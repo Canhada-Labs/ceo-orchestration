@@ -81,23 +81,22 @@ bash /tmp/ceo-install.sh [--target /caminho/do/seu/projeto]
 > automaticamente — não precisa copiar hex manualmente das release
 > notes. Sempre use uma tag fixa; `main` é alvo móvel.
 
-### npm install — disponível após o primeiro release público
+### npm install
 
-> **Ainda não publicado.** O pacote bootstrap com nome escopado abaixo
-> sai junto com o primeiro release público; até lá, use o caminho
-> recomendado de clone acima.
+> **Instalação via npm.** O pacote bootstrap é publicado no npm com
+> SLSA 3 provenance; o caminho de clone acima também permanece suportado.
 
-Depois de publicado, o bootstrap instala pelo npm com verificação
+O bootstrap instala pelo npm com verificação
 automática de integridade (registry npm + SLSA provenance L3):
 
 ```bash
-npm install -g @ceo-orch/init
+npm install -g ceo-orchestration
 cd /caminho/do/seu/projeto
-ceo-orch-init
+ceo-orchestration
 ```
 
-O pacote publicável é o nome escopado `@ceo-orch/init` (o `bin` que ele
-instala é `ceo-orch-init`). É publicado com `--provenance` (SLSA 3) e o
+O pacote publicável é o nome não-escopado `ceo-orchestration` (o `bin` que ele
+instala é `ceo-orchestration`). É publicado com `--provenance` (SLSA 3) e o
 `npm` verifica o tarball SHA antes de extrair. Veja
 `docs/install-verification.md` e `.github/workflows/npm-publish.yml`.
 

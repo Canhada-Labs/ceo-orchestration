@@ -95,7 +95,7 @@ jobs:
             if [[ -f npm/package.json ]]; then
               deps=$(jq '.dependencies // {} | length' npm/package.json)
               if [[ "$deps" -ne 0 ]]; then
-                echo "::error::@ceo-orch/init must ship with 0 runtime deps (got $deps)"
+                echo "::error::ceo-orchestration must ship with 0 runtime deps (got $deps)"
                 exit 1
               fi
               echo "OK: npm shim has zero runtime dependencies"

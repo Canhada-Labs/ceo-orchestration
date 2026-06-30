@@ -202,7 +202,7 @@ Todos os 6 usam Adapter Layer (Sprint 6 migration).
 - ✅ `release.yml` (7 gates on tag push, OIDC)
 - ✅ `benchmarks.yml` (advisory skill benchmarks)
 - ✅ `translations-drift.yml` (EN vs PT mirror check)
-- ✅ `npm-publish.yml` (OIDC trusted publisher para @ceo-orch/init)
+- ✅ `npm-publish.yml` (OIDC trusted publisher para ceo-orchestration)
 - ✅ `dependabot.yml` (PRs automáticos para action SHAs)
 
 #### SPEC v1 (published contract)

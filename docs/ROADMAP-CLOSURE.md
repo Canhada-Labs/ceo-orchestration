@@ -184,9 +184,9 @@ secundários que preferem EN. CI drift check evita bitrot.
 **Fase 2 — NPM install path (3 dias)**
 Motivação: facilitar install em adopter-1 e adopter-2 na Sprint 15.
 - [ ] `scripts/install-npm.sh` empacotando git-clone num `package.json`
-  fino `@ceo-orch/init` (NOT published yet — only shipped as internal
+  fino `ceo-orchestration` (NOT published yet — only shipped as internal
   tarball)
-- [ ] Testar `npx @ceo-orch/init` em projeto vazio local
+- [ ] Testar `npx ceo-orchestration` em projeto vazio local
 - [ ] SPEC/v1/npm-shim.md validar que está current
 - [ ] NPM publish workflow **permanece disabled** — só ativa no
   Sprint 17 se Owner aprovar público
@@ -411,7 +411,7 @@ Antes de público, validar:
 - [ ] Owner approval explícito final
 - [ ] Contamination scan final
 - [ ] `gh repo edit --visibility public`
-- [ ] NPM publish `@ceo-orch/init`
+- [ ] NPM publish `ceo-orchestration`
 - [ ] GitHub Discussions enable
 - [ ] Issue templates live
 - [ ] Blog post published

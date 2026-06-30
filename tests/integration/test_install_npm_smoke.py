@@ -148,7 +148,7 @@ class TestSmokeInvoke:
 
         install-npm.sh's `--smoke` path already does:
           - npm install --no-save <tarball> in a scratch tmp dir
-          - npx ceo-orch-init <tmp> --profile core
+          - npx ceo-orchestration <tmp> --profile core
         and asserts post-install artifacts. A zero exit from this flow
         exercises steps 3-5 of the P1-QA-7 acceptance spec in one shot.
         """

@@ -130,8 +130,8 @@ If you installed via npm:
 
 ```bash
 cd /path/to/your/project
-npm update -g ceo-orch-init
-ceo-orch-init upgrade --pin v1.11.2
+npm update -g ceo-orchestration
+ceo-orchestration upgrade --pin v1.11.2
 ```
 
 The npm package wraps `bash scripts/upgrade.sh` with the same flags.

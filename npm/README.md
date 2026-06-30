@@ -84,7 +84,7 @@ cd /path/to/your-app
 bash .claude/scripts/validate-governance.sh   # prints an error count; 0 = healthy
 ```
 
-> **Install paths.** The clone-and-`install.sh` flow above is the supported path today. A one-step npm shim — `npm install -g @ceo-orch/init && ceo-orch-init` — will be available after the first public release (the `@ceo-orch/init` package is not published to npm yet).
+> **Install paths.** The clone-and-`install.sh` flow above is the supported path today. A one-step npm shim is also available — `npx ceo-orchestration /path/to/your-app` (published to npm with SLSA 3 provenance).
 
 By default the installer copies the core and frontend skill profiles and the governance hooks. Select profiles and stack hooks explicitly:
 

@@ -152,7 +152,7 @@ without installing any of the above. CI installs them transiently.
 | `git clone` + `bash scripts/install.sh .` | ✅ Primary | Works for any version, any time |
 | `git submodule add` + `--link` install | ✅ Supported | Recommended for monorepos |
 | GitHub template repo | ✅ Supported | "Use this template" button on the GitHub UI |
-| `npm install -g ceo-orch-init` | ✅ Supported (≥ v1.5) | `npm/` package; verifies SHA256 against `npm/SHA256SUMS.txt` |
+| `npm install -g ceo-orchestration` | ✅ Supported (≥ v1.5) | `npm/` package; verifies SHA256 against `npm/SHA256SUMS.txt` |
 | Homebrew tap | ❌ Not yet | Considered for v2.0 |
 
 The `npm` package is the easiest path for projects that already have

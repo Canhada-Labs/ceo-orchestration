@@ -82,7 +82,7 @@ cd /path/to/your-app
 bash .claude/scripts/validate-governance.sh   # imprime uma contagem de erros; 0 = saudável
 ```
 
-> **Caminhos de instalação.** O fluxo de clone + `install.sh` acima é o caminho suportado hoje. Um atalho npm de um passo — `npm install -g @ceo-orch/init && ceo-orch-init` — ficará disponível após o primeiro lançamento público (o pacote `@ceo-orch/init` ainda não foi publicado no npm).
+> **Caminhos de instalação.** O fluxo de clone + `install.sh` acima é o caminho suportado hoje. Um atalho npm de um passo também está disponível — `npx ceo-orchestration /caminho/do/seu-app` (publicado no npm com SLSA 3 provenance).
 
 Por padrão, o instalador copia os perfis de skill core e frontend e os hooks de governança. Selecione perfis e hooks de stack explicitamente:
 

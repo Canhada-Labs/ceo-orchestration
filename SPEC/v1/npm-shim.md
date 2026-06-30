@@ -4,9 +4,9 @@
 > **Status:** normative
 > **Canonical source:** `npm/bin/ceo-orch-init.js`
 
-The npm package `@ceo-orch/init` is a **pass-through shim** around
+The npm package `ceo-orchestration` is a **pass-through shim** around
 `scripts/install.sh`. This file locks the contract so adopters can
-rely on uniform behavior between `bash install.sh` and `npx @ceo-orch/init`.
+rely on uniform behavior between `bash install.sh` and `npx ceo-orchestration`.
 
 ## Pass-through invariants (locked in v1)
 
@@ -51,7 +51,7 @@ package; if `VERSION=1.2.3`, the npm package is `1.2.3`.
 
 ## Publishing
 
-`@ceo-orch/init` is published from CI on tag push (`v*`) via OIDC
+`ceo-orchestration` is published from CI on tag push (`v*`) via OIDC
 trusted publisher. See `.github/workflows/npm-publish.yml`. Manual
 `npm publish` is not used; tags are the only entry point.
 

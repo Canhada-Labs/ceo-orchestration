@@ -1,6 +1,6 @@
 # NPM shim integrity manifest
 
-> **Integrity contract for the `@ceo-orch/init` npm shim.** The package is
+> **Integrity contract for the `ceo-orchestration` npm shim.** The package is
 > built and versioned (`VERSION` / `package.json`, currently 1.0.0).
 > Publishing stays gated — `npm-publish.yml` holds all `v*-rc.*` tags and
 > requires manual approval on GA tags via `environment: production-npm`.
@@ -21,7 +21,7 @@ Every release tarball (`npm pack --dry-run` output) MUST satisfy:
 | Control | Value / mechanism | Where enforced |
 |---|---|---|
 | SHA-256 manifest per file | `sha256sum` over every file in `files:` array | `.github/workflows/validate.yml` (to-add) + manifest committed to `npm/SHA256SUMS.txt` during release prep |
-| GPG detached signature | RFC 4880 signature over tarball | Release operator signs locally with project key; signature attached to GitHub Release as `@ceo-orch-init-<version>.tgz.asc` |
+| GPG detached signature | RFC 4880 signature over tarball | Release operator signs locally with project key; signature attached to GitHub Release as `ceo-orchestration-<version>.tgz.asc` |
 | SLSA Level-2 provenance | `npm publish --provenance` (Sigstore-attested via OIDC) | `.github/workflows/npm-publish.yml` already passes `--provenance`; requires `id-token: write` permission (already set) |
 | Reproducible build | `SOURCE_DATE_EPOCH` set to VERSION tag commit date | Release script (Sprint 17 scope) sets env var before `npm pack` |
 | Zero runtime dependencies | `Object.keys(dependencies).length === 0` | `.github/workflows/npm-publish.yml` step "Verify zero runtime dependencies" (existing) |
@@ -43,7 +43,7 @@ Generated during release prep, committed to `npm/SHA256SUMS.txt` adjacent to
 Consumers verify with:
 
 ```bash
-cd $(npm root -g)/@ceo-orch/init
+cd $(npm root -g)/ceo-orchestration
 sha256sum -c SHA256SUMS.txt
 ```
 
@@ -64,7 +64,7 @@ Public key distributed via GitHub Release notes + `.well-known/gpg.asc`.
 Consumers inspect via:
 
 ```bash
-npm audit signatures @ceo-orch/init
+npm audit signatures ceo-orchestration
 ```
 
 ## Reproducible-build spec

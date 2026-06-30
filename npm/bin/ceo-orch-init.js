@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @ceo-orch/init — pass-through shim around scripts/install.sh.
+// ceo-orchestration — pass-through shim around scripts/install.sh.
 //
 // Sprint 5 Phase 4. The bundle ships everything install.sh needs (the
 // full source tree at publish time). This binary locates the bundled
@@ -9,8 +9,8 @@
 // asserts it.
 //
 // Usage:
-//   npx @ceo-orch/init <target-repo-path> [--profile core,frontend] [--stack node]
-//   ceo-orch-init <target-repo-path> [--profile ...]
+//   npx ceo-orchestration <target-repo-path> [--profile core,frontend] [--stack node]
+//   ceo-orchestration <target-repo-path> [--profile ...]
 //
 // Behavior contract (SPEC/v1/npm-shim.md):
 //   - Locates install.sh relative to __dirname (no PATH lookup, no env).
