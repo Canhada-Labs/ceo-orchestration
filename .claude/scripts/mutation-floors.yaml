@@ -1,0 +1,51 @@
+# mutation-floors.yaml — PLAN-045 F-03-09 (non-canonical companion)
+#
+# Recorded mutation kill-rate floors per critical module. A bump
+# requires an ADR amendment documenting the regression tolerance
+# (currently the targets are at-or-above these floors per PLAN-032
+# Session 37 + PLAN-043 Session 37 cont measurements).
+#
+# Consumed by:
+#   - `.claude/scripts/mutation-test.py --fail-under $(lookup floor)`
+#   - `.github/workflows/mutation-gate.yml` (staged — see
+#     `.claude/plans/PLAN-045/staged-code/F-03-09-mutation-ci-wiring.md`)
+#
+# Format: `<module-relative-path>: <float in [0.0, 1.0]>`
+# Bump rule: raise floors opportunistically when suite lands fresh
+# mutants-killed; lower only via explicit Owner-signed ADR
+# amendment + rationale.
+
+floors:
+  # Agent-eval tournament (PLAN-032 Session 37; kill rate measured
+  # 100% on scorer, 72.5% on reporter with survivors in fail-open
+  # branches documented).
+  "tournament/scorer.py": 0.95
+  "tournament/reporter.py": 0.70
+
+  # Dynamic tier-policy (PLAN-043 Session 37 cont; VETO-floor
+  # mutations killed 100% in-dev).
+  "tier_policy_cli/learn.py": 0.95
+  "tier_policy_cli/apply.py": 0.95
+
+  # Audit-log HMAC crypto-critical path (PLAN-023 Phase B + PLAN-
+  # 045 Wave 5 F-01-06 hardening).
+  "_lib/audit_hmac.py": 0.85
+
+# Non-target modules (listed for future bumps; no floor set).
+candidates_for_future_floors:
+  - ".claude/scripts/confidence_gate.py"
+  - ".claude/hooks/_lib/policy.py"
+  - ".claude/hooks/_lib/state_store.py"
+  - ".claude/hooks/check_canonical_edit.py"   # arbitration-kernel
+  - ".claude/hooks/check_agent_spawn.py"      # arbitration-kernel
+
+# ADRs gating any floor change:
+# - ADR-052 multi-model dispatch by role (VETO floor scope)
+# - ADR-055 audit-log HMAC chain (crypto invariant scope)
+# - ADR-063 agent-eval empirical dispatch validation
+# - ADR-064 dynamic tier-policy learned dispatch
+
+# Cadence:
+# - Weekly scheduled run (staged mutation-gate.yml cron Tue 05:45 UTC)
+# - Phase 1 advisory until 2026-05-20 (1-month post-sentinel)
+# - Phase 2 enforcing (`continue-on-error: false`) after 4 green weeks

@@ -1,0 +1,1 @@
+binance_api_key: bWyyZSeQCZ5A7IAf6BUxoQmMr0PXFwhKs7zIJAwFCYKgd3xApD5ttPn17keopWZk

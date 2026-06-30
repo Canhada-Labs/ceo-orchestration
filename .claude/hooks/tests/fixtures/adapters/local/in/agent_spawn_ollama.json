@@ -1,0 +1,19 @@
+{
+  "session_id": "local-sess-001",
+  "model": "llama3.1:8b",
+  "message": {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "function": {
+          "name": "Agent",
+          "arguments": {
+            "subagent_type": "general-purpose",
+            "description": "Sample spawn",
+            "prompt": "## AGENT PROFILE\n## SKILL CONTENT\nX"
+          }
+        }
+      }
+    ]
+  }
+}

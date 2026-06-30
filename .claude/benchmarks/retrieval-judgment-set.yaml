@@ -1,0 +1,194 @@
+# retrieval-judgment-set.yaml — PLAN-011 Phase 2 (H4 gate)
+#
+# Validation log (most recent first):
+#   2026-06-13 — H4 gate re-run (PLAN-134 W4 morning #2 staleness advisory):
+#     recall@5 lexical 0.923 (36/39) >= static 0.641 (25/39) — PASS.
+#     Benchmark healthy against the live repo (151 skills); re-validated to
+#     clear the >14d last-touched staleness flag. Run via:
+#     python3 -m pytest .claude/benchmarks/tests/test_retrieval_recall_gate.py
+#
+# Hand-crafted gold pairs mapping realistic task descriptions to the
+# skill(s) that should appear in the top-K retrieval result.
+#
+# Schema:
+#   version: <int>
+#   pairs:
+#     - task: "<description string>"
+#       expected_top_k: [<skill-slug>, ...]  # ordered by relevance; any
+#                                             # of these counted as hit
+#       archetype_hint: <archetype slug>     # optional; used for boost
+#
+# Success metric: Recall@5
+#   For each pair, the retrieval is a HIT if any skill in expected_top_k
+#   appears in the top-5 of the lexical ranking.
+#   Recall@5 = HITS / len(pairs).
+#
+# Gate (H4): lexical baseline recall@5 must equal or exceed the static
+# SKILL-MAP baseline recall@5 on this same set. If lexical loses, the
+# gate test SKIPs with a note directing Sprint 12 to enable real
+# embeddings via CEO_REAL_EMBEDDINGS=1.
+
+version: 1
+pairs:
+  # --- Core skills coverage ---
+  - task: "Add unit tests for the new session-graph derivation"
+    expected_top_k: [testing-strategy, state-machines-and-invariants, code-review-checklist]
+    archetype_hint: principal-qa-architect
+
+  - task: "Design the OpenAPI contract for a new webhook endpoint"
+    expected_top_k: [public-api-design, code-review-checklist]
+    archetype_hint: staff-backend-engineer
+
+  - task: "Model the checkout state machine so it cannot skip payment"
+    expected_top_k: [state-machines-and-invariants, public-api-design]
+    archetype_hint: real-time-systems-engineer
+
+  - task: "Investigate a memory leak in the event loop"
+    expected_top_k: [performance-engineering, observability-and-ops]
+    archetype_hint: principal-performance-engineer
+
+  - task: "Set up the Postgres migration with row-level security"
+    expected_top_k: [data-schema-design, security-and-auth]
+    archetype_hint: principal-data-engineer
+
+  - task: "Write an ADR for the new queue topology decision"
+    expected_top_k: [architecture-decisions]
+    archetype_hint: vp-engineering
+
+  - task: "Audit the Docker compose pipeline and deploy gates"
+    expected_top_k: [devops-ci-cd, observability-and-ops]
+    archetype_hint: devops-engineer
+
+  - task: "Review a pull request for the payment flow refactor"
+    expected_top_k: [code-review-checklist, incremental-refactoring]
+    archetype_hint: staff-code-reviewer
+
+  - task: "Bulletproof the websocket reconnect with circuit breakers"
+    expected_top_k: [chaos-and-resilience, state-machines-and-invariants]
+    archetype_hint: chaos-engineer
+
+  - task: "Set up OpenTelemetry traces and dashboards for the API"
+    expected_top_k: [observability-and-ops]
+    archetype_hint: vp-operations
+
+  - task: "Lock down the JWT verification and refresh token rotation"
+    expected_top_k: [security-and-auth]
+    archetype_hint: security-engineer
+
+  - task: "Plan a gradual refactor of the legacy order module"
+    expected_top_k: [incremental-refactoring, architecture-decisions]
+    archetype_hint: refactoring-lead
+
+  - task: "Improve the signup conversion funnel and onboarding drop-off"
+    expected_top_k: [growth-and-launch, product-conversion-readiness]
+    archetype_hint: growth-engineer
+
+  - task: "Prepare the launch readiness checklist for public beta"
+    expected_top_k: [product-conversion-readiness, growth-and-launch]
+    archetype_hint: vp-product
+
+  - task: "Wire up a new Stripe subscription tier and proration"
+    expected_top_k: [monetization-and-billing]
+    archetype_hint: billing-engineer
+
+  - task: "Design an LLM-powered feature with safety guardrails"
+    expected_top_k: [ai-llm-orchestration, security-and-auth]
+    archetype_hint: security-engineer
+
+  - task: "Draft the LGPD data-subject access request flow"
+    expected_top_k: [compliance-lgpd]
+    archetype_hint: compliance-specialist
+
+  - task: "Build an orchestration plan for a new multi-archetype squad"
+    expected_top_k: [agent-architect, ceo-orchestration]
+    archetype_hint: agent-architect
+
+  # --- Frontend skills coverage ---
+  - task: "Audit color contrast and focus traps across the dashboard"
+    expected_top_k: [accessibility-and-wcag, frontend-accessibility, ux-and-user-journeys]
+    archetype_hint: frontend-accessibility-lead
+
+  - task: "Set up a design token system and component library"
+    expected_top_k: [design-system-and-components, code-quality-and-typescript]
+    archetype_hint: design-system-engineer
+
+  - task: "Reduce the dashboard first contentful paint by a second"
+    expected_top_k: [frontend-performance-optimization, frontend-patterns]
+    archetype_hint: frontend-performance-engineer
+
+  - task: "Refactor the data-fetching hooks to consolidate caching"
+    expected_top_k: [frontend-data-layer, frontend-patterns]
+    archetype_hint: frontend-data-engineer
+
+  - task: "Strengthen the TypeScript strictness on the web app"
+    expected_top_k: [code-quality-and-typescript]
+    archetype_hint: frontend-quality-lead
+
+  - task: "Map the entire user journey from landing page to first value"
+    expected_top_k: [ux-and-user-journeys, product-conversion-readiness]
+    archetype_hint: ux-engineer
+
+  # --- Domain skills: fintech ---
+  - task: "Fix the rounding on the P&L display in the trading panel"
+    expected_top_k: [financial-display, financial-correctness-and-math]
+    archetype_hint: fintech-display-engineer
+
+  - task: "Integrate the Binance exchange API with rate-limit handling"
+    expected_top_k: [exchange-api-integration, exchange-onboarding-playbook]
+    archetype_hint: exchange-integration-engineer
+
+  - task: "Design a prediction-market resolution flow with fair pricing"
+    expected_top_k: [prediction-markets, financial-correctness-and-math]
+    archetype_hint: prediction-markets-engineer
+
+  # --- Domain skills: edtech ---
+  - task: "Prevent cheating on the online assessment with proctoring"
+    expected_top_k: [assessment-integrity, student-data-privacy]
+    archetype_hint: assessment-integrity-lead
+
+  - task: "Track learning outcomes and create a teacher dashboard"
+    expected_top_k: [learning-analytics, student-data-privacy]
+    archetype_hint: learning-analytics-engineer
+
+  - task: "Comply with FERPA and parental consent for under-13 users"
+    expected_top_k: [student-data-privacy, compliance-lgpd]
+    archetype_hint: edtech-privacy-lead
+
+  # --- Domain skills: government ---
+  - task: "Make the public portal Section 508 and WCAG 2.1 AA compliant"
+    expected_top_k: [accessibility-section-508, accessibility-and-wcag, frontend-accessibility]
+    archetype_hint: accessibility-lead
+
+  - task: "Design the FOIA request intake and records retention flow"
+    expected_top_k: [foia-and-records]
+    archetype_hint: foia-officer
+
+  - task: "Audit the government procurement contract workflow"
+    expected_top_k: [public-procurement]
+    archetype_hint: procurement-officer
+
+  # --- Domain skills: lgpd-heavy-saas ---
+  - task: "Refactor the consent lifecycle state machine without breaking LGPD"
+    expected_top_k: [consent-lifecycle, compliance-lgpd, state-machines-and-invariants]
+    archetype_hint: consent-engineer
+
+  - task: "Write the DPO monthly compliance report automation"
+    expected_top_k: [dpo-reporting, compliance-lgpd]
+    archetype_hint: dpo
+
+  - task: "Map PII data flows for a new analytics pipeline"
+    expected_top_k: [pii-data-flow, compliance-lgpd]
+    archetype_hint: privacy-engineer
+
+  # --- Domain skills: trading-hft ---
+  - task: "Add a hardware kill switch for runaway trading bots"
+    expected_top_k: [kill-switches, chaos-and-resilience]
+    archetype_hint: hft-risk-engineer
+
+  - task: "Profile latency budgets down to microsecond on the order path"
+    expected_top_k: [latency-budgets, performance-engineering]
+    archetype_hint: hft-latency-engineer
+
+  - task: "Route orders across multiple venues with smart order router"
+    expected_top_k: [order-routing, exchange-api-integration]
+    archetype_hint: hft-routing-engineer

@@ -1,0 +1,90 @@
+# Task chains — Finance & Accounting Squad
+# Domain-specific workflows that extend the universal .claude/task-chains.yaml.
+
+task_chains:
+  - id: finance-accounting-new-revenue-stream
+    title: "Launch a new revenue stream (recognition policy + tax review)"
+    whenToUse: |
+      A new product, service tier, bundle, or pricing model is being launched
+      that generates a new category of revenue not previously in the chart of
+      accounts or not previously subject to a written recognition policy.
+      Examples: first recurring subscription product, first professional services
+      upsell, first usage-based pricing tier, first hardware bundle with
+      embedded software. Triggers whenever the revenue recognition analysis
+      cannot be resolved by pointing to an existing, signed policy memo.
+      Out of scope: pricing changes within an existing, already-policy-covered
+      revenue category (handled by Controller review without a new chain).
+    steps:
+      - id: 1
+        owner: "Renata Fonseca (Financial Controller)"
+        action: "Performance-obligation analysis: identify all distinct performance obligations in the new contract type. Determine standalone selling prices. Document variable-consideration treatment (if any). Confirm the applicable standard (ASC 606 vs. IFRS 15 vs. CPC 47) and any applicable exemptions. (FIN-001)"
+      - id: 2
+        owner: "Renata Fonseca"
+        action: "Write the recognition policy memo: document the analysis, methodology, examples, and exceptions. Sign and date before the first invoice of the new revenue type is issued. Store in the accounting policy library (FIN-002)."
+      - id: 3
+        owner: "Valentina Fiscal (Tax Practitioner)"
+        action: "Tax treatment review: confirm the revenue type's treatment for income tax, VAT/PIS-COFINS (BR), sales tax nexus (US), and applicable withholding obligations. If cross-border, confirm treaty treatment and transfer pricing implications for any intercompany version of this revenue (FIN-005, FIN-008)."
+      - id: 4
+        owner: "Marcelo Santos (FP&A Manager)"
+        action: "FP&A model update: add new revenue driver to the rolling forecast and annual plan model. Define the unit-economic driver (per seat, per transaction, per usage unit). Confirm the GL account mapping before first invoice."
+      - id: 5
+        owner: "Cintia Barros (Bookkeeping Specialist)"
+        action: "GL configuration: create new revenue GL account(s) with Controller approval. Add to close checklist. Set up deferred revenue account if recognition is ratable. Document the booking entry and reconciliation procedure."
+      - id: 6
+        owner: "Eduardo Marques (Audit Specialist)"
+        action: "Control design: confirm the invoicing → recognition → deferred revenue → reconciliation chain has segregation of duties. Identify who creates the invoice, who posts the revenue entry, who reconciles deferred revenue — these must be different people or at minimum dual-approved (FIN-009)."
+      - id: 7
+        owner: "Principal QA Architect"
+        action: "First-cycle test: process one synthetic invoice through the complete cycle. Verify recognition timing matches policy memo, deferred revenue balance reconciles, GL posting is correct, control log shows correct approvers."
+      - id: 8
+        owner: "Staff Code Reviewer"
+        action: "Launch VETO check: recognition policy memo signed by Controller before first invoice (FIN-002), tax treatment documented, GL account approved, SOD confirmed on the booking chain (FIN-009)."
+    verification: |
+      - Performance-obligation analysis documented (FIN-001)
+      - Recognition policy memo signed and dated before first invoice (FIN-002)
+      - Tax treatment memo: income tax + indirect tax + TP implications (FIN-005)
+      - GL account created with Controller approval, deferred revenue account if needed
+      - SOD confirmed: invoice creator, revenue poster, reconciler are different roles (FIN-009)
+      - FP&A model updated with new revenue driver
+
+  - id: finance-accounting-period-end-close
+    title: "Execute period-end close (hard close checklist + sign-off chain)"
+    whenToUse: |
+      A monthly, quarterly, or annual accounting period is being closed.
+      This chain governs the sequence from pre-close preparation through
+      consolidated financial statement release. Applies to every close cycle.
+      The annual close adds tax provision and external audit coordination steps
+      (not fully detailed here — extend the chain when applicable).
+    steps:
+      - id: 1
+        owner: "Cintia Barros (Bookkeeping Specialist)"
+        action: "Pre-close (T-3 business days): confirm all sub-ledger interfaces are current (AP, AR, payroll, fixed assets, deferred revenue). Flag any open items that will not close before hard close. Distribute the close checklist to all owners."
+      - id: 2
+        owner: "Cintia Barros"
+        action: "Reconciliations (T-2): complete bank, credit card, intercompany, and key balance-sheet account reconciliations. Each reconciliation requires an independent reviewer different from the preparer (FIN-009 SOD requirement). Flag unreconciled items to Controller."
+      - id: 3
+        owner: "Renata Fonseca (Financial Controller)"
+        action: "Accruals and estimates: review all accrual balances against the documented estimate basis (FIN-003). Post new accruals with documentation; reverse or adjust existing accruals with explanation. Confirm variable-consideration estimates are updated for any new information."
+      - id: 4
+        owner: "Valentina Fiscal (Tax Practitioner)"
+        action: "Tax provision entries: post current-period income tax expense, deferred tax movements, indirect tax payables (PIS/COFINS, VAT, state sales tax). Confirm uncertain tax positions (FIN-006) are adequately reserved. Update tax rate used in provision if applicable law has changed."
+      - id: 5
+        owner: "Renata Fonseca"
+        action: "Hard close (T): post any remaining period-end entries. Lock the period in the ERP (no further posting without CFO approval — FIN-004). Confirm no journal entries were posted by admin access outside the normal approval workflow (Eduardo Marques journal-entry access log review)."
+      - id: 6
+        owner: "Renata Fonseca"
+        action: "Consolidation (T+1): eliminate intercompany transactions and balances. Translate foreign-currency entities at closing rate (P&L at average rate, balance sheet at closing rate per IFRS 21 / ASC 830 / CPC 02). Confirm minority interest and non-controlling interest calculations."
+      - id: 7
+        owner: "Eduardo Marques (Audit Specialist)"
+        action: "Control sign-off: confirm each close-checklist item has owner and reviewer signatures. Journal-entry access log reviewed for any entries posted outside normal approval flow. Reconciliation preparer / reviewer SOD confirmed (FIN-009). Flag any control exception for CFO."
+      - id: 8
+        owner: "Staff Code Reviewer"
+        action: "Release VETO check: all entity reconciliation sign-offs obtained (FIN-012), no unapproved post-hard-close entries (FIN-004), tax provision posted and signed, SOD confirmed on all close steps (FIN-009)."
+    verification: |
+      - All sub-ledger reconciliations signed by independent reviewers (FIN-009)
+      - Accruals: documented estimate basis and review date (FIN-003)
+      - Period locked in ERP after hard close (FIN-004)
+      - Tax provision posted, uncertain positions reserved (FIN-006)
+      - Intercompany eliminations completed, currency translation applied
+      - Entity Controller sign-offs before consolidated release (FIN-012)
+      - Variance bridge prepared for management reporting (FIN-013)

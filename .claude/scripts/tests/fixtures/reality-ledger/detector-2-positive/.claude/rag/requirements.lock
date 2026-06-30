@@ -1,0 +1,2 @@
+# PLACEHOLDER — this requirements.lock is NOT a valid pip install target
+# install-sidecar.sh MUST refuse to run when this file is unpopulated.

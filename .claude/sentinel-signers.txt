@@ -1,0 +1,24 @@
+# Canonical-edit sentinel signer allowlist (ADR-010, PLAN-045 P0-01).
+#
+# Each non-blank, non-comment line is one full 40-hex-character GPG
+# fingerprint (uppercase) permitted to sign canonical-edit sentinel
+# files (.claude/plans/PLAN-NNN/architect/round-N/approved.md.asc).
+#
+# Empty allowlist is FAIL-CLOSED: no sentinel will be accepted. This
+# file MUST NOT be empty in a functional deployment.
+#
+# Format:
+#   # optional comment
+#   <40-hex-uppercase-fingerprint>
+#
+# Guarded by ADR-010 canonical-edit sentinel + check_canonical_edit.py.
+# Edits require Owner-signed sentinel with this path in Scope.
+#
+# To add a signer:
+#   1. Get the fpr: gpg --list-keys --with-colons <uid> | awk -F: '/^fpr/{print $10; exit}'
+#   2. Append the fpr on its own line
+#   3. Create a sentinel amending this path in Scope
+#   4. Edit under sentinel
+
+# Owner (Canhada Labs, created 2026-04-20)
+AE9B236FDAF0462874060C6BCFCFACF00335DC74

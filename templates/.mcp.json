@@ -1,0 +1,13 @@
+{
+  "_comment": "ceo-orchestration — project-scope MCP registration for the Codex pair-rail (PLAN-135 W1 S5-lite). scripts/install.sh copies this file to the target repo root as .mcp.json (idempotent EXISTS->SKIP — an adopter's own .mcp.json is never overwritten; maintainer ceremony only). The 'codex' server name yields the mcp__codex__codex / mcp__codex__codex-reply tools that the settings.json hook matchers govern (check_codex_filewrite PreToolUse, check_codex_response PostToolUse, check_pair_rail). Credentials travel via ${ENV} expansion ONLY — never hardcode a key in this file. The codex binary is resolved from PATH (pre-flight: .claude/scripts/local/pair-rail-gate.sh asserts presence + the version pin in .claude/governance/codex-cli-pin.txt). OPENAI_API_KEY uses the :-empty default so adopters authenticated via ChatGPT login (~/.codex) are not hard-failed by an unset var. Troubleshooting: claude --mcp-debug (deprecated alias of claude --debug) — see INSTALL.md §Troubleshooting.",
+  "mcpServers": {
+    "codex": {
+      "type": "stdio",
+      "command": "codex",
+      "args": ["mcp-server"],
+      "env": {
+        "OPENAI_API_KEY": "${OPENAI_API_KEY:-}"
+      }
+    }
+  }
+}

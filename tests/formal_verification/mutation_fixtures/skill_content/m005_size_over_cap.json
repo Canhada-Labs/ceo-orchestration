@@ -1,0 +1,8 @@
+{
+  "description": "Size over cap: SKILL.md file body padded past 1 MiB (1048576 bytes) to trigger the DoS defense sub-check 7. The content itself is valid (frontmatter + body + no secrets), but the file size alone fails the validator.",
+  "mutation_class": "S3_content_validation",
+  "sub_check_targeted": 7,
+  "expected_reason": "reference_too_large",
+  "skill_body_variant": "valid",
+  "skill_size_pad_to_bytes": 1048580
+}

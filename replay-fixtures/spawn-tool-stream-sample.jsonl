@@ -1,0 +1,11 @@
+# PLAN-133 C2 — spawn→tool-call JSON-stream fixture (record/playback golden source).
+# Each line is one event in a captured CEO orchestration spawn→tool-call stream.
+# Volatile fields (ts, session_id, tokens_*, duration_ms, request_id, cost_*) are
+# present here but are stripped by canonical_stream() before structural hashing,
+# so the golden is stable across runs that differ only in wall-clock/token telemetry.
+{"event": "agent_spawn", "spawn_id": 1, "archetype": "Staff Backend Engineer", "skill": "public-api-design", "task": "design the /v1/replay endpoint", "ts": "2026-06-08T10:00:00Z", "session_id": "sess-aaa", "request_id": "req-001", "tokens_in": 1200, "tokens_out": 340, "duration_ms": 5120, "cost_usd_cents": 4}
+{"event": "tool_call", "spawn_id": 1, "tool": "Read", "args": {"file_path": "benchmarks/replay.py"}, "ts": "2026-06-08T10:00:06Z", "request_id": "req-002", "duration_ms": 88}
+{"event": "tool_call", "spawn_id": 1, "tool": "Edit", "args": {"file_path": "benchmarks/replay.py", "anchor": "main"}, "ts": "2026-06-08T10:00:12Z", "request_id": "req-003", "duration_ms": 142}
+{"event": "agent_spawn", "spawn_id": 2, "archetype": "Staff Code Reviewer", "skill": "code-review-checklist", "task": "review the replay diff", "ts": "2026-06-08T10:01:00Z", "session_id": "sess-aaa", "request_id": "req-004", "tokens_in": 980, "tokens_out": 210, "duration_ms": 3300, "cost_usd_cents": 3}
+{"event": "tool_call", "spawn_id": 2, "tool": "Bash", "args": {"command": "python3 -m pytest .claude/scripts/tests/test_benchmarks_replay.py -q"}, "ts": "2026-06-08T10:01:05Z", "request_id": "req-005", "duration_ms": 410}
+{"event": "agent_result", "spawn_id": 2, "verdict": "ACCEPT", "ts": "2026-06-08T10:01:30Z", "session_id": "sess-aaa", "tokens_total": 1190, "duration_ms": 25000}

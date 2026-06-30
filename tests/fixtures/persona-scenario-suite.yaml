@@ -1,0 +1,101 @@
+# PLAN-088 W5.1 — 52-cell persona scenario suite fixture
+# Per AC1-AC4 dual-mode verify-persona-coverage.py CI mode default.
+#
+# Cells closure plan (post-PLAN-088 ship; ADR-118 §2.1 thresholds):
+#   vibecoder      >= 12/13 (target 92.3%)
+#   junior_dev     >= 11/13 (target 84.6%)
+#   skeptical_cto  >= 11/13 (target 84.6%)
+#   team_member    >= 11/13 (target 84.6%)
+#
+# Each cell is labeled AUTO / SEMI / MANUAL (legacy MANUAL becomes
+# AUTO/SEMI post-PLAN-088 wiring per automation-gap-roadmap.yaml).
+#
+# Schema (13-axis x 4-persona = 52 cells):
+#   axes: [B.1 ... B.14] (subset of 13 active per canonical-13)
+#   personas:
+#     <persona>:
+#       <axis>: AUTO | SEMI | MANUAL
+#
+# This fixture represents the TARGET STATE post-PLAN-088 ship; CI mode
+# reads this to validate the verifier itself works. Live mode reads
+# audit-log to compute the actual observed state.
+
+axes:
+  - B.1   # prompt caching (AUTO-01)
+  - B.10  # TTFV first-run-wizard (AUTO-02)
+  - B.14  # estimation calibrator (AUTO-03)
+  - B.13  # graceful degradation (SEMI-13)
+  - B.11  # tier-policy token efficiency (AUTO-04)
+  - B.12  # multi-model routing (AUTO-05)
+  - B.2   # extended thinking (AUTO-09)
+  - B.6   # MCP routing (AUTO-06)
+  - B.7   # cookbook patterns (SEMI-11)
+  - B.3   # sub-agent dispatch general -> specialized (AUTO-10)
+  - B.4   # Pair-Rail substantive (AUTO-07 SHADOW+DRY_RUN)
+  - B.5   # batch / streaming (AUTO-08)
+  - B.8   # SOTA research patterns (SEMI-12 — deferred to PLAN-092)
+
+personas:
+  vibecoder:
+    # Post-PLAN-088 target: 12/13 AUTO+SEMI (B.8 SEMI-12 deferred = MANUAL)
+    B.1: AUTO    # cache discipline alerts auto-fire on SessionStart
+    B.10: AUTO   # first-run wizard auto-spawned on session-start (no .install-completed)
+    B.14: SEMI   # architect skill auto-pull but estimate refinement requires manual review
+    B.13: AUTO   # graceful-degradation emits are telemetry-invariant
+    B.11: AUTO   # tier-policy Tier-S check fires every /ceo-boot
+    B.12: AUTO   # model_routing.resolve() injects per-spawn
+    B.2: AUTO    # thinking-budget per task-class via _lib/model_routing
+    B.6: SEMI    # MCP server suggested; user one-confirm to invoke
+    B.7: SEMI    # cookbook patterns surfaced on skill-author / plan-draft
+    B.3: AUTO    # general -> specialized auto-promotion via check_agent_spawn
+    B.4: SEMI    # Pair-Rail SHADOW+DRY_RUN advisory; Phase C deferred
+    B.5: AUTO    # batch detected on >=10 spawn benchmarks
+    B.8: MANUAL  # SEMI-12 SOTA research DEFERRED to PLAN-092
+
+  junior_dev:
+    # Post-PLAN-088 target: 11/13 AUTO+SEMI
+    B.1: AUTO
+    B.10: AUTO
+    B.14: SEMI
+    B.13: AUTO
+    B.11: AUTO
+    B.12: AUTO
+    B.2: AUTO
+    B.6: SEMI
+    B.7: SEMI
+    B.3: AUTO
+    B.4: SEMI
+    B.5: MANUAL  # junior likely won't run benchmarks; SEMI not applicable
+    B.8: MANUAL
+
+  skeptical_cto:
+    # Post-PLAN-088 target: 11-12/13 AUTO+SEMI (CTO opts out of some autos)
+    B.1: AUTO
+    B.10: AUTO
+    B.14: AUTO    # CTO wants estimation auto-refined for billing visibility
+    B.13: AUTO
+    B.11: AUTO
+    B.12: AUTO
+    B.2: SEMI     # CTO may opt-out of thinking per cost concern
+    B.6: SEMI
+    B.7: MANUAL   # CTO does not author skills typically
+    B.3: AUTO
+    B.4: AUTO     # CTO trusts Pair-Rail dual-rail; SHADOW + DRY_RUN visible
+    B.5: AUTO
+    B.8: MANUAL
+
+  team_member:
+    # Post-PLAN-088 target: 11/13 AUTO+SEMI
+    B.1: AUTO
+    B.10: AUTO
+    B.14: SEMI
+    B.13: AUTO
+    B.11: AUTO
+    B.12: AUTO
+    B.2: AUTO
+    B.6: SEMI
+    B.7: SEMI
+    B.3: AUTO
+    B.4: SEMI
+    B.5: MANUAL   # team member rarely runs benchmarks
+    B.8: MANUAL

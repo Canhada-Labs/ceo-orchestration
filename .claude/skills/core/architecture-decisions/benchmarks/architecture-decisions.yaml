@@ -1,0 +1,257 @@
+# ============================================================================
+# architecture-decisions.yaml — benchmark scenarios for the architecture-decisions skill
+# ============================================================================
+#
+# PLAN-008 Phase 5 (Sprint 8). Exercises L2/L3 blast-radius identification,
+# ADR template completeness, fanout-creep detection, and 10x-scale rule.
+#
+# 7 positive + 3 control = 10 scenarios.
+
+skill: architecture-decisions
+benchmark_version: 1
+created: 2026-04-13
+owner: VP Engineering (archetype)
+description: |
+  Architecture decision quality — distinguishing L2 vs L3+ changes,
+  ADR completeness, 10x scale failures, irreversibility, and
+  fanout-creep. Controls test that routine L1/L2 changes do NOT get
+  flagged as architectural escalations.
+
+scoring:
+  pass_threshold: 0.7
+  health_thresholds:
+    critical: 0.4
+    warning: 0.6
+    healthy: 0.8
+  tag_weight: 0.5
+  suggestion_weight: 0.3
+  severity_weight: 0.2
+
+scenarios:
+
+  # ----------------------------------------------------------------------------
+  # POSITIVE scenarios — must flag as architectural (L3+ / needs ADR)
+  # ----------------------------------------------------------------------------
+
+  - id: ARCH-BENCH-001
+    name: Schema migration touches 4+ services
+    category: blast-radius
+    severity: HIGH
+    version: 1
+    validated_by: 2026-04-13
+    input:
+      type: scenario
+      language: markdown
+      content: |
+        Proposal: rename column `users.email` to `users.primary_email`
+        across the auth service, billing service, notifications service,
+        and the analytics pipeline. Rollout in one deploy window.
+    prompt_template: |
+      Review this architectural proposal. Identify concerns.
+      For each issue return: tag (kebab-case), severity
+      (LOW/MEDIUM/HIGH/CRITICAL), suggestion (one line).
+      Respond ONLY with JSON: {"issues": [...]}.
+    expected:
+      must_flag_tags: ["cross-service-migration", "needs-adr", "l3-blast-radius"]
+      acceptable_alternative_tags: ["schema-migration", "coordinated-deploy", "multi-service-change"]
+      must_suggest_keywords: ["ADR", "phased rollout", "dual-write", "deprecation", "backwards compat"]
+      must_identify_severity: HIGH
+
+  - id: ARCH-BENCH-002
+    name: Event bus replacement proposed mid-sprint
+    category: irreversibility
+    severity: HIGH
+    version: 1
+    validated_by: 2026-04-13
+    input:
+      type: scenario
+      language: markdown
+      content: |
+        Team proposes replacing Kafka with NATS JetStream before end of
+        sprint. No ADR; reasoning given is "NATS is simpler and the
+        team knows it better".
+    prompt_template: |
+      Review this proposal. Flag architecture concerns. Respond ONLY with
+      JSON: {"issues": [{"tag": "...", "severity": "...", "suggestion": "..."}]}.
+    expected:
+      must_flag_tags: ["missing-adr", "irreversible-change", "infrastructure-swap"]
+      acceptable_alternative_tags: ["message-bus-swap", "undocumented-decision", "no-trade-off-analysis"]
+      must_suggest_keywords: ["ADR", "trade-off", "options considered", "blast radius"]
+      must_identify_severity: HIGH
+
+  - id: ARCH-BENCH-003
+    name: 10x scale failure — synchronous fanout
+    category: scalability
+    severity: HIGH
+    version: 1
+    validated_by: 2026-04-13
+    input:
+      type: code
+      language: python
+      content: |
+        # worker.py — called once per user signup
+        def on_signup(user_id: int):
+            for integration in ACTIVE_INTEGRATIONS:  # ~50 today
+                integration.send_webhook(user_id)  # synchronous, retries 3x
+                integration.update_crm(user_id)
+            send_welcome_email(user_id)
+    prompt_template: |
+      Review this handler for architectural concerns. Respond ONLY with
+      JSON: {"issues": [...]}
+    expected:
+      must_flag_tags: ["synchronous-fanout", "10x-scale-failure", "no-queue"]
+      acceptable_alternative_tags: ["blocking-io", "sequential-webhooks", "scale-bottleneck"]
+      must_suggest_keywords: ["queue", "async", "worker pool", "fanout", "background job"]
+      must_identify_severity: HIGH
+
+  - id: ARCH-BENCH-004
+    name: Shared mutable state across modules
+    category: coupling
+    severity: MEDIUM
+    version: 1
+    validated_by: 2026-04-13
+    input:
+      type: code
+      language: typescript
+      content: |
+        // globalState.ts
+        export const state = {
+          currentUser: null as User | null,
+          featureFlags: new Map<string, boolean>(),
+          queryCache: new Map<string, unknown>(),
+        };
+        // imported and mutated from 14 files across auth/, billing/, admin/, api/
+    prompt_template: |
+      Identify architectural concerns. Respond with JSON {"issues": [...]}.
+    expected:
+      must_flag_tags: ["shared-mutable-state", "cross-module-coupling", "global-singleton"]
+      acceptable_alternative_tags: ["global-state", "implicit-dependencies", "tight-coupling"]
+      must_suggest_keywords: ["dependency injection", "context", "boundaries", "encapsulate"]
+      must_identify_severity: MEDIUM
+
+  - id: ARCH-BENCH-005
+    name: ADR proposes option A with no alternatives
+    category: adr-completeness
+    severity: MEDIUM
+    version: 1
+    validated_by: 2026-04-13
+    input:
+      type: scenario
+      language: markdown
+      content: |
+        ADR-042 "Use PostgreSQL for all new services"
+
+        ## Decision
+        All new services will use PostgreSQL.
+
+        ## Consequences
+        Uniform tooling.
+    prompt_template: |
+      Review this ADR for completeness. Respond with JSON {"issues": [...]}.
+    expected:
+      must_flag_tags: ["incomplete-adr", "missing-alternatives", "no-trade-off"]
+      acceptable_alternative_tags: ["missing-options-considered", "thin-adr", "no-context-section"]
+      must_suggest_keywords: ["options considered", "trade-off", "context", "decision drivers"]
+      must_identify_severity: MEDIUM
+
+  - id: ARCH-BENCH-006
+    name: Fanout-creep — one plan phase silently requires another
+    category: fanout-creep
+    severity: MEDIUM
+    version: 1
+    validated_by: 2026-04-13
+    input:
+      type: scenario
+      language: markdown
+      content: |
+        Plan Phase 2 says: "Add audit event `confidence_gate`".
+        Plan Phase 5 says: "Write confidence-gate CLI and deploy to all
+        spawn paths." Phase 5 expects Phase 2 audit consumers updated;
+        Phase 2 only added the emitter. No mention of consumer update.
+    prompt_template: |
+      Identify cross-phase dependencies and scope gaps. Respond JSON {"issues": [...]}.
+    expected:
+      must_flag_tags: ["fanout-creep", "phase-scope-gap", "implicit-dependency"]
+      acceptable_alternative_tags: ["missing-phase-coordination", "hidden-dependency"]
+      must_suggest_keywords: ["consumer update", "phase dependency", "explicit scope"]
+      must_identify_severity: MEDIUM
+
+  - id: ARCH-BENCH-007
+    name: Direct database access from API handler
+    category: boundaries
+    severity: MEDIUM
+    version: 1
+    validated_by: 2026-04-13
+    input:
+      type: code
+      language: typescript
+      content: |
+        // handlers/users.ts
+        import { pool } from "../db/pool";
+        export async function getUser(req, res) {
+          const r = await pool.query("SELECT * FROM users WHERE id=$1", [req.params.id]);
+          res.json(r.rows[0]);
+        }
+    prompt_template: |
+      Review architectural concerns. Respond JSON.
+    expected:
+      must_flag_tags: ["missing-service-layer", "direct-db-in-handler", "boundary-violation"]
+      acceptable_alternative_tags: ["no-repository", "handler-knows-schema"]
+      must_suggest_keywords: ["service layer", "repository", "abstraction", "boundary"]
+      must_identify_severity: MEDIUM
+
+  # ----------------------------------------------------------------------------
+  # CONTROL scenarios — MUST NOT flag as architectural
+  # ----------------------------------------------------------------------------
+
+  - id: CTRL-ARCH-001
+    name: Typo fix in log message
+    category: precision-control
+    severity: NONE
+    version: 1
+    validated_by: 2026-04-13
+    input:
+      type: scenario
+      language: markdown
+      content: |
+        PR changes one line: `logger.info("User sined in")` →
+        `logger.info("User signed in")`. No other changes.
+    prompt_template: |
+      Is this change architectural? Identify issues if any. JSON {"issues": [...]}.
+    expected:
+      must_not_flag_tags: ["needs-adr", "l3-blast-radius", "architectural-change"]
+
+  - id: CTRL-ARCH-002
+    name: Single-file bug fix with test
+    category: precision-control
+    severity: NONE
+    version: 1
+    validated_by: 2026-04-13
+    input:
+      type: scenario
+      language: markdown
+      content: |
+        PR fixes off-by-one in `parsePage(pageStr)` inside
+        `pagination.ts`, adds one test case. Does not change the
+        function signature or exports.
+    prompt_template: |
+      Is this change architectural? JSON {"issues": [...]}.
+    expected:
+      must_not_flag_tags: ["needs-adr", "cross-module-change", "breaking-change"]
+
+  - id: CTRL-ARCH-003
+    name: Config value tuning
+    category: precision-control
+    severity: NONE
+    version: 1
+    validated_by: 2026-04-13
+    input:
+      type: scenario
+      language: markdown
+      content: |
+        PR updates `TIMEOUT_MS` from 5000 to 7500 in one config file.
+        Single-service impact. Reasoning given in commit message.
+    prompt_template: |
+      Is this change architectural? JSON {"issues": [...]}.
+    expected:
+      must_not_flag_tags: ["needs-adr", "l3-blast-radius", "infrastructure-change"]

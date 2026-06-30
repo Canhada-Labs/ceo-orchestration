@@ -1,0 +1,238 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ceo-orchestration.example.com/schemas/benchmark-manifest.schema.json",
+  "title": "ceo-orchestration benchmark manifest",
+  "description": "Schema for benchmark replay manifests consumed by .claude/scripts/swarm/_benchmark_replay.py (PLAN-017 P06 scaffold + PLAN-051 Phase 5 pre-registration). Locked by ADR-071 + docs/benchmarks/sprint-32-fairness-protocol.md §3-4.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "fairness_protocol_ref",
+    "tasks",
+    "sandbox"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "enum": ["1.0.0"],
+      "description": "Schema version for this manifest; bump requires new ADR."
+    },
+    "fairness_protocol_ref": {
+      "type": "string",
+      "pattern": "^docs/benchmarks/.*-fairness-protocol\\.md$",
+      "description": "Git-tracked path to the pre-registration protocol this run adheres to. Freshness verified at run start."
+    },
+    "competitor_context": {
+      "type": "object",
+      "description": "Public baseline scores being compared against; NEVER a live API reference.",
+      "additionalProperties": false,
+      "properties": {
+        "vendors": {
+          "type": "array",
+          "description": "List of vendors/systems whose public scores are referenced for comparison.",
+          "items": {
+            "type": "object",
+            "required": ["name", "score_source_url", "score_snapshot_date"],
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Human-readable vendor or system name (e.g. 'Devin (Cognition)').",
+                "examples": ["Devin (Cognition)", "Aider", "AutoCodeRover"]
+              },
+              "score_source_url": {
+                "type": "string",
+                "format": "uri",
+                "description": "Public URL of the leaderboard or paper where the score was sourced."
+              },
+              "score_snapshot_date": {
+                "type": "string",
+                "format": "date",
+                "description": "ISO date of the score snapshot; staleness tracked per fairness protocol §3.7."
+              },
+              "reported_score_pct": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 100.0,
+                "description": "Published score as a percentage (0-100) of issues resolved."
+              },
+              "benchmark_version": {
+                "type": "string",
+                "description": "Upstream benchmark version/edition the score was reported against.",
+                "examples": ["SWE-bench-lite v1", "SWE-bench-verified 2026-03"]
+              }
+            }
+          }
+        }
+      }
+    },
+    "tasks": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 20,
+      "description": "Pre-registered task list. Per fairness protocol §7, selection happens BEFORE any run and is immutable for that run.",
+      "items": {
+        "type": "object",
+        "required": ["task_id", "seed", "timeout_seconds"],
+        "additionalProperties": false,
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_\\-./]+$",
+            "description": "SWE-bench-lite issue id (e.g. 'django__django-12345') or equivalent identifier."
+          },
+          "seed": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4294967295,
+            "description": "Deterministic seed for framework random exploration. Fixed per task."
+          },
+          "timeout_seconds": {
+            "type": "integer",
+            "minimum": 60,
+            "maximum": 1800,
+            "description": "Hard ceiling for task wall-clock. Task exceeding this counts as FAIL."
+          },
+          "expected_score_range": {
+            "type": "array",
+            "items": {"type": "number"},
+            "minItems": 2,
+            "maxItems": 2,
+            "description": "[min, max] — if actual score outside this range, flag for investigation. NOT a pass/fail gate."
+          },
+          "dataset_ref": {
+            "type": "string",
+            "description": "Upstream dataset+commit for reproducibility."
+          }
+        }
+      }
+    },
+    "sandbox": {
+      "type": "object",
+      "required": ["container_image_digest", "network_mode"],
+      "additionalProperties": false,
+      "description": "Ephemeral Docker sandbox constraints. Per fairness protocol §4 + Security P1.",
+      "properties": {
+        "container_image_digest": {
+          "type": "string",
+          "pattern": "^[a-z0-9/_\\-.]+@sha256:[0-9a-f]{64}$",
+          "description": "Docker image reference pinned by digest (NEVER by tag). Example: 'swebench/sweb.eval:latest@sha256:...'."
+        },
+        "network_mode": {
+          "type": "string",
+          "enum": ["none", "host-allowlist"],
+          "description": "'none' = --network=none (default, preferred). 'host-allowlist' = network access gated by allowlisted hosts (Claude API only, per allowed_endpoints)."
+        },
+        "allowed_endpoints": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uri"
+          },
+          "description": "Only consulted when network_mode=host-allowlist. Must include protocol + host + optional port; e.g. 'https://api.anthropic.com:443'."
+        },
+        "mount_mode": {
+          "type": "string",
+          "enum": ["readonly", "readwrite"],
+          "default": "readonly",
+          "description": "Source repo mount mode. Default readonly per Security Risk #3."
+        },
+        "workspace_tmpfs_mb": {
+          "type": "integer",
+          "minimum": 128,
+          "maximum": 8192,
+          "default": 1024,
+          "description": "tmpfs size for /workspace in the container."
+        }
+      }
+    },
+    "measurement": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Measurement methodology per fairness protocol §3. Defaults enforce the protocol; override at own risk.",
+      "properties": {
+        "n_runs_per_task": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 50,
+          "default": 10,
+          "description": "Minimum N=10 per fairness protocol §3.1."
+        },
+        "statistics_required": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["median", "p50", "p95", "p99", "stddev", "mean"]
+          },
+          "default": ["median", "p50", "p95", "p99", "stddev"],
+          "description": "Required percentiles; per §3.2, NEVER mean alone."
+        },
+        "cold_warm_separation": {
+          "type": "boolean",
+          "default": true,
+          "description": "Cold run (first per task) reported separately from warm runs."
+        },
+        "latency_decomposition": {
+          "type": "boolean",
+          "default": true,
+          "description": "Preserve work_latency_ms vs git_overhead_ms split per C4 SLA."
+        }
+      }
+    },
+    "independent_verifier": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Pre-publish independent-verifier step per fairness protocol §5.",
+      "required": ["required"],
+      "properties": {
+        "required": {
+          "type": "boolean",
+          "description": "Per ADR-071, MUST be true for any published results."
+        },
+        "verifier_agent_type": {
+          "type": "string",
+          "enum": ["ceo-spawn", "general-purpose"],
+          "description": "Which agent acts as independent verifier. Must be a different spawn from the original runner."
+        },
+        "tolerance_p95_pct": {
+          "type": "number",
+          "default": 5.0,
+          "minimum": 0.0,
+          "maximum": 20.0,
+          "description": "Verifier p95 divergence tolerance. Default ±5% per fairness protocol §5."
+        },
+        "sample_tasks_for_verification": {
+          "type": "integer",
+          "default": 1,
+          "minimum": 1,
+          "description": "How many tasks the verifier re-runs. Default 1 (minimum; enough to detect gross divergence)."
+        },
+        "sample_seeds_per_verifier_task": {
+          "type": "integer",
+          "default": 3,
+          "minimum": 3,
+          "description": "Seeds per verifier-sampled task. Default 3 per fairness protocol §5."
+        }
+      }
+    },
+    "budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Cost and runtime budgets; breach closes Phase 5 via refused-ADR per fairness protocol §6.",
+      "properties": {
+        "max_total_usd": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1000.0,
+          "description": "Hard ceiling on Claude API spend. Fairness protocol §6 refuses at $1000."
+        },
+        "max_total_wall_clock_hours": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 72.0,
+          "description": "Upper bound on total wall-clock hours across all tasks/runs. Exceeding this closes Phase 5 via refused-ADR per fairness protocol §6."
+        }
+      }
+    }
+  }
+}

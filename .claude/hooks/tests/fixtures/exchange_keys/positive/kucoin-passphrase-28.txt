@@ -1,0 +1,1 @@
+KC_API_PASSPHRASE="kucoin-trade-bot-v2"

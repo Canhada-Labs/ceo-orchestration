@@ -1,0 +1,32 @@
+--- a/.claude/hooks/_lib/audit_emit.py	2026-06-20 14:31:37
++++ b/.claude/hooks/_lib/audit_emit.py	2026-06-20 14:32:09
+@@ -5851,6 +5851,16 @@
+                 f"{sorted(dropped)[:10]}"
+             )
+     elif action == "codex_invoke_dispatched":
++        # PLAN-143 item-3 (audit-errors-04): clamp the dual-rail exit_code
++        # to the POSIX exit-status range (0..255) BEFORE the allowlist
++        # scrub so the now-retained field can never carry an unbounded /
++        # non-int value. Mirrors the bps/count clamps used elsewhere in
++        # emit_generic. Absent/garbage -> 0 (fail-open, advisory telemetry).
++        if "exit_code" in event:
++            try:
++                event["exit_code"] = max(0, min(255, int(event["exit_code"])))
++            except (TypeError, ValueError):
++                event["exit_code"] = 0
+         event, dropped = _scrub_ceo_boot_event(event, _CODEX_INVOKE_DISPATCHED_ALLOWLIST)
+         if dropped:
+             _breadcrumb(
+@@ -9558,6 +9568,12 @@
+     "hmac", "hmac_error",
+     "atlas_technique",
+     "invocation_class", "thread_id_prefix", "redacted_outgoing",
++    # PLAN-143 item-3 (audit-errors-04): retain the dual-rail process
++    # exit code that check_pair_rail.py emits via emit_generic. Bounded
++    # int 0..255 (POSIX exit-status range), clamped in the emit_generic
++    # dispatch branch before scrub. Same forbidden-field-drop class as
++    # PLAN-140's hook_origin (ADR-153). Advisory telemetry; no PII.
++    "exit_code",
+ })
+ 
+ 

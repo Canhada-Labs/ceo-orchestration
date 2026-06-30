@@ -1,0 +1,250 @@
+"""PLAN-099 Wave A.2 — stdlib federation client (mTLS + signed requests).
+
+Counterpart to :mod:`federation.server`. The client speaks the same
+HMAC+nonce+timestamp wire envelope (AC13) and propagates a
+correlation-id for cross-node audit stitching (Wave C).
+
+Stdlib-only: :mod:`http.client` + :mod:`ssl` + :mod:`hashlib` +
+:mod:`json`. No ``requests`` / ``httpx`` / third-party HTTP libs.
+
+The client is INTENTIONALLY restricted to GET — there is no ``post()``
+/ ``put()`` API surface. Write-mode is PLAN-099-FOLLOWUP scope.
+"""
+
+from __future__ import annotations
+
+import datetime as _dt
+import hashlib
+import http.client
+import json
+import ssl
+import time
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Dict, Optional, Tuple
+
+try:
+    from .audit_chain import (
+        CORRELATION_ID_HEADER,
+        FEDERATION_CORRELATION_ID_KEY,
+        generate_correlation_id,
+        tag_remote_event,
+    )
+    from .replay import generate_nonce, sign_request
+    from .identity import compute_cert_fingerprint
+    from . import HANDSHAKE_TIMEOUT_SECONDS
+except ImportError:
+    from audit_chain import (  # type: ignore[no-redef]
+        CORRELATION_ID_HEADER,
+        FEDERATION_CORRELATION_ID_KEY,
+        generate_correlation_id,
+        tag_remote_event,
+    )
+    from replay import generate_nonce, sign_request  # type: ignore[no-redef]
+    from identity import compute_cert_fingerprint  # type: ignore[no-redef]
+    HANDSHAKE_TIMEOUT_SECONDS = 5.0
+
+
+__all__ = [
+    "FederationClient",
+    "FederationClientConfig",
+    "FederationClientError",
+    "FederationResponse",
+]
+
+
+# ---------------------------------------------------------------------------
+# Exceptions
+# ---------------------------------------------------------------------------
+
+
+class FederationClientError(RuntimeError):
+    """Raised on any HTTP / TLS / verification failure during a request."""
+
+
+# ---------------------------------------------------------------------------
+# Config + response shapes
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class FederationClientConfig:
+    """One peer endpoint + the credentials needed to call it.
+
+    Fields
+    ------
+    peer_id
+        Used for audit-chain tagging (local emits associate the response
+        with this peer).
+    host
+        DNS/IP of the remote node.
+    port
+        TCP port.
+    client_cert
+        PEM cert presented for mTLS.
+    client_key
+        PEM private key.
+    ca_file
+        Bundle of server-CA certs we trust.
+    server_cert_fingerprint
+        Expected ``peer_id_cert_fingerprint`` of the remote — compared
+        post-handshake. Pin-mismatch → :class:`FederationClientError`.
+    hmac_secret_hex
+        Per-peer shared secret used to sign requests.
+    """
+
+    peer_id: str
+    host: str
+    port: int
+    client_cert: Path
+    client_key: Path
+    ca_file: Path
+    server_cert_fingerprint: str
+    hmac_secret_hex: str
+
+
+@dataclass
+class FederationResponse:
+    status: int
+    body: Dict[str, Any]
+    correlation_id: str = ""
+
+
+# ---------------------------------------------------------------------------
+# Client
+# ---------------------------------------------------------------------------
+
+
+class FederationClient:
+    """Stdlib mTLS client for read-only federation endpoints.
+
+    Usage
+    -----
+
+        cfg = FederationClientConfig(peer_id="peer-east-01", ...)
+        client = FederationClient(cfg)
+        ident = client.get_identity()
+        status = client.get_status()
+        summary = client.get_audit_summary(since="2026-05-17T00:00:00Z")
+    """
+
+    def __init__(self, config: FederationClientConfig) -> None:
+        self.config = config
+
+    # -- SSLContext (mTLS, TLSv1.3 min) ---------------------------------
+
+    def _build_ctx(self) -> ssl.SSLContext:
+        cfg = self.config
+        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        ctx.minimum_version = ssl.TLSVersion.TLSv1_3
+        ctx.verify_mode = ssl.CERT_REQUIRED
+        ctx.check_hostname = True
+        ctx.load_verify_locations(cafile=str(cfg.ca_file))
+        ctx.load_cert_chain(
+            certfile=str(cfg.client_cert),
+            keyfile=str(cfg.client_key),
+        )
+        return ctx
+
+    # -- Generic GET ----------------------------------------------------
+
+    def _get(self, path: str) -> FederationResponse:
+        cfg = self.config
+        ctx = self._build_ctx()
+        timestamp = _dt.datetime.now(_dt.timezone.utc).strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
+        nonce = generate_nonce()
+        body = b""
+        signature = sign_request(
+            "GET", path, timestamp, nonce, body, cfg.hmac_secret_hex,
+        )
+        correlation_id = generate_correlation_id()
+
+        conn = http.client.HTTPSConnection(
+            cfg.host,
+            cfg.port,
+            context=ctx,
+            timeout=HANDSHAKE_TIMEOUT_SECONDS,
+        )
+        try:
+            conn.connect()
+            # Post-handshake: verify presented server cert matches the
+            # pinned fingerprint. stdlib `getpeercert(True)` returns DER.
+            sock = conn.sock
+            der: Optional[bytes] = None
+            if sock is not None and hasattr(sock, "getpeercert"):
+                try:
+                    der = sock.getpeercert(True)  # type: ignore[union-attr]
+                except (ssl.SSLError, OSError):
+                    der = None
+            if not der:
+                raise FederationClientError("no peer cert presented")
+            presented_fp = hashlib.sha256(der).hexdigest()
+            if presented_fp.lower() != cfg.server_cert_fingerprint.lower():
+                raise FederationClientError(
+                    "server fingerprint pin mismatch: expected {0!s:.16}.., got {1!s:.16}..".format(
+                        cfg.server_cert_fingerprint, presented_fp,
+                    )
+                )
+
+            headers = {
+                "X-CEO-Federation-Nonce": nonce,
+                "X-CEO-Federation-Timestamp": timestamp,
+                "X-CEO-Federation-Signature": signature,
+                CORRELATION_ID_HEADER: correlation_id,
+                "Accept": "application/json",
+                "User-Agent": "CEOFederationClient/1.0",
+                "Connection": "close",
+            }
+            conn.request("GET", path, body=None, headers=headers)
+            resp = conn.getresponse()
+            raw = resp.read()
+            try:
+                parsed = json.loads(raw.decode("utf-8")) if raw else {}
+                if not isinstance(parsed, dict):
+                    parsed = {"_raw": parsed}
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                parsed = {"_raw_bytes_len": len(raw)}
+            return FederationResponse(
+                status=resp.status,
+                body=parsed,
+                correlation_id=correlation_id,
+            )
+        finally:
+            try:
+                conn.close()
+            except OSError:
+                pass
+
+    # -- Public surface (3 RO endpoints) --------------------------------
+
+    def get_identity(self) -> FederationResponse:
+        return self._get("/federation/identity")
+
+    def get_status(self) -> FederationResponse:
+        return self._get("/federation/status")
+
+    def get_audit_summary(
+        self, since: Optional[str] = None,
+    ) -> FederationResponse:
+        path = "/federation/audit-summary"
+        if since:
+            from urllib.parse import quote
+            path += "?since={0}".format(quote(since, safe=""))
+        resp = self._get(path)
+        # Wave C — tag every remote event with our peer's federation_origin
+        # before the caller forwards to the local emit pipeline.
+        events = resp.body.get("events") if isinstance(resp.body, dict) else None
+        if isinstance(events, list):
+            tagged = [
+                tag_remote_event(
+                    ev,
+                    federation_origin=self.config.server_cert_fingerprint,
+                    correlation_id=resp.correlation_id,
+                )
+                for ev in events
+                if isinstance(ev, dict)
+            ]
+            resp.body["events"] = tagged
+        return resp

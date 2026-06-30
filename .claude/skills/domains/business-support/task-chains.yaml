@@ -1,0 +1,118 @@
+# Task chains — Business-Support Squad
+# Domain-specific workflows that extend the universal .claude/task-chains.yaml.
+
+task_chains:
+  - id: business-support-escalation-policy-change
+    title: "Change an escalation policy, routing rule, or SLA threshold"
+    whenToUse: |
+      Any modification to: ticketing system routing logic, SLA response or
+      resolution time thresholds, escalation trigger conditions, on-call
+      rotation, or queue assignment rules. High-risk: a routing bug or SLA
+      misconfiguration can silently breach enterprise contracts without
+      anyone being paged.
+    steps:
+      - id: 1
+        owner: "Camille Fontaine (Support Operations Lead)"
+        action: "Document the current policy as-configured (not as-documented — these often diverge). Specify exactly what is changing, why, and what the expected impact is on ticket routing (BSP-001)."
+      - id: 2
+        owner: "Camille Fontaine"
+        action: "Author a written rollback procedure: exact steps to revert the change if routing behaviour is unexpected. Must be executable by any support engineer without Camille present (BSP-001)."
+      - id: 3
+        owner: "Anika Johansson (Support Analytics Engineer)"
+        action: "Run the proposed routing rule against a replay of the previous 48 hours of ticket volume. Produce a diff of where each ticket would have routed under old vs new logic. Flag any unexpected divergences (BSP-004)."
+      - id: 4
+        owner: "Ingrid Hoffmann (Customer Success Manager)"
+        action: "Review: does the policy change affect any SLA commitment that is reflected in contracts or the support portal? If so, confirm that the contract SLA and configured SLA remain in sync (BSP-002)."
+      - id: 5
+        owner: "Camille Fontaine"
+        action: "Shadow period: deploy new routing rule in parallel (shadow mode) for 24 hours. Compare shadow routing decisions against live routing decisions. Confirm false-positive escalation rate is within acceptable range."
+      - id: 6
+        owner: "Camille Fontaine"
+        action: "If on-call rotation is affected: notify all affected engineers and confirm receipt. Do not go live until all engineers confirm awareness (BSP-003)."
+      - id: 7
+        owner: "Anika Johansson"
+        action: "Monitor real-time SLA metrics for 4 hours post-go-live: first-response time by tier, queue age distribution, escalation count. Alert Camille if any metric deviates >15% from the 7-day baseline."
+      - id: 8
+        owner: "Staff Code Reviewer"
+        action: "Merge check: rollback procedure documented, shadow period completed, Ingrid SLA alignment sign-off, on-call notifications confirmed (BSP-001, BSP-002, BSP-003)."
+    verification: |
+      - Rollback procedure written and reviewed by a second engineer (BSP-001)
+      - 48-hour ticket replay diff reviewed and approved (BSP-004)
+      - Contract SLA and configured SLA in sync (BSP-002)
+      - Shadow period completed with acceptable divergence rate
+      - On-call engineers notified (BSP-003)
+      - 4-hour post-deploy monitoring window passed
+
+  - id: business-support-new-ticketing-integration
+    title: "Onboard a new support tool integration or webhook"
+    whenToUse: |
+      A new integration is being connected to the support ticketing system —
+      webhook from the product to Zendesk/Intercom, API connector to a BI
+      tool, CRM integration for customer health data, or any tool that reads
+      or writes ticket data. Triggered by both net-new integrations and
+      significant changes to existing integrations.
+    steps:
+      - id: 1
+        owner: "Kwame Asante (Tier-2/3 Support Engineer)"
+        action: "Assess integration scope: what data does it read? what does it write? Does it add fields to the ticket schema? If new fields may contain PII, declare retention class and deletion path before proceeding (BSP-005)."
+      - id: 2
+        owner: "Kwame Asante"
+        action: "Scope the API key to least-privilege access. A read-only integration gets a read-only key. Document why any write scope is required. Rotate any existing over-permissioned keys as part of this work (BSP-008)."
+      - id: 3
+        owner: "Kwame Asante"
+        action: "If the integration uses webhooks: implement idempotency on both the sender and receiver. Define how duplicate events are detected (e.g. event_id deduplication). Test with intentionally replayed webhook events (BSP-006)."
+      - id: 4
+        owner: "Kwame Asante"
+        action: "If the integration exports ticket data: confirm PII scrubbing or pseudonymisation is applied before the export. Document the legal basis for the data transfer under GDPR/LGPD (BSP-007)."
+      - id: 5
+        owner: "Camille Fontaine (Support Operations Lead)"
+        action: "Validate that the integration does not alter routing logic or SLA calculation. If it does, invoke the escalation-policy-change chain for the affected configuration (BSP-001)."
+      - id: 6
+        owner: "Principal QA Architect"
+        action: "Integration tests: fire 5 duplicate webhook events and confirm only 1 ticket or action results (idempotency). Confirm PII fields are absent from any external export. Confirm API key scope is read-only if write was not authorised."
+      - id: 7
+        owner: "Staff Code Reviewer"
+        action: "Merge check: new PII fields have retention class (BSP-005), API key least-privilege (BSP-008), idempotency implemented (BSP-006), PII scrubbed in exports (BSP-007)."
+    verification: |
+      - New PII fields declared with retention class and deletion path (BSP-005)
+      - API key scoped to minimum required permissions (BSP-008)
+      - Idempotency tested with duplicate event replay (BSP-006)
+      - PII scrubbed or pseudonymised before any export (BSP-007)
+      - No routing or SLA side-effects introduced
+
+  - id: business-support-kb-content-lifecycle
+    title: "Launch, review, or deprecate a Knowledge Base article set"
+    whenToUse: |
+      Any significant KB content operation: publishing a new article set for
+      a product feature, running a quarterly content review, deprecating
+      outdated articles, or migrating KB content between platforms. Also
+      triggered when agent-assist suggestion quality degrades (increase in
+      ticket reopens after KB suggestions).
+    steps:
+      - id: 1
+        owner: "Tomás Vargas (Knowledge Base Author)"
+        action: "Audit article set for accuracy, last-reviewed date, and taxonomy metadata (product area, version, audience). Flag any article missing a last-reviewed date or with content over 6 months old for a feature that ships frequently (BSP-011)."
+      - id: 2
+        owner: "Tomás Vargas"
+        action: "For new articles: author with screenshot-independent descriptions (reference UI function, not button label). Assign last-reviewed date and review cadence. Set expiry flag in the KB metadata (BSP-011)."
+      - id: 3
+        owner: "Kwame Asante (Tier-2/3 Support Engineer)"
+        action: "Technical accuracy review: verify that procedures described in the articles are correct for the current product version. Flag any article that references deprecated API endpoints, removed UI flows, or outdated configurations."
+      - id: 4
+        owner: "Anika Johansson (Support Analytics Engineer)"
+        action: "Pull deflection-to-reopen rate for articles being reviewed: what percentage of tickets closed by a KB link were reopened within 48 hours? Articles with >20% reopen rate are candidates for rewrite or deprecation (BSP-012)."
+      - id: 5
+        owner: "Tomás Vargas"
+        action: "Configure agent-assist confidence thresholds: ensure deprecated or low-confidence articles are excluded from suggestion surfacing. Verify that the most-cited current articles rank highest in agent-assist results (BSP-012)."
+      - id: 6
+        owner: "Principal QA Architect"
+        action: "Spot-check 10% of articles via simulated agent workflow: retrieve the article from the ticketing system's suggested-articles panel and verify the content matches the current product behaviour."
+      - id: 7
+        owner: "Staff Code Reviewer"
+        action: "Merge check: all new articles have last-reviewed date and review cadence (BSP-011), deprecated articles removed from agent-assist index (BSP-012), technical accuracy confirmed by Kwame."
+    verification: |
+      - All articles have last-reviewed date and review cadence (BSP-011)
+      - Deflection-to-reopen rate below 20% threshold for published articles (BSP-012)
+      - Deprecated articles excluded from agent-assist surfacing (BSP-012)
+      - No articles referencing removed UI elements or deprecated APIs
+      - Technical accuracy sign-off by Kwame

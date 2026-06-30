@@ -1,0 +1,73 @@
+"""PLAN-099 Federation cross-machine MVP — stdlib ssl mTLS, loopback-default,
+read-only allowlist FIRST.
+
+This package implements the federation surface under ADR-129 (C1 crypto
+capability class) + ADR-135 (federation contract MVP). Stdlib-only per
+ADR-126 §Part 6.
+
+Tier-C per ADR-125: default-OFF, Owner-GPG sentinel pair required to
+enable, additional pair required for non-loopback bind. NO write
+endpoints in MVP.
+"""
+
+from __future__ import annotations
+
+__all__ = [
+    "FEDERATION_KILL_SWITCH_ENV",
+    "DEFAULT_BIND",
+    "DEFAULT_PORT",
+    "MAX_CLOCK_SKEW_SECONDS",
+    "MIN_TLS_VERSION_NAME",
+    "OWNER_GPG_FPR",
+    "ENABLED_SENTINEL_REL",
+    "ENABLED_SENTINEL_ASC_REL",
+    "LAN_ENABLED_SENTINEL_REL",
+    "LAN_ENABLED_SENTINEL_ASC_REL",
+    "PEERS_YAML_REL",
+    "FEDERATION_DATA_DIR_REL",
+    "ALLOWED_HTTP_METHODS",
+    "MAX_CERT_VALIDITY_DAYS",
+    "CERT_EXPIRY_WARN_DAYS",
+    "AUDIT_SUMMARY_RATE_PER_MIN",
+    "HANDSHAKE_TIMEOUT_SECONDS",
+]
+
+# Master kill-switch env (AC12 layer 1).
+FEDERATION_KILL_SWITCH_ENV = "CEO_FEDERATION_ENABLED"
+
+# Loopback-default bind (AC3).
+DEFAULT_BIND = "127.0.0.1"
+DEFAULT_PORT = 8843
+
+# AC13 freshness primitive.
+MAX_CLOCK_SKEW_SECONDS = 30
+
+# AC1 (waiver) — TLSv1.3 minimum enforced via SSLContext.minimum_version.
+# Programmatic per-cert key-floor verification (RSA/EC/DSA) is FORMALLY
+# WAIVED for MVP per ADR-129 §Key-floor-waiver (stdlib `ssl` does not
+# expose primitives for cert-key-parameter inspection).
+MIN_TLS_VERSION_NAME = "TLSv1_3"
+
+# Owner GPG fingerprint allowlist for sentinel verification.
+OWNER_GPG_FPR = "0000000000000000000000000000000000000000"
+
+# In-repo federation kernel paths (E.1 — 6 paths added to _KERNEL_PATHS).
+FEDERATION_DATA_DIR_REL = ".claude/data/federation"
+PEERS_YAML_REL = ".claude/data/federation/peers.yaml"
+ENABLED_SENTINEL_REL = ".claude/data/federation/enabled.md"
+ENABLED_SENTINEL_ASC_REL = ".claude/data/federation/enabled.md.asc"
+LAN_ENABLED_SENTINEL_REL = ".claude/data/federation/lan-enabled.md"
+LAN_ENABLED_SENTINEL_ASC_REL = ".claude/data/federation/lan-enabled.md.asc"
+
+# AC15 — mechanical method allowlist; everything else → 405.
+ALLOWED_HTTP_METHODS = frozenset(("GET",))
+
+# AC11 — cert rotation discipline.
+MAX_CERT_VALIDITY_DAYS = 90
+CERT_EXPIRY_WARN_DAYS = 14
+
+# AC17 — joint-key rate limit on /audit-summary (10/min/peer).
+AUDIT_SUMMARY_RATE_PER_MIN = 10
+
+# AC16 — fail-fast handshake timeout.
+HANDSHAKE_TIMEOUT_SECONDS = 5.0

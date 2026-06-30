@@ -1,0 +1,3 @@
+# redis cluster node id
+node: kES5qyFpxvKI6LaLlQd51imAWcLv2S3G4KPldGiB
+slots: 0-5460

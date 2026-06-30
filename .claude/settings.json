@@ -1,0 +1,786 @@
+{
+  "_comment": "CEO Orchestration — local settings for THIS repo (ceo-orchestration itself). Source of truth for distribution lives in templates/settings/ (settings.base.json + settings.stack.<name>.json). This file is a dogfooded BASE install — no tsc/vitest pre-commit gate because this repo has no TypeScript.",
+  "_squad_allowlist_comment": "Sprint 11 CR2: empty default means nothing imports. Owners add entries via git; see ADR-039 + docs/squad-marketplace.md.",
+  "squad_allowlist": [],
+  "_sandbox_comment": "PLAN-136 W3 S4b: OS-level Bash containment composed into the LIVE dogfood install (no longer SPOF fail-open — the env-layer sandbox sits UNDER the hook rail and does NOT fail open). Values copied from templates/settings/settings.stack.sandbox.json (PLAN-135 W2 / S4). enabled=true contains each Bash tool-call; allowUnixSockets keeps local IPC (audit filelock, git local sockets); filesystem.writablePaths scopes writes to the repo tree + scratch ($CLAUDE_PROJECT_DIR, /tmp, /var/folders), HOME stays non-writable (startup-file class); network.defaultPosture=deny with allowedDomains = the PLAN-133 egress SoT (_lib/egress_taxonomy.py _PAIR_RAIL_HOST_SUFFIXES) + operationally-required hosts. autoAllowBashIfSandboxed SHIPPED FALSE (a fail-open hook + auto-allow makes allowedDomains the SOLE exfil control — deliberate adopter choice only).",
+  "sandbox": {
+    "_comment": "OS-level containment for Bash tool-calls. SHIPPED enabled:false (Codex R1 P1) — the sandbox config is composed-and-ready in the live install, but NOT active until you flip enabled:true AFTER a sandbox probe (curl/gh/pip/npm/codex/anthropic) confirms allowedDomains covers your real workflows. When enabled, the harness runs each Bash command inside it; allowUnix keeps local IPC working (audit filelock, git local sockets); network.allowedDomains is the egress allowlist; default posture is deny.",
+    "enabled": false,
+    "allowUnixSockets": true,
+    "filesystem": {
+      "_comment": "Paths the sandboxed Bash process may read/write. repo = the project tree (so Edit/Write/build/test all work); /tmp = scratch (mktemp scratch dirs used by review_loop.py git-init, eval/probe scratch runs, hermetic venvs). HOME is NOT writable: keeps a sandboxed command from rewriting ~/.bashrc / ~/.claude profile/credential files (harvest D5 startup-file class). $CLAUDE_PROJECT_DIR expands to the repo root at install time.",
+      "writablePaths": [
+        "$CLAUDE_PROJECT_DIR",
+        "/tmp",
+        "/var/folders"
+      ],
+      "readablePaths": [
+        "$CLAUDE_PROJECT_DIR",
+        "/tmp",
+        "/usr",
+        "/bin",
+        "/opt"
+      ]
+    },
+    "network": {
+      "_comment": "allowedDomains = PLAN-133 egress allowlist (see _network_allowlist_comment). Default posture is DENY: a host not on this list is unreachable from a sandboxed Bash command, which is the ~84%-fewer-prompts containment that retires the regex whack-a-mole (5 env(1) bypasses found in S223). deniedDomains is an explicit carve-back layer, empty by design.",
+      "defaultPosture": "deny",
+      "allowedDomains": [
+        "openai.com",
+        "api.openai.com",
+        "githubcopilot.com",
+        "codex.dev",
+        "anthropic.com",
+        "api.anthropic.com",
+        "github.com",
+        "api.github.com",
+        "raw.githubusercontent.com",
+        "objects.githubusercontent.com",
+        "codeload.github.com",
+        "registry.npmjs.org",
+        "pypi.org",
+        "files.pythonhosted.org",
+        "api.osv.dev"
+      ],
+      "deniedDomains": []
+    }
+  },
+  "autoAllowBashIfSandboxed": false,
+  "hooks": {
+    "PreToolUse": [
+      {
+        "_comment": "CORE protocol enforcement: blocks named-agent spawns without ## SKILL CONTENT. Python hook via shim (resolves Python >= 3.9).",
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_agent_spawn.py",
+            "timeout": 5,
+            "statusMessage": "Checking agent spawn governance..."
+          }
+        ]
+      },
+      {
+        "_comment": "Bash safety: shlex-based parser replaces 5 substring-matching rules that false-positived on quoted strings during Sprint 2. Blocks: rm -rf (all flag combos), git reset --hard, git push --force/-f. Allows: --force-with-lease, quoted strings, compound commands with safe clauses. See check_bash_safety.py docstring for full logic.",
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_bash_safety.py",
+            "timeout": 5,
+            "statusMessage": "Checking bash safety..."
+          }
+        ]
+      },
+      {
+        "_comment": "PLAN-133 E1 (Goose-harvest) — adversary local-rules deny/ask gate. DETERMINISTIC local-rules scan over the Bash command, reading patterns from .claude/adversary.md (UNTRUSTED DATA, size-capped, read only INSIDE CLAUDE_PROJECT_DIR). LOCAL-RULES-ONLY: NO model call on the hot path (the rite rejected sync Codex here — a measured 40x-600x p99 regression vs the ~5ms warm floor; real adversarial depth lives in the canonical/L3 Codex pair-rail). Default-OFF behaviorally: advisory (emit-only, ALLOW) until CEO_ADVERSARY=1 flips a deny/ask rule to BLOCK. Secret-in-command → fail-CLOSED (deny/flag, never transmit — E1 sends nothing, local-only). Fail-OPEN on any infra error. Own ADR (ADR-146) lands FIRST. Mirror in BOTH this template and .claude/settings.json or test_template_dogfood_parity reddens.",
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_adversary.py",
+            "timeout": 5,
+            "statusMessage": "Adversary local-rules scan (default-OFF advisory)..."
+          }
+        ]
+      },
+      {
+        "_comment": "Plan lifecycle enforcement (Sprint 3 Item D + PLAN-019 P1-SEC-E): blocks illegal status transitions on .claude/plans/PLAN-NNN-slug.md files across Edit|Write|MultiEdit (P1-SEC-E closed a bypass where Write/MultiEdit let a sub-agent Write PLAN-NNN.md with status: done without required fields). Legal transitions per PLAN-SCHEMA.md §4. Out-of-scope edits (any path not matching PLAN-*.md) pass through.",
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_plan_edit.py",
+            "timeout": 5,
+            "statusMessage": "Checking plan lifecycle..."
+          }
+        ]
+      },
+      {
+        "_comment": "Canonical-edit sentinel (Sprint 5 Phase 7 ADR-010 + PLAN-065 Layer A 2026-05-04): blocks Edit/Write/MultiEdit AND any mcp__* tool with write-shaped params (path/file_path/content/patch/diff/source/text) against canonical governance paths unless a matching Owner-signed sentinel exists. Layer A closes S81-tris gap: custom MCP tools (mcp__codex__apply_patch etc.) previously bypassed the gate entirely. See feedback custom_mcp_tools_governance_gap.md.",
+        "matcher": "Edit|Write|MultiEdit|mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_canonical_edit.py",
+            "timeout": 5,
+            "statusMessage": "Checking canonical-path sentinel..."
+          }
+        ]
+      },
+      {
+        "_comment": "PROTOCOL.md semver cascade (PLAN-110 Wave D shipped v1.39.0 / wired v1.39.6 via PLAN-112-FOLLOWUP-plan-110-close S153 — closes false-closure F-1.1-1.1-7c108548 caught by S152 PLAN-112 audit). Fail-OPEN advisory: detects PROTOCOL.md edit without paired ADR-NNN-AMEND-M in same-session session_edits → emits protocol_edit_missing_amend_paired audit event + additionalContext WARN, never blocks. In-hook path filter targets PROTOCOL.md (matcher is broad per check_plan_edit.py convention). Position-in-chain: AFTER canonical-edit (sentinel-block fires first) + BEFORE skill-patch-sentinel (orthogonal scope). Doctrine port: spec-kit constitution.md:L302-L305 semver discipline.",
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_protocol_semver_cascade.py",
+            "timeout": 5,
+            "statusMessage": "Checking PROTOCOL.md semver cascade..."
+          }
+        ]
+      },
+      {
+        "_comment": "Skill-patch sentinel (Sprint 11 Phase 4, ADR-031, CR1): blocks Edit/Write against .claude/skills/**/SKILL.md unless a paired GPG-signed SP-NNN.md proposal exists under .claude/proposals/ AND the pending commit carries the Skill-Patch-SHA trailer. Fail-closed by design (safety surface). CEO_SOTA_DISABLE does NOT disable this hook.",
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_skill_patch_sentinel.py",
+            "timeout": 5,
+            "statusMessage": "Checking skill-patch sentinel..."
+          }
+        ]
+      },
+      {
+        "_comment": "VETO-floor tier-policy sentinel (PLAN-043 Phase 4, ADR-064): blocks Edit/Write/MultiEdit against .claude/agents/code-reviewer.md or security-engineer.md whose diff modifies the model: field unless a dedicated Owner-signed sentinel with both 'Scope:' entry AND 'VETO-CHANGE:' marker exists. Third structural layer of VETO-floor defense (C-P0-3) in addition to _constants.VETO_HARDCODE module-load SHA256 assertion + apply.py VETO_HARDCODE_APPLY independent literal.",
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_tier_policy.py",
+            "timeout": 5,
+            "statusMessage": "Checking VETO-floor tier-policy sentinel..."
+          }
+        ]
+      },
+      {
+        "_comment": "Arbitration-kernel HARD-DENY (PLAN-019 P1-SEC-A + PLAN-065 Layer A 2026-05-04): blocks Edit|Write|MultiEdit AND any mcp__* tool with write-shaped params on the hooks that enforce governance themselves + _lib policy/redact/audit-emit/contract primitives + .claude/policies. NO sentinel escape — only CEO_KERNEL_OVERRIDE=<reason-slug> + CEO_KERNEL_OVERRIDE_ACK=I-ACCEPT bypasses (bypass emits veto_triggered audit event with reason_code=kernel_override_used). Layer A closes S81-tris gap on kernel-protected paths.",
+        "matcher": "Edit|Write|MultiEdit|mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_arbitration_kernel.py",
+            "timeout": 5,
+            "statusMessage": "Checking arbitration kernel..."
+          }
+        ]
+      },
+      {
+        "_comment": "Scratchpad scope gate (Sprint 11 Phase 7, ADR-034, M2): PreToolUse Bash hook that inspects python3 .claude/scripts/scratchpad.py invocations; blocks cross-plan --plan X when the active session derives Y. Allows non-scratchpad Bash and same-plan / no-plan invocations. Fail-open on infra error.",
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_scratchpad_access.py",
+            "timeout": 5,
+            "statusMessage": "Checking scratchpad scope..."
+          }
+        ]
+      },
+      {
+        "_comment": "Cost/budget advisory (Sprint 11 Phase 6, ADR-033): PreToolUse Agent hook that tallies running tokens for the active plan and emits budget_exceeded audit event + systemMessage warning when CEO_MAX_PLAN_TOKENS is exceeded. ALWAYS allows in Sprint 11 (State 0 advisory). CEO_BUDGET_BYPASS=1 is the Owner-only escape hatch (rate-limited 10/24h per plan per H13). Sprint 12 flip criterion documented in ADR-033 §2 Flip Criteria Table.",
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_budget.py",
+            "timeout": 5,
+            "statusMessage": "Checking token budget..."
+          }
+        ]
+      },
+      {
+        "_comment": "PLAN-045 F-10-03 closure: wire the opt-in Read-injection scanner into the dogfood install. Advisory-only (always emits allow); fail-open on any infra error; per the hook docstring runs NFKC + zero-width strip + injection family scan and emits injection_flag audit event + systemMessage on hit. Kill-switch CEO_READ_INJECTION_SCAN=0 short-circuits with allow.",
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_read_injection.py",
+            "timeout": 5,
+            "statusMessage": "Scanning read content for injection patterns..."
+          }
+        ]
+      },
+      {
+        "_comment": "PLAN-075 v1.13.x narrow-promotion (ADR-106 + ADR-110): PreToolUse Pair-Rail Multi-LLM hook. When Edit|Write|MultiEdit targets an L3+ canonical-guarded path, invokes Codex MCP in read-only review mode and validates the response contains no write-shaped patches (apply_patch envelope, unified diff, JSON Patch RFC 6902). On Codex unavailable: fail-OPEN + breadcrumb. On write-shaped response: BLOCK + audit pair_rail_codex_violation. On clean review: ALLOW + audit pair_rail_review_passed. Sentinel-bypass short-circuits to ALLOW + audit pair_rail_sentinel_bypass. Kill-switches: CEO_PAIR_RAIL_DISABLE=1, CEO_PAIR_RAIL_TIMEOUT_S (default 30s).",
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/_python-hook.sh .claude/hooks/check_pair_rail.py",
+            "timeout": 60
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__codex__codex|mcp__codex__codex-reply",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/check_codex_filewrite.py\"",
+            "timeout": 30
+          }
+        ]
+      },
+      {
+        "_comment": "PLAN-083 Wave 0a sub-agent 0.5: anti-CEO-overhead detector. PreToolUse hook detecting CEO doing work a sub-agent could do equally well (P1 sequential skill reads / P2 unrelated edits / P3 serial schema authoring / P4 grep/find serial / P5 cross-module test writes). Fail-OPEN on infra bug. Emit budget ≤20/day. Override CEO_OVERHEAD_ACK=1. Kill-switch CEO_ANTI_OVERHEAD=0. p95 latency ≤50ms (bench 0.029ms). PLAN-125 WS-1 (kooky-harvest): matcher widened to the broad tool set so this hook also writes the cheap per-tool-call PreToolUse lifecycle stamp (tool_use_id pairing record; emits NO audit-chain event per MF-SEC-5) co-located here to add NO new subprocess (MF-PERF-1). Lifecycle kill-switch CEO_TOOL_LIFECYCLE=0.",
+        "matcher": "Agent|Bash|Edit|Write|MultiEdit|Read|Glob|Grep|WebFetch|WebSearch|NotebookEdit|TodoWrite|Task|mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_anti_ceo_overhead.py",
+            "timeout": 5,
+            "statusMessage": "Checking for CEO-overhead anti-patterns..."
+          }
+        ]
+      },
+      {
+        "_comment": "PLAN-102 Wave A (S142 2026-05-18) — cost-envelope HARD CAP gate on swarm-loop dispatch. Activates ONLY when BOTH CEO_SWARM=1 AND command body matches a real swarm coordinator signature (P1 #1 fold). Hook emits cost_envelope_capped on breach via emit_generic (P0 #2 fold; matches task_route_advised precedent). Default-OFF: fail-OPEN allow `{}` when CEO_SWARM unset/0. See ADR-133 §A + PLAN-102 §6b.",
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_cost_envelope.py",
+            "timeout": 5,
+            "statusMessage": "Checking cost envelope..."
+          }
+        ]
+      },
+      {
+        "_comment": "PLAN-125 WS-2 (kooky-harvest) — parallel-writer worktree-isolation enforcement. Default-OFF: INERT unless the writer self-sets CEO_PARALLEL_WRITER=1 (+ CEO_ASSIGNED_WORKTREE=<abs>). When ACTIVE it is UNCONDITIONAL + fail-CLOSED — DENIES any Bash/Edit/Write/MultiEdit whose RESOLVED target lands in the shared main checkout instead of the assigned dedicated worktree (ADR-049a AMEND-1; stops the S191 worktree-bleed). cwd resolved at the PreToolUse decision point (no TOCTOU via a later cd/git -C — MF-SEC-6); git refs/paths require a `--` end-of-options separator + allowlist regex (MF-SEC-7). Fail-OPEN only on an infra/parse bug of the hook itself. INFRA for non-conflicting parallel reads/reviews — NO throughput/speed claim (MF-4).",
+        "matcher": "Bash|Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_worktree_writer.py",
+            "timeout": 5,
+            "statusMessage": "Checking parallel-writer worktree isolation..."
+          }
+        ]
+      },
+      {
+        "_comment": "PLAN-124 WS-2 (ECC value-harvest) — adopter linter/formatter config protection. BLOCKING (maintainer ceremony). Allows first-time CREATION of a config (ENOENT) but BLOCKS any Edit/Write/MultiEdit that MODIFIES an EXISTING file in the UNAMBIGUOUS adopter-linter basename allowlist (eslint/prettier/biome/ruff/stylelint/markdownlint/shellcheck/tslint/flake8 — NOT pyproject.toml/setup.cfg/package.json, NOT governance configs which are the canonical guard's job per MF-L/debate K6). The insight: an agent 'fixes' a failing lint gate by relaxing the config instead of the code → 'fix the code, not the config'. Design choice = block-any-edit (ECC parity, revisitable; see module docstring). Escape hatches: CEO_CONFIG_PROTECTION=0 (session) or <repo>/.claude/.config-protection-disable (per-repo). User ceremony wires the ADVISORY variant (CEO_CONFIG_PROTECTION_ADVISORY=1 → allow + systemMessage steer, never blocks). Fail-OPEN on a hook bug; fail-CLOSED (bounded) only on a write tool with no resolvable file path. Raw tool input is never echoed (basename + resolved path only). MIT-attributed re-implementation of ECC scripts/hooks/config-protection.js.",
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_config_protection.py",
+            "timeout": 5,
+            "statusMessage": "Checking adopter config protection..."
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "_comment": "Silent audit-log observer (Python): appends one JSONL line per Agent spawn to $HOME/.claude/projects/ceo-orchestration/audit-log.jsonl. Emits nothing on stdout (composes with reminder hook). Schema: .claude/plans/AUDIT-LOG-SCHEMA.md. Adds hook_duration_ms field + monthly rotation at 10MB.",
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" audit_log.py",
+            "timeout": 5,
+            "statusMessage": "Writing audit log..."
+          }
+        ]
+      },
+      {
+        "_comment": "Confidence gate (Sprint 9 Phase 1, ADR-019): PostToolUse Agent hook that invokes confidence_gate.py CLI over agent output, emits confidence_gate audit event, and ENFORCES blocking when CEO_CONFIDENCE_ENFORCE=1 (Owner-only flip; see ADR-019 + RELEASE.md). Advisory-only by default. CEO_CONFIDENCE_BYPASS=1 is the session-scoped escape hatch. Fail-open on timeout/infra per CLAUDE.md §Critical Rules. 10s timeout covers the CLI's 5s subprocess + overhead.",
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_confidence_gate.py",
+            "timeout": 10,
+            "statusMessage": "Running confidence gate..."
+          }
+        ]
+      },
+      {
+        "_comment": "Output safety (Sprint 11 Phase 9, ADR-036, H14): PostToolUse Agent hook that scans tool_response for PII/secrets via mandatory pipeline (NFKC → zero-width strip → base64 decode ≤1 → Shannon entropy → regex). Advisory Sprint 11 (flag mode); emits output_safety_flag audit event, output preserved. CEO_OUTPUT_SAFETY_MODE=redact switches to [REDACTED:TYPE] substitution. CEO_SOTA_DISABLE=1 short-circuits to allow no-op. Sprint 12 flag→redact flip criterion in ADR-036.",
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_output_safety.py",
+            "timeout": 10,
+            "statusMessage": "Scanning agent output for PII/secrets..."
+          }
+        ]
+      },
+      {
+        "_comment": "Sub-agent fabrication detection (PLAN-059 Phase 0, ADR-080): scans Agent dispatch responses for the 4 fabrication formats observed in Sessions 61+62 rail anomaly (function_calls XML, tool_use JSON, tool_call JSON, **Tool Use markdown) + bonus tool_response fake. Default ADVISORY: emits veto_triggered audit event with reason_code=subagent_fabrication_detected. CEO_SUBAGENT_FABRICATION_BLOCK=1 escalates to systemMessage warning. CEO_SUBAGENT_FABRICATION_DEBUG=1 dumps full response to /tmp/h4-fabrication-<sha8>.json. Fail-open on any internal error. Activated via Owner-signed sentinel at .claude/plans/PLAN-059/architect/round-1/approved.md (GPG: 00000000).",
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_subagent_fabrication.py",
+            "timeout": 5,
+            "statusMessage": "Scanning sub-agent response for fabrication patterns..."
+          }
+        ]
+      },
+      {
+        "_comment": "After any Agent spawn, remind CEO to verify the agent respected the file assignment.",
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '{\"decision\":\"allow\",\"message\":\"POST-AGENT: Check git diff to verify file assignment compliance. Run: git diff --name-only\"}'",
+            "timeout": 5,
+            "statusMessage": "Reminding CEO to verify file assignment..."
+          }
+        ]
+      },
+      {
+        "_comment": "PLAN-020 Phase 2 (ADR-051): PostToolUse observer for Read tool calls. When a sub-agent Reads a SKILL.md under .claude/skills/**, re-hash the content and emit a forensic breadcrumb to audit-log. Observer-only: always returns allow. Purpose: detect TOCTOU between spawn-time SHA-256 pin and actual Read (attacker swap mid-session). Fail-open on any error.",
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_skill_reference_read.py",
+            "timeout": 3,
+            "statusMessage": "Verifying skill reference re-hash..."
+          }
+        ]
+      },
+      {
+        "_comment": "PLAN-029 / ADR-057: PostToolUse output-scan redaction. Scans tool responses for 3 families — unicode-injection (bidi/zero-width), telemetry strings (12 vendors), OWASP LLM Top 10 subset (LLM01/02/06/08/10). Advisory-only at State 0; advisory banner systemMessage on hit. Kill-switches: CEO_OUTPUT_SCAN=0 (master) + CEO_OUTPUT_SCAN_UNICODE / _TELEMETRY / _LLM10 (per-family).",
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_output_secrets.py",
+            "timeout": 5,
+            "statusMessage": "Scanning tool output..."
+          }
+        ]
+      },
+      {
+        "_comment": "PLAN-042 ITEM 7 (FINDING-17): SKILL.md bootstrap TOCTOU forensic observer. After any Edit|Write|MultiEdit on .claude/skills/**/SKILL.md, computes sha256 of resulting file and correlates with any recent skill_bootstrap_used audit event. Emits skill_bootstrap_post_hash with anomaly flag if delay > 5s (possible concurrent-race). Observer-only (advisory). Kill-switch: CEO_SKILL_BOOTSTRAP_POST=0.",
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_skill_bootstrap_post.py",
+            "timeout": 5,
+            "statusMessage": "Checking skill bootstrap TOCTOU..."
+          }
+        ]
+      },
+      {
+        "_comment": "PLAN-058 Phase A (ADR-077): PostToolUse scanner for WebFetch + WebSearch tool responses. Scans for prompt-injection (scan-injection.py 6 families) + harness-mimicry (_lib/injection_patterns.py 4 families). Advisory only; never blocks. Kill-switch CEO_WEBFETCH_INJECTION_SCAN=0. Incident 2026-04-24 remediation.",
+        "matcher": "WebFetch|WebSearch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_webfetch_injection.py",
+            "timeout": 5,
+            "statusMessage": "Scanning web content for injection patterns..."
+          }
+        ]
+      },
+      {
+        "_comment": "PLAN-052 / ADR-083: PostToolUse scanner for MCP tool responses. Scans for harness-mimicry + directive-prose patterns (4 families reused from _lib/injection_patterns.py via _lib/mcp_injection_scan.py wrapper). ADVISORY only — never blocks. Emits mcp_injection_finding audit event when match fires (gated on _lib/audit_emit.py kernel-override extension; degrades to advisory-only if extension not yet applied). Kill-switch CEO_MCP_SCANNER_DISABLE=1. Closes PLAN-058 C-P0-01 G4 (MCP tool result injection gate).",
+        "matcher": "mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_mcp_response.py",
+            "timeout": 5,
+            "statusMessage": "Scanning MCP response for injection patterns..."
+          }
+        ]
+      },
+      {
+        "_comment": "PLAN-081 Phase 1-full / R1 S-Sec-5: PostToolUse Codex MCP ingress sanitization. Scans Codex stdout for prompt-injection patterns (harness_mimicry [SYSTEM:, xml_system_tag <system>, tool_use_forgery <tool_use>) BEFORE Claude consumes the next turn. Emits pair_rail_codex_injection_detected audit event on match. ADVISORY only per ADR-106 (PostToolUse cannot block). Restricted to Codex MCP tool names via matcher; the broader mcp__.* scanner above (PLAN-052) covers other MCP servers' generic injection patterns. Fail-open: import / parse / scan failure → allow + breadcrumb.",
+        "matcher": "mcp__codex__codex|mcp__codex__codex-reply",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_codex_response.py",
+            "timeout": 5,
+            "statusMessage": "Scanning Codex response for injection patterns..."
+          }
+        ]
+      },
+      {
+        "_comment": "PLAN-085 Wave E.4 — PostToolUse Bash canonical-edit forensic audit. Advisory only (never blocks); emits canonical_edit_completed breadcrumb when Bash command targets a canonical governance path via write-shape operators (> / >> / tee / sed -i / git checkout). Composition with E.3 PreToolUse interceptor: E.3 blocks at intent, E.4 records at completion.",
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_bash_canonical_forensic.py",
+            "timeout": 5,
+            "statusMessage": "Wave E.4 forensic audit..."
+          }
+        ]
+      },
+      {
+        "_comment": "PLAN-128 W1 #1+#4: after-edit verify dispatcher (advisory default-on; CEO_VERIFY_AFTER_EDIT=0 to disable). Runs syntax/lint on the changed file; surfaces findings as additionalContext for self-repair. Fail-OPEN.",
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" accel_dispatch.py",
+            "timeout": 20,
+            "statusMessage": "Verifying edit..."
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "_comment": "PLAN-125 WS-1 (kooky-harvest): per-tool-call lifecycle FAILURE coverage. Fires only on the rare tool-failure path (not the hot success path). Reuses check_output_secrets.py — it reads the native duration_ms + tool_use_id, pairs with the PreToolUse stamp, and emits tool_call_lifecycle_recorded with success=false (the PostToolUseFailure phase IS the success signal — no marker scan, MF-SEC). Routes through the dedicated scrub-branch + allowlist (NEVER _EMIT_GENERIC_PASSTHROUGH, MF-SEC-2); raw mcp__* tool name → mcp_other (MF-SEC-1); duration_bucket only, never raw ms (MF-SEC-3). Advisory + fail-open: a telemetry emit failure never blocks. Kill-switch CEO_TOOL_LIFECYCLE=0.",
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_output_secrets.py",
+            "timeout": 5,
+            "statusMessage": "Recording tool-failure lifecycle..."
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "_comment": "PLAN-028 / ADR-056 lifecycle hook. Fires at session boot — audit init + Gate-1 cache warmup + governance health check. Fail-open: any error → allow + breadcrumb. Kill-switch: CEO_EXTENDED_LIFECYCLE=0.",
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" SessionStart.py",
+            "timeout": 5,
+            "statusMessage": "Session warmup..."
+          }
+        ]
+      },
+      {
+        "_comment": "PLAN-128 W2: turbo what's-on line + first-run banner + (opt-in CEO_AUTO_BOOT=1) /ceo-boot nudge. Advisory additionalContext; fail-open. Kill: CEO_TURBO=0 / .claude/turbo-off.",
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" turbo_sessionstart.py",
+            "timeout": 5,
+            "statusMessage": "Turbo status..."
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "_comment": "PLAN-028 / ADR-056 lifecycle hook. Fires at session close — audit closeout + memory persistence verify + audit-log filelock drain. Fail-open. Kill-switch: CEO_EXTENDED_LIFECYCLE=0.",
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" SessionEnd.py",
+            "timeout": 5,
+            "statusMessage": "Session closeout..."
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "_comment": "PLAN-028 / ADR-056 lifecycle hook. Fires pre-model-inference on each user prompt — redact-hit breadcrumb + 5-family injection smell-test + advisory banner on hit. Observer-only at State 0 (never blocks). Kill-switches: CEO_EXTENDED_LIFECYCLE=0 (disables hook), CEO_PROMPT_INJECTION_SCAN=0 (disables only the scan).",
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" UserPromptSubmit.py",
+            "timeout": 5,
+            "statusMessage": "Prompt smell-test..."
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "_comment": "PLAN-028 / ADR-056 lifecycle hook. Fires on SIGINT / SIGTERM / user_stop — emit session_stop event + filelock drain + stale-lock release. Graceful cleanup only; never blocks. Kill-switch: CEO_EXTENDED_LIFECYCLE=0.",
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" Stop.py",
+            "timeout": 5,
+            "statusMessage": "Session interrupt cleanup..."
+          }
+        ]
+      },
+      {
+        "_comment": "PLAN-128 W1 #3: cross-model review detector (detect-only default; CEO_CODEX_USER_REVIEW_AUTO=1 to auto-run codex; CEO_CODEX_USER_REVIEW=0 to disable). On a NEW risky diff advises `codex review --uncommitted`. Fail-OPEN.",
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" codex_review_user_code.py",
+            "timeout": 130,
+            "statusMessage": "Checking for risky diff..."
+          }
+        ]
+      },
+      {
+        "_comment": "PLAN-128 W2: auto review-loop. OPT-IN (CEO_REVIEW_LOOP=1; default OFF/no-op). On a risky+unreviewed uncommitted diff, BLOCKS Stop with a 'run codex review --uncommitted' nudge, bounded at 3 iters then fail-open. READ-ONLY. Kill: CEO_REVIEW_LOOP=0.",
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" review_loop.py",
+            "timeout": 15,
+            "statusMessage": "Checking review loop..."
+          }
+        ]
+      },
+      {
+        "_comment": "PLAN-134 W1 #5 (E5-F2): closeout-guard — ADVISORY Stop reminder when the session did substantive work without a closeout (CLAUDE.md §Current Work + CHANGELOG + memory) and/or an Owner-GPG finish-*.sh ceremony is pending (staged/** or scripts/local/ newer than the last tag). Fail-OPEN, never blocks. Kill: CEO_CLOSEOUT_GUARD=0.",
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_closeout_guard.py",
+            "timeout": 5,
+            "statusMessage": "Closeout guard..."
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "_comment": "PLAN-045 P0-09 (b) — Artifact Paradox fluency-marker advisory. Scans sub-agent output for confidence phrases ('all done', 'tests green', 'perfect', etc). Adaptive threshold by length (2 markers <500ch, 4 <5000ch, 8 >=5000ch). On threshold-crossed: emits systemMessage advisory + fluency_nudge audit event. Observer-only; never blocks. Kill-switch: CEO_FLUENCY_NUDGE=0. See PROTOCOL.md §Artifact Paradox + pitfall LLM-001.",
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_fluency_nudge.py",
+            "timeout": 5,
+            "statusMessage": "Checking for Artifact Paradox fluency markers..."
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "_comment": "PLAN-135 W2 H1 (ADR-153): PreCompact continuity snapshot — before the transcript collapses (manual /compact or auto context-window threshold), snapshots plan-id + execution-unit position + ceremony flags to the plan scratchpad + reads the HMAC-chain anchor. ADVISORY, fail-OPEN, never blocks. Emits closed-enum compaction_continuity_snapshot. Kill: CEO_COMPACTION_CONTINUITY=0.",
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_precompact_continuity.py",
+            "timeout": 5,
+            "statusMessage": "Snapshotting governance state before compaction..."
+          }
+        ]
+      }
+    ],
+    "PostCompact": [
+      {
+        "_comment": "PLAN-135 W2 H1 (ADR-153): PostCompact governance reinjection — after compaction, reads the PreCompact snapshot from the plan scratchpad and reinjects governance POINTERS (active PLAN, execution-unit position, Gate-1 re-read reminder, pending ceremonies) via additionalContext. POINTERS ONLY, never file contents (injection surface). ADVISORY, fail-OPEN. Emits closed-enum compaction_context_reinjected. Kill: CEO_COMPACTION_CONTINUITY=0.",
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_postcompact_reinject.py",
+            "timeout": 5,
+            "statusMessage": "Reinjecting governance pointers after compaction..."
+          }
+        ]
+      }
+    ],
+    "ConfigChange": [
+      {
+        "_comment": "PLAN-135 W2 H2: ConfigChange guard — ADVISORY audit + advisory-block of out-of-band settings.json tamper (the S197 class). Resolves multi-layer settings via _lib/effective_config (shared FORBIDDEN-KEYS source) + classifies tamper on the settings-FILE surfaces; emits config_change_observed (benign) / config_change_forbidden_key (advisory-block, ONE per tamper class). Fail-OPEN, never blocks on infra. Honest coverage boundary: disarmed by disableAllHooks + blind to outside-harness edits; compensators = /ceo-boot tripwires (S3) + W5 O10 OTEL witness (ADR-153 §H2). Kill: CEO_CONFIG_CHANGE_GUARD=0.",
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_config_change.py",
+            "timeout": 5,
+            "statusMessage": "Checking config change for tamper..."
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "_comment": "PLAN-135 W2 H3: SubagentStart lifecycle recorder — records the spawn instant + spawn context (agent_type, session binding) into a local sidecar keyed by sha256(agent_id)[:16] (raw agent_id NEVER persisted). The SubagentStop half (check_fluency_nudge.py) consumes it + agent_transcript_path to emit ONE closed-enum subagent_lifecycle_observed bracket (per-agent wall-time + token + claim; feeds persona-ledger). ADVISORY, fail-OPEN, never blocks, NO audit action from this hook. Kill: CEO_SUBAGENT_LIFECYCLE=0.",
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_subagent_start.py",
+            "timeout": 5,
+            "statusMessage": "Recording sub-agent spawn instant..."
+          }
+        ]
+      }
+    ],
+    "Setup": [
+      {
+        "_comment": "PLAN-135 W2 H8: Setup-event post-install self-verification (init matcher) — validate-governance --fast + verify-counts + hook exec-bits (the S228 exec-bit class) + CLAUDE_ENV_FILE allowlist persistence (explicit CEO_* include-list; every override/escape-hatch/kill-switch EXCLUDED, S185/S197 stale-override class). ADVISORY + fail-open; NEVER blocks. Kill-switch: CEO_SETUP_VERIFICATION=0.",
+        "matcher": "init",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_setup_verification.py",
+            "timeout": 15,
+            "statusMessage": "Post-install self-verification..."
+          }
+        ]
+      }
+    ]
+  },
+  "ceo_quality_profile": "balanced",
+  "env": {
+    "CEO_QUIET_MODE": "1",
+    "CLAUDE_CODE_SUBAGENT_MODEL": "inherit",
+    "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB": "1",
+    "BASH_MAX_TIMEOUT_MS": "600000",
+    "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR": "1",
+    "ENABLE_TOOL_SEARCH": "auto"
+  },
+  "availableModels": [
+    "claude-opus-4-8",
+    "claude-fable-5",
+    "claude-sonnet-4-6",
+    "claude-haiku-4-5"
+  ],
+  "fallbackModel": [
+    "claude-opus-4-8"
+  ],
+  "permissions": {
+    "deny": [
+      "Bash(git push --force*)",
+      "Edit(PROTOCOL.md)",
+      "Write(PROTOCOL.md)",
+      "Edit(.claude/settings.json)",
+      "Write(.claude/settings.json)",
+      "Edit(SPEC/**)",
+      "Write(SPEC/**)"
+    ],
+    "allow": [
+      "Bash(git status*)",
+      "Bash(git log*)",
+      "Bash(git diff*)",
+      "Bash(ls)",
+      "Bash(ls *)",
+      "Bash(grep *)",
+      "Bash(head *)",
+      "Bash(tail *)",
+      "Bash(wc *)"
+    ]
+  },
+  "cleanupPeriodDays": 90,
+  "plansDirectory": ".claude/plans",
+  "attribution": {
+    "coAuthoredBy": true
+  },
+  "_skill_budget_comment": "PLAN-135 W1 S7: skillListingBudgetFraction caps the skill-listing context tax (fraction of context window in chars; CLI default 0.01 = 8000 chars at a 200k window); skillOverrides name-only demotes 0-dispatch domain-tier skills. Regenerate: python3 .claude/scripts/skill-budget-generator.py --jq-fragment",
+  "skillListingBudgetFraction": 0.01,
+  "skillOverrides": {
+    "Fintech Frontend Data Layer & Real-Time": "name-only",
+    "Kill Switches": "name-only",
+    "Latency Budgets": "name-only",
+    "Order Routing": "name-only",
+    "accessibility-section-508": "name-only",
+    "account-strategist": "name-only",
+    "advanced-evaluation": "name-only",
+    "agent-evaluation": "name-only",
+    "agentic-actions-auditor": "name-only",
+    "agentic-search-optimizer": "name-only",
+    "ai-citation-strategist": "name-only",
+    "analytics-reporter": "name-only",
+    "anthropologist": "name-only",
+    "app-store-optimizer": "name-only",
+    "assessment-integrity": "name-only",
+    "auditor": "name-only",
+    "blockchain-security-audit": "name-only",
+    "book-co-author": "name-only",
+    "bookkeeper-controller": "name-only",
+    "buyer-seller-agent": "name-only",
+    "carousel-growth-engine": "name-only",
+    "civil-engineer": "name-only",
+    "client-intake": "name-only",
+    "cms-developer": "name-only",
+    "content-creator": "name-only",
+    "corporate-training-designer": "name-only",
+    "creative-strategist": "name-only",
+    "cultural-intelligence": "name-only",
+    "customer-returns": "name-only",
+    "deal-strategist": "name-only",
+    "developer-advocate": "name-only",
+    "digital-presales": "name-only",
+    "discovery-coach": "name-only",
+    "document-review": "name-only",
+    "embedded-firmware": "name-only",
+    "equity-research": "name-only",
+    "exchange-api-integration": "name-only",
+    "exchange-onboarding-playbook": "name-only",
+    "executive-summary": "name-only",
+    "experiment-tracker": "name-only",
+    "filament-specialist": "name-only",
+    "finance-tracker": "name-only",
+    "financial-analyst": "name-only",
+    "financial-correctness-and-math": "name-only",
+    "financial-display": "name-only",
+    "fintech-frontend-patterns": "name-only",
+    "foia-and-records": "name-only",
+    "fpa-analyst": "name-only",
+    "french-consulting": "name-only",
+    "geographer": "name-only",
+    "growth-hacker": "name-only",
+    "guest-services": "name-only",
+    "healthcare-customer-service": "name-only",
+    "historian": "name-only",
+    "hr-onboarding": "name-only",
+    "identity-graph-operator": "name-only",
+    "instagram-curator": "name-only",
+    "kill-switches": "name-only",
+    "korean-business": "name-only",
+    "language-translator": "name-only",
+    "latency-budgets": "name-only",
+    "learning-analytics": "name-only",
+    "legal-billing": "name-only",
+    "linkedin-content-creator": "name-only",
+    "loan-officer-assistant": "name-only",
+    "marketing-compliance": "name-only",
+    "mobile-app-builder": "name-only",
+    "narratologist": "name-only",
+    "order-routing": "name-only",
+    "outbound-strategist": "name-only",
+    "paid-social-strategist": "name-only",
+    "pipeline-analyst": "name-only",
+    "podcast-strategist": "name-only",
+    "ppc-strategist": "name-only",
+    "prediction-markets": "name-only",
+    "programmatic-buyer": "name-only",
+    "project-shepherd": "name-only",
+    "proposal-strategist": "name-only",
+    "psychologist": "name-only",
+    "public-procurement": "name-only",
+    "real-time-market-systems": "name-only",
+    "recruitment-specialist": "name-only",
+    "reddit-community-builder": "name-only",
+    "sales-coach": "name-only",
+    "sales-engineer": "name-only",
+    "sales-outreach": "name-only",
+    "salesforce-architect": "name-only",
+    "search-query-analyst": "name-only",
+    "seo-specialist": "name-only",
+    "social-media-strategist": "name-only",
+    "solidity-smart-contracts": "name-only",
+    "student-data-privacy": "name-only",
+    "studio-operations": "name-only",
+    "studio-producer": "name-only",
+    "study-abroad-advisory": "name-only",
+    "supply-chain-strategist": "name-only",
+    "support-responder": "name-only",
+    "tax-strategist": "name-only",
+    "tiktok-strategist": "name-only",
+    "tracking-specialist": "name-only",
+    "trading-execution": "name-only",
+    "twitter-engager": "name-only",
+    "video-optimization-specialist": "name-only",
+    "voice-ai-integration": "name-only"
+  },
+  "disableSkillShellExecution": true,
+  "statusLine": {
+    "type": "command",
+    "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/scripts/statusline-ceo.py\"",
+    "padding": 0,
+    "refreshInterval": 30
+  }
+}

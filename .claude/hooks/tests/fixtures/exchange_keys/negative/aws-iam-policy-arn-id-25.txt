@@ -1,0 +1,2 @@
+# aws iam policy
+policy_id: FsZ9oYqfHaVUYOgqsGvHUh6ma2YSc0pUK4H0

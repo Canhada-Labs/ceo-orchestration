@@ -1,0 +1,3 @@
+# bybit auth
+BYBIT_API_KEY=P0qecIi6zpLwNKEWqudz
+BYBIT_API_SECRET=uuKKTJYlDa0o47sVEjiog3zfwzjyVICX2MT7

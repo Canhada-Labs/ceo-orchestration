@@ -1,0 +1,123 @@
+# Task chains — Real-Estate Finance Squad
+# Domain-specific workflows that extend the universal .claude/task-chains.yaml.
+
+task_chains:
+  - id: real-estate-finance-loan-product-launch
+    title: "Launch or reconfigure a loan product (rate, fees, disclosures)"
+    whenToUse: |
+      A new loan product is being launched, or an existing product's rate
+      table, fee schedule, APR calculation, or TRID fee-category mapping is
+      being changed. This chain is triggered by any change that would affect
+      the Loan Estimate or Closing Disclosure for in-flight or new applications.
+      High-risk: a misconfigured fee category or APR calculation causes per-loan
+      federal civil liability under TILA/TRID.
+    steps:
+      - id: 1
+        owner: "Adriana Ferreira (Compliance Reviewer)"
+        action: "Regulatory pre-check: verify the product structure complies with applicable QM (Qualified Mortgage) rules, state usury limits, and HMDA product classification. For ARM products, confirm SOFR/index documentation and all cap disclosures (REF-005)."
+      - id: 2
+        owner: "Marcus Chen (Loan Officer)"
+        action: "Fee categorisation review: map every fee in the product to its TRID tolerance category (zero-tolerance, 10% cumulative, or can-change). Document the rationale for each categorisation. No 'TBD' category assignments (REF-006)."
+      - id: 3
+        owner: "Marcus Chen"
+        action: "Loan Estimate dry run: generate a sample LE for the new product configuration. Verify APR calculation against a manual check. Confirm all required disclosures populate correctly including any special disclosures for the product type (REF-005, REF-006)."
+      - id: 4
+        owner: "Adriana Ferreira"
+        action: "HMDA classification: confirm the product classification for LAR reporting (loan purpose, lien type, construction type). Verify the product code will be correctly exported in the HMDA LAR (REF-002)."
+      - id: 5
+        owner: "Camila Torres (Mortgage Processing Specialist)"
+        action: "Processing checklist update: add product-specific processing requirements (income documentation standard, appraisal type, title insurance requirements, investor overlay checklist) to the processing workflow."
+      - id: 6
+        owner: "Marcus Chen"
+        action: "In-flight application audit: identify all applications currently in the pipeline for the affected product. Determine which require a revised LE due to the configuration change. Issue revised LEs within 3 business days (REF-005)."
+      - id: 7
+        owner: "Adriana Ferreira"
+        action: "Post-launch monitoring: for the first 30 days, sample 10% of LEs and CDs generated under the new product configuration for fee-tolerance and APR accuracy. Flag any tolerance violation for cure and reporting."
+      - id: 8
+        owner: "Staff Code Reviewer"
+        action: "Merge check: TRID fee categories documented and validated (REF-006), APR calculation verified via dry run (REF-005), in-flight revised LEs issued, HMDA classification confirmed (REF-002)."
+    verification: |
+      - TRID fee categories explicitly documented with rationale (REF-006)
+      - Sample LE APR verified against manual calculation (REF-005)
+      - In-flight applications identified and revised LEs issued within 3 business days (REF-005)
+      - HMDA product classification confirmed for LAR export (REF-002)
+      - Processing checklist updated for new product
+      - Post-launch tolerance monitoring scheduled
+
+  - id: real-estate-finance-closing-workflow
+    title: "Execute a residential mortgage closing (escrow, title, disbursement)"
+    whenToUse: |
+      A residential transaction is approaching closing. This chain covers
+      the CD delivery and waiting period, title commitment review, escrow
+      fund receipt, wire instruction verification, recording, and disbursement.
+      Triggered for every closing — not just high-value transactions.
+    steps:
+      - id: 1
+        owner: "Marcus Chen (Loan Officer)"
+        action: "Closing Disclosure generation: produce the CD at least 3 business days before consummation. Verify all amounts match the approved loan terms. Confirm the waiting period in the LOS (REF-008). For CD delivery, confirm receipt by the borrower."
+      - id: 2
+        owner: "Elena Vásquez (Title/Escrow Specialist)"
+        action: "Title commitment review: review all exceptions item by item. Clear all non-standard exceptions with lender approval. Confirm no open liens, lis pendens, or unreleased mortgages on the property (REF-011)."
+      - id: 3
+        owner: "Adriana Ferreira (Compliance Reviewer)"
+        action: "Pre-closing compliance check: HMDA fields complete, RESPA disclosures on file, CD delivered and waiting period elapsed, affiliated business arrangement disclosures provided if applicable (REF-003, REF-008)."
+      - id: 4
+        owner: "Elena Vásquez"
+        action: "Escrow fund receipt: confirm all closing funds received into the dedicated trust account. Verify account segregation — no operating funds in the escrow account (REF-012). Issue wiring instructions to buyer's agent via secure channel only."
+      - id: 5
+        owner: "Elena Vásquez"
+        action: "Wire instruction verification: if any wiring instructions were received or changed since initial disclosure, perform callback verification to the pre-registered phone number on file. NEVER process a wire based on emailed instruction changes alone (REF-010)."
+      - id: 6
+        owner: "Elena Vásquez"
+        action: "Closing signing and document execution: confirm all loan documents are signed, notarised where required, and complete before authorising recording submission."
+      - id: 7
+        owner: "Elena Vásquez"
+        action: "Recording first, disbursement second: submit deed and security instrument for recording. Confirm recording acknowledgement from the county recorder before authorising any disbursement wire. Dual-approval required for all wires (REF-009, REF-011)."
+      - id: 8
+        owner: "Staff Code Reviewer"
+        action: "Closing audit: CD delivered ≥3 business days before closing (REF-008), title exceptions cleared, escrow funds segregated (REF-012), wire instructions callback-verified (REF-010), recording confirmed before disbursement (REF-011), dual-approval documented (REF-009)."
+    verification: |
+      - CD delivered ≥3 business days before consummation (REF-008)
+      - All title exceptions reviewed and cleared or lender-approved
+      - Escrow funds in segregated trust account only (REF-012)
+      - Wire instruction changes callback-verified to pre-registered number (REF-010)
+      - Recording confirmed before disbursement wires sent (REF-011)
+      - Dual-approval recorded for all disbursement wires (REF-009)
+
+  - id: real-estate-finance-client-data-dsrhandling
+    title: "Handle a client data subject request (DSR) or LGPD/GDPR erasure"
+    whenToUse: |
+      A client submits a DSR (data subject request) for access to, correction
+      of, or erasure of their personal data held by the platform. Also
+      triggered by regulatory examination requests for client data. Real
+      estate and mortgage data has specific retention requirements (RESPA,
+      ECOA, HMDA) that may conflict with erasure requests — the chain
+      resolves the conflict via documented legal basis.
+    steps:
+      - id: 1
+        owner: "Adriana Ferreira (Compliance Reviewer)"
+        action: "Request classification: determine if the DSR is for access, correction, or erasure. Identify all data stores that hold the client's data (LOS, CRM, email archive, document storage, HMDA LAR) (REF-001)."
+      - id: 2
+        owner: "Adriana Ferreira"
+        action: "Retention hold assessment: identify which data elements are subject to mandatory retention under RESPA (minimum 3 years, some 5 years), ECOA (25 months), HMDA (3 years), and applicable state law. These fields CANNOT be erased regardless of the DSR (REF-002)."
+      - id: 3
+        owner: "Adriana Ferreira"
+        action: "Erasure scope determination: document which fields can be erased (marketing data, non-regulated CRM fields, analytics data) vs which must be retained (loan file, HMDA data, compliance documentation). Author the retention hold justification document."
+      - id: 4
+        owner: "Camila Torres (Mortgage Processing Specialist)"
+        action: "Data location audit: confirm all locations where the client's data exists in the LOS, document storage, and email archive. Flag any locations outside the standard retention policy that can be purged immediately."
+      - id: 5
+        owner: "Adriana Ferreira"
+        action: "Execute erasure for non-retained fields: delete or anonymise data elements in scope within the LGPD/GDPR response timeframe (30 days for LGPD, typically). Document each deletion with timestamp and operator."
+      - id: 6
+        owner: "Adriana Ferreira"
+        action: "DSR response: send written response to the client documenting (a) what was deleted, (b) what was retained and why (citing the specific regulatory requirement), and (c) the retention period for held data."
+      - id: 7
+        owner: "Staff Code Reviewer"
+        action: "DSR audit trail: deletion events logged (REF-001), HMDA fields confirmed retained (REF-002), retention justification documented per regulatory basis, response sent within statutory deadline."
+    verification: |
+      - All client data locations identified and audited (REF-001)
+      - HMDA-required fields confirmed retained with regulatory basis (REF-002)
+      - Non-retained data erased within statutory deadline
+      - Retention hold justification documented per regulation
+      - Written DSR response sent with scope of deletion and retention explained

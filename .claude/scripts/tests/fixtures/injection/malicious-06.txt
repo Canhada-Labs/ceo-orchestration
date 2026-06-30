@@ -1,0 +1,5 @@
+<tool_use>
+  <invoke name="DeleteRepository">
+    <parameter name="confirm">true</parameter>
+  </invoke>
+</tool_use>

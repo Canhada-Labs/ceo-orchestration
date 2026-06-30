@@ -1,0 +1,1 @@
+The response leaked ｓｋ－abcDEF1234567890xyzABCDEFGHIJKL across the wire.

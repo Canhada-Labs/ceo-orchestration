@@ -1,0 +1,74 @@
+# Pitfalls Catalog — Healthcare Squad
+# Loaded alongside the universal catalog when the healthcare profile is
+# installed. Format mirrors .claude/pitfalls-catalog.yaml:
+# id, rule, whenToUse, agents.
+
+pitfalls:
+  # === PHI DATA HANDLING & HIPAA/LGPD COMPLIANCE ===
+  - id: HCR-001
+    rule: "NEVER store PHI in server-side application logs, error tracking payloads, or analytics event properties. Patient names, appointment reasons, diagnosis codes, and insurance IDs are all PHI under HIPAA and sensitive personal data under LGPD Art. 11. Scrubbing must happen before transmission, not post-ingestion."
+    whenToUse: "any logging configuration, error-tracker setup, or analytics event design in a healthcare context"
+    agents: [Bruno Alencar, Fernanda Luz]
+
+  - id: HCR-002
+    rule: "NEVER use a third-party vendor to process PHI without a signed Business Associate Agreement (HIPAA) or Data Processing Agreement (LGPD) on file, with expiry date tracked. A vendor's SOC 2 certification or HIPAA compliance badge does NOT substitute for a signed BAA."
+    whenToUse: "any new vendor onboarding, tool evaluation, or third-party integration in a healthcare data pipeline"
+    agents: [Fernanda Luz]
+
+  - id: HCR-003
+    rule: "NEVER fire a Meta Pixel, Google Tag, or any third-party tracking SDK on a patient-portal page, symptom-checker page, appointment-scheduling page, or any page where health-condition inference is possible — without consent-mode blocking data transmission before affirmative opt-in. OCR (US) and ANPD (BR) have both issued guidance treating this as a PHI breach."
+    whenToUse: "any tag manager configuration, pixel implementation, or analytics SDK setup on a patient-facing digital surface"
+    agents: [Fernanda Luz, Valentina Rosario]
+
+  - id: HCR-004
+    rule: "NEVER use patient health information (diagnosis, appointment reason, medication, condition) as a marketing audience segment, lookalike seed, or retargeting list without individual written HIPAA marketing authorisation (§164.514(e)). Treatment relationship consent is a separate instrument and does NOT cover marketing use."
+    whenToUse: "any marketing audience build, CRM segment export, or retargeting list creation in a healthcare context"
+    agents: [Valentina Rosario, Fernanda Luz]
+
+  # === CLINICAL ESCALATION & PATIENT SAFETY ===
+  - id: HCR-005
+    rule: "NEVER allow an automated system (chatbot, IVR, FAQ) to provide a clinical assessment, differential diagnosis, or treatment recommendation — even framed as 'information, not advice'. Any inquiry that includes symptom description MUST be routed to a licensed clinician. The distinction between 'clinical advice' and 'health information' is not enforceable at scale without clinical review."
+    whenToUse: "any chatbot, IVR, FAQ, or automated patient communication design"
+    agents: [Dr. Rodrigo Alves, Camila Oliveira]
+
+  - id: HCR-006
+    rule: "NEVER weaken or remove safe-messaging guidelines for mental health, suicide, or self-harm inquiries in any patient communication channel. Safe messaging (based on AFSP / WHO guidance) applies to phone, chat, email, and SMS equally — not only to phone scripts."
+    whenToUse: "any patient communication flow design, script review, or chatbot training for healthcare contexts"
+    agents: [Dr. Rodrigo Alves, Camila Oliveira]
+
+  - id: HCR-007
+    rule: "NEVER route a patient who describes a new symptom or pain during what was classified as an administrative call (billing, scheduling) to an administrative hold without first offering clinical routing. Symptom reports received in any context are clinical events."
+    whenToUse: "any call-routing rule change, IVR design, or agent-handling workflow in healthcare customer service"
+    agents: [Dr. Rodrigo Alves, Camila Oliveira]
+
+  - id: HCR-008
+    rule: "NEVER make clinical escalation SLAs longer without explicit sign-off from the Clinical Operations Lead. An increase in callback wait time for clinical questions is a patient-safety parameter, not an operational efficiency decision."
+    whenToUse: "any SLA change, staffing model change, or routing-rule change that affects clinical callback time"
+    agents: [Dr. Rodrigo Alves]
+
+  # === HEALTHCARE MARKETING & PROMOTIONAL CLAIMS ===
+  - id: HCR-009
+    rule: "NEVER publish a promotional health claim without a substantiation file that specifies the clinical evidence level (RCT, meta-analysis, observational study, expert consensus) and the population the evidence applies to. 'Studies show' without a citation is an unsupported claim under FTC and Anvisa standards."
+    whenToUse: "any healthcare marketing asset review, ad copy approval, or content publication in a healthcare context"
+    agents: [Valentina Rosario]
+
+  - id: HCR-010
+    rule: "NEVER imply or state an off-label use of a regulated health product in promotional material. Off-label promotion is prohibited by FDA, Anvisa, and EMA regardless of the clinical evidence that might exist for the use."
+    whenToUse: "any promotional content, sales enablement material, or social media copy for a regulated health product"
+    agents: [Valentina Rosario]
+
+  - id: HCR-011
+    rule: "NEVER publish a patient testimonial that names a health condition, treatment outcome, or medication without individual written HIPAA marketing authorisation. An email or verbal 'yes, use my story' is not HIPAA-compliant authorisation."
+    whenToUse: "any testimonial campaign, case study, or patient-story content piece in a healthcare context"
+    agents: [Valentina Rosario, Fernanda Luz]
+
+  # === DATA RETENTION & BREACH RESPONSE ===
+  - id: HCR-012
+    rule: "NEVER shorten medical record retention schedules without confirming the minimum retention period under BOTH applicable jurisdictions (HIPAA: 6 years from creation or last effective date; CFM/Brazil: 10 years minimum; GDPR: minimum for the processing purpose). The longer period governs when both apply."
+    whenToUse: "any data retention policy change, storage-cost reduction initiative, or data-deletion pipeline design in a healthcare context"
+    agents: [Fernanda Luz, Bruno Alencar]
+
+  - id: HCR-013
+    rule: "NEVER delay activating the breach incident-response playbook beyond 24 hours of breach detection. LGPD requires ANPD notification within 2 working days for high-risk events; HIPAA requires HHS notification within 60 days but MOST state laws require earlier notification. The 24-hour internal activation window ensures the external obligation is met regardless of jurisdiction."
+    whenToUse: "any security incident, PHI exposure event, or anomalous data-access pattern in a healthcare system"
+    agents: [Fernanda Luz, Bruno Alencar]

@@ -1,0 +1,8 @@
+{"class": "rate_limit", "ip_prefix": "203.0.113.7", "peer_id": "attacker-2", "route": "/federation/peer-register", "ts": 1900000000.0}
+{"class": "rate_limit", "ip_prefix": "203.0.113.7", "peer_id": "attacker-2", "route": "/federation/peer-register", "ts": 1900000010.0}
+{"class": "rate_limit", "ip_prefix": "203.0.113.7", "peer_id": "attacker-2", "route": "/federation/peer-register", "ts": 1900000020.0}
+{"class": "rate_limit", "ip_prefix": "203.0.113.7", "peer_id": "attacker-2", "route": "/federation/peer-register", "ts": 1900000030.0}
+{"class": "rate_limit", "ip_prefix": "203.0.113.7", "peer_id": "attacker-2", "route": "/federation/peer-register", "ts": 1900000040.0}
+{"class": "rate_limit", "ip_prefix": "203.0.113.7", "peer_id": "attacker-2", "route": "/federation/peer-register", "ts": 1900000050.0}
+{"class": "rate_limit", "ip_prefix": "203.0.113.7", "peer_id": "attacker-2", "route": "/federation/peer-register", "ts": 1900000060.0}
+{"class": "rate_limit", "ip_prefix": "203.0.113.7", "peer_id": "attacker-2", "route": "/federation/peer-register", "ts": 1900000070.0}

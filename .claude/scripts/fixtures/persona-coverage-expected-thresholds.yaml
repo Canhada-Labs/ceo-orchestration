@@ -1,0 +1,20 @@
+# PLAN-088 W5.1 — persona coverage thresholds per ADR-118 §2.1
+# Consumed by verify-persona-coverage.py to assert AUTO+SEMI cell
+# counts meet target.
+
+thresholds:
+  vibecoder:
+    min_auto_semi: 12  # 12/13 = 92.3% floor (ADR-118 §2.1 vibecoder)
+    target_pct: 92.3
+  junior_dev:
+    min_auto_semi: 11  # 11/13 = 84.6% floor
+    target_pct: 84.6
+  skeptical_cto:
+    min_auto_semi: 11  # 11/13 = 84.6% floor (stretch 12/13)
+    target_pct: 84.6
+  team_member:
+    min_auto_semi: 11
+    target_pct: 84.6
+
+# Total active axes (canonical-13 subset)
+total_axes: 13

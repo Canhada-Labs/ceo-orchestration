@@ -1,0 +1,1 @@
+wallet_private_key = "0xd8b00ab305ff3a79a84473f95b64e92ab7b29ae6b9e6ae7b45607fb67d8e7136"

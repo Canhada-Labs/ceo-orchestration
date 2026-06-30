@@ -1,0 +1,94 @@
+---
+plan_id: PLAN-EXAMPLE-{{DOMAIN_PREFIX}}
+title: "{{EXAMPLE_PLAN_TITLE}}"
+status: draft
+owner: ceo
+level: L3
+squad: {{DOMAIN_SLUG}}
+profile: core,{{DOMAIN_SLUG}}
+created_at: {{EXAMPLE_CREATED_DATE}}
+---
+
+# Example PLAN — {{EXAMPLE_PLAN_TITLE}}
+
+> **This is an illustrative example**, not a real plan. It shows
+> how the {{DOMAIN_LABEL}} squad coordinates on a feature that
+> touches {{EXAMPLE_VETO_SCOPE_DESCRIPTION}}.
+>
+> Exemplar pattern derived from:
+> `.claude/skills/domains/edtech/examples/PLAN-EXAMPLE.md`
+> `.claude/skills/domains/government/examples/`
+> `.claude/skills/domains/lgpd-heavy-saas/examples/`
+> `.claude/skills/domains/trading-hft/examples/`
+
+## 1. Problem
+
+{{EXAMPLE_PROBLEM_STATEMENT}}
+<!-- 2-5 sentences: what business need or user pain is being addressed?
+     Be specific about the data types, user roles, and system components
+     involved. This contextualizes the VETO surfaces below. -->
+
+Sources:
+- {{EXAMPLE_SOURCE_1}}
+- {{EXAMPLE_SOURCE_2}}
+- {{EXAMPLE_SOURCE_3}}
+
+## 2. Scope
+
+**In:**
+- {{EXAMPLE_INSCOPE_1}}
+- {{EXAMPLE_INSCOPE_2}}
+- {{EXAMPLE_INSCOPE_3}}
+
+**Out:**
+- {{EXAMPLE_OUTSCOPE_1}} ({{EXAMPLE_OUTSCOPE_1_REASON}})
+- {{EXAMPLE_OUTSCOPE_2}} ({{EXAMPLE_OUTSCOPE_2_REASON}})
+
+## 3. Squad assignments
+
+| Phase | Owner | Deliverable |
+|---|---|---|
+| P1 — {{PHASE_1_LABEL}} | {{PHASE_1_OWNER}} | {{PHASE_1_DELIVERABLE}} |
+| P2 — {{PHASE_2_LABEL}} | {{PHASE_2_OWNER}} | {{PHASE_2_DELIVERABLE}} |
+| P3 — {{PHASE_3_LABEL}} | {{PHASE_3_OWNER}} | {{PHASE_3_DELIVERABLE}} |
+| P4 — {{PHASE_4_LABEL}} | {{PHASE_4_OWNER}} | {{PHASE_4_DELIVERABLE}} |
+| P5 — {{PHASE_5_LABEL}} | {{PHASE_5_OWNER}} | {{PHASE_5_DELIVERABLE}} |
+| P6 — Launch review | CEO + all VETO holders | {{VETO_1_ROLE}} + {{VETO_2_ROLE}} + {{VETO_3_ROLE}} sign-off |
+
+## 4. Risk axes and VETO holders
+
+- **{{VETO_PERSONA_1}} ({{VETO_1_ROLE}}):** {{VETO_1_RISK_DESCRIPTION}} →
+  BLOCK if {{VETO_1_BLOCK_CONDITION}}.
+- **{{VETO_PERSONA_2}} ({{VETO_2_ROLE}}):** {{VETO_2_RISK_DESCRIPTION}} →
+  BLOCK if {{VETO_2_BLOCK_CONDITION}}.
+- **{{VETO_PERSONA_3}} ({{VETO_3_ROLE}}):** {{VETO_3_RISK_DESCRIPTION}} →
+  BLOCK if {{VETO_3_BLOCK_CONDITION}}.
+
+## 5. Task chains invoked
+
+- `{{DOMAIN_SLUG}}-{{CHAIN_1_SLUG}}` — {{CHAIN_1_INVOKE_REASON}}
+- `{{DOMAIN_SLUG}}-{{CHAIN_2_SLUG}}` — {{CHAIN_2_INVOKE_REASON}}
+<!-- Add or remove chain references as applicable. Include "skipped (reason)"
+     for chains that are in scope of the squad but not this feature. -->
+
+## 6. Acceptance
+
+- {{ACCEPTANCE_CRITERION_1}}
+- {{ACCEPTANCE_CRITERION_2}}
+- {{ACCEPTANCE_CRITERION_3}}
+- {{ACCEPTANCE_CRITERION_4}}
+<!-- Cross-reference specific pitfall IDs (e.g. {{DOMAIN_PREFIX}}-001) for
+     the pitfall suppressions that must be verified before launch. -->
+
+## 7. Metrics
+
+- {{METRIC_1}}
+- {{METRIC_2}}
+- **{{METRIC_3_MONITORED_POST_LAUNCH}}** (monitored post-launch)
+
+## 8. References
+
+- `.claude/skills/domains/{{DOMAIN_SLUG}}/skills/{{SKILL_1_SLUG}}/SKILL.md`
+- `.claude/skills/domains/{{DOMAIN_SLUG}}/skills/{{SKILL_2_SLUG}}/SKILL.md`
+- `.claude/skills/domains/{{DOMAIN_SLUG}}/task-chains.yaml` — `{{DOMAIN_SLUG}}-{{CHAIN_1_SLUG}}`
+- {{REFERENCE_ADR_OR_PLAN}}

@@ -1,0 +1,152 @@
+schema: "policy-dsl/v1"
+id: plan-edit
+description: "Mechanical enforcement of plan lifecycle transitions (migrated from check_plan_edit.py)"
+kind: mixed
+defaults:
+  decision: allow
+rules:
+  - id: scope_skip_non_plan
+    description: "Not a plan file — skip"
+    decision: allow
+    predicate:
+      eq: {field: _derived_plan.is_plan_file, value: false}
+  - id: scope_skip_no_change
+    description: "Status unchanged — skip"
+    decision: allow
+    predicate:
+      eq: {field: _derived_plan.status_changed, value: false}
+  - id: illegal_status
+    description: "New status value is not one of the legal enum values"
+    decision: block
+    reason: illegal_status_value
+    predicate:
+      all:
+        - eq: {field: _derived_plan.status_changed, value: true}
+        - eq: {field: _derived_plan.new_status_legal, value: false}
+  - id: illegal_transition
+    description: "Transition from old to new is forbidden by the graph"
+    decision: block
+    reason: illegal_transition
+    predicate:
+      all:
+        - eq: {field: _derived_plan.status_changed, value: true}
+        - eq: {field: _derived_plan.new_status_legal, value: true}
+        - eq: {field: _derived_plan.transition_legal, value: false}
+  - id: missing_reviewed_at
+    description: "transition to reviewed requires reviewed_at frontmatter field"
+    decision: block
+    reason: missing_reviewed_at
+    predicate:
+      all:
+        - eq: {field: _derived_plan.new_status, value: "reviewed"}
+        - eq: {field: _derived_plan.reviewed_at_present, value: false}
+  - id: missing_completed_at
+    description: "transition to done requires completed_at"
+    decision: block
+    reason: missing_completed_at
+    predicate:
+      all:
+        - eq: {field: _derived_plan.new_status, value: "done"}
+        - eq: {field: _derived_plan.completed_at_present, value: false}
+  - id: missing_related_commits
+    description: "transition to done requires non-empty related_commits"
+    decision: block
+    reason: missing_related_commits
+    predicate:
+      all:
+        - eq: {field: _derived_plan.new_status, value: "done"}
+        - eq: {field: _derived_plan.completed_at_present, value: true}
+        - eq: {field: _derived_plan.related_commits_nonempty, value: false}
+  - id: missing_abandonment_reason
+    description: "transition to abandoned requires Abandonment reason section in body"
+    decision: block
+    reason: missing_abandonment_reason
+    predicate:
+      all:
+        - eq: {field: _derived_plan.new_status, value: "abandoned"}
+        - eq: {field: _derived_plan.abandonment_reason_present, value: false}
+  - id: missing_refused_adr
+    description: "Session 75 F7 — transition to refused requires refused_adr field (per ADR-092)"
+    decision: block
+    reason: missing_refused_adr
+    predicate:
+      all:
+        - eq: {field: _derived_plan.new_status, value: "refused"}
+        - eq: {field: _derived_plan.refused_adr_present, value: false}
+  - id: malformed_refused_adr
+    description: "refused_adr field present but not in ADR-NNN form"
+    decision: block
+    reason: malformed_refused_adr
+    predicate:
+      all:
+        - eq: {field: _derived_plan.new_status, value: "refused"}
+        - eq: {field: _derived_plan.refused_adr_present, value: true}
+        - eq: {field: _derived_plan.refused_adr_well_formed, value: false}
+  # Session 76 audit-v3 (DIM-11) — ADR-092 honest-deferral enforcement.
+  - id: missing_refused_at
+    description: "transition to refused requires refused_at frontmatter (ADR-092)"
+    decision: block
+    reason: missing_refused_at
+    predicate:
+      all:
+        - eq: {field: _derived_plan.new_status, value: "refused"}
+        - eq: {field: _derived_plan.refused_adr_present, value: true}
+        - eq: {field: _derived_plan.refused_adr_well_formed, value: true}
+        - eq: {field: _derived_plan.refused_at_present, value: false}
+  - id: missing_reopen_via
+    description: "reopen done -> executing requires reopen_via ADR ref (ADR-092)"
+    decision: block
+    reason: missing_reopen_via
+    predicate:
+      all:
+        - eq: {field: _derived_plan.new_status, value: "executing"}
+        - eq: {field: _derived_plan.old_status, value: "done"}
+        - eq: {field: _derived_plan.reopen_via_present, value: false}
+  - id: malformed_reopen_via
+    description: "reopen_via field present but not in ADR-NNN form"
+    decision: block
+    reason: malformed_reopen_via
+    predicate:
+      all:
+        - eq: {field: _derived_plan.new_status, value: "executing"}
+        - eq: {field: _derived_plan.old_status, value: "done"}
+        - eq: {field: _derived_plan.reopen_via_present, value: true}
+        - eq: {field: _derived_plan.reopen_via_well_formed, value: false}
+  - id: missing_reopen_trigger
+    description: "reopen done -> executing requires reopen_trigger free-text (ADR-092)"
+    decision: block
+    reason: missing_reopen_trigger
+    predicate:
+      all:
+        - eq: {field: _derived_plan.new_status, value: "executing"}
+        - eq: {field: _derived_plan.old_status, value: "done"}
+        - eq: {field: _derived_plan.reopen_via_present, value: true}
+        - eq: {field: _derived_plan.reopen_via_well_formed, value: true}
+        - eq: {field: _derived_plan.reopen_trigger_present, value: false}
+  - id: missing_reopen_criteria
+    description: "reopen done -> executing requires ## Reopen criteria body section (ADR-092)"
+    decision: block
+    reason: missing_reopen_criteria
+    predicate:
+      all:
+        - eq: {field: _derived_plan.new_status, value: "executing"}
+        - eq: {field: _derived_plan.old_status, value: "done"}
+        - eq: {field: _derived_plan.reopen_via_present, value: true}
+        - eq: {field: _derived_plan.reopen_via_well_formed, value: true}
+        - eq: {field: _derived_plan.reopen_trigger_present, value: true}
+        - eq: {field: _derived_plan.reopen_criteria_section_present, value: false}
+error_model:
+  reasons:
+    illegal_status_value: "PLAN-LIFECYCLE: illegal status value. Must be one of: abandoned, done, draft, executing, refused, reviewed."
+    illegal_transition: "PLAN-LIFECYCLE: illegal transition. See .claude/plans/PLAN-SCHEMA.md section 4."
+    missing_reviewed_at: "PLAN-LIFECYCLE: transition to 'reviewed' requires `reviewed_at: <YYYY-MM-DD>` in frontmatter."
+    missing_completed_at: "PLAN-LIFECYCLE: transition to 'done' requires `completed_at: <YYYY-MM-DD>` in frontmatter."
+    missing_related_commits: "PLAN-LIFECYCLE: transition to 'done' requires non-empty `related_commits: [sha1, sha2, ...]` in frontmatter."
+    missing_abandonment_reason: "PLAN-LIFECYCLE: transition to 'abandoned' requires an `## Abandonment reason` section in the plan body."
+    missing_refused_adr: "PLAN-LIFECYCLE: transition to 'refused' requires `refused_adr: ADR-NNN` in frontmatter (cite the ADR that documents the refusal). Per ADR-092 honest deferral."
+    malformed_refused_adr: "PLAN-LIFECYCLE: 'refused_adr' field must be an ADR identifier of the form 'ADR-NNN' or 'ADR-NNNN'."
+    missing_refused_at: "PLAN-LIFECYCLE: transition to 'refused' requires `refused_at: <YYYY-MM-DD>` in frontmatter. Per ADR-092 honest deferral."
+    missing_reopen_via: "PLAN-LIFECYCLE: reopen 'done' -> 'executing' requires `reopen_via: ADR-NNN` in frontmatter. Per ADR-092 honest deferral framework."
+    malformed_reopen_via: "PLAN-LIFECYCLE: 'reopen_via' field must be an ADR identifier of the form 'ADR-NNN' or 'ADR-NNNN'."
+    missing_reopen_trigger: "PLAN-LIFECYCLE: reopen 'done' -> 'executing' requires `reopen_trigger: <free-text describing the external signal>` in frontmatter. Per ADR-092."
+    missing_reopen_criteria: "PLAN-LIFECYCLE: reopen 'done' -> 'executing' requires a `## Reopen criteria` section in the plan body. Per ADR-092."

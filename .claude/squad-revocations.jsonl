@@ -1,0 +1,5 @@
+# squad revocation ledger — one JSON object per line. See
+# ADR-039 + SPEC/v1/squad-manifest.schema.md. Each entry:
+#   {"squad_name": "<slug>", "manifest_sha256": "<64-hex>", "revoked_at": "<ISO8601 UTC>"}
+# squad-import.py refuses any tarball whose manifest SHA-256 matches a
+# revocation entry here, regardless of signature validity.

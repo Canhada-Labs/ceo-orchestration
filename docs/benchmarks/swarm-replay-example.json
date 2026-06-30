@@ -1,0 +1,37 @@
+{
+  "manifest_version": 1,
+  "baseline_sha": "PLAN-050-PHASE-7B-INITIAL-BASELINE",
+  "description": "Example swarm benchmark manifest. Copy + edit + pin to the baseline SHA of your adopter repo. See .claude/scripts/swarm/_benchmark_replay.py for replay semantics.",
+  "tasks": [
+    {
+      "id": "regression-test-speed-01",
+      "input": {
+        "suite": "hot-path-optimization",
+        "variant": "baseline",
+        "max_iterations": 4
+      },
+      "baseline_score": 0.85,
+      "regression_tolerance": 0.02
+    },
+    {
+      "id": "bundle-size-reduction-01",
+      "input": {
+        "suite": "bundle-size",
+        "variant": "minified",
+        "max_iterations": 4
+      },
+      "baseline_score": 0.70,
+      "regression_tolerance": 0.05
+    },
+    {
+      "id": "llm-prompt-iteration-01",
+      "input": {
+        "suite": "prompt-tuning",
+        "variant": "deterministic-replay",
+        "max_iterations": 4
+      },
+      "baseline_score": 0.60,
+      "regression_tolerance": 0.10
+    }
+  ]
+}

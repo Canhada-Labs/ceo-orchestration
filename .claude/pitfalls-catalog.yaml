@@ -1,0 +1,150 @@
+# Pitfalls Catalog — Universal (core)
+# CEO consults this before spawning agents.
+# whenToUse: conditions that trigger injection into agent prompt.
+#
+# Agents are listed by ARCHETYPE (role name). Replace with your concrete persona
+# names when adopting this template in your project. See .claude/team.md for the
+# archetype → persona mapping.
+#
+# Domain-specific pitfalls live in .claude/skills/domains/<domain>/pitfalls.yaml
+# (e.g. domains/fintech/pitfalls.yaml for crypto exchange + financial math rules).
+# inject-agent-context.sh merges both catalogs when a domain profile is installed.
+
+pitfalls:
+  # === IPC / THREADING (applies to any worker_threads / multi-process backend) ===
+  - id: IPC-001
+    rule: "NEVER shift hot-path CPU from worker to main thread. Main is always the bottleneck."
+    whenToUse: "any change to IPC, worker_threads, message passing, gateway wiring"
+    agents: [PerformanceEngineer, RealTimeSystemsEngineer]
+
+  - id: IPC-002
+    rule: "IPC message COUNT > SIZE. Each process.send() has overhead in the tens of ms. Coalesce into batches."
+    whenToUse: "any new IPC message type, any change to batch timing"
+    agents: [PerformanceEngineer, RealTimeSystemsEngineer]
+
+  - id: IPC-003
+    rule: "setImmediate() chunking with closures captures large arrays → heap bloat. Use slice() for deferred chunks."
+    whenToUse: "any chunking/batching with setImmediate, setTimeout, or queueMicrotask"
+    agents: [PerformanceEngineer]
+
+  - id: IPC-004
+    rule: "Hot-path writers must NOT have time-based skip guards — they silently block consecutive legitimate writes."
+    whenToUse: "any modification to a fast-path persistence writer"
+    agents: [PerformanceEngineer, RealTimeSystemsEngineer]
+
+  - id: IPC-005
+    rule: "Slow-path writers must guard against overwriting fresher fast-path state (compare ingest timestamps)."
+    whenToUse: "any modification to a slow-path / post-processing writer"
+    agents: [PerformanceEngineer, RealTimeSystemsEngineer]
+
+  # === FRONTEND — design system / API consumption (non domain-specific) ===
+  - id: FE-001
+    rule: "CSS variable naming: consistency matters. Follow the project's convention strictly — mismatches like `var(--text1)` vs `var(--text-1)` fail silently."
+    whenToUse: "any Tailwind or CSS variable usage in frontend"
+    agents: [UIUXLead, ComponentArchitect]
+
+  - id: FE-002
+    rule: "No opacity on design-system bg vars: background tokens with opacity modifiers can become invisible in one theme. Use solid background tokens or explicit color mixing."
+    whenToUse: "any background color with opacity in frontend"
+    agents: [UIUXLead, ComponentArchitect]
+
+  - id: FE-003
+    rule: "Backend may send numeric values as strings (API contracts vary). Never assume number type from an API response — type your DTO layer."
+    whenToUse: "any new API consumption or type definition in frontend"
+    agents: [DataLayerLead, FrontendTypeScriptLead]
+
+  - id: FE-004
+    rule: "SSE/streaming data sources MUST be in useMemo/useEffect deps when merged with REST data, otherwise the merge goes stale."
+    whenToUse: "any SSE/WebSocket data merging with REST data"
+    agents: [RealTimeDataEngineer, DataLayerLead]
+
+  # === SECURITY ===
+  - id: SEC-001
+    rule: "Literal route paths MUST be declared BEFORE parameterized ones (e.g. /users/me before /users/:id). Wrong order = auth bypass."
+    whenToUse: "any new route or route reordering"
+    agents: [SecurityEngineer, StaffBackendEngineer]
+
+  - id: SEC-002
+    rule: "Async callbacks in setTimeout/setInterval MUST use a safe() wrapper (try/catch → log) to prevent unhandled rejection crash."
+    whenToUse: "any periodic polling or timer-based operations"
+    agents: [SecurityEngineer, ChaosEngineer]
+
+  - id: SEC-003
+    rule: "AI-agent CLI credentials at rest MUST go to the OS secret store (Keychain/Keystore), never plaintext JSON under ~/Library/Application Support (or equivalent). Any local read/backup/file-sync leaks a long-lived key. Cross-ref the secret-management rows in security-and-auth + identity-and-trust-architecture; this is the agent-CLI-credential case specifically."
+    whenToUse: "any code that stores, reads, or syncs an agent/CLI auth token or API key on disk"
+    agents: [SecurityEngineer]
+
+  # === ARCHITECTURE ===
+  - id: ARCH-001
+    rule: "If 1-3 fixes don't resolve → STOP → propose architectural change. No fix-of-fix-of-fix — it hides a design problem."
+    whenToUse: "any debugging session that has tried 2+ approaches"
+    agents: [VPEngineering, all]
+
+  - id: ARCH-002
+    rule: "Main thread event loop stall is usually distributed, not single-op. Fix requires reducing ALL hot-path ops simultaneously, not chasing the loudest one."
+    whenToUse: "any event loop latency investigation"
+    agents: [PerformanceEngineer, RealTimeSystemsEngineer]
+
+  - id: ARCH-003
+    rule: "Freshness/staleness tracking: helper methods that refresh lastUpdateTimes may NOT update the canonical freshness timestamp. Always check the canonical field, not the derived one."
+    whenToUse: "any staleness detection or health check logic"
+    agents: [RealTimeSystemsEngineer, ChaosEngineer, VPOperations]
+
+  # === DATABASE (PostgreSQL / Supabase-flavored) ===
+  - id: DB-001
+    rule: "Some PostgREST/Supabase configs return numeric values as strings (STRING_MODE). Parse on read, don't assume number."
+    whenToUse: "any Supabase/PostgREST query result handling"
+    agents: [DataEngineer, StaffBackendEngineer]
+
+  - id: DB-002
+    rule: "RLS policies require authenticated role. Test with both anon AND authenticated clients."
+    whenToUse: "any new table or RLS policy"
+    agents: [DataEngineer, SecurityEngineer]
+
+  # === LLM GOVERNANCE / META (PLAN-045 P0-09) ===
+  - id: LLM-001
+    rule: "Artifact Paradox: polished AI outputs receive ~5.2pp less critical scrutiny (Anthropic fluency research, PLAN-038 / SP-001 soaked 2026-04-19). When an agent returns a confident 'all done, tests green' with clean prose, treat that as a red flag for unreviewed gaps — not as a quality signal. Review as junior-engineer's work; focus on what's absent; use adversarial framing per code-review-checklist."
+    whenToUse: "any agent output review at L3+ blast radius, especially when the diff looks clean or the agent reports 'all green'"
+    agents: [CodeReviewer, SecurityEngineer, VPEngineering, all]
+
+  - id: LLM-002
+    rule: "Same-LLM 'independent review' is not independent. Debate rounds + specialist skills shift the distribution of errors but inherit training biases. The only truly independent check is the human Owner (PROTOCOL.md §Same-LLM). For L3+ merges, the Owner's break-point is load-bearing — do not skip it by declaring the pre-merge debate 'sufficient'."
+    whenToUse: "any L3+ merge decision where the CEO + sub-agents have converged but Owner has not yet reviewed"
+    agents: [CodeReviewer, VPEngineering, all]
+
+  # === LLM SDK SURFACE (PLAN-135 W3 — K7/K8 harvest) ===
+  - id: SDK-001
+    rule: "NuGet package `Anthropic` at version <=3.x is a COMMUNITY SDK, not the official Anthropic C# library — API surface, auth, and streaming behavior do not match official docs. Detection cue: `<PackageReference Include=\"Anthropic\"` pinned at 3.x or lower, or code samples whose types don't exist in the official SDK reference. Mitigation: verify the publisher and pin the official Anthropic-published release line before adopting any sample; treat <=3.x-era snippets/answers as unvetted community code."
+    whenToUse: "any C#/.NET integration with the Anthropic API, any NuGet dependency addition or version bump touching `Anthropic`"
+    agents: [StaffBackendEngineer, CodeReviewer]
+
+  - id: SDK-002
+    rule: "PHP SDK on a PSR-18 client WITHOUT Guzzle silently BUFFERS SSE streaming — the call succeeds but tokens arrive only after the full response completes (looks like a hang, breaks incremental UX, blows timeout budgets, and invalidates streaming-latency measurements). Detection cue: a streaming code path with no guzzlehttp/guzzle in composer.json/composer.lock. Mitigation: require Guzzle for any streaming path, and assert incremental (chunk-by-chunk) delivery in an integration test rather than trusting a green end-to-end result."
+    whenToUse: "any PHP integration with the Anthropic API that uses streaming, any composer dependency change on an LLM code path"
+    agents: [StaffBackendEngineer, RealTimeSystemsEngineer]
+
+  - id: SDK-003
+    rule: ".apiKey auth compiled into a shipped client binary (e.g. Apple Foundation Models / ClaudeForFoundationModels adapters) is EXTRACTABLE — anyone with the app binary can pull the key and bill the adopter's account. Detection cue: `.apiKey` (or any literal API key) in Swift/mobile/desktop client code shipped to end users. Mitigation: `.proxied(headers:)` through an adopter-controlled backend is the ONLY production auth — keys live server-side; client binaries carry zero long-lived credentials (cross-ref SEC-003 for the at-rest case)."
+    whenToUse: "any mobile/desktop client code that initializes an LLM SDK, any Swift Foundation Models adapter, any review of credentials in a shippable artifact"
+    agents: [SecurityEngineer, StaffBackendEngineer]
+
+  # === LONG-AUTONOMY / PROJECT-VEND CLASSES (PLAN-135 W3 — D10) ===
+  - id: AUTON-001
+    rule: "Long-autonomy agents HALLUCINATE accounts and counterparties (Project Vend class: invented a payment account, conversed with a non-existent person). Detection cue: any transaction target, account id, vendor, or contact that does not resolve against the canonical system of record. Mitigation: agents never invent transaction endpoints — money/identity-bearing actions must verify against the system of record first and route through Owner escalation (Money is always Owner-escalated per the CEO decision framework); every external commitment lands in the audit log."
+    whenToUse: "any autonomous-loop run that can commit money, create accounts, or contact external parties"
+    agents: [SecurityEngineer, VPOperations, all]
+
+  - id: AUTON-002
+    rule: "Agents under conversational social pressure CONCEDE discounts and exceptions (Project Vend class: granted discounts/freebies when users pushed). Detection cue: a price or policy deviation granted inside a conversation with no pre-authorized rule backing it. Mitigation: pricing/policy concessions are outside agent authority — the agent answers 'escalated to Owner' instead of yielding; encode hard price floors and policy limits as data the agent reads, not prose it can be argued out of."
+    whenToUse: "any agent surface that negotiates price, refunds, quotas, or policy exceptions with users"
+    agents: [VPOperations, SecurityEngineer]
+
+  - id: AUTON-003
+    rule: "Corrections accepted in-session EVAPORATE between sessions when not persisted (Project Vend class: acknowledged mistakes, then repeated them). Detection cue: the same correction issued twice across sessions, or an 'understood, from now on I will X' acknowledgment with no memory write behind it. Mitigation: every behavior correction is persisted via the Memory Protocol (memory/ lesson entry, or CLAUDE.md at the closeout ceremony) in the SAME session it was given — an acknowledgment without a persisted artifact counts as not done."
+    whenToUse: "any Owner/user correction during an autonomous or long-running session; any session-closeout review"
+    agents: [VPEngineering, all]
+
+  - id: AUTON-004
+    rule: "Over long autonomous runs agents DRIFT in identity (Project Vend class: claimed to be human, to wear a blazer, to make deliveries in person). Detection cue: the agent self-describing physical capabilities, claiming human identity, or acting outside its declared persona/role scope. Mitigation: persona and role re-anchor at every session boot (Gate 1/2 canonical reads); on mid-run drift, STOP the loop and re-boot from the canonical persona files — do not try to argue the agent back into role inside the drifted context."
+    whenToUse: "any long-running autonomous loop; any agent output that self-describes identity or real-world capability"
+    agents: [VPEngineering, ChaosEngineer, all]

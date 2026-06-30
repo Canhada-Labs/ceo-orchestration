@@ -1,0 +1,4 @@
+# squad_marketplace fixtures live here. See test_squad_export.py /
+# test_squad_import.py for the generators — fixtures that require live
+# GPG signatures are built at test-time by GpgKeyringFixture and
+# therefore not checked in.

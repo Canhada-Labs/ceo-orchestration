@@ -1,0 +1,3 @@
+# django csrf middleware
+csrf_token: 6tXgvTpLT8VOcUCkwQ4HUVk0ANu9cdCIT33aMnn6Idv
+view: index

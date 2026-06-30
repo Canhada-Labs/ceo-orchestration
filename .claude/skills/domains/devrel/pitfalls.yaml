@@ -1,0 +1,74 @@
+# Pitfalls Catalog — DevRel Squad
+# Loaded alongside the universal catalog when the devrel profile is
+# installed. Format mirrors .claude/pitfalls-catalog.yaml:
+# id, rule, whenToUse, agents.
+#
+# ADR-009 §bundle-completeness: ≥10 pitfall entries required.
+# Each id follows DEV-NNN (3-digit zero-padded, monotonic).
+# Exemplars: .claude/skills/domains/edtech/pitfalls.yaml
+#            .claude/skills/domains/trading-hft/pitfalls.yaml
+
+pitfalls:
+  # === DOCUMENTATION ACCURACY + API CONTRACT ===
+  - id: DEV-001
+    rule: "Documentation MUST NOT be published ahead of the corresponding code being shipped. Documenting a parameter, endpoint, or behavior that does not yet exist generates support tickets and erodes developer trust. If code ships after docs, redirect developers to a 'coming soon' page with an ETA."
+    whenToUse: "any documentation update tied to a feature not yet deployed to production; any API reference update"
+    agents: [Sola Adewale]
+
+  - id: DEV-002
+    rule: "Every breaking change MUST have a changelog entry that names the specific change (endpoint removed, parameter renamed, response schema modified) and links to the migration guide. 'Various improvements' or 'bug fixes' changelog entries are forbidden for any change that could break existing integrations."
+    whenToUse: "any API change, SDK release, or documentation update that alters documented behavior"
+    agents: [Sola Adewale, Remy Dubois, Felix Acharya]
+
+  - id: DEV-003
+    rule: "API reference pages MUST include a 'last verified against version' timestamp and the API version they describe. An undated API reference is untestable by the developer and untraceable by support."
+    whenToUse: "any API reference publication, documentation site rebuild, or version-freeze process"
+    agents: [Sola Adewale]
+
+  - id: DEV-004
+    rule: "Migration guides MUST be published simultaneously with the deprecation notice — never after. A deprecation notice with 'migration guide coming soon' gives developers no actionable path and will generate community backlash."
+    whenToUse: "any deprecation notice, API sunset announcement, or major version release"
+    agents: [Sola Adewale, Remy Dubois]
+
+  # === DEPRECATION + BREAKING-CHANGE COMMUNICATION ===
+  - id: DEV-005
+    rule: "Public API deprecations MUST provide at minimum 6 months advance notice before the sunset date. Any exception (security-driven, legal-driven) requires explicit CEO + Owner sign-off with a documented reason. A 30-day deprecation on a widely-used endpoint is a trust-destroying event."
+    whenToUse: "any public API endpoint, SDK method, or documented behavior being deprecated"
+    agents: [Remy Dubois]
+
+  - id: DEV-006
+    rule: "Sunset dates MUST NOT be announced unless telemetry shows < 5% of tracked active integrations still depend on the deprecated surface. Announcing a sunset date while 40% of active integrations are still on the deprecated surface creates a migration crisis."
+    whenToUse: "any sunset date announcement for a deprecated API or SDK version"
+    agents: [Remy Dubois, Felix Acharya]
+
+  - id: DEV-007
+    rule: "Breaking changes MUST be communicated through at least two channels beyond the changelog: a forum/community post AND a direct notification (email or in-platform) to integrations with recent active usage. Changelog-only communication for breaking changes is insufficient."
+    whenToUse: "any breaking change communication plan for a public API or SDK"
+    agents: [Remy Dubois, Jodie Okonkwo]
+
+  - id: DEV-008
+    rule: "The deprecated version of an API MUST continue serving traffic for the full announced deprecation period even if the new version is available. 'We shipped v2 so v1 can be turned off earlier' is a violation of the published sunset date."
+    whenToUse: "any infrastructure decommission plan for a versioned API endpoint"
+    agents: [Remy Dubois, Felix Acharya]
+
+  # === SDK QUALITY + DEVELOPER EXPERIENCE ===
+  - id: DEV-009
+    rule: "SDK releases that remove a method or parameter MUST include a deprecation warning in the PRIOR version before removal. Remove-without-warning is a breaking change regardless of semantic version number. The deprecation warning must appear at runtime, not just in the changelog."
+    whenToUse: "any SDK release that removes, renames, or changes the signature of a public method"
+    agents: [Felix Acharya, Priscilla Tan]
+
+  - id: DEV-010
+    rule: "API error responses MUST include ALL THREE: a machine-readable error code (e.g. 'RATE_LIMIT_EXCEEDED'), a human-readable message ('You have exceeded 100 requests per minute for this endpoint'), and a link to the relevant documentation page. An error with only an HTTP status code forces developers to read source code."
+    whenToUse: "any new API endpoint, error-handling code change, or error response schema modification"
+    agents: [Priscilla Tan, Felix Acharya, Sola Adewale]
+
+  - id: DEV-011
+    rule: "SDK retry logic MUST handle 429 (rate limit) responses with exponential backoff and jitter. Retry-after header MUST be respected when present. An SDK that retries immediately on a 429 response will amplify the rate-limit problem, not solve it."
+    whenToUse: "any SDK retry configuration, rate-limit handling code, or backoff strategy change"
+    agents: [Felix Acharya, Priscilla Tan]
+
+  # === COMMUNITY + SECURITY DISCLOSURE ===
+  - id: DEV-012
+    rule: "Security disclosures received in public community channels (Discord, forum, GitHub issues) MUST be immediately routed to the private security disclosure channel and the security team — NEVER acknowledged or discussed publicly before a fix is available. A public discussion of an unpatched vulnerability is a coordinated attack invitation."
+    whenToUse: "any community moderation, forum post triage, or GitHub issue review that involves a potential security vulnerability"
+    agents: [Jodie Okonkwo, Remy Dubois]

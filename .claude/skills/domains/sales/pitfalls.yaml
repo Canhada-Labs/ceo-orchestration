@@ -1,0 +1,73 @@
+# Pitfalls Catalog — Sales Squad
+# Loaded alongside the universal catalog when the sales profile is
+# installed. Format mirrors .claude/pitfalls-catalog.yaml:
+# id, rule, whenToUse, agents.
+#
+# ADR-009 §bundle-completeness: ≥10 pitfall entries required.
+# Each id follows SAL-NNN (3-digit zero-padded, monotonic).
+# Exemplars: .claude/skills/domains/edtech/pitfalls.yaml
+#            .claude/skills/domains/lgpd-heavy-saas/pitfalls.yaml
+
+pitfalls:
+  # === REVENUE INTEGRITY + FORECAST ===
+  - id: SAL-001
+    rule: "NEVER modify commission or attainment calculation logic without running a parallel dry-run against the last completed quarter's actuals. A formula change that looks correct on new data can silently misstate historical attainment."
+    whenToUse: "any change to commission engine logic, attainment calculation, quota credit allocation, or accelerator threshold"
+    agents: [Valentina Osei]
+
+  - id: SAL-002
+    rule: "Pipeline stage probability weights MUST be documented in a versioned methodology document signed by Finance before they influence any forecast or comp calculation. Undocumented weights are invisible assumptions."
+    whenToUse: "any change to CRM pipeline stage definitions, probability weighting, or forecast rollup logic"
+    agents: [Valentina Osei]
+
+  - id: SAL-003
+    rule: "NEVER rename or delete a CRM field that is referenced in a live forecast formula or compensation plan without first auditing all downstream dependencies. Silent breakage in spreadsheet-formula-based RevOps is endemic."
+    whenToUse: "any CRM schema change, field rename, field deprecation, or data model migration"
+    agents: [Valentina Osei, Ngozi Adeyemi]
+
+  - id: SAL-004
+    rule: "Quota changes mid-quarter MUST be documented in writing, acknowledged by the affected representative, and logged with an effective date. Verbal quota adjustments without a paper trail create comp disputes."
+    whenToUse: "any quota modification, territory change, ramp adjustment, or overlay reassignment mid-period"
+    agents: [Valentina Osei, Marcus Thorne]
+
+  # === DEAL STRUCTURE + CONTRACT INTEGRITY ===
+  - id: SAL-005
+    rule: "Deals MUST NOT advance to Closed Won status until a countersigned Order Form is on file and linked to the CRM opportunity. Stage manipulation to hit a quarter-end number without signed paper is a revenue recognition risk."
+    whenToUse: "any automated or manual deal-close workflow, stage-update trigger, or end-of-period deal processing"
+    agents: [Marcus Thorne, Valentina Osei]
+
+  - id: SAL-006
+    rule: "Side letters, verbal commitments, and out-of-band addenda MUST be captured in the CRM opportunity record and reviewed by Legal before the deal closes. Unrecorded commitments become post-close support obligations or legal disputes."
+    whenToUse: "any deal negotiation involving non-standard terms, customer-specific promises, or modifications to the standard MSA"
+    agents: [Marcus Thorne, Priya Srinath]
+
+  - id: SAL-007
+    rule: "Discount stacking across products or multi-year terms MUST be validated against the authorized margin floor BEFORE presenting to the customer. Never commit to a combined discount that collectively exceeds the approval matrix."
+    whenToUse: "any multi-product quote, multi-year deal structure, or compound-discount scenario"
+    agents: [Marcus Thorne, Valentina Osei]
+
+  - id: SAL-008
+    rule: "Enterprise deals (ARR > $100k threshold or as locally defined) MUST have the Order Form reviewed by Legal before signature. Sales-generated contract redlines without Legal review create unenforceable or adverse terms."
+    whenToUse: "any enterprise deal, any contract with customer-proposed redlines, any renewal with material term changes"
+    agents: [Marcus Thorne, Priya Srinath]
+
+  # === PROSPECT/CUSTOMER PII + DATA COMPLIANCE ===
+  - id: SAL-009
+    rule: "NEVER integrate a data-enrichment, intent-data, or AI-outreach vendor into the CRM or sequencing toolchain without a signed DPA and a reviewed sub-processor list. 'Public data' from aggregators is still personal data under GDPR/LGPD."
+    whenToUse: "any new sales-tech integration, data vendor evaluation, or outreach tool onboarding"
+    agents: [Priya Srinath]
+
+  - id: SAL-010
+    rule: "Outbound email sequences targeting EU or BR prospects MUST have a documented legal basis for outreach (legitimate interest analysis or explicit opt-in record) before the first message is sent. No basis = no send."
+    whenToUse: "any outbound sequence creation or territory expansion into GDPR or LGPD jurisdictions"
+    agents: [Priya Srinath, Santiago Delgado]
+
+  - id: SAL-011
+    rule: "Prospect PII MUST NOT be exported from the CRM into personal cloud storage (personal Google Drive, Dropbox, local CSV) for any purpose including prospecting research, conference prep, or account planning."
+    whenToUse: "any bulk contact export, territory list generation, event attendee lookup, or account planning preparation"
+    agents: [Priya Srinath, Santiago Delgado]
+
+  - id: SAL-012
+    rule: "Demo environments MUST be seeded with synthetic data only. Production customer records — even 'just one account' for a compelling demo — are a data breach risk and a DPA violation."
+    whenToUse: "any demo environment setup, POC environment provisioning, or customer-facing technical demonstration"
+    agents: [Ngozi Adeyemi, Priya Srinath]

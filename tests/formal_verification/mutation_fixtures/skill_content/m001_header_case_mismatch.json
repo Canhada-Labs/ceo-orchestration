@@ -1,0 +1,8 @@
+{
+  "description": "Header case mismatch: spawn prompt uses '## Skill Reference' (mixed case) instead of required '## SKILL REFERENCE'. The regex _SKILL_REFERENCE_HEADER_RE is case-sensitive, so the header will not match.",
+  "mutation_class": "S1_regex_bypass",
+  "sub_check_targeted": 1,
+  "expected_reason": "reference_missing",
+  "skill_body_variant": "valid",
+  "prompt_header_override": "## Skill Reference"
+}

@@ -1,0 +1,3 @@
+# rails session
+session_id: ce1xfFVefXn9nWYbmy0o2Cbga8J8JB9UCVv42AHw6K3
+# expires 2h

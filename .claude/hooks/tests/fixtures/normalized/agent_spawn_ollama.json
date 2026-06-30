@@ -1,0 +1,42 @@
+{
+  "session_id": "local-sess-001",
+  "project": "",
+  "phase": "PreToolUse",
+  "tool_name": "Agent",
+  "tool_input": {
+    "subagent_type": "general-purpose",
+    "description": "Sample spawn",
+    "prompt": "## AGENT PROFILE\n## SKILL CONTENT\nX"
+  },
+  "tool_response": {},
+  "description": "Sample spawn",
+  "prompt": "## AGENT PROFILE\n## SKILL CONTENT\nX",
+  "subagent_type": "general-purpose",
+  "file_path": "",
+  "old_string": "",
+  "new_string": "",
+  "replace_all": false,
+  "command": "",
+  "raw_payload": {
+    "session_id": "local-sess-001",
+    "model": "llama3.1:8b",
+    "message": {
+      "role": "assistant",
+      "tool_calls": [
+        {
+          "function": {
+            "name": "Agent",
+            "arguments": {
+              "subagent_type": "general-purpose",
+              "description": "Sample spawn",
+              "prompt": "## AGENT PROFILE\n## SKILL CONTENT\nX"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "parse_error": null,
+  "tool_use_id": "",
+  "duration_ms": null
+}

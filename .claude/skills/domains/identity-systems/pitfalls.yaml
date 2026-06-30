@@ -1,0 +1,74 @@
+# Pitfalls Catalog — Identity Systems Squad
+# Loaded alongside the universal catalog when the identity-systems profile is
+# installed. Format mirrors .claude/pitfalls-catalog.yaml:
+# id, rule, whenToUse, agents.
+
+pitfalls:
+  # === TOKEN & SESSION LIFECYCLE ===
+  - id: IDS-001
+    rule: "NEVER issue access tokens with a lifetime exceeding 15 minutes without documented risk-acceptance from the Security team. Access token lifetime is the attack window for stolen tokens; extending it for UX convenience trades security exposure for convenience at scale."
+    whenToUse: "any access token issuance configuration, OAuth 2.0 server setup, or session management change"
+    agents: [Sione Tuilagi, Lena Hoffmann]
+
+  - id: IDS-002
+    rule: "NEVER issue refresh tokens without rotation-on-use (each use of a refresh token MUST invalidate the old token and issue a new one). Refresh token reuse detection with family invalidation is the standard defence against stolen refresh tokens. Absence of rotation means a stolen refresh token is valid indefinitely."
+    whenToUse: "any OAuth 2.0 / OIDC refresh token implementation, token store design, or token rotation procedure"
+    agents: [Sione Tuilagi, Lena Hoffmann]
+
+  - id: IDS-003
+    rule: "NEVER use the OAuth 2.0 Implicit Flow (response_type=token) for any new client application. Implicit Flow delivers access tokens in the URL fragment, making them visible to browser history, referer headers, and JavaScript on the page. Authorization Code + PKCE is the mandatory replacement for all browser-based clients."
+    whenToUse: "any new OAuth 2.0 client registration, SPA or mobile app authentication design, or existing Implicit Flow migration"
+    agents: [Sione Tuilagi, Lena Hoffmann]
+
+  - id: IDS-004
+    rule: "NEVER set a session cookie without Secure + HttpOnly + SameSite attributes. Omitting Secure allows transmission over HTTP; omitting HttpOnly exposes the cookie to JavaScript-based XSS; omitting SameSite enables CSRF. All three attributes are required simultaneously."
+    whenToUse: "any cookie-based session design, session management library selection, or cookie attribute audit"
+    agents: [Sione Tuilagi, Lena Hoffmann]
+
+  # === CRYPTOGRAPHIC IMPLEMENTATION ===
+  - id: IDS-005
+    rule: "NEVER use HS256 (symmetric HMAC-SHA256) for JWT signing when the token is verified by a party other than the issuer. Sharing a symmetric key with external parties violates the principle of least-privilege for key material. Use RS256, ES256, or EdDSA with public-key cryptography."
+    whenToUse: "any JWT signing algorithm selection, token validation library configuration, or JWKS endpoint design"
+    agents: [Lena Hoffmann, Sione Tuilagi]
+
+  - id: IDS-006
+    rule: "NEVER allow 'alg: none' in the JWT validation code path. Libraries that do not explicitly reject the none algorithm accept unsigned tokens as valid. This is a critical vulnerability class with active exploitation history. Maintain an explicit allowlist of accepted algorithms and reject everything else."
+    whenToUse: "any JWT validation implementation, library selection, or token verification code review"
+    agents: [Lena Hoffmann]
+
+  - id: IDS-007
+    rule: "NEVER store password hashes using MD5, SHA-1, SHA-256, or any hash function not designed for password storage. Use Argon2id (preferred) or bcrypt with cost factor 12 or above. Password storage functions are deliberately slow; fast hash functions are trivially brute-forced against modern GPU hardware."
+    whenToUse: "any user credential storage design, password hashing implementation, or legacy hash migration"
+    agents: [Lena Hoffmann]
+
+  - id: IDS-008
+    rule: "NEVER plan a key rotation procedure that requires a maintenance window or causes service downtime. Key rotation MUST be zero-downtime via a dual-validation window: new key is accepted before old key is retired, with an overlap period sufficient for all active tokens to expire or be re-issued."
+    whenToUse: "any key rotation plan, signing key lifecycle design, or HSM key management procedure"
+    agents: [Lena Hoffmann, Sione Tuilagi]
+
+  # === CONSENT & PRIVACY IN IDENTITY ===
+  - id: IDS-009
+    rule: "NEVER record consent state as a mutable boolean field. Consent is an event log: each consent event (grant, revoke, re-grant, version-update) must be a new immutable row with purpose, legal basis, timestamp, and the exact consent text version shown to the user at the time of the event."
+    whenToUse: "any consent management database design, consent API implementation, or consent UI flow"
+    agents: [Ayasha Morningstar, Valentina Osei]
+
+  - id: IDS-010
+    rule: "NEVER perform identity matching (deterministic or probabilistic) on data from a user without a valid consent record for that processing purpose. A consent record for 'product personalisation' does not cover identity resolution for advertising audiences. Each processing purpose requires its own legal basis documented separately."
+    whenToUse: "any identity graph build, deterministic match pipeline, or probabilistic identity resolution implementation"
+    agents: [Valentina Osei, Ayasha Morningstar]
+
+  - id: IDS-011
+    rule: "NEVER implement a right-to-erasure request as a soft-delete or account archive. Erasure from the identity graph must be complete: all graph links, all probabilistic match records, all household associations, and all downstream derived identifiers must be removed and propagation confirmed to each consuming system within 30 days (LGPD) or 30 days (GDPR)."
+    whenToUse: "any DSAR erasure request handling, identity graph deletion pipeline design, or user-account offboarding flow"
+    agents: [Ayasha Morningstar, Valentina Osei]
+
+  # === PRIVILEGED ACCESS & CROSS-SYSTEM TRUST ===
+  - id: IDS-012
+    rule: "NEVER provision privileged or admin identities through the same authentication flow as regular users. Privileged identities require step-up authentication (hardware MFA, phishing-resistant WebAuthn / FIDO2), just-in-time access provisioning, and session recording. Admin SSO bypass is an insider-threat surface."
+    whenToUse: "any admin identity design, privileged access management implementation, or IAM role provisioning for administrative accounts"
+    agents: [Sione Tuilagi, Lena Hoffmann]
+
+  - id: IDS-013
+    rule: "NEVER skip JWT audience ('aud') claim validation. A token issued for Service A MUST be rejected by Service B if Service B is not in the aud claim. Audience validation prevents token-reuse attacks where a token obtained for a low-privilege service is replayed against a high-privilege service."
+    whenToUse: "any JWT validation implementation, service-to-service authentication design, or API gateway token verification"
+    agents: [Lena Hoffmann, Sione Tuilagi]

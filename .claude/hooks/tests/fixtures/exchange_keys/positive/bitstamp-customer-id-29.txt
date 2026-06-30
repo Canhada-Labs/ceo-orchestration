@@ -1,0 +1,2 @@
+BITSTAMP_CUSTOMER_ID=1234567
+bitstamp_api_key: b2jJLQlXWYBsO3USO1dzefjktBM5AgMz

@@ -1,0 +1,109 @@
+(***************************************************************************)
+(* PlusCal source for the PLAN-SCHEMA §4 Plan Lifecycle state machine.     *)
+(*                                                                         *)
+(* This is the READABLE source. The canonical machine-checkable spec is    *)
+(* in ``plan-lifecycle.tla``. See ``run-tlc.sh`` for toolchain pin.       *)
+(*                                                                         *)
+(* Models ``.claude/hooks/check_plan_edit.py`` as of 2026-04-15.          *)
+(* Correspondence table in ``properties-proved.md § Plan-Lifecycle Model   *)
+(* ↔ Implementation``.                                                    *)
+(*                                                                         *)
+(* Phase B.1 — PLAN-014. QA Architect + Security composite.               *)
+(***************************************************************************)
+--algorithm PlanLifecycle {
+
+variables
+  (* Plan status: the frontmatter `status:` field. Mirrors
+     check_plan_edit.py:67 _ALLOWED_TRANSITIONS keys. *)
+  plan_status = "draft",
+
+  (* Required-field presence flags. Mirrors check_plan_edit.py:183-211
+     _check_required_fields. *)
+  reviewed_at = FALSE,
+  completed_at = FALSE,
+  related_commits = FALSE,
+  abandonment_reason = FALSE,
+
+  (* Auth gate: Owner approval for draft->reviewed. Mirrors the governance
+     contract in PLAN-SCHEMA.md §4 "draft->reviewed is the human-gate". *)
+  approved_by_owner = FALSE,
+
+  (* Bounded step counter for TLC tractability. *)
+  step_count = 0,
+
+  (* Audit trail: sequence of transition records. *)
+  transition_log = <<>>;
+
+define {
+  Statuses == {"draft", "reviewed", "executing", "done", "abandoned"}
+  TypeOK == plan_status \in Statuses
+}
+
+(***************************************************************************)
+(* The Plan Lifecycle process non-deterministically picks one of the        *)
+(* legal transitions from the current state. Each transition enforces       *)
+(* its preconditions (required fields, owner approval) before firing.       *)
+(***************************************************************************)
+fair process (Lifecycle = "lifecycle") {
+  Loop: while (step_count < MaxSteps) {
+    either {
+      \* draft -> reviewed (Owner gate)
+      DraftToReviewed:
+        if (plan_status = "draft") {
+          approved_by_owner := TRUE;
+          reviewed_at := TRUE;
+          plan_status := "reviewed";
+          transition_log := Append(transition_log,
+                                   [from |-> "draft", to |-> "reviewed"]);
+          step_count := step_count + 1;
+        };
+    } or {
+      \* reviewed -> executing
+      ReviewedToExecuting:
+        if (plan_status = "reviewed") {
+          plan_status := "executing";
+          transition_log := Append(transition_log,
+                                   [from |-> "reviewed", to |-> "executing"]);
+          step_count := step_count + 1;
+        };
+    } or {
+      \* executing -> done
+      ExecutingToDone:
+        if (plan_status = "executing") {
+          completed_at := TRUE;
+          related_commits := TRUE;
+          plan_status := "done";
+          transition_log := Append(transition_log,
+                                   [from |-> "executing", to |-> "done"]);
+          step_count := step_count + 1;
+        };
+    } or {
+      \* {draft, reviewed, executing} -> abandoned
+      ToAbandoned:
+        if (plan_status \in {"draft", "reviewed", "executing"}) {
+          abandonment_reason := TRUE;
+          plan_status := "abandoned";
+          transition_log := Append(transition_log,
+                                   [from |-> plan_status, to |-> "abandoned"]);
+          step_count := step_count + 1;
+        };
+    } or {
+      \* No-op for stuttering (allows model to terminate cleanly).
+      Skip: skip;
+    };
+  };
+}
+
+}
+
+(***************************************************************************)
+(* Properties (encoded as THEOREMs in plan-lifecycle.tla):                 *)
+(*                                                                         *)
+(* S1 — no-skip: ~(plan_status = "draft" /\ plan_status' = "done")        *)
+(* S2 — abandonment-documented: plan_status' = "abandoned" =>              *)
+(*       abandonment_reason'                                               *)
+(* S3 — monotonic-timestamps: executing => reviewed_at,                    *)
+(*       done => completed_at /\ related_commits                           *)
+(* Auth — owner-approval: (draft /\ reviewed') => approved_by_owner'      *)
+(* Terminal — done/abandoned are absorbing                                 *)
+(***************************************************************************)

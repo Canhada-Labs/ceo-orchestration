@@ -1,0 +1,1 @@
+{"session_id":"test-sess-cg-001","hook_event_name":"PostToolUse","tool_name":"Agent","tool_input":{"subagent_type":"general-purpose","description":"Test spawn","prompt":"Do work"},"tool_response":{"text":"No claims in this response."}}

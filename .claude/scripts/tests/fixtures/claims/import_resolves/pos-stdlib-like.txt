@@ -1,0 +1,5 @@
+The architect bundle validator imports the registry module.
+
+CLAIM:import_resolves:registry
+
+ADR-018 v1.1: syntactic + file-existence only. No importlib calls.

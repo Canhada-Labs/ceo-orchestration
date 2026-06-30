@@ -1,0 +1,99 @@
+name: Hook performance profile (advisory)
+
+# Sprint 10 PLAN-010 Phase 2. Advisory, measure-only per ADR-024.
+# Converts to a blocking gate in Sprint 11 IFF three consecutive
+# weekly runs show p99 stable within 20% variance (ADR-024 §Decision).
+
+on:
+  schedule:
+    # Monday 06:00 UTC — PLAN-012 §S6 cron stagger. Chaos runs 03:00,
+    # perf-profile 06:00, otel-smoke 09:00, adapter-live 12:00. See
+    # .github/workflows/_README.md for the full schedule + rationale.
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.claude/hooks/**'
+      - '.claude/scripts/hook-profiler.py'
+      - '.github/workflows/perf-profile.yml'
+
+concurrency:
+  group: perf-profile-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  profile:
+    name: Measure hook p50/p95/p99 (N=1000, advisory)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # PLAN-012 Phase 2 CEO_SOTA_DISABLE parity. Matches chaos.yml +
+      # otel-smoke.yml: a repo admin can set `CEO_SOTA_DISABLE=1` as a
+      # repo variable to short-circuit this workflow.
+      CEO_SOTA_DISABLE: ${{ vars.CEO_SOTA_DISABLE || '' }}
+
+    steps:
+      - name: Kill-switch check (CEO_SOTA_DISABLE=1)
+        id: killswitch
+        run: |
+          if [ "${CEO_SOTA_DISABLE}" = "1" ]; then
+            echo "::notice::CEO_SOTA_DISABLE=1 — perf-profile short-circuited."
+            echo "disabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "disabled=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        if: steps.killswitch.outputs.disabled == 'false'
+        # SHA-pinned (matches validate.yml): actions/checkout@v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Setup Python
+        if: steps.killswitch.outputs.disabled == 'false'
+        # SHA-pinned (matches validate.yml): actions/setup-python@v6.2.0
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.12'
+
+      - name: Run hook profiler (N=1000, warmup=100)
+        if: steps.killswitch.outputs.disabled == 'false'
+        id: profile
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/hp-ci-home
+          # PLAN-138 follow-up (S241): the profiler used to run TWICE (--format
+          # table then --format json), each a full N=1000 measurement, which
+          # chronically blew the 15-min timeout (10 of the last 12 runs were
+          # CANCELLED — advisory, never failed). Run it ONCE (json → artifact for
+          # Sprint 11 longitudinal analysis) and render the json to the log.
+          # Halves wall-clock to ~7-8 min; measurement (N=1000) is unchanged.
+          python3 .claude/scripts/hook-profiler.py \
+            --home /tmp/hp-ci-home \
+            --samples 1000 \
+            --warmup 100 \
+            --format json > profile.json
+          echo "Wrote profile.json ($(wc -c < profile.json) bytes)"
+          echo "--- profile (json) ---"
+          cat profile.json
+
+      - name: Upload profile artifact
+        if: steps.killswitch.outputs.disabled == 'false'
+        # SHA-pinned (matches benchmarks.yml): actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: hook-profile-${{ github.run_id }}
+          path: profile.json
+          retention-days: 90
+
+      - name: Advisory note
+        if: steps.killswitch.outputs.disabled == 'false'
+        # ADR-024 state 0: we do NOT fail the workflow based on any
+        # threshold. Sprint 11 will convert this to a gate (with a
+        # named threshold) once three weekly runs show stable p99.
+        run: |
+          echo "::notice::Perf profile is advisory (ADR-024 state 0)."
+          echo "::notice::Sprint 11 will convert to a gate if p99 stabilizes."

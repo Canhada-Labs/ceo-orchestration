@@ -1,0 +1,10 @@
+# PLAN-045 F-10-06 — tournament fixture corpus SHA256 anchor.
+# Regenerate via: python3 .claude/scripts/tournament/regen_corpus_sha.py
+# Consumed by tier_policy/learn.py::_verify_fixture_corpus (fail-CLOSED on mismatch).
+# Compatible with `shasum -a 256 -c CORPUS_SHA256.txt` for manual checking.
+
+c3442f675a965dc317d34d88f41763945b6095390816c000e9efce4f0bdddf70  code-review.jsonl
+005b3b6feb405ad68c728d919ac5d40b288267a4083fa0c9f1e61780c6c6e407  docs-writing.jsonl
+0040e3221967ece503ef7e39dcf5abc5396ad21c0c1644a21aff314640205e78  performance-triage.jsonl
+31dde218848517132dfb264040542c4466e3579a0d71259390402165adc4e524  security-review.jsonl
+aaa6c289d44db25489207ae938cfa4bbe97c7d238aff180549d6dbb3bce5b7b7  test-design.jsonl

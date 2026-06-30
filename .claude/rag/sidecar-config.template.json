@@ -1,0 +1,53 @@
+{
+  "_comment": "PLAN-041 Phase 3 / ADR-062 — sidecar config template. Adopter copies to ~/.ceo-orchestration/rag/config.json and edits. File must be chmod 0600.",
+  "schema_version": "1.0",
+  "transport": {
+    "mode": "unix",
+    "unix_socket_path": "~/.ceo-orchestration/rag/sidecar.sock",
+    "tcp_fallback": {
+      "enabled": false,
+      "comment": "To enable: set CEO_RAG_SIDECAR_TRANSPORT=tcp + CEO_RAG_TCP_ACK=I-UNDERSTAND-LOOPBACK-IS-NOT-AUTH. Windows-only; bearer token auto-generated.",
+      "bind_address": "127.0.0.1",
+      "port": 19876,
+      "token_file": "~/.ceo-orchestration/rag/token"
+    }
+  },
+  "storage": {
+    "base_dir": "~/.ceo-orchestration/rag",
+    "dir_mode": "0700",
+    "file_mode": "0600",
+    "max_index_gb": 10,
+    "per_project_isolation": true
+  },
+  "indexing": {
+    "mode": "local",
+    "_mode_comment": "'naive' (no LLM), 'local' (2 LLM calls), 'hybrid' (3 LLM calls). bridge.py default expects 'naive'-compatible response shapes; 'local'/'hybrid' require CEO_RAG_QUERY_TIMEOUT_MS=15000+.",
+    "indexignore_path": ".claude/rag/indexignore",
+    "max_parallel_insert": 32,
+    "llm_max_async": 32,
+    "pre_embed_secret_scan": true,
+    "_scan_comment": "Runs _lib.output_scan.scan() on every chunk before embedding. LLM06 patterns drop the chunk + emit rag_index_redacted. Security P0-4 mitigation."
+  },
+  "query": {
+    "default_top_k": 5,
+    "default_timeout_ms": 5000,
+    "health_probe_timeout_ms": 500,
+    "rate_limit_per_session": {
+      "enabled": true,
+      "tokens_per_minute": 30,
+      "burst": 10
+    }
+  },
+  "logging": {
+    "level": "info",
+    "log_file": "~/.ceo-orchestration/rag/sidecar.log",
+    "redact_query_strings": true,
+    "_redact_comment": "Query strings may contain user secrets; redact via _lib.redact.redact_secrets before writing."
+  },
+  "supply_chain": {
+    "requirements_lock_path": ".claude/rag/requirements.lock",
+    "models_manifest_path": ".claude/rag/models.manifest.json",
+    "enforce_hashes": true,
+    "refuse_postinstall_scripts": true
+  }
+}

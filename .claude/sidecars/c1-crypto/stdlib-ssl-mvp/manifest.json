@@ -1,0 +1,48 @@
+{
+  "sidecar": {
+    "name": "stdlib-ssl-mvp",
+    "capability_class": "C1",
+    "version": "1.0.0-mvp",
+    "default_tier": "C"
+  },
+  "isolation": {
+    "core_paths_blocked": [
+      ".claude/hooks/",
+      ".claude/scripts/",
+      "SPEC/",
+      ".claude/policies/",
+      ".github/workflows/"
+    ],
+    "core_paths_allowlisted_workflow_invokers": [
+      ".github/workflows/validate.yml"
+    ],
+    "import_roots": ["cryptography"],
+    "allowed_workflow_invocation_patterns": [
+      "^python3? \\.claude/sidecars/c1-crypto/stdlib-ssl-mvp/boundary_test\\.py($| )"
+    ],
+    "boundary_test": "boundary_test.py"
+  },
+  "dependencies": {
+    "python": [],
+    "system": ["gpg"],
+    "licenses": {}
+  },
+  "governance": {
+    "kill_switch_env": "CEO_SIDECAR_C1_CRYPTO_STDLIB_SSL_MVP_ENABLED",
+    "default_state": "off",
+    "activation_predicate": "CEO_FEDERATION_ENABLED=1 AND owner_gpg_enable_sentinel_valid",
+    "enable_value": "1",
+    "disable_value": "0",
+    "explicit_opt_in_required": true,
+    "authorizing_adr": "ADR-129",
+    "cost_envelope": {
+      "per_invocation_tokens": 0,
+      "daily_burn_cap": 0,
+      "enforcement": "adapter"
+    }
+  },
+  "install": {
+    "script": "install.sh",
+    "hw_class_check": "none"
+  }
+}

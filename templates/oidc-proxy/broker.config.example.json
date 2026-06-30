@@ -1,0 +1,29 @@
+{
+  "_comment": "OIDC -> key-broker reference config (PLAN-133 E7). EDIT ME. This is a template, not a wired framework hook. The broker verifies a workload OIDC token, then mints a short-lived provider credential scoped to that workload. NO long-lived provider key ever leaves the broker.",
+
+  "expected_issuer": "https://token.actions.githubusercontent.com",
+  "expected_audience": "ceo-key-broker",
+
+  "_alg_allowlist_comment": "ADR-122 §A.1/§A.3 — asymmetric only; alg=none and alg=HS* are rejected at PARSER PRECEDENCE in oidc_key_broker.enforce_alg_allowlist(). This list is informational; the code is the source of truth.",
+  "allowed_algs": ["ES256", "ES384", "ES512", "EdDSA", "PS256", "PS384", "PS512", "RS256", "RS384", "RS512"],
+
+  "_nonce_cache_comment": "ADR-122 §A.4 — per-jti single-use nonce cache. TTL <= 300s (5 min, RFC 9449 §11.1). Eviction LRU+TTL only. Key is the (jti, iat) tuple.",
+  "nonce_ttl_seconds": 300,
+  "nonce_max_entries": 16384,
+  "clock_skew_seconds": 60,
+
+  "_subject_allowlist_comment": "Optional. If present, ONLY these OIDC `sub` values may mint. For GitHub Actions OIDC, sub looks like 'repo:OWNER/REPO:ref:refs/heads/main' or 'repo:OWNER/REPO:environment:production'. Leave null to allow any sub from the trusted issuer/audience.",
+  "allowed_subjects": [
+    "repo:OWNER/REPO:ref:refs/heads/main"
+  ],
+
+  "_jwks_comment": "The adopter wires a real asymmetric signature verifier (oidc_key_broker.verify_signature seam). Fetch + cache the issuer JWKS at this URL; verify the token signature against the kid. The stdlib has no asymmetric crypto, so this is intentionally NOT implemented here — the shipped default RejectAllVerifier DENIES everything until you wire it.",
+  "jwks_uri": "https://token.actions.githubusercontent.com/.well-known/jwks",
+
+  "_minted_credential_comment": "What the broker returns on success. Mint SHORT-LIVED and SCOPED. Never return your standing provider API key.",
+  "minted_credential": {
+    "max_ttl_seconds": 900,
+    "scope": "model:invoke",
+    "provider": "anthropic"
+  }
+}

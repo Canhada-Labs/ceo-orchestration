@@ -1,0 +1,11 @@
+# Changelog
+
+## [1.0.0] - 2026-04-15
+
+### Added
+- Support for incremental refactoring via the `incremental-refactoring`
+  skill.
+- New audit-query sub-commands: debate, plans, vetoes, benchmarks.
+
+### Changed
+- Bumped contamination check to use a glob for plan files.

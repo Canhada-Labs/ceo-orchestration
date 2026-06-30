@@ -1,0 +1,123 @@
+# Task chains — Sales Squad
+# Domain-specific workflows that extend the universal .claude/task-chains.yaml.
+#
+# ADR-009 §bundle-completeness: ≥2 task chain entries required.
+# Each chain id follows sales-<short-slug> (kebab-case).
+# NOT canonical-guarded — no sentinel required for edits.
+
+task_chains:
+  - id: sales-qbr-revenue-forecast
+    title: "Quarterly Business Review — revenue forecast package"
+    whenToUse: |
+      Triggered at the start of every quarter-close (typically 2 weeks before
+      fiscal quarter end) when the revenue team needs a signed-off forecast
+      package for exec review. Covers: pipeline review, attainment projection,
+      ARR bridge (new + expansion + churn), and commission liability estimate.
+      Out of scope: revenue recognition accounting (use finance-accounting squad)
+      and board-level financial reporting (CFO-owned separately).
+    steps:
+      - id: 1
+        owner: "Valentina Osei (Revenue Operations Analyst)"
+        action: "Pull CRM snapshot with stage, ARR, close date, probability. Validate against methodology doc (SAL-002). Flag any opportunity with a close date in-quarter that lacks a countersigned Order Form (SAL-005)."
+      - id: 2
+        owner: "Valentina Osei"
+        action: "Run attainment calculation across all reps and overlays. Cross-check against comp plan document. Flag any quota ramp adjustments not yet acknowledged in writing (SAL-004)."
+      - id: 3
+        owner: "Marcus Thorne (Account Executive Lead)"
+        action: "Review deal-by-deal Commit vs. Upside categorization. Flag any deal with verbal commitments or non-standard terms not captured in the CRM (SAL-006)."
+      - id: 4
+        owner: "Marcus Thorne"
+        action: "Validate that all deals in 'Commit' have signed Order Forms on file or a named Legal review in progress. Escalate any exception to CEO before the forecast is finalized."
+      - id: 5
+        owner: "Valentina Osei"
+        action: "Build ARR bridge (new ARR + expansion ARR - churn). Confirm multi-year deals are credited consistently with the comp plan (no double-counting, no omission) (SAL-007)."
+      - id: 6
+        owner: "Priya Srinath (Sales Compliance Officer)"
+        action: "Audit any new customers added to the CRM this quarter. Confirm all associated enrichment-tool integrations have active DPAs (SAL-009). Flag missing legal bases for any EU/BR accounts acquired via outbound (SAL-010)."
+      - id: 7
+        owner: "Valentina Osei"
+        action: "Produce the commission liability estimate for the quarter. Dry-run against the attainment numbers from step 2. Any discrepancy > 2% requires a root-cause note before the package is sent."
+      - id: 8
+        owner: "Staff Code Reviewer"
+        action: "Merge check: forecast methodology version referenced, all Commit deals have Order Forms, commission dry-run attached, no undocumented quota changes."
+    verification: |
+      - CRM snapshot timestamp recorded; methodology doc version pinned (SAL-002)
+      - All Commit-category deals have countersigned Order Forms (SAL-005)
+      - Commission dry-run within 2% of manual check
+      - No verbal-commitment side letters unresolved (SAL-006)
+      - Enrichment vendor DPAs confirmed active for all new accounts (SAL-009)
+
+  - id: sales-new-tool-integration
+    title: "Onboard a new sales tool (sequencer, enrichment, AI outreach, ABM platform)"
+    whenToUse: |
+      Any time a new SaaS tool is being integrated into the sales tech stack —
+      whether a sequencing platform (Outreach, Salesloft, Apollo), data enrichment
+      vendor (ZoomInfo, Clearbit, Lusha), ABM platform (6sense, Demandbase),
+      or AI-assisted outreach tool. Triggered at vendor evaluation, not at
+      contract signature. Out of scope: internal tooling or integrations that
+      do not touch prospect or customer PII.
+    steps:
+      - id: 1
+        owner: "Priya Srinath (Sales Compliance Officer)"
+        action: "Request and review the vendor's DPA and sub-processor list. Block onboarding if DPA is not available or if sub-processors include jurisdictions that fail adequacy assessment (SAL-009)."
+      - id: 2
+        owner: "Priya Srinath"
+        action: "Identify the legal basis for processing the contact data that will flow into this tool. Document legitimate interest analysis or opt-in record for EU/BR cohorts (SAL-010)."
+      - id: 3
+        owner: "Ngozi Adeyemi (Sales Engineer)"
+        action: "Technical integration review: verify API key is stored in secrets manager (not in frontend config or CRM workflow plain text), confirm data egress scope (which fields leave the CRM), test opt-out sync behavior."
+      - id: 4
+        owner: "Valentina Osei (Revenue Operations Analyst)"
+        action: "CRM field-mapping review: confirm integration does not rename, overwrite, or shadow any field referenced in a live forecast formula or comp calculation (SAL-003)."
+      - id: 5
+        owner: "Santiago Delgado (SDR)"
+        action: "Sequence configuration review: confirm opt-out and unsubscribe lists are synced bidirectionally before the first sequence fires (SAL-010). Confirm bounce handling removes contacts from the pipeline."
+      - id: 6
+        owner: "Principal QA Architect"
+        action: "Integration tests: fire a test contact through the full sequence with an opt-out flag set; confirm the contact is suppressed before send. Verify no production PII appears in the vendor's demo or sandbox environment (SAL-012)."
+      - id: 7
+        owner: "Staff Code Reviewer"
+        action: "Merge VETO check: DPA signed, sub-processors listed, opt-out sync verified, API key in secrets manager, no CRM forecast fields at risk."
+    verification: |
+      - DPA signed and on file before first data transfer (SAL-009)
+      - Legal basis documented for EU/BR contact segments (SAL-010)
+      - API key stored in secrets manager; not in CRM workflow or frontend config
+      - Opt-out bidirectional sync confirmed live in test (SAL-010)
+      - No production PII used in vendor sandbox or demo (SAL-012)
+
+  - id: sales-enterprise-deal-close
+    title: "Enterprise deal close process (ARR > $100k)"
+    whenToUse: |
+      Any opportunity with ARR exceeding the enterprise threshold (default $100k,
+      adjust per company policy) moving from Negotiation to Closed Won. Covers
+      contract review, non-standard term escalation, discount approval, and
+      Order Form countersignature. Out of scope: SMB/PLG deals below threshold
+      (use standard close workflow), post-signature customer onboarding (CS team).
+    steps:
+      - id: 1
+        owner: "Marcus Thorne (Account Executive Lead)"
+        action: "Deal structure audit: list every commitment made to the customer (SLA, payment terms, feature roadmap, data portability) and confirm each is captured in the draft Order Form or MSA addendum. No verbal commitments left off paper (SAL-006)."
+      - id: 2
+        owner: "Marcus Thorne"
+        action: "Discount approval check: confirm the total effective discount across products and term length is within the authorized approval matrix. Escalate to Finance if it exceeds the floor (SAL-007)."
+      - id: 3
+        owner: "Priya Srinath (Sales Compliance Officer)"
+        action: "Contract data-processing terms: confirm the Order Form references the DPA. For EU/BR customers, confirm GDPR/LGPD standard contractual clauses are appended. Flag any missing DPA reference (SAL-008)."
+      - id: 4
+        owner: "Legal (external to squad)"
+        action: "Full contract review of any non-standard MSA redlines. Legal sign-off is required before Valentina Osei can accept the deal into the forecast as Closed Won (SAL-008)."
+      - id: 5
+        owner: "Valentina Osei (Revenue Operations Analyst)"
+        action: "CRM opportunity audit: confirm countersigned Order Form is attached, ARR value matches the signed document, close date is accurate, and stage is advanced to Closed Won only after step 4 sign-off (SAL-005)."
+      - id: 6
+        owner: "Principal QA Architect"
+        action: "Post-close data audit: verify the new customer account in the CRM has source, legal-basis, and data-retention fields populated. Confirm no customer PII leaked to unapproved tooling during the sales cycle."
+      - id: 7
+        owner: "Staff Code Reviewer"
+        action: "Merge VETO check: countersigned Order Form attached, Legal sign-off recorded, discount within matrix, DPA reference confirmed, no verbal-only commitments outstanding."
+    verification: |
+      - Countersigned Order Form linked to CRM opportunity before Closed Won (SAL-005)
+      - Legal sign-off documented for any non-standard redlines (SAL-008)
+      - Discount within authorized approval matrix (SAL-007)
+      - DPA referenced in Order Form for EU/BR customers
+      - No side letters or verbal commitments unresolved (SAL-006)

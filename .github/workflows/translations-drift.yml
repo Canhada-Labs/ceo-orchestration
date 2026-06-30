@@ -1,0 +1,143 @@
+name: Translations drift
+
+# PLAN-004 Phase 9 (advisory commits-ahead monitor) +
+# PLAN-013 Phase B.7 (structural parity enforcement over 9 pairs).
+#
+# Two jobs:
+#   - `drift-check` (PLAN-004, advisory, continue-on-error) — commits-ahead
+#     heuristic between README pair.
+#   - `structural-parity` (PLAN-013, blocking) — runs
+#     `check_translations_drift.py` across all pairs declared in
+#     `.claude/scripts/translations-pairs.yaml`; validates heading count,
+#     code-fence count, line-count delta ≤10%, bidirectional cross-link.
+#
+# Cron stagger per `.github/workflows/_README.md` table: Monday 18:00 UTC
+# (next free slot after PLAN-012 03/06/09/12 + PLAN-013 red-team 15:00).
+
+on:
+  pull_request:
+    paths:
+      - "README.md"
+      - "README.pt-BR.md"
+      - "PROTOCOL.md"
+      - "PROTOCOL.pt-BR.md"
+      - ".claude/team.md"
+      - "team.en.md"
+      - "CONTRIBUTING.md"
+      - "CONTRIBUTING.pt-BR.md"
+      - "docs/**.md"
+      - "docs/translations/**"
+      - ".claude/scripts/check_translations_drift.py"
+      - ".claude/scripts/translations-pairs.yaml"
+      - ".claude/scripts/tests/test_check_translations_drift.py"
+      - ".github/workflows/translations-drift.yml"
+  push:
+    branches: [main]
+    paths:
+      - "README.md"
+      - "README.pt-BR.md"
+      - "PROTOCOL.md"
+      - "PROTOCOL.pt-BR.md"
+      - ".claude/team.md"
+      - "team.en.md"
+      - "CONTRIBUTING.md"
+      - "CONTRIBUTING.pt-BR.md"
+      - "docs/**.md"
+      - ".claude/scripts/check_translations_drift.py"
+      - ".claude/scripts/translations-pairs.yaml"
+  schedule:
+    # Monday 18:00 UTC — free slot per workflows/_README.md stagger.
+    - cron: "0 18 * * 1"
+
+concurrency:
+  group: translations-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  drift-check:
+    name: Translation drift (advisory — README commits-ahead)
+    # CEO_SOTA_DISABLE parity per _README.md §R8.
+    if: vars.CEO_SOTA_DISABLE != '1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    continue-on-error: true  # advisory: never blocks merge
+
+    steps:
+      - name: Checkout
+        # SHA-pinned (Sprint 7 Dependabot bump): actions/checkout@v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 0
+
+      - name: Compute drift for README ↔ README.pt-BR
+        run: |
+          set -euo pipefail
+          EN="README.md"
+          PT="README.pt-BR.md"
+
+          if [[ ! -f "$EN" ]] || [[ ! -f "$PT" ]]; then
+            echo "::warning::one of $EN or $PT missing — skipping drift check"
+            exit 0
+          fi
+
+          EN_LAST=$(git log -1 --format=%H -- "$EN")
+          PT_LAST=$(git log -1 --format=%H -- "$PT")
+          COMMITS_AHEAD=$(git rev-list --count "$PT_LAST..HEAD" -- "$EN" 2>/dev/null || echo 0)
+
+          echo "EN last touched:  $EN_LAST"
+          echo "PT last touched:  $PT_LAST"
+          echo "EN commits ahead of PT: $COMMITS_AHEAD"
+
+          {
+            echo "## Translation drift report"
+            echo ""
+            echo "| File | Last EN commit | Last PT commit | EN ahead of PT |"
+            echo "|---|---|---|---|"
+            echo "| README | \`${EN_LAST:0:8}\` | \`${PT_LAST:0:8}\` | $COMMITS_AHEAD commits |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [[ "$COMMITS_AHEAD" -gt 50 ]]; then
+            echo "::warning::README.pt-BR.md is STALE (>50 commits behind README.md). Please update."
+            echo "status: stale" >> "$GITHUB_STEP_SUMMARY"
+          elif [[ "$COMMITS_AHEAD" -gt 20 ]]; then
+            echo "::warning::README.pt-BR.md has DRIFTED (>20 commits behind README.md)."
+            echo "status: drifted" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "README.pt-BR.md is in sync (≤20 commits behind)."
+            echo "status: synced" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  structural-parity:
+    name: Translation structural parity (blocking — 9 pairs)
+    # PLAN-013 Phase B.7 — blocking enforcement.
+    # CEO_SOTA_DISABLE parity per _README.md §R8.
+    if: vars.CEO_SOTA_DISABLE != '1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        # SHA-pinned: actions/checkout@v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Setup Python 3.11
+        # SHA-pinned: actions/setup-python@v6.2.0
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.11"
+
+      - name: Run drift checker (all 9 pairs)
+        run: python3 .claude/scripts/check_translations_drift.py --json
+
+      - name: Run unit tests
+        run: |
+          set -euo pipefail
+          # Short module name invocation: leading-dot paths like
+          # `.claude.scripts.tests.*` are invalid Python modules
+          # (ValueError: Empty module name). Use `cd` + bare module name
+          # — same pattern as validate.yml's adapter matrix leg.
+          cd "$GITHUB_WORKSPACE/.claude/scripts/tests"
+          python3 -m unittest test_check_translations_drift -v

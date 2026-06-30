@@ -1,0 +1,3 @@
+# documentation example
+# Replace YOUR-API-KEY-HERE with your real key.
+# Example: BINANCE_API_KEY=YOUR-API-KEY-HERE

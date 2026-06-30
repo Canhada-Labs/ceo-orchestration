@@ -1,0 +1,6 @@
+Malicious claim targeting a host /proc path.
+
+CLAIM:path_exists:/proc/self/environ
+
+PLAN-009 A2 / R-SEC2: must be rejected — absolute path outside the
+repo root. Would leak env vars on Linux if allowed.

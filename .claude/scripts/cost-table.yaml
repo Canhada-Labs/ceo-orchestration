@@ -1,0 +1,99 @@
+# Cost table for token-estimator.py — pricing per model family
+# PLAN-083 sub-agent 0.2 deliverable; Perf P1-1 `cost_table_valid_until` field
+#
+# Mini-YAML subset parsed by token-estimator.py (stdlib-only). Supported syntax:
+#   - top-level scalars (key: value)
+#   - nested two-space dicts (one level deep under `models:` + `parallel_ceiling:`)
+#   - string + float + ISO-date scalars (no anchors, aliases, flow-style, or lists)
+# DO NOT add YAML anchors / aliases / multi-line strings — the in-tree parser
+# rejects them by design (Sec P1 yaml.safe_load-equivalent).
+
+schema_version: "1.0"
+
+# PLAN-133 B1 — AUGMENT pointer. The provenance-stamped, checksum-protected
+# canonical pricing source now lives at .claude/data/canonical_models.json
+# (models.dev-sourced; Owner re-runs build-canonical-models.py --fetch). This
+# YAML stays the in-tree authoritative table for token-estimator.py; the
+# canonical JSON is the AUGMENTING source that adds cache columns + limits +
+# provenance. Reconcile the two with:
+#   python3 .claude/scripts/build-canonical-models.py --reconcile
+# Divergence is FLAGGED, never blind-overwritten (S220 unknown=0 preserved).
+canonical_models_ref: ".claude/data/canonical_models.json"
+
+# Authoritative validity window. token-estimator.py emits a stderr warning when
+# the current date exceeds this value and falls back to last-known pricing.
+# Refresh procedure: every 90 days, re-verify each `source_url` row below,
+# bump `last_verified_at` to today, bump `cost_table_valid_until` to today+90d,
+# and update any rate that changed. Use `python3 token-estimator.py
+# --check-pricing-staleness` to surface the warning in CI.
+cost_table_valid_until: 2026-09-13
+# PLAN-137 A4 (2026-06-15): 1M window confirmed flat standard rate (no long-context
+# premium) for Opus 4.6/4.7/4.8, Sonnet 4.6, Fable 5; Haiku 4.5 window=200K. See
+# docs/provider-pricing.md Long-context section. (Own-line comment: the in-tree
+# parser only strips inline comments on nested model fields, not top-level scalars.)
+last_verified_at: 2026-06-15
+refresh_cadence_days: 90
+
+# Default model used by Wave 0a sub-agents per PLAN-083 §5.1 ("Sonnet" column).
+# Estimator pads tokens to this model when caller omits `--model`.
+default_model: claude-sonnet-4-6
+
+# Blended-rate weights for the typical sub-agent invocation (CEO-prompt heavy,
+# tool-result light). Per ADR-081 §Cost reference table + audit-log empirical
+# averages from S82-S105 (input:output ≈ 4:1 for sub-agent dispatch summaries).
+# Override via env CEO_TOKEN_ESTIMATOR_BLENDED_RATIO=<float 0..1> (= input share).
+blended_input_share: 0.80
+blended_output_share: 0.20
+
+# Parallel-execution ceiling per Perf P0-1 (PLAN-083). When estimator computes
+# wallclock_paralelizado it divides per-sub-agent wallclock by `effective_workers`
+# = min(sub_agents, max_parallel).
+parallel_ceiling:
+  max_parallel: 6
+  ceiling_rationale: "Perf P0-1 — bounded sub-agent fan-out (CEO single-message dispatch + tool budget)"
+
+# Token-to-wallclock conversion factor. Empirical: a sub-agent burning 90k tokens
+# averages ~6 minutes wallclock on Sonnet (audit-log S96-S105 medians). The
+# estimator uses this single linear factor; not perfect, but defensible v1.0.
+# Override via env CEO_TOKEN_ESTIMATOR_SECONDS_PER_KTOK=<float>.
+seconds_per_ktok: 4.0
+seconds_per_ktok_rationale: "S96-S105 audit-log median ≈ 4s per 1k tokens, Sonnet sub-agent dispatch"
+
+# Pricing rows. Per-million-token rates in USD. Sourced from ADR-052 §Cost
+# magnitude + provider-pricing.md as of last_verified_at.
+models:
+  claude-fable-5:
+    input_per_mtok: 10.00
+    output_per_mtok: 50.00
+    tier: fable
+    source_url: "https://models.dev/api.json"  # Owner fetch 2026-06-10 sha a6f5cb21; live-confirmed by W0b reconciliation 20/20 calls drift~0.0000
+  claude-opus-4-8:
+    input_per_mtok: 5.00
+    output_per_mtok: 25.00
+    tier: opus
+    source_url: "https://www.anthropic.com/api"
+  claude-opus-4-7:
+    input_per_mtok: 5.00
+    output_per_mtok: 25.00
+    tier: opus
+    source_url: "https://models.dev/api.json"  # Owner fetch 2026-06-10 sha a6f5cb21; live-confirmed by W0b reconciliation 20/20 (was 15/75 pre-4.8 launch)
+  claude-opus-4-7-1m:
+    input_per_mtok: 5.00
+    output_per_mtok: 25.00
+    tier: opus
+    source_url: "https://models.dev/api.json"  # follows the base 4-7 row (no separate 1m rate published)
+  claude-sonnet-4-6:
+    input_per_mtok: 3.00
+    output_per_mtok: 15.00
+    tier: sonnet
+    source_url: "https://docs.anthropic.com/en/docs/about-claude/pricing"
+  claude-haiku-4-5:
+    input_per_mtok: 1.00
+    output_per_mtok: 5.00
+    tier: haiku
+    source_url: "https://docs.anthropic.com/en/docs/about-claude/pricing"
+  claude-haiku-4-5-20251001:
+    input_per_mtok: 1.00
+    output_per_mtok: 5.00
+    tier: haiku
+    source_url: "https://docs.anthropic.com/en/docs/about-claude/pricing"

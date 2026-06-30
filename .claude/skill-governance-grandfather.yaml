@@ -1,0 +1,39 @@
+# DEPRECATED: superseded by .claude/policies/grandfather-cap.policy.yaml (PLAN-080 Phase 1b / ADR-112)
+# This file remains as a backward-compat reader for `skill_grandfather_parser.py` +
+# `validate-governance.sh`. Authoritative caps + domain bundles live in the
+# successor policy file. The 5 individual_skills entries below are mirrored
+# from `policies/grandfather-cap.policy.yaml::individual_skills.members`.
+
+deprecated: true
+superseded_by: .claude/policies/grandfather-cap.policy.yaml
+deprecation_plan: PLAN-080
+deprecated_at: 2026-05-09
+
+# Legacy single-cap declaration preserved for one transitional release:
+grandfathered_skills_cap: 5
+
+# ----------------------------------------------------------------------------
+# Individual-skill grandfather entries (mirrors policies/grandfather-cap.policy.yaml).
+# Reason categories enum-validated by skill_grandfather_parser.py.
+# ----------------------------------------------------------------------------
+
+grandfathered:
+  - skill: pre-plan-brainstorm
+    reason: meta-skill-adjacent
+    justification: "Invoked by CEO before drafting L3+ plans per ADR-058. Not a Task-spawn routing target. Session-scoped mental-framework, not a spawnable archetype."
+
+  - skill: terse-mode
+    reason: slash-command-only
+    justification: "Invoked via /terse slash command per PLAN-047 Phase 2. Session output-economy toggle; VETO auto-off for code-review/security/QA-verdict/compliance per skill spec."
+
+  - skill: advanced-evaluation
+    reason: community-import
+    justification: "Imported via ADR-060 curated pipeline (community domain). Adopter-opt-in LLM-as-judge/rubric skill; not in core routing."
+
+  - skill: agent-evaluation
+    reason: community-import
+    justification: "Imported via ADR-060 curated pipeline (community domain). Adopter-opt-in agent-behavior testing skill; not in core routing."
+
+  - skill: agentic-actions-auditor
+    reason: community-import
+    justification: "Imported via ADR-060 curated pipeline (community domain). Adopter-opt-in GitHub Actions AI-integration auditor; not in core routing."

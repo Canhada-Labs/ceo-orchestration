@@ -1,0 +1,31 @@
+# flip-criteria-drift-allowlist — intentional mismatches pending ADR amendment.
+#
+# Format: <Flip>\t<ADR-ref>\t<token>
+#
+# One entry per known mismatch. A mismatch is "allowlisted" when
+# PLAN-012 carries a debate-revised criterion that the owning ADR has
+# not yet been amended to reflect. Per ADR-041 §4, the ADR amendment
+# lands in the flip PR itself — so until the flip actually happens,
+# the plan intentionally leads the ADR.
+#
+# Each allowlist entry MUST reference the PLAN-012 debate adjustment
+# row (C2/C3/C5/etc.) that introduced the revised criterion.
+#
+# When a flip PR lands, remove the corresponding rows here AND add the
+# amendment to the owning ADR in the same PR. The drift-checker then
+# flips to strict for that (Flip, ADR) pair.
+#
+# Columns are tab-separated. Comments + blank lines ignored.
+
+# Flip #7 (perf-profile State 0→1) — PLAN-012 debate C-QA row:
+# revised criterion "6 weekly runs + range/median ≤0.20 + Mann-Whitney".
+# ADR-024 currently says "3 weekly runs" and "max/min ≤ 1.2". ADR-024
+# amendment lands in the flip PR.
+Flip #7	ADR-024	6week
+Flip #7	ADR-024	6weeklyruns
+
+# Flip #10 (skill retrieval real embeddings) — PLAN-012 debate S1 +
+# QA revision row: "paired bootstrap on N≥200 pairs". ADR-029 currently
+# says ">= 50 pairs". ADR-029 amendment lands in the flip PR.
+Flip #10	ADR-029	N≥200
+Flip #10	ADR-029	≥200pairs

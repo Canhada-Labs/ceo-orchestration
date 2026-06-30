@@ -1,0 +1,7 @@
+Malicious claim attempting relative `..` traversal to escape repo root.
+
+CLAIM:path_exists:../../etc/passwd
+
+PLAN-009 A2 / R-SEC2: must be rejected by `_scoped_resolve` even though
+`/etc/passwd` exists on the host — the resolved path is outside the
+repo root.

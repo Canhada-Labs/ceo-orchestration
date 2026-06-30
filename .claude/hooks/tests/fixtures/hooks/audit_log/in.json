@@ -1,0 +1,1 @@
+{"session_id":"test-sess-006","hook_event_name":"PostToolUse","tool_name":"Task","tool_input":{"description":"Test spawn","prompt":"Do work","subagent_type":"general-purpose"},"tool_response":{"totalDurationMs":1500,"totalTokens":2000}}

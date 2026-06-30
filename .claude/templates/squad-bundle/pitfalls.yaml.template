@@ -1,0 +1,88 @@
+# Pitfalls Catalog — {{DOMAIN_LABEL}} Squad
+# Loaded alongside the universal catalog when the {{DOMAIN_SLUG}} profile is
+# installed. Format mirrors .claude/pitfalls-catalog.yaml:
+# id, rule, whenToUse, agents.
+#
+# ADR-009 §bundle-completeness: ≥10 pitfall entries required.
+# Each id follows {{DOMAIN_PREFIX}}-NNN (3-digit zero-padded, monotonic).
+# Exemplars: .claude/skills/domains/edtech/pitfalls.yaml
+#            .claude/skills/domains/government/pitfalls.yaml
+#            .claude/skills/domains/lgpd-heavy-saas/pitfalls.yaml
+#            .claude/skills/domains/trading-hft/pitfalls.yaml
+#
+# CANONICAL GUARD: this file is canonical. Any edit requires a sentinel
+# in .claude/plans/PLAN-<NNN>/architect/round-1/approved.md
+# (see PLAN-080 Phase 0b ceremony script).
+
+pitfalls:
+  # === {{CATEGORY_1_LABEL}} ===
+  - id: {{DOMAIN_PREFIX}}-001
+    rule: "{{RULE_001}}"
+    whenToUse: "{{WHEN_001}}"
+    agents: [{{AGENTS_001}}]
+
+  - id: {{DOMAIN_PREFIX}}-002
+    rule: "{{RULE_002}}"
+    whenToUse: "{{WHEN_002}}"
+    agents: [{{AGENTS_002}}]
+
+  - id: {{DOMAIN_PREFIX}}-003
+    rule: "{{RULE_003}}"
+    whenToUse: "{{WHEN_003}}"
+    agents: [{{AGENTS_003}}]
+
+  - id: {{DOMAIN_PREFIX}}-004
+    rule: "{{RULE_004}}"
+    whenToUse: "{{WHEN_004}}"
+    agents: [{{AGENTS_004}}]
+
+  # === {{CATEGORY_2_LABEL}} ===
+  - id: {{DOMAIN_PREFIX}}-005
+    rule: "{{RULE_005}}"
+    whenToUse: "{{WHEN_005}}"
+    agents: [{{AGENTS_005}}]
+
+  - id: {{DOMAIN_PREFIX}}-006
+    rule: "{{RULE_006}}"
+    whenToUse: "{{WHEN_006}}"
+    agents: [{{AGENTS_006}}]
+
+  - id: {{DOMAIN_PREFIX}}-007
+    rule: "{{RULE_007}}"
+    whenToUse: "{{WHEN_007}}"
+    agents: [{{AGENTS_007}}]
+
+  - id: {{DOMAIN_PREFIX}}-008
+    rule: "{{RULE_008}}"
+    whenToUse: "{{WHEN_008}}"
+    agents: [{{AGENTS_008}}]
+
+  # === {{CATEGORY_3_LABEL}} ===
+  - id: {{DOMAIN_PREFIX}}-009
+    rule: "{{RULE_009}}"
+    whenToUse: "{{WHEN_009}}"
+    agents: [{{AGENTS_009}}]
+
+  - id: {{DOMAIN_PREFIX}}-010
+    rule: "{{RULE_010}}"
+    whenToUse: "{{WHEN_010}}"
+    agents: [{{AGENTS_010}}]
+
+  - id: {{DOMAIN_PREFIX}}-011
+    rule: "{{RULE_011}}"
+    whenToUse: "{{WHEN_011}}"
+    agents: [{{AGENTS_011}}]
+
+  - id: {{DOMAIN_PREFIX}}-012
+    rule: "{{RULE_012}}"
+    whenToUse: "{{WHEN_012}}"
+    agents: [{{AGENTS_012}}]
+
+  # === {{CATEGORY_4_LABEL}} (optional; add if domain warrants) ===
+  # - id: {{DOMAIN_PREFIX}}-013
+  #   rule: "{{RULE_013}}"
+  #   whenToUse: "{{WHEN_013}}"
+  #   agents: [{{AGENTS_013}}]
+  #
+  # Add as many pitfalls as the domain warrants beyond the ≥12 baseline.
+  # Ids are monotonically assigned; do not reuse or skip.

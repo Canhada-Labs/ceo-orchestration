@@ -1,0 +1,57 @@
+# self_test.yaml — PLAN-133 C5 governance self-test scenario manifest.
+#
+# Declarative metadata for `/self-test` (.claude/commands/self-test.md).
+# The actual guard-driving payloads live in `.claude/scripts/self_test.py`
+# (the source of truth — a tampered manifest can NEVER weaken a verdict).
+# This file documents the contract and the hermeticity invariants so a
+# reviewer can confirm at a glance what `/self-test` checks.
+#
+# INVARIANTS (asserted by the runner, not by this file):
+#   no_live_spawn: true   # guards are driven IN-PROCESS; no subagent is spawned
+#   hermetic: true        # NO Anthropic client is constructed → $0 to run
+#
+# Each scenario drives ONE core governance guard against ONE crafted payload
+# and asserts the guard BLOCKS it. Any ALLOW verdict is a CRITICAL governance
+# regression (the protective hook was silently disabled or weakened).
+
+name: ceo-governance-self-test
+plan: PLAN-133
+item: C5
+no_live_spawn: true
+hermetic: true
+runner: .claude/scripts/self_test.py
+
+scenarios:
+  - id: spawn_missing_profile
+    guard: check_agent_spawn
+    expect: block
+    payload: persona header (PERSONA:) with NO '## SKILL CONTENT' section
+    rationale: a named/persona spawn without skill content is a generic agent
+      wearing a name tag; the spawn governance hook must block it.
+
+  - id: canonical_edit_no_sentinel
+    guard: check_canonical_edit
+    expect: block
+    payload: edit to .claude/team.md in a repo with NO Owner-signed sentinel
+    rationale: canonical governance files require an Owner-signed sentinel
+      (ADR-010); an unsentineled edit must be blocked.
+
+  - id: bash_destructive_rm_rf
+    guard: check_bash_safety
+    expect: block
+    payload: "rm -rf /"
+    rationale: destructive recursive-force removal of root must be blocked.
+
+  # PLAN-135 W1 S3 — tamper-tripwire assertion section (reported under
+  # `tamper`, separate from the three C5 scenarios above). SKIPPED with an
+  # advisory note while _lib/effective_config is not installed
+  # (pre-W1-ceremony trees); a `missed` verdict post-ceremony is CRITICAL.
+  - id: settings_tamper_classes_detected
+    guard: effective_config.classify_tampering
+    expect: detect
+    payload: crafted resolved-settings + env snapshot (disableAllHooks,
+      apiKeyHelper, bypassPermissions, ANTHROPIC_BASE_URL remap,
+      ANTHROPIC_AUTH_TOKEN, dangerously-skip flag, ghost registered hook)
+    rationale: the /ceo-boot settings_tamper_tripwires Tier-S check relies
+      on this classifier - it must detect every crafted tamper class and
+      redact secrets from finding details (PLAN-135 threat-model section 2).

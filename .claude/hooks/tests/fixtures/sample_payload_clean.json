@@ -1,0 +1,13 @@
+{
+  "session_id": "test-session-001",
+  "tool_name": "Agent",
+  "tool_input": {
+    "description": "Review the authentication middleware for security issues",
+    "prompt": "## AGENT PROFILE\nSofia Nakamura — VP Engineering\n\n## SKILL CONTENT\nSKILL: security-and-auth\nReview for OWASP basics.\n\n## FILE ASSIGNMENT\n- src/middleware/auth.ts\n\n## TASK\nReview and list issues.",
+    "subagent_type": "general-purpose"
+  },
+  "tool_response": {
+    "type": "text",
+    "content": "Review complete, 2 issues found"
+  }
+}

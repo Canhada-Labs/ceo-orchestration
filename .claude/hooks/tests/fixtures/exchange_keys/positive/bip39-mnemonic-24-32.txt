@@ -1,0 +1,2 @@
+# seed phrase backup
+recovery_phrase = 'admit actual ability about adjust actress above accident accident admit abandon admit across ability above accuse acid adjust adapt account adopt abuse actual adjust'

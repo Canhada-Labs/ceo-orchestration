@@ -1,0 +1,139 @@
+{
+  "schema_version": "1.0",
+  "plan_origin": "PLAN-092",
+  "wave_origin": "Wave A.2",
+  "doctrine": "stdlib-JSON per ADR-126 (PyYAML/jsonschema NOT imported by hook path)",
+  "patterns": {
+    "COOK-P1": {
+      "title": "Structured output / JSON mode",
+      "trigger_class": "structured-extract",
+      "task_signature_regex": [
+        "(?i)\\bemit\\s+json\\b",
+        "(?i)\\bjson\\s+(?:mode|schema|response_format)\\b",
+        "(?i)\\bstructured\\s+(?:output|extract|response)\\b",
+        "(?i)\\btool_choice\\b.*strict",
+        "(?i)\\bparse\\s+(?:the\\s+)?model('s)?\\s+response\\b",
+        "(?i)\\bdownstream\\s+automation\\b"
+      ],
+      "suggestion": "Use Anthropic tool_choice strict-JSON pattern or response_format parameter (docs/cookbook-patterns.md Pattern 1).",
+      "doc_anchor": "docs/cookbook-patterns.md#pattern-1--structured-output--json-mode"
+    },
+    "COOK-P2": {
+      "title": "Chain-of-Verification (CoVe)",
+      "trigger_class": "self-verification",
+      "task_signature_regex": [
+        "(?i)\\bchain[\\s-]?of[\\s-]?verification\\b",
+        "(?i)\\bCoVe\\b",
+        "(?i)\\bself[\\s-]?(?:verify|check|review)\\b",
+        "(?i)\\bfact[\\s-]?check\\b",
+        "(?i)\\bhallucination\\s+mitigation\\b",
+        "(?i)\\bdouble[\\s-]?check\\s+(?:the\\s+)?(?:claim|fact|answer)\\b"
+      ],
+      "suggestion": "Implement CoVe via 4-call sequence (draft -> verify-questions -> verify-answers -> revise). See docs/cookbook-patterns.md Pattern 2.",
+      "doc_anchor": "docs/cookbook-patterns.md#pattern-2--chain-of-verification-cove"
+    },
+    "COOK-P3": {
+      "title": "Citations API",
+      "trigger_class": "source-attribution",
+      "task_signature_regex": [
+        "(?i)\\bcitations?\\s+api\\b",
+        "(?i)\\battribution\\b",
+        "(?i)\\bsource\\s+reference\\b",
+        "(?i)\\bcite\\s+(?:the\\s+)?(?:source|document|paper|article)\\b",
+        "(?i)\\bdoc[\\s-]?grounded\\s+generation\\b",
+        "(?i)\\bquote\\s+(?:the\\s+)?(?:source|document)\\b"
+      ],
+      "suggestion": "Enable Citations API + supply documents array (docs/cookbook-patterns.md Pattern 3).",
+      "doc_anchor": "docs/cookbook-patterns.md#pattern-3--citations-api"
+    },
+    "COOK-P4": {
+      "title": "Message Batches API",
+      "trigger_class": "bulk-processing",
+      "task_signature_regex": [
+        "(?i)\\bmessage\\s+batches?\\s+api\\b",
+        "(?i)\\bbatch(?:\\s+processing|\\s+job)?\\b",
+        "(?i)\\bbulk\\s+(?:process|request|generate)\\b",
+        "(?i)\\boffline\\s+(?:pipeline|job|batch)\\b",
+        "(?i)\\bovernight\\s+job\\b",
+        "(?i)\\basync(?:hronous)?\\s+batch\\b"
+      ],
+      "suggestion": "Use Anthropic Message Batches API for >=50% cost savings vs synchronous (docs/cookbook-patterns.md Pattern 4).",
+      "doc_anchor": "docs/cookbook-patterns.md#pattern-4--message-batches-api"
+    },
+    "COOK-P5": {
+      "title": "Prompt Caching",
+      "trigger_class": "cache-discipline",
+      "task_signature_regex": [
+        "(?i)\\bprompt[\\s-]?cach(?:e|ing)\\b",
+        "(?i)\\bcache[\\s_]?control\\b",
+        "(?i)\\bephemeral[\\s_]?cache\\b",
+        "(?i)\\bcache[\\s_]?breakpoint\\b",
+        "(?i)\\bcache[\\s_]?hit\\s+rate\\b",
+        "(?i)\\breaduce[\\s_]?(?:token|input)\\s+cost\\b"
+      ],
+      "suggestion": "Apply cache_control:{type:ephemeral} to the stable system-prompt prefix to enable prompt caching (docs/cookbook-patterns.md Pattern 5 / PLAN-020 Phase 4).",
+      "doc_anchor": "docs/cookbook-patterns.md#pattern-5--prompt-caching"
+    },
+    "COOK-P6": {
+      "title": "Tool Result Feedback Loops",
+      "trigger_class": "tool-feedback-loop",
+      "task_signature_regex": [
+        "(?i)\\btool[\\s-]?(?:result|use|call)\\s+feedback\\b",
+        "(?i)\\bagentic[\\s-]?loop\\b",
+        "(?i)\\bfeedback[\\s-]?loop\\b",
+        "(?i)\\bmulti[\\s-]?turn\\s+tool\\b",
+        "(?i)\\bblock[\\s-]?reason\\s+inject\\b",
+        "(?i)\\bpre[\\s-]?tool[\\s-]?use\\s+hook\\b"
+      ],
+      "suggestion": "Wire PreToolUse + PostToolUse hooks; inject block_reason into the next turn's context so the agent sees why a tool was blocked (docs/cookbook-patterns.md Pattern 6).",
+      "doc_anchor": "docs/cookbook-patterns.md#pattern-6--tool-result-feedback-loops"
+    },
+    "COOK-P7": {
+      "title": "Memory Tool",
+      "trigger_class": "persistent-memory",
+      "task_signature_regex": [
+        "(?i)\\bmemory[\\s-]?tool\\b",
+        "(?i)\\bpersistent[\\s-]?memory\\b",
+        "(?i)\\bcross[\\s-]?session\\s+(?:memory|recall)\\b",
+        "(?i)\\banthrop(?:ic)?\\s+memory\\s+api\\b",
+        "(?i)\\bsession[\\s-]?memory\\b",
+        "(?i)\\blong[\\s-]?term\\s+memory\\b"
+      ],
+      "suggestion": "Use the Anthropic Memory API or the ceo-orchestration memory-scratchpad skill for persistent cross-session memory (docs/cookbook-patterns.md Pattern 7 / .claude/skills/core/memory-scratchpad/).",
+      "doc_anchor": "docs/cookbook-patterns.md#pattern-7--memory-tool"
+    },
+    "COOK-P8": {
+      "title": "Code Execution Tool",
+      "trigger_class": "inline-code-execution",
+      "task_signature_regex": [
+        "(?i)\\bcode[\\s-]?execution[\\s-]?tool\\b",
+        "(?i)\\binline[\\s-]?(?:python|code)\\s+exec(?:ution)?\\b",
+        "(?i)\\banthrop(?:ic)?\\s+code[\\s-]?run\\b",
+        "(?i)\\brun[\\s-]?python\\s+inline\\b",
+        "(?i)\\bsandbox(?:ed)?\\s+exec(?:ution)?\\b",
+        "(?i)\\bmodel[\\s-]?executes?\\s+code\\b"
+      ],
+      "suggestion": "Use the Anthropic code-execution tool for inline Python validation instead of spawning Codex MCP; reduces round-trip overhead on cheapest models (docs/cookbook-patterns.md Pattern 8).",
+      "doc_anchor": "docs/cookbook-patterns.md#pattern-8--code-execution-tool"
+    },
+    "COOK-P9": {
+      "title": "Contextual Retrieval / RAG",
+      "trigger_class": "contextual-retrieval",
+      "task_signature_regex": [
+        "(?i)\\bcontextual[\\s-]?retrieval\\b",
+        "(?i)\\brag[\\s-]?over[\\s-]?docs\\b",
+        "(?i)\\bhyde[\\s-]?recipe\\b",
+        "(?i)\\bembedding[\\s-]?(?:index|search|retrieval)\\b",
+        "(?i)\\bsemantic[\\s-]?search\\b",
+        "(?i)\\bchunk[\\s-]?and[\\s-]?rerank\\b"
+      ],
+      "suggestion": "Use contextual retrieval (chunk + context-anchor + reranker) for doc-grounded generation; see docs/HYDE-RECIPE.md and docs/INSTALL-RAG.md (docs/cookbook-patterns.md Pattern 9).",
+      "doc_anchor": "docs/cookbook-patterns.md#pattern-9--contextual-retrieval--rag"
+    }
+  },
+  "required_keys_per_pattern": ["title", "trigger_class", "task_signature_regex", "suggestion", "doc_anchor"],
+  "canonical_ids": ["COOK-P1", "COOK-P2", "COOK-P3", "COOK-P4", "COOK-P5", "COOK-P6", "COOK-P7", "COOK-P8", "COOK-P9"],
+  "audit_action": "cookbook_pattern_advised",
+  "audit_fields_whitelist": ["pattern_id", "trigger_class", "match_confidence_bucket"],
+  "kill_switch_env": "CEO_COOKBOOK_ADVISOR_ENABLED"
+}

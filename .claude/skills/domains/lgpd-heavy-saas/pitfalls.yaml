@@ -1,0 +1,90 @@
+# Pitfalls Catalog — LGPD-Heavy SaaS Squad
+# Loaded alongside the universal catalog when the lgpd-heavy-saas
+# profile is installed. Format mirrors .claude/pitfalls-catalog.yaml:
+# id, rule, whenToUse, agents.
+
+pitfalls:
+  # === CONSENT ===
+  - id: LGPD-001
+    rule: "NEVER store consent as a boolean on the user row. Consent is an append-only event log — booleans lose history and fail audit."
+    whenToUse: "any schema change that touches consent; any signup or preference-center flow"
+    agents: [Rafael Menezes, Theodora Nunes, Mira Okafor]
+
+  - id: LGPD-002
+    rule: "Consent must be per-purpose granular. ONE catch-all checkbox ('I agree to everything') does not constitute valid consent under LGPD."
+    whenToUse: "designing any consent UI or signup form"
+    agents: [Rafael Menezes, Theodora Nunes]
+
+  - id: LGPD-003
+    rule: "Revocation propagation has a SLA per downstream system. Every downstream that processes PII MUST publish its SLA; missing SLA = compliance gap."
+    whenToUse: "adding any downstream consumer of user data (analytics, CRM, email queue, etc.)"
+    agents: [Rafael Menezes, Helena Silveira, Mira Okafor]
+
+  - id: LGPD-004
+    rule: "Consent expiry (re-up) requires a NEW explicit event. NEVER silently extend expiry via a background job or timestamp bump."
+    whenToUse: "any code path that handles consent expiry or re-confirmation"
+    agents: [Rafael Menezes]
+
+  # === PII + DATAFLOW ===
+  - id: LGPD-005
+    rule: "Every new service/feature that reads or writes PII MUST update pii-inventory.yaml in the same PR. DPO VETO on any PR that adds PII processing without map update."
+    whenToUse: "any schema migration, new endpoint, new downstream, or new vendor integration that touches user data"
+    agents: [Helena Silveira, Theodora Nunes, Mira Okafor]
+
+  - id: LGPD-006
+    rule: "NEVER log PII (email, name, CPF, phone, address, IP without business reason). Logs use surrogate IDs. Enforce via lint rule + runtime scrubber."
+    whenToUse: "any logging call in any service that has access to user records"
+    agents: [Helena Silveira, Bram Voss]
+
+  - id: LGPD-007
+    rule: "Analytics + error-tracker pipelines MUST scrub/pseudonymize at source, never at destination. Pre-aggregate or hash before the wire crosses."
+    whenToUse: "wiring any analytics / telemetry / error-tracking vendor"
+    agents: [Helena Silveira, Bram Voss]
+
+  - id: LGPD-008
+    rule: "Sensitive PII (CPF, health, race, biometric) requires column-level encryption + access audit log, not just RLS. RLS alone is not sufficient for Art. 5 II data."
+    whenToUse: "any schema touching sensitive PII categories"
+    agents: [Bram Voss, Helena Silveira]
+
+  - id: LGPD-009
+    rule: "Backups are PII storage. Retention policy MUST apply to backups; DSR deletion MUST have a documented redaction path into backup media."
+    whenToUse: "designing or auditing the backup/restore pipeline; any change to retention policy"
+    agents: [Helena Silveira, Bram Voss]
+
+  # === DSR ===
+  - id: LGPD-010
+    rule: "DSR endpoints MUST authenticate + rate-limit + log with signed timestamp. Impersonation or enumeration through DSR defeats the regime."
+    whenToUse: "implementing or modifying any /api/dsr endpoint"
+    agents: [Mira Okafor, Bram Voss]
+
+  - id: LGPD-011
+    rule: "The DSR SLA stopwatch starts when the request enters the queue, not when someone reads it. Queue ingestion time is the legal start."
+    whenToUse: "designing the DSR processing pipeline"
+    agents: [Mira Okafor]
+
+  - id: LGPD-012
+    rule: "Portability response MUST redact third-party PII. If user A's record mentions user B, B's fields are redacted from A's export."
+    whenToUse: "implementing portability endpoint or export generator"
+    agents: [Mira Okafor, Helena Silveira]
+
+  # === INCIDENT ===
+  - id: LGPD-013
+    rule: "ANPD 72-h notification clock starts at CONFIRMED incident time (security sign-off), NOT at first user complaint. Log the confirmation timestamp; don't argue it later."
+    whenToUse: "incident response; designing the incident tracker; playbook rehearsals"
+    agents: [Mira Okafor, Bram Voss, Theodora Nunes]
+
+  - id: LGPD-014
+    rule: "Incident playbook must be rehearsed twice a year minimum with a synthetic incident. Unrehearsed playbooks fail in production."
+    whenToUse: "any time the playbook changes; quarterly DPO review"
+    agents: [Mira Okafor]
+
+  # === REGISTRO + RIPD ===
+  - id: LGPD-015
+    rule: "Registro de Operações MUST be generated from sources (pii-inventory + registro.yaml in-repo), never a spreadsheet updated manually. Drift between sources and Registro = compliance failure."
+    whenToUse: "any processing-activity change; quarterly Registro snapshot"
+    agents: [Theodora Nunes, Mira Okafor]
+
+  - id: LGPD-016
+    rule: "RIPD is a LAUNCH BLOCKER for new high-risk processing, not a retrospective document. Ship no new high-risk feature without a signed RIPD."
+    whenToUse: "any new feature touching sensitive PII or novel processing"
+    agents: [Theodora Nunes, Mira Okafor, Helena Silveira]

@@ -1,0 +1,34 @@
+# PLAN-083 Wave 0b sub-agent 0.7d — smart-loading per-profile cap table.
+#
+# Mirrors the numeric caps Owner ratified in R2 Spec-A:
+#
+#   frontend         <= 10 active skills
+#   engine           <= 12 active skills
+#   fintech          <= 15 active skills
+#   trading-readonly <=  8 active skills (lowest cap — vibecoder ergonomics)
+#   generic          <=  6 active skills (defensive default)
+#
+# Plus a uniform 30,000-token context budget cap per profile (sum of
+# `context_budget_tokens` across the active set). 30k matches the
+# per-skill upper bound enum in repo-profile-skill-binding.schema.json
+# and the 0.7a classification table SUM (29,700 across 34 core skills).
+#
+# Consumer: .claude/scripts/smart-loading-resolver.py:load_cap_table().
+# Schema-shape (no formal JSON schema; consumer is strict-parsed):
+#   version: 1
+#   profiles:
+#     <profile>:
+#       max_active: int >= 1
+#       context_budget_tokens: int >= 0
+#
+# Changing any number here is a v2.x bump (per-profile cap is a contract
+# field consumed by sub-agent 2.7 trading-readonly hook + 2.1 first-run
+# wizard + 2.2 recommender). Owner ACK required.
+
+version: 1
+profiles:
+  frontend:         {max_active: 10, context_budget_tokens: 30000}
+  engine:           {max_active: 12, context_budget_tokens: 30000}
+  fintech:          {max_active: 15, context_budget_tokens: 30000}
+  trading-readonly: {max_active: 8,  context_budget_tokens: 30000}
+  generic:          {max_active: 6,  context_budget_tokens: 30000}

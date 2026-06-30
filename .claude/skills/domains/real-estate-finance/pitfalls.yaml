@@ -1,0 +1,68 @@
+# Pitfalls Catalog — Real-Estate Finance Squad
+# Loaded alongside the universal catalog when the real-estate-finance profile
+# is installed. Format mirrors .claude/pitfalls-catalog.yaml:
+# id, rule, whenToUse, agents.
+
+pitfalls:
+  # === CLIENT PII AND REGULATORY COMPLIANCE ===
+  - id: REF-001
+    rule: "Client PII (SSN, income documents, tax returns, credit reports, bank statements) MUST be encrypted at rest with field-level access logging. A plaintext SSN in a logging table 'for debugging' is a data breach waiting for a discovery subpoena. Every access to a PII field must be auditable."
+    whenToUse: "any schema change, logging configuration, or data pipeline that touches mortgage application data"
+    agents: [Adriana Ferreira, Camila Torres]
+
+  - id: REF-002
+    rule: "HMDA-required fields (race, ethnicity, sex, income, property location, loan purpose, action taken) MUST NEVER be deleted, nulled, or cleaned away from the LAR. If a field is missing, it must be coded per FFIEC standards — not dropped. A cleaned LAR with systematic nulls is an HMDA violation."
+    whenToUse: "any data cleaning, ETL pipeline, or analytics process that touches loan application records"
+    agents: [Adriana Ferreira]
+
+  - id: REF-003
+    rule: "An affiliated business arrangement (ABA) between the lender and any service provider (title company, appraiser, insurance agent) MUST trigger the RESPA Section 8(c) disclosure to the borrower. Failure to disclose an ABA is a RESPA §8 violation regardless of whether any kickback occurred."
+    whenToUse: "any new vendor relationship or referral arrangement that touches loan origination or settlement services"
+    agents: [Adriana Ferreira]
+
+  - id: REF-004
+    rule: "AML transaction monitoring thresholds MUST be logged with an immutable audit trail including the who/when/why of any threshold change. A config file change that silently raises the SAR-filing threshold is an internal control failure that regulators treat as wilful blindness."
+    whenToUse: "any change to transaction monitoring configuration, SAR filing rules, or beneficial ownership collection"
+    agents: [Adriana Ferreira]
+
+  # === LOAN DISCLOSURE ACCURACY (TILA/RESPA/TRID) ===
+  - id: REF-005
+    rule: "Any change to loan product configuration (rate, points, fees, APR calculation, fee-to-category mapping) MUST trigger a new Loan Estimate for all in-flight applications within 3 business days. Deploying a rate table change mid-pipeline without re-disclosure is a TRID violation with per-loan civil liability."
+    whenToUse: "any loan product configuration change, rate table update, or fee schedule modification"
+    agents: [Marcus Chen, Adriana Ferreira]
+
+  - id: REF-006
+    rule: "Fee categorisation under TRID (zero-tolerance / 10% cumulative / can-change) MUST be explicitly configured and reviewed before any new fee type is added to the system. An incorrectly categorised fee that exceeds tolerance requires a cure payment to the borrower."
+    whenToUse: "any new fee type introduction; any fee-category reclassification; any TRID configuration change"
+    agents: [Marcus Chen, Adriana Ferreira]
+
+  - id: REF-007
+    rule: "Rate lock confirmations MUST be recorded as immutable events with: locked rate, APR, lock expiry date, points, and timestamp. A rate lock that exists only in an email thread or a verbal confirmation is not a compliant lock confirmation — and is unenforceable in a rate dispute."
+    whenToUse: "any rate lock workflow, lock extension, or lock expiry event; any change to rate lock confirmation templates"
+    agents: [Marcus Chen]
+
+  - id: REF-008
+    rule: "The Closing Disclosure MUST be delivered to the borrower at least 3 business days before consummation. Scheduling a same-day or next-day closing without a documented, signed borrower waiver is a TRID violation. The waiver must be for a bona fide personal financial emergency — not a scheduling convenience."
+    whenToUse: "any closing date scheduling; any CD delivery workflow; any request to expedite the 3-day waiting period"
+    agents: [Marcus Chen, Adriana Ferreira]
+
+  # === ESCROW, WIRE FRAUD PREVENTION, AND TITLE ===
+  - id: REF-009
+    rule: "Escrow disbursement MUST require dual approval for all wires above the jurisdiction-defined threshold. Single-approval disbursement at any amount above $5,000 is a control failure. Dual-approval may not be waived by convenience or urgency — it is a wire fraud prevention control."
+    whenToUse: "any change to escrow disbursement approval workflow; any new escrow integration or automation"
+    agents: [Elena Vásquez]
+
+  - id: REF-010
+    rule: "Wire instruction changes (payee, account number, routing number) MUST be verified via callback to a pre-registered phone number on file — NOT via email, text, or any channel that may be spoofed. 'The buyer's agent emailed updated wiring instructions' is the verbatim description of 90% of real estate wire fraud incidents."
+    whenToUse: "any escrow disbursement with changed wiring instructions; any new payee added to the escrow system"
+    agents: [Elena Vásquez]
+
+  - id: REF-011
+    rule: "Disbursement MUST follow deed and security instrument recording — NEVER precede it. Wiring funds before recording creates constructive insolvency risk if the recording fails or is contested. 'Record first, wire second' is the invariant, regardless of closing pressure."
+    whenToUse: "any closing workflow, disbursement scheduling, or escrow automation that determines the sequencing of recording vs wire"
+    agents: [Elena Vásquez]
+
+  - id: REF-012
+    rule: "Escrow funds MUST be held in dedicated, segregated trust accounts — never commingled with operating funds. Commingling escrow and operating funds is a licensing violation in every US state and a fiduciary breach. No business reason justifies commingling."
+    whenToUse: "any escrow account configuration, banking integration, or fund transfer between accounts"
+    agents: [Elena Vásquez, Adriana Ferreira]

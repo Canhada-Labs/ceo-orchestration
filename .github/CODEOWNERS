@@ -1,0 +1,174 @@
+# .github/CODEOWNERS — ceo-orchestration framework
+#
+# Defines who must review changes to protected paths. Active when branch
+# protection is enabled (see docs/BRANCH-PROTECTION.md, shipped in
+# Sprint 2 Item F).
+#
+# Per PLAN-002 §11-bis Q4: catchall only, per-skill archetype deferred.
+# Per-skill CODEOWNERS becomes worth it when there are 3+ skills with
+# benchmarks AND multiple human reviewers — neither holds in Sprint 2.
+# The "which specialist is on the hook" signal is carried by the
+# `owner:` field in each benchmark YAML frontmatter, surfaced by
+# run-skill-benchmark.py in $GITHUB_STEP_SUMMARY on failure.
+#
+# PLAN-019 Phase 2 Wave 2A (VP-F3/DevOps-P1-2):
+#   - .github/workflows/validate.yml  ->  .github/workflows/**  (wildcard
+#     covers all 14 workflows; adding a workflow no longer bypasses CODEOWNERS)
+#   - Added coverage: .claude/hooks/, .claude/scripts/, .claude/plans/,
+#     .claude/adr/, SPEC/, .claude/policies/ (already listed below by
+#     Phase 0 block), .claude/settings.json (already)
+#   - Retired: .claude/scripts/check-audit-read-api-stable.py (file
+#     does not exist in the tree; original rule referenced a ghost path)
+#
+# Format: <path pattern>  <owner(s) — GitHub handles>
+
+# Skills are the governance surface — any change needs review
+.claude/skills/**                       @Canhada-Labs/maintainers
+
+# Benchmarks decide whether skills regress — same gate
+.claude/skills/**/benchmarks/**         @Canhada-Labs/maintainers
+
+# Hooks enforce the protocol mechanically — cannot weaken silently
+.claude/hooks/**                        @Canhada-Labs/maintainers
+
+# Governance scripts (all of them, not just validate-governance.sh +
+# check-contamination.sh — expanded per VP-F3 to cover the 40+ scripts
+# shipped since Sprint 2)
+.claude/scripts/**                      @Canhada-Labs/maintainers
+
+# Plans are executable contracts; ADRs are the decision record
+.claude/plans/**                        @Canhada-Labs/maintainers
+.claude/adr/**                          @Canhada-Labs/maintainers
+
+# Protocol reference
+PROTOCOL.md                             @Canhada-Labs/maintainers
+
+# CI workflows (wildcarded — was a single-file rule before Phase 2 Wave 2A,
+# which let new workflow files bypass CODEOWNERS review)
+.github/workflows/**                    @Canhada-Labs/maintainers
+.github/CODEOWNERS                      @Canhada-Labs/maintainers
+
+# Settings + distribution templates (blast-radius L3)
+.claude/settings.json                   @Canhada-Labs/maintainers
+templates/settings/**                   @Canhada-Labs/maintainers
+templates/.github/**                    @Canhada-Labs/maintainers
+
+# Installer + upgrader + NPM publish surface — distribution integrity
+scripts/install.sh                      @Canhada-Labs/maintainers
+scripts/install-npm.sh                  @Canhada-Labs/maintainers
+scripts/upgrade.sh                      @Canhada-Labs/maintainers
+
+# PLAN-120-FOLLOWUP WS-D (E10-F8) — close the framework-distribution
+# scaffolding gap. The explicit installer rules above left sibling top-level
+# scripts (measure-repo-size.sh, npm-rebuild.sh, uninstall.sh, local/**,
+# tests/**) and the adopter-install templates (templates/CLAUDE.md,
+# templates/docs/**, templates/README.md, …) UNOWNED — a controllable-merge
+# surface. Two catch-all wildcards cover all current + future entries;
+# explicit rules above remain for auditor legibility (DYN-DO-1 pattern).
+scripts/**                              @Canhada-Labs/maintainers
+templates/**                            @Canhada-Labs/maintainers
+
+# SPEC/v1 — published Compliance contract (same gate as ADRs)
+SPEC/**                                 @Canhada-Labs/maintainers
+
+# PLAN-013 Phase 0 item 0.4 — coverage for Phase D + E new surfaces.
+# Debate Round 1 consensus §S7 HIGH (DevOps): branch protection +
+# CODEOWNERS is the PR gate; gap = ungated merge into main.
+.claude/scripts/mcp-server/**           @Canhada-Labs/maintainers
+docs/formal-verification/**             @Canhada-Labs/maintainers
+.claude/scripts/red-team-*              @Canhada-Labs/maintainers
+benchmarks/public/**                    @Canhada-Labs/maintainers
+docs/site/**                            @Canhada-Labs/maintainers
+
+# PLAN-014 Phase 0.5 — security-sensitive paths carry @Canhada-Labs/maintainers twice
+# until a dedicated security-lead handle is assigned (Sprint 15 adopter
+# kickoff). (check-audit-read-api-stable.py removed per PLAN-019
+# VP-F3/DevOps-P1-2 — file did not exist in the tree.)
+.claude/hooks/_lib/policy.py            @Canhada-Labs/maintainers @Canhada-Labs/maintainers
+.claude/policies/**                     @Canhada-Labs/maintainers @Canhada-Labs/maintainers
+docs/threat-model.md                    @Canhada-Labs/maintainers @Canhada-Labs/maintainers
+docs/soc2-audit-mapping.md              @Canhada-Labs/maintainers @Canhada-Labs/maintainers
+.claude/scripts/check-policy-drift.py   @Canhada-Labs/maintainers
+.claude/scripts/check-threat-model-freshness.py  @Canhada-Labs/maintainers
+.claude/scripts/check-tla-schema-drift.py        @Canhada-Labs/maintainers
+.claude/scripts/check-flip-release-gate-consistency.py  @Canhada-Labs/maintainers
+# DYN note (Wave 2A W2A-3): spawn prompt asked us to retire this rule
+# claiming the file didn't exist, but the file IS present in the tree
+# (237 lines, active). Restoring the dedicated rule so branch-protection
+# semantics stay tight even if `last match wins` rule order changes
+# downstream. Covered ALSO by `.claude/scripts/** @Canhada-Labs/maintainers` wildcard
+# above — double coverage is intentional defense-in-depth.
+.claude/scripts/check-audit-read-api-stable.py   @Canhada-Labs/maintainers
+tests/formal_verification/**            @Canhada-Labs/maintainers
+.claude/red-team-corpus/**              @Canhada-Labs/maintainers @Canhada-Labs/maintainers
+.claude/memory-shared/**                @Canhada-Labs/maintainers
+.claude/scripts/replay/**               @Canhada-Labs/maintainers
+.claude/scripts/predict-budget/**       @Canhada-Labs/maintainers
+docs/formal-verification/plan-lifecycle.*       @Canhada-Labs/maintainers
+docs/formal-verification/debate-convergence.*   @Canhada-Labs/maintainers
+
+# Tests — integration + scripts tests gate the regression shield
+tests/**                                @Canhada-Labs/maintainers
+.claude/hooks/tests/**                  @Canhada-Labs/maintainers
+.claude/scripts/tests/**                @Canhada-Labs/maintainers
+
+# PLAN-020 Phase 0a — Opus 4.7 optimization preflight (2026-04-17 Session 32).
+# Branch-protection coverage shipped BEFORE Phase 0+ creates these paths,
+# so the rule is in effect at the moment of first merge — not retroactive.
+# 3 of these (scripts/profile-*, plans/PLAN-020/rubrics, ...) are already
+# wildcard-covered upstream; dedicated rules added defense-in-depth
+# (W2A-3 DYN-DO-1 pattern: explicit > implicit when ownership matters).
+.claude/agents/**                       @Canhada-Labs/maintainers
+.claude/scripts/profile-opus-4-7.py     @Canhada-Labs/maintainers
+docs/opus-4-7-baseline.md               @Canhada-Labs/maintainers
+docs/opus-4-7-baseline-raw-data.jsonl   @Canhada-Labs/maintainers
+docs/opus-4-7-operations.md             @Canhada-Labs/maintainers
+docs/opus-4-7-phase6-report.md          @Canhada-Labs/maintainers
+benchmarks/replay/**                    @Canhada-Labs/maintainers
+replay-fixtures/**                      @Canhada-Labs/maintainers
+.claude/plans/PLAN-020/rubrics/**       @Canhada-Labs/maintainers
+
+# PLAN-032 Wave B — tournament framework (2026-04-19 Session 37).
+# Fixture corpus is merge-side gated in addition to commit-side
+# check_fixture.py validator (C-P0-1 defense-in-depth). Every fixture
+# PR requires Owner review; adversarial fixtures submitted via PR
+# are blocked by CODEOWNERS in addition to pre-commit scan.
+.claude/scripts/tournament/fixtures/**  @Canhada-Labs/maintainers
+
+# PLAN-045 Wave 3 F-14-05 closure — explicit tier_policy defense-in-depth.
+# tier_policy_cli/ already falls under the .claude/scripts/** wildcard above;
+# adding dedicated rules makes the ownership intent legible to auditors
+# reading this file without following wildcard precedence. Dual coverage
+# mirrors the PLAN-020 DYN-DO-1 pattern (explicit > implicit when
+# ownership matters).
+.claude/scripts/tier_policy_cli/**      @Canhada-Labs/maintainers
+.claude/tier-policy.json                @Canhada-Labs/maintainers
+.claude/tier-policy.json.sigchain       @Canhada-Labs/maintainers
+
+# PLAN-045 Wave 1-5 sentinel + signer allowlists. Any edit to these
+# files changes who can sign what; merge-side gate is Owner-only.
+.claude/sentinel-signers.txt            @Canhada-Labs/maintainers
+.claude/skill-patch-signers.txt         @Canhada-Labs/maintainers
+.claude/gpg-revocations.jsonl           @Canhada-Labs/maintainers
+
+# PLAN-044 + PLAN-045 audit artifacts — adopter-facing per-finding
+# evidence. Merge-side lockdown so no retroactive finding rewrites.
+.claude/plans/PLAN-044/findings/**      @Canhada-Labs/maintainers
+.claude/plans/PLAN-044/consolidated/**  @Canhada-Labs/maintainers
+.claude/plans/PLAN-044/action-plan/**   @Canhada-Labs/maintainers
+.claude/plans/PLAN-044/verdict.md       @Canhada-Labs/maintainers
+.claude/plans/PLAN-045/re-audit/**      @Canhada-Labs/maintainers
+.claude/plans/PLAN-045/verdict.md       @Canhada-Labs/maintainers
+
+# PLAN-119 WS-A — suite-wide audit-dir isolation REDIRECT (durable test/probe
+# audit-log isolation). The isolation helper and the
+# `@pytest.mark.allow_live_audit_dir` escape hatch are security-sensitive: a
+# weakened redirect, or any new `allow_live_audit_dir` use, re-opens the LIVE
+# audit-chain pollution vector (S181/S182 — test/probe events draining into the
+# real ~/.claude chain → spurious `tamper`). Double-@Canhada-Labs/maintainers (the
+# security-review convention, lines 73-76) until a dedicated security-lead handle
+# exists. The conftests + isolation test are also covered by the
+# `.claude/hooks/**` + tests wildcards above; explicit > implicit when ownership
+# matters (DYN-DO-1 pattern). A reviewer adding an `allow_live_audit_dir` marker
+# MUST confirm the test cannot instead use TestEnvContext.
+.claude/hooks/_lib/test_isolation.py    @Canhada-Labs/maintainers @Canhada-Labs/maintainers

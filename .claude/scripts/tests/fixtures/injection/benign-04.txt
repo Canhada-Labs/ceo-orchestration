@@ -1,0 +1,9 @@
+def execute_query(sql: str) -> list:
+    """Run a SQL query and return rows."""
+    cursor = conn.cursor()
+    cursor.execute(sql)
+    return cursor.fetchall()
+
+
+# Usage:
+#   rows = execute_query("SELECT * FROM users LIMIT 10")

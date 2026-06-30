@@ -1,0 +1,41 @@
+--- a/.claude/hooks/_lib/spool_writer.py	2026-06-20 14:32:32
++++ b/.claude/hooks/_lib/spool_writer.py	2026-06-20 14:33:00
+@@ -1726,7 +1726,19 @@
+     try:
+         from _lib import audit_emit as _audit_emit_lazy
+         from _lib import audit_hmac as _audit_hmac_lazy
+-        rotated_to_phase4 = _audit_emit_lazy._rotate_if_needed_safe(log_path)
++        # PLAN-143 item-2 (audit-errors-02): guard the rotation probe.
++        # Under test/shim wiring the lazily-imported object can be an
++        # _EmitCapture double that lacks _rotate_if_needed_safe; calling
++        # it raised AttributeError into the fail-open except below, which
++        # breadcrumbed cosmetic audit-log.errors noise and silently
++        # skipped the probe. getattr-guard -> no attribute means "no
++        # rotation" (None), taking the same intended branch without noise.
++        _rotate_probe = getattr(
++            _audit_emit_lazy, "_rotate_if_needed_safe", None
++        )
++        rotated_to_phase4 = (
++            _rotate_probe(log_path) if callable(_rotate_probe) else None
++        )
+         if rotated_to_phase4 is not None and not _audit_hmac_lazy.is_disabled():
+             try:
+                 _audit_hmac_lazy.reset_chain_on_rotation()
+@@ -1964,7 +1976,16 @@
+     try:
+         from _lib import audit_emit as _audit_emit_lazy
+         from _lib import audit_hmac as _audit_hmac_lazy
+-        rotated_to = _audit_emit_lazy._rotate_if_needed_safe(log_path)
++        # PLAN-143 item-2 (audit-errors-02): guard the rotation probe — a
++        # capture-shim object may lack _rotate_if_needed_safe (see the
++        # phase-4 probe above). getattr-guard -> missing attribute means
++        # "no rotation" (None), no AttributeError into the fail-open path.
++        _rotate_probe = getattr(
++            _audit_emit_lazy, "_rotate_if_needed_safe", None
++        )
++        rotated_to = (
++            _rotate_probe(log_path) if callable(_rotate_probe) else None
++        )
+         if rotated_to is not None and not _audit_hmac_lazy.is_disabled():
+             try:
+                 _audit_hmac_lazy.reset_chain_on_rotation()

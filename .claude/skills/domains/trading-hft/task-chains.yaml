@@ -1,0 +1,97 @@
+# Task chains — Trading-HFT Squad
+# Domain-specific workflows that extend the universal .claude/task-chains.yaml.
+
+task_chains:
+  - id: hft-launch-new-strategy
+    title: "Launch a new HFT strategy with kill-switch coverage"
+    whenToUse: |
+      Any new strategy that will trade live, regardless of size. Strategy
+      MUST have surveillance review, latency budget, kill coverage, and
+      a paper-trade window before live deployment.
+    steps:
+      - id: 1
+        owner: "Hiroshi Tanaka (Quant)"
+        action: |
+          Build the strategy with deterministic backtest. Verify slippage
+          model matches paper-trade within 1 bps. Cite data window for
+          every magic constant.
+        verify: "Backtest report + slippage analysis attached to PR"
+      - id: 2
+        owner: "Eluned Pryce (Compliance)"
+        action: |
+          Layering / spoofing red-team review. Confirm strategy doesn't
+          generate patterns surveillance will flag. Document expected
+          order patterns + risk-of-flagging assessment.
+        verify: "Red-team review document signed off"
+      - id: 3
+        owner: "Marcelo Andrade (Latency Architect)"
+        action: |
+          Set p50/p99/p99.9 budgets for the new strategy hot path. Verify
+          before/after histograms vs baseline. Confirm no new heap
+          allocations / syscalls / contended locks.
+        verify: "Latency report + budget table attached"
+      - id: 4
+        owner: "Yara Bensoussan (Kill-Switch)"
+        action: |
+          Wire the strategy into per-strategy kill switch. Verify cancel
+          path is independent of order infra. Drill the kill in paper.
+          Document termination SLA and provide drill report.
+        verify: "Drill report (paper) shows kill within SLA"
+      - id: 5
+        owner: "Diane Okafor (Head of Trading Systems)"
+        action: |
+          Final go/no-go review across all four prior approvals. Sign
+          off on production deployment. Schedule paper-trade window
+          (minimum 5 trading days) before live.
+        verify: "Production deployment ticket created with the four sign-offs"
+      - id: 6
+        owner: "All four"
+        action: |
+          Post-deployment monitoring: latency budgets met, surveillance
+          taps capturing, kill switch tested in live within 30 days.
+        verify: "30-day post-deployment review passes"
+
+  - id: hft-latency-regression-triage
+    title: "Triage a latency regression alert"
+    whenToUse: |
+      Any monitoring alert that p99 or p99.9 of a hot path exceeded
+      its budget. Even a single breach is a P1; multiple breaches
+      within an hour escalate to P0 and may trigger automatic kill.
+    steps:
+      - id: 1
+        owner: "Marcelo Andrade (Latency Architect)"
+        action: |
+          Pull histogram + perf trace for the breach window. Identify
+          the contributing call sites (top 3 by cycles). Compare against
+          the last clean histogram.
+        verify: "Trace artifact captured + diff vs baseline produced"
+      - id: 2
+        owner: "Marcelo Andrade + Diane Okafor"
+        action: |
+          Decide whether to (a) hot-fix immediately, (b) deploy a
+          temporary throttle / per-symbol kill, or (c) defer to next
+          maintenance window. Decision criteria: revenue impact +
+          surveillance impact + confidence in fix.
+        verify: "Decision logged with rationale; if (b), throttle deployed"
+      - id: 3
+        owner: "Yara Bensoussan (Kill-Switch)"
+        action: |
+          If decision was throttle / per-symbol kill, verify the action
+          fired correctly. If automatic kill triggered, run post-kill
+          recovery playbook.
+        verify: "Kill action audit trail captured; recovery (if any) complete"
+      - id: 4
+        owner: "Marcelo Andrade"
+        action: |
+          Implement the fix or schedule the maintenance window. Add a
+          regression test that would have caught this. Update the
+          documented budget if the fix changes p99 expectations.
+        verify: "Fix PR shipped with regression test; budget table updated if needed"
+      - id: 5
+        owner: "Diane Okafor + Eluned Pryce"
+        action: |
+          Post-mortem: timeline, root cause, contributing factors,
+          surveillance impact (any orders unintentionally not sent /
+          duplicated), action items. Distribute internally + (if
+          surveillance affected) to compliance.
+        verify: "Post-mortem document committed to incidents/ + reviewed"

@@ -1,0 +1,105 @@
+name: Smoke Install
+
+on:
+  pull_request:
+    paths:
+      - "scripts/install.sh"
+      - "scripts/upgrade.sh"
+      - "scripts/tests/smoke-install.sh"
+      - "templates/**"
+      - "SPEC/v1/install-cli.md"
+      - ".github/workflows/smoke-install.yml"
+      # PLAN-006 Phase 1 (Sprint 6): Adapter Layer migration changes
+      # install-time expectations (hook import paths, contract). Scope
+      # broadened for the sprint; narrow back post-Sprint-7 closeout.
+      - ".claude/hooks/**"
+  push:
+    branches:
+      - main
+    paths:
+      - "scripts/install.sh"
+      - "scripts/upgrade.sh"
+      - "scripts/tests/smoke-install.sh"
+      - "templates/**"
+      - ".claude/hooks/**"
+
+concurrency:
+  group: smoke-install-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    # PLAN-012 Phase 2 CEO_SOTA_DISABLE parity.
+    if: vars.CEO_SOTA_DISABLE != '1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        # SHA-pinned (Sprint 7 Dependabot bump): actions/checkout@v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 1
+
+      - name: Setup Python 3.11
+        # SHA-pinned (Sprint 7 Dependabot bump): actions/setup-python@v6.2.0
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.11"
+
+      - name: Install jq (for settings.json merge)
+        run: |
+          set -euo pipefail
+          if ! command -v jq >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq jq
+          fi
+          jq --version
+
+      - name: Run smoke install
+        run: |
+          set -euo pipefail
+          bash scripts/tests/smoke-install.sh
+
+      # WS4-user-ceremony-leg
+      - name: Install with --ceremony user (governance rc=0 + no out-of-.claude writes)
+        run: |
+          set -euo pipefail
+          U="$(mktemp -d)"
+          ( cd "$U" && git init -q )
+          CEO_INSTALL_SKIP_SELF_SHA=1 CEO_RAG_INSTALL_PROMPT=0 \
+            bash scripts/install.sh "$U" --ceremony user
+          echo '--- validate-governance.sh (user) ---'
+          ( cd "$U" && bash .claude/scripts/validate-governance.sh )
+          echo '--- assert only .claude/ at top level ---'  # WS4-sc2010-glob
+          extra=""
+          for _e in "$U"/* "$U"/.[!.]* "$U"/..?*; do
+            [ -e "$_e" ] || continue
+            _b="$(basename "$_e")"
+            case "$_b" in .claude|.git) continue ;; esac
+            extra="$extra $_b"
+          done
+          if [ -n "$extra" ]; then
+            echo "::error::--ceremony user wrote outside .claude/:$extra"
+            exit 1
+          fi
+          echo 'user-ceremony leg: PASS'
+
+      - name: Assert npx/npm shim contract (if present)
+        # Phase 4 deliverable; skip if directory missing
+        run: |
+          set -euo pipefail
+          if [[ -d "npm" ]]; then
+            # Check no runtime deps
+            if [[ -f npm/package.json ]]; then
+              deps=$(jq '.dependencies // {} | length' npm/package.json)
+              if [[ "$deps" -ne 0 ]]; then
+                echo "::error::@ceo-orch/init must ship with 0 runtime deps (got $deps)"
+                exit 1
+              fi
+              echo "OK: npm shim has zero runtime dependencies"
+            fi
+          else
+            echo "npm/ shim not yet present — skipping"
+          fi

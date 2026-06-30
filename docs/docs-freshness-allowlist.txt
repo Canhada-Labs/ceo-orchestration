@@ -1,0 +1,46 @@
+# docs-freshness-allowlist — one target per line.
+#
+# owner: @<owner>
+# quarterly review: every 90 days (next review drops to ROADMAP Sprint 11).
+#
+# Purpose: permit markdown link targets that the freshness scanner
+# (.claude/scripts/check-docs-freshness.py) would otherwise flag as broken.
+# Typical candidates:
+#   - Future files that Phase 7/8 will create (dated reference, not rot).
+#   - Archival targets intentionally moved out of tree.
+#   - Third-party paths the repo references but does not own.
+#
+# Format:
+#   - one path per line, exactly as it appears in the [text](path) target
+#   - #fragment and ?query are stripped before comparison
+#   - `#` starts a comment (ignored), blank lines OK
+#
+# Initial state (PLAN-010 Phase 3): empty. Real-repo scan of 110 files
+# returned zero broken refs; no entries needed.
+
+# docs/case-studies/_TEMPLATE-cross-project.md contains placeholder
+# link targets `{{name_A}}-case-study.md` + `{{name_B}}-case-study.md`
+# that are substituted per-adopter when the template is instantiated.
+# They are never valid paths in the framework repo itself.
+{{name_A}}-case-study.md
+{{name_B}}-case-study.md
+
+# S156 — pre-existing intentional refs surfaced once the Governance-job
+# timeout bump (10->15) let the docs-freshness step run to completion (it had
+# been cancelled early). None introduced by S156 work.
+#
+# (NOTE: the 8 external `~/.claude/.../memory/*.md` pointers that also surfaced
+#  are now handled directly by classify_target() — a `~`-prefixed target is an
+#  out-of-tree home pointer, ignored like a scheme URL — so they need no entry
+#  here. That keeps the Owner's username out of this file.)
+#
+# (b) ADR/README.md index-parity row for ADR-111 — content was RENAMED to
+#     ADR-120 (collision-rename per ADR-117); the ADR-111-pii-core-promotion.md
+#     file is intentionally absent (only ADR-111-locked-corpus-governance.md
+#     exists on disk). The README lists it for disk<->index parity (AC-F-4).
+ADR-111-pii-core-promotion.md
+# (c) PLAN-085 burn-down references the handoff with a repo-root-relative path;
+#     the file DOES exist (.claude/plans/PLAN-085/handoff-085-086-087-088.md) but
+#     the scanner resolves it relative to the doc dir (doubled prefix). Ref-style
+#     wart, not rot.
+.claude/plans/PLAN-085/handoff-085-086-087-088.md

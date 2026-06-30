@@ -1,0 +1,87 @@
+# Task chains — Healthcare Squad
+# Domain-specific workflows that extend the universal .claude/task-chains.yaml.
+
+task_chains:
+  - id: healthcare-launch-patient-facing-feature
+    title: "Launch a new patient-facing digital feature (PHI + clinical safety review)"
+    whenToUse: |
+      A new patient-facing digital feature is being launched or a major
+      existing feature is being changed — examples: appointment scheduling
+      redesign, symptom checker introduction, patient portal enhancement,
+      billing portal update. Triggers when the feature touches PHI storage,
+      PHI transmission, clinical escalation logic, or any tracking/analytics
+      on patient-facing pages.
+      Out of scope: backend infrastructure changes with no patient-facing
+      surface (use standard engineering review process).
+    steps:
+      - id: 1
+        owner: "Bruno Alencar (Clinical Data & Privacy Engineer)"
+        action: "Map PHI dataflow: what patient identifiers are collected, where they are stored, which third parties receive them, what egress paths exist. Update PHI inventory before any design is approved (HCR-001 check for logging paths)."
+      - id: 2
+        owner: "Fernanda Luz (Compliance Officer)"
+        action: "BAA/DPA coverage check: list all vendors that will process PHI in this feature. Confirm each has a signed BAA (HIPAA) or DPA (LGPD) with current expiry date. Block launch if any gap exists (HCR-002)."
+      - id: 3
+        owner: "Fernanda Luz"
+        action: "Retention schedule: assign retention class to every new PHI field. Confirm the schedule respects both HIPAA (6 years) and CFM (10 years) where both apply. Confirm automated deletion pipeline exists or is in scope (HCR-012)."
+      - id: 4
+        owner: "Dr. Rodrigo Alves (Clinical Operations Lead)"
+        action: "Clinical safety review: if the feature involves any triage, symptom description, clinical question, or escalation path — review the routing logic. Confirm safe-messaging guidelines are present in all channels if mental health is reachable (HCR-005, HCR-006, HCR-007)."
+      - id: 5
+        owner: "Valentina Rosario (Healthcare Marketing Compliance)"
+        action: "Analytics and tracking review: identify all pixels, SDKs, and third-party tags that will fire on patient-facing pages. Confirm consent-mode is configured to block before opt-in on any sensitive-category page (HCR-003)."
+      - id: 6
+        owner: "Camila Oliveira (Patient Experience Manager)"
+        action: "Patient UX review: confirm interpreter access path is reachable, complaint escalation path is present in the UI, and no clinical question is dead-ended at an automated response without a clinician routing option (HCR-007)."
+      - id: 7
+        owner: "Principal QA Architect"
+        action: "End-to-end test: PHI does not appear in logs or analytics events; consent-mode blocks tags before opt-in; clinical escalation routes to a clinician (not a FAQ) when a symptom keyword is detected; BAA vendors receive only minimum-necessary data."
+      - id: 8
+        owner: "Staff Code Reviewer"
+        action: "Launch VETO check: PHI inventory updated, BAA coverage confirmed, retention schedule assigned, clinical routing live, consent-mode configured, safe-messaging guidelines present."
+    verification: |
+      - PHI inventory updated with all new fields and egress paths (HCR-001)
+      - BAA/DPA on file for every PHI-receiving vendor (HCR-002)
+      - Retention schedule documented + automated deletion pipeline live (HCR-012)
+      - Clinical escalation tested — symptom description routes to clinician (HCR-005)
+      - Safe-messaging guidelines active across all channels (HCR-006)
+      - Consent-mode verified — no pre-consent pixel fire on patient pages (HCR-003)
+
+  - id: healthcare-marketing-campaign-review
+    title: "Review and approve a healthcare marketing campaign (MLR gate)"
+    whenToUse: |
+      Any healthcare marketing campaign, promotional asset, or content piece
+      that makes health claims, references patient outcomes, uses patient
+      testimonials, or targets audiences based on health conditions or
+      healthcare engagement. Applies to digital, print, social, influencer,
+      and OOH campaigns. Triggers before any asset is published externally.
+      Out of scope: internal communications, staff training materials, and
+      purely administrative communications with no health claims.
+    steps:
+      - id: 1
+        owner: "Valentina Rosario (Healthcare Marketing Compliance)"
+        action: "Claim inventory: list every health claim in the asset, classify it by evidence level (RCT / meta-analysis / observational / expert opinion / testimonial). Any claim without a documented evidence level is automatically blocked (HCR-009)."
+      - id: 2
+        owner: "Valentina Rosario"
+        action: "Off-label check: confirm no claim implies a use not approved by the applicable regulatory body (FDA / Anvisa / EMA). Off-label implication in promotional material is a regulatory violation regardless of the clinical evidence (HCR-010)."
+      - id: 3
+        owner: "Valentina Rosario"
+        action: "Fair-balance review: confirm safety information is presented in proportion to efficacy claims. A full-page efficacy claim paired with a footnote safety disclosure does not meet fair-balance requirements."
+      - id: 4
+        owner: "Fernanda Luz (Compliance Officer)"
+        action: "PHI in marketing check: confirm no patient-identifiable data (names, photos, conditions, outcomes) is used without individual written HIPAA marketing authorisation. Verify testimonials have written authorisation on file (HCR-004, HCR-011)."
+      - id: 5
+        owner: "Fernanda Luz"
+        action: "Audience consent check: if campaign uses digital targeting, confirm audience segments are not built from PHI (appointment data, symptom-page visits, portal login data) without marketing authorisation. Confirm retargeting consent is LGPD/GDPR-compliant (HCR-004)."
+      - id: 6
+        owner: "Valentina Rosario"
+        action: "Influencer and testimonial disclosures: confirm all compensated creators carry native-language disclosure. Confirm patient testimonials include 'individual results may vary' where outcome claims are made (PMD-013 cross-reference)."
+      - id: 7
+        owner: "Staff Code Reviewer"
+        action: "MLR sign-off: Medical (Dr. Rodrigo Alves clinical review if needed), Legal (Fernanda Luz), Regulatory (Valentina Rosario) — three-party sign-off documented in campaign record before publish."
+    verification: |
+      - Claim substantiation file completed for every health claim (HCR-009)
+      - Off-label prohibition verified (HCR-010)
+      - Fair-balance confirmed — safety info proportional to efficacy claim
+      - PHI in marketing: written HIPAA authorisation on file for every patient story (HCR-011)
+      - Retargeting audiences confirmed PHI-free without marketing authorisation (HCR-004)
+      - Three-party MLR sign-off documented in campaign record

@@ -1,0 +1,2 @@
+# kucoin
+KC-API-KEY: 02757d44-a6e3-0a10-1048-f442e000724b

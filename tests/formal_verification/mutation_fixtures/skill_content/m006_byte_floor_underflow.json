@@ -1,0 +1,7 @@
+{
+  "description": "Byte floor underflow: SKILL.md body has fewer than 512 non-whitespace bytes after frontmatter. The file has valid frontmatter with name: key, but the body is too thin — sub-check 8 (non-ws body >= 512) fails.",
+  "mutation_class": "S3_content_validation",
+  "sub_check_targeted": 8,
+  "expected_reason": "reference_byte_floor_underflow",
+  "skill_body_variant": "tiny"
+}

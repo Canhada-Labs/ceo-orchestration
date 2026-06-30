@@ -1,0 +1,187 @@
+# .claude/policies/rubric-violation-catalogue.yaml — PLAN-081 Phase 3 deliverable
+#
+# Enumerated catalogue of rubric violation identifiers used by the
+# Pair-Rail asymmetric VETO matrix Cases A-F (per spec.md §11). When
+# Codex returns a Case-B verdict (Codex BLOCK + Claude PASS), the
+# verdict envelope MUST carry a `rubric_violation_id` field whose value
+# is one of the canonical IDs declared below. Codex prompt templates
+# constrain output to this set; free-form rubric IDs are rejected by
+# `check_pair_rail.py:_validate_provider_pair()` and the case
+# downgrades to advisory (Case-F-equivalent fail-OPEN per ADR-106).
+#
+# Per R1 S-TDE-1 (PLAN-081 R1 consensus): canonical-guarded under
+# `.claude/policies/*.yaml` glob (already in `_CANONICAL_GUARDS`).
+# 12-20 enumerated entries with structure:
+#   - id: <kebab-case-slug>
+#     severity_default: P0 | P1
+#     description: <one-line operational description>
+#     owasp_mapping: <OWASP Top 10 / LLM Top 10 reference> (optional)
+#     mitre_attack_id: <Txxxx[.yyy]> (optional)
+#     scope: <code-review | security | qa | performance | threat-detection>
+#
+# Severity defaults follow ADR-108 §Operational protocol:
+#   - P0 → blocks unconditionally on Case-B
+#   - P1 → 24h human-triage grace window via env
+#         CEO_PAIR_RAIL_HUMAN_TRIAGE_HOURS=24; T+24h unlabeled = closes
+#         as advisory (NOT blocking); explicit Owner label upgrades.
+#
+# Adding a new rubric ID:
+#   1. Append the entry below alphabetically by ID
+#   2. Update `_VALID_RUBRIC_IDS` cache in test_rubric_catalogue.py
+#   3. Bump catalogue_version (semver minor for additions, major for
+#      removals)
+#   4. ADR amendment if the addition shifts the asymmetric VETO
+#      surface (e.g. introducing a new severity tier)
+
+catalogue_version: "1.0.0-rc.1"
+plan: PLAN-081
+phase: 3
+spec_ref: PLAN-075/spec.md §11
+adr_refs: [ADR-052, ADR-107, ADR-108]
+
+# ---------------------------------------------------------------------
+# Code-review rubric IDs (CR archetype scope)
+# ---------------------------------------------------------------------
+
+violations:
+
+  - id: cr-bug-null-deref
+    severity_default: P0
+    description: Null/None pointer dereference reachable from a public entry point or governance-critical path
+    owasp_mapping: A06-2021 (vulnerable + outdated components)
+    mitre_attack_id: T1059
+    scope: code-review
+
+  - id: cr-bug-race-condition
+    severity_default: P0
+    description: TOCTOU / unprotected concurrent state mutation in critical-path code
+    owasp_mapping: A04-2021 (insecure design)
+    scope: code-review
+
+  - id: cr-bug-resource-leak
+    severity_default: P1
+    description: File handle / socket / subprocess leak on error paths (defensive cleanup missing)
+    scope: code-review
+
+  - id: cr-smell-inconsistent-naming
+    severity_default: P1
+    description: Identifier naming drift across module/test/audit-event surface (e.g. emit_X vs X_emitted action discriminator)
+    scope: code-review
+
+  - id: cr-smell-dead-code
+    severity_default: P1
+    description: Declared symbol with no consumer (helper added but never wired; T-4 archetype-spoofing variant)
+    scope: code-review
+
+  - id: cr-smell-magic-constant
+    severity_default: P1
+    description: Hardcoded numeric/string constant should be named/documented (e.g. timeout 75 vs DEFAULT_TIMEOUT_SIMPLE_S)
+    scope: code-review
+
+# ---------------------------------------------------------------------
+# Security rubric IDs (Sec archetype scope)
+# ---------------------------------------------------------------------
+
+  - id: sec-auth-token-leak
+    severity_default: P0
+    description: Auth token / session ID / API key exposed in response body, logs, or audit-log payload (LLM06 side-channel risk)
+    owasp_mapping: A01-2021 (broken access control) + LLM06
+    mitre_attack_id: T1552.001
+    scope: security
+
+  - id: sec-injection-sql
+    severity_default: P0
+    description: SQL injection vector — concatenated query, missing parameterization, or unescaped user input in WHERE/SET clauses
+    owasp_mapping: A03-2021 (injection)
+    mitre_attack_id: T1190
+    scope: security
+
+  - id: sec-injection-prompt
+    severity_default: P0
+    description: Prompt-injection vector — attacker-controlled string concatenated into LLM system or user prompt without sanitization (T-1 ingress / T-3 PostToolUse semantics from threat-model)
+    owasp_mapping: LLM01 (prompt injection)
+    mitre_attack_id: T1059.006
+    scope: security
+
+  - id: sec-crypto-alg-none
+    severity_default: P0
+    description: JWT/JWS verifier accepts `alg=none` or any unverified algorithm; cryptographic floor breach
+    owasp_mapping: A02-2021 (cryptographic failures)
+    scope: security
+
+  - id: sec-input-no-validation
+    severity_default: P1
+    description: External input deserialized or routed to a sensitive sink without length/type/charset validation at the boundary
+    owasp_mapping: A04-2021 (insecure design)
+    scope: security
+
+  - id: sec-rate-limit-missing
+    severity_default: P1
+    description: Authentication / token-mint / spawn-dispatch endpoint lacks rate limit; abuse vector for credential stuffing or token-budget exhaustion
+    owasp_mapping: A04-2021 (insecure design)
+    mitre_attack_id: T1110
+    scope: security
+
+# ---------------------------------------------------------------------
+# QA rubric IDs (QA archetype scope)
+# ---------------------------------------------------------------------
+
+  - id: qa-coverage-gap
+    severity_default: P1
+    description: Critical-path code with <80% line coverage and no rationale; mutation-killing surface absent
+    scope: qa
+
+  - id: qa-flake-timing-dependent
+    severity_default: P1
+    description: Test asserts wall-clock or interleaving in a way that fails non-deterministically on CI runners (e.g. exact-ms perf assertion)
+    scope: qa
+
+  - id: qa-fixture-not-frozen
+    severity_default: P1
+    description: Locked-corpus fixture or mutation surface lacks SHA-pin; breaks reproducibility across promotion gate runs
+    scope: qa
+
+# ---------------------------------------------------------------------
+# Performance rubric IDs (Perf archetype scope)
+# ---------------------------------------------------------------------
+
+  - id: perf-unbounded-scan
+    severity_default: P0
+    description: O(n) or worse audit-log / file scan without bounded tail-cap; risks p99 budget breach on large datasets
+    scope: performance
+
+  - id: perf-allocation-hot-path
+    severity_default: P1
+    description: Repeated allocation in a tight loop where reuse / pre-allocation would eliminate GC pressure
+    scope: performance
+
+# ---------------------------------------------------------------------
+# Threat-detection rubric IDs (TDE archetype scope)
+# ---------------------------------------------------------------------
+
+  - id: tde-rule-noisy
+    severity_default: P1
+    description: Detection rule fires on legitimate traffic at >5% rate without dedup or suppression — trains SOC to ignore the channel
+    scope: threat-detection
+
+  - id: tde-coverage-gap
+    severity_default: P0
+    description: ATT&CK technique or OWASP Top-10 class with zero detection coverage in the rule corpus; missed-detection blast radius is rule-lifetime
+    scope: threat-detection
+
+# ---------------------------------------------------------------------
+# Total: 19 enumerated rubric IDs across 5 scopes (R1 S-TDE-1 target ~12-20).
+# Distribution: 6 CR + 6 Sec + 3 QA + 2 Perf + 2 TDE = 19.
+#
+#   CR  (6): cr-bug-null-deref, cr-bug-race-condition, cr-bug-resource-leak,
+#            cr-smell-inconsistent-naming, cr-smell-dead-code,
+#            cr-smell-magic-constant
+#   Sec (6): sec-auth-token-leak, sec-injection-sql, sec-injection-prompt,
+#            sec-crypto-alg-none, sec-input-no-validation,
+#            sec-rate-limit-missing
+#   QA  (3): qa-coverage-gap, qa-flake-timing-dependent, qa-fixture-not-frozen
+#   Perf(2): perf-unbounded-scan, perf-allocation-hot-path
+#   TDE (2): tde-rule-noisy, tde-coverage-gap
+#
+# Codex iter 1 P2: count comment normalized (was "18 / 19" contradiction).
+# ---------------------------------------------------------------------

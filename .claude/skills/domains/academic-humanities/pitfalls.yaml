@@ -1,0 +1,68 @@
+# Pitfalls Catalog — Academic-Humanities Squad
+# Loaded alongside the universal catalog when the academic-humanities profile
+# is installed. Format mirrors .claude/pitfalls-catalog.yaml:
+# id, rule, whenToUse, agents.
+
+pitfalls:
+  # === IRB AND HUMAN-SUBJECTS ETHICS ===
+  - id: ACH-001
+    rule: "NEVER collect, process, or retain human-subjects data under an expired or unapproved IRB protocol. A lapsed IRB approval is not a minor procedural issue — continuing research after lapse requires retroactive review and may require the research to be repeated. 'We're almost done' is not a justification."
+    whenToUse: "any research project that involves human participants, their data, or oral history recordings; any project that may require IRB review"
+    agents: [Dr. Amara Nkosi]
+
+  - id: ACH-002
+    rule: "Consent forms MUST NOT be changed without IRB review and approval of the amended form. A researcher who updates consent language unilaterally — even to 'clarify' or 'simplify' — has invalidated the consent for participants enrolled after the change."
+    whenToUse: "any modification to participant consent forms, information sheets, or recruitment materials"
+    agents: [Dr. Amara Nkosi]
+
+  - id: ACH-003
+    rule: "Research involving minors requires BOTH age-appropriate assent from the minor AND parental/guardian consent via an IRB-approved method. A school's blanket consent to conduct research on students does NOT substitute for parental consent under most IRB standards. Verify the specific IRB policy."
+    whenToUse: "any research involving participants under 18; any educational research that might contact students"
+    agents: [Dr. Amara Nkosi]
+
+  - id: ACH-004
+    rule: "'Anonymised' datasets MUST pass a re-identification risk assessment before release or sharing. Removing a name column is not anonymisation. Combination of zip code + birth year + gender re-identifies 87% of Americans (Sweeney 2000). Assess k-anonymity with at least the quasi-identifiers present in the data."
+    whenToUse: "any release, sharing, or publication of research data originally collected with personal identifiers"
+    agents: [Dr. Amara Nkosi, Takeshi Inoue]
+
+  # === CITATION ACCURACY AND EDITORIAL STANDARDS ===
+  - id: ACH-005
+    rule: "NEVER include a direct quote in a manuscript without consulting the original source document. A quote passed down through secondary literature may be misattributed, truncated, or contextually distorted. 'Commonly attributed to X' is not a citation — it is an admission that the source was not verified."
+    whenToUse: "any manuscript preparation that includes direct quotations; any AI-assisted writing that proposes citations"
+    agents: [Prof. Helene Marchand, Dr. Esperanza Villanueva]
+
+  - id: ACH-006
+    rule: "AI-generated citations MUST be independently verified against the actual source before inclusion. Large language models hallucinate plausible but non-existent citations. 'The AI generated it' is not a defence against a retraction for fabricated sources."
+    whenToUse: "any use of AI writing or research assistants for literature review or citation generation"
+    agents: [Prof. Helene Marchand, Gabriel Oduya]
+
+  - id: ACH-007
+    rule: "Authorship MUST be assigned based on contribution criteria (e.g. ICMJE: conception, design, execution, interpretation AND draft review AND final approval). Seniority, funding source, and lab head status do not constitute authorship. Gift and ghost authorship are both violations of academic integrity."
+    whenToUse: "any manuscript preparation; any research output where authorship is being assigned"
+    agents: [Prof. Helene Marchand]
+
+  - id: ACH-008
+    rule: "Citation spot-checks (minimum 20% of citations verified against primary source) are REQUIRED before submission. A manuscript submitted without a citation audit is a manuscript with unverified claims. The editor's review is not a substitute for the author's citation verification."
+    whenToUse: "any manuscript at pre-submission stage; any revised manuscript before resubmission"
+    agents: [Prof. Helene Marchand]
+
+  # === ARCHIVE ACCESS AND REPOSITORY STANDARDS ===
+  - id: ACH-009
+    rule: "Archival images, documents, and digitised materials MUST have confirmed licensing from the holding institution before publication. 'Old' does not mean public domain — copyright term varies by jurisdiction, author death date, and first-publication status. For materials held by private archives or families, always obtain written permission."
+    whenToUse: "any publication or digital output that includes reproductions of archival materials"
+    agents: [Gabriel Oduya]
+
+  - id: ACH-010
+    rule: "Research datasets cited in publications MUST include a version number and persistent identifier (DOI, ARK, or PURL). A URL that resolves to a frequently-updated dataset is not a reproducible citation — the dataset the paper relied on may no longer exist at that URL."
+    whenToUse: "any data citation in a manuscript; any release of a shared research dataset"
+    agents: [Gabriel Oduya, Takeshi Inoue]
+
+  - id: ACH-011
+    rule: "Repository metadata MUST conform to the declared standard (Dublin Core, EAD, MARC21) for every record — not just a majority. Incomplete or non-conforming metadata creates unfindable records. 'We'll fix the metadata later' means 40% of the collection is effectively invisible to researchers."
+    whenToUse: "any repository population event; any metadata migration; any new record type being added to an existing repository"
+    agents: [Gabriel Oduya, Takeshi Inoue]
+
+  - id: ACH-012
+    rule: "Research data MUST be stored in open, non-proprietary formats and archived with version control before any analysis begins. Data stored only in a local folder, a proprietary tool, or a single researcher's machine is data that will be lost when the project ends. Minimum: open format + version-controlled repository + institutional backup."
+    whenToUse: "any new research project data infrastructure design; any computational analysis pipeline; any project handoff"
+    agents: [Takeshi Inoue, Dr. Esperanza Villanueva]

@@ -1,0 +1,119 @@
+(***************************************************************************)
+(* PlusCal source for the DEBATE-SCHEMA §12 debate convergence protocol.   *)
+(*                                                                         *)
+(* This is the READABLE source. The canonical machine-checkable spec is    *)
+(* in ``debate-convergence.tla``. See ``run-tlc.sh`` for toolchain pin.   *)
+(*                                                                         *)
+(* Models ``.claude/scripts/debate-converge.py`` (Jaccard) +               *)
+(* ``.claude/scripts/debate-orchestrate.py`` (orchestrator) as of          *)
+(* 2026-04-15.                                                             *)
+(*                                                                         *)
+(* Phase B.2 — PLAN-014. QA Architect + Security composite.               *)
+(***************************************************************************)
+--algorithm DebateConvergence {
+
+variables
+  (* Debate phase: tracks the orchestrator's state. *)
+  debate_state = "proposal",
+
+  (* Current round number (1-indexed). *)
+  round_number = 1,
+
+  (* Set of agent IDs that have contributed to the current round. *)
+  agents_contributed = {},
+
+  (* Simulated Jaccard score × 100 (integer). TLC explores all values. *)
+  jaccard_score = 0,
+
+  (* M1 Red Team gate has fired. *)
+  red_team_spawned = FALSE,
+
+  (* Sequence tracking whether redaction was applied before each round
+     advancement. Index i means redaction was applied before round i+1. *)
+  redaction_applied = <<>>,
+
+  (* Consensus flag — once TRUE, cannot flip back. *)
+  consensus_reached = FALSE,
+
+  (* Full set of agent IDs for this debate. *)
+  all_agents = 1..N;
+
+define {
+  AgentIDs == 1..N
+  DebateStates == {"proposal", "critiquing", "synthesis", "consensus", "failed"}
+}
+
+(***************************************************************************)
+(* The debate orchestrator drives the multi-round debate loop.              *)
+(* Non-deterministic Jaccard scoring lets TLC explore convergent and        *)
+(* divergent paths. The Red Team gate fires as a precondition for          *)
+(* consensus at round <= 2 with N <= 2.                                    *)
+(***************************************************************************)
+fair process (Orchestrator = "orchestrator") {
+  Start:
+    debate_state := "critiquing";
+
+  MainLoop:
+    while (debate_state \notin {"consensus", "failed"}) {
+      \* All agents contribute
+      AgentLoop:
+        while (agents_contributed /= AgentIDs) {
+          with (a \in AgentIDs \ agents_contributed) {
+            agents_contributed := agents_contributed \cup {a};
+          };
+        };
+
+      \* CEO synthesizes — pick a non-deterministic Jaccard score
+      Synth:
+        debate_state := "synthesis";
+        with (score \in 0..100) {
+          jaccard_score := score;
+        };
+
+      \* Decide outcome
+      Decide:
+        if (round_number >= MAX_ROUNDS /\ jaccard_score < JACCARD_THRESHOLD) {
+          \* Max rounds exhausted without convergence
+          debate_state := "failed";
+        } else if (jaccard_score >= JACCARD_THRESHOLD /\ round_number >= 2) {
+          \* Convergence detected
+          if (round_number <= 2 /\ N <= 2 /\ ~red_team_spawned) {
+            \* M1 gate: spawn red team before allowing consensus
+            red_team_spawned := TRUE;
+          };
+          \* After red team (or if not needed), reach consensus
+          if (~(round_number <= 2 /\ N <= 2) \/ red_team_spawned) {
+            consensus_reached := TRUE;
+            debate_state := "consensus";
+          } else {
+            \* Advance to next round (red team still processing)
+            redaction_applied := Append(redaction_applied, TRUE);
+            round_number := round_number + 1;
+            agents_contributed := {};
+            debate_state := "critiquing";
+          };
+        } else {
+          \* Not converged — advance to next round
+          if (round_number < MAX_ROUNDS) {
+            redaction_applied := Append(redaction_applied, TRUE);
+            round_number := round_number + 1;
+            agents_contributed := {};
+            debate_state := "critiquing";
+          } else {
+            debate_state := "failed";
+          };
+        };
+    };
+}
+
+}
+
+(***************************************************************************)
+(* Properties (encoded as THEOREMs in debate-convergence.tla):             *)
+(*                                                                         *)
+(* S1 — max-rounds-respected: [](round_number <= MAX_ROUNDS)              *)
+(* S2 — red-team-fires: consensus at round <=2, N<=2 => red_team_spawned  *)
+(* S3 — consensus-idempotent: consensus_reached => [](consensus_reached)  *)
+(* S4 — redaction-applied: round N+1 sees redacted round N                *)
+(* Auth — all-contributed: consensus => agents_contributed = AgentIDs      *)
+(***************************************************************************)

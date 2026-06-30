@@ -1,0 +1,3 @@
+# decoded
+payload: oPhzIf3fC2dS4BQuzeiBlqQwx+IKvnNkvKzvw/mP9gOyBhlPqWzKo6LGPpuVym8r7v0GGmhV9Rytcb9H=
+# this is a JSON blob: base64-encoded inventory data

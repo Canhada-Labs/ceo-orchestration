@@ -1,0 +1,191 @@
+/* PLAN-013 Phase E.6 — landing page stylesheet.
+   Terminal-aesthetic. Monospace stack. Minimal. No JS.
+   NOT deployed. Sprint 17 conditional per ROADMAP-CLOSURE.md. */
+
+:root {
+  --bg: #0a0e14;
+  --fg: #c9d1d9;
+  --fg-dim: #8b949e;
+  --accent: #58a6ff;
+  --accent-dim: #1f6feb;
+  --border: #21262d;
+  --code-bg: #161b22;
+  --max-width: 760px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: ui-monospace, "SF Mono", "Menlo", "Consolas", "DejaVu Sans Mono", monospace;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+header, main, footer {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: 2rem 1.5rem;
+}
+
+header {
+  border-bottom: 1px solid var(--border);
+  padding-top: 3rem;
+  padding-bottom: 2rem;
+}
+
+header h1 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.85rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+header .tagline {
+  color: var(--fg-dim);
+  margin: 0 0 1.5rem 0;
+  font-size: 0.95rem;
+}
+
+header nav {
+  display: flex;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+}
+
+header nav a {
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 0.9rem;
+  border-bottom: 1px dotted transparent;
+}
+
+header nav a:hover {
+  border-bottom-color: var(--accent);
+}
+
+main section {
+  margin: 3rem 0;
+}
+
+h2 {
+  font-size: 1.25rem;
+  margin: 0 0 1rem 0;
+  color: var(--fg);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.5rem;
+}
+
+p, li {
+  color: var(--fg);
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px dotted var(--accent-dim);
+}
+
+a:hover {
+  color: var(--fg);
+  border-bottom-color: var(--fg);
+}
+
+code {
+  background: var(--code-bg);
+  padding: 0.1rem 0.35rem;
+  border-radius: 3px;
+  font-size: 0.88em;
+}
+
+pre {
+  background: var(--code-bg);
+  padding: 1rem;
+  border-radius: 6px;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+}
+
+pre code {
+  background: transparent;
+  padding: 0;
+  font-size: 0.88rem;
+}
+
+ul.stats {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.75rem 1.5rem;
+}
+
+ul.stats li {
+  border-left: 2px solid var(--accent-dim);
+  padding-left: 0.75rem;
+  color: var(--fg-dim);
+  font-size: 0.9rem;
+}
+
+ul.stats strong {
+  color: var(--fg);
+  font-size: 1.3rem;
+  font-weight: 500;
+  display: block;
+  margin-bottom: 0.1rem;
+}
+
+dl dt {
+  font-weight: 600;
+  margin-top: 1.25rem;
+  color: var(--fg);
+}
+
+dl dd {
+  margin: 0.3rem 0 0 0;
+  color: var(--fg-dim);
+}
+
+dl dd code {
+  color: var(--fg);
+}
+
+footer {
+  border-top: 1px solid var(--border);
+  margin-top: 4rem;
+  color: var(--fg-dim);
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+footer a {
+  color: var(--fg-dim);
+  border-bottom-color: var(--border);
+}
+
+footer a:hover {
+  color: var(--fg);
+  border-bottom-color: var(--fg);
+}
+
+.draft-note {
+  font-size: 0.8rem;
+  color: var(--fg-dim);
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px dashed var(--border);
+}
+
+@media (max-width: 600px) {
+  header nav {
+    gap: 0.75rem;
+  }
+  ul.stats {
+    grid-template-columns: 1fr;
+  }
+}

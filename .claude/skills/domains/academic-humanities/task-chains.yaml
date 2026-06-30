@@ -1,0 +1,125 @@
+# Task chains — Academic-Humanities Squad
+# Domain-specific workflows that extend the universal .claude/task-chains.yaml.
+
+task_chains:
+  - id: academic-humanities-new-research-project
+    title: "Launch a new humanities research project (IRB, archive access, data infrastructure)"
+    whenToUse: |
+      A new research project is beginning that involves human participants,
+      archival materials, oral histories, or any data that requires IRB
+      review. Also triggered when an existing project scope expands to
+      include a new population, data type, or archive collection. Covers
+      IRB protocol, archive access, consent design, and data infrastructure.
+    steps:
+      - id: 1
+        owner: "Dr. Amara Nkosi (IRB/Ethics Coordinator)"
+        action: "IRB classification: determine whether the project requires full board review, expedited review, or exempt determination. Document the classification rationale. If uncertain, submit for IRB pre-review before proceeding (ACH-001)."
+      - id: 2
+        owner: "Dr. Amara Nkosi"
+        action: "Consent form and information sheet review: draft or review consent materials. Confirm age-appropriate assent for any minor participants (ACH-003). Confirm consent covers the specific data use types planned — storage, analysis, sharing, future use."
+      - id: 3
+        owner: "Gabriel Oduya (Reference Librarian)"
+        action: "Archive access review: confirm institutional access agreements for all planned archives. Identify any materials requiring special permissions (private family archives, sensitive community materials). License status assessment for all materials to be reproduced in outputs (ACH-009)."
+      - id: 4
+        owner: "Dr. Esperanza Villanueva (Senior Researcher)"
+        action: "Methodology design: document research methodology, primary source triangulation plan, data collection procedures, and analysis approach. Write the data management plan per grant funder requirements."
+      - id: 5
+        owner: "Takeshi Inoue (Digital Humanities Engineer)"
+        action: "Data infrastructure setup: establish version-controlled repository in open format, institutional backup, and access controls. Confirm retention timeline against IRB protocol (ACH-001, ACH-012). Set up metadata schema per Gabriel's standard."
+      - id: 6
+        owner: "Dr. Amara Nkosi"
+        action: "IRB protocol submission: compile and submit the complete protocol (or amendment if extending an existing project). Do not begin data collection until written IRB approval is received (ACH-001)."
+      - id: 7
+        owner: "Prof. Helene Marchand (Editor)"
+        action: "Editorial standards briefing: confirm citation format requirements for target journals, authorship criteria agreed with all collaborators (ACH-007), and editorial review plan for outputs."
+      - id: 8
+        owner: "Staff Code Reviewer"
+        action: "Project launch gate: IRB approval in hand (not pending), archive access confirmed, data infrastructure operational, consent materials approved, authorship agreement documented (ACH-001, ACH-007, ACH-012)."
+    verification: |
+      - Written IRB approval received before data collection begins (ACH-001)
+      - Archive access agreements confirmed for all planned sources (ACH-009)
+      - Data infrastructure in open format with version control (ACH-012)
+      - Consent materials IRB-approved; age-appropriate assent plan for minors (ACH-003)
+      - Authorship criteria agreed with all collaborators in writing (ACH-007)
+      - Data management plan written per grant funder requirements
+
+  - id: academic-humanities-manuscript-submission-review
+    title: "Editorial review and submission gate for a humanities manuscript"
+    whenToUse: |
+      A research manuscript is approaching submission to a journal or press.
+      Covers citation audit, source verification, human-subjects compliance
+      check (data used was IRB-approved), archive licensing, authorship
+      review, and editorial gate. Also triggered for revised manuscripts
+      before resubmission.
+    steps:
+      - id: 1
+        owner: "Prof. Helene Marchand (Editor)"
+        action: "Citation audit: verify minimum 20% of citations against primary sources. Flag any citation that cannot be verified, any AI-generated citation, and any quote that cannot be traced to the original document (ACH-005, ACH-006, ACH-008)."
+      - id: 2
+        owner: "Prof. Helene Marchand"
+        action: "Direct quote verification: for every direct quote, confirm the original source document was consulted. Remove or replace any quote sourced only from secondary literature or from AI generation without primary source verification (ACH-005)."
+      - id: 3
+        owner: "Prof. Helene Marchand"
+        action: "Authorship review: confirm all listed authors meet contribution criteria. Confirm no gift or ghost authorship. Confirm author contribution statement is complete (ACH-007)."
+      - id: 4
+        owner: "Dr. Amara Nkosi (IRB/Ethics Coordinator)"
+        action: "Human-subjects compliance check: confirm all data used in the manuscript was collected under a currently-approved IRB protocol (or appropriately exempt). Confirm 'anonymised' data was assessed for re-identification risk (ACH-001, ACH-004)."
+      - id: 5
+        owner: "Gabriel Oduya (Reference Librarian)"
+        action: "Archive and licensing review: confirm every reproduced archival image or document has confirmed licensing from the holding institution. Confirm all dataset citations include version number and persistent identifier (ACH-009, ACH-010)."
+      - id: 6
+        owner: "Dr. Esperanza Villanueva (Senior Researcher)"
+        action: "Methodology and claims review: spot-check that all major empirical claims are supported by at least two independent primary sources. Flag any claim that rests on a single source or on secondary synthesis only."
+      - id: 7
+        owner: "Principal QA Architect"
+        action: "Final pre-submission check: citation audit complete and signed off, IRB compliance confirmed, archival licensing documented, author contribution statement present, dataset citations complete (ACH-005 through ACH-010)."
+      - id: 8
+        owner: "Staff Code Reviewer"
+        action: "Submission gate sign-off: Prof. Marchand citation audit passed, Dr. Nkosi IRB clearance issued, Gabriel licensing clear, authorship statement complete (ACH-007, ACH-008)."
+    verification: |
+      - ≥20% of citations verified against primary sources (ACH-008)
+      - All direct quotes traced to original source document (ACH-005)
+      - AI-generated citations independently verified (ACH-006)
+      - IRB compliance confirmed for all human-subjects data (ACH-001, ACH-004)
+      - Archive licensing confirmed for all reproduced materials (ACH-009)
+      - Dataset citations include version and persistent identifier (ACH-010)
+      - Author contribution statement complete and accurate (ACH-007)
+
+  - id: academic-humanities-digital-archive-population
+    title: "Populate or migrate a digital research repository"
+    whenToUse: |
+      A new digital archive or research repository is being created, or
+      existing materials are being migrated from a legacy system. Covers
+      metadata standards, licensing verification, format conversion, and
+      long-term preservation planning. Also triggered when a new collection
+      type is added to an existing repository.
+    steps:
+      - id: 1
+        owner: "Gabriel Oduya (Reference Librarian)"
+        action: "Metadata standard declaration: define the metadata schema (Dublin Core, EAD, MARC21, or custom TEI) for the repository. Document required vs optional fields. Confirm all records will conform before ingest (ACH-011)."
+      - id: 2
+        owner: "Gabriel Oduya"
+        action: "Licensing audit: for each collection being ingested, determine copyright status and required permissions. Flag materials that require specific institutional permissions or community agreements (ACH-009)."
+      - id: 3
+        owner: "Dr. Amara Nkosi (IRB/Ethics Coordinator)"
+        action: "If any materials contain human-subjects data or oral history recordings: confirm IRB coverage and participant consent for archive and sharing. Community research agreements for indigenous or sensitive materials (ACH-001, ACH-002)."
+      - id: 4
+        owner: "Takeshi Inoue (Digital Humanities Engineer)"
+        action: "Format conversion: convert materials to open, non-proprietary formats (TIFF for images, TEI/XML for text, CSV/TSV for tabular data). Document all format decisions and conversion scripts in the repository (ACH-012)."
+      - id: 5
+        owner: "Takeshi Inoue"
+        action: "Persistent identifier assignment: assign DOI, ARK, or PURL to each record and collection. No record enters the public-facing repository without a persistent identifier (ACH-010)."
+      - id: 6
+        owner: "Gabriel Oduya"
+        action: "Metadata completeness check: validate all ingest records against the declared schema. Reject or flag records with missing required metadata — do not ingest partially-compliant records (ACH-011)."
+      - id: 7
+        owner: "Principal QA Architect"
+        action: "Repository QA: verify 100% of records have persistent identifiers, metadata schema validation passes, and no material with unresolved licensing is publicly accessible. Confirm backup and preservation strategy is operational."
+    verification: |
+      - Metadata standard declared and documented (ACH-011)
+      - All records conform to schema before ingest (ACH-011)
+      - Licensing confirmed for all ingested materials (ACH-009)
+      - IRB coverage confirmed for human-subjects or oral history materials (ACH-001)
+      - All materials in open, non-proprietary formats (ACH-012)
+      - Persistent identifiers assigned to every record and collection (ACH-010)
+      - Backup and long-term preservation strategy operational

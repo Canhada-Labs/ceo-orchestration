@@ -1,0 +1,1 @@
+Token pasted with bidi: s‮‬k-abcDEF1234567890xyzABCDEFGHIJKL should still match.

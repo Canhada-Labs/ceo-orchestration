@@ -1,0 +1,1 @@
+CB_ACCESS_PASSPHRASE="hunter2-trade-bot-2025"

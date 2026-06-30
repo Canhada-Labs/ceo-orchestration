@@ -1,0 +1,7 @@
+{
+  "description": "Frontmatter missing name: key: SKILL.md has valid --- fenced frontmatter with 'description:' only; no lowercase 'name:' line. Sub-check 9 (YAML frontmatter + name: key) fails.",
+  "mutation_class": "S3_content_validation",
+  "sub_check_targeted": 9,
+  "expected_reason": "reference_missing_frontmatter",
+  "skill_body_variant": "no_name_key"
+}

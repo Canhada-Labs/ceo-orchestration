@@ -1,0 +1,7 @@
+Here is a proposed snippet:
+
+```
+CLAIM:path_exists:totally/fake/path.py
+```
+
+The line above is inside a code block so the extractor MUST ignore it.

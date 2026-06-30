@@ -1,0 +1,13 @@
+# actionlint configuration — github.com/rhysd/actionlint
+#
+# Declares the org-level GitHub-hosted larger runner label "Ceo" (8-core) so
+# actionlint's [runner-label] static check stops rejecting `runs-on: Ceo`.
+# Without this, the actionlint hard-fail steps (validate.yml step "actionlint"
+# and the actionlint.yml workflow, both continue-on-error: false) block CI on
+# every workflow routed to the larger runner.
+#
+# "Ceo" is a real GitHub-hosted larger-runner label configured in the
+# Canhada-Labs org Actions settings — not a typo, not a self-hosted machine.
+self-hosted-runner:
+  labels:
+    - Ceo

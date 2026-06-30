@@ -1,0 +1,84 @@
+name: actionlint (advisory)
+
+# PLAN-025 Batch G F-wf-008 — actionlint static analysis of .github/workflows/
+# to catch shellcheck issues, undefined env vars, missing permissions blocks,
+# unpinned actions, etc. BEFORE they hit production workflow runs.
+#
+# **Mode:** permanent advisory (continue-on-error: true).
+#
+# PLAN-045 F-08-02 closure (2026-04-22): the "1 green week then flip"
+# sunset was proposed but deliberately not enacted. actionlint flags
+# stylistic drift (bash exit-code suggestions, `set -euo pipefail`
+# preference, etc) that would block legitimate merges without
+# material adopter benefit. The check runs on every PR as a
+# **reviewer aid**, not a hard gate. To flip to hard-fail, update
+# the `continue-on-error` line below + file an ADR documenting
+# the stricter stance.
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/**"
+      - ".github/actions/**"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/**"
+      - ".github/actions/**"
+  workflow_dispatch:
+
+concurrency:
+  group: actionlint-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  actionlint:
+    name: actionlint static analysis (hard-fail)
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    continue-on-error: false  # PLAN-063 DIM-20 #1 (round-1 ceremony) — hard-fail per Owner consensus
+
+    steps:
+      - name: Checkout
+        # SHA-pinned (Sprint 7 Dependabot bump): actions/checkout@v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Install actionlint (SHA-pinned 1.7.7)
+        # PLAN-063 round-3 (DIM-20 #1 partial closure): SHA-pinned vendored
+        # release asset replaces the prior `bash <(curl)` install pattern
+        # against the rhysd/actionlint main branch. Same pattern as
+        # validate.yml. Supply-chain hardening per Codex Phase 9 finding.
+        run: |
+          set -euo pipefail
+          VERSION="1.7.7"
+          EXPECTED_SHA256="023070a287cd8cccd71515fedc843f1985bf96c436b7effaecce67290e7e0757"
+          ASSET="actionlint_${VERSION}_linux_amd64.tar.gz"
+          URL="https://github.com/rhysd/actionlint/releases/download/v${VERSION}/${ASSET}"
+          cd "$RUNNER_TEMP"
+          curl -fsSL -o "$ASSET" "$URL"
+          echo "${EXPECTED_SHA256}  ${ASSET}" | sha256sum -c -
+          tar -xzf "$ASSET" actionlint
+          chmod +x actionlint
+          mv ./actionlint /usr/local/bin/actionlint
+          actionlint -version
+
+      - name: Run actionlint on all workflows
+        run: |
+          set -euo pipefail
+          actionlint -color .github/workflows/*.yml
+
+      - name: Summarize (UI)
+        if: always()
+        run: |
+          {
+            echo "## actionlint (hard-fail)"
+            echo ""
+            echo "Static analysis of .github/workflows/*.yml."
+            echo ""
+            echo "- **Mode:** hard-fail (continue-on-error: false; Phase 4 round-1)"
+            echo "- **Install:** SHA-pinned 1.7.7 vendored asset (round-3)"
+            echo "- **Tracker:** .github/workflows/GOVERNANCE-MAP.md"
+          } >> "$GITHUB_STEP_SUMMARY"

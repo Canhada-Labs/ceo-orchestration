@@ -1,0 +1,8 @@
+# Project README
+
+This project is a small utility for parsing CSV files. It uses pandas
+under the hood. To install:
+
+    pip install -r requirements.txt
+
+Then run `python parse.py input.csv`.

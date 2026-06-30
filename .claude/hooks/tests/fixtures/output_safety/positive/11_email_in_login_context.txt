@@ -1,0 +1,1 @@
+Login attempt by user alice.smith@example.com from new device.

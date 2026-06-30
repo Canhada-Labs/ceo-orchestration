@@ -1,0 +1,3 @@
+# kubectl describe pod
+UID: bfec98bc-9216-7a57-f561-e13366a6ea60
+Name: nginx-pod-7d4f8

@@ -1,0 +1,226 @@
+name: Validate CEO Orchestration governance
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Cancel in-progress runs when a newer commit lands on the same ref.
+# Prevents duplicate compute on rapid-fire PR updates and matches the
+# devops-ci-cd skill's concurrency-control mandate.
+concurrency:
+  group: validate-${{ github.ref }}
+  cancel-in-progress: true
+
+# Least-privilege: this workflow only reads the repo to validate.
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Governance, health, contamination, shellcheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # -----------------------------------------------------------------
+      # Step: Governance structure validation
+      # -----------------------------------------------------------------
+      - name: Run validate-governance.sh
+        run: |
+          set -euo pipefail
+          bash .claude/scripts/validate-governance.sh
+
+      # -----------------------------------------------------------------
+      # Step: Skill health check (CI mode tolerates stale framework refs)
+      # -----------------------------------------------------------------
+      - name: Run check-skill-health.sh --ci
+        run: |
+          set -euo pipefail
+          bash .claude/scripts/check-skill-health.sh --ci
+
+      # -----------------------------------------------------------------
+      # Step: Pitfall regression check
+      # -----------------------------------------------------------------
+      - name: Run check-pitfall-regression.sh
+        run: |
+          set -euo pipefail
+          if [ -x .claude/scripts/check-pitfall-regression.sh ]; then
+            bash .claude/scripts/check-pitfall-regression.sh || {
+              rc=$?
+              # Accept exit 0 only. Anything else is a real regression.
+              echo "check-pitfall-regression.sh exited with rc=$rc" >&2
+              exit $rc
+            }
+          else
+            echo "check-pitfall-regression.sh not executable; skipping"
+          fi
+
+      # -----------------------------------------------------------------
+      # Step: Contamination check (project-specific refs outside allowed zones)
+      #
+      # Uses `git ls-files` so that (a) .gitignore is honored, (b) .git/
+      # is not descended into, (c) path anchoring is stable across runners.
+      # NFKC-normalizes each file before grepping to catch Unicode homoglyph
+      # attempts.
+      # -----------------------------------------------------------------
+      - name: Contamination check (no private-project/personal refs outside allowlist)
+        run: bash .claude/scripts/check-contamination.sh
+
+      # -----------------------------------------------------------------
+      # Step: Placeholder lint — no unfilled {{PLACEHOLDERS}} beyond the
+      # known template set in core/frontend skills.
+      # -----------------------------------------------------------------
+      - name: Placeholder lint (core/frontend skills only)
+        run: |
+          set -euo pipefail
+          # Known template placeholders we ship with (expected in template text).
+          ALLOWED='PROJECT_NAME|PROJECT_PATH|OWNER_NAME|DOMAIN|PRODUCTION_URL|APP_NAME|BACKEND_URL|FRONTEND_REPO_PATH|FOUNDER_NAME|CITY|COUNTRY|LEGAL_ID|STACK|DEPLOY_TARGET|DEPLOY_COMMAND|DATABASE|RUNTIME_NOTES|FILE_COUNT|LINES|TEST_COUNT|TEST_TOOL|LINT_TOOL|CI_TOOL|ARCHITECTURE_DIAGRAM|NUMERIC_RULES|ARCHITECTURE_RULES|SECURITY_RULES|ENDPOINT_LIST|DB_TABLES|ENV_VAR_COUNT|FRONTEND_PATH'
+          FOUND=$(grep -rhoE '\{\{[A-Z_][A-Z0-9_]*\}\}' .claude/skills/core .claude/skills/frontend 2>/dev/null | sort -u || true)
+          UNKNOWN=$(printf '%s\n' "$FOUND" | grep -vE "^\{\{($ALLOWED)\}\}$" || true)
+          if [ -n "$UNKNOWN" ]; then
+            echo "❌ Unknown {{PLACEHOLDERS}} in core/frontend skills:"
+            printf '%s\n' "$UNKNOWN"
+            echo ""
+            echo "Either fill the placeholder, replace with archetype text, or add it"
+            echo "to the ALLOWED list in .github/workflows/validate.yml (only if it is"
+            echo "genuinely a shared template variable)."
+            exit 1
+          fi
+          echo "✓ Only known placeholders present in core/frontend skills"
+
+      # -----------------------------------------------------------------
+      # Step: JSON/YAML syntax check for governance files
+      # -----------------------------------------------------------------
+      - name: Validate settings.json and YAML catalogs
+        run: |
+          set -euo pipefail
+          jq empty .claude/settings.json
+          echo "✓ .claude/settings.json is valid JSON"
+          for t in templates/settings/*.json; do
+            [ -f "$t" ] || continue
+            jq empty "$t"
+            echo "✓ $t is valid JSON"
+          done
+          python3 -c 'import yaml; yaml.safe_load(open(".claude/pitfalls-catalog.yaml")); print("✓ pitfalls-catalog.yaml is valid YAML")'
+          python3 -c 'import yaml; yaml.safe_load(open(".claude/task-chains.yaml")); print("✓ task-chains.yaml is valid YAML")'
+
+      # -----------------------------------------------------------------
+      # Step: Shellcheck on all active hooks and scripts
+      #
+      # .claude/hooks/legacy/ is excluded — those are Sprint 1 bash
+      # fallbacks kept for one sprint per PLAN-002 §11-bis Q5. They are
+      # NOT on the execution path (settings.json uses the Python shim).
+      # -----------------------------------------------------------------
+      - name: Shellcheck hooks and scripts (excluding legacy/)
+        run: |
+          set -euo pipefail
+          if ! command -v shellcheck >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq shellcheck
+          fi
+          FAILED=0
+          while IFS= read -r -d '' script; do
+            echo "--- $script ---"
+            shellcheck -S warning "$script" || FAILED=1
+          done < <(find .claude/scripts .claude/hooks \
+                        -path '*/legacy/*' -prune -o \
+                        -name '*.sh' -print0 2>/dev/null)
+          if [ $FAILED -eq 1 ]; then
+            echo "shellcheck reported warnings or errors" >&2
+            exit 1
+          fi
+          echo "✓ Shellcheck clean on all active hooks/scripts"
+
+      # -----------------------------------------------------------------
+      # Step: Python hook unit tests (Sprint 2 A.4)
+      # Runs every test under .claude/hooks/tests/. Uses Python 3.12
+      # from ubuntu-24.04 runner default (3.10 is also acceptable).
+      # -----------------------------------------------------------------
+      - name: Run Python hook unit tests
+        run: |
+          set -euo pipefail
+          echo "Python version: $(python3 --version)"
+          cd "$GITHUB_WORKSPACE"
+          python3 -m unittest discover -s .claude/hooks/tests -p 'test_*.py' -v
+
+      # -----------------------------------------------------------------
+      # Step: Python script unit tests (audit-query, run-skill-benchmark,
+      # check-tier-boundaries)
+      # -----------------------------------------------------------------
+      - name: Run Python script unit tests
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          python3 -m unittest discover -s .claude/scripts/tests -p 'test_*.py' -v
+
+      # -----------------------------------------------------------------
+      # Step: core/frontend → domains tier boundary check
+      # -----------------------------------------------------------------
+      - name: Check tier boundaries (core/frontend must not reference domains)
+        run: |
+          set -euo pipefail
+          python3 .claude/scripts/check-tier-boundaries.py
+
+      # -----------------------------------------------------------------
+      # Step: actionlint — static analysis for GitHub Actions workflows
+      # Downloads the binary directly (no docker pull, no marketplace dep).
+      # -----------------------------------------------------------------
+      - name: actionlint
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          bash <(curl -sSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          ./actionlint -color "$GITHUB_WORKSPACE/.github/workflows/"*.yml
+
+      # -----------------------------------------------------------------
+      # Step: Skill inventory idempotency — generator output must match
+      # the committed block in ceo-orchestration/SKILL.md.
+      # -----------------------------------------------------------------
+      - name: Skill inventory idempotency
+        run: |
+          set -euo pipefail
+          GEN=$(bash .claude/scripts/generate-skill-inventory.sh)
+          # Extract the BEGIN/END block from the committed SKILL.md
+          COMMITTED=$(awk '/<!-- BEGIN AUTO-GENERATED SKILL INVENTORY -->/,/<!-- END AUTO-GENERATED SKILL INVENTORY -->/' \
+            .claude/skills/core/ceo-orchestration/SKILL.md)
+          if [ "$GEN" != "$COMMITTED" ]; then
+            echo "❌ Skill inventory in ceo-orchestration/SKILL.md is stale."
+            echo "Run: bash .claude/scripts/generate-skill-inventory.sh"
+            echo "Then re-embed the BEGIN/END block."
+            diff <(printf '%s\n' "$GEN") <(printf '%s\n' "$COMMITTED") || true
+            exit 1
+          fi
+          echo "✓ Skill inventory is up-to-date"
+
+      # -----------------------------------------------------------------
+      # Step: Hook executable bits (.sh + active Python hooks)
+      # -----------------------------------------------------------------
+      - name: Hook and script executable bits
+        run: |
+          set -euo pipefail
+          MISSING=""
+          # All .sh files under scripts/ and hooks/ (includes legacy for
+          # completeness — fallback scripts should still be executable).
+          while IFS= read -r -d '' script; do
+            if [ ! -x "$script" ]; then
+              MISSING="$MISSING $script"
+            fi
+          done < <(find .claude/scripts .claude/hooks -name '*.sh' -print0 2>/dev/null)
+          # Active Python hooks (not _lib or tests — those are libraries)
+          for py in .claude/hooks/check_agent_spawn.py .claude/hooks/audit_log.py .claude/hooks/check_bash_safety.py .claude/hooks/check_plan_edit.py; do
+            if [ -f "$py" ] && [ ! -x "$py" ]; then
+              MISSING="$MISSING $py"
+            fi
+          done
+          if [ -n "$MISSING" ]; then
+            echo "❌ The following files are not executable:"
+            for m in $MISSING; do echo "  - $m"; done
+            echo ""
+            echo "Run: chmod +x <file>"
+            exit 1
+          fi
+          echo "✓ All active hooks/scripts are executable"

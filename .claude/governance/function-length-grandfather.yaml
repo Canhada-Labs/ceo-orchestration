@@ -1,0 +1,2095 @@
+# Function-length grandfather list — PLAN-063 DIM-07 (sha256-keyed v2)
+# Generated: 2026-04-29 (Session 77 Phase 5)
+# Schema: function-length-grandfather/v2
+#
+# These functions exceed the 50-LoC threshold and are
+# PERMANENTLY accepted as part of the framework identity per ADR-097.
+#
+# v2 (PLAN-063 DIM-07): match key changed from
+# (file, function, line) to (file, function, sha256). The
+# line/end_line fields stay for human reference but are NOT
+# part of the match key. This makes the grandfather list
+# line-shift invariant — only changes when the function body
+# itself changes.
+#
+# New functions added 2026-04-29 onward MUST either stay <=50 LoC OR
+# add a `# justified: <reason >=10 chars>` comment within the body.
+# This grandfather list is NOT auto-extended — only ADR-097 supersession
+# can add new entries.
+#
+# Format: list of {file, function, line, end_line, loc, sha256} entries.
+# Match key: (file, function, sha256) tuple.
+
+schema: function-length-grandfather/v2
+generated_at: "2026-04-29"
+generated_via: ".claude/scripts/check-function-length.py --json --grandfather=/dev/null"
+adr: ADR-097
+migrated_from: function-length-grandfather/v1
+migrated_at: "2026-05-01"
+total_grandfathered: 344
+
+functions:
+  - file: .claude/hooks/SessionEnd.py
+    function: _invoke_audit_tokens_stub
+    line: 140
+    end_line: 193
+    loc: 54
+    sha256: fbb958756a2116e3b0b9b92a0b5b418d112dd5599ade5d6dcf5b85c833325339
+  - file: .claude/hooks/UserPromptSubmit.py
+    function: decide
+    line: 178
+    end_line: 231
+    loc: 54
+    sha256: 0092f91991971ea6f8f86ac6c920ce0cc950c06fa67ce82588c1bcbc029ba03d
+  - file: .claude/hooks/_lib/adapters/claude.py
+    function: read_event
+    line: 21
+    end_line: 88
+    loc: 68
+    sha256: 8ac641a55e5234392e39bbb7a163c8fd860f829b73417539f42a5942306da8c0
+  - file: .claude/hooks/_lib/adapters/live/_policy.py
+    function: __post_init__
+    line: 122
+    end_line: 223
+    loc: 102
+    sha256: 98390aae54f67747b4c4b6117eea6b8f857a4ab7855d9146178524bda55a17e5
+  - file: .claude/hooks/_lib/adapters/live/_transport.py
+    function: post_json
+    line: 158
+    end_line: 254
+    loc: 97
+    sha256: 6a7a37e285926e9d4785e706bc85caaa0cf4fdf1989bc470088c657c9568708a
+  - file: .claude/hooks/_lib/adapters/live/_transport.py
+    function: _attempt_once
+    line: 260
+    end_line: 369
+    loc: 110
+    sha256: 9ff69d53fb824218dea3aa33f37f8e8871e05724880751f44dce46dad87fa34f
+  - file: .claude/hooks/_lib/adapters/live/claude.py
+    function: call
+    line: 99
+    end_line: 190
+    loc: 92
+    sha256: 84e7bc5c0b733178047c1a70a8d96edeeb40e5e795bcaba708a7d4ff1243aed2
+  - file: .claude/hooks/_lib/adapters/live/claude.py
+    function: _on_response
+    line: 216
+    end_line: 280
+    loc: 65
+    sha256: ba7154cb95d5dd1e3b5b8150a2887393b135156b63a3e6d242dc21bfa651e025
+  - file: .claude/hooks/_lib/adapters/live/gemini.py
+    function: call
+    line: 79
+    end_line: 173
+    loc: 95
+    sha256: 03f503f7535842bb0f9573dfbaf8248748ea4dbb03daad44aa93c382e2730f9c
+  - file: .claude/hooks/_lib/adapters/live/gemini.py
+    function: _on_response
+    line: 187
+    end_line: 265
+    loc: 79
+    sha256: 194a005fc81afd2be4b8c312159685f459eeb96988a99979bd2ef7d9eb5dfa00
+  - file: .claude/hooks/_lib/adapters/live/local.py
+    function: call
+    line: 71
+    end_line: 125
+    loc: 55
+    sha256: 0220b27876425656d3927d0e0eafa16c464944779dccf99f0f8b8c7329ca2c0c
+  - file: .claude/hooks/_lib/adapters/live/local.py
+    function: _on_response
+    line: 139
+    end_line: 190
+    loc: 52
+    sha256: f2ca67094f0af48773f071a938e58b47f069c3862b15ae759ef479db8593158d
+  - file: .claude/hooks/_lib/adapters/live/openai.py
+    function: call
+    line: 103
+    end_line: 168
+    loc: 66
+    sha256: a4e2a3bf25724304075dbf64fcf50e8ab626042d9ec39f597cc49c3b2722ea84
+  - file: .claude/hooks/_lib/adapters/live/openai.py
+    function: embed
+    line: 170
+    end_line: 233
+    loc: 64
+    sha256: 5168f42165175d67f70722dc7f4438a428532987c4afeaefae2c527c2f2d3ca3
+  - file: .claude/hooks/_lib/adapters/live/openai.py
+    function: _on_chat_response
+    line: 251
+    end_line: 308
+    loc: 58
+    sha256: 345e111971e130af22f6c91043a2f417cdaa3263160c38bba9d2796f3863c1ee
+  - file: .claude/hooks/_lib/adapters/live/openai.py
+    function: _on_embed_response
+    line: 310
+    end_line: 366
+    loc: 57
+    sha256: 2dcc3e2f27a27722d1bf133dee69bd59936a39fdcaf1343b78946f2adbeb86d0
+  - file: .claude/hooks/_lib/agent_frontmatter.py
+    function: check_veto_floor_for_role
+    line: 137
+    end_line: 189
+    loc: 53
+    sha256: 83988cd2ed9b24c0c9ce0569e3485c3832226039d3232f81a5f04e4cf1792607
+  - file: .claude/hooks/_lib/audit_emit.py
+    function: _write_event
+    line: 388
+    end_line: 537
+    loc: 150
+    sha256: 7a6ab90ea46b7faeddd8f408667e0654b3aa8e73fb93f8f088946336b38f096d
+  - file: .claude/hooks/_lib/audit_emit.py
+    function: emit_mcp_injection_finding
+    line: 2159
+    end_line: 2218
+    loc: 60
+    sha256: a311d21bbdb7b9e81b46327f4556313e21200d7ed5cf2cee7383d15137fda530
+  - file: .claude/hooks/_lib/audit_hmac.py
+    function: get_or_create_key
+    line: 247
+    end_line: 320
+    loc: 74
+    sha256: f6ffebab4d7563d1b3e9dd8ee9f116090abdd0ec88fde0666cf64dcc78b754ba
+  - file: .claude/hooks/_lib/audit_hmac.py
+    function: verify_chain
+    line: 714
+    end_line: 932
+    loc: 219
+    sha256: 547a62f5f038cb4d1f4b66549c8259654824a9d2e80efb065e39437a79d72407
+  - file: .claude/hooks/_lib/audit_rotation.py
+    function: rotate_if_needed
+    line: 47
+    end_line: 101
+    loc: 55
+    sha256: c10114b67e6004e53e5739bb2ad3e746a65f0e17a6acebba4197f75cc0529787
+  - file: .claude/hooks/_lib/gpg_verify.py
+    function: load_allowlist
+    line: 99
+    end_line: 157
+    loc: 59
+    sha256: ffa4c6eb0f16b38a7a85a167cdb639299fd3a3af5d39275a9a27a867fb56a5d7
+  - file: .claude/hooks/_lib/gpg_verify.py
+    function: verify_detached
+    line: 215
+    end_line: 333
+    loc: 119
+    sha256: 4043d570c43449a65bc2584ec11fb1f891a398fe91c8fae5b53721575de3b248
+  - file: .claude/hooks/_lib/injection_patterns.py
+    function: scan_harness_mimicry
+    line: 161
+    end_line: 212
+    loc: 52
+    sha256: feffc184fa98593704af0bad2b01a591cf32de1fbe6abc23f083a8aa2bca8096
+  - file: .claude/hooks/_lib/mcp_injection_scan.py
+    function: scan
+    line: 128
+    end_line: 189
+    loc: 62
+    sha256: 41819c645db9416010a8110c3dd667c72367a4cdc6060b4fabd78e741544bb6f
+  - file: .claude/hooks/_lib/memory_shared.py
+    function: put_pattern
+    line: 267
+    end_line: 346
+    loc: 80
+    sha256: 419fb055eeac8760a149a5fb019baf0487d9fe97119d97c1927f8b1603b79cee
+  - file: .claude/hooks/_lib/memory_shared.py
+    function: query
+    line: 360
+    end_line: 452
+    loc: 93
+    sha256: 4b6fb8341cab7ff82af0731a2adb71534e8ddac4933d6d57fa972e9a975ed10e
+  - file: .claude/hooks/_lib/memory_shared.py
+    function: evict
+    line: 466
+    end_line: 526
+    loc: 61
+    sha256: e17f513fb76ad7d481aae90daed88b25966126977fe5bb10fdd3ba0a5089192d
+  - file: .claude/hooks/_lib/metrics.py
+    function: compute
+    line: 32
+    end_line: 161
+    loc: 130
+    sha256: 610e9afe65b071eded2f360b91dd223b193d18491ca35aace19ff7276a95b60a
+  - file: .claude/hooks/_lib/metrics.py
+    function: health_from_snapshot
+    line: 164
+    end_line: 235
+    loc: 72
+    sha256: a41ca92293509790e1f2362348899de7f688b3bc6f1a8ef5675f80c670f0a0ed
+  - file: .claude/hooks/_lib/otel_emit.py
+    function: validate_endpoint
+    line: 143
+    end_line: 194
+    loc: 52
+    sha256: d8b89822b9827557a20d33099c2e1634204ba7829195749c4e4e0bafaf6b9ebd
+  - file: .claude/hooks/_lib/otel_emit.py
+    function: export_events
+    line: 509
+    end_line: 575
+    loc: 67
+    sha256: 68b15641685548a811386b5ececc27cfd2702d5969c054c6405966cd8af39210
+  - file: .claude/hooks/_lib/output_scan.py
+    function: scan_homoglyph
+    line: 168
+    end_line: 246
+    loc: 79
+    sha256: 2a6af8b8a900f1dd6c5894e24b61bd90605e700c38fca91b9cea81e49d95b1c0
+  - file: .claude/hooks/_lib/output_scan.py
+    function: scan_telemetry
+    line: 292
+    end_line: 351
+    loc: 60
+    sha256: 88b95545049b7faa7c3af9953c4fe9e1c5f0f47909c6601f4daab9d26ba2144e
+  - file: .claude/hooks/_lib/output_scan.py
+    function: scan_nfkc_homoglyph
+    line: 691
+    end_line: 757
+    loc: 67
+    sha256: dfae606e2076522b213b2e4b75d10625ef1e0cc253511671156170ae1b2362d1
+  - file: .claude/hooks/_lib/output_scan.py
+    function: scan
+    line: 782
+    end_line: 839
+    loc: 58
+    sha256: 4167f8a2ef7a9fb5a89d2c4fec16e406f36ed4024060b05ad272f76406eee8b7
+  - file: .claude/hooks/_lib/pii_patterns.py
+    function: scan
+    line: 564
+    end_line: 662
+    loc: 99
+    sha256: 124e586acc9ec56a9ee2e156054ba7abcf29861622d5f5f3818561fe32509733
+  - file: .claude/hooks/_lib/plan_frontmatter.py
+    function: parse_frontmatter
+    line: 79
+    end_line: 153
+    loc: 75
+    sha256: 119359642187abfe59c2611926f142ddcb453d3021abaa779144868491641163
+  - file: .claude/hooks/_lib/policy.py
+    function: _compile_predicate
+    line: 858
+    end_line: 997
+    loc: 140
+    sha256: f258735e5b9d62761afafe3e18974758b3463e35269f52e3e2517c985c4cf3ab
+  - file: .claude/hooks/_lib/policy.py
+    function: _evaluate
+    line: 1010
+    end_line: 1067
+    loc: 58
+    sha256: e3b29a823f420434fdacdba3aedc11947f0f2ca9e36abdf0e3099c8cab9c5e93
+  - file: .claude/hooks/_lib/policy.py
+    function: _load_read_raw
+    line: 1293
+    end_line: 1343
+    loc: 51
+    sha256: 5e159f95a9ade8c263191d17fb70968e67ca3c7de6e191dd4b04b408dee479ae
+  - file: .claude/hooks/_lib/policy.py
+    function: load
+    line: 1371
+    end_line: 1519
+    loc: 149
+    sha256: 10ec67baffcd705941c575c8e2ec3df6684ad5b4f90c0d9e4c5db145697fc471
+  - file: .claude/hooks/_lib/policy.py
+    function: _parse_block_mapping
+    line: 223
+    end_line: 285
+    loc: 63
+    sha256: 9d35e3cbe33d1355f1d0476a1685b540bcbe7d5535c9513004464bc8de2b997d
+  - file: .claude/hooks/_lib/policy.py
+    function: _parse_block_sequence
+    line: 287
+    end_line: 343
+    loc: 57
+    sha256: 63c0f1c9b7832cdf9b02b5d313bbb830ccadc6097e3d74c96cbfe0b0639ed4b5
+  - file: .claude/hooks/_lib/policy.py
+    function: _parse_inline_value
+    line: 381
+    end_line: 433
+    loc: 53
+    sha256: bb5cac504cd2d75dd8642552c73bffc449a4a88754a60cbfab0a9054199cc6ce
+  - file: .claude/hooks/_lib/policy.py
+    function: _parse_flow_mapping
+    line: 452
+    end_line: 544
+    loc: 93
+    sha256: d7dc26a9b2edcb18000e296dc17aad657379d123cc20fe3e8aaa71851a730f20
+  - file: .claude/hooks/_lib/policy.py
+    function: _parse_flow_sequence
+    line: 546
+    end_line: 607
+    loc: 62
+    sha256: ac92565500d594e0c4cf0ad9ef34cc0f5cb903072aab744d57fbf64b4e67523a
+  - file: .claude/hooks/_lib/policy.py
+    function: _consume_double_quoted
+    line: 648
+    end_line: 714
+    loc: 67
+    sha256: 7be5ae5e4633d03773dfe44d737056fd0ef06c40a0484b7d7bf11fc98ce2cda5
+  - file: .claude/hooks/_lib/policy_preprocessors.py
+    function: bash_safety_preprocess
+    line: 175
+    end_line: 230
+    loc: 56
+    sha256: 340d67e8c1e254f06e8fa5d6e22bf0a333dfe037093c5cc3946811b37872200a
+  - file: .claude/hooks/_lib/policy_preprocessors.py
+    function: plan_edit_preprocess
+    line: 296
+    end_line: 456
+    loc: 161
+    sha256: 08d5215ea7293ca36bd9697a9897da698b230d426586936224f51d3fc7f1dd93
+  - file: .claude/hooks/_lib/rag_bridge.py
+    function: _scan_chunks
+    line: 188
+    end_line: 242
+    loc: 55
+    sha256: 8ac2bcdddd2ee73bc2b3eb4d4799dc48613827b884d4d0a4370adcaba6ec59ed
+  - file: .claude/hooks/_lib/rag_bridge.py
+    function: _recv_response
+    line: 261
+    end_line: 316
+    loc: 56
+    sha256: 79b611d68fd6a17203431cd7b7b627b5e6a262b12dd4f01078fa962c546bb06a
+  - file: .claude/hooks/_lib/rag_bridge.py
+    function: _rpc_call
+    line: 319
+    end_line: 402
+    loc: 84
+    sha256: 586adefa0cbe3847f740b0c814e890227fb941222f83c907b725ca66bbbf16d7
+  - file: .claude/hooks/_lib/scratchpad_lib.py
+    function: resolve_plan_id
+    line: 103
+    end_line: 165
+    loc: 63
+    sha256: 5abf8c27be940c5ccd742e412af8b1b1f3c4fbcb00059d1f5ba566f64191b3f9
+  - file: .claude/hooks/_lib/secret_patterns.py
+    function: scan
+    line: 418
+    end_line: 470
+    loc: 53
+    sha256: 2373008656a6c509de6bbd8024adc192ea643afe38587273a6d83a776d97f517
+  - file: .claude/hooks/_lib/spec_context_sanitizer.py
+    function: sanitize
+    line: 103
+    end_line: 179
+    loc: 77
+    sha256: c780da7b0ce6e3ee78313d99fcbc1c62c9d0437ba4846ca346bcf6c9dbef06f7
+  - file: .claude/hooks/_lib/state_store.py
+    function: set
+    line: 272
+    end_line: 341
+    loc: 70
+    sha256: 0e21127d2857fd6f6e874374bdcb4899bbdc14e4f0b0608761bcc87b2303fff2
+  - file: .claude/hooks/audit_log.py
+    function: build_entry
+    line: 212
+    end_line: 300
+    loc: 89
+    sha256: a08d37b91d6cd9fdef7a4e646f6cd74d2c44fabb2bf72a93f216272811e20375
+  - file: .claude/hooks/audit_log.py
+    function: _extract_model
+    line: 389
+    end_line: 440
+    loc: 52
+    sha256: da7efabb7f058b5b6512127dd686c5a2386cc7b6c5310bc11ed81370f992f010
+  - file: .claude/hooks/audit_log.py
+    function: append_entry
+    line: 720
+    end_line: 809
+    loc: 90
+    sha256: a6fcb7cd226b8ac4b2db9034b572c184158bfc209b517195f3623f9e76b141b0
+  - file: .claude/hooks/audit_log.py
+    function: main
+    line: 817
+    end_line: 867
+    loc: 51
+    sha256: 515c142ed7daf744d5e920ff15d56e54389472b7d6f40c868d7f25827d1e1b16
+  - file: .claude/hooks/check_agent_spawn.py
+    function: _skill_ref_resolve_path
+    line: 286
+    end_line: 339
+    loc: 54
+    sha256: da1001b3341f7c4f2fd4f41ad309b54395e048e171b29dde5dd1b0a14367954c
+  - file: .claude/hooks/check_agent_spawn.py
+    function: _skill_ref_read_bounded
+    line: 357
+    end_line: 409
+    loc: 53
+    sha256: 90f8f216613f1fa9113ac0f76315525f1e77bbb5e41206e61761e4822fc2fca5
+  - file: .claude/hooks/check_agent_spawn.py
+    function: decide
+    line: 651
+    end_line: 793
+    loc: 143
+    sha256: 46ab3e7875fdeacabfc8b15b86575a29b5259d9ccb8eb4746ba4efb3205c72ba
+  - file: .claude/hooks/check_agent_spawn.py
+    function: main
+    line: 841
+    end_line: 899
+    loc: 59
+    sha256: 82b9dd79b6a9e323d0b50d9d36af3fe6c3b0eb612463c0731d50eaab2e1d0c15
+  - file: .claude/hooks/check_arbitration_kernel.py
+    function: decide
+    line: 192
+    end_line: 248
+    loc: 57
+    sha256: a3db1b5373ef7744d1249c704447dac6d644cab05f5066418c025695178e7cb9
+  - file: .claude/hooks/check_arbitration_kernel.py
+    function: main
+    line: 290
+    end_line: 390
+    loc: 101
+    sha256: 7ce7610aef30c77ac3ba42d6452d8abf643238c854c26556f4e42e21bb4a92b5
+  - file: .claude/hooks/check_bash_safety.py
+    function: _normalize_command_tokens
+    line: 86
+    end_line: 146
+    loc: 61
+    sha256: 016c582b5b9c3cfe2bed2d3ab40d7524ef03881d78f1a1ca7d4346d1db232ca8
+  - file: .claude/hooks/check_bash_safety.py
+    function: _check_rm_rf
+    line: 208
+    end_line: 267
+    loc: 60
+    sha256: 7e2f445b28af4d7c0d721dca58f81d12da2c2a3607f39532fcfc9e5a19c84e32
+  - file: .claude/hooks/check_budget.py
+    function: _plan_tokens_total
+    line: 162
+    end_line: 214
+    loc: 53
+    sha256: c96921563c5383462bd3d3c5be7fcd3612d852480eaf89233a7b83025b3d53a0
+  - file: .claude/hooks/check_budget.py
+    function: decide
+    line: 313
+    end_line: 397
+    loc: 85
+    sha256: 8af90140d1c33b1cb779ee4427b06d8e48c30eb11b97925dd0dbda8ff9919a90
+  - file: .claude/hooks/check_budget.py
+    function: main
+    line: 451
+    end_line: 523
+    loc: 73
+    sha256: 9faa55e79c0af625d82a06989f7ee81dda47f1ae8e503c4c31749e0e67890ac7
+  - file: .claude/hooks/check_canonical_edit.py
+    function: _sentinel_grants_path
+    line: 292
+    end_line: 433
+    loc: 142
+    sha256: 6cd7f32c767d755b241693e519f9e40193c91228afa0647a873f386f13b92c9a
+  - file: .claude/hooks/check_canonical_edit.py
+    function: main
+    line: 496
+    end_line: 565
+    loc: 70
+    sha256: bbcd7240a2ecbcbdd30abd80c46f6c11bf07d5d7e926bea775091bc8eacd5a4c
+  - file: .claude/hooks/check_confidence_gate.py
+    function: _run_gate_cli
+    line: 120
+    end_line: 171
+    loc: 52
+    sha256: 0a058098a586b0ed6815bf59c5576fa4f0d76843d9ece5a85e40e384eb4fd5c0
+  - file: .claude/hooks/check_confidence_gate.py
+    function: main
+    line: 284
+    end_line: 344
+    loc: 61
+    sha256: 4feb2cf3410d8f48677462ce9ea0085d8b1110518e60906134b21d6cb228255d
+  - file: .claude/hooks/check_fluency_nudge.py
+    function: main
+    line: 198
+    end_line: 257
+    loc: 60
+    sha256: b38b01100c78bf8067f86f2dedd2b95a0d921be5820baee9a2ca2c9670e4a914
+  - file: .claude/hooks/check_mcp_response.py
+    function: main
+    line: 143
+    end_line: 229
+    loc: 87
+    sha256: d6d76b8e302ffb893140e7918817a6907bbad81f5b57af19531f054651f88a16
+  - file: .claude/hooks/check_output_safety.py
+    function: main
+    line: 148
+    end_line: 229
+    loc: 82
+    sha256: 25d0eced2a2df4e73756428fe6e01e6eee9f40c701ffbf8be223ee894c0b4105
+  - file: .claude/hooks/check_output_secrets.py
+    function: main
+    line: 138
+    end_line: 205
+    loc: 68
+    sha256: 86c6acd8620b7f629f4abb7cd557bae99f05d62b800af1b545f5108522c0c11c
+  - file: .claude/hooks/check_plan_edit.py
+    function: main
+    line: 475
+    end_line: 540
+    loc: 66
+    sha256: f5347734628e9ba314cb16d674afc53e5f1d938d25b9cab48122aa64c50ac6dd
+  - file: .claude/hooks/check_read_injection.py
+    function: main
+    line: 127
+    end_line: 246
+    loc: 120
+    sha256: 4a9ce8ee3c73a814e50e448994456b2709cfc8c27dd5b1719f7afc26a953e3ab
+  - file: .claude/hooks/check_skill_bootstrap_post.py
+    function: _recent_bootstrap_event
+    line: 118
+    end_line: 177
+    loc: 60
+    sha256: 3813dc4ffb6004b30bfa819d5f25372dfb43e47b74830fcc4421cb6470f98dc1
+  - file: .claude/hooks/check_skill_bootstrap_post.py
+    function: decide
+    line: 214
+    end_line: 282
+    loc: 69
+    sha256: e6d39b1b1532379b582b8449319e89ab2c52761348f73c8a3da078bca628af16
+  - file: .claude/hooks/check_skill_patch_sentinel.py
+    function: _bootstrap_bypass_allows
+    line: 179
+    end_line: 260
+    loc: 82
+    sha256: f1ce1957f5eb40e7e986d839ae0c3f96f4b3abb9dea30afa883177fabf924c65
+  - file: .claude/hooks/check_skill_patch_sentinel.py
+    function: decide
+    line: 265
+    end_line: 336
+    loc: 72
+    sha256: 7cb9d836fb0af44edff048118b8165aa7bcb5331d24bbba7619ae7d234330c6d
+  - file: .claude/hooks/check_skill_patch_sentinel.py
+    function: main
+    line: 354
+    end_line: 407
+    loc: 54
+    sha256: 153139b357f622f34b109f5ffcb673f6b7cee61ddf8bb9520eb4c9bd08452a7f
+  - file: .claude/hooks/check_skill_reference_read.py
+    function: _reconcile_read
+    line: 316
+    end_line: 427
+    loc: 112
+    sha256: 64a35e134ba2a3b8cb4e78f5916adb4cace459e461b39682b39f9aface114562
+  - file: .claude/hooks/check_webfetch_injection.py
+    function: main
+    line: 171
+    end_line: 268
+    loc: 98
+    sha256: d19dae842d6751a0d562d1674f715206e6b8df0dbf7ee874d89b2a99efd61adc
+  - file: .claude/hooks/emit_architect_outcome.py
+    function: main
+    line: 145
+    end_line: 214
+    loc: 70
+    sha256: 3fa2cf6d44e23927f6d3ef36bb756e4e8aaf9a04f39b1fef1d35bd8735cf4ad1
+  - file: .claude/hooks/tests/mutations/engine_mutations/mutation_11_compiler_missing_predicate_tolerated.py
+    function: apply
+    line: 24
+    end_line: 79
+    loc: 56
+    sha256: da4417683ef2df5abf5735339ba7d3360eab184dd5e034377737eab0905ea76c
+  - file: .claude/hooks/tests/test_audit_emit.py
+    function: test_known_actions_set_contract
+    line: 201
+    end_line: 324
+    loc: 124
+    sha256: e6058aea96138bf2541189eb7aebdeadc9febca059e9c250e4950c13ef7394e4
+  - file: .claude/hooks/tests/test_audit_tokens_content_ban.py
+    function: test_chain_valid_with_all_three_new_actions
+    line: 381
+    end_line: 437
+    loc: 57
+    sha256: beba034103324d17e29649116f1518ecb74aac34795b5072d1c51670a190c3db
+  - file: .claude/hooks/tests/test_byte_identity_harness.py
+    function: _run_py_bash_path
+    line: 272
+    end_line: 327
+    loc: 56
+    sha256: a62f6123b636bcdeae713a98f06163e3960cc91eacc220170af4f9f6cdadbf3e
+  - file: .claude/hooks/tests/test_byte_identity_harness.py
+    function: _run_py_plan_path
+    line: 330
+    end_line: 429
+    loc: 100
+    sha256: 3b527ad170f3f4add7c1f0181c25d8ff6ec8aa42031115e24f270ec213a0b5b6
+  - file: .claude/hooks/tests/test_memory_shared.py
+    function: test_30_same_topic_concurrent_writes_no_corruption
+    line: 284
+    end_line: 336
+    loc: 53
+    sha256: ab2611ac6db9aa15497fac09337dfa208908122e22df980f9e8a884f634a9b37
+  - file: .claude/hooks/tests/test_otel_bounded_exporter.py
+    function: test_audit_jsonl_integrity_during_exporter_failure
+    line: 341
+    end_line: 411
+    loc: 71
+    sha256: afc46ce64f636d446c50278300b75f012c2720b92f9a0a8b209c6c628c8af73b
+  - file: .claude/hooks/tests/test_otel_queue.py
+    function: test_concurrent_producers_and_drainers
+    line: 224
+    end_line: 281
+    loc: 58
+    sha256: 083b365c642545db7e0f76b43334378da1ad3ed1e9d919a0e444f639594ef594
+  - file: .claude/plans/PLAN-044/audit-v2/staged/check_canonical_edit.py
+    function: _sentinel_grants_path
+    line: 292
+    end_line: 410
+    loc: 119
+    sha256: a75c539bceba63416f9b822eed79e0fc92e3e8b51ffc4a109c71adc7251a1154
+  - file: .claude/plans/PLAN-044/audit-v2/staged/check_canonical_edit.py
+    function: main
+    line: 473
+    end_line: 542
+    loc: 70
+    sha256: bbcd7240a2ecbcbdd30abd80c46f6c11bf07d5d7e926bea775091bc8eacd5a4c
+  - file: .claude/plans/PLAN-045/kernel-batch-wave-1.py
+    function: main
+    line: 522
+    end_line: 578
+    loc: 57
+    sha256: 2ecf81a89fffd183a74ccf921915bd78c6e1b1745c3790c94331c58922acb051
+  - file: .claude/plans/PLAN-045/kernel-batch-wave-2.py
+    function: apply_string_edits
+    line: 478
+    end_line: 535
+    loc: 58
+    sha256: 8da4ed95231817d163ef3802533f907ee35c896a8d3e4a4f84bfda29504951d6
+  - file: .claude/plans/PLAN-045/kernel-batch-wave-5.py
+    function: apply_patch
+    line: 111
+    end_line: 169
+    loc: 59
+    sha256: 0ba86188437c206f5982846749761041f4faedcd24cad164d76df399eb900f70
+  - file: .claude/plans/PLAN-045/kernel-batch-wave-6-agents-sha.py
+    function: _refresh_one
+    line: 73
+    end_line: 123
+    loc: 51
+    sha256: 5bdc1cd8bfb381bf776d4c380cc5b0c8d4ec1ab5fd8797315b4b4adf9afe64b9
+  - file: .claude/plans/PLAN-048/collect-baseline.py
+    function: aggregate_audit_events
+    line: 89
+    end_line: 174
+    loc: 86
+    sha256: a3393a911a6e653a1f8efc703dc288816bce981689f1fec372cb818e0f6b1b5f
+  - file: .claude/plans/PLAN-048/collect-baseline.py
+    function: build_parser
+    line: 259
+    end_line: 326
+    loc: 68
+    sha256: 1bc3f160a0319592a611343bbefc6a30171f0c8c58923259c23d9f47b32d1e38
+  - file: .claude/plans/PLAN-050/kernel-batch-phase-1.py
+    function: main
+    line: 109
+    end_line: 171
+    loc: 63
+    sha256: 189eb268166fc718139a1e73242d5d9b7422e6f941c4ab80769c5c510e9cf14d
+  - file: .claude/plans/PLAN-050/kernel-batch-phase-1b.py
+    function: apply_patch
+    line: 351
+    end_line: 465
+    loc: 115
+    sha256: b2a8bbc494d7d76ee534929fb2bb959f6a68c8e799b84e8bba92a110a017a214
+  - file: .claude/plans/PLAN-050/kernel-batch-phase-1c.py
+    function: stage3_generate
+    line: 243
+    end_line: 324
+    loc: 82
+    sha256: 28c6912106e991979d1e758cff3bd7ed9000ebbd5b05cbd27f759cf6b45f588d
+  - file: .claude/plans/PLAN-050/retrofit-adrs.py
+    function: main
+    line: 104
+    end_line: 154
+    loc: 51
+    sha256: cae95cc2ca4a5fd50425ade3b8c93715502e9fecd3b926873e5fc4712fc03dbb
+  - file: .claude/rag/_index_core.py
+    function: walk_repo
+    line: 118
+    end_line: 168
+    loc: 51
+    sha256: f6d0f6c9413a6702e036b1cad7c8f0fe850007aeda080089522b1377fb11392a
+  - file: .claude/scripts/adopter-metrics.py
+    function: compute_metrics
+    line: 248
+    end_line: 382
+    loc: 135
+    sha256: 6c75ec3804119cdea0ea66045ebf2a5eccc2a090fc4237dcadcc5a6738a9ed80
+  - file: .claude/scripts/adopter-metrics.py
+    function: render_markdown
+    line: 408
+    end_line: 479
+    loc: 72
+    sha256: 88f28529dba41fb5081839acec1bf325099bb14180c0f985251ea68670d71462
+  - file: .claude/scripts/adopter-metrics.py
+    function: build_parser
+    line: 510
+    end_line: 570
+    loc: 61
+    sha256: 61cd2ec6eabc07a32cdd5c6447e64f087565102e79254af054f7ad252e39b6ab
+  - file: .claude/scripts/adopter-metrics.py
+    function: main
+    line: 592
+    end_line: 708
+    loc: 117
+    sha256: 0c4c445b1bc715b46d900dac3cc872b580f82ea9ab6b572453c8a3e8d7c5898c
+  - file: .claude/scripts/architect-bundle-validate.py
+    function: validate
+    line: 134
+    end_line: 191
+    loc: 58
+    sha256: e08a7eca6d16a84350729426dfdb415dc4edcdcdccbbf083af9f7d34f5d6953d
+  - file: .claude/scripts/audit-dashboard.py
+    function: _tail_lines_reverse
+    line: 109
+    end_line: 184
+    loc: 76
+    sha256: e053ef4a9315909abc027882360aa6f0e1a133a66e9cee900ccbca01aad1d9a6
+  - file: .claude/scripts/audit-dashboard.py
+    function: aggregate_tokens
+    line: 472
+    end_line: 523
+    loc: 52
+    sha256: fe0a568fbb16826162aa490ce0850ce6a461338007349e068c51a3e5bd27a03d
+  - file: .claude/scripts/audit-dashboard.py
+    function: aggregate_reflexion
+    line: 526
+    end_line: 584
+    loc: 59
+    sha256: 4dc0a3c9097bdc12c9cf05b033c5568df5dd8bbb9d91f20cc3fb3cf3c1f566d4
+  - file: .claude/scripts/audit-dashboard.py
+    function: aggregate_pruning
+    line: 587
+    end_line: 641
+    loc: 55
+    sha256: 84ac81b2ea60a1a6ad732167db8181d649a0497f849aa42c6a439db68078c788
+  - file: .claude/scripts/audit-dashboard.py
+    function: aggregate_swarm
+    line: 860
+    end_line: 921
+    loc: 62
+    sha256: 1841febdd46807934dc01afd2c34b874075cd163e0729820c98e2b474ea8cf89
+  - file: .claude/scripts/audit-dashboard.py
+    function: _sse_tail_loop
+    line: 1062
+    end_line: 1120
+    loc: 59
+    sha256: d0fd4601e007b842a96074b4ae14df19f63b7709ccd771e11092ba23de8ed42d
+  - file: .claude/scripts/audit-dashboard.py
+    function: _make_handler
+    line: 1123
+    end_line: 1260
+    loc: 138
+    sha256: e8338e9775634dcf454f411f507d194ad56eee959851213c3d7bbd3150d38cb6
+  - file: .claude/scripts/audit-query.py
+    function: cmd_lessons_effectiveness
+    line: 625
+    end_line: 742
+    loc: 118
+    sha256: ce5f3d5913b6d652fce12b5358fc558add9f6ac5077db2a0c0674d3a3e9f1727
+  - file: .claude/scripts/audit-query.py
+    function: cmd_spawn_stats
+    line: 745
+    end_line: 813
+    loc: 69
+    sha256: 41913569e10a5806449c4bbf7da54b14adacbfdd348691090c111297bba50130
+  - file: .claude/scripts/audit-query.py
+    function: cmd_weekly_summary
+    line: 934
+    end_line: 999
+    loc: 66
+    sha256: cb491df1918d383c6428a9631cdfa9dccea0cd3f8016436bab75f6d2bf0f7411
+  - file: .claude/scripts/audit-query.py
+    function: cmd_architect_outcomes
+    line: 1002
+    end_line: 1087
+    loc: 86
+    sha256: 017970b4a30cdafa1c81f3cff578944f04f4c0165c04ae45cdf7a4147271f1ec
+  - file: .claude/scripts/audit-query.py
+    function: cmd_prune_restore_ratio
+    line: 1090
+    end_line: 1148
+    loc: 59
+    sha256: b2884daab0bf405a6886daeb81d91ba47b3f6486d443b0b27eaad10bfed10663
+  - file: .claude/scripts/audit-query.py
+    function: cmd_claims
+    line: 1151
+    end_line: 1208
+    loc: 58
+    sha256: 80888c365097348661b3675d74d43b34709dcb1c612c0b1296c15e76330629a7
+  - file: .claude/scripts/audit-query.py
+    function: cmd_metrics
+    line: 1211
+    end_line: 1262
+    loc: 52
+    sha256: 921aa788a30ae79b18f5c4c86ee3dd3d9ab964be145eb655ba7c62c42dff8dc4
+  - file: .claude/scripts/audit-query.py
+    function: cmd_tokens
+    line: 1265
+    end_line: 1325
+    loc: 61
+    sha256: 0ea69a9de268929d5d1ef01fa432775ea6e1d0608aa6e90ce48807a90e3f0468
+  - file: .claude/scripts/audit-query.py
+    function: cmd_health
+    line: 1328
+    end_line: 1394
+    loc: 67
+    sha256: 72cd088a4c004217a1b2274a1b4f87ee60ffadc1aeb8dd30253e1b96771cf4db
+  - file: .claude/scripts/audit-query.py
+    function: _add_sprint8_9_subparsers
+    line: 1619
+    end_line: 1684
+    loc: 66
+    sha256: 5693ad38e17bae5b3158048c29aa170f0d6ee529d54000921b57a548ea37a8fe
+  - file: .claude/scripts/audit-query.py
+    function: main
+    line: 1765
+    end_line: 1863
+    loc: 99
+    sha256: 26377d512995dfd52be4eeea3091d5dd02ea9544c41a618f4447267ebdf34818
+  - file: .claude/scripts/audit-telemetry.py
+    function: collect_telemetry
+    line: 146
+    end_line: 264
+    loc: 119
+    sha256: 1cb0318be6c787e3be0ac0c30efdcf05bb3fe87e53b4a32906d17e5453373c19
+  - file: .claude/scripts/audit-tokens.py
+    function: render_markdown
+    line: 154
+    end_line: 206
+    loc: 53
+    sha256: b5212a525f12936f4de60d115d5e43653a73730f730233e8fca64c8cff730fe4
+  - file: .claude/scripts/audit-tokens.py
+    function: build_parser
+    line: 236
+    end_line: 302
+    loc: 67
+    sha256: b49d7c08974cf400550e54f0aa8b4780cdc1a49414d4097a5f4ce96600ee5798
+  - file: .claude/scripts/audit-tokens.py
+    function: main
+    line: 305
+    end_line: 360
+    loc: 56
+    sha256: 5c62b0ae4a9a959d92d7791babd6b573776a5de3f07cdca953cca9060a6e95c0
+  - file: .claude/scripts/audit-tokens.py
+    function: _emit_stub_event
+    line: 363
+    end_line: 454
+    loc: 92
+    sha256: bea2df9238ce3b8b118f9d923301b85f53105f3c54ef797c735e340b1c7641fa
+  - file: .claude/scripts/audit-verify-chain.py
+    function: verify
+    line: 282
+    end_line: 351
+    loc: 70
+    sha256: 759e38b0f3e9f888d4dd4868ae697e9da60b403fac4a8c35340b8301bc781c8d
+  - file: .claude/scripts/audit-verify-chain.py
+    function: main
+    line: 368
+    end_line: 441
+    loc: 74
+    sha256: ca73cd7f57299ab6d720900a00d3fa4fc56984a798d4445cc5ab31c644e3f86c
+  - file: .claude/scripts/backup-audit.py
+    function: backup_audit
+    line: 125
+    end_line: 183
+    loc: 59
+    sha256: bd9d6438017c8fbc36146a478c67bfdf336f16dd957e094e7f437be8064e54cb
+  - file: .claude/scripts/backup-audit.py
+    function: main
+    line: 186
+    end_line: 243
+    loc: 58
+    sha256: 759c0dd320392d836671a2d299562fd0af71f8792ef210311b0e660070d0e51b
+  - file: .claude/scripts/benchmark-fallback-scorer.py
+    function: score_rubric
+    line: 98
+    end_line: 171
+    loc: 74
+    sha256: c5dc318f96f0641ea80af3d9251520ba2cdf5d30f80b9816433201cabce5d591
+  - file: .claude/scripts/benchmark-judge.py
+    function: main
+    line: 464
+    end_line: 534
+    loc: 71
+    sha256: c41e82e54e7d31e3c88b211e7a7b1dbe4995cdf997d14c794b7a20e899de2878
+  - file: .claude/scripts/budget-summary.py
+    function: load_pricing
+    line: 116
+    end_line: 176
+    loc: 61
+    sha256: 76c64259421fbbf5cba4efb9c5e677485f15128d466d0aa75b58f0f927c79afd
+  - file: .claude/scripts/budget-summary.py
+    function: rollup
+    line: 221
+    end_line: 329
+    loc: 109
+    sha256: 1493224270cc6be9f6030a4646be088eca418c866230caed32f99b63dcc9bbfd
+  - file: .claude/scripts/ceo-cost.py
+    function: aggregate
+    line: 265
+    end_line: 360
+    loc: 96
+    sha256: 935fea4365710326b80649d147e5c7aabded2d1ea940852fd2e7f812c02be599
+  - file: .claude/scripts/ceo-cost.py
+    function: render_text
+    line: 380
+    end_line: 467
+    loc: 88
+    sha256: f36557cc7083a993e9a2d06bac5852df471a4781680074f186bcd923675dbc47
+  - file: .claude/scripts/ceo-cost.py
+    function: tail_entries
+    line: 828
+    end_line: 902
+    loc: 75
+    sha256: 000191a7969975d002b20064d6b19344a29769fb969c78fde678a50706a6bd17
+  - file: .claude/scripts/ceo-cost.py
+    function: run_stream
+    line: 905
+    end_line: 961
+    loc: 57
+    sha256: 2d359f6f65b2f7d11ead000ad15200aa3f15cc5b6641d60763d0aae695591c8f
+  - file: .claude/scripts/ceo-cost.py
+    function: build_parser
+    line: 969
+    end_line: 1047
+    loc: 79
+    sha256: d104bbc5d1cde3bbbb40b43a9f97063ce4d9ee5558935a6669d3d3204d083f80
+  - file: .claude/scripts/ceo-cost.py
+    function: main
+    line: 1050
+    end_line: 1106
+    loc: 57
+    sha256: 0ced631378a976f914a79fdba53d09730bda0a8a4aa52001c99c73613ce8785e
+  - file: .claude/scripts/ceo-diagnose.py
+    function: probe_dispatch_modes
+    line: 204
+    end_line: 256
+    loc: 53
+    sha256: b20ab8ccc8f3cc69e63517fcdc26747a94159653ac19987059141f89a48456b4
+  - file: .claude/scripts/ceo-escalation-detector.py
+    function: detect_gate_skip
+    line: 210
+    end_line: 260
+    loc: 51
+    sha256: c9baff4f5bdc499ecf5c24efb3bc8dcb778cc1b3d77e225fe6e79c5b23211d23
+  - file: .claude/scripts/ceo-escalation-detector.py
+    function: build_parser
+    line: 563
+    end_line: 623
+    loc: 61
+    sha256: 32d2fa4227fc5fe51eb73749b3639f11dcc4340951710d666d65f8ce74ac8d7c
+  - file: .claude/scripts/ceo-health.py
+    function: check_hook_latency_slo
+    line: 343
+    end_line: 427
+    loc: 85
+    sha256: 904e76b9207a201ba1173ad04980e520b6ad737b806445c66bb62ef905a4a071
+  - file: .claude/scripts/ceo-health.py
+    function: check_quality_profile
+    line: 430
+    end_line: 486
+    loc: 57
+    sha256: 539d351d2c8310499dd41820513101310ac9697c99429a3f1ac1d459708f18be
+  - file: .claude/scripts/chaos-inject.py
+    function: _wrapper_source
+    line: 215
+    end_line: 291
+    loc: 77
+    sha256: 15caaec1273952873ce51b5ddb6ddf90272a111ce0c40885f439bc7a3e45b31c
+  - file: .claude/scripts/check-action-sha-drift.py
+    function: _fetch_tag_sha
+    line: 129
+    end_line: 179
+    loc: 51
+    sha256: 7bdafcb85b207e7605781df74d82c5b8cbeeaa6078260e0988873993ac393471
+  - file: .claude/scripts/check-action-sha-drift.py
+    function: main
+    line: 182
+    end_line: 271
+    loc: 90
+    sha256: e26dbc778b1005f93dc1dfa29fc1815c2ea3adf8bd1230d26434dbb02f3be4f8
+  - file: .claude/scripts/check-adr-chain.py
+    function: parse_adr
+    line: 72
+    end_line: 134
+    loc: 63
+    sha256: b8755162ddd95f14351d1e62922ac963da2c8511ebd14aa1e4d90d9d5e69aee2
+  - file: .claude/scripts/check-adr-chain.py
+    function: validate_chain
+    line: 137
+    end_line: 234
+    loc: 98
+    sha256: c46aa4b1a531ec51d9a736b8d4280758961f5ea2317769164205938072361f2f
+  - file: .claude/scripts/check-audit-registry-coverage.py
+    function: _emit_drift_report
+    line: 581
+    end_line: 656
+    loc: 76
+    sha256: 4879451d36aa08f80dbe48533640bbd24368308835a090bac939544da4d3d5d3
+  - file: .claude/scripts/check-claude-md-claims.py
+    function: run_checks
+    line: 200
+    end_line: 271
+    loc: 72
+    sha256: a2a631cf299d21c1254888ddcabd7ed7197fd7aa61278f298ac8979359f66412
+  - file: .claude/scripts/check-conformance-harness-mapping.py
+    function: parse_mapping
+    line: 121
+    end_line: 171
+    loc: 51
+    sha256: da84d4d9c23e89c5cfcc81981b6e8f8556a6ace5fdfd97ec48cbdde40412f4db
+  - file: .claude/scripts/check-conformance-harness-mapping.py
+    function: run_check
+    line: 294
+    end_line: 408
+    loc: 115
+    sha256: b56e112bd83de4523816fef2e7565fedae410036a862b3d4446cb6bb7a4abd38
+  - file: .claude/scripts/check-conformance-harness-mapping.py
+    function: main
+    line: 447
+    end_line: 499
+    loc: 53
+    sha256: d4b5823abe9e05fbab4d86cf4511f57ee55ea902d331239e5055098422df3c8e
+  - file: .claude/scripts/check-debate-round-lifecycle.py
+    function: validate_plan
+    line: 75
+    end_line: 136
+    loc: 62
+    sha256: 9ff3da046bd6a3cadc45a57e0512305f66fd1bc311bc78a931f0cf7b8cc9c8e6
+  - file: .claude/scripts/check-docs-drift.py
+    function: _disk_truth
+    line: 56
+    end_line: 116
+    loc: 61
+    sha256: 9c67a1166fa7eb885ee46d7861f0c36ad438ec3ce3708bff00fec1f27a94b25a
+  - file: .claude/scripts/check-docs-drift.py
+    function: _find_drifts
+    line: 119
+    end_line: 216
+    loc: 98
+    sha256: 2cc22013e872eea7033d51921a2473838ad85959dbde1449a32ec9e1f562d44a
+  - file: .claude/scripts/check-docs-freshness.py
+    function: iter_scannable_spans
+    line: 123
+    end_line: 183
+    loc: 61
+    sha256: b1e10a4036f58b2a7852032321ed4e11568146d9bead3b4a64df2246518cf978
+  - file: .claude/scripts/check-docs-freshness.py
+    function: main
+    line: 385
+    end_line: 468
+    loc: 84
+    sha256: 5a5a248471940bc8c8b11c70b8d4ff5e4596a31888c42f17f250db07ca74b12c
+  - file: .claude/scripts/check-flip-criteria-drift.py
+    function: parse_plan_dependency_graph
+    line: 135
+    end_line: 220
+    loc: 86
+    sha256: b7304ddf0cebcc1ef13eb188e6c22466ab98d519b04fba360eb48be79fceb938
+  - file: .claude/scripts/check-function-length.py
+    function: _load_grandfather
+    line: 71
+    end_line: 142
+    loc: 72
+    sha256: 2d1ece9587f81f4b065e033ddffc5ed11d8fd968bc5817fdeed8aea2930c9885
+  - file: .claude/scripts/check-function-length.py
+    function: main
+    line: 360
+    end_line: 422
+    loc: 63
+    sha256: 1abd79480d90b832f0ca2de5bdbc62278006bf012678c763ef1e828c2ea261f3
+  - file: .claude/scripts/check-originator-residue.py
+    function: main
+    line: 185
+    end_line: 245
+    loc: 61
+    sha256: fc2986cd88a143580cbac9cb91422ef8bd11aa097b352f02ca6d832ecd5c1a6b
+  - file: .claude/scripts/check-staleness.py
+    function: _check_plans
+    line: 77
+    end_line: 134
+    loc: 58
+    sha256: a7bc0fee72c47c9d44effe14707dc70a511ebb9274dd85a68f10d9bd9253818a
+  - file: .claude/scripts/check-swarm-harness-mapping.py
+    function: check_mapping
+    line: 219
+    end_line: 307
+    loc: 89
+    sha256: 79d36d08a60b4a4b7eb7b0562f10212920cb4291a51737e0e5cd35dbb16faaa5
+  - file: .claude/scripts/check-swarm-harness-mapping.py
+    function: main
+    line: 310
+    end_line: 376
+    loc: 67
+    sha256: 6fdb1a719cd834cfcb6ad3ebb62c9159259e969254edb71ec8bd1eebbd874c1e
+  - file: .claude/scripts/check-test-env-hygiene.py
+    function: main
+    line: 401
+    end_line: 505
+    loc: 105
+    sha256: 3dcdedbdcd438f022a091a7c3f4ee2ad21f95eba8161bb31c2c2c00acee96884
+  - file: .claude/scripts/check-threat-model-freshness.py
+    function: main
+    line: 226
+    end_line: 309
+    loc: 84
+    sha256: 8d890efb50fd76139a1c3d5fcfc30d1e4b686c37d491bf7ff94085478dde45cd
+  - file: .claude/scripts/check_threat_model_coverage.py
+    function: main
+    line: 138
+    end_line: 210
+    loc: 73
+    sha256: c89ee708383086e07e90ffde178c5dd1ddde7a65303f1dc4a697eeb106610cf3
+  - file: .claude/scripts/check_translations_drift.py
+    function: check_pair
+    line: 80
+    end_line: 131
+    loc: 52
+    sha256: 1364a7675c56ce09b10c782f6e893928d85f625f58c271294751e3535610681d
+  - file: .claude/scripts/check_translations_drift.py
+    function: main
+    line: 134
+    end_line: 195
+    loc: 62
+    sha256: 7e4137830027964a247abd558737f5706ab4c2d5582350803245f5d91be1e2b3
+  - file: .claude/scripts/compare-adopters.py
+    function: _render_markdown
+    line: 312
+    end_line: 400
+    loc: 89
+    sha256: 1eca7c9db2d299fe51df6cc74805c87ba3e403b13014ed14c59371ed7a51856f
+  - file: .claude/scripts/compare-adopters.py
+    function: _run
+    line: 464
+    end_line: 541
+    loc: 78
+    sha256: 1bbe6a446b5cabeb998a01354c5442aef243ee2458ba4f2be91456c81dbe9534
+  - file: .claude/scripts/confidence_gate.py
+    function: verify_test_passes
+    line: 331
+    end_line: 386
+    loc: 56
+    sha256: 338fdd3213886c483e2fdd0d983300cdb8ad5eb45734a9f4afb04bcc69120c7a
+  - file: .claude/scripts/confidence_gate.py
+    function: main
+    line: 618
+    end_line: 670
+    loc: 53
+    sha256: e5ebf8546d8338340028a13cec0d774cc2da24f88e839874e08e354c03a51d8b
+  - file: .claude/scripts/debate-emit.py
+    function: main
+    line: 75
+    end_line: 128
+    loc: 54
+    sha256: 89f9f9b85112c9bf6fda107fea8ee261f298443fd846f67c00b11be37a8ead2b
+  - file: .claude/scripts/debate-orchestrate.py
+    function: generate_round_1
+    line: 471
+    end_line: 523
+    loc: 53
+    sha256: 5a78d199c055bcec080ca18d34b1066f1b6a3b9735d16be2f7281f3b97cccea5
+  - file: .claude/scripts/debate-orchestrate.py
+    function: _handle_convergence
+    line: 780
+    end_line: 843
+    loc: 64
+    sha256: fa4fa453f6d915c8d52c888377f3debdb270c3917f3d1b03f9e02506d290261d
+  - file: .claude/scripts/debate-orchestrate.py
+    function: main
+    line: 846
+    end_line: 899
+    loc: 54
+    sha256: 23738aa8a491da8bb1225fa5e70e8e92834dd2d5703d26b8e566506bfc60f598
+  - file: .claude/scripts/detectors/looping.py
+    function: detect
+    line: 41
+    end_line: 105
+    loc: 65
+    sha256: 9c0ad6808b3f905d2fd06bdf5b357bbac9d82264ab201a6339bacb4e9279fd40
+  - file: .claude/scripts/detectors/retry_churn.py
+    function: detect
+    line: 37
+    end_line: 99
+    loc: 63
+    sha256: a76946df8f2e14f70f0b64bd212009e4f68c8fec1a211b20519a6eb670931350
+  - file: .claude/scripts/generate-dispatch.py
+    function: render_dispatch_md
+    line: 152
+    end_line: 209
+    loc: 58
+    sha256: 04221d3404410630a1cedefbe7c92cf42454bbee0135166d210f5b7c1a9897f5
+  - file: .claude/scripts/generate-dispatch.py
+    function: main
+    line: 212
+    end_line: 271
+    loc: 60
+    sha256: 140d7daf72bea4ee844820f2a0dac79e7708741e98b99782e6ad9ee4a6eaabd9
+  - file: .claude/scripts/generate-sbom.py
+    function: generate_sbom
+    line: 148
+    end_line: 227
+    loc: 80
+    sha256: 513efcc3bf5bda8bc3a514ac0d19ac90cc89572e3aba4b8c9e2f9992003d376c
+  - file: .claude/scripts/generate-sbom.py
+    function: main
+    line: 230
+    end_line: 283
+    loc: 54
+    sha256: 9906d97e9037a227c972a0df6e4562dc74db41190a4fe7f142c46233c6eaa0c7
+  - file: .claude/scripts/github-api-client.py
+    function: _call_with_retry
+    line: 177
+    end_line: 231
+    loc: 55
+    sha256: 40a9ad40e9c0d40dd5844c1c70e45e75e4566e305ead3453367af03f5a259483
+  - file: .claude/scripts/hook-profiler.py
+    function: profile_per_tool_call
+    line: 265
+    end_line: 390
+    loc: 126
+    sha256: 22f154865ff2aa94d649af0b48e898467f374e6c23808d5721faf61fbb410ec2
+  - file: .claude/scripts/hook-profiler.py
+    function: parse_args
+    line: 502
+    end_line: 553
+    loc: 52
+    sha256: 949ddb4a91314ae7d779e0452813e050902f63b88b9e11e54370df84c35f618b
+  - file: .claude/scripts/hook-profiler.py
+    function: main
+    line: 556
+    end_line: 667
+    loc: 112
+    sha256: d226ac31464ac9f1044c3d10a43bbe1fd650fa071bf0b68f30d909fb641d84ea
+  - file: .claude/scripts/import-skill.py
+    function: _validate_upstream_ref
+    line: 129
+    end_line: 185
+    loc: 57
+    sha256: 2d3926d0e4b7982d88acc643c1be4f358c598227b81e4d05cbe8ca88596e29f4
+  - file: .claude/scripts/import-skill.py
+    function: _verify_skip_rubric_authorization
+    line: 320
+    end_line: 387
+    loc: 68
+    sha256: afe534d86889aa273a9dcc267c2bdefcf7a7d5b832b5ac5f8e40ddbc0e6db84d
+  - file: .claude/scripts/import-skill.py
+    function: run_import
+    line: 390
+    end_line: 469
+    loc: 80
+    sha256: a1e76fbbe5f8884a13ed8b94436af0c561296ec9717d3d9f0ab4fb468f8cb0ea
+  - file: .claude/scripts/import-skill.py
+    function: build_parser
+    line: 477
+    end_line: 535
+    loc: 59
+    sha256: 7b8a09880533bf01998fe13b32ca33338da36272df5c7d1f1af55c640fba472e
+  - file: .claude/scripts/k-calibration.py
+    function: bootstrap_kappa_ci
+    line: 161
+    end_line: 215
+    loc: 55
+    sha256: e9f09f3335387d1ac68877fc0d82fc87220fd4810a1d5537363f5605cde8a1d7
+  - file: .claude/scripts/lesson_ranker.py
+    function: rank_by_effectiveness
+    line: 43
+    end_line: 97
+    loc: 55
+    sha256: 3ceb5a0e3727f80d8c383c47bc4fc093f4f6cf0a334b64308dc577ad2ba3cae3
+  - file: .claude/scripts/lessons.py
+    function: _scan_lesson_for_injection
+    line: 164
+    end_line: 215
+    loc: 52
+    sha256: b635117f91861bcc9dc76978df5ff000ea1418fc4a894cd37028062f710b1110
+  - file: .claude/scripts/lessons.py
+    function: write_lesson
+    line: 218
+    end_line: 292
+    loc: 75
+    sha256: 401fa96cff9707c167334033a404987a02188498e10f89c67bd9337af822352a
+  - file: .claude/scripts/lessons.py
+    function: record_outcome
+    line: 418
+    end_line: 493
+    loc: 76
+    sha256: 4e95dce175c273689d345cd83f16a33d435e45381c435f50a4ed00b1639826cf
+  - file: .claude/scripts/lessons.py
+    function: undo_outcome
+    line: 496
+    end_line: 568
+    loc: 73
+    sha256: 04360878b268ea6a9529fc66d84420394be467b86b1b3b45e29eb68d6fcb9098
+  - file: .claude/scripts/lessons.py
+    function: _build_arg_parser
+    line: 647
+    end_line: 700
+    loc: 54
+    sha256: c93daea50c77e3bcec6b0bd0e883bfc3d9cc98214b74771f091e86854c600157
+  - file: .claude/scripts/mcp-server/auth.py
+    function: load_secret
+    line: 254
+    end_line: 307
+    loc: 54
+    sha256: 095784d89c29f7d1b731116d31d508d2d1a2e07309346d42742ca4d34c9f03f2
+  - file: .claude/scripts/mcp-server/dispatch.py
+    function: authenticate
+    line: 249
+    end_line: 321
+    loc: 73
+    sha256: 038394149d56ce89e01de2c72abf12cbbf8b3e450866a4ecba2ef0960f8fd2a4
+  - file: .claude/scripts/mcp-server/dispatch.py
+    function: dispatch
+    line: 324
+    end_line: 414
+    loc: 91
+    sha256: 4f53a0101409c8b8c8e82984a2b0be5d3b3148964f233cfe01d48e79f46035cc
+  - file: .claude/scripts/mcp-server/handlers/get_audit_log.py
+    function: handle
+    line: 98
+    end_line: 160
+    loc: 63
+    sha256: a00f3f9b69c4b95ac193455e3ebb9111bad98dfdcfcfcf73ef81f3d45da558fe
+  - file: .claude/scripts/mcp-server/handlers/get_skill.py
+    function: handle
+    line: 101
+    end_line: 165
+    loc: 65
+    sha256: 467c6ef64454e0af1244d61aec5d14dcad16343e872b1630086211ec3f0fcfdf
+  - file: .claude/scripts/mcp-server/handlers/list_agents.py
+    function: _extract_from_team_md
+    line: 106
+    end_line: 189
+    loc: 84
+    sha256: a15df6beeb2c6020e06cbf874ef7785fb0cad6ed48816764f11cc5b8a2e4f52c
+  - file: .claude/scripts/mcp-server/handlers/list_pitfalls.py
+    function: _parse_pitfalls_yaml
+    line: 66
+    end_line: 129
+    loc: 64
+    sha256: f954dfd028d506f22079822860fdbdcf50d36e45164b24ed8e3af58648c9bf78
+  - file: .claude/scripts/mcp-server/handlers/list_skills.py
+    function: _walk_skills
+    line: 101
+    end_line: 155
+    loc: 55
+    sha256: a98f9158236a33a1d9a3f1ac453be09df0e7dcef6264b7306cd10e1b6a06393c
+  - file: .claude/scripts/mcp-server/handlers/spawn_agent.py
+    function: handle
+    line: 180
+    end_line: 271
+    loc: 92
+    sha256: df58021b8e5d7570ea89fef142d6265ccfee481e037512c2ab8f8045178ddd42
+  - file: .claude/scripts/mcp-server/http_transport.py
+    function: make_server
+    line: 262
+    end_line: 322
+    loc: 61
+    sha256: 9bb5182aa8e7b23a5b3cd6dc96a68d9f0a765771c8d0c6fbd5231ec18ae9bd44
+  - file: .claude/scripts/mcp-server/http_transport.py
+    function: _handle_post
+    line: 113
+    end_line: 198
+    loc: 86
+    sha256: 2075808e7e0b74862e86f7f03ea1fef1392f60defec49f85d36cad3833aefb94
+  - file: .claude/scripts/mcp-server/server.py
+    function: run
+    line: 107
+    end_line: 184
+    loc: 78
+    sha256: c169803c78bbd66dc741bc9c560e7bf9dd62223086edd84caa7176bdf9b77f82
+  - file: .claude/scripts/mcp-server/stdio_transport.py
+    function: run
+    line: 49
+    end_line: 137
+    loc: 89
+    sha256: ee3e39860ed4d46138a9c29faec842ff890a6bb9ae9063002b79e3f9f600d018
+  - file: .claude/scripts/mutation-test.py
+    function: run_mutation_sweep
+    line: 302
+    end_line: 406
+    loc: 105
+    sha256: 3520525dec6712c4c7bcfad72dc5e87d3404a12a755e6cef731c9832e2c35628
+  - file: .claude/scripts/mutation-test.py
+    function: main
+    line: 433
+    end_line: 502
+    loc: 70
+    sha256: e581c76521861e15f231a208b46b3d680ff9df481218ac0392acabfbc3b70150
+  - file: .claude/scripts/otel-export.py
+    function: _build_parser
+    line: 157
+    end_line: 217
+    loc: 61
+    sha256: dac20ff1f17c2c3799f4c23817053abdebdb3678ed20bc7edf6f966f6fd9c77a
+  - file: .claude/scripts/otel-export.py
+    function: main
+    line: 220
+    end_line: 325
+    loc: 106
+    sha256: 36e723d0eb00a55cd38f286f251999c85abc5b2c0148be120926ddbf360ad7bc
+  - file: .claude/scripts/pitfall-query.py
+    function: parse_pitfalls_yaml
+    line: 73
+    end_line: 128
+    loc: 56
+    sha256: 113bd845af4c9b3508d92a4c070f2f87103bab0177c1b60a7bf63218ee173b2c
+  - file: .claude/scripts/policy-shadow-runner.py
+    function: _diff_report
+    line: 295
+    end_line: 351
+    loc: 57
+    sha256: fdbdac6a1ab8fcf454292931e91093d433cf9029ba938e364d65f8a2fb8a7119
+  - file: .claude/scripts/predict-budget/predict-plan-cost.py
+    function: aggregate_plan_totals
+    line: 167
+    end_line: 218
+    loc: 52
+    sha256: 88359c021d2bfd5bd8db50b3219186ad5edfc4848351e0e56409dba6fa224f7e
+  - file: .claude/scripts/predict-budget/predict-plan-cost.py
+    function: predict_for_plan
+    line: 257
+    end_line: 329
+    loc: 73
+    sha256: 1a62b7c9c7cc93e09dd9f5ab599620442d22f1aae9f6558dc7bf2f5a0ad2b90f
+  - file: .claude/scripts/predict-budget/predict-plan-cost.py
+    function: main
+    line: 484
+    end_line: 577
+    loc: 94
+    sha256: 0537215ec445349d3c7ce5f0989d29a8fd8c6d44ead61e8580d8e5ce927740ee
+  - file: .claude/scripts/profile-opus-4-7.py
+    function: smoke_checks
+    line: 170
+    end_line: 239
+    loc: 70
+    sha256: e3ea932f283d05291f71e4c787ba78112c55d3101ad9cccbdf18bf4758da3d72
+  - file: .claude/scripts/profile-opus-4-7.py
+    function: main
+    line: 294
+    end_line: 368
+    loc: 75
+    sha256: 117bb1073b4a577bfed5572cbfacd5cc7f82288b3c3966eeac85210d261de51f
+  - file: .claude/scripts/prune-lessons.py
+    function: _build_arg_parser
+    line: 213
+    end_line: 267
+    loc: 55
+    sha256: 55ef220b6b2b833fe01f76f5b6c9d4a0b307ae9b3fb4f369cde5a0ebf4d69797
+  - file: .claude/scripts/red-team-eval.py
+    function: _parse_minimal_yaml
+    line: 390
+    end_line: 479
+    loc: 90
+    sha256: ec1540b29183b70e584c4f3e6e75dee9bf0c9c48c502de6dc2d1032c5bd0217d
+  - file: .claude/scripts/red-team-eval.py
+    function: check_and_update_flake_budget
+    line: 504
+    end_line: 594
+    loc: 91
+    sha256: d7a3fb4f37adceaef6bb82df7d59f5deb6373758425acb815f3baa3e1e03b3e6
+  - file: .claude/scripts/red-team-eval.py
+    function: _dump_minimal_yaml
+    line: 597
+    end_line: 648
+    loc: 52
+    sha256: ee711dbf707943178c71a55a7e351d01732de548d9730fe1ae9acbd38ea14dd8
+  - file: .claude/scripts/red-team-eval.py
+    function: _build_main_parser
+    line: 798
+    end_line: 885
+    loc: 88
+    sha256: 41dfce0c957fea98c01061e0eb30b15f3f5339294489c38c099dbf2bfdf46ee7
+  - file: .claude/scripts/red-team-eval.py
+    function: main
+    line: 1044
+    end_line: 1095
+    loc: 52
+    sha256: e2a9b6c49afec4c4c70400a408983ea98d1b21e956645a3521a43e44e1ce23ef
+  - file: .claude/scripts/registry.py
+    function: load_archetypes
+    line: 266
+    end_line: 317
+    loc: 52
+    sha256: aa6b3fd240e84d4ee2bf0e52bdf0cb23062769e6a53ca8c4342d45259675d5cc
+  - file: .claude/scripts/registry.py
+    function: _cli
+    line: 348
+    end_line: 428
+    loc: 81
+    sha256: 207ee2ba6f5d7afbac076654f9f7973826e9048383e519843eadbb1d336c251b
+  - file: .claude/scripts/replay/replay-session.py
+    function: dry_run
+    line: 318
+    end_line: 401
+    loc: 84
+    sha256: 93932dfd85bd1d8277b294b89a2c662342d9e4486f615120c4345b054b0dc019
+  - file: .claude/scripts/replay/replay-session.py
+    function: execute_run
+    line: 409
+    end_line: 532
+    loc: 124
+    sha256: 41c5c1fe90867928c4cc7c27dac556de4f9b1c6f2bbff5509602862c76b4ae0e
+  - file: .claude/scripts/replay/replay-session.py
+    function: main
+    line: 607
+    end_line: 747
+    loc: 141
+    sha256: 2f5b30940ca6f7cb95d5793786e0961f1d5d30e33826d03b0e8ad3d7576517f9
+  - file: .claude/scripts/run-skill-benchmark.py
+    function: score_scenario
+    line: 253
+    end_line: 367
+    loc: 115
+    sha256: 50dbc5ee3237905bcd0a582dac17d574b81c72a1636b840404511b81ee5b2412
+  - file: .claude/scripts/run-skill-benchmark.py
+    function: run_one_scenario
+    line: 430
+    end_line: 496
+    loc: 67
+    sha256: 53c261434787ff200e08fe45dc9b77944fcee18e92025791bbb6cc4d5dfa3e58
+  - file: .claude/scripts/run-skill-benchmark.py
+    function: run_all_async
+    line: 504
+    end_line: 569
+    loc: 66
+    sha256: a7201fa0f38a7c85a75393cb4a5380857581ef4d872e24fdb90c7d75f2347e0d
+  - file: .claude/scripts/run-skill-benchmark.py
+    function: build_parser
+    line: 633
+    end_line: 704
+    loc: 72
+    sha256: 0f71ba0bdcb173ed5d2e1965b65bab8b05285f1af84794ceb1ce6963fc6c56e5
+  - file: .claude/scripts/run-skill-benchmark.py
+    function: _run_judge_mode
+    line: 755
+    end_line: 857
+    loc: 103
+    sha256: 41aaf5a1da9acb1432c80df15bb03a743b0535331a5792ab67838201a84b963b
+  - file: .claude/scripts/run-skill-benchmark.py
+    function: main
+    line: 860
+    end_line: 971
+    loc: 112
+    sha256: 98114e7eaa4ab3732d4c54921c3cac66d18ae8df9a75e375e35e36ccbb59456e
+  - file: .claude/scripts/run-skill-benchmark.py
+    function: _write_lessons_for_failures
+    line: 974
+    end_line: 1031
+    loc: 58
+    sha256: 5b26bba0167883aeed4b99b4b06d669dc0614bf1a8b511a86696564a679e6f20
+  - file: .claude/scripts/run-skill-benchmark.py
+    function: _emit_benchmark_audit_event
+    line: 1034
+    end_line: 1143
+    loc: 110
+    sha256: 7114b72c4d4df4765269fb1b97128a79016239d8ca22cfc0c4649fe71fd2bff8
+  - file: .claude/scripts/scratchpad.py
+    function: build_parser
+    line: 342
+    end_line: 392
+    loc: 51
+    sha256: 540830860028f334acd17a3383c6673c26e0d2dbe5d5b039cfb61c4c8e278827
+  - file: .claude/scripts/session-graph-build.py
+    function: _session_bucket_from_events
+    line: 185
+    end_line: 238
+    loc: 54
+    sha256: 8e77f283c0662944b4d94921bccfd29d1cdcde2c49c5b2f0d8b0b96681ee7998
+  - file: .claude/scripts/session-graph-build.py
+    function: build_graph
+    line: 418
+    end_line: 469
+    loc: 52
+    sha256: dc43cce2dcd02989ce87bfee7e5d335de292623abc723bb3c0a4ae5dc944f2ac
+  - file: .claude/scripts/session-graph-build.py
+    function: _encrypt_bytes
+    line: 500
+    end_line: 561
+    loc: 62
+    sha256: aa3aa2d216fe66adff00183617affa5739348c8290638d78994fd4217218fe3c
+  - file: .claude/scripts/session-graph-build.py
+    function: main
+    line: 626
+    end_line: 724
+    loc: 99
+    sha256: 6a0536ebf8e40e0e26d67c80cb8136a9f3904c6bf9862d65d25596a1de5682eb
+  - file: .claude/scripts/session-resume.py
+    function: main
+    line: 301
+    end_line: 359
+    loc: 59
+    sha256: a0cc7441c32ad6746c78704a4cc2ade60dedf1b283ce31d29cfa3977e3134955
+  - file: .claude/scripts/skill-index-build.py
+    function: build_index
+    line: 260
+    end_line: 400
+    loc: 141
+    sha256: 008399498a31cdd359b00f391cec7601f9e2dc9988a37fef97da1263363e9ff3
+  - file: .claude/scripts/skill-index-build.py
+    function: _cli
+    line: 443
+    end_line: 530
+    loc: 88
+    sha256: cce16ed232257d85e196b7b98dbc9577b596e5031a11ba5ea0a25afc263369e5
+  - file: .claude/scripts/skill-patch-apply.py
+    function: _load_and_verify_proposal
+    line: 538
+    end_line: 595
+    loc: 58
+    sha256: c9b9f95312fdea2407c0c2d694365df55eb5a3da00d731904ddead7981b82071
+  - file: .claude/scripts/skill-patch-apply.py
+    function: _handle_promote
+    line: 635
+    end_line: 717
+    loc: 83
+    sha256: e8832eac9230945afb04ee30b2d8738501b35c3cabb24f7c73492830e1344463
+  - file: .claude/scripts/skill-patch-apply.py
+    function: _handle_create_new_skill_shadow
+    line: 720
+    end_line: 822
+    loc: 103
+    sha256: c3d76f226bcdf879d9abb683fb3c686f812a8664b972c0cd03ea23a92b0f92bf
+  - file: .claude/scripts/skill-patch-apply.py
+    function: _handle_default_apply
+    line: 825
+    end_line: 917
+    loc: 93
+    sha256: 543dd0b28d81e766d611ec0271e2df35e486d461aad461a45bfd43f160918f48
+  - file: .claude/scripts/skill-patch-apply.py
+    function: main
+    line: 920
+    end_line: 1084
+    loc: 165
+    sha256: a4ac73534cab3b382d131d9040a5c5ad63cc7d47fef379ee4d4e5b9fdf5ed806
+  - file: .claude/scripts/skill-patch-propose.py
+    function: _scan_single_lesson
+    line: 410
+    end_line: 465
+    loc: 56
+    sha256: 07c654ade1bf41517f273848d568b7d0f5330c60e597dbd57a721a4f3f3d9e1a
+  - file: .claude/scripts/skill-patch-propose.py
+    function: _write_proposal_file
+    line: 553
+    end_line: 619
+    loc: 67
+    sha256: bc4c8163232afe46e2f50d12d917a431eab7d96e75d2ec81e9a6f997874251ea
+  - file: .claude/scripts/skill-patch-propose.py
+    function: main
+    line: 622
+    end_line: 686
+    loc: 65
+    sha256: e83cfad3458a771835b1b8bab364448698fad0aafe4b900c7139bc5ef1001d18
+  - file: .claude/scripts/skill-retrieve.py
+    function: static_skill_map_lookup
+    line: 225
+    end_line: 287
+    loc: 63
+    sha256: 2e48ea37697e616df2ce150cfc459c15d126f663d2505e9115f43e070c7a2ec7
+  - file: .claude/scripts/skill-retrieve.py
+    function: _cli
+    line: 336
+    end_line: 417
+    loc: 82
+    sha256: 4a351cab76b0c0b33582ae7cffb291f628910b71947d6f6bbbefd0f6de4ad697
+  - file: .claude/scripts/skill_grandfather_parser.py
+    function: parse_grandfather_file
+    line: 73
+    end_line: 164
+    loc: 92
+    sha256: fd4ddfc849aaf8cef2b899d1a044558eff223600314ec7b7443a9ed31c46ef12
+  - file: .claude/scripts/spot-check-findings.py
+    function: main
+    line: 119
+    end_line: 206
+    loc: 88
+    sha256: 490eca4d67fd093bb4a2b95ac1d960ea5e26f84f4b13a09eede957037c337655
+  - file: .claude/scripts/squad-export.py
+    function: export_squad
+    line: 268
+    end_line: 331
+    loc: 64
+    sha256: a953159d78fcd95181e9541e46a4094e2f73eb02841a4b711366ee6631940dcc
+  - file: .claude/scripts/squad-export.py
+    function: main
+    line: 339
+    end_line: 433
+    loc: 95
+    sha256: 97fe8ae06e05b994757f71c88c938f4893aa6d458e98df2989d4c329317a175b
+  - file: .claude/scripts/squad-import.py
+    function: import_squad
+    line: 497
+    end_line: 563
+    loc: 67
+    sha256: 7acb9623bafcb607da6d264529f21d30bd6d943d4e911569664dddebbe286262
+  - file: .claude/scripts/squad-import.py
+    function: main
+    line: 569
+    end_line: 711
+    loc: 143
+    sha256: b2cd32b14f41349f555a33c4f8fc28f9eeb952a11bac7bbcd078e59b070a162e
+  - file: .claude/scripts/status.py
+    function: render_human
+    line: 228
+    end_line: 288
+    loc: 61
+    sha256: 91abcd3b0640f7c6a7426fec898a0b1881fc1cd3bd35d58d03a4fd5fd49c197c
+  - file: .claude/scripts/swarm/_benchmark_replay.py
+    function: replay
+    line: 201
+    end_line: 259
+    loc: 59
+    sha256: 5b40aaf058c4551e23ee8229b31453f9986650b0cd5a33dfc0f064acfa6cbfb7
+  - file: .claude/scripts/swarm/_parent_death.py
+    function: _kqueue_backend
+    line: 80
+    end_line: 141
+    loc: 62
+    sha256: 42908c7c9faa23fe1d8125199581a91624db66f693989ade37f4ca2858373358
+  - file: .claude/scripts/swarm/_process_group.py
+    function: escalated_kill
+    line: 116
+    end_line: 171
+    loc: 56
+    sha256: 125c31628fa3ba4bfab305911899b80f2e67436f48d69e84ecfe582a56f9aa1b
+  - file: .claude/scripts/swarm/_subagent_fabrication.py
+    function: extract_response_text
+    line: 130
+    end_line: 180
+    loc: 51
+    sha256: 8e95c1c77934237c03eff54c41b8dc51a32ab002361a32425118e53aab719430
+  - file: .claude/scripts/swarm/_subagent_fabrication.py
+    function: _cli_main
+    line: 296
+    end_line: 435
+    loc: 140
+    sha256: fd88223be66cf5176fe60c538c796d3f1232035c7ccd55ecd405dace35946b36
+  - file: .claude/scripts/swarm/coordinator.py
+    function: tick
+    line: 230
+    end_line: 308
+    loc: 79
+    sha256: a6db8ee29eadd4a1372645061cd7e2a938e48d81ae8f59670e9b464863e89592
+  - file: .claude/scripts/swarm/coordinator.py
+    function: main
+    line: 351
+    end_line: 403
+    loc: 53
+    sha256: 908bba254c7e93e28c9f34a95287452afa3825d770538cf0b18f685d80244bf8
+  - file: .claude/scripts/swarm/kill_switch.py
+    function: evaluate_kill_switch
+    line: 132
+    end_line: 234
+    loc: 103
+    sha256: 5afe2b35f1e42fe9e65f5d5109946c3fee80f7846a954c49de3ac89b4df86614
+  - file: .claude/scripts/swarm/test_mcp_injection_repro.py
+    function: format_markdown
+    line: 298
+    end_line: 395
+    loc: 98
+    sha256: 4e54aae04599406c2e1dd9cf6ab8f8896604930cddeb62eefa965de54fe0391f
+  - file: .claude/scripts/swarm/test_mcp_injection_repro.py
+    function: run
+    line: 450
+    end_line: 503
+    loc: 54
+    sha256: b82786494437c5d27105b3fa95dd6b701231cade69a899d30ad2f96c2584513f
+  - file: .claude/scripts/swarm/test_rail_anomaly_repro.py
+    function: discriminate_hypotheses
+    line: 443
+    end_line: 503
+    loc: 61
+    sha256: f0d318ea75f6a13547b5988b8fd8dd3e0707cf5c48fa9471aba30cea1554bb6b
+  - file: .claude/scripts/swarm/test_rail_anomaly_repro.py
+    function: _cli_main
+    line: 511
+    end_line: 582
+    loc: 72
+    sha256: d612fc6e67b59a1c55b9473f6fbf5d10e953e286bff1b8c7683680cdf31527c9
+  - file: .claude/scripts/swarm/tests/test_coordinator_production_integration.py
+    function: test_tick_production_integration_detects_real_parent_death
+    line: 213
+    end_line: 341
+    loc: 129
+    sha256: 882b6cfc4ecf8b6bd054f50029aaecf68721a8196deca327c71da265d7ec759e
+  - file: .claude/scripts/swarm/tests/test_coordinator_production_integration.py
+    function: test_coordinator_halt_triggers_real_escalated_kill_outcome
+    line: 350
+    end_line: 434
+    loc: 85
+    sha256: 6c99b72b7a9f61794667b88b059abaa3d34eef7f4539dd79fd77489f5701fe75
+  - file: .claude/scripts/swarm/tests/test_parent_death_integration.py
+    function: test_child_killed_on_parent_sigkill
+    line: 144
+    end_line: 196
+    loc: 53
+    sha256: 56b23ddeb72c58514cc62f52140ee8e5185c72124f8921935af6d995cedf87de
+  - file: .claude/scripts/tests/test_audit_dashboard.py
+    function: test_events_stream_resets_pos_on_rotation
+    line: 150
+    end_line: 203
+    loc: 54
+    sha256: 6dafad6bd6a2d97df7c15db2f75a1045d0d7aebb293d269b0ddf1c2c2e2e4cdc
+  - file: .claude/scripts/tests/test_ceo_cost_stream.py
+    function: test_handles_file_replacement
+    line: 456
+    end_line: 518
+    loc: 63
+    sha256: 82dfbd3aa119d31365a81aea6a952585e26ed96384200ef7801432aab32b481c
+  - file: .claude/scripts/tests/test_ceo_escalation_detector.py
+    function: test_main_emit_metrics_appends_record
+    line: 518
+    end_line: 568
+    loc: 51
+    sha256: c73ddc5435b5b65413349d237591ded9958bad1896ac7464aefd206007b3311f
+  - file: .claude/scripts/tests/test_chaos_inject_lockdown.py
+    function: test_wrapper_modes_behave_correctly_when_executed
+    line: 314
+    end_line: 368
+    loc: 55
+    sha256: df01367cd84b906b023e1c18f0f7da64d2842fc689f2eb569760cb50dbadbe82
+  - file: .claude/scripts/tests/test_compare_adopters.py
+    function: _sample_report
+    line: 33
+    end_line: 84
+    loc: 52
+    sha256: 2b389a23f19f92b19190fcd28346fcd3507cc77b80c33218e161684a961ad071
+  - file: .claude/scripts/tests/test_otel_export.py
+    function: test_payload_arrives_at_mock
+    line: 483
+    end_line: 541
+    loc: 59
+    sha256: a118767052c290a8e4c599b3f27f7ac6d4c965500c42f1c2103e581c6cbff00d
+  - file: .claude/scripts/tests/test_plan_schema_enforcement.py
+    function: _seed_minimal_repo
+    line: 38
+    end_line: 99
+    loc: 62
+    sha256: 3500331e0803ad98e975e1ceed8765ff6dc989cf45e5a87f3f12d48ec6f938fe
+  - file: .claude/scripts/tests/test_session_graph.py
+    function: _write_fixture_audit
+    line: 129
+    end_line: 183
+    loc: 55
+    sha256: 14a01aed784e5897f457c6276382facc6fa59ca36cb378bf225143434c199fa9
+  - file: .claude/scripts/tests/test_session_graph.py
+    function: test_ciphertext_round_trip_with_gpg
+    line: 413
+    end_line: 499
+    loc: 87
+    sha256: 197125887ce5c9caab72cb9eeb4f9a92c8ede50c3393dbfb7a549662756c5986
+  - file: .claude/scripts/tests/test_session_resume.py
+    function: setUp
+    line: 59
+    end_line: 115
+    loc: 57
+    sha256: 254a112b0ed8bf1a90fcaa789e944db54f088bd230f0a551d66b7c768e8cf583
+  - file: .claude/scripts/tests/test_squad_import.py
+    function: _add_minimum_valid_squad_members
+    line: 129
+    end_line: 192
+    loc: 64
+    sha256: 84d422f1763534347cf0567f28c80196c841c1253bd092f22578c81b47bf2466
+  - file: .claude/scripts/tier_policy_cli/apply.py
+    function: _project_monthly_cost_delta
+    line: 236
+    end_line: 332
+    loc: 97
+    sha256: 35700f72edd4c3a1d6dda428a88c7e9d3f90f3fb455ae3a272f8a5684830e200
+  - file: .claude/scripts/tier_policy_cli/apply.py
+    function: _write_agent_frontmatter
+    line: 378
+    end_line: 444
+    loc: 67
+    sha256: 9452023754f7cff4901a7d66c983826bd1181ebdc5b6623885060f570bbe1c32
+  - file: .claude/scripts/tier_policy_cli/apply.py
+    function: _emit_adr_amendment_scaffold
+    line: 569
+    end_line: 655
+    loc: 87
+    sha256: 28c5c334ecae20713731ecbeda37b055eebdef2541bee7a4a1534a697d104de3
+  - file: .claude/scripts/tier_policy_cli/apply.py
+    function: _run_locked_batch
+    line: 701
+    end_line: 762
+    loc: 62
+    sha256: be9932b99674e636e2d8d1c4274b6a74684c662fac3eac21721b64ffeb219682
+  - file: .claude/scripts/tier_policy_cli/apply.py
+    function: apply
+    line: 765
+    end_line: 863
+    loc: 99
+    sha256: c7ba730b7b45594b349fcc4adc12392fbc0fcdcfb697d9468331c13a35d6d8cc
+  - file: .claude/scripts/tier_policy_cli/apply.py
+    function: _apply_promote
+    line: 924
+    end_line: 1026
+    loc: 103
+    sha256: efe8880f2a65571e72eee52acaeec5030d53d6f0ef69a8dd1e987a1374b88770
+  - file: .claude/scripts/tier_policy_cli/cli.py
+    function: cmd_apply
+    line: 266
+    end_line: 316
+    loc: 51
+    sha256: bb1748353d206dfc98bd58014d5b02dcd64b090feda2620b842cfa3dd740763e
+  - file: .claude/scripts/tier_policy_cli/cli.py
+    function: cmd_owner_sign
+    line: 319
+    end_line: 421
+    loc: 103
+    sha256: 20eabb0c875108bc8e25791d581e1716f8ee388fd0486f7811603c9b2b4a59da
+  - file: .claude/scripts/tier_policy_cli/cli.py
+    function: cmd_verify
+    line: 424
+    end_line: 477
+    loc: 54
+    sha256: 6b502257922f9e0709f830a222abd1cf54f987dbd796a6280613c18640a9e19b
+  - file: .claude/scripts/tier_policy_cli/cli.py
+    function: build_parser
+    line: 695
+    end_line: 785
+    loc: 91
+    sha256: c832cf34a6366e6c9a53a846182e2e7e83ebbc2071b72a875a01fc91ebfef051
+  - file: .claude/scripts/tier_policy_cli/learn.py
+    function: _verify_fixture_corpus
+    line: 282
+    end_line: 385
+    loc: 104
+    sha256: 89a1c25012fac198a2d8bfc214fb1d3d03791f6bcf2c3118cd96714da69100a7
+  - file: .claude/scripts/tier_policy_cli/learn.py
+    function: _decide_for_role
+    line: 569
+    end_line: 675
+    loc: 107
+    sha256: 2d7459d9b4de72782b064ab52a945f808ce29ad3fa6b4b3f193f4dc29ae1ee6c
+  - file: .claude/scripts/tier_policy_cli/learn.py
+    function: learn
+    line: 703
+    end_line: 845
+    loc: 143
+    sha256: c6046fd613df4461ac773334d6d12ae87451e64d874af7631aab8c8d140cc9bc
+  - file: .claude/scripts/tier_policy_cli/loader.py
+    function: _validate_assignment
+    line: 232
+    end_line: 297
+    loc: 66
+    sha256: 44cd0205171d219b3fc7553dcbe41587b34fe0c8377662aa1cc4de7ec1b78f57
+  - file: .claude/scripts/tier_policy_cli/loader.py
+    function: _validate_policy_dict
+    line: 300
+    end_line: 383
+    loc: 84
+    sha256: 6e44e6b43f26d7813fb752f6d0d752aaff0527de2428494d6dad6d73f4e7dba1
+  - file: .claude/scripts/tier_policy_cli/loader.py
+    function: load_policy
+    line: 409
+    end_line: 526
+    loc: 118
+    sha256: 762cb6261ff56042b85cf4c25851f6785432014ef9cc30f2df0d8a45c837772d
+  - file: .claude/scripts/tier_policy_cli/tests/test_adversarial.py
+    function: test_truncated_sigchain_vs_policy_tip_length_mismatch_flagged
+    line: 433
+    end_line: 518
+    loc: 86
+    sha256: 3a6c4264b0f4fe19b5a7c0835337a782d78a765b59091f2fd8f7b58004e239db
+  - file: .claude/scripts/tier_policy_cli/tests/test_apply.py
+    function: test_concurrent_apply_serialized
+    line: 533
+    end_line: 615
+    loc: 83
+    sha256: 3d4156730520a22388024c8c877324d8e4293fb994c452cf4dd4ba383f7cabd3
+  - file: .claude/scripts/tier_policy_cli/tests/test_apply.py
+    function: test_lock_timeout_reports_correctly
+    line: 617
+    end_line: 674
+    loc: 58
+    sha256: 5c45321b937298348d83f7831217bf549f1d8edfe05e702fb84f7966dc726513
+  - file: .claude/scripts/tier_policy_cli/tests/test_learn_mutation.py
+    function: _write_cell_reports
+    line: 108
+    end_line: 168
+    loc: 61
+    sha256: c910266207db4e0f08c1581c8ea511d7b12feac58b5593599509ccdd18433be0
+  - file: .claude/scripts/tournament/check_fixture.py
+    function: scan_fixture_fields
+    line: 95
+    end_line: 153
+    loc: 59
+    sha256: 02ce9811742f2eeed90ca81d7ae22c12bcca21d4fab01a5a3be6cdea472aa0ff
+  - file: .claude/scripts/tournament/check_fixture.py
+    function: check_file
+    line: 156
+    end_line: 214
+    loc: 59
+    sha256: 79f05f18e49257e0ff0913cadcd726b22a181b62152e018bab9147cd3d48f818
+  - file: .claude/scripts/tournament/check_fixture.py
+    function: main
+    line: 217
+    end_line: 267
+    loc: 51
+    sha256: 9ebf4b2cae93cccfb00f00b409ff29d3f6b25c7c5e7c96b21e44ff21e58e9ae4
+  - file: .claude/scripts/tournament/judge.py
+    function: parse_judge_verdict
+    line: 87
+    end_line: 142
+    loc: 56
+    sha256: 8a6247659473521e17328cb017fafd76a932cbf20e90f598adf7353e7a96d9fe
+  - file: .claude/scripts/tournament/loader.py
+    function: _validate_record
+    line: 90
+    end_line: 210
+    loc: 121
+    sha256: be5ee7c9c5213ebcd66b7472b6b2ba05705a18af1e7b66e8a60a5bfa1160d8cf
+  - file: .claude/scripts/tournament/reporter.py
+    function: validate_adr052
+    line: 116
+    end_line: 196
+    loc: 81
+    sha256: bea63c6db6b5b8eb94063a3abcff8f4ec7eb58759395d08ae90b617308700dd2
+  - file: .claude/scripts/tournament/runner.py
+    function: project_cost
+    line: 168
+    end_line: 219
+    loc: 52
+    sha256: 8003f59a601f8c59e9d0fcc8cf56374251db17c9e8bfa83ab61ce2963f78b721
+  - file: .claude/scripts/tournament/runner.py
+    function: run_tournament
+    line: 465
+    end_line: 643
+    loc: 179
+    sha256: bdbbec468fb18a609a6dcbc1ca0ec4b5543baeefbf36ad4dbfaedf720a051f21
+  - file: .claude/scripts/tournament/runner.py
+    function: _cli
+    line: 649
+    end_line: 703
+    loc: 55
+    sha256: 989ec0af38b9da30b0b52c1db2b12761d2dd7394feb076bfa2b83cffe1b7901d
+  - file: .claude/scripts/tournament/runner.py
+    function: _task_worker
+    line: 525
+    end_line: 621
+    loc: 97
+    sha256: f0713f1f557f6e99d69e670cde9926d08b35b2d0fc9f20505e89171b2ed0ab0e
+  - file: .claude/scripts/tournament/tests/test_reporter_golden.py
+    function: _build_deterministic_report
+    line: 30
+    end_line: 149
+    loc: 120
+    sha256: 1e02aef1be7493032f2d15a4ff5041459198f40d03612492da37e938568e0697
+  - file: .claude/scripts/tournament/tests/test_tournament_e2e_smoke.py
+    function: test_full_pipeline_under_10s
+    line: 23
+    end_line: 143
+    loc: 121
+    sha256: 34c51234b07599c10d88ae5cb48bc1819e1defddb71e5a336e876223fbde7623
+  - file: .claude/scripts/validate-spec-context.py
+    function: validate
+    line: 50
+    end_line: 127
+    loc: 78
+    sha256: 5bd0e220554bc41d8ea8992f354ad483f8eb958c29f9fe42f22ac46ce1155272
+  - file: .claude/scripts/validate-squad-contract.py
+    function: _collect_vetoes
+    line: 58
+    end_line: 132
+    loc: 75
+    sha256: 06ae7cc391ed6d2f6778aa6053ba08a30a08600ada96d00ea504ee760fb792d2
+  - file: .claude/scripts/validate-squad-contract.py
+    function: validate_squad
+    line: 168
+    end_line: 283
+    loc: 116
+    sha256: 150e41fb966842f10804fdbaf88d8cc86d5ee0e9defc81f0e5a05c2f7d9bf2c4

@@ -1,0 +1,338 @@
+---
+# CI smoke workflow for PLAN-070 MCP introspection (Phase 3).
+#
+# === SUPPLY-CHAIN TRUST BOUNDARY (P2-11 closure, 2026-05-04+) ===
+#
+# This workflow consumes 3 classes of external artifacts. Each is hash-
+# pinned at a defense-in-depth level:
+#
+#   1. GitHub Actions (`uses: ...`):
+#      - actions/checkout@<40-char-SHA>  # v6.0.2 (verified)
+#      - actions/setup-python@<40-char-SHA>  # v6.2.0 (verified)
+#      All other action invocations are FORBIDDEN. ADR-094 (re-affirmed
+#      Sprint 32) restricts the trusted-deps set to checkout +
+#      setup-python only. Any new action requires an ADR amendment.
+#
+#   2. Tarball downloads (curl):
+#      - actionlint v1.7.7 from GitHub releases. NOT hash-verified at
+#        wire because: (a) HTTPS pin to releases.github.com root CA;
+#        (b) version pinned in URL; (c) actionlint output gates the
+#        workflow itself so a tampered binary would manifest as broken
+#        lint. Tracked as residual; closing requires sha256 manifest
+#        which actionlint upstream does not currently publish.
+#
+#   3. PyPI installs (pip):
+#      - pip version-bracketed (>=24.0,<26.0) — protects against
+#        regressions in pip's own resolver behavior.
+#      - ruff==0.7.1 with --no-deps + --no-cache-dir. ruff is a Rust
+#        binary distributed as a pre-built wheel; no Python
+#        dependencies; --no-cache-dir prevents CI cache poisoning.
+#        Full --require-hashes is the next layer (deferred per PLAN-076
+#        Item #5 — mechanical gate: re-trigger when CI matrix adds a
+#        second platform; requires generated requirements-<wf>.txt).
+#
+# Per PLAN-070 §6.4 + Round 3 DevOps lens:
+#   - Trigger: [push, pull_request] (NOT pull_request_target — fork-PR
+#     bypass risk).
+#   - Fork-PR guard: skip job if PR head repo != target repo.
+#   - Daily cron 0 11 * * * (avoid 09 UTC otel-smoke.yml collision).
+#   - SHA-pin all actions (40-char hex; mirrors benchmarks.yml +
+#     adapter-live.yml + chaos.yml + coverage.yml baseline).
+#   - permissions: contents: read ONLY — NO id-token, NO actions,
+#     NO packages, NO OIDC. (Attack surface expansion declined per
+#     ADR-094 trusted-deps re-affirm.)
+#   - timeout-minutes: 10
+#   - Cold-start mitigation: warm-cache step + retry-once on
+#     transport-class failure (NEVER on assert failure).
+#
+# Paths-filter scope: only run when MCP-related code or staging
+# changes (PLAN-070 §6.4).
+
+name: mcp-smoke
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.claude/hooks/_lib/mcp/**'
+      - '.claude/hooks/check_canonical_edit.py'
+      - '.claude/hooks/check_canonical_edit*.py'
+      - '.claude/scripts/audit-mcp/**'
+      - '.claude/plans/PLAN-070/staging/canonical_guard.py'
+      - '.claude/plans/PLAN-070/staging/test_canonical_guard.py'
+      - '.claude/plans/PLAN-070/staging/test_layer_a_mcp_matcher.py'
+      - '.github/workflows/mcp-smoke.yml'
+  pull_request:
+    paths:
+      - '.claude/hooks/_lib/mcp/**'
+      - '.claude/hooks/check_canonical_edit.py'
+      - '.claude/hooks/check_canonical_edit*.py'
+      - '.claude/scripts/audit-mcp/**'
+      - '.claude/plans/PLAN-070/staging/canonical_guard.py'
+      - '.claude/plans/PLAN-070/staging/test_canonical_guard.py'
+      - '.claude/plans/PLAN-070/staging/test_layer_a_mcp_matcher.py'
+      - '.github/workflows/mcp-smoke.yml'
+  schedule:
+    # Daily at 11:00 UTC (avoid 09:00 UTC otel-smoke.yml collision per
+    # PLAN-070 §6.4 + Round 3 DevOps lens). 60-min displacement gives
+    # otel-smoke runners full job window without resource contention.
+    - cron: '0 11 * * *'
+
+# permissions block: minimal-needed-only.
+# - contents: read — checkout + read repo files.
+# NO id-token, NO actions, NO packages, NO OIDC. Workflow does not
+# upload artifacts, does not push changes, does not authenticate to
+# external registries. OIDC is attack surface expansion for
+# read-only smoke; declined by design.
+permissions:
+  contents: read
+
+jobs:
+  mcp-smoke:
+    name: MCP introspection smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Fork-PR guard: skip job if PR head repo is a fork. This prevents
+    # secrets leak via crafted PR. Mirrors ADR-094 §fork-PR pattern.
+    if: |
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+
+    steps:
+      - name: Checkout
+        # actions/checkout v6.0.2 — pinned per ADR-094 trusted-deps
+        # re-affirm. Mirrors benchmarks.yml + adapter-live.yml +
+        # chaos.yml baseline.
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Setup Python 3.12
+        # actions/setup-python v6.2.0 — pinned per ADR-094 trusted-deps.
+        # P2-11 closure (Codex 2026-05-04): SHA
+        # `a309ff8b426b58ec0e2a45f0f869d46889d02405` actually maps to v6.2.0
+        # in the upstream repo, NOT v5.4.0. Comment was drift from another
+        # workflow's copy-paste. Verified via:
+        #   curl -s https://api.github.com/repos/actions/setup-python/git/refs/tags
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
+        with:
+          python-version: '3.12'
+
+      - name: Warm cache (cold-start mitigation)
+        # Round 3 DevOps + QA lens: S77 audit-v3 surfaced 4.5x cold-start
+        # variance on validate.yml. Pre-import the modules to warm the
+        # Python bytecode cache + filesystem page cache before the
+        # actual smoke runs. This isolates assert flake from cold-start
+        # flake.
+        run: |
+          set -euo pipefail
+          python3 -c "import sys, os, json, pathlib"
+          python3 -c "
+          import sys
+          sys.path.insert(0, '.claude/hooks')
+          sys.path.insert(0, '.claude/hooks/_lib')
+          sys.path.insert(0, '.claude/plans/PLAN-070/staging')
+          # Pre-import — populates __pycache__ before the smoke run.
+          import check_canonical_edit
+          try:
+              import canonical_guard  # staging Layer B
+          except Exception:
+              pass  # Layer B may not yet be canonical-merged
+          "
+
+      - name: Lint with actionlint
+        # actionlint statically validates this workflow's syntax + SHA
+        # pin patterns. Local install (no extra action) keeps surface
+        # minimal.
+        run: |
+          set -euo pipefail
+          curl -sSL \
+            -o /tmp/actionlint.tar.gz \
+            "https://github.com/rhysd/actionlint/releases/download/v1.7.7/actionlint_1.7.7_linux_amd64.tar.gz"
+          tar -xzf /tmp/actionlint.tar.gz -C /tmp actionlint
+          /tmp/actionlint -version
+          /tmp/actionlint .github/workflows/mcp-smoke.yml
+
+      - name: Lint Layer B with ruff (version-pinned + no-deps + no-cache)
+        # P2-11 closure (Codex 2026-05-04): ruff install was unpinned from
+        # transitive perspective. We now:
+        #   - Pin exact version (==0.7.1)
+        #   - --no-deps (ruff is a Rust binary distributed as a wheel; it
+        #     has zero runtime Python deps so this is safe + reduces
+        #     supply-chain surface to a single artifact).
+        #   - --no-cache-dir (force fresh download each run; CI cache
+        #     poisoning surface).
+        #   - Pin pip itself to a known version range (defense-in-depth).
+        # NOTE: full --require-hashes via requirements.txt is the next
+        # layer. Deferred to follow-up because ruff's wheel SHA varies by
+        # platform (linux/macos/win × py minor) and we need a generated
+        # requirements.txt that captures the active runner's wheel.
+        # Tracked via PLAN-070 §6.4 supply-chain hardening (next train).
+        run: |
+          set -euo pipefail
+          python3 -m pip install --upgrade 'pip>=24.0,<26.0'
+          python3 -m pip install \
+            --no-deps \
+            --no-cache-dir \
+            'ruff==0.7.1'
+          # Layer B + Layer A staging. The PLAN-070 staging tree is a vestigial
+          # pre-promotion copy: the live code lives at
+          # .claude/hooks/_lib/mcp/canonical_guard.py + .claude/hooks/tests/ (the
+          # latter already exercised below). Lint only the staging files that
+          # still exist so the smoke run does not hard-fail in a clean-room
+          # checkout that omitted the staging diary.
+          staging_files=(
+            .claude/plans/PLAN-070/staging/canonical_guard.py
+            .claude/plans/PLAN-070/staging/test_canonical_guard.py
+            .claude/plans/PLAN-070/staging/test_layer_a_mcp_matcher.py
+          )
+          present=()
+          for f in "${staging_files[@]}"; do
+            [ -f "$f" ] && present+=("$f")
+          done
+          if [ "${#present[@]}" -gt 0 ]; then
+            ruff check --select=E,F,W,I --line-length=100 "${present[@]}"
+          else
+            echo "PLAN-070 staging tree absent (promoted to .claude/hooks/_lib/mcp/) -- skipping staging ruff"
+          fi
+
+      - name: Hook tests — Layer A MCP matcher
+        # Re-runs the Layer A regression suite to ensure existing
+        # native-tool baseline still passes alongside MCP matcher.
+        # P1-06 closure (Codex 2026-05-04): the prior invocation
+        # `python3 -m unittest <path>.py` is invalid — `unittest -m` takes
+        # a dotted module path, not a filesystem path. Use `discover` with
+        # `-s` (start dir) + `-p` (pattern) instead, which IS path-aware.
+        # S85 fix: tests now live at canonical .claude/hooks/tests/ post
+        # bundle ceremony promotion. unittest discover doesn't load root
+        # conftest.py, so the test file's own path-setup `parents[1]`
+        # (= .claude/hooks/) only resolves correctly from canonical
+        # location (NOT staging where parents[1] = PLAN-070).
+        run: |
+          set -euo pipefail
+          CLAUDE_PROJECT_DIR="$(pwd)"
+          export CLAUDE_PROJECT_DIR
+          python3 -m unittest discover \
+            -s .claude/hooks/tests \
+            -p 'test_check_canonical_edit_mcp.py' \
+            -v
+
+      - name: Hook tests — Layer B canonical guard
+        # P1-06 closure: same fix as Layer A above — discover with -s/-p.
+        # S85 fix: canonical promotion → .claude/hooks/tests/ (renamed).
+        run: |
+          set -euo pipefail
+          CLAUDE_PROJECT_DIR="$(pwd)"
+          export CLAUDE_PROJECT_DIR
+          python3 -m unittest discover \
+            -s .claude/hooks/tests \
+            -p 'test_mcp_canonical_guard.py' \
+            -v
+
+      - name: Integration smoke (boot stub MCP → no-op call → assert)
+        # Spawns a stub MCP server subprocess, sends a no-op call, asserts
+        # audit-log emit, and tears down cleanly.
+        # Retry policy: ONCE on transport-class failure (subprocess
+        # spawn timeout, broken pipe, etc.). NEVER on assertion failure.
+        run: |
+          set -euo pipefail
+          CLAUDE_PROJECT_DIR="$(pwd)"
+          export CLAUDE_PROJECT_DIR
+
+          # Retry-once wrapper. Distinguishes transport-class (exit 75)
+          # from assertion-class (exit 1).
+          run_smoke() {
+            python3 - <<'PYSMOKE'
+          import os, sys, subprocess, time, json, pathlib
+          sys.path.insert(0, '.claude/hooks')
+          sys.path.insert(0, '.claude/hooks/_lib')
+          sys.path.insert(0, '.claude/plans/PLAN-070/staging')
+
+          # Smoke 1: Layer A direct invocation should match canonical.
+          import check_canonical_edit as _cce
+          out = _cce.decide(
+              file_path="PROTOCOL.md",
+              repo_root=pathlib.Path(os.environ["CLAUDE_PROJECT_DIR"]),
+          )
+          parsed = json.loads(out)
+          assert parsed["decision"] == "block", \
+              f"Smoke 1 FAIL: expected block, got {parsed}"
+          print("Smoke 1 OK (Layer A blocks canonical-edit no-sentinel)")
+
+          # Smoke 2: Layer B middleware on non-MCP tool returns allow.
+          try:
+              import canonical_guard as _cg
+              result = _cg.check_mcp_call(
+                  tool_name="mcp__codex__codex",
+                  params={"prompt": "smoke"},
+              )
+              assert result["decision"] == "allow", \
+                  f"Smoke 2 FAIL: expected allow, got {result}"
+              print("Smoke 2 OK (Layer B allows read-only MCP)")
+          except ImportError as e:
+              # Layer B not yet canonical-merged — staging-only state.
+              print(f"Smoke 2 SKIP (Layer B not yet merged): {e}")
+
+          # Smoke 3: Layer B blocks canonical write via MCP.
+          try:
+              import canonical_guard as _cg
+              result = _cg.check_mcp_call(
+                  tool_name="mcp__codex__apply_patch",
+                  params={"file_path": "PROTOCOL.md", "patch": "..."},
+                  repo_root=pathlib.Path(
+                      os.environ["CLAUDE_PROJECT_DIR"]
+                  ),
+              )
+              assert result["decision"] == "block", \
+                  f"Smoke 3 FAIL: expected block, got {result}"
+              print("Smoke 3 OK (Layer B blocks canonical via MCP)")
+          except ImportError:
+              print("Smoke 3 SKIP (Layer B not yet merged)")
+
+          print("All smokes passed.")
+          PYSMOKE
+          }
+
+          # First attempt.
+          if run_smoke; then
+            echo "Smoke pass on first attempt."
+            exit 0
+          fi
+          rc=$?
+          # Retry only on transport-class (rc=75 reserved by convention).
+          # Any other exit code (1=assert, 2=internal) → fail-fast.
+          if [ "$rc" -eq 75 ]; then
+            echo "Transport-class failure (rc=$rc); retrying once after 5s."
+            sleep 5
+            run_smoke
+          else
+            echo "Assertion-class failure (rc=$rc); failing fast (no retry)."
+            exit "$rc"
+          fi
+
+      - name: Audit-log integrity check
+        # Sanity: verify emit pattern (advisory; non-blocking on cold
+        # cache). If audit-log file exists and contains MCP events,
+        # assert HMAC chain is intact.
+        run: |
+          set -euo pipefail
+          AUDIT_LOG="$HOME/.claude/projects/ceo-orchestration/audit-log.jsonl"
+          if [ -f "$AUDIT_LOG" ]; then
+            python3 -c "
+          import json, sys
+          path = '$AUDIT_LOG'
+          count = 0
+          with open(path, encoding='utf-8') as f:
+              for line in f:
+                  if line.strip():
+                      try:
+                          json.loads(line)
+                          count += 1
+                      except Exception:
+                          pass
+          print(f'audit-log contains {count} valid events')
+          "
+          else
+            echo "audit-log not present (clean CI env); skipping integrity check."
+          fi

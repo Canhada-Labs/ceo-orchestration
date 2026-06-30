@@ -1,0 +1,9 @@
+{
+  "hook_event_name": "PreToolUse",
+  "session_id": "sess-paired-bash",
+  "tool_use_id": "toolu_paired_bash_01",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "echo hello"
+  }
+}

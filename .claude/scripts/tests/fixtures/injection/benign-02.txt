@@ -1,0 +1,5 @@
+## Issue summary
+
+The previous instructions to refactor the auth module are still pending.
+We need to ignore the legacy code path because it's been deprecated for
+six months. From now on, all auth flows will go through the new module.

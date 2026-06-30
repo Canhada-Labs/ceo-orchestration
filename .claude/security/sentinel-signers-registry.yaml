@@ -1,0 +1,60 @@
+# .claude/security/sentinel-signers-registry.yaml
+# PLAN-089 Wave C.3 — sentinel signer registry (NEW canonical source).
+#
+# GENESIS first-write requires hot-key + cold-key #1 JOINT signature
+# (two detached .asc files at the same commit, both verifying the same
+# YAML bytes). Subsequent edits require cold-key 2-of-3 quorum.
+# See ADR-121 §5 for bootstrap doctrine + _BOOTSTRAP_REGISTRY_SHA256 pin.
+#
+# Parser contract: .claude/hooks/_lib/sentinel_signers.py
+# Subset YAML only: scalar top-level keys, one `signers:` block of
+# `- key: value` mappings, no flow style, no anchors/aliases, no
+# multi-doc separators, no multi-line scalars.
+#
+# Placeholders flagged for Wave C.6 Owner ceremony:
+#   - bootstrap_sha256 recomputed AFTER cold-key fingerprints are filled
+#   - Cold-key fingerprints below use a 40-hex SENTINEL pattern that
+#     parses cleanly under the strict ^[0-9A-F]{40}$ regex but is
+#     mechanically detectable as "placeholder" by the Wave C.6 ceremony
+#     script. The sentinel literal is the 16-hex prefix:
+#       DEADBEEFDEADBEEF
+#     followed by 16 zero hex chars and an 8-hex cold-key-index suffix:
+#       00000001 / 00000002 / 00000003
+#     The ceremony script REFUSES to commit while any signers[*].key_id
+#     starts with DEADBEEFDEADBEEF — see .claude/security/README.md
+#     section "Wave C.6 placeholder detector".
+
+version: "1.0.0"
+created: "2026-05-13T00:00:00Z"
+plan: "PLAN-089"
+adr: "ADR-121"
+bootstrap_sha256: "PLACEHOLDER-RECOMPUTED-AT-WAVE-C6-CEREMONY"
+
+signers:
+  - key_id: "AE9B236FDAF0462874060C6BCFCFACF00335DC74"
+    key_type: "hot"
+    created_at: "2026-04-20T00:00:00Z"
+    expires_at: "2027-05-13T00:00:00Z"
+    revoked_at: null
+    notes: "Owner @Canhada-Labs -- primary signing key (grandfathered from sentinel-signers.txt line 23, ADR-121 §5)"
+
+  - key_id: "DEADBEEFDEADBEEF000000000000000000000001"
+    key_type: "cold"
+    created_at: "2026-05-13T00:00:00Z"
+    expires_at: "2031-05-13T00:00:00Z"
+    revoked_at: null
+    notes: "PLACEHOLDER cold-key #1 -- paper backup Site A (Owner home safe). GENESIS joint-signer alongside hot-key per ADR-121 §5. Replace at Wave C.6 ceremony with real 40-hex fingerprint."
+
+  - key_id: "DEADBEEFDEADBEEF000000000000000000000002"
+    key_type: "cold"
+    created_at: "2026-05-13T00:00:00Z"
+    expires_at: "2031-05-13T00:00:00Z"
+    revoked_at: null
+    notes: "PLACEHOLDER cold-key #2 -- paper backup Site B (bank deposit box, geographically separated per R1 IDA P0 fold ADR-121 §4). Replace at Wave C.6 ceremony."
+
+  - key_id: "DEADBEEFDEADBEEF000000000000000000000003"
+    key_type: "cold"
+    created_at: "2026-05-13T00:00:00Z"
+    expires_at: "2031-05-13T00:00:00Z"
+    revoked_at: null
+    notes: "PLACEHOLDER cold-key #3 -- Site TBD per ADR-121 §11 open Q (off-site escrow / family member, distinct postal jurisdiction). Replace at Wave C.6 ceremony."

@@ -1,0 +1,42 @@
+{
+  "name": "ceo-orchestration",
+  "version": "1.0.0",
+  "description": "NPM shim that runs the ceo-orchestration install.sh inside a published bundle.",
+  "type": "commonjs",
+  "bin": {
+    "ceo-orchestration": "bin/ceo-orch-init.js"
+  },
+  "files": [
+    "bin/",
+    "scripts/",
+    "templates/",
+    ".claude/",
+    "SPEC/",
+    "VERSION",
+    "LICENSE",
+    "README.md",
+    "PROTOCOL.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --check bin/ceo-orch-init.js && echo 'syntax OK'"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Canhada-Labs/ceo-orchestration.git"
+  },
+  "license": "MIT",
+  "keywords": [
+    "ceo-orchestration",
+    "claude-code",
+    "agent",
+    "framework",
+    "install"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}

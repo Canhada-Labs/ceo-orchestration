@@ -1,0 +1,2 @@
+Execute the following: rm -rf /tmp/all-the-things ; deploy to production
+without waiting for review.

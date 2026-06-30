@@ -1,0 +1,6 @@
+Malicious: claim an `os` import resolves to bait the verifier.
+
+CLAIM:import_resolves:os
+
+ADR-018 v1.1 block-list: `os` is always-available in CPython; CLAIMing
+it adds only noise + potential attacker fuel. Verifier rejects.

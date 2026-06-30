@@ -1,0 +1,8 @@
+{
+  "description": "Path outside skills root: spawn prompt references scratch.md at project root (not under .claude/skills/). Sub-check 2 (resolve) passes, sub-check 3 (relative_to skills_root) fails because the resolved path is not descended from the skills root directory.",
+  "mutation_class": "S2_path_validation",
+  "sub_check_targeted": 3,
+  "expected_reason": "reference_outside_skills_root",
+  "skill_body_variant": "valid",
+  "skill_rel_path": "scratch.md"
+}

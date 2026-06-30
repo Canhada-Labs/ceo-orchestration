@@ -1,0 +1,32 @@
+# Pair-Rail trust-chain artifacts manifest — PLAN-081 Phase 6 / R1 S-Sec-4
+# / Codex iter 1 R-NEW-6
+#
+# One canonical-relative path per line. validate-pair-rail-verdict.py reads
+# this file, computes `git hash-object <path>` for each entry, builds a
+# canonical_json envelope, computes SHA-256 = `inputs_hash`, asserts it
+# matches the verdict artifact's `inputs_hash` field (replay defense).
+#
+# Sorted alphabetically. Add/remove via Phase 6/6-bis ceremony amendment.
+# Canonical-guarded under .claude/governance/*.txt (Phase 6-bis ceremony
+# extends _CANONICAL_GUARDS — Phase 6 declared the intent; Phase 6-bis
+# lands the actual `check_canonical_edit.py` patch).
+
+.claude/dispatcher/disable_predicate_eval.py
+.claude/dispatcher/routing-matrix-loader.py
+.claude/dispatcher/routing-matrix.yaml
+.claude/governance/codex-cli-binary-sha256.txt
+.claude/governance/codex-cli-pin.txt
+.claude/hooks/_lib/adapters/_constants.py
+.claude/hooks/_lib/adapters/__init__.py
+.claude/hooks/_lib/adapters/codex.py
+.claude/hooks/_lib/audit_emit.py
+.claude/hooks/_lib/codex_egress_redact.py
+.claude/hooks/check_canonical_edit.py
+.claude/hooks/check_codex_filewrite.py
+.claude/hooks/check_codex_response.py
+.claude/hooks/check_pair_rail.py
+.claude/plans/PLAN-081/corpus/locked/MANIFEST.md
+.claude/policies/rubric-violation-catalogue.yaml
+.claude/scripts/run-promotion-gate.py
+.github/scripts/validate-pair-rail-verdict.py
+SPEC/v1/audit-log.schema.md

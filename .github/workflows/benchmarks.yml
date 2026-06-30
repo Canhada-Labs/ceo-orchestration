@@ -1,0 +1,186 @@
+name: Skill benchmarks (advisory)
+
+# Only runs on changes to skill benchmarks, the runner, or this workflow
+# itself. Per PLAN-002 §11-bis Q2: paths filter keeps docs/plans/hooks PRs
+# from paying API cost.
+on:
+  pull_request:
+    paths:
+      - ".claude/skills/**/benchmarks/**"
+      - ".claude/scripts/run-skill-benchmark.py"
+      - ".github/workflows/benchmarks.yml"
+  push:
+    branches: [main]
+    paths:
+      - ".claude/skills/**/benchmarks/**"
+      - ".claude/scripts/run-skill-benchmark.py"
+      - ".github/workflows/benchmarks.yml"
+
+concurrency:
+  group: benchmarks-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  # Write permission needed for $GITHUB_STEP_SUMMARY
+  pull-requests: write
+
+jobs:
+  benchmarks:
+    name: Run skill benchmarks
+    runs-on: ubuntu-latest
+    # PLAN-008 Phase 5: bumped 10 → 15 min per debate consensus C2
+    # (3 benchmarks × 10 scenarios × median-of-3 = 90 LLM calls at ~3s each
+    # ≈ 5 min; 15-min ceiling gives headroom for slow upstream).
+    timeout-minutes: 15
+    env:
+      # PLAN-008 Phase 5 cost ceiling: fail-fast if total scenarios exceed
+      # this across all YAMLs. Adjust upward only after a deliberate
+      # benchmark-expansion ADR.
+      CEO_BENCHMARK_MAX_SCENARIOS: "100"
+
+    # Combined gate: fork-PR safety + PLAN-012 CEO_SOTA_DISABLE parity.
+    # Fork PR safety: benchmarks require ANTHROPIC_API_KEY which fork PRs
+    # don't have access to. Skip visibly on forks. pull_request_target is
+    # EXPLICITLY FORBIDDEN per PLAN-002 §8 finding #18 (code-injection
+    # vector in the forked repo's workflow).
+    # Kill-switch: repo admin sets `CEO_SOTA_DISABLE=1` as a repo variable
+    # to short-circuit the benchmarks without editing YAML.
+    if: |
+      vars.CEO_SOTA_DISABLE != '1' &&
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+
+    steps:
+      - name: Checkout
+        # SHA-pinned (Sprint 7 Dependabot bump): actions/checkout@v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Set up Python
+        # SHA-pinned (Sprint 7 Dependabot bump): actions/setup-python@v6.2.0
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          python3 -m pip install --upgrade pip
+          python3 -m pip install pyyaml anthropic
+
+      - name: Detect changed benchmarks
+        id: detect
+        run: |
+          set -euo pipefail
+          # Find all benchmark YAMLs under skills/
+          mapfile -t ALL_BENCHES < <(find .claude/skills -type f -path '*/benchmarks/*.yaml' 2>/dev/null)
+          if [ ${#ALL_BENCHES[@]} -eq 0 ]; then
+            echo "no_benchmarks=true" >> "$GITHUB_OUTPUT"
+            echo "No benchmark YAMLs found — nothing to run" >&2
+          else
+            printf 'found %d benchmark file(s):\n' "${#ALL_BENCHES[@]}"
+            printf '  %s\n' "${ALL_BENCHES[@]}"
+          fi
+
+      - name: Cost guard (scenario count)
+        run: |
+          set -euo pipefail
+          # PLAN-008 Phase 5 (debate consensus C2): aggregate scenario count
+          # cap. Prevents a single PR from blowing up CI cost by adding a
+          # 200-scenario benchmark without ADR.
+          total=$(python3 -c '
+          import sys, yaml, glob
+          n = 0
+          for f in glob.glob(".claude/skills/**/benchmarks/*.yaml", recursive=True):
+              try:
+                  d = yaml.safe_load(open(f))
+                  n += len(d.get("scenarios", []))
+              except Exception:
+                  pass
+          print(n)
+          ')
+          ceiling="${CEO_BENCHMARK_MAX_SCENARIOS:-60}"
+          echo "Total scenarios across all benchmarks: $total (ceiling: $ceiling)"
+          if [ "$total" -gt "$ceiling" ]; then
+            echo "::error::Benchmark scenario total $total exceeds ceiling $ceiling."
+            echo "::error::Raise CEO_BENCHMARK_MAX_SCENARIOS with an accompanying ADR."
+            exit 1
+          fi
+
+      - name: Run benchmarks (advisory, skip-if-no-key)
+        id: bench
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          set -euo pipefail
+          mkdir -p benchmark-results
+
+          if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
+            echo "SKIPPED: ANTHROPIC_API_KEY secret not set (advisory mode)." >&2
+            echo "skipped=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          FAILED=0
+          mapfile -t ALL_BENCHES < <(find .claude/skills -type f -path '*/benchmarks/*.yaml')
+          # Sprint 3 Item B: absolute floor at 0.6 + write lessons on failure.
+          # Per debate consensus R-DEV1, rc=1 for ALL floor failures (no new
+          # exit codes — we distinguish via $GITHUB_STEP_SUMMARY, not rc).
+          for bench in "${ALL_BENCHES[@]}"; do
+            base=$(basename "$bench" .yaml)
+            echo "::group::Running $bench"
+            out="benchmark-results/${base}.json"
+            if ! python3 .claude/scripts/run-skill-benchmark.py \
+                 "$bench" \
+                 --output-json "$out" \
+                 --markdown \
+                 --floor 0.6 \
+                 --write-lessons \
+                 --skip-if-no-key; then
+              rc=$?
+              if [ "$rc" -eq 1 ]; then
+                echo "::error::$bench below floor (CRITICAL or <0.6)"
+                FAILED=1
+              else
+                echo "::error::$bench: runner error rc=$rc"
+                FAILED=1
+              fi
+            fi
+            echo "::endgroup::"
+          done
+
+          echo "failed=$FAILED" >> "$GITHUB_OUTPUT"
+
+      - name: Post results to $GITHUB_STEP_SUMMARY
+        if: always()
+        run: |
+          set -euo pipefail
+          if [ "${{ steps.bench.outputs.skipped }}" = "true" ]; then
+            {
+              printf '## Benchmarks skipped\n\n'
+              printf 'ANTHROPIC_API_KEY secret is not configured.\n'
+              printf 'Enable in Settings -> Secrets and variables -> Actions.\n'
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if [ ! -d benchmark-results ] || [ -z "$(ls -A benchmark-results 2>/dev/null)" ]; then
+            printf '## Benchmarks: no results produced\n' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          python3 .github/scripts/summarize-benchmarks.py benchmark-results/*.json \
+            >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload benchmark JSON results
+        if: always()
+        # SHA-pinned (Sprint 7 Dependabot bump): actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: benchmark-results
+          path: benchmark-results/
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Fail on floor breach
+        if: steps.bench.outputs.failed == '1'
+        run: |
+          echo "::error::One or more benchmarks fell below floor (CRITICAL < 0.4 or absolute < 0.6)"
+          exit 1

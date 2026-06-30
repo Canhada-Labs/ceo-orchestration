@@ -1,0 +1,186 @@
+# Synthetic skill catalog — 36 skills covering:
+#   - 5 high-priority/high-risk anchors (security-and-auth class)
+#   - 24 "dormant" domain bundle skills (NOT active for any of the 5 profiles
+#     in the standard fixture) — used by the dormant-suppression test
+#   - 5 inactive_but_retained=true skills (universal-suppress test)
+#   - 2 duplicate-trigger arbitration scenarios
+#   - 30+ active-eligible skills for cap-cascade tests
+#
+# Each row is fed by the test's `build_skill_tree` helper into
+# `<tmpdir>/<path>/SKILL.md` with a valid 4-skill frontmatter.
+
+version: 1
+skills:
+  # --- HIGH-PRIORITY ANCHORS (priority 1-2; appear in every profile) ---
+  - path: core/security-and-auth/SKILL.md
+    priority: 1
+    risk_class: high
+    domain: core
+    context_budget_tokens: 1400
+    bindings:
+      frontend: {active: true, priority: 2}
+      engine: {active: true, priority: 1}
+      fintech: {active: true, priority: 1}
+      trading-readonly: {active: true, priority: 1}
+      generic: {active: true, priority: 3}
+
+  - path: core/identity-and-trust-architecture/SKILL.md
+    priority: 2
+    risk_class: high
+    domain: core
+    context_budget_tokens: 1400
+    bindings:
+      frontend: {active: true, priority: 3}
+      engine: {active: true, priority: 2}
+      fintech: {active: true, priority: 2}
+      trading-readonly: {active: true, priority: 2}
+      generic: {active: true, priority: 5}
+
+  - path: core/code-review-checklist/SKILL.md
+    priority: 3
+    risk_class: low
+    domain: core
+    context_budget_tokens: 1100
+    bindings:
+      frontend: {active: true, priority: 3}
+      engine: {active: true, priority: 3}
+      fintech: {active: true, priority: 3}
+      trading-readonly: {active: true, priority: 3}
+      generic: {active: true, priority: 3}
+
+  - path: core/minimal-change-discipline/SKILL.md
+    priority: 3
+    risk_class: low
+    domain: core
+    context_budget_tokens: 900
+    bindings:
+      frontend: {active: true, priority: 3}
+      engine: {active: true, priority: 3}
+      fintech: {active: true, priority: 3}
+      trading-readonly: {active: true, priority: 2}
+      generic: {active: true, priority: 3}
+
+  - path: core/compliance-lgpd/SKILL.md
+    priority: 4
+    risk_class: high
+    domain: core
+    context_budget_tokens: 1400
+    bindings:
+      frontend: {active: true, priority: 6}
+      engine: {active: true, priority: 4}
+      fintech: {active: true, priority: 2}
+      trading-readonly: {active: true, priority: 3}
+      generic: {active: true, priority: 7}
+
+  # --- DORMANT DOMAIN BUNDLES (24 skills, active for NONE of 5 profiles) ---
+  # These verify the dormant-suppression AC. Bindings deliberately empty.
+  - {path: domains/hospitality/sales/SKILL.md, priority: 5, risk_class: medium, domain: hospitality, context_budget_tokens: 500, bindings: {}}
+  - {path: domains/hospitality/devrel/SKILL.md, priority: 6, risk_class: low, domain: hospitality, context_budget_tokens: 400, bindings: {}}
+  - {path: domains/hospitality/legal/SKILL.md, priority: 6, risk_class: high, domain: hospitality, context_budget_tokens: 600, bindings: {}}
+  - {path: domains/retail/sales/SKILL.md, priority: 5, risk_class: medium, domain: retail, context_budget_tokens: 500, bindings: {}}
+  - {path: domains/retail/devrel/SKILL.md, priority: 6, risk_class: low, domain: retail, context_budget_tokens: 400, bindings: {}}
+  - {path: domains/retail/legal/SKILL.md, priority: 6, risk_class: high, domain: retail, context_budget_tokens: 600, bindings: {}}
+  - {path: domains/healthcare/sales/SKILL.md, priority: 5, risk_class: medium, domain: healthcare, context_budget_tokens: 500, bindings: {}}
+  - {path: domains/healthcare/devrel/SKILL.md, priority: 6, risk_class: low, domain: healthcare, context_budget_tokens: 400, bindings: {}}
+  - {path: domains/healthcare/legal/SKILL.md, priority: 6, risk_class: high, domain: healthcare, context_budget_tokens: 600, bindings: {}}
+  - {path: domains/hr/sales/SKILL.md, priority: 5, risk_class: medium, domain: hr, context_budget_tokens: 500, bindings: {}}
+  - {path: domains/hr/devrel/SKILL.md, priority: 6, risk_class: low, domain: hr, context_budget_tokens: 400, bindings: {}}
+  - {path: domains/hr/legal/SKILL.md, priority: 6, risk_class: high, domain: hr, context_budget_tokens: 600, bindings: {}}
+  - {path: domains/real-estate-finance/sales/SKILL.md, priority: 5, risk_class: medium, domain: real-estate-finance, context_budget_tokens: 500, bindings: {}}
+  - {path: domains/real-estate-finance/devrel/SKILL.md, priority: 6, risk_class: low, domain: real-estate-finance, context_budget_tokens: 400, bindings: {}}
+  - {path: domains/real-estate-finance/legal/SKILL.md, priority: 6, risk_class: high, domain: real-estate-finance, context_budget_tokens: 600, bindings: {}}
+  - {path: domains/edtech/sales/SKILL.md, priority: 5, risk_class: medium, domain: edtech, context_budget_tokens: 500, bindings: {}}
+  - {path: domains/edtech/devrel/SKILL.md, priority: 6, risk_class: low, domain: edtech, context_budget_tokens: 400, bindings: {}}
+  - {path: domains/edtech/legal/SKILL.md, priority: 6, risk_class: high, domain: edtech, context_budget_tokens: 600, bindings: {}}
+  - {path: domains/government/sales/SKILL.md, priority: 5, risk_class: medium, domain: government, context_budget_tokens: 500, bindings: {}}
+  - {path: domains/government/devrel/SKILL.md, priority: 6, risk_class: low, domain: government, context_budget_tokens: 400, bindings: {}}
+  - {path: domains/government/legal/SKILL.md, priority: 6, risk_class: high, domain: government, context_budget_tokens: 600, bindings: {}}
+  - {path: domains/community/sales/SKILL.md, priority: 5, risk_class: medium, domain: community, context_budget_tokens: 500, bindings: {}}
+  - {path: domains/community/devrel/SKILL.md, priority: 6, risk_class: low, domain: community, context_budget_tokens: 400, bindings: {}}
+  - {path: domains/community/legal/SKILL.md, priority: 6, risk_class: high, domain: community, context_budget_tokens: 600, bindings: {}}
+
+  # --- inactive_but_retained=true (universal suppress) ---
+  - path: core/retained-experimental-a/SKILL.md
+    priority: 1
+    risk_class: low
+    domain: core
+    context_budget_tokens: 200
+    inactive_but_retained: true
+    bindings:
+      frontend: {active: true, priority: 1}
+      engine: {active: true, priority: 1}
+      fintech: {active: true, priority: 1}
+      trading-readonly: {active: true, priority: 1}
+      generic: {active: true, priority: 1}
+
+  - path: core/retained-experimental-b/SKILL.md
+    priority: 2
+    risk_class: medium
+    domain: core
+    context_budget_tokens: 300
+    inactive_but_retained: true
+    bindings:
+      frontend: {active: true, priority: 1}
+      engine: {active: true, priority: 1}
+      fintech: {active: true, priority: 1}
+      trading-readonly: {active: true, priority: 1}
+      generic: {active: true, priority: 1}
+
+  # --- DUPLICATE-TRIGGER ARBITRATION pairs ---
+  # Same priority + DIFFERENT risk_class -> low wins
+  - path: core/dup-trigger-low-risk/SKILL.md
+    priority: 5
+    risk_class: low
+    domain: core
+    context_budget_tokens: 400
+    activation_triggers:
+      - {event: file-edit, glob: "src/**/*.ts"}
+    bindings:
+      frontend: {active: true, priority: 5}
+      engine: {active: true, priority: 5}
+      fintech: {active: true, priority: 5}
+      trading-readonly: {active: true, priority: 5}
+      generic: {active: true, priority: 5}
+
+  - path: core/dup-trigger-high-risk/SKILL.md
+    priority: 5
+    risk_class: high
+    domain: core
+    context_budget_tokens: 400
+    activation_triggers:
+      - {event: file-edit, glob: "src/**/*.ts"}
+    bindings:
+      frontend: {active: true, priority: 5}
+      engine: {active: true, priority: 5}
+      fintech: {active: true, priority: 5}
+      trading-readonly: {active: true, priority: 5}
+      generic: {active: true, priority: 5}
+
+  # Same priority + same risk_class -> lex path wins (alpha sorts before beta)
+  - path: core/dup-trigger-alpha/SKILL.md
+    priority: 6
+    risk_class: medium
+    domain: core
+    context_budget_tokens: 400
+    activation_triggers:
+      - {event: help-me-invoked, regex: "duplicate-tie-break"}
+    bindings:
+      frontend: {active: true, priority: 6}
+      engine: {active: true, priority: 6}
+      fintech: {active: true, priority: 6}
+      trading-readonly: {active: true, priority: 6}
+      generic: {active: true, priority: 6}
+
+  - path: core/dup-trigger-beta/SKILL.md
+    priority: 6
+    risk_class: medium
+    domain: core
+    context_budget_tokens: 400
+    activation_triggers:
+      - {event: help-me-invoked, regex: "duplicate-tie-break"}
+    bindings:
+      frontend: {active: true, priority: 6}
+      engine: {active: true, priority: 6}
+      fintech: {active: true, priority: 6}
+      trading-readonly: {active: true, priority: 6}
+      generic: {active: true, priority: 6}

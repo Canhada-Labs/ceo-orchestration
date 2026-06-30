@@ -1,0 +1,6 @@
+The lesson ranker lives inside the scripts package.
+
+CLAIM:import_resolves:lessons
+
+Top-level `lessons` resolves to `.claude/scripts/lessons.py` via the
+syntactic verifier (file-existence check).

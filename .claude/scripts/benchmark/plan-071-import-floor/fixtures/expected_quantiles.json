@@ -1,0 +1,11 @@
+{
+  "_status": "aspirational-pending-empirical-baseline",
+  "_advisory_mode_default": true,
+  "_p1_08_closure": "Codex 2026-05-04: these thresholds (p50<=5ms, p99<=10ms) are sub-floor for macOS Python 3.9 — measured ~22ms cold interpreter floor (PLAN-020 S32). Hard-fail on absolute thresholds would block CI on the floor, not on a regression. Run --mode=advisory --write-baseline=fixtures/baseline.json on the target runner first to record an empirical baseline; then promote to --mode=gate --baseline=fixtures/baseline.json which uses delta-vs-baseline (>10% p99 increase = fail; >5% p50 = warning; >25% rss = warning).",
+  "p50_ms": 5.0,
+  "p99_ms": 10.0,
+  "p99_9_ms": 50.0,
+  "rss_delta_kib": 2048.0,
+  "gc_events": 0,
+  "_comment": "PLAN-071 Phase 0.5 acceptance thresholds (LEGACY ABSOLUTE). p50 <=5ms / p99 <=10ms / p99.9 <=50ms. RSS 2MB = 2048 KiB. gc_events=0 hard invariant. ADR-071 §3 methodology: N>=10 runs, cold/warm separated, p50/p95/p99 reported. Subprocess-per-iter rationale: ADR-081 + PLAN-020 S32 ~23ms macOS floor. Phase 1 §5.3 budget (p95 < 200ms local / 300ms CI) has >>10x slack over these floor gates by design — Phase 0.5 measures the import floor only, not the full classify() pipeline. STATUS: these are aspirational floor numbers BELOW the empirical macOS interpreter floor; today's runners use --mode=advisory + recorded baseline.json for delta-mode gating."
+}

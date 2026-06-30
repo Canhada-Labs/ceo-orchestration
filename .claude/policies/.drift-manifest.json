@@ -1,0 +1,16 @@
+{
+  "policies": {
+    "bash-safety": {
+      "sha256": "19dc616388b1bce1f649f1b24c0bfde36a351c3bb4684fa92bd4c111ff103930",
+      "updated": "2026-04-17",
+      "pr": "PLAN-014 Phase A.4",
+      "reviewers": ["@Canhada-Labs", "@security-lead"]
+    },
+    "plan-edit": {
+      "sha256": "2898f2c0dbd43d83db9bf853f97331e6f1882bd7e97f53e178ee56eed53d37eb",
+      "updated": "2026-04-29",
+      "pr": "Session 76 audit-v3 (DIM-11) — ADR-092 enforcement (refused_at + reopen_via/trigger/criteria)",
+      "reviewers": ["@Canhada-Labs"]
+    }
+  }
+}

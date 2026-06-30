@@ -1,0 +1,33 @@
+# .github/CODEOWNERS — target install (ceo-orchestration framework)
+#
+# Rename this file to `.github/CODEOWNERS` (drop the .template suffix)
+# when you are ready to enable branch protection. See
+# docs/BRANCH-PROTECTION.md for the GitHub setup checklist.
+#
+# The {{OWNER_HANDLE}} placeholder is substituted by install.sh when the
+# `--github-owner <handle>` flag is passed. Otherwise, replace it
+# manually with the GitHub handle of the primary reviewer.
+#
+# Format: <path pattern>  <owner(s) — GitHub handles>
+
+# Skills are the governance surface — any change needs review
+.claude/skills/**                       @{{OWNER_HANDLE}}
+
+# Benchmarks decide whether skills regress — same gate
+.claude/skills/**/benchmarks/**         @{{OWNER_HANDLE}}
+
+# Hooks enforce the protocol mechanically — cannot weaken silently
+.claude/hooks/**                        @{{OWNER_HANDLE}}
+
+# Plans are executable contracts; ADRs are the decision record
+.claude/plans/PLAN-*.md                 @{{OWNER_HANDLE}}
+.claude/adr/**                          @{{OWNER_HANDLE}}
+
+# Protocol reference + governance scripts
+PROTOCOL.md                             @{{OWNER_HANDLE}}
+.claude/scripts/validate-governance.sh  @{{OWNER_HANDLE}}
+.claude/scripts/check-contamination.sh  @{{OWNER_HANDLE}}
+
+# CI workflows + settings are blast-radius L3
+.github/workflows/**                    @{{OWNER_HANDLE}}
+.claude/settings.json                   @{{OWNER_HANDLE}}

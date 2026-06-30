@@ -1,0 +1,1093 @@
+# test-env-hygiene-allowlist.yaml — PLAN-019 P1-QA-3
+#
+# Pre-approved violators of the TestEnvContext mandate. Generated
+# by `check-test-env-hygiene.py --init` and then hand-tended as
+# violators are drained. New violations in unlisted files fail
+# the check.
+#
+# Violation kinds:
+#   - env-write       (os.environ[KEY] = ...)
+#   - env-del         (del os.environ[KEY])
+#   - bare-testcase   (class Foo(unittest.TestCase))
+#
+# Format (line-oriented; stdlib-parseable, NOT real YAML):
+#   file: <relpath>
+#     - <kind>
+#     - <kind>
+
+file: .claude/hooks/tests/adapters/live/test_adapters.py
+  - bare-testcase
+  - env-write
+
+file: .claude/hooks/tests/adapters/live/test_breaker.py
+  - bare-testcase
+
+file: .claude/hooks/tests/adapters/live/test_cost.py
+  - bare-testcase
+  - env-write
+
+file: .claude/hooks/tests/adapters/live/test_o7_modernization.py
+  - env-write
+
+file: .claude/hooks/tests/adapters/live/test_policy.py
+  - bare-testcase
+
+file: .claude/hooks/tests/probes/test_architect_probe.py
+  - env-write
+
+file: .claude/hooks/tests/probes/test_canonical_edit_probe.py
+  - env-write
+
+file: .claude/hooks/tests/test_adapter_golden.py
+  - env-write
+
+file: .claude/hooks/tests/test_adr_052_role_to_model_coverage.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_adr_058_brainstorm_structure.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_agent_frontmatter.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_anti_ceo_overhead.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_audit_emit.py
+  - env-write
+
+file: .claude/hooks/tests/test_audit_emit_api_contract.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_audit_emit_backpressure.py
+  - env-write
+
+file: .claude/hooks/tests/test_audit_emit_callsite_coverage_matrix.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_audit_emit_coverage.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_audit_emit_ghost_action_guard.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_audit_emit_rotation.py
+  - env-write
+
+file: .claude/hooks/tests/test_audit_hmac.py
+  - bare-testcase
+  - env-write
+
+file: .claude/hooks/tests/test_audit_hmac_hardening.py
+  - bare-testcase
+  - env-del
+  - env-write
+
+file: .claude/hooks/tests/test_audit_hmac_rotation_scenarios.py
+  - bare-testcase
+  - env-write
+
+file: .claude/hooks/tests/test_audit_hmac_verify_chain.py
+  - bare-testcase
+  - env-write
+
+file: .claude/hooks/tests/test_audit_log.py
+  - env-write
+
+file: .claude/hooks/tests/test_audit_log_security.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_audit_log_tokens.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_audit_log_v2_7.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_audit_log_v2_8_model.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_audit_rotation.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_audit_stream_verbose_protection.py
+  - env-write
+
+file: .claude/hooks/tests/test_audit_tokens_content_ban.py
+  - bare-testcase
+  - env-write
+
+file: .claude/hooks/tests/test_bash_canonical_forensic.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_bash_canonical_interceptor.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_brotli_passthrough.py
+  - env-write
+
+file: .claude/hooks/tests/test_canonical_guard_typed_exceptions.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_canonical_json.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_chain_invariants_property.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_check_agent_spawn_effort_token.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_check_agent_spawn_import_isolation.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_check_agent_spawn_model_routing_mode.py
+  - env-write
+
+file: .claude/hooks/tests/test_check_agent_spawn_routing_promotion.py
+  - env-write
+
+file: .claude/hooks/tests/test_check_agent_spawn_skill_reference.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_check_arbitration_kernel.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_check_bash_safety_h5_rewrite.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_check_budget.py
+  - bare-testcase
+  - env-write
+
+file: .claude/hooks/tests/test_check_compaction_continuity.py
+  - bare-testcase
+  - env-write
+
+file: .claude/hooks/tests/test_check_confidence_gate.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_check_config_change.py
+  - bare-testcase
+  - env-write
+
+file: .claude/hooks/tests/test_check_fluency_nudge.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_check_mcp_response.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_check_output_secrets.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_check_pair_rail.py
+  - bare-testcase
+  - env-write
+
+file: .claude/hooks/tests/test_check_pair_rail_decide_canonical.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_check_pair_rail_golden.py
+  - bare-testcase
+  - env-write
+
+file: .claude/hooks/tests/test_check_pair_rail_hook_integration.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_check_pair_rail_matrix.py
+  - bare-testcase
+  - env-write
+
+file: .claude/hooks/tests/test_check_plan_edit.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_check_protocol_semver_cascade.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_check_read_injection_pathbound.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_check_scratchpad_access.py
+  - env-write
+
+file: .claude/hooks/tests/test_check_skill_bootstrap_post.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_check_skill_reference_read.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_check_skill_reference_read_v2.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_check_subagent_start.py
+  - bare-testcase
+  - env-write
+
+file: .claude/hooks/tests/test_claim_producer_pair_end_to_end_loop_perf.py
+  - env-write
+
+file: .claude/hooks/tests/test_claude_adapter_thinking.py
+  - env-write
+
+file: .claude/hooks/tests/test_claude_batch_adapter.py
+  - env-write
+
+file: .claude/hooks/tests/test_codex_egress_proof_telemetry.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_codex_egress_redact_outgoing.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_codex_reply_multi_turn.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_codex_strict_json.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_confidence_gate_producer_pair.py
+  - env-write
+
+file: .claude/hooks/tests/test_confidence_labels.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_contract.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_credentials.py
+  - env-del
+  - env-write
+
+file: .claude/hooks/tests/test_detect_repo_profile_branches.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_emit_architect_outcome.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_env_persist_allowlist.py
+  - bare-testcase
+  - env-write
+
+file: .claude/hooks/tests/test_estimation_bayesian_pipeline.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_execution_context_deferral.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_fail_open_contract.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_file_walker.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_find_sentinels_pattern_matrix.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_flip_closures.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_frontmatter.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_gpg_verify.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_hook_byte_fidelity.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_injection_patterns.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_injection_patterns_bypass.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_injection_salt.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_kernel_subsumes_security_critical_lib.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_kill_switch_godmode_enforcing.py
+  - env-write
+
+file: .claude/hooks/tests/test_lifecycle_edge_cases.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_live_adapters.py
+  - env-del
+  - env-write
+
+file: .claude/hooks/tests/test_mcp_bearer_friction_buffer.py
+  - env-write
+
+file: .claude/hooks/tests/test_mcp_bearer_friction_emit.py
+  - env-write
+
+file: .claude/hooks/tests/test_mcp_injection_scan.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_mcp_routing_resolve.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_memory_shared.py
+  - bare-testcase
+  - env-write
+
+file: .claude/hooks/tests/test_metrics.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_migrated_hooks_fixtures.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_model_routing.py
+  - bare-testcase
+  - env-write
+
+file: .claude/hooks/tests/test_model_routing_resolve.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_model_routing_resolve_full.py
+  - env-write
+
+file: .claude/hooks/tests/test_otel_emit.py
+  - env-write
+
+file: .claude/hooks/tests/test_otel_wire_defaultoff.py
+  - env-write
+
+file: .claude/hooks/tests/test_output_scan.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_output_scan_dedup.py
+  - env-del
+  - env-write
+
+file: .claude/hooks/tests/test_output_scan_fixtures.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_pair_rail_decide.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_persona_coverage_wire.py
+  - env-write
+
+file: .claude/hooks/tests/test_persona_routing_enforcing.py
+  - env-write
+
+file: .claude/hooks/tests/test_pii_patterns.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_plan_085_wave_c_callsites_preserved.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_plan_091_expected_callsites.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_plan_frontmatter.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_rag_bridge.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_rag_events.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_red_team_fixtures.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_redact_secrets_parity.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_replay_determinism.py
+  - env-write
+
+file: .claude/hooks/tests/test_rubric_catalogue.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_scratchpad_lib.py
+  - env-write
+
+file: .claude/hooks/tests/test_secret_patterns_provenance.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_sentinel_session_cache_tier1.py
+  - env-write
+
+file: .claude/hooks/tests/test_session_end.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_session_start.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_smart_loading_resolver_caching.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_spec_context_sanitizer.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_spool_drain_rotation_property_b.py
+  - bare-testcase
+  - env-write
+
+file: .claude/hooks/tests/test_spool_drain_rotation_race.py
+  - bare-testcase
+  - env-write
+
+file: .claude/hooks/tests/test_spool_writer_cache.py
+  - env-del
+  - env-write
+
+file: .claude/hooks/tests/test_state_store.py
+  - env-write
+
+file: .claude/hooks/tests/test_stop.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_streaming_rate_cap.py
+  - env-write
+
+file: .claude/hooks/tests/test_subagent_dispatch.py
+  - bare-testcase
+  - env-write
+
+file: .claude/hooks/tests/test_subagent_model_override_removed.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_terminal_compress.py
+  - env-write
+
+file: .claude/hooks/tests/test_thinking_budget_command.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_tier_policy_agent_frontmatter.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_tier_policy_agent_frontmatter_disposition.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_tier_policy_constants.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_tier_policy_loader.py
+  - bare-testcase
+  - env-write
+
+file: .claude/hooks/tests/test_tier_policy_types.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_tokens_lib.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_tool_lifecycle.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_two_writer_chain.py
+  - env-write
+
+file: .claude/hooks/tests/test_upgrade_retry.py
+  - env-write
+
+file: .claude/hooks/tests/test_user_prompt_submit.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_user_prompt_submit_salt.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_w5_cookbook_remediation.py
+  - bare-testcase
+  - env-write
+
+file: .claude/hooks/tests/test_webfetch_injection.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_worktree_writer.py
+  - env-write
+
+file: .claude/scripts/predict-budget/tests/test_predict_plan_cost.py
+  - bare-testcase
+  - env-write
+
+file: .claude/scripts/tests/perf/test_kernel_hard_deny_microbench.py
+  - bare-testcase
+
+file: .claude/scripts/tests/perf/test_optimizer_complexity_gate_p99.py
+  - bare-testcase
+
+file: .claude/scripts/tests/perf/test_wave_c_canonical_json.py
+  - bare-testcase
+
+file: .claude/scripts/tests/perf/test_wave_c_filelock_mkdir.py
+  - bare-testcase
+
+file: .claude/scripts/tests/perf/test_wave_c_plan_glob_cache.py
+  - bare-testcase
+
+file: .claude/scripts/tests/perf/test_wave_c_preview_collapse.py
+  - bare-testcase
+
+file: .claude/scripts/tests/perf/test_wave_c_sys_modules.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_admin_invite.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_adopter_metrics.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_aek_calibration_c2.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_aek_calibration_c3.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_aek_state_machine.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_architect_bundle_validate.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_audit_dashboard.py
+  - bare-testcase
+  - env-write
+
+file: .claude/scripts/tests/test_audit_log_dispatch_hint.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_audit_log_retain.py
+  - bare-testcase
+  - env-del
+  - env-write
+
+file: .claude/scripts/tests/test_audit_query.py
+  - bare-testcase
+  - env-write
+
+file: .claude/scripts/tests/test_audit_query_by_domain.py
+  - bare-testcase
+  - env-del
+  - env-write
+
+file: .claude/scripts/tests/test_audit_query_claims.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_audit_query_critical.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_audit_query_tokens.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_audit_telemetry.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_audit_tokens.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_audit_verify_chain.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_backup_audit.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_benchmark_judge.py
+  - env-write
+
+file: .claude/scripts/tests/test_benchmarks_replay.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_budget_summary.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_calibration_kappa.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_cc_analytics_pull.py
+  - env-write
+
+file: .claude/scripts/tests/test_ceo_backup.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_ceo_boot.py
+  - env-write
+
+file: .claude/scripts/tests/test_ceo_boot_audit_emit.py
+  - env-write
+
+file: .claude/scripts/tests/test_ceo_boot_enhanced.py
+  - env-write
+
+file: .claude/scripts/tests/test_ceo_boot_persona_cadence.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_ceo_boot_task_candidate.py
+  - env-write
+
+file: .claude/scripts/tests/test_ceo_cost.py
+  - bare-testcase
+  - env-del
+  - env-write
+
+file: .claude/scripts/tests/test_ceo_cost_stream.py
+  - bare-testcase
+  - env-write
+
+file: .claude/scripts/tests/test_ceo_diagnose.py
+  - bare-testcase
+  - env-write
+
+file: .claude/scripts/tests/test_ceo_health.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_chaos_inject_lockdown.py
+  - bare-testcase
+  - env-del
+  - env-write
+
+file: .claude/scripts/tests/test_check_action_sha_drift.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_check_adr_chain.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_check_audit_read_api_stable.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_check_audit_registry_coverage.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_check_auto_activation_flags.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_check_canonical_doc_freshness.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_check_claude_md_claims.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_check_contamination.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_check_debate_round_lifecycle.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_check_doc_skill_paths.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_check_docs_freshness.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_check_flip_release_gate_consistency.py
+  - bare-testcase
+  - env-write
+
+file: .claude/scripts/tests/test_check_model_deprecations.py
+  - env-write
+
+file: .claude/scripts/tests/test_check_sdk_compat.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_check_sidecar_manifest_sbom_sync.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_check_staleness.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_check_substrate_watch.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_check_tier_boundaries.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_check_tla_schema_drift.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_compare_adopters.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_confidence_gate.py
+  - bare-testcase
+  - env-write
+
+file: .claude/scripts/tests/test_confidence_gate_backfill.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_context_budget.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_contextual_recommender.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_debate_converge.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_debate_emit_cli.py
+  - bare-testcase
+  - env-write
+
+file: .claude/scripts/tests/test_debate_orchestrate.py
+  - bare-testcase
+  - env-del
+  - env-write
+
+file: .claude/scripts/tests/test_detect_repo_profile.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_dispatch_archetype_hint.py
+  - bare-testcase
+  - env-del
+  - env-write
+
+file: .claude/scripts/tests/test_embeddings.py
+  - bare-testcase
+  - env-write
+
+file: .claude/scripts/tests/test_find_orphan_sentinels.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_first_run_wizard.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_generate_dispatch.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_generate_skill_inventory.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_hook_profiler.py
+  - bare-testcase
+  - env-write
+
+file: .claude/scripts/tests/test_import_skill_skip_rubric_auth.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_inject_agent_context_mitigated_dispatch.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_inject_agent_context_reference_mode.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_k_calibration.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_key_hygiene.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_lesson_ranker.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_lesson_restore.py
+  - bare-testcase
+  - env-write
+
+file: .claude/scripts/tests/test_lessons.py
+  - bare-testcase
+  - env-write
+
+file: .claude/scripts/tests/test_lessons_concurrency.py
+  - bare-testcase
+  - env-write
+
+file: .claude/scripts/tests/test_lessons_emit.py
+  - bare-testcase
+  - env-write
+
+file: .claude/scripts/tests/test_lessons_v2.py
+  - bare-testcase
+  - env-write
+
+file: .claude/scripts/tests/test_log_friction.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_mutation_test.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_otel_export.py
+  - bare-testcase
+  - env-write
+
+file: .claude/scripts/tests/test_pitfall_query.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_plan_tokens.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_prune_lessons.py
+  - bare-testcase
+  - env-write
+
+file: .claude/scripts/tests/test_quality_profile.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_rate_card_calibrate.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_red_team_eval_sha.py
+  - bare-testcase
+  - env-write
+
+file: .claude/scripts/tests/test_registry.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_run_benchmark.py
+  - bare-testcase
+  - env-write
+
+file: .claude/scripts/tests/test_run_skill_benchmark_emit.py
+  - bare-testcase
+  - env-write
+
+file: .claude/scripts/tests/test_run_skill_benchmark_judge_mode.py
+  - env-write
+
+file: .claude/scripts/tests/test_scan_injection.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_scratchpad_cli.py
+  - bare-testcase
+  - env-del
+  - env-write
+
+file: .claude/scripts/tests/test_session_graph.py
+  - env-write
+
+file: .claude/scripts/tests/test_session_resume.py
+  - env-write
+
+file: .claude/scripts/tests/test_siem_rule_fixtures_have_paired_positive_negative.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_skill_grandfather_parser.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_skill_retrieval.py
+  - bare-testcase
+  - env-write
+
+file: .claude/scripts/tests/test_skill_retrieve_rag_wire.py
+  - bare-testcase
+  - env-write
+
+file: .claude/scripts/tests/test_smart_loading_resolver.py
+  - bare-testcase
+  - env-write
+
+file: .claude/scripts/tests/test_squad_export.py
+  - bare-testcase
+  - env-write
+
+file: .claude/scripts/tests/test_squad_grandfather_cap.py
+  - bare-testcase
+  - env-del
+  - env-write
+
+file: .claude/scripts/tests/test_squad_import.py
+  - bare-testcase
+  - env-write
+
+file: .claude/scripts/tests/test_success_receipt.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_token_budget_guard.py
+  - bare-testcase
+  - env-write
+
+file: .claude/scripts/tests/test_token_estimator.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_trading_readonly.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_validate_skill_frontmatter_pii_core.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_validate_spec_context.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_validate_squad_contract.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_value_dashboard.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_verify_adr_118_rationale.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_verify_atlas_binding.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_verify_counts.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_verify_counts_remediation.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_verify_persona_coverage.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_veto_check.py
+  - bare-testcase
+
+file: .claude/scripts/tier_policy_cli/tests/test_adversarial.py
+  - bare-testcase
+  - env-write
+
+file: .claude/scripts/tier_policy_cli/tests/test_agent_frontmatter.py
+  - bare-testcase
+
+file: .claude/scripts/tier_policy_cli/tests/test_apply.py
+  - bare-testcase
+  - env-write
+
+file: .claude/scripts/tier_policy_cli/tests/test_check_tier_policy_hook.py
+  - bare-testcase
+
+file: .claude/scripts/tier_policy_cli/tests/test_cli.py
+  - bare-testcase
+
+file: .claude/scripts/tier_policy_cli/tests/test_constants.py
+  - bare-testcase
+
+file: .claude/scripts/tier_policy_cli/tests/test_learn.py
+  - bare-testcase
+
+file: .claude/scripts/tier_policy_cli/tests/test_learn_mutation.py
+  - bare-testcase
+
+file: .claude/scripts/tier_policy_cli/tests/test_loader.py
+  - bare-testcase
+  - env-write
+
+file: .claude/scripts/tier_policy_cli/tests/test_types.py
+  - bare-testcase
+
+file: .claude/scripts/tournament/tests/test_fixture_envelope.py
+  - bare-testcase
+
+file: .claude/scripts/tournament/tests/test_fixture_security.py
+  - bare-testcase
+
+file: .claude/scripts/tournament/tests/test_judge.py
+  - bare-testcase
+
+file: .claude/scripts/tournament/tests/test_loader.py
+  - bare-testcase
+
+file: .claude/scripts/tournament/tests/test_model_id_parity.py
+  - bare-testcase
+
+file: .claude/scripts/tournament/tests/test_reporter.py
+  - bare-testcase
+
+file: .claude/scripts/tournament/tests/test_reporter_golden.py
+  - bare-testcase
+
+file: .claude/scripts/tournament/tests/test_runner.py
+  - bare-testcase
+
+file: .claude/scripts/tournament/tests/test_runner_fail_open.py
+  - bare-testcase
+
+file: .claude/scripts/tournament/tests/test_scorer.py
+  - bare-testcase
+
+file: .claude/scripts/tournament/tests/test_tournament_e2e_smoke.py
+  - bare-testcase
+
+file: .claude/scripts/tournament/tests/test_tournament_properties.py
+  - bare-testcase
+
+file: tests/chaos/conftest.py
+  - env-write
+
+file: tests/chaos/test_audit_disk_full.py
+  - env-write
+
+file: tests/chaos/test_live_adapter_failure_injection.py
+  - env-write
+
+file: tests/chaos/test_live_breaker.py
+  - env-write
+
+file: tests/chaos/test_otel_collector_unreachable.py
+  - env-write
+
+file: tests/forensic/test_federation_attack_surface_writes.py
+  - bare-testcase
+
+file: tests/forensic/test_peers_yaml_downgrade.py
+  - bare-testcase
+
+file: tests/formal_verification/test_expected_kills_manifest.py
+  - bare-testcase
+
+file: tests/integration/test_peers_yaml_migration.py
+  - bare-testcase
+
+file: tests/integration/test_threat_model_coverage.py
+  - bare-testcase
+
+file: tests/test_atlas_technique_id_tagging.py
+  - bare-testcase
+
+file: tests/test_check_atlas_fpr.py
+  - bare-testcase
+
+file: tests/test_codex_redact_fail_closed.py
+  - bare-testcase
+
+file: tests/test_credential_rotation_emit.py
+  - env-write
+
+file: tests/test_federation/conftest.py
+  - env-write
+
+file: tests/test_federation/test_ac18_extension.py
+  - bare-testcase
+
+file: tests/test_federation/test_ac20_handshake_budget.py
+  - bare-testcase
+
+file: tests/test_federation/test_attck_fixtures_fpr.py
+  - bare-testcase
+  - env-write
+
+file: tests/test_federation/test_audit_emit_kwarg_contract.py
+  - bare-testcase
+  - env-write
+
+file: tests/test_federation/test_cert_inspector.py
+  - bare-testcase
+  - env-write
+
+file: tests/test_federation/test_cosign_adversarial.py
+  - bare-testcase
+
+file: tests/test_federation/test_mtls_integration.py
+  - bare-testcase
+  - env-write
+
+file: tests/test_federation/test_peers_roundtrip_handlers.py
+  - bare-testcase
+
+file: tests/test_federation/test_scopes_parse.py
+  - bare-testcase
+
+file: tests/test_federation/test_spki_dispatcher.py
+  - bare-testcase
+
+file: tests/test_federation/test_write_endpoints.py
+  - bare-testcase
+  - env-write
+
+file: tests/test_federation/test_write_mode_wire.py
+  - bare-testcase
+  - env-write
+
+file: tests/test_install_yaml_glob.py
+  - bare-testcase
+
+file: tests/test_live_adapter_allowlist_runtime.py
+  - env-write
+
+file: tests/test_output_scan_llm03.py
+  - env-write
+
+file: tests/test_value_dashboard_emit.py
+  - bare-testcase

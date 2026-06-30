@@ -1,0 +1,8 @@
+Code-block exemption per ADR-018 v1.0 — claims inside fenced blocks are ignored.
+
+```python
+# The following claim must NOT be extracted by the CLI
+CLAIM:import_resolves:subprocess
+```
+
+The fenced CLAIM above is skipped; the verifier does not see it.

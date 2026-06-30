@@ -1,0 +1,117 @@
+name: Adapter Live Smoke
+
+# PLAN-012 Phase 2 D7. Dedicated workflow for the live-adapter smoke
+# suite (tests/integration/test_live_adapter_smoke.py). Split from
+# validate.yml per debate §R7 — the live matrix can legitimately run
+# 3-15s per provider × 4 providers, which exceeds the 6-min validate
+# ceiling. Weekly cadence + push-to-live-paths + manual dispatch.
+
+on:
+  schedule:
+    # Monday 12:00 UTC. Staggered after chaos (03), perf-profile (06),
+    # otel-smoke (09) per PLAN-012 §S6 cron-stagger table. See
+    # .github/workflows/_README.md for the full schedule.
+    - cron: "0 12 * * 1"
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.claude/hooks/_lib/adapters/live/**'
+      - 'tests/integration/test_live_adapter_smoke.py'
+      - 'SPEC/v1/live-adapters-policy.schema.md'
+      - '.github/workflows/adapter-live.yml'
+
+concurrency:
+  # cancel-in-progress: false — a cron run mid-way should not be killed
+  # by a push; live smokes against real APIs have real cost implications
+  # and a torn run mid-flight would leave provider state indeterminate.
+  group: adapter-live-${{ github.ref }}
+  cancel-in-progress: false
+
+# Least-privilege: read-only, no write-back anywhere.
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: Live provider round-trip (gated)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Fork-PR rejection per PLAN-012 §R9 + debate consensus C9: forks
+    # MUST NEVER receive the provider keys, and `pull_request_target`
+    # is EXPLICITLY FORBIDDEN per PLAN-002 §8 finding #18. The condition
+    # here mirrors benchmarks.yml:46 exactly.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+
+    # GitHub Environment scoping per debate §R2 + ADR-040 §6: provider
+    # keys only reachable from this environment, which can require
+    # manual approval for first prod-key use (configured in repo
+    # Settings → Environments → live-adapters-smoke).
+    environment:
+      name: live-adapters-smoke
+
+    # Kill-switch wired at job level so the `env` injection available to
+    # every step. Per debate §S4 any repo admin can set a repo-level
+    # variable `CEO_SOTA_DISABLE=1` to short-circuit every Sprint-11+
+    # workflow without editing YAML.
+    env:
+      CEO_SOTA_DISABLE: ${{ vars.CEO_SOTA_DISABLE || '' }}
+
+    steps:
+      - name: Kill-switch check (CEO_SOTA_DISABLE=1)
+        id: killswitch
+        run: |
+          if [ "${CEO_SOTA_DISABLE}" = "1" ]; then
+            echo "::notice::CEO_SOTA_DISABLE=1 — adapter-live workflow short-circuited."
+            echo "disabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "disabled=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        if: steps.killswitch.outputs.disabled == 'false'
+        # SHA-pinned (matches validate.yml): actions/checkout@v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Setup Python
+        if: steps.killswitch.outputs.disabled == 'false'
+        # SHA-pinned (matches validate.yml): actions/setup-python@v6.2.0
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.11"
+
+      - name: Install pytest + pytest-timeout (dev-only — stdlib otherwise)
+        if: steps.killswitch.outputs.disabled == 'false'
+        # pytest-timeout is required because the smoke step below
+        # invokes `pytest --timeout=60`. Without the plugin, pytest
+        # rejects the flag as `unrecognized arguments: --timeout=60`
+        # (exit 4) before any test runs — root cause of the
+        # adapter-live red streak back to 2026-04-15.
+        run: python3 -m pip install --quiet --no-cache-dir "pytest==8.*" "pytest-timeout"
+
+      - name: Run live adapter smoke (CEO_LIVE_ADAPTERS gated)
+        if: steps.killswitch.outputs.disabled == 'false'
+        # Per-provider gating is done INSIDE the test module — the
+        # smoke skips a provider whose credential env var is absent.
+        # Setting the umbrella flag here is what makes pytestmark.skipif
+        # in test_live_adapter_smoke.py flip from "skip all" to "run".
+        env:
+          CEO_LIVE_ADAPTERS: "1"
+          CEO_LIVE_CLAUDE: ${{ vars.CEO_LIVE_CLAUDE || '' }}
+          CEO_LIVE_GEMINI: ${{ vars.CEO_LIVE_GEMINI || '' }}
+          CEO_LIVE_OPENAI: ${{ vars.CEO_LIVE_OPENAI || '' }}
+          CEO_LIVE_LOCAL: ${{ vars.CEO_LIVE_LOCAL || '' }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          python3 -m pytest tests/integration/test_live_adapter_smoke.py \
+            -v --tb=short --timeout=60
+
+      - name: Advisory note
+        if: steps.killswitch.outputs.disabled == 'false'
+        run: |
+          echo "::notice::Live-adapter smoke uses real provider APIs."
+          echo "::notice::See ADR-040 for credential rotation contract."

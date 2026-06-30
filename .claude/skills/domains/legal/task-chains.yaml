@@ -1,0 +1,131 @@
+# Task chains — Legal Squad
+# Domain-specific workflows that extend the universal .claude/task-chains.yaml.
+#
+# ADR-009 §bundle-completeness: ≥2 task chain entries required.
+# Each chain id follows legal-<short-slug> (kebab-case).
+# NOT canonical-guarded — no sentinel required for edits.
+#
+# Inherits PII core paths per ADR-111 (PLAN-080 Phase 0a).
+
+task_chains:
+  - id: legal-client-intake-pii-flow
+    title: "New client intake — matter opening with PII + privilege controls"
+    whenToUse: |
+      Triggered when a new client engagement is being opened in the
+      matter management system. Covers: conflict check, client PII
+      collection and residency assessment, matter record creation (append-only),
+      attorney-client privilege classification, retention class assignment,
+      and trust account setup if retainer is collected. Out of scope: billing
+      system configuration for AFAs (use legal-afa-setup chain) and
+      litigation e-discovery workflows (use legal-litigation-hold chain).
+    steps:
+      - id: 1
+        owner: "Amir Nakashima (Matter Management Engineer)"
+        action: "Conflict check: run adverse party index against all open and closed matters. Return CLEAR/CONFLICT result only — do not expose underlying matter details to the intaking attorney (LEG-002)."
+      - id: 2
+        owner: "Ingrid Vasquez (Compliance Officer)"
+        action: "Client PII assessment: identify client's home jurisdiction. If EU or BR, confirm data residency and SCC/adequacy status for the firm's processing stack (LEG-004). Assign retention class to the new matter record."
+      - id: 3
+        owner: "Amir Nakashima"
+        action: "Matter record creation: initialize with append-only document store. Set privilege classification default (attorney-client privileged) for all documents added to this matter. Confirm no client data pre-populates from a prior matter without explicit cross-matter consent."
+      - id: 4
+        owner: "Tobias Mensah (Records Manager)"
+        action: "Retention schedule assignment: bind the matter to the correct retention class (client file vs. firm work product vs. billing records — each has a different post-closure retention period). Record the expected destruction date."
+      - id: 5
+        owner: "Elena Sorokina (Legal Operations Lead)"
+        action: "If retainer collected: initialize trust account ledger for this client. Confirm three-way reconciliation baseline (matter ledger + client ledger + bank) before any funds are received (LEG-009)."
+      - id: 6
+        owner: "Ingrid Vasquez"
+        action: "Privilege audit: confirm no matter documents or client-identifying data are accessible to staff outside the matter's access control group. Run a cross-client isolation check (LEG-002)."
+      - id: 7
+        owner: "Chloé Bernard (Legal AI Integration Specialist)"
+        action: "If any AI-assisted intake (document classification, conflict analysis, client risk scoring) is used: verify DPA is in place for the AI vendor, confirm client matter text is not sent to a non-DPA-covered endpoint (LEG-001)."
+      - id: 8
+        owner: "Staff Code Reviewer"
+        action: "Merge check: conflict check returns CLEAR/CONFLICT only, retention class assigned, privilege ACL configured, trust account baseline recorded if retainer, no AI ingestion of matter content without DPA."
+    verification: |
+      - Conflict check result is CLEAR/CONFLICT only; underlying matter details not exposed (LEG-002)
+      - Data residency confirmed for EU/BR clients; SCCs in place if required (LEG-004)
+      - Matter record append-only; privilege classification default set
+      - Retention schedule bound with expected destruction date (LEG-005)
+      - Trust account three-way reconciliation baseline recorded if retainer (LEG-009)
+      - AI intake tools verified against signed DPA (LEG-001)
+
+  - id: legal-ai-tool-onboarding
+    title: "Onboard a new AI legal tool (document review, research, drafting assistant)"
+    whenToUse: |
+      Any time a new AI-powered legal tool is being integrated — document
+      review platforms, contract analysis tools, legal research assistants,
+      brief drafting tools, or AI-powered due diligence platforms. Triggered
+      at vendor evaluation, before any client matter content is shared.
+      Out of scope: general productivity tools that do not ingest client
+      matter content (use core onboarding workflow) and e-discovery platforms
+      with their own privilege protocol (separate legal-litigation-hold chain).
+    steps:
+      - id: 1
+        owner: "Ingrid Vasquez (Compliance Officer)"
+        action: "DPA review: request and review vendor's DPA specifically for attorney-client privileged material. Confirm: zero-retention at rest, no training use of client content, GDPR/LGPD SCCs for cross-border flows (LEG-001). Block onboarding if DPA does not explicitly cover privileged content."
+      - id: 2
+        owner: "Chloé Bernard (Legal AI Integration Specialist)"
+        action: "Technical verification of retention claims: confirm logging of inputs is disabled for client matter documents, confirm no fine-tuning pipeline receives client content. Request vendor's SOC 2 Type II or equivalent. Verbal 'zero retention' without technical evidence is insufficient (LEG-001)."
+      - id: 3
+        owner: "Ingrid Vasquez"
+        action: "Privilege protocol design: define which document types may be sent to the tool (privilege-waived documents only vs. with-privilege documents under DPA). Produce a privilege scope document signed by a supervising attorney before any client documents are processed."
+      - id: 4
+        owner: "Tobias Mensah (Records Manager)"
+        action: "Records impact: confirm AI-tool output (summaries, classifications, suggested edits) is stored with appropriate retention class — same as source document or shorter. AI-generated output must not extend the retention period of the underlying client matter."
+      - id: 5
+        owner: "Chloé Bernard"
+        action: "Accuracy validation: run the tool on a set of synthetic (non-client) legal documents. Check citation accuracy for any research feature (LEG-012). Document the hallucination rate and set a minimum human-review requirement before any output reaches a client deliverable."
+      - id: 6
+        owner: "Principal QA Architect"
+        action: "Integration tests: send a synthetic privileged document through the tool; verify no logging in the vendor's audit trail; verify the output is flagged as AI-generated and requires attorney attestation before filing (LEG-012)."
+      - id: 7
+        owner: "Staff Code Reviewer"
+        action: "Merge VETO check: DPA covers privileged content, zero-retention verified technically, privilege scope document signed, records retention impact assessed, citation accuracy baseline documented."
+    verification: |
+      - DPA signed and explicitly covers attorney-client privileged material (LEG-001)
+      - Zero-retention claim verified technically (no input logging, no training use) (LEG-001)
+      - Privilege scope document signed by supervising attorney
+      - AI output retention class ≤ source document retention class (LEG-008)
+      - Citation accuracy baseline documented; human-review gate configured (LEG-012)
+
+  - id: legal-matter-closure-archival
+    title: "Matter closure — archival, retention enforcement, and destruction scheduling"
+    whenToUse: |
+      Triggered when a matter is being closed and moved from active to archived
+      status. Covers document archival, retention schedule confirmation,
+      billing finalization, trust account reconciliation on close,
+      and destruction scheduling. Also triggered when an archived matter
+      reaches its scheduled destruction date. Out of scope: matters subject
+      to a litigation hold (destruction suspended; use legal-litigation-hold
+      chain instead).
+    steps:
+      - id: 1
+        owner: "Amir Nakashima (Matter Management Engineer)"
+        action: "Matter status transition: advance to 'Closed' via the state machine. Confirm no litigation-hold flag is active — if any hold is active, abort closure and escalate to Tobias Mensah (LEG-007)."
+      - id: 2
+        owner: "Elena Sorokina (Legal Operations Lead)"
+        action: "Billing finalization: confirm all unbilled time entries are either billed or written off with an audit trail (LEG-011). Confirm no open trust account balance — disburse or return client funds before archival (LEG-009)."
+      - id: 3
+        owner: "Tobias Mensah (Records Manager)"
+        action: "Retention schedule review: confirm the matter's destruction date (per the retention class assigned at intake). If the matter has mixed document types (client file + firm work product + billing records), each retention class applies independently."
+      - id: 4
+        owner: "Tobias Mensah"
+        action: "Backup inclusion audit: confirm that the backup system retains this matter only until the scheduled destruction date (no indefinite-retention backup tier includes this matter). Flag if any backup policy would extend retention past the scheduled date (LEG-008)."
+      - id: 5
+        owner: "Ingrid Vasquez (Compliance Officer)"
+        action: "Privacy sign-off: confirm client PII in the matter (contacts, financial details, sensitive communications) is subject to the same destruction schedule. No PII retained in analytics pipelines or AI training sets past destruction date (ADR-111 / Phase 0a core paths)."
+      - id: 6
+        owner: "Tobias Mensah"
+        action: "If destruction date reached: execute destruction workflow. Produce destruction certificate (record IDs, timestamp, actor, method). Confirm backup purge triggered. Store certificate in the firm's destruction registry (LEG-006)."
+      - id: 7
+        owner: "Staff Code Reviewer"
+        action: "Merge check: litigation hold clear, billing finalized with audit trail, trust account zero-balanced, retention schedule confirmed, backup purge confirmed at destruction, destruction certificate produced."
+    verification: |
+      - No litigation hold active at time of closure (LEG-007)
+      - All time entries billed or written off with audit trail (LEG-011)
+      - Trust account zero-balanced before archival (LEG-009)
+      - Destruction date scheduled per retention class (LEG-005)
+      - Backup retention confirmed to respect destruction date (LEG-008)
+      - Destruction certificate produced at scheduled destruction (LEG-006)

@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ceo-orchestration — governance + agent orchestration for Claude Code</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="A reusable governance + agent orchestration protocol for Claude Code projects. Structured, mechanical, evidence-grounded.">
+<meta name="robots" content="noindex, nofollow">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!--
+  PLAN-013 Phase E.6 — draft landing page.
+  NOT deployed to GitHub Pages. Sprint 17 conditional per
+  ROADMAP-CLOSURE.md. Repo visibility remains private.
+-->
+
+<header>
+  <h1>ceo-orchestration</h1>
+  <p class="tagline">
+    Governance + agent orchestration protocol for Claude Code projects.
+    Stdlib-only. Mechanically enforced. Evidence-grounded.
+  </p>
+  <nav>
+    <a href="https://github.com/Canhada-Labs/ceo-orchestration">GitHub</a>
+    <a href="https://github.com/Canhada-Labs/ceo-orchestration/blob/main/docs/QUICKSTART.md">Quickstart</a>
+    <a href="https://github.com/Canhada-Labs/ceo-orchestration/blob/main/PROTOCOL.md">Protocol</a>
+    <a href="https://github.com/Canhada-Labs/ceo-orchestration/blob/main/docs/GUIA-COMPLETO.md">Complete guide</a>
+  </nav>
+</header>
+
+<main>
+
+<section id="what-it-is">
+<h2>What it is</h2>
+<p>
+  A structured way to use Claude Code as if it were a multi-person
+  engineering organization — with a CEO (Claude), VPs, specialists,
+  staff with veto power, a spawn protocol, a plan→debate→execute
+  workflow, and a skill library organized into core + frontend +
+  optional domain profiles.
+</p>
+<p>
+  The framework ships <strong>mechanical governance</strong>: 12 Python
+  hooks enforce invariants that can't be weakened by prompt wording.
+  It's not a prompt pack. It's a runtime.
+</p>
+</section>
+
+<section id="numbers">
+<h2>By the numbers</h2>
+<ul class="stats">
+  <li><strong>48</strong> skills (19 core + 8 frontend + 21 domain)</li>
+  <li><strong>12</strong> Python hooks (stdlib only, Python 3.9+)</li>
+  <li><strong>41</strong> ADRs published</li>
+  <li><strong>1,742</strong> tests</li>
+  <li><strong>5</strong> domain squads (fintech, edtech, government, lgpd-heavy-saas, trading-hft)</li>
+  <li><strong>16</strong> SPEC v1 schema files</li>
+  <li><strong>0</strong> runtime dependencies</li>
+</ul>
+</section>
+
+<section id="design">
+<h2>Design decisions worth knowing</h2>
+<dl>
+  <dt>English is the Single Source of Truth (post v1.4.0)</dt>
+  <dd>PT-BR mirrors remain. Drift checker enforces structural parity across 7 document pairs (headings, code fences, line delta ≤10%, bidirectional cross-links).</dd>
+
+  <dt>Stdlib-only Python (ADR-002)</dt>
+  <dd>Hooks and scripts ship with zero pip installs. urllib over HTTP. No SDK vendor lock-in. Live adapter layer ships 4 providers (Claude / Gemini / OpenAI / local) as hand-rolled urllib wrappers behind a shared <code>LiveCallPolicy</code>.</dd>
+
+  <dt>24h RC hold, mechanically enforced</dt>
+  <dd>GA tags reject if the prior RC tag is less than 24 hours old (Codex re-pass window, ADR-103). No policy without mechanism (PLAN-013 Phase 0 item 0.3).</dd>
+
+  <dt>Plan → Debate → Execute</dt>
+  <dd>L3+ tasks require parallel agent critiques with ≥77% consensus threshold before execution. Plan artifacts + debate rounds + consensus docs are committed to <code>.claude/plans/</code> as source of truth.</dd>
+
+  <dt>Canonical-edit hook</dt>
+  <dd>Direct edits to <code>.claude/team.md</code>, <code>PROTOCOL.md</code>, <code>SKILL.md</code> files require Owner-signed sentinels. Mechanical enforcement via <code>check_canonical_edit.py</code> (ADR-010 v1.1).</dd>
+
+  <dt>48 skills held steady</dt>
+  <dd>Framework deliberately does NOT expand skill count every sprint. Machinery sprints (multi-LLM adapters, retrieval, judge, marketplace) happen around the existing skill library.</dd>
+
+  <dt>Not public yet</dt>
+  <dd>Repo stays private until post-adopter validation in adopter-1 + adopter-2 (Sprint 15/16). Public launch is a Sprint 17 go/no-go decision with Owner approval, not an automatic milestone.</dd>
+</dl>
+</section>
+
+<section id="install">
+<h2>Install (target project)</h2>
+<pre><code>cd /path/to/your-project
+bash /path/to/ceo-orchestration/scripts/install.sh . --profile core,frontend</code></pre>
+<p>
+  Domain profiles: <code>--profile core,fintech</code> or
+  <code>core,edtech,frontend</code>, etc. See
+  <a href="https://github.com/Canhada-Labs/ceo-orchestration/blob/main/INSTALL.md">INSTALL.md</a>.
+</p>
+</section>
+
+<section id="how-it-works">
+<h2>How it works in one paragraph</h2>
+<p>
+  You open Claude Code inside a project that has <code>.claude/</code>
+  installed. Claude reads <code>CLAUDE.md</code>, activates the
+  <code>ceo-orchestration</code> skill, loads the team roster, and
+  operates as the CEO. Every delegation happens through the Spawn
+  Protocol (persona + skill + file assignment), enforced by hooks.
+  Every L3+ decision runs through a debate with ≥2 parallel agents
+  before execution. Every merge goes through a code-reviewer VETO.
+  Everything is audited to <code>~/.claude/projects/&lt;slug&gt;/audit-log.jsonl</code>.
+  You read the audit log when something surprises you.
+</p>
+</section>
+
+<section id="not-for-you-if">
+<h2>This is probably NOT for you if</h2>
+<ul>
+  <li>You want a ChatGPT-style chat wrapper — use Claude Code directly</li>
+  <li>You want a prompt library — try <a href="https://github.com/forrestchang/andrej-karpathy-skills">karpathy-skills</a> or similar curated collections</li>
+  <li>You want an npm install + auto-deploy — this framework installs via bash script and does not publish to npm by default (Sprint 17 conditional)</li>
+  <li>You want something lightweight — this is a runtime with 12 hooks + 48 skills + 1,742 tests. Run it because you want mechanical governance, not despite it.</li>
+</ul>
+</section>
+
+<section id="status">
+<h2>Current status</h2>
+<p>
+  Version <strong>1.4.0-rc.1</strong> (2026-04-14). Sprints 1-12
+  executed. Sprint 13 (PLAN-013) Technical Closure Expanded in progress.
+  Repo is <strong>private</strong>; public launch remains Sprint 17
+  conditional with Owner approval.
+</p>
+<p>
+  See <a href="https://github.com/Canhada-Labs/ceo-orchestration/blob/main/CHANGELOG.md">CHANGELOG.md</a>
+  for release history and
+  <a href="https://github.com/Canhada-Labs/ceo-orchestration/blob/main/docs/ROADMAP-CLOSURE.md">ROADMAP-CLOSURE.md</a>
+  for the closure strategy.
+</p>
+</section>
+
+</main>
+
+<footer>
+  <p>
+    MIT license. Owner: Canhada Labs.
+    <a href="https://github.com/Canhada-Labs/ceo-orchestration">Source</a> ·
+    <a href="https://github.com/Canhada-Labs/ceo-orchestration/blob/main/PROTOCOL.md">Protocol</a> ·
+    <a href="https://github.com/Canhada-Labs/ceo-orchestration/blob/main/CONTRIBUTING.md">Contributing</a>
+  </p>
+  <p class="draft-note">
+    Draft landing page — not deployed. PLAN-013 Phase E.6 artifact.
+    GitHub Pages publish remains Sprint 17 conditional per
+    <a href="https://github.com/Canhada-Labs/ceo-orchestration/blob/main/docs/ROADMAP-CLOSURE.md">ROADMAP-CLOSURE.md</a>.
+  </p>
+</footer>
+
+</body>
+</html>

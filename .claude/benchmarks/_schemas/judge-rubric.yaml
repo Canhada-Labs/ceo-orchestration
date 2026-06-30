@@ -1,0 +1,39 @@
+# Judge rubric schema — PLAN-011 Phase 3
+#
+# Public documentation of the rubric format. Code consumes a JSON twin
+# (`judge-rubric-example.json`) because the framework is stdlib-only
+# and does not depend on PyYAML at the library surface. Both files MUST
+# stay semantically equivalent; the JSON twin is the source of truth
+# for tests.
+#
+# Fields
+# ------
+# version     int     schema version; bump on breaking changes
+# rubric_id   string  stable slug (kebab-case); unique within repo
+# items       list    >=1 rubric item; each has id/description/weight
+# scoring     enum    "weighted_average" | "all_or_nothing"
+#
+# Each item:
+#   id          slug; unique within rubric
+#   description one-sentence natural-language criterion
+#   weight      float in [0, 1]; weights SHOULD sum to 1.0 for
+#               weighted_average but the scorer does not enforce
+#
+# Example (structure only; not a real benchmark)
+
+version: 1
+rubric_id: example-generic
+items:
+  - id: r1
+    description: "Code compiles / passes lint"
+    weight: 0.2
+  - id: r2
+    description: "Covers edge cases listed in brief"
+    weight: 0.3
+  - id: r3
+    description: "Includes at least one test"
+    weight: 0.2
+  - id: r4
+    description: "Follows project style guide"
+    weight: 0.3
+scoring: weighted_average

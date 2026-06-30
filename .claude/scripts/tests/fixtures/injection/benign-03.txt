@@ -1,0 +1,7 @@
+# Architecture decisions
+
+We chose PostgreSQL because it has good support for JSON columns. The
+downside is operational complexity: backups, replication, and tuning
+all require care.
+
+See ADR-001 for details.

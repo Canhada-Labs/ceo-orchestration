@@ -1,0 +1,1 @@
+bfx_api_secret = "JZV7QEb6wcTTuRCE6wEZcwWLy5UDZNIaeOnWqs8ZKP2"  # arbitrage-bot

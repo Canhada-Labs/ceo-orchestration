@@ -1,0 +1,252 @@
+name: Coverage
+
+# PLAN-004 Phase 7: advisory-only measurement.
+# PLAN-006 Phase 3 (Sprint 6, 2026-04-13): gate flipped to ENFORCING.
+# Baseline 88% measured in docs/coverage-baseline.md; threshold 86
+# (max(median-2, 80)). Drops below 86% now block PRs.
+
+on:
+  pull_request:
+    paths:
+      - ".claude/hooks/**"
+      - ".claude/scripts/**"
+      - ".github/workflows/coverage.yml"
+  schedule:
+    - cron: "0 7 * * *"   # nightly — moved off per-push (S220) so pushes finish on the validate job (~6-8min)
+  workflow_dispatch:
+
+concurrency:
+  group: coverage-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  coverage:
+    name: Coverage (Tier-1 per-module 86 + repo floor 70; subprocess capture)
+    runs-on: Ceo
+    # S157 ADR-139: subprocess capture instruments every spawned hook, so the
+    # suite runs materially slower than the in-process baseline (the no-coverage
+    # matrix already takes ~12 min). 35 min gives headroom for hooks + scripts
+    # under capture + combine. Was 15 (which the captured run overran → cancel).
+    timeout-minutes: 35
+    # PLAN-006 Phase 3: continue-on-error removed. Gate is enforcing.
+
+    steps:
+      - name: Checkout
+        # SHA-pinned (Sprint 7 Dependabot bump): actions/checkout@v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Setup Python 3.11
+        # SHA-pinned (Sprint 7 Dependabot bump): actions/setup-python@v6.2.0
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.11"
+
+      - name: Install coverage.py + pyyaml + pytest (dev deps, not shipped)
+        # pyyaml is used by test_run_benchmark.py (script tests exercise
+        # the yaml-backed benchmark loader).
+        # pytest is used by 4 script test files + several hook tests that
+        # rely on fixtures (tmp_path, capsys, pytest.raises). Adding it
+        # here recovers the ~8pp of coverage these tests contribute —
+        # without it, unittest discover skips them and the total drops
+        # from ~86% → 78%.
+        # Stdlib-only runtime invariant is preserved — these are CI-only
+        # dev deps, never shipped in install.sh / upgrade.sh tarballs.
+        # PLAN-093 Wave A.2 — extend with C5 dev-extras (hypothesis + jsonschema)
+        run: python3 -m pip install --quiet --no-cache-dir "coverage==7.6.*" "pyyaml" "pytest==8.*" "hypothesis==6.100.0" "jsonschema==4.21.1"
+
+      - name: C5 hypothesis sidecar boundary check (ADR-126 §Part 5/6)
+        # PLAN-093 Wave A.2 + Wave B.4 — enforce zero production-path import
+        # of hypothesis / jsonschema; manifest schema validated.
+        # Belt-and-braces non-Python grep is INTENTIONALLY omitted here —
+        # boundary_test.py Part 5 §2c already rejects forbidden imports in
+        # workflow run: bodies. Including a grep line would create a
+        # self-collision: boundary_test.py would flag this workflow at the
+        # grep pattern's literal 'import' substring.
+        run: |
+          set -euo pipefail
+          python3 .claude/scripts/check-sidecar-manifest.py --strict
+          python3 .claude/sidecars/c5-dev-tools/hypothesis/boundary_test.py
+
+      - name: Set up subprocess coverage capture (ADR-139)
+        # PLAN-112-FOLLOWUP-coverage-doctrine-reconcile (S157): the hooks are
+        # tested via `subprocess.run([sys.executable, hook])`, so an in-process
+        # `coverage run` cannot follow the child and under-counts every hook
+        # (e.g. check_read_injection measured 0% line despite a 100%-passing
+        # suite). A `coverage.process_startup()` .pth in the runner's writable
+        # site-packages + COVERAGE_PROCESS_START + parallel + combine captures
+        # the subprocess runs. site-packages is HOME-independent so it survives
+        # TestEnvContext's HOME rewrite. See ADR-139 + .coveragerc.
+        run: |
+          set -euo pipefail
+          SITE="$(python3 -c 'import sysconfig; print(sysconfig.get_path("purelib"))')"
+          echo 'import coverage; coverage.process_startup()' > "$SITE/zzz_ceo_subprocess_cov.pth"
+          echo "wrote subprocess-coverage .pth -> $SITE/zzz_ceo_subprocess_cov.pth"
+
+      - name: Run hook tests under coverage (subprocess capture, parallel)
+        # Canonical subprocess-coverage pattern: plain `python -m pytest`
+        # (NOT `coverage run`) + COVERAGE_PROCESS_START + the .pth above.
+        # The parent pytest AND every subprocess hook self-instrument via
+        # coverage.process_startup() — a single tracer per process (no
+        # double-tracer overhead). .coveragerc declares parallel,
+        # relative_files, source (both trees), [paths] aliasing for tmp-tree
+        # hook copies, and omit .claude/plans/*. `coverage combine` merges.
+        env:
+          COVERAGE_PROCESS_START: ${{ github.workspace }}/.coveragerc
+        run: |
+          set -euo pipefail
+          python3 -m pytest .claude/hooks/tests -q --tb=short
+
+      - name: Drop the subprocess-capture .pth before script tests
+        # The hook capture data is already written. Removing the .pth means the
+        # python subprocesses that script tests spawn (validate-governance.sh
+        # helpers, skill-patch-propose.py, reality-ledger detectors) no longer
+        # even `import coverage` at startup — that per-subprocess import overhead,
+        # multiplied across validate-governance.sh's dozens of python calls, was
+        # enough to push it past its 20s in-test timeout. Restores the pre-S157
+        # subprocess speed for the script step.
+        run: |
+          set -euo pipefail
+          SITE="$(python3 -c 'import sysconfig; print(sysconfig.get_path("purelib"))')"
+          rm -f "$SITE/zzz_ceo_subprocess_cov.pth"
+          echo "removed .pth — script-test subprocesses run uninstrumented"
+
+      - name: Run script tests under coverage (in-process; NO subprocess capture)
+        # IMPORTANT (S157): scripts are measured with plain `coverage run`
+        # (parent instrumentation only), the .pth removed above + no
+        # COVERAGE_PROCESS_START, so the subprocesses these tests spawn are NOT
+        # instrumented (instrumenting them slows each past its in-test hard
+        # timeout 20s/30s/15s). The Tier-1 ENFORCING modules are all HOOKS
+        # (captured above); scripts only feed the advisory repo-wide floor, for
+        # which in-process coverage suffices. The perf/ microbench dir is
+        # excluded — those tests measure TIMING (coverage instrumentation biases
+        # their ratios, e.g. C.6 ASCII-fastpath p99 ratio) and add ~no coverage;
+        # they still run unaltered in validate.yml's matrix + dual-rail jobs.
+        run: |
+          set -euo pipefail
+          python3 -m coverage run --rcfile=.coveragerc \
+            -m pytest .claude/scripts/tests .claude/scripts/optimizer/tests --ignore=.claude/scripts/tests/perf \
+            -q --tb=short
+
+      - name: C5 hypothesis sidecar property tests (PLAN-093 Wave A.2 advisory)
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          python3 -m coverage run --rcfile=.coveragerc \
+            -m pytest .claude/sidecars/c5-dev-tools/hypothesis/tests -q --tb=short
+
+      - name: Combine parallel coverage + JSON export
+        run: |
+          set -euo pipefail
+          python3 -m coverage combine --rcfile=.coveragerc
+          python3 -m coverage json --rcfile=.coveragerc --ignore-errors -o coverage.json
+
+      - name: PLAN-093 parse-coverage gate (advisory — Wave A.5 kill-switch)
+        # CEO_BRANCH_COVERAGE_ENFORCING=0 keeps this step advisory until a
+        # future coverage-uplift sprint raises the baseline past 86%/85%.
+        env:
+          CEO_BRANCH_COVERAGE_ENFORCING: "0"
+        run: |
+          python3 .github/scripts/parse-coverage.py \
+            --branch-min 86 --line-min 85 \
+            --baseline-md .claude/plans/PLAN-093/wave-a-coverage-baseline.md \
+            --max-drop 2.0
+
+      - name: ADR-139 Tier-1 per-module coverage gate (ENFORCING)
+        # PLAN-112-FOLLOWUP-coverage-doctrine-reconcile (S157) / ADR-139.
+        # Per-module enforcing gate at 86% for the modules MEASURED ≥86% under
+        # subprocess capture (S157). check_agent_spawn.py stays ADVISORY (real
+        # gaps in fail-open except branches + decide() core; uplift owner =
+        # follow-on plan) and is intentionally NOT in this list. A module is
+        # promoted here the moment it crosses 86% — no ceremony beyond the edit
+        # (no-silent-LOWER clause: removals require an ADR-139 amendment).
+        # Kill-switch: CEO_TIER1_COVERAGE_ENFORCING=0 (advisory).
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/parse-coverage.py \
+            --tier1-modules 'check_bash_safety.py,check_read_injection.py,check_canonical_edit.py,check_output_secrets.py,audit_log.py' \
+            --tier1-min 86
+
+      - name: Coverage report (text, enforcing repo-wide --fail-under line floor)
+        run: |
+          set -euo pipefail
+          # PLAN-112-FOLLOWUP-coverage-doctrine-reconcile (S157) / ADR-139:
+          # the repo-wide line floor is an HONEST measured value under
+          # subprocess capture, not the aspirational 86%. The real per-module
+          # enforcement is the Tier-1 gate above; this repo-wide floor is a
+          # belt-and-braces guard against a broad regression. The omit-list
+          # (.claude/plans/* staging copies) lives in .coveragerc. CI TOTAL
+          # measured 69.75% at S157 (hooks subprocess-captured; scripts in-
+          # process only — script subprocess-capture is deferred follow-up
+          # work, see ADR-139). Floor set ~2.75pp below as margin. This is the
+          # belt, NOT the gate — the Tier-1 per-module 86% gate above is the
+          # real enforcement. Raise as the script-capture + agent_spawn uplift
+          # land (DYN-TEST-1 carries forward).
+          python3 -m coverage report --rcfile=.coveragerc --skip-empty \
+            --fail-under=67 | tee coverage-text.txt
+
+      - name: Branch coverage advisory baseline (non-enforcing, F-03-03)
+        # PLAN-045 F-03-03: branch coverage is measured (via --branch in
+        # the run steps above) and reported here as an advisory baseline.
+        # Output flows to coverage-branch-text.txt + GITHUB_STEP_SUMMARY.
+        # Does NOT gate the build — the enforcing gate above is line-only
+        # (78%). When 3 consecutive runs stabilise, this step flips to
+        # enforcing with threshold = max(baseline - 2, 50).
+        # TODO: PLAN-093 R-035 — flip continue-on-error: false when 3-run
+        #       stability window confirmed. Branch baseline ≥86% required
+        #       before enforcement. Advisory-only per ADR-115 anti-churn.
+        # PLAN-091 R-032 disposition: DEFER 78→85 line bump + branch flip to
+        # PLAN-093 (single coverage-uplift ceremony). Rationale + closure
+        # roadmap: .claude/plans/PLAN-091/wave-b-coverage-gap.md.
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          # --skip-empty + --precision=2 so the branch number is visible.
+          # --fail-under=0 guarantees non-failure regardless of value.
+          python3 -m coverage report --rcfile=.coveragerc --skip-empty --precision=2 \
+            --fail-under=0 | tee coverage-branch-text.txt
+          # Extract the TOTAL line's branch percentage for summary header.
+          # Format: "TOTAL  <stmts>  <miss>  <branch>  <partial>  <cov>%"
+          BRANCH_TOTAL=$(awk '/^TOTAL/{print $NF}' coverage-branch-text.txt || echo "N/A")
+          echo "BRANCH_TOTAL=${BRANCH_TOTAL}" >> "$GITHUB_ENV"
+
+      - name: Coverage summary to GitHub UI
+        # Surfaces top-line totals without forcing readers to download artifact.
+        run: |
+          set -euo pipefail
+          {
+            echo "## Coverage (enforcing gate: --fail-under=78 line)"
+            echo ""
+            echo '```'
+            tail -20 coverage-text.txt
+            echo '```'
+            echo ""
+            echo "### Branch coverage — advisory baseline (F-03-03)"
+            echo ""
+            echo "Measured via \`coverage run --branch\`. Non-enforcing until 3-run stability window."
+            echo ""
+            if [ -f coverage-branch-text.txt ]; then
+              echo '```'
+              tail -20 coverage-branch-text.txt
+              echo '```'
+            else
+              echo "_Branch report unavailable (step failed)._"
+            fi
+            echo ""
+            echo "_Line threshold calibrated to 78% post-hardening (Session 33, PLAN-024 F-wf-003). Original 86% target tracked as DYN-TEST-1 in PLAN-019 uplift roadmap. Branch advisory added Session 41 PLAN-045 F-03-03._"
+            echo "_See \`docs/coverage-baseline.md\` for measurement history._"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Coverage XML artifact
+        run: python3 -m coverage xml -o coverage.xml
+
+      - name: Upload coverage.xml
+        if: always()
+        # SHA-pinned (Sprint 7 Dependabot bump): actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: coverage-${{ github.sha }}
+          path: coverage.xml
+          retention-days: 14

@@ -1,0 +1,51 @@
+# coverage.py config — repo-root so local `coverage run` and CI share
+# identical flags. Documented in docs/coverage-baseline.md §Session 33
+# Phase D Batch B + PLAN-045 Session 41 F-03-03.
+#
+# PLAN-112-FOLLOWUP-coverage-doctrine-reconcile (S157) / ADR-139:
+# Hooks are tested via `subprocess.run([sys.executable, hook])`, so an
+# in-process `coverage run` under-counts them (e.g. check_read_injection
+# showed 0% despite 100%-passing tests). The fix is subprocess capture:
+#   * parallel = True            -> each process writes its own data file
+#   * COVERAGE_PROCESS_START env  -> points subprocesses at this rcfile
+#   * a `coverage.process_startup()` .pth in site-packages (HOME-independent)
+#   * `coverage combine` merges parent + subprocess data files
+#   * relative_files + [paths]   -> fold tmp-tree hook copies back to source
+# See coverage.yml for the wired CI steps.
+
+[run]
+branch = True
+parallel = True
+relative_files = True
+source =
+    .claude/hooks
+    .claude/scripts
+omit =
+    # Stale staging copies of hooks/scripts under plan dirs pollute the
+    # denominator — they are historical snapshots, not live code.
+    .claude/plans/*
+
+[paths]
+# Fold throwaway hook/script copies (built under pytest tmp dirs and run
+# from there) back onto the canonical source tree so subprocess coverage
+# is attributed to the real file, not /tmp/.../test_x/.claude/hooks/<h>.py.
+hooks =
+    .claude/hooks/
+    */.claude/hooks/
+scripts =
+    .claude/scripts/
+    */.claude/scripts/
+
+[report]
+skip_empty = True
+# precision = 2 gives branch percentages like "72.45%" instead of "72%".
+precision = 2
+# exclude_lines keeps defensive `pragma: no cover` markers honoured.
+exclude_lines =
+    pragma: no cover
+    raise NotImplementedError
+    if __name__ == .__main__.:
+    if TYPE_CHECKING:
+
+[html]
+directory = htmlcov

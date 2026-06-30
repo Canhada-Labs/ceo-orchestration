@@ -1,0 +1,69 @@
+# Pitfalls Catalog — Business-Support Squad
+# Loaded alongside the universal catalog when the business-support profile is
+# installed. Format mirrors .claude/pitfalls-catalog.yaml:
+# id, rule, whenToUse, agents.
+
+pitfalls:
+  # === ESCALATION POLICY AND SLA ===
+  - id: BSP-001
+    rule: "NEVER change an escalation routing rule without (a) a written rollback procedure and (b) a shadow period where the new rule runs in parallel with the old one, routing to the same queue, before becoming active. A bad routing rule can silently land enterprise tickets in the wrong queue."
+    whenToUse: "any change to ticketing system routing logic, auto-assignment rules, or escalation trigger conditions"
+    agents: [Camille Fontaine]
+
+  - id: BSP-002
+    rule: "SLA thresholds in the ticketing system MUST match the contractual SLA commitments exactly. A mismatch between the configured SLA (e.g. 4-hour response) and the contracted SLA (e.g. 2-hour response) causes silent breaches that are never flagged to operations."
+    whenToUse: "any SLA threshold configuration change; any contract renewal that modifies SLA terms"
+    agents: [Camille Fontaine, Ingrid Hoffmann]
+
+  - id: BSP-003
+    rule: "On-call rotation changes MUST be confirmed by all affected engineers before going live. A rotation that exists only in a configuration system but wasn't communicated to the engineer results in an unanswered P0 escalation."
+    whenToUse: "any on-call rotation update, PagerDuty/OpsGenie schedule change, or holiday coverage plan"
+    agents: [Camille Fontaine]
+
+  - id: BSP-004
+    rule: "Escalation timeout conditions MUST be tested with a replay of real ticket volume before deploy. An escalation that fires too early floods engineering; one that fires too late misses the SLA window. Test with at least 48 hours of historical ticket data."
+    whenToUse: "any escalation timeout configuration change; new product tier adding support coverage"
+    agents: [Camille Fontaine, Anika Johansson]
+
+  # === TICKET DATA AND TOOLING INTEGRITY ===
+  - id: BSP-005
+    rule: "Any new custom field on the ticket schema that may contain PII MUST have a declared retention class and a deletion path before it is deployed. Ticket PII falls under GDPR/LGPD subject-access and erasure rights — a field with no deletion path is a compliance violation at the first DSR."
+    whenToUse: "any new custom field added to the ticket schema in Zendesk, Intercom, Freshdesk, or in-house systems"
+    agents: [Kwame Asante]
+
+  - id: BSP-006
+    rule: "Webhook integrations between the ticketing system and external tools MUST implement idempotency. Duplicate webhook deliveries (guaranteed by every major webhook provider under at-least-once semantics) MUST NOT create duplicate tickets, double-credit refunds, or send duplicate notifications to customers."
+    whenToUse: "any new or modified webhook integration from or to the support ticketing system"
+    agents: [Kwame Asante]
+
+  - id: BSP-007
+    rule: "Bulk exports of ticket data for analytics, ML training, or reporting MUST scrub or pseudonymise PII fields before the data leaves the ticketing system. 'We'll handle PII in the BI tool' is not compliant — the export itself is the transfer."
+    whenToUse: "any bulk export, ETL pipeline, or reporting query that extracts ticket records from the support system"
+    agents: [Kwame Asante, Anika Johansson]
+
+  - id: BSP-008
+    rule: "Support API keys MUST follow least-privilege scope. An integration that only reads ticket status MUST NOT hold a write-scope API key. API key scope is permanent until rotated — over-permissioned keys are a lateral-movement risk."
+    whenToUse: "any new integration onboarding that requires a support system API key; any API key rotation"
+    agents: [Kwame Asante]
+
+  # === CUSTOMER COMMUNICATION AND TEMPLATES ===
+  - id: BSP-009
+    rule: "Response macros and templates that reference specific resolution times or commitments MUST be reviewed against the contractual SLA before deployment. 'We'll resolve this by end of day' in a template is a contractual promise if the customer quotes it in a dispute."
+    whenToUse: "any new or modified response macro, canned response, or automated reply template"
+    agents: [Ingrid Hoffmann, Camille Fontaine]
+
+  - id: BSP-010
+    rule: "SLA breach notification templates MUST clearly state that a breach occurred and what the impact is. Softening language that obscures the breach (e.g. 'your ticket is taking longer than expected') without stating the SLA commitment that was missed is a transparency failure and may violate contract terms."
+    whenToUse: "any modification to SLA breach notification copy or automated escalation email templates"
+    agents: [Ingrid Hoffmann]
+
+  # === KNOWLEDGE BASE AND SELF-SERVICE ===
+  - id: BSP-011
+    rule: "KB articles MUST include a last-reviewed date and a review-expiry policy (e.g. quarterly for frequently-changing features, annually for stable APIs). An article with no review date is effectively undated — agents and customers cannot know if it reflects the current product."
+    whenToUse: "any new KB article creation or article import from a legacy system; KB taxonomy redesign"
+    agents: [Tomás Vargas]
+
+  - id: BSP-012
+    rule: "Agent-assist article suggestion confidence thresholds MUST be calibrated and monitored. Surfacing low-confidence or deprecated articles as 'suggested solutions' degrades agent trust in the system and can cause agents to send customers incorrect instructions. Monitor the deflection-to-reopen rate as a quality signal."
+    whenToUse: "any change to KB search ranking, agent-assist suggestion thresholds, or KB article indexing logic"
+    agents: [Tomás Vargas, Anika Johansson]

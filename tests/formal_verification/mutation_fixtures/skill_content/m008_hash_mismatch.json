@@ -1,0 +1,8 @@
+{
+  "description": "Hash mismatch: spawn prompt carries a 64-hex SHA-256 value that does NOT match the staged SKILL.md content. All prior sub-checks pass; sub-check 10 (hashlib.sha256(content_bytes).hexdigest() == expected) fails.",
+  "mutation_class": "S3_content_validation",
+  "sub_check_targeted": 10,
+  "expected_reason": "reference_hash_mismatch",
+  "skill_body_variant": "valid",
+  "hash_in_prompt_override": "deadbeef00000000000000000000000000000000000000000000000000000000"
+}

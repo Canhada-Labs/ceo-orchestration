@@ -1,0 +1,8 @@
+{
+  "session_id": "local-sess-002",
+  "tool": "Bash",
+  "tool_input": {
+    "command": "ls -la",
+    "description": "List files"
+  }
+}

@@ -1,0 +1,121 @@
+# Task chains — Paid Media Squad
+# Domain-specific workflows that extend the universal .claude/task-chains.yaml.
+
+task_chains:
+  - id: paid-media-launch-new-channel
+    title: "Launch a new paid channel or platform (full pre-flight)"
+    whenToUse: |
+      A new paid advertising channel is being added to the media mix for the
+      first time — examples: first TikTok Ads campaign, first LinkedIn Ads
+      campaign, first programmatic DSP activation. Also applies when a
+      previously paused channel is reactivated after more than 90 days.
+      Out of scope: incremental campaign additions to an already-active channel.
+    steps:
+      - id: 1
+        owner: "Valentina Reyes (Paid Social Strategist)"
+        action: "Score the platform against the audience-platform fit matrix: audience density for target persona, commercial intent signals, creative format compatibility, measurement readiness post-iOS. Document score before any budget is committed (PMD-008 gate for Advantage-Plus)."
+      - id: 2
+        owner: "Marcus Holt (PPC Strategist)"
+        action: "If SEM-adjacent platform (Google, Microsoft, Reddit Search): design campaign structure — brand vs. non-brand segmentation (PMD-006), negative keyword seed list minimum 50 entries (PMD-007), bid strategy matched to conversion-volume data maturity (PMD-005)."
+      - id: 3
+        owner: "Tomás Carvalho (Revenue Operations Analyst)"
+        action: "Define attribution plan for the new channel: conversion window, which conversion events map to business outcomes, how channel credit will be allocated in the multi-touch model. Document before launch to establish baseline. Identify double-count risk with existing channels."
+      - id: 4
+        owner: "Rafaela Dias (Compliance & Legal Reviewer)"
+        action: "Review platform terms for the target ad category. Audit consent infrastructure: does the pixel/SDK fire only after affirmative consent on regulated page types (PMD-012)? Is the audience data being uploaded hashed (PMD-004)?"
+      - id: 5
+        owner: "Camila Nunes (Creative Strategist)"
+        action: "Build opening creative inventory: minimum 4 variants per ad set (PMD-010), platform-native formats and aspect ratios, separate hook variants with shared body/CTA for first-week signal gathering."
+      - id: 6
+        owner: "Camila Nunes"
+        action: "Establish pacing targets and fatigue-detection cadence: daily spend cap, frequency cap, weekly hook-rate and CTR review schedule. Define kill threshold for underperforming variants (PMD-011 runtime minimum respected)."
+      - id: 7
+        owner: "Tomás Carvalho"
+        action: "Configure tracking: pixel/SDK fires verified, conversion events match agreed attribution plan, test purchase / test lead confirmed in platform UI before live budget is applied."
+      - id: 8
+        owner: "Staff Code Reviewer"
+        action: "Launch VETO check: audience-platform score documented, attribution plan filed, consent audit passed (PMD-012), PII upload hashed (PMD-004), creative variant count meets minimum (PMD-010)."
+    verification: |
+      - Audience-platform fit score documented before budget committed
+      - Attribution plan filed with conversion windows specified
+      - Pixel/tag consent-mode configured — no pre-consent firing on sensitive pages (PMD-012)
+      - First-party list uploads SHA-256 hashed (PMD-004)
+      - Minimum 4 creative variants per ad set above $200/day (PMD-010)
+      - Pacing and fatigue-detection schedule live before day 3
+
+  - id: paid-media-attribution-model-change
+    title: "Change attribution model or conversion window (governance review)"
+    whenToUse: |
+      Any proposed change to the attribution methodology, conversion window,
+      or primary conversion event across an active paid-media programme.
+      Triggered by: switching from last-click to data-driven, reducing a
+      30-day to 7-day window, introducing media-mix modelling as a parallel
+      source-of-truth, or changing the primary conversion event on any campaign.
+      Out of scope: adding a secondary conversion event for learning purposes
+      without changing the primary or billing metric.
+    steps:
+      - id: 1
+        owner: "Tomás Carvalho (Revenue Operations Analyst)"
+        action: "Document the current model: current conversion windows per platform, current primary conversion events per campaign, trailing-90-day reported conversions under current methodology (PMD-001 baseline)."
+      - id: 2
+        owner: "Tomás Carvalho"
+        action: "Model the impact of the proposed change: run current data through new window/model and produce before/after delta table. Flag any campaign where reported conversions change by more than 15% — these require VETO holder review."
+      - id: 3
+        owner: "Valentina Reyes (Paid Social Strategist)"
+        action: "For Meta, TikTok, LinkedIn: confirm whether the change triggers a campaign learning reset. If yes, schedule the change at the start of a new budget period (not mid-month) to minimise delivery disruption."
+      - id: 4
+        owner: "Marcus Holt (PPC Strategist)"
+        action: "For Google/Microsoft: evaluate whether Smart Bidding targets need to be recalibrated post-change. A 7-day to 30-day window change inflates reported conversions and the current Target CPA will become under-target overnight."
+      - id: 5
+        owner: "Tomás Carvalho"
+        action: "Freeze the old model's output for one full reporting cycle post-change. Document the changeover date and model version in the attribution changelog. Notify all stakeholders who consume paid-media reports (PMD-002 double-count warning if applicable)."
+      - id: 6
+        owner: "Principal QA Architect"
+        action: "Validate post-change tracking: verify new conversion event fires correctly in all platforms, spot-check that double-count logic in dashboard accounts for the new model."
+      - id: 7
+        owner: "Staff Code Reviewer"
+        action: "Merge VETO check: trailing-90-day impact documented, learning-reset timing agreed, Smart Bidding targets reviewed, attribution changelog entry written."
+    verification: |
+      - Trailing-90-day conversion delta table produced before change (PMD-001)
+      - Attribution changelog entry with changeover date and model version
+      - Smart Bidding targets reviewed against new conversion window (PMD-005)
+      - Reporting stakeholders notified of methodology change
+      - Double-count risk flagged in any blended ROAS dashboard (PMD-002)
+
+  - id: paid-media-creative-refresh-cycle
+    title: "Execute a planned creative refresh (fatigue-driven or strategic)"
+    whenToUse: |
+      A creative refresh is triggered by fatigue signals (hook rate declining
+      week-over-week, frequency above 3.5 on awareness placements, CPM
+      increasing more than 20% over 2 weeks) or by a strategic brief
+      (new product launch, seasonal push, brand refresh). Use this chain
+      for any refresh that touches more than 2 ad sets or involves a new
+      creative direction rather than an incremental variant swap.
+    steps:
+      - id: 1
+        owner: "Camila Nunes (Creative Strategist)"
+        action: "Run fatigue audit: pull hook rate, CTR, frequency, CPM trends for all active creatives over the past 21 days. Flag any creative below hook-rate floor or above frequency ceiling per platform benchmark."
+      - id: 2
+        owner: "Camila Nunes"
+        action: "Build creative brief: define the variable being tested (hook / format / CTA / offer / social proof type). Each refresh MUST isolate one variable per test tier — do not change hook + format + CTA simultaneously."
+      - id: 3
+        owner: "Rafaela Dias (Compliance & Legal Reviewer)"
+        action: "Review new copy for claim compliance: substantiation files for any outcome claims, disclosure placement for testimonials, platform policy compliance for the ad category (PMD-013 for influencer content)."
+      - id: 4
+        owner: "Tomás Carvalho (Revenue Operations Analyst)"
+        action: "Confirm test parameters: minimum runtime before kill decision (PMD-011), minimum conversion volume per variant before winner declaration (PMD-009), budget allocation between control and test variants."
+      - id: 5
+        owner: "Valentina Reyes (Paid Social Strategist)"
+        action: "Structure launch: retire fatigued creatives only after new variants accumulate 48 hours of delivery (not before — sudden creative vacuums cause bid instability). Verify minimum 4 variants per ad set above $200/day threshold (PMD-010)."
+      - id: 6
+        owner: "Principal QA Architect"
+        action: "Post-launch check at 72 hours: verify new creatives are delivering, spend is distributing across variants, tracking events fire correctly on landing pages linked from new ads."
+      - id: 7
+        owner: "Staff Code Reviewer"
+        action: "Merge VETO check: compliance review passed, test isolation confirmed (single variable per tier), significance thresholds agreed, minimum runtime floor respected (PMD-011)."
+    verification: |
+      - Fatigue audit documented with per-creative metrics before refresh
+      - Single variable isolated per test tier
+      - Compliance review passed for all new copy (PMD-013 if influencer content)
+      - Minimum 4 variants per ad set above $200/day (PMD-010)
+      - Winner declaration deferred until significance threshold reached (PMD-009)

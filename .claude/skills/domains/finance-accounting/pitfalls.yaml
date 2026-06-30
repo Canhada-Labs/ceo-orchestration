@@ -1,0 +1,74 @@
+# Pitfalls Catalog — Finance & Accounting Squad
+# Loaded alongside the universal catalog when the finance-accounting profile is
+# installed. Format mirrors .claude/pitfalls-catalog.yaml:
+# id, rule, whenToUse, agents.
+
+pitfalls:
+  # === REVENUE RECOGNITION & ACCRUALS ===
+  - id: FIN-001
+    rule: "NEVER recognise revenue before all performance obligations under the applicable standard (ASC 606 / IFRS 15 / CPC 47) are satisfied. 'We delivered it, so we can book it' is not a recognition analysis. Each performance obligation must be identified, its standalone selling price allocated, and its satisfaction confirmed before recognition."
+    whenToUse: "any new revenue stream launch, contract modification, pricing change, or end-of-period revenue review"
+    agents: [Renata Fonseca]
+
+  - id: FIN-002
+    rule: "NEVER launch a new revenue stream without a written revenue-recognition policy memo signed by the Financial Controller before the first invoice is issued. Retroactively writing recognition policy after revenue is on the books produces restatement risk."
+    whenToUse: "any new product, service tier, bundled offering, or pricing model before go-live"
+    agents: [Renata Fonseca, Marcelo Santos]
+
+  - id: FIN-003
+    rule: "NEVER post an accrual entry without a documented estimate basis (who produced the estimate, what methodology, what data source), an owner responsible for monitoring the accrual, and a defined true-up review date. An undocumented accrual is an unsupported liability."
+    whenToUse: "any accrual entry creation, modification, or reversal"
+    agents: [Renata Fonseca, Cintia Barros]
+
+  - id: FIN-004
+    rule: "NEVER adjust or reverse a journal entry after the hard close date without documented CFO approval and a clear explanation of why the entry was missed in the close process. Post-hard-close entries are an auditor-attention signal regardless of materiality."
+    whenToUse: "any journal entry dated after the period hard-close date; any manual journal entry above the dual-approval threshold"
+    agents: [Renata Fonseca, Eduardo Marques]
+
+  # === TAX POSITIONS & TRANSFER PRICING ===
+  - id: FIN-005
+    rule: "NEVER execute a new intercompany transaction (management fee, royalty, IP licence, service charge, intercompany loan) without a transfer pricing documentation memo establishing the arm's-length methodology, functional analysis, and selected comparable before the transaction date — not retrospectively."
+    whenToUse: "any new intercompany transaction, related-party agreement, or intercompany restructuring"
+    agents: [Valentina Fiscal]
+
+  - id: FIN-006
+    rule: "NEVER take a cross-border tax position classified as 'aggressive' (uncertain tax position requiring ASC 740-10 / IAS 12 disclosure) without a written opinion from external or senior internal tax counsel AND CFO written risk-acceptance before filing."
+    whenToUse: "any cross-border tax position that does not meet the more-likely-than-not standard or that creates a liability above the entity's materiality threshold"
+    agents: [Valentina Fiscal]
+
+  - id: FIN-007
+    rule: "NEVER claim R&D tax credits (US §41, Brazil Lei do Bem, UK RDEC) without contemporaneous project-level records: qualified research expense logs, payroll time allocations by project, experiment documentation establishing the uncertainty being resolved. Reconstructed records at audit time are per se insufficient under IRS/RFB audit standards."
+    whenToUse: "any R&D credit study, annual R&D credit claim preparation, or innovation incentive filing"
+    agents: [Valentina Fiscal]
+
+  - id: FIN-008
+    rule: "NEVER incorporate a new subsidiary or structure an acquisition without a tax diligence memo addressing: entity-type election and tax treatment, exit flexibility (liquidation, sale of shares vs. assets), repatriation mechanics (dividend withholding, treaty availability), and Pillar 2 GloBE impact for entities above the €750M consolidated revenue threshold."
+    whenToUse: "any new entity formation, acquisition structuring, or cross-border reorganisation"
+    agents: [Valentina Fiscal, Renata Fonseca]
+
+  # === INTERNAL CONTROLS & AUDIT ===
+  - id: FIN-009
+    rule: "NEVER configure a financial system (ERP, payroll platform, AP automation) in a way that allows a single user to authorise AND execute AND record a financial transaction. Segregation of duties is a primary internal control; its absence is a reportable deficiency under SOX and a significant deficiency under PCAOB standards."
+    whenToUse: "any ERP or financial system access-provisioning, role design, or workflow configuration"
+    agents: [Eduardo Marques, Renata Fonseca]
+
+  - id: FIN-010
+    rule: "NEVER deploy a change to a production financial system (ERP, GL, payroll, payment platform) without going through a documented change-management process: change request, impact assessment, approval, testing in non-production, rollback plan. Emergency patches require retroactive approval documentation within 24 hours."
+    whenToUse: "any production financial system change, configuration update, or data migration"
+    agents: [Eduardo Marques]
+
+  - id: FIN-011
+    rule: "NEVER skip the 3-way match (purchase order, goods receipt, vendor invoice) for vendor invoices above the materiality threshold. A 2-way match (PO + invoice only) exposes the AP cycle to duplicate payment, inflated quantities, and pricing manipulation risk."
+    whenToUse: "any AP invoice approval workflow design, vendor payment process, or invoice exception handling"
+    agents: [Cintia Barros, Eduardo Marques]
+
+  # === PERIOD-END CLOSE & REPORTING ===
+  - id: FIN-012
+    rule: "NEVER release consolidated financial statements without reconciliation sign-off from every entity's Controller. A parent-level consolidation produced without entity-level reconciliation sign-off is an unsupported financial statement. Individual entity sign-offs are the audit trail for the consolidated output."
+    whenToUse: "any period-end close, consolidated financial statement preparation, or management reporting release"
+    agents: [Renata Fonseca, Eduardo Marques]
+
+  - id: FIN-013
+    rule: "NEVER present a variance report with only the absolute delta between actuals and plan. Every material variance MUST be attributed to volume, price/rate, and mix effects. 'Revenue was $200K below plan' is an observation; 'Revenue was $200K below plan driven by 15% volume shortfall in the enterprise segment, partially offset by 3% ASP improvement in SMB' is a diagnosis."
+    whenToUse: "any management reporting, board presentation, or investor update that includes actuals vs. plan or actuals vs. prior period"
+    agents: [Marcelo Santos, Renata Fonseca]

@@ -1,0 +1,24 @@
+{
+  "tiers": {
+    "sha_exists": "HIGH_CONFIDENCE_BLOCK",
+    "path_exists": "MED_CONFIDENCE_ADVISORY",
+    "function_exists": "MED_CONFIDENCE_ADVISORY",
+    "line_range": "MED_CONFIDENCE_ADVISORY",
+    "import_resolves": "MED_CONFIDENCE_ADVISORY",
+    "test_passes": "LOW_CONFIDENCE_ADVISORY"
+  },
+  "_meta": {
+    "baseline_report": ".claude/plans/PLAN-090/wave-a10-confidence-baseline.md",
+    "baseline_date": "2026-05-18",
+    "min_samples": 200,
+    "amendment_doc": ".claude/adr/ADR-019-AMEND-1-confidence-gate-block-mode-lifecycle.md",
+    "plan": "PLAN-100",
+    "ship_tag": "v1.34.0",
+    "promoted_classes_v1_34_0": [
+      "sha_exists"
+    ],
+    "promotion_rationale_v1_34_0": {
+      "sha_exists": "Critical severity (forensic gap if wrong) + deterministic verifier (git cat-file -e) + N=200 empirical sample met. Other critical class (test_passes) demoted to LOW_CONFIDENCE_ADVISORY due to pytest verifier env-flakiness (87.5% empirical reject rate)."
+    }
+  }
+}

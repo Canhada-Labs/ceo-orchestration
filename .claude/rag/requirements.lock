@@ -1,0 +1,40 @@
+# .claude/rag/requirements.lock (PLAN-041 Phase 3 / ADR-062)
+#
+# PLACEHOLDER — this file defines the INTERFACE for a production
+# requirements.lock. It is NOT a valid pip install target as-shipped.
+#
+# Production generation (adopter-side OR framework CI):
+#
+#   # Start from a pinned top-level dependency list:
+#   echo "lightrag==<PINNED>" > /tmp/reqs.in
+#   # Generate hash-locked transitive closure:
+#   pip-compile --generate-hashes \
+#               --output-file .claude/rag/requirements.lock \
+#               /tmp/reqs.in
+#
+# install-sidecar.sh MUST invoke pip with `--require-hashes --no-deps`
+# against this file. No dependency installed without a matching sha256.
+#
+# Regeneration workflow:
+#   1. Open PR with updated pin in /tmp/reqs.in
+#   2. CI regenerates this file via pip-compile
+#   3. Branch-protection requires CODEOWNERS review
+#   4. Optional: ADR-063 amendment for new LightRAG major version
+#
+# Security rationale: PLAN-041 Round 1 debate, security-engineer P0-2.
+# `pip install lightrag` with no version pin, no hash lock, no SBOM is
+# the #1 supply-chain attack vector for the sidecar. This file is the
+# mitigation contract.
+#
+# Format: standard pip requirements with hashes, e.g.:
+#
+#   lightrag==1.2.3 \
+#       --hash=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+#   chromadb==0.4.15 \
+#       --hash=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+#   sentence-transformers==2.2.2 \
+#       --hash=sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+#   # ... transitive closure
+#
+# As-shipped (no hashes): install-sidecar.sh MUST refuse to run and
+# instruct the adopter to run the regeneration workflow first.

@@ -1,0 +1,4 @@
+# git log output
+commit a4f3c20be8d12f456789012345678901234567890
+Author: someone <user@example.com>
+Date: 2026-05-11

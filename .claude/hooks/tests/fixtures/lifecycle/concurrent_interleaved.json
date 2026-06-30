@@ -1,0 +1,36 @@
+{
+  "_comment": "PLAN-125 WS-1 golden fixture: two concurrent DISTINCT tools (Bash + Read) whose Pre/Post events interleave on a single session. Pairing is by tool_use_id, NOT arrival order — the Read's Post arrives BEFORE the Bash's Post even though the Bash Pre arrived first. Each event is one hook stdin payload, applied in `sequence` order.",
+  "session_id": "sess-concurrent",
+  "sequence": [
+    {
+      "hook_event_name": "PreToolUse",
+      "session_id": "sess-concurrent",
+      "tool_use_id": "toolu_bash_A",
+      "tool_name": "Bash",
+      "tool_input": {"command": "sleep 5"}
+    },
+    {
+      "hook_event_name": "PreToolUse",
+      "session_id": "sess-concurrent",
+      "tool_use_id": "toolu_read_B",
+      "tool_name": "Read",
+      "tool_input": {"file_path": "/repo/x.py"}
+    },
+    {
+      "hook_event_name": "PostToolUse",
+      "session_id": "sess-concurrent",
+      "tool_use_id": "toolu_read_B",
+      "tool_name": "Read",
+      "duration_ms": 40,
+      "tool_response": "..."
+    },
+    {
+      "hook_event_name": "PostToolUse",
+      "session_id": "sess-concurrent",
+      "tool_use_id": "toolu_bash_A",
+      "tool_name": "Bash",
+      "duration_ms": 5200,
+      "tool_response": "done"
+    }
+  ]
+}

@@ -1,0 +1,126 @@
+# Task chains — Mobile Squad
+# Domain-specific workflows that extend the universal .claude/task-chains.yaml.
+
+task_chains:
+  - id: mobile-api-contract-change
+    title: "Deploy a cross-platform API contract change (schema, auth, deep-links)"
+    whenToUse: |
+      A backend API endpoint that mobile clients consume is being changed in
+      a way that affects the contract: request or response schema change,
+      field rename, error code change, auth token format change, push
+      notification payload change, or deep-link format change. This chain
+      is triggered even for "minor" contract changes — a nullable field
+      becoming required breaks every older mobile client version still in
+      the App Store.
+    steps:
+      - id: 1
+        owner: "Santiago Reyes (Mobile Architect)"
+        action: "Contract change analysis: document exactly what is changing in the API contract and which mobile client versions are affected. Determine the minimum mobile client version that can handle the new contract. Assess how many active users are on older versions (MOB-001)."
+      - id: 2
+        owner: "Santiago Reyes"
+        action: "Versioning strategy: choose an approach — API versioning (new endpoint, old endpoint deprecated), field addition only (backward-compatible), or flag-gated rollout. Document the strategy. If the old app version will break, a new mobile release MUST ship first (MOB-001)."
+      - id: 3
+        owner: "Yui Nakamura (iOS Engineer)"
+        action: "iOS impact assessment: which iOS code paths consume the affected contract? Are there backward-compatibility shims needed? Does a new mobile client need to ship before the backend change? Set an iOS release timeline if required."
+      - id: 4
+        owner: "Damilola Adeyemi (Android Engineer)"
+        action: "Android impact assessment: mirror Yui's iOS assessment for Android. Are there ProGuard rules that affect the impacted code paths? Confirm Android release timeline if a new client must ship first (MOB-009)."
+      - id: 5
+        owner: "Santiago Reyes"
+        action: "Coordinated deployment plan: sequence the deployments. If both platforms need a new client first: (a) ship iOS and Android clients → (b) monitor adoption until >80% active users on new client (MOB-003) → (c) deploy backend contract change. Document go/no-go adoption criteria."
+      - id: 6
+        owner: "Priya Singh (Mobile QA Engineer)"
+        action: "Cross-platform contract test: test the new contract against the new mobile client AND the old mobile client. Old client behavior on new contract must be graceful degradation — not a crash or silent data loss (MOB-004)."
+      - id: 7
+        owner: "Santiago Reyes"
+        action: "Deep-link and push backward-compatibility check: if deep links or push payloads are affected, verify that the previous app version (still in App Store) handles the new format gracefully — either processes it correctly or ignores it safely (MOB-004)."
+      - id: 8
+        owner: "Staff Code Reviewer"
+        action: "Merge check: versioning strategy documented (MOB-001), old client tested against new contract (MOB-004), adoption gate defined if phased rollout required (MOB-003), certificate pinning coordination confirmed if TLS-related (MOB-002)."
+    verification: |
+      - API versioning strategy documented and approved by Santiago (MOB-001)
+      - Old mobile client version tested against new API contract (MOB-004)
+      - Adoption gate defined (>80%) if phased client rollout required (MOB-003)
+      - Both platforms have iOS and Android release timelines aligned
+      - Certificate pinning coordination plan if TLS-related (MOB-002)
+      - Graceful degradation confirmed for old app versions
+
+  - id: mobile-app-store-release
+    title: "Prepare and submit a mobile app release (iOS App Store + Android Play Store)"
+    whenToUse: |
+      A new version of the mobile app is being submitted to the App Store
+      and/or Play Store. Covers pre-submission checklist, build verification,
+      privacy and permission compliance, phased rollout configuration, and
+      post-release monitoring gate. Triggered for every production release,
+      including hotfixes.
+    steps:
+      - id: 1
+        owner: "Yui Nakamura (iOS Engineer)"
+        action: "iOS pre-submission checklist: verify PrivacyInfo.xcprivacy matches all privacy APIs used in the build (MOB-005); confirm all entitlements are actively used in this build (MOB-006); verify no sensitive data in UserDefaults (MOB-007); confirm NSUsageDescription strings are accurate for all permissions."
+      - id: 2
+        owner: "Damilola Adeyemi (Android Engineer)"
+        action: "Android pre-submission checklist: verify all AndroidManifest permissions have corresponding Play Console justifications (MOB-008); review ProGuard/R8 changes since last release (MOB-009); confirm no credentials in SharedPreferences (MOB-010); update Play Store data safety section if new data flows added."
+      - id: 3
+        owner: "Santiago Reyes (Mobile Architect)"
+        action: "Cross-platform parity check: confirm that the feature set and behaviour of this release is parity across iOS and Android. Any intentional asymmetry must be documented with a timeline for the other platform. Confirm no API contract changes were shipped without the coordinated rollout plan (MOB-001)."
+      - id: 4
+        owner: "Priya Singh (Mobile QA Engineer)"
+        action: "Physical device regression test: run the regression suite on the minimum-supported iOS device and minimum-supported Android device (MOB-012). Test accessibility (VoiceOver, TalkBack, Dynamic Type large), network degradation (offline, 3G), and cold start time. Sign off only on physical device results."
+      - id: 5
+        owner: "Beatrix Hoffmann (Mobile Release Manager)"
+        action: "Build preparation: confirm build number monotonicity (App Store rejects if build number ≤ previous submission), code signing configuration, release notes authored (don't skip — blank notes attract reviewer attention), and TestFlight / Internal Testing track verified."
+      - id: 6
+        owner: "Beatrix Hoffmann"
+        action: "Phased rollout configuration: configure App Store Connect and Play Console for phased rollout (1% first, auto-advance gates based on crash rate threshold). Define the crash-rate and ANR-rate gate criteria and monitoring responsibility (MOB-011)."
+      - id: 7
+        owner: "Priya Singh"
+        action: "Post-release monitoring (first 48 hours at 1% rollout): monitor crash rate, ANR rate (Android), and App Store review sentiment. If crash rate exceeds baseline +0.5%, halt rollout and notify Santiago (MOB-011)."
+      - id: 8
+        owner: "Staff Code Reviewer"
+        action: "Release gate sign-off: iOS checklist complete (MOB-005, MOB-006, MOB-007), Android checklist complete (MOB-008, MOB-009, MOB-010), physical device QA signed off (MOB-012), phased rollout configured (MOB-011), Santiago cross-platform parity confirmed."
+    verification: |
+      - iOS PrivacyInfo.xcprivacy updated for all privacy APIs (MOB-005)
+      - All iOS entitlements confirmed as actively used (MOB-006)
+      - Android restricted permissions have Play Console justifications (MOB-008)
+      - ProGuard/R8 changes audited for security-critical class impact (MOB-009)
+      - Physical device regression test passed on minimum-supported devices (MOB-012)
+      - Phased rollout configured with crash-rate gate (MOB-011)
+      - Cross-platform parity confirmed by Santiago
+
+  - id: mobile-security-posture-change
+    title: "Change mobile security configuration (certificate pinning, detection, Keychain/Keystore)"
+    whenToUse: |
+      Any change to the mobile security posture: certificate pinning
+      configuration, jailbreak/root detection logic, Keychain/Keystore
+      usage, auth token storage, or any security-relevant ProGuard/R8 rule.
+      High-risk: security regressions ship in a signed binary that cannot
+      be changed without going through App Store review.
+    steps:
+      - id: 1
+        owner: "Santiago Reyes (Mobile Architect)"
+        action: "Security change classification: document exactly what security control is changing and why. For any reduction in security posture (e.g. disabling a detection control), a formal security risk acceptance signed by the Owner is required before proceeding."
+      - id: 2
+        owner: "Santiago Reyes"
+        action: "Certificate pinning coordination (if applicable): issue 72-hour advance notice to iOS and Android teams. Draft the coordinated deployment plan (mobile client ships first, backend rotates after >90% adoption) (MOB-002)."
+      - id: 3
+        owner: "Yui Nakamura (iOS Engineer)"
+        action: "iOS Keychain review: if storage or retrieval of sensitive data is changing, confirm data is routed to Keychain with the correct accessibility level (kSecAttrAccessibleWhenUnlockedThisDeviceOnly for session-bound data). Audit any UserDefaults usage for sensitive keys (MOB-007)."
+      - id: 4
+        owner: "Damilola Adeyemi (Android Engineer)"
+        action: "Android Keystore review: if storage or retrieval of sensitive data is changing, confirm Android Keystore is used with appropriate hardware-backed flag. Review ProGuard/R8 rules for any rule that touches the affected security code path (MOB-009, MOB-010)."
+      - id: 5
+        owner: "Priya Singh (Mobile QA Engineer)"
+        action: "Security regression test: verify on a physical jailbroken/rooted device (or emulator with root detection test harness) that the security control functions as intended after the change. For certificate pinning changes, verify the old certificate is rejected after the rotation window."
+      - id: 6
+        owner: "Santiago Reyes"
+        action: "Final security review: confirm the change achieves the intended security outcome without introducing a regression in another control. If the change reduces security posture, confirm Owner sign-off is on record."
+      - id: 7
+        owner: "Staff Code Reviewer"
+        action: "Security merge gate: Santiago risk classification documented, certificate coordination plan if applicable (MOB-002), Keychain/Keystore usage confirmed for all sensitive data (MOB-007, MOB-010), ProGuard/R8 changes audited (MOB-009), Priya security regression test passed."
+    verification: |
+      - Security change documented with rationale
+      - Owner sign-off on file if security posture is being reduced
+      - Certificate pinning 72h notice issued and coordination plan executed (MOB-002)
+      - Keychain (iOS) / Keystore (Android) confirmed for all sensitive data (MOB-007, MOB-010)
+      - ProGuard/R8 changes audited for security-critical class paths (MOB-009)
+      - Physical device security regression test passed

@@ -1,0 +1,26 @@
+# Codex CLI version pin — PLAN-081 Phase 6 / R1 C5 BLOCKING per TDE MF-6
+#
+# Format: semver range. release.yml step 15 + scripts/local/pair-rail-gate.sh
+# pre-flight assert that `codex --version` resolves to a version in this range.
+# Pin update ceremony: requires Phase 4-bis re-run + GPG sign + ADR amendment
+# IF catch_rate shifts >5pp on the locked corpus.
+#
+# Initial range chosen to cover the Phase 0A SPIKE-VERDICT.md baseline.
+#
+# v1.16.0 update (Phase 6-bis 2026-05-11 S101-cont): widened upper bound
+# to <0.131.0 so Owner's actual binary at codex-cli 0.130.0 is in-range.
+# Per ADR-111 §pin-update-protocol, this widening does NOT trigger Phase
+# 4-bis re-run because no new locked-corpus measurement has been taken
+# yet (initial corpus run is itself part of v1.16.0 GA scope). If post-GA
+# the promotion-gate run shows catch_rate shift >5pp on 0.130.x vs
+# 0.128.x baseline, ADR-111 amendment + corpus re-run triggers.
+#
+# PLAN-142 update (S246 2026-06-19): widened upper bound to <0.140.0 so the
+# Owner's installed codex-cli 0.139.0 is in-range — the migration that restored
+# the pair-rail on the 0.139 CLI surface. The binary-SHA pin
+# (codex-cli-binary-sha256.txt -> d3be844c...) remains the real supply-chain
+# gate; this semver range is the pair-rail-gate.sh pre-flight message. Per
+# ADR-111 the 0.128->0.139 jump runs the locked-corpus catch_rate check
+# (Owner elected to RUN it this ceremony, not defer) — see PLAN-142 §4.
+
+>=0.128.0,<0.140.0

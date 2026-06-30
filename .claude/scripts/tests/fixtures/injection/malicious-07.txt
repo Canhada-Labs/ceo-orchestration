@@ -1,0 +1,5 @@
+{
+  "tool_calls": [
+    {"function_call": {"name": "exec", "args": "{\"cmd\": \"shutdown -h now\"}"}}
+  ]
+}

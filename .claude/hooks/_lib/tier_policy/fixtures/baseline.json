@@ -1,0 +1,17 @@
+{
+  "schema_version": 2,
+  "default_mode": "M",
+  "default_model": "claude-opus-4-8",
+  "veto_floor_roles": [
+    "ceo",
+    "code-reviewer",
+    "devops",
+    "performance-engineer",
+    "qa-architect",
+    "security-engineer"
+  ],
+  "modes": ["S", "M", "L", "XL"],
+  "confidence": 0.0,
+  "source": "frozen_baseline",
+  "reason": "structural reference to tier_policy._constants.FROZEN_BASELINE"
+}

@@ -1,0 +1,57 @@
+{
+  "_comment": "CEO Orchestration — OS-SANDBOX stack fragment (PLAN-135 W2 / S4). OPT-IN, NOT default-on. Installed only when install.sh is run with --stack sandbox (turbo-style opt-in, like settings.stack.node.json). Merged into settings.json alongside settings.base.json. This is an ENVIRONMENT-LAYER containment primitive that sits UNDER the hook rail: hooks = policy/audit (fail-OPEN by doctrine, CLAUDE.md §5); the OS sandbox = enforcement (does NOT fail open). It contains a compromised/runaway Bash process the way a hook cannot — a hook only refuses tool-call shapes it can parse. See docs/threat-model.md 'three containment layers' (Environment row) + the fail-open x auto-allow interaction note. Sandbox keys are version-dependent harness behavior (PLAN-135 anthropic-surface harvest, S4); ship with a fires/effective probe per Doctrine 3 before promoting beyond opt-in.",
+
+  "_doctrine_comment": "Doctrine 1 (native-under-rail, never native-instead-of-rail): this fragment is a FLOOR under the hooks, not a replacement. NO hook is retired by enabling it (H4 retirement-mapping is DEFERRED — see PLAN-135 disposition ledger). check_bash_safety.py + the canonical guards keep catching INTENT; the sandbox catches MECHANICS (process containment, network egress, FS scope).",
+
+  "_compat_comment": "Compatibility pass over the 48 on-disk hooks (PLAN-135 W2 / staged/w2/SANDBOX-COMPAT-NOTES.md): the ONLY hooks that need NETWORK egress under the sandbox are the Codex pair-rail (check_pair_rail.py + codex_review_user_code.py -> `codex` CLI). Their endpoints are exactly the PLAN-133 sanctioned-egress SoT (_lib/egress_taxonomy.py _PAIR_RAIL_HOST_SUFFIXES) and are mirrored into allowedDomains below. NO hook invokes gpg/gh/git-push (those are Owner-ceremony shell commands run OUTSIDE the hook rail); under this fragment the Owner ceremony runs in the un-sandboxed operator shell, not inside a sandboxed Bash tool-call. Exec-only hooks (node --check, eslint, python3 -m pytest, scratch `git init/commit`) need process exec inside the sandbox but NO network.",
+
+  "_network_allowlist_comment": "allowedDomains = the PLAN-133 egress list. SoT = _lib/egress_taxonomy.py _PAIR_RAIL_HOST_SUFFIXES (openai.com, githubcopilot.com, codex.dev) for the Codex pair-rail, PLUS the two operationally-required hosts the compat pass surfaced (api.anthropic.com for the model API the harness itself reaches; github.com + objects.githubusercontent.com for `gh`/git operations the Owner runs and for codex's GitHub-backed auth). Extend ONLY by extending the egress SoT first, then regenerating this list — do not hand-edit divergent. deniedDomains is empty by design: the model is default-deny (allowlist wins); deniedDomains exists for adopters who widen allowedDomains and want to carve back a known-bad host.",
+
+  "_auto_allow_comment": "autoAllowBashIfSandboxed: when TRUE, a Bash tool-call that the OS sandbox has already contained is auto-approved WITHOUT a permission prompt (the ~84% prompt-reduction in the S4 harvest). SHIPPED FALSE here. RATIONALE (THREAT-MODEL-WORKSHEET §4 / docs/threat-model.md fail-open x auto-allow): a crashed PreToolUse hook (fail-open §5) PLUS autoAllowBashIfSandboxed = a command gated by NOTHING but this sandbox config — the allowedDomains list becomes the SOLE exfil control in that degraded window. Flipping this to true is a deliberate adopter choice that trades the permission prompt for sandbox-only enforcement; do it only with S3 boot tripwire (e) (effective-hook-count == registered count) live so the degraded-rail state is detected at next boot, and with allowedDomains audited.",
+
+  "sandbox": {
+    "_comment": "OS-level containment for Bash tool-calls. enabled=true turns on the sandbox; the harness runs each Bash command inside it. allowUnix keeps local IPC working (the audit filelock, git's local sockets). network.allowedDomains is the egress allowlist; default posture is deny.",
+    "_enabled_comment": "enabled=true is the ADOPTER OPT-IN: this fragment is only merged when install.sh is run with `--stack sandbox` (an explicit choice — see settings.stack.node.json precedent), so shipping enabled=true means 'the adopter who asked for the sandbox stack gets it ON'. This DIFFERS from the live dogfood settings.json, which keeps sandbox.enabled=false (the framework's own session runs the un-sandboxed Owner ceremony — gpg/gh/git-push live outside the hook rail). An adopter who wants the fragment installed-but-dormant flips this to false post-install.",
+    "enabled": true,
+    "allowUnixSockets": true,
+    "filesystem": {
+      "_comment": "Paths the sandboxed Bash process may read/write. repo = the project tree (so Edit/Write/build/test all work); /tmp = scratch (mktemp scratch dirs used by review_loop.py git-init, eval/probe scratch runs, hermetic venvs). HOME is NOT writable: keeps a sandboxed command from rewriting ~/.bashrc / ~/.claude profile/credential files (harvest D5 startup-file class). $CLAUDE_PROJECT_DIR expands to the repo root at install time.",
+      "writablePaths": [
+        "$CLAUDE_PROJECT_DIR",
+        "/tmp",
+        "/var/folders"
+      ],
+      "readablePaths": [
+        "$CLAUDE_PROJECT_DIR",
+        "/tmp",
+        "/usr",
+        "/bin",
+        "/opt"
+      ]
+    },
+    "network": {
+      "_comment": "allowedDomains = PLAN-133 egress allowlist (see _network_allowlist_comment). Default posture is DENY: a host not on this list is unreachable from a sandboxed Bash command, which is the ~84%-fewer-prompts containment that retires the regex whack-a-mole (5 env(1) bypasses found in S223). deniedDomains is an explicit carve-back layer, empty by design.",
+      "defaultPosture": "deny",
+      "allowedDomains": [
+        "openai.com",
+        "api.openai.com",
+        "githubcopilot.com",
+        "codex.dev",
+        "api.anthropic.com",
+        "anthropic.com",
+        "github.com",
+        "api.github.com",
+        "objects.githubusercontent.com",
+        "raw.githubusercontent.com",
+        "codeload.github.com",
+        "registry.npmjs.org",
+        "pypi.org",
+        "files.pythonhosted.org",
+        "api.osv.dev"
+      ],
+      "deniedDomains": []
+    }
+  },
+
+  "autoAllowBashIfSandboxed": false
+}

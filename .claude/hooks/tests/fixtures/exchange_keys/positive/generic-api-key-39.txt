@@ -1,0 +1,2 @@
+ACCESS_KEY=iL7PmtLgfeygnaknwNGOnvGI
+PASSPHRASE=5oDK6QyGvuOuVIzziFIs

@@ -1,0 +1,2 @@
+# wallet recovery phrase
+mnemonic: above about about accident above add adopt abstract acid accident add acoustic

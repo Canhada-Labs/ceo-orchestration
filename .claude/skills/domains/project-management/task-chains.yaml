@@ -1,0 +1,118 @@
+# Task chains — Project-Management Squad
+# Domain-specific workflows that extend the universal .claude/task-chains.yaml.
+
+task_chains:
+  - id: project-management-scope-change-control
+    title: "Process a mid-delivery scope change request"
+    whenToUse: |
+      A request is received to add, remove, or significantly change the scope
+      of an active sprint, release, or program. Applies whether the request
+      comes from internal stakeholders (sales, executive, product) or external
+      (customer, partner). Any scope change that touches a committed delivery
+      date or external promise requires this chain.
+    steps:
+      - id: 1
+        owner: "Renata Souza (Senior PM)"
+        action: "Receive and log the scope change request. Document: what is being requested, who requested it, by when it is needed, and what the stated business reason is. Do not commit or decline without completing the chain (PMG-001)."
+      - id: 2
+        owner: "Renata Souza"
+        action: "Feasibility assessment: consult the engineering team lead on effort, complexity, and any technical dependencies the request introduces. Get a written estimate — not a verbal 'probably a week' (PMG-002)."
+      - id: 3
+        owner: "Marcus Webb (Program Manager)"
+        action: "Cascade impact analysis: does this scope change affect any cross-project dependency, downstream squad milestone, or program-level date? Update the dependency graph if new dependencies are introduced (PMG-003)."
+      - id: 4
+        owner: "Yara Al-Hassan (Risk Coordinator)"
+        action: "Risk assessment: register any new delivery or technical risk introduced by the scope change. If the change tightens the critical path, assess schedule risk and assign probability + impact (PMG-005)."
+      - id: 5
+        owner: "Renata Souza"
+        action: "Author the trade-off document: what is being added, what is deferred or removed to make room, and who must sign off on the trade-off. Present to the requester — the trade-off is non-negotiable (PMG-001)."
+      - id: 6
+        owner: "Renata Souza"
+        action: "Obtain sign-off from all parties: requester accepts the trade-off, engineering team confirms feasibility, Marcus confirms no cascade impact to program milestones, Yara confirms risk register is updated."
+      - id: 7
+        owner: "Priscilla Ng (Scrum Master)"
+        action: "Update the sprint plan and sprint goal if the change affects the current sprint. Ensure the sprint goal remains achievable with the revised scope. Add unplanned work tracking tag if applicable (PMG-011)."
+      - id: 8
+        owner: "Staff Code Reviewer"
+        action: "Merge check: change order document exists with all sign-offs, dependency graph updated if new deps introduced, risk register updated, sprint goal revised if needed (PMG-001, PMG-003, PMG-005)."
+    verification: |
+      - Written change order with trade-off documented (PMG-001)
+      - Requester explicitly accepted the trade-off
+      - Engineering feasibility confirmed in writing
+      - Cascade impact analysis on program dependencies (PMG-003)
+      - Risk register updated with new delivery risks (PMG-005)
+      - Sprint goal remains achievable post-change
+
+  - id: project-management-program-risk-review
+    title: "Weekly program risk review and status report generation"
+    whenToUse: |
+      Weekly cadence for any active multi-squad program. Covers: risk register
+      review, issue escalation, program status report (RAG), and executive
+      briefing preparation. Also triggered ad-hoc when a risk materialises
+      into an issue or when a critical-path milestone is in jeopardy.
+    steps:
+      - id: 1
+        owner: "Yara Al-Hassan (Risk Coordinator)"
+        action: "Risk register review: for each open risk, update probability, impact, and status. Identify any risk that has increased in severity since last review. Flag risks approaching their trigger conditions (PMG-005)."
+      - id: 2
+        owner: "Yara Al-Hassan"
+        action: "Issue triage: identify any risks that have materialised into issues since last review. Move them to the issue register with owner and target resolution date within 24 hours of materialisation (PMG-006)."
+      - id: 3
+        owner: "Marcus Webb (Program Manager)"
+        action: "Dependency status check: for each cross-squad dependency in the program graph, confirm status from the dependency owner. Identify any dependency that has slipped from its committed date (PMG-003)."
+      - id: 4
+        owner: "Diogo Martins (Delivery Analytics Lead)"
+        action: "Pull delivery metrics: cycle time, WIP, throughput, unplanned-work ratio for each squad. Flag any squad with unplanned-work ratio >20% for Renata's review (PMG-011)."
+      - id: 5
+        owner: "Marcus Webb"
+        action: "Determine program RAG status: GREEN only if no critical-path item is in AMBER or RED. AMBER if critical-path risk is elevated. RED if a milestone is at risk of being missed. Do not report GREEN over RED (PMG-008)."
+      - id: 6
+        owner: "Renata Souza (Senior PM)"
+        action: "Executive status report: write the summary using the RAG status from Marcus. Include top 3 risks, top 3 issues, critical-path status, and next milestone date. No softening of AMBER/RED status for executive audiences (PMG-008)."
+      - id: 7
+        owner: "Yara Al-Hassan"
+        action: "Retrospective: compare this week's risk register to last week's. Are risks improving or worsening? Flag any risk that has appeared for 3 consecutive reviews without progress — it needs escalation or explicit acceptance (PMG-007)."
+    verification: |
+      - All open risks reviewed and status updated (PMG-005)
+      - Materialised risks moved to issue register within 24h (PMG-006)
+      - Program RAG status accurately reflects critical-path health (PMG-008)
+      - Executive report does not show GREEN over any RED dependency (PMG-008)
+      - Risk owners confirmed for all open risks (PMG-007)
+      - Delivery metrics pulled and anomalies flagged (PMG-011)
+
+  - id: project-management-retrospective-cycle
+    title: "Run and close a sprint or program retrospective"
+    whenToUse: |
+      At the end of every sprint or program phase. Covers facilitation of
+      the retrospective ceremony, generation of specific action items,
+      owner assignment, and follow-through tracking at the subsequent
+      retrospective. Ensures retrospectives produce systemic improvement
+      rather than recurring complaints.
+    steps:
+      - id: 1
+        owner: "Priscilla Ng (Scrum Master)"
+        action: "Prepare retrospective data: pull unplanned-work ratio, sprint goal achievement rate, velocity trend, and any open action items from the previous retrospective. Share with the team 24 hours before the ceremony (PMG-012)."
+      - id: 2
+        owner: "Priscilla Ng"
+        action: "Facilitate the retrospective: structured format (what went well / what didn't / what to change). Timebox each section. Ensure all engineers contribute — not just the loudest voices (PMG-009)."
+      - id: 3
+        owner: "Priscilla Ng"
+        action: "For each 'what to change' item: drive the group to a specific action item with a named owner and a concrete deadline. If the group cannot agree on a specific action, the item is a topic for a separate working session — not a retrospective output (PMG-009)."
+      - id: 4
+        owner: "Yara Al-Hassan (Risk Coordinator)"
+        action: "Review retrospective outcomes for systemic risks: are recurring problems signalling a structural risk (dependency on a single engineer, process gap, tooling failure)? Register any structural risk identified (PMG-005)."
+      - id: 5
+        owner: "Diogo Martins (Delivery Analytics Lead)"
+        action: "Track retrospective action items in the delivery analytics system. Set up follow-through check for the next retrospective — were action items completed? (PMG-009)"
+      - id: 6
+        owner: "Renata Souza (Senior PM)"
+        action: "Review retrospective findings for scope or commitment implications: does any finding change the planning baseline for the next sprint or release? If yes, initiate scope-change-control chain."
+      - id: 7
+        owner: "Staff Code Reviewer"
+        action: "Retrospective closed: confirm all 'what to change' items have a specific action, owner, and deadline (no vague items) (PMG-009). Confirm previous retrospective action items were reviewed."
+    verification: |
+      - All retrospective action items have a named owner and deadline (PMG-009)
+      - No vague retrospective outputs (e.g. 'communicate better' without specific actions)
+      - Previous retrospective action items reviewed for completion (PMG-009)
+      - Structural risks identified and registered (PMG-005)
+      - Action items tracked in delivery analytics for follow-through (PMG-012)

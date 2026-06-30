@@ -1,0 +1,18 @@
+# ShellCheck configuration for ceo-orchestration.
+#
+# This file covers repo-wide defaults. Per-path exclusion (specifically
+# the .claude/hooks/legacy/ directory during the Sprint 2 → Sprint 3
+# transition) is handled at the `find` invocation in the CI workflow,
+# not here — shellcheck's own config does not support path globs.
+#
+# The legacy/ bash hooks are retained as fallbacks. They are NOT on the
+# active execution path (settings.json points at the Python shim) and
+# are removed in Sprint 3 once the 3 stability invariants from
+# PLAN-002 §11-bis Q5 are met.
+
+# Allow `source` expansion to external paths
+external-sources=true
+
+# Silence the most common bash → POSIX warnings that aren't real bugs
+# for our use case (we specifically target bash 4+).
+disable=SC1091

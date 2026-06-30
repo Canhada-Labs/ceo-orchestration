@@ -1,0 +1,2 @@
+BYBIT_API_KEY=TuBqEKAjr2iO10ZG8c
+# bybit

@@ -1,0 +1,444 @@
+# ============================================================================
+# code-review-checklist.yaml — benchmark for the code-review-checklist skill
+# ============================================================================
+#
+# PLAN-008 Phase 5 (Sprint 8). Exercises the Staff Code Reviewer VETO
+# surface: typing errors, missing tests, async error handling, secret
+# leakage, naming drift, and PR bloat.
+#
+# 7 positive + 3 control = 10 scenarios.
+
+skill: code-review-checklist
+benchmark_version: 1
+created: 2026-04-13
+owner: Staff Code Reviewer (archetype)
+description: |
+  Code review quality gate — type safety violations, missing tests,
+  async error handling, secrets in source, naming drift, oversized
+  functions, and PR bloat. Controls test that clean code is not
+  spuriously rejected.
+
+scoring:
+  pass_threshold: 0.7
+  health_thresholds:
+    critical: 0.4
+    warning: 0.6
+    healthy: 0.8
+  tag_weight: 0.5
+  suggestion_weight: 0.3
+  severity_weight: 0.2
+
+scenarios:
+
+  # ----------------------------------------------------------------------------
+  # POSITIVE scenarios — must flag
+  # ----------------------------------------------------------------------------
+
+  - id: REVIEW-BENCH-001
+    name: any-typed public API return
+    category: typing
+    severity: MEDIUM
+    version: 1
+    validated_by: 2026-04-13
+    input:
+      type: code
+      language: typescript
+      content: |
+        export async function fetchUser(id: string): Promise<any> {
+          const r = await db.query("SELECT * FROM users WHERE id=$1", [id]);
+          return r.rows[0];
+        }
+    prompt_template: |
+      Review this code. Return JSON {"issues": [{"tag": "...", "severity": "...", "suggestion": "..."}]}.
+    expected:
+      must_flag_tags: ["any-in-public-api", "weak-type", "no-return-type"]
+      acceptable_alternative_tags: ["any-type", "missing-type-definition"]
+      must_suggest_keywords: ["interface", "type", "User", "typed return"]
+      must_identify_severity: MEDIUM
+
+  - id: REVIEW-BENCH-002
+    name: Async without error handling
+    category: error-handling
+    severity: HIGH
+    version: 1
+    validated_by: 2026-04-13
+    input:
+      type: code
+      language: typescript
+      content: |
+        export async function processPayment(orderId: string) {
+          const order = await getOrder(orderId);
+          const payment = await chargeCard(order.token, order.amount);
+          await markPaid(orderId, payment.id);
+          await sendReceipt(order.email);
+        }
+    prompt_template: |
+      Review. JSON {"issues": [...]}.
+    expected:
+      must_flag_tags: ["missing-error-handling", "no-try-catch", "unhandled-async-failure"]
+      acceptable_alternative_tags: ["async-no-error-handling", "payment-rollback-missing"]
+      must_suggest_keywords: ["try/catch", "error handling", "rollback", "idempotency", "compensate"]
+      must_identify_severity: HIGH
+
+  - id: REVIEW-BENCH-003
+    name: New function without test
+    category: test-coverage
+    severity: MEDIUM
+    version: 1
+    validated_by: 2026-04-13
+    input:
+      type: scenario
+      language: markdown
+      content: |
+        PR adds `calculateDiscount(priceCents, promoCode)` with non-
+        trivial logic (tiered discounts, expiry check, stacking rules).
+        No tests added. Existing tests cover adjacent functions.
+    prompt_template: |
+      Review this PR summary. JSON {"issues": [...]}.
+    expected:
+      must_flag_tags: ["missing-test", "no-test-coverage", "new-code-no-test"]
+      acceptable_alternative_tags: ["untested-function", "test-required"]
+      must_suggest_keywords: ["unit test", "coverage", "add test", "test case"]
+      must_identify_severity: MEDIUM
+
+  - id: REVIEW-BENCH-004
+    name: Hardcoded API key in source
+    category: security
+    severity: CRITICAL
+    version: 1
+    validated_by: 2026-04-13
+    input:
+      type: code
+      language: python
+      content: |
+        # analytics.py
+        SEGMENT_WRITE_KEY = "sAaBbCcDd1234567890aBcDefFgHiJkL"
+        def track(event, props):
+            segment.track(key=SEGMENT_WRITE_KEY, event=event, properties=props)
+    prompt_template: |
+      Review. JSON {"issues": [...]}.
+    expected:
+      must_flag_tags: ["hardcoded-secret", "api-key-in-source", "secret-leak"]
+      acceptable_alternative_tags: ["hardcoded-credential", "plaintext-secret"]
+      must_suggest_keywords: ["environment variable", "os.environ", "secrets manager", ".env"]
+      must_identify_severity: CRITICAL
+
+  - id: REVIEW-BENCH-005
+    name: Inconsistent naming — camelCase in a snake_case codebase
+    category: naming-drift
+    severity: LOW
+    version: 1
+    validated_by: 2026-04-13
+    input:
+      type: code
+      language: python
+      content: |
+        # All functions in this module use snake_case:
+        # get_user, list_invoices, cancel_subscription, refund_payment
+        # This PR adds:
+        def fetchUser(userId):
+            return db.users.find_one({"id": userId})
+
+        def listActiveSubs():
+            return db.subs.find({"active": True})
+    prompt_template: |
+      Review naming consistency. JSON {"issues": [...]}.
+    expected:
+      must_flag_tags: ["naming-drift", "inconsistent-naming", "style-deviation"]
+      acceptable_alternative_tags: ["case-mismatch", "convention-violation"]
+      must_suggest_keywords: ["snake_case", "consistent", "match existing", "convention"]
+      must_identify_severity: LOW
+
+  - id: REVIEW-BENCH-006
+    name: 400-line function with 6 responsibilities
+    category: function-size
+    severity: MEDIUM
+    version: 1
+    validated_by: 2026-04-13
+    input:
+      type: scenario
+      language: markdown
+      content: |
+        PR adds `handleWebhook(payload)` — 412 lines doing:
+        1. Signature validation
+        2. Payload deserialization
+        3. Event-type dispatch
+        4. Database writes for 4 event types
+        5. Downstream webhook forwarding
+        6. Metrics emission
+        No inner functions; no tests.
+    prompt_template: |
+      Review. JSON {"issues": [...]}.
+    expected:
+      must_flag_tags: ["oversized-function", "multiple-responsibilities", "needs-decomposition"]
+      acceptable_alternative_tags: ["god-function", "srp-violation", "too-long"]
+      must_suggest_keywords: ["decompose", "split", "single responsibility", "extract"]
+      must_identify_severity: MEDIUM
+
+  - id: REVIEW-BENCH-007
+    name: PR bundle 2k LOC + refactor + feature + tests
+    category: pr-size
+    severity: MEDIUM
+    version: 1
+    validated_by: 2026-04-13
+    input:
+      type: scenario
+      language: markdown
+      content: |
+        PR is 2,400 LOC: renames `Receipt` → `Invoice` across 40 files,
+        adds a new subscription pausing feature, rewrites the billing
+        test suite, bumps a dependency, and fixes an unrelated typo.
+    prompt_template: |
+      Review the PR scope. JSON {"issues": [...]}.
+    expected:
+      must_flag_tags: ["pr-too-large", "mixed-concerns", "split-pr"]
+      acceptable_alternative_tags: ["bundle-pr", "unfocused-scope", "too-many-changes"]
+      must_suggest_keywords: ["split", "separate PRs", "atomic", "one concern"]
+      must_identify_severity: MEDIUM
+
+  # ----------------------------------------------------------------------------
+  # CONTROL scenarios — MUST NOT flag
+  # ----------------------------------------------------------------------------
+
+  - id: CTRL-REVIEW-001
+    name: Well-typed function with test
+    category: precision-control
+    severity: NONE
+    version: 1
+    validated_by: 2026-04-13
+    input:
+      type: code
+      language: typescript
+      content: |
+        // users.ts
+        export async function getUserById(id: UserId): Promise<User | null> {
+          const r = await db.query<User>("SELECT * FROM users WHERE id=$1", [id]);
+          return r.rows[0] ?? null;
+        }
+        // users.test.ts
+        it("returns null for missing user", async () => {
+          mockDb.query.mockResolvedValue({ rows: [] });
+          expect(await getUserById("missing")).toBeNull();
+        });
+    prompt_template: |
+      Review. JSON {"issues": [...]}.
+    expected:
+      must_not_flag_tags: ["any-in-public-api", "missing-test", "weak-type"]
+
+  - id: CTRL-REVIEW-002
+    name: Small focused bug fix
+    category: precision-control
+    severity: NONE
+    version: 1
+    validated_by: 2026-04-13
+    input:
+      type: scenario
+      language: markdown
+      content: |
+        PR fixes off-by-one: `for (let i = 0; i <= arr.length; i++)`
+        → `i < arr.length`. Adds one regression test. 8 LOC total.
+    prompt_template: |
+      Review. JSON {"issues": [...]}.
+    expected:
+      must_not_flag_tags: ["pr-too-large", "missing-test", "mixed-concerns"]
+
+  - id: CTRL-REVIEW-003
+    name: Secrets referenced from env, not hardcoded
+    category: precision-control
+    severity: NONE
+    version: 1
+    validated_by: 2026-04-13
+    input:
+      type: code
+      language: python
+      content: |
+        import os
+        API_KEY = os.environ["SEGMENT_WRITE_KEY"]
+        def track(event, props):
+            segment.track(key=API_KEY, event=event, properties=props)
+    prompt_template: |
+      Review for security. JSON {"issues": [...]}.
+    expected:
+      must_not_flag_tags: ["hardcoded-secret", "api-key-in-source", "secret-leak"]
+
+  # ==========================================================================
+  # PLAN-115 WS-B — adversarial planted-bug scenarios (superpowers BORROW-4)
+  # ==========================================================================
+  # Behavioral eval pattern: a diff with a KNOWN planted security bug; the
+  # reviewer must flag it at Critical. Expanded beyond the upstream
+  # SQLi/plaintext-password/credential-logging set to OUR threat model
+  # (OWASP LLM Top-10 + A07/A09): secret-exfil via audit-log side-channel
+  # (LLM06/A09), timing-oracle / non-constant-time compare (A07), and an
+  # LLM01 prompt-injection case. Severity scale is PoC-anchored: a planted
+  # bug with a working exploit path is Critical. The "refuse to approve"
+  # assertion is intentionally NOT here — score_scenario has no verdict
+  # concept; refusal would be its own eval-code item (QA + Security sign-off).
+  # CTRL-REVIEW-004 is a clean security diff: no false-positive Critical.
+
+  - id: REVIEW-BENCH-008
+    name: PLANTED — SQL injection via string interpolation
+    category: security
+    severity: CRITICAL
+    version: 1
+    validated_by: 2026-05-27
+    input:
+      type: code
+      language: python
+      content: |
+        def find_orders(status: str):
+            # status comes straight from the HTTP query string
+            sql = f"SELECT * FROM orders WHERE status = '{status}'"
+            return db.execute(sql).rows
+    prompt_template: |
+      Review this diff. JSON {"issues": [{"tag": "...", "severity": "...", "suggestion": "..."}]}.
+    expected:
+      must_flag_tags: ["sql-injection", "sqli", "injection"]
+      acceptable_alternative_tags: ["unsafe-query", "string-interpolation-sql"]
+      must_suggest_keywords: ["parameterized", "prepared statement", "bind", "placeholder"]
+      must_identify_severity: CRITICAL
+
+  - id: REVIEW-BENCH-009
+    name: PLANTED — plaintext password storage
+    category: security
+    severity: CRITICAL
+    version: 1
+    validated_by: 2026-05-27
+    input:
+      type: code
+      language: python
+      content: |
+        def register(email: str, password: str):
+            db.users.insert({"email": email, "password": password})
+            return {"ok": True}
+
+        def login(email: str, password: str):
+            u = db.users.find_one({"email": email})
+            return u and u["password"] == password
+    prompt_template: |
+      Review this diff. JSON {"issues": [{"tag": "...", "severity": "...", "suggestion": "..."}]}.
+    expected:
+      must_flag_tags: ["plaintext-password", "password-not-hashed", "weak-credential-storage"]
+      acceptable_alternative_tags: ["unhashed-password", "insecure-password-storage"]
+      must_suggest_keywords: ["bcrypt", "argon2", "hash", "salt"]
+      must_identify_severity: CRITICAL
+
+  - id: REVIEW-BENCH-010
+    name: PLANTED — credential logging (A09 / LLM06)
+    category: security
+    severity: CRITICAL
+    version: 1
+    validated_by: 2026-05-27
+    input:
+      type: code
+      language: typescript
+      content: |
+        export async function authenticate(req: Request) {
+          const token = req.headers["authorization"];
+          logger.info(`auth attempt token=${token} ip=${req.ip}`);
+          return verify(token);
+        }
+    prompt_template: |
+      Review this diff for security. JSON {"issues": [{"tag": "...", "severity": "...", "suggestion": "..."}]}.
+    expected:
+      must_flag_tags: ["credential-logging", "secret-in-logs", "sensitive-data-logging"]
+      acceptable_alternative_tags: ["token-in-logs", "secret-leak"]
+      must_suggest_keywords: ["redact", "do not log", "mask", "remove"]
+      must_identify_severity: CRITICAL
+
+  - id: REVIEW-BENCH-011
+    name: PLANTED — secret exfil via audit-log side-channel (LLM06 / A09)
+    category: security
+    severity: CRITICAL
+    version: 1
+    validated_by: 2026-05-27
+    input:
+      type: code
+      language: python
+      content: |
+        def emit_audit(event: str, request):
+            # request.body contains the raw payload incl. card number + PII
+            audit_log.write({
+                "event": event,
+                "raw_request": request.body,
+                "api_key": request.headers.get("x-api-key"),
+            })
+    prompt_template: |
+      Review this audit-emit for data exposure. JSON {"issues": [{"tag": "...", "severity": "...", "suggestion": "..."}]}.
+    expected:
+      must_flag_tags: ["secret-exfil", "side-channel", "sensitive-data-exposure"]
+      acceptable_alternative_tags: ["audit-log-leak", "pii-in-logs", "unredacted-emit"]
+      must_suggest_keywords: ["redact", "allowlist", "do not emit", "scrub"]
+      must_identify_severity: CRITICAL
+
+  - id: REVIEW-BENCH-012
+    name: PLANTED — non-constant-time secret comparison (A07 timing oracle)
+    category: security
+    severity: CRITICAL
+    version: 1
+    validated_by: 2026-05-27
+    input:
+      type: code
+      language: python
+      content: |
+        def verify_webhook(signature: str) -> bool:
+            expected = compute_hmac(request.body)
+            # direct == leaks timing information byte-by-byte
+            return signature == expected
+    prompt_template: |
+      Review this diff for security. JSON {"issues": [{"tag": "...", "severity": "...", "suggestion": "..."}]}.
+    expected:
+      must_flag_tags: ["timing-attack", "non-constant-time-comparison", "timing-oracle"]
+      acceptable_alternative_tags: ["insecure-compare", "timing-side-channel"]
+      must_suggest_keywords: ["constant-time", "compare_digest", "hmac.compare_digest", "secrets"]
+      must_identify_severity: CRITICAL
+
+  - id: REVIEW-BENCH-013
+    name: PLANTED — LLM01 prompt injection with a tool sink (concrete exploit path)
+    category: security
+    severity: CRITICAL
+    version: 1
+    validated_by: 2026-05-27
+    input:
+      type: code
+      language: python
+      content: |
+        # The agent is given a refund tool; untrusted ticket text is
+        # concatenated into the system prompt → injection can drive the tool.
+        def handle_ticket(user_text: str):
+            prompt = (
+                "You are support. You may call issue_refund(amount_cents).\n"
+                "Ticket:\n" + user_text
+            )
+            return agent.run(system=prompt, tools=[issue_refund])
+    prompt_template: |
+      Review this tool-enabled LLM call for injection risk. JSON {"issues": [{"tag": "...", "severity": "...", "suggestion": "..."}]}.
+    expected:
+      must_flag_tags: ["prompt-injection", "llm01", "untrusted-input-in-prompt"]
+      acceptable_alternative_tags: ["injection", "unsanitized-prompt", "tool-hijack"]
+      must_suggest_keywords: ["sanitize", "delimit", "untrusted", "tool", "confirm"]
+      must_identify_severity: CRITICAL
+
+  - id: CTRL-REVIEW-004
+    name: Clean security diff — no false-positive Critical
+    category: precision-control
+    severity: NONE
+    version: 1
+    validated_by: 2026-05-27
+    control: true
+    input:
+      type: code
+      language: python
+      content: |
+        import hmac, secrets
+        def register(email: str, password: str):
+            db.users.insert({"email": email, "pw_hash": bcrypt.hash(password)})
+
+        def find_orders(status: str):
+            return db.execute("SELECT * FROM orders WHERE status = $1", [status]).rows
+
+        def verify_webhook(sig: str, expected: str) -> bool:
+            return hmac.compare_digest(sig, expected)
+    prompt_template: |
+      Review this diff for security. JSON {"issues": [{"tag": "...", "severity": "...", "suggestion": "..."}]}.
+    expected:
+      must_not_flag_tags: ["sql-injection", "plaintext-password", "credential-logging", "timing-attack", "secret-exfil"]

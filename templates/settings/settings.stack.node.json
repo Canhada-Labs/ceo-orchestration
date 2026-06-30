@@ -1,0 +1,19 @@
+{
+  "_comment": "CEO Orchestration — Node.js/TypeScript STACK hooks. Installed when install.sh is run with --stack node. Merged into settings.json alongside settings.base.json. Assumes: package.json with scripts, tsc available via npx, vitest available via npx.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "_comment": "Pre-commit gate: tsc --noEmit + vitest run must pass before ANY git commit. Stack-specific (TypeScript + vitest).",
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.command // \"\"' | grep -q '^git commit' && { cd \"$CLAUDE_PROJECT_DIR\" && npx tsc --noEmit 2>&1 | tail -5; TSC_EXIT=${PIPESTATUS[0]}; if [ $TSC_EXIT -ne 0 ]; then echo '{\"decision\":\"block\",\"reason\":\"tsc --noEmit failed. Fix TypeScript errors before committing.\"}'; exit 0; fi; npx vitest run 2>&1 | tail -20; VITEST_EXIT=${PIPESTATUS[0]}; if [ $VITEST_EXIT -ne 0 ]; then echo '{\"decision\":\"block\",\"reason\":\"vitest run failed. Fix failing tests before committing.\"}'; exit 0; fi; echo '{\"decision\":\"allow\",\"reason\":\"tsc + vitest passed\"}'; } || true",
+            "timeout": 300,
+            "statusMessage": "Running tsc + vitest pre-commit check..."
+          }
+        ]
+      }
+    ]
+  }
+}

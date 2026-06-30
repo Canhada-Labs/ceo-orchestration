@@ -1,0 +1,90 @@
+# Task chains — Identity Systems Squad
+# Domain-specific workflows that extend the universal .claude/task-chains.yaml.
+
+task_chains:
+  - id: identity-systems-new-auth-flow
+    title: "Implement a new authentication or federation flow (OAuth, OIDC, SAML)"
+    whenToUse: |
+      A new authentication flow is being added or an existing flow is being
+      materially changed — examples: adding a new SSO provider (Google,
+      Microsoft, Okta), adding a new OAuth 2.0 client type (mobile app,
+      SPA, machine-to-machine), migrating from Implicit Flow to Authorization
+      Code + PKCE, adding WebAuthn / passkey support. Triggers for any change
+      that touches the token lifecycle, session management, or trust chain.
+      Out of scope: minor UI changes to the login page that do not touch
+      the auth protocol or session backend.
+    steps:
+      - id: 1
+        owner: "Sione Tuilagi (Identity Architect)"
+        action: "Protocol selection: confirm Authorization Code + PKCE for browser/mobile clients (never Implicit Flow — IDS-003). Evaluate SAML vs. OIDC for enterprise SSO based on IdP capabilities. Document the chosen flow and rationale before implementation starts."
+      - id: 2
+        owner: "Sione Tuilagi"
+        action: "Token lifecycle design: specify access token lifetime (15 min ceiling — IDS-001), refresh token rotation-on-use policy (IDS-002), refresh token family invalidation on reuse detection. Document session duration and sliding vs. absolute expiry decision."
+      - id: 3
+        owner: "Lena Hoffmann (Auth Engineer)"
+        action: "Cryptographic design: signing algorithm selection (RS256/ES256/EdDSA — not HS256 for multi-party — IDS-005). JWKS endpoint design with key ID and algorithm fields. Confirm 'alg: none' is in the explicit rejection list (IDS-006). Define key rotation procedure (zero-downtime — IDS-008)."
+      - id: 4
+        owner: "Lena Hoffmann"
+        action: "Session cookie design: confirm Secure + HttpOnly + SameSite attributes on all session cookies (IDS-004). Confirm JWT audience claim validation is enforced at every service boundary (IDS-013). Review CSRF protection for any form-post flows."
+      - id: 5
+        owner: "Ayasha Morningstar (Compliance & Privacy Reviewer)"
+        action: "Consent and data-transfer review: confirm any new SSO provider is evaluated for cross-border data transfer (adequacy decision or SCCs required). Confirm the consent flow for any new scope requested during authentication is per-purpose and event-logged (IDS-009)."
+      - id: 6
+        owner: "Valentina Osei (Identity Graph Operator)"
+        action: "If new auth event feeds identity graph: confirm consent record exists before any graph link is written (IDS-010). Confirm erasure propagation path is defined from auth system to graph to all downstream systems (IDS-011)."
+      - id: 7
+        owner: "Principal QA Architect"
+        action: "Security tests: verify Implicit Flow rejected; verify refresh token reuse triggers family invalidation; verify 'alg: none' JWT rejected; verify session cookie has all three attributes; verify audience mismatch is rejected. Use OWASP ASVS Level 2 as the minimum test suite."
+      - id: 8
+        owner: "Staff Code Reviewer"
+        action: "Launch VETO check: Authorization Code + PKCE confirmed (IDS-003), token lifetimes within policy (IDS-001), refresh rotation-on-use (IDS-002), signing algorithm approved by Auth Engineer (IDS-005, IDS-006), session cookies correct (IDS-004), consent flow reviewed (IDS-009)."
+    verification: |
+      - Authorization Code + PKCE for all browser/mobile clients (IDS-003)
+      - Access token lifetime 15 min ceiling, documented rationale if extended (IDS-001)
+      - Refresh token rotation-on-use + family invalidation (IDS-002)
+      - Signing algorithm approved, 'alg: none' rejected (IDS-005, IDS-006)
+      - Session cookies: Secure + HttpOnly + SameSite (IDS-004)
+      - JWT audience validated at every service boundary (IDS-013)
+      - Cross-border data transfer assessed for new IdP (Ayasha sign-off)
+
+  - id: identity-systems-consent-flow-change
+    title: "Change a consent flow or extend identity matching scope"
+    whenToUse: |
+      A consent flow is being modified or a new identity matching purpose
+      is being added — examples: adding a new processing purpose to the
+      consent banner, extending identity graph matching to include a new
+      signal (device fingerprint, email hash from a new channel), changing
+      the default consent state for a new user segment, implementing the
+      Global Privacy Control (GPC) opt-out signal. Also triggers for any
+      right-to-erasure path changes that touch the identity graph.
+      Out of scope: cosmetic changes to consent UI copy that do not change
+      the consent scope, legal basis, or data flow.
+    steps:
+      - id: 1
+        owner: "Ayasha Morningstar (Compliance & Privacy Reviewer)"
+        action: "Consent scope analysis: define the new processing purpose and its legal basis (LGPD Art. 7 consent or legitimate interest with balancing test; GDPR Art. 6). Confirm the purpose is distinct from existing consent purposes — do not bundle new processing into an existing consent string (IDS-009)."
+      - id: 2
+        owner: "Ayasha Morningstar"
+        action: "Consent event model: confirm the new consent event will be stored as an immutable row (purpose, legal basis, timestamp, consent text version) rather than updating a mutable field (IDS-009). Design the revocation event model: what happens in the graph when this purpose is revoked?"
+      - id: 3
+        owner: "Valentina Osei (Identity Graph Operator)"
+        action: "Graph impact: map which graph links depend on the new consent purpose. Confirm that revocation of this purpose propagates to all dependent graph links, not just to the display layer (IDS-010, IDS-011). Define propagation SLA (72 hours maximum)."
+      - id: 4
+        owner: "Valentina Osei"
+        action: "If new identity signal (email hash, device ID, phone hash): confirm valid consent record is required before any graph write using this signal (IDS-010). Confirm minimum confidence threshold for probabilistic links is documented. Confirm erasure removes this signal type from the graph."
+      - id: 5
+        owner: "Sione Tuilagi (Identity Architect)"
+        action: "Session interaction: confirm the consent state change does not inadvertently extend or shorten session validity. Confirm refresh token revocation is triggered when a user's core identity-consent (the basis for the authentication itself) is revoked."
+      - id: 6
+        owner: "Principal QA Architect"
+        action: "Consent compliance tests: verify revocation propagates to identity graph within 72 hours; verify GPC signal is respected if applicable; verify erasure removes all graph links (not just soft-delete — IDS-011); verify new consent purpose stored as immutable event (IDS-009)."
+      - id: 7
+        owner: "Staff Code Reviewer"
+        action: "Merge VETO check: new purpose has distinct legal basis (IDS-009), consent stored as event log (IDS-009), graph revocation propagation path confirmed (IDS-011), 72-hour propagation SLA committed (Ayasha sign-off)."
+    verification: |
+      - New processing purpose has distinct legal basis documented (IDS-009)
+      - Consent stored as immutable event log with all required fields (IDS-009)
+      - Revocation propagation: graph links removed, downstream systems notified within 72h (IDS-010, IDS-011)
+      - Erasure: complete removal from graph including probabilistic links (IDS-011)
+      - GPC signal respected if jurisdiction requires (Ayasha sign-off)
+      - Minimum confidence threshold documented for any probabilistic match (IDS-010)

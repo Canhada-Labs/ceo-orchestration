@@ -1,0 +1,74 @@
+# Pitfalls Catalog — SaaS Platforms Squad
+# Loaded alongside the universal catalog when the saas-platforms profile is
+# installed. Format mirrors .claude/pitfalls-catalog.yaml:
+# id, rule, whenToUse, agents.
+
+pitfalls:
+  # === TENANCY ISOLATION ===
+  - id: SAS-001
+    rule: "NEVER write a database query in a multi-tenant codebase without a tenant_id predicate enforced at BOTH the application layer (ORM filter) AND the database layer (RLS policy or view). Application-layer-only enforcement is bypassed by admin queries, direct DB connections, and raw SQL fallbacks. Database-layer-only enforcement is invisible to the ORM and causes silent query failures. Both layers must be independent."
+    whenToUse: "any database query, ORM model, migration, or raw SQL path in a multi-tenant system"
+    agents: [Amara Nwosu, Priyanka Mehta]
+
+  - id: SAS-002
+    rule: "NEVER use a cache key that does not include the tenant_id. A cache miss for Tenant A that is filled by Tenant B's cached response is a cross-tenant data disclosure. The pattern is silent under low load and catastrophic under high load. Tenant_id MUST be a mandatory prefix or structured element of every cache key."
+    whenToUse: "any caching layer design (Redis, Memcached, CDN, in-memory) in a multi-tenant system"
+    agents: [Amara Nwosu, Priyanka Mehta]
+
+  - id: SAS-003
+    rule: "NEVER deliver events from a message bus (Kafka, SQS, SNS, RabbitMQ) to a consumer without tenant routing logic verified at both the producer and the consumer. A queue that routes Tenant A's events to Tenant B's consumer is a tenancy isolation failure indistinguishable from a direct cross-tenant query."
+    whenToUse: "any message queue, event bus, or pub/sub implementation in a multi-tenant architecture"
+    agents: [Priyanka Mehta, Cormac Sullivan]
+
+  - id: SAS-004
+    rule: "NEVER change the tenancy model (siloed → pooled, pooled → hybrid, adding a shared data layer) without a formal isolation analysis document reviewed and signed by the Platform Architect before any code is written. Tenancy model changes have non-obvious isolation implications that must be reasoned through before implementation, not during."
+    whenToUse: "any tenancy architecture change, new shared data layer introduction, or data model refactoring that affects tenant scope"
+    agents: [Priyanka Mehta]
+
+  # === BLAST RADIUS & SHARED INFRASTRUCTURE ===
+  - id: SAS-005
+    rule: "NEVER deploy a new shared-infrastructure component (database, cache cluster, job scheduler, message bus) without per-tenant resource quotas enforced as hard limits at the platform layer. Advisory monitoring without enforcement does not prevent a single tenant's runaway workload from degrading the tenant fleet."
+    whenToUse: "any shared infrastructure provisioning, capacity planning, or new platform component introduction"
+    agents: [Cormac Sullivan, Priyanka Mehta]
+
+  - id: SAS-006
+    rule: "NEVER add a synchronous cross-service dependency without a circuit-breaker or bulkhead pattern isolating the failure mode to the tenant or request that caused it. A synchronous call without a circuit-breaker means one downstream service outage can cascade to all tenants using any service in the call chain."
+    whenToUse: "any new service-to-service synchronous call, API integration, or cross-service dependency introduction"
+    agents: [Cormac Sullivan]
+
+  - id: SAS-007
+    rule: "NEVER deploy a change to shared infrastructure outside of a reviewed change window without SRE sign-off on the rollback plan. Shared infrastructure changes with no rollback path leave the full tenant fleet in a degraded state with no recovery option except forward-fix under incident conditions."
+    whenToUse: "any shared infrastructure change (schema migration, cluster configuration, connection pool change) regardless of perceived risk level"
+    agents: [Cormac Sullivan]
+
+  # === BILLING & ENTITLEMENT ===
+  - id: SAS-008
+    rule: "NEVER allow a feature flag or admin toggle to grant access to a plan-gated feature without going through the entitlement enforcement layer. Admin backdoors that bypass plan checks create silent billing errors and contractual entitlement violations that are expensive to unwind at audit time."
+    whenToUse: "any feature flag implementation, admin tool, internal tool, or support-team access mechanism in a SaaS platform"
+    agents: [Diego Paredes]
+
+  - id: SAS-009
+    rule: "NEVER record a subscription state transition (trial-to-active, active-to-cancelled, plan-upgrade, plan-downgrade) as an in-place mutation of a status column. Every transition MUST be an immutable event appended to a subscription event log before the status is updated. The event log is the audit trail and the source of truth for billing disputes."
+    whenToUse: "any subscription state machine implementation, billing system design, or plan-change workflow"
+    agents: [Diego Paredes, Priyanka Mehta]
+
+  - id: SAS-010
+    rule: "NEVER generate an invoice without reconciling it against the subscription event log for the billing period. Invoices generated from snapshot state rather than from event replay are vulnerable to clock skew, race conditions, and missed pro-ration edge cases. Event replay is the only correct way to produce a deterministic bill."
+    whenToUse: "any invoice generation logic, billing cycle implementation, or proration calculation"
+    agents: [Diego Paredes]
+
+  # === SALESFORCE & PLATFORM GOVERNANCE ===
+  - id: SAS-011
+    rule: "NEVER write a SOQL query inside an Apex loop. Each SOQL query inside a loop is an N+1 pattern against Salesforce governor limits (100 SOQL queries per transaction). At volume, this produces LimitException errors that surface to users as silent failures. Bulk-fetch before the loop, process in memory."
+    whenToUse: "any Apex trigger, batch job, or controller that iterates records and queries Salesforce objects"
+    agents: [Kenji Watanabe]
+
+  - id: SAS-012
+    rule: "NEVER grant 'Modify All' or 'View All' object permissions to solve a sharing-model problem. These permissions bypass the sharing model entirely. The correct fix is to design the sharing model — OWD, sharing rules, or role hierarchy — to give users the access they need without bypassing the record visibility controls for everyone else."
+    whenToUse: "any Salesforce permission set design, profile configuration, or access-control troubleshooting"
+    agents: [Kenji Watanabe, Priyanka Mehta]
+
+  - id: SAS-013
+    rule: "NEVER use Process Builder or Workflow Rules for new automation in a Salesforce org. These are deprecated automation tools. All new automation MUST use Flow (Record-Triggered Flow, Scheduled-Path Flow, or Screen Flow). Apex enters only when Flow cannot guarantee bulk-safe execution of the required logic."
+    whenToUse: "any new Salesforce automation, trigger replacement, or Process Builder/Workflow migration"
+    agents: [Kenji Watanabe]

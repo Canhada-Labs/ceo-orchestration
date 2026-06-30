@@ -1,0 +1,83 @@
+# Task chains — LGPD-Heavy SaaS Squad
+# Domain-specific workflows that extend the universal .claude/task-chains.yaml.
+
+task_chains:
+  - id: lgpd-new-processing-activity
+    title: "Launch a new processing activity (new feature touching PII)"
+    whenToUse: |
+      Any feature or service that introduces a new purpose or processes
+      a new category of PII. Whether it's a new CRM integration, a new
+      analytics pipeline, or a new user-facing feature that collects
+      previously-uncollected data.
+    steps:
+      - id: 1
+        owner: "Theodora Nunes (Compliance)"
+        action: "Determine legal basis (LGPD Art. 7); document in proposal."
+      - id: 2
+        owner: "Helena Silveira (PII Data-Flow)"
+        action: "Draft pii-inventory.yaml entry BEFORE migration; classify PII class; define retention class, egress map."
+      - id: 3
+        owner: "Rafael Menezes (Consent Lifecycle)"
+        action: "If legal basis is 'consent', design the consent UI + per-purpose granularity; add purpose to consent event schema enum."
+      - id: 4
+        owner: "Mira Okafor (DPO) + Theodora Nunes"
+        action: "Assess risk; if high-risk, produce RIPD. Launch blocked until RIPD signed."
+      - id: 5
+        owner: "Bram Voss (Security)"
+        action: "Review encryption, access control, logging. Sensitive PII requires column-level + audit log."
+      - id: 6
+        owner: "VP Engineering"
+        action: "Architecture review; ADR if cross-cutting."
+      - id: 7
+        owner: "Mira Okafor"
+        action: "Update Registro de Operações entry; version-tag this quarter."
+      - id: 8
+        owner: "Rafael Menezes + Helena Silveira"
+        action: "If consent-based, verify revocation propagation SLA is defined for every downstream."
+      - id: 9
+        owner: "Principal QA Architect"
+        action: "Integration tests: consent grant/revoke, DSR access/deletion, retention job dry-run."
+      - id: 10
+        owner: "Staff Code Reviewer"
+        action: "Merge VETO check; DPO + compliance signatures present."
+    verification: |
+      - pii-inventory.yaml updated in same PR (LGPD-005)
+      - RIPD filed if high-risk (LGPD-016)
+      - Registro versioned
+      - Revocation SLA documented for every downstream
+      - Integration tests pass
+
+  - id: lgpd-dsr-response
+    title: "Respond to a Data Subject Request"
+    whenToUse: |
+      A user has submitted a DSR (acesso, correção, portabilidade,
+      anonimização, eliminação, informação sobre compartilhamentos,
+      informação sobre recusa de consentimento, revogação de consentimento).
+      This chain is triggered by the DSR queue, not by a user message.
+    steps:
+      - id: 1
+        owner: "Mira Okafor (DPO Engineer)"
+        action: "Confirm requester identity (account + 2FA step-up). Rate-limit check."
+      - id: 2
+        owner: "DSR pipeline"
+        action: "Log request with signed timestamp. Queue ingestion = SLA stopwatch start."
+      - id: 3
+        owner: "Helena Silveira (PII Data-Flow)"
+        action: "Resolve every PII location for the requester from the inventory map."
+      - id: 4
+        owner: "DSR pipeline"
+        action: "Execute per type: acesso → machine-readable export; correção → apply; anonimização → retention job; revogação → consent event + downstream propagation."
+      - id: 5
+        owner: "Mira Okafor"
+        action: "Redact third-party PII from any export (LGPD-012)."
+      - id: 6
+        owner: "DSR pipeline"
+        action: "Deliver response; update DSR status; notify user with signed completion timestamp."
+      - id: 7
+        owner: "Mira Okafor"
+        action: "Monthly audit: any DSR exceeding SLA is investigated and logged in the DPO report."
+    verification: |
+      - Identity verified (2FA / email loop)
+      - Response ≤ 15 calendar days (or 24 h for revocation internally)
+      - Third-party PII redacted in exports
+      - DSR status transitions logged with timestamps

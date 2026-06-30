@@ -1,0 +1,114 @@
+# Pitfalls Catalog — Government Squad
+# Loaded alongside the universal catalog when the government profile
+# is installed. Format mirrors .claude/pitfalls-catalog.yaml:
+# id, rule, whenToUse, agents.
+
+pitfalls:
+  # === SECTION 508 / ACCESSIBILITY (procurement-block surface) ===
+  - id: GOV-001
+    rule: "NEVER convey information by color alone. Required fields, error states, status indicators, and diff views MUST use text or icon in addition to color. Color-only fails WCAG 1.4.1 and Section 508; agency procurement will cite it."
+    whenToUse: "any UI that uses color to signal state, validation, or category"
+    agents: [Linh Abernathy, Darius Okonkwo]
+
+  - id: GOV-002
+    rule: "Accessible name MUST match or contain the visible text on every interactive element (WCAG 2.5.3). `aria-label='Submit'` on a button visibly labeled 'Send' is a Section 508 fail and breaks voice-control (Dragon, Voice Access)."
+    whenToUse: "any button, link, or custom control with a visible text label"
+    agents: [Linh Abernathy]
+
+  - id: GOV-003
+    rule: "Motion-triggered content (auto-play video, animated hero, parallax, auto-carousel) MUST respect `prefers-reduced-motion`. No exceptions for marketing. Flashing content >3 Hz is a seizure risk (WCAG 2.3.1) and is never acceptable."
+    whenToUse: "any new animation, transition, or motion-based effect on shipping surfaces"
+    agents: [Linh Abernathy]
+
+  - id: GOV-004
+    rule: "Session timeout under 20 hours MUST show a warning modal with an 'extend session' option (WCAG 2.2.1). Agency workflows (license renewal, benefits application, exam delivery) serve users with cognitive and motor disabilities who need extra time."
+    whenToUse: "introducing or shortening any authenticated session timeout"
+    agents: [Linh Abernathy, Darius Okonkwo]
+
+  - id: GOV-005
+    rule: "VPAT older than 12 months is considered stale by most agency procurement offices. Any RFP response citing a stale VPAT risks bid disqualification. Refresh VPAT annually AND after any UI/accessibility-material release."
+    whenToUse: "responding to an RFP; shipping a release that changes interactive flows; scheduled VPAT cadence"
+    agents: [Linh Abernathy, Senator Rafael Hoelzle]
+
+  - id: GOV-006
+    rule: "Keyboard path to every primary action MUST exist. 'Mouse-only' UX (drag-and-drop without keyboard alternative, hover-only menus, coord-targeting) is a Section 508 block. Provide a keyboard-operable equivalent, not a workaround buried in docs."
+    whenToUse: "designing any interaction that currently relies on pointer gestures"
+    agents: [Linh Abernathy]
+
+  # === FOIA / PUBLIC RECORDS ===
+  - id: GOV-007
+    rule: "NEVER hard-DELETE a record-bearing row. 'Deleted' means tombstoned + audit-logged with record_id, destruction reason, retention schedule cited, and authorized_by. A missing existence record breaks FOIA accountability regardless of the underlying content."
+    whenToUse: "any migration, admin tool, or data-pipeline step that would remove rows from a records table"
+    agents: [Yewande Crossland, Darius Okonkwo]
+
+  - id: GOV-008
+    rule: "Redactions MUST happen at the data layer, not only at the render layer. A CSS `display:none`, a frontend filter, or a PDF with a black rectangle over selectable text are cosmetic. Re-rasterize images/PDFs; replace redacted text with `[REDACTED (exemption) — basis]` server-side."
+    whenToUse: "any redaction feature, any FOIA response flow, any public-facing record display"
+    agents: [Yewande Crossland, Darius Okonkwo]
+
+  - id: GOV-009
+    rule: "Every redaction MUST log exemption code + legal-basis note + actor + timestamp. 'Redacted per policy' is not auditable. Use the FOIA exemption enum ((b)(1)..(b)(9) + state equivalents) and require a non-empty legal basis string."
+    whenToUse: "designing redaction schema; implementing redact / unredact tools"
+    agents: [Yewande Crossland]
+
+  - id: GOV-010
+    rule: "Requester identity MUST NOT be disclosed to the subject of the records (default posture). Notification webhooks, audit logs visible to subjects, and 'who asked about you' features are privacy breaches dressed as transparency."
+    whenToUse: "designing FOIA intake, request-status notifications, or any UI exposing request metadata"
+    agents: [Yewande Crossland, Darius Okonkwo]
+
+  - id: GOV-011
+    rule: "Retention clock MUST start from the correct regulatory event (closure / creation / last-action), not merely from row insertion. A wrong anchor means destruction happens too early (compliance violation) or too late (cost + risk)."
+    whenToUse: "schema design for any records table; migration that adds retention tracking"
+    agents: [Yewande Crossland]
+
+  - id: GOV-012
+    rule: "Automated purge pipelines MUST consult the FOIA litigation-hold list before deleting. A pending public-records request freezes destruction on touched records regardless of retention schedule. 'The cron ran before we knew' is not a defense."
+    whenToUse: "designing or modifying retention-driven purge jobs"
+    agents: [Yewande Crossland, Darius Okonkwo]
+
+  # === PROCUREMENT INTEGRITY ===
+  - id: GOV-013
+    rule: "Bid amount MUST NOT appear in log lines, APM breadcrumbs, error-tracker payloads, or any observability surface before the scheduled bid-opening timestamp. Pre-opening disclosure (even to agency employees) is a procurement integrity breach."
+    whenToUse: "any code path that handles bid intake, storage, or pre-opening access"
+    agents: [Senator Rafael Hoelzle, Darius Okonkwo]
+
+  - id: GOV-014
+    rule: "Bids MUST be encrypted at rest with time-released or sealed-bid key material from submission until the scheduled bid-opening time. Any employee who can decrypt a bid pre-opening is a leak surface, including procurement officers."
+    whenToUse: "designing bid-storage schema; implementing bid-intake service"
+    agents: [Senator Rafael Hoelzle]
+
+  - id: GOV-015
+    rule: "SAM.gov (federal) or state-equivalent debarment check MUST run at proposal receipt, pre-award, AND every contract modification. Parent/subsidiary corporate tree is consulted; a debarred parent often taints subsidiaries."
+    whenToUse: "any vendor-onboarding, bid evaluation, award, or contract-amendment flow"
+    agents: [Senator Rafael Hoelzle, Darius Okonkwo]
+
+  - id: GOV-016
+    rule: "Evaluator assignments MUST verify a current COI disclosure on file (filed within the last 12 months) AND cross-check declared interests against the bidder list for the specific RFP. Stale or missing disclosure = no assignment."
+    whenToUse: "assigning panel members; rotating evaluators mid-evaluation"
+    agents: [Senator Rafael Hoelzle]
+
+  - id: GOV-017
+    rule: "Award decisions MUST persist a source-selection rationale that includes the 'why not the lowest bid' trade-off when applicable. A missing or template-only rationale is a sustained protest waiting to happen."
+    whenToUse: "implementing award-recording; generating notice-of-award artifacts"
+    agents: [Senator Rafael Hoelzle]
+
+  - id: GOV-018
+    rule: "Set-aside awards (small-business, 8(a), WOSB, SDVOSB, HUBZone, state/local minority/veteran preference) MUST verify eligibility at award time, not only at registration. Size/socioeconomic status can lapse between registration and award."
+    whenToUse: "designing set-aside routing logic; awarding under any preference program"
+    agents: [Senator Rafael Hoelzle]
+
+  - id: GOV-019
+    rule: "The procurement_decisions (or equivalent) audit table MUST be append-only. UPDATE is forbidden; corrections are new rows with supersedes_decision_id pointing at the prior entry. Protest defense requires reconstructing every decision as-of every timestamp."
+    whenToUse: "schema design for procurement audit tables; admin tools that edit decision records"
+    agents: [Senator Rafael Hoelzle, Darius Okonkwo]
+
+  # === CROSS-CUTTING ===
+  - id: GOV-020
+    rule: "PDF forms delivered to citizens or records requesters MUST be tagged (structured headings, form fields, reading order) OR replaced with HTML forms. Untagged scanned PDFs are inaccessible and fail Section 508 at the delivery surface."
+    whenToUse: "shipping any downloadable form; accepting PDF from vendor for public distribution"
+    agents: [Linh Abernathy, Darius Okonkwo]
+
+  - id: GOV-021
+    rule: "Agency email and chat systems retain correspondence as official records. 'Delete' for the user MUST mean tombstone + retention-schedule-observed destruction, never immediate hard delete. Discovery obligations survive user actions."
+    whenToUse: "designing agency-internal messaging; implementing user data-deletion flows for agency accounts"
+    agents: [Yewande Crossland]

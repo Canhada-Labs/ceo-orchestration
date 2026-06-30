@@ -1,0 +1,60 @@
+# PLAN-013 Phase B.7 — translation pair registry.
+#
+# Each pair declares a PT-BR source file and its EN mirror (or the
+# inverse — README.md is EN canonical with PT-BR mirror).
+#
+# The drift checker (`.claude/scripts/check_translations_drift.py`)
+# validates that every configured pair stays within:
+#  - heading-count parity
+#  - code-fence-count parity
+#  - line-count delta ≤10%
+#  - bidirectional cross-link (each side references the other)
+#
+# New pairs: add a `- source: ... / mirror: ...` block. Both files must
+# exist at the declared paths (repo-relative) or CI fails.
+#
+# Exception: `README.md` is EN-canonical per line 3; its "mirror" is
+# PT-BR. The drift checker treats `source` = longer/canonical and
+# `mirror` = translation. Ordering is by convention; metric checks are
+# symmetric.
+
+# NOTE: two pairs are INTENTIONALLY excluded from this registry:
+#
+#  - `README.md ↔ README.pt-BR.md` — legacy pair from Sprint 5;
+#    PT-BR has accumulated multi-sprint drift that predates this
+#    enforcement. Covered by the `drift-check` advisory job in
+#    `translations-drift.yml` (commits-ahead heuristic, non-blocking).
+#  - `.claude/team.md ↔ team.en.md` — source is a canonical-edit-
+#    guarded path (ADR-010 v1.1 `_CANONICAL_GUARDS`). Adding a
+#    cross-link to team.md requires the Owner-signed sentinel
+#    ceremony; structural parity is enforced via the canonical
+#    governance path, not this check. EN mirror exists for reader
+#    ergonomics; source stays SSoT.
+#
+# If you need these pairs enforced, escalate via PROTOCOL.md §Debate
+# and include an ADR amendment.
+
+# Governance contract — PROTOCOL.md is the EN SSOT; PT-BR mirror is .pt-BR.md
+- source: PROTOCOL.md
+  mirror: PROTOCOL.pt-BR.md
+
+# Contributing — EN is canonical (CONTRIBUTING.md is the SSOT);
+# PT-BR mirror is CONTRIBUTING.pt-BR.md.
+- source: CONTRIBUTING.md
+  mirror: CONTRIBUTING.pt-BR.md
+
+# User-facing docs — PT source + EN mirror
+- source: docs/QUICKSTART.md
+  mirror: docs/QUICKSTART.pt-BR.md
+
+- source: docs/GUIA-COMPLETO.md
+  mirror: docs/GUIA-COMPLETO.pt-BR.md
+
+- source: docs/FOR-EMPLOYEES.md
+  mirror: docs/FOR-EMPLOYEES.pt-BR.md
+
+- source: docs/TROUBLESHOOTING.md
+  mirror: docs/TROUBLESHOOTING.pt-BR.md
+
+- source: docs/GLOSSARY.md
+  mirror: docs/GLOSSARY.pt-BR.md

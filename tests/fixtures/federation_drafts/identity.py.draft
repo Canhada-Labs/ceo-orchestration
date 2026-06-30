@@ -1,0 +1,494 @@
+"""PLAN-099 Wave A.3 — peer identity primitives (stdlib only).
+
+Implements the full-cert DER fingerprint identity primitive (AC4) +
+peers.yaml loader + 2-stage Owner-GPG sentinel verification (AC22).
+
+Identity primitive (S129 Codex R2 iter-3 fold — SPKI extraction is not
+stdlib-feasible; full-cert DER fingerprint used instead. SPKI extraction
++ programmatic key-floor verification deferred to C1 crypto sidecar via
+PLAN-099-FOLLOWUP):
+
+    pem = ssl.get_server_certificate((host, port))
+    der = ssl.PEM_cert_to_DER_cert(pem)   # bytes, NOT str
+    fingerprint = hashlib.sha256(der).hexdigest()
+
+Compared via :func:`hmac.compare_digest` against
+``peers.yaml[peer].peer_id_cert_fingerprint``.
+
+Sentinel verification is a TWO-STAGE composition per ADR-135 §Enable
+protocol:
+
+    ok, fpr, reason = verify_detached(signed, sig, allowlist_fprs=[OWNER_FPR])
+    if not ok:
+        return False  # fail-CLOSED with Stage-1 reason
+    signer_ok, signer_reason = is_valid_signer(fpr, ...)
+    if not signer_ok:
+        return False  # fail-CLOSED with Stage-2 reason
+
+Both stages fail-CLOSED on any error path.
+"""
+
+from __future__ import annotations
+
+import datetime as _dt
+import hashlib
+import hmac
+import re
+import ssl
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+__all__ = [
+    "PeerRecord",
+    "PeersFileError",
+    "compute_cert_fingerprint",
+    "compute_der_fingerprint",
+    "compare_fingerprints",
+    "load_peers",
+    "verify_enable_sentinel_pair",
+    "SentinelVerifyError",
+]
+
+
+# ---------------------------------------------------------------------------
+# Dataclasses
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class PeerRecord:
+    """One row from ``peers.yaml``.
+
+    Fields
+    ------
+    peer_id
+        Short opaque identifier (e.g. ``"peer-east-01"``). Used for
+        rate-limit keying + audit-chain tagging.
+    peer_id_cert_fingerprint
+        SHA-256 hex of the full-cert DER (lowercase, 64-hex). Compared
+        via :func:`hmac.compare_digest`.
+    ca_pin_sha256
+        SHA-256 hex of the issuing CA cert (lowercase, 64-hex). AC11
+        cert-rotation discipline — CA pin survives cert rotation.
+    not_valid_after
+        UTC-aware datetime. The peer's certificate ``Not After`` field.
+        Enforced ≤ ``MAX_CERT_VALIDITY_DAYS`` from ``not_valid_before``
+        at peer-add time (AC11).
+    not_valid_before
+        UTC-aware datetime. The peer's certificate ``Not Before``.
+    revoked
+        ``True`` if peer is in the blocklist. Loaded fail-CLOSED on
+        parse error (AC11 revocation channel).
+    hmac_secret_hex
+        Per-peer HMAC-SHA256 shared secret (32-byte = 64-hex). Used by
+        :mod:`federation.replay` for request-binding signatures.
+        Rotated alongside the cert.
+    """
+
+    peer_id: str
+    peer_id_cert_fingerprint: str
+    ca_pin_sha256: str
+    not_valid_after: _dt.datetime
+    not_valid_before: _dt.datetime
+    revoked: bool = False
+    hmac_secret_hex: str = ""
+
+
+class PeersFileError(ValueError):
+    """Raised when peers.yaml cannot be parsed OR violates an invariant."""
+
+
+class SentinelVerifyError(Exception):
+    """Internal helper — sentinel verification surface error.
+
+    Callers should catch and convert to ``(False, reason)`` tuples; the
+    public surface (:func:`verify_enable_sentinel_pair`) never raises.
+    """
+
+
+# ---------------------------------------------------------------------------
+# Fingerprint primitives (AC4 stdlib downgrade per S129 iter-2/3 fold)
+# ---------------------------------------------------------------------------
+
+
+def compute_der_fingerprint(der_bytes: bytes) -> str:
+    """SHA-256 hex of an already-decoded DER cert byte string.
+
+    Returns 64-hex lowercase. The caller passes bytes from
+    :func:`ssl.PEM_cert_to_DER_cert` (which returns ``bytes`` already —
+    do NOT call ``.encode()`` on it).
+    """
+    if not isinstance(der_bytes, (bytes, bytearray)):
+        raise TypeError(
+            "compute_der_fingerprint expects bytes, got {0}".format(
+                type(der_bytes).__name__
+            )
+        )
+    return hashlib.sha256(bytes(der_bytes)).hexdigest()
+
+
+def compute_cert_fingerprint(pem_text: str) -> str:
+    """Compute the full-cert DER fingerprint from a PEM-encoded string.
+
+    ``pem_text`` is a string returned by
+    :func:`ssl.get_server_certificate` or read from a ``.pem`` file.
+    The PEM → DER conversion uses :func:`ssl.PEM_cert_to_DER_cert`
+    which returns ``bytes`` (NOT ``str``).
+    """
+    if not isinstance(pem_text, str):
+        raise TypeError(
+            "compute_cert_fingerprint expects str (PEM), got {0}".format(
+                type(pem_text).__name__
+            )
+        )
+    der_bytes = ssl.PEM_cert_to_DER_cert(pem_text)
+    return compute_der_fingerprint(der_bytes)
+
+
+def compare_fingerprints(a: str, b: str) -> bool:
+    """Constant-time comparison of two fingerprint strings.
+
+    Empty / mismatched-length inputs → ``False``. Comparison is via
+    :func:`hmac.compare_digest` to defeat timing side-channels.
+    """
+    if not isinstance(a, str) or not isinstance(b, str):
+        return False
+    if not a or not b:
+        return False
+    if len(a) != len(b):
+        return False
+    return hmac.compare_digest(a.lower(), b.lower())
+
+
+# ---------------------------------------------------------------------------
+# peers.yaml loader (minimal subset YAML — mirrors sentinel_signers pattern)
+# ---------------------------------------------------------------------------
+
+
+_PEER_FPR_RE = re.compile(r"^[0-9a-f]{64}$")
+_PEER_ID_RE = re.compile(r"^[A-Za-z0-9_\-.]{1,64}$")
+_HMAC_SECRET_RE = re.compile(r"^[0-9a-f]{64}$")
+
+
+def _normalise_hex_lower(value: str) -> str:
+    cleaned = re.sub(r"\s+", "", value).lower()
+    return cleaned
+
+
+def _parse_iso_utc(value: str) -> _dt.datetime:
+    """Parse an ISO-8601 datetime into UTC-aware. Naive input rejected."""
+    raw = value.strip().strip('"').strip("'")
+    if not raw:
+        raise PeersFileError("empty datetime value")
+    candidate = raw
+    if candidate.endswith("Z") or candidate.endswith("z"):
+        candidate = candidate[:-1] + "+00:00"
+    try:
+        parsed = _dt.datetime.fromisoformat(candidate)
+    except ValueError as e:
+        raise PeersFileError(
+            "malformed datetime: {0!r} ({1})".format(raw, e)
+        )
+    if parsed.tzinfo is None:
+        raise PeersFileError(
+            "naive datetime not allowed: {0!r}".format(raw)
+        )
+    return parsed.astimezone(_dt.timezone.utc)
+
+
+def _strip_comment(line: str) -> str:
+    out: List[str] = []
+    in_s = False
+    in_d = False
+    for ch in line:
+        if ch == "'" and not in_d:
+            in_s = not in_s
+        elif ch == '"' and not in_s:
+            in_d = not in_d
+        elif ch == "#" and not in_s and not in_d:
+            break
+        out.append(ch)
+    return "".join(out).rstrip()
+
+
+def _unquote(v: str) -> str:
+    v = v.strip()
+    if len(v) >= 2 and (
+        (v[0] == '"' and v[-1] == '"') or (v[0] == "'" and v[-1] == "'")
+    ):
+        return v[1:-1]
+    return v
+
+
+def load_peers(path: Path) -> Dict[str, PeerRecord]:
+    """Parse peers.yaml into ``{peer_id: PeerRecord}``.
+
+    Fail-CLOSED contract:
+
+    - File missing → :class:`FileNotFoundError` (caller blocks server start).
+    - Parse error / invariant violation → :class:`PeersFileError`.
+
+    Supported YAML shape::
+
+        peers:
+          - peer_id: peer-east-01
+            peer_id_cert_fingerprint: "abc...64hex"
+            ca_pin_sha256: "def...64hex"
+            not_valid_after: "2027-01-01T00:00:00Z"
+            not_valid_before: "2026-01-01T00:00:00Z"
+            revoked: false
+            hmac_secret_hex: "012...64hex"
+    """
+    if not path.exists():
+        raise FileNotFoundError(str(path))
+    text = path.read_text(encoding="utf-8")
+
+    peers_raw: List[Dict[str, str]] = []
+    current: Optional[Dict[str, str]] = None
+    in_peers = False
+    list_item_indent: Optional[int] = None
+
+    for lineno, raw_line in enumerate(text.splitlines(), start=1):
+        line = _strip_comment(raw_line)
+        if not line.strip():
+            continue
+
+        if line.startswith("peers:") and not line.strip().startswith("- "):
+            in_peers = True
+            continue
+
+        if not in_peers:
+            # Anything before `peers:` is ignored (allows top-level
+            # comments / version pin / metadata).
+            continue
+
+        item_match = re.match(r"^(\s*)-\s+(.*)$", line)
+        if item_match:
+            indent = len(item_match.group(1))
+            if list_item_indent is None:
+                list_item_indent = indent
+            elif indent != list_item_indent:
+                raise PeersFileError(
+                    "list-item indent drift at line {0}".format(lineno)
+                )
+            current = {}
+            peers_raw.append(current)
+            inner = item_match.group(2)
+            if ":" in inner:
+                k, _, v = inner.partition(":")
+                k = k.strip()
+                if not k:
+                    raise PeersFileError(
+                        "empty key on list-item line {0}".format(lineno)
+                    )
+                current[k] = _unquote(v.strip())
+            continue
+
+        # Field of current list item ("  key: value" indented past list_item).
+        kv_match = re.match(r"^(\s*)([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(.*?)\s*$", line)
+        if kv_match and current is not None and list_item_indent is not None:
+            key_indent = len(kv_match.group(1))
+            if key_indent <= list_item_indent:
+                raise PeersFileError(
+                    "list-item field at line {0} not indented past list marker".format(
+                        lineno
+                    )
+                )
+            key = kv_match.group(2)
+            value = _unquote(kv_match.group(3))
+            current[key] = value
+            continue
+
+        raise PeersFileError(
+            "unparseable line {0}: {1!r}".format(lineno, raw_line)
+        )
+
+    out: Dict[str, PeerRecord] = {}
+    for idx, row in enumerate(peers_raw):
+        required = ("peer_id", "peer_id_cert_fingerprint", "ca_pin_sha256",
+                    "not_valid_after", "not_valid_before")
+        for fld in required:
+            if fld not in row or not row[fld]:
+                raise PeersFileError(
+                    "peers[{0}] missing required field {1!r}".format(idx, fld)
+                )
+
+        peer_id = row["peer_id"].strip()
+        if not _PEER_ID_RE.match(peer_id):
+            raise PeersFileError(
+                "peers[{0}].peer_id invalid: {1!r}".format(idx, peer_id)
+            )
+
+        fpr = _normalise_hex_lower(row["peer_id_cert_fingerprint"])
+        if not _PEER_FPR_RE.match(fpr):
+            raise PeersFileError(
+                "peers[{0}].peer_id_cert_fingerprint not 64-hex: {1!r}".format(
+                    idx, row["peer_id_cert_fingerprint"]
+                )
+            )
+
+        ca_pin = _normalise_hex_lower(row["ca_pin_sha256"])
+        if not _PEER_FPR_RE.match(ca_pin):
+            raise PeersFileError(
+                "peers[{0}].ca_pin_sha256 not 64-hex: {1!r}".format(
+                    idx, row["ca_pin_sha256"]
+                )
+            )
+
+        try:
+            not_after = _parse_iso_utc(row["not_valid_after"])
+            not_before = _parse_iso_utc(row["not_valid_before"])
+        except PeersFileError as e:
+            raise PeersFileError("peers[{0}]: {1}".format(idx, e))
+
+        if not_after <= not_before:
+            raise PeersFileError(
+                "peers[{0}] not_valid_after <= not_valid_before".format(idx)
+            )
+
+        revoked_raw = row.get("revoked", "false")
+        revoked = str(revoked_raw).strip().lower() in ("true", "1", "yes")
+
+        hmac_raw = row.get("hmac_secret_hex", "").strip()
+        if hmac_raw:
+            hmac_hex = _normalise_hex_lower(hmac_raw)
+            if not _HMAC_SECRET_RE.match(hmac_hex):
+                raise PeersFileError(
+                    "peers[{0}].hmac_secret_hex not 64-hex".format(idx)
+                )
+        else:
+            hmac_hex = ""
+
+        if peer_id in out:
+            raise PeersFileError(
+                "duplicate peer_id {0!r} (peers[{1}])".format(peer_id, idx)
+            )
+
+        out[peer_id] = PeerRecord(
+            peer_id=peer_id,
+            peer_id_cert_fingerprint=fpr,
+            ca_pin_sha256=ca_pin,
+            not_valid_after=not_after,
+            not_valid_before=not_before,
+            revoked=revoked,
+            hmac_secret_hex=hmac_hex,
+        )
+
+    return out
+
+
+def lookup_peer_by_fingerprint(
+    peers: Dict[str, PeerRecord],
+    fingerprint: str,
+) -> Optional[PeerRecord]:
+    """Find a (non-revoked) peer by full-cert DER fingerprint.
+
+    Returns ``None`` if no peer matches OR the matching peer is
+    ``revoked=True``. Uses :func:`compare_fingerprints` for constant-time
+    comparison.
+    """
+    if not fingerprint:
+        return None
+    target = _normalise_hex_lower(fingerprint)
+    for peer in peers.values():
+        if peer.revoked:
+            continue
+        if compare_fingerprints(peer.peer_id_cert_fingerprint, target):
+            return peer
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Owner-GPG sentinel pair verification (AC22 two-stage composition)
+# ---------------------------------------------------------------------------
+
+
+def verify_enable_sentinel_pair(
+    signed_path: Path,
+    signature_path: Path,
+    allowlist_fprs: List[str],
+    signer_registry_path: Optional[Path] = None,
+    now: Optional[_dt.datetime] = None,
+) -> Tuple[bool, str]:
+    """Verify a detached-signature Owner-GPG sentinel pair (2-stage).
+
+    Stage 1 — :func:`_lib.gpg_verify.verify_detached`:
+        Cryptographic GOODSIG + VALIDSIG check via ``gpg --verify``.
+        Cross-checks the recovered signer fpr against ``allowlist_fprs``
+        (which MUST contain at least the Owner fingerprint
+        ``00000000...``).
+
+    Stage 2 — :func:`_lib.sentinel_signers.is_valid_signer`:
+        Registry-driven expiry / revocation check for the recovered
+        fpr per ADR-121.
+
+    Returns
+    -------
+    (ok, reason)
+        ``ok=True`` only if BOTH stages pass.
+        ``reason`` is empty on success, otherwise either the Stage-1
+        ``verify_detached`` reason verbatim, OR
+        ``signer_invalid:<stage-2 reason>`` for Stage 2 failures.
+
+    Never raises. All error paths return ``(False, reason)``.
+
+    The caller is expected to emit ``federation_enable_sentinel_invalid``
+    audit on a False return.
+    """
+    # Lazy imports — works pre + post canonical ceremony (HMAC libs may
+    # not be wired in adopter installs that haven't run install.sh yet).
+    try:
+        # Both modules live in `_lib/`. We deliberately import via the
+        # package qualifier so this module is portable to test contexts
+        # that import the helpers under a different namespace.
+        try:
+            from _lib import gpg_verify as _gpg_verify  # type: ignore[import]
+            from _lib import sentinel_signers as _signers  # type: ignore[import]
+        except ImportError:
+            # Fall back to the dotted name for pytest invocations from repo root.
+            import importlib
+            _gpg_verify = importlib.import_module(".gpg_verify", package="_lib")
+            _signers = importlib.import_module(".sentinel_signers", package="_lib")
+    except ImportError as e:
+        return False, "gpg_verify_unavailable:{0}".format(type(e).__name__)
+
+    try:
+        ok, fpr, reason = _gpg_verify.verify_detached(
+            signed_path,
+            signature_path,
+            allowlist_fprs=allowlist_fprs,
+        )
+    except Exception as e:  # noqa: BLE001 — defense-in-depth
+        return False, "verify_detached_exception:{0}".format(type(e).__name__)
+
+    if not ok:
+        return False, reason or "verify_detached_failed"
+
+    # Stage 2 — registry validity check. If a registry path is provided,
+    # load it and consult is_valid_signer; otherwise pass an empty
+    # registry which means "every key unknown" — fail-CLOSED.
+    registry: Dict[str, "_signers.SignerRecord"] = {}
+    if signer_registry_path is not None:
+        try:
+            registry = _signers.load_registry(signer_registry_path)
+        except FileNotFoundError:
+            return False, "signer_invalid:registry_missing"
+        except Exception as e:  # noqa: BLE001
+            return False, "signer_invalid:registry_parse_error:{0}".format(
+                type(e).__name__
+            )
+
+    try:
+        signer_ok, signer_reason = _signers.is_valid_signer(
+            fpr, now=now, registry=registry,
+        )
+    except Exception as e:  # noqa: BLE001
+        return False, "signer_invalid:is_valid_signer_exception:{0}".format(
+            type(e).__name__
+        )
+
+    if not signer_ok:
+        return False, "signer_invalid:{0}".format(signer_reason)
+
+    return True, ""

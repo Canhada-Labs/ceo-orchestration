@@ -1,0 +1,420 @@
+# ============================================================================
+# accessibility-and-wcag.yaml — benchmark scenarios for the a11y skill
+# ============================================================================
+#
+# PLAN-045 F-09 partial closure — first a11y skill benchmark (skeleton).
+#
+# Structure:
+#   - 10 POSITIVE scenarios (A11Y-BENCH-001..010): code with a real WCAG 2.1
+#     AA violation that a compliant a11y reviewer MUST flag. Covers the
+#     WCAG POUR principles (Perceivable, Operable, Understandable, Robust).
+#   - 4 CONTROL scenarios (A11Y-CTRL-001..004): code that LOOKS suspicious
+#     but is actually correct. Measures PRECISION.
+#
+# Scoring (per scenario):
+#   - tag_weight        = 0.5
+#   - suggestion_weight = 0.3
+#   - severity_weight   = 0.2
+#
+# A scenario passes if the computed score >= pass_threshold (0.7 default).
+#
+# Control scenarios use `must_not_flag_tags` — a correct skill returns
+# an empty issues list or flags only unrelated issues. Controls pass
+# when the response does NOT contain any of the must_not_flag_tags at
+# MEDIUM+ severity.
+#
+# Edit policy:
+#   - Any edit to a scenario MUST bump `version:` + `validated_by: YYYY-MM-DD`.
+#   - CODEOWNERS on `benchmarks/**` gates amendments.
+# ============================================================================
+
+skill: accessibility-and-wcag
+benchmark_version: 1
+created: 2026-04-20
+owner: Accessibility & i18n Engineer
+description: |
+  WCAG 2.1 AA baseline — perceivable (contrast, alt text, captions),
+  operable (keyboard, focus, timing), understandable (language, errors,
+  labels), robust (parse, name/role/value). Includes 4 precision
+  controls. Shipped as SKELETON in Session 46; full validation after
+  SP-006 promote 2026-04-27 + adopter feedback.
+
+scoring:
+  pass_threshold: 0.7
+  health_thresholds:
+    critical: 0.4
+    warning: 0.6
+    healthy: 0.8
+  tag_weight: 0.5
+  suggestion_weight: 0.3
+  severity_weight: 0.2
+
+# ----------------------------------------------------------------------------
+# Positive scenarios — must flag
+# ----------------------------------------------------------------------------
+
+scenarios:
+
+  - id: A11Y-BENCH-001
+    name: Image without alt text
+    category: WCAG-1.1.1-non-text-content
+    severity: HIGH
+    version: 1
+    validated_by: 2026-04-20
+    input:
+      type: code
+      language: tsx
+      content: |
+        export function ProductCard({ product }: { product: Product }) {
+          return (
+            <div className="card">
+              <img src={product.image} />
+              <h3>{product.name}</h3>
+            </div>
+          );
+        }
+    prompt_template: |
+      Review this React component for accessibility issues. For each issue return:
+        - tag: short kebab-case identifier (e.g. "missing-alt-text")
+        - severity: LOW | MEDIUM | HIGH | CRITICAL
+        - suggestion: a one-line remediation
+      Respond ONLY with JSON: {"issues": [{"tag": "...", "severity": "...", "suggestion": "..."}]}
+    expected:
+      must_flag_tags: ["missing-alt-text", "img-missing-alt", "wcag-1.1.1"]
+      acceptable_alternative_tags: ["img-no-alt", "alt-attribute-missing", "non-text-content"]
+      must_suggest_keywords: ["alt=", "alt attribute", "aria-label", "decorative", "role=\"presentation\""]
+      must_identify_severity: HIGH
+
+  - id: A11Y-BENCH-002
+    name: Color-only state indicator
+    category: WCAG-1.4.1-use-of-color
+    severity: MEDIUM
+    version: 1
+    validated_by: 2026-04-20
+    input:
+      type: code
+      language: tsx
+      content: |
+        export function OrderStatus({ status }: { status: "pending" | "error" }) {
+          const color = status === "error" ? "red" : "green";
+          return <span style={{ color }}>{status}</span>;
+        }
+    prompt_template: |
+      Review this React component for accessibility issues. Return JSON with issues list.
+      Respond ONLY with JSON: {"issues": [{"tag": "...", "severity": "...", "suggestion": "..."}]}
+    expected:
+      must_flag_tags: ["color-only-indicator", "color-dependence", "wcag-1.4.1"]
+      acceptable_alternative_tags: ["use-of-color", "color-as-sole-cue", "colorblind-unsafe"]
+      must_suggest_keywords: ["icon", "text label", "aria-label", "screen reader", "non-color cue"]
+      must_identify_severity: MEDIUM
+
+  - id: A11Y-BENCH-003
+    name: Click handler on non-interactive div (missing keyboard support)
+    category: WCAG-2.1.1-keyboard
+    severity: HIGH
+    version: 1
+    validated_by: 2026-04-20
+    input:
+      type: code
+      language: tsx
+      content: |
+        export function Dropdown({ onSelect }: { onSelect: () => void }) {
+          return (
+            <div onClick={onSelect} className="dropdown-trigger">
+              Select option
+            </div>
+          );
+        }
+    prompt_template: |
+      Review this React component for accessibility issues. Respond ONLY with JSON.
+    expected:
+      must_flag_tags: ["non-interactive-click", "missing-keyboard", "wcag-2.1.1"]
+      acceptable_alternative_tags: ["div-with-onclick", "no-keyboard-handler", "keyboard-inaccessible"]
+      must_suggest_keywords: ["button", "onKeyDown", "role=\"button\"", "tabIndex", "keyboard"]
+      must_identify_severity: HIGH
+
+  - id: A11Y-BENCH-004
+    name: Form input without associated label
+    category: WCAG-3.3.2-labels-or-instructions
+    severity: HIGH
+    version: 1
+    validated_by: 2026-04-20
+    input:
+      type: code
+      language: tsx
+      content: |
+        export function SearchForm() {
+          return (
+            <form>
+              <input type="text" placeholder="Search..." />
+              <button type="submit">Go</button>
+            </form>
+          );
+        }
+    prompt_template: |
+      Review this React form for accessibility issues. Respond ONLY with JSON.
+    expected:
+      must_flag_tags: ["missing-label", "input-no-label", "wcag-3.3.2"]
+      acceptable_alternative_tags: ["placeholder-as-label", "unlabeled-input", "form-label-missing"]
+      must_suggest_keywords: ["<label>", "aria-label", "htmlFor", "id", "associate"]
+      must_identify_severity: HIGH
+
+  - id: A11Y-BENCH-005
+    name: Insufficient color contrast
+    category: WCAG-1.4.3-contrast-minimum
+    severity: MEDIUM
+    version: 1
+    validated_by: 2026-04-20
+    input:
+      type: code
+      language: css
+      content: |
+        .subtitle {
+          color: #aaaaaa;           /* light gray */
+          background-color: #ffffff; /* white */
+          font-size: 14px;
+        }
+    prompt_template: |
+      Review this CSS for WCAG 2.1 AA contrast compliance. Respond ONLY with JSON.
+    expected:
+      must_flag_tags: ["low-contrast", "wcag-1.4.3", "contrast-ratio"]
+      acceptable_alternative_tags: ["contrast-minimum", "insufficient-contrast", "text-contrast"]
+      must_suggest_keywords: ["4.5:1", "contrast ratio", "darker", "AA", "WCAG"]
+      must_identify_severity: MEDIUM
+
+  - id: A11Y-BENCH-006
+    name: Missing focus outline suppression
+    category: WCAG-2.4.7-focus-visible
+    severity: MEDIUM
+    version: 1
+    validated_by: 2026-04-20
+    input:
+      type: code
+      language: css
+      content: |
+        button:focus,
+        a:focus,
+        input:focus {
+          outline: none;
+        }
+    prompt_template: |
+      Review this CSS for accessibility regressions. Respond ONLY with JSON.
+    expected:
+      must_flag_tags: ["focus-outline-removed", "no-focus-visible", "wcag-2.4.7"]
+      acceptable_alternative_tags: ["outline-none", "focus-invisible", "keyboard-focus-hidden"]
+      must_suggest_keywords: ["focus-visible", "outline", "box-shadow", "keyboard", "visible focus"]
+      must_identify_severity: MEDIUM
+
+  - id: A11Y-BENCH-007
+    name: Modal without focus trap or role
+    category: WCAG-2.4.3-focus-order
+    severity: HIGH
+    version: 1
+    validated_by: 2026-04-20
+    input:
+      type: code
+      language: tsx
+      content: |
+        export function Modal({ open, onClose, children }: Props) {
+          if (!open) return null;
+          return (
+            <div className="modal-backdrop" onClick={onClose}>
+              <div className="modal">{children}</div>
+            </div>
+          );
+        }
+    prompt_template: |
+      Review this modal component for accessibility issues. Respond ONLY with JSON.
+    expected:
+      must_flag_tags: ["missing-focus-trap", "no-aria-role", "wcag-2.4.3"]
+      acceptable_alternative_tags: ["modal-no-role", "missing-role-dialog", "no-aria-modal"]
+      must_suggest_keywords: ["role=\"dialog\"", "aria-modal", "focus trap", "Escape", "return focus"]
+      must_identify_severity: HIGH
+
+  - id: A11Y-BENCH-008
+    name: Missing lang attribute on html element
+    category: WCAG-3.1.1-language-of-page
+    severity: MEDIUM
+    version: 1
+    validated_by: 2026-04-20
+    input:
+      type: code
+      language: html
+      content: |
+        <!DOCTYPE html>
+        <html>
+          <head><title>My App</title></head>
+          <body><main>Welcome</main></body>
+        </html>
+    prompt_template: |
+      Review this HTML for accessibility issues. Respond ONLY with JSON.
+    expected:
+      must_flag_tags: ["missing-lang", "html-no-lang", "wcag-3.1.1"]
+      acceptable_alternative_tags: ["language-of-page", "lang-attribute-missing", "no-lang-attr"]
+      must_suggest_keywords: ["lang=", "html lang", "language", "screen reader"]
+      must_identify_severity: MEDIUM
+
+  - id: A11Y-BENCH-009
+    name: Disabled button without visual or aria indication
+    category: WCAG-1.3.1-info-and-relationships
+    severity: MEDIUM
+    version: 1
+    validated_by: 2026-04-20
+    input:
+      type: code
+      language: tsx
+      content: |
+        export function SubmitButton({ isSubmitting }: { isSubmitting: boolean }) {
+          return (
+            <button className="btn" style={{ opacity: isSubmitting ? 0.5 : 1 }}>
+              Submit
+            </button>
+          );
+        }
+    prompt_template: |
+      Review this React component for accessibility issues. Respond ONLY with JSON.
+    expected:
+      must_flag_tags: ["missing-aria-disabled", "visual-only-disabled-state", "wcag-1.3.1"]
+      acceptable_alternative_tags: ["no-disabled-attribute", "opacity-only-state", "disabled-not-announced"]
+      must_suggest_keywords: ["disabled", "aria-disabled", "aria-busy", "screen reader"]
+      must_identify_severity: MEDIUM
+
+  - id: A11Y-BENCH-010
+    name: Heading order skips from h1 to h3
+    category: WCAG-1.3.1-info-and-relationships
+    severity: LOW
+    version: 1
+    validated_by: 2026-04-20
+    input:
+      type: code
+      language: tsx
+      content: |
+        export function ArticlePage() {
+          return (
+            <article>
+              <h1>Main Title</h1>
+              <h3>First Subsection</h3>
+              <p>Content...</p>
+            </article>
+          );
+        }
+    prompt_template: |
+      Review this React component for accessibility issues. Respond ONLY with JSON.
+    expected:
+      must_flag_tags: ["heading-order-skip", "h1-to-h3", "wcag-1.3.1"]
+      acceptable_alternative_tags: ["heading-hierarchy", "skipped-heading-level", "heading-structure"]
+      must_suggest_keywords: ["h2", "heading order", "hierarchical", "logical order", "nested"]
+      must_identify_severity: LOW
+
+# ----------------------------------------------------------------------------
+# Control scenarios — must NOT flag
+# ----------------------------------------------------------------------------
+
+  - id: A11Y-CTRL-001
+    name: Correctly labeled form input (no issue)
+    category: WCAG-3.3.2-labels-or-instructions
+    version: 1
+    validated_by: 2026-04-20
+    input:
+      type: code
+      language: tsx
+      content: |
+        export function EmailForm() {
+          return (
+            <form>
+              <label htmlFor="email-input">Email address</label>
+              <input
+                id="email-input"
+                type="email"
+                aria-required="true"
+                aria-describedby="email-help"
+              />
+              <p id="email-help">We'll never share your email.</p>
+              <button type="submit">Subscribe</button>
+            </form>
+          );
+        }
+    prompt_template: |
+      Review this React form for accessibility issues. Respond ONLY with JSON.
+    expected:
+      must_not_flag_tags: ["missing-label", "input-no-label", "missing-aria"]
+      pass_condition: "empty_issues_or_unrelated"
+
+  - id: A11Y-CTRL-002
+    name: Decorative image with explicit empty alt
+    category: WCAG-1.1.1-non-text-content
+    version: 1
+    validated_by: 2026-04-20
+    input:
+      type: code
+      language: tsx
+      content: |
+        export function HeroBanner() {
+          return (
+            <div className="hero">
+              <img src="/decorative-flourish.svg" alt="" role="presentation" />
+              <h1>Welcome</h1>
+            </div>
+          );
+        }
+    prompt_template: |
+      Review this React component for accessibility issues. Respond ONLY with JSON.
+    expected:
+      must_not_flag_tags: ["missing-alt-text", "img-missing-alt"]
+      pass_condition: "empty_issues_or_unrelated"
+
+  - id: A11Y-CTRL-003
+    name: Focus outline retained with modern focus-visible
+    category: WCAG-2.4.7-focus-visible
+    version: 1
+    validated_by: 2026-04-20
+    input:
+      type: code
+      language: css
+      content: |
+        button:focus {
+          outline: none;
+        }
+        button:focus-visible {
+          outline: 2px solid currentColor;
+          outline-offset: 2px;
+        }
+    prompt_template: |
+      Review this CSS for accessibility regressions. Respond ONLY with JSON.
+    expected:
+      must_not_flag_tags: ["focus-outline-removed", "no-focus-visible"]
+      pass_condition: "empty_issues_or_unrelated"
+
+  - id: A11Y-CTRL-004
+    name: Button with keyboard-accessible custom element
+    category: WCAG-2.1.1-keyboard
+    version: 1
+    validated_by: 2026-04-20
+    input:
+      type: code
+      language: tsx
+      content: |
+        export function CustomToggle({ onToggle, pressed }: Props) {
+          const handleKey = (e: React.KeyboardEvent) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              onToggle();
+            }
+          };
+          return (
+            <button
+              type="button"
+              role="switch"
+              aria-pressed={pressed}
+              onClick={onToggle}
+              onKeyDown={handleKey}
+            >
+              Toggle setting
+            </button>
+          );
+        }
+    prompt_template: |
+      Review this React component for accessibility issues. Respond ONLY with JSON.
+    expected:
+      must_not_flag_tags: ["non-interactive-click", "missing-keyboard"]
+      pass_condition: "empty_issues_or_unrelated"

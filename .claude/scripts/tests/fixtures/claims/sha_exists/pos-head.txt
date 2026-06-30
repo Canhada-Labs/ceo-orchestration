@@ -1,0 +1,4 @@
+Verify latest sha: CLAIM:sha_exists:c57e576
+(The Phase 1 commit SHA; this fixture will need to be updated if the
+commit is rewritten. Intentionally dynamic — sha_exists fixtures
+validate the verifier not the specific SHA.)

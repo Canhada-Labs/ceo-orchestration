@@ -1,0 +1,1 @@
+KRAKEN_API_KEY=fmopCmAE6d4XUtBk1ZeXZvgm+K5qX/iH/LTj6mlhoH5uUwRCnxWcCi5j

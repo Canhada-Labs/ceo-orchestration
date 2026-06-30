@@ -1,0 +1,1070 @@
+"""PLAN-099 Wave A.1 + Wave B — stdlib federation server (mTLS + 3 RO endpoints).
+
+This module ships ``FederationServer``, a thin wrapper around
+:class:`http.server.ThreadingHTTPServer` with:
+
+- TLSv1.3 minimum (:class:`ssl.SSLContext` ``minimum_version``)
+- mTLS mandatory (``CERT_REQUIRED``; server-side ``check_hostname=False``
+  by design — stdlib SSLContext does not validate incoming-client SNI
+  via this flag, so leaving it True would only add a confusing
+  no-op. Client-side context (``federation.client``) DOES enable
+  ``check_hostname=True`` for outbound peer-cert SAN validation.)
+- Loopback-default bind; non-loopback bind gated by Owner-GPG LAN sentinel
+- Mechanical HTTP method allowlist (GET only — AC15)
+- 3 read-only endpoints: ``/federation/identity``, ``/federation/status``,
+  ``/federation/audit-summary`` (Wave B)
+- HMAC+nonce+timestamp replay protection (Wave A — AC13)
+- Joint-key rate limit on /audit-summary (AC17)
+- All emit paths gated through :mod:`audit_emit` with kernel-override-
+  registered ``federation_*`` actions (Wave D.4)
+
+Stdlib-only per ADR-126 §Part 6 (no ``cryptography`` package). The
+limitations of this stdlib MVP are documented in ADR-129 §Key-floor-waiver
++ R-key-floor-soft + AC-LIM-1 — programmatic per-cert key-floor
+verification (RSA/EC bit-count) is FORMALLY WAIVED for MVP and deferred
+to PLAN-099-FOLLOWUP write-mode.
+"""
+
+from __future__ import annotations
+
+import collections
+import datetime as _dt
+import hashlib
+import http.server
+import ipaddress
+import json
+import os
+import socket
+import ssl
+import sys
+import threading
+import time
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Tuple
+
+# Package-internal helpers — imports resolve via the canonical package
+# path .claude/hooks/_lib/federation/ once the patcher installs the
+# files. During unit tests the draft layout in .claude/plans/PLAN-099/
+# is loaded directly.
+try:
+    from .identity import (
+        PeerRecord,
+        PeersFileError,
+        compute_cert_fingerprint,
+        compare_fingerprints,
+        load_peers,
+        lookup_peer_by_fingerprint,
+        verify_enable_sentinel_pair,
+    )
+    from .replay import ReplayCache, ReplayDecision, parse_rfc3339_utc
+    from .audit_chain import (
+        CORRELATION_ID_HEADER,
+        stamp_local_with_correlation,
+    )
+    from . import (
+        AUDIT_SUMMARY_RATE_PER_MIN,
+        ALLOWED_HTTP_METHODS,
+        CERT_EXPIRY_WARN_DAYS,
+        DEFAULT_BIND,
+        DEFAULT_PORT,
+        FEDERATION_KILL_SWITCH_ENV,
+        HANDSHAKE_TIMEOUT_SECONDS,
+        MAX_CERT_VALIDITY_DAYS,
+        MAX_CLOCK_SKEW_SECONDS,
+        OWNER_GPG_FPR,
+    )
+except ImportError:
+    # Test / draft mode — flat-import fallback.
+    from identity import (  # type: ignore[no-redef]
+        PeerRecord,
+        PeersFileError,
+        compute_cert_fingerprint,
+        compare_fingerprints,
+        load_peers,
+        lookup_peer_by_fingerprint,
+        verify_enable_sentinel_pair,
+    )
+    from replay import ReplayCache, ReplayDecision, parse_rfc3339_utc  # type: ignore[no-redef]
+    from audit_chain import (  # type: ignore[no-redef]
+        CORRELATION_ID_HEADER,
+        stamp_local_with_correlation,
+    )
+    AUDIT_SUMMARY_RATE_PER_MIN = 10
+    ALLOWED_HTTP_METHODS = frozenset(("GET",))
+    CERT_EXPIRY_WARN_DAYS = 14
+    DEFAULT_BIND = "127.0.0.1"
+    DEFAULT_PORT = 8843
+    FEDERATION_KILL_SWITCH_ENV = "CEO_FEDERATION_ENABLED"
+    HANDSHAKE_TIMEOUT_SECONDS = 5.0
+    MAX_CERT_VALIDITY_DAYS = 90
+    MAX_CLOCK_SKEW_SECONDS = 30
+    OWNER_GPG_FPR = "0000000000000000000000000000000000000000"
+
+
+__all__ = [
+    "FederationConfig",
+    "FederationServer",
+    "FederationStartError",
+    "build_ssl_context",
+    "resolve_bind_is_loopback",
+]
+
+
+# ---------------------------------------------------------------------------
+# Exceptions
+# ---------------------------------------------------------------------------
+
+
+class FederationStartError(RuntimeError):
+    """Raised by :meth:`FederationServer.serve_forever` when any of the
+    enable invariants fail. The audit-emit side-effect happens
+    BEFORE the raise; the exception is the operator-facing surface."""
+
+
+# ---------------------------------------------------------------------------
+# Audit emit shims (hasattr-guarded to work pre + post canonical ceremony)
+# ---------------------------------------------------------------------------
+
+
+def _safe_emit(action: str, **fields: Any) -> None:
+    """Call ``audit_emit.emit_<action>(...)`` if registered; otherwise no-op.
+
+    All federation events go through this shim so the module is usable
+    in adopter installs that haven't run the v1.32.0 ceremony yet.
+    """
+    try:
+        try:
+            from _lib import audit_emit  # type: ignore[import]
+        except ImportError:
+            import importlib
+            audit_emit = importlib.import_module(".audit_emit", package="_lib")
+    except ImportError:
+        return
+    fn_name = "emit_{0}".format(action)
+    fn = getattr(audit_emit, fn_name, None)
+    if fn is None:
+        return
+    try:
+        fn(**fields)
+    except Exception:
+        # Audit-emit MUST NEVER block the server. Swallow + breadcrumb.
+        try:
+            sys.stderr.write(
+                "[federation.server] audit emit '{0}' raised; ignored\n".format(
+                    action
+                )
+            )
+        except Exception:
+            pass
+
+
+# ---------------------------------------------------------------------------
+# Configuration
+# ---------------------------------------------------------------------------
+
+
+class FederationConfig:
+    """Resolved server configuration (immutable after construction).
+
+    Fields
+    ------
+    bind_host
+        Host string (IP literal or hostname). Hostnames are resolved on
+        bind to check loopback.
+    bind_port
+        TCP port (1..65535).
+    cert_file
+        Server cert (PEM).
+    key_file
+        Server private key (PEM).
+    ca_file
+        Bundle of trusted client-CA certs (PEM).
+    peers_path
+        Path to ``peers.yaml`` (allowlist for client cert fingerprints).
+    enabled_sentinel
+        Path to ``.claude/data/federation/enabled.md`` (signed cleartext).
+    enabled_sentinel_asc
+        Path to ``enabled.md.asc`` (detached signature).
+    lan_enabled_sentinel
+        Path to ``lan-enabled.md`` (LAN-bind additional pair).
+    lan_enabled_sentinel_asc
+        Path to ``lan-enabled.md.asc``.
+    signer_registry_path
+        Path to ``.claude/security/sentinel-signers-registry.yaml`` for
+        Stage-2 signer expiry / revocation check.
+    """
+
+    __slots__ = (
+        "bind_host", "bind_port", "cert_file", "key_file", "ca_file",
+        "peers_path", "enabled_sentinel", "enabled_sentinel_asc",
+        "lan_enabled_sentinel", "lan_enabled_sentinel_asc",
+        "signer_registry_path",
+    )
+
+    def __init__(
+        self,
+        bind_host: str,
+        bind_port: int,
+        cert_file: Path,
+        key_file: Path,
+        ca_file: Path,
+        peers_path: Path,
+        enabled_sentinel: Path,
+        enabled_sentinel_asc: Path,
+        lan_enabled_sentinel: Path,
+        lan_enabled_sentinel_asc: Path,
+        signer_registry_path: Optional[Path] = None,
+    ) -> None:
+        self.bind_host = bind_host
+        self.bind_port = int(bind_port)
+        self.cert_file = cert_file
+        self.key_file = key_file
+        self.ca_file = ca_file
+        self.peers_path = peers_path
+        self.enabled_sentinel = enabled_sentinel
+        self.enabled_sentinel_asc = enabled_sentinel_asc
+        self.lan_enabled_sentinel = lan_enabled_sentinel
+        self.lan_enabled_sentinel_asc = lan_enabled_sentinel_asc
+        self.signer_registry_path = signer_registry_path
+
+
+# ---------------------------------------------------------------------------
+# Bind-loopback resolver (AC3 — covers ALL non-loopback shapes)
+# ---------------------------------------------------------------------------
+
+
+def resolve_bind_is_loopback(bind_host: str) -> Tuple[bool, str]:
+    """Return ``(is_loopback, resolved_ip_str)`` for a bind host.
+
+    Resolves hostnames via :func:`socket.gethostbyname_ex` and tests
+    EACH resolved address against :func:`ipaddress.ip_address.is_loopback`.
+    A host with any non-loopback address counts as non-loopback (the
+    server cannot bind to "loopback-only" without an explicit literal).
+
+    Handles literally:
+
+    - ``"127.0.0.1"``, ``"::1"`` → ``(True, ip)``
+    - ``"0.0.0.0"``, ``"::"``, ``"::0"`` → ``(False, ip)`` (unspecified =
+      bind-all = LAN exposure)
+    - LAN literals (``"192.168.x.y"``, ``"10.x.x.x"``) → ``(False, ip)``
+    - Hostnames resolving to LAN → ``(False, first_ip)``
+    """
+    raw = (bind_host or "").strip()
+    if not raw:
+        return False, ""
+
+    # Try literal IP first (covers IPv4 + IPv6 + "::").
+    try:
+        addr = ipaddress.ip_address(raw)
+        # `unspecified` (0.0.0.0 / ::) is intentionally NOT loopback.
+        return bool(addr.is_loopback), str(addr)
+    except ValueError:
+        pass
+
+    # Hostname — resolve and check every A/AAAA.
+    try:
+        _, _, ips = socket.gethostbyname_ex(raw)
+    except (socket.gaierror, OSError):
+        # Unresolvable host → treat as non-loopback (fail-CLOSED on AC3
+        # gate; the bind() call will fail anyway, but we want the
+        # right reason emitted).
+        return False, ""
+
+    all_loopback = True
+    first = ""
+    for ip in ips:
+        if not first:
+            first = ip
+        try:
+            addr = ipaddress.ip_address(ip)
+        except ValueError:
+            all_loopback = False
+            continue
+        if not addr.is_loopback:
+            all_loopback = False
+    return all_loopback, first
+
+
+# ---------------------------------------------------------------------------
+# IPv6-aware threaded HTTPS server (AC3 + Codex R2 iter-2 P1#3 fold —
+# stdlib HTTPServer defaults to AF_INET; without this subclass, binding
+# to `::1` would fail at runtime with EAFNOSUPPORT).
+# ---------------------------------------------------------------------------
+
+
+class _ThreadingHTTPSServer(http.server.ThreadingHTTPServer):
+    """ThreadingHTTPServer with dual-stack support.
+
+    We override ``address_family`` based on whether the bind address
+    is IPv6. The decision is made BEFORE bind by
+    :meth:`FederationServer.serve_forever` via the constructor's
+    ``address_family`` kwarg (it inspects ``cfg.bind_host`` and picks
+    ``AF_INET6`` for IPv6 literals, ``AF_INET`` for everything else).
+    This keeps the stdlib contract for IPv4 binds (default ``AF_INET``)
+    while honoring ``::1`` / ``::`` for IPv6 binds.
+    """
+    address_family = socket.AF_INET  # default; overridden at instantiate
+
+    def __init__(self, server_address, RequestHandlerClass, address_family=None):
+        if address_family is not None:
+            self.address_family = address_family
+        super().__init__(server_address, RequestHandlerClass)
+
+
+# ---------------------------------------------------------------------------
+# SSLContext builder (AC1 / AC2 + R1 P1-6/P1-8 hardening)
+# ---------------------------------------------------------------------------
+
+
+def build_ssl_context(
+    cert_file: Path,
+    key_file: Path,
+    ca_file: Path,
+) -> ssl.SSLContext:
+    """Construct a TLSv1.3-min mTLS SSLContext for the server side.
+
+    AC1 governance-waived invariants (recorded under ADR-129 §Key-floor-waiver):
+
+    - ``minimum_version = TLSv1.3``
+    - ``verify_mode = CERT_REQUIRED``
+    - ``check_hostname = False`` on the SERVER context (S134 Codex R2
+      iter-4 P2 fold — stdlib SSLContext does not use this flag for
+      incoming-client SNI validation on the server side; the
+      client-side context in ``federation.client`` sets it True for
+      outbound peer-cert SAN matching).
+    - Server cert + private key loaded
+    - Client CA bundle loaded (for verifying the peer cert chain)
+
+    AC1 ORIGINAL invariant (per-cert key-floor ed25519/P-256/RSA-2048+
+    programmatically verified) is FORMALLY WAIVED for MVP — stdlib
+    `SSLContext` does NOT expose primitives for inspecting cert public-
+    key parameters. Operational mitigation: Owner provisions ed25519 /
+    P-256 / RSA-2048+ certs at peer-add per runbook (R-key-floor-soft).
+    """
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    ctx.minimum_version = ssl.TLSVersion.TLSv1_3
+    ctx.verify_mode = ssl.CERT_REQUIRED
+    # Hostname check: server doesn't normally check incoming-client
+    # hostnames; this flag matters more for the client side. We keep it
+    # True on the server SSLContext for defense-in-depth and consistency
+    # with the documented R1 P1-8 invariant — stdlib still requires a
+    # SAN/CN on client certs presented via CERT_REQUIRED for some
+    # versions, and we want that strict.
+    ctx.check_hostname = False  # Server side: client SNI not validated by us
+    ctx.load_cert_chain(certfile=str(cert_file), keyfile=str(key_file))
+    ctx.load_verify_locations(cafile=str(ca_file))
+    return ctx
+
+
+# ---------------------------------------------------------------------------
+# Rate limiter — joint key (peer_id_cert_fingerprint, ip)
+# ---------------------------------------------------------------------------
+
+
+class JointKeyRateLimiter:
+    """Bucket-by-minute joint-key rate limiter (AC17).
+
+    The key is ``(peer_id_cert_fingerprint, client_ip)`` — composite so
+    a single peer's cert cannot be reused from a different host AND a
+    single host cannot spray requests across rotating peer certs.
+
+    Storage is in-memory; the bucket epoch is server wall-clock seconds
+    floored to the minute. Buckets older than 2 minutes are pruned on
+    every access.
+    """
+
+    def __init__(self, per_minute: int) -> None:
+        self.per_minute = int(per_minute)
+        self._buckets: Dict[Tuple[str, str, int], int] = {}
+        self._lock = threading.Lock()
+
+    def allow(
+        self,
+        peer_fpr: str,
+        client_ip: str,
+        now_epoch: Optional[float] = None,
+    ) -> bool:
+        """Return True if the request is within rate; record otherwise."""
+        now = now_epoch if now_epoch is not None else time.time()
+        bucket = int(now // 60)
+        key = (peer_fpr.lower(), client_ip, bucket)
+        with self._lock:
+            self._prune_locked(bucket)
+            current = self._buckets.get(key, 0)
+            if current >= self.per_minute:
+                return False
+            self._buckets[key] = current + 1
+            return True
+
+    def _prune_locked(self, current_bucket: int) -> None:
+        cutoff = current_bucket - 2
+        stale = [k for k in self._buckets if k[2] < cutoff]
+        for k in stale:
+            del self._buckets[k]
+
+
+# ---------------------------------------------------------------------------
+# Request handler — 3 endpoints + method allowlist + replay protection
+# ---------------------------------------------------------------------------
+
+
+class _FederationHandler(http.server.BaseHTTPRequestHandler):
+    """Per-request handler. Wired by :class:`FederationServer`.
+
+    The server attaches its config + helpers as attributes on the
+    handler-class object before bind, so each instance reads them off
+    ``self.server.federation_*``.
+
+    Method dispatch is MECHANICAL — we override
+    :meth:`parse_request` (Codex R2 iter-1 P1#1 fold; was previously
+    documented as `handle_one_request` but `parse_request` is the
+    correct stdlib chokepoint that runs BEFORE `do_*` dispatch). Any
+    request whose method is not in ``ALLOWED_HTTP_METHODS`` (i.e.,
+    anything other than ``GET``) emits
+    ``federation_write_attempt_blocked`` + 405 + drops the request.
+    The ``do_POST``/``do_PUT``/etc. overrides below remain as
+    defense-in-depth for the small set of named methods.
+    """
+
+    server_version = "CEOFederation/1.0"
+    sys_version = ""  # don't leak Python version
+
+    # AC16 — fail-fast timeout per request.
+    timeout = HANDSHAKE_TIMEOUT_SECONDS
+
+    # We override the request log to silence stdlib's default stdout writes
+    # (the audit-log + structured emit are the only sanctioned outputs).
+    def log_message(self, format: str, *args: Any) -> None:  # noqa: A002
+        return  # silent — audit-log is the canonical record
+
+    # AC15 mechanical method allowlist — defense-in-depth.
+    # The do_POST/PUT/etc. overrides below catch the named methods; this
+    # parse_request override catches EVERY non-allowed method (TRACE,
+    # CONNECT, custom verbs, X-HTTP-Method-Override smuggling) BEFORE
+    # the base-class dispatcher returns 501. We emit
+    # federation_write_attempt_blocked + return 405 mechanically.
+    # (Codex R2 iter-1 P1#1 fold.)
+    def parse_request(self) -> bool:
+        ok = http.server.BaseHTTPRequestHandler.parse_request(self)
+        if not ok:
+            return ok
+        method = (self.command or "").upper()
+        if method not in ALLOWED_HTTP_METHODS:
+            self._emit_write_blocked()
+            self._send_405()
+            # Returning False tells the base-class loop to drop this
+            # request without dispatching to do_*. We've already sent
+            # the 405 above.
+            return False
+        return True
+
+    # -- Method allowlist gate -----------------------------------------
+
+    def _emit_write_blocked(self) -> None:
+        # AC15 — every non-GET method-allowlist violation emits.
+        peer_fpr = self._lookup_peer_fpr()
+        correlation = self.headers.get(CORRELATION_ID_HEADER, "") or ""
+        _safe_emit(
+            "federation_write_attempt_blocked",
+            method=str(self.command)[:16] if self.command else "",
+            path=str(self.path)[:128] if self.path else "",
+            peer_id_cert_fingerprint=peer_fpr,
+            client_ip=self._client_ip(),
+            fed_correlation_id=correlation[:64],
+        )
+
+    def _send_405(self) -> None:
+        self.send_response(405)
+        self.send_header("Allow", "GET")
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Connection", "close")
+        body = b'{"error":"method_not_allowed"}'
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_POST(self) -> None:  # noqa: N802 — base-class convention
+        self._emit_write_blocked()
+        self._send_405()
+
+    def do_PUT(self) -> None:  # noqa: N802
+        self._emit_write_blocked()
+        self._send_405()
+
+    def do_PATCH(self) -> None:  # noqa: N802
+        self._emit_write_blocked()
+        self._send_405()
+
+    def do_DELETE(self) -> None:  # noqa: N802
+        self._emit_write_blocked()
+        self._send_405()
+
+    def do_OPTIONS(self) -> None:  # noqa: N802
+        self._emit_write_blocked()
+        self._send_405()
+
+    def do_HEAD(self) -> None:  # noqa: N802
+        # HEAD on GET resources is conventionally allowed, but federation
+        # is strict GET-only (no metadata pre-fetch).
+        self._emit_write_blocked()
+        self._send_405()
+
+    # -- Common helpers --------------------------------------------------
+
+    def _client_ip(self) -> str:
+        try:
+            return self.client_address[0] if self.client_address else ""
+        except (AttributeError, IndexError):
+            return ""
+
+    def _lookup_peer_fpr(self) -> str:
+        """Compute the DER fingerprint of the connecting peer's cert."""
+        # Stdlib ssl exposes the peer cert as DER via getpeercert(True).
+        try:
+            der = self.connection.getpeercert(True)  # type: ignore[union-attr]
+        except (AttributeError, ssl.SSLError):
+            return ""
+        if not der:
+            return ""
+        return hashlib.sha256(der).hexdigest()
+
+    def _lookup_peer_record(self) -> Optional[PeerRecord]:
+        fpr = self._lookup_peer_fpr()
+        if not fpr:
+            return None
+        peers = getattr(self.server, "federation_peers", {})
+        return lookup_peer_by_fingerprint(peers, fpr)
+
+    def _emit_connection_rejected(self, reason: str) -> None:
+        _safe_emit(
+            "federation_connection_rejected",
+            peer_id_cert_fingerprint=self._lookup_peer_fpr(),
+            client_ip=self._client_ip(),
+            reason=reason[:64],
+        )
+
+    def _emit_connection_accepted(self, peer_id: str) -> None:
+        correlation = self.headers.get(CORRELATION_ID_HEADER, "") or ""
+        _safe_emit(
+            "federation_connection_accepted",
+            peer_id=peer_id[:64],
+            client_ip=self._client_ip(),
+            fed_correlation_id=correlation[:64],
+        )
+
+    # -- Replay + signature verification (AC13) -------------------------
+
+    def _verify_replay_and_signature(
+        self, peer: PeerRecord, body: bytes,
+    ) -> Optional[str]:
+        """Return None on success; a reason-string on rejection.
+
+        The caller (do_GET) sends 401 on a non-None return + emits
+        ``federation_connection_replay_suspected``.
+        """
+        replay = getattr(self.server, "federation_replay_cache", None)
+        if replay is None:
+            return "replay_cache_missing"
+
+        nonce = self.headers.get("X-CEO-Federation-Nonce", "")
+        ts = self.headers.get("X-CEO-Federation-Timestamp", "")
+        sig = self.headers.get("X-CEO-Federation-Signature", "")
+
+        if not (nonce and ts and sig):
+            return "missing_replay_headers"
+
+        # 1. Replay check (timestamp window + nonce ring).
+        decision: ReplayDecision = replay.check_and_record(
+            peer.peer_id, nonce, ts,
+        )
+        if not decision.accepted:
+            return decision.reason
+
+        # 2. Signature check.
+        try:
+            from .replay import verify_signature  # type: ignore[import]
+        except ImportError:
+            from replay import verify_signature  # type: ignore[no-redef]
+
+        ok = verify_signature(
+            self.command or "",
+            self.path or "",
+            ts,
+            nonce,
+            body,
+            peer.hmac_secret_hex,
+            sig,
+        )
+        if not ok:
+            return "signature_invalid"
+        return None
+
+    # -- Dispatch -------------------------------------------------------
+
+    def do_GET(self) -> None:  # noqa: N802
+        # AC15 — mechanical method allowlist (defense-in-depth even
+        # though the do_* methods above already enforce — handler-class
+        # mutations are a kernel-level concern, this is just extra).
+        if self.command not in ALLOWED_HTTP_METHODS:
+            self._emit_write_blocked()
+            self._send_405()
+            return
+
+        peer = self._lookup_peer_record()
+        if peer is None:
+            self._emit_connection_rejected("peer_unknown_or_revoked")
+            self._send_403()
+            return
+
+        # Read request body if any (federation requests are GETs but
+        # we still bind the body sha into the HMAC; for GET it's normally
+        # empty/zero-length).
+        body = b""
+        cl = self.headers.get("Content-Length")
+        if cl and cl.isdigit():
+            try:
+                body = self.rfile.read(min(int(cl), 4096))
+            except OSError:
+                body = b""
+
+        replay_reason = self._verify_replay_and_signature(peer, body)
+        if replay_reason is not None:
+            _safe_emit(
+                "federation_connection_replay_suspected",
+                peer_id=peer.peer_id[:64],
+                reason=replay_reason[:64],
+                client_ip=self._client_ip(),
+            )
+            self._send_401(replay_reason)
+            return
+
+        self._emit_connection_accepted(peer.peer_id)
+
+        # Route to endpoint.
+        # AC17 rate limit applies only to /audit-summary; others are
+        # unbounded for MVP (Owner-controlled peers only).
+        if self.path == "/federation/identity":
+            self._handle_identity()
+        elif self.path == "/federation/status":
+            self._handle_status()
+        elif self.path.startswith("/federation/audit-summary"):
+            self._handle_audit_summary(peer)
+        else:
+            self._send_404()
+
+    # -- Endpoints ------------------------------------------------------
+
+    def _handle_identity(self) -> None:
+        """B.1 — return server's own full-cert DER fingerprint."""
+        server_fpr = getattr(self.server, "federation_server_fingerprint", "")
+        payload = {"peer_id_cert_fingerprint": server_fpr}
+        self._send_json(200, payload)
+
+    def _handle_status(self) -> None:
+        """B.2 — peer-id, uptime, opaque hash + count of last-event."""
+        peer = self._lookup_peer_record()
+        peer_id = peer.peer_id if peer else ""
+        started_at = getattr(self.server, "federation_started_at", 0.0)
+        uptime_s = max(0, int(time.time() - started_at)) if started_at else 0
+
+        # R1 hardening — opaque hash, NOT content. We hash the last-N
+        # event-record digests rather than including any field text.
+        last_events_digest = getattr(self.server, "federation_status_digest", "")
+        last_events_count = getattr(self.server, "federation_status_count", 0)
+        payload = {
+            "peer_id": peer_id,
+            "uptime_seconds": uptime_s,
+            "last_event_opaque_sha256": last_events_digest,
+            "last_event_count": int(last_events_count),
+        }
+        self._send_json(200, payload)
+
+    def _handle_audit_summary(self, peer: PeerRecord) -> None:
+        """B.3 — last-N audit events redacted via PII pipeline (10/min/peer)."""
+        rl = getattr(self.server, "federation_rate_limiter", None)
+        if rl is not None and not rl.allow(
+            peer.peer_id_cert_fingerprint, self._client_ip(),
+        ):
+            self._send_429()
+            return
+
+        fetch: Optional[Callable[[Optional[str]], List[Dict[str, Any]]]] = (
+            getattr(self.server, "federation_audit_fetch", None)
+        )
+        since = ""
+        if "?" in self.path:
+            qs = self.path.split("?", 1)[1]
+            for kv in qs.split("&"):
+                if kv.startswith("since="):
+                    since = kv.split("=", 1)[1][:64]
+                    break
+
+        events: List[Dict[str, Any]] = []
+        if fetch is not None:
+            try:
+                events = fetch(since or None) or []
+            except Exception:
+                events = []
+
+        # AC6 — apply redact_secrets + pii_patterns.scan(mode="redact")
+        # pipeline before serialisation. The exact module names are
+        # governance-stable but lazy-imported so the federation module
+        # itself is testable without the full _lib stack.
+        events = _apply_redaction_pipeline(events)
+        payload = {"events": events, "count": len(events)}
+        self._send_json(200, payload)
+
+    # -- Response helpers ------------------------------------------------
+
+    def _send_json(self, code: int, payload: Dict[str, Any]) -> None:
+        body = json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Connection", "close")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _send_403(self) -> None:
+        body = b'{"error":"forbidden"}'
+        self.send_response(403)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _send_401(self, reason: str) -> None:
+        body = json.dumps(
+            {"error": "unauthorized", "reason": reason[:64]},
+            ensure_ascii=False,
+        ).encode("utf-8")
+        self.send_response(401)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _send_404(self) -> None:
+        body = b'{"error":"not_found"}'
+        self.send_response(404)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _send_429(self) -> None:
+        body = b'{"error":"rate_limited"}'
+        self.send_response(429)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Retry-After", "60")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+
+# AC6 fail-CLOSED contract — when either redactor is unavailable, we
+# DROP the events entirely rather than leak unredacted content cross-
+# machine (Codex R2 iter-1 P0#2 fold). The original "pass-through"
+# fallback was a cross-machine leak vector; the only safe behaviour is
+# to return zero events and let the operator install the redact pipeline.
+_REDACTION_FAIL_CLOSED_MARKER = object()
+
+
+def _apply_redaction_pipeline(
+    events: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Apply ``redact_secrets`` + ``pii_patterns.scan(...,mode="redact")``
+    before serialisation.
+
+    Fail-CLOSED contract (Codex R2 iter-1 P0#2 fix): if EITHER redactor
+    is unavailable, this function returns the empty list — refusing to
+    leak unredacted audit content cross-machine. Adopters who lack the
+    `_lib/redact.py` + `_lib/pii_patterns.py` modules cannot expose
+    `/federation/audit-summary` content until they install the pipeline.
+
+    Real API surfaces (Codex R2 iter-2 P1#2 fold — verified against
+    `.claude/hooks/_lib/`):
+    - ``_lib.redact.redact_secrets(text) -> text``  (returns redacted)
+    - ``_lib.pii_patterns.scan(text, mode="redact") -> ScanResult`` with
+      ``.redacted_text`` attribute (we wrap into a `(text) -> text`
+      adapter so the two-step pipeline shape stays consistent).
+
+    On success, each event is serialised → redacted (both passes) →
+    re-parsed, so PII inside nested values (which key-level scans
+    miss) is caught by the redactor scanning the full JSON blob.
+    """
+    out: List[Dict[str, Any]] = []
+    redact_secrets = None
+    pii_scan = None
+    load_error: Optional[str] = None
+    try:
+        try:
+            from _lib import redact as _redact  # type: ignore[import]
+            from _lib import pii_patterns as _pii  # type: ignore[import]
+        except ImportError:
+            import importlib
+            _redact = importlib.import_module(".redact", package="_lib")
+            _pii = importlib.import_module(".pii_patterns", package="_lib")
+        # `_lib.redact.redact_secrets(text)` returns redacted text.
+        redact_secrets = getattr(_redact, "redact_secrets", None)
+        # `_lib.pii_patterns.scan(text, mode="redact")` returns ScanResult
+        # with `.redacted_text`. We wrap into a `(text) -> text` adapter.
+        _pii_scan = getattr(_pii, "scan", None)
+        if _pii_scan is not None:
+            def _pii_redact_adapter(text: str) -> str:
+                result = _pii_scan(text, mode="redact")
+                return getattr(result, "redacted_text", text) or text
+            pii_scan = _pii_redact_adapter
+    except Exception as e:  # noqa: BLE001 — defense-in-depth
+        load_error = "{0}:{1}".format(type(e).__name__, str(e)[:80])
+
+    # AC6 fail-CLOSED — refuse to leak when either redactor is missing.
+    if redact_secrets is None or pii_scan is None:
+        try:
+            sys.stderr.write(
+                "[federation.server] AC6 fail-CLOSED — redact_secrets={0!r} "
+                "pii_scan={1!r} load_error={2!r}; refusing to serialise "
+                "audit-summary events\n".format(
+                    redact_secrets is not None,
+                    pii_scan is not None,
+                    load_error,
+                )
+            )
+        except Exception:
+            pass
+        return []
+
+    for ev in events:
+        if not isinstance(ev, dict):
+            continue
+        # Defense-in-depth: serialise → redact → parse so the redactor
+        # sees the full payload string (catches PII inside nested
+        # values that key-level scans miss).
+        try:
+            blob = json.dumps(ev, ensure_ascii=False)
+        except (TypeError, ValueError):
+            continue
+        try:
+            blob = redact_secrets(blob)
+        except Exception:
+            # Redactor errored on this event → drop it (don't fall back
+            # to unredacted output).
+            continue
+        try:
+            blob = pii_scan(blob)
+        except Exception:
+            continue
+        try:
+            redacted = json.loads(blob)
+        except (TypeError, ValueError):
+            continue
+        out.append(redacted)
+    return out
+
+
+# ---------------------------------------------------------------------------
+# FederationServer — orchestrator
+# ---------------------------------------------------------------------------
+
+
+class FederationServer:
+    """Top-level orchestrator for the federation server.
+
+    Calls in order:
+
+    1. Master env kill-switch (``CEO_FEDERATION_ENABLED=1`` required).
+    2. Enable-sentinel pair verify (Stage 1 GPG + Stage 2 signer
+       expiry/revocation). MANDATORY regardless of bind.
+    3. Bind-loopback check (AC3). If non-loopback → LAN sentinel pair
+       verify (same 2-stage protocol). Fail-CLOSED with
+       ``federation_lan_bind_denied`` on missing/bad LAN sentinel.
+    4. Load peers.yaml (fail-CLOSED on parse error / blocklist breach).
+    5. Build SSLContext (TLSv1.3 min + mTLS).
+    6. Bind + serve forever.
+
+    Each failure path emits a structured audit event AND raises
+    :class:`FederationStartError` so the operator-facing run-script
+    can exit nonzero.
+    """
+
+    def __init__(
+        self,
+        config: FederationConfig,
+        audit_fetch: Optional[Callable[[Optional[str]], List[Dict[str, Any]]]] = None,
+        now: Optional[_dt.datetime] = None,
+    ) -> None:
+        self.config = config
+        self._audit_fetch = audit_fetch
+        self._now = now or _dt.datetime.now(_dt.timezone.utc)
+        self._httpd: Optional[http.server.HTTPServer] = None
+
+    # -- Pre-start invariants ------------------------------------------
+
+    def _check_kill_switch(self) -> None:
+        v = os.environ.get(FEDERATION_KILL_SWITCH_ENV, "0").strip()
+        if v not in ("1", "true", "TRUE"):
+            raise FederationStartError(
+                "kill-switch {0} not set; refusing to start".format(
+                    FEDERATION_KILL_SWITCH_ENV
+                )
+            )
+
+    def _check_enable_sentinel(self) -> None:
+        cfg = self.config
+        ok, reason = verify_enable_sentinel_pair(
+            cfg.enabled_sentinel,
+            cfg.enabled_sentinel_asc,
+            [OWNER_GPG_FPR],
+            signer_registry_path=cfg.signer_registry_path,
+            now=self._now,
+        )
+        if not ok:
+            _safe_emit(
+                "federation_enable_sentinel_invalid",
+                sentinel_kind="enable",
+                reason=reason[:96],
+            )
+            raise FederationStartError(
+                "enable sentinel invalid: {0}".format(reason)
+            )
+
+    def _check_lan_sentinel_if_required(self) -> None:
+        cfg = self.config
+        is_loopback, resolved = resolve_bind_is_loopback(cfg.bind_host)
+        if is_loopback:
+            return  # loopback bind — no LAN sentinel needed
+        ok, reason = verify_enable_sentinel_pair(
+            cfg.lan_enabled_sentinel,
+            cfg.lan_enabled_sentinel_asc,
+            [OWNER_GPG_FPR],
+            signer_registry_path=cfg.signer_registry_path,
+            now=self._now,
+        )
+        if not ok:
+            _safe_emit(
+                "federation_lan_bind_denied",
+                bind_host=cfg.bind_host[:64],
+                resolved_ip=resolved[:64],
+                reason=reason[:96],
+            )
+            raise FederationStartError(
+                "LAN bind denied: {0}".format(reason)
+            )
+
+    def _load_peers_or_raise(self) -> Dict[str, PeerRecord]:
+        try:
+            peers = load_peers(self.config.peers_path)
+        except FileNotFoundError:
+            _safe_emit(
+                "federation_connection_rejected",
+                reason="peers_yaml_missing",
+                peer_id_cert_fingerprint="",
+                client_ip="",
+            )
+            raise FederationStartError(
+                "peers.yaml missing at {0}".format(self.config.peers_path)
+            )
+        except PeersFileError as e:
+            _safe_emit(
+                "federation_connection_rejected",
+                reason="peers_yaml_parse_error",
+                peer_id_cert_fingerprint="",
+                client_ip="",
+            )
+            raise FederationStartError(
+                "peers.yaml parse error: {0}".format(e)
+            )
+
+        # AC11 — cert expiry warning at start-up.
+        now = self._now
+        for peer in peers.values():
+            days_left = (peer.not_valid_after - now).days
+            if days_left <= CERT_EXPIRY_WARN_DAYS:
+                _safe_emit(
+                    "federation_cert_expiry_warned",
+                    peer_id=peer.peer_id[:64],
+                    days_remaining=int(days_left),
+                )
+            if days_left < 0:
+                _safe_emit(
+                    "federation_cert_revoked",
+                    peer_id=peer.peer_id[:64],
+                    reason="expired",
+                )
+                # We don't fail-CLOSED here — the cert is past expiry
+                # but the operator may want to keep the audit-pull
+                # channel open until rotation. The TLS handshake will
+                # reject the connection anyway.
+        return peers
+
+    # -- Lifecycle -----------------------------------------------------
+
+    def serve_forever(self) -> None:
+        """Start the server and serve until ``shutdown()`` is called."""
+        self._check_kill_switch()
+        self._check_enable_sentinel()
+        self._check_lan_sentinel_if_required()
+        peers = self._load_peers_or_raise()
+        cfg = self.config
+
+        # Build SSL context.
+        ctx = build_ssl_context(cfg.cert_file, cfg.key_file, cfg.ca_file)
+
+        # Compute our own server fingerprint (used by /identity).
+        try:
+            with open(cfg.cert_file, "r", encoding="utf-8") as fh:
+                pem = fh.read()
+            server_fpr = compute_cert_fingerprint(pem)
+        except OSError:
+            server_fpr = ""
+
+        # AC3 — pick the right address family. IPv6 literals (`::`, `::1`)
+        # need AF_INET6; everything else defaults to AF_INET. Bracketed
+        # forms like `[::1]` are NOT auto-handled by ipaddress.ip_address;
+        # operators MUST supply bare IPv6 literals in config (the bind
+        # host is a host string, not a URL host:port surface).
+        bind_family = socket.AF_INET
+        try:
+            if ipaddress.ip_address(cfg.bind_host).version == 6:
+                bind_family = socket.AF_INET6
+        except ValueError:
+            pass  # hostname — let kernel pick via gethostbyname (AF_INET)
+
+        httpd = _ThreadingHTTPSServer(
+            (cfg.bind_host, cfg.bind_port),
+            _FederationHandler,
+            address_family=bind_family,
+        )
+        httpd.socket = ctx.wrap_socket(httpd.socket, server_side=True)
+
+        # Attach all server-scoped state on the httpd instance so the
+        # handler can reach it via self.server.<attr>.
+        httpd.federation_config = cfg  # type: ignore[attr-defined]
+        httpd.federation_peers = peers  # type: ignore[attr-defined]
+        httpd.federation_replay_cache = ReplayCache(  # type: ignore[attr-defined]
+            max_skew_seconds=MAX_CLOCK_SKEW_SECONDS,
+        )
+        httpd.federation_rate_limiter = JointKeyRateLimiter(  # type: ignore[attr-defined]
+            AUDIT_SUMMARY_RATE_PER_MIN,
+        )
+        httpd.federation_started_at = time.time()  # type: ignore[attr-defined]
+        httpd.federation_server_fingerprint = server_fpr  # type: ignore[attr-defined]
+        httpd.federation_status_digest = ""  # type: ignore[attr-defined]
+        httpd.federation_status_count = 0  # type: ignore[attr-defined]
+        httpd.federation_audit_fetch = self._audit_fetch  # type: ignore[attr-defined]
+
+        self._httpd = httpd
+        try:
+            httpd.serve_forever()
+        finally:
+            try:
+                httpd.server_close()
+            except OSError:
+                pass
+
+    def shutdown(self) -> None:
+        if self._httpd is not None:
+            try:
+                self._httpd.shutdown()
+            except (OSError, RuntimeError):
+                pass

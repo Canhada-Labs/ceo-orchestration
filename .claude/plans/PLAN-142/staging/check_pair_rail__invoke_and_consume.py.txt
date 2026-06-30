@@ -1,0 +1,644 @@
+# PLAN-142 STAGING DRAFT — apply to .claude/hooks/check_pair_rail.py under the GPG ceremony; NOT YET TESTED.
+#
+# =====================================================================
+# SCOPE OF THIS DRAFT
+# =====================================================================
+# This file is a *reference* for the KERNEL-HARD-DENY edit to
+# `.claude/hooks/check_pair_rail.py` (path 1 of the 4-kernel-path
+# ceremony, _KERNEL_PATHS:170). It rewrites exactly TWO surfaces:
+#
+#   (A) the INVOKE side — `_invoke_codex_review` (current L347-458) and a
+#       tiny argv assist that DELEGATES to the NEW non-kernel helper
+#       `_lib/codex_cli_shape.py` (D2). No inline argv, no `--read-only`.
+#
+#   (B) the CONSUME side — the Codex-review arm of `_decide` (current
+#       L679-759): read the `-o` last-message file → single-pass redact
+#       the FULL bytes → `parse_verdict_strict` (structured, fail-CLOSED-
+#       to-ADVISORY) → derive the decision from the structured verdict.
+#       `_detect_write_shaped_patch` is RETAINED only as a secondary
+#       defense-in-depth scan on the redacted text (D3), never primary.
+#
+# Everything ELSE in check_pair_rail.py (the L3+ classifier, the sentinel
+# bypass, `_emit_audit`, `_emit_codex_review_invoked`, the Phase-3
+# `_decide_with_matrix` wrapper + its `_base_to_verdicts` translator, the
+# `main()` entrypoint) is UNCHANGED by PLAN-142 and is NOT reproduced
+# here. The execution session MUST splice these two surfaces into the
+# live file, preserving the surrounding code byte-for-byte.
+#
+# IMPORTANT — `_base_to_verdicts` COMPATIBILITY (see open_items): the
+# Phase-3 matrix translator (`_base_to_verdicts`, live L1206-1259) reads
+# the legacy `systemMessage` substrings ("Codex unavailable", "Codex
+# timeout", "Codex malformed", "review clean", "PAIR-RAIL-ADVISORY" +
+# "write-shaped", "bypass via Architect sentinel"). To avoid silently
+# breaking the matrix-case emit, the new consume arm below PRESERVES
+# those exact substrings in its returned `systemMessage` values where a
+# matrix case must still fire, AND adds a new BLOCK-verdict arm. The
+# execution session MUST re-read `_base_to_verdicts` and confirm the
+# substring contract still classifies correctly (a BLOCK structured
+# verdict is a NEW signal the legacy translator never saw).
+#
+# Repo rules honored: stdlib-only; py3.9+; `from __future__ import
+# annotations`; typing.Optional/List/Dict/Tuple (no PEP 604, no match).
+# Fail-open-to-ADVISORY (ADR-106) preserved on the consume path; the
+# OUTGOING egress redaction (ADR-114, fail-CLOSED) is preserved UNTOUCHED
+# inside `_invoke_codex_review`.
+# =====================================================================
+
+
+# ---------------------------------------------------------------------
+# (0) NEW module-level constants — add near the existing
+#     `_MAX_RESPONSE_BYTES` block (current L203-205). These bound the
+#     UNTRUSTED `-o` file the Codex binary writes (TOCTOU writer).
+# ---------------------------------------------------------------------
+
+# Hard cap on the bytes we will read back from the `-o` last-message
+# file. The redactor (`codex_egress_redact`) independently truncates at
+# 256 KB; this is a defense-in-depth read-time cap so an oversize /
+# disk-filling file cannot be slurped whole before redaction. Oversize
+# (file larger than this) → ADVISORY degradation, never raise.
+_MAX_OUTPUT_FILE_BYTES: int = 1 * 1024 * 1024  # 1 MiB
+
+
+# ---------------------------------------------------------------------
+# (1) NEW import-and-delegate helper — argv via codex_cli_shape (D2).
+#     check_pair_rail.py is a KERNEL file; per the §3 grep gate it must
+#     carry ZERO CLI literals (no 'exec', no '--<flag>', no 'gpt-5*'/
+#     'o3*'/'o4*', no '_VALID_MODELS'). ALL of that lives in the NEW
+#     non-kernel `_lib/codex_cli_shape.py`; this kernel file only calls
+#     into it. The function below is the ONLY argv-construction surface
+#     in the kernel and it builds NOTHING itself — it forwards to the
+#     helper.
+# ---------------------------------------------------------------------
+
+
+def _resolve_codex_cli_shape():  # type: ignore[no-untyped-def]
+    """Resolve the NEW non-kernel `_lib.codex_cli_shape` module.
+
+    Mirrors the canonical-layout resolution used by `_emit_pair_rail_case`
+    (Resolution-2): the `.claude/hooks/` dir that houses this file also
+    houses `_lib/`. Returns the module or None (fail-OPEN — the caller
+    treats None as CodexUnavailable, which is the ADR-106 fail-open path).
+
+    NEVER raises.
+    """
+    try:
+        hooks_dir = Path(__file__).resolve().parent
+        if str(hooks_dir) not in sys.path:
+            sys.path.insert(0, str(hooks_dir))
+        from _lib import codex_cli_shape as _shape  # type: ignore
+        return _shape
+    except Exception:
+        return None
+
+
+# ---------------------------------------------------------------------
+# (2) REWRITE of `_invoke_codex_review` (REPLACES current L347-458).
+#
+# Signature CHANGE: returns the redacted CONTENT-OF-THE-`-o`-FILE as a
+# str, exactly as before this returned `proc.stdout`. The consume side
+# (`_decide`) therefore still receives a single str — but now it is the
+# isolated last agent message (one structured JSON object) that the CLI
+# wrote to the `-o` tmpfile, ALREADY single-pass redacted. The consumer
+# then runs `parse_verdict_strict` on it.
+#
+# Why redact INSIDE this function: R-SEC-1 — the redaction must happen
+# on the live-rail file-read site, BEFORE any json.loads, and the file
+# is the lowest-trust surface (an untrusted binary wrote it). Doing the
+# single-pass redact here keeps the trust boundary in one place and
+# means `_decide` only ever sees redacted text.
+# ---------------------------------------------------------------------
+
+
+def _invoke_codex_review(
+    tool_name: str,
+    file_path: str,
+    proposed_content: str,
+    timeout_s: float,
+) -> str:
+    """Invoke Codex CLI review on codex-cli 0.139.0; return the REDACTED
+    last-message file content (one structured JSON object) as a str.
+
+    PLAN-142: the 0.139 binary REJECTS `--read-only` (exit 2). The
+    verdict is obtained via `codex exec ... -o <tmpfile> --color never
+    -s read-only -- "<prompt>"`, where the CLI writes ONLY the final
+    agent message to <tmpfile> (verified on 0.139: a one-line JSON
+    object). All flag-shape lives in the NON-kernel `_lib.codex_cli_shape`
+    helper (D2); this kernel function constructs NO argv literals.
+
+    Test-fixture path: env `CEO_PAIR_RAIL_FIXTURE_RESPONSE` short-
+    circuits the subprocess invoke and returns its value verbatim
+    (UNCHANGED contract — the fixture is treated as the already-isolated
+    last-message string; the consume side redacts+parses it the same way
+    it would a real file read, so fixture tests exercise the real parse
+    path). This is the ONLY test-injection point.
+
+    tmpfile TOCTOU hygiene (R-SEC-4 / R-VP-E):
+      - `tempfile.mkdtemp(0o700)` per call (private dir we own).
+      - The rail creates the file `O_CREAT|O_EXCL|0o600` at an ABSOLUTE
+        path inside that dir, then closes our fd. (The CLI re-opens by
+        path and overwrites — we pre-create to win the race against a
+        symlink plant; we re-validate after the run anyway.)
+      - After the run we REFUSE to read if the path is a symlink / not a
+        regular file / not owned by us (os.lstat checks).
+      - `finally:` unlink the file + rmdir the dir on EVERY exit path
+        (success, read error, timeout, exception).
+
+    Degradation matrix → CodexUnavailable / CodexMalformed (both map to
+    ADVISORY in `_decide`), NEVER raise past the typed-exception wall:
+      - helper unavailable               -> CodexUnavailable
+      - codex binary missing             -> CodexUnavailable
+      - timeout                          -> CodexTimeout
+      - subprocess spawn / OS error      -> CodexUnavailable
+      - exit != 0                        -> CodexUnavailable
+      - file missing after exit-0        -> CodexMalformed
+      - file is symlink/non-regular/
+        not-owned                        -> CodexMalformed
+      - file empty                       -> CodexMalformed
+      - file oversize (> cap)            -> CodexMalformed
+
+    Raises:
+        CodexUnavailable, CodexTimeout, CodexMalformed (all consumed as
+        ADVISORY fail-open by `_decide`).
+    """
+    import os as _os  # local alias to avoid any chance of shadowing
+    import stat as _stat
+    import tempfile as _tempfile
+
+    fixture = _os.environ.get("CEO_PAIR_RAIL_FIXTURE_RESPONSE")
+    if fixture is not None:
+        # Fixture is the already-isolated last-message string. We STILL
+        # single-pass redact it so the fixture path exercises the same
+        # ingress trust boundary as a real file read (R-SEC-6 golden
+        # fixtures land here). redact() is fail-OPEN (never raises;
+        # empty in -> empty out).
+        try:
+            from _lib import codex_egress_redact as _redact
+            return _redact.redact(fixture)
+        except Exception:
+            # Redactor import failure on the INGRESS path is fail-OPEN
+            # to ADVISORY (NOT the ADR-114 fail-CLOSED egress contract —
+            # that governs OUTGOING prompt bytes, handled below). An
+            # un-redactable ingress fixture is treated as malformed so
+            # the consumer degrades to ADVISORY rather than parsing
+            # un-redacted text.
+            raise CodexMalformed(
+                "codex_egress_redact unavailable on ingress (fixture)"
+            )
+
+    codex_bin = _resolve_codex_bin()
+    if codex_bin is None:
+        raise CodexUnavailable("codex binary not on PATH")
+
+    shape = _resolve_codex_cli_shape()
+    if shape is None:
+        # The single argv builder is gone/unimportable. Fail-OPEN to
+        # ADVISORY rather than hand-roll a (possibly rejected) argv.
+        raise CodexUnavailable("codex_cli_shape helper unavailable")
+
+    prompt = _build_codex_prompt(tool_name, file_path, proposed_content)
+
+    # -----------------------------------------------------------------
+    # OUTGOING egress redaction — ADR-114, fail-CLOSED. PRESERVED
+    # UNTOUCHED from the pre-PLAN-142 implementation (current L375-401).
+    # This guards the PROMPT bytes that leave the framework toward the
+    # Codex binary. It MUST stay fail-CLOSED: a redactor-import failure
+    # REFUSES to ship the prompt.
+    # -----------------------------------------------------------------
+    try:
+        from _lib import codex_egress_redact as _redact
+        _egress_bytes = (
+            len(prompt.encode("utf-8", "replace")) if isinstance(prompt, str) else 0
+        )
+        prompt, _egress_findings = _redact.redact_outgoing_with_findings(prompt)
+    except ImportError:
+        # Fail-CLOSED per ADR-114: refuse to ship unredacted prompt.
+        raise CodexUnavailable(
+            "codex_egress_redact unavailable — fail-CLOSED per ADR-114"
+        )
+    # Positive-proof emit on EVERY outbound redaction (empty allowed).
+    # Fail-OPEN — wraps ONLY the emit; the redact above stays fail-CLOSED.
+    try:
+        from _lib import audit_emit as _ae
+        _ae.emit_pair_rail_outgoing_redaction_applied(
+            signal="outbound",
+            match_count=len(_egress_findings),
+            bytes_scanned=_egress_bytes,
+            callsite="check_pair_rail.py:_invoke_codex_review",
+            session_id=_os.environ.get("CLAUDE_SESSION_ID", ""),
+            project=_os.environ.get("CLAUDE_PROJECT_DIR", ""),
+        )
+    except Exception:
+        pass
+
+    # -----------------------------------------------------------------
+    # tmpfile setup — we own the dir (0o700) and pre-create the file
+    # with O_EXCL|0o600 to win the symlink race; the CLI writes to it
+    # by absolute path via `-o`.
+    # -----------------------------------------------------------------
+    tmp_dir = _tempfile.mkdtemp(prefix="ceo_pairrail_")
+    try:
+        _os.chmod(tmp_dir, 0o700)
+    except OSError:
+        # Best-effort; mkdtemp already creates 0o700 on POSIX.
+        pass
+    out_path = _os.path.join(tmp_dir, "codex_last_message.json")
+
+    def _cleanup() -> None:
+        """Unlink the file + rmdir the dir; never raises."""
+        try:
+            _os.unlink(out_path)
+        except OSError:
+            pass
+        try:
+            _os.rmdir(tmp_dir)
+        except OSError:
+            pass
+
+    try:
+        # Pre-create O_CREAT|O_EXCL|0o600 — if a symlink/file already
+        # sits at out_path, O_EXCL fails and we treat it as unavailable.
+        try:
+            fd = _os.open(out_path, _os.O_CREAT | _os.O_EXCL | _os.O_WRONLY, 0o600)
+            _os.close(fd)
+        except FileNotFoundError:
+            raise CodexUnavailable("tmpdir vanished before pre-create")
+        except FileExistsError:
+            raise CodexUnavailable("tmpfile pre-create lost O_EXCL race")
+        except OSError as e:
+            raise CodexUnavailable(
+                f"tmpfile pre-create failed: {type(e).__name__}"
+            )
+
+        # Build argv via the NON-kernel helper. mode='verdict' selects the
+        # `-o <out_path> --color never -s read-only` shape (NO --json on
+        # the live rail — usage telemetry consciously DROPPED, R-SEC-5).
+        # The helper owns flag names + model id + dead-flag migration; we
+        # pass only semantic intent. (See open_items: confirm the helper's
+        # exact public signature at execution.)
+        try:
+            cli_args = shape.build_argv(
+                mode="verdict",
+                prompt=prompt,
+                output_last_message_path=out_path,
+            )
+        except Exception as e:
+            raise CodexUnavailable(
+                f"codex_cli_shape.build_argv failed: {type(e).__name__}"
+            )
+        if not isinstance(cli_args, (list, tuple)) or not cli_args:
+            raise CodexUnavailable("codex_cli_shape.build_argv returned empty argv")
+
+        cmd = [codex_bin] + list(cli_args)
+
+        # Invoke. NO stdin prompt (the prompt is the trailing `-- "<prompt>"`
+        # positional built by the helper); close stdin via input="" so the
+        # child never blocks on a pipe.
+        try:
+            proc = subprocess.run(
+                cmd,
+                input="",
+                capture_output=True,
+                text=True,
+                timeout=timeout_s,
+                check=False,
+            )
+        except subprocess.TimeoutExpired:
+            raise CodexTimeout(f"codex invoke exceeded {timeout_s}s")
+        except (FileNotFoundError, PermissionError, OSError, ConnectionError) as e:
+            raise CodexUnavailable(
+                f"codex invoke failed: {type(e).__name__}: {e}"
+            )
+        except ValueError as e:
+            # UnicodeDecodeError IS-A ValueError; map to malformed so
+            # `_decide` degrades to ADVISORY (preserve concrete name).
+            raise CodexMalformed(f"codex invoke {type(e).__name__}: {e}")
+
+        # Post-subprocess audit breadcrumb (UNCHANGED behavior).
+        try:
+            from _lib import audit_emit as _ae  # type: ignore  # noqa: F811
+            if hasattr(_ae, "emit_generic"):
+                _ae.emit_generic(
+                    "codex_invoke_dispatched", exit_code=int(proc.returncode)
+                )
+        except Exception:
+            pass
+
+        if proc.returncode != 0:
+            # Non-zero exit → unavailable (fail-OPEN). Per the degradation
+            # matrix a present-file-after-exit!=0 is IGNORED (we do not
+            # read it) and cleaned up in `finally`.
+            raise CodexUnavailable(
+                f"codex returned exit={proc.returncode}; stderr_head="
+                f"{(proc.stderr or '')[:240]!r}"
+            )
+
+        # -------------------------------------------------------------
+        # Read back the `-o` file with TOCTOU re-validation. We re-stat
+        # via os.lstat (NOT following symlinks) and refuse anything that
+        # is not a regular file we own.
+        # -------------------------------------------------------------
+        try:
+            st = _os.lstat(out_path)
+        except FileNotFoundError:
+            # File missing after exit-0 → malformed → ADVISORY.
+            raise CodexMalformed("codex -o last-message file missing after exit-0")
+        except OSError as e:
+            raise CodexMalformed(f"codex -o lstat failed: {type(e).__name__}")
+
+        if _stat.S_ISLNK(st.st_mode):
+            raise CodexMalformed("codex -o path is a symlink; refusing to read")
+        if not _stat.S_ISREG(st.st_mode):
+            raise CodexMalformed("codex -o path is not a regular file; refusing")
+        # Ownership: the file must be owned by us (the writer wrote at a
+        # path inside our 0o700 dir, but re-check defensively).
+        try:
+            if st.st_uid != _os.getuid():
+                raise CodexMalformed("codex -o file not owned by us; refusing")
+        except AttributeError:
+            # os.getuid absent (non-POSIX) — the 0o700 mkdtemp + O_EXCL
+            # pre-create are the primary controls; skip the uid check.
+            pass
+        if st.st_size == 0:
+            raise CodexMalformed("codex -o last-message file is empty")
+        if st.st_size > _MAX_OUTPUT_FILE_BYTES:
+            raise CodexMalformed(
+                f"codex -o file oversize ({st.st_size} > {_MAX_OUTPUT_FILE_BYTES})"
+            )
+
+        # Open WITHOUT following a symlink (defense even though lstat
+        # already cleared it — close the residual race). O_NOFOLLOW
+        # makes the open itself refuse a symlink swapped in post-lstat.
+        try:
+            open_flags = _os.O_RDONLY
+            if hasattr(_os, "O_NOFOLLOW"):
+                open_flags |= _os.O_NOFOLLOW
+            rfd = _os.open(out_path, open_flags)
+        except OSError as e:
+            raise CodexMalformed(f"codex -o open failed: {type(e).__name__}")
+        try:
+            raw_bytes = _os.read(rfd, _MAX_OUTPUT_FILE_BYTES + 1)
+        finally:
+            try:
+                _os.close(rfd)
+            except OSError:
+                pass
+        if len(raw_bytes) > _MAX_OUTPUT_FILE_BYTES:
+            raise CodexMalformed("codex -o file grew past cap during read")
+
+        content = raw_bytes.decode("utf-8", errors="replace")
+
+        # -------------------------------------------------------------
+        # SINGLE-PASS redact the FULL byte-string BEFORE returning (and
+        # thus before any json.loads in the consumer). R-SEC-1. Ingress
+        # redaction is fail-OPEN to ADVISORY (distinct from the ADR-114
+        # fail-CLOSED *egress* contract above): if the redactor is
+        # unavailable we refuse to hand un-redacted text to the parser
+        # and degrade to ADVISORY via CodexMalformed.
+        # -------------------------------------------------------------
+        try:
+            from _lib import codex_egress_redact as _redact  # noqa: F811
+            redacted = _redact.redact(content)
+        except Exception:
+            raise CodexMalformed(
+                "codex_egress_redact unavailable on ingress; refusing raw parse"
+            )
+        return redacted
+    finally:
+        _cleanup()
+
+
+# ---------------------------------------------------------------------
+# (3) NEW consume helper — parse the redacted last-message via the
+#     adapter's structured `parse_verdict_strict` and derive a decision.
+#     This is the PRIMARY verdict signal (D3). Add this function near
+#     `_decide` (before it). It is PURE except for the adapter import.
+# ---------------------------------------------------------------------
+
+
+def _load_codex_adapter():  # type: ignore[no-untyped-def]
+    """Resolve `_lib.adapters.codex` (the structured-verdict parser).
+
+    Same canonical-layout resolution as the other `_lib` loaders.
+    Returns the module or None (fail-OPEN — caller degrades to ADVISORY).
+    NEVER raises.
+    """
+    try:
+        hooks_dir = Path(__file__).resolve().parent
+        if str(hooks_dir) not in sys.path:
+            sys.path.insert(0, str(hooks_dir))
+        from _lib.adapters import codex as _codex  # type: ignore
+        return _codex
+    except Exception:
+        return None
+
+
+def _consume_codex_review(redacted_review: str) -> Tuple[str, Optional[str]]:
+    """Derive (verdict, secondary_patch_grammar) from a REDACTED review.
+
+    PRIMARY signal (D3): `parse_verdict_strict` — the verdict is accepted
+    ONLY from a structured, schema-validated object (verdict ∈
+    `_VALID_VERDICTS` = {PASS, ADVISORY, BLOCK}). A forged free-text
+    'PASS' with no structured object raises `CodexJsonInvalid` →
+    coerced to ADVISORY (fail-CLOSED-to-ADVISORY per R-SEC-2 / ADR-106).
+
+    SECONDARY signal (D3): `_detect_write_shaped_patch` runs on the SAME
+    redacted text as defense-in-depth ONLY — it can never *upgrade* a
+    verdict to a hard block, it only annotates. The structured verdict
+    is authoritative.
+
+    Returns:
+        (verdict, patch_grammar) where verdict ∈ {"PASS","ADVISORY",
+        "BLOCK"} and patch_grammar is the `_detect_write_shaped_patch`
+        tag (or None if clean / oversize). NEVER raises.
+    """
+    # Secondary defense-in-depth scan (advisory annotation only).
+    try:
+        patch_grammar = _detect_write_shaped_patch(redacted_review)
+    except Exception:
+        patch_grammar = None
+
+    codex = _load_codex_adapter()
+    if codex is None:
+        # Adapter unimportable — fail-CLOSED-to-ADVISORY (we cannot
+        # validate a structured verdict, so we do not trust one).
+        return "ADVISORY", patch_grammar
+
+    # `parse_verdict_strict` raises typed exceptions on any parse/schema
+    # failure (CodexResponseTooLarge / CodexJsonInvalid) and carries NO
+    # payload. Catch BOTH (plus a defensive catch-all) and coerce to
+    # ADVISORY — the rail never blocks on an unparseable verdict.
+    try:
+        envelope = codex.parse_verdict_strict(redacted_review)
+        verdict = envelope.get("verdict")
+        if verdict not in _VALID_VERDICTS_LOCAL:
+            return "ADVISORY", patch_grammar
+        return str(verdict), patch_grammar
+    except Exception:
+        # CodexResponseTooLarge, CodexJsonInvalid, or anything else →
+        # fail-CLOSED-to-ADVISORY (R-SEC-2). Importantly we do NOT fall
+        # back to the free-text patch scan as the verdict — `_detect_*`
+        # stays SECONDARY.
+        return "ADVISORY", patch_grammar
+
+
+# Mirror of `_lib.adapters.codex._VALID_VERDICTS` so the kernel can
+# validate without re-importing a private name. Kept here (NOT a CLI
+# literal — these are verdict labels, the trust-boundary vocabulary the
+# §3 grep gate explicitly KEEPS in the kernel).
+_VALID_VERDICTS_LOCAL: Tuple[str, ...] = ("PASS", "ADVISORY", "BLOCK")
+
+
+# ---------------------------------------------------------------------
+# (4) REWRITE of the Codex-review arm of `_decide` (REPLACES current
+#     L679-759 — from the `# Invoke Codex review.` comment through the
+#     final `return {... "review clean" ...}` ). Everything ABOVE that
+#     (kill-switch, out-of-scope, sentinel bypass — current L640-677) is
+#     UNCHANGED and not reproduced.
+#
+# Paste this block in place of L679-759 of the live file.
+# ---------------------------------------------------------------------
+
+#     # Invoke Codex review. `_invoke_codex_review` now returns the
+#     # REDACTED `-o` last-message content (one structured JSON object).
+#     try:
+#         redacted_review = _invoke_codex_review(
+#             tool_name=tool_name,
+#             file_path=file_path,
+#             proposed_content=proposed_content,
+#             timeout_s=timeout_s,
+#         )
+#     except CodexUnavailable as e:
+#         _emit_audit(
+#             _AUDIT_CODEX_UNAVAILABLE,
+#             tool_name=tool_name, file_path=file_path,
+#             error=str(e),
+#         )
+#         # Substring "Codex unavailable" PRESERVED for _base_to_verdicts.
+#         return {
+#             "systemMessage": (
+#                 f"PAIR-RAIL: Codex unavailable ({e}); fail-OPEN "
+#                 "advisory mode."
+#             ),
+#         }
+#     except CodexTimeout as e:
+#         _emit_audit(
+#             _AUDIT_CODEX_UNAVAILABLE,
+#             tool_name=tool_name, file_path=file_path,
+#             error=f"timeout:{e}",
+#         )
+#         # Substring "Codex timeout" PRESERVED for _base_to_verdicts.
+#         return {
+#             "systemMessage": (
+#                 f"PAIR-RAIL: Codex timeout ({e}); fail-OPEN."
+#             ),
+#         }
+#     except CodexMalformed as e:
+#         _emit_audit(
+#             _AUDIT_CODEX_UNAVAILABLE,
+#             tool_name=tool_name, file_path=file_path,
+#             error=f"malformed:{e}",
+#         )
+#         # Substring "Codex malformed" PRESERVED for _base_to_verdicts.
+#         return {
+#             "systemMessage": (
+#                 f"PAIR-RAIL: Codex malformed response ({e}); "
+#                 "fail-OPEN."
+#             ),
+#         }
+#
+#     # PRIMARY: structured verdict (parse_verdict_strict, fail-CLOSED-to-
+#     # ADVISORY). SECONDARY: _detect_write_shaped_patch annotation (D3).
+#     verdict, patch_grammar = _consume_codex_review(redacted_review)
+#
+#     # Record the completed Codex review (any verdict) as
+#     # codex_review_invoked (advisory; redacted PhaseReview; never blocks).
+#     # `grammar` arg keeps its historical meaning (write-shape tag) — the
+#     # secondary scan still feeds the WS3 driver's accept/block mapping.
+#     _emit_codex_review_invoked(redacted_review, patch_grammar)
+#
+#     if verdict == "BLOCK":
+#         # Structured BLOCK from a schema-validated object. Per the
+#         # PLAN-092/ADR-127 SHADOW-strip, the rail remains ADVISORY-ONLY
+#         # at the user-facing surface (no top-level "decision":"block");
+#         # the matrix wrapper (_decide_with_matrix) owns any block
+#         # promotion via Case-B preconditions. We emit the violation
+#         # audit + an advisory systemMessage. The "PAIR-RAIL-ADVISORY" +
+#         # "write-shaped" substrings are PRESERVED so _base_to_verdicts
+#         # classifies this as Case B (codex_verdict=BLOCK).
+#         _emit_audit(
+#             _AUDIT_CODEX_VIOLATION,
+#             tool_name=tool_name, file_path=file_path,
+#             verdict="BLOCK",
+#             patch_grammar=(patch_grammar or ""),
+#             response_len=len(redacted_review),
+#         )
+#         return {
+#             "systemMessage": (
+#                 "PAIR-RAIL-ADVISORY: Codex returned a structured BLOCK "
+#                 "verdict (advisory-only per ADR-127). A write-shaped "
+#                 "secondary signal "
+#                 f"({patch_grammar or 'none'}) was "
+#                 f"{'also ' if patch_grammar else 'not '}detected. See "
+#                 "routing-matrix.md §threat-model."
+#             ),
+#         }
+#
+#     if patch_grammar is not None and verdict != "BLOCK":
+#         # Defense-in-depth ONLY: a write-shaped patch slipped through a
+#         # non-BLOCK structured verdict. The structured verdict is
+#         # authoritative (D3) so we do NOT block; we surface an advisory
+#         # note and emit the violation audit for forensic continuity.
+#         # The "PAIR-RAIL-ADVISORY" + "write-shaped" substrings keep the
+#         # matrix Case-B classification stable.
+#         _emit_audit(
+#             _AUDIT_CODEX_VIOLATION,
+#             tool_name=tool_name, file_path=file_path,
+#             verdict=verdict,
+#             patch_grammar=patch_grammar,
+#             response_len=len(redacted_review),
+#             note="secondary_writeshape_under_nonblock_verdict",
+#         )
+#         return {
+#             "systemMessage": (
+#                 "PAIR-RAIL-ADVISORY: secondary defense-in-depth detected "
+#                 f"a write-shaped patch ({patch_grammar}) under a "
+#                 f"non-BLOCK structured verdict ({verdict}); advisory-only "
+#                 "per ADR-127 + D3 (structured verdict is authoritative)."
+#             ),
+#         }
+#
+#     if verdict == "ADVISORY":
+#         # Parse miss / forged free-text / oversize / adapter-missing →
+#         # ADVISORY (fail-open). No "review clean" substring (this is NOT
+#         # a clean pass); no matrix Case-A. Surface an advisory note.
+#         _emit_audit(
+#             _AUDIT_REVIEW_PASSED,
+#             tool_name=tool_name, file_path=file_path,
+#             verdict="ADVISORY",
+#             response_len=len(redacted_review),
+#         )
+#         return {
+#             "systemMessage": (
+#                 "PAIR-RAIL: Codex verdict ADVISORY (no structured PASS/"
+#                 "BLOCK parsed); fail-OPEN advisory mode."
+#             ),
+#         }
+#
+#     # verdict == "PASS" — structured clean review. "review clean"
+#     # substring PRESERVED for _base_to_verdicts Case-A classification.
+#     _emit_audit(
+#         _AUDIT_REVIEW_PASSED,
+#         tool_name=tool_name, file_path=file_path,
+#         verdict="PASS",
+#         response_len=len(redacted_review),
+#     )
+#     return {
+#         "systemMessage": "PAIR-RAIL: Codex review clean (structured PASS verdict).",
+#     }
+
+
+# =====================================================================
+# END OF DRAFT — apply surfaces (1)-(4) into check_pair_rail.py under
+# the GPG ceremony. Surface (4) is shown COMMENTED so this .txt stays a
+# faithful reference of the exact lines to splice; un-comment on apply.
+# =====================================================================

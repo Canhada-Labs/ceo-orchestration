@@ -1,0 +1,4 @@
+# Copyright 2026 Acme
+# Licensed under Apache 2.0
+# No secrets in this file.
+function helloWorld() { return 'hi'; }

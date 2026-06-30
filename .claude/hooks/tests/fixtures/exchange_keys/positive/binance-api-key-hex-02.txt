@@ -1,0 +1,2 @@
+import os
+binance_key = "b1310ade73ade9f1edb5bf72d6ab21cb34d3fb5300bb589c653f3fd2f1b5e783"  # paper-trading

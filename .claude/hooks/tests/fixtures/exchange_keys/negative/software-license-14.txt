@@ -1,0 +1,4 @@
+# license
+product_license: XXXX-YYYY-ZZZZ-AAAA-BBBB
+user: Acme Corp
+expires: 2027-01-01

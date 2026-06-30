@@ -1,0 +1,1004 @@
+name: Validate CEO Orchestration governance
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Cancel in-progress runs when a newer commit lands on the same ref.
+# Prevents duplicate compute on rapid-fire PR updates and matches the
+# devops-ci-cd skill's concurrency-control mandate.
+concurrency:
+  group: validate-${{ github.ref }}
+  cancel-in-progress: true
+
+# Least-privilege: this workflow only reads the repo to validate.
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Governance, health, contamination, shellcheck
+    # PLAN-012 Phase 2 CEO_SOTA_DISABLE parity. Job-level `if:` keeps
+    # the kill-switch scoped to a single check instead of per-step
+    # guards across 18 steps. A repo admin sets `CEO_SOTA_DISABLE=1`
+    # as a repo variable to short-circuit without editing YAML.
+    if: vars.CEO_SOTA_DISABLE != '1'
+    runs-on: Ceo
+    # PLAN-014 G.1 ADJ-040 — bumped 5 → 10 to absorb policy-drift + TLA
+    # drift + TestEnvContext mandate steps (Phases A.7 + B.7 + C.4)
+    # without sporadic CI flakes on slower runners. S166/PLAN-114: 15->25 —
+    # validate-governance.sh (47 steps) + lint + pytest + actionlint +
+    # contamination + shellcheck legitimately runs ~10-15min; 15 was marginal
+    # and timed out (->cancelled) under CI load. Job does not hang; 25 gives headroom.
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        # SHA-pinned (Sprint 7 Dependabot bump): actions/checkout@v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      # -----------------------------------------------------------------
+      # Step: Governance structure validation
+      # -----------------------------------------------------------------
+      - name: Run validate-governance.sh
+        run: |
+          set -euo pipefail
+          bash .claude/scripts/validate-governance.sh
+
+      # -----------------------------------------------------------------
+      # Step: CLAUDE.md drift check (PLAN-045 Wave 3 P0-14)
+      #
+      # Mechanical gate that asserts numeric claims in CLAUDE.md match
+      # disk truth (ADR count, skill count, plan count). Closes the
+      # PLAN-044 F-06-01 / F-06-02 / F-06-03 / F-06-06 / F-05-01 /
+      # F-15-04 cross-cutting drift finding — previously 6 dimensions
+      # independently flagged that CLAUDE.md aspired to numbers the
+      # disk did not have.
+      #
+      # Failure remediation: one-shot CLAUDE.md edit at next session
+      # closeout (Gate-1 cache discipline). Run
+      # ``python3 .claude/scripts/check-claude-md-claims.py --verbose``
+      # locally to see exact claim/disk deltas.
+      # -----------------------------------------------------------------
+      - name: Run check-claude-md-claims.py
+        run: |
+          set -euo pipefail
+          python3 .claude/scripts/check-claude-md-claims.py
+
+      # -----------------------------------------------------------------
+      # Step: Doc skill-path resolves (PLAN-112-FOLLOWUP-install-md-skill-path)
+      #
+      # Every `.claude/skills/...SKILL.md` literal in INSTALL/README/CLAUDE.md
+      # must resolve on disk (or be a documented placeholder / allowlisted).
+      # Closes F-4.2 (INSTALL.md once cited a path missing the `core/` tier).
+      # -----------------------------------------------------------------
+      - name: Run check-doc-skill-paths.sh
+        run: |
+          set -euo pipefail
+          bash .claude/scripts/local/check-doc-skill-paths.sh
+
+      # -----------------------------------------------------------------
+      # Step: Doc count drift — bidirectional + cross-file
+      # (PLAN-112-FOLLOWUP-claude-md-count-drift)
+      #
+      # Every count claim in CLAUDE.md / README.md / INSTALL.md must match
+      # the live source of truth (skills total + core/frontend/domain tiers,
+      # ADRs, hook .py files, registered hooks, `_lib` modules; tests as an
+      # N+ floor). Closes F-3-3.1 / F-4-docs-001. No `paths:` filter — this
+      # job runs on every push/PR, so a docs-only PR cannot bypass it (AC4a).
+      # `--no-tests` skips the slow pytest-collect floor (the full suite runs
+      # in the test jobs; the exact counts here are the load-bearing signal).
+      # -----------------------------------------------------------------
+      - name: Run verify-counts.sh
+        run: |
+          set -euo pipefail
+          bash .claude/scripts/local/verify-counts.sh --no-tests --quiet
+
+      # -----------------------------------------------------------------
+      # Step: PLAN-135 W5 surface-hygiene advisory (O8/O11/O12). ADVISORY
+      # (continue-on-error) — these checks are drift detectors, not gates;
+      # a NEW env-var surface / stale rate-card pin / stale substrate ledger
+      # is a maintenance signal the maintainer reads, not a build-breaker.
+      # NO network + NO paid spend: every probe here is the STATIC mode of
+      # its script (no ANTHROPIC_API_KEY needed; runs on fork PRs). The live
+      # GET /v1/models per allowlist member is Owner-run only (ceo-info.py
+      # --verify-models --live) and is deliberately NOT wired into CI — fork
+      # PRs have no credential and CI must not bill.
+      # -----------------------------------------------------------------
+      - name: PLAN-135 W5 surface-hygiene (advisory, static, no network)
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          echo "::group::verify-models (static — ADR-149 allowlist vs rate card)"
+          python3 .claude/scripts/ceo-info.py --verify-models --json || true
+          echo "::endgroup::"
+          echo "::group::rate-card calibrate (vs ratified fixtures — the S227 stale-pin class)"
+          if python3 .claude/scripts/rate-card-calibrate.py --check; then
+            echo "rate-card: clean"
+          else
+            echo "::warning title=rate-card drift::a rate-card pin disagrees with rate-card-fixtures.json (S227 class) — run rate-card-calibrate.py"
+          fi
+          echo "::endgroup::"
+          echo "::group::env-var inventory drift (the S218 footgun class)"
+          if [ -f .claude/scripts/env-inventory-check.py ]; then
+            if python3 .claude/scripts/env-inventory-check.py --check; then
+              echo "env-inventory: clean"
+            else
+              echo "::warning title=env-var drift::referenced CLAUDE_*/ANTHROPIC_*/CEO_* names drifted from the inventory — run env-inventory-check.py --generate"
+            fi
+          fi
+          echo "::endgroup::"
+          echo "::group::substrate watch (Claude Code + SDK changelog ledger)"
+          if [ -f .claude/scripts/check-substrate-watch.py ]; then
+            if python3 .claude/scripts/check-substrate-watch.py --check; then
+              echo "substrate: current"
+            else
+              echo "::warning title=substrate watch::the substrate-watch ledger is stale or drifted — Owner-run check-substrate-watch.py --refresh"
+            fi
+          fi
+          echo "::endgroup::"
+
+      # -----------------------------------------------------------------
+      # Step: Skill health check (CI mode tolerates stale framework refs)
+      # -----------------------------------------------------------------
+      - name: Run check-skill-health.sh --ci
+        run: |
+          set -euo pipefail
+          bash .claude/scripts/check-skill-health.sh --ci
+
+      # -----------------------------------------------------------------
+      # Step: Pitfall regression check
+      # -----------------------------------------------------------------
+      - name: Run check-pitfall-regression.sh
+        run: |
+          set -euo pipefail
+          if [ -x .claude/scripts/check-pitfall-regression.sh ]; then
+            bash .claude/scripts/check-pitfall-regression.sh || {
+              rc=$?
+              # Accept exit 0 only. Anything else is a real regression.
+              echo "check-pitfall-regression.sh exited with rc=$rc" >&2
+              exit $rc
+            }
+          else
+            echo "check-pitfall-regression.sh not executable; skipping"
+          fi
+
+      # -----------------------------------------------------------------
+      # Step: Contamination check (project-specific refs outside allowed zones)
+      #
+      # Uses `git ls-files` so that (a) .gitignore is honored, (b) .git/
+      # is not descended into, (c) path anchoring is stable across runners.
+      # NFKC-normalizes each file before grepping to catch Unicode homoglyph
+      # attempts.
+      # -----------------------------------------------------------------
+      - name: Contamination check (no private-project/personal refs outside allowlist)
+        run: bash .claude/scripts/check-contamination.sh
+
+      # -----------------------------------------------------------------
+      # Step: Placeholder lint — no unfilled {{PLACEHOLDERS}} beyond the
+      # known template set in core/frontend skills.
+      # -----------------------------------------------------------------
+      - name: Placeholder lint (core/frontend skills only)
+        run: |
+          set -euo pipefail
+          # Known template placeholders we ship with (expected in template text).
+          ALLOWED='PROJECT_NAME|PROJECT_PATH|OWNER_NAME|DOMAIN|PRODUCTION_URL|APP_NAME|BACKEND_URL|FRONTEND_REPO_PATH|FOUNDER_NAME|CITY|COUNTRY|LEGAL_ID|STACK|DEPLOY_TARGET|DEPLOY_COMMAND|DATABASE|RUNTIME_NOTES|FILE_COUNT|LINES|TEST_COUNT|TEST_TOOL|LINT_TOOL|CI_TOOL|ARCHITECTURE_DIAGRAM|NUMERIC_RULES|ARCHITECTURE_RULES|SECURITY_RULES|ENDPOINT_LIST|DB_TABLES|ENV_VAR_COUNT|FRONTEND_PATH'
+          FOUND=$(grep -rhoE '\{\{[A-Z_][A-Z0-9_]*\}\}' .claude/skills/core .claude/skills/frontend 2>/dev/null | sort -u || true)
+          UNKNOWN=$(printf '%s\n' "$FOUND" | grep -vE "^\{\{($ALLOWED)\}\}$" || true)
+          if [ -n "$UNKNOWN" ]; then
+            echo "❌ Unknown {{PLACEHOLDERS}} in core/frontend skills:"
+            printf '%s\n' "$UNKNOWN"
+            echo ""
+            echo "Either fill the placeholder, replace with archetype text, or add it"
+            echo "to the ALLOWED list in .github/workflows/validate.yml (only if it is"
+            echo "genuinely a shared template variable)."
+            exit 1
+          fi
+          echo "✓ Only known placeholders present in core/frontend skills"
+
+      # -----------------------------------------------------------------
+      # Step: Function-length advisory (PLAN-044 audit-v2 R4 P1 #12)
+      #
+      # Reports functions >=50 LoC in `.claude/` Python files without
+      # `# justified: <reason >=10 chars>` comment. Advisory only --
+      # CI exits 0 regardless. Adopters who want a strict gate run
+      # the same script with --strict in their own workflow.
+      # -----------------------------------------------------------------
+      - name: Function-length advisory (.claude/ Python)
+        run: |
+          set -euo pipefail
+          python3 .claude/scripts/check-function-length.py \
+            --root .claude \
+            --threshold 50 \
+            --limit 15 || true
+
+      # -----------------------------------------------------------------
+      # Step: JSON/YAML syntax check for governance files
+      # -----------------------------------------------------------------
+
+      - name: SDK compat advisory (PLAN-056 Phase 2 / ADR-094)
+        continue-on-error: true
+        run: |
+          bash .claude/scripts/check-sdk-compat.sh
+      - name: Validate settings.json and YAML catalogs
+        run: |
+          set -euo pipefail
+          jq empty .claude/settings.json
+          echo "✓ .claude/settings.json is valid JSON"
+          for t in templates/settings/*.json; do
+            [ -f "$t" ] || continue
+            jq empty "$t"
+            echo "✓ $t is valid JSON"
+          done
+          python3 -c 'import yaml; yaml.safe_load(open(".claude/pitfalls-catalog.yaml")); print("✓ pitfalls-catalog.yaml is valid YAML")'
+          python3 -c 'import yaml; yaml.safe_load(open(".claude/task-chains.yaml")); print("✓ task-chains.yaml is valid YAML")'
+
+      # -----------------------------------------------------------------
+      # Step: SBOM ⇆ sidecar-manifest sync gate (ADR-126 / PLAN-112-FOLLOWUP
+      # -sbom-third-party-disclosure AC4). Runs on every push/PR (no path
+      # filter) so a lone .claude/sidecars/** manifest edit cannot land a new
+      # third-party package without disclosing it in SBOM.md Section B.
+      # --check-sbom-sync also re-uses the manifest license schema landed in
+      # the same change. Stdlib-only; no extra deps.
+      # -----------------------------------------------------------------
+      - name: SBOM sidecar-dependency sync gate (ADR-126 / AC4)
+        run: |
+          set -euo pipefail
+          python3 .claude/scripts/check-sidecar-manifest.py --check-sbom-sync
+
+      # -----------------------------------------------------------------
+      # Step: Shellcheck on all active hooks and scripts
+      # -----------------------------------------------------------------
+      - name: Shellcheck hooks and scripts
+        run: |
+          set -euo pipefail
+          if ! command -v shellcheck >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq shellcheck
+          fi
+          FAILED=0
+          while IFS= read -r -d '' script; do
+            echo "--- $script ---"
+            shellcheck -S warning "$script" || FAILED=1
+          done < <(find .claude/scripts .claude/hooks \
+                        -name '*.sh' \
+                        -not -path '.claude/scripts/owner-ceremony/archive/*' \
+                        -print0 2>/dev/null)
+          if [ $FAILED -eq 1 ]; then
+            echo "shellcheck reported warnings or errors" >&2
+            exit 1
+          fi
+          echo "✓ Shellcheck clean on all active hooks/scripts"
+
+      # -----------------------------------------------------------------
+      # Step: Python hook unit tests (Sprint 2 A.4)
+      # Runs every test under .claude/hooks/tests/. Uses Python 3.12
+      # from setup-python (audit-v2 hot-fix: ubuntu-24.04 runner's
+      # default python3 ships without pytest; set up explicitly).
+      # -----------------------------------------------------------------
+      - name: Set up Python for hook tests
+        # SHA-pinned (Sprint 7 Dependabot bump): actions/setup-python@v6.2.0
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.12'
+
+      - name: Install pytest + PyYAML (dev deps, not shipped)
+        # PyYAML used by `test_run_benchmark.py` + `test_squad_import.py`
+        # in .claude/scripts/tests/; pytest used by all hook tests.
+        run: python3 -m pip install --quiet --no-cache-dir "pytest==8.*" "PyYAML>=6.0" pytest-xdist
+
+      - name: Run Python hook unit tests (CEO_HOOK_ADAPTER=claude default)
+        env:
+          CEO_HOOK_ADAPTER: claude
+        run: |
+          set -euo pipefail
+          echo "Python version: $(python3 --version)"
+          cd "$GITHUB_WORKSPACE"
+          python3 -m pytest .claude/hooks/tests/ -n auto -m 'not serial' --strict-markers --tb=no -q
+          python3 -m pytest .claude/hooks/tests/ -m 'serial' --strict-markers --tb=no -q
+
+
+      # PLAN-050 C12 — action SHA-pin compliance gate (round-17)
+      - name: Action SHA-pin compliance (PLAN-050 C12)
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          python3 .claude/scripts/check-action-sha-drift.py --offline
+
+      # -----------------------------------------------------------------
+      # Step: Python script unit tests (audit-query, run-skill-benchmark,
+      # check-tier-boundaries)
+      # -----------------------------------------------------------------
+      - name: Run Python script unit tests
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          # PLAN-122 WS12 — optimizer (WS-1/WS-2) unit suite CI-gated.
+          python3 -m pytest .claude/scripts/tests/ .claude/scripts/optimizer/tests/ -n auto -m 'not serial' --strict-markers --tb=no -q
+          python3 -m pytest .claude/scripts/tests/ .claude/scripts/optimizer/tests/ -m 'serial' --strict-markers --tb=no -q
+
+      # -----------------------------------------------------------------
+      # Step: PLAN-013 Phase A.6 / ADJ-021 (QA Architect §S10 HIGH) —
+      # Audit event registry drift (SPEC ⇆ code).
+      #
+      # Asserts that _lib/audit_emit.py::_KNOWN_ACTIONS set, the
+      # SPEC/v1/audit-log.schema.md table, and every emit_<name>() call
+      # site under .claude/scripts/ + .claude/hooks/ agree. Gap #3
+      # from Session 20 is locked by this check — live_adapter_* and
+      # mcp_* events cannot regress silently.
+      # -----------------------------------------------------------------
+      - name: Audit registry drift (SPEC ⇆ code)
+        run: python3 .claude/scripts/check-audit-registry-coverage.py --verbose
+
+      # -----------------------------------------------------------------
+      # Step: PLAN-136 W2/W3 (T2) — audit-log HMAC-null regression gate.
+      #
+      # Closes the S234 born-broken-action class: an emit_<name>() whose
+      # canonical payload carries a forbidden type (e.g. a float in the
+      # HMAC-signed body) lands with ``hmac=null`` + ``hmac_error`` and is
+      # silently EXCLUDED from the verifiable chain. The scrub-only green
+      # suite never catches it because the emit fail-soft dies downstream.
+      #
+      # ``check-audit-hmac-null.py`` walks the audit log and FAILS when any
+      # present line carries a null/empty hmac with an hmac_error breadcrumb.
+      # It is a REAL gate (no ``|| true``): the script fail-OPENS by design
+      # (exit 0) only when the log file is absent — exactly the fresh-CI
+      # checkout case — so there is no false-positive risk in CI while a
+      # populated log with a regression still hard-fails the job.
+      # -----------------------------------------------------------------
+      - name: Audit-log HMAC-null regression gate (S234 class)
+        run: python3 .claude/scripts/check-audit-hmac-null.py
+
+      # -----------------------------------------------------------------
+      # Step: F6 — tamper-evidence verifier gate.
+      #
+      # The HMAC chain verifier (.claude/scripts/audit-verify-chain.py) is
+      # the mechanism behind the README's headline tamper-evidence claim,
+      # yet until now NO workflow ran it against a log — only its unit
+      # tests executed in CI, so the central "we detect tamper" claim was
+      # never exercised as a release gate.
+      #
+      # This step closes that gap deterministically and WITHOUT the
+      # machine-local ~/.claude live chain (which is not shipped and whose
+      # key is per-host). It builds a known-good chain in $RUNNER_TEMP
+      # using the SAME _lib.audit_hmac construction the production emitter
+      # and the unit tests use, then asserts the exit-code contract end to
+      # end:
+      #   1. intact chain                  -> exit 0  (EXIT_INTACT)
+      #   2. one-byte tamper on an entry   -> exit 1  (EXIT_TAMPER)
+      #   3. a SHIPPED reality-ledger
+      #      audit-log.jsonl fixture       -> exit 0  (runs clean on a
+      #                                       real shipped artifact)
+      # A regression in the verifier (e.g. it stops recomputing the chain
+      # and rubber-stamps every log) flips assertion #2 and fails the job.
+      # Stdlib-only; no network; no paid spend; no live log required.
+      # -----------------------------------------------------------------
+      - name: Tamper-evidence verifier gate (F6)
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          KEY="$RUNNER_TEMP/audit-key"
+          LOG="$RUNNER_TEMP/audit-log.jsonl"
+          # 32-byte owner-only key (matches audit_hmac.KEY_BYTES; 0600 or
+          # the verifier exits 4 on unsafe perms).
+          printf 'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB' > "$KEY"
+          chmod 600 "$KEY"
+          # Build a known-good HMAC chain with the canonical construction.
+          python3 - "$KEY" "$LOG" <<'PY'
+          import json, sys
+          from pathlib import Path
+          sys.path.insert(0, str(Path.cwd() / ".claude" / "hooks"))
+          from _lib.audit_hmac import GENESIS_PREV, compute_entry_hmac, hex_digest
+          key = Path(sys.argv[1]).read_bytes()
+          entries = [
+              {"action": "session_start", "ts": "2026-01-01T00:00:00Z", "n": 1},
+              {"action": "agent_spawn",   "ts": "2026-01-01T00:00:01Z", "n": 2},
+              {"action": "file_edit",     "ts": "2026-01-01T00:00:02Z", "n": 3},
+          ]
+          prev = GENESIS_PREV
+          lines = []
+          for e in entries:
+              h = compute_entry_hmac(key, prev, e)
+              full = dict(e); full["hmac"] = hex_digest(h)
+              lines.append(json.dumps(full, sort_keys=True, separators=(",", ":")))
+              prev = h
+          Path(sys.argv[2]).write_text("\n".join(lines) + "\n")
+          PY
+          # Assertion 1: intact chain must verify (exit 0).
+          if ! python3 .claude/scripts/audit-verify-chain.py \
+                 --log-file "$LOG" --key-file "$KEY" --verbose; then
+            echo "::error::verifier rejected a known-good intact chain (expected exit 0)"
+            exit 1
+          fi
+          echo "✓ intact chain verified (exit 0)"
+          # Assertion 2: a one-byte tamper must be detected (exit 1).
+          python3 - "$LOG" <<'PY'
+          import json, sys
+          from pathlib import Path
+          p = Path(sys.argv[1])
+          lines = p.read_text().strip().split("\n")
+          d = json.loads(lines[1]); d["n"] = 999  # mutate signed body, keep recorded hmac
+          lines[1] = json.dumps(d, sort_keys=True, separators=(",", ":"))
+          p.write_text("\n".join(lines) + "\n")
+          PY
+          set +e
+          python3 .claude/scripts/audit-verify-chain.py \
+            --log-file "$LOG" --key-file "$KEY" >/dev/null 2>&1
+          rc=$?
+          set -e
+          if [ "$rc" -ne 1 ]; then
+            echo "::error::verifier did NOT flag a tampered chain (rc=$rc, expected 1)"
+            exit 1
+          fi
+          echo "✓ tampered chain detected (exit 1)"
+          # Assertion 3: the verifier runs clean on a SHIPPED fixture.
+          FIXTURE=.claude/scripts/tests/fixtures/reality-ledger/detector-3-positive/audit-log.jsonl
+          if [ -f "$FIXTURE" ]; then
+            if ! python3 .claude/scripts/audit-verify-chain.py \
+                   --log-file "$FIXTURE" --key-file "$KEY"; then
+              echo "::error::verifier failed on shipped fixture $FIXTURE (expected exit 0)"
+              exit 1
+            fi
+            echo "✓ shipped fixture verified clean (exit 0)"
+          else
+            echo "::notice::shipped reality-ledger fixture absent — assertion 3 skipped"
+          fi
+          echo "✓ tamper-evidence verifier gate green"
+
+      # -----------------------------------------------------------------
+      # Step: PLAN-099-FOLLOWUP Wave F.1 + F.5 / peers-yaml-schema-
+      # migration.md §7 — peers.yaml v2.0 schema gate.
+      #
+      # Drives ``tools/migrate-peers-yaml.py --verify-only`` against the
+      # tracked example federation registry. Exits 0 when every peer
+      # row meets the v2.0 invariants (per §7: at least one pin
+      # non-empty; ``scopes`` is a list; ``key_floor_verified_at``
+      # present when SPKI is set); exit 7 (EXIT_CONFORMANCE_FAIL) on
+      # drift.
+      #
+      # Design choice — the gate runs against
+      # ``peers.example.yaml`` (the only tracked peers file). The live
+      # operational ``peers.yaml`` is ADOPTER-OWNED and gitignored
+      # (per the example file's preamble + INSTALL guidance) — adopters
+      # run the same tool locally as part of their pre-deploy ceremony.
+      #
+      # The example file intentionally ships a v1.x LEGACY peer row
+      # alongside v2.0 rows (Row A in peers.example.yaml) to demonstrate
+      # the 90d-soak backward-compat shape per ADR-129-AMEND-1 §3. That
+      # row lacks the v2.0 ``scopes`` + ``key_floor_verified_at`` fields
+      # by design. Until Wave F.5 lands a doc-row excluder, this step
+      # is ADVISORY (``continue-on-error: true``) — non-zero exit is
+      # surfaced in the workflow summary but does NOT block CI. The
+      # advisory mode mirrors the SDK-compat + function-length steps
+      # above. Flip to hard-fail when the example file moves to
+      # pure-v2.0 (post-90d data-volume gate per ADR-095 §4).
+      # -----------------------------------------------------------------
+      - name: check peers.yaml v2.0 schema (PLAN-099-FOLLOWUP F.1+F.5, advisory)
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          if [ ! -f .claude/data/federation/peers.example.yaml ]; then
+            echo "::notice::peers.example.yaml not found — gate skipped (no tracked peers fixture)"
+            exit 0
+          fi
+          python3 tools/migrate-peers-yaml.py \
+            --verify-only \
+            --in .claude/data/federation/peers.example.yaml
+        # Exits 0 if v2.0 conformant; 7 on drift. Advisory pending
+        # post-90d-soak hard-fail flip.
+
+      # -----------------------------------------------------------------
+      # Step: PLAN-014 Phase A.7 / A.4 / ADJ-005 — policy drift guard.
+      #
+      # For each .claude/policies/*.policy.yaml, recompute canonical-form
+      # hash (SPEC/v1/policy-dsl.schema.md §6.1) and diff against the
+      # pinned sha256 in .claude/policies/.drift-manifest.json. Also runs
+      # the fixture corpus through the engine (§6.2) to detect semantic
+      # drift even when the hash is stable. Exit 1 on drift, 0 clean.
+      # -----------------------------------------------------------------
+      - name: Policy drift guard (YAML-canonical-hash + fixture-corpus)
+        run: python3 .claude/scripts/check-policy-drift.py --verbose
+        if: hashFiles('.claude/policies/**/*.yaml') != ''
+
+      - name: SPEC drift guard (PLAN-066 DIM-02)
+        run: python3 .claude/scripts/check-spec-drift.py --verbose
+
+      # -----------------------------------------------------------------
+      # Step: PLAN-014 Phase A.7 / ADJ-028 — TestEnvContext mandate grep
+      # (SUPERSEDED by PLAN-019 P1-QA-3 check-test-env-hygiene.py below;
+      # kept as emit-only warn for continuity during the allowlist drain).
+      # -----------------------------------------------------------------
+      - name: TestEnvContext mandate — legacy grep (ADJ-028, advisory)
+        run: |
+          set -euo pipefail
+          violations=$(grep -rEn \
+            -e 'os\.environ\[[^]]+\]\s*=' \
+            -e 'unittest\.TestCase\)' \
+            .claude/hooks/tests .claude/scripts/tests 2>/dev/null \
+            | grep -v 'testing\.py' \
+            | grep -v 'ENV-ISOLATED-WAIVER' \
+            | grep -v 'TestEnvContext' \
+            | head -20 || true)
+          if [ -n "$violations" ]; then
+            echo "::warning::TestEnvContext mandate (legacy grep) — review:"
+            echo "$violations"
+          fi
+          echo "OK: legacy TestEnvContext grep advisory-pass"
+
+      # -----------------------------------------------------------------
+      # Step: PLAN-019 P1-QA-3 — check-test-env-hygiene.py (AST-based).
+      #
+      # Replacement for the legacy grep above. Uses AST to detect:
+      #   - bare unittest.TestCase inheritance
+      #   - direct os.environ[KEY] = VALUE / del / aug-assign for tracked
+      #     keys (HOME, CLAUDE_PROJECT_DIR, CEO_*, CLAUDE_*)
+      #
+      # PLAN-019 DevOps-P2-4 — FLIPPED from advisory to hard-fail.
+      # At flip time (2026-04-17), the allowlist at
+      # `.claude/scripts/test-env-hygiene-allowlist.yaml` captured 92
+      # legacy violators; `python3 .claude/scripts/check-test-env-hygiene.py`
+      # returns 0 exactly because all 92 are allowlisted. Running the
+      # check as hard-fail now BLOCKS any NEW violator (a test file that
+      # mutates tracked env keys without TestEnvContext). Legacy drain
+      # continues as a P3 cleanup.
+      # -----------------------------------------------------------------
+      - name: TestEnvContext hygiene — AST check (P1-QA-3, hard-fail post P2-4)
+        run: |
+          set -euo pipefail
+          python3 .claude/scripts/check-test-env-hygiene.py --verbose
+
+      # -----------------------------------------------------------------
+      # Step: core/frontend → domains tier boundary check
+      # -----------------------------------------------------------------
+      - name: Check tier boundaries (core/frontend must not reference domains)
+        run: |
+          set -euo pipefail
+          python3 .claude/scripts/check-tier-boundaries.py
+
+      # -----------------------------------------------------------------
+      # Step: PLAN-012 Phase 2 — flip-criteria drift check (ADR-041 §4).
+      #
+      # Asserts that PLAN-012's Dependency Graph flip criteria match
+      # the owning ADR text (or are documented in the allowlist as
+      # intentional pre-amendment drift). Fails the PR if a flip PR
+      # updates the plan without touching the ADR.
+      # -----------------------------------------------------------------
+      - name: Flip-criteria drift check (PLAN-012 ↔ ADR-NNN)
+        run: |
+          set -euo pipefail
+          # The clean-history repo ships only plan schemas + examples (no
+          # per-sprint plan diary), so skip if the referenced plan is absent.
+          PLAN=.claude/plans/PLAN-012-sprint-12-stub.md
+          if [ ! -f "$PLAN" ]; then
+            echo "skip: $PLAN not present in this repo"; exit 0
+          fi
+          python3 .claude/scripts/check-flip-criteria-drift.py --plan "$PLAN"
+
+      # -----------------------------------------------------------------
+      # Step: D1 pricing TBD guard (PLAN-012 Phase 0 D1 / ADR-033).
+      # Rejects TBD in primary pricing table data rows (prose ignored).
+      # Paths-filter: runs always on push to main; on PRs, only when
+      # the pricing doc or this workflow changes. Mirrors adapter-matrix
+      # job's inline `contains()` approach (no external action needed).
+      # Stdlib only.
+      # -----------------------------------------------------------------
+      - name: D1 pricing TBD guard
+        if: |
+          github.event_name == 'push' ||
+          (github.event_name == 'pull_request' &&
+           (contains(github.event.pull_request.changed_files, 'docs/provider-pricing.md') ||
+            contains(github.event.pull_request.changed_files, '.github/workflows/validate.yml')))
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import re, sys
+          p = "docs/provider-pricing.md"; t = False; h = {}; bad = []
+          for n, ln in enumerate(open(p, encoding="utf-8").read().splitlines(), 1):
+              s = ln.strip()
+              if not s.startswith("|"): t = False; h = {}; continue
+              c = [x.strip() for x in s.strip("|").split("|")]; lo = [x.lower() for x in c]
+              if not t:
+                  if any("model" in x for x in lo) and any(("input" in x or "output" in x) for x in lo):
+                      h = {("in" if "input" in x else "out"): i for i, x in enumerate(lo) if "input" in x or "output" in x}
+                      t = True
+                  continue
+              if all(set(x) <= set(":-") for x in c): continue
+              for k in ("in", "out"):
+                  i = h.get(k)
+                  if i is not None and i < len(c) and re.search(r"\bTBD\b", c[i], re.I):
+                      bad.append(f"  line {n}: {ln.rstrip()}"); break
+          if bad: sys.exit(f"FAIL: TBD in pricing data rows (fix per ADR-033 §8):\n" + "\n".join(bad))
+          print(f"OK: no TBD rows in {p} primary pricing table")
+          PY
+
+      # -----------------------------------------------------------------
+      # Step: actionlint — static analysis for GitHub Actions workflows
+      #
+      # SHA-256-verified release asset download (Sprint 5 Phase 2 supply
+      # chain hardening per debate consensus C5 + DevOps lens). Replaces
+      # the prior `bash <(curl)` install pattern.
+      #
+      # When bumping VERSION:
+      #   1. Update VERSION below
+      #   2. Recompute EXPECTED_SHA256:
+      #        curl -fsSL -O <url> && shasum -a 256 <file>
+      #   3. Verify against rhysd/actionlint release notes
+      # -----------------------------------------------------------------
+      - name: actionlint
+        run: |
+          set -euo pipefail
+          VERSION="1.7.7"
+          EXPECTED_SHA256="023070a287cd8cccd71515fedc843f1985bf96c436b7effaecce67290e7e0757"
+          ASSET="actionlint_${VERSION}_linux_amd64.tar.gz"
+          URL="https://github.com/rhysd/actionlint/releases/download/v${VERSION}/${ASSET}"
+          cd "$RUNNER_TEMP"
+          curl -fsSL -o "$ASSET" "$URL"
+          echo "${EXPECTED_SHA256}  ${ASSET}" | sha256sum -c -
+          tar -xzf "$ASSET" actionlint
+          chmod +x actionlint
+          # audit-v2 hot-fix #7 (2026-04-27): shellcheck nits in tier-policy.yml,
+          # tournament.yml, etc. were pre-existing style warnings (SC2002 useless
+          # cat, SC2012 ls vs find, SC2016 single-quote $var, SC2129 batch >>).
+          # Suppress them via shellcheck severity threshold; actionlint's own
+          # YAML/expression checks remain active.
+          ./actionlint -color \
+            -shellcheck="-S error -e SC2002,SC2012,SC2016,SC2129" \
+            "$GITHUB_WORKSPACE/.github/workflows/"*.yml
+
+      # -----------------------------------------------------------------
+      # Step: Skill inventory idempotency — generator output must match
+      # the committed block in ceo-orchestration/SKILL.md.
+      # -----------------------------------------------------------------
+      - name: Skill inventory idempotency
+        run: |
+          set -euo pipefail
+          GEN=$(bash .claude/scripts/generate-skill-inventory.sh)
+          # Extract the BEGIN/END block from the committed SKILL.md
+          COMMITTED=$(awk '/<!-- BEGIN AUTO-GENERATED SKILL INVENTORY -->/,/<!-- END AUTO-GENERATED SKILL INVENTORY -->/' \
+            .claude/skills/core/ceo-orchestration/SKILL.md)
+          if [ "$GEN" != "$COMMITTED" ]; then
+            echo "❌ Skill inventory in ceo-orchestration/SKILL.md is stale."
+            echo "Run: bash .claude/scripts/generate-skill-inventory.sh"
+            echo "Then re-embed the BEGIN/END block."
+            diff <(printf '%s\n' "$GEN") <(printf '%s\n' "$COMMITTED") || true
+            exit 1
+          fi
+          echo "✓ Skill inventory is up-to-date"
+
+      # -----------------------------------------------------------------
+      # Step: Docs-as-code freshness (PLAN-010 Phase 3, ADR-023).
+      #
+      # BLOCKING (State 2 of 3) — flipped from advisory per PLAN-014
+      # Phase E.2. Evidence: 0 broken refs across 5+ consecutive main
+      # pushes (verified 2026-04-15). ADR-023 Transition Log updated.
+      #
+      # Rollback: if >1 false-positive per sprint, re-add
+      # `continue-on-error: true` and open docs-freshness-fp issue.
+      #
+      # Scans CLAUDE.md, CLAUDE_FULL.md, README.md, docs/**, .claude/adr/*,
+      # .claude/plans/PLAN-*, .claude/skills/**. Ignores external URLs +
+      # anchor-only refs + docs/docs-freshness-allowlist.txt entries.
+      # -----------------------------------------------------------------
+      - name: Docs-as-code freshness (blocking — ADR-023 State 2)
+        id: docs_freshness
+        run: |
+          set -euo pipefail
+          # Run once capturing BOTH the summary stream and the stderr
+          # back into the step log so broken-ref details are visible
+          # when the scanner reports findings (debug note: previous
+          # {...} >> SUMMARY layout swallowed all stdout on fail).
+          python3 .claude/scripts/check-docs-freshness.py --format=text \
+            | tee /tmp/docs-freshness.out
+          {
+            echo "## Docs freshness (ADR-023)"
+            echo ""
+            echo '```'
+            cat /tmp/docs-freshness.out
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # -----------------------------------------------------------------
+      # Step: Hook executable bits (.sh + active Python hooks)
+      # -----------------------------------------------------------------
+      - name: Hook and script executable bits
+        # Session 75 Codex Finding 9 closure: prior step hardcoded 4 hook
+        # files while .claude/settings.json activates ~26+ hooks.
+        # `check-active-hooks-executable.py` enumerates settings.json AND
+        # templates/settings/settings.base.json, asserting every hook
+        # they activate exists + has the executable bit set.
+        run: |
+          set -euo pipefail
+          MISSING=""
+          # All .sh files under scripts/ and hooks/ (unchanged).
+          while IFS= read -r -d '' script; do
+            if [ ! -x "$script" ]; then
+              MISSING="$MISSING $script"
+            fi
+          done < <(find .claude/scripts .claude/hooks -name '*.sh' -print0 2>/dev/null)
+          if [ -n "$MISSING" ]; then
+            echo "❌ The following .sh files are not executable:"
+            for m in $MISSING; do echo "  - $m"; done
+            echo ""
+            echo "Run: chmod +x <file>"
+            exit 1
+          fi
+          # Dynamic Python-hook coverage (Session 75 Finding 9):
+          python3 .claude/scripts/check-active-hooks-executable.py
+          echo "✓ All active hooks/scripts are executable"
+
+      # -----------------------------------------------------------------
+      # Step: npm bundle sync gate (Session 75 Finding 3 + Owner D1)
+      # -----------------------------------------------------------------
+      # The npm/.claude, npm/SPEC, npm/scripts, npm/templates, npm/VERSION
+      # are gitignored (generated artifacts). This step runs the rebuild
+      # script, then asserts that the only npm/ files git considers
+      # modified are tracked metadata (package.json) — no manual edits
+      # to the generated trees, and the package.json version field
+      # matches the canonical VERSION.
+      - name: verify-npm-bundle-sync
+        run: |
+          set -euo pipefail
+          # Snapshot package.json before regen so we can detect manual edits.
+          ORIGINAL_PKG_VERSION="$(python3 -c 'import json; print(json.load(open("npm/package.json"))["version"])')"
+          # Regenerate the bundle from canonical sources.
+          bash scripts/npm-rebuild.sh
+          # After rebuild, package.json version MUST match VERSION.
+          POST_PKG_VERSION="$(python3 -c 'import json; print(json.load(open("npm/package.json"))["version"])')"
+          REPO_VERSION="$(tr -d '[:space:]' < VERSION)"
+          if [ "$REPO_VERSION" != "$POST_PKG_VERSION" ]; then
+            echo "::error::VERSION ($REPO_VERSION) != npm/package.json post-rebuild ($POST_PKG_VERSION)"
+            exit 1
+          fi
+          # Drift check: package.json version field MUST already match
+          # canonical VERSION pre-rebuild — i.e. the committed package.json
+          # must be in sync. Missing this indicates someone bumped VERSION
+          # without running scripts/npm-rebuild.sh.
+          if [ "$ORIGINAL_PKG_VERSION" != "$REPO_VERSION" ]; then
+            echo "::error::npm/package.json version ($ORIGINAL_PKG_VERSION) != VERSION ($REPO_VERSION)"
+            echo "::error::Run: bash scripts/npm-rebuild.sh && git add npm/package.json && commit"
+            exit 1
+          fi
+          echo "✓ npm bundle in sync with canonical sources"
+
+  integration-tests:
+    # PLAN-010 Phase 1 — E2E integration harness (ADR-021).
+    # Exercises real hook subprocesses end-to-end. Runs in parallel with
+    # the governance `validate` job; does not block fast feedback.
+    name: E2E integration tests (pytest)
+    # PLAN-012 Phase 2 CEO_SOTA_DISABLE parity.
+    if: vars.CEO_SOTA_DISABLE != '1'
+    runs-on: Ceo
+    timeout-minutes: 8
+
+    steps:
+      - name: Checkout
+        # SHA-pinned (Sprint 7 Dependabot bump): actions/checkout@v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Setup Python 3.11
+        # SHA-pinned (Sprint 7 Dependabot bump): actions/setup-python@v6.2.0
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.11"
+
+      - name: Install pytest (dev dep, not shipped)
+        run: python3 -m pip install --quiet --no-cache-dir "pytest==8.*"
+
+      - name: Run E2E integration suite
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          python3 -m pytest tests/integration/ -v --tb=short
+
+      # PLAN-044 F-03-02 closure — tier_policy_cli/tests/ (191 test defs
+      # covering VETO-floor mutation harness, adversarial fixtures,
+      # statistical power gate, cooldown) previously ran only on
+      # dev laptops. This step gates the CLAUDE.md 100% VETO-floor
+      # mutation kill-rate claim mechanically in CI.
+      - name: Run tier_policy_cli tests (VETO-floor + adversarial)
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          python3 -m pytest .claude/scripts/tier_policy_cli/tests/ -q --tb=short
+
+      # PLAN-044 companion — tournament/tests/ (188 test defs covering
+      # scorer 100% kill-rate, judge envelope, reporter byte-identity)
+      # for the same "exists but not CI-gated" reason.
+      - name: Run tournament tests (scorer + judge + reporter)
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          python3 -m pytest .claude/scripts/tournament/tests/ -q --tb=short
+
+  formal-verification-mutation-harness:
+    # P0-03 from PLAN-018: mutation-kill harness CI enforcement (ADR-044 SOTA claim)
+    #
+    # Previously `tests/formal_verification/` (4 conformance test classes + 21
+    # mutation fixtures, "65 mutations 100% kill" per ADR-044) ran on dev
+    # laptops only. No CI workflow exercised it. `formal-verify.yml` runs TLC
+    # on TLA+ specs (paths: docs/formal-verification/**) but not the Python
+    # conformance harness. This job closes that gap: any mutation that
+    # escapes (any test failure) fails the workflow and blocks merge.
+    #
+    # Modelled on the sibling `integration-tests` job above — same triggers
+    # (push to main + pull_request inherited from workflow-level `on:`),
+    # same pytest-8 pin, same SHA-pinned checkout + setup-python, same
+    # least-privilege `contents: read`. Runs in parallel with `validate` and
+    # `integration-tests` — does not serialize fast feedback.
+    name: Formal verification mutation harness (pytest)
+    # PLAN-012 Phase 2 CEO_SOTA_DISABLE parity.
+    if: vars.CEO_SOTA_DISABLE != '1'
+    runs-on: Ceo
+    # Harness finishes in ~seconds on a laptop; 10-min ceiling is a
+    # generous safety net against runaway workers.
+    timeout-minutes: 10
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        # SHA-pinned (Sprint 7 Dependabot bump): actions/checkout@v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Setup Python 3.11
+        # SHA-pinned (Sprint 7 Dependabot bump): actions/setup-python@v6.2.0
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.11"
+
+      - name: Install pytest (dev dep, not shipped)
+        run: python3 -m pip install --quiet --no-cache-dir "pytest==8.*"
+
+      - name: Run tests/formal_verification/ (mutation-kill gate)
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          python3 -m pytest tests/formal_verification/ -v --tb=short
+
+
+  # ===========================================================================
+  # PLAN-020 Phase 0 item 6b — opus-4-7-profiler-smoke job
+  # ---------------------------------------------------------------------------
+  # Runs `.claude/scripts/profile-opus-4-7.py --smoke` on every push + PR.
+  # Synthetic mode (no Anthropic API call); ≤30s budget.
+  # Catches regressions in:
+  #  - Gate-boot file presence (CLAUDE.md + PROTOCOL.md + team.md +
+  #    frontend-team.md + ceo-orchestration SKILL.md)
+  #  - PLAN-020 frontmatter `status: executing` discipline
+  #  - CODEOWNERS Phase 0a globs presence
+  # ===========================================================================
+  opus-4-7-profiler-smoke:
+    if: vars.CEO_SOTA_DISABLE != '1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        # SHA-pinned: actions/checkout@v6.0.2 (matches sibling jobs)
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Setup Python 3.11
+        # SHA-pinned: actions/setup-python@v6.2.0 (matches sibling jobs)
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.11"
+
+      - name: Run profile-opus-4-7.py --smoke
+        run: |
+          set -euo pipefail
+          # 30s budget enforced by --budget-seconds; non-zero exit on overrun
+          # E12-F3 fix: script now also exits non-zero if any check.passed=false
+          python3 .claude/scripts/profile-opus-4-7.py --smoke --budget-seconds 30
+          echo "✓ opus-4-7 profiler smoke green (all checks passed)"
+
+      - name: Run profile-opus-4-7.py --hook-latency (p95/p99 gate)
+        run: |
+          set -euo pipefail
+          # E12-F4 fix: first real latency gate in CI (was zero thresholds).
+          # N=20 iterations (fast; ADR-071 N≥200 for percentile-stability;
+          # N=20 is advisory-grade but still catches gross regressions like
+          # the PLAN-120 WS-J 2.27x p99 regression from eager live-import).
+          # Budget: p95<120ms / p99<160ms (PLAN-063 DIM-15 CI fallback +
+          # generous margin over the measured 57-64ms CI baseline).
+          # Advisory emitters are disabled so pure governance logic is measured.
+          python3 .claude/scripts/profile-opus-4-7.py \
+            --hook-latency \
+            --latency-iterations 20 \
+            --p95-ceiling-ms 120 \
+            --p99-ceiling-ms 160
+          echo "✓ hook latency p95/p99 within budget"
+
+      - name: Run profile-opus-4-7.py --floor (sanity)
+        run: |
+          set -euo pipefail
+          # ~2s; subprocess startup floor measurement
+          python3 .claude/scripts/profile-opus-4-7.py --floor > /tmp/floor.json
+          # Sanity assertion: p50 floor must be < 200ms (CI runners are slow
+          # but not pathologically so). Fails CI if regression > 4x macOS.
+          python3 - <<'PY'
+          import json, sys
+          with open('/tmp/floor.json') as f:
+              d = json.load(f)
+          p50_ms = d['subprocess_floor_ms']['p50']
+          if p50_ms > 200:
+              sys.exit(f"FAIL: subprocess floor p50={p50_ms}ms > 200ms (CI runner regression?)")
+          print(f"✓ subprocess floor p50={p50_ms}ms (under 200ms sanity cap)")
+          PY
+
+  # ===========================================================================
+  # PLAN-020 Phase 1 — hook-tests-dual-rail (CEO_NATIVE_SUBAGENTS=[0,1])
+  # ---------------------------------------------------------------------------
+  # Catches regressions in BOTH the legacy custom rail (when adopters opt
+  # out via CEO_NATIVE_SUBAGENTS=0) AND the native-subagent rail (default).
+  # Budget ≤90s extra wall-clock vs single-rail run (≥45s × 2 legs).
+  # ===========================================================================
+  hook-tests-dual-rail:
+    if: vars.CEO_SOTA_DISABLE != '1'
+    runs-on: Ceo
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        native_subagents: ["0", "1"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.11"
+
+      - name: Install pytest (dev dep, not shipped)
+        run: python3 -m pip install --quiet --no-cache-dir "pytest==8.*" pytest-xdist
+
+      - name: Run hook tests with CEO_NATIVE_SUBAGENTS=${{ matrix.native_subagents }}
+        env:
+          CEO_NATIVE_SUBAGENTS: ${{ matrix.native_subagents }}
+        run: |
+          set -euo pipefail
+          echo "Running hook tests with CEO_NATIVE_SUBAGENTS=$CEO_NATIVE_SUBAGENTS"
+          python3 -m pytest .claude/hooks/tests/ -n auto -m 'not serial' --strict-markers --tb=no -q
+          python3 -m pytest .claude/hooks/tests/ -m 'serial' --strict-markers --tb=no -q
+          echo "✓ Hook tests green for CEO_NATIVE_SUBAGENTS=$CEO_NATIVE_SUBAGENTS"
+
+  # =========================================================================
+  # PLAN-086 Wave G.2 — Python version matrix (M-7 fold)
+  # =========================================================================
+  hook-tests-python-matrix:
+    if: vars.CEO_SOTA_DISABLE != '1'
+    runs-on: Ceo
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Setup Python ${{ matrix.python-version }}
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install pytest + PyYAML (dev deps, not shipped)
+        run: python3 -m pip install --quiet --no-cache-dir "pytest==8.*" "PyYAML>=6.0" pytest-xdist
+
+      - name: Run hook + script tests on Python ${{ matrix.python-version }}
+        env:
+          PYTHONPATH: "."
+        run: |
+          set -euo pipefail
+          echo "Python version: $(python3 --version)"
+          python3 -m pytest .claude/hooks/tests/ .claude/scripts/tests/ .claude/scripts/optimizer/tests/ \
+            -n auto -m 'not serial' --strict-markers --tb=no -q
+          python3 -m pytest .claude/hooks/tests/ .claude/scripts/tests/ .claude/scripts/optimizer/tests/ \
+            -m 'serial' --strict-markers --tb=no -q
+          echo "Tests green on Python ${{ matrix.python-version }}"

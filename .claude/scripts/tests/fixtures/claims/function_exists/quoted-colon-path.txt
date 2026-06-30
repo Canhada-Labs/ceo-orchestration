@@ -1,0 +1,1 @@
+CLAIM:function_exists:`.claude/scripts/confidence_gate.py:verify_test_passes`

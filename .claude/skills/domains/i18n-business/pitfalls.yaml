@@ -1,0 +1,68 @@
+# Pitfalls Catalog — i18n-Business Squad
+# Loaded alongside the universal catalog when the i18n-business profile is
+# installed. Format mirrors .claude/pitfalls-catalog.yaml:
+# id, rule, whenToUse, agents.
+
+pitfalls:
+  # === LOCALE KEY MANAGEMENT ===
+  - id: I18N-001
+    rule: "NEVER rename a locale key without providing a redirect alias in the old key for at least one full release cycle. A silent rename breaks fallback for every live locale at once — web, mobile, email, and push pipelines all consume keys independently."
+    whenToUse: "any locale key rename, file reorganisation, or namespace refactor"
+    agents: [Amara Osei-Bonsu, Nadia Reyes]
+
+  - id: I18N-002
+    rule: "NEVER delete a locale key without first scanning ALL consumers — web, iOS, Android, email templates, push notification templates, and backend-rendered strings. A key that is 'unused' in the web repo may still be live in the mobile app."
+    whenToUse: "any locale key deletion or deprecation task"
+    agents: [Amara Osei-Bonsu, Pascal Diallo]
+
+  - id: I18N-003
+    rule: "Locale fallback chains MUST be explicit and tested. Implicit fallback (e.g. 'pt-BR falls through to pt, then to en') must be declared in config, not assumed. Any fallback chain change requires a full locale-coverage diff before deploy."
+    whenToUse: "any change to locale configuration, language priority settings, or i18next/FormatJS config"
+    agents: [Amara Osei-Bonsu, Nadia Reyes]
+
+  - id: I18N-004
+    rule: "String freeze dates MUST be communicated to the TMS and translation vendors at least 5 business days in advance. A freeze broken at the last minute invalidates in-progress translations and requires emergency re-work that degrades quality."
+    whenToUse: "any release planning that involves localised content; any hotfix to translated strings"
+    agents: [Amara Osei-Bonsu, Sofia Petrov]
+
+  # === ICU FORMAT AND PLURALIZATION ===
+  - id: I18N-005
+    rule: "ALL plural strings MUST use ICU MessageFormat `{count, plural, one{...} other{...}}` — never a ternary or if/else. English has 2 plural forms; Arabic has 6; Slavic languages have 4. Ternary logic is wrong for any non-English locale."
+    whenToUse: "any string that varies by count (items, users, days, results, errors)"
+    agents: [Nadia Reyes, Pascal Diallo]
+
+  - id: I18N-006
+    rule: "ICU message arguments MUST be named (`{firstName}`, `{count}`), never positional (`{0}`, `{1}`). Subject-verb-object order differs by language; positional arguments produce grammatically wrong output when language order changes."
+    whenToUse: "any string with dynamic inserted values; any ICU message authoring or review"
+    agents: [Nadia Reyes]
+
+  - id: I18N-007
+    rule: "String concatenation to build user-facing sentences is FORBIDDEN. Use a single ICU message with named slots. Concatenation breaks for languages where adjective order, gendered article, or verb conjugation depends on the combined meaning."
+    whenToUse: "any code that builds a display string by joining variables with literals"
+    agents: [Nadia Reyes, Amara Osei-Bonsu]
+
+  - id: I18N-008
+    rule: "Date, time, currency, and number formatting MUST use locale-aware ICU or CLDR patterns. Hard-coded format strings (e.g. `MM/DD/YYYY`, `$N,NNN.NN`) produce wrong output in every non-US locale and in some cases violate regulatory requirements (e.g. Japanese date display in government contexts)."
+    whenToUse: "any code path that formats or displays dates, numbers, currencies, or units to users"
+    agents: [Dr. Yuki Tanaka, Nadia Reyes]
+
+  # === CULTURAL AND REGULATED-MARKET COPY ===
+  - id: I18N-009
+    rule: "Copy in regulated markets (financial services, healthcare, government) MUST be reviewed by a native-speaker consultant with regulatory context before launch. A legally-required disclaimer translated incorrectly is a compliance violation — not a translation defect."
+    whenToUse: "any launch or copy update targeting markets under financial, healthcare, or government regulation"
+    agents: [Dr. Yuki Tanaka, Amara Osei-Bonsu]
+
+  - id: I18N-010
+    rule: "Imagery, iconography, and colour palette MUST pass a cultural-review checklist before launch in a new geographic market. Symbols that are neutral or positive in one culture (thumbs-up, owl, white for purity) carry negative connotations in others."
+    whenToUse: "any new market launch; any visual design update shipping to multi-cultural audiences"
+    agents: [Dr. Yuki Tanaka]
+
+  - id: I18N-011
+    rule: "RTL (right-to-left) layout MUST be implemented with CSS logical properties (margin-inline-start, padding-inline-end, text-align: start) — NOT via `transform: scaleX(-1)` mirroring. Mirroring reverses punctuation, bidirectional text markers, and some icons incorrectly."
+    whenToUse: "any UI component or layout work targeting Arabic, Hebrew, Farsi, or Urdu locales"
+    agents: [Nadia Reyes, Pascal Diallo]
+
+  - id: I18N-012
+    rule: "Pseudo-localisation MUST run in CI as a required gate. Pseudo-locale builds catch truncated labels, hard-coded pixel widths, and missing ICU placeholders before real translators spend time on strings that will break in layout. Removing pseudo-locale to save CI time is a false economy."
+    whenToUse: "CI configuration changes; any removal or bypass of locale-related test gates"
+    agents: [Pascal Diallo, Nadia Reyes]

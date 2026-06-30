@@ -1,0 +1,3 @@
+# opentelemetry trace
+trace_id: 39d67724-7803-007c-ebb8-cdd2ed166907
+span_id: 6fd43fac2f9abfcd

@@ -1,0 +1,27 @@
+# Squad-bundle templates directory — generated artifact exclusions.
+#
+# Template instances are created by adopters via `cp *.template -> domains/<new>/<artifact>`
+# followed by sed token substitution. The resulting domain files are committed
+# to .claude/skills/domains/<slug>/ as canonical artifacts. This .gitignore
+# prevents intermediate generated files from being accidentally staged here.
+#
+# Template-vs-instance distinction:
+#   *.template  — source template (committed, tracked)
+#   <artifact>  — generated instance (committed in skills/domains/, NOT here)
+
+# Scratch / intermediate files from token substitution passes
+*.bak
+*.tmp
+
+# Generated instance artifacts that should live in skills/domains/, not here
+team-personas.md
+pitfalls.yaml
+task-chains.yaml
+
+# Generated example files (if auto-generated during pilot authoring)
+examples/PLAN-EXAMPLE.md
+
+# OS and editor noise
+.DS_Store
+*.swp
+*~

@@ -1,0 +1,58 @@
+# Pitfalls Catalog — Fintech Domain
+# Crypto exchange + trading + financial math pitfalls.
+# Loaded alongside the universal catalog when the fintech profile is installed.
+# Format mirrors .claude/pitfalls-catalog.yaml: id, rule, whenToUse, agents.
+
+pitfalls:
+  # === FINANCIAL MATH ===
+  - id: FIN-001
+    rule: "NEVER use float/Number() for price/volume/PnL — use a decimal library (e.g. decimal.js-light, Python Decimal, Go shopspring/decimal)"
+    whenToUse: "any code touching price, volume, PnL, VWAP, arb, spread, depth, slippage"
+    agents: [Viktor, Luna, Marcus, Mei]
+
+  - id: FIN-002
+    rule: "decimal.js-light has NO .isFinite()/.isNaN() — use try-catch around constructor (adapt for your decimal library's constructor semantics)"
+    whenToUse: "any code using decimal library constructors"
+    agents: [Viktor, Luna]
+
+  - id: FIN-003
+    rule: "_pct fields need a type-check: spread_pct may be a ratio (×100 to display), change_pct may already be a percentage (display as-is). Check the API contract, never assume."
+    whenToUse: "any display of percentage values, frontend or backend"
+    agents: [Mei, Viktor, Luna]
+
+  - id: FIN-004
+    rule: "NEVER use parseFloat on financial values — use typed safe-number helpers (e.g. safeNumber/safeFixed/safePct from a safe.ts module)"
+    whenToUse: "any frontend code displaying prices, volumes, percentages"
+    agents: [Mei]
+
+  # === EXCHANGE ADAPTERS ===
+  - id: EX-001
+    rule: "Exchange pair formats diverge — check ordering and separator per venue (e.g. Mercado Bitcoin uses quote+base with no separator: BRLBTC not BTCBRL)"
+    whenToUse: "any work on an exchange adapter that introduces a new symbol format"
+    agents: [Marcus]
+
+  - id: EX-002
+    rule: "When adding a new exchange, ALWAYS update the ticker poller (poll fetchers + backoff) in addition to the adapter itself"
+    whenToUse: "adding any new exchange adapter"
+    agents: [Marcus]
+
+  - id: EX-003
+    rule: "Some exchanges reject WS connections from cloud IPs (seen on ExchangeX 1008 disconnects) — route via residential proxy when this happens"
+    whenToUse: "any adapter hitting exchanges with IP-based WS restrictions"
+    agents: [Marcus]
+
+  - id: EX-004
+    rule: "cleanupConnection() MUST clear orderbooks for that connection. Stale data across reconnect → crossed books → bad arbitrage signals."
+    whenToUse: "any reconnect logic in any adapter"
+    agents: [Marcus, Mara]
+
+  - id: EX-005
+    rule: "extractBaseFromPair must strip PERP/SWAP/PERPETUAL suffixes before quote extraction, otherwise spot/perp pair classification breaks"
+    whenToUse: "any pair normalization or tier classification changes"
+    agents: [Marcus, Tomas]
+
+  # === FRONTEND — ORDERBOOK DISPLAY ===
+  - id: FE-005
+    rule: "sanitizeBook() must filter crossed levels (bid >= ask). Keep 3 layers of defense (adapter, aggregator, display). Showing crossed levels is NOT a bug — it's a sanitation failure."
+    whenToUse: "any orderbook display or cross-exchange arb display"
+    agents: [Kofi, Mei]

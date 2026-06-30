@@ -1,0 +1,149 @@
+name: NPM Publish
+
+# Sprint 5 Phase 4. Publishes ceo-orchestration via OIDC trusted publisher
+# on tag push (`v*`). Manual `npm publish` is not used. The workflow:
+#   1. Verifies VERSION + npm/package.json version + tag are consistent
+#   2. Asserts package.json has zero runtime dependencies
+#   3. Publishes with --provenance (Sigstore-attested)
+#
+# PLAN-013 Phase 0 item 0.2 hardening (debate Round 1 consensus §C5
+# CRITICAL, 2/5 agents — DevOps + Staff Backend):
+#   - Skip RC tags entirely (`if: !contains(github.ref, '-rc.')`) —
+#     pushing `v1.4.0-rc.1` MUST NOT trigger a public npm publish;
+#     that would violate PLAN-013 anti-goal #3 ("NO NPM publish during
+#     Sprint 13") and anti-goal #16 ("NO auto-publish from tag without
+#     manual approval").
+#   - GA tags (`v1.4.0`) gate through `environment: production-npm`,
+#     which requires a manual approval step in GitHub's Environments
+#     settings before the job runs. The manual approval is the
+#     Owner-in-the-loop gate covering the Sprint 17 public-launch
+#     go/no-go decision (private-first strategy per
+#     `project_closure_strategy.md`).
+
+on:
+  push:
+    tags:
+      - "v*"
+
+concurrency:
+  group: npm-publish-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write   # required for OIDC + provenance
+
+jobs:
+  publish:
+    # PLAN-013 Phase 0 item 0.2 — RC tag guard.
+    # RC tags contain `-rc.` (e.g. `v1.4.0-rc.1`). Skip them entirely.
+    # Only GA tags (`v1.4.0`) proceed, and those gate through the
+    # `production-npm` environment (manual approval).
+    if: "!contains(github.ref, '-rc.')"
+    runs-on: ubuntu-latest
+    environment: production-npm
+    timeout-minutes: 8
+    steps:
+      - name: Checkout tag
+        # SHA-pinned (Sprint 7 Dependabot bump): actions/checkout@v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node 20
+        # SHA-pinned: actions/setup-node@v4.1.0
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Verify VERSION matches tag
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          VERSION_FILE="$(tr -d '[:space:]' < VERSION)"
+          EXPECTED="${TAG#v}"
+          if [[ "$VERSION_FILE" != "$EXPECTED" ]]; then
+            echo "::error::VERSION ($VERSION_FILE) does not match tag ($TAG → $EXPECTED)"
+            exit 1
+          fi
+          echo "OK: VERSION=$VERSION_FILE matches tag=$TAG"
+
+      - name: Verify npm/package.json version matches VERSION
+        run: |
+          set -euo pipefail
+          PKG_VERSION=$(node -p "require('./npm/package.json').version")
+          VERSION_FILE="$(tr -d '[:space:]' < VERSION)"
+          if [[ "$PKG_VERSION" != "$VERSION_FILE" ]]; then
+            echo "::error::npm/package.json version ($PKG_VERSION) does not match VERSION ($VERSION_FILE)"
+            exit 1
+          fi
+          echo "OK: npm/package.json version=$PKG_VERSION matches VERSION"
+
+      - name: Verify zero runtime dependencies
+        run: |
+          set -euo pipefail
+          DEP_COUNT=$(node -p "Object.keys(require('./npm/package.json').dependencies || {}).length")
+          if [[ "$DEP_COUNT" -ne 0 ]]; then
+            echo "::error::ceo-orchestration must ship with 0 runtime dependencies (got $DEP_COUNT)"
+            exit 1
+          fi
+          echo "OK: ceo-orchestration has zero runtime dependencies"
+
+      - name: Stage bundle into npm/
+        # The npm package needs the framework source tree relative to npm/.
+        # Copy (don't symlink — npm pack walks symlinks unpredictably across hosts).
+        run: |
+          set -euo pipefail
+          for src in scripts templates .claude SPEC VERSION LICENSE README.md PROTOCOL.md; do
+            if [[ -e "$src" ]]; then
+              cp -r "$src" "npm/"
+            fi
+          done
+          ls -la npm/
+
+      - name: Syntax-check the shim
+        run: node --check npm/bin/ceo-orch-init.js
+
+      - name: Verify scripts/install.sh is present in staged bundle
+        run: test -f npm/scripts/install.sh
+
+      - name: Populate install.sh self-SHA trailer (P0-15, PLAN-045)
+        # PLAN-045 F-15R2-01 / Session 41: install.sh ships with a
+        # `# CEO-INSTALL-SHA256: PLACEHOLDER_RELEASE_FILL` trailer as its
+        # last line. At publish time, compute sha256 of the script body
+        # (all lines EXCEPT the last) and substitute the placeholder with
+        # the real hex. The script's own self-verify logic reads the same
+        # last-line pattern, so downstream adopters running
+        # `bash install.sh ...` trigger a rc=5 fail-CLOSED if the script
+        # is modified in transit.
+        working-directory: npm
+        run: |
+          set -euo pipefail
+          FILE="scripts/install.sh"
+          TRAILER_LINE="$(tail -n 1 "$FILE")"
+          if [ "$TRAILER_LINE" != "# CEO-INSTALL-SHA256: PLACEHOLDER_RELEASE_FILL" ]; then
+            echo "::error::$FILE trailer not at expected placeholder state"
+            echo "got: $TRAILER_LINE"
+            exit 1
+          fi
+          # Compute sha of everything EXCEPT the last line.
+          HASH=$(awk 'NR==FNR{n++; next} FNR < n' "$FILE" "$FILE" | sha256sum | awk '{print $1}')
+          # In-place substitute ONLY the last line.
+          awk -v hash="$HASH" '
+            NR == FNR { total = NR; next }
+            FNR == total { print "# CEO-INSTALL-SHA256: " hash; next }
+            { print }
+          ' "$FILE" "$FILE" > "$FILE.new"
+          mv "$FILE.new" "$FILE"
+          chmod +x "$FILE"
+          # Smoke-verify: execute the self-verify branch by running
+          # the script without args (hits _verify_self_sha, then usage).
+          bash "$FILE" 2>&1 | head -3 || true
+          echo "OK: install.sh trailer populated with sha256 $HASH"
+
+      - name: Publish
+        working-directory: npm
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

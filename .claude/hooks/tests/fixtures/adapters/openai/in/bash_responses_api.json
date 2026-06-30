@@ -1,0 +1,9 @@
+{
+  "session_id": "openai-sess-002",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "ls -la",
+    "description": "List files"
+  },
+  "system": "You are a helpful assistant."
+}

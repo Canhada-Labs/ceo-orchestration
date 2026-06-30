@@ -1,0 +1,261 @@
+# ============================================================================
+# public-api-design.yaml — benchmark scenarios for the public-api-design skill
+# ============================================================================
+#
+# PLAN-009 Phase 4 (Sprint 9). Exercises API versioning, error contracts,
+# deprecation, rate limiting, API-key discipline, and SDK patterns.
+#
+# 7 positive + 3 control = 10 scenarios. Option D discipline per A24:
+# defer state-machines-and-invariants benchmark to Sprint 10.
+
+skill: public-api-design
+benchmark_version: 1
+created: 2026-04-14
+owner: Staff Backend Engineer (archetype)
+description: |
+  Public API design quality — versioning strategy, error contract
+  stability, deprecation discipline, rate-limit tier differentiation,
+  API-key hygiene, and SDK patterns. Controls test that routine
+  internal API changes do NOT get flagged as public-breaking.
+
+scoring:
+  pass_threshold: 0.7
+  health_thresholds:
+    critical: 0.4
+    warning: 0.6
+    healthy: 0.8
+  tag_weight: 0.5
+  suggestion_weight: 0.3
+  severity_weight: 0.2
+
+scenarios:
+
+  # ----------------------------------------------------------------------------
+  # POSITIVE scenarios — must flag as public-API concern
+  # ----------------------------------------------------------------------------
+
+  - id: PAD-BENCH-001
+    name: Breaking change to JSON response shape
+    category: versioning
+    severity: HIGH
+    version: 1
+    validated_by: 2026-04-14
+    input:
+      type: scenario
+      language: markdown
+      content: |
+        PR renames `order.total_cents` to `order.amount` in the public
+        `/v1/orders/:id` response. Frontend and 3 external partner
+        integrations consume this endpoint. No /v2 proposed.
+    prompt_template: |
+      Review this public-API change. Identify concerns. For each issue
+      return: tag (kebab-case), severity (LOW/MEDIUM/HIGH/CRITICAL),
+      suggestion (one line). Respond ONLY with JSON: {"issues": [...]}.
+    expected:
+      must_flag_tags: ["breaking-change", "missing-versioning", "partner-contract-break"]
+      acceptable_alternative_tags: ["field-rename-v1", "needs-v2", "external-consumer-impact"]
+      must_suggest_keywords: ["v2", "additive", "deprecation window", "dual-emit"]
+      must_identify_severity: HIGH
+
+  - id: PAD-BENCH-002
+    name: Error message leaks internal stack trace
+    category: error-contract
+    severity: HIGH
+    version: 1
+    validated_by: 2026-04-14
+    input:
+      type: scenario
+      language: markdown
+      content: |
+        `/v1/checkout` returns `500` with body containing full Python
+        traceback including internal file paths, SQL query text, and
+        database connection string format.
+    prompt_template: |
+      Review this error response. Flag API concerns. Respond ONLY with
+      JSON: {"issues": [{"tag": "...", "severity": "...", "suggestion": "..."}]}.
+    expected:
+      must_flag_tags: ["pii-or-secret-leak", "stack-trace-exposed", "non-stable-error-contract"]
+      acceptable_alternative_tags: ["information-disclosure", "sql-leak", "missing-error-envelope"]
+      must_suggest_keywords: ["error envelope", "trace_id", "stable error codes", "redact"]
+      must_identify_severity: HIGH
+
+  - id: PAD-BENCH-003
+    name: Deprecation with 14-day window
+    category: deprecation
+    severity: HIGH
+    version: 1
+    validated_by: 2026-04-14
+    input:
+      type: scenario
+      language: markdown
+      content: |
+        Product announces deprecation of `/v1/reports` endpoint with
+        14 days to migrate to `/v2/reports`. No sunset header, no email
+        to known integrators, no dual-emit period.
+    prompt_template: |
+      Review this deprecation plan. Flag public-API concerns. Respond
+      ONLY with JSON: {"issues": [...]}.
+    expected:
+      must_flag_tags: ["insufficient-deprecation-window", "missing-sunset-header", "no-integrator-outreach"]
+      acceptable_alternative_tags: ["short-notice", "breaking-timeline", "no-dual-emit"]
+      must_suggest_keywords: ["Sunset header", "Deprecation header", "90 days", "changelog", "email"]
+      must_identify_severity: HIGH
+
+  - id: PAD-BENCH-004
+    name: Rate limit applied uniformly across free and paid tiers
+    category: rate-limiting
+    severity: MEDIUM
+    version: 1
+    validated_by: 2026-04-14
+    input:
+      type: scenario
+      language: markdown
+      content: |
+        API applies 60 req/min limit to all users, regardless of
+        free/pro/enterprise tier. Enterprise customers complaining
+        their bulk imports are throttled.
+    prompt_template: |
+      Review this rate-limit policy. Flag concerns. Respond ONLY with
+      JSON: {"issues": [...]}.
+    expected:
+      must_flag_tags: ["tier-agnostic-rate-limit", "no-tier-differentiation", "missing-retry-after"]
+      acceptable_alternative_tags: ["flat-limit", "no-tier-override", "bulk-throttled"]
+      must_suggest_keywords: ["per-tier", "429 Retry-After", "quota headers", "burst"]
+      must_identify_severity: MEDIUM
+
+  - id: PAD-BENCH-005
+    name: API keys stored in plaintext in customer accounts table
+    category: api-key-hygiene
+    severity: CRITICAL
+    version: 1
+    validated_by: 2026-04-14
+    input:
+      type: scenario
+      language: markdown
+      content: |
+        Self-service API key management: keys are written to
+        `customers.api_key` column in plaintext, displayed in the
+        dashboard on every page load, and never rotated.
+    prompt_template: |
+      Review this API-key management design. Flag security + API
+      concerns. Respond ONLY with JSON: {"issues": [...]}.
+    expected:
+      must_flag_tags: ["plaintext-secret-storage", "one-time-reveal-missing", "no-rotation-policy"]
+      acceptable_alternative_tags: ["hash-only-storage-missing", "key-exposure", "rotation-absent"]
+      must_suggest_keywords: ["hash at rest", "one-time reveal", "rotation", "prefix + suffix", "argon2"]
+      must_identify_severity: CRITICAL
+
+  - id: PAD-BENCH-006
+    name: SDK generated with breaking model change in patch release
+    category: sdk-contract
+    severity: HIGH
+    version: 1
+    validated_by: 2026-04-14
+    input:
+      type: scenario
+      language: markdown
+      content: |
+        `@acme/sdk@1.2.3` renames `Order.totalCents` to `Order.amount`
+        and removes the old property. Shipped as a patch release
+        (1.2.2 → 1.2.3), not minor or major.
+    prompt_template: |
+      Review this SDK release. Flag API-contract concerns. Respond
+      ONLY with JSON: {"issues": [...]}.
+    expected:
+      must_flag_tags: ["semver-violation", "breaking-change-in-patch", "sdk-contract-break"]
+      acceptable_alternative_tags: ["improper-version-bump", "removed-field-patch", "consumer-break"]
+      must_suggest_keywords: ["MAJOR bump", "semver", "deprecation", "dual-property", "migration guide"]
+      must_identify_severity: HIGH
+
+  - id: PAD-BENCH-007
+    name: Endpoint returns 200 on validation failure
+    category: error-contract
+    severity: HIGH
+    version: 1
+    validated_by: 2026-04-14
+    input:
+      type: scenario
+      language: markdown
+      content: |
+        `POST /v1/invoices` returns HTTP 200 with body
+        `{"success": false, "error": "invalid amount"}` when the
+        payload fails validation. Consumers can't distinguish success
+        from failure without parsing the body.
+    prompt_template: |
+      Review this response contract. Flag concerns. Respond ONLY with
+      JSON: {"issues": [...]}.
+    expected:
+      must_flag_tags: ["wrong-status-code", "validation-failure-as-200", "non-restful-error"]
+      acceptable_alternative_tags: ["status-code-misuse", "missing-422", "body-only-error-signaling"]
+      must_suggest_keywords: ["422", "400", "Problem Details", "RFC 7807", "HTTP semantics"]
+      must_identify_severity: HIGH
+
+  # ----------------------------------------------------------------------------
+  # CONTROL scenarios — must NOT flag as public-API concern (precision test)
+  # ----------------------------------------------------------------------------
+
+  - id: PAD-CTRL-001
+    name: Internal admin endpoint behind VPN
+    category: control-internal
+    severity: NONE
+    version: 1
+    validated_by: 2026-04-14
+    input:
+      type: scenario
+      language: markdown
+      content: |
+        Engineer adds `/admin/internal/reindex` behind corporate VPN.
+        Not documented publicly. Used by ops team for maintenance
+        windows.
+    prompt_template: |
+      Review this change. Flag PUBLIC-API concerns only (internal
+      admin endpoints are not public). Respond ONLY with JSON:
+      {"issues": [...]}.
+    expected:
+      must_flag_tags: []  # control — no public-API concern
+      acceptable_alternative_tags: ["internal-only", "admin-scoped"]
+      must_suggest_keywords: []
+      must_identify_severity: NONE
+
+  - id: PAD-CTRL-002
+    name: Additive new field in response (backwards compatible)
+    category: control-additive
+    severity: NONE
+    version: 1
+    validated_by: 2026-04-14
+    input:
+      type: scenario
+      language: markdown
+      content: |
+        `/v1/orders/:id` gains a new optional field `estimated_delivery`
+        in the response. Existing consumers ignore unknown fields per
+        our documented contract. No existing field changed.
+    prompt_template: |
+      Review this change. Flag public-API BREAKING concerns only
+      (additive is fine). Respond ONLY with JSON: {"issues": [...]}.
+    expected:
+      must_flag_tags: []
+      acceptable_alternative_tags: ["additive-only", "backwards-compatible", "minor-bump-ok"]
+      must_suggest_keywords: []
+      must_identify_severity: NONE
+
+  - id: PAD-CTRL-003
+    name: Rate-limit headers added, limits unchanged
+    category: control-observability
+    severity: NONE
+    version: 1
+    validated_by: 2026-04-14
+    input:
+      type: scenario
+      language: markdown
+      content: |
+        Adds `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`
+        response headers. Actual rate limits unchanged; purely informational.
+    prompt_template: |
+      Review this change. Flag public-API concerns only. Respond ONLY
+      with JSON: {"issues": [...]}.
+    expected:
+      must_flag_tags: []
+      acceptable_alternative_tags: ["observability-improvement", "additive-header", "non-breaking"]
+      must_suggest_keywords: []
+      must_identify_severity: NONE

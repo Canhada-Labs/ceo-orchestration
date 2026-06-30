@@ -1,0 +1,177 @@
+name: Chaos + Load tests (advisory)
+
+# Sprint 11 PLAN-011 Phase 10. Advisory, never-blocks per ADR-037.
+# Converts to a soft-gate (::warning::) in Sprint 12 IFF 4 consecutive
+# weekly runs are green. Converts to blocking in Sprint 13+ IFF 8 more
+# weeks clean. See ADR-037 §Decision §2 for the flip-criteria table.
+
+on:
+  schedule:
+    # Monday 03:00 UTC. Earlier than perf-profile (Monday 12:00) so a
+    # chaos regression surfaces before perf looks at the same commit.
+    - cron: '0 3 * * 1'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.claude/hooks/**'
+      - '.claude/scripts/chaos-inject.py'
+      - '.github/workflows/chaos.yml'
+      - 'tests/chaos/**'
+      - 'tests/load/**'
+
+concurrency:
+  group: chaos-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  chaos:
+    name: Load (thread) + chaos (process) — advisory
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # Sprint 11 kill-switch — per debate §S4. Any repo admin can set
+      # this as a repo-level secret/variable to force the workflow into
+      # early-exit-0 without editing YAML.
+      CEO_SOTA_DISABLE: ${{ vars.CEO_SOTA_DISABLE || '' }}
+
+    steps:
+      - name: Kill-switch check (CEO_SOTA_DISABLE=1)
+        id: killswitch
+        run: |
+          if [ "${CEO_SOTA_DISABLE}" = "1" ]; then
+            echo "::notice::CEO_SOTA_DISABLE=1 — chaos workflow disabled by admin."
+            echo "disabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "disabled=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        if: steps.killswitch.outputs.disabled == 'false'
+        # SHA-pinned (matches validate.yml): actions/checkout@v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Setup Python
+        if: steps.killswitch.outputs.disabled == 'false'
+        # SHA-pinned (matches validate.yml): actions/setup-python@v6.2.0
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.12'
+
+      - name: Install pytest (stdlib-only otherwise)
+        if: steps.killswitch.outputs.disabled == 'false'
+        run: |
+          # Stdlib-only policy per CLAUDE.md §5. pytest is the ONLY
+          # runtime dep for tests and matches validate.yml.
+          python3 -m pip install --upgrade pip
+          python3 -m pip install pytest
+
+      - name: Run LOAD tests (thread-based, PR-fast)
+        if: steps.killswitch.outputs.disabled == 'false'
+        id: load
+        continue-on-error: true  # ADR-037 state 0: advisory, never fails
+        run: |
+          set +e
+          python3 -m pytest tests/load/ -v --tb=short 2>&1 | tee load-output.txt
+          echo "rc=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Run CHAOS tests (process-based, realistic failure modes)
+        if: steps.killswitch.outputs.disabled == 'false'
+        id: chaos
+        continue-on-error: true  # ADR-037 state 0: advisory, never fails
+        run: |
+          set +e
+          python3 -m pytest tests/chaos/ -v --tb=short 2>&1 | tee chaos-output.txt
+          echo "rc=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Run chaos-inject LOCKDOWN tests
+        if: steps.killswitch.outputs.disabled == 'false'
+        id: lockdown
+        continue-on-error: true
+        run: |
+          set +e
+          python3 -m pytest .claude/scripts/tests/test_chaos_inject_lockdown.py \
+            -v --tb=short 2>&1 | tee lockdown-output.txt
+          echo "rc=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Build results JSON
+        if: steps.killswitch.outputs.disabled == 'false'
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          import subprocess
+          from pathlib import Path
+
+          def count_passed(text: str) -> int:
+              m = re.search(r'(\d+)\s+passed', text)
+              return int(m.group(1)) if m else 0
+
+          def count_failed(text: str) -> int:
+              m = re.search(r'(\d+)\s+failed', text)
+              return int(m.group(1)) if m else 0
+
+          out = {}
+          for name in ("load", "chaos", "lockdown"):
+              p = Path(f"{name}-output.txt")
+              text = p.read_text() if p.is_file() else ""
+              out[name] = {
+                  "passed": count_passed(text),
+                  "failed": count_failed(text),
+                  "has_output": bool(text),
+              }
+          out["adr"] = "ADR-037"
+          out["state"] = 0  # advisory
+          out["run_id"] = os.environ.get("GITHUB_RUN_ID", "")
+          out["run_attempt"] = os.environ.get("GITHUB_RUN_ATTEMPT", "")
+          out["sha"] = os.environ.get("GITHUB_SHA", "")
+          out["event"] = os.environ.get("GITHUB_EVENT_NAME", "")
+          Path("chaos-results.json").write_text(json.dumps(out, indent=2))
+          print(json.dumps(out, indent=2))
+          PY
+
+      - name: Write summary
+        if: steps.killswitch.outputs.disabled == 'false'
+        run: |
+          {
+            echo "## Chaos + Load results (advisory)"
+            echo ""
+            echo "| Suite | Passed | Failed |"
+            echo "|-------|--------|--------|"
+            python3 -c "
+          import json, pathlib
+          r = json.loads(pathlib.Path('chaos-results.json').read_text())
+          for k in ('load','chaos','lockdown'):
+              v = r[k]
+              print(f'| {k} | {v[\"passed\"]} | {v[\"failed\"]} |')
+          "
+            echo ""
+            echo "Advisory per [ADR-037](../.claude/adr/ADR-037-chaos-testing-methodology.md)."
+            echo "Workflow never fails in State 0."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload results artifact
+        if: steps.killswitch.outputs.disabled == 'false'
+        # SHA-pinned (matches benchmarks.yml): actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: chaos-results-${{ github.run_id }}
+          path: |
+            chaos-results.json
+            load-output.txt
+            chaos-output.txt
+            lockdown-output.txt
+          retention-days: 30
+
+      - name: Advisory note
+        if: steps.killswitch.outputs.disabled == 'false'
+        # ADR-037 state 0: we do NOT fail the workflow. Sprint 12 may
+        # flip continue-on-error → false for the chaos step if the
+        # 4-week stability gate opens.
+        run: |
+          echo "::notice::Chaos + load suite is advisory (ADR-037 state 0)."
+          echo "::notice::Sprint 12 will convert to a soft-gate if 4 weeks stay green."

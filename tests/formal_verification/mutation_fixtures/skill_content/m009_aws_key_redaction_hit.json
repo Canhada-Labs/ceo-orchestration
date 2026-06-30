@@ -1,0 +1,7 @@
+{
+  "description": "AWS access key in body: SKILL.md body contains an AKIA... pattern that triggers the redaction scanner in sub-check 11. The staged file has a valid frontmatter and enough bytes, but the embedded secret causes _lib.redact.redact_secrets to insert the [AWS_KEY] placeholder, which the validator detects.",
+  "mutation_class": "S3_content_validation",
+  "sub_check_targeted": 11,
+  "expected_reason": "reference_redaction_hit",
+  "skill_body_variant": "with_aws_key"
+}

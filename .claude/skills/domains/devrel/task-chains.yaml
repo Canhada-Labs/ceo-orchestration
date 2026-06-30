@@ -1,0 +1,129 @@
+# Task chains — DevRel Squad
+# Domain-specific workflows that extend the universal .claude/task-chains.yaml.
+#
+# ADR-009 §bundle-completeness: ≥2 task chain entries required.
+# Each chain id follows devrel-<short-slug> (kebab-case).
+# NOT canonical-guarded — no sentinel required for edits.
+
+task_chains:
+  - id: devrel-api-deprecation-comms
+    title: "Deprecate a public API endpoint — communication and sunset workflow"
+    whenToUse: |
+      Triggered when a public API endpoint, SDK method, or documented behavior
+      is being deprecated. Covers: impact assessment, advance notice period
+      verification (≥6 months), migration guide publication, community
+      announcement, telemetry-gated sunset date, and decommission sign-off.
+      Out of scope: internal-only APIs (use standard engineering decommission),
+      security-driven emergency deprecations (shorter notice period requires
+      CEO+Owner sign-off documented separately before this chain runs).
+    steps:
+      - id: 1
+        owner: "Felix Acharya (SDK / API Reliability Engineer)"
+        action: "Impact telemetry: pull usage data for the deprecated surface (requests per day, unique integration count, language/SDK breakdown). This data gates the sunset date announcement (DEV-006)."
+      - id: 2
+        owner: "Remy Dubois (Developer Advocate)"
+        action: "Advance notice verification: confirm the proposed sunset date is at minimum 6 months from today's deprecation notice date. If < 6 months, escalate to CEO + Owner for documented exception (DEV-005)."
+      - id: 3
+        owner: "Sola Adewale (Technical Writer)"
+        action: "Migration guide authorship: write the full migration guide (old endpoint → new endpoint, parameter mapping, response schema differences, code samples in all supported SDK languages). Migration guide MUST be published simultaneously with the deprecation notice (DEV-004)."
+      - id: 4
+        owner: "Felix Acharya"
+        action: "SDK deprecation warnings: inject in-code runtime deprecation warnings into all official SDKs for any methods that wrap the deprecated endpoint. Bump the SDK to a new minor version with the warning (DEV-009)."
+      - id: 5
+        owner: "Sola Adewale"
+        action: "Documentation update: mark the endpoint as deprecated in the API reference (with the sunset date and migration guide link). Update changelog with a specific entry naming the deprecated endpoint and linking to migration guide (DEV-002, DEV-003)."
+      - id: 6
+        owner: "Remy Dubois"
+        action: "Community announcement: post deprecation notice on forum + send direct notification to integrations with active usage in the past 30 days. Announcement must include: sunset date, migration guide link, and office-hours availability (DEV-007)."
+      - id: 7
+        owner: "Jodie Okonkwo (Community Manager)"
+        action: "Community monitoring: pin the deprecation announcement thread. Set up keyword alerts for the deprecated endpoint name. First-response SLA on migration questions is 4 hours during the first week post-announcement."
+      - id: 8
+        owner: "Staff Code Reviewer"
+        action: "Merge check: migration guide published, SDK deprecation warnings in all official SDKs, changelog entry names the specific endpoint, sunset date ≥ 6 months from notice, community announcement posted."
+    verification: |
+      - Sunset date is ≥ 6 months from deprecation notice date (DEV-005)
+      - Migration guide published simultaneously with notice (DEV-004)
+      - In-code deprecation warnings shipped in all official SDKs (DEV-009)
+      - Changelog entry names the specific deprecated endpoint with migration link (DEV-002)
+      - Community announcement posted via ≥ 2 channels + direct notification (DEV-007)
+      - Deprecated endpoint continues serving traffic until sunset date (DEV-008)
+
+  - id: devrel-sdk-release
+    title: "SDK major or breaking version release"
+    whenToUse: |
+      Any SDK release that increments the major version (breaking changes) or
+      that removes, renames, or changes the signature of a public method.
+      Minor releases without breaking changes use the lightweight SDK patch
+      workflow. This chain covers: DX quality gate, documentation sync,
+      breaking change communication, community notification, and release
+      sign-off. Out of scope: patch releases with no breaking changes
+      (use standard CI/CD release pipeline).
+    steps:
+      - id: 1
+        owner: "Priscilla Tan (DX Engineer)"
+        action: "DX quality gate: run the onboarding test harness (time to first successful API call benchmark). Verify auth flow is ≤ 3 steps for the happy path. Verify all removed methods had in-code deprecation warnings in the prior version (DEV-009)."
+      - id: 2
+        owner: "Felix Acharya (SDK / API Reliability Engineer)"
+        action: "Version bump audit: confirm the semantic version bump matches the change severity (breaking change = major bump). Confirm in-code deprecation warnings for methods removed in this version were present in the prior minor release (DEV-009)."
+      - id: 3
+        owner: "Sola Adewale (Technical Writer)"
+        action: "Documentation sync: verify every new method, removed method, and changed signature is reflected accurately in the API reference and SDK reference before release (DEV-001). Confirm changelog entry is specific and complete (DEV-002)."
+      - id: 4
+        owner: "Priscilla Tan"
+        action: "Error response audit: verify all new API error paths have machine-readable error code + human-readable message + documentation link (DEV-010). Verify retry logic handles 429 with exponential backoff + jitter (DEV-011)."
+      - id: 5
+        owner: "Remy Dubois (Developer Advocate)"
+        action: "Breaking change communication plan: prepare forum post + direct notification to active integrations. If any methods were removed, confirm the deprecation warning has been in place for ≥ 1 major version cycle (DEV-007)."
+      - id: 6
+        owner: "Principal QA Architect"
+        action: "Integration tests: run the full SDK test harness against the live API in the staging environment. Verify auth flow completes end-to-end. Verify 429 handling triggers backoff, not immediate retry. Verify version compatibility matrix is updated."
+      - id: 7
+        owner: "Staff Code Reviewer"
+        action: "Merge VETO check: DX quality gate passed, semantic version bump correct, docs in sync before release, error responses complete, community announcement ready to post."
+    verification: |
+      - DX onboarding benchmark at or better than baseline (time to first call) (DEV-001)
+      - Semantic version bump matches change severity; breaking = major (DEV-009)
+      - API reference + changelog updated and accurate before release (DEV-002, DEV-003)
+      - All new error paths include machine-readable code + message + docs link (DEV-010)
+      - 429 retry handling uses exponential backoff with jitter (DEV-011)
+      - Community announcement ready; direct notifications to affected integrations (DEV-007)
+
+  - id: devrel-new-api-launch
+    title: "Launch a new public API or developer feature"
+    whenToUse: |
+      Any new API endpoint, SDK feature, or developer-facing capability being
+      launched to production for the first time. Covers: documentation
+      completeness gate, DX quality review, beta feedback incorporation,
+      and launch announcement. Also covers re-launching a previously
+      experimental or preview feature to GA. Out of scope: internal-only
+      APIs; breaking changes to existing endpoints (use devrel-api-deprecation-comms).
+    steps:
+      - id: 1
+        owner: "Sola Adewale (Technical Writer)"
+        action: "Documentation completeness: confirm API reference, quickstart guide, and at least one conceptual tutorial are written and accurate against the production implementation. No launch without docs (DEV-001)."
+      - id: 2
+        owner: "Priscilla Tan (DX Engineer)"
+        action: "DX quality gate: run onboarding test harness. Time to first successful API call measured against baseline. Verify auth flow is ≤ 3 steps. Verify all error responses include machine-readable code + message + docs link (DEV-010)."
+      - id: 3
+        owner: "Felix Acharya (SDK / API Reliability Engineer)"
+        action: "SDK coverage: confirm official SDKs (Python, Node.js, Go, Ruby — or whichever are officially supported) have been updated to include the new endpoint/feature. Verify version bump is in the patch or minor range (no breaking change for a new feature)."
+      - id: 4
+        owner: "Remy Dubois (Developer Advocate)"
+        action: "Beta feedback review: if a preview/beta period ran, review all filed issues and feedback. Confirm breaking feedback items are resolved or documented as known limitations before GA launch."
+      - id: 5
+        owner: "Jodie Okonkwo (Community Manager)"
+        action: "Launch announcement: draft forum post + community notification. Coordinate timing with marketing-global if a broader launch campaign is planned. Ensure support team is briefed before announcement goes live."
+      - id: 6
+        owner: "Principal QA Architect"
+        action: "Integration tests: verify the new endpoint is covered in the SDK integration test harness. Verify the quickstart completes end-to-end without requiring external context."
+      - id: 7
+        owner: "Staff Code Reviewer"
+        action: "Merge VETO check: docs complete and accurate, DX quality gate passed, SDK coverage confirmed, beta feedback addressed, community announcement ready."
+    verification: |
+      - API reference + quickstart published before launch; accurate against production (DEV-001)
+      - DX onboarding benchmark met (DEV-001)
+      - All error responses include machine-readable code + message + docs link (DEV-010)
+      - SDK coverage confirmed in all officially supported languages
+      - Beta feedback issues resolved or documented as known limitations
+      - Community announcement coordinated and support team briefed

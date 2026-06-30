@@ -1,0 +1,3 @@
+config:
+  api_key: "e0so5x6f8GXMA2tCB5FmlOE+AFH76lUiqPJWGHSU"
+  api_secret: "mAWt0hMlPXD4xdq+9R0Z9SV3t3RNyWtH10T8PikMiPZAk+O/T5cTEYyRlIeqG25d="

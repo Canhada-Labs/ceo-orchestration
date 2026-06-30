@@ -1,0 +1,152 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ceo-orchestration/schemas/squad-bundle-frontmatter/v1",
+  "title": "Squad Bundle Frontmatter Schema",
+  "description": "Validates the structural content of a squad bundle's three canonical artifacts (team-personas.md, pitfalls.yaml, task-chains.yaml) as merged into a single validation envelope. This schema is consumed by the Phase 2 bundle-validator script (not yet authored). It does NOT validate file existence — that is the responsibility of the bundle-completeness check in validate-governance.sh. ADR-009 §bundle-completeness governs the 5-artifact requirement; this schema enforces per-artifact internal structure.",
+  "type": "object",
+  "required": [
+    "team_personas_h1_present",
+    "team_personas_squad_vetoes_present",
+    "pitfalls",
+    "task_chains"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "team_personas_h1_present": {
+      "type": "boolean",
+      "const": true,
+      "description": "True when team-personas.md contains an H1 heading matching '# Team Personas — <Domain> Squad'. The validator MUST confirm the heading text starts with '# Team Personas'."
+    },
+    "team_personas_squad_vetoes_present": {
+      "type": "boolean",
+      "const": true,
+      "description": "True when team-personas.md contains the '## Squad vetoes' H2 section followed by a markdown table with columns 'Persona' and 'VETO scope'."
+    },
+    "team_personas_veto_count": {
+      "type": "integer",
+      "minimum": 2,
+      "description": "Number of VETO personas declared in the Squad vetoes table. ADR-009 requires at minimum 2 VETO holders; 3 is the typical pattern from the 4 exemplars."
+    },
+    "team_personas_persona_count": {
+      "type": "integer",
+      "minimum": 3,
+      "description": "Total number of named persona H3 sections in team-personas.md. ADR-009 requires at least 3; the 4 exemplars all have 5."
+    },
+    "pitfalls": {
+      "type": "array",
+      "minItems": 10,
+      "description": "Array of pitfall entries parsed from pitfalls.yaml top-level 'pitfalls:' key. ADR-009 requires ≥10; the 4 exemplars have 12-18.",
+      "items": {
+        "$ref": "#/$defs/pitfall_entry"
+      }
+    },
+    "task_chains": {
+      "type": "array",
+      "minItems": 2,
+      "description": "Array of task chain entries parsed from task-chains.yaml top-level 'task_chains:' key. ADR-009 requires ≥2.",
+      "items": {
+        "$ref": "#/$defs/task_chain_entry"
+      }
+    }
+  },
+  "$defs": {
+    "pitfall_entry": {
+      "type": "object",
+      "required": ["id", "rule", "whenToUse", "agents"],
+      "additionalProperties": false,
+      "description": "A single pitfall entry. Mirrors the format of .claude/pitfalls-catalog.yaml and all 4 ADR-009-compliant exemplar pitfalls.yaml files.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9]+-[0-9]{3}$",
+          "description": "Pitfall id in the form PREFIX-NNN (uppercase prefix, 3-digit zero-padded monotonic number). Examples: EDTECH-001, DEVREL-003, SALES-012."
+        },
+        "rule": {
+          "type": "string",
+          "minLength": 20,
+          "description": "Imperative rule statement. Should begin with 'NEVER' or an affirmative obligation verb. Minimum 20 characters to prevent placeholder stubs."
+        },
+        "whenToUse": {
+          "type": "string",
+          "minLength": 10,
+          "description": "One sentence describing the trigger context for this pitfall. Minimum 10 characters to prevent placeholder stubs."
+        },
+        "agents": {
+          "type": "array",
+          "minItems": 1,
+          "description": "List of persona names from the domain's team-personas.md that are responsible for enforcing this rule.",
+          "items": {
+            "type": "string",
+            "minLength": 3,
+            "description": "Persona name as it appears in team-personas.md (e.g. 'Priya Narayanan')."
+          }
+        }
+      }
+    },
+    "task_chain_entry": {
+      "type": "object",
+      "required": ["id", "title", "whenToUse", "steps"],
+      "additionalProperties": false,
+      "description": "A single task chain entry. Mirrors the format in the 4 ADR-009-compliant exemplar task-chains.yaml files.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]+-[a-z][a-z0-9-]+$",
+          "description": "Task chain id in the form <domain-slug>-<chain-slug> (all lowercase kebab-case). Example: edtech-onboard-new-school-district."
+        },
+        "title": {
+          "type": "string",
+          "minLength": 10,
+          "description": "Human-readable chain title. Should be imperative or descriptive of the workflow."
+        },
+        "whenToUse": {
+          "type": "string",
+          "minLength": 20,
+          "description": "2-5 sentences describing the trigger condition and scope boundaries for this chain."
+        },
+        "steps": {
+          "type": "array",
+          "minItems": 4,
+          "description": "Ordered steps in the chain. ADR-009 exemplars have 7-9 steps; minimum is 4 to prevent trivially thin chains.",
+          "items": {
+            "$ref": "#/$defs/task_chain_step"
+          }
+        },
+        "verification": {
+          "type": "string",
+          "minLength": 10,
+          "description": "Optional multi-line verification block listing acceptance criteria for this chain. Present in all 4 exemplars."
+        }
+      }
+    },
+    "task_chain_step": {
+      "type": "object",
+      "required": ["id", "owner", "action"],
+      "additionalProperties": false,
+      "description": "A single step within a task chain.",
+      "properties": {
+        "id": {
+          "oneOf": [
+            {"type": "integer", "minimum": 1},
+            {"type": "string", "minLength": 1}
+          ],
+          "description": "Step identifier. Typically an integer (1, 2, 3...) but may be a string for sub-steps."
+        },
+        "owner": {
+          "type": "string",
+          "minLength": 3,
+          "description": "Persona name and role responsible for this step. E.g. 'Priya Narayanan (Student Privacy Engineer)'."
+        },
+        "action": {
+          "type": "string",
+          "minLength": 10,
+          "description": "Imperative action sentence describing what the owner does in this step."
+        },
+        "skill": {
+          "type": "string",
+          "description": "Optional skill reference if a named skill governs this step."
+        }
+      }
+    }
+  }
+}

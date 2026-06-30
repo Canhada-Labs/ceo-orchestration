@@ -1,0 +1,1 @@
+AWS access key AKIAIOSFODNN7EXAMPLE is attached to the service account.

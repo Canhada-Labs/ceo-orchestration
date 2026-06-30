@@ -1,0 +1,11 @@
+{
+  "schema_version": "1.0",
+  "baseline_emit_count_per_invocation": 1,
+  "tolerance_pct": 10,
+  "advisory_field": "decision_advisory",
+  "captured_at": "2026-05-14",
+  "plan": "PLAN-092",
+  "wave": "B",
+  "adr": "ADR-127",
+  "description": "Per-invocation pair_rail_case emit baseline. The hook MUST emit exactly one pair_rail_case event per Pair-Rail evaluation (one per matrix-relevant decision arm: A/B/F). This invariant existed pre-Wave-B (enforce path) and MUST hold post-Wave-B (advisory path). Drift > 10% over a rolling 7-day window during the 30-day soak triggers wave-b-rollback-PR.md."
+}

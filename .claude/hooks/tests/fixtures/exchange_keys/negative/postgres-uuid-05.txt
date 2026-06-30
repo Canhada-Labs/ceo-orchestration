@@ -1,0 +1,2 @@
+# postgres row
+INSERT INTO sessions VALUES ('a5790138-af4e-67a7-3380-a8208151e01c', 'login', NOW());

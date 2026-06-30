@@ -1,0 +1,37 @@
+{
+  "_comment": "PLAN-059 SEC-P0-04 / ADR-080 — counts-only allowlist for audit_tokens_emitted events. Source of truth: _lib/audit_emit.py _AUDIT_TOKENS_ALLOWLIST frozenset. This JSON file is the machine-readable mirror for CI post-flight scan (validate.yml extension). Keep in sync.",
+  "_source_of_truth": ".claude/hooks/_lib/audit_emit.py:_AUDIT_TOKENS_ALLOWLIST",
+  "_spec": ".claude/plans/PLAN-059/sec-p0-04-audit-tokens-content-ban.md",
+  "version": "1.0.0",
+  "allowlist": [
+    "action",
+    "session_id",
+    "timestamp",
+    "window_seconds",
+    "events_scanned",
+    "tokens_in_total",
+    "tokens_out_total",
+    "cost_cents",
+    "tier_id_distribution",
+    "detector_findings_count",
+    "hook_duration_ms",
+    "ts",
+    "event_schema",
+    "tokens_in",
+    "tokens_out",
+    "tokens_total",
+    "hmac",
+    "hmac_error",
+    "project"
+  ],
+  "forbidden_examples": [
+    "prompt_excerpt",
+    "tool_input_sample",
+    "subagent_output_excerpt",
+    "tool_output_body",
+    "raw_prompt",
+    "stack_trace",
+    "error_payload",
+    "skill_content"
+  ]
+}

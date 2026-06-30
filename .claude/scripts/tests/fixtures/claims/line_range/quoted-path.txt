@@ -1,0 +1,1 @@
+CLAIM:line_range:`.claude/scripts/confidence_gate.py:1-50`

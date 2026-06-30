@@ -1,0 +1,14 @@
+---
+name: malicious-agent
+__proto__: evil-payload
+constructor: another-evil-payload
+prototype: third-evil-payload
+__defineGetter__: getter-evil
+__defineSetter__: setter-evil
+---
+
+This fixture is a NEGATIVE test case. tier_policy._agent_frontmatter.parse_agent_frontmatter
+must refuse it: every top-level key after `name` is a JS prototype-pollution
+slug. Reject path: FrontmatterError raised during _check_key().
+
+PLAN-071 §3 R-CR Unseen #5 coverage.

@@ -1,0 +1,89 @@
+# PLAN-099-FOLLOWUP Federation cross-machine v1.39.1 — peers allowlist (EXAMPLE).
+#
+# SCHEMA VERSION: v2.0 (per peers-yaml-schema-migration.md §2).
+#
+# v2.0 deltas vs v1.x (PLAN-099 v1.32.0 MVP):
+#   ADDED   peer_id_spki_fingerprint  — SPKI SHA-256, rotation-survives
+#   ADDED   scopes                    — RBAC list (write authorization)
+#   ADDED   key_floor_verified_at     — ISO-8601 UTC; set by cert_inspector
+#   PRESERVED peer_id_cert_fingerprint — DER full-cert SHA-256 (legacy)
+#
+# Required v2.0 invariant: AT LEAST ONE of peer_id_spki_fingerprint OR
+# peer_id_cert_fingerprint MUST be non-empty. Both empty → parse-time
+# REJECT with audit `federation_peer_invalid_no_fingerprint`.
+#
+# When SPKI is present, DER is NOT consulted (no downgrade attack
+# surface). When SPKI is empty, server falls back to DER comparison
+# (legacy v1.x backward-compat during 90d soak per ADR-129-AMEND-1 §3).
+#
+# Cert rotation discipline (ADR-135-AMEND-1 §3) requires:
+#   - Max 90-day validity window (peer-add reject + CI gate, AC14)
+#   - CA pin (SHA-256 of issuing CA cert) survives cert rotation
+#   - 14-day expiry warning audit emits before not_valid_after
+#   - SPKI pin survives full-cert rotation (key reuse) — rotation-
+#     survives invariant per PLAN-099-FOLLOWUP §2 goal #2
+#   - M=2-of-N=3 quorum for peer-add (ADR-121 analogy)
+#
+# Per-peer HMAC secret is 64-hex (32 bytes). Generate via:
+#
+#     python3 -c "import secrets; print(secrets.token_hex(32))"
+#
+# This file is kernel-guarded (ADR-129 §Part 4 + ADR-135-AMEND-1 §4).
+# Edits require an Owner-signed canonical sentinel with this path in
+# Scope.
+#
+# IMPORTANT: this file is an EXAMPLE for adopters. The live operational
+# peers.yaml is **gitignored** (NEVER committed). Rename a COPY of this
+# file to `peers.yaml` (NOT this example) and fill the fingerprints +
+# hmac_secret_hex values with REAL per-peer data. The server REFUSES
+# to start if peers.yaml is missing or parses unsuccessfully.
+#
+# RBAC scopes (locked at v1.39.1 — 4 routes; new routes require
+# ADR-135-AMEND-2):
+#
+#   peer_register         — POST /federation/peer-register
+#   audit_event_push      — POST /federation/audit-event
+#   audit_event_push_batch — POST /federation/audit-event/batch
+#   peer_revoke           — POST /federation/peer-revoke
+#
+# Empty `scopes: []` = read-only peer (PLAN-099 MVP behaviour).
+# All hex values below are EXAMPLE placeholders. Replace before use.
+
+peers:
+  # Row A: v1.x legacy (DER-only). Server accepts during 90d soak;
+  # graceful warning emitted to migrate to SPKI. No scopes — read-only.
+  - peer_id: peer-east-01-legacy
+    peer_id_cert_fingerprint: "0101010101010101010101010101010101010101010101010101010101010101"
+    ca_pin_sha256: "ca01ca01ca01ca01ca01ca01ca01ca01ca01ca01ca01ca01ca01ca01ca01ca01"
+    not_valid_after: "2026-08-17T00:00:00Z"
+    not_valid_before: "2026-05-17T00:00:00Z"
+    revoked: false
+    hmac_secret_hex: "h001h001h001h001h001h001h001h001h001h001h001h001h001h001h001h001"
+
+  # Row B: migrated v2.0 (BOTH SPKI + DER side-by-side during 90d soak).
+  # When SPKI is present, server REQUIRES SPKI match — DER is NOT
+  # consulted (per peers-yaml-schema-migration.md §3 "no downgrade").
+  # `audit_event_push` scope demonstrates write-mode authorization.
+  - peer_id: peer-west-02-migrated
+    peer_id_spki_fingerprint: "5b502020202020202020202020202020202020202020202020202020202020bb"
+    peer_id_cert_fingerprint: "0202020202020202020202020202020202020202020202020202020202020202"
+    ca_pin_sha256: "ca02ca02ca02ca02ca02ca02ca02ca02ca02ca02ca02ca02ca02ca02ca02ca02"
+    not_valid_after: "2026-08-17T00:00:00Z"
+    not_valid_before: "2026-05-17T00:00:00Z"
+    revoked: false
+    hmac_secret_hex: "h002h002h002h002h002h002h002h002h002h002h002h002h002h002h002h002"
+    scopes:
+      - audit_event_push
+    key_floor_verified_at: "2026-05-20T00:00:00Z"
+
+  # Row C: clean v2.0 (SPKI-only; no DER). New-install canonical shape.
+  # Empty scopes = read-only (MVP-compatible behaviour under v2.0 schema).
+  - peer_id: peer-north-03-clean
+    peer_id_spki_fingerprint: "5b503030303030303030303030303030303030303030303030303030303030cc"
+    ca_pin_sha256: "ca03ca03ca03ca03ca03ca03ca03ca03ca03ca03ca03ca03ca03ca03ca03ca03"
+    not_valid_after: "2026-08-17T00:00:00Z"
+    not_valid_before: "2026-05-17T00:00:00Z"
+    revoked: false
+    hmac_secret_hex: "h003h003h003h003h003h003h003h003h003h003h003h003h003h003h003h003"
+    scopes: []
+    key_floor_verified_at: "2026-05-20T00:00:00Z"

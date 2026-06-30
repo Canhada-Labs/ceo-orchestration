@@ -1,0 +1,3305 @@
+{
+  "schema_version": "1.0",
+  "_comment": "Canonical inventory of CLAUDE_*/ANTHROPIC_*/CEO_* names referenced by framework code (PLAN-135 W5 O8 — the S218 footgun class). Token-level superset of strictly-consumed vars; see env-inventory-check.py docstring. Regenerate with --generate after any REVIEWED env-surface change.",
+  "generated_by": "env-inventory-check.py --generate",
+  "generated_at": "2026-06-21",
+  "scan_roots": [
+    ".claude/hooks",
+    ".claude/scripts",
+    ".claude/workflows",
+    ".claude/commands",
+    ".claude/settings.json",
+    "scripts",
+    "templates"
+  ],
+  "vars": {
+    "ANTHROPIC_ADMIN_KEY": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/key-hygiene.py"
+      ],
+      "sites": 2
+    },
+    "ANTHROPIC_API_KEY": {
+      "evidence": [
+        ".claude/hooks/_lib/adapters/live/__init__.py",
+        ".claude/hooks/_lib/adapters/live/_policy.py",
+        ".claude/hooks/_lib/adapters/live/claude.py"
+      ],
+      "sites": 11
+    },
+    "ANTHROPIC_AUTH_TOKEN": {
+      "evidence": [
+        ".claude/hooks/_lib/audit_emit.py",
+        ".claude/hooks/_lib/effective_config.py",
+        ".claude/scripts/ceo-boot.py"
+      ],
+      "sites": 6
+    },
+    "ANTHROPIC_BASE_URL": {
+      "evidence": [
+        ".claude/hooks/_lib/effective_config.py",
+        ".claude/scripts/ceo-boot.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 4
+    },
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": {
+      "evidence": [
+        ".claude/hooks/_lib/effective_config.py"
+      ],
+      "sites": 1
+    },
+    "ANTHROPIC_MODEL": {
+      "evidence": [
+        ".claude/hooks/_lib/effective_config.py",
+        ".claude/scripts/ceo-boot.py"
+      ],
+      "sites": 2
+    },
+    "ANTHROPIC_SMALL_FAST_MODEL": {
+      "evidence": [
+        ".claude/hooks/_lib/effective_config.py",
+        ".claude/scripts/ceo-boot.py"
+      ],
+      "sites": 2
+    },
+    "ANTHROPIC_VERSION": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/key-hygiene.py"
+      ],
+      "sites": 2
+    },
+    "CEO_ACTIVE_ARCHETYPE": {
+      "evidence": [
+        ".claude/hooks/check_canonical_edit.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_ADEQUACY_GATE": {
+      "evidence": [
+        ".claude/hooks/accel_dispatch.py",
+        ".claude/hooks/adequacy_gate.py",
+        ".claude/hooks/turbo_profile.py"
+      ],
+      "sites": 5
+    },
+    "CEO_ADVERSARY": {
+      "evidence": [
+        ".claude/hooks/_lib/adversary_rules.py",
+        ".claude/hooks/_lib/audit_emit.py",
+        ".claude/hooks/check_adversary.py"
+      ],
+      "sites": 6
+    },
+    "CEO_ADVERSARY_MAX_PER_SESSION": {
+      "evidence": [
+        ".claude/hooks/check_adversary.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_AGE_RECIPIENT_FILE": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/session-graph-build.py"
+      ],
+      "sites": 2
+    },
+    "CEO_ALLOW_NO_VERIFY": {
+      "evidence": [
+        ".claude/hooks/_lib/env_persist_allowlist.py"
+      ],
+      "sites": 1
+    },
+    "CEO_ANALYTICS_ADMIN_KEY": {
+      "evidence": [
+        ".claude/scripts/cc-analytics-pull.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_ANALYTICS_SNAPSHOT": {
+      "evidence": [
+        ".claude/scripts/cc-analytics-pull.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_ANTI_OVERHEAD": {
+      "evidence": [
+        ".claude/hooks/check_anti_ceo_overhead.py",
+        ".claude/scripts/env-inventory.json",
+        ".claude/settings.json"
+      ],
+      "sites": 5
+    },
+    "CEO_APP_NAME": {
+      "evidence": [
+        ".claude/hooks/_lib/env_persist_allowlist.py",
+        ".claude/scripts/env-inventory.json",
+        "scripts/install.sh"
+      ],
+      "sites": 3
+    },
+    "CEO_ARCHITECT_ACTIVE": {
+      "evidence": [
+        ".claude/hooks/check_agent_spawn.py",
+        ".claude/hooks/emit_architect_outcome.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 4
+    },
+    "CEO_ASSIGNED_WORKTREE": {
+      "evidence": [
+        ".claude/hooks/check_worktree_writer.py",
+        ".claude/scripts/env-inventory.json",
+        ".claude/settings.json"
+      ],
+      "sites": 4
+    },
+    "CEO_AUDIT_CHAIN_LENGTH_PATH": {
+      "evidence": [
+        ".claude/hooks/_lib/audit_hmac.py",
+        ".claude/hooks/_lib/test_isolation.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 3
+    },
+    "CEO_AUDIT_EMIT_LAZY_IMPORT_DISABLED": {
+      "evidence": [
+        ".claude/hooks/_lib/audit_emit_dispatch.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_AUDIT_HMAC_DISABLE": {
+      "evidence": [
+        ".claude/hooks/_lib/audit_hmac.py",
+        ".claude/hooks/_lib/env_persist_allowlist.py",
+        ".claude/hooks/_lib/test_isolation.py"
+      ],
+      "sites": 4
+    },
+    "CEO_AUDIT_KEY_PATH": {
+      "evidence": [
+        ".claude/hooks/_lib/audit_hmac.py",
+        ".claude/hooks/_lib/test_isolation.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 3
+    },
+    "CEO_AUDIT_LAST_HMAC_PATH": {
+      "evidence": [
+        ".claude/hooks/_lib/audit_hmac.py",
+        ".claude/hooks/_lib/test_isolation.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 3
+    },
+    "CEO_AUDIT_LIVE_LOG_PATH_SNAPSHOT": {
+      "evidence": [
+        ".claude/hooks/_lib/spool_writer.py",
+        ".claude/hooks/_lib/test_isolation.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 3
+    },
+    "CEO_AUDIT_LOG_DIR": {
+      "evidence": [
+        ".claude/hooks/_lib/audit_emit.py",
+        ".claude/hooks/_lib/audit_hmac.py",
+        ".claude/hooks/_lib/output_scan_dedup.py"
+      ],
+      "sites": 37
+    },
+    "CEO_AUDIT_LOG_ERR": {
+      "evidence": [
+        ".claude/hooks/_lib/audit_emit.py",
+        ".claude/hooks/_lib/embeddings.py",
+        ".claude/hooks/_lib/spool_writer.py"
+      ],
+      "sites": 12
+    },
+    "CEO_AUDIT_LOG_FALLBACK_PATH": {
+      "evidence": [
+        ".claude/hooks/_lib/audit_emit.py",
+        ".claude/hooks/_lib/test_isolation.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 3
+    },
+    "CEO_AUDIT_LOG_LOCK": {
+      "evidence": [
+        ".claude/hooks/_lib/audit_emit.py",
+        ".claude/hooks/_lib/spool_writer.py",
+        ".claude/hooks/_lib/test_isolation.py"
+      ],
+      "sites": 6
+    },
+    "CEO_AUDIT_LOG_PATH": {
+      "evidence": [
+        ".claude/hooks/_lib/audit_emit.py",
+        ".claude/hooks/_lib/audit_hmac.py",
+        ".claude/hooks/_lib/federation/handlers/audit_event_push.py"
+      ],
+      "sites": 34
+    },
+    "CEO_AUDIT_LOG_ROTATE_BYTES": {
+      "evidence": [
+        ".claude/hooks/_lib/audit_emit.py",
+        ".claude/hooks/_lib/test_isolation.py",
+        ".claude/hooks/audit_log.py"
+      ],
+      "sites": 4
+    },
+    "CEO_AUDIT_STREAM_VERBOSE": {
+      "evidence": [
+        ".claude/hooks/_lib/adapters/live/claude_batch.py",
+        ".claude/hooks/_lib/audit_emit.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 3
+    },
+    "CEO_AUDIT_SYNC_MODE": {
+      "evidence": [
+        ".claude/hooks/_lib/audit_emit.py",
+        ".claude/hooks/_lib/spool_writer.py",
+        ".claude/hooks/_lib/test_isolation.py"
+      ],
+      "sites": 6
+    },
+    "CEO_AUDIT_TOKENS_AUTO": {
+      "evidence": [
+        ".claude/hooks/SessionEnd.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_AUTH_PROVIDER": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        "scripts/install.sh"
+      ],
+      "sites": 2
+    },
+    "CEO_AUTONOMOUS_LOOPS_DISABLE": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/swarm/coordinator.py",
+        ".claude/scripts/swarm/kill_switch.py"
+      ],
+      "sites": 4
+    },
+    "CEO_AUTO_BOOT": {
+      "evidence": [
+        ".claude/hooks/auto_boot.py",
+        ".claude/hooks/turbo_sessionstart.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 5
+    },
+    "CEO_AUTO_COMPACT_COOLDOWN_TURNS": {
+      "evidence": [
+        ".claude/scripts/context-budget.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_AUTO_COMPACT_LOW_WATER": {
+      "evidence": [
+        ".claude/scripts/context-budget.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_AUTO_COMPACT_MIN_RECLAIM_PCT": {
+      "evidence": [
+        ".claude/scripts/context-budget.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_AUTO_COMPACT_THRESHOLD": {
+      "evidence": [
+        ".claude/hooks/_lib/audit_emit.py",
+        ".claude/scripts/context-budget.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 3
+    },
+    "CEO_AUTO_SPECIALIZE": {
+      "evidence": [
+        ".claude/scripts/check-auto-activation-flags.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_BACKUP_ROOT": {
+      "evidence": [
+        ".claude/scripts/ceo-backup.sh",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_BASH_CANONICAL_BYPASS": {
+      "evidence": [
+        ".claude/hooks/_lib/audit_emit.py",
+        ".claude/hooks/_lib/env_persist_allowlist.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 3
+    },
+    "CEO_BASH_FORCE_PUSH_REWRITE": {
+      "evidence": [
+        ".claude/hooks/check_bash_safety.py"
+      ],
+      "sites": 1
+    },
+    "CEO_BENCHMARK_BATCH_MODE": {
+      "evidence": [
+        ".claude/scripts/check-auto-activation-flags.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_BENCH_AGGREGATION": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/run-skill-benchmark.py"
+      ],
+      "sites": 2
+    },
+    "CEO_BOOT_AUTO_TASK": {
+      "evidence": [
+        ".claude/scripts/ceo-boot.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_BOOT_CACHE_DIR": {
+      "evidence": [
+        ".claude/scripts/ceo-boot.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_BOOT_COST_RED_USD": {
+      "evidence": [
+        ".claude/scripts/ceo-boot.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_BOOT_COST_YELLOW_USD": {
+      "evidence": [
+        ".claude/scripts/ceo-boot.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_BOOT_DEBUG": {
+      "evidence": [
+        ".claude/hooks/check_codex_response.py",
+        ".claude/scripts/ceo-boot.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 3
+    },
+    "CEO_BOOT_LEDGER": {
+      "evidence": [
+        ".claude/scripts/ceo-boot.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_BOOT_TASK_STATE_PATH": {
+      "evidence": [
+        ".claude/scripts/ceo-boot.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_BRANCH_COVERAGE_ENFORCING": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        "scripts/local/plan-093-apply-kernel-edits.py",
+        "scripts/local/plan-093-ship-v1.26.0.sh"
+      ],
+      "sites": 3
+    },
+    "CEO_BUDGET_BENCHMARKS": {
+      "evidence": [
+        ".claude/scripts/budget-summary.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_BUDGET_BYPASS": {
+      "evidence": [
+        ".claude/hooks/_lib/audit_emit.py",
+        ".claude/hooks/check_budget.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 6
+    },
+    "CEO_BUDGET_BYPASS_MAX_PER_DAY": {
+      "evidence": [
+        ".claude/hooks/check_budget.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_BUDGET_ENFORCE": {
+      "evidence": [
+        ".claude/hooks/check_budget.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_BUDGET_GUARD_STATE_DIR": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/token-budget-guard.py"
+      ],
+      "sites": 2
+    },
+    "CEO_BUDGET_QUOTA_HINT": {
+      "evidence": [
+        ".claude/hooks/check_budget.py"
+      ],
+      "sites": 1
+    },
+    "CEO_BUNDLE_SIZE": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        "scripts/install.sh"
+      ],
+      "sites": 2
+    },
+    "CEO_BY_DOMAIN_SUNSET_STDIN": {
+      "evidence": [
+        ".claude/scripts/audit-query.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_CACHE_CONTROL_AUTO_DISABLE": {
+      "evidence": [
+        ".claude/hooks/_lib/adapters/live/claude.py"
+      ],
+      "sites": 1
+    },
+    "CEO_CACHE_DISCIPLINE": {
+      "evidence": [
+        ".claude/scripts/check-auto-activation-flags.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_CANONICAL_GUARD_DISABLE": {
+      "evidence": [
+        ".claude/hooks/_lib/env_persist_allowlist.py"
+      ],
+      "sites": 1
+    },
+    "CEO_CANONICAL_MODELS": {
+      "evidence": [
+        ".claude/scripts/build-canonical-models.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_CHAOS_ALLOWED": {
+      "evidence": [
+        ".claude/scripts/chaos-inject.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_CHARTING_LIBRARY": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        "scripts/install.sh"
+      ],
+      "sites": 2
+    },
+    "CEO_CITY": {
+      "evidence": [
+        ".claude/hooks/_lib/env_persist_allowlist.py",
+        ".claude/scripts/env-inventory.json",
+        "scripts/install.sh"
+      ],
+      "sites": 3
+    },
+    "CEO_CI_TOOL": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        "scripts/install.sh"
+      ],
+      "sites": 2
+    },
+    "CEO_CLOSEOUT_GUARD": {
+      "evidence": [
+        ".claude/hooks/check_closeout_guard.py",
+        ".claude/scripts/env-inventory.json",
+        ".claude/settings.json"
+      ],
+      "sites": 5
+    },
+    "CEO_CODEX_CLI_PIN": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/run-promotion-gate.py"
+      ],
+      "sites": 2
+    },
+    "CEO_CODEX_FILEWRITE_AUDIT_SINK": {
+      "evidence": [
+        ".claude/hooks/check_codex_filewrite.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_CODEX_FILEWRITE_DISABLE": {
+      "evidence": [
+        ".claude/hooks/check_codex_filewrite.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_CODEX_FILEWRITE_DRY_RUN": {
+      "evidence": [
+        ".claude/hooks/check_codex_filewrite.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_CODEX_KEY_ROTATION_OVERRIDE": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/local/pair-rail-gate.sh"
+      ],
+      "sites": 2
+    },
+    "CEO_CODEX_REVIEW": {
+      "evidence": [
+        ".claude/hooks/check_pair_rail.py",
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/optimizer/codex_phase_gate.py"
+      ],
+      "sites": 3
+    },
+    "CEO_CODEX_REVIEW_OBSERVE": {
+      "evidence": [
+        ".claude/hooks/check_codex_response.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_CODEX_USER_REVIEW": {
+      "evidence": [
+        ".claude/hooks/codex_review_user_code.py",
+        ".claude/hooks/turbo_profile.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 6
+    },
+    "CEO_CODEX_USER_REVIEW_AUTO": {
+      "evidence": [
+        ".claude/hooks/codex_review_user_code.py",
+        ".claude/hooks/review_loop.py",
+        ".claude/hooks/turbo_profile.py"
+      ],
+      "sites": 7
+    },
+    "CEO_CODEX_USER_REVIEW_BLOCK": {
+      "evidence": [
+        ".claude/hooks/codex_review_user_code.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_COMPACTION_CONTINUITY": {
+      "evidence": [
+        ".claude/hooks/check_postcompact_reinject.py",
+        ".claude/hooks/check_precompact_continuity.py",
+        ".claude/settings.json"
+      ],
+      "sites": 5
+    },
+    "CEO_COMPONENT_COUNT": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        "scripts/install.sh"
+      ],
+      "sites": 2
+    },
+    "CEO_CONFIDENCE_AUTO_CONFIRM": {
+      "evidence": [
+        ".claude/hooks/_lib/confidence_labels.py",
+        ".claude/hooks/_lib/env_persist_allowlist.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 3
+    },
+    "CEO_CONFIDENCE_BLOCK": {
+      "evidence": [
+        ".claude/hooks/check_confidence_gate.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_CONFIDENCE_BYPASS": {
+      "evidence": [
+        ".claude/hooks/check_confidence_gate.py",
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/hook-profiler.py"
+      ],
+      "sites": 6
+    },
+    "CEO_CONFIDENCE_BYPASS_RISKY": {
+      "evidence": [
+        ".claude/hooks/_lib/confidence_labels.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_CONFIDENCE_ENFORCE": {
+      "evidence": [
+        ".claude/hooks/check_confidence_gate.py",
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/hook-profiler.py"
+      ],
+      "sites": 6
+    },
+    "CEO_CONFIDENCE_GATE_PRODUCER_PAIR_DISABLED": {
+      "evidence": [
+        ".claude/hooks/check_confidence_gate.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_CONFIDENCE_MAX_CLAIMS": {
+      "evidence": [
+        ".claude/hooks/_lib/audit_emit.py",
+        ".claude/scripts/confidence_gate.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 3
+    },
+    "CEO_CONFIG_CHANGE_GUARD": {
+      "evidence": [
+        ".claude/hooks/check_config_change.py",
+        ".claude/settings.json",
+        "scripts/upgrade.sh"
+      ],
+      "sites": 4
+    },
+    "CEO_CONFIG_PROTECTION": {
+      "evidence": [
+        ".claude/hooks/check_config_protection.py",
+        ".claude/scripts/env-inventory.json",
+        ".claude/settings.json"
+      ],
+      "sites": 5
+    },
+    "CEO_CONFIG_PROTECTION_ADVISORY": {
+      "evidence": [
+        ".claude/hooks/check_config_protection.py",
+        ".claude/scripts/env-inventory.json",
+        ".claude/settings.json"
+      ],
+      "sites": 5
+    },
+    "CEO_CONFIRM_SKIP": {
+      "evidence": [
+        ".claude/hooks/_lib/env_persist_allowlist.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_COOKBOOK_ADVISOR_ENABLED": {
+      "evidence": [
+        ".claude/hooks/_lib/cookbook_patterns.py",
+        ".claude/hooks/check_agent_spawn.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 4
+    },
+    "CEO_COST_OTLP_BEARER": {
+      "evidence": [
+        ".claude/scripts/ceo-cost.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_COST_PRICING_JSON": {
+      "evidence": [
+        ".claude/scripts/audit-telemetry.py",
+        ".claude/scripts/ceo-cost.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 3
+    },
+    "CEO_COST_STREAMING": {
+      "evidence": [
+        ".claude/scripts/ceo-cost.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_COUNTRY": {
+      "evidence": [
+        ".claude/hooks/_lib/env_persist_allowlist.py",
+        ".claude/scripts/env-inventory.json",
+        "scripts/install.sh"
+      ],
+      "sites": 3
+    },
+    "CEO_COUNT_TOKENS_PREFLIGHT": {
+      "evidence": [
+        ".claude/hooks/_lib/adapters/live/claude.py"
+      ],
+      "sites": 1
+    },
+    "CEO_CREDENTIAL_BLOCK_EMERGENCY_OVERRIDE": {
+      "evidence": [
+        ".claude/hooks/_lib/adapters/live/claude.py",
+        ".claude/hooks/_lib/audit_emit.py",
+        ".claude/hooks/_lib/exceptions.py"
+      ],
+      "sites": 5
+    },
+    "CEO_CURRENT_PLAN": {
+      "evidence": [
+        ".claude/hooks/_lib/scratchpad_lib.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_DANGEROUSLY_SKIP_ZZZ": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/self_test.py"
+      ],
+      "sites": 2
+    },
+    "CEO_DATABASE": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        "scripts/install.sh"
+      ],
+      "sites": 2
+    },
+    "CEO_DEPLOY_COMMAND": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        "scripts/install.sh"
+      ],
+      "sites": 2
+    },
+    "CEO_DEPLOY_PLATFORM": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        "scripts/install.sh"
+      ],
+      "sites": 2
+    },
+    "CEO_DEPLOY_TARGET": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        "scripts/install.sh"
+      ],
+      "sites": 2
+    },
+    "CEO_DEPRECATION_SCAN_ROOTS": {
+      "evidence": [
+        ".claude/scripts/check-model-deprecations.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_DISPATCHER_MODE": {
+      "evidence": [
+        ".claude/hooks/audit_log.py",
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/inject-agent-context.sh"
+      ],
+      "sites": 3
+    },
+    "CEO_DISPATCH_ARCHETYPE_HINT": {
+      "evidence": [
+        ".claude/hooks/audit_log.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_DOC_FRESHNESS_WAIVER": {
+      "evidence": [
+        ".claude/scripts/check-canonical-doc-freshness.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_DOMAIN": {
+      "evidence": [
+        ".claude/hooks/_lib/env_persist_allowlist.py",
+        ".claude/scripts/env-inventory.json",
+        "scripts/install.sh"
+      ],
+      "sites": 3
+    },
+    "CEO_EFFORT_OVERRIDE": {
+      "evidence": [
+        ".claude/hooks/_lib/adapters/live/claude.py",
+        ".claude/hooks/_lib/model_routing.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 3
+    },
+    "CEO_EGRESS_TAXONOMY_EMIT": {
+      "evidence": [
+        ".claude/hooks/_lib/audit_emit.py",
+        ".claude/hooks/_lib/egress_taxonomy.py",
+        ".claude/hooks/check_bash_safety.py"
+      ],
+      "sites": 4
+    },
+    "CEO_ENV_GUARD_ENFORCE": {
+      "evidence": [
+        ".claude/hooks/_lib/audit_emit.py",
+        ".claude/hooks/_lib/env_guard.py",
+        ".claude/hooks/_lib/env_persist_allowlist.py"
+      ],
+      "sites": 5
+    },
+    "CEO_ESCALATION_FORMAT": {
+      "evidence": [
+        ".claude/scripts/ceo-escalation-detector.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_ESCALATION_QUIET": {
+      "evidence": [
+        ".claude/scripts/ceo-escalation-detector.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_ESTIMATE_VIBES": {
+      "evidence": [
+        ".claude/scripts/check-auto-activation-flags.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_EXECUTION_CONTEXT_HOOKS_DISABLE": {
+      "evidence": [
+        ".claude/hooks/_lib/execution_context.py",
+        ".claude/hooks/_lib/swarm_circuit_breaker.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 4
+    },
+    "CEO_EXTENDED_LIFECYCLE": {
+      "evidence": [
+        ".claude/hooks/SessionEnd.py",
+        ".claude/hooks/SessionStart.py",
+        ".claude/hooks/Stop.py"
+      ],
+      "sites": 8
+    },
+    "CEO_FANOUT": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/optimizer/fanout.py",
+        ".claude/scripts/swarm/coordinator.py"
+      ],
+      "sites": 3
+    },
+    "CEO_FANOUT_BUDGET_TOKENS": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/optimizer/fanout.py"
+      ],
+      "sites": 2
+    },
+    "CEO_FEDERATION_ENABLED": {
+      "evidence": [
+        ".claude/hooks/_lib/federation/__init__.py",
+        ".claude/hooks/_lib/federation/server.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 3
+    },
+    "CEO_FEDERATION_WRITE_ENABLED": {
+      "evidence": [
+        ".claude/hooks/_lib/federation/__init__.py",
+        ".claude/hooks/_lib/federation/server.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 3
+    },
+    "CEO_FILE_COUNT": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        "scripts/install.sh"
+      ],
+      "sites": 2
+    },
+    "CEO_FINISH_CEREMONY": {
+      "evidence": [
+        "scripts/local/finish-plan135.sh"
+      ],
+      "sites": 1
+    },
+    "CEO_FLUENCY_NUDGE": {
+      "evidence": [
+        ".claude/hooks/check_fluency_nudge.py",
+        ".claude/scripts/env-inventory.json",
+        ".claude/settings.json"
+      ],
+      "sites": 3
+    },
+    "CEO_FOREIGN_CONTEXT_DISCOVERY": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        "scripts/discover_foreign_context.py"
+      ],
+      "sites": 2
+    },
+    "CEO_FOUNDER_NAME": {
+      "evidence": [
+        ".claude/hooks/_lib/env_persist_allowlist.py",
+        ".claude/scripts/env-inventory.json",
+        "scripts/install.sh"
+      ],
+      "sites": 3
+    },
+    "CEO_FRAMEWORK_UPSTREAM": {
+      "evidence": [
+        ".claude/scripts/check-framework-updates.sh",
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/generate-sbom.py"
+      ],
+      "sites": 3
+    },
+    "CEO_FRONTEND_PATH": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        "scripts/install.sh"
+      ],
+      "sites": 2
+    },
+    "CEO_FRONTEND_REPO_PATH": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        "scripts/install.sh"
+      ],
+      "sites": 2
+    },
+    "CEO_FRONTEND_STACK": {
+      "evidence": [
+        ".claude/hooks/_lib/env_persist_allowlist.py",
+        ".claude/scripts/env-inventory.json",
+        "scripts/install.sh"
+      ],
+      "sites": 3
+    },
+    "CEO_GIT_BYPASS_ALLOW": {
+      "evidence": [
+        ".claude/hooks/_lib/audit_emit.py",
+        ".claude/hooks/_lib/env_persist_allowlist.py",
+        ".claude/hooks/_lib/git_bypass.py"
+      ],
+      "sites": 6
+    },
+    "CEO_GIT_BYPASS_ALLOW_ACK": {
+      "evidence": [
+        ".claude/hooks/check_bash_safety.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_GIT_LOCK_RETRY_BACKOFF_BASE": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        "scripts/upgrade.sh"
+      ],
+      "sites": 2
+    },
+    "CEO_GIT_LOCK_RETRY_MAX": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        "scripts/upgrade.sh"
+      ],
+      "sites": 2
+    },
+    "CEO_GOAP_ADVISORY_ENABLED": {
+      "evidence": [
+        ".claude/hooks/check_agent_spawn.py",
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/goap-planner.py"
+      ],
+      "sites": 3
+    },
+    "CEO_GOAP_CONFIRMED": {
+      "evidence": [
+        ".claude/hooks/check_agent_spawn.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_GOAP_OVERRIDE_DETECTION_DISABLED": {
+      "evidence": [
+        ".claude/hooks/check_agent_spawn.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_GODMODE_ENFORCING": {
+      "evidence": [
+        ".claude/hooks/_lib/env_persist_allowlist.py",
+        ".claude/hooks/_lib/persona_routing.py",
+        ".claude/hooks/check_agent_spawn.py"
+      ],
+      "sites": 4
+    },
+    "CEO_GPG_FINGERPRINT": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/session-graph-build.py"
+      ],
+      "sites": 2
+    },
+    "CEO_GRANDFATHER_POLICY_PATH": {
+      "evidence": [
+        ".claude/scripts/audit-query.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_HITL_RAIL": {
+      "evidence": [
+        ".claude/hooks/_lib/action_required.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_HITL_RAIL_STORE_DIR": {
+      "evidence": [
+        ".claude/hooks/_lib/action_required.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_HITL_RAIL_TTL_SECONDS": {
+      "evidence": [
+        ".claude/hooks/_lib/action_required.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_HMAC_DISABLE": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 1
+    },
+    "CEO_HOOKS_DISABLE": {
+      "evidence": [
+        ".claude/hooks/_lib/env_persist_allowlist.py"
+      ],
+      "sites": 1
+    },
+    "CEO_HOOK_ADAPTER": {
+      "evidence": [
+        ".claude/hooks/_lib/adapters/__init__.py",
+        ".claude/hooks/_lib/contract.py",
+        ".claude/scripts/benchmark-judge.py"
+      ],
+      "sites": 5
+    },
+    "CEO_HOOK_COUNT": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        "scripts/install.sh"
+      ],
+      "sites": 2
+    },
+    "CEO_I18N_FRAMEWORK": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        "scripts/install.sh"
+      ],
+      "sites": 2
+    },
+    "CEO_INFO_LIVE_PROBE": {
+      "evidence": [
+        ".claude/scripts/ceo-info.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_INFO_PROBE_MODEL": {
+      "evidence": [
+        ".claude/scripts/ceo-info.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_INFO_TRANSCRIPTS_DIR": {
+      "evidence": [
+        ".claude/scripts/ceo-info.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_INSTALL_SKIP_SELF_SHA": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        "scripts/install.sh",
+        "scripts/local/smoke-install-parity.sh"
+      ],
+      "sites": 3
+    },
+    "CEO_INSTALL_STRICT_PH": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        "scripts/install.sh"
+      ],
+      "sites": 2
+    },
+    "CEO_INTERLEAVED_THINKING_DISABLE": {
+      "evidence": [
+        ".claude/hooks/_lib/adapters/live/claude.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_ITPM_CEILING": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/optimizer/fanout.py"
+      ],
+      "sites": 2
+    },
+    "CEO_KERNEL": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 1
+    },
+    "CEO_KERNEL_OVERRIDE": {
+      "evidence": [
+        ".claude/hooks/_lib/agent_frontmatter.py",
+        ".claude/hooks/_lib/audit_emit.py",
+        ".claude/hooks/_lib/env_persist_allowlist.py"
+      ],
+      "sites": 20
+    },
+    "CEO_KERNEL_OVERRIDE_ACK": {
+      "evidence": [
+        ".claude/hooks/_lib/audit_emit.py",
+        ".claude/hooks/_lib/federation/cert_inspector.py",
+        ".claude/hooks/_lib/rag_events.py"
+      ],
+      "sites": 9
+    },
+    "CEO_LEGAL_ID": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        "scripts/install.sh"
+      ],
+      "sites": 2
+    },
+    "CEO_LESSONS_DIR": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/lessons.py"
+      ],
+      "sites": 2
+    },
+    "CEO_LESSON_CONSUMER": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/inject-agent-context.sh"
+      ],
+      "sites": 2
+    },
+    "CEO_LESSON_RANKING_MODE": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/inject-agent-context.sh"
+      ],
+      "sites": 2
+    },
+    "CEO_LINES": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        "scripts/install.sh"
+      ],
+      "sites": 2
+    },
+    "CEO_LINE_COUNT": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        "scripts/install.sh"
+      ],
+      "sites": 2
+    },
+    "CEO_LINT_TOOL": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        "scripts/install.sh"
+      ],
+      "sites": 2
+    },
+    "CEO_LIVE_ADAPTERS": {
+      "evidence": [
+        ".claude/hooks/_lib/adapters/live/__init__.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_LIVE_ADAPTER_STUB": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/replay/replay-session.py"
+      ],
+      "sites": 2
+    },
+    "CEO_LIVE_CLAUDE": {
+      "evidence": [
+        ".claude/hooks/_lib/adapters/__init__.py",
+        ".claude/hooks/_lib/adapters/live/_policy.py",
+        ".claude/hooks/_lib/adapters/live/claude.py"
+      ],
+      "sites": 5
+    },
+    "CEO_LIVE_GEMINI": {
+      "evidence": [
+        ".claude/hooks/_lib/adapters/live/_policy.py",
+        ".claude/hooks/_lib/adapters/live/gemini.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 3
+    },
+    "CEO_LIVE_LOCAL": {
+      "evidence": [
+        ".claude/hooks/_lib/adapters/live/_policy.py",
+        ".claude/hooks/_lib/adapters/live/local.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 3
+    },
+    "CEO_LIVE_OPENAI": {
+      "evidence": [
+        ".claude/hooks/_lib/adapters/live/_policy.py",
+        ".claude/hooks/_lib/adapters/live/openai.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 3
+    },
+    "CEO_LIVE_PROVIDER": {
+      "evidence": [
+        ".claude/hooks/_lib/adapters/live/__init__.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_LIVE_TIMEOUT": {
+      "evidence": [
+        ".claude/hooks/_lib/adapters/live/__init__.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_LOCAL_NO_CREDENTIAL": {
+      "evidence": [
+        ".claude/hooks/_lib/adapters/live/_policy.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_LOCAL_URL": {
+      "evidence": [
+        ".claude/hooks/_lib/adapters/live/local.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_MARKETPLACE_REPO": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        "scripts/publish-plugin.sh"
+      ],
+      "sites": 2
+    },
+    "CEO_MAX_PLAN_TOKENS": {
+      "evidence": [
+        ".claude/hooks/check_budget.py",
+        ".claude/scripts/env-inventory.json",
+        ".claude/settings.json"
+      ],
+      "sites": 5
+    },
+    "CEO_MAX_SPAWN_TOKENS": {
+      "evidence": [
+        ".claude/hooks/_lib/audit_emit.py",
+        ".claude/hooks/check_budget.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 3
+    },
+    "CEO_MCP_ALLOW_PLAINTEXT_PUBLIC": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/mcp-server/http_transport.py"
+      ],
+      "sites": 2
+    },
+    "CEO_MCP_ALLOW_PUBLIC": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/mcp-server/http_transport.py",
+        ".claude/scripts/mcp-server/server.py"
+      ],
+      "sites": 4
+    },
+    "CEO_MCP_HOST": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/mcp-server/http_transport.py",
+        ".claude/scripts/mcp-server/server.py"
+      ],
+      "sites": 4
+    },
+    "CEO_MCP_PORT": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/mcp-server/server.py",
+        ".claude/scripts/mcp-server/start-mcp-server.sh"
+      ],
+      "sites": 3
+    },
+    "CEO_MCP_ROUTING_DISABLE": {
+      "evidence": [
+        ".claude/scripts/check-auto-activation-flags.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_MCP_ROUTING_HOOK": {
+      "evidence": [
+        ".claude/hooks/check_agent_spawn.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_MCP_SCANNER_DISABLE": {
+      "evidence": [
+        ".claude/hooks/check_mcp_response.py",
+        ".claude/scripts/env-inventory.json",
+        ".claude/settings.json"
+      ],
+      "sites": 5
+    },
+    "CEO_MCP_SCANNER_MODE": {
+      "evidence": [
+        ".claude/hooks/check_mcp_response.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_MCP_TLS_CERT": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/mcp-server/http_transport.py",
+        ".claude/scripts/mcp-server/server.py"
+      ],
+      "sites": 3
+    },
+    "CEO_MCP_TLS_KEY": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/mcp-server/http_transport.py"
+      ],
+      "sites": 2
+    },
+    "CEO_MCP_TRANSPORT": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/mcp-server/server.py",
+        ".claude/scripts/mcp-server/start-mcp-server.sh"
+      ],
+      "sites": 3
+    },
+    "CEO_MEMORY_DIR": {
+      "evidence": [
+        ".claude/scripts/ceo-info.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_MEMORY_SHARED_PATH": {
+      "evidence": [
+        ".claude/hooks/_lib/memory_shared.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_MIDDLE_OUT_DEGRADE": {
+      "evidence": [
+        ".claude/hooks/_lib/audit_emit.py",
+        ".claude/scripts/context-budget.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 3
+    },
+    "CEO_MIDDLE_OUT_MIN_MSG_TOKENS": {
+      "evidence": [
+        ".claude/scripts/context-budget.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_MIDDLE_OUT_PROTECT_LAST": {
+      "evidence": [
+        ".claude/scripts/context-budget.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_MITIGATION_DISABLE": {
+      "evidence": [
+        ".claude/hooks/audit_log.py",
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/inject-agent-context.sh"
+      ],
+      "sites": 3
+    },
+    "CEO_MODEL_DOWNSHIFT": {
+      "evidence": [
+        ".claude/hooks/audit_log.py",
+        ".claude/scripts/ceo-escalation-detector.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 4
+    },
+    "CEO_MODEL_ID": {
+      "evidence": [
+        ".claude/scripts/ceo-escalation-detector.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_MODEL_NORMALIZE": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/set-quality-profile.sh"
+      ],
+      "sites": 2
+    },
+    "CEO_MODEL_ROUTING": {
+      "evidence": [
+        ".claude/hooks/check_agent_spawn.py",
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/optimizer/model_choice.py"
+      ],
+      "sites": 4
+    },
+    "CEO_MULTIMODEL_ENABLE": {
+      "evidence": [
+        ".claude/hooks/_lib/agent_frontmatter.py",
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/validate-governance.sh"
+      ],
+      "sites": 4
+    },
+    "CEO_MULTI_MODEL_MANUAL": {
+      "evidence": [
+        ".claude/hooks/_lib/model_routing.py",
+        ".claude/scripts/check-auto-activation-flags.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 3
+    },
+    "CEO_NATIVE_BATCH_LIFECYCLE": {
+      "evidence": [
+        ".claude/hooks/_lib/adapters/live/claude_batch.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_NATIVE_SUBAGENTS": {
+      "evidence": [
+        ".claude/hooks/check_agent_spawn.py",
+        ".claude/scripts/env-inventory.json",
+        "scripts/upgrade.sh"
+      ],
+      "sites": 3
+    },
+    "CEO_N_BACKEND": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        "scripts/install.sh"
+      ],
+      "sites": 2
+    },
+    "CEO_N_FRONTEND": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        "scripts/install.sh"
+      ],
+      "sites": 2
+    },
+    "CEO_OPTIMIZER": {
+      "evidence": [
+        ".claude/hooks/UserPromptSubmit.py",
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/optimizer/_skeleton.py"
+      ],
+      "sites": 8
+    },
+    "CEO_OPUS_SPOT_CHECK_P1": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/spot-check-findings.py"
+      ],
+      "sites": 2
+    },
+    "CEO_ORCH_FORCE": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        "scripts/upgrade.sh"
+      ],
+      "sites": 2
+    },
+    "CEO_OSV_COMMANDS": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        "scripts/install.sh"
+      ],
+      "sites": 2
+    },
+    "CEO_OSV_DISABLE": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/osv_check.py"
+      ],
+      "sites": 2
+    },
+    "CEO_OSV_GATE": {
+      "evidence": [
+        ".claude/hooks/_lib/audit_emit.py",
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/osv_check.py"
+      ],
+      "sites": 4
+    },
+    "CEO_OSV_OFFLINE": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/osv_check.py"
+      ],
+      "sites": 2
+    },
+    "CEO_OSV_TIMEOUT_S": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/osv_check.py",
+        "scripts/install.sh"
+      ],
+      "sites": 3
+    },
+    "CEO_OTEL_ALLOWED_HOSTS": {
+      "evidence": [
+        ".claude/hooks/_lib/otel/bounded_exporter.py",
+        ".claude/hooks/_lib/otel/hook_bridge.py",
+        ".claude/hooks/_lib/otel_emit.py"
+      ],
+      "sites": 6
+    },
+    "CEO_OTEL_DISABLED": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/replay/replay-session.py"
+      ],
+      "sites": 2
+    },
+    "CEO_OTEL_ENDPOINT": {
+      "evidence": [
+        ".claude/hooks/_lib/otel/bounded_exporter.py",
+        ".claude/hooks/_lib/otel/hook_bridge.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 3
+    },
+    "CEO_OTEL_SMOKE": {
+      "evidence": [
+        ".claude/hooks/_lib/otel_emit.py",
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/otel-export.py"
+      ],
+      "sites": 3
+    },
+    "CEO_OTPM_CEILING": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/optimizer/fanout.py"
+      ],
+      "sites": 2
+    },
+    "CEO_OUTPUT_SAFETY_MODE": {
+      "evidence": [
+        ".claude/hooks/check_output_safety.py",
+        ".claude/scripts/env-inventory.json",
+        ".claude/settings.json"
+      ],
+      "sites": 5
+    },
+    "CEO_OUTPUT_SCAN": {
+      "evidence": [
+        ".claude/hooks/_lib/output_scan.py",
+        ".claude/hooks/check_output_secrets.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 6
+    },
+    "CEO_OUTPUT_SCAN_DEDUP": {
+      "evidence": [
+        ".claude/hooks/check_output_secrets.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_OUTPUT_SCAN_DEDUP_STATE_DIR": {
+      "evidence": [
+        ".claude/hooks/_lib/output_scan_dedup.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_OUTPUT_SCAN_HOMOGLYPH": {
+      "evidence": [
+        ".claude/hooks/_lib/output_scan.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_OUTPUT_SCAN_LLM03": {
+      "evidence": [
+        ".claude/hooks/_lib/output_scan.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_OUTPUT_SCAN_LLM04": {
+      "evidence": [
+        ".claude/hooks/_lib/output_scan.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_OUTPUT_SCAN_LLM05": {
+      "evidence": [
+        ".claude/hooks/_lib/output_scan.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_OUTPUT_SCAN_LLM07": {
+      "evidence": [
+        ".claude/hooks/_lib/output_scan.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_OUTPUT_SCAN_LLM09": {
+      "evidence": [
+        ".claude/hooks/_lib/output_scan.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_OUTPUT_SCAN_LLM0X": {
+      "evidence": [
+        ".claude/hooks/_lib/output_scan.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_OUTPUT_SCAN_LLM10": {
+      "evidence": [
+        ".claude/hooks/_lib/output_scan.py",
+        ".claude/hooks/check_output_secrets.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 3
+    },
+    "CEO_OUTPUT_SCAN_NFKC": {
+      "evidence": [
+        ".claude/hooks/_lib/output_scan.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_OUTPUT_SCAN_TELEMETRY": {
+      "evidence": [
+        ".claude/hooks/_lib/output_scan.py",
+        ".claude/hooks/check_output_secrets.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 3
+    },
+    "CEO_OUTPUT_SCAN_UNICODE": {
+      "evidence": [
+        ".claude/hooks/_lib/output_scan.py",
+        ".claude/hooks/check_output_secrets.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 4
+    },
+    "CEO_OVERHEAD_ACK": {
+      "evidence": [
+        ".claude/hooks/_lib/audit_emit.py",
+        ".claude/hooks/_lib/testing.py",
+        ".claude/hooks/check_anti_ceo_overhead.py"
+      ],
+      "sites": 7
+    },
+    "CEO_OWNER": {
+      "evidence": [
+        ".claude/hooks/_lib/env_persist_allowlist.py",
+        ".claude/scripts/env-inventory.json",
+        "scripts/install.sh"
+      ],
+      "sites": 3
+    },
+    "CEO_OWNER_GPG_KEY": {
+      "evidence": [
+        ".claude/hooks/_lib/env_persist_allowlist.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_PAGE_COUNT": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        "scripts/install.sh"
+      ],
+      "sites": 2
+    },
+    "CEO_PAIR_RAIL_AUDIT_SINK": {
+      "evidence": [
+        ".claude/hooks/check_pair_rail.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_PAIR_RAIL_CODEX_BIN": {
+      "evidence": [
+        ".claude/hooks/check_pair_rail.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_PAIR_RAIL_DISABLE": {
+      "evidence": [
+        ".claude/hooks/check_codex_filewrite.py",
+        ".claude/hooks/check_pair_rail.py",
+        ".claude/scripts/check-auto-activation-flags.py"
+      ],
+      "sites": 7
+    },
+    "CEO_PAIR_RAIL_FIXTURE_RESPONSE": {
+      "evidence": [
+        ".claude/hooks/check_pair_rail.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_PAIR_RAIL_HUMAN_TRIAGE_HOURS": {
+      "evidence": [
+        ".claude/hooks/check_pair_rail.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_PAIR_RAIL_LABEL_STORE_PATH": {
+      "evidence": [
+        ".claude/scripts/audit-query.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_PAIR_RAIL_MATRIX_SHA256": {
+      "evidence": [
+        ".claude/hooks/_lib/audit_emit.py",
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/inject-agent-context.sh"
+      ],
+      "sites": 3
+    },
+    "CEO_PAIR_RAIL_PHASE": {
+      "evidence": [
+        ".claude/hooks/_lib/pair_rail_decide.py",
+        ".claude/scripts/check-auto-activation-flags.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 3
+    },
+    "CEO_PAIR_RAIL_STAGED_AUDIT_EMIT_DIR": {
+      "evidence": [
+        ".claude/hooks/check_pair_rail.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_PAIR_RAIL_TIMEOUT_S": {
+      "evidence": [
+        ".claude/hooks/check_pair_rail.py",
+        ".claude/scripts/env-inventory.json",
+        ".claude/settings.json"
+      ],
+      "sites": 3
+    },
+    "CEO_PARALLEL_WRITER": {
+      "evidence": [
+        ".claude/hooks/check_worktree_writer.py",
+        ".claude/scripts/env-inventory.json",
+        ".claude/settings.json"
+      ],
+      "sites": 4
+    },
+    "CEO_PERSONA": {
+      "evidence": [
+        ".claude/hooks/_lib/pair_rail_decide.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_PERSONA_CLI_FLAG": {
+      "evidence": [
+        ".claude/hooks/_lib/pair_rail_decide.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_PERSONA_COVERAGE_EMIT": {
+      "evidence": [
+        ".claude/hooks/check_agent_spawn.py",
+        ".claude/hooks/check_canonical_edit.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 3
+    },
+    "CEO_PERSONA_DEMAND_LEDGER_DISABLED": {
+      "evidence": [
+        ".claude/scripts/ceo-boot.py",
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/persona_demand_resolver.py"
+      ],
+      "sites": 4
+    },
+    "CEO_PERSONA_HEURISTIC": {
+      "evidence": [
+        ".claude/hooks/_lib/pair_rail_decide.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_PHASE_4_77_LANDED": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 1
+    },
+    "CEO_PHASE_4_PARTIAL_OK": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/run-promotion-gate.py"
+      ],
+      "sites": 2
+    },
+    "CEO_PHASE_5_77_LANDED": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 1
+    },
+    "CEO_PHASE_5_BIS_77_LANDED": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 1
+    },
+    "CEO_PHASE_AUTO_FLIP_DRY_RUN": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/run-promotion-gate.py"
+      ],
+      "sites": 2
+    },
+    "CEO_PHASE_REFINE_DISABLE": {
+      "evidence": [
+        ".claude/scripts/check-auto-activation-flags.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_PLANS_DIR": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/session-graph-build.py"
+      ],
+      "sites": 2
+    },
+    "CEO_PLAN_ID": {
+      "evidence": [
+        ".claude/hooks/check_cost_envelope.py",
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/red-team-eval.py"
+      ],
+      "sites": 3
+    },
+    "CEO_POLICY_ENGINE_DISABLE": {
+      "evidence": [
+        ".claude/hooks/policy_dispatch.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_POLICY_FILE": {
+      "evidence": [
+        ".claude/hooks/policy_dispatch.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_POLICY_LEGACY_HOOK_PATH": {
+      "evidence": [
+        ".claude/hooks/policy_dispatch.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_PREDICT_CACHE_DIR": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/predict-budget/predict-plan-cost.py"
+      ],
+      "sites": 2
+    },
+    "CEO_PRICING_PATH": {
+      "evidence": [
+        ".claude/hooks/_lib/adapters/live/_cost.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_PRODUCTION_URL": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        "scripts/install.sh"
+      ],
+      "sites": 2
+    },
+    "CEO_PROJECT": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/reality-ledger.py",
+        "scripts/install.sh"
+      ],
+      "sites": 3
+    },
+    "CEO_PROJECT_NAME": {
+      "evidence": [
+        ".claude/hooks/_lib/env_persist_allowlist.py",
+        ".claude/hooks/_lib/state_store.py",
+        ".claude/scripts/ceo-backup.sh"
+      ],
+      "sites": 8
+    },
+    "CEO_PROJECT_PATH": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        "scripts/install.sh"
+      ],
+      "sites": 2
+    },
+    "CEO_PROJECT_STATE_DIR": {
+      "evidence": [
+        ".claude/hooks/_lib/audit_hmac.py",
+        ".claude/hooks/_lib/spool_writer.py",
+        ".claude/hooks/_lib/test_isolation.py"
+      ],
+      "sites": 5
+    },
+    "CEO_PROMOTION_HEURISTIC": {
+      "evidence": [
+        ".claude/hooks/check_agent_spawn.py",
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/profile-opus-4-7.py"
+      ],
+      "sites": 3
+    },
+    "CEO_PROMPT_INJECTION_SCAN": {
+      "evidence": [
+        ".claude/hooks/UserPromptSubmit.py",
+        ".claude/scripts/env-inventory.json",
+        ".claude/settings.json"
+      ],
+      "sites": 5
+    },
+    "CEO_PROTOCOL_SOURCE": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        "scripts/install.sh"
+      ],
+      "sites": 2
+    },
+    "CEO_PROTOCOL_SYNC_CASCADE": {
+      "evidence": [
+        ".claude/hooks/check_protocol_semver_cascade.py"
+      ],
+      "sites": 1
+    },
+    "CEO_PRUNE_EXECUTE": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/prune-lessons.py"
+      ],
+      "sites": 2
+    },
+    "CEO_PUBLISH_AUTHOR_EMAIL": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        "scripts/publish-plugin.sh"
+      ],
+      "sites": 2
+    },
+    "CEO_PUBLISH_AUTHOR_NAME": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        "scripts/publish-plugin.sh"
+      ],
+      "sites": 2
+    },
+    "CEO_PUBLISH_WORKDIR": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        "scripts/publish-plugin.sh"
+      ],
+      "sites": 2
+    },
+    "CEO_PYHOOK_NO_CACHE": {
+      "evidence": [
+        ".claude/hooks/_python-hook.sh",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_QUIET_MODE": {
+      "evidence": [
+        ".claude/hooks/_lib/testing.py",
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/first-run-wizard.py"
+      ],
+      "sites": 6
+    },
+    "CEO_QUIET_MODE_BYPASS": {
+      "evidence": [
+        ".claude/hooks/_lib/env_persist_allowlist.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_RAG": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/optimizer/__init__.py",
+        ".claude/scripts/optimizer/rag_recommender.py"
+      ],
+      "sites": 3
+    },
+    "CEO_RAG_HEALTH_PROBE": {
+      "evidence": [
+        ".claude/hooks/_lib/rag_bridge.py",
+        ".claude/hooks/_lib/rag_router.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 3
+    },
+    "CEO_RAG_INSTALL_PROMPT": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        "scripts/install.sh",
+        "scripts/local/smoke-install-parity.sh"
+      ],
+      "sites": 3
+    },
+    "CEO_RAG_QUERY_TIMEOUT_MS": {
+      "evidence": [
+        ".claude/hooks/_lib/rag_bridge.py",
+        ".claude/hooks/_lib/rag_router.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 4
+    },
+    "CEO_RAG_RETRY_HEALTH": {
+      "evidence": [
+        ".claude/hooks/_lib/rag_bridge.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_RAG_SCAN": {
+      "evidence": [
+        ".claude/hooks/_lib/rag_bridge.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_RAG_SCAN_ACK": {
+      "evidence": [
+        ".claude/hooks/_lib/rag_bridge.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_RAG_SIDECAR": {
+      "evidence": [
+        ".claude/hooks/_lib/rag_bridge.py",
+        ".claude/hooks/_lib/rag_router.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 3
+    },
+    "CEO_RAG_SIDECAR_SOCKET": {
+      "evidence": [
+        ".claude/hooks/_lib/rag_bridge.py",
+        ".claude/hooks/_lib/rag_router.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 3
+    },
+    "CEO_RAG_SOCKET": {
+      "evidence": [
+        ".claude/hooks/_lib/rag_bridge.py",
+        ".claude/hooks/_lib/rag_router.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 3
+    },
+    "CEO_RATE_PRESSURE": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/optimizer/fanout.py"
+      ],
+      "sites": 2
+    },
+    "CEO_READ_INJECTION_SCAN": {
+      "evidence": [
+        ".claude/hooks/check_read_injection.py",
+        ".claude/hooks/check_webfetch_injection.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 4
+    },
+    "CEO_REALITY_LEDGER_DETECTOR_07": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/reality-ledger.py"
+      ],
+      "sites": 2
+    },
+    "CEO_REALTIME_TRANSPORT": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        "scripts/install.sh"
+      ],
+      "sites": 2
+    },
+    "CEO_REAL_EMBEDDINGS": {
+      "evidence": [
+        ".claude/hooks/_lib/embeddings.py",
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/skill-retrieve.py"
+      ],
+      "sites": 3
+    },
+    "CEO_RED_TEAM_STATE": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/red-team-eval.py"
+      ],
+      "sites": 2
+    },
+    "CEO_REQUIRE_REPO_PROFILE_FIXTURES": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        "scripts/local/plan-093-execute-ceremony.sh"
+      ],
+      "sites": 2
+    },
+    "CEO_REVIEW_LOOP": {
+      "evidence": [
+        ".claude/hooks/codex_review_user_code.py",
+        ".claude/hooks/review_loop.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 5
+    },
+    "CEO_REVIEW_LOOP_STATE": {
+      "evidence": [
+        ".claude/hooks/codex_review_user_code.py",
+        ".claude/hooks/review_loop.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 3
+    },
+    "CEO_ROTATED_BY": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/key-hygiene.py"
+      ],
+      "sites": 2
+    },
+    "CEO_RUNTIME_DIR": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/morning_ledger.py"
+      ],
+      "sites": 2
+    },
+    "CEO_RUNTIME_NOTES": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        "scripts/install.sh"
+      ],
+      "sites": 2
+    },
+    "CEO_SCAN_INJECTION_DEBUG": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/scan-injection-strict.sh"
+      ],
+      "sites": 2
+    },
+    "CEO_SELF_TEST_STRICT": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/self_test.py"
+      ],
+      "sites": 2
+    },
+    "CEO_SENTINEL_SESSION_CACHE_DISABLED": {
+      "evidence": [
+        ".claude/hooks/check_canonical_edit.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_SENTINEL_UNLOCK": {
+      "evidence": [
+        ".claude/hooks/check_canonical_edit.py",
+        ".claude/scripts/env-inventory.json",
+        "scripts/local/plan-094-apply-wave-a-c-e.py"
+      ],
+      "sites": 3
+    },
+    "CEO_SENTINEL_UNLOCK_ACK": {
+      "evidence": [
+        ".claude/hooks/check_canonical_edit.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_SESSION_GRAPH_DIR": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/session-graph-build.py"
+      ],
+      "sites": 2
+    },
+    "CEO_SESSION_ID": {
+      "evidence": [
+        ".claude/hooks/check_agent_spawn.py",
+        ".claude/scripts/ceo-boot.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 5
+    },
+    "CEO_SESSION_START_HEAD": {
+      "evidence": [
+        ".claude/hooks/check_closeout_guard.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_SETUP_VERIFICATION": {
+      "evidence": [
+        ".claude/hooks/check_setup_verification.py",
+        ".claude/settings.json",
+        "scripts/upgrade.sh"
+      ],
+      "sites": 4
+    },
+    "CEO_SIDECAR_C1_CRYPTO_CRYPTOGRAPHY_MVP_ENABLED": {
+      "evidence": [
+        ".claude/hooks/_lib/federation/cert_inspector.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_SIDECAR_C2_VECTOR_MEMORY_ENABLED": {
+      "evidence": [
+        ".claude/hooks/_lib/rag_bridge.py",
+        ".claude/hooks/_lib/rag_router.py",
+        ".claude/scripts/check-sidecar-manifest.py"
+      ],
+      "sites": 4
+    },
+    "CEO_SKILL_BOOTSTRAP": {
+      "evidence": [
+        ".claude/hooks/check_skill_bootstrap_post.py",
+        ".claude/hooks/check_skill_patch_sentinel.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 3
+    },
+    "CEO_SKILL_BOOTSTRAP_ACK": {
+      "evidence": [
+        ".claude/hooks/check_skill_bootstrap_post.py",
+        ".claude/hooks/check_skill_patch_sentinel.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 3
+    },
+    "CEO_SKILL_BOOTSTRAP_POST": {
+      "evidence": [
+        ".claude/hooks/check_skill_bootstrap_post.py",
+        ".claude/scripts/env-inventory.json",
+        ".claude/settings.json"
+      ],
+      "sites": 3
+    },
+    "CEO_SKILL_FRONTMATTER_CACHE_DISABLED": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/smart-loading-resolver.py"
+      ],
+      "sites": 2
+    },
+    "CEO_SKILL_FRONTMATTER_CACHE_PATH": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/smart-loading-resolver.py"
+      ],
+      "sites": 2
+    },
+    "CEO_SKILL_INDEX_PATH": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/skill-index-build.py",
+        ".claude/scripts/skill-retrieve.py"
+      ],
+      "sites": 3
+    },
+    "CEO_SKILL_PATCH_ALLOW_CODE": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/skill-patch-propose.py"
+      ],
+      "sites": 2
+    },
+    "CEO_SKILL_PATCH_SHA": {
+      "evidence": [
+        ".claude/hooks/check_skill_patch_sentinel.py",
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/skill-patch-apply.py"
+      ],
+      "sites": 3
+    },
+    "CEO_SKILL_READ_STATE_DIR": {
+      "evidence": [
+        ".claude/hooks/check_skill_reference_read.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_SKILL_READ_V2": {
+      "evidence": [
+        ".claude/hooks/check_skill_reference_read.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_SKILL_REFERENCE_MODE": {
+      "evidence": [
+        ".claude/hooks/check_agent_spawn.py",
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/inject-agent-context.sh"
+      ],
+      "sites": 3
+    },
+    "CEO_SKIP_COOKBOOK_HINT": {
+      "evidence": [
+        ".claude/scripts/check-auto-activation-flags.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_SKIP_FIXTURE_CORPUS_VERIFY": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/tier_policy_cli/learn.py"
+      ],
+      "sites": 2
+    },
+    "CEO_SKIP_HOOKS": {
+      "evidence": [
+        ".claude/hooks/_lib/env_persist_allowlist.py"
+      ],
+      "sites": 1
+    },
+    "CEO_SKIP_REAL_REGISTRY_SMOKE": {
+      "evidence": [
+        ".claude/hooks/_lib/testing.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_SKIP_TIER_POLICY_CHECK": {
+      "evidence": [
+        ".claude/scripts/check-auto-activation-flags.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_SKIP_WIZARD": {
+      "evidence": [
+        ".claude/scripts/check-auto-activation-flags.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_SMART_LOADING_DEBUG": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/smart-loading-resolver.py"
+      ],
+      "sites": 2
+    },
+    "CEO_SOTA_DISABLE": {
+      "evidence": [
+        ".claude/hooks/_lib/adapters/live/__init__.py",
+        ".claude/hooks/_lib/adapters/live/claude.py",
+        ".claude/hooks/_lib/adapters/live/gemini.py"
+      ],
+      "sites": 40
+    },
+    "CEO_SOURCE_FILE_COUNT": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        "scripts/install.sh"
+      ],
+      "sites": 2
+    },
+    "CEO_SPAWN_CONFIDENCE_ENABLED": {
+      "evidence": [
+        ".claude/hooks/check_agent_spawn.py",
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/profile-opus-4-7.py"
+      ],
+      "sites": 3
+    },
+    "CEO_SPAWN_DEPTH": {
+      "evidence": [
+        ".claude/hooks/check_agent_spawn.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_SPAWN_DEPTH_GUARD": {
+      "evidence": [
+        ".claude/hooks/check_agent_spawn.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_SPAWN_OVERLAP_GUARD": {
+      "evidence": [
+        ".claude/hooks/check_agent_spawn.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_SPAWN_SECRET_SCAN": {
+      "evidence": [
+        ".claude/hooks/check_agent_spawn.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_SPAWN_TOOL_SCOPE": {
+      "evidence": [
+        ".claude/hooks/check_agent_spawn.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_SPEC_CTX_SANITIZER_ENABLED": {
+      "evidence": [
+        ".claude/hooks/check_agent_spawn.py",
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/profile-opus-4-7.py"
+      ],
+      "sites": 3
+    },
+    "CEO_SPEC_VALIDATION": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/validate-spec-context.py"
+      ],
+      "sites": 2
+    },
+    "CEO_SQUAD_MAX_BYTES": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/squad-import.py"
+      ],
+      "sites": 2
+    },
+    "CEO_STACK": {
+      "evidence": [
+        ".claude/hooks/_lib/env_persist_allowlist.py",
+        ".claude/scripts/env-inventory.json",
+        "scripts/install.sh"
+      ],
+      "sites": 3
+    },
+    "CEO_STATE_MANAGEMENT": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        "scripts/install.sh"
+      ],
+      "sites": 2
+    },
+    "CEO_STATE_ROOT": {
+      "evidence": [
+        ".claude/hooks/_lib/state_store.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_STATUSLINE_DEBUG": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/statusline-ceo.py",
+        "templates/scripts/statusline-ceo.py"
+      ],
+      "sites": 3
+    },
+    "CEO_STATUSLINE_DISABLE": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/statusline-ceo.py",
+        "templates/scripts/statusline-ceo.py"
+      ],
+      "sites": 3
+    },
+    "CEO_STATUSLINE_EMIT": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/statusline-ceo.py",
+        "templates/scripts/statusline-ceo.py"
+      ],
+      "sites": 3
+    },
+    "CEO_STATUSLINE_EMIT_INTERVAL_S": {
+      "evidence": [
+        ".claude/hooks/_lib/audit_emit.py",
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/statusline-ceo.py"
+      ],
+      "sites": 4
+    },
+    "CEO_STATUSLINE_SIDECAR": {
+      "evidence": [
+        ".claude/hooks/_lib/audit_emit.py",
+        ".claude/hooks/_lib/effective_config.py",
+        ".claude/hooks/check_budget.py"
+      ],
+      "sites": 6
+    },
+    "CEO_STREAMING_DISABLE": {
+      "evidence": [
+        ".claude/scripts/check-auto-activation-flags.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_STRUCTURED_OUTPUTS": {
+      "evidence": [
+        ".claude/scripts/benchmark-judge.py"
+      ],
+      "sites": 1
+    },
+    "CEO_SUBAGENT_FABRICATION_BLOCK": {
+      "evidence": [
+        ".claude/hooks/check_subagent_fabrication.py",
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/swarm/_subagent_fabrication.py"
+      ],
+      "sites": 6
+    },
+    "CEO_SUBAGENT_FABRICATION_DEBUG": {
+      "evidence": [
+        ".claude/hooks/check_subagent_fabrication.py",
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/swarm/_subagent_fabrication.py"
+      ],
+      "sites": 6
+    },
+    "CEO_SUBAGENT_FABRICATION_DUMP_DIR": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/swarm/_subagent_fabrication.py"
+      ],
+      "sites": 2
+    },
+    "CEO_SUBAGENT_LIFECYCLE": {
+      "evidence": [
+        ".claude/hooks/check_fluency_nudge.py",
+        ".claude/hooks/check_subagent_start.py",
+        ".claude/settings.json"
+      ],
+      "sites": 5
+    },
+    "CEO_SUBAGENT_LIFECYCLE_STATE_DIR": {
+      "evidence": [
+        ".claude/hooks/check_fluency_nudge.py",
+        ".claude/hooks/check_subagent_start.py"
+      ],
+      "sites": 2
+    },
+    "CEO_SUBAGENT_TRANSCRIPT_ROOT": {
+      "evidence": [
+        ".claude/hooks/check_fluency_nudge.py"
+      ],
+      "sites": 1
+    },
+    "CEO_SUMMARIZE_MIN_TOKENS": {
+      "evidence": [
+        ".claude/scripts/context-budget.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_SUMMARIZE_OLDEST": {
+      "evidence": [
+        ".claude/scripts/context-budget.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_SUMMARIZE_PROTECT_LAST": {
+      "evidence": [
+        ".claude/scripts/context-budget.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_SWARM": {
+      "evidence": [
+        ".claude/hooks/_lib/cost_envelope.py",
+        ".claude/hooks/check_cost_envelope.py",
+        ".claude/scripts/audit-dashboard.py"
+      ],
+      "sites": 9
+    },
+    "CEO_SWARM_CLASS": {
+      "evidence": [
+        ".claude/hooks/check_cost_envelope.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_SWARM_ENABLE_GATE_DISABLE": {
+      "evidence": [
+        ".claude/hooks/_lib/swarm_enable_gate.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_SWARM_ESTIMATED_SPAWN_CENTS": {
+      "evidence": [
+        ".claude/hooks/check_cost_envelope.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_SWARM_ESTIMATE_CENTS": {
+      "evidence": [
+        ".claude/hooks/check_cost_envelope.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_TERSE_MODE": {
+      "evidence": [
+        ".claude/hooks/check_agent_spawn.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_TEST_COUNT": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        "scripts/install.sh"
+      ],
+      "sites": 2
+    },
+    "CEO_TEST_FRAMEWORK": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        "scripts/install.sh"
+      ],
+      "sites": 2
+    },
+    "CEO_TEST_HARNESS": {
+      "evidence": [
+        ".claude/hooks/_lib/spool_writer.py",
+        ".claude/hooks/_lib/test_isolation.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 3
+    },
+    "CEO_TEST_TOOL": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        "scripts/install.sh"
+      ],
+      "sites": 2
+    },
+    "CEO_THINKING_AUTO_DISABLE": {
+      "evidence": [
+        ".claude/hooks/_lib/adapters/live/claude.py",
+        ".claude/hooks/_lib/model_routing.py",
+        ".claude/scripts/check-auto-activation-flags.py"
+      ],
+      "sites": 4
+    },
+    "CEO_TIER_POLICY_CI": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/tier_policy_cli/apply.py"
+      ],
+      "sites": 2
+    },
+    "CEO_TIER_POLICY_COOLDOWN_DAYS": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/tier_policy_cli/learn.py"
+      ],
+      "sites": 2
+    },
+    "CEO_TIER_POLICY_DRY_RUN": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/tier_policy_cli/apply.py"
+      ],
+      "sites": 2
+    },
+    "CEO_TIER_POLICY_ENABLE": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/tier_policy_cli/__init__.py",
+        ".claude/scripts/tier_policy_cli/apply.py"
+      ],
+      "sites": 3
+    },
+    "CEO_TIER_POLICY_MAX_PROMOTE_DELTA_USD": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/tier_policy_cli/_types.py",
+        ".claude/scripts/tier_policy_cli/apply.py"
+      ],
+      "sites": 3
+    },
+    "CEO_TIER_POLICY_MAX_RUNS": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/tier_policy_cli/learn.py"
+      ],
+      "sites": 2
+    },
+    "CEO_TIER_POLICY_PATH": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/tier_policy_cli/loader.py"
+      ],
+      "sites": 2
+    },
+    "CEO_TIER_POLICY_REPORT_MAX_AGE_DAYS": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/tier_policy_cli/learn.py"
+      ],
+      "sites": 2
+    },
+    "CEO_TIER_POLICY_SENTINEL_PATH": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/tier_policy_cli/apply.py"
+      ],
+      "sites": 2
+    },
+    "CEO_TIER_POLICY_SIGCHAIN_PATH": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/tier_policy_cli/loader.py"
+      ],
+      "sites": 2
+    },
+    "CEO_TOKEN_ESTIMATE_DIR": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/token-budget-guard.py"
+      ],
+      "sites": 2
+    },
+    "CEO_TOKEN_ESTIMATOR_BLENDED_RATIO": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/token-estimator.py"
+      ],
+      "sites": 2
+    },
+    "CEO_TOKEN_ESTIMATOR_SECONDS_PER_KTOK": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/token-estimator.py"
+      ],
+      "sites": 2
+    },
+    "CEO_TOOL_LIFECYCLE": {
+      "evidence": [
+        ".claude/hooks/check_anti_ceo_overhead.py",
+        ".claude/hooks/check_output_secrets.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 5
+    },
+    "CEO_TOOL_LIFECYCLE_ORPHAN_TIMEOUT_S": {
+      "evidence": [
+        ".claude/hooks/_lib/tool_lifecycle.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_TOURNAMENT": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/tournament/__init__.py",
+        ".claude/scripts/tournament/runner.py"
+      ],
+      "sites": 3
+    },
+    "CEO_TOURNAMENT_ABORT_MULTIPLIER": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/tournament/runner.py"
+      ],
+      "sites": 2
+    },
+    "CEO_TOURNAMENT_BUDGET_USD": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/tournament/__init__.py",
+        ".claude/scripts/tournament/runner.py"
+      ],
+      "sites": 3
+    },
+    "CEO_TOURNAMENT_CALL_TIMEOUT_S": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/tournament/__init__.py",
+        ".claude/scripts/tournament/runner.py"
+      ],
+      "sites": 3
+    },
+    "CEO_TOURNAMENT_CI": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/tournament/__init__.py",
+        ".claude/scripts/tournament/runner.py"
+      ],
+      "sites": 3
+    },
+    "CEO_TOURNAMENT_CONCURRENCY": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/tournament/__init__.py",
+        ".claude/scripts/tournament/runner.py"
+      ],
+      "sites": 3
+    },
+    "CEO_TOURNAMENT_JUDGE_RUNS": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/tournament/__init__.py",
+        ".claude/scripts/tournament/runner.py"
+      ],
+      "sites": 3
+    },
+    "CEO_TRADING_WRITE_JUSTIFICATION": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/trading-readonly-guardrails.py"
+      ],
+      "sites": 2
+    },
+    "CEO_TRADING_WRITE_OVERRIDE": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/trading-readonly-guardrails.py"
+      ],
+      "sites": 2
+    },
+    "CEO_TRUST_BYPASS": {
+      "evidence": [
+        ".claude/hooks/_lib/env_persist_allowlist.py"
+      ],
+      "sites": 1
+    },
+    "CEO_TURBO": {
+      "evidence": [
+        ".claude/hooks/_lib/env_persist_allowlist.py",
+        ".claude/hooks/accel_dispatch.py",
+        ".claude/hooks/check_setup_verification.py"
+      ],
+      "sites": 9
+    },
+    "CEO_UI_LIBRARY": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        "scripts/install.sh"
+      ],
+      "sites": 2
+    },
+    "CEO_UNICODE_HARDBLOCK": {
+      "evidence": [
+        ".claude/hooks/check_agent_spawn.py",
+        ".claude/hooks/check_canonical_edit.py",
+        ".claude/hooks/check_read_injection.py"
+      ],
+      "sites": 4
+    },
+    "CEO_USER_ID": {
+      "evidence": [
+        ".claude/hooks/check_cost_envelope.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_VALUE_DASHBOARD_AUTO": {
+      "evidence": [
+        ".claude/hooks/SessionEnd.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_VERBOSE": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 1
+    },
+    "CEO_VERIFY_AFTER_EDIT": {
+      "evidence": [
+        ".claude/hooks/turbo_profile.py",
+        ".claude/hooks/verify_after_edit.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 6
+    },
+    "CEO_VERIFY_AFTER_EDIT_BLOCK": {
+      "evidence": [
+        ".claude/hooks/accel_dispatch.py",
+        ".claude/hooks/verify_after_edit.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 3
+    },
+    "CEO_VERIFY_AFTER_EDIT_GO_PACKAGE": {
+      "evidence": [
+        ".claude/hooks/verify_after_edit.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_VERIFY_AFTER_EDIT_NO_CONTINUE": {
+      "evidence": [
+        ".claude/hooks/accel_dispatch.py",
+        ".claude/hooks/verify_after_edit.py"
+      ],
+      "sites": 2
+    },
+    "CEO_WEBFETCH_INJECTION_SCAN": {
+      "evidence": [
+        ".claude/hooks/check_webfetch_injection.py",
+        ".claude/scripts/env-inventory.json",
+        ".claude/settings.json"
+      ],
+      "sites": 5
+    },
+    "CEO_WS3_APPLY_OK": {
+      "evidence": [
+        ".claude/hooks/check_worktree_writer.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CEO_X": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/reality-ledger.py"
+      ],
+      "sites": 2
+    },
+    "CLAUDE_ACTIVATION_CHECK_NEW": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 1
+    },
+    "CLAUDE_AGENT_NAME": {
+      "evidence": [
+        ".claude/hooks/check_arbitration_kernel.py",
+        ".claude/hooks/check_canonical_edit.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 3
+    },
+    "CLAUDE_AUDIT_LOG": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        "scripts/install-accelerators.sh"
+      ],
+      "sites": 2
+    },
+    "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR": {
+      "evidence": [
+        ".claude/settings.json",
+        "templates/settings/settings.base.json"
+      ],
+      "sites": 2
+    },
+    "CLAUDE_CALL_INSERT": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 1
+    },
+    "CLAUDE_CODE_DISABLE_AUTO_MEMORY": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/workflows/eval-baseline-n20.js"
+      ],
+      "sites": 2
+    },
+    "CLAUDE_CODE_ENABLE_TELEMETRY": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/otel-local-sink.py",
+        "templates/settings/settings.stack.otel.json"
+      ],
+      "sites": 3
+    },
+    "CLAUDE_CODE_MAX_OUTPUT_TOKENS": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/substrate-watch.json"
+      ],
+      "sites": 2
+    },
+    "CLAUDE_CODE_SUBAGENT_MODEL": {
+      "evidence": [
+        ".claude/hooks/route.py",
+        ".claude/hooks/turbo_profile.py",
+        ".claude/scripts/env-inventory-check.py"
+      ],
+      "sites": 10
+    },
+    "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB": {
+      "evidence": [
+        ".claude/settings.json",
+        "templates/settings/settings.base.json"
+      ],
+      "sites": 2
+    },
+    "CLAUDE_CONFIG_DIR": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/workflows/eval-baseline-n20.js"
+      ],
+      "sites": 2
+    },
+    "CLAUDE_DIR_NAME": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/first-run-wizard.py"
+      ],
+      "sites": 2
+    },
+    "CLAUDE_ENV_FILE": {
+      "evidence": [
+        ".claude/hooks/_lib/env_persist_allowlist.py",
+        ".claude/hooks/check_setup_verification.py",
+        ".claude/settings.json"
+      ],
+      "sites": 5
+    },
+    "CLAUDE_FULL": {
+      "evidence": [
+        ".claude/scripts/check-docs-freshness.py",
+        ".claude/scripts/check-originator-residue.py",
+        ".claude/scripts/check_contamination.py"
+      ],
+      "sites": 5
+    },
+    "CLAUDE_IMPORTS_BLOCK": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 1
+    },
+    "CLAUDE_IN_CHROME": {
+      "evidence": [
+        ".claude/scripts/check-auto-activation-flags.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CLAUDE_MD": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/validate-governance.sh"
+      ],
+      "sites": 2
+    },
+    "CLAUDE_MD_BYTES": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/validate-governance.sh"
+      ],
+      "sites": 2
+    },
+    "CLAUDE_MD_LIMIT": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/validate-governance.sh"
+      ],
+      "sites": 2
+    },
+    "CLAUDE_MD_PATH": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/validate-governance.sh"
+      ],
+      "sites": 2
+    },
+    "CLAUDE_MD_SIZE_LIMIT": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/scripts/validate-governance.sh"
+      ],
+      "sites": 2
+    },
+    "CLAUDE_PARENT_AGENT": {
+      "evidence": [
+        ".claude/hooks/check_arbitration_kernel.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CLAUDE_PLUGIN_ROOT": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        "scripts/build-plugin.py"
+      ],
+      "sites": 2
+    },
+    "CLAUDE_PROJECT_DIR": {
+      "evidence": [
+        ".claude/hooks/SessionEnd.py",
+        ".claude/hooks/SessionStart.py",
+        ".claude/hooks/Stop.py"
+      ],
+      "sites": 112
+    },
+    "CLAUDE_PY": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 1
+    },
+    "CLAUDE_RC": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json",
+        ".claude/workflows/eval-baseline-n20.js"
+      ],
+      "sites": 2
+    },
+    "CLAUDE_SESSION_END_COMPLETED": {
+      "evidence": [
+        ".claude/hooks/Stop.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CLAUDE_SESSION_END_REASON": {
+      "evidence": [
+        ".claude/hooks/SessionEnd.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CLAUDE_SESSION_ID": {
+      "evidence": [
+        ".claude/hooks/SessionEnd.py",
+        ".claude/hooks/SessionStart.py",
+        ".claude/hooks/Stop.py"
+      ],
+      "sites": 22
+    },
+    "CLAUDE_SIZE": {
+      "evidence": [
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 1
+    },
+    "CLAUDE_STOP_REASON": {
+      "evidence": [
+        ".claude/hooks/Stop.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    },
+    "CLAUDE_VERSION": {
+      "evidence": [
+        ".claude/scripts/check-sdk-compat.sh",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 2
+    }
+  }
+}

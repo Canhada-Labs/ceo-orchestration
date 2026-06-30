@@ -1,0 +1,8 @@
+risk_class: generic
+detected_at: 2026-05-11T00:00:00Z
+confidence: medium
+signals:
+  - fallback:no-signals
+manual_override: true
+created_at: 2026-05-11T00:00:00Z
+schema_version: "1"

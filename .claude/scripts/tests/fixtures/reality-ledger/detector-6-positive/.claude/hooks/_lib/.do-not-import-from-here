@@ -1,0 +1,15 @@
+# PLAN-118 AC-B6 — KEEP-ISOLATED-NO-RENAME marker.
+#
+# This `_lib/` directory is preserved IN PLACE because a live consumer
+# references its exact on-disk path (e.g. reality-ledger.py hardcoded
+# filesystem scan target OR test_check_agent_spawn.py spec_from_file_
+# location dynamic loader). Renaming to `_lib_archived/` would break
+# the consumer.
+#
+# NEVER add this directory's parent to `sys.path` from any new code.
+# The pre-canonical-fast-path `open(path, 'a')` write at audit_emit.py
+# `_emit_chain_reset_marker_under_lock` (PLAN-118 chokepoint 1) +
+# audit_hmac._ensure_canonical_lib_modules (chokepoint 3) WILL detect
+# stale-`_lib`-on-sys.path at HMAC compute time and fail-CLOSED on the
+# chain (line written with hmac:null + closed-enum hmac_error
+# `producer_path_pollution_detected`).

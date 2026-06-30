@@ -1,0 +1,181 @@
+# PLAN-071 §4.5 Phase 4 — Reality Ledger advisory CI workflow
+#
+# Weekly drift-detection run. Advisory-only — never blocks CI; opens or
+# updates a SINGLE ongoing GitHub issue when findings exist (idempotent
+# per ADR-064 precedent).
+#
+# Schedule offset 09:00 UTC = 2h after tier-policy.yml (07:00 UTC) per
+# Round 1 R-SEC U6 to avoid runner contention.
+#
+# Security envelope (9 explicit checks per §4.5):
+#   1. Trigger: ONLY workflow_dispatch + schedule (no PR triggers)
+#   2. Permissions: contents:read + issues:write (deny-by-default)
+#   3. Fork-PR guard at job level
+#   4. Checkout SHA-pinned + persist-credentials:false
+#   5. timeout-minutes: 15 job cap
+#   6. Concurrency group with cancel-in-progress:false
+#   7. ALL uses: SHA-pinned (validate-governance.sh enforces)
+#   8. Zero secrets.* except GITHUB_TOKEN
+#   9. Concurrency block declared (R2 G1)
+
+name: reality-ledger
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 9 * * 1"  # Monday 09:00 UTC
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: reality-ledger-main
+  cancel-in-progress: false
+
+jobs:
+  drift-scan:
+    name: Reality Ledger drift scan (advisory)
+    if: github.event.repository.fork == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
+        with:
+          python-version: '3.12'
+
+      - name: Run reality-ledger drift scan (markdown)
+        id: ledger
+        run: |
+          set -euo pipefail
+          OUT=$(mktemp)
+          # Advisory-only: NEVER fail the workflow on findings or runtime errors
+          if python3 .claude/scripts/reality-ledger.py \
+              --format markdown \
+              --severity medium > "$OUT" 2>&1; then
+            EXIT_CODE=0
+          else
+            EXIT_CODE=$?
+          fi
+          # Capture output for downstream steps
+          echo "exit_code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
+          {
+            echo "report<<EOF"
+            cat "$OUT"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+          # Always exit 0 — advisory-only contract
+          exit 0
+
+      - name: Run reality-ledger jsonl (audit-log payload)
+        id: ledger_jsonl
+        run: |
+          set -euo pipefail
+          # JSONL output excludes claim_source_path per Sec policy
+          # (claim_source_sha256 only for audit-log + GH issue body).
+          python3 .claude/scripts/reality-ledger.py \
+              --format jsonl \
+              --severity medium > /tmp/ledger.jsonl 2>/dev/null || true
+          FINDING_COUNT=$(wc -l < /tmp/ledger.jsonl | tr -d ' ')
+          echo "finding_count=$FINDING_COUNT" >> "$GITHUB_OUTPUT"
+
+      - name: Update or open GitHub issue (idempotent)
+        if: steps.ledger_jsonl.outputs.finding_count != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FINDING_COUNT: ${{ steps.ledger_jsonl.outputs.finding_count }}
+        run: |
+          set -euo pipefail
+          DATE=$(date -u +%Y-%m-%d)
+          TITLE_PREFIX="[reality-ledger] Drift findings"
+          # Find existing open issue (single ongoing issue per ADR-064)
+          EXISTING=$(gh issue list \
+            --search "$TITLE_PREFIX in:title is:open" \
+            --json number \
+            --jq '.[0].number // empty' || echo "")
+          # Codex S87 B4 fix: build issue body from JSONL ONLY
+          # (claim_source_sha256 + sha-only fields). Markdown rendering
+          # would leak claim_source_path violating R-SEC2 contract.
+          # Each JSONL line is a finding; render as markdown table rows.
+          ROWS=$(python3 - <<'PYEOF'
+          import json, pathlib
+          findings = []
+          path = pathlib.Path('/tmp/ledger.jsonl')
+          if path.exists():
+              for line in path.read_text(encoding='utf-8').splitlines():
+                  if line.strip():
+                      findings.append(json.loads(line))
+          print('| Detector | Severity | Confidence | claim_source_sha256 |')
+          print('|---|---|---|---|')
+          for f in findings:
+              sha = f.get('claim_source_sha256', '')
+              short = sha[:12] + '...' if sha else '(none)'
+              print(f"| `{f.get('detector','?')}` | {f.get('severity','?')} | {f.get('confidence','?')} | `{short}` |")
+          PYEOF
+          )
+          # PLAN-112-FOLLOWUP-reality-ledger-yaml-fix (S153): replaced
+          # `BODY=$(cat <<EOF ... EOF)` with bash multi-line double-quoted
+          # string. The heredoc form required EOF + body content at column
+          # 1, which escaped the YAML `run: |` block scalar and triggered
+          # `expected <block end>, but found '-'` at line 128's
+          # `- Detectors run: 5 ...` (parsed as a new top-level list item).
+          # Multi-line "..." stays inside the YAML block scalar indent;
+          # bash variable expansion + backticks-as-literal preserved
+          # (identical semantics to <<EOF, NOT <<'EOF').
+          BODY="# $TITLE_PREFIX — $DATE
+
+          ## Summary
+
+          - Detectors run: 5 (PLAN-071 §4.3 — runtime_read_missing, installable_claim_drift, model_assignment_divergence, enforcement_commit_unpopulated, audit_action_phantom)
+          - Findings (medium+): $FINDING_COUNT
+          - claim_source_sha256 only (paths excluded per Sec R-SEC2 policy)
+
+          ## Findings
+
+          $ROWS
+
+          ## Triage
+
+          Run locally for full triage including \`claim_source_path\`:
+
+          \`\`\`
+          python3 .claude/scripts/reality-ledger.py --format markdown
+          \`\`\`
+
+          ---
+
+          _Generated by \`.github/workflows/reality-ledger.yml\` — advisory only, never blocks CI._
+          _PLAN-071 Phase 4 acceptance: schedule offset 09:00 UTC; 9-check envelope verified; B4 closure (S87 Codex audit)._
+          "
+          if [ -n "$EXISTING" ]; then
+            echo "Appending to existing issue #$EXISTING"
+            gh issue comment "$EXISTING" --body "$BODY"
+          else
+            echo "Creating new issue"
+            gh issue create \
+              --title "$TITLE_PREFIX — $DATE" \
+              --body "$BODY" \
+              --label "reality-ledger,advisory"
+          fi
+
+      - name: Summary (always)
+        if: always()
+        run: |
+          # PLAN-112-FOLLOWUP-reality-ledger-yaml-fix (S153): collapsed 5
+          # individual `echo ... >> "$GITHUB_STEP_SUMMARY"` into one block
+          # redirect to clear pre-existing SC2129 style warning that kept
+          # actionlint exit non-zero even after the parse fix.
+          {
+            echo "## Reality Ledger run summary"
+            echo ""
+            echo "- Exit code: ${{ steps.ledger.outputs.exit_code }}"
+            echo "- Finding count: ${{ steps.ledger_jsonl.outputs.finding_count }}"
+            echo "- Advisory only — no CI gate"
+          } >> "$GITHUB_STEP_SUMMARY"

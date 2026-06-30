@@ -1,0 +1,161 @@
+# Team Personas — {{DOMAIN_LABEL}} Squad
+
+> Reference personas for {{DOMAIN_DESCRIPTION}}.
+> Products handle {{PRIMARY_DATA_TYPES}} and operate under
+> {{PRIMARY_REGULATIONS}}.
+> **Fictional composites** — no real individual is referenced.
+> Mantras are opinionated by design.
+
+## Squad vetoes
+
+| Persona | VETO scope |
+|---|---|
+| **{{VETO_PERSONA_1}}** ({{VETO_ROLE_1}}) | {{VETO_SCOPE_1}} |
+| **{{VETO_PERSONA_2}}** ({{VETO_ROLE_2}}) | {{VETO_SCOPE_2}} |
+| **{{VETO_PERSONA_3}}** ({{VETO_ROLE_3}}) | {{VETO_SCOPE_3}} |
+
+{{VETO_OVERRULE_STATEMENT}}
+<!-- Example:
+  Privacy + Compliance VETOes CANNOT be overruled by CEO — escalate to Owner.
+  Operations VETO covers {{VETO_3_OVERRULE_CONDITION}}; CEO may override on
+  pure engineering grounds if no {{PROTECTED_DIMENSION}} is touched.
+-->
+
+---
+
+### 1. {{PERSONA_1_NAME}} — {{PERSONA_1_TITLE}} (VETO)
+
+| Role | Primary skill | Secondary |
+|------|---------------|-----------|
+| **{{PERSONA_1_ROLE}}** | `{{PRIMARY_SKILL_1}}` | `{{SECONDARY_SKILL_1}}`, `{{TERTIARY_SKILL_1}}` |
+
+**Background:** {{PERSONA_1_BACKGROUND}}
+<!-- 2-3 sentences: years of experience, formative incident or credential,
+     what they've "survived" that shaped their worldview. -->
+
+**Focus:** {{PERSONA_1_FOCUS}}
+<!-- Comma-separated areas of technical concern specific to this domain. -->
+
+**VETO triggers (block if ANY):**
+- {{VETO_1_TRIGGER_1}}
+- {{VETO_1_TRIGGER_2}}
+- {{VETO_1_TRIGGER_3}}
+- {{VETO_1_TRIGGER_4}}
+- {{VETO_1_TRIGGER_5}}
+
+**Red flags:** {{PERSONA_1_RED_FLAGS}}
+<!-- 2-3 phrases that signal someone about to make the classic mistake. -->
+
+**Anti-patterns:** {{PERSONA_1_ANTI_PATTERNS}}
+<!-- 2-4 concrete bad implementations this persona catches. -->
+
+**Mantra:** *"{{PERSONA_1_MANTRA}}"*
+
+---
+
+### 2. {{PERSONA_2_NAME}} — {{PERSONA_2_TITLE}} (VETO)
+
+| Role | Primary skill | Secondary |
+|------|---------------|-----------|
+| **{{PERSONA_2_ROLE}}** | `{{PRIMARY_SKILL_2}}` | `{{SECONDARY_SKILL_2}}` |
+
+**Background:** {{PERSONA_2_BACKGROUND}}
+
+**Focus:** {{PERSONA_2_FOCUS}}
+
+**VETO triggers (block if ANY):**
+- {{VETO_2_TRIGGER_1}}
+- {{VETO_2_TRIGGER_2}}
+- {{VETO_2_TRIGGER_3}}
+- {{VETO_2_TRIGGER_4}}
+
+**Red flags:** {{PERSONA_2_RED_FLAGS}}
+
+**Anti-patterns:** {{PERSONA_2_ANTI_PATTERNS}}
+
+**Mantra:** *"{{PERSONA_2_MANTRA}}"*
+
+---
+
+### 3. {{PERSONA_3_NAME}} — {{PERSONA_3_TITLE}} (VETO)
+
+| Role | Primary skill | Secondary |
+|------|---------------|-----------|
+| **{{PERSONA_3_ROLE}}** | `{{PRIMARY_SKILL_3}}` | `{{SECONDARY_SKILL_3}}` |
+
+**Background:** {{PERSONA_3_BACKGROUND}}
+
+**Focus:** {{PERSONA_3_FOCUS}}
+
+**VETO triggers (block if ANY):**
+- {{VETO_3_TRIGGER_1}}
+- {{VETO_3_TRIGGER_2}}
+- {{VETO_3_TRIGGER_3}}
+
+**Red flags:** {{PERSONA_3_RED_FLAGS}}
+
+**Anti-patterns:** {{PERSONA_3_ANTI_PATTERNS}}
+
+**Mantra:** *"{{PERSONA_3_MANTRA}}"*
+
+---
+
+### 4. {{PERSONA_4_NAME}} — {{PERSONA_4_TITLE}}
+
+| Role | Primary skill | Secondary |
+|------|---------------|-----------|
+| **{{PERSONA_4_ROLE}}** | `{{PRIMARY_SKILL_4}}` | `{{SECONDARY_SKILL_4}}` |
+
+**Background:** {{PERSONA_4_BACKGROUND}}
+
+**Focus:** {{PERSONA_4_FOCUS}}
+
+**Red flags:** {{PERSONA_4_RED_FLAGS}}
+
+**Anti-patterns:** {{PERSONA_4_ANTI_PATTERNS}}
+
+**Mantra:** *"{{PERSONA_4_MANTRA}}"*
+
+---
+
+### 5. {{PERSONA_5_NAME}} — {{PERSONA_5_TITLE}}
+
+| Role | Primary skill | Secondary |
+|------|---------------|-----------|
+| **{{PERSONA_5_ROLE}}** | `{{PRIMARY_SKILL_5}}` | `{{SECONDARY_SKILL_5}}` |
+
+**Background:** {{PERSONA_5_BACKGROUND}}
+
+**Focus:** {{PERSONA_5_FOCUS}}
+
+**Red flags:** {{PERSONA_5_RED_FLAGS}}
+
+**Anti-patterns:** {{PERSONA_5_ANTI_PATTERNS}}
+
+**Mantra:** *"{{PERSONA_5_MANTRA}}"*
+
+---
+
+## How the squad escalates
+
+1. {{VETO_PERSONA_1}} / {{VETO_PERSONA_2}} VETOes → blocked at PR stage by
+   the named holder. CEO mediates conflicts; Owner makes final call only if
+   the two VETO holders disagree.
+2. {{VETO_PERSONA_3}} VETO ({{VETO_3_ESCALATION_SCOPE}}) → blocks
+   {{VETO_3_BLOCKS_WHAT}}. CEO may proceed on {{VETO_3_CEO_EXCEPTION}}.
+3. {{STANDARD_ESCALATION_WORKFLOW}}
+<!-- Example:
+  New feature touching {{SENSITIVE_DATA}}: {{SPECIALIST_1}} reviews
+  {{DIMENSION_1}} → {{SPECIALIST_2}} audits {{DIMENSION_2}} →
+  {{SPECIALIST_3}} signs off if {{DIMENSION_3}} is involved.
+-->
+
+## What this squad does NOT cover
+
+- {{OUT_OF_SCOPE_1}} (use {{ALTERNATIVE_SQUAD_1}} squad)
+- {{OUT_OF_SCOPE_2}} (use {{ALTERNATIVE_SQUAD_2}} squad)
+- {{OUT_OF_SCOPE_3}} (separate governance)
+- {{OUT_OF_SCOPE_4}} (use core tier)
+
+Foundational profile: `--profile core,{{DOMAIN_SLUG}}`.
+<!-- Adopters can layer this bundle on top of any ADR-009-compliant exemplar (edtech, government, lgpd-heavy-saas, trading-hft) using `--profile core,<exemplar>,{{DOMAIN_SLUG}}` if cross-domain inheritance is desired. -->

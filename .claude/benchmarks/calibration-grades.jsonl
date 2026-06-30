@@ -1,0 +1,6 @@
+# Append-only ledger of human-vs-judge paired grades for PLAN-011 Phase 3.
+# Schema: {"id","date","benchmark","skill","human","judge_fwd","judge_rev",
+#          "refused_human","refused_judge","note"}
+# Status: SEED — no human grades collected yet. When real pairs land,
+# append one JSON per line below. Duplicates by id are resolved by last
+# occurrence (see calibration-kappa.py _load_grades dedupe).

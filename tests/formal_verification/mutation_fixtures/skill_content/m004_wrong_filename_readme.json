@@ -1,0 +1,8 @@
+{
+  "description": "Wrong filename: spawn prompt references .claude/skills/core/test-mutation/README.md (not SKILL.md). The file is staged under skills root and has valid content, but sub-check 4 requires Path.name == 'SKILL.md' exactly.",
+  "mutation_class": "S2_path_validation",
+  "sub_check_targeted": 4,
+  "expected_reason": "reference_wrong_filename",
+  "skill_body_variant": "valid",
+  "skill_rel_path": ".claude/skills/core/test-mutation/README.md"
+}

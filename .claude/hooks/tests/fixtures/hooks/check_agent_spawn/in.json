@@ -1,0 +1,1 @@
+{"session_id":"test-sess-005","hook_event_name":"PreToolUse","tool_name":"Task","tool_input":{"description":"General task","prompt":"Do work","subagent_type":"general-purpose"}}

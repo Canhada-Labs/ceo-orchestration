@@ -1,0 +1,8 @@
+{
+  "hook_event_name": "PostToolUse",
+  "session_id": "sess-paired-bash",
+  "tool_use_id": "toolu_paired_bash_01",
+  "tool_name": "Bash",
+  "duration_ms": 2500,
+  "tool_response": "hello\n"
+}

@@ -1,0 +1,4 @@
+{"action": "agent_spawn", "ts": "2026-04-15T00:00:00Z", "subagent_type": "devops", "model": "claude-sonnet-4-6"}
+{"action": "agent_spawn", "ts": "2026-04-16T00:00:00Z", "subagent_type": "devops", "model": "claude-sonnet-4-6"}
+{"action": "agent_spawn", "ts": "2026-04-17T00:00:00Z", "subagent_type": "devops", "model": "claude-sonnet-4-6"}
+{"action": "agent_spawn", "ts": "2026-04-18T00:00:00Z", "subagent_type": "devops", "model": "claude-haiku-4-7"}

@@ -1,0 +1,5 @@
+# memory address dump
+0xdeadbeef
+0x00000000
+0xfeedface12345678
+# debugger output

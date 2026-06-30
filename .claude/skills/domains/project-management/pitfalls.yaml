@@ -1,0 +1,68 @@
+# Pitfalls Catalog — Project-Management Squad
+# Loaded alongside the universal catalog when the project-management profile
+# is installed. Format mirrors .claude/pitfalls-catalog.yaml:
+# id, rule, whenToUse, agents.
+
+pitfalls:
+  # === SCOPE AND COMMITMENT CONTROL ===
+  - id: PMG-001
+    rule: "NEVER add scope to an active sprint or release without a written change order that documents (a) what is being added, (b) what is being deferred or removed to accommodate it, and (c) who authorised the trade-off. 'Fitting it in' without a trade-off is not a plan — it is optimism with a delivery date attached."
+    whenToUse: "any mid-sprint or mid-release scope addition request; any stakeholder request to add features to a committed delivery"
+    agents: [Renata Souza, Marcus Webb]
+
+  - id: PMG-002
+    rule: "NEVER communicate a release date to an external stakeholder (customer, partner, executive sponsor) before the engineering team has confirmed the date is achievable with current scope and velocity. A date communicated before engineering sign-off is a promise the team didn't make."
+    whenToUse: "any external roadmap communication, customer commitment, or sales promise about a delivery date"
+    agents: [Renata Souza]
+
+  - id: PMG-003
+    rule: "Cross-team dependencies MUST be explicit, written, and owner-assigned before the dependent work begins. A dependency tracked only in a Slack message or a 'they said they'd try' verbal commitment is an untracked risk. Every dependency in the program dependency graph must have a named owner and a committed delivery date."
+    whenToUse: "any planning session where a squad's work depends on output from another squad, vendor, or external team"
+    agents: [Marcus Webb, Renata Souza]
+
+  - id: PMG-004
+    rule: "Sprint goals MUST be specific enough that every engineer can state in one sentence whether the goal was achieved. Vague sprint goals ('continue platform work', 'make progress on Q3 features') cannot be evaluated and mask delivery problems until they become crises."
+    whenToUse: "sprint planning; any sprint goal definition or review"
+    agents: [Renata Souza, Priscilla Ng]
+
+  # === RISK REGISTER DISCIPLINE ===
+  - id: PMG-005
+    rule: "Risks in the risk register MUST NOT be closed without a documented reason: mitigation completed (with evidence), explicitly accepted with rationale and owner sign-off, or no longer applicable with explanation. 'The sprint passed and the risk didn't materialise' is not a closure reason — it may materialise next sprint."
+    whenToUse: "any risk register review; any attempt to close or suppress a risk item"
+    agents: [Yara Al-Hassan]
+
+  - id: PMG-006
+    rule: "When a risk materialises into an issue, it MUST be moved to the issue register within 24 hours with an assigned owner and a target resolution date. A risk that became an issue but stayed in the risk register is an invisible blocker — invisible blockers kill programs."
+    whenToUse: "any event that indicates a tracked risk has begun to impact the delivery"
+    agents: [Yara Al-Hassan, Renata Souza]
+
+  - id: PMG-007
+    rule: "Risk owners MUST explicitly accept ownership in writing when assigned. A risk 'assigned' without the owner's acknowledgement is a risk with no owner. Risk ownership does not transfer with org-chart changes unless the new owner explicitly re-accepts."
+    whenToUse: "any risk register update that changes the risk owner field"
+    agents: [Yara Al-Hassan]
+
+  - id: PMG-008
+    rule: "Program status reports MUST NOT show GREEN for any program where a critical-path item is in AMBER or RED status. A GREEN program status with RED dependencies is a misinformed executive — and an executive who learns the truth at the milestone review is an angry one."
+    whenToUse: "any program health report, executive status update, or RAG status assignment"
+    agents: [Marcus Webb, Yara Al-Hassan]
+
+  # === DELIVERY METRICS AND RETROSPECTIVES ===
+  - id: PMG-009
+    rule: "Retrospective findings MUST produce at least one specific, timeboxed action item with a named owner. A retrospective that closes with 'we should communicate better' and no specific action item is a ceremony without a result — the same problem will appear in the next retrospective."
+    whenToUse: "any sprint or program retrospective; retrospective action item review at subsequent retrospective"
+    agents: [Priscilla Ng, Renata Souza]
+
+  - id: PMG-010
+    rule: "Velocity MUST NOT be used to compare teams or to set engineer performance expectations. Velocity is a team-level planning tool calibrated to that team's definition of a story point. Cross-team velocity comparisons are meaningless and damage team trust."
+    whenToUse: "any team performance review, cross-team reporting, or planning discussion that references sprint velocity"
+    agents: [Diogo Martins, Renata Souza]
+
+  - id: PMG-011
+    rule: "Unplanned work (interrupt-driven tickets, production incidents, ad-hoc requests) MUST be tracked separately from planned sprint work. If unplanned work exceeds 20% of sprint capacity for two consecutive sprints, Renata must review the source and address it — it signals an unreliable planning baseline."
+    whenToUse: "sprint planning; sprint review; any ticket that is added to an active sprint that was not in the sprint plan"
+    agents: [Priscilla Ng, Diogo Martins]
+
+  - id: PMG-012
+    rule: "Estimation accuracy MUST be tracked and reviewed quarterly. If the team's estimation error consistently exceeds 30% (planned vs actual story points), the estimation process is broken and must be recalibrated — not compensated for by adding artificial buffer to every estimate."
+    whenToUse: "quarterly delivery review; sprint planning calibration sessions; any proposal to 'just add buffer' to estimates"
+    agents: [Diogo Martins, Priscilla Ng]

@@ -1,0 +1,5 @@
+Relative import form is not valid for `import_resolves` — use `path_exists` instead.
+
+CLAIM:import_resolves:.hidden_mod
+
+ADR-018 v1.1 rejects leading-dot forms.

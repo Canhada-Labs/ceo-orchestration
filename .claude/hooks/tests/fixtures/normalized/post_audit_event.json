@@ -1,0 +1,31 @@
+{
+  "session_id": "test-session-post-001",
+  "project": "/tmp/sandbox",
+  "phase": "PostToolUse",
+  "tool_name": "Task",
+  "tool_input": {
+    "subagent_type": "general-purpose",
+    "description": "Completed task",
+    "prompt": "Original prompt"
+  },
+  "tool_response": {
+    "totalDurationMs": 2500,
+    "totalTokens": 1234,
+    "usage": {
+      "input_tokens": 800,
+      "output_tokens": 434
+    }
+  },
+  "description": "Completed task",
+  "prompt": "Original prompt",
+  "subagent_type": "general-purpose",
+  "file_path": "",
+  "old_string": "",
+  "new_string": "",
+  "replace_all": false,
+  "command": "",
+  "raw_payload": {},
+  "parse_error": null,
+  "tool_use_id": "",
+  "duration_ms": null
+}

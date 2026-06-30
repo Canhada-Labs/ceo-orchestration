@@ -1,0 +1,74 @@
+# Pitfalls Catalog — HR Squad
+# Loaded alongside the universal catalog when the hr profile is
+# installed. Format mirrors .claude/pitfalls-catalog.yaml:
+# id, rule, whenToUse, agents.
+
+pitfalls:
+  # === EMPLOYEE RECORD GOVERNANCE ===
+  - id: HRR-001
+    rule: "NEVER delete or destroy an employee or former-employee record without first confirming no legal hold is active (litigation, regulatory inquiry, pending DSR, LGPD erasure request under evaluation). Premature destruction forfeits the employer's evidentiary position in employment disputes."
+    whenToUse: "any data deletion pipeline, storage-cost reduction project, or offboarding automation that touches employee records"
+    agents: [Isabel Meireles]
+
+  - id: HRR-002
+    rule: "NEVER expose compensation data (salary, bonus, equity, benefits value) to any role outside the documented minimum-necessary access list. Access must be role-scoped: payroll sees all; HRBPs see their supported population; direct managers see their reports only; skip-level and above requires documented approval. Compensation data in shared spreadsheets or Slack channels is an automatic access-control failure."
+    whenToUse: "any compensation data schema design, HRIS access-control configuration, or people-analytics dashboard that includes pay data"
+    agents: [Isabel Meireles, Daniel Kwon]
+
+  - id: HRR-003
+    rule: "NEVER mutate employment status (hire, terminate, promotion, leave-of-absence, return-from-leave) without a double-approval audit trail recording: who authorised the change, who executed it, the timestamp, and the reason code. Single-approver mutations on employment status are an audit and labour-law compliance failure."
+    whenToUse: "any HRIS workflow, API endpoint, or automation that changes employment-status fields"
+    agents: [Isabel Meireles]
+
+  - id: HRR-004
+    rule: "NEVER collect health or disability information from candidates or employees beyond what is legally required for the specific jurisdiction and specific business purpose (e.g. statutory medical fitness check, disability accommodation request). Pre-employment medical histories, family medical histories, and non-accommodation disability disclosures are discriminatory collection patterns."
+    whenToUse: "any onboarding form design, benefits enrollment form, or pre-employment screening that touches health or medical data"
+    agents: [Isabel Meireles, Larissa Andrade]
+
+  # === RECRUITMENT COMPLIANCE ===
+  - id: HRR-005
+    rule: "NEVER use a global 'hire / no hire' impression rating instead of per-competency scorecard ratings recorded before the debrief discussion begins. Post-hoc rationalisation of an impression is not a structured interview. Global ratings are indefensible in disparate-impact litigation."
+    whenToUse: "any interview process design, scorecard template creation, or debrief meeting facilitation"
+    agents: [Larissa Andrade]
+
+  - id: HRR-006
+    rule: "NEVER include age references ('young', 'recent graduate', 'energetic'), gendered language ('salesman', 'manpower', 'chairman'), or physical requirements that are not demonstrably essential to the job function in a job description or interview evaluation criteria."
+    whenToUse: "any job description authoring, revision, or audit; any evaluation criteria definition"
+    agents: [Larissa Andrade]
+
+  - id: HRR-007
+    rule: "NEVER ask a candidate about salary history during any stage of the hiring process. Salary history questions are prohibited by law in multiple BR states (e.g. São Paulo) and US jurisdictions, and perpetuate compensation inequity when answered voluntarily. Ask for salary expectations instead."
+    whenToUse: "any interview script, recruiter playbook, or offer-stage conversation that discusses compensation"
+    agents: [Larissa Andrade]
+
+  - id: HRR-008
+    rule: "NEVER conduct a background check on a candidate before making a conditional offer. FCRA (US) prohibits pre-offer background checks in most configurations. Conducting checks pre-offer exposes the employer to discriminatory-screening claims if the check is used to filter candidates before they see an offer."
+    whenToUse: "any background check process design, ATS automation, or recruiter checklist"
+    agents: [Larissa Andrade]
+
+  # === PEOPLE ANALYTICS & FAIRNESS ===
+  - id: HRR-009
+    rule: "NEVER surface a predictive score, risk rating, attrition prediction, or promotion recommendation to managers without a disparate-impact analysis per protected class completed and documented. A model accuracy metric does not substitute for a fairness evaluation."
+    whenToUse: "any people-analytics model, HR scoring system, or algorithmic decision-support tool surfaced to managers or HR leaders"
+    agents: [Daniel Kwon]
+
+  - id: HRR-010
+    rule: "NEVER display aggregated people-analytics data (attrition rate, performance distribution, engagement score) for a subgroup where N<5. Small-N cells re-identify individuals from contextual knowledge. Suppress or combine subgroups below the floor."
+    whenToUse: "any people-analytics dashboard, HR report, or engagement survey disaggregation"
+    agents: [Daniel Kwon, Isabel Meireles]
+
+  - id: HRR-011
+    rule: "NEVER retrain an attrition, promotion, or performance model without re-running the full fairness evaluation suite on the new training data. Training data changes can introduce or amplify bias even when the model architecture is unchanged."
+    whenToUse: "any model retrain event, data refresh for an existing HR model, or training-data pipeline update"
+    agents: [Daniel Kwon]
+
+  # === PII & CONSENT ===
+  - id: HRR-012
+    rule: "NEVER retain rejected-candidate records past the jurisdiction-mandated maximum without documented consent from the candidate for extended retention. Minimum retention (to defend against discrimination claims) is 1-2 years in most jurisdictions; retention beyond that requires LGPD/GDPR-compliant consent."
+    whenToUse: "any ATS data-retention policy, candidate-record deletion pipeline, or talent-pool database design"
+    agents: [Larissa Andrade, Isabel Meireles]
+
+  - id: HRR-013
+    rule: "NEVER defer offboarding access revocation. All production system access, admin credentials, and physical access (building cards, key fobs) MUST be revoked on the last day of employment — not the following Monday, not when IT gets around to it. A former employee with active credentials is an insider-threat surface that cannot be remediated retroactively."
+    whenToUse: "any offboarding checklist, ITSM offboarding workflow, or HRIS-to-IAM integration design"
+    agents: [Isabel Meireles]

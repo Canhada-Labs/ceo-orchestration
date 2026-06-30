@@ -1,0 +1,29 @@
+{
+  "_schema": "v1",
+  "_purpose": "PLAN-098 Wave A.1 — A* heuristic cost table per action_id (AC14).",
+  "_doctrine": "Rebaselined quarterly from audit-log.jsonl p50 token cost per action_id. Until first rebaseline, values are SOTA-prior estimates from observed PLAN-095..097 ceremonies (S128-S131).",
+  "_units": {
+    "tokens_k": "approximate LLM tokens spent on the action (input+output combined; in thousands)",
+    "gpg_events": "Owner physical GPG taps required (cost dimension distinct from tokens — irreducible bottleneck)",
+    "wall_clock_s": "approximate wall-clock seconds for the action to complete"
+  },
+  "_baseline_session_window": "S128..S131 (4 ceremonies; v1.28.0..v1.30.0)",
+  "_rebaseline_due": "2026-08-17",
+  "actions": {
+    "spawn_general": {"tokens_k": 25, "gpg_events": 0, "wall_clock_s": 60},
+    "spawn_specialist": {"tokens_k": 80, "gpg_events": 0, "wall_clock_s": 180},
+    "spawn_code_reviewer": {"tokens_k": 60, "gpg_events": 0, "wall_clock_s": 150},
+    "spawn_security_engineer": {"tokens_k": 70, "gpg_events": 0, "wall_clock_s": 160},
+    "spawn_qa_architect": {"tokens_k": 65, "gpg_events": 0, "wall_clock_s": 150},
+    "debate_round_1": {"tokens_k": 200, "gpg_events": 0, "wall_clock_s": 600},
+    "debate_round_2_codex": {"tokens_k": 350, "gpg_events": 0, "wall_clock_s": 900},
+    "plan_flip_draft_to_reviewed": {"tokens_k": 5, "gpg_events": 0, "wall_clock_s": 5},
+    "plan_flip_reviewed_to_executing": {"tokens_k": 5, "gpg_events": 1, "wall_clock_s": 30},
+    "plan_flip_executing_to_done": {"tokens_k": 5, "gpg_events": 1, "wall_clock_s": 30},
+    "adr_propose": {"tokens_k": 30, "gpg_events": 0, "wall_clock_s": 120},
+    "adr_promote_to_accepted": {"tokens_k": 10, "gpg_events": 1, "wall_clock_s": 60},
+    "closeout_session": {"tokens_k": 50, "gpg_events": 0, "wall_clock_s": 300},
+    "tag_release": {"tokens_k": 5, "gpg_events": 2, "wall_clock_s": 60},
+    "owner_ceremony_apply_patches": {"tokens_k": 10, "gpg_events": 1, "wall_clock_s": 120}
+  }
+}

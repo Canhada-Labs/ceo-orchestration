@@ -1,0 +1,32 @@
+# Codex CLI binary SHA-256 pin — PLAN-081 Phase 6-bis / Codex iter 1 R-NEW-4 / T-8
+#
+# Format: ONE 64-hex SHA-256 line (no path; the binary at `which codex`
+# resolution time is hashed by `pair-rail-gate.sh` pre-flight, compared
+# against this pin, and asserts equality).
+#
+# Rationale: T-8 (Codex CLI binary swap / supply-chain) — a malicious
+# package upgrade or PATH-prepended decoy could replace the trusted
+# binary mid-session. `subprocess.run(["codex", ...])` resolves PATH at
+# invocation; without a pin, the framework trusts whatever `which codex`
+# returns. The pin closes this vector: `pair-rail-gate.sh` computes
+# `shasum -a 256 $(which codex)` and asserts == this file's hex.
+#
+# Pin update ceremony:
+# 1. Owner runs `shasum -a 256 $(which codex)` after legitimate upgrade
+# 2. Owner edits this file with new hex (sentinel-gated — canonical-guarded
+#    under .claude/governance/*.txt per Phase 6-bis _CANONICAL_GUARDS extension)
+# 3. Phase 4-bis promotion gate re-runs if codex-cli-pin.txt semver bumped
+# 4. ADR amendment if catch_rate shifts >5pp post-upgrade
+#
+# Verification:
+#   bash .claude/scripts/local/pair-rail-gate.sh
+#   # emits pair_rail_codex_binary_verified audit event with sha256[:16] prefix
+#
+# Audit emit: pair_rail_codex_binary_verified (PLAN-081 Phase 6-bis NEW)
+# Allowlist fields: codex_cli_version, binary_sha256_prefix (16-hex), match (bool)
+#
+# PLAN-142 re-pin (S246 2026-06-19): codex-cli 0.139.0 binary at
+# /opt/homebrew/bin/codex. Computed via `shasum -a 256 $(which codex)` and
+# re-verified at execution. Supersedes the 0.130.x pin (baefc109...).
+
+d3be844c45c4fd89392536e56e1010963f94785592596b50cd0c45bb8a341406

@@ -1,0 +1,117 @@
+# Task chains — i18n-Business Squad
+# Domain-specific workflows that extend the universal .claude/task-chains.yaml.
+
+task_chains:
+  - id: i18n-business-launch-new-locale
+    title: "Launch a new locale / language market"
+    whenToUse: |
+      A new language or regional locale is being added to the product.
+      This chain covers: ICU format validation, platform parity check
+      (web/iOS/Android), cultural review, TMS onboarding, pseudo-locale
+      QA, and regulated-market copy review if applicable. Triggered by
+      any new language code being added to the supported-locales manifest.
+    steps:
+      - id: 1
+        owner: "Amara Osei-Bonsu (Localization Lead)"
+        action: "Audit locale key coverage for the new locale: identify all namespaces, confirm key schema compatibility, and check fallback chain configuration (I18N-003). Document any keys not yet translated."
+      - id: 2
+        owner: "Nadia Reyes (i18n Engineer)"
+        action: "Validate ICU format parity across web, iOS, and Android for all strings in scope (I18N-005, I18N-006). Run extraction pipeline to confirm no strings bypassed TMS. Verify CLDR plural rules for the target language are wired (I18N-005)."
+      - id: 3
+        owner: "Dr. Yuki Tanaka (Cultural Consultant)"
+        action: "Complete cultural review checklist: imagery (I18N-010), date/number formatting (I18N-008), RTL requirement assessment (I18N-011), regulated-market copy review if financial/health/gov sector (I18N-009)."
+      - id: 4
+        owner: "Sofia Petrov (Translation Ops Coordinator)"
+        action: "Confirm TMS pipeline for the new locale: vendor assignment, glossary version, character limit constraints, screenshot context attached to all strings. Set string freeze date and communicate to vendors (I18N-004)."
+      - id: 5
+        owner: "Pascal Diallo (QA Localization Specialist)"
+        action: "Run pseudo-locale build for the new locale family (I18N-012). Verify no truncated labels, no untranslated fallback leakage, no RTL-specific layout breaks if applicable (I18N-011)."
+      - id: 6
+        owner: "Pascal Diallo"
+        action: "Human QA sign-off pass with native-speaker reviewer or TMS reviewer. Check error states, empty states, and long-content variants — not just happy-path flows."
+      - id: 7
+        owner: "Amara Osei-Bonsu"
+        action: "Launch gate: confirm locale listed in supported-locales manifest, fallback chain declared, no key deletions pending in the release branch (I18N-002), string freeze respected (I18N-004)."
+      - id: 8
+        owner: "Staff Code Reviewer"
+        action: "Merge check: ICU format valid, no positional arguments (I18N-006), no string concatenation (I18N-007), pseudo-locale gate green (I18N-012), cultural review checklist complete."
+    verification: |
+      - ICU plural rules wired for target language (I18N-005)
+      - Fallback chain declared and tested (I18N-003)
+      - Cultural review checklist signed off by Dr. Tanaka
+      - Pseudo-locale build passes in CI (I18N-012)
+      - TMS delivery confirmed for all strings before freeze
+      - Native-speaker QA sign-off recorded
+
+  - id: i18n-business-locale-key-refactor
+    title: "Locale key rename, namespace refactor, or bulk key deprecation"
+    whenToUse: |
+      An existing locale key or key namespace is being renamed, merged,
+      split, or deleted. This chain is also triggered by any change to
+      the extraction config that affects which keys are scanned. High-risk
+      operation: a missed consumer causes silent English fallback in
+      production for potentially millions of users.
+    steps:
+      - id: 1
+        owner: "Amara Osei-Bonsu (Localization Lead)"
+        action: "Pre-flight scan: identify ALL consumers of affected keys across web, iOS, Android, email templates, push templates, and backend strings. Document every usage site. No consumer may be assumed 'probably unused' (I18N-002)."
+      - id: 2
+        owner: "Nadia Reyes (i18n Engineer)"
+        action: "Author redirect aliases for all renamed keys: old key returns new value with a deprecation marker. Confirm alias coverage in the locale file schema for all supported locales (I18N-001)."
+      - id: 3
+        owner: "Amara Osei-Bonsu"
+        action: "Plan key retirement timeline: alias must survive at least one full release cycle (typically 2-4 weeks for mobile App Store propagation). Set a calendar reminder to retire the alias after the window."
+      - id: 4
+        owner: "Nadia Reyes"
+        action: "Run extraction pipeline dry-run: confirm new key names are extracted correctly into TMS, and no keys are orphaned in any locale file (I18N-003)."
+      - id: 5
+        owner: "Pascal Diallo (QA Localization Specialist)"
+        action: "Run pseudo-locale build and spot-check renamed key paths in UI flows. Verify no empty string or fallback leakage on any platform (I18N-012)."
+      - id: 6
+        owner: "Principal QA Architect"
+        action: "Integration tests: deploy to staging with the refactored keys. Run locale-coverage smoke test across all supported locales. Check that no locale returns the old key name as a raw string."
+      - id: 7
+        owner: "Staff Code Reviewer"
+        action: "Merge VETO check: redirect aliases present (I18N-001), all consumers updated, extraction pipeline confirms zero orphaned keys, Amara sign-off recorded."
+    verification: |
+      - Redirect aliases authored for all renamed keys (I18N-001)
+      - All consumer platforms updated and verified (I18N-002)
+      - Extraction pipeline dry-run shows zero orphaned keys
+      - Pseudo-locale build passes post-refactor (I18N-012)
+      - Key retirement calendar entry created
+
+  - id: i18n-business-regulated-market-copy-update
+    title: "Update copy in a regulated market (financial, healthcare, government)"
+    whenToUse: |
+      Any product copy change in a market where language is subject to
+      regulatory requirements — financial disclaimers, medical device
+      labeling, government-service tone requirements. Even small wording
+      changes (e.g. rephrasing a disclaimer) require the full chain.
+    steps:
+      - id: 1
+        owner: "Dr. Yuki Tanaka (Cultural Consultant)"
+        action: "Review copy change against market-specific regulatory requirements. Cross-reference applicable regulation (FSA, BaFin, BACEN, etc.). If uncertain, flag for external legal review before proceeding (I18N-009)."
+      - id: 2
+        owner: "Dr. Yuki Tanaka"
+        action: "Confirm cultural framing: check that phrasing, tone, and formality register are appropriate for the target market. Identify any culturally-loaded idioms or metaphors that do not translate correctly (I18N-010)."
+      - id: 3
+        owner: "Sofia Petrov (Translation Ops Coordinator)"
+        action: "Submit updated source string to TMS with regulatory context note. Assign to a translator with domain expertise in the specific regulation. Set expedited review flag."
+      - id: 4
+        owner: "Pascal Diallo (QA Localization Specialist)"
+        action: "Native-speaker review of translated copy against the regulatory source. Verify that mandatory disclaimer text is present and unaltered in the translation."
+      - id: 5
+        owner: "Amara Osei-Bonsu (Localization Lead)"
+        action: "Confirm locale key is correctly wired, fallback does not leak an older version of the disclaimer, and no ICU format issue was introduced in the updated string (I18N-006)."
+      - id: 6
+        owner: "Principal QA Architect"
+        action: "Verify in staging: correct regulatory copy appears for target locale, old copy is fully replaced, no other locale is inadvertently affected."
+      - id: 7
+        owner: "Staff Code Reviewer"
+        action: "Merge check: Dr. Tanaka cultural sign-off recorded, regulatory context note in TMS, Pascal QA attestation on translated copy, no fallback leakage."
+    verification: |
+      - Regulatory requirement source cited in change record
+      - Dr. Tanaka sign-off on regulatory and cultural correctness (I18N-009)
+      - TMS translator has domain expertise in applicable regulation
+      - Native-speaker QA passed for all affected locales
+      - Fallback chain does not leak old copy (I18N-003)

@@ -1,0 +1,83 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ceo-orchestration.local/schemas/repo-profile.schema.json",
+  "title": "Repo Profile (`.claude/repo-profile.yaml`) Schema",
+  "description": "Validates the canonical `.claude/repo-profile.yaml` written by `.claude/scripts/detect-repo-profile.py` (PLAN-083 Wave 0a sub-agent 0.6). This file pins the repo's risk class for smart-loading, trading guardrails, first-run banner, and the kill-switch fail-CLOSED ceremony. Per PLAN-083 R1 Codex P0: unknown structure MUST NOT silently fall through to `generic`; the detector either emits `risk_class: trading-readonly` (fail-CLOSED default) or `risk_class: unknown-needs-owner-confirmation` (when ambiguity is high enough to demand explicit Owner ack via `detect-repo-profile.py confirm-profile <name>`). The 7-day read-only banner consumer (sub-agent 2.7) keys off `created_at`. The trading-readonly hook deny-list consumer (sub-agent 2.7) keys off `manual_review_paths`.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "risk_class",
+    "detected_at",
+    "confidence",
+    "signals",
+    "manual_override",
+    "created_at"
+  ],
+  "properties": {
+    "risk_class": {
+      "type": "string",
+      "enum": [
+        "frontend",
+        "engine",
+        "fintech",
+        "trading-readonly",
+        "generic",
+        "unknown-needs-owner-confirmation"
+      ],
+      "description": "The detected (or Owner-confirmed) repo profile. Drives smart-loading per-profile caps (frontend <=10, engine <=12, fintech <=15, trading-readonly <=8, generic <=6) and trading guardrails. Per PLAN-083 §7.1 fail-CLOSED requirement, the detector defaults to `trading-readonly` when signals are ambiguous, and to `unknown-needs-owner-confirmation` when no signals fire at all (caller must run `confirm-profile <name>` to proceed). `generic` is reachable ONLY via explicit Owner `confirm-profile generic` (never via auto-detect)."
+    },
+    "detected_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "RFC 3339 / ISO 8601 UTC timestamp (e.g. `2026-05-11T15:42:01Z`) of the most recent detection run. Updated on every `detect-repo-profile.py detect`. Distinct from `created_at` which is fixed at first-run."
+    },
+    "confidence": {
+      "type": "string",
+      "enum": ["high", "medium", "low"],
+      "description": "Confidence in the detection result. `high` = >=3 strong signals all agreeing; `medium` = 1-2 strong signals OR multiple weak signals agreeing; `low` = ambiguous, mixed, or fail-CLOSED default. Sub-agent 2.1 first-run wizard SHOULD surface a confirmation prompt when confidence != `high`."
+    },
+    "signals": {
+      "type": "array",
+      "description": "Ordered list of heuristic signals that fired during detection. Each entry is a short slug describing the matched evidence (e.g. `package.json:next`, `pyproject.toml:fastapi`, `dir:strategies/`, `file:exchanges/binance.py`, `dir:compliance/`, `fallback:no-signals`). Empty signals array combined with `risk_class: unknown-needs-owner-confirmation` indicates the fail-CLOSED path. Audit forensics consumes this field.",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200,
+        "pattern": "^[a-zA-Z0-9._:/+-]+$"
+      },
+      "uniqueItems": true,
+      "default": []
+    },
+    "manual_override": {
+      "type": "boolean",
+      "description": "True when the current `risk_class` was set via `detect-repo-profile.py confirm-profile <name>` (explicit Owner ACK) rather than auto-detection. Once true, subsequent `detect` runs MUST NOT silently overwrite the file; they re-detect and refuse to mutate, requiring `confirm-profile` again. This satisfies the §7.5 kill-switch contract: the file is the trust anchor, not the detection algorithm."
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "RFC 3339 / ISO 8601 UTC timestamp of the FIRST successful detection or confirmation. Fixed for the lifetime of this `.claude/repo-profile.yaml`. Consumed by sub-agent 2.7 to render the 7-day read-only banner (banner remains visible until `now() - created_at > 7d`). Resetting the file via `rm` + re-detect deliberately resets this clock — that is part of the kill-switch fail-CLOSED escape-hatch ceremony per §7.5."
+    },
+    "manual_review_paths": {
+      "type": "array",
+      "description": "Optional deny-list of file globs/paths that the trading-readonly hook (sub-agent 2.7) MUST block on Edit/Write attempts. Pre-populated by the detector when `risk_class: trading-readonly` is set (default >=10 fixtures per PLAN-083 CR NTH). Owner may extend post-detection; the file is owned-sentinel-scope for `.claude/repo-profile.yaml` only (NOT canonical-guard kernel).",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 500
+      },
+      "uniqueItems": true,
+      "default": []
+    },
+    "schema_version": {
+      "type": "string",
+      "enum": ["1"],
+      "description": "Schema version pin. Bumped only when this schema's required-fields or enum membership changes in a backward-incompatible way. Sub-agent 2.7 / 2.1 consumers MUST refuse to operate on a `repo-profile.yaml` whose `schema_version` they do not recognize.",
+      "default": "1"
+    },
+    "notes": {
+      "type": "string",
+      "maxLength": 2000,
+      "description": "Optional free-form Owner annotation. Persisted across `detect` runs. Not interpreted by any consumer; purely human-readable."
+    }
+  }
+}

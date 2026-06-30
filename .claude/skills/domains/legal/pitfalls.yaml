@@ -1,0 +1,77 @@
+# Pitfalls Catalog — Legal Squad
+# Loaded alongside the universal catalog when the legal profile is
+# installed. Format mirrors .claude/pitfalls-catalog.yaml:
+# id, rule, whenToUse, agents.
+#
+# ADR-009 §bundle-completeness: ≥10 pitfall entries required.
+# Each id follows LEG-NNN (3-digit zero-padded, monotonic).
+# Exemplars: .claude/skills/domains/edtech/pitfalls.yaml
+#            .claude/skills/domains/lgpd-heavy-saas/pitfalls.yaml
+#
+# IMPORTANT: this domain inherits PII core paths (ADR-111 / PLAN-080 Phase 0a).
+# LEG-specific pitfalls extend, not replace, the core pii-data-flow catalog.
+
+pitfalls:
+  # === ATTORNEY-CLIENT PRIVILEGE + CLIENT DATA ===
+  - id: LEG-001
+    rule: "NEVER send client matter documents, emails, or case-file content to a third-party AI/ML API without a signed DPA that explicitly covers attorney-client privileged material and confirms zero-retention at rest. Contractual 'zero retention' claims must be verified technically (no logging of inputs, no fine-tuning use)."
+    whenToUse: "any AI-assisted document review, contract analysis, legal research, or summarization feature that ingests client matter content"
+    agents: [Ingrid Vasquez, Chloé Bernard]
+
+  - id: LEG-002
+    rule: "Conflict-check queries MUST NOT expose one client's matter identifiers or adverse party names to another client's user context. The conflict-check result (CLEAR/CONFLICT) is returnable; the underlying matter details that triggered the match are NOT."
+    whenToUse: "any conflict-check feature, adverse party screening, or matter-intake workflow"
+    agents: [Ingrid Vasquez, Amir Nakashima]
+
+  - id: LEG-003
+    rule: "Client data MUST NOT be exported to non-production environments (staging, analytics, demo) without explicit anonymization sign-off from the Compliance Officer. 'Mostly anonymized' is not anonymized."
+    whenToUse: "any dev-data refresh, staging seed, analytics pipeline seeding, or demo environment provisioning"
+    agents: [Ingrid Vasquez, Tobias Mensah]
+
+  - id: LEG-004
+    rule: "Cross-border client data transfers MUST have an adequacy finding, executed SCCs, or binding corporate rules in place before the first byte leaves the jurisdiction. Check the client's governing law clause, not just the firm's home jurisdiction."
+    whenToUse: "any cloud storage, backup, or processing system that could route EU or BR client data through non-adequate jurisdictions"
+    agents: [Ingrid Vasquez]
+
+  # === RECORDS LIFECYCLE + RETENTION ===
+  - id: LEG-005
+    rule: "Matter records MUST use append-only writes for all client communications, filed documents, and work product. Overwrite operations on filed documents are forbidden — corrections create a new version with a reason code and actor ID, never a silent replacement."
+    whenToUse: "any schema design or mutation path for matter documents, filed pleadings, or client communications"
+    agents: [Tobias Mensah, Amir Nakashima]
+
+  - id: LEG-006
+    rule: "A 'delete' on matter records MUST produce a destruction certificate (record ID, destruction timestamp, actor, method, retention-class) AND trigger backup purge confirmation. A database DELETE without backup purge is not destruction under bar rules."
+    whenToUse: "any matter-closure archival, scheduled destruction workflow, or data-deletion feature"
+    agents: [Tobias Mensah]
+
+  - id: LEG-007
+    rule: "Litigation holds MUST suspend ALL destruction triggers for the affected matter — including scheduled archival jobs, backup rotation cycles, and email purge policies. A litigation hold applied only to the document folder but not to the email archive is incomplete."
+    whenToUse: "any litigation hold feature, e-discovery workflow, or matter-status adversarial flag"
+    agents: [Tobias Mensah, Amir Nakashima]
+
+  - id: LEG-008
+    rule: "New storage tiers, archival systems, or backup configurations MUST have a confirmed retention policy mapping before client data flows into them. Indefinite backup retention of archived matters violates bar-mandated destruction schedules."
+    whenToUse: "any infrastructure change involving storage, backups, CDN caching, or data archival"
+    agents: [Tobias Mensah, Ingrid Vasquez]
+
+  # === BILLING INTEGRITY + TRUST ACCOUNTS ===
+  - id: LEG-009
+    rule: "Trust account debit/credit logic MUST pass a three-way reconciliation test (matter ledger + client ledger + bank account) before any change ships. A rounding bug or off-by-one in trust account logic is a bar violation, not a UX issue."
+    whenToUse: "any change to trust account debit/credit logic, disbursement workflow, or IOLTA reconciliation feature"
+    agents: [Elena Sorokina]
+
+  - id: LEG-010
+    rule: "Time-entry rounding logic MUST be consistent across all timekeepers and timezone contexts. Timezone-dependent rounding that produces different billable minutes for the same wall-clock interval is a systematic billing error."
+    whenToUse: "any time-entry system, billing calculation, or timekeeper rounding-rule change"
+    agents: [Elena Sorokina]
+
+  - id: LEG-011
+    rule: "Write-offs and write-downs MUST produce an immutable audit trail with the authorizing attorney's ID, timestamp, reason code, and original billed amount. A write-down recorded only in a spreadsheet or email thread is not an audit trail."
+    whenToUse: "any write-off, write-down, courtesy discount, or billing adjustment feature"
+    agents: [Elena Sorokina, Ingrid Vasquez]
+
+  # === AI + LEGAL RESEARCH ACCURACY ===
+  - id: LEG-012
+    rule: "AI-generated legal research outputs (case citations, statute references, regulatory summaries) MUST be verified by a licensed attorney before they appear in any client deliverable, court filing, or legal advice document. AI hallucination of legal citations is a professional responsibility violation, not just a product bug."
+    whenToUse: "any AI-assisted legal research, brief drafting, regulatory analysis, or contract review feature that produces output shared with clients or filed in court"
+    agents: [Chloé Bernard, Ingrid Vasquez]

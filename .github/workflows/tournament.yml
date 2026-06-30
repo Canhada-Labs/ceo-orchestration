@@ -1,0 +1,219 @@
+name: Agent-eval tournament (advisory, cost-bounded)
+
+# PLAN-032 Wave B — ADR-063 empirical ADR-052 dispatch validation.
+#
+# Trigger surface (Round 1 C-P0 + F-OPS closures):
+#   - workflow_dispatch: manual run for Owner-initiated validation
+#   - schedule: monthly on 1st at 04:00 UTC (avoids collision with
+#     red-team.yml Mon 15:00 UTC and adapter-live.yml Mon 12:00 UTC)
+#
+# Explicitly NOT triggered on PR (cost discipline — each run $40-120).
+# pull_request_target EXPLICITLY FORBIDDEN per PLAN-002 §8 finding #18
+# (code-injection vector in forked repo's workflow).
+#
+# Fork-safety (F-OPS2 closure): IS_FORK_PR env gates issue creation so
+# fork PRs can never cause write-access attempts without secret scoping.
+#
+# Budget (F-OPS4 closure): TOURNAMENT_BUDGET_USD wired from repo secret
+# with $75 default (Round 1 recalibrated from miscalibrated $10).
+#
+# Timeout (F-OPS1 closure): 75-minute job ceiling covers 50-fixture run
+# at Tier-2 Anthropic rate-limit with headroom for slow upstream.
+
+on:
+  workflow_dispatch:
+    inputs:
+      fixtures_count:
+        description: "Fixtures count (ceiling 50)"
+        required: false
+        default: "50"
+      judge_runs:
+        description: "Judge multi-run median count"
+        required: false
+        default: "3"
+  schedule:
+    # Monthly on the 1st at 04:00 UTC — empirical validation cadence
+    - cron: "0 4 1 * *"
+
+concurrency:
+  group: tournament-${{ github.ref }}
+  cancel-in-progress: false  # tournament mid-run abort = budget waste
+
+permissions:
+  contents: read
+  # Write needed for $GITHUB_STEP_SUMMARY + issue creation on regression
+  issues: write
+  pull-requests: write
+
+jobs:
+  tournament:
+    name: Run tournament + emit report
+    runs-on: ubuntu-latest
+
+    # F-OPS1 — 75-minute ceiling (Round 1 F-PERF2 wall-clock estimate
+    # Tier 2 ~7min, Tier 1 ~15min at default concurrency; 75-min gives
+    # 5× headroom for rate-limit backoff storms).
+    timeout-minutes: 75
+
+    env:
+      # F-OPS4 — TOURNAMENT_BUDGET_USD wired from repo secret with
+      # Round 1 recalibrated $75 default (original $10 aborted every run)
+      TOURNAMENT_BUDGET_USD: ${{ secrets.TOURNAMENT_BUDGET_USD || '75' }}
+      # Framework master kill-switch (parity with benchmarks.yml +
+      # red-team.yml)
+      CEO_SOTA_DISABLE: ${{ vars.CEO_SOTA_DISABLE || '0' }}
+      # CI distinct flag replaces two-factor sentinel in local mode
+      CEO_TOURNAMENT_CI: "1"
+      # F-OPS2 — fork-PR detection
+      IS_FORK_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'true' || 'false' }}
+
+    # Combined gate: master kill-switch parity + fork-PR safety + no secret
+    # exposure. Fork PRs that somehow reach here (workflow_dispatch from
+    # fork is already blocked by GHA) skip visibly.
+    if: |
+      vars.CEO_SOTA_DISABLE != '1'
+
+    steps:
+      - name: Abort on fork PR (belt-and-suspenders)
+        if: env.IS_FORK_PR == 'true'
+        run: |
+          echo "::notice::Fork PR — tournament skipped (no secret access by design)"
+          exit 0
+
+      - name: Checkout
+        # SHA-pinned: actions/checkout@v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Set up Python
+        # SHA-pinned: actions/setup-python@v6.2.0
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+
+      - name: Install deps (Anthropic SDK already framework dep per ADR-063)
+        run: |
+          set -euo pipefail
+          python3 -m pip install --upgrade pip
+          python3 -m pip install anthropic pytest
+
+      - name: Verify fixture corpus passes security scan
+        run: |
+          set -euo pipefail
+          # C-P0-1 enforcement: every fixture must pass check_fixture.py
+          # BEFORE any LLM dispatch. Defense-in-depth beyond pre-commit hook
+          # (adopters may bypass local hooks; CI is authoritative).
+          python3 .claude/scripts/tournament/check_fixture.py \
+            .claude/scripts/tournament/fixtures/*.jsonl
+
+      - name: Cost projection (dry-run gate)
+        id: estimate
+        run: |
+          set -euo pipefail
+          # --estimate-cost is required before any API dispatch per
+          # Round 1 F-PERF1 closure. Fails the job if projected > budget.
+          FIXTURES_COUNT="${{ github.event.inputs.fixtures_count || '50' }}"
+          JUDGE_RUNS="${{ github.event.inputs.judge_runs || '3' }}"
+
+          python3 -m tournament.runner \
+            --estimate-cost \
+            --fixtures-count "$FIXTURES_COUNT" \
+            --judge-runs "$JUDGE_RUNS" \
+            --budget-usd "$TOURNAMENT_BUDGET_USD" \
+            2>&1 | tee projection.txt
+
+          # Extract the projected cost (first JSON doc on stdout)
+          python3 -c "
+          import json
+          data = json.load(open('projection.txt'))
+          print(f\"projected_usd={data['grand_total_usd']}\")
+          " >> "$GITHUB_OUTPUT"
+
+          # Emit to step summary for Owner visibility
+          {
+            echo "## Tournament cost projection"
+            echo ""
+            echo '```json'
+            head -20 projection.txt
+            echo '```'
+            echo ""
+            echo "Budget cap: \$${TOURNAMENT_BUDGET_USD}"
+          } >> "$GITHUB_STEP_SUMMARY"
+        working-directory: .claude/scripts
+
+      - name: Run tournament suite tests (smoke, offline)
+        run: |
+          set -euo pipefail
+          # Even if ANTHROPIC_API_KEY is absent, the tournament unit + E2E
+          # smoke tests MUST pass — they use FakeLLMDispatcher (no network).
+          # This provides a fork-safe fallback CI signal.
+          python3 -m pytest .claude/scripts/tournament/tests -q --tb=short
+
+      - name: Live tournament dispatch (only if API key present)
+        id: live_run
+        if: env.IS_FORK_PR == 'false'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
+            echo "::notice::ANTHROPIC_API_KEY secret absent — skipping live dispatch (offline smoke only)"
+            echo "live_ran=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "::notice::ANTHROPIC_API_KEY present — live tournament dispatch (cost bounded)"
+          # NOTE: the actual live-dispatch glue (runner.py wiring to real
+          # Anthropic SDK) is Phase 5 deliverable. For this workflow v1,
+          # we emit a placeholder message; the offline smoke above + the
+          # cost projection gate provide the advisory signal today.
+          echo "live_ran=pending_phase5_wire" >> "$GITHUB_OUTPUT"
+
+      - name: Emit step summary
+        if: always()
+        run: |
+          {
+            echo ""
+            echo "## Tournament workflow result"
+            # PLAN-063 round-4 (SC2002+SC2016 fix): extract-to-var with double-quoted python
+            PROJECTION=$(python3 -c "import json; d=json.load(open('projection.txt')); print('\$' + str(d.get('grand_total_usd', '?')))" 2>/dev/null || echo "N/A")
+            echo "- Projection: $PROJECTION"
+            echo "- Budget cap: \$${TOURNAMENT_BUDGET_USD}"
+            echo "- Offline smoke: completed"
+            echo "- Live dispatch: ${{ steps.live_run.outputs.live_ran || 'skipped' }}"
+            echo ""
+            echo "See SPEC/v1/tournament-report.schema.md for report format."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload projection as artifact
+        if: always()
+        # SHA-pinned: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: tournament-projection-${{ github.run_id }}
+          path: .claude/scripts/projection.txt
+          retention-days: 90
+
+  notify-on-regression:
+    name: Open issue on win-rate regression
+    runs-on: ubuntu-latest
+    needs: tournament
+    if: |
+      always() &&
+      needs.tournament.result == 'success' &&
+      github.event_name == 'schedule' &&
+      vars.CEO_SOTA_DISABLE != '1'
+    # F-OPS2 — fork-PR gate (defense-in-depth; schedule always runs on
+    # canonical repo)
+    env:
+      IS_FORK_PR: "false"
+    steps:
+      - name: De-dup issue creation (F-OPS5)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # Phase 5 will add runner.py::emit_regression_issues() with
+          # cross-run win-rate delta comparison. For Phase 4, this step
+          # is a placeholder that checks an hypothetical regression label
+          # and is a no-op while the comparison infra is still landing.
+          echo "::notice::Win-rate regression detection is Phase 5 deliverable; no-op placeholder"

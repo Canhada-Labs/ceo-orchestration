@@ -1,0 +1,378 @@
+{
+  "schema_version": "1.0",
+  "source": "PLAN-051 Phase 4 B3 \u2014 mutation budget 40",
+  "generated_at": "2026-04-24",
+  "harness": "tests/formal_verification/test_swarm_coordinator_conformance.py",
+  "simulator_cfg": {
+    "n": 3,
+    "max_parallel": 2,
+    "max_iter": 4,
+    "budget": 6,
+    "step_ceiling": 200
+  },
+  "seeds_per_property": 200,
+  "total_mutations": 40,
+  "mutations": [
+    {
+      "mutation_id": "mut_i1_01_parallel_cap_bypassed",
+      "property": "I1",
+      "anchor": "_coordinator_sim.py:113",
+      "axis": "gate-removal",
+      "bias_used": "start_heavy_bias",
+      "expected_kill_seed": 0,
+      "expected_kill_step": 3
+    },
+    {
+      "mutation_id": "mut_i1_02_active_count_off_by_one",
+      "property": "I1",
+      "anchor": "_coordinator_sim.py:113",
+      "axis": "comparator-off-by-one",
+      "bias_used": "start_heavy_bias",
+      "expected_kill_seed": 0,
+      "expected_kill_step": 3
+    },
+    {
+      "mutation_id": "mut_i1_03_active_count_always_zero",
+      "property": "I1",
+      "anchor": "_coordinator_sim.py:108-110",
+      "axis": "counter-short-circuit",
+      "bias_used": "start_heavy_bias",
+      "expected_kill_seed": 0,
+      "expected_kill_step": 3
+    },
+    {
+      "mutation_id": "mut_i1_04_active_count_excludes_iter_zero",
+      "property": "I1",
+      "anchor": "_coordinator_sim.py:108-110",
+      "axis": "predicate-swap",
+      "bias_used": "start_heavy_bias",
+      "expected_kill_seed": 0,
+      "expected_kill_step": 3
+    },
+    {
+      "mutation_id": "mut_i1_05_active_count_excludes_first_loop",
+      "property": "I1",
+      "anchor": "_coordinator_sim.py:108-110",
+      "axis": "scope-exclusion",
+      "bias_used": "start_heavy_bias",
+      "expected_kill_seed": 1,
+      "expected_kill_step": 3
+    },
+    {
+      "mutation_id": "mut_i2_01_iter_ceiling_bypassed",
+      "property": "I2",
+      "anchor": "_coordinator_sim.py:121",
+      "axis": "gate-removal",
+      "bias_used": "iterate_heavy_bias",
+      "expected_kill_seed": 1,
+      "expected_kill_step": 9
+    },
+    {
+      "mutation_id": "mut_i2_02_double_iter_increment",
+      "property": "I2",
+      "anchor": "_coordinator_sim.py:179",
+      "axis": "transition-overshoot",
+      "bias_used": "iterate_heavy_bias",
+      "expected_kill_seed": 1,
+      "expected_kill_step": 3
+    },
+    {
+      "mutation_id": "mut_i2_03_iterate_on_pending",
+      "property": "I2",
+      "anchor": "_coordinator_sim.py:120",
+      "axis": "status-gate-error",
+      "bias_used": "iterate_heavy_bias",
+      "expected_kill_seed": 5,
+      "expected_kill_step": 6
+    },
+    {
+      "mutation_id": "mut_i2_04_iter_ceiling_relaxed_double",
+      "property": "I2",
+      "anchor": "_coordinator_sim.py:121",
+      "axis": "ceiling-relaxed-factor",
+      "bias_used": "iterate_heavy_bias",
+      "expected_kill_seed": 1,
+      "expected_kill_step": 9
+    },
+    {
+      "mutation_id": "mut_i2_05_iter_ceiling_off_by_one_lte",
+      "property": "I2",
+      "anchor": "_coordinator_sim.py:121",
+      "axis": "comparator-off-by-one",
+      "bias_used": "iterate_heavy_bias",
+      "expected_kill_seed": 1,
+      "expected_kill_step": 9
+    },
+    {
+      "mutation_id": "mut_i3_01_double_token_charge",
+      "property": "I3",
+      "anchor": "_coordinator_sim.py:180",
+      "axis": "per-step-multiplier",
+      "bias_used": "iterate_heavy_bias",
+      "expected_kill_seed": 1,
+      "expected_kill_step": 3
+    },
+    {
+      "mutation_id": "mut_i3_02_iter_increment_skipped",
+      "property": "I3",
+      "anchor": "_coordinator_sim.py:179-180",
+      "axis": "decoupling-increment-dropped",
+      "bias_used": "iterate_heavy_bias",
+      "expected_kill_seed": 1,
+      "expected_kill_step": 3
+    },
+    {
+      "mutation_id": "mut_i3_03_start_charges_tokens",
+      "property": "I3",
+      "anchor": "_coordinator_sim.py:176-177",
+      "axis": "wrong-transition-side-effect",
+      "bias_used": "iterate_heavy_bias",
+      "expected_kill_seed": 1,
+      "expected_kill_step": 1
+    },
+    {
+      "mutation_id": "mut_i3_04_converge_charges_tokens",
+      "property": "I3",
+      "anchor": "_coordinator_sim.py:182-183",
+      "axis": "wrong-transition-side-effect",
+      "bias_used": "iterate_heavy_bias",
+      "expected_kill_seed": 1,
+      "expected_kill_step": 6
+    },
+    {
+      "mutation_id": "mut_i3_05_tokens_scale_with_iter",
+      "property": "I3",
+      "anchor": "_coordinator_sim.py:180",
+      "axis": "non-linear-growth",
+      "bias_used": "iterate_heavy_bias",
+      "expected_kill_seed": 1,
+      "expected_kill_step": 5
+    },
+    {
+      "mutation_id": "mut_i4_01_budget_bypassed",
+      "property": "I4",
+      "anchor": "_coordinator_sim.py:120-125,180",
+      "axis": "gate+inflation",
+      "bias_used": "iterate_heavy_bias",
+      "expected_kill_seed": 1,
+      "expected_kill_step": 4
+    },
+    {
+      "mutation_id": "mut_i4_02_single_iter_overflow",
+      "property": "I4",
+      "anchor": "_coordinator_sim.py:180",
+      "axis": "single-step-magnitude",
+      "bias_used": "iterate_heavy_bias",
+      "expected_kill_seed": 1,
+      "expected_kill_step": 3
+    },
+    {
+      "mutation_id": "mut_i4_03_budget_kill_inflates_consumed",
+      "property": "I4",
+      "anchor": "_coordinator_sim.py:186-187",
+      "axis": "terminal-transition-side-effect",
+      "bias_used": "iterate_heavy_bias",
+      "expected_kill_seed": 4,
+      "expected_kill_step": 9
+    },
+    {
+      "mutation_id": "mut_i4_04_start_charges_global_consumed",
+      "property": "I4",
+      "anchor": "_coordinator_sim.py:176-177",
+      "axis": "entry-transition-side-effect",
+      "bias_used": "iterate_heavy_bias",
+      "expected_kill_seed": 3,
+      "expected_kill_step": 6
+    },
+    {
+      "mutation_id": "mut_i4_05_converge_charges_global_consumed",
+      "property": "I4",
+      "anchor": "_coordinator_sim.py:182-183",
+      "axis": "success-transition-side-effect",
+      "bias_used": "iterate_heavy_bias",
+      "expected_kill_seed": 1,
+      "expected_kill_step": 6
+    },
+    {
+      "mutation_id": "mut_l1_01_completion_disabled",
+      "property": "L1",
+      "anchor": "_coordinator_sim.py:127-142",
+      "axis": "gate-level-terminal-blackout",
+      "bias_used": "mutation_l1_a_bias",
+      "expected_kill_seed": 0,
+      "expected_kill_step": 8
+    },
+    {
+      "mutation_id": "mut_l1_02_terminal_not_sink",
+      "property": "L1",
+      "anchor": "_coordinator_sim.py:114-118,176-177",
+      "axis": "terminal-escape-via-start",
+      "bias_used": "mutation_l1_a_bias",
+      "expected_kill_seed": 2,
+      "expected_kill_step": 10
+    },
+    {
+      "mutation_id": "mut_l1_03_all_terminal_actions_disabled",
+      "property": "L1",
+      "anchor": "_coordinator_sim.py:127-138",
+      "axis": "gate-level-terminal-blackout-narrow",
+      "bias_used": "mutation_l1_a_bias",
+      "expected_kill_seed": 0,
+      "expected_kill_step": 9
+    },
+    {
+      "mutation_id": "mut_l1_04_start_transition_noop",
+      "property": "L1",
+      "anchor": "_coordinator_sim.py:176-177",
+      "axis": "entry-transition-noop",
+      "bias_used": "mutation_l1_a_bias",
+      "expected_kill_seed": 0,
+      "expected_kill_step": 200
+    },
+    {
+      "mutation_id": "mut_l1_05_terminal_transitions_regress_to_pending",
+      "property": "L1",
+      "anchor": "_coordinator_sim.py:182-187",
+      "axis": "terminal-transition-regress",
+      "bias_used": "mutation_l1_a_bias",
+      "expected_kill_seed": 0,
+      "expected_kill_step": 200
+    },
+    {
+      "mutation_id": "mut_l2_01_iterate_noop",
+      "property": "L2",
+      "anchor": "_coordinator_sim.py:178-180",
+      "axis": "transition-total-noop",
+      "bias_used": "mutation_l2_bias",
+      "expected_kill_seed": 0,
+      "expected_kill_step": 200
+    },
+    {
+      "mutation_id": "mut_l2_02_iter_not_incremented",
+      "property": "L2",
+      "anchor": "_coordinator_sim.py:178-180",
+      "axis": "transition-partial-noop",
+      "bias_used": "mutation_l2_bias",
+      "expected_kill_seed": 0,
+      "expected_kill_step": 200
+    },
+    {
+      "mutation_id": "mut_l2_03_iter_only_on_first_loop",
+      "property": "L2",
+      "anchor": "_coordinator_sim.py:178-180",
+      "axis": "loop-scope-regression",
+      "bias_used": "mutation_l2_bias",
+      "expected_kill_seed": 0,
+      "expected_kill_step": 200
+    },
+    {
+      "mutation_id": "mut_l2_04_iterate_gate_requires_iter_positive",
+      "property": "L2",
+      "anchor": "_coordinator_sim.py:119-125",
+      "axis": "gate-catch-22-numeric",
+      "bias_used": "mutation_l2_bias",
+      "expected_kill_seed": 0,
+      "expected_kill_step": 2
+    },
+    {
+      "mutation_id": "mut_l2_05_iterate_gate_rejects_running",
+      "property": "L2",
+      "anchor": "_coordinator_sim.py:119-125",
+      "axis": "gate-catch-22-categorical",
+      "bias_used": "mutation_l2_bias",
+      "expected_kill_seed": 2,
+      "expected_kill_step": 6
+    },
+    {
+      "mutation_id": "mut_l3_01_propagate_without_trip",
+      "property": "L3",
+      "anchor": "_coordinator_sim.py:137",
+      "axis": "gate-kill-flag-bypass",
+      "bias_used": "kill_then_propagate_bias",
+      "expected_kill_seed": 1,
+      "expected_kill_step": 1
+    },
+    {
+      "mutation_id": "mut_l3_02_kill_not_halting",
+      "property": "L3",
+      "anchor": "_coordinator_sim.py:114-125,137",
+      "axis": "gate-ignores-kill+propagate-disabled",
+      "bias_used": "kill_then_propagate_bias",
+      "expected_kill_seed": -1,
+      "expected_kill_step": -1,
+      "kill_mechanism": "harness_raises_mutation_not_detected: mutation prevents kill=True from halting loops, but baseline terminal paths (converge/complete) still terminate loops; harness detects survivorship via detected_seed=None after 200-seed sweep"
+    },
+    {
+      "mutation_id": "mut_l3_03_partial_propagate",
+      "property": "L3",
+      "anchor": "_coordinator_sim.py:188-189",
+      "axis": "propagation-scope-partial",
+      "bias_used": "kill_then_propagate_bias",
+      "expected_kill_seed": 0,
+      "expected_kill_step": 200
+    },
+    {
+      "mutation_id": "mut_l3_04_propagate_transitions_to_running",
+      "property": "L3",
+      "anchor": "_coordinator_sim.py:188-189",
+      "axis": "transition-cosmetic-kill",
+      "bias_used": "kill_then_propagate_bias",
+      "expected_kill_seed": 0,
+      "expected_kill_step": 200
+    },
+    {
+      "mutation_id": "mut_l3_05_propagate_skips_pending_loops",
+      "property": "L3",
+      "anchor": "_coordinator_sim.py:137",
+      "axis": "gate-scope-regression",
+      "bias_used": "kill_then_propagate_bias",
+      "expected_kill_seed": 0,
+      "expected_kill_step": 1
+    },
+    {
+      "mutation_id": "mut_l4_01_trip_does_not_set_flag",
+      "property": "L4",
+      "anchor": "_coordinator_sim.py:171-172,137",
+      "axis": "trip-noop+propagate-bypass",
+      "bias_used": "kill_heavy_bias",
+      "expected_kill_seed": 0,
+      "expected_kill_step": 2
+    },
+    {
+      "mutation_id": "mut_l4_02_propagate_resets_kill_flag",
+      "property": "L4",
+      "anchor": "_coordinator_sim.py:188-189",
+      "axis": "transition-side-effect-kill-reset",
+      "bias_used": "kill_heavy_bias",
+      "expected_kill_seed": 0,
+      "expected_kill_step": 2
+    },
+    {
+      "mutation_id": "mut_l4_03_trip_kills_loops_without_setting_flag",
+      "property": "L4",
+      "anchor": "_coordinator_sim.py:171-172",
+      "axis": "transition-action-confusion",
+      "bias_used": "kill_heavy_bias",
+      "expected_kill_seed": 0,
+      "expected_kill_step": 1
+    },
+    {
+      "mutation_id": "mut_l4_04_start_sets_killed_status",
+      "property": "L4",
+      "anchor": "_coordinator_sim.py:176-177",
+      "axis": "typo-wrong-literal",
+      "bias_used": "kill_heavy_bias",
+      "expected_kill_seed": 1,
+      "expected_kill_step": 1
+    },
+    {
+      "mutation_id": "mut_l4_05_initial_state_corrupted",
+      "property": "L4",
+      "anchor": "_coordinator_sim.py:222-224",
+      "axis": "initialization-corruption",
+      "bias_used": "kill_heavy_bias",
+      "expected_kill_seed": 0,
+      "expected_kill_step": 0
+    }
+  ]
+}

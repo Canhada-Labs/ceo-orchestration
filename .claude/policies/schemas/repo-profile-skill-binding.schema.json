@@ -1,0 +1,126 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ceo-orchestration.local/schemas/repo-profile-skill-binding.schema.json",
+  "title": "Repo-Profile Skill Binding Frontmatter Schema",
+  "description": "Validates the smart-loading frontmatter fields on every SKILL.md under .claude/skills/**. These fields drive PLAN-083 Wave 0b sub-agent 0.7d (smart-loading-resolver.py) and the per-profile active-set caps (frontend <=10, engine <=12, fintech <=15, trading-readonly <=8, generic <=6). This schema validates ONLY the smart-loading subset of frontmatter; it intentionally allows other pre-existing fields (name, description, owner, inspired_by, etc.) via additionalProperties:true. The smart-loading subset is required; everything else is left alone for backward compatibility with the 143 existing SKILL.md files.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "repo_profile_binding",
+    "domain",
+    "priority",
+    "risk_class"
+  ],
+  "properties": {
+    "repo_profile_binding": {
+      "type": "object",
+      "description": "Per-repo-profile binding map. Keys are the 5 canonical profile names defined by sub-agent 0.6 (detect-repo-profile.py) plus the catch-all 'generic'. Each value declares whether this skill auto-activates for that profile and a profile-local priority tie-breaker. Profiles not listed are implicitly inactive for this skill.",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "frontend": {"$ref": "#/$defs/profile_binding_entry"},
+        "engine": {"$ref": "#/$defs/profile_binding_entry"},
+        "fintech": {"$ref": "#/$defs/profile_binding_entry"},
+        "trading-readonly": {"$ref": "#/$defs/profile_binding_entry"},
+        "generic": {"$ref": "#/$defs/profile_binding_entry"}
+      }
+    },
+    "activation_triggers": {
+      "type": "array",
+      "description": "Optional list of triggers that signal this skill should be considered for activation in addition to its repo_profile_binding. The resolver evaluates these triggers against the current event stream (file edits, repo scan results, /help-me invocations). Empty/absent array means the skill activates purely from repo_profile_binding.active=true. Per Wave 0b duplicate-trigger arbitration, when 2+ skills match the same trigger, ties are broken by top-level priority, then risk_class, then lexicographic skill path.",
+      "items": {"$ref": "#/$defs/activation_trigger"},
+      "default": []
+    },
+    "risk_class": {
+      "type": "string",
+      "enum": ["low", "medium", "high"],
+      "description": "Risk classification for duplicate-trigger arbitration tie-break #2. Lower risk wins to favor vibecoder ergonomics (less likely to surprise the user with unexpected guardrails). 'low' = read-only / advisory / docs / scaffolding; 'medium' = mutates code or config in well-scoped ways; 'high' = security-sensitive, trading-path, PII, or anything that can cause hard-to-reverse damage. The cap-table arbitration in smart-loading-resolver.py uses this as tie-break #2 after the top-level priority field."
+    },
+    "domain": {
+      "type": "string",
+      "minLength": 2,
+      "description": "Framework domain slug this skill belongs to. Mirrors the directory under .claude/skills/. Examples: 'core', 'frontend', 'fintech', 'lgpd-heavy-saas', 'trading-hft', 'edtech', 'government', 'community'. Used by audit-query.py by-domain (S100 deliverable) and by smart-loading-resolver.py for per-profile budget accounting."
+    },
+    "stack": {
+      "type": "array",
+      "description": "Optional list of technology stack hints. Lowercase tokens preferred. Examples: 'typescript', 'react', 'nextjs', 'python', 'fastapi', 'postgres', 'redis', 'node', 'go', 'rust'. The resolver uses these to refine activation when sub-agent 0.6 has tagged the repo with a stack manifest; absent stack means the skill is stack-agnostic.",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "^[a-z0-9][a-z0-9._+-]*$"
+      },
+      "uniqueItems": true,
+      "default": []
+    },
+    "inactive_but_retained": {
+      "type": "boolean",
+      "default": false,
+      "description": "Owner directive (PLAN-083 §4 'do NOT cut skills/bundles'): when true, the skill is preserved in the repo for forensic/historical/Owner-override use but is auto-suppressed from the active set for ALL profiles regardless of repo_profile_binding.active. Only takes effect when set to true; the smart-loading-resolver MUST honor this flag and exclude the skill from active counts. Explicit Owner override (env var CEO_FORCE_SKILL=<name>) bypasses suppression."
+    },
+    "context_budget_tokens": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 30000,
+      "description": "Estimated active-set token contribution for this skill (SKILL.md content body, excluding frontmatter). Used by smart-loading-resolver.py to enforce the Wave 0b acceptance criterion: SUM(context_budget_tokens) across active set per profile MUST be <=30000. Author should measure with token-estimator.py (sub-agent 0.2 deliverable) rather than guess. Max per-skill cap of 30k mirrors the per-profile total; in practice individual skills are 0.5-5k."
+    },
+    "priority": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10,
+      "description": "Top-level priority for duplicate-trigger arbitration (PRIMARY key). 1 = highest precedence, 10 = lowest. When 2+ skills match the same activation trigger or compete for the same profile cap slot, the resolver picks the skill with the LOWEST priority integer. Tie-break #1 = risk_class (low > medium > high). Tie-break #2 = lexicographic skill path. Suggested anchors: 1-2 reserved for safety-critical (security-and-auth, anti-ceo-overhead); 3-4 = primary domain skills; 5-6 = standard skills; 7-8 = nice-to-have helpers; 9-10 = experimental/optional."
+    }
+  },
+  "$defs": {
+    "profile_binding_entry": {
+      "type": "object",
+      "description": "Per-profile binding. Declares whether this skill auto-activates for the given repo profile and the profile-local priority used only when comparing two skills both matching the same profile (NOT the same global trigger).",
+      "additionalProperties": false,
+      "required": ["active", "priority"],
+      "properties": {
+        "active": {
+          "type": "boolean",
+          "description": "When true, this skill is a candidate for inclusion in this profile's active set (subject to the per-profile cap and global context_budget_tokens). When false, the skill is bound to this profile for documentation/discovery purposes but does NOT consume a cap slot."
+        },
+        "priority": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10,
+          "description": "Profile-local priority (1=highest, 10=lowest). Used as a sub-key after the top-level priority field when ranking candidates for inclusion under this specific profile. Allows the same skill to be 'priority 2 for frontend, priority 6 for fintech' without duplicating the SKILL.md."
+        }
+      }
+    },
+    "activation_trigger": {
+      "type": "object",
+      "description": "A single trigger that signals this skill should be considered for activation. The resolver evaluates triggers against the live event stream; matched triggers add the skill to the candidate pool for the current profile, then cap/arbitration rules decide final inclusion.",
+      "additionalProperties": false,
+      "required": ["event"],
+      "properties": {
+        "glob": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Optional file-path glob (POSIX glob syntax) evaluated against the path involved in the triggering event. Examples: 'src/**/*.ts', 'package.json', '.github/workflows/*.yml'. Absent glob means the trigger fires on any path."
+        },
+        "regex": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Optional Python re.search-compatible regex evaluated against the content of the file or the body of the event payload. Use sparingly: regex triggers are O(N*M) and can blow the resolver's <50ms p95 budget. Absent regex means no content match required."
+        },
+        "event": {
+          "type": "string",
+          "enum": [
+            "file-edit",
+            "file-create",
+            "file-delete",
+            "repo-detect",
+            "help-me-invoked",
+            "spawn-requested",
+            "plan-opened",
+            "audit-emit",
+            "session-boot"
+          ],
+          "description": "The event class that fires this trigger. 'file-edit' = PreToolUse Edit/Write. 'repo-detect' = sub-agent 0.6 detect-repo-profile.py result. 'help-me-invoked' = /help me slash command. 'session-boot' = ceo-boot.py run at session start. Adding new event types requires extending sub-agent 0.7d resolver + this enum atomically."
+        }
+      }
+    }
+  }
+}

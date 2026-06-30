@@ -1,0 +1,49 @@
+{
+  "_meta": {
+    "schema": "task-route.calibration.v1",
+    "purpose": "Phase 0 holdout — 4 fixtures NOT seen by Phase 1 implementation. Per PLAN-071 §4.1 R-CR3 + R-CR6, Owner curates labels; CEO does not see them until Phase 1 acceptance run. Acceptance threshold: ≥3/4 holdout classify correctly.",
+    "split": "holdout",
+    "count": 4,
+    "authoring_session": "S87 (2026-05-05)",
+    "owner_label_authority": true,
+    "anti_circularity": "These are deliberately authored to probe edge cases not over-fit to train set"
+  },
+  "fixtures": [
+    {
+      "id": "H01",
+      "task_description": "patch a single line in scripts/lessons.py to fix off-by-one in lesson_id assignment",
+      "file_hints": [".claude/scripts/lessons.py"],
+      "expected_classification": "XL",
+      "expected_ceremony_mode": "debate",
+      "expected_agents": ["code-reviewer", "security-engineer"],
+      "rationale_hidden": ".claude/scripts/lessons.py is canonical-guarded (PLAN-019 P1-SEC-A) → XL → debate. Tests that canonical-detection wins over single-file scope. S87 fixture authoring: classifier MUST treat canonical paths as XL invariantly, even for single-line fixes (any edit there triggers governance ceremony per ADR-010)."
+    },
+    {
+      "id": "H02",
+      "task_description": "rewire SHA pinning policy across all GitHub Actions workflows including SBOM emit and changesets release",
+      "file_hints": [".github/workflows/release.yml", ".github/workflows/validate.yml", ".github/workflows/coverage.yml", ".github/workflows/mcp-smoke.yml"],
+      "expected_classification": "XL",
+      "expected_ceremony_mode": "debate",
+      "expected_agents": ["devops", "security-engineer", "code-reviewer"],
+      "rationale_hidden": "4 workflow files (release/ci) + supply-chain (SBOM) → XL with debate; multi_module + workflow_change=release union"
+    },
+    {
+      "id": "H03",
+      "task_description": "investigate cost regression in claude api adapter — token counts diverging from cost_24h_usd",
+      "file_hints": [".claude/hooks/_lib/adapters/claude.py", ".claude/scripts/audit-tokens.py"],
+      "expected_classification": "XL",
+      "expected_ceremony_mode": "debate",
+      "expected_agents": ["llm-finops-architect", "code-reviewer", "security-engineer"],
+      "rationale_hidden": ".claude/hooks/_lib/adapters/claude.py is canonical-guarded (.claude/hooks/*.py) → XL invariantly. llm-finops-architect dispatched as ADVISORY archetype (NOT in VETO_FLOOR_ROLES per Wave 1c matrix — cost ≠ security; ADR-052 amendment); 5-role security-floor union post-Wave-1c reduction. Debate ceremony covers cross-domain finops advisory + code/security VETO review."
+    },
+    {
+      "id": "H04",
+      "task_description": "add new skill bundle for mobile-android domain — 5 SKILL.md files + team-personas.md + pitfalls.yaml",
+      "file_hints": [".claude/skills/domains/mobile-android/SKILL.md", ".claude/skills/domains/mobile-android/auth-flows/SKILL.md", ".claude/skills/domains/mobile-android/team-personas.md", ".claude/skills/domains/mobile-android/pitfalls.yaml"],
+      "expected_classification": "XL",
+      "expected_ceremony_mode": "debate",
+      "expected_agents": ["code-reviewer", "security-engineer"],
+      "rationale_hidden": "domains/**/SKILL.md is canonical-guarded → XL → debate"
+    }
+  ]
+}

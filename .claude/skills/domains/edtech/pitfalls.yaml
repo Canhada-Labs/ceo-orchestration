@@ -1,0 +1,98 @@
+# Pitfalls Catalog — Edtech Squad
+# Loaded alongside the universal catalog when the edtech profile is
+# installed. Format mirrors .claude/pitfalls-catalog.yaml:
+# id, rule, whenToUse, agents.
+
+pitfalls:
+  # === STUDENT PRIVACY (FERPA + COPPA + LGPD-educational) ===
+  - id: EDTECH-001
+    rule: "NEVER put a student identifier (name, email, student_id, SIS id) in a URL query string, path, or referer-visible location. URLs leak via logs, analytics, browser history, and referer headers."
+    whenToUse: "any new route, redirect, or link construction that involves a student"
+    agents: [Priya Narayanan, Marcus Olatunde]
+
+  - id: EDTECH-002
+    rule: "NEVER cache grades, assessment answers, or IEP/504 status in browser localStorage or sessionStorage. Shared devices (classroom, library, family tablet) leak across users. Use server-rendered or memory-only state."
+    whenToUse: "any frontend storage decision in grade, assessment, or IEP views"
+    agents: [Priya Narayanan, Konstantin Ferreira, Jin-Soo Ramirez]
+
+  - id: EDTECH-003
+    rule: "Parental consent MUST be verifiably verified (COPPA VPC). A checkbox from the child, or an email link opened from the child's inbox, is NOT verifiable parental consent. Use an FTC-approved VPC method."
+    whenToUse: "any signup flow that might register a user under 13; any consent re-prompt"
+    agents: [Marcus Olatunde, Priya Narayanan]
+
+  - id: EDTECH-004
+    rule: "Age-gate enforcement MUST be server-side. Client-side age-gating is bypassable by dev tools and browser automation. Log the age-gate decision with the raw birthdate so the decision can be re-evaluated when regulations shift."
+    whenToUse: "any signup, account conversion, or parental-consent path"
+    agents: [Priya Narayanan, Marcus Olatunde]
+
+  - id: EDTECH-005
+    rule: "FERPA 'directory information' opt-out MUST be checked before any public-facing display of student name, photo, or enrollment status. Directory-info opt-out is per-student per-district and can change mid-year."
+    whenToUse: "any feature that displays student info outside the authenticated student + guardian + school-official scope"
+    agents: [Priya Narayanan, Marcus Olatunde]
+
+  - id: EDTECH-006
+    rule: "Engagement telemetry and error-tracker pipelines MUST scrub student PII BEFORE the wire leaves the service. Post-ingestion scrubbing at the vendor is not sufficient — the PII was still transmitted."
+    whenToUse: "wiring any analytics, APM, error-tracker, or session-replay vendor"
+    agents: [Priya Narayanan, Dr. Léa Mbeki]
+
+  - id: EDTECH-007
+    rule: "Consent revocation (parental or student-18+) MUST propagate to analytics training data, not just display layers. A revoked student MUST be excluded from future model training runs."
+    whenToUse: "any code path that handles consent revocation or data deletion; any model training pipeline"
+    agents: [Marcus Olatunde, Dr. Léa Mbeki, Priya Narayanan]
+
+  # === ASSESSMENT INTEGRITY ===
+  - id: EDTECH-008
+    rule: "Grades MUST be append-only. UPDATE on the grades table is forbidden. Grade 'changes' are new rows with change_reason + actor_id + previous_grade_id. The current grade is a view, not a column."
+    whenToUse: "any schema change touching the grades table; any teacher-facing grade edit flow"
+    agents: [Konstantin Ferreira, Priya Narayanan]
+
+  - id: EDTECH-009
+    rule: "Question randomization seed MUST NOT be derived from user_id or any user-controlled input. Use a server-generated per-delivery nonce. Otherwise two students can compare 'my question 3' to cheat efficiently."
+    whenToUse: "any assessment delivery or question-bank serving code path"
+    agents: [Konstantin Ferreira]
+
+  - id: EDTECH-010
+    rule: "Assessment time-attack telemetry (reaction time per question, tab-focus loss, paste events, keystroke timing) MUST be captured during the attempt, not reconstructed after. If it's not logged at the time, it's lost."
+    whenToUse: "designing the assessment delivery client or the attempt-log schema"
+    agents: [Konstantin Ferreira]
+
+  - id: EDTECH-011
+    rule: "Proctoring video / screen-recording artifacts MUST be encrypted at rest, access-logged, and retained only for the regulatory minimum (typically 30-90 days unless under active dispute). 'Indefinitely' is a compliance failure."
+    whenToUse: "any proctoring feature; any retention policy change on proctoring media"
+    agents: [Konstantin Ferreira, Priya Narayanan]
+
+  - id: EDTECH-012
+    rule: "Question banks MUST NOT be copied to non-production environments in plaintext. Use a seed bank for dev/staging. A leaked prod question bank invalidates an entire assessment cycle."
+    whenToUse: "any dev-data refresh, staging seed, or QA dataset preparation"
+    agents: [Konstantin Ferreira]
+
+  - id: EDTECH-013
+    rule: "Proctoring anti-cheat heuristics MUST respect assistive-technology allowlist BEFORE flagging. A screen reader moving the focus is NOT suspicious behavior; a student using dictation is NOT cheating."
+    whenToUse: "any proctoring heuristic design, ML classifier training, or flag-triage workflow"
+    agents: [Jin-Soo Ramirez, Konstantin Ferreira]
+
+  # === LEARNING ANALYTICS (fairness + privacy) ===
+  - id: EDTECH-014
+    rule: "Aggregate dashboards MUST enforce N≥5 per displayed cell (FERPA de-identification floor; often N≥10 for district reports). Cross-tab filters that can produce N<5 via combination MUST suppress or noise-add."
+    whenToUse: "designing any staff-facing or public analytics dashboard with subgroup filters"
+    agents: [Dr. Léa Mbeki, Priya Narayanan]
+
+  - id: EDTECH-015
+    rule: "Dropout prediction and early-warning models MUST be evaluated for disparate impact per protected subgroup (race, gender, SES proxy, IEP status, ESL status) BEFORE launch AND on every retrain. FPR > 2x majority rate for any subgroup blocks launch."
+    whenToUse: "any ML model surfaced to staff or students that influences interventions"
+    agents: [Dr. Léa Mbeki]
+
+  - id: EDTECH-016
+    rule: "Models MUST respect opt-out students in both training and inference. 'Opt-out' means the student's data is excluded from training data, not just hidden from the display. Privacy-by-default."
+    whenToUse: "any data pipeline that builds training sets for edtech ML models"
+    agents: [Dr. Léa Mbeki, Marcus Olatunde]
+
+  - id: EDTECH-017
+    rule: "A 'risk score' displayed to teachers MUST include a calibration interval and at least 3 feature attributions. A single number invites confirmation bias; staff act on certainty cues they don't have."
+    whenToUse: "any teacher-facing prediction UI"
+    agents: [Dr. Léa Mbeki, Jin-Soo Ramirez]
+
+  - id: EDTECH-018
+    rule: "Fairness evaluation artifacts (per-subgroup confusion matrices, calibration plots, FPR/FNR tables) MUST be versioned and retained for the lifetime of the model's deployment + 1 year. Auditors ask; 'we lost the report' is a compliance finding."
+    whenToUse: "any model launch, retrain, or offboarding event"
+    agents: [Dr. Léa Mbeki]

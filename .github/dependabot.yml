@@ -1,0 +1,30 @@
+version: 2
+
+# Dependabot configuration — PLAN-004 Phase 7 (per consensus C6 / DevOps proposal P4).
+#
+# Scope: GitHub Actions only. We ship zero runtime dependencies (stdlib-only
+# hooks and scripts), so no ecosystem beyond github-actions should be polled.
+#
+# Cadence: monthly to minimize PR noise. Grouped patch + minor updates into
+# one PR per ecosystem to reduce review burden (DevOps R-DEVOPS3 mitigation).
+
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+      day: monday
+      time: "10:00"
+      timezone: America/Sao_Paulo
+    open-pull-requests-limit: 3
+    groups:
+      actions-patch-and-minor:
+        update-types:
+          - patch
+          - minor
+    commit-message:
+      prefix: "ci"
+      include: scope
+    labels:
+      - dependencies
+      - github-actions

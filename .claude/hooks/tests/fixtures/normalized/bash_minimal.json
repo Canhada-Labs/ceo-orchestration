@@ -1,0 +1,23 @@
+{
+  "session_id": "gem-sess-002",
+  "project": "",
+  "phase": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "ls -la",
+    "description": "List files"
+  },
+  "tool_response": {},
+  "description": "List files",
+  "prompt": "",
+  "subagent_type": "",
+  "file_path": "",
+  "old_string": "",
+  "new_string": "",
+  "replace_all": false,
+  "command": "ls -la",
+  "raw_payload": {},
+  "parse_error": null,
+  "tool_use_id": "",
+  "duration_ms": null
+}

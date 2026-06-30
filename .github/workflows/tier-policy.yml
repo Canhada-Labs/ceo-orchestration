@@ -1,0 +1,185 @@
+# STAGED: .github/workflows/tier-policy.yml (Phase 5 Owner promotion target)
+#
+# Owner physical shell moves via kernel batch
+# /tmp/plan_043_phase_5_promote_canonical.py (see OWNER-LOCAL-ACTIONS.md).
+#
+# Per Round 1 closures:
+# - C-P0-13 schedule at 07:00 UTC (2h buffer post-tournament 04:00 + 75min cap)
+# - C-P0-14 Option B (notify-only): derive + create GH issues; Owner
+#   applies LOCALLY. CI does NOT auto-commit.
+# - C-P1-8 install.sh compatible (both factors kill-switch enforced
+#   at job level: CEO_TIER_POLICY_CI=1 + fork-safety assertion)
+# - F-OPS-P0-2 issue dedup: by label + agent + direction
+name: tier-policy
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry-run only (no issue creation)"
+        required: false
+        default: "true"
+        type: choice
+        options: ["true", "false"]
+  # Monthly, 07:00 UTC first-of-month. 2h buffer after tournament.yml
+  # (04:00 + 75min max runtime) per C-P0-13.
+  schedule:
+    - cron: "0 7 1 * *"
+
+# Fork safety: refuse to run on forks per ADR-063 precedent.
+# GH_TOKEN with write:issues scope required for issue creation.
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: tier-policy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  derive-notify:
+    name: Derive + notify (Option B)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    if: github.event.repository.fork == false
+    env:
+      # CI-distinct kill-switch flag per C-P0-14
+      CEO_TIER_POLICY_CI: "1"
+      # Notify-only mode is enforced by the workflow shape (no apply).
+      CEO_TIER_POLICY_ENABLE: "1"
+    steps:
+      - name: Checkout
+        # SHA-pinned per C-P0-14 / ADR-052 Wave B supply-chain hardening
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Setup Python
+        uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b  # v5.3.0
+        with:
+          python-version: "3.11"
+
+      - name: Freshness pre-flight — latest tournament report <1h
+        run: |
+          set -euo pipefail
+          # shellcheck disable=SC2012 # ls -t mtime sort is intentional; find -printf is GNU-only
+          latest=$(ls -t benchmarks/tournament-*.jsonl 2>/dev/null | head -n1 || true)
+          if [ -z "${latest}" ]; then
+            echo "tier-policy: no tournament reports found; skipping."
+            echo "SKIP_REASON=no_reports" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          # Reject if latest is too old (likely the scheduled tournament
+          # run didn't complete). 2h = 7200s buffer.
+          if ! find "${latest}" -mmin -120 | grep -q .; then
+            echo "tier-policy: latest report mtime > 2h old; skipping."
+            echo "SKIP_REASON=stale_report" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          echo "LATEST_REPORT=${latest}" >> "$GITHUB_ENV"
+
+      - name: Derive recommendations
+        if: env.SKIP_REASON == ''
+        id: derive
+        run: |
+          set -euo pipefail
+          python3 .claude/scripts/tier_policy_cli/cli.py derive \
+            --reports benchmarks > /tmp/recs.json
+          cat /tmp/recs.json
+          count=$(python3 -c "import json; print(len(json.load(open('/tmp/recs.json'))))")
+          echo "REC_COUNT=${count}" >> "$GITHUB_OUTPUT"
+
+      - name: Create / update GitHub issues (Option B notify-only)
+        if: env.SKIP_REASON == '' && steps.derive.outputs.REC_COUNT != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Iterate recommendations; create issue with dedup by label
+          # + agent + direction per F-OPS-P0-2.
+          python3 - <<'PY'
+          import json
+          import os
+          import subprocess
+
+          with open("/tmp/recs.json") as f:
+              recs = json.load(f)
+
+          for rec in recs:
+              if rec["action"] == "hold":
+                  continue
+              label = "tier-policy:{}".format(rec["action"])
+              agent = rec["agent_slug"]
+              direction = "{}->{}".format(
+                  rec["current_tier"], rec["recommended_tier"]
+              )
+              title = "tier-policy: {} {} {}".format(
+                  rec["action"], agent, direction,
+              )
+              # Dedup: search open issues with matching label + title.
+              search = subprocess.run(
+                  ["gh", "issue", "list",
+                   "--label", label,
+                   "--search", title,
+                   "--json", "number",
+                   "--state", "open"],
+                  capture_output=True, text=True,
+              )
+              existing = json.loads(search.stdout or "[]")
+              body_lines = [
+                  "## tier-policy recommendation (notify-only)",
+                  "",
+                  "- agent: `{}`".format(agent),
+                  "- action: `{}`".format(rec["action"]),
+                  "- from: `{}`".format(rec["current_tier"]),
+                  "- to: `{}`".format(rec["recommended_tier"]),
+                  "- n: {}".format(rec["evidence"]["n"]),
+                  "- gap_pp: {}".format(rec["evidence"]["gap_pp"]),
+                  "- signature_required: {}".format(
+                      rec["signature_required"]
+                  ),
+                  "",
+                  "Owner applies locally:",
+                  "```bash",
+                  "ceo-tier-policy apply --dry-run",
+                  "ceo-tier-policy apply",
+                  "# If signature_required:",
+                  "ceo-tier-policy owner-sign --agent {a} --from-tier {f} --to-tier {t} --sp-chain-id SP-NNN-<8hex>".format(
+                      a=agent, f=rec["current_tier"],
+                      t=rec["recommended_tier"],
+                  ),
+                  "```",
+              ]
+              body = "\n".join(body_lines)
+              if existing:
+                  # Append comment to existing open issue.
+                  num = existing[0]["number"]
+                  subprocess.run(
+                      ["gh", "issue", "comment", str(num),
+                       "--body", "New run confirmed; see body"],
+                      check=True,
+                  )
+              else:
+                  subprocess.run(
+                      ["gh", "issue", "create",
+                       "--title", title,
+                       "--body", body,
+                       "--label", label],
+                      check=True,
+                  )
+          PY
+
+      - name: Summary
+        if: always()
+        run: |
+          # SC2129: group redirects (PLAN-063 round-3, Task #18)
+          {
+            echo "### tier-policy CI summary"
+            echo ""
+            echo "- skip_reason: ${SKIP_REASON:-none}"
+            echo "- latest_report: ${LATEST_REPORT:-n/a}"
+            echo "- rec_count: ${REC_COUNT:-n/a}"
+            echo ""
+            echo "CI is notify-only (Option B). Owner applies locally."
+          } >> "$GITHUB_STEP_SUMMARY"

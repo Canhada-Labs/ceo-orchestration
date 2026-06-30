@@ -1,0 +1,174 @@
+{
+  "_meta": {
+    "schema": "task-route.calibration.v1",
+    "purpose": "Phase 0 train set — 16 ground-truth task classifications. Authored before task-route.py so Phase 1 acceptance is anti-circular per PLAN-071 §4.1. Each fixture pins the expected classification + minimum required agents/skills. Holdout (4) lives in calibration-holdout.json.",
+    "split": "train",
+    "count": 18,
+    "authoring_session": "S87 (2026-05-05)",
+    "plan": "PLAN-071 §4.1 Phase 0 + §3.3 Phase 1 decision tree"
+  },
+  "fixtures": [
+    {
+      "id": "T01",
+      "task_description": "rename helper variable in src/utils/format.ts",
+      "file_hints": ["src/utils/format.ts"],
+      "expected_classification": "S",
+      "expected_ceremony_mode": "direct",
+      "expected_agents": [],
+      "rationale": "Single file, no veto domain, no canonical, no schema/workflow signal — trivial S"
+    },
+    {
+      "id": "T02",
+      "task_description": "fix typo in error message in src/api/handler.py",
+      "file_hints": ["src/api/handler.py"],
+      "expected_classification": "S",
+      "expected_ceremony_mode": "direct",
+      "expected_agents": [],
+      "rationale": "Single-file cosmetic fix; no veto, no canonical"
+    },
+    {
+      "id": "T03",
+      "task_description": "fix timing oracle in authentication module src/auth/login.ts:94",
+      "file_hints": ["src/auth/login.ts"],
+      "expected_classification": "M",
+      "expected_ceremony_mode": "1-agent-with-veto",
+      "expected_agents": ["security-engineer", "code-reviewer"],
+      "rationale": "Single file (S signal) but auth/timing veto domain → S→M upgrade; security-engineer + code-reviewer VETO floor"
+    },
+    {
+      "id": "T04",
+      "task_description": "add input validation to login form src/auth/form.tsx",
+      "file_hints": ["src/auth/form.tsx"],
+      "expected_classification": "M",
+      "expected_ceremony_mode": "1-agent-with-veto",
+      "expected_agents": ["security-engineer", "code-reviewer"],
+      "rationale": "Auth domain → M; VETO floor applies"
+    },
+    {
+      "id": "T05",
+      "task_description": "rotate JWT signing secret across api/auth and api/refresh",
+      "file_hints": ["src/api/auth.ts", "src/api/refresh.ts"],
+      "expected_classification": "M",
+      "expected_ceremony_mode": "1-agent-with-veto",
+      "expected_agents": ["security-engineer", "code-reviewer"],
+      "rationale": "JWT/auth keywords + ≤4 files → M; VETO floor"
+    },
+    {
+      "id": "T06",
+      "task_description": "refactor decimal-precision rounding in payments module",
+      "file_hints": ["src/payments/calc.ts", "src/payments/format.ts"],
+      "expected_classification": "M",
+      "expected_ceremony_mode": "1-agent-with-veto",
+      "expected_agents": ["security-engineer", "code-reviewer"],
+      "rationale": "decimal/financial keyword → veto domain → M"
+    },
+    {
+      "id": "T07",
+      "task_description": "add new endpoint POST /api/users with input validation",
+      "file_hints": ["src/api/users.ts", "src/api/users.test.ts", "src/middleware/validate.ts"],
+      "expected_classification": "M",
+      "expected_ceremony_mode": "1-agent-with-veto",
+      "expected_agents": ["code-reviewer"],
+      "rationale": "≤4 files no explicit veto kw match → M default; code-reviewer floor only. CR-relaxation: 'input validation' is dialectical security but not in current veto-keyword regex; classifier emits CR-only floor — additional security review ON OWNER-DISCRETION via override."
+    },
+    {
+      "id": "T08",
+      "task_description": "rename interfaces across user/order/billing modules",
+      "file_hints": ["src/user/types.ts", "src/order/types.ts", "src/billing/types.ts"],
+      "expected_classification": "L",
+      "expected_ceremony_mode": "multi-agent",
+      "expected_agents": ["code-reviewer"],
+      "rationale": "3 distinct module roots → multi_module → L"
+    },
+    {
+      "id": "T09",
+      "task_description": "extract shared logging helper from user/order/billing services",
+      "file_hints": ["src/user/log.ts", "src/order/log.ts", "src/billing/log.ts", "src/lib/log.ts"],
+      "expected_classification": "L",
+      "expected_ceremony_mode": "multi-agent",
+      "expected_agents": ["code-reviewer"],
+      "rationale": "≥3 module roots → L"
+    },
+    {
+      "id": "T10",
+      "task_description": "rewire pytest discovery via conftest restructure",
+      "file_hints": ["tests/conftest.py", "pytest.ini"],
+      "expected_classification": "L",
+      "expected_ceremony_mode": "multi-agent",
+      "expected_agents": ["qa-architect", "code-reviewer"],
+      "rationale": "test-infra workflow signal → L (qa-architect)"
+    },
+    {
+      "id": "T11",
+      "task_description": "add SCHEMA migration for orders table adding decimal precision column",
+      "file_hints": ["migrations/2026-05-add-precision.sql", "SPEC/v1/orders.schema.md"],
+      "expected_classification": "XL",
+      "expected_ceremony_mode": "debate",
+      "expected_agents": ["security-engineer", "code-reviewer", "qa-architect"],
+      "rationale": "schema_change + SPEC/v1 signal → XL → debate"
+    },
+    {
+      "id": "T12",
+      "task_description": "amend release.yml CI to add SBOM generation step",
+      "file_hints": [".github/workflows/release.yml"],
+      "expected_classification": "XL",
+      "expected_ceremony_mode": "debate",
+      "expected_agents": ["devops", "security-engineer", "code-reviewer"],
+      "rationale": "release workflow_change → XL → debate (devops + security-engineer)"
+    },
+    {
+      "id": "T13",
+      "task_description": "rewire RAG sidecar to use new vector store under .claude/rag/",
+      "file_hints": [".claude/rag/index.py", ".claude/rag/requirements.lock"],
+      "expected_classification": "XL",
+      "expected_ceremony_mode": "debate",
+      "expected_agents": ["security-engineer", "code-reviewer"],
+      "rationale": "rag workflow signal → XL. performance-engineer routing deferred to v1.15.0+ (currently not wired in _agents_for())."
+    },
+    {
+      "id": "T14",
+      "task_description": "modify check_canonical_edit hook to extend matcher to mcp__* tools",
+      "file_hints": [".claude/hooks/check_canonical_edit.py"],
+      "expected_classification": "XL",
+      "expected_ceremony_mode": "debate",
+      "expected_agents": ["security-engineer", "code-reviewer"],
+      "rationale": "canonical-guarded path edit → XL → debate (KERNEL-class)"
+    },
+    {
+      "id": "T15",
+      "task_description": "extend tier_policy/_constants VETO_HARDCODE to include new role",
+      "file_hints": [".claude/hooks/_lib/tier_policy/_constants.py"],
+      "expected_classification": "XL",
+      "expected_ceremony_mode": "debate",
+      "expected_agents": ["security-engineer", "code-reviewer"],
+      "rationale": "canonical-guarded path edit + tier_policy + multi_module signal → XL"
+    },
+    {
+      "id": "T16",
+      "task_description": "investigate cross-test flake across user/order/billing/middleware service modules",
+      "file_hints": ["src/user/users.ts", "src/order/orders.ts", "src/billing/billing.ts", "src/middleware/handler.ts"],
+      "expected_classification": "L",
+      "expected_ceremony_mode": "multi-agent",
+      "expected_agents": ["qa-architect", "code-reviewer"],
+      "rationale": "4 distinct module roots (src/user, src/order, src/billing, src/middleware) → multi_module → L"
+    },
+    {
+      "id": "T17",
+      "task_description": "rotate authentication credentials across user/order/billing payment modules",
+      "file_hints": ["src/user/auth.ts", "src/order/payment.ts", "src/billing/billing.ts"],
+      "expected_classification": "XL",
+      "expected_ceremony_mode": "debate",
+      "expected_agents": ["security-engineer", "code-reviewer"],
+      "rationale": "Auth + payment veto domain + multi-module (3 distinct roots) → XL → debate (Codex audit fix #3 — exercises auth+multi → XL XL branch)"
+    },
+    {
+      "id": "T18",
+      "task_description": "tidy up imports across 5 files inside src/utils namespace",
+      "file_hints": ["src/utils/a.ts", "src/utils/b.ts", "src/utils/c.ts", "src/utils/d.ts", "src/utils/e.ts"],
+      "expected_classification": "M",
+      "expected_ceremony_mode": "1-agent-with-veto",
+      "expected_agents": ["code-reviewer"],
+      "rationale": ">4 same-root files no veto domain → M-default fallback (Codex audit fix #3 — exercises >4 same-root M-default)"
+    }
+  ]
+}

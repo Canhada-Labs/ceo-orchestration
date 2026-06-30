@@ -1,0 +1,19 @@
+# PLAN-013 Phase E.5 — issue template config.
+#
+# Blank issues disabled to force template selection. GitHub Discussions
+# stay DISABLED per ROADMAP-CLOSURE.md §Sprint 17 — questions live in
+# the regular issue tracker with label `question` until public-launch
+# decision lands.
+
+blank_issues_enabled: false
+
+contact_links:
+  - name: Security vulnerability (private disclosure)
+    url: https://github.com/Canhada-Labs/ceo-orchestration/security/advisories/new
+    about: Open a GitHub Security Advisory. Do NOT file a public issue for security bugs.
+  - name: Documentation clarification
+    url: https://github.com/Canhada-Labs/ceo-orchestration/blob/main/docs/GUIA-COMPLETO.md
+    about: Read the comprehensive guide (EN at GUIA-COMPLETO.md, PT-BR at GUIA-COMPLETO.pt-BR.md).
+  - name: Troubleshooting
+    url: https://github.com/Canhada-Labs/ceo-orchestration/blob/main/docs/TROUBLESHOOTING.md
+    about: Common problems + resolutions.

@@ -1,0 +1,24 @@
+{
+  "session_id": "gem-sess-001",
+  "project": "",
+  "phase": "PreToolUse",
+  "tool_name": "Agent",
+  "tool_input": {
+    "subagent_type": "general-purpose",
+    "description": "Sample spawn",
+    "prompt": "## AGENT PROFILE\n## SKILL CONTENT\nX"
+  },
+  "tool_response": {},
+  "description": "Sample spawn",
+  "prompt": "## AGENT PROFILE\n## SKILL CONTENT\nX",
+  "subagent_type": "general-purpose",
+  "file_path": "",
+  "old_string": "",
+  "new_string": "",
+  "replace_all": false,
+  "command": "",
+  "raw_payload": {},
+  "parse_error": null,
+  "tool_use_id": "",
+  "duration_ms": null
+}

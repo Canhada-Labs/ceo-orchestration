@@ -1,0 +1,92 @@
+# Task chains — {{DOMAIN_LABEL}} Squad
+# Domain-specific workflows that extend the universal .claude/task-chains.yaml.
+#
+# ADR-009 §bundle-completeness: ≥2 task chain entries required.
+# Exemplars: .claude/skills/domains/edtech/task-chains.yaml
+#            .claude/skills/domains/government/task-chains.yaml
+#            .claude/skills/domains/lgpd-heavy-saas/task-chains.yaml
+#            .claude/skills/domains/trading-hft/task-chains.yaml
+#
+# NOT canonical-guarded — no sentinel required for edits.
+# Each chain id follows {{DOMAIN_SLUG}}-<short-slug> (kebab-case).
+# scan-injection-strict.sh MUST pass on this file (Phase 0b acceptance gate).
+
+task_chains:
+  - id: {{DOMAIN_SLUG}}-{{CHAIN_1_SLUG}}
+    title: "{{CHAIN_1_TITLE}}"
+    whenToUse: |
+      {{CHAIN_1_WHEN_TO_USE}}
+      <!-- 2-5 sentences: describe the trigger condition and scope boundaries
+           (what is in vs out of scope for this chain). -->
+    steps:
+      - id: 1
+        owner: "{{CHAIN_1_STEP_1_OWNER}}"
+        action: "{{CHAIN_1_STEP_1_ACTION}}"
+        # skill: "{{OPTIONAL_SKILL_REFERENCE}}"  # uncomment if a named skill governs
+      - id: 2
+        owner: "{{CHAIN_1_STEP_2_OWNER}}"
+        action: "{{CHAIN_1_STEP_2_ACTION}}"
+      - id: 3
+        owner: "{{CHAIN_1_STEP_3_OWNER}}"
+        action: "{{CHAIN_1_STEP_3_ACTION}}"
+      - id: 4
+        owner: "{{CHAIN_1_STEP_4_OWNER}}"
+        action: "{{CHAIN_1_STEP_4_ACTION}}"
+      - id: 5
+        owner: "{{CHAIN_1_STEP_5_OWNER}}"
+        action: "{{CHAIN_1_STEP_5_ACTION}}"
+      - id: 6
+        owner: "{{CHAIN_1_STEP_6_OWNER}}"
+        action: "{{CHAIN_1_STEP_6_ACTION}}"
+      - id: 7
+        owner: "{{CHAIN_1_STEP_7_OWNER}}"
+        action: "{{CHAIN_1_STEP_7_ACTION}}"
+      - id: 8
+        owner: "Staff Code Reviewer"
+        action: "Merge check: verify all VETO holder sign-offs recorded, pitfall suppressions justified, no out-of-scope changes."
+    verification: |
+      - {{CHAIN_1_VERIFY_1}}
+      - {{CHAIN_1_VERIFY_2}}
+      - {{CHAIN_1_VERIFY_3}}
+      - {{CHAIN_1_VERIFY_4}}
+      # Reference specific pitfall IDs (e.g. {{DOMAIN_PREFIX}}-001) where applicable.
+
+  - id: {{DOMAIN_SLUG}}-{{CHAIN_2_SLUG}}
+    title: "{{CHAIN_2_TITLE}}"
+    whenToUse: |
+      {{CHAIN_2_WHEN_TO_USE}}
+    steps:
+      - id: 1
+        owner: "{{CHAIN_2_STEP_1_OWNER}}"
+        action: "{{CHAIN_2_STEP_1_ACTION}}"
+      - id: 2
+        owner: "{{CHAIN_2_STEP_2_OWNER}}"
+        action: "{{CHAIN_2_STEP_2_ACTION}}"
+      - id: 3
+        owner: "{{CHAIN_2_STEP_3_OWNER}}"
+        action: "{{CHAIN_2_STEP_3_ACTION}}"
+      - id: 4
+        owner: "{{CHAIN_2_STEP_4_OWNER}}"
+        action: "{{CHAIN_2_STEP_4_ACTION}}"
+      - id: 5
+        owner: "{{CHAIN_2_STEP_5_OWNER}}"
+        action: "{{CHAIN_2_STEP_5_ACTION}}"
+      - id: 6
+        owner: "Principal QA Architect"
+        action: "Integration tests: {{CHAIN_2_QA_ACTION}}"
+      - id: 7
+        owner: "Staff Code Reviewer"
+        action: "Merge VETO check: {{CHAIN_2_MERGE_CHECK}}"
+    verification: |
+      - {{CHAIN_2_VERIFY_1}}
+      - {{CHAIN_2_VERIFY_2}}
+      - {{CHAIN_2_VERIFY_3}}
+
+  # Add additional chains as the domain warrants. Minimum is 2; typical
+  # domains have 3-4. Complex domains (edtech, trading-hft) have 3.
+  # - id: {{DOMAIN_SLUG}}-{{CHAIN_3_SLUG}}
+  #   title: "{{CHAIN_3_TITLE}}"
+  #   whenToUse: |
+  #     {{CHAIN_3_WHEN_TO_USE}}
+  #   steps:
+  #     ...

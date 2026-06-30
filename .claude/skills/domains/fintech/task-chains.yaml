@@ -1,0 +1,46 @@
+# Task Chains — Fintech Domain
+# Crypto exchange + financial math workflows.
+# Loaded alongside the universal task-chains.yaml when fintech profile is installed.
+# Agents follow these chains, not ad-hoc sequences.
+
+chains:
+  add-exchange:
+    description: "New exchange adapter onboarding (crypto spot/perp)"
+    steps:
+      - name: "registry"
+        action: "Add to exchange-registry.ts + types.ts ExchangeCode union"
+        verify: "Type checker clean"
+      - name: "adapter"
+        action: "Create src/adapters/{exchange}.ts extending BaseAdapter"
+        verify: "Adapter compiles"
+      - name: "pairs"
+        action: "Add pair fetching to pairs.ts"
+        verify: "Pairs fetch returns results"
+      - name: "ticker"
+        action: "Add ticker polling to ticker.ts with appropriate backoff"
+        verify: "Ticker data flows"
+      - name: "test"
+        action: "Write adapter tests (mock WS, reconnect, crossed-book defense)"
+        verify: "Tests pass"
+      - name: "thread-config"
+        action: "Add to thread-config.ts pool allocation"
+        verify: "Worker starts without errors"
+
+  financial-code:
+    description: "Any code touching prices/volumes/PnL"
+    steps:
+      - name: "decimal-check"
+        action: "Verify all arithmetic uses a decimal library (backend) or typed safe-number helpers (frontend). Zero float arithmetic on financial values."
+        verify: "No Number()/parseFloat on financial paths"
+      - name: "implement"
+        action: "Write the code"
+        verify: "Type checker clean"
+      - name: "boundary-test"
+        action: "Test with boundary values: 0, -0, NaN, Infinity, very large, very small, negative"
+        verify: "All boundary tests pass"
+      - name: "invariant-test"
+        action: "Test invariants: bestBid < bestAsk, depth monotonically cumulative, VWAP volume-weighted"
+        verify: "Invariant tests pass"
+      - name: "viktor-review"
+        action: "Viktor (staff quant) reviews against financial-correctness-and-math checklist"
+        verify: "Viktor approves"

@@ -1,0 +1,2 @@
+# cdn cache key (32 alnum)
+key: cpYQpRexx9UoHM97GRj0keOaf9vWt0O2

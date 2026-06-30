@@ -1,0 +1,35 @@
+{
+  "schema_version": "1.0",
+  "generated_at": "2026-04-19T00:00:00Z",
+  "baseline_from": "ADR-052",
+  "assignments": {
+    "code-reviewer": {
+      "tier": "claude-opus-4-8",
+      "locked_by": "VETO_FLOOR",
+      "evidence": null
+    },
+    "security-engineer": {
+      "tier": "claude-opus-4-8",
+      "locked_by": "VETO_FLOOR",
+      "evidence": null
+    },
+    "qa-architect": {
+      "tier": "claude-sonnet-4-6",
+      "locked_by": null,
+      "evidence": null
+    },
+    "performance-engineer": {
+      "tier": "claude-sonnet-4-6",
+      "locked_by": null,
+      "evidence": null
+    },
+    "devops": {
+      "tier": "claude-haiku-4-5-20251001",
+      "locked_by": null,
+      "evidence": null
+    }
+  },
+  "hmac_anchor": "0000000000000000000000000000000000000000000000000000000000000000",
+  "sigchain_tip_length": 1,
+  "last_change_by_role": {}
+}

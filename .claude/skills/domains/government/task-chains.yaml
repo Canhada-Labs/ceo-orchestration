@@ -1,0 +1,88 @@
+# Task chains — Government Squad
+# Domain-specific workflows that extend the universal .claude/task-chains.yaml.
+
+task_chains:
+  - id: gov-publish-rfp
+    title: "Publish an RFP (procurement draft -> COI check -> A11y review -> publish)"
+    whenToUse: |
+      A new Request-For-Proposal (RFP) or equivalent solicitation is
+      being prepared for public posting. This chain covers: SOW/SOO/PWS
+      authoring, COI vetting of the authoring team, accessibility of
+      the solicitation package (often PDF — must be tagged), and the
+      controlled hand-off to the public procurement portal.
+    steps:
+      - id: 1
+        owner: "Senator Rafael Hoelzle (Procurement Integrity Officer)"
+        action: "Verify the requirements author(s) have current COI disclosures (GOV-016) AND that no disclosed interest ties to a likely bidder. Biased-ground-rules OCI is the easiest protest to sustain."
+      - id: 2
+        owner: "Senator Rafael Hoelzle"
+        action: "Confirm the solicitation does not leak pre-market-research bidder conversations (unequal-access OCI). If any vendor helped shape the SOW, document the OCI mitigation plan or exclude them from bidding."
+      - id: 3
+        owner: "Darius Okonkwo (Public Records Engineer)"
+        action: "Prepare the solicitation package. If delivered as PDF: verify tags, reading order, form fields are accessible (GOV-020). Prefer HTML solicitation portal where the agency supports it."
+      - id: 4
+        owner: "Linh Abernathy (Government A11y Engineer)"
+        action: "A11y review of the solicitation package and portal surface: keyboard-only flow through the public RFP pages, screen-reader announcement of deadlines and Q&A links, color-independent status indicators for 'open / Q&A / closed / awarded' (GOV-001)."
+      - id: 5
+        owner: "Senator Rafael Hoelzle"
+        action: "Set the bid-opening timestamp and confirm the bid-store is configured with time-released key material (GOV-014). No pre-opening decrypt path exists."
+      - id: 6
+        owner: "Darius Okonkwo"
+        action: "Implement bid-intake: per-bidder ciphertext storage, audit-log without bid amounts (GOV-013), access log flags any pre-opening read."
+      - id: 7
+        owner: "Yewande Crossland (FOIA Compliance Officer)"
+        action: "Retention classification for the solicitation, all Q&A, all submitted bids, and the eventual award decision memo (GOV-011). Map each to NARA GRS or agency schedule."
+      - id: 8
+        owner: "Staff Code Reviewer"
+        action: "Merge check: COI vetting, accessible package, bid-store encryption, no pre-opening amount emission in logs, retention schedule attached."
+    verification: |
+      - COI disclosures current for all requirements authors (GOV-016)
+      - Solicitation PDF tagged or HTML delivered (GOV-020)
+      - A11y checklist green on portal surface (GOV-001..006)
+      - Bid ciphertext only pre-opening; access log monitored (GOV-013, GOV-014)
+      - Retention schedule mapped for solicitation + bids + award memo (GOV-011)
+
+  - id: gov-foia-respond
+    title: "Respond to a FOIA / public-records request (intake -> classification -> redaction -> release -> audit)"
+    whenToUse: |
+      A FOIA (federal) or state-sunshine / public-records request is
+      received. This chain covers: perfection check, responsive-record
+      identification, exemption analysis + redaction, requester-identity
+      confidentiality, SLA clock management, release delivery, and the
+      audit trail that survives appeal or litigation.
+    steps:
+      - id: 1
+        owner: "Darius Okonkwo (Public Records Engineer)"
+        action: "Intake: capture request scope, requester contact, fee commitment. Determine if the request is perfected (specific enough records identifier + contact + fee posture). Unperfected requests do NOT start the SLA clock; send clarification request instead."
+      - id: 2
+        owner: "Yewande Crossland (FOIA Compliance Officer)"
+        action: "Start the SLA clock only on perfected receipt. Log tolling events (fee disputes, clarification exchanges) with start/end timestamps. Baseline: 20 working days federal; check state-specific clock for state requests."
+      - id: 3
+        owner: "Darius Okonkwo"
+        action: "Identify responsive records: search across all record-bearing systems (including email + chat per GOV-021). Populate the FOIA-hold list to freeze destruction during processing (GOV-012)."
+      - id: 4
+        owner: "Yewande Crossland"
+        action: "Exemption analysis: per responsive record, determine which exemptions ((b)(1)..(b)(9) federal; state equivalents) apply. Document the legal basis for each withholding; 'per policy' is not sufficient (GOV-009)."
+      - id: 5
+        owner: "Darius Okonkwo"
+        action: "Apply redactions at the data layer: true pixel redaction for images/PDFs (re-rasterize + metadata strip); server-side text substitution for HTML/text records (GOV-008). Never CSS-only."
+      - id: 6
+        owner: "Yewande Crossland"
+        action: "Second-pass review of redactions: random-sample QA against over-redaction AND under-redaction. Log reviewer identity + timestamp per record."
+      - id: 7
+        owner: "Darius Okonkwo"
+        action: "Package release: redacted records + cover letter citing exemptions + appeal rights notice. Deliver via the channel the requester selected. Log delivery without exposing requester identity to any record subject (GOV-010)."
+      - id: 8
+        owner: "Yewande Crossland"
+        action: "Close the request in the tracking system. Retain the full audit trail (request, scope, responsive set, exemption analysis, redactions, delivery) for the statutory retention period + appeal window."
+      - id: 9
+        owner: "Principal QA Architect"
+        action: "Spot-audit: verify at least one redaction's reconstruction from the audit trail (who redacted, which exemption, basis text); verify the requester's identity is NOT visible in any record-subject-facing log."
+    verification: |
+      - SLA clock started only on perfected request (not unperfected intake)
+      - All responsive records pulled from all systems including email/chat (GOV-021)
+      - FOIA-hold list populated; automated purge respects it (GOV-012)
+      - Every redaction carries exemption + legal basis + actor (GOV-009)
+      - Redactions are data-layer, not render-only (GOV-008)
+      - Requester identity NOT disclosed to record subject (GOV-010)
+      - Audit trail retained for statutory period

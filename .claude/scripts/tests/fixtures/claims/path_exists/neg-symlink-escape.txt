@@ -1,0 +1,8 @@
+Malicious claim targeting a symlink that escapes the repo.
+
+CLAIM:path_exists:linky-outside
+
+PLAN-009 A2 / R-SEC2: must be rejected when `linky-outside` is a
+symlink resolving to a path outside the repo root. Verified by the
+`test_symlink_escape_rejected` unit test which creates the symlink
+in a temp repo.

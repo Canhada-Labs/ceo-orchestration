@@ -1,0 +1,19 @@
+{
+  "_comment": "PLAN-041 Phase 3 / ADR-062 — embedding model manifest. PLACEHOLDER: production SHA256 values are populated when the adopter runs the install-sidecar.sh --populate-manifest step against the pinned HuggingFace revision. See security-engineer Round 1 debate P0-2 #3.",
+  "schema_version": "1.0",
+  "models": {
+    "bge-m3": {
+      "hf_repo": "BAAI/bge-m3",
+      "hf_revision": "PLACEHOLDER_COMMIT_SHA",
+      "sha256": "PLACEHOLDER_SHA256",
+      "size_bytes": 0,
+      "license": "MIT",
+      "notes": "Default embedding model for LightRAG sidecar. 1024-dim multilingual embeddings."
+    }
+  },
+  "verification_protocol": {
+    "on_install": "install-sidecar.sh refuses to proceed if any sha256 is PLACEHOLDER. Adopter must either (a) regenerate the manifest against a trusted mirror + commit the hashes, or (b) use --skip-model-verify flag with two-factor env `CEO_RAG_UNVERIFIED_MODEL_ACK=I-ACCEPT-MODEL-INTEGRITY-RISK`.",
+    "on_sidecar_start": "sidecar verifies model file sha256 matches manifest before loading; refuses to start on mismatch.",
+    "on_model_upgrade": "new sha256 + hf_revision committed via same PR workflow as requirements.lock regeneration."
+  }
+}

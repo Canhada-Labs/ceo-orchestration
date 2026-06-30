@@ -1,0 +1,28 @@
+# Consolidated governance waiver registry.
+# Two top-level keys: rc_hold + workflow_staleness.
+#
+# Parsed by release.yml gates via flag-based awk:
+#   awk '/^rc_hold:/{f=1; next} f && /^[a-z_]+:/{f=0} f'
+#   awk '/^workflow_staleness:/{f=1; next} f && /^[a-z_]+:/{f=0} f'
+# Each section grep-matches `^[[:space:]]*-[[:space:]]*version:[[:space:]]*<V>$`.
+#
+# HONESTY LABEL: the single entry below is the v1.0.0 BOOTSTRAP waiver
+# (adopter_count=0). The RC-hold (24h) and 14-day-workflow-staleness gates are
+# WAIVED for the bootstrap public release by design — a brand-new zero-history
+# repo has no prior RC tag and no prior weekly-workflow runs. release.yml carries
+# a mechanical SUNSET assertion (FIRST_GA=2.0.0): the release FAILS the moment any
+# entry here parses >= the first GA version, so this waiver cannot silently follow
+# the project into GA. When a real adopter ships, empty these lists (resuming
+# ADR-007 enforcement) before — or as part of — lowering FIRST_GA.
+
+rc_hold:
+  - version: 1.0.0
+    reason: "v1.0.0 bootstrap public release; adopter_count=0; zero-history genesis has no prior RC tag, so the ADR-007 24h RC-hold is waived for the bootstrap per Owner directive 2026-06-29."
+    authorized_by: "v1.0.0 genesis commit (Owner GPG)"
+    authorized_at: 2026-06-29
+
+workflow_staleness:
+  - version: 1.0.0
+    reason: "v1.0.0 bootstrap public release; adopter_count=0; a brand-new repo has zero prior weekly-workflow runs, so the 14-day advisory-workflow staleness gate is waived for the bootstrap per Owner directive 2026-06-29."
+    authorized_by: "v1.0.0 genesis commit (Owner GPG)"
+    authorized_at: 2026-06-29

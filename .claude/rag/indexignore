@@ -1,0 +1,101 @@
+# .claude/rag/indexignore — default exclusion patterns for RAG indexer.
+# PLAN-041 Phase 4 / ADR-062. Security-engineer Round 1 P0-4 mitigation:
+# keep secrets, build artifacts, and node_modules out of the index.
+# Pattern syntax mirrors .gitignore.
+
+# Secrets / credentials
+.env
+.env.*
+*.env.local
+secrets/
+credentials/
+*.pem
+*.key
+*.p12
+*.pfx
+*_rsa
+*_dsa
+*_ecdsa
+*_ed25519
+id_rsa
+id_dsa
+*.kdbx
+.netrc
+.aws/credentials
+.ssh/
+
+# Cache / build / transient
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.coverage
+.coverage.*
+htmlcov/
+dist/
+build/
+*.egg-info/
+.eggs/
+
+# JS / TS dependency trees (gigabytes of transitive deps)
+node_modules/
+.next/
+.nuxt/
+.cache/
+.parcel-cache/
+.output/
+coverage/
+
+# IDE / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Version control metadata (indexer reads git via CLI, not via blobs)
+.git/
+.hg/
+.svn/
+
+# Lock files (large, non-semantic)
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+poetry.lock
+Pipfile.lock
+composer.lock
+go.sum
+Cargo.lock
+
+# Data dumps / large binaries
+*.sqlite
+*.db
+*.csv.gz
+*.json.gz
+*.parquet
+*.arrow
+*.pth
+*.pt
+*.ckpt
+*.safetensors
+*.onnx
+*.bin
+*.h5
+
+# Generated docs
+_site/
+site/
+.docusaurus/
+
+# venv / virtualenv
+.venv/
+venv/
+env/
+ENV/
+
+# Framework-specific — the RAG sidecar's own venv (prevent self-indexing)
+.claude/rag/venv/

@@ -1,0 +1,151 @@
+# Task Chains — Universal (core)
+# Standard workflows. Agents follow these chains, not ad-hoc sequences.
+# Each chain is a pipeline: output of step N validates before step N+1 starts.
+#
+# Domain-specific chains live in .claude/skills/domains/<domain>/task-chains.yaml
+# (e.g. domains/fintech/task-chains.yaml for add-exchange, financial-code).
+#
+# PLAN-020 Phase 3 (ADR-050) — `effort` annotation per chain.
+# Recommended `/effort` tier for the CEO-driving turn that orchestrates
+# this chain. Sub-agents NEVER receive `/effort` hints (rejected by
+# check_agent_spawn.py::_has_effort_token); they inherit Anthropic
+# default. The chain-level annotation guides CEO-side cognitive budget.
+#
+# Tiers:
+#   low      — single-file edits, config tweaks, typo fixes
+#   default  — multi-file contained work
+#   high     — multi-module, ADR decisions, debate rounds
+#   max      — cross-cutting redesign, sprint planning, release-gate
+
+chains:
+  implement-feature:
+    description: "Standard feature implementation"
+    effort: default  # PLAN-020 Phase 3 — typical multi-file work
+    steps:
+      - name: "plan"
+        action: "Write implementation plan with files to touch"
+        verify: "Plan exists and is reviewed"
+      - name: "implement"
+        action: "Write the code"
+        verify: "Code compiles / type checker clean"
+      - name: "test"
+        action: "Write tests for new code"
+        verify: "Tests pass"
+      - name: "review"
+        action: "Self-review against skill checklist"
+        verify: "All checklist items checked"
+
+  fix-bug:
+    description: "Bug fix with regression prevention"
+    effort: default  # PLAN-020 Phase 3 — bug class drives effort; default usually fits
+    steps:
+      - name: "reproduce"
+        action: "Write a failing test that demonstrates the bug"
+        verify: "Test fails as expected"
+      - name: "fix"
+        action: "Fix the code (minimal change)"
+        verify: "Failing test now passes"
+      - name: "regression"
+        action: "Run full test suite"
+        verify: "All tests pass"
+      - name: "verify-types"
+        action: "Type check"
+        verify: "Type checker clean"
+
+  security-change:
+    description: "Any change touching auth/security"
+    effort: high  # PLAN-020 Phase 3 — security domain warrants thorough thinking
+    steps:
+      - name: "threat-model"
+        action: "Identify attack vectors for this change"
+        verify: "Threat model documented"
+      - name: "implement"
+        action: "Write secure code"
+        verify: "Type checker clean"
+      - name: "test-happy"
+        action: "Test authorized access works"
+        verify: "Auth test passes"
+      - name: "test-attack"
+        action: "Test unauthorized access is blocked"
+        verify: "Attack test fails correctly"
+      - name: "review"
+        action: "Security reviewer validates against security-and-auth skill checklist"
+        verify: "No OWASP Top 10 violations"
+
+  # PLAN-020 Phase 3 — frontend chains added effort: default annotation
+  frontend-component:
+    description: "New frontend component"
+    effort: default  # PLAN-020 Phase 3 — single component scope
+    steps:
+      - name: "design"
+        action: "Use design tokens, plan loading/empty/error states"
+        verify: "Component spec reviewed"
+      - name: "implement"
+        action: "Write component with memo(), i18n, responsive"
+        verify: "Type checker clean"
+      - name: "a11y"
+        action: "Add aria-labels, keyboard nav, focus management"
+        verify: "Keyboard-navigable, screen-reader friendly"
+      - name: "test"
+        action: "Write component tests"
+        verify: "Tests pass"
+      - name: "visual"
+        action: "Verify dark/light mode, responsive breakpoints"
+        verify: "Visual review passed"
+
+  deploy-backend:
+    description: "Deploy backend to production (platform-agnostic)"
+    effort: high  # PLAN-020 Phase 3 — production deploy with rollback decision
+    steps:
+      - name: "pre-check"
+        action: "Run full test suite + type checker + secret scan"
+        verify: "All clean"
+      - name: "commit"
+        action: "git add specific files + commit + push"
+        verify: "Push successful"
+      - name: "deploy"
+        action: "Trigger deploy via CI/CD or platform CLI (e.g. fly deploy, railway up, vercel --prod, kubectl apply)"
+        verify: "Deploy succeeds"
+      - name: "smoke"
+        action: "Hit health/readiness/status endpoints"
+        verify: "All endpoints return healthy"
+      - name: "validate"
+        action: "Check key workload signals + logs for error spikes (window: 5 min)"
+        verify: "System healthy after 5 minutes"
+
+  # PLAN-020 Phase 3 — deploy chains carry effort: high (production blast radius)
+  deploy-frontend:
+    description: "Deploy frontend to production (platform-agnostic)"
+    effort: high  # PLAN-020 Phase 3 — production deploy with rollback decision
+    steps:
+      - name: "pre-check"
+        action: "Run type checker + tests + production build"
+        verify: "Build succeeds, no errors"
+      - name: "commit"
+        action: "git add specific files + commit + push"
+        verify: "Push triggers deploy (or run platform CLI)"
+      - name: "verify"
+        action: "Load the deployed site, check console for errors, verify key routes"
+        verify: "Site operational"
+  git-workflow-canonical:
+    description: "Canonical git workflow — branch through signed tag"
+    effort: default  # multi-file, multi-commit work; escalate to high for L3+ blast radius
+    steps:
+      - name: "branch"
+        action: "git checkout main && git pull --ff-only && git checkout -b <branch-name> (see core/git-workflow-discipline §Branch Naming)"
+        verify: "Branch exists locally; HEAD matches main; working tree clean"
+      - name: "draft-commits"
+        action: "Stage specific files by name (never git add -A); commit one logical change per commit with Conventional Commits message; run tests + type-checker before first push"
+        verify: "git diff main...HEAD shows only plan-authorized files; each commit atomic; test suite passes"
+      - name: "pr-open"
+        action: "Push branch; open PR with Summary + Test plan + Risk/blast-radius sections; request reviewer"
+        verify: "PR exists; title ≤70 chars; description contains all three sections; plan number cited; CI triggered"
+      - name: "review-gate"
+        action: "Staff Code Reviewer (core/code-review-checklist) runs review pass; Opus 4.7 required for VETO-adjacent changes (ADR-052)"
+        verify: "Verdict is APPROVED or APPROVED WITH CONDITIONS (conditions named + controlled); BLOCKED verdict sends back to draft-commits"
+      - name: "merge"
+        action: "Verify CI is GREEN on the test-merge commit (refs/pull/N/merge), merge-queue result, or equivalent test-merge artifact BEFORE merging — PR-branch-only CI is insufficient. Then squash-merge (default) or merge-commit per repo policy; delete branch (remote + local) after merge"
+        verify: "Pre-merge: CI GREEN on test-merge artifact (test-merge / merge-queue) — NOT just PR branch HEAD. Post-merge: git log origin/main shows merged commit; CI GREEN on main post-merge; branch deleted"
+      - name: "tag"
+        action: "Verify release metadata (CHANGELOG + VERSION + npm package.json) is ALREADY present in the merged commit on main from Phase 2 draft-commits. Never commit directly to main. If metadata is missing, return to draft-commits via a new release PR. Sign + push tag: git tag -s v<semver> -m 'v<semver>'; git push origin v<semver>"
+        verify: "git describe --tags --abbrev=0 returns new tag; CHANGELOG + VERSION + package.json present in the merged commit (verify via git show origin/main); release.yml workflow GREEN; tag is GPG-signed"

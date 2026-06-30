@@ -1,0 +1,4 @@
+# kraken-config.yaml
+kraken:
+  api_key: M3QK3NVnUaKFeLWNgOt6mf6rl1d5cIC1K4/GZZI0kvbgtLaJZ0MdrViE
+  api_secret: lI/W6KxMWgwJv3A80ODcqW0G840sUxhAqX9t+/w7boktt7rAGUv09IqswkP0FalohenbcIwFAZlSvJE9tVOmlb8Q==

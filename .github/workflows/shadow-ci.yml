@@ -1,0 +1,139 @@
+name: Shadow CI — Skill Patch Benchmarks (advisory)
+
+# PLAN-012 Phase 3 D4 / ADR-031 §5.
+#
+# Runs benchmarks against `<SKILL.md>.shadow.md` files and posts a PR
+# comment + uploads a report artifact. NEVER auto-merges. Owner merges
+# manually after review.
+#
+# Security contract (debate round 1 Security HIGH-2):
+#   - `pull_request` trigger ONLY. NEVER `pull_request_target` — skill
+#     patches are executable instructions for future agents (CWE-94),
+#     so running PR-author code with write perms is unacceptable
+#     (CVE-2020-27151 pattern).
+#   - `permissions: contents: read` + `pull-requests: write`. No
+#     `contents: write`, no `id-token: write`.
+#   - Concurrency: per-ref group; `cancel-in-progress: false` so
+#     in-flight shadow runs finish (race exercised by
+#     test_shadow_apply_kill.py).
+#   - SHA-pinned actions (Sprint 7 convention).
+#   - 20-min timeout.
+#
+# `run-skill-shadow-bench.py` is a Sprint 12 follow-up. Until it ships
+# the step emits a stub "runner not yet shipped" report. Workflow
+# stays VALID + advisory without the runner.
+#
+# Kill-switch: `CEO_SOTA_DISABLE=1` short-circuits (PLAN-011 §S4).
+
+on:
+  pull_request:
+    paths:
+      - '.claude/skills/**/*.shadow.md'
+      - '.claude/scripts/skill-patch-apply.py'
+      - '.github/workflows/shadow-ci.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: shadow-ci-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  shadow-benchmark:
+    name: Run benchmarks against shadow SKILL.md
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Fork PR safety (matches benchmarks.yml).
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+
+    steps:
+      - name: Kill-switch check (CEO_SOTA_DISABLE)
+        run: |
+          set -euo pipefail
+          if [ "${CEO_SOTA_DISABLE:-0}" = "1" ]; then
+            echo "CEO_SOTA_DISABLE=1 — skipping (PLAN-011 §S4)"
+            exit 0
+          fi
+
+      - name: Checkout
+        # SHA-pinned (matches benchmarks.yml): actions/checkout@v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 0
+
+      - name: Detect touched shadow files
+        id: detect
+        run: |
+          set -euo pipefail
+          git fetch origin "${{ github.base_ref }}" --depth=1 || true
+          base="origin/${{ github.base_ref }}"
+          touched=$(git diff --name-only "${base}...HEAD" \
+                     -- '.claude/skills/**/*.shadow.md' 2>/dev/null || true)
+          echo "Touched shadow files: ${touched:-<none>}"
+          { echo "touched<<EOF"; echo "${touched}"; echo "EOF"; } >> "$GITHUB_OUTPUT"
+
+      - name: Set up Python
+        if: steps.detect.outputs.touched != ''
+        # SHA-pinned (matches benchmarks.yml): actions/setup-python@v6.2.0
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+
+      - name: Install pytest
+        if: steps.detect.outputs.touched != ''
+        run: python3 -m pip install --upgrade pip pytest
+
+      - name: Run shadow benchmarks (stub if runner absent)
+        if: steps.detect.outputs.touched != ''
+        run: |
+          set -euo pipefail
+          runner=".claude/scripts/run-skill-shadow-bench.py"
+          out=/tmp/shadow-report.md
+          touched="${{ steps.detect.outputs.touched }}"
+          if [ -f "${runner}" ]; then
+            python3 "${runner}" --shadow-files "${touched}" --out "${out}" \
+              || echo "## Shadow runner exited non-zero" > "${out}"
+          else
+            {
+              echo "## Shadow runner not yet shipped"
+              echo ""
+              echo "Touched shadow files:"
+              echo '```'
+              echo "${touched}"
+              echo '```'
+              echo ""
+              echo "\`${runner}\` is a Sprint 12 follow-up deliverable."
+            } > "${out}"
+          fi
+          cat "${out}"
+
+      - name: Post report as PR comment
+        if: steps.detect.outputs.touched != '' && github.event_name == 'pull_request'
+        # SHA-pinned: actions/github-script@v9.0.0
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+        with:
+          script: |
+            const fs = require('fs');
+            let body;
+            try { body = fs.readFileSync('/tmp/shadow-report.md', 'utf8'); }
+            catch (_) { body = '(shadow report not produced)'; }
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '## Shadow CI Report (advisory)\n\n' + body +
+                    '\n\n*Never auto-merges. Owner merges after review.*'
+            });
+
+      - name: Upload report artifact
+        if: steps.detect.outputs.touched != '' && always()
+        # SHA-pinned (matches benchmarks.yml): actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: shadow-report
+          path: /tmp/shadow-report.md
+          retention-days: 7
+          if-no-files-found: ignore

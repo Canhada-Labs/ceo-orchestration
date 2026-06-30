@@ -1,0 +1,91 @@
+# Task chains — HR Squad
+# Domain-specific workflows that extend the universal .claude/task-chains.yaml.
+
+task_chains:
+  - id: hr-hire-to-onboard
+    title: "Hire-to-onboard execution (structured recruitment + day-one readiness)"
+    whenToUse: |
+      A new hire has been made and the transition from signed offer to
+      productive team member must be executed. This chain covers: offer
+      acceptance to day-one logistics, PII collection under minimum-necessary
+      discipline, access provisioning, compliance training enrollment,
+      benefits enrollment, and first-30-60-90 plan delivery. Triggered by
+      every new hire, including rehires and contractors converting to full-time.
+      Out of scope: the interview and selection process itself (see
+      hr-structured-recruitment chain).
+    steps:
+      - id: 1
+        owner: "Valentina Souza (HR Onboarding Specialist)"
+        action: "Pre-boarding sequence (days 1-5 before start): send welcome email with equipment logistics, system access timeline, and first-day schedule. Collect required PII only (CPF, bank coordinates, CTPS, emergency contact). Do NOT request medical history beyond legally required fitness check (HRR-004)."
+      - id: 2
+        owner: "Isabel Meireles (HR Operations Lead)"
+        action: "Employment record creation: create canonical record with legal basis (CLT / LGPD Art. 7 employment performance) for every PII field. Assign retention class. Confirm the new hire's record is accessible only to payroll, their HRBP, and direct manager (HRR-002 access-control check)."
+      - id: 3
+        owner: "Isabel Meireles"
+        action: "Double-approval hire entry: record who authorised the hire (hiring manager) and who executed the HRIS entry (HR Ops). Both IDs logged with timestamps (HRR-003). Employment status set to 'active' only after both approvals are recorded."
+      - id: 4
+        owner: "Valentina Souza"
+        action: "Access provisioning request: submit access request for core tools (email, Slack, code repository, HRIS self-service) on the FIRST day, not the first week. Confirm provisioning by end-of-day-one. Least-privilege: role-appropriate access only (HRR-013 principle applied to provisioning speed)."
+      - id: 5
+        owner: "Valentina Souza"
+        action: "Day-one orientation: mission + team + tools sequence (NOT paperwork-first). Pair with a buddy (tenured peer, same team, identified before start date). Schedule week-one check-in with direct manager."
+      - id: 6
+        owner: "Valentina Souza"
+        action: "Benefits enrollment: open enrollment window, confirm hard deadline communicated, confirm new hire knows consequences of missing the window (most benefits require qualifying event or wait for open enrollment). Document window close date in the employee record."
+      - id: 7
+        owner: "Isabel Meireles"
+        action: "Compliance training enrollment: assign required training (data privacy, code of conduct, anti-harassment, safety) on day one. Set completion deadline (typically 30 days). Delinquency flagged to HRBP at day 25."
+      - id: 8
+        owner: "Staff Code Reviewer"
+        action: "30-day check: first-30-plan checkpoint complete, compliance training completion rate confirmed, access provisioning verified as correct (no over-provisioning), compensation data access verified as minimum-necessary (HRR-002)."
+    verification: |
+      - PII collected: minimum-necessary only, legal basis declared per field (HRR-004)
+      - Employment record: access-controlled to payroll + HRBP + direct manager (HRR-002)
+      - Double-approval employment-status entry recorded (HRR-003)
+      - Day-one access provisioning: core tools live by end of day 1 (HRR-013 principle)
+      - Benefits enrollment window communicated with hard deadline
+      - Compliance training: enrolled on day 1, completion deadline set
+
+  - id: hr-structured-recruitment
+    title: "Run a structured recruitment cycle (scorecard-driven, bias-audited)"
+    whenToUse: |
+      A new role is being filled through external recruitment. This chain
+      covers: job description review, sourcing strategy, structured interview
+      design, debrief protocol, reference and background check sequencing,
+      and offer. Applies to all external hires. Internal transfers use a
+      shorter chain (not documented here — adapt by skipping sourcing steps).
+      Out of scope: compensation benchmarking and offer negotiation strategy
+      (handled within the offer step using finance-accounting squad input for
+      budget approval).
+    steps:
+      - id: 1
+        owner: "Larissa Andrade (Recruitment Compliance Specialist)"
+        action: "Job description review: scan for age references, gendered language, physical requirements without demonstrated necessity (HRR-006). Confirm salary history is NOT in the job posting or application form (HRR-007). Confirm minimum requirements are grounded in job function, not credential inflation."
+      - id: 2
+        owner: "Larissa Andrade"
+        action: "Scorecard design: define 4-6 competencies per role with behavioural anchors (what does 'exceeds expectations' look like for this competency in this role?). Confirm global impression rating is NOT on the scorecard — per-competency only (HRR-005)."
+      - id: 3
+        owner: "Valentina Souza (HR Onboarding Specialist acting as coordinator)"
+        action: "Sourcing strategy: define channels (inbound, outbound boolean search, referral, community, agency). Document demographic reach of each channel. Flag if all channels systematically draw from the same networks — diversity of sourcing pools is a fairness input (HRR-009 downstream)."
+      - id: 4
+        owner: "Larissa Andrade"
+        action: "Interview panel briefing: all panel members receive the scorecard and behavioural question bank before the first interview. Brief on prohibited questions (marital status, children, religion, political affiliation, health — HRR-004). Confirm debrief protocol: independent scores submitted before group discussion."
+      - id: 5
+        owner: "Larissa Andrade"
+        action: "Debrief facilitation: collect per-competency scores from all panel members independently. Hold group debrief only after scores are submitted. Challenge any global impression override of the per-competency aggregate without documented justification (HRR-005)."
+      - id: 6
+        owner: "Larissa Andrade"
+        action: "Background check: order only after conditional offer is extended (HRR-008). Confirm FCRA disclosure provided (US) or equivalent BR legal basis for the check. Adverse-action procedure prepared in advance if check returns a finding."
+      - id: 7
+        owner: "Isabel Meireles (HR Operations Lead)"
+        action: "Offer and record: offer letter reviewed for discriminatory terms. Employment record pre-created with legal basis for PII collection at offer stage. Rejected candidate records flagged for 2-year retention minimum (HRR-012)."
+      - id: 8
+        owner: "Staff Code Reviewer"
+        action: "Merge VETO check: JD reviewed for prohibited criteria (HRR-006), scorecard per-competency confirmed (HRR-005), background check sequenced post-offer (HRR-008), rejected candidate retention flagged (HRR-012)."
+    verification: |
+      - Job description: no prohibited criteria, no salary history request (HRR-006, HRR-007)
+      - Scorecard: per-competency ratings, no global impression field (HRR-005)
+      - Independent scores submitted before debrief discussion
+      - Background check ordered only post-conditional-offer (HRR-008)
+      - Rejected candidate records: 2-year retention minimum flagged (HRR-012)
+      - Disparate-impact analysis: staged for post-cycle review if hire volume warrants (HRR-009)

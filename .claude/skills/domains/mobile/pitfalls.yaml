@@ -1,0 +1,69 @@
+# Pitfalls Catalog — Mobile Squad
+# Loaded alongside the universal catalog when the mobile profile is
+# installed. Format mirrors .claude/pitfalls-catalog.yaml:
+# id, rule, whenToUse, agents.
+
+pitfalls:
+  # === CROSS-PLATFORM API CONTRACT ===
+  - id: MOB-001
+    rule: "NEVER change a cross-platform API contract (request/response schema, error codes, auth token format, push notification payload, deep-link format) server-side without a versioning strategy that supports the currently-live app version for at least one full App Store review cycle (7 days minimum). Users on the previous app version are still in production."
+    whenToUse: "any backend API change that mobile clients consume; any schema migration or field rename in a mobile-facing endpoint"
+    agents: [Santiago Reyes]
+
+  - id: MOB-002
+    rule: "Certificate pinning changes MUST be coordinated with 72-hour advance notice to all platform teams and deployed in a coordinated rollout (mobile client ships first, backend rotates after client adoption exceeds 90%). An uncoordinated certificate rotation causes a 100% mobile app outage until an emergency hotfix clears App Store review."
+    whenToUse: "any backend TLS certificate rotation; any change to mobile certificate pinning configuration"
+    agents: [Santiago Reyes, Yui Nakamura, Damilola Adeyemi]
+
+  - id: MOB-003
+    rule: "Auth token schema changes (scopes, expiry window, format, refresh grant type) MUST NOT be deployed server-side until both iOS and Android clients implementing the new schema have shipped AND have reached >80% adoption among active users. A token format mismatch logs out users silently."
+    whenToUse: "any auth service change that affects the token issued to mobile clients; any token refresh flow change"
+    agents: [Santiago Reyes]
+
+  - id: MOB-004
+    rule: "Deep-link format and push notification payload schema changes MUST include backward-compatible handling for users on the previous app version still in the App Store. A deep link that works in v2.0 but returns a blank screen in v1.9 (still live in the App Store) is a user-facing regression with no fast fix path."
+    whenToUse: "any deep-link scheme change; any push notification payload schema change"
+    agents: [Santiago Reyes, Priya Singh]
+
+  # === IOS APP STORE COMPLIANCE ===
+  - id: MOB-005
+    rule: "Every API that accesses privacy-sensitive data (camera, microphone, location, contacts, photo library, health data) MUST be declared in PrivacyInfo.xcprivacy and in the App Store privacy nutrition label BEFORE submission. An undisclosed privacy API access triggers App Store rejection and, if the app slips through, App Store removal."
+    whenToUse: "any new iOS feature that accesses privacy APIs; any App Store submission"
+    agents: [Yui Nakamura]
+
+  - id: MOB-006
+    rule: "App Store entitlements MUST match what the app actively uses. An entitlement present in the provisioning profile but not used in the current build triggers App Store rejection. Remove unused entitlements before submission — leftover entitlements from removed features are a common rejection cause."
+    whenToUse: "any iOS build submitted for App Store review; any entitlement addition or removal"
+    agents: [Yui Nakamura]
+
+  - id: MOB-007
+    rule: "Sensitive data on iOS MUST be stored in the Keychain — never in UserDefaults, NSCache, or NSUserDefaults. UserDefaults is world-readable on jailbroken devices. Auth tokens, session cookies, API keys, and any PII that persists between sessions belong in the Keychain."
+    whenToUse: "any iOS code that persists sensitive state between app launches; any data storage decision for credentials or PII"
+    agents: [Yui Nakamura, Santiago Reyes]
+
+  # === ANDROID PLAY STORE COMPLIANCE ===
+  - id: MOB-008
+    rule: "Every Android permission declared in AndroidManifest.xml MUST correspond to a Play Console use-case justification for restricted permissions (background location, READ_CONTACTS, RECORD_AUDIO, etc.). A restricted permission declared without Play Console justification triggers immediate Play Store removal, not a warning."
+    whenToUse: "any new permission added to AndroidManifest.xml; any Play Store submission for an app with restricted permissions"
+    agents: [Damilola Adeyemi]
+
+  - id: MOB-009
+    rule: "ProGuard/R8 rules that add `-keep` or `-dontwarn` for security-critical classes (certificate validation, root detection, cryptographic operations, SSL socket factories) MUST be audited before being merged. A ProGuard rule that strips root detection or disables certificate validation is a security regression that ships silently in a release build."
+    whenToUse: "any ProGuard/R8 configuration change; any build configuration change affecting code shrinking"
+    agents: [Damilola Adeyemi, Santiago Reyes]
+
+  - id: MOB-010
+    rule: "Sensitive credentials on Android MUST be stored in the Android Keystore — never in SharedPreferences (even encrypted SharedPreferences has weaker guarantees than Keystore for secrets). The Android Keystore provides hardware-backed protection on supported devices."
+    whenToUse: "any Android code that persists credentials, auth tokens, or API keys between app launches"
+    agents: [Damilola Adeyemi, Santiago Reyes]
+
+  # === RELEASE AND QA DISCIPLINE ===
+  - id: MOB-011
+    rule: "Mobile releases MUST use phased rollout (1% → 10% → 50% → 100%) with crash-rate and ANR-rate gates between phases. A crash rate increase >0.5% over baseline at any phase gate pauses the rollout. 'Ship to 100% immediately' is not an option for any release that hasn't completed phased rollout at the prior phase."
+    whenToUse: "any App Store or Play Store release rollout configuration; any request to skip or accelerate phased rollout"
+    agents: [Beatrix Hoffmann, Priya Singh]
+
+  - id: MOB-012
+    rule: "QA on physical devices — including the oldest device in the app's support matrix — is REQUIRED before any App Store or Play Store submission. Simulator testing is insufficient for memory footprint, battery impact, and hardware-specific behaviour. If no physical device is available for the minimum-supported device, that device must be removed from the support matrix."
+    whenToUse: "any pre-release QA sign-off; any App Store / Play Store build preparation"
+    agents: [Priya Singh, Beatrix Hoffmann]

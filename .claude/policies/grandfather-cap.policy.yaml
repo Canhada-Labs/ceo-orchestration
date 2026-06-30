@@ -1,0 +1,85 @@
+# .claude/policies/grandfather-cap.policy.yaml
+# Authored by PLAN-080 Phase 1b — successor to .claude/skill-governance-grandfather.yaml
+# Canonical-guarded via _CANONICAL_GUARDS `policies/*.yaml` glob
+#
+# This file declares the governance caps for grandfathered skills and domain
+# bundles. It is the authoritative source for:
+#
+#   1. individual_skills — 5-slot cap for one-off skills outside domain bundles
+#   2. domain_bundles — domain roster cap (Q4 default: 15; post-PLAN-074 current: 25)
+#   3. sunset_* — criteria for the check-reopen gate in `audit-query by-domain`
+#
+# To add/remove domains: open a PLAN, run the governance gate, then edit this
+# file as part of the ceremony. The cap is Owner-gated (requires GPG ceremony).
+
+individual_skills:
+  cap: 5
+  current: 5
+  members:
+    - pre-plan-brainstorm
+    - terse-mode
+    - advanced-evaluation
+    - agent-evaluation
+    - agentic-actions-auditor
+
+domain_bundles:
+  # cap: operational ceiling enforced by `test_squad_grandfather_cap.py`.
+  # Phase 1 ships with cap=22 reflecting post-Phase-0b state (sales+legal+devrel
+  # dropped from grandfather = 25 - 3). Phase 4 lowers cap to 15 (target_cap)
+  # after sunset trim of zero-traffic domains.
+  cap: 25
+  # target_cap: PLAN-080 §6 Q4 default — long-term target. Phase 4 lowers
+  # `cap` toward `target_cap` via sunset trim.
+  target_cap: 15
+  # current: actual count of SQUAD_GRANDFATHER entries at Phase 1 ship
+  # (post-Phase-0b drop of 3 pilot domains).
+  current: 24
+  members:
+    # see SQUAD_GRANDFATHER in validate-governance.sh:284
+    # 25 entries; trim to ≤15 via Phase 4 sunset
+    - fintech
+    - community
+    - devrel
+    - marketing-global
+    - paid-media
+    - mobile
+    - embedded
+    - voice-ai
+    - hospitality
+    - retail
+    - supply-chain
+    - training-l-and-d
+    - civil-engineering
+    - academic-humanities
+    - healthcare
+    - hr
+    - real-estate-finance
+    - finance-accounting
+    - i18n-business
+    - business-support
+    - project-management
+    - saas-platforms
+    - identity-systems
+    - lgpd-heavy-saas
+
+# ---------------------------------------------------------------------------
+# Sunset / reopen gate configuration
+# Used by `audit-query.py by-domain --check-reopen` (PLAN-080 Phase 1)
+# ---------------------------------------------------------------------------
+
+# Number of calendar days post-sunset during which a spawn triggers reopen alert
+sunset_reopen_window_days: 14
+
+# A spawn must have dispatch_archetype_hint matching the sunset domain slug
+# to trigger the reopen gate (UNKNOWN bucket never triggers — M2-CDX-7)
+sunset_reopen_requires_hint_match: true
+
+# UNKNOWN bucket explicitly excluded from reopen check per M2-CDX-7
+sunset_reopen_unknown_excluded: true
+
+# ---------------------------------------------------------------------------
+# Deprecation linkage
+# ---------------------------------------------------------------------------
+
+# Legacy file being superseded (kept for one transitional release)
+deprecated_predecessor: .claude/skill-governance-grandfather.yaml

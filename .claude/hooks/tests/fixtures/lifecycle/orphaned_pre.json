@@ -1,0 +1,8 @@
+{
+  "_comment": "PLAN-125 WS-1 golden fixture: an orphaned PreToolUse — a tool call whose Post/Failure never arrives (agent killed / hung). The bounded sweeper, after T=30s (via INJECTED clock in the test — never time.sleep), flags it orphan=true, emits, and evicts it.",
+  "hook_event_name": "PreToolUse",
+  "session_id": "sess-orphan",
+  "tool_use_id": "toolu_orphan_01",
+  "tool_name": "WebFetch",
+  "tool_input": {"url": "https://example.com"}
+}

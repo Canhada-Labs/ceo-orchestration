@@ -1,0 +1,51 @@
+{
+  "canonical_stream": [
+    {
+      "archetype": "Staff Backend Engineer",
+      "event": "agent_spawn",
+      "skill": "public-api-design",
+      "spawn_id": 1,
+      "task": "design the /v1/replay endpoint"
+    },
+    {
+      "args": {
+        "file_path": "benchmarks/replay.py"
+      },
+      "event": "tool_call",
+      "spawn_id": 1,
+      "tool": "Read"
+    },
+    {
+      "args": {
+        "anchor": "main",
+        "file_path": "benchmarks/replay.py"
+      },
+      "event": "tool_call",
+      "spawn_id": 1,
+      "tool": "Edit"
+    },
+    {
+      "archetype": "Staff Code Reviewer",
+      "event": "agent_spawn",
+      "skill": "code-review-checklist",
+      "spawn_id": 2,
+      "task": "review the replay diff"
+    },
+    {
+      "args": {
+        "command": "python3 -m pytest .claude/scripts/tests/test_benchmarks_replay.py -q"
+      },
+      "event": "tool_call",
+      "spawn_id": 2,
+      "tool": "Bash"
+    },
+    {
+      "event": "agent_result",
+      "spawn_id": 2,
+      "verdict": "ACCEPT"
+    }
+  ],
+  "n_events": 6,
+  "schema": "benchmarks-replay-stream.v1",
+  "stream_digest": "96f1908d0ae87a1c084047424b26622868e52043fab311a6efcf3e857b2b8768"
+}

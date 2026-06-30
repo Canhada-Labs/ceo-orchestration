@@ -1,0 +1,122 @@
+# Task chains — Edtech Squad
+# Domain-specific workflows that extend the universal .claude/task-chains.yaml.
+
+task_chains:
+  - id: edtech-onboard-new-school-district
+    title: "Onboard a new school district (consent + provisioning + SSO)"
+    whenToUse: |
+      A new school district (or higher-ed campus) is onboarding. This
+      chain covers: signed data-sharing agreement (DSA), SIS roster
+      provisioning (OneRoster / Clever / ClassLink), SSO federation
+      (SAML / OIDC), parental-consent surface for under-13 students,
+      and the district's directory-information opt-out policy.
+    steps:
+      - id: 1
+        owner: "Marcus Olatunde (Parental Consent Specialist)"
+        action: "Verify signed DSA on file. DSA governs FERPA §99.31 school-official designation and vendor data-handling obligations. No DSA = no onboarding."
+      - id: 2
+        owner: "Priya Narayanan (Student Privacy Engineer)"
+        action: "Review roster feed schema: which PII fields, which retention class, which egress paths. Update pii-inventory with district-scoped entries."
+      - id: 3
+        owner: "Marcus Olatunde"
+        action: "Configure district's directory-information opt-out default. District policy overrides per-student defaults; per-student opt-outs stack on top."
+      - id: 4
+        owner: "Staff Backend Engineer"
+        action: "Provision SSO (SAML preferred for districts, OIDC for higher-ed). Per-district signing keys; shared keys are a breach waiting to happen."
+      - id: 5
+        owner: "Staff Backend Engineer"
+        action: "Wire roster sync with per-district scoped credentials. NEVER run roster sync as a cross-district daemon."
+      - id: 6
+        owner: "Marcus Olatunde"
+        action: "For K-12: identify under-13 students in the roster; route to parental-consent flow (COPPA VPC). Block their account until VPC completes."
+      - id: 7
+        owner: "Priya Narayanan"
+        action: "Audit: verify roster sync does not log PII; verify SSO does not leak student email in redirect chains; verify the district's student list is accessible only to their own staff."
+      - id: 8
+        owner: "Principal QA Architect"
+        action: "End-to-end test: district admin logs in, sees only their students; cross-district leakage test must fail (as expected)."
+      - id: 9
+        owner: "Staff Code Reviewer"
+        action: "Merge check: DSA on file, VPC pipeline live, no PII in logs, per-district scoping present."
+    verification: |
+      - DSA signed + stored with expiry tracking
+      - pii-inventory updated for this district's data
+      - VPC flow exercises for under-13 cohort
+      - SSO per-district keys, not shared
+      - Roster sync scoped per district (EDTECH-001, EDTECH-005)
+      - Cross-district isolation test green
+
+  - id: edtech-deploy-assessment-feature
+    title: "Deploy a new assessment feature (integrity review + analytics privacy review)"
+    whenToUse: |
+      Any feature touching assessment delivery, grading, or anti-cheat.
+      Examples: new question type, new proctoring heuristic, new grade
+      rubric, new teacher-gradebook flow, new time-accommodation option.
+    steps:
+      - id: 1
+        owner: "Konstantin Ferreira (Assessment Integrity Engineer)"
+        action: "Integrity review: question randomization seeding (EDTECH-009), time-attack telemetry plan (EDTECH-010), grade append-only invariant (EDTECH-008), question bank access control."
+      - id: 2
+        owner: "Jin-Soo Ramirez (Accessibility Engineer)"
+        action: "Accessibility review: keyboard-only flow, screen-reader compatibility, assistive-tech allowlist in any proctoring heuristic (EDTECH-013), accommodation-flag propagation (extra time, breaks, reader/scribe)."
+      - id: 3
+        owner: "Priya Narayanan (Student Privacy Engineer)"
+        action: "Privacy review: proctoring retention (EDTECH-011), telemetry scrubbing before egress (EDTECH-006), no PII in URLs (EDTECH-001), no client-side grade cache (EDTECH-002)."
+      - id: 4
+        owner: "Dr. Léa Mbeki (Learning Analytics Engineer)"
+        action: "If engagement/performance telemetry feeds ML: confirm opt-out propagation (EDTECH-016), aggregation floor on any dashboards derived from this data (EDTECH-014)."
+      - id: 5
+        owner: "Staff Backend Engineer"
+        action: "Implement with append-only grade writes, per-delivery seed for randomization, audit-log on every grade mutation, encryption at rest for proctoring media."
+      - id: 6
+        owner: "Principal QA Architect"
+        action: "Integration tests: grade tamper attempt fails loudly; question seed reproducibility is per-delivery not per-user; accommodation flags respected; proctoring video access-logged."
+      - id: 7
+        owner: "Konstantin Ferreira"
+        action: "Dogfood / dry-run: run a synthetic high-stakes assessment with 3 concurrent students sharing a network; verify randomization prevents cross-copy cheating."
+      - id: 8
+        owner: "Staff Code Reviewer"
+        action: "Merge VETO check: grade append-only, seed non-user-derived, accommodation path, proctoring retention bounded, no plaintext question bank in non-prod."
+    verification: |
+      - Grade table append-only (schema review)
+      - Randomization seed server-generated per delivery
+      - Proctoring retention ≤ regulatory minimum
+      - Accommodation flags propagate to anti-cheat heuristics
+      - Fairness / disparate-impact check passes if ML surface exists
+      - Assessment delivery works with screen reader
+
+  - id: edtech-launch-prediction-model
+    title: "Launch or retrain a student-facing or staff-facing prediction model"
+    whenToUse: |
+      A new ML model (dropout risk, engagement score, at-risk
+      classification, grade forecast) is being shipped to staff or
+      students, OR an existing model is being retrained on new data.
+      Triggered by both initial launch and every retrain.
+    steps:
+      - id: 1
+        owner: "Dr. Léa Mbeki (Learning Analytics Engineer)"
+        action: "Data sourcing: confirm opt-out students excluded from training data (EDTECH-016). Identify protected subgroups in training population."
+      - id: 2
+        owner: "Dr. Léa Mbeki"
+        action: "Fairness evaluation: per-subgroup confusion matrix, FPR/FNR tables, calibration plots (EDTECH-015). FPR > 2x majority rate for any subgroup = blocker."
+      - id: 3
+        owner: "Dr. Léa Mbeki"
+        action: "Version the fairness artifacts (EDTECH-018). Retain for model lifetime + 1 year."
+      - id: 4
+        owner: "Priya Narayanan (Student Privacy Engineer)"
+        action: "Confirm model inputs do not include PII that earns no predictive value (minimum-necessary). Confirm inference output is not logged with student PII."
+      - id: 5
+        owner: "Jin-Soo Ramirez (Accessibility Engineer)"
+        action: "UI review for any staff-facing or student-facing risk display: calibration interval visible, feature attributions shown (EDTECH-017), color-blind-safe."
+      - id: 6
+        owner: "Staff Backend Engineer"
+        action: "Implement inference service with opt-out check at both training and serving time (EDTECH-016). Wire opt-out revocation into training data exclusion pipeline."
+      - id: 7
+        owner: "Dr. Léa Mbeki"
+        action: "Schedule next fairness re-evaluation (quarterly or per-retrain, whichever is sooner). Never ship 'fairness evaluated at launch, never revisited'."
+    verification: |
+      - Fairness report per protected subgroup archived
+      - Opt-out students excluded from training AND inference
+      - Calibration interval displayed on every risk UI
+      - No PII in inference logs
+      - Retrain schedule + fairness re-eval committed

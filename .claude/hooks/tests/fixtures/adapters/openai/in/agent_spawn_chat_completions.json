@@ -1,0 +1,13 @@
+{
+  "session_id": "openai-sess-001",
+  "tool_calls": [
+    {
+      "id": "call_01",
+      "type": "function",
+      "function": {
+        "name": "Agent",
+        "arguments": "{\"subagent_type\": \"general-purpose\", \"description\": \"Sample spawn\", \"prompt\": \"## AGENT PROFILE\\n## SKILL CONTENT\\nX\"}"
+      }
+    }
+  ]
+}

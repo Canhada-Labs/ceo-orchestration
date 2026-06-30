@@ -1,0 +1,491 @@
+# ============================================================================
+# owasp-basics.yaml — benchmark scenarios for the security-and-auth skill
+# ============================================================================
+#
+# Sprint 2 Item C.1 deliverable. First skill benchmark in the framework.
+#
+# Structure:
+#   - 10 POSITIVE scenarios (SEC-BENCH-001..010): code with a real
+#     vulnerability that a compliant security reviewer MUST flag. Covers
+#     OWASP Top 10 2021 categories A01-A10.
+#   - 4 CONTROL scenarios (CTRL-001..004): code that LOOKS suspicious but
+#     is actually correct. A skill that flags everything gets 0/4 on
+#     controls, so the benchmark measures PRECISION, not just recall.
+#
+# Scoring (per scenario):
+#   - tag_weight        = 0.5
+#   - suggestion_weight = 0.3
+#   - severity_weight   = 0.2
+#
+# A scenario passes if the computed score >= pass_threshold (0.7 default).
+#
+# Control scenarios use `must_not_flag_tags` — a correct skill returns an
+# empty issues list or flags only unrelated issues. Controls pass when the
+# response does NOT contain any of the must_not_flag_tags at MEDIUM+ severity.
+#
+# Edit policy:
+#   - Any edit to a scenario (code sample, expected tags, severity) MUST
+#     bump `version:` on that scenario and carry `validated_by: YYYY-MM-DD`
+#     in the commit trailer. Owned via CODEOWNERS on `benchmarks/**`.
+#   - A scenario whose version is bumped without validation is a CI error.
+# ============================================================================
+
+skill: security-and-auth
+benchmark_version: 1
+created: 2026-04-11
+owner: Principal Security Engineer
+description: |
+  OWASP Top 10 2021 coverage — authentication failures, cryptographic
+  failures, injection, broken access control, security misconfiguration,
+  vulnerable components, SSRF/open-redirect, prototype pollution, and
+  insecure deserialization. Includes 4 precision controls.
+
+scoring:
+  pass_threshold: 0.7
+  health_thresholds:
+    critical: 0.4   # below = CRITICAL skill regression
+    warning: 0.6    # below = WARNING
+    healthy: 0.8    # at or above = HEALTHY
+  # Per-scenario weights (used by run-skill-benchmark.py scorer)
+  tag_weight: 0.5
+  suggestion_weight: 0.3
+  severity_weight: 0.2
+
+# ----------------------------------------------------------------------------
+# Positive scenarios — must flag
+# ----------------------------------------------------------------------------
+
+scenarios:
+
+  - id: SEC-BENCH-001
+    name: Timing oracle in password compare
+    category: A07-identification-and-authentication-failures
+    severity: HIGH
+    version: 1
+    validated_by: 2026-04-11
+    input:
+      type: code
+      language: typescript
+      content: |
+        function checkPassword(provided: string, stored: string): boolean {
+          if (provided !== stored) return false;
+          return true;
+        }
+    prompt_template: |
+      Review this code for security issues. For each issue return:
+        - tag: short kebab-case identifier (e.g. "timing-oracle")
+        - severity: LOW | MEDIUM | HIGH | CRITICAL
+        - suggestion: a one-line remediation
+      Respond ONLY with JSON: {"issues": [{"tag": "...", "severity": "...", "suggestion": "..."}]}
+    expected:
+      must_flag_tags: ["timing-oracle", "non-constant-time-compare"]
+      acceptable_alternative_tags: ["password-compare", "side-channel", "string-equality-password"]
+      must_suggest_keywords: ["timingSafeEqual", "constant-time", "crypto.timingSafeEqual", "timing safe"]
+      must_identify_severity: HIGH
+
+  - id: SEC-BENCH-002
+    name: Hardcoded secret in source
+    category: A02-cryptographic-failures
+    severity: HIGH
+    version: 1
+    validated_by: 2026-04-11
+    input:
+      type: code
+      language: python
+      content: |
+        # settings.py
+        STRIPE_API_KEY = "sk_live_hardcoded_example_for_benchmark_only"
+        DATABASE_URL = "postgres://admin:hunter2@prod.db.internal:5432/main"
+
+        def charge(amount_cents: int, token: str):
+            import stripe
+            stripe.api_key = STRIPE_API_KEY
+            return stripe.Charge.create(amount=amount_cents, source=token)
+    prompt_template: |
+      Review this code for security issues. For each issue return:
+        - tag: short kebab-case identifier
+        - severity: LOW | MEDIUM | HIGH | CRITICAL
+        - suggestion: a one-line remediation
+      Respond ONLY with JSON: {"issues": [{"tag": "...", "severity": "...", "suggestion": "..."}]}
+    expected:
+      must_flag_tags: ["hardcoded-secret", "hardcoded-credentials", "secret-in-source"]
+      acceptable_alternative_tags: ["plaintext-secret", "credentials-in-code", "api-key-in-source"]
+      must_suggest_keywords: ["environment variable", "env", "secret manager", "vault", "os.environ"]
+      must_identify_severity: HIGH
+
+  - id: SEC-BENCH-003
+    name: Missing auth middleware on mutating endpoint
+    category: A01-broken-access-control
+    severity: HIGH
+    version: 1
+    validated_by: 2026-04-11
+    input:
+      type: code
+      language: typescript
+      content: |
+        // routes/records.ts
+        import { Router } from "express";
+        import { db } from "../db";
+
+        const router = Router();
+
+        // GET is gated — good
+        router.get("/records", requireAuth, async (req, res) => {
+          const rows = await db.query("SELECT id, title FROM records");
+          res.json(rows);
+        });
+
+        // POST has no auth middleware
+        router.post("/records", async (req, res) => {
+          const { title, body } = req.body;
+          await db.query("INSERT INTO records (title, body) VALUES ($1, $2)", [title, body]);
+          res.status(201).end();
+        });
+
+        export default router;
+    prompt_template: |
+      Review this Express route file for security issues. For each issue return:
+        - tag: short kebab-case identifier
+        - severity: LOW | MEDIUM | HIGH | CRITICAL
+        - suggestion: a one-line remediation
+      Respond ONLY with JSON: {"issues": [{"tag": "...", "severity": "...", "suggestion": "..."}]}
+    expected:
+      must_flag_tags: ["missing-auth", "broken-access-control", "unauthenticated-mutation"]
+      acceptable_alternative_tags: ["missing-authentication", "no-auth-middleware", "open-endpoint"]
+      must_suggest_keywords: ["requireAuth", "middleware", "authenticate", "auth middleware"]
+      must_identify_severity: HIGH
+
+  - id: SEC-BENCH-004
+    name: Permissive CORS with credentials
+    category: A05-security-misconfiguration
+    severity: HIGH
+    version: 1
+    validated_by: 2026-04-11
+    input:
+      type: code
+      language: typescript
+      content: |
+        // server.ts
+        import express from "express";
+        import cors from "cors";
+
+        const app = express();
+        app.use(cors({
+          origin: "*",
+          credentials: true,
+        }));
+        app.get("/api/me", (req, res) => res.json({ id: req.session?.userId }));
+    prompt_template: |
+      Review this Express CORS configuration for security issues.
+      For each issue return:
+        - tag: short kebab-case identifier
+        - severity: LOW | MEDIUM | HIGH | CRITICAL
+        - suggestion: a one-line remediation
+      Respond ONLY with JSON: {"issues": [{"tag": "...", "severity": "...", "suggestion": "..."}]}
+    expected:
+      must_flag_tags: ["cors-wildcard-with-credentials", "permissive-cors", "cors-credentials-any-origin"]
+      acceptable_alternative_tags: ["cors-misconfiguration", "wildcard-origin-credentials"]
+      must_suggest_keywords: ["explicit origin", "allowlist", "specific origin", "origin whitelist", "remove credentials"]
+      must_identify_severity: HIGH
+
+  - id: SEC-BENCH-005
+    name: SQL injection via string concatenation
+    category: A03-injection
+    severity: CRITICAL
+    version: 1
+    validated_by: 2026-04-11
+    input:
+      type: code
+      language: python
+      content: |
+        def get_user(conn, user_id: str):
+            cur = conn.cursor()
+            cur.execute(f"SELECT id, email FROM users WHERE id = '{user_id}'")
+            return cur.fetchone()
+    prompt_template: |
+      Review this code for security issues. For each issue return:
+        - tag: short kebab-case identifier
+        - severity: LOW | MEDIUM | HIGH | CRITICAL
+        - suggestion: a one-line remediation
+      Respond ONLY with JSON: {"issues": [{"tag": "...", "severity": "...", "suggestion": "..."}]}
+    expected:
+      must_flag_tags: ["sql-injection", "string-concat-sql"]
+      acceptable_alternative_tags: ["sqli", "unsafe-sql-interpolation", "injection"]
+      must_suggest_keywords: ["parameterized", "prepared statement", "bind parameter", "placeholder", "%s"]
+      must_identify_severity: CRITICAL
+
+  - id: SEC-BENCH-006
+    name: innerHTML with user input (DOM XSS)
+    category: A03-injection
+    severity: HIGH
+    version: 1
+    validated_by: 2026-04-11
+    input:
+      type: code
+      language: javascript
+      content: |
+        // comment-renderer.js
+        function renderComment(commentEl, comment) {
+          commentEl.innerHTML = `<p class="body">${comment.body}</p>`;
+        }
+    prompt_template: |
+      Review this DOM rendering code for security issues. For each issue return:
+        - tag: short kebab-case identifier
+        - severity: LOW | MEDIUM | HIGH | CRITICAL
+        - suggestion: a one-line remediation
+      Respond ONLY with JSON: {"issues": [{"tag": "...", "severity": "...", "suggestion": "..."}]}
+    expected:
+      must_flag_tags: ["xss", "dom-xss", "innerhtml-injection"]
+      acceptable_alternative_tags: ["cross-site-scripting", "unsafe-innerhtml", "html-injection"]
+      must_suggest_keywords: ["textContent", "sanitize", "DOMPurify", "escape", "innerText"]
+      must_identify_severity: HIGH
+
+  - id: SEC-BENCH-007
+    name: MD5 for password hashing
+    category: A02-cryptographic-failures
+    severity: HIGH
+    version: 1
+    validated_by: 2026-04-11
+    input:
+      type: code
+      language: python
+      content: |
+        import hashlib
+
+        def hash_password(plaintext: str) -> str:
+            return hashlib.md5(plaintext.encode("utf-8")).hexdigest()
+
+        def verify_password(plaintext: str, stored_hash: str) -> bool:
+            return hash_password(plaintext) == stored_hash
+    prompt_template: |
+      Review this password hashing code for security issues. For each issue return:
+        - tag: short kebab-case identifier
+        - severity: LOW | MEDIUM | HIGH | CRITICAL
+        - suggestion: a one-line remediation
+      Respond ONLY with JSON: {"issues": [{"tag": "...", "severity": "...", "suggestion": "..."}]}
+    expected:
+      must_flag_tags: ["weak-hash", "md5-password", "broken-crypto"]
+      acceptable_alternative_tags: ["weak-password-hash", "insufficient-password-hashing", "fast-hash-password"]
+      must_suggest_keywords: ["bcrypt", "argon2", "scrypt", "pbkdf2", "adaptive hash", "salt"]
+      must_identify_severity: HIGH
+
+  - id: SEC-BENCH-008
+    name: JWT decoded without signature verification
+    category: A02-cryptographic-failures
+    severity: CRITICAL
+    version: 1
+    validated_by: 2026-04-11
+    input:
+      type: code
+      language: typescript
+      content: |
+        import jwt from "jsonwebtoken";
+
+        export function getUserFromToken(token: string): { sub: string } | null {
+          // Read the claims without verifying the signature
+          const decoded = jwt.decode(token) as { sub: string } | null;
+          if (!decoded) return null;
+          return decoded;
+        }
+    prompt_template: |
+      Review this JWT handling code for security issues. For each issue return:
+        - tag: short kebab-case identifier
+        - severity: LOW | MEDIUM | HIGH | CRITICAL
+        - suggestion: a one-line remediation
+      Respond ONLY with JSON: {"issues": [{"tag": "...", "severity": "...", "suggestion": "..."}]}
+    expected:
+      must_flag_tags: ["jwt-no-verify", "unverified-jwt", "jwt-signature-skipped"]
+      acceptable_alternative_tags: ["jwt-decode-without-verify", "missing-jwt-verification", "broken-auth"]
+      must_suggest_keywords: ["jwt.verify", "verify signature", "verify(", "validate signature"]
+      must_identify_severity: CRITICAL
+
+  - id: SEC-BENCH-009
+    name: Open redirect via user-controlled Location
+    category: A10-server-side-request-forgery
+    severity: MEDIUM
+    version: 1
+    validated_by: 2026-04-11
+    input:
+      type: code
+      language: typescript
+      content: |
+        // routes/redirect.ts
+        import { Router } from "express";
+        const router = Router();
+
+        router.get("/go", (req, res) => {
+          const next = String(req.query.next ?? "/");
+          res.redirect(302, next);
+        });
+
+        export default router;
+    prompt_template: |
+      Review this redirect handler for security issues. For each issue return:
+        - tag: short kebab-case identifier
+        - severity: LOW | MEDIUM | HIGH | CRITICAL
+        - suggestion: a one-line remediation
+      Respond ONLY with JSON: {"issues": [{"tag": "...", "severity": "...", "suggestion": "..."}]}
+    expected:
+      must_flag_tags: ["open-redirect", "unvalidated-redirect"]
+      acceptable_alternative_tags: ["ssrf-redirect", "user-controlled-redirect", "forwarding-unsafe"]
+      must_suggest_keywords: ["allowlist", "whitelist", "validate path", "relative path", "same origin"]
+      must_identify_severity: MEDIUM
+
+  - id: SEC-BENCH-010
+    name: Prototype pollution via Object.assign on user input
+    category: A08-software-and-data-integrity-failures
+    severity: HIGH
+    version: 1
+    validated_by: 2026-04-11
+    input:
+      type: code
+      language: javascript
+      content: |
+        // merge-config.js
+        function mergeUserConfig(defaults, userInput) {
+          return Object.assign({}, defaults, userInput);
+        }
+
+        // called with JSON.parse(req.body)
+        const merged = mergeUserConfig(defaultConfig, JSON.parse(req.body));
+    prompt_template: |
+      Review this config-merging code for security issues. The `userInput`
+      comes straight from a request body. For each issue return:
+        - tag: short kebab-case identifier
+        - severity: LOW | MEDIUM | HIGH | CRITICAL
+        - suggestion: a one-line remediation
+      Respond ONLY with JSON: {"issues": [{"tag": "...", "severity": "...", "suggestion": "..."}]}
+    expected:
+      must_flag_tags: ["prototype-pollution", "unsafe-merge"]
+      acceptable_alternative_tags: ["object-assign-user-input", "deep-merge-pollution", "__proto__-pollution"]
+      must_suggest_keywords: ["Object.create(null)", "hasOwnProperty", "JSON schema", "allowlist keys", "__proto__", "validate schema"]
+      must_identify_severity: HIGH
+
+  # ----------------------------------------------------------------------------
+  # Control / negative scenarios — must NOT flag at MEDIUM+
+  # ----------------------------------------------------------------------------
+
+  - id: CTRL-001
+    name: Correct constant-time password compare
+    category: CONTROL-timing-safe
+    control: true
+    version: 1
+    validated_by: 2026-04-11
+    input:
+      type: code
+      language: typescript
+      content: |
+        import crypto from "crypto";
+
+        export function checkPassword(provided: string, storedHashBuf: Buffer): boolean {
+          const providedHash = crypto.createHash("sha256").update(provided).digest();
+          if (providedHash.length !== storedHashBuf.length) return false;
+          return crypto.timingSafeEqual(providedHash, storedHashBuf);
+        }
+    prompt_template: |
+      Review this code for security issues. For each issue return:
+        - tag: short kebab-case identifier
+        - severity: LOW | MEDIUM | HIGH | CRITICAL
+        - suggestion: a one-line remediation
+      Respond ONLY with JSON: {"issues": [{"tag": "...", "severity": "...", "suggestion": "..."}]}
+    expected:
+      # Control: must NOT flag a timing-related issue at MEDIUM+
+      must_not_flag_tags: ["timing-oracle", "non-constant-time-compare", "timing-attack"]
+      # May still flag HIGH-level issues like "plain sha256 for password" —
+      # we are testing the precision on the timing-compare aspect only.
+      notes: |
+        This is a correct constant-time compare using crypto.timingSafeEqual.
+        A high-precision skill may still warn that sha256 alone is not an
+        adaptive password hash (that's a valid, orthogonal finding). This
+        control ONLY tests that the skill doesn't flag timing-oracle here.
+
+  - id: CTRL-002
+    name: Parameterized SQL via prepared statement
+    category: CONTROL-parameterized-query
+    control: true
+    version: 1
+    validated_by: 2026-04-11
+    input:
+      type: code
+      language: python
+      content: |
+        def get_user(conn, user_id: str):
+            cur = conn.cursor()
+            cur.execute("SELECT id, email FROM users WHERE id = %s", (user_id,))
+            return cur.fetchone()
+    prompt_template: |
+      Review this code for security issues. For each issue return:
+        - tag: short kebab-case identifier
+        - severity: LOW | MEDIUM | HIGH | CRITICAL
+        - suggestion: a one-line remediation
+      Respond ONLY with JSON: {"issues": [{"tag": "...", "severity": "...", "suggestion": "..."}]}
+    expected:
+      must_not_flag_tags: ["sql-injection", "sqli", "unsafe-sql-interpolation", "injection"]
+      notes: |
+        This is a correct parameterized query using psycopg-style %s
+        placeholders with a tuple. A skill that flags this as SQL
+        injection has a false positive — it's pattern-matching on the
+        presence of `%s` without understanding the driver's placeholder
+        semantics.
+
+  - id: CTRL-003
+    name: Correct bcrypt password hashing
+    category: CONTROL-adaptive-hash
+    control: true
+    version: 1
+    validated_by: 2026-04-11
+    input:
+      type: code
+      language: python
+      content: |
+        import bcrypt
+
+        def hash_password(plaintext: str) -> str:
+            salt = bcrypt.gensalt(rounds=12)
+            return bcrypt.hashpw(plaintext.encode("utf-8"), salt).decode("utf-8")
+
+        def verify_password(plaintext: str, stored_hash: str) -> bool:
+            return bcrypt.checkpw(plaintext.encode("utf-8"), stored_hash.encode("utf-8"))
+    prompt_template: |
+      Review this password hashing code for security issues. For each issue return:
+        - tag: short kebab-case identifier
+        - severity: LOW | MEDIUM | HIGH | CRITICAL
+        - suggestion: a one-line remediation
+      Respond ONLY with JSON: {"issues": [{"tag": "...", "severity": "...", "suggestion": "..."}]}
+    expected:
+      must_not_flag_tags: ["weak-hash", "md5-password", "broken-crypto", "weak-password-hash"]
+      notes: |
+        bcrypt.gensalt(rounds=12) + bcrypt.hashpw is a correct adaptive
+        password hash with a reasonable cost parameter. Any flag of
+        "weak hash" or "insufficient password hashing" at MEDIUM+ is a
+        false positive.
+
+  - id: CTRL-004
+    name: Safe DOM update via textContent
+    category: CONTROL-safe-dom-update
+    control: true
+    version: 1
+    validated_by: 2026-04-11
+    input:
+      type: code
+      language: javascript
+      content: |
+        // comment-renderer.js
+        function renderComment(commentEl, comment) {
+          const p = document.createElement("p");
+          p.className = "body";
+          p.textContent = comment.body;
+          commentEl.replaceChildren(p);
+        }
+    prompt_template: |
+      Review this DOM rendering code for security issues. For each issue return:
+        - tag: short kebab-case identifier
+        - severity: LOW | MEDIUM | HIGH | CRITICAL
+        - suggestion: a one-line remediation
+      Respond ONLY with JSON: {"issues": [{"tag": "...", "severity": "...", "suggestion": "..."}]}
+    expected:
+      must_not_flag_tags: ["xss", "dom-xss", "innerhtml-injection", "unsafe-innerhtml"]
+      notes: |
+        textContent is the safe way to render user text in the DOM. No
+        HTML parsing happens; no scripts run. A skill that still flags
+        this as XSS is over-reporting (false positive) — precision test.

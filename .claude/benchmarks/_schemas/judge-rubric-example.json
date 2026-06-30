@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "rubric_id": "example-generic",
+  "items": [
+    {"id": "r1", "description": "Code compiles / passes lint", "weight": 0.2},
+    {"id": "r2", "description": "Covers edge cases listed in brief", "weight": 0.3},
+    {"id": "r3", "description": "Includes at least one test", "weight": 0.2},
+    {"id": "r4", "description": "Follows project style guide", "weight": 0.3}
+  ],
+  "scoring": "weighted_average"
+}

@@ -1,0 +1,17 @@
+{
+  "schema_version": 2,
+  "default_mode": "L",
+  "default_model": "claude-opus-4-8",
+  "veto_floor_roles": [
+    "ceo",
+    "code-reviewer",
+    "devops",
+    "performance-engineer",
+    "qa-architect",
+    "security-engineer"
+  ],
+  "modes": ["S", "M", "L", "XL"],
+  "confidence": 0.85,
+  "source": "on_disk_v2",
+  "reason": "fixture sample for happy-path loader tests"
+}

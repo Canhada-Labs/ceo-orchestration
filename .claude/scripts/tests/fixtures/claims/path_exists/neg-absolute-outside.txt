@@ -1,0 +1,6 @@
+Malicious claim asserting an absolute path outside the repo.
+
+CLAIM:path_exists:/etc/passwd
+
+PLAN-009 A2 / R-SEC2: must be rejected even if the file exists on the
+host — the absolute path is not under the repo root.

@@ -1,0 +1,25 @@
+{
+  "_comment": "CEO Orchestration — OTEL OPT-IN telemetry stack (PLAN-135 W5 / O10). OPT-IN, NOT default-on. Installed ONLY when install.sh is run with --stack otel (turbo-style opt-in, like settings.stack.node.json and settings.stack.sandbox.json). NOT registered by settings.base.json or any default install. This fragment turns ON Claude Code's NATIVE OpenTelemetry emission and points it at the LOCAL loopback sink (.claude/scripts/otel-local-sink.py) — NO egress. Positioning per ADR-087-AMEND-1: audit-log.jsonl = tamper-evident truth (canonical governance record); OTel = dashboard (convenient queryable panel). Consume-native (the harness emits OTel; we sink it locally) != emit-native (ADR-087 still refuses the framework emitting its OWN spans alongside the audit log). See docs/otel-integration.md + the ADR.",
+
+  "_doctrine_comment": "Doctrine 1 (native-under-rail, never native-instead-of-rail): enabling this fragment RETIRES NO hook and REPLACES NO audit-log path. The audit log stays canonical; this is a parallel, lossy, dashboard-grade mirror. The load-bearing security value is the OTEL_LOGS_EXPORTER hook-execution event stream as the INDEPENDENT rail-tamper witness ('who watches the hooks'): a silently disarmed hook (exec-bit stripped — S228; settings-merge skip — S217) emits NO audit-log event, but Claude Code's native OTel records the hook_execution attempt/absence, caught by an external diff against the registered-hook set. Named compensator for THREAT-MODEL-WORKSHEET §2 H2's coverage boundary (H2 is itself a hook, blind to its own disarm).",
+
+  "_no_egress_comment": "OTEL_EXPORTER_OTLP_ENDPOINT points at http://127.0.0.1:4318 — the LOCAL loopback sink ONLY. The sink (.claude/scripts/otel-local-sink.py) binds 127.0.0.1, opens NO outbound socket, and writes JSONL to the project state dir. There is NO cloud OTel backend in this fragment by design: the meta-repo's telemetry (which can contain Owner source snippets) never leaves the workstation. An adopter who WANTS cloud export uses the ADR-035 exporter (otel-export.py) with its 6-mitigation defense bundle + CEO_OTEL_ALLOWED_HOSTS allowlist — a deliberate, separately-gated choice. Do NOT repoint OTEL_EXPORTER_OTLP_ENDPOINT at a non-loopback host in this fragment; that would turn a no-egress dashboard into an exfil channel without the ADR-035 redaction pipeline.",
+
+  "_resource_attrs_comment": "OTEL_RESOURCE_ATTRIBUTES carries plan/wave/archetype attribution onto every emitted signal — the same attribution measure_multiplier reconstructs post-hoc from audit JSONL with documented hazards (cache-TTL, subagent accounting). The placeholders below ({{PLAN_ID}}/{{WAVE}}/{{ARCHETYPE}}) are install/launch-time fill (export before launching claude, or leave as service.* defaults). They are NOT secrets; keep them descriptive, never put credentials here.",
+
+  "_auth_comment": "OTEL_EXPORTER_OTLP_HEADERS is intentionally ABSENT — the loopback sink needs no auth and a header value here would land in settings/shell history. If a future adopter points this at an authenticated local collector, supply auth via otelHeadersHelper (a script that prints headers) rather than inlining a token, per the harvest text + ADR-035 §security warnings.",
+
+  "_activation_comment": "All keys live under 'env' so the harness exports them to the session + every subprocess launcher (the TRACEPARENT propagation point — one trace per pilot). Removing this fragment (or unsetting CLAUDE_CODE_ENABLE_TELEMETRY) is the kill-switch: with telemetry off, Claude Code emits nothing and the sink simply receives nothing. There is no separate CEO_* disable needed — the native CLAUDE_CODE_ENABLE_TELEMETRY toggle IS the switch.",
+
+  "env": {
+    "CLAUDE_CODE_ENABLE_TELEMETRY": "1",
+    "OTEL_METRICS_EXPORTER": "otlp",
+    "OTEL_LOGS_EXPORTER": "otlp",
+    "OTEL_TRACES_EXPORTER": "otlp",
+    "OTEL_EXPORTER_OTLP_PROTOCOL": "http/json",
+    "OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:4318",
+    "OTEL_METRIC_EXPORT_INTERVAL": "60000",
+    "OTEL_LOGS_EXPORT_INTERVAL": "5000",
+    "OTEL_RESOURCE_ATTRIBUTES": "service.name=ceo-orchestration,plan.id={{PLAN_ID}},wave={{WAVE}},archetype={{ARCHETYPE}}"
+  }
+}

@@ -1,0 +1,86 @@
+# Red-team synthetic fixture SHA-256 ledger
+#
+# PLAN-013 consensus §S16. Autoformat-drift defense: CI computes
+# SHA-256 of each synthetic/*.jsonl and compares to this ledger.
+# Any drift → workflow fails.
+#
+# Format: <sha256>  synthetic/<filename>
+#
+# To update: see red-team-corpus/README.md §Byte-identity check.
+# External/*.md files are NOT in this ledger — they are pointer docs,
+# not adversarial payloads; they may be edited freely.
+
+1354e9a51ff50e0cf0d0f3b958adb9d92bfe0f2f58d70fd1dff72e63abdd6004  synthetic/SYN-001-skill-patch-bidi-trojan.jsonl
+bd2109dbc69d38d730bcdeb793974855f922b5a3322c61c9a36f1fcb4ef0e50e  synthetic/SYN-002-skill-patch-zero-width-smuggle.jsonl
+08f7d87ca61f7097c17d06d6c64ba1dfc6f39eea1b936cedf37f85483ff1b695  synthetic/SYN-003-skill-patch-exec-smuggled-fence.jsonl
+c2a2f554bac1144f5a60f0f6f4b1d0cc1a09626d07eb2073006dc19a253347f5  synthetic/SYN-004-skill-patch-oversized-diff.jsonl
+a612be8d84de36bb60b8dfe9c052e889dbc39dbfda9bb41cee899b29caa0f16d  synthetic/SYN-005-audit-log-byte-rewrite.jsonl
+248313945dbf72003663fb563196b7071ae656354718151a8dcdde8b7b6ae61b  synthetic/SYN-006-audit-log-truncation.jsonl
+67de6f995d74e3301b48655f03ffa1714837aca952bfd0b9c4f07b3bcbb14977  synthetic/SYN-007-audit-log-lock-race.jsonl
+13a9436bd6bb7cd6f5703adceb641da3cc9015ff7f2ac98674e1c77407c8ad60  synthetic/SYN-008-plan-id-env-spoof.jsonl
+4434b72eaa142be2321cfc87b65b615c2b67637630ddd81d607dbe0efd96649c  synthetic/SYN-009-plan-id-frontmatter-hijack.jsonl
+d2a1ca2247dd2ec7b2487c73c443a375d2e78a9ec7b00fac466c382555ccc0b7  synthetic/SYN-010-plan-id-cross-plan-read.jsonl
+d65b59f26a6da43285fffc203693c463d18121fc4dd1c911aed1bc8a223560e7  synthetic/SYN-011-sandbox-escape-curl-exfil.jsonl
+9a2edf58a80fa1582075d54811da96f9b3661e7b96b07c40de4883f265d6ed56  synthetic/SYN-012-sandbox-escape-env-dump.jsonl
+3107d9ef067b7ab79f4d7cb92e91d8e99c59ebf9faab8fa8b9bd01121b2e3b3d  synthetic/SYN-013-sandbox-escape-symlink-plant.jsonl
+898a93b00b2676a929b2c3a3d54e0202fd5a919e747234c3cff1330f483fef6e  synthetic/SYN-014-mcp-handler-governance-bypass.jsonl
+8408a1d2483f03d61babe98e96c01ecd057d1683295204ce1e0e57de41158431  synthetic/SYN-015-mcp-handler-acl-enumeration.jsonl
+8c78e2dfa4d62fb6cb808fea4a1bdd5c1deec807971f432a725288fb5eb44842  synthetic/SYN-016-mcp-handler-rate-limit-evasion.jsonl
+df5981de35df1e8badb68393c2ff2a288979d7ed10608bbd8a6b4b364c3f230a  synthetic/SYN-017-adapter-exfil-via-error-message.jsonl
+0f08d9c20b3b55754ded719518737b9c94207d0d5285d0d9c9cfa1c7df0b9d91  synthetic/SYN-018-adapter-exfil-otel-attr.jsonl
+5f7ce9d065b0ad9afab188cc2a135973883fc9aeba99e2348d498f0e09ee75ae  synthetic/SYN-019-adapter-exfil-retry-replay.jsonl
+b6176389f9a2db2ca1392e298683a8a93c51b8dc2810b68ccaa37b1a02138c6e  synthetic/SYN-020-output-safety-nfkc-bypass.jsonl
+5d2999693704026715894b44ab1252594b6810cfb5154f61afdf517b7b9ab7a4  synthetic/SYN-021-output-safety-base64-double-wrap.jsonl
+3db90432d2f63728c2cc43aae73295ca774b0bc4ede0990b2f627d94e49cfdb9  synthetic/SYN-022-output-safety-entropy-below-threshold.jsonl
+0bdbcfdbead111e4f2abd954ed4d27cf71b2d6abe1cd38d3ffe19eeececfed9c  synthetic/SYN-023-output-safety-regex-obfuscation.jsonl
+961f535b832ae1b4a301ee540da6d9193b0caafaa5e13e7e25fc00267038af3b  synthetic/SYN-024-output-safety-luhn-partial.jsonl
+0604f55b455fdbc1491aa18a96c7213567fa6d28055f3c1962c51353916aa16c  synthetic/SYN-025-npm-tamper-supply-chain.jsonl
+c302817ccb9347f569e6cfd67bbc2432287a915e6f5a784d41ed5e523a407386  synthetic/SYN-026-npm-tamper-typo-squat.jsonl
+9f43fe4825376b2abc5e8a74cb79b24bc066683f7d0c84e2dd04164bdcf45891  synthetic/SYN-027-npm-tamper-unsigned-slsa.jsonl
+
+# External adversarial fixtures (PLAN-014 Phase D.1)
+9e12c0726c88d7903ac51f36c907d48c74611a28d9bdc9d4c75234e03f7f9907  external/EXT-016-skill-content-injection-via-markdown.jsonl
+e0c339f70da5e359177b999dd32acd87ad5d771842e7a12b11b9df39636db592  external/EXT-017-persona-impersonation-ceo.jsonl
+82713d0d633916d92d81c30b2fd2d4d44928167c18c6b9d20c5498e3049edf2d  external/EXT-018-file-assignment-wildcard-escape.jsonl
+3f09c733e3f4ea92a54ce6155a5ea972a7c16acc0c9000509f3767ed2afceb51  external/EXT-019-veto-bypass-force-proceed.jsonl
+6eee5f8a7d1c3e986fa11153fe70fd74366c37c7bd695fc47979bf4ea0d2a405  external/EXT-020-canonical-edit-circumvent-settings.jsonl
+4716278846b8a0dc491cafa8dd428f3d75c19cb94bdc2a812b3b7e97ef9ac585  external/EXT-021-spawn-without-agent-profile.jsonl
+3936ba06b88f5eec7c4c9845a1458401e99be03537e3b3beff7da273075f2b1f  external/EXT-022-hidden-unicode-in-skill-name.jsonl
+6fb9e4408483c9d48592c0599c0d8e0b6b398972fe29e4e949e78629f0b69a74  external/EXT-023-mcp-spawn-governance-bypass.jsonl
+994a6f48b4ad74b3604c5dda4482db8f9eb9d442a88af285eced65e557a86c1a  external/EXT-024-adapter-credential-in-error-trace.jsonl
+4846204bd2c4dcaac82f59246ec0897d8ec7c7b4866ce800081b8d1a5c938f03  external/EXT-025-sandbox-escape-nested-subshell.jsonl
+528ad463c54b33a6d19897d7b99824f93de4a8cad933ad019be117daafa01e43  external/EXT-026-plan-edit-without-debate.jsonl
+7516f6c46f54a6e61ea8b0064be270dce74433a4c4372378f8b08a2e4f36be66  external/EXT-027-audit-log-rotation-race.jsonl
+e2039e933fd0bfc96cdcc8e84352ddd2f274ea84722c9b43547ea696f2102653  external/EXT-028-npm-dependency-confusion.jsonl
+6d66b45696ebee4779068e347387156af28228b76d769c9edc10a3cfd0226385  external/EXT-029-output-safety-unicode-confusable.jsonl
+f03f98eaee53b1945fb93f22a3485b901835045f0f586163d91d557080e81000  external/EXT-030-adapter-retry-storm-dos.jsonl
+0b42f3b04738508d4038a484718e638068f3ca9a50456d796553e2af5249f2c0  external/EXT-031-team-md-direct-edit.jsonl
+b7f688e4ee8f1cd8bed95009620864521752c981bcfa774cfc0684d8c35b7381  external/EXT-032-sandbox-env-var-exfil.jsonl
+a801e04b4659ff6027d3dac6938214cda43085c178701bcdf147a1eaa1492abf  external/EXT-033-mcp-rate-limit-bypass-headers.jsonl
+40843c81019488f61044a95cffc0d764224958020884f84c966904db9b34b095  external/EXT-034-otel-span-attribute-leak.jsonl
+d764ae41be362098132a8cddd4f2b42467829450e41976aa5eda25795475dc0d  external/EXT-035-skill-patch-polyglot-payload.jsonl
+7e6ee8097ab83dd7f72e53dce8485c4596560b13e1a0d2c7c3270b923f32ef47  external/EXT-036-output-safety-base64-triple-wrap.jsonl
+ab087d84a71bc6d21c95dd74aef37068d60a53a80f59175b9c7dc33d090015c5  external/EXT-037-plan-id-cross-plan-memory-read.jsonl
+9a0bb4217740c29f73dca2f6933ca2336141c635f07af29b6e2c10025de607a8  external/EXT-038-npm-slsa-provenance-strip.jsonl
+3a992d62e9dc7d58d9ed4c025f2dd03a7e3364ad6c95f4ae1a82a483d6583892  external/EXT-039-adapter-exfil-streaming-chunk.jsonl
+2fae4b842fb3e3d7f7f56240a89cb4ce434113f35767a8e9e20d12919a3c6960  external/EXT-040-sandbox-symlink-to-secrets.jsonl
+
+# Regression-from-incidents fixtures (PLAN-014 Phase D.1)
+7c5199a5f65e7550a591e8fe04611fa7d061eae76681969dca16372d8d11d8bf  regression/REG-001-s3-audit-emission-gap.jsonl
+a6688463a34ad53f33e7564a8925dcc1ec16c3adf1e660b52d53908f9f947b6e  regression/REG-002-audit-registry-miss.jsonl
+c66590e4f412fad157732ac2773f458bd519c5cde73ad798f337015050dd8b6e  regression/REG-003-breaker-provider-kwarg-missing.jsonl
+042996873ad8ce52b70bc15035a3bc06e8645875dbe6efa42c17d3820e4d7f98  regression/REG-004-canonical-edit-conftest-block.jsonl
+ee92495ba4187d264d32ef290aa532aeed4c2f9fb7f50f6096aa669f6e6cfbda  regression/REG-005-mcp-dispatch-oversized-handler.jsonl
+582ce6fb9859e0270183bc484881bc30c5dbfd32b1aa4a827d2cb595f2583340  regression/REG-006-audit-registry-false-orphan.jsonl
+17b6aa51df1795cef8fd77004a0e93ecbdc154f91c8f45f5579ce4c197361d24  regression/REG-007-spec-count-undercount.jsonl
+0b7f250e8011934539f042779fa5678d46dc4610dbc4a6df8aaf0c76d1aaf5a2  regression/REG-008-adr-reserved-slot-phantom.jsonl
+55daaa7eaf7a1d0bfb1f1ef96883058e1a0cb1df1133d35f903f8affd29b81e5  regression/REG-009-tlc-pending-placeholder.jsonl
+7f238e17557763046ce194d03bc9e8d0f2f15fdafb11b8addca94f5b63457164  regression/REG-010-mutation-kill-rate-fake.jsonl
+df6d7b0fb2e30a404e05f3e065e4b52b35c858993f0a006c3477afa0d89840c1  regression/REG-011-byte-identity-governance-persona.jsonl
+a8af9a9ceeab418d8b59fda3fc81b58dd1ee58dfd667a0cfb25a3d66cd6c6dd9  regression/REG-012-conformance-mapping-partial-path.jsonl
+379cfd85e8fe20047327b8dd4afad9c32b9b9b25bb2ca9416e7b5bad852fd2bd  regression/REG-013-l1-fairness-lazy-fire.jsonl
+a9a2973cc8acc3c62209ffcc7dcdbef5fd11a712f07be727dcaadd2073458753  regression/REG-014-mcp-path-traversal-skill.jsonl
+dba7f8e42e2317351fbaf2338df7d2275aa6a236098713c8b63594c4134d181f  regression/REG-015-mcp-hmac-timestamp-skew.jsonl
+
+# Frozen corpus v1 (PLAN-014 Phase D.2)
+a5a62a03a84ef206c9023d2af65bdef9c4828d89cd80a6a124691886401de80a  v1/fixtures.jsonl

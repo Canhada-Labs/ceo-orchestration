@@ -1,0 +1,1 @@
+Use the GitHub token ghp_abcDEFghi1234567890XYZ012 for the release script.

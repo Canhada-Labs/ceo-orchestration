@@ -1,0 +1,7 @@
+## Pull request description
+
+This PR adds support for the new `--profile` flag in install.sh. The
+flag accepts a comma-separated list of profiles; the installer copies
+only the matching skill subtrees.
+
+Tested with: `bash install.sh /tmp/x --profile core,fintech`

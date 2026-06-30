@@ -1,0 +1,3 @@
+# bitstamp
+bitstamp_api_key=36Rlltd1gCotFkHI9Aj4pr8zsxY0zmIW
+bitstamp_secret=jHYQQpaLNvbAT6SmVxBVOXPSiOYPiePl

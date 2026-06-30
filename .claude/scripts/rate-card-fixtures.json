@@ -1,0 +1,18 @@
+{
+  "_meta": {
+    "schema": 1,
+    "provenance": "PLAN-135 W5 unit o8o11o12 (O8 rate-card calibrator). The ratified Anthropic rate card — the SAME ground truth S227 propagated in commit e3b179bf (fable-5 row + opus-4-7 $15/$75 -> $5/$25, live-confirmed by W0b reconciliation). rate-card-calibrate.py diffs cost-table.yaml + provider-pricing.md against THIS file so the next stale pin (S227 found exactly 2) surfaces as a diff, not in a future paid run.",
+    "ratified_at": "2026-06-10",
+    "ratified_by": "PLAN-134 W0b reconciliation (20/20 calls drift~0.0000) + S227 propagation e3b179bf",
+    "units": "USD per 1,000,000 tokens (per-Mtok) — the cost-table.yaml unit; provider-pricing.md is per-1k ($/Mtok / 1000)",
+    "tolerance_per_mtok": 0.005,
+    "live_calibration": "PENDING-OWNER: the Anthropic Usage/Cost API (admin-scoped) is the authoritative drift source for actual billed rates. --live mode recipe is in the rate-card-calibrate.py docstring; it is Owner-run (admin key, never committed; custody per research/THREAT-MODEL-WORKSHEET.md §3) and bills nothing (read-only cost endpoint). Until run, this fixtures file is the human-ratified ground truth."
+  },
+  "rates": {
+    "claude-fable-5": {"input_per_mtok": 10.00, "output_per_mtok": 50.00},
+    "claude-opus-4-8": {"input_per_mtok": 5.00, "output_per_mtok": 25.00},
+    "claude-opus-4-7": {"input_per_mtok": 5.00, "output_per_mtok": 25.00},
+    "claude-sonnet-4-6": {"input_per_mtok": 3.00, "output_per_mtok": 15.00},
+    "claude-haiku-4-5": {"input_per_mtok": 1.00, "output_per_mtok": 5.00}
+  }
+}

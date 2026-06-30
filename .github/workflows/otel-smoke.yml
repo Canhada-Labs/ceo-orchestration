@@ -1,0 +1,223 @@
+name: OTEL export smoke (advisory)
+
+# Sprint 11 PLAN-011 Phase 8. Advisory-only per ADR-035. Does NOT fail
+# the workflow on any exporter signal. Converts to a gate in Sprint 12
+# IFF the otel_export_dropped event rate is stable for two weeks
+# (ADR-035 §Flip criteria).
+#
+# Scope: exercise the CLI end-to-end against a stdlib `http.server`
+# mock receiver running on the same runner. Proves that:
+#
+#   1. `--dry-run` mode produces valid OTLP/HTTP JSON offline.
+#   2. `--endpoint` mode (with CEO_OTEL_SMOKE=1 + --no-tls-verify)
+#      can POST to a loopback mock receiver without opening outbound
+#      network to the public internet.
+#
+# Nothing about this smoke should be run against a production endpoint.
+# The receiver lives on 127.0.0.1:4318 inside the runner only.
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Monday 09:00 UTC — PLAN-012 §S6 cron stagger. Chaos runs 03:00,
+    # perf-profile 06:00, otel-smoke 09:00, adapter-live 12:00. See
+    # .github/workflows/_README.md for the full schedule + rationale.
+    - cron: '0 9 * * 1'
+  push:
+    branches: [main]
+    paths:
+      - '.claude/scripts/otel-export.py'
+      - '.claude/hooks/_lib/otel_emit.py'
+      - '.github/workflows/otel-smoke.yml'
+
+concurrency:
+  group: otel-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: OTLP/HTTP JSON round-trip (stdlib receiver)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        # SHA-pinned (matches validate.yml): actions/checkout@v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Setup Python
+        # SHA-pinned (matches validate.yml): actions/setup-python@v6.2.0
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.12'
+
+      - name: Stage a synthetic audit log
+        # Three realistic events so the export has at least one span per
+        # common action type. Uses `CEO_AUDIT_LOG_DIR` to redirect
+        # emitters away from the runner's HOME.
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/ceo-otel-smoke
+          export CEO_AUDIT_LOG_DIR=/tmp/ceo-otel-smoke
+          cat > /tmp/ceo-otel-smoke/audit-log.jsonl <<'JSONL'
+          {"action":"agent_spawn","ts":"2026-04-14T10:00:00Z","project":"ceo-orchestration","session_id":"smoke","desc_preview":"smoke test spawn","description_hash":"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"}
+          {"action":"plan_transition","ts":"2026-04-14T10:00:01Z","project":"ceo-orchestration","session_id":"smoke","plan_id":"PLAN-011","from_status":"draft","to_status":"reviewed"}
+          {"action":"debate_event","ts":"2026-04-14T10:00:02Z","project":"ceo-orchestration","session_id":"smoke","plan_id":"PLAN-011","round":1,"phase":"consensus","agent":"consensus"}
+          JSONL
+          wc -l /tmp/ceo-otel-smoke/audit-log.jsonl
+
+      - name: Test 1 — dry-run against allowlisted host (offline)
+        # `--dry-run` never touches the network. This proves:
+        #   - scheme allowlist: https accepted.
+        #   - host allowlist: CEO_OTEL_ALLOWED_HOSTS honored.
+        #   - payload builds and serializes.
+        env:
+          CEO_OTEL_ALLOWED_HOSTS: tempo.example.com
+        run: |
+          set -euo pipefail
+          python3 .claude/scripts/otel-export.py \
+            --endpoint https://tempo.example.com/v1/traces \
+            --dry-run \
+            --audit-log /tmp/ceo-otel-smoke/audit-log.jsonl \
+            | tee /tmp/ceo-otel-smoke/dry-run.json >/dev/null
+          python3 -c "import json; d=json.load(open('/tmp/ceo-otel-smoke/dry-run.json')); assert d['dry_run']; assert d['exported']>=3, d; print('ok:',d['exported'],'spans')"
+
+      - name: Test 2 — http scheme must be rejected (exit 2)
+        run: |
+          set -euo pipefail
+          set +e
+          python3 .claude/scripts/otel-export.py \
+            --endpoint http://attacker.example.com/ \
+            --dry-run 2> /tmp/ceo-otel-smoke/reject-http.err
+          rc=$?
+          set -e
+          if [ "$rc" != "2" ]; then
+            echo "::error::expected exit=2 for http scheme, got $rc"
+            cat /tmp/ceo-otel-smoke/reject-http.err
+            exit 1
+          fi
+          grep -q "scheme http not allowed" /tmp/ceo-otel-smoke/reject-http.err
+          echo "ok: http rejected with exit=2"
+
+      - name: Test 3 — non-allowlisted host must be rejected (exit 2)
+        env:
+          CEO_OTEL_ALLOWED_HOSTS: only-this.example.com
+        run: |
+          set -euo pipefail
+          set +e
+          python3 .claude/scripts/otel-export.py \
+            --endpoint https://other.example.com/v1/traces \
+            --dry-run 2> /tmp/ceo-otel-smoke/reject-host.err
+          rc=$?
+          set -e
+          if [ "$rc" != "2" ]; then
+            echo "::error::expected exit=2 for non-allowlisted host, got $rc"
+            cat /tmp/ceo-otel-smoke/reject-host.err
+            exit 1
+          fi
+          grep -q "not in allowlist" /tmp/ceo-otel-smoke/reject-host.err
+          echo "ok: non-allowlisted host rejected with exit=2"
+
+      - name: Test 4 — mock receiver POST (stdlib http.server, HTTP loopback)
+        # We POST to plain HTTP loopback with CEO_OTEL_SMOKE=1 +
+        # --no-tls-verify so the exporter skips TLS verification.
+        # The https scheme check still fires — we use a small wrapper
+        # that embeds the stdlib `http.server` as the receiver AND
+        # bypasses the scheme guard by calling the library directly.
+        #
+        # For the true HTTPS loopback case, the unit tests exercise
+        # the stdlib ssl.SSLContext path against a self-signed cert.
+        # The CI smoke stays on HTTP loopback to keep cert-minting
+        # out of the workflow.
+        env:
+          CEO_OTEL_ALLOWED_HOSTS: 127.0.0.1
+          CEO_OTEL_SMOKE: "1"
+        run: |
+          set -euo pipefail
+          python3 - <<'PYEOF'
+          """Drive the receiver + library end-to-end inside the runner."""
+          import json
+          import sys
+          import threading
+          from http.server import BaseHTTPRequestHandler, HTTPServer
+          from pathlib import Path
+
+          # Path setup
+          repo = Path.cwd()
+          sys.path.insert(0, str(repo / ".claude" / "hooks"))
+          from _lib import otel_emit  # type: ignore
+
+          class Handler(BaseHTTPRequestHandler):
+              received = []
+
+              def do_POST(self):
+                  length = int(self.headers.get("Content-Length", "0"))
+                  raw = self.rfile.read(length) if length else b""
+                  type(self).received.append(raw)
+                  self.send_response(200)
+                  self.send_header("Content-Type", "application/json")
+                  self.end_headers()
+                  self.wfile.write(b'{"ok":true}')
+
+              def log_message(self, format, *args):
+                  return  # silence
+
+          server = HTTPServer(("127.0.0.1", 4318), Handler)
+          thread = threading.Thread(target=server.serve_forever, daemon=True)
+          thread.start()
+          try:
+              events = [
+                  {"action": "agent_spawn", "ts": "2026-04-14T10:00:00Z",
+                   "project": "ceo-orchestration", "session_id": "smoke",
+                   "desc_preview": "mock receiver test"}
+              ]
+              # Library path — scheme/host already validated by unit
+              # tests. post_spans handles transport.
+              payload, _ = otel_emit.batch_to_otlp(events)
+              status, body = otel_emit.post_spans(
+                  "http://127.0.0.1:4318/v1/traces",
+                  payload,
+                  headers={"X-Trace": "smoke"},
+                  timeout=5.0,
+                  verify_tls=False,
+              )
+              assert status == 200, f"unexpected status={status}"
+              assert len(Handler.received) == 1, "mock did not receive"
+              received = json.loads(Handler.received[0])
+              assert received["resourceSpans"], "no resourceSpans"
+              print(f"ok: mock received {len(Handler.received)} POST(s)")
+          finally:
+              server.shutdown()
+              server.server_close()
+              thread.join(timeout=2)
+          PYEOF
+
+      - name: Test 5 — CEO_SOTA_DISABLE short-circuits
+        env:
+          CEO_OTEL_ALLOWED_HOSTS: tempo.example.com
+          CEO_SOTA_DISABLE: "1"
+        run: |
+          set -euo pipefail
+          out=$(python3 .claude/scripts/otel-export.py \
+            --endpoint https://tempo.example.com/v1/traces \
+            --dry-run)
+          echo "$out" | grep -qi "disabled" || { echo "expected 'disabled' in output"; exit 1; }
+          echo "ok: kill-switch honored"
+
+      - name: Upload smoke artifacts
+        if: always()
+        # SHA-pinned (matches benchmarks.yml): actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: otel-smoke-${{ github.run_id }}
+          path: /tmp/ceo-otel-smoke/
+          retention-days: 30
+
+      - name: Advisory note
+        # ADR-035: advisory only in Sprint 11.
+        run: |
+          echo "::notice::OTEL smoke is advisory (ADR-035 — Sprint 11)."
+          echo "::notice::Converts to blocking in Sprint 12 iff otel_export_dropped stable."

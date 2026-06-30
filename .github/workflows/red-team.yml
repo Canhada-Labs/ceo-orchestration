@@ -1,0 +1,314 @@
+name: Red-team adversarial eval (State 1 — enforcing)
+
+# PLAN-014 Phase D.3 (ADJ-018). State 1 enforcement:
+# - PR path: exit-1 on regression (blocks merge)
+# - Schedule path: exit-0 + issue creation (backward compatible)
+# - Timeout bumped to 30 min for 80-fixture corpus
+# - Fork-PR policy: PRs from forks touching hooks/red-team require
+#   re-open from intra-repo branch
+#
+# Previous: PLAN-013 Phase D.6 advisory (State 0).
+# ADR-037 Transition Log: State 0 -> 1 evidence at
+# .claude/scripts/red-team-corpus/v1/fixtures.jsonl.sha256
+#
+# Flake budget (PLAN-013 consensus S17): max 1/week tolerated per
+# fixture; 2+ failures in 7-day window auto-quarantine the fixture
+# in `.claude/scripts/red-team-corpus/flake-budget.yaml` and open an
+# issue requesting root-cause analysis. Quarantined fixtures are
+# SKIPPED until RCA sign-off + 7 consecutive clean runs.
+
+on:
+  schedule:
+    # Monday 15:00 UTC. Non-collision slot -- PLAN-012 uses 03/06/09/12.
+    - cron: '0 15 * * 1'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.claude/scripts/red-team-eval.py'
+      - '.claude/scripts/red-team-corpus/**'
+      - '.claude/hooks/**'
+      - '.github/workflows/red-team.yml'
+  pull_request:
+    paths:
+      - '.claude/scripts/red-team-eval.py'
+      - '.claude/scripts/red-team-corpus/**'
+      - '.claude/hooks/**'
+      - '.github/workflows/red-team.yml'
+
+concurrency:
+  group: red-team-${{ github.ref }}
+  cancel-in-progress: false
+
+# Least privilege: contents:read for checkout, issues:write for
+# idempotent issue creation on fixture failure. NO write-all.
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  eval:
+    name: Adversarial corpus runner (State 1)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    # Fork-PR policy (PLAN-014 ADJ-018): PRs from forks touching
+    # .claude/hooks/** or .claude/scripts/red-team-* are NOT blocked
+    # but run in dry-run mode (no ledger writes, no issue creation).
+    # Forks never receive secrets.
+    env:
+      CEO_SOTA_DISABLE: ${{ vars.CEO_SOTA_DISABLE || '' }}
+      IS_FORK_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'true' || 'false' }}
+      IS_SCHEDULE: ${{ github.event_name == 'schedule' && 'true' || 'false' }}
+      # State 1 for PR + push; State 0 for schedule (backward compatible)
+      RED_TEAM_STATE: ${{ github.event_name == 'schedule' && '0' || '1' }}
+
+    steps:
+      - name: Kill-switch check (CEO_SOTA_DISABLE=1)
+        id: killswitch
+        run: |
+          if [ "${CEO_SOTA_DISABLE}" = "1" ]; then
+            echo "::notice::CEO_SOTA_DISABLE=1 — red-team workflow short-circuited."
+            echo "disabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "disabled=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Fork-PR guard check
+        id: forkguard
+        if: steps.killswitch.outputs.disabled == 'false'
+        run: |
+          if [ "${IS_FORK_PR}" = "true" ]; then
+            echo "::warning::Fork PR detected — running in dry-run mode (no ledger writes, no issues)."
+            echo "fork=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "fork=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        if: steps.killswitch.outputs.disabled == 'false'
+        # SHA-pinned (matches validate.yml): actions/checkout@v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Setup Python
+        if: steps.killswitch.outputs.disabled == 'false'
+        # SHA-pinned (matches validate.yml): actions/setup-python@v6.2.0
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.12'
+
+      - name: Frozen corpus SHA-256 pre-check (PLAN-014 Phase D.2)
+        if: steps.killswitch.outputs.disabled == 'false'
+        run: |
+          set -euo pipefail
+          EXPECTED=$(cut -d' ' -f1 .claude/scripts/red-team-corpus/v1/fixtures.jsonl.sha256)
+          ACTUAL=$(python3 -c "import hashlib; print(hashlib.sha256(open('.claude/scripts/red-team-corpus/v1/fixtures.jsonl','rb').read()).hexdigest())")
+          if [ "$EXPECTED" != "$ACTUAL" ]; then
+            echo "::error::Frozen corpus SHA-256 mismatch! expected=$EXPECTED actual=$ACTUAL"
+            exit 1
+          fi
+          echo "::notice::Frozen corpus SHA-256 verified: $ACTUAL"
+
+      - name: Byte-identity check (all fixture dirs)
+        if: steps.killswitch.outputs.disabled == 'false'
+        run: |
+          set -euo pipefail
+          python3 .claude/scripts/red-team-eval.py \
+            --fixture-dir .claude/scripts/red-team-corpus/synthetic \
+            --byte-identity-check .claude/scripts/red-team-corpus/.byte-identity-check.txt \
+            --corpus-root .claude/scripts/red-team-corpus \
+            --dry-run \
+            --output text
+
+      - name: Run red-team eval (frozen corpus v1 — enforcing)
+        if: steps.killswitch.outputs.disabled == 'false'
+        id: eval_frozen
+        # State 1 on PR/push: exit-1 on regression
+        # State 0 on schedule: exit-0 (advisory, backward compatible)
+        continue-on-error: ${{ env.IS_SCHEDULE == 'true' }}
+        run: |
+          set -euo pipefail
+          DRY_RUN_FLAG=""
+          if [ "${IS_FORK_PR}" = "true" ]; then
+            DRY_RUN_FLAG="--dry-run"
+          fi
+          python3 .claude/scripts/red-team-eval.py \
+            --frozen-corpus .claude/scripts/red-team-corpus/v1/fixtures.jsonl \
+            --frozen-sha .claude/scripts/red-team-corpus/v1/fixtures.jsonl.sha256 \
+            --quarantine-ledger .claude/scripts/red-team-corpus/flake-budget.yaml \
+            --state "${RED_TEAM_STATE}" \
+            --output junit \
+            --output-file junit-frozen-v1.xml \
+            $DRY_RUN_FLAG
+
+      - name: Run red-team eval (synthetic corpus — backward compat)
+        if: steps.killswitch.outputs.disabled == 'false'
+        id: eval_syn
+        continue-on-error: ${{ env.IS_SCHEDULE == 'true' }}
+        run: |
+          set -euo pipefail
+          DRY_RUN_FLAG=""
+          if [ "${IS_FORK_PR}" = "true" ]; then
+            DRY_RUN_FLAG="--dry-run"
+          fi
+          python3 .claude/scripts/red-team-eval.py \
+            --fixture-dir .claude/scripts/red-team-corpus/synthetic \
+            --quarantine-ledger .claude/scripts/red-team-corpus/flake-budget.yaml \
+            --state "${RED_TEAM_STATE}" \
+            --output junit \
+            --output-file junit-synthetic.xml \
+            $DRY_RUN_FLAG
+
+      - name: Run red-team eval (external corpus)
+        if: steps.killswitch.outputs.disabled == 'false'
+        continue-on-error: ${{ env.IS_SCHEDULE == 'true' }}
+        run: |
+          set -euo pipefail
+          DRY_RUN_FLAG=""
+          if [ "${IS_FORK_PR}" = "true" ]; then
+            DRY_RUN_FLAG="--dry-run"
+          fi
+          python3 .claude/scripts/red-team-eval.py \
+            --fixture-dir .claude/scripts/red-team-corpus/external \
+            --quarantine-ledger .claude/scripts/red-team-corpus/flake-budget.yaml \
+            --state "${RED_TEAM_STATE}" \
+            --output junit \
+            --output-file junit-external.xml \
+            $DRY_RUN_FLAG
+
+      - name: Run red-team eval (regression corpus)
+        if: steps.killswitch.outputs.disabled == 'false'
+        continue-on-error: ${{ env.IS_SCHEDULE == 'true' }}
+        run: |
+          set -euo pipefail
+          DRY_RUN_FLAG=""
+          if [ "${IS_FORK_PR}" = "true" ]; then
+            DRY_RUN_FLAG="--dry-run"
+          fi
+          python3 .claude/scripts/red-team-eval.py \
+            --fixture-dir .claude/scripts/red-team-corpus/regression \
+            --quarantine-ledger .claude/scripts/red-team-corpus/flake-budget.yaml \
+            --state "${RED_TEAM_STATE}" \
+            --output junit \
+            --output-file junit-regression.xml \
+            $DRY_RUN_FLAG
+
+      - name: Write job summary
+        if: steps.killswitch.outputs.disabled == 'false'
+        run: |
+          set -euo pipefail
+          {
+            echo "## Red-team adversarial eval (State 1 — enforcing)"
+            echo ""
+            echo "| Corpus | Fixture count | Mode |"
+            echo "|--------|---------------|------|"
+            SYN_COUNT=$(find .claude/scripts/red-team-corpus/synthetic -maxdepth 1 -name '*.jsonl' -type f | wc -l | tr -d ' ')
+            EXT_JSONL=$(find .claude/scripts/red-team-corpus/external -maxdepth 1 -name '*.jsonl' -type f | wc -l | tr -d ' ')
+            EXT_PTR=$(find .claude/scripts/red-team-corpus/external -maxdepth 1 -name 'EXT-*.md' -type f | wc -l | tr -d ' ')
+            REG_COUNT=$(find .claude/scripts/red-team-corpus/regression -maxdepth 1 -name '*.jsonl' -type f | wc -l | tr -d ' ')
+            FROZEN=$(wc -l < .claude/scripts/red-team-corpus/v1/fixtures.jsonl | tr -d ' ')
+            echo "| Synthetic | $SYN_COUNT | enforcing (State $RED_TEAM_STATE) |"
+            echo "| External JSONL | $EXT_JSONL | enforcing |"
+            echo "| External pointers | $EXT_PTR | informational |"
+            echo "| Regression | $REG_COUNT | enforcing |"
+            echo "| **Frozen v1** | **$FROZEN** | **enforcing (primary)** |"
+            echo ""
+            echo "State: **$RED_TEAM_STATE** (0=advisory, 1=enforcing on PR, 2=blocking)"
+            echo ""
+            echo "See JUnit XML artifacts for per-fixture results."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload artifacts (JUnit XML)
+        if: steps.killswitch.outputs.disabled == 'false'
+        # SHA-pinned (matches benchmarks.yml): actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: red-team-results-${{ github.run_id }}
+          path: |
+            junit-frozen-v1.xml
+            junit-synthetic.xml
+            junit-external.xml
+            junit-regression.xml
+          retention-days: 30
+
+      - name: Idempotent issue creation for persistent failures (schedule only)
+        # Only on schedule + push-to-main (NOT on PR — State 1 PR uses exit-1).
+        # Fork guard already excluded forks at env level.
+        if: >-
+          steps.killswitch.outputs.disabled == 'false' &&
+          steps.forkguard.outputs.fork == 'false' &&
+          (github.event_name == 'schedule' || github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for XML in junit-frozen-v1.xml junit-synthetic.xml junit-external.xml junit-regression.xml; do
+            if [ ! -f "$XML" ]; then
+              echo "::notice::no $XML results; skipping issue creation for this corpus"
+              continue
+            fi
+            python3 - <<PYEOF
+          """Idempotent issue creation from JUnit failures."""
+          import json
+          import os
+          import re
+          import subprocess
+          import sys
+          from xml.etree import ElementTree as ET
+
+          xml_file = "$XML"
+          tree = ET.parse(xml_file)
+          root = tree.getroot()
+          failures = []
+          for tc in root.iter("testcase"):
+              f = tc.find("failure")
+              if f is None:
+                  continue
+              fixture = tc.attrib.get("name", "unknown")
+              msg = f.attrib.get("message", "")
+              body = (f.text or "").strip()
+              m = re.search(r"fingerprint=([a-f0-9]+)", body)
+              fingerprint = m.group(1)[:8] if m else "unknown"
+              failures.append((fixture, fingerprint, msg, body))
+          if not failures:
+              print(f"::notice::no failures in {xml_file}; no issues needed")
+              sys.exit(0)
+
+          existing = subprocess.check_output([
+              "gh", "issue", "list",
+              "--label", "red-team-eval",
+              "--state", "open",
+              "--limit", "100",
+              "--json", "title,number"
+          ], text=True)
+          open_issues = json.loads(existing) if existing.strip() else []
+          existing_titles = {i.get("title", "") for i in open_issues}
+
+          for fixture, fp, msg, body in failures:
+              title = f"Red-team fixture flake: {fixture} ({fp})"
+              if title in existing_titles:
+                  print(f"::notice::issue already open for {fixture} — skipping")
+                  continue
+              body_md = (
+                  f"Fixture: \`{fixture}\`\n"
+                  f"Fingerprint: \`{fp}\`\n"
+                  f"Message: {msg}\n"
+                  f"Source: \`{xml_file}\`\n\n"
+                  f"Raw:\n\`\`\`\n{body}\n\`\`\`\n"
+              )
+              subprocess.check_call([
+                  "gh", "issue", "create",
+                  "--title", title,
+                  "--body", body_md,
+                  "--label", "red-team-eval,priority:high",
+              ])
+              print(f"::notice::opened issue: {title}")
+          PYEOF
+          done
+
+      - name: State 1 enforcement note
+        if: steps.killswitch.outputs.disabled == 'false'
+        run: |
+          echo "::notice::Red-team eval State 1 (enforcing). PR failures block merge."
+          echo "::notice::Schedule failures create issues but do not fail workflow."
+          echo "::notice::ADR-037 Transition Log: State 0->1 at PLAN-014 Phase D.3."

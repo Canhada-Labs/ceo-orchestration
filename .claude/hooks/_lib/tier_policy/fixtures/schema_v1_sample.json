@@ -1,0 +1,5 @@
+{
+  "schema_version": 1,
+  "default_mode": "L",
+  "default_model": "claude-sonnet-4-6"
+}

@@ -1,0 +1,18 @@
+[project]
+name = "ceo-orchestration"
+version = "1.0.0"
+description = "Portable framework for operating Claude Code as a structured team of specialist agents under a CEO protocol."
+requires-python = ">=3.9"
+
+[project.optional-dependencies]
+dev = [
+  "hypothesis==6.100.0",
+  "jsonschema==4.21.1",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = []

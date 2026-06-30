@@ -1,0 +1,79 @@
+# Pitfalls Catalog — Paid Media Squad
+# Loaded alongside the universal catalog when the paid-media profile is
+# installed. Format mirrors .claude/pitfalls-catalog.yaml:
+# id, rule, whenToUse, agents.
+
+pitfalls:
+  # === ATTRIBUTION & MEASUREMENT ===
+  - id: PMD-001
+    rule: "NEVER change a conversion window on an active campaign without documenting the trailing-90-day impact on reported conversions first. Window changes retroactively alter performance history and make period-over-period comparisons meaningless."
+    whenToUse: "any request to modify conversion window settings in Google Ads, Meta Ads, or any DSP"
+    agents: [Tomás Carvalho, Valentina Reyes]
+
+  - id: PMD-002
+    rule: "NEVER report blended ROAS by dividing total platform-reported revenue by total ad spend without flagging multi-touch double-counting risk. Each platform claims 100% of shared conversions. Blended ROAS without a deduplication layer is always inflated."
+    whenToUse: "any paid-media reporting, dashboard build, or executive summary that combines more than one ad platform"
+    agents: [Tomás Carvalho]
+
+  - id: PMD-003
+    rule: "NEVER switch the primary conversion event on a campaign in active learning phase without explicitly resetting the learning phase. Swapping conversion events mid-learn teaches the algorithm on a different signal than it will be measured against."
+    whenToUse: "any conversion event reconfiguration on a campaign that has been live less than 7 days or is in Meta's 'Learning' or Google's 'Limited' status"
+    agents: [Valentina Reyes, Tomás Carvalho]
+
+  - id: PMD-004
+    rule: "NEVER upload a Custom Audience (Meta, Google, LinkedIn, TikTok) using unhashed PII. Email addresses and phone numbers MUST be SHA-256 hashed client-side before upload. Unhashed upload transmits cleartext PII to the platform — a LGPD/GDPR data-transfer violation."
+    whenToUse: "any Custom Audience, Customer Match, or equivalent first-party list upload to any ad platform"
+    agents: [Rafaela Dias, Tomás Carvalho]
+
+  # === CAMPAIGN STRUCTURE & BIDDING ===
+  - id: PMD-005
+    rule: "NEVER activate Smart Bidding (Target CPA, Target ROAS, Maximize Conversions) on a campaign with fewer than 30 conversions in the trailing 30 days at campaign level. Smart Bidding on insufficient signal optimises toward noise, not signal."
+    whenToUse: "any new Smart Bidding activation, campaign restructure, or bid-strategy change"
+    agents: [Marcus Holt, Valentina Reyes]
+
+  - id: PMD-006
+    rule: "NEVER run brand and non-brand keywords in the same campaign. Brand terms produce artificially high conversion rates that inflate non-brand Smart Bidding targets. Separate campaigns are mandatory for structural diagnostic clarity."
+    whenToUse: "any Google Ads or Microsoft Ads account structure review or new campaign build"
+    agents: [Marcus Holt]
+
+  - id: PMD-007
+    rule: "NEVER launch broad match keywords without a campaign-level or account-level negative keyword list with at minimum 50 entries drawn from search-query report forensics. Broad match without negatives funds irrelevant queries at full bid."
+    whenToUse: "any campaign that uses broad match or Smart Bidding with broad match enabled"
+    agents: [Marcus Holt, Tomás Carvalho]
+
+  - id: PMD-008
+    rule: "NEVER activate Advantage-Plus Shopping on a Meta account with fewer than 50 purchase events in the past 7 days at account level. Below this threshold, the campaign trains on insufficient signal and typically outspends manually structured campaigns without efficiency gains."
+    whenToUse: "any Advantage-Plus Shopping or ASC campaign launch or migration decision"
+    agents: [Valentina Reyes]
+
+  # === CREATIVE STRATEGY ===
+  - id: PMD-009
+    rule: "NEVER declare a creative variant the winner before reaching statistical significance (minimum 95% confidence, minimum 100 conversions per variant, minimum 2 weeks runtime). Early declaration of a winner is confirmation bias at scale."
+    whenToUse: "any creative A/B test, RSA ad copy test, or landing page test result review"
+    agents: [Camila Nunes, Marcus Holt]
+
+  - id: PMD-010
+    rule: "NEVER launch a paid social campaign with fewer than 4 creative variants per ad set on budgets above $200/day. Fewer variants starve the algorithm of creative exploration signal and concentrate fatigue risk on a single asset."
+    whenToUse: "any paid social campaign launch, restructure, or creative refresh planning"
+    agents: [Camila Nunes, Valentina Reyes]
+
+  - id: PMD-011
+    rule: "NEVER evaluate creative performance at fewer than 5 days runtime for direct-response campaigns or 7 days for brand campaigns. Frequency and delivery algorithms have not stabilised in the first 48-72 hours; early data overweights anomalous delivery windows."
+    whenToUse: "any creative performance review, creative kill decision, or bid adjustment based on creative data"
+    agents: [Camila Nunes]
+
+  # === COMPLIANCE & CONSENT ===
+  - id: PMD-012
+    rule: "NEVER fire a Meta Pixel, Google Tag, or any third-party tracking tag on a page that collects or infers health, financial distress, or political affiliation signals without verifying that affirmative opt-in consent was collected before the tag fires. Platform enforcement and regulator fines have both escalated sharply on this pattern."
+    whenToUse: "any pixel implementation, tag manager configuration, or consent-mode setup on any page category"
+    agents: [Rafaela Dias, Tomás Carvalho]
+
+  - id: PMD-013
+    rule: "NEVER publish an influencer or creator-partnership post without a native-language disclosure ('Ad', 'Publi', '#publi', '#ad') placed before the first fold or before any call to action in video. FTC and CONAR both require disclosure to be clear, conspicuous, and in the audience's primary language."
+    whenToUse: "any influencer brief, creator partnership content review, or gifted product campaign"
+    agents: [Rafaela Dias]
+
+  - id: PMD-014
+    rule: "NEVER run retargeting campaigns against lists built from sensitive-category page visits (health-condition pages, financial-hardship pages, relationship-status pages) without an explicit consent audit confirming opt-in was obtained for retargeting purposes under LGPD/GDPR. Sensitive-category retargeting without consent is a high-enforcement-risk pattern."
+    whenToUse: "any retargeting audience build, lookalike seed creation, or custom audience sourced from onsite behavioural data"
+    agents: [Rafaela Dias, Tomás Carvalho]

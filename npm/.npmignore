@@ -1,0 +1,37 @@
+node_modules/
+*.log
+.DS_Store
+.git/
+.github/
+.claude/hooks/tests/
+.claude/scripts/tests/
+docs/
+NOTES.md
+*.test.js
+# PLAN-118 D5 / AC-B8 surface (S179 2026-05-28) — exclude the framework's
+# own plan artifacts from the adopter-shipped npm tarball. The plan tree
+# is meta-repo internal state (debate transcripts, ceremony receipts,
+# ~4.3 GB of PLAN-112 sandbox project-clones); shipping it bloats the
+# tarball + carries 500+ stale `_lib/audit_emit.py` copies that adopters'
+# Codex tooling or sloppy `sys.path.insert` refactors could plausibly
+# inject onto the live producer's sys.path — the exact pollution vector
+# PLAN-118 closes via AC-B4/B5/B6/B7. install.sh provisions the canonical
+# SCHEMA + examples directly; nothing under .claude/plans/PLAN-* is read
+# by adopter runtime. Note: install-npm.sh and the npm-publish workflow
+# remain kernel-guarded; this is a NON-KERNEL hygiene fix that closes
+# the recurrence vector at the tarball boundary.
+.claude/plans/
+
+# PLAN-120-FOLLOWUP WS-D (E4-F1/E4-F2, S185 readiness audit) — exclude the
+# framework's OWN test harness from the adopter-shipped npm tarball. The
+# _lib/ runtime modules ship (adopter hooks import them), but the test
+# files MUST NOT: _lib/tests/ runs framework unit tests that emit real
+# audit events without the WS-A session redirect (no conftest ships), and
+# test_isolation.py / testing.py do `import pytest` at module top — both
+# pollute the adopter's live audit chain and pull a pytest dep an adopter
+# need not have. install.sh::install_lib_selective() excludes these at
+# COPY time; this .npmignore entry closes the same vector at the tarball
+# boundary (defense-in-depth — neither layer alone is fail-closed).
+.claude/hooks/_lib/tests/
+.claude/hooks/_lib/test_isolation.py
+.claude/hooks/_lib/testing.py

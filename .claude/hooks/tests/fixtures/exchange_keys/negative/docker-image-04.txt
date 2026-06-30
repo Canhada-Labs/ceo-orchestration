@@ -1,0 +1,2 @@
+# docker pull
+image: nginx@sha256:0b3acb7c0b3e8e0d29c5e89f0d12345678901234567890abcdef1234567890ab

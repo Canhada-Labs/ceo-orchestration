@@ -1,0 +1,343 @@
+# .claude/dispatcher/routing-matrix.yaml — PLAN-081 Phase 2 deliverable
+#
+# Pair-Rail capability matrix. Per archetype, declares:
+#   - coder: which provider authors the work (claude or codex)
+#   - reviewer: which provider reviews the work (codex or claude)
+#   - coder_model: model floor for the coder (per ADR-052 / ADR-064)
+#   - reviewer_sandbox: sandbox mode for the reviewer (read-only / workspace-write / danger-full)
+#   - fallback_provider: which provider to fall back to if the pair-rail is disabled
+#   - health_prereq: list of unknown-IDs from PLAN-075 SPIKE-VERDICT.md that
+#                    must PASS for this archetype to route via the pair-rail.
+#                    Phase 2 carries these as **advisory metadata** for Phase 4
+#                    promotion-gate consumption — the runtime dispatcher
+#                    (inject-agent-context.sh --pair-mode) does NOT evaluate
+#                    health_prereq directly; that becomes the Phase 4
+#                    promotion-gate role per spec.md §10. Codex iter 1 P1-3.
+#   - disable_predicates: list of typed predicates that, when ANY evaluates true,
+#                         disable the pair-rail for this archetype and fall back
+#                         to single-LLM coder=fallback_provider
+#
+# Schema is validated by .claude/dispatcher/routing-matrix-loader.py at load
+# time. Each disable_predicate is evaluated by
+# .claude/dispatcher/disable_predicate_eval.py against a bounded tail-scan
+# of audit-log.jsonl (default 10000 records, override via env var
+# CEO_PAIR_RAIL_AUDIT_TAIL_N) — NEVER unbounded O(n) scan.
+#
+# Per PLAN-081 R1 consensus + spec.md §10:
+#   - 8 archetypes mandatory L2+ per ADR-107 (Phase 3 ACCEPTED)
+#   - VETO-floor archetypes (CR + Sec + IDX + IC + TDE) coder=claude, model=opus
+#     per ADR-052 — NEVER downgrade to Codex coder until Phase 4 promotion
+#     gate passes 15/15 with 2-pass-with-triage (per ADR-108 §Operational)
+#   - Other archetypes (QA + PE + RF + DOC + TA) reviewer=codex with
+#     sandbox=read-only per ADR-106
+#
+# threat-model T-4 (archetype-spoofing): mutation of this YAML to swap
+# coder/reviewer assignments is mitigated by:
+#   1. canonical-guard (.claude/dispatcher/*.yaml) — sentinel-gated edits
+#   2. SHA-pin in routing-matrix-loader.py at load time (audit-emit on
+#      digest mismatch via dispatcher_route action)
+#   3. validate-governance.sh registry check
+#
+# Schema version (bump on breaking change):
+schema_version: "1.0.0-rc.1"
+plan: PLAN-081
+phase: 2
+adr_refs: [ADR-052, ADR-064, ADR-095, ADR-105, ADR-106, ADR-107, ADR-108, ADR-110]
+
+# ---------------------------------------------------------------------
+# Archetype routing entries — sorted alphabetically for stable diff
+# ---------------------------------------------------------------------
+
+archetypes:
+
+  code-reviewer:
+    coder: claude
+    coder_model: opus  # ADR-052 VETO floor — NEVER downgrade
+    reviewer: codex
+    reviewer_sandbox: read-only
+    fallback_provider: claude
+    health_prereq:
+      - u1_pass    # Codex CLI installed + version pin
+      - u4_pass    # Egress redaction parity
+      - u7_pass    # Same-LLM bias gap acceptable
+      - u11_pass   # PostToolUse advisory semantics
+    disable_predicates:
+      - id: codex_outage_5min
+        type: duration_threshold
+        metric: codex_outage_minutes
+        operator: ">"
+        value: 5
+        window_minutes: 60
+      - id: fp_rate_30d_above_30pct
+        type: numeric_threshold
+        metric: fp_rate_30d
+        operator: ">"
+        value: 0.30
+        window_days: 30
+      - id: rubric_gap_threshold
+        type: numeric_threshold
+        metric: u7_rubric_gap_pp
+        operator: ">"
+        value: 5
+
+  security-engineer:
+    coder: claude
+    coder_model: opus  # ADR-052 VETO floor
+    reviewer: codex
+    reviewer_sandbox: read-only
+    fallback_provider: claude
+    health_prereq:
+      - u1_pass
+      - u4_pass
+      - u7_pass
+      - u11_pass
+    disable_predicates:
+      - id: codex_outage_5min
+        type: duration_threshold
+        metric: codex_outage_minutes
+        operator: ">"
+        value: 5
+        window_minutes: 60
+      - id: rubric_gap_threshold
+        type: numeric_threshold
+        metric: u7_rubric_gap_pp
+        operator: ">"
+        value: 5
+
+  qa-architect:
+    coder: claude  # Phase 2 ships review-only; Phase 4 promotion gate may flip to codex
+    coder_model: sonnet
+    reviewer: codex
+    reviewer_sandbox: read-only
+    fallback_provider: claude
+    health_prereq:
+      - u1_pass
+      - u3_pass    # Latency p99 ≤30s
+      - u4_pass
+      - u11_pass
+    disable_predicates:
+      - id: codex_outage_5min
+        type: duration_threshold
+        metric: codex_outage_minutes
+        operator: ">"
+        value: 5
+        window_minutes: 60
+      - id: latency_p95_above_60s
+        type: numeric_threshold
+        metric: codex_latency_p95_s
+        operator: ">"
+        value: 60
+        window_minutes: 30
+
+  performance-engineer:
+    coder: claude  # long-context profiling strength
+    coder_model: sonnet
+    reviewer: codex
+    reviewer_sandbox: read-only
+    fallback_provider: claude
+    health_prereq:
+      - u1_pass
+      - u11_pass
+    disable_predicates:
+      - id: codex_outage_5min
+        type: duration_threshold
+        metric: codex_outage_minutes
+        operator: ">"
+        value: 5
+        window_minutes: 60
+      - id: disagreement_rate_above_50pct
+        type: numeric_threshold
+        metric: disagreement_rate_30d
+        operator: ">"
+        value: 0.50
+        window_days: 30
+
+  refactoring:
+    coder: claude
+    coder_model: sonnet
+    reviewer: codex
+    reviewer_sandbox: read-only
+    fallback_provider: claude
+    health_prereq:
+      - u1_pass
+      - u11_pass
+    disable_predicates:
+      - id: codex_outage_5min
+        type: duration_threshold
+        metric: codex_outage_minutes
+        operator: ">"
+        value: 5
+        window_minutes: 60
+
+  docs-writer:
+    coder: claude
+    coder_model: sonnet
+    reviewer: codex
+    reviewer_sandbox: read-only
+    fallback_provider: claude
+    health_prereq:
+      - u1_pass
+      - u11_pass
+    disable_predicates:
+      - id: codex_outage_5min
+        type: duration_threshold
+        metric: codex_outage_minutes
+        operator: ">"
+        value: 5
+        window_minutes: 60
+
+  test-author:
+    coder: claude
+    coder_model: sonnet
+    reviewer: codex
+    reviewer_sandbox: read-only
+    fallback_provider: claude
+    health_prereq:
+      - u1_pass
+      - u3_pass
+      - u11_pass
+    disable_predicates:
+      - id: codex_outage_5min
+        type: duration_threshold
+        metric: codex_outage_minutes
+        operator: ">"
+        value: 5
+        window_minutes: 60
+      - id: latency_p95_above_60s
+        type: numeric_threshold
+        metric: codex_latency_p95_s
+        operator: ">"
+        value: 60
+        window_minutes: 30
+
+  threat-detection-engineer:
+    coder: claude
+    coder_model: opus  # ADR-052 VETO floor (PLAN-074 Wave 1c)
+    reviewer: codex
+    reviewer_sandbox: read-only
+    fallback_provider: claude
+    health_prereq:
+      - u1_pass
+      - u4_pass
+      - u7_pass
+      - u11_pass
+    disable_predicates:
+      - id: codex_outage_5min
+        type: duration_threshold
+        metric: codex_outage_minutes
+        operator: ">"
+        value: 5
+        window_minutes: 60
+      - id: fp_rate_30d_above_30pct
+        type: numeric_threshold
+        metric: fp_rate_30d
+        operator: ">"
+        value: 0.30
+        window_days: 30
+
+# ---------------------------------------------------------------------
+# Predicate type registry — referenced by disable_predicate_eval.py
+# Each entry declares the typed-state-machine arm that implements it.
+# Adding a new predicate type requires:
+#   1. Add entry below
+#   2. Implement evaluator arm in disable_predicate_eval.py
+#   3. Add test fixture in tests/test_disable_predicate_eval.py
+# ---------------------------------------------------------------------
+
+predicate_types:
+
+  duration_threshold:
+    description: |
+      Compares a duration metric (in minutes) against a numeric threshold.
+      Evaluates true when the metric breaches the operator+value gate.
+      Bounded tail-scan over audit-log: reads at most CEO_PAIR_RAIL_AUDIT_TAIL_N
+      records (default 10000) ending at log tail.
+    required_keys: [metric, operator, value, window_minutes]
+    operators: [">", ">=", "<", "<=", "=="]
+
+  numeric_threshold:
+    description: |
+      Compares a numeric metric against a numeric threshold. Same bounded
+      tail-scan semantics as duration_threshold. Used for rates (fp_rate,
+      disagreement_rate) and percentile latencies (latency_p95).
+    required_keys: [metric, operator, value]
+    optional_keys: [window_days, window_minutes]
+    operators: [">", ">=", "<", "<=", "=="]
+
+  boolean:
+    description: |
+      Compares a boolean-coerced metric against a fixed value (typically
+      true/false or 0/1). Used for hard-fail gates (e.g. write_parity_breach
+      when ANY breach observed).
+    required_keys: [metric, operator, value]
+    operators: [">", ">=", "<", "<=", "=="]
+
+# ---------------------------------------------------------------------
+# Metric registry — names recognized by disable_predicate_eval.py.
+# Each metric maps to an audit-log query shape. Adding a new metric
+# requires a corresponding query implementation in the evaluator.
+# ---------------------------------------------------------------------
+
+metrics:
+  codex_outage_minutes:
+    description: |
+      Total minutes within the trailing window where Codex MCP was
+      unavailable (timeouts + connection errors + spawn failures
+      grouped). Sourced from `pair_rail_codex_unavailable` audit events.
+    source_action: pair_rail_codex_unavailable
+    aggregation: window_sum_minutes
+
+  fp_rate_30d:
+    description: |
+      False-positive rate over trailing 30 days. Numerator: Case-B audit
+      events labeled FP via `audit-query.py label` (Phase 6 deliverable).
+      Denominator: total Case-B events. Phase 2 evaluator returns 0.0 if
+      denominator < 5 (insufficient evidence — never disable on noise).
+    source_action: pair_rail_case_emit
+    aggregation: ratio_with_min_n
+    min_denominator: 5
+
+  disagreement_rate_30d:
+    description: |
+      Share of Case-E (divergent verdicts) over total cases A-E (excluding
+      F=outage). Phase 2 returns 0.0 if denominator < 5.
+    source_action: pair_rail_case_emit
+    aggregation: ratio_with_min_n
+    min_denominator: 5
+
+  codex_latency_p95_s:
+    description: |
+      95th percentile wall_clock_s field over `dispatcher_route`
+      events in the trailing window_minutes. Bounded by
+      CEO_PAIR_RAIL_AUDIT_TAIL_N. Returns 0.0 if denominator < 10
+      (insufficient samples).
+    source_action: dispatcher_route
+    aggregation: percentile_p95
+    min_denominator: 10
+
+  u7_rubric_gap_pp:
+    description: |
+      Same-LLM bias rubric gap in percentage points, sourced from
+      Phase 4 promotion-gate emitted `pair_rail_promotion_emit` records.
+      Returns 0.0 if no promotion gate has run yet.
+    source_action: pair_rail_promotion_emit
+    aggregation: latest_value
+    field: rubric_gap_pp
+
+  u2_breaches_count:
+    description: |
+      Count of `file_write_breaches` from `codex_writeguard_block` audit
+      events in the trailing window. Hard-fail gate — any breach disables
+      coder=codex routing for write-archetype types.
+    source_action: codex_writeguard_block
+    aggregation: window_count
+
+# ---------------------------------------------------------------------
+# Default values — applied when archetype omits an optional field.
+# ---------------------------------------------------------------------
+
+defaults:
+  reviewer_sandbox: read-only
+  fallback_provider: claude
+  audit_tail_n: 10000  # CEO_PAIR_RAIL_AUDIT_TAIL_N override permitted
+  evaluator_timeout_ms: 100  # disable_predicate_eval must return ≤100ms

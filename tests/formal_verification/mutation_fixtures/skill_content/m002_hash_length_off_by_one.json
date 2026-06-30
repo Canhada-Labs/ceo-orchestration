@@ -1,0 +1,8 @@
+{
+  "description": "Hash length off by one: sha256 value is 63 hex chars instead of 64. The body regex _SKILL_REFERENCE_LINE_RE requires exactly [0-9a-f]{64}, so the body line will not match and the validator returns reference_missing ('header found but no @<path> sha256=<hex> body').",
+  "mutation_class": "S1_regex_bypass",
+  "sub_check_targeted": 1,
+  "expected_reason": "reference_missing",
+  "skill_body_variant": "valid",
+  "hash_in_prompt_override": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcde"
+}

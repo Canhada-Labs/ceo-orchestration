@@ -1,0 +1,90 @@
+# Task chains — SaaS Platforms Squad
+# Domain-specific workflows that extend the universal .claude/task-chains.yaml.
+
+task_chains:
+  - id: saas-platforms-new-tenant-tier
+    title: "Launch a new tenant tier or tenancy model (isolation review + quota design)"
+    whenToUse: |
+      A new tenant tier, isolation model, or shared-infrastructure component
+      is being introduced — examples: adding an Enterprise tier with dedicated
+      database isolation, introducing a shared job scheduler for the growth
+      tier, launching a new region with dedicated compute for data-residency
+      customers. Also triggers when changing the isolation level of an existing
+      shared component (e.g. converting a shared Redis cluster to per-tenant
+      clusters for the Enterprise tier).
+      Out of scope: feature additions within an existing tier that do not
+      touch the tenancy model or shared infrastructure.
+    steps:
+      - id: 1
+        owner: "Priyanka Mehta (Platform Architect)"
+        action: "Isolation analysis document: define the tenancy model for the new tier (siloed, pooled, hybrid). For each shared component (database, cache, queue, job scheduler), specify the isolation boundary, the isolation mechanism, and the failure mode if the isolation is breached (SAS-001, SAS-002, SAS-003, SAS-004)."
+      - id: 2
+        owner: "Amara Nwosu (Tenancy Engineer)"
+        action: "Database-layer isolation: confirm RLS policy or per-schema strategy is in place for the new tier. Verify that ORM model filters AND database-layer enforcement are both present and independent (SAS-001). Draft the tenant provisioning script for the new tier."
+      - id: 3
+        owner: "Amara Nwosu"
+        action: "Cache and queue tenant routing: confirm cache key strategy includes tenant_id as a mandatory prefix (SAS-002). Confirm message bus routing logic is verified at both producer and consumer for any new queue topology (SAS-003)."
+      - id: 4
+        owner: "Cormac Sullivan (SRE Lead)"
+        action: "Blast-radius and quota design: for every new or modified shared-infrastructure component, define per-tenant hard limits (CPU, memory, request rate, IOPS, API call rate). Confirm circuit-breakers on any new synchronous cross-service dependency (SAS-005, SAS-006). Define the rollback plan."
+      - id: 5
+        owner: "Cormac Sullivan"
+        action: "Observability: define SLO targets per tier. Add per-tenant quota utilisation metrics to the SRE dashboard. Configure burn-rate alerts before the new tier goes live. Add on-call runbook entry for the new tier's specific failure modes."
+      - id: 6
+        owner: "Diego Paredes (Plan & Billing Engineer)"
+        action: "Entitlement mapping: define which features are gated to the new tier. Confirm entitlement enforcement runs through the platform entitlement layer — no admin toggle bypass path (SAS-008). Confirm subscription event log records the tier assignment as an immutable event (SAS-009)."
+      - id: 7
+        owner: "Principal QA Architect"
+        action: "Cross-tenant isolation tests: run a test suite that attempts to read Tenant A's data as Tenant B across every access path (API, cache, queue, storage). Confirm all attempts fail loudly. Confirm per-tenant quota limits are enforced under synthetic load."
+      - id: 8
+        owner: "Staff Code Reviewer"
+        action: "Launch VETO check: isolation analysis document signed by Priyanka, per-tenant quotas enforced as hard limits (SAS-005), circuit-breakers on new dependencies (SAS-006), rollback plan approved by Cormac, entitlement mapping live (SAS-008)."
+    verification: |
+      - Isolation analysis document signed by Platform Architect (SAS-004)
+      - RLS or per-schema isolation confirmed at database layer (SAS-001)
+      - Cache keys include tenant_id as mandatory prefix (SAS-002)
+      - Queue routing verified at producer and consumer (SAS-003)
+      - Per-tenant hard quotas enforced on every shared component (SAS-005)
+      - Circuit-breakers on all new synchronous dependencies (SAS-006)
+      - Cross-tenant isolation test suite green before launch
+
+  - id: saas-platforms-subscription-plan-change
+    title: "Launch or modify a subscription plan (billing state machine + entitlement review)"
+    whenToUse: |
+      A new subscription plan is being introduced, or an existing plan is
+      being modified in a way that affects pricing, entitlements, trial
+      conditions, or upgrade/downgrade transitions. Examples: launching a
+      new pricing tier, changing a plan's feature entitlements, modifying
+      trial duration, introducing usage-based billing on top of a flat fee.
+      Also triggers for dunning-workflow changes (payment-failure grace period,
+      access-restriction timing). Out of scope: cosmetic changes to plan names
+      or marketing descriptions that do not affect entitlements or billing.
+    steps:
+      - id: 1
+        owner: "Diego Paredes (Plan & Billing Engineer)"
+        action: "State machine spec: document every new subscription state and transition for the changed plan. For each transition, specify: trigger, timing, entitlement change (immediate vs. end-of-period), customer communication, and audit log event type (SAS-009). No transition should be implied — each must be explicit."
+      - id: 2
+        owner: "Diego Paredes"
+        action: "Entitlement enforcement audit: confirm every feature gated by the plan runs through the entitlement enforcement layer (SAS-008). List every admin bypass or override path and confirm each requires a logged, auditable action with a reason code."
+      - id: 3
+        owner: "Diego Paredes"
+        action: "Billing calculation review: confirm proration formula for mid-cycle upgrades/downgrades. Confirm invoice generation uses event-replay from the subscription event log — not snapshot state (SAS-010). Test boundary conditions: upgrade on last day of period, downgrade on first day."
+      - id: 4
+        owner: "Priyanka Mehta (Platform Architect)"
+        action: "Infrastructure impact: if the new plan tier adds or removes access to shared infrastructure components (dedicated queues, higher storage quota, new geographic region), confirm isolation analysis is updated and per-tenant quotas are reconfigured (SAS-005)."
+      - id: 5
+        owner: "Cormac Sullivan (SRE Lead)"
+        action: "Blast-radius assessment: if the new plan tier brings a new class of workload (high-compute, high-storage, high-API-volume), confirm the per-tenant quota hard limits for this workload class are defined and enforced before any tenant is upgraded."
+      - id: 6
+        owner: "Principal QA Architect"
+        action: "Billing correctness tests: simulate upgrade, downgrade, cancellation, reactivation across all boundary conditions. Verify subscription event log is written before state transitions. Verify invoice amounts match event-log reconciliation. Verify entitlement changes take effect at the correct timing (SAS-009, SAS-010)."
+      - id: 7
+        owner: "Staff Code Reviewer"
+        action: "Merge VETO check: state machine spec documented, entitlement enforcement confirmed (SAS-008), invoice uses event-replay (SAS-010), subscription event log immutable (SAS-009), infrastructure quotas updated if needed (SAS-005)."
+    verification: |
+      - Subscription state machine spec: all transitions explicit and documented (SAS-009)
+      - Entitlement enforcement: all plan-gated features run through enforcement layer (SAS-008)
+      - Invoice generation: event-log reconciliation, not snapshot state (SAS-010)
+      - Proration boundary conditions tested: last-day upgrade, first-day downgrade
+      - Per-tenant quotas updated for new tier's workload class (SAS-005)
+      - Dunning timing documented and customer communication confirmed

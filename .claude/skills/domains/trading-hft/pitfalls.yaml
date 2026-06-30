@@ -1,0 +1,99 @@
+# Pitfalls Catalog — Trading-HFT Squad
+# Loaded alongside the universal catalog when the trading-hft profile
+# is installed. Format mirrors .claude/pitfalls-catalog.yaml.
+
+pitfalls:
+  # === LATENCY ===
+  - id: HFT-001
+    rule: "NEVER allocate heap memory in the order hot path. Pool objects, use stack/arena, or value types. Allocations cause GC pauses that miss the latency budget."
+    whenToUse: "any change to the wire-to-wire path or strategy decision loop"
+    agents: [Marcelo Andrade, Diane Okafor]
+
+  - id: HFT-002
+    rule: "NEVER call clock_gettime / time.time() per-order in the hot path. Cache a monotonic clock with documented update cadence; reading wall clock per order is a syscall storm."
+    whenToUse: "any code path that runs per-order or per-tick"
+    agents: [Marcelo Andrade]
+
+  - id: HFT-003
+    rule: "Synchronous logging in the hot path is forbidden. Use a lock-free ring buffer + sidecar formatter; the hot path memcpy-fills, the sidecar formats and writes."
+    whenToUse: "adding any log statement to the order send / market-data ingest path"
+    agents: [Marcelo Andrade, Diane Okafor]
+
+  - id: HFT-004
+    rule: "Every hot-path PR MUST ship with before/after histogram (p50/p99/p99.9). Latency Architect VETOes without measurement. 'Should be fast enough' is not evidence."
+    whenToUse: "any PR touching a code path with a documented latency budget"
+    agents: [Marcelo Andrade]
+
+  # === ORDER ROUTING ===
+  - id: HFT-005
+    rule: "Floats on price/size are FORBIDDEN. Use integer ticks (qty * tick_size) or domain Decimal. Float = nondeterministic = audit failure."
+    whenToUse: "any order construction, replace, or risk-check code"
+    agents: [Hiroshi Tanaka, Diane Okafor]
+
+  - id: HFT-006
+    rule: "TIF (Time-In-Force) MUST be explicit at every call site. Defaulting to DAY because the field was omitted has caused multi-million-dollar incidents."
+    whenToUse: "any order send or replace code"
+    agents: [Diane Okafor]
+
+  - id: HFT-007
+    rule: "cl_ord_id MUST be deterministic from (strategy_id, symbol, sequence). Re-sends reuse the same ID for venue dedup; replacements use a NEW id with orig_cl_ord_id reference."
+    whenToUse: "writing or modifying the order-id derivation logic"
+    agents: [Diane Okafor]
+
+  - id: HFT-008
+    rule: "Audit-write happens BEFORE wire-send (or queued via guaranteed-flush sidecar with measured latency). 'Fire and forget' sends without audit evidence are a regulatory violation."
+    whenToUse: "any change to the order-send path"
+    agents: [Diane Okafor, Eluned Pryce]
+
+  # === KILL SWITCHES ===
+  - id: HFT-009
+    rule: "Kill-switch path MUST be independent of the order-placement path. No shared database, queue, or cache. If shared infra fails, the kill cannot fire."
+    whenToUse: "designing or modifying any cancel-all / panic-flatten path"
+    agents: [Yara Bensoussan]
+
+  - id: HFT-010
+    rule: "Cancel-all uses a venue-side mass-cancel API or batched call. Looping SELECT * FROM open_orders + per-row cancel is a P0 bug — won't terminate within SLA under load."
+    whenToUse: "any cancel-path implementation"
+    agents: [Yara Bensoussan]
+
+  - id: HFT-011
+    rule: "Kill switches MUST NOT be behind a feature flag. The flag can't be changed during the incident. Kills are always-on; deprecation requires VETO + ADR."
+    whenToUse: "any change to kill-switch enablement / configuration"
+    agents: [Yara Bensoussan]
+
+  - id: HFT-012
+    rule: "Cancel-on-disconnect (COD) is opt-OUT, not opt-in. Every venue session MUST request COD at logon. Removing COD requires Kill-Switch Operator VETO + ADR."
+    whenToUse: "any change to venue session setup or FIX logon logic"
+    agents: [Yara Bensoussan, Diane Okafor]
+
+  # === COMPLIANCE / SURVEILLANCE ===
+  - id: HFT-013
+    rule: "Audit-trail field removal from order messages is a Compliance VETO trigger. Every removal needs regulator-facing impact analysis + ADR."
+    whenToUse: "any change to FIX message construction, order tagging, or audit log schema"
+    agents: [Eluned Pryce]
+
+  - id: HFT-014
+    rule: "Time-source change that breaks PTP-grade clock sync (sub-microsecond) is a Compliance VETO trigger. MiFID II / SEC require regulator-grade clocks."
+    whenToUse: "any change to NTP/PTP configuration, timestamp source, or kernel clock"
+    agents: [Eluned Pryce, Marcelo Andrade]
+
+  - id: HFT-015
+    rule: "Every new strategy MUST go through layering / spoofing red-team review before live deployment. Surveillance retroactively flags patterns the strategy author didn't anticipate."
+    whenToUse: "deploying any new strategy or significantly altering an existing one"
+    agents: [Eluned Pryce, Hiroshi Tanaka]
+
+  # === BACKTEST / MODEL ===
+  - id: HFT-016
+    rule: "If backtest doesn't match paper-trade by slippage > 1 bps without explanation, the model is wrong — not the data. Investigate before going live."
+    whenToUse: "validating any strategy before live deployment"
+    agents: [Hiroshi Tanaka]
+
+  - id: HFT-017
+    rule: "Hard-coded thresholds without data citation are forbidden in strategy code. Every magic constant is a future bug; cite the data window or the rationale."
+    whenToUse: "writing or reviewing strategy parameters"
+    agents: [Hiroshi Tanaka]
+
+  - id: HFT-018
+    rule: "Backtest determinism: same code + same data MUST produce same trades. Non-determinism (e.g. iteration order over a dict, parallel execution without seeded RNG) is a test-environment bug to fix immediately."
+    whenToUse: "writing or reviewing the backtest engine"
+    agents: [Hiroshi Tanaka, Diane Okafor]

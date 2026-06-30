@@ -1,0 +1,7 @@
+Notes from the security review:
+
+- All auth tokens are stored in httpOnly cookies, never localStorage.
+- CSRF protection is in place for state-changing endpoints.
+- Rate limiting is enabled at the edge.
+
+The auditor approved the design with two minor recommendations.

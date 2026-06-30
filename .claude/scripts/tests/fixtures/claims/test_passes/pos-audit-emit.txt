@@ -1,0 +1,1 @@
+CLAIM:test_passes:.claude/hooks/tests/test_audit_emit.py
