@@ -90,15 +90,21 @@ class SubstrateWatchTest(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0)
 
-    def test_live_seeded_ledger_is_stale(self):
-        # The shipped ledger is seeded source_stale=true (no network at build).
+    def test_live_ledger_is_owner_refreshed_and_current(self):
+        # 2026-07-01 Owner-run --refresh (recipe in _meta) set the live page
+        # heads and flipped source_stale=false; the shipped ledger is now
+        # reconciled. (Pre-refresh it was seeded source_stale=true — that
+        # state is still covered synthetically by the stale-path tests.)
         ledger = self.mod.load_ledger(str(LIVE_LEDGER))
         self.assertIsNotNone(ledger)
         report = self.mod.build_report(ledger, probe_installed=False)
-        self.assertEqual(report["status"], "stale-ledger")
-        self.assertTrue(report["source_stale"])
+        self.assertEqual(report["status"], "current")
+        self.assertFalse(report["source_stale"])
         # PLAN-142 added the 4th component (codex_cli) to substrate-watch.json.
         self.assertEqual(len(report["components"]), 4)
+        # An Owner refresh must never leave a component un-reconciled.
+        for comp in report["components"]:
+            self.assertNotEqual(comp["last_seen_version"], "unknown")
 
     def test_missing_ledger_fails_open_exit_zero(self):
         report = self.mod.build_report(None)
@@ -139,8 +145,14 @@ class SubstrateWatchTest(unittest.TestCase):
         self.assertTrue(report["components"][0]["drift"])
 
     def test_check_returns_one_on_stale_or_drift(self):
-        rc = self.mod.main(["--ledger", str(LIVE_LEDGER), "--check"])
-        self.assertEqual(rc, 1)  # seeded ledger is stale
+        # Synthetic stale ledger — the LIVE ledger is Owner-refreshed
+        # (source_stale=false) as of 2026-07-01, so the stale path is
+        # exercised via a fixture rather than the shipped file.
+        with tempfile.TemporaryDirectory() as td:
+            led = Path(td) / "led.json"
+            _write_ledger(led, source_stale=True, last_seen_version="1.0.0")
+            rc = self.mod.main(["--ledger", str(led), "--check"])
+        self.assertEqual(rc, 1)  # stale ledger flags maintenance
 
     def test_check_returns_zero_on_current(self):
         with tempfile.TemporaryDirectory() as td:

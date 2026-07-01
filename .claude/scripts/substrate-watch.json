@@ -3,12 +3,13 @@
     "schema": 1,
     "provenance": "PLAN-135 W5 unit o8o11o12 (O12 substrate watch) — the heroic S214/S230 manual changelog sweep + THIS plan's 8-dimension research sweep made a permanent nightly instrument. Consumed by .claude/scripts/check-substrate-watch.py; surfaced as nightly-hygiene dimension vii.",
     "sources": {
-      "claude_code": "https://docs.claude.com/en/release-notes/claude-code",
+      "claude_code": "https://raw.githubusercontent.com/anthropics/claude-code/main/CHANGELOG.md",
       "agent_sdk_ts": "https://github.com/anthropics/claude-agent-sdk-typescript/blob/main/CHANGELOG.md",
       "agent_sdk_py": "https://github.com/anthropics/claude-agent-sdk-python/blob/main/CHANGELOG.md"
     },
-    "fetched": "2026-06-12",
-    "source_stale": true,
+    "_sources_note": "claude_code URL swapped 2026-07-01: docs.claude.com/en/release-notes/claude-code now 301s to platform.claude.com which 307s to the GitHub CHANGELOG; fetch the raw GitHub head directly.",
+    "fetched": "2026-07-01",
+    "source_stale": false,
     "_source_stale_reason": "Seeded last_seen from the values knowable at build time WITHOUT a network fetch (no-paid-spend rule; the changelog pages are not in-repo). The first Owner-run --refresh sets these to the live page heads and flips source_stale=false. Until then dimension vii reports a single advisory finding rather than a false 'up to date'.",
     "refresh_recipe": "Owner-run: WebFetch each source URL, read the topmost version + date, update the matching last_seen.{version,date} + set _meta.fetched + _meta.source_stale=false. Costs no model tokens (doc fetch only). Record nothing billable. This is the ONE network step O12 needs and it is PENDING-OWNER by design (agents stay no-network under ADR-136-AMEND-1).",
     "notes": "last_seen is the substrate version this framework was last RECONCILED against (its hooks/instruments/docs assume that surface). A newer upstream head is not a defect — it is a prompt to re-run the harvest/verify-the-knob-routes pass before trusting an old assumption (the S217/S228 silent-knob class). Detection only; never a BREAK."
@@ -18,8 +19,8 @@
       "key": "claude_code",
       "label": "Claude Code CLI",
       "last_seen": {
-        "version": "unknown",
-        "date": "unknown"
+        "version": "2.1.198",
+        "date": "2026-07-01"
       },
       "watch_for": "settings.json schema changes (statusLine.refreshInterval — unverified per W5 context pack §3), new hook events, output-token env honoring (CLAUDE_CODE_MAX_OUTPUT_TOKENS S229), settingSources/--bare/strictMcpConfig flag drift (the O5 hermeticity surface)."
     },
@@ -27,8 +28,8 @@
       "key": "agent_sdk_ts",
       "label": "Claude Agent SDK (TypeScript)",
       "last_seen": {
-        "version": "unknown",
-        "date": "unknown"
+        "version": "0.3.198",
+        "date": "2026-07-01"
       },
       "watch_for": "agent-loop / tool-permission API changes that the framework's spawn + workflow primitives mirror."
     },
@@ -36,8 +37,8 @@
       "key": "agent_sdk_py",
       "label": "Claude Agent SDK (Python)",
       "last_seen": {
-        "version": "unknown",
-        "date": "unknown"
+        "version": "0.2.110",
+        "date": "2026-07-01"
       },
       "watch_for": "headless `claude -p` credit-bucket accounting (the 2026-06-15 Agent-SDK bucket axis), output-format / stream-json contract used by eval-baseline-n20 + w0b."
     },
