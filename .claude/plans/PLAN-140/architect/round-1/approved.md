@@ -17,7 +17,7 @@ Scope:
 <!-- END SIGNED SCOPE -->
 
 Authorization: Owner-signed GPG detached signature (approved.md.asc), signer
-fingerprint D7227DFE7614477282A64BFE61C1C798ED8EE279, verified against both
+fingerprint AE9B236FDAF0462874060C6BCFCFACF00335DC74, verified against both
 signer rails (.claude/sentinel-signers.txt + the ADR-121 YAML registry).
 
 Scope note (re: cross-model review P1): the signer-rail activation that makes

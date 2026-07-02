@@ -94,9 +94,9 @@ findings.
 ### Wave 0 — Owner prerequisites (unblocks canonical edits)
 Check: none (Owner-only; not a CEO execution unit)
 
-- [ ] [P0] [OQ ratification] Present the 3 resolved questions (§Resolved questions) to the Owner via AskUserQuestion (K10 doctrine — structured multiple-choice, debate synthesis marked "(Recomendado)"); log the picked option verbatim into that section.
-- [ ] [P0] [.claude/plans/PLAN-140..142/architect/**/approved.md] Owner GPG-signs the 3 pending sentinels (backlog #1 / governance-06) — OR confirms they are residue of already-merged plans and closes Task #1. Independent of PLAN-152's own scope.
-- [ ] [P0] [.claude/plans/PLAN-152/] Owner GPG-signs the PLAN-152 canonical-edit sentinel (anchor-sha + Scope) per the OQ2 resolution: ONE sentinel whose Scope is an **enumerated explicit-file allowlist** (no globs) covering the guarded paths of Waves A/B/C/D/F (incl. `validate.yml` + `coverage.yml` — debate C8) and **excluding** `.claude/workflows/*.js` (not guarded — debate C3). **Allocate the Wave F ADR number NOW** (next free NNN in `.claude/adr/`) and pin the exact `ADR-<NNN>-sonnet-5-tier.md` path in Scope — the canonical-edit hook exact-matches Scope entries, so a placeholder `ADR-NNN-…` authorizes nothing (Codex R5-P2). `touched−scope=∅` is re-checked mechanically at EVERY wave boundary before commit. (Zero-cost variant at Owner discretion: split a second, tighter Wave-A-only sentinel in the same sitting — minority position, Critic-C.)
+- [x] [P0] [OQ ratification] Present the 3 resolved questions (§Resolved questions) to the Owner via AskUserQuestion (K10 doctrine — structured multiple-choice, debate synthesis marked "(Recomendado)"); log the picked option verbatim into that section. *(DONE 2026-07-02 — all three explicitly answered "(Recomendado)"; verbatim record in §Resolved questions.)*
+- [x] [P0] [.claude/plans/PLAN-140..142/architect/**/approved.md] Owner GPG-signs the 3 pending sentinels (backlog #1 / governance-06) — OR confirms they are residue of already-merged plans and closes Task #1. Independent of PLAN-152's own scope. *(DONE 2026-07-02 — all 3 SIGNED with key `AE9B…DC74`; the stale pre-de-id signer fingerprint (`D7227DFE…`) in their prose was corrected to `AE9B…DC74` BEFORE signing — the rails only register the AE9B hot-key.)*
+- [x] *(DONE 2026-07-02 — signed at anchor `c88daf9`, 14-file Scope, ADR-157 pinned; `.asc` verified against both rails.)* [P0] [.claude/plans/PLAN-152/] Owner GPG-signs the PLAN-152 canonical-edit sentinel (anchor-sha + Scope) per the OQ2 resolution: ONE sentinel whose Scope is an **enumerated explicit-file allowlist** (no globs) covering the guarded paths of Waves A/B/C/D/F (incl. `validate.yml` + `coverage.yml` — debate C8) and **excluding** `.claude/workflows/*.js` (not guarded — debate C3). **Allocate the Wave F ADR number NOW** (next free NNN in `.claude/adr/`) and pin the exact `ADR-<NNN>-sonnet-5-tier.md` path in Scope — the canonical-edit hook exact-matches Scope entries, so a placeholder `ADR-NNN-…` authorizes nothing (Codex R5-P2). `touched−scope=∅` is re-checked mechanically at EVERY wave boundary before commit. (Zero-cost variant at Owner discretion: split a second, tighter Wave-A-only sentinel in the same sitting — minority position, Critic-C.)
 - [ ] [P0] [kernel-override authorization — Codex pair-rail R2-P1] Several target paths are in `check_arbitration_kernel.py::_KERNEL_PATHS` (`.claude/settings.json`, `_python-hook.sh`, `check_bash_safety.py`, `.github/workflows/*.yml`, `tier_policy/_types.py`), and that hook is HARD-DENY with **no sentinel escape** (:31-36: "Absent BOTH env vars, the edit is blocked regardless of any sentinel"). **Launch procedure** (Codex pair-rail R3-P2: hooks read the Claude Code PROCESS env — a Bash-tool `export` mid-session never reaches hook invocations): the Owner launches the executing session with the vars in the launch environment, e.g. `CEO_KERNEL_OVERRIDE="PLAN-152-v1-0-1-hardening" CEO_KERNEL_OVERRIDE_ACK="I-ACCEPT" claude`. Scope is therefore the WHOLE session — compensating controls: signed sentinel + `touched−scope=∅` per wave + `kernel_override_used` audit emit on every use (ADR-031 frozen invariant) + manual pair-rail APPROVE per guarded commit. Optional tightening: after the last kernel wave (F), relaunch WITHOUT the vars for E/G-style non-kernel edits. Without this launch env, the run stops at the first Wave A edit even with the sentinel signed.
 
 ### Wave A — P0 security fail-opens (SHIPPED-BROKEN in v1.0.0)
@@ -213,7 +213,17 @@ Check: full CI gate set green locally (validate-governance --fast, shellcheck -S
 > follow-on plan if the corpus scope balloons — that is a Wave F execution decision, not
 > a double-count against the audit's 3 defers.
 
-## Resolved questions (debate round-1, 2026-07-01 — PENDING Owner ratification, Wave 0 via AskUserQuestion/K10)
+## Resolved questions (debate round-1, 2026-07-01 — RATIFIED by Owner, Wave 0, 2026-07-02)
+
+> **Ratification record (Wave 0, S256, 2026-07-02):** the 3 resolutions were
+> presented to the Owner via AskUserQuestion (K10, debate synthesis marked
+> "(Recomendado)") and EXPLICITLY answered, verbatim: OQ1 = "Sim, membro + ADR
+> agora (Recomendado)"; OQ2 = "Sim, um sentinel (Recomendado)"; OQ3 = "Sim,
+> única com floor (Recomendado)". Same Wave-0 sitting, the Owner GPG-signed
+> (key `AE9B…DC74`) the PLAN-152 sentinel encoding OQ2 (14-file enumerated
+> allowlist, anchor `c88daf9`, ADR-157 allocated per OQ1) and the 3 pending
+> PLAN-140/141/142 sentinels (SIGNED, not residue-closed — backlog #1 /
+> governance-06 closed).
 
 1. **OQ1 — Sonnet-5 scope** · RESOLVED (unanimous, 4/4 critics + CEO):
    ADD the Sonnet-5 `MODEL_ID` member + envelope ADR now; "reconcile OPUS47" =
