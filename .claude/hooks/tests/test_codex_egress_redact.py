@@ -25,6 +25,8 @@ import unittest
 from pathlib import Path
 from typing import Optional
 
+import pytest
+
 # ---------------------------------------------------------------------------
 # Path bootstrap
 # ---------------------------------------------------------------------------
@@ -310,8 +312,13 @@ class TestFamilyIds(TestEnvContext):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.serial
 class TestPerformanceBudget(TestEnvContext):
-    """redact() handles 32 KB Codex output in <0.5s."""
+    """redact() handles 32 KB Codex output in <0.5s.
+
+    serial: wall-clock assertion is load-sensitive — must not run in the
+    parallel `-m "not serial"` CI pass (PLAN-152 tests-07, debate C2).
+    """
 
     def _redact_mod(self):
         return _import_redact()

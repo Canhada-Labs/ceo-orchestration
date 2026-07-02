@@ -13,6 +13,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 _HOOKS_DIR = Path(__file__).resolve().parents[1]
 
 from _lib import output_scan  # type: ignore  # noqa: E402
@@ -567,8 +569,13 @@ class TestCombinedScan(unittest.TestCase):
 # ---------------------------------------------------------------------
 
 
+@pytest.mark.serial
 class TestPerformance(unittest.TestCase):
-    """ADR-057 acceptance: p99 scan ≤5ms on 1-10KB output."""
+    """ADR-057 acceptance: p99 scan ≤5ms on 1-10KB output.
+
+    serial: wall-clock assertions are load-sensitive — must not run in the
+    parallel `-m "not serial"` CI pass (PLAN-152 tests-07, debate C2).
+    """
 
     def _mk_payload(self, size_kb: int) -> str:
         base = "a" * 1000
