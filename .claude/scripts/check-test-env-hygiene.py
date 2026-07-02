@@ -60,6 +60,9 @@ _DEFAULT_SCAN_ROOTS = (
     ".claude/scripts/tier_policy_cli/tests",     # PLAN-045 F-03-06 (PLAN-076 fork (f) rename)
     ".claude/scripts/tournament/tests",      # PLAN-045 F-03-06
     ".claude/scripts/predict-budget/tests",  # PLAN-045 F-03-06
+    ".claude/scripts/swarm/tests",           # PLAN-152 Wave B tests-03
+    ".claude/scripts/mcp-server/tests",      # PLAN-152 Wave B tests-03
+    ".claude/scripts/detectors/tests",       # PLAN-152 Wave B tests-03
     "tests",
 )
 

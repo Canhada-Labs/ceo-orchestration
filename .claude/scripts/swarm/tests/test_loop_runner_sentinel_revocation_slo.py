@@ -59,7 +59,15 @@ class TestSentinelRevocationSLO(TestEnvContext):
         super().setUp()
         # PLAN-102-FOLLOWUP S145 Fix #3 (Codex triage 019e42fc): Layer-1
         # swarm-on env required for gate to fire (Fix #1 early-return guard).
-        os.environ["CEO_SWARM"] = "1"
+        # patch.dict started here, stopped in tearDown before
+        # super().tearDown() so the base-class env restore stays the last
+        # write (never re-clobbered by the isolated-env snapshot).
+        self._swarm_env_patch = mock.patch.dict(os.environ, {"CEO_SWARM": "1"})
+        self._swarm_env_patch.start()
+
+    def tearDown(self):
+        self._swarm_env_patch.stop()
+        super().tearDown()
 
     def test_revocation_propagates_under_slo(self):
         # Mutable holder simulating Owner's sentinel state. Flip from

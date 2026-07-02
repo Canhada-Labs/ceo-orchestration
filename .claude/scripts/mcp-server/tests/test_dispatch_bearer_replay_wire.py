@@ -76,7 +76,8 @@ def _make_token(client_id: str, nonce: str, ts_ms: int, secret: bytes) -> str:
 class _Base(TestEnvContext):
     def setUp(self) -> None:
         super().setUp()
-        os.environ["CEO_AUDIT_SYNC_MODE"] = "1"
+        # CEO_AUDIT_SYNC_MODE=1 is provided by TestEnvContext.setUp
+        # (SYNC_MODE_DEFAULT=True); no explicit env write needed here.
         rate_limit.reset_registry()
         # Fresh per-process replay store + clean friction buffer/dedup so
         # tests do not bleed state between cases.

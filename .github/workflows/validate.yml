@@ -319,6 +319,48 @@ jobs:
           python3 -m pytest .claude/scripts/tests/ .claude/scripts/optimizer/tests/ -m 'serial' --strict-markers --tb=no -q
 
       # -----------------------------------------------------------------
+      # Step: PLAN-152 tests-01 — v1.0.1 formerly-CI-dark test roots.
+      # These ~1,4k tests (incl. the 3 SECURITY files now in tests/unit/)
+      # shipped in v1.0.0 but ran in NO CI job. Wired as EXPLICIT paths
+      # (debate C1: no bare `pytest`/testpaths job — bare `tests/` would
+      # double-collect the 7 existing tests/<subdir> pytest.ini entries),
+      # replicating the two-pass `not serial`/`serial` split above.
+      # Ordering is load-bearing: .claude/scripts/replay/tests is
+      # co-located immediately AFTER swarm/tests to reproduce the S228
+      # collection ordering. Pre-wiring audit (debate C2) ran per-root:
+      # wall-clock/perf tests are serial-marked (tests-07 + the root
+      # conftest.py nodeid auto-marker cover them).
+      # -----------------------------------------------------------------
+      - name: Run v1.0.1 test roots (PLAN-152 tests-01)
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          python3 -m pytest \
+            tests/unit \
+            .claude/hooks/_lib/tests \
+            .claude/scripts/swarm/tests \
+            .claude/scripts/replay/tests \
+            tests/test_federation \
+            .claude/scripts/mcp-server/tests \
+            .claude/scripts/detectors/tests \
+            .claude/scripts/predict-budget/tests \
+            tests/forensic \
+            tests/synthetic \
+            -n auto -m 'not serial' --strict-markers --tb=no -q
+          python3 -m pytest \
+            tests/unit \
+            .claude/hooks/_lib/tests \
+            .claude/scripts/swarm/tests \
+            .claude/scripts/replay/tests \
+            tests/test_federation \
+            .claude/scripts/mcp-server/tests \
+            .claude/scripts/detectors/tests \
+            .claude/scripts/predict-budget/tests \
+            tests/forensic \
+            tests/synthetic \
+            -m 'serial' --strict-markers --tb=no -q
+
+      # -----------------------------------------------------------------
       # Step: PLAN-013 Phase A.6 / ADJ-021 (QA Architect §S10 HIGH) —
       # Audit event registry drift (SPEC ⇆ code).
       #

@@ -26,13 +26,19 @@ _REPO_ROOT = _HERE.parent.parent.parent.parent  # scripts/swarm/tests → repo r
 _SCHEMA_PATH = _REPO_ROOT / "docs" / "benchmarks" / "manifest.schema.json"
 _EXAMPLE_PATH = _REPO_ROOT / "docs" / "benchmarks" / "swarm-replay-example.json"
 
+_HOOKS_DIR = _REPO_ROOT / ".claude" / "hooks"
+if str(_HOOKS_DIR) not in sys.path:
+    sys.path.insert(0, str(_HOOKS_DIR))
+
+from _lib.testing import TestEnvContext  # noqa: E402
+
 
 def _load_schema():
     with _SCHEMA_PATH.open() as f:
         return json.load(f)
 
 
-class TestSchemaValidity(unittest.TestCase):
+class TestSchemaValidity(TestEnvContext):
     """The schema document itself must be valid JSON and self-consistent."""
 
     def test_schema_file_exists(self):
@@ -91,7 +97,7 @@ class TestSchemaValidity(unittest.TestCase):
             )
 
 
-class TestSchemaFairnessConstraints(unittest.TestCase):
+class TestSchemaFairnessConstraints(TestEnvContext):
     """Test that the schema encodes the fairness protocol §3-5 constraints."""
 
     def test_sandbox_network_mode_enum(self):
@@ -171,7 +177,7 @@ class TestSchemaFairnessConstraints(unittest.TestCase):
         self.assertIn("fairness-protocol", ref["pattern"])
 
 
-class TestSchemaWithExample(unittest.TestCase):
+class TestSchemaWithExample(TestEnvContext):
     """If the example manifest exists, verify it parses under the schema."""
 
     def test_example_manifest_loadable(self):
@@ -189,7 +195,7 @@ class TestSchemaWithExample(unittest.TestCase):
             json.load(f)  # must not raise
 
 
-class TestSchemaDocumentation(unittest.TestCase):
+class TestSchemaDocumentation(TestEnvContext):
     """The schema must be self-documenting — every field has description."""
 
     def _walk_schema(self, schema_fragment, path="<root>"):

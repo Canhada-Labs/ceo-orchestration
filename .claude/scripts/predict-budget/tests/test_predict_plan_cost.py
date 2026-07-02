@@ -61,10 +61,17 @@ class TestPredictPlanCost(unittest.TestCase):
         self._env_snap = {}
         for k in ("CEO_AUDIT_LOG_PATH", "CLAUDE_PROJECT_DIR", "HOME",
                   "CEO_PREDICT_CACHE_DIR", "CEO_AUDIT_LOG_DIR",
-                  "CEO_AUDIT_LOG_ERR", "CEO_AUDIT_LOG_LOCK"):
+                  "CEO_AUDIT_LOG_ERR", "CEO_AUDIT_LOG_LOCK",
+                  "CEO_AUDIT_SYNC_MODE"):
             self._env_snap[k] = os.environ.get(k)
         os.environ["HOME"] = str(self.home_dir)
         os.environ["CLAUDE_PROJECT_DIR"] = str(self.project_dir)
+        # PLAN-152 tests-01 pre-wiring fix: since PLAN-094 Wave A.3 the audit
+        # emit routes through the per-PID spool (amortized drain), so an event
+        # asserted straight off audit-log.jsonl may still sit in the spool.
+        # Force the synchronous write path (spool_writer.py kill-switch) so
+        # log-content assertions are deterministic.
+        os.environ["CEO_AUDIT_SYNC_MODE"] = "1"
         self.audit_log = self.audit_dir / "audit-log.jsonl"
         os.environ["CEO_AUDIT_LOG_PATH"] = str(self.audit_log)
         os.environ["CEO_AUDIT_LOG_DIR"] = str(self.audit_dir)

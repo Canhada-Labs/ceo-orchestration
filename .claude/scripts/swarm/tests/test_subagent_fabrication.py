@@ -31,6 +31,12 @@ _SCRIPTS_DIR = _SWARM_DIR.parent
 if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 
+_HOOKS_DIR = _SCRIPTS_DIR.parent / "hooks"
+if str(_HOOKS_DIR) not in sys.path:
+    sys.path.insert(0, str(_HOOKS_DIR))
+
+from _lib.testing import TestEnvContext  # noqa: E402
+
 from swarm import _subagent_fabrication as sf  # noqa: E402
 
 
@@ -39,7 +45,7 @@ from swarm import _subagent_fabrication as sf  # noqa: E402
 # =============================================================================
 
 
-class TestFabricationPatternDetection(unittest.TestCase):
+class TestFabricationPatternDetection(TestEnvContext):
     """Each of the 4 observed fabrication formats must trigger."""
 
     def test_function_calls_xml_pattern(self) -> None:
@@ -138,7 +144,7 @@ class TestFabricationPatternDetection(unittest.TestCase):
 # =============================================================================
 
 
-class TestNoFalsePositives(unittest.TestCase):
+class TestNoFalsePositives(TestEnvContext):
     """Legitimate prose that mentions tool-call terms must NOT match."""
 
     def test_empty_text(self) -> None:
@@ -209,7 +215,7 @@ class TestNoFalsePositives(unittest.TestCase):
 # =============================================================================
 
 
-class TestRealFabricationCorpus(unittest.TestCase):
+class TestRealFabricationCorpus(TestEnvContext):
     """Snippets extracted from Sessions 61+62 must trigger detection."""
 
     def test_session_62_qa_pseudo_xml(self) -> None:
@@ -279,7 +285,7 @@ class TestRealFabricationCorpus(unittest.TestCase):
 # =============================================================================
 
 
-class TestScanSizeCap(unittest.TestCase):
+class TestScanSizeCap(TestEnvContext):
     """Pathological large inputs must be capped to MAX_SCAN_BYTES."""
 
     def test_cap_below_limit(self) -> None:
@@ -312,7 +318,7 @@ class TestScanSizeCap(unittest.TestCase):
 # =============================================================================
 
 
-class TestHelpers(unittest.TestCase):
+class TestHelpers(TestEnvContext):
 
     def test_fabrication_pattern_names_returns_5(self) -> None:
         names = sf.fabrication_pattern_names()
@@ -359,7 +365,7 @@ class TestHelpers(unittest.TestCase):
 # =============================================================================
 
 
-class TestExtractResponseText(unittest.TestCase):
+class TestExtractResponseText(TestEnvContext):
 
     def test_none_returns_empty(self) -> None:
         self.assertEqual(sf.extract_response_text(None), "")
@@ -437,7 +443,7 @@ class TestExtractResponseText(unittest.TestCase):
 # =============================================================================
 
 
-class TestEnvVarModes(unittest.TestCase):
+class TestEnvVarModes(TestEnvContext):
 
     def test_blocking_mode_unset_default_false(self) -> None:
         self.assertFalse(sf.is_blocking_mode(env={}))
@@ -466,7 +472,7 @@ class TestEnvVarModes(unittest.TestCase):
 # =============================================================================
 
 
-class TestWriteDebugDump(unittest.TestCase):
+class TestWriteDebugDump(TestEnvContext):
 
     def test_round_trip_basic(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -500,20 +506,13 @@ class TestWriteDebugDump(unittest.TestCase):
 
     def test_uses_env_var_dump_dir(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
-            old = os.environ.get("CEO_SUBAGENT_FABRICATION_DUMP_DIR")
-            os.environ["CEO_SUBAGENT_FABRICATION_DUMP_DIR"] = tmpdir
-            try:
+            with mock.patch.dict(
+                os.environ, {"CEO_SUBAGENT_FABRICATION_DUMP_DIR": tmpdir}
+            ):
                 path = sf.write_debug_dump("text", "abc12345", [])
                 self.assertIsNotNone(path)
                 assert path is not None
                 self.assertEqual(path.parent, Path(tmpdir))
-            finally:
-                if old is None:
-                    os.environ.pop(
-                        "CEO_SUBAGENT_FABRICATION_DUMP_DIR", None
-                    )
-                else:
-                    os.environ["CEO_SUBAGENT_FABRICATION_DUMP_DIR"] = old
 
     def test_failure_returns_none_no_raise(self) -> None:
         # Try writing to a path that contains a file (not a dir)
@@ -532,7 +531,7 @@ class TestWriteDebugDump(unittest.TestCase):
 # =============================================================================
 
 
-class TestCLIHookMode(unittest.TestCase):
+class TestCLIHookMode(TestEnvContext):
     """Test ``_cli_main`` hook mode (PostToolUse contract)."""
 
     def _run_cli(
@@ -543,10 +542,7 @@ class TestCLIHookMode(unittest.TestCase):
     ) -> tuple:
         """Run _cli_main with mocked stdin/stdout/env. Returns (exit_code, stdout)."""
         env_overrides = env_overrides or {}
-        old_env = {k: os.environ.get(k) for k in env_overrides}
-        for k, v in env_overrides.items():
-            os.environ[k] = v
-        try:
+        with mock.patch.dict(os.environ, env_overrides):
             old_stdin = sys.stdin
             old_stdout = sys.stdout
             sys.stdin = io.StringIO(stdin_text)
@@ -557,12 +553,6 @@ class TestCLIHookMode(unittest.TestCase):
             finally:
                 sys.stdin = old_stdin
                 sys.stdout = old_stdout
-        finally:
-            for k, v in old_env.items():
-                if v is None:
-                    os.environ.pop(k, None)
-                else:
-                    os.environ[k] = v
         return exit_code, stdout_value
 
     def test_hook_mode_clean_response_silent(self) -> None:
@@ -664,7 +654,7 @@ class TestCLIHookMode(unittest.TestCase):
         self.assertEqual(out, "")
 
 
-class TestCLIStandaloneMode(unittest.TestCase):
+class TestCLIStandaloneMode(TestEnvContext):
     """Test ``_cli_main`` standalone mode (JSON report)."""
 
     def _run_cli(self, stdin_text: str, argv: list = None) -> tuple:
@@ -713,7 +703,7 @@ class TestCLIStandaloneMode(unittest.TestCase):
 # =============================================================================
 
 
-class TestSubprocessIntegration(unittest.TestCase):
+class TestSubprocessIntegration(TestEnvContext):
     """End-to-end: invoke the module via ``python3 -m`` and verify behavior."""
 
     def _module_path(self) -> Path:
@@ -769,7 +759,7 @@ class TestSubprocessIntegration(unittest.TestCase):
         self.assertIn("FABRICATION DETECTED", out_data["systemMessage"])
 
 
-class TestHookBlockingModeSchemaContract(unittest.TestCase):
+class TestHookBlockingModeSchemaContract(TestEnvContext):
     """Regression: hook blocking-mode emit must not include 'decision':'allow'.
 
     F-1.9-1.9-f86375ff: Claude Code hook schema rejects
@@ -788,17 +778,16 @@ class TestHookBlockingModeSchemaContract(unittest.TestCase):
             "tool_response": {"content": fabrication_text},
         })
         old_stdin, old_stdout = sys.stdin, sys.stdout
-        old_env = os.environ.copy()
         try:
             sys.stdin = io.StringIO(payload)
             sys.stdout = io.StringIO()
-            os.environ["CEO_SUBAGENT_FABRICATION_BLOCK"] = "1"
-            sf._cli_main(["--hook"])
+            with mock.patch.dict(
+                os.environ, {"CEO_SUBAGENT_FABRICATION_BLOCK": "1"}
+            ):
+                sf._cli_main(["--hook"])
             return _json.loads(sys.stdout.getvalue() or "{}")
         finally:
             sys.stdin, sys.stdout = old_stdin, old_stdout
-            os.environ.clear()
-            os.environ.update(old_env)
 
     def test_blocking_mode_emit_has_no_decision_key(self) -> None:
         """blocking mode emit MUST NOT include top-level 'decision' key."""

@@ -1,9 +1,11 @@
 name: Coverage
 
 # PLAN-004 Phase 7: advisory-only measurement.
-# PLAN-006 Phase 3 (Sprint 6, 2026-04-13): gate flipped to ENFORCING.
-# Baseline 88% measured in docs/coverage-baseline.md; threshold 86
-# (max(median-2, 80)). Drops below 86% now block PRs.
+# PLAN-006 Phase 3 (Sprint 6, 2026-04-13): gate flipped to ENFORCING —
+# historical baseline 88%, historical threshold 86 (max(median-2, 80)).
+# CURRENT enforcing floors (PLAN-152 tests-04 reconcile): repo-wide line
+# floor --fail-under=67 (see the enforcing-report step) + Tier-1
+# per-module 86 (parse-coverage step). Drops below those block PRs.
 
 on:
   pull_request:
@@ -24,7 +26,7 @@ permissions:
 
 jobs:
   coverage:
-    name: Coverage (Tier-1 per-module 86 + repo floor 70; subprocess capture)
+    name: Coverage (Tier-1 per-module 86 + repo floor 67; subprocess capture)
     runs-on: Ceo
     # S157 ADR-139: subprocess capture instruments every spawned hook, so the
     # suite runs materially slower than the in-process baseline (the no-coverage
@@ -192,8 +194,8 @@ jobs:
         # the run steps above) and reported here as an advisory baseline.
         # Output flows to coverage-branch-text.txt + GITHUB_STEP_SUMMARY.
         # Does NOT gate the build — the enforcing gate above is line-only
-        # (78%). When 3 consecutive runs stabilise, this step flips to
-        # enforcing with threshold = max(baseline - 2, 50).
+        # (--fail-under=67). When 3 consecutive runs stabilise, this step
+        # flips to enforcing with threshold = max(baseline - 2, 50).
         # TODO: PLAN-093 R-035 — flip continue-on-error: false when 3-run
         #       stability window confirmed. Branch baseline ≥86% required
         #       before enforcement. Advisory-only per ADR-115 anti-churn.
@@ -217,7 +219,7 @@ jobs:
         run: |
           set -euo pipefail
           {
-            echo "## Coverage (enforcing gate: --fail-under=78 line)"
+            echo "## Coverage (enforcing gate: --fail-under=67 line)"
             echo ""
             echo '```'
             tail -20 coverage-text.txt
@@ -235,8 +237,7 @@ jobs:
               echo "_Branch report unavailable (step failed)._"
             fi
             echo ""
-            echo "_Line threshold calibrated to 78% post-hardening (Session 33, PLAN-024 F-wf-003). Original 86% target tracked as DYN-TEST-1 in PLAN-019 uplift roadmap. Branch advisory added Session 41 PLAN-045 F-03-03._"
-            echo "_See \`docs/coverage-baseline.md\` for measurement history._"
+            echo "_Line floor enforcing at 67% (--fail-under=67; recalibrated for the subprocess-capture matrix — see the enforcing-report step). Historical: 78% post-hardening (Session 33, PLAN-024 F-wf-003); original 86% target tracked as DYN-TEST-1 in PLAN-019 uplift roadmap. Branch advisory added Session 41 PLAN-045 F-03-03._"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Coverage XML artifact

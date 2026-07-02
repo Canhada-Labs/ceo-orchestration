@@ -45,15 +45,28 @@ def _fake_gate(enabled: bool, reason: str):
     )
 
 
-class TestSixLayerKillSwitchChain(TestEnvContext):
-    """6-layer chain (ADR-133 §Part 1 §6) — each independent gate reason
-    blocks step() and emits with the collapsed reason_code."""
+class _SwarmOnBase(TestEnvContext):
+    """TestEnvContext with CEO_SWARM=1 set for the test's duration.
+
+    patch.dict is started in setUp and stopped in tearDown BEFORE
+    super().tearDown(), so the base-class env restore (original snapshot)
+    stays the last write and is never re-clobbered by the isolated-env
+    snapshot (the leak addCleanup ordering would reintroduce).
+    """
 
     def setUp(self):
         super().setUp()
-        # PLAN-102-FOLLOWUP S145 Fix #3 (Codex triage 019e42fc): Layer-1
-        # swarm-on env required for gate to fire (Fix #1 early-return guard).
-        os.environ["CEO_SWARM"] = "1"
+        self._swarm_env_patch = mock.patch.dict(os.environ, {"CEO_SWARM": "1"})
+        self._swarm_env_patch.start()
+
+    def tearDown(self):
+        self._swarm_env_patch.stop()
+        super().tearDown()
+
+
+class TestSixLayerKillSwitchChain(_SwarmOnBase):
+    """6-layer chain (ADR-133 §Part 1 §6) — each independent gate reason
+    blocks step() and emits with the collapsed reason_code."""
 
     def _make(self) -> LoopRunner:
         return LoopRunner(
@@ -103,20 +116,15 @@ class TestSixLayerKillSwitchChain(TestEnvContext):
         self._assert_blocked("env_flag_not_1", "layer_4_unset")
 
 
-class TestKillSwitchEnvShortCircuit(TestEnvContext):
+class TestKillSwitchEnvShortCircuit(_SwarmOnBase):
     """CEO_SWARM_ENABLE_GATE_DISABLE=1 env short-circuit. The real
     `is_class_enabled` returns (False, "gate_disabled") immediately;
     this test patches the gate stub directly to mimic that path."""
 
-    def setUp(self):
-        super().setUp()
-        # PLAN-102-FOLLOWUP S145 Fix #3 (Codex triage 019e42fc): Layer-1
-        # swarm-on env required for gate to fire (Fix #1 early-return guard).
-        os.environ["CEO_SWARM"] = "1"
-
     def test_env_short_circuit_blocks_with_kill_switch_reason(self):
-        os.environ["CEO_SWARM_ENABLE_GATE_DISABLE"] = "1"
-        try:
+        with mock.patch.dict(
+            os.environ, {"CEO_SWARM_ENABLE_GATE_DISABLE": "1"}
+        ):
             with _fake_gate(False, "gate_disabled"):
                 with mock.patch(
                     "swarm.loop_runner._emit_swarm_layer_3_4_blocked"
@@ -139,8 +147,6 @@ class TestKillSwitchEnvShortCircuit(TestEnvContext):
                         emit_mock.call_args.kwargs.get("reason_code"),
                         "kill_switch",
                     )
-        finally:
-            os.environ.pop("CEO_SWARM_ENABLE_GATE_DISABLE", None)
 
 
 if __name__ == "__main__":

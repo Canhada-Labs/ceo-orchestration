@@ -110,7 +110,15 @@ class _BaseGateTest(TestEnvContext):
         # Pre-existing test_loop_runner.py tests do NOT set this, so they
         # bypass the gate and run iterate() exactly as before (regression-
         # safety guarantee for the autonomous-loop opt-in invariant).
-        os.environ["CEO_SWARM"] = "1"
+        # Set via patch.dict started here and stopped in tearDown BEFORE
+        # super().tearDown(), so the base-class env restore (original
+        # snapshot) stays the last write and is never re-clobbered.
+        self._swarm_env_patch = mock.patch.dict(os.environ, {"CEO_SWARM": "1"})
+        self._swarm_env_patch.start()
+
+    def tearDown(self):
+        self._swarm_env_patch.stop()
+        super().tearDown()
 
     def _make_runner(self, class_tier: str = "vibecoder") -> LoopRunner:
         return LoopRunner(
@@ -253,7 +261,7 @@ class TestGateUnavailableFailsOpen(_BaseGateTest):
                 sys.modules[k] = v
 
 
-class TestLLM06ProducerBoundary(unittest.TestCase):
+class TestLLM06ProducerBoundary(TestEnvContext):
     """AC19a — `_emit_swarm_layer_3_4_blocked` drops adversarial
     loop_id values (fail-open) and forwards valid ones."""
 

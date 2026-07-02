@@ -626,7 +626,11 @@ to existing state; no changes to running-framework behaviour when
   (Wave 2).
 - `tests/integration/test_mcp_governance_passthrough.py` — byte-
   identity integration test (Wave 2).
-- `.github/workflows/mcp-coverage.yml` — CI coverage check (Wave 2).
+- `.github/workflows/mcp-smoke.yml` — CI smoke check (Wave 2). *(A
+  dedicated `mcp-coverage.yml` was never shipped — the smoke workflow is
+  what landed, and the mcp-server test roots enter the main CI matrix via
+  `validate.yml` in v1.0.1 (PLAN-152 tests-01/tests-05); the general
+  coverage gate lives in `coverage.yml`.)*
 
 ### Modules modified (already complete in Wave 0 — Phase 0 + Session 21)
 

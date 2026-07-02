@@ -15,6 +15,12 @@ _SCRIPTS_DIR = _SWARM_DIR.parent
 if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 
+_HOOKS_DIR = _SCRIPTS_DIR.parent / "hooks"
+if str(_HOOKS_DIR) not in sys.path:
+    sys.path.insert(0, str(_HOOKS_DIR))
+
+from _lib.testing import TestEnvContext  # noqa: E402
+
 from swarm import test_rail_anomaly_repro as ra  # noqa: E402
 
 
@@ -23,7 +29,7 @@ from swarm import test_rail_anomaly_repro as ra  # noqa: E402
 # =============================================================================
 
 
-class TestManifestParsing(unittest.TestCase):
+class TestManifestParsing(TestEnvContext):
 
     def test_parse_minimal_row(self) -> None:
         raw = {
@@ -140,7 +146,7 @@ class TestManifestParsing(unittest.TestCase):
 # =============================================================================
 
 
-class TestScoring(unittest.TestCase):
+class TestScoring(TestEnvContext):
 
     def test_success_when_fixture_contains_marker(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -216,7 +222,7 @@ class TestScoring(unittest.TestCase):
 # =============================================================================
 
 
-class TestAggregation(unittest.TestCase):
+class TestAggregation(TestEnvContext):
 
     def _mk_result(
         self,
@@ -319,7 +325,7 @@ class TestAggregation(unittest.TestCase):
 # =============================================================================
 
 
-class TestReporting(unittest.TestCase):
+class TestReporting(TestEnvContext):
 
     def test_render_markdown_table_empty(self) -> None:
         out = ra.render_markdown_table([])
@@ -375,7 +381,7 @@ class TestReporting(unittest.TestCase):
 # =============================================================================
 
 
-class TestHypothesisDiscrimination(unittest.TestCase):
+class TestHypothesisDiscrimination(TestEnvContext):
 
     def _mk(self, arch: str, ok: bool, **cond) -> ra.DispatchScoreResult:
         return ra.DispatchScoreResult(
@@ -436,7 +442,7 @@ class TestHypothesisDiscrimination(unittest.TestCase):
 # =============================================================================
 
 
-class TestCLI(unittest.TestCase):
+class TestCLI(TestEnvContext):
 
     def _capture(self, argv: list) -> tuple:
         old_stdout = sys.stdout

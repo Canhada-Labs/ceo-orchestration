@@ -145,6 +145,30 @@ class _FakeEmitContext:
 
 
 # ---------------------------------------------------------------------------
+# Shared base — CEO_SWARM=1 for the test duration
+# ---------------------------------------------------------------------------
+
+class _SwarmEnabledBase(TestEnvContext):
+    """TestEnvContext with CEO_SWARM=1 set for the test's duration.
+
+    The patch is started in setUp and stopped in tearDown BEFORE
+    super().tearDown() runs, so the base-class restore (from the original
+    env snapshot) is the last write. Stopping via addCleanup would run
+    AFTER tearDown and re-apply the isolated-env snapshot on top of the
+    restored real env — the exact leak class TestEnvContext prevents.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._swarm_env_patch = mock.patch.dict(os.environ, {"CEO_SWARM": "1"})
+        self._swarm_env_patch.start()
+
+    def tearDown(self) -> None:
+        self._swarm_env_patch.stop()
+        super().tearDown()
+
+
+# ---------------------------------------------------------------------------
 # _resolve_breaker_audit_log_path
 # ---------------------------------------------------------------------------
 
@@ -152,16 +176,18 @@ class TestResolveBreakerAuditLogPath(TestEnvContext):
     """Env-override logic mirrors audit_emit._log_path()."""
 
     def test_ceo_audit_log_path_env_wins(self):
-        os.environ["CEO_AUDIT_LOG_PATH"] = "/tmp/test-audit.jsonl"
-        p = _resolve_breaker_audit_log_path()
-        self.assertEqual(str(p), "/tmp/test-audit.jsonl")
+        with mock.patch.dict(
+            os.environ, {"CEO_AUDIT_LOG_PATH": "/tmp/test-audit.jsonl"}
+        ):
+            p = _resolve_breaker_audit_log_path()
+            self.assertEqual(str(p), "/tmp/test-audit.jsonl")
 
     def test_ceo_audit_log_dir_env_appends_filename(self):
-        os.environ.pop("CEO_AUDIT_LOG_PATH", None)
-        os.environ["CEO_AUDIT_LOG_DIR"] = "/tmp/mydir"
-        p = _resolve_breaker_audit_log_path()
-        self.assertEqual(p.name, "audit-log.jsonl")
-        self.assertTrue(str(p).startswith("/tmp/mydir"))
+        with mock.patch.dict(os.environ, {"CEO_AUDIT_LOG_DIR": "/tmp/mydir"}):
+            os.environ.pop("CEO_AUDIT_LOG_PATH", None)
+            p = _resolve_breaker_audit_log_path()
+            self.assertEqual(p.name, "audit-log.jsonl")
+            self.assertTrue(str(p).startswith("/tmp/mydir"))
 
     def test_default_path_under_home(self):
         os.environ.pop("CEO_AUDIT_LOG_PATH", None)
@@ -220,31 +246,28 @@ class TestBreakerDisabledEnvFlag(TestEnvContext):
     SwarmCircuitBreaker methods return False — gate step-check passes through."""
 
     def test_breaker_disabled_flag_no_op(self):
-        os.environ["CEO_SWARM"] = "1"
-        os.environ["CEO_EXECUTION_CONTEXT_HOOKS_DISABLE"] = "1"
-
-        with _install_fake_gate_enabled():
-            # Use REAL breaker module — disabled=True → both return False.
-            # (The real module's is_disabled() checks the env flag.)
-            runner = _make_runner()
-            result = runner.step()
-            # iterate() ran — breaker was a no-op
-            self.assertEqual(result.metric, 1.0)
-            self.assertIsNone(result.error)
-            self.assertEqual(runner.state.status, "running")
+        with mock.patch.dict(
+            os.environ,
+            {"CEO_SWARM": "1", "CEO_EXECUTION_CONTEXT_HOOKS_DISABLE": "1"},
+        ):
+            with _install_fake_gate_enabled():
+                # Use REAL breaker module — disabled=True → both return False.
+                # (The real module's is_disabled() checks the env flag.)
+                runner = _make_runner()
+                result = runner.step()
+                # iterate() ran — breaker was a no-op
+                self.assertEqual(result.metric, 1.0)
+                self.assertIsNone(result.error)
+                self.assertEqual(runner.state.status, "running")
 
 
 # ---------------------------------------------------------------------------
 # B.4 reverse-tripwire fires
 # ---------------------------------------------------------------------------
 
-class TestBreakerB4Fires(TestEnvContext):
+class TestBreakerB4Fires(_SwarmEnabledBase):
     """When B.4 fires: step() returns killed IterationResult + emits
     swarm_runaway_suspected + does NOT emit swarm_layer_3_4_blocked."""
-
-    def setUp(self) -> None:
-        super().setUp()
-        os.environ["CEO_SWARM"] = "1"
 
     def test_b4_fires_kills_runner(self):
         with _install_fake_gate_enabled():
@@ -304,13 +327,9 @@ class TestBreakerB4Fires(TestEnvContext):
 # B.5 weekend-burn fires
 # ---------------------------------------------------------------------------
 
-class TestBreakerB5Fires(TestEnvContext):
+class TestBreakerB5Fires(_SwarmEnabledBase):
     """When B.5 fires: step() returns killed IterationResult + emits
     swarm_paused_owner_absent."""
-
-    def setUp(self) -> None:
-        super().setUp()
-        os.environ["CEO_SWARM"] = "1"
 
     def test_b5_fires_kills_runner(self):
         with _install_fake_gate_enabled():
@@ -352,14 +371,10 @@ class TestBreakerB5Fires(TestEnvContext):
 # Fail-CLOSED on breaker import error (within gated path)
 # ---------------------------------------------------------------------------
 
-class TestBreakerImportFailedClosedGatedPath(TestEnvContext):
+class TestBreakerImportFailedClosedGatedPath(_SwarmEnabledBase):
     """When the breaker module is unimportable and CEO_SWARM=1 (gated path),
     dispatch is DENIED (fail-CLOSED). This differs from the Layer 3+4 gate
     infra-unavailable path (fail-open there, fail-closed here)."""
-
-    def setUp(self) -> None:
-        super().setUp()
-        os.environ["CEO_SWARM"] = "1"
 
     def test_breaker_import_failure_blocks_dispatch(self):
         # Inject a broken stub: module exists but SwarmCircuitBreaker attr missing
@@ -391,13 +406,9 @@ class TestBreakerImportFailedClosedGatedPath(TestEnvContext):
 # Fail-CLOSED on breaker call error (within gated path)
 # ---------------------------------------------------------------------------
 
-class TestBreakerCallRaisesClosedGatedPath(TestEnvContext):
+class TestBreakerCallRaisesClosedGatedPath(_SwarmEnabledBase):
     """When SwarmCircuitBreaker.should_pause_reverse_tripwire raises,
     dispatch is DENIED (fail-CLOSED within the gated path)."""
-
-    def setUp(self) -> None:
-        super().setUp()
-        os.environ["CEO_SWARM"] = "1"
 
     def test_b4_raises_blocks_dispatch(self):
         fake_mod = types.ModuleType("_lib.swarm_circuit_breaker")
@@ -464,12 +475,8 @@ class TestBreakerCallRaisesClosedGatedPath(TestEnvContext):
 # Both breakers pass → iterate() runs normally
 # ---------------------------------------------------------------------------
 
-class TestBreakerPassThrough(TestEnvContext):
+class TestBreakerPassThrough(_SwarmEnabledBase):
     """When both B.4+B.5 pass, step() proceeds to iterate() normally."""
-
-    def setUp(self) -> None:
-        super().setUp()
-        os.environ["CEO_SWARM"] = "1"
 
     def test_both_pass_iterate_runs(self):
         called = []
@@ -502,14 +509,10 @@ class TestBreakerPassThrough(TestEnvContext):
 # Regression: Layer 3+4 block path still works (no regression)
 # ---------------------------------------------------------------------------
 
-class TestLayer34BlockPathRegression(TestEnvContext):
+class TestLayer34BlockPathRegression(_SwarmEnabledBase):
     """Ensure the original Layer 3+4 gate-block path still works after
     refactor — when gate returns (False, reason), swarm_layer_3_4_blocked
     is emitted and the breaker is NOT reached."""
-
-    def setUp(self) -> None:
-        super().setUp()
-        os.environ["CEO_SWARM"] = "1"
 
     def test_layer34_block_emits_correct_action_not_breaker_action(self):
         fake_gate = types.ModuleType("_lib.swarm_enable_gate")
