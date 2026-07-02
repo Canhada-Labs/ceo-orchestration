@@ -82,8 +82,8 @@ ler o resto.
    (`check_agent_spawn.py`) bloqueia spawns que não seguem o formato.
    Resultado: você não recebe mais "agent genérico com nome bonito".
 
-3. **Hooks mecânicos em Python.** 6 hooks rodam no `PreToolUse` e
-   `PostToolUse` do Claude Code:
+3. **Hooks mecânicos em Python.** 31 hooks rodam no `PreToolUse` e
+   `PostToolUse` do Claude Code, incluindo:
    - `check_agent_spawn` — persona+skill obrigatórios
    - `check_bash_safety` — bloqueia `rm -rf /`, `git push --force main`, etc
    - `check_canonical_edit` — edits em `SKILL.md` / `team.md` exigem sentinel assinado
@@ -98,7 +98,7 @@ ler o resto.
 
 5. **Audit log.** Tudo em
    `~/.claude/projects/<slug>/audit-log.jsonl`. `audit-query.py` tem
-   9 subcomandos (summary, by-skill, debate, tokens, health, etc).
+   29 subcomandos (summary, by-skill, debate, tokens, health, etc).
 
 6. **Vetos obrigatórios.** Staff Code Reviewer veta merge sem
    `tsc/mypy/go vet` limpo. Staff Security veta mudanças de auth sem
@@ -109,7 +109,7 @@ ler o resto.
    adapters, normalized_envelope, judge-payload, scratchpad, session-graph,
    squad-manifest, skill-index, skill-proposals, etc). SemVer enforced.
 
-8. **1529 testes.** `pytest .claude/hooks/tests .claude/scripts/tests`
+8. **9929 testes.** `pytest .claude/hooks/tests .claude/scripts/tests`
    roda em ~30s e tem cobertura ≥86%. Você pode confiar que os hooks
    não vão te trollar.
 

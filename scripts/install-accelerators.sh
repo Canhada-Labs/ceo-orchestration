@@ -162,5 +162,6 @@ echo "    CLAUDE_AUDIT_LOG=$AUDIT_DIR/audit-log.jsonl \\"
 echo "      bash $FRAMEWORK/.claude/plans/PLAN-128/measure-state.sh 1 \"$APP\""
 echo "  Full protocol (read this — the switch list + caveats matter): $FRAMEWORK/.claude/plans/PLAN-128/AB-PROTOCOL.md"
 echo
-echo "NOTE: catch-rate stays 0 until the emit-wiring lands (PLAN-128 wave3 EMIT-WIRING-DESIGN.md,"
-echo "      needs a kernel-override session + Owner-GPG). Autonomy + spawn-token axes work now."
+echo "NOTE: the PLAN-128 catch-emit wiring is LIVE (audit actions verify_after_edit_finding +"
+echo "      adequacy_gate_flag, registered in .claude/hooks/_lib/audit_emit.py; tests:"
+echo "      .claude/hooks/tests/test_plan128_emit_wiring.py). Catch-rate 0 = live-but-unexercised."

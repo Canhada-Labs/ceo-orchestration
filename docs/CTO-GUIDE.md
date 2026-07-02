@@ -111,12 +111,13 @@ ls SPEC/v1/*.schema.md                                    # 28 files
 
 ### 3.5 Remediation transparency — 5 minutes
 
-Read `.claude/plans/PLAN-018/audit/consolidated-findings.md` — the audit
-that catalogued 79 issues (4 P0 + 26 P1 + 35 P2 + 14 P3). Then read
-`.claude/plans/PLAN-019/progress.md` — the remediation tracker with
-per-finding commit refs. Then read
-`.claude/plans/PLAN-019/dynamic-findings.md` — bugs discovered *while
-fixing* bugs, escalated honestly rather than quietly closed.
+Read `.claude/plans/PLAN-152-v1-0-1-hardening-sweep.md` — the
+post-v1.0.0 self-audit sweep: 41 confirmed findings (32 fix / 6 accept
+/ 3 defer), P0 security fail-opens included, with wave-by-wave
+remediation tracked in-tree. Then read
+`.claude/plans/PLAN-143-repo-hygiene-debt.md` — repo debt collected
+from a nightly hygiene sweep, each item closed with a commit ref
+recorded in the plan's own frontmatter.
 
 A framework that publishes its own audit findings is either
 self-sabotaging or honest. Decide which.

@@ -83,8 +83,8 @@ a dev to read the rest.
    (`check_agent_spawn.py`) blocks spawns that do not follow the
    format. Result: no more "generic agent with a pretty name".
 
-3. **Mechanical Python hooks.** 6 hooks run on Claude Code's
-   `PreToolUse` and `PostToolUse`:
+3. **Mechanical Python hooks.** 31 hooks run on Claude Code's
+   `PreToolUse` and `PostToolUse`, including:
    - `check_agent_spawn` — persona+skill required
    - `check_bash_safety` — blocks `rm -rf /`, `git push --force main`, etc.
    - `check_canonical_edit` — edits to `SKILL.md` / `team.md` require a signed sentinel
@@ -99,7 +99,7 @@ a dev to read the rest.
 
 5. **Audit log.** Everything in
    `~/.claude/projects/<slug>/audit-log.jsonl`. `audit-query.py` has
-   9 subcommands (summary, by-skill, debate, tokens, health, etc.).
+   29 subcommands (summary, by-skill, debate, tokens, health, etc.).
 
 6. **Mandatory vetoes.** Staff Code Reviewer vetoes merges without
    clean `tsc/mypy/go vet`. Staff Security vetoes auth changes without
@@ -111,7 +111,7 @@ a dev to read the rest.
    session-graph, squad-manifest, skill-index, skill-proposals, etc.).
    SemVer enforced.
 
-8. **1529 tests.** `pytest .claude/hooks/tests .claude/scripts/tests`
+8. **9929 tests.** `pytest .claude/hooks/tests .claude/scripts/tests`
    runs in ~30s with ≥86% coverage. You can trust the hooks not to
    troll you.
 

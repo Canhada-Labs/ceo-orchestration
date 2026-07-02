@@ -160,6 +160,25 @@ def test_valid_subdirectories_allowed(minimal_repo: Path) -> None:
         "subdirs:\n" + result.stdout
     )
     assert "OK: no invalid subdirectories" in result.stdout
+    assert "OK: every PLAN-NNN subdir has a matching plan file" in result.stdout
+
+
+def test_orphan_plan_dir_fails(minimal_repo: Path) -> None:
+    """PLAN-002/ with no matching PLAN-002-*.md plan file → orphan error.
+
+    PLAN-152 governance-05 / dead-code-03: PLAN-SCHEMA §1 subdir rule 1
+    requires a ``PLAN-<NNN>/`` subdir to match an EXISTING top-level plan
+    file. The seeded repo ships only PLAN-001-example-slug.md, so PLAN-002/
+    is an orphan (the PLAN-128 clean-room-migration class).
+    """
+    (minimal_repo / ".claude" / "plans" / "PLAN-002").mkdir()
+    result = _run_validate(minimal_repo)
+    assert result.returncode != 0, (
+        "validate-governance.sh unexpectedly passed with an orphan "
+        "PLAN-NNN subdir:\n" + result.stdout
+    )
+    assert "PLAN-SCHEMA §1 orphan PLAN-<NNN> subdir" in result.stdout
+    assert "PLAN-002" in result.stdout
 
 
 def test_invalid_filename_wrong_nnn_width_fails(minimal_repo: Path) -> None:
@@ -248,4 +267,9 @@ def test_real_repo_passes() -> None:
     )
     assert "PLAN-SCHEMA §1 invalid filename" not in result.stdout, (
         "Real repo triggers false-positive invalid-filename:\n" + result.stdout
+    )
+    assert "PLAN-SCHEMA §1 orphan PLAN-<NNN> subdir" not in result.stdout, (
+        "Real repo triggers false-positive orphan PLAN-NNN subdir "
+        "(is a PLAN-<NNN>/ dir missing its PLAN-<NNN>-*.md plan file?):\n"
+        + result.stdout
     )

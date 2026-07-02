@@ -318,13 +318,13 @@ versions:
 - **`SPEC/v1/install-cli.md`** — `install.sh` flag contract, exit
   codes, `--verify` and `--strict-placeholders` semantics, deprecation
   policy (e.g. `--verify-sigstore` deprecated 1.11.4, removed 2.0.0).
-- **`SPEC/v1/audit-log.md`** — `audit-log.jsonl` schema, action
+- **`SPEC/v1/audit-log.schema.md`** — `audit-log.jsonl` schema, action
   vocabulary, HMAC chain contract, rotation semantics.
-- **`SPEC/v1/plan-frontmatter.md`** — `PLAN-NNN-*.md` frontmatter
+- **`SPEC/v1/plan.schema.md`** — `PLAN-NNN-*.md` frontmatter
   shape (the `status:` / `target_tag:` / `milestone:` etc. table that
   governs lifecycle).
-- **`SPEC/v1/governance.md`** — hook contract (which hooks block,
-  which warn-only, which env-vars override what).
+- **`SPEC/v1/hook-io.schema.md`** — hook I/O contract (stdin payload,
+  block/allow decision schema, fail-open rule, env-var contract).
 - Plus per-subsystem schemas: ADR template, debate fixture format,
   red-team-corpus, secret-patterns-exchange, etc.
 

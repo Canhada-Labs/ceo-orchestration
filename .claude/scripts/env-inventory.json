@@ -366,9 +366,10 @@
     "CEO_BASH_RAWSCAN": {
       "evidence": [
         ".claude/hooks/check_bash_safety.py",
-        "scripts/local/plan-152-apply-wave-a-kernel.py"
+        ".claude/scripts/env-inventory.json",
+        "scripts/local/plan-152-apply-wave-a-codex-fixes-2.py"
       ],
-      "sites": 2
+      "sites": 5
     },
     "CEO_BENCHMARK_BATCH_MODE": {
       "evidence": [
@@ -437,8 +438,8 @@
     "CEO_BRANCH_COVERAGE_ENFORCING": {
       "evidence": [
         ".claude/scripts/env-inventory.json",
-        "scripts/local/plan-093-apply-kernel-edits.py",
-        "scripts/local/plan-093-ship-v1.26.0.sh"
+        "scripts/local/historical/plan-093-apply-kernel-edits.py",
+        "scripts/local/historical/plan-093-ship-v1.26.0.sh"
       ],
       "sites": 3
     },
@@ -2263,7 +2264,7 @@
     "CEO_REQUIRE_REPO_PROFILE_FIXTURES": {
       "evidence": [
         ".claude/scripts/env-inventory.json",
-        "scripts/local/plan-093-execute-ceremony.sh"
+        "scripts/local/historical/plan-093-execute-ceremony.sh"
       ],
       "sites": 2
     },
@@ -2329,7 +2330,7 @@
       "evidence": [
         ".claude/hooks/check_canonical_edit.py",
         ".claude/scripts/env-inventory.json",
-        "scripts/local/plan-094-apply-wave-a-c-e.py"
+        "scripts/local/historical/plan-094-apply-wave-a-c-e.py"
       ],
       "sites": 3
     },

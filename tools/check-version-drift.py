@@ -4,8 +4,13 @@
 Reads VERSION + pyproject.toml + npm/package.json. Exits 1 if any of the
 three diverge from the canonical VERSION file. Exits 0 if all aligned.
 
-Stdlib-only, Python >= 3.9. Wired into .claude/scripts/validate-governance.sh
-by PLAN-108 Wave B.3.
+Stdlib-only, Python >= 3.9. NOT wired into any gate: the PLAN-108 Wave B.3
+wiring into .claude/scripts/validate-governance.sh never shipped. CI covers
+only npm/package.json <-> VERSION (validate.yml verify-npm-bundle-sync) and
+VERSION <-> tag (release.yml); pyproject.toml <-> VERSION is checked by this
+probe alone. Run manually before any version bump:
+    python3 tools/check-version-drift.py
+(PLAN-152 dead-code-01: docstring corrected; kept unwired-but-documented.)
 """
 from __future__ import annotations
 

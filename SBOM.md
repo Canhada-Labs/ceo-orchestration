@@ -31,9 +31,9 @@ grep -rhE '^import [a-z_.]+|^from [a-z_.]+' \
 `tests/`, `fixtures/`, and `.claude/sidecars/**`.
 
 **Result:** an AST scan of all core runtime `.py` files
-(`PLAN-112-FOLLOWUP-sbom-third-party-disclosure` W0,
-`.claude/plans/PLAN-112/staging/sbom-third-party-disclosure/W0-core-scan.txt`;
-re-confirmed by `check-stdlib-only.py` at PLAN-120 S185) found **0 third-party
+(originally run as `PLAN-112-FOLLOWUP-sbom-third-party-disclosure` W0;
+re-confirmed by `.claude/scripts/check-stdlib-only.py` at PLAN-120 S185,
+re-runnable at any time) found **0 third-party
 imports on the production hot path of `.claude/hooks` + `.claude/hooks/_lib`** —
 the governance runtime is genuinely stdlib-only. **One documented test-only
 exception** (PLAN-120 E10-F1): `.claude/hooks/_lib/test_isolation.py` imports
@@ -207,7 +207,7 @@ No third-party actions (every `uses:` is a first-party `actions/*` action).
 
 ## 5. Install-time dependencies
 
-`scripts/install.sh` requires: `bash ≥ 4`, `python3 ≥ 3.9`, `git`, `grep`,
+`scripts/install.sh` requires: `bash ≥ 3.2`, `python3 ≥ 3.9`, `git`, `grep`,
 `sed`, `find`. No `curl | bash`. Tarball mode (`scripts/install-npm.sh`) uses
 npm's integrity check against the OIDC-provenanced artifact. Sidecars (§B) are
 NOT installed by default and require explicit opt-in (ADR-126).

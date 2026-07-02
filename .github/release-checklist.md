@@ -17,8 +17,8 @@
 ### Documentação
 
 - [ ] `CLAUDE.md` §Current Work reflete o estado atual
-- [ ] `CLAUDE.md` §CHANGELOG tem entry pro sprint mais recente
-- [ ] `docs/coverage-baseline.md` tem números reais, não `_pending_`
+- [ ] `CHANGELOG.md` tem entry pro release mais recente
+- [ ] Coverage gate ENFORCING verde (`.github/workflows/coverage.yml`)
 - [ ] `docs/actions-versions.md` tem SHAs atualizados
 - [ ] `VERSION` file bate com a tag que vai criar
 

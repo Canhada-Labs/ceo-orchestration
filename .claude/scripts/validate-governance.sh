@@ -482,6 +482,28 @@ if [ -d "$PLAN_DIR" ]; then
     echo "  OK: no invalid subdirectories"
   fi
 
+  # 1b) Orphan-dir guard (PLAN-152 governance-05 / dead-code-03).
+  # PLAN-SCHEMA §1 subdir rule 1: a `PLAN-<NNN>/` subdir is only legal when
+  # it matches an EXISTING top-level plan file (`PLAN-<NNN>-<slug>.md` or
+  # `PLAN-<NNN>-FOLLOWUP-<slug>.md`). A dir with no plan file at all is an
+  # orphan (the PLAN-128 clean-room-migration class) and FAILs.
+  orphan_dirs=""
+  while IFS= read -r d; do
+    [ -z "$d" ] && continue
+    nnn=$(basename "$d")   # e.g. PLAN-128
+    plan_match=$(find "$PLAN_DIR" -mindepth 1 -maxdepth 1 -type f -name "${nnn}-*.md" 2>/dev/null)
+    if [ -z "$plan_match" ]; then
+      orphan_dirs="$orphan_dirs\n    $d"
+    fi
+  done < <(find "$PLAN_DIR" -mindepth 1 -maxdepth 1 -type d -name 'PLAN-[0-9][0-9][0-9]' 2>/dev/null)
+  if [ -n "$orphan_dirs" ]; then
+    # shellcheck disable=SC2059
+    printf "  FAIL: PLAN-SCHEMA §1 orphan PLAN-<NNN> subdir(s) — no matching PLAN-<NNN>-*.md plan file:$orphan_dirs\n"
+    ERRORS=$((ERRORS + 1))
+  else
+    echo "  OK: every PLAN-NNN subdir has a matching plan file"
+  fi
+
   # 2) Filename check (files directly under .claude/plans/)
   KNOWN_GOV_FILES="README.md PLAN-SCHEMA.md AUDIT-LOG-SCHEMA.md DEBATE-SCHEMA.md"
   invalid_files=""

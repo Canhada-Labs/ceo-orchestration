@@ -271,7 +271,7 @@ persona rewrite).
 3. Add tests to cover it
 
 Or, if it's a temporary regression (large refactor), open a PR
-relaxing the threshold via `docs/coverage-baseline.md` (Owner
+relaxing the threshold in `.github/workflows/coverage.yml` (Owner
 approves).
 
 ## "/debate stuck on 'waiting for agent N'"

@@ -280,7 +280,7 @@ Se não existe, a agent mentiu. É strike (3 strikes = persona rewrite).
 3. Adiciona teste pra cobrir
 
 Ou, se foi regressão temporária (grande refactor), abra PR
-relaxando threshold via `docs/coverage-baseline.md` (Owner aprova).
+relaxando threshold em `.github/workflows/coverage.yml` (Owner aprova).
 
 ## "/debate travou em 'waiting for agent N'"
 

@@ -34,8 +34,8 @@ Antes de começar, confirme:
       todos em `success`)
 - [ ] Branch protection ligado no GitHub (`Settings → Branches → main`)
 - [ ] CODEOWNERS atualizado (`cat .github/CODEOWNERS`)
-- [ ] CHANGELOG atualizado na `CLAUDE.md` §CHANGELOG
-- [ ] `docs/coverage-baseline.md` tem números reais (não `_pending_`)
+- [ ] CHANGELOG atualizado no `CHANGELOG.md`
+- [ ] Coverage gate ENFORCING verde (`.github/workflows/coverage.yml`)
 - [ ] Sua chave GPG está configurada pro git:
       `git config --global commit.gpgsign true`
 
@@ -92,7 +92,7 @@ Scope: framework completo para Claude Code.
 - Reflexion v2 com outcome loop
 - Cross-adapter golden fixtures (Claude prod, Gemini stub)
 
-Changelog completo: CLAUDE.md §CHANGELOG + git log"
+Changelog completo: CHANGELOG.md + git log"
 
 git push origin v1.0.0-rc.1
 ```

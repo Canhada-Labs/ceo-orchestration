@@ -223,7 +223,7 @@ A: No. The framework is just files. You pay for regular Claude Code.
 A: Hook latency < 40ms per invocation. Imperceptible.
 
 **Q: Can I use this with another AI (Gemini, Cursor)?**
-A: There is a Gemini stub at `.claude/hooks/_lib/adapters/gemini.py`
+A: There is a Gemini stub at `.claude/hooks/_lib/adapters/live/gemini.py`
 but it is not full parity. V1.0 is **Claude Code only**.
 
 **Q: How do I upgrade to a new framework version?**

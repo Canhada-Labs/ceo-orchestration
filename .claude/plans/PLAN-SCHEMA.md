@@ -80,6 +80,9 @@ subdirectory or filename under `.claude/plans/` violates the rules above:
 
 - subdirectories not matching `PLAN-<NNN>` / `examples` / `archive` /
   `WAR-ROOM` / `_templates` → FAIL
+- `PLAN-<NNN>/` subdirectories with no matching top-level
+  `PLAN-<NNN>-*.md` plan file (orphan dirs) → FAIL (added PLAN-152
+  governance-05; the PLAN-128 clean-room-migration class)
 - files not matching `PLAN-<NNN>-<kebab-case-slug>.md` / `SPRINT-N-*.md`
   or one of the four known governance filenames (`README.md`,
   `PLAN-SCHEMA.md`, `AUDIT-LOG-SCHEMA.md`, `DEBATE-SCHEMA.md`) → FAIL
@@ -87,7 +90,7 @@ subdirectory or filename under `.claude/plans/` violates the rules above:
 The enforcement code + tests live at
 `.claude/scripts/validate-governance.sh` (section "PLAN-SCHEMA §1
 invariants") and `.claude/scripts/tests/test_plan_schema_enforcement.py`
-(9 tests covering valid baseline + 7 violation classes +
+(10 tests covering valid baseline + 8 violation classes +
 real-repo sanity). CODEOWNERS on `.claude/plans/PLAN-*.md` remains the
 merge-side backstop for the rare case where someone bypasses the
 validator locally.
