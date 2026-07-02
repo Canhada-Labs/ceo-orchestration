@@ -18,8 +18,9 @@
 #   3 — environment missing (node / npm / bash)
 #
 # Stays disabled for actual publish. The CI workflow npm-publish.yml is
-# the only path to npmjs.org and gates through OIDC + manual approval
-# in production-npm environment.
+# the only path to npmjs.org and gates through manual approval in the
+# production-npm environment (auth = npm granular token; --provenance is
+# Sigstore attestation, not OIDC trusted publishing — PLAN-152 tarball-01).
 
 set -euo pipefail
 
@@ -55,7 +56,8 @@ Notes:
   This script DOES NOT publish to the npm registry. It only builds the local tarball
   + optionally validates it locally. Real publishing flows through:
       .github/workflows/npm-publish.yml
-  which gates on OIDC + manual approval in the production-npm environment.
+  which gates on manual approval in the production-npm environment (npm
+  granular token auth + Sigstore --provenance).
 
   Use this to validate the npm shim BEFORE any tag-push triggers the real publish
   workflow. The CI workflow expects this script to have been run on the release
@@ -71,7 +73,7 @@ HELP
 done
 
 # -------------------------------- env check ----------------------------------
-for cmd in node npm bash; do
+for cmd in node npm bash rsync; do
   if ! command -v "$cmd" >/dev/null 2>&1; then
     echo "::error::required command missing: $cmd" >&2
     exit 3
@@ -99,10 +101,32 @@ echo "OK: version sync — $VERSION_FILE"
 # -------------------------------- stage bundle -------------------------------
 # Copy framework source tree into npm/ so npm pack picks it up via files: list.
 # Mirror npm-publish.yml step "Stage bundle into npm/".
+# PLAN-152 tarball-01: SELECTIVE staging — the root .npmignore is INERT under
+# the package.json "files" whitelist, so exclusion must happen here. Excludes
+# the framework-internal test harness, fixture corpora, eval/, red-team
+# corpus, numbered plan trees, and _lib/testing.py + _lib/test_isolation.py
+# (PLAN-120 contract install.sh already honors); keeps .claude/plans/ schemas
+# + README + examples/ and .claude/policies/fixtures/ (install.sh provisions
+# both).
 echo "==> Staging bundle into npm/"
+RSYNC_EXCLUDES=(
+  --include='.claude/policies/fixtures/'
+  --include='templates/oidc-proxy/tests/'
+  --include='templates/oidc-proxy/tests/**'
+  --exclude='**/tests/'
+  --exclude='**/fixtures/'
+  --exclude='.claude/scripts/red-team-corpus/'
+  --exclude='.claude/eval/'
+  --exclude='.claude/plans/PLAN-[0-9]*'
+  --exclude='.claude/hooks/_lib/testing.py'
+  --exclude='.claude/hooks/_lib/test_isolation.py'
+  --exclude='__pycache__/'
+  --exclude='*.pyc'
+  --exclude='.pytest_cache/'
+)
 for src in scripts templates .claude SPEC VERSION LICENSE README.md PROTOCOL.md; do
   if [[ -e "$ROOT/$src" ]]; then
-    cp -r "$ROOT/$src" "$NPM_DIR/"
+    rsync -a --delete --delete-excluded "${RSYNC_EXCLUDES[@]}" "$ROOT/$src" "$NPM_DIR/"
   fi
 done
 
@@ -115,6 +139,27 @@ fi
 # Syntax-check the shim (mirror npm-publish.yml step).
 node --check "$NPM_DIR/bin/ceo-orch-init.js"
 echo "OK: shim syntax"
+
+# -------------------------------- packlist gate ------------------------------
+# PLAN-152 tarball-02 (local mirror of the validate.yml / npm-publish.yml
+# gates — Codex pair-rail: npm/ is gitignored and older stagers may have left
+# stale files; the rsync --delete-excluded above mirrors the staged roots, and
+# this gate asserts the WHOLE would-be packlist before npm pack).
+echo "==> Packlist gate"
+( cd "$NPM_DIR" && npm pack --dry-run --json 2>/dev/null ) | python3 -c '
+import json, re, sys
+d = json.load(sys.stdin)
+o = d[0] if isinstance(d, list) else d
+paths = [f["path"] for f in o["files"]]
+pat = re.compile(r"(^|/)(tests|fixtures)(/|$)|(^|/)eval/|(^|/)red-team-corpus/|(^|/)plans/PLAN-[0-9]|(^|/)_lib/(testing|test_isolation)\.py$")
+allow = (".claude/policies/fixtures/", "templates/oidc-proxy/tests/")
+bad = [p for p in paths if pat.search(p) and not p.startswith(allow)]
+if bad:
+    print("::error::tarball would ship %d framework-internal artifact(s):" % len(bad))
+    print("\n".join(bad[:40]))
+    sys.exit(1)
+print("OK: packlist clean — %d files" % len(paths))
+'
 
 # -------------------------------- npm pack -----------------------------------
 echo "==> Building tarball"

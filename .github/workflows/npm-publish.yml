@@ -1,7 +1,11 @@
 name: NPM Publish
 
-# Sprint 5 Phase 4. Publishes ceo-orchestration via OIDC trusted publisher
-# on tag push (`v*`). Manual `npm publish` is not used. The workflow:
+# Sprint 5 Phase 4. Publishes ceo-orchestration on tag push (`v*`) using a
+# repo-scoped npm granular token (secrets.NPM_TOKEN) with Sigstore
+# --provenance (that is what `id-token: write` serves). npm "trusted
+# publishing" (OIDC auth) is NOT configured yet — tracked as a v1.0.2
+# follow-up (PLAN-152 §Deferred backlog-oidc; NPM_TOKEN expires
+# ~2026-09-28). Manual `npm publish` is not used. The workflow:
 #   1. Verifies VERSION + npm/package.json version + tag are consistent
 #   2. Asserts package.json has zero runtime dependencies
 #   3. Publishes with --provenance (Sigstore-attested)
@@ -93,11 +97,35 @@ jobs:
       - name: Stage bundle into npm/
         # The npm package needs the framework source tree relative to npm/.
         # Copy (don't symlink — npm pack walks symlinks unpredictably across hosts).
+        # PLAN-152 tarball-01: SELECTIVE staging. The root .npmignore is INERT
+        # (package.json "files" whitelist takes precedence in npm-packlist), so
+        # exclusion must happen at stage time. Framework-internal artifacts
+        # (test harness, fixture corpora, eval/, red-team corpus, numbered plan
+        # trees, _lib/testing.py + _lib/test_isolation.py per the PLAN-120
+        # contract install.sh already honors) must NOT ship. Kept deliberately:
+        # .claude/plans/ schemas + README + examples/ (install.sh provisions
+        # them) and .claude/policies/fixtures/ (install.sh PLAN-014 A.8 ships
+        # the policy bundle including fixtures).
         run: |
           set -euo pipefail
+          RSYNC_EXCLUDES=(
+            --include='.claude/policies/fixtures/'
+            --include='templates/oidc-proxy/tests/'
+            --include='templates/oidc-proxy/tests/**'
+            --exclude='**/tests/'
+            --exclude='**/fixtures/'
+            --exclude='.claude/scripts/red-team-corpus/'
+            --exclude='.claude/eval/'
+            --exclude='.claude/plans/PLAN-[0-9]*'
+            --exclude='.claude/hooks/_lib/testing.py'
+            --exclude='.claude/hooks/_lib/test_isolation.py'
+            --exclude='__pycache__/'
+            --exclude='*.pyc'
+            --exclude='.pytest_cache/'
+          )
           for src in scripts templates .claude SPEC VERSION LICENSE README.md PROTOCOL.md; do
             if [[ -e "$src" ]]; then
-              cp -r "$src" "npm/"
+              rsync -a --delete --delete-excluded "${RSYNC_EXCLUDES[@]}" "$src" "npm/"
             fi
           done
           ls -la npm/
@@ -141,6 +169,31 @@ jobs:
           # the script without args (hits _verify_self_sha, then usage).
           bash "$FILE" 2>&1 | head -3 || true
           echo "OK: install.sh trailer populated with sha256 $HASH"
+
+      - name: Packlist gate (PLAN-152 tarball-02)
+        # Last-line assert before publish: the would-be tarball must carry no
+        # tests/ or fixtures/ dirs (except .claude/policies/fixtures/, shipped
+        # by install.sh contract), no .claude/eval/, no red-team-corpus/, no
+        # .claude/plans/PLAN-<N>* artifacts, no _lib/testing.py or
+        # _lib/test_isolation.py. Fail-closed: a pack or JSON parse failure
+        # fails the job (set -euo pipefail).
+        working-directory: npm
+        run: |
+          set -euo pipefail
+          npm pack --dry-run --json 2>/dev/null | python3 -c '
+          import json, re, sys
+          d = json.load(sys.stdin)
+          o = d[0] if isinstance(d, list) else d
+          paths = [f["path"] for f in o["files"]]
+          pat = re.compile(r"(^|/)(tests|fixtures)(/|$)|(^|/)eval/|(^|/)red-team-corpus/|(^|/)plans/PLAN-[0-9]|(^|/)_lib/(testing|test_isolation)\.py$")
+          allow = (".claude/policies/fixtures/", "templates/oidc-proxy/tests/")
+          bad = [p for p in paths if pat.search(p) and not p.startswith(allow)]
+          if bad:
+              print("::error::tarball would ship %d framework-internal artifact(s):" % len(bad))
+              print("\n".join(bad[:40]))
+              sys.exit(1)
+          print("OK: packlist clean — %d files" % len(paths))
+          '
 
       - name: Publish
         working-directory: npm

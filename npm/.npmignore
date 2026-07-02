@@ -1,3 +1,12 @@
+# ⚠ PLAN-152 tarball-01 GROUND TRUTH (2026-07-02): every .claude/* entry in
+# this file is INERT — npm/package.json carries a `files` whitelist, and
+# npm-packlist IGNORES .npmignore for paths matched by `files` (empirically
+# proven: v1.0.0 shipped 461 files from .claude/hooks/tests/ despite the
+# entry below). The LOAD-BEARING exclusion rail is the selective rsync
+# staging in npm-publish.yml "Stage bundle into npm/" + install-npm.sh
+# (same exclude set), asserted by the packlist gates in validate.yml and
+# npm-publish.yml. Entries are kept for documentation + as a rail that
+# would re-arm if the `files` whitelist were ever removed.
 node_modules/
 *.log
 .DS_Store
@@ -17,9 +26,9 @@ NOTES.md
 # inject onto the live producer's sys.path — the exact pollution vector
 # PLAN-118 closes via AC-B4/B5/B6/B7. install.sh provisions the canonical
 # SCHEMA + examples directly; nothing under .claude/plans/PLAN-* is read
-# by adopter runtime. Note: install-npm.sh and the npm-publish workflow
-# remain kernel-guarded; this is a NON-KERNEL hygiene fix that closes
-# the recurrence vector at the tarball boundary.
+# by adopter runtime. (PLAN-152 correction: this entry was INERT under the
+# package.json `files` whitelist — the real rail is the staging-time
+# rsync exclude `.claude/plans/PLAN-[0-9]*` + packlist gate; see header.)
 .claude/plans/
 
 # PLAN-120-FOLLOWUP WS-D (E4-F1/E4-F2, S185 readiness audit) — exclude the
@@ -30,8 +39,11 @@ NOTES.md
 # test_isolation.py / testing.py do `import pytest` at module top — both
 # pollute the adopter's live audit chain and pull a pytest dep an adopter
 # need not have. install.sh::install_lib_selective() excludes these at
-# COPY time; this .npmignore entry closes the same vector at the tarball
-# boundary (defense-in-depth — neither layer alone is fail-closed).
+# COPY time. (PLAN-152 correction: these .npmignore entries were INERT
+# under the `files` whitelist — v1.0.0 shipped these files anyway. The
+# real tarball rail is now the staging-time rsync excludes + packlist
+# gate, which cover **/tests/, testing.py and test_isolation.py; see
+# the header note.)
 .claude/hooks/_lib/tests/
 .claude/hooks/_lib/test_isolation.py
 .claude/hooks/_lib/testing.py

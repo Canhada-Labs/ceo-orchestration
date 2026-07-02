@@ -1,8 +1,9 @@
+<!-- SPDX-License-Identifier: MIT -->
 # NOTICE — `.claude/skills/frontend/`
 
 This directory imports reference data from the `ui-ux-pro-max-skill`
-project under the MIT License. Per the MIT License terms, attribution
-is retained here.
+project under the MIT License (SPDX: MIT). Per the MIT License terms,
+attribution is retained here.
 
 ## Imported data (PLAN-035, Wave B Session 38, 2026-04-19)
 

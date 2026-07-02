@@ -18,7 +18,7 @@ Last updated: 2026-05-25 (PLAN-113 RW-E doc/count drift reconcile — added 5 mi
 | `formal-verify.yml` | TLA+ TLC + conformance harness | ADR-044 (formal verification pilot) | `CEO_FORMAL_VERIFY_DISABLE=1` | ADVISORY (weekly) |
 | `release.yml` | Release gate (VERSION ↔ tag, 24h RC hold) | ADR-007 (SPEC v1 + SemVer + RC), ADR-014, ADR-103 | `CEO_SOTA_DISABLE=1` (repo var) | ENFORCING on tag push |
 | `smoke-install.yml` | Fresh-install dogfood | ADR-007 | — | ADVISORY |
-| `npm-publish.yml` | OIDC + `--provenance` NPM publish | ADR-012 (cross-adapter goldens + OIDC NPM) | — (opt-in via workflow_dispatch) | ENFORCING on tag push |
+| `npm-publish.yml` | NPM publish — granular-token auth + Sigstore `--provenance` (Trusted-Publishing OIDC = v1.0.2 follow-up, PLAN-152) | ADR-012 (cross-adapter goldens + NPM publish) | — (opt-in via workflow_dispatch) | ENFORCING on tag push |
 | `chaos.yml` | Chaos + resilience weekly probe | ADR-037 (chaos testing methodology) | `CEO_CHAOS_DISABLE=1` | ADVISORY (weekly) |
 | `otel-smoke.yml` | OpenTelemetry export smoke | ADR-035 (OTEL export) | `CEO_OTEL_DISABLE=1` | ADVISORY (weekly) |
 | `perf-profile.yml` | Hook latency p50/p95/p99 profile | ADR-024 (perf baseline policy) | `CEO_PERF_PROFILE_DISABLE=1` | ADVISORY (weekly) |
@@ -53,7 +53,7 @@ Workflows NOT in release-chain (advisory-only):
 | Workflow | Secret | Rotation cadence |
 |----------|--------|------------------|
 | `adapter-live.yml` | `ANTHROPIC_API_KEY` (repo secret) | 90 days (ADR-054) |
-| `npm-publish.yml` | OIDC token (exchanged per-run); `id-token: write` permission grants ability to request OIDC JWTs from the GitHub IdP (blast-radius: a compromised step in this job could mint short-lived JWTs to authenticate as the workflow to OIDC-aware services; risk mitigated by `production-npm` environment gate requiring manual approval before any publish step runs) | N/A |
+| `npm-publish.yml` | `NPM_TOKEN` (repo-scoped npm granular token, env `production-npm` — the actual publish auth; **expires ~2026-09-28**, regenerate before the next release after that) + a per-run OIDC JWT via `id-token: write` used ONLY for Sigstore `--provenance` attestation, not registry auth (blast-radius of the JWT: a compromised step could mint short-lived tokens toward OIDC-aware services; mitigated by the `production-npm` manual-approval gate before any publish step). Trusted-Publishing (OIDC registry auth) is a v1.0.2 follow-up (PLAN-152 §Deferred backlog-oidc). | NPM_TOKEN: 90-day granular token; JWT: per-run |
 | Others | `github.token` (ephemeral per-workflow) | N/A |
 
 See `ADR-054-github-token-rotation.md` for the full rotation policy
