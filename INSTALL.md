@@ -1,6 +1,6 @@
 # Install
 
-<!-- last-reviewed: 2026-06-20 v1.0.0 -->
+<!-- last-reviewed: 2026-07-02 v1.0.1 -->
 
 > ⚠ **Maintained personal-use framework — bus-factor 1, no roadmap commitments; the public repo is a stable snapshot, not an actively-staffed product.** Reactive maintenance only, no new feature work; the install modes below are personal-use only, with no external-adopter SLA or support channel. Formal verdict: `MAINTENANCE-MODE-VIBECODER` per [ADR-096](.claude/adr/ADR-096-vibecoder-only-by-design.md) — read it before adopting.
 
@@ -357,7 +357,7 @@ To refresh framework-derived content in an existing adopter install
 ```bash
 cd /path/to/ceo-orchestration   # source framework checkout
 git pull                         # get the latest framework
-bash scripts/upgrade.sh /path/to/your/project --pin v1.0.0
+bash scripts/upgrade.sh /path/to/your/project --pin v1.0.1
 ```
 
 What gets refreshed:

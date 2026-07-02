@@ -1,7 +1,7 @@
 # NPM shim integrity manifest
 
 > **Integrity contract for the `ceo-orchestration` npm shim.** The package is
-> built and versioned (`VERSION` / `package.json`, currently 1.0.0).
+> built and versioned (`VERSION` / `package.json`, currently 1.0.1).
 > Publishing stays gated — `npm-publish.yml` holds all `v*-rc.*` tags and
 > requires manual approval on GA tags via `environment: production-npm`.
 > The integrity controls enforced **today** are: (1) an `install.sh`
