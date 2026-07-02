@@ -238,15 +238,27 @@ log(`eval-baseline-n20: model=${MODEL} run=${RUN} corpus=${CORPUS} — 4 batches
 
 const batches = await parallel(BATCHES.map((ids, i) => () =>
   agent(batchPrompt(ids), { label: `eval:${MODEL}:batch${i + 1}`, phase: 'Eval', schema: BATCH_SCHEMA })
+    // agent() RESOLVES null on terminal API error (never rejects) — .catch alone
+    // misses it and the row loop crashes on null.rows (PLAN-152 error-handling-03;
+    // crash class from run wf_071ef6c5). Degraded rows carry result_subtype=
+    // instrument_error so the reconciler voids the cells instead of miscounting.
+    .then((r) => r || {
+      rows: ids.map((id) => ({
+        task: id, pass: false, cost_usd: 0, transcript_path: '',
+        notes: 'BATCH-AGENT-NULL: agent resolved null (terminal API error or user skip)',
+        result_subtype: 'instrument_error',
+      })),
+    })
     .catch((e) => ({
       rows: ids.map((id) => ({
         task: id, pass: false, cost_usd: 0, transcript_path: '',
         notes: `BATCH-AGENT-ERROR: ${String(e).slice(0, 160)}`,
+        result_subtype: 'instrument_error',
       })),
     }))))
 
 const rows = []
-for (const b of batches) for (const r of b.rows) rows.push(r)
+for (const b of batches) for (const r of (b.rows || [])) rows.push(r)
 
 phase('Reconcile')
 
@@ -304,6 +316,31 @@ Reconcile (W0b discipline — counts must close, never trust a single accounting
 Return ONLY the structured object.`,
   { label: `eval:${MODEL}:reconcile`, phase: 'Reconcile', schema: RECON_SCHEMA })
 
+// recon === null on terminal API error — return a DEGRADED reconciliation instead
+// of silently dropping the accounting leg (PLAN-152 error-handling-03). The degraded
+// object still DERIVES histogram/pass_count/total_cost mechanically from `rows`
+// (counts-must-close: zeroed numbers would under-report paid spend — Codex P2);
+// only the transcript cross-check leg is lost.
+const reconSafe = recon || (() => {
+  const hist = { success: 0, error_max_budget: 0, error_max_turns: 0, error_other: 0, instrument_error: 0 }
+  let passCount = 0
+  let totalCost = 0
+  for (const r of rows) {
+    const st = (r && Object.prototype.hasOwnProperty.call(hist, r.result_subtype)) ? r.result_subtype : 'instrument_error'
+    hist[st] += 1
+    if (st === 'success' && r.pass === true) passCount += 1
+    totalCost += (r && typeof r.cost_usd === 'number') ? r.cost_usd : 0
+  }
+  return {
+    n: rows.length, pass_count: passCount, success_cells: hist.success,
+    subtype_histogram: hist, total_cost_usd: totalCost, missing_transcripts: [],
+    anomalies: ['RECONCILER-NULL: agent resolved null (terminal API error or user skip) — counts derived mechanically from rows; transcript cross-check NOT performed'],
+    summary: `DEGRADED: reconciler agent resolved null; mechanical derivation from rows: pass ${passCount}/${hist.success} success cells, `
+      + `subtype histogram ${JSON.stringify(hist)}, total cost $${totalCost.toFixed(4)}. `
+      + 'Transcript cross-check not performed; no pass@1 claim admissible.',
+  }
+})()
+
 return {
   run_id: RUN,
   model: MODEL,
@@ -325,6 +362,6 @@ return {
     taxonomy: 'budget-kill ≠ p_fail: result_subtype splits success | error_max_budget | error_max_turns | error_other | instrument_error; pass@1 denominator = success cells only',
   },
   rows,
-  reconciliation: recon,
+  reconciliation: reconSafe,
   note: 'Subject model ran only via `claude -p --model` subprocesses (W0a: Workflow opts.model is INERT). Repo untouched; all writes confined to /tmp scratch + a per-task scratch CLAUDE_CONFIG_DIR (no operator ~/.claude contamination — O5).',
 }

@@ -8,9 +8,12 @@ PLAN-106 Wave H.2 REFACTOR (absorbing PLAN-095-FOLLOWUP §H.2):
   `_lib.output_scan_dedup.check_and_record()` for each finding.
 - On suppress (within 24h TTL) → emits `output_scan_finding_suppressed`.
 - On first-fire → emits `output_scan_finding` (per-pattern shape).
-- Backward-compat: the legacy aggregate emit is preserved as a sidecar
-  with `_DEPRECATION_WINDOW_HOURS = 24` — removed in a follow-on plan
-  past the 24h deprecation window per PLAN-095-FOLLOWUP §B.5 / AC15b.
+
+PLAN-152 economics-01: the backward-compat aggregate sidecar (24h
+deprecation window per PLAN-095-FOLLOWUP §B.5 / AC15b) is REMOVED —
+the window elapsed. A scan hit now emits per-pattern events ONLY (no
+aggregate twin), halving HMAC appends + filelocks on this all-tools
+PostToolUse hot path.
 
 This hook is a wrapper around `_lib/output_scan.scan()` that:
 
@@ -30,7 +33,7 @@ This hook is a wrapper around `_lib/output_scan.scan()` that:
   - `CEO_OUTPUT_SCAN_UNICODE=0` — disable unicode sub-scanner
   - `CEO_OUTPUT_SCAN_TELEMETRY=0` — disable telemetry sub-scanner
   - `CEO_OUTPUT_SCAN_LLM10=0` — disable LLM-Top-10 sub-scanner
-  - `CEO_OUTPUT_SCAN_DEDUP=0` — disable dedup (revert to aggregate emit only)
+  - `CEO_OUTPUT_SCAN_DEDUP=0` — disable dedup (every finding emits as first-fire)
 - **Performance.** p99 ≤5ms on typical 1-10KB output per ADR-057
   acceptance; dedup adds ≤50ms p95 under N=4 contention per AC17b.
 """
@@ -47,12 +50,6 @@ if str(_HOOKS_DIR) not in sys.path:
     sys.path.insert(0, str(_HOOKS_DIR))
 
 _HOOK_VERSION = "1.1.0"  # PLAN-106 Wave H.2 bump (per-pattern emit).
-
-# PLAN-106 Wave H.2 — backward-compat aggregate sidecar deprecation window.
-# Past this window the sidecar emission MUST be removed in a follow-on
-# plan (matches PLAN-095-FOLLOWUP §B.5 source spec / AC15b).
-_DEPRECATION_WINDOW_HOURS = 24
-
 
 def _emit_observe(system_message: Optional[str] = None) -> str:
     """Emit schema-compliant PostToolUse advisory output."""
@@ -163,74 +160,6 @@ def _emit_per_pattern_finding(
         return
 
 
-def _emit_aggregate_sidecar(
-    *,
-    session_id: str,
-    tool_name: str,
-    scan_result: Dict[str, object],
-    project: str,
-    audit_emit_mod: Any,
-) -> None:
-    """Backward-compat aggregate sidecar emit.
-
-    Carries `_DEPRECATION_WINDOW_HOURS = 24` per AC15b. A follow-on
-    plan removes this sidecar past the deprecation window. This emit
-    uses the LEGACY aggregate shape so existing audit-query consumers
-    continue to see the totals during transition.
-    """
-    try:
-        emitter = getattr(audit_emit_mod, "emit_generic", None)
-        if emitter is None:
-            return
-        emitter(
-            action="output_scan_finding",
-            session_id=session_id,
-            tool_name=tool_name,
-            hook_version=_HOOK_VERSION,
-            total_findings=scan_result.get("total_findings", 0),
-            family_counts=scan_result.get("family_counts", {}),
-            kill_switched=scan_result.get("kill_switched", {}),
-            project=project,
-            # No pattern_id on the aggregate sidecar — distinguishes it
-            # from the per-pattern emit downstream.
-        )
-    except Exception:
-        return
-
-
-def _emit_audit_finding(
-    *,
-    session_id: str,
-    tool_name: str,
-    scan_result: Dict[str, object],
-    project: str,
-) -> None:
-    """DEPRECATED PLAN-106 Wave H.2 — use ``_emit_per_pattern_finding``.
-
-    Backward-compat shim retained for 24h post-ship per AC15b for caller
-    migration. The aggregate-emit shape is preserved for downstream
-    audit-query parsers that expect ``total_findings`` + ``family_counts``
-    aggregates rather than per-pattern ``pattern_id`` + ``family`` events.
-    A follow-on plan removes this wrapper past
-    ``_DEPRECATION_WINDOW_HOURS``. New call-sites MUST use the per-pattern
-    helper. Existing external callers (legacy tests) hit this wrapper.
-
-    Never raises — same failure-isolation contract as the rest of the
-    output-scan emit path.
-    """
-    try:
-        from _lib import audit_emit  # type: ignore
-        _emit_aggregate_sidecar(
-            session_id=session_id,
-            tool_name=tool_name,
-            scan_result=scan_result,
-            project=project,
-            audit_emit_mod=audit_emit,
-        )
-    except Exception:
-        return
-
-
 def _derive_command_sha(
     *,
     tool_name: str,
@@ -287,8 +216,8 @@ def decide(
     """Pure decision function. Returns JSON for stdout.
 
     Always returns `allow` (advisory hook). Side effects: audit emit
-    when findings present — per-pattern + dedup'd path + aggregate
-    sidecar (24h deprecation window per AC15b).
+    when findings present — per-pattern + dedup'd path ONLY (the legacy
+    aggregate sidecar was removed by PLAN-152 economics-01).
     """
     try:
         from _lib import output_scan  # type: ignore
@@ -348,15 +277,6 @@ def decide(
                 command_sha=csh,
                 dedup_mod=dedup_mod,
             )
-
-        # Backward-compat aggregate sidecar (24h deprecation per AC15b).
-        _emit_aggregate_sidecar(
-            session_id=session_id,
-            tool_name=tool_name,
-            scan_result=result,
-            project=project,
-            audit_emit_mod=audit_emit_mod,
-        )
 
     family_counts = result.get("family_counts", {})
     top_families = sorted(

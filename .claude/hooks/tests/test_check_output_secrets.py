@@ -143,12 +143,18 @@ class TestCheckOutputSecretsKillSwitch(unittest.TestCase):
 
 class TestCheckOutputSecretsEmit(unittest.TestCase):
     def test_emit_never_raises(self) -> None:
+        # PLAN-152 economics-01 removed the aggregate sidecar; the surviving
+        # per-pattern emitter carries the same never-raises contract.
         try:
-            check_output_secrets._emit_audit_finding(
+            check_output_secrets._emit_per_pattern_finding(
                 session_id="t",
                 tool_name="Bash",
-                scan_result={"total_findings": 3, "family_counts": {"unicode_injection": 3}},
+                finding={"pattern_id": "LLM01_probe", "family": "unicode_injection"},
                 project="/tmp",
+                audit_emit_mod=object(),
+                repo_path_hash="0" * 64,
+                command_sha="0" * 64,
+                dedup_mod=None,
             )
         except Exception as e:
             self.fail(f"raised: {type(e).__name__}: {e}")
@@ -269,26 +275,30 @@ class TestCheckOutputSecretsDecideFailureBranches(unittest.TestCase):
         finally:
             _scan_mod.scan = real_scan  # type: ignore[assignment]
 
-    def test_emit_audit_finding_swallows_emitter_exception(self) -> None:
-        """`_emit_audit_finding` must not propagate emitter exceptions."""
-        import sys as _sys
-        from _lib import audit_emit as _ae  # type: ignore
-        real_emit = getattr(_ae, "emit_generic", None)
+    def test_emit_per_pattern_swallows_emitter_exception(self) -> None:
+        """`_emit_per_pattern_finding` must not propagate emitter exceptions.
 
-        def _boom(**_kwargs):
-            raise RuntimeError("emit failed")
+        (PLAN-152 economics-01: the aggregate `_emit_audit_finding` shim this
+        test used to drive was removed with the sidecar.)
+        """
 
-        _ae.emit_generic = _boom  # type: ignore[assignment]
+        class _BoomEmitter:
+            def emit_generic(self, **_kwargs):
+                raise RuntimeError("emit failed")
+
         try:
             # Should return silently without raising
-            check_output_secrets._emit_audit_finding(
+            check_output_secrets._emit_per_pattern_finding(
                 session_id="t", tool_name="Bash",
-                scan_result={"total_findings": 1, "family_counts": {"x": 1}},
+                finding={"pattern_id": "LLM01_probe", "family": "x"},
                 project="/tmp",
+                audit_emit_mod=_BoomEmitter(),
+                repo_path_hash="0" * 64,
+                command_sha="0" * 64,
+                dedup_mod=None,
             )
-        finally:
-            if real_emit is not None:
-                _ae.emit_generic = real_emit  # type: ignore[assignment]
+        except Exception as e:
+            self.fail(f"raised: {type(e).__name__}: {e}")
 
 
 class TestCheckOutputSecretsMainFailureBranches(unittest.TestCase):

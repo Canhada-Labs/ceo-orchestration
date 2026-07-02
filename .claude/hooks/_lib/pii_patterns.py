@@ -465,14 +465,52 @@ def _has_context(
 # ---------------------------------------------------------------------------
 
 
+# Recursion guard for _snippet's context re-redaction: the family/entropy
+# finders invoked during that pass construct Match objects whose own
+# _snippet calls must NOT re-enter the redaction sweep. Hooks execute as
+# single-threaded subprocesses, so a module global is race-free here.
+_IN_SNIPPET_REDACT = False
+
+
 def _snippet(text: str, start: int, end: int) -> str:
-    """Short surrounding snippet for the audit preview. Preview is
-    generated from the already-normalized text (step 1+2 output), so the
-    audit can show why the scanner matched after transforms.
+    """Short surrounding snippet for the audit preview, honoring the
+    ``Match.snippet`` "redacted / preview-safe" contract (PLAN-152
+    error-handling-02).
+
+    Two masking layers:
+    1. THIS match's span is replaced by ``[MASKED:n]``.
+    2. The surrounding context is swept with the module's own family
+       finders + entropy step and every hit is ``[REDACTED:FAMILY]``-ed
+       (Codex pair-rail P1: an ADJACENT secret inside the snippet radius
+       previously leaked in cleartext context).
+    Fail-safe: if the context sweep raises, the snippet degrades to the
+    bare mask — never the raw context.
     """
+    global _IN_SNIPPET_REDACT
     s = max(0, start - _SNIPPET_RADIUS)
     e = min(len(text), end + _SNIPPET_RADIUS)
-    chunk = text[s:e].replace("\n", " ").replace("\r", " ")
+    masked = "[MASKED:%d]" % max(0, end - start)
+    chunk = text[s:start] + masked + text[end:e]
+    if not _IN_SNIPPET_REDACT:
+        _IN_SNIPPET_REDACT = True
+        try:
+            others: List[Match] = []
+            for finder in (
+                _find_api_key_matches, _find_jwt_matches,
+                _find_bearer_matches, _find_cpf_cnpj_matches,
+                _find_rg_matches, _find_cnh_matches,
+                _find_pis_pasep_matches, _find_passport_br_matches,
+                _find_iban_br_matches, _find_credit_card_matches,
+                _find_email_matches,
+            ):
+                others.extend(finder(chunk))
+            others.extend(_find_entropy_matches(chunk, others))
+            chunk = _apply_redactions(chunk, others)
+        except Exception:
+            chunk = masked
+        finally:
+            _IN_SNIPPET_REDACT = False
+    chunk = chunk.replace("\n", " ").replace("\r", " ")
     return chunk.strip()[:200]
 
 

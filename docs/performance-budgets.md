@@ -12,9 +12,12 @@ and covered **one** dimension only: per-hook p99 latency. That single
 number hides five real performance risks the adopter has already asked
 about:
 
-1. A single `Edit` tool call chains **three** hooks — `check_plan_edit` +
-   `check_canonical_edit` + `audit_log`. The p99 of each alone does not
-   capture the distributed stall the agent actually experiences.
+1. A single `Edit` tool call chains **thirteen** hooks — 10 PreToolUse
+   (`check_plan_edit`, `check_canonical_edit`, `check_pair_rail`, plus
+   7 more) + 3 PostToolUse (`check_output_secrets`,
+   `check_skill_bootstrap_post`, `accel_dispatch`). The p99 of each
+   alone does not capture the distributed stall the agent actually
+   experiences.
 2. `audit-query.py` was built on `list(read_entries(...))` and degrades
    from imperceptible to seconds-long as the log grows past 100k entries.
 3. `audit-dashboard.py` loaded the whole log into RAM on every SSE
@@ -34,7 +37,7 @@ reason about which dimension they moved.
 | Dimension | Target | Measurement | Gate |
 |-----------|--------|-------------|------|
 | Per-hook p99 latency | **<20 ms** | `hook-profiler.py` (default `--mode=per-hook`) single-hook warm p99 | ADR-024 (advisory state 0; state-flip criteria documented) |
-| Distributed chain (Edit → 3 hooks, spawn → 2, etc.) | **<600 ms** p99 aggregate on `Edit`/`Write` | `hook-profiler.py --mode=per-tool-call` — aggregate row | proposal — defer ADR to Sprint 16 |
+| Distributed chain (Edit → 13 hooks, spawn → 9, etc.) | **<600 ms** p99 aggregate on `Edit`/`Write` | `hook-profiler.py --mode=per-tool-call` — aggregate row | proposal — ADR deferred, target v1.0.2+ (see Distributed-chain note) |
 | `audit-query.py` materialization (100 k events) | **<500 ms** wall-clock for streamable subcommands | `test_audit_query.TestStreamingPerformance.test_100k_summary_streams_under_500ms` | PR-gate (Python-tests step of `validate.yml`) |
 | `audit-query.py` large-log warn threshold | 100 k entries emit `[audit-query] NOTE:` to stderr | `test_audit_query.TestMaterializationWarning` | PR-gate |
 | `audit-dashboard.py` SSE connect RAM | **<5 MB** additional resident memory at 50 MB log | `test_audit_dashboard.TestSSEMemoryFootprint.test_50mb_log_tail_under_5mb` | PR-gate |
@@ -51,12 +54,16 @@ reason about which dimension they moved.
   ADR-024 can turn this advisory gate into a blocking one.
 - **Distributed chain.** This is the one the adopter *feels*. A
   `check_plan_edit` p99 of 18 ms, a `check_canonical_edit` p99 of
-  20 ms and an `audit_log` p99 of 15 ms each look fine, but the
+  20 ms and a `check_pair_rail` p99 of 15 ms each look fine, but the
   sequential chain an `Edit` triggers can sit at ~200 ms p99 on a
   laptop and ~400–500 ms p99 on a warm `ubuntu-latest` runner. The
   <600 ms target assumes a 50% headroom over laptop-measured p99 and
   is intentionally generous — the budget is there to catch
   ~10× regressions, not to micro-tune.
+  *Deferral note (PLAN-152 Wave E, v1.0.1):* the aggregate
+  per-tool-call latency gate still has no owning ADR. That deferral is
+  recorded here deliberately — no new ADR file ships in v1.0.1; target
+  v1.0.2+ for promoting this row from "proposal" to a gated ADR.
 - **audit-query streaming.** `audit-query summary` on a synthetic
   100 k-entry log takes <500 ms after Perf-P1-002. Subcommands that
   genuinely need full context (median / percentile / debate-grouping)

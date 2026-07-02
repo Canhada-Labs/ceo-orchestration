@@ -232,6 +232,91 @@ class ReadInjectionInProcessTest(TestEnvContext):
         self.assertIn("systemMessage", out)
         self.assertIn("direct_override", out["systemMessage"])
 
+    # --- PLAN-152 economics-02: A2 unicode re-read gated + capped ---------
+
+    def test_unicode_gate_default_off_skips_content_work(self):
+        # Flag unset → _scan_read_unicode must NOT run (previously the
+        # sanitize + a second uncapped full-file read ran on EVERY Read
+        # for this default-OFF guard — the economics-02 hot-path cost).
+        target = self._real_target()
+        sys.modules["scan_injection_mod"] = _FakeScanner(
+            result=_ScanResult(matched=False))
+        with mock.patch.dict(os.environ,
+                             {"CLAUDE_PROJECT_DIR": str(self.project_dir)}):
+            os.environ.pop("CEO_UNICODE_HARDBLOCK", None)
+            with mock.patch("_lib.trusted_env.get_trusted", return_value=None):
+                with mock.patch.object(
+                        cri, "_scan_read_unicode",
+                        side_effect=AssertionError("A2 scan must not run "
+                                                   "while the gate is off")):
+                    rc, out = self._run_main(
+                        {"tool_input": {"file_path": str(target)}})
+        self.assertEqual(rc, 0)
+        self.assertNotIn("systemMessage", out)
+
+    def test_unicode_gate_enabled_scans_capped_content(self):
+        # Flag set → the scan runs, and never sees more than the cap.
+        target = self._real_target()
+        sys.modules["scan_injection_mod"] = _FakeScanner(
+            result=_ScanResult(matched=False))
+        seen = {}
+
+        def _rec(content, file_path, env=None):
+            seen["len"] = len(content)
+            return None
+
+        with mock.patch.dict(os.environ,
+                             {"CLAUDE_PROJECT_DIR": str(self.project_dir),
+                              "CEO_UNICODE_HARDBLOCK": "1"}):
+            with mock.patch("_lib.trusted_env.get_trusted", return_value=None):
+                with mock.patch.object(cri, "_scan_read_unicode", _rec):
+                    rc, _ = self._run_main(
+                        {"tool_input": {"file_path": str(target)}})
+        self.assertEqual(rc, 0)
+        self.assertIn("len", seen)
+        self.assertLessEqual(seen["len"], cri._UNICODE_SCAN_CAP_CHARS)
+
+    def test_unicode_cap_bounds_large_file(self):
+        # A file larger than the cap surfaces exactly cap-many chars —
+        # the "single capped scan" assertion from the economics-02 Check.
+        big = self.project_dir / "big.txt"
+        big.write_text("a" * (cri._UNICODE_SCAN_CAP_CHARS + 4096),
+                       encoding="utf-8")
+        sys.modules["scan_injection_mod"] = _FakeScanner(
+            result=_ScanResult(matched=False))
+        seen = {}
+
+        def _rec(content, file_path, env=None):
+            seen["len"] = len(content)
+            return None
+
+        with mock.patch.dict(os.environ,
+                             {"CLAUDE_PROJECT_DIR": str(self.project_dir),
+                              "CEO_UNICODE_HARDBLOCK": "1"}):
+            with mock.patch("_lib.trusted_env.get_trusted", return_value=None):
+                with mock.patch.object(cri, "_scan_read_unicode", _rec):
+                    rc, _ = self._run_main(
+                        {"tool_input": {"file_path": str(big)}})
+        self.assertEqual(rc, 0)
+        self.assertEqual(seen["len"], cri._UNICODE_SCAN_CAP_CHARS)
+
+    def test_unicode_gate_helper_derivation(self):
+        with mock.patch("_lib.trusted_env.get_trusted", return_value=None):
+            self.assertFalse(cri._unicode_hardblock_enabled(env={}))
+            self.assertFalse(cri._unicode_hardblock_enabled(
+                env={"CEO_UNICODE_HARDBLOCK": "0"}))
+            # Master kill wins over the armed flag.
+            self.assertFalse(cri._unicode_hardblock_enabled(
+                env={"CEO_UNICODE_HARDBLOCK": "1", "CEO_SOTA_DISABLE": "1"}))
+            self.assertTrue(cri._unicode_hardblock_enabled(
+                env={"CEO_UNICODE_HARDBLOCK": "1"}))
+        # Trusted snapshot wins over the live env (mirror of the A1/§5b rule).
+        with mock.patch("_lib.trusted_env.get_trusted", return_value="1"):
+            self.assertTrue(cri._unicode_hardblock_enabled(env={}))
+        with mock.patch("_lib.trusted_env.get_trusted", return_value="0"):
+            self.assertFalse(cri._unicode_hardblock_enabled(
+                env={"CEO_UNICODE_HARDBLOCK": "1"}))
+
 
 if __name__ == "__main__":
     unittest.main()

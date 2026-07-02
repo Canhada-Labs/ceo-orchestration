@@ -554,5 +554,67 @@ class TestEnvIsolation(TestEnvContext):
         self.assertFalse((self.audit_dir / "audit-log.jsonl").exists())
 
 
+class TestSnippetMasksSecret(unittest.TestCase):
+    """PLAN-152 error-handling-02: Match.snippet honors its own contract.
+
+    The dataclass field is documented "redacted / preview-safe"; pre-fix,
+    _snippet() embedded the matched secret in cleartext (latent — the emit
+    path re-redacted, but any future consumer trusting the contract would
+    have written cleartext secrets).
+    """
+
+    _SECRET = "sk-ant-api03-" + "a1b2c3d4e5" * 9
+
+    def test_match_snippet_never_carries_cleartext_secret(self):
+        result = pp.scan(f"config loaded key={self._SECRET} from env")
+        self.assertTrue(result.matched, "fixture must trip the api_key family")
+        self.assertTrue(result.matches)
+        for m in result.matches:
+            self.assertNotIn(self._SECRET, m.snippet,
+                             "snippet leaked the cleartext secret")
+            self.assertIn("[MASKED:", m.snippet)
+
+    def test_snippet_keeps_surrounding_context(self):
+        result = pp.scan(f"config loaded key={self._SECRET} from env")
+        joined = " ".join(m.snippet for m in result.matches)
+        self.assertIn("config loaded", joined,
+                      "context before the span must survive masking")
+
+    def test_snippet_helper_masks_span_directly(self):
+        text = "prefix SECRETVALUE suffix"
+        out = pp._snippet(text, 7, 18)
+        self.assertNotIn("SECRETVALUE", out)
+        self.assertIn("[MASKED:11]", out)
+        self.assertIn("prefix", out)
+        self.assertIn("suffix", out)
+
+    def test_adjacent_secret_masked_in_context(self):
+        # Codex pair-rail P1 (PLAN-152 Wave C review): a SECOND secret
+        # inside the snippet radius previously survived in cleartext in
+        # the first match's context. Both secrets — and any ≥24-char
+        # fragment of them — must be gone from every snippet.
+        secret_a = "sk-ant-api03-" + "a1b2c3d4e5" * 9
+        secret_b = "sk-ant-api03-" + "f6e5d4c3b2" * 9
+        result = pp.scan(f"one {secret_a} two {secret_b} three")
+        self.assertTrue(result.matched)
+        self.assertGreaterEqual(len(result.matches), 2)
+        for m in result.matches:
+            self.assertNotIn(secret_a, m.snippet)
+            self.assertNotIn(secret_b, m.snippet)
+            self.assertNotIn(secret_a[:24], m.snippet,
+                             "fragment of secret A leaked in context")
+            self.assertNotIn(secret_b[:24], m.snippet,
+                             "fragment of secret B leaked in context")
+
+    def test_snippet_failsafe_degrades_to_bare_mask(self):
+        # If the context sweep raises, the snippet must degrade to the
+        # bare mask — never emit raw context (fail-safe branch).
+        from unittest import mock as _mock
+        with _mock.patch.object(pp, "_apply_redactions",
+                                side_effect=RuntimeError("sweep down")):
+            out = pp._snippet("ctx SECRETVALUE ctx", 4, 15)
+        self.assertEqual(out, "[MASKED:11]")
+
+
 if __name__ == "__main__":
     unittest.main()

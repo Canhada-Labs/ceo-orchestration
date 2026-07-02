@@ -587,5 +587,82 @@ def _make_stdin(text: str):
     return StringIO(text)
 
 
+# -----------------------------------------------------------------------------
+# PLAN-152 economics-03 — per-session window scoping
+# -----------------------------------------------------------------------------
+
+class SessionScopedWindowTest(unittest.TestCase):
+    """Two concurrent sessions must NOT share the P4 grep counter."""
+
+    def _run_main(self, session_id: str, command: str) -> Dict[str, Any]:
+        payload = json.dumps({
+            "tool_name": "Bash",
+            "session_id": session_id,
+            "tool_input": {"command": command},
+        })
+        with mock.patch.object(sys, "stdin", _make_stdin(payload)):
+            with _CaptureStdout() as cap:
+                rc = hook.main()
+        self.assertEqual(rc, 0)
+        try:
+            return json.loads(cap.text.strip() or "{}")
+        except json.JSONDecodeError:
+            return {}
+
+    def test_state_path_is_session_scoped(self):
+        # Everything stays inside the _TempStateDir patch so _state_path
+        # never touches the real ~/.claude state dir (Codex P2).
+        with _TempStateDir():
+            a = hook._state_path("sess-A")
+            b = hook._state_path("sess-B")
+            legacy = hook._state_path("")
+            self.assertNotEqual(a, b)
+            self.assertEqual(legacy.name, "ceo-overhead-window.json")
+            # Hostile session ids cannot escape the state dir.
+            weird = hook._state_path("../../etc/passwd")
+            self.assertEqual(weird.parent, hook._state_path("x").parent)
+            self.assertNotIn("/", weird.name)
+
+    def test_two_sessions_do_not_share_p4_counter(self):
+        # P4 threshold = 4 distinct greps / 5min. Pre-fix the window was
+        # project-wide: 3 greps from session A + 1 from session B pooled to
+        # 4 and fired on B. Post-fix each session has its own window.
+        cmds = [
+            "grep -rn alpha_pattern src/",
+            "grep -rn beta_needle lib/",
+            "find docs -name gamma.md",
+            "grep -c delta_token tests/",
+            "grep -l epsilon_flag scripts/",
+        ]
+        with _TempStateDir():
+            for c in cmds[:3]:
+                out = self._run_main("sess-A", c)
+                self.assertNotEqual(out.get("decision"), "block",
+                                    f"A must stay under threshold on {c!r}")
+            # Session B's FIRST grep — a pooled window would fire here.
+            out_b = self._run_main("sess-B", cmds[3])
+            self.assertNotEqual(out_b.get("decision"), "block",
+                                "session B must not inherit A's window")
+            # Positive control: A's 4th distinct grep still fires in-session.
+            out_a4 = self._run_main("sess-A", cmds[4])
+            self.assertIsNotNone(out_a4.get("decision") or
+                                 out_a4.get("systemMessage"),
+                                 "P4 must still fire within one session")
+
+    def test_gc_removes_only_stale_session_windows(self):
+        with _TempStateDir() as td:
+            now = time.time()
+            stale = td / "ceo-overhead-window-old.json"
+            fresh = td / "ceo-overhead-window-new.json"
+            legacy = td / "ceo-overhead-window.json"
+            for f in (stale, fresh, legacy):
+                f.write_text('{"events": []}', encoding="utf-8")
+            os.utime(stale, (now - 90000, now - 90000))  # >24h old
+            hook._gc_stale_session_windows(td, now)
+            self.assertFalse(stale.exists(), "stale session window swept")
+            self.assertTrue(fresh.exists(), "fresh session window kept")
+            self.assertTrue(legacy.exists(), "legacy project file untouched")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

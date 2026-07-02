@@ -138,6 +138,12 @@ log(`nightly-hygiene: ${DIMENSIONS.length} read-only dimension agents in paralle
 
 const dims = await parallel(DIMENSIONS.map((d) => () =>
   agent(dimPrompt(d), { label: `hygiene:${d.key}`, phase: 'Sweep', schema: DIM_SCHEMA })
+    // agent() RESOLVES null on terminal API error (never rejects) — .catch alone
+    // misses it (PLAN-152 error-handling-03; crash class from run wf_071ef6c5).
+    .then((r) => r || {
+      dimension: d.key, status: 'skipped',
+      summary: 'agent resolved null (terminal API error or user skip)', findings: [],
+    })
     .catch((e) => ({
       dimension: d.key, status: 'skipped',
       summary: `agent error: ${String(e).slice(0, 200)}`, findings: [],
@@ -168,9 +174,17 @@ Overall = red if any dimension red, else yellow if any yellow, else green (skipp
 Do not invent findings; only restructure what the dimensions returned. Return ONLY the structured object.`,
   { label: 'hygiene:synthesize', phase: 'Synthesize', schema: SYNTH_SCHEMA })
 
+// synth === null on terminal API error — degrade instead of crashing on
+// null.overall (PLAN-152 error-handling-03).
+const synthSafe = synth || {
+  overall: 'yellow',
+  report: '# Nightly hygiene — DEGRADED\n\nSynthesizer agent resolved null (terminal API error or user skip); '
+    + 'per-dimension results are in `dimensions` below (skipped counts as yellow).',
+}
+
 return {
-  overall: synth.overall,
-  report: synth.report,
+  overall: synthSafe.overall,
+  report: synthSafe.report,
   dimensions: dims,
   confinement: 'ADR-136-AMEND-1 read-only fan-out; no agent wrote any file; report is a return value only.',
 }

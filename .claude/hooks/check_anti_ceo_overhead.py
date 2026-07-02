@@ -219,8 +219,41 @@ def _project_state_dir() -> Path:
     return base
 
 
-def _state_path() -> Path:
+def _state_path(session_id: str = "") -> Path:
+    """Per-SESSION sliding-window state (PLAN-152 economics-03).
+
+    Pre-v1.0.1 the window file was project-wide, so N parallel sessions
+    (sanctioned read-only fan-outs, background agents, a second terminal)
+    pooled ONE 5-min budget and tripped each other's P4 grep counter.
+    Scope the window by session_id. An empty/absent session_id falls back
+    to the legacy project-wide file (stampless subprocess callers keep the
+    old — strictly more conservative — behavior).
+    """
+    sid = re.sub(r"[^A-Za-z0-9._-]", "_", (session_id or ""))[:64]
+    if sid:
+        return _project_state_dir() / ("ceo-overhead-window-%s.json" % sid)
     return _project_state_dir() / "ceo-overhead-window.json"
+
+
+def _gc_stale_session_windows(state_dir: Path, now: float) -> None:
+    """Best-effort GC of per-session window files older than 24h.
+
+    Called ONCE per session (on first window-file creation), never on the
+    hot per-tool-call path. Fail-open: any OS error is swallowed.
+    """
+    try:
+        cutoff = now - 24 * 60 * 60
+        for f in state_dir.glob("ceo-overhead-window-*.json"):
+            try:
+                if f.stat().st_mtime < cutoff:
+                    f.unlink()
+                    lock = f.with_suffix(".json.lock")
+                    if lock.is_file():
+                        lock.unlink()
+            except OSError:
+                continue
+    except Exception:
+        return
 
 
 def _emit_budget_path() -> Path:
@@ -699,9 +732,11 @@ def main() -> int:
 
     override = os.environ.get(OVERRIDE_ENV_VAR) == "1"
 
-    # 3. State + lock (fail-open on any IO).
+    # 3. State + lock (fail-open on any IO). Window is per-session
+    # (PLAN-152 economics-03) so parallel sessions don't pool one budget.
     now = time.time()
-    state_path = _state_path()
+    state_path = _state_path(session_id)
+    _is_new_session_window = not state_path.exists()
     lock_path = state_path.with_suffix(".json.lock")
 
     lock_ctx = None
@@ -738,6 +773,10 @@ def main() -> int:
         # 5. Persist state (fail-open).
         try:
             _save_state(state_path, state)
+            # Once per session (first window-file write, off the hot path):
+            # sweep sibling per-session windows older than 24h.
+            if _is_new_session_window and state_path.exists():
+                _gc_stale_session_windows(state_path.parent, now)
         except Exception as e:
             _breadcrumb(f"save_state exception: {e}")
 

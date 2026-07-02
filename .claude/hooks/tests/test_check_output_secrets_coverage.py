@@ -146,31 +146,38 @@ class OutputSecretsHelperTest(TestEnvContext):
             command_sha="c", dedup_mod=_Dedup(suppressed=False),
         )
 
-    # --- aggregate sidecar + deprecated shim -----------------------------
+    # --- aggregate sidecar REMOVED (PLAN-152 economics-01) ----------------
 
-    def test_aggregate_sidecar_no_emitter(self):
-        cos._emit_aggregate_sidecar(
-            session_id="s", tool_name="Bash",
-            scan_result={"total_findings": 2}, project="p",
-            audit_emit_mod=object(),
-        )
+    def test_aggregate_sidecar_helpers_removed(self):
+        # PLAN-106's 24h deprecation window elapsed; PLAN-152 economics-01
+        # removed the aggregate twin (it doubled HMAC appends + filelocks on
+        # the all-tools PostToolUse hot path). Regression-pin the removal.
+        self.assertFalse(hasattr(cos, "_emit_aggregate_sidecar"))
+        self.assertFalse(hasattr(cos, "_emit_audit_finding"))
+        self.assertFalse(hasattr(cos, "_DEPRECATION_WINDOW_HOURS"))
 
-    def test_aggregate_sidecar_emit_raises(self):
-        emitter = _RecordingEmitter(raise_exc=RuntimeError("x"))
-        cos._emit_aggregate_sidecar(
-            session_id="s", tool_name="Bash",
-            scan_result={"total_findings": 2}, project="p",
-            audit_emit_mod=emitter,
-        )
-
-    def test_emit_audit_finding_shim_swallows(self):
-        # Force the inner aggregate call to raise -> outer except returns.
-        with mock.patch("check_output_secrets._emit_aggregate_sidecar",
-                        side_effect=RuntimeError("boom")):
-            cos._emit_audit_finding(
-                session_id="s", tool_name="Bash",
-                scan_result={"total_findings": 1}, project="p",
-            )
+    def test_decide_emits_no_aggregate_twin(self):
+        # PLAN-152 economics-01 Check: after a scan hit, ONLY per-pattern
+        # output_scan_finding events emit — no aggregate twin. The aggregate
+        # shape carried no pattern_id and total_findings=N; per-pattern
+        # carries pattern_id and total_findings=1.
+        from _lib import audit_emit as real_audit_emit
+        calls = []
+        with mock.patch.dict(os.environ, {"CEO_OUTPUT_SCAN_DEDUP": "0"}):
+            with mock.patch.object(real_audit_emit, "emit_generic",
+                                   lambda **kw: calls.append(kw)):
+                out = cos.decide(
+                    tool_response="normal‮reverse",
+                    tool_name="Bash",
+                    session_id="s",
+                    project="p",
+                )
+        self.assertIn("continue", json.loads(out))
+        self.assertTrue(calls, "expected at least one per-pattern emit")
+        for c in calls:
+            self.assertEqual(c["action"], "output_scan_finding")
+            self.assertEqual(c["total_findings"], 1)
+            self.assertIn("pattern_id", c)
 
     # --- _derive_command_sha branches ------------------------------------
 

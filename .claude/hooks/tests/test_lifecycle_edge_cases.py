@@ -546,16 +546,18 @@ class TestEmitGracefulFallback(unittest.TestCase):
             self.fail(f"emit raised: {type(e).__name__}: {e}")
 
     def test_output_scan_finding_emit_resilient(self) -> None:
+        # PLAN-152 economics-01 removed the aggregate sidecar shim; the
+        # per-pattern emitter carries the same never-raises contract.
         try:
-            check_output_secrets._emit_audit_finding(
+            check_output_secrets._emit_per_pattern_finding(
                 session_id="t",
                 tool_name="Bash",
-                scan_result={
-                    "total_findings": 2,
-                    "family_counts": {"unicode_injection": 2},
-                    "kill_switched": {},
-                },
+                finding={"pattern_id": "LLM01_probe", "family": "unicode_injection"},
                 project="/tmp",
+                audit_emit_mod=object(),
+                repo_path_hash="0" * 64,
+                command_sha="0" * 64,
+                dedup_mod=None,
             )
         except Exception as e:
             self.fail(f"emit raised: {type(e).__name__}: {e}")

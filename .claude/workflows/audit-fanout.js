@@ -75,6 +75,10 @@ log(`audit-fanout: scope=${SCOPE} — ${DIMENSIONS.length} read-only finders in 
 
 const finderResults = await parallel(DIMENSIONS.map((d) => () =>
   agent(finderPrompt(d), { label: `find:${d.key}`, phase: 'Find', schema: FINDER_SCHEMA })
+    // agent() RESOLVES null on terminal API error (never rejects) — .catch alone
+    // misses it and the reducer crashes on null.findings (PLAN-152 error-handling-03;
+    // crashed real run wf_071ef6c5). Degrade to an empty-finder shard instead.
+    .then((r) => r || { dimension: d.key, findings: [], finder_error: 'agent resolved null (terminal API error or user skip)' })
     .catch((e) => ({ dimension: d.key, findings: [], finder_error: String(e).slice(0, 200) }))))
 
 // Deterministic dedup by file+claim (normalized) BEFORE verification spend.
@@ -82,7 +86,7 @@ const seen = {}
 const deduped = []
 let dupCount = 0
 for (const fr of finderResults) {
-  for (const f of fr.findings) {
+  for (const f of (fr.findings || [])) {
     const key = `${f.file}|${String(f.claim).toLowerCase().replace(/\s+/g, ' ').trim()}`
     if (seen[key]) {
       dupCount += 1
@@ -94,6 +98,14 @@ for (const fr of finderResults) {
   }
 }
 log(`audit-fanout: ${deduped.length} unique findings after dedup (${dupCount} cross-dimension dups folded)`)
+
+// Degraded finders (null-resolution or thrown error) mean a dimension was NEVER
+// audited — that must poison a CLEAN verdict, not silently vanish (Codex P2 on
+// PLAN-152 error-handling-03: an empty shard downstream reads as "audited, clean").
+const degradedFinders = finderResults
+  .filter((fr) => fr && fr.finder_error)
+  .map((fr) => ({ dimension: fr.dimension, finder_error: fr.finder_error }))
+if (degradedFinders.length) log(`audit-fanout: ${degradedFinders.length} finder dimension(s) DEGRADED — CLEAN verdict is off the table`)
 
 phase('Refute')
 
@@ -151,7 +163,9 @@ const refuteResults = await parallel(refuteDims.map((dim) => () =>
     }))))
 
 const verdictById = {}
-for (const rr of refuteResults) for (const v of rr.verdicts) verdictById[v.finding_id] = v
+// null refuter (terminal API error) → filter(Boolean); missing verdicts fall back
+// to the 'no refuter verdict returned' default in `merged` (PLAN-152 error-handling-03).
+for (const rr of refuteResults.filter(Boolean)) for (const v of (rr.verdicts || [])) verdictById[v.finding_id] = v
 const merged = deduped.map((f) => ({
   ...f,
   verdict: (verdictById[f.finding_id] || { verdict: 'unverifiable', evidence_check: 'no refuter verdict returned' }).verdict,
@@ -177,10 +191,11 @@ Scope: ${SCOPE}. Adversarially-verified results:
 - confirmed: ${JSON.stringify(confirmed, null, 1)}
 - refuted (count ${refuted.length}): ${JSON.stringify(refuted.map((f) => ({ finding_id: f.finding_id, claim: f.claim, evidence_check: f.evidence_check })), null, 1)}
 - unverifiable (count ${unverifiable.length}): ${JSON.stringify(unverifiable.map((f) => ({ finding_id: f.finding_id, claim: f.claim })), null, 1)}
+- DEGRADED finder dimensions (count ${degradedFinders.length} — these were NEVER audited): ${JSON.stringify(degradedFinders, null, 1)}
 
 Produce a markdown report:
 # Audit fan-out — ${SCOPE}
-## Verdict        (CLEAN = zero confirmed; FINDINGS = confirmed findings exist; DEGRADED = unverifiable > confirmed, audit quality suspect)
+## Verdict        (CLEAN = zero confirmed AND zero degraded finder dimensions; FINDINGS = confirmed findings exist; DEGRADED = any finder dimension degraded with nothing confirmed, OR unverifiable > confirmed — audit coverage/quality suspect. A degraded dimension MUST be named in the report; never report CLEAN over unaudited dimensions.)
 ## Confirmed findings   (table: id | dimension | disposition | confidence(bps) | file | claim | evidence)
 ## Refuted at REDUCE    (table: id | claim | what the refuter actually found — these are the saved false-positives)
 ## Unverifiable         (list, with why)
@@ -188,17 +203,48 @@ Produce a markdown report:
 Restructure only — invent NOTHING beyond the verdict rule above. Return ONLY {verdict, report}.`,
   { label: 'synthesize', phase: 'Synthesize', schema: SYNTH_SCHEMA })
 
+// synth === null on terminal API error — degrade to a DEGRADED report carrying the
+// already-computed counts instead of crashing (PLAN-152 error-handling-03).
+const synthSafe = synth || {
+  verdict: 'DEGRADED',
+  report: `# Audit fan-out — ${SCOPE}\n\nSynthesizer agent resolved null (terminal API error or user skip); `
+    + `confirmed=${confirmed.length}, refuted=${refuted.length}, unverifiable=${unverifiable.length}, `
+    + `degraded finder dimensions=${degradedFinders.length}. `
+    + `Raw confirmed findings are in confirmed_findings.`,
+}
+// Mechanical verdict — a deterministic restatement of the documented rule,
+// enforced on EVERY path including the null-synth fallback (Codex P2 rounds
+// 1+2, PLAN-152 error-handling-03). The synthesizer's verdict is advisory;
+// counts win:
+//   confirmed>0 → FINDINGS (unless unverifiable > confirmed → DEGRADED,
+//                 audit quality suspect)
+//   confirmed=0 → DEGRADED if any degraded finder dimension or any
+//                 unverifiable remains, else CLEAN
+const mechanicalVerdict = confirmed.length
+  ? (unverifiable.length > confirmed.length ? 'DEGRADED' : 'FINDINGS')
+  : ((degradedFinders.length || unverifiable.length) ? 'DEGRADED' : 'CLEAN')
+if (synthSafe.verdict !== mechanicalVerdict) {
+  synthSafe.report = `> **[mechanical verdict override]** the synthesizer said ${synthSafe.verdict}; `
+    + `computed from counts (confirmed=${confirmed.length}, unverifiable=${unverifiable.length}, `
+    + `degraded finder dimensions=${degradedFinders.length}) the verdict is ${mechanicalVerdict}. `
+    + `Do not trust contradictory wording below.\n\n`
+    + synthSafe.report
+  synthSafe.verdict = mechanicalVerdict
+}
+
 return {
   scope: SCOPE,
-  verdict: synth.verdict,
-  report: synth.report,
+  verdict: synthSafe.verdict,
+  report: synthSafe.report,
   stats: {
-    raw_findings: finderResults.reduce((n, fr) => n + fr.findings.length, 0),
+    raw_findings: finderResults.reduce((n, fr) => n + (fr.findings || []).length, 0),
     dedup_folded: dupCount,
     confirmed: confirmed.length,
     refuted: refuted.length,
     unverifiable: unverifiable.length,
+    degraded_finders: degradedFinders.length,
   },
+  degraded_finders: degradedFinders,
   confirmed_findings: confirmed,
   confinement: 'ADR-136-AMEND-1 read-only fan-out; ADR-141 8-field shards + adversarial REDUCE; no file writes.',
 }

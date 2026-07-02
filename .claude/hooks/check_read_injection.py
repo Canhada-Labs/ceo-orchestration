@@ -121,6 +121,38 @@ def _emit_allow(system_message: Optional[str] = None) -> str:
     return json.dumps(out, ensure_ascii=False)
 
 
+# PLAN-152 economics-02: cap for the A2 unicode re-read of Read content.
+# Mirrors scan-injection.py's _MAX_BYTES (1 MiB) so the two scans share one
+# ceiling. Measured in characters at the text layer (fh.read(n)) — bounded,
+# which is what the hot-path economics need.
+_UNICODE_SCAN_CAP_CHARS = 1024 * 1024
+
+
+def _unicode_hardblock_enabled(env=None) -> bool:
+    """PLAN-152 economics-02 gate: is the A2 read-direction guard armed?
+
+    Mirrors ``_scan_read_unicode``'s enforce derivation (master kill first,
+    then trusted-env snapshot over live env) WITHOUT touching file content —
+    the hot path uses this to skip the second file read + sanitize entirely
+    while the guard is default-OFF. Fail-open (False) on any infra error.
+    """
+    try:
+        src_env = env if env is not None else os.environ
+        if (src_env.get("CEO_SOTA_DISABLE") or "").strip() == "1":
+            return False
+        enabled = (src_env.get("CEO_UNICODE_HARDBLOCK") or "").strip() == "1"
+        try:
+            from _lib import trusted_env as _te  # noqa: E402
+            _snap = _te.get_trusted("CEO_UNICODE_HARDBLOCK")
+            if _snap is not None:
+                enabled = (_snap or "").strip() == "1"
+        except Exception:  # pragma: no cover
+            pass
+        return enabled
+    except Exception:  # pragma: no cover - fail-open invariant
+        return False
+
+
 def _scan_read_unicode(content: str, file_path: str, env=None) -> Optional[str]:
     """PLAN-133 A2 — fail-CLOSED invisible-unicode guard on Read content.
 
@@ -316,17 +348,25 @@ def main() -> int:
     # unicode (control / bidi / zero-width / U+E0000–E007F Tag-block), a detection
     # becomes a fail-CLOSED block. Default behavior unchanged (advisory) when the
     # flag is unset. Fail-open.
+    #
+    # PLAN-152 economics-02: this previously did a SECOND uncapped full-file
+    # read + unconditional sanitize on EVERY Read (all-sessions hot path) for
+    # a default-OFF guard. The gate now runs FIRST — flag unset means zero
+    # extra work (the enforced=0 measure-first breadcrumb is retired with it)
+    # — and the re-read is capped at _UNICODE_SCAN_CAP_CHARS.
     try:
-        content = p.read_text(encoding="utf-8", errors="replace")
-        _uni = _scan_read_unicode(content, file_path)  # helper mirrors §6a
-        if _uni is not None:
-            # block via the contract (this hook normally only advises; the
-            # block is gated by CEO_UNICODE_HARDBLOCK so default behavior is
-            # preserved).
-            from _lib.adapters import claude as _ca
-            from _lib import contract as _ct
-            _ca.emit_decision(_ct.block(_uni))
-            return 0
+        if _unicode_hardblock_enabled():
+            with p.open("r", encoding="utf-8", errors="replace") as _fh:
+                content = _fh.read(_UNICODE_SCAN_CAP_CHARS)
+            _uni = _scan_read_unicode(content, file_path)  # helper mirrors §6a
+            if _uni is not None:
+                # block via the contract (this hook normally only advises; the
+                # block is gated by CEO_UNICODE_HARDBLOCK so default behavior is
+                # preserved).
+                from _lib.adapters import claude as _ca
+                from _lib import contract as _ct
+                _ca.emit_decision(_ct.block(_uni))
+                return 0
     except Exception:
         pass
 
