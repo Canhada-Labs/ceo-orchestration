@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 OUTPUT_SCAN_PATH = (
     REPO_ROOT / ".claude" / "hooks" / "_lib" / "output_scan.py"
 )

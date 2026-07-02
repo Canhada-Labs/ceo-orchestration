@@ -40,7 +40,7 @@ import sys
 import unittest
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 _HOOKS = REPO_ROOT / ".claude" / "hooks"
 _MCP_SERVER = REPO_ROOT / ".claude" / "scripts" / "mcp-server"
 for _p in (_HOOKS, _MCP_SERVER):

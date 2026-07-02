@@ -21,7 +21,7 @@ import unittest
 from pathlib import Path
 from typing import Any, Dict, List
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 _HOOKS = REPO_ROOT / ".claude" / "hooks"
 if str(_HOOKS) not in sys.path:
     sys.path.insert(0, str(_HOOKS))

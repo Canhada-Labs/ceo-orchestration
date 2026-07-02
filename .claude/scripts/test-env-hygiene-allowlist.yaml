@@ -1023,16 +1023,16 @@ file: tests/integration/test_peers_yaml_migration.py
 file: tests/integration/test_threat_model_coverage.py
   - bare-testcase
 
-file: tests/test_atlas_technique_id_tagging.py
+file: tests/unit/test_atlas_technique_id_tagging.py
   - bare-testcase
 
-file: tests/test_check_atlas_fpr.py
+file: tests/unit/test_check_atlas_fpr.py
   - bare-testcase
 
-file: tests/test_codex_redact_fail_closed.py
+file: tests/unit/test_codex_redact_fail_closed.py
   - bare-testcase
 
-file: tests/test_credential_rotation_emit.py
+file: tests/unit/test_credential_rotation_emit.py
   - env-write
 
 file: tests/test_federation/conftest.py
@@ -1080,14 +1080,14 @@ file: tests/test_federation/test_write_mode_wire.py
   - bare-testcase
   - env-write
 
-file: tests/test_install_yaml_glob.py
+file: tests/unit/test_install_yaml_glob.py
   - bare-testcase
 
-file: tests/test_live_adapter_allowlist_runtime.py
+file: tests/unit/test_live_adapter_allowlist_runtime.py
   - env-write
 
-file: tests/test_output_scan_llm03.py
+file: tests/unit/test_output_scan_llm03.py
   - env-write
 
-file: tests/test_value_dashboard_emit.py
+file: tests/unit/test_value_dashboard_emit.py
   - bare-testcase

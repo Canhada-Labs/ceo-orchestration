@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import List
 
 
-_REPO_ROOT = Path(__file__).resolve().parents[1]
+_REPO_ROOT = Path(__file__).resolve().parents[2]
 _SCRIPT = _REPO_ROOT / ".claude" / "scripts" / "check_atlas_fpr.py"
 
 

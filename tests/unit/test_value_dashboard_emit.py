@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 from unittest import mock
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 _HOOKS = REPO_ROOT / ".claude" / "hooks"
 _SCRIPTS = REPO_ROOT / ".claude" / "scripts"
 for _p in (_HOOKS, _SCRIPTS):

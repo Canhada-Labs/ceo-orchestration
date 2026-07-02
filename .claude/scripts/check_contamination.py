@@ -175,7 +175,7 @@ _ALLOWLIST_EXACT = {
     ".claude/hooks/tests/test_check_canonical_edit_mcp.py",
     ".claude/hooks/tests/test_mcp_canonical_guard.py",
     ".claude/scripts/tests/test_success_receipt.py",
-    "tests/test_output_scan_llm03.py",
+    "tests/unit/test_output_scan_llm03.py",
     # GPG sentinel-signer roster — references Owner key by design (like
     # sentinel-signers.txt / skill-patch-signers.txt above):
     ".claude/security/sentinel-signers-registry.yaml",
