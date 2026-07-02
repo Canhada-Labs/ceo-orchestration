@@ -205,12 +205,15 @@ class TestUnknownModelValidation(_FsBase):
         self.assertIn("unknown_model", result.reason)
 
     def test_all_known_models_pass(self):
-        """All 3 ``MODEL_ID`` values pass the validation."""
-        for model in (
-            "claude-opus-4-8",
-            "claude-sonnet-4-6",
-            "claude-haiku-4-5",
-        ):
+        """EVERY ``MODEL_ID`` value passes the validation.
+
+        Iterates the enum itself (not a hardcoded list) so a new member —
+        e.g. SONNET5, ADR-157 — is pinned automatically: an on-disk policy
+        naming it must load cleanly, never trip the ``unknown_model``
+        fallback (Codex pair-rail, PLAN-152 Wave F review).
+        """
+        from _lib.tier_policy import _types as _T
+        for model in (m.value for m in _T.MODEL_ID):
             _write_json(
                 self.policy,
                 {

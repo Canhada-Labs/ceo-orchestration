@@ -41,15 +41,20 @@ from _lib.tier_policy import _types as T
 class TestModelIdEnum(unittest.TestCase):
     """R-CR R2-2 — closed-membership enum of canonical model slugs."""
 
-    def test_enum_has_three_members(self):
+    def test_enum_has_four_members(self):
+        # 3 → 4: SONNET5 added by ADR-157 (PLAN-152 sonnet5-tier).
         members = list(T.MODEL_ID)
-        self.assertEqual(len(members), 3)
+        self.assertEqual(len(members), 4)
 
     def test_opus47_value(self):
         self.assertEqual(T.MODEL_ID.OPUS47.value, "claude-opus-4-8")
 
     def test_sonnet46_value(self):
         self.assertEqual(T.MODEL_ID.SONNET46.value, "claude-sonnet-4-6")
+
+    def test_sonnet5_value(self):
+        # ADR-157: exact wire string, no date suffix.
+        self.assertEqual(T.MODEL_ID.SONNET5.value, "claude-sonnet-5")
 
     def test_haiku45_value(self):
         self.assertEqual(T.MODEL_ID.HAIKU45.value, "claude-haiku-4-5")

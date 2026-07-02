@@ -87,6 +87,11 @@ models:
     output_per_mtok: 15.00
     tier: sonnet
     source_url: "https://docs.anthropic.com/en/docs/about-claude/pricing"
+  claude-sonnet-5:
+    input_per_mtok: 3.00
+    output_per_mtok: 15.00
+    tier: sonnet
+    source_url: "https://docs.anthropic.com/en/docs/about-claude/pricing"  # ADR-157: sticker rate; intro $2/$10 through 2026-08-31 not modeled (estimator uses standard); tokenizer +30% tokens vs 4.6
   claude-haiku-4-5:
     input_per_mtok: 1.00
     output_per_mtok: 5.00

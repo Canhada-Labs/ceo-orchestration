@@ -9,8 +9,12 @@ Public symbols
 
 * ``MODEL_ID`` — closed enum of the model slugs the framework recognises.
   Values are the canonical Anthropic model IDs ("claude-opus-4-8",
-  "claude-sonnet-4-6", "claude-haiku-4-5"). Membership is closed; new
-  models require an ADR + KERNEL edit here.
+  "claude-sonnet-5", "claude-sonnet-4-6", "claude-haiku-4-5").
+  Membership is closed; new models require an ADR + KERNEL edit here
+  (SONNET5 added by ADR-157 / PLAN-152 — member only; the M-tier
+  routing default is UNCHANGED, a routing flip is its own future plan).
+  Member NAMES are stable identifiers and may lag the value they map to
+  (``OPUS47`` → "claude-opus-4-8"); never rename a member (R-CR R2-2).
 
 * ``TaskTypeRequest`` — frozen dataclass passed by the classifier.
   Fields: ``task_type``, ``role``, ``context_tokens``, ``risk_level``.
@@ -40,6 +44,9 @@ PLAN-071 §3 must-fix coverage:
   runtime mutation raise.
 * R-CR R2-2 — ``MODEL_ID.OPUS47`` is the canonical "claude-opus-4-8"
   symbol used by the VETO floor (not the legacy ``opus-4-1`` slug).
+  The member NAME is a frozen stable identifier from the Opus-4.7 era;
+  its VALUE tracks the current Opus. Renaming it would be a breaking
+  ref-sweep with zero benefit (PLAN-152 OQ1: docstring reconcile only).
 * R-SEC4 / P0-03 — keys are a strict superset of the 6 spec VETO floor
   roles named in PLAN-071 §3.1 line 151. The 4 forward-looking roles
   (threat-detection-engineer, identity-trust-architect, incident-
@@ -91,8 +98,14 @@ class MODEL_ID(enum.Enum):
     string-comparison silently coercing the enum is impossible.
     """
 
+    # OPUS47 is a STABLE member name (R-CR R2-2) — the name lags the value
+    # by design; do not rename (PLAN-152 OQ1 docstring-only reconcile).
     OPUS47 = "claude-opus-4-8"
     SONNET46 = "claude-sonnet-4-6"
+    # ADR-157 (PLAN-152 sonnet5-tier): member ADDED; M-tier routing default
+    # UNCHANGED (still OPUS47) — the routing flip is a separate future plan
+    # with soak + documented revert.
+    SONNET5 = "claude-sonnet-5"
     HAIKU45 = "claude-haiku-4-5"
 
     def __str__(self) -> str:  # pragma: no cover — convenience

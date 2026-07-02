@@ -38,6 +38,20 @@
       "replacement": "claude-mythos-5"
     },
     {
+      "model_id": "claude-opus-4-6-fast",
+      "aliases": [],
+      "deprecated": null,
+      "retirement": "2026-06-29",
+      "replacement": "claude-opus-4-8-fast"
+    },
+    {
+      "model_id": "claude-opus-4-7-fast",
+      "aliases": [],
+      "deprecated": "2026-06-25",
+      "retirement": "2026-07-24",
+      "replacement": "claude-opus-4-8-fast"
+    },
+    {
       "model_id": "claude-3-7-sonnet-20250219",
       "aliases": ["claude-3-7-sonnet"],
       "deprecated": "2025-10-28",

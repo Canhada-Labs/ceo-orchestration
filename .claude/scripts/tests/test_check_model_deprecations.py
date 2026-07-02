@@ -126,6 +126,41 @@ class TestRealLedgerParses(_CheckerTestBase):
                 _mod.parse_iso_date(entry["retirement"]),
                 "unparseable retirement on %s" % entry["model_id"])
 
+    def test_fastmode_entries_parse_and_classify_break_by_date(self):
+        """PLAN-152 fastmode-deprecation: per-model_id fast-mode fuses.
+
+        The checker has NO class/mode concept, so the fast-mode retirements
+        ride ordinary per-id ledger entries: claude-opus-4-6-fast (retired
+        2026-06-29 — the API silently falls back to standard speed) and
+        claude-opus-4-7-fast (retires 2026-07-24 — hard API error after
+        removal). Both must parse and classify BREAK once their date passes.
+        """
+        ledger = _mod.load_ledger(str(REAL_LEDGER))
+        by_id = {m["model_id"]: m for m in ledger["models"]}
+        self.assertEqual(by_id["claude-opus-4-6-fast"]["retirement"],
+                         "2026-06-29")
+        self.assertEqual(by_id["claude-opus-4-7-fast"]["retirement"],
+                         "2026-07-24")
+        # deprecated dates pinned too (Codex Wave F review caught a wrong
+        # guess here — the official fast-mode doc says 2026-06-25).
+        self.assertIsNone(by_id["claude-opus-4-6-fast"]["deprecated"])
+        self.assertEqual(by_id["claude-opus-4-7-fast"]["deprecated"],
+                         "2026-06-25")
+        self.assertEqual(by_id["claude-opus-4-6-fast"]["replacement"],
+                         "claude-opus-4-8-fast")
+        self.assertEqual(by_id["claude-opus-4-7-fast"]["replacement"],
+                         "claude-opus-4-8-fast")
+        # classify BREAK by date (deterministic injected today)
+        today = _mod.parse_iso_date("2026-07-25")
+        for mid in ("claude-opus-4-6-fast", "claude-opus-4-7-fast"):
+            sev, _label = _mod.classify_entry(by_id[mid], today, 60)
+            self.assertEqual(sev, "BREAK",
+                             "%s must classify BREAK past retirement" % mid)
+        # 4-6-fast is already BREAK at the 4-7-fast deprecation date
+        sev, _ = _mod.classify_entry(
+            by_id["claude-opus-4-6-fast"], _mod.parse_iso_date("2026-07-02"), 60)
+        self.assertEqual(sev, "BREAK")
+
     def test_ledger_meta_not_stale_and_rules_compile(self):
         ledger = _mod.load_ledger(str(REAL_LEDGER))
         self.assertFalse(ledger["_meta"]["source_stale"])
