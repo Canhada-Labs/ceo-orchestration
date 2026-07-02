@@ -136,6 +136,44 @@ _path_hash() {
   fi
 }
 
+# PLAN-152 security-01 — cache trust gate (TOCTOU / symlink hardening).
+#
+# The cached interpreter path is READ from $TMPDIR and later EXEC'd; under
+# a shared /tmp another local user could pre-create the cache dir (or swap
+# in a symlink) and plant an interpreter path of their choosing, and a
+# symlinked cache DIR would additionally redirect the cache WRITE into an
+# attacker-chosen location. Before any read or write we therefore require:
+# the cache dir is a real directory (not a symlink) owned by the current
+# uid, and the cache file (when present) is a regular non-symlink file
+# owned by the current uid. Any failed check = cache miss (fall back to
+# the full probe) — never a hard failure.
+_owner_uid() {
+  # GNU stat first (Linux); BSD stat fallback (macOS).
+  stat -c '%u' "$1" 2>/dev/null || stat -f '%u' "$1" 2>/dev/null
+}
+_perm_bits() {
+  # Octal permission bits (low bits only): GNU '%a' / BSD '%Lp'.
+  stat -c '%a' "$1" 2>/dev/null || stat -f '%Lp' "$1" 2>/dev/null
+}
+_dir_mode_safe() {
+  # PLAN-152 security-01 P2 (Codex R2): reject a group/other-writable
+  # cache dir. A user-owned but world/group-writable dir lets another
+  # local user swap the cache file between the trust check and the read
+  # (TOCTOU), restoring the interpreter-hijack this gate closes.
+  local m
+  m="$(_perm_bits "$1")" || return 1
+  [ -n "$m" ] && [ "$(( 0${m} & 022 ))" -eq 0 ]
+}
+_cache_dir_trusted() {
+  [ ! -L "$_CACHE_DIR" ] && [ -d "$_CACHE_DIR" ] \
+    && [ "$(_owner_uid "$_CACHE_DIR")" = "$_CUR_UID" ] \
+    && _dir_mode_safe "$_CACHE_DIR"
+}
+_cache_file_trusted() {
+  [ ! -L "$_CACHE_FILE" ] && [ -f "$_CACHE_FILE" ] \
+    && [ "$(_owner_uid "$_CACHE_FILE")" = "$_CUR_UID" ]
+}
+
 parse_version() {
   # Emit "MAJOR MINOR" from `python --version` output (e.g. "Python 3.12.3")
   local py="$1"
@@ -156,13 +194,17 @@ version_ok() {
 
 # ---- Cache lookup (fast path) ----
 FOUND_PY=""
+_CUR_UID="$(id -u)"
 _CACHE_DIR="$(_cache_dir)"
 _PATH_SIG="$(_path_hash 2>/dev/null || echo "nohash")"
 _CACHE_FILE="${_CACHE_DIR}/resolved-py-${_PATH_SIG}"
 
 # Honour CEO_PYHOOK_NO_CACHE=1 to force re-probe (useful for testing
 # the fallback path or after installing a new interpreter mid-session).
-if [ "${CEO_PYHOOK_NO_CACHE:-0}" != "1" ] && [ -r "$_CACHE_FILE" ]; then
+# PLAN-152 security-01: the dir + file trust gates (ownership, no
+# symlinks) run BEFORE the read — an untrusted cache is a cache MISS.
+if [ "${CEO_PYHOOK_NO_CACHE:-0}" != "1" ] && _cache_dir_trusted \
+    && _cache_file_trusted && [ -r "$_CACHE_FILE" ]; then
   _cached_py="$(cat "$_CACHE_FILE" 2>/dev/null || echo "")"
   if [ -n "$_cached_py" ] && command -v "$_cached_py" >/dev/null 2>&1; then
     # Trust the cache: PATH-hash changes would have produced a different
@@ -195,7 +237,14 @@ if [ -z "$FOUND_PY" ]; then
   if [ -n "$FOUND_PY" ]; then
     # mkdir is idempotent + concurrent-safe (-p). Set 0700 so another
     # unix user on the host cannot read or replace the cache.
-    if mkdir -p "$_CACHE_DIR" 2>/dev/null && chmod 0700 "$_CACHE_DIR" 2>/dev/null; then
+    # PLAN-152 security-01: never write through a symlinked or foreign-
+    # owned cache dir (symlink-redirect write primitive).
+    # Order matters (PLAN-152 security-01 P2): reject a symlinked dir
+    # BEFORE chmod (never chmod an attacker's symlink target), then chmod
+    # 0700 to normalize the mode under a loose umask, THEN the full trust
+    # check (owner + non-symlink + no group/other write).
+    if mkdir -p "$_CACHE_DIR" 2>/dev/null && [ ! -L "$_CACHE_DIR" ] \
+        && chmod 0700 "$_CACHE_DIR" 2>/dev/null && _cache_dir_trusted; then
       _tmp_cache="${_CACHE_FILE}.$$"
       if printf '%s\n' "$FOUND_PY" > "$_tmp_cache" 2>/dev/null; then
         mv -f "$_tmp_cache" "$_CACHE_FILE" 2>/dev/null || rm -f "$_tmp_cache" 2>/dev/null

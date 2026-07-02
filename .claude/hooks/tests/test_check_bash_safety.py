@@ -544,3 +544,158 @@ class TestCredentialScanFailClosed(TestEnvContext):
         self.assertIn("****", d.reason)
         # Raw key body must not leak in the block reason.
         self.assertNotIn(_A[10:], d.reason)
+
+
+class TestRawscanValueErrorBranch(TestEnvContext):
+    """PLAN-152 error-handling-01 (debate C4 + Codex R2 P2#1) — shlex bypass.
+
+    The naive subcommand splitter mangles quoted metachars (`rm -rf ~ ";"`
+    splits into an unbalanced-quote chunk), shlex rejects the chunk, and
+    pre-PLAN-152 the chunk was silently SKIPPED — fail-open, because real
+    bash still executes the destructive core. The fix re-tokenizes the
+    WHOLE command and blocks only on a real destructive SEGMENT, so
+    destructive text inside a quoted argument (`echo "a && rm -rf /tmp"`)
+    stays ALLOWED (Codex R2 P2#1 false-positive close), while
+    `rm -rf ~ ";"` is blocked.
+    """
+
+    # ---- the probes from the PLAN-152 Wave A Check line ----
+
+    def test_blocks_rm_rf_home_quoted_metachar(self):
+        """The audit's live-verified bypass vector (P0)."""
+        d = cbs.decide_command('rm -rf ~ ";"')
+        self.assertFalse(d.allow)
+        self.assertIn("BLOCKED", d.reason)
+        self.assertIn("re-tokenized", d.reason)
+
+    # ---- Codex R2 P2#1: quoted destructive text is DATA, not a command ----
+
+    def test_allows_quoted_destructive_after_separator_echo(self):
+        """`echo "a && rm -rf /tmp"` — the `&&` is quoted, so the whole
+        command re-parses to a single benign `echo` segment. The earlier
+        regex rescan false-positived here (Codex R2 P2#1)."""
+        d = cbs.decide_command('echo "a && rm -rf /tmp"')
+        self.assertTrue(d.allow)
+
+    def test_allows_quoted_destructive_after_separator_printf(self):
+        d = cbs.decide_command('printf "do not run; rm -rf /tmp"')
+        self.assertTrue(d.allow)
+
+    def test_blocks_compound_unparseable_rm_rf(self):
+        """A REAL compound where the destructive part is in command
+        position: `git pull && rm -rf ~ ";"` → 2nd segment blocks."""
+        d = cbs.decide_command('git pull && rm -rf ~ ";"')
+        self.assertFalse(d.allow)
+        self.assertIn("re-tokenized", d.reason)
+
+    def test_blocks_adjacent_operator_no_whitespace(self):
+        """Codex R3 P1: shell operators need no surrounding whitespace.
+        `true&&rm -rf ~ ';'` — the quote-aware splitter separates the
+        glued `&&` (shlex.split would keep `true&&rm` as one token and
+        miss the rm)."""
+        d = cbs.decide_command("true&&rm -rf ~ ';'")
+        self.assertFalse(d.allow)
+        self.assertIn("re-tokenized", d.reason)
+
+    def test_blocks_adjacent_pipe_and_or(self):
+        """Adjacency parity for `|` and `||`."""
+        self.assertFalse(cbs.decide_command("cat x|rm -rf ~ ';'").allow)
+        self.assertFalse(cbs.decide_command("false||rm -rf ~ ';'").allow)
+
+    def test_allows_quoted_standalone_separator_is_data(self):
+        """Codex R3 P2: a QUOTED standalone `;` is a literal argument, not
+        a separator. `echo ';' rm -rf /tmp` runs as `echo` with args —
+        the quote-aware splitter keeps it one subcommand (shlex.split
+        would strip the quotes and spuriously segment)."""
+        d = cbs.decide_command("echo ';' rm -rf /tmp")
+        self.assertTrue(d.allow)
+
+    def test_allows_escaped_quote_inside_double_quotes(self):
+        r"""A `\"` inside double quotes does not close them, so the whole
+        destructive-looking tail stays quoted data."""
+        d = cbs.decide_command('echo "x\\"; rm -rf /tmp"')
+        self.assertTrue(d.allow)
+
+    def test_blocks_quoted_sep_data_then_real_sep(self):
+        """A quoted `;` (data) followed by a REAL `;`: `rm -rf ~ ';' ; ls`
+        — the first subcommand is `rm -rf ~ ';'` with rm in command
+        position → block."""
+        d = cbs.decide_command("rm -rf ~ ';' ; ls")
+        self.assertFalse(d.allow)
+
+    def test_allows_benign_unparseable_chunk(self):
+        """Debate C4: NOT a blanket fail-closed — a benign command whose
+        CHUNKS fail shlex (the naive splitter mangling quoted `&&`) must
+        keep working.
+
+        NOTE the debate's original example (`echo it's fine`) is blocked
+        BEFORE the chunk loop by `_e3`'s whole-command parse gate
+        (fail-CLOSED by design — CLAUDE.md §4 input-vs-infra distinction,
+        PLAN-152 Wave G); the chunk-level rescan never sees it. The
+        correct benign analog is a command that parses whole but mangles
+        at the chunk level. Verified against HEAD (pre-PLAN-152): both
+        commands behaved this way BEFORE the rescan branch existed.
+        """
+        d = cbs.decide_command('echo "a && b"')
+        self.assertTrue(d.allow)
+
+    def test_e3_whole_command_parse_gate_precedes_rescan(self):
+        """Pins the PRE-EXISTING `_e3` whole-command fail-CLOSED (input-
+        parse failure in a security matcher, by design): `echo it's fine`
+        never reaches the rescan branch. A future refactor moving that
+        gate becomes a visible diff here."""
+        d = cbs.decide_command("echo it's fine")
+        self.assertFalse(d.allow)
+        self.assertIn("shlex", d.reason)
+
+    # ---- signature parity with the token rules ----
+
+    def test_blocks_git_reset_hard_quoted_metachar(self):
+        d = cbs.decide_command('git reset --hard HEAD ";"')
+        self.assertFalse(d.allow)
+        self.assertIn("re-tokenized", d.reason)
+
+    def test_blocks_git_push_force_quoted_metachar(self):
+        d = cbs.decide_command('git push --force origin main ";"')
+        self.assertFalse(d.allow)
+        self.assertIn("re-tokenized", d.reason)
+
+    def test_allows_git_push_force_with_lease_quoted_metachar(self):
+        """--force-with-lease is the safe form on the raw path too."""
+        d = cbs.decide_command('git push --force-with-lease origin main ";"')
+        self.assertTrue(d.allow)
+
+    def test_allows_rm_recursive_without_force_unparseable(self):
+        """-r without -f does not match the rm signature (parity with
+        `_check_rm_rf`)."""
+        d = cbs.decide_command('rm -r mydir ";"')
+        self.assertTrue(d.allow)
+
+    def test_blocks_sudo_prefixed_rm_rf_unparseable(self):
+        """Privilege-prefix normalization parity on the raw path."""
+        d = cbs.decide_command('sudo rm -rf /tmp/foo ";"')
+        self.assertFalse(d.allow)
+
+    # ---- kill-switch (CEO_BASH_RAWSCAN=0 reverts to the legacy skip) ----
+
+    def test_kill_switch_reverts_to_legacy_skip(self):
+        with mock.patch.object(
+            cbs._trusted_env, "get_trusted", return_value="0"
+        ):
+            d = cbs.decide_command('rm -rf ~ ";"')
+        self.assertTrue(d.allow)
+
+    def test_default_on_when_var_unset(self):
+        with mock.patch.object(
+            cbs._trusted_env, "get_trusted", return_value=None
+        ):
+            d = cbs.decide_command('rm -rf ~ ";"')
+        self.assertFalse(d.allow)
+
+    # ---- parseable chunks never take the raw path ----
+
+    def test_parseable_quoted_rm_string_still_allowed(self):
+        """A PARSEABLE echo of destructive-looking text takes the token
+        path (echo != rm) — the rescan only sees shlex-rejected chunks."""
+        d = cbs.decide_command('echo "rm -rf /tmp"')
+        self.assertTrue(d.allow)

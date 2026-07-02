@@ -2,7 +2,7 @@
   "schema_version": "1.0",
   "_comment": "Canonical inventory of CLAUDE_*/ANTHROPIC_*/CEO_* names referenced by framework code (PLAN-135 W5 O8 — the S218 footgun class). Token-level superset of strictly-consumed vars; see env-inventory-check.py docstring. Regenerate with --generate after any REVIEWED env-surface change.",
   "generated_by": "env-inventory-check.py --generate",
-  "generated_at": "2026-06-21",
+  "generated_at": "2026-07-02",
   "scan_roots": [
     ".claude/hooks",
     ".claude/scripts",
@@ -46,23 +46,26 @@
     },
     "ANTHROPIC_DEFAULT_OPUS_MODEL": {
       "evidence": [
-        ".claude/hooks/_lib/effective_config.py"
+        ".claude/hooks/_lib/effective_config.py",
+        ".claude/scripts/env-inventory.json"
       ],
-      "sites": 1
+      "sites": 2
     },
     "ANTHROPIC_MODEL": {
       "evidence": [
         ".claude/hooks/_lib/effective_config.py",
-        ".claude/scripts/ceo-boot.py"
+        ".claude/scripts/ceo-boot.py",
+        ".claude/scripts/env-inventory.json"
       ],
-      "sites": 2
+      "sites": 3
     },
     "ANTHROPIC_SMALL_FAST_MODEL": {
       "evidence": [
         ".claude/hooks/_lib/effective_config.py",
-        ".claude/scripts/ceo-boot.py"
+        ".claude/scripts/ceo-boot.py",
+        ".claude/scripts/env-inventory.json"
       ],
-      "sites": 2
+      "sites": 3
     },
     "ANTHROPIC_VERSION": {
       "evidence": [
@@ -110,9 +113,10 @@
     },
     "CEO_ALLOW_NO_VERIFY": {
       "evidence": [
-        ".claude/hooks/_lib/env_persist_allowlist.py"
+        ".claude/hooks/_lib/env_persist_allowlist.py",
+        ".claude/scripts/env-inventory.json"
       ],
-      "sites": 1
+      "sites": 2
     },
     "CEO_ANALYTICS_ADMIN_KEY": {
       "evidence": [
@@ -354,9 +358,17 @@
     },
     "CEO_BASH_FORCE_PUSH_REWRITE": {
       "evidence": [
-        ".claude/hooks/check_bash_safety.py"
+        ".claude/hooks/check_bash_safety.py",
+        ".claude/scripts/env-inventory.json"
       ],
-      "sites": 1
+      "sites": 2
+    },
+    "CEO_BASH_RAWSCAN": {
+      "evidence": [
+        ".claude/hooks/check_bash_safety.py",
+        "scripts/local/plan-152-apply-wave-a-kernel.py"
+      ],
+      "sites": 2
     },
     "CEO_BENCHMARK_BATCH_MODE": {
       "evidence": [
@@ -468,9 +480,10 @@
     },
     "CEO_BUDGET_QUOTA_HINT": {
       "evidence": [
-        ".claude/hooks/check_budget.py"
+        ".claude/hooks/check_budget.py",
+        ".claude/scripts/env-inventory.json"
       ],
-      "sites": 1
+      "sites": 2
     },
     "CEO_BUNDLE_SIZE": {
       "evidence": [
@@ -488,9 +501,10 @@
     },
     "CEO_CACHE_CONTROL_AUTO_DISABLE": {
       "evidence": [
-        ".claude/hooks/_lib/adapters/live/claude.py"
+        ".claude/hooks/_lib/adapters/live/claude.py",
+        ".claude/scripts/env-inventory.json"
       ],
-      "sites": 1
+      "sites": 2
     },
     "CEO_CACHE_DISCIPLINE": {
       "evidence": [
@@ -501,9 +515,10 @@
     },
     "CEO_CANONICAL_GUARD_DISABLE": {
       "evidence": [
-        ".claude/hooks/_lib/env_persist_allowlist.py"
+        ".claude/hooks/_lib/env_persist_allowlist.py",
+        ".claude/scripts/env-inventory.json"
       ],
-      "sites": 1
+      "sites": 2
     },
     "CEO_CANONICAL_MODELS": {
       "evidence": [
@@ -547,7 +562,7 @@
         ".claude/scripts/env-inventory.json",
         ".claude/settings.json"
       ],
-      "sites": 5
+      "sites": 4
     },
     "CEO_CODEX_CLI_PIN": {
       "evidence": [
@@ -626,9 +641,9 @@
       "evidence": [
         ".claude/hooks/check_postcompact_reinject.py",
         ".claude/hooks/check_precompact_continuity.py",
-        ".claude/settings.json"
+        ".claude/scripts/env-inventory.json"
       ],
-      "sites": 5
+      "sites": 6
     },
     "CEO_COMPONENT_COUNT": {
       "evidence": [
@@ -693,10 +708,10 @@
     "CEO_CONFIG_CHANGE_GUARD": {
       "evidence": [
         ".claude/hooks/check_config_change.py",
-        ".claude/settings.json",
-        "scripts/upgrade.sh"
+        ".claude/scripts/env-inventory.json",
+        ".claude/settings.json"
       ],
-      "sites": 4
+      "sites": 5
     },
     "CEO_CONFIG_PROTECTION": {
       "evidence": [
@@ -761,9 +776,10 @@
     },
     "CEO_COUNT_TOKENS_PREFLIGHT": {
       "evidence": [
-        ".claude/hooks/_lib/adapters/live/claude.py"
+        ".claude/hooks/_lib/adapters/live/claude.py",
+        ".claude/scripts/env-inventory.json"
       ],
-      "sites": 1
+      "sites": 2
     },
     "CEO_CREDENTIAL_BLOCK_EMERGENCY_OVERRIDE": {
       "evidence": [
@@ -953,7 +969,7 @@
     },
     "CEO_FINISH_CEREMONY": {
       "evidence": [
-        "scripts/local/finish-plan135.sh"
+        ".claude/scripts/env-inventory.json"
       ],
       "sites": 1
     },
@@ -1112,9 +1128,10 @@
     },
     "CEO_HOOKS_DISABLE": {
       "evidence": [
-        ".claude/hooks/_lib/env_persist_allowlist.py"
+        ".claude/hooks/_lib/env_persist_allowlist.py",
+        ".claude/scripts/env-inventory.json"
       ],
-      "sites": 1
+      "sites": 2
     },
     "CEO_HOOK_ADAPTER": {
       "evidence": [
@@ -1200,7 +1217,7 @@
         ".claude/hooks/_lib/audit_emit.py",
         ".claude/hooks/_lib/env_persist_allowlist.py"
       ],
-      "sites": 20
+      "sites": 21
     },
     "CEO_KERNEL_OVERRIDE_ACK": {
       "evidence": [
@@ -1815,7 +1832,7 @@
         ".claude/hooks/check_pair_rail.py",
         ".claude/scripts/check-auto-activation-flags.py"
       ],
-      "sites": 7
+      "sites": 8
     },
     "CEO_PAIR_RAIL_FIXTURE_RESPONSE": {
       "evidence": [
@@ -1867,7 +1884,7 @@
         ".claude/scripts/env-inventory.json",
         ".claude/settings.json"
       ],
-      "sites": 3
+      "sites": 4
     },
     "CEO_PARALLEL_WRITER": {
       "evidence": [
@@ -2066,9 +2083,10 @@
     },
     "CEO_PROTOCOL_SYNC_CASCADE": {
       "evidence": [
-        ".claude/hooks/check_protocol_semver_cascade.py"
+        ".claude/hooks/check_protocol_semver_cascade.py",
+        ".claude/scripts/env-inventory.json"
       ],
-      "sites": 1
+      "sites": 2
     },
     "CEO_PRUNE_EXECUTE": {
       "evidence": [
@@ -2101,9 +2119,10 @@
     "CEO_PYHOOK_NO_CACHE": {
       "evidence": [
         ".claude/hooks/_python-hook.sh",
-        ".claude/scripts/env-inventory.json"
+        ".claude/scripts/env-inventory.json",
+        "scripts/local/plan-152-apply-wave-a-kernel.py"
       ],
-      "sites": 2
+      "sites": 3
     },
     "CEO_QUIET_MODE": {
       "evidence": [
@@ -2346,10 +2365,10 @@
     "CEO_SETUP_VERIFICATION": {
       "evidence": [
         ".claude/hooks/check_setup_verification.py",
-        ".claude/settings.json",
-        "scripts/upgrade.sh"
+        ".claude/scripts/env-inventory.json",
+        ".claude/settings.json"
       ],
-      "sites": 4
+      "sites": 5
     },
     "CEO_SIDECAR_C1_CRYPTO_CRYPTOGRAPHY_MVP_ENABLED": {
       "evidence": [
@@ -2465,9 +2484,10 @@
     },
     "CEO_SKIP_HOOKS": {
       "evidence": [
-        ".claude/hooks/_lib/env_persist_allowlist.py"
+        ".claude/hooks/_lib/env_persist_allowlist.py",
+        ".claude/scripts/env-inventory.json"
       ],
-      "sites": 1
+      "sites": 2
     },
     "CEO_SKIP_REAL_REGISTRY_SMOKE": {
       "evidence": [
@@ -2648,9 +2668,10 @@
     },
     "CEO_STRUCTURED_OUTPUTS": {
       "evidence": [
-        ".claude/scripts/benchmark-judge.py"
+        ".claude/scripts/benchmark-judge.py",
+        ".claude/scripts/env-inventory.json"
       ],
-      "sites": 1
+      "sites": 2
     },
     "CEO_SUBAGENT_FABRICATION_BLOCK": {
       "evidence": [
@@ -2679,22 +2700,24 @@
       "evidence": [
         ".claude/hooks/check_fluency_nudge.py",
         ".claude/hooks/check_subagent_start.py",
-        ".claude/settings.json"
+        ".claude/scripts/env-inventory.json"
       ],
-      "sites": 5
+      "sites": 6
     },
     "CEO_SUBAGENT_LIFECYCLE_STATE_DIR": {
       "evidence": [
         ".claude/hooks/check_fluency_nudge.py",
-        ".claude/hooks/check_subagent_start.py"
+        ".claude/hooks/check_subagent_start.py",
+        ".claude/scripts/env-inventory.json"
       ],
-      "sites": 2
+      "sites": 3
     },
     "CEO_SUBAGENT_TRANSCRIPT_ROOT": {
       "evidence": [
-        ".claude/hooks/check_fluency_nudge.py"
+        ".claude/hooks/check_fluency_nudge.py",
+        ".claude/scripts/env-inventory.json"
       ],
-      "sites": 1
+      "sites": 2
     },
     "CEO_SUMMARIZE_MIN_TOKENS": {
       "evidence": [
@@ -2976,9 +2999,10 @@
     },
     "CEO_TRUST_BYPASS": {
       "evidence": [
-        ".claude/hooks/_lib/env_persist_allowlist.py"
+        ".claude/hooks/_lib/env_persist_allowlist.py",
+        ".claude/scripts/env-inventory.json"
       ],
-      "sites": 1
+      "sites": 2
     },
     "CEO_TURBO": {
       "evidence": [
@@ -3049,9 +3073,10 @@
     "CEO_VERIFY_AFTER_EDIT_NO_CONTINUE": {
       "evidence": [
         ".claude/hooks/accel_dispatch.py",
-        ".claude/hooks/verify_after_edit.py"
+        ".claude/hooks/verify_after_edit.py",
+        ".claude/scripts/env-inventory.json"
       ],
-      "sites": 2
+      "sites": 3
     },
     "CEO_WEBFETCH_INJECTION_SCAN": {
       "evidence": [
@@ -3098,10 +3123,11 @@
     },
     "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR": {
       "evidence": [
+        ".claude/scripts/env-inventory.json",
         ".claude/settings.json",
         "templates/settings/settings.base.json"
       ],
-      "sites": 2
+      "sites": 3
     },
     "CLAUDE_CALL_INSERT": {
       "evidence": [
@@ -3141,10 +3167,11 @@
     },
     "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB": {
       "evidence": [
+        ".claude/scripts/env-inventory.json",
         ".claude/settings.json",
         "templates/settings/settings.base.json"
       ],
-      "sites": 2
+      "sites": 3
     },
     "CLAUDE_CONFIG_DIR": {
       "evidence": [
@@ -3164,9 +3191,9 @@
       "evidence": [
         ".claude/hooks/_lib/env_persist_allowlist.py",
         ".claude/hooks/check_setup_verification.py",
-        ".claude/settings.json"
+        ".claude/scripts/env-inventory.json"
       ],
-      "sites": 5
+      "sites": 6
     },
     "CLAUDE_FULL": {
       "evidence": [

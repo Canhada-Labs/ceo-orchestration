@@ -198,7 +198,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/_python-hook.sh .claude/hooks/check_pair_rail.py",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_pair_rail.py",
             "timeout": 60
           }
         ]

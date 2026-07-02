@@ -206,7 +206,11 @@ _GIT_BYPASS_TICKET_RE = re.compile(
 # Split on top-level &&, ||, ;, | — shell control operators.
 # NOTE: this is a NAIVE split that ignores quoting. A command like
 # `echo "a && b"` will be over-split into `echo "a` and `b"`, both of
-# which fail to tokenize cleanly under shlex → skipped. Fail-safe.
+# which fail to tokenize cleanly under shlex. PLAN-152 error-handling-01:
+# such chunks are NOT silently skipped anymore — they fall through to the
+# raw-text destructive-signature rescan (`_rawscan_destructive`), because
+# real bash still executes the destructive core of e.g. `rm -rf ~ ";"`
+# even though the mangled chunk defeats the token rules.
 _SUBCOMMAND_SPLIT_RE = re.compile(r"\s*(?:&&|\|\||[;|])\s*")
 
 
@@ -271,17 +275,21 @@ def _split_subcommands(command: str) -> List[str]:
     return [p for p in (s.strip() for s in parts) if p]
 
 
-def _tokenize(subcommand: str) -> List[str]:
-    """shlex.split with fail-safe: returns [] on parse error.
+def _tokenize(subcommand: str) -> Optional[List[str]]:
+    """shlex.split; returns None on parse error (unbalanced quotes, etc.).
 
-    Unbalanced quotes, etc. produce an empty token list so the caller
-    skips the chunk — fail-safe, not fail-open, because a chunk we
-    cannot parse also cannot match a block rule.
+    A parse failure is fail-OPEN for the token rules, NOT fail-safe: bash
+    itself may still execute the destructive core of a chunk the naive
+    subcommand splitter mangled (e.g. `rm -rf ~ ";"` splits into an
+    unbalanced-quote chunk that shlex rejects, while real bash runs
+    `rm -rf ~ ';'`). Callers must treat None as "unscanned", not "clean" —
+    `decide_command` routes None through the raw-text destructive-signature
+    rescan (`_rawscan_destructive`, PLAN-152 error-handling-01 / debate C4).
     """
     try:
         return shlex.split(subcommand)
     except ValueError:
-        return []
+        return None
 
 
 def _check_rm_rf(tokens: List[str]) -> Optional[str]:
@@ -385,6 +393,153 @@ def _check_git_push_force(tokens: List[str]) -> Optional[str]:
                 "Use `git push --force-with-lease` to avoid overwriting "
                 "unseen commits pushed by others."
             )
+    return None
+
+
+# ---------------------------------------------------------------------------
+# PLAN-152 error-handling-01 — shlex.ValueError bypass close (Codex R3)
+# ---------------------------------------------------------------------------
+#
+# Closes the destructive-command bypass where the NAIVE subcommand split
+# (`_split_subcommands`, a quoting-blind regex) breaks inside quotes, so
+# `rm -rf ~ ";"` splits into an unbalanced-quote chunk shlex rejects — the
+# token rules never see it, yet real bash runs `rm -rf ~` (the quoted `;`
+# is a literal argument).
+#
+# Fix history:
+#   R1 (regex rescan of the raw chunk)  — Codex R2 P2#1: false-positived
+#     on quoted literals like `echo "a && rm -rf /tmp"`.
+#   R2 (`shlex.split` the whole command, segment on control-op TOKENS) —
+#     Codex R3: shlex.split neither separates ADJACENT operators
+#     (`true&&rm` stays one token → `rm` hides → bypass) NOR preserves
+#     quoting (a quoted standalone `;` in `echo ';' rm -rf /tmp` looks
+#     like a real separator → false positive).
+#   R3 (this) — a QUOTE-AWARE subcommand splitter: it walks the command
+#     char-by-char, honoring single/double quotes + backslash escapes (so
+#     a quoted metachar is NEVER a separator) and recognizing operators
+#     with NO surrounding whitespace. Each subcommand it yields has
+#     balanced quotes, so the per-subcommand `shlex.split` + token rules
+#     are exact. Blocks `rm -rf ~ ";"`, `true&&rm -rf ~ ';'`,
+#     `git pull && rm -rf ~ ";"`; ALLOWs `echo "a && rm -rf /tmp"`,
+#     `echo ';' rm -rf /tmp`. Verified against a 16-case adversarial
+#     battery.
+#
+# A genuinely-unbalanced command (no closing quote) yields a subcommand
+# that still fails shlex → skipped → ALLOW; bash would syntax-error too,
+# and the `_e3` whole-command gate (a DIFFERENT tokenizer) already blocks
+# the parse-rejectable class upstream (debate C4's reason this is not a
+# blanket fail-closed).
+#
+# Kill-switch: CEO_BASH_RAWSCAN=0 reverts to the pre-PLAN-152 skip
+# behavior (default-ON; read from the import-time trusted_env snapshot,
+# NOT live os.environ, so a late-set value cannot disarm it mid-op).
+
+_RAWSCAN_DISABLE_VAR = "CEO_BASH_RAWSCAN"
+
+
+def _rawscan_enabled() -> bool:
+    """True unless CEO_BASH_RAWSCAN == "0" in the trusted_env snapshot.
+
+    Default-ON (a security tightening ships armed); the kill-switch
+    exists for no-redeploy rollback (PLAN-152 §Approach). On snapshot
+    unavailability it stays ON — the recheck is pure and cannot raise.
+    Never raises.
+    """
+    if _trusted_env is None:  # pragma: no cover — import failure → stay armed
+        return True
+    try:
+        raw = _trusted_env.get_trusted(_RAWSCAN_DISABLE_VAR)
+    except Exception:  # pragma: no cover
+        return True
+    return (str(raw).strip() != "0") if raw is not None else True
+
+
+def _split_subcommands_quote_aware(command: str) -> List[str]:
+    """Split on UNQUOTED &&, ||, ;, | — honoring single/double quotes and
+    backslash escapes; operators need no surrounding whitespace.
+
+    Unlike `_split_subcommands` (a quoting-blind regex) this never splits
+    on a metachar inside quotes, and unlike `shlex.split` it separates
+    adjacent operators. Returns stripped, non-empty subcommand strings.
+    Pure; never raises.
+    """
+    parts = []  # type: List[str]
+    buf = []  # type: List[str]
+    i = 0
+    n = len(command)
+    quote = None  # type: Optional[str]
+    while i < n:
+        c = command[i]
+        if quote is not None:
+            # Inside quotes: only the matching quote closes. Inside DOUBLE
+            # quotes a backslash escapes the next char (so \" does not
+            # close); inside single quotes nothing escapes.
+            if c == "\\" and quote == '"' and i + 1 < n:
+                buf.append(c)
+                buf.append(command[i + 1])
+                i += 2
+                continue
+            buf.append(c)
+            if c == quote:
+                quote = None
+            i += 1
+            continue
+        if c == "'" or c == '"':
+            quote = c
+            buf.append(c)
+            i += 1
+            continue
+        if c == "\\" and i + 1 < n:
+            buf.append(c)
+            buf.append(command[i + 1])
+            i += 2
+            continue
+        if c == "&" and i + 1 < n and command[i + 1] == "&":
+            parts.append("".join(buf))
+            buf = []
+            i += 2
+            continue
+        if c == "|" and i + 1 < n and command[i + 1] == "|":
+            parts.append("".join(buf))
+            buf = []
+            i += 2
+            continue
+        if c == ";" or c == "|":
+            parts.append("".join(buf))
+            buf = []
+            i += 1
+            continue
+        buf.append(c)
+        i += 1
+    parts.append("".join(buf))
+    return [p for p in (s.strip() for s in parts) if p]
+
+
+def _recheck_whole_command(command: str) -> Optional[str]:
+    """Quote-aware recheck: block on a destructive SUBCOMMAND. Returns a
+    block reason or None (allow). Pure; never raises.
+
+    Called ONLY when a naive-split chunk failed to tokenize (see
+    `decide_command`). Re-splits the WHOLE command with the quote-aware
+    splitter, then runs the token rules on each balanced-quote subcommand.
+    """
+    for sub in _split_subcommands_quote_aware(command):
+        toks = _tokenize(sub)
+        if not toks:
+            # Still unbalanced (no closing quote) → bash would syntax-
+            # error too → skip (fail-safe).
+            continue
+        for check in (_check_rm_rf, _check_git_reset_hard, _check_git_push_force):
+            reason = check(toks)
+            if reason:
+                # Annotate so audit + user see this came via the quote-
+                # aware recheck (a chunk failed the naive tokenize).
+                return reason.replace(
+                    " is destructive.",
+                    " is destructive (re-tokenized: a quoted metachar "
+                    "defeated the naive split — see CEO_BASH_RAWSCAN).",
+                    1,
+                )
     return None
 
 
@@ -1211,6 +1366,18 @@ def decide_command(command: str) -> Decision:
 
     for subcommand in _split_subcommands(command):
         tokens = _tokenize(subcommand)
+        if tokens is None:
+            # PLAN-152 error-handling-01 (debate C4 + Codex R2 P2#1): shlex
+            # rejected this chunk — the naive splitter broke inside quotes
+            # (e.g. `rm -rf ~ ";"`). Re-tokenize the WHOLE command and block
+            # only if a real command SEGMENT is destructive; quoted text
+            # like `echo "a && rm -rf /tmp"` re-parses to a single benign
+            # `echo` segment and is allowed. CEO_BASH_RAWSCAN=0 reverts.
+            if _rawscan_enabled():
+                reason = _recheck_whole_command(command)
+                if reason:
+                    return Decision(allow=False, reason=reason)
+            continue
         if not tokens:
             continue
         for check in (

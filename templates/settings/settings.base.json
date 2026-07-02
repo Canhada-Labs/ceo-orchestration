@@ -89,6 +89,28 @@
         ]
       },
       {
+        "_comment": "PLAN-152 governance-03 (mirror of dogfood ADR-106 + ADR-110): PreToolUse Pair-Rail Multi-LLM hook. When Edit|Write|MultiEdit targets an L3+ canonical-guarded path, invokes Codex MCP in read-only review mode and validates the response contains no write-shaped patches. Adopters get the codex .mcp.json from install.sh, so the rail is meaningful out of the box; on Codex unavailable it fail-OPENs with a breadcrumb (adopters without Codex pay only the no-op). Kill-switches: CEO_PAIR_RAIL_DISABLE=1, CEO_PAIR_RAIL_TIMEOUT_S (default 30s).",
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_pair_rail.py",
+            "timeout": 60
+          }
+        ]
+      },
+      {
+        "_comment": "PLAN-152 governance-03 (mirror of dogfood): Codex MCP file-write gate — blocks write-shaped Codex responses (apply_patch envelope, unified diff, JSON Patch) on the codex tool pair. Raw python3 invocation mirrors the dogfood registration form.",
+        "matcher": "mcp__codex__codex|mcp__codex__codex-reply",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/check_codex_filewrite.py\"",
+            "timeout": 30
+          }
+        ]
+      },
+      {
         "_comment": "Canonical-edit sentinel (Sprint 5 Phase 7 ADR-010 + PLAN-065 Layer A 2026-05-04): blocks Edit/Write/MultiEdit AND any mcp__* tool with write-shaped params (path/file_path/target_path/file/filename/dest/destination/target/uri) against canonical governance paths (team.md, frontend-team.md, pitfalls-catalog.yaml, skills/**/SKILL.md, domains/*/team-personas.md, domains/*/pitfalls.yaml, plus PLAN-019 expansion: all hooks, policies, SPEC, ADRs, CI workflows, CODEOWNERS, install scripts) unless a matching Owner-signed sentinel file exists. Out-of-scope paths pass through silently. Layer A closes S81-tris gap (custom MCP tools previously bypassed).",
         "matcher": "Edit|Write|MultiEdit|mcp__.*",
         "hooks": [

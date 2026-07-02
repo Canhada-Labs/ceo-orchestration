@@ -32,7 +32,24 @@ from _lib.testing import TestEnvContext  # noqa: E402
 DOGFOOD_SETTINGS = REPO_ROOT / ".claude" / "settings.json"
 TEMPLATE_SETTINGS = REPO_ROOT / "templates" / "settings" / "settings.base.json"
 
-_HOOK_RE = re.compile(r'_python-hook\.sh["\']?\s+([A-Za-z0-9_-]+\.py)')
+# PLAN-152 governance-02: the original single regex only matched the
+# canonical `_python-hook.sh <basename>.py` form, so a registration using
+# a relative-path arg (the v1.0.0 check_pair_rail.py drift) or a raw
+# `python3 ".../.claude/hooks/<hook>.py"` invocation (check_codex_filewrite)
+# was INVISIBLE to the parity diff — the assertion was vacuous for exactly
+# the hooks most likely to drift. Two forms are now parsed; both extract
+# the hook basename.
+#
+# Form A/B — the shim, with the first arg either a bare basename or a
+# (legacy/drifted) relative path:
+_SHIM_HOOK_RE = re.compile(
+    r'_python-hook\.sh["\']?\s+(?:[\w.$/{}"\'-]*/)?([A-Za-z0-9_-]+\.py)'
+)
+# Form C — raw interpreter invocation of a hooks-dir script:
+_RAW_PY_HOOK_RE = re.compile(
+    r'python3?[\d.]*\s+["\']?[\w.$/{}-]*/\.claude/hooks/([A-Za-z0-9_-]+\.py)'
+)
+_HOOK_RES = (_SHIM_HOOK_RE, _RAW_PY_HOOK_RE)
 
 # Hooks deliberately enabled only in the dogfood (this repo) and NOT
 # shipped to adopters. MUST be empty by default — every entry needs a
@@ -53,9 +70,11 @@ def _hook_ids(settings_path: Path) -> Set[Tuple[str, str, str]]:
             matcher = block.get("matcher", "*")
             for hook in block.get("hooks", []) or []:
                 cmd = hook.get("command", "") or ""
-                m = _HOOK_RE.search(cmd)
-                if m:
-                    out.add((phase, matcher, m.group(1)))
+                for rx in _HOOK_RES:
+                    m = rx.search(cmd)
+                    if m:
+                        out.add((phase, matcher, m.group(1)))
+                        break
     return out
 
 
