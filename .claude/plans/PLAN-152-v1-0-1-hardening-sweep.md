@@ -174,7 +174,7 @@ Check: full CI gate set green locally (validate-governance --fast, shellcheck -S
 - [x] *(DONE S258 — ADR 171→172; §4 emenda input-vs-infra codificada (precedentes _e3 + _check_credential_leak, sem line numbers p/ não apodrecer); claims rc=0)* [P0] [CLAUDE.md] [SBOM.md] — re-run `check-claude-md-claims.py` after all ADR/skill/hook count changes (tolerance=0 ENFORCING gate); reconcile any drift. ALSO (debate C4): amend CLAUDE.md §4 to codify the input-vs-infra fail-mode distinction — input-parse failure in a security matcher is fail-CLOSED by design (precedents: `_e3:907-922`, `_check_credential_leak:692-695`); INFRA failure (missing file / import / timeout) remains fail-open. §4 is Gate-1 cache-stable → this is a closeout-only edit, LAST in the session. Check: `check-claude-md-claims.py` exits 0; §4 carries the distinction.
 - [x] *(DONE S258 — VERSION + npm/package.json + pyproject.toml + INSTALL.md ×2 (caronas pegos pelo verify-counts) = 1.0.1; CHANGELOG entry completa)* [P0] [VERSION] [CHANGELOG.md] [npm/package.json] — bump `1.0.0`→`1.0.1` in **BOTH** VERSION and `npm/package.json` (debate/Critic-B M1 release-blocker: npm-publish.yml:72-81 hard-fails the publish on mismatch); write the CHANGELOG entry enumerating the fixed findings. Check: VERSION reads 1.0.1 AND `node -p "require('./npm/package.json').version"` reads 1.0.1; CHANGELOG has the entry.
 - [x] *(DONE S258 — hooks 5338+444; scripts 3955+301; 10-roots 2 rodadas consecutivas idênticas (1483+51/72); shellcheck CI-set FAILED=0; actionlint; env-hygiene rc=0; contamination ✓; perf p95/p99 passed; claims rc=0; verify-counts sem drift; validate-governance PASS)* [P0] [pre-push] — run the EXACT CI gates (not just touched-file pytest): full hooks+scripts suites, shellcheck `-S warning`, env-hygiene, contamination, perf p95/p99; force exec bit where needed. Check: every CI job's local equivalent is green.
-- [ ] [P0] [fresh-session probe] — after the final commit, open a FRESH session (or re-launch) and run the governance-01 Check verbatim (debate C5: hooks load at session start — only a fresh session proves the pair-rail registration is live again). Check: the registered command executes the hook (no `hook not found` + `{}`).
+- [x] *(DONE S260 2026-07-03 — Check run VERBATIM in the fresh closeout session: `echo '{"tool_name":"Edit","tool_input":{"file_path":"x"}}' | bash .claude/hooks/_python-hook.sh check_pair_rail.py` → the hook EXECUTED and decided — `[check_pair_rail SPIKE] pair_rail_out_of_scope tool_name='Edit', file_path='x', reason='not_l3_plus'` + `{}` verdict, exit 0; no `hook not found`. Corroborated by the same session's /ceo-boot: hook_live_smoke 44/44 + settings_tamper_tripwires 44/44 effective. This box was flagged unchecked by the Codex release re-pass R1 — evidence recorded here closes it.)* [P0] [fresh-session probe] — after the final commit, open a FRESH session (or re-launch) and run the governance-01 Check verbatim (debate C5: hooks load at session start — only a fresh session proves the pair-rail registration is live again). Check: the registered command executes the hook (no `hook not found` + `{}`).
 
 ---
 
@@ -349,10 +349,23 @@ the v1.0.0 bootstrap waiver does not extend to 1.0.1; nothing published, publish
 job skipped). Owner chose the honest path over a waiver ceremony:
 `v1.0.1-rc.1` GPG-signed at `07ad298` (creatordate 2026-07-03 10:23 -03, pushed),
 failed GA tag deleted from origin, Codex release re-pass run inside the window.
-GA closes when the Owner re-signs `v1.0.1` at `07ad298` **on/after 2026-07-04
-10:24 -03** and pushes (gate then sees RC ≥24h; remaining gate steps pre-verified
-green locally). Two latent release.yml bugs surfaced by the live-fire are in
-§Deferred (`release-gate-rc-version-mismatch`, `release-notes-hardcoded-first-release`).
+
+**Codex release re-pass R1 (window working as intended): REJECT** — (1) the
+economics-02 capped unicode re-read fail-opened the OPT-IN `CEO_UNICODE_HARDBLOCK`
+guard past 1 MiB (CONFIRMED in code); (2) the Wave G fresh-session probe checkbox
+was still unchecked (probe then run VERBATIM in-session — hook executes; box
+closed with evidence). Remediation = **round-2 ceremony**: Owner-signed sentinel
+(`architect/round-2/approved.md` + `.asc`, scope = `check_read_injection.py`
+only); the file is `_KERNEL_PATHS`-guarded and the session had no launch
+override, so the Owner applied the authorized diff by hand
+(`git apply architect/round-2/fix.patch` — S258 patcher precedent; diff
+committed as evidence). Fix = streaming chunked scan (flag-off path unchanged);
+RED-first tests (2) flipped green; full hooks suite + fast gates green.
+GA closes when the Owner re-signs `v1.0.1` **at the round-2 fix commit**
+(NOT `07ad298`) **on/after 2026-07-04 10:24 -03** and pushes (gate sees RC ≥24h —
+the RC/GA comparison is by tag creatordate, commits may differ). Two latent
+release.yml bugs surfaced by the live-fire are in §Deferred
+(`release-gate-rc-version-mismatch`, `release-notes-hardcoded-first-release`).
 
 ## Reference links
 

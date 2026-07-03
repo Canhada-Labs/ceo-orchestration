@@ -276,18 +276,20 @@ class ReadInjectionInProcessTest(TestEnvContext):
         self.assertIn("len", seen)
         self.assertLessEqual(seen["len"], cri._UNICODE_SCAN_CAP_CHARS)
 
-    def test_unicode_cap_bounds_large_file(self):
-        # A file larger than the cap surfaces exactly cap-many chars —
-        # the "single capped scan" assertion from the economics-02 Check.
+    def test_unicode_stream_covers_large_file_in_capped_chunks(self):
+        # PLAN-152 round-2 (Codex release re-pass R1 finding 1): the armed
+        # scan must cover the WHOLE file — the cap bounds each chunk, never
+        # the total coverage. (Supersedes the "single capped scan" shape,
+        # which fail-opened past the cap.)
         big = self.project_dir / "big.txt"
-        big.write_text("a" * (cri._UNICODE_SCAN_CAP_CHARS + 4096),
-                       encoding="utf-8")
+        total = cri._UNICODE_SCAN_CAP_CHARS + 4096
+        big.write_text("a" * total, encoding="utf-8")
         sys.modules["scan_injection_mod"] = _FakeScanner(
             result=_ScanResult(matched=False))
-        seen = {}
+        calls = []
 
         def _rec(content, file_path, env=None):
-            seen["len"] = len(content)
+            calls.append(len(content))
             return None
 
         with mock.patch.dict(os.environ,
@@ -298,7 +300,27 @@ class ReadInjectionInProcessTest(TestEnvContext):
                     rc, _ = self._run_main(
                         {"tool_input": {"file_path": str(big)}})
         self.assertEqual(rc, 0)
-        self.assertEqual(seen["len"], cri._UNICODE_SCAN_CAP_CHARS)
+        self.assertEqual(sum(calls), total)
+        self.assertTrue(
+            all(n <= cri._UNICODE_SCAN_CAP_CHARS for n in calls))
+
+    def test_unicode_hardblock_blocks_payload_past_cap(self):
+        # Codex release re-pass R1 finding 1 regression: an invisible
+        # payload placed AFTER the cap boundary must still block when the
+        # operator armed the fail-closed guard (real helper, no scan mock).
+        evil = self.project_dir / "evil.txt"
+        evil.write_text(
+            "a" * cri._UNICODE_SCAN_CAP_CHARS + "\u200b", encoding="utf-8")
+        sys.modules["scan_injection_mod"] = _FakeScanner(
+            result=_ScanResult(matched=False))
+        with mock.patch.dict(os.environ,
+                             {"CLAUDE_PROJECT_DIR": str(self.project_dir),
+                              "CEO_UNICODE_HARDBLOCK": "1"}):
+            with mock.patch("_lib.trusted_env.get_trusted", return_value=None):
+                rc, out = self._run_main(
+                    {"tool_input": {"file_path": str(evil)}})
+        self.assertEqual(rc, 0)
+        self.assertEqual(out.get("decision"), "block")
 
     def test_unicode_gate_helper_derivation(self):
         with mock.patch("_lib.trusted_env.get_trusted", return_value=None):

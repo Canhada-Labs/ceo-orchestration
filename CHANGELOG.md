@@ -38,6 +38,12 @@ No new features; security fixes, CI truth, tarball hygiene, model modernization.
   preview-safe" contract: matched span masked AND surrounding context
   re-swept by the module's own family+entropy redaction (adjacent-secret
   leak found by the Codex pair-rail) (error-handling-02).
+- **`CEO_UNICODE_HARDBLOCK=1` Read scan streams the whole file** — the
+  economics-02 capped re-read silently fail-opened the opt-in fail-closed
+  guard for invisible-unicode payloads past 1 MiB. Found by the Codex
+  release re-pass (RC window, R1 REJECT); the armed path now scans in
+  cap-sized chunks (per-code-point detection — chunking exact); flag-off
+  hot path unchanged (PLAN-152 round-2).
 
 ### CI / tests
 - **~1,600 formerly CI-dark tests wired into validate.yml** as explicit

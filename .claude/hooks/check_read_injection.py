@@ -352,21 +352,30 @@ def main() -> int:
     # PLAN-152 economics-02: this previously did a SECOND uncapped full-file
     # read + unconditional sanitize on EVERY Read (all-sessions hot path) for
     # a default-OFF guard. The gate now runs FIRST — flag unset means zero
-    # extra work (the enforced=0 measure-first breadcrumb is retired with it)
-    # — and the re-read is capped at _UNICODE_SCAN_CAP_CHARS.
+    # extra work (the enforced=0 measure-first breadcrumb is retired with it).
+    #
+    # PLAN-152 round-2 (Codex release re-pass R1): the armed path streams the
+    # WHOLE file in _UNICODE_SCAN_CAP_CHARS-sized chunks — a single capped
+    # read fail-opened the OPT-IN fail-closed guard for payloads past the cap.
+    # Detection is per-code-point (control / bidi / zero-width / Tag-block),
+    # so chunk boundaries cannot split or hide a detected character. The cap
+    # bounds per-call memory, not total coverage.
     try:
         if _unicode_hardblock_enabled():
             with p.open("r", encoding="utf-8", errors="replace") as _fh:
-                content = _fh.read(_UNICODE_SCAN_CAP_CHARS)
-            _uni = _scan_read_unicode(content, file_path)  # helper mirrors §6a
-            if _uni is not None:
-                # block via the contract (this hook normally only advises; the
-                # block is gated by CEO_UNICODE_HARDBLOCK so default behavior is
-                # preserved).
-                from _lib.adapters import claude as _ca
-                from _lib import contract as _ct
-                _ca.emit_decision(_ct.block(_uni))
-                return 0
+                while True:
+                    content = _fh.read(_UNICODE_SCAN_CAP_CHARS)
+                    if not content:
+                        break
+                    _uni = _scan_read_unicode(content, file_path)  # mirrors §6a
+                    if _uni is not None:
+                        # block via the contract (this hook normally only
+                        # advises; the block is gated by CEO_UNICODE_HARDBLOCK
+                        # so default behavior is preserved).
+                        from _lib.adapters import claude as _ca
+                        from _lib import contract as _ct
+                        _ca.emit_decision(_ct.block(_uni))
+                        return 0
     except Exception:
         pass
 
