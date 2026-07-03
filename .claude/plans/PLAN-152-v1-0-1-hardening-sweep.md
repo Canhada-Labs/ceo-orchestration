@@ -247,6 +247,19 @@ Check: full CI gate set green locally (validate-governance --fast, shellcheck -S
   Restore a de-identified copy from the private archive OR degrade the artifacts.
   Documented in the restored `PLAN-128-sota-solo-accelerator.md` §Known gap.
   → v1.0.2.
+- **release-gate-rc-version-mismatch** (S260 closeout, live-fire discovery) — the
+  `release.yml` "Assert VERSION matches tag" step does not strip the `-rc.N`
+  suffix, so an RC tag can NEVER pass its own release run against a GA-versioned
+  tree (`v1.0.1-rc.1` vs `VERSION=1.0.1` → hard fail, run 28663453202). The RC-hold
+  gate and the VERSION gate had never been exercised together (v1.0.0 rode the
+  bootstrap waiver). Harmless for GA shipping — the 24h RC-hold check only reads
+  the RC *tag's creatordate*, not its run result — but every RC leaves a red run
+  in public Actions history. Fix: strip `-rc.[0-9]*` before comparing (or document
+  a VERSION-bump RC flow). `release.yml` edit = guarded → ride the next release-yml
+  sentinel (PLAN-153 Wave C touches workflows). → v1.0.2.
+- **release-notes-hardcoded-first-release** (S260 closeout, same live-fire) — the
+  `gh release create` step hardcodes the notes string "first public release", stale
+  for every tag after v1.0.0. Same guarded file, same sentinel ride-along. → v1.0.2.
 
 > NOTE — `nested-subagent-redteam` (Wave F P3) is NOT one of the 41 confirmed findings;
 > it is net-new red-team scope from the substrate sweep. It may itself be deferred to a
@@ -324,10 +337,22 @@ Executed S257+S258 (waves A–G, `bdf7f6b..07ad298`, pushed 2026-07-02); every w
 carried a manual Codex pair-rail APPROVE in the commit message. Fresh-session
 pair-rail probe satisfied by the S259 green boot (44/44 hooks live + tamper
 tripwires green). CI at flip time: 6/7 workflows green on `07ad298`; **Validate
-stuck `queued`** on a runner-group misconfig (group did not allow public repos —
-toggled S259; reruns reuse the stale resolution). The push of this closeout commit
-is the decisive fresh Validate run; the `v1.0.1` tag ceremony (Owner GPG,
-decision A: tag-only signature) waits for that green.
+stuck `queued`** on a runner-group misconfig — real root cause found S260: the
+`Ceo` hosted runner lived in group "Default" (`allows_public_repositories: false`);
+the S259 toggle had hit the empty "Default Larger Runners" group. Owner moved the
+runner (`PATCH hosted-runners/1 → runner_group_id=3`) and the fresh Validate on
+this commit went **GREEN** (run 28654394112) — v1.0.1 CI confirmation complete.
+
+**Tag ceremony (S260, live-fire of the release gates):** first GA push of
+`v1.0.1` was correctly **rejected by the ADR-007 RC-hold gate** (no prior RC tag —
+the v1.0.0 bootstrap waiver does not extend to 1.0.1; nothing published, publish
+job skipped). Owner chose the honest path over a waiver ceremony:
+`v1.0.1-rc.1` GPG-signed at `07ad298` (creatordate 2026-07-03 10:23 -03, pushed),
+failed GA tag deleted from origin, Codex release re-pass run inside the window.
+GA closes when the Owner re-signs `v1.0.1` at `07ad298` **on/after 2026-07-04
+10:24 -03** and pushes (gate then sees RC ≥24h; remaining gate steps pre-verified
+green locally). Two latent release.yml bugs surfaced by the live-fire are in
+§Deferred (`release-gate-rc-version-mismatch`, `release-notes-hardcoded-first-release`).
 
 ## Reference links
 
