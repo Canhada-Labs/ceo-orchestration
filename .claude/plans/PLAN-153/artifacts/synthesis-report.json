@@ -1,0 +1,305 @@
+{
+ "executive_summary": "ecc (277 skills, 92 commands, 67 agents, 12 harnesses) e ceo-orchestration otimizam coisas diferentes: eles, DISTRIBUIÇÃO e aprendizado contínuo; nós, GOVERNANÇA e auditabilidade. Nenhum rail nosso existe lá (zero hits repo-wide para audit-chain/HMAC/pair-rail; veto e debate só prosa; zero enforcement de spawn) e o enforcement runtime deles é majoritariamente WARN — o GateGuard libera retry sem verificar fatos. Nosso enforcement é objetivamente superior. Onde eles ganham (11 claims CONFIRMED/PARTIAL sobreviveram à verificação; 1 REFUTED descartado): lifecycle de install (manifests schema-validados, install-state com request original, doctor/repair), funil passivo de aprendizado (observe → distilador Haiku → instincts com confiança/TTL → injeção bounded no boot), persistência automática de sessão no Stop, scan estático da config do harness (a classe que teria pego nosso P0 do pair-rail morto do S254), /hookify (correção do Owner → regra executável) e um Prompt Defense Baseline uniforme em 66/67 agentes. Sobre \"vale criar outras ~100 skills?\": NÃO. Dos 277 deles, só 32 são ADOPT (12%) e 97 ADAPT (35%, maioria merge em skill nossa existente, não arquivo novo); 109 SKIP (39%). O número honesto é ~30-40 skills novas em ~6 squads (network-ops, healthcare-clinical, manufacturing, JVM, frontend-motion, scientific-research) — precedidas de /skill-health, porque somar volume às 151 sem telemetria de uso agrava o problema de descoberta que já temos. Formato: nosso frontmatter é muito mais rico (owner, veto_floor, risk_class, activation_triggers — tudo ausente lá); o CORPO deles é melhor empacotado (progressive disclosure com references/, scripts determinísticos co-locados, medição de compliance via skill-comply). Proposta: 7 waves — A docs/DX L1, B installer/release L2, C formato+telemetria das nossas skills L2, D criação das ADOPT L2, E gates de segurança L3 (debate+ADR), F learning loop gated L3, G merges ADAPT L2. Tudo sob as regras da casa: Python stdlib-only ≥3.9 para hooks, atribuição MIT via inspired_by (source@commit+license), doutrina human-gated (nunca auto-apply), no-contamination. Riscos principais: reescrita node→python subestimada; conteúdo de terceiros exige review anti-injection (skills deles instruem executar scripts e exibir stdout); números do AgentShield são claims de vendor com código em repo separado.",
+ "ecc_better": [
+  {
+   "item": "Instalação seletiva manifest-driven: 3 níveis (7 perfis → 33 módulos com cost/stability → 78 componentes), JSON schema-validado em CI, plano --json",
+   "evidence": "CONFIRMED: ecc/manifests/install-{profiles,modules,components}.json + schemas/install-*.schema.json + ci/validate-install-manifests.js; nosso install.sh é bash hardcoded (has_profile l.754-785), sem metadados nem plano machine-readable",
+   "so_what": "Externalizar perfis do install.sh em manifest JSON validado + `--dry-run --json` torna o install auditável e testável — pré-requisito barato para qualquer evolução futura do instalador"
+  },
+  {
+   "item": "install-state + lifecycle doctor/repair: grava o REQUEST original de install e cada operação; doctor detecta drift, repair restaura, uninstall remove só o registrado",
+   "evidence": "CONFIRMED: ecc/scripts/{doctor,repair,list-installed}.js; install-lifecycle.js:678,924. Nós só gravamos skill-manifest.sha256 — request NÃO persistido, sem doctor/repair (nossa safety de uninstall por SHA é mais forte, mantê-la)",
+   "so_what": "Adopter nosso com install driftado hoje reinstala às cegas e re-digita flags a cada upgrade; gravar o request + doctor/repair fecha o ciclo mantendo o gate manual do Owner (política PLAN-125 preservada)"
+  },
+  {
+   "item": "Scan estático da config do harness (classe AgentShield): 5 categorias sobre .claude/ (segredos, permissions, hook injection/fail-open, MCP, agents), nota A-F, exit-gate de CI",
+   "evidence": "PARTIAL: ecc/skills/security-scan/SKILL.md:20-28; nosso check-active-hooks-executable.py só checa existência+exec-bit — o P0 do S254 (pair-rail morto por shim fail-open em settings.json desde v1.0.0) PASSOU nesse gate",
+   "so_what": "Gap substantivo real: um gate stdlib no Validate que verifica cada hook registrado (path, executável, não-shim, fail-open) teria pego nosso pior bug pós-launch; é a maior lição de segurança do comparativo"
+  },
+  {
+   "item": "Prompt Defense Baseline uniforme: bloco anti-injection idêntico de 6 bullets em 66/67 agentes, versionado numa fonte central",
+   "evidence": "CONFIRMED: ecc/agents/security-reviewer.md:8-15; fonte rules/everything-claude-code-guardrails.md. Nosso check_agent_spawn.py exige PROFILE/SKILL/FILE ASSIGNMENT mas nenhum bloco de defesa; anti-injection nosso é ad-hoc por skill",
+   "so_what": "Padronizar 6 bullets no template de spawn e validar presença via check_agent_spawn.py para agentes que tocam conteúdo untrusted custa pouco e cobre a classe inteira de uma vez"
+  },
+  {
+   "item": "/hookify: correções do Owner na conversa viram regras declarativas de hook (event/pattern/action block|warn) em minutos",
+   "evidence": "CONFIRMED: ecc/commands/hookify.md:16-46 + agente conversation-analyzer; nosso repo tem 0 hits p/ hookify — hooks Python escritos à mão sob canonical-guard, lessons são advisory, não regra executável",
+   "so_what": "O motor deles é mais fraco que nossos 53 hooks, mas a UX de captura não tem análogo nosso; versão governada (proposta assinada avaliada por hook genérico canônico, nunca escrita direta) fecha o loop lição→enforcement"
+  },
+  {
+   "item": "Observer daemon barato: loop background com `claude --model haiku --print` destila padrões das últimas 500 observações em instincts atômicos, fora do contexto principal",
+   "evidence": "CONFIRMED: ecc/skills/continuous-learning-v2/agents/observer-loop.sh:145-284 (cooldown 60s, watchdog, archive só pós-análise). Nosso repo não tem destilador automático — toda lição nasce de evento explícito",
+   "so_what": "Um distilador offline barato propondo lesson-candidates PENDING no lessons.py existente amplia o funil de aprendizado a custo ~zero de atenção — desde que nada ative sem aprovação humana"
+  },
+  {
+   "item": "Captura passiva de tool calls: matcher * grava todo Pre+PostToolUse em observations.jsonl por projeto, com scrub de secrets e 5 camadas anti-self-loop",
+   "evidence": "PARTIAL: ecc observe.sh:157-182,330-362; nós já temos rail per-tool-call determinístico content-free (PLAN-125 WS-1, _lib/tool_lifecycle.py) — o gap real é só o CONTEÚDO redigido, não o mecanismo",
+   "so_what": "Estender nosso rail existente com payload redigido via _lib.redact (opt-in) é incremento pequeno que dá matéria-prima ao distilador — funil muito mais largo que só falhas de benchmark"
+  },
+  {
+   "item": "Pipeline de instintos com clustering e confiança: /evolve clusteriza por trigger e gera candidatos de skill/command; promoção project→global (2+ projetos, conf ≥0.8); prune TTL-30d de pendentes",
+   "evidence": "PARTIAL: ecc/commands/evolve.md:23-118, instinct-cli.py:927-955. Nós temos recency_decay, prune por hit_rate (ADR-017/020) e skill-patch-propose (ADR-031) — falta clustering, confidence por observação e tier global",
+   "so_what": "Com o framework instalado em N repos, promoção cross-projeto de lessons + quarentena pending-com-TTL viram relevantes; o modelo de dados deles é importável sem importar o auto-apply"
+  },
+  {
+   "item": "Persistência automática de sessão: Stop hook escreve/atualiza sumário por transcript-UUID a cada parada; SessionStart reinjeta bounded (cap 8k, retenção 30d, stale-replay guard)",
+   "evidence": "PARTIAL: ecc session-end.js:28-95,228-243 wired no Stop. Nosso closeout é manual (CLAUDE.md §6); Stop.py grava session_stop no audit HMAC (rastro existe) mas sem sumário mecânico retomável",
+   "so_what": "Sessão que morre sem closeout hoje perde a narrativa; um Stop hook stdlib gravando sumário mecânico pointers-first + redacted dá fallback sem substituir a memória canônica do closeout"
+  },
+  {
+   "item": "Instincts v2 com ciclo de confiança completo: confidence 0.3-0.85 por frequência observada, escopo project/global, injeção top-6 conf≥0.7 no boot",
+   "evidence": "PARTIAL: ecc continuous-learning-v2/SKILL.md:48-151. Nosso lessons.py TEM hit/miss, hit_rate, undo e escopo por projeto (l.122-155) — falta score de confiança com decay determinístico, tier global e injeção no boot da sessão principal",
+   "so_what": "Gate de injeção por confiança evita injetar lessons contraditas; injetar top-3 no /ceo-boot (cap ~1k chars) leva o aprendizado à sessão principal — hoje lessons só chegam a subagentes spawnados"
+  },
+  {
+   "item": "Remediação de config: `agentshield init` scaffold seguro + `scan --fix` aplica só correções marcadas auto-fixable (segredo→env ref, wildcard→scoped)",
+   "evidence": "PARTIAL: ecc/skills/security-scan/SKILL.md:80-118. Nosso install.sh SKIPA settings.json pré-existente do repo-alvo; temos advisory pós-install (check_setup_verification.py) mas nenhum caminho de correção proposta",
+   "so_what": "Modo auto-fix ADVISORY via nossa cerimônia de patch assinado (nunca escrita silenciosa) dá paridade sem abrir mão da governança — relevante para adopters com config pré-existente insegura"
+  }
+ ],
+ "we_better": [
+  {
+   "item": "Audit log HMAC-chained tamper-evidente always-on (verify_chain detecta qualquer quebra)",
+   "why_it_matters": "ecc tem ZERO hits repo-wide para audit-chain/hash-chain/tamper-evident; a captura de governança deles é opt-in (ECC_GOVERNANCE_CAPTURE=1) e sem cadeia — nosso diferencial central de auditabilidade não tem equivalente lá"
+  },
+  {
+   "item": "Fail-closed em matchers de segurança (input não-parseável é bloqueado, não waved through)",
+   "why_it_matters": "O GateGuard deles LIBERA o retry sem verificar os fatos apresentados (fricção, não enforcement) e regex malformada cai em fallback; nossa política PLAN-152/C4 é garantia real, não sugestão"
+  },
+  {
+   "item": "Pair-rail cross-LLM (Codex) obrigatório por edit canônico",
+   "why_it_matters": "O --opus deles (red/blue/auditor) é same-vendor e on-demand — exatamente o blind-spot que nosso segundo modelo de outro vendor mitiga; nenhum mecanismo cross-vendor existe no ecc"
+  },
+  {
+   "item": "Spawn protocol ENFORÇADO por hook: check_agent_spawn.py valida PROFILE/SKILL/FILE ASSIGNMENT; contrato de retorno DONE/BLOCKED + matriz de escalação + anti-colisão de arquivos",
+   "why_it_matters": "O ecc não tem NENHUM enforcement de que a definição do agente é honrada nem protocolo de colisão — paralelismo lá é 1 linha de conselho; aqui é contrato verificado"
+  },
+  {
+   "item": "Plan→Debate→Execute com vetos, three-strike e 172 ADRs vinculados",
+   "why_it_matters": "No ecc, 'veto' e 'debate' aparecem só como prosa (loop-design-check, team-builder); nossa governança de decisão L3+ é cerimônia com registro, não recomendação"
+  },
+  {
+   "item": "Canonical-edit guard + cerimônia GPG de sentinel (dois rails de signer, scope verificado)",
+   "why_it_matters": "Nenhum equivalente no ecc: qualquer arquivo deles é editável sem prova de autorização; nossos arquivos-kernel exigem assinatura verificável e escopo declarado"
+  },
+  {
+   "item": "Frontmatter de skill radicalmente mais rico: owner, veto_floor, risk_class, priority, context_budget_tokens, activation_triggers, repo_profile_binding",
+   "why_it_matters": "Census dos 277 SKILL.md deles: ~92% só têm name/description/origin; ZERO têm owner/veto_floor/risk_class — nosso binding persona↔skill e roteamento por metadado não existem lá"
+  },
+  {
+   "item": "Segurança em RUNTIME: scan de injection em Read/WebFetch/MCP/output (bidi/zero-width), egress default-deny, red-team corpus enforcing em CI, ConfigChange tamper-guard",
+   "why_it_matters": "O ecc só cobre at-rest (scan estático) e instrução (rules); a janela entre conteúdo hostil chegar e agir é coberta por nós e descoberta por eles"
+  },
+  {
+   "item": "Uninstall safety por SHA idêntico + HMAC sidecar",
+   "why_it_matters": "Nosso uninstall só remove arquivo cujo SHA bate com o manifest assinado; o deles remove o que está registrado no install-state sem prova criptográfica de integridade"
+  },
+  {
+   "item": "Rail nativa de subagent COM governança: .claude/agents/*.md (ADR-050 dual-rail + ADR-144 tiering) reconhecida por check_agent_spawn.py",
+   "why_it_matters": "O claim de que eles ganham em ergonomia de subagent foi REFUTADO na verificação: temos a mesma rail nativa MAIS validação por hook — paridade de ergonomia com superioridade de governança"
+  }
+ ],
+ "skills_stats": {
+  "total": 277,
+  "adopt": 32,
+  "adapt": 97,
+  "inspire": 39,
+  "skip": 109
+ },
+ "adopt_shortlist": [
+  "netmiko-ssh-automation — read-only default + flag explícita p/ config; núcleo da squad network-ops nova",
+  "network-bgp-diagnostics — triage read-only com tabela de estados; squad network-ops",
+  "network-config-validation — pre-flight em camadas c/ detecção de comandos perigosos; squad network-ops",
+  "network-interface-health — método baseline-trend + tabela de contadores; squad network-ops",
+  "healthcare-cdss-patterns — CDSS puro-funcional c/ modelos de dados reais (dose/NEWS2); squad healthcare-clinical",
+  "healthcare-emr-patterns — EMR safety-first c/ fluxo de encontro concreto; squad healthcare-clinical",
+  "healthcare-eval-harness — harness que BLOQUEIA deploy em falha CRITICAL; casa com nossa filosofia de gates",
+  "production-scheduling (q5) — TOC/DBR, SMED, OEE, frozen window; semeia squad manufacturing",
+  "quality-nonconformance (q5) — NCR/CAPA/SPC regulado (FDA/IATF/AS9100); par do production-scheduling",
+  "energy-procurement (q5) — tarifas, demand charge, PPA com números reais; domínio novo",
+  "java-coding-standards — 384 linhas PASS/FAIL + detecção Spring/Quarkus; lacuna JVM",
+  "springboot-patterns — 315 linhas de padrões Spring densos; zero cobertura Java nas 151",
+  "cpp-coding-standards (q5) — Core Guidelines destiladas em 724 linhas; lacuna C++",
+  "cpp-testing — GoogleTest/CTest/sanitizers; par do cpp-coding-standards",
+  "csharp-testing — xUnit/FluentAssertions/Testcontainers; lacuna .NET",
+  "golang-patterns — Go idiomático denso (675L, código real); lacuna Go",
+  "angular-developer (q5) — 155 linhas + 35 references versionadas; lacuna Angular",
+  "nuxt4-patterns — hydration/useFetch/routeRules; framework sem cobertura nossa",
+  "nestjs-patterns — módulos, DTO/guards/interceptors; backend TS que não temos",
+  "prisma-patterns (q5) — traps não-óbvios reais (updateMany count, migrate reset)",
+  "motion-advanced (q5) — 596 linhas: gestures, SVG, useAnimate; nada nosso cobre motion",
+  "motion-patterns — padrões copy-paste (modal, stagger) com regras numéricas",
+  "pytorch-patterns — device-agnostic, seeds, shapes explícitas; semeia domínio ML",
+  "recsys-pipeline-architect — framework 6 estágios autocontido; domínio novo",
+  "hexagonal-architecture — Ports&Adapters multi-linguagem passo-a-passo; lacuna de arquitetura",
+  "windows-desktop-e2e (q5) — 888 linhas pywinauto/UIA + CI; nada equivalente nosso",
+  "frontend-slides — autocontido com presets+scripts (export-pdf, extract-pptx); lacuna real",
+  "ui-demo — método Discover-Rehearse-Record p/ vídeos demo Playwright; útil p/ devrel/launch",
+  "loop-design-check (q5) — metas decidíveis + anti-Goodhart + 5 modos de falha; governança de loop pura",
+  "dynamic-workflow-mode — contrato harness-por-tarefa + árvore de quando extrair skill",
+  "scientific-db-pubmed-database — sintaxe MeSH/E-utilities concreta; base squad research",
+  "scientific-db-uspto-database — fontes oficiais USPTO + logs reproduzíveis; squad legal/IP"
+ ],
+ "adapt_shortlist": [
+  "skill-comply (q5) — mede se skills são SEGUIDAS em 3 níveis de prompt; ouro p/ governança; remover uv, stdlib-only",
+  "continuous-learning-v2 (q5) — instincts com confiança+escopo; importar modelo de dados, NUNCA o auto-apply",
+  "gateguard — deny-once fact-forcing pré-edit com A/B (+2.25); reimplementar como hook stdlib",
+  "config-gc (q5) — GC de config human-in-loop c/ soft-delete e undo log; casa com nightly-hygiene",
+  "strategic-compact — advisor de /compact por contexto REAL (parser já existe em check_fluency_nudge.py)",
+  "context-budget — auditoria ESTÁTICA de overhead; complementa audit-tokens (runtime)",
+  "skill-stocktake + skill-scout — auditoria de qualidade da lib + dedup antes de criar skill; alimenta SP-NNN",
+  "agent-architecture-audit (q5) — taxonomia 12-layer de falhas de agente; única e densa",
+  "autonomous-loops (q5) — catálogo de 6 padrões de loop (611L); complementa parallelization",
+  "iterative-retrieval — loop DISPATCH-EVALUATE-REFINE teto 3; ataca context-problem dos fan-outs",
+  "santa-method + gan-style-harness — convergência dual-review tipada + loop gerador/avaliador; complementam pair-rail",
+  "eval-harness — EDD com pass@k + taxonomia de graders; fundir com agent-evaluation",
+  "growth-log — 3 regras (falha>sucesso, merge causa-raiz, transferibilidade) p/ lessons",
+  "rules-distill — coleta determinística + veredito LLM p/ manter as 151 skills",
+  "workspace-surface-audit — audit read-only de MCP/plugins/env; complementa ceo-info",
+  "inherit-legacy-style (q5) — anti style-drift com grilling protocol",
+  "intent-driven-development (q5) — AC-NNN observável; enriquece spec-clarify",
+  "database-migrations (q5) — zero-downtime checklist + SQL por ORM; funde em data-schema-design",
+  "tdd-workflow — trata *.plan.md como input NÃO-confiável (anti-injection); vale portar a seção",
+  "search-first — anti-NIH com matriz adopt/extend/build",
+  "security-review + security-bounty-hunter — checklist FAIL/PASS denso + lente explorável/pagável",
+  "llm-trading-agent-security — injection=ataque financeiro, spend limits; fit fintech+governança",
+  "healthcare-phi-compliance + hipaa-compliance — PHI/RLS/audit insert-only; overlay do squad healthcare",
+  "react-performance (q5) — 70+ regras priorizadas (base Vercel MIT); merge em frontend-performance-optimization",
+  "react-testing + react-patterns — RTL/MSW/axe + RSC; gap real no time frontend",
+  "motion-foundations (q5) — tokens/springs/a11y; base do trio motion",
+  "postgres-patterns + mysql-patterns — cheat-sheets índice/RLS + divergências; complementam data-schema-design",
+  "python-patterns + python-testing — úteis p/ dev de hooks; alinhar a py≥3.9 stdlib + TestEnvContext",
+  "github-ops — playbook gh CLI p/ operar nosso repo OSS",
+  "carrier-relationship-management (q5) + customs + logistics-exception + inventory-demand — enriquecem supply-chain",
+  "evm-token-decimals + nodejs-keccak256 — footguns reais com prova; dobrar no fintech",
+  "customer-billing-ops — OPERAÇÃO de billing; complementa monetization-and-billing",
+  "browser-qa + click-path-audit — QA pós-deploy read-only + efeitos de estado; frontend-team",
+  "opensource-pipeline — fork→sanitize→package com gates; espelha nosso de-id vivido",
+  "production-audit + prompt-optimizer + documentation-lookup — prontidão-prod, reescrita de prompt, docs-vivas com teto de calls"
+ ],
+ "our_skill_format_improvements": [
+  "Progressive disclosure: extrair exemplos longos das skills >600 linhas para references/*.md carregados sob demanda; começar por core/testing-strategy (1026L) e core/security-and-auth (868L). Média deles ~262L vs nossa ~378L — reduz context_budget real sem perder conteúdo.",
+  "Scripts determinísticos co-locados nas skills procedurais (coverage-audit, audit-tokens): SKILL.md instrui 'rode o script e apresente stdout verbatim' — congela comportamento entre versões de modelo. Stdlib-only, sob bash-safety existente.",
+  "allowed-tools:/tools: no frontmatter das skills risk_class:high, validado por hook — least-privilege por skill além do enforcement global (13 skills do ecc fazem isso; nenhuma nossa faz).",
+  "version: por skill + changelog — repos-alvo com framework instalado passam a conseguir diff/upgrade seletivo de skills (hoje só existe versão do framework).",
+  "templates/ de output nas skills que produzem artefatos (audit report, ADR, debate consensus): template canônico em arquivo em vez de exemplo inline — reduz drift de formato entre sessões.",
+  "Seção '## When to Activate' no corpo (129/277 no ecc): gatilhos human-scannable complementando nossos activation_triggers machine-first — manter ambos, convergência barata.",
+  "Formato skill-como-plugin p/ squads de domínio: hooks/ + agents/ + config.json + version dentro do bundle; squad-install já importa tarball assinado — estender o schema.",
+  "Validação JSON-schema do nosso inspired_by/provenance (nosso é mais rico por item, mas não é schema-validado; falta campo confidence p/ skills geradas em runtime).",
+  "Harness de compliance comportamental estilo skill-comply: cenários em 3 níveis de estrictez (supportive/neutral/competing) medindo aderência via claude -p stream-json — complementa benchmarks/ planted-bug (julgamento) com prompt-independence."
+ ],
+ "new_skill_recommendation": "Resposta direta: NÃO crie ~100 skills. Dos 277 do ecc: 32 ADOPT (12%), 97 ADAPT (35% — maioria é MERGE em skill nossa existente, não arquivo novo), 39 INSPIRE, 109 SKIP (39%: commodity de stack, vendor-specific ou já coberto). Qualidade dos ADOPTs é alta (9/32 são q5, resto q4), concentrada em 6 lacunas reais: network-ops (4), healthcare-clinical (3), manufacturing (2), JVM/Java (2 + 8 ADAPTs), frontend-motion (3), scientific-research (2), mais ~10 avulsas fortes (energy-procurement, windows-desktop-e2e, loop-design-check, hexagonal-architecture, prisma, pytorch, recsys). Número honesto: ~30-40 skills novas + ~25 merges. PRÉ-REQUISITO: /skill-health (telemetria de uso/sucesso derivada do audit-log HMAC que já temos) ANTES da criação em massa — com 151 skills sem telemetria não sabemos quais funcionam; volume agrava a descoberta. Cada port: atribuição MIT via inspired_by (source@commit + license), reescrita anti-contaminação (zero refs ECC), scripts em Python stdlib ≥3.9, entrada via /architect + skill-review normal.",
+ "proposed_waves": [
+  {
+   "wave": "A",
+   "title": "Docs/DX quick wins (honestidade + anti-footgun)",
+   "goal": "Fechar gaps de documentação que previnem a classe de issue mais comum de adopters, a custo quase zero",
+   "items": [
+    "INSTALL.md/README.md: seção 'Pick one path only' (conflito npx vs install.sh vs plugin, modo de falha empilhado, ordem de reset) + aviso 'Official sources only' (GitHub Canhada-Labs, npm ceo-orchestration)",
+    "SECURITY.md: seção 'superfícies oficiais' anti-typosquat, espelho de ecc/SECURITY.md:52-72",
+    "AGENTS.md na raiz: doutrina de review, limites de ação e mapa do repo — vira o contrato lido pelo nosso próprio pair-rail Codex (hoje `codex exec` roda sem contrato de repo)",
+    "docs/: página honesta 'o que degrada fora do Claude Code' (hook enforcement, audit chain, vetos evaporam) — coerente com o ângulo no-speed-claim",
+    "examples/: 4-6 CLAUDE.md de repo-alvo pós-install por stack (node-api, django, go, monorepo-ts) — hoje só temos first-session.md",
+    "README: tabela 'Which skill should I use?' de 10-15 linhas extraída do CHEAT-SHEET"
+   ],
+   "level": "L1"
+  },
+  {
+   "wave": "B",
+   "title": "Installer/release lifecycle",
+   "goal": "Fechar o ciclo install→verify→doctor→repair e endurecer o release, mantendo o gate manual do Owner (PLAN-125)",
+   "items": [
+    "scripts/install.sh: gravar install-state com o request original (--profile/--stack/--ceremony/placeholders) + operações",
+    "scripts/upgrade.sh: replay do request gravado (sem auto-pull; gate manual preservado)",
+    "scripts/doctor.sh + repair: diff do instalado vs skill-manifest.sha256 já existente (drift/faltantes) + restauração seletiva",
+    "Externalizar perfis do install.sh em manifest JSON schema-validado (cost/stability/default) + `--dry-run --json`; validador no CI",
+    ".github/workflows/release.yml: check idempotente already_published no npm, dist-tag `next` p/ -rc, teste de sync versão↔plugin-manifest (mata a classe versão-fantasma do follow-up v1.0.1)",
+    ".claude-plugin/{marketplace.json,plugin.json} gerados por build-plugin.py no repo público — marketplace self-hosted elimina o repo privado separado e habilita /plugin update"
+   ],
+   "level": "L2"
+  },
+  {
+   "wave": "C",
+   "title": "Formato + telemetria das NOSSAS 151 skills",
+   "goal": "Melhorar o empacotamento do corpo (onde o ecc ganha) e ganhar visibilidade de quais skills funcionam — pré-requisito da Wave D",
+   "items": [
+    "Progressive disclosure: references/*.md em core/testing-strategy (1026L) e core/security-and-auth (868L) como pilotos",
+    "allowed-tools: no frontmatter das skills risk_class:high + validação via hook existente",
+    "version: por skill + changelog; templates/ nas skills que produzem artefatos; seção '## When to Activate' human-scannable",
+    "/skill-health: taxa de uso/sucesso por skill derivada do audit-log HMAC (já registramos spawns/skill-injection), clustering de falhas, sinalização de skills mortas",
+    "/context-budget: auditoria estática de overhead (team.md, frontmatter das 151, 22 commands, CLAUDE.md, ~500 tok/tool MCP) com top-3 economias",
+    "Doc derivado COMMAND→SKILL→HOOK map gerado por script (estilo COMMAND-AGENT-MAP.md) p/ descoberta e refactor seguro"
+   ],
+   "level": "L2"
+  },
+  {
+   "wave": "D",
+   "title": "Criação de skills novas (as 32 ADOPT)",
+   "goal": "Preencher as 6 lacunas reais do catálogo com ~30-40 skills em squads novas, com atribuição MIT e reescrita anti-contaminação",
+   "items": [
+    "Squad network-ops via /architect: netmiko-ssh-automation, network-bgp-diagnostics, network-config-validation, network-interface-health (.claude/skills/domains/network-ops/)",
+    "Squad healthcare-clinical: healthcare-cdss-patterns, healthcare-emr-patterns, healthcare-eval-harness (+ ADAPTs phi-compliance/hipaa como overlay)",
+    "Squad manufacturing: production-scheduling, quality-nonconformance; avulsa energy-procurement",
+    "Squad jvm: java-coding-standards, springboot-patterns (+ ADAPTs quarkus/kotlin/jpa na mesma leva)",
+    "Frontend: angular-developer, nuxt4-patterns, nestjs-patterns, prisma-patterns, trio motion (advanced/patterns + foundations ADAPT) em .claude/skills/frontend/ ou domain",
+    "Avulsas: cpp x2, csharp-testing, golang-patterns, pytorch, recsys, hexagonal-architecture, windows-desktop-e2e, frontend-slides, ui-demo, loop-design-check, dynamic-workflow-mode, pubmed/uspto",
+    "Cada port: inspired_by (source@commit + MIT license), zero refs ECC, scripts em stdlib py≥3.9, entrada via skill-review; rodar check-claude-md-claims.py (contagens hardcoded) antes de cada push"
+   ],
+   "level": "L2"
+  },
+  {
+   "wave": "E",
+   "title": "Gates de segurança (lição S254 codificada)",
+   "goal": "Fechar a classe de bug que o próprio audit S254 encontrou (pair-rail morto/fail-open) com gates estáticos de CI e política declarativa",
+   "items": [
+    "Gate estático de harness-config no validate.yml: script stdlib verifica cada hook registrado em settings.json (path existe, executável, não-shim, não fail-open) + segredos inline + deny ausente; exit≠0 quebra o CI",
+    "Deny baseline de segredos no settings.json shippado + install.sh: Read/Write(~/.ssh/**, ~/.aws/**, **/.env*) e Bash(curl * | bash) — complementar ao credential-leak hook",
+    "Workflow supply-chain-watch agendado: npm audit signatures do pacote ceo-orchestration publicado + validador de SHA-pinning/política de workflows (além do actionlint) + playbook de incident-response",
+    "Elemento 'cite a instrução verbatim' no gate de Bash destrutivo L3, gravado na cadeia HMAC — SEM copiar a fraqueza do GateGuard de liberar retry não-verificado",
+    "Teste de regressão stale-replay: assert de que check_postcompact_reinject.py jamais carrega payloads ARGUMENTS= executáveis (classe ecc #1534)"
+   ],
+   "level": "L3"
+  },
+  {
+   "wave": "F",
+   "title": "Learning loop gated (observe→distill→pending)",
+   "goal": "Importar o funil passivo de aprendizado do ecc SOB nossa governança: captura redigida, quarentena pending, aprovação humana sempre",
+   "items": [
+    "Hook PostToolUse opt-in (stdlib) estendendo o rail PLAN-125 WS-1 com payload redigido via _lib.redact, store por-projeto",
+    "Distilador offline (modelo barato) propondo lesson-candidates PENDING no lessons.py; TTL 30d + aviso 7d; nada ativa sem /lesson-review",
+    "Score de confiança com decay determinístico em lessons.py (hit/miss já existem) + gate de injeção por confiança",
+    "Injeção top-3 lessons como one-liners no /ceo-boot (cap ~1k chars, threshold de efetividade)",
+    "Dampening de denials nos guards bloqueadores (canonical-edit, bash-safety, spawn-guard): após N blocks idênticos, versão condensada de 1 linha com ordinal (lição ecc #2142)",
+    "Gate fact-forcing deny-once ADVISORY→enforce: negar 1º Edit/Write de arquivo não lido exigindo 4 fatos, liberar retry — complementa check_bash_safety",
+    "/lesson-evolve: clustering por trigger gerando candidatos SP-NNN automaticamente; aprovação humana via /skill-review (mantém ADR-031)"
+   ],
+   "level": "L3"
+  },
+  {
+   "wave": "G",
+   "title": "Merges ADAPT nas skills existentes",
+   "goal": "Absorver os ~25 ADAPTs que são enriquecimento de skill nossa, sem criar arquivos novos",
+   "items": [
+    "react-performance (70+ regras, base Vercel MIT) → frontend/frontend-performance-optimization; react-patterns/testing → frontend",
+    "database-migrations + postgres/mysql-patterns → core/data-schema-design",
+    "intent-driven-development (AC-NNN observável) → core/spec-clarify; search-first → doutrina anti-NIH em code-review",
+    "evm-token-decimals + nodejs-keccak256 + llm-trading-agent-security → domains/fintech e trading-hft",
+    "carrier-relationship + customs + logistics-exception + inventory-demand → domains/supply-chain; returns-reverse-logistics → retail",
+    "security-review + security-bounty-hunter (lente explorável/pagável) → core/security-and-auth + /security-review",
+    "tdd-workflow: portar a seção plan-handoff (*.plan.md como input não-confiável) → testing-strategy",
+    "Piloto skill-comply: medir compliance de minimal-change-discipline e git-workflow-discipline sob prompt neutro/competidor"
+   ],
+   "level": "L2"
+  }
+ ],
+ "risks": [
+  "Reescrita node→python stdlib-only é o custo escondido dos ADAPTs de mecanismo (observe/distill, doctor/repair, strategic-compact): estimar por peça antes de comprometer waves E/F inteiras.",
+  "Contaminação/atribuição: todo conteúdo portado exige inspired_by (source@commit + MIT) e reescrita limpa; nota da recon: .kiro/README.md do ecc faz claim de provenance duvidoso — verificar licença upstream real de cada peça antes do port.",
+  "Anti-injection no import: skills do ecc instruem o agente a executar scripts e exibir stdout verbatim (ck, visa-doc-translate com 'execute WITHOUT asking'); cada SKILL.md importado precisa de review linha-a-linha antes de entrar no catálogo.",
+  "Claims de vendor não verificados: números do AgentShield (102 regras, 98% coverage) vêm do README do ECC com código em repo separado — inspirar-se na CLASSE (scan estático), nunca citar os números deles.",
+  "Waves E/F tocam hooks/guards = L3+: exigem /debate + ADR + cerimônia sentinel; risco de scope creep se tratadas como incrementos — quebrar em execution units pequenas.",
+  "Criar skills antes de medir (Wave D antes da C) agrava o problema '151 skills, quais funcionam?'; ordenar C→D é parte da proposta, não opcional.",
+  "Learning loop pode erodir a governança se auto-apply escapar: a linha vermelha é NADA ativa sem aprovação humana (lesson pending → /lesson-review; instinct→skill via SP-NNN + soak 7d).",
+  "Contagens hardcoded no CLAUDE.md (skills/hooks/ADRs) são ENFORCING tolerance=0: cada wave que adiciona skill/ADR precisa rodar check-claude-md-claims.py pré-push ou toma main-red (lição já vivida)."
+ ]
+}
