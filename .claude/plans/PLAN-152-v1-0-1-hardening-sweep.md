@@ -361,6 +361,9 @@ override, so the Owner applied the authorized diff by hand
 (`git apply architect/round-2/fix.patch` — S258 patcher precedent; diff
 committed as evidence). Fix = streaming chunked scan (flag-off path unchanged);
 RED-first tests (2) flipped green; full hooks suite + fast gates green.
+**Re-pass R2 on the widened diff (`489f020..2bac7c0`): APPROVE** — both R1
+findings verified remediated; verdict record at
+`PLAN-152/architect/round-2/repass-verdict.md`.
 GA closes when the Owner re-signs `v1.0.1` **at the round-2 fix commit**
 (NOT `07ad298`) **on/after 2026-07-04 10:24 -03** and pushes (gate sees RC ≥24h —
 the RC/GA comparison is by tag creatordate, commits may differ). Two latent
