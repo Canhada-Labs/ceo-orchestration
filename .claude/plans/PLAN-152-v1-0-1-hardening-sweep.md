@@ -1,12 +1,24 @@
 ---
 id: PLAN-152
 title: v1.0.1 Hardening Sweep — Audit Fan-out Remediation + Backlog Closeout
-status: executing
+status: done
 reviewed_at: 2026-07-01
 executing_since: 2026-07-02
+completed_at: 2026-07-03
 created: 2026-07-01
 owner: CEO
 depends_on: []
+related_commits:
+  - 37867c2                        # Wave F pre-item: substrate-watch ledger refresh (pair-rail APPROVE in msg)
+  - bdf7f6b                        # Wave A: P0 security fail-opens shipped-broken in v1.0.0
+  - f8f2af6                        # Wave B tests-02: relocate 13 CI-dark root tests → tests/unit/
+  - 0396b71                        # Wave B tests-07: serial marker on wall-clock perf classes
+  - 7df843d                        # Wave C: hot-path economics + workflow robustness
+  - 1fe0243                        # Wave E: docs-drift + dead-code + orphan PLAN-128
+  - 6320046                        # Wave B: wire ~1.6k CI-dark tests + hygiene burndown + coverage-truth
+  - b795973                        # Wave F: Sonnet 5 MODEL_ID member (ADR-157) + fast-mode fuses
+  - 2c420ff                        # Wave D: npm tarball hygiene — selective staging + packlist gates
+  - 07ad298                        # Wave G: v1.0.1 closeout — bump, CHANGELOG, CLAUDE.md §4
 budget_tokens: 400-700k
 budget_sessions: 2  # 1 execution session + 1 tiny fresh-session pair-rail probe (Wave G — Codex R5-P3)
 context_risk: high
@@ -298,13 +310,24 @@ V1 deterministic + V2 Codex pair-rail + V3 Owner GPG per wave):
 - [x] All 32 `fix` findings resolved OR explicitly re-classified with an on-disk pointer (incl. the two debate re-classifications: `_lib/tests` burndown + OIDC → §Deferred/v1.0.2) — zero silently dropped. *(S258: waves A–F completos; re-classificações novas todas em §Deferred com successor.)*
 - [x] All 6 `accept` + all §Deferred findings have an on-disk pointer — zero silently dropped.
 - [x] Backlog closed: npm tarball (#2), Sonnet 5 (#3), workflow null-guards (#4), sentinels (#1 / Wave 0); OIDC deferred-with-pointer + NPM_TOKEN expiry (~2026-09-28) calendar-flagged in GOVERNANCE-MAP token table + CHANGELOG. (Issue template: already shipped in v1.0.0 — verified S255, no action.)
-- [x] Wave A: pair-rail registration fixed; `rm -rf ~ ";"` blocks AND benign-analog allows (S257, deviation documentada); cache path hardened com testes ±. *(PENDENTE só o fresh-session probe — item Wave G do Owner.)*
+- [x] Wave A: pair-rail registration fixed; `rm -rf ~ ";"` blocks AND benign-analog allows (S257, deviation documentada); cache path hardened com testes ±. *(Fresh-session probe SATISFEITO: boot verde S259 2026-07-03 — 44/44 hooks smoke-pass, `settings_tamper_tripwires` green (44/44 registered effective) — re-confirmado no boot da sessão de closeout.)*
 - [x] Wave B: the 3 security root-tests (tests/unit/) collect + pass — 2 rodadas locais consecutivas do comando exato do CI (confirmação em CI = pós-push); env-hygiene 55→0 nos roots v1.0.1 (`_lib/tests` 128 → v1.0.2).
 - [x] §Release floor shipped — SEM degradação: floor + TODOS os itens não-floor entregues; únicos cortes = defers pré-acordados/ratificados, todos com ponteiro §Deferred.
 - [x] Wave D: `npm pack --dry-run` ships zero forbidden paths (KEEPS PLAN-SCHEMA.md + examples/ + carve-outs contratuais); packlist gate live em 3 camadas.
 - [x] `check-claude-md-claims.py` rc=0 (tolerance=0) + `validate-governance.sh` PASS localmente; full CI green = confirmação pós-push.
 - [x] VERSION=1.0.1 (+ npm/package.json + pyproject + INSTALL), CHANGELOG entry, tag ceremony ready (release.yml: RC hold + production-npm approval = Owner).
 - [x] `check-contamination` green (no foxbit/employer-class residue introduced).
+
+## Closeout (2026-07-03)
+
+Executed S257+S258 (waves A–G, `bdf7f6b..07ad298`, pushed 2026-07-02); every wave
+carried a manual Codex pair-rail APPROVE in the commit message. Fresh-session
+pair-rail probe satisfied by the S259 green boot (44/44 hooks live + tamper
+tripwires green). CI at flip time: 6/7 workflows green on `07ad298`; **Validate
+stuck `queued`** on a runner-group misconfig (group did not allow public repos —
+toggled S259; reruns reuse the stale resolution). The push of this closeout commit
+is the decisive fresh Validate run; the `v1.0.1` tag ceremony (Owner GPG,
+decision A: tag-only signature) waits for that green.
 
 ## Reference links
 
