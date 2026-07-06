@@ -364,10 +364,24 @@ RED-first tests (2) flipped green; full hooks suite + fast gates green.
 **Re-pass R2 on the widened diff (`489f020..2bac7c0`): APPROVE** — both R1
 findings verified remediated; verdict record at
 `PLAN-152/architect/round-2/repass-verdict.md`.
-GA closes when the Owner re-signs `v1.0.1` **at the round-2 fix commit**
-(NOT `07ad298`) **on/after 2026-07-04 10:24 -03** and pushes (gate sees RC ≥24h —
-the RC/GA comparison is by tag creatordate, commits may differ). Two latent
-release.yml bugs surfaced by the live-fire are in §Deferred
+**GA SHIPPED 2026-07-06** — but the live-fire found two more gates first:
+(3) the **weekly-workflow staleness gate** (zero runs of `otel-smoke` /
+`adapter-live` — their Monday crons had never fired post-public-flip; fixed by
+manual `workflow_dispatch` of both); (4) the **step-15 pair-rail verdict
+gate** — first release where it hard-blocks (v1.0.0 rode the
+`CEO_PAIR_RAIL_VERDICT_OPTIONAL=1` transition variable, deleted at launch
+closeout). Resolution = **round-3 ceremony** (`architect/round-3/`):
+fresh Codex R3 GO within the 24h TTL, S104 `parent_sha` bind, real
+single-line-encoded Owner GPG signature in the envelope, validator green
+locally (rc=0), plus a manifest amendment removing the dead PLAN-081
+locked-corpus path (clean-room casualty that INFRA-failed the validator).
+Kernel-guarded files applied via the Owner-patcher route again. GA tag
+re-cut at the verdict commit `23e9dea`; Release + step 15 GREEN; one more
+gotcha — the 07-03 NPM run sat `waiting` at the approval gate holding the
+`cancel-in-progress: false` concurrency slot, parking the real run at
+`pending`/zero-jobs until cancelled. **npm publish approved by the Owner;
+registry serves `1.0.1` (`latest`); `npx ceo-orchestration@1.0.1 --help`
+rc=0.** Two latent release.yml bugs remain in §Deferred
 (`release-gate-rc-version-mismatch`, `release-notes-hardcoded-first-release`).
 
 ## Reference links
