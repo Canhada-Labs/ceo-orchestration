@@ -11,6 +11,11 @@
 # extends _CANONICAL_GUARDS — Phase 6 declared the intent; Phase 6-bis
 # lands the actual `check_canonical_edit.py` patch).
 
+# PLAN-152 round-3 amendment (2026-07-06, Owner-signed sentinel): removed
+# .claude/plans/PLAN-081/corpus/locked/MANIFEST.md — stripped in the
+# clean-room migration; git hash-object on the dead path made the step-15
+# validator INFRA-fail for every post-public release.
+
 .claude/dispatcher/disable_predicate_eval.py
 .claude/dispatcher/routing-matrix-loader.py
 .claude/dispatcher/routing-matrix.yaml
@@ -25,7 +30,6 @@
 .claude/hooks/check_codex_filewrite.py
 .claude/hooks/check_codex_response.py
 .claude/hooks/check_pair_rail.py
-.claude/plans/PLAN-081/corpus/locked/MANIFEST.md
 .claude/policies/rubric-violation-catalogue.yaml
 .claude/scripts/run-promotion-gate.py
 .github/scripts/validate-pair-rail-verdict.py

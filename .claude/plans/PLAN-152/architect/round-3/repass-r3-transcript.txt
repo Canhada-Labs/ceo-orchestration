@@ -1,0 +1,20 @@
+.claude/plans/PLAN-152-v1-0-1-hardening-sweep.md:139:- [x] *(DONE S258 Wave C, commit 7df843d — gate-first + cap 1MiB + 4 testes novos)* [P1] [.claude/hooks/check_read_injection.py] **economics-02** — eliminate/cap the 2nd uncapped full-file `read_text` + unconditional unicode sanitize (:320); gate the heavy path on `CEO_UNICODE_HARDBLOCK` before doing the work. CANONICAL → ceremony. Check: a large-file Read triggers a single capped scan (assert via added test or timing).
+.claude/plans/PLAN-152-v1-0-1-hardening-sweep.md:177:- [x] *(DONE S260 2026-07-03 — Check run VERBATIM in the fresh closeout session: `echo '{"tool_name":"Edit","tool_input":{"file_path":"x"}}' | bash .claude/hooks/_python-hook.sh check_pair_rail.py` → the hook EXECUTED and decided — `[check_pair_rail SPIKE] pair_rail_out_of_scope tool_name='Edit', file_path='x', reason='not_l3_plus'` + `{}` verdict, exit 0; no `hook not found`. Corroborated by the same session's /ceo-boot: hook_live_smoke 44/44 + settings_tamper_tripwires 44/44 effective. This box was flagged unchecked by the Codex release re-pass R1 — evidence recorded here closes it.)* [P0] [fresh-session probe] — after the final commit, open a FRESH session (or re-launch) and run the governance-01 Check verbatim (debate C5: hooks load at session start — only a fresh session proves the pair-rail registration is live again). Check: the registered command executes the hook (no `hook not found` + `{}`).
+.claude/plans/PLAN-152-v1-0-1-hardening-sweep.md:319:> fresh-session pair-rail probe.
+.claude/plans/PLAN-152-v1-0-1-hardening-sweep.md:355:guard past 1 MiB (CONFIRMED in code); (2) the Wave G fresh-session probe checkbox
+.claude/plans/PLAN-152-v1-0-1-hardening-sweep.md:366:`PLAN-152/architect/round-2/repass-verdict.md`.
+.claude/hooks/check_read_injection.py:358:    # WHOLE file in _UNICODE_SCAN_CAP_CHARS-sized chunks — a single capped
+.claude/hooks/check_read_injection.py:367:                    content = _fh.read(_UNICODE_SCAN_CAP_CHARS)
+.claude/plans/PLAN-152/architect/round-2/fix.patch:12:+    # WHOLE file in _UNICODE_SCAN_CAP_CHARS-sized chunks — a single capped
+.claude/plans/PLAN-152/architect/round-2/fix.patch:20:-                content = _fh.read(_UNICODE_SCAN_CAP_CHARS)
+.claude/plans/PLAN-152/architect/round-2/fix.patch:31:+                    content = _fh.read(_UNICODE_SCAN_CAP_CHARS)
+.claude/plans/PLAN-152/architect/round-2/approved.md:44:  - .claude/hooks/check_read_injection.py — replace the single capped read
+.claude/plans/PLAN-152/architect/round-2/repass-verdict.md:13:- **Finding 2 (process):** the PLAN-152 Wave G fresh-session pair-rail
+.claude/plans/PLAN-152/architect/round-2/repass-verdict.md:15:- Verdict line: `RELEASE-REPASS: REJECT` (~174k tokens).
+.claude/plans/PLAN-152/architect/round-2/repass-verdict.md:32:- Verdict line: `RELEASE-REPASS: APPROVE` (~178k tokens).
+
+codex
+RELEASE-VERDICT: GO
+tokens used
+217.383
+RELEASE-VERDICT: GO

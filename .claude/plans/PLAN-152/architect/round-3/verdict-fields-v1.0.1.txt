@@ -1,0 +1,14 @@
+verdict: GO
+generated_at: 2026-07-06T12:26:24Z
+ttl_hours: 24
+parent_sha: ab3678ce6ca1258db6b94ee2ab4eedf312d8af9b
+release_tag: v1.0.1
+inputs_hash: 525c6af99f993dca48ecd64c1ab5f1d2d957eec8cd2e00299a3ac291f546ea36
+inputs_hash_paths_manifest_sha: b3ab0242a6ff4e12fdf2fd90c47cbc23649ab07226340c8b7aacbb0f9cc093e0
+tool_versions:
+  codex_cli: 0.139.0
+  codex_cli_binary_sha256: d3be844c45c4fd89392536e56e1010963f94785592596b50cd0c45bb8a341406
+  claude_code: claude-fable-5
+  python: 3.9.6
+transcript_hash: a2db8563a256529a6901ca577479cda3c5a0243fe981c0476fe934a71069d563
+findings: []

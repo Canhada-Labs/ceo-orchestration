@@ -1,0 +1,66 @@
+# Pair-Rail Verdict — v1.0.1 GA
+
+**Verdict:** GO
+**Generated:** 2026-07-06T12:26:24Z by CEO (claude-fable-5) — S260-cont GA ceremony
+**Plan:** PLAN-152 (v1.0.1 Hardening Sweep) — round-3 sentinel
+**Codex re-pass chain:** R1 REJECT (2026-07-03: 1 MiB cap fail-open + open probe box)
+→ remediation `2bac7c0` (round-2 sentinel + Owner-applied patch) → R2 APPROVE
+(widened diff) → **R3 GO (2026-07-06, fresh within TTL)** — transcript at
+`.claude/plans/PLAN-152/architect/round-3/repass-r3-transcript.txt`.
+
+First release where step 15 hard-blocks: v1.0.0 shipped under the
+`CEO_PAIR_RAIL_VERDICT_OPTIONAL=1` transition variable, deleted by the Owner
+at launch closeout. This verdict uses the S104 `parent_sha` bind (no legacy
+`commit_sha`, no escape variable).
+
+## Verdict envelope (validator-parsed YAML frontmatter)
+
+```yaml
+verdict: GO
+generated_at: 2026-07-06T12:26:24Z
+ttl_hours: 24
+parent_sha: ab3678ce6ca1258db6b94ee2ab4eedf312d8af9b
+release_tag: v1.0.1
+inputs_hash: 525c6af99f993dca48ecd64c1ab5f1d2d957eec8cd2e00299a3ac291f546ea36
+inputs_hash_paths_manifest_sha: b3ab0242a6ff4e12fdf2fd90c47cbc23649ab07226340c8b7aacbb0f9cc093e0
+tool_versions:
+  codex_cli: 0.139.0
+  codex_cli_binary_sha256: d3be844c45c4fd89392536e56e1010963f94785592596b50cd0c45bb8a341406
+  claude_code: claude-fable-5
+  python: 3.9.6
+transcript_hash: a2db8563a256529a6901ca577479cda3c5a0243fe981c0476fe934a71069d563
+findings: []
+gpg_signature: base64:LS0tLS1CRUdJTiBQR1AgU0lHTkFUVVJFLS0tLS0KCmlKRUVBQllLQURrV0lRU3VteU52MnZCR0tIUUdER3ZQejZ6d0F6WGNkQVVDYWt1azJoc1VnQUFBQUFBRUFBNXQKWVc1MU1pd3lMalVyTVM0eE1pd3dMRE1BQ2drUXo4K3M4QU0xM0hTdjNBRUE5aVNQTU1jSGFZbVRzNkJxYWZqaQppUkVTQ21DQ2JSOWx6WU5KalZjZ0F5UUEvaVRwaXBBL3JQUEtCcHVTMTJkRXNBQXcxVW9hMjJMUXV1SWRtSmxHCmpPSUQKPXJkQ08KLS0tLS1FTkQgUEdQIFNJR05BVFVSRS0tLS0tCg==
+```
+
+## Signature verification recipe
+
+The `gpg_signature` value is the base64 of an armored detached GPG signature
+(signer AE9B236FDAF0462874060C6BCFCFACF00335DC74) over the canonical fields
+file — every envelope line above EXCEPT `gpg_signature` itself, as committed
+at `.claude/plans/PLAN-152/architect/round-3/verdict-fields-v1.0.1.txt`
+(raw `.asc` sibling committed alongside). Verify:
+
+    base64 -d <<< "<value after base64:>" > /tmp/v.asc
+    gpg --verify /tmp/v.asc \
+      .claude/plans/PLAN-152/architect/round-3/verdict-fields-v1.0.1.txt
+
+The validator's line-oriented YAML parser cannot carry a multi-line armor
+block, hence the single-line encoding (validator asserts non-empty; the
+armored original ships as evidence).
+
+## Findings (P0/P1/P2/P3)
+
+NONE outstanding. R1's two findings were remediated at `2bac7c0` and
+re-verified by R2 and R3 (see re-pass chain above; R2 record at
+`.claude/plans/PLAN-152/architect/round-2/repass-verdict.md`).
+
+## Authorization
+
+- Round-3 Owner-signed sentinel: `.claude/plans/PLAN-152/architect/round-3/approved.md` (+ `.asc`).
+- `parent_sha` = `ab3678ce6ca1258db6b94ee2ab4eedf312d8af9b` (HEAD at authoring;
+  parent of the verdict commit). GA tag `v1.0.1` re-cut at the verdict commit.
+- RC-hold (ADR-007): `v1.0.1-rc.1` creatordate 2026-07-03 10:23 -03 — >24h
+  elapsed at any GA re-tag from here.
+- inputs-hash manifest amended this ceremony (dead PLAN-081 corpus path
+  removed; 18/18 paths live) — same signed sentinel scope.
