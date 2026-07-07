@@ -39,6 +39,8 @@ Scope:
   - SPEC/v1/audit-log.schema.md
 Amends: SPEC/v1/audit-log.schema.md — adds the spawn_prompt_defense_gate
   action row (closed-enum fields keyword/present/enforced, Sec MF-3
-  allowlist); required by the _KNOWN_ACTIONS 302→303 registration landing
-  in .claude/hooks/_lib/audit_emit.py under this same sentinel.
+  allowlist) AND the matching v2.47 version-summary-table row (SPEC
+  internal consistency; v2.46 carries one); required by the _KNOWN_ACTIONS
+  302→303 registration landing in .claude/hooks/_lib/audit_emit.py under
+  this same sentinel.
 <!-- END SIGNED SCOPE -->

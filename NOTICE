@@ -90,3 +90,88 @@ not staged. It is pulled forward only on explicit Owner go/no-go; rows are added
 here at that time. See `.claude/plans/PLAN-153/staged/wave-D/MANIFEST.md`
 §"Batch 2 (deferred)".
 --------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+PENDING CEREMONY LANDING — PLAN-153 Wave G, ADAPT merges (23 of 25 staged)
+--------------------------------------------------------------------------------
+
+Status: **STAGED, not yet live.** The rows below describe upstream knowledge
+**merged into EXISTING catalog skills** (not new skill files — the catalog count
+does NOT change). They are staged under
+`.claude/plans/PLAN-153/staged/wave-G/` and have **not** yet been merged into the
+live catalog. Until the Wave G landing ceremony runs (per-target SP-NNN +
+`/skill-review` + `check-imported-skill.py`, then `mv SKILL.md.shadow.md
+SKILL.md` under the SKILL.md sentinel), the live skills at these target paths do
+NOT yet carry this material. See
+`.claude/plans/PLAN-153/staged/wave-G/CEREMONY-NOTES.md` for the exact per-merge
+steps (including the AFTER-C ordering for `testing-strategy` and
+`security-and-auth`) and `.../MANIFEST.md` for the census.
+
+Upstream (all rows in this section):
+  affaan-m/ecc — https://github.com/affaan-m/ecc — repository-level MIT License,
+  pinned at commit 81af4076. Each merge is a **clean-room ADAPT** (Session 261):
+  the upstream skill informed scope only; the merged prose, examples, and
+  activation surface are original work authored for this framework and carry zero
+  upstream references. Where a merge lands as a net-new `references/*.md`, that
+  file is named as the ported piece; where it folds into the existing `SKILL.md`,
+  that `SKILL.md` is named.
+
+frontend-performance-optimization (SP-024)
+  `.claude/skills/frontend/frontend-performance-optimization/SKILL.md` — clean-room ADAPT merge (S261, PLAN-153 Wave G); imported from `affaan-m/ecc@81af4076` `skills/react-performance/`, ported under the MIT License.
+
+frontend-patterns (SP-025)
+  `.claude/skills/frontend/frontend-patterns/SKILL.md` — clean-room ADAPT merge (S261, PLAN-153 Wave G); imported from `affaan-m/ecc@81af4076` `skills/react-patterns/`, ported under the MIT License.
+
+testing-strategy (SP-026 — AFTER-C, applies on the SP-022 loader)
+  `.claude/skills/core/testing-strategy/references/react-component-testing.md` — clean-room ADAPT merge (S261, PLAN-153 Wave G); imported from `affaan-m/ecc@81af4076` `skills/react-testing/`, ported under the MIT License.
+  `.claude/skills/core/testing-strategy/references/tdd-red-green-cycle.md` — clean-room ADAPT merge (S261, PLAN-153 Wave G); imported from `affaan-m/ecc@81af4076` `skills/tdd-workflow/`, ported under the MIT License.
+
+data-schema-design (SP-027)
+  `.claude/skills/core/data-schema-design/SKILL.md` — clean-room ADAPT merge (S261, PLAN-153 Wave G); imported from `affaan-m/ecc@81af4076` `skills/database-migrations/`, ported under the MIT License.
+  `.claude/skills/core/data-schema-design/SKILL.md` — clean-room ADAPT merge (S261, PLAN-153 Wave G); imported from `affaan-m/ecc@81af4076` `skills/postgres-patterns/`, ported under the MIT License.
+  `.claude/skills/core/data-schema-design/SKILL.md` — clean-room ADAPT merge (S261, PLAN-153 Wave G); imported from `affaan-m/ecc@81af4076` `skills/mysql-patterns/`, ported under the MIT License.
+
+spec-clarify (SP-028)
+  `.claude/skills/core/spec-clarify/SKILL.md` — clean-room ADAPT merge (S261, PLAN-153 Wave G); imported from `affaan-m/ecc@81af4076` `skills/intent-driven-development/`, ported under the MIT License.
+
+code-review-checklist (SP-029)
+  `.claude/skills/core/code-review-checklist/SKILL.md` — clean-room ADAPT merge (S261, PLAN-153 Wave G); imported from `affaan-m/ecc@81af4076` `skills/search-first/`, ported under the MIT License.
+
+financial-correctness-and-math (SP-030)
+  `.claude/skills/domains/fintech/skills/financial-correctness-and-math/SKILL.md` — clean-room ADAPT merge (S261, PLAN-153 Wave G); imported from `affaan-m/ecc@81af4076` `skills/evm-token-decimals/`, ported under the MIT License.
+
+blockchain-security-audit (SP-031)
+  `.claude/skills/domains/fintech/skills/blockchain-security-audit/SKILL.md` — clean-room ADAPT merge (S261, PLAN-153 Wave G); imported from `affaan-m/ecc@81af4076` `skills/nodejs-keccak256/`, ported under the MIT License.
+
+kill-switches (SP-032)
+  `.claude/skills/domains/trading-hft/skills/kill-switches/SKILL.md` — clean-room ADAPT merge (S261, PLAN-153 Wave G); imported from `affaan-m/ecc@81af4076` `skills/llm-trading-agent-security/`, ported under the MIT License.
+
+supply-chain-strategist (SP-033)
+  `.claude/skills/domains/supply-chain/skills/supply-chain-strategist/SKILL.md` — clean-room ADAPT merge (S261, PLAN-153 Wave G); imported from `affaan-m/ecc@81af4076` `skills/carrier-relationship-management/`, ported under the MIT License.
+  `.claude/skills/domains/supply-chain/skills/supply-chain-strategist/SKILL.md` — clean-room ADAPT merge (S261, PLAN-153 Wave G); imported from `affaan-m/ecc@81af4076` `skills/customs-trade-compliance/`, ported under the MIT License.
+  `.claude/skills/domains/supply-chain/skills/supply-chain-strategist/SKILL.md` — clean-room ADAPT merge (S261, PLAN-153 Wave G); imported from `affaan-m/ecc@81af4076` `skills/logistics-exception-management/`, ported under the MIT License.
+  `.claude/skills/domains/supply-chain/skills/supply-chain-strategist/SKILL.md` — clean-room ADAPT merge (S261, PLAN-153 Wave G); imported from `affaan-m/ecc@81af4076` `skills/inventory-demand-planning/`, ported under the MIT License.
+
+security-and-auth (SP-034 — AFTER-C, applies on the SP-023 loader)
+  `.claude/skills/core/security-and-auth/references/cloud-and-ci-cd-security.md` — clean-room ADAPT merge (S261, PLAN-153 Wave G); imported from `affaan-m/ecc@81af4076` `skills/security-review/`, ported under the MIT License.
+  `.claude/skills/core/security-and-auth/references/vulnerability-hunting.md` — clean-room ADAPT merge (S261, PLAN-153 Wave G); imported from `affaan-m/ecc@81af4076` `skills/security-bounty-hunter/`, ported under the MIT License.
+
+codebase-onboarding (SP-035)
+  `.claude/skills/core/codebase-onboarding/SKILL.md` — clean-room ADAPT merge (S261, PLAN-153 Wave G); imported from `affaan-m/ecc@81af4076` `skills/inherit-legacy-style/`, ported under the MIT License.
+
+design-system-and-components (SP-036 — ⚠ CROSS-WAVE: drop if Wave D b2 promotes motion-foundations as a new skill)
+  `.claude/skills/frontend/design-system-and-components/reference/motion-tokens.md` — clean-room ADAPT merge (S261, PLAN-153 Wave G); imported from `affaan-m/ecc@81af4076` `skills/motion-foundations/`, ported under the MIT License.
+
+mobile-app-builder (SP-037)
+  `.claude/skills/domains/mobile/skills/mobile-app-builder/SKILL.md` — clean-room ADAPT merge (S261, PLAN-153 Wave G); imported from `affaan-m/ecc@81af4076` `skills/android-clean-architecture/`, ported under the MIT License.
+
+content-creator (SP-038 — strip-ECC-refs precondition; contamination gate applies)
+  `.claude/skills/domains/marketing-global/skills/content-creator/SKILL.md` — clean-room ADAPT merge (S261, PLAN-153 Wave G); imported from `affaan-m/ecc@81af4076` `skills/brand-voice/`, ported under the MIT License.
+
+executive-summary (SP-039)
+  `.claude/skills/domains/business-support/skills/executive-summary/SKILL.md` — clean-room ADAPT merge (S261, PLAN-153 Wave G); imported from `affaan-m/ecc@81af4076` `skills/competitive-report-structure/`, ported under the MIT License.
+
+Not staged (2 of the 25 materialized merges — NO Wave G content on disk; deferred):
+  `skills/agent-harness-construction/` → `core/mcp-server-authoring` (row 21) — no staged file; add its NOTICE row when staged.
+  `skills/benchmark-optimization-loop/` → `core/performance-engineering` (row 23) — no staged file; add its NOTICE row when staged.
+--------------------------------------------------------------------------------
