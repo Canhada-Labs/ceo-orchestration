@@ -1,8 +1,9 @@
 ---
 id: PLAN-153
 title: ECC Comparative Uplift Program
-status: reviewed
+status: executing
 reviewed_at: 2026-07-03
+executing_at: 2026-07-06
 created: 2026-07-03
 owner: CEO
 depends_on: [PLAN-152]

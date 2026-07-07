@@ -7,6 +7,18 @@
 > 3 ways to consume `ceo-orchestration` from another repo. Pick the one that
 > matches your team's workflow.
 
+> ## Official sources only
+>
+> The only official distribution points for this framework are:
+>
+> - **GitHub:** [`Canhada-Labs/ceo-orchestration`](https://github.com/Canhada-Labs/ceo-orchestration)
+> - **npm:** [`ceo-orchestration`](https://www.npmjs.com/package/ceo-orchestration) (`npx ceo-orchestration`)
+>
+> Anything else — mirrors, forks, re-published packages, marketplace
+> listings, lookalike names — is unofficial and untrusted. GitHub
+> releases ship SHA-256 checksums; the npm package is published with
+> SLSA 3 provenance. Verify before installing.
+
 > ## ⚠ Pre-install: read these first
 >
 > 1. [`docs/HONEST-LIMITATIONS.md`](docs/HONEST-LIMITATIONS.md) —
@@ -57,6 +69,61 @@
 > ```bash
 > export CEO_MITIGATION_DISABLE=1
 > ```
+
+---
+
+## Pick one install path — they do not stack
+
+Three routes can put the framework in front of Claude Code for a target
+repo, and they are **mutually exclusive per target**. The two supported
+routes (script and npx) write the same surfaces: `.claude/hooks/`,
+`.claude/skills/`, `.claude/settings.json` (hook registrations), and the
+install manifest at `.claude/.install-manifest.sha256`. The experimental
+plugin route is different: `scripts/build-plugin.py` produces a bundle
+with its **own** `hooks/hooks.json` under the plugin root — it does
+**not** write the target repo's `settings.json` or install manifest, so
+the manifest-based uninstall/recovery guidance below applies only to
+script/npx installs (a plugin is removed through Claude Code's plugin
+manager). The conflict is real either way: a plugin stacked on a script
+install means two registrations firing the same hook scripts.
+
+| Path | What it is | Status |
+|---|---|---|
+| `scripts/install.sh <target>` from a clone (Option 1) or submodule `--link` mode (Option 2) | The reference installer — Options 1 and 2 below are the **same script**, so they count as one path | Supported |
+| `npx ceo-orchestration <target>` | npm shim that spawns the *same bundled* `install.sh` and forwards your flags unchanged | Supported |
+| Claude Code plugin (`scripts/build-plugin.py`) | Experimental packager of the advisory (`--ceremony user`) surface — see the note under Option 3 | Experimental — not a supported install path |
+
+(Option 3, the GitHub template, creates a brand-new repo rather than
+installing into an existing one, so it does not enter this conflict.)
+
+**The stacked-failure mode.** Installing via more than one path on the
+same repo produces:
+
+- **Duplicated hooks** — the same hook fires once from
+  `.claude/settings.json` and once from the plugin's own hook
+  registration, so every governed action pays the hook chain twice.
+- **Stacked settings merges** — two installers merging hook entries
+  into `.claude/settings.json` on top of each other.
+- **A drifted install manifest** — `.claude/.install-manifest.sha256`
+  records only the **last** writer. Files from the earlier install no
+  longer match the manifest, so the manifest-honoring `uninstall.sh`
+  preserves them as "user-modified" and leaves orphans behind.
+
+**Reset order to recover from a mixed install:**
+
+1. **Uninstall via the path you installed with.** Script or npx
+   installs: `scripts/uninstall.sh <target> --dry-run` first, then for
+   real (see §Uninstall below). The npm shim only exposes the
+   installer, so run `uninstall.sh` from a clone — it honours the same
+   manifest the bundled installer wrote. Plugin installs: remove the
+   plugin through Claude Code's plugin manager.
+2. **Verify `.claude/` is clean.** No `team.md`, `hooks/`, `skills/`,
+   or `.install-manifest.sha256` left behind. By design the uninstaller
+   preserves files whose SHA no longer matches the manifest (your
+   post-install edits), so inspect leftovers and remove them by hand —
+   the manual `rm -rf` fallback in §Uninstall is the checklist.
+3. **Reinstall via exactly ONE path.** Stay on that path for upgrades
+   too (`scripts/upgrade.sh` assumes an install.sh-shaped manifest).
 
 ---
 

@@ -145,13 +145,13 @@ htmlcov/
 .claude/plans/PLAN-112/coverage-ledger.json.lock
 
 # S158 — OpenAI Codex app local artifacts. The Owner runs Codex inside the repo
-# as a dev tool; it writes .codex/ + .agents/ (transcripts/state, ~229k lines)
-# + AGENTS.md. Pure per-developer tool state — never framework source (the
-# canonical agent-instructions file is CLAUDE.md). If you ever want AGENTS.md
-# versioned as repo-wide Codex instructions, `git add -f AGENTS.md` to override.
+# as a dev tool; it writes .codex/ + .agents/ (transcripts/state, ~229k lines).
+# Pure per-developer tool state — never framework source.
+# S261 (PLAN-153 Wave A): AGENTS.md is now VERSIONED framework source — the
+# review contract read by the cross-LLM pair-rail (freshness-checked by
+# .claude/scripts/check-agents-md.py). It is no longer ignored here.
 .codex/
 .agents/
-AGENTS.md
 
 # S159 — Python bytecode + pytest cache (never versioned; the repo had no
 # global ignore for these, so a `git add <dir>` over a test tree could drag

@@ -26,6 +26,7 @@ Pick the row that matches your role and follow it down.
 |-----|------------|
 | [PITCH.md](PITCH.md) | One page: what the framework is, who it is for, and what it deliberately does not promise. |
 | [HONEST-LIMITATIONS.md](HONEST-LIMITATIONS.md) | The candid "what this is *not*" — no speedup, single-maintainer bus factor, the same-vendor reviewer caveat, and how it sits next to alternatives like AutoGen, MetaGPT, and LangGraph. Read this before you get excited. |
+| [degradation-outside-claude-code.md](degradation-outside-claude-code.md) | What the framework loses when the repo is used outside Claude Code (plain editor, other harnesses): hook enforcement and the audit-chain append stop; records, scripts, and chain verification survive. |
 | [GLOSSARY.md](GLOSSARY.md) | Definitions for every term of art: CEO protocol, pair-rail, canonical edit, ceremony, skill, squad. |
 
 ---

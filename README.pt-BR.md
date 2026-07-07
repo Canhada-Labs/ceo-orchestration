@@ -65,7 +65,35 @@ Há também um **contrato de conformidade publicado** em `SPEC/v1/` (32 arquivos
 
 ---
 
+## Qual skill devo usar?
+
+151 skills é um problema de descoberta, não uma feature. A lista curta abaixo cobre os casos do dia a dia; o resto pode esperar até algo quebrar. Slash commands são digitados no chat do Claude Code; nomes simples são checklists de skill em `.claude/skills/core/` que você (ou um agente spawnado) carrega pelo nome.
+
+| Se você precisa de… | Use | Por quê, em uma linha |
+|---|---|---|
+| Um início de sessão governado | `/ceo-boot` | Roda os checks de boot da sessão e imprime um digest de estado antes de qualquer trabalho |
+| Uma visão do estado do projeto num relance | `/status` | Plano, fase, vetos e atividade recente de auditoria em uma tela |
+| Delegar trabalho a um agente especialista | `/spawn "<Agent>" "<task>"` | Monta o prompt de persona + skill + file-assignment que o hook de spawn exige |
+| Gatear uma mudança arriscada (L3+) | `/debate start PLAN-NNN "<proposta>"` | Debate estruturado de múltiplas rodadas, registrado, antes da execução |
+| Uma revisão de código estruturada | `code-review-checklist` | O checklist de revisão que um revisor spawnado carrega em vez de improvisar |
+| Um scan de padrões de veto em um arquivo | `/veto-check <arquivo>` | Sinaliza padrões de code-review e segurança dignos de veto antes de um PR |
+| Uma revisão de segurança e auth | `security-and-auth` | Checklist de arquitetura de segurança, autenticação/autorização e hardening |
+| Se orientar em uma base de código desconhecida | `/onboard <path>` | Entry points, grafo de dependências, mapa de camadas, ordem de leitura (skill: `codebase-onboarding`) |
+| Decidir o que e como testar | `testing-strategy` | Padrões de teste e doutrina de garantia de qualidade do projeto |
+| Continuar um plano em um terminal novo | `/resume PLAN-NNN` | Re-deriva o estado do trabalho a partir do arquivo do plano, do log de auditoria e do scratchpad |
+| Passar estado entre agentes no meio de um plano | `/memory-scratchpad` | Memória compartilhada com escopo de plano para handoff entre agentes |
+| Prova de que as proteções realmente bloqueiam | `/self-test` | Teste hermético in-process das proteções centrais — sem rede, sem custo |
+| Saber quanto custou um plano ou janela de tempo | `/agent-budget` | Rollup de uso de tokens e custo por plano ou janela |
+| Interpretar um veredito de revisão cross-model | `cross-llm-pair-review` | Quando invocar o pair-rail e como ler os desfechos dos Casos A–F |
+| Padrões de falha conhecidos antes de trabalho arriscado | `/pitfall` | Lista pitfalls do catálogo universal (mais qualquer catálogo de domínio instalado) |
+
+Referência completa de comandos e scripts: [`docs/CHEAT-SHEET.md`](docs/CHEAT-SHEET.md). Se nada acima servir, a skill `help-me` recomenda até três skills contextuais para uma tarefa que você descreve em linguagem natural.
+
+---
+
 ## Início rápido
+
+> **Somente fontes oficiais.** Os únicos pontos oficiais de distribuição são o repositório GitHub [`Canhada-Labs/ceo-orchestration`](https://github.com/Canhada-Labs/ceo-orchestration) e o pacote npm [`ceo-orchestration`](https://www.npmjs.com/package/ceo-orchestration) (`npx ceo-orchestration`). Qualquer outro espelho, fork, pacote republicado, listagem em marketplace ou nome parecido é não-oficial e não-confiável. Os releases no GitHub trazem checksums SHA-256 e o pacote npm é publicado com SLSA 3 provenance — verifique antes de instalar.
 
 **Pré-requisitos:** Python ≥ 3.9, Git e Bash. No macOS, o Bash do sistema é o 3.2; instale um moderno com `brew install bash` antes de instalar.
 
@@ -82,7 +110,25 @@ cd /path/to/your-app
 bash .claude/scripts/validate-governance.sh   # imprime uma contagem de erros; 0 = saudável
 ```
 
-> **Caminhos de instalação.** O fluxo de clone + `install.sh` acima é o caminho suportado hoje. Um atalho npm de um passo também está disponível — `npx ceo-orchestration /caminho/do/seu-app` (publicado no npm com SLSA 3 provenance).
+### Escolha UM caminho de instalação
+
+Três rotas podem colocar o framework na frente do Claude Code para um repositório alvo, e elas são **mutuamente exclusivas por repositório**. As duas rotas suportadas (script e npx) escrevem nas mesmas superfícies (`.claude/hooks/`, `.claude/skills/`, `.claude/settings.json` e o manifesto de instalação em `.claude/.install-manifest.sha256`); a rota experimental de plugin, em vez disso, empacota um bundle com seu próprio `hooks/hooks.json` sob a raiz do plugin e **não** escreve settings nem manifesto no repo alvo — então a orientação de desinstalação baseada em manifesto não se aplica a ela:
+
+| Caminho | O que é | Status |
+|---|---|---|
+| `./scripts/install.sh <target>` a partir de um clone | O instalador de referência (a variante `--link` via git-submodule roda o mesmo script) | Suportado |
+| `npx ceo-orchestration <target>` | Shim npm que roda o *mesmo* `install.sh` empacotado | Suportado |
+| Plugin do Claude Code (`scripts/build-plugin.py`) | Empacotador experimental da superfície consultiva (`--ceremony user`) | Experimental — não é um caminho de instalação suportado |
+
+**Não** empilhe caminhos no mesmo repositório. Misturá-los produz um modo de falha conhecido: hooks registrados duas vezes (uma em `.claude/settings.json`, outra via o registro de hooks do próprio plugin), fazendo cada ação governada pagar a cadeia de hooks em dobro; merges de settings empilhados uns sobre os outros; e um manifesto de instalação em deriva — o manifesto registra apenas o último escritor, então o `uninstall.sh` não consegue mais remover fielmente a instalação anterior e deixa órfãos para trás.
+
+Se você misturou caminhos, recupere nesta ordem:
+
+1. **Desinstale pelo caminho com que instalou.** Instalações via script ou npx: `scripts/uninstall.sh <target> --dry-run` primeiro, depois de verdade. O shim npm só expõe o instalador, então rode o `uninstall.sh` a partir de um clone — ele honra o mesmo manifesto que o instalador empacotado escreveu. Plugin: remova-o pelo gerenciador de plugins do Claude Code.
+2. **Verifique que `.claude/` está limpo.** Sem `team.md`, `hooks/`, `skills/` ou `.install-manifest.sha256` sobrando. O desinstalador preserva deliberadamente arquivos que você modificou depois da instalação — inspecione e remova sobras manualmente.
+3. **Reinstale por exatamente UM caminho.**
+
+Veja [`INSTALL.md`](INSTALL.md) para o guia completo opção por opção.
 
 Por padrão, o instalador copia os perfis de skill core e frontend e os hooks de governança. Selecione perfis e hooks de stack explicitamente:
 

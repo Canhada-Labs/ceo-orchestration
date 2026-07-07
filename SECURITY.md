@@ -48,6 +48,42 @@ A 33-scenario STRIDE catalog with explicit residual risks lives in
 [`docs/threat-model.md`](docs/threat-model.md). Read the §Executive
 summary first.
 
+## Official surfaces (anti-typosquat)
+
+The framework is distributed through **exactly two** official surfaces.
+Anything else — however similar the name — is not us:
+
+| Surface | Only official identifier |
+|---------|---------------------------|
+| GitHub | `github.com/Canhada-Labs/ceo-orchestration` |
+| npm | package `ceo-orchestration` (installed via `npx ceo-orchestration`) |
+
+There is no scoped npm variant, no `-cli` / `-init` sibling package,
+and no distribution on PyPI, Docker Hub, or any other registry — the
+only registry-publish workflow in this repository is
+`.github/workflows/npm-publish.yml` (GitHub Releases are cut by
+`release.yml`). Treat look-alike names (scope-prefixed variants,
+hyphenated near-misses, suffix packages, forks publishing their own
+releases) as **typosquat risk**: do not install them, and report them
+via the channels in §Reporting a vulnerability below, plus the
+registry's own abuse channel.
+
+### How to verify what you install
+
+| Artifact | Check |
+|----------|-------|
+| npm package | Published exclusively from CI via `npm publish --provenance` (GitHub Actions OIDC → Sigstore attestation, SLSA provenance format; see `.github/workflows/npm-publish.yml`). Confirm the "Provenance" panel on the npm package page points at `Canhada-Labs/ceo-orchestration`, or run `npm audit signatures` in a project that installed it. |
+| Release tags | GPG-signed; `release.yml` fail-closes if the tag signature does not verify against the Owner public key committed at [`.claude/trust/owner.asc`](.claude/trust/owner.asc). Verify locally: `gpg --import .claude/trust/owner.asc && git tag --verify vX.Y.Z`. |
+| GitHub Release assets | Each release ships `install.sh.sha256` (SHA-256 of the `scripts/install.sh` body, excluding its final `# CEO-INSTALL-SHA256:` self-hash trailer line) and `sbom.cyclonedx.json` (CycloneDX SBOM). Check the `install.sh` you are about to run against `install.sh.sha256` before executing it. |
+
+Honest limits of this defense: there is no aggregate `SHA256SUMS`
+covering every file — release checksum coverage is `install.sh` only.
+npm "trusted publishing" (OIDC-authenticated publish) is not yet
+configured — provenance attestation IS active; the gap is noted in the
+`npm-publish.yml` header. And none of this stops someone registering a
+look-alike name: verification, not name similarity, is the trust
+signal.
+
 ## Reporting a vulnerability
 
 Report **privately** to the Owner via:

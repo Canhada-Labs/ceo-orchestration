@@ -67,7 +67,35 @@ There is also a **published compliance contract** under `SPEC/v1/` (32 files —
 
 ---
 
+## Which skill should I use?
+
+151 skills is a discovery problem, not a feature. The shortlist below covers the everyday cases; everything else can wait until something breaks. Slash commands are typed in the Claude Code chat; bare names are skill checklists under `.claude/skills/core/` that you (or a spawned agent) load by name.
+
+| If you need… | Use | One-line why |
+|---|---|---|
+| A governed session start | `/ceo-boot` | Runs the session boot checks and prints a state digest before any work |
+| A single-glance picture of project state | `/status` | Plan, phase, vetoes, and recent audit activity in one screen |
+| To delegate work to a specialist agent | `/spawn "<Agent>" "<task>"` | Builds the persona + skill + file-assignment prompt the spawn hook enforces |
+| To gate a risky (L3+) change | `/debate start PLAN-NNN "<proposal>"` | Recorded multi-round debate among agent personas before execution |
+| A structured code review | `code-review-checklist` | The review checklist a spawned reviewer loads instead of improvising |
+| A veto-pattern scan of one file | `/veto-check <file>` | Flags veto-worthy code-review and security patterns before a PR |
+| A security and auth review | `security-and-auth` | Security architecture, authentication/authorization, and hardening checklist |
+| To orient in an unfamiliar codebase | `/onboard <path>` | Entry points, dependency graph, layer map, reading order (skill: `codebase-onboarding`) |
+| To decide what and how to test | `testing-strategy` | Testing patterns and quality-assurance doctrine for the project |
+| To continue a plan in a fresh terminal | `/resume PLAN-NNN` | Re-derives work state from the plan file, audit log, and scratchpad |
+| To hand state between agents mid-plan | `/memory-scratchpad` | Plan-scoped shared memory for inter-agent handoff |
+| Proof the guards actually block | `/self-test` | Hermetic in-process test of the core guards — no network, no cost |
+| To know what a plan or time window cost | `/agent-budget` | Token usage and cost rollup per plan or window |
+| To interpret a cross-model review verdict | `cross-llm-pair-review` | When to invoke the pair-rail and how to read its Case A–F outcomes |
+| Known failure patterns before risky work | `/pitfall` | Lists pitfalls from the universal catalog (plus any installed domain catalog) |
+
+Full command and script reference: [`docs/CHEAT-SHEET.md`](docs/CHEAT-SHEET.md). If none of the above fits, the `help-me` skill recommends up to three contextual skills for a task you describe in plain language.
+
+---
+
 ## Quick start
+
+> **Official sources only.** The only official distribution points are the GitHub repository [`Canhada-Labs/ceo-orchestration`](https://github.com/Canhada-Labs/ceo-orchestration) and the npm package [`ceo-orchestration`](https://www.npmjs.com/package/ceo-orchestration) (`npx ceo-orchestration`). Any other mirror, fork, re-published package, marketplace listing, or lookalike name is unofficial and untrusted. GitHub releases ship SHA-256 checksums and the npm package is published with SLSA 3 provenance — verify before installing.
 
 **Prerequisites:** Python ≥ 3.9, Git, and Bash. On macOS the system Bash is 3.2; install a modern one with `brew install bash` before installing.
 
@@ -84,7 +112,25 @@ cd /path/to/your-app
 bash .claude/scripts/validate-governance.sh   # prints an error count; 0 = healthy
 ```
 
-> **Install paths.** The clone-and-`install.sh` flow above is the supported path today. A one-step npm shim is also available — `npx ceo-orchestration /path/to/your-app` (published to npm with SLSA 3 provenance).
+### Pick one install path
+
+Three routes can put the framework in front of Claude Code for a target repository, and they are **mutually exclusive per target repo**. The two supported routes (script and npx) write the same surfaces (`.claude/hooks/`, `.claude/skills/`, `.claude/settings.json`, and the install manifest at `.claude/.install-manifest.sha256`); the experimental plugin route instead ships a bundle with its own `hooks/hooks.json` under the plugin root and writes **no** target-repo settings or manifest — so manifest-based uninstall guidance does not apply to it:
+
+| Path | What it is | Status |
+|---|---|---|
+| `./scripts/install.sh <target>` from a clone | The reference installer (the git-submodule `--link` variant runs the same script) | Supported |
+| `npx ceo-orchestration <target>` | npm shim that runs the *same bundled* `install.sh` | Supported |
+| Claude Code plugin (`scripts/build-plugin.py`) | Experimental packager of the advisory (`--ceremony user`) surface | Experimental — not a supported install path |
+
+Do **not** stack them on one repo. Mixing paths produces a known failure mode: hooks registered twice (once in `.claude/settings.json`, once via the plugin's own hook registration), so every governed action pays the hook chain twice; settings merges stacked on top of each other; and a drifted install manifest — the manifest records only the last writer, so `uninstall.sh` can no longer faithfully remove the earlier install and leaves orphans behind.
+
+If you have mixed paths, recover in this order:
+
+1. **Uninstall via the path you installed with.** Script or npx installs: `scripts/uninstall.sh <target> --dry-run` first, then for real. The npm shim only exposes the installer, so run `uninstall.sh` from a clone — it honours the same manifest the bundled installer wrote. Plugin: remove it through Claude Code's plugin manager.
+2. **Verify `.claude/` is clean.** No `team.md`, `hooks/`, `skills/`, or `.install-manifest.sha256` left behind. The uninstaller deliberately preserves files you modified after install, so inspect and remove leftovers by hand.
+3. **Reinstall via exactly one path.**
+
+See [`INSTALL.md`](INSTALL.md) for the full option-by-option guide.
 
 By default the installer copies the core and frontend skill profiles and the governance hooks. Select profiles and stack hooks explicitly:
 
