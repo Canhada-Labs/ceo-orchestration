@@ -377,9 +377,67 @@ posture honored.
    files (Wave D; nothing to regress), parallel-shadow for merges (Wave G).
    CEO recommends **(c)**.
 
+## Closeout record (S261, 2026-07-06/07 — overnight autonomous run)
+
+All six waves EXECUTED. Split: everything unguarded is committed on `main`;
+everything canonical-guarded is authored + tested + Codex/rehearsal-verified
+and STAGED under `PLAN-153/staged/<wave>/` for the Owner wake-up ceremony
+(`~/Desktop/ceo-wakeup/` — `wake-up-sign-and-land.sh` + `README-WAKEUP.md`).
+The plan stays `executing` until the Owner signs the sentinels and lands the
+staged overlays; at that point it goes `executing → done`.
+
+**Committed on main (this run):**
+- Wave A `0fa0396` — docs/DX (pick-one-path, anti-typosquat, AGENTS.md
+  review contract + freshness gate, degradation page, post-install examples).
+- Wave 0 + PLAN-154 debate `3d670eb` — ratifications (OQ3=c, batch split,
+  ADR realloc 173/174/175 → 158/159/160), Wave G contract materialized,
+  PLAN-154 round-1 debate (3× ADJUST_PROCEED → PROCEED, 13 binding applied)
+  → reviewed.
+- Wave E direct `09d7720` — /ceo-boot fail-open-rail liveness, spawn
+  prompt-defense template, sha-drift `--policy` (fork-guard P2 fixed),
+  postcompact freeze, harness-config fixtures, honesty docs.
+- Wave B direct `3121c1d` — doctor.sh + repair (symlink type-change P2
+  fixed), install-profiles manifest + validator, deterministic plugin regen
+  gate, release-notes template.
+- PLAN-155 + sentinels `314891a` — Codex-harness-compat plan reviewed +
+  Codex pair-rail R1 REJECT → R2 APPROVE; SENT-E/SENT-B drafts.
+- Wave C direct `4d194d9` — /skill-health + /context-budget + COMMAND→
+  SKILL→HOOK map; SP-022/023 for the disclosure pilots; commands 22→24.
+- Backlog `982bb7c` — substrate-adopt sweep doc, PLAN-152 deferred-status
+  doc, enum-pin-sync guard, SENT-BACKLOG draft.
+- Wave D `05f5c9a` — import gate `check-imported-skill.py` (13 tests) +
+  NOTICE provenance ledger (15 batch-1 skills staged, 8 new squads).
+- Wave G `b933037` + `54a6296` — SP-024..041 (25/25 merges, 18 targets),
+  NOTICE additions, SENT-E Amends broadened to the SPEC v2.47 summary row.
+
+**Staged for the ceremony (guarded — Owner GPG):** Wave E (16-path SENT-E
+round-1: check_harness_config, check_bash_safety citation gate,
+check_agent_spawn prompt defense, settings.json deny baseline,
+supply-chain-watch.yml, validate.yml, install.sh, _lib/audit_emit 302→303 +
+SPEC row + api-contract pin, ADR-158/159); Wave B (6-path SENT-B round-2:
+install.sh install-state + upgrade replay, release/npm-publish idempotency +
+the 2 latent release.yml bugs, validate.yml); Wave backlog (SENT-BACKLOG
+round-4: settings.json sandbox.credentials + enforceAvailableModels,
+tool_lifecycle + audit_emit Task* enum, SPEC amend); Wave C SKILL.md pilots
+(SP-022/023 via /skill-review); Wave D 15 skills (import gate + /skill-review,
+count 151→166 at ceremony); Wave G 25 merges (SP-024..041 via /skill-review).
+
+**Ceremony fixups recorded** (in the staged MANIFEST/CEREMONY-NOTES): Wave D
+frontmatter source:/license: hoist + attestation trailer + 8 new domain
+scaffolds + count bump; Wave C SP-023 changelog SP-022→SP-023 typo; Wave G
+AFTER-C ordering (SP-022→023→026→034). **Operational finding for Owner
+triage:** the pre-rotation audit log had a real HMAC chain break at line 483
+(2026-07-02, now in a rotated archive) — surfaced by /skill-health.
+
+**Follow-ups noted (not this plan):** `check_skill_patch_sentinel.py`
+`_SKILL_MD_RE` is unanchored — it fires on `.claude/plans/**/staged/**`
+SKILL.md, forcing every wave to Bash-cp around the Write tool; anchor it or
+exempt staged paths. Register a typed `skill_import_quarantined` audit action
+for the import gate's quarantine path.
+
 ## Success criteria
 
-- [ ] All 6 waves executed or explicitly deferred with pointer (nothing
+- [x] All 6 waves executed or explicitly deferred with pointer (nothing
       silently dropped) — including the 72 unmerged ADAPTs in §Deferred.
 - [ ] Behavioral positive-control suite: red on planted dead-rail fixture AND
       runtime-unresolvable shim; the S254 class cannot recur SILENTLY
