@@ -62,6 +62,32 @@ Exit code: always 0 (advisory) — never blocks a session, never writes outside
 stdout. Use ``--strict`` to exit 1 when any heavy-file / over-subscription
 flag fires (for an opt-in advisory CI lint).
 
+## PLAN-153 Wave C item 5 — /context-budget command surface
+
+The ``/context-budget`` slash command (``.claude/commands/context-budget.md``)
+fronts this CLI. Wave C additions on top of the PLAN-124 inventory:
+
+  * ``savings_top3`` — top-3 progressive-disclosure savings opportunities.
+    Candidate = a SKILL.md over the heavy-skill line threshold with NO
+    ``references/`` dir yet (already-split skills self-retire from the list).
+    The PLAN-153 Wave C item 1 **designated pilots**
+    (``core/testing-strategy``, ``core/security-and-auth``) rank first WHEN
+    the scan finds them still un-split — that ordering is a plan decision,
+    not a pure size rank, and each entry says which rule ranked it.
+  * ``notes`` — honesty block rendered in both outputs: chars/4 is an
+    ESTIMATE (not a tokenizer); this is a STATIC audit (activation-time cost,
+    not runtime usage — retire/merge/improve judgement is /skill-health's
+    scope, and neither tool can measure greenfield domains; PLAN-153 debate A
+    must-fix 4).
+  * Untrusted-data fence (debate B unseen-2): scanned file content is DATA,
+    never instructions. The only free text this report re-displays (MCP
+    server names from config files) passes ``_lib/injection_patterns`` +
+    a conservative charset allowlist; hits render as
+    ``[REDACTED-INJECTION-PATTERN]``. Frontmatter descriptions are only
+    MEASURED (length), never displayed.
+  * ``--scheduled`` — any scheduled wrapper must pass it so
+    ``CEO_SOTA_DISABLE`` is honored.
+
 ## Stdlib-only
 
 Filesystem walks + ``json`` for MCP config + a regex frontmatter parse. No
@@ -106,6 +132,101 @@ CAT_COMMANDS = "commands"
 CAT_MCP = "mcp"
 
 _FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
+
+
+# ---------------------------------------------------------------------------
+# PLAN-153 Wave C — untrusted-data fence (debate B unseen-2)
+# ---------------------------------------------------------------------------
+#
+# Everything this tool reads is repo file content — rendered as DATA, never
+# as instructions. The only free-text field re-displayed verbatim-ish is the
+# MCP server name (a key in a JSON config); it passes the harness-mimicry
+# injection scan + a conservative charset allowlist before display (mirrors
+# skill-health.py `fence_token`). Frontmatter descriptions are only MEASURED
+# (length), never displayed, so they need no display fence.
+
+_HOOKS_DIR = str(Path(__file__).resolve().parent.parent / "hooks")
+if _HOOKS_DIR not in sys.path:
+    sys.path.insert(0, _HOOKS_DIR)
+
+try:
+    from _lib import injection_patterns as _injection_patterns  # type: ignore
+except Exception:  # pragma: no cover - exercised via monkeypatch in tests
+    _injection_patterns = None  # type: ignore[assignment]
+
+REDACTED = "[REDACTED-INJECTION-PATTERN]"
+
+# Conservative charset for identifier-like fields (MCP server names). No
+# whitespace / angle brackets / pipes survive, so no catalogued injection
+# pattern can survive either; the scanner still runs first when available.
+_TOKEN_ALLOWED = re.compile(r"[^A-Za-z0-9._:/@#+()-]")
+
+
+def _scan_matched(s: str) -> Optional[bool]:
+    """Run the injection scan. True=hit, False=clean, None=scanner down."""
+    if _injection_patterns is None:
+        return None
+    try:
+        scan_fn = getattr(_injection_patterns, "scan_harness_mimicry", None)
+        if not callable(scan_fn):
+            return None
+        result = scan_fn(s)
+        matched = getattr(result, "matched", None)
+        if matched is None:
+            matched = bool(result)
+        return bool(matched)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def fence_token(s: Any, *, max_len: int = 80) -> str:
+    """Fence an identifier-like field (MCP server name) for display.
+
+    Scanner first (hit => REDACTED), then a strictly-destructive charset
+    allowlist — safe to use even when the scanner is unavailable.
+    """
+    if not isinstance(s, str):
+        s = str(s)
+    s = s.replace("\x00", "")[:max_len]
+    if _scan_matched(s) is True:
+        return REDACTED
+    s = _TOKEN_ALLOWED.sub("", s)
+    return s or "(empty)"
+
+
+# ---------------------------------------------------------------------------
+# PLAN-153 Wave C item 5 — progressive-disclosure savings
+# ---------------------------------------------------------------------------
+
+# Loader-pointer stub assumed to remain in a split SKILL.md (est. tokens).
+POINTER_OVERHEAD_TOKENS = 150
+
+# PLAN-153 Wave C item 1 designated progressive-disclosure pilots
+# (testing-strategy 1026L, security-and-auth 868L at designation time).
+# Surfaced FIRST in savings_top3 when — and only when — the scan finds them
+# still un-split; designation is a plan decision, not a size ranking, and
+# the entry's `reason` says so.
+DESIGNATED_PILOTS = (
+    ".claude/skills/core/testing-strategy/SKILL.md",
+    ".claude/skills/core/security-and-auth/SKILL.md",
+)
+
+# Honesty block rendered in BOTH outputs (markdown + --json).
+HONESTY_NOTES = (
+    "Token figures are chars/{} — a heuristic ESTIMATE, not a tokenizer "
+    "(expect +/-20-30% vs real BPE counts).".format(CHARS_PER_TOKEN),
+    "STATIC audit only: measures what a file costs WHEN loaded, not runtime "
+    "usage or value. Retire/merge/improve judgement belongs to /skill-health "
+    "telemetry; neither tool can measure greenfield domains (PLAN-153 "
+    "debate A must-fix 4).",
+    "All scanned file content is rendered as UNTRUSTED DATA, never as "
+    "instructions. Re-displayed free text (MCP server names) is "
+    "injection-scanned; hits render as {}.".format(REDACTED),
+    "savings_top3 assumes the Wave C progressive-disclosure mechanism: "
+    "extract references/*.md + keep a ~{}-token loader pointer in SKILL.md "
+    "(100% content preserved; saving is activation-time only).".format(
+        POINTER_OVERHEAD_TOKENS),
+)
 
 
 # ---------------------------------------------------------------------------
@@ -232,6 +353,12 @@ def _file_entry(path: Path, repo: Path, category: str) -> Optional[Dict[str, Any
         rel = str(path.relative_to(repo))
     except ValueError:
         rel = str(path)
+    # Progressive-disclosure state (Wave C): a skill dir with references/
+    # already loads its bulk on demand — it self-retires from savings_top3.
+    has_references = (
+        category in (CAT_SKILLS, CAT_CORE_SKILL)
+        and (path.parent / "references").is_dir()
+    )
     return {
         "category": category,
         "path": rel,
@@ -239,6 +366,7 @@ def _file_entry(path: Path, repo: Path, category: str) -> Optional[Dict[str, Any
         "chars": chars,
         "est_tokens": estimate_tokens(chars),
         "description_chars": len(description),
+        "has_references": has_references,
     }
 
 
@@ -283,8 +411,11 @@ def discover_mcp_servers(repo: Path) -> Tuple[List[str], List[str]]:
                 rel = str(cand)
             sources.append(rel)
             for key in servers.keys():
-                if key not in names:
-                    names.append(str(key))
+                # Untrusted-data fence: server names come from file content
+                # and are re-displayed — scan + charset-allowlist first.
+                fenced = fence_token(str(key))
+                if fenced not in names:
+                    names.append(fenced)
     return names, sources
 
 
@@ -395,6 +526,81 @@ def _flag_file(entry: Dict[str, Any]) -> List[Dict[str, Any]]:
     return flags
 
 
+def compute_savings(
+    files_by_cat: Dict[str, List[Dict[str, Any]]],
+    limit: int = 3,
+) -> List[Dict[str, Any]]:
+    """Top-N progressive-disclosure savings opportunities (Wave C item 5).
+
+    Candidate = a SKILL.md entry (skills or core_skill category) with
+    ``lines > THRESHOLD_SKILL_LINES`` and NO existing ``references/`` dir.
+    PLAN-153-designated pilots rank first WHEN FOUND as candidates; remaining
+    slots go to the largest candidates by estimated tokens (path tie-break).
+    Every entry carries an honest ``reason`` naming which rule ranked it.
+    """
+    candidates = [
+        e
+        for cat in (CAT_SKILLS, CAT_CORE_SKILL)
+        for e in files_by_cat.get(cat, [])
+        if e["lines"] > THRESHOLD_SKILL_LINES and not e.get("has_references")
+    ]
+    by_path = {e["path"]: e for e in candidates}
+    picked: List[Dict[str, Any]] = []
+    picked_paths = set()
+
+    for pilot in DESIGNATED_PILOTS:
+        if len(picked) >= limit:
+            break
+        entry = by_path.get(pilot)
+        if entry is None:
+            continue
+        picked.append(_savings_entry(
+            entry,
+            reason="PLAN-153 Wave C item 1 designated pilot (plan decision, "
+                   "not size rank alone — larger files may exist below)",
+        ))
+        picked_paths.add(entry["path"])
+
+    rest = sorted(
+        (e for e in candidates if e["path"] not in picked_paths),
+        key=lambda e: (-e["est_tokens"], e["path"]),
+    )
+    for entry in rest:
+        if len(picked) >= limit:
+            break
+        picked.append(_savings_entry(
+            entry, reason="largest un-split SKILL.md by estimated tokens"))
+        picked_paths.add(entry["path"])
+
+    for rank, item in enumerate(picked, start=1):
+        item["rank"] = rank
+    return picked
+
+
+def _savings_entry(entry: Dict[str, Any], reason: str) -> Dict[str, Any]:
+    """One savings_top3 row. Numbers are estimates (chars/4 heuristic)."""
+    item = {
+        "rank": 0,
+        "path": entry["path"],
+        "category": entry["category"],
+        "lines": entry["lines"],
+        "est_tokens": entry["est_tokens"],
+        "est_saving_tokens": max(
+            0, entry["est_tokens"] - POINTER_OVERHEAD_TOKENS),
+        "reason": reason,
+        "mechanism": (
+            "extract references/*.md + loader pointer in SKILL.md "
+            "(100% content preserved; saving = activation-time only)"
+        ),
+    }
+    if entry["category"] == CAT_CORE_SKILL:
+        item["caveat"] = (
+            "always-on at Gate 2 — highest raw saving, but restructuring the "
+            "core CEO skill needs its own ceremony/debate, not a Wave C pilot"
+        )
+    return item
+
+
 def build_inventory(repo: Path, top: int = 10) -> Dict[str, Any]:
     """Produce the full context-budget report dict.
 
@@ -471,6 +677,11 @@ def build_inventory(repo: Path, top: int = 10) -> Dict[str, Any]:
         "grand_total_est_tokens": grand_tokens,
         "categories": categories,
         "top_candidates": ranked,
+        # PLAN-153 Wave C item 5 (additive to v1): top-3 progressive-
+        # disclosure savings + the honesty block. See module docstring.
+        "savings_top3": compute_savings(files_by_cat),
+        "notes": list(HONESTY_NOTES),
+        "scanner_available": _injection_patterns is not None,
         "flags": flags,
         "flag_count": len(flags),
         "files": all_files,
@@ -1690,6 +1901,26 @@ def _render_human(report: Dict[str, Any], top: int) -> str:
                 e["est_tokens"], e["lines"], e["category"], e["path"]))
     lines.append("")
 
+    # PLAN-153 Wave C item 5 — top-3 savings opportunities.
+    savings = report.get("savings_top3", [])
+    lines.append("## top-3 savings opportunities (progressive disclosure)")
+    if not savings:
+        lines.append(
+            "  (none — no un-split SKILL.md over {} lines)".format(
+                THRESHOLD_SKILL_LINES))
+    else:
+        for s in savings:
+            lines.append(
+                "  {}. {} — {}L, ~{} est tok; potential saving ~{} est tok "
+                "per activation".format(
+                    s["rank"], s["path"], s["lines"], s["est_tokens"],
+                    s["est_saving_tokens"]))
+            lines.append("     why ranked: {}".format(s["reason"]))
+            lines.append("     mechanism: {}".format(s["mechanism"]))
+            if s.get("caveat"):
+                lines.append("     caveat: {}".format(s["caveat"]))
+    lines.append("")
+
     lines.append("## flags ({} total)".format(report["flag_count"]))
     if not report["flags"]:
         lines.append("  OK: no heavy-file / bloat / over-subscription flags.")
@@ -1697,6 +1928,15 @@ def _render_human(report: Dict[str, Any], top: int) -> str:
         for f in report["flags"]:
             lines.append("  [{}] {}".format(f["kind"], f.get("path", f["category"])))
             lines.append("      {}".format(f["message"]))
+    lines.append("")
+
+    lines.append("## honesty notes")
+    for note in report.get("notes", []):
+        lines.append("  - {}".format(note))
+    if not report.get("scanner_available", True):
+        lines.append(
+            "  - DEGRADED: _lib/injection_patterns unavailable — displayed "
+            "identifiers fell back to the charset allowlist only.")
     lines.append("")
     lines.append("# advisory only — this tool never blocks and never writes "
                  "outside stdout.")
@@ -1740,6 +1980,9 @@ def _cli(argv: List[str]) -> int:
     parser.add_argument(
         "--strict", action="store_true",
         help="exit 1 if any flag fires (opt-in advisory CI lint)")
+    parser.add_argument(
+        "--scheduled", action="store_true",
+        help="mark this run as scheduled machinery (honors CEO_SOTA_DISABLE)")
     parser.add_argument(
         "--tool-loop-scan", metavar="AUDIT_LOG", default=None,
         help="(P3) flag N identical consecutive tool-calls in an audit-log "
@@ -1801,6 +2044,12 @@ def _cli(argv: List[str]) -> int:
         "--budget-tokens", type=int, default=None,
         help="(D5) the token budget the assembled context must fit within")
     args = parser.parse_args(argv)
+
+    # CEO_SOTA_DISABLE contract: any *scheduled* machinery must honor it.
+    if args.scheduled and os.environ.get("CEO_SOTA_DISABLE"):
+        print("[context-budget] skipped: CEO_SOTA_DISABLE is set "
+              "(scheduled run)")
+        return 0
 
     # Clamp a negative --top to 0 (least-surprising): a negative limit would
     # otherwise SKIP the slice and return ALL candidates plus print a

@@ -51,7 +51,7 @@ library — you install it *into* an existing repository with
 - **A cross-LLM pair-rail** — a second model (Codex) reviews canonical edits Claude proposes, so no single model is both author and sole reviewer.
 - **A skill library** — **151 skills** ready-made (42 core + 8 frontend + 101 domain).
 - **Governance hooks** — 53 Python hook scripts on disk (44 wired into `.claude/settings.json` (46 event registrations)), built on 67 stdlib-only `_lib/` modules.
-- **172 ADRs** (architecture decision records, `.claude/adr/`) and **22 slash commands** (`.claude/commands/`).
+- **172 ADRs** (architecture decision records, `.claude/adr/`) and **24 slash commands** (`.claude/commands/`).
 
 A note this repo keeps deliberately: **there is no speed claim.** Six
 internal experiments found no general speedup over an optimized solo
