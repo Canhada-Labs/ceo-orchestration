@@ -1,0 +1,92 @@
+NOTICE
+======
+
+ceo-orchestration
+Copyright (c) 2026 Canhada Labs
+Licensed under the MIT License. See `LICENSE` for the full text.
+
+This repository is stdlib-only at runtime and carries no third-party runtime
+dependencies (see `SBOM.md`). This NOTICE file is the project's **provenance
+ledger**: the authoritative, per-piece attribution record for content that was
+ported or adapted into this repository from an external source.
+
+Why a ledger (and not just per-file frontmatter)
+-------------------------------------------------
+A `SKILL.md` frontmatter block can state a skill's origin, but frontmatter is
+edited alongside the skill and travels with a single file. This NOTICE is the
+single, catalog-wide, human-auditable record: one row per ported piece, naming
+the exact upstream source, the pinned upstream commit, the upstream license,
+and how the piece entered our tree (clean-room rewrite vs. verbatim port). The
+mechanical import gate (`.claude/scripts/check-imported-skill.py`, PLAN-153
+Wave D) reads this file directly: a ported skill cannot enter the catalog
+unless a well-formed provenance row for its catalog path exists here. This
+ledger is therefore load-bearing, not decorative.
+
+How to read a row
+-----------------
+    <repo-relative target path> — <relationship> (<provenance>); imported from
+    `<upstream>@<sha>` `<upstream subpath>`, ported under the <license>.
+
+Rows are grouped by the batch that introduced them.
+
+--------------------------------------------------------------------------------
+PENDING CEREMONY LANDING — PLAN-153 Wave D, batch 1
+--------------------------------------------------------------------------------
+
+Status: **STAGED, not yet live.** The 15 rows below describe skills that have
+been authored (clean-room) and staged under
+`.claude/plans/PLAN-153/staged/wave-D/` but have **not** yet been moved into the
+live catalog. Their target paths (`.claude/skills/domains/**`) therefore do NOT
+resolve in the working tree until the Wave D landing ceremony runs
+(`/skill-review` + `check-imported-skill.py` per skill, then the count bump).
+Until that ceremony completes, treat every path in this section as a forward
+declaration. See `.claude/plans/PLAN-153/staged/wave-D/CEREMONY-NOTES.md` for
+the exact landing steps and `.../MANIFEST.md` for the census + count delta.
+
+Upstream (all rows in this section):
+  affaan-m/ecc — https://github.com/affaan-m/ecc — repository-level MIT License,
+  pinned at commit 81af4076. Each row was produced as a **clean-room rewrite**
+  (Session 261): the upstream skill informed scope and structure; the prose,
+  examples, activation surface, and any shipped scripts are original work
+  authored for this framework and carry zero upstream references.
+
+agents-meta
+  `.claude/skills/domains/agents-meta/skills/dynamic-workflow-mode/SKILL.md` — clean-room rewrite (S261, PLAN-153 Wave D); imported from `affaan-m/ecc@81af4076` `skills/dynamic-workflow-mode/`, ported under the MIT License.
+  `.claude/skills/domains/agents-meta/skills/loop-design-check/SKILL.md` — clean-room rewrite (S261, PLAN-153 Wave D); imported from `affaan-m/ecc@81af4076` `skills/loop-design-check/`, ported under the MIT License.
+
+architecture
+  `.claude/skills/domains/architecture/skills/hexagonal-architecture/SKILL.md` — clean-room rewrite (S261, PLAN-153 Wave D); imported from `affaan-m/ecc@81af4076` `skills/hexagonal-architecture/`, ported under the MIT License.
+  `.claude/skills/domains/architecture/skills/recsys-pipeline-architect/SKILL.md` — clean-room rewrite (S261, PLAN-153 Wave D); imported from `affaan-m/ecc@81af4076` `skills/recsys-pipeline-architect/`, ported under the MIT License.
+
+cpp
+  `.claude/skills/domains/cpp/skills/cpp-coding-standards/SKILL.md` — clean-room rewrite (S261, PLAN-153 Wave D); imported from `affaan-m/ecc@81af4076` `skills/cpp-coding-standards/`, ported under the MIT License.
+  `.claude/skills/domains/cpp/skills/cpp-testing/SKILL.md` — clean-room rewrite (S261, PLAN-153 Wave D); imported from `affaan-m/ecc@81af4076` `skills/cpp-testing/`, ported under the MIT License.
+
+data-ml
+  `.claude/skills/domains/data-ml/skills/prisma-patterns/SKILL.md` — clean-room rewrite (S261, PLAN-153 Wave D); imported from `affaan-m/ecc@81af4076` `skills/prisma-patterns/`, ported under the MIT License.
+  `.claude/skills/domains/data-ml/skills/pytorch-patterns/SKILL.md` — clean-room rewrite (S261, PLAN-153 Wave D); imported from `affaan-m/ecc@81af4076` `skills/pytorch-patterns/`, ported under the MIT License.
+
+desktop
+  `.claude/skills/domains/desktop/skills/windows-desktop-e2e/SKILL.md` — clean-room rewrite (S261, PLAN-153 Wave D); imported from `affaan-m/ecc@81af4076` `skills/windows-desktop-e2e/`, ported under the MIT License.
+
+devrel
+  `.claude/skills/domains/devrel/skills/frontend-slides/SKILL.md` — clean-room rewrite (S261, PLAN-153 Wave D); imported from `affaan-m/ecc@81af4076` `skills/frontend-slides/`, ported under the MIT License.
+  `.claude/skills/domains/devrel/skills/ui-demo/SKILL.md` — clean-room rewrite (S261, PLAN-153 Wave D); imported from `affaan-m/ecc@81af4076` `skills/ui-demo/`, ported under the MIT License.
+
+dotnet
+  `.claude/skills/domains/dotnet/skills/csharp-testing/SKILL.md` — clean-room rewrite (S261, PLAN-153 Wave D); imported from `affaan-m/ecc@81af4076` `skills/csharp-testing/`, ported under the MIT License.
+
+golang
+  `.claude/skills/domains/golang/skills/golang-patterns/SKILL.md` — clean-room rewrite (S261, PLAN-153 Wave D); imported from `affaan-m/ecc@81af4076` `skills/golang-patterns/`, ported under the MIT License.
+
+jvm
+  `.claude/skills/domains/jvm/skills/java-coding-standards/SKILL.md` — clean-room rewrite (S261, PLAN-153 Wave D); imported from `affaan-m/ecc@81af4076` `skills/java-coding-standards/` (with `skills/jpa-patterns/` folded in), ported under the MIT License.
+  `.claude/skills/domains/jvm/skills/springboot-patterns/SKILL.md` — clean-room rewrite (S261, PLAN-153 Wave D); imported from `affaan-m/ecc@81af4076` `skills/springboot-patterns/`, ported under the MIT License.
+
+--------------------------------------------------------------------------------
+Batch 2 (PLAN-153 Wave D) — deferred by default.
+No rows. Batch 2 is speculative inventory (no consumer repo exists today) and is
+not staged. It is pulled forward only on explicit Owner go/no-go; rows are added
+here at that time. See `.claude/plans/PLAN-153/staged/wave-D/MANIFEST.md`
+§"Batch 2 (deferred)".
+--------------------------------------------------------------------------------
