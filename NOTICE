@@ -92,7 +92,7 @@ here at that time. See `.claude/plans/PLAN-153/staged/wave-D/MANIFEST.md`
 --------------------------------------------------------------------------------
 
 --------------------------------------------------------------------------------
-PENDING CEREMONY LANDING — PLAN-153 Wave G, ADAPT merges (23 of 25 staged)
+PENDING CEREMONY LANDING — PLAN-153 Wave G, ADAPT merges (25 of 25 staged)
 --------------------------------------------------------------------------------
 
 Status: **STAGED, not yet live.** The rows below describe upstream knowledge
@@ -171,7 +171,13 @@ content-creator (SP-038 — strip-ECC-refs precondition; contamination gate appl
 executive-summary (SP-039)
   `.claude/skills/domains/business-support/skills/executive-summary/SKILL.md` — clean-room ADAPT merge (S261, PLAN-153 Wave G); imported from `affaan-m/ecc@81af4076` `skills/competitive-report-structure/`, ported under the MIT License.
 
-Not staged (2 of the 25 materialized merges — NO Wave G content on disk; deferred):
-  `skills/agent-harness-construction/` → `core/mcp-server-authoring` (row 21) — no staged file; add its NOTICE row when staged.
-  `skills/benchmark-optimization-loop/` → `core/performance-engineering` (row 23) — no staged file; add its NOTICE row when staged.
+mcp-server-authoring (SP-040)
+  `.claude/skills/core/mcp-server-authoring/SKILL.md` — clean-room ADAPT merge (S261, PLAN-153 Wave G; staged in the Wave G finish pass); imported from `affaan-m/ecc@81af4076` `skills/agent-harness-construction/`, ported under the MIT License.
+
+performance-engineering (SP-041)
+  `.claude/skills/core/performance-engineering/SKILL.md` — clean-room ADAPT merge (S261, PLAN-153 Wave G; staged in the Wave G finish pass); imported from `affaan-m/ecc@81af4076` `skills/benchmark-optimization-loop/`, ported under the MIT License.
+
+All 25 materialized Wave G merges are now staged (rows 21 & 23 — mcp-server-authoring
+and performance-engineering — were staged in the finish pass under SP-040 / SP-041;
+the earlier 23 were staged in S261). None are live until the landing ceremony runs.
 --------------------------------------------------------------------------------
