@@ -126,6 +126,13 @@ PER_CHECK_TIMEOUT_OVERRIDES_S: Dict[str, float] = {
     # override the check would inherit the 1.0 s default and a future
     # log-growth regression wouldn't trip an alarm until 1000 ms.
     "confidence_gate_drift_7d": 0.2,
+    # PLAN-153 Wave E item 2 — streaming audit-log read over a 7d window
+    # (same class as dispatch_count_24h / skill_unknown_ratio).
+    "failopen_rail_liveness_7d": 1.5,
+    # PLAN-153 Wave E item 1 wire — subprocess-bound (python3 spawn of the
+    # E1 gate; subprocess timeout 2.5s default, see
+    # _harness_config_gate_timeout_s).
+    "harness_config_gate": 3.0,
 }
 
 # ---- Sentinel mtime cutoff (Codex S82 P2 fix) ------------------------------
@@ -1643,6 +1650,254 @@ def check_settings_tamper_tripwires() -> Tuple[str, str, Any]:
         return "yellow", f"tamper tripwires error: {type(exc).__name__}", None
 
 
+# === PLAN-153 Wave E item 2 — fail-open rail LIVENESS (debate B unseen-1) ===
+# S254 root cause codified: `check_pair_rail.py` fail-opens BY DESIGN when
+# Codex is absent, so a dead pair-rail is INDISTINGUISHABLE from a quiet one
+# unless something counts outcomes over a window. Doctrine: silence from a
+# fail-open security rail is NOT health — a window where every classified
+# invocation fail-opened is RED; a window with no signal at all is YELLOW
+# (never green; the S254 dead-registration failure mode produces exactly
+# zero on-disk events, so "no signal" must stay visible).
+#
+# Data source (canonical audit-log.jsonl typed events only):
+#   - `pair_rail_case` (check_pair_rail.py:1655/1673/1686 via
+#     _lib/audit_emit.emit_pair_rail_case): closed-enum `case` A-F.
+#     A/B/C/D/E == a COMPLETED Codex review (rail demonstrably alive;
+#     B is a block — the strongest liveness proof). F == the ADR-106
+#     fail-open path (Codex unavailable / timeout / malformed).
+#   - Legacy/typed labels `pair_rail_review_passed` /
+#     `pair_rail_codex_unavailable` (emitted by codex_invoke.py:366-390;
+#     check_pair_rail's own copies go to a local sink + stderr only).
+#   - `pair_rail_fatal_failopen` (pending _KNOWN_ACTIONS registration —
+#     included forward-compatibly; costs nothing while absent).
+# NOT derivable from disk (honest gap, stated in PLAN-153 Wave E report):
+# sentinel-bypass / kill-switch / out-of-scope invocations emit NO canonical
+# event (check_pair_rail.py:1644-1647), and the audit-log.errors sidecar
+# attributes lines to infra writers (spool_writer/check_budget/audit_emit),
+# not to security rails. Those windows degrade to the yellow "no signal"
+# verdict — never to green.
+
+FAILOPEN_RAIL_WINDOW_HOURS_DEFAULT = 168.0  # 7d
+
+
+def _failopen_rail_window_hours() -> float:
+    """Resolve the liveness window (hours). Env override for tests/tuning.
+
+    ``CEO_FAILOPEN_LIVENESS_WINDOW_H`` clamped to [1, 2160] (1h..90d);
+    unparseable input falls back to the 168h default (fail-open on infra —
+    this is a tuning knob, not a security matcher input).
+    """
+    raw = os.environ.get("CEO_FAILOPEN_LIVENESS_WINDOW_H", "")
+    if raw:
+        try:
+            return max(1.0, min(2160.0, float(raw)))
+        except (TypeError, ValueError):
+            pass
+    return FAILOPEN_RAIL_WINDOW_HOURS_DEFAULT
+
+
+def _classify_pair_rail_event(ev: Dict[str, Any]) -> Optional[str]:
+    """Classify one audit event for the pair-rail liveness ledger.
+
+    Returns "healthy" | "failopen" | "unclassified" | None (not a
+    pair-rail event). An out-of-enum `case` value can only appear via a
+    hand-forged log line (the producer coerces unknowns to "F",
+    audit_emit.emit_pair_rail_case) — it is counted "unclassified" and can
+    NEVER contribute to a green verdict (no false-green on unparseable
+    input; observability sibling of the _e3 fail-closed precedent).
+    """
+    action = ev.get("action")
+    if action == "pair_rail_case":
+        case = ev.get("case")
+        if case == "F":
+            return "failopen"
+        if case in ("A", "B", "C", "D", "E"):
+            return "healthy"
+        return "unclassified"
+    if action in ("pair_rail_codex_unavailable", "pair_rail_fatal_failopen"):
+        return "failopen"
+    if action in ("pair_rail_review_passed", "pair_rail_codex_violation"):
+        return "healthy"
+    return None
+
+
+# Deterministic rail registry (list order == render order). Future fail-open
+# rails append (name, classifier) here; the check aggregates worst-of.
+FAILOPEN_RAIL_CLASSIFIERS: List[
+    Tuple[str, Callable[[Dict[str, Any]], Optional[str]]]
+] = [
+    ("pair_rail", _classify_pair_rail_event),
+]
+
+_STATUS_RANK = {"green": 0, "yellow": 1, "red": 2}
+
+
+def check_failopen_rail_liveness_7d() -> Tuple[str, str, Any]:
+    """PLAN-153 Wave E item 2 — 22nd Tier-S check: fail-open rail liveness.
+
+    Single streaming pass over the canonical audit-log window; per-rail
+    verdicts (deterministic registry order), overall = worst-of:
+
+      failopen > 0 and healthy == 0 → red    (fail-opened on EVERY
+                                              classified invocation)
+      failopen > 0 and healthy > 0  → yellow (partial fail-open)
+      healthy > 0                   → green
+      unclassified only             → yellow (signal present, unparseable)
+      zero events                   → yellow "no signal" (silence from a
+                                      fail-open rail is not health — the
+                                      live S254 state renders THIS row)
+
+    ADVISORY fail-open on infra: missing/unreadable log degrades to the
+    no-signal yellow via `_iter_audit_events_since`; any internal error is
+    caught by the `_wrap_check` fail-soft floor. Never blocks the session.
+    """
+    window_h = _failopen_rail_window_hours()
+    counts: Dict[str, Dict[str, int]] = {
+        rail: {"healthy": 0, "failopen": 0, "unclassified": 0}
+        for rail, _ in FAILOPEN_RAIL_CLASSIFIERS
+    }
+    for ev in _iter_audit_events_since(window_h):
+        if not isinstance(ev, dict) or _is_test_pollution_event(ev):
+            continue
+        for rail, classify in FAILOPEN_RAIL_CLASSIFIERS:
+            bucket = classify(ev)
+            if bucket is not None:
+                counts[rail][bucket] += 1
+                break
+
+    worst = "green"
+    parts: List[str] = []
+    detail: Dict[str, Any] = {"window_hours": window_h, "rails": {}}
+    for rail, _ in FAILOPEN_RAIL_CLASSIFIERS:
+        c = counts[rail]
+        if c["failopen"] > 0 and c["healthy"] == 0:
+            rail_status = "red"
+            msg = (
+                f"{rail}: fail-opened on ALL {c['failopen']} classified "
+                f"invocation(s) in {window_h:.0f}h"
+            )
+        elif c["failopen"] > 0:
+            rail_status = "yellow"
+            msg = (
+                f"{rail}: partial fail-open ({c['failopen']} fail-open / "
+                f"{c['healthy']} healthy in {window_h:.0f}h)"
+            )
+        elif c["healthy"] > 0:
+            rail_status = "green"
+            msg = f"{rail}: {c['healthy']} healthy invocation(s) in {window_h:.0f}h"
+        elif c["unclassified"] > 0:
+            rail_status = "yellow"
+            msg = (
+                f"{rail}: {c['unclassified']} unclassified event(s), no "
+                f"classified signal in {window_h:.0f}h"
+            )
+        else:
+            rail_status = "yellow"
+            msg = (
+                f"{rail}: no signal in {window_h:.0f}h (silence from a "
+                f"fail-open rail is not health)"
+            )
+        parts.append(msg)
+        detail["rails"][rail] = {"status": rail_status, **c}
+        if _STATUS_RANK[rail_status] > _STATUS_RANK[worst]:
+            worst = rail_status
+    return worst, _sanitize_for_recs("; ".join(parts)), detail
+
+
+# === PLAN-153 Wave E item 1 wire — static harness-config gate at boot ======
+# The E1 gate (`.claude/hooks/check_harness_config.py`, ADR-173) lands via
+# the SENT-E canonical ceremony (staged under PLAN-153/staged/wave-E until
+# signed). This Tier-S check invokes it as a subprocess ONLY when the file
+# exists — pre-landing, boot stays green with an explicit "not installed"
+# summary. Contract assumed: CLI run with no args from REPO_ROOT, stdin
+# closed, exit 0 == pass / non-zero == fail (the same contract validate.yml
+# will consume). Fail-open on infra: timeout → yellow + a
+# `ceo_boot_check_skipped` audit event (never a session block); spawn error
+# → yellow. Local static check — no network, CEO_SOTA_DISABLE n/a.
+
+HARNESS_CONFIG_GATE_DEFAULT = (
+    REPO_ROOT / ".claude" / "hooks" / "check_harness_config.py"
+)
+HARNESS_CONFIG_GATE_TIMEOUT_S_DEFAULT = 2.5
+
+
+def _harness_config_gate_path() -> Path:
+    """Resolve the E1 gate script path (env override for tests)."""
+    override = os.environ.get("CEO_HARNESS_CONFIG_GATE", "")
+    if override:
+        return Path(override)
+    return HARNESS_CONFIG_GATE_DEFAULT
+
+
+def _harness_config_gate_timeout_s() -> float:
+    """Subprocess timeout for the E1 gate, clamped to [0.1, 10.0]s."""
+    raw = os.environ.get("CEO_HARNESS_CONFIG_GATE_TIMEOUT_S", "")
+    if raw:
+        try:
+            return max(0.1, min(10.0, float(raw)))
+        except (TypeError, ValueError):
+            pass
+    return HARNESS_CONFIG_GATE_TIMEOUT_S_DEFAULT
+
+
+def check_harness_config_gate() -> Tuple[str, str, Any]:
+    """PLAN-153 Wave E item 1 — 23rd Tier-S check: harness-config gate.
+
+    File-existence guarded: green "not installed" until the SENT-E ceremony
+    lands `check_harness_config.py` canonical. Once present: subprocess run,
+    rc 0 → green, rc != 0 → red carrying the first sanitized output line,
+    timeout → yellow (skipped, `ceo_boot_check_skipped` emitted), spawn
+    error → yellow. ADVISORY — never blocks the session.
+    """
+    gate = _harness_config_gate_path()
+    if not gate.is_file():
+        return (
+            "green",
+            "harness-config gate not installed (PLAN-153 E1 staged; skipping)",
+            {"installed": False},
+        )
+    timeout_s = _harness_config_gate_timeout_s()
+    try:
+        proc = subprocess.run(
+            [sys.executable, str(gate)],
+            capture_output=True,
+            text=True,
+            timeout=timeout_s,
+            cwd=str(REPO_ROOT),
+            stdin=subprocess.DEVNULL,
+        )
+    except subprocess.TimeoutExpired:
+        _emit_ceo_boot_check_skipped_safe(
+            check_name="harness_config_gate",
+            timeout_ms=int(timeout_s * 1000),
+        )
+        return (
+            "yellow",
+            f"harness-config gate timeout >{timeout_s:.1f}s (skipped, fail-open)",
+            {"installed": True, "timeout": True},
+        )
+    except OSError as exc:
+        return (
+            "yellow",
+            f"harness-config gate spawn error: {type(exc).__name__}",
+            {"installed": True},
+        )
+    if proc.returncode == 0:
+        return "green", "harness-config gate pass", {"installed": True, "rc": 0}
+    first_line = ""
+    for stream in (proc.stdout, proc.stderr):
+        for line in (stream or "").splitlines():
+            if line.strip():
+                first_line = _sanitize_for_recs(line.strip())
+                break
+        if first_line:
+            break
+    summary = f"harness-config gate FAIL (rc={proc.returncode})"
+    if first_line:
+        summary = f"{summary}: {first_line}"
+    return "red", summary[:200], {"installed": True, "rc": proc.returncode}
+
+
 TIER_S_CHECKS: List[Tuple[str, Callable[[], Tuple[str, str, Any]]]] = [
     ("plans_executing", check_plans_executing),
     ("plans_reviewed_pending", check_plans_reviewed_pending),
@@ -1694,9 +1949,17 @@ TIER_S_CHECKS: List[Tuple[str, Callable[[], Tuple[str, str, Any]]]] = [
     # enum `settings_tamper_detected` emit per class. ADVISORY fail-open:
     # infra error → yellow + stderr breadcrumb, never crashes, never blocks.
     ("settings_tamper_tripwires", check_settings_tamper_tripwires),
+    # PLAN-153 Wave E item 2 — 22nd Tier-S check: fail-open rail liveness
+    # over a 7d audit-log window (S254 lesson: silence from a fail-open
+    # rail is not health; all-fail-open window → red, no signal → yellow).
+    ("failopen_rail_liveness_7d", check_failopen_rail_liveness_7d),
+    # PLAN-153 Wave E item 1 wire — 23rd Tier-S check: static harness-config
+    # gate subprocess (file-existence guarded; green "not installed" until
+    # the SENT-E ceremony lands check_harness_config.py canonical).
+    ("harness_config_gate", check_harness_config_gate),
 ]
 
-assert len(TIER_S_CHECKS) == 21, f"Expected 21 Tier-S checks, got {len(TIER_S_CHECKS)}"
+assert len(TIER_S_CHECKS) == 23, f"Expected 23 Tier-S checks, got {len(TIER_S_CHECKS)}"
 
 
 TIER_A_CHECKS: List[Tuple[str, Callable[[], Tuple[str, str, Any]]]] = [
@@ -2027,6 +2290,28 @@ def _make_recommendations(results: List[CheckResult]) -> List[str]:
                 f"settings layers + env before trusting this session",
             ))
 
+    # PLAN-153 Wave E item 2 — fail-open rail liveness (S254 class).
+    # Sort key "006-*": after 005-settings-tamper, before 01-owner-sentinels
+    # (a rail that fail-opened all window means its guarantees were absent
+    # for every edit it should have reviewed).
+    liveness = by_name.get("failopen_rail_liveness_7d")
+    if liveness and liveness.status == "red":
+        recs.append((
+            "006-failopen-rail",
+            f"Fail-open security rail fail-opened on EVERY invocation in "
+            f"window: {_sanitize_for_recs(liveness.summary)} — restore the "
+            f"rail dependency (S254 class) before trusting its silence",
+        ))
+
+    # PLAN-153 Wave E item 1 wire — static harness-config gate red.
+    gate = by_name.get("harness_config_gate")
+    if gate and gate.status == "red":
+        recs.append((
+            "007-harness-config",
+            f"Harness-config gate FAIL: {_sanitize_for_recs(gate.summary)} "
+            f"— a registered hook may not resolve at runtime (dead rail)",
+        ))
+
     # Owner-pending GPG sentinels — highest priority (HARD blocker for ceremony)
     sent = by_name.get("sentinels_pending_gpg")
     if sent and sent.status == "yellow" and sent.detail:
@@ -2148,6 +2433,25 @@ def _recommendations_with_severity(
                 f"settings layers + env before trusting this session",
             ))
 
+    # PLAN-153 Wave E — mirrors of the _make_recommendations rules 006/007
+    # (same sort keys + same text so the two pipelines never drift).
+    liveness = by_name.get("failopen_rail_liveness_7d")
+    if liveness and liveness.status == "red":
+        recs.append((
+            "006-failopen-rail",
+            f"Fail-open security rail fail-opened on EVERY invocation in "
+            f"window: {_sanitize_for_recs(liveness.summary)} — restore the "
+            f"rail dependency (S254 class) before trusting its silence",
+        ))
+
+    gate = by_name.get("harness_config_gate")
+    if gate and gate.status == "red":
+        recs.append((
+            "007-harness-config",
+            f"Harness-config gate FAIL: {_sanitize_for_recs(gate.summary)} "
+            f"— a registered hook may not resolve at runtime (dead rail)",
+        ))
+
     sent = by_name.get("sentinels_pending_gpg")
     if sent and sent.status == "yellow" and sent.detail:
         items = sent.detail if isinstance(sent.detail, list) else []
@@ -2200,6 +2504,8 @@ def _recommendations_with_severity(
     for sort_key, text in recs[:5]:
         if sort_key.startswith("00-") or sort_key in (
             "005-settings-tamper",  # PLAN-135 W1 S3 — rail-integrity = high
+            "006-failopen-rail",    # PLAN-153 Wave E item 2 — S254 class = high
+            "007-harness-config",   # PLAN-153 Wave E item 1 wire — dead rail = high
             "01-owner-sentinels", "02-stranded-plans"
         ):
             severity = "high"

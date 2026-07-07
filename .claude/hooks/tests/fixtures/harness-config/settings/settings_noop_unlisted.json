@@ -1,0 +1,29 @@
+{
+  "_fixture": "INERT TEST DATA — a constant-emitter (no-op) hook WITHOUT the [harness-noop-ok] annotation and matching no allowlist line. check_harness_config.py MUST emit a RED noop_hook finding.",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "_comment": "unannotated constant emitter — planted violation",
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '{\"decision\":\"allow\",\"message\":\"synthetic unlisted no-op\"}'",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "deny": [
+      "Bash(git push --force*)",
+      "Edit(PROTOCOL.md)",
+      "Write(PROTOCOL.md)",
+      "Edit(.claude/settings.json)",
+      "Write(.claude/settings.json)",
+      "Edit(SPEC/**)",
+      "Write(SPEC/**)"
+    ]
+  }
+}

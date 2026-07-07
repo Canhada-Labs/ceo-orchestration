@@ -3,8 +3,9 @@ Unit tests for .claude/scripts/check-agents-md.py.
 
 AGENTS.md (repo root) is the cross-LLM reviewer contract; the checker
 flags drift between its repo-map / guarded-surfaces tables and the
-on-disk tree. Stdlib-only, Python >= 3.9. No env access (no
-TestEnvContext needed — the script reads only --root).
+on-disk tree. Stdlib-only, Python >= 3.9. The script itself reads only
+--root (no env), but the test classes subclass TestEnvContext for
+env-hygiene gate compliance (the tree forbids bare unittest.TestCase).
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ from __future__ import annotations
 import importlib.util
 import io
 import json
+import sys
 import tempfile
 import unittest
 from contextlib import redirect_stdout
@@ -19,6 +21,13 @@ from pathlib import Path
 
 SCRIPT = Path(__file__).resolve().parent.parent / "check-agents-md.py"
 REPO_ROOT = Path(__file__).resolve().parents[3]
+
+# Ensure ``_lib.testing`` (TestEnvContext) is importable for env-isolation.
+_HOOKS_DIR = REPO_ROOT / ".claude" / "hooks"
+if str(_HOOKS_DIR) not in sys.path:
+    sys.path.insert(0, str(_HOOKS_DIR))
+
+from _lib.testing import TestEnvContext  # noqa: E402
 
 
 def _load():
@@ -72,7 +81,7 @@ def _run_main(argv):
     return rc, buf.getvalue()
 
 
-class TestRealRepo(unittest.TestCase):
+class TestRealRepo(TestEnvContext):
     """The live freshness gate: the committed AGENTS.md must be clean."""
 
     def test_repo_agents_md_is_fresh(self):
@@ -89,7 +98,7 @@ class TestRealRepo(unittest.TestCase):
         self.assertGreater(payload["checked_paths"], 0)
 
 
-class TestFixtureRepo(unittest.TestCase):
+class TestFixtureRepo(TestEnvContext):
     def test_clean_fixture_exits_zero(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
@@ -226,7 +235,7 @@ class TestFixtureRepo(unittest.TestCase):
         self.assertEqual(rc, 2)
 
 
-class TestHelpers(unittest.TestCase):
+class TestHelpers(TestEnvContext):
     def test_extract_paths_skips_header_and_separator(self):
         section = (
             "\n| Path | What |\n"

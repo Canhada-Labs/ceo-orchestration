@@ -1,0 +1,14 @@
+{
+  "_fixture": "INERT TEST DATA — PLAN-153 Wave E positive control. Planted violation: an Edit against a canonical-guarded governance path (check_bash_safety.py) with NO Owner-signed sentinel covering it. check_canonical_edit.py MUST emit a block-shaped decision. Consumed only by check_harness_config.py --replay / its tests.",
+  "expect": "block",
+  "hook": "check_canonical_edit.py",
+  "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Edit",
+    "tool_input": {
+      "file_path": "{{PROJECT_DIR}}/.claude/hooks/check_bash_safety.py",
+      "old_string": "PLANTED-VIOLATION-INERT",
+      "new_string": "PLANTED-VIOLATION-INERT-2"
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "_fixture": "INERT TEST DATA — permissions.deny is missing most DENY_BASELINE entries. check_harness_config.py MUST emit RED deny_baseline findings for each missing entry.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "_comment": "anchored shim invocation",
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_ok_hook.py",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "deny": [
+      "Bash(git push --force*)"
+    ]
+  }
+}

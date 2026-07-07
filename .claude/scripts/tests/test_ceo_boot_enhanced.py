@@ -91,7 +91,7 @@ class TestRealCache(TestEnvContext):
         # PLAN-091 Wave A.1: bumped 15 → 16.
         # S127 cadence-amendment + PLAN-106 Wave F: 16 → 20 (drift absorbed).
         # PLAN-135 W1 S3: 20 → 21 (settings_tamper_tripwires).
-        self.assertEqual(payload["checks_total"], 21)  # PLAN-135 W1 S3
+        self.assertEqual(payload["checks_total"], 23)  # PLAN-153 Wave E: +2
         self.assertEqual(payload["checks_failed"], 0)
         self.assertTrue(payload["gate_pass"])
 
@@ -277,12 +277,12 @@ class TestVerboseMode(TestEnvContext):
         PLAN-135 W1 S3: Tier-S bumped 20 → 21 (settings_tamper_tripwires).
         """
         results = _mod.dispatch_parallel(include_tier_a=True)
-        self.assertEqual(len(results), 31)  # PLAN-135 W1 S3: 21+10
+        self.assertEqual(len(results), 33)  # PLAN-153 Wave E: 23+10
 
     def test_dispatch_without_tier_a_returns_21(self):
         """Default dispatch (Tier-S only) returns 21 post-PLAN-135 W1 S3."""
         results = _mod.dispatch_parallel()
-        self.assertEqual(len(results), 21)  # PLAN-135 W1 S3
+        self.assertEqual(len(results), 23)  # PLAN-153 Wave E: +2
 
     def test_dispatch_verbose_budget_10s(self):
         """Verbose dispatch fits in 10s aggregate (CI cold-start slack: 12s)."""

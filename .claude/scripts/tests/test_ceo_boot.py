@@ -56,7 +56,7 @@ class TestRegistry(TestEnvContext):
         # at 168h cadence, Codex R2 `019e33a3` AMEND).
         # PLAN-106 Wave F: 20 Tier-S checks (was 19; added confidence_gate_drift_7d).
         # PLAN-135 W1 S3: 21 Tier-S checks (added settings_tamper_tripwires).
-        self.assertEqual(len(_mod.TIER_S_CHECKS), 21)  # PLAN-135 W1 S3: +1 (settings_tamper_tripwires)
+        self.assertEqual(len(_mod.TIER_S_CHECKS), 23)  # PLAN-153 Wave E: +2 (failopen_rail_liveness_7d, harness_config_gate)
 
     def test_tier_policy_misrouting_check_present(self):
         # PLAN-091 Wave A.1: 16th Tier-S check registered.
@@ -109,7 +109,7 @@ class TestDispatcher(TestEnvContext):
         results = _mod.dispatch_parallel()
         # PLAN-106 Wave F: 20 Tier-S checks (was 19; added confidence_gate_drift_7d).
         # PLAN-135 W1 S3: 21 Tier-S checks (added settings_tamper_tripwires).
-        self.assertEqual(len(results), 21)  # PLAN-135 W1 S3: +1 (settings_tamper_tripwires)
+        self.assertEqual(len(results), 23)  # PLAN-153 Wave E: +2 (failopen_rail_liveness_7d, harness_config_gate)
         for r in results:
             self.assertIsInstance(r, _mod.CheckResult)
             self.assertIn(r.status, ("green", "yellow", "red", "timeout", "error"))
@@ -489,7 +489,7 @@ class TestRenderer(TestEnvContext):
         results = [self._ck(name, "green", "ok") for name, _ in _mod.TIER_S_CHECKS]
         out = _mod.render_digest(results, short=True)
         # PLAN-135 W1 S3: 21 Tier-S checks.
-        self.assertIn("21 green", out)
+        self.assertIn("23 green", out)  # PLAN-153 Wave E: 23 Tier-S checks
         self.assertNotIn("| Check |", out)
 
     def test_render_short_surfaces_non_green(self):
@@ -636,7 +636,7 @@ class TestMainCLI(TestEnvContext):
         self.assertIn("checks_total", payload)
         self.assertIn("results", payload)
         # PLAN-135 W1 S3: 21 Tier-S checks.
-        self.assertEqual(len(payload["results"]), 21)  # PLAN-135 W1 S3
+        self.assertEqual(len(payload["results"]), 23)  # PLAN-153 Wave E
 
 
 if __name__ == "__main__":

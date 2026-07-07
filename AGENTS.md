@@ -75,7 +75,6 @@ machine-checked against disk (see §5).
 | `.claude/security/` | Sentinel-signers registry |
 | `.claude/sidecars/` | Sidecar bundles (crypto, vector-memory, dev-tools) |
 | `.claude/skills/` | Skill library (`core/`, `frontend/`, `domains/`) |
-| `.claude/state/` | Runtime state |
 | `.claude/templates/` | Squad-bundle authoring template |
 | `.claude/trust/` | Owner GPG public key |
 | `.claude/workflows/` | Workflow definitions (audit-fanout, nightly-hygiene, eval-baseline) |

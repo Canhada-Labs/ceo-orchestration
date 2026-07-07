@@ -17,6 +17,28 @@ like:
    dereferenced SHA. Mismatch → advisory WARN line (exit 2 under
    ``--strict``, else exit 0).
 
+3. **Workflow-policy assertions (hard — PLAN-153 Wave E item 4, opt-in
+   via ``--policy``).** Line-based (stdlib has no YAML parser; same
+   heuristic tier as the pin scan) checks per workflow file:
+
+   - ``pull_request_target`` trigger → violation. Forbidden outright in
+     this repo (PLAN-002 §8 finding #18; `.github/workflows/_README.md`
+     §R9). When the same file also checks out the PR head
+     (``github.event.pull_request.head.{sha,ref}`` / ``github.head_ref``)
+     the violation message flags the RCE-equivalent combination.
+   - Fork-reachable secrets → violation: a ``pull_request``-triggered
+     workflow referencing ``${{ secrets.X }}`` (X ≠ GITHUB_TOKEN) without
+     a head-repo fork guard
+     (``...head.repo.full_name == github.repository`` or
+     ``head.repo.fork``) anywhere in the file.
+   - A workflow file the validator cannot read/decode is a violation,
+     not a skip — fail-CLOSED on input a security matcher cannot parse
+     (precedent: ``check_bash_safety.py`` ``_e3`` whole-command parse
+     gate + ``_check_credential_leak``, codified PLAN-152 debate C4).
+     Note the asymmetry: the pin scan (pass 1) keeps its historical
+     skip-on-unreadable behavior; only the ``--policy`` pass is
+     fail-closed.
+
 Stdlib-only (urllib). Python 3.9+.
 
 Exit codes:
@@ -61,6 +83,44 @@ _ANY_USES_RE = re.compile(r"^\s*(?:-\s+)?uses:\s*(\S+)")
 _EXEMPT_PREFIXES = ("./", "docker://")
 
 _REQUEST_TIMEOUT_S = 10.0
+
+# --- PLAN-153 Wave E item 4 — workflow-policy assertion patterns ---------
+# Trigger detection is line-shape based: YAML key form, block-list item
+# form, inline `on: [a, b]` form, and scalar `on: x` form. Comment lines
+# are skipped and inline `# ...` tails stripped before matching.
+_PRT_TRIGGER_RES = (
+    re.compile(r"^\s*pull_request_target\s*:"),
+    re.compile(r"^\s*-\s+pull_request_target\s*$"),
+    re.compile(r"^\s*on:\s*\[[^\]]*\bpull_request_target\b"),
+    re.compile(r"^\s*on:\s*pull_request_target\s*$"),
+)
+# NB: `\bpull_request\b` does NOT match inside `pull_request_target`
+# (`_` is a word character, so no boundary after `request`).
+_PR_TRIGGER_RES = (
+    re.compile(r"^\s*pull_request\s*:"),
+    re.compile(r"^\s*-\s+pull_request\s*$"),
+    re.compile(r"^\s*on:\s*\[[^\]]*\bpull_request\b"),
+    re.compile(r"^\s*on:\s*pull_request\s*$"),
+)
+# Checkout of the PR head — the RCE-equivalent aggravator under
+# pull_request_target (untrusted code + trusted-context token).
+_HEAD_CHECKOUT_RE = re.compile(
+    r"github\.event\.pull_request\.head\.(?:sha|ref)|github\.head_ref"
+)
+# `${{ ... secrets.NAME ... }}` — the only syntax through which a secret
+# can actually flow into a job. Requiring `${{` on the same line keeps
+# prose/path mentions (e.g. `check_output_secrets.py`) out of scope.
+_SECRET_EXPR_RE = re.compile(r"\bsecrets\.([A-Za-z0-9_]+)")
+# Head-repo fork guard forms used in this repo (_README.md §R9).
+# Codex pair-rail P2 (S261): only SAME-REPO / NON-FORK conditions count as
+# a guard. `full_name != github.repository` or a bare truthy
+# `head.repo.fork` gates the job to run ONLY for forks — the exact unsafe
+# configuration this check exists to catch — and must NOT satisfy it.
+_FORK_GUARD_RE = re.compile(
+    r"head\.repo\.full_name\s*==\s*github\.repository"
+    r"|head\.repo\.fork\s*==\s*false"
+    r"|!\s*github\.event\.pull_request\.head\.repo\.fork\b"
+)
 
 
 def _build_ssl_context() -> ssl.SSLContext:
@@ -179,6 +239,86 @@ def _fetch_tag_sha(
         return "unknown"
 
 
+def _policy_violations(workflows_dir: Path) -> List[str]:
+    """PLAN-153 Wave E item 4 — workflow-policy assertions.
+
+    Returns a list of human-readable violation strings (empty = clean).
+
+    Fail-CLOSED on unparseable INPUT: a workflow file that cannot be
+    read/decoded cannot be certified, so it is reported as a violation
+    rather than skipped (precedent: ``check_bash_safety.py`` ``_e3`` +
+    ``_check_credential_leak``; PLAN-152 debate C4). A missing/absent
+    *directory* remains a no-op — that is an infrastructure condition,
+    consistent with the pin scan.
+    """
+    violations: List[str] = []
+    if not workflows_dir.is_dir():
+        return violations
+    candidates = sorted(
+        list(workflows_dir.glob("*.yml")) + list(workflows_dir.glob("*.yaml"))
+    )
+    for wf in candidates:
+        try:
+            lines = wf.read_text(encoding="utf-8").splitlines()
+        except (OSError, UnicodeDecodeError) as exc:
+            violations.append(
+                f"  {wf.name}: UNREADABLE ({exc.__class__.__name__}) — "
+                "fail-closed: a workflow the validator cannot parse "
+                "cannot be certified (PLAN-152 C4 precedent)"
+            )
+            continue
+
+        prt_line = 0
+        pr_line = 0
+        head_checkout_line = 0
+        has_fork_guard = False
+        secret_names: dict = {}  # name -> first line seen
+        for i, raw in enumerate(lines, start=1):
+            if raw.lstrip().startswith("#"):
+                continue
+            # Strip inline comment tails; policy patterns never contain
+            # a legitimate `#` before the match.
+            code = raw.split("#", 1)[0]
+            if not prt_line and any(r.match(code) for r in _PRT_TRIGGER_RES):
+                prt_line = i
+            if not pr_line and any(r.match(code) for r in _PR_TRIGGER_RES):
+                pr_line = i
+            if not head_checkout_line and _HEAD_CHECKOUT_RE.search(code):
+                head_checkout_line = i
+            if not has_fork_guard and _FORK_GUARD_RE.search(code):
+                has_fork_guard = True
+            if "${{" in code:
+                for name in _SECRET_EXPR_RE.findall(code):
+                    if name != "GITHUB_TOKEN":
+                        secret_names.setdefault(name, i)
+
+        if prt_line:
+            msg = (
+                f"  {wf.name}:{prt_line}  pull_request_target trigger is "
+                "FORBIDDEN (PLAN-002 §8 #18; workflows _README.md §R9)"
+            )
+            if head_checkout_line:
+                msg += (
+                    f" — AND checks out the PR head at line "
+                    f"{head_checkout_line} (RCE-equivalent: untrusted "
+                    "code under a trusted-context token)"
+                )
+            violations.append(msg)
+
+        if pr_line and secret_names and not has_fork_guard:
+            listing = ", ".join(
+                f"{name} (line {line})"
+                for name, line in sorted(secret_names.items())
+            )
+            violations.append(
+                f"  {wf.name}:{pr_line}  fork-reachable (pull_request) "
+                f"workflow references secrets [{listing}] with no "
+                "head-repo fork guard "
+                "(head.repo.full_name == github.repository)"
+            )
+    return violations
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     """CLI entrypoint — scan workflow SHA-pins + verify format + drift."""
     parser = argparse.ArgumentParser(
@@ -203,6 +343,15 @@ def main(argv: Optional[List[str]] = None) -> int:
         dest="offline", action="store_true",
         help="Skip GitHub API drift check; format-compliance only.",
     )
+    parser.add_argument(
+        "--policy", action="store_true",
+        help=(
+            "PLAN-153 Wave E item 4: also run workflow-policy assertions "
+            "(no pull_request_target; no unguarded secrets in "
+            "fork-reachable jobs; unreadable workflow = fail-closed). "
+            "Violations exit 1."
+        ),
+    )
     args = parser.parse_args(argv)
 
     # Pass 1 — collect + classify pins
@@ -219,17 +368,41 @@ def main(argv: Optional[List[str]] = None) -> int:
             continue
         compliant.append((path, line_no, repo, ref, tag_claim))
 
-    # Format violations → hard fail
-    if violations:
-        print("FORMAT VIOLATIONS (PLAN-050 C12 hard-fail):", file=sys.stderr)
-        for v in violations:
-            print(v, file=sys.stderr)
+    # PLAN-153 Wave E item 4 — opt-in workflow-policy pass
+    policy_violations: List[str] = []
+    if args.policy:
+        policy_violations = _policy_violations(args.workflows_dir)
+
+    # Format/policy violations → hard fail
+    if violations or policy_violations:
+        if violations:
+            print(
+                "FORMAT VIOLATIONS (PLAN-050 C12 hard-fail):",
+                file=sys.stderr,
+            )
+            for v in violations:
+                print(v, file=sys.stderr)
+        if policy_violations:
+            print(
+                "POLICY VIOLATIONS (PLAN-153 Wave E hard-fail):",
+                file=sys.stderr,
+            )
+            for v in policy_violations:
+                print(v, file=sys.stderr)
         print(
             f"\ninventory: {len(compliant)} compliant, "
-            f"{len(violations)} violation(s)",
+            f"{len(violations)} format violation(s), "
+            f"{len(policy_violations)} policy violation(s)",
             file=sys.stderr,
         )
         return 1
+
+    if args.policy:
+        print(
+            "policy OK: no pull_request_target, no unguarded "
+            "fork-reachable secrets.",
+            file=sys.stderr,
+        )
 
     if args.offline or not compliant:
         print(

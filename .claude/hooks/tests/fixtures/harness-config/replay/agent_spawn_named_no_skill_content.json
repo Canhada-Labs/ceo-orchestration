@@ -1,0 +1,13 @@
+{
+  "_fixture": "INERT TEST DATA — PLAN-153 Wave E positive control. Planted violation: a NAMED agent spawn (persona header present) whose prompt has no '## SKILL CONTENT' section. check_agent_spawn.py MUST emit a block-shaped decision. Consumed only by check_harness_config.py --replay / its tests.",
+  "expect": "block",
+  "hook": "check_agent_spawn.py",
+  "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Agent",
+    "tool_input": {
+      "description": "Spawn Apex Coder for kernel patch",
+      "prompt": "## AGENT PROFILE\nYou are a specialist agent (inert replay fixture).\n\nDo the task. This prompt deliberately omits the skill section."
+    }
+  }
+}

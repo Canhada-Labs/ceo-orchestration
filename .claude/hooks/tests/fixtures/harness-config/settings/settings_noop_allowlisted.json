@@ -1,0 +1,29 @@
+{
+  "_fixture": "INERT TEST DATA — the SAME constant-emitter hook as settings_noop_unlisted.json but WITH the explicit [harness-noop-ok] annotation in the entry _comment. check_harness_config.py must NOT flag it.",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "_comment": "[harness-noop-ok] intentional advisory emitter — synthetic fixture",
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '{\"decision\":\"allow\",\"message\":\"synthetic allowlisted no-op\"}'",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "deny": [
+      "Bash(git push --force*)",
+      "Edit(PROTOCOL.md)",
+      "Write(PROTOCOL.md)",
+      "Edit(.claude/settings.json)",
+      "Write(.claude/settings.json)",
+      "Edit(SPEC/**)",
+      "Write(SPEC/**)"
+    ]
+  }
+}
