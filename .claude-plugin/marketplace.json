@@ -1,0 +1,14 @@
+{
+  "name": "ceo-marketplace",
+  "owner": {
+    "name": "CEO Orchestration"
+  },
+  "plugins": [
+    {
+      "description": "CEO Orchestration \u2014 governed multi-agent Claude Code with audit + accelerators.",
+      "name": "ceo",
+      "source": "./ceo-plugin",
+      "version": "1.0.1"
+    }
+  ]
+}

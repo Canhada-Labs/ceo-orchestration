@@ -1,0 +1,461 @@
+{
+  "schema_version": 1,
+  "$comment": "DERIVED, CI-VALIDATED MIRROR of the inline profile logic in scripts/install.sh (PLAN-153 item B4). install.sh does NOT read this file yet — it remains the single runtime truth; drift between the two turns CI red via .claude/scripts/check-install-profiles.py. The consumption flip (install.sh reading this manifest + --dry-run --json) is a recorded follow-up, see 'consumption' below.",
+  "default_profiles": [
+    "core",
+    "frontend"
+  ],
+  "derivation": {
+    "truth_source": "scripts/install.sh inline logic",
+    "profile_semantics": "--profile is a comma-separated list. 'core' and 'frontend' select the matching .claude/skills/<name>/ tree; any other token selects .claude/skills/domains/<token>/ if that directory exists (else install.sh WARNs and skips it). Hooks/scripts/commands/dispatcher are installed UNCONDITIONALLY for every profile selection; per-profile hook_stacks below is therefore always ['base'].",
+    "orthogonal_dimensions": {
+      "--stack": "node|none (help text); merges templates/settings/settings.stack.<name>.json over the base settings template. Orthogonal to --profile — modeled as hook_stacks definitions here, never referenced by profiles.",
+      "--ceremony": "maintainer|user; ceremony=user swaps the base settings template to templates/settings/settings.user.json (advisory-only hook surface). Orthogonal to --profile."
+    },
+    "stability_rule": "stable = profiles in default_profiles UNION domains with a dedicated `has_profile \"<name>\"` block in install.sh; every other domain (accepted only via the generic domain loop) is experimental. Machine-enforced by check-install-profiles.py.",
+    "est_context_cost_rule": {
+      "metric": "count of SKILL.md files under the profile's skill root",
+      "low_max": 9,
+      "med_max": 25,
+      "else": "high"
+    }
+  },
+  "hook_stacks": {
+    "base": {
+      "description": "Universal governance hook surface: .claude/hooks/ top-level *.py/*.sh + _lib/ runtime, wired via the base settings template. Installed for EVERY profile selection (install.sh section 5 installs hooks unconditionally).",
+      "settings_template": "templates/settings/settings.base.json",
+      "selected_by": "always (ceremony=maintainer, the default)"
+    },
+    "user-ceremony": {
+      "description": "Advisory-only hook surface for --ceremony user installs (no-GPG, .claude/-only writes). Replaces the base template.",
+      "settings_template": "templates/settings/settings.user.json",
+      "selected_by": "--ceremony user"
+    },
+    "node": {
+      "description": "Node stack overlay — tsc + vitest pre-commit gate merged into settings.json via jq.",
+      "settings_template": "templates/settings/settings.stack.node.json",
+      "selected_by": "--stack node"
+    },
+    "otel": {
+      "description": "OpenTelemetry env overlay merged via jq.",
+      "settings_template": "templates/settings/settings.stack.otel.json",
+      "selected_by": "--stack otel"
+    },
+    "sandbox": {
+      "description": "Sandbox env overlay merged via jq.",
+      "settings_template": "templates/settings/settings.stack.sandbox.json",
+      "selected_by": "--stack sandbox"
+    }
+  },
+  "profiles": [
+    {
+      "name": "core",
+      "description": "Universal CEO-protocol skill set (.claude/skills/core/) — governance, orchestration, debate, audit. Installed when 'core' is in --profile; part of the install.sh default profile list.",
+      "skill_globs": [
+        ".claude/skills/core/*/SKILL.md"
+      ],
+      "hook_stacks": [
+        "base"
+      ],
+      "stability": "stable",
+      "est_context_cost": "high"
+    },
+    {
+      "name": "frontend",
+      "description": "Frontend specialist skill set (.claude/skills/frontend/) — accessibility, design systems, performance, UX. Installed when 'frontend' is in --profile; part of the install.sh default profile list.",
+      "skill_globs": [
+        ".claude/skills/frontend/*/SKILL.md"
+      ],
+      "hook_stacks": [
+        "base"
+      ],
+      "stability": "stable",
+      "est_context_cost": "low"
+    },
+    {
+      "name": "academic-humanities",
+      "description": "Domain skill pack 'academic-humanities' (.claude/skills/domains/academic-humanities/) — opt-in via --profile <list>,academic-humanities; handled by install.sh's generic domain loop.",
+      "skill_globs": [
+        ".claude/skills/domains/academic-humanities/**/*"
+      ],
+      "hook_stacks": [
+        "base"
+      ],
+      "stability": "experimental",
+      "est_context_cost": "low"
+    },
+    {
+      "name": "business-support",
+      "description": "Domain skill pack 'business-support' (.claude/skills/domains/business-support/) — opt-in via --profile <list>,business-support; handled by install.sh's generic domain loop.",
+      "skill_globs": [
+        ".claude/skills/domains/business-support/**/*"
+      ],
+      "hook_stacks": [
+        "base"
+      ],
+      "stability": "experimental",
+      "est_context_cost": "low"
+    },
+    {
+      "name": "civil-engineering",
+      "description": "Domain skill pack 'civil-engineering' (.claude/skills/domains/civil-engineering/) — opt-in via --profile <list>,civil-engineering; handled by install.sh's generic domain loop.",
+      "skill_globs": [
+        ".claude/skills/domains/civil-engineering/**/*"
+      ],
+      "hook_stacks": [
+        "base"
+      ],
+      "stability": "experimental",
+      "est_context_cost": "low"
+    },
+    {
+      "name": "community",
+      "description": "Domain skill pack 'community' (.claude/skills/domains/community/) — opt-in via --profile <list>,community; handled by install.sh's generic domain loop.",
+      "skill_globs": [
+        ".claude/skills/domains/community/**/*"
+      ],
+      "hook_stacks": [
+        "base"
+      ],
+      "stability": "experimental",
+      "est_context_cost": "low"
+    },
+    {
+      "name": "devrel",
+      "description": "Domain skill pack 'devrel' (.claude/skills/domains/devrel/) — opt-in via --profile <list>,devrel; handled by install.sh's generic domain loop.",
+      "skill_globs": [
+        ".claude/skills/domains/devrel/**/*"
+      ],
+      "hook_stacks": [
+        "base"
+      ],
+      "stability": "experimental",
+      "est_context_cost": "low"
+    },
+    {
+      "name": "edtech",
+      "description": "Domain skill pack 'edtech' (.claude/skills/domains/edtech/) — opt-in via --profile <list>,edtech; handled by install.sh's generic domain loop.",
+      "skill_globs": [
+        ".claude/skills/domains/edtech/**/*"
+      ],
+      "hook_stacks": [
+        "base"
+      ],
+      "stability": "experimental",
+      "est_context_cost": "low"
+    },
+    {
+      "name": "embedded",
+      "description": "Domain skill pack 'embedded' (.claude/skills/domains/embedded/) — opt-in via --profile <list>,embedded; handled by install.sh's generic domain loop.",
+      "skill_globs": [
+        ".claude/skills/domains/embedded/**/*"
+      ],
+      "hook_stacks": [
+        "base"
+      ],
+      "stability": "experimental",
+      "est_context_cost": "low"
+    },
+    {
+      "name": "finance-accounting",
+      "description": "Domain skill pack 'finance-accounting' (.claude/skills/domains/finance-accounting/) — opt-in via --profile <list>,finance-accounting; handled by install.sh's generic domain loop.",
+      "skill_globs": [
+        ".claude/skills/domains/finance-accounting/**/*"
+      ],
+      "hook_stacks": [
+        "base"
+      ],
+      "stability": "experimental",
+      "est_context_cost": "low"
+    },
+    {
+      "name": "fintech",
+      "description": "Fintech domain pack (.claude/skills/domains/fintech/) — skills, FIN-*/EX-* pitfalls, personas, commands. Opt-in via --profile; the only domain with a dedicated post-install block in install.sh.",
+      "skill_globs": [
+        ".claude/skills/domains/fintech/**/*"
+      ],
+      "hook_stacks": [
+        "base"
+      ],
+      "stability": "stable",
+      "est_context_cost": "med"
+    },
+    {
+      "name": "government",
+      "description": "Domain skill pack 'government' (.claude/skills/domains/government/) — opt-in via --profile <list>,government; handled by install.sh's generic domain loop.",
+      "skill_globs": [
+        ".claude/skills/domains/government/**/*"
+      ],
+      "hook_stacks": [
+        "base"
+      ],
+      "stability": "experimental",
+      "est_context_cost": "low"
+    },
+    {
+      "name": "healthcare",
+      "description": "Domain skill pack 'healthcare' (.claude/skills/domains/healthcare/) — opt-in via --profile <list>,healthcare; handled by install.sh's generic domain loop.",
+      "skill_globs": [
+        ".claude/skills/domains/healthcare/**/*"
+      ],
+      "hook_stacks": [
+        "base"
+      ],
+      "stability": "experimental",
+      "est_context_cost": "low"
+    },
+    {
+      "name": "hospitality",
+      "description": "Domain skill pack 'hospitality' (.claude/skills/domains/hospitality/) — opt-in via --profile <list>,hospitality; handled by install.sh's generic domain loop.",
+      "skill_globs": [
+        ".claude/skills/domains/hospitality/**/*"
+      ],
+      "hook_stacks": [
+        "base"
+      ],
+      "stability": "experimental",
+      "est_context_cost": "low"
+    },
+    {
+      "name": "hr",
+      "description": "Domain skill pack 'hr' (.claude/skills/domains/hr/) — opt-in via --profile <list>,hr; handled by install.sh's generic domain loop.",
+      "skill_globs": [
+        ".claude/skills/domains/hr/**/*"
+      ],
+      "hook_stacks": [
+        "base"
+      ],
+      "stability": "experimental",
+      "est_context_cost": "low"
+    },
+    {
+      "name": "i18n-business",
+      "description": "Domain skill pack 'i18n-business' (.claude/skills/domains/i18n-business/) — opt-in via --profile <list>,i18n-business; handled by install.sh's generic domain loop.",
+      "skill_globs": [
+        ".claude/skills/domains/i18n-business/**/*"
+      ],
+      "hook_stacks": [
+        "base"
+      ],
+      "stability": "experimental",
+      "est_context_cost": "low"
+    },
+    {
+      "name": "identity-systems",
+      "description": "Domain skill pack 'identity-systems' (.claude/skills/domains/identity-systems/) — opt-in via --profile <list>,identity-systems; handled by install.sh's generic domain loop.",
+      "skill_globs": [
+        ".claude/skills/domains/identity-systems/**/*"
+      ],
+      "hook_stacks": [
+        "base"
+      ],
+      "stability": "experimental",
+      "est_context_cost": "low"
+    },
+    {
+      "name": "legal",
+      "description": "Domain skill pack 'legal' (.claude/skills/domains/legal/) — opt-in via --profile <list>,legal; handled by install.sh's generic domain loop.",
+      "skill_globs": [
+        ".claude/skills/domains/legal/**/*"
+      ],
+      "hook_stacks": [
+        "base"
+      ],
+      "stability": "experimental",
+      "est_context_cost": "low"
+    },
+    {
+      "name": "lgpd-heavy-saas",
+      "description": "Domain skill pack 'lgpd-heavy-saas' (.claude/skills/domains/lgpd-heavy-saas/) — opt-in via --profile <list>,lgpd-heavy-saas; handled by install.sh's generic domain loop.",
+      "skill_globs": [
+        ".claude/skills/domains/lgpd-heavy-saas/**/*"
+      ],
+      "hook_stacks": [
+        "base"
+      ],
+      "stability": "experimental",
+      "est_context_cost": "low",
+      "notes": "Ships pitfalls.yaml / team-personas.md / task-chains.yaml only — no SKILL.md files as of schema_version 1."
+    },
+    {
+      "name": "marketing-global",
+      "description": "Domain skill pack 'marketing-global' (.claude/skills/domains/marketing-global/) — opt-in via --profile <list>,marketing-global; handled by install.sh's generic domain loop.",
+      "skill_globs": [
+        ".claude/skills/domains/marketing-global/**/*"
+      ],
+      "hook_stacks": [
+        "base"
+      ],
+      "stability": "experimental",
+      "est_context_cost": "med"
+    },
+    {
+      "name": "mobile",
+      "description": "Domain skill pack 'mobile' (.claude/skills/domains/mobile/) — opt-in via --profile <list>,mobile; handled by install.sh's generic domain loop.",
+      "skill_globs": [
+        ".claude/skills/domains/mobile/**/*"
+      ],
+      "hook_stacks": [
+        "base"
+      ],
+      "stability": "experimental",
+      "est_context_cost": "low"
+    },
+    {
+      "name": "paid-media",
+      "description": "Domain skill pack 'paid-media' (.claude/skills/domains/paid-media/) — opt-in via --profile <list>,paid-media; handled by install.sh's generic domain loop.",
+      "skill_globs": [
+        ".claude/skills/domains/paid-media/**/*"
+      ],
+      "hook_stacks": [
+        "base"
+      ],
+      "stability": "experimental",
+      "est_context_cost": "low"
+    },
+    {
+      "name": "project-management",
+      "description": "Domain skill pack 'project-management' (.claude/skills/domains/project-management/) — opt-in via --profile <list>,project-management; handled by install.sh's generic domain loop.",
+      "skill_globs": [
+        ".claude/skills/domains/project-management/**/*"
+      ],
+      "hook_stacks": [
+        "base"
+      ],
+      "stability": "experimental",
+      "est_context_cost": "low"
+    },
+    {
+      "name": "real-estate-finance",
+      "description": "Domain skill pack 'real-estate-finance' (.claude/skills/domains/real-estate-finance/) — opt-in via --profile <list>,real-estate-finance; handled by install.sh's generic domain loop.",
+      "skill_globs": [
+        ".claude/skills/domains/real-estate-finance/**/*"
+      ],
+      "hook_stacks": [
+        "base"
+      ],
+      "stability": "experimental",
+      "est_context_cost": "low"
+    },
+    {
+      "name": "retail",
+      "description": "Domain skill pack 'retail' (.claude/skills/domains/retail/) — opt-in via --profile <list>,retail; handled by install.sh's generic domain loop.",
+      "skill_globs": [
+        ".claude/skills/domains/retail/**/*"
+      ],
+      "hook_stacks": [
+        "base"
+      ],
+      "stability": "experimental",
+      "est_context_cost": "low"
+    },
+    {
+      "name": "saas-platforms",
+      "description": "Domain skill pack 'saas-platforms' (.claude/skills/domains/saas-platforms/) — opt-in via --profile <list>,saas-platforms; handled by install.sh's generic domain loop.",
+      "skill_globs": [
+        ".claude/skills/domains/saas-platforms/**/*"
+      ],
+      "hook_stacks": [
+        "base"
+      ],
+      "stability": "experimental",
+      "est_context_cost": "low"
+    },
+    {
+      "name": "sales",
+      "description": "Domain skill pack 'sales' (.claude/skills/domains/sales/) — opt-in via --profile <list>,sales; handled by install.sh's generic domain loop.",
+      "skill_globs": [
+        ".claude/skills/domains/sales/**/*"
+      ],
+      "hook_stacks": [
+        "base"
+      ],
+      "stability": "experimental",
+      "est_context_cost": "low"
+    },
+    {
+      "name": "supply-chain",
+      "description": "Domain skill pack 'supply-chain' (.claude/skills/domains/supply-chain/) — opt-in via --profile <list>,supply-chain; handled by install.sh's generic domain loop.",
+      "skill_globs": [
+        ".claude/skills/domains/supply-chain/**/*"
+      ],
+      "hook_stacks": [
+        "base"
+      ],
+      "stability": "experimental",
+      "est_context_cost": "low"
+    },
+    {
+      "name": "trading-hft",
+      "description": "Domain skill pack 'trading-hft' (.claude/skills/domains/trading-hft/) — opt-in via --profile <list>,trading-hft; handled by install.sh's generic domain loop.",
+      "skill_globs": [
+        ".claude/skills/domains/trading-hft/**/*"
+      ],
+      "hook_stacks": [
+        "base"
+      ],
+      "stability": "experimental",
+      "est_context_cost": "low"
+    },
+    {
+      "name": "training-l-and-d",
+      "description": "Domain skill pack 'training-l-and-d' (.claude/skills/domains/training-l-and-d/) — opt-in via --profile <list>,training-l-and-d; handled by install.sh's generic domain loop.",
+      "skill_globs": [
+        ".claude/skills/domains/training-l-and-d/**/*"
+      ],
+      "hook_stacks": [
+        "base"
+      ],
+      "stability": "experimental",
+      "est_context_cost": "low"
+    },
+    {
+      "name": "voice-ai",
+      "description": "Domain skill pack 'voice-ai' (.claude/skills/domains/voice-ai/) — opt-in via --profile <list>,voice-ai; handled by install.sh's generic domain loop.",
+      "skill_globs": [
+        ".claude/skills/domains/voice-ai/**/*"
+      ],
+      "hook_stacks": [
+        "base"
+      ],
+      "stability": "experimental",
+      "est_context_cost": "low"
+    }
+  ],
+  "consumption": {
+    "status": "not_yet_consumed",
+    "honesty": "install.sh still carries the inline truth; this manifest is a mirror validated in CI. Flipping install.sh to CONSUME this file is a follow-up staged change owned by the installer track.",
+    "planned_flags": [
+      "--dry-run --json"
+    ],
+    "dry_run_json_contract": {
+      "description": "SPEC (v1, not yet implemented): `install.sh <target> --dry-run --json` will emit exactly one JSON object on stdout, write nothing to disk, and exit 0. Human dry-run output moves to stderr in this mode.",
+      "shape": {
+        "schema_version": 1,
+        "profile": [
+          "<resolved profile parts, in order>"
+        ],
+        "unknown_profiles": [
+          "<parts with no matching domain dir>"
+        ],
+        "stack": "<--stack value>",
+        "ceremony": "<maintainer|user>",
+        "would_install": {
+          "skills": [
+            "<skill tree paths>"
+          ],
+          "hooks": [
+            ".claude/hooks/ top-level + _lib runtime (always)"
+          ],
+          "settings_merge": [
+            "<base template>",
+            "<stack template if any>"
+          ]
+        },
+        "would_skip_existing": [
+          "<paths that already exist in target>"
+        ]
+      }
+    }
+  }
+}
