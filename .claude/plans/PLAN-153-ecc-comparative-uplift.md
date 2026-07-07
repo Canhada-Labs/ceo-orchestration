@@ -125,6 +125,52 @@ contamination-clean. The learning-loop track is carved to PLAN-154.
 Check: sentinels verify against both signer rails; ADR slugs reserved; OQ
 answers logged verbatim in this file.
 
+### Wave 0 — execution log (S261, 2026-07-06/07)
+
+Executed by the CEO under the Owner's explicit overnight delegation
+(S261 directive, verbatim in the session ledger: "quero que termine o plano
+153 completo […] se precisar assinar algo deixa o script pronto que eu faço
+quando acordar, rode autônomo […] não pare de trabalhar até finalizar tudo").
+Physical GPG signatures remain Owner-only and are batched into the wake-up
+ceremony below.
+
+1. **OQ dispositions ratified:** OQ1 = NOTICE ledger (debate resolution
+   confirmed). OQ2 = metadata-only v1 → PLAN-154 (confirmed). **OQ3 = (c)
+   hybrid** — skip-soak posture for brand-new files (Wave D; nothing to
+   regress), parallel-shadow for merges (Wave G) — per the CEO recommendation
+   in §Open questions, under the delegation above.
+2. **Batch split ratified:** Wave D batch-1 executes; batch-2 stays deferred.
+   JVM ride-along ruling (matrix under-specifies "quarkus/kotlin/jpa ADAPTs"):
+   `jpa-patterns` (the only unambiguous 1:1) is absorbed as a persistence
+   section of the new `java-coding-standards`; quarkus\*/kotlin\* rows move to
+   batch-2 with pointer — they have 2-4 candidate rows each and need an Owner
+   pin.
+3. **ADR allocation CORRECTED:** this plan reserved ADR-173/174/175 on a
+   count-vs-index confusion ("172 ADRs" is a FILE count inflated by AMEND
+   files; the highest index on disk is ADR-157). Corrected allocation, keeping
+   the index monotonic: **ADR-158** (harness-config gate, was "173"),
+   **ADR-159** (citation gate + prompt defense, was "175"), **ADR-160**
+   (reserved for PLAN-154 learning-loop doctrine, was "174"). Any artifact of
+   this plan citing 173/174/175 is to be read as 158/159/160.
+4. **Ceremony reality (S261):** ALL canonical-guarded surfaces (incl.
+   `.claude/adr/ADR-*.md` and every `SKILL.md` write — both confirmed guarded
+   for NEW files too) are STAGED under `PLAN-153/staged/<wave>/` as complete
+   final files with per-wave `MANIFEST.md`. Sentinels are drafted per wave at
+   `PLAN-153/architect/round-{1..4}/approved.md` (SIGNED SCOPE markers, exact
+   paths, `__ANCHOR_SHA__` placeholder filled at signing time) — round-1 =
+   SENT-E, round-2 = SENT-B, round-3 = SENT-CDG (SKILL.md namespace),
+   round-4 = SENT-BACKLOG. Owner applies via `~/Desktop/ceo-wakeup/`
+   (sign → scope==touched assert → overlay apply → full CI-equivalent gates →
+   commit per wave), the S258 patcher precedent: the Owner's shell applies the
+   exact authorized diff; the signed sentinel is the authorization record.
+   Signer-rail repairs folded into the same ceremony: sentinel-signers
+   registry YAML is pre-GENESIS (placeholder bootstrap_sha256 + DEADBEEF cold
+   keys) and `skill-patch-signers.txt` is all-zeros (promote fail-closed) —
+   both get the real fpr at wake-up.
+5. **Wave G contract materialized:** `artifacts/wave-g-materialized-list.md`
+   (18 plan-named rows verbatim + 7 selected by deterministic doctrine; 72
+   deferred ADAPTs enumerated by name; arithmetic reconciles 97−25=72).
+
 ## Execution order
 
 `A → E → B → C → D → G` (letters are stable labels). Wave F was carved to
