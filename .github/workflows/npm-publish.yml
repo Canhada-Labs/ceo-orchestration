@@ -8,7 +8,10 @@ name: NPM Publish
 # ~2026-09-28). Manual `npm publish` is not used. The workflow:
 #   1. Verifies VERSION + npm/package.json version + tag are consistent
 #   2. Asserts package.json has zero runtime dependencies
-#   3. Publishes with --provenance (Sigstore-attested)
+#   3. Checks the registry for the exact version (PLAN-153 Wave B item 5
+#      `already_published` idempotency guard) — if already present, the
+#      run succeeds as a no-op instead of failing on EPUBLISHCONFLICT
+#   4. Publishes with --provenance (Sigstore-attested)
 #
 # PLAN-013 Phase 0 item 0.2 hardening (debate Round 1 consensus §C5
 # CRITICAL, 2/5 agents — DevOps + Staff Backend):
@@ -43,6 +46,11 @@ jobs:
     # RC tags contain `-rc.` (e.g. `v1.4.0-rc.1`). Skip them entirely.
     # Only GA tags (`v1.4.0`) proceed, and those gate through the
     # `production-npm` environment (manual approval).
+    # PLAN-153 Wave B item 5 (f): RC posture UNCHANGED — this exclusion
+    # is load-bearing (PLAN-013 anti-goals #3/#16) and MUST survive any
+    # future edit to this file; the draft `next` dist-tag idea was
+    # DROPPED by ratified debate. Pinned by
+    # .claude/scripts/tests/test_release_workflow_asserts.py.
     if: "!contains(github.ref, '-rc.')"
     runs-on: ubuntu-latest
     environment: production-npm
@@ -195,8 +203,51 @@ jobs:
           print("OK: packlist clean — %d files" % len(paths))
           '
 
+      # -----------------------------------------------------------------
+      # PLAN-153 Wave B item 5 (a) — `already_published` idempotency
+      # guard. Before publishing, ask the registry whether this exact
+      # name@version already exists. If it does (a re-run of a
+      # previously successful publish, or a re-run after a post-publish
+      # step failed), the Publish step is skipped and the job succeeds
+      # as a documented no-op instead of going red on EPUBLISHCONFLICT.
+      #
+      # Detection is deliberately conservative: "published" ONLY when
+      # `npm view <name>@<version> version` exits 0 AND prints exactly
+      # the version (npm has historically flip-flopped between
+      # rc!=0/E404 and rc=0/empty-stdout for a missing version of an
+      # existing package — both shapes are treated as not-published).
+      # Any registry/network error therefore falls through to the
+      # publish attempt, which preserves today's behavior (npm itself
+      # fails closed on a true conflict). No auth needed: the package
+      # is public and `npm view` is an unauthenticated read.
+      # -----------------------------------------------------------------
+      - name: Check registry for already-published version
+        id: already_published
+        working-directory: npm
+        run: |
+          set -euo pipefail
+          PKG_NAME=$(node -p "require('./package.json').name")
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          set +e
+          SEEN=$(npm view "${PKG_NAME}@${PKG_VERSION}" version 2>/dev/null)
+          RC=$?
+          set -e
+          if [[ "$RC" -eq 0 && "$SEEN" == "$PKG_VERSION" ]]; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::${PKG_NAME}@${PKG_VERSION} already exists in the registry — publish will be skipped (idempotent re-run, succeed-as-noop)"
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+            echo "OK: ${PKG_NAME}@${PKG_VERSION} not in registry (rc=$RC) — proceeding to publish"
+          fi
+
       - name: Publish
+        if: steps.already_published.outputs.published != 'true'
         working-directory: npm
         run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish skipped — version already in registry (no-op success)
+        if: steps.already_published.outputs.published == 'true'
+        run: |
+          echo "::notice::publish skipped — exact version already in the registry; this re-run is an idempotent no-op (PLAN-153 Wave B item 5)"

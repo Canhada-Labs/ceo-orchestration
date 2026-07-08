@@ -124,6 +124,14 @@
 #      placeholder left unrendered is reported with a stderr warning and
 #      listed at the end.
 #   8. Lists placeholders the user must fill in.
+#   9. (PLAN-153 Wave B item B1) Records the install-state at
+#      .claude/.install-state.json (schema ceo.install-state/v1, atomic
+#      same-directory tmpfile + rename): the ORIGINAL request (verbatim
+#      argv + every parsed flag + the RESOLVED placeholder map) and each
+#      operation performed, updated on every run. Target-side, UNSIGNED,
+#      advisory — same trust class as the ADR-155 baseline manifest.
+#      upgrade.sh (item B2) replays request.profile / request.stack as
+#      DEFAULTS when its own flags are omitted.
 #
 # Idempotent: re-running won't clobber edited files.
 #
@@ -308,6 +316,11 @@ _verify_self_sha "$SCRIPT_SRC"
 
 # ---- Arg parsing ----
 
+# PLAN-153 Wave B item B1 — capture the ORIGINAL request argv verbatim BEFORE
+# the parser consumes it, so the post-install state record persists exactly
+# what the Owner asked for. Data only: recorded, never eval-ed or re-expanded.
+ORIG_ARGV=( "$@" )
+
 TARGET=""
 MODE="copy"
 PROFILE="core,frontend"
@@ -378,7 +391,7 @@ print_help() {
   # the LGPD/fintech placeholder flags --city/--country/--domain/
   # --founder-name/--legal-id/--production-url). Range bounded by the
   # "Portability:" trailer to stay drift-stable.
-  sed -n '3,120p' "$0"
+  sed -n '3,136p' "$0"
   exit 0
 }
 
@@ -600,6 +613,9 @@ detect_mtime() {
 
 cleanup_on_failure() {
   local rc=$?
+  # PLAN-153 Wave B item B1 — the ops journal lives OUTSIDE $TARGET; drop it
+  # on every exit path (fail-open, never affects rc).
+  if [[ -n "${_STATE_OPS_FILE:-}" ]]; then rm -f "$_STATE_OPS_FILE" 2>/dev/null || true; fi
   if [[ "$DRY_RUN" -eq 1 ]]; then
     # Dry-run never touches $TARGET, so never restore.
     exit "$rc"
@@ -623,6 +639,25 @@ cleanup_on_failure() {
   exit "$rc"
 }
 trap cleanup_on_failure EXIT
+
+# ---------------------------------------------------------------------
+# PLAN-153 Wave B item B1 — install-state operation journal.
+# Each major install operation appends one TAB-separated line
+# (op<TAB>detail) to a tempfile OUTSIDE $TARGET; _write_install_state
+# folds the journal into .claude/.install-state.json at the end of a
+# successful run. Dry-run never creates the journal (the "no files
+# modified" promise). Fail-open: journal problems never abort anything.
+# ---------------------------------------------------------------------
+_STATE_OPS_FILE=""
+if [[ "$DRY_RUN" -eq 0 ]]; then
+  _STATE_OPS_FILE="$(mktemp "${TMPDIR:-/tmp}/ceo-install-ops.XXXXXX" 2>/dev/null || true)"
+fi
+_state_record_op() {
+  if [[ -n "${_STATE_OPS_FILE:-}" && -f "${_STATE_OPS_FILE:-}" ]]; then
+    printf '%s\t%s\n' "$1" "${2:-}" >> "$_STATE_OPS_FILE" 2>/dev/null || true
+  fi
+  return 0
+}
 
 if [[ "$DRY_RUN" -eq 0 ]]; then
   if [[ -d "$TARGET/.claude" ]]; then
@@ -772,6 +807,7 @@ has_profile() {
 
 # ---- 1. Team rosters (always installed — these are templates with placeholders) ----
 
+_state_record_op "install_team_rosters" ".claude/team.md + .claude/frontend-team.md"
 install_one ".claude/team.md"
 install_one ".claude/frontend-team.md"
 
@@ -780,6 +816,7 @@ install_one ".claude/frontend-team.md"
 if has_profile "core"; then
   echo ""
   echo "==> Installing core skills"
+  _state_record_op "install_skills" "core"
   install_one ".claude/skills/core"
 fi
 
@@ -788,6 +825,7 @@ fi
 if has_profile "frontend"; then
   echo ""
   echo "==> Installing frontend skills"
+  _state_record_op "install_skills" "frontend"
   install_one ".claude/skills/frontend"
 fi
 
@@ -803,6 +841,7 @@ for part in "${PROFILE_PARTS[@]}"; do
     fi
     echo ""
     echo "==> Installing domain: $part"
+    _state_record_op "install_skills" "domain:$part"
     install_one ".claude/skills/domains/$part"
   fi
 done
@@ -852,6 +891,7 @@ install_lib_selective() {
 install_hooks_selective() {
   echo ""
   echo "==> Installing hooks (top-level + _lib/, tests/ + legacy/ excluded)"
+  _state_record_op "install_hooks" "selective (top-level + _lib)"
   install_lib_selective
   local f base
   for f in "$SOURCE_DIR/.claude/hooks/"*.sh "$SOURCE_DIR/.claude/hooks/"*.py; do
@@ -871,6 +911,7 @@ install_dispatcher() {
   fi
   echo ""
   echo "==> Installing dispatcher (.claude/dispatcher/ — E6-F5 validate-governance gate)"
+  _state_record_op "install_dispatcher" ".claude/dispatcher"
   local f
   if [[ "$DRY_RUN" -eq 1 ]]; then
     for f in routing-matrix.yaml routing-matrix-loader.py disable_predicate_eval.py; do
@@ -890,6 +931,7 @@ install_dispatcher() {
 install_scripts_selective() {
   echo ""
   echo "==> Installing scripts (top-level only, tests/ excluded)"
+  _state_record_op "install_scripts" "selective"
   # PLAN-085 Wave A.1 (F-A-QA-0001-c7f21a3e): *.yaml extension added to
   # the glob so policy/config YAMLs co-located with scripts/ ship to
   # adopters. Without this, files like smart-loading-cap-table.yaml
@@ -917,6 +959,7 @@ install_scripts_selective() {
 install_tier_policy() {
   echo ""
   echo "==> Installing tier-policy (templates/.claude/tier-policy.json + .sigchain)"
+  _state_record_op "install_tier_policy" ".claude/tier-policy.json"
   install_template "templates/.claude/tier-policy.json"          ".claude/tier-policy.json"
   install_template "templates/.claude/tier-policy.json.sigchain" ".claude/tier-policy.json.sigchain"
 }
@@ -970,6 +1013,7 @@ osv_supply_chain_advisory() {
 
   echo ""
   echo "==> Supply-chain advisory (OSV.dev / OSSF malicious-packages) — mode=$mode"
+  _state_record_op "supply_chain_advisory" "mode=$mode"
 
   # The framework ships no third-party runtime installs of its own (stdlib
   # only). The surface this gate guards is the set of install commands an
@@ -1025,6 +1069,7 @@ install_policies_bundle() {
   fi
   echo ""
   echo "==> Installing policy-as-code bundle (PLAN-014 Phase A)"
+  _state_record_op "install_policy_bundle" ".claude/policies"
   install_one ".claude/policies"
 }
 
@@ -1046,6 +1091,7 @@ osv_supply_chain_advisory || {
     echo "             Review the breadcrumb above before running that install." >&2
   fi
 }
+_state_record_op "install_commands_and_catalogs" ".claude/commands + pitfalls-catalog + task-chains + agent-metrics"
 install_one ".claude/commands"
 install_one ".claude/pitfalls-catalog.yaml"
 install_one ".claude/task-chains.yaml"
@@ -1056,6 +1102,7 @@ install_one ".claude/agent-metrics.md"
 install_plan_schemas() {
   echo ""
   echo "==> Installing plan schemas + debate fixture"
+  _state_record_op "install_plan_schemas" ""
   install_one ".claude/plans/README.md"
   install_one ".claude/plans/PLAN-SCHEMA.md"
   install_one ".claude/plans/AUDIT-LOG-SCHEMA.md"
@@ -1070,6 +1117,7 @@ install_plan_schemas
 install_adr_template() {
   echo ""
   echo "==> Installing ADR template"
+  _state_record_op "install_adr_template" ".claude/adr/README.md"
   install_one ".claude/adr/README.md"
 }
 
@@ -1084,6 +1132,7 @@ install_spec_v1() {
   fi
   echo ""
   echo "==> Installing SPEC v1 schemas (~$(ls "$SOURCE_DIR"/SPEC/v1/*.md 2>/dev/null | wc -l | tr -d ' ') files)"
+  _state_record_op "install_spec_v1" "SPEC/v1"
   install_one "SPEC/v1"
 }
 
@@ -1098,6 +1147,7 @@ install_version() {
   fi
   echo ""
   echo "==> Installing VERSION manifest ($(tr -d '\n' < "$SOURCE_DIR/VERSION"))"
+  _state_record_op "install_version_manifest" "VERSION"
   install_one "VERSION"
 }
 
@@ -1109,6 +1159,7 @@ install_reference_personas() {
   if [[ "$WITH_REFERENCE_PERSONAS" -eq 1 ]]; then
     echo ""
     echo "==> Installing reference personas (opt-in)"
+    _state_record_op "install_reference_personas" "opt-in"
     local src="$SOURCE_DIR/templates/team-personas-reference.md"
     local dst="$TARGET/.claude/team-personas-reference.md"
     if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -1168,6 +1219,7 @@ install_docs_template() {
 install_docs_templates() {
   echo ""
   echo "==> Installing docs/ templates"
+  _state_record_op "install_docs_templates" "BRANCH-PROTECTION.md + rotation-log.md"
   install_docs_template "templates/docs/BRANCH-PROTECTION.md" "docs/BRANCH-PROTECTION.md"
   install_docs_template "templates/docs/rotation-log.md" "docs/rotation-log.md"
 }
@@ -1179,6 +1231,7 @@ if [[ "$CEREMONY" != "user" ]]; then install_docs_templates; fi  # WS4-guard-doc
 install_github_templates() {
   echo ""
   echo "==> Installing .github/ templates"
+  _state_record_op "install_github_templates" ""
 
   local codeowners_src="$SOURCE_DIR/templates/.github/CODEOWNERS.template"
   if [[ ! -f "$codeowners_src" ]]; then
@@ -1218,6 +1271,7 @@ if [[ "$CEREMONY" != "user" ]]; then install_github_templates; fi  # WS4-guard-g
 
 echo ""
 echo "==> Building settings.json"
+_state_record_op "build_settings" "stack=$STACK"
 
 SETTINGS_DST="$TARGET/.claude/settings.json"
 BASE_SRC="$SOURCE_DIR/templates/settings/settings.base.json"
@@ -1471,6 +1525,7 @@ PY
 
 echo ""
 echo "==> Deny baseline (coarse backstop — PLAN-153 Wave E; docs/deny-baseline.md)"
+_state_record_op "apply_deny_baseline" "install.sh section 6a"
 apply_deny_baseline
 
 # ---- 6b. P2-SEC-H (PLAN-019 Phase 3 Wave 3B): MCP secrets directory ----
@@ -1500,6 +1555,7 @@ install_mcp_secrets_dir() {
 
   echo ""
   echo "==> MCP secrets directory (P2-SEC-H)"
+  _state_record_op "ensure_mcp_secrets_dir" "state/mcp_client_secrets 0700"
   mkdir -p "$secrets_dir"
   chmod 700 "$secrets_dir"
   echo "    ENSURED: $secrets_dir (mode 0700)"
@@ -1536,6 +1592,7 @@ if [[ "$CEREMONY" != "user" ]]; then install_mcp_secrets_dir; fi  # WS4-guard-mc
 
 echo ""
 echo "==> Installing project templates"
+_state_record_op "install_project_templates" "ceremony=$CEREMONY"
 if [[ "$CEREMONY" != "user" ]]; then  # WS4-guard-projtmpl
 install_template "templates/CLAUDE.md" "CLAUDE.md"
 install_template "templates/MEMORY.md" "MEMORY.md"
@@ -1601,6 +1658,7 @@ To pull updates:
 $pointer_body
 EOF
   echo "    CREATED: PROTOCOL.md (pointer)"
+  _state_record_op "install_protocol_pointer" "PROTOCOL.md"
 }
 
 if [[ "$CEREMONY" != "user" ]]; then install_protocol_pointer; fi  # WS4-guard-proto
@@ -1698,6 +1756,7 @@ apply_placeholder_substitutions() {
 
   echo ""
   echo "==> Applying placeholder substitutions"
+  _state_record_op "apply_placeholder_substitutions" ""
 
   # Files we are allowed to rewrite — strictly the template-sourced files
   # that install.sh just placed. We check existence first.
@@ -1786,6 +1845,7 @@ validate_no_unrendered_placeholders() {
 
   echo ""
   echo "==> Scanning for unrendered placeholders ({{X}} patterns)"
+  _state_record_op "scan_unrendered_placeholders" "strict=$strict"
 
   local scan_roots=(
     "$TARGET/CLAUDE.md"
@@ -1853,6 +1913,7 @@ validate_no_unrendered_placeholders
 if [[ "${VERIFY:-0}" -eq 1 ]]; then
   echo ""
   echo "==> Verifying installed skill checksums (--verify)"
+  _state_record_op "verify_skill_checksums" ""
   manifest="$TARGET/.claude/skill-manifest.sha256"
   if [[ ! -f "$manifest" ]]; then
     echo "    NOTE: no skill-manifest.sha256 present — skipping verify"
@@ -1945,6 +2006,7 @@ write_install_manifest() {
   local manifest="$TARGET/.claude/.install-manifest.sha256"
   echo ""
   echo "==> Writing install baseline manifest (.claude/.install-manifest.sha256)"
+  _state_record_op "write_install_manifest" ".claude/.install-manifest.sha256"
 
   # Profile-aware enumeration rooted at the installed target; the SINGLE shared
   # generator in _framework_manifest_set.sh does the walk + hashing + LINK
@@ -1957,8 +2019,227 @@ write_install_manifest() {
   return 0
 }
 
+
+# ----------------------------------------------------------------------
+# PLAN-153 Wave B item B1 — persist the install-state.
+# ----------------------------------------------------------------------
+# Writes $TARGET/.claude/.install-state.json (next to the ADR-155 baseline
+# manifest): the ORIGINAL request — verbatim argv + every parsed flag + the
+# RESOLVED placeholder map (CLI > env > deterministic default; empty values
+# omitted) — plus the operation journal for THIS run.
+#
+#   * Atomic: python writes a same-directory tempfile, then os.replace().
+#   * Updated on every run: first_recorded_at + run_count + a bounded
+#     history (last 20 runs) survive re-installs; request/operations
+#     reflect the LATEST run.
+#   * Schema-versioned: schema ceo.install-state/v1, schema_version 1.
+#   * Consumed by upgrade.sh (PLAN-153 B2): request.profile/request.stack
+#     become upgrade DEFAULTS when its own flags are omitted. A missing or
+#     invalid state file degrades upgrade.sh to the ADR-155 drift-classifier
+#     path — never an error, never a no-op (debate C back-compat must-fix).
+#   * TRUST: target-side, UNSIGNED, advisory — the same trust class as the
+#     ADR-155 baseline manifest (whoever can write the target tree can
+#     rewrite it). upgrade.sh charset-validates every replayed value and
+#     falls back on anything suspect; values are data, never eval-ed.
+#   * Fail-open: no python3 / write error => stderr NOTE, install still
+#     succeeds. Dry-run never writes (the "no files modified" promise).
+#   * NOT covered by the baseline-manifest enumeration (like the manifest
+#     dotfile itself), so the upgrade classifier never touches it.
+_write_install_state() {
+  [[ "${DRY_RUN:-0}" -eq 0 ]] || return 0
+  if ! command -v python3 >/dev/null 2>&1; then
+    echo "    NOTE: install-state skipped (python3 not found) — upgrade.sh will use the ADR-155 fallback path" >&2
+    return 0
+  fi
+  local state_file="$TARGET/.claude/.install-state.json"
+  local fw_version=""
+  if [[ -f "$SOURCE_DIR/VERSION" ]]; then
+    fw_version="$(tr -d '[:space:]' < "$SOURCE_DIR/VERSION" 2>/dev/null || true)"
+  fi
+
+  echo ""
+  echo "==> Writing install-state (.claude/.install-state.json — PLAN-153 Wave B)"
+
+  # Flat key/value pairs, argv-passed (PLAN-106 G.2.b house pattern: never
+  # source-string interpolation; python3 -I + PYTHONNOUSERSITE=1). Keys with
+  # a "ph." prefix land in request.placeholders; empty ph values are omitted.
+  local pairs=(
+    "target" "$TARGET"
+    "mode" "$MODE"
+    "profile" "$PROFILE"
+    "stack" "$STACK"
+    "stack_explicit" "$STACK_EXPLICIT"
+    "ceremony" "$CEREMONY"
+    "github_owner" "$GITHUB_OWNER"
+    "with_reference_personas" "$WITH_REFERENCE_PERSONAS"
+    "strict_placeholders" "$STRICT_PLACEHOLDERS"
+    "verify" "$VERIFY"
+    "ph.OWNER_NAME" "$PH_OWNER_NAME"
+    "ph.PROJECT_NAME" "$PH_PROJECT_NAME"
+    "ph.PROJECT_PATH" "$PH_PROJECT_PATH"
+    "ph.STACK" "$PH_STACK"
+    "ph.PROTOCOL_SOURCE" "$PH_PROTOCOL_SOURCE"
+    "ph.DEPLOY_COMMAND" "$PH_DEPLOY_COMMAND"
+    "ph.DEPLOY_PLATFORM" "$PH_DEPLOY_PLATFORM"
+    "ph.DEPLOY_TARGET" "$PH_DEPLOY_TARGET"
+    "ph.RUNTIME_NOTES" "$PH_RUNTIME_NOTES"
+    "ph.DATABASE" "$PH_DATABASE"
+    "ph.N_BACKEND" "$PH_N_BACKEND"
+    "ph.N_FRONTEND" "$PH_N_FRONTEND"
+    "ph.FRONTEND_STACK" "$PH_FRONTEND_STACK"
+    "ph.FRONTEND_PATH" "$PH_FRONTEND_PATH"
+    "ph.FRONTEND_REPO_PATH" "$PH_FRONTEND_REPO_PATH"
+    "ph.UI_LIBRARY" "$PH_UI_LIBRARY"
+    "ph.STATE_MANAGEMENT" "$PH_STATE_MANAGEMENT"
+    "ph.REALTIME_TRANSPORT" "$PH_REALTIME_TRANSPORT"
+    "ph.CHARTING_LIBRARY" "$PH_CHARTING_LIBRARY"
+    "ph.AUTH_PROVIDER" "$PH_AUTH_PROVIDER"
+    "ph.I18N_FRAMEWORK" "$PH_I18N_FRAMEWORK"
+    "ph.TEST_FRAMEWORK" "$PH_TEST_FRAMEWORK"
+    "ph.TEST_TOOL" "$PH_TEST_TOOL"
+    "ph.TEST_COUNT" "$PH_TEST_COUNT"
+    "ph.LINT_TOOL" "$PH_LINT_TOOL"
+    "ph.CI_TOOL" "$PH_CI_TOOL"
+    "ph.APP_NAME" "$PH_APP_NAME"
+    "ph.SOURCE_FILE_COUNT" "$PH_SOURCE_FILE_COUNT"
+    "ph.LINE_COUNT" "$PH_LINE_COUNT"
+    "ph.LINES" "$PH_LINES"
+    "ph.FILE_COUNT" "$PH_FILE_COUNT"
+    "ph.PAGE_COUNT" "$PH_PAGE_COUNT"
+    "ph.COMPONENT_COUNT" "$PH_COMPONENT_COUNT"
+    "ph.HOOK_COUNT" "$PH_HOOK_COUNT"
+    "ph.BUNDLE_SIZE" "$PH_BUNDLE_SIZE"
+    "ph.CITY" "$PH_CITY"
+    "ph.COUNTRY" "$PH_COUNTRY"
+    "ph.DOMAIN" "$PH_DOMAIN"
+    "ph.FOUNDER_NAME" "$PH_FOUNDER_NAME"
+    "ph.LEGAL_ID" "$PH_LEGAL_ID"
+    "ph.PRODUCTION_URL" "$PH_PRODUCTION_URL"
+  )
+
+  if ! PYTHONNOUSERSITE=1 python3 -I -c '
+import json, os, sys, tempfile, time
+args = sys.argv[1:]
+state_path, ops_path, fw_version = args[0], args[1], args[2]
+n = int(args[3]); kv = args[4:4 + n]; orig_argv = list(args[4 + n:])
+vals = {}; ph = {}
+i = 0
+while i + 1 < len(kv):
+    k, v = kv[i], kv[i + 1]
+    if k.startswith("ph."):
+        if v != "":
+            ph[k[3:]] = v
+    else:
+        vals[k] = v
+    i += 2
+ops = []
+if ops_path and os.path.isfile(ops_path):
+    try:
+        with open(ops_path, "r", encoding="utf-8", errors="replace") as f:
+            for line in f:
+                line = line.rstrip("\n")
+                if not line:
+                    continue
+                parts = line.split("\t", 1)
+                ops.append({"op": parts[0], "detail": parts[1] if len(parts) > 1 else ""})
+    except OSError:
+        pass
+now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+prev = None
+try:
+    with open(state_path, "r", encoding="utf-8") as f:
+        prev = json.load(f)
+    if not isinstance(prev, dict):
+        prev = None
+except (OSError, ValueError):
+    prev = None
+first, run_count, history = now, 1, []
+if prev is not None:
+    v = prev.get("first_recorded_at")
+    if isinstance(v, str) and v:
+        first = v
+    rc = prev.get("run_count")
+    if isinstance(rc, int) and rc > 0:
+        run_count = rc + 1
+    h = prev.get("history")
+    if isinstance(h, list):
+        history = [e for e in h if isinstance(e, dict)][-19:]
+    pr = prev.get("request"); pt = prev.get("tool"); pw = prev.get("written_at")
+    history.append({
+        "at": pw if isinstance(pw, str) else "",
+        "tool": (pt.get("name", "") if isinstance(pt, dict) else ""),
+        "profile": (pr.get("profile", "") if isinstance(pr, dict) else ""),
+        "stack": (pr.get("stack", "") if isinstance(pr, dict) else ""),
+    })
+    history = history[-20:]
+    # Placeholder map is a UNION across runs: install.sh is EXISTS-SKIP
+    # idempotent and never un-substitutes, so a value recorded by an earlier
+    # run remains in effect on disk even when a later run omits the flag.
+    # New non-empty values override recorded ones.
+    if isinstance(pr, dict):
+        oph = pr.get("placeholders")
+        if isinstance(oph, dict):
+            merged = {}
+            for k in oph:
+                if isinstance(k, str) and isinstance(oph[k], str):
+                    merged[k] = oph[k]
+            merged.update(ph)
+            ph = merged
+req = {
+    "argv": orig_argv,
+    "target": vals.get("target", ""),
+    "mode": vals.get("mode", ""),
+    "profile": vals.get("profile", ""),
+    "stack": vals.get("stack", ""),
+    "stack_explicit": vals.get("stack_explicit", "0") == "1",
+    "ceremony": vals.get("ceremony", ""),
+    "github_owner": vals.get("github_owner", ""),
+    "with_reference_personas": vals.get("with_reference_personas", "0") == "1",
+    "strict_placeholders": vals.get("strict_placeholders", "0") == "1",
+    "verify": vals.get("verify", "0") == "1",
+    "placeholders": ph,
+}
+state = {
+    "schema": "ceo.install-state/v1",
+    "schema_version": 1,
+    "written_at": now,
+    "first_recorded_at": first,
+    "run_count": run_count,
+    "tool": {"name": "install.sh", "framework_version": fw_version},
+    "request": req,
+    "operations": ops,
+    "result": {"install_succeeded": True,
+               "baseline_manifest": ".claude/.install-manifest.sha256"},
+    "history": history,
+    "_comment": "Target-side, UNSIGNED, advisory record (same trust class as the ADR-155 baseline manifest). upgrade.sh replays request.profile/request.stack as DEFAULTS only; explicit flags always win. Not a trust anchor.",
+}
+d = os.path.dirname(state_path) or "."
+if not os.path.isdir(d):
+    sys.exit(3)
+fd, tmp = tempfile.mkstemp(prefix=".install-state.", suffix=".tmp", dir=d)
+try:
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        json.dump(state, f, indent=2)
+        f.write("\n")
+    os.replace(tmp, state_path)
+except BaseException:
+    try:
+        os.unlink(tmp)
+    except OSError:
+        pass
+    raise
+' "$state_file" "${_STATE_OPS_FILE:-}" "$fw_version" "${#pairs[@]}" "${pairs[@]}" \
+    ${ORIG_ARGV[@]+"${ORIG_ARGV[@]}"} 2>/dev/null; then
+    echo "    NOTE: install-state write failed — upgrade.sh will use the ADR-155 fallback path (fail-open)" >&2
+    return 0
+  fi
+  echo "    WROTE: .claude/.install-state.json (schema ceo.install-state/v1, atomic)"
+  return 0
+}
+
 if [[ "$DRY_RUN" -eq 0 ]]; then
   write_install_manifest
+  _write_install_state
 fi
 INSTALL_SUCCEEDED=1
 

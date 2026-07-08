@@ -40,6 +40,21 @@
 #     runs it explicitly after a deliberate `git pull`; the framework never
 #     self-updates or auto-downloads in the background (convergent with kooky's
 #     manual-only update checker — see PLAN-125 WS-3c / E5).
+#   - (PLAN-153 Wave B item B2) REPLAYS the RECORDED install request: when
+#     $TARGET/.claude/.install-state.json (written by install.sh since Wave B;
+#     schema ceo.install-state/v1) is present and valid, --profile/--stack
+#     DEFAULT to the recorded request.profile/request.stack. Explicit flags
+#     always win; --no-replay opts out entirely. BACK-COMPAT (debate C
+#     must-fix): a missing state file (every pre-Wave-B install) or an
+#     unreadable/invalid one NEVER errors and NEVER no-ops — the upgrade
+#     proceeds exactly as before on the ADR-155 path (--dry-run previews +
+#     the baseline drift-classifier below preserve/refuse customizations,
+#     degrading to diff -q warn-then-clobber when no baseline manifest
+#     exists either). After a successful non-dry upgrade the state file is
+#     (re)written, so the pre-Wave-B population acquires one (mirrors
+#     ADR-155 decision iv for the manifest). Replayed values are charset-
+#     validated data — the state file is UNSIGNED and advisory, never a
+#     trust anchor, and is never eval-ed.
 #
 # Run after `git pull` in the source ceo-orchestration repo.
 
@@ -72,6 +87,10 @@ if [ -f "$SCRIPT_DIR/_framework_manifest_set.sh" ]; then
   . "$SCRIPT_DIR/_framework_manifest_set.sh"
 fi
 
+# PLAN-153 Wave B item B2 — capture the ORIGINAL upgrade argv verbatim BEFORE
+# parsing, for the post-upgrade state record (data only, never eval-ed).
+ORIG_UP_ARGV=( "$@" )
+
 TARGET=""
 PROFILE="core,frontend"
 STACK="none"
@@ -81,16 +100,21 @@ DIFF_WARN=1
 DEPRECATION_WARN=1
 SETTINGS_MERGE=1
 ON_CONFLICT="refuse"   # PLAN-138 Wave C (ADR-155): {refuse|theirs|backup}; default refuse (OQ2)
+REPLAY=1               # PLAN-153 Wave B item B2: replay the recorded install request (opt out: --no-replay)
+PROFILE_EXPLICIT=0      # PLAN-153 B2: explicit --profile always beats a replayed value
+STACK_EXPLICIT=0        # PLAN-153 B2: explicit --stack always beats a replayed value
 SKIP_GLOBS=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --profile)
       PROFILE="${2:-}"
+      PROFILE_EXPLICIT=1
       shift 2
       ;;
     --stack)
       STACK="${2:-}"
+      STACK_EXPLICIT=1
       shift 2
       ;;
     --pin)
@@ -111,6 +135,11 @@ while [[ $# -gt 0 ]]; do
       ;;
     --no-settings-merge)
       SETTINGS_MERGE=0
+      shift
+      ;;
+    --no-replay)
+      # PLAN-153 Wave B item B2: ignore .claude/.install-state.json entirely.
+      REPLAY=0
       shift
       ;;
     --skip)
@@ -167,6 +196,13 @@ Options:
                         existing .claude/settings.json. The merge is idempotent
                         + fail-open (never blocks the upgrade); pass this to opt
                         out entirely and manage settings.json by hand.
+  --no-replay           PLAN-153 Wave B (B2): do NOT replay the recorded
+                        install request from .claude/.install-state.json.
+                        By default, when that file exists and validates,
+                        --profile/--stack DEFAULT to the recorded values
+                        (explicit flags always win). Missing/invalid state
+                        falls back to the ADR-155 drift-classifier path —
+                        never an error, never a no-op.
   --skip <glob>         Exclude files from the overwrite (repeat for multiple globs).
                         Example: --skip='.claude/scripts/local/*'
   --skip=<glob>         Alternate inline syntax for --skip.
@@ -360,6 +396,100 @@ if [[ -n "$PIN_REF" ]]; then
 fi
 
 TARGET="$( cd "$TARGET" && pwd )"
+
+# ===========================================================================
+# PLAN-153 Wave B item B2 — replay the RECORDED install request.
+# ===========================================================================
+# install.sh (>= Wave B) records the original request in
+# $TARGET/.claude/.install-state.json (schema ceo.install-state/v1). When
+# present + valid, request.profile / request.stack become the DEFAULTS for
+# this upgrade so an adopter who installed `--profile core,fintech` does not
+# silently get the core,frontend default by forgetting the flag. Explicit
+# flags always win; --no-replay opts out.
+#
+# BACK-COMPAT (debate C must-fix): missing state (ALL pre-Wave-B installs)
+# or unreadable/invalid state NEVER errors and NEVER no-ops — the upgrade
+# proceeds with CLI/default flags on the ADR-155 path (the --dry-run preview
+# and the baseline drift-classifier below), and a state file is (re)written
+# after a successful non-dry upgrade so the NEXT run can replay.
+#
+# TRUST: the state file is target-side, UNSIGNED, advisory (ADR-155 trust
+# class). Values are parsed by python3 -I under PYTHONNOUSERSITE=1, charset-
+# validated (profile: [A-Za-z0-9_,.-]{1,200}; stack: [A-Za-z0-9_.-]{1,100}),
+# and NEVER eval-ed; anything suspect => fallback, exactly as if absent.
+_INSTALL_STATE_FILE="$TARGET/.claude/.install-state.json"
+_REPLAY_SOURCE="cli-default"
+_UP_OPS_FILE=""
+
+# Print "<profile>\t<stack>" from a valid state file; non-zero rc on ANY
+# problem (missing python3, unreadable file, bad JSON, wrong schema_version,
+# non-string or charset-violating values) => caller falls back.
+_read_install_state_request() {
+  command -v python3 >/dev/null 2>&1 || return 3
+  [ -f "$_INSTALL_STATE_FILE" ] && [ -r "$_INSTALL_STATE_FILE" ] || return 3
+  PYTHONNOUSERSITE=1 python3 -I -c '
+import json, re, sys
+try:
+    with open(sys.argv[1], "r", encoding="utf-8") as f:
+        d = json.load(f)
+except (OSError, ValueError):
+    sys.exit(3)
+if not isinstance(d, dict):
+    sys.exit(3)
+if d.get("schema_version") != 1:
+    sys.exit(3)
+req = d.get("request")
+if not isinstance(req, dict):
+    sys.exit(3)
+prof = req.get("profile", "")
+stack = req.get("stack", "")
+if not isinstance(prof, str) or not isinstance(stack, str):
+    sys.exit(3)
+if prof and not re.match(r"^[A-Za-z0-9_,.-]{1,200}$", prof):
+    sys.exit(3)
+if stack and not re.match(r"^[A-Za-z0-9_.-]{1,100}$", stack):
+    sys.exit(3)
+sys.stdout.write(prof + "\t" + stack + "\n")
+' "$_INSTALL_STATE_FILE" 2>/dev/null
+}
+
+if [[ "$REPLAY" -eq 1 ]]; then
+  if [[ -f "$_INSTALL_STATE_FILE" ]]; then
+    _rp_line=""
+    if _rp_line="$(_read_install_state_request)" && [[ -n "$_rp_line" ]]; then
+      _rp_profile="${_rp_line%%$'\t'*}"
+      _rp_stack="${_rp_line#*$'\t'}"
+      _rp_used=0
+      if [[ "$PROFILE_EXPLICIT" -eq 0 && -n "$_rp_profile" ]]; then
+        PROFILE="$_rp_profile"
+        _rp_used=1
+        echo "    REPLAY: --profile $PROFILE (recorded request in .claude/.install-state.json; pass --profile or --no-replay to override)" >&2
+      fi
+      if [[ "$STACK_EXPLICIT" -eq 0 && -n "$_rp_stack" ]]; then
+        STACK="$_rp_stack"
+        _rp_used=1
+        echo "    REPLAY: --stack $STACK (recorded request in .claude/.install-state.json; pass --stack or --no-replay to override)" >&2
+      fi
+      if [[ "$_rp_used" -eq 1 ]]; then
+        _REPLAY_SOURCE="replay"
+      fi
+    else
+      _REPLAY_SOURCE="fallback-invalid-state"
+      echo "    NOTE: .claude/.install-state.json present but unreadable/invalid — IGNORED." >&2
+      echo "          Proceeding with CLI/default flags on the ADR-155 path (baseline" >&2
+      echo "          drift-classifier; --dry-run previews). Never blocks (PLAN-153" >&2
+      echo "          debate C back-compat must-fix); a valid state file is rewritten" >&2
+      echo "          after this upgrade completes." >&2
+    fi
+  else
+    _REPLAY_SOURCE="fallback-no-state"
+    echo "    NOTE: no .claude/.install-state.json in target (pre-Wave-B install)." >&2
+    echo "          Proceeding with CLI/default flags on the ADR-155 path (baseline" >&2
+    echo "          drift-classifier when a manifest exists, else diff -q warn-then-" >&2
+    echo "          clobber). A state file is recorded after this upgrade completes." >&2
+  fi
+fi
+
 TIMESTAMP="$( date +%Y%m%d-%H%M%S )"
 BAK_DIR="$TARGET/.claude.bak/$TIMESTAMP"
 
@@ -371,12 +501,29 @@ echo "    Target:  $TARGET"
 echo "    Backup:  $BAK_DIR"
 echo "    Profile: $PROFILE"
 echo "    Stack:   $STACK"
+if [[ "$_REPLAY_SOURCE" == "replay" ]]; then
+  echo "    Request: replayed from .claude/.install-state.json (PLAN-153 B2)"
+fi
 if [[ -n "$PIN_REF" ]]; then
   echo "    Pinned:  $PIN_REF"
 fi
 echo ""
 
 mkdir -p "$BAK_DIR"
+
+# PLAN-153 Wave B item B2 — upgrade operation journal (same shape as the
+# install-side journal): op<TAB>detail lines in a tempfile OUTSIDE $TARGET,
+# folded into .claude/.install-state.json by _write_upgrade_state at the end.
+# Dry-run never creates it. Fail-open throughout.
+if [[ "$DRY_RUN" -eq 0 ]]; then
+  _UP_OPS_FILE="$(mktemp "${TMPDIR:-/tmp}/ceo-upgrade-ops.XXXXXX" 2>/dev/null || true)"
+fi
+_up_record_op() {
+  if [[ -n "${_UP_OPS_FILE:-}" && -f "${_UP_OPS_FILE:-}" ]]; then
+    printf '%s\t%s\n' "$1" "${2:-}" >> "$_UP_OPS_FILE" 2>/dev/null || true
+  fi
+  return 0
+}
 
 # ===========================================================================
 # PLAN-138 Wave C (ADR-155) — baseline manifest load + per-file classifier.
@@ -599,7 +746,8 @@ _path_is_skipped() {
   local pattern
   for pattern in "${SKIP_GLOBS[@]:-}"; do
     [[ -n "$pattern" ]] || continue
-    # shellcheck disable=SC2053
+    # Intentional unquoted glob match (the whole point of --skip patterns).
+    # shellcheck disable=SC2053,SC2254
     case "$rel" in
       $pattern) return 0 ;;
     esac
@@ -758,6 +906,8 @@ backup_and_replace() {
     return
   fi
 
+  _up_record_op "refresh_target" "$rel_path"
+
   # F-CHAOS-3: warn the Owner about any customization we're about to
   # clobber, BEFORE the overwrite takes place. The backup under
   # $BAK_DIR is still the rollback path, but the warning surfaces the
@@ -899,6 +1049,8 @@ To pull updates:
     return 0
   fi
 
+  _up_record_op "refresh_protocol_pointer" "PROTOCOL.md"
+
   # PLAN-138 Wave C (ADR-155) C.6 — close the verified S238 driver.
   #
   # (a) ALWAYS back up an existing root PROTOCOL.md to $BAK_DIR/PROTOCOL.md
@@ -1032,6 +1184,7 @@ _merge_lifecycle_hooks_into_settings() {
 
   echo ""
   echo "==> Registering new lifecycle hooks into .claude/settings.json (PLAN-135 W2 H8)"
+  _up_record_op "merge_lifecycle_hooks" "additive settings.json merge"
 
   # Idempotent jq program — mirrors staged merges/{60,62,64,70}-*.jq. Registers
   # ALL FIVE new W2 lifecycle hooks (Codex V2 P2: registering only Setup left
@@ -1165,6 +1318,7 @@ upgrade_agents_canonical_only() {
   fi
   echo ""
   echo "==> Upgrading native subagent canonical-5 (ADR-050 + ADR-052)"
+  _up_record_op "upgrade_agents_canonical_only" "canonical-5"
   mkdir -p "$TARGET/.claude/agents"
   for name in "${CANONICAL_AGENTS[@]}"; do
     local SRC="$SOURCE_DIR/.claude/agents/$name"
@@ -1225,6 +1379,7 @@ _refresh_protocol_pointer
 if [[ "$DRY_RUN" -eq 0 ]] && command -v _write_baseline_manifest >/dev/null 2>&1; then
   echo ""
   echo "==> (Re)writing install baseline manifest (.claude/.install-manifest.sha256)"
+  _up_record_op "rewrite_baseline_manifest" ".claude/.install-manifest.sha256"
   export FMS_ROOT="$TARGET"            # enumerate what the target holds post-upgrade
   export FMS_HASH_ROOT="$SOURCE_DIR"   # but record the FRAMEWORK hash, not the
                                        # (possibly customized-and-preserved) target
@@ -1241,6 +1396,147 @@ if [[ "$DRY_RUN" -eq 0 ]] && command -v _write_baseline_manifest >/dev/null 2>&1
   _write_baseline_manifest "$TARGET/.claude/.install-manifest.sha256"
   unset FMS_ROOT FMS_HASH_ROOT FMS_PROFILE_PARTS FMS_MODE FMS_PROTOCOL_HASH
 fi
+
+# ===========================================================================
+# PLAN-153 Wave B item B2 — (re)write the install-state after a successful
+# upgrade, mirroring the ADR-155 decision-(iv) manifest rewrite above: a
+# pre-Wave-B adopter (no state file) ACQUIRES one on their first post-Wave-B
+# upgrade, so the NEXT upgrade can replay. Merge semantics preserve the
+# ORIGINAL install request (argv, mode, ceremony, placeholders map) and only
+# update the replayable fields (request.profile/request.stack) to the values
+# THIS run effectively used; the upgrade run itself is recorded under
+# last_upgrade + history. Atomic (same-directory tempfile + os.replace),
+# schema ceo.install-state/v1, fail-open (a write problem emits a NOTE and
+# never aborts the completed upgrade). Skipped on --dry-run.
+_write_upgrade_state() {
+  [[ "$DRY_RUN" -eq 0 ]] || return 0
+  if ! command -v python3 >/dev/null 2>&1; then
+    echo "    NOTE: install-state not (re)written (python3 not found) — the next upgrade uses the ADR-155 fallback path" >&2
+    return 0
+  fi
+  local fw_version=""
+  if [[ -f "$SOURCE_DIR/VERSION" ]]; then
+    fw_version="$(tr -d '[:space:]' < "$SOURCE_DIR/VERSION" 2>/dev/null || true)"
+  fi
+  local pairs=(
+    "target" "$TARGET"
+    "profile" "$PROFILE"
+    "stack" "$STACK"
+    "on_conflict" "$ON_CONFLICT"
+    "pin" "$PIN_REF"
+    "replay_source" "$_REPLAY_SOURCE"
+  )
+  echo ""
+  echo "==> (Re)writing install-state (.claude/.install-state.json — PLAN-153 Wave B)"
+  if ! PYTHONNOUSERSITE=1 python3 -I -c '
+import json, os, sys, tempfile, time
+args = sys.argv[1:]
+state_path, ops_path, fw_version = args[0], args[1], args[2]
+n = int(args[3]); kv = args[4:4 + n]; up_argv = list(args[4 + n:])
+vals = {}
+i = 0
+while i + 1 < len(kv):
+    vals[kv[i]] = kv[i + 1]; i += 2
+ops = []
+if ops_path and os.path.isfile(ops_path):
+    try:
+        with open(ops_path, "r", encoding="utf-8", errors="replace") as f:
+            for line in f:
+                line = line.rstrip("\n")
+                if not line:
+                    continue
+                parts = line.split("\t", 1)
+                ops.append({"op": parts[0], "detail": parts[1] if len(parts) > 1 else ""})
+    except OSError:
+        pass
+now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+prev = None
+try:
+    with open(state_path, "r", encoding="utf-8") as f:
+        prev = json.load(f)
+    if not isinstance(prev, dict):
+        prev = None
+except (OSError, ValueError):
+    prev = None
+first, run_count, history, req = now, 1, [], None
+if prev is not None:
+    v = prev.get("first_recorded_at")
+    if isinstance(v, str) and v:
+        first = v
+    rc = prev.get("run_count")
+    if isinstance(rc, int) and rc > 0:
+        run_count = rc + 1
+    h = prev.get("history")
+    if isinstance(h, list):
+        history = [e for e in h if isinstance(e, dict)][-19:]
+    pr = prev.get("request")
+    if isinstance(pr, dict):
+        req = pr
+    pt = prev.get("tool"); pw = prev.get("written_at")
+    history.append({
+        "at": pw if isinstance(pw, str) else "",
+        "tool": (pt.get("name", "") if isinstance(pt, dict) else ""),
+        "profile": (req.get("profile", "") if isinstance(req, dict) else ""),
+        "stack": (req.get("stack", "") if isinstance(req, dict) else ""),
+    })
+    history = history[-20:]
+if req is None:
+    req = {
+        "argv": [],
+        "target": vals.get("target", ""),
+        "placeholders": {},
+        "note": "synthesized by upgrade.sh - no pre-Wave-B install.sh record existed (back-compat path)",
+    }
+req["profile"] = vals.get("profile", "")
+req["stack"] = vals.get("stack", "")
+state = {
+    "schema": "ceo.install-state/v1",
+    "schema_version": 1,
+    "written_at": now,
+    "first_recorded_at": first,
+    "run_count": run_count,
+    "tool": {"name": "upgrade.sh", "framework_version": fw_version},
+    "request": req,
+    "last_upgrade": {
+        "at": now,
+        "argv": up_argv,
+        "profile": vals.get("profile", ""),
+        "stack": vals.get("stack", ""),
+        "on_conflict": vals.get("on_conflict", ""),
+        "pin": vals.get("pin", ""),
+        "replay_source": vals.get("replay_source", ""),
+    },
+    "operations": ops,
+    "result": {"upgrade_succeeded": True,
+               "baseline_manifest": ".claude/.install-manifest.sha256"},
+    "history": history,
+    "_comment": "Target-side, UNSIGNED, advisory record (same trust class as the ADR-155 baseline manifest). upgrade.sh replays request.profile/request.stack as DEFAULTS only; explicit flags always win. Not a trust anchor.",
+}
+d = os.path.dirname(state_path) or "."
+if not os.path.isdir(d):
+    sys.exit(3)
+fd, tmp = tempfile.mkstemp(prefix=".install-state.", suffix=".tmp", dir=d)
+try:
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        json.dump(state, f, indent=2)
+        f.write("\n")
+    os.replace(tmp, state_path)
+except BaseException:
+    try:
+        os.unlink(tmp)
+    except OSError:
+        pass
+    raise
+' "$_INSTALL_STATE_FILE" "${_UP_OPS_FILE:-}" "$fw_version" "${#pairs[@]}" "${pairs[@]}" \
+    ${ORIG_UP_ARGV[@]+"${ORIG_UP_ARGV[@]}"} 2>/dev/null; then
+    echo "    NOTE: install-state write failed — the next upgrade falls back to the ADR-155 path (fail-open)" >&2
+  else
+    echo "    WROTE: .claude/.install-state.json (schema ceo.install-state/v1, atomic)"
+  fi
+  if [[ -n "${_UP_OPS_FILE:-}" ]]; then rm -f "$_UP_OPS_FILE" 2>/dev/null || true; fi
+  return 0
+}
+_write_upgrade_state
 
 echo ""
 echo "==> Upgrade complete."

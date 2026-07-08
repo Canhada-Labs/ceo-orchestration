@@ -21,7 +21,7 @@ omitted `.github/workflows/validate.yml` and
 authoritative and matches the built overlay exactly.
 
 <!-- BEGIN SIGNED SCOPE -->
-Approved-By: @Canhada-Labs __ANCHOR_SHA__
+Approved-By: @Canhada-Labs 24d2a27885405f1bcacd10a15d1dfbb4300f692a
 Plans: PLAN-153
 Scope:
   Wave B — installer/release lifecycle (install-state persistence + upgrade
