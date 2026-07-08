@@ -6,6 +6,14 @@
 > as the CEO of the `ceo-orchestration` meta-project, and the "product"
 > is the framework's own evolution (dogfooding).
 
+> **⏭️ PENDING OWNER ACTION (set 2026-07-08, remove when done):** the
+> PLAN-153 guarded overlays landed (`main`, CI green), but the Wave C/D/G
+> **staged skills are not yet promoted** — conduct the `/skill-review`
+> step-by-step to land them (catalog **151 → 166**). Full guide in memory
+> `project_next_skill_review`. ⚠ The staged material is LOCAL-ONLY
+> (`.claude/plans/PLAN-153/staged/wave-{C,D,G}/`, gitignored) — do it from
+> this checkout. Order (AFTER-C): SP-022 → 023 → 026 → 034.
+
 ---
 
 ## 0. Session Protocol (MANDATORY — execute in order)
