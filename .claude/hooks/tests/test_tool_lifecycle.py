@@ -329,8 +329,12 @@ class TestDenyByDefault(_LifecycleBase):
         ev = rows[0]
         # The raw integer must NOT appear as a field.
         self.assertNotIn("duration_ms", ev)
-        # And the raw value 4242 must not appear textually in the row.
-        self.assertNotIn("4242", json.dumps(ev))
+        # And the raw value 4242 must not appear in any SEMANTIC field. The
+        # hmac hex digest is excluded: a hash can coincidentally contain any
+        # digit run (this assertion flaked in CI when the hmac contained
+        # "4242") — the guarantee is about semantic fields, not the digest.
+        ev_semantic = {k: v for k, v in ev.items() if k not in ("hmac", "hmac_error")}
+        self.assertNotIn("4242", json.dumps(ev_semantic))
         self.assertEqual(ev["duration_bucket"], "b_1_10s")
 
     def test_typed_emitter_drops_forbidden_smuggled_fields(self):
@@ -395,7 +399,10 @@ class TestDenyByDefault(_LifecycleBase):
         self.assertEqual(ev["tool_name_enum"], "other")
         self.assertEqual(ev["duration_bucket"], "lt_100ms")
         self.assertNotIn("mcp__", self._raw_log_text())
-        self.assertNotIn("77777", self._raw_log_text())
+        # Smuggled '77777' must not leak into any SEMANTIC field; the hmac
+        # hex digest is excluded (a hash can coincidentally contain the run).
+        ev_semantic = {k: v for k, v in ev.items() if k not in ("hmac", "hmac_error")}
+        self.assertNotIn("77777", json.dumps(ev_semantic))
 
     def test_emit_generic_coerces_smuggled_success_orphan_to_bool(self):
         # Regression for the Codex pair-rail P0: success / orphan are ALSO in
