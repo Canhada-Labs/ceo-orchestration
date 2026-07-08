@@ -1905,6 +1905,164 @@ def _emit_file_assignment_recorded(path_hashes: set, session_id: str) -> None:
         return
 
 
+# ---------------------------------------------------------------------------
+# PLAN-153 Wave E item 7 (ADR-175) — Prompt Defense Baseline gate.  [BEGIN]
+# ---------------------------------------------------------------------------
+# NAMED spawns whose task indicates contact with UNTRUSTED CONTENT (web
+# fetch/search, scraping, imported/upstream/third-party material) MUST carry
+# the 6-bullet `## PROMPT DEFENSE` anti-injection block that
+# `.claude/scripts/inject-agent-context.sh` now emits unconditionally.
+#
+# Failure semantics (CLAUDE.md §4 doctrine):
+#   - INPUT side is fail-CLOSED: heuristic matched + section missing/thin
+#     => BLOCK (precedent: check_bash_safety.py `_e3` parse gate + C4).
+#   - INFRASTRUCTURE side is fail-OPEN: any exception inside this gate
+#     => allow (never punish the session for our own bug).
+#
+# Detection is a CONSERVATIVE lowercase-substring keyword set scanned over
+# the sanitized (fence/comment-stripped) description + prompt. HONESTY —
+# documented false negatives, by design:
+#   - synonyms/other languages are missed ("crawl", "harvest", "baixar",
+#     "read the vendor tarball", ...);
+#   - obfuscated intents (base64, hyphenation, l33t) are missed;
+#   - keywords appearing ONLY inside fenced code blocks are masked by
+#     `_strip_fenced_and_comments` and therefore missed;
+#   - scan is capped at `_PROMPT_DEFENSE_SCAN_CAP` bytes; mentions beyond
+#     the cap are missed.
+# The cheap mitigation for every miss-class is the same: the spawn template
+# emits the block UNCONDITIONALLY, so any template-generated prompt passes
+# regardless of heuristic reach. This gate exists to catch hand-rolled
+# prompts that bypass the template.
+#
+# Kill-switches (advisory demotion — event still emitted, spawn allowed):
+#   CEO_PROMPT_DEFENSE_GATE=0   per-gate opt-out
+#   CEO_SOTA_DISABLE=1          master kill (E3-rail precedent)
+_PROMPT_DEFENSE_HEADER_RE = re.compile(
+    r"^##[ \t]+PROMPT[ \t]+DEFENSE[ \t]*$",
+    flags=re.MULTILINE,
+)
+# A bullet line: "-" or "*" + whitespace + at least one non-space char.
+_PROMPT_DEFENSE_BULLET_RE = re.compile(
+    r"^[ \t]*[-*][ \t]+\S",
+    flags=re.MULTILINE,
+)
+_PROMPT_DEFENSE_MIN_BULLETS = 6
+_PROMPT_DEFENSE_SCAN_CAP = 256 * 1024  # bytes of sanitized text scanned
+# Closed, lowercase substring set. Ordering = report priority (first hit
+# wins; the matched token is the ONLY prompt-derived value that reaches the
+# audit log — closed-enum-safe, no prompt body echo).
+_UNTRUSTED_CONTENT_HINTS: Tuple[str, ...] = (
+    "webfetch",
+    "websearch",
+    "web search",
+    "search the web",
+    "fetch the url",
+    "fetch url",
+    "fetch http",
+    "download from http",
+    "scrape",
+    "scraping",
+    "imported",
+    "upstream",
+    "third-party",
+    "third party",
+    "untrusted",
+)
+
+
+def _prompt_defense_required(
+    description: str, prompt_sanitized: str
+) -> Optional[str]:
+    """Return the first matched untrusted-content hint, or None.
+
+    Pure. Never raises. Bounded scan over lowercase(description + sanitized
+    prompt) capped at `_PROMPT_DEFENSE_SCAN_CAP` bytes.
+    """
+    haystack = (
+        (description or "") + "\n" + (prompt_sanitized or "")
+    )[:_PROMPT_DEFENSE_SCAN_CAP].lower()
+    for hint in _UNTRUSTED_CONTENT_HINTS:
+        if hint in haystack:
+            return hint
+    return None
+
+
+def _has_prompt_defense_block(prompt_sanitized: str) -> bool:
+    """True iff sanitized prompt has `## PROMPT DEFENSE` on its own line
+    with >= `_PROMPT_DEFENSE_MIN_BULLETS` bullet lines before the next
+    `##` heading / EOF. Fence/comment-masked headers do NOT count
+    (P1-SEC-B precedent — caller passes pre-sanitized text)."""
+    if not prompt_sanitized:
+        return False
+    m = _PROMPT_DEFENSE_HEADER_RE.search(prompt_sanitized)
+    if m is None:
+        return False
+    block_start = m.end()
+    nxt = _NEXT_H2_RE.search(prompt_sanitized, block_start)
+    block = prompt_sanitized[
+        block_start: nxt.start() if nxt else len(prompt_sanitized)
+    ]
+    bullets = len(_PROMPT_DEFENSE_BULLET_RE.findall(block))
+    return bullets >= _PROMPT_DEFENSE_MIN_BULLETS
+
+
+def _emit_prompt_defense_event(
+    *, keyword: str, present: bool, enforced: bool
+) -> None:
+    """Emit `spawn_prompt_defense_gate` telemetry. `keyword` is from the
+    closed `_UNTRUSTED_CONTENT_HINTS` enum — no prompt body ever persists.
+    Fail-open."""
+    try:
+        if not _AUDIT_EMIT_AVAILABLE:
+            return
+        _audit_emit.emit_generic(
+            "spawn_prompt_defense_gate",
+            keyword=(keyword or "")[:32],
+            present=1 if present else 0,
+            enforced=1 if enforced else 0,
+        )
+    except Exception:  # pragma: no cover - fail-open
+        return
+
+
+def _enforce_prompt_defense(
+    *,
+    description: str,
+    prompt: str,
+    env: Dict[str, str],
+) -> Optional[Tuple[str, str]]:
+    """Evaluate the Prompt Defense Baseline gate for a NAMED spawn.
+
+    Returns (reason_code, detail) when the gate is ENFORCING and fires;
+    None otherwise. NEVER raises (infra fail-open); the block itself is
+    the input-side fail-CLOSED posture (matched + missing => BLOCK).
+    """
+    try:
+        sanitized = _strip_fenced_and_comments(prompt or "")
+        keyword = _prompt_defense_required(description or "", sanitized)
+        if keyword is None:
+            return None  # no untrusted-content signal — out of scope
+        present = _has_prompt_defense_block(sanitized)
+        master_off = (env.get("CEO_SOTA_DISABLE") or "").strip() == "1"
+        raw = (env.get("CEO_PROMPT_DEFENSE_GATE") or "").strip()
+        gate_off = raw in ("0", "false", "False", "no", "off")
+        enforced = (not master_off) and (not gate_off)
+        _emit_prompt_defense_event(
+            keyword=keyword, present=present, enforced=enforced
+        )
+        if present or not enforced:
+            return None
+        return (
+            "spawn_prompt_defense_missing",
+            f"keyword={keyword} min_bullets={_PROMPT_DEFENSE_MIN_BULLETS}",
+        )
+    except Exception:  # pragma: no cover - fail-open invariant
+        return None
+# ---------------------------------------------------------------------------
+# PLAN-153 Wave E item 7 (ADR-175) — Prompt Defense Baseline gate.  [END]
+# ---------------------------------------------------------------------------
+
+
 def decide(
     *,
     description: str,
@@ -2163,6 +2321,34 @@ def decide(
             _goap_intent_plan_id, _goap_intent_action_id, src_env
         )
         return Decision(allow=True)
+
+    # PLAN-153 Wave E item 7 (ADR-175) — Prompt Defense Baseline gate.
+    # NAMED spawns only (scoped here, after the generic early-return, so
+    # unmatched/generic spawns see zero behavior change). Runs BEFORE the
+    # SKILL REFERENCE / SKILL CONTENT accept-paths so an untrusted-content
+    # spawn missing the block is rejected even when otherwise well-formed.
+    # Input fail-CLOSED (matched + missing block => BLOCK); infra fail-OPEN
+    # inside _enforce_prompt_defense. Kill-switches documented at the gate.
+    _pd_hit = _enforce_prompt_defense(
+        description=description or "",
+        prompt=prompt or "",
+        env=src_env,
+    )
+    if _pd_hit is not None:
+        _pd_code, _pd_detail = _pd_hit
+        return Decision(
+            allow=False,
+            reason=(
+                f"GOVERNANCE: {_pd_code}: {_pd_detail}. This NAMED spawn's "
+                "task indicates contact with untrusted content (WebFetch/"
+                "WebSearch/scrape/imported/upstream/third-party), but the "
+                "prompt has no `## PROMPT DEFENSE` section with >= 6 bullet "
+                "lines. Fix: regenerate the prompt via "
+                ".claude/scripts/inject-agent-context.sh (it emits the block "
+                "unconditionally), or append the 6-bullet anti-injection "
+                "block verbatim. See PLAN-153 Wave E item 7 / ADR-175."
+            ),
+        )
 
     # PLAN-020 Phase 2 — Reference path (ADR-051). If `## SKILL REFERENCE`
     # marker is present, validate strictly (fail-CLOSED). Reference path
@@ -2577,6 +2763,8 @@ _BLOCK_REASON_MARKERS = (
     ("GOVERNANCE: spawn_tool_out_of_scope", "spawn_tool_out_of_scope"),
     ("GOVERNANCE: spawn_depth_over_one", "spawn_depth_over_one"),
     ("GOVERNANCE: spawn_file_assignment_overlap", "spawn_file_assignment_overlap"),
+    # PLAN-153 Wave E item 7 (ADR-175) — Prompt Defense Baseline gate.
+    ("GOVERNANCE: spawn_prompt_defense_missing", "spawn_prompt_defense_missing"),
     # NAMED-spawn-without-skill is the historical default — keep last.
     ("GOVERNANCE: Agent spawn detected as NAMED", "missing_skill_content"),
 )

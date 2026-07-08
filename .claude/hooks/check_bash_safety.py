@@ -94,6 +94,20 @@ from typing import Dict, List, Optional
 
 _PRIVILEGE_PREFIXES = frozenset({"sudo", "doas", "nocorrect"})
 
+# >>> PLAN-153.E5 / ADR-175 citation-gate BEGIN (env-assignment normalization)
+# A leading shell env assignment (`FOO=1 rm -rf /`, `env FOO=1 rm -rf /`)
+# defeated the tokens[0] literal-equality check in every destructive matcher
+# (same bypass class P0-02 closed for sudo/absolute-path spellings). Closing
+# it here is a precondition for the citation gate: the gate's own structured
+# channel is a leading `CEO_DESTRUCTIVE_CITE=...` assignment, which must make
+# the command MORE scrutinized, never less. `env` is folded into the
+# privilege-prefix strip (its value-taking flags -u/-C/--chdir/--unset are
+# consumed like sudo's -u USER).
+_ENV_ASSIGNMENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
+_PRIVILEGE_PREFIXES = frozenset({"sudo", "doas", "nocorrect", "env"})
+_PREFIX_VALUE_FLAGS = ("-u", "--user", "-C", "--chdir", "--unset")
+# <<< PLAN-153.E5 / ADR-175 citation-gate END
+
 
 def _normalize_command_tokens(tokens: List[str]) -> List[str]:
     """Strip privilege-escalation prefixes + normalize the command token.
@@ -109,6 +123,11 @@ def _normalize_command_tokens(tokens: List[str]) -> List[str]:
     - Replaces ``tokens[0]`` with its basename (``/bin/rm`` → ``rm``,
       ``./rm`` → ``rm``) after stripping a single leading backslash
       (shell alias-escape: ``\\rm`` → ``rm``).
+    - PLAN-153.E5 / ADR-175: additionally drops leading shell env
+      assignments (``NAME=VALUE``) and the ``env`` prefix runner, so
+      ``FOO=1 rm -rf /`` / ``env FOO=1 rm -rf /`` / the citation channel
+      ``CEO_DESTRUCTIVE_CITE='…' rm -rf /`` all reach the same matcher
+      decision as a bare ``rm -rf /``.
 
     Returns a NEW list; never mutates ``tokens``. Empty input returns
     the input unchanged. Pure function (no I/O).
@@ -131,19 +150,32 @@ def _normalize_command_tokens(tokens: List[str]) -> List[str]:
     if not tokens:
         return tokens
     working = list(tokens)
-    # Drop leading privilege prefixes (sudo/doas/nocorrect) and any flags
+    # Drop leading privilege prefixes (sudo/doas/nocorrect/env) and any flags
     # that belong to them.
-    while working and working[0] in _PRIVILEGE_PREFIXES:
-        working.pop(0)
-        # Consume prefix-owned flags: any -flag until we hit a non-flag
-        # or run out. For value-taking flags (-u USER / --user=USER),
-        # also pop the following non-flag value token.
-        while working and working[0].startswith("-"):
-            flag = working.pop(0)
-            if (flag in ("-u", "--user")
-                    and working
-                    and not working[0].startswith("-")):
-                working.pop(0)  # consume USER arg
+    # >>> PLAN-153.E5 / ADR-175 citation-gate BEGIN (strip-loop restructure)
+    # Interleaved fixed-point loop: leading NAME=VALUE env assignments and
+    # privilege/env prefixes may alternate (`FOO=1 sudo rm …`,
+    # `sudo env FOO=1 rm …`, `CEO_DESTRUCTIVE_CITE='…' rm …`) — keep
+    # stripping until the first real command token. Pure; never raises.
+    while working:
+        if _ENV_ASSIGNMENT_RE.match(working[0]):
+            working.pop(0)  # leading shell env assignment (NAME=VALUE)
+            continue
+        if working[0] in _PRIVILEGE_PREFIXES:
+            working.pop(0)
+            # Consume prefix-owned flags: any -flag until we hit a non-flag
+            # or run out. For value-taking flags (-u USER / --user=USER /
+            # env's -C DIR / --chdir DIR / --unset NAME), also pop the
+            # following non-flag value token.
+            while working and working[0].startswith("-"):
+                flag = working.pop(0)
+                if (flag in _PREFIX_VALUE_FLAGS
+                        and working
+                        and not working[0].startswith("-")):
+                    working.pop(0)  # consume the flag's value arg
+            continue
+        break
+    # <<< PLAN-153.E5 / ADR-175 citation-gate END
     if not working:
         return working
     first = working[0]
@@ -251,6 +283,14 @@ class Decision:
     allow: bool
     reason: Optional[str] = None
     rewrite: Optional["Rewrite"] = None
+    # >>> PLAN-153.E5 / ADR-175 citation-gate BEGIN (destructive tag)
+    # True ONLY when the block came from one of the three destructive-command
+    # matchers (rm -rf / git reset --hard / git push --force), including the
+    # quote-aware rawscan recheck path. The citation gate keys off this tag —
+    # NEVER off reason-string matching — so canonical-path, credential-leak,
+    # git-bypass and env-hijack blocks can never be unlocked by a citation.
+    destructive: bool = False
+    # <<< PLAN-153.E5 / ADR-175 citation-gate END
 
     def to_json(self) -> str:
         # Allow: emit empty JSON object — Claude Code hook schema rejects
@@ -850,6 +890,394 @@ def _check_credential_leak(command: str) -> Optional[tuple]:
         return "unknown", "unknown:****"
 
 
+# >>> PLAN-153.E5 / ADR-175 citation-gate BEGIN (gate implementation)
+# -----------------------------------------------------------------------------
+# PLAN-153 Wave E item 5 / ADR-175 half 1 — destructive-Bash CITATION GATE
+# -----------------------------------------------------------------------------
+#
+# When a command classifies as DESTRUCTIVE (rm -rf / git reset --hard /
+# git push --force — Decision.destructive == True), the operator may supply
+# a CITATION: the instruction that justifies the destructive op, quoted
+# VERBATIM, via a leading shell env-assignment on the command itself:
+#
+#     CEO_DESTRUCTIVE_CITE='transcript:<verbatim instruction text>' rm -rf build/
+#     CEO_DESTRUCTIVE_CITE='PLAN-153:<verbatim plan text>'          rm -rf build/
+#
+# Channel rationale: the assignment travels INSIDE `tool_input.command` — the
+# one field this PreToolUse hook actually receives and can verify against the
+# stdin payload (a separate env var would be invisible to the payload; a
+# transcript-adjacent side file would be writable by the same actor issuing
+# the command). `_normalize_command_tokens` strips leading assignments, so
+# the citation prefix can never DE-classify the command (see the env-
+# assignment normalization block above).
+#
+# VERIFICATION (bounded read):
+#   * source `transcript` → the `transcript_path` field of the hook's OWN
+#     stdin payload (Claude Code supplies it on every hook event). Hardening:
+#     the resolved path must live under ~/.claude/ and end in `.jsonl` —
+#     a payload pointing anywhere else fails verification (fail-CLOSED).
+#     The cited text must appear verbatim (raw or JSON-escaped, since
+#     transcripts are JSONL) within the LAST `_CITE_READ_CAP_BYTES` of the
+#     file (recent instructions live at the tail; text beyond the bound
+#     simply fails verification — the fail-closed direction).
+#   * source `PLAN-NNN` → `$CLAUDE_PROJECT_DIR/.claude/plans/PLAN-NNN-*.md`
+#     (PLAN-SCHEMA naming), same bounded read.
+#
+# FAIL-CLOSED (mirrors the `_e3` whole-command parse gate + the
+# `_check_credential_leak` precedent, PLAN-152 debate C4): citation absent /
+# malformed / too short / transcript unreadable / cited text not found ⇒ the
+# destructive op stays BLOCKED with an actionable reason. Fail-OPEN is
+# permitted ONLY on the audit-emit side (an emit failure never flips the
+# decision).
+#
+# ACCEPTED citations are recorded into the HMAC audit chain via
+# `_lib.audit_emit.emit_generic("veto_triggered", ...)` (a passthrough-
+# registered action; a NEW action name would require touching
+# `_lib/audit_emit.py`'s _KNOWN_ACTIONS, outside this unit's scope — the
+# `reason_code=destructive_citation_accepted` + `gate_outcome` fields
+# disambiguate, following the git_hook_bypass_blocked/escape_hatch_used
+# precedent of recording the AUTHORIZED path under the guard's action). The
+# cited text passes `_lib.redact.redact_secrets` and lands in the
+# `cited_instruction_data` field — the `_data` suffix marks it as inert DATA
+# (quoted evidence), never instructions.
+#
+# SCOPE GUARD: the gate keys off `Decision.destructive` ONLY. Canonical-path
+# writes, credential leaks, git hook-bypass and env-hijack blocks are NOT
+# citation-gatable — no citation unlocks those.
+#
+# Pilot flag: CEO_DESTRUCTIVE_CITATION_GATE == "1" ENABLES the gate
+# (default-OFF, mirroring the H5 force-push-rewrite pilot: a change that adds
+# an allow path to a hard block ships opt-in until its ceremony + Codex round
+# close). Read from the import-time trusted_env snapshot, NOT live os.environ.
+
+_DESTRUCTIVE_CITE_GATE_VAR = "CEO_DESTRUCTIVE_CITATION_GATE"
+_DESTRUCTIVE_CITE_VAR = "CEO_DESTRUCTIVE_CITE"
+_CITE_MIN_CHARS = 16                    # a real instruction, not a token
+_CITE_READ_CAP_BYTES = 4 * 1024 * 1024  # bounded tail read (4 MiB)
+_CITE_AUDIT_PREVIEW_CHARS = 400         # cap on cited text entering the chain
+_CITE_PLAN_SOURCE_RE = re.compile(r"^PLAN-\d{3}$")
+_CITE_MAX_PLAN_FILES = 5                # bound the glob fan-out
+
+
+def _destructive_citation_gate_enabled() -> bool:
+    """True iff CEO_DESTRUCTIVE_CITATION_GATE == "1" in the trusted_env
+    snapshot (default-OFF pilot). Snapshot unavailability ⇒ DISABLED (the
+    most conservative state: the legacy hard BLOCK). Pure; never raises."""
+    if _trusted_env is None:  # pragma: no cover — import failure → default-OFF
+        return False
+    try:
+        raw = _trusted_env.get_trusted(_DESTRUCTIVE_CITE_GATE_VAR)
+    except Exception:  # pragma: no cover
+        return False
+    return (str(raw).strip() == "1") if raw is not None else False
+
+
+def _extract_destructive_citation(command: str) -> "tuple":
+    """Extract the CEO_DESTRUCTIVE_CITE citation from the command's leading
+    env-assignment prefix.
+
+    Returns a 3-tuple ``(status, source, cited_text)``:
+      * ``("absent", "", "")``     — no citation assignment in the prefix
+        (also the outcome when the whole command fails shlex — an
+        unparseable command cannot carry a verifiable citation, and the
+        caller's fail-closed handling keeps the op blocked).
+      * ``("malformed", detail, "")`` — assignment present but not of shape
+        ``<source>:<verbatim text>`` with source ``transcript`` | ``PLAN-NNN``
+        and text >= _CITE_MIN_CHARS.
+      * ``("ok", source, cited_text)`` — well-formed citation.
+
+    Only the LEADING assignment run is scanned (shell semantics: assignments
+    after the first command word are arguments, not environment). Pure;
+    never raises.
+    """
+    if not command or not command.strip():
+        return ("absent", "", "")
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        return ("absent", "", "")
+    value = None  # type: Optional[str]
+    for tok in tokens:
+        if not _ENV_ASSIGNMENT_RE.match(tok):
+            break  # first non-assignment token ends the env prefix run
+        name, _, rest = tok.partition("=")
+        if name == _DESTRUCTIVE_CITE_VAR:
+            value = rest
+            break
+    if value is None:
+        return ("absent", "", "")
+    source, sep, cited = value.partition(":")
+    if not sep:
+        return (
+            "malformed",
+            "missing ':' separator (expected '<source>:<verbatim text>')",
+            "",
+        )
+    source = source.strip()
+    if source != "transcript" and not _CITE_PLAN_SOURCE_RE.match(source):
+        return (
+            "malformed",
+            "unknown source %r (expected 'transcript' or 'PLAN-NNN')" % source,
+            "",
+        )
+    if len(cited) < _CITE_MIN_CHARS:
+        return (
+            "malformed",
+            "cited text under %d chars — quote the justifying instruction "
+            "verbatim, not a fragment" % _CITE_MIN_CHARS,
+            "",
+        )
+    return ("ok", source, cited)
+
+
+def _cite_bounded_tail_read(path: "Path") -> str:
+    """Read at most the LAST _CITE_READ_CAP_BYTES of ``path`` as utf-8
+    (errors=replace). Raises OSError family on unreadable paths — the
+    CALLER converts that to a fail-CLOSED block."""
+    import os as _os
+    size = _os.path.getsize(str(path))
+    with open(str(path), "rb") as fh:
+        if size > _CITE_READ_CAP_BYTES:
+            fh.seek(size - _CITE_READ_CAP_BYTES)
+        data = fh.read(_CITE_READ_CAP_BYTES)
+    return data.decode("utf-8", "replace")
+
+
+def _cite_needles(cited_text: str) -> "List[str]":
+    """The raw cited text + its JSON-escaped form (transcripts are JSONL, so
+    an instruction containing quotes/newlines is stored escaped)."""
+    needles = [cited_text]
+    try:
+        escaped = json.dumps(cited_text, ensure_ascii=False)[1:-1]
+        if escaped != cited_text:
+            needles.append(escaped)
+    except Exception:  # pragma: no cover — dumps on str cannot realistically fail
+        pass
+    return needles
+
+
+def _verify_destructive_citation(
+    source: str,
+    cited_text: str,
+    transcript_path: str,
+) -> "tuple":
+    """Verify ``cited_text`` appears verbatim in the source it points at.
+
+    Returns ``(ok, detail, source_class)`` where ``source_class`` is the
+    closed enum ``"transcript"`` | ``"plan"`` (for the audit record) and
+    ``detail`` is an actionable failure description on ``ok == False``.
+
+    FAIL-CLOSED BY CONSTRUCTION: every unexpected exception is caught and
+    converted to ``(False, ...)`` — content the gate cannot verify is
+    blocked, never waved through (the `_e3` / C4 precedent).
+    """
+    import os as _os
+    try:
+        if source == "transcript":
+            if not transcript_path:
+                return (
+                    False,
+                    "hook payload carried no transcript_path (cannot verify "
+                    "a 'transcript:' citation in this session)",
+                    "transcript",
+                )
+            real = _os.path.realpath(transcript_path)
+            claude_root = _os.path.realpath(
+                _os.path.join(_os.path.expanduser("~"), ".claude")
+            )
+            if not real.startswith(claude_root + _os.sep):
+                return (
+                    False,
+                    "transcript_path resolves outside ~/.claude/ "
+                    "(refusing to verify against an arbitrary file)",
+                    "transcript",
+                )
+            if not real.endswith(".jsonl"):
+                return (
+                    False,
+                    "transcript_path is not a .jsonl session transcript",
+                    "transcript",
+                )
+            if not _os.path.isfile(real):
+                return (
+                    False,
+                    "transcript file does not exist or is not a regular file",
+                    "transcript",
+                )
+            content = _cite_bounded_tail_read(Path(real))
+            for needle in _cite_needles(cited_text):
+                if needle in content:
+                    return (True, "", "transcript")
+            return (
+                False,
+                "cited text not found in the session transcript (last %d "
+                "bytes searched) — the citation must be VERBATIM"
+                % _CITE_READ_CAP_BYTES,
+                "transcript",
+            )
+        # PLAN-NNN source. Codex pair-rail P2 (S261 landing): a plan file is
+        # NOT a trusted citation source. Any agent can plant a line in a draft
+        # `.claude/plans/PLAN-NNN-*.md` and then cite it to flip a destructive
+        # command from BLOCK to ALLOW. Per the repo's fail-CLOSED rule for
+        # security matchers, only the session TRANSCRIPT (append-only, written
+        # by the harness, not plantable by the agent) is a trusted source for
+        # authorizing a destructive op. Plan citations are rejected — cite the
+        # instruction via the session transcript instead. (A future signed-
+        # sentinel citation channel could reinstate a trusted file source.)
+        return (
+            False,
+            "plan-file citations are not a trusted source (an agent can plant "
+            "a line in a draft plan) — cite the authorizing instruction via "
+            "the session transcript instead",
+            "plan",
+        )
+    except Exception as e:
+        # FAIL-CLOSED: unreadable source == unverifiable citation == block.
+        return (
+            False,
+            "citation source read failed (%s) — cannot verify, so the op "
+            "stays blocked" % e.__class__.__name__,
+            "transcript" if source == "transcript" else "plan",
+        )
+
+
+def _emit_destructive_citation_accepted(
+    source_class: str, source: str, cited_text: str
+) -> None:
+    """Record the ACCEPTED citation into the HMAC audit chain. Fail-open
+    (an emit failure never flips the allow) — but NEVER writes the cited
+    text unredacted: if the redactor is unavailable the text is withheld."""
+    if _audit_emit is None:
+        return
+    try:
+        try:
+            from _lib.redact import redact_secrets as _redact_secrets
+            cited_data = _redact_secrets(
+                cited_text, max_chars=_CITE_AUDIT_PREVIEW_CHARS
+            )
+        except Exception:
+            cited_data = "[REDACTION-UNAVAILABLE: cited text withheld]"
+        import os as _os
+        _audit_emit.emit_generic(
+            "veto_triggered",
+            hook="check_bash_safety",
+            reason_code="destructive_citation_accepted",
+            reason_preview=(
+                "destructive Bash ALLOWED via verified citation "
+                "(source=%s); see cited_instruction_data" % source_class
+            ),
+            blocked_tool="Bash",
+            gate_outcome="allowed_with_citation",
+            cite_source_class=source_class,
+            cite_source_label=source[:80],
+            # DATA field (ADR-175): quoted evidence of the justifying
+            # instruction — redacted, truncated, inert. Never instructions.
+            cited_instruction_data=cited_data,
+            session_id=_os.environ.get("CLAUDE_SESSION_ID", ""),
+            project=_os.environ.get("CLAUDE_PROJECT_DIR", ""),
+        )
+    except Exception:  # pragma: no cover — fail-open on emit only
+        pass
+
+
+def _emit_destructive_citation_rejected(detail: str) -> None:
+    """Record a citation verify-failure (the op was BLOCKED). Metadata only —
+    the cited bytes are NOT persisted on the reject path. Fail-open."""
+    if _audit_emit is None:
+        return
+    try:
+        _audit_emit.emit_veto_triggered(
+            hook="check_bash_safety",
+            reason_code="destructive_citation_verify_failed",
+            reason_preview=detail[:200],
+            blocked_tool="Bash",
+        )
+    except Exception:  # pragma: no cover — fail-open on emit only
+        pass
+
+
+def _extract_transcript_path(raw_stdin_text: str) -> str:
+    """Best-effort read of the top-level `transcript_path` field from the
+    hook's raw stdin payload (the adapter's NormalizedEvent deliberately
+    drops it — deny-by-default raw_payload — so we parse the buffered raw
+    text ourselves). Returns "" on any parse issue; a missing path only
+    ever FAILS a 'transcript:' citation (fail-closed), never allows."""
+    try:
+        data = json.loads(raw_stdin_text)
+        if isinstance(data, dict):
+            tp = data.get("transcript_path")
+            if isinstance(tp, str):
+                return tp
+    except Exception:
+        pass
+    return ""
+
+
+def _apply_destructive_citation_gate(
+    decision: "Decision", command: str, transcript_path: str
+) -> "Decision":
+    """Apply the ADR-175 citation gate to a DESTRUCTIVE block decision.
+
+    Called from main() ONLY when the gate is enabled AND
+    ``decision.destructive`` is True. Outcomes:
+
+      * citation absent    → BLOCK (original reason + how-to-cite hint)
+      * citation malformed → BLOCK (actionable shape error)
+      * verify failure     → BLOCK (fail-CLOSED; actionable reason)
+      * verified           → ALLOW + `destructive_citation_accepted`
+                             recorded into the HMAC chain (emit fail-open)
+
+    This function performs bounded file I/O — it lives on the main() side,
+    NOT in decide_command (which stays pure).
+    """
+    status, source_or_detail, cited = _extract_destructive_citation(command)
+    if status == "absent":
+        return Decision(
+            allow=False,
+            reason=(decision.reason or "") + (
+                "\nCITATION GATE (ADR-175): destructive Bash additionally "
+                "requires a verbatim citation of the instruction that "
+                "justifies it. Re-run as: "
+                "CEO_DESTRUCTIVE_CITE='transcript:<verbatim instruction "
+                "text>' <command>  (or 'PLAN-NNN:<verbatim plan text>'). "
+                "The cited text (>= %d chars) must appear VERBATIM in the "
+                "cited source or the op stays blocked." % _CITE_MIN_CHARS
+            ),
+            destructive=True,
+        )
+    if status == "malformed":
+        _emit_destructive_citation_rejected("malformed: " + source_or_detail)
+        return Decision(
+            allow=False,
+            reason=(
+                "BLOCKED (citation gate, fail-CLOSED): the "
+                "CEO_DESTRUCTIVE_CITE citation is malformed — %s. Expected "
+                "CEO_DESTRUCTIVE_CITE='<source>:<verbatim text>' with "
+                "source 'transcript' or 'PLAN-NNN'. The destructive op "
+                "stays blocked." % source_or_detail
+            ),
+            destructive=True,
+        )
+    ok, detail, source_class = _verify_destructive_citation(
+        source_or_detail, cited, transcript_path
+    )
+    if not ok:
+        _emit_destructive_citation_rejected(detail)
+        return Decision(
+            allow=False,
+            reason=(
+                "BLOCKED (citation gate, fail-CLOSED): destructive Bash "
+                "citation could not be verified — %s. Content the gate "
+                "cannot verify is blocked, not waved through (mirror of "
+                "the Wave E.3 parse gate). Fix the citation so the quoted "
+                "text appears VERBATIM in the cited source, or drop the "
+                "destructive command." % detail
+            ),
+            destructive=True,
+        )
+    _emit_destructive_citation_accepted(source_class, source_or_detail, cited)
+    return Decision(allow=True)
+# <<< PLAN-153.E5 / ADR-175 citation-gate END
 
 
 # -----------------------------------------------------------------------------
@@ -1376,7 +1804,10 @@ def decide_command(command: str) -> Decision:
             if _rawscan_enabled():
                 reason = _recheck_whole_command(command)
                 if reason:
-                    return Decision(allow=False, reason=reason)
+                    # PLAN-153.E5 / ADR-175: destructive=True — rawscan hits
+                    # are the same destructive class, so they are citation-
+                    # gatable (main() applies the gate off this tag).
+                    return Decision(allow=False, reason=reason, destructive=True)
             continue
         if not tokens:
             continue
@@ -1406,7 +1837,9 @@ def decide_command(command: str) -> Decision:
                         # updatedInput vendor shape. The permission prompt is
                         # ALWAYS retained — this is never a silent allow.
                         return Decision(allow=True, rewrite=rewrite)
-                return Decision(allow=False, reason=reason)
+                # PLAN-153.E5 / ADR-175: destructive=True marks this block as
+                # citation-gatable (main() applies the gate off this tag).
+                return Decision(allow=False, reason=reason, destructive=True)
 
     return Decision(allow=True)
 
@@ -1578,7 +2011,22 @@ def main() -> int:
     Output is byte-identical to pre-migration (test_hook_byte_fidelity).
     """
     try:
-        event = _claude_adapter.read_event(phase="PreToolUse")
+        # >>> PLAN-153.E5 / ADR-175 citation-gate BEGIN (stdin buffering)
+        # Read stdin ONCE into a buffer, then hand the adapter an equivalent
+        # stream. The adapter's NormalizedEvent deliberately drops the raw
+        # payload (deny-by-default), but the citation gate needs the
+        # top-level `transcript_path` field — parsed here from the SAME
+        # bytes the adapter consumes, so the verified path is exactly what
+        # the harness sent. Behavior-neutral for every other code path.
+        import io as _io
+        try:
+            _raw_stdin_text = sys.stdin.read()
+        except Exception:  # exotic stdin failure → same fail-open as before
+            _raw_stdin_text = ""
+        event = _claude_adapter.read_event(
+            stream=_io.StringIO(_raw_stdin_text), phase="PreToolUse"
+        )
+        # <<< PLAN-153.E5 / ADR-175 citation-gate END
         if event.parse_error:
             print(
                 f"[check_bash_safety] WARN: stdin parse error: {event.parse_error}",
@@ -1592,6 +2040,21 @@ def main() -> int:
             command = str(event.tool_input.get("command") or "")
 
         decision = decide_command(command)
+        # >>> PLAN-153.E5 / ADR-175 citation-gate BEGIN (gate application)
+        # Applied ONLY to destructive-class blocks (Decision.destructive) and
+        # ONLY when the pilot flag is armed. Verified citation → ALLOW +
+        # HMAC-chain record; absent/malformed/unverifiable → BLOCK
+        # (fail-CLOSED). Runs BEFORE the emit tail so downstream emits see
+        # the final decision.
+        if (
+            not decision.allow
+            and decision.destructive
+            and _destructive_citation_gate_enabled()
+        ):
+            decision = _apply_destructive_citation_gate(
+                decision, command, _extract_transcript_path(_raw_stdin_text)
+            )
+        # <<< PLAN-153.E5 / ADR-175 citation-gate END
         # Re-run detector on credential blocks to emit audit event.
         if not decision.allow and decision.reason and "API credential" in decision.reason:
             hit = _check_credential_leak(command)

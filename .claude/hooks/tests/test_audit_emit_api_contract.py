@@ -598,7 +598,16 @@ _EXPECTED_KNOWN_ACTIONS_SHA256 = (
     # the _KNOWN_ACTIONS SET is unchanged by that move, so this SHA + the 302
     # count pin still hold. SHA re-derived from the FINAL arc audit_emit.py via
     # sha256(json.dumps(sorted(_KNOWN_ACTIONS))). See staged/w5/actions-added.md.
-    "2744d12aaf7a65701ddb8d46f061b7e0f45f2932132f78a0374f584e8f6fc617"
+    # Updated PLAN-153 Wave E item 7 / NEW-4 (ADR-159, 2026-07-07) — +1 action
+    # spawn_prompt_defense_gate (Prompt Defense Baseline gate telemetry emitted
+    # via emit_generic from check_agent_spawn._emit_prompt_defense_event; closed-
+    # enum fields keyword/present/enforced, Sec MF-3 dedicated dispatch branch +
+    # _SPAWN_PROMPT_DEFENSE_GATE_ALLOWLIST, NEVER _EMIT_GENERIC_PASSTHROUGH). NO
+    # new public emitter — emit_generic only (spawn_confidence_advisory precedent).
+    # SHA re-derived from the STAGED audit_emit.py under
+    # .claude/plans/PLAN-153/staged/wave-E/ via
+    # sha256(json.dumps(sorted(_KNOWN_ACTIONS))). Count: 302 -> 303.
+    "7ae35582b99bde40c95efd44ced65521bfb43a6e3323b9bb8da358963a887e49"
 )
 
 
@@ -640,13 +649,13 @@ class AuditEmitPublicSurfaceTests(unittest.TestCase):
         self.assertEqual(
             actual, _EXPECTED_KNOWN_ACTIONS_SHA256,
             f"_KNOWN_ACTIONS drift detected. "
-            f"Count={len(actions)} (expected 302). "
+            f"Count={len(actions)} (expected 303). "
             f"Rebaseline this test + add audit-registry entry if the change is intentional.",
         )
 
     def test_known_actions_count_fixed(self) -> None:
         self.assertEqual(
-            len(audit_emit._KNOWN_ACTIONS), 302,
+            len(audit_emit._KNOWN_ACTIONS), 303,
             "_KNOWN_ACTIONS count drifted from 163 baseline (PLAN-088 S114 Wave 1 +11 actions: "
             "cache_discipline_alerted + first_run_wizard_dispatched + "
             "estimate_calibrator_pipeline_run + subagent_findings_partial_drop + "

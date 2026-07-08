@@ -15,7 +15,7 @@ patcher route; the signed sentinel is the authorization record. ADR-158/159
 land with this wave and flip PROPOSED→ACCEPTED in the landing series.
 
 <!-- BEGIN SIGNED SCOPE -->
-Approved-By: @Canhada-Labs __ANCHOR_SHA__
+Approved-By: @Canhada-Labs 71a2ef5f8dc52aabe8ba2c848e65b7c6b895a5c1
 Plans: PLAN-153
 Scope:
   Wave E — security gates (behavioral positive-controls, harness-config

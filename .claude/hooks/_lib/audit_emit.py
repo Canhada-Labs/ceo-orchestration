@@ -372,6 +372,15 @@ _KNOWN_ACTIONS = {
     # matched chars, and the var/value are NEVER persisted.
     "invisible_unicode_blocked",
     "spawn_confidence_advisory",  # PLAN-113 / PLAN-083 1.10 — spawn action-type confidence label
+    # PLAN-153 Wave E item 7 (ADR-175) — Prompt Defense Baseline gate telemetry.
+    # Emitted (ADVISORY, fail-open) by check_agent_spawn._emit_prompt_defense_event()
+    # after an untrusted-content signal match on a NAMED spawn. Sec MF-3
+    # deny-by-default via _SPAWN_PROMPT_DEFENSE_GATE_ALLOWLIST + dedicated
+    # dispatch-gate branch below: `keyword` is a closed-enum hint
+    # (_UNTRUSTED_CONTENT_HINTS, 32-char capped at the producer AND re-capped in
+    # the dispatch gate), `present`/`enforced` are 0/1 flags — NO prompt or
+    # description body is ever persisted.
+    "spawn_prompt_defense_gate",
     # PLAN-017 Phase 4 — Autonomous-loop parallelism swarm events
     # (PLAN-102 Wave A extends with cost_envelope_capped +
     # swarm_runaway_suspected + swarm_paused_owner_absent. See ADR-133.)
@@ -1741,6 +1750,17 @@ _SPAWN_CONFIDENCE_ADVISORY_ALLOWLIST = _FEDERATION_ENVELOPE | {
     "confidence_marker",
     "reason_code",
     "is_named_spawn",
+}
+
+# PLAN-153 Wave E item 7 (ADR-175) — spawn_prompt_defense_gate explicit allowlist.
+# Sec MF-3 deny-by-default: only the 3 caller-supplied fields from
+# check_agent_spawn._emit_prompt_defense_event() persist. `keyword` is a
+# closed-enum untrusted-content hint (bounded + 32-char capped in the dispatch
+# branch below); `present`/`enforced` are 0/1 flags. NO prompt/description body.
+_SPAWN_PROMPT_DEFENSE_GATE_ALLOWLIST = _FEDERATION_ENVELOPE | {
+    "keyword",
+    "present",
+    "enforced",
 }
 
 # PLAN-113 Codex P2 — spec_context_sanitized explicit allowlist.
@@ -6301,6 +6321,24 @@ def emit_generic(action: str, **kwargs: Any) -> None:
         if dropped:
             _breadcrumb(
                 f"emit_generic spawn_confidence_advisory dropped "
+                f"forbidden field(s): {sorted(dropped)[:10]}"
+            )
+    # PLAN-153 Wave E item 7 (ADR-175) — spawn_prompt_defense_gate Sec MF-3 scrub.
+    # Dedicated deny-by-default branch (NEVER _EMIT_GENERIC_PASSTHROUGH). The
+    # field-name scrub DROPS any non-allowlisted key; the value re-coercion below
+    # closes the direct-emit_generic-caller path (bypassing the typed producer):
+    # present/enforced collapse to 0/1 flags and keyword is string-coerced + 32-
+    # char capped, so no prompt/description body can ride the closed-enum channel.
+    elif action == "spawn_prompt_defense_gate":
+        event, dropped = _scrub_ceo_boot_event(
+            event, _SPAWN_PROMPT_DEFENSE_GATE_ALLOWLIST
+        )
+        event["keyword"] = str(event.get("keyword", ""))[:32]
+        event["present"] = 1 if str(event.get("present")) in ("1", "True", "true") else 0
+        event["enforced"] = 1 if str(event.get("enforced")) in ("1", "True", "true") else 0
+        if dropped:
+            _breadcrumb(
+                f"emit_generic spawn_prompt_defense_gate dropped "
                 f"forbidden field(s): {sorted(dropped)[:10]}"
             )
     # PLAN-113 Codex P2 — spec_context_sanitized explicit allowlist branch.

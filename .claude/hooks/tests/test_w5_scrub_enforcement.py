@@ -72,8 +72,9 @@ class TestW5OffPassthrough(TestEnvContext):
             self.assertIn(a, audit_emit._KNOWN_ACTIONS)
 
     def test_known_actions_count_unchanged(self):
-        # Move, not add — the count is still 302.
-        self.assertEqual(len(audit_emit._KNOWN_ACTIONS), 302)
+        # W5 was a move, not add (302). PLAN-153 Wave E / ADR-159 then adds
+        # one action (spawn_prompt_defense_gate) -> 303.
+        self.assertEqual(len(audit_emit._KNOWN_ACTIONS), 303)
 
 
 class TestAdminKeyScrub(_W5Base):

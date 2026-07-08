@@ -1,0 +1,239 @@
+# PLAN-153 Wave E item 4 — scheduled supply-chain watch (NEW workflow).
+#
+# Two watch axes, weekly:
+#   (a) workflow policy — SHA-pin format across ALL workflows + policy
+#       assertions (no pull_request_target, no unguarded fork-reachable
+#       secrets) + tag-comment drift vs upstream, via the extended
+#       `.claude/scripts/check-action-sha-drift.py --policy --strict`.
+#   (b) npm provenance — the latest published `ceo-orchestration` version
+#       still carries a SLSA provenance attestation on the npm registry,
+#       still corresponds to a tag in THIS repo, and `npm audit
+#       signatures` still verifies (honest-limits note inline below).
+# On any red: create/update a SINGLE pinned issue (idempotent, searched
+# by label — reality-ledger.yml / ADR-064 precedent) and red the run.
+#
+# Security envelope (mirrors reality-ledger.yml §4.5 precedent):
+#   1. Triggers: schedule + workflow_dispatch ONLY. NEVER pull_request /
+#      pull_request_target — nothing here is fork-reachable (would also
+#      be self-contradictory: axis (a) enforces exactly that policy).
+#   2. Permissions: contents:read baseline; issues:write exists SOLELY
+#      for the red-path pinned issue. No other write surface.
+#   3. All `uses:` SHA-pinned; checkout persist-credentials:false.
+#   4. Zero secrets.* except the ambient GITHUB_TOKEN (gh api + issue).
+#      npm registry queries are unauthenticated public reads.
+#   5. CEO_SOTA_DISABLE honored at job level (_README.md §R8).
+#   6. timeout-minutes bounded; concurrency no-cancel (cron precedent).
+
+name: supply-chain-watch
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Monday 19:23 UTC — 19:00 band is a free slot per the
+    # .github/workflows/_README.md stagger table (next-free list
+    # 00/19/20/22/01/02); off-:00 minute because GitHub delays/drops
+    # scheduled runs queued at high-load minute 0.
+    - cron: "23 19 * * 1"
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: supply-chain-watch-main
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    name: Supply-chain watch (weekly, advisory-red)
+    # CEO_SOTA_DISABLE parity per _README.md §R8 + fork belt-and-braces
+    # (scheduled workflows are disabled on forks by default; keep the
+    # guard anyway per reality-ledger.yml precedent).
+    if: vars.CEO_SOTA_DISABLE != '1' && github.event.repository.fork == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
+        with:
+          python-version: "3.12"
+
+      - name: Workflow policy + SHA-pin drift (axis a)
+        id: policy
+        env:
+          # Authenticated tag-dereference (5000 req/hr) for the drift
+          # pass — read-only use of the ambient token.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+          # rc semantics from the script: 0 green; 1 format/policy
+          # violation; 2 tag-comment drift under --strict OR network
+          # failure. In a weekly watch we treat ANY nonzero as red —
+          # upstream-tag drift IS the action-compromise tripwire, and a
+          # network fail-red is the fail-closed direction (noted in the
+          # issue body so triage can dismiss transient network reds).
+          python3 .claude/scripts/check-action-sha-drift.py --policy --strict
+          RC=$?
+          echo "rc=$RC" >> "$GITHUB_OUTPUT"
+          echo "axis (a) policy/pin/drift rc=$RC"
+          exit 0
+
+      - name: npm SLSA provenance chain (axis b)
+        id: provenance
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+          # HONEST LIMITS — what this step does and does NOT prove:
+          #   * Proves: the npm registry still SERVES a SLSA provenance
+          #     attestation for the latest published version; that
+          #     version corresponds to a tag in THIS repo; and
+          #     `npm audit signatures` verifies the registry signature +
+          #     attestation for the fetched tarball.
+          #   * Does NOT prove the tarball content matches this repo's
+          #     source tree (no rebuild/diff here).
+          #   * Does NOT stop a compromised npm account publishing a NEW
+          #     version WITH valid provenance from a compromised
+          #     workflow — the tag-correspondence check below is only a
+          #     partial tripwire for that class.
+          #   * `npm audit signatures` is thin for ceo-orchestration
+          #     anyway: zero runtime deps means the "audit" covers
+          #     exactly one package — there is no dependency tree whose
+          #     signatures add coverage.
+          RC=0
+          PKG="ceo-orchestration"
+
+          # (1) Latest published version straight from the registry.
+          LATEST=$(curl -fsS --max-time 30 "https://registry.npmjs.org/${PKG}" \
+            | python3 -c 'import json,sys; print(json.load(sys.stdin)["dist-tags"]["latest"])') || LATEST=""
+          if [ -z "$LATEST" ]; then
+            echo "::error::axis (b): could not resolve npm dist-tags.latest for ${PKG}"
+            RC=1
+          else
+            echo "npm latest: ${PKG}@${LATEST}"
+
+            # (2) SLSA provenance attestation still present.
+            PREDICATES=$(curl -fsS --max-time 30 \
+              "https://registry.npmjs.org/-/npm/v1/attestations/${PKG}@${LATEST}" \
+              | python3 -c 'import json,sys; d=json.load(sys.stdin); print("\n".join(a.get("predicateType","") for a in d.get("attestations",[])))') || PREDICATES=""
+            if printf '%s\n' "$PREDICATES" | grep -q "slsa.dev/provenance"; then
+              echo "OK: SLSA provenance attestation present for ${PKG}@${LATEST}"
+            else
+              echo "::error::axis (b): NO SLSA provenance attestation on ${PKG}@${LATEST} (predicates: ${PREDICATES:-none}) — regression vs npm-publish.yml --provenance"
+              RC=1
+            fi
+
+            # (3) Latest npm version must correspond to a tag in THIS
+            # repo (partial hijacked-publish tripwire).
+            if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/v${LATEST}" >/dev/null 2>&1; then
+              echo "OK: tag v${LATEST} exists in ${GITHUB_REPOSITORY}"
+            else
+              echo "::error::axis (b): npm ${PKG}@${LATEST} has NO corresponding tag v${LATEST} in ${GITHUB_REPOSITORY} — possible out-of-band publish"
+              RC=1
+            fi
+
+            # (4) Latest GitHub release recorded for cross-reference in
+            # the summary (advisory only: release may legitimately lead
+            # npm while the production-npm manual gate is pending).
+            REL_TAG=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq .tag_name 2>/dev/null || echo "unknown")
+            echo "latest GitHub release: ${REL_TAG}"
+
+            # (5) Registry signature + attestation verification.
+            # --ignore-scripts: NEVER execute lifecycle scripts of the
+            # fetched package, even our own (defense in depth).
+            WORKDIR=$(mktemp -d)
+            (
+              cd "$WORKDIR" || exit 1
+              npm init -y >/dev/null 2>&1
+              npm install "${PKG}@${LATEST}" --ignore-scripts --no-audit --no-fund >/dev/null 2>&1 \
+                && npm audit signatures
+            )
+            SIG_RC=$?
+            if [ "$SIG_RC" -ne 0 ]; then
+              echo "::error::axis (b): npm audit signatures failed (rc=${SIG_RC}) for ${PKG}@${LATEST}"
+              RC=1
+            fi
+            rm -rf "$WORKDIR"
+          fi
+          echo "rc=$RC" >> "$GITHUB_OUTPUT"
+          echo "axis (b) provenance rc=$RC"
+          exit 0
+
+      - name: Create/update pinned issue on red (idempotent)
+        if: steps.policy.outputs.rc != '0' || steps.provenance.outputs.rc != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          POLICY_RC: ${{ steps.policy.outputs.rc }}
+          PROV_RC: ${{ steps.provenance.outputs.rc }}
+        run: |
+          set -euo pipefail
+          DATE=$(date -u +%Y-%m-%d)
+          LABEL="supply-chain-watch"
+          TITLE="[supply-chain-watch] RED — weekly watch findings"
+          RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          # Idempotent label (create is a no-op update with --force).
+          gh label create "$LABEL" \
+            --description "Automated weekly supply-chain watch findings" \
+            --color B60205 --force || true
+          # Single ongoing issue, searched by LABEL (ADR-064 precedent).
+          EXISTING=$(gh issue list \
+            --label "$LABEL" \
+            --state open \
+            --json number \
+            --jq '.[0].number // empty' || echo "")
+          # Multi-line double-quoted string, NOT a heredoc — heredoc
+          # terminators at column 1 escape the YAML block scalar (see
+          # reality-ledger.yml S153 comment for the failure mode).
+          BODY="## Supply-chain watch red — ${DATE}
+
+          | Axis | Check | rc |
+          |---|---|---|
+          | (a) | workflow policy + SHA-pin format + tag drift (\`check-action-sha-drift.py --policy --strict\`) | ${POLICY_RC} |
+          | (b) | npm SLSA provenance chain (attestation + tag correspondence + \`npm audit signatures\`) | ${PROV_RC} |
+
+          rc legend for axis (a): 1 = format/policy violation; 2 = tag-comment drift vs upstream OR transient network failure — read the run log to distinguish before escalating.
+
+          Run: ${RUN_URL}
+
+          Triage playbook: \`docs/supply-chain-incident-playbook.md\` (verify → classify → contain → comms).
+
+          _Generated by \`.github/workflows/supply-chain-watch.yml\` (PLAN-153 Wave E item 4). Single ongoing issue — the watch comments here instead of opening duplicates._
+          "
+          if [ -n "$EXISTING" ]; then
+            echo "Appending to existing issue #${EXISTING}"
+            gh issue comment "$EXISTING" --body "$BODY"
+          else
+            echo "Creating new pinned issue"
+            NEW_URL=$(gh issue create \
+              --title "$TITLE" \
+              --body "$BODY" \
+              --label "$LABEL")
+            # Pin is best-effort: GraphQL pinIssue needs write; if the
+            # token cannot pin, the labeled issue still exists.
+            gh issue pin "$NEW_URL" || true
+          fi
+
+      - name: Summary + verdict
+        if: always()
+        env:
+          POLICY_RC: ${{ steps.policy.outputs.rc }}
+          PROV_RC: ${{ steps.provenance.outputs.rc }}
+        run: |
+          {
+            echo "## Supply-chain watch"
+            echo ""
+            echo "- axis (a) workflow policy/pins/drift rc: ${POLICY_RC:-not-run}"
+            echo "- axis (b) npm provenance chain rc: ${PROV_RC:-not-run}"
+            echo "- red path: single pinned issue labeled supply-chain-watch"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "${POLICY_RC:-1}" != "0" ] || [ "${PROV_RC:-1}" != "0" ]; then
+            echo "::error::supply-chain watch RED — see summary + pinned issue"
+            exit 1
+          fi
+          echo "supply-chain watch green"

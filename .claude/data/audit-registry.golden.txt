@@ -1,7 +1,7 @@
 # audit-action registry golden (generated — do not hand-edit)
 # format: v1  source: .claude/hooks/_lib/audit_emit.py::_KNOWN_ACTIONS
 # regenerate: python3 .claude/scripts/check-audit-registry-coverage.py --write-golden
-# count: 302
+# count: 303
 action_required_held
 action_required_rejected
 action_required_resumed
@@ -243,6 +243,7 @@ smart_loading_resolved
 spawn_confidence_advisory
 spawn_depth_or_overlap_blocked
 spawn_file_assignment_recorded
+spawn_prompt_defense_gate
 spawn_tool_scope_violation
 spec_context_sanitized
 squad_imported

@@ -1,19 +1,16 @@
-# SP-NNN skill-patch signer allowlist (ADR-031, PLAN-045 P0-02).
+
 #
-# Each non-blank, non-comment line is one full 40-hex-character GPG
-# fingerprint (uppercase) permitted to sign SP-NNN proposals via
-# `.claude/scripts/skill-patch-apply.py`.
-#
-# Empty allowlist is FAIL-CLOSED: no proposal will be accepted. This
-# closes the TOFU gap documented in ADR-031 §Open questions #2 and
-# the threat-model dim-1 P0-02 finding (F-01-02).
-#
-# Format:
 #   # optional comment
 #   <40-hex-uppercase-fingerprint>
-#
-# Guarded by ADR-010 canonical-edit sentinel + check_canonical_edit.py.
+# Each non-blank, non-comment line is one full 40-hex-character GPG
 # Edits require Owner-signed sentinel with this path in Scope.
-
+# Empty allowlist is FAIL-CLOSED: no proposal will be accepted. This
+# Format:
+# Guarded by ADR-010 canonical-edit sentinel + check_canonical_edit.py.
 # Owner (Canhada Labs, created 2026-04-20)
-0000000000000000000000000000000000000000
+# SP-NNN skill-patch signer allowlist (ADR-031, PLAN-045 P0-02).
+# `.claude/scripts/skill-patch-apply.py`.
+# closes the TOFU gap documented in ADR-031 §Open questions #2 and
+# fingerprint (uppercase) permitted to sign SP-NNN proposals via
+# the threat-model dim-1 P0-02 finding (F-01-02).
+AE9B236FDAF0462874060C6BCFCFACF00335DC74

@@ -298,7 +298,7 @@ your-project/
 │   │   ├── _python-hook.sh              # Python version resolver + invoker
 │   │   ├── check_agent_spawn.py         # mechanical enforcement of spawn protocol
 │   │   ├── audit_log.py                 # silent PostToolUse audit observer
-│   │   ├── ... (53 hooks total — see .claude/hooks/*.py)
+│   │   ├── ... (54 hooks total — see .claude/hooks/*.py)
 │   │   └── tests/                       # 11000+ unit tests via `make test-collect`
 │   ├── scripts/
 │   │   ├── validate-governance.sh

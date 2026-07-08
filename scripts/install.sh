@@ -104,6 +104,15 @@
 #   4. Produces .claude/settings.json from templates/settings/settings.base.json
 #      (+ settings.stack.<stack>.json if --stack is set), using jq to merge.
 #      Hard-fails (rc=3) if --stack is EXPLICITLY supplied and jq is missing.
+#   4b. (PLAN-153 Wave E item 3) Injects a coarse credential-read deny
+#      baseline into the permissions.deny of a settings.json THIS run
+#      created (SSH/AWS/npm/gcloud/kube/docker/git-credentials/netrc/
+#      pypirc reads, common .env variants, curl-pipe-bash tripwire).
+#      HONEST FRAMING: a coarse harness backstop, deliberately NOT sold
+#      as coverage — the pipe-to-shell class is owned by
+#      check_bash_safety.py's parse gate. Skipped when settings.json
+#      pre-existed (re-runs never re-add removed entries) or when
+#      CEO_INSTALL_SKIP_DENY_BASELINE=1. See docs/deny-baseline.md.
 #   5. Copies templates/CLAUDE.md to target as CLAUDE.md (only if missing)
 #   6. Copies templates/MEMORY.md to target as MEMORY.md (only if missing)
 #   6b. (PLAN-135 W1 S5-lite) Copies templates/.mcp.json to target as
@@ -1216,6 +1225,15 @@ if [[ "$CEREMONY" == "user" ]]; then  # WS4-ceremony-settings
   BASE_SRC="$SOURCE_DIR/templates/settings/settings.user.json"
 fi
 
+# PLAN-153 Wave E item 3: remember whether settings.json pre-existed so the
+# deny-baseline injection (section 6a below) only ever touches a file THIS
+# run created. Re-runs hit build_settings' EXISTS->SKIP path, so entries an
+# adopter deliberately removed are never re-added.
+SETTINGS_PRE_EXISTING=0
+if [[ -e "$SETTINGS_DST" ]]; then
+  SETTINGS_PRE_EXISTING=1
+fi
+
 build_settings() {
   if [[ "$DRY_RUN" -eq 1 ]]; then
     if [[ -e "$SETTINGS_DST" ]]; then
@@ -1312,6 +1330,148 @@ build_settings || build_rc=$?
 if [[ "$build_rc" -ne 0 ]]; then
   exit "$build_rc"
 fi
+
+# ---- 6a. PLAN-153 Wave E item 3: coarse credential-read deny baseline ----
+#
+# Injects a small permissions.deny baseline into the settings.json THIS
+# install run just produced.
+#
+# HONEST FRAMING (never sold as coverage): this is a coarse harness
+# backstop. Claude Code Read deny rules cover the built-in file tools and
+# the file commands the harness recognizes inside Bash (cat/head/tail/sed),
+# but NOT arbitrary subprocesses that open files themselves; Bash pattern
+# rules are trivially bypassable by rephrasing. The pipe-to-shell class is
+# OWNED by check_bash_safety.py's parse gate — the single
+# "Bash(curl * | bash)" entry here is a tripwire, not the rail.
+# Scope, residuals, and opt-out: docs/deny-baseline.md.
+#
+# Exclusion note (ratified fallback): Claude Code evaluates deny before
+# allow and "a deny rule can't carry allowlist exceptions", so
+# "deny **/.env.* except .env.example" is NOT expressible via deny+allow.
+# We therefore deny SPECIFIC sensitive .env variants only; .env.example /
+# .env.sample / .env.template stay readable because they are simply not
+# listed. Residual: unlisted variants (e.g. .env.secret) pass the backstop.
+#
+# Idempotency: runs ONLY when this run created settings.json
+# (SETTINGS_PRE_EXISTING=0). Re-running install skips settings.json
+# entirely, so removed entries are never re-added. The merge itself is
+# also order-preserving + deduplicating, so even a forced re-apply cannot
+# duplicate entries.
+#
+# Fail-open on infrastructure (house rule): if neither jq nor python3 is
+# available, or the merge fails, WARN with manual instructions and leave
+# the just-copied settings.json untouched.
+#
+# Opt-out: CEO_INSTALL_SKIP_DENY_BASELINE=1 (mirrors CEO_INSTALL_SKIP_SELF_SHA).
+
+DENY_BASELINE_ENTRIES=(
+  "Read(~/.ssh/**)"
+  "Read(~/.aws/**)"
+  "Read(~/.npmrc)"
+  "Read(~/.config/gcloud/**)"
+  "Read(~/.kube/config)"
+  "Read(~/.docker/config.json)"
+  "Read(~/.git-credentials)"
+  "Read(~/.netrc)"
+  "Read(~/.pypirc)"
+  "Read(**/.env)"
+  "Read(**/.env.local)"
+  "Read(**/.env.*.local)"
+  "Read(**/.env.development)"
+  "Read(**/.env.dev)"
+  "Read(**/.env.production)"
+  "Read(**/.env.prod)"
+  "Read(**/.env.staging)"
+  "Read(**/.env.test)"
+  "Read(**/.env.ci)"
+  "Bash(curl * | bash)"
+)
+
+apply_deny_baseline() {
+  if [[ "${CEO_INSTALL_SKIP_DENY_BASELINE:-0}" = "1" ]]; then
+    echo "    SKIP: deny baseline (CEO_INSTALL_SKIP_DENY_BASELINE=1)"
+    return 0
+  fi
+
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    if [[ "$SETTINGS_PRE_EXISTING" -eq 1 ]]; then
+      echo "    (dry-run) settings.json pre-existed — would NOT touch deny baseline"
+    else
+      echo "    (dry-run) would MERGE ${#DENY_BASELINE_ENTRIES[@]} deny-baseline entries into .claude/settings.json"
+    fi
+    return 0
+  fi
+
+  if [[ "$SETTINGS_PRE_EXISTING" -eq 1 ]]; then
+    echo "    SKIP: settings.json pre-existed this run (add entries manually if wanted — docs/deny-baseline.md)"
+    return 0
+  fi
+  if [[ ! -f "$SETTINGS_DST" ]]; then
+    # build_settings decided not to produce one; nothing to inject into.
+    return 0
+  fi
+
+  # Build a JSON array literal from the entries. All entries are static
+  # literals controlled above (no embedded double quotes or backslashes),
+  # so direct interpolation is safe.
+  local entries_json="[" e first=1
+  for e in "${DENY_BASELINE_ENTRIES[@]}"; do
+    if [[ "$first" -eq 1 ]]; then first=0; else entries_json+=","; fi
+    entries_json+="\"$e\""
+  done
+  entries_json+="]"
+
+  local tmp="$SETTINGS_DST.deny-baseline.$$"
+
+  if command -v jq >/dev/null 2>&1; then
+    # Order-preserving dedup: keep existing deny list as-is, append only
+    # baseline entries not already present (jq array subtraction).
+    if jq --argjson newdeny "$entries_json" '
+         (.permissions.deny // []) as $cur
+         | .permissions.deny = ($cur + ($newdeny - $cur))
+       ' "$SETTINGS_DST" > "$tmp" 2>/dev/null; then
+      mv "$tmp" "$SETTINGS_DST"
+      echo "    MERGED: ${#DENY_BASELINE_ENTRIES[@]}-entry coarse deny baseline -> .claude/settings.json (docs/deny-baseline.md)"
+      return 0
+    fi
+    rm -f "$tmp"
+    echo "    WARNING: jq merge of the deny baseline failed — settings.json left untouched." >&2
+    echo "             Add the permissions.deny entries manually: docs/deny-baseline.md." >&2
+    return 0
+  fi
+
+  if command -v python3 >/dev/null 2>&1; then
+    if python3 - "$SETTINGS_DST" "$entries_json" > "$tmp" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], "r", encoding="utf-8") as fh:
+    settings = json.load(fh)
+new = json.loads(sys.argv[2])
+perms = settings.setdefault("permissions", {})
+cur = perms.get("deny") or []
+perms["deny"] = cur + [e for e in new if e not in cur]
+sys.stdout.write(json.dumps(settings, indent=2) + "\n")
+PY
+    then
+      mv "$tmp" "$SETTINGS_DST"
+      echo "    MERGED: ${#DENY_BASELINE_ENTRIES[@]}-entry coarse deny baseline -> .claude/settings.json (python3; docs/deny-baseline.md)"
+      return 0
+    fi
+    rm -f "$tmp"
+    echo "    WARNING: python3 merge of the deny baseline failed — settings.json left untouched." >&2
+    echo "             Add the permissions.deny entries manually: docs/deny-baseline.md." >&2
+    return 0
+  fi
+
+  echo "    WARNING: neither jq nor python3 found — deny baseline NOT applied." >&2
+  echo "             Add the permissions.deny entries manually: docs/deny-baseline.md." >&2
+  return 0
+}
+
+echo ""
+echo "==> Deny baseline (coarse backstop — PLAN-153 Wave E; docs/deny-baseline.md)"
+apply_deny_baseline
 
 # ---- 6b. P2-SEC-H (PLAN-019 Phase 3 Wave 3B): MCP secrets directory ----
 #

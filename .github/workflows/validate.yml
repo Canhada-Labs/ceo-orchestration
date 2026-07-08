@@ -67,6 +67,22 @@ jobs:
           python3 .claude/scripts/check-claude-md-claims.py
 
       # -----------------------------------------------------------------
+      # Step: AGENTS.md freshness gate (PLAN-153 Wave A follow-up)
+      #
+      # AGENTS.md lists the governance entry-point paths coding agents are
+      # told to read; check-agents-md.py asserts every listed path exists
+      # on disk so the file cannot drift into pointing at moved/deleted
+      # files. Static, stdlib-only, NO network, NO credential — safe on
+      # fork PRs. Kill-switch: the job-level `if:` CEO_SOTA_DISABLE gate
+      # above (per-repo variable) covers this step like every other.
+      # Exit contract: 0 fresh / non-zero stale — non-zero fails the job.
+      # -----------------------------------------------------------------
+      - name: Run check-agents-md.py (AGENTS.md freshness)
+        run: |
+          set -euo pipefail
+          python3 .claude/scripts/check-agents-md.py
+
+      # -----------------------------------------------------------------
       # Step: Doc skill-path resolves (PLAN-112-FOLLOWUP-install-md-skill-path)
       #
       # Every `.claude/skills/...SKILL.md` literal in INSTALL/README/CLAUDE.md
@@ -768,6 +784,50 @@ jobs:
           # Dynamic Python-hook coverage (Session 75 Finding 9):
           python3 .claude/scripts/check-active-hooks-executable.py
           echo "✓ All active hooks/scripts are executable"
+
+      # -----------------------------------------------------------------
+      # Step: Harness-config gate (PLAN-153 Wave E item 1 / ADR-173)
+      #
+      # `.claude/hooks/check_harness_config.py` certifies the hook rail is
+      # ALIVE, not merely present (the S254 dead-pair-rail class: a
+      # registered hook whose shim path never resolves fail-opens `{}`
+      # silently at runtime and no static exec-bit sweep sees it):
+      #   - static: runtime-resolution model over settings.json hook
+      #     commands ($CLAUDE_PROJECT_DIR-anchored or absolute only; shim
+      #     args must resolve at the shim's dirname), inline-secret scan,
+      #     DENY_BASELINE subset check, no-op annotation check, plus
+      #     delegation to check-active-hooks-executable.py (exec bits —
+      #     single owner, re-run here so this gate is self-contained).
+      #   - behavioral: replays planted-violation fixtures
+      #     (.claude/hooks/tests/fixtures/harness-config/replay/ — inert
+      #     test data) through the REAL hooks in a hermetic env (temp
+      #     HOME/GNUPGHOME, no override/sentinel env leakage) and asserts
+      #     each rail BLOCKS its positive control. A dead rail cannot
+      #     pass this half.
+      # No-arg invocation = static + replay, matching the /ceo-boot
+      # `harness_config_gate` check for CI/boot parity. Local-only: NO
+      # network, NO credential — safe on fork PRs. CEO_SOTA_DISABLE=1
+      # skips the replay half in-script (static unaffected); the
+      # job-level `if:` gate above skips the whole job anyway.
+      # Exit contract: 0 green / 1 RED finding(s) / 2 unusable input —
+      # ANY non-zero fails this step (fail-closed gate context).
+      #
+      # Collection note (PLAN-153 Wave E): the Wave E pytest files
+      # (test_check_harness_config.py, test_bash_citation_gate.py,
+      # test_prompt_defense_baseline.py,
+      # test_postcompact_reinject_no_exec_payload.py -> .claude/hooks/tests/;
+      # test_ceo_boot_liveness.py, test_check_action_sha_drift.py [ext],
+      # test_check_agents_md.py -> .claude/scripts/tests/) are collected
+      # by the EXISTING directory pins in the pytest steps above —
+      # deliberately NOT re-listed as explicit paths (debate C1 in the
+      # PLAN-152 tests-01 comment: explicit re-listing of files under an
+      # already-pinned directory double-collects them).
+      # -----------------------------------------------------------------
+      - name: Harness-config gate (PLAN-153 E1 — static + positive-control replay)
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          python3 .claude/hooks/check_harness_config.py
 
       # -----------------------------------------------------------------
       # Step: npm bundle sync gate (Session 75 Finding 3 + Owner D1)

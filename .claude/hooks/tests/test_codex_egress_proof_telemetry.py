@@ -94,7 +94,8 @@ class TestAllowlistAndContract(unittest.TestCase):
         #    [o4] + model_refusal_observed [o7], all trusted-producer emit_generic
         #    passthrough) = 302. CONSOLIDATION: this is the FINAL arc-consolidated
         #    count, re-derived vs the final arc audit_emit.py (staged/w5/actions-added.md).
-        self.assertEqual(len(audit_emit._KNOWN_ACTIONS), 302)
+        # +1 PLAN-153 Wave E / ADR-159 (spawn_prompt_defense_gate) = 303.
+        self.assertEqual(len(audit_emit._KNOWN_ACTIONS), 303)
         self.assertIn("pair_rail_outgoing_redaction_applied", audit_emit._KNOWN_ACTIONS)
 
     def test_dispatch_scrub_accepts_empty_findings(self):
