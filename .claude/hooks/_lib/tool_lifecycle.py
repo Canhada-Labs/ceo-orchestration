@@ -68,9 +68,27 @@ except Exception:  # pragma: no cover — fail-open if _lib unavailable
 # (``"mcp_other"`` / ``"other"``) are NOT members of this set, so an attacker
 # cannot smuggle a literal ``"mcp_other"`` tool name through a different path:
 # the mapper always recomputes from the raw name.
+#
+# PLAN-153 wave-backlog (Anthropic ADOPT, Claude Code 2.1.x): ``TodoWrite``
+# is deprecated upstream in favor of the four Task tools —
+# ``TaskCreate`` / ``TaskUpdate`` / ``TaskGet`` / ``TaskList``. All four get
+# FIRST-CLASS enum members (they are the dominant plan-tracking surface going
+# forward; collapsing them to ``"other"`` would blind the telemetry).
+# ``TodoWrite`` STAYS for back-compat (older harnesses still emit it) —
+# ADDITIVE-only per SPEC/v1 rules. COUPLING (3-way pin): this set must stay
+# in sync with ``_TOOL_CALL_LIFECYCLE_TOOL_NAME_ENUM`` in ``_lib/audit_emit.py``
+# (which re-coerces out-of-enum values to ``"other"`` at BOTH emit paths —
+# the typed emitter AND the emit_generic scrub branch) and with the closed
+# enum documented on the ``tool_call_lifecycle_recorded`` row of
+# ``SPEC/v1/audit-log.schema.md`` (v2.48 amendment). The pin-sync is
+# regression-guarded by ``hooks/tests/test_tool_lifecycle_enum_pin_sync.py``.
 _RECOGNIZED_TOOL_NAMES = frozenset({
     "Agent",
     "Task",
+    "TaskCreate",
+    "TaskUpdate",
+    "TaskGet",
+    "TaskList",
     "Bash",
     "Edit",
     "MultiEdit",

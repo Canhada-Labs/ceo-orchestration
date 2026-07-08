@@ -7709,8 +7709,16 @@ _TOOL_CALL_LIFECYCLE_DURATION_BUCKETS = frozenset({
 # produces. A value outside this set is coerced to "other" before emit so a
 # raw mcp__<server>__<tool> string can NEVER reach the wire (MF-SEC-1), even on
 # a direct typed-emitter call that bypassed the mapper.
+# PLAN-153 wave-backlog (v2.48 additive enum extension): + TaskCreate /
+# TaskUpdate / TaskGet / TaskList — the Claude Code 2.1.x Task tools that
+# deprecate TodoWrite (which stays for back-compat). COUPLING (3-way pin):
+# must stay in sync with `_RECOGNIZED_TOOL_NAMES` in _lib/tool_lifecycle.py
+# and the closed enum on the `tool_call_lifecycle_recorded` row of
+# SPEC/v1/audit-log.schema.md; pin-sync regression-guarded by
+# hooks/tests/test_tool_lifecycle_enum_pin_sync.py.
 _TOOL_CALL_LIFECYCLE_TOOL_NAME_ENUM = frozenset({
-    "Agent", "Task", "Bash", "Edit", "MultiEdit", "Write", "Read",
+    "Agent", "Task", "TaskCreate", "TaskUpdate", "TaskGet", "TaskList",
+    "Bash", "Edit", "MultiEdit", "Write", "Read",
     "Glob", "Grep", "WebFetch", "WebSearch", "NotebookEdit", "TodoWrite",
     "mcp_other", "other",
 })

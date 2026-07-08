@@ -43,6 +43,86 @@
         "api.osv.dev"
       ],
       "deniedDomains": []
+    },
+    "_credentials_comment": "PLAN-153 wave-backlog (Anthropic ADOPT sweep 2026-07) — Claude Code >=2.1.187 sandbox.credentials, schema verified against the 2.1.202 binary (files[].mode is literal 'deny'; envVars[].mode is 'deny'|'mask'; allowPlaintextInject optional, defaults false). Denies sandboxed Bash commands access to credential FILES (the subprocess-read class the permissions.deny Read() rail explicitly cannot cover — see _deny_baseline_comment) and unsets secret ENV VARS for sandboxed commands. INERT until sandbox.enabled=true (same flip discipline as the rest of this block). Honest limits: (1) this rail is HARNESS-side fail-open — the 2.1.202 loader drops an invalid entry or the whole block with a warning ('no credential protection is applied until it is fixed'), so the hook-side fail-CLOSED credential-leak guard in check_bash_safety.py remains the primary rail and this is defense-in-depth; (2) files paths resolve like sandbox.filesystem.* (absolute, ~ expanded, or relative to the project root) with NO glob support — the .env entries cover the repo ROOT only; subdir dotenv reads stay owned by the Read() deny rail + contamination CI; (3) envVars deliberately EXCLUDES GH_TOKEN/GITHUB_TOKEN/ANTHROPIC_API_KEY/OPENAI_API_KEY because gh, the `claude -p` eval harnesses, and the codex pair-rail all run through sandboxed Bash and may legitimately consume them — tighten only after an Owner-run probe (WATCH in docs/substrate-adopt-2026-07.md); (4) 'mask' mode (sentinel-in-sandbox + proxy inject on egress) is deliberately unused: it rests on egress-proxy TLS assumptions we have not probed; allowPlaintextInject stays explicit false.",
+    "credentials": {
+      "files": [
+        {
+          "path": "~/.ssh",
+          "mode": "deny"
+        },
+        {
+          "path": "~/.aws",
+          "mode": "deny"
+        },
+        {
+          "path": "~/.npmrc",
+          "mode": "deny"
+        },
+        {
+          "path": "~/.config/gcloud",
+          "mode": "deny"
+        },
+        {
+          "path": "~/.kube",
+          "mode": "deny"
+        },
+        {
+          "path": "~/.docker/config.json",
+          "mode": "deny"
+        },
+        {
+          "path": "~/.git-credentials",
+          "mode": "deny"
+        },
+        {
+          "path": "~/.netrc",
+          "mode": "deny"
+        },
+        {
+          "path": "~/.pypirc",
+          "mode": "deny"
+        },
+        {
+          "path": "~/.gnupg",
+          "mode": "deny"
+        },
+        {
+          "path": "~/.claude/.credentials.json",
+          "mode": "deny"
+        },
+        {
+          "path": ".env",
+          "mode": "deny"
+        },
+        {
+          "path": ".env.local",
+          "mode": "deny"
+        }
+      ],
+      "envVars": [
+        {
+          "name": "AWS_ACCESS_KEY_ID",
+          "mode": "deny"
+        },
+        {
+          "name": "AWS_SECRET_ACCESS_KEY",
+          "mode": "deny"
+        },
+        {
+          "name": "AWS_SESSION_TOKEN",
+          "mode": "deny"
+        },
+        {
+          "name": "NPM_TOKEN",
+          "mode": "deny"
+        },
+        {
+          "name": "NODE_AUTH_TOKEN",
+          "mode": "deny"
+        }
+      ],
+      "allowPlaintextInject": false
     }
   },
   "autoAllowBashIfSandboxed": false,
@@ -638,6 +718,8 @@
     "claude-sonnet-4-6",
     "claude-haiku-4-5"
   ],
+  "_enforce_available_models_comment": "PLAN-153 wave-backlog (Anthropic ADOPT sweep 2026-07) — Claude Code >=2.1.202 verified semantics: when true and availableModels is a non-empty array, the DEFAULT model selection is also constrained to the allowlist (if the tier default is not in availableModels, Default resolves to the first allowed entry). Closes Default-model drift when the harness tier default moves ahead of our pinned set. Schema-verified optional boolean, valid in project settings (cascade-trust mode). Caveat straight from the binary: if a MANAGED-POLICY settings source exists but fails to load, the harness refuses cascade-trust mode and model enforcement from user/project settings is DISABLED with a warning — fail-open at harness level; acceptable because the availableModels pins still gate explicit selection.",
+  "enforceAvailableModels": true,
   "fallbackModel": [
     "claude-opus-4-8"
   ],

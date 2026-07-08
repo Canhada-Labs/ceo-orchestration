@@ -1,6 +1,6 @@
 # SPEC v1 — npm-shim
 
-> **Spec version:** 1.0.0-rc.1
+> **Spec version:** 1.0.1-rc.1 (amended PLAN-152 §Deferred `spec-npm-shim-oidc-wording` — §Publishing corrected to the shipped auth mechanism; no behavioral change)
 > **Status:** normative
 > **Canonical source:** `npm/bin/ceo-orch-init.js`
 
@@ -51,9 +51,21 @@ package; if `VERSION=1.2.3`, the npm package is `1.2.3`.
 
 ## Publishing
 
-`ceo-orchestration` is published from CI on tag push (`v*`) via OIDC
-trusted publisher. See `.github/workflows/npm-publish.yml`. Manual
-`npm publish` is not used; tags are the only entry point.
+`ceo-orchestration` is published from CI on tag push (`v*`) via
+`.github/workflows/npm-publish.yml`. Manual `npm publish` is not
+used; tags are the only entry point. RC tags (`-rc.*`) are excluded
+at the job level; only GA tags publish.
+
+Registry authentication is a repo-scoped npm **granular token**
+(`secrets.NPM_TOKEN`), gated behind the `production-npm` GitHub
+environment (manual approval before any publish step). The per-run
+GitHub OIDC JWT (`id-token: write`) is consumed ONLY by the Sigstore
+`--provenance` attestation — it is **not** registry authentication.
+npm **Trusted Publishing** (OIDC registry auth, replacing the
+long-lived token) is NOT configured; it is a tracked v1.0.2
+follow-up with an Owner web-console prerequisite (PLAN-152 §Deferred
+`backlog-oidc`; NPM_TOKEN expires ~2026-09-28 and must be
+regenerated before any later release until Trusted Publishing lands).
 
 The publish workflow:
 1. Verifies `npm/package.json` `version` matches `VERSION`.
@@ -86,10 +98,12 @@ Future deprecation requires:
 - `.github/workflows/smoke-install.yml` — pre-merge gate that runs
   `bash install.sh` AND (when the npm/ subtree changes) checks the
   npm shim's contract.
-- ADR-012 — cross-adapter golden fixtures + OIDC publisher rationale.
+- ADR-012 — cross-adapter golden fixtures + OIDC trusted-publisher
+  rationale (target end-state; not yet configured — see §Publishing).
 
 ## Version history
 
 | SPEC version | Changes |
 |---|---|
 | 1.0.0-rc.1 | Initial formal contract; pass-through shim with zero deps |
+| 1.0.1-rc.1 | §Publishing corrected: publish auth is a repo-scoped npm granular token + Sigstore `--provenance` attestation; the "OIDC trusted publisher" claim removed (never configured — same false-claim class as the npm-publish.yml header fixed by PLAN-152 tarball-01). Trusted Publishing tracked for v1.0.2 (PLAN-152 §Deferred `backlog-oidc`). Documentation correction only; no contract or behavioral change. |

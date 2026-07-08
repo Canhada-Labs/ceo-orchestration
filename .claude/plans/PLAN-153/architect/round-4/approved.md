@@ -34,7 +34,7 @@ IS the sanctioned patcher route; for the `SPEC/**` rows the Owner-shell
 sentinel is the authorization record.
 
 <!-- BEGIN SIGNED SCOPE -->
-Approved-By: @Canhada-Labs __ANCHOR_SHA__
+Approved-By: @Canhada-Labs 2094175a55fbe9f341e42baffa0ab06898aaa357
 Plans: PLAN-153
 Scope:
   Wave backlog — PLAN-152 §Deferred + Anthropic ADOPT-PLANNED substrate
