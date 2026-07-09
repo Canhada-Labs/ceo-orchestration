@@ -308,7 +308,14 @@ echo "--- Squad bundle contract (ADR-009) ---"
 # scheduled for PLAN-074 Wave 4 (16 skills + team-personas.md +
 # pitfalls.yaml + task-chains.yaml + examples/). Grandfathered until
 # Wave 4 closes; remove this entry as part of Wave 4 ceremony.
-SQUAD_GRANDFATHER="academic-humanities business-support civil-engineering community devrel embedded finance-accounting fintech healthcare hospitality hr i18n-business identity-systems lgpd-heavy-saas marketing-global mobile paid-media project-management real-estate-finance retail saas-platforms supply-chain training-l-and-d voice-ai"
+#
+# PLAN-153 Wave D imported squads (added S262 2026-07-09): agents-meta,
+# architecture, cpp, data-ml, desktop, dotnet, golang, jvm are skills-only
+# clean-room imports (1-2 skills each) — the same externally-imported
+# posture as `community` (ADR-060), not /architect-authored squads.
+# Graduate each by authoring its bundle via /architect (team-personas +
+# pitfalls + task-chains + examples + >=3 skills), then remove it here.
+SQUAD_GRANDFATHER="academic-humanities agents-meta architecture business-support civil-engineering community cpp data-ml desktop devrel dotnet embedded finance-accounting fintech golang healthcare hospitality hr i18n-business identity-systems jvm lgpd-heavy-saas marketing-global mobile paid-media project-management real-estate-finance retail saas-platforms supply-chain training-l-and-d voice-ai"
 
 is_grandfathered() {
   local name="$1"
