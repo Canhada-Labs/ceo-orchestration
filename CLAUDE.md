@@ -7,12 +7,14 @@
 > is the framework's own evolution (dogfooding).
 
 > **⏭️ PENDING OWNER ACTION (updated 2026-07-09, remove when done):** the
-> PLAN-153 `/skill-review` ceremony ran on 2026-07-08/09: Wave D landed
-> (catalog **151 → 166**), Wave C (SP-022/023) is in **parallel-shadow
-> soak**. Remaining: (1) promote SP-022/023 after a clean soak window
-> (**≥ 2026-07-14**, `skill-health.py` is the signal), (2) only THEN
-> dispatch SP-026/SP-034 (AFTER-C), (3) land the Wave G non-AFTER-C SPs.
-> ⚠ Staged material is LOCAL-ONLY (gitignored) — work from this checkout.
+> PLAN-153 `/skill-review` ceremony is fully executed: Wave D landed
+> (catalog **151 → 166**), Waves C (SP-022/023) and G (16 non-AFTER-C
+> SPs) are in **parallel-shadow soak**. Remaining: (1) promote after a
+> clean soak window (**≥ 2026-07-14**, `skill-health.py` is the signal;
+> whole-file SPs need `sha256_of_diff` pinned at promote time), (2) only
+> THEN dispatch SP-026/SP-034 (AFTER-C). Then close PLAN-153
+> `executing → done` and remove this banner. ⚠ Staged material is
+> LOCAL-ONLY (gitignored) — work from this checkout.
 
 ---
 
