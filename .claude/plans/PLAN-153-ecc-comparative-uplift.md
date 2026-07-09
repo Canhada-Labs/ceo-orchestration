@@ -376,6 +376,20 @@ posture honored.
    (adds ~1-2 weeks wall-clock, zero token cost); (c) hybrid — skip for new
    files (Wave D; nothing to regress), parallel-shadow for merges (Wave G).
    CEO recommends **(c)**.
+4. **OQ4 (S264 — AFTER-C soak window, ratified 2026-07-09):** AskUserQuestion
+   put to the Owner: "O promote de SP-026/SP-034 é a última unidade de
+   execução do PLAN-153, mas a janela de soak ratificada (S263) só abre em
+   2026-07-14 — e o soak começou hoje às 16:32Z (~0h de sinal). Como
+   finalizamos?" Owner selected (verbatim): **"Waiver agora (S264) — fechar
+   hoje"** over the CEO-recommended "Manter soak, promote 07-14". Decision:
+   the remaining parallel-shadow window for SP-026/SP-034 is waived
+   (**soak waiver S264**, same pre-authorized skip semantics as S263);
+   promote executes 2026-07-09 via the Owner terminal script
+   (`~/Desktop/ceo-promote-after-c/`). Pre-waiver audit sweep of the soak
+   window (2026-07-09T16:32Z → sweep time, 101 events) found **zero adverse
+   signal** touching either shadow; the only match was a benign
+   `reference_postread_observed` observability event on an unrelated
+   SKILL.md.
 
 ## Closeout record (S261, 2026-07-06/07 — overnight autonomous run)
 
