@@ -21,6 +21,11 @@ inspired_by:
     relationship: structural_inspiration
     authored_by: ceo-orchestration framework
     authored_at: 2026-05-07
+  - source: affaan-m/ecc/skills/android-clean-architecture@81af40761939056ab3dc54732fd4f562a27309d0
+    license: MIT
+    relationship: structural_inspiration
+    authored_by: ceo-orchestration framework
+    authored_at: 2026-07-07
 # --- smart-loading fields (PLAN-083 Wave 0b sub-agent 0.7c) ---
 domain: mobile
 priority: 8
@@ -36,6 +41,8 @@ repo_profile_binding:
   generic: {active: false, priority: 10}
 activation_triggers:
   - {event: help-me-invoked, regex: "(?i)foundation.?models|apple.?intelligence"}
+source: affaan-m/ecc@81af4076 skills/android-clean-architecture/
+license: MIT
 ---
 
 # Mobile App Builder
@@ -222,6 +229,110 @@ silently degrading — surface it, never swallow it.
   injected at the composition root, stubs at test time.
 - Snapshot tests (iOS: swift-snapshot-testing; Android: Paparazzi) cover each
   distinct UI state, not every permutation.
+
+## Clean Architecture on Android / Kotlin Multiplatform
+
+The "Clean Architecture" row in the pattern table and the module-boundary
+doctrine above become concrete on Android — and on Kotlin Multiplatform (KMP),
+where the domain and data layers are shared Kotlin across Android and iOS — as a
+fixed layer stack governed by a single one-directional dependency rule. Reach for
+this realization when the codebase is large enough that testability and CI gate
+coverage justify the data-layer ceremony; consult the pattern table's "when to
+avoid" column before adopting it on a small app.
+
+### Layer stack
+
+| Module | Holds | Depends on |
+|---|---|---|
+| `app` | Entry point, DI wiring, `Application` / composition root | everything below |
+| `presentation` | Screens, ViewModels, UI models, navigation | `domain`, `design-system`, `core` |
+| `domain` | UseCases, domain models, repository **interfaces** — pure Kotlin | `core` only (ideally nothing) |
+| `data` | Repository **implementations**, DataSources, DB, network | `domain`, `core` |
+| `core` | Shared error types, base utilities | nothing |
+| `design-system` | Reusable Compose components, theme, typography | `core` |
+| `feature/*` | Optional per-feature slices for large apps | `domain`, `design-system`, `core` |
+
+The one-directional rule (dependencies point inward, never out):
+
+```
+app          -> presentation, domain, data, core
+presentation -> domain, design-system, core
+data         -> domain, core
+domain       -> core   (or nothing)
+core         -> (nothing)
+```
+
+**The load-bearing invariant: `domain` is pure Kotlin.** Zero Android framework
+import, zero `data` or `presentation` import. This is the concrete form of the
+"no UI code in domain or data layers" rule above. A framework import in `domain`
+is a Fail-Fast condition, not a style preference — it silently couples business
+rules to a platform and breaks KMP sharing.
+
+### Domain layer
+
+- **UseCase = one business operation**, exposed through a single
+  `operator fun invoke` so call sites read as `getItemsByCategory(category)`.
+  Use `suspend` for one-shot work and return `Flow<T>` for reactive streams —
+  do not fold both concerns into one UseCase.
+- **Domain models are plain data classes** with no persistence or serialization
+  annotations. An `@Entity`, `@Serializable`, or DTO type in the domain layer is
+  a leak of an outer concern inward.
+- **Repository interfaces live in `domain`; implementations live in `data`.**
+  This is dependency inversion: the business layer declares what it needs, the
+  data layer supplies it, and `domain` never names a concrete database or client.
+
+```kotlin
+// domain/
+class GetItemsByCategory(private val repo: ItemRepository) {
+    suspend operator fun invoke(category: String): Result<List<Item>> =
+        repo.getItemsByCategory(category)
+}
+
+interface ItemRepository {                     // declared here...
+    suspend fun getItemsByCategory(category: String): Result<List<Item>>
+    fun observeItems(): Flow<List<Item>>
+}
+```
+
+### Data layer
+
+- **Repository implementations coordinate DataSources** — a local source and a
+  remote source, each with one job — rather than talking to the framework
+  directly. A repository that accretes query logic, caching policy, and mapping
+  all at once is the "fat repository" anti-pattern; split it into focused
+  DataSources.
+- **Map at the boundary.** DTOs (network) and entities (DB) convert to and from
+  domain models via small mapper functions — idiomatically Kotlin extension
+  functions kept beside the data models. A DTO or DB entity must never cross into
+  `domain` or the UI; the mapper is the seam that keeps the invariant true.
+- **Storage/network realization for the offline-first strategy:** Room on
+  Android, SQLDelight for KMP, Ktor for the network client. Clean layering is
+  what lets you swap those without touching `domain`.
+
+### Composition root and error boundary
+
+- **Dependency injection is wired only in `app`** — the one module that sees
+  every layer. Koin is the KMP-friendly choice; Hilt is Android-only. This is the
+  same "inject real implementations at the composition root, stub at test time"
+  discipline the Testability section states, made concrete: because `domain`
+  depends on interfaces, tests substitute fakes with no framework present.
+- **Errors cross the repository boundary as values, not exceptions.** Return
+  `Result<T>` or a sealed `AppError` / `Try` type from the repository; the
+  ViewModel maps that value to UI state. An exception thrown from `data` and
+  caught (or missed) in a Composable is an uncontrolled boundary — model the
+  failure explicitly so every call site is forced to handle it.
+
+### Layering anti-patterns (build-time and review-time)
+
+- Android framework class imported in `domain` — breaks purity and KMP sharing.
+- DB entity or DTO exposed to the UI — always map to a domain model first.
+- Business logic living in a ViewModel — extract it to a UseCase so it is
+  testable without the UI.
+- `GlobalScope` or unstructured coroutines — use `viewModelScope` and structured
+  concurrency (see State Management).
+- Circular module dependency — if `A` depends on `B`, `B` must not depend on
+  `A`; this is a build error, matching the feature-module rule in Module
+  boundaries above.
 
 ## State Management
 
@@ -444,3 +555,8 @@ Optimistic mutations must be paired with:
   capability declaration for model IDs not compiled into
   `ClaudeForFoundationModels` is the in-app mirror of the framework's allowlist
   doctrine — never guess what an unverified model ID accepts.
+
+## Changelog
+
+- **PLAN-153 Wave G (SP-037, 2026-07-09):** Android clean-architecture layering doctrine folded in (clean-room ADAPT; provenance in frontmatter/NOTICE).
+Skill-Import-Attestation: reviewed-by=AE9B236FDAF0462874060C6BCFCFACF00335DC74; sha256=00ff5c83ae52e269b5121ff86de4b1e1003f3d157998053e669bf06d773e128d

@@ -8,14 +8,14 @@ source_lessons:
 scan_injection_pass: true
 diff_size_added: 68
 diff_size_removed: 0
-sha256_of_diff: null
+sha256_of_diff: 727816569765542a27358c3fb49797812ba464f79b9b64661970eaa3b27d5761
 sha256_of_staged: 6b1ff063fec023e3b3748bb75df255da11309f1a5fb3373757fa367677758006
 claims_declared: false
-status: shadow
+status: promoted
 approved_by: AE9B236FDAF0462874060C6BCFCFACF00335DC74
 applied_at: 2026-07-09T11:33:28Z
-promoted_at: null
-shadow_mode: true
+promoted_at: 2026-07-09T15:49:44Z
+shadow_mode: false
 proposal_type: adapt-merge-enrichment
 after_wave_c: false
 contains_code: true
@@ -96,3 +96,5 @@ git diff --no-index .claude/skills/domains/fintech/skills/blockchain-security-au
 
 
 > **Contagens finais S262 (pós-review, autoritativas):** staged = 560 linhas; diff vs live = +68/−0; frontmatter diff_size_added/removed sincronizados. Rail de integridade = pin sha256_of_staged, re-pinado após cada fix.
+
+> **Soak waiver S263 (2026-07-09):** 7-day parallel-shadow window waived by explicit Owner decision (single-user dogfood; pre-authorized skip semantics of --promote --force-recover). SP-026/SP-034 (AFTER-C) excluded — they keep the full soak.

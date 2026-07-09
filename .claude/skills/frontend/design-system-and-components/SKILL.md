@@ -2,6 +2,13 @@
 name: Design System & Component Architecture
 description: Design token governance, component architecture patterns, shared component organization, empty/loading/error state standards, component library integration (e.g. shadcn/ui, Material-UI, Chakra), responsive design, and visual consistency for the {{PROJECT_NAME}} frontend. Use when creating or reviewing components, organizing shared/, working with design tokens, implementing responsive layouts, or ensuring visual consistency across pages. Also use when the user mentions "design system", "components", "shared/", "god component", "empty state", "skeleton", "design tokens", "dark mode", "responsive", or any visual/structural component work.
 trigger: Any work involving components, design system, visual consistency, or shared/ directory.
+version: 1.1.0
+inspired_by:
+  - source: affaan-m/ecc/skills/motion-foundations@81af40761939056ab3dc54732fd4f562a27309d0
+    license: MIT
+    relationship: structural_inspiration
+    authored_by: ceo-orchestration framework
+    authored_at: 2026-07-07
 # --- smart-loading fields (PLAN-083 Wave 0b sub-agent 0.7b) ---
 domain: frontend
 priority: 5
@@ -19,6 +26,8 @@ activation_triggers:
   - {event: file-edit, glob: "**/components/**"}
   - {event: file-edit, glob: "**/shared/**"}
   - {event: help-me-invoked, regex: "(?i)design.?system|component|shadcn|tailwind|token"}
+source: affaan-m/ecc@81af4076 skills/motion-foundations/
+license: MIT
 ---
 
 # Design System & Component Architecture — {{PROJECT_NAME}} Frontend
@@ -64,6 +73,74 @@ numbered so this skill can reference them.
 - **NEVER** use `dark:` prefix — theme works via CSS variable swapping
 - **ALWAYS** use density tokens for spacing (gap, padding, row height, font size)
 - 33 files currently violate with hardcoded colors (mostly chart/canvas components)
+
+## Motion Tokens & Motion Governance
+
+Motion is a token category, not a per-component decision. The token table
+above already lists Motion (7 tokens) alongside color and density; this
+section gives that category the same governance the color tokens get — a
+single source of truth, no hardcoded values, and accessibility baked into
+the tokens rather than bolted onto each animation.
+
+### Tokenize every motion value
+
+Durations, easings, spring configs, and interaction scales all live in
+the token layer. A component that references `motionTokens.duration.normal`
+is correct by construction; a component with `transition: 300ms` inline is
+a drift you cannot audit.
+
+| Tier | What it holds | Example steps |
+|------|---------------|---------------|
+| Duration | How long a motion runs | instant / fast / normal / slow / crawl |
+| Easing | The acceleration curve | smooth / sharp / bounce / linear |
+| Spring | Named physics presets | snappy / gentle / bouncy / instant / release |
+| Scale | Interaction transforms | subtle / press / pop |
+
+Rule (parallel to "NEVER hardcode hex colors"): **NEVER hardcode a
+duration, easing, or spring config in a component — reference a token.**
+Inline motion values are the same class of violation as inline hex.
+
+### Accessibility is a property of the token layer
+
+Reduced motion is not a per-component opt-in — it is a priority order the
+token/gate layer enforces for *every* animation:
+
+1. **`prefers-reduced-motion: reduce` wins over everything.** It disables
+   transforms; the only permitted fallback is an opacity fade ≤ 0.2s.
+2. **Low-end device** (e.g. low `hardwareConcurrency`) drops non-essential
+   animation and shortens the rest.
+3. **Design preference** applies only after the two gates above pass.
+
+A single `shouldAnimate()` gate that reads those two signals is what every
+animated component calls before it animates — so the accessibility
+contract cannot be forgotten one component at a time. The runtime *budget*
+rules (zero transitions on high-frequency-update elements, direction-
+encoded state flashes) live in `frontend-patterns` → "Animation and Motion
+Floors"; this section governs the *tokens and the gate*, that one governs
+*what motion is allowed to run*.
+
+### Two hard constraints
+
+- **Animate `transform` and `opacity` only.** `width`, `height`, `top`,
+  `left`, `margin`, and `padding` trigger layout/paint and drop frames —
+  use a `scale` / `translate` transform instead. (This is why the Scale
+  tier exists as a token.)
+- **`initial` must match server output.** An entrance that starts at
+  `opacity: 0` while the server rendered `opacity: 1` is a hydration
+  mismatch. Defer the animated initial state to a client mount flag, or
+  drive enter/exit through a presence wrapper. Never read `window` or
+  `navigator` at module scope — guard with `typeof window !== "undefined"`.
+
+### Should this motion exist at all?
+
+Before adding an animation, require it to do at least one job: **guide
+attention**, **communicate a state change**, or **preserve spatial
+continuity**. Decorative motion with none of these is removed.
+Responsiveness outranks smoothness — an animation that adds input latency
+is worse than no animation.
+
+See `reference/motion-tokens.md` for the concrete token object, the spring
+preset map, the `shouldAnimate()` gate, and an SSR-safe animated component.
 
 ## Component Standards
 
@@ -153,3 +230,15 @@ For your adopter project:
   equivalents (or keep the pattern if they happen to match).
 - The §Empty / Loading / Error States contract below the
   current-state block is universal and applies as-is.
+
+## Changelog
+
+- **1.1.0** (2026-07-07, PLAN-153 Wave G): enrichment merge — added
+  §Motion Tokens & Motion Governance (motion as a governed token category:
+  tokenize every value, reduced-motion priority order, transform/opacity-
+  only, SSR-safe initial state) plus `reference/motion-tokens.md`. Clean-
+  room ADAPT of upstream motion-foundations guidance; no pre-existing
+  section changed. First tracked revision.
+- **1.0.0** (framework v1.0.x): initial version shipped with the
+  framework; this changelog was introduced retroactively at 1.1.0.
+Skill-Import-Attestation: reviewed-by=AE9B236FDAF0462874060C6BCFCFACF00335DC74; sha256=76e69cd5e2175c53eb36b1da9a8e8fd56e8afa80026356faa489da59c4661013

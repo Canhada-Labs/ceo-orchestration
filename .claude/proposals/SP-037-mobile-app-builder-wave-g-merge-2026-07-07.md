@@ -8,14 +8,14 @@ source_lessons:
 scan_injection_pass: true
 diff_size_added: 115
 diff_size_removed: 0
-sha256_of_diff: null
+sha256_of_diff: 816119648f14df287f6de5829ece7888b3d40e9ed2a7f6e3fdbe0d757d976ff0
 sha256_of_staged: 1d644f9b5bd8db652ba886822cbf757c84e14de43bbe5c42641a24c8584b4b09
 claims_declared: false
-status: shadow
+status: promoted
 approved_by: AE9B236FDAF0462874060C6BCFCFACF00335DC74
 applied_at: 2026-07-09T11:33:30Z
-promoted_at: null
-shadow_mode: true
+promoted_at: 2026-07-09T15:49:45Z
+shadow_mode: false
 proposal_type: adapt-merge-enrichment
 after_wave_c: false
 upstream_sources:
@@ -94,3 +94,5 @@ git diff --no-index .claude/skills/domains/mobile/skills/mobile-app-builder/SKIL
 
 
 > **Contagens finais S262 (pós-review, autoritativas):** staged = 561 linhas; diff vs live = +115/−0; frontmatter diff_size_added/removed sincronizados. Rail de integridade = pin sha256_of_staged, re-pinado após cada fix.
+
+> **Soak waiver S263 (2026-07-09):** 7-day parallel-shadow window waived by explicit Owner decision (single-user dogfood; pre-authorized skip semantics of --promote --force-recover). SP-026/SP-034 (AFTER-C) excluded — they keep the full soak.

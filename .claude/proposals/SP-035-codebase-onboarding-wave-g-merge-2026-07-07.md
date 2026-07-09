@@ -8,14 +8,14 @@ source_lessons:
 scan_injection_pass: true
 diff_size_added: 96
 diff_size_removed: 4
-sha256_of_diff: null
+sha256_of_diff: e8e0b2f5559b09c3a927846fa5156bd877cd4685393c7396d2519f3842952a23
 sha256_of_staged: 003ac9aba31d4151303c1c90ac776710ed0d0186a044c34e9ea9d174c9671a4a
 claims_declared: false
-status: shadow
+status: promoted
 approved_by: AE9B236FDAF0462874060C6BCFCFACF00335DC74
 applied_at: 2026-07-09T11:33:29Z
-promoted_at: null
-shadow_mode: true
+promoted_at: 2026-07-09T15:49:44Z
+shadow_mode: false
 proposal_type: adapt-merge-enrichment
 after_wave_c: false
 upstream_sources:
@@ -91,3 +91,5 @@ git diff --no-index .claude/skills/core/codebase-onboarding/SKILL.md \
 
 
 > **Contagens finais S262 (pós-review, autoritativas):** staged = 607 linhas; diff vs live = +96/−4; frontmatter diff_size_added/removed sincronizados. Rail de integridade = pin sha256_of_staged, re-pinado após cada fix.
+
+> **Soak waiver S263 (2026-07-09):** 7-day parallel-shadow window waived by explicit Owner decision (single-user dogfood; pre-authorized skip semantics of --promote --force-recover). SP-026/SP-034 (AFTER-C) excluded — they keep the full soak.

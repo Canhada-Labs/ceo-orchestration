@@ -96,7 +96,7 @@ correlation conclusion.
 
 ## SKILL REFERENCE
 
-@.claude/skills/core/performance-engineering/SKILL.md sha256=b7d2dbf36d9157d4422be7262b3a816208070674166d7f80e19bb8dc06a165dd
+@.claude/skills/core/performance-engineering/SKILL.md sha256=0dde57e6d492ec45c1283cf4a9993b8c23e7b675c1fa06a114993f6c1d186b51
 
 (Sub-agent MUST Read the referenced SKILL.md after spawn. ~8 KB
 covering measurement methodology, profiling tools, percentile

@@ -8,14 +8,14 @@ source_lessons:
 scan_injection_pass: true
 diff_size_added: 115
 diff_size_removed: 0
-sha256_of_diff: null
+sha256_of_diff: 1b5a8d6a9023e50e9b763d35947e5bf3466e87753e9f6fa45c31d01cf1f1ad13
 sha256_of_staged: c459a7a29c8e44b8ef6ba272a83db3f36503670175a2b458f96b8657b4e1ec4b
 claims_declared: false
-status: shadow
+status: promoted
 approved_by: AE9B236FDAF0462874060C6BCFCFACF00335DC74
 applied_at: 2026-07-09T11:33:31Z
-promoted_at: null
-shadow_mode: true
+promoted_at: 2026-07-09T15:49:45Z
+shadow_mode: false
 proposal_type: adapt-merge-enrichment
 after_wave_c: false
 upstream_sources:
@@ -127,3 +127,5 @@ ceremony below.
 
 
 > **Contagens finais S262 (pós-review, autoritativas):** staged = 800 linhas; diff vs live = +115/−0; frontmatter diff_size_added/removed sincronizados. Rail de integridade = pin sha256_of_staged, re-pinado após cada fix.
+
+> **Soak waiver S263 (2026-07-09):** 7-day parallel-shadow window waived by explicit Owner decision (single-user dogfood; pre-authorized skip semantics of --promote --force-recover). SP-026/SP-034 (AFTER-C) excluded — they keep the full soak.

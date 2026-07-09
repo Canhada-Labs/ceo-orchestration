@@ -29,6 +29,11 @@ inspired_by:
     relationship: pattern_reference
     authored_by: ceo-orchestration framework
     authored_at: 2026-05-06
+  - source: affaan-m/ecc/skills/search-first/SKILL.md@81af40761939056ab3dc54732fd4f562a27309d0
+    license: MIT
+    relationship: partial_reuse
+    authored_by: ceo-orchestration framework
+    authored_at: 2026-07-07
 # --- smart-loading fields (PLAN-083 Wave 0a sub-agent 0.7a) ---
 domain: core
 priority: 3
@@ -45,6 +50,8 @@ repo_profile_binding:
 activation_triggers:
   - {event: plan-opened}
   - {event: help-me-invoked, regex: "(?i)code.?review|cr"}
+source: affaan-m/ecc@81af4076 skills/search-first/
+license: MIT
 ---
 
 # Code Review Checklist
@@ -673,3 +680,73 @@ PR that adds a dependency without a matrix score is the same shape
 of finding as a PR that adds an unauthenticated endpoint — a missing
 mandatory artifact, severity MAJOR minimum, verdict `BLOCKED` until
 the matrix lands inline in the review document.
+
+## Reuse & Prior-Art Review (reinvented-wheel findings)
+
+Tool-Introduction Scoring above gates the dependencies a PR *adds*. This
+section gates the mirror-image failure: a PR that hand-writes custom code
+where existing prior art — an in-repo utility, a maintained library, a wired
+MCP capability, or a sibling skill — already solves the problem. Reinvention
+is a review finding, because duplicated logic diverges under maintenance and
+widens a blast radius no one is tracking.
+
+### The prior-art sweep (before judging the implementation)
+
+When a diff introduces a new helper, parser, client, validator, retry loop,
+date/number formatter, or any other general-purpose primitive, run a bounded
+search *before* evaluating the code quality:
+
+1. **In-repo first.** `rg` for an existing function or module that already
+   does this. A second copy of a utility that lives one directory over is the
+   highest-value reuse finding — the two call sites *will* drift.
+2. **Ecosystem.** A well-solved commodity problem (HTTP retry/backoff,
+   schema validation, CSV, argument parsing) usually has a battle-tested
+   package. Net-new custom code for a commodity problem is a finding.
+3. **Capability already wired.** An MCP server or an existing framework skill
+   may already expose the capability; re-implementing it in the PR is a
+   finding.
+
+Honesty rule: report only the channels actually searched. "No existing
+solution found" after searching zero channels is a false negative dressed as
+diligence — the same anti-pattern as approving without reading the diff.
+
+### Reuse verdict lens
+
+Map the change to a verdict, not a reflex to rewrite:
+
+| Situation | Reviewer verdict |
+|---|---|
+| Exact match exists in-repo, or a vetted dependency already present covers it | **Reuse** — the custom code is a MAJOR finding (two sources of truth) |
+| Close match needs only a thin adapter | **Extend** — a small wrapper is fine; a heavy re-implementation around it is a MINOR finding |
+| Only weak partial matches exist | **Compose** — combining small pieces is acceptable; note the trade-off |
+| Nothing suitable, or every candidate fails the Tool-Introduction matrix | **Build** — custom code is justified; record *why* the search came up empty |
+
+"Build" is a legitimate outcome. A reviewer who forces adoption of an
+un-vetted library has not removed risk, only relocated it — so any library the
+review *proposes* as a replacement must itself clear the 7-axis
+Tool-Introduction matrix above. The two sections interlock: the reuse lens
+stops reinvention, the tool matrix stops careless adoption, and neither is a
+loophole for the other.
+
+### Severity guidance
+
+- Duplicating an existing in-repo function: **MAJOR** (two sources of truth
+  that drift silently).
+- Reinventing a commodity, well-solved problem as net-new custom logic:
+  **MINOR** at L1–L2 blast radius, **MAJOR** at L3+.
+- Over-wrapping an adopted library until its guarantees are lost (e.g.
+  swallowing a library's typed errors behind a bare `except`): **MINOR**, or
+  higher when it defeats a safety property.
+- A new dependency pulled in to avoid a five-line in-repo helper (dependency
+  bloat): **MINOR**, and it still must clear the Tool-Introduction matrix.
+
+## Changelog
+
+- **2026-07-07 (PLAN-153 Wave G, SP-029)**: added §"Reuse & Prior-Art
+  Review (reinvented-wheel findings)" — a reviewer lens for flagging
+  hand-written code that duplicates in-repo utilities, maintained libraries,
+  MCP capabilities, or sibling skills, interlocked with the existing
+  Tool-Introduction matrix so neither is a loophole. Clean-room ADAPT merge of
+  the search-before-build practice; no change to the severity scale, the
+  blast-radius bands, or the default-BLOCKED verdict discipline.
+Skill-Import-Attestation: reviewed-by=AE9B236FDAF0462874060C6BCFCFACF00335DC74; sha256=74ed267ae82ae8fa499b252fd46e9bf3e3292000e85231d4db3b54d458dd8cca

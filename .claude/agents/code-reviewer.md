@@ -113,7 +113,7 @@ the primary gate).
 
 ## SKILL REFERENCE
 
-@.claude/skills/core/code-review-checklist/SKILL.md sha256=d0d18c87a01a7200029447ebadf3c934b114fb88de058554b4cc70a9a6126553
+@.claude/skills/core/code-review-checklist/SKILL.md sha256=be588ebe4ad480a0e8ab6b544880012fec2e233648472e10eb54942c0d23a0a3
 
 (Sub-agent MUST Read the referenced SKILL.md after spawn to load the
 full checklist. The PostToolUse observer `check_skill_reference_read.py`

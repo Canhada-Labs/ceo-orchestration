@@ -21,6 +21,11 @@ inspired_by:
     relationship: structural_inspiration
     authored_by: ceo-orchestration framework
     authored_at: 2026-05-07
+  - source: affaan-m/ecc/skills/brand-voice@81af40761939056ab3dc54732fd4f562a27309d0
+    license: MIT
+    relationship: structural_inspiration
+    authored_by: ceo-orchestration framework
+    authored_at: 2026-07-07
 # --- smart-loading fields (PLAN-083 Wave 0b sub-agent 0.7c) ---
 domain: marketing-global
 priority: 8
@@ -41,6 +46,8 @@ paths:
   - "**/articles/**"
   - "**/newsletters/**"
   - "**/blog/**"
+source: affaan-m/ecc@81af4076 skills/brand-voice/
+license: MIT
 ---
 
 # Content Creator
@@ -288,6 +295,78 @@ aspiration, not an operational constraint. The minimum required sections:
   does not make claims without evidence, does not use first-person superlatives,
   does not take positions on topics outside its defined authority domain.
 
+### Source-Derived Voice Profiling
+
+A voice document assembled from aspiration — adjectives chosen because they sound
+right — is a hypothesis. A voice derived from a representative sample of the
+author's real work is evidence. The tone-register adjectives above should be
+*read off* actual artifacts, not invented; source-derived profiling is the method
+that grounds the document so it survives author turnover and resists the
+generic-AI default the model reverts to under thin guidance.
+
+**Source priority (ranked by fidelity).** Derive from real material, strongest
+source first:
+
+| Tier | Source | Why it ranks here |
+|---|---|---|
+| S1 | Recent original posts / threads by the author | Channel-native, unedited-by-committee — the voice at its most characteristic |
+| S2 | Articles, essays, memos, launch notes, newsletters | Sustained argument; shows structure and claim style |
+| S3 | Outbound emails or DMs that actually landed | Voice under real stakes, in a one-to-one register |
+| S4 | Product docs, changelogs, README framing, site copy | Institutional register; useful for the "public" voice |
+
+Never derive from generic platform exemplars or competitor copy — that
+reproduces the market's average voice, which is the exact thing a distinct voice
+exists to escape.
+
+**Collection.** Gather 5-20 representative samples. Prefer recent material unless
+the author says older writing is more canonical. If the set clearly splits into a
+public / launch register and a private / working register, keep them separate —
+averaging two real voices produces a third voice no one actually uses. Where live
+access to the author's own channels exists, pull recent originals directly rather
+than reconstructing the voice from memory.
+
+**What to read off the sample** — the observable signals, not vibes:
+
+- Sentence rhythm and length; degree of fragmentation.
+- Compression vs. explanation ratio.
+- Capitalization norms (conventional, mixed, situational).
+- Parenthetical usage — and what parentheticals are *not* used for.
+- Question frequency and purpose (direct, rhetorical, or near-absent).
+- How sharply claims are made, and how they are supported.
+- How often numbers, mechanisms, and receipts appear vs. adjectives.
+- How transitions are handled.
+- Most diagnostic of all: **what the author never does.**
+
+**Reusable profile block.** Emit a short, source-backed `VOICE PROFILE` — an
+operational artifact downstream authoring consumes directly, not literary
+criticism. Keep it to short bullets; every banned move must be observable in the
+source set (or explicitly requested by the owner); if the source set conflicts,
+name the split rather than averaging it into mush.
+
+```text
+VOICE PROFILE
+Author/Persona:      Goal:            Confidence:
+Source Set:          (the S1-S4 samples used)
+Rhythm:              Compression:     Capitalization:
+Parentheticals:      Question Use:    Claim Style:
+Preferred Moves:     (concrete moves the author does use)
+Banned Moves:        (specific patterns the author does not use)
+CTA Rules:           (how / when / whether to close with an ask)
+Channel Notes:       (per channel — long-form, social, email)
+```
+
+**AI-tell bans.** A thin profile lets the model fall back to the phrasings that
+erase voice. Ban these on sight — they are the deletion targets behind the "AI
+slop" anti-pattern below: fake curiosity hooks, the "not X, just Y" construction,
+"no fluff", forced lowercase, thought-leader cadence, bait questions, "excited to
+share", generic founder-journey filler, and decorative parentheticals.
+
+**Persistence and privacy.** Reuse the latest confirmed profile across related
+tasks in the same session. Persist a durable copy only where the owner asks for
+one. Do **not** commit a repo-tracked file that stores an individual's personal
+voice fingerprint unless the owner explicitly requests it — a voice profile is
+personal data about a named author, and it is handled as such.
+
 ### Voice Drift Detection
 
 Voice drift occurs when content published under the same brand or author
@@ -414,3 +493,8 @@ than to miss it attempting to hit a precise optimal moment.
   The two-pass adversarial review pattern applies to voice consistency audits:
   the first pass reads for argument coherence; the second pass reads specifically
   for voice drift, prohibited vocabulary, and format-intent mismatch.
+
+## Changelog
+
+- **PLAN-153 Wave G (SP-038, 2026-07-09):** source-derived voice profiling method folded in (clean-room ADAPT; provenance in frontmatter/NOTICE).
+Skill-Import-Attestation: reviewed-by=AE9B236FDAF0462874060C6BCFCFACF00335DC74; sha256=7adbe37b72f9dc1d5493ced0554a25113793f9559cd0c20aa266f9ba8975a758

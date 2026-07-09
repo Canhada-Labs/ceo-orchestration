@@ -1,13 +1,17 @@
 ---
 name: data-schema-design
-description: PostgreSQL schema design including migration strategy, retention policy
-  design, index strategy, disaster recovery DDL, SECURITY DEFINER safety, RLS policy
-  patterns, and naming conventions. Use when creating or modifying database tables,
-  writing SQL migrations, designing RLS policies, planning data retention, adding
-  indexes, reviewing schema security, or troubleshooting query performance. Also
-  use when the user mentions "schema", "DDL", "migration", "RLS", "retention",
-  "index", "table", "enum", or "database design".
+description: PostgreSQL schema design including migration strategy and cross-ORM
+  migration tooling (Prisma, Drizzle, Kysely, Django, golang-migrate), retention
+  policy design, index strategy, keyset pagination, queue-claim patterns, disaster
+  recovery DDL, SECURITY DEFINER safety, RLS policy patterns and RLS performance,
+  naming conventions, and cross-engine notes for MySQL/MariaDB. Use when creating or
+  modifying database tables, writing SQL migrations, planning zero-downtime rollouts,
+  designing RLS policies, planning data retention, adding indexes, reviewing schema
+  security, or troubleshooting query performance. Also use when the user mentions
+  "schema", "DDL", "migration", "RLS", "retention", "index", "table", "enum",
+  "pagination", "MySQL", "MariaDB", or "database design".
 owner: Data Engineer (archetype)
+version: 1.1.0
 inspired_by:
   - source: msitarzewski/agency-agents/engineering/engineering-database-optimizer.md@783f6a72bfd7f3135700ac273c619d92821b419a
     license: MIT
@@ -19,6 +23,21 @@ inspired_by:
     relationship: pattern_reference
     authored_by: ceo-orchestration framework
     authored_at: 2026-05-06
+  - source: affaan-m/ecc/skills/database-migrations/@81af40761939056ab3dc54732fd4f562a27309d0
+    license: MIT
+    relationship: pattern_reference
+    authored_by: ceo-orchestration framework
+    authored_at: 2026-07-07
+  - source: affaan-m/ecc/skills/postgres-patterns/@81af40761939056ab3dc54732fd4f562a27309d0
+    license: MIT
+    relationship: pattern_reference
+    authored_by: ceo-orchestration framework
+    authored_at: 2026-07-07
+  - source: affaan-m/ecc/skills/mysql-patterns/@81af40761939056ab3dc54732fd4f562a27309d0
+    license: MIT
+    relationship: pattern_reference
+    authored_by: ceo-orchestration framework
+    authored_at: 2026-07-07
 # --- smart-loading fields (PLAN-083 Wave 0a sub-agent 0.7a) ---
 domain: core
 priority: 4
@@ -34,7 +53,9 @@ repo_profile_binding:
   generic: {active: true, priority: 4}
 activation_triggers:
   - {event: file-edit, glob: "**/migrations/**"}
-  - {event: help-me-invoked, regex: "(?i)schema|migration|ddl"}
+  - {event: help-me-invoked, regex: "(?i)schema|migration|ddl|mysql|mariadb|pagination"}
+source: affaan-m/ecc@81af4076 skills/database-migrations/ + skills/postgres-patterns/ + skills/mysql-patterns/
+license: MIT
 ---
 
 # Data Schema Design
@@ -931,3 +952,489 @@ CREATE TABLE IF NOT EXISTS public.pipeline_landing (
 `pipeline_run_id` lets you answer: "which pipeline run wrote these rows?"
 without querying an external log system. `row_checksum` lets you detect
 silent data mutation between pipeline stages.
+
+## Migration Tooling and Rollout Safety
+
+The *Migration Strategy* section above covers the idempotent, Postgres-first
+DDL shape this project uses. This section covers the discipline that holds
+regardless of which migration runner a target repo already uses, and the
+zero-downtime rollout pattern for changes that would otherwise break a rolling
+deploy.
+
+### Migration Discipline (tool-independent)
+
+1. **Every change is a migration file.** Never hand-run DDL against a production
+   database. A manual change leaves no audit trail and cannot be replayed onto a
+   fresh environment, so environments silently diverge.
+2. **Migrations are immutable once they have run in production.** Editing a
+   landed migration makes the version that ran in prod no longer match the one in
+   the repo — the definition of drift. To change course, add a *new* forward
+   migration; never rewrite history.
+3. **Roll forward, not back.** In production a "rollback" is a new migration that
+   undoes the change, not an in-place reversal. Keep a documented DOWN for
+   local/dev iteration, but treat production recovery as forward-only.
+4. **Separate schema (DDL) from data (DML).** A backfill that transforms millions
+   of rows has a different risk and retry profile from an `ALTER TABLE`. Mixing
+   them in one migration makes both harder to reason about, and a failed backfill
+   can strand the schema change mid-flight. (This is the operational twin of the
+   *Additive only* rule.)
+5. **Rehearse against production-sized data.** A migration that returns instantly
+   on 100 rows can hold a lock for minutes on 10M. Test on a branch or a restored
+   snapshot before applying.
+
+### Migration Safety Checklist
+
+Before applying any migration:
+
+- [ ] Reversible, **or** explicitly marked irreversible with a recovery note.
+- [ ] No full-table lock on a large table (concurrent DDL, batched DML).
+- [ ] New columns are nullable or carry a default. Never add `NOT NULL` **without
+      a default** to a populated table — that rewrites every row under an
+      exclusive lock. (On Postgres 11+, `ADD COLUMN ... NOT NULL DEFAULT <const>`
+      is a metadata-only change and is safe; the hazard is the *no-default* case.)
+- [ ] Indexes built `CONCURRENTLY`, outside a transaction block.
+- [ ] Data backfill is its own migration, batched.
+- [ ] Rehearsed on production-sized data; recovery path written down.
+
+### Cross-Tool Quick Reference
+
+Our default is raw Postgres DDL in `sql/`. When a target repo already drives
+migrations through an ORM's runner, these are the commands you'll meet — the
+safety rules above are tool-independent and still apply.
+
+| Runner | Generate | Apply (prod) | Custom SQL / concurrent index |
+|---|---|---|---|
+| Prisma | `prisma migrate dev --name x` | `prisma migrate deploy` | `prisma migrate dev --create-only`, then hand-edit — Prisma does not emit `CONCURRENTLY` |
+| Drizzle | `drizzle-kit generate` | `drizzle-kit migrate` | Edit the generated SQL by hand; `drizzle-kit push` is dev-only (no migration file) |
+| Kysely | `kysely migrate:make x` | `kysely migrate:latest` | Write `up`/`down` in TS; type the DB as `Kysely<any>` so a frozen migration never depends on current schema types |
+| Django | `makemigrations` | `migrate` | `makemigrations --empty` for a `RunPython` backfill; `SeparateDatabaseAndState` to drop a field from model state without touching the DB yet |
+| golang-migrate | `migrate create -ext sql -seq x` | `migrate ... up` | Paired `.up.sql`/`.down.sql`; `migrate ... force VERSION` clears a dirty state |
+
+One caveat that bites every runner: `CREATE INDEX CONCURRENTLY` cannot run inside
+a transaction, and most runners wrap each migration in one. Isolate a concurrent
+index in its own migration, or use the runner's explicit "no transaction" escape
+hatch.
+
+### Expand–Contract (Zero-Downtime) Rollout
+
+Any change that a rolling deploy would break — renaming a column, tightening a
+type, splitting a table — goes through three phases so that old and new code run
+side by side without error. This is the same principle as the *Dual-write during
+cut-over* rule in the pipeline section, generalized to all schema change.
+
+```
+Phase 1 — EXPAND
+  Add the new column/table (nullable or defaulted).
+  Deploy code that writes BOTH old and new.
+  Backfill existing rows in batches.
+
+Phase 2 — MIGRATE
+  Deploy code that READS new, still WRITES both.
+  Verify old and new agree.
+
+Phase 3 — CONTRACT
+  Deploy code that uses only new.
+  Drop the old column/table in a SEPARATE, later migration.
+```
+
+Column rename is the canonical case: never `ALTER TABLE ... RENAME COLUMN` in
+place on a live table. Add the new name, dual-write, cut reads over, then drop
+the old name once no deployed code references it. A representative day-scale
+timeline (compress or stretch to your deploy cadence):
+
+```
+Day 1  Migration adds new_status (nullable); deploy v2 writes status + new_status
+Day 2  Backfill migration fills new_status for existing rows
+Day 3  Deploy v3 reads new_status only (still writes both)
+Day 7  Migration drops the old status column
+```
+
+### Batched Backfill with SKIP LOCKED
+
+The *Batch Delete with Backpressure* function covers deletes; backfills need the
+same backpressure. `FOR UPDATE SKIP LOCKED` lets several workers backfill
+disjoint row sets without blocking each other, and the batch loop keeps any
+single transaction short:
+
+```sql
+-- Backfill in bounded batches, releasing locks between batches.
+CREATE OR REPLACE PROCEDURE public.backfill_normalized_email(batch_size INT DEFAULT 10000)
+LANGUAGE plpgsql AS $$
+DECLARE _n INT;
+BEGIN
+  LOOP
+    UPDATE public.users
+      SET normalized_email = lower(email)
+    WHERE id IN (
+      SELECT id FROM public.users
+      WHERE normalized_email IS NULL
+      LIMIT batch_size
+      FOR UPDATE SKIP LOCKED
+    );
+    GET DIAGNOSTICS _n = ROW_COUNT;
+    EXIT WHEN _n = 0;
+    COMMIT;   -- release row locks + WAL pressure between batches
+  END LOOP;
+END $$;
+
+CALL public.backfill_normalized_email();
+```
+
+Note the `PROCEDURE`/`CALL` shape: transaction-control statements (`COMMIT`)
+are never legal inside an ordinary function, and inside a `DO $$ ... $$`
+block only on PG11+ when invoked at top level (outside an explicit
+transaction). The stored `PROCEDURE` + `CALL` shape works on every PG >= 11
+and keeps the transaction boundaries explicit; an application-side loop is
+the portable fallback.
+If your migration runner wraps each migration in a single transaction, drive the
+loop from application code instead so each batch commits independently.
+
+## Access Patterns: Pagination, Queues, and RLS Performance
+
+These are read/write shapes that keep hot paths fast as tables grow. They
+complement the *Index Strategy* and *RLS Policy Patterns* sections above.
+
+### Keyset (Cursor) Pagination
+
+`OFFSET n` makes the database scan and discard `n` rows before returning the
+page — O(n), and it gets slower the deeper a user pages. Keyset pagination
+carries the last row's sort key as a cursor and is effectively O(1) per page:
+
+```sql
+-- First page
+SELECT id, created_at
+FROM public.events
+ORDER BY created_at DESC, id DESC
+LIMIT 20;
+
+-- Next page: pass the last row's (created_at, id) back as the cursor
+SELECT id, created_at
+FROM public.events
+WHERE (created_at, id) < ($last_created_at, $last_id)
+ORDER BY created_at DESC, id DESC
+LIMIT 20;
+```
+
+Back it with an index whose column order matches the `ORDER BY`:
+`(created_at DESC, id DESC)`. Use the **row-value** comparison
+`(created_at, id) < (...)`, not a bare `created_at <` — comparing only the
+timestamp duplicates or skips rows at the page boundary whenever two rows share
+a timestamp. The trailing unique key (`id`) breaks the tie deterministically.
+
+### Queue Claim with SKIP LOCKED
+
+To hand work to N concurrent workers without two of them grabbing the same job,
+claim the next row under `FOR UPDATE SKIP LOCKED`:
+
+```sql
+UPDATE public.jobs
+  SET status = 'processing', started_at = NOW()
+WHERE id = (
+  SELECT id FROM public.jobs
+  WHERE status = 'pending'
+  ORDER BY created_at
+  LIMIT 1
+  FOR UPDATE SKIP LOCKED
+)
+RETURNING *;
+```
+
+`SKIP LOCKED` is correct **only** for queue-style work where skipping a
+row another worker already holds is the desired behavior. Never use it for
+balance reads, accounting, or any integrity-sensitive query — it deliberately
+returns an inconsistent snapshot (locked rows simply vanish from the result).
+
+### RLS Predicate Performance
+
+A policy predicate is evaluated per row. If it calls a stable function such as
+`auth.uid()` directly, the planner may re-evaluate that call for every row. Wrap
+the call in a scalar subquery so the planner hoists it to an init-plan evaluated
+once per statement:
+
+```sql
+-- Slower: auth.uid() may run per row
+CREATE POLICY "Users read own t" ON public.t
+  FOR SELECT USING (auth.uid() = user_id);
+
+-- Faster: evaluated once, then compared per row — identical meaning
+CREATE POLICY "Users read own t" ON public.t
+  FOR SELECT USING ((SELECT auth.uid()) = user_id);
+```
+
+Apply the same wrap to any `STABLE` helper used in a policy, e.g.
+`(SELECT public.get_user_tier((SELECT auth.uid())))`. This changes nothing about
+what the policy permits — only how many times the function runs — and is a
+measurable win on large tables.
+
+### BRIN for Append-Only Time-Series
+
+The *Index Strategy* section uses B-tree composite and partial indexes. For very
+large **append-only** tables whose rows land in roughly time order (event logs,
+`snapshots` keyed by `timestamp`, ingest tables), a BRIN index on the time column
+is a tiny fraction of the size of a B-tree and is enough to prune block ranges
+for wide range scans:
+
+```sql
+CREATE INDEX IF NOT EXISTS brin_events_ts ON public.events USING brin (timestamp);
+```
+
+BRIN only helps when physical heap order correlates with the indexed column —
+true for append-only ingest, false once heavy updates/deletes shuffle the heap.
+Keep the B-tree `(key, timestamp DESC)` for "latest N per key" lookups; add BRIN
+alongside it for historical range scans over the whole table.
+
+### Drift-Detection Queries
+
+Run these periodically; they complement the *DDL Audit Checklist*:
+
+```sql
+-- Foreign keys with no backing index (slow joins + slow cascading deletes)
+SELECT conrelid::regclass AS tbl, a.attname AS col
+FROM pg_constraint c
+JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY (c.conkey)
+WHERE c.contype = 'f'
+  AND NOT EXISTS (
+    SELECT 1 FROM pg_index i
+    WHERE i.indrelid = c.conrelid AND a.attnum = ANY (i.indkey)
+  );
+
+-- Tables accumulating dead tuples (autovacuum falling behind)
+SELECT relname, n_dead_tup, last_autovacuum
+FROM pg_stat_user_tables
+WHERE n_dead_tup > 1000
+ORDER BY n_dead_tup DESC;
+
+-- Slowest normalized statements (requires the pg_stat_statements extension)
+SELECT query, calls, mean_exec_time
+FROM pg_stat_statements
+WHERE mean_exec_time > 100
+ORDER BY mean_exec_time DESC
+LIMIT 20;
+```
+
+### Server-Level Guards
+
+Two settings stop a single runaway query or a forgotten open transaction from
+taking the database down. Set them at the database or role level, not just per
+session:
+
+```sql
+ALTER DATABASE app SET statement_timeout = '30s';
+ALTER DATABASE app SET idle_in_transaction_session_timeout = '30s';
+```
+
+And revoke the default `public` schema grant so newly created objects are not
+world-usable by accident, then grant explicitly:
+
+```sql
+REVOKE ALL ON SCHEMA public FROM PUBLIC;
+```
+
+This is defense-in-depth alongside RLS, not a replacement for it.
+
+## Cross-Engine Notes: MySQL and MariaDB
+
+This skill assumes Postgres, and the *principles* transfer directly:
+schema-as-code, additive migrations, indexed foreign keys, exact-decimal money,
+batched deletes, and least privilege all apply unchanged. When a target repo is
+on MySQL or MariaDB, the items below are the concrete syntax and behavioral
+differences that actually bite. The two engines have diverged, so identify which
+one you are on before applying a version-specific pattern.
+
+### Identify the Engine and Version First
+
+```sql
+SELECT VERSION();
+SHOW VARIABLES LIKE 'version_comment';
+```
+
+### Schema Defaults
+
+```sql
+CREATE TABLE orders (
+    id          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    account_id  BIGINT UNSIGNED NOT NULL,
+    status      VARCHAR(32)     NOT NULL,
+    total       DECIMAL(15, 2)  NOT NULL,
+    created_at  DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at  DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted_at  DATETIME        NULL,
+    PRIMARY KEY (id),
+    KEY idx_orders_account_status_created (account_id, status, created_at),
+    KEY idx_orders_active (account_id, deleted_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+```
+
+| Concern | Prefer | Avoid |
+|---|---|---|
+| Surrogate primary key | `BIGINT UNSIGNED AUTO_INCREMENT` | `INT` on anything that can pass ~2B rows |
+| UUID lookup key | `BINARY(16)` with app-side conversion | `VARCHAR(36)` primary key on a hot table |
+| Money / exact quantity | `DECIMAL(p, s)` | `FLOAT` / `DOUBLE` (same lesson as our Postgres money rule — exact type, never binary float) |
+| User-facing text | `utf8mb4` tables and indexes | the legacy `utf8` / `utf8mb3` alias (3-byte; drops emoji and some CJK) |
+| Application timestamps | `DATETIME`, UTC managed by the app | assuming any type stores a time zone |
+| Soft delete | `deleted_at DATETIME NULL` + an index that scopes it | filtering soft-deletes with no supporting index |
+| Changing status set | lookup table or constrained `VARCHAR` | `ENUM` when values churn (mirrors our "TEXT not ENUM" rule) |
+
+### Upsert — Engine Divergence
+
+This is the sharpest edge. MySQL now documents a **row-alias** form and
+deprecates `VALUES(col)`; MariaDB still documents `VALUES(col)`. For a mixed or
+unknown fleet, `VALUES(col)` is the portable choice:
+
+```sql
+-- Portable (MySQL + MariaDB)
+INSERT INTO user_settings (user_id, setting_key, setting_value)
+VALUES (?, ?, ?)
+ON DUPLICATE KEY UPDATE
+    setting_value = VALUES(setting_value),
+    updated_at    = CURRENT_TIMESTAMP;
+
+-- MySQL-only row alias (use only after confirming the engine is MySQL)
+INSERT INTO user_settings (user_id, setting_key, setting_value)
+VALUES (?, ?, ?) AS new
+ON DUPLICATE KEY UPDATE
+    setting_value = new.setting_value,
+    updated_at    = CURRENT_TIMESTAMP;
+```
+
+### Keyset Pagination
+
+Same shape as the Postgres pattern above, MySQL syntax:
+
+```sql
+SELECT id, name, created_at
+FROM products
+WHERE (created_at, id) < (?, ?)
+ORDER BY created_at DESC, id DESC
+LIMIT 50;
+-- back it with:  CREATE INDEX idx_products_created_id ON products (created_at, id);
+```
+
+Deep `OFFSET` is O(n) here too — avoid it on large tables.
+
+### JSON Columns
+
+Store extension data in a `JSON` column, but keep ownership, tenancy, and
+lifecycle fields relational. To index a hot JSON path, expose a **generated
+column** and index that column, not the JSON directly:
+
+```sql
+CREATE TABLE events (
+    id         BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    payload    JSON NOT NULL,
+    event_type VARCHAR(64)
+        GENERATED ALWAYS AS (JSON_UNQUOTE(JSON_EXTRACT(payload, '$.type'))) STORED,
+    KEY idx_events_type (event_type)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+```
+
+### Reading EXPLAIN
+
+| Field | Investigate when |
+|---|---|
+| `type` | `ALL` (full scan) on a large table |
+| `key` | `NULL` despite a selective predicate existing |
+| `rows` | very high estimate on an interactive path |
+| `Extra` | `Using temporary`, `Using filesort`, or a broad `Using where` |
+
+Use `EXPLAIN ANALYZE` only where it is safe to actually run the statement — it
+executes the query and can be expensive on production-sized data.
+
+### Transactions and Deadlocks
+
+Keep transactions short and lock rows in a **deterministic order** across every
+code path — two paths locking the same rows in opposite order is the number-one
+deadlock cause.
+
+```sql
+START TRANSACTION;
+SELECT id, balance FROM accounts
+  WHERE id IN (?, ?) ORDER BY id FOR UPDATE;   -- deterministic lock order
+UPDATE accounts SET balance = balance - ? WHERE id = ?;
+UPDATE accounts SET balance = balance + ? WHERE id = ?;
+COMMIT;
+```
+
+Deadlock / lock-wait checklist:
+
+- Do external/API calls **before** opening the transaction, never inside it.
+- Index every predicate used in `UPDATE`, `DELETE`, and locking reads.
+- On deadlock, roll back and retry the whole transaction with a bounded budget.
+- Capture `SHOW ENGINE INNODB STATUS\G` immediately — it is overwritten by the
+  next event.
+- For queue-style workers, claim with `FOR UPDATE SKIP LOCKED` (queue work only,
+  same caveat as the Postgres queue pattern).
+
+### Connection Pool Sizing
+
+Keep the pool's recycle age **below** the server `wait_timeout`, or the server
+drops idle connections the pool still believes are live. If `wait_timeout = 300`,
+a `pool_recycle` around 240s plus a checkout-time pre-ping (SQLAlchemy
+`pool_pre_ping`) is coherent and recovers cleanly from failover. Note for
+`mysql2`: `enableKeepAlive` is TCP-level keepalive only — it does NOT
+validate a connection at pool checkout; pair the recycle age with a
+`connection.ping()`-on-checkout or retry-on-stale wrapper instead.
+
+### Replication Read-After-Write
+
+Read replicas lag. Never route read-your-own-write paths — checkout, permission
+checks, idempotency-key reads — to a replica immediately after a write; pin those
+to the primary. Monitor SQL-thread health, IO-thread health, and lag, not just
+TCP liveness. The status command name differs by version — `SHOW REPLICA STATUS\G`
+on newer builds, `SHOW SLAVE STATUS\G` on older fleets — so check before
+standardizing on one.
+
+### Least Privilege and TLS
+
+Same posture as our Postgres `SECURITY DEFINER` / RLS discipline:
+
+- The runtime application user is **not** the migration/admin user and never
+  holds `ALL PRIVILEGES` or `*.*`.
+- Require TLS for users whose traffic crosses hosts (`ALTER USER ... REQUIRE SSL`).
+- Manage grants through `CREATE USER` / `ALTER USER` / `DROP USER`, never by DML
+  against `mysql.user` (grant-table corruption risk).
+- Remove anonymous users (`DROP USER IF EXISTS ''@'localhost'`).
+- Store credentials in a secret manager, never in migration files or examples.
+
+### Configuration Is a Prompt for Review, Not a Preset
+
+Durability and sizing knobs (`innodb_buffer_pool_size`, `max_connections`,
+`innodb_flush_log_at_trx_commit`, `sync_binlog`, `wait_timeout`, slow-log
+settings, binlog retention) must be sized from the workload, hardware, backup
+policy, and recovery objectives — not copied from a template. Treat any example
+`my.cnf` as a starting point to review, not a universal default.
+
+### MySQL/MariaDB Anti-Patterns
+
+| Anti-Pattern | Risk | Better Pattern |
+|---|---|---|
+| `SELECT *` on hot paths | Over-fetching, brittle clients | Select explicit columns |
+| Deep `OFFSET` pagination | Linear scans, slow pages | Keyset pagination |
+| No index on FK joins | Slow joins, lock-heavy deletes | Index FK columns intentionally |
+| Long transactions | Lock waits, large undo history | Commit small units of work |
+| Direct DML against `mysql.user` | Grant-table corruption | `CREATE`/`ALTER`/`DROP USER` |
+| App user with admin grants | Large blast radius | Least-privilege runtime user |
+| `pool_recycle` above `wait_timeout` | Stale pooled connections | Recycle below timeout + pre-ping |
+| Replica read after write | Stale user-facing state | Pin read-after-write flows to primary |
+
+### When Reviewing a MySQL/MariaDB Change
+
+State the engine/version assumption up front, call out the highest-risk
+correctness, lock, security, and migration issues, give the exact safe SQL, and
+attach a validation plan: `EXPLAIN`, a migration dry run on production-sized
+data, a lock/deadlock check, and rollback criteria. Flag any MySQL-vs-MariaDB
+syntax difference that changes the recommendation.
+
+## Changelog
+
+- **1.1.0** (2026-07-07, PLAN-153 Wave G, SP-027): clean-room ADAPT merge of three
+  upstream skills into new sections — *Migration Tooling and Rollout Safety*
+  (tool-independent migration discipline, safety checklist, cross-ORM runner
+  reference, expand–contract rollout, SKIP-LOCKED batched backfill),
+  *Access Patterns: Pagination, Queues, and RLS Performance* (keyset pagination,
+  queue claim, RLS init-plan wrap, BRIN, drift-detection queries, server-level
+  guards), and *Cross-Engine Notes: MySQL and MariaDB*. Also introduced the
+  `version:` frontmatter and this changelog, extended `description` +
+  `activation_triggers`, and recorded provenance in `inspired_by`. No existing
+  section was altered; all additions are net-new.
+Skill-Import-Attestation: reviewed-by=AE9B236FDAF0462874060C6BCFCFACF00335DC74; sha256=702045c2a1b730fe8184e11fa458fc726891b36379c513e9e55cac643187a2c6

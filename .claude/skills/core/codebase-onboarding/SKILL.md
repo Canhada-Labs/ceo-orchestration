@@ -13,6 +13,11 @@ inspired_by:
     relationship: pattern_reference
     authored_by: ceo-orchestration framework
     authored_at: 2026-05-06
+  - source: affaan-m/ecc/skills/inherit-legacy-style/SKILL.md@81af40761939056ab3dc54732fd4f562a27309d0
+    license: MIT
+    relationship: partial_reuse
+    authored_by: ceo-orchestration framework
+    authored_at: 2026-07-07
 # --- smart-loading fields (PLAN-083 Wave 0a sub-agent 0.7a) ---
 domain: core
 priority: 5
@@ -28,6 +33,8 @@ repo_profile_binding:
   generic: {active: true, priority: 4}
 activation_triggers:
   - {event: help-me-invoked, regex: "(?i)onboard|new.?repo|tour"}
+source: affaan-m/ecc@81af4076 skills/inherit-legacy-style/
+license: MIT
 ---
 
 # Codebase Onboarding
@@ -87,7 +94,7 @@ as a GOTCHA in the final report.
 List and categorize every top-level directory and significant file:
 
 ```
-<root>/
+<repo-root>/
 ├── src/          → production source
 ├── tests/        → test suite (secondary citizens during orientation)
 ├── .claude/      → framework governance
@@ -176,6 +183,53 @@ For this framework specifically, the layers are:
 
 **Output:** Layer map with one sentence per layer describing its role and its
 boundary rules (what CAN and CANNOT cross the boundary).
+
+### Phase 4b — Convention inventory (goal: capture the house style so edits don't drift)
+
+Run this phase when the target is a hand-written codebase with its own settled
+idioms (most legacy and long-lived repos). Skip it for greenfield or heavily
+generated trees where no human convention has formed yet. Its purpose is to
+prevent *style drift*: an agent that has mapped the structure but not the
+conventions will, on its first edit, impose its own pretrained mainstream
+idioms over the project's actual house style — producing code that passes the
+tests but reads as foreign and fractures consistency.
+
+This phase is read-only like every other (Hard Rule 7). It records conventions
+into the orientation report; it does **not** generate a separate rules file,
+install a hook, or modify project configuration. Enforcement is the downstream
+editor's job, informed by this map.
+
+Scan four meta-architecture dimensions — structure and pattern, never syntax
+(formatters and linters own whitespace and quoting; do not re-litigate them):
+
+1. **File anatomy** — the in-file declaration order the project keeps
+   (e.g. imports → types → public API → helpers → exports). Note the dominant
+   order; a file that inverts it is a drift risk, not a rival convention.
+2. **State & control flow** — naming habits for async state, flags,
+   pagination, and results; early-return versus deeply nested branching.
+3. **Infrastructure placement** — where cross-cutting concerns live
+   (interceptors, middleware, formatters, shared clients). New code of that
+   kind is expected in the same place.
+4. **Error handling** — the dominant model: raise-and-catch, a Result/Either
+   return, or a global boundary; plus the project's null/empty-check habit.
+
+Apply a signal threshold so noise does not masquerade as doctrine: the pattern
+that dominates the sampled files is the convention; a small minority variant
+(a handful of files, well under a tenth) is recorded as an anti-pattern to
+avoid propagating, not as a competing rule. Only a genuine near-even split, or
+a fork on a core dimension, is worth flagging as an unresolved convention
+question for a human to settle. On a small codebase, "three files versus two"
+is not a majority — flag it rather than guess.
+
+Pick one or two **golden files** per dimension: real exemplars that best
+demonstrate the house style, cited by path. These become the concrete
+"write new code like this" reference in the reading order. Reuse their
+*structure*, never their bugs — a defect spotted in an exemplar is a gotcha,
+not a pattern to copy.
+
+**Output:** A convention table (dimension → observed rule → golden-file
+citation) plus a short DON'T list of the minority anti-patterns, and any
+near-even splits recorded as open convention questions.
 
 ### Phase 5 — Hot-path identification (goal: find files that matter most)
 
@@ -331,6 +385,20 @@ of the report — no hedging, no "TBD," no aspirations.
 |-------|-----------------------|------|--------------|
 | ... | ... | ... | ... |
 
+## Convention Inventory (Phase 4b)
+
+*(Include when Phase 4b ran; otherwise a one-line "skipped — greenfield/generated".)*
+
+| Dimension | Observed house rule | Golden file(s) |
+|-----------|---------------------|----------------|
+| File anatomy | ... | ... |
+| State & control flow | ... | ... |
+| Infrastructure placement | ... | ... |
+| Error handling | ... | ... |
+
+**DON'T propagate:** <minority anti-patterns observed>
+**Open convention questions:** <near-even splits for a human to settle — empty is fine>
+
 ## Top-5 Hot Files (Phase 5)
 
 | Rank | File | Fan-out | Churn (90d) | Security? | Why |
@@ -350,7 +418,8 @@ of the report — no hedging, no "TBD," no aspirations.
 3. <highest fan-out module> — shared logic you will touch everywhere
 4. <hot file #1> — highest-risk file for side effects
 5. <test file for hot file #1> — to understand expected behaviour
-6. ... (cap at 10 files)
+6. <golden file(s)> — the house-style exemplar(s) to imitate when writing new code (from Convention Inventory; omit if Phase 4b was skipped)
+7. ... (cap at 10 files)
 
 ## Gotchas
 
@@ -467,6 +536,13 @@ files, explains WHY each gotcha matters, and tells the reader what to do.
    primary deliverable for a human reader starting on the codebase. Orientation
    without a reading order produces a map with no route.
 
+9. **Style drift — imposing mainstream idioms over the house style.** Mapping
+   the structure (Phases 1–4) but skipping the convention inventory (Phase 4b),
+   then editing in the agent's own pretrained defaults. Code that passes the
+   tests but reads as foreign to the project still fractures consistency and
+   raises the review cost of every future change. Capture the conventions
+   before the first edit.
+
 ---
 
 ## Acceptance Criteria
@@ -483,13 +559,16 @@ A complete orientation run satisfies ALL of the following:
 - [ ] Phase 3: Dependency summary table present. External dependencies listed.
   Circular imports checked (empty is fine; not-checked is a fail).
 - [ ] Phase 4: Layer map present. Pattern named. Each layer has a boundary rule.
+- [ ] Phase 4b (when applicable): Convention inventory table present across the
+  four dimensions with golden-file citations, OR an explicit "skipped —
+  greenfield/generated" note. Minority anti-patterns listed as DON'Ts.
 - [ ] Phase 5: Top-5 hot files table present. All three signals (fan-out, churn,
   security) were evaluated. Ranking rationale is visible.
 - [ ] Phase 6: Coverage sketch table present. Blindspots explicitly named.
 - [ ] Phase 7: Orientation report saved to `orientation/<slug>-orientation.md`.
   Report follows the output contract structure. All output-contract sections
-  present (8 phases + executive summary + recommended reading order +
-  gotchas).
+  present (8 core phases + the optional Phase 4b convention inventory when it
+  ran + executive summary + recommended reading order + gotchas).
 - [ ] Gotchas section: At least 1 gotcha recorded (if truly zero gotchas, write
   "None found — this is unusual for a first orientation pass. Verify
   Phase 0–7 were completed without shortcuts.").
@@ -513,3 +592,17 @@ A complete orientation run satisfies ALL of the following:
 - `ceo-orchestration` (root skill) — orientation is typically the first act
   of a CEO session on an unfamiliar repo; the session protocol in CLAUDE.md
   covers Gate 1 (read CLAUDE.md) which overlaps with Phase 0 of this skill
+
+---
+
+## Changelog
+
+- **2026-07-07 (PLAN-153 Wave G, SP-035)**: added Phase 4b (Convention
+  Inventory) and its matching output-contract section, an anti-pattern for
+  style drift, a golden-file entry in the reading order, and a conditional
+  acceptance criterion — porting legacy-style-inheritance practice so an
+  orientation captures the house conventions, not just the structure, before
+  any edit. Clean-room ADAPT merge; read-only (Hard Rule 7) is preserved — the
+  upstream directive to auto-generate a rules file and install an enforcement
+  hook was deliberately NOT ported. Phases 0–7 are not renumbered.
+Skill-Import-Attestation: reviewed-by=AE9B236FDAF0462874060C6BCFCFACF00335DC74; sha256=fe61d1a3e10f0af4235e17f6a3975d0d7e6590944e22e2e3da869582603cc0da

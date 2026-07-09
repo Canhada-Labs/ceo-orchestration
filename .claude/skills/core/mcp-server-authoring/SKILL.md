@@ -15,6 +15,11 @@ inspired_by:
     relationship: pattern_reference
     authored_by: ceo-orchestration framework
     authored_at: 2026-05-06
+  - source: affaan-m/ecc/skills/agent-harness-construction/SKILL.md@81af40761939056ab3dc54732fd4f562a27309d0
+    license: MIT
+    relationship: structural_inspiration
+    authored_by: ceo-orchestration framework
+    authored_at: 2026-07-07
 # --- smart-loading fields (PLAN-083 Wave 0a sub-agent 0.7a) ---
 domain: core
 priority: 6
@@ -30,6 +35,8 @@ repo_profile_binding:
   generic: {active: true, priority: 6}
 activation_triggers:
   - {event: help-me-invoked, regex: "(?i)mcp|tool.?author"}
+source: affaan-m/ecc@81af4076 skills/agent-harness-construction/
+license: MIT
 ---
 
 # MCP Server Authoring
@@ -224,6 +231,102 @@ If the framework client does not read this field, the server should implement
 a request-ID deduplication layer: cache the last N responses keyed by
 `request.id`; if the same ID arrives twice within the TTL window, return the
 cached response without re-executing the handler.
+
+## Designing the Tool Surface for the Calling Agent
+
+The Hard Rules keep the server *safe*. They say nothing about whether the LLM
+harness on the other end of the pipe can actually *use* it. A server can be
+airtight and still drive the calling agent into retry loops, wrong-tool
+selection, and dead ends — because tool names are ambiguous, granularity is
+wrong, or responses give the agent nothing to act on. Usability of the tool
+surface is a first-class authoring concern, not polish: the consuming harness
+picks a tool, fills its params, reads the result, and decides what to do next
+*entirely from the text you emit*. Everything below raises the odds it picks
+correctly on the first try and recovers cleanly when it does not.
+
+### Action space
+
+- **Name tools for what they do, stably.** A tool name is part of the contract
+  the harness reasons over; renaming a tool silently breaks every prompt that
+  learned it. Prefer explicit verb-noun names (`read_file`, `append_log`) over
+  vague ones (`process`, `handle`, `run`).
+- **Keep each input schema narrow and single-purpose.** A tool that does one
+  thing with a few well-bounded params is selected correctly far more often than
+  a catch-all tool with a mode flag that changes what the other params mean.
+  Narrow schemas also shrink the fuzz surface (see Testing Patterns, Layer 2)
+  and make the constraints in Tool Schema Design easier to state.
+- **Return a deterministic output shape.** The same tool should return the same
+  result keys in the same structure on every call, success or failure. A harness
+  that has to branch on which fields happen to be present this time makes worse
+  decisions than one reading a fixed shape. This is the usability twin of the
+  wire-framing rule (Hard Rule 5): stable *shape* is to the agent what stable
+  *framing* is to the transport.
+- **Avoid catch-all tools unless isolation is genuinely impossible.** One
+  `do_everything` tool with a `command` string is both a selection problem for
+  the agent and, usually, a `shell=True`-shaped hole (Hard Rule 2). Split it.
+
+### Granularity
+
+Match tool granularity to the blast radius and the round-trip cost:
+
+- **Micro-tools for high-risk operations** — deploy, migration, permission
+  change, anything mutating (`"idempotent": false`). One narrow action per tool
+  so the agent (and the audit log) can see exactly what was authorized.
+- **Medium tools for the common read/edit/search loop** — the everyday verbs
+  where round-trip overhead is small relative to the work.
+- **Macro-tools only when round-trip overhead dominates** — batch a fixed,
+  well-understood sequence when the latency of N calls is the actual bottleneck,
+  never to paper over a missing action.
+
+### Observation design — make the response actionable
+
+An error envelope (see the JSON-RPC table above) tells the client that
+something failed. It does not tell the *agent* what to do next. For tools whose
+results feed further agent decisions, structure the `result` payload so the
+model can act without guessing. A useful result carries:
+
+- `status` — `success` / `warning` / `error`, so the agent branches on one field.
+- `summary` — a one-line human-readable outcome.
+- `next_actions` — concrete follow-ups the agent can take (e.g. "call
+  `read_file` on the path in `artifacts[0]`").
+- `artifacts` — the file paths / IDs the next step will need, not prose the
+  agent must re-parse.
+
+This is additive to — never a replacement for — the JSON-RPC error envelope:
+protocol-level failures still return a `-32xxx` error object; `status`-shaped
+observations live inside a *successful* `result` where the tool ran but the
+outcome needs interpretation.
+
+### Error-recovery contract
+
+Every error a tool can return should give the agent three things, or it will
+loop:
+
+1. **A root-cause hint** — what actually went wrong, in the `message` (never a
+   raw traceback; those go to stderr per Hard Rule 5).
+2. **A safe retry instruction** — whether retrying is safe at all (tie this to
+   the `idempotent` marker) and what to change first.
+3. **An explicit stop condition** — when the agent should *stop* retrying and
+   surface the failure, so a permanent error does not become an infinite loop.
+
+A `-32001 Permission denied` on a path-traversal attempt, for instance, is a
+*stop* signal, not a *retry-with-a-different-path* signal — say so.
+
+### Benchmark the surface, not just the latency
+
+Server correctness tests (Testing Patterns) prove the server behaves; they do
+not prove the *agent* succeeds through it. When a server is on a hot agent path,
+track the harness-level signals that reveal an unusable surface:
+
+- completion rate (did the agent finish the task through these tools?),
+- retries per task (a spike points at ambiguous names or thin error messages),
+- pass@1 vs. pass@3 (a large gap means the surface is recoverable but not
+  first-try clear),
+- cost per successful task (macro-tool over-batching and retry loops both show
+  up here).
+
+These are diagnostic, not gate criteria — but a regression in retries-per-task
+after a tool change is the earliest signal that the surface got harder to use.
 
 ## Security Boundaries
 
@@ -683,3 +786,16 @@ following are true:
 - `ADR-110` (`.claude/adr/ADR-110-codex-pretool-enforcement.md`) — governance gap
   for MCP tools that bypass the `check_canonical_edit` hook; relevant if the server
   exposes write-capable tools that could be used to modify canonical-guarded files.
+
+## Changelog
+
+- **2026-07-07 (PLAN-153 Wave G, SP-040)**: added "Designing the Tool Surface
+  for the Calling Agent" (action space, granularity, actionable observation
+  design, the error-recovery contract, and surface-level benchmark signals) —
+  porting agent-harness-construction practice so the skill covers whether the
+  calling harness can *use* the server, not only whether the server is *safe*.
+  Clean-room ADAPT merge; additive only — the security-first Hard Rules are
+  unchanged and every new usability rule is cross-referenced back to the Hard
+  Rule it complements (stable output shape ↔ wire framing, narrow schema ↔ fuzz
+  surface, retry guidance ↔ idempotency markers). No section renumbered.
+Skill-Import-Attestation: reviewed-by=AE9B236FDAF0462874060C6BCFCFACF00335DC74; sha256=a53d2b95398fa56f83d51a21a69dfad965358b5063489fb3875f614187357f97

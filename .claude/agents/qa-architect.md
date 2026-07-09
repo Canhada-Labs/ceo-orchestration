@@ -113,7 +113,7 @@ Disagreement between passes = BLOCK + CEO decides which pass wins
 
 ## SKILL REFERENCE
 
-@.claude/skills/core/testing-strategy/SKILL.md sha256=3a230d88502c81e006ee17416a049c987a3f7fbe26177049c480a70fe25816e6
+@.claude/skills/core/testing-strategy/SKILL.md sha256=a915dc36785cbfe8154c36689142f06991cae936e52c82f27d188a00874640fd
 
 (Sub-agent MUST Read the referenced SKILL.md after spawn. ~29 KB —
 the largest of the canonical-5 skills, covering test pyramid,

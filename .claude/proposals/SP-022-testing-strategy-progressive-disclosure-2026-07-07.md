@@ -8,13 +8,13 @@ source_lessons:
 scan_injection_pass: true
 diff_size_added: 44
 diff_size_removed: 924
-sha256_of_diff: 4a2bbb3fe074603ca28826a8ce50cb3fc1531ec51b71444b5280a58a1fd5d520
+sha256_of_diff: a88b95f5b3c537651267b0aee7367e4250b005c118d25b329bc413c78b716890
 claims_declared: false
-status: shadow
+status: promoted
 approved_by: AE9B236FDAF0462874060C6BCFCFACF00335DC74
 applied_at: 2026-07-08T22:48:10Z
-promoted_at: null
-shadow_mode: true
+promoted_at: 2026-07-09T15:49:44Z
+shadow_mode: false
 proposal_type: progressive-disclosure-restructure
 patch_source: .claude/plans/PLAN-153/staged/wave-C/.claude/skills/core/testing-strategy/
 ---
@@ -136,3 +136,5 @@ automated apply path cannot express a restructure:
 - Activation-time saving is realized only if agents actually Read
   references on demand; `check_skill_reference_read.py` +
   `skill-health.py` discovery telemetry are the post-promote check.
+
+> **Soak waiver S263 (2026-07-09):** 7-day parallel-shadow window waived by explicit Owner decision (single-user dogfood; pre-authorized skip semantics of --promote --force-recover). SP-026/SP-034 (AFTER-C) excluded — they keep the full soak.

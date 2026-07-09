@@ -8,6 +8,12 @@ description: Ensuring mathematical correctness and determinism in financial syst
   or types for financial data, validating orderbook invariants, or implementing
   any calculation where precision errors could cause incorrect trading decisions.
 owner: Dr. Viktor Petrov
+inspired_by:
+  - source: affaan-m/ecc/skills/evm-token-decimals/SKILL.md@81af40761939056ab3dc54732fd4f562a27309d0
+    license: MIT
+    relationship: pattern_reference
+    authored_by: ceo-orchestration framework
+    authored_at: 2026-07-07
 # --- smart-loading fields (PLAN-083 Wave 0b sub-agent 0.7b) ---
 domain: fintech
 priority: 2
@@ -30,6 +36,8 @@ paths:
   - "**/orderbook/**"
   - "**/depth/**"
   - "**/calculations/**"
+source: affaan-m/ecc@81af4076 skills/evm-token-decimals/
+license: MIT
 ---
 
 # Financial Correctness and Math
@@ -133,6 +141,88 @@ interface PreciseResult {
 
 When reviewing code, reject any calculation output that does not make
 its precision and rounding mode traceable.
+
+## On-Chain Token Decimals (EVM)
+
+Tick size and step size are the precision contract of a *centralized*
+venue. The on-chain analogue is a token's **decimals** — and it is a
+sharper footgun, because there is no exchange spec sheet to read: the
+scale is a runtime property of the token contract, and getting it wrong
+produces a balance or USD figure off by orders of magnitude **with no
+error thrown**. A silent 1e12 mistake looks like a plausible number.
+
+### The scale is keyed by (chain_id, token_address), never by symbol
+
+Decimals belong to the deployed contract, not to the ticker. The same
+symbol is routinely 6 decimals on one chain and 18 on another; a bridged
+wrapper can differ from its origin asset. Treating "USDC-ish symbol
+therefore 6 decimals" as a constant is the same class of error as
+merging two order books because they share a base asset — it ignores the
+identity that actually determines the math. Cache decimals under the
+full `(chain_id, token_address)` key, exactly as §Pair-Strict Correctness
+keys books under the full canonical symbol.
+
+### Query at runtime; never hardcode 10**6 / 10**18
+
+```python
+from decimal import Decimal
+
+# WRONG — hardcoded scale; silently wrong for any token that isn't 6dp here
+human = Decimal(raw_amount) / Decimal(1_000_000)
+
+# CORRECT — scale sourced from the contract, exact-math normalization.
+# The Decimal CONSTRUCTOR is context-independent: building from a string
+# preserves every digit of any uint256 (78 digits). Arithmetic ops —
+# division AND scaleb alike — round to the context precision (default
+# prec=28), which silently truncates large raws. Verified: for
+# 2**256-1, scaleb/division keep 28 digits; the constructor keeps 78.
+def to_human(raw_amount: int, decimals: int) -> Decimal:
+    return Decimal(f"{raw_amount}E-{decimals}")
+```
+
+Read `decimals()` from the token contract and cache the result per
+`(chain_id, token_address)`. In Solidity, normalize a raw amount to a
+single internal scale (e.g. 18-decimal WAD) with integer math — scale up
+when the token has fewer decimals, scale down when it has more — never
+via float.
+
+### A missing or reverting `decimals()` is missing semantics — apply Fail-Fast
+
+Old and non-standard tokens exist whose `decimals()` reverts or is
+absent. Upstream guidance sometimes defaults such tokens to 18 and moves
+on. Under this skill's **Fail-Fast Rule** that silent default is a
+defect: an unreadable scale is *missing exchange/asset semantics*, and
+missing information must be **rejected**, not approximated. If your
+system can safely reject the token, do. If a fallback is operationally
+unavoidable, it must obey **No Silent Nulls** — loud, logged, and
+reason-coded, never a silent `18`:
+
+```python
+def resolve_decimals(read_decimals) -> dict:
+    try:
+        return {"state": "OK", "decimals": read_decimals()}
+    except Exception as exc:
+        # Do NOT silently continue at 18. Surface a reason code so the
+        # caller decides (reject vs. flagged fallback) — never guess quietly.
+        return {"state": "DECIMALS_UNREADABLE", "reason": str(exc), "decimals": None}
+```
+
+### Bridged and wrapped tokens drift — re-query, never carry forward
+
+A bridge or wrapper mints a **new** contract with its own `decimals()`.
+Do not reuse the origin asset's scale for its bridged form: re-query
+after any bridging or wrapper change, and treat the bridged token as a
+distinct `(chain_id, token_address)` cache entry.
+
+### Normalize to one internal scale before any cross-token math
+
+Summing, comparing, or pricing raw integer amounts that carry different
+decimal scales is the on-chain twin of mixing quote currencies
+(§Consolidation Rules): the numbers combine without complaint and the
+result is nonsense. Normalize every amount to one canonical internal
+scale at the ingestion boundary, and carry the sourced `decimals` (with
+`chain_id` and `token_address`) in **Precision Provenance** alongside
+`sourceTickSize`, so an auditor can trace which scale produced a figure.
 
 ## No Silent Nulls
 
@@ -285,6 +375,9 @@ Rules:
 - VWAP: known inputs → hand-computed expected results.
 - Rounding: truncation at boundary values.
 - No-silent-null: empty input → structured failure, not null/zero.
+- Token decimals: a token that is 6dp on one chain and 18dp on another
+  normalizes to the same human value; an unreadable `decimals()` yields a
+  reason-coded failure, never a silent 18.
 
 ### Property-Based Tests (Recommended)
 
@@ -316,6 +409,9 @@ fc.assert(fc.property(arbOrderbook(), (book) => {
 - Inject mismatched quote currency → verify rejection.
 - Inject crossed book → verify INVALID state + alert.
 - Empty levels → verify INSUFFICIENT_DATA, never null/zero.
+- Inject a bridged token whose wrapper decimals differ from the origin →
+  verify the scale is re-queried per `(chain_id, token_address)`, not
+  carried forward.
 
 ## Anti-Patterns to Reject
 
@@ -327,6 +423,9 @@ fc.assert(fc.property(arbOrderbook(), (book) => {
 | Storing prices as `NUMBER` in DB | Float storage | Use `DECIMAL(p,s)` or `TEXT` |
 | `if (spread < 0)` with float | Float comparison unreliable | Decimal comparison methods |
 | Merging without quote check | Quote currency mixing | Explicit `quoteCurrency` guard |
+| Hardcoding `10**6` / `10**18` for a token | Decimals vary by (chain, address); silent order-of-magnitude error | Query `decimals()` at runtime; cache per `(chain_id, token_address)` |
+| Defaulting a reverting `decimals()` to 18 | Silent approximation of missing semantics | Reject, or loud reason-coded fallback (Fail-Fast + No Silent Nulls) |
+| Reusing origin decimals for a bridged token | Bridged wrapper is a distinct contract | Re-query decimals for the bridged `(chain, address)` |
 | "Looks reasonable" | Intuition doesn't validate math | Invariant checks validate math |
 | "Approximate fill price" | Approximation in trading = error | Exact computation or reject |
 | "Average of VWAPs" | Classic silent error | Re-compute from raw levels |
@@ -338,3 +437,10 @@ fc.assert(fc.property(arbOrderbook(), (book) => {
 - **String.replace("BRL","") removes FIRST occurrence, not last** — for suffix removal, use str.slice(0, -suffix.length) after endsWith()
 - **Delta drift grows depth indefinitely** — applyBookDelta() binary merge must be capped. Observed: 837 levels when the real book was 20. Enforce a max adapter emit (e.g. 50 levels).
 - **Runtime wrong-method errors:** tsx/esbuild has NO type checking. e.g. calling `getBooks()` when the method is `getAllBooks()` silently returns undefined. Verify method names.
+- **Stablecoin decimals are not universal** — the same symbol can be 6 decimals on one chain and 18 on another, and a bridged wrapper can differ from its origin. Key decimals by `(chain_id, token_address)`, never by symbol.
+
+
+## Changelog
+
+- **PLAN-153 Wave G (SP-030, 2026-07-09):** on-chain token decimals doctrine (chain-aware caching, bridged-token drift, exact scaleb normalization) folded in (clean-room ADAPT; provenance in frontmatter/NOTICE).
+Skill-Import-Attestation: reviewed-by=AE9B236FDAF0462874060C6BCFCFACF00335DC74; sha256=dc8ed004c61c650475ec4241377e1758e5c836f5c5b54ca61e722f0ae48f8cf1

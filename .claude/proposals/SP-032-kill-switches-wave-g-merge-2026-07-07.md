@@ -8,14 +8,14 @@ source_lessons:
 scan_injection_pass: true
 diff_size_added: 84
 diff_size_removed: 0
-sha256_of_diff: null
+sha256_of_diff: 4370917d345a1d88f65255132948aab8c27bf4a0581582f3d4a023818b9a8e23
 sha256_of_staged: 7d2febcefe518b39a4ea01494737ec15114c6ed74e05ac473da8f0a749b8eecd
 claims_declared: false
-status: shadow
+status: promoted
 approved_by: AE9B236FDAF0462874060C6BCFCFACF00335DC74
 applied_at: 2026-07-09T11:33:28Z
-promoted_at: null
-shadow_mode: true
+promoted_at: 2026-07-09T15:49:44Z
+shadow_mode: false
 proposal_type: adapt-merge-enrichment
 after_wave_c: false
 upstream_sources:
@@ -93,3 +93,5 @@ git diff --no-index .claude/skills/domains/trading-hft/skills/kill-switches/SKIL
 
 
 > **Contagens finais S262 (pós-review, autoritativas):** staged = 212 linhas; diff vs live = +84/−0; frontmatter diff_size_added/removed sincronizados. Rail de integridade = pin sha256_of_staged, re-pinado após cada fix.
+
+> **Soak waiver S263 (2026-07-09):** 7-day parallel-shadow window waived by explicit Owner decision (single-user dogfood; pre-authorized skip semantics of --promote --force-recover). SP-026/SP-034 (AFTER-C) excluded — they keep the full soak.

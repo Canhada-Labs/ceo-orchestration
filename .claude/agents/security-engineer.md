@@ -131,7 +131,7 @@ Pass 1 since threat-model precedence governs integration).
 
 ## SKILL REFERENCE
 
-@.claude/skills/core/security-and-auth/SKILL.md sha256=a3ba5ef9158f1839b440aca48a5e384c08b834c83d7950e74806114875d1223b
+@.claude/skills/core/security-and-auth/SKILL.md sha256=01136ae3d537cedff7ce5cb97a66a864b570ab33e7aa7033ada53159d39a4296
 
 (Sub-agent MUST Read the referenced SKILL.md after spawn. The full
 skill is ~17 KB and contains the comprehensive security checklist

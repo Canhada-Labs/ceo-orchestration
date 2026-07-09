@@ -2,6 +2,12 @@
 name: Kill Switches
 description: Kill-switch and circuit-breaker engineering for HFT systems — independence from order paths, cancel-all flow correctness, position-flatten guarantees, panic dashboards, and termination SLAs.
 trigger: Any change touching cancel-all, panic-flatten, circuit-breaker, drawdown limit, position limit, or order-rate throttle code paths. Pair with `order-routing` (cancel-on-disconnect) and `latency-budgets` (kill-path budget).
+inspired_by:
+  - source: affaan-m/ecc/skills/llm-trading-agent-security/SKILL.md@81af40761939056ab3dc54732fd4f562a27309d0
+    license: MIT
+    relationship: pattern_reference
+    authored_by: ceo-orchestration framework
+    authored_at: 2026-07-07
 # --- smart-loading fields (PLAN-083 Wave 0b sub-agent 0.7c) ---
 domain: trading-hft
 priority: 1
@@ -24,6 +30,8 @@ paths:
   - "**/circuit-breaker/**"
   - "**/risk-limits/**"
   - "**/cancel-all/**"
+source: affaan-m/ecc@81af4076 skills/llm-trading-agent-security/
+license: MIT
 ---
 
 # Kill Switches — Trading-HFT skill
@@ -39,6 +47,7 @@ paths:
 - Reviewing a kill-switch drill outcome
 - Onboarding a new venue / strategy that needs kill coverage
 - Investigating an incident where a kill switch failed to fire
+- Bringing an autonomous / LLM-driven agent tier under kill coverage
 
 ## Core principle
 
@@ -87,6 +96,77 @@ acceptable for cloud venues).
 - **Kill audit trail in the same database as orders.** Use a separate
   durable store (append-only file + sidecar, or a separate DB).
 
+## Autonomous / LLM-driven order sources
+
+When a strategy tier's order flow is produced by an autonomous or
+LLM-driven agent holding wallet or execution authority, the threat model
+sharpens: a bad tool path or an injected instruction turns directly into
+asset loss, on a path with no human in the loop to hesitate. This skill's
+**core principle already covers it** — a real kill/limit control is
+independent of the order-placement path. An LLM agent is simply an
+*untrusted* order source, and the risk layer must sit BELOW it,
+un-bypassable by anything the agent emits (including text the agent was
+talked into). Treat the following as independent, layered controls; no
+single one is sufficient.
+
+1. **Untrusted-input hygiene — injected text is a financial attack.**
+   External data that reaches an execution-capable prompt (token names,
+   pair labels, social / news feeds, on-chain memo or calldata fields,
+   webhook payloads) is attacker-reachable. A prompt injection here can
+   drive the agent to size, place, redirect, or *suppress* orders —
+   including talking it out of firing a kill. Sanitize or quarantine
+   external data before it enters the decision context; never splice raw
+   feed / on-chain text into an order-emitting prompt. High-signal
+   patterns to screen for: instruction-override phrasing ("ignore prior
+   instructions", "new directive") and unsolicited transfer / approve /
+   send-to-address directives embedded in data. Treat this filter as
+   advisory defense-in-depth — it is bypassable and is NOT the
+   load-bearing control.
+
+2. **Hard spend / notional limits, enforced independently of model
+   output.** A max-single-transaction and max-rolling-window notional cap
+   the agent cannot raise or route around — the spend-side analogue of a
+   position limit. Enforce it in a process / store separate from the
+   agent, the same independence rule this skill applies to the kill path
+   and its audit trail. A limit the model can argue past is theater.
+
+3. **Pre-send simulation as a fire-before-harm gate.** Simulate the
+   transaction (`eth_call` / static call) and require an explicit expected
+   bound (`min_amount_out` or equivalent); reject on divergence before
+   signing. A *missing* expected-output bound is itself a defect — refuse
+   to send rather than send blind.
+
+4. **Circuit breaker on consecutive losses / windowed drawdown.** Halt
+   and require manual re-arm on N consecutive losses or a windowed PnL
+   breach — the same shape as the Global kill ("refuse new orders until
+   manual re-arm"). An invalid or zero baseline (e.g. `hour_start ≤ 0`)
+   must halt, never divide-by-zero into a bad ratio.
+
+5. **Wallet / blast-radius isolation.** Point the agent at a dedicated
+   hot wallet funded with only the current session's working capital;
+   never at a primary treasury. Keys come from env or a secret manager,
+   never from code or logs. This is the per-venue-kill principle applied
+   to key custody — it bounds what a hijacked or injected agent can lose.
+
+6. **Audit-log every decision, not just executed sends.** Blocked,
+   simulated-and-rejected, and injection-flagged attempts must be recorded
+   to the same durable, order-path-independent store this skill requires
+   for kill-fire events. If the only trace is successful sends, the
+   incident review is blind to exactly the attempts that mattered.
+
+MEV protection, private-mempool routing, and per-strategy deadlines are
+adjacent execution-quality controls; they belong to the `order-routing`
+and `latency-budgets` skills — cross-reference rather than duplicate here.
+
+### Agent-tier kill checklist (in addition to the standard kill-path checklist)
+
+- [ ] Spend / notional cap enforced in a process independent of the agent
+- [ ] External data sanitized before entering the execution-capable prompt
+- [ ] Transactions simulated with a mandatory expected-output bound before send
+- [ ] Circuit breaker halts on drawdown / consecutive loss / invalid baseline
+- [ ] Dedicated session hot wallet; keys from env or secret manager (never code / logs)
+- [ ] Every agent decision audit-logged (blocked + rejected + injected, not only sends)
+
 ## Termination SLAs (illustrative — adjust per system)
 
 | Tier | First cancel | Last cancel | Last flatten |
@@ -126,3 +206,8 @@ fail → freeze new feature work until kill is restored.
 - `order-routing` skill (cancel-on-disconnect is the venue-side pair)
 - `latency-budgets` skill (cancel hot-path budget is a first-class budget)
 - Universal `chaos-and-resilience` skill (drill methodology)
+
+## Changelog
+
+- **PLAN-153 Wave G (SP-032, 2026-07-09):** autonomous/LLM-agent kill-switch doctrine folded in (clean-room ADAPT; provenance in frontmatter/NOTICE).
+Skill-Import-Attestation: reviewed-by=AE9B236FDAF0462874060C6BCFCFACF00335DC74; sha256=2c78314618e48f928a02e6e45b30f1a9528de045d526256622d4798658ffb197

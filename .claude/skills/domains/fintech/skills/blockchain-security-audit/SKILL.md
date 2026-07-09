@@ -25,6 +25,11 @@ inspired_by:
     relationship: structural_inspiration
     authored_by: ceo-orchestration framework
     authored_at: 2026-05-07
+  - source: affaan-m/ecc/skills/nodejs-keccak256/SKILL.md@81af40761939056ab3dc54732fd4f562a27309d0
+    license: MIT
+    relationship: structural_inspiration
+    authored_by: ceo-orchestration framework
+    authored_at: 2026-07-07
 # --- smart-loading fields (PLAN-083 Wave 0b sub-agent 0.7b) ---
 domain: fintech
 priority: 2
@@ -47,6 +52,8 @@ paths:
   - "**/contracts/**"
   - "**/bridge/**"
   - "**/treasury/**"
+source: affaan-m/ecc@81af4076 skills/nodejs-keccak256/
+license: MIT
 ---
 
 # Blockchain Security Audit
@@ -292,6 +299,35 @@ interest, and withdraw. When protocol fee math assumes time-weighted
 exposure but implementation pays per-block, JIT extracts fees from
 passive LPs.
 
+**Off-chain hash-algorithm mismatch (Keccak-256 vs NIST SHA3-256).**
+The audit surface extends past on-chain bytecode to the off-chain
+helpers a contract *trusts* to produce hashes byte-identical to its
+own `keccak256(...)` — indexers, signing backends, allowlist / Merkle
+generators, storage-slot readers. Ethereum uses original Keccak-256;
+several standard libraries expose NIST FIPS-202 SHA3-256 under a
+confusingly similar name (Node's `crypto.createHash('sha3-256')`
+being the canonical trap), and the two return **different** digests
+for the same input with no error raised. Note the scope: inside
+Solidity, `keccak256(...)` is already correct — this class lives in
+the JS/TS/tooling layer. Where it bites: function selectors and event
+topics in an off-chain indexer; EIP-712 digests in a signing service
+(the digest silently diverges from the contract's, so valid signatures
+fail — or a "working" test-only path masks the divergence); Merkle
+roots in an allowlist generator (an off-chain root built with the
+wrong hash cannot be proven against on-chain `keccak256` — legitimate
+users locked out of a mint/claim, or a wrong root committed); and
+storage-slot derivation in a state reader (reads the wrong slot).
+Severity tracks whether the mismatch gates funds or access: an
+allowlist that controls a claim is High; a read-only indexer
+inconsistency is Medium/Low. **Detection:** grep the off-chain code
+(`grep -rn "createHash.*sha3"` over `*.ts`/`*.js`, excluding
+`node_modules`); confirm JS/TS hashing uses a Keccak-aware helper
+(ethers `keccak256` / `id` / `solidityPackedKeccak256`, viem
+`keccak256`, web3 `keccak256` / `soliditySha3`); and require a
+**parity test** asserting the off-chain digest equals the contract's
+`keccak256` for a known vector before trusting any off-chain hash in a
+fund or access path.
+
 ## Static + Dynamic Analysis Toolchain
 
 Tools find different bug classes. Run all of them; do not assume any
@@ -416,6 +452,7 @@ Every audit MUST enumerate composability dependencies.
 | **Bridge** | Source-chain message replay; signer-set compromise | Per-message nonce committed on destination? Signer-set rotation honored? |
 | **Token (ERC-20)** | Fee-on-transfer, rebasing, blacklist, custom callbacks | Protocol assumes `transfer` returns exact `amount`? Supports ERC-777 / ERC-1155 hooks? |
 | **AMM pool** | Pair-creation race; liquidity-removal during settlement | Pool address pinned or factory-derived per call? |
+| **Off-chain hashing helper** | NIST SHA3 vs Keccak-256 divergence in an allowlist / signing / indexer path the contract trusts | Off-chain hash proven byte-equal to on-chain `keccak256` for a known vector? |
 | **Liquidator bot** | Gas-DoS in liquidation path | Liquidation gas-bounded? Partial-liquidation when full reverts? |
 
 A protocol integrating `n` upstream protocols inherits the threat
@@ -434,6 +471,7 @@ integrating contract handles each.
 | Trusting OpenZeppelin = no review | Misuse of safe libraries is its own class (Initializable misuse, ReentrancyGuard wrong scope) | Review the integration even when the library is audited |
 | `onlyOwner` accepted without checking ownership | Owner is often an EOA; one stolen key = full compromise | Verify owner is multisig OR timelock; flag EOA owner on production |
 | Auditing source while deployed bytecode differs | Supply-chain attack vector | `forge verify-bytecode`; halt audit on mismatch (§Fail-Fast) |
+| Off-chain helper hashes Ethereum data with `crypto.createHash('sha3-256')` | NIST SHA3-256 ≠ Keccak-256; digest diverges from on-chain `keccak256` silently — breaks allowlists, EIP-712, selectors | Keccak-aware lib (ethers / viem / web3) + a parity test vs on-chain `keccak256` for a known vector |
 | High finding without runnable PoC | Unfalsifiable; team disputes; auditor loses leverage | Foundry test asserting profit > 0 OR invariant violation (§Cardinal Rule) |
 | Audit window includes scope-changing commits | Findings against moving target are stale on delivery | Halt audit (§Fail-Fast #5); resume on frozen commit |
 | Auditor amends own VETO without re-PoC | Defeats VETO floor purpose | Re-run PoC against patched contract; verdict only changes if PoC fails |
@@ -476,6 +514,28 @@ integrating contract handles each.
   missed; this skill recommends Codex re-pass on every Critical /
   High finding before closeout.
 
+Runnable parity proof (the digests differ on the SAME input — no error is
+raised, which is exactly why the class survives review):
+
+```js
+// node — SHA3-256 (NIST FIPS-202) vs Keccak-256 (original, Ethereum)
+const { createHash } = require("node:crypto");
+const { keccak256 } = require("js-sha3");   // or ethers' keccak256
+
+const nist = createHash("sha3-256").update("").digest("hex");
+const eth  = keccak256("");
+
+console.log(nist);
+// a7ffc6f8bf1ed76651c14756a061d62683576285280f30987fda07fda0f9724c
+console.log(eth);
+// c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470
+console.log(nist === eth); // false — pin this assertion in a parity test
+```
+
+Both calls succeed; only a parity test against a known Keccak-256 vector
+(e.g. the empty-string digest above, or any digest cross-checked with
+Solidity's `keccak256`) catches a wrong-primitive substitution.
+
 ## References
 
 - SWC Registry — https://swcregistry.io
@@ -485,8 +545,17 @@ integrating contract handles each.
 - Solidity ^0.8.24 docs — checked-arithmetic, `unchecked` block
 - OpenZeppelin Contracts v5.x — Initializable, ReentrancyGuard,
   AccessControl, ERC4626 default-virtual-shares mitigation
+- Off-chain Ethereum hashing — Keccak-256 (original) vs NIST FIPS-202
+  SHA3-256 divergence; use ethers / viem / web3 Keccak helpers and a
+  parity test against on-chain `keccak256`
 - Tooling: Trail of Bits Slither + Echidna; ConsenSys Mythril;
   Foundry / Forge; a16z Halmos; Certora Prover
 - Real-exploit corpus: rekt.news, DeFiHackLabs, immunefi.com/exploits
 - Inspiration: `msitarzewski/agency-agents` specialized/blockchain-
   security-auditor @ `783f6a72bfd7f3135700ac273c619d92821b419a` (MIT)
+- Inspiration: off-chain Keccak-256 vs NIST SHA3-256 hashing-parity
+
+## Changelog
+
+- **PLAN-153 Wave G (SP-031, 2026-07-09):** wrong-primitive keccak/sha3 doctrine + runnable parity proof folded in (clean-room ADAPT; provenance in frontmatter/NOTICE).
+Skill-Import-Attestation: reviewed-by=AE9B236FDAF0462874060C6BCFCFACF00335DC74; sha256=0f5a91f905447e711b371f13909e51864eb2e8414df2ccc6d226aff4fffe7c7f

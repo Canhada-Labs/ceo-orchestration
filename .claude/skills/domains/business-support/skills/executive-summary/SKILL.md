@@ -22,6 +22,11 @@ inspired_by:
     relationship: structural_inspiration
     authored_by: ceo-orchestration framework
     authored_at: 2026-05-07
+  - source: affaan-m/ecc/skills/competitive-report-structure@81af40761939056ab3dc54732fd4f562a27309d0
+    license: MIT
+    relationship: structural_inspiration
+    authored_by: ceo-orchestration framework
+    authored_at: 2026-07-07
 # --- smart-loading fields (PLAN-083 Wave 0b sub-agent 0.7c) ---
 domain: business-support
 priority: 8
@@ -41,6 +46,8 @@ paths:
   - "**/memos/**"
   - "**/briefs/**"
   - "**/summaries/**"
+source: affaan-m/ecc@81af4076 skills/competitive-report-structure/
+license: MIT
 ---
 
 # Executive Summary
@@ -236,6 +243,42 @@ obligation), High (material impact within 30 days), Medium (material
 impact within 90 days). No more than one Critical item per summary; if
 more than one Critical item exists, the summary scope is too broad.
 
+## Decision-Grade Reporting
+
+When the summary sits atop a structured analysis — a competitive study, a
+benchmark, a technical audit, or a multi-option evaluation — the one-page
+mechanics above still hold, and four additional disciplines keep the summary
+driving a decision rather than documenting the work. (The underlying analysis is
+typically produced under `domains/business-support/skills/analytics-reporter`;
+this skill compresses its findings into the decision.)
+
+1. **Decision-first, methodology last.** Open with the three-to-five findings
+   that change what the reader does — where the subject is strong, where it is
+   exposed, and the top two-to-three moves — written so a reader who reads only
+   the summary knows what to do. How the analysis was run (weights, rubrics,
+   sample, scope) belongs in an appendix, never the opening. Where a single
+   visual resolves the decision faster than a paragraph, lead with it, within
+   the one-page ceiling.
+2. **Asserted vs. proven.** Every load-bearing claim carries its provenance: is
+   it *proven* (measured, sourced, independently verifiable) or *asserted*
+   (inference, single source, estimate)? A one-line verification note per major
+   claim, with the sources behind it in the appendix, is what makes the summary
+   auditable and defensible. A decision made on an asserted claim dressed as a
+   proven one is the failure this discipline exists to prevent — it is the
+   provenance complement to the Cognitive-Economy quantify-over-qualify rule.
+3. **No false composite.** When findings span multiple dimensions — cost, risk,
+   capability, time — do not collapse them into one blended score or a single
+   status dot. Averaging distinct dimensions hides the asymmetry the decision
+   turns on: an option that is cheap-but-slow and one that is fast-but-costly can
+   average to the same number while demanding opposite decisions. Report the
+   dimensions separately and state plainly where the subject leads and where it
+   trails.
+4. **Close on forcing-questions.** If the summary feeds a decision or alignment
+   meeting, end with the specific questions that force a choice — which option,
+   which risk to accept, which gap to close versus concede — not a recap. A close
+   that invites admiration of the analysis ("as the data shows...") wastes the
+   meeting; a close that names the pending decision runs it.
+
 ## Anti-patterns
 
 | Anti-pattern | Symptom | Correction |
@@ -246,6 +289,9 @@ more than one Critical item exists, the summary scope is too broad.
 | Vanity-data | Metrics included that do not bear on the decision (e.g., team headcount in a budget summary) | Remove; every metric must trace to a decision criterion |
 | Hidden-bad-news | Risk or adverse finding appears after positive findings or in a footnote | Lead with risk in its section; promote from footnote to body |
 | Scope-creep | Summary exceeds 350 words or covers more than one primary decision | Scope to one decision; move secondary decisions to separate summaries |
+| Methodology-first | Summary opens by explaining how the analysis was run before stating what it found | Move the top findings to the opening sentence; methodology to the appendix |
+| False-composite | Multi-dimensional findings collapsed into one blended score or status dot that hides asymmetry | Report the dimensions separately; name where the subject leads and where it trails |
+| Analysis-admiration | Summary closes by recapping the work instead of forcing the pending decision | End with the specific choice the reader must make; forcing-questions, not a recap |
 
 ## Cross-References
 
@@ -266,3 +312,8 @@ Related skills within this framework:
 - **ADR-058** — two-pass review gate; applies to all outputs produced
   under this skill. First pass: content completeness and decision
   structure. Second pass: cognitive-economy and jargon gate.
+
+## Changelog
+
+- **PLAN-153 Wave G (SP-039, 2026-07-09):** decision-grade reporting discipline folded in (clean-room ADAPT; provenance in frontmatter/NOTICE).
+Skill-Import-Attestation: reviewed-by=AE9B236FDAF0462874060C6BCFCFACF00335DC74; sha256=0e69d05f23abb6b12b1b9c2fc94d402a8feb04e21d17ea6101d0d18344ba31aa

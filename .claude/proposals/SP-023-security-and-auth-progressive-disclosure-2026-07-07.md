@@ -8,13 +8,13 @@ source_lessons:
 scan_injection_pass: true
 diff_size_added: 43
 diff_size_removed: 771
-sha256_of_diff: 443e26df2e8f3ba59f1c3c5f781d68d3cfbed53d4bda1ec646c17738629ed857
+sha256_of_diff: 0b53f19e79c32e817fce377d30f66709ebbcfd09b7bc26ce353612746ed202e7
 claims_declared: false
-status: shadow
+status: promoted
 approved_by: AE9B236FDAF0462874060C6BCFCFACF00335DC74
 applied_at: 2026-07-09T00:11:21Z
-promoted_at: null
-shadow_mode: true
+promoted_at: 2026-07-09T15:49:44Z
+shadow_mode: false
 proposal_type: progressive-disclosure-restructure
 patch_source: .claude/plans/PLAN-153/staged/wave-C/.claude/skills/core/security-and-auth/
 ---
@@ -158,3 +158,5 @@ ceremony — which is exactly this `/skill-review` step. Fix the line during
 review, then re-pin `sha256_of_diff`/loader sha (the reproduction command is
 in the Patch-source section above) before promote. Nothing else in the
 staged tree references the wrong number.
+
+> **Soak waiver S263 (2026-07-09):** 7-day parallel-shadow window waived by explicit Owner decision (single-user dogfood; pre-authorized skip semantics of --promote --force-recover). SP-026/SP-034 (AFTER-C) excluded — they keep the full soak.

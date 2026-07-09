@@ -37,6 +37,8 @@ repo_profile_binding:
 activation_triggers:
   - {event: file-edit, glob: "**/*.tsx"}
   - {event: help-me-invoked, regex: "(?i)react|vite|memo|hook|render.?prop"}
+source: affaan-m/ecc@81af4076 skills/react-patterns/
+license: MIT
 ---
 
 # Frontend Patterns (Universal)
@@ -346,6 +348,137 @@ function useSSE(endpoint: string) {
 2. **Use SSE for low-frequency push** (alerts, status changes, analytics).
 3. **Use WS for high-frequency bidirectional data.**
 4. **Never open multiple SSE connections to the same endpoint.**
+
+## Deriving and Locating State
+
+### Render is a pure function of props and state
+
+Derive values during render. Storing a derived value in `useState` and
+syncing it with `useEffect` adds an extra render cycle, can desync from
+its source, and hides the data flow.
+
+```typescript
+// GOOD — derive during render
+const total = items.reduce((sum, i) => sum + i.price * i.qty, 0);
+
+// BAD — derived state kept in an effect
+const [total, setTotal] = useState(0);
+useEffect(() => {
+  setTotal(items.reduce((sum, i) => sum + i.price * i.qty, 0));
+}, [items]);
+```
+
+### Where should this state live?
+
+Reach for the least powerful option that works; escalate only when the
+current one hurts.
+
+```
+Used by one component?              → useState inside it
+Parent + a few descendants?         → lift to nearest common ancestor
+Distant branches, low-frequency
+  reads (theme, auth, locale)?      → React Context
+High-frequency updates, shared?     → external store (Zustand / Jotai / Redux)
+Derived from the server?            → server-state library (see below)
+```
+
+Most pages need neither context nor a global store. Resist the
+abstraction until duplicated lifting becomes painful — and when you do
+reach for context, **split it by concern** (one context per axis) so a
+theme change does not re-render auth consumers. For external stores,
+subscribe through `useSyncExternalStore` (or the store's own hook, which
+uses it) so reads stay safe under concurrent rendering.
+
+### Which fetching tool?
+
+| Need | Tool |
+|------|------|
+| Per-request data in a server-component router | server-side `await fetch()` |
+| Client cache + mutations + invalidation | TanStack Query |
+| Lightweight client cache + revalidation | SWR |
+| Real-time subscriptions | SSE / WebSocket (see Real-Time Data Display) |
+| One-off, fire-and-forget | `fetch()` in an event handler |
+
+Avoid `useEffect` + `fetch` for application data: it races, has no cache,
+no retry, and no Suspense integration. The existing anti-pattern
+"Fetching on every render" is the same failure in a different shape.
+
+## Server and Client Components (RSC)
+
+Frameworks with a React Server Components model (for example the Next.js
+App Router) split the tree into two runtimes. Getting the boundary right
+is the difference between shipping a little JS and shipping a lot.
+
+```typescript
+// Server Component — the default. Async, runs on the server, ships no JS for itself.
+export default async function ProductPage({ params }: { params: { id: string } }) {
+  const product = await getProduct(params.id);
+  if (!product) return notFound();
+  return <ProductView product={product} />;   // pass serializable data down
+}
+
+// Client Component — opt in explicitly; needed for state, effects, event handlers.
+"use client";
+export function AddToCart({ id }: { id: string }) {
+  const [pending, start] = useTransition();
+  return (
+    <button disabled={pending} onClick={() => start(() => addToCart(id))}>
+      {pending ? "Adding…" : "Add to cart"}
+    </button>
+  );
+}
+```
+
+Boundary rules:
+
+1. **Server → Client:** pass serializable props or `children`. Functions,
+   class instances, and Dates-with-methods do not cross.
+2. **Client → Server:** invoke a server action from a `<form action={…}>`
+   or an event handler — never `import` a server component into a client
+   component file. Compose them via `children` instead.
+3. **A server action is a public endpoint.** Authenticate and authorize
+   inside it; the client's gating is not a security boundary.
+
+## Forms (React 19 Actions and Optimistic UI)
+
+For new code, prefer form *actions* over hand-wired `onSubmit` +
+`useState`. `useActionState` gives you pending state and a return channel
+for validation errors with no manual plumbing.
+
+```typescript
+"use client";
+import { useActionState } from "react";
+
+export function ProfileForm() {
+  const [state, action, pending] = useActionState(updateProfile, { error: null });
+  return (
+    <form action={action}>
+      <input name="name" required />
+      <button type="submit" disabled={pending}>Save</button>
+      {state.error && <p role="alert">{state.error}</p>}
+    </form>
+  );
+}
+```
+
+- **Controlled inputs** only when the value drives other UI, formats on
+  each keystroke, or needs live validation — otherwise let the form own
+  the value (uncontrolled + form action).
+- **Reach for a form library** (React Hook Form, TanStack Form) at the
+  first sign of multi-step flows, dynamic field arrays, or cross-field
+  validation. Rolling your own past trivial complexity is a maintenance
+  trap.
+- **Optimistic UI** with `useOptimistic`: render the intended end-state
+  immediately, then reconcile when the server responds. The reduced
+  perceived latency is worth the reconciliation code for send / like /
+  toggle interactions.
+
+```typescript
+const [optimistic, addOptimistic] = useOptimistic(
+  messages,
+  (state, next: Message) => [...state, next],
+);
+```
 
 ## State Management Patterns
 
@@ -769,3 +902,15 @@ function usePriceFlash(value: number): Direction {
 | CSS transition on high-frequency WS element | FPS drops on mid-range hardware | Suppress transition when update rate > 5/s |
 | Flash animation without direction encoding | No actionable information; fails WCAG 1.4.1 if color-only | ▲/▼ icon + `+`/`−` text prefix; color (green/red) reinforces but does NOT solely communicate direction |
 | Animation without prefers-reduced-motion gate | Vestibular/accessibility violation | Gate every non-essential motion |
+
+## Changelog
+
+- **1.1.0** (2026-07-07, PLAN-153 Wave G, SP-025): enrichment merge — added
+  §Deriving and Locating State (derive-during-render, state-location and
+  data-fetching decision trees), §Server and Client Components (RSC), and
+  §Forms (React 19 Actions and Optimistic UI). Clean-room ADAPT of
+  upstream React 18/19 pattern guidance; no pre-existing section changed.
+  First tracked revision.
+- **1.0.0** (framework v1.0.x): initial version shipped with the
+  framework; this changelog was introduced retroactively at 1.1.0.
+Skill-Import-Attestation: reviewed-by=AE9B236FDAF0462874060C6BCFCFACF00335DC74; sha256=835c8ab17461c1b1cfcffb2f62955184d0c4212fb2549789e09800c3d2360b45
