@@ -204,7 +204,9 @@ _STAGED_POLICY = (
 
 # These match the values declared in the staged grandfather-cap.policy.yaml
 _EXPECTED_INDIVIDUAL_CAP = 5
-_EXPECTED_DOMAIN_CAP = 25   # Phase 1 ship cap (post-Phase-0b drop of 3 pilots).
+_EXPECTED_DOMAIN_CAP = 32   # Phase 1 ship cap 25 + 8 PLAN-153 Wave D imported
+                            # squads (S262 2026-07-09, Owner-mandate raise —
+                            # see policy cap note). No headroom by design.
                             # Phase 4 lowers to 15 (target_cap = §6 Q4 default)
                             # via sunset trim of zero-traffic domains.
 _EXPECTED_DOMAIN_TARGET_CAP = 15  # PLAN-080 §6 Q4 long-term target
