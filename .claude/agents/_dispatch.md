@@ -18,9 +18,9 @@ python3 .claude/scripts/generate-dispatch.py --write
 | `incident-commander` | incident-commander | anthropic-subagent-v1 | `claude-fable-5` | `Read,Grep,Glob,Bash` | `18aecacf…` | Principal Incident Commander with severity / scope / all-clear VETO authority. Loads in… |
 | `llm-finops-architect` | llm-finops-architect | anthropic-subagent-v1 | `sonnet-4.6` | `Read,Grep,Glob,Bash` | `f3374e1c…` | LLM FinOps Architect specializing in model-tier routing, cost-envelope governance, burn… |
 | `performance-engineer` | performance-engineer | anthropic-subagent-v1 | `sonnet-4.6` | `Read,Grep,Glob,Bash` | `0dde57e6…` | Principal Performance Engineer specializing in latency analysis, GC tuning, memory prof… |
-| `qa-architect` | qa-architect | anthropic-subagent-v1 | `sonnet-4.6` | `Read,Grep,Glob,Bash` | `a915dc36…` | Principal QA Architect specializing in test strategy, edge cases, regression prevention… |
-| `security-engineer` | security-engineer | anthropic-subagent-v1 | `claude-fable-5` | `Read,Grep,Glob,Bash` | `01136ae3…` | Principal Security Engineer with auth/crypto VETO authority. Loads security-and-auth sk… |
-| `threat-detection-engineer` | threat-detection-engineer | anthropic-subagent-v1 | `claude-fable-5` | `Read,Grep,Glob,Bash` | `01136ae3…` | Principal Threat Detection Engineer with VETO authority over detection-as-code coverage… |
+| `qa-architect` | qa-architect | anthropic-subagent-v1 | `sonnet-4.6` | `Read,Grep,Glob,Bash` | `d5d9598c…` | Principal QA Architect specializing in test strategy, edge cases, regression prevention… |
+| `security-engineer` | security-engineer | anthropic-subagent-v1 | `claude-fable-5` | `Read,Grep,Glob,Bash` | `50cd673f…` | Principal Security Engineer with auth/crypto VETO authority. Loads security-and-auth sk… |
+| `threat-detection-engineer` | threat-detection-engineer | anthropic-subagent-v1 | `claude-fable-5` | `Read,Grep,Glob,Bash` | `50cd673f…` | Principal Threat Detection Engineer with VETO authority over detection-as-code coverage… |
 
 ## Provenance
 

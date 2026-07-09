@@ -8,14 +8,14 @@ source_lessons:
 scan_injection_pass: true
 diff_size_added: null
 diff_size_removed: null
-sha256_of_diff: 4f55e3d1ae4669c42e831de8c231f19046e130fe3de1b49ace987b74af1bd66c
+sha256_of_diff: 69d05b6a09860857771550b2b510f4bcb0e618d1c1972b73c97178393ab57c57
 sha256_of_staged: 4f55e3d1ae4669c42e831de8c231f19046e130fe3de1b49ace987b74af1bd66c
 claims_declared: false
-status: shadow
+status: promoted
 approved_by: AE9B236FDAF0462874060C6BCFCFACF00335DC74
 applied_at: 2026-07-09T16:32:58Z
-promoted_at: null
-shadow_mode: true
+promoted_at: 2026-07-09T22:07:19Z
+shadow_mode: false
 proposal_type: adapt-merge-enrichment
 after_wave_c: true
 depends_on: SP-023
@@ -146,3 +146,5 @@ git apply --check .claude/plans/PLAN-153/staged/wave-G/security-and-auth.SKILL.m
 > - `802a4b4b09594737d05ecedb02862ddf68cd2a0c04c1b70016c294b255f3ecdc` — `.claude/skills/core/security-and-auth/references/cloud-and-ci-cd-security.md`
 > - `182b6dc3319dedf375ad220ae8ce9e792f694067ef394469084648b9683efeed` — `.claude/skills/core/security-and-auth/references/vulnerability-hunting.md`
 > **Adjudicação S263 (pair-rail):** o Codex round-2 sugeriu remover até os PONTEIROS de proveniência ('recorded in the parent inspired_by frontmatter'). REJEITADO pelo CEO: ponteiro sem identidade upstream, padrão endossado pelo reviewer humano e idêntico ao precedente landado CI-verde da Wave G (ddf2b17). Zero imperativos upstream restantes (confirmado pelo mesmo round).
+
+> **Soak waiver S264 (2026-07-09):** the remaining parallel-shadow window (>= 2026-07-14 per S263) waived by explicit Owner decision, ratified in-session via AskUserQuestion and logged verbatim in PLAN-153 OQ4. Same pre-authorized skip semantics as S263 (--promote --force-recover). Pre-waiver audit sweep of the soak window (applied_at 2026-07-09T16:32Z onward) found zero adverse signal touching this shadow.

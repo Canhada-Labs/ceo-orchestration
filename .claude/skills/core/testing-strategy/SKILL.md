@@ -6,11 +6,26 @@ description: Testing strategy, patterns, and quality assurance for the project.
   test design (boundary values, precision edge cases), E2E multi-process testing
   (IPC, worker lifecycle), route testing (auth verification, input validation),
   database test patterns (mocking data layer), chaos test framework design, test
-  quality metrics (mutation testing, branch coverage), and CI integration. Use
+  quality metrics (mutation testing, branch coverage), React component/hook
+  testing (RTL query priority, MSW network mocking, axe a11y), test-first TDD
+  (RED/GREEN/REFACTOR discipline), and CI integration. Use
   when writing tests, reviewing test quality, designing test strategies, setting
   up CI pipelines, or evaluating test coverage gaps.
 owner: QA Architect (archetype)
-version: 1.0.0
+version: 1.1.0
+inspired_by:
+  - source: affaan-m/ecc/skills/react-testing@81af40761939056ab3dc54732fd4f562a27309d0
+    license: MIT
+    relationship: structural_inspiration
+    authored_by: ceo-orchestration framework
+    authored_at: 2026-07-07
+  - source: affaan-m/ecc/skills/tdd-workflow@81af40761939056ab3dc54732fd4f562a27309d0
+    license: MIT
+    relationship: structural_inspiration
+    authored_by: ceo-orchestration framework
+    authored_at: 2026-07-07
+source: affaan-m/ecc@81af4076 skills/react-testing/ + skills/tdd-workflow/
+license: MIT
 # --- smart-loading fields (PLAN-083 Wave 0a sub-agent 0.7a) ---
 domain: core
 priority: 4
@@ -44,6 +59,10 @@ Read this skill when you are:
 - setting up or hardening a CI pipeline that gates deploy on tests;
 - evaluating test QUALITY (mutation score, planted-bug reviewer evals),
   not just test quantity;
+- writing behavior-focused tests for React components, custom hooks, or pages
+  (see `references/react-component-testing.md`);
+- running a test-first RED/GREEN/REFACTOR cycle for a new feature or bug fix
+  (see `references/tdd-red-green-cycle.md`);
 - editing files matched by the machine triggers in the frontmatter
   (`**/test_*.py`, `**/*.test.{ts,tsx,js,jsx}`).
 
@@ -72,11 +91,11 @@ auto-load rule; this section is its human-scannable mirror.
 
 ## Reference Files — progressive disclosure (PLAN-153 Wave C)
 
-The deep-dive sections of this skill were extracted VERBATIM into
-`references/*.md` — zero content loss (every content line of the pre-split SKILL.md appears
-verbatim either in this file or in a reference file; the loader additionally
-ADDS loader-only sections — When to Activate, this pointer table, the
-changelog). Load on demand:
+The deep-dive sections of this skill were extracted VERBATIM into the ten
+Wave-C `references/*.md` files listed below — zero content loss (every content
+line of the pre-split SKILL.md appears verbatim either in this file or in one
+of those ten references; the loader additionally ADDS loader-only sections —
+When to Activate, the pointer tables, the changelog). Load on demand:
 
 | Load `references/<file>` | For |
 |---|---|
@@ -90,6 +109,19 @@ changelog). Load on demand:
 | `test-quality-and-mutation.md` | Mutation testing, branch coverage, planted-bug behavioral evals, quality checklist |
 | `ci-integration.md` | Required CI pipeline shape + CI rules |
 | `module-test-matrices.md` | Per-module what-to-test priority tables |
+
+### Merged-in references (PLAN-153 Wave G — clean-room ADAPT)
+
+These two references carry knowledge ported clean-room and adapted into our
+voice (provenance in the `inspired_by:` frontmatter). They are NOT verbatim extractions, so they do
+**not** participate in the Wave-C verbatim-union invariant above — treat them
+as first-party framework content authored during the Wave-G merge. Load on
+demand:
+
+| Load `references/<file>` | For |
+|---|---|
+| `react-component-testing.md` | React component & hook tests: RTL query priority, `userEvent`, MSW network mocking, `axe` a11y assertions, snapshot boundaries, and the RTL-vs-Playwright decision line |
+| `tdd-red-green-cycle.md` | Test-first RED/GREEN/REFACTOR discipline: the RED-gate proof obligation, test-runner detection, git checkpoints, and the TDD evidence report |
 
 ## Anti-Patterns to Reject
 
@@ -133,6 +165,13 @@ worth naming explicitly for fresh adopters:
   equivalent is different (Python multiprocessing, Go
   goroutine test harnesses, JVM test containers).
 
+- `references/react-component-testing.md` and
+  `references/tdd-red-green-cycle.md` are JS/TS-flavored
+  (RTL, MSW, `bun test` vs `bun run test`). The *principles*
+  — accessible queries, network-seam mocking, the RED-gate
+  proof obligation, and the evidence report — transfer to
+  any stack; the tool names do not.
+
 The patterns (mocking at the transport seam, asserting on
 observable state not private calls, mutation testing to
 verify test quality, CI-runs-tests-before-deploy) all
@@ -140,7 +179,16 @@ transfer. The tool names and file paths do not.
 
 ## Changelog
 
+- **1.1.0** (2026-07-09, PLAN-153 Wave G, SP-026): two clean-room
+  ADAPT merges added as NEW references — `react-component-testing.md`
+  (React Testing Library / MSW / axe) and `tdd-red-green-cycle.md`
+  (test-first RED/GREEN/REFACTOR + evidence report), both ported
+  clean-room (provenance in `inspired_by:` frontmatter). Core gains two pointer rows,
+  an activation-cue pair, and an adopter-note bullet; no Wave-C content
+  changed. Soak: parallel-shadow (OQ3=c) until >= 2026-07-14. Adds zero to
+  the skill count (references, not new SKILL.md files).
 - **1.0.0** (2026-07-07, PLAN-153 Wave C, SP-022): progressive-disclosure
   restructure — deep-dive sections extracted verbatim to `references/*.md`;
   added `version:` frontmatter, this changelog, and the human-scannable
   `## When to Activate` section. Zero change to the extracted content.
+Skill-Import-Attestation: reviewed-by=AE9B236FDAF0462874060C6BCFCFACF00335DC74; sha256=5dfa88aa074f04d89de90890e26195c737a935d51fb26f99a49c455820fbca3a

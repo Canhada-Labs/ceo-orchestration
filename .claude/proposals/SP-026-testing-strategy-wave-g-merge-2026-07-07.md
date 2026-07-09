@@ -8,14 +8,14 @@ source_lessons:
 scan_injection_pass: true
 diff_size_added: null
 diff_size_removed: null
-sha256_of_diff: e56793e0c19938d050d24827bfbb350964eeadcf22f8eb872b9a862caed4e803
+sha256_of_diff: 23b8dfcc034e787762887f7bc65ee07059017f536975196d56c3e5afd97a14bd
 sha256_of_staged: 87820ab038e8ebf659aefd6c2a6b9c5a9b7a6330c5334c4dd08330f9b8221715
 claims_declared: false
-status: shadow
+status: promoted
 approved_by: AE9B236FDAF0462874060C6BCFCFACF00335DC74
 applied_at: 2026-07-09T16:32:58Z
-promoted_at: null
-shadow_mode: true
+promoted_at: 2026-07-09T22:07:19Z
+shadow_mode: false
 proposal_type: adapt-merge-enrichment
 after_wave_c: true
 depends_on: SP-022
@@ -139,3 +139,5 @@ git apply --check .claude/plans/PLAN-153/staged/wave-G/.claude/skills/core/testi
 > - `49ddcf89e5c1764cc21941ebc922cadbb888957fe96ee516caddcca402ac5deb` — `.claude/skills/core/testing-strategy/references/react-component-testing.md`
 > - `16c8377ec8d1101630dd6cb9f2759e9be7bb1d6ef1148f5865f59e8336903670` — `.claude/skills/core/testing-strategy/references/tdd-red-green-cycle.md`
 > **Adjudicação S263 (pair-rail):** o Codex round-2 sugeriu remover até os PONTEIROS de proveniência ('recorded in the parent inspired_by frontmatter'). REJEITADO pelo CEO: ponteiro sem identidade upstream, padrão endossado pelo reviewer humano e idêntico ao precedente landado CI-verde da Wave G (ddf2b17). Zero imperativos upstream restantes (confirmado pelo mesmo round).
+
+> **Soak waiver S264 (2026-07-09):** the remaining parallel-shadow window (>= 2026-07-14 per S263) waived by explicit Owner decision, ratified in-session via AskUserQuestion and logged verbatim in PLAN-153 OQ4. Same pre-authorized skip semantics as S263 (--promote --force-recover). Pre-waiver audit sweep of the soak window (applied_at 2026-07-09T16:32Z onward) found zero adverse signal touching this shadow.

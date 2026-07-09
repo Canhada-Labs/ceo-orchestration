@@ -162,7 +162,7 @@ Pass 1 since coverage precedence governs noise).
 
 ## SKILL REFERENCE
 
-@.claude/skills/core/security-and-auth/SKILL.md sha256=01136ae3d537cedff7ce5cb97a66a864b570ab33e7aa7033ada53159d39a4296
+@.claude/skills/core/security-and-auth/SKILL.md sha256=50cd673fddd5b3ea5168c1132bb8ef14871181d7931bc1ff40f3f6af94b99a80
 
 (Sub-agent MUST Read the referenced SKILL.md after spawn — specifically
 the §Detection-as-Code section. The PostToolUse observer
