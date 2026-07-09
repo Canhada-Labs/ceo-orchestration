@@ -11,9 +11,9 @@ diff_size_removed: null
 sha256_of_diff: e56793e0c19938d050d24827bfbb350964eeadcf22f8eb872b9a862caed4e803
 sha256_of_staged: 87820ab038e8ebf659aefd6c2a6b9c5a9b7a6330c5334c4dd08330f9b8221715
 claims_declared: false
-status: draft
-approved_by: null
-applied_at: null
+status: shadow
+approved_by: AE9B236FDAF0462874060C6BCFCFACF00335DC74
+applied_at: 2026-07-09T16:32:58Z
 promoted_at: null
 shadow_mode: true
 proposal_type: adapt-merge-enrichment
@@ -126,3 +126,16 @@ git apply --check .claude/plans/PLAN-153/staged/wave-G/.claude/skills/core/testi
   the reviewer confirms it reads as guidance, not a payload.
 - The two references are activation-time free until the loader pointer is read on
   demand (progressive disclosure inherited from the SP-022 loader shape).
+
+> **Aplicação manual S263 (2026-07-09):** o patch pinado original não aplica
+> no loader promovido (hunks com contexto stale — o loader recebeu os fixes
+> do pair-rail S262 depois que o patch foi autorado). O shadow foi construído
+> por aplicação manual reconciliada, revisada linha-a-linha (reviewer
+> after-c-review + Codex), preservando os fixes S262 e normalizando
+> enum/sha da cerimônia. **O conteúdo assinado é o shadow + references nos
+> shas abaixo** (o pin antigo do patch fica como registro histórico):
+>
+> - `d5d9598cc24ffdd37cc270d35f4ffbdd9be2034b110244309a1c785e9300f285` — `.claude/skills/core/testing-strategy/SKILL.md.shadow.md`
+> - `49ddcf89e5c1764cc21941ebc922cadbb888957fe96ee516caddcca402ac5deb` — `.claude/skills/core/testing-strategy/references/react-component-testing.md`
+> - `16c8377ec8d1101630dd6cb9f2759e9be7bb1d6ef1148f5865f59e8336903670` — `.claude/skills/core/testing-strategy/references/tdd-red-green-cycle.md`
+> **Adjudicação S263 (pair-rail):** o Codex round-2 sugeriu remover até os PONTEIROS de proveniência ('recorded in the parent inspired_by frontmatter'). REJEITADO pelo CEO: ponteiro sem identidade upstream, padrão endossado pelo reviewer humano e idêntico ao precedente landado CI-verde da Wave G (ddf2b17). Zero imperativos upstream restantes (confirmado pelo mesmo round).

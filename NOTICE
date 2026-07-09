@@ -123,7 +123,7 @@ frontend-patterns (SP-025)
   `.claude/skills/frontend/frontend-patterns/SKILL.md` — clean-room ADAPT merge (S261, PLAN-153 Wave G); imported from `affaan-m/ecc@81af4076` `skills/react-patterns/`, ported under the MIT License.
 
 testing-strategy (SP-026 — AFTER-C, applies on the SP-022 loader)
-  `.claude/skills/core/testing-strategy/references/react-component-testing.md` — clean-room ADAPT merge (S261, PLAN-153 Wave G); imported from `affaan-m/ecc@81af4076` `skills/react-testing/`, ported under the MIT License.
+  `.claude/skills/core/testing-strategy/SKILL.md` (loader pointer rows) + `.claude/skills/core/testing-strategy/references/react-component-testing.md` — clean-room ADAPT merge (S261, PLAN-153 Wave G); imported from `affaan-m/ecc@81af4076` `skills/react-testing/`, ported under the MIT License.
   `.claude/skills/core/testing-strategy/references/tdd-red-green-cycle.md` — clean-room ADAPT merge (S261, PLAN-153 Wave G); imported from `affaan-m/ecc@81af4076` `skills/tdd-workflow/`, ported under the MIT License.
 
 data-schema-design (SP-027)
@@ -153,7 +153,7 @@ supply-chain-strategist (SP-033)
   `.claude/skills/domains/supply-chain/skills/supply-chain-strategist/SKILL.md` — clean-room ADAPT merge (S261, PLAN-153 Wave G); imported from `affaan-m/ecc@81af4076` `skills/inventory-demand-planning/`, ported under the MIT License.
 
 security-and-auth (SP-034 — AFTER-C, applies on the SP-023 loader)
-  `.claude/skills/core/security-and-auth/references/cloud-and-ci-cd-security.md` — clean-room ADAPT merge (S261, PLAN-153 Wave G); imported from `affaan-m/ecc@81af4076` `skills/security-review/`, ported under the MIT License.
+  `.claude/skills/core/security-and-auth/SKILL.md` (loader pointer rows) + `.claude/skills/core/security-and-auth/references/cloud-and-ci-cd-security.md` — clean-room ADAPT merge (S261, PLAN-153 Wave G); imported from `affaan-m/ecc@81af4076` `skills/security-review/`, ported under the MIT License.
   `.claude/skills/core/security-and-auth/references/vulnerability-hunting.md` — clean-room ADAPT merge (S261, PLAN-153 Wave G); imported from `affaan-m/ecc@81af4076` `skills/security-bounty-hunter/`, ported under the MIT License.
 
 codebase-onboarding (SP-035)
