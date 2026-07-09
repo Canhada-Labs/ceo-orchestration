@@ -6,14 +6,14 @@ proposed_at: 2026-07-07T06:14:00Z
 source_lessons:
   - plan-153-wave-g-adapt-merge
 scan_injection_pass: true
-diff_size_added: null
-diff_size_removed: null
+diff_size_added: 83
+diff_size_removed: 0
 sha256_of_diff: null
-sha256_of_staged: 3e877c67c6171f1bac16f63c727eec213a26cdbd87e07c6240707149b9c62ee4
+sha256_of_staged: f3c47e49002eedefec7bbf1c59e4c979af9a1cdad307dfd7fff424c285c1a20e
 claims_declared: false
-status: draft
-approved_by: null
-applied_at: null
+status: shadow
+approved_by: AE9B236FDAF0462874060C6BCFCFACF00335DC74
+applied_at: 2026-07-09T11:33:30Z
 promoted_at: null
 shadow_mode: true
 proposal_type: adapt-merge-enrichment
@@ -65,7 +65,7 @@ Rollback-safe: promote replaces exactly one file (SKILL.md).
 
 | sha256 | file |
 |---|---|
-| `3e877c67c6171f1bac16f63c727eec213a26cdbd87e07c6240707149b9c62ee4` | `SKILL.md` (merged, 493L) |
+| `7adbe37b72f9dc1d5493ced0554a25113793f9559cd0c20aa266f9ba8975a758` | `SKILL.md` (merged, 499L) |
 
 ## Proposed diff (summary — the full diff is NOT embedded)
 
@@ -96,3 +96,6 @@ git diff --no-index .claude/skills/domains/marketing-global/skills/content-creat
   contamination gate on push.
 - `scan_injection_pass: true` = advisory exit-0, not a full injection audit.
 - +77 lines paid per activation (not a Wave C pilot); acceptable for q4.
+
+
+> **Contagens finais S262 (pós-review, autoritativas):** staged = 499 linhas; diff vs live = +83/−0; frontmatter diff_size_added/removed sincronizados. Rail de integridade = pin sha256_of_staged, re-pinado após cada fix.

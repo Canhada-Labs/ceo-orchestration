@@ -6,14 +6,14 @@ proposed_at: 2026-07-07T06:07:00Z
 source_lessons:
   - plan-153-wave-g-adapt-merge
 scan_injection_pass: true
-diff_size_added: null
-diff_size_removed: null
+diff_size_added: 68
+diff_size_removed: 0
 sha256_of_diff: null
-sha256_of_staged: 7bf5b4bec75962a7d3b74c08e7e654d1801d36a6676ef3914246373f6ec1d204
+sha256_of_staged: 6b1ff063fec023e3b3748bb75df255da11309f1a5fb3373757fa367677758006
 claims_declared: false
-status: draft
-approved_by: null
-applied_at: null
+status: shadow
+approved_by: AE9B236FDAF0462874060C6BCFCFACF00335DC74
+applied_at: 2026-07-09T11:33:28Z
 promoted_at: null
 shadow_mode: true
 proposal_type: adapt-merge-enrichment
@@ -63,7 +63,7 @@ Rollback-safe: promote replaces exactly one file (SKILL.md).
 
 | sha256 | file |
 |---|---|
-| `7bf5b4bec75962a7d3b74c08e7e654d1801d36a6676ef3914246373f6ec1d204` | `SKILL.md` (merged, 535L) |
+| `0f5a91f905447e711b371f13909e51864eb2e8414df2ccc6d226aff4fffe7c7f` | `SKILL.md` (merged, 560L) |
 
 ## Proposed diff (summary — the full diff is NOT embedded)
 
@@ -93,3 +93,6 @@ git diff --no-index .claude/skills/domains/fintech/skills/blockchain-security-au
   not optional.
 - `scan_injection_pass: true` = advisory exit-0, not a full injection audit.
 - +43 lines paid per activation (not a Wave C pilot); small, acceptable for q4.
+
+
+> **Contagens finais S262 (pós-review, autoritativas):** staged = 560 linhas; diff vs live = +68/−0; frontmatter diff_size_added/removed sincronizados. Rail de integridade = pin sha256_of_staged, re-pinado após cada fix.

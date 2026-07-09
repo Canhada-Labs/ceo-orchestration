@@ -6,14 +6,14 @@ proposed_at: 2026-07-07T06:01:00Z
 source_lessons:
   - plan-153-wave-g-adapt-merge
 scan_injection_pass: true
-diff_size_added: null
-diff_size_removed: null
+diff_size_added: 144
+diff_size_removed: 0
 sha256_of_diff: null
-sha256_of_staged: cc6b73807015e422a8eeff9b3cbb032104ac062840d2b64b4e013f1a975e3b35
+sha256_of_staged: 1c1c68ec0edcbd75523eeb029bc541493ab8a7e2230a668bdff74b2dfdc5fe4e
 claims_declared: false
-status: draft
-approved_by: null
-applied_at: null
+status: shadow
+approved_by: AE9B236FDAF0462874060C6BCFCFACF00335DC74
+applied_at: 2026-07-09T11:33:27Z
 promoted_at: null
 shadow_mode: true
 proposal_type: adapt-merge-enrichment
@@ -57,7 +57,7 @@ the prior SKILL.md.
 
 | sha256 | file |
 |---|---|
-| `cc6b73807015e422a8eeff9b3cbb032104ac062840d2b64b4e013f1a975e3b35` | `SKILL.md` (merged, 913L) |
+| `835c8ab17461c1b1cfcffb2f62955184d0c4212fb2549789e09800c3d2360b45` | `SKILL.md` (merged, 915L) |
 
 ## Proposed diff (summary — the full diff is NOT embedded)
 
@@ -89,3 +89,6 @@ whole-file replacement is not an append-only patch). Landing is the ceremony bel
 - `scan_injection_pass: true` = advisory exit-0, not a full injection audit.
 - +142 lines paid per activation (not a Wave C pilot); acceptable for q4, revisit
   if it enters the context-budget top-3.
+
+
+> **Contagens finais S262 (pós-review, autoritativas):** staged = 915 linhas; diff vs live = +144/−0; frontmatter diff_size_added/removed sincronizados. Rail de integridade = pin sha256_of_staged, re-pinado após cada fix.

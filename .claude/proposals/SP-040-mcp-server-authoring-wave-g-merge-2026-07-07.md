@@ -6,14 +6,14 @@ proposed_at: 2026-07-07T07:30:00Z
 source_lessons:
   - plan-153-wave-g-adapt-merge
 scan_injection_pass: true
-diff_size_added: 113
+diff_size_added: 115
 diff_size_removed: 0
 sha256_of_diff: null
-sha256_of_staged: 47d4b48d6015bed8d8ab1936804773559b3a7088b0325e856a7d57d606dd4eb5
+sha256_of_staged: c459a7a29c8e44b8ef6ba272a83db3f36503670175a2b458f96b8657b4e1ec4b
 claims_declared: false
-status: draft
-approved_by: null
-applied_at: null
+status: shadow
+approved_by: AE9B236FDAF0462874060C6BCFCFACF00335DC74
+applied_at: 2026-07-09T11:33:31Z
 promoted_at: null
 shadow_mode: true
 proposal_type: adapt-merge-enrichment
@@ -43,8 +43,8 @@ granularity, actionable observation shape, an error-recovery contract, and
 surface-level benchmark signals. The merge is **additive**: one net-new
 `## Designing the Tool Surface for the Calling Agent` section (inserted after
 `## Tool Schema Design`, before `## Security Boundaries`) plus a `## Changelog`
-entry; no pre-existing content rewritten. Staged file is 798 lines vs. the
-685-line live skill (net +113 lines of merged material, 0 removed).
+entry; no pre-existing content rewritten. Staged file is 800 lines vs. the
+685-line live skill (net +115 lines of merged material, 0 removed).
 
 ## Provenance note
 
@@ -76,11 +76,11 @@ Source of truth = the staged tree at
 
 | sha256 | file |
 |---|---|
-| `47d4b48d6015bed8d8ab1936804773559b3a7088b0325e856a7d57d606dd4eb5` | `SKILL.md` (merged, 798L) |
+| `a53d2b95398fa56f83d51a21a69dfad965358b5063489fb3875f614187357f97` | `SKILL.md` (merged, 800L) |
 
 ## Proposed diff (summary — the full diff is NOT embedded)
 
-The merge is additive (verified: `git diff --no-index` shows +113, 0 removals);
+The merge is additive (verified: `git diff --no-index` shows +115, 0 removals);
 regenerate and review the unified diff against the live skill with:
 
 ```
@@ -121,6 +121,9 @@ ceremony below.
 - `scan_injection_pass: true` records an exit-0 run of the advisory scanner, not
   a full adversarial injection audit — the import gate at ceremony is enforcing.
 - Activation-time cost rises with the merged content; `mcp-server-authoring` is
-  not a Wave C progressive-disclosure pilot, so the +113 lines are paid per
+  not a Wave C progressive-disclosure pilot, so the +115 lines are paid per
   activation. Acceptable for a first-class usability axis on an authoring skill;
   revisit if it becomes a context-budget top-3.
+
+
+> **Contagens finais S262 (pós-review, autoritativas):** staged = 800 linhas; diff vs live = +115/−0; frontmatter diff_size_added/removed sincronizados. Rail de integridade = pin sha256_of_staged, re-pinado após cada fix.

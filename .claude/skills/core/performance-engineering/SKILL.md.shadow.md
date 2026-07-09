@@ -8,6 +8,29 @@ description: Performance engineering for Node.js real-time systems. Covers V8 in
   memory growth, optimizing hot paths, profiling IPC throughput, or reviewing any code
   that runs on the critical data path.
 owner: Principal Performance Engineer (archetype)
+inspired_by:
+  - source: affaan-m/ecc/skills/benchmark-optimization-loop/SKILL.md@81af40761939056ab3dc54732fd4f562a27309d0
+    license: MIT
+    relationship: structural_inspiration
+    authored_by: ceo-orchestration framework
+    authored_at: 2026-07-07
+# --- smart-loading fields (PLAN-083 Wave 0a sub-agent 0.7a) ---
+domain: core
+priority: 4
+risk_class: medium
+stack: []
+context_budget_tokens: 600
+inactive_but_retained: false
+repo_profile_binding:
+  frontend: {active: true, priority: 4}
+  engine: {active: true, priority: 3}
+  fintech: {active: true, priority: 4}
+  trading-readonly: {active: true, priority: 3}
+  generic: {active: true, priority: 5}
+activation_triggers:
+  - {event: help-me-invoked, regex: "(?i)performance|latency|p95|p99"}
+source: affaan-m/ecc@81af4076 skills/benchmark-optimization-loop/
+license: MIT
 ---
 
 # Performance Engineering
@@ -152,6 +175,79 @@ Before any optimization:
 5. **Change ONE thing**: Measure again. Attribute improvement.
 6. **Repeat**: Until target is met or diminishing returns
 
+## Bounded Optimization Loop
+
+The Profiling Checklist tells you how to make *one* measured change. This section
+scales that to "make it 20x faster" or "try 50 variants" without turning into an
+unbounded, unfalsifiable search. The discipline is: never optimize without a
+baseline and a budget, and never promote a variant that has not beaten the prior
+*accepted* winner on a repeatable measurement with correctness still green.
+
+### Required baseline (do not start without all five)
+
+1. **The operation** being optimized, isolated enough to run repeatedly.
+2. **The correctness gate** that must stay green — the test/assertion set a faster
+   variant is not allowed to break. Speed that fails correctness is a regression,
+   not a win (this is the Fail-Fast Rule applied to the search).
+3. **The metric**, chosen explicitly: wall time, p95/p99 latency, throughput
+   (events/s, rows/s), cost/run, heap, RSS, or error rate. Optimizing the wrong
+   metric is an anti-pattern (RSS is not heap; p50 is not p99).
+4. **The current baseline** — the measured number today, under real load, not a
+   warm-up log (steady-state 5min+ per the Known Pitfalls note).
+5. **The search budget** — max variants, max wall-clock, max spend, max data
+   impact. An unrealistic target ("20x") is fine as ambition; the *loop* stays
+   bounded and measurable.
+
+### The loop
+
+1. Measure the baseline.
+2. Identify the bottleneck **from evidence** (a profile), not a hunch.
+3. Generate variants that each test **one** hypothesis.
+4. Run every variant against the **same input shape** as the baseline.
+5. Reject any variant that fails correctness, safety, or reproducibility.
+6. Promote the fastest surviving variant.
+7. Codify the winner in a script, command, test, config, or doc — a number you
+   cannot reproduce on demand is not a result.
+8. Rerun baseline and winner back-to-back to confirm the delta is real.
+
+### Variant ledger
+
+Track every variant so improvement is attributable and reproducible:
+
+```text
+Variant     | Hypothesis            | Command                       | Metric | Correct? | Notes
+baseline    | current path          | npm run job                   | 120s   | yes      | stable
+batch-500   | fewer round trips     | npm run job -- --batch 500    | 42s    | yes      | winner
+parallel-8  | more workers          | npm run job -- --workers 8    | 31s    | NO       | rate-limited, rejected
+```
+
+The `Correct?` column is load-bearing: `parallel-8` is faster and still loses,
+because a faster-but-wrong variant never promotes.
+
+### Recursive / hyperparameter search
+
+For a long or recursive search:
+
+- Persist every run to the ledger, not just the current best.
+- Compare each candidate against the **prior accepted winner**, not merely the
+  previous run — otherwise a noisy sequence drifts.
+- Keep a holdout or replay check so you are not overfitting to one input.
+- **Stop** when improvement is within measurement noise, correctness fails, cost
+  exceeds the budget, or the search starts changing more variables than it can
+  explain. Say "best measured safe variant," not "global optimum," unless the
+  space was actually exhausted.
+
+### Promotion gate
+
+A variant becomes the new default only when ALL hold:
+
+- correctness tests pass;
+- the performance delta is repeated or explained (not a single lucky run);
+- rollback is obvious (one revert restores the prior default);
+- the change is encoded in source control or a durable runbook;
+- the final summary carries the **exact commands and measurements** — so the
+  next engineer reproduces the number instead of trusting it.
+
 ## Anti-Patterns
 
 1. **Premature optimization**: Optimizing code that runs 1x/min
@@ -202,3 +298,15 @@ For your own adopter:
 Treat the text as an illustrated archetype; run your own
 profiling first, and cite your own baseline in any follow-up
 amendment.
+
+## Changelog
+
+- **2026-07-07 (PLAN-153 Wave G, SP-041)**: added "Bounded Optimization Loop"
+  (required baseline, the measured loop, the variant ledger, recursive-search
+  stopping conditions, and the promotion gate) — porting benchmark-optimization-
+  loop practice so "make it 20x faster" becomes a bounded, reproducible search
+  instead of an open-ended one. Clean-room ADAPT merge; additive only. The loop
+  is deliberately runtime-agnostic and extends the existing Node-specific
+  Profiling Checklist rather than replacing it, so the portability caveat at the
+  top still holds. No section renumbered.
+Skill-Import-Attestation: reviewed-by=AE9B236FDAF0462874060C6BCFCFACF00335DC74; sha256=95a2bd336b00f6b3a45d4c851acd77f9fddb544b618f97d2216669b9ecd14a49

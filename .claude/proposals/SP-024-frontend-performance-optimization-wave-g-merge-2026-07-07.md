@@ -6,14 +6,14 @@ proposed_at: 2026-07-07T06:00:00Z
 source_lessons:
   - plan-153-wave-g-adapt-merge
 scan_injection_pass: true
-diff_size_added: null
-diff_size_removed: null
+diff_size_added: 131
+diff_size_removed: 0
 sha256_of_diff: null
-sha256_of_staged: 40caca77c266e0bcad0fb95a45276d2046ab1e4c695ea897b3866e6205333d96
+sha256_of_staged: 852b7292e0e3b575e36116eb375386699fb23437654b58b5ee19d540fbc1487e
 claims_declared: false
-status: draft
-approved_by: null
-applied_at: null
+status: shadow
+approved_by: AE9B236FDAF0462874060C6BCFCFACF00335DC74
+applied_at: 2026-07-09T11:33:26Z
 promoted_at: null
 shadow_mode: true
 proposal_type: adapt-merge-enrichment
@@ -68,7 +68,7 @@ Source of truth = the staged tree at
 
 | sha256 | file |
 |---|---|
-| `40caca77c266e0bcad0fb95a45276d2046ab1e4c695ea897b3866e6205333d96` | `SKILL.md` (merged, 357L) |
+| `e1ada5ff2434bc5277893204c5fc8101a60dd590749055c8d6e96cab4d529291` | `SKILL.md` (merged, 359L) |
 
 ## Proposed diff (summary — the full diff is NOT embedded)
 
@@ -113,3 +113,6 @@ append-only patch. Landing is the Owner ceremony below.
 - Activation-time cost rises with the merged content; `frontend-performance-optimization`
   is not a Wave C progressive-disclosure pilot, so the +129 lines are paid per
   activation. Acceptable for a q5 enrichment; revisit if it becomes a budget top-3.
+
+
+> **Contagens finais S262 (pós-review, autoritativas):** staged = 359 linhas; diff vs live = +131/−0; frontmatter diff_size_added/removed sincronizados. Rail de integridade = pin sha256_of_staged, re-pinado após cada fix.

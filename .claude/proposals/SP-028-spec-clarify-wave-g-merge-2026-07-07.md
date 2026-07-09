@@ -6,14 +6,14 @@ proposed_at: 2026-07-07T06:04:00Z
 source_lessons:
   - plan-153-wave-g-adapt-merge
 scan_injection_pass: true
-diff_size_added: null
-diff_size_removed: null
+diff_size_added: 71
+diff_size_removed: 0
 sha256_of_diff: null
-sha256_of_staged: a62535113f35bf5f16a473c78bd6e3a94ca7bf9011892458433a0a0437b0255d
+sha256_of_staged: 35ad48fd061656255b54bc568e73049cd0c7b23690e3005d9732faf66a45481a
 claims_declared: false
-status: draft
-approved_by: null
-applied_at: null
+status: shadow
+approved_by: AE9B236FDAF0462874060C6BCFCFACF00335DC74
+applied_at: 2026-07-09T11:33:27Z
 promoted_at: null
 shadow_mode: true
 proposal_type: adapt-merge-enrichment
@@ -65,7 +65,7 @@ Rollback-safe: promote replaces exactly one file (SKILL.md).
 
 | sha256 | file |
 |---|---|
-| `a62535113f35bf5f16a473c78bd6e3a94ca7bf9011892458433a0a0437b0255d` | `SKILL.md` (merged, 189L) |
+| `d07d53177092dbfe268af2443829c10f6054fb8fbeedb9ab5ae3dc7592f3acc5` | `SKILL.md` (merged, 191L) |
 
 ## Proposed diff (summary — the full diff is NOT embedded)
 
@@ -94,3 +94,6 @@ git diff --no-index .claude/skills/core/spec-clarify/SKILL.md \
   reviewer inherits it rather than re-deriving it.
 - `scan_injection_pass: true` = advisory exit-0, not a full injection audit.
 - +69 lines paid per activation (not a Wave C pilot); small, acceptable for q5.
+
+
+> **Contagens finais S262 (pós-review, autoritativas):** staged = 191 linhas; diff vs live = +71/−0; frontmatter diff_size_added/removed sincronizados. Rail de integridade = pin sha256_of_staged, re-pinado após cada fix.

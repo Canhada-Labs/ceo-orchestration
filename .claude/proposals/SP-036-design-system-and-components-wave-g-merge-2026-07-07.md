@@ -6,14 +6,14 @@ proposed_at: 2026-07-07T06:12:00Z
 source_lessons:
   - plan-153-wave-g-adapt-merge
 scan_injection_pass: true
-diff_size_added: null
-diff_size_removed: null
+diff_size_added: 88
+diff_size_removed: 0
 sha256_of_diff: null
-sha256_of_staged: 546a8f2660da6103208ae23819a7a4d47c77e4f4b546ad48a20e3e8e11124cd7
+sha256_of_staged: c7c38baddd971eb5e78308aa971a7d33ae034c6f0bc9b6d7e6392e9466322d88
 claims_declared: false
-status: draft
-approved_by: null
-applied_at: null
+status: shadow
+approved_by: AE9B236FDAF0462874060C6BCFCFACF00335DC74
+applied_at: 2026-07-09T11:33:29Z
 promoted_at: null
 shadow_mode: true
 proposal_type: adapt-merge-enrichment
@@ -73,8 +73,8 @@ the reference.
 
 | sha256 | file |
 |---|---|
-| `546a8f2660da6103208ae23819a7a4d47c77e4f4b546ad48a20e3e8e11124cd7` | `SKILL.md` (merged loader, 234L) |
-| `a40242e471c1312e6c6ba9d00daaa78873b958a5b3b5b1fc57c4e041dc2b68e2` | `reference/motion-tokens.md` (137L, net-new) |
+| `76e69cd5e2175c53eb36b1da9a8e8fd56e8afa80026356faa489da59c4661013` | `SKILL.md` (merged loader, 243L) |
+| `5b8d86d7ca34dd29e727c37d2ab44c0ea9d0f6c2cf45a2b3ff1e7894a4a417e6` | `reference/motion-tokens.md` (243L, net-new) |
 
 Note: this skill uses a singular `reference/` directory (not `references/`) —
 match the live layout when landing.
@@ -108,3 +108,6 @@ git diff --no-index .claude/skills/frontend/design-system-and-components/SKILL.m
   hard reconciliation rule rather than an assumption.
 - `scan_injection_pass: true` = advisory exit-0, not a full injection audit.
 - The reference is activation-time free until its pointer is read on demand.
+
+
+> **Contagens finais S262 (pós-review, autoritativas):** staged = 243 linhas; diff vs live = +88/−0; frontmatter diff_size_added/removed sincronizados. Rail de integridade = pin sha256_of_staged, re-pinado após cada fix.

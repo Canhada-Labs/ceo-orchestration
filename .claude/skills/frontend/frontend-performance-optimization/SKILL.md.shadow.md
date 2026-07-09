@@ -2,6 +2,23 @@
 name: Frontend Performance Optimization
 description: Bundle analysis, code splitting, lazy loading strategy, rendering optimization, virtualization patterns, Core Web Vitals targets, memoization correctness, network performance, image optimization, and build tool tuning (e.g. Vite) for the {{PROJECT_NAME}} frontend. Use when analyzing bundle size, optimizing rendering, adding virtualization to large lists, reviewing memoization patterns, tuning build config, or improving Core Web Vitals scores.
 owner: Frontend Performance Engineer (archetype)
+# --- smart-loading fields (PLAN-083 Wave 0b sub-agent 0.7b) ---
+domain: frontend
+priority: 4
+risk_class: medium
+stack: [typescript, react, vite]
+context_budget_tokens: 1000
+inactive_but_retained: false
+repo_profile_binding:
+  frontend: {active: true, priority: 3}
+  engine: {active: true, priority: 8}
+  fintech: {active: true, priority: 6}
+  trading-readonly: {active: true, priority: 7}
+  generic: {active: true, priority: 5}
+activation_triggers:
+  - {event: help-me-invoked, regex: "(?i)bundle|core.?web.?vital|lcp|cls|inp|virtualization|code.?split"}
+source: affaan-m/ecc@81af4076 skills/react-performance/
+license: MIT
 ---
 
 # Frontend Performance Optimization — {{PROJECT_NAME}} Frontend
@@ -184,6 +201,125 @@ Before approving performance-sensitive changes:
 - [ ] Images have `loading="lazy"`
 - [ ] Queries have appropriate `staleTime`
 - [ ] No `Date.now()` or `Math.random()` in render path
+
+## Async & Server-Side Performance (Waterfalls, RSC, Server Actions)
+
+The rules above target client-render cost. The largest wins on a page's
+*time-to-content*, though, usually sit upstream of render: how data is
+sequenced, and how much work the server does before the first byte. This
+section covers the data-sequencing and server-side dimension the
+client-focused rules above do not.
+
+### Kill request waterfalls first
+
+A waterfall is any `await` that blocks a *later, independent* `await`.
+Each sequential round-trip adds a full network latency to the critical
+path — it is the single most expensive data-loading mistake.
+
+```ts
+// BAD — three sequential round-trips
+const user      = await getUser(id);
+const posts     = await getPosts(id);
+const followers = await getFollowers(id);
+
+// GOOD — one round-trip's worth of latency for all three
+const [user, posts, followers] = await Promise.all([
+  getUser(id),
+  getPosts(id),
+  getFollowers(id),
+]);
+```
+
+Companion rules:
+
+- **Check cheap sync conditions before awaiting.** Guard on props, env,
+  or feature flags *before* the first `await`, so a short-circuit costs
+  zero round-trips.
+- **Defer an `await` into the branch that uses it.** Don't fetch a user
+  and only then discover you are rendering the guest view.
+- **Start early, await late.** Kick off independent promises immediately
+  and `await` each only where its result is first needed
+  (`const p = getX(); …; const x = await p;`).
+- **Stream with Suspense.** Push `<Suspense>` boundaries close to the
+  slow data so the shell paints while sub-trees stream in — reserve space
+  (skeleton or `min-height`) to avoid the CLS that streaming introduces.
+
+### Parallelize server components through composition
+
+Sibling `await`s inside one server component run sequentially. Split the
+work into child components and the runtime resolves them in parallel:
+
+```tsx
+// BAD — user resolves fully before cart even starts
+async function Page() {
+  const user = await getUser();
+  const cart = await getCart();
+  return <View user={user} cart={cart} />;
+}
+
+// GOOD — children fetch independently, in parallel
+async function Page() {
+  return <View><UserSection /><CartSection /></View>;
+}
+```
+
+### Server-side rules that shape TTFB
+
+- **Every server action is a public endpoint.** A `"use server"` function
+  is reachable by anyone — authenticate *and* authorize inside it. Never
+  trust the calling client component's gating.
+- **Deduplicate per-request reads.** Wrap request-scoped loaders in
+  `React.cache()` so three components asking for the same record produce
+  one query per request. For data that does not vary per request (config,
+  lookup tables), cache *outside* the request with an LRU or the
+  framework's persistent cache.
+- **Hoist static I/O to module scope.** A file read or config parse that
+  never changes should run once at module load, not per request.
+- **No mutable module-level state on the server.** Module globals are
+  shared across all concurrent requests — a cross-user race. Use
+  request-scoped storage (headers / cookies / async context).
+- **Minimize what crosses the server→client boundary.** Serialization
+  runs once per client consumer. Project columns, paginate, and strip
+  fields at the data layer; lift a shared client component up and pass it
+  `children` rather than serializing the same payload into several
+  consumers.
+- **Push non-blocking work after the response** (logging, cache warming,
+  analytics) into a post-response hook, not the critical path.
+
+### Bundle nuances beyond "lazy-load heavy libs"
+
+- **Import from the module, not the barrel.** A barrel `index.ts` forces
+  the bundler to walk the whole module graph; direct imports
+  (`@/components/Button`, not `@/components`) can shave hundreds of ms of
+  first-load JS. Some toolchains automate this for named packages — use
+  that, but direct imports are still required for non-listed libs.
+- **Keep dynamic-import paths statically analyzable.** A template-literal
+  path like `` import(`./pages/${name}`) `` defeats trace analysis;
+  branch to explicit literal paths instead.
+- **Defer third-party scripts** (analytics, chat, logging) until after
+  hydration, and **preload on hover / focus** so a route's chunk is warm
+  before the click.
+
+## Diagnosing by Web Vital
+
+When a Core Web Vital regresses, the lever is usually one specific
+category above. Map the symptom to the fix before you start guessing:
+
+| Web Vital | Most likely lever |
+|-----------|-------------------|
+| **LCP** (Largest Contentful Paint) | Waterfalls, bundle size, resource hints (`preload` / `preconnect`) |
+| **INP** (Interaction to Next Paint) | Re-render cost, rendering work, main-thread JS |
+| **CLS** (Cumulative Layout Shift) | Reserve space for streamed/Suspense content and for images (width/height) |
+| **TBT** (Total Blocking Time) | Bundle size, deferred third-party scripts, main-thread JS |
+
+**Rules the compiler will eventually own.** When the project adopts an
+auto-memoizing React compiler, manual `useMemo` / `useCallback` added
+purely to stabilize identity becomes review-only noise — the compiler
+handles it; keep manual memoization only where a profiler proves it still
+matters. Bundle-analyzer and package-import optimizers likewise automate
+the barrel and first-load-JS rules above; treat these sections as the
+*why* behind what those tools do.
+
 ## Adopter Note — Metrics Snapshot is Originating-Project (PLAN-044 P0-12)
 
 The §Current Metrics (V2 Audit 2026-03-24) table and the
@@ -211,3 +347,14 @@ table with your numbers before optimisation work. The rules
 and patterns (never import heavy libs at top level, lazy-load
 routes, memoise correctly, virtualise lists > 50 items) are
 universal; the numbers and vendor-chunk names are not.
+
+## Changelog
+
+- **1.1.0** (2026-07-07, PLAN-153 Wave G, SP-024): enrichment merge — added
+  §Async & Server-Side Performance (Waterfalls, RSC, Server Actions),
+  §Diagnosing by Web Vital, and the "rules the compiler will eventually
+  own" note. Clean-room ADAPT of upstream React/Next.js performance
+  guidance; no pre-existing section changed. First tracked revision.
+- **1.0.0** (framework v1.0.x): initial version shipped with the
+  framework; this changelog was introduced retroactively at 1.1.0.
+Skill-Import-Attestation: reviewed-by=AE9B236FDAF0462874060C6BCFCFACF00335DC74; sha256=e1ada5ff2434bc5277893204c5fc8101a60dd590749055c8d6e96cab4d529291

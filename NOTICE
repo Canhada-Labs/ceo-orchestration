@@ -160,7 +160,7 @@ codebase-onboarding (SP-035)
   `.claude/skills/core/codebase-onboarding/SKILL.md` — clean-room ADAPT merge (S261, PLAN-153 Wave G); imported from `affaan-m/ecc@81af4076` `skills/inherit-legacy-style/`, ported under the MIT License.
 
 design-system-and-components (SP-036 — ⚠ CROSS-WAVE: drop if Wave D b2 promotes motion-foundations as a new skill)
-  `.claude/skills/frontend/design-system-and-components/reference/motion-tokens.md` — clean-room ADAPT merge (S261, PLAN-153 Wave G); imported from `affaan-m/ecc@81af4076` `skills/motion-foundations/`, ported under the MIT License.
+  `.claude/skills/frontend/design-system-and-components/SKILL.md` + `.claude/skills/frontend/design-system-and-components/reference/motion-tokens.md` — clean-room ADAPT merge (S261, PLAN-153 Wave G); imported from `affaan-m/ecc@81af4076` `skills/motion-foundations/`, ported under the MIT License.
 
 mobile-app-builder (SP-037)
   `.claude/skills/domains/mobile/skills/mobile-app-builder/SKILL.md` — clean-room ADAPT merge (S261, PLAN-153 Wave G); imported from `affaan-m/ecc@81af4076` `skills/android-clean-architecture/`, ported under the MIT License.

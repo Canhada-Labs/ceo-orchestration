@@ -6,14 +6,14 @@ proposed_at: 2026-07-07T06:09:00Z
 source_lessons:
   - plan-153-wave-g-adapt-merge
 scan_injection_pass: true
-diff_size_added: null
-diff_size_removed: null
+diff_size_added: 374
+diff_size_removed: 10
 sha256_of_diff: null
-sha256_of_staged: b38a1776ea3d4c29fd20c931f7157901379b7a18edccfd612be78e16b6958d57
+sha256_of_staged: 97df8a5ad13e35f24c2f435fa64e8169644b0f41b143f43b479722b2a0c298f1
 claims_declared: false
-status: draft
-approved_by: null
-applied_at: null
+status: shadow
+approved_by: AE9B236FDAF0462874060C6BCFCFACF00335DC74
+applied_at: 2026-07-09T11:33:29Z
 promoted_at: null
 shadow_mode: true
 proposal_type: adapt-merge-enrichment
@@ -50,7 +50,7 @@ four-way pile-up onto `supply-chain-strategist`:
 All four fold into ONE SP (a target getting N merges = one proposal folding all
 N). Staged file is 702 lines vs. the 340-line live skill (net +362 lines). Per
 the pile-up rule, the four merges are sequenced as **ordered sub-edits within this
-one SP** so the patches do not self-conflict; the staged `SKILL.md.staged` is the
+one SP** so the patches do not self-conflict; the staged `SKILL.md` is the
 already-reconciled result.
 
 ## Provenance note
@@ -71,7 +71,7 @@ the prior SKILL.md.
 
 | sha256 | file |
 |---|---|
-| `b38a1776ea3d4c29fd20c931f7157901379b7a18edccfd612be78e16b6958d57` | `SKILL.md.staged` (merged, 702L) |
+| `058eb9ae26baf7868bf81c1440f847fd8497cde83c417393231c5bdc5bb733cb` | `SKILL.md` (merged, 704L) |
 
 Note: the staged file carries the `.staged` suffix; the shadow/promote target is
 the un-suffixed live `SKILL.md`.
@@ -80,16 +80,16 @@ the un-suffixed live `SKILL.md`.
 
 ```
 git diff --no-index .claude/skills/domains/supply-chain/skills/supply-chain-strategist/SKILL.md \
-  .claude/plans/PLAN-153/staged/wave-G/.claude/skills/domains/supply-chain/skills/supply-chain-strategist/SKILL.md.staged
+  .claude/plans/PLAN-153/staged/wave-G/.claude/skills/domains/supply-chain/skills/supply-chain-strategist/SKILL.md
 ```
 
 ## Landing mechanics (wake-up ceremony — /skill-review + import gate)
 
 1. **Import gate + /skill-review** — `check-imported-skill.py --skill <staged
-   SKILL.md.staged> --notice NOTICE`; expect the provenance check to resolve
+   SKILL.md> --notice NOTICE`; expect the provenance check to resolve
    against ALL FOUR Wave G NOTICE rows for this target. Human review ON TOP.
    Verify the sha256 pin.
-2. **Approve (shadow apply)** — copy staged `SKILL.md.staged` →
+2. **Approve (shadow apply)** — copy staged `SKILL.md` →
    `.../supply-chain-strategist/SKILL.md.shadow.md`; set `status: shadow`,
    `applied_at`, `approved_by`.
 3. **Soak — parallel-shadow, NOT skip (OQ3=c)** — live SKILL.md keeps serving;
@@ -106,3 +106,8 @@ git diff --no-index .claude/skills/domains/supply-chain/skills/supply-chain-stra
   (`supply-chain-strategist` is not a Wave C pilot). Flag for a future
   progressive-disclosure pass if the domain sees real dogfood traffic.
 - `scan_injection_pass: true` = advisory exit-0, not a full injection audit.
+
+> **Emenda S262 (review):** o staged nao carrega token literal `SP-NNN`; no promote, GRAVE o id deste SP na linha de changelog do arquivo promovido (adicionando a linha se o skill nao tiver changelog), em vez de substituir um token.
+
+
+> **Contagens finais S262 (pós-review, autoritativas):** staged = 704 linhas; diff vs live = +374/−10; frontmatter diff_size_added/removed sincronizados. Rail de integridade = pin sha256_of_staged, re-pinado após cada fix.

@@ -6,14 +6,14 @@ proposed_at: 2026-07-07T06:15:00Z
 source_lessons:
   - plan-153-wave-g-adapt-merge
 scan_injection_pass: true
-diff_size_added: null
-diff_size_removed: null
+diff_size_added: 50
+diff_size_removed: 0
 sha256_of_diff: null
-sha256_of_staged: 16ad96dc16f45891e25a61dd33e35237b277db1ba87417afd2adc9aed7e9b116
+sha256_of_staged: 71c29fc2bdf9cd7c203e211ad65713137b24ea16901027e8c8faa70b43ca0c3c
 claims_declared: false
-status: draft
-approved_by: null
-applied_at: null
+status: shadow
+approved_by: AE9B236FDAF0462874060C6BCFCFACF00335DC74
+applied_at: 2026-07-09T11:33:30Z
 promoted_at: null
 shadow_mode: true
 proposal_type: adapt-merge-enrichment
@@ -56,7 +56,7 @@ Rollback-safe: promote replaces exactly one file (SKILL.md).
 
 | sha256 | file |
 |---|---|
-| `16ad96dc16f45891e25a61dd33e35237b277db1ba87417afd2adc9aed7e9b116` | `SKILL.md` (merged, 312L) |
+| `0e69d05f23abb6b12b1b9c2fc94d402a8feb04e21d17ea6101d0d18344ba31aa` | `SKILL.md` (merged, 318L) |
 
 ## Proposed diff (summary — the full diff is NOT embedded)
 
@@ -86,3 +86,6 @@ git diff --no-index .claude/skills/domains/business-support/skills/executive-sum
   `iterative-retrieval`, `kubernetes-patterns`, `prompt-optimizer`,
   `regex-vs-llm-structured-text`, `returns-reverse-logistics`) fall below this cut
   and roll into §Deferred.
+
+
+> **Contagens finais S262 (pós-review, autoritativas):** staged = 318 linhas; diff vs live = +50/−0; frontmatter diff_size_added/removed sincronizados. Rail de integridade = pin sha256_of_staged, re-pinado após cada fix.

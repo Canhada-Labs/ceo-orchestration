@@ -6,14 +6,14 @@ proposed_at: 2026-07-07T06:08:00Z
 source_lessons:
   - plan-153-wave-g-adapt-merge
 scan_injection_pass: true
-diff_size_added: null
-diff_size_removed: null
+diff_size_added: 84
+diff_size_removed: 0
 sha256_of_diff: null
-sha256_of_staged: 2ecd99f65035c3b72f1549766102e38cf64dc67bca964cc23c45856057cc5729
+sha256_of_staged: 7d2febcefe518b39a4ea01494737ec15114c6ed74e05ac473da8f0a749b8eecd
 claims_declared: false
-status: draft
-approved_by: null
-applied_at: null
+status: shadow
+approved_by: AE9B236FDAF0462874060C6BCFCFACF00335DC74
+applied_at: 2026-07-09T11:33:28Z
 promoted_at: null
 shadow_mode: true
 proposal_type: adapt-merge-enrichment
@@ -59,7 +59,7 @@ Rollback-safe: promote replaces exactly one file (SKILL.md).
 
 | sha256 | file |
 |---|---|
-| `2ecd99f65035c3b72f1549766102e38cf64dc67bca964cc23c45856057cc5729` | `SKILL.md` (merged, 212L) |
+| `2c78314618e48f928a02e6e45b30f1a9528de045d526256622d4798658ffb197` | `SKILL.md` (merged, 212L) |
 
 ## Proposed diff (summary — the full diff is NOT embedded)
 
@@ -90,3 +90,6 @@ git diff --no-index .claude/skills/domains/trading-hft/skills/kill-switches/SKIL
   review judgement, not an auto-block.
 - `scan_injection_pass: true` = advisory exit-0, not a full injection audit.
 - +84 lines paid per activation (not a Wave C pilot); acceptable for q4.
+
+
+> **Contagens finais S262 (pós-review, autoritativas):** staged = 212 linhas; diff vs live = +84/−0; frontmatter diff_size_added/removed sincronizados. Rail de integridade = pin sha256_of_staged, re-pinado após cada fix.

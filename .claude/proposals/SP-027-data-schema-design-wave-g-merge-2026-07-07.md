@@ -6,14 +6,14 @@ proposed_at: 2026-07-07T06:03:00Z
 source_lessons:
   - plan-153-wave-g-adapt-merge
 scan_injection_pass: true
-diff_size_added: null
-diff_size_removed: null
+diff_size_added: 514
+diff_size_removed: 8
 sha256_of_diff: null
-sha256_of_staged: a9dd6990575251b97ff63af67c631a8ee2db43a32d46331cd230914ea5313eae
+sha256_of_staged: 439f2336599ca8ada2249f28384d866dde05ec795ee61dcd97f102e80e99d384
 claims_declared: false
-status: draft
-approved_by: null
-applied_at: null
+status: shadow
+approved_by: AE9B236FDAF0462874060C6BCFCFACF00335DC74
+applied_at: 2026-07-09T11:33:27Z
 promoted_at: null
 shadow_mode: true
 proposal_type: adapt-merge-enrichment
@@ -68,7 +68,7 @@ the prior SKILL.md.
 
 | sha256 | file |
 |---|---|
-| `a9dd6990575251b97ff63af67c631a8ee2db43a32d46331cd230914ea5313eae` | `SKILL.md` (merged, 1431L, v1.1.0) |
+| `702045c2a1b730fe8184e11fa458fc726891b36379c513e9e55cac643187a2c6` | `SKILL.md` (merged, 1439L, v1.1.0) |
 
 ## Proposed diff (summary — the full diff is NOT embedded)
 
@@ -105,3 +105,6 @@ Landing is the ceremony below.
 - +498 lines is the largest single-target merge in Wave G and is paid per
   activation (`data-schema-design` is not a Wave C pilot). Flag for a future
   progressive-disclosure pass if it enters the context-budget top-3.
+
+
+> **Contagens finais S262 (pós-review, autoritativas):** staged = 1439 linhas; diff vs live = +514/−8; frontmatter diff_size_added/removed sincronizados. Rail de integridade = pin sha256_of_staged, re-pinado após cada fix.

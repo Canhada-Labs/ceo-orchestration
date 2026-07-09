@@ -6,14 +6,14 @@ proposed_at: 2026-07-07T07:35:00Z
 source_lessons:
   - plan-153-wave-g-adapt-merge
 scan_injection_pass: true
-diff_size_added: 90
+diff_size_added: 92
 diff_size_removed: 0
 sha256_of_diff: null
-sha256_of_staged: 9373ddff5b1e5ccc23010ad8e64979b228ae85606b2d5b0d07554052a34c39f1
+sha256_of_staged: 0dde57e6d492ec45c1283cf4a9993b8c23e7b675c1fa06a114993f6c1d186b51
 claims_declared: false
-status: draft
-approved_by: null
-applied_at: null
+status: shadow
+approved_by: AE9B236FDAF0462874060C6BCFCFACF00335DC74
+applied_at: 2026-07-09T11:33:31Z
 promoted_at: null
 shadow_mode: true
 proposal_type: adapt-merge-enrichment
@@ -45,7 +45,7 @@ conditions, and a promotion gate. The merge is **additive**: one net-new
 `## Bounded Optimization Loop` section (inserted after `## Profiling Checklist`,
 before `## Anti-Patterns`), an `inspired_by:` frontmatter key (the live file had
 none), and a `## Changelog` entry; no pre-existing content rewritten. Staged
-file is 309 lines vs. the 219-line live skill (net +90 lines, 0 removed).
+file is 311 lines vs. the 219-line live skill (net +92 lines, 0 removed).
 
 ## Provenance note
 
@@ -79,11 +79,11 @@ Source of truth = the staged tree at
 
 | sha256 | file |
 |---|---|
-| `9373ddff5b1e5ccc23010ad8e64979b228ae85606b2d5b0d07554052a34c39f1` | `SKILL.md` (merged, 309L) |
+| `95a2bd336b00f6b3a45d4c851acd77f9fddb544b618f97d2216669b9ecd14a49` | `SKILL.md` (merged, 311L) |
 
 ## Proposed diff (summary — the full diff is NOT embedded)
 
-The merge is additive (verified: `git diff --no-index` shows +90, 0 removals);
+The merge is additive (verified: `git diff --no-index` shows +92, 0 removals);
 regenerate and review the unified diff against the live skill with:
 
 ```
@@ -126,3 +126,6 @@ ceremony below.
 - The merged loop is intentionally runtime-agnostic; it does not add Node.js
   budgets or numbers, so the existing §Performance Budgets snapshots and the
   portability caveat are untouched and still apply.
+
+
+> **Contagens finais S262 (pós-review, autoritativas):** staged = 311 linhas; diff vs live = +92/−0; frontmatter diff_size_added/removed sincronizados. Rail de integridade = pin sha256_of_staged, re-pinado após cada fix.

@@ -8,6 +8,50 @@ description: Structured code review process for the {{PROJECT_NAME}}. Covers
   of changes, or performing quality gate reviews. This is the Staff Code Reviewer archetype's operating manual
   as the final gate before production.
 owner: Staff Code Reviewer (archetype)
+inspired_by:
+  - source: msitarzewski/agency-agents/testing/testing-reality-checker.md@783f6a72bfd7f3135700ac273c619d92821b419a
+    license: MIT
+    relationship: structural_inspiration
+    authored_by: ceo-orchestration framework
+    authored_at: 2026-05-06
+  - source: msitarzewski/agency-agents/testing/testing-evidence-collector.md@783f6a72bfd7f3135700ac273c619d92821b419a
+    license: MIT
+    relationship: pattern_reference
+    authored_by: ceo-orchestration framework
+    authored_at: 2026-05-06
+  - source: msitarzewski/agency-agents/testing/testing-test-results-analyzer.md@783f6a72bfd7f3135700ac273c619d92821b419a
+    license: MIT
+    relationship: pattern_reference
+    authored_by: ceo-orchestration framework
+    authored_at: 2026-05-06
+  - source: msitarzewski/agency-agents/testing/testing-tool-evaluator.md@783f6a72bfd7f3135700ac273c619d92821b419a
+    license: MIT
+    relationship: pattern_reference
+    authored_by: ceo-orchestration framework
+    authored_at: 2026-05-06
+  - source: affaan-m/ecc/skills/search-first/SKILL.md@81af40761939056ab3dc54732fd4f562a27309d0
+    license: MIT
+    relationship: partial_reuse
+    authored_by: ceo-orchestration framework
+    authored_at: 2026-07-07
+# --- smart-loading fields (PLAN-083 Wave 0a sub-agent 0.7a) ---
+domain: core
+priority: 3
+risk_class: low
+stack: []
+context_budget_tokens: 1100
+inactive_but_retained: false
+repo_profile_binding:
+  frontend: {active: true, priority: 3}
+  engine: {active: true, priority: 3}
+  fintech: {active: true, priority: 3}
+  trading-readonly: {active: true, priority: 3}
+  generic: {active: true, priority: 3}
+activation_triggers:
+  - {event: plan-opened}
+  - {event: help-me-invoked, regex: "(?i)code.?review|cr"}
+source: affaan-m/ecc@81af4076 skills/search-first/
+license: MIT
 ---
 
 # Code Review Checklist
@@ -120,6 +164,10 @@ For every change, classify blast radius:
 **L3+ changes require VP Engineering (architect) review before the Staff Code Reviewer approves.**
 
 ## Review Output Format
+
+The reviewer publishes one document per review using the structure below.
+The document lives in the PR description or alongside the plan as
+`PLAN-NNN/review-YYYY-MM-DD.md`.
 
 ```markdown
 ## Code Review — [Feature/Fix Name]
@@ -244,7 +292,7 @@ severity (BLOCKER / CRITICAL / MAJOR / MINOR / NIT).
 
 ### Pass-cost mitigation (ADR-052 VETO floor preserved)
 
-Both passes default to Opus 4.7 per ADR-052. Pass 2 MAY dispatch to
+Both passes default to Opus 4.8 per ADR-052. Pass 2 MAY dispatch to
 Sonnet 4.6 if ALL of:
 
 - Pass 1 returned `ALLOW` clean (no BLOCKER / CRITICAL / MAJOR)
@@ -335,3 +383,370 @@ feeling — it is a measurable bias that lowers scrutiny by ~5.2 pp
 Cross-ref: `PROTOCOL.md` §Artifact Paradox + `docs/HONEST-
 LIMITATIONS.md` §4 + SP-001 cross-link seed (shadow-applied
 2026-04-20).
+
+## Default-BLOCKED Posture (verdict-flip discipline)
+
+The reviewer's verdict starts at `BLOCKED`. Approval requires
+flipping it. Approval is never the default state of the document
+that has not yet been read.
+
+This rule exists because the inverse posture — start at `APPROVED`,
+flip to `BLOCKED` only when something obvious shows up — produced
+~35% phantom-approval rate across pre-PLAN-058 review cycles
+(Round-23 burn-down inventory). When the floor of "no findings yet"
+maps to APPROVED, every unread file path silently votes for the
+change. When the floor maps to BLOCKED, every unread file path
+demands evidence.
+
+### The flip rule
+
+Three conditions, all required, before flipping `BLOCKED → APPROVED`:
+
+1. **Every domain checklist applicable to the diff has been walked
+   end-to-end.** Not skimmed. Not "the relevant ones." Every box that
+   the diff intersects gets a tick or a finding. An un-walked box is a
+   missing finding, not an implicit pass.
+
+2. **At least one finding has been recorded** — even at NIT severity.
+   A diff non-trivial enough to merit review has at least one thing
+   the reviewer noticed. "Zero findings" on a non-trivial diff is a
+   review-quality red flag and triggers a self-restart (re-read the
+   diff colder).
+
+3. **The CI run cited in the PR has been opened and the failing-job
+   list confirmed empty.** Not "CI was green when I started." The
+   actual current state of the actual current branch.
+
+Missing any of the three → verdict stays `BLOCKED`. The PR description
+is then updated with the specific missing condition, not a vague "needs
+more work" note.
+
+### `APPROVED WITH CONDITIONS` — the middle band
+
+`APPROVED WITH CONDITIONS` is a verdict, not a softer approval. It
+exists for residual risk that is acceptable *with a named control*.
+Every condition cites:
+
+- The control: feature flag, canary stage, follow-up ticket, post-
+  deploy monitor, rollback script
+- The owner: a person, not a team
+- The trigger that closes the condition: a deploy gate, a CI hook, a
+  date
+
+A condition that reads "fix in a follow-up" with no control, no owner,
+or no trigger is not a condition — it is the reviewer rationalizing.
+Such a condition fails the verdict and the review returns to `BLOCKED`.
+
+### Phantom-approval auto-trigger
+
+If the reviewer notices any of the following self-statements while
+drafting the verdict, the verdict snaps back to `BLOCKED` for one more
+self-check pass:
+
+- "I think this is fine"
+- "Looks reasonable"
+- "Probably correct"
+- "Author has done this kind of thing before"
+- "Small change, low risk"
+
+Each of those is fluency-credulous language. Evidence-based language —
+"line X handles Y because Z is enforced at A" — is required to clear
+the auto-trigger.
+
+## Evidence Requirement (file:line + reproduction artifact)
+
+Every finding above NIT severity carries two attachments: a precise
+location and a reproduction artifact. "I think the input handler is
+broken" is not a finding. It is a hunch, and hunches do not make it
+into the review document.
+
+### What counts as evidence
+
+| Finding type           | Required artifact                                                                    |
+|------------------------|--------------------------------------------------------------------------------------|
+| Behavioral regression  | Failing test output (full traceback) OR a runnable repro snippet pasted into the PR  |
+| Missing test coverage  | Coverage report excerpt showing the line range with 0% AND a proposed test signature |
+| Spec drift             | Quoted spec.md line + quoted implementation line, side-by-side                       |
+| Performance regression | Before/after benchmark with sample size n≥10, p95 + p99 reported, fixed seed cited   |
+| Security finding       | Attack input + path through the code that fails to neutralize it                     |
+| Type-safety finding    | TypeScript / mypy / pyright output line + the offending source line                  |
+| Dependency finding     | Lockfile diff + advisory ID (CVE / GHSA) where applicable                            |
+| Config finding         | Workflow file path + line + the asserted-vs-observed behavior                        |
+
+The artifact is part of the review document. Comments like "see CI"
+or "you can find it in the logs" do not satisfy the requirement —
+the reviewer copies the relevant excerpt into the finding so the
+author and any later auditor can read the review without leaving it.
+
+### CORRECT vs WRONG — finding evidence
+
+```markdown
+# CORRECT — Finding 3 (CRITICAL)
+File: src/auth/session.ts:118
+Issue: Session token compared with non-constant-time `===`
+Repro:
+  Input: token differing in byte 0 vs token differing in byte 31
+  Observed: timing delta ~120ns / ~3800ns (n=1000, taskset -c 0)
+  Expected: ≤2× timing variance under timing-safe comparison
+Fix: Use `crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b))`
+     Cross-check `core/security-and-auth` §Timing-Safe Comparisons.
+
+# WRONG — Finding 3
+The session comparison looks unsafe. Should probably use a
+timing-safe equality check. Auth code is sensitive so let's be
+careful here.
+```
+
+The wrong version offers a hunch and a vibe. The correct version
+offers a location, a reproduction, an observation, an expectation,
+and a fix that is auditable on its own.
+
+### Reproduction-budget escape hatch
+
+When reproducing a finding would consume more than 30 minutes of
+diagnostic time (e.g., a flake that surfaces 1-in-200 runs), the
+reviewer DOES NOT skip the finding and DOES NOT downgrade it. The
+reviewer files it with severity `MAJOR` minimum, attaches the
+partial signal that prompted the suspicion (one stack trace, one
+log excerpt, one observed metric), and notes `repro_pending: true`.
+The author then carries the reproduction load. The verdict stays
+`BLOCKED` until the artifact lands.
+
+### Visual-proof carve-out for UI / dashboard / report changes
+
+Changes that affect rendered output — dashboards, generated reports,
+CLI banners with structured output — additionally carry a before/after
+artifact: a screenshot, a terminal transcript, or a saved-HTML diff.
+A reviewer who cannot describe what the change LOOKS LIKE has not
+reviewed the change. "The CSS diff is small" is not a substitute for
+opening the page.
+
+## Quality-Metric Findings (treat numbers as findings)
+
+Coverage delta, mutation kill-rate, flake-rate, p95 latency drift,
+binary-size delta, dependency-tree depth — these are not background
+telemetry. When they move adversely on a PR, they are findings, with
+severity, location, and fix-required just like any code finding.
+
+### The quality-metric rubric
+
+Each metric has an empirical threshold. When a PR crosses the threshold,
+a finding is filed with the indicated severity:
+
+| Metric                            | Threshold for finding                                          | Default severity |
+|-----------------------------------|----------------------------------------------------------------|------------------|
+| Line coverage delta               | ≥1.0 pp drop on touched files                                  | MAJOR            |
+| Branch coverage delta             | ≥2.0 pp drop on touched files                                  | MAJOR            |
+| Mutation kill-rate                | <85% on touched-file mutants OR ≥3 pp drop                     | CRITICAL         |
+| Flake-rate (last 50 CI runs)      | ≥2% on a test added or modified by the PR                      | CRITICAL         |
+| p95 latency on benchmarked path   | ≥10% regression with n≥10, fixed seed, same hardware class     | MAJOR            |
+| Binary / bundle size delta        | ≥5% increase OR ≥250 KiB absolute, whichever is smaller        | MAJOR            |
+| Dependency tree depth delta       | ≥+5 transitive deps OR introduces a non-MIT/Apache/BSD license | MAJOR            |
+| New `try/except: pass` constructs | ≥1 introduction without an inline rationale comment            | MAJOR            |
+| New `console.log` / `print` debug | ≥1 in non-test, non-CLI source                                 | MINOR            |
+| New `TODO` / `FIXME` without ID   | ≥1 new TODO not linked to a tracking ticket                    | MINOR            |
+
+The thresholds are defaults. A project's `.claude/settings.local.json`
+or per-skill override may tighten them, never loosen them without an
+ADR. "We don't track mutation kill-rate" is itself a finding with
+severity MAJOR — the absence of the metric is a quality-process gap.
+
+### Trend over snapshot
+
+A single absolute value is less load-bearing than a trend. If the PR
+holds the metric flat at a value that is already adverse (e.g.,
+coverage frozen at 71% while the project floor is 80%), the finding
+fires regardless of delta. The frozen-bad state is the finding.
+
+The reviewer pulls the trend from the last 10 closed PRs on the same
+file paths where possible. A directional move that the reviewer
+flags only at the extreme threshold misses the leading indicator.
+
+### CORRECT vs WRONG — quality-metric finding
+
+```markdown
+# CORRECT — Finding 7 (CRITICAL)
+Metric: mutation kill-rate on _lib/audit_emit.py
+Observed: 78.4% (this PR) vs 89.1% (last 10 PRs touching this file)
+Threshold: <85% on touched-file mutants
+Cause: 4 new branches added in `_normalize_action_label`; only
+       happy-path covered. Mutants surviving:
+         - boundary off-by-one in slice index
+         - identity vs equality on action-name compare
+         - early-return on empty string short-circuits validator
+Fix: Add 4 negative-path tests; re-run `make mutation` and confirm
+     ≥85% kill rate before re-review.
+
+# WRONG — Finding 7
+Mutation testing showed some surviving mutants. Should add more
+tests.
+```
+
+The wrong version is impossible to act on without re-doing the
+reviewer's work. The correct version names the file, the threshold,
+the trend, the surviving mutants, and the closing condition.
+
+### Metric-finding interaction with verdict
+
+Quality-metric findings count toward the verdict at their assigned
+severity. A clean code review with a `mutation kill-rate < 85%`
+CRITICAL finding does NOT round to `APPROVED` — the metric finding
+holds the verdict at `BLOCKED` until the fix lands. This is the
+mechanism that prevents "the code looks fine" from rationalizing
+around adverse trend signals.
+
+## Tool-Introduction Scoring (libraries, services, vendors)
+
+When a PR introduces a new runtime dependency, replaces an existing
+one, or adopts a new SaaS / managed service, the reviewer applies a
+weighted scoring matrix BEFORE evaluating the integration code. The
+choice itself is the load-bearing decision; the integration is
+downstream.
+
+### The 7-axis matrix
+
+Each axis scores 0-10. Weights sum to 1.00. A weighted score below
+6.5 maps to a `BLOCKED` verdict on the tool choice independent of
+the integration code's quality.
+
+| Axis                          | Weight | What scores 10                                                                  | What scores 0                                                                       |
+|-------------------------------|--------|---------------------------------------------------------------------------------|-------------------------------------------------------------------------------------|
+| Security posture              | 0.20   | Active CVE response, signed releases, SBOM published, security contact listed   | Unsigned releases, no CVE history because nobody's looked, no contact               |
+| Maintenance signal            | 0.18   | ≥1 commit / week from ≥2 maintainers across last 12 months; issues closed monthly | Last commit ≥18 months ago; sole maintainer; issue tracker abandoned                |
+| Ecosystem fit                 | 0.15   | Used by ≥3 projects already in the framework's stack with no friction reports   | Single-project deployment; stack mismatch; transitive licensing conflict            |
+| Lock-in / exit cost           | 0.12   | Open data format, runs locally, contracts terminable on 30-day notice           | Proprietary data format with no export, vendor-required cloud, 1-year contract lock |
+| Operational complexity        | 0.10   | One-line install; zero config defaults; logs to stdout; no daemons              | Multi-host install; 200-line YAML config; custom log format; required sidecar       |
+| Total cost of integration     | 0.10   | Replaces existing manual work with quantified ROI; fits inside current budget   | Adds new line item without offsetting savings; usage-based billing without cap      |
+| Documentation completeness    | 0.15   | Public API docs, runnable quickstart, troubleshooting page, changelog up-to-date | "Docs coming soon"; only blog posts; changelog is the git log                       |
+
+Weighted score = Σ (axis_score × axis_weight). A score in
+[6.5, 7.5) is `APPROVED WITH CONDITIONS`; ≥7.5 is `APPROVED`.
+
+### When the matrix applies
+
+The matrix runs when the PR diff includes any of:
+
+- A new entry in `package.json`, `requirements.txt`, `Cargo.toml`,
+  `go.mod`, or equivalent
+- A version bump that changes the major version of an existing entry
+- A new `Dockerfile FROM` base image
+- A new external service URL in config (a SaaS endpoint, a managed
+  database, a third-party auth provider)
+- A new GitHub Action `uses:` reference at a tag the project has
+  not previously pinned
+- A new MCP server registration or a new external tool wired into a
+  hook
+
+Bug-fix-version bumps and patch-version bumps inside an already-
+approved tool DO NOT re-trigger the matrix. They run through the
+universal checklist as ordinary code changes.
+
+### CORRECT vs WRONG — tool-introduction finding
+
+```markdown
+# CORRECT — Tool-introduction review for `fast-json-stringify@5.x`
+Replaces: `JSON.stringify` on hot-path serializer
+
+Axis scores (0-10):
+- Security posture: 7  (signed npm releases; one CVE in 2024 with 11-day patch; no SBOM)
+- Maintenance: 9       (weekly commits, 4 maintainers, 92% issue close rate over 12mo)
+- Ecosystem fit: 8     (used by Fastify; matches our Node 22 line; MIT license)
+- Lock-in: 9           (drop-in API; revert via 1-line code change; no data format change)
+- Operational: 10      (zero config; no daemons; pure library)
+- Cost: 8              (replaces existing serializer; ~12% p95 throughput improvement on benchmark)
+- Documentation: 8     (full API docs, benchmark page, changelog current)
+
+Weighted score: 8.36 → APPROVED
+Conditions: pin to exact patch version; subscribe to repo security advisories.
+
+# WRONG — Tool-introduction review
+Adding fast-json-stringify, it's faster than the built-in. Looks
+well-maintained, lots of users. Approving.
+```
+
+The wrong version makes a recommendation without an audit trail; if
+the library is later compromised or abandoned, the review record
+gives no signal about WHAT the reviewer evaluated. The correct
+version is auditable and re-runnable next year when the same library
+needs to be re-evaluated for a major-version bump.
+
+### Why it sits inside code review
+
+Tool selection is sometimes treated as a separate "RFC" exercise
+that lives outside the PR review. The framework rejects that split:
+the PR that introduces the tool IS the moment the choice becomes
+load-bearing. Routing the matrix anywhere else loses the gate. A
+PR that adds a dependency without a matrix score is the same shape
+of finding as a PR that adds an unauthenticated endpoint — a missing
+mandatory artifact, severity MAJOR minimum, verdict `BLOCKED` until
+the matrix lands inline in the review document.
+
+## Reuse & Prior-Art Review (reinvented-wheel findings)
+
+Tool-Introduction Scoring above gates the dependencies a PR *adds*. This
+section gates the mirror-image failure: a PR that hand-writes custom code
+where existing prior art — an in-repo utility, a maintained library, a wired
+MCP capability, or a sibling skill — already solves the problem. Reinvention
+is a review finding, because duplicated logic diverges under maintenance and
+widens a blast radius no one is tracking.
+
+### The prior-art sweep (before judging the implementation)
+
+When a diff introduces a new helper, parser, client, validator, retry loop,
+date/number formatter, or any other general-purpose primitive, run a bounded
+search *before* evaluating the code quality:
+
+1. **In-repo first.** `rg` for an existing function or module that already
+   does this. A second copy of a utility that lives one directory over is the
+   highest-value reuse finding — the two call sites *will* drift.
+2. **Ecosystem.** A well-solved commodity problem (HTTP retry/backoff,
+   schema validation, CSV, argument parsing) usually has a battle-tested
+   package. Net-new custom code for a commodity problem is a finding.
+3. **Capability already wired.** An MCP server or an existing framework skill
+   may already expose the capability; re-implementing it in the PR is a
+   finding.
+
+Honesty rule: report only the channels actually searched. "No existing
+solution found" after searching zero channels is a false negative dressed as
+diligence — the same anti-pattern as approving without reading the diff.
+
+### Reuse verdict lens
+
+Map the change to a verdict, not a reflex to rewrite:
+
+| Situation | Reviewer verdict |
+|---|---|
+| Exact match exists in-repo, or a vetted dependency already present covers it | **Reuse** — the custom code is a MAJOR finding (two sources of truth) |
+| Close match needs only a thin adapter | **Extend** — a small wrapper is fine; a heavy re-implementation around it is a MINOR finding |
+| Only weak partial matches exist | **Compose** — combining small pieces is acceptable; note the trade-off |
+| Nothing suitable, or every candidate fails the Tool-Introduction matrix | **Build** — custom code is justified; record *why* the search came up empty |
+
+"Build" is a legitimate outcome. A reviewer who forces adoption of an
+un-vetted library has not removed risk, only relocated it — so any library the
+review *proposes* as a replacement must itself clear the 7-axis
+Tool-Introduction matrix above. The two sections interlock: the reuse lens
+stops reinvention, the tool matrix stops careless adoption, and neither is a
+loophole for the other.
+
+### Severity guidance
+
+- Duplicating an existing in-repo function: **MAJOR** (two sources of truth
+  that drift silently).
+- Reinventing a commodity, well-solved problem as net-new custom logic:
+  **MINOR** at L1–L2 blast radius, **MAJOR** at L3+.
+- Over-wrapping an adopted library until its guarantees are lost (e.g.
+  swallowing a library's typed errors behind a bare `except`): **MINOR**, or
+  higher when it defeats a safety property.
+- A new dependency pulled in to avoid a five-line in-repo helper (dependency
+  bloat): **MINOR**, and it still must clear the Tool-Introduction matrix.
+
+## Changelog
+
+- **2026-07-07 (PLAN-153 Wave G, SP-029)**: added §"Reuse & Prior-Art
+  Review (reinvented-wheel findings)" — a reviewer lens for flagging
+  hand-written code that duplicates in-repo utilities, maintained libraries,
+  MCP capabilities, or sibling skills, interlocked with the existing
+  Tool-Introduction matrix so neither is a loophole. Clean-room ADAPT merge of
+  the search-before-build practice; no change to the severity scale, the
+  blast-radius bands, or the default-BLOCKED verdict discipline.
+Skill-Import-Attestation: reviewed-by=AE9B236FDAF0462874060C6BCFCFACF00335DC74; sha256=74ed267ae82ae8fa499b252fd46e9bf3e3292000e85231d4db3b54d458dd8cca

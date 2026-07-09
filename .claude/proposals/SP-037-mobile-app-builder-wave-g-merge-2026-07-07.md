@@ -6,14 +6,14 @@ proposed_at: 2026-07-07T06:13:00Z
 source_lessons:
   - plan-153-wave-g-adapt-merge
 scan_injection_pass: true
-diff_size_added: null
-diff_size_removed: null
+diff_size_added: 115
+diff_size_removed: 0
 sha256_of_diff: null
-sha256_of_staged: 57fb70a8cfec42738d5995b526cbcb0004096b021218ff8fc2b8e54e3833443e
+sha256_of_staged: 1d644f9b5bd8db652ba886822cbf757c84e14de43bbe5c42641a24c8584b4b09
 claims_declared: false
-status: draft
-approved_by: null
-applied_at: null
+status: shadow
+approved_by: AE9B236FDAF0462874060C6BCFCFACF00335DC74
+applied_at: 2026-07-09T11:33:30Z
 promoted_at: null
 shadow_mode: true
 proposal_type: adapt-merge-enrichment
@@ -59,7 +59,7 @@ Rollback-safe: promote replaces exactly one file (SKILL.md).
 
 | sha256 | file |
 |---|---|
-| `57fb70a8cfec42738d5995b526cbcb0004096b021218ff8fc2b8e54e3833443e` | `SKILL.md` (merged, 555L) |
+| `00ff5c83ae52e269b5121ff86de4b1e1003f3d157998053e669bf06d773e128d` | `SKILL.md` (merged, 561L) |
 
 ## Proposed diff (summary — the full diff is NOT embedded)
 
@@ -89,3 +89,8 @@ git diff --no-index .claude/skills/domains/mobile/skills/mobile-app-builder/SKIL
 - The other mobile ADAPTs (dart-flutter, kotlin-*, react-native, swift*) roll into
   §Deferred to keep this a single-target merge; revisit after `/skill-health`.
 - +109 lines paid per activation (not a Wave C pilot); acceptable for q4.
+
+> **Emenda S262 (review):** o staged nao carrega token literal `SP-NNN`; no promote, GRAVE o id deste SP na linha de changelog do arquivo promovido (adicionando a linha se o skill nao tiver changelog), em vez de substituir um token.
+
+
+> **Contagens finais S262 (pós-review, autoritativas):** staged = 561 linhas; diff vs live = +115/−0; frontmatter diff_size_added/removed sincronizados. Rail de integridade = pin sha256_of_staged, re-pinado após cada fix.

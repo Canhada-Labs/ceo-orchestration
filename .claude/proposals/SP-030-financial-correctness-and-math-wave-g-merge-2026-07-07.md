@@ -6,14 +6,14 @@ proposed_at: 2026-07-07T06:06:00Z
 source_lessons:
   - plan-153-wave-g-adapt-merge
 scan_injection_pass: true
-diff_size_added: null
-diff_size_removed: null
+diff_size_added: 105
+diff_size_removed: 0
 sha256_of_diff: null
-sha256_of_staged: 228ddfe2e55a216d352afd7af7c7feb9e48ab2656c3f4787f0a82bba045167cb
+sha256_of_staged: 831c01c295c1a8e82b473c4031b8524c18e8a95a534fb8d647c1b79c9ce6df46
 claims_declared: false
-status: draft
-approved_by: null
-applied_at: null
+status: shadow
+approved_by: AE9B236FDAF0462874060C6BCFCFACF00335DC74
+applied_at: 2026-07-09T11:33:28Z
 promoted_at: null
 shadow_mode: true
 proposal_type: adapt-merge-enrichment
@@ -58,7 +58,7 @@ Rollback-safe: promote replaces exactly one file (SKILL.md).
 
 | sha256 | file |
 |---|---|
-| `228ddfe2e55a216d352afd7af7c7feb9e48ab2656c3f4787f0a82bba045167cb` | `SKILL.md` (merged, 441L) |
+| `dc8ed004c61c650475ec4241377e1758e5c836f5c5b54ca61e722f0ae48f8cf1` | `SKILL.md` (merged, 445L) |
 
 ## Proposed diff (summary — the full diff is NOT embedded)
 
@@ -85,3 +85,8 @@ git diff --no-index .claude/skills/domains/fintech/skills/financial-correctness-
 - `scan_injection_pass: true` = advisory exit-0, not a full injection audit.
 - +101 lines paid per activation (not a Wave C pilot); acceptable for a
   correctness-critical fintech enrichment.
+
+> **Emenda S262 (review):** o staged nao carrega token literal `SP-NNN`; no promote, GRAVE o id deste SP na linha de changelog do arquivo promovido (adicionando a linha se o skill nao tiver changelog), em vez de substituir um token.
+
+
+> **Contagens finais S262 (pós-review, autoritativas):** staged = 445 linhas; diff vs live = +105/−0; frontmatter diff_size_added/removed sincronizados. Rail de integridade = pin sha256_of_staged, re-pinado após cada fix.
