@@ -510,7 +510,7 @@ bash .claude/scripts/generate-skill-inventory.sh > /tmp/new-inv.md
 - `cookbook-advisor` — Advise on 4 Anthropic Cookbook 2026 patterns (COOK-P1..P4) — surface UX hints when a task signature matches a pattern trigger class.
 - `coverage-audit` — Read-only cross-artifact consistency analyzer (port of spec-kit /analyze).
 - `cross-llm-pair-review` — Cross-LLM Pair-Rail dispatch + verdict interpretation — when to invoke, Cases A-F asymmetric matrix outcomes, Owner override semantics, post-verdict labeling protocol, promotion...
-- `data-schema-design` — PostgreSQL schema design including migration strategy, retention policy design, index strategy, disaster recovery DDL, SECURITY DEFINER safety, RLS policy patterns, and naming conventions.
+- `data-schema-design` — PostgreSQL schema design including migration strategy and cross-ORM migration tooling (Prisma, Drizzle, Kysely, Django, golang-migrate), retention policy design, index strategy, keyset pagination, queue-claim patterns, disaster recovery DDL, SECURITY DEFINER safety, RLS policy patterns and RLS performance, naming conventions, and cross-engine notes for MySQL/MariaDB.
 - `devops-ci-cd` — CI/CD pipeline design, Docker optimization, PaaS deployment, health check engineering, rollback strategies, monitoring infrastructure, and secret management for backend services.
 - `dpo-reporting` — Data Protection Officer reporting discipline for Brazilian LGPD compliance.
 - `evidence-based-qa` — Evidence-based quality assurance doctrine for {{PROJECT_NAME}}.
@@ -827,7 +827,7 @@ _Total in Domain: sales: 9 skill(s)._
 
 ### Domain: supply-chain
 
-- `supply-chain-strategist` — Supply chain strategy across sourcing, supplier qualification, demand planning, inventory optimisation, S&OP, lead-time management, risk diversification, and ESG traceability compliance for {{PROJECT_NAME}}.
+- `supply-chain-strategist` — Supply chain strategy across sourcing, supplier qualification, demand planning, inventory optimisation, S&OP, lead-time management, freight and carrier strategy, customs and trade compliance, logistics exception and claims management, risk diversification, and ESG traceability compliance for {{PROJECT_NAME}}.
 
 _Total in Domain: supply-chain: 1 skill(s)._
 
