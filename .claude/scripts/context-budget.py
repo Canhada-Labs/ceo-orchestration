@@ -353,11 +353,15 @@ def _file_entry(path: Path, repo: Path, category: str) -> Optional[Dict[str, Any
         rel = str(path.relative_to(repo))
     except ValueError:
         rel = str(path)
-    # Progressive-disclosure state (Wave C): a skill dir with references/
-    # already loads its bulk on demand — it self-retires from savings_top3.
+    # Progressive-disclosure state (Wave C): a skill self-retires from
+    # savings_top3 only when its live SKILL.md actually POINTS at the
+    # references/ dir. Dir existence alone is not enough: during a
+    # parallel-shadow soak the references land beside a still-unsplit
+    # live SKILL.md, and that skill must keep appearing in the report.
     has_references = (
         category in (CAT_SKILLS, CAT_CORE_SKILL)
         and (path.parent / "references").is_dir()
+        and "references/" in text
     )
     return {
         "category": category,

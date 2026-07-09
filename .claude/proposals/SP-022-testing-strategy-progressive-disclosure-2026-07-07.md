@@ -6,13 +6,13 @@ proposed_at: 2026-07-07T05:30:00Z
 source_lessons:
   - plan-153-wave-c-progressive-disclosure-pilot
 scan_injection_pass: true
-diff_size_added: 42
+diff_size_added: 44
 diff_size_removed: 924
-sha256_of_diff: 2b0cf937dc86a366fae1c4279e09dc84c419a38dcc7c443ccab58c65887f1e31
+sha256_of_diff: 4a2bbb3fe074603ca28826a8ce50cb3fc1531ec51b71444b5280a58a1fd5d520
 claims_declared: false
-status: draft
-approved_by: null
-applied_at: null
+status: shadow
+approved_by: AE9B236FDAF0462874060C6BCFCFACF00335DC74
+applied_at: 2026-07-08T22:48:10Z
 promoted_at: null
 shadow_mode: true
 proposal_type: progressive-disclosure-restructure
@@ -70,7 +70,7 @@ Source of truth = the staged tree at
 
 | sha256 | file |
 |---|---|
-| `0695cc59701bee9f4e518ca9348d2eebbdfb4af16dbe057d4ec45fc0a663bc72` | `SKILL.md` (loader, 144L) |
+| `a915dc36785cbfe8154c36689142f06991cae936e52c82f27d188a00874640fd` | `SKILL.md` (loader, 144L) |
 | `9317903142429fb868fb5649ad4e1de351bf131609c5ba9ee7e618f5465abecb` | `references/chaos-testing.md` |
 | `0adbaff2d50b2a4b49a7897fb4f74c746321ac9339ecf6795bb686a8c05b4758` | `references/ci-integration.md` |
 | `2ff46706e4b0cb96aaa72ffe4d292f323ab28840ba13edbc0c413e2ed08e7780` | `references/database-testing.md` |
@@ -84,7 +84,7 @@ Source of truth = the staged tree at
 
 ## Proposed diff (summary — the full diff is NOT embedded)
 
-The SKILL.md unified diff is 42 added / 924 removed lines; regenerate and
+The SKILL.md unified diff is 44 added / 924 removed lines; regenerate and
 verify against `sha256_of_diff` in the frontmatter with:
 
 ```

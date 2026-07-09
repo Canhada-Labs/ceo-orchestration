@@ -1430,8 +1430,12 @@ def _wave_c_tree(repo: Path, *, with_pilots: bool = True) -> None:
     _write(skills / "core" / "huge-other" / "SKILL.md", _big_md(500))
     # Mid-size non-pilot candidate.
     _write(skills / "core" / "mid-other" / "SKILL.md", _big_md(450, width=40))
-    # Already progressive-disclosed: over threshold but has references/.
-    _write(skills / "core" / "split-already" / "SKILL.md", _big_md(500))
+    # Already progressive-disclosed: over threshold, has references/ AND the
+    # loader points at them (both required to self-retire — dir existence
+    # alone must not retire a skill whose live SKILL.md is still unsplit,
+    # e.g. mid parallel-shadow soak).
+    _write(skills / "core" / "split-already" / "SKILL.md",
+           _big_md(500) + "\nLoad references/deep.md on demand.\n")
     _write(skills / "core" / "split-already" / "references" / "deep.md",
            "extracted detail\n")
     # Under threshold: never a candidate.
@@ -1485,8 +1489,9 @@ class TestSavingsTop3(unittest.TestCase):
                 ".claude/skills/core/split-already/SKILL.md", paths)
 
     def test_split_pilot_self_retires_too(self):
-        # A designated pilot that already has references/ is DONE — it must
-        # not be re-proposed just because it is on the designated list.
+        # A designated pilot whose loader POINTS at its references/ is
+        # DONE — it must not be re-proposed just because it is on the
+        # designated list.
         with tempfile.TemporaryDirectory() as d:
             repo = Path(d)
             _wave_c_tree(repo, with_pilots=True)
@@ -1494,6 +1499,10 @@ class TestSavingsTop3(unittest.TestCase):
                 repo / ".claude" / "skills" / "core" / "testing-strategy"
                 / "references" / "extracted.md",
                 "moved out\n")
+            _write(
+                repo / ".claude" / "skills" / "core" / "testing-strategy"
+                / "SKILL.md",
+                _md_lines(500) + "\nLoad references/extracted.md on demand.\n")
             savings = self._report(repo)["savings_top3"]
             paths = [s["path"] for s in savings]
             self.assertNotIn(
@@ -1501,6 +1510,22 @@ class TestSavingsTop3(unittest.TestCase):
             # The other pilot still leads.
             self.assertEqual(
                 paths[0], ".claude/skills/core/security-and-auth/SKILL.md")
+
+    def test_references_dir_alone_does_not_retire_mid_soak(self):
+        # Codex pair-rail finding (S262): during a parallel-shadow soak the
+        # references/ dir lands beside a still-unsplit live SKILL.md; the
+        # skill must KEEP appearing in savings_top3 until the loader is
+        # promoted and actually points at the references.
+        with tempfile.TemporaryDirectory() as d:
+            repo = Path(d)
+            _wave_c_tree(repo, with_pilots=True)
+            _write(
+                repo / ".claude" / "skills" / "core" / "testing-strategy"
+                / "references" / "extracted.md",
+                "moved out\n")
+            paths = [s["path"] for s in self._report(repo)["savings_top3"]]
+            self.assertIn(
+                ".claude/skills/core/testing-strategy/SKILL.md", paths)
 
     def test_under_threshold_never_a_candidate(self):
         with tempfile.TemporaryDirectory() as d:

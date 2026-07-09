@@ -85,6 +85,30 @@
       "est_context_cost": "low"
     },
     {
+      "name": "agents-meta",
+      "description": "Domain skill pack 'agents-meta' (.claude/skills/domains/agents-meta/) — opt-in via --profile <list>,agents-meta; handled by install.sh's generic domain loop.",
+      "skill_globs": [
+        ".claude/skills/domains/agents-meta/**/*"
+      ],
+      "hook_stacks": [
+        "base"
+      ],
+      "stability": "experimental",
+      "est_context_cost": "low"
+    },
+    {
+      "name": "architecture",
+      "description": "Domain skill pack 'architecture' (.claude/skills/domains/architecture/) — opt-in via --profile <list>,architecture; handled by install.sh's generic domain loop.",
+      "skill_globs": [
+        ".claude/skills/domains/architecture/**/*"
+      ],
+      "hook_stacks": [
+        "base"
+      ],
+      "stability": "experimental",
+      "est_context_cost": "low"
+    },
+    {
       "name": "business-support",
       "description": "Domain skill pack 'business-support' (.claude/skills/domains/business-support/) — opt-in via --profile <list>,business-support; handled by install.sh's generic domain loop.",
       "skill_globs": [
@@ -121,10 +145,58 @@
       "est_context_cost": "low"
     },
     {
+      "name": "cpp",
+      "description": "Domain skill pack 'cpp' (.claude/skills/domains/cpp/) — opt-in via --profile <list>,cpp; handled by install.sh's generic domain loop.",
+      "skill_globs": [
+        ".claude/skills/domains/cpp/**/*"
+      ],
+      "hook_stacks": [
+        "base"
+      ],
+      "stability": "experimental",
+      "est_context_cost": "low"
+    },
+    {
+      "name": "data-ml",
+      "description": "Domain skill pack 'data-ml' (.claude/skills/domains/data-ml/) — opt-in via --profile <list>,data-ml; handled by install.sh's generic domain loop.",
+      "skill_globs": [
+        ".claude/skills/domains/data-ml/**/*"
+      ],
+      "hook_stacks": [
+        "base"
+      ],
+      "stability": "experimental",
+      "est_context_cost": "low"
+    },
+    {
+      "name": "desktop",
+      "description": "Domain skill pack 'desktop' (.claude/skills/domains/desktop/) — opt-in via --profile <list>,desktop; handled by install.sh's generic domain loop.",
+      "skill_globs": [
+        ".claude/skills/domains/desktop/**/*"
+      ],
+      "hook_stacks": [
+        "base"
+      ],
+      "stability": "experimental",
+      "est_context_cost": "low"
+    },
+    {
       "name": "devrel",
       "description": "Domain skill pack 'devrel' (.claude/skills/domains/devrel/) — opt-in via --profile <list>,devrel; handled by install.sh's generic domain loop.",
       "skill_globs": [
         ".claude/skills/domains/devrel/**/*"
+      ],
+      "hook_stacks": [
+        "base"
+      ],
+      "stability": "experimental",
+      "est_context_cost": "low"
+    },
+    {
+      "name": "dotnet",
+      "description": "Domain skill pack 'dotnet' (.claude/skills/domains/dotnet/) — opt-in via --profile <list>,dotnet; handled by install.sh's generic domain loop.",
+      "skill_globs": [
+        ".claude/skills/domains/dotnet/**/*"
       ],
       "hook_stacks": [
         "base"
@@ -179,6 +251,18 @@
       ],
       "stability": "stable",
       "est_context_cost": "med"
+    },
+    {
+      "name": "golang",
+      "description": "Domain skill pack 'golang' (.claude/skills/domains/golang/) — opt-in via --profile <list>,golang; handled by install.sh's generic domain loop.",
+      "skill_globs": [
+        ".claude/skills/domains/golang/**/*"
+      ],
+      "hook_stacks": [
+        "base"
+      ],
+      "stability": "experimental",
+      "est_context_cost": "low"
     },
     {
       "name": "government",
@@ -245,6 +329,18 @@
       "description": "Domain skill pack 'identity-systems' (.claude/skills/domains/identity-systems/) — opt-in via --profile <list>,identity-systems; handled by install.sh's generic domain loop.",
       "skill_globs": [
         ".claude/skills/domains/identity-systems/**/*"
+      ],
+      "hook_stacks": [
+        "base"
+      ],
+      "stability": "experimental",
+      "est_context_cost": "low"
+    },
+    {
+      "name": "jvm",
+      "description": "Domain skill pack 'jvm' (.claude/skills/domains/jvm/) — opt-in via --profile <list>,jvm; handled by install.sh's generic domain loop.",
+      "skill_globs": [
+        ".claude/skills/domains/jvm/**/*"
       ],
       "hook_stacks": [
         "base"

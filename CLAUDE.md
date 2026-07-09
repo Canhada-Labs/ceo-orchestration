@@ -6,13 +6,13 @@
 > as the CEO of the `ceo-orchestration` meta-project, and the "product"
 > is the framework's own evolution (dogfooding).
 
-> **⏭️ PENDING OWNER ACTION (set 2026-07-08, remove when done):** the
-> PLAN-153 guarded overlays landed (`main`, CI green), but the Wave C/D/G
-> **staged skills are not yet promoted** — conduct the `/skill-review`
-> step-by-step to land them (catalog **151 → 166**). Full guide in memory
-> `project_next_skill_review`. ⚠ The staged material is LOCAL-ONLY
-> (`.claude/plans/PLAN-153/staged/wave-{C,D,G}/`, gitignored) — do it from
-> this checkout. Order (AFTER-C): SP-022 → 023 → 026 → 034.
+> **⏭️ PENDING OWNER ACTION (updated 2026-07-09, remove when done):** the
+> PLAN-153 `/skill-review` ceremony ran on 2026-07-08/09: Wave D landed
+> (catalog **151 → 166**), Wave C (SP-022/023) is in **parallel-shadow
+> soak**. Remaining: (1) promote SP-022/023 after a clean soak window
+> (**≥ 2026-07-14**, `skill-health.py` is the signal), (2) only THEN
+> dispatch SP-026/SP-034 (AFTER-C), (3) land the Wave G non-AFTER-C SPs.
+> ⚠ Staged material is LOCAL-ONLY (gitignored) — work from this checkout.
 
 ---
 
@@ -57,7 +57,7 @@ library — you install it *into* an existing repository with
 - **Plan → Debate → Execute gating** for risky (L3+) changes, with vetoes and a three-strike rule (see `PROTOCOL.md`).
 - **A tamper-evident audit log** — every agent spawn, edit, and ceremony is appended to an HMAC-chained log; `verify_chain()` (`.claude/hooks/_lib/audit_hmac.py`) **detects** any break in the chain.
 - **A cross-LLM pair-rail** — a second model (Codex) reviews canonical edits Claude proposes, so no single model is both author and sole reviewer.
-- **A skill library** — **151 skills** ready-made (42 core + 8 frontend + 101 domain).
+- **A skill library** — **166 skills** ready-made (42 core + 8 frontend + 116 domain).
 - **Governance hooks** — 54 Python hook scripts on disk (44 wired into `.claude/settings.json` (46 event registrations)), built on 67 stdlib-only `_lib/` modules.
 - **174 ADRs** (architecture decision records, `.claude/adr/`) and **24 slash commands** (`.claude/commands/`).
 

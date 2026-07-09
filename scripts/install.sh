@@ -1800,7 +1800,8 @@ apply_placeholder_substitutions() {
     echo "    SUBSTITUTED: ${f#$TARGET/}"
   done
 
-  # Skills/**/SKILL*.md and skills/**/team-personas.md + pitfalls.yaml —
+  # Skills/**/SKILL*.md, skills/**/team-personas.md + pitfalls.yaml, and
+  # progressive-disclosure references/*.md (PLAN-153 Wave C splits) —
   # these are canonical content that ships {{PROJECT_NAME}}, {{OWNER_NAME}},
   # {{DEPLOY_COMMAND}}, {{FRONTEND_REPO_PATH}}, {{APP_NAME}},
   # {{PRODUCTION_URL}}, etc. as installer-time substitutions (not
@@ -1817,7 +1818,8 @@ apply_placeholder_substitutions() {
       echo "    SUBSTITUTED: ${f#$TARGET/}"
     done < <(find "$skills_root" \
       \( -name 'SKILL.md' -o -name 'SKILL-*.md' \
-         -o -name 'team-personas.md' -o -name 'pitfalls.yaml' \) \
+         -o -name 'team-personas.md' -o -name 'pitfalls.yaml' \
+         -o -path '*/references/*.md' -o -path '*/reference/*.md' \) \
       -type f 2>/dev/null)
   fi
 }
