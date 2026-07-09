@@ -6,15 +6,16 @@
 > as the CEO of the `ceo-orchestration` meta-project, and the "product"
 > is the framework's own evolution (dogfooding).
 
-> **⏭️ PENDING OWNER ACTION (updated 2026-07-09, remove when done):** the
-> PLAN-153 `/skill-review` ceremony is fully executed: Wave D landed
-> (catalog **151 → 166**), Waves C (SP-022/023) and G (16 non-AFTER-C
-> SPs) are in **parallel-shadow soak**. Remaining: (1) promote after a
-> clean soak window (**≥ 2026-07-14**, `skill-health.py` is the signal;
-> whole-file SPs need `sha256_of_diff` pinned at promote time), (2) only
-> THEN dispatch SP-026/SP-034 (AFTER-C). Then close PLAN-153
-> `executing → done` and remove this banner. ⚠ Staged material is
-> LOCAL-ONLY (gitignored) — work from this checkout.
+> **⏭️ PENDING OWNER ACTION (updated 2026-07-09, remove when done):**
+> PLAN-153 `/skill-review` is 95% done: catalog **151 → 166**; waves
+> C+G PROMOTED (Owner soak waiver S263, ratified); AFTER-C SP-026/SP-034
+> signed and in **real parallel-shadow soak**. Remaining: (1) promote
+> SP-026/SP-034 after a clean soak window (**≥ 2026-07-14**;
+> `security-and-auth` is the /debate VETO-floor reviewer — watch those
+> sessions), with the mandatory promote tail: re-pin agent-definition
+> SHAs + `generate-dispatch.py --write` + regenerate the skill
+> inventory; (2) move PLAN-153 `executing → done` and remove this
+> banner. Full guide in memory `project_next_skill_review`.
 
 ---
 
