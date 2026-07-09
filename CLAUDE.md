@@ -6,17 +6,6 @@
 > as the CEO of the `ceo-orchestration` meta-project, and the "product"
 > is the framework's own evolution (dogfooding).
 
-> **⏭️ PENDING OWNER ACTION (updated 2026-07-09, remove when done):**
-> PLAN-153 `/skill-review` is 95% done: catalog **151 → 166**; waves
-> C+G PROMOTED (Owner soak waiver S263, ratified); AFTER-C SP-026/SP-034
-> signed and in **real parallel-shadow soak**. Remaining: (1) promote
-> SP-026/SP-034 after a clean soak window (**≥ 2026-07-14**;
-> `security-and-auth` is the /debate VETO-floor reviewer — watch those
-> sessions), with the mandatory promote tail: re-pin agent-definition
-> SHAs + `generate-dispatch.py --write` + regenerate the skill
-> inventory; (2) move PLAN-153 `executing → done` and remove this
-> banner. Full guide in memory `project_next_skill_review`.
-
 ---
 
 ## 0. Session Protocol (MANDATORY — execute in order)

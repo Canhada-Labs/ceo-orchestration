@@ -1,12 +1,33 @@
 ---
 id: PLAN-153
 title: ECC Comparative Uplift Program
-status: executing
+status: done
 reviewed_at: 2026-07-03
 executing_at: 2026-07-06
+completed_at: 2026-07-09
 created: 2026-07-03
 owner: CEO
 depends_on: [PLAN-152]
+related_commits:
+  - 0fa0396                        # Wave A: docs/DX quick-wins
+  - 3d670eb                        # Wave 0 ratifications + PLAN-154 debate → reviewed
+  - 09d7720                        # Wave E direct: liveness + spawn prompt-defense + sha-drift policy
+  - 3121c1d                        # Wave B direct: doctor.sh + install-profiles + plugin regen gate
+  - 314891a                        # PLAN-155 reviewed + SENT-E/SENT-B drafts
+  - 4d194d9                        # Wave C direct: /skill-health + /context-budget + map; SP-022/023
+  - 982bb7c                        # Backlog: substrate-adopt sweep + enum-pin-sync guard
+  - 05f5c9a                        # Wave D: import gate + NOTICE ledger (15 skills staged)
+  - b933037                        # Wave G: SP-024..041 authored (25 merges, 18 targets)
+  - 54a6296                        # Wave G: NOTICE additions + SENT-E amend
+  - 9152295                        # Ceremony landing: waves C+D (catalog 151→166)
+  - b403e24                        # Hotfix: grandfather rows for imported squads
+  - 5718de0                        # Cap policy 25→32 (Owner-ratified)
+  - ddf2b17                        # Wave G: 16 non-AFTER-C SPs signed → shadow
+  - fbe02c4                        # Promote waves C+G (18 SPs, Owner soak waiver S263)
+  - 22b831d                        # Hotfix: skill-inventory regen post-promote (main-red)
+  - 0b9ea1a                        # AFTER-C SP-026/SP-034 signed → shadow
+  - 0fff2af                        # OQ4: Owner soak waiver S264 ratification
+  - ed0f0e3                        # Promote AFTER-C SP-026/SP-034 (waiver S264) — final unit
 budget_tokens: 2.0-2.8M
 budget_sessions: 7
 context_risk: high
@@ -390,6 +411,20 @@ posture honored.
    signal** touching either shadow; the only match was a benign
    `reference_postread_observed` observability event on an unrelated
    SKILL.md.
+
+## Final closeout (S264, 2026-07-09)
+
+All execution units complete. Waves C+D+G landed via the S262 ceremony
+(catalog 151→166); C+G promoted under Owner soak waiver S263 (`fbe02c4`);
+AFTER-C SP-026/SP-034 signed to shadow (`0b9ea1a`) and promoted under Owner
+soak waiver S264 (`ed0f0e3` — OQ4 ratification, zero adverse signal in the
+observed soak window). Promote tail executed in-commit both times: agent
+re-pins + `generate-dispatch.py --write` + skill-inventory regen (the three
+main-red classes from the first promote). Plan moves `executing → done`.
+Residual items deliberately NOT in scope (tracked in memory backlog):
+/architect graduation for the 8 imported squads (cap 32→24), the
+pre-existing cross-llm-pair-review lint error (needs an SP), latent `Task*`
+matcher, HMAC line-483 triage (rotated archive), PLAN-154/155 execution.
 
 ## Closeout record (S261, 2026-07-06/07 — overnight autonomous run)
 
