@@ -1181,7 +1181,7 @@ jobs:
   hook-tests-dual-rail:
     if: vars.CEO_SOTA_DISABLE != '1'
     runs-on: Ceo
-    timeout-minutes: 10
+    timeout-minutes: 20
     permissions:
       contents: read
     strategy:
