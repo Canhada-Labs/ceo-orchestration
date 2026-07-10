@@ -42,7 +42,6 @@ if str(_HOOKS_DIR) not in sys.path:
 
 import lessons  # noqa: E402
 from _lib.testing import TestEnvContext  # noqa: E402
-import _lib.audit_emit as audit_emit_mod  # noqa: E402
 
 
 BASE = datetime(2026, 6, 1, 12, 0, 0, tzinfo=timezone.utc)
@@ -59,6 +58,39 @@ def _clock(dt):
 
 def _chain_ts(dt):
     return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _patch_emit_generic():
+    """Patch ``emit_generic`` on the module object the production code actually
+    resolves — robust to cross-suite ``_lib.audit_emit`` churn (mirrors the
+    proven ``_patch_typed_disabled_emitter`` fix in
+    ``.claude/hooks/tests/test_tool_lifecycle_observe.py``).
+
+    ``lessons._emit_lesson_event`` resolves the emitter via a FRESH
+    ``from _lib import audit_emit`` on EVERY call (lessons.py ~L306). In the
+    combined serial ``hooks/ + scripts/`` suite a predecessor test
+    (``test_check_agent_spawn.py::TestPLAN078Wave1ModelRoutingAdvisory``)
+    ``spec_from_file_location``-loads a fresh ``_lib.audit_emit`` and, in
+    tearDown, ``sys.modules.pop`` + ``importlib.import_module`` re-creates it —
+    so a collection-time ``import _lib.audit_emit as audit_emit_mod`` binding
+    would go STALE (a DIFFERENT object than the one the production breadcrumb
+    now resolves). ``mock.patch.object`` on the stale object leaves the real
+    ``emit_generic`` firing → emit assertions see ``len(calls) == 0``, and the
+    ``_add_pending`` suppression leaks a real ``lesson_candidate_written`` chain
+    row that breaks the two chain-missing fixtures.
+
+    Resolving the emitter the SAME way production does — a live
+    ``from _lib import audit_emit`` (``IMPORT_FROM`` semantics: getattr on the
+    ``_lib`` package, else ``sys.modules`` fallback) — then patching THAT object
+    lands the patch on the exact object the breadcrumb reads, under both a stale
+    rebind AND a dangling package attribute. No ``new`` is passed, so ``as emit``
+    still binds the auto-created ``MagicMock`` (identical call-recording
+    behavior to the old ``patch.object(audit_emit_mod, "emit_generic")``). CI is
+    unaffected (validate.yml runs hooks/ and scripts/ as separate ``-n auto``
+    steps); this hardens a latent cross-suite trap.
+    """
+    from _lib import audit_emit as _live_audit_emit  # noqa: E402 — resolve as production does
+    return mock.patch.object(_live_audit_emit, "emit_generic")
 
 
 class _CandidateTestBase(TestEnvContext):
@@ -91,7 +123,7 @@ class _CandidateTestBase(TestEnvContext):
         # lesson_candidate_written chain row -- without this patch the
         # chain-event-missing fixtures would stop being missing
         # (registration-order dependence).
-        with mock.patch.object(audit_emit_mod, "emit_generic"):
+        with _patch_emit_generic():
             lesson_id, status = lessons.add_candidate(
                 trigger, text, list(tags),
                 now_fn=_clock(now), base_dir=self.lessons_dir,
@@ -209,7 +241,7 @@ class TestAddCandidate(_CandidateTestBase):
         self.assertEqual(record["status_reason"], "scanner_unavailable")
 
     def test_add_emits_candidate_written_metadata_only(self):
-        with mock.patch.object(audit_emit_mod, "emit_generic") as emit:
+        with _patch_emit_generic() as emit:
             lesson_id, status = lessons.add_candidate(
                 "t_ok", BENIGN_TEXT, ["ci"],
                 now_fn=_clock(BASE), base_dir=self.lessons_dir,
@@ -234,7 +266,7 @@ class TestApproveCandidate(_CandidateTestBase):
     def test_happy_path_emits_hash_pinned_approval(self):
         lesson_id = self._add_pending()
         self._pin_chain_write(lesson_id, BASE)
-        with mock.patch.object(audit_emit_mod, "emit_generic") as emit:
+        with _patch_emit_generic() as emit:
             result = lessons.approve_candidate(
                 lesson_id, base_dir=self.lessons_dir,
                 now_fn=_clock(BASE + timedelta(days=1)),
@@ -398,7 +430,7 @@ class TestTtlSweepAndWarning(_CandidateTestBase):
     def test_sweep_emits_lesson_expired_without_text(self):
         lesson_id = self._add_pending(now=BASE)
         self._pin_chain_write(lesson_id, BASE)
-        with mock.patch.object(audit_emit_mod, "emit_generic") as emit:
+        with _patch_emit_generic() as emit:
             lessons.expire_pending_candidates(
                 base_dir=self.lessons_dir,
                 now_fn=_clock(BASE + timedelta(days=31)),
