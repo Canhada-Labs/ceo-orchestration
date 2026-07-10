@@ -179,7 +179,13 @@ class EgressNoValueEchoTests(TestEnvContext):
             destination="https://user:pw@evil.example.com:8443/exfil?token=sk-ant-LIVE-SECRET",
             session_id="s", project="p",
         )
-        blob = json.dumps(e)
+        # Scan the payload WITHOUT the hmac field: the digest is derived, not
+        # an echo, and "8443" is valid hex — a 64-char digest contains any
+        # given 4-hex substring ~0.09% of the time (flaked on CI 2026-07-09:
+        # "...bfd08443e56..."). The no-echo contract applies to payload
+        # fields only.
+        payload = {k: v for k, v in e.items() if k not in ("hmac", "hmac_error")}
+        blob = json.dumps(payload)
         for forbidden in ("sk-ant-LIVE-SECRET", "user:pw", "/exfil", "?token", "8443"):
             self.assertNotIn(forbidden, blob)
         self.assertEqual(e["destination"], "evil.example.com")

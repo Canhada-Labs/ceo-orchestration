@@ -344,7 +344,12 @@ class StopConsumerTests(_H3Base):
             "leaked field(s): %s" % (set(ev.keys()) - allowed_keys),
         )
         # The S227 token-sum (50000) and per-field token names never appear.
-        blob = json.dumps({k: ev[k] for k in ev if k not in ("ts",)})
+        # hmac/hmac_error excluded like ts: "50000" is valid hex and a 64-char
+        # digest can coincidentally contain it (the test_tool_lifecycle "4242"
+        # / egress-taxonomy "8443" CI-flake class).
+        blob = json.dumps(
+            {k: ev[k] for k in ev if k not in ("ts", "hmac", "hmac_error")}
+        )
         self.assertNotIn("50000", blob)
         self.assertNotIn("input_tokens", blob)
         self.assertNotIn("agent_transcript", blob)
