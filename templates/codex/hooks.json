@@ -1,0 +1,118 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "apply_patch|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "env CEO_HOOK_ADAPTER=codex CLAUDE_PROJECT_DIR=\"{{PROJECT_PATH}}\" bash \"{{PROJECT_PATH}}/.claude/hooks/_python-hook.sh\" check_canonical_edit.py",
+            "timeout": 5,
+            "statusMessage": "CEO canonical-edit guard [ENFORCED at edit time; residual: shell-escape class] -- NOTHING is enforced until /hooks trust is granted"
+          },
+          {
+            "type": "command",
+            "command": "env CEO_HOOK_ADAPTER=codex CLAUDE_PROJECT_DIR=\"{{PROJECT_PATH}}\" bash \"{{PROJECT_PATH}}/.claude/hooks/_python-hook.sh\" check_plan_edit.py",
+            "timeout": 5,
+            "statusMessage": "CEO plan-lifecycle guard [ENFORCED at edit time; residual: shell-escape class]"
+          },
+          {
+            "type": "command",
+            "command": "env CEO_HOOK_ADAPTER=codex CLAUDE_PROJECT_DIR=\"{{PROJECT_PATH}}\" bash \"{{PROJECT_PATH}}/.claude/hooks/_python-hook.sh\" check_arbitration_kernel.py",
+            "timeout": 5,
+            "statusMessage": "CEO arbitration-kernel deny [ENFORCED at edit time; residual: shell-escape class]"
+          }
+        ]
+      },
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "env CEO_HOOK_ADAPTER=codex CLAUDE_PROJECT_DIR=\"{{PROJECT_PATH}}\" bash \"{{PROJECT_PATH}}/.claude/hooks/_python-hook.sh\" check_bash_safety.py",
+            "timeout": 5,
+            "statusMessage": "CEO bash-safety guard [ENFORCED; residual: codex intercepts only simple shell calls -- .codex/rules/ceo.rules is the coarse prefix backstop]"
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "env CEO_HOOK_ADAPTER=codex CLAUDE_PROJECT_DIR=\"{{PROJECT_PATH}}\" bash \"{{PROJECT_PATH}}/.claude/hooks/_python-hook.sh\" check_canonical_edit.py",
+            "timeout": 5,
+            "statusMessage": "CEO canonical-edit guard over MCP tools [ENFORCED at edit time; residual: MCP arg-shape class]"
+          },
+          {
+            "type": "command",
+            "command": "env CEO_HOOK_ADAPTER=codex CLAUDE_PROJECT_DIR=\"{{PROJECT_PATH}}\" bash \"{{PROJECT_PATH}}/.claude/hooks/_python-hook.sh\" check_arbitration_kernel.py",
+            "timeout": 5,
+            "statusMessage": "CEO arbitration-kernel deny over MCP tools [ENFORCED at edit time; residual: MCP arg-shape class]"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "env CEO_HOOK_ADAPTER=codex CLAUDE_PROJECT_DIR=\"{{PROJECT_PATH}}\" bash \"{{PROJECT_PATH}}/.claude/hooks/_python-hook.sh\" audit_log.py",
+            "timeout": 10,
+            "statusMessage": "CEO audit-chain append [ENFORCED, completeness-bounded: absence of an entry is not evidence of absence of activity; per-tool-call action lands with PLAN-155 Wave 4]"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "env CEO_HOOK_ADAPTER=codex CLAUDE_PROJECT_DIR=\"{{PROJECT_PATH}}\" bash \"{{PROJECT_PATH}}/.claude/hooks/_python-hook.sh\" SessionStart.py",
+            "timeout": 10,
+            "statusMessage": "CEO boot breadcrumb + config hash re-check [config protection is ADVISORY between sessions: codex has no ConfigChange event; kill-switch surface protection is ABSENT until PLAN-155 Wave 3b lands]"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "env CEO_HOOK_ADAPTER=codex CLAUDE_PROJECT_DIR=\"{{PROJECT_PATH}}\" bash \"{{PROJECT_PATH}}/.claude/hooks/_python-hook.sh\" UserPromptSubmit.py",
+            "timeout": 5,
+            "statusMessage": "CEO prompt-gate breadcrumb"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "env CEO_HOOK_ADAPTER=codex CLAUDE_PROJECT_DIR=\"{{PROJECT_PATH}}\" bash \"{{PROJECT_PATH}}/.claude/hooks/_python-hook.sh\" Stop.py",
+            "timeout": 10,
+            "statusMessage": "CEO stop-gate [inverted pair-rail Stop-block review gate lands with PLAN-155 Wave 6; until then this is breadcrumb-only]"
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "env CEO_HOOK_ADAPTER=codex CLAUDE_PROJECT_DIR=\"{{PROJECT_PATH}}\" bash \"{{PROJECT_PATH}}/.claude/hooks/_python-hook.sh\" check_subagent_start.py",
+            "timeout": 5,
+            "statusMessage": "CEO spawn-protocol context injection (AGENT PROFILE / SKILL CONTENT / FILE ASSIGNMENT) [ADVISORY: codex 0.139 parses continue:false but does NOT stop the subagent]"
+          }
+        ]
+      }
+    ]
+  }
+}

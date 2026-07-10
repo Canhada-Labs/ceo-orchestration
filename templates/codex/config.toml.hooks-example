@@ -1,0 +1,217 @@
+# =========================================================================
+# ceo-orchestration -- Codex registration, config.toml VARIANT (EXAMPLE)
+# Verified against: codex-cli 0.139.0 (PLAN-155; fixtures + trust semantics
+# recorded per that pin -- re-verify on every CLI bump, see the
+# substrate-watch item).
+# =========================================================================
+#
+# SHIP EXACTLY ONE REGISTRATION SURFACE. The canonical, installer-shipped
+# surface is `.codex/hooks.json` (templates/codex/hooks.json). This file
+# documents the equivalent `[hooks]`-in-`config.toml` form because codex
+# 0.139 honors BOTH: dual registration WARNS and runs BOTH hooks twice.
+# Never install this file as `.codex/config.toml` alongside hooks.json.
+# (The non-`.toml` filename is deliberate: a blind directory copy must not
+# arm a second registration surface.)
+#
+# -------------------------------------------------------------------------
+# LOUD WARNINGS (read before trusting anything)
+# -------------------------------------------------------------------------
+# 1. NOTHING in this file (or hooks.json) is enforced until the operator
+#    grants /hooks trust. On codex 0.139 an untrusted or modified hook is
+#    a SILENT NO-OP: no execution, no warning, exit 0 -- "installed but
+#    untrusted" is indistinguishable from healthy at runtime. Run the
+#    post-install arming check (PLAN-155 Wave 5) after any change here.
+# 2. KILL-SWITCH SURFACE PROTECTION IS ABSENT UNTIL PLAN-155 WAVE 3b
+#    LANDS. Until the Wave 3b guard-list + boot-tripwire extension is on
+#    main, an agent running under codex can rewrite `.codex/hooks.json`,
+#    `.codex/config.toml`, `.codex/rules/ceo.rules`, `requirements.toml`,
+#    or the operator `AGENTS.md` and disarm every rail registered here,
+#    and the tripwire that should detect it stays silent. Backstop until
+#    then: CODEOWNERS + branch protection at push time.
+# 3. Trust is keyed to the COMMAND LINE, not to hook code: the /hooks
+#    trust hash covers {event, matcher, command, timeout, statusMessage}
+#    only. Editing a hook `.py` body does NOT re-prompt trust; editing one
+#    byte of a command string flips the hook to `modified` and it silently
+#    stops firing. Registration integrity is codex's; hook-body integrity
+#    is the framework's (canonical-edit guard over `.claude/hooks/**`).
+# 4. Two gates must BOTH hold before a project hook fires:
+#      projects."<abs project path>".trust_level = "trusted"
+#    in `$CODEX_HOME/config.toml`, AND per-hook trust (interactive /hooks,
+#    or a headless `[hooks.state]` entry). If an installer writes trust
+#    entries headlessly it MUST print-and-confirm first -- trust is
+#    consent, not a config bit (PLAN-155 OQ1 doctrine).
+# 5. No speed claim anywhere. The value is governance and auditability.
+#
+# -------------------------------------------------------------------------
+# Placeholder: `{{PROJECT_PATH}}` = absolute path of the target repository
+# root (substituted at install time by `install.sh --harness codex`,
+# PLAN-155 Wave 5 -- same placeholder vocabulary as the existing
+# installer). Codex adds only CODEX_HOME/CODEX_MANAGED_* to the hook
+# environment; it does NOT set or expand $CLAUDE_PROJECT_DIR, so commands
+# below must carry absolute paths.
+# -------------------------------------------------------------------------
+
+# === PreToolUse: edit-time ENFORCED rails ================================
+# matcher "apply_patch|Edit|Write": codex file edits arrive as the
+# `apply_patch` tool; the host adapter (PLAN-155 Wave 1) parses the patch
+# headers into Edit/Write semantics. Residual on every ENFORCED row:
+# writes smuggled through complex shell commands (the shell-escape class);
+# backstops: the ^Bash$ rail sees the full command string, CODEOWNERS +
+# branch protection at push.
+
+[[hooks.PreToolUse]]
+matcher = "apply_patch|Edit|Write"
+
+  [[hooks.PreToolUse.hooks]]
+  type = "command"
+  command = 'env CEO_HOOK_ADAPTER=codex CLAUDE_PROJECT_DIR="{{PROJECT_PATH}}" bash "{{PROJECT_PATH}}/.claude/hooks/_python-hook.sh" check_canonical_edit.py'
+  timeout = 5
+  statusMessage = "CEO canonical-edit guard [ENFORCED at edit time; residual: shell-escape class] -- NOTHING is enforced until /hooks trust is granted"
+
+  [[hooks.PreToolUse.hooks]]
+  type = "command"
+  command = 'env CEO_HOOK_ADAPTER=codex CLAUDE_PROJECT_DIR="{{PROJECT_PATH}}" bash "{{PROJECT_PATH}}/.claude/hooks/_python-hook.sh" check_plan_edit.py'
+  timeout = 5
+  statusMessage = "CEO plan-lifecycle guard [ENFORCED at edit time; residual: shell-escape class]"
+
+  [[hooks.PreToolUse.hooks]]
+  type = "command"
+  command = 'env CEO_HOOK_ADAPTER=codex CLAUDE_PROJECT_DIR="{{PROJECT_PATH}}" bash "{{PROJECT_PATH}}/.claude/hooks/_python-hook.sh" check_arbitration_kernel.py'
+  timeout = 5
+  statusMessage = "CEO arbitration-kernel deny [ENFORCED at edit time; residual: shell-escape class]"
+
+# matcher "^Bash$": our hook receives the FULL command string on every
+# event that fires and applies our own parser (fail-closed on unparseable
+# input, PLAN-152 C4). Residual: codex "doesn't intercept all shell calls
+# yet, only the simple ones" -- .codex/rules/ceo.rules is the coarse
+# prefix backstop under this rail, never coverage.
+
+[[hooks.PreToolUse]]
+matcher = "^Bash$"
+
+  [[hooks.PreToolUse.hooks]]
+  type = "command"
+  command = 'env CEO_HOOK_ADAPTER=codex CLAUDE_PROJECT_DIR="{{PROJECT_PATH}}" bash "{{PROJECT_PATH}}/.claude/hooks/_python-hook.sh" check_bash_safety.py'
+  timeout = 5
+  statusMessage = "CEO bash-safety guard [ENFORCED; residual: partial shell interception -- ceo.rules is the coarse prefix backstop]"
+
+# matcher "mcp__.*": MCP tool calls. Residual: MCP arg-shape class (tool
+# arguments are server-defined; the guard normalizes what it recognizes
+# and fails closed on unparseable security-matcher input).
+
+[[hooks.PreToolUse]]
+matcher = "mcp__.*"
+
+  [[hooks.PreToolUse.hooks]]
+  type = "command"
+  command = 'env CEO_HOOK_ADAPTER=codex CLAUDE_PROJECT_DIR="{{PROJECT_PATH}}" bash "{{PROJECT_PATH}}/.claude/hooks/_python-hook.sh" check_canonical_edit.py'
+  timeout = 5
+  statusMessage = "CEO canonical-edit guard over MCP tools [ENFORCED at edit time; residual: MCP arg-shape class]"
+
+  [[hooks.PreToolUse.hooks]]
+  type = "command"
+  command = 'env CEO_HOOK_ADAPTER=codex CLAUDE_PROJECT_DIR="{{PROJECT_PATH}}" bash "{{PROJECT_PATH}}/.claude/hooks/_python-hook.sh" check_arbitration_kernel.py'
+  timeout = 5
+  statusMessage = "CEO arbitration-kernel deny over MCP tools [ENFORCED at edit time; residual: MCP arg-shape class]"
+
+# --- OPTIONAL (commented; not part of the shipped default) --------------
+# The PLAN-155 Wave 1 lab verified that a PreToolUse deny on the
+# `spawn_agent` tool blocks the spawn BEFORE SubagentStart fires
+# (artifact: PLAN-155/artifacts/wave1-transcripts/e6-deny-spawn.jsonl).
+# The shipped default keeps the spawn-governance row ADVISORY per the
+# PLAN-155 capability matrix; promoting it on the back of this finding is
+# a Wave 7 docs/matrix decision, not a template default. To experiment:
+#
+# [[hooks.PreToolUse]]
+# matcher = "^spawn_agent$"
+#
+#   [[hooks.PreToolUse.hooks]]
+#   type = "command"
+#   command = 'env CEO_HOOK_ADAPTER=codex CLAUDE_PROJECT_DIR="{{PROJECT_PATH}}" bash "{{PROJECT_PATH}}/.claude/hooks/_python-hook.sh" check_agent_spawn.py'
+#   timeout = 5
+#   statusMessage = "CEO spawn-protocol gate on spawn_agent [experimental; matrix row remains ADVISORY until promoted by docs]"
+# -------------------------------------------------------------------------
+
+# === PostToolUse: audit chain (ENFORCED, completeness-bounded) ===========
+# Residual: per-edit completeness is best-effort while shell interception
+# is partial -- absence of an entry is NOT evidence of absence of
+# activity. verify_chain() is unchanged and green over what was written.
+# The per-tool-call action registration lands with PLAN-155 Wave 4; until
+# then non-Agent events are a no-op append (emission-only registration).
+
+[[hooks.PostToolUse]]
+matcher = "*"
+
+  [[hooks.PostToolUse.hooks]]
+  type = "command"
+  command = 'env CEO_HOOK_ADAPTER=codex CLAUDE_PROJECT_DIR="{{PROJECT_PATH}}" bash "{{PROJECT_PATH}}/.claude/hooks/_python-hook.sh" audit_log.py'
+  timeout = 10
+  statusMessage = "CEO audit-chain append [ENFORCED, completeness-bounded]"
+
+# === SessionStart: boot breadcrumb + config hash re-check ================
+# Config protection is ENFORCED at edit time (PreToolUse above) but
+# ADVISORY between sessions: codex has no ConfigChange event, so the
+# tamper tripwire degrades to a boot-time-only re-check.
+
+[[hooks.SessionStart]]
+
+  [[hooks.SessionStart.hooks]]
+  type = "command"
+  command = 'env CEO_HOOK_ADAPTER=codex CLAUDE_PROJECT_DIR="{{PROJECT_PATH}}" bash "{{PROJECT_PATH}}/.claude/hooks/_python-hook.sh" SessionStart.py'
+  timeout = 10
+  statusMessage = "CEO boot breadcrumb + config hash re-check [boot-time ADVISORY; kill-switch surface ABSENT until Wave 3b]"
+
+# === UserPromptSubmit (matcher ignored by codex on this event) ===========
+
+[[hooks.UserPromptSubmit]]
+
+  [[hooks.UserPromptSubmit.hooks]]
+  type = "command"
+  command = 'env CEO_HOOK_ADAPTER=codex CLAUDE_PROJECT_DIR="{{PROJECT_PATH}}" bash "{{PROJECT_PATH}}/.claude/hooks/_python-hook.sh" UserPromptSubmit.py'
+  timeout = 5
+  statusMessage = "CEO prompt-gate breadcrumb"
+
+# === Stop (matcher ignored by codex on this event) =======================
+# codex 0.139 ENFORCES Stop {"decision":"block"} (verified: auto-continue,
+# PLAN-155/artifacts/stop-block-transcript.md). The inverted pair-rail
+# review gate that USES that primitive lands with PLAN-155 Wave 6; until
+# then this registration is breadcrumb-only.
+
+[[hooks.Stop]]
+
+  [[hooks.Stop.hooks]]
+  type = "command"
+  command = 'env CEO_HOOK_ADAPTER=codex CLAUDE_PROJECT_DIR="{{PROJECT_PATH}}" bash "{{PROJECT_PATH}}/.claude/hooks/_python-hook.sh" Stop.py'
+  timeout = 10
+  statusMessage = "CEO stop-gate [Wave 6 adds the inverted pair-rail Stop-block]"
+
+# === SubagentStart: spawn-protocol context injection [ADVISORY] ==========
+# The hook injects the spawn-protocol requirement (## AGENT PROFILE /
+# ## SKILL CONTENT / ## FILE ASSIGNMENT) via hookSpecificOutput.
+# additionalContext -- verified working on 0.139. ADVISORY, not enforced:
+# codex 0.139 parses {"continue": false} on SubagentStart but the
+# subagent RUNS ANYWAY (PLAN-155/artifacts/subagentstart-transcript.md).
+# Mitigations: spawns routed via Bash (`claude -p` / `codex exec`)
+# re-gain the ENFORCED gate through the ^Bash$ matcher; PLAN-155 Wave 6
+# adds pre-push/CI teeth over the audit chain's spawn records.
+
+[[hooks.SubagentStart]]
+
+  [[hooks.SubagentStart.hooks]]
+  type = "command"
+  command = 'env CEO_HOOK_ADAPTER=codex CLAUDE_PROJECT_DIR="{{PROJECT_PATH}}" bash "{{PROJECT_PATH}}/.claude/hooks/_python-hook.sh" check_subagent_start.py'
+  timeout = 5
+  statusMessage = "CEO spawn-protocol context injection [ADVISORY: continue:false is NOT enforced by codex 0.139]"
+
+# === notify: turn-ended audit backstop (config.toml-only surface) ========
+# `notify` is NOT a hook event on codex 0.139 -- it is a top-level
+# config.toml program invoked on turn-end notifications, so it CANNOT live
+# in hooks.json. It is the audit chain's turn-level backstop (PLAN-155
+# Wave 4-B): when per-tool-call appends were missed under partial
+# interception, the turn-ended append (a DISTINCT registered action, so
+# completeness analysis can tell the rails apart) still lands in the
+# chain. Emission-only note: the distinct turn-ended action and the argv
+# JSON ingestion path land with Wave 4; enable this line when Wave 4 is on
+# main. The notify payload arrives as an ARGV JSON argument, not stdin.
+#
+# notify = ["bash", "{{PROJECT_PATH}}/.claude/hooks/_python-hook.sh", "audit_log.py", "--codex-notify"]

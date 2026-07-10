@@ -1,0 +1,78 @@
+# =========================================================================
+# ceo-orchestration -- Codex execpolicy prefix backstop (PLAN-155 Wave 3)
+# Verified against: codex-cli 0.139.0 (`codex execpolicy check --rules ...`)
+# =========================================================================
+#
+# WHAT THIS FILE IS (and is not):
+# This is a COARSE prefix backstop UNDER the hook rail
+# (check_bash_safety.py registered on PreToolUse ^Bash$), never coverage.
+# `prefix_rule` matches literal leading argv tokens on the SIMPLE commands
+# codex splits out (plain words + `&&`/`||`/`;`/`|`); it cannot see
+# combined-flag variants it does not list, env-assignment prefixes,
+# absolute-path spellings (`/bin/rm`), backslash escapes (`\rm`), pipes,
+# or anything smuggled inside an opaque shell string. The hook owns the
+# real parser (token-rule matchers + the `_e3` whole-command gate,
+# fail-CLOSED on unparseable input per PLAN-152 C4); these rules only
+# catch the classic spellings when the hook layer is dead, untrusted, or
+# bypassed. If a rule here fires, decision = "forbidden" and codex refuses
+# the command outright.
+#
+# KILL-SWITCH WARNING: this file is part of the rail's own kill-switch
+# surface. Its protection (canonical-edit deny + boot-time hash tripwire)
+# is ABSENT until PLAN-155 Wave 3b lands; until then the backstop at push
+# time is CODEOWNERS + branch protection.
+#
+# RULE -> check_bash_safety.py CLASS MAP (each rule names what it
+# backstops; honesty first -- one class below has NO hook-side matcher
+# today and says so):
+#
+# | Rule group                       | Backstops hook class            | Notes                                                        |
+# |----------------------------------|---------------------------------|--------------------------------------------------------------|
+# | rm recursive+force variants      | _check_rm_rf                    | hook also parses combined/long flags, sudo/env/path prefixes |
+# | git reset --hard                 | _check_git_reset_hard           | prefix also matches trailing refs (e.g. `... HEAD~1`)        |
+# | git push --force / -f            | _check_git_push_force           | `--force-with-lease` deliberately NOT matched (both layers); |
+# |                                  |                                 | `git push origin --force` NOT prefix-matchable -- hook-only  |
+# | pipe-to-shell installers         | (NO hook class today -- named   | prefix rules cannot express `curl ... | sh` (the pipe splits |
+# |   (`sh -c`/`bash -c`/`zsh -c`    |  gap; only the `_e3` fail-closed| into segments whose halves look benign); the expressible     |
+# |    eval-string forms)            |  parse gate applies on garbage) | slice is the eval-a-string form `sh -c "$(curl ...)"`, which |
+# |                                  |                                 | these rules forbid wholesale -- deliberately coarse          |
+#
+# Relaxing any rule is an edit to a governance file: after PLAN-155 Wave
+# 3b it requires the canonical-edit ceremony, and BEFORE Wave 3b it is
+# visible only at push time. No speed claim anywhere; this file trades
+# convenience for a refusal.
+
+# --- rm recursive+force variants (backstops _check_rm_rf) ----------------
+prefix_rule(pattern = ["rm", "-rf"], decision = "forbidden")
+prefix_rule(pattern = ["rm", "-fr"], decision = "forbidden")
+prefix_rule(pattern = ["rm", "-Rf"], decision = "forbidden")
+prefix_rule(pattern = ["rm", "-fR"], decision = "forbidden")
+prefix_rule(pattern = ["rm", "-r", "-f"], decision = "forbidden")
+prefix_rule(pattern = ["rm", "-f", "-r"], decision = "forbidden")
+prefix_rule(pattern = ["rm", "-R", "-f"], decision = "forbidden")
+prefix_rule(pattern = ["rm", "--recursive", "--force"], decision = "forbidden")
+prefix_rule(pattern = ["rm", "--force", "--recursive"], decision = "forbidden")
+prefix_rule(pattern = ["sudo", "rm", "-rf"], decision = "forbidden")
+prefix_rule(pattern = ["sudo", "rm", "-fr"], decision = "forbidden")
+
+# --- git reset --hard (backstops _check_git_reset_hard) ------------------
+prefix_rule(pattern = ["git", "reset", "--hard"], decision = "forbidden")
+
+# --- force-push (backstops _check_git_push_force) ------------------------
+# `git push --force-with-lease` is deliberately NOT matched: token-exact
+# prefix matching treats `--force-with-lease` as a different token, which
+# mirrors the hook's explicit allow of the safe alternative.
+prefix_rule(pattern = ["git", "push", "--force"], decision = "forbidden")
+prefix_rule(pattern = ["git", "push", "-f"], decision = "forbidden")
+
+# --- pipe-to-shell installers (NO dedicated hook class today) ------------
+# The literal `curl ... | sh` pipe is NOT expressible as a prefix rule:
+# codex splits on `|` and each half (`curl ...`; bare `sh`) is
+# indistinguishable from benign use at prefix granularity. What IS
+# expressible is the eval-a-downloaded-string form
+# (`sh -c "$(curl -fsSL https://...)"`) and, more broadly, the
+# opaque-nested-shell smuggling class -- forbidden wholesale here, at the
+# documented cost of also refusing benign `sh -c`/`bash -c` one-liners.
+prefix_rule(pattern = ["sh", "-c"], decision = "forbidden")
+prefix_rule(pattern = ["bash", "-c"], decision = "forbidden")
+prefix_rule(pattern = ["zsh", "-c"], decision = "forbidden")
