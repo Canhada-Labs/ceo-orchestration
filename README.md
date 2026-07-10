@@ -143,6 +143,16 @@ Two install modes:
 - `--ceremony maintainer` (default): full governance, including signed-edit ceremonies on protected paths.
 - `--ceremony user`: advisory hooks only, no signing — writes only under `.claude/`. Good for a low-friction trial.
 
+### Harness: Claude Code (default) or Codex CLI
+
+The same enforcement hooks run under two harnesses. `--harness claude` (the default; byte-identical to omitting the flag) registers the hooks for Claude Code. `--harness codex` additionally emits a Codex bundle — `.codex/hooks.json`, `.codex/rules/ceo.rules`, and an operator `AGENTS.md` — that invokes the **same** hooks with `CEO_HOOK_ADAPTER=codex`:
+
+```bash
+./scripts/install.sh /path/to/your-app --harness codex
+```
+
+Under Codex the rails are **per-rail**, verified against codex-cli 0.139.0: canonical-edit, bash-safety, plan-lifecycle, kernel-deny, config, and kill-switch are ENFORCED at edit time; the audit chain is ENFORCED but completeness-bounded; the pair-rail is inverted (Codex operates, `claude -p` reviews) and PARTIAL; **spawn governance is ADVISORY, not enforced**. Two things bound every ENFORCED claim: **nothing is enforced until you grant Codex `/hooks` trust** (the installer prints the exact steps and ends with an `ARMED / NOT-ARMED-(untrusted) / BROKEN` arming check), and codex-cli fail-opens on hook death — an untrusted or crashed hook is a silent no-op. See [`docs/adapters.md`](docs/adapters.md), [`docs/provider_capability_matrix.md`](docs/provider_capability_matrix.md), and [`INSTALL.md`](INSTALL.md) `--harness codex`.
+
 To verify the safety guards actually block what they claim, run the in-process self-test (hermetic, no network, no cost):
 
 ```bash

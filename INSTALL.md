@@ -160,6 +160,8 @@ cd /path/to/your/project
 | `--link` | — | (off) | Use symlinks instead of copies (for submodule mode) |
 | `--profile` | `core,frontend,<domain>` | `core,frontend` | Comma-separated list of profiles to install |
 | `--stack` | `node`, `none` | `none` | Stack-specific hooks to merge into settings.json |
+| `--harness` | `claude`, `codex` | `claude` | Host harness. `claude` is byte-identical to omitting the flag; `codex` additionally emits the `.codex/` bundle (see [Harness: Codex CLI](#harness-codex-cli---harness-codex)) |
+| `--managed-hooks` | — | (off) | Codex only: also emit a `requirements.toml` MANAGED-hooks policy file (trusted-by-policy, non-disableable) instead of the consent-first `/hooks` flow |
 
 ### What the script installs
 
@@ -199,6 +201,95 @@ Note: `lgpd-heavy-saas` is a legacy domain stub — the 3 LGPD skills
 are included with the default `--profile core` install.
 The 22 newer domains added in v1.15.0 ship as **seed skills only** — full
 squad-bundle scaffolding is tracked in PLAN-080 (post-v1.15.0).
+
+### Harness: Codex CLI (`--harness codex`)
+
+The framework runs its **same** enforcement hooks under OpenAI Codex CLI.
+`--harness codex` does not fork any hook — it emits a Codex-side
+registration that invokes the shared Python hooks with
+`CEO_HOOK_ADAPTER=codex`. **Verified against codex-cli 0.139.0** (pin
+`.claude/governance/codex-cli-pin.txt` = `>=0.128.0,<0.140.0`).
+
+```bash
+./scripts/install.sh /path/to/your-app --harness codex
+```
+
+**What the codex path emits (in addition to the base install):**
+
+- `.codex/hooks.json` — registers PreToolUse (`apply_patch|Edit|Write`,
+  `^Bash$`, `mcp__.*`), PostToolUse `*`, SessionStart, UserPromptSubmit,
+  Stop, SubagentStart, and a turn-ended backstop, each invoking the shared
+  `_python-hook.sh`-shimmed hooks with `CEO_HOOK_ADAPTER=codex` and a
+  per-hook timeout.
+- `.codex/rules/ceo.rules` — a COARSE `prefix_rule(decision=forbidden)`
+  execpolicy backstop for the destructive-command classes (never coverage
+  — the hook owns the real parser).
+- operator `AGENTS.md` — the operator contract, rendered ≤ 32768 bytes
+  (`project_doc_max_bytes`).
+- a manifest ledger `.codex/.ceo-harness-manifest` so `uninstall.sh`
+  removes every emitted path (lifecycle symmetry).
+
+**Enforcement is per-rail — do not read "runs on Codex" as "same
+guarantees as Claude Code".** canonical-edit, bash-safety, plan-lifecycle,
+kernel-deny, config, and kill-switch are ENFORCED at edit time; the audit
+HMAC chain is ENFORCED but completeness-bounded (partial shell interception
+means absence of an entry is not evidence of absence of activity); the
+pair-rail is inverted and PARTIAL (Codex operates, `claude -p` reviews at
+Stop-time and push-time); **spawn governance is ADVISORY, not enforced**
+(`continue:false` is parsed but does not stop the subagent on 0.139). The
+full per-rail matrix with residuals is
+[`docs/provider_capability_matrix.md`](docs/provider_capability_matrix.md).
+
+#### Trust flow (consent-first) — nothing is enforced until you grant it
+
+Codex requires two separate trust grants before a project hook fires, and
+**the installer never writes trust for you** — it prints what to trust and
+asks you to confirm:
+
+1. **Project trust** — `projects."<path>".trust_level = "trusted"` in your
+   Codex user config.
+2. **Per-hook trust** — the `/hooks` review flow (or the headless
+   `[hooks.state]` entries), keyed to the hook **registration** hash.
+
+An installed-but-untrusted hook is a **silent no-op**, indistinguishable
+from healthy at runtime. The installer's final line is a post-install
+arming check that reports **ARMED / NOT-ARMED-(untrusted) / BROKEN** — read
+it. `BROKEN` also flags the two known 0.139 substrate gaps: hook discovery
+returns zero hooks inside a **git worktree** (use a plain clone), and a
+Codex version outside the pin range.
+
+#### Trust-rekeying friction (know this before upgrading)
+
+Codex `/hooks` trust is keyed to the hook **registration** (the command
+string), **not** the hook program body:
+
+- A framework upgrade that changes only hook `.py` bodies does **not**
+  re-prompt for trust — low friction (the "every upgrade re-prompts" fear
+  is wrong for body-only upgrades).
+- Any change to a hook's **registration command string** (e.g. the
+  `.codex/hooks.json` command bytes) flips that hook to `modified` and it
+  **silently stops firing** until you re-trust it. Re-run the arming check
+  after any upgrade that touches the bundle.
+- Because Codex keys the *registration* but not the *body*, hook-**body**
+  integrity is the framework's responsibility: the `.codex` kill-switch
+  surface is canonical-guarded and boot-re-hash-tripwired, and
+  `.claude/hooks/**` stays under the canonical-edit guard.
+
+#### `--managed-hooks` (enterprise posture, opt-in)
+
+`--harness codex --managed-hooks` additionally emits a `requirements.toml`
+MANAGED-hooks policy file: trusted-by-policy, non-disableable, no `/hooks`
+prompt. This is a **reviewable policy file**, not a headless trust write —
+the installer still prints it for confirmation. Use it for enterprise
+rollouts where the operator should not be able to toggle the rail; the
+default consent-first `/hooks` flow suits single-repo adopters.
+
+#### Uninstall / upgrade symmetry
+
+`uninstall.sh` reads `.codex/.ceo-harness-manifest` and removes every
+emitted path (restoring `--force` backups). The `--harness` value
+round-trips through `.install-state.json`, so `upgrade.sh` replays it —
+you do not re-pass `--harness codex` on upgrade.
 
 ### Updating later
 
@@ -298,7 +389,7 @@ your-project/
 │   │   ├── _python-hook.sh              # Python version resolver + invoker
 │   │   ├── check_agent_spawn.py         # mechanical enforcement of spawn protocol
 │   │   ├── audit_log.py                 # silent PostToolUse audit observer
-│   │   ├── ... (54 hooks total — see .claude/hooks/*.py)
+│   │   ├── ... (55 hooks total — see .claude/hooks/*.py)
 │   │   └── tests/                       # 11000+ unit tests via `make test-collect`
 │   ├── scripts/
 │   │   ├── validate-governance.sh

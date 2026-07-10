@@ -85,13 +85,24 @@ model is blind to) will evade every critique agent identically.
 
 **Mitigations in place:**
 
-- ADR-028 + ADR-040: Gemini adapter is **shape-probing supported**
-  (PLAN-023 Phase C, v1.6.0) — multi-LLM canonical envelope parity
-  (ADR-028) + live activation contract (ADR-040) unblock the cross-model
-  critique host path. Live-payload fixture capture pending adopter
-  feedback. See `SUPPORT.md`. (ADR-032 is the Interactive Debate
-  Protocol, unrelated to adapters — prior editions of this doc
-  mis-cited it; PLAN-045 F-05-06 closure.)
+- **The cross-vendor pair-rail, direction-neutral (ADR-145 / ADR-161).**
+  No single model is both the author and the sole reviewer of a canonical
+  edit. The pair-rail runs a *second, different-vendor* model over changes
+  the first proposes. Under Claude Code the operating model is Anthropic
+  and the cross-model reviewer is OpenAI Codex; under the Codex harness
+  (PLAN-155) the direction inverts — the operating model is OpenAI Codex
+  and the reviewer is Anthropic Claude (`claude -p`, Stop-time + push-time).
+  The guarantee is symmetric: whichever vendor operates, the other reviews.
+  **Caveat (unchanged in force, direction-neutral):** this reduces
+  single-model blind spots; it does **not** eliminate shared-substrate
+  failure modes. A defect both an OpenAI model and an Anthropic model make
+  — a shared misconception, a class of prompt injection both fall for, an
+  industry-wide training-data blind spot — is caught by neither seat. The
+  pair-rail buys *cross-vendor diversity*, not *independence*. It is one
+  layer; CODEOWNERS, branch protection, CI, and human review at merge are
+  the others. (ADR-032 is the Interactive Debate Protocol, unrelated to
+  adapters — prior editions of this doc mis-cited it; PLAN-045 F-05-06
+  closure.)
 - Human Owner intervention is mandatory for L3+ plan promotion (frontmatter
   `status: reviewed` can only be set post-Owner inspection).
 - Formal verification (TLA+ + conformance harness) catches a class of
@@ -119,10 +130,22 @@ what's absent, verify confidence against code, use adversarial framing
 per PLAN-034). Human Owner review on L3+ is the only reviewer not
 susceptible to this bias.
 
+**Reviewer-unavailable posture (ADR-161, direction-neutral):** if the
+reviewer cannot be reached (binary absent, timeout, empty verdict), the
+rail records the attempt as `UNAVAILABLE` and does **not** silently approve
+and does **not** block forever: it allows with a loud RED-on-absence
+breadcrumb, and the push-time gate + CI remain the backstops. A rail that
+blocked indefinitely on a broken reviewer would be a denial-of-service on
+the operator; a rail that silently approved would be a dead gate. The
+honest middle is: record the gap, allow with noise, backstop downstream.
+
 **What this means for you:** the debate protocol is not a substitute for
 human senior-engineer review on load-bearing changes. It is a rigorous
 preflight, not an approval. Treat fluent agent output with more skepticism,
-not less.
+not less. Which harness hosts the rail (Claude Code or Codex CLI) changes
+*who reviews whom*, not this bottom line — see
+[degradation-outside-claude-code.md](degradation-outside-claude-code.md)
+for the per-rail Codex matrix.
 
 ---
 
