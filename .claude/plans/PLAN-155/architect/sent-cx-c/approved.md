@@ -12,7 +12,7 @@ rule) before applying. No kernel rows in this wave — sentinel-only
 **Anchor note (binding):** PLAN-153's install.sh waves (SENT-B lifecycle +
 SENT-E deny-baseline) LANDED on main 2026-07-08 — the sequencing
 precondition in PLAN-155 §Approach is SATISFIED. The anchor
-(`__ANCHOR_SHA__`) is taken on **post-PLAN-153 main**, AND after PLAN-154
+(`0d13e11384732218ce8760c28f49b5bd675cdf60`) is taken on **post-PLAN-153 main**, AND after PLAN-154
 SENT-F lands (F-before-CX order) — if SENT-F also touches
 `scripts/install.sh`, the Wave 5 staged copy MUST be rebased on the
 SENT-F version before this sentinel applies (two signed sentinels racing
@@ -34,7 +34,7 @@ decision).
 
 <!-- BEGIN SIGNED SCOPE -->
 Approved-By: @Canhada-Labs 71a2ef5f8dc52aabe8ba2c848e65b7c6b895a5c1
-Anchor-SHA: __ANCHOR_SHA__
+Anchor-SHA: 0d13e11384732218ce8760c28f49b5bd675cdf60
 Plans: PLAN-155
 Scope:
   Wave 5 — installer `--harness codex` (debate A7 arming verification,

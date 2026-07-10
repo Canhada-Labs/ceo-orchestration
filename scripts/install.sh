@@ -29,6 +29,33 @@
 #   --dry-run                      Print what WOULD be done (mkdir, cp, sed) without
 #                                    touching $TARGET. Exit 0 after preview.
 #
+#   --harness <claude|codex>       Target harness (default: claude). PLAN-155 Wave 5.
+#                                    claude (default) is BYTE-IDENTICAL to the flag
+#                                    being absent. codex ALSO emits the .codex/
+#                                    registration bundle (.codex/hooks.json +
+#                                    .codex/rules/ceo.rules), the operator AGENTS.md,
+#                                    the inverted pair-rail reviewer guidance, a
+#                                    lifecycle manifest, and a post-install ARMING
+#                                    check. Verified against codex-cli 0.139.0.
+#                                    HONESTY: NOTHING is enforced under codex until
+#                                    you grant /hooks trust (an untrusted/modified
+#                                    hook is a SILENT no-op on 0.139).
+#   --managed-hooks                (codex only) Also emit requirements.toml — the
+#                                    trusted-by-policy MANAGED-hooks posture (OQ1
+#                                    opt-in; a reviewable policy file, never a
+#                                    headless trust write into $CODEX_HOME).
+#   --with-codex-skills            (codex only) Copy skills into .codex/skills/.
+#                                    NO-OP until PLAN-155 Wave 8 lands (guarded).
+#   --force                        (codex only) Back up + overwrite a pre-existing
+#                                    .codex/** / AGENTS.md / requirements.toml
+#                                    instead of the default refuse-and-print-diff.
+#   --arming-check                 (codex only) Run just the post-install arming
+#                                    doctor (ARMED / NOT-ARMED-(untrusted) / BROKEN)
+#                                    on <target> and exit. No files written.
+#   --uninstall                    (codex only) Manifest-driven removal of every
+#                                    codex-emitted path (+ restore of --force
+#                                    backups) and exit. Lifecycle symmetry (A9).
+#
 #   Placeholder substitution flags (override env + default values):
 #     --owner <name>               -> {{OWNER_NAME}}                 (env: CEO_OWNER)
 #     --project <name>             -> {{PROJECT_NAME}}               (env: CEO_PROJECT; default: target basename)
@@ -223,6 +250,13 @@ if [ -f "$SCRIPT_DIR/_framework_manifest_set.sh" ]; then
   # shellcheck source=scripts/_framework_manifest_set.sh
   . "$SCRIPT_DIR/_framework_manifest_set.sh"
 fi
+# PLAN-155 Wave 5 — Codex harness emission (sourced, not executed). Fail-open:
+# if absent (partial checkout), --harness codex degrades to a clear error at
+# use; the default claude path never references it.
+if [ -f "$SCRIPT_DIR/_codex_harness.sh" ]; then
+  # shellcheck source=scripts/_codex_harness.sh
+  . "$SCRIPT_DIR/_codex_harness.sh"
+fi
 
 # ----------------------------------------------------------------------
 # P0-15 (PLAN-045 Session 41 / PLAN-044 F-15R2-01, 2026-04-20;
@@ -336,6 +370,18 @@ _WS4_PRESNAP=""        # WS4-ceremony-var (set under -u; populated in non-dry-ru
 # Re-checksums installed skill SHAs against the source manifest.
 VERIFY=0
 
+# PLAN-155 Wave 5 (SENT-CX-C) — Codex harness. All default to the claude path;
+# when HARNESS stays "claude" NONE of these are consulted and the install is
+# byte-identical to pre-plan behavior (the flag being absent).
+HARNESS="claude"
+CODEX_MANAGED_HOOKS=0
+# shellcheck disable=SC2034  # CODEX_WITH_SKILLS/CODEX_FORCE consumed by the sourced _codex_harness.sh
+CODEX_WITH_SKILLS=0
+# shellcheck disable=SC2034
+CODEX_FORCE=0
+CODEX_ARMING_ONLY=0
+CODEX_UNINSTALL=0
+
 # Placeholder values — resolved from CLI > env > "" (report-only).
 # Default values for values we can derive deterministically are set later
 # (after $TARGET is known).
@@ -390,8 +436,11 @@ print_help() {
   # which silently dropped the --verify-sigstore deprecation notice and
   # the LGPD/fintech placeholder flags --city/--country/--domain/
   # --founder-name/--legal-id/--production-url). Range bounded by the
-  # "Portability:" trailer to stay drift-stable.
-  sed -n '3,136p' "$0"
+  # "Portability:" trailer to stay drift-stable. Bounded by the
+  # "# Idempotent: re-running" sentinel line (was a hardcoded 3,136 range;
+  # PLAN-155 Wave 5 added --harness docs above it, so anchor on the sentinel
+  # instead of a line number).
+  sed -n '3,/^# Idempotent: re-running/p' "$0"
   exit 0
 }
 
@@ -495,6 +544,31 @@ while [[ $# -gt 0 ]]; do
     --legal-id)            PH_LEGAL_ID="${2:-}";           shift 2 ;;
     --production-url)      PH_PRODUCTION_URL="${2:-}";     shift 2 ;;
 
+    --harness)
+      # PLAN-155 Wave 5 (SENT-CX-C). Default claude is byte-identical to the
+      # flag being absent; codex adds the .codex/ emission path.
+      HARNESS="${2:-}"
+      case "$HARNESS" in
+        claude|codex) ;;
+        *)
+          echo "ERROR: --harness must be 'claude' or 'codex' (got: $HARNESS)" >&2
+          exit 2
+          ;;
+      esac
+      shift 2 ;;
+    --managed-hooks)
+      CODEX_MANAGED_HOOKS=1; shift ;;
+    --with-codex-skills)
+      # shellcheck disable=SC2034  # consumed by the sourced _codex_harness.sh
+      CODEX_WITH_SKILLS=1; shift ;;
+    --force)
+      # shellcheck disable=SC2034  # consumed by the sourced _codex_harness.sh
+      CODEX_FORCE=1; shift ;;
+    --arming-check)
+      CODEX_ARMING_ONLY=1; shift ;;
+    --uninstall)
+      CODEX_UNINSTALL=1; shift ;;
+
     -h|--help)
       print_help ;;
     -*)
@@ -579,6 +653,22 @@ fi
 # Split PROFILE into array (e.g. "core,fintech" -> [core, fintech])
 IFS=',' read -r -a PROFILE_PARTS <<< "$PROFILE"
 
+# ----------------------------------------------------------------------
+# PLAN-155 Wave 5 — Codex-only early-exit modes (--arming-check / --uninstall).
+# These operate on an EXISTING install and never run the full installer. They
+# run BEFORE the backup/trap machinery (no snapshot needed) and exit directly.
+# ----------------------------------------------------------------------
+if [[ "$CODEX_ARMING_ONLY" -eq 1 || "$CODEX_UNINSTALL" -eq 1 ]]; then
+  if ! command -v codex_arming_check >/dev/null 2>&1; then
+    echo "ERROR: --arming-check/--uninstall require scripts/_codex_harness.sh (not sourced)" >&2
+    exit 1
+  fi
+  if [[ "$CODEX_UNINSTALL" -eq 1 ]]; then
+    codex_uninstall "$TARGET"; exit $?
+  fi
+  codex_arming_check "$TARGET"; exit $?
+fi
+
 echo "==> Installing ceo-orchestration"
 echo "    Source:       $SOURCE_DIR"
 echo "    Target:       $TARGET"
@@ -658,6 +748,11 @@ _state_record_op() {
   fi
   return 0
 }
+
+# PLAN-155 Wave 5 — the codex harness helper records its operations through
+# this recorder, mapped onto the install-state journal (overrides the helper's
+# no-op default so codex emissions land in .claude/.install-state.json).
+codex_journal() { _state_record_op "$1" "${2:-}"; }
 
 if [[ "$DRY_RUN" -eq 0 ]]; then
   if [[ -d "$TARGET/.claude" ]]; then
@@ -2076,6 +2171,8 @@ _write_install_state() {
     "with_reference_personas" "$WITH_REFERENCE_PERSONAS"
     "strict_placeholders" "$STRICT_PLACEHOLDERS"
     "verify" "$VERIFY"
+    "harness" "$HARNESS"
+    "managed_hooks" "$CODEX_MANAGED_HOOKS"
     "ph.OWNER_NAME" "$PH_OWNER_NAME"
     "ph.PROJECT_NAME" "$PH_PROJECT_NAME"
     "ph.PROJECT_PATH" "$PH_PROJECT_PATH"
@@ -2199,6 +2296,9 @@ req = {
     "with_reference_personas": vals.get("with_reference_personas", "0") == "1",
     "strict_placeholders": vals.get("strict_placeholders", "0") == "1",
     "verify": vals.get("verify", "0") == "1",
+    # PLAN-155 Wave 5: recorded so upgrade.sh replays the harness (B2 mirror).
+    "harness": vals.get("harness", "claude"),
+    "managed_hooks": vals.get("managed_hooks", "0") == "1",
     "placeholders": ph,
 }
 state = {
@@ -2238,6 +2338,25 @@ except BaseException:
   echo "    WROTE: .claude/.install-state.json (schema ceo.install-state/v1, atomic)"
   return 0
 }
+
+# ----------------------------------------------------------------------
+# PLAN-155 Wave 5 — Codex harness emission. Runs AFTER the claude install
+# completes (so the .claude/ hooks the .codex/ registration points at are in
+# place) and BEFORE the state/manifest are written (so codex ops are journaled
+# into .claude/.install-state.json). Fully gated on --harness codex; the
+# default claude path never enters this block. Honors --dry-run internally.
+# ----------------------------------------------------------------------
+if [[ "$HARNESS" == "codex" ]]; then
+  if ! command -v codex_emit_bundle >/dev/null 2>&1; then
+    echo "ERROR: --harness codex requires scripts/_codex_harness.sh (not sourced)" >&2
+    exit 1
+  fi
+  if codex_emit_bundle; then :; else
+    _cx_rc=$?
+    echo "ERROR: codex harness emission failed/refused (rc=$_cx_rc)" >&2
+    exit "$_cx_rc"
+  fi
+fi
 
 if [[ "$DRY_RUN" -eq 0 ]]; then
   write_install_manifest
@@ -2367,6 +2486,22 @@ if has_profile "fintech"; then
   echo "    - FIN-*/EX-* pitfalls in .claude/skills/domains/fintech/pitfalls.yaml"
   echo "    - Reference personas in .claude/skills/domains/fintech/team-personas.md"
   echo "    - Additional commands in .claude/skills/domains/fintech/commands/"
+fi
+
+# PLAN-155 Wave 5 (debate A7) — the codex path closes with the arming check as
+# its FINAL instruction: installed != armed. The check states loudly that
+# NOTHING is enforced until /hooks trust is granted; a NOT-ARMED-(untrusted)
+# verdict is EXPECTED on a fresh install and does NOT fail the install (trust
+# is the operator's next, consent-gated step).
+if [[ "$HARNESS" == "codex" ]]; then
+  echo ""
+  echo "==> Codex harness installed. FINAL STEP — arm enforcement:"
+  codex_arming_check "$TARGET" || true
+  echo ""
+  echo "    Re-run the arming check any time:"
+  echo "      $0 --harness codex --arming-check $TARGET"
+  echo "    Uninstall the codex harness (lifecycle-symmetric):"
+  echo "      $0 --harness codex --uninstall $TARGET"
 fi
 
 # Release workflow (.github/workflows/release.yml) replaces the

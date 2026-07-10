@@ -86,6 +86,12 @@ if [ -f "$SCRIPT_DIR/_framework_manifest_set.sh" ]; then
   # shellcheck source=scripts/_framework_manifest_set.sh
   . "$SCRIPT_DIR/_framework_manifest_set.sh"
 fi
+# PLAN-155 Wave 5 — codex harness emission helper (sourced, not executed).
+# Fail-open: absent => --harness codex round-trip degrades to a warning.
+if [ -f "$SCRIPT_DIR/_codex_harness.sh" ]; then
+  # shellcheck source=scripts/_codex_harness.sh
+  . "$SCRIPT_DIR/_codex_harness.sh"
+fi
 
 # PLAN-153 Wave B item B2 — capture the ORIGINAL upgrade argv verbatim BEFORE
 # parsing, for the post-upgrade state record (data only, never eval-ed).
@@ -101,6 +107,13 @@ DEPRECATION_WARN=1
 SETTINGS_MERGE=1
 ON_CONFLICT="refuse"   # PLAN-138 Wave C (ADR-155): {refuse|theirs|backup}; default refuse (OQ2)
 REPLAY=1               # PLAN-153 Wave B item B2: replay the recorded install request (opt out: --no-replay)
+HARNESS=""             # PLAN-155 Wave 5: "" = infer from recorded request.harness (B2 mirror)
+HARNESS_EXPLICIT=0     # explicit --harness always beats a replayed value
+CODEX_MANAGED_HOOKS=0  # replayed from request.managed_hooks unless --managed-hooks
+# shellcheck disable=SC2034  # CODEX_WITH_SKILLS/CODEX_FORCE consumed by the sourced _codex_harness.sh
+CODEX_WITH_SKILLS=0
+# shellcheck disable=SC2034
+CODEX_FORCE=0          # upgrade derives this from --on-conflict for the codex refresh
 PROFILE_EXPLICIT=0      # PLAN-153 B2: explicit --profile always beats a replayed value
 STACK_EXPLICIT=0        # PLAN-153 B2: explicit --stack always beats a replayed value
 SKIP_GLOBS=()
@@ -140,6 +153,20 @@ while [[ $# -gt 0 ]]; do
     --no-replay)
       # PLAN-153 Wave B item B2: ignore .claude/.install-state.json entirely.
       REPLAY=0
+      shift
+      ;;
+    --harness)
+      # PLAN-155 Wave 5: explicit override of the replayed harness.
+      HARNESS="${2:-}"
+      case "$HARNESS" in
+        claude|codex) ;;
+        *) echo "ERROR: --harness must be 'claude' or 'codex' (got: $HARNESS)" >&2; exit 2 ;;
+      esac
+      HARNESS_EXPLICIT=1
+      shift 2
+      ;;
+    --managed-hooks)
+      CODEX_MANAGED_HOOKS=1
       shift
       ;;
     --skip)
@@ -203,6 +230,13 @@ Options:
                         (explicit flags always win). Missing/invalid state
                         falls back to the ADR-155 drift-classifier path —
                         never an error, never a no-op.
+  --harness <c|codex>   PLAN-155 Wave 5: override the harness. Defaults to the
+                        recorded request.harness (B2 replay). When codex, the
+                        upgrade also refreshes the .codex/ bundle from the
+                        current templates (collision behavior follows
+                        --on-conflict; refuse leaves local edits).
+  --managed-hooks       PLAN-155 Wave 5 (codex): also refresh requirements.toml
+                        (managed-hooks posture). Replayed from state otherwise.
   --skip <glob>         Exclude files from the overwrite (repeat for multiple globs).
                         Example: --skip='.claude/scripts/local/*'
   --skip=<glob>         Alternate inline syntax for --skip.
@@ -449,7 +483,12 @@ if prof and not re.match(r"^[A-Za-z0-9_,.-]{1,200}$", prof):
     sys.exit(3)
 if stack and not re.match(r"^[A-Za-z0-9_.-]{1,100}$", stack):
     sys.exit(3)
-sys.stdout.write(prof + "\t" + stack + "\n")
+# PLAN-155 Wave 5: harness (closed enum) + managed_hooks bool round-trip.
+harness = req.get("harness", "")
+if harness not in ("", "claude", "codex"):
+    harness = ""  # unknown value => fall back to CLI/default, never trust it
+managed = "1" if req.get("managed_hooks") is True else "0"
+sys.stdout.write(prof + "\t" + stack + "\t" + harness + "\t" + managed + "\n")
 ' "$_INSTALL_STATE_FILE" 2>/dev/null
 }
 
@@ -457,8 +496,8 @@ if [[ "$REPLAY" -eq 1 ]]; then
   if [[ -f "$_INSTALL_STATE_FILE" ]]; then
     _rp_line=""
     if _rp_line="$(_read_install_state_request)" && [[ -n "$_rp_line" ]]; then
-      _rp_profile="${_rp_line%%$'\t'*}"
-      _rp_stack="${_rp_line#*$'\t'}"
+      # TAB-separated: profile<TAB>stack<TAB>harness<TAB>managed (PLAN-155 W5).
+      IFS=$'\t' read -r _rp_profile _rp_stack _rp_harness _rp_managed <<< "$_rp_line"
       _rp_used=0
       if [[ "$PROFILE_EXPLICIT" -eq 0 && -n "$_rp_profile" ]]; then
         PROFILE="$_rp_profile"
@@ -469,6 +508,15 @@ if [[ "$REPLAY" -eq 1 ]]; then
         STACK="$_rp_stack"
         _rp_used=1
         echo "    REPLAY: --stack $STACK (recorded request in .claude/.install-state.json; pass --stack or --no-replay to override)" >&2
+      fi
+      if [[ "$HARNESS_EXPLICIT" -eq 0 && -n "$_rp_harness" ]]; then
+        HARNESS="$_rp_harness"
+        _rp_used=1
+        echo "    REPLAY: --harness $HARNESS (recorded request in .claude/.install-state.json; pass --harness or --no-replay to override)" >&2
+      fi
+      if [[ "$CODEX_MANAGED_HOOKS" -eq 0 && "${_rp_managed:-0}" = "1" ]]; then
+        CODEX_MANAGED_HOOKS=1
+        _rp_used=1
       fi
       if [[ "$_rp_used" -eq 1 ]]; then
         _REPLAY_SOURCE="replay"
@@ -524,6 +572,10 @@ _up_record_op() {
   fi
   return 0
 }
+
+# PLAN-155 Wave 5 — override the codex helper's no-op recorder so a codex
+# refresh during upgrade is journaled into the upgrade operation log.
+codex_journal() { _up_record_op "$1" "${2:-}"; }
 
 # ===========================================================================
 # PLAN-138 Wave C (ADR-155) — baseline manifest load + per-file classifier.
@@ -1425,6 +1477,8 @@ _write_upgrade_state() {
     "on_conflict" "$ON_CONFLICT"
     "pin" "$PIN_REF"
     "replay_source" "$_REPLAY_SOURCE"
+    "harness" "$HARNESS"
+    "managed_hooks" "$CODEX_MANAGED_HOOKS"
   )
   echo ""
   echo "==> (Re)writing install-state (.claude/.install-state.json — PLAN-153 Wave B)"
@@ -1489,6 +1543,18 @@ if req is None:
     }
 req["profile"] = vals.get("profile", "")
 req["stack"] = vals.get("stack", "")
+# PLAN-155 Wave 5: persist harness so it survives even a pre-Wave-B target
+# whose request was synthesized above. Only overwrite when non-empty so a
+# claude-only upgrade never clobbers a recorded codex harness with "".
+_h = vals.get("harness", "")
+if _h in ("claude", "codex"):
+    req["harness"] = _h
+elif "harness" not in req:
+    req["harness"] = "claude"
+if vals.get("managed_hooks", "0") == "1":
+    req["managed_hooks"] = True
+elif "managed_hooks" not in req:
+    req["managed_hooks"] = False
 state = {
     "schema": "ceo.install-state/v1",
     "schema_version": 1,
@@ -1536,6 +1602,41 @@ except BaseException:
   if [[ -n "${_UP_OPS_FILE:-}" ]]; then rm -f "$_UP_OPS_FILE" 2>/dev/null || true; fi
   return 0
 }
+# ----------------------------------------------------------------------
+# PLAN-155 Wave 5 — Codex harness refresh (round-trip). When the effective
+# harness (explicit --harness or replayed request.harness) is codex, refresh
+# the .codex/ bundle from the (possibly newer) templates. Collision behavior
+# mirrors the claude upgrade's --on-conflict: refuse (default) leaves a locally
+# changed file, backup/theirs overwrite with a backup. A refusal WARNS, never
+# fails the upgrade (consistent with the ADR-155 default). Runs BEFORE the
+# state rewrite so codex ops are journaled.
+# ----------------------------------------------------------------------
+if [[ "$HARNESS" == "codex" ]]; then
+  if ! command -v codex_emit_bundle >/dev/null 2>&1; then
+    echo "    NOTE: recorded harness is codex but scripts/_codex_harness.sh is not" >&2
+    echo "          sourced — skipping the .codex/ refresh (fail-open)." >&2
+  else
+    # shellcheck disable=SC2034  # PH_PROJECT_*/CODEX_FORCE consumed by the sourced _codex_harness.sh
+    PH_PROJECT_PATH="$TARGET"
+    # shellcheck disable=SC2034
+    PH_PROJECT_NAME="$( basename "$TARGET" )"
+    # shellcheck disable=SC2034
+    if [[ "$ON_CONFLICT" == "theirs" || "$ON_CONFLICT" == "backup" ]]; then
+      CODEX_FORCE=1
+    else
+      CODEX_FORCE=0
+    fi
+    echo ""
+    echo "==> Codex harness refresh (--harness codex; on-conflict=$ON_CONFLICT)"
+    if codex_emit_bundle; then :; else
+      _cx_rc=$?
+      echo "    NOTE: codex bundle refresh returned rc=$_cx_rc (likely a local edit under" >&2
+      echo "          the default refuse policy). Re-run with --on-conflict backup to" >&2
+      echo "          overwrite, or resolve by hand. The upgrade itself is unaffected." >&2
+    fi
+  fi
+fi
+
 _write_upgrade_state
 
 echo ""
