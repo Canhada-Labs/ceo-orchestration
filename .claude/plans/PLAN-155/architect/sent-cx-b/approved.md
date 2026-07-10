@@ -19,7 +19,7 @@ the same requirement with this signed sentinel as the authorization record.
 Landing order (binding): PLAN-154 SENT-F lands BEFORE every SENT-CX
 (F-before-CX); within PLAN-155: SENT-CX-A → (Waves 2/3 unguarded) →
 SENT-CX-E → **SENT-CX-B** → SENT-CX-C → SENT-CX-D. Anchor
-(`__ANCHOR_SHA__`) taken on main after SENT-CX-E lands.
+(`c529caa9b087f669763f1015165b23ada09b92e2`) taken on main after SENT-CX-E lands.
 
 **Baseline-count note (binding):** the `_KNOWN_ACTIONS` count baseline
 INHERITS PLAN-154 SENT-F's landing (F-before-CX order). The repo baseline
@@ -40,7 +40,7 @@ named here so the coupling is not discovered at execution time.
 
 <!-- BEGIN SIGNED SCOPE -->
 Approved-By: @Canhada-Labs 71a2ef5f8dc52aabe8ba2c848e65b7c6b895a5c1
-Anchor-SHA: __ANCHOR_SHA__
+Anchor-SHA: c529caa9b087f669763f1015165b23ada09b92e2
 Plans: PLAN-155
 Kernel-Override: PLAN-155-CODEX-AUDIT-ACTIONS (+ CEO_KERNEL_OVERRIDE_ACK=I-ACCEPT)
 Scope:

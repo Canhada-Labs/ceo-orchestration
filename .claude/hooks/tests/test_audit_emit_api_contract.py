@@ -139,6 +139,12 @@ _EXPECTED_PUBLIC_SYMBOLS = frozenset({
     # closed enums tool_name_enum (MF-SEC-1) + duration_bucket (MF-SEC-3).
     "emit_tool_call_lifecycle_recorded",
     "emit_learning_rail_disabled",  # PLAN-154 A12 typed emitter (ADR-160 D8)
+    # PLAN-155 Wave 4 (Codex harness audit chain / SENT-CX-B, ADR-161) — two
+    # metadata-only typed emitters. Deny-by-default scrub-branch +
+    # _CODEX_TOOL_RECORDED_ALLOWLIST / _CODEX_TURN_ENDED_ALLOWLIST; closed
+    # enums (tool_name_enum -> other, source -> other, harness -> codex).
+    "emit_codex_tool_recorded",
+    "emit_codex_turn_ended",
     # PLAN-124 WS-1 (ECC value-harvest) — git hook-bypass guard breadcrumb.
     # Deny-by-default scrub-branch + _GIT_HOOK_BYPASS_BLOCKED_ALLOWLIST;
     # the ONLY caller field is the closed-enum flag_class (MF-G), never the
@@ -620,7 +626,17 @@ _EXPECTED_KNOWN_ACTIONS_SHA256 = (
     # _EXPECTED_PUBLIC_SYMBOLS). SPEC amend v2.48. SHA re-derived from the
     # STAGED audit_emit.py under .claude/plans/PLAN-154/staged/sent-f/ via
     # sha256(json.dumps(sorted(_KNOWN_ACTIONS))). Count: 303 -> 314.
-    "689e30948409af119259b445fceb97fd7eae45d3db5c6d9bf370a59659cd2caa"
+    # Updated PLAN-155 Wave 4 (Codex harness audit chain / ADR-161, SENT-CX-B
+    # ceremony) — +2 metadata-only actions: codex_tool_recorded (per-tool
+    # PostToolUse append, A) + codex_turn_ended (turn-level backstop, B). Both
+    # route through dedicated Sec MF-3 dispatch branches + per-action
+    # allowlists (_CODEX_TOOL_RECORDED_ALLOWLIST / _CODEX_TURN_ENDED_ALLOWLIST),
+    # NEVER _EMIT_GENERIC_PASSTHROUGH. TWO new public typed emitters:
+    # emit_codex_tool_recorded + emit_codex_turn_ended (added to
+    # _EXPECTED_PUBLIC_SYMBOLS). SPEC amend v2.49. SHA re-derived from the
+    # STAGED audit_emit.py under .claude/plans/PLAN-155/staged/wave-4/ via
+    # sha256(json.dumps(sorted(_KNOWN_ACTIONS))). Count: 314 -> 316.
+    "bcb1afc7f79d473b7febc3b8b6662f722b404300f91fa922cdd2e416113b49ee"
 )
 
 
@@ -662,13 +678,13 @@ class AuditEmitPublicSurfaceTests(unittest.TestCase):
         self.assertEqual(
             actual, _EXPECTED_KNOWN_ACTIONS_SHA256,
             f"_KNOWN_ACTIONS drift detected. "
-            f"Count={len(actions)} (expected 314). "
+            f"Count={len(actions)} (expected 316). "
             f"Rebaseline this test + add audit-registry entry if the change is intentional.",
         )
 
     def test_known_actions_count_fixed(self) -> None:
         self.assertEqual(
-            len(audit_emit._KNOWN_ACTIONS), 314,
+            len(audit_emit._KNOWN_ACTIONS), 316,
             "_KNOWN_ACTIONS count drifted from 163 baseline (PLAN-088 S114 Wave 1 +11 actions: "
             "cache_discipline_alerted + first_run_wizard_dispatched + "
             "estimate_calibrator_pipeline_run + subagent_findings_partial_drop + "

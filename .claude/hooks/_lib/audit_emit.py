@@ -964,6 +964,29 @@ _KNOWN_ACTIONS = {
     "distiller_run_completed",
     # Item-7 $0 deterministic clustering pass — counts-only breadcrumb.
     "lesson_evolve_run",
+    # PLAN-155 Wave 4 (Codex harness audit chain / SENT-CX-B, ADR-161) — two
+    # NEW metadata-only actions so the HMAC chain appends under OpenAI Codex.
+    # Both are distinct from agent_spawn (the claude-only spawn record) AND
+    # from tool_call_lifecycle_recorded, so codex-completeness analysis can
+    # tell the per-tool rail from the turn-level backstop apart in the same
+    # log slice (the completeness query IS the Wave-4 replay test).
+    # Deny-by-default: each routes through a dedicated `_scrub_` branch in
+    # emit_generic + its own closed-enum allowlist below, NEVER
+    # _EMIT_GENERIC_PASSTHROUGH. NO command bytes / patch body / paths /
+    # prompt / last_assistant_message / tool_response text is EVER persisted
+    # — only closed-enum + bool scalars (Sec MF-3). Emitted by audit_log.py
+    # under CEO_HOOK_ADAPTER=codex (via the codex host adapter). The HMAC
+    # chain shape + verify_chain() are UNTOUCHED; only the enum grows.
+    #
+    # (A) per-tool-call append for the codex PostToolUse `*` matcher — the
+    # completeness-bounded record that "a tool call happened", tool identity
+    # coerced to a closed enum (raw mcp__<server>__<tool> -> mcp_other).
+    "codex_tool_recorded",
+    # (B) turn-ended backstop (Stop / SubagentStop / notify / headless-wrapper
+    # bracket) — a DISTINCT action so a turn-level append is never conflated
+    # with a per-tool append when partial shell interception drops per-tool
+    # events (the named completeness residual).
+    "codex_turn_ended",
 }
 
 
@@ -6982,6 +7005,29 @@ def emit_generic(action: str, **kwargs: Any) -> None:
         if dropped:
             _breadcrumb("emit_generic lesson_evolve_run dropped: %s"
                         % sorted(dropped)[:10])
+    elif action == "codex_tool_recorded":  # PLAN-155 Wave 4 — Sec MF-3 + coercion
+        if event.get("harness") not in _CODEX_HARNESS_ENUM:
+            event["harness"] = "codex"
+        if event.get("tool_name_enum") not in _CODEX_TOOL_RECORDED_TOOL_NAME_ENUM:
+            event["tool_name_enum"] = "other"
+        if event.get("hook_event_name") not in _CODEX_TOOL_RECORDED_EVENT_ENUM:
+            event["hook_event_name"] = "PostToolUse"
+        event, dropped = _scrub_ceo_boot_event(
+            event, _CODEX_TOOL_RECORDED_ALLOWLIST)
+        if dropped:
+            _breadcrumb("emit_generic codex_tool_recorded dropped: %s"
+                        % sorted(dropped)[:10])
+    elif action == "codex_turn_ended":  # PLAN-155 Wave 4 — Sec MF-3 + coercion
+        if event.get("harness") not in _CODEX_HARNESS_ENUM:
+            event["harness"] = "codex"
+        if event.get("source") not in _CODEX_TURN_ENDED_SOURCE_ENUM:
+            event["source"] = "other"
+        event["stop_hook_active"] = bool(event.get("stop_hook_active"))
+        event, dropped = _scrub_ceo_boot_event(
+            event, _CODEX_TURN_ENDED_ALLOWLIST)
+        if dropped:
+            _breadcrumb("emit_generic codex_turn_ended dropped: %s"
+                        % sorted(dropped)[:10])
     # PLAN-113 Phase B B-STRUCTURAL — verbatim passthrough for the documented
     # set of TRUSTED first-party producers (see _EMIT_GENERIC_PASSTHROUGH).
     # Their field sets are controlled at the producer site; pass through as-is
@@ -7169,6 +7215,65 @@ _TOOL_CALL_LIFECYCLE_RECORDED_ALLOWLIST = frozenset({
     "ts", "event_schema",
     "tokens_in", "tokens_out", "tokens_total",
     "hmac", "hmac_error",
+})
+
+
+# ---------------------------------------------------------------------------
+# PLAN-155 Wave 4 (Codex harness audit chain / SENT-CX-B, ADR-161) — Sec MF-3
+# closed enums + field allowlists for the two codex audit-chain actions.
+# Deny-by-default; every emit_generic branch ALSO re-coerces the enum VALUES
+# by closed-set membership so a direct emit_generic caller can never sign a
+# raw tool name / patch body / command string into the HMAC chain. NEVER
+# _EMIT_GENERIC_PASSTHROUGH.
+# ---------------------------------------------------------------------------
+
+# Base signed envelope both codex actions pre-allow so the scrub does not strip
+# _write_event's own keys on a round-trip. Mirrors _LEARNING_ENVELOPE /
+# _TOOL_CALL_LIFECYCLE_RECORDED_ALLOWLIST shape.
+_CODEX_AUDIT_ENVELOPE = frozenset({
+    "action", "session_id", "project",
+    "ts", "event_schema",
+    "tokens_in", "tokens_out", "tokens_total",
+    "hmac", "hmac_error",
+})
+
+# Harness discriminator — always "codex" for these two actions (they exist
+# ONLY on the codex host wire), but kept as a closed field so completeness
+# analysis can pivot codex_tool_recorded vs the claude-only agent_spawn rail
+# without inferring from the action name. A miss coerces to "codex".
+_CODEX_HARNESS_ENUM = frozenset({"codex"})
+
+# codex_tool_recorded — the per-tool-call closed tool-name enum. The codex host
+# adapter has ALREADY normalized apply_patch -> Write/Edit and spawn_agent ->
+# Task before this point; a raw mcp__<server>__<tool> string coerces to
+# "mcp_other" and anything unrecognized to "other" so NO raw tool name reaches
+# the wire even on a direct caller path (MF-SEC-1). Deliberately a SEPARATE
+# constant from _TOOL_CALL_LIFECYCLE_TOOL_NAME_ENUM (no cross-plan pin-sync
+# coupling to _lib/tool_lifecycle.py).
+_CODEX_TOOL_RECORDED_TOOL_NAME_ENUM = frozenset({
+    "Bash", "Edit", "Write", "Task", "Read",
+    "MultiEdit", "NotebookEdit", "Glob", "Grep", "WebFetch", "WebSearch",
+    "mcp_other", "other",
+})
+
+# codex_tool_recorded — the codex host event that produced this per-tool
+# append. Only PostToolUse produces action (A); a miss coerces to "PostToolUse".
+_CODEX_TOOL_RECORDED_EVENT_ENUM = frozenset({"PostToolUse"})
+
+_CODEX_TOOL_RECORDED_ALLOWLIST = _CODEX_AUDIT_ENVELOPE | frozenset({
+    "harness", "hook_event_name", "tool_name_enum",
+})
+
+# codex_turn_ended — how the turn-end was signaled. "stop"/"subagent_stop" are
+# the codex Stop-family hook events; "notify" is the codex notify program
+# surface; "wrapper" is the headless codex-exec-wrapper.sh bracket (its
+# synthetic Stop envelope). A miss coerces to "other".
+_CODEX_TURN_ENDED_SOURCE_ENUM = frozenset({
+    "stop", "subagent_stop", "notify", "wrapper", "other",
+})
+
+_CODEX_TURN_ENDED_ALLOWLIST = _CODEX_AUDIT_ENVELOPE | frozenset({
+    "harness", "source", "stop_hook_active",
 })
 
 
@@ -7527,6 +7632,11 @@ _SETTINGS_TAMPER_CLASSES = frozenset({
     # _lib/effective_config.TAMPER_CLASSES (enum-parity test). A settings.json env
     # block steering the always-on statusline sidecar writer out of the state dir.
     "settings_tamper_sidecar_redirect",
+    # PLAN-155 Wave 3b (SENT-CX-E) — Codex kill-switch surface census tamper:
+    # a deregistered `.codex` registration (only ceo.rules left) or a referenced
+    # codex hook missing on disk. Added to _lib/effective_config.TAMPER_CLASSES
+    # in the same wave; MUST mirror here (enum-parity test).
+    "settings_tamper_codex_killswitch_missing",
     "other",
 })
 _SETTINGS_TAMPER_LAYERS = frozenset({
@@ -8086,6 +8196,111 @@ def emit_tool_call_lifecycle_recorded(
     if dropped:  # pragma: no cover — impossible from the typed wrapper
         _breadcrumb(
             f"tool_call_lifecycle_recorded dropped forbidden field(s): "
+            f"{sorted(dropped)[:10]}"
+        )
+
+
+def emit_codex_tool_recorded(
+    *,
+    session_id: str,
+    tool_name_enum: str,
+    hook_event_name: str = "PostToolUse",
+    project: str = "",
+) -> None:
+    """Emit codex_tool_recorded (PLAN-155 Wave 4 / SENT-CX-B / ADR-161).
+
+    Fired once per codex PostToolUse `*` matcher hit by audit_log.py under
+    CEO_HOOK_ADAPTER=codex — the completeness-bounded per-tool-call append
+    that lands the codex session in the HMAC chain. DISTINCT action from
+    agent_spawn (claude-only spawn record) and codex_turn_ended (the
+    turn-level backstop) so a completeness query can count them separately.
+
+    Deny-by-default field allowlist enforced (Sec MF-3): NO command bytes,
+    NO apply_patch body, NO file paths, NO tool_response text, NO prompt.
+    Both closed enums are re-validated here (defense-in-depth): an
+    unrecognized ``tool_name_enum`` coerces to ``"other"`` (a raw
+    ``mcp__<server>__<tool>`` string that reached here uncoerced would map to
+    ``"other"`` — the audit_log codex path pre-maps mcp__* to ``"mcp_other"``)
+    and an unrecognized ``hook_event_name`` coerces to ``"PostToolUse"`` so a
+    smuggled raw value can never reach the wire on a direct caller path.
+
+    Completeness residual (named, ADR-161 + degradation page): under partial
+    shell interception codex may not fire PostToolUse for every tool call, so
+    absence of a row is NOT evidence of absence of activity. The chain shape
+    and verify_chain() are unchanged; this only appends.
+
+    Fail-open per audit_emit contract — exceptions are swallowed by
+    _write_event. audit_log.py also wraps this so a slow filelock never blocks
+    the codex session (the whole hook exits 0 on every path).
+    """
+    safe_tool = (
+        tool_name_enum
+        if tool_name_enum in _CODEX_TOOL_RECORDED_TOOL_NAME_ENUM
+        else "other"
+    )
+    safe_event = (
+        hook_event_name
+        if hook_event_name in _CODEX_TOOL_RECORDED_EVENT_ENUM
+        else "PostToolUse"
+    )
+    raw_event: Dict[str, Any] = {
+        "action": "codex_tool_recorded",
+        "session_id": session_id,
+        "project": project,
+        "harness": "codex",
+        "hook_event_name": safe_event,
+        "tool_name_enum": safe_tool,
+    }
+    cleaned, dropped = _scrub_ceo_boot_event(
+        raw_event, _CODEX_TOOL_RECORDED_ALLOWLIST
+    )
+    _write_event(cleaned)
+    if dropped:  # pragma: no cover — impossible from the typed wrapper
+        _breadcrumb(
+            f"codex_tool_recorded dropped forbidden field(s): "
+            f"{sorted(dropped)[:10]}"
+        )
+
+
+def emit_codex_turn_ended(
+    *,
+    session_id: str,
+    source: str,
+    stop_hook_active: bool = False,
+    project: str = "",
+) -> None:
+    """Emit codex_turn_ended (PLAN-155 Wave 4 / SENT-CX-B / ADR-161).
+
+    The turn-level backstop append. Fired by audit_log.py under
+    CEO_HOOK_ADAPTER=codex on a codex Stop / SubagentStop hook event, and by
+    the headless ``codex-exec-wrapper.sh`` bracket (source="wrapper"). A
+    DISTINCT action from codex_tool_recorded so a partial-interception turn
+    (per-tool appends dropped) is still marked in the chain AND is never
+    conflated with a per-tool append by the completeness query.
+
+    Deny-by-default field allowlist (Sec MF-3): NO last_assistant_message,
+    NO transcript path, NO agent id, NO command/prompt text. ``source`` is a
+    closed enum (miss -> "other"); ``stop_hook_active`` is the codex loop
+    guard (bool). Fail-open per audit_emit contract.
+    """
+    safe_source = (
+        source if source in _CODEX_TURN_ENDED_SOURCE_ENUM else "other"
+    )
+    raw_event: Dict[str, Any] = {
+        "action": "codex_turn_ended",
+        "session_id": session_id,
+        "project": project,
+        "harness": "codex",
+        "source": safe_source,
+        "stop_hook_active": bool(stop_hook_active),
+    }
+    cleaned, dropped = _scrub_ceo_boot_event(
+        raw_event, _CODEX_TURN_ENDED_ALLOWLIST
+    )
+    _write_event(cleaned)
+    if dropped:  # pragma: no cover — impossible from the typed wrapper
+        _breadcrumb(
+            f"codex_turn_ended dropped forbidden field(s): "
             f"{sorted(dropped)[:10]}"
         )
 

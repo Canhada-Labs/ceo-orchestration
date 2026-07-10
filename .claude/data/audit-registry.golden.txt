@@ -1,7 +1,7 @@
 # audit-action registry golden (generated — do not hand-edit)
 # format: v1  source: .claude/hooks/_lib/audit_emit.py::_KNOWN_ACTIONS
 # regenerate: python3 .claude/scripts/check-audit-registry-coverage.py --write-golden
-# count: 314
+# count: 316
 action_required_held
 action_required_rejected
 action_required_resumed
@@ -48,6 +48,8 @@ codex_egress_redacted
 codex_invoke_dispatched
 codex_review_disabled
 codex_review_invoked
+codex_tool_recorded
+codex_turn_ended
 compaction_context_reinjected
 compaction_continuity_snapshot
 confidence_gate
