@@ -1,8 +1,10 @@
 ---
 id: PLAN-154
 title: Gated Learning Loop
-status: reviewed
+status: done
 reviewed_at: 2026-07-07
+executing_at: 2026-07-09
+completed_at: 2026-07-10
 created: 2026-07-03
 owner: CEO
 depends_on: [PLAN-153]
@@ -11,6 +13,10 @@ budget_sessions: 2
 context_risk: medium
 external_wait: none
 tags: [learning-loop, security, governance, ecc-analysis]
+related_commits:
+  - 11a7c07                        # SENT-F: gated learning loop, 42 files, 303→314 audit actions
+  - 236b59d                        # ci: hook-tests-dual-rail timeout 10→20 (suite grew to 5538)
+  - 20646fe                        # fix: test_lessons_candidates audit_emit rebind hardening (3.9 combined-job pollution)
 ---
 
 # PLAN-154 — Gated Learning Loop
@@ -27,7 +33,19 @@ constraints, not suggestions.
 
 **Debated and reviewed.** This plan's own L3 round-1 debate ran (3×
 ADJUST_PROCEED → PROCEED, see §Debate); binding adjustments A1–A13 are
-applied into this text. Do not execute any item before ALL of:
+applied into this text.
+
+> **Executing-status scope note (S265, per pair-rail diff-review P1):**
+> `status: executing` as of 2026-07-09 covers Wave 0 (explicitly
+> "execution start" below) and the AUTHORING of the staged overlay +
+> ADR-160/SENT-F drafts only — all inert, nothing touches canonical
+> paths. Items 1–7 LAND only at the Owner's morning GPG ceremony, after
+> preconditions 3–4 below are satisfied (ADR-160 accepted in the landing
+> series, SENT-F signed). The status flag is NOT landing authority; the
+> signed sentinel is. Precedent: PLAN-153 S261 ran `executing` with
+> staged waves pending ceremony.
+
+Do not execute any item before ALL of:
 
 1. **PLAN-153 Wave E is MERGED on main with positive-control fixtures
    green** — authored/staged does NOT satisfy this gate. (S261 status:

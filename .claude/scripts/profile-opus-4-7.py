@@ -49,8 +49,10 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -316,102 +318,348 @@ def run_floor() -> Dict[str, Any]:
     }
 
 
+def _pct_of_sorted(lst: List[float], p: float) -> float:
+    """Nearest-rank percentile of an ascending-sorted list (0.0 on empty)."""
+    if not lst:
+        return 0.0
+    idx = int((len(lst) - 1) * p / 100.0)
+    return lst[min(idx, len(lst) - 1)]
+
+
+# Session id used by every hook-latency corpus payload. Kept alnum+underscore
+# so tool_lifecycle._safe_session_component passes it through unchanged (the
+# observe-rail controls below need to predict the on-disk store filename).
+_LATENCY_SESSION_ID = "profile_latency"
+
+
+def _latency_pre_payload(tool_use_id: str) -> bytes:
+    """PreToolUse payload for check_anti_ceo_overhead.py (record_pre carrier)."""
+    return json.dumps({
+        "session_id": _LATENCY_SESSION_ID,
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_use_id": tool_use_id,
+        "tool_input": {"command": "true"},
+    }).encode()
+
+
+def _latency_post_payload(tool_use_id: str) -> bytes:
+    """PostToolUse payload for check_output_secrets.py (record_post host)."""
+    return json.dumps({
+        "session_id": _LATENCY_SESSION_ID,
+        "hook_event_name": "PostToolUse",
+        "tool_name": "Bash",
+        "tool_use_id": tool_use_id,
+        "duration_ms": 42,
+        "tool_response": "profile latency probe output (benign, no secrets)",
+    }).encode()
+
+
 def run_hook_latency(
     repo_root: Path,
     iterations: int = 20,
     p95_ceiling_ms: float = 120.0,
     p99_ceiling_ms: float = 160.0,
 ) -> Dict[str, Any]:
-    """Run check_agent_spawn.py N+1 times (discard first as cold) and check p95/p99.
+    """Subprocess-profile the hook-latency corpus and gate p95/p99.
 
-    Addresses E12-F4 (profile-opus-4-7.py had zero latency thresholds).
+    Addresses E12-F4 (profile-opus-4-7.py had zero latency thresholds) and
+    PLAN-154 binding constraint 8 / SENT-F MANIFEST open-issue 3 (the observe
+    rail's extended write path must join this corpus).
 
-    Budget: p95 < 120ms / p99 < 160ms — the CI-confirmed fallback budget
-    from PLAN-063 DIM-15 (ubuntu-latest baseline 57-64ms + headroom).
-    This is more conservative than the test_hook_latency.py xfail budget
-    (p95 100ms / p99 150ms) to account for measurement variance in the
-    profile script vs the dedicated test runner.
+    Corpus (each entry: N+1 runs, first discarded as cold, warm p95/p99
+    asserted against the shared ceilings):
 
-    Returns a dict with per-hook p50/p95/p99 + passed boolean.
-    Note: discards 1 cold-start iteration; asserts p95/p99 of warm set.
+    1. ``check_agent_spawn``                      — original E12-F4 entry.
+    2. ``check_anti_ceo_overhead[observe=unset]`` — PreToolUse record_pre
+       carrier, observe rail structurally OFF (baseline).
+    3. ``check_anti_ceo_overhead[observe=1]``     — same, CEO_LEARNING_OBSERVE=1.
+       record_pre is contractually byte-identical (MF-SEC-5), so this state
+       must sit at baseline; the run doubles as an MF-SEC-5 tripwire (no
+       observation store may appear on the Pre side).
+    4. ``check_output_secrets[observe=unset]``    — PostToolUse record_post
+       host, observe OFF. Negative control: the per-entry isolated audit dir
+       must contain NO ``*.observe.jsonl`` after the runs (A12 zero-delta).
+    5. ``check_output_secrets[observe=1]``        — THE extended write path.
+       Each timed run is pre-seeded (unmeasured check_anti_ceo_overhead run,
+       same tool_use_id) so record_post takes the real paired path: pairing
+       pop + eviction save + lifecycle emit + observe append. Positive
+       control (anti-vacuity, S254 class): when the repo's tool_lifecycle.py
+       ships the observe rail, the store MUST hold >= iterations rows, all
+       ``"paired": true`` — otherwise the entry measured a no-op boolean and
+       the gate FAILS rather than passing vacuously. On a tree without the
+       rail (pre-PLAN-154 landing) the control is reported not-required and
+       both states measure baseline parity.
+
+    Isolation: every corpus entry gets its own throwaway HOME +
+    CEO_AUDIT_LOG_DIR (never the real ``~/.claude``); CEO_SOTA_DISABLE /
+    CEO_TOOL_LIFECYCLE / CEO_ANTI_OVERHEAD / CLAUDE_SESSION_ID are scrubbed
+    from the inherited env so the measured state is deterministic.
+
+    Budget: p95 < 120ms / p99 < 160ms per corpus entry — the CI-confirmed
+    fallback budget from PLAN-063 DIM-15 (ubuntu-latest baseline 57-64ms +
+    headroom). More conservative than the test_hook_latency.py xfail budget
+    (p95 100ms / p99 150ms) to absorb profile-script measurement variance.
+
+    Returns a dict with per-hook p50/p95/p99 (``hooks``), the two observe
+    controls (``controls``), the legacy top-level ``check_agent_spawn``
+    block (back-compat), and an aggregate ``passed`` boolean.
     """
-    hook_path = repo_root / ".claude" / "hooks" / "check_agent_spawn.py"
-    if not hook_path.is_file():
-        return {
-            "schema": "profile-opus-4-7.v1",
-            "mode": "hook_latency",
-            "measured_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "error": f"hook not found: {hook_path}",
-            "passed": False,
-        }
-
     hooks_dir = repo_root / ".claude" / "hooks"
-    payload = json.dumps({
-        "session_id": "profile_latency",
-        "tool_name": "Agent",
-        "tool_input": {"description": "latency probe", "prompt": "bench"},
-    }).encode()
+    agent_spawn = hooks_dir / "check_agent_spawn.py"
+    anti_overhead = hooks_dir / "check_anti_ceo_overhead.py"
+    output_secrets = hooks_dir / "check_output_secrets.py"
+    measured_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    import os as _os
-    env = {k: v for k, v in _os.environ.items()}
-    env["PYTHONPATH"] = str(hooks_dir)
+    for required in (agent_spawn, anti_overhead, output_secrets):
+        if not required.is_file():
+            return {
+                "schema": "profile-opus-4-7.v1",
+                "mode": "hook_latency",
+                "measured_at": measured_at,
+                "error": f"hook not found: {required}",
+                "passed": False,
+            }
+
+    # Static rail detection: does this tree's tool_lifecycle ship the PLAN-154
+    # observe rail? Drives whether the positive control is REQUIRED (post-
+    # landing) or informational (pre-landing baseline-parity run).
+    observe_rail_present = False
+    try:
+        observe_rail_present = "observation_store_path" in (
+            hooks_dir / "_lib" / "tool_lifecycle.py"
+        ).read_text(encoding="utf-8")
+    except OSError:
+        observe_rail_present = False
+
+    base_env = {k: v for k, v in os.environ.items()}
+    base_env["PYTHONPATH"] = str(hooks_dir)
+    base_env["CLAUDE_PROJECT_DIR"] = str(repo_root)
     # Disable all advisory emitters so we measure governance logic only
-    env["CEO_MODEL_ROUTING"] = "0"
-    env["CEO_PROMOTION_HEURISTIC"] = "0"
-    env["CEO_COOKBOOK_ADVISOR_ENABLED"] = "0"
-    env["CEO_SPEC_CTX_SANITIZER_ENABLED"] = "0"
-    env["CEO_SPAWN_CONFIDENCE_ENABLED"] = "0"
+    base_env["CEO_MODEL_ROUTING"] = "0"
+    base_env["CEO_PROMOTION_HEURISTIC"] = "0"
+    base_env["CEO_COOKBOOK_ADVISOR_ENABLED"] = "0"
+    base_env["CEO_SPEC_CTX_SANITIZER_ENABLED"] = "0"
+    base_env["CEO_SPAWN_CONFIDENCE_ENABLED"] = "0"
+    # Deterministic corpus state: no inherited kill-switches / session id.
+    for scrubbed in (
+        "CEO_LEARNING_OBSERVE",
+        "CEO_SOTA_DISABLE",
+        "CEO_TOOL_LIFECYCLE",
+        "CEO_ANTI_OVERHEAD",
+        "CLAUDE_SESSION_ID",
+    ):
+        base_env.pop(scrubbed, None)
 
-    def _run_once() -> float:
-        t0 = time.perf_counter_ns()
-        subprocess.run(
-            [sys.executable, str(hook_path)],
-            input=payload,
-            capture_output=True,
-            env=env,
-            timeout=10,
-        )
-        return (time.perf_counter_ns() - t0) / 1_000_000.0
+    def _spawn_payload(tool_use_id: str) -> bytes:  # noqa: ARG001 — uniform sig
+        return json.dumps({
+            "session_id": _LATENCY_SESSION_ID,
+            "tool_name": "Agent",
+            "tool_input": {"description": "latency probe", "prompt": "bench"},
+        }).encode()
 
-    # Cold start (discarded)
-    cold_ms = _run_once()
+    corpus: List[Dict[str, Any]] = [
+        {
+            "name": "check_agent_spawn",
+            "hook": agent_spawn,
+            "payload": _spawn_payload,
+            "env_set": {},
+            "seed": False,
+        },
+        {
+            "name": "check_anti_ceo_overhead[observe=unset]",
+            "hook": anti_overhead,
+            "payload": _latency_pre_payload,
+            "env_set": {},
+            "seed": False,
+        },
+        {
+            "name": "check_anti_ceo_overhead[observe=1]",
+            "hook": anti_overhead,
+            "payload": _latency_pre_payload,
+            "env_set": {"CEO_LEARNING_OBSERVE": "1"},
+            "seed": False,
+        },
+        {
+            "name": "check_output_secrets[observe=unset]",
+            "hook": output_secrets,
+            "payload": _latency_post_payload,
+            "env_set": {},
+            "seed": True,
+        },
+        {
+            "name": "check_output_secrets[observe=1]",
+            "hook": output_secrets,
+            "payload": _latency_post_payload,
+            "env_set": {"CEO_LEARNING_OBSERVE": "1"},
+            "seed": True,
+        },
+    ]
 
-    # Warm iterations
-    warm: List[float] = [_run_once() for _ in range(iterations)]
-    warm_sorted = sorted(warm)
-    n = len(warm_sorted)
+    observe_store_name = _LATENCY_SESSION_ID + ".observe.jsonl"
+    hooks_out: Dict[str, Dict[str, Any]] = {}
+    all_within_budget = True
 
-    def _pct(lst: List[float], p: float) -> float:
-        if not lst:
-            return 0.0
-        idx = int((len(lst) - 1) * p / 100.0)
-        return lst[min(idx, len(lst) - 1)]
+    for entry in corpus:
+        entry_tmp = Path(tempfile.mkdtemp(prefix="ceo-hook-latency-"))
+        try:
+            env = dict(base_env)
+            env["HOME"] = str(entry_tmp / "home")
+            env["CEO_AUDIT_LOG_DIR"] = str(entry_tmp / "audit")
+            env.update(entry["env_set"])
+            (entry_tmp / "home").mkdir(parents=True, exist_ok=True)
+            (entry_tmp / "audit").mkdir(parents=True, exist_ok=True)
 
-    p50 = _pct(warm_sorted, 50)
-    p95 = _pct(warm_sorted, 95)
-    p99 = _pct(warm_sorted, 99)
-    hook_passed = p95 <= p95_ceiling_ms and p99 <= p99_ceiling_ms
+            # Codex pair-rail S265 P2: a hook that exits non-zero (import
+            # or runtime error) must FAIL the gate, not silently record a
+            # small latency sample. Hooks always exit 0 by contract, so any
+            # non-zero return is a real failure — capture it for seed AND
+            # timed runs and fold it into entry_passed (the S254 vacuous-
+            # green class this profiler exists to prevent).
+            entry_hook_failed = False
+
+            def _run_once(tag: str) -> float:
+                nonlocal entry_hook_failed
+                tool_use_id = "profile-tu-" + tag
+                if entry["seed"]:
+                    # Unmeasured Pre stamp via the REAL record_pre carrier so
+                    # the timed record_post run takes the paired path.
+                    seed_res = subprocess.run(
+                        [sys.executable, str(anti_overhead)],
+                        input=_latency_pre_payload(tool_use_id),
+                        capture_output=True,
+                        env=env,
+                        cwd=str(repo_root),
+                        timeout=10,
+                    )
+                    if seed_res.returncode != 0:
+                        entry_hook_failed = True
+                payload = entry["payload"](tool_use_id)
+                t0 = time.perf_counter_ns()
+                res = subprocess.run(
+                    [sys.executable, str(entry["hook"])],
+                    input=payload,
+                    capture_output=True,
+                    env=env,
+                    cwd=str(repo_root),
+                    timeout=10,
+                )
+                if res.returncode != 0:
+                    entry_hook_failed = True
+                return (time.perf_counter_ns() - t0) / 1_000_000.0
+
+            cold_ms = _run_once("cold")
+            warm = [_run_once("%04d" % i) for i in range(iterations)]
+            warm_sorted = sorted(warm)
+            p50 = _pct_of_sorted(warm_sorted, 50)
+            p95 = _pct_of_sorted(warm_sorted, 95)
+            p99 = _pct_of_sorted(warm_sorted, 99)
+            entry_passed = (
+                p95 <= p95_ceiling_ms
+                and p99 <= p99_ceiling_ms
+                and not entry_hook_failed
+            )
+            all_within_budget = all_within_budget and entry_passed
+            hooks_out[entry["name"]] = {
+                "cold_ms": round(cold_ms, 1),
+                "p50_ms": round(p50, 1),
+                "p95_ms": round(p95, 1),
+                "p99_ms": round(p99, 1),
+                "max_ms": round(max(warm_sorted), 1),
+                "hook_failed": entry_hook_failed,
+                "passed": entry_passed,
+            }
+
+            # Snapshot the entry's observation store BEFORE the tmpdir is
+            # deleted (the controls below consume these snapshots).
+            store = entry_tmp / "audit" / "tool-lifecycle" / observe_store_name
+            if store.is_file():
+                try:
+                    rows = [
+                        json.loads(line)
+                        for line in store.read_text(
+                            encoding="utf-8"
+                        ).splitlines()
+                        if line.strip()
+                    ]
+                except (OSError, json.JSONDecodeError):
+                    rows = []
+                hooks_out[entry["name"]]["observe_rows"] = len(rows)
+                hooks_out[entry["name"]]["observe_paired_rows"] = sum(
+                    1 for r in rows
+                    if isinstance(r, dict) and r.get("paired") is True
+                )
+            else:
+                hooks_out[entry["name"]]["observe_rows"] = 0
+                hooks_out[entry["name"]]["observe_paired_rows"] = 0
+        finally:
+            shutil.rmtree(entry_tmp, ignore_errors=True)
+
+    # ---- Observe-rail controls (anti-vacuity, S254 class) -------------------
+    on_rows = hooks_out["check_output_secrets[observe=1]"]["observe_rows"]
+    on_paired = hooks_out["check_output_secrets[observe=1]"][
+        "observe_paired_rows"
+    ]
+    # Codex pair-rail S265 P3: every seeded run (cold + all warm) takes the
+    # paired path, so EVERY observed row must be paired — requiring only
+    # `on_paired >= iterations` let one unpaired warm row hide behind the
+    # cold row's paired count (cold + 19 paired + 1 unpaired = 20). The
+    # robust invariant is: no unpaired rows at all, and at least `iterations`
+    # of them.
+    positive_ok = (not observe_rail_present) or (
+        on_rows >= iterations and on_paired == on_rows
+    )
+    positive_control = {
+        "required": observe_rail_present,
+        "rows": on_rows,
+        "paired_rows": on_paired,
+        "passed": positive_ok,
+        "note": (
+            "observe rail present: store must hold >= iterations paired rows "
+            "or the observe=1 timing is a vacuous no-op measurement"
+            if observe_rail_present
+            else "observe rail not in this tree; both states are baseline "
+            "parity runs (control arms automatically at PLAN-154 landing)"
+        ),
+    }
+    off_rows = hooks_out["check_output_secrets[observe=unset]"]["observe_rows"]
+    pre_rows = hooks_out["check_anti_ceo_overhead[observe=1]"]["observe_rows"]
+    negative_ok = off_rows == 0 and pre_rows == 0
+    negative_control = {
+        "unset_store_rows": off_rows,
+        "pre_side_store_rows": pre_rows,
+        "passed": negative_ok,
+        "note": (
+            "A12 zero-delta: unset state writes nothing; MF-SEC-5: the "
+            "record_pre carrier never writes the store even with observe=1"
+        ),
+    }
+
+    passed = all_within_budget and positive_ok and negative_ok
 
     return {
         "schema": "profile-opus-4-7.v1",
         "mode": "hook_latency",
-        "measured_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "measured_at": measured_at,
         "python": sys.version.split()[0],
         "iterations": iterations,
         "p95_ceiling_ms": p95_ceiling_ms,
         "p99_ceiling_ms": p99_ceiling_ms,
-        "check_agent_spawn": {
-            "cold_ms": round(cold_ms, 1),
-            "p50_ms": round(p50, 1),
-            "p95_ms": round(p95, 1),
-            "p99_ms": round(p99, 1),
-            "max_ms": round(max(warm_sorted), 1),
+        "observe_rail_present": observe_rail_present,
+        "hooks": hooks_out,
+        # Back-compat: legacy consumers read this top-level block.
+        "check_agent_spawn": hooks_out["check_agent_spawn"],
+        "controls": {
+            "observe_positive_control": positive_control,
+            "observe_negative_control": negative_control,
         },
-        "passed": hook_passed,
+        "passed": passed,
         "note": (
             "Advisory emitters disabled (CEO_MODEL_ROUTING=0 etc.); "
             "measures governance hot-path only. Budget PLAN-063 DIM-15 "
-            "CI fallback: p95<120ms / p99<160ms."
+            "CI fallback: p95<120ms / p99<160ms per corpus entry. "
+            "PLAN-154 constraint 8: observe-rail extended write path "
+            "profiled in both states with anti-vacuity controls."
         ),
     }
 
@@ -441,9 +689,13 @@ def main() -> int:
         dest="hook_latency",
         action="store_true",
         help=(
-            "Measure check_agent_spawn.py warm p95/p99 latency (N=20 default). "
-            "Exits non-zero if p95 exceeds --p95-ceiling-ms or p99 exceeds "
-            "--p99-ceiling-ms. Fixes E12-F4: profile script now has latency gates."
+            "Measure warm p95/p99 latency of the hook corpus (N=20 default): "
+            "check_agent_spawn + the PLAN-154 observe-rail host hooks "
+            "(check_anti_ceo_overhead record_pre carrier, check_output_secrets "
+            "record_post path) in BOTH CEO_LEARNING_OBSERVE states, with "
+            "anti-vacuity store controls. Exits non-zero if any entry's p95 "
+            "exceeds --p95-ceiling-ms / p99 exceeds --p99-ceiling-ms, or a "
+            "control fails. Fixes E12-F4 + PLAN-154 constraint 8."
         ),
     )
     parser.add_argument(
@@ -536,12 +788,25 @@ def main() -> int:
             json.dump(result, sys.stdout, indent=2)
             print()
             if not result["passed"]:
+                failures: List[str] = []
+                for hook_name, stats in sorted(
+                    result.get("hooks", {}).items()
+                ):
+                    if not stats.get("passed", True):
+                        failures.append(
+                            f"{hook_name} p95={stats['p95_ms']:.1f}ms "
+                            f"p99={stats['p99_ms']:.1f}ms"
+                        )
+                for ctrl_name, ctrl in sorted(
+                    result.get("controls", {}).items()
+                ):
+                    if isinstance(ctrl, dict) and not ctrl.get("passed", True):
+                        failures.append(f"control:{ctrl_name}")
                 print(
-                    "FAIL: hook latency exceeded budget — "
-                    f"check_agent_spawn p95={result['check_agent_spawn']['p95_ms']:.1f}ms "
-                    f"(ceiling {result['p95_ceiling_ms']}ms), "
-                    f"p99={result['check_agent_spawn']['p99_ms']:.1f}ms "
-                    f"(ceiling {result['p99_ceiling_ms']}ms)",
+                    "FAIL: hook latency gate — "
+                    + ("; ".join(failures) or result.get("error", "unknown"))
+                    + f" (ceilings p95<{result.get('p95_ceiling_ms')}ms / "
+                    f"p99<{result.get('p99_ceiling_ms')}ms)",
                     file=sys.stderr,
                 )
                 return 1
