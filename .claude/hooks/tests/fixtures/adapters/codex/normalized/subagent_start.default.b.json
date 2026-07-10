@@ -1,0 +1,19 @@
+{
+  "session_id": "019f4a0b-17cf-76f1-8dcd-132136aab3b7",
+  "project": "/tmp/codex-lab/repo",
+  "phase": "SubagentStart",
+  "tool_name": "",
+  "tool_input": {},
+  "tool_response": {},
+  "description": "",
+  "prompt": "",
+  "subagent_type": "default",
+  "file_path": "",
+  "old_string": "",
+  "new_string": "",
+  "replace_all": false,
+  "command": "",
+  "tool_use_id": "",
+  "duration_ms": null,
+  "parse_error": null
+}

@@ -1,0 +1,31 @@
+{
+  "session_id": "019f4a0e-a7f6-78d2-9bb4-a7cb2401ef44",
+  "project": "/tmp/codex-lab/repo",
+  "phase": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "command": "*** Begin Patch\n*** Update File: notes.txt\n@@\n-alpha-bravo-charlie\n+delta-echo-foxtrot\n*** End Patch\n",
+    "file_path": "notes.txt",
+    "apply_patch_paths": [
+      "notes.txt"
+    ],
+    "apply_patch_ops": [
+      {
+        "op": "update",
+        "path": "notes.txt"
+      }
+    ]
+  },
+  "tool_response": {},
+  "description": "",
+  "prompt": "",
+  "subagent_type": "",
+  "file_path": "notes.txt",
+  "old_string": "",
+  "new_string": "",
+  "replace_all": false,
+  "command": "*** Begin Patch\n*** Update File: notes.txt\n@@\n-alpha-bravo-charlie\n+delta-echo-foxtrot\n*** End Patch\n",
+  "tool_use_id": "call_nBK708GxA4maVWXyv22PLueM",
+  "duration_ms": null,
+  "parse_error": null
+}

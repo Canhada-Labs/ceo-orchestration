@@ -1,0 +1,18 @@
+{
+  "session_id": "019f4a05-7497-77a0-8918-0b644d662ff5",
+  "turn_id": "019f4a05-74cd-7592-b481-be5963886c49",
+  "transcript_path": "/tmp/codex-lab/codexhome/sessions/2026/07/10/rollout-2026-07-10T00-14-59-019f4a05-7497-77a0-8918-0b644d662ff5.jsonl",
+  "cwd": "/tmp/codex-lab/repo",
+  "hook_event_name": "Stop",
+  "model": "gpt-5.5",
+  "permission_mode": "bypassPermissions",
+  "stop_hook_active": false,
+  "last_assistant_message": "done",
+  "_meta": {
+    "codex_cli_version": "codex-cli 0.139.0",
+    "recorded": "2026-07-10",
+    "recording": "live codex exec session, hook stdin captured verbatim by a tee recorder (PLAN-155 Wave 1 lab)",
+    "sanitized": "absolute lab paths rewritten to /tmp/codex-lab; all other bytes verbatim",
+    "note": "Stop, stop_hook_active=false, last_assistant_message present"
+  }
+}

@@ -437,25 +437,89 @@ def _audit_block(rel: str, override_used: bool) -> None:
         return
 
 
+def _emit_legacy_decision_json(out: str, adapter, event=None) -> None:
+    """Emit a pre-built legacy (Claude-shaped) decision JSON string through
+    the resolved host adapter (PLAN-155 Wave 1 dispatch seam, debate A1).
+
+    ``decide()`` returns pre-built JSON strings for the legacy contract.
+    Under the default/claude adapter the string is written RAW + newline —
+    byte-identical to the pre-seam hook. Under any other host adapter the
+    string is parsed back into a neutral ``Decision`` and re-emitted via
+    the adapter's ``emit_decision`` WITH the parsed NormalizedEvent
+    (host egress shape is EXPLICIT-only — the codex adapter emits
+    ``hookSpecificOutput.permissionDecision`` only for host-wire-stamped
+    events), so a deny reaches the host in the shape its wire enforces
+    (a raw Claude-shaped line is foreign JSON on the codex wire →
+    silent fail-open → the S254 dead-gate class).
+    """
+    adapter_basename = (getattr(adapter, "__name__", "") or "").rsplit(".", 1)[-1]
+    if adapter_basename == "claude":
+        sys.stdout.write(out + "\n")
+        return
+    from _lib import contract as _contract  # noqa: PLC0415
+    parsed = json.loads(out)
+    adapter.emit_decision(
+        _contract.Decision(
+            allow=(parsed.get("decision") != "block"),
+            reason=parsed.get("reason"),
+            system_message=parsed.get("systemMessage"),
+            message=parsed.get("message"),
+        ),
+        event=event,
+    )
+
+
+def _adapter_emit(adapter, decision, event=None) -> None:
+    """Emit a neutral ``Decision`` through the resolved host adapter.
+
+    Claude path: the historical two-arg call — byte-identical output
+    (``claude.py:emit_decision`` does not take ``event=``). Any other
+    resolved adapter (codex host mode, ``_FailClosedAdapter``) receives
+    the parsed NormalizedEvent so the egress shape follows the wire that
+    produced it and the debate-A2 coherence override can fire.
+    """
+    adapter_basename = (getattr(adapter, "__name__", "") or "").rsplit(".", 1)[-1]
+    if adapter_basename == "claude":
+        adapter.emit_decision(decision)
+        return
+    adapter.emit_decision(decision, event=event)
+
+
 def main() -> int:
     """Hook entry point.
 
     Uses the Adapter Layer. On catastrophic (import/adapter) failure,
     fail-open so the runtime isn't bricked. On payload-parse failure,
     fail-closed for edit-class tools (blocks).
+
+    PLAN-155 Wave 1 (debate A1, ratified seam option b): the adapter is
+    resolved ONCE per invocation via the shared seam
+    ``_lib.adapters.resolve()``. The resolve call sits INSIDE the
+    infrastructure fail-open try (an ImportError-class failure keeps the
+    pre-seam "cannot even load the adapter → allow" contract), but the
+    debate-A2 coherence gate inside ``resolve()``
+    (explicitly-set-but-unresolvable ``CEO_HOOK_ADAPTER`` → INPUT class
+    per PLAN-152 C4) fails CLOSED by returning a ``_FailClosedAdapter``
+    whose egress ALWAYS denies in BOTH harness vocabularies (top-level
+    ``decision: block`` + ``hookSpecificOutput.permissionDecision:
+    deny``) with a stderr + audit breadcrumb — never a silent fallback
+    to the claude adapter. Under ``CEO_HOOK_ADAPTER`` unset/"claude"
+    downstream behavior is byte-identical.
     """
     try:
-        from _lib.adapters import claude as _claude_adapter  # noqa: E402
+        from _lib import adapters as _adapters  # noqa: E402
         from _lib import contract as _contract  # noqa: E402
+
+        _adapter = _adapters.resolve()
     except Exception:
         # Cannot even load the adapter — don't brick the session.
         sys.stdout.write(_emit_allow() + "\n")
         return 0
 
     try:
-        event = _claude_adapter.read_event(phase="PreToolUse")
+        event = _adapter.read_event(phase="PreToolUse")
     except Exception:
-        _claude_adapter.emit_decision(_contract.allow())
+        _adapter.emit_decision(_contract.allow())
         return 0
 
     tool_name = (event.tool_name or "").strip() or "Edit"
@@ -465,22 +529,41 @@ def main() -> int:
         # trust the routing. If the matcher fired, the tool was edit-class;
         # block to be safe.
         if tool_name in {"Edit", "Write", "MultiEdit"}:
-            sys.stdout.write(
+            _emit_legacy_decision_json(
                 _emit_block(
                     reason=(
                         "ARBITRATION-KERNEL-BLOCKED: PreToolUse payload "
                         "parse error on an edit-class invocation. Cannot "
                         "verify target path; fail-closed."
                     )
-                )
-                + "\n"
+                ),
+                _adapter,
+                event,
             )
             return 0
-        _claude_adapter.emit_decision(_contract.allow())
+        _adapter_emit(_adapter, _contract.allow(), event)
         return 0
 
     repo_root = Path(os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd())
     file_path = event.file_path or ""
+
+    # PLAN-155 Wave 1 (S265 pair-rail P1#3): a codex apply_patch can touch
+    # MULTIPLE files; the host adapter surfaces every path as
+    # tool_input['apply_patch_paths']. If ANY of them is a kernel path,
+    # gate on THAT path — a benign first op must not smuggle a later op
+    # into the kernel. Key absent under Claude Code (byte-identical).
+    if isinstance(event.tool_input, dict):
+        _extra_paths = event.tool_input.get("apply_patch_paths") or []
+        if isinstance(_extra_paths, list) and len(_extra_paths) > 1:
+            for _pp in _extra_paths:
+                if not (isinstance(_pp, str) and _pp):
+                    continue
+                try:
+                    if _is_kernel_path(_pp, repo_root):
+                        file_path = _pp
+                        break
+                except Exception:
+                    continue
 
     try:
         out = decide(
@@ -500,18 +583,19 @@ def main() -> int:
             file=sys.stderr,
         )
         if tool_name in {"Edit", "Write", "MultiEdit"}:
-            sys.stdout.write(
+            _emit_legacy_decision_json(
                 _emit_block(
                     reason=(
                         "ARBITRATION-KERNEL-BLOCKED: decide() raised "
                         f"{type(e).__name__}; fail-closed on edit-class "
                         "invocation per PLAN-024 F-chaos-002."
                     )
-                )
-                + "\n"
+                ),
+                _adapter,
+                event,
             )
             return 0
-        _claude_adapter.emit_decision(_contract.allow())
+        _adapter_emit(_adapter, _contract.allow(), event)
         return 0
 
     parsed = json.loads(out)
@@ -536,7 +620,11 @@ def main() -> int:
             rel = file_path
         _audit_block(rel, override_used=True)
 
-    sys.stdout.write(out + "\n")
+    # `decide()` returns pre-built JSON strings for the legacy contract;
+    # under the default/claude adapter the seam helper writes it directly
+    # + newline (byte identity preserved); other host adapters re-shape it
+    # on the parsed event's wire.
+    _emit_legacy_decision_json(out, _adapter, event)
     return 0
 
 

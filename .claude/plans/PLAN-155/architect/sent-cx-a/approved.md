@@ -28,7 +28,7 @@ the same requirement with this signed sentinel as the authorization record.
 Landing order (binding): **PLAN-154 SENT-F lands BEFORE every SENT-CX**;
 within PLAN-155 the order is SENT-CX-A → (Waves 2/3 templates, unguarded
 L2, land direct) → SENT-CX-E → SENT-CX-B → SENT-CX-C → SENT-CX-D. Anchor
-(`__ANCHOR_SHA__` below) is taken on main AFTER PLAN-154 SENT-F lands. If
+(`4270575cdb91d0b80d6e55e4422d44bdc6763d36` below) is taken on main AFTER PLAN-154 SENT-F lands. If
 SENT-F staged a `check_bash_safety.py` edit, the Wave 1 staged copy of that
 file MUST be rebased on the SENT-F version before this sentinel applies.
 
@@ -44,7 +44,7 @@ is not discovered at execution time (not sentinel-blocked).
 
 <!-- BEGIN SIGNED SCOPE -->
 Approved-By: @Canhada-Labs 71a2ef5f8dc52aabe8ba2c848e65b7c6b895a5c1
-Anchor-SHA: __ANCHOR_SHA__
+Anchor-SHA: 4270575cdb91d0b80d6e55e4422d44bdc6763d36
 Plans: PLAN-155
 Kernel-Override: PLAN-155-CODEX-HOST-ADAPTER (+ CEO_KERNEL_OVERRIDE_ACK=I-ACCEPT)
 Scope:

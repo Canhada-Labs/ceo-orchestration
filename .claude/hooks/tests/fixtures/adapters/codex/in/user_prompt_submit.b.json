@@ -1,0 +1,17 @@
+{
+  "session_id": "019f4a0e-a7f6-78d2-9bb4-a7cb2401ef44",
+  "turn_id": "019f4a0e-a830-7ec3-950a-9a9a3ba9fd6c",
+  "transcript_path": "/tmp/codex-lab/codexhome/sessions/2026/07/10/rollout-2026-07-10T00-25-02-019f4a0e-a7f6-78d2-9bb4-a7cb2401ef44.jsonl",
+  "cwd": "/tmp/codex-lab/repo",
+  "hook_event_name": "UserPromptSubmit",
+  "model": "gpt-5.5",
+  "permission_mode": "bypassPermissions",
+  "prompt": "Edit the existing file notes.txt: change its line to exactly delta-echo-foxtrot. Use apply_patch. Then reply done.",
+  "_meta": {
+    "codex_cli_version": "codex-cli 0.139.0",
+    "recorded": "2026-07-10",
+    "recording": "live codex exec session, hook stdin captured verbatim by a tee recorder (PLAN-155 Wave 1 lab)",
+    "sanitized": "absolute lab paths rewritten to /tmp/codex-lab; all other bytes verbatim",
+    "note": "UserPromptSubmit with prompt field (edit task)"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "session_id": "019f4a06-bf37-7371-9150-c0728277797c",
+  "turn_id": "019f4a06-dc79-7763-b6f3-10352344d33c",
+  "transcript_path": "/tmp/codex-lab/codexhome/sessions/2026/07/10/rollout-2026-07-10T00-16-24-019f4a06-bf37-7371-9150-c0728277797c.jsonl",
+  "agent_transcript_path": "/tmp/codex-lab/codexhome/sessions/2026/07/10/rollout-2026-07-10T00-16-31-019f4a06-dc3b-76d0-a84c-14269ebdc435.jsonl",
+  "cwd": "/tmp/codex-lab/repo",
+  "hook_event_name": "SubagentStop",
+  "model": "gpt-5.5",
+  "permission_mode": "bypassPermissions",
+  "stop_hook_active": false,
+  "agent_id": "019f4a06-dc3b-76d0-a84c-14269ebdc435",
+  "agent_type": "default",
+  "last_assistant_message": "quartz",
+  "_meta": {
+    "codex_cli_version": "codex-cli 0.139.0",
+    "recorded": "2026-07-10",
+    "recording": "live codex exec session, hook stdin captured verbatim by a tee recorder (PLAN-155 Wave 1 lab)",
+    "sanitized": "absolute lab paths rewritten to /tmp/codex-lab; all other bytes verbatim",
+    "note": "SubagentStop with agent_transcript_path + last_assistant_message"
+  }
+}

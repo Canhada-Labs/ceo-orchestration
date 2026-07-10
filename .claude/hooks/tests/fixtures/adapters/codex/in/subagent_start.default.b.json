@@ -1,0 +1,18 @@
+{
+  "session_id": "019f4a0b-17cf-76f1-8dcd-132136aab3b7",
+  "turn_id": "019f4a0b-4495-7af1-b280-f444cc36293b",
+  "transcript_path": "/tmp/codex-lab/codexhome/sessions/2026/07/10/rollout-2026-07-10T00-21-20-019f4a0b-4441-7f11-ba86-0b6bd6c24593.jsonl",
+  "cwd": "/tmp/codex-lab/repo",
+  "hook_event_name": "SubagentStart",
+  "model": "gpt-5.5",
+  "permission_mode": "bypassPermissions",
+  "agent_id": "019f4a0b-4441-7f11-ba86-0b6bd6c24593",
+  "agent_type": "default",
+  "_meta": {
+    "codex_cli_version": "codex-cli 0.139.0",
+    "recorded": "2026-07-10",
+    "recording": "live codex exec session, hook stdin captured verbatim by a tee recorder (PLAN-155 Wave 1 lab)",
+    "sanitized": "absolute lab paths rewritten to /tmp/codex-lab; all other bytes verbatim",
+    "note": "SubagentStart from the continue:false non-enforcement experiment (same wire shape)"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "session_id": "019f4a06-bf37-7371-9150-c0728277797c",
+  "turn_id": "019f4a06-bf73-78a3-98c4-a9e79468b2de",
+  "transcript_path": "/tmp/codex-lab/codexhome/sessions/2026/07/10/rollout-2026-07-10T00-16-24-019f4a06-bf37-7371-9150-c0728277797c.jsonl",
+  "cwd": "/tmp/codex-lab/repo",
+  "hook_event_name": "PreToolUse",
+  "model": "gpt-5.5",
+  "permission_mode": "bypassPermissions",
+  "tool_name": "spawn_agent",
+  "tool_input": {
+    "message": "Reply with exactly the word: quartz",
+    "agent_type": "default"
+  },
+  "tool_use_id": "call_LcEIdNPc5QqTPRSRA2qt4vas",
+  "_meta": {
+    "codex_cli_version": "codex-cli 0.139.0",
+    "recorded": "2026-07-10",
+    "recording": "live codex exec session, hook stdin captured verbatim by a tee recorder (PLAN-155 Wave 1 lab)",
+    "sanitized": "absolute lab paths rewritten to /tmp/codex-lab; all other bytes verbatim",
+    "note": "PreToolUse tool_name=spawn_agent (collab/multi-agent spawn IS PreToolUse-interceptable)"
+  }
+}

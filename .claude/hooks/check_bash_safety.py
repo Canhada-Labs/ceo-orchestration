@@ -198,7 +198,16 @@ if str(_HOOKS_DIR) not in sys.path:
 from _lib import contract as _contract  # noqa: E402
 from _lib import credentials as _credentials  # noqa: E402
 from _lib import git_bypass as _git_bypass  # noqa: E402
-from _lib.adapters import claude as _claude_adapter  # noqa: E402
+from _lib import adapters as _adapters  # noqa: E402
+
+# PLAN-155 Wave 1 (debate A1): dispatch migrated to the shared seam
+# ``_adapters.resolve()`` (resolved once per invocation in ``main()``).
+# The direct claude-adapter import below is RETAINED solely as a
+# back-compat alias for existing in-process tests that call
+# ``check_bash_safety._claude_adapter.write_decision`` directly
+# (test_check_bash_safety_h5_rewrite.py); no dispatch path uses it.
+# Remove when that test migrates to the seam-era surface.
+from _lib.adapters import claude as _claude_adapter  # noqa: E402,F401
 
 try:  # noqa: E402
     from _lib import audit_emit as _audit_emit  # noqa: E402
@@ -2677,13 +2686,45 @@ def _emit_bash_input_rewritten_event(rewrite: "Rewrite") -> None:
         pass
 
 
+def _adapter_emit(adapter, decision, event=None) -> None:
+    """Emit a neutral ``Decision`` through the resolved host adapter
+    (PLAN-155 Wave 1 dispatch seam, debate A1).
+
+    Claude path: the historical two-arg call — byte-identical output
+    (``claude.py:emit_decision`` does not take ``event=``). Any other
+    resolved adapter (codex host mode, ``_FailClosedAdapter``) receives
+    the parsed NormalizedEvent so the egress shape follows the wire that
+    produced it (host shape is EXPLICIT-only) and the debate-A2
+    coherence override can fire.
+    """
+    adapter_basename = (getattr(adapter, "__name__", "") or "").rsplit(".", 1)[-1]
+    if adapter_basename == "claude":
+        adapter.emit_decision(decision)
+        return
+    adapter.emit_decision(decision, event=event)
+
+
 def main() -> int:
     """Hook entry point: read stdin via Adapter Layer, decide, write stdout, exit 0.
 
     PLAN-006 Phase 1 migration (ADR-014). Uses `claude_adapter.read_event()`
     / `emit_decision()` instead of direct `_lib.payload` + `print()`.
     Output is byte-identical to pre-migration (test_hook_byte_fidelity).
+
+    PLAN-155 Wave 1 (debate A1, ratified seam option b): the adapter is
+    resolved ONCE per invocation via the shared seam
+    ``_lib.adapters.resolve()`` — BEFORE the fail-open try block, so the
+    debate-A2 coherence gate inside ``resolve()``
+    (explicitly-set-but-unresolvable ``CEO_HOOK_ADAPTER`` → INPUT class
+    per PLAN-152 C4 → fail-CLOSED: ``resolve()`` returns a
+    ``_FailClosedAdapter`` whose egress ALWAYS denies in BOTH harness
+    vocabularies, with a stderr + audit breadcrumb — never a silent
+    fallback to the claude adapter) is never swallowed into an allow.
+    Under ``CEO_HOOK_ADAPTER`` unset/"claude" the seam returns the claude
+    adapter module and downstream behavior is byte-identical.
     """
+    _adapter = _adapters.resolve()
+    event = None
     try:
         # >>> PLAN-153.E5 / ADR-175 citation-gate BEGIN (stdin buffering)
         # Read stdin ONCE into a buffer, then hand the adapter an equivalent
@@ -2697,7 +2738,7 @@ def main() -> int:
             _raw_stdin_text = sys.stdin.read()
         except Exception:  # exotic stdin failure → same fail-open as before
             _raw_stdin_text = ""
-        event = _claude_adapter.read_event(
+        event = _adapter.read_event(
             stream=_io.StringIO(_raw_stdin_text), phase="PreToolUse"
         )
         # <<< PLAN-153.E5 / ADR-175 citation-gate END
@@ -2706,7 +2747,7 @@ def main() -> int:
                 f"[check_bash_safety] WARN: stdin parse error: {event.parse_error}",
                 file=sys.stderr,
             )
-            _claude_adapter.emit_decision(_contract.allow())
+            _adapter_emit(_adapter, _contract.allow(), event)
             return 0
 
         command = event.command or ""
@@ -2785,8 +2826,8 @@ def main() -> int:
         # emit is fail-open (it never gates the decision).
         if decision.rewrite is not None:
             _emit_bash_input_rewritten_event(decision.rewrite)
-        _claude_adapter.emit_decision(
-            _to_contract_decision(decision, event.tool_input)
+        _adapter_emit(
+            _adapter, _to_contract_decision(decision, event.tool_input), event
         )
         return 0
     except Exception as e:  # pragma: no cover
@@ -2794,7 +2835,7 @@ def main() -> int:
             f"[check_bash_safety] FATAL: {e.__class__.__name__}: {e}",
             file=sys.stderr,
         )
-        _claude_adapter.emit_decision(_contract.allow())
+        _adapter_emit(_adapter, _contract.allow(), event)
         return 0
 
 

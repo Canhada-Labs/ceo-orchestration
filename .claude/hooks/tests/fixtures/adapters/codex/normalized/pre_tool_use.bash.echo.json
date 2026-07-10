@@ -1,0 +1,21 @@
+{
+  "session_id": "019f4a05-7497-77a0-8918-0b644d662ff5",
+  "project": "/tmp/codex-lab/repo",
+  "phase": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "echo hello-marker-trusted"
+  },
+  "tool_response": {},
+  "description": "",
+  "prompt": "",
+  "subagent_type": "",
+  "file_path": "",
+  "old_string": "",
+  "new_string": "",
+  "replace_all": false,
+  "command": "echo hello-marker-trusted",
+  "tool_use_id": "call_vYPrrru9LHrLltnthouARWCC",
+  "duration_ms": null,
+  "parse_error": null
+}

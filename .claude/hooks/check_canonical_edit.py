@@ -1072,23 +1072,89 @@ def _audit_block(rel: str, sentinels_count: int) -> None:
         return
 
 
+def _emit_legacy_decision_json(out: str, adapter, event=None) -> None:
+    """Emit a pre-built legacy (Claude-shaped) decision JSON string through
+    the resolved host adapter (PLAN-155 Wave 1 dispatch seam, debate A1).
+
+    ``decide()`` returns pre-built JSON strings for the legacy contract.
+    Under the default/claude adapter the string is written RAW + newline —
+    byte-identical to the pre-seam hook. Under any other host adapter the
+    string is parsed back into a neutral ``Decision`` and re-emitted via
+    the adapter's ``emit_decision`` WITH the parsed NormalizedEvent
+    (host egress shape is EXPLICIT-only: a host-wire event stamps
+    ``raw_payload['ceo_host_wire']`` and the codex adapter emits
+    ``hookSpecificOutput.permissionDecision``), so a deny reaches the
+    host in the shape its wire enforces (a raw Claude-shaped line is
+    foreign JSON on the codex wire → silent fail-open → the S254
+    dead-gate class).
+    """
+    adapter_basename = (getattr(adapter, "__name__", "") or "").rsplit(".", 1)[-1]
+    if adapter_basename == "claude":
+        sys.stdout.write(out + "\n")
+        return
+    from _lib import contract as _contract  # noqa: PLC0415
+    parsed = json.loads(out)
+    adapter.emit_decision(
+        _contract.Decision(
+            allow=(parsed.get("decision") != "block"),
+            reason=parsed.get("reason"),
+            system_message=parsed.get("systemMessage"),
+            message=parsed.get("message"),
+        ),
+        event=event,
+    )
+
+
+def _adapter_emit(adapter, decision, event=None) -> None:
+    """Emit a neutral ``Decision`` through the resolved host adapter.
+
+    Claude path: the historical two-arg call — byte-identical output
+    (``claude.py:emit_decision`` does not take ``event=``). Any other
+    resolved adapter (codex host mode, ``_FailClosedAdapter``) receives
+    the parsed NormalizedEvent so the egress shape follows the wire that
+    produced it and the debate-A2 coherence override can fire.
+    """
+    adapter_basename = (getattr(adapter, "__name__", "") or "").rsplit(".", 1)[-1]
+    if adapter_basename == "claude":
+        adapter.emit_decision(decision)
+        return
+    adapter.emit_decision(decision, event=event)
+
+
 def main() -> int:
     """Hook entry point.
 
     PLAN-006 Phase 1 migration (ADR-014): uses Adapter Layer
     `read_event()` / `emit_decision()`. Byte-identical output.
+
+    PLAN-155 Wave 1 (debate A1, ratified seam option b): the adapter is
+    resolved ONCE per invocation through the shared seam
+    ``_lib.adapters.resolve()``. Under ``CEO_HOOK_ADAPTER`` unset/"claude"
+    the seam returns the claude adapter module and every downstream byte
+    is identical to the pre-seam hook (the regression bar). The debate-A2
+    coherence gate (explicitly-set-but-unresolvable ``CEO_HOOK_ADAPTER``
+    → INPUT class per PLAN-152 C4) lives INSIDE ``resolve()``, which
+    fails CLOSED by returning a ``_FailClosedAdapter`` whose egress
+    ALWAYS denies in BOTH harness vocabularies (top-level
+    ``decision: block`` + ``hookSpecificOutput.permissionDecision:
+    deny``) with a stderr + audit breadcrumb — never a silent fallback
+    to the claude adapter. Non-claude adapters additionally receive the
+    parsed event at egress (``_adapter_emit``) so the host wire shape
+    and the coherence override are event-driven, never latched.
     """
-    from _lib.adapters import claude as _claude_adapter  # noqa: E402
+    from _lib import adapters as _adapters  # noqa: E402
     from _lib import contract as _contract  # noqa: E402
 
+    _adapter = _adapters.resolve()
+
     try:
-        event = _claude_adapter.read_event(phase="PreToolUse")
+        event = _adapter.read_event(phase="PreToolUse")
     except Exception:
-        _claude_adapter.emit_decision(_contract.allow())
+        _adapter.emit_decision(_contract.allow())
         return 0
 
     if event.parse_error:
-        _claude_adapter.emit_decision(_contract.allow())
+        _adapter.emit_decision(_contract.allow())
         return 0
 
     # PLAN-065 Layer A (S81-tris gap closure, 2026-05-04):
@@ -1106,9 +1172,18 @@ def main() -> int:
         candidate_paths.extend(
             _extract_mcp_target_paths(event.tool_input or {})
         )
+    # PLAN-155 Wave 1 (S265 pair-rail P1#3): a codex apply_patch can touch
+    # MULTIPLE files; the host adapter surfaces every path (incl. rename
+    # targets) as tool_input['apply_patch_paths']. Gate them ALL — a
+    # benign first op must not smuggle a later op into a guarded path.
+    # Absent under Claude Code (key never present → byte-identical).
+    if isinstance(event.tool_input, dict):
+        for _pp in event.tool_input.get("apply_patch_paths") or []:
+            if isinstance(_pp, str) and _pp and _pp not in candidate_paths:
+                candidate_paths.append(_pp)
 
     if not candidate_paths:
-        _claude_adapter.emit_decision(_contract.allow())
+        _adapter_emit(_adapter, _contract.allow(), event)
         return 0
 
     # Use the first canonical path for legacy file_path-keyed downstream
@@ -1117,9 +1192,12 @@ def main() -> int:
 
     repo_root = Path(os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd())
 
-    # Layer A: if tool is mcp__* and ANY candidate is canonical, gate
-    # using that canonical path (most restrictive policy).
-    if tool_name.startswith("mcp__"):
+    # Layer A: if ANY candidate is canonical, gate using that canonical
+    # path (most restrictive policy). Historically mcp__*-only; PLAN-155
+    # extends the scan to any multi-candidate event (apply_patch multi-
+    # file, S265 P1#3). Single-candidate events (every Claude Code
+    # Edit/Write) skip the loop body outcome-identically.
+    if tool_name.startswith("mcp__") or len(candidate_paths) > 1:
         for candidate in candidate_paths:
             try:
                 if _is_canonical(candidate, repo_root):
@@ -1146,17 +1224,18 @@ def main() -> int:
         except Exception:
             is_canonical = False
         if is_canonical:
-            sys.stdout.write(
+            _emit_legacy_decision_json(
                 _emit_block(
                     reason=(
                         "CANONICAL-EDIT-BLOCKED: hook fault on canonical "
                         f"path; {type(e).__name__}: {e}. PLAN-045 F-01-07."
                     )
-                )
-                + "\n"
+                ),
+                _adapter,
+                event,
             )
             return 0
-        _claude_adapter.emit_decision(_contract.allow())
+        _adapter_emit(_adapter, _contract.allow(), event)
         return 0
 
     # On block, emit veto event (best-effort)
@@ -1184,12 +1263,14 @@ def main() -> int:
                 new_content, surface="skill_write"
             )
             if _uni is not None:
-                _claude_adapter.emit_decision(_contract.block(_uni))
+                _adapter_emit(_adapter, _contract.block(_uni), event)
                 return 0
 
     # `decide()` returns pre-built JSON strings for the legacy contract;
-    # to preserve byte identity we write it directly + newline.
-    sys.stdout.write(out + "\n")
+    # under the default/claude adapter the seam helper writes it directly
+    # + newline (byte identity preserved); other host adapters re-shape it
+    # on the parsed event's wire.
+    _emit_legacy_decision_json(out, _adapter, event)
     return 0
 
 

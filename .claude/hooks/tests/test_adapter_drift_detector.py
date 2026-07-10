@@ -13,6 +13,12 @@ sites, and `SPEC/v1/normalized_envelope.schema.md`.
    silently-introduced ones).
 3. The SPEC-documented field inventory matches the dataclass
    one-to-one (no ghost fields in either direction).
+4. (PLAN-155 Wave 1, debate A4) The same call-site scan runs over the
+   `codex` adapter's HOST-mode `NormalizedEvent(...)` sites — the codex
+   host normalizer must not silently introduce non-canonical fields
+   either — and the `_lib.adapters.ADAPTER_REGISTRY` /
+   `contract.KNOWN_ADAPTERS` mirror pair is asserted in sync (the
+   registry drift this package's docstring has always promised to flag).
 
 If a PR introduces a new NormalizedEvent field without updating the
 SPEC, this test fails CI. If the SPEC documents a field the dataclass
@@ -32,12 +38,14 @@ from pathlib import Path
 
 
 from _lib import contract  # noqa: E402
+from _lib import adapters as adapters_pkg  # noqa: E402
 from _lib.testing import TestEnvContext  # noqa: E402
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SPEC_FILE = REPO_ROOT / "SPEC" / "v1" / "normalized_envelope.schema.md"
 CLAUDE_ADAPTER = REPO_ROOT / ".claude" / "hooks" / "_lib" / "adapters" / "claude.py"
+CODEX_ADAPTER = REPO_ROOT / ".claude" / "hooks" / "_lib" / "adapters" / "codex.py"
 
 
 def _dataclass_field_names() -> set:
@@ -64,6 +72,19 @@ def _spec_inventory_fields() -> set:
     for m in row_re.finditer(text):
         names.add(m.group(1))
     return names
+
+
+def _adapter_populated_fields(adapter_path: Path) -> set:
+    """Static-parse an adapter for kwargs passed to NormalizedEvent(...)."""
+    if not adapter_path.exists():
+        return set()
+    source = adapter_path.read_text(encoding="utf-8")
+
+    populated: set = set()
+    call_sites = _find_call_sites(source, "NormalizedEvent(")
+    for body in call_sites:
+        populated |= _top_level_kwarg_names(body)
+    return populated
 
 
 def _claude_adapter_populated_fields() -> set:
@@ -248,6 +269,70 @@ class TestClaudeAdapterDrift(TestEnvContext):
             "claude.py populates non-canonical fields: {}. "
             "Add them to NormalizedEvent + SPEC §1.1, or remove.".format(sorted(rogue)),
         )
+
+
+class TestCodexAdapterDrift(TestEnvContext):
+    """PLAN-155 Wave 1 (debate A4): the codex adapter's host-mode
+    `NormalizedEvent(...)` call-sites stay canonical too."""
+
+    def test_codex_adapter_source_file_exists(self):
+        self.assertTrue(CODEX_ADAPTER.exists(), "codex.py adapter file missing")
+
+    def test_codex_adapter_populated_fields_are_canonical(self):
+        populated = _adapter_populated_fields(CODEX_ADAPTER)
+        # Sanity: the host normalizer populates the key envelope fields —
+        # an empty scan would be the vacuous-green class.
+        self.assertIn("session_id", populated)
+        self.assertIn("tool_name", populated)
+        self.assertIn("tool_input", populated)
+        dc_fields = _dataclass_field_names()
+        rogue = populated - dc_fields
+        self.assertFalse(
+            rogue,
+            "codex.py populates non-canonical fields: {}. "
+            "Add them to NormalizedEvent + SPEC §1.1, or remove.".format(sorted(rogue)),
+        )
+
+    def test_codex_host_extras_ride_raw_payload_not_new_fields(self):
+        """The codex-only wire scalars (turn_id, stop_hook_active, agent_id,
+        ...) must NOT become NormalizedEvent fields silently — this wave
+        deliberately ships NO SPEC/v1 envelope row (SENT-CX-A `Amends:
+        none`); they ride raw_payload."""
+        dc_fields = _dataclass_field_names()
+        for codex_only in ("turn_id", "stop_hook_active", "agent_id",
+                           "agent_transcript_path", "permission_mode"):
+            self.assertNotIn(
+                codex_only, dc_fields,
+                "{} became a NormalizedEvent field — that requires a SPEC "
+                "§1.1 row + a sentinel scope that amends SPEC/v1 (not "
+                "Wave 1)".format(codex_only),
+            )
+
+
+class TestAdapterRegistrySync(TestEnvContext):
+    """`_lib.adapters.ADAPTER_REGISTRY` mirrors `contract.KNOWN_ADAPTERS`
+    (the divergence this package's docstring promises the drift detector
+    flags — now it actually does)."""
+
+    def test_registry_mirror_in_sync(self):
+        self.assertEqual(
+            adapters_pkg.ADAPTER_REGISTRY,
+            contract.KNOWN_ADAPTERS,
+            "ADAPTER_REGISTRY and KNOWN_ADAPTERS diverged — an adapter is "
+            "reachable by one dispatch surface but not the other",
+        )
+
+    def test_every_registered_adapter_module_importable(self):
+        import importlib
+
+        for name in adapters_pkg.ADAPTER_REGISTRY:
+            mod = importlib.import_module("_lib.adapters." + name)
+            for attr in ("read_event", "read_post_event",
+                         "write_decision", "emit_decision"):
+                self.assertTrue(
+                    hasattr(mod, attr),
+                    "adapter '{}' missing ABI callable {}".format(name, attr),
+                )
 
 
 if __name__ == "__main__":

@@ -1,0 +1,21 @@
+{
+  "session_id": "019f4a0e-a7f6-78d2-9bb4-a7cb2401ef44",
+  "project": "/tmp/codex-lab/repo",
+  "phase": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "pwd && ls && sed -n '1,5p' notes.txt"
+  },
+  "tool_response": {},
+  "description": "",
+  "prompt": "",
+  "subagent_type": "",
+  "file_path": "",
+  "old_string": "",
+  "new_string": "",
+  "replace_all": false,
+  "command": "pwd && ls && sed -n '1,5p' notes.txt",
+  "tool_use_id": "call_UToKwRp5MqVVZGiDRWafhqux",
+  "duration_ms": null,
+  "parse_error": null
+}

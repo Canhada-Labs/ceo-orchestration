@@ -89,7 +89,7 @@ if str(_HOOKS_DIR) not in sys.path:
     sys.path.insert(0, str(_HOOKS_DIR))
 
 from _lib import contract as _contract  # noqa: E402
-from _lib.adapters import claude as _claude_adapter  # noqa: E402
+from _lib import adapters as _adapters  # noqa: E402
 from _lib import plan_frontmatter as _fm  # noqa: E402
 
 # Optional: emit to event stream v2 (fail-open if module missing or errors)
@@ -817,25 +817,84 @@ def _scan_and_emit_stranded(file_path: str) -> List[StrandedPlan]:
         return []
 
 
+def _adapter_emit(adapter, decision, event=None) -> None:
+    """Emit a neutral ``Decision`` through the resolved host adapter
+    (PLAN-155 Wave 1 dispatch seam, debate A1).
+
+    Claude path: the historical two-arg call — byte-identical output
+    (``claude.py:emit_decision`` does not take ``event=``). Any other
+    resolved adapter (codex host mode, ``_FailClosedAdapter``) receives
+    the parsed NormalizedEvent so the egress shape follows the wire that
+    produced it (host shape is EXPLICIT-only) and the debate-A2
+    coherence override can fire.
+    """
+    adapter_basename = (getattr(adapter, "__name__", "") or "").rsplit(".", 1)[-1]
+    if adapter_basename == "claude":
+        adapter.emit_decision(decision)
+        return
+    adapter.emit_decision(decision, event=event)
+
+
 def main() -> int:
     """Hook entry point.
 
     PLAN-006 Phase 1 migration (ADR-014): Adapter Layer I/O.
     PLAN-019 P1-SEC-E: dispatch by tool_name (Edit / Write / MultiEdit).
     PLAN-065 §4.4.B: stranded-plan side-effect on allow path.
+
+    PLAN-155 Wave 1 (debate A1, ratified seam option b): the adapter is
+    resolved ONCE per invocation via the shared seam
+    ``_lib.adapters.resolve()`` — BEFORE the fail-open try block, so the
+    debate-A2 coherence gate inside ``resolve()``
+    (explicitly-set-but-unresolvable ``CEO_HOOK_ADAPTER`` → INPUT class
+    per PLAN-152 C4 → fail-CLOSED: ``resolve()`` returns a
+    ``_FailClosedAdapter`` whose egress ALWAYS denies in BOTH harness
+    vocabularies, with a stderr + audit breadcrumb — never a silent
+    fallback to the claude adapter) is never swallowed into an allow.
+    Under ``CEO_HOOK_ADAPTER`` unset/"claude" the seam returns the claude
+    adapter module and downstream behavior is byte-identical.
     """
+    _adapter = _adapters.resolve()
+    event = None
     try:
-        event = _claude_adapter.read_event(phase="PreToolUse")
+        event = _adapter.read_event(phase="PreToolUse")
         if event.parse_error:
             print(
                 f"[check_plan_edit] WARN: stdin parse error: {event.parse_error}",
                 file=sys.stderr,
             )
-            _claude_adapter.emit_decision(_contract.allow())
+            _adapter_emit(_adapter, _contract.allow(), event)
             return 0
 
         file_path = event.file_path or ""
         tool_name = event.tool_name or "Edit"
+
+        # PLAN-155 Wave 1 (S265 pair-rail P1#3 class, plan rail): a
+        # multi-file codex apply_patch can ADD a plan file in a LATER op
+        # while ops[0] is benign. The host adapter reconstructs each
+        # Add-op's full content (ops[i]['content']); gate every plan-file
+        # add, not just ops[0]. Update-hunk ops stay a named residual
+        # (content not reconstructable from the wire). Key absent under
+        # Claude Code (byte-identical).
+        if isinstance(event.tool_input, dict):
+            _ops = event.tool_input.get("apply_patch_ops") or []
+            if isinstance(_ops, list) and len(_ops) > 1:
+                for _op in _ops:
+                    if not isinstance(_op, dict) or _op.get("op") != "add":
+                        continue
+                    _op_path = str(_op.get("path") or "")
+                    _op_content = _op.get("content")
+                    if _op_path and _is_plan_file(_op_path) and isinstance(_op_content, str):
+                        _op_decision = decide_write(
+                            file_path=_op_path, content=_op_content
+                        )
+                        if not _op_decision.allow:
+                            _adapter_emit(
+                                _adapter,
+                                _to_contract_decision(_op_decision),
+                                event,
+                            )
+                            return 0
 
         if tool_name == "Write":
             # Write: single `content` field replaces the whole file.
@@ -890,14 +949,14 @@ def main() -> int:
             except Exception:
                 pass
 
-        _claude_adapter.emit_decision(_to_contract_decision(decision))
+        _adapter_emit(_adapter, _to_contract_decision(decision), event)
         return 0
     except Exception as e:  # pragma: no cover
         print(
             f"[check_plan_edit] FATAL: {e.__class__.__name__}: {e}",
             file=sys.stderr,
         )
-        _claude_adapter.emit_decision(_contract.allow())
+        _adapter_emit(_adapter, _contract.allow(), event)
         return 0
 
 
