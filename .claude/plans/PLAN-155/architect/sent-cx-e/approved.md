@@ -30,7 +30,7 @@ protects) → **SENT-CX-E** → SENT-CX-B → SENT-CX-C → SENT-CX-D. SENT-CX-E
 MUST land before SENT-CX-C ships the `.codex` kill-switch paths via the
 installer. `check_canonical_edit.py` is touched by BOTH SENT-CX-A (seam
 migration) and this sentinel (guard-list extension): the anchor
-(`__ANCHOR_SHA__`) is taken on main AFTER SENT-CX-A lands, and the Wave
+(`fdb182215c4fce8041ec6b70d99b16a6ca5da970`) is taken on main AFTER SENT-CX-A lands, and the Wave
 3b staged copy is rebased on the post-A file.
 
 Guarded-surface effect (what this sentinel authorizes): extend
@@ -49,7 +49,7 @@ the coupling is not discovered at execution time.
 
 <!-- BEGIN SIGNED SCOPE -->
 Approved-By: @Canhada-Labs 71a2ef5f8dc52aabe8ba2c848e65b7c6b895a5c1
-Anchor-SHA: __ANCHOR_SHA__
+Anchor-SHA: fdb182215c4fce8041ec6b70d99b16a6ca5da970
 Plans: PLAN-155
 Kernel-Override: PLAN-155-CODEX-KILLSWITCH-GUARD-EXTENSION (+ CEO_KERNEL_OVERRIDE_ACK=I-ACCEPT; covers BOTH kernel rows: check_canonical_edit.py AND SessionStart.py)
 Scope:

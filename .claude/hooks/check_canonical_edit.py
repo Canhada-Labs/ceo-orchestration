@@ -237,6 +237,28 @@ _CANONICAL_GUARDS = [
     # CEO_KERNEL_OVERRIDE=PLAN-084-WAVE-0-CANONICAL-GUARD-EXTENSION +
     # CEO_KERNEL_OVERRIDE_ACK=I-ACCEPT required to extend this list.
     ".claude/plans/PLAN-*/canonical/*",
+    # ---- PLAN-155 Wave 3b (SENT-CX-E) — Codex kill-switch surface ----
+    # debate A8: the .codex registration/rules/managed surface + the
+    # operator AGENTS.md are the rail's OWN disarm surface under the Codex
+    # harness. Waves 2/3 EMIT these as unguarded L2 templates; without this
+    # guard an agent running under Codex could rewrite `.codex/hooks.json`
+    # (or the rest of the surface) and disarm every ENFORCED rail while the
+    # boot tripwire that should detect it stays silent — the circular-disarm
+    # gap. Sentinel-gated edits only. KERNEL HARD-DENY since this guard list
+    # itself is in `_KERNEL_PATHS` — extending it requires
+    # CEO_KERNEL_OVERRIDE=PLAN-155-CODEX-KILLSWITCH-GUARD-EXTENSION AND
+    # CEO_KERNEL_OVERRIDE_ACK=I-ACCEPT in addition to the SENT-CX-E sentinel
+    # (same double-gate as PLAN-080-PHASE-0B / PLAN-081-PHASE-2). NOTE: in
+    # THIS framework repo the root `AGENTS.md` is the reviewer contract
+    # (S261) — a trusted prompt surface injected into reviewer prompts — so
+    # guarding it here is a deliberate, defensible protection, not only the
+    # installed-target operator file. Path patterns are repo-relative and
+    # apply to BOTH this repo and an installed target's tree.
+    ".codex/hooks.json",
+    ".codex/config.toml",
+    ".codex/rules/ceo.rules",
+    "requirements.toml",
+    "AGENTS.md",
 ]
 
 
@@ -570,6 +592,13 @@ def _staged_content(event) -> Optional[str]:
 # starts with one of these prefixes by construction.
 _CANONICAL_PREFIXES = frozenset({
     ".claude", ".github", "scripts", "SPEC", "PROTOCOL.md",
+    # PLAN-155 Wave 3b (SENT-CX-E) — first-segment prefixes for the Codex
+    # kill-switch surface. Without these three the fast-path bail-out in
+    # `_is_canonical` returns False BEFORE the new `_CANONICAL_GUARDS`
+    # entries are ever consulted (the guard would be dead — the S254
+    # dead-gate class). Every kill-switch guard pattern starts with one of
+    # these by construction (`.codex/*`, `requirements.toml`, `AGENTS.md`).
+    ".codex", "requirements.toml", "AGENTS.md",
 })
 
 

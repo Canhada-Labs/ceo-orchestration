@@ -53,6 +53,56 @@ _GATE_1_FILES: List[str] = [
     ".claude/skills/core/ceo-orchestration/SKILL.md",
 ]
 
+# PLAN-155 Wave 3b (SENT-CX-E) — Codex kill-switch surface boot tripwire.
+#
+# The `.codex` registration/rules/managed files + the operator `AGENTS.md`
+# are the rail's OWN disarm surface under the Codex harness (debate A8).
+# The edit-time canonical guard (check_canonical_edit.py `_CANONICAL_GUARDS`,
+# same wave) blocks unsentineled writes to them; this boot re-hash is the
+# BACKSTOP tripwire for the case where the edit-time guard was bypassed
+# (shell-escape residual, or an out-of-session mutation). Because
+# `SessionStart.py` is itself in `_KERNEL_PATHS`
+# (check_arbitration_kernel.py), this extension rides the SENT-CX-E
+# `CEO_KERNEL_OVERRIDE=PLAN-155-CODEX-KILLSWITCH-GUARD-EXTENSION` + ACK
+# ceremony (pair-rail S265 F2 — corrects an earlier "sentinel-only" claim).
+#
+# RED-on-absence semantics (debate A2): a kill-switch file that was present
+# and is now missing OR mutated turns the boot re-hash RED (a RED stderr
+# breadcrumb + a governance-degraded systemMessage note). Silence from a
+# fail-open rail is not health — vacuous green is the S254 dead-gate class
+# this wave exists to catch.
+#
+# NO yellow-fatigue: the whole check is a NO-OP unless the Codex harness is
+# actually installed (a `.codex` registration marker present). "Absent
+# because never installed" is NOT red — in particular, in THIS framework
+# repo the root `AGENTS.md` is the reviewer contract and there is no
+# `.codex/`, so the tripwire never engages here.
+_KILLSWITCH_FILES: List[str] = [
+    ".codex/hooks.json",
+    ".codex/config.toml",
+    ".codex/rules/ceo.rules",
+    "requirements.toml",
+    "AGENTS.md",
+]
+
+#: Presence of ANY of these under the repo root means the Codex harness
+#: registration is installed — the signal that arms the kill-switch
+#: tripwire. Without one of them the surface files (`AGENTS.md`,
+#: `requirements.toml`) are unrelated to Codex and MUST NOT be tracked
+#: (no false RED on this repo's reviewer-contract `AGENTS.md`).
+_KILLSWITCH_INSTALL_MARKERS: List[str] = [
+    ".codex/hooks.json",
+    ".codex/config.toml",
+    ".codex/rules/ceo.rules",
+]
+
+#: Relative location of the persisted baseline hash manifest, under the
+#: per-project state dir (the `onboarded.flag` precedent). The baseline
+#: lives OUTSIDE the repo tree (and outside `.codex/`) so a repo-scoped
+#: edit does not touch it; an attacker with full shell can rewrite both —
+#: that is the documented residual, backstopped by CODEOWNERS/CI at push.
+_KILLSWITCH_BASELINE_NAME = "codex_killswitch_baseline.json"
+
 
 def _emit_observe(system_message: Optional[str] = None) -> str:
     """Emit a schema-compliant lifecycle hook output.
@@ -102,6 +152,179 @@ def _warmup_gate_1(repo_root: Path) -> int:
         except Exception:
             continue
     return total
+
+
+# ---------------------------------------------------------------------------
+# PLAN-155 Wave 3b (SENT-CX-E) — Codex kill-switch surface boot tripwire
+# ---------------------------------------------------------------------------
+
+
+def _hash_file16(path: Path) -> Optional[str]:
+    """sha256[:16] of a file, or None if absent/unreadable (same shape as
+    ``_gate_1_hash``)."""
+    try:
+        if not path.is_file():
+            return None
+        return hashlib.sha256(path.read_bytes()).hexdigest()[:16]
+    except Exception:
+        return None
+
+
+def _codex_harness_installed(repo_root: Path) -> bool:
+    """True iff a Codex-harness registration marker is present under the repo.
+
+    The signal that the kill-switch tripwire should engage. Absent → the
+    surface files (``AGENTS.md`` / ``requirements.toml``) are unrelated to
+    Codex and are NOT tracked (no yellow-fatigue; no false RED on this
+    repo's reviewer-contract ``AGENTS.md``). Never raises.
+    """
+    for rel in _KILLSWITCH_INSTALL_MARKERS:
+        try:
+            if (repo_root / rel).is_file():
+                return True
+        except Exception:
+            continue
+    return False
+
+
+def _killswitch_baseline_path(repo_root: Path) -> Optional[Path]:
+    """Resolve the persisted baseline path, or None on failure.
+
+    Prefers the explicit ``CEO_PROJECT_STATE_DIR`` override (the isolated
+    per-project state dir used by tests / subprocess hooks); falls back to
+    the HOME-based per-project state dir (``_maybe_emit_first_run_wizard``
+    precedent). Never raises.
+    """
+    try:
+        override = os.environ.get("CEO_PROJECT_STATE_DIR", "").strip()
+        if override:
+            base = Path(override)
+        else:
+            base = Path.home() / ".claude" / "projects" / repo_root.name / "state"
+        return base / _KILLSWITCH_BASELINE_NAME
+    except Exception:
+        return None
+
+
+def _killswitch_hashes(repo_root: Path) -> Dict[str, str]:
+    """Current sha256[:16] per PRESENT kill-switch file (absent files omitted)."""
+    result: Dict[str, str] = {}
+    for rel in _KILLSWITCH_FILES:
+        h = _hash_file16(repo_root / rel)
+        if h is not None:
+            result[rel] = h
+    return result
+
+
+def _load_killswitch_baseline(path: Optional[Path]) -> Optional[Dict[str, str]]:
+    """Load the baseline manifest (dict of rel→hash16), or None if absent/bad.
+
+    A corrupt/foreign baseline is treated as absent (re-baseline on this
+    boot) rather than raising. Never raises.
+    """
+    if path is None:
+        return None
+    try:
+        if not path.is_file():
+            return None
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            return None
+        return {
+            str(k): str(v)
+            for k, v in data.items()
+            if isinstance(k, str) and isinstance(v, str)
+        }
+    except Exception:
+        return None
+
+
+def _store_killswitch_baseline(path: Optional[Path], hashes: Dict[str, str]) -> None:
+    """Best-effort write of the baseline manifest. Never raises."""
+    if path is None:
+        return
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps(hashes, ensure_ascii=False, sort_keys=True),
+            encoding="utf-8",
+        )
+    except Exception:
+        return
+
+
+def _check_killswitch_surface(repo_root: Path) -> Tuple[str, Optional[str], bool]:
+    """Boot-time re-hash of the Codex kill-switch surface (debate A8 backstop).
+
+    Returns ``(status, note, red)`` where ``status`` is one of
+    ``"absent"`` (harness not installed — no-op),
+    ``"baselined"`` (first sighting — baseline recorded, informational),
+    ``"armed"`` (unchanged vs baseline — green),
+    ``"tampered"`` (a tracked file is MISSING or MUTATED vs baseline — RED),
+    ``"error"`` (internal failure — fail-open, no-op). ``note`` is an
+    optional systemMessage fragment; ``red`` is True only for
+    ``"tampered"``. NEVER raises (fail-open per ADR-005).
+
+    RED-on-absence (debate A2): a file present at baseline time that is now
+    missing OR whose hash changed is a tamper signal. The baseline is NOT
+    overwritten on a RED verdict — the signal persists across boots until
+    the surface is legitimately re-armed (delete the baseline, or re-run
+    the installer arming check, Wave 5). A NEW surface file appearing (a
+    legit install of another surface component) refreshes the baseline and
+    is not RED.
+    """
+    try:
+        if not _codex_harness_installed(repo_root):
+            return ("absent", None, False)
+
+        current = _killswitch_hashes(repo_root)
+        baseline_path = _killswitch_baseline_path(repo_root)
+        baseline = _load_killswitch_baseline(baseline_path)
+
+        if baseline is None:
+            # First sighting under an installed harness — record the
+            # baseline. Informational, never RED (nothing to compare to).
+            _store_killswitch_baseline(baseline_path, current)
+            return (
+                "baselined",
+                (
+                    "kill-switch tripwire: baselined %d Codex surface file(s)"
+                    % len(current)
+                ),
+                False,
+            )
+
+        missing = sorted(rel for rel in baseline if rel not in current)
+        mutated = sorted(
+            rel for rel, h in baseline.items()
+            if rel in current and current[rel] != h
+        )
+        added = sorted(rel for rel in current if rel not in baseline)
+
+        if missing or mutated:
+            # Do NOT overwrite the baseline — preserve the signal.
+            detail = "kill-switch tripwire: RED"
+            if mutated:
+                detail += " — %d mutated %s" % (len(mutated), mutated)
+            if missing:
+                detail += " — %d removed %s" % (len(missing), missing)
+            return ("tampered", detail, True)
+
+        if added:
+            # A new surface component was installed legitimately — extend
+            # the baseline to cover it. Not RED.
+            merged = dict(baseline)
+            merged.update(current)
+            _store_killswitch_baseline(baseline_path, merged)
+
+        return (
+            "armed",
+            "kill-switch tripwire: %d Codex surface file(s) unchanged" % len(current),
+            False,
+        )
+    except Exception:
+        # Fail-open per ADR-005 — a tripwire bug never breaks the boot.
+        return ("error", None, False)
 
 
 # PLAN-136 W3 S2 — trusted persistent-instructions channel (PLAN-133 G1).
@@ -252,17 +475,31 @@ def decide(*, repo_root: Path, session_id: str) -> str:
                 f" [injection-guard: blocked {instructions_blocked} "
                 f"instruction-file + {hints_blocked} hint(s)]"
             )
+        # PLAN-155 Wave 3b (SENT-CX-E) — Codex kill-switch surface boot
+        # re-hash. No-op unless the Codex harness is installed; RED (stderr
+        # breadcrumb + systemMessage note) when a tracked surface file is
+        # missing or mutated vs the recorded baseline. Never blocks the boot.
+        ks_status, ks_note, ks_red = _check_killswitch_surface(repo_root)
+        ks_suffix = f" [{ks_note}]" if ks_note else ""
+        if ks_red:
+            # The RED breadcrumb (debate A2 / A8): silence from a fail-open
+            # rail is not health — surface the tamper to the audit-log
+            # dashboard AND the session banner, without breaking the boot.
+            sys.stderr.write(
+                f"[SessionStart] KILLSWITCH-TRIPWIRE-RED: {ks_note}\n"
+            )
         if missing:
             return _emit_observe(
                 system_message=(
                     f"SessionStart: governance degraded — missing "
-                    f"{len(missing)} Gate-1 file(s): {missing[:3]}{guard_note}"
+                    f"{len(missing)} Gate-1 file(s): {missing[:3]}"
+                    f"{guard_note}{ks_suffix}"
                 )
             )
         return _emit_observe(
             system_message=(
                 f"SessionStart: healthy ({len(gate_1_hashes)} Gate-1 files "
-                f"warm, {warmup_bytes} bytes){guard_note}"
+                f"warm, {warmup_bytes} bytes){guard_note}{ks_suffix}"
             )
         )
     except Exception as e:

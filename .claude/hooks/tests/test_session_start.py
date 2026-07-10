@@ -289,5 +289,153 @@ class TestSessionStartInjectionWiring(TestEnvContext):
         self.assertEqual(result, (0, 0))
 
 
+class TestSessionStartCodexKillswitch(TestEnvContext):
+    """PLAN-155 Wave 3b (SENT-CX-E) — the boot-time kill-switch tripwire.
+
+    RED-on-absence (debate A2): once the Codex harness is installed and a
+    baseline is recorded, a tracked surface file that is later MISSING or
+    MUTATED turns the boot re-hash RED (stderr breadcrumb + systemMessage
+    note). NO-OP unless the harness is installed (no yellow-fatigue).
+    Isolated via ``TestEnvContext`` — the baseline lands under the isolated
+    HOME per-project state dir, never the real ``$HOME``.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        # Per-test baseline isolation. ``_killswitch_baseline_path`` PREFERS
+        # ``CEO_PROJECT_STATE_DIR`` over HOME; the suite-wide audit-isolation
+        # fixture (``_lib/test_isolation``) points that var at ONE session-
+        # shared dir, so without this every in-process killswitch test would
+        # read/write the SAME baseline file and go order-dependent (a prior
+        # test's baseline reads back as ``armed``/``tampered``). Re-point it
+        # under this test's own tmp tree. ``patch.dict`` (not a bare
+        # ``os.environ[...] =``) keeps the test-env-hygiene gate green.
+        _p = patch.dict(
+            os.environ,
+            {"CEO_PROJECT_STATE_DIR": str(self.project_dir / ".ceo-state")},
+        )
+        _p.start()
+        self.addCleanup(_p.stop)
+
+    def _install_codex_surface(self) -> None:
+        """Materialize an installed-codex kill-switch surface under project."""
+        codex = self.project_dir / ".codex"
+        (codex / "rules").mkdir(parents=True, exist_ok=True)
+        (codex / "hooks.json").write_text('{"hooks": {}}\n', encoding="utf-8")
+        (codex / "config.toml").write_text("# codex\n", encoding="utf-8")
+        (codex / "rules" / "ceo.rules").write_text(
+            'prefix_rule(pattern=["rm","-rf"], decision="forbidden")\n',
+            encoding="utf-8",
+        )
+        (self.project_dir / "requirements.toml").write_text("# req\n", encoding="utf-8")
+        (self.project_dir / "AGENTS.md").write_text("# operator\n", encoding="utf-8")
+
+    # --- (a) no harness installed -> tripwire is a NO-OP -------------------
+    def test_absent_when_no_codex_surface(self) -> None:
+        status, note, red = SessionStart._check_killswitch_surface(self.project_dir)
+        self.assertEqual(status, "absent")
+        self.assertIsNone(note)
+        self.assertFalse(red)
+
+    def test_root_agents_md_alone_is_not_tracked(self) -> None:
+        """The reviewer-contract AGENTS.md WITHOUT a `.codex/` marker must not
+        arm the tripwire (this framework repo's case — no yellow-fatigue)."""
+        (self.project_dir / "AGENTS.md").write_text("# reviewer\n", encoding="utf-8")
+        status, _note, red = SessionStart._check_killswitch_surface(self.project_dir)
+        self.assertEqual(status, "absent")
+        self.assertFalse(red)
+
+    # --- (b) first sighting baselines; second boot is armed ---------------
+    def test_first_sighting_baselines_then_armed(self) -> None:
+        self._install_codex_surface()
+        status1, note1, red1 = SessionStart._check_killswitch_surface(self.project_dir)
+        self.assertEqual(status1, "baselined")
+        self.assertFalse(red1)
+        self.assertIn("baselined", note1)
+        # baseline file was written under the isolated HOME state dir
+        bpath = SessionStart._killswitch_baseline_path(self.project_dir)
+        self.assertIsNotNone(bpath)
+        self.assertTrue(bpath.is_file())
+        status2, note2, red2 = SessionStart._check_killswitch_surface(self.project_dir)
+        self.assertEqual(status2, "armed")
+        self.assertFalse(red2)
+
+    # --- (c) mutation of a tracked file -> RED ----------------------------
+    def test_mutated_surface_file_goes_red(self) -> None:
+        self._install_codex_surface()
+        SessionStart._check_killswitch_surface(self.project_dir)  # baseline
+        # tamper: rewrite the registration
+        (self.project_dir / ".codex" / "hooks.json").write_text(
+            '{"hooks": {"disarmed": true}}\n', encoding="utf-8"
+        )
+        status, note, red = SessionStart._check_killswitch_surface(self.project_dir)
+        self.assertEqual(status, "tampered")
+        self.assertTrue(red)
+        self.assertIn("RED", note)
+        self.assertIn(".codex/hooks.json", note)
+
+    def test_removed_surface_file_goes_red(self) -> None:
+        self._install_codex_surface()
+        SessionStart._check_killswitch_surface(self.project_dir)  # baseline
+        (self.project_dir / "requirements.toml").unlink()
+        status, note, red = SessionStart._check_killswitch_surface(self.project_dir)
+        self.assertEqual(status, "tampered")
+        self.assertTrue(red)
+        self.assertIn("removed", note)
+
+    def test_red_persists_across_boots_until_rebaseline(self) -> None:
+        """A RED verdict must NOT silently overwrite the baseline — the signal
+        persists until the surface is legitimately re-armed."""
+        self._install_codex_surface()
+        SessionStart._check_killswitch_surface(self.project_dir)  # baseline
+        (self.project_dir / "AGENTS.md").write_text("# tampered\n", encoding="utf-8")
+        _s1, _n1, red1 = SessionStart._check_killswitch_surface(self.project_dir)
+        _s2, _n2, red2 = SessionStart._check_killswitch_surface(self.project_dir)
+        self.assertTrue(red1)
+        self.assertTrue(red2)
+
+    def test_new_surface_component_extends_baseline_not_red(self) -> None:
+        """Installing an additional surface component after baseline is a
+        legit extension, not tamper."""
+        codex = self.project_dir / ".codex"
+        (codex / "rules").mkdir(parents=True, exist_ok=True)
+        (codex / "hooks.json").write_text('{"hooks": {}}\n', encoding="utf-8")
+        SessionStart._check_killswitch_surface(self.project_dir)  # baseline (1 file+)
+        (self.project_dir / "AGENTS.md").write_text("# operator\n", encoding="utf-8")
+        status, _note, red = SessionStart._check_killswitch_surface(self.project_dir)
+        self.assertEqual(status, "armed")
+        self.assertFalse(red)
+
+    # --- (d) decide() surfaces RED in systemMessage + stderr breadcrumb ----
+    def test_decide_surfaces_red_note_and_breadcrumb(self) -> None:
+        import io
+        import contextlib
+        self._install_codex_surface()
+        SessionStart.decide(repo_root=self.project_dir, session_id="ks-base")
+        (self.project_dir / ".codex" / "rules" / "ceo.rules").write_text(
+            "# disarmed\n", encoding="utf-8"
+        )
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            out = SessionStart.decide(repo_root=self.project_dir, session_id="ks-red")
+        payload = json.loads(out)
+        self.assertTrue(payload.get("continue") is True)  # never blocks
+        self.assertIn("RED", payload.get("systemMessage", ""))
+        self.assertIn("KILLSWITCH-TRIPWIRE-RED", err.getvalue())
+
+    def test_decide_no_note_when_absent(self) -> None:
+        out = SessionStart.decide(repo_root=self.project_dir, session_id="ks-absent")
+        payload = json.loads(out)
+        self.assertNotIn("kill-switch", payload.get("systemMessage", ""))
+
+    def test_check_never_raises(self) -> None:
+        for weird in (Path("/nonexistent/xyz"), self.project_dir):
+            with self.subTest(root=weird):
+                try:
+                    SessionStart._check_killswitch_surface(weird)
+                except Exception as e:  # noqa: BLE001
+                    self.fail(f"fail-open violated: {type(e).__name__}: {e}")
+
+
 if __name__ == "__main__":
     unittest.main()

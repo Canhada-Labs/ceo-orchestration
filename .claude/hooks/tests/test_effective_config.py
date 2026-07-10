@@ -550,6 +550,8 @@ class TestPublicContract(_EffectiveConfigBase):
                 "settings_tamper_hook_count_mismatch",
                 # PLAN-135-FOLLOWUP (Codex R5 P1-3)
                 "settings_tamper_sidecar_redirect",
+                # PLAN-155 Wave 3b (SENT-CX-E) — Codex kill-switch census
+                "settings_tamper_codex_killswitch_missing",
             },
         )
 
@@ -642,6 +644,69 @@ class TestSidecarRedirect(_EffectiveConfigBase):
         self.assertEqual(
             [f for f in findings if f["class"] == ec.TAMPER_SIDECAR_REDIRECT], []
         )
+
+
+# ---------------------------------------------------------------------------
+# PLAN-155 Wave 3b (SENT-CX-E) — Codex kill-switch registration census
+# ---------------------------------------------------------------------------
+
+class TestCodexKillswitchCensus(_EffectiveConfigBase):
+    """The disk census now flags a deregistered / hook-missing Codex
+    registration surface (debate A8). NO-OP unless the codex harness is
+    installed — critical so the existing `.claude`-only fixtures stay green.
+    """
+
+    def _ks_findings(self) -> list:
+        return [
+            f for f in self.classify({})
+            if f["class"] == ec.TAMPER_CODEX_KILLSWITCH_MISSING
+        ]
+
+    def test_no_codex_surface_is_noop(self) -> None:
+        # Bare .claude project (no `.codex/`) — never a codex finding.
+        self.write_project_file("AGENTS.md", "# reviewer contract\n")
+        self.write_project_file("requirements.toml", "# deps\n")
+        self.assertEqual(self._ks_findings(), [])
+
+    def test_healthy_install_no_finding(self) -> None:
+        self.write_project_file(".codex/hooks.json", json.dumps(_hook_settings(
+            "check_canonical_edit.py")))
+        self.write_project_file(".codex/rules/ceo.rules", "# rules\n")
+        self.write_project_file(".claude/hooks/check_canonical_edit.py", "# stub\n")
+        self.assertEqual(self._ks_findings(), [])
+
+    def test_deregistered_registration_flagged(self) -> None:
+        # Install marker present (ceo.rules) but NO hooks.json/config.toml —
+        # every codex rail is silently deregistered.
+        self.write_project_file(".codex/rules/ceo.rules", "# rules only\n")
+        findings = self._ks_findings()
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0]["layer"], "disk")
+        self.assertIn("deregistered", findings[0]["detail"])
+
+    def test_referenced_hook_missing_flagged(self) -> None:
+        # Registration present but a referenced hook script is missing.
+        self.write_project_file(".codex/hooks.json", json.dumps(_hook_settings(
+            "check_canonical_edit.py", "check_bash_safety.py")))
+        self.write_project_file(".claude/hooks/check_canonical_edit.py", "# stub\n")
+        # check_bash_safety.py deliberately absent
+        findings = self._ks_findings()
+        self.assertEqual(len(findings), 1)
+        self.assertIn("check_bash_safety.py", findings[0]["detail"])
+        self.assertIn("missing", findings[0]["detail"])
+
+    def test_config_toml_registration_alone_is_not_flagged(self) -> None:
+        # config.toml-only registration (no hooks.json) is a legit variant —
+        # registration IS present, so no "deregistered" finding, and the
+        # hooks-json parse path is skipped.
+        self.write_project_file(".codex/config.toml", "[hooks]\n")
+        self.write_project_file(".codex/rules/ceo.rules", "# rules\n")
+        self.assertEqual(self._ks_findings(), [])
+
+    def test_census_finding_carries_no_secret(self) -> None:
+        self.write_project_file(".codex/rules/ceo.rules", "# rules only\n")
+        findings = self._ks_findings()
+        self.assertEqual(set(findings[0]), {"class", "layer", "detail"})
 
 
 if __name__ == "__main__":

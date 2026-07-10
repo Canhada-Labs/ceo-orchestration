@@ -102,6 +102,16 @@ TAMPER_HOOK_COUNT_MISMATCH = "settings_tamper_hook_count_mismatch"
 # surface); the Owner's legitimate launch-env override is structurally invisible
 # to the env-snapshot check (_capture_tamper_env filters to ANTHROPIC_*/DANGEROUSLY*).
 TAMPER_SIDECAR_REDIRECT = "settings_tamper_sidecar_redirect"
+# PLAN-155 Wave 3b (SENT-CX-E) — the Codex kill-switch registration surface
+# (`.codex/hooks.json` / `.codex/config.toml` / `.codex/rules/ceo.rules`)
+# deregistered or its referenced hook scripts removed on disk. Distinct from
+# TAMPER_HOOK_COUNT_MISMATCH (which is the CLAUDE-harness settings.json disk
+# census) so SOC triage routes the two harnesses' rail-degradation signals
+# apart. Detected ONLY when the Codex harness is actually installed (an
+# install marker present) — "absent because never installed" is not a finding
+# (no yellow-fatigue; this repo has no `.codex/`, so the census is a no-op
+# here). Disk surface, one-directional like the existing census.
+TAMPER_CODEX_KILLSWITCH_MISSING = "settings_tamper_codex_killswitch_missing"
 
 TAMPER_CLASSES = frozenset({
     TAMPER_DISABLE_ALL_HOOKS,
@@ -110,6 +120,7 @@ TAMPER_CLASSES = frozenset({
     TAMPER_PERMISSION_BYPASS,
     TAMPER_HOOK_COUNT_MISMATCH,
     TAMPER_SIDECAR_REDIRECT,
+    TAMPER_CODEX_KILLSWITCH_MISSING,
 })
 
 # ---------------------------------------------------------------------------
@@ -196,6 +207,19 @@ FORBIDDEN_KEYS: Tuple[Dict[str, str], ...] = (
         "note": "a registered hook script missing from disk degrades the rail "
                 "silently (hook fail-open = allow); extra UNregistered files "
                 "on disk are normal and never flagged",
+    },
+    {
+        "surface": "disk", "key": ".codex/hooks.json",
+        "rule": "codex-registration-deregistered-or-hooks-missing",
+        "tamper_class": TAMPER_CODEX_KILLSWITCH_MISSING,
+        "note": "PLAN-155 Wave 3b (debate A8): the Codex kill-switch "
+                "registration surface. Fires ONLY when the Codex harness is "
+                "installed (a `.codex/` install marker present) AND the "
+                "registration was removed (only `.codex/rules/ceo.rules` "
+                "left, no hooks.json/config.toml) OR a hook script the "
+                "registration references is missing on disk — both silently "
+                "disarm the codex rail (hook fail-open = allow). Absent-"
+                "because-never-installed is NOT flagged.",
     },
 )
 
@@ -567,6 +591,93 @@ def _check_hook_census(resolved: Any, findings: List[Dict[str, str]]) -> None:
         ))
 
 
+# PLAN-155 Wave 3b (SENT-CX-E) — Codex kill-switch registration surface.
+_CODEX_HOOKS_JSON = ".codex/hooks.json"
+_CODEX_CONFIG_TOML = ".codex/config.toml"
+_CODEX_RULES = ".codex/rules/ceo.rules"
+#: Presence of ANY marker = the Codex harness is installed (arms the census).
+_CODEX_INSTALL_MARKERS: Tuple[str, ...] = (
+    _CODEX_HOOKS_JSON, _CODEX_CONFIG_TOML, _CODEX_RULES,
+)
+#: The registration files (either arms the hooks). Both absent while a
+#: marker is present = deregistered = silent disarm.
+_CODEX_REGISTRATION_FILES: Tuple[str, ...] = (_CODEX_HOOKS_JSON, _CODEX_CONFIG_TOML)
+
+
+def _check_codex_killswitch_census(
+    resolved: Any, findings: List[Dict[str, str]]
+) -> None:
+    """PLAN-155 Wave 3b (debate A8) — Codex kill-switch registration census.
+
+    Extends the disk census beyond the CLAUDE-harness ``.claude/hooks/*.py``
+    basenames so a deregistered / removed Codex kill-switch registration
+    surfaces as a tamper class instead of silently fail-open. Two signatures,
+    both one-directional (like ``_check_hook_census``):
+
+    1. **Registration deregistered** — a `.codex/` install marker is present
+       (the harness was installed) but NEITHER `.codex/hooks.json` NOR
+       `.codex/config.toml` exists: every rail registered under codex is
+       silently unregistered (the circular-disarm gap).
+    2. **Referenced hook removed** — `.codex/hooks.json` is present but a hook
+       script it references is missing under `.claude/hooks/`: that rail is
+       silently degraded (hook fail-open = allow).
+
+    NO-OP unless the Codex harness is installed (no `.codex/` marker → no
+    finding, no yellow-fatigue; this framework repo has no `.codex/`).
+    Never raises (advisory fail-open, consistent with this module).
+    """
+    if not isinstance(resolved, dict):
+        return
+    project_dir = resolved.get("project_dir")
+    if not isinstance(project_dir, str) or not project_dir:
+        return
+    try:
+        root = Path(project_dir)
+        installed = any(
+            (root / marker).is_file() for marker in _CODEX_INSTALL_MARKERS
+        )
+        if not installed:
+            return  # harness not installed — census is a no-op.
+
+        registration_present = any(
+            (root / reg).is_file() for reg in _CODEX_REGISTRATION_FILES
+        )
+        if not registration_present:
+            findings.append(_finding(
+                TAMPER_CODEX_KILLSWITCH_MISSING, LAYER_DISK,
+                "codex kill-switch registration removed: a .codex/ install "
+                "marker is present but neither .codex/hooks.json nor "
+                ".codex/config.toml exists — every rail registered under "
+                "codex is silently deregistered",
+            ))
+            return
+
+        hooks_json = root / _CODEX_HOOKS_JSON
+        if not hooks_json.is_file():
+            return  # config.toml-only registration; hooks parse is JSON-only.
+        try:
+            data = json.loads(hooks_json.read_text(encoding="utf-8", errors="replace"))
+        except Exception:
+            return  # unparseable registration is not a census signal here.
+        if not isinstance(data, dict):
+            return
+        registered = _registered_hook_basenames(data)
+        if not registered:
+            return
+        hooks_dir = root / ".claude" / "hooks"
+        missing = sorted(n for n in registered if not _hook_on_disk(hooks_dir / n))
+        if missing:
+            findings.append(_finding(
+                TAMPER_CODEX_KILLSWITCH_MISSING, LAYER_DISK,
+                "codex registration references hook script(s) missing on "
+                "disk: registered=%d missing=%s — the codex rail is silently "
+                "degraded (hook fail-open = allow)" % (len(registered), missing[:8]),
+            ))
+    except Exception:
+        _breadcrumb("codex killswitch census degraded fail-open")
+        return
+
+
 def _resolve_repo_root(project_dir: Optional[_PathLike]) -> Path:
     if project_dir:
         return Path(_safe_str(project_dir))
@@ -694,6 +805,9 @@ def classify_tampering(
         env = IMPORT_TIME_ENV_SNAPSHOT if env_snapshot is None else env_snapshot
         _check_env_mapping(env, LAYER_ENV, allowlist, findings)
         _check_hook_census(resolved, findings)
+        # PLAN-155 Wave 3b (SENT-CX-E) — Codex kill-switch registration
+        # census (no-op unless the codex harness is installed).
+        _check_codex_killswitch_census(resolved, findings)
         return findings
     except Exception as exc:
         _breadcrumb(f"classify_tampering degraded fail-open: {type(exc).__name__}")

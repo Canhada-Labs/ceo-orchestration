@@ -15,6 +15,7 @@ import os
 import subprocess
 import sys
 import unittest
+from unittest import mock
 from pathlib import Path
 
 _HOOKS_DIR = Path(__file__).resolve().parent.parent
@@ -296,6 +297,114 @@ class CanonicalGuardsExpansionTest(TestEnvContext):
     def test_expanded_workflow_blocks_end_to_end(self):
         self._make_repo_layout()
         self._assert_blocks(".github/workflows/release.yml")
+
+
+class CodexKillswitchGuardTest(CanonicalGuardsExpansionTest):
+    """PLAN-155 Wave 3b (SENT-CX-E) — the Codex kill-switch surface is now
+    canonical-guarded (debate A8 circular-disarm closure).
+
+    Each kill-switch path must be canonical (segment-glob match) AND block
+    end-to-end without a sentinel — the teeth that Waves 2/3 deliberately
+    deferred. Inherits the ``_assert_canonical`` / ``_assert_blocks``
+    helpers.
+    """
+
+    _KILLSWITCH_PATHS = (
+        ".codex/hooks.json",
+        ".codex/config.toml",
+        ".codex/rules/ceo.rules",
+        "requirements.toml",
+        "AGENTS.md",
+    )
+
+    def test_killswitch_paths_are_canonical(self):
+        self._make_repo_layout()
+        for rel in self._KILLSWITCH_PATHS:
+            with self.subTest(path=rel):
+                self._assert_canonical(rel)
+
+    def test_killswitch_paths_block_end_to_end(self):
+        self._make_repo_layout()
+        for rel in self._KILLSWITCH_PATHS:
+            with self.subTest(path=rel):
+                self._assert_blocks(rel)
+
+    def test_killswitch_prefixes_registered_in_fast_path(self):
+        """Guard-dead regression: the `_is_canonical` fast-path bails on any
+        first-segment not in `_CANONICAL_PREFIXES`. If a kill-switch prefix
+        is missing there, the guard entry is DEAD (the S254 class) even
+        though it is listed in `_CANONICAL_GUARDS`."""
+        import check_canonical_edit as cce
+        for prefix in (".codex", "requirements.toml", "AGENTS.md"):
+            with self.subTest(prefix=prefix):
+                self.assertIn(prefix, cce._CANONICAL_PREFIXES)
+
+    def test_killswitch_allowed_via_scoped_sentinel(self):
+        """A sentinel that scopes the kill-switch path grants the edit —
+        proving the surface is sentinel-GATED (Owner can still land changes),
+        not hard-denied."""
+        import check_canonical_edit as cce
+        self._make_repo_layout()
+        rel = ".codex/hooks.json"
+        target = self.project_dir / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("{}", encoding="utf-8")
+        sentinel_dir = (
+            self.project_dir / ".claude" / "plans" / "PLAN-155"
+            / "architect" / "round-1"
+        )
+        sentinel_dir.mkdir(parents=True, exist_ok=True)
+        (sentinel_dir / "approved.md").write_text(
+            "---\nplan: PLAN-155\n---\n\n"
+            "Approved-By: @Canhada-Labs deadbeef\n"
+            "Scope:\n  - " + rel + "\n",
+            encoding="utf-8",
+        )
+        with mock.patch.dict(
+            os.environ,
+            {
+                "CEO_SENTINEL_UNLOCK": "PLAN-155-codex-killswitch",
+                "CEO_SENTINEL_UNLOCK_ACK": "I-ACCEPT",
+            },
+            clear=False,
+        ):
+            out = cce.decide(file_path=str(target), repo_root=self.project_dir)
+        self.assertEqual(json.loads(out).get("decision", "allow"), "allow", msg=out)
+
+    def test_scoped_sentinel_for_other_path_still_blocks_killswitch(self):
+        """A sentinel scoping a DIFFERENT path does NOT grant a kill-switch
+        edit — scope must list the exact path (the 'copied marker still
+        reddens' property: an approval marker present but not scoping this
+        path cannot disarm the surface)."""
+        import check_canonical_edit as cce
+        self._make_repo_layout()
+        rel = ".codex/hooks.json"
+        target = self.project_dir / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("{}", encoding="utf-8")
+        sentinel_dir = (
+            self.project_dir / ".claude" / "plans" / "PLAN-155"
+            / "architect" / "round-1"
+        )
+        sentinel_dir.mkdir(parents=True, exist_ok=True)
+        (sentinel_dir / "approved.md").write_text(
+            "---\nplan: PLAN-155\n---\n\n"
+            "Approved-By: @Canhada-Labs deadbeef\n"
+            "Scope:\n  - .claude/team.md\n",
+            encoding="utf-8",
+        )
+        with mock.patch.dict(
+            os.environ,
+            {
+                "CEO_SENTINEL_UNLOCK": "PLAN-155-codex-killswitch",
+                "CEO_SENTINEL_UNLOCK_ACK": "I-ACCEPT",
+            },
+            clear=False,
+        ):
+            out = cce.decide(file_path=str(target), repo_root=self.project_dir)
+        d = json.loads(out)
+        self.assertEqual(d.get("decision"), "block", msg=out)
+        self.assertIn("CANONICAL-EDIT-BLOCKED", d["reason"])
 
 
 if __name__ == "__main__":
