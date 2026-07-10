@@ -8,7 +8,6 @@ when_to_invoke: |
   - Checking promotion gate eligibility before v1.x.0 GA tag
 plan_refs: [PLAN-075, PLAN-081]
 adr_refs: [ADR-052, ADR-105, ADR-106, ADR-107, ADR-108, ADR-111]
-inspired_by: []
 # --- smart-loading fields (PLAN-083 Wave 0a sub-agent 0.7a) ---
 domain: core
 priority: 3
