@@ -173,17 +173,25 @@ matcher = "*"
 
 # === Stop (matcher ignored by codex on this event) =======================
 # codex 0.139 ENFORCES Stop {"decision":"block"} (verified: auto-continue,
-# PLAN-155/artifacts/stop-block-transcript.md). The inverted pair-rail
-# review gate that USES that primitive lands with PLAN-155 Wave 6; until
-# then this registration is breadcrumb-only.
+# PLAN-155/artifacts/stop-block-transcript.md). PLAN-155 Wave 6 lands the
+# inverted pair-rail review gate that USES that primitive: check_codex_stop_
+# review.py blocks Stop until an APPROVE review record covers the touched
+# L3/canonical paths (residual: killing the session abandons it -- the
+# pre-push gate is the teeth). It runs ahead of the Stop.py cleanup hook.
 
 [[hooks.Stop]]
 
   [[hooks.Stop.hooks]]
   type = "command"
+  command = 'env CEO_HOOK_ADAPTER=codex CLAUDE_PROJECT_DIR="{{PROJECT_PATH}}" bash "{{PROJECT_PATH}}/.claude/hooks/_python-hook.sh" check_codex_stop_review.py'
+  timeout = 10
+  statusMessage = "CEO inverted pair-rail Stop-review [PARTIAL: Codex operates, Claude reviews; blocks Stop until an APPROVE review record covers the touched L3/canonical paths -- residual: killing the session abandons it, pre-push gate is the teeth]"
+
+  [[hooks.Stop.hooks]]
+  type = "command"
   command = 'env CEO_HOOK_ADAPTER=codex CLAUDE_PROJECT_DIR="{{PROJECT_PATH}}" bash "{{PROJECT_PATH}}/.claude/hooks/_python-hook.sh" Stop.py'
   timeout = 10
-  statusMessage = "CEO stop-gate [Wave 6 adds the inverted pair-rail Stop-block]"
+  statusMessage = "CEO stop-gate [cleanup; the Wave 6 inverted pair-rail Stop-block runs ahead of this]"
 
 # === SubagentStart: spawn-protocol context injection [ADVISORY] ==========
 # The hook injects the spawn-protocol requirement (## AGENT PROFILE /

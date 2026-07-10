@@ -341,6 +341,51 @@ jobs:
           python3 -m pytest .claude/hooks/tests/ -n auto -m 'not serial' --strict-markers --tb=no -q
           python3 -m pytest .claude/hooks/tests/ -m 'serial' --strict-markers --tb=no -q
 
+      # -----------------------------------------------------------------
+      # Step: Installer --harness codex matrix (PLAN-155 Wave 5, debate A11)
+      # The nine-case `install.sh --harness codex` matrix + uninstall
+      # lifecycle symmetry. Hermetic (T1 tier): builds a throwaway SOURCE
+      # overlay and installs into temp dirs under mktemp; NO codex binary
+      # required — the runtime-resolution case runs the shipped command
+      # lines as subprocesses (recorded-wire replay). The real-binary
+      # live-fire is the T2 local tier (PLAN-155/artifacts/).
+      # -----------------------------------------------------------------
+      - name: Installer --harness codex matrix (PLAN-155 Wave 5)
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          bash scripts/tests/test-install-harness-codex.sh
+
+
+
+      # -----------------------------------------------------------------
+      # PLAN-155 Wave 6 -- inverted pair-rail + advisory-rail teeth.
+      # Explicit positive-control paths (the plan asks for them even though
+      # hooks/tests/ is dir-collected above): the Stop-review gate + the
+      # advisory-teeth chain-scan, pinned green under BOTH adapters. Plus a
+      # FUNCTIONAL self-test that the RED-on-absence teeth exit non-zero on a
+      # synthetic chain with tool activity but no boot breadcrumb (a
+      # fail-open rail's silence is NOT health -- the teeth must bite in CI).
+      # -----------------------------------------------------------------
+      - name: PLAN-155 Wave 6 pair-rail + advisory teeth
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          for adapter in claude codex; do
+            CEO_HOOK_ADAPTER="$adapter" python3 -m pytest \
+              .claude/hooks/tests/test_codex_stop_review.py \
+              .claude/hooks/tests/test_codex_advisory_teeth.py \
+              --strict-markers --tb=short -q
+          done
+          # RED-on-absence self-test: activity + no boot breadcrumb => exit 1.
+          tmp="$(mktemp -d)"
+          printf '%s\n' '{"action":"codex_tool_recorded","session_id":"ci-red","ts":"2026-07-10T00:00:00Z","tool_name_enum":"Edit"}' > "$tmp/audit-log.jsonl"
+          if python3 .claude/scripts/codex-advisory-teeth.py --log "$tmp/audit-log.jsonl" >/dev/null 2>&1; then
+            echo "FAIL: codex-advisory-teeth did not RED on a boot-breadcrumb-absent chain" >&2
+            exit 1
+          fi
+          echo "OK: advisory-teeth RED-on-absence self-test bit (exit non-zero as expected)"
+          rm -rf "$tmp"
 
       # PLAN-050 C12 — action SHA-pin compliance gate (round-17)
       - name: Action SHA-pin compliance (PLAN-050 C12)

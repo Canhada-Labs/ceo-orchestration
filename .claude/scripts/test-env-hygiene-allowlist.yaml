@@ -1097,3 +1097,10 @@ file: tests/unit/test_output_scan_llm03.py
 
 file: tests/unit/test_value_dashboard_emit.py
   - bare-testcase
+
+file: .claude/hooks/tests/test_codex_advisory_teeth.py
+  - bare-testcase
+
+file: .claude/hooks/tests/test_codex_stop_review.py
+  - bare-testcase
+  - env-write

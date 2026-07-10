@@ -23,7 +23,7 @@ override is expected-required.
 
 Landing order (binding): PLAN-154 SENT-F → SENT-CX-A → (Waves 2/3
 unguarded) → SENT-CX-E → SENT-CX-B → SENT-CX-C → **SENT-CX-D** (last).
-Anchor (`__ANCHOR_SHA__`) taken on main after SENT-CX-C lands.
+Anchor (`8c032dfdfbef63bd5a25a504d4bef659df68dbd2`) taken on main after SENT-CX-C lands.
 
 Scope notes: `check_pair_rail.py` and `.claude/dispatcher/**` are
 CONDITIONAL — in scope only if the inverted Stop-hook rail / routing
@@ -38,7 +38,7 @@ transcript, debate A5) archives under `PLAN-155/artifacts/` (unguarded).
 
 <!-- BEGIN SIGNED SCOPE -->
 Approved-By: @Canhada-Labs 71a2ef5f8dc52aabe8ba2c848e65b7c6b895a5c1
-Anchor-SHA: __ANCHOR_SHA__
+Anchor-SHA: 8c032dfdfbef63bd5a25a504d4bef659df68dbd2
 Plans: PLAN-155
 Kernel-Override: PLAN-155-CODEX-PAIRRAIL-TEETH (+ CEO_KERNEL_OVERRIDE_ACK=I-ACCEPT; covers the KERNEL `.github/workflows/validate.yml` row — required because BOTH ceremony riders touch it)
 Scope:

@@ -95,9 +95,15 @@
         "hooks": [
           {
             "type": "command",
+            "command": "env CEO_HOOK_ADAPTER=codex CLAUDE_PROJECT_DIR=\"{{PROJECT_PATH}}\" bash \"{{PROJECT_PATH}}/.claude/hooks/_python-hook.sh\" check_codex_stop_review.py",
+            "timeout": 15,
+            "statusMessage": "CEO inverted pair-rail Stop-review [PARTIAL: Codex operates, Claude reviews; blocks Stop until an APPROVE review record covers the touched L3/canonical paths -- residual: killing the session abandons it, pre-push gate is the teeth]"
+          },
+          {
+            "type": "command",
             "command": "env CEO_HOOK_ADAPTER=codex CLAUDE_PROJECT_DIR=\"{{PROJECT_PATH}}\" bash \"{{PROJECT_PATH}}/.claude/hooks/_python-hook.sh\" Stop.py",
             "timeout": 10,
-            "statusMessage": "CEO stop-gate [inverted pair-rail Stop-block review gate lands with PLAN-155 Wave 6; until then this is breadcrumb-only]"
+            "statusMessage": "CEO stop-gate lifecycle cleanup (audit flush + stale-lock release)"
           }
         ]
       }
@@ -109,7 +115,7 @@
             "type": "command",
             "command": "env CEO_HOOK_ADAPTER=codex CLAUDE_PROJECT_DIR=\"{{PROJECT_PATH}}\" bash \"{{PROJECT_PATH}}/.claude/hooks/_python-hook.sh\" check_subagent_start.py",
             "timeout": 5,
-            "statusMessage": "CEO spawn-protocol context injection (AGENT PROFILE / SKILL CONTENT / FILE ASSIGNMENT) [ADVISORY: codex 0.139 parses continue:false but does NOT stop the subagent]"
+            "statusMessage": "CEO spawn-protocol context injection (AGENT PROFILE / SKILL CONTENT / FILE ASSIGNMENT) [ADVISORY: codex 0.139 parses continue:false but does NOT stop the subagent; scripts/codex-advisory-teeth.py is the chain-scan backstop]"
           }
         ]
       }
