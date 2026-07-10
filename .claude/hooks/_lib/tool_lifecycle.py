@@ -31,13 +31,47 @@ ONLY four coarse fields:
   (hot-path audit noise), and redacts strings. Wrong tool for an opaque
   ``tool_use_id`` + coarse enum.
 
+## PLAN-154 item 1 — opt-in metadata OBSERVE rail (A2/A3/A12)
+
+An OPT-IN extension rides the existing ``record_post`` / ``sweep_orphans``
+paths (ZERO new hook registrations — constraint 8/A3). When
+``CEO_LEARNING_OBSERVE=1`` (and ``CEO_SOTA_DISABLE`` != ``"1"`` — master
+precedence), each completed/orphaned tool call appends ONE row of allowlisted
+metadata to a per-session append-only JSONL observation store next to the
+per-session pairing state file
+(``<audit_dir>/tool-lifecycle/<session>.observe.jsonl``, 0600).
+
+- **A2 (metadata is normative, not prose).** The row schema is CLOSED and
+  deny-by-default: :data:`OBSERVATION_SCHEMA_V1` enumerates every field —
+  closed enums, booleans, and one bounded opaque hash ONLY. The writer
+  (:func:`_append_observation`) builds the row FROM the allowlist (it never
+  iterates caller input), re-coerces every value by closed-set membership,
+  and drops anything else. No free-text field exists; adding one requires an
+  ADR-160 amendment + a conscious re-pin of the frozen schema digest
+  (:func:`observation_schema_digest`).
+- **A12 (kill-switch story).** ``CEO_LEARNING_OBSERVE`` unset/empty →
+  structurally OFF: the added code path is a single dict lookup and produces
+  ZERO filesystem delta. Set to anything other than ``"1"``, or overridden by
+  ``CEO_SOTA_DISABLE=1``, → explicitly OFF: a single
+  ``learning_rail_disabled`` breadcrumb per session (marker-file deduped,
+  wired to Wave-E liveness) and no store writes.
+- **MF-SEC-5 preserved.** The observe rail hangs ONLY off the Post/sweep
+  side; :func:`record_pre` remains byte-for-byte audit-silent (its stamp
+  already feeds the row's ``paired`` bit and pairing data).
+- The store PERSISTS across sessions (it is the PLAN-154 item-2 distiller's
+  v1 read surface; ``cleanup_session`` deletes the pairing state + the
+  disabled-marker but NEVER the observation store). Retention/pruning is the
+  distiller pipeline's concern.
+
 Stdlib-only, Python >= 3.9, ``from __future__ import annotations``.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -177,6 +211,86 @@ def to_duration_bucket(duration_ms: Optional[int]) -> str:
 
 
 # ---------------------------------------------------------------------------
+# PLAN-154 item 1 — observe-rail closed schema + kill-switch gate (A2/A12)
+# ---------------------------------------------------------------------------
+
+# Opt-in ENABLE flag (A12): unset/empty = structurally OFF (zero filesystem
+# delta — `cost_envelope.py` posture); ONLY the literal "1" enables; any other
+# set value = explicitly OFF (recorded operator choice → one breadcrumb per
+# session). CEO_SOTA_DISABLE=1 takes master precedence over an enabled flag.
+_OBSERVE_ENV = "CEO_LEARNING_OBSERVE"
+_SOTA_DISABLE_ENV = "CEO_SOTA_DISABLE"
+
+# Frozen observation schema version. Bumping it (or touching ANY field below)
+# changes observation_schema_digest() and REDs the pinned CI fixture in
+# hooks/tests/test_tool_lifecycle_observe.py until consciously re-pinned in
+# review (A2 CI assertion a).
+OBSERVATION_SCHEMA_VERSION = 1
+
+# Defense-in-depth per-row byte ceiling (A18). With the closed schema a row is
+# ~120 bytes; anything larger is structurally impossible unless the schema is
+# widened, in which case this ceiling is re-reviewed with it.
+_MAX_OBSERVATION_LINE_BYTES = 512
+
+# Bounded opaque ID: sha256(tool_use_id) truncated to 16 hex chars. The raw
+# tool_use_id (attacker-influenceable, unbounded) NEVER enters the store.
+_TOOL_USE_HASH_HEX_LEN = 16
+_TOOL_USE_HASH_RE = re.compile(r"^[0-9a-f]{0,16}$")
+
+# THE deny-by-default capture-time field allowlist (A2). Every observation row
+# carries EXACTLY these fields — closed enums, booleans, and one bounded
+# opaque hash. There is NO free-text field; adding any field (or widening any
+# enum) requires an ADR-160 amendment and re-pins the frozen schema digest.
+# NOTE the deliberate coupling: widening _RECOGNIZED_TOOL_NAMES (already a
+# 3-way pin with audit_emit + SPEC) also changes this digest — a conscious
+# review touch, by design.
+OBSERVATION_SCHEMA_V1: Tuple[Tuple[str, str], ...] = (
+    ("v", "int_const:1"),
+    ("tool_name_enum", "enum:" + ",".join(
+        sorted(_RECOGNIZED_TOOL_NAMES | {"mcp_other", "other"}))),
+    ("duration_bucket", "enum:" + ",".join(DURATION_BUCKETS)),
+    ("success", "bool"),
+    ("orphan", "bool"),
+    ("paired", "bool"),
+    ("tool_use_hash", "hex:0-16"),
+)
+
+
+def observation_schema_digest() -> str:
+    """Return the sha256 hex digest of the canonical schema serialization.
+
+    Pinned by the frozen schema-hash CI fixture (A2 assertion a): ANY field
+    addition/removal/reorder, type change, or enum widening changes this
+    digest and REDs the pin until consciously updated in review.
+    """
+    payload = json.dumps(
+        [list(pair) for pair in OBSERVATION_SCHEMA_V1],
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _observe_state() -> Tuple[str, str]:
+    """Resolve the observe-rail gate → ``(state, switch)``.
+
+    ``state`` ∈ {``"on"``, ``"off_unset"``, ``"off_explicit"``}; ``switch`` is
+    the env var that recorded the explicit-off choice (breadcrumb payload),
+    else ``""``. Read per-invocation from ``os.environ`` (hooks are
+    per-invocation processes — matches this module's existing env style).
+    """
+    raw = (os.environ.get(_OBSERVE_ENV) or "").strip()
+    if not raw:
+        return ("off_unset", "")
+    if (os.environ.get(_SOTA_DISABLE_ENV) or "").strip() == "1":
+        # Master precedence (A12): SOTA kill beats an enabled opt-in.
+        return ("off_explicit", _SOTA_DISABLE_ENV)
+    if raw == "1":
+        return ("on", "")
+    # Set to any non-"1" value = recorded operator choice to keep it off.
+    return ("off_explicit", _OBSERVE_ENV)
+
+
+# ---------------------------------------------------------------------------
 # Per-session record file (NOT state_store) — MF-PERF-2 / MF-SEC-5
 # ---------------------------------------------------------------------------
 
@@ -220,6 +334,30 @@ def _record_path(session_id: str, audit_dir: Optional[Path] = None) -> Path:
 
 def _lock_path(record_path: Path) -> Path:
     return record_path.with_suffix(record_path.suffix + ".lock")
+
+
+def observation_store_path(session_id: str, audit_dir: Optional[Path] = None) -> Path:
+    """Return the per-session observation store path (PLAN-154 item 1).
+
+    ``<audit_dir>/tool-lifecycle/<session>.observe.jsonl`` — next to the
+    pairing state file, 0600, append-only JSONL. Public: this is the item-2
+    distiller's v1 read surface. The file PERSISTS across sessions
+    (``cleanup_session`` never deletes it).
+    """
+    base = audit_dir if audit_dir is not None else _audit_dir()
+    return base / "tool-lifecycle" / (
+        _safe_session_component(session_id) + ".observe.jsonl"
+    )
+
+
+def _observe_disabled_marker_path(
+    session_id: str, audit_dir: Optional[Path] = None
+) -> Path:
+    """Per-session once-guard marker for the disabled-rail breadcrumb (A12)."""
+    base = audit_dir if audit_dir is not None else _audit_dir()
+    return base / "tool-lifecycle" / (
+        _safe_session_component(session_id) + ".observe-disabled"
+    )
 
 
 def _load_records(record_path: Path) -> Dict[str, Dict[str, Any]]:
@@ -305,6 +443,195 @@ class _MaybeLock:
                 self._lock.release()
             except Exception:
                 pass
+
+
+# ---------------------------------------------------------------------------
+# PLAN-154 item 1 — observe-rail writer (post/sweep side ONLY; MF-SEC-5 keeps
+# record_pre audit-silent and untouched)
+# ---------------------------------------------------------------------------
+
+
+def _tool_use_hash(tool_use_id: str) -> str:
+    """Bounded opaque ID: sha256(tool_use_id)[:16]; empty in → empty out."""
+    if not tool_use_id:
+        return ""
+    try:
+        return hashlib.sha256(
+            tool_use_id.encode("utf-8", "replace")
+        ).hexdigest()[:_TOOL_USE_HASH_HEX_LEN]
+    except Exception:
+        return ""
+
+
+def _coerce_observation(fields: Dict[str, Any]) -> Dict[str, Any]:
+    """Closed-type gate (A2 CI assertion b) — deny-by-default coercion.
+
+    Builds the row FROM :data:`OBSERVATION_SCHEMA_V1`'s field list (never by
+    iterating caller input, so un-allowlisted keys can never pass), and
+    re-coerces every value by closed-set membership:
+
+    * ``tool_name_enum``  → :func:`to_tool_name_enum` (out-of-enum → "other")
+    * ``duration_bucket`` → membership in :data:`DURATION_BUCKETS`, else floor
+    * ``success``/``orphan``/``paired`` → ``bool(...)``
+    * ``tool_use_hash``   → must match ``^[0-9a-f]{0,16}$``, else ``""``
+
+    No free-form string can survive: every string field is either
+    enum-membership-checked or regex-bounded lowercase hex.
+    """
+    out: Dict[str, Any] = {}
+    out["v"] = OBSERVATION_SCHEMA_VERSION
+    out["tool_name_enum"] = to_tool_name_enum(fields.get("tool_name_enum"))
+    bucket = fields.get("duration_bucket")
+    out["duration_bucket"] = (
+        bucket if bucket in DURATION_BUCKETS else DURATION_BUCKETS[0]
+    )
+    out["success"] = bool(fields.get("success"))
+    out["orphan"] = bool(fields.get("orphan"))
+    out["paired"] = bool(fields.get("paired"))
+    tuh = fields.get("tool_use_hash")
+    if not (isinstance(tuh, str) and _TOOL_USE_HASH_RE.match(tuh)):
+        tuh = ""
+    out["tool_use_hash"] = tuh
+    return out
+
+
+def _append_observation(
+    session_id: str,
+    fields: Dict[str, Any],
+    audit_dir: Optional[Path] = None,
+) -> bool:
+    """Coerce + append ONE observation row. Fail-open; no lock; no subprocess.
+
+    Hot-path shape: a single ``open(O_APPEND)`` + one small ``write`` + close
+    (rows are ~120 bytes ≪ PIPE_BUF, so concurrent appenders interleave at
+    line granularity). The per-row byte ceiling is defense-in-depth (A18).
+    Returns True iff a row was written (telemetry only — callers ignore it).
+    """
+    try:
+        row = _coerce_observation(fields if isinstance(fields, dict) else {})
+        data = (
+            json.dumps(row, separators=(",", ":"), sort_keys=True) + "\n"
+        ).encode("utf-8")
+        if len(data) > _MAX_OBSERVATION_LINE_BYTES:
+            return False
+        path = observation_store_path(session_id, audit_dir)
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        except OSError:
+            pass
+        fd = os.open(str(path), os.O_CREAT | os.O_WRONLY | os.O_APPEND, 0o600)
+        try:
+            os.write(fd, data)
+        finally:
+            os.close(fd)
+        return True
+    except Exception:
+        # Fail-open — a telemetry write failure must never block the tool.
+        return False
+
+
+def _emit_observe_disabled_breadcrumb(session_id: str, switch: str) -> None:
+    """Emit the once-per-session ``learning_rail_disabled`` breadcrumb (A12).
+
+    Typed emitter preferred via the house hasattr/getattr guard (pre-
+    registration no-op); falls back to ``emit_generic`` — which is itself a
+    silent no-op breadcrumb until the integrator lands the 4-file action
+    registration. Fail-OPEN on every path.
+    """
+    try:
+        from _lib import audit_emit  # noqa: E402
+    except Exception:
+        return
+    project = os.environ.get("CLAUDE_PROJECT_DIR") or ""
+    try:
+        emit = getattr(audit_emit, "emit_learning_rail_disabled", None)
+        if emit is not None:
+            emit(
+                rail="observe",
+                switch=switch,
+                session_id=session_id,
+                project=project,
+            )
+            return
+        emit_generic = getattr(audit_emit, "emit_generic", None)
+        if emit_generic is not None:
+            emit_generic(
+                "learning_rail_disabled",
+                rail="observe",
+                switch=switch,
+                session_id=session_id,
+                project=project,
+            )
+    except Exception:
+        return
+
+
+def _observe_disabled_once(
+    session_id: str, switch: str, audit_dir: Optional[Path] = None
+) -> None:
+    """Record the explicit-off choice ≤1× per session (marker-file dedupe).
+
+    Marker-first ordering guarantees the ≤1 contract even across concurrent
+    hook invocations (``O_EXCL`` is the race arbiter); a crash between marker
+    and emit loses the breadcrumb — acceptable, fail-open. Only reached when
+    the operator EXPLICITLY disabled the rail (the unset path returns before
+    any filesystem touch — zero-delta negative control, A2/A12).
+    """
+    try:
+        marker = _observe_disabled_marker_path(session_id, audit_dir)
+        try:
+            marker.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        except OSError:
+            pass
+        try:
+            fd = os.open(
+                str(marker), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600
+            )
+        except FileExistsError:
+            return  # already recorded this session
+        os.close(fd)
+        _emit_observe_disabled_breadcrumb(session_id, switch)
+    except Exception:
+        return
+
+
+def _observe_post(
+    *,
+    session_id: str,
+    raw_tool_name: str,
+    duration_ms: Optional[int],
+    success: bool,
+    orphan: bool,
+    paired: bool,
+    tool_use_id: str,
+    audit_dir: Optional[Path] = None,
+) -> None:
+    """Observe-rail entry for the Post/sweep side. Fail-open, gate-first.
+
+    Callers guard with the cheap inline ``os.environ.get(_OBSERVE_ENV)``
+    lookup, so when the opt-in is unset this function is never even called.
+    """
+    try:
+        state, switch = _observe_state()
+        if state == "off_unset":
+            return  # structurally OFF — zero filesystem delta
+        if state == "off_explicit":
+            _observe_disabled_once(session_id, switch, audit_dir)
+            return
+        _append_observation(
+            session_id,
+            {
+                "tool_name_enum": to_tool_name_enum(raw_tool_name),
+                "duration_bucket": to_duration_bucket(duration_ms),
+                "success": success,
+                "orphan": orphan,
+                "paired": paired,
+                "tool_use_hash": _tool_use_hash(tool_use_id),
+            },
+            audit_dir,
+        )
+    except Exception:
+        return
 
 
 # ---------------------------------------------------------------------------
@@ -395,6 +722,22 @@ def record_post(
             success=(not failure),
             orphan=False,
         )
+        # PLAN-154 item 1 — opt-in observe rail (A2/A3/A12). The inline env
+        # lookup is the ENTIRE added cost when the opt-in is unset (a single
+        # dict get — never a call, never a filesystem touch).
+        if os.environ.get(_OBSERVE_ENV):
+            _observe_post(
+                session_id=session_id,
+                raw_tool_name=raw_tool_name,
+                duration_ms=(
+                    duration_ms if isinstance(duration_ms, int) else None
+                ),
+                success=(not failure),
+                orphan=False,
+                paired=bool(pre_tool_name),
+                tool_use_id=tool_use_id,
+                audit_dir=audit_dir,
+            )
     except Exception:
         # Fail-open — never block the tool on a telemetry emit failure.
         return
@@ -424,20 +767,20 @@ def sweep_orphans(
                 return 0
             now = float(now_fn())
             survivors: Dict[str, Dict[str, Any]] = {}
-            orphans: List[Dict[str, Any]] = []
+            orphans: List[Tuple[str, Dict[str, Any]]] = []
             for tool_use_id, rec in records.items():
                 t_start = rec.get("t_start_s")
                 age = None
                 if isinstance(t_start, (int, float)):
                     age = now - float(t_start)
                 if age is not None and age >= timeout_s:
-                    orphans.append(rec)
+                    orphans.append((tool_use_id, rec))
                 else:
                     survivors[tool_use_id] = rec
             if orphans:
                 _save_records(record_path, survivors)
         # Emit OUTSIDE the lock hold (keep the lock O(1) / lock-cheap).
-        for rec in orphans:
+        for tool_use_id, rec in orphans:
             _emit_lifecycle(
                 session_id=session_id,
                 raw_tool_name=str(rec.get("tool_name", "") or ""),
@@ -445,6 +788,20 @@ def sweep_orphans(
                 success=False,
                 orphan=True,
             )
+            # PLAN-154 item 1 — observe rail mirrors the orphan signal (same
+            # cheap inline gate as record_post; a stamped record implies the
+            # Pre side ran, so paired=True).
+            if os.environ.get(_OBSERVE_ENV):
+                _observe_post(
+                    session_id=session_id,
+                    raw_tool_name=str(rec.get("tool_name", "") or ""),
+                    duration_ms=None,
+                    success=False,
+                    orphan=True,
+                    paired=True,
+                    tool_use_id=tool_use_id,
+                    audit_dir=audit_dir,
+                )
             emitted += 1
     except Exception:
         return emitted
@@ -454,12 +811,16 @@ def sweep_orphans(
 def cleanup_session(session_id: str, audit_dir: Optional[Path] = None) -> None:
     """Delete the per-session record file + lock at SessionEnd. Fail-open.
 
-    MF-PERF-2 — bounds the file lifecycle to a single session.
+    MF-PERF-2 — bounds the file lifecycle to a single session. PLAN-154: the
+    per-session disabled-marker is session-scoped junk and is deleted too; the
+    OBSERVATION STORE (``*.observe.jsonl``) is deliberately NOT deleted — it
+    persists as the item-2 distiller's read surface.
     """
     try:
         record_path = _record_path(session_id, audit_dir)
         for p in (record_path, _lock_path(record_path),
-                  record_path.with_suffix(record_path.suffix + ".tmp")):
+                  record_path.with_suffix(record_path.suffix + ".tmp"),
+                  _observe_disabled_marker_path(session_id, audit_dir)):
             try:
                 if p.exists():
                     p.unlink()

@@ -1,0 +1,6 @@
+{
+  "model": "claude-haiku-4-5-20251001",
+  "tokens_in": 512,
+  "tokens_out": 96,
+  "output": "{\"candidates\": [{\"trigger\": \"repeat_tool_failure\", \"advisory_text\": \"Bash shows an elevated failure share this window; prefer a dry-run or --check pass before stateful commands.\", \"scope_tags\": [\"bash\", \"reliability\"]}]}"
+}

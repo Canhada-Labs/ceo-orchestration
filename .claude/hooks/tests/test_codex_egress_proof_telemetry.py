@@ -95,7 +95,18 @@ class TestAllowlistAndContract(unittest.TestCase):
         #    passthrough) = 302. CONSOLIDATION: this is the FINAL arc-consolidated
         #    count, re-derived vs the final arc audit_emit.py (staged/w5/actions-added.md).
         # +1 PLAN-153 Wave E / ADR-159 (spawn_prompt_defense_gate) = 303.
-        self.assertEqual(len(audit_emit._KNOWN_ACTIONS), 303)
+        # +11 PLAN-154 (Gated Learning Loop / ADR-160, SENT-F ceremony) net-new
+        #    metadata-only actions = 314: lesson_candidate_written +
+        #    lesson_approved + lesson_quarantined + lesson_expired +
+        #    lesson_integrity_flag + lesson_boot_render_dropped +
+        #    learning_rail_disabled + fact_gate_activation_changed +
+        #    advisory_dampened + distiller_run_completed + lesson_evolve_run.
+        #    All route through dedicated Sec MF-3 dispatch branches +
+        #    per-action allowlists (_LEARNING_ENVELOPE family), NEVER
+        #    _EMIT_GENERIC_PASSTHROUGH. This telemetry test is unguarded
+        #    (hooks/tests/) and rides the SENT-F commit WITH audit_emit.py so
+        #    the egress-pin does not red the landing (MANIFEST-A open issue #1).
+        self.assertEqual(len(audit_emit._KNOWN_ACTIONS), 314)
         self.assertIn("pair_rail_outgoing_redaction_applied", audit_emit._KNOWN_ACTIONS)
 
     def test_dispatch_scrub_accepts_empty_findings(self):

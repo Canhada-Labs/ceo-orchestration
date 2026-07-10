@@ -5,7 +5,7 @@
 > `Output $/1k tokens`. The parser is case-insensitive on column headers
 > but matches models exactly (lower-cased) — keep model slugs stable.
 
-**Last updated:** 2026-06-12 (added fast-mode premium-lane section for PLAN-135 W4 D7 — informational, not parsed; prior: 2026-06-02 cache-tier multipliers for PLAN-123 MF-A).
+**Last updated:** 2026-07-10 (added PLAN-154 offline-distiller lane section — informational, not parsed; prior: 2026-06-12 fast-mode premium-lane section for PLAN-135 W4 D7).
 **Last verified:** 2026-05-29 (Anthropic rows: Opus 4.8 added at $5/$25; Opus 4-7 retained HISTORICAL; Google/OpenAI rows unchanged from 2026-04-14).
 **Next refresh due:** 2026-08-27 (90-day cadence).
 **Providers monitored:** Anthropic, Google, OpenAI (plus Local = $0 baseline).
@@ -170,6 +170,33 @@ cache read billed at the full input rate (the gate-0b accounting) over-bills ~10
   criteria + falsifier + budget cap). See
   `docs/HONEST-LIMITATIONS.md` §14 and `docs/CEO-MODEL-ROUTING.md`
   §Routing one-liners.
+
+## Offline lesson distiller (PLAN-154 item 2 — informational, NOT parsed)
+
+> Prose only — no table, so `budget_summary.load_pricing()` never touches
+> this section. This is the pricing-doc pin required by PLAN-154 A4
+> ("pricing row added in the same commit that pins the model").
+
+- `.claude/scripts/distill-lessons.py` pins its model EXPLICITLY to
+  **`claude-haiku-4-5-20251001`** — the date-suffixed haiku-tier slug
+  already priced in the primary + provenance tables above ($1/$5 per
+  MTok, confidence `medium`). The pin is a constant in the script, NOT
+  routed through `model_routing.py`.
+- Override: `CEO_LEARNING_DISTILL_MODEL=<model-id>` (documented in the
+  CHEAT-SHEET env table). `CEO_SOTA_DISABLE=1` no-ops the distiller
+  entirely (master precedence).
+- **Budget visibility:** every run emits a `distiller_run_completed`
+  audit event carrying `tokens_in` / `tokens_out`, so the
+  `budget-summary.py` rollup (`/agent budget`) shows the distiller as
+  its own line item priced against the haiku row above.
+- **Spend bounds:** cadence is Owner-invoked or nightly-hygiene
+  piggyback only (never per-session); a persisted delta cursor prevents
+  re-billing already-distilled telemetry; a hard per-run input-token
+  ceiling (default 8,000 estimated tokens ≈ $0.008 input at the haiku
+  rate) refuses the run BEFORE any model spend. Haiku 4.5's 200K window
+  note above applies but is unreachable under the ceiling.
+- CI never bills: the hermetic `--from-fixture` recorded-output mode is
+  the first-class test contract.
 
 ## Provenance table (metadata per row — human-readable only)
 

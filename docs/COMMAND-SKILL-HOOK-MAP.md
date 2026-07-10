@@ -27,6 +27,7 @@ Derived deterministically (sorted, no timestamps) from three committed sources:
 | `/effort` | — | — |
 | `/fan-plan` | — | `.claude/scripts/fan-plan-parser.py` |
 | `/goap` | — | `.claude/scripts/goap-planner.py` |
+| `/lesson-evolve` | — | `.claude/scripts/lesson_evolve.py` |
 | `/lesson-review` | — | `.claude/scripts/lessons.py` |
 | `/memory-scratchpad` | — | `.claude/scripts/scratchpad.py` |
 | `/onboard` | `codebase-onboarding` | — |
@@ -120,7 +121,7 @@ Derivation rule: a registered hook guards a surface iff its source file under `.
 
 ## 5. Catalog totals
 
-- Commands: 24
+- Commands: 25
 - Skills (SKILL.md-bearing dirs): 166 — core 42, frontend 8, domain 116 (across 36 domains)
 - Skills with >=1 `activation_triggers` entry: 65
 - Hook registrations: 46 across 13 events (45 unique hook labels)

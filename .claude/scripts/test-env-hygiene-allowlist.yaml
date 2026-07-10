@@ -479,6 +479,9 @@ file: .claude/hooks/tests/test_tokens_lib.py
 file: .claude/hooks/tests/test_tool_lifecycle.py
   - bare-testcase
 
+file: .claude/hooks/tests/test_tool_lifecycle_observe.py
+  - bare-testcase
+
 file: .claude/hooks/tests/test_two_writer_chain.py
   - env-write
 
@@ -767,6 +770,9 @@ file: .claude/scripts/tests/test_k_calibration.py
   - bare-testcase
 
 file: .claude/scripts/tests/test_key_hygiene.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_lesson_evolve.py
   - bare-testcase
 
 file: .claude/scripts/tests/test_lesson_ranker.py

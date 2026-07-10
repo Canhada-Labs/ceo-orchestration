@@ -1,0 +1,6 @@
+{
+  "model": "claude-haiku-4-5-20251001",
+  "tokens_in": 480,
+  "tokens_out": 12,
+  "output": "{\"candidates\": []}"
+}

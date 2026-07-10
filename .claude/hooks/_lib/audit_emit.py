@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import json
 import os
+import re  # PLAN-154 — bounded-token field coercion (learning-loop actions)
 import sys
 import threading  # PLAN-088 W1.4 / M-12 rate-cap state lock
 import time  # PLAN-088 W1.4 / M-12 rate-cap sliding window
@@ -919,6 +920,50 @@ _KNOWN_ACTIONS = {
     # status/duration ints; `stop_details.explanation` (model free text) is dropped
     # at the emit site and can NEVER reach the audit log.
     "model_refusal_observed",
+    # ------------------------------------------------------------------
+    # PLAN-154 (Gated Learning Loop / ADR-160) — 11 new actions, all
+    # metadata-only (A2: closed enums / booleans / bounded IDs / hashes;
+    # NO free-text field). Every one routes through a dedicated
+    # deny-by-default scrub branch + allowlist below — NEVER
+    # _EMIT_GENERIC_PASSTHROUGH (Sec MF-3). Count: 303 -> 314.
+    # ------------------------------------------------------------------
+    # Candidate lifecycle (lessons.py add_candidate — birth event carrying
+    # the A6 content pin sha256(trigger+"\n"+advisory_text); its chain ts
+    # is the created_at authority for TTL + approval).
+    "lesson_candidate_written",
+    # /lesson-review approval (lessons.py approve_candidate) — THE A6
+    # hash-pinned approval event; get_boot_lessons_verified recomputes
+    # and verifies against it before any render.
+    "lesson_approved",
+    # Post-birth terminal QUARANTINED transition (INPUT failures at the
+    # fail-CLOSED promotion boundary, A4).
+    "lesson_quarantined",
+    # Terminal TTL expiry (A9 — never any default disposition toward
+    # activation).
+    "lesson_expired",
+    # A6 verify-before-render drop breadcrumb (hash mismatch / missing
+    # approval event / vocab tamper) — feeds the item-6 flip criterion
+    # "zero unresolved integrity flags".
+    "lesson_integrity_flag",
+    # /ceo-boot render-gate drop breadcrumb (item 4 / A5 — closed reason
+    # enum + bounded lesson_id; count-only human counterpart in digest).
+    "lesson_boot_render_dropped",
+    # A12 disabled-this-session breadcrumb, shared by all four rails
+    # (observe / distill / boot_render / fact_gate); wired to the ADR-158
+    # fail-open-rail liveness surface. Emitted ONLY on explicit disable.
+    "learning_rail_disabled",
+    # A8 governance event — every observed ADVISORY<->ENFORCE flip of the
+    # item-6 fact-forcing deny-once gate (settings-backed; lazy detection
+    # on the already-matched destructive path in check_bash_safety).
+    "fact_gate_activation_changed",
+    # A10 dampening condensation — <=1 per advisory ID per session
+    # (_lib/advisory_dampen.py; bounded ID + ordinal + closed channel).
+    "advisory_dampened",
+    # Item-2 offline distiller run rollup — tokens_in/tokens_out make the
+    # distiller its own /agent-budget line item; closed outcome enum.
+    "distiller_run_completed",
+    # Item-7 $0 deterministic clustering pass — counts-only breadcrumb.
+    "lesson_evolve_run",
 }
 
 
@@ -6805,6 +6850,138 @@ def emit_generic(action: str, **kwargs: Any) -> None:
                 "emit_generic model_refusal_observed dropped forbidden field(s): %s"
                 % sorted(dropped)[:10]
             )
+    # ------------------------------------------------------------------
+    # PLAN-154 (Gated Learning Loop / ADR-160) — Sec MF-3 scrub branches.
+    # Deny-by-default allowlists + VALUE re-coercion by closed-set
+    # membership / bounded charset (A2 metadata-only: a direct
+    # emit_generic caller can never sign free text into the chain).
+    # ------------------------------------------------------------------
+    elif action == "lesson_candidate_written":
+        event, dropped = _scrub_ceo_boot_event(
+            event, _LESSON_CANDIDATE_WRITTEN_ALLOWLIST)
+        event["lesson_id"] = _learning_token_field(event.get("lesson_id"))
+        event["trigger"] = _learning_token_field(event.get("trigger"))
+        if event.get("status") not in _LESSON_CANDIDATE_STATUS_ENUM:
+            event["status"] = "QUARANTINED"  # safe floor: never invents PENDING
+        if event.get("scan_outcome") not in _LESSON_SCAN_OUTCOME_ENUM:
+            event["scan_outcome"] = "scanner_unavailable"
+        event["content_sha256"] = _learning_sha256_field(
+            event.get("content_sha256"))
+        event["scope_tags"] = _learning_scope_tags_field(
+            event.get("scope_tags"))
+        if dropped:
+            _breadcrumb("emit_generic lesson_candidate_written dropped: %s"
+                        % sorted(dropped)[:10])
+    elif action == "lesson_approved":
+        event, dropped = _scrub_ceo_boot_event(event, _LESSON_APPROVED_ALLOWLIST)
+        event["lesson_id"] = _learning_token_field(event.get("lesson_id"))
+        event["trigger"] = _learning_token_field(event.get("trigger"))
+        event["content_sha256"] = _learning_sha256_field(
+            event.get("content_sha256"))
+        event["scope_tags"] = _learning_scope_tags_field(
+            event.get("scope_tags"))
+        if dropped:
+            _breadcrumb("emit_generic lesson_approved dropped: %s"
+                        % sorted(dropped)[:10])
+    elif action == "lesson_quarantined":
+        event, dropped = _scrub_ceo_boot_event(
+            event, _LESSON_QUARANTINED_ALLOWLIST)
+        event["lesson_id"] = _learning_token_field(event.get("lesson_id"))
+        if event.get("reason") not in _LESSON_QUARANTINE_REASON_ENUM:
+            event["reason"] = "injection_pattern"
+        if event.get("prior_status") != "PENDING":
+            event["prior_status"] = "PENDING"  # only legal prior state
+        if dropped:
+            _breadcrumb("emit_generic lesson_quarantined dropped: %s"
+                        % sorted(dropped)[:10])
+    elif action == "lesson_expired":
+        event, dropped = _scrub_ceo_boot_event(event, _LESSON_EXPIRED_ALLOWLIST)
+        event["lesson_id"] = _learning_token_field(event.get("lesson_id"))
+        event["age_days"] = _learning_int_field(event.get("age_days"), 100_000)
+        if event.get("created_at_source") not in _LESSON_CREATED_AT_SOURCE_ENUM:
+            event["created_at_source"] = "file"
+        if dropped:
+            _breadcrumb("emit_generic lesson_expired dropped: %s"
+                        % sorted(dropped)[:10])
+    elif action == "lesson_integrity_flag":
+        event, dropped = _scrub_ceo_boot_event(
+            event, _LESSON_INTEGRITY_FLAG_ALLOWLIST)
+        event["lesson_id"] = _learning_token_field(event.get("lesson_id"))
+        if event.get("check") not in _LESSON_INTEGRITY_CHECK_ENUM:
+            event["check"] = "hash_unverifiable"
+        if event.get("consumer") not in _LESSON_INTEGRITY_CONSUMER_ENUM:
+            event["consumer"] = "boot"
+        if dropped:
+            _breadcrumb("emit_generic lesson_integrity_flag dropped: %s"
+                        % sorted(dropped)[:10])
+    elif action == "lesson_boot_render_dropped":
+        event, dropped = _scrub_ceo_boot_event(
+            event, _LESSON_BOOT_RENDER_DROPPED_ALLOWLIST)
+        if event.get("reason") not in _LESSON_BOOT_DROP_REASON_ENUM:
+            event["reason"] = "other"
+        event["lesson_id"] = _learning_token_field(event.get("lesson_id"))
+        if dropped:
+            _breadcrumb("emit_generic lesson_boot_render_dropped dropped: %s"
+                        % sorted(dropped)[:10])
+    elif action == "learning_rail_disabled":
+        event, dropped = _scrub_ceo_boot_event(
+            event, _LEARNING_RAIL_DISABLED_ALLOWLIST)
+        if event.get("rail") not in _LEARNING_RAIL_ENUM:
+            event["rail"] = "observe"
+        if event.get("switch") not in _LEARNING_SWITCH_ENUM:
+            event["switch"] = "other"
+        if "hook" in event:
+            event["hook"] = _learning_token_field(event.get("hook"))
+        if dropped:
+            _breadcrumb("emit_generic learning_rail_disabled dropped: %s"
+                        % sorted(dropped)[:10])
+    elif action == "fact_gate_activation_changed":
+        event, dropped = _scrub_ceo_boot_event(
+            event, _FACT_GATE_ACTIVATION_CHANGED_ALLOWLIST)
+        event["enabled"] = bool(event.get("enabled"))
+        if event.get("source") not in _FACT_GATE_SOURCE_ENUM:
+            event["source"] = "default_advisory"
+        if "hook" in event:
+            event["hook"] = _learning_token_field(event.get("hook"))
+        if dropped:
+            _breadcrumb("emit_generic fact_gate_activation_changed dropped: %s"
+                        % sorted(dropped)[:10])
+    elif action == "advisory_dampened":
+        event, dropped = _scrub_ceo_boot_event(
+            event, _ADVISORY_DAMPENED_ALLOWLIST)
+        event["advisory_id"] = _learning_token_field(event.get("advisory_id"))
+        event["ordinal"] = _learning_int_field(event.get("ordinal"), 1_000_000)
+        if event.get("channel") not in _ADVISORY_DAMPEN_CHANNEL_ENUM:
+            event["channel"] = "stderr_prose"
+        if dropped:
+            _breadcrumb("emit_generic advisory_dampened dropped: %s"
+                        % sorted(dropped)[:10])
+    elif action == "distiller_run_completed":
+        event, dropped = _scrub_ceo_boot_event(
+            event, _DISTILLER_RUN_COMPLETED_ALLOWLIST)
+        if event.get("outcome") not in _DISTILLER_OUTCOME_ENUM:
+            event["outcome"] = "model_error"  # safe floor: never invents "ok"
+        event["model_id"] = _learning_token_field(event.get("model_id"))
+        event["fixture_mode"] = bool(event.get("fixture_mode"))
+        event["cursor_advanced"] = bool(event.get("cursor_advanced"))
+        for _cnt in ("events_consumed", "observations_rejected",
+                     "candidates_proposed", "candidates_written",
+                     "candidates_quarantined", "rejected_pre_candidate",
+                     "tokens_in", "tokens_out"):
+            event[_cnt] = _learning_int_field(event.get(_cnt))
+        if dropped:
+            _breadcrumb("emit_generic distiller_run_completed dropped: %s"
+                        % sorted(dropped)[:10])
+    elif action == "lesson_evolve_run":
+        event, dropped = _scrub_ceo_boot_event(
+            event, _LESSON_EVOLVE_RUN_ALLOWLIST)
+        event["dry_run"] = bool(event.get("dry_run"))
+        for _cnt in ("lessons_scanned", "clusters_found", "clusters_resolved",
+                     "proposals_written", "proposals_failed"):
+            event[_cnt] = _learning_int_field(event.get(_cnt))
+        if dropped:
+            _breadcrumb("emit_generic lesson_evolve_run dropped: %s"
+                        % sorted(dropped)[:10])
     # PLAN-113 Phase B B-STRUCTURAL — verbatim passthrough for the documented
     # set of TRUSTED first-party producers (see _EMIT_GENERIC_PASSTHROUGH).
     # Their field sets are controlled at the producer site; pass through as-is
@@ -6992,6 +7169,141 @@ _TOOL_CALL_LIFECYCLE_RECORDED_ALLOWLIST = frozenset({
     "ts", "event_schema",
     "tokens_in", "tokens_out", "tokens_total",
     "hmac", "hmac_error",
+})
+
+
+# ---------------------------------------------------------------------------
+# PLAN-154 (Gated Learning Loop / ADR-160) — Sec MF-3 closed enums + field
+# allowlists for the 11 learning-loop actions. All deny-by-default; every
+# branch also re-coerces VALUES by closed-set membership / bounded charset so
+# a direct emit_generic caller can never sign free text into the HMAC chain
+# (A2 metadata-only). NEVER _EMIT_GENERIC_PASSTHROUGH.
+# ---------------------------------------------------------------------------
+
+# Base signed envelope every PLAN-154 allowlist pre-allows so the scrub does
+# not strip _write_event's own keys on a round-trip.
+_LEARNING_ENVELOPE = frozenset({
+    "action", "session_id", "project",
+    "ts", "event_schema",
+    "tokens_in", "tokens_out", "tokens_total",
+    "hmac", "hmac_error",
+})
+
+_LEARNING_RAIL_ENUM = frozenset({"observe", "distill", "boot_render", "fact_gate"})
+_LEARNING_SWITCH_ENUM = frozenset({
+    "CEO_LEARNING_OBSERVE", "CEO_LEARNING_BOOT_LESSONS",
+    "CEO_LEARNING_DISTILL_MODEL", "CEO_FACT_GATE_ENFORCE",
+    "CEO_FACT_GATE_SHADOW", "CEO_ADVISORY_DAMPEN",
+    "CEO_SOTA_DISABLE", "other",
+})
+_LESSON_CANDIDATE_STATUS_ENUM = frozenset({"PENDING", "QUARANTINED"})
+_LESSON_SCAN_OUTCOME_ENUM = frozenset({
+    "clean", "scanner_unavailable", "injection_pattern",
+})
+_LESSON_QUARANTINE_REASON_ENUM = frozenset({
+    "injection_pattern", "content_hash_mismatch", "vocab_violation",
+})
+_LESSON_CREATED_AT_SOURCE_ENUM = frozenset({"chain", "file"})
+_LESSON_INTEGRITY_CHECK_ENUM = frozenset({
+    "hash_mismatch", "missing_approval_event", "vocab_violation",
+    "hash_unverifiable",
+})
+_LESSON_INTEGRITY_CONSUMER_ENUM = frozenset({"boot", "spawn"})
+_LESSON_BOOT_DROP_REASON_ENUM = frozenset({
+    "bad_shape", "hash_malformed", "vocab", "oversize",
+    "validator_unavailable", "validator_block", "scan_redacted",
+    "excess", "other",
+})
+_FACT_GATE_SOURCE_ENUM = frozenset({
+    "settings", "env_emergency_off", "sota_master_off", "default_advisory",
+})
+_ADVISORY_DAMPEN_CHANNEL_ENUM = frozenset({"stderr_prose"})
+_DISTILLER_OUTCOME_ENUM = frozenset({
+    "ok", "no_new_events", "schema_reject", "scan_unavailable",
+    "token_ceiling", "model_error", "store_unavailable",
+    "input_surface_unavailable",
+})
+
+# Bounded-token shapes (mirror lessons.py `_CANDIDATE_TOKEN_RE` and the
+# ceo-boot `_LESSON_ID_RE`): identifier-charset only, hard length cap. A
+# value that fails the shape is coerced to "" — never echoed.
+_LEARNING_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$")
+_LESSON_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+
+
+def _learning_token_field(value: Any) -> str:
+    """Coerce a bounded-identifier field: shape-pass verbatim, else ''."""
+    if isinstance(value, str) and _LEARNING_ID_RE.match(value):
+        return value
+    return ""
+
+
+def _learning_sha256_field(value: Any) -> str:
+    """Coerce a content_sha256 field: 64 lowercase hex or ''."""
+    if isinstance(value, str) and _LESSON_SHA256_RE.match(value):
+        return value
+    return ""
+
+
+def _learning_scope_tags_field(value: Any) -> List[str]:
+    """Coerce scope_tags: <=16 bounded identifier tokens, rest dropped."""
+    out: List[str] = []
+    if isinstance(value, (list, tuple)):
+        for item in value:
+            if isinstance(item, str) and _LEARNING_ID_RE.match(item):
+                out.append(item)
+            if len(out) >= 16:
+                break
+    return out
+
+
+def _learning_int_field(value: Any, ceiling: int = 1_000_000_000) -> int:
+    """Coerce a counter field: non-negative bounded int, else 0."""
+    try:
+        if isinstance(value, bool):
+            return int(value)
+        iv = int(value)
+    except (TypeError, ValueError, OverflowError):
+        return 0
+    return max(0, min(iv, ceiling))
+
+
+_LESSON_CANDIDATE_WRITTEN_ALLOWLIST = _LEARNING_ENVELOPE | frozenset({
+    "lesson_id", "trigger", "status", "scan_outcome", "content_sha256",
+    "scope_tags",
+})
+_LESSON_APPROVED_ALLOWLIST = _LEARNING_ENVELOPE | frozenset({
+    "lesson_id", "trigger", "content_sha256", "scope_tags",
+})
+_LESSON_QUARANTINED_ALLOWLIST = _LEARNING_ENVELOPE | frozenset({
+    "lesson_id", "reason", "prior_status",
+})
+_LESSON_EXPIRED_ALLOWLIST = _LEARNING_ENVELOPE | frozenset({
+    "lesson_id", "age_days", "created_at_source",
+})
+_LESSON_INTEGRITY_FLAG_ALLOWLIST = _LEARNING_ENVELOPE | frozenset({
+    "lesson_id", "check", "consumer",
+})
+_LESSON_BOOT_RENDER_DROPPED_ALLOWLIST = _LEARNING_ENVELOPE | frozenset({
+    "reason", "lesson_id",
+})
+_LEARNING_RAIL_DISABLED_ALLOWLIST = _LEARNING_ENVELOPE | frozenset({
+    "hook", "rail", "switch",
+})
+_FACT_GATE_ACTIVATION_CHANGED_ALLOWLIST = _LEARNING_ENVELOPE | frozenset({
+    "hook", "enabled", "source",
+})
+_ADVISORY_DAMPENED_ALLOWLIST = _LEARNING_ENVELOPE | frozenset({
+    "advisory_id", "ordinal", "channel",
+})
+_DISTILLER_RUN_COMPLETED_ALLOWLIST = _LEARNING_ENVELOPE | frozenset({
+    "outcome", "model_id", "fixture_mode", "events_consumed",
+    "observations_rejected", "candidates_proposed", "candidates_written",
+    "candidates_quarantined", "rejected_pre_candidate", "cursor_advanced",
+})
+_LESSON_EVOLVE_RUN_ALLOWLIST = _LEARNING_ENVELOPE | frozenset({
+    "lessons_scanned", "clusters_found", "clusters_resolved",
+    "proposals_written", "proposals_failed", "dry_run",
 })
 
 
@@ -7774,6 +8086,51 @@ def emit_tool_call_lifecycle_recorded(
     if dropped:  # pragma: no cover — impossible from the typed wrapper
         _breadcrumb(
             f"tool_call_lifecycle_recorded dropped forbidden field(s): "
+            f"{sorted(dropped)[:10]}"
+        )
+
+
+def emit_learning_rail_disabled(
+    *,
+    rail: str,
+    switch: str,
+    hook: str = "",
+    session_id: str = "",
+    project: str = "",
+) -> None:
+    """Emit learning_rail_disabled (PLAN-154 A12 / ADR-160 Decision 8).
+
+    Once-per-session "disabled-this-session" breadcrumb shared by the four
+    learning-loop rails (observe / distill / boot_render / fact_gate) —
+    emitted ONLY on an EXPLICIT operator disable (switch set to a non-enable
+    value, or CEO_SOTA_DISABLE master kill over an opted-in rail), NEVER on
+    merely-unset (which is structurally off with zero delta). Wired to the
+    ADR-158 fail-open-rail liveness surface so "off by recorded operator
+    choice" is distinguishable from a dead rail.
+
+    Both closed enums are re-validated here (defense-in-depth): an
+    unrecognized ``rail`` is coerced to ``"observe"`` and an unrecognized
+    ``switch`` to ``"other"``. ``hook`` (optional producer tag) is bounded
+    to the identifier charset. Fail-open per audit_emit contract.
+    """
+    safe_rail = rail if rail in _LEARNING_RAIL_ENUM else "observe"
+    safe_switch = switch if switch in _LEARNING_SWITCH_ENUM else "other"
+    raw_event: Dict[str, Any] = {
+        "action": "learning_rail_disabled",
+        "session_id": session_id,
+        "project": project,
+        "rail": safe_rail,
+        "switch": safe_switch,
+    }
+    if hook:
+        raw_event["hook"] = _learning_token_field(hook)
+    cleaned, dropped = _scrub_ceo_boot_event(
+        raw_event, _LEARNING_RAIL_DISABLED_ALLOWLIST
+    )
+    _write_event(cleaned)
+    if dropped:  # pragma: no cover — impossible from the typed wrapper
+        _breadcrumb(
+            f"learning_rail_disabled dropped forbidden field(s): "
             f"{sorted(dropped)[:10]}"
         )
 

@@ -73,8 +73,11 @@ class TestW5OffPassthrough(TestEnvContext):
 
     def test_known_actions_count_unchanged(self):
         # W5 was a move, not add (302). PLAN-153 Wave E / ADR-159 then adds
-        # one action (spawn_prompt_defense_gate) -> 303.
-        self.assertEqual(len(audit_emit._KNOWN_ACTIONS), 303)
+        # one action (spawn_prompt_defense_gate) -> 303. PLAN-154 (Gated
+        # Learning Loop / ADR-160, SENT-F) adds 11 metadata-only actions
+        # (lesson_* family + learning_rail_disabled + fact_gate_activation_changed
+        # + advisory_dampened + distiller_run_completed + lesson_evolve_run) -> 314.
+        self.assertEqual(len(audit_emit._KNOWN_ACTIONS), 314)
 
 
 class TestAdminKeyScrub(_W5Base):

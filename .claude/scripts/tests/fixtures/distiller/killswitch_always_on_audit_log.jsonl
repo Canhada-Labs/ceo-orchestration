@@ -1,0 +1,4 @@
+{"action":"tool_call_lifecycle_recorded","session_id":"s-nooptin","project":"test","tool_name_enum":"Bash","duration_bucket":"b_1_10s","success":false,"orphan":false}
+{"action":"tool_call_lifecycle_recorded","session_id":"s-nooptin","project":"test","tool_name_enum":"Bash","duration_bucket":"b_1_10s","success":false,"orphan":false}
+{"action":"tool_call_lifecycle_recorded","session_id":"s-nooptin","project":"test","tool_name_enum":"Bash","duration_bucket":"b_100ms_1s","success":false,"orphan":false}
+{"action":"lesson_write","session_id":"s-nooptin","project":"test","lesson_id":"abc123","archetype":"vp-eng"}

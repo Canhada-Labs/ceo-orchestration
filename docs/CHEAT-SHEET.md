@@ -156,6 +156,17 @@ All scripts are stdlib-only Python ≥ 3.9 or Bash ≥ 4.
 | `CEO_OTEL_EMIT` | unset | `=1` activates OTLP cost-stream emit (ADR-061, requires `CEO_OTEL_ENDPOINT`) |
 | `CEO_TWO_PASS_REVIEW` | unset | `=1` activates 2-pass code-review (Sonnet→Opus) |
 | `CEO_AUTONOMOUS_LOOPS_DISABLE` | unset | `=1` hard-disables autonomous-loop scheduling (overrides `CEO_SWARM`) |
+| `CEO_LEARNING_OBSERVE` | unset | `=1` activates the PLAN-154 metadata observe rail (per-session closed-schema `.observe.jsonl` store). Unset = structurally off (zero delta); any other set value = explicit off → one `learning_rail_disabled` breadcrumb/session |
+| `CEO_LEARNING_BOOT_LESSONS` | unset | `=1` activates the `/ceo-boot` "Past lessons" fenced section (PLAN-154 item 4; default full-markdown mode only — never `--short`/`--cached`/`--json`). Unset = structurally off; other set value = explicit off (breadcrumb) |
+| `CEO_FACT_GATE_ENFORCE` | unset | Fact-forcing deny-once gate flip (PLAN-154 item 6 / ADR-160 D5). ENABLE is SETTINGS-BACKED only (`{"env":{"CEO_FACT_GATE_ENFORCE":"1"}}` in a settings layer); as an ENV var it is EMERGENCY OFF only (`=0` forces advisory — env can never enable) |
+| `CEO_LEARNING_DISTILL_MODEL` | unset | Overrides the offline distiller model id (`distill-lessons.py`; default = explicit pin `claude-haiku-4-5-20251001`) |
+
+**PLAN-154 learning-loop kill-switches (default-ON telemetry rails):**
+
+| Variable | Default | Effect |
+|----------|---------|--------|
+| `CEO_FACT_GATE_SHADOW` | `1` (shadow on) | `=0` disables item-6 shadow telemetry (zero filesystem delta; separate from the enforce flip — disabling shadow never touches an armed deny-once gate). Shadow produces the ADR-160 D5 flip-criteria telemetry |
+| `CEO_ADVISORY_DAMPEN` | `1` (dampening on) | `=0` disables advisory condensation (`_lib/advisory_dampen.py` — full text on every repeat). Display-only rail; block reasons are EXEMPT BY NAME and never dampened |
 
 **Budget controls (recommended for production-like adopters):**
 

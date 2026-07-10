@@ -138,6 +138,7 @@ _EXPECTED_PUBLIC_SYMBOLS = frozenset({
     # Deny-by-default scrub-branch + _TOOL_CALL_LIFECYCLE_RECORDED_ALLOWLIST;
     # closed enums tool_name_enum (MF-SEC-1) + duration_bucket (MF-SEC-3).
     "emit_tool_call_lifecycle_recorded",
+    "emit_learning_rail_disabled",  # PLAN-154 A12 typed emitter (ADR-160 D8)
     # PLAN-124 WS-1 (ECC value-harvest) — git hook-bypass guard breadcrumb.
     # Deny-by-default scrub-branch + _GIT_HOOK_BYPASS_BLOCKED_ALLOWLIST;
     # the ONLY caller field is the closed-enum flag_class (MF-G), never the
@@ -607,7 +608,19 @@ _EXPECTED_KNOWN_ACTIONS_SHA256 = (
     # SHA re-derived from the STAGED audit_emit.py under
     # .claude/plans/PLAN-153/staged/wave-E/ via
     # sha256(json.dumps(sorted(_KNOWN_ACTIONS))). Count: 302 -> 303.
-    "7ae35582b99bde40c95efd44ced65521bfb43a6e3323b9bb8da358963a887e49"
+    # Updated PLAN-154 (Gated Learning Loop / ADR-160, SENT-F ceremony) —
+    # +11 metadata-only actions: lesson_candidate_written + lesson_approved
+    # + lesson_quarantined + lesson_expired + lesson_integrity_flag
+    # + lesson_boot_render_dropped + learning_rail_disabled
+    # + fact_gate_activation_changed + advisory_dampened
+    # + distiller_run_completed + lesson_evolve_run. All route through
+    # dedicated Sec MF-3 dispatch branches + per-action allowlists
+    # (_LEARNING_ENVELOPE family), NEVER _EMIT_GENERIC_PASSTHROUGH. ONE new
+    # public typed emitter: emit_learning_rail_disabled (added to
+    # _EXPECTED_PUBLIC_SYMBOLS). SPEC amend v2.48. SHA re-derived from the
+    # STAGED audit_emit.py under .claude/plans/PLAN-154/staged/sent-f/ via
+    # sha256(json.dumps(sorted(_KNOWN_ACTIONS))). Count: 303 -> 314.
+    "689e30948409af119259b445fceb97fd7eae45d3db5c6d9bf370a59659cd2caa"
 )
 
 
@@ -649,13 +662,13 @@ class AuditEmitPublicSurfaceTests(unittest.TestCase):
         self.assertEqual(
             actual, _EXPECTED_KNOWN_ACTIONS_SHA256,
             f"_KNOWN_ACTIONS drift detected. "
-            f"Count={len(actions)} (expected 303). "
+            f"Count={len(actions)} (expected 314). "
             f"Rebaseline this test + add audit-registry entry if the change is intentional.",
         )
 
     def test_known_actions_count_fixed(self) -> None:
         self.assertEqual(
-            len(audit_emit._KNOWN_ACTIONS), 303,
+            len(audit_emit._KNOWN_ACTIONS), 314,
             "_KNOWN_ACTIONS count drifted from 163 baseline (PLAN-088 S114 Wave 1 +11 actions: "
             "cache_discipline_alerted + first_run_wizard_dispatched + "
             "estimate_calibrator_pipeline_run + subagent_findings_partial_drop + "

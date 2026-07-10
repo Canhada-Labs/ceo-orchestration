@@ -1,13 +1,14 @@
 # audit-action registry golden (generated — do not hand-edit)
 # format: v1  source: .claude/hooks/_lib/audit_emit.py::_KNOWN_ACTIONS
 # regenerate: python3 .claude/scripts/check-audit-registry-coverage.py --write-golden
-# count: 303
+# count: 314
 action_required_held
 action_required_rejected
 action_required_resumed
 adequacy_gate_flag
 admin_key_lifecycle_event
 adversary_review_flagged
+advisory_dampened
 agent_spawn
 anthropic_429_observed
 anti_ceo_overhead_block
@@ -69,6 +70,7 @@ credential_override_late_set_ignored
 credential_rotation_due
 debate_event
 dispatcher_route
+distiller_run_completed
 egress_destination_detected
 env_var_hijack_blocked
 escalation_baseline_recorded
@@ -82,6 +84,7 @@ estimate_refined
 eval_task_completed
 execution_context_signed
 execution_context_validation_failed
+fact_gate_activation_changed
 fanout_recommended
 federation_audit_event_pushed
 federation_audit_event_pushed_batch
@@ -136,9 +139,17 @@ injection_flag
 invisible_unicode_blocked
 kernel_extension_landed
 kill_switch_invoked
+learning_rail_disabled
+lesson_approved
 lesson_archived
+lesson_boot_render_dropped
+lesson_candidate_written
+lesson_evolve_run
+lesson_expired
+lesson_integrity_flag
 lesson_outcome
 lesson_outcome_undone
+lesson_quarantined
 lesson_read
 lesson_restored
 lesson_write

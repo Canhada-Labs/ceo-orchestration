@@ -1,0 +1,6 @@
+{
+  "model": "claude-haiku-4-5-20251001",
+  "tokens_in": 512,
+  "tokens_out": 40,
+  "output": "Sure! Here are some thoughts about your telemetry: Bash fails a lot."
+}

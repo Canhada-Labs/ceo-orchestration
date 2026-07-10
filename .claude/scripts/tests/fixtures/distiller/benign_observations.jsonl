@@ -1,0 +1,6 @@
+{"v":1,"tool_name_enum":"Bash","duration_bucket":"b_100ms_1s","success":true,"orphan":false,"paired":true,"tool_use_hash":"0123456789abcdef"}
+{"v":1,"tool_name_enum":"Bash","duration_bucket":"b_1_10s","success":false,"orphan":false,"paired":true,"tool_use_hash":"1123456789abcdef"}
+{"v":1,"tool_name_enum":"Bash","duration_bucket":"b_1_10s","success":false,"orphan":false,"paired":true,"tool_use_hash":"2123456789abcdef"}
+{"v":1,"tool_name_enum":"Read","duration_bucket":"lt_100ms","success":true,"orphan":false,"paired":true,"tool_use_hash":"3123456789abcdef"}
+{"v":1,"tool_name_enum":"Grep","duration_bucket":"b_10_60s","success":true,"orphan":false,"paired":true,"tool_use_hash":"4123456789abcdef"}
+{"v":1,"tool_name_enum":"mcp_other","duration_bucket":"gt_60s","success":true,"orphan":true,"paired":true,"tool_use_hash":"5123456789abcdef"}
