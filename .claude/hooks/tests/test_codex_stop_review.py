@@ -7,17 +7,15 @@ Two layers:
   ``fingerprint``, ``l3_paths``, the review-log round-trip, ``decide``'s
   branch table, ``build_review_instruction`` content).
 - **Subprocess behavioral controls** (the S254 anti-dead-gate doctrine):
-  the staged hook is executed as a SUBPROCESS under ``CEO_HOOK_ADAPTER=codex``
-  on a composed overlay (repo HEAD hooks + the wave-1 host adapter/seam +
-  this wave's hook), fed a recorded-shape codex Stop envelope on stdin. A
-  canonical edit with NO review record MUST come back
-  ``{"decision":"block", ...}`` on the codex wire; adding an APPROVE record
-  flips it to ``{}`` allow. A mutation control (blind the record match)
-  proves the block assertion has teeth.
+  the landed hook is executed as a SUBPROCESS under ``CEO_HOOK_ADAPTER=codex``
+  on a tmpdir copy of the live hooks tree (which post-landing already
+  contains the wave-1 host adapter/seam and this wave's hook), fed a
+  recorded-shape codex Stop envelope on stdin. A canonical edit with NO
+  review record MUST come back ``{"decision":"block", ...}`` on the codex
+  wire; adding an APPROVE record flips it to ``{}`` allow. A mutation
+  control (blind the record match) proves the block assertion has teeth.
 
-The overlay is built the same way the MANIFEST-A prove pass composes:
-copy the repo hooks tree, overlay the staged wave-1 seam + adapter and the
-wave-6 hook. No repo-tree writes.
+The tmpdir copy preserves the no-repo-tree-writes isolation.
 """
 
 from __future__ import annotations
@@ -31,8 +29,7 @@ import unittest
 from pathlib import Path
 
 _THIS = Path(__file__).resolve()
-# staged/wave-6/.claude/hooks/tests/test_...py  -> repo root is 6 parents up
-# tests -> hooks -> .claude -> wave-6 -> staged -> PLAN-155 -> plans -> .claude -> repo
+# Landed location: .claude/hooks/tests/test_...py -> repo root is 3 parents up.
 # Resolve the repo root by walking up to the dir containing ".git".
 def _repo_root() -> Path:
     p = _THIS
@@ -40,18 +37,18 @@ def _repo_root() -> Path:
         if (p / ".git").exists():
             return p
         p = p.parent
-    # Fallback: assume the standard staged depth.
-    return _THIS.parents[8]
+    # Fallback: assume the landed depth.
+    return _THIS.parents[3]
 
 
 REPO = _repo_root()
-STAGED = REPO / ".claude" / "plans" / "PLAN-155" / "staged"
-WAVE1 = STAGED / "wave-1" / ".claude" / "hooks"
-WAVE6 = STAGED / "wave-6" / ".claude" / "hooks"
-HOOK_SRC = WAVE6 / "check_codex_stop_review.py"
+# Post-landing (SENT-CX-D): the hook lives in the real hooks tree — the
+# staged overlay copy is gitignored and absent in CI checkouts.
+HOOKS_LIVE = REPO / ".claude" / "hooks"
+HOOK_SRC = HOOKS_LIVE / "check_codex_stop_review.py"
 
-# Make the staged hook importable in-process for the unit tests.
-sys.path.insert(0, str(WAVE6))
+# Make the landed hook importable in-process for the unit tests.
+sys.path.insert(0, str(HOOKS_LIVE))
 import importlib.util as _ilu  # noqa: E402
 
 
@@ -350,22 +347,15 @@ class InstructionTests(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 def _build_overlay() -> Path:
-    """Compose repo HEAD hooks + wave-1 seam/adapter + wave-6 hook.
+    """Copy the landed hooks tree into an isolated tmpdir.
 
-    Skips (returns None) if the repo hooks tree is unavailable.
+    Post-landing the live tree already contains the wave-1 seam/adapter
+    and this wave's hook — no staged overlay composition is needed; the
+    tmpdir copy only preserves the no-repo-tree-writes isolation.
     """
     import tempfile
     dst = Path(tempfile.mkdtemp(prefix="w6-overlay-")) / "hooks"
-    repo_hooks = REPO / ".claude" / "hooks"
-    shutil.copytree(repo_hooks, dst)
-    # Overlay wave-1 seam + host adapter (host-mode read_event/write_decision).
-    for rel in ("_lib/adapters/__init__.py", "_lib/adapters/codex.py"):
-        src = WAVE1 / rel
-        if src.is_file():
-            (dst / rel).parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(src, dst / rel)
-    # Overlay the wave-6 hook.
-    shutil.copy2(HOOK_SRC, dst / "check_codex_stop_review.py")
+    shutil.copytree(HOOKS_LIVE, dst)
     return dst
 
 
@@ -494,10 +484,9 @@ class SubprocessStopWireTests(unittest.TestCase, _GitRepoMixin):
             shutil.rmtree(state, ignore_errors=True)
 
 
-PRE_PUSH_GATE = (
-    REPO / ".claude" / "plans" / "PLAN-155" / "staged" / "wave-6"
-    / "templates" / "codex" / "pre-push-review-gate.sh"
-)
+# Post-landing (SENT-CX-D): the gate template lives at its real path — the
+# staged overlay copy is gitignored and absent in CI checkouts.
+PRE_PUSH_GATE = REPO / "templates" / "codex" / "pre-push-review-gate.sh"
 
 
 class PrePushGateTests(unittest.TestCase, _GitRepoMixin):

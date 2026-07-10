@@ -36,11 +36,13 @@ def _repo_root() -> Path:
         if (p / ".git").exists():
             return p
         p = p.parent
-    return _THIS.parents[8]
+    return _THIS.parents[3]
 
 
 REPO = _repo_root()
-SCRIPT = REPO / ".claude" / "plans" / "PLAN-155" / "staged" / "wave-6" / "scripts" / "codex-advisory-teeth.py"
+# Post-landing (SENT-CX-D): the script lives at its real path — the staged
+# overlay copy is gitignored and absent in CI checkouts.
+SCRIPT = REPO / "scripts" / "codex-advisory-teeth.py"
 
 
 def _load():
