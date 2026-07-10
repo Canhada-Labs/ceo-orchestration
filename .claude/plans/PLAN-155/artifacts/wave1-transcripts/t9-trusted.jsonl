@@ -1,0 +1,6 @@
+{"type":"thread.started","thread_id":"019f4a05-7497-77a0-8918-0b644d662ff5"}
+{"type":"turn.started"}
+{"type":"item.started","item":{"id":"item_0","type":"command_execution","command":"/bin/zsh -lc 'echo hello-marker-trusted'","aggregated_output":"","exit_code":null,"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_0","type":"command_execution","command":"/bin/zsh -lc 'echo hello-marker-trusted'","aggregated_output":"hello-marker-trusted\n","exit_code":0,"status":"completed"}}
+{"type":"item.completed","item":{"id":"item_1","type":"agent_message","text":"done"}}
+{"type":"turn.completed","usage":{"input_tokens":25269,"cached_input_tokens":19200,"output_tokens":106,"reasoning_output_tokens":0}}

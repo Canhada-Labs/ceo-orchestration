@@ -5,9 +5,16 @@
     "sources": {
       "claude_code": "https://raw.githubusercontent.com/anthropics/claude-code/main/CHANGELOG.md",
       "agent_sdk_ts": "https://github.com/anthropics/claude-agent-sdk-typescript/blob/main/CHANGELOG.md",
-      "agent_sdk_py": "https://github.com/anthropics/claude-agent-sdk-python/blob/main/CHANGELOG.md"
+      "agent_sdk_py": "https://github.com/anthropics/claude-agent-sdk-python/blob/main/CHANGELOG.md",
+      "codex_cli": "https://github.com/openai/codex/releases",
+      "codex_harness": [
+        "https://github.com/openai/codex/releases",
+        "https://developers.openai.com/codex/hooks",
+        "https://developers.openai.com/codex/config-reference",
+        "https://developers.openai.com/codex/rules"
+      ]
     },
-    "_sources_note": "claude_code URL swapped 2026-07-01: docs.claude.com/en/release-notes/claude-code now 301s to platform.claude.com which 307s to the GitHub CHANGELOG; fetch the raw GitHub head directly.",
+    "_sources_note": "claude_code URL swapped 2026-07-01: docs.claude.com/en/release-notes/claude-code now 301s to platform.claude.com which 307s to the GitHub CHANGELOG; fetch the raw GitHub head directly. PLAN-155 Wave 0 (debate A12): codex_cli + codex_harness source URLs added; a LIST value means the Owner --refresh fetches EACH URL for that key (the codex_harness entry watches the release feed AND the three host-harness doc pages — hook-schema drift can land in docs without a release-feed line).",
     "fetched": "2026-07-01",
     "source_stale": false,
     "_source_stale_reason": "Seeded last_seen from the values knowable at build time WITHOUT a network fetch (no-paid-spend rule; the changelog pages are not in-repo). The first Owner-run --refresh sets these to the live page heads and flips source_stale=false. Until then dimension vii reports a single advisory finding rather than a false 'up to date'.",
@@ -50,6 +57,15 @@
         "date": "2026-06-19"
       },
       "watch_for": "codex `exec` flag-surface drift (the PLAN-142 / S214-S230 class): --color, -s/--sandbox enum (read-only|workspace-write|danger-full-access), -o/--output-last-message, --output-schema, --json (JSONL event stream), -m/--model; AND the removals that broke the rail on 0.139 — the old read-only/no-color/strict-json flags, and resume becoming an `exec resume` subcommand. All CLI shape lives in .claude/hooks/_lib/codex_cli_shape.py so a new removal/rename there is a NON-kernel edit. Also watch the binary-SHA pin (codex-cli-binary-sha256.txt) + the semver pin (codex-cli-pin.txt) when the binary upgrades."
+    },
+    {
+      "key": "codex_harness",
+      "label": "Codex CLI (host harness: hooks/config/rules)",
+      "last_seen": {
+        "version": "0.139.0",
+        "date": "2026-07-07"
+      },
+      "watch_for": "PLAN-155 Codex-as-HOST schema surface (debate A12), verified against codex-cli 0.139.0 (S261/S262 research): lifecycle-hook envelope vocabulary (hookEventName / permissionDecision / permissionDecisionReason / hookSpecificOutput / additionalContext), PreToolUse interception coverage (official caveat: intercepts only 'the simple' shell calls today), apply_patch|Edit|Write matcher aliases, /hooks trust-hash keying semantics, .codex/hooks.json + [hooks]-in-config.toml registration shape, execpolicy prefix_rule syntax, requirements.toml MANAGED-hook semantics, project_doc_max_bytes (AGENTS.md 32 KiB cap), SubagentStart continue:false enforcement (parsed-but-NOT-enforced on 0.139 — a future release enforcing it promotes the spawn rail ADVISORY->ENFORCED), Stop decision:block semantics, ConfigChange lifecycle event appearance (ABSENT on 0.139). On drift the checker attaches the code-registered fixture re-record runbook (_DRIFT_RUNBOOKS in check-substrate-watch.py): bump the pin via the ADR-111 ceremony FIRST, then re-record the Wave-1 host-adapter fixtures."
     }
   ]
 }

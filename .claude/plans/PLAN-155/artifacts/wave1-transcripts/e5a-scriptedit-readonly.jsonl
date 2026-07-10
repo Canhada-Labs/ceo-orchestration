@@ -1,0 +1,6 @@
+{"type":"thread.started","thread_id":"019f4a0c-164c-7472-b198-8e41f8140efa"}
+{"type":"turn.started"}
+{"type":"item.started","item":{"id":"item_0","type":"command_execution","command":"/bin/zsh -lc 'echo trust-probe-A'","aggregated_output":"","exit_code":null,"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_0","type":"command_execution","command":"/bin/zsh -lc 'echo trust-probe-A'","aggregated_output":"trust-probe-A\n","exit_code":0,"status":"completed"}}
+{"type":"item.completed","item":{"id":"item_1","type":"agent_message","text":"done"}}
+{"type":"turn.completed","usage":{"input_tokens":24370,"cached_input_tokens":23296,"output_tokens":94,"reasoning_output_tokens":0}}

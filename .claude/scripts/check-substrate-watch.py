@@ -38,6 +38,14 @@ Exit codes:
       not infra failure)
   2 — CLI usage error (argparse)
 
+PLAN-155 Wave 0 (debate A12) extended coverage to the Codex HOST-harness
+substrate: the `codex_harness` ledger entry watches the codex-cli release
+feed AND the developers.openai.com/codex/{hooks,config-reference,rules} doc
+pages; both codex-keyed components now carry a code-defined version probe
+(`codex --version`), and a detected codex drift attaches the code-registered
+fixture re-record runbook (`_DRIFT_RUNBOOKS`): bump the pin via the ADR-111
+ceremony FIRST, then re-record the Wave-1 adapter fixtures.
+
 Stdlib-only. Python >= 3.9. Read-only (never writes; --refresh only PRINTS
 the recipe, it does not fetch). Emits NO audit events.
 """
@@ -75,6 +83,36 @@ _PROBE_ARGV: Dict[str, List[str]] = {
         "python3", "-c",
         "import importlib.metadata as m; print(m.version('claude-agent-sdk'))",
     ],
+    # PLAN-155 Wave 0 (debate A12): the Codex substrate is watched by TWO
+    # ledger entries backed by the SAME read-only binary probe — `codex_cli`
+    # (pair-rail reviewer flag-surface, PLAN-142 lineage; previously had no
+    # probe registered) and `codex_harness` (Codex-as-HOST hooks/config/rules
+    # schema surface, PLAN-155).
+    "codex_cli": ["codex", "--version"],
+    "codex_harness": ["codex", "--version"],
+}
+
+# Code-registered drift runbooks (PLAN-155 Wave 0, debate A12). Same posture
+# as _PROBE_ARGV (Codex R2 P0): the ledger can only SELECT a component key —
+# it can NEVER supply alert/procedure text of its own. When a component with
+# a registered runbook drifts, the runbook is attached to that report row
+# (`runbook`) and printed in text mode, so the alert names the exact
+# re-record procedure instead of a bare version delta.
+_CODEX_FIXTURE_RUNBOOK = (
+    "codex-cli drift — fixture re-record runbook (PLAN-155 debate A12): do "
+    "NOT re-record fixtures against the new binary directly. (1) bump the "
+    "pin FIRST via the ADR-111 pin ceremony (codex-cli-pin.txt + "
+    "codex-cli-binary-sha256.txt); (2) THEN re-record the PLAN-155 Wave-1 "
+    "host-adapter fixtures under .claude/hooks/tests/fixtures/adapters/codex/ "
+    "(each fixture carries _meta.codex_cli_version; the pin-range test stays "
+    "RED until fixtures are re-recorded or explicitly waived); (3) run the "
+    "per-bump re-verification checklist in ADR-161 (hook envelope schema, "
+    "PreToolUse interception surface, /hooks trust-hash keying, SubagentStart "
+    "continue:false, Stop decision:block, execpolicy prefix_rule syntax)."
+)
+_DRIFT_RUNBOOKS: Dict[str, str] = {
+    "codex_cli": _CODEX_FIXTURE_RUNBOOK,
+    "codex_harness": _CODEX_FIXTURE_RUNBOOK,
 }
 
 
@@ -175,6 +213,7 @@ def build_report(
             "installed_version": None,
             "probe_note": "not probed (--probe-installed off)",
             "drift": False,
+            "runbook": None,
         }
         if seen_version == "unknown":
             any_unknown = True
@@ -189,6 +228,9 @@ def build_report(
             ):
                 row["drift"] = True
                 any_drift = True
+                # Attach the code-registered runbook (None-safe): the alert
+                # names the fixture re-record procedure, not just the delta.
+                row["runbook"] = _DRIFT_RUNBOOKS.get(str(comp.get("key", "")))
         rows.append(row)
 
     if source_stale or any_unknown:
@@ -219,8 +261,17 @@ def build_report(
 _REFRESH_RECIPE = """\
 PENDING-OWNER substrate-watch refresh (no model tokens; one doc fetch each):
   For each component in .claude/scripts/substrate-watch.json:
-    1. WebFetch the _meta.sources URL for that key.
-    2. Read the topmost version + release date on the page.
+    1. WebFetch the _meta.sources value for that key. A STRING is one
+       URL; a LIST means fetch EACH URL in it (PLAN-155 A12: e.g.
+       codex_harness = release feed + the three host-harness doc pages).
+    2. Single-URL key: read the topmost version + release date on the
+       page. LIST key: last_seen.version tracks the versioned feed (the
+       first URL); the doc pages carry no version — record last_seen.date
+       as the newest visible 'last updated' across ALL pages, and treat
+       ANY observed change on a doc page as drift for that component
+       EVEN IF the release feed shows no new version (docs-only schema
+       drift is exactly the class this entry watches; on drift follow
+       the component's registered runbook in _DRIFT_RUNBOOKS).
     3. Set components[key].last_seen.version + .date to those values.
     4. Set _meta.fetched to today and _meta.source_stale to false.
   This is Owner-run by design — the nightly agent stays no-network
@@ -273,6 +324,8 @@ def main(argv: Optional[List[str]] = None) -> int:
                 "  [%s] %-28s last_seen=%s installed=%s (%s)"
                 % (mark, row["label"], row["last_seen_version"], installed, row["probe_note"])
             )
+            if row["drift"] and row.get("runbook"):
+                print("         runbook: %s" % row["runbook"])
         if report["status"] != "current":
             sys.stderr.write("advisory: run --refresh for the PENDING-OWNER recipe\n")
 

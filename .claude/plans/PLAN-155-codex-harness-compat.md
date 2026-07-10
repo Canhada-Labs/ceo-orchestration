@@ -1,8 +1,9 @@
 ---
 id: PLAN-155
 title: Codex Harness Compatibility
-status: reviewed
+status: executing
 reviewed_at: 2026-07-07
+executing_at: 2026-07-09
 created: 2026-07-07
 owner: CEO
 depends_on: [PLAN-153]
@@ -180,7 +181,7 @@ file.
       CRITICAL):** `CEO_HOOK_ADAPTER` has ZERO consumers in the
       enforcement hooks today — all four ENFORCED hooks (and ~20 more)
       hard-import the claude adapter (`check_canonical_edit.py:1081`,
-      `check_bash_safety.py:169`, `check_plan_edit.py:92`,
+      `check_bash_safety.py:201`, `check_plan_edit.py:92`,
       `check_arbitration_kernel.py:448`); no hook entrypoint calls
       `contract.load_adapter()`/`resolve_adapter()`. Enumerate every
       `from _lib.adapters import claude` site in `.claude/hooks/`, then
@@ -198,30 +199,55 @@ file.
       signing), PLUS the hook entrypoint files (or the single shared
       seam module) ratified under the debate-A1 dispatch-surface
       inventory — enumerated explicitly at signing, or split into a new
-      **SENT-CX-A2**;
+      **SENT-CX-A2**. **KERNEL-class (pair-rail S265 F1):** all three
+      named files are in `_KERNEL_PATHS`
+      (`check_arbitration_kernel.py:85,165,168` — the PLAN-153 landing's
+      ADR-116-AMEND-1 kernel-extension-v2 added the adapter modules), so
+      the Wave 1 ceremony additionally requires
+      `CEO_KERNEL_OVERRIDE=PLAN-155-CODEX-HOST-ADAPTER` +
+      `CEO_KERNEL_OVERRIDE_ACK=I-ACCEPT` (audited per ADR-031
+      §kernel-override) on top of the sentinel; the SENT-E/S261
+      Owner-shell apply route satisfies the same requirement with the
+      signed sentinel as the authorization record;
       **SENT-CX-B** (Wave 4): registering a NEW audit action is a
       four-file coupling (the S261 PLAN-153 Wave E 302→303 precedent —
-      exactly this shape), so the scope enumerates ALL of:
+      exactly this shape; that precedent has since LANDED, so the current
+      baseline is 303), so the scope enumerates ALL of:
       `.claude/hooks/audit_log.py` (guarded — if the per-tool-call append
       path is extended past the `agent_spawn`-only `build_entry`,
       `audit_log.py:566-567,:642`), `.claude/hooks/_lib/audit_emit.py`
       (guarded — register the new action in `_KNOWN_ACTIONS`
       (`audit_emit.py:153`) with its closed-enum field allowlist, since
       `_write_event` rejects any unregistered action at
-      `audit_emit.py:2455`), `SPEC/v1/audit-log.schema.md` (guarded under
-      `SPEC/v1/*.md` — the action row gets an **Amends** version-bump
+      `audit_emit.py:2475-2477`), `SPEC/v1/audit-log.schema.md` (guarded
+      under `SPEC/v1/*.md` — the action row gets an **Amends** version-bump
       clause), and the unguarded same-commit companion
       `.claude/hooks/tests/test_audit_emit_api_contract.py` (rebaseline the
-      `_KNOWN_ACTIONS` count + SHA256 pin — count 302→303). The unguarded
+      `_KNOWN_ACTIONS` count + SHA256 pin — CURRENT pin is 303 at
+      `test_audit_emit_api_contract.py:656-658`; Wave 4's actions
+      rebaseline 303→304/305, pair-rail S265 F4). The unguarded
       test rides along in the emitter's commit; it is named here only so
       the coupling is not discovered at execution time (`hooks/tests/` is
-      NOT canonical-guarded, so it is not sentinel-blocked);
+      NOT canonical-guarded, so it is not sentinel-blocked).
+      **KERNEL-class (pair-rail S265 F3):** `audit_log.py` and
+      `_lib/audit_emit.py` are in `_KERNEL_PATHS`
+      (`check_arbitration_kernel.py:200,90`), so the Wave 4 ceremony
+      additionally requires
+      `CEO_KERNEL_OVERRIDE=PLAN-155-CODEX-AUDIT-ACTIONS` +
+      `CEO_KERNEL_OVERRIDE_ACK=I-ACCEPT` on top of the sentinel (same
+      Owner-shell-apply equivalence as SENT-CX-A);
       **SENT-CX-C** (Wave 5): `scripts/install.sh` (+ `scripts/upgrade.sh`
       if touched) — sign only AFTER PLAN-153 SENT-B lands, anchor-sha on
       the post-PLAN-153 main;
       **SENT-CX-D** (Wave 6): `.claude/hooks/check_pair_rail.py` (if
       touched), `.claude/dispatcher/**` (if routing matrix touched),
-      `.github/workflows/validate.yml` (CI teeth for the advisory rails);
+      `.github/workflows/validate.yml` (CI teeth for the advisory rails).
+      **KERNEL-class (pair-rail S265 F5):** all three named surfaces are
+      in `_KERNEL_PATHS` (`check_arbitration_kernel.py:180,133,135`), so
+      if Wave 6 touches any of them the ceremony additionally requires
+      `CEO_KERNEL_OVERRIDE=PLAN-155-CODEX-PAIRRAIL-TEETH` +
+      `CEO_KERNEL_OVERRIDE_ACK=I-ACCEPT` on top of the sentinel (same
+      Owner-shell-apply equivalence as SENT-CX-A);
       **SENT-CX-E** (Wave 3b — kill-switch guard extension, debate A8):
       `.claude/hooks/check_canonical_edit.py` (extend `_CANONICAL_GUARDS`
       to cover `.codex/hooks.json`, `.codex/config.toml`,
@@ -472,9 +498,14 @@ RED; full hook suite green under BOTH `CEO_HOOK_ADAPTER=claude` and
 - [ ] **Boot-tripwire extension:** extend `SessionStart.py`'s boot-time
       hash re-check so the kill-switch surface is re-hashed on
       SessionStart (today `_GATE_1_FILES` / `_gate_1_hash` cover only the
-      5 Gate-1 files, `SessionStart.py:48-54,:79`) — this is a
-      canonical-guarded hook edit (sentinel-only; `SessionStart.py` is NOT
-      in `_KERNEL_PATHS`).
+      5 Gate-1 files, `SessionStart.py:48-54,:79`). **KERNEL-class
+      (pair-rail S265 F2 — corrects this plan's earlier "sentinel-only"
+      claim):** `SessionStart.py` IS in `_KERNEL_PATHS`
+      (`check_arbitration_kernel.py:201`, added by the PLAN-153 landing's
+      kernel-extension), so this edit is covered by the SAME
+      `CEO_KERNEL_OVERRIDE=PLAN-155-CODEX-KILLSWITCH-GUARD-EXTENSION` +
+      ACK that the guard-list extension already carries — SENT-CX-E's
+      override covers BOTH kernel rows of this wave.
 - [ ] **Census extension:** extend the `effective_config.py` disk census
       (today `registered-basename-missing-on-disk` over
       `.claude/hooks/*.py`, `effective_config.py:192-199`) so a
@@ -519,16 +550,19 @@ appears in the degradation page diff (Wave 7).
       per-tool-call events were missed (partial interception), marked with
       a distinct action so completeness analysis can tell rails apart.
 - [ ] **Action registration is a four-file coupling, all in the SAME
-      commit as the emitter (S261 PLAN-153 Wave E precedent, 302→303):**
+      commit as the emitter (S261 PLAN-153 Wave E precedent, 302→303 —
+      landed; current baseline 303):**
       each NEW action introduced by A (per-tool-call, non-`agent_spawn`)
       and B (turn-ended backstop) is (1) added to `_KNOWN_ACTIONS` in
       `_lib/audit_emit.py:153` WITH its closed-enum field allowlist
       (deny-by-default per-action allowlist per SPEC v2.41; `_write_event`
-      rejects any unregistered action at `audit_emit.py:2455`); (2)
+      rejects any unregistered action at `audit_emit.py:2475-2477`); (2)
       recorded in `SPEC/v1/audit-log.schema.md` as an **Amends**
       version-bump clause on the action row; (3) count+SHA rebaselined in
       `.claude/hooks/tests/test_audit_emit_api_contract.py` (the pin at
-      `_EXPECTED_KNOWN_ACTIONS_SHA256`, count 302→303); (4) emitted by the
+      `_EXPECTED_KNOWN_ACTIONS_SHA256`, count 303→304/305 from the
+      current 303 baseline at `test_audit_emit_api_contract.py:656-658`);
+      (4) emitted by the
       Wave 4 code — items 1-4 land in ONE commit so the api-contract test
       never goes RED against an unregistered emit. SENT-CX-B scope (Wave 0)
       names files 1-3; file 3's test is the unguarded companion.
@@ -721,6 +755,33 @@ MUST NOT drift); contamination grep green over the installed tree.
    `docs/provider-pricing.md`-consistent row + named env override in the
    same commit that pins it.)
 
+### Owner ratifications — 2026-07-10 (S265 wake-up ceremony, verbatim)
+
+Presented via AskUserQuestion; selected options logged verbatim per the
+CLAUDE.md AskUserQuestion doctrine.
+
+- **A1 dispatch seam → OPTION (b) — single shared `resolve()` seam + only
+  the 4 ENFORCED hooks migrated** (CEO recommendation, CONFIRMED). The
+  Owner first selected (a) but, after the CEO corrected the record that
+  (a) is a full re-implementation across +19 KERNEL hooks (not a text
+  re-draft) with cascading Wave-3b/4 rebases — and that those 19 are
+  Claude-only rails that never fire on Codex's wire shape, so (a) adds no
+  Codex-matrix coverage, only kernel blast-radius — the Owner reverted to
+  (b) on an informed re-choice (2026-07-10). Wave 1 overlay as-built
+  already implements (b); SENT-CX-A scope stands as reconciled. Migrating
+  the remaining advisory rails to the seam is available incrementally
+  later if a Codex-side need for them appears.
+- **AGENTS.md guard (SENT-CX-E) → KEEP (Recomendado).** Guarding the
+  repo-root `AGENTS.md` (reviewer contract = trusted prompt surface)
+  stands; SENT-CX-E unchanged on this point.
+- **OQ1 → `/hooks` guided default + `--managed-hooks` opt-in** (Recomendado;
+  ratified now — the empirical trust-hash keying fact is in
+  `artifacts/trust-keying-A6.md`).
+- **OQ2 → (b) opt-in `--with-codex-skills` copy** (Recomendado),
+  manifest-recorded.
+- **OQ3 → reviewer pin `claude-opus-4-8`, 100k-token ceiling, env override
+  `CEO_PAIR_RAIL_REVIEWER_MODEL`** (Recomendado; ADR-052 VETO-floor parity).
+
 ## Success criteria
 
 - [ ] Positive-control replay: the 3 planted violation classes
@@ -771,10 +832,11 @@ MUST NOT drift); contamination grep green over the installed tree.
 > + `docs/degradation-outside-claude-code.md` + `_lib/adapters/codex.py`
 > (note its dual role: pair-rail reviewer-egress helpers stay untouched;
 > host mode is the new surface). Debate round-1 is DONE (ADJUST_PROCEED,
-> A1-A15 applied into this text — see §Debate); status is `reviewed`.
-> Codex pair-rail R1 was REJECT (P1 ceremony misclassification / P2 audit
-> under-scoping), fixes applied — R2 is PENDING and gates EXECUTION (do
-> NOT start Wave 0 signing until the pair-rail returns APPROVE).
+> A1-A15 applied into this text — see §Debate). Codex pair-rail: R1
+> REJECT → fixes → R2 APPROVE (S262) → S265 re-run REJECT on
+> post-PLAN-153 disk drift (kernel-extension-v2 + 303 baseline) → fixes
+> applied → **R3 APPROVE 2026-07-09 (S265)** — the execution gate is
+> SATISFIED; status flipped `executing` S265.
 > Next: execute Wave 0 with the Owner (ratify OQ2/OQ3 — OQ1 waits for
 > the debate-A6 trust-keying answer; run the debate-A1 dispatch-surface
 > inventory + seam ratification; sign SENT-CX-A/B/E with the A1/A2/A8
@@ -943,7 +1005,8 @@ Owner delegation, after applying all fifteen binding adjustments.
     claim).** `audit_log.py:566-567` ignores non-Agent tool events and
     `:642` hardcodes `action: "agent_spawn"`; `_lib/audit_emit.py` gates
     every write on a fixed `_KNOWN_ACTIONS` registry (`:153`) and rejects
-    unknown actions (`:2455`). A distinct per-tool/turn-ended action is
+    unknown actions (`:2455` at R1 time; now `:2475-2477`). A distinct
+    per-tool/turn-ended action is
     therefore a four-file coupling, exactly the S261 PLAN-153 Wave E
     302→303 precedent. **Fix:** dropped the "no schema change" claim in
     Wave 4-A; added the same-commit four-file registration item
@@ -951,8 +1014,33 @@ Owner delegation, after applying all fifteen binding adjustments.
     `SPEC/v1/audit-log.schema.md` Amends clause,
     `test_audit_emit_api_contract.py` count+SHA rebaseline, emitter) and
     named files 1-3 in SENT-CX-B scope in Wave 0.
-- **Round 2 — PENDING.** The debate consensus (ADJUST_PROCEED, A1-A15)
-  stands and the plan remains `reviewed`; the pair-rail round-2 verdict
-  gates **EXECUTION**, not review status. Wave 0 signing must not begin
-  until the pair-rail returns APPROVE on this amended text (PLAN-152
-  precedent: R1 REJECT → targeted fix → R2 APPROVE).
+- **Round 2 — 2026-07-07 (S262) — APPROVE, no residuals** (recorded in
+  commit `314891a`'s message; this paragraph previously said PENDING —
+  stale). That verdict was rendered against PRE-PLAN-153-landing main.
+- **Round 2 re-run — 2026-07-09 (S265) — REJECT (5 findings + 2 P3),
+  all disk-drift:** the PLAN-153 landing (2026-07-08, `24d2a27` +
+  series) extended `_KERNEL_PATHS` (ADR-116-AMEND-1 kernel-extension-v2)
+  and landed the 302→303 action registration, invalidating this plan's
+  ceremony scoping written against the older main. F1: SENT-CX-A files
+  (`_lib/adapters/codex.py`, `adapters/__init__.py`, `contract.py`) are
+  KERNEL (`check_arbitration_kernel.py:165,168,85`) → Wave 1 needs
+  `CEO_KERNEL_OVERRIDE=PLAN-155-CODEX-HOST-ADAPTER` + ACK. F2:
+  `SessionStart.py` IS KERNEL (`:201`) → Wave 3b boot-tripwire edit rides
+  the SENT-CX-E override (the "sentinel-only" claim was wrong). F3:
+  `audit_log.py`/`audit_emit.py` are KERNEL (`:200,90`) → Wave 4 needs
+  `CEO_KERNEL_OVERRIDE=PLAN-155-CODEX-AUDIT-ACTIONS` + ACK. F4: action
+  count baseline is 303 (pin at `test_audit_emit_api_contract.py:656-658`),
+  not 302 → Wave 4 rebaselines 303→304/305. F5: SENT-CX-D surfaces
+  (`check_pair_rail.py`, `dispatcher/**`, `validate.yml`) are KERNEL
+  (`:180,133,135`) → `CEO_KERNEL_OVERRIDE=PLAN-155-CODEX-PAIRRAIL-TEETH`
+  + ACK if touched. P3 anchor fixes: `audit_emit.py:2455`→`:2475-2477`;
+  `check_bash_safety.py:169`→`:201`. **All 7 fixes applied into this
+  text 2026-07-09 (S265).**
+- **Round 3 — 2026-07-09 (S265) — APPROVE.** F1-F5 verified resolved
+  against disk (kernel lines 85/165/168, 201, 90/200, count pin
+  `test_audit_emit_api_contract.py:656-658`, 180/133/135); the two P3
+  leftovers (stale `:2455` in the historical R1 paragraph — annotated;
+  §How to continue R2-PENDING contradiction — fixed) applied same
+  session. **Execution gate SATISFIED**; Owner signing of the SENT-CX
+  sentinels (with the three kernel-override slugs) remains the morning
+  ceremony.

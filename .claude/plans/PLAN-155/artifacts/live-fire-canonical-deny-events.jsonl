@@ -1,0 +1,5 @@
+{"type":"thread.started","thread_id":"019f4a6d-bd9d-74a2-9a99-a7eaa40cd7e5"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"I’m making the requested direct file edit with one `apply_patch` call and no shell commands."}}
+{"type":"item.completed","item":{"id":"item_1","type":"agent_message","text":"Blocked exactly as requested:\n\n`Command blocked by PreToolUse hook: CANONICAL-EDIT-BLOCKED: '.claude/team.md' is a canonical governance path. Edits require an Owner-signed sentinel at .claude/plans/PLAN-NNN/architect/round-N/approved.md with this path declared in the Scope: block. See ADR-010..`"}}
+{"type":"turn.completed","usage":{"input_tokens":30524,"cached_input_tokens":24320,"output_tokens":181,"reasoning_output_tokens":33}}

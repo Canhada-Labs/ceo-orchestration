@@ -1,0 +1,4 @@
+{"type":"thread.started","thread_id":"019f4a09-7fae-7490-9148-2e2abda7ad9d"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"The command did not run. It was blocked by a PreToolUse hook with this message:\n\n`responder synthetic block reason via exit2. Command: echo matrix-marker-exit2`"}}
+{"type":"turn.completed","usage":{"input_tokens":25259,"cached_input_tokens":24320,"output_tokens":144,"reasoning_output_tokens":0}}

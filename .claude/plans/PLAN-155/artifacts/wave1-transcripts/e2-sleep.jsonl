@@ -1,0 +1,6 @@
+{"type":"thread.started","thread_id":"019f4a09-2e8d-75a1-9804-b75170b7316c"}
+{"type":"turn.started"}
+{"type":"item.started","item":{"id":"item_0","type":"command_execution","command":"/bin/zsh -lc 'echo matrix-marker-sleep'","aggregated_output":"","exit_code":null,"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_0","type":"command_execution","command":"/bin/zsh -lc 'echo matrix-marker-sleep'","aggregated_output":"matrix-marker-sleep\n","exit_code":0,"status":"completed"}}
+{"type":"item.completed","item":{"id":"item_1","type":"agent_message","text":"The command ran successfully and exited with code `0`.\n\nOutput:\n```text\nmatrix-marker-sleep\n```"}}
+{"type":"turn.completed","usage":{"input_tokens":25273,"cached_input_tokens":21760,"output_tokens":127,"reasoning_output_tokens":0}}

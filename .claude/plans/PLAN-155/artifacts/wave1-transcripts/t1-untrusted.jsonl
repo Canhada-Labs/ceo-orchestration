@@ -1,0 +1,6 @@
+{"type":"thread.started","thread_id":"019f49fa-a61f-7551-8037-66f9d7dff124"}
+{"type":"turn.started"}
+{"type":"item.started","item":{"id":"item_0","type":"command_execution","command":"/bin/zsh -lc 'echo hello-marker-123'","aggregated_output":"","exit_code":null,"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_0","type":"command_execution","command":"/bin/zsh -lc 'echo hello-marker-123'","aggregated_output":"hello-marker-123\n","exit_code":0,"status":"completed"}}
+{"type":"item.completed","item":{"id":"item_1","type":"agent_message","text":"done"}}
+{"type":"turn.completed","usage":{"input_tokens":27924,"cached_input_tokens":16128,"output_tokens":106,"reasoning_output_tokens":0}}

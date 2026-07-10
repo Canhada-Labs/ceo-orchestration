@@ -1,0 +1,7 @@
+{"type":"thread.started","thread_id":"019f4a0c-b1e1-7363-ae1f-cd57fc733004"}
+{"type":"item.completed","item":{"id":"item_0","type":"error","message":"`--dangerously-bypass-hook-trust` is enabled. Enabled hooks may run without review for this invocation."}}
+{"type":"turn.started"}
+{"type":"item.started","item":{"id":"item_1","type":"command_execution","command":"/bin/zsh -lc 'echo trust-probe-C'","aggregated_output":"","exit_code":null,"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_1","type":"command_execution","command":"/bin/zsh -lc 'echo trust-probe-C'","aggregated_output":"trust-probe-C\n","exit_code":0,"status":"completed"}}
+{"type":"item.completed","item":{"id":"item_2","type":"agent_message","text":"done"}}
+{"type":"turn.completed","usage":{"input_tokens":25254,"cached_input_tokens":21760,"output_tokens":94,"reasoning_output_tokens":0}}
