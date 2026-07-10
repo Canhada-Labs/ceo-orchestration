@@ -50,8 +50,8 @@ library — you install it *into* an existing repository with
 - **A tamper-evident audit log** — every agent spawn, edit, and ceremony is appended to an HMAC-chained log; `verify_chain()` (`.claude/hooks/_lib/audit_hmac.py`) **detects** any break in the chain.
 - **A cross-LLM pair-rail** — a second model (Codex) reviews canonical edits Claude proposes, so no single model is both author and sole reviewer.
 - **A skill library** — **166 skills** ready-made (42 core + 8 frontend + 116 domain).
-- **Governance hooks** — 54 Python hook scripts on disk (44 wired into `.claude/settings.json` (46 event registrations)), built on 68 stdlib-only `_lib/` modules.
-- **175 ADRs** (architecture decision records, `.claude/adr/`) and **25 slash commands** (`.claude/commands/`).
+- **Governance hooks** — 55 Python hook scripts on disk (44 wired into `.claude/settings.json` (46 event registrations)), built on 68 stdlib-only `_lib/` modules.
+- **176 ADRs** (architecture decision records, `.claude/adr/`) and **25 slash commands** (`.claude/commands/`).
 
 A note this repo keeps deliberately: **there is no speed claim.** Six
 internal experiments found no general speedup over an optimized solo

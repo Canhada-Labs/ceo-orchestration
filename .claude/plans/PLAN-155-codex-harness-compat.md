@@ -1,9 +1,10 @@
 ---
 id: PLAN-155
 title: Codex Harness Compatibility
-status: executing
+status: done
 reviewed_at: 2026-07-07
 executing_at: 2026-07-09
+completed_at: 2026-07-10
 created: 2026-07-07
 owner: CEO
 depends_on: [PLAN-153]
@@ -12,6 +13,14 @@ budget_sessions: 4
 context_risk: medium
 external_wait: none
 tags: [harness-compat, adapters, codex, installer, audit, pair-rail]
+related_commits:
+  - daca2ec   # feat(PLAN-155): land Wave-1 codex host adapter — resolve() seam (b), 4 enforced hooks, ADR
+  - fdb1822   # feat(PLAN-155): land Wave-2 codex templates — hooks.json + config example + AGENTS.md + ru
+  - c529caa   # feat(PLAN-155): land Wave-3b kill-switch teeth — guard-list extension incl. AGENTS.md [SEN
+  - 0d13e11   # feat(PLAN-155): land Wave-4 codex audit chain — actions 314→316 + tamper mirror [SENT-CX-B
+  - 8c032df   # feat(PLAN-155): land Wave-5 codex installer — _codex_harness + matrix tests [SENT-CX-C]
+  - 9a74d51   # feat(PLAN-155): land Wave-6 inverted pair-rail teeth + validate.yml riders [SENT-CX-D]
+  - c70adf1   # docs(PLAN-155): land Wave-7 docs — INSTALL/README/adapters/capability matrix
 ---
 
 # PLAN-155 — Codex Harness Compatibility
