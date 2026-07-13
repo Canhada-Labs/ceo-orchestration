@@ -21,9 +21,10 @@ translate the wire.
 The authoritative list is `KNOWN_ADAPTERS` in
 `.claude/hooks/_lib/contract.py` (mirrored by `ADAPTER_REGISTRY` in
 `.claude/hooks/_lib/adapters/__init__.py`). As of this writing it is
-**exactly** `["claude", "codex"]` — those are the only two host-dispatch
-adapter modules on disk (`.claude/hooks/_lib/adapters/claude.py`,
-`.claude/hooks/_lib/adapters/codex.py`). There is no top-level
+**exactly** `["claude", "codex", "grok"]` — those are the only three
+host-dispatch adapter modules on disk (`.claude/hooks/_lib/adapters/claude.py`,
+`.claude/hooks/_lib/adapters/codex.py`,
+`.claude/hooks/_lib/adapters/grok.py`). There is no top-level
 `gemini.py` / `openai.py` / `local.py` hook-dispatch adapter; earlier
 editions of this page documented three that were never in the registry
 and are not on disk — that prose is removed.
@@ -118,6 +119,94 @@ discovery silently returns zero hooks inside a **git worktree** (plain
 repo works) — the installer arming check detects-and-warns, and it is on
 the substrate-watch per-bump re-test list.
 
+### `grok` (xAI Grok Build CLI) — per-rail; **verified against grok 0.2.93**
+
+- Module: `.claude/hooks/_lib/adapters/grok.py`. Grok Build reads the
+  framework's legacy-compat `.claude/settings.json` as a Claude-compatible
+  hook registration, so the **single registration surface is the
+  `.claude/settings.json` the framework already ships**. The grok path
+  deliberately does **not** emit a `.grok/hooks/` bundle: arming both
+  surfaces makes grok 0.2.93 fire every hook **twice** on the same tool
+  call (an HMAC double-count), with no documented runtime kill switch for
+  the duplication. (This inverts the original single-vs-dual-surface design
+  question, OQ1.)
+- Wire shape: grok lifecycle-hook stdin JSON with **camelCase** keys
+  (`hookEventName`, `toolName`, `toolInput`, `workspaceRoot`, `sessionId`,
+  `toolUseId`) and **snake_case** event values (`pre_tool_use`). Tool names
+  arrive under grok's **native** vocabulary and the adapter aliases them at
+  both the matcher and the wire: `Bash`→`run_terminal_command`,
+  `Read`→`read_file`, `Edit`/`Write`/`MultiEdit`→`search_replace`,
+  `Grep`→`grep`, `Glob`/`ListDir`→`list_dir`, `WebSearch`→`web_search`,
+  `Task`→`spawn_subagent`.
+- Blocking surface: **`pre_tool_use` is the only blocking event.** Stop,
+  UserPromptSubmit, and SubagentStart are **passive** (non-blocking) under
+  grok — they can observe and inject context but cannot deny.
+- Vocabulary / exit discipline (grok-scoped): grok does **not** understand
+  `{"decision":"block"}` — it treats that shape as malformed output and
+  **fail-OPENs, even with exit 2** (probe P5). So the `_python-hook.sh`
+  shim rewrites `block`→`deny` whenever `CEO_HOOK_ADAPTER=grok` (this is the
+  enforcement mechanism, not a convenience — it is not disableable) and
+  maps `deny`→exit 2 as a belt-and-suspenders second channel
+  (`CEO_HOOK_EXIT_MAP=0` disables only the exit-code mapping). The rewrite
+  is grok-gated: exit 2 is already an **active** deny in Codex PreToolUse
+  (not inert), so Claude and Codex output stay byte-identical and only grok
+  gets the translation.
+- Output shape (host mode): a single-line `deny`/`allow` decision the shim
+  translates for grok as above; on the enforced `pre_tool_use` path a deny
+  surfaces as exit 2 + stderr.
+- Selection: `CEO_HOOK_ADAPTER=grok`, set on the hook invocations inside the
+  shipped `.claude/settings.json` when the grok bundle is installed — one
+  enforcement kernel, now three harnesses, no hook forks.
+
+#### Per-rail status under Grok (each row tied to its mechanism)
+
+Same house vocabulary (ENFORCED / ADVISORY / ABSENT); the residual is part
+of the claim, not a footnote. Full normative text is ADR-162 and
+[`provider_capability_matrix.md`](provider_capability_matrix.md); the source
+of truth for each `deny` is the behavioral positive-control replay, not the
+existence of a config file.
+
+| Rail | Grok primitive | Status | Residual + backstop |
+|---|---|---|---|
+| Canonical-edit guard | `pre_tool_use` `search_replace\|run_terminal_command\|mcp__.*` → deny (grok's native tool names) | **ENFORCED** (edit-time) | Writes smuggled through complex shell (shell-escape class, same as Claude/Codex); every path in a multi-file edit is still gated. Backstops: the `run_terminal_command` rail sees the full command; CODEOWNERS + branch protection at push. |
+| Bash safety | `pre_tool_use` on `run_terminal_command` (grok's native name for `Bash`) running our parser | **ENFORCED** | The hook fires only on the events grok surfaces; the `_e3` whole-command gate stays fail-closed on input. |
+| Plan lifecycle | `pre_tool_use` on `.claude/plans/**` writes | **ENFORCED** (edit-time) | Same shell-escape residual; CI plan-schema checks at push. |
+| Arbitration kernel | `pre_tool_use` unconditional deny on kernel paths (any kernel path in a multi-file edit) | **ENFORCED** (edit-time) | Same residual class; kernel paths also in CODEOWNERS. |
+| Kill-switch protection (`.grok/hooks/**`, `.grok/config.toml`, `.grok/sandbox.toml`, `.grok/rules/*.md`) | The `.grok` config/registration surface enters the canonical deny matcher | **ENFORCED at edit-time; ADVISORY between sessions** | Grok has no continuous config-change event, so between-session config protection degrades to advisory; the edit-time canonical guard is the real protection, CODEOWNERS/CI is the backstop. |
+| Audit HMAC chain | Post-tool per-tool append (`grok_tool_recorded`) + `grok_turn_ended` turn-level backstop (turn accounting rides the passive Stop event) | **ENFORCED, completeness-bounded** | Headless `SessionEnd` is not reliable, so completeness is bounded by turn accounting; `verify_chain()` is unchanged and green over what was written — absence of an entry is not evidence of absence of activity. |
+| Config protection | Edit-time `pre_tool_use` deny; between-session re-check only | **ENFORCED at edit-time; ADVISORY between sessions** | No continuous config-change event; backstop is CI. |
+| Inverted pair-rail | Grok operates, reviewer = `claude -p`; grok's **Stop is passive** and cannot force the review, so the **git pre-push gate is the teeth** (`templates/grok/pre-push-review-gate.sh`) | **ADVISORY at Stop; ENFORCED at push (pre-push gate)** | An operator who never pushes never triggers the gate; reviewer-model pin PROVISIONAL (override `CEO_PAIR_RAIL_REVIEWER_MODEL`). |
+| Spawn governance | `Task`→`spawn_subagent` alias exists, but SubagentStart is **passive** | **ADVISORY** — the spawn event cannot deny under grok | `additionalContext` injects the profile/skill/file-assignment requirement; spawns routed via `run_terminal_command` (`claude -p` / `codex exec` / `grok`) re-gain the ENFORCED gate; pre-push/CI scan over the chain's spawn records is the backstop. **Never documented as enforced.** |
+
+**Failure semantics.** Grok hooks **fail open**: a hook that crashes, times
+out (5s default), or emits malformed output waves the tool call through
+with no model-visible signal — and, per the vocabulary note above, a raw
+`{"decision":"block"}` is itself "malformed" to grok, which is exactly why
+the shim rewrites it to `deny`. The PLAN-152 C4 fail-closed-on-INPUT
+invariant is therefore implemented **inside** our hooks (parse failure at a
+security matcher → emit the deny envelope), never delegated to the harness.
+Every ENFORCED row above carries the residual "hook death or an un-trusted
+folder degrades to silent allow; backstops: boot-time arming check
+(installer), RED-on-absence chain assertions, CODEOWNERS/CI at push."
+
+**Trust keying.** Grok uses a **unified folder-trust** model — one grant
+covers MCP, LSP, and hooks — granted via `/hooks-trust` or `grok --trust`
+and persisted to `~/.grok/trusted_folders.toml`. **Nothing is enforced
+until the folder is trusted**; until then hooks are silently skipped, and
+"installed but untrusted" is indistinguishable from healthy at runtime. The
+installer's arming check (`grok inspect` + refuse-on-drift) is the only
+local detector.
+
+**Substrate boundary (binding).** Grok Build is a rolling 0.x CLI shipping
+**1–2 releases per day**, so the pin is an **exact version**, not a range:
+`.claude/governance/grok-cli-pin.txt` = `grok 0.2.93` (a range would be
+meaningless at that cadence). The installer is itself a rolling, non-pinned
+script — it is fetched, hashed, `grok inspect`-ed, and only **then**
+executed (never `curl | bash`); the binary-SHA pin is the real supply-chain
+gate. `grok login` requires a SuperGrok / X Premium+ account; that account
+exposes `grok-4.5` (default) and `grok-composer-2.5-fast` — **not**
+`grok-build-0.1` — and the cross-vendor council's grok lane uses `grok-4.5`.
+
 ## LLM-invocation adapters (`live/`) — a separate layer
 
 `.claude/hooks/_lib/adapters/live/` holds `claude.py`, `claude_batch.py`,
@@ -162,6 +251,24 @@ That emits `.codex/hooks.json`, `.codex/rules/ceo.rules`, and an operator
 trust** — the installer prints the exact trust steps and a
 post-install arming check (`ARMED / NOT-ARMED-(untrusted) / BROKEN`) as
 its final instruction. See [INSTALL.md](../INSTALL.md) `--harness codex`.
+
+### For Grok Build users
+
+Install the Grok bundle with the installer:
+
+```bash
+./scripts/install.sh /path/to/your-app --harness grok
+```
+
+Grok reads the framework's legacy-compat `.claude/settings.json` as a
+Claude-compatible registration, so this arms a **single** hook surface (no
+`.grok/hooks/` — a second surface would double-fire every hook on grok
+0.2.93). The installer also emits an operator `AGENTS.md`,
+`.grok/config.toml.example` + `.grok/sandbox.toml.example`, and the pre-push
+review gate, then runs an arming check (`grok inspect` + refuse-on-drift).
+**Nothing is enforced until you grant folder trust** (`grok --trust`,
+unified across MCP/LSP/hooks). See [INSTALL.md](../INSTALL.md)
+`--harness grok`.
 
 ### In CI
 
@@ -239,7 +346,9 @@ To add a new adapter `foo`:
 - ADR-012 — Cross-adapter golden fixtures
 - ADR-028 — Multi-LLM canonical envelope parity
 - ADR-161 — Codex harness capability matrix + host-adapter doctrine
+- ADR-162 — Grok Build harness capability matrix + cross-vendor council
 - PLAN-155 — Codex harness compatibility (host-mode adapter, per-rail matrix)
+- PLAN-156 — Grok third harness + GPT-5.6 refresh + cross-vendor council
 - SPEC/v1/hook-io.schema.md — Claude wire format
 - SPEC/v1/normalized_envelope.schema.md — canonical envelope
 - SPEC/v1/adapters.schema.md — adapter ABI

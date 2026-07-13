@@ -143,7 +143,7 @@ Two install modes:
 - `--ceremony maintainer` (default): full governance, including signed-edit ceremonies on protected paths.
 - `--ceremony user`: advisory hooks only, no signing — writes only under `.claude/`. Good for a low-friction trial.
 
-### Harness: Claude Code (default) or Codex CLI
+### Harness: Claude Code (default), Codex CLI, or Grok Build
 
 The same enforcement hooks run under two harnesses. `--harness claude` (the default; byte-identical to omitting the flag) registers the hooks for Claude Code. `--harness codex` additionally emits a Codex bundle — `.codex/hooks.json`, `.codex/rules/ceo.rules`, and an operator `AGENTS.md` — that invokes the **same** hooks with `CEO_HOOK_ADAPTER=codex`:
 
@@ -152,6 +152,14 @@ The same enforcement hooks run under two harnesses. `--harness claude` (the defa
 ```
 
 Under Codex the rails are **per-rail**, verified against codex-cli 0.139.0: canonical-edit, bash-safety, plan-lifecycle, kernel-deny, config, and kill-switch are ENFORCED at edit time; the audit chain is ENFORCED but completeness-bounded; the pair-rail is inverted (Codex operates, `claude -p` reviews) and PARTIAL; **spawn governance is ADVISORY, not enforced**. Two things bound every ENFORCED claim: **nothing is enforced until you grant Codex `/hooks` trust** (the installer prints the exact steps and ends with an `ARMED / NOT-ARMED-(untrusted) / BROKEN` arming check), and codex-cli fail-opens on hook death — an untrusted or crashed hook is a silent no-op. See [`docs/adapters.md`](docs/adapters.md), [`docs/provider_capability_matrix.md`](docs/provider_capability_matrix.md), and [`INSTALL.md`](INSTALL.md) `--harness codex`.
+
+`--harness grok` runs the **same** hooks under xAI Grok Build. Grok reads the framework's legacy-compat `.claude/settings.json` as a Claude-compatible registration, so this is a **single-surface** install — it arms the shipped `.claude/settings.json` (no `.grok/hooks/` bundle; arming both surfaces would double-fire every hook) and emits `AGENTS.md`, `.grok/*.example` config, and a git pre-push review gate:
+
+```bash
+./scripts/install.sh /path/to/your-app --harness grok
+```
+
+Verified against grok 0.2.93 (an **exact** pin, not a range — Grok Build ships 1–2 releases/day). The prevention rails (canonical-edit, bash-safety on grok's native `run_terminal_command`, plan-lifecycle, kernel-deny, `.grok` kill-switch) are ENFORCED at edit time via grok's only blocking event, `pre_tool_use`; the audit chain is ENFORCED but completeness-bounded; **spawn governance is ADVISORY** (SubagentStart is passive). The pair-rail is inverted and **Stop-passive** — grok's Stop hook cannot force the review, so the **git pre-push gate is the teeth**. As with Codex, two things bound every ENFORCED claim: nothing fires until you grant Grok **folder trust** (`grok --trust`, unified across MCP/LSP/hooks), and grok fail-opens on hook death (crash / timeout / malformed = silent allow). Separately, `/council <scope>` runs an ADVISORY cross-vendor audit (Claude + Codex + Grok), fail-loud and never in CI. See [`docs/adapters.md`](docs/adapters.md) and [`INSTALL.md`](INSTALL.md) `--harness grok`.
 
 To verify the safety guards actually block what they claim, run the in-process self-test (hermetic, no network, no cost):
 

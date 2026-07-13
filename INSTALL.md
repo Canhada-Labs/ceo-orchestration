@@ -160,7 +160,7 @@ cd /path/to/your/project
 | `--link` | — | (off) | Use symlinks instead of copies (for submodule mode) |
 | `--profile` | `core,frontend,<domain>` | `core,frontend` | Comma-separated list of profiles to install |
 | `--stack` | `node`, `none` | `none` | Stack-specific hooks to merge into settings.json |
-| `--harness` | `claude`, `codex` | `claude` | Host harness. `claude` is byte-identical to omitting the flag; `codex` additionally emits the `.codex/` bundle (see [Harness: Codex CLI](#harness-codex-cli---harness-codex)) |
+| `--harness` | `claude`, `codex`, `grok` | `claude` | Host harness. `claude` is byte-identical to omitting the flag; `codex` additionally emits the `.codex/` bundle (see [Harness: Codex CLI](#harness-codex-cli---harness-codex)); `grok` arms the shipped `.claude/settings.json` for xAI Grok Build (single surface — no `.grok/hooks/`) and emits `AGENTS.md` + `.grok/*.example` + the pre-push gate (see [Harness: Grok Build](#harness-grok-build---harness-grok)) |
 | `--managed-hooks` | — | (off) | Codex only: also emit a `requirements.toml` MANAGED-hooks policy file (trusted-by-policy, non-disableable) instead of the consent-first `/hooks` flow |
 
 ### What the script installs
@@ -290,6 +290,99 @@ default consent-first `/hooks` flow suits single-repo adopters.
 emitted path (restoring `--force` backups). The `--harness` value
 round-trips through `.install-state.json`, so `upgrade.sh` replays it —
 you do not re-pass `--harness codex` on upgrade.
+
+### Harness: Grok Build (`--harness grok`)
+
+The framework runs its **same** enforcement hooks under the xAI Grok Build
+CLI. Grok reads the framework's legacy-compat `.claude/settings.json` as a
+Claude-compatible hook registration, so `--harness grok` **does not fork
+any hook and does not add a second hook surface** — it arms the hooks that
+`.claude/settings.json` already ships, with `CEO_HOOK_ADAPTER=grok` on the
+invocations. **Verified against grok 0.2.93** (pin
+`.claude/governance/grok-cli-pin.txt` = `grok 0.2.93` — an **exact**
+version, not a range: Grok Build ships 1–2 releases per day, so a range is
+meaningless).
+
+```bash
+./scripts/install.sh /path/to/your-app --harness grok
+```
+
+**Single registration surface (why there is no `.grok/hooks/`).** Grok
+Build honours the same `.claude/settings.json` hooks Claude Code does. If
+the installer ALSO emitted a `.grok/hooks/` bundle, grok 0.2.93 would fire
+every hook **twice** on the same tool call (an HMAC double-count), with no
+documented runtime kill switch for the duplication. So the grok path
+deliberately arms **one** surface — the shipped `.claude/settings.json` —
+and emits no `.grok/hooks/`.
+
+**What the grok path emits (in addition to the base install):**
+
+- operator `AGENTS.md` — the operator contract (Grok Build reads it the
+  same way Codex does).
+- `.grok/config.toml.example` and `.grok/sandbox.toml.example` — sample
+  config + sandbox policy for you to review and copy into place (the live
+  `.grok/config.toml`, `.grok/sandbox.toml`, `.grok/rules/*.md`, and
+  `.grok/hooks/**` are all canonical-guarded once present, so the installer
+  ships `.example` files rather than writing live config for you).
+- `templates/grok/pre-push-review-gate.sh` — the git pre-push pair-rail
+  gate (the teeth of the inverted pair-rail under grok; see below).
+- a manifest ledger so `uninstall.sh` removes every emitted path.
+
+**Enforcement is per-rail — do not read "runs on Grok" as "same guarantees
+as Claude Code".** canonical-edit, bash-safety (grok's native
+`run_terminal_command`), plan-lifecycle, kernel-deny, and the `.grok`
+kill-switch surface are ENFORCED at edit time via grok's **only** blocking
+event, `pre_tool_use`; the audit HMAC chain is ENFORCED but
+completeness-bounded (`grok_tool_recorded` per tool + a `grok_turn_ended`
+turn backstop — headless `SessionEnd` is unreliable, so turn accounting
+rides the passive Stop event); config protection between sessions is
+ADVISORY (grok has no continuous config-change event); **spawn governance
+is ADVISORY** (the `Task`→`spawn_subagent` alias exists but SubagentStart
+is passive and cannot deny). The pair-rail is **inverted and Stop-passive**:
+grok operates, `claude -p` reviews, but grok's Stop hook cannot force the
+review — so the **git pre-push gate is the teeth**
+(`templates/grok/pre-push-review-gate.sh`). The full per-rail matrix with
+residuals is [`docs/adapters.md`](docs/adapters.md) and
+[`docs/provider_capability_matrix.md`](docs/provider_capability_matrix.md).
+
+**Vocabulary shim (grok-scoped, non-disableable).** Grok does not
+understand `{"decision":"block"}` — it treats that shape as malformed and
+**fail-opens even with exit 2**. Under `CEO_HOOK_ADAPTER=grok` the
+`_python-hook.sh` shim therefore rewrites `block`→`deny` (this is the
+enforcement mechanism, not a convenience) and maps `deny`→exit 2 as a
+belt-and-suspenders second channel (`CEO_HOOK_EXIT_MAP=0` disables only the
+exit-code mapping). The rewrite is grok-gated, so Claude and Codex output
+stays byte-identical.
+
+#### Trust flow — nothing is enforced until you grant folder trust
+
+Grok uses a **unified folder-trust** model: one grant covers MCP, LSP, and
+hooks. Grant it with `grok --trust` (or the `/hooks-trust` flow); it is
+persisted to `~/.grok/trusted_folders.toml`. **Until the folder is trusted,
+hooks are silently skipped** — installed-but-untrusted is indistinguishable
+from healthy at runtime. `grok login` requires a SuperGrok / X Premium+
+account; the account exposes `grok-4.5` (default) and
+`grok-composer-2.5-fast`, not `grok-build-0.1`.
+
+#### Arming check + fail-open
+
+The installer's final step is an arming check (`grok inspect` +
+refuse-on-drift) that reports whether the hooks are actually armed and
+whether the local `grok` version / binary SHA matches the pin. Grok hooks
+**fail open**: a hook that crashes, times out (5s default), or emits
+malformed output waves the tool call through with no model-visible signal —
+so read the arming check, and treat an un-trusted or drifted install as
+un-enforced. The installer itself is a rolling, non-pinned script and is
+**fetched, hashed, and `grok inspect`-ed before it is executed** (never
+`curl | bash`); the binary-SHA pin is the real supply-chain gate.
+
+#### Uninstall / upgrade symmetry
+
+The manifest ledger lets `uninstall.sh` remove every emitted path. The
+`--harness grok` value round-trips through `.install-state.json`, so
+`upgrade.sh` replays it — you do not re-pass `--harness grok` on upgrade.
+Any upgrade that changes a hook registration re-arms the surface; re-run the
+arming check afterward.
 
 ### Updating later
 

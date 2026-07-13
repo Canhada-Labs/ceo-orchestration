@@ -44,6 +44,45 @@ total shell-call interception; a `ConfigChange` lifecycle event; a
 `SubagentStart` that hard-blocks (`continue:false` is parsed-but-not-
 enforced upstream).
 
+### 1b. Governance capability — Grok Build host
+
+**Source of truth:** PLAN-156 §Capability matrix + **ADR-162** (normative),
+certified by behavioral positive-control replay against **grok 0.2.93**
+(pin `.claude/governance/grok-cli-pin.txt` = exact `0.2.93`; 0.x daily
+cadence makes a range meaningless). Same vocabulary (ENFORCED / ADVISORY /
+ABSENT); residual is part of the claim.
+
+| Rail | Grok Build (folder-trusted) | Residual + backstop (Grok) |
+|---|---|---|
+| Canonical-edit guard | **ENFORCED** (edit-time, `pre_tool_use`/`search_replace`) | Shell-escape class. The grok wire carries Claude-shaped `file_path`/`old_string`/`new_string`, so the guard sees a familiar shape once `search_replace`→`Edit` is aliased. |
+| Bash safety | **ENFORCED** (edit-time, native `run_terminal_command`) | The matcher must cover the NATIVE name (grok also accepts the Claude alias); the positive control drives `run_terminal_command` for `rm -rf ~`. |
+| Plan lifecycle | **ENFORCED** (edit-time) | Same shell-escape residual. |
+| Arbitration kernel | **ENFORCED** (edit-time) | Same residual; kernel paths also in CODEOWNERS. |
+| Kill-switch protection (`.grok/hooks/**`, `.grok/config.toml`, `.grok/sandbox.toml`, `.grok/rules/*.md`) | **ENFORCED at edit-time** | Canonical deny matcher + SessionStart boot re-hash. `.grok/hooks/**` is guarded even though the framework ships NO live hooks there — a file we deliberately don't ship is exactly what an attacker would create to re-open the double-fire. |
+| Audit HMAC chain | **ENFORCED, completeness-bounded** | Per-event coverage; PostToolUse is passive. `grok_tool_recorded` + `grok_turn_ended` countable separately; SessionEnd unreliable headless, so turn accounting hangs off `Stop`. |
+| Config protection | **ADVISORY between sessions** | No ConfigChange event; boot-time re-hash only. |
+| Pair-rail review | **ADVISORY (Stop) / ENFORCED (pre-push)** | `Stop` is NON-blocking on grok, so the Stop-review gate is advisory; the git **pre-push gate is the teeth** (`templates/grok/pre-push-review-gate.sh`). Reviewer = `claude -p` (author=xAI, reviewer=Anthropic). |
+| Spawn governance | **ADVISORY** | `SubagentStart` is passive; `Task`→`spawn_subagent` matcher-alias exists but a deny cannot stop the subagent. Mitigation: `additionalContext` + Bash-routed re-gate + chain-scan backstop. |
+
+**The grok enforcement discipline (ADR-162 §2, grok-scoped).** Grok
+fail-OPENs on the Claude `block` vocabulary **even with exit 2** (probe P5),
+so the shim rewrites `block`→`deny` under `CEO_HOOK_ADAPTER=grok` (the
+enforcement mechanism, not disableable) and maps emitted-deny→exit 2
+(belt-and-suspenders, `CEO_HOOK_EXIT_MAP=0` disables). This is grok-gated:
+exit 2 is an ACTIVE deny on Codex (not inert), so Claude/Codex stay
+byte-identical to the "exit 0 regardless" SPEC rule. Hermetic teeth:
+`hooks/tests/test_exit2_chokepoint.py` (RED-on-absence).
+
+**Single-surface (OQ1, inverted by evidence).** The framework arms ONLY the
+legacy-compat `.claude/settings.json`; there is no shipped `.grok/hooks/`.
+Arming both double-fires every hook on 0.2.93 and neither documented kill
+switch stops it at runtime (probe P8). Details: ADR-162 §3.
+
+**ABSENT on Grok today** (WATCH: `docs.x.ai/build` + the grok release feed;
+substrate-watch owns the per-bump re-test): a blocking `Stop` /
+`UserPromptSubmit` / `SubagentStart`; a ConfigChange event; a
+runtime-honored compat kill switch.
+
 **The CI-green ≠ current-Codex boundary (binding).** CI certifies
 fixture-replay against a recorded wire; **only local live-fire certifies
 the real binary, per pinned version.** CI replays FROZEN fixtures recorded
