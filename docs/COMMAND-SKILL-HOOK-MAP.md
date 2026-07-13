@@ -23,6 +23,7 @@ Derived deterministically (sorted, no timestamps) from three committed sources:
 | `/ceo-boot` | — | `.claude/scripts/ceo-boot.py` |
 | `/ceo-info` | — | `.claude/scripts/ceo-info.py` |
 | `/context-budget` | `ceo-orchestration` | `.claude/scripts/context-budget.py` |
+| `/council` | — | — |
 | `/debate` | `architecture-decisions`, `devops-ci-cd`, `financial-correctness-and-math`, `security-and-auth` | `.claude/scripts/debate-emit.py`, `.claude/scripts/inject-agent-context.sh` |
 | `/effort` | — | — |
 | `/fan-plan` | — | `.claude/scripts/fan-plan-parser.py` |
@@ -117,11 +118,11 @@ Derivation rule: a registered hook guards a surface iff its source file under `.
 | Surface | Guarding hooks (source references the surface) |
 |---|---|
 | Skill files (`.claude/skills/**`, `SKILL.md`) | `SessionStart.py`, `audit_log.py`, `check_agent_spawn.py`, `check_anti_ceo_overhead.py`, `check_canonical_edit.py`, `check_protocol_semver_cascade.py`, `check_skill_bootstrap_post.py`, `check_skill_patch_sentinel.py`, `check_skill_reference_read.py` |
-| Command files (`.claude/commands/**`) | — |
+| Command files (`.claude/commands/**`) | `check_canonical_edit.py` |
 
 ## 5. Catalog totals
 
-- Commands: 25
+- Commands: 26
 - Skills (SKILL.md-bearing dirs): 166 — core 42, frontend 8, domain 116 (across 36 domains)
 - Skills with >=1 `activation_triggers` entry: 65
 - Hook registrations: 46 across 13 events (45 unique hook labels)
