@@ -19,8 +19,9 @@
 #
 # Stays disabled for actual publish. The CI workflow npm-publish.yml is
 # the only path to npmjs.org and gates through manual approval in the
-# production-npm environment (auth = npm granular token; --provenance is
-# Sigstore attestation, not OIDC trusted publishing — PLAN-152 tarball-01).
+# production-npm environment (auth = npm Trusted Publishing / OIDC since
+# v1.1.0, PLAN-158 Wave 1 — no long-lived token; --provenance is Sigstore
+# attestation fed by the same per-run JWT).
 
 set -euo pipefail
 
@@ -57,7 +58,7 @@ Notes:
   + optionally validates it locally. Real publishing flows through:
       .github/workflows/npm-publish.yml
   which gates on manual approval in the production-npm environment (npm
-  granular token auth + Sigstore --provenance).
+  Trusted Publishing / OIDC auth + Sigstore --provenance).
 
   Use this to validate the npm shim BEFORE any tag-push triggers the real publish
   workflow. The CI workflow expects this script to have been run on the release

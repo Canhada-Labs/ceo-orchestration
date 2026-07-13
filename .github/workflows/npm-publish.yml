@@ -1,11 +1,22 @@
 name: NPM Publish
 
-# Sprint 5 Phase 4. Publishes ceo-orchestration on tag push (`v*`) using a
-# repo-scoped npm granular token (secrets.NPM_TOKEN) with Sigstore
-# --provenance (that is what `id-token: write` serves). npm "trusted
-# publishing" (OIDC auth) is NOT configured yet — tracked as a v1.0.2
-# follow-up (PLAN-152 §Deferred backlog-oidc; NPM_TOKEN expires
-# ~2026-09-28). Manual `npm publish` is not used. The workflow:
+# Sprint 5 Phase 4; registry auth migrated to npm **Trusted Publishing**
+# (OIDC) by PLAN-158 Wave 1 (PLAN-152 §Deferred backlog-oidc successor).
+# Publishes ceo-orchestration on tag push (`v*`): the npm CLI (>=11.5.1,
+# upgraded in-job — Node 20 bundles npm 10.x, which cannot do the
+# exchange) detects the GitHub Actions OIDC context (`id-token: write`)
+# and exchanges the per-run JWT for a short-lived publish credential
+# scoped to this repo + workflow + `production-npm` environment as
+# registered in the npmjs.com trusted-publisher config (Owner console).
+# The same JWT keeps feeding the Sigstore `--provenance` attestation.
+# The long-lived NPM_TOKEN is NOT read by this workflow anymore and is
+# REVOKED once the first OIDC GA publish succeeds (until then it exists
+# solely as the rollback path:
+# .claude/plans/PLAN-158/staged/wave1/rollback-oidc-to-token.patch +
+# .claude/plans/PLAN-158/oidc-failure-playbook.md — tag runs pin the
+# workflow to the tag's tree, so a failed GA publish means rollback +
+# delete/re-tag; there is no workflow_dispatch here by design).
+# Manual `npm publish` is not used. The workflow:
 #   1. Verifies VERSION + npm/package.json version + tag are consistent
 #   2. Asserts package.json has zero runtime dependencies
 #   3. Checks the registry for the exact version (PLAN-153 Wave B item 5
@@ -38,7 +49,7 @@ concurrency:
 
 permissions:
   contents: read
-  id-token: write   # required for OIDC + provenance
+  id-token: write   # required for OIDC trusted publishing + provenance
 
 jobs:
   publish:
@@ -68,6 +79,24 @@ jobs:
         with:
           node-version: "20"
           registry-url: "https://registry.npmjs.org"
+
+      - name: Upgrade npm CLI for Trusted Publishing (OIDC)
+        # PLAN-158 W1 (debate, all 3 critics): Node 20 bundles npm 10.x,
+        # which does NOT implement the trusted-publishing token exchange —
+        # without this step the OIDC publish dies ENEEDAUTH at GA, and
+        # there is no earlier proof point (RC tags skip this workflow
+        # entirely). npm >=11.5.1 is the first trusted-publishing-GA CLI.
+        run: |
+          set -euo pipefail
+          npm install -g npm@^11.5.1
+          NPM_V="$(npm --version)"
+          case "$NPM_V" in
+            10.*|11.0.*|11.1.*|11.2.*|11.3.*|11.4.*|11.5.0)
+              echo "::error::npm $NPM_V < 11.5.1 — trusted publishing unsupported"
+              exit 1
+              ;;
+          esac
+          echo "OK: npm $NPM_V (>=11.5.1, trusted-publishing capable)"
 
       - name: Verify VERSION matches tag
         run: |
@@ -240,12 +269,25 @@ jobs:
             echo "OK: ${PKG_NAME}@${PKG_VERSION} not in registry (rc=$RC) — proceeding to publish"
           fi
 
-      - name: Publish
+      - name: Publish (Trusted Publishing — OIDC)
         if: steps.already_published.outputs.published != 'true'
         working-directory: npm
+        # PLAN-158 W1: NO long-lived token — npm >=11.5.1 detects the
+        # GitHub Actions OIDC context and mints a short-lived credential
+        # against the npmjs trusted-publisher registration (repo
+        # Canhada-Labs/ceo-orchestration, workflow npm-publish.yml,
+        # environment production-npm). --provenance keeps working (same
+        # OIDC JWT feeds Sigstore).
+        #
+        # ROLLBACK (token fallback) — kept dormant BY DESIGN, do not
+        # inline-enable: apply
+        # .claude/plans/PLAN-158/staged/wave1/rollback-oidc-to-token.patch
+        # (restores the `env: NODE_AUTH_TOKEN` block below), regenerate a
+        # granular NPM_TOKEN in the Owner console, then delete + re-tag
+        # (tag runs pin the workflow to the tag's tree — a re-run of the
+        # failed run would re-execute the OIDC tree). Full sequence:
+        # .claude/plans/PLAN-158/oidc-failure-playbook.md
         run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish skipped — version already in registry (no-op success)
         if: steps.already_published.outputs.published == 'true'
