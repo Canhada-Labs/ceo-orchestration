@@ -55,7 +55,7 @@ All counts below are verifiable from a clean checkout (see *Verifying the number
 | Hook scripts (on disk) | **53** | Python entrypoints under `.claude/hooks/` |
 | Hooks wired in `settings.json` | **44** | distinct scripts, 46 event registrations |
 | Shared library modules | **67** | stdlib-only, under `.claude/hooks/_lib/` (excluding the package `__init__.py`) |
-| Slash commands | **25** | under `.claude/commands/` |
+| Slash commands | **26** | under `.claude/commands/` |
 | Architecture decision records | **171** | under `.claude/adr/` |
 | Tests | **~12,000 cases** | reported by `pytest --collect-only` across the hook, script, and conformance suites |
 
@@ -182,7 +182,7 @@ Don't take the table on faith. From a clean checkout:
 
 ```bash
 find .claude/skills -name SKILL.md | wc -l        # 151 skills
-ls .claude/commands/*.md | wc -l                  # 25 slash commands
+ls .claude/commands/*.md | wc -l                  # 26 slash commands
 ls .claude/adr | grep -c '^ADR-'                  # 171 ADRs
 python3 -m pytest --collect-only -q | tail -1     # ~12,000 collected cases
 ```
