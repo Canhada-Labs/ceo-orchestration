@@ -22,5 +22,22 @@
 # gate; this semver range is the pair-rail-gate.sh pre-flight message. Per
 # ADR-111 the 0.128->0.139 jump runs the locked-corpus catch_rate check
 # (Owner elected to RUN it this ceremony, not defer) — see PLAN-142 §4.
+#
+# PLAN-156 update (S269 2026-07-12, SENT-CX-PIN): widened upper bound to
+# <0.145.0 so the Owner's installed codex-cli 0.144.1 is in-range — the
+# bump that restores frontier-model access (GPT-5.6 Sol/Terra/Luna are
+# first-class from 0.143.0; 0.139 cannot run them). LOWER BOUND UNCHANGED
+# at >=0.128.0 (debate C10 / pair-rail R2: raising it would drop an
+# in-flight RC verdict out of range in release.yml step-15 and red-lock a
+# GA cut — widen-upper-only is the ONLY safe shape during any release
+# window; this bump was executed OUTSIDE an open release window).
+# Empirical base: PLAN-156/artifacts/characterization-grok-codex-S269.md
+# (0.144.1 flag surface verified — the 0.139 verified-compose
+# `exec --color never --sandbox <mode> -o <file> --output-schema --json -m`
+# is UNCHANGED; sandbox enum still read-only|workspace-write|
+# danger-full-access; reasoning-effort accepts max/xhigh client-side;
+# 0.144.0 open bugs #31873/#31860/#31826 triaged non-blocking, #31869
+# CLOSED upstream 2026-07-10). Locked-corpus catch_rate check: Owner
+# elects run-vs-defer at SENT-CX-PIN signing (S246 precedent: run it).
 
->=0.128.0,<0.140.0
+>=0.128.0,<0.145.0

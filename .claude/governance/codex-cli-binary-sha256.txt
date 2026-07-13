@@ -28,5 +28,11 @@
 # PLAN-142 re-pin (S246 2026-06-19): codex-cli 0.139.0 binary at
 # /opt/homebrew/bin/codex. Computed via `shasum -a 256 $(which codex)` and
 # re-verified at execution. Supersedes the 0.130.x pin (baefc109...).
+#
+# PLAN-156 re-pin (S269 2026-07-12, SENT-CX-PIN): codex-cli 0.144.1 binary
+# at /opt/homebrew/bin/codex (npm symlink → @openai/codex/bin/codex.js;
+# shasum follows the symlink). Computed via `shasum -a 256 $(which codex)`
+# on the Owner's machine at characterization time and re-verified at
+# ceremony. Supersedes the 0.139.0 pin (d3be844c...).
 
-d3be844c45c4fd89392536e56e1010963f94785592596b50cd0c45bb8a341406
+134063e133f0b4244fa3b251acf973d4fe4b4aeeacbdc135211bf480f59f1477
