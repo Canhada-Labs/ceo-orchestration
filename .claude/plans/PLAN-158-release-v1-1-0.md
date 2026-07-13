@@ -153,7 +153,7 @@ Check: python3 -m pytest .claude/hooks/tests/ -q -k adversary
   the wave.
   Check: none (doc-only)
 
-### Wave 3 — RC ceremony
+### Wave 3 — RC ceremony — PREP DONE S272: pair-rail R1 GO-WITH-CONDITIONS → SPEC stale-xref staged (SENT-RC-SPEC) → R2 APPROVE = 16/16 GO; advisories 6/6 verdes; Owner roda `owner-rc-ceremony.sh` (envelope computado na hora, TTL 24h)
 Check: gh run list --workflow release.yml --limit 1 (release-gate green on the RC tag)
 - [ ] Codex pair-rail verdict for the RC: signed
   **`.claude/governance/pair-rail-verdict-v1.1.0-rc.1.md`** — the gate
@@ -162,10 +162,11 @@ Check: gh run list --workflow release.yml --limit 1 (release-gate green on the R
   run failed and no RC verdict ever existed in history). ≤24h old,
   bound to parent sha, codex-cli inside `codex-cli-pin.txt` (<0.145.0)
   + binary sha256 (release.yml:641-695 hard-block).
-- [ ] Advisory-workflow freshness gate (release.yml:457-557): all 6
+- [x] Advisory-workflow freshness gate (release.yml:457-557): all 6
   advisory workflows non-red AND fresh ≤14d; manual dispatch any stale
   one BEFORE cutting the tag (the v1.0.1 lesson — otel/adapter needed
-  dispatch).
+  dispatch). — Verificado S272: 6/6 latest=success, todos ≤8d; o
+  owner-rc-ceremony.sh re-verifica no preflight.
   Check: gh run list --limit 20 --json workflowName,conclusion,createdAt
 - [ ] **Owner:** cut signed `v1.1.0-rc.1` (VERSION already 1.1.0;
   release.yml:42-53 RC flow). RC runs the full gate, publishes GitHub
