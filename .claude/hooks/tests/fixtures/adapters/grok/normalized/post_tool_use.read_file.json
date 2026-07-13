@@ -1,0 +1,32 @@
+{
+  "session_id": "019f58eb-5d53-7df3-b408-18d2bbc3accb",
+  "project": "/tmp/grok-lab/",
+  "phase": "PostToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "target_file": "fx_edit.txt",
+    "file_path": "fx_edit.txt"
+  },
+  "tool_response": {
+    "type": "ReadFile",
+    "FileContent": {
+      "content": "1→original line\n",
+      "content_concise": "1→original line\n",
+      "absolute_path": "/tmp/grok-lab/fx_edit.txt",
+      "offset": null,
+      "raw_output": "original line\n",
+      "total_lines": 2
+    }
+  },
+  "description": "",
+  "prompt": "",
+  "subagent_type": "",
+  "file_path": "fx_edit.txt",
+  "old_string": "",
+  "new_string": "",
+  "replace_all": false,
+  "command": "",
+  "tool_use_id": "call-7f4f90be-89c3-4d6d-a3e3-b5f8c4d8be77-1",
+  "duration_ms": null,
+  "parse_error": null
+}

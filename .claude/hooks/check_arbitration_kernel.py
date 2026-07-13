@@ -163,6 +163,14 @@ _KERNEL_PATHS: List[str] = [
     ".claude/hooks/_lib/state_store.py",
     ".claude/hooks/_lib/filelock.py",
     ".claude/hooks/_lib/adapters/codex.py",
+    # PLAN-156 Wave 2 (SENT-GK-A): the grok host adapter is enrolled in
+    # the SAME kernel-guarded wave that registers it. _KERNEL_PATHS
+    # enumerates adapter modules INDIVIDUALLY (not by glob), so without
+    # this row a later edit to the new enforcement adapter would be only
+    # sentinel-gated — an asymmetry vs claude.py/codex.py that a future
+    # edit could exploit (pair-rail R4/R5). grok.py owns the block→deny
+    # egress normalization that IS enforcement on that host.
+    ".claude/hooks/_lib/adapters/grok.py",
     ".claude/hooks/_lib/adapters/_constants.py",
     ".claude/hooks/_lib/__init__.py",
     ".claude/hooks/_lib/adapters/__init__.py",
@@ -208,6 +216,12 @@ _KERNEL_PATHS: List[str] = [
     ".claude/governance/governance-waivers.yaml",
     ".claude/governance/codex-cli-pin.txt",
     ".claude/governance/codex-cli-binary-sha256.txt",
+    # PLAN-156 W0b (SENT-GK-0): the grok pin pair, enrolled in the same
+    # guarded step that creates it (debate C12) so the Wave-4 registry
+    # edit meets an already-guarded pin, not a surprise. The binary-SHA
+    # file is the real supply-chain gate for a proprietary rolling 0.x.
+    ".claude/governance/grok-cli-pin.txt",
+    ".claude/governance/grok-cli-binary-sha256.txt",
     ".claude/governance/pair-rail-inputs-hash-manifest.txt",
     ".claude/governance/pair-rail-verdict-template.md",
     ".claude/governance/function-length-grandfather.yaml",

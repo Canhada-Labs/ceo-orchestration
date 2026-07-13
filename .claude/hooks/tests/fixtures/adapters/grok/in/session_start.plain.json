@@ -1,0 +1,15 @@
+{
+  "hookEventName": "session_start",
+  "sessionId": "019f58eb-5d53-7df3-b408-18d2bbc3accb",
+  "cwd": "/tmp/grok-lab",
+  "workspaceRoot": "/tmp/grok-lab/",
+  "timestamp": "2026-07-13T00:40:47.736745+00:00",
+  "source": "new",
+  "_meta": {
+    "grok_cli_version": "grok 0.2.93 (f00f96316d4b)",
+    "recorded": "2026-07-12",
+    "recording": "live grok headless session (-p --yolo --sandbox workspace --trust --no-leader), hook stdin captured verbatim by a recorder (PLAN-156 W0a lab)",
+    "sanitized": "absolute lab paths rewritten to /tmp/grok-lab; all other bytes verbatim",
+    "note": "SessionStart (passive)"
+  }
+}

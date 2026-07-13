@@ -1,0 +1,23 @@
+{
+  "session_id": "019f58eb-5d53-7df3-b408-18d2bbc3accb",
+  "project": "/tmp/grok-lab/",
+  "phase": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "fx_edit.txt",
+    "old_string": "original line",
+    "new_string": "edited line"
+  },
+  "tool_response": {},
+  "description": "",
+  "prompt": "",
+  "subagent_type": "",
+  "file_path": "fx_edit.txt",
+  "old_string": "original line",
+  "new_string": "edited line",
+  "replace_all": false,
+  "command": "",
+  "tool_use_id": "call-2d00ef38-2a2c-474f-8222-a4375c96d235-2",
+  "duration_ms": null,
+  "parse_error": null
+}

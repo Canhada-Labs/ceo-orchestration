@@ -1,0 +1,19 @@
+{
+  "session_id": "019f58eb-5d53-7df3-b408-18d2bbc3accb",
+  "project": "/tmp/grok-lab/",
+  "phase": "Stop",
+  "tool_name": "",
+  "tool_input": {},
+  "tool_response": {},
+  "description": "",
+  "prompt": "",
+  "subagent_type": "",
+  "file_path": "",
+  "old_string": "",
+  "new_string": "",
+  "replace_all": false,
+  "command": "",
+  "tool_use_id": "",
+  "duration_ms": null,
+  "parse_error": null
+}

@@ -85,6 +85,29 @@ _py_version_check() {
 
 set -euo pipefail
 
+# ---------------------------------------------------------------------------
+# PLAN-156 Wave 2 (SENT-GK-A) — grok adapter AUTO-DETECT (pair-rail S269 P1 #1).
+#
+# THE CRITICAL single-surface fix. The grok harness arms the legacy-compat
+# `.claude/settings.json`, whose hook commands do NOT carry
+# `env CEO_HOOK_ADAPTER=grok` (they are the Claude-native registrations —
+# adding it would break Claude Code, which shares the file). But grok delivers
+# a camelCase wire (`hookEventName`/`toolName`) to those hooks, so without the
+# adapter set they resolve to the CLAUDE adapter, which misparses the grok
+# wire → empty tool_name → the matcher-shaped guards no-op → ENFORCEMENT
+# SILENTLY FAILS (fail-open). The live-fire missed this because it set the env
+# by hand; the codex pair-rail caught it.
+#
+# Grok injects `GROK_HOOK_EVENT` (+ GROK_SESSION_ID / GROK_WORKSPACE_ROOT) on
+# EVERY hook it runs, and never sets CEO_HOOK_ADAPTER. So: if a grok runner
+# var is present and the adapter is unset, we ARE under grok — select it. This
+# is what makes the single-surface (`.claude/settings.json`) armed rail
+# actually enforce under grok. An explicit CEO_HOOK_ADAPTER always wins (tests,
+# codex, a deliberate override).
+if [ -z "${CEO_HOOK_ADAPTER:-}" ] && [ -n "${GROK_HOOK_EVENT:-}${GROK_SESSION_ID:-}" ]; then
+  export CEO_HOOK_ADAPTER=grok
+fi
+
 MIN_MAJOR=3
 MIN_MINOR=9
 
@@ -287,5 +310,161 @@ if [ ! -f "$HOOK_SCRIPT" ]; then
   exit 0
 fi
 
-# Forward stdin + any remaining args to the hook.
-exec "$FOUND_PY" "$HOOK_SCRIPT" "$@"
+# ---------------------------------------------------------------------------
+# PLAN-156 Wave 2 (SENT-GK-A) — decision→exit chokepoint.
+#
+# ## Why the shim owns this
+#
+# Grok Build's PreToolUse contract (grok 0.2.93) and Codex's both key a
+# deny on **exit 2** in addition to the stdout JSON (probes:
+# PLAN-156/artifacts/characterization-grok-codex-S269.md). Before this
+# block, deny-emit and process-exit were DECOUPLED: `write_decision` only
+# wrote stdout and the shim `exec`'d the hook, so the hook's own exit 0
+# became the process exit — a correct deny could still fail OPEN on a
+# host that keys on the code. The mapping cannot live in Python (an
+# interpreter crash / ImportError / signal never reaches Python), so it
+# lives HERE: the single path every registered hook routes through.
+#
+# ## The rule: decision-derived, never exit-code-derived
+#
+#   emitted deny          -> exit 2   (a decision was made: enforce it)
+#   emitted allow / {}    -> exit 0
+#   crashed, NO decision  -> hook's own rc (fail-OPEN: the INFRASTRUCTURE
+#                                     half of CLAUDE.md §4 — a missing
+#                                     file, an ImportError, a timeout
+#                                     must never block the user session)
+#
+# Reading the DECISION rather than the hook's exit code is what keeps
+# those two apart: an input-class deny (a security matcher emitting a
+# structured deny on a payload it cannot parse — the codex.py coherence
+# gate pattern) exits 2, while a bare interpreter crash with no decision
+# on stdout keeps its own (fail-open) code. A blanket "nonzero -> deny"
+# remap would break the fail-open half and is explicitly NOT what this does.
+#
+# ## ADAPTER-AWARE: gated on CEO_HOOK_ADAPTER=grok (debate C14, per lacuna (h))
+#
+# The plan's Wave-2 conditional: "UNCONDITIONAL mapping SAFE iff Wave-0
+# lacuna (h) confirms exit 2 is INERT on Codex; if not, the mapping is
+# adapter-aware." Lacuna (h) found exit 2 is NOT inert on Codex — it is an
+# ACTIVE deny on PreToolUse (probe P9a). So the plan's own fork selects the
+# adapter-aware branch: gate on grok, leave Claude/Codex byte-identical.
+#
+# This is not a weakening. On EVERY host the stdout JSON decision blocks on
+# its own (grok P2, codex JSON-deny, claude JSON-block); the exit code is
+# belt-and-suspenders. Remapping deny->2 on Codex/Claude would only change
+# an observable exit code with no enforcement gain, while breaking every
+# existing test that pins "deny -> exit 0" — a large blast radius for zero
+# security benefit. The grok gate keeps the value (a future grok release
+# that tightens the docs.x.ai "deny REQUIRES exit 2" rule is covered) where
+# it belongs.
+#
+# R-SEC2 (unset adapter under grok → fail-open) is NOT solved by an
+# unconditional EXIT map anyway: on grok a `block` with exit 2 STILL
+# fail-opens (P5 — malformed output beats the exit code). It is solved by
+# (1) the grok registration always setting CEO_HOOK_ADAPTER=grok — exactly
+# as codex sets =codex — and (2) the CI test asserting every registration
+# routes through this shim (hooks/tests/test_exit2_chokepoint.py). A named
+# residual, identical in kind to the codex one.
+#
+# ## What this block does NOT do
+#
+# It does NOT rewrite the decision vocabulary here — the grok block->deny
+# rewrite below (also grok-gated) is the ESSENTIAL fix, because grok
+# fail-OPENs on `{"decision":"block"}` EVEN WITH exit 2 (probe P5). This
+# exit map is the secondary half; the meta-test asserts BOTH.
+#
+# CEO_HOOK_EXIT_MAP=0 disables the mapping (escape hatch if a future grok
+# release turns exit-2-hostile; the arming check surfaces the override).
+
+# The grok path has TWO halves with DIFFERENT disable semantics:
+#   - vocabulary rewrite (block->deny): the ESSENTIAL grok fix — a `block`
+#     fail-OPENs on grok (P4/P5). NOT disableable by CEO_HOOK_EXIT_MAP.
+#   - exit-2 mapping (deny->exit 2): belt-and-suspenders. CEO_HOOK_EXIT_MAP=0
+#     turns this off (a future grok release that makes exit-2 hostile).
+# Both fire ONLY under CEO_HOOK_ADAPTER=grok on a BLOCKING event; every other
+# path preserves the historical exec byte-for-byte (Claude/Codex unchanged).
+_CEO_GROK_PATH=0
+if [ "${CEO_HOOK_ADAPTER:-}" = "grok" ]; then
+  _CEO_GROK_PATH=1
+fi
+
+# Event source: under grok, GROK_HOOK_EVENT is the AUTHORITATIVE source (grok
+# sets it). Pair-rail S269 finding #4: a generic
+# `${CLAUDE_HOOK_EVENT:-${GROK_HOOK_EVENT:-…}}` precedence lets a stale/injected
+# CLAUDE_HOOK_EVENT=post_tool_use mislabel a real grok pre_tool_use as passive
+# and DISABLE the chokepoint (grok then fail-opens). Since this whole block is
+# already gated on CEO_HOOK_ADAPTER=grok, read grok's own var first.
+_CEO_EVENT="${GROK_HOOK_EVENT:-${CLAUDE_HOOK_EVENT:-${CODEX_HOOK_EVENT:-}}}"
+_CEO_BLOCKING_EVENT=1
+case "$_CEO_EVENT" in
+  # Passive events (grok spells them snake_case). A passive hook can never
+  # block on grok, so neither the rewrite nor the exit map should touch it.
+  post_tool_use|post_tool_use_failure|session_start|session_end|\
+  notification|pre_compact|post_compact|subagent_start|subagent_stop|\
+  permission_denied|stop_failure|stop)
+    _CEO_BLOCKING_EVENT=0
+    ;;
+esac
+
+if [ "$_CEO_GROK_PATH" -eq 0 ] || [ "$_CEO_BLOCKING_EVENT" -eq 0 ]; then
+  # Not the grok blocking path (Claude/Codex byte-identical to the historical
+  # shim), or a passive grok event: preserve the historical exec (zero added
+  # latency; exit = the hook's own).
+  exec "$FOUND_PY" "$HOOK_SCRIPT" "$@"
+fi
+
+# Blocking event: capture stdout so the decision can drive the exit code.
+# stderr passes through untouched (breadcrumbs stay visible to the host).
+# `set -e` must not kill us on a nonzero hook exit — we inspect it.
+set +e
+_CEO_HOOK_STDOUT="$("$FOUND_PY" "$HOOK_SCRIPT" "$@")"
+_CEO_HOOK_RC=$?
+set -e
+
+# --- grok vocabulary backstop (probe P5) ------------------------------------
+#
+# Hooks that route their egress through `_lib/adapters/resolve()` already
+# emit `deny` under CEO_HOOK_ADAPTER=grok (grok.py:write_decision). But a
+# LEGACY hook that hardcodes the Claude vocabulary — today
+# `check_codex_filewrite.py`, which json.dumps `{"decision": "block"}`
+# directly (lines 275/294/356) — would emit a word grok does not know.
+# On grok that is malformed output = hook failure = **fail-OPEN, even
+# with exit 2** (P5). Re-routing that hook through this shim (PLAN-156
+# Wave 2 settings edit) gives it the exit mapping but NOT the vocabulary,
+# so the shim translates here as well: one chokepoint owns BOTH halves,
+# and any future hook that forgets the adapter seam degrades to a correct
+# deny instead of a silent allow.
+#
+# We are guaranteed here to be on the grok blocking path. Rewrite block→deny
+# with a WHITESPACE-TOLERANT regex (pair-rail S269 finding #3): the two
+# fixed-string substitutions only matched json.dumps's exact spacing
+# (`"decision": "block"` and `"decision":"block"`), so a hook emitting
+# `"decision" : "block"` (space before the colon) would slip through and
+# grok would fail-OPEN. `[[:space:]]*` around the colon covers any spacing.
+# sed is one cheap subprocess on the (rare) blocking path — acceptable vs a
+# silent-allow on an unusual-but-valid deny shape.
+if [ -n "$_CEO_HOOK_STDOUT" ]; then
+  _CEO_HOOK_STDOUT="$(printf '%s' "$_CEO_HOOK_STDOUT" \
+    | sed -E 's/"decision"[[:space:]]*:[[:space:]]*"block"/"decision": "deny"/g')"
+fi
+
+# Re-emit the hook's stdout: on grok the JSON decision is what actually blocks.
+if [ -n "$_CEO_HOOK_STDOUT" ]; then
+  printf '%s\n' "$_CEO_HOOK_STDOUT"
+fi
+
+# Exit-2 mapping (belt-and-suspenders; CEO_HOOK_EXIT_MAP=0 disables JUST this
+# half, never the vocabulary rewrite above). After the rewrite the only deny
+# vocabulary on stdout is grok's `deny` (or a codex-shaped permissionDecision
+# from a legacy hook that also routed here). A crash leaves stdout empty ->
+# fall through to the hook's own (fail-open) exit code; a nonzero-with-no
+# -decision is NEVER turned into a deny.
+if [ "${CEO_HOOK_EXIT_MAP:-1}" = "1" ]; then
+  case "$_CEO_HOOK_STDOUT" in
+    *'"decision"'*'"deny"'*|*'"permissionDecision"'*'"deny"'*)
+      exit 2
+      ;;
+  esac
+fi
+
+exit "$_CEO_HOOK_RC"

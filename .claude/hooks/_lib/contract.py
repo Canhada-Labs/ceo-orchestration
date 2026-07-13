@@ -213,7 +213,11 @@ def block(reason: str, system_message: Optional[str] = None) -> Decision:
 # Pair-Rail Multi-LLM cross-review. KERNEL_OVERRIDE consumed
 # (PLAN-081-PHASE-1-CODEX-ADAPTER + I-ACCEPT) per check_arbitration_
 # kernel.py:90 _KERNEL_PATHS HARD-DENY enforcement on this file.
-KNOWN_ADAPTERS: List[str] = ["claude", "codex"]
+# PLAN-156 Wave 2 extension: ["claude","codex"] → +["grok"] (xAI Grok
+# Build CLI as a third HOST). KERNEL_OVERRIDE consumed
+# (PLAN-156-GROK-HOST-ADAPTER + I-ACCEPT) per check_arbitration_kernel.py
+# _KERNEL_PATHS HARD-DENY enforcement on this file.
+KNOWN_ADAPTERS: List[str] = ["claude", "codex", "grok"]
 
 DEFAULT_ADAPTER: str = "claude"
 

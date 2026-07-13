@@ -1,0 +1,24 @@
+{
+  "hookEventName": "pre_tool_use",
+  "sessionId": "019f58eb-5d53-7df3-b408-18d2bbc3accb",
+  "cwd": "/tmp/grok-lab",
+  "workspaceRoot": "/tmp/grok-lab/",
+  "timestamp": "2026-07-13T00:40:51.158918+00:00",
+  "transcriptPath": "/Users/dev/.grok/sessions/%2Fprivate%2Ftmp%2Fclaude-501%2F-Users-dev-canhada-labs-ceo-orchestration%2F37de29fa-6b53-4ffc-922c-ac7fe5bd1ae7%2Fscratchpad%2Fgrok-lab/019f58eb-5d53-7df3-b408-18d2bbc3accb/updates.jsonl",
+  "toolName": "search_replace",
+  "toolUseId": "call-2d00ef38-2a2c-474f-8222-a4375c96d235-2",
+  "toolInput": {
+    "file_path": "fx_edit.txt",
+    "old_string": "original line",
+    "new_string": "edited line"
+  },
+  "toolInputTruncated": false,
+  "permissionMode": "bypassPermissions",
+  "_meta": {
+    "grok_cli_version": "grok 0.2.93 (f00f96316d4b)",
+    "recorded": "2026-07-12",
+    "recording": "live grok headless session (-p --yolo --sandbox workspace --trust --no-leader), hook stdin captured verbatim by a recorder (PLAN-156 W0a lab)",
+    "sanitized": "absolute lab paths rewritten to /tmp/grok-lab; all other bytes verbatim",
+    "note": "PreToolUse edit — native toolName search_replace -> Edit. The wire ALREADY carries Claude-shaped file_path/old_string/new_string keys, so check_canonical_edit sees the shape it knows once the tool name is aliased."
+  }
+}

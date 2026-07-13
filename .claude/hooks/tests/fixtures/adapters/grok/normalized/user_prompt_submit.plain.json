@@ -1,0 +1,19 @@
+{
+  "session_id": "019f58eb-5d53-7df3-b408-18d2bbc3accb",
+  "project": "/tmp/grok-lab/",
+  "phase": "UserPromptSubmit",
+  "tool_name": "",
+  "tool_input": {},
+  "tool_response": {},
+  "description": "",
+  "prompt": "<user_query>\nDo two things: (1) use the shell to run: echo FIXTURE_OK. (2) edit the file fx_edit.txt replacing the text 'original line' with 'edited line'. Then stop.\n</user_query>",
+  "subagent_type": "",
+  "file_path": "",
+  "old_string": "",
+  "new_string": "",
+  "replace_all": false,
+  "command": "",
+  "tool_use_id": "",
+  "duration_ms": null,
+  "parse_error": null
+}

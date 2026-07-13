@@ -1,0 +1,22 @@
+{
+  "session_id": "019f58eb-5d53-7df3-b408-18d2bbc3accb",
+  "project": "/tmp/grok-lab/",
+  "phase": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "echo FIXTURE_OK",
+    "description": "Echo FIXTURE_OK fixture marker"
+  },
+  "tool_response": {},
+  "description": "",
+  "prompt": "",
+  "subagent_type": "",
+  "file_path": "",
+  "old_string": "",
+  "new_string": "",
+  "replace_all": false,
+  "command": "echo FIXTURE_OK",
+  "tool_use_id": "call-7f4f90be-89c3-4d6d-a3e3-b5f8c4d8be77-0",
+  "duration_ms": null,
+  "parse_error": null
+}

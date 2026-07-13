@@ -288,7 +288,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/check_codex_filewrite.py\"",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_codex_filewrite.py",
             "timeout": 30
           }
         ]

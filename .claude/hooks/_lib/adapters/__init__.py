@@ -67,7 +67,14 @@ from typing import List
 # (read_event / read_post_event / write_decision / emit_decision)
 # plus Pair-Rail-specific helpers (_classify_prompt_complexity,
 # parse_verdict, make_invoke_command, compute_redaction_inputs).
-ADAPTER_REGISTRY: List[str] = ["claude", "codex"]
+#
+# PLAN-156 Wave 2 extension: +"grok" (xAI Grok Build CLI as HOST).
+# grok.py implements the SPEC/v1 adapters ABI (read_event /
+# read_post_event / write_decision / emit_decision) for the camelCase
+# grok wire, and owns the block→deny egress normalization that is the
+# ENFORCEMENT mechanism on that host (grok fail-OPENs on an
+# unrecognized decision word even with exit 2 — S269 probe P5).
+ADAPTER_REGISTRY: List[str] = ["claude", "codex", "grok"]
 
 
 # ---------------------------------------------------------------------------

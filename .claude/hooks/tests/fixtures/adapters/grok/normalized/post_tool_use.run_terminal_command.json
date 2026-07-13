@@ -1,0 +1,48 @@
+{
+  "session_id": "019f58eb-5d53-7df3-b408-18d2bbc3accb",
+  "project": "/tmp/grok-lab/",
+  "phase": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "echo FIXTURE_OK",
+    "description": "Echo FIXTURE_OK fixture marker"
+  },
+  "tool_response": {
+    "type": "Bash",
+    "output": [
+      70,
+      73,
+      88,
+      84,
+      85,
+      82,
+      69,
+      95,
+      79,
+      75,
+      10
+    ],
+    "output_for_prompt": "exit: 0\nFIXTURE_OK\n",
+    "exit_code": 0,
+    "command": "echo FIXTURE_OK",
+    "truncated": false,
+    "signal": null,
+    "timed_out": false,
+    "description": "Echo FIXTURE_OK fixture marker",
+    "current_dir": "/tmp/grok-lab",
+    "output_file": "/Users/dev/.grok/sessions/%2Fprivate%2Ftmp%2Fclaude-501%2F-Users-dev-canhada-labs-ceo-orchestration%2F37de29fa-6b53-4ffc-922c-ac7fe5bd1ae7%2Fscratchpad%2Fgrok-lab/019f58eb-5d53-7df3-b408-18d2bbc3accb/terminal/call-7f4f90be-89c3-4d6d-a3e3-b5f8c4d8be77-0.log",
+    "total_bytes": 11,
+    "was_bare_echo": true
+  },
+  "description": "",
+  "prompt": "",
+  "subagent_type": "",
+  "file_path": "",
+  "old_string": "",
+  "new_string": "",
+  "replace_all": false,
+  "command": "echo FIXTURE_OK",
+  "tool_use_id": "call-7f4f90be-89c3-4d6d-a3e3-b5f8c4d8be77-0",
+  "duration_ms": null,
+  "parse_error": null
+}

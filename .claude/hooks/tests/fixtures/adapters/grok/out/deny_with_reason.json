@@ -1,0 +1,1 @@
+{"decision": "deny", "reason": "unsentineled write to a canonical path (check_canonical_edit)"}

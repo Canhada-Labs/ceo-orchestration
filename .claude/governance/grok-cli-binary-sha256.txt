@@ -1,0 +1,24 @@
+# Grok Build CLI binary SHA-256 pin — PLAN-156 W0b / SENT-GK-0
+#
+# Format: ONE 64-hex SHA-256 line. The binary at `command -v grok`
+# resolution time is hashed (`shasum -a 256`, following the ~/.grok/bin
+# symlink to the versioned download) and asserted equal by the
+# _grok_harness.sh arming check.
+#
+# Rationale: same T-8 class as the codex pin (binary swap /
+# supply-chain): the Grok Build installer is an unpinned proprietary
+# rolling script with a DAILY release cadence and an auto-update
+# channel — without a SHA pin the framework trusts whatever
+# `command -v grok` returns at invocation. The pin closes this vector
+# for the arming check; residual: the installer itself is
+# trust-on-first-fetch (no publisher signature), documented in
+# HONEST-LIMITATIONS (PLAN-156 W7).
+#
+# Pin update ceremony: see grok-cli-pin.txt header (pin + SHA move
+# together under one sentinel, never separately).
+#
+# PLAN-156 initial pin (S269 2026-07-12, SENT-GK-0): grok 0.2.93 binary,
+# ~/.grok/bin/grok → ~/.grok/downloads/grok-macos-aarch64 on the
+# characterization machine. Computed via `shasum -a 256 $(command -v grok)`.
+
+2a97ba675bd992aa9b981e2e83776460d94f469b510c0b8efe28b50d236d767c

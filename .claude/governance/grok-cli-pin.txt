@@ -1,0 +1,32 @@
+# Grok Build CLI version pin — PLAN-156 W0b / SENT-GK-0
+#
+# Format: ONE exact version line (no semver range — Grok Build ships 1-2
+# releases per DAY on a proprietary 0.x channel, which makes any range
+# meaningless as a compatibility statement; OQ2 ratified exact-pin +
+# weekly substrate-watch staleness, mirroring nothing: this is stricter
+# than the codex semver-range pin BY DESIGN).
+#
+# Consumers:
+# - scripts/_grok_harness.sh arming check: asserts `grok --version`
+#   prefix == this pin AND binary SHA == grok-cli-binary-sha256.txt; on
+#   mismatch the harness SETUP fails closed (refuse to arm governance
+#   against an uncharacterized binary — debate C11 / Sec R-SEC7). The
+#   USER SESSION is never blocked by this file (CLAUDE.md §4 infra half).
+# - substrate-watch.json grok-build item: weekly staleness check against
+#   the release channel; any pin bump re-runs the capability-matrix
+#   positive controls before ENFORCED cells are trusted (ADR-162).
+#
+# Pin update ceremony: same mechanics as the codex pin (ADR-111
+# §pin-update-protocol applied to the grok lane): Owner installs the new
+# binary, re-runs the Wave-0 characterization probes (decision-semantics
+# matrix + double-fire + envelope capture — see
+# PLAN-156/artifacts/characterization-grok-codex-S269.md), updates this
+# file + the SHA file under a sentinel, and ADR-162 gains an amendment
+# row if any ENFORCED/ADVISORY cell flips.
+#
+# PLAN-156 initial pin (S269 2026-07-12, SENT-GK-0): grok 0.2.93
+# (f00f96316d4b) — the binary the S269 characterization ran against.
+# NOTE: 0.2.94 existed upstream at plan drafting; we pin what we
+# CHARACTERIZED, not what is newest (never trust an uncharacterized 0.x).
+
+0.2.93

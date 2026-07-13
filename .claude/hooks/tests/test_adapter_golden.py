@@ -92,13 +92,18 @@ _CODEX_PIN_FILE = _REPO_ROOT / ".claude" / "governance" / "codex-cli-pin.txt"
 # ZERO *.json files and must FAIL these floors. Raise a floor when new
 # scenarios are recorded; never lower one below the recorded set.
 # ---------------------------------------------------------------------------
-_MIN_IN_FIXTURES: Dict[str, int] = {"claude": 3, "codex": 12}
-_MIN_OUT_FIXTURES: Dict[str, int] = {"claude": 2, "codex": 3}
+_MIN_IN_FIXTURES: Dict[str, int] = {"claude": 3, "codex": 12, "grok": 8}
+_MIN_OUT_FIXTURES: Dict[str, int] = {"claude": 2, "codex": 3, "grok": 3}
 
 # Adapters whose `project` field is env-dependent (CLAUDE_PROJECT_DIR) vs
 # deterministic from the wire (the codex host wire carries `cwd` on every
-# event, so its normalized `project` is byte-comparable).
-_ENV_DEPENDENT_PROJECT: Dict[str, bool] = {"claude": True, "codex": False}
+# event, so its normalized `project` is byte-comparable; the grok wire
+# carries `workspaceRoot` AND `cwd` on every event — same property).
+_ENV_DEPENDENT_PROJECT: Dict[str, bool] = {
+    "claude": True,
+    "codex": False,
+    "grok": False,
+}
 
 
 def _expected_normalized_path(adapter: str, scenario: str) -> Path:

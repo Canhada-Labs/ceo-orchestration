@@ -46,6 +46,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 SPEC_FILE = REPO_ROOT / "SPEC" / "v1" / "normalized_envelope.schema.md"
 CLAUDE_ADAPTER = REPO_ROOT / ".claude" / "hooks" / "_lib" / "adapters" / "claude.py"
 CODEX_ADAPTER = REPO_ROOT / ".claude" / "hooks" / "_lib" / "adapters" / "codex.py"
+GROK_ADAPTER = REPO_ROOT / ".claude" / "hooks" / "_lib" / "adapters" / "grok.py"
 
 
 def _dataclass_field_names() -> set:
@@ -307,6 +308,86 @@ class TestCodexAdapterDrift(TestEnvContext):
                 "§1.1 row + a sentinel scope that amends SPEC/v1 (not "
                 "Wave 1)".format(codex_only),
             )
+
+
+class TestGrokAdapterCanonicality(TestEnvContext):
+    """PLAN-156 Wave 2 — the grok host adapter under the same drift bar.
+
+    Same contract as the codex rows above: the grok normalizer may not
+    silently introduce non-canonical NormalizedEvent fields, and its
+    wire-only scalars (`workspaceRoot`, `toolUseId`, `toolInputTruncated`,
+    ...) must ride `raw_payload`, not become dataclass fields (that would
+    require a SPEC §1.1 row + a sentinel scope amending SPEC/v1).
+    """
+
+    def test_grok_adapter_source_file_exists(self):
+        self.assertTrue(GROK_ADAPTER.exists(), "grok.py adapter file missing")
+
+    def test_grok_adapter_populated_fields_are_canonical(self):
+        populated = _adapter_populated_fields(GROK_ADAPTER)
+        # Sanity: an empty scan would be the vacuous-green class.
+        self.assertIn("session_id", populated)
+        self.assertIn("tool_name", populated)
+        self.assertIn("tool_input", populated)
+        dc_fields = _dataclass_field_names()
+        rogue = populated - dc_fields
+        self.assertFalse(
+            rogue,
+            "grok.py populates non-canonical fields: {}. "
+            "Add them to NormalizedEvent + SPEC §1.1, or remove.".format(sorted(rogue)),
+        )
+
+    def test_grok_host_extras_ride_raw_payload_not_new_fields(self):
+        dc_fields = _dataclass_field_names()
+        for grok_only in ("workspaceRoot", "toolUseId", "toolInputTruncated",
+                          "permissionMode", "hookEventName"):
+            self.assertNotIn(
+                grok_only, dc_fields,
+                "{} became a NormalizedEvent field — that requires a SPEC "
+                "§1.1 row + a sentinel scope that amends SPEC/v1".format(grok_only),
+            )
+
+    def test_grok_egress_never_emits_the_block_vocabulary(self):
+        """The P5 class, asserted at the source level.
+
+        Grok fail-OPENs on `{"decision":"block"}` EVEN WITH exit 2 (S269
+        probe P5: the tool RAN). So `grok.py` must never serialize that
+        word — its deny vocabulary is `deny`, full stop. A future edit
+        that "helpfully" adds a Claude-compatible `block` key to the grok
+        egress would silently disarm every ENFORCED row on that host; this
+        test is what stops it.
+        """
+        import io as _io
+
+        from _lib.adapters import grok as grok_adapter
+
+        out = grok_adapter.write_decision(
+            contract.Decision(allow=False, reason="canonical path"),
+        )
+        self.assertIn('"deny"', out)
+        self.assertNotIn(
+            '"block"', out,
+            "grok.py emitted the 'block' vocabulary — malformed output on the "
+            "grok wire = hook failure = FAIL-OPEN (S269 probe P5)",
+        )
+
+        # ...including when the Decision arrives already carrying Claude
+        # vocabulary in `extra` (a legacy hook path).
+        out = grok_adapter.write_decision(
+            contract.Decision(
+                allow=False,
+                reason="canonical path",
+                extra={"decision": "block"},
+            ),
+        )
+        self.assertNotIn('"block"', out)
+
+        # ...and the coherence gate forces a deny even on an allow Decision.
+        ev = grok_adapter.read_event(
+            _io.StringIO('{"tool_name": "Edit", "tool_input": {"file_path": "x"}}'),
+        )
+        out = grok_adapter.write_decision(contract.Decision(allow=True), event=ev)
+        self.assertIn('"deny"', out)
 
 
 class TestAdapterRegistrySync(TestEnvContext):

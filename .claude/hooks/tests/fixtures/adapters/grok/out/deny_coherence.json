@@ -1,0 +1,1 @@
+{"decision": "deny", "reason": "[grok-host coherence gate] payload carries no 'hookEventName' — not the grok host wire; refusing to normalize a foreign envelope under CEO_HOOK_ADAPTER=grok (PLAN-152 C4 fail-CLOSED on INPUT)"}

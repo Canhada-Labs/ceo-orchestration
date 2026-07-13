@@ -1,0 +1,51 @@
+{
+  "hookEventName": "post_tool_use",
+  "sessionId": "019f58eb-5d53-7df3-b408-18d2bbc3accb",
+  "cwd": "/tmp/grok-lab",
+  "workspaceRoot": "/tmp/grok-lab/",
+  "timestamp": "2026-07-13T00:40:49.734789+00:00",
+  "transcriptPath": "/Users/dev/.grok/sessions/%2Fprivate%2Ftmp%2Fclaude-501%2F-Users-dev-canhada-labs-ceo-orchestration%2F37de29fa-6b53-4ffc-922c-ac7fe5bd1ae7%2Fscratchpad%2Fgrok-lab/019f58eb-5d53-7df3-b408-18d2bbc3accb/updates.jsonl",
+  "toolName": "run_terminal_command",
+  "toolUseId": "call-7f4f90be-89c3-4d6d-a3e3-b5f8c4d8be77-0",
+  "toolInput": {
+    "command": "echo FIXTURE_OK",
+    "description": "Echo FIXTURE_OK fixture marker"
+  },
+  "toolResult": {
+    "type": "Bash",
+    "output": [
+      70,
+      73,
+      88,
+      84,
+      85,
+      82,
+      69,
+      95,
+      79,
+      75,
+      10
+    ],
+    "output_for_prompt": "exit: 0\nFIXTURE_OK\n",
+    "exit_code": 0,
+    "command": "echo FIXTURE_OK",
+    "truncated": false,
+    "signal": null,
+    "timed_out": false,
+    "description": "Echo FIXTURE_OK fixture marker",
+    "current_dir": "/tmp/grok-lab",
+    "output_file": "/Users/dev/.grok/sessions/%2Fprivate%2Ftmp%2Fclaude-501%2F-Users-dev-canhada-labs-ceo-orchestration%2F37de29fa-6b53-4ffc-922c-ac7fe5bd1ae7%2Fscratchpad%2Fgrok-lab/019f58eb-5d53-7df3-b408-18d2bbc3accb/terminal/call-7f4f90be-89c3-4d6d-a3e3-b5f8c4d8be77-0.log",
+    "total_bytes": 11,
+    "was_bare_echo": true
+  },
+  "toolInputTruncated": false,
+  "toolResultTruncated": false,
+  "isBackgrounded": false,
+  "_meta": {
+    "grok_cli_version": "grok 0.2.93 (f00f96316d4b)",
+    "recorded": "2026-07-12",
+    "recording": "live grok headless session (-p --yolo --sandbox workspace --trust --no-leader), hook stdin captured verbatim by a recorder (PLAN-156 W0a lab)",
+    "sanitized": "absolute lab paths rewritten to /tmp/grok-lab; all other bytes verbatim",
+    "note": "PostToolUse (passive on grok — a deny here is cosmetic). String toolResult is wrapped as {'output': ...} so the contract field stays Dict-typed."
+  }
+}
