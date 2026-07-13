@@ -75,27 +75,32 @@ pays the ceremony cost.
 
 ## Waves
 
-### Wave 0 — debate + version prep (unguarded)
+### Wave 0 — debate + version prep (unguarded) — DONE S271, commit `132f26d`, Validate green
 Check: bash .claude/scripts/validate-governance.sh --fast
-- [ ] Debate L3 (`/debate start PLAN-158`); fold adjustments; Owner
+- [x] Debate L3 (`/debate start PLAN-158`); fold adjustments; Owner
   ratifies OQ1-OQ3 at `draft → reviewed`.
-- [ ] Bump the version triple: `VERSION`=1.1.0, `npm/package.json`; the
+- [x] Bump the version triple: `VERSION`=1.1.0, `npm/package.json`; the
   plugin manifests regenerate via `scripts/build-plugin.py` (validate.yml
-  runs its `--check` — do NOT hand-edit; debate Critic-C).
-  Check: grep -l "1\.1\.0" VERSION npm/package.json .claude-plugin/plugin.json .claude-plugin/marketplace.json | wc -l  # must print 4 (Codex S270: marketplace.json missing from the check let a stale manifest pass)
-- [ ] CHANGELOG `## [1.1.0]` section (release.yml:293-310 gate) — delta
+  runs its `--check` — do NOT hand-edit; debate Critic-C). Rider found by
+  verify-counts at execution: INSTALL.md + pyproject.toml also cite the
+  version — bumped too.
+  Check: grep -l "1\.1\.0" VERSION npm/package.json .claude-plugin/plugin.json .claude-plugin/marketplace.json | wc -l  # must print 4 (Codex S270: marketplace.json missing from the check let a stale manifest pass) — PASSED 4/4
+- [x] CHANGELOG `## [1.1.0]` section (release.yml:293-310 gate) — delta
   grouped by PLAN-153/154/155/156, no speed claims.
-  Check: grep -n "## \[1.1.0\]" CHANGELOG.md
-- [ ] Doc-freshness: VERIFY first — live check S270 says stamps pass
+  Check: grep -n "## \[1.1.0\]" CHANGELOG.md — PASSED
+- [x] Doc-freshness: VERIFY first — live check S270 says stamps pass
   at-limit for a 1.0→1.1 bump without restamp; restamp only what the
   gate actually flags.
-  Check: python3 .claude/scripts/check-docs-freshness.py --format=text
-- [ ] Stale-claims riders: README says "151 skills" in 4 places +
+  Check: python3 .claude/scripts/check-docs-freshness.py --format=text — PASSED (0 broken refs, no restamp)
+- [x] Stale-claims riders: README says "151 skills" in 4 places +
   plugin.json description says 151 (disk truth: 166) — both slip the
   mechanical gates. Fix here (dedup: PLAN-157 W1 carries an overlapping
   README rider; whichever lands first takes it). Also fix the stale
   NPM_TOKEN-expiry citation (GOVERNANCE-MAP.md:56 → the real flags).
-  Check: grep -rniE "151[^0-9]{0,3}(skill|checklist)" README.md .claude-plugin/plugin.json scripts/build-plugin.py | wc -l  # must print 0 — broad pattern (Codex S270: "151 skills" alone misses "151 skill files"/"**151**"/"151 skill checklists"; bare "151" would false-positive on PLAN-151 refs)
+  Executed wider (same stale-claim class, disk truth): README EN+pt-BR
+  also carried hooks 53→55, _lib 67→68, ADRs 171→177, pt-BR commands
+  22→26; deferred-status backlog-oidc successor re-pointed at this plan.
+  Check: grep -rniE "151[^0-9]{0,3}(skill|checklist)" README.md .claude-plugin/plugin.json scripts/build-plugin.py | wc -l  # must print 0 — PASSED 0
 
 ### Wave 1 — backlog-oidc: npm Trusted Publishing
 Check: none (Owner console work + guarded workflow edit; mechanical proof lands at the Wave 4 GA publish — RC tags skip npm-publish entirely, so no earlier proof point exists)
@@ -212,6 +217,20 @@ Check: npx ceo-orchestration@latest --help exits 0 (post-publish smoke)
   (Recomendado)"** (block with FOLLOWUP OQs) — check_adversary rider IN
   (Wave 2, own conditional sentinel, security guardrails recorded);
   RC-hold full 24h, no waiver.
+- 2026-07-13 (S271, CEO): W0 executed and landed (`132f26d`, Validate
+  green). W1+W2 STAGED + PROVEN (`PLAN-158/staged/`, gitignored): OIDC
+  workflow pins asserted; SPEC patcher idempotency-proven on a copy; W2
+  8/8 regression tests in neutral-layout proof + live positive control
+  (the unpatched gate ASK-blocked this session's own command carrying
+  the CPF-colliding run id — incident class reproduced in vivo).
+  Pair-rail per-file verdicts: round-1 5×APPROVE + 1 REJECT
+  (GOVERNANCE-MAP false `workflow_dispatch` claim — real catch, folded),
+  round-2 APPROVE → 6/6 (`PLAN-158/pair-rail-verdict-w1w2.md`).
+  Ceremony script: `PLAN-158/land-plan158.sh` (2 sentinels, SENT-OIDC +
+  SENT-ADV, canonical class, no kernel override). Owner prereqs before
+  running: npmjs trusted-publisher registration (workflow FILENAME
+  npm-publish.yml, env production-npm), then Waves 3-4 per the script's
+  wrap notes. Failure playbook: `PLAN-158/oidc-failure-playbook.md`.
 
 ## How to continue
 
