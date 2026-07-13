@@ -145,6 +145,18 @@ _EXPECTED_PUBLIC_SYMBOLS = frozenset({
     # enums (tool_name_enum -> other, source -> other, harness -> codex).
     "emit_codex_tool_recorded",
     "emit_codex_turn_ended",
+    # PLAN-156 Wave 4 (grok harness audit chain / ADR-162, SENT-GK-B) — +2
+    # metadata-only typed emitters mirroring the codex pair: grok_tool_recorded
+    # (per-tool PostToolUse append) + grok_turn_ended (Stop/SubagentStop
+    # backstop; grok has no stop_hook_active analogue). Dedicated Sec MF-3
+    # dispatch branches + per-action allowlists (_GROK_TOOL_RECORDED_ALLOWLIST /
+    # _GROK_TURN_ENDED_ALLOWLIST); closed enums (harness -> grok).
+    "emit_grok_tool_recorded",
+    "emit_grok_turn_ended",
+    # PLAN-156 Wave 6 (council / SENT-GK-F) — one metadata-only typed
+    # emitter: council_lane_invoked. Records the FACT of external egress
+    # (vendor + lane_status), NEVER the audited scope or findings.
+    "emit_council_lane_invoked",
     # PLAN-124 WS-1 (ECC value-harvest) — git hook-bypass guard breadcrumb.
     # Deny-by-default scrub-branch + _GIT_HOOK_BYPASS_BLOCKED_ALLOWLIST;
     # the ONLY caller field is the closed-enum flag_class (MF-G), never the
@@ -636,7 +648,22 @@ _EXPECTED_KNOWN_ACTIONS_SHA256 = (
     # _EXPECTED_PUBLIC_SYMBOLS). SPEC amend v2.49. SHA re-derived from the
     # STAGED audit_emit.py under .claude/plans/PLAN-155/staged/wave-4/ via
     # sha256(json.dumps(sorted(_KNOWN_ACTIONS))). Count: 314 -> 316.
-    "bcb1afc7f79d473b7febc3b8b6662f722b404300f91fa922cdd2e416113b49ee"
+    # Updated PLAN-156 Wave 4 (grok harness audit chain / ADR-162, SENT-GK-B
+    # ceremony) — +2 metadata-only actions: grok_tool_recorded (per-tool
+    # PostToolUse append) + grok_turn_ended (Stop/SubagentStop backstop). Both
+    # route through dedicated Sec MF-3 dispatch branches + per-action
+    # allowlists (_GROK_TOOL_RECORDED_ALLOWLIST / _GROK_TURN_ENDED_ALLOWLIST),
+    # NEVER _EMIT_GENERIC_PASSTHROUGH. TWO new public typed emitters:
+    # emit_grok_tool_recorded + emit_grok_turn_ended (added to
+    # _EXPECTED_PUBLIC_SYMBOLS). SHA re-derived from the STAGED audit_emit.py
+    # under .claude/plans/PLAN-156/staged/wave4/ via
+    # sha256(json.dumps(sorted(_KNOWN_ACTIONS))). Count: 316 -> 318.
+    # Updated PLAN-156 Wave 6 (council / ADR-162, SENT-GK-F ceremony) — +1
+    # action council_lane_invoked (one append per available external council
+    # lane; deny-by-default _COUNCIL_LANE_INVOKED_ALLOWLIST, closed enums
+    # vendor/lane_status, NEVER the audited scope). One new public typed
+    # emitter emit_council_lane_invoked. Count: 318 -> 319.
+    "93c985df13a884cc663cf53e39fd69455a3fa1654b0314c2a8071cab9856b246"
 )
 
 
@@ -678,13 +705,13 @@ class AuditEmitPublicSurfaceTests(unittest.TestCase):
         self.assertEqual(
             actual, _EXPECTED_KNOWN_ACTIONS_SHA256,
             f"_KNOWN_ACTIONS drift detected. "
-            f"Count={len(actions)} (expected 316). "
+            f"Count={len(actions)} (expected 319). "
             f"Rebaseline this test + add audit-registry entry if the change is intentional.",
         )
 
     def test_known_actions_count_fixed(self) -> None:
         self.assertEqual(
-            len(audit_emit._KNOWN_ACTIONS), 316,
+            len(audit_emit._KNOWN_ACTIONS), 319,
             "_KNOWN_ACTIONS count drifted from 163 baseline (PLAN-088 S114 Wave 1 +11 actions: "
             "cache_discipline_alerted + first_run_wizard_dispatched + "
             "estimate_calibrator_pipeline_run + subagent_findings_partial_drop + "

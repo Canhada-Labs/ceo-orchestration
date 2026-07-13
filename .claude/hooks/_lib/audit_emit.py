@@ -987,6 +987,21 @@ _KNOWN_ACTIONS = {
     # with a per-tool append when partial shell interception drops per-tool
     # events (the named completeness residual).
     "codex_turn_ended",
+    # PLAN-156 Wave 4 (SENT-GK-B) — grok host per-tool + turn-ended pair.
+    # Same completeness contract as the codex pair above: a `grok`
+    # discriminator so analysis can pivot the grok rail without inferring
+    # from the action name. Grok fires PostToolUse per tool call and Stop
+    # per turn (both passive — a deny there is cosmetic, but the AUDIT
+    # append still lands); SessionEnd is not reliable on grok, so
+    # turn-ended accounting hangs off Stop (completeness caveat documented).
+    "grok_tool_recorded",
+    "grok_turn_ended",
+    # PLAN-156 Wave 6 (SENT-GK-F) — cross-vendor council lane invocation.
+    # One append per AVAILABLE external lane per council run (who asked what,
+    # when) so cross-vendor egress is itself auditable. Registered HERE, not
+    # in Wave 4, so a slipped Wave 6 never publishes a contract action the
+    # framework cannot yet emit (pair-rail R11). Completeness-bounded.
+    "council_lane_invoked",
 }
 
 
@@ -7028,6 +7043,38 @@ def emit_generic(action: str, **kwargs: Any) -> None:
         if dropped:
             _breadcrumb("emit_generic codex_turn_ended dropped: %s"
                         % sorted(dropped)[:10])
+    elif action == "grok_tool_recorded":  # PLAN-156 Wave 4 — Sec MF-3 + coercion
+        if event.get("harness") not in _GROK_HARNESS_ENUM:
+            event["harness"] = "grok"
+        if event.get("tool_name_enum") not in _GROK_TOOL_RECORDED_TOOL_NAME_ENUM:
+            event["tool_name_enum"] = "other"
+        if event.get("hook_event_name") not in _GROK_TOOL_RECORDED_EVENT_ENUM:
+            event["hook_event_name"] = "PostToolUse"
+        event, dropped = _scrub_ceo_boot_event(
+            event, _GROK_TOOL_RECORDED_ALLOWLIST)
+        if dropped:
+            _breadcrumb("emit_generic grok_tool_recorded dropped: %s"
+                        % sorted(dropped)[:10])
+    elif action == "grok_turn_ended":  # PLAN-156 Wave 4 — Sec MF-3 + coercion
+        if event.get("harness") not in _GROK_HARNESS_ENUM:
+            event["harness"] = "grok"
+        if event.get("source") not in _GROK_TURN_ENDED_SOURCE_ENUM:
+            event["source"] = "other"
+        event, dropped = _scrub_ceo_boot_event(
+            event, _GROK_TURN_ENDED_ALLOWLIST)
+        if dropped:
+            _breadcrumb("emit_generic grok_turn_ended dropped: %s"
+                        % sorted(dropped)[:10])
+    elif action == "council_lane_invoked":  # PLAN-156 Wave 6 — Sec MF-3 + coercion
+        if event.get("vendor") not in _COUNCIL_VENDOR_ENUM:
+            event["vendor"] = "other"
+        if event.get("lane_status") not in _COUNCIL_LANE_STATUS_ENUM:
+            event["lane_status"] = "other"
+        event, dropped = _scrub_ceo_boot_event(
+            event, _COUNCIL_LANE_INVOKED_ALLOWLIST)
+        if dropped:
+            _breadcrumb("emit_generic council_lane_invoked dropped: %s"
+                        % sorted(dropped)[:10])
     # PLAN-113 Phase B B-STRUCTURAL — verbatim passthrough for the documented
     # set of TRUSTED first-party producers (see _EMIT_GENERIC_PASSTHROUGH).
     # Their field sets are controlled at the producer site; pass through as-is
@@ -7274,6 +7321,53 @@ _CODEX_TURN_ENDED_SOURCE_ENUM = frozenset({
 
 _CODEX_TURN_ENDED_ALLOWLIST = _CODEX_AUDIT_ENVELOPE | frozenset({
     "harness", "source", "stop_hook_active",
+})
+
+
+# ---------------------------------------------------------------------------
+# PLAN-156 Wave 4 (SENT-GK-B) — grok host audit actions. Mirror of the codex
+# pair above; SEPARATE constants (no cross-plan pin-sync coupling). Grok's
+# turn-end surface is narrower than codex's: only the `stop` hook is a
+# reliable turn-boundary (SessionEnd does not fire in headless runs — S269),
+# so the source enum omits the codex-specific `notify`/`wrapper` and keeps
+# `stop`/`subagent_stop`/`other`. `stop_hook_active` has no grok analogue and
+# is NOT allowlisted (a direct caller cannot smuggle it onto the wire).
+# ---------------------------------------------------------------------------
+_GROK_HARNESS_ENUM = frozenset({"grok"})
+
+_GROK_TOOL_RECORDED_TOOL_NAME_ENUM = frozenset({
+    "Bash", "Edit", "Write", "Task", "Read",
+    "MultiEdit", "NotebookEdit", "Glob", "Grep", "WebFetch", "WebSearch",
+    "mcp_other", "other",
+})
+
+_GROK_TOOL_RECORDED_EVENT_ENUM = frozenset({"PostToolUse"})
+
+_GROK_TOOL_RECORDED_ALLOWLIST = _CODEX_AUDIT_ENVELOPE | frozenset({
+    "harness", "hook_event_name", "tool_name_enum",
+})
+
+_GROK_TURN_ENDED_SOURCE_ENUM = frozenset({
+    "stop", "subagent_stop", "other",
+})
+
+_GROK_TURN_ENDED_ALLOWLIST = _CODEX_AUDIT_ENVELOPE | frozenset({
+    "harness", "source",
+})
+
+
+# ---------------------------------------------------------------------------
+# PLAN-156 Wave 6 (SENT-GK-F) — cross-vendor council lane invocation. A LIVE
+# external-egress action: repo scope leaves the process to xAI/OpenAI, so the
+# allowlist is deny-by-default and carries NO scope text, NO findings, NO
+# prompt bytes — only WHICH vendor lane ran and its terminal status. The
+# scope is NEVER persisted (an operator ratifies the egress at OQ5; the audit
+# row records the fact of egress, not its content).
+# ---------------------------------------------------------------------------
+_COUNCIL_VENDOR_ENUM = frozenset({"claude", "codex", "grok", "other"})
+_COUNCIL_LANE_STATUS_ENUM = frozenset({"ok", "unavailable", "other"})
+_COUNCIL_LANE_INVOKED_ALLOWLIST = _CODEX_AUDIT_ENVELOPE | frozenset({
+    "vendor", "lane_status",
 })
 
 
@@ -8301,6 +8395,137 @@ def emit_codex_turn_ended(
     if dropped:  # pragma: no cover — impossible from the typed wrapper
         _breadcrumb(
             f"codex_turn_ended dropped forbidden field(s): "
+            f"{sorted(dropped)[:10]}"
+        )
+
+
+def emit_grok_tool_recorded(
+    *,
+    session_id: str,
+    tool_name_enum: str,
+    hook_event_name: str = "PostToolUse",
+    project: str = "",
+) -> None:
+    """Emit grok_tool_recorded (PLAN-156 Wave 4 / SENT-GK-B / ADR-162).
+
+    Fired once per grok PostToolUse hit by audit_log.py under
+    CEO_HOOK_ADAPTER=grok — the completeness-bounded per-tool-call append
+    that lands the grok session in the HMAC chain. DISTINCT action from the
+    codex/claude rails so a completeness query can count grok separately.
+
+    Deny-by-default field allowlist (Sec MF-3): NO command bytes, NO edit
+    body, NO file paths, NO tool_response text, NO prompt. Both closed enums
+    are re-validated here (a smuggled raw value can never reach the wire).
+
+    Completeness residual (named, ADR-162 + degradation page): grok's hook
+    coverage is per-event, and PostToolUse is passive there, so absence of a
+    row is NOT evidence of absence of activity. Chain shape + verify_chain()
+    unchanged; this only appends. Fail-open per audit_emit contract.
+    """
+    safe_tool = (
+        tool_name_enum
+        if tool_name_enum in _GROK_TOOL_RECORDED_TOOL_NAME_ENUM
+        else "other"
+    )
+    safe_event = (
+        hook_event_name
+        if hook_event_name in _GROK_TOOL_RECORDED_EVENT_ENUM
+        else "PostToolUse"
+    )
+    raw_event: Dict[str, Any] = {
+        "action": "grok_tool_recorded",
+        "session_id": session_id,
+        "project": project,
+        "harness": "grok",
+        "hook_event_name": safe_event,
+        "tool_name_enum": safe_tool,
+    }
+    cleaned, dropped = _scrub_ceo_boot_event(
+        raw_event, _GROK_TOOL_RECORDED_ALLOWLIST
+    )
+    _write_event(cleaned)
+    if dropped:  # pragma: no cover — impossible from the typed wrapper
+        _breadcrumb(
+            f"grok_tool_recorded dropped forbidden field(s): "
+            f"{sorted(dropped)[:10]}"
+        )
+
+
+def emit_grok_turn_ended(
+    *,
+    session_id: str,
+    source: str,
+    project: str = "",
+) -> None:
+    """Emit grok_turn_ended (PLAN-156 Wave 4 / SENT-GK-B / ADR-162).
+
+    The turn-level backstop append. Fired by audit_log.py under
+    CEO_HOOK_ADAPTER=grok on a grok Stop / SubagentStop hook event. Grok's
+    Stop is PASSIVE (it cannot block), but the audit append still lands — a
+    DISTINCT action from grok_tool_recorded so a partial-coverage turn is
+    still marked in the chain. Grok has no `stop_hook_active` analogue, so
+    (unlike the codex twin) this carries no loop-guard field.
+
+    ``source`` is a closed enum (miss -> "other"). Deny-by-default field
+    allowlist (Sec MF-3): NO last_assistant_message, NO transcript path, NO
+    command/prompt text. Fail-open per audit_emit contract.
+    """
+    safe_source = (
+        source if source in _GROK_TURN_ENDED_SOURCE_ENUM else "other"
+    )
+    raw_event: Dict[str, Any] = {
+        "action": "grok_turn_ended",
+        "session_id": session_id,
+        "project": project,
+        "harness": "grok",
+        "source": safe_source,
+    }
+    cleaned, dropped = _scrub_ceo_boot_event(
+        raw_event, _GROK_TURN_ENDED_ALLOWLIST
+    )
+    _write_event(cleaned)
+    if dropped:  # pragma: no cover — impossible from the typed wrapper
+        _breadcrumb(
+            f"grok_turn_ended dropped forbidden field(s): "
+            f"{sorted(dropped)[:10]}"
+        )
+
+
+def emit_council_lane_invoked(
+    *,
+    session_id: str,
+    vendor: str,
+    lane_status: str,
+    project: str = "",
+) -> None:
+    """Emit council_lane_invoked (PLAN-156 Wave 6 / SENT-GK-F / ADR-162).
+
+    One append per AVAILABLE external council lane per run — the auditable
+    record that repo scope left the process to an external vendor. Sec MF-3
+    deny-by-default: the ONLY caller fields are the closed-enum ``vendor``
+    and ``lane_status``. NEVER the audited scope, NEVER findings, NEVER any
+    prompt bytes — the egress content is ratified by the operator at OQ5;
+    this row records the FACT of egress, not its content.
+
+    Completeness residual (ADR-162): an absent row is not evidence of an
+    absent invocation. Fail-open per audit_emit contract.
+    """
+    safe_vendor = vendor if vendor in _COUNCIL_VENDOR_ENUM else "other"
+    safe_status = lane_status if lane_status in _COUNCIL_LANE_STATUS_ENUM else "other"
+    raw_event: Dict[str, Any] = {
+        "action": "council_lane_invoked",
+        "session_id": session_id,
+        "project": project,
+        "vendor": safe_vendor,
+        "lane_status": safe_status,
+    }
+    cleaned, dropped = _scrub_ceo_boot_event(
+        raw_event, _COUNCIL_LANE_INVOKED_ALLOWLIST
+    )
+    _write_event(cleaned)
+    if dropped:  # pragma: no cover — impossible from the typed wrapper
+        _breadcrumb(
+            f"council_lane_invoked dropped forbidden field(s): "
             f"{sorted(dropped)[:10]}"
         )
 

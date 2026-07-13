@@ -77,7 +77,10 @@ class TestW5OffPassthrough(TestEnvContext):
         # Learning Loop / ADR-160, SENT-F) adds 11 metadata-only actions
         # (lesson_* family + learning_rail_disabled + fact_gate_activation_changed
         # + advisory_dampened + distiller_run_completed + lesson_evolve_run) -> 314.
-        self.assertEqual(len(audit_emit._KNOWN_ACTIONS), 316)
+        # PLAN-155 Wave 4 (+codex_tool_recorded +codex_turn_ended) -> 316.
+        # PLAN-156 Wave 4/6 (+grok_tool_recorded +grok_turn_ended
+        # +council_lane_invoked) -> 319.
+        self.assertEqual(len(audit_emit._KNOWN_ACTIONS), 319)
 
 
 class TestAdminKeyScrub(_W5Base):

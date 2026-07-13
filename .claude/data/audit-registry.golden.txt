@@ -1,7 +1,7 @@
 # audit-action registry golden (generated — do not hand-edit)
 # format: v1  source: .claude/hooks/_lib/audit_emit.py::_KNOWN_ACTIONS
 # regenerate: python3 .claude/scripts/check-audit-registry-coverage.py --write-golden
-# count: 316
+# count: 319
 action_required_held
 action_required_rejected
 action_required_resumed
@@ -66,6 +66,7 @@ context_middle_out_degraded
 contextual_recommendation_emitted
 cookbook_pattern_advised
 cost_envelope_capped
+council_lane_invoked
 credential_blocked_due_to_age
 credential_emergency_override_used
 credential_override_late_set_ignored
@@ -136,6 +137,8 @@ goap_search_aborted
 goap_search_summary
 gpg_signed
 gpg_verified
+grok_tool_recorded
+grok_turn_ended
 hint_provenance_recorded
 injection_flag
 invisible_unicode_blocked

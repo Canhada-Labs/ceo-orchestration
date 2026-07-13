@@ -106,7 +106,9 @@ class TestAllowlistAndContract(unittest.TestCase):
         #    _EMIT_GENERIC_PASSTHROUGH. This telemetry test is unguarded
         #    (hooks/tests/) and rides the SENT-F commit WITH audit_emit.py so
         #    the egress-pin does not red the landing (MANIFEST-A open issue #1).
-        self.assertEqual(len(audit_emit._KNOWN_ACTIONS), 316)
+        # PLAN-156 Wave 4/6 (SENT-GK-B/F): 316 -> 319 (+grok_tool_recorded,
+        # +grok_turn_ended, +council_lane_invoked).
+        self.assertEqual(len(audit_emit._KNOWN_ACTIONS), 319)
         self.assertIn("pair_rail_outgoing_redaction_applied", audit_emit._KNOWN_ACTIONS)
 
     def test_dispatch_scrub_accepts_empty_findings(self):
