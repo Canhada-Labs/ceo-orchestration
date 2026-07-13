@@ -116,11 +116,23 @@ def _command_carries_secret(command: str) -> bool:
 
     Fail-OPEN on infra (a scan exception → False, no false block). The canonical
     secret_patterns bank is the source of truth.
+
+    SECRETS-only (PLAN-158 Wave 2, spec-conformance): the E1 §4 gate is scoped
+    to LIVE CREDENTIALS by its own docstring, but scan()'s ALL_PATTERNS default
+    also swept the 11 LGPD/BR PII families — checksum-valid numeric collisions
+    (a benign GitHub run id that happens to pass the CPF checksum; `br_rg`
+    matching ANY bare 8-9 digit run) fail-CLOSED blocked benign commands with
+    no env escape (S270 live incident). Restrict THIS pre-exec scan to the
+    token/credential families; the PII families stay in the shared catalog and
+    keep being consumed by the egress-redaction rail, where PII belongs.
+    Degradation is fail-CLOSED-preserving: if SECRETS is unavailable
+    (older _lib), fall back to the full catalog (over-block, never under-block).
     """
     if _secret_patterns is None or not command:
         return False
     try:
-        return bool(_secret_patterns.scan(command))
+        families = getattr(_secret_patterns, "SECRETS", None)
+        return bool(_secret_patterns.scan(command, patterns=families))
     except Exception:  # pragma: no cover — fail-OPEN
         return False
 
