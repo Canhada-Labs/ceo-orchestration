@@ -259,6 +259,66 @@ _CANONICAL_GUARDS = [
     ".codex/rules/ceo.rules",
     "requirements.toml",
     "AGENTS.md",
+    # ---- PLAN-156 Wave 3 (SENT-GK-E) — Grok kill-switch surface ----
+    # Same class as the .codex surface above: under the Grok harness these
+    # files ARE the rail's own disarm surface. An agent running under grok
+    # that can rewrite `.grok/config.toml` (compat cells, leader mode) or
+    # `.grok/sandbox.toml` (the council lane's OS-level containment)
+    # disarms governance while the boot tripwire stays silent — the
+    # circular-disarm gap. `.grok/hooks/` is guarded even though PLAN-156
+    # deliberately ships NO live hooks there: a file we choose not to ship
+    # is exactly the file an attacker would CREATE, and creating it
+    # re-opens the double-fire that the single-surface decision closes.
+    #
+    # Why single-surface (OQ1, INVERTED by evidence — S269 probe P8): with
+    # BOTH `.grok/hooks/` and the legacy `.claude/settings.json` present,
+    # grok 0.2.93 fires EVERY hook TWICE on the same toolUseId, and neither
+    # documented kill switch turns the legacy surface off at runtime —
+    # `[compat.claude] hooks = false` in the project config is not even
+    # read, and `GROK_CLAUDE_HOOKS_ENABLED=0` marks the hook `[disabled]`
+    # in `grok inspect` while the runtime STILL fires it (probes
+    # P8b/P8c/P8d; product-bug class on a 0.x). A double-fired audit-chain
+    # append is an HMAC double-count + a filelock race, so the only sound
+    # resolution is to arm exactly ONE surface. We arm the one grok reads
+    # natively as legacy compat — the `.claude/settings.json` this
+    # framework already ships — and guard `.grok/**` so nothing re-arms the
+    # second one behind our back.
+    #
+    # KERNEL HARD-DENY (this guard list lives in _KERNEL_PATHS): extending
+    # it requires CEO_KERNEL_OVERRIDE=PLAN-156-GROK-KILLSWITCH-GUARD-EXTENSION
+    # AND CEO_KERNEL_OVERRIDE_ACK=I-ACCEPT in addition to the SENT-GK-E
+    # sentinel (same double-gate as PLAN-155-CODEX-KILLSWITCH).
+    ".grok/hooks/*.json",
+    ".grok/hooks/**/*.json",
+    ".grok/config.toml",
+    ".grok/sandbox.toml",
+    ".grok/rules/*.md",
+    # ---- PLAN-156 Wave 3 (SENT-GK-E) — install-template settings ----
+    # pair-rail R13: `templates/settings/settings.base.json` is the hook
+    # REGISTRATION surface every new install inherits, and it carried the
+    # same non-shim `check_codex_filewrite.py` registration the live
+    # settings.json did — so fixing only the dogfood file would have left
+    # every adopter fail-open under grok (both halves: no exit-2 mapping,
+    # no block->deny rewrite). It is a fail-open-BEARING distribution
+    # surface and belongs under the same sentinel gate as
+    # `.claude/settings.json`, not merely under a CI meta-test.
+    "templates/settings/settings.base.json",
+    "templates/settings/*.json",
+    # ---- PLAN-156 Wave 6 (SENT-GK-F) — cross-vendor council egress surface ----
+    # `council-audit.js` OWNS the live external-lane egress: it invokes the
+    # ADR-114 redactor, enforces the per-lane budget hard-kill, and carries
+    # the no-CI fence. A later ORDINARY edit that stripped the redactor call
+    # or the fence would transmit repo content to xAI/OpenAI UNREDACTED — so
+    # the workflow AND the /council command that triggers it are guarded.
+    # NOTE (verified): `.claude/workflows/` was NOT previously canonical-
+    # guarded (only `.github/workflows/*` is); this closes that gap for the
+    # egress-bearing workflow. The `.claude/commands/council.md` trigger is
+    # guarded for the same reason — it is the operator entry point to egress.
+    # KERNEL HARD-DENY (this guard list is in _KERNEL_PATHS): extending it
+    # requires CEO_KERNEL_OVERRIDE=PLAN-156-COUNCIL-GUARD-EXTENSION AND
+    # CEO_KERNEL_OVERRIDE_ACK=I-ACCEPT in addition to SENT-GK-F.
+    ".claude/workflows/council-audit.js",
+    ".claude/commands/council.md",
 ]
 
 
@@ -599,6 +659,15 @@ _CANONICAL_PREFIXES = frozenset({
     # dead-gate class). Every kill-switch guard pattern starts with one of
     # these by construction (`.codex/*`, `requirements.toml`, `AGENTS.md`).
     ".codex", "requirements.toml", "AGENTS.md",
+    # PLAN-156 Wave 3 (SENT-GK-E) — the same dead-guard class as `.codex`
+    # above, twice over (pair-rail R4 + R14). `_is_canonical()` bails out
+    # BEFORE any glob matching unless the path's first segment is in this
+    # set, so adding the `.grok/**` and `templates/settings/*` patterns to
+    # _CANONICAL_GUARDS without adding their first segments HERE would
+    # leave both guards INERT — unsentineled edits sailing straight through
+    # a list that LOOKS like it protects them. The S254 dead-gate class,
+    # and the reason this pair of edits can never be split across waves.
+    ".grok", "templates",
 })
 
 

@@ -1,0 +1,108 @@
+# =========================================================================
+# ceo-orchestration — Grok sandbox profile for the cross-vendor council
+# Verified against: grok 0.2.93 (PLAN-156 W0a lacuna (e))
+# =========================================================================
+#
+# WHERE THIS GOES: `~/.grok/sandbox.toml` (global) or `.grok/sandbox.toml`
+# (per-project; the sandbox file IS read per-project even though
+# `config.toml` is not — verified live: an unknown profile name makes grok
+# refuse to start, quoting the project path).
+#
+# WHY IT EXISTS
+#
+# The council's grok lane reads the repo and returns findings. It must not
+# WRITE. On grok, hooks fail open — so a "deny-all-writes hooks profile"
+# as the containment layer would be circular (kill the hook, get the
+# write). The containment must therefore be OS-level: Seatbelt on macOS,
+# Landlock/bwrap on Linux, applied to the whole process at startup and
+# irreversible thereafter. Child processes (`bash`, `grep`, subagents)
+# inherit it automatically.
+#
+# The framework's council invokes:
+#
+#   grok -p "<brief>" --sandbox council --output-format json \
+#        --no-leader --disallowed-tools "search_replace,run_terminal_command"
+#
+# The `--disallowed-tools` list is defense-in-depth ONLY. The kernel
+# profile below is the load-bearing layer.
+#
+# ⚠ VERIFIED CAVEAT (grok 0.2.93 — the docs oversell this): grok fails
+# closed only for a MALFORMED profile (e.g. an unsupported glob) —
+# `error: ... refusing to start rather than run unsandboxed`, rc=1. But a
+# profile NAME THAT DOES NOT EXIST (a typo in `--sandbox council`) only
+# emits `warning: sandbox could not be applied` and may proceed
+# UNSANDBOXED. So "I passed --sandbox council" is NOT proof the sandbox
+# applied. The council therefore does NOT trust the flag: it asserts a
+# `{"event_type":"ProfileApplied","profile":"council","enforced":true}`
+# line landed in `~/.grok/sandbox-events.jsonl` for the run before
+# accepting any grok-lane output; if that line is absent the lane reports
+# `STATUS: unavailable` (fail-loud, never a silent vendor substitution).
+#
+# ⚠ TEMP DIRS ARE WRITABLE. `read-only` (and thus this profile) permits
+# writes to `~/.grok/` and the temp dirs — on macOS that includes
+# `/tmp`, `/private/tmp`, `/var/folders/**` (grok's own list, seen in the
+# ProfileApplied event's read_write_paths). A council run in the REPO is
+# still read-only over the repo (which is what the audit protects), but
+# do NOT stage secrets in /tmp expecting this profile to guard them.
+
+[profiles.council]
+# `read-only` = read everywhere; write ONLY to ~/.grok/ (session
+# persistence — grok needs it) and the temp dirs. Exactly the shape an
+# auditor needs.
+extends = "read-only"
+
+# Block network for CHILD processes. NOTE the honest limitation: this is
+# enforced on Linux (seccomp) and is a NO-OP on macOS. The LLM API call
+# itself always has network (the agent could not function otherwise), so
+# this is not an egress control — egress is handled by routing every
+# external-lane prompt through the ADR-114 redactor before it leaves the
+# process. Do not mistake this line for a data-exfiltration guarantee.
+restrict_network = true
+
+# Kernel-DENY the credential surface: read AND write/rename are blocked,
+# which also closes the `mv secret x && cat x` relocation bypass. On macOS
+# each glob becomes a Seatbelt regex evaluated at runtime, so files
+# created AFTER grok starts are still denied. On Linux globs are expanded
+# at launch (best-effort) — name exact paths for anything that must be
+# airtight there.
+#
+# Grammar constraints (both platforms, fail-closed): `*` `?` `**`
+# `[a-z]` only. NO brace alternation — write `*.pem` and `*.key` as
+# SEPARATE entries; a malformed or unsupported glob makes grok refuse to
+# start (which is the correct direction, but surprises you at 3am).
+deny = [
+  "**/.env",
+  "**/.env.*",
+  "**/*.pem",
+  "**/*.key",
+  "**/*.p12",
+  "**/id_rsa",
+  "**/id_ed25519",
+  "**/.netrc",
+  "**/.npmrc",
+  "**/.pypirc",
+  "**/credentials",
+  "**/.aws",
+  "**/.ssh",
+  "**/.gnupg",
+  # The framework's own trust roots — an auditing lane has no business
+  # reading the signer allowlist or the HMAC key material.
+  "**/.claude/sentinel-signers.txt",
+  "**/.claude/audit-hmac-key*",
+]
+
+# -------------------------------------------------------------------------
+# Verifying the profile actually applies (do this once, per pin bump)
+# -------------------------------------------------------------------------
+#
+#   grok -p "Try to write the file /tmp/should-not-exist-$$ and report what happened." \
+#        --sandbox council --no-leader --output-format json
+#
+# Expect: the write FAILS (kernel), and the model says so. Sandbox events
+# are logged to `~/.grok/sandbox-events.jsonl` — check that a violation
+# was actually recorded rather than trusting the model's narration.
+#
+# Negative control (the one that matters): rename the profile to a name
+# that does not exist and confirm grok REFUSES TO START. A profile that
+# silently degrades to "no sandbox" is the failure mode this whole file
+# exists to prevent.

@@ -1,0 +1,79 @@
+# =========================================================================
+# ceo-orchestration — Grok Build config snippet (EXAMPLE, user-level)
+# Verified against: grok 0.2.93 (PLAN-156; probes + fixtures recorded per
+# that pin — re-verify on every CLI bump, see the substrate-watch item).
+# =========================================================================
+#
+# WHERE THIS GOES: `~/.grok/config.toml` (user-level). A PROJECT-level
+# `.grok/config.toml` is NOT read as a config source on 0.2.93 (measured:
+# `grok inspect` lists only the user file) — do not rely on a repo-local
+# config to change behavior. That is also why the framework's kill-switch
+# guard-list covers `.grok/config.toml`: a file grok ignores today may be
+# honored by tomorrow's daily release, and it must not become an
+# unsentineled disarm surface the moment it starts working.
+#
+# -------------------------------------------------------------------------
+# LOUD WARNINGS (read before trusting anything)
+# -------------------------------------------------------------------------
+# 1. NOTHING is enforced until the project folder is TRUSTED
+#    (`/hooks-trust`, or launch with `--trust`). An untrusted project's
+#    hooks are silently skipped — "installed but untrusted" is
+#    indistinguishable from healthy at runtime. Run the arming check.
+# 2. HOOKS FAIL OPEN on grok. Crash, timeout, malformed stdout, or an
+#    unrecognized decision word ⇒ the tool call PROCEEDS. Only a
+#    well-formed `{"decision":"deny"}` blocks. In particular
+#    `{"decision":"block"}` (the Claude vocabulary) fail-OPENs EVEN WITH
+#    exit 2 — the framework's shim rewrites it; do not bypass the shim.
+# 3. DO NOT create `.grok/hooks/*.json` while `.claude/settings.json`
+#    carries the CEO hooks. Both surfaces are read, and every hook fires
+#    TWICE on the same toolUseId (measured on 0.2.93). The compat kill
+#    switches do NOT stop it at runtime ([compat.claude] hooks=false is
+#    unread at project level; GROK_CLAUDE_HOOKS_ENABLED=0 only marks the
+#    hook `[disabled]` in `grok inspect`). Arm exactly ONE surface —
+#    the framework arms `.claude/settings.json`.
+
+# -------------------------------------------------------------------------
+# Model
+# -------------------------------------------------------------------------
+# `grok models` lists what YOUR account exposes. On the reference account
+# (SuperGrok) that is `grok-4.5` (default) + `grok-composer-2.5-fast`;
+# `grok-build-0.1` was NOT exposed. Pin explicitly rather than inheriting
+# a default that a daily release may move.
+[model]
+# default = "grok-4.5"
+
+# -------------------------------------------------------------------------
+# Leader mode — turn it OFF for scripted / headless lanes
+# -------------------------------------------------------------------------
+# Grok can share one backend process across clients (`~/.grok/leader.sock`).
+# A stale leader silently serves an old config to a scripted lane (the
+# council's grok lane, the pre-push gate, any `grok -p` invocation in CI-
+# adjacent tooling). Every framework-issued invocation passes `--no-leader`
+# explicitly, but set this too so an operator's ad-hoc run behaves the same.
+[cli]
+# use_leader = false
+
+# -------------------------------------------------------------------------
+# Sandbox — the council lane's containment
+# -------------------------------------------------------------------------
+# The cross-vendor council runs the grok lane under a KERNEL-ENFORCED
+# read-only profile (Seatbelt on macOS, Landlock on Linux). It is NOT
+# hook-based: hooks fail open on grok, so hooks-as-sandbox would be
+# circular. See `sandbox.toml.example` for the profile itself; reference
+# it here only if you want it as your default (most operators should not
+# — it blocks writes for interactive work too).
+[sandbox]
+# profile = "council"
+
+# -------------------------------------------------------------------------
+# Harness compatibility — DOCUMENTED, NOT LOAD-BEARING
+# -------------------------------------------------------------------------
+# These cells exist and appear in `grok inspect`, but on 0.2.93 flipping
+# `hooks` to false does NOT stop the legacy `.claude/settings.json` hooks
+# from firing at runtime (probe P8b/P8c). Do not use them as a security
+# control. They are listed here so the next operator does not rediscover
+# the trap.
+# [compat.claude]
+# hooks = true   # ← leave TRUE: this is the surface the framework arms
+# [compat.cursor]
+# hooks = false  # ← the framework ships nothing here
