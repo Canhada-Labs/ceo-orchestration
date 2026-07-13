@@ -2,7 +2,7 @@
   "author": {
     "name": "CEO Orchestration"
   },
-  "description": "CEO Orchestration \u2014 run Claude Code as a governed team of specialist agents: Plan->Debate->Execute, tamper-evident audit chain, cross-LLM Codex review, 151 skill checklists, and a zero-config edit->verify->review accelerator loop.",
+  "description": "CEO Orchestration \u2014 run Claude Code as a governed team of specialist agents: Plan->Debate->Execute, tamper-evident audit chain, cross-LLM Codex review, 166 skill checklists, and a zero-config edit->verify->review accelerator loop.",
   "keywords": [
     "governance",
     "audit",
@@ -13,5 +13,5 @@
   ],
   "license": "MIT",
   "name": "ceo",
-  "version": "1.0.1"
+  "version": "1.1.0"
 }

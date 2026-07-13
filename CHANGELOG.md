@@ -9,11 +9,97 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > commands, schema/contract changes, and behavior an adopter would notice after
 > installing or upgrading the framework. Internal refactors, test-only churn, and
 > release-engineering bookkeeping are omitted. Counts cited below (as of
-> v1.0.1: 151 skills, 22 slash commands, 172 ADRs, 67 `_lib` modules) are
+> v1.1.0: 166 skills, 26 slash commands, 177 ADRs, 68 `_lib` modules) are
 > reproducible from the repository via
 > `bash .claude/scripts/local/verify-counts.sh`.
 
 ---
+
+## [1.1.0] - 2026-07-13
+
+Feature release (PLAN-153/154/155/156): two new host harnesses (Codex CLI
+and Grok Build run the same enforcement hooks), a cross-vendor audit
+council, a gated learning loop, and a skill-catalog uplift 151 → 166. As
+always: governance and auditability — no speed claim.
+
+### Added — multi-harness (PLAN-155, PLAN-156)
+- **`--harness codex`** (PLAN-155, ADR-161): the installer emits a Codex
+  bundle (`.codex/hooks.json`, `.codex/rules/ceo.rules`, operator
+  `AGENTS.md`) that runs the **same** hooks under `CEO_HOOK_ADAPTER=codex`.
+  Per-rail truth (verified against codex-cli 0.139.0): canonical-edit,
+  bash-safety, plan-lifecycle, kernel-deny, config, and kill-switch are
+  ENFORCED at edit time; audit chain ENFORCED but completeness-bounded;
+  pair-rail inverted (Codex operates, `claude -p` reviews) and PARTIAL;
+  spawn governance ADVISORY. Installer ends with an
+  `ARMED / NOT-ARMED-(untrusted) / BROKEN` arming check.
+- **`--harness grok`** (PLAN-156, ADR-162): single-surface install — Grok
+  Build reads the shipped `.claude/settings.json` directly (no second
+  bundle; arming both surfaces would double-fire every hook). Prevention
+  rails ENFORCED via grok's `pre_tool_use`; pair-rail is Stop-passive, so
+  a **git pre-push review gate is the teeth**. Verified against grok
+  0.2.93 (exact pin). Emits `AGENTS.md` + `.grok/*.example` config.
+- New docs: [`docs/adapters.md`](docs/adapters.md) +
+  [`docs/provider_capability_matrix.md`](docs/provider_capability_matrix.md)
+  (per-rail, per-harness enforcement matrix — what is actually enforced
+  vs advisory under each harness).
+- Audit-chain action registry extended for both harnesses (314 → 319
+  registered actions, tamper-mirror coverage included).
+- codex-cli version pin bumped to `<0.145.0` (GPT-5.6 line) in
+  `codex-cli-pin.txt`; release gate hard-blocks verdicts from unpinned
+  codex binaries.
+
+### Added — cross-vendor audit council (PLAN-156)
+- **`/council <scope>`** — read-only, three-vendor audit (Claude in-harness
+  agents + Codex `exec --sandbox read-only` + Grok `-p --sandbox council`)
+  with vendor-attributed verdicts, adversarial re-verification, and
+  explicit fail-loud quorum degradation (an unavailable lane reports
+  STATUS: unavailable, never a silent substitution). Every external-lane
+  prompt passes the ADR-114 egress redactor; ADVISORY evidence only;
+  operator/local only — never CI.
+
+### Added — gated learning loop (PLAN-154)
+- Hooks accrue **lesson candidates** from live sessions; nothing renders
+  or persists as advice until explicitly approved: **`/lesson-review`**
+  (approve / reject / undo, HMAC-recorded), **`/lesson-evolve`** (cluster
+  approved lessons into SP-NNN skill-patch drafts for the existing
+  /skill-review ceremony), and an opt-in boot surface
+  (`CEO_LEARNING_BOOT_LESSONS=1`) that renders ≤3 verified one-liners as
+  fenced untrusted data — verify-before-render against the HMAC chain,
+  fail-closed drops, count-only integrity notes. Default OFF
+  (`CEO_SOTA_DISABLE=1` master kill precedence).
+
+### Added — skill catalog + commands (PLAN-153)
+- Skill catalog **151 → 166**: 15 imported domain skills land through a
+  new import gate with a NOTICE provenance ledger; 20+ SP-NNN adaptation
+  patches promoted shadow → live through the new **`/skill-review`**
+  ceremony (staged shadow-soak, Owner-waivable).
+- New commands: **`/skill-health`** (per-skill telemetry from the HMAC
+  audit log — invocations, failure-proxy clusters, dead-skill flagging)
+  and **`/context-budget`** (static context-overhead audit of the skill
+  catalog + governance surface).
+- `COMMAND→SKILL→HOOK` map (`docs/COMMAND-SKILL-HOOK-MAP.md`) with a
+  validate.yml drift gate — regenerate via
+  `.claude/scripts/gen-command-skill-hook-map.py --write`.
+
+### Added — security gates (PLAN-153 Wave E)
+- Harness-config gate (tamper tripwires over `settings.json` hook
+  registrations), citation gate, spawn prompt-defense template, deny
+  baseline, and supply-chain watch — all wired into `/ceo-boot` +
+  validate.yml.
+
+### Added — installer / release lifecycle (PLAN-153 Wave B)
+- `doctor.sh` + repair mode, install-state manifest + replay,
+  install-profiles manifest, deterministic plugin-manifest regeneration
+  (`build-plugin.py --check` CI drift gate), release idempotency +
+  release-notes template. Fixes the two latent v1.0.x release.yml bugs
+  (RC-version-mismatch; hardcoded release notes).
+
+### Changed
+- `/ceo-boot` extended with liveness checks (fail-open rail silence is
+  now surfaced, not mistaken for health) and the harness-config gate.
+- README / plugin description / manifests: counts reconciled to disk
+  truth (166 skills, 55 hook scripts, 68 `_lib` modules, 26 commands,
+  177 ADRs).
 
 ## [1.0.1] - 2026-07-02
 

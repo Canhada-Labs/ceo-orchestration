@@ -88,7 +88,7 @@ def plugin_manifest(version: str = VERSION) -> dict:
         "description": (
             "CEO Orchestration — run Claude Code as a governed team of specialist agents: "
             "Plan->Debate->Execute, tamper-evident audit chain, cross-LLM Codex review, "
-            "151 skill checklists, and a zero-config edit->verify->review accelerator loop."
+            "166 skill checklists, and a zero-config edit->verify->review accelerator loop."
         ),
         "version": version,
         "author": {"name": "CEO Orchestration"},

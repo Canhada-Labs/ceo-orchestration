@@ -39,7 +39,7 @@ Quando instalado, o framework registra um conjunto de [hooks do Claude Code](htt
 
 **3. Pair-rail cross-model.** Quando um agente tenta editar um caminho canônico (protegido), um hook roteia a mudança proposta para um segundo modelo, para revisão somente leitura. Se esse revisor retornar qualquer coisa com formato de escrita, a edição é bloqueada. A ressalva honesta: o revisor padrão é outro modelo de linguagem grande, e revisores da mesma classe compartilham pontos cegos (veja *Riscos*).
 
-**4. Checklists de skills.** O framework entrega **151 arquivos de skill** — checklists reutilizáveis e específicos de domínio (revisão de segurança, fan-out de auditoria, onboarding em uma base de código desconhecida, e assim por diante) que um agente carrega quando relevante, em vez de reinventar os passos a cada vez.
+**4. Checklists de skills.** O framework entrega **166 arquivos de skill** — checklists reutilizáveis e específicos de domínio (revisão de segurança, fan-out de auditoria, onboarding em uma base de código desconhecida, e assim por diante) que um agente carrega quando relevante, em vez de reinventar os passos a cada vez.
 
 ---
 
@@ -49,15 +49,15 @@ Todas as contagens abaixo são verificáveis a partir de um checkout limpo (veja
 
 | Componente | Contagem | Notas |
 |---|---|---|
-| Checklists de skills | **151** | 42 core + 8 frontend + 101 de domínio |
-| Scripts de hook (em disco) | **53** | entrypoints Python em `.claude/hooks/` |
+| Checklists de skills | **166** | 42 core + 8 frontend + 116 de domínio |
+| Scripts de hook (em disco) | **55** | entrypoints Python em `.claude/hooks/` |
 | Hooks ligados em `settings.json` | **44** | scripts distintos, 46 registros de evento |
-| Módulos de biblioteca compartilhada | **67** | apenas stdlib, em `.claude/hooks/_lib/` (excluindo o `__init__.py` do pacote) |
-| Slash commands | **22** | em `.claude/commands/` |
-| Architecture decision records | **171** | em `.claude/adr/` |
+| Módulos de biblioteca compartilhada | **68** | apenas stdlib, em `.claude/hooks/_lib/` (excluindo o `__init__.py` do pacote) |
+| Slash commands | **26** | em `.claude/commands/` |
+| Architecture decision records | **177** | em `.claude/adr/` |
 | Testes | **~12.000 casos** | reportados por `pytest --collect-only` nas suítes de hook, script e conformidade |
 
-A diferença entre **53 em disco** e **44 ligados** é benigna: vários módulos que não respondem a eventos são ativados via dispatch in-process (invocados por outros hooks), e não por um registro de evento direto em `settings.json`.
+A diferença entre **55 em disco** e **44 ligados** é benigna: vários módulos que não respondem a eventos são ativados via dispatch in-process (invocados por outros hooks), e não por um registro de evento direto em `settings.json`.
 
 **Dependências de runtime: nenhuma.** Hooks e scripts são Python ≥ 3.9, **apenas biblioteca padrão** — zero pacotes de terceiros em runtime. Veja [`SBOM.md`](SBOM.md). (Desenvolvimento e CI usam ferramentas de teste de terceiros, como o pytest; o runtime instalado não usa.)
 
@@ -67,7 +67,7 @@ Há também um **contrato de conformidade publicado** em `SPEC/v1/` (32 arquivos
 
 ## Qual skill devo usar?
 
-151 skills é um problema de descoberta, não uma feature. A lista curta abaixo cobre os casos do dia a dia; o resto pode esperar até algo quebrar. Slash commands são digitados no chat do Claude Code; nomes simples são checklists de skill em `.claude/skills/core/` que você (ou um agente spawnado) carrega pelo nome.
+166 skills é um problema de descoberta, não uma feature. A lista curta abaixo cobre os casos do dia a dia; o resto pode esperar até algo quebrar. Slash commands são digitados no chat do Claude Code; nomes simples são checklists de skill em `.claude/skills/core/` que você (ou um agente spawnado) carrega pelo nome.
 
 | Se você precisa de… | Use | Por quê, em uma linha |
 |---|---|---|
@@ -161,9 +161,9 @@ Para remover o framework de forma limpa:
 Não acredite na tabela por fé. A partir de um checkout limpo:
 
 ```bash
-find .claude/skills -name SKILL.md | wc -l        # 151 skills
+find .claude/skills -name SKILL.md | wc -l        # 166 skills
 ls .claude/commands/*.md | wc -l                  # 22 slash commands
-ls .claude/adr | grep -c '^ADR-'                  # 171 ADRs
+ls .claude/adr | grep -c '^ADR-'                  # 177 ADRs
 python3 -m pytest --collect-only -q | tail -1     # ~12.000 casos coletados
 ```
 

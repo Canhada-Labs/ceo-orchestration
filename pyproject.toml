@@ -1,6 +1,6 @@
 [project]
 name = "ceo-orchestration"
-version = "1.0.1"
+version = "1.1.0"
 description = "Portable framework for operating Claude Code as a structured team of specialist agents under a CEO protocol."
 requires-python = ">=3.9"
 

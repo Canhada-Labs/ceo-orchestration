@@ -1,9 +1,10 @@
 ---
 id: PLAN-158
 title: Release v1.1.0 — ship PLAN-153..156 + OIDC before token expiry
-status: reviewed
+status: executing
 created: 2026-07-13
 reviewed_at: 2026-07-13
+execution_started: 2026-07-13
 reviewed_by: "Owner (chat ratification, S270)"
 owner: CEO
 depends_on: [PLAN-153, PLAN-154, PLAN-155, PLAN-156]

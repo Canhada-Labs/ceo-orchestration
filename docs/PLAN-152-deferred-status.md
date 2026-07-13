@@ -25,7 +25,7 @@ silently dropped.
 | 2 | `governance-07` — NotebookEdit coverage | **Deferred** (unchanged) | Folds into the governance-04 plan |
 | 3 | ~~`tests-07`~~ — serial markers | **Resolved in v1.0.1** (not deferred) | Done, commit `0396b71` (Wave B, debate C2) |
 | 4 | `burndown-lib-tests` — 128-site `_lib/tests` env-hygiene | **Deferred** (unchanged) | v1.0.2; ceremony-scoped (`.claude/hooks/_lib/**` canonical-guarded) |
-| 5 | `backlog-oidc` — npm Trusted Publishing | **Deferred** (unchanged) | v1.0.2 plan; **Owner web-console prereq**; NPM_TOKEN expires ~2026-09-28 |
+| 5 | `backlog-oidc` — npm Trusted Publishing | **In execution — PLAN-158 Wave 1** | **Owner web-console prereq**; NPM_TOKEN expires ~2026-09-28 |
 | 6 | `nested-subagent-redteam` — red-team corpus cases | **Deferred** (unchanged) | v1.0.2 / follow-on scoped corpus effort |
 | 7 | `canonical-models-sonnet5-entry` — pricing entry | **Deferred** (unchanged) | **Owner prereq**: next Owner-run `build-canonical-models.py --fetch` refresh |
 | 8 | `spec-npm-shim-oidc-wording` — SPEC false-claim fix | **Addressed — STAGED** (this pass) | Owner GPG ceremony; sentinel Scope must carry `SPEC/v1/npm-shim.md` (Amends clause, PLAN-085 E.5) |
@@ -76,7 +76,7 @@ v1.0.1 itself.
   `.github/workflows/GOVERNANCE-MAP.md:56` and `CHANGELOG.md` (v1.0.1 entry).
   Any release after expiry fails at publish until the token is regenerated or
   Trusted Publishing lands.
-- **Successor:** v1.0.2 plan; item 8 below rides its sentinel if not landed earlier.
+- **Successor:** PLAN-158 Wave 1 (v1.1.0, in execution); item 8 below rides its sentinel.
 
 ### 6. `nested-subagent-redteam` — corpus cases for nested subagents + background auto-push
 - **Where:** PLAN-152:223-229 (Wave F execution decision, via the item's own
