@@ -432,5 +432,76 @@ class TestSquadGrandfatherArrayLeqCap(TestEnvContext):
         )
 
 
+class TestSquadGrandfatherSetEqualsPolicyMembers(TestEnvContext):
+    """PLAN-157 W0 tamper rider (debate consensus #5) — set-equality by NAME.
+
+    Count-equality (the test above) cannot catch a swap tamper: removing
+    squad A from the policy while adding squad B to the bash array keeps
+    both counts identical. This gate asserts the two rosters contain the
+    SAME names. Also note (recorded in PLAN-157): the reopen gate watches
+    `domain_bundles.members` — squads sunset out of the policy leave its
+    view, so this set-equality is the last mechanical tie between the two
+    surfaces before a sunset lands.
+    """
+
+    def test_squad_grandfather_set_equals_policy_members(self) -> None:
+        if not _STAGED_POLICY.is_file():
+            self.skipTest("Staged policy not found")
+        validate_path = (
+            _REPO_ROOT / ".claude" / "scripts" / "validate-governance.sh"
+        )
+        if not validate_path.is_file():
+            self.skipTest(f"validate-governance.sh not found at {validate_path}")
+        array_members = (
+            TestSquadGrandfatherArrayLeqCap._parse_squad_grandfather_array(
+                validate_path
+            )
+        )
+        if not array_members:
+            self.skipTest("Could not parse SQUAD_GRANDFATHER")
+        policy_members = _parse_policy_members(_STAGED_POLICY, "domain_bundles")
+        if not policy_members:
+            self.skipTest("Could not parse domain_bundles.members")
+        array_set = set(array_members)
+        policy_set = set(policy_members)
+        only_in_array = sorted(array_set - policy_set)
+        only_in_policy = sorted(policy_set - array_set)
+        self.assertEqual(
+            array_set,
+            policy_set,
+            "SQUAD_GRANDFATHER and domain_bundles.members diverge by NAME "
+            f"(counts alone cannot catch a swap): only in bash array = "
+            f"{only_in_array}; only in policy = {only_in_policy}. Every "
+            f"sunset/graduation must remove the squad from BOTH surfaces "
+            f"in the same commit (PLAN-157 commit-atomic rule).",
+        )
+
+    def test_no_duplicate_entries_either_surface(self) -> None:
+        """A duplicated slug would let count-based gates drift silently."""
+        if not _STAGED_POLICY.is_file():
+            self.skipTest("Staged policy not found")
+        validate_path = (
+            _REPO_ROOT / ".claude" / "scripts" / "validate-governance.sh"
+        )
+        if not validate_path.is_file():
+            self.skipTest("validate-governance.sh not found")
+        array_members = (
+            TestSquadGrandfatherArrayLeqCap._parse_squad_grandfather_array(
+                validate_path
+            )
+        )
+        policy_members = _parse_policy_members(_STAGED_POLICY, "domain_bundles")
+        self.assertEqual(
+            len(array_members),
+            len(set(array_members)),
+            f"duplicate entries in SQUAD_GRANDFATHER: {array_members}",
+        )
+        self.assertEqual(
+            len(policy_members),
+            len(set(policy_members)),
+            f"duplicate entries in domain_bundles.members: {policy_members}",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

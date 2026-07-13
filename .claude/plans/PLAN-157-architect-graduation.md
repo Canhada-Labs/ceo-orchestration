@@ -1,7 +1,7 @@
 ---
 id: PLAN-157
 title: Architect Graduation — Drain the 8 Imported Squads (cap 32→24)
-status: reviewed
+status: executing
 created: 2026-07-13
 reviewed_at: 2026-07-13
 reviewed_by: "Owner (chat ratification, S270)"
@@ -129,21 +129,22 @@ actually runs, together) && clean-clone proof for new/changed tests.
 
 ## Waves
 
-### Wave 0 — ratification + baseline + roster-tamper rider
+### Wave 0 — ratification + baseline + roster-tamper rider — DONE S272 (2026-07-13)
 Check: python3 -m pytest .claude/scripts/tests/test_squad_grandfather_cap.py -q && bash .claude/scripts/validate-governance.sh
-- [ ] Debate adjustments folded (this revision); Owner ratifies OQ1-OQ5
+- [x] Debate adjustments folded (this revision); Owner ratifies OQ1-OQ5
   at `draft → reviewed`, including the fold soak-waiver decision.
-- [ ] Baseline snapshot: roster membership + policy state →
+- [x] Baseline snapshot: roster membership + policy state →
   `PLAN-157/baseline.md`.
   Check: grep -c 'SQUAD_GRANDFATHER=' .claude/scripts/validate-governance.sh && grep -n 'current: 32' .claude/policies/grandfather-cap.policy.yaml
-- [ ] **Tamper-gap rider (debate consensus #5):** add set-equality
+- [x] **Tamper-gap rider (debate consensus #5):** add set-equality
   (names, not counts) between `SQUAD_GRANDFATHER` and policy
   `domain_bundles.members` to `test_squad_grandfather_cap.py`
   (scripts/tests is unguarded — direct edit). Also note: the reopen
   gate watches `domain_bundles.members`; sunset squads leave its view.
   Check: python3 -m pytest .claude/scripts/tests/test_squad_grandfather_cap.py -q
-- [ ] Standing precondition: main Validate green on HEAD before W1
-  lands (satisfied S270 at `9b09f7c`; re-verify at execution start).
+- [x] Standing precondition: main Validate green on HEAD before W1
+  lands (satisfied S270 at `9b09f7c`; re-verified S272 at `264a8c4`
+  após rerun de perf-flake — success).
   Check: gh run list --branch main --workflow "Validate CEO Orchestration governance" --limit 1
 
 ### Wave 1 — sunsets + folds (desktop, dotnet, architecture, agents-meta) [SENTINEL CEREMONY + SP-NNN]
