@@ -102,13 +102,13 @@ Check: bash .claude/scripts/validate-governance.sh --fast
   22→26; deferred-status backlog-oidc successor re-pointed at this plan.
   Check: grep -rniE "151[^0-9]{0,3}(skill|checklist)" README.md .claude-plugin/plugin.json scripts/build-plugin.py | wc -l  # must print 0 — PASSED 0
 
-### Wave 1 — backlog-oidc: npm Trusted Publishing
+### Wave 1 — backlog-oidc: npm Trusted Publishing — flip+playbook LANDED S271, commit `d6cad0b`, Validate green (S272 rerun após perf-flake); pendem: Owner console (prereq GA) + revoke pós-GA
 Check: none (Owner console work + guarded workflow edit; mechanical proof lands at the Wave 4 GA publish — RC tags skip npm-publish entirely, so no earlier proof point exists)
 - [ ] **Owner (web console, prereq):** configure the GitHub Actions
   trusted publisher for `ceo-orchestration` on npmjs.com
   (repo `Canhada-Labs/ceo-orchestration`, workflow `npm-publish.yml`,
   environment `production-npm`).
-- [ ] Flip `npm-publish.yml` publish step to OIDC — **guarded workflow →
+- [x] Flip `npm-publish.yml` publish step to OIDC — **guarded workflow →
   sentinel ceremony**, scope MUST also carry the kernel-guarded
   `SPEC/v1/npm-shim.md` doc cascade (PLAN-152 §Deferred assigned it to
   this flip) with per-file pair-rail verdicts. The sentinel scope ALSO
@@ -122,19 +122,19 @@ Check: none (Owner console work + guarded workflow edit; mechanical proof lands 
   dies ENEEDAUTH); `--provenance` keeps working; keep `NPM_TOKEN`
   fallback behind a comment with the **rollback diff pre-staged in the
   same sentinel**.
-- [ ] Failure playbook (mandatory — npm-publish.yml has NO
+- [x] Failure playbook (mandatory — npm-publish.yml has NO
   workflow_dispatch and tag runs pin the workflow to the tag's tree): a
   failed OIDC-only GA publish means delete/re-tag with the rollback
   diff applied. Document the exact command sequence in the wave.
 - [ ] After the GA publish proves OIDC end-to-end: **explicitly REVOKE**
   the old granular token (not just stop using it) and record revocation.
-- [ ] Fallback if Owner defers OIDC (OQ1): regenerate the granular
+- [ ] (N/A — OQ1 ratificada OIDC-now) Fallback if Owner defers OIDC (OQ1): regenerate the granular
   token NOW, re-date the expiry flags (deferred-status tracker +
   npm-publish.yml header), fix the stale GOVERNANCE-MAP citation.
 
-### Wave 2 — rider: check_adversary PII-collision fix (OQ2-gated; OWN conditional sentinel)
+### Wave 2 — rider: check_adversary PII-collision fix (OQ2-gated; OWN conditional sentinel) — DONE S271, commit `264a8c4`, Validate green (S272 rerun após perf-flake em check_output_secrets, não relacionado)
 Check: python3 -m pytest .claude/hooks/tests/ -q -k adversary
-- [ ] Debate upgraded this from "optional" to **spec-conformance**: the
+- [x] Debate upgraded this from "optional" to **spec-conformance**: the
   E1 gate's own docstring scopes it to live credentials — ALL_PATTERNS
   exceeded the spec. FP class is wider than CPF: `br_rg` blocks ANY
   bare 8-9 digit run (validator=None, no context gate). Restrict
@@ -142,14 +142,14 @@ Check: python3 -m pytest .claude/hooks/tests/ -q -k adversary
   (check_adversary.py:120-123) + regression tests (CPF-shaped run id
   allowed; 8-9 digit bare run allowed; npm/ghp/PEM/aws forms still
   denied/ask — verified live by the security critic).
-- [ ] **Security guardrails (VETO lines, recorded):** no PII family is
+- [x] **Security guardrails (VETO lines, recorded):** no PII family is
   DELETED from the shared catalog (egress-redact keeps consuming them);
   the unconditional credential fail-closed path is untouched; no RC
   dist-tag npm publish to "prove OIDC early".
-- [ ] Ceremony vehicle: its OWN sentinel (exact-scope, per-file
+- [x] Ceremony vehicle: its OWN sentinel (exact-scope, per-file
   verdict), scheduled with Wave 1's when OQ1=OIDC, standalone when
   OQ1=fallback (debate: riding W1 breaks under fallback).
-- [ ] If Owner rejects OQ2: record refusal in §Clarifications and drop
+- [ ] (N/A — OQ2 ratificada rider-IN) If Owner rejects OQ2: record refusal in §Clarifications and drop
   the wave.
   Check: none (doc-only)
 
