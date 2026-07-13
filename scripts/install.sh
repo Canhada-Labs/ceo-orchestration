@@ -258,6 +258,14 @@ if [ -f "$SCRIPT_DIR/_codex_harness.sh" ]; then
   . "$SCRIPT_DIR/_codex_harness.sh"
 fi
 
+# PLAN-156 Wave 4 — Grok harness emission (sourced, not executed). Same
+# fail-open shape as the codex source above: absent => --harness grok
+# degrades to a clear error at use; the default claude path never references it.
+if [ -f "$SCRIPT_DIR/_grok_harness.sh" ]; then
+  # shellcheck source=scripts/_grok_harness.sh
+  . "$SCRIPT_DIR/_grok_harness.sh"
+fi
+
 # ----------------------------------------------------------------------
 # P0-15 (PLAN-045 Session 41 / PLAN-044 F-15R2-01, 2026-04-20;
 #        narrative clarified PLAN-063 DIM-01 P1, 2026-04-30):
@@ -549,9 +557,9 @@ while [[ $# -gt 0 ]]; do
       # flag being absent; codex adds the .codex/ emission path.
       HARNESS="${2:-}"
       case "$HARNESS" in
-        claude|codex) ;;
+        claude|codex|grok) ;;
         *)
-          echo "ERROR: --harness must be 'claude' or 'codex' (got: $HARNESS)" >&2
+          echo "ERROR: --harness must be 'claude', 'codex', or 'grok' (got: $HARNESS)" >&2
           exit 2
           ;;
       esac
@@ -562,8 +570,13 @@ while [[ $# -gt 0 ]]; do
       # shellcheck disable=SC2034  # consumed by the sourced _codex_harness.sh
       CODEX_WITH_SKILLS=1; shift ;;
     --force)
-      # shellcheck disable=SC2034  # consumed by the sourced _codex_harness.sh
-      CODEX_FORCE=1; shift ;;
+      # --force is harness-neutral: set BOTH so `--harness grok --force`
+      # actually reaches GROK_FORCE (PLAN-156 Wave 4 — the codex-only
+      # CODEX_FORCE was a bug for the grok path).
+      # shellcheck disable=SC2034  # consumed by the sourced _codex/_grok_harness.sh
+      CODEX_FORCE=1
+      # shellcheck disable=SC2034
+      GROK_FORCE=1; shift ;;
     --arming-check)
       CODEX_ARMING_ONLY=1; shift ;;
     --uninstall)
@@ -659,6 +672,21 @@ IFS=',' read -r -a PROFILE_PARTS <<< "$PROFILE"
 # run BEFORE the backup/trap machinery (no snapshot needed) and exit directly.
 # ----------------------------------------------------------------------
 if [[ "$CODEX_ARMING_ONLY" -eq 1 || "$CODEX_UNINSTALL" -eq 1 ]]; then
+  # PLAN-156 Wave 4 — route the shared --arming-check flag to the grok
+  # checker when the harness is grok (flag names stay CODEX_* for
+  # back-compat; the dispatch is harness-aware).
+  if [[ "$HARNESS" == "grok" ]]; then
+    # PLAN-156 Wave 4 P2 #5 — grok lifecycle symmetry: route BOTH
+    # --arming-check and --uninstall to the grok helpers.
+    if ! command -v grok_arming_check >/dev/null 2>&1; then
+      echo "ERROR: --arming-check/--uninstall --harness grok requires scripts/_grok_harness.sh (not sourced)" >&2
+      exit 1
+    fi
+    if [[ "$CODEX_UNINSTALL" -eq 1 ]]; then
+      grok_uninstall "$TARGET"; exit $?
+    fi
+    grok_arming_check "$TARGET"; exit $?
+  fi
   if ! command -v codex_arming_check >/dev/null 2>&1; then
     echo "ERROR: --arming-check/--uninstall require scripts/_codex_harness.sh (not sourced)" >&2
     exit 1
@@ -2358,6 +2386,21 @@ if [[ "$HARNESS" == "codex" ]]; then
   fi
 fi
 
+# PLAN-156 Wave 4 — Grok harness emission. Mirror of the codex dispatch
+# above; fully gated on --harness grok. Emits the operator surface (NO live
+# hooks — the legacy .claude/settings.json is the armed surface, OQ1).
+if [[ "$HARNESS" == "grok" ]]; then
+  if ! command -v grok_emit_bundle >/dev/null 2>&1; then
+    echo "ERROR: --harness grok requires scripts/_grok_harness.sh (not sourced)" >&2
+    exit 1
+  fi
+  if grok_emit_bundle; then :; else
+    _gk_rc=$?
+    echo "ERROR: grok harness emission failed/refused (rc=$_gk_rc)" >&2
+    exit "$_gk_rc"
+  fi
+fi
+
 if [[ "$DRY_RUN" -eq 0 ]]; then
   write_install_manifest
   _write_install_state
@@ -2502,6 +2545,17 @@ if [[ "$HARNESS" == "codex" ]]; then
   echo "      $0 --harness codex --arming-check $TARGET"
   echo "    Uninstall the codex harness (lifecycle-symmetric):"
   echo "      $0 --harness codex --uninstall $TARGET"
+fi
+
+# PLAN-156 Wave 4 — the grok path closes with its arming check as the FINAL
+# instruction (installed != armed; folder-trust is the operator's next step).
+if [[ "$HARNESS" == "grok" ]]; then
+  echo ""
+  echo "==> Grok harness installed. FINAL STEP — trust the folder to arm enforcement:"
+  grok_arming_check "$TARGET" || true
+  echo ""
+  echo "    Re-run the arming check any time:"
+  echo "      $0 --harness grok --arming-check $TARGET"
 fi
 
 # Release workflow (.github/workflows/release.yml) replaces the

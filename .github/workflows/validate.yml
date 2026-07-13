@@ -350,11 +350,16 @@ jobs:
       # lines as subprocesses (recorded-wire replay). The real-binary
       # live-fire is the T2 local tier (PLAN-155/artifacts/).
       # -----------------------------------------------------------------
-      - name: Installer --harness codex matrix (PLAN-155 Wave 5)
+      - name: Installer --harness codex + grok matrix (PLAN-155 W5 / PLAN-156 W4)
         run: |
           set -euo pipefail
           cd "$GITHUB_WORKSPACE"
           bash scripts/tests/test-install-harness-codex.sh
+          # PLAN-156 Wave 4 — grok installer matrix. HERMETIC acceptance
+          # criterion: ZERO grok binary, ZERO xAI secret on the runner (mirror
+          # of the codex property, validate.yml:348-351). The T2 live-fire is
+          # the Owner's authed machine (PLAN-156/artifacts/).
+          bash scripts/tests/test-install-harness-grok.sh
 
 
 
@@ -371,11 +376,24 @@ jobs:
         run: |
           set -euo pipefail
           cd "$GITHUB_WORKSPACE"
-          for adapter in claude codex; do
-            CEO_HOOK_ADAPTER="$adapter" python3 -m pytest \
-              .claude/hooks/tests/test_codex_stop_review.py \
-              .claude/hooks/tests/test_codex_advisory_teeth.py \
-              --strict-markers --tb=short -q
+          for adapter in claude codex grok; do
+            if [ "$adapter" = "grok" ]; then
+              # PLAN-156 Wave 2/4 — grok is SHAPE-DIFFERENT: Stop is passive
+              # there, so the codex Stop-review/advisory-teeth tests do not
+              # apply. Grok's ENFORCEMENT teeth are the decision->exit-2
+              # chokepoint (RED-on-absence, hermetic) + the adapter golden/
+              # drift round-trip over the recorded grok wire.
+              CEO_HOOK_ADAPTER=grok python3 -m pytest \
+                .claude/hooks/tests/test_exit2_chokepoint.py \
+                .claude/hooks/tests/test_adapter_golden.py \
+                .claude/hooks/tests/test_adapter_drift_detector.py \
+                --strict-markers --tb=short -q
+            else
+              CEO_HOOK_ADAPTER="$adapter" python3 -m pytest \
+                .claude/hooks/tests/test_codex_stop_review.py \
+                .claude/hooks/tests/test_codex_advisory_teeth.py \
+                --strict-markers --tb=short -q
+            fi
           done
           # RED-on-absence self-test: activity + no boot breadcrumb => exit 1.
           tmp="$(mktemp -d)"

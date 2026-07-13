@@ -93,6 +93,13 @@ if [ -f "$SCRIPT_DIR/_codex_harness.sh" ]; then
   . "$SCRIPT_DIR/_codex_harness.sh"
 fi
 
+# PLAN-156 Wave 4 — Grok harness (sourced). Fail-open: absent => --harness
+# grok round-trip degrades to a warning (mirrors the codex source above).
+if [ -f "$SCRIPT_DIR/_grok_harness.sh" ]; then
+  # shellcheck source=scripts/_grok_harness.sh
+  . "$SCRIPT_DIR/_grok_harness.sh"
+fi
+
 # PLAN-153 Wave B item B2 — capture the ORIGINAL upgrade argv verbatim BEFORE
 # parsing, for the post-upgrade state record (data only, never eval-ed).
 ORIG_UP_ARGV=( "$@" )
@@ -159,8 +166,8 @@ while [[ $# -gt 0 ]]; do
       # PLAN-155 Wave 5: explicit override of the replayed harness.
       HARNESS="${2:-}"
       case "$HARNESS" in
-        claude|codex) ;;
-        *) echo "ERROR: --harness must be 'claude' or 'codex' (got: $HARNESS)" >&2; exit 2 ;;
+        claude|codex|grok) ;;
+        *) echo "ERROR: --harness must be 'claude', 'codex', or 'grok' (got: $HARNESS)" >&2; exit 2 ;;
       esac
       HARNESS_EXPLICIT=1
       shift 2
@@ -1633,6 +1640,36 @@ if [[ "$HARNESS" == "codex" ]]; then
       echo "    NOTE: codex bundle refresh returned rc=$_cx_rc (likely a local edit under" >&2
       echo "          the default refuse policy). Re-run with --on-conflict backup to" >&2
       echo "          overwrite, or resolve by hand. The upgrade itself is unaffected." >&2
+    fi
+  fi
+fi
+
+# PLAN-156 Wave 4 — Grok harness refresh on upgrade. Mirrors the codex block:
+# re-emits the grok operator surface from the (possibly newer) templates and
+# RE-ARMS nothing silently (no live hooks). Runs on an explicit or replayed
+# --harness grok. A refusal WARNS, never fails the upgrade.
+if [[ "$HARNESS" == "grok" ]]; then
+  if ! command -v grok_emit_bundle >/dev/null 2>&1; then
+    echo "    NOTE: recorded harness is grok but scripts/_grok_harness.sh is not" >&2
+    echo "          sourced — skipping the grok surface refresh (fail-open)." >&2
+  else
+    # shellcheck disable=SC2034  # PH_PROJECT_*/GROK_FORCE consumed by the sourced _grok_harness.sh
+    PH_PROJECT_PATH="$TARGET"
+    # shellcheck disable=SC2034
+    PH_PROJECT_NAME="$( basename "$TARGET" )"
+    # shellcheck disable=SC2034
+    if [[ "$ON_CONFLICT" == "theirs" || "$ON_CONFLICT" == "backup" ]]; then
+      GROK_FORCE=1
+    else
+      GROK_FORCE=0
+    fi
+    echo ""
+    echo "==> Grok harness refresh (--harness grok; on-conflict=$ON_CONFLICT)"
+    if grok_emit_bundle; then :; else
+      _gk_rc=$?
+      echo "    NOTE: grok surface refresh returned rc=$_gk_rc (likely a local edit under" >&2
+      echo "          the default refuse policy). Re-run with --on-conflict backup, or" >&2
+      echo "          resolve by hand. The upgrade itself is unaffected." >&2
     fi
   fi
 fi
