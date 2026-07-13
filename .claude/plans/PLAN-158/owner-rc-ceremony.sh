@@ -49,6 +49,11 @@ git fetch origin main --quiet
 gpg --list-secret-keys "$KEY" >/dev/null 2>&1 || die "signing key $KEY not in keyring"
 [ -f "$BODY" ] || die "verdict body missing: $BODY (CEO prepares it from codex R1)"
 [ -f "$TRANSCRIPT" ] || die "codex transcript missing: $TRANSCRIPT"
+# machine-local staged overlay (gitignored by design) — required unless the
+# SENT-RC-SPEC fix has already been applied to canonical:
+if ! diff -q "$PLANDIR/staged/rc/npm-shim.md" SPEC/v1/npm-shim.md >/dev/null 2>&1; then
+  [ -f "$PLANDIR/staged/rc/npm-shim.md" ] || die "staged/rc/npm-shim.md missing — run from the session's machine (staged/ is machine-local)"
+fi
 git rev-parse -q --verify "refs/tags/$TAG" >/dev/null && die "tag $TAG already exists"
 
 say "Validate green on HEAD?"
@@ -110,8 +115,9 @@ else
   # touched-set == scope check: exactly the SPEC file + sentinel artifacts
   TOUCHED="$(git status --porcelain=v1 | awk '{print $2}' | grep -v "^.claude/plans/PLAN-158/" || true)"
   [ "$TOUCHED" = "SPEC/v1/npm-shim.md" ] || die "touched set != scope: [$TOUCHED]"
-  git add SPEC/v1/npm-shim.md "$SENTDIR/approved.md" "$SENTDIR/approved.md.asc" \
-    "$PLANDIR/staged/rc/npm-shim.md" "$PLANDIR/staged/rc/spec-npm-shim-oidc-xref.patch"
+  # staged/rc/* is machine-local by design (.gitignore:17 'staged/') — the
+  # signed sentinel + the applied SPEC file are the committed record.
+  git add SPEC/v1/npm-shim.md "$SENTDIR/approved.md" "$SENTDIR/approved.md.asc"
   git commit -S -m "fix(PLAN-158): SENT-RC-SPEC — npm-shim §Cross-reference OIDC stale claim
 
 Pair-rail RC R1 P2 (codex 0.144.1): ADR-012 cross-reference still said
