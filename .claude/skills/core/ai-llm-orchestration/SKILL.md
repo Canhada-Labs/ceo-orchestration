@@ -22,7 +22,7 @@ domain: core
 priority: 5
 risk_class: medium
 stack: [python, typescript]
-context_budget_tokens: 1000
+context_budget_tokens: 1150
 inactive_but_retained: false
 repo_profile_binding:
   frontend: {active: true, priority: 6}
@@ -618,3 +618,41 @@ mandatory; missing sections fail intake.
 - **"The bill is fine, no need for the FinOps section"** — FinOps
   drift is the leading indicator for a regressed prompt. Skipping the
   section is skipping the leading indicator.
+
+## Ranking/Feed Pipeline Shape — folded from `recsys-pipeline-architect` (PLAN-157 W1)
+
+When the task is "pick the top K items for a (user, context)" — RAG retrieval
+reranking, notification/task prioritisation, feed or search ranking — the
+plumbing around the scoring function follows six composable stages, in fixed
+order (distilled from the sunset architecture squad's
+`recsys-pipeline-architect` skill; full text in git history):
+
+| # | Stage | Job | Concurrency |
+|---|---|---|---|
+| 1 | Source | retrieve candidates from one or more origins | parallel fan-out |
+| 2 | Hydrator | attach the metadata later stages need | parallel |
+| 3 | Filter | drop what must never be shown | sequential |
+| 4 | Scorer | score survivors — a chain, not one scorer | sequential |
+| 5 | Selector | sort by final score, take top K | single op |
+| 6 | SideEffect | cache served ids, log, emit events | async — never blocks |
+
+Why the order is fixed: source before hydrate (know the candidates before
+paying to enrich them); hydrate before filter (filters need attributes the
+source did not return); filter before score (scoring is the expensive stage);
+select after score (keeps scoring deterministic and cacheable); side effects
+last and async (bookkeeping never sits in the latency path).
+
+Trade-offs to surface explicitly — never default silently: **single relevance
+score vs multi-action prediction** (predict P(action) per action and combine
+with serving-time weights — re-tune without retraining; weights can be
+negative); **candidate isolation vs joint scoring** (isolated = deterministic
+and cacheable, the default; joint only with a specific reason such as
+batch-aware diversity); **online vs offline vs hybrid serving** (online
+~100-300 ms budget is the default; hybrid = retrieve offline, rank online).
+
+Hard rules: never invent benchmark numbers ("it depends; measure it");
+filter order is load-bearing — cheap/universal before expensive/personal;
+side effects are fire-and-forget; scaffolds must actually run, no pseudocode.
+Attribute the pattern honestly: the six-stage shape was popularised by the
+open-sourced "For You" ranking algorithm (Apache-2.0); no trademark or brand
+borrowing — use neutral names ("candidate pipeline", "ranking pipeline").

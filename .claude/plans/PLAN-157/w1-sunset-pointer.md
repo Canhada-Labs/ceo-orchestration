@@ -8,7 +8,7 @@
 ## Recovery anchor
 
 - **Final pre-deletion commit (parent of the W1 deletion commit):**
-  `__LAND_SHA__`
+  `a8838d4bdf5f3920c4a39bcf79af3660afb9f88a`
   *(placeholder — the land script fills this with `git rev-parse HEAD`
   immediately before the deletion commit; if you are reading this in a
   landed tree and still see the placeholder, the land script skipped the
@@ -33,13 +33,13 @@ under the W1 folds pack — this pointer covers only the tree deletions.
 
 ```sh
 # Inspect a deleted skill:
-git show __LAND_SHA__:.claude/skills/domains/desktop/skills/windows-desktop-e2e/SKILL.md
+git show a8838d4bdf5f3920c4a39bcf79af3660afb9f88a:.claude/skills/domains/desktop/skills/windows-desktop-e2e/SKILL.md
 
 # Restore a whole squad tree into the working copy:
-git checkout __LAND_SHA__ -- .claude/skills/domains/dotnet
+git checkout a8838d4bdf5f3920c4a39bcf79af3660afb9f88a -- .claude/skills/domains/dotnet
 
 # List everything that existed pre-deletion:
-git ls-tree -r --name-only __LAND_SHA__ .claude/skills/domains/agents-meta
+git ls-tree -r --name-only a8838d4bdf5f3920c4a39bcf79af3660afb9f88a .claude/skills/domains/agents-meta
 ```
 
 **Reopen gate.** Re-adding any of these squads is a new Owner-gated decision:

@@ -25,7 +25,7 @@ domain: core
 priority: 4
 risk_class: medium
 stack: []
-context_budget_tokens: 900
+context_budget_tokens: 1100
 inactive_but_retained: false
 repo_profile_binding:
   frontend: {active: true, priority: 5}
@@ -362,3 +362,55 @@ For Embedded and Infrastructure-coupled candidates, produce a small ADR
 - **Treating the default package manager choice as a decision.** Transitive
   dependencies require the same reversibility classification as direct ones
   when they own a data format or protocol surface.
+
+## Hexagonal Boundaries (Ports & Adapters) — folded from `hexagonal-architecture` (PLAN-157 W1)
+
+Boundary doctrine for keeping business logic independent of frameworks,
+transport, and persistence — distilled from the sunset architecture squad's
+`hexagonal-architecture` skill (full text in git history; fold ratified
+PLAN-157 OQ1-OQ4, S270).
+
+**The one rule: dependencies point inward.** The core — domain rules plus the
+use cases that orchestrate them — never imports a framework, driver, transport
+type, or concrete client; it depends only on abstractions it owns (ports). An
+entity or use case that imports an ORM row, a web `Request`, or a vendor SDK
+has already broken the architecture.
+
+**The pieces:** domain model (entities, value objects, invariants — knows
+nothing external); use case (orchestrates one intent — knows ports only);
+inbound port (what the application can do); outbound port (what the
+application needs: repository, gateway, publisher, clock, id-generator);
+adapter (concrete edge — HTTP controller, DB repository, queue consumer, SDK
+wrapper — knows frameworks); composition root (the single place that
+instantiates adapters and injects them into use cases — knows everything, by
+design). Outbound port interfaces belong to the application layer; their
+implementations live in infrastructure.
+
+**Build recipe:** (1) draw one use-case boundary with explicit input/output
+DTOs — no transport wrappers cross the line; (2) name every side effect as an
+outbound port first — model capabilities (`StockRepository`), never
+technologies (`PostgresStockTable`); (3) write the use case as pure
+orchestration over injected ports; (4) build adapters at the edge — mapping
+lives there and never leaks inward; (5) wire everything in one auditable
+composition root; (6) test per boundary.
+
+**Testing, by boundary:** domain tests as pure rules (no mocks); use-case unit
+tests with in-memory fakes for every port; one shared contract suite per
+outbound port, run against every adapter implementing it; inbound adapter
+tests for protocol mapping in both directions; adapter integration tests
+against real infrastructure; end-to-end on the critical journeys;
+characterization tests before any extraction.
+
+**Anti-patterns:** domain entities importing ORM/web/SDK types; use cases
+reading `req`/`res` or queue metadata; use cases returning raw database rows;
+adapters calling each other instead of flowing through use-case ports; wiring
+scattered behind hidden global singletons.
+
+**Checklist:** validation at both boundaries (inbound adapter AND use-case
+invariants); transformations return new values, never mutate shared state;
+errors translated across boundaries (infra error → application/domain error);
+use cases runnable under simple in-memory fakes for every port.
+
+For migrating a tangled service slice-by-slice, use
+`core/incremental-refactoring` — its Migration Playbook and legacy-code
+sections cover the strangler path the source skill described.

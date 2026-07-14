@@ -5,7 +5,7 @@ owner: CEO (primitive — applies framework-wide)
 domain: core
 priority: 2
 risk_class: low
-context_budget_tokens: 2500
+context_budget_tokens: 3500
 inactive_but_retained: false
 repo_profile_binding:
   frontend:
@@ -174,3 +174,109 @@ indicates a hot loop or unbounded recursion in the caller.
   speed up Wave 1-3" — anti-ceo-overhead hook is the mitigation
 - ADR-046 sub-agent dispatch protocol (file-assignment-per-agent + result-
   contract)
+
+## Task-Local Harness Discipline — folded from `dynamic-workflow-mode` (PLAN-157 W1)
+
+Dispatch answers "who does the work in parallel"; this section answers "does
+the work deserve a custom harness at all" — the case where an agent generates
+a small task-local loop, evaluator, crawler, fixture generator, or watcher
+instead of following a fixed command flow (distilled from the sunset
+agents-meta squad's `dynamic-workflow-mode` skill; full text in git history).
+
+**Decision tree — how much harness does this deserve?**
+
+1. One-shot task → keep it inline; do not invent a harness.
+2. Repeated task, changing inputs → task-local harness in a plan-local or
+   scratchpad working area — never a canonical path.
+3. Repeated task across teammates or repos → extract into a shared skill.
+4. Task with external state, queueing, or approvals → add observable
+   checkpoints (plan file, plan-scoped scratchpad, task board, audit log)
+   before adding more automation.
+5. Task with a safety risk → eval gate + human merge gate before anything
+   autonomous.
+
+**Core contract** — every harness declares five fields before any code:
+Objective (what it owns and what it explicitly does NOT own); Inputs (files,
+URLs, data sources, credentials policy); Outputs (commits, reports, status
+files, checkpoints); Eval (at least one pass/fail check tied to the task, not
+merely "it ran"); Handoff (what happened, what is blocked, how to resume).
+
+**Eval gate per work type:** code feature → focused test + lint + one
+integration path; UI/dashboard → browser smoke + screenshot + overflow/error
+check; agent workflow → fixture transcript or seeded work item with expected
+routing; research/content → claim checklist + publish-ready outline;
+integration → dry-run + config validation + no-secret scan. A workflow is not
+reusable until another teammate can rerun its eval.
+
+**Promote to a shared skill only when at least two of:** the same workflow
+recurs across sessions/repos/teams; it needs specific tool or safety
+sequencing; failures repeat because operators skip a gate; it has a stable
+input/output contract; it benefits from a shared status board or handoff. A
+new skill is canonical-guarded — it lands through the import gate and
+`/skill-review`, never by direct write.
+
+**Anti-patterns:** scripts that hide the real decision logic from the
+operator; treating "dynamic workflow" as permission to skip tests; one-off
+docs when a shared skill or status artifact is the real deliverable; multiple
+agents with no ownership, merge gate, or conflict policy; private data
+leaking into committed artifacts.
+
+## Loop Design + Review (judgment layer) — folded from `loop-design-check` (PLAN-157 W1)
+
+Dispatch and harness are the mechanism layer; this is the judgment layer —
+whether a repeating goal-seeking loop should exist, whether its goal is
+machine-decidable, and whether it can run away (distilled from the sunset
+agents-meta squad's `loop-design-check` skill; full text in git history).
+
+**Two-level feedback red line.** Execution feedback — measure distance from
+the literal goal and grind it to zero — belongs to the machine. Judgment
+feedback — whether the goal itself is right, whether it should change,
+whether to stop — belongs to the human/Owner: in this framework the
+Owner-flipped plan lifecycle, the canonical-guard sentinel, the pair-rail,
+and escalate-to-Owner. A loop that bypasses those has removed its own
+top-level feedback.
+
+**Build gate (4 conditions; any miss = veto):** (1) the task repeats weekly
+or more often; (2) verification can be automated; (3) the token budget can
+absorb the iteration; (4) the agent has tools that actually run the work and
+observe the result. Miss any one → do not build a loop.
+
+**Machine-decidable goal (five points; the loop lives or dies here):**
+(1) done-criterion machine-verifiable — one command returns a verdict;
+(2) boundary conditions defined alongside it — "what it must NOT do" is the
+Goodhart antibody; (3) failure fallback — retry cap N, then escalate to a
+human; (4) the goal is layered so a partial result is legible;
+(5) prefer reconciliation over assertion — anchor to an external fact
+(golden sample, upstream total, tie-out): "all tests pass" can be gamed;
+"diff vs the reference < 0.01" cannot.
+
+**Loop types:** clear "done" test → servo (stops on reaching the goal); no
+endpoint, keep maintaining a state → regulator (never stops; a dead-band
+suppresses noise); periodic sampling with a stop condition → regulator with
+an exit; "must happen on time" → wrap either in the scheduler.
+
+**Plan/build/judge iron rules:** the judge is independent — never the same
+agent as Build (the pair-rail principle: the author is never the sole
+reviewer); the judge is deterministic (pytest, a reconciliation diff, a real
+diff — never "looks right"); Build may not weaken the acceptance conditions
+to pass; three failed retries → escalate to a human. Add damping — a retry
+cap, a hard stop, and a human at the last switch; negative feedback with no
+damping oscillates (the loop spins in place, burning tokens).
+
+**Review checklist (a hit on any row = send the loop back):**
+
+| # | Failure mode | Antibody |
+|---|---|---|
+| 1 | Goal is a correct-sounding platitude → spins, burns tokens | replace with a decidable result condition |
+| 2 | "Verification" is "looks ok" / the judge is the defendant | reconcile + exit-code rules + independent judge |
+| 3 | Gates only on "all tests pass" → agent deletes the tests | done-criterion + boundary together |
+| 4 | Counts on the agent asking mid-run → it will not | front-load every clarification before launch |
+| 5 | Bloated context + stale memory → the faster it loops, the more it errs | layered memory + periodic hygiene sweep |
+
+**Three red lines — violate any and the loop may not go automatic:** the
+"done" cell is flipped by a human (the loop is the worker, not the acceptance
+officer); responsibility does not transfer (anything whose failure you cannot
+afford must not receive the loop's authority automatically); the more
+self-improving the loop, the STRICTER the human review — the gate sits before
+the action, exactly as kernel/self-modification routes through the sentinel +
+Owner, never through the loop itself.

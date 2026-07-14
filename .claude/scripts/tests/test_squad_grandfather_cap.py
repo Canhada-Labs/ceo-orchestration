@@ -204,11 +204,12 @@ _STAGED_POLICY = (
 
 # These match the values declared in the staged grandfather-cap.policy.yaml
 _EXPECTED_INDIVIDUAL_CAP = 5
-_EXPECTED_DOMAIN_CAP = 32   # Phase 1 ship cap 25 + 8 PLAN-153 Wave D imported
-                            # squads (S262 2026-07-09, Owner-mandate raise —
-                            # see policy cap note). No headroom by design.
-                            # Phase 4 lowers to 15 (target_cap = §6 Q4 default)
-                            # via sunset trim of zero-traffic domains.
+_EXPECTED_DOMAIN_CAP = 28  # PLAN-157 W1 sunset: 32 - 4 (desktop, dotnet,
+                           # architecture, agents-meta removed from roster;
+                           # OQ3 ratified cap := current, so cap drops with
+                           # the trim). No headroom by design. Phase 4 lowers
+                           # to 15 (target_cap = §6 Q4 default) via further
+                           # sunset trim of zero-traffic domains.
 _EXPECTED_DOMAIN_TARGET_CAP = 15  # PLAN-080 §6 Q4 long-term target
 _EXPECTED_DOMAIN_CURRENT = 25  # post-PLAN-074 W4-W10 grandfather (sunset target)
 _EXPECTED_INDIVIDUAL_CURRENT = 5

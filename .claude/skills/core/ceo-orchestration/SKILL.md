@@ -115,20 +115,6 @@ _Total in Frontend (universal): 8 skill(s)._
 
 _Total in Domain: academic-humanities: 5 skill(s)._
 
-### Domain: agents-meta
-
-- `dynamic-workflow-mode` — Design task-local harnesses, eval gates, and reusable-skill extraction for the case where an agent can generate or adapt its own workflow instead of only following a fixed command flow.
-- `loop-design-check` — Design a goal-oriented agent loop and review it for the ways loops fail — spinning and burning tokens, Goodhart-gaming the verifier, or driving a wrong answer to completion.
-
-_Total in Domain: agents-meta: 2 skill(s)._
-
-### Domain: architecture
-
-- `hexagonal-architecture` — > Ports & Adapters (hexagonal) design discipline for keeping business logic independent of frameworks, transport, and persistence.
-- `recsys-pipeline-architect` — > Spec-and-scaffold discipline for composable recommendation, ranking, and feed pipelines built on the six-stage pattern Source → Hydrator → Filter → Scorer → Selector → SideEffect.
-
-_Total in Domain: architecture: 2 skill(s)._
-
 ### Domain: business-support
 
 - `analytics-reporter` — | Business intelligence reporting discipline covering data-source-of-truth selection, dashboard design, narrative reporting, statistical literacy, visualisation discipline, and audience-tailored output.
@@ -166,12 +152,6 @@ _Total in Domain: cpp: 2 skill(s)._
 
 _Total in Domain: data-ml: 2 skill(s)._
 
-### Domain: desktop
-
-- `windows-desktop-e2e` — > End-to-end UI testing for native Windows desktop applications — WPF, WinForms, Win32/MFC, and Qt (5.x and 6.x) — driven through pywinauto on top of the built-in Windows UI Automation (UIA) accessibility API.
-
-_Total in Domain: desktop: 1 skill(s)._
-
 ### Domain: devrel
 
 - `developer-advocate` — > Developer relations and advocacy discipline covering technical content production (tutorials, cookbooks, deep-dives, quickstarts, migration guides), documentation engineering with CI runnability gates, sample app authorship grounded in production patterns, conference and meetup proposal craft, community operations across Discord/Slack/GitHub/forums, developer-experience feedback synthesis routed to product, and internal evangelism including new-feature dogfood and release-note authorship.
@@ -179,12 +159,6 @@ _Total in Domain: desktop: 1 skill(s)._
 - `ui-demo` — > Record a polished demo/walkthrough video of a web application with a browser automation driver (Playwright).
 
 _Total in Domain: devrel: 3 skill(s)._
-
-### Domain: dotnet
-
-- `csharp-testing` — > Testing discipline for C# / .NET applications.
-
-_Total in Domain: dotnet: 1 skill(s)._
 
 ### Domain: edtech
 
@@ -403,7 +377,7 @@ _Total in Domain: voice-ai: 1 skill(s)._
 
 <!-- END AUTO-GENERATED SKILL INVENTORY -->
 
-**Total skills installed in this repo:** 143 (31 core + 8 frontend + 104 domain across 29 profiles). PLAN-074 v1.15.0 ship: +90 vs the v1.11.x baseline (+12 core, +95 domain across 22 NEW domains, plus 4 NEW agents — see ROUTING TABLE in `.claude/team.md` for `Principal Incident Commander`, `Principal Identity & Trust Architect`, `Principal Threat Detection Engineer`, `LLM FinOps Architect`). As the CEO, I am aware of all of them at all times and consult this inventory before every spawn. I do not need to `ls` or grep — this list is my working memory of the skill library.
+**Total skills installed in this repo:** 160 (42 core + 8 frontend + 110 domain across 33 profiles). PLAN-074 v1.15.0 ship: +90 vs the v1.11.x baseline (+12 core, +95 domain across 22 NEW domains, plus 4 NEW agents — see ROUTING TABLE in `.claude/team.md` for `Principal Incident Commander`, `Principal Identity & Trust Architect`, `Principal Threat Detection Engineer`, `LLM FinOps Architect`). As the CEO, I am aware of all of them at all times and consult this inventory before every spawn. I do not need to `ls` or grep — this list is my working memory of the skill library.
 
 ## How I operate
 

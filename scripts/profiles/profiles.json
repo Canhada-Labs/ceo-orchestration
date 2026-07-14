@@ -85,30 +85,6 @@
       "est_context_cost": "low"
     },
     {
-      "name": "agents-meta",
-      "description": "Domain skill pack 'agents-meta' (.claude/skills/domains/agents-meta/) — opt-in via --profile <list>,agents-meta; handled by install.sh's generic domain loop.",
-      "skill_globs": [
-        ".claude/skills/domains/agents-meta/**/*"
-      ],
-      "hook_stacks": [
-        "base"
-      ],
-      "stability": "experimental",
-      "est_context_cost": "low"
-    },
-    {
-      "name": "architecture",
-      "description": "Domain skill pack 'architecture' (.claude/skills/domains/architecture/) — opt-in via --profile <list>,architecture; handled by install.sh's generic domain loop.",
-      "skill_globs": [
-        ".claude/skills/domains/architecture/**/*"
-      ],
-      "hook_stacks": [
-        "base"
-      ],
-      "stability": "experimental",
-      "est_context_cost": "low"
-    },
-    {
       "name": "business-support",
       "description": "Domain skill pack 'business-support' (.claude/skills/domains/business-support/) — opt-in via --profile <list>,business-support; handled by install.sh's generic domain loop.",
       "skill_globs": [
@@ -169,34 +145,10 @@
       "est_context_cost": "low"
     },
     {
-      "name": "desktop",
-      "description": "Domain skill pack 'desktop' (.claude/skills/domains/desktop/) — opt-in via --profile <list>,desktop; handled by install.sh's generic domain loop.",
-      "skill_globs": [
-        ".claude/skills/domains/desktop/**/*"
-      ],
-      "hook_stacks": [
-        "base"
-      ],
-      "stability": "experimental",
-      "est_context_cost": "low"
-    },
-    {
       "name": "devrel",
       "description": "Domain skill pack 'devrel' (.claude/skills/domains/devrel/) — opt-in via --profile <list>,devrel; handled by install.sh's generic domain loop.",
       "skill_globs": [
         ".claude/skills/domains/devrel/**/*"
-      ],
-      "hook_stacks": [
-        "base"
-      ],
-      "stability": "experimental",
-      "est_context_cost": "low"
-    },
-    {
-      "name": "dotnet",
-      "description": "Domain skill pack 'dotnet' (.claude/skills/domains/dotnet/) — opt-in via --profile <list>,dotnet; handled by install.sh's generic domain loop.",
-      "skill_globs": [
-        ".claude/skills/domains/dotnet/**/*"
       ],
       "hook_stacks": [
         "base"
