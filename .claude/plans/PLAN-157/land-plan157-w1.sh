@@ -92,6 +92,11 @@ SP_SET=(
 
 say() { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
 die() { printf '\n\033[1;31mFATAL: %s\033[0m\n' "$*" >&2; exit 1; }
+warn() { printf '\033[1;33mWARN: %s\033[0m\n' "$*" >&2; }
+# Under --dry-run the CI/sync gates are WARN-only: a rehearsal must be
+# runnable while CI is still in flight (it changes nothing and signs nothing).
+# The REAL run keeps them fail-CLOSED.
+gate() { if [ "$DRY_RUN" = 1 ]; then warn "$*"; else die "$*"; fi; }
 sha() { shasum -a 256 "$1" | awk '{print $1}'; }
 fm()  { sed -n "s/^$2: *//p" "$1" | head -1 | sed 's/[[:space:]]*#.*$//; s/[[:space:]]*$//'; }
 
@@ -132,6 +137,8 @@ say "[0/7] Preflight"
 [ "$(git rev-parse --abbrev-ref HEAD)" = "main" ] || die "not on main"
 if [ -n "$(git status --porcelain=v1)" ]; then
   git status --short >&2
+  # NOT warn-only, even under --dry-run: the rehearsal ends with
+  # `git reset --hard $CLEAN_HEAD`, which would DESTROY uncommitted work.
   die "working tree not clean — commit/stash unrelated changes first"
 fi
 CLEAN_HEAD="$(git rev-parse HEAD)"
@@ -140,7 +147,7 @@ gpg --list-secret-keys "$KEY" >/dev/null 2>&1 || die "signing key $KEY not in yo
 say "[0/7] Preflight: main up to date with origin"
 git fetch origin main --quiet || die "git fetch origin main failed — network/auth?"
 [ "$CLEAN_HEAD" = "$(git rev-parse origin/main)" ] \
-  || die "local main ($CLEAN_HEAD) != origin/main — sync first (git pull --ff-only) or push"
+  || gate "local main ($CLEAN_HEAD) != origin/main — sync first (git pull --ff-only) or push"
 
 say "[0/7] Preflight: Validate green on HEAD ($CLEAN_HEAD)"
 _runs_json="$(gh run list --workflow validate.yml --branch main --limit 30 \
@@ -152,7 +159,7 @@ runs = [r for r in json.load(sys.stdin) if r.get("headSha") == head]
 print((str(runs[0].get("status")) + "/" + str(runs[0].get("conclusion"))) if runs else "none/none")
 ' "$CLEAN_HEAD")"
 [ "$_state" = "completed/success" ] \
-  || die "Validate on HEAD is '$_state' (need completed/success) — wait for CI before landing"
+  || gate "Validate on HEAD is '$_state' (need completed/success) — wait for CI before landing"
 echo "    Validate: completed/success"
 
 say "[0/7] Preflight: pack integrity"
