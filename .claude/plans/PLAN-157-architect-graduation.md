@@ -147,23 +147,27 @@ Check: python3 -m pytest .claude/scripts/tests/test_squad_grandfather_cap.py -q 
   após rerun de perf-flake — success).
   Check: gh run list --branch main --workflow "Validate CEO Orchestration governance" --limit 1
 
-### Wave 1 — sunsets + folds (desktop, dotnet, architecture, agents-meta) [SENTINEL CEREMONY + SP-NNN]
+### Wave 1 — sunsets + folds (desktop, dotnet, architecture, agents-meta) [SENTINEL CEREMONY + SP-NNN] — DONE S272 (2026-07-14), commit `c3bfa2e` (Owner-signed, GPG Good)
 Check: the full per-wave Check set (§reconcile checklist above)
-- [ ] Sunset `desktop` + `dotnet`: disposition per OQ2 (default
-  git-history-only deletion + pointer — NOT an archive dir under
-  `.claude/skills/`, which stays in every counter); remove scaffolds,
-  drop from `SQUAD_GRANDFATHER` + policy `members` + `current` in ONE
-  commit-atomic guarded step each → `current: 30`. Docs-freshness
-  allowlist entries ride the same commit.
-- [ ] Fold `architecture` + `agents-meta`: draft SP-NNN skill patches
-  via `/skill-review` pipeline with **named, tier-checked fold targets**
-  (`recsys-pipeline-architect` does NOT fit
-  `core/architecture-decisions`' token budget — pick target in-wave,
-  `check-tier-boundaries.py` gates); soak per Owner's OQ ratification;
-  sunset scaffolds after fold lands → `current: 28`; `cap := current`
-  rider per OQ3 (with same-commit `_EXPECTED_DOMAIN_CAP` edit).
-- [ ] Full reconcile checklist items 1-9 in the same wave commit(s);
-  README/regex riders land here.
+- [x] Sunset `desktop` + `dotnet` (+ `architecture`, `agents-meta` after
+  their folds): OQ2 git-history-only deletion; recovery pointer at
+  `.claude/plans/PLAN-157/w1-sunset-pointer.md` (moved OUT of the
+  gitignored `staged/` after the verify pass caught that `git add`
+  silently skips ignored paths — the pointer would never have landed).
+  All four dropped from `SQUAD_GRANDFATHER` + policy `members` in ONE
+  commit-atomic guarded step.
+- [x] Fold `architecture` + `agents-meta` via SP-043..SP-046 (Owner
+  detach-signed; OQ4 soak waived): hexagonal → `core/architecture-decisions`,
+  recsys → `core/ai-llm-orchestration`, dynamic-workflow + loop-design →
+  `core/parallelization-by-default` (SP-045→046 ordering binding). Each
+  diff pinned by `sha256_of_diff` + `sha256_of_staged`; tier budgets
+  checked. → `current: 28`, `cap: 28` (OQ3), `_EXPECTED_DOMAIN_CAP` edited
+  in the same commit.
+- [x] Full reconcile in the same commit: skills 166 → **160**, domain dirs
+  29 → 25; CLAUDE.md / README / INSTALL / ARCHITECTURE / GUIA twins /
+  verify-counts / profiles.json applied from sha256-pinned replicas;
+  COMMAND-SKILL-HOOK-MAP + skill-inventory regenerated. All 9 gates green
+  (10,865 tests); `touched − scope = ∅`; clean-clone proof 15/15.
 
 ### Wave 2 — graduate jvm + cpp [SENTINEL CEREMONY; per-squad Owner go/no-go]
 Check: the full per-wave Check set (§reconcile checklist above)
