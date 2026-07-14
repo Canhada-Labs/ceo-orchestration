@@ -145,8 +145,18 @@ class _Base(TestEnvContext):
 
 class TestContendedFreshSpoolIsSilent(_Base):
     def test_yield_sets_contended_skip_no_breadcrumb(self) -> None:
-        self._emit(1)  # non-empty, fresh mtime
+        self._emit(1)  # non-empty
         with _external_lock_holder():
+            # Re-stamp the spool mtime AFTER the lock-holder setup, which spawns
+            # a process and can itself take longer than the freshness window
+            # (DRAIN_TRIGGER_MTIME_MS = 100 ms). Without this the test carries a
+            # WALL-CLOCK dependency: under load the spool ages past the trigger,
+            # the drain path emits a CORRECT starvation breadcrumb, and the test
+            # reads that correctness as a failure. (S272: the only red in two
+            # separate ~10k-test runs — CI under matrix load, and a local
+            # full-suite ceremony rehearsal.) The assertion is about a FRESH
+            # spool; pin freshness instead of hoping for it.
+            os.utime(spool_writer._spool_path(os.getpid()), None)
             with mock.patch.object(spool_writer, "should_drain", return_value=True):
                 stats = spool_writer.drain_now(force=False)
         self.assertTrue(stats.contended_skip, "force=False must yield on contention")
