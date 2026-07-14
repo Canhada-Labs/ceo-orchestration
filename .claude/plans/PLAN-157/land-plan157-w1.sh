@@ -108,6 +108,21 @@ TMP_CEREMONY="$(mktemp -d)"
 on_exit() {
   local rc=$?
   rm -rf "$TMP_CEREMONY"
+  # A --dry-run that mutated must ALWAYS hand the tree back, on ANY exit.
+  # Otherwise an aborted rehearsal leaves the four `git rm -r` DELETIONS STAGED
+  # IN THE INDEX, and the operator's next `git commit` — of anything at all —
+  # silently carries them along. (S272: a one-file commit took four skill trees
+  # with it. Caught before push, but the index is the trap.) Restoring the INDEX
+  # is the point here, not just the worktree.
+  if [ "${DRY_RUN:-0}" = "1" ] && [ "$MUTATING" -eq 1 ] && [ "$COMMITTED" -eq 0 ] \
+     && [ -n "$CLEAN_HEAD" ]; then
+    printf '\n\033[1;36m==> [dry-run] restoring tree + index to %s\033[0m\n' "$CLEAN_HEAD"
+    git reset --hard --quiet "$CLEAN_HEAD" || true
+    git clean -fdq .claude/proposals 2>/dev/null || true
+    MUTATING=0
+    printf '    restored — nothing signed, nothing committed, nothing left staged\n'
+    return "$rc"
+  fi
   if [ "$rc" -ne 0 ] && [ "$MUTATING" -eq 1 ] && [ "$COMMITTED" -eq 0 ]; then
     {
       printf '\n\033[1;33mABORTED MID-APPLY — the repo is dirty; NOTHING was committed or pushed.\033[0m\n'
@@ -305,10 +320,17 @@ for entry in "${SP_SET[@]}"; do
   _got_staged="$(sha "$target")"
   [ "$_got_staged" = "$_want_staged" ] \
     || die "$spfile: post-apply $target sha256 ($_got_staged) != pinned sha256_of_staged ($_want_staged)"
-  # register the proposal (+ Owner signature) in the canonical proposals dir
+  # register the proposal (+ Owner signature) in the canonical proposals dir.
+  # Under --dry-run the SPs were NOT signed (nothing is signed in a rehearsal),
+  # so there is no .asc to copy — the diff apply + staged-hash pin above is the
+  # part a rehearsal exists to prove.
   cp "$sp_src" ".claude/proposals/$spfile"
-  cp "$sp_src.asc" ".claude/proposals/$spfile.asc"
-  echo "     applied → $target (staged-hash OK); registered in .claude/proposals/"
+  if [ "$DRY_RUN" = 1 ]; then
+    echo "     applied → $target (staged-hash OK); [dry-run] .asc not copied (unsigned)"
+  else
+    cp "$sp_src.asc" ".claude/proposals/$spfile.asc"
+    echo "     applied → $target (staged-hash OK); registered in .claude/proposals/"
+  fi
 done
 
 say "[3/7] Fill pointer.md __LAND_SHA__ (pre-deletion commit = current HEAD)"
@@ -413,11 +435,9 @@ echo "    touched - scope = (empty set)"
 # =============================================================================
 if [ "$DRY_RUN" = 1 ]; then
   say "[7/7] [dry-run] REHEARSAL COMPLETE — every gate passed; nothing signed, nothing committed"
-  echo "    restoring the tree to the pre-ceremony state ($CLEAN_HEAD)"
-  git reset --hard --quiet "$CLEAN_HEAD"
-  git clean -fdq .claude/proposals 2>/dev/null || true
-  MUTATING=0
-  echo "    restored — run WITHOUT --dry-run to land for real"
+  echo "    run WITHOUT --dry-run to land for real"
+  # The EXIT trap restores tree + index (single restore path for both the
+  # happy and the aborted case).
   exit 0
 fi
 
