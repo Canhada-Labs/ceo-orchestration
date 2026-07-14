@@ -485,12 +485,20 @@ if [ "$DRY" = 1 ]; then
   fi
 else
   gpg --list-secret-keys "$KEY" >/dev/null 2>&1 || die "signing key $KEY not in your keyring"
-  [ -f "$SENTINEL_DIR/approved.md" ]     || die "sentinel missing: $SENTINEL_DIR/approved.md (create from approved.body.md + sign at the ceremony first)"
-  [ -f "$SENTINEL_DIR/approved.md.asc" ] || die "sentinel signature missing: $SENTINEL_DIR/approved.md.asc"
+  [ -f "$SENTINEL_DIR/approved.body.md" ] \
+    || die "sentinel BODY missing: $SENTINEL_DIR/approved.body.md"
+  # Fill the anchor + sign INLINE (S272). Demanding a pre-signed approved.md
+  # that nothing creates is a dead end: the anchor must equal the CURRENT HEAD,
+  # which is only knowable here.
+  sed "s/__ANCHOR_SHA__/$CLEAN_HEAD/" "$SENTINEL_DIR/approved.body.md" \
+    > "$SENTINEL_DIR/approved.md"
+  rm -f "$SENTINEL_DIR/approved.md.asc"
+  gpg --local-user "$KEY" --armor --detach-sign \
+    --output "$SENTINEL_DIR/approved.md.asc" "$SENTINEL_DIR/approved.md" \
+    || die "GPG signing failed (try: export GPG_TTY=\$(tty); gpgconf --kill gpg-agent)"
   gpg_verify_owner "$SENTINEL_DIR/approved.md.asc" "$SENTINEL_DIR/approved.md"
-  _anchor="$(sed -n 's/^Anchor-SHA: *//p' "$SENTINEL_DIR/approved.md" | head -1)"
-  [ "$_anchor" = "$CLEAN_HEAD" ] \
-    || die "sentinel Anchor-SHA ($_anchor) != HEAD ($CLEAN_HEAD) — re-sign the sentinel at current HEAD"
+  echo "    signed: $SENTINEL_DIR/approved.md (anchor $CLEAN_HEAD)"
+  _anchor="$CLEAN_HEAD"
   grep -q 'PLAN-157' "$SENTINEL_DIR/approved.md" || die "sentinel does not reference PLAN-157"
   _scope_block="$(sed -n '/^Scope:/,/END SIGNED SCOPE/p' "$SENTINEL_DIR/approved.md")"
   [ -n "$_scope_block" ] || die "sentinel has no Scope: block"
