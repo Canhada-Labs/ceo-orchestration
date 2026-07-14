@@ -48,6 +48,13 @@
 # =============================================================================
 set -euo pipefail
 
+DRY_RUN=0
+case "${1:-}" in
+  --dry-run) DRY_RUN=1 ;;
+  "") ;;
+  *) echo "usage: $0 [--dry-run]" >&2; exit 64 ;;
+esac
+
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 cd "$REPO"
 
@@ -162,16 +169,27 @@ for t in "${TREES[@]}"; do
   [ -d "$t" ] || die "squad tree already gone: $t — W1 appears to have landed already"
 done
 
-say "[0/7] Preflight: W1 sentinel at $SENTINEL_DIR"
-[ -f "$SENTINEL_DIR/approved.md" ]     || die "sentinel missing: $SENTINEL_DIR/approved.md (create+sign at the ceremony first)"
-[ -f "$SENTINEL_DIR/approved.md.asc" ] || die "sentinel signature missing: $SENTINEL_DIR/approved.md.asc"
-gpg_verify_owner "$SENTINEL_DIR/approved.md.asc" "$SENTINEL_DIR/approved.md"
-_anchor="$(sed -n 's/^Anchor-SHA: *//p' "$SENTINEL_DIR/approved.md" | head -1)"
-[ "$_anchor" = "$CLEAN_HEAD" ] \
-  || die "sentinel Anchor-SHA ($_anchor) != HEAD ($CLEAN_HEAD) — re-sign the sentinel at current HEAD"
-grep -q 'PLAN-157' "$SENTINEL_DIR/approved.md" || die "sentinel does not reference PLAN-157"
+say "[0/7] Sentinel: fill anchor + Owner GPG sign (inline — S272)"
+[ -f "$SENTINEL_DIR/approved.body.md" ] \
+  || die "sentinel BODY missing: $SENTINEL_DIR/approved.body.md"
+if [ "$DRY_RUN" = 1 ]; then
+  echo "    [dry-run] would sign $SENTINEL_DIR/approved.md at anchor $CLEAN_HEAD"
+else
+  sed "s/__ANCHOR_SHA__/$CLEAN_HEAD/" "$SENTINEL_DIR/approved.body.md" \
+    > "$SENTINEL_DIR/approved.md"
+  rm -f "$SENTINEL_DIR/approved.md.asc"
+  gpg --local-user "$KEY" --armor --detach-sign \
+    --output "$SENTINEL_DIR/approved.md.asc" "$SENTINEL_DIR/approved.md" \
+    || die "GPG signing failed (try: export GPG_TTY=\$(tty); gpgconf --kill gpg-agent)"
+  gpg_verify_owner "$SENTINEL_DIR/approved.md.asc" "$SENTINEL_DIR/approved.md"
+  echo "    signed: $SENTINEL_DIR/approved.md (anchor $CLEAN_HEAD)"
+fi
+_anchor="$CLEAN_HEAD"
+_sent_src="$SENTINEL_DIR/approved.md"
+[ "$DRY_RUN" = 1 ] && _sent_src="$SENTINEL_DIR/approved.body.md"
+grep -q 'PLAN-157' "$_sent_src" || die "sentinel does not reference PLAN-157"
 # The guarded files this ceremony rewrites MUST be in the signed Scope block.
-_scope_block="$(sed -n '/^Scope:/,/END SIGNED SCOPE/p' "$SENTINEL_DIR/approved.md")"
+_scope_block="$(sed -n '/^Scope:/,/END SIGNED SCOPE/p' "$_sent_src")"
 [ -n "$_scope_block" ] || die "sentinel has no Scope: block"
 for must in \
   CLAUDE.md \
@@ -185,11 +203,23 @@ for must in \
 done
 echo "    sentinel scope covers all guarded targets"
 
-say "[0/7] Preflight: fold SP signatures (OQ4 waiver = Owner detach-signs each SP)"
+say "[0/7] Fold SPs: Owner detach-signs each (OQ4 soak waiver = the signature)"
 for entry in "${SP_SET[@]}"; do
   spfile="${entry%%|*}"
-  [ -f "$PROPS/$spfile" ]     || die "staged SP missing: $PROPS/$spfile"
-  [ -f "$PROPS/$spfile.asc" ] || die "missing Owner signature $PROPS/$spfile.asc — detach-sign at the ceremony: gpg --local-user $KEY --armor --detach-sign $PROPS/$spfile"
+  [ -f "$PROPS/$spfile" ] || die "staged SP missing: $PROPS/$spfile"
+  if [ "$DRY_RUN" = 1 ]; then
+    echo "    [dry-run] would sign $spfile"
+    continue
+  fi
+  if [ -f "$PROPS/$spfile.asc" ] && gpg --verify "$PROPS/$spfile.asc" "$PROPS/$spfile" >/dev/null 2>&1; then
+    echo "    already signed: $spfile"
+  else
+    rm -f "$PROPS/$spfile.asc"
+    gpg --local-user "$KEY" --armor --detach-sign \
+      --output "$PROPS/$spfile.asc" "$PROPS/$spfile" \
+      || die "GPG signing failed for $spfile"
+    echo "    signed: $spfile"
+  fi
   gpg_verify_owner "$PROPS/$spfile.asc" "$PROPS/$spfile"
 done
 
@@ -374,6 +404,16 @@ echo "    touched - scope = (empty set)"
 # =============================================================================
 # [7/7] Single signed commit (NO auto-push)
 # =============================================================================
+if [ "$DRY_RUN" = 1 ]; then
+  say "[7/7] [dry-run] REHEARSAL COMPLETE — every gate passed; nothing signed, nothing committed"
+  echo "    restoring the tree to the pre-ceremony state ($CLEAN_HEAD)"
+  git reset --hard --quiet "$CLEAN_HEAD"
+  git clean -fdq .claude/proposals 2>/dev/null || true
+  MUTATING=0
+  echo "    restored — run WITHOUT --dry-run to land for real"
+  exit 0
+fi
+
 say "[7/7] git add exact scope + git commit -S"
 ADD_PATHS=(
   CLAUDE.md
