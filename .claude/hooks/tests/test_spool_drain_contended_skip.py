@@ -242,11 +242,17 @@ class TestSustainedStarvationBreadcrumb(_Base):
                          "sustained starvation must surface exactly one STARVED breadcrumb")
 
     def test_fresh_spool_emits_no_starved_breadcrumb(self) -> None:
-        self._emit(1)  # fresh mtime → not starved
+        self._emit(1)
         with _external_lock_holder():
+            # Same wall-clock trap as TestContendedFreshSpoolIsSilent: the
+            # lock-holder spawn can outlive the 100 ms freshness window, aging
+            # the spool past the trigger so the drain path CORRECTLY emits a
+            # starvation breadcrumb. Pin freshness at the moment it is asserted.
+            os.utime(spool_writer._spool_path(os.getpid()), None)
             with mock.patch.object(spool_writer, "should_drain", return_value=True):
                 spool_writer.drain_now(force=False)
-        self.assertEqual(_starved_breadcrumb_count(), 0)
+        self.assertEqual(_starved_breadcrumb_count(), 0,
+                         "a FRESH spool must never emit a STARVED breadcrumb")
 
 
 class TestSyncModeGuard(_Base):
