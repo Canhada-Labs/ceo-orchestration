@@ -104,7 +104,8 @@ Future deprecation requires:
   `bash install.sh` AND (when the npm/ subtree changes) checks the
   npm shim's contract.
 - ADR-012 — cross-adapter golden fixtures + OIDC trusted-publisher
-  rationale (target end-state; not yet configured — see §Publishing).
+  rationale (Trusted Publishing live since spec 1.1.0 — see
+  §Publishing).
 
 ## Version history
 
@@ -112,4 +113,4 @@ Future deprecation requires:
 |---|---|
 | 1.0.0-rc.1 | Initial formal contract; pass-through shim with zero deps |
 | 1.0.1-rc.1 | §Publishing corrected: publish auth is a repo-scoped npm granular token + Sigstore `--provenance` attestation; the "OIDC trusted publisher" claim removed (never configured — same false-claim class as the npm-publish.yml header fixed by PLAN-152 tarball-01). Trusted Publishing tracked for v1.0.2 (PLAN-152 §Deferred `backlog-oidc`). Documentation correction only; no contract or behavioral change. |
-| 1.1.0 | §Publishing: registry auth migrated from the repo-scoped granular token to npm **Trusted Publishing** (OIDC token exchange via npm CLI >=11.5.1; trusted publisher registered on npmjs.com by the Owner: repo + workflow `npm-publish.yml` + env `production-npm`). `--provenance` attestation unchanged. `NPM_TOKEN` revoked after the first OIDC GA publish; rollback patch pre-staged until then. Documentation-of-mechanism change; no shim contract or behavioral change (PLAN-158 Wave 1). |
+| 1.1.0 | §Publishing: registry auth migrated from the repo-scoped granular token to npm **Trusted Publishing** (OIDC token exchange via npm CLI >=11.5.1; trusted publisher registered on npmjs.com by the Owner: repo + workflow `npm-publish.yml` + env `production-npm`). `--provenance` attestation unchanged. `NPM_TOKEN` revoked after the first OIDC GA publish; rollback patch pre-staged until then. Documentation-of-mechanism change; no shim contract or behavioral change (PLAN-158 Wave 1). Post-amendment sweep (Wave 3 RC pair-rail R1, P2): §Cross-reference ADR-012 line still said "not yet configured" — corrected to "live since spec 1.1.0" (stale-claim class; doc-only). |
