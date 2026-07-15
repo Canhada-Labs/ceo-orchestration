@@ -357,7 +357,7 @@ def _latency_post_payload(tool_use_id: str) -> bytes:
 
 def run_hook_latency(
     repo_root: Path,
-    iterations: int = 20,
+    iterations: int = 200,
     p95_ceiling_ms: float = 120.0,
     p99_ceiling_ms: float = 160.0,
 ) -> Dict[str, Any]:
@@ -410,6 +410,29 @@ def run_hook_latency(
     anti_overhead = hooks_dir / "check_anti_ceo_overhead.py"
     output_secrets = hooks_dir / "check_output_secrets.py"
     measured_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    # ADR-163 percentile precondition (PLAN-159 debate round-1 must-fix):
+    # with the nearest-rank truncation in _pct_of_sorted (int((n-1)*p/100)),
+    # p95 and p99 collapse onto the SAME order statistic for n < 22 — the
+    # p99 ceiling becomes dead code and the gate keys on the 2nd-largest
+    # sample (the S272/S273 load-flake class). A gate run on a collapsed
+    # index is a defect state: fail LOUDLY instead of measuring.
+    idx_p95 = int((iterations - 1) * 95 / 100.0)
+    idx_p99 = int((iterations - 1) * 99 / 100.0)
+    if idx_p95 == idx_p99:
+        return {
+            "schema": "profile-opus-4-7.v1",
+            "mode": "hook_latency",
+            "measured_at": measured_at,
+            "error": (
+                "percentile_indices_collapsed: iterations=%d puts p95 and "
+                "p99 on the same order statistic (index %d); minimum is 22, "
+                "gate standard is 200 (ADR-163)" % (iterations, idx_p95)
+            ),
+            "p95_ceiling_ms": p95_ceiling_ms,
+            "p99_ceiling_ms": p99_ceiling_ms,
+            "passed": False,
+        }
 
     for required in (agent_spawn, anti_overhead, output_secrets):
         if not required.is_file():
@@ -524,27 +547,40 @@ def run_hook_latency(
                 if entry["seed"]:
                     # Unmeasured Pre stamp via the REAL record_pre carrier so
                     # the timed record_post run takes the paired path.
-                    seed_res = subprocess.run(
-                        [sys.executable, str(anti_overhead)],
-                        input=_latency_pre_payload(tool_use_id),
+                    # ADR-163: a >10s stall is folded into the fail-closed
+                    # sink instead of raising an opaque TimeoutExpired
+                    # traceback (more subprocess calls at N=200 raise the
+                    # cumulative odds of one stall on a contended runner).
+                    try:
+                        seed_res = subprocess.run(
+                            [sys.executable, str(anti_overhead)],
+                            input=_latency_pre_payload(tool_use_id),
+                            capture_output=True,
+                            env=env,
+                            cwd=str(repo_root),
+                            timeout=10,
+                        )
+                        if seed_res.returncode != 0:
+                            entry_hook_failed = True
+                    except subprocess.TimeoutExpired:
+                        entry_hook_failed = True
+                payload = entry["payload"](tool_use_id)
+                t0 = time.perf_counter_ns()
+                try:
+                    res = subprocess.run(
+                        [sys.executable, str(entry["hook"])],
+                        input=payload,
                         capture_output=True,
                         env=env,
                         cwd=str(repo_root),
                         timeout=10,
                     )
-                    if seed_res.returncode != 0:
+                    if res.returncode != 0:
                         entry_hook_failed = True
-                payload = entry["payload"](tool_use_id)
-                t0 = time.perf_counter_ns()
-                res = subprocess.run(
-                    [sys.executable, str(entry["hook"])],
-                    input=payload,
-                    capture_output=True,
-                    env=env,
-                    cwd=str(repo_root),
-                    timeout=10,
-                )
-                if res.returncode != 0:
+                except subprocess.TimeoutExpired:
+                    # ADR-163: stall == hook failure (fail-closed, clean
+                    # report instead of an uncaught traceback); the ~10s
+                    # elapsed sample also breaches the ceiling by itself.
                     entry_hook_failed = True
                 return (time.perf_counter_ns() - t0) / 1_000_000.0
 
@@ -689,7 +725,7 @@ def main() -> int:
         dest="hook_latency",
         action="store_true",
         help=(
-            "Measure warm p95/p99 latency of the hook corpus (N=20 default): "
+            "Measure warm p95/p99 latency of the hook corpus (N=200 default): "
             "check_agent_spawn + the PLAN-154 observe-rail host hooks "
             "(check_anti_ceo_overhead record_pre carrier, check_output_secrets "
             "record_post path) in BOTH CEO_LEARNING_OBSERVE states, with "
@@ -702,8 +738,8 @@ def main() -> int:
         "--latency-iterations",
         dest="latency_iterations",
         type=int,
-        default=20,
-        help="Warm iteration count for --hook-latency (default 20; ADR-071 min=200 for p-stable).",
+        default=200,
+        help="Warm iteration count for --hook-latency (default 200; ADR-163 percentile-stability standard, minimum 22).",
     )
     parser.add_argument(
         "--p95-ceiling-ms",

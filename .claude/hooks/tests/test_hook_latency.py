@@ -29,8 +29,10 @@ of startup on macOS; the test enforces a budget that absorbs this.
   ~84-92ms headroom for warm-noise tail)
 - **cold start (iter 0):** < 300ms — separate ceiling, unchanged
 
-All measured with N=200 iterations per hook (was 50; matches
-ADR-071 N≥200 percentile-stability minimum). If a run is noisy and a
+All measured with N=200 iterations per hook (was 50; matches the
+ADR-163 N≥200 percentile-stability rule — the CI gate samples the
+same N=200 since PLAN-159; ADR-071 covers benchmark methodology,
+not hook-latency percentiles). If a run is noisy and a
 single iter exceeds the budget, that's still within p95/p99 tolerance.
 
 ## Environment

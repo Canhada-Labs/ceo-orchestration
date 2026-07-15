@@ -1178,7 +1178,9 @@ jobs:
   opus-4-7-profiler-smoke:
     if: vars.CEO_SOTA_DISABLE != '1'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # PLAN-159/ADR-163: 2 capped gate attempts (2x420s) + smoke + floor +
+    # checkout/setup — sized for the CONTENDED case, not the nominal one.
+    timeout-minutes: 16
     permissions:
       contents: read
     steps:
@@ -1203,19 +1205,87 @@ jobs:
       - name: Run profile-opus-4-7.py --hook-latency (p95/p99 gate)
         run: |
           set -euo pipefail
-          # E12-F4 fix: first real latency gate in CI (was zero thresholds).
-          # N=20 iterations (fast; ADR-071 N≥200 for percentile-stability;
-          # N=20 is advisory-grade but still catches gross regressions like
-          # the PLAN-120 WS-J 2.27x p99 regression from eager live-import).
-          # Budget: p95<120ms / p99<160ms (PLAN-063 DIM-15 CI fallback +
-          # generous margin over the measured 57-64ms CI baseline).
-          # Advisory emitters are disabled so pure governance logic is measured.
-          python3 .claude/scripts/profile-opus-4-7.py \
-            --hook-latency \
-            --latency-iterations 20 \
-            --p95-ceiling-ms 120 \
-            --p99-ceiling-ms 160
-          echo "✓ hook latency p95/p99 within budget"
+          # PLAN-159 / ADR-163: N=200 warm iterations (percentile stability).
+          # At N=20 the nearest-rank index collapsed (int((n-1)*p/100) gives
+          # idx_p95 == idx_p99 == 18 -> both ceilings gated the SAME
+          # 2nd-largest sample; p99 was dead code) and 2 contended
+          # iterations out of 20 failed the gate: 8 load-flakes S272/S273
+          # on doc-only commits. At N=200, p95 (rank 190) tolerates 10
+          # outliers and p99 (rank 198) gates independently. The profiler
+          # itself now fail-louds on a collapsed index (minimum N=22).
+          # Ceilings UNCHANGED: p95<120ms / p99<160ms (PLAN-063 DIM-15;
+          # measured N=200 baseline p95<=76ms p99<=98ms — ADR-163). The
+          # advisory sibling test_hook_latency.py already samples N=200.
+          # Detection is per-entry vs the ABSOLUTE ceiling (~1.6x-2.2x of
+          # the per-entry baseline — ADR-163 §Detection contract).
+          #
+          # Retry contract (ADR-163 invariant — EXACTLY 2 attempts, never
+          # more, never unbounded): contention is bursty, so one retry
+          # relocates the measurement to a different scheduler window.
+          # Each attempt is wall-capped (coreutils timeout 420s ~= 5.5x
+          # the 77s local N=200 cost) so a pathologically contended
+          # attempt 1 is killed in time for attempt 2 to run and two
+          # attempts always fit the job budget. A genuine regression
+          # shifts the whole distribution and fails BOTH attempts ->
+          # explicit exit 1 (fail-closed; NOT continue-on-error, no
+          # third-party retry action). Attempt percentiles go to the step
+          # summary whenever the attempt leaves a parseable report — a
+          # cap-killed attempt that leaves none is NOTED explicitly — so
+          # a green-on-attempt-2 pattern (drift toward the ceiling)
+          # stays visible.
+          run_gate() {
+            timeout 420 python3 .claude/scripts/profile-opus-4-7.py \
+              --hook-latency \
+              --latency-iterations 200 \
+              --p95-ceiling-ms 120 \
+              --p99-ceiling-ms 160 > "/tmp/hook-latency-attempt-$1.json"
+          }
+          publish() {
+            # Advisory logging only — never gates (any failure tolerated).
+            # A cap-killed (124) attempt may leave no report: that case is
+            # NOTED explicitly in the summary, never silently skipped
+            # (pair-rail round-1 finding #3b).
+            python3 - "$1" <<'PYSUM' || true
+          import json, os, sys
+          att = sys.argv[1]
+          out = os.environ.get("GITHUB_STEP_SUMMARY")
+          def note(text):
+              if out:
+                  with open(out, "a") as f:
+                      f.write(text + "\n")
+          try:
+              with open(f"/tmp/hook-latency-attempt-{att}.json") as f:
+                  d = json.load(f)
+          except Exception:
+              note(f"hook-latency attempt {att}: NO parseable report (a 420s cap-killed attempt leaves none)")
+              sys.exit(0)
+          rows = [f"| attempt {att}: {name} | {h.get('p50_ms')} | {h.get('p95_ms')} | {h.get('p99_ms')} | {h.get('max_ms')} |"
+                  for name, h in d.get("hooks", {}).items() if isinstance(h, dict) and "p95_ms" in h]
+          if rows:
+              note("| hook-latency entry | p50 | p95 | p99 | max (ms) |")
+              note("|---|---|---|---|---|")
+              note("\n".join(rows))
+          else:
+              note(f"hook-latency attempt {att}: report parsed but carries no per-hook stats (early-error report: {str(d.get('error','?'))[:120]})")
+          PYSUM
+          }
+          if run_gate 1; then
+            publish 1
+            echo "✓ hook latency p95/p99 within budget (attempt 1)"
+          else
+            rc=$?
+            publish 1
+            echo "::warning::hook-latency gate attempt 1 FAILED (exit $rc; 124 = 420s per-attempt cap) — single deterministic retry (PLAN-159/ADR-163; a real regression fails both attempts)"
+            if run_gate 2; then
+              publish 2
+              echo "✓ hook latency p95/p99 within budget (attempt 2 — attempt 1 was a load-flake; see ::warning)"
+            else
+              rc2=$?
+              publish 2
+              echo "::error::hook-latency gate FAILED on BOTH attempts (rc1=$rc rc2=$rc2) — treating as a real regression"
+              exit 1
+            fi
+          fi
 
       - name: Run profile-opus-4-7.py --floor (sanity)
         run: |
