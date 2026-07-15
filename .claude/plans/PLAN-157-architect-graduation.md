@@ -182,12 +182,16 @@ Check: the full per-wave Check set (§reconcile checklist above)
   (this wave adds +2 SKILL.md files — claims/counts/map/inventory all
   move).
 
-### Wave 3 — graduate golang + data-ml [SENTINEL CEREMONY; per-squad Owner go/no-go]
+### Wave 3 — graduate golang + data-ml [SENTINEL CEREMONY; per-squad Owner go/no-go] — golang DONE S272 (2026-07-15), commit `ae4488b` (Owner-signed, Validate green); data-ml pending
 Check: the full per-wave Check set (§reconcile checklist above)
-- [ ] Owner go/no-go for golang; if go: bundle → `current: 25`;
-  `cap := current`.
+- [x] Owner go/no-go for golang → GO; ADR-009 bundle (6 personas, 3
+  skills incl. authored `golang-testing` + `golang-services`, 16
+  pitfalls, 12 task-chains, 1 example) → `current: 25`; `cap := 25`.
+  12/12 gates, 10,865 tests, scope ∅, clean-clone 15/15.
 - [ ] data-ml ONLY after OQ5 (prisma home) is resolved; if go: bundle →
-  `current: 24`; `cap := current`.
+  `current: 24`; `cap := current`. Run with `--apply-sp047` (moves
+  prisma-patterns → saas-platforms first); bundle ships +2 ML skills
+  (ADR-009 needs ≥3 with prisma out — Owner acks by signing).
 - [ ] Closeout: policy `current: 24` + `cap: 24`, full reconcile, plan
   `executing → done` with `completed_at` + `related_commits`.
   Check: python3 -m pytest .claude/scripts/tests/test_squad_grandfather_cap.py -q && python3 .claude/scripts/check-claude-md-claims.py
