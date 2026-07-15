@@ -462,8 +462,19 @@ if [ "$SQUAD" = "data-ml" ]; then
         warn "SP-047 Owner signature missing — detach-sign before the real run: gpg --local-user $KEY --armor --detach-sign $SP047_STAGED"
       fi
     else
-      [ -f "$SP047_STAGED.asc" ] \
-        || die "missing Owner signature $SP047_STAGED.asc — detach-sign at the ceremony (OQ4 soak waiver = your signature)"
+      # Sign SP-047 INLINE (S272) — same as the sentinel and the W1 SPs
+      # (043-046). Demanding a pre-signed .asc that nothing creates is the
+      # dead-end the sentinel path already fixed; OQ4 soak waiver = this
+      # signature, applied at the ceremony.
+      if [ -f "$SP047_STAGED.asc" ] && gpg --verify "$SP047_STAGED.asc" "$SP047_STAGED" >/dev/null 2>&1; then
+        echo "    SP-047 already signed"
+      else
+        rm -f "$SP047_STAGED.asc"
+        gpg --local-user "$KEY" --armor --detach-sign \
+          --output "$SP047_STAGED.asc" "$SP047_STAGED" \
+          || die "GPG signing failed for SP-047 (try: export GPG_TTY=\$(tty); gpgconf --kill gpg-agent)"
+        echo "    signed: $SP047_FILE"
+      fi
       gpg_verify_owner "$SP047_STAGED.asc" "$SP047_STAGED"
     fi
     echo "    SP-047 ready to apply (source pin OK)"
