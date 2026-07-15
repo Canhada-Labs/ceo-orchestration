@@ -205,8 +205,10 @@ _Total in Domain: fintech: 12 skill(s)._
 ### Domain: golang
 
 - `golang-patterns` — > Idiomatic Go engineering discipline: writing, reviewing, and refactoring Go so it stays boring, predictable, and easy to maintain.
+- `golang-services` — > Production Go service patterns: the wiring that turns a correct package into a service that survives deploys, load, and 3 a.m.
+- `golang-testing` — > Go testing workflow that keeps suites deterministic, parallel-safe, and honest about what they prove.
 
-_Total in Domain: golang: 1 skill(s)._
+_Total in Domain: golang: 3 skill(s)._
 
 ### Domain: government
 
@@ -379,7 +381,7 @@ _Total in Domain: voice-ai: 1 skill(s)._
 
 <!-- END AUTO-GENERATED SKILL INVENTORY -->
 
-**Total skills installed in this repo:** 162 (42 core + 8 frontend + 112 domain across 33 profiles). PLAN-074 v1.15.0 ship: +90 vs the v1.11.x baseline (+12 core, +95 domain across 22 NEW domains, plus 4 NEW agents — see ROUTING TABLE in `.claude/team.md` for `Principal Incident Commander`, `Principal Identity & Trust Architect`, `Principal Threat Detection Engineer`, `LLM FinOps Architect`). As the CEO, I am aware of all of them at all times and consult this inventory before every spawn. I do not need to `ls` or grep — this list is my working memory of the skill library.
+**Total skills installed in this repo:** 164 (42 core + 8 frontend + 114 domain across 33 profiles). PLAN-074 v1.15.0 ship: +90 vs the v1.11.x baseline (+12 core, +95 domain across 22 NEW domains, plus 4 NEW agents — see ROUTING TABLE in `.claude/team.md` for `Principal Incident Commander`, `Principal Identity & Trust Architect`, `Principal Threat Detection Engineer`, `LLM FinOps Architect`). As the CEO, I am aware of all of them at all times and consult this inventory before every spawn. I do not need to `ls` or grep — this list is my working memory of the skill library.
 
 ## How I operate
 

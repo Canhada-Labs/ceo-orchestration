@@ -44,16 +44,18 @@ domain_bundles:
   # bundle landed, squad off the roster; OQ3 cap := current).
   # cap lowered 27→26 (PLAN-157 W2 graduation: cpp — full ADR-009
   # bundle landed, squad off the roster; OQ3 cap := current).
-  cap: 26
+  # cap lowered 26→25 (PLAN-157 W3 graduation: golang — full ADR-009
+  # bundle landed, squad off the roster; OQ3 cap := current).
+  cap: 25
   # target_cap: PLAN-080 §6 Q4 default — long-term target. Phase 4 lowers
   # `cap` toward `target_cap` via sunset trim.
   target_cap: 15
   # current: actual count of SQUAD_GRANDFATHER entries (32 post-PLAN-153
-  # Wave D, minus 4 PLAN-157 W1 sunsets = 26).
-  current: 26
+  # Wave D, minus 4 PLAN-157 W1 sunsets = 25).
+  current: 25
   members:
     # see SQUAD_GRANDFATHER in validate-governance.sh (re-grep for the
-    # line — the number drifts). 26 entries (24 legacy + 2 remaining
+    # line — the number drifts). 25 entries (24 legacy + 1 remaining
     # Wave D imports); trim toward ≤15 via Phase 4 sunset + Wave D
     # graduation. Set-equality with SQUAD_GRANDFATHER is enforced by
     # TestSquadGrandfatherSetEqualsPolicyMembers (PLAN-157 W0 rider).
@@ -85,7 +87,6 @@ domain_bundles:
     # architecture, agents-meta removed by PLAN-157 W1 sunset; cpp, data-ml,
     # golang, jvm graduate in PLAN-157 W2/W3):
     - data-ml
-    - golang
 
 # ---------------------------------------------------------------------------
 # Sunset / reopen gate configuration

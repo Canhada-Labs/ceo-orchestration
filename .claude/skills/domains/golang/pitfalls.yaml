@@ -1,0 +1,88 @@
+# Pitfalls Catalog — Golang Squad
+# Loaded alongside the universal catalog when the golang profile is
+# installed. Format mirrors .claude/pitfalls-catalog.yaml.
+
+pitfalls:
+  # === ERRORS ===
+  - id: GO-001
+    rule: "NEVER discard an error with `_` unless the discard is deliberate AND commented (best-effort cleanup only). errcheck runs in CI; an uncommented `_ =` on an error return is a review block."
+    whenToUse: "any code that calls a function returning error"
+    agents: [Tomasz Zieliński, Renata Villaça]
+
+  - id: GO-002
+    rule: "Compare errors ONLY with errors.Is (sentinels) or errors.As (typed). `err == ErrX` on a wrapped error and `strings.Contains(err.Error(), ...)` both break the moment someone adds a wrap — grep for both patterns before approving."
+    whenToUse: "any error-branching code or review of one"
+    agents: [Tomasz Zieliński]
+
+  - id: GO-003
+    rule: "Wrap with %w (not %v) at each boundary the error crosses, lowercase context, no trailing punctuation. A %v wrap severs the chain and silently breaks every errors.Is/As caller upstream."
+    whenToUse: "adding or editing any fmt.Errorf call on an error path"
+    agents: [Tomasz Zieliński, Inês Barbosa]
+
+  # === CONCURRENCY ===
+  - id: GO-004
+    rule: "Every spawned goroutine MUST have a defined stop path: a select on ctx.Done(), a channel the owner closes, or a buffered escape. A goroutine blocked forever on an unbuffered send is a leak that accumulates until OOM."
+    whenToUse: "any `go func` introduction or review"
+    agents: [Tomasz Zieliński]
+
+  - id: GO-005
+    rule: "context.Context is the FIRST parameter of any function that blocks or does I/O — never a struct field. A stored context hides lifecycle and leaks cancellation scope across requests."
+    whenToUse: "any function signature that does I/O, and any struct definition holding request state"
+    agents: [Tomasz Zieliński, Callum McBride]
+
+  - id: GO-006
+    rule: "A -race failure is a bug until proven environmental. Waving it through as 'flaky' requires a pprof/trace artifact showing the race is in test scaffolding, not product code — otherwise the merge is blocked."
+    whenToUse: "any CI run where the race detector fires"
+    agents: [Tomasz Zieliński, Priya Raghunathan]
+
+  # === TESTING ===
+  - id: GO-007
+    rule: "CI runs `go test -race ./...` on every merge-gating lane. Removing -race, or splitting a lane so the raced packages skip it, is a Testing Gate VETO trigger — no exceptions for speed."
+    whenToUse: "any change to CI test commands or Makefile test targets"
+    agents: [Priya Raghunathan]
+
+  - id: GO-008
+    rule: "time.Sleep as synchronization in a test is FORBIDDEN. Wait on a channel, use a fake clock, or poll with a bounded deadline helper. Sleep-synced tests are flaky under load and slow when padded."
+    whenToUse: "writing or reviewing any test that waits for a concurrent effect"
+    agents: [Priya Raghunathan, Tomasz Zieliński]
+
+  - id: GO-009
+    rule: "t.Parallel tests MUST NOT share mutable state (globals, env vars, working dir, fixture structs). Use t.Setenv (it disables parallelism intentionally) or per-test instances; a passing parallel suite with shared state is a race waiting for a scheduler change."
+    whenToUse: "adding t.Parallel or reviewing a parallel test file"
+    agents: [Priya Raghunathan]
+
+  - id: GO-010
+    rule: "Golden files are regenerated ONLY via an explicit -update flag, with the diff reviewed like code. Output written to golden files must be deterministic: sort map-derived output before writing (map iteration order is randomized by design)."
+    whenToUse: "any golden-file test creation, update, or review"
+    agents: [Priya Raghunathan, Inês Barbosa]
+
+  - id: GO-011
+    rule: "Do not mock what you don't own. Real HTTP boundaries get httptest.Server; real databases get testcontainers-go or an in-memory fake behind YOUR interface. Hand-mocking a third-party client freezes your misunderstanding of it into the suite."
+    whenToUse: "designing test doubles for any external dependency"
+    agents: [Priya Raghunathan, Callum McBride]
+
+  # === SERVICES ===
+  - id: GO-012
+    rule: "Every boundary gets an explicit timeout: http.Server sets ReadHeaderTimeout/ReadTimeout/WriteTimeout/IdleTimeout; every outbound http.Client sets Timeout (or a per-request ctx deadline); DB pools set conn + query limits. A zero value means infinite — audit for zeros, not just absences."
+    whenToUse: "constructing any server, client, or pool; reviewing service wiring"
+    agents: [Callum McBride]
+
+  - id: GO-013
+    rule: "SIGTERM triggers graceful drain: stop accepting, srv.Shutdown under a bounded context (shorter than the orchestrator's kill grace period), flush telemetry, then exit. os.Exit or an unhandled signal drops in-flight requests and corrupts client retries."
+    whenToUse: "any change to main(), signal handling, or deployment grace settings"
+    agents: [Callum McBride, Renata Villaça]
+
+  - id: GO-014
+    rule: "Liveness and readiness are DIFFERENT probes: readiness checks dependencies and gates traffic; liveness checks only the process itself. A liveness probe that pings the database turns every DB blip into a restart storm."
+    whenToUse: "adding or modifying health endpoints or probe configuration"
+    agents: [Callum McBride]
+
+  - id: GO-015
+    rule: "No package-level mutable state wired in init(). Dependencies (DB handles, clients, loggers) are injected through struct fields; config is read once in main() and passed down. init()-wired globals are untestable, racy, and order-dependent."
+    whenToUse: "any package introducing a global var or an init() function"
+    agents: [Tomasz Zieliński, Inês Barbosa]
+
+  - id: GO-016
+    rule: "Never log secrets, tokens, or full request/response bodies — at any level, including debug. Structured logs (slog) carry field names; add a redaction test for any handler that logs request payloads."
+    whenToUse: "adding logging to any handler, middleware, or client"
+    agents: [Callum McBride, Renata Villaça]

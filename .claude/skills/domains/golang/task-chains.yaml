@@ -1,0 +1,108 @@
+# Task chains — Golang Squad
+# Domain-specific workflows that extend the universal .claude/task-chains.yaml.
+
+task_chains:
+  - id: golang-ship-new-service
+    title: "Ship a new Go service through the squad's four gates"
+    whenToUse: |
+      Any new Go service (HTTP, gRPC, or worker) that will run in
+      production. The service MUST clear layout/dependency review,
+      correctness review, the test gate, and the reliability gate
+      before its first deploy. Load `golang-patterns` for the build,
+      `golang-testing` for the suite, and `golang-services` for the
+      wiring.
+    steps:
+      - id: 1
+        owner: "Renata Villaça (Head of Go Platform)"
+        action: |
+          Approve the service skeleton: standard repo layout
+          (cmd/<app>, internal/{handler,service,store}), go.mod with
+          the dependency budget justified per module ("a little
+          copying beats a little dependency"), Go version within two
+          releases of stable, golangci-lint config inherited from the
+          platform baseline.
+        verify: "Skeleton PR approved; go.mod diff annotated with per-dependency justification"
+      - id: 2
+        owner: "Tomasz Zieliński (Concurrency & Correctness Reviewer)"
+        action: |
+          Review the implementation against golang-patterns: every
+          goroutine has a stop path, ctx is the first parameter on
+          every blocking call, errors wrap with %w and are branched
+          via errors.Is/As, no package-level mutable state, interfaces
+          declared consumer-side.
+        verify: "Review checklist attached; `go vet ./...` + staticcheck clean; no VETO triggers open"
+      - id: 3
+        owner: "Priya Raghunathan (Testing & CI Gate Engineer)"
+        action: |
+          Verify the suite per golang-testing: table-driven unit tests
+          on business logic, httptest coverage on every handler,
+          integration tests behind a build tag or testing.Short guard
+          (testcontainers-go for real stores), no sleep-based
+          synchronization, `go test -race ./...` wired into the
+          merge-gating CI lane.
+        verify: "CI lane green WITH -race; coverage report attached; flake ledger empty"
+      - id: 4
+        owner: "Callum McBride (Service Reliability Engineer)"
+        action: |
+          Verify the wiring per golang-services: all four http.Server
+          timeouts set, every outbound client carries a timeout,
+          graceful shutdown drains under a bounded context shorter
+          than the platform grace period, liveness/readiness probes
+          split correctly, slog structured logging with no secrets,
+          OTel traces on ingress and egress.
+        verify: "Shutdown drill log attached (SIGTERM drains in-flight requests); probe semantics documented"
+      - id: 5
+        owner: "Renata Villaça (Head of Go Platform)"
+        action: |
+          Final go/no-go across the three sign-offs. Schedule the
+          first deploy behind a canary or low-traffic window; confirm
+          the rollback path (previous image + config) is documented.
+        verify: "Deploy ticket carries all three sign-offs + rollback note"
+
+  - id: golang-race-or-leak-triage
+    title: "Triage a data race or goroutine leak report"
+    whenToUse: |
+      Any race-detector firing (CI or production canary), any
+      monitoring alert showing monotonic goroutine-count growth, or
+      any OOM whose heap profile implicates leaked goroutine stacks.
+      A -race report is a bug until proven environmental (GO-006).
+    steps:
+      - id: 1
+        owner: "Tomasz Zieliński (Concurrency & Correctness Reviewer)"
+        action: |
+          Reproduce and capture evidence: re-run the failing package
+          with `go test -race -count=10`, or for a live leak capture
+          `pprof` goroutine profiles 10 minutes apart and diff them.
+          Identify the owning spawn site and its missing stop path.
+        verify: "Race trace or goroutine-profile diff attached with the spawn site identified"
+      - id: 2
+        owner: "Tomasz Zieliński + Callum McBride"
+        action: |
+          Decide mitigation: (a) hot-fix the stop path now, (b)
+          throttle/disable the affected feature, or (c) restart-cycle
+          the fleet while the fix lands. Criteria: leak growth rate
+          vs. deploy latency vs. user impact.
+        verify: "Decision logged with rationale; if (b) or (c), mitigation confirmed in dashboards"
+      - id: 3
+        owner: "Tomasz Zieliński (Concurrency & Correctness Reviewer)"
+        action: |
+          Land the fix per golang-patterns: give the goroutine a
+          defined stop (select on ctx.Done(), owner-closed channel,
+          or buffered escape); remove any context stored in a struct
+          that hid the lifecycle.
+        verify: "Fix PR merged; `go test -race` clean at -count=10 on the affected package"
+      - id: 4
+        owner: "Priya Raghunathan (Testing & CI Gate Engineer)"
+        action: |
+          Convert the root cause into a regression test that fails on
+          the old code: a race-provoking test, a leak assertion
+          (goroutine count before/after with bounded polling — no
+          sleeps), or an httptest-driven cancellation test.
+        verify: "Regression test demonstrated red on pre-fix commit, green on fix"
+      - id: 5
+        owner: "Renata Villaça (Head of Go Platform)"
+        action: |
+          Post-mortem if the leak reached production: timeline, why
+          review missed it, whether a lint/vet rule or a pitfalls
+          entry (GO-004/GO-006) update would have caught it earlier.
+        verify: "Post-mortem committed; pitfalls/lint follow-up filed or explicitly declined"
