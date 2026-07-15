@@ -1,8 +1,10 @@
 ---
 id: PLAN-159
 title: Perf-gate robustness — kill the opus-4-7-profiler-smoke load-flake
-status: reviewed
+status: executing
 reviewed_at: 2026-07-15
+started_at: 2026-07-15
+related_commits: [a1e6f7d, 1776c95, ed9fa7d, 553d796]
 created: 2026-07-15
 owner: CEO
 depends_on: []
@@ -128,19 +130,29 @@ Check: bash .claude/plans/PLAN-159/land-plan159.sh --dry-run (green preflight); 
   `PLAN-159/pair-rail-verdict-wave1.md`, anchored to the tracked
   `staged-wave1.sha256` manifest; land script re-verifies the hashes
   fail-closed at preflight).
-- [ ] **V3 Owner ceremony**: `bash .claude/plans/PLAN-159/land-plan159.sh`
-  (sign inline, apply staged, gates, scope assert, 1 signed commit) + push.
+- [x] **V3 Owner ceremony** (2026-07-15): dry-run green → live green —
+  sentinel signed (anchor `a1e6f7d`), bundle applied, gates green (9/9 +
+  claims + governance + local N=200 proof), scope asserted, commit
+  **`1776c95`** [SENT-PERFGATE], pushed.
 
 ### Wave 2 — prove + closeout
 Check: gh run list --workflow validate.yml — 3 consecutive green pushes incl. one during a known-busy runner window
-- [ ] Landing push green (OQ2: one bounded rerun pre-authorized if the
-  OLD gate flakes on this very push — documented, not silent).
-- [ ] Two no-op pushes → 3 consecutive green, zero reruns (anti-flake
-  acceptance; probabilistic evidence per debate R4).
-- [ ] `bash .claude/plans/PLAN-159/wave2-regression-proof.sh` — injected
-  over-ceiling regression RED-flags THROUGH the retry wrapper (both
-  attempts fail ⇒ exit 1). Criterion reworded per consensus C4 (was
-  "≥2×"; detection is per-entry vs the absolute ceiling). Never lands.
+- [ ] 3 consecutive green Validate pushes with the NEW gate, zero reruns
+  (anti-flake acceptance; probabilistic evidence per debate R4). Status:
+  the OQ2 rerun was never needed (push events use the pushed commit's
+  workflow, so the OLD gate never ran again); the landing-era runs were
+  concurrency-cancelled except the tip (`553d796`), which failed on an
+  UNRELATED cause (new test file was bare `unittest.TestCase` →
+  env-hygiene allowlist gate; fixed by converting to `TestEnvContext` —
+  the known S-lesson applied late). **The NEW perf gate itself ran green
+  on `553d796` in 1m49s** — first CI datapoint. Green streak counts from
+  the hygiene-fix push onward.
+- [x] `bash .claude/plans/PLAN-159/wave2-regression-proof.sh` — injected
+  over-ceiling regression RED-flagged THROUGH the retry wrapper: both
+  attempts failed on the MEASUREMENT (rc1=1 rc2=1; p95 239–253 ms > 120),
+  anti-vacuity confirmed the measured breach on both output_secrets
+  entries, macOS shim + no-report note behaved as designed
+  (2026-07-15T19:15:26Z). Criterion per consensus C4. Never lands.
 - [ ] Post-land review (consensus D3): if the retry never fired across
   the acceptance window, open a follow-up to retire it (shrinks the
   drift-masking surface). Check `::warning` frequency via step summaries.

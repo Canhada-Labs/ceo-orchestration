@@ -29,6 +29,14 @@ from unittest import mock
 _REPO = Path(__file__).resolve().parents[3]
 _SCRIPT = _REPO / ".claude" / "scripts" / "profile-opus-4-7.py"
 
+# Ensure ``_lib.testing`` (TestEnvContext) is importable for env-isolation
+# (env-hygiene gate: bare unittest.TestCase is a violation in this tree).
+_HOOKS_DIR = str(_REPO / ".claude" / "hooks")
+if _HOOKS_DIR not in sys.path:
+    sys.path.insert(0, _HOOKS_DIR)
+
+from _lib.testing import TestEnvContext  # noqa: E402
+
 
 def _load_module():
     spec = importlib.util.spec_from_file_location("profile_opus_4_7", _SCRIPT)
@@ -40,7 +48,7 @@ def _load_module():
 MOD = _load_module()
 
 
-class TestPercentileIndexMath(unittest.TestCase):
+class TestPercentileIndexMath(TestEnvContext):
     """ADR-163 rank table for the nearest-rank truncation int((n-1)*p/100)."""
 
     @staticmethod
@@ -73,7 +81,7 @@ class TestPercentileIndexMath(unittest.TestCase):
         self.assertEqual(MOD._pct_of_sorted(lst200, 99), 197.0)
 
 
-class TestPercentilePrecondition(unittest.TestCase):
+class TestPercentilePrecondition(TestEnvContext):
     def test_n20_fails_loudly_without_spawning(self):
         def _forbidden(*a, **k):  # pragma: no cover — failure path
             raise AssertionError("precondition must fire BEFORE any subprocess")
@@ -108,7 +116,7 @@ class TestPercentilePrecondition(unittest.TestCase):
         self.assertEqual(sig.parameters["iterations"].default, 200)
 
 
-class TestTimeoutExpiredFold(unittest.TestCase):
+class TestTimeoutExpiredFold(TestEnvContext):
     def test_stall_reads_as_hook_failed_not_traceback(self):
         def _stall(*a, **k):
             raise subprocess.TimeoutExpired(cmd="hook", timeout=10)
