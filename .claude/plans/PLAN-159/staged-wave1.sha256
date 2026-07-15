@@ -1,0 +1,4 @@
+78c845f031bddddd1de44ed8261eb9cacb3369cf7ef3456c227cf7148508b283  .claude/plans/PLAN-159/staged/wave1/validate-yml.patch
+af6ba24648ca0d30421ae31cfce285be547169ec50de5033870dd3938ca58181  .claude/plans/PLAN-159/staged/wave1/root/.claude/scripts/profile-opus-4-7.py
+b69c7c4b6d568169d628436ed14265188ff56122043bf016d52ac4522a282ce4  .claude/plans/PLAN-159/staged/wave1/root/.claude/scripts/tests/test_profile_opus47_latency_gate.py
+b75d423a472990e65cb398624c71a295727212fa4e627e4e63977aa158ef34ee  .claude/plans/PLAN-159/staged/wave1/root/.claude/adr/ADR-163-hook-latency-gate-percentile-stability.md
