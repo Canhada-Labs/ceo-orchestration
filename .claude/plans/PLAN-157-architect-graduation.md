@@ -169,13 +169,15 @@ Check: the full per-wave Check set (§reconcile checklist above)
   COMMAND-SKILL-HOOK-MAP + skill-inventory regenerated. All 9 gates green
   (10,865 tests); `touched − scope = ∅`; clean-clone proof 15/15.
 
-### Wave 2 — graduate jvm + cpp [SENTINEL CEREMONY; per-squad Owner go/no-go] — jvm DONE S272 (2026-07-15), commit `51dd132` (Owner-signed, Validate green); cpp pending
+### Wave 2 — graduate jvm + cpp [SENTINEL CEREMONY; per-squad Owner go/no-go] — DONE S272 (2026-07-15): jvm `51dd132`, cpp `8d106c1` (both Owner-signed, Validate green)
 Check: the full per-wave Check set (§reconcile checklist above)
 - [x] Owner go/no-go for jvm → GO; ADR-009 bundle (6 personas, 3 skills
   incl. authored `jvm-testing`, 18 pitfalls, 12 task-chains, 1 example);
   removed from roster+policy commit-atomically → `current: 27`;
   `cap := 27`. 12/12 gates, 10,865 tests, scope ∅, clean-clone 15/15.
-- [ ] Same for cpp → `current: 26`.
+- [x] Same for cpp → `current: 26` (`8d106c1`): ADR-009 bundle (6
+  personas, 3 skills incl. authored `cpp-build-systems`, 15 pitfalls,
+  12 task-chains, 1 example); 12/12 gates, scope ∅, clean-clone 15/15.
 - [ ] Reconcile checklist in the SAME commit as each catalog delta
   (this wave adds +2 SKILL.md files — claims/counts/map/inventory all
   move).
