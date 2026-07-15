@@ -1,0 +1,84 @@
+# Pitfalls Catalog — C++ Squad
+# Loaded alongside the universal catalog when the cpp profile is
+# installed. Format mirrors .claude/pitfalls-catalog.yaml.
+
+pitfalls:
+  # === OWNERSHIP / UNDEFINED BEHAVIOR ===
+  - id: CPP-001
+    rule: "NEVER introduce owning raw pointers or manual new/delete outside an approved arena or FFI boundary. Ownership lives in unique_ptr/shared_ptr or a scoped object (R.11, R.20); a raw T* is a non-owning observer only (R.3)."
+    whenToUse: "any change that allocates, frees, or transfers ownership of a resource"
+    agents: [Tomasz Zieliński, Kofi Mensah]
+
+  - id: CPP-002
+    rule: "Rule of Zero or a COMPLETE Rule of Five (C.20, C.21). Declaring any one of destructor / copy / move without accounting for all five is a blocking finding — the compiler-synthesized remainder is wrong for resource-owning types."
+    whenToUse: "any class that declares a destructor, copy, or move operation"
+    agents: [Tomasz Zieliński]
+
+  - id: CPP-003
+    rule: "Single-argument constructors MUST be explicit (C.46). An implicit converting constructor on a public type silently rewrites call sites; removal of `explicit` from an existing constructor is an API review trigger."
+    whenToUse: "adding or modifying any constructor callable with one argument"
+    agents: [Kofi Mensah, Tomasz Zieliński]
+
+  - id: CPP-004
+    rule: "No C-style casts; use named casts only (ES.48). NEVER cast away const on data a caller observes as immutable (ES.50) — it is a Memory-Safety VETO trigger, and UB if the object was defined const."
+    whenToUse: "any cast in reviewed code"
+    agents: [Tomasz Zieliński]
+
+  # === CONCURRENCY ===
+  - id: CPP-005
+    rule: "Every lock guard is NAMED (CP.44). `std::lock_guard<std::mutex>(m_);` constructs a temporary that unlocks immediately — the classic silent no-op. Multiple mutexes are acquired with std::scoped_lock, never sequentially (CP.21)."
+    whenToUse: "any code taking a mutex or adding a locked region"
+    agents: [Tomasz Zieliński]
+
+  - id: CPP-006
+    rule: "Condition-variable waits take a predicate (CP.42). A bare wait() loses the race against spurious wakeups and missed notifies; the bug reproduces once a week in CI and never on a laptop."
+    whenToUse: "any use of std::condition_variable or a wait/notify pair"
+    agents: [Tomasz Zieliński, Sofia Lindqvist]
+
+  # === HEADERS / API SURFACE ===
+  - id: CPP-007
+    rule: "No `using namespace` at global scope in a header (SF.7). Headers are include-guarded and self-contained — each header compiles standalone with only its own includes (SF.8, SF.11)."
+    whenToUse: "adding or modifying any header file"
+    agents: [Kofi Mensah]
+
+  # === TESTING ===
+  - id: CPP-008
+    rule: "NEVER sleep to synchronize a test. Wait on a condition variable, latch, or future. A sleep-based wait is an auto-flagged flake source: too short it races, too long it taxes every CI run forever."
+    whenToUse: "any test coordinating with a thread, timer, or async operation"
+    agents: [Sofia Lindqvist]
+
+  - id: CPP-009
+    rule: "ASan and TSan MUST NOT be combined in one binary — they are mutually exclusive instrumentations. Keep separate build configurations; a matrix 'optimization' that merges them silently drops all data-race coverage."
+    whenToUse: "any change to sanitizer build configurations or the CI matrix"
+    agents: [Sofia Lindqvist, Priya Raghavan]
+
+  - id: CPP-010
+    rule: "Removing, downgrading, or conditionally skipping a sanitizer CI job requires Memory-Safety VETO review plus an ADR. Sanitizer failures are real until root-caused — 'flaky' is a conclusion, never a default."
+    whenToUse: "any CI config change touching ASan/UBSan/TSan jobs, or triaging a sanitizer failure"
+    agents: [Tomasz Zieliński, Sofia Lindqvist]
+
+  - id: CPP-011
+    rule: "Tests are discovered per-case with gtest_discover_tests(), not registered as one add_test() for the whole binary. Per-case CTest visibility is what makes sharding, quarantine, and -R filtering work."
+    whenToUse: "wiring any test executable into CMake/CTest"
+    agents: [Sofia Lindqvist, Priya Raghavan]
+
+  # === BUILD SYSTEM ===
+  - id: CPP-012
+    rule: "Every third-party dependency is pinned to an immutable ref: a full commit SHA or URL_HASH for FetchContent, a builtin-baseline for vcpkg, a committed lockfile for Conan. Branch names and moving tags are forbidden."
+    whenToUse: "adding or upgrading any dependency in CMake, vcpkg.json, or conanfile"
+    agents: [Priya Raghavan, Renata Vasconcelos]
+
+  - id: CPP-013
+    rule: "No global flag mutation in library CMake. String-appending CMAKE_CXX_FLAGS or calling directory-scoped commands (include_directories, add_compile_options) in a library dir is a blocking finding — use target_* commands with explicit visibility."
+    whenToUse: "any CMakeLists.txt or *.cmake change"
+    agents: [Priya Raghavan]
+
+  - id: CPP-014
+    rule: "Warning and -Werror flags are PRIVATE, never PUBLIC/INTERFACE — a library must not force its warning policy on consumers. -Werror defaults ON only in CI (via option/preset), OFF for downstream builds with newer compilers."
+    whenToUse: "configuring warning flags or -Werror anywhere in the build"
+    agents: [Priya Raghavan, Kofi Mensah]
+
+  - id: CPP-015
+    rule: "Never claim a build or runtime speedup without before/after measurement (Per.6). LTO/IPO, unity builds, and ccache changes ship with clean-build AND incremental-build timings, plus a test-suite run confirming behavior is unchanged."
+    whenToUse: "any PR whose motivation is build time or binary performance"
+    agents: [Priya Raghavan, Renata Vasconcelos]

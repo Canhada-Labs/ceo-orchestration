@@ -26,10 +26,10 @@
 #
 #   metric            live source                                   rule
 #   ----------------  --------------------------------------------  -----
-#   skills (total)    find .claude/skills -name SKILL.md            exact (161)
+#   skills (total)    find .claude/skills -name SKILL.md            exact (162)
 #   core skills       find .claude/skills/core -name SKILL.md       exact (42)
 #   frontend skills   find .claude/skills/frontend -name SKILL.md   exact (8)
-#   domain skills     find .claude/skills/domains -name SKILL.md    exact (111)
+#   domain skills     find .claude/skills/domains -name SKILL.md    exact (112)
 #   ADRs              ls .claude/adr/ADR-*.md                        exact (167)
 #   hook .py files    ls .claude/hooks/*.py                          exact (53)
 #   registered hooks  distinct *.py in settings.json "command" lines exact (45)

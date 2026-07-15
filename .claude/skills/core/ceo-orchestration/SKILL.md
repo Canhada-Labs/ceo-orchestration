@@ -140,10 +140,11 @@ _Total in Domain: community: 3 skill(s)._
 
 ### Domain: cpp
 
+- `cpp-build-systems` — > Modern CMake and C++ build/toolchain discipline for C++17/20/23 projects.
 - `cpp-coding-standards` — > Modern C++ (C++17/20/23) coding standard grounded in the public C++ Core Guidelines.
 - `cpp-testing` — > Testing workflow for modern C++ (C++17/20) with GoogleTest / GoogleMock driven through CMake and CTest.
 
-_Total in Domain: cpp: 2 skill(s)._
+_Total in Domain: cpp: 3 skill(s)._
 
 ### Domain: data-ml
 
@@ -378,7 +379,7 @@ _Total in Domain: voice-ai: 1 skill(s)._
 
 <!-- END AUTO-GENERATED SKILL INVENTORY -->
 
-**Total skills installed in this repo:** 161 (42 core + 8 frontend + 111 domain across 33 profiles). PLAN-074 v1.15.0 ship: +90 vs the v1.11.x baseline (+12 core, +95 domain across 22 NEW domains, plus 4 NEW agents — see ROUTING TABLE in `.claude/team.md` for `Principal Incident Commander`, `Principal Identity & Trust Architect`, `Principal Threat Detection Engineer`, `LLM FinOps Architect`). As the CEO, I am aware of all of them at all times and consult this inventory before every spawn. I do not need to `ls` or grep — this list is my working memory of the skill library.
+**Total skills installed in this repo:** 162 (42 core + 8 frontend + 112 domain across 33 profiles). PLAN-074 v1.15.0 ship: +90 vs the v1.11.x baseline (+12 core, +95 domain across 22 NEW domains, plus 4 NEW agents — see ROUTING TABLE in `.claude/team.md` for `Principal Incident Commander`, `Principal Identity & Trust Architect`, `Principal Threat Detection Engineer`, `LLM FinOps Architect`). As the CEO, I am aware of all of them at all times and consult this inventory before every spawn. I do not need to `ls` or grep — this list is my working memory of the skill library.
 
 ## How I operate
 

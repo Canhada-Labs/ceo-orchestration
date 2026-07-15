@@ -1,0 +1,104 @@
+# Task chains — C++ Squad
+# Domain-specific workflows that extend the universal .claude/task-chains.yaml.
+
+task_chains:
+  - id: cpp-add-third-party-dependency
+    title: "Add or major-upgrade a third-party C++ dependency with pinning and sanitizer coverage"
+    whenToUse: |
+      Any new third-party library entering a C++ target, or a
+      major-version upgrade of an existing one — regardless of how small
+      the library looks. Header-only libraries count: they still carry
+      UB, license, and header-hygiene risk.
+    steps:
+      - id: 1
+        owner: "Priya Raghavan (Build & Toolchain)"
+        action: |
+          Load `cpp-build-systems`. Choose the delivery mechanism
+          (FetchContent vs vcpkg vs Conan) per the decision rubric —
+          do not introduce a second package manager into a repo that
+          already has one. Pin to an immutable ref (full commit SHA or
+          URL_HASH; vcpkg builtin-baseline; Conan lockfile). Wire the
+          dependency as a namespaced target with explicit
+          PRIVATE/PUBLIC/INTERFACE visibility.
+        verify: "PR shows the pinned immutable ref + target_link_libraries with explicit visibility; no global flag or include-path mutation"
+      - id: 2
+        owner: "Tomasz Zieliński (Memory-Safety & UB Reviewer)"
+        action: |
+          Load `cpp-coding-standards`. Review ownership idioms at the
+          boundary — who allocates, who frees, whether the library hands
+          back raw owning pointers that need RAII wrapping. Run the
+          suite under ASan+UBSan with the new code paths exercised.
+        verify: "Sanitizer run green; boundary ownership documented in the PR description"
+      - id: 3
+        owner: "Sofia Lindqvist (Test Infrastructure)"
+        action: |
+          Load `cpp-testing`. Add at least one integration test that
+          exercises the dependency's real code path (not a mock of it).
+          Confirm gtest_discover_tests picks the new cases up as
+          individual CTest entries and report the suite wall-time delta.
+        verify: "New test visible as its own CTest case; suite-time delta reported in the PR"
+      - id: 4
+        owner: "Kofi Mensah (Library Interface & Templates)"
+        action: |
+          Confirm the dependency does not leak through public headers —
+          no transitive include exposure to consumers. If consumers must
+          not see it, wrap it behind a facade or pimpl and keep the
+          dependency's headers out of the public include tree.
+        verify: "Public headers compile standalone without the new dependency on the include path (or an ADR documents intentional exposure)"
+      - id: 5
+        owner: "Renata Vasconcelos (Head of C++ Engineering)"
+        action: |
+          License check (compatible with the repo's license), maintenance
+          health check (release cadence, open CVEs), and final sign-off.
+          Record the license and the chosen pin in the dependency ledger.
+        verify: "License + pin recorded; sign-off comment on the PR"
+
+  - id: cpp-sanitizer-failure-triage
+    title: "Triage an ASan/UBSan/TSan failure in CI"
+    whenToUse: |
+      Any sanitizer failure in CI, on any branch. Sanitizer failures are
+      never "flaky" by default — a data race that reproduces 1 run in 50
+      is still a data race. Treat every report as real until root-caused.
+    steps:
+      - id: 1
+        owner: "Sofia Lindqvist (Test Infrastructure)"
+        action: |
+          Load `cpp-testing`. Reproduce narrow: re-run the single failing
+          case with --gtest_filter under the exact same sanitizer
+          configuration and capture the full report as a CI artifact.
+          For races, loop the case (>= 50 iterations) before declaring
+          non-reproducible.
+        verify: "Failure reproduced with report artifact attached (or non-repro documented with iteration count >= 50)"
+      - id: 2
+        owner: "Tomasz Zieliński (Memory-Safety & UB Reviewer)"
+        action: |
+          Load `cpp-coding-standards`. Classify the report
+          (use-after-free, buffer overflow, UB class, data race),
+          identify the owning code path, and bisect to the introducing
+          commit. Decide fix-now vs revert: if the fix is not same-day
+          and the introducing commit is identified, revert first.
+        verify: "Classification + owning path + introducing commit recorded; revert issued if fix is not same-day"
+      - id: 3
+        owner: "Introducing author (routed by Renata Vasconcelos)"
+        action: |
+          Implement the fix following `cpp-coding-standards` ownership
+          and concurrency discipline (RAII, named lock guards, predicate
+          waits). Add a regression test that fails without the fix under
+          the same sanitizer configuration.
+        verify: "Regression test fails on the parent commit and passes on the fix, under the same sanitizer config"
+      - id: 4
+        owner: "Priya Raghavan (Build & Toolchain)"
+        action: |
+          Load `cpp-build-systems`. Confirm the sanitizer matrix would
+          have caught this pre-merge. If the failure escaped through a
+          config gap (job skipped, config drift, ASan/TSan merged into
+          one binary), fix the matrix and the preset that drives it.
+        verify: "Matrix gap analysis attached; CI-config PR filed if a gap was found"
+      - id: 5
+        owner: "Renata Vasconcelos (Head of C++ Engineering)"
+        action: |
+          If the failure reached a release branch: post-mortem with
+          timeline, root cause, escape analysis, and action items.
+          Internal-only distribution; add resulting rules to
+          pitfalls.yaml if a new failure class was found.
+        verify: "Post-mortem committed (release-branch escapes only); pitfalls entry proposed if a new class emerged"
