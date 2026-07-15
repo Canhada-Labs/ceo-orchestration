@@ -204,7 +204,8 @@ _STAGED_POLICY = (
 
 # These match the values declared in the staged grandfather-cap.policy.yaml
 _EXPECTED_INDIVIDUAL_CAP = 5
-_EXPECTED_DOMAIN_CAP = 28  # PLAN-157 W1 sunset: 32 - 4 (desktop, dotnet,
+# PLAN-157 W2 graduation (jvm): cap 28→27 (OQ3 cap := current).
+_EXPECTED_DOMAIN_CAP = 27  # PLAN-157 W1 sunset: 32 - 4 (desktop, dotnet,
                            # architecture, agents-meta removed from roster;
                            # OQ3 ratified cap := current, so cap drops with
                            # the trim). No headroom by design. Phase 4 lowers

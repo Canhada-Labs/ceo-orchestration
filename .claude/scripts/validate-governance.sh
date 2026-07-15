@@ -315,7 +315,7 @@ echo "--- Squad bundle contract (ADR-009) ---"
 # posture as `community` (ADR-060), not /architect-authored squads.
 # Graduate each by authoring its bundle via /architect (team-personas +
 # pitfalls + task-chains + examples + >=3 skills), then remove it here.
-SQUAD_GRANDFATHER="academic-humanities business-support civil-engineering community cpp data-ml devrel embedded finance-accounting fintech golang healthcare hospitality hr i18n-business identity-systems jvm lgpd-heavy-saas marketing-global mobile paid-media project-management real-estate-finance retail saas-platforms supply-chain training-l-and-d voice-ai"
+SQUAD_GRANDFATHER="academic-humanities business-support civil-engineering community cpp data-ml devrel embedded finance-accounting fintech golang healthcare hospitality hr i18n-business identity-systems lgpd-heavy-saas marketing-global mobile paid-media project-management real-estate-finance retail saas-platforms supply-chain training-l-and-d voice-ai"
 
 is_grandfathered() {
   local name="$1"

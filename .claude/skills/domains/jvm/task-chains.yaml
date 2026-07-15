@@ -1,0 +1,106 @@
+# Task chains — JVM Squad
+# Domain-specific workflows that extend the universal .claude/task-chains.yaml.
+
+task_chains:
+  - id: jvm-ship-new-endpoint
+    title: "Ship a new REST endpoint through the layered contract"
+    whenToUse: |
+      Any new externally-visible endpoint on a Spring Boot or Quarkus
+      service — new resource, new verb on an existing resource, or a
+      contract-changing field addition. The chain enforces the squad's
+      three VETO gates: API contract, data path, and test coverage.
+    steps:
+      - id: 1
+        owner: "Priya Raghunathan (Service & API Architect)"
+        action: |
+          Design the contract first: resource path, verbs, request and
+          response DTO records with Bean Validation constraints, error
+          shape (RFC 7807), and versioning impact on existing clients.
+          Apply the `springboot-patterns` skill — thin controller,
+          explicit statuses, no entity leakage.
+        verify: "Contract sketch (DTOs + status table) attached to the PR description"
+      - id: 2
+        owner: "Tomasz Zieliński (Language & Persistence Steward)"
+        action: |
+          Design the data path per `java-coding-standards` (Persistence
+          section): entity/mapping changes as a reversible Flyway or
+          Liquibase migration, fetch plan for every new read (JOIN
+          FETCH / projection / EntityGraph), @Transactional boundary on
+          the service method with readOnly on query paths, and no
+          remote I/O inside the transaction.
+        verify: "Migration file reviewed reversible; fetch plan stated; SQL log shows no N+1 on the new path"
+      - id: 3
+        owner: "Kofi Mensah-Addo (Test & Release Engineer)"
+        action: |
+          Build the test pyramid per `jvm-testing`: plain JUnit 5 +
+          Mockito units for the service logic, @WebMvcTest slice for
+          the controller (validation failures + error shape included),
+          @DataJpaTest against Testcontainers with the production
+          engine for the repository, and at least one failing-path
+          test per layer.
+        verify: "CI green; new endpoint has happy-path AND failing-path coverage at every layer"
+      - id: 4
+        owner: "Marta Krüger (Production Reliability Engineer)"
+        action: |
+          Verify production readiness: explicit timeouts and retry
+          budget on any new outbound call, metrics and structured logs
+          (no PII) on the new path, cache boundedness if caching was
+          added, and pool impact if the query profile changed.
+        verify: "Timeout/retry table + dashboard panel linked in the PR"
+      - id: 5
+        owner: "Beatriz Fontoura (Head of JVM Platform)"
+        action: |
+          Final review across the three VETO sign-offs (contract, data
+          path, coverage) plus reliability notes. Confirm no dependency
+          was added without an EOL/CVE check. Approve the release.
+        verify: "PR merged with all four prior approvals recorded"
+
+  - id: jvm-flaky-suite-triage
+    title: "Triage and eliminate a flaky JVM test"
+    whenToUse: |
+      Any intermittent CI failure in a JVM service suite. Flakiness is
+      treated as a correctness defect in the test (or the code under
+      test), never as bad luck — retries and deletion are not fixes.
+    steps:
+      - id: 1
+        owner: "Kofi Mensah-Addo (Test & Release Engineer)"
+        action: |
+          Reproduce and classify: rerun the failing test in isolation
+          and under parallel load, then classify against the
+          `jvm-testing` flake taxonomy — sleep-based synchronization,
+          wall-clock/timezone dependence, shared state between tests,
+          container/port collisions, or a real race in production code.
+        verify: "Flake reproduced (or 50-run soak clean) + classification recorded in the ticket"
+      - id: 2
+        owner: "Kofi Mensah-Addo (Test & Release Engineer)"
+        action: |
+          Quarantine only if the fix is not same-day: tag the test as
+          quarantined with a linked root-cause ticket and an owner.
+          Never raise CI retry counts, never delete the test — both
+          are test-gate weakenings requiring VETO sign-off.
+        verify: "Quarantine (if any) carries ticket link + owner; CI retry config unchanged"
+      - id: 3
+        owner: "Tomasz Zieliński (Language & Persistence Steward)"
+        action: |
+          If classified as a real race or a transaction/visibility bug
+          in production code (not the test), own the production fix:
+          proper synchronization, corrected transaction boundary, or an
+          idempotency guard. The test stays as the regression proof.
+        verify: "Production fix PR linked; the formerly flaky test passes unmodified against it"
+      - id: 4
+        owner: "Kofi Mensah-Addo (Test & Release Engineer)"
+        action: |
+          Repair the test per `jvm-testing`: replace sleeps with
+          Awaitility/latches, inject Clock.fixed for time logic, give
+          each test unique temp/container resources, and remove
+          inter-test state. Then soak: run the repaired test 50x
+          locally and unquarantine.
+        verify: "50-run soak passes; quarantine tag removed; ticket closed with root cause"
+      - id: 5
+        owner: "Marta Krüger (Production Reliability Engineer)"
+        action: |
+          If the root cause was environmental (CI resource starvation,
+          container startup timeouts, port exhaustion), fix the
+          environment and document it so the next flake report starts
+          from the updated baseline.
+        verify: "Environment fix applied + runbook entry added (or step recorded N/A)"

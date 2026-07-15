@@ -1,0 +1,98 @@
+# Pitfalls Catalog — JVM Squad
+# Loaded alongside the universal catalog when the jvm profile is
+# installed. Format mirrors .claude/pitfalls-catalog.yaml.
+
+pitfalls:
+  # === PERSISTENCE / JPA ===
+  - id: JVM-001
+    rule: "Map persisted enums with EnumType.STRING, never ORDINAL. ORDINAL stores the position — reordering or inserting an enum constant silently corrupts every existing row."
+    whenToUse: "any @Enumerated mapping, or any change to an enum type that is persisted"
+    agents: [Tomasz Zieliński]
+
+  - id: JVM-002
+    rule: "Default every association to LAZY and never put EAGER on a collection. Every read path MUST state its fetch plan (JOIN FETCH, DTO projection, or EntityGraph) — otherwise it ships an N+1."
+    whenToUse: "any entity relationship mapping or any new repository read path"
+    agents: [Tomasz Zieliński, Marta Krüger]
+
+  - id: JVM-003
+    rule: "Hibernate ddl-auto MUST be none or validate in production profiles. Schema is owned by Flyway/Liquibase migrations; destructive changes (drop, type narrowing) ship as a separate, reversible step AFTER the code stops using the column."
+    whenToUse: "any change to application.yml/properties datasource config or any schema migration"
+    agents: [Tomasz Zieliński, Beatriz Fontoura]
+
+  - id: JVM-004
+    rule: "@Transactional lives on service methods — never on controllers or repositories. Read paths use readOnly = true. No remote I/O (HTTP, queue publish, email) inside a transaction: a slow remote call holds a DB connection and cascades into pool exhaustion."
+    whenToUse: "any change to transaction boundaries or any service method that mixes DB writes with outbound calls"
+    agents: [Tomasz Zieliński, Marta Krüger]
+
+  - id: JVM-005
+    rule: "Money is BigDecimal (or integer minor units) end to end — float/double on a monetary amount is FORBIDDEN in entities, DTOs, and calculations. Binary floats cannot represent 0.10 and rounding drift compounds."
+    whenToUse: "any field, column, or calculation involving money, price, or quantity with a monetary meaning"
+    agents: [Tomasz Zieliński, Priya Raghunathan]
+
+  # === API / SERVICE LAYER ===
+  - id: JVM-006
+    rule: "Never return a JPA entity from a controller. The wire format is a DTO record mapped at the edge — exposing entities couples the public contract to the schema and triggers lazy-loading serialization surprises."
+    whenToUse: "any new endpoint or any change to a controller return type"
+    agents: [Priya Raghunathan, Tomasz Zieliński]
+
+  - id: JVM-007
+    rule: "Never parse X-Forwarded-For yourself — it is attacker-controlled. Key rate limiters and audit logs on request.getRemoteAddr() with ForwardedHeaderFilter + trusted-proxy config; without that config, getRemoteAddr() is the ONLY trustworthy value."
+    whenToUse: "any filter, rate limiter, or audit path that identifies clients by IP"
+    agents: [Priya Raghunathan]
+
+  - id: JVM-008
+    rule: "Field @Autowired is forbidden — constructor injection only, with final fields. Field injection hides dependencies and makes the class untestable without a container."
+    whenToUse: "any new bean or any review touching dependency injection"
+    agents: [Priya Raghunathan, Beatriz Fontoura]
+
+  - id: JVM-009
+    rule: "Every outbound call (HTTP client, gRPC, queue) MUST declare an explicit timeout and a bounded retry budget with backoff. A missing timeout turns a slow dependency into your outage. Restore the interrupt flag when catching InterruptedException in backoff sleeps."
+    whenToUse: "any code that calls another service, and any retry/resilience wrapper"
+    agents: [Priya Raghunathan, Marta Krüger]
+
+  - id: JVM-010
+    rule: "Exceptions are handled centrally in one @RestControllerAdvice (or ExceptionMapper in Quarkus) — never per-endpoint try/catch that swallows and returns 200. Stack traces are logged, never leaked to the client."
+    whenToUse: "any error-handling change or any new exception type"
+    agents: [Priya Raghunathan]
+
+  - id: JVM-011
+    rule: "In-memory caches MUST be bounded and evicting (e.g. Caffeine with maximumSize/expireAfterAccess). A bare ConcurrentHashMap keyed per-client/per-request grows without bound — that is a slow-motion OOM, not a cache."
+    whenToUse: "any @Cacheable configuration or any hand-rolled map used as a cache"
+    agents: [Marta Krüger, Priya Raghunathan]
+
+  # === TESTING ===
+  - id: JVM-012
+    rule: "Use the narrowest test that proves the behavior: plain JUnit 5 + Mockito for logic, @WebMvcTest for controllers, @DataJpaTest for repositories. @SpringBootTest boots the full context and is reserved for genuine integration tests — an all-@SpringBootTest suite is a build-time bug."
+    whenToUse: "any new test class or any test-suite runtime complaint"
+    agents: [Kofi Mensah-Addo]
+
+  - id: JVM-013
+    rule: "Data-layer tests run against the production database engine via Testcontainers — never H2-as-stand-in when production is Postgres/MySQL. H2 accepts SQL your real engine rejects and hides dialect, constraint, and locking differences."
+    whenToUse: "any @DataJpaTest configuration or any repository/migration test"
+    agents: [Kofi Mensah-Addo, Tomasz Zieliński]
+
+  - id: JVM-014
+    rule: "Thread.sleep for synchronization in a test is forbidden — wait on the condition with Awaitility, a CountDownLatch, or a CompletableFuture. Sleeps are the number-one JVM flake source and inflate suite runtime."
+    whenToUse: "any test touching async code, @Async methods, schedulers, or message listeners"
+    agents: [Kofi Mensah-Addo]
+
+  - id: JVM-015
+    rule: "Tests never assert on now(): inject java.time.Clock (Clock.fixed in tests) instead of calling Instant.now()/LocalDateTime.now() inline. Wall-clock reads make tests timezone- and midnight-sensitive."
+    whenToUse: "any code or test involving timestamps, expiry, or scheduling logic"
+    agents: [Kofi Mensah-Addo, Tomasz Zieliński]
+
+  - id: JVM-016
+    rule: "A flaky test is quarantined ONLY with a linked root-cause ticket and an owner — never deleted, never blanket-retried. Raising CI retry counts to mask flakes is a test-gate weakening that requires the Test & Release Engineer's sign-off."
+    whenToUse: "any intermittent CI failure or any change to CI retry/quarantine configuration"
+    agents: [Kofi Mensah-Addo, Beatriz Fontoura]
+
+  # === RUNTIME / OPERATIONS ===
+  - id: JVM-017
+    rule: "Size the HikariCP pool from measured concurrency, not folklore. An oversized pool starves the database and hides slow queries behind queueing; pair every pool change with before/after connection-wait metrics."
+    whenToUse: "any datasource pool configuration change or any connection-timeout incident"
+    agents: [Marta Krüger, Tomasz Zieliński]
+
+  - id: JVM-018
+    rule: "Quarkus CDI: use @ApplicationScoped, not @Singleton, wherever proxying/interception may be needed; never block inside a Uni/Multi pipeline; never subscribe twice to a shared Uni (memoize it). Blocking on the event loop stalls every request on that thread."
+    whenToUse: "any Quarkus bean scope choice or any reactive (Uni/Multi) pipeline"
+    agents: [Priya Raghunathan, Tomasz Zieliński]

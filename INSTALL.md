@@ -528,7 +528,7 @@ Claude should:
 1. Invoke the `ceo-orchestration` skill from `.claude/skills/core/ceo-orchestration/SKILL.md`
 2. Read `.claude/team.md` and `.claude/frontend-team.md`
 3. Confirm the team roster is loaded (archetype or installed domain personas)
-4. Show the 160-skill inventory (42 core + 8 frontend + 110 domain across 33 profiles)
+4. Show the 161-skill inventory (42 core + 8 frontend + 111 domain across 33 profiles)
 5. Be ready to spawn named agents on request
 
 Then test the hook is wired up. Ask Claude:

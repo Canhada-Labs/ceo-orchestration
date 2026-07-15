@@ -254,9 +254,10 @@ _Total in Domain: identity-systems: 1 skill(s)._
 ### Domain: jvm
 
 - `java-coding-standards` — > Coding standards for modern Java (17+) services on the two dominant JVM backend stacks — Spring Boot and Quarkus.
+- `jvm-testing` — > Testing workflow for JVM services (Java 17+) on Spring Boot and Quarkus — JUnit 5, Mockito, and AssertJ fundamentals, the test pyramid from plain units through Spring Boot test slices (@WebMvcTest, @DataJpaTest) to full integration tests with Testcontainers against the production database engine, Quarkus @QuarkusTest with Dev Services, test-data builders, flake elimination (Awaitility over sleeps, injected Clock, isolated resources), and JaCoCo/CI coverage gates with a unit/integration split.
 - `springboot-patterns` — > Spring Boot architecture and API patterns for production-grade services — layered controller/service/repository design, REST endpoint shape, Spring Data access, DTO validation, centralised exception handling, caching, async processing, scheduled jobs, request filters, pagination, resilient external calls, rate limiting, and observability.
 
-_Total in Domain: jvm: 2 skill(s)._
+_Total in Domain: jvm: 3 skill(s)._
 
 ### Domain: legal
 
@@ -377,7 +378,7 @@ _Total in Domain: voice-ai: 1 skill(s)._
 
 <!-- END AUTO-GENERATED SKILL INVENTORY -->
 
-**Total skills installed in this repo:** 160 (42 core + 8 frontend + 110 domain across 33 profiles). PLAN-074 v1.15.0 ship: +90 vs the v1.11.x baseline (+12 core, +95 domain across 22 NEW domains, plus 4 NEW agents — see ROUTING TABLE in `.claude/team.md` for `Principal Incident Commander`, `Principal Identity & Trust Architect`, `Principal Threat Detection Engineer`, `LLM FinOps Architect`). As the CEO, I am aware of all of them at all times and consult this inventory before every spawn. I do not need to `ls` or grep — this list is my working memory of the skill library.
+**Total skills installed in this repo:** 161 (42 core + 8 frontend + 111 domain across 33 profiles). PLAN-074 v1.15.0 ship: +90 vs the v1.11.x baseline (+12 core, +95 domain across 22 NEW domains, plus 4 NEW agents — see ROUTING TABLE in `.claude/team.md` for `Principal Incident Commander`, `Principal Identity & Trust Architect`, `Principal Threat Detection Engineer`, `LLM FinOps Architect`). As the CEO, I am aware of all of them at all times and consult this inventory before every spawn. I do not need to `ls` or grep — this list is my working memory of the skill library.
 
 ## How I operate
 

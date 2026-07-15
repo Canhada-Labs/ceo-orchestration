@@ -123,6 +123,6 @@ Derivation rule: a registered hook guards a surface iff its source file under `.
 ## 5. Catalog totals
 
 - Commands: 26
-- Skills (SKILL.md-bearing dirs): 160 — core 42, frontend 8, domain 110 (across 32 domains)
+- Skills (SKILL.md-bearing dirs): 161 — core 42, frontend 8, domain 111 (across 32 domains)
 - Skills with >=1 `activation_triggers` entry: 62
 - Hook registrations: 46 across 13 events (45 unique hook labels)

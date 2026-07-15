@@ -71,7 +71,7 @@ a dev to read the rest.
 
 ### What you get technically
 
-1. **Skills as mechanical checklists.** 160 skills in
+1. **Skills as mechanical checklists.** 161 skills in
    `.claude/skills/core`, `.claude/skills/frontend`, and
    `.claude/skills/domains/<domain>`. Each skill is a `SKILL.md` with
    verifiable rules ("use decimal, not float", "validate CSRF",
