@@ -162,7 +162,7 @@ Pra esses, usa Claude Code direto. Overhead de spawn > benefício.
   parity real fica pra v2+.
 - **Auditado.** Cada spawn, cada decision, cada veto vira evento em
   JSONL.
-- **Governed por ADR.** 171 ADRs documentam toda decisão arquitetural.
+- **Governed por ADR.** 178 ADRs documentam toda decisão arquitetural.
 
 ### NÃO é:
 - **Um produto.** Não tem UI, não tem SaaS, não tem login.
@@ -1217,7 +1217,7 @@ mv .claude .claude.disabled
 - `.claude/frontend-team.md` — roster frontend
 - `.claude/pitfalls-catalog.yaml` — pitfalls universais
 - `.claude/task-chains.yaml` — 6 workflows universais
-- `.claude/adr/` — 171 Architecture Decision Records
+- `.claude/adr/` — 178 Architecture Decision Records
 - `.claude/plans/` — planos ativos + arquivo
 - `.claude/skills/core/` — 42 skills universais
 - `.claude/skills/frontend/` — 8 skills frontend

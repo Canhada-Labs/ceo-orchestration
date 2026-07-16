@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > commands, schema/contract changes, and behavior an adopter would notice after
 > installing or upgrading the framework. Internal refactors, test-only churn, and
 > release-engineering bookkeeping are omitted. Counts cited below (as of
-> v1.1.0: 166 skills, 26 slash commands, 177 ADRs, 68 `_lib` modules) are
+> v1.1.0: 166 skills, 26 slash commands, 178 ADRs, 68 `_lib` modules) are
 > reproducible from the repository via
 > `bash .claude/scripts/local/verify-counts.sh`.
 
@@ -99,7 +99,7 @@ always: governance and auditability — no speed claim.
   now surfaced, not mistaken for health) and the harness-config gate.
 - README / plugin description / manifests: counts reconciled to disk
   truth (166 skills, 55 hook scripts, 68 `_lib` modules, 26 commands,
-  177 ADRs).
+  178 ADRs).
 
 ## [1.0.1] - 2026-07-02
 
