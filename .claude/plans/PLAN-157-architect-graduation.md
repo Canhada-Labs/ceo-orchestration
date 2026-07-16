@@ -1,7 +1,9 @@
 ---
 id: PLAN-157
 title: Architect Graduation — Drain the 8 Imported Squads (cap 32→24)
-status: executing
+status: done
+completed_at: 2026-07-16
+related_commits: [705562f, c3bfa2e, 60ceb63, f30d391, 51dd132, 8d106c1, ae4488b, 5f116f2, c7db400]
 created: 2026-07-13
 reviewed_at: 2026-07-13
 reviewed_by: "Owner (chat ratification, S270)"
@@ -188,11 +190,16 @@ Check: the full per-wave Check set (§reconcile checklist above)
   skills incl. authored `golang-testing` + `golang-services`, 16
   pitfalls, 12 task-chains, 1 example) → `current: 25`; `cap := 25`.
   12/12 gates, 10,865 tests, scope ∅, clean-clone 15/15.
-- [ ] data-ml ONLY after OQ5 (prisma home) is resolved; if go: bundle →
-  `current: 24`; `cap := current`. Run with `--apply-sp047` (moves
-  prisma-patterns → saas-platforms first); bundle ships +2 ML skills
-  (ADR-009 needs ≥3 with prisma out — Owner acks by signing).
-- [ ] Closeout: policy `current: 24` + `cap: 24`, full reconcile, plan
+- [x] data-ml graduated 2026-07-16, commit `c7db400` (Owner-signed;
+  OQ5 resolved via SP-047 applied in-ceremony: prisma-patterns →
+  saas-platforms, Owner ack = the signature). Bundle: 6 personas, 3 ML
+  skills (pytorch + authored ml-evaluation + ml-serving), 17 pitfalls,
+  13 task-chains, 1 example. `current: 24`; `cap := 24` — **plan goal
+  (roster 24/24) reached**. 12/12 gates, 10,874 tests, counts 164→166,
+  scope ∅, clean-clone 15/15. Validate on the push: in flight.
+- [x] Closeout (2026-07-16): policy `current: 24` + `cap: 24` landed in
+  `c7db400`; full reconcile green (verify-counts, claims, map,
+  inventory); Validate green on the push (run 29510440513); plan
   `executing → done` with `completed_at` + `related_commits`.
   Check: python3 -m pytest .claude/scripts/tests/test_squad_grandfather_cap.py -q && python3 .claude/scripts/check-claude-md-claims.py
 
@@ -243,11 +250,15 @@ test_squad_grandfather_cap.py (unguarded).
 
 ## Success criteria
 
-- [ ] Policy shows `current: 24` AND `cap: 24`; `SQUAD_GRANDFATHER`
-  set-equal to policy members (new test green).
-- [ ] Graduated squads carry complete ADR-009 bundles; bundle
-  validation ERROR-free (not WARNING-suppressed).
-- [ ] No orphan skills: all 13 imported skills graduated, folded (SP
-  landed), or deleted with pointer.
-- [ ] Every wave commit green on the FULL Validate workflow (not just
-  local fast checks).
+- [x] Policy shows `current: 24` AND `cap: 24`; `SQUAD_GRANDFATHER`
+  set-equal to policy members (test green in-ceremony + clean-clone
+  15/15 post-land).
+- [x] Graduated squads carry complete ADR-009 bundles; bundle
+  validation ERROR-free (jvm/cpp/golang/data-ml all at ERROR level,
+  validator OK in each ceremony).
+- [x] No orphan skills: all 13 imported skills graduated, folded (SPs
+  landed — last: SP-047 prisma-patterns → saas-platforms in `c7db400`),
+  or deleted with pointer (W1 sunset).
+- [x] Every wave commit green on the FULL Validate workflow: c3bfa2e /
+  51dd132 / 8d106c1 / ae4488b (S272-S273) + c7db400 (run 29510440513,
+  2026-07-16).
