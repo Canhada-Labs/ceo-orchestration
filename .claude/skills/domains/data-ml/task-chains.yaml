@@ -1,0 +1,122 @@
+# Task chains — Data-ML Squad
+# Domain-specific workflows that extend the universal .claude/task-chains.yaml.
+
+task_chains:
+  - id: data-ml-promote-model-to-production
+    title: "Promote a trained model to production with evaluation and rollback gates"
+    whenToUse: |
+      Any model (new or retrained) that will serve live traffic,
+      regardless of size. Promotion MUST have a seeded evaluation
+      report, a leakage review, export-safety and parity checks, a
+      staged rollout with a pinned rollback, and live monitors before
+      full traffic.
+    steps:
+      - id: 1
+        owner: "Rafael Siqueira (Training Systems Engineer)"
+        action: |
+          Produce the candidate with a reproducible run per
+          `pytorch-patterns`: seeded RNGs, device-agnostic code,
+          resumable checkpoint (model + optimizer + scheduler + RNG
+          state), and the (code SHA, data snapshot, seed) triple
+          recorded in the run manifest.
+        verify: "Run manifest attached to PR; re-run from the triple reproduces the checkpoint metrics"
+      - id: 2
+        owner: "Ingrid Solheim (Evaluation & Data Integrity Lead)"
+        action: |
+          Run the evaluation gate per `ml-evaluation-patterns`: verify
+          the split strategy matches the data (temporal/grouped where
+          applicable), walk the leakage checklist (preprocessing fit on
+          train only, test set untouched by any decision), confirm the
+          metric was fixed before the sweep, and compare against the
+          trivial baselines and the current production model over >=3
+          seeds.
+        verify: "Seeded evaluation report with baseline table + leakage checklist signed off (VETO gate)"
+      - id: 3
+        owner: "Kwame Mensah (Inference Platform Engineer)"
+        action: |
+          Export and verify serving safety per `ml-serving-patterns`:
+          state_dict/safetensors export, weights_only-safe load path,
+          preprocessing imported from the training transform module (or
+          golden-batch parity test), GPU memory measured at max batch
+          size and max input length, previous model version pinned warm
+          in the registry as the rollback target.
+        verify: "Export + parity + memory report attached; rollback version pinned and load-tested (VETO gate)"
+      - id: 4
+        owner: "Mei-Lin Chou (ML Reliability & Observability Engineer)"
+        action: |
+          Wire monitors before traffic: input-distribution drift,
+          prediction-distribution drift, delayed-label quality metrics,
+          NaN/data-quality alerts upstream, and segment-level
+          dashboards. Define the alert thresholds and the retraining
+          trigger.
+        verify: "Monitors firing on synthetic drift in staging; dashboard reviewed"
+      - id: 5
+        owner: "Priya Raghunathan (Head of ML Engineering)"
+        action: |
+          Go/no-go across the four prior gates. Approve the staged
+          rollout plan: shadow traffic first, then canary percentage,
+          then full, with explicit promotion criteria and abort
+          criteria at each stage.
+        verify: "Rollout ticket created with all four sign-offs + staged plan"
+      - id: 6
+        owner: "Kwame Mensah + Mei-Lin Chou"
+        action: |
+          Execute the staged rollout: shadow window (predictions logged,
+          not served), canary at limited traffic, full traffic only
+          after canary metrics match the offline evaluation within the
+          documented tolerance. Any abort criterion fires the pinned
+          rollback.
+        verify: "30-day post-deployment review: canary-vs-offline delta within tolerance, monitors green"
+
+  - id: data-ml-drift-incident-triage
+    title: "Triage a model drift or quality-regression alert"
+    whenToUse: |
+      Any monitoring alert on a production model: input-distribution
+      drift, prediction-distribution shift, delayed-label metric
+      regression, or NaN/data-quality spike. First question is always
+      "data bug or real drift?" — rollback and retraining decisions
+      differ completely between the two.
+    steps:
+      - id: 1
+        owner: "Mei-Lin Chou (ML Reliability & Observability Engineer)"
+        action: |
+          Classify the alert: pull the drifting feature/segment,
+          compare against the upstream data-quality monitors, and
+          decide data bug (pipeline broke) vs. genuine drift (world
+          changed) vs. model regression (recent rollout). Capture the
+          evidence window.
+        verify: "Triage note with classification + evidence window committed to the incident"
+      - id: 2
+        owner: "Kwame Mensah (Inference Platform Engineer)"
+        action: |
+          If a recent rollout is implicated or quality impact crosses
+          the abort threshold, fire the pinned rollback and confirm
+          the previous version is serving. If a data bug, coordinate
+          the upstream fix; the model stays, the alert stays open.
+        verify: "Rollback (if fired) confirmed serving + audit trail; decision logged with rationale"
+      - id: 3
+        owner: "Ingrid Solheim (Evaluation & Data Integrity Lead)"
+        action: |
+          Re-validate offline per `ml-evaluation-patterns`: score the
+          current and previous model on a fresh labeled window, verify
+          the regression is real under the fixed metric, and check
+          whether the drifted segment was represented in the original
+          evaluation split.
+        verify: "Offline re-validation report; split-coverage gap documented if found"
+      - id: 4
+        owner: "Rafael Siqueira (Training Systems Engineer)"
+        action: |
+          If retraining is warranted, run it per `pytorch-patterns` on
+          a leakage-checked refreshed dataset (Ingrid signs the split),
+          with the feedback-loop audit if training data includes
+          model-influenced samples. The retrained candidate re-enters
+          `data-ml-promote-model-to-production` at step 1.
+        verify: "Retrain manifest + Ingrid's split sign-off; promotion chain opened"
+      - id: 5
+        owner: "Priya Raghunathan (Head of ML Engineering)"
+        action: |
+          Post-mortem: timeline, classification (data bug / drift /
+          regression), detection latency, whether monitors caught it
+          before users did, action items (new monitors, split coverage,
+          threshold changes). Distribute to the squad.
+        verify: "Post-mortem document committed to incidents/ + reviewed"

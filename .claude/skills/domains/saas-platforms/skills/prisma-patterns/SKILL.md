@@ -29,7 +29,7 @@ metadata:
     - "**/prisma/**"
     - "**/prisma.config.ts"
   risk_class: low
-  domain: data-ml
+  domain: saas-platforms
 source: affaan-m/ecc@81af4076 skills/prisma-patterns/
 license: MIT
 ---

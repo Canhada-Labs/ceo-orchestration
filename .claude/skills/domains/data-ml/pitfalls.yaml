@@ -1,0 +1,93 @@
+# Pitfalls Catalog — Data-ML Squad
+# Loaded alongside the universal catalog when the data-ml profile is
+# installed. Format mirrors .claude/pitfalls-catalog.yaml.
+
+pitfalls:
+  # === REPRODUCIBILITY ===
+  - id: ML-001
+    rule: "Every training run MUST seed all RNGs it touches (torch CPU+CUDA, NumPy, random) and record the (code SHA, data snapshot, seed) triple. A result that cannot be re-derived from that triple is an anecdote, not a result."
+    whenToUse: "any training script, experiment, or benchmark whose numbers will be cited"
+    agents: [Rafael Siqueira, Ingrid Solheim]
+
+  - id: ML-002
+    rule: "Checkpoints intended for resumption MUST carry model state_dict + optimizer + LR scheduler + epoch + RNG state. Weights-only files cannot resume a run; label them as export artifacts, not checkpoints."
+    whenToUse: "writing or reviewing checkpoint save/load code"
+    agents: [Rafael Siqueira]
+
+  - id: ML-003
+    rule: "NEVER hardcode .cuda(). Resolve a torch.device once and use .to(device) everywhere, so CPU-only machines fall back instead of crashing. Device choice is configuration, not code."
+    whenToUse: "any model, training loop, or inference code that places tensors"
+    agents: [Rafael Siqueira, Kwame Mensah]
+
+  # === EVALUATION / LEAKAGE ===
+  - id: ML-004
+    rule: "Fit preprocessing (scalers, vocabularies, target encoders, imputers) on the TRAINING split only, then apply to val/test. Fitting on the full dataset before splitting is preprocessing leakage and invalidates the evaluation."
+    whenToUse: "any pipeline that transforms features before a split, or any sklearn/torch preprocessing review"
+    agents: [Ingrid Solheim, Rafael Siqueira]
+
+  - id: ML-005
+    rule: "Temporal or grouped data gets temporal/grouped splits (TimeSeriesSplit, GroupKFold). A random shuffle on time-ordered or entity-grouped data leaks the future (or the entity) into training."
+    whenToUse: "choosing or reviewing a split strategy for any dataset with a time axis or repeated entities"
+    agents: [Ingrid Solheim]
+
+  - id: ML-006
+    rule: "The test set is consulted ONCE, at the end. Early stopping, model selection, and hyperparameter search read the validation set only. A test set that steered any decision is a second validation set."
+    whenToUse: "any experiment loop, sweep, or promotion decision"
+    agents: [Ingrid Solheim, Priya Raghunathan]
+
+  - id: ML-007
+    rule: "Ship the trivial baselines (majority class / mean predictor / current production model) in every evaluation report. A model that is not compared against the trivial baseline has not been evaluated."
+    whenToUse: "writing or reviewing any model-comparison or promotion report"
+    agents: [Ingrid Solheim, Priya Raghunathan]
+
+  - id: ML-008
+    rule: "Metric must match task and class balance, chosen BEFORE the sweep. Accuracy on imbalanced classes is forbidden without PR-AUC/F1 alongside; switching metrics mid-experiment requires re-running all baselines."
+    whenToUse: "defining evaluation criteria for any classifier or ranking model"
+    agents: [Ingrid Solheim]
+
+  - id: ML-009
+    rule: "Model deltas need multi-seed evidence: report mean and spread over >=3 seeds before claiming an improvement. A single-seed +0.3% is noise until proven otherwise."
+    whenToUse: "any claim that model B beats model A"
+    agents: [Ingrid Solheim, Rafael Siqueira]
+
+  # === SERVING / SAFETY ===
+  - id: ML-010
+    rule: "torch.load on any checkpoint you did not produce yourself MUST pass weights_only=True (or use safetensors). Legacy torch.load unpickles arbitrary objects — a malicious checkpoint is remote code execution."
+    whenToUse: "loading any checkpoint, especially third-party or bucket-sourced files"
+    agents: [Kwame Mensah, Rafael Siqueira]
+
+  - id: ML-011
+    rule: "Serving preprocessing MUST import the same transform code used at training. Reimplementing feature transforms inside the server is training-serving skew; if unavoidable, a parity test comparing outputs on a golden batch is mandatory."
+    whenToUse: "building or reviewing any inference service or feature-transform change"
+    agents: [Kwame Mensah, Ingrid Solheim]
+
+  - id: ML-012
+    rule: "Inference paths set model.eval() AND run under torch.no_grad() (or inference_mode). Missing eval() leaves dropout firing and BatchNorm drifting in production — silently wrong predictions, no exception."
+    whenToUse: "any inference handler, batch scoring job, or model server code"
+    agents: [Kwame Mensah, Rafael Siqueira]
+
+  - id: ML-013
+    rule: "Every rollout ships with a pinned, warm, previously validated rollback version. 'Redeploy the old container' is not a rollback plan unless the old model version is pinned in the registry and load-tested."
+    whenToUse: "any model deployment, rollout, or registry change"
+    agents: [Kwame Mensah, Priya Raghunathan]
+
+  - id: ML-014
+    rule: "Measure GPU memory at maximum batch size and maximum input length BEFORE rollout. An OOM that only appears at p99 traffic is a launch blocker, not a follow-up ticket."
+    whenToUse: "sizing or reviewing any GPU-backed serving deployment"
+    agents: [Kwame Mensah, Rafael Siqueira]
+
+  # === MONITORING / OPERATIONS ===
+  - id: ML-015
+    rule: "Drift monitors (input distribution, prediction distribution, delayed-label quality) are part of the deployment definition, not a post-launch task. A model without monitors does not go to full traffic."
+    whenToUse: "any production model launch or monitoring-config change"
+    agents: [Mei-Lin Chou, Kwame Mensah]
+
+  - id: ML-016
+    rule: "Dashboards MUST break metrics down by segment, not aggregate only. Aggregate metrics hide segment collapse — a model can hold its overall AUC while failing an entire cohort."
+    whenToUse: "building or reviewing model-quality dashboards and alerts"
+    agents: [Mei-Lin Chou, Ingrid Solheim]
+
+  - id: ML-017
+    rule: "Retraining on data influenced by the model's own predictions (feedback loops) requires an explicit audit of the loop before the retrain is scheduled. Unaudited feedback loops amplify yesterday's mistakes."
+    whenToUse: "designing retraining triggers or automated retraining pipelines"
+    agents: [Mei-Lin Chou, Ingrid Solheim]

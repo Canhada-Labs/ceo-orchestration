@@ -148,10 +148,11 @@ _Total in Domain: cpp: 3 skill(s)._
 
 ### Domain: data-ml
 
-- `prisma-patterns` — > Production patterns and footgun avoidance for the Prisma ORM in TypeScript backends: schema and index design, ID strategy, include-vs-select and DTO mapping, transaction form selection, the PrismaClient singleton, cursor pagination, soft delete, typed error translation, and serverless connection pooling.
+- `ml-evaluation-patterns` — > Evaluation and data-split hygiene for ML systems: train/validation/test discipline, temporal and grouped splits, the leakage taxonomy (target, feature, preprocessing, and split leakage) with concrete checks for each, metric selection matched to task and class balance, trivial baselines before models, seeded reproducible evaluation harnesses, and statistical treatment of model deltas (multi-seed runs, mean and spread, significance before celebration).
+- `ml-serving-patterns` — > From checkpoint to production inference: safe model export and loading (state_dict with weights_only, safetensors for distribution, TorchScript/ONNX trade-offs), eval-mode and no-grad inference discipline, training-serving preprocessing parity via a shared transform module plus golden-batch tests, inference-server shape (health/readiness, versioned model registry, warmup), dynamic batching under an explicit latency budget, GPU memory measured at peak load before rollout, staged rollout (shadow, canary, full) with a pinned warm rollback, and drift plus quality monitoring wired as part of the deployment.
 - `pytorch-patterns` — > Idiomatic PyTorch for robust, reproducible, memory-conscious training pipelines: device-agnostic placement, full seed control, explicit tensor shape tracking, clean nn.Module construction, weight initialisation, correct train/eval mode discipline, the standard training and validation loops, efficient Dataset/DataLoader configuration, variable-length collation, resumable checkpointing, and the performance levers (mixed precision, gradient checkpointing, torch.compile).
 
-_Total in Domain: data-ml: 2 skill(s)._
+_Total in Domain: data-ml: 3 skill(s)._
 
 ### Domain: devrel
 
@@ -335,9 +336,10 @@ _Total in Domain: retail: 1 skill(s)._
 
 - `cms-developer` — > CMS and DXP development across headless (Sanity, Contentful, Strapi, Payload) and traditional (WordPress, Drupal, Sitecore) platforms.
 - `filament-specialist` — | Filament v3 (Laravel TALL stack admin panel) optimisation for teams building or maintaining Laravel back-office applications.
+- `prisma-patterns` — > Production patterns and footgun avoidance for the Prisma ORM in TypeScript backends: schema and index design, ID strategy, include-vs-select and DTO mapping, transaction form selection, the PrismaClient singleton, cursor pagination, soft delete, typed error translation, and serverless connection pooling.
 - `salesforce-architect` — Salesforce platform architecture — Sales / Service / Marketing / Experience / Commerce Cloud selection, declarative-first / programmatic-when-justified discipline, governor limit budget management, data model design (standard object reuse, custom objects, Master-Detail vs Lookup vs Junction), Apex + LWC + Flow trade-offs, integration pattern selection (REST / Bulk / Streaming API / Platform Events / CDC), and authorisation-model design (profiles / permission sets / OWD sharing rules).
 
-_Total in Domain: saas-platforms: 3 skill(s)._
+_Total in Domain: saas-platforms: 4 skill(s)._
 
 ### Domain: sales
 
@@ -381,7 +383,7 @@ _Total in Domain: voice-ai: 1 skill(s)._
 
 <!-- END AUTO-GENERATED SKILL INVENTORY -->
 
-**Total skills installed in this repo:** 164 (42 core + 8 frontend + 114 domain across 33 profiles). PLAN-074 v1.15.0 ship: +90 vs the v1.11.x baseline (+12 core, +95 domain across 22 NEW domains, plus 4 NEW agents — see ROUTING TABLE in `.claude/team.md` for `Principal Incident Commander`, `Principal Identity & Trust Architect`, `Principal Threat Detection Engineer`, `LLM FinOps Architect`). As the CEO, I am aware of all of them at all times and consult this inventory before every spawn. I do not need to `ls` or grep — this list is my working memory of the skill library.
+**Total skills installed in this repo:** 166 (42 core + 8 frontend + 116 domain across 33 profiles). PLAN-074 v1.15.0 ship: +90 vs the v1.11.x baseline (+12 core, +95 domain across 22 NEW domains, plus 4 NEW agents — see ROUTING TABLE in `.claude/team.md` for `Principal Incident Commander`, `Principal Identity & Trust Architect`, `Principal Threat Detection Engineer`, `LLM FinOps Architect`). As the CEO, I am aware of all of them at all times and consult this inventory before every spawn. I do not need to `ls` or grep — this list is my working memory of the skill library.
 
 ## How I operate
 

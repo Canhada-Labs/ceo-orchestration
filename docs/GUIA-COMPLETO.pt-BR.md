@@ -70,7 +70,7 @@ ler o resto.
 
 ### O que você ganha tecnicamente
 
-1. **Skills como checklists mecânicos.** 164 skills em
+1. **Skills como checklists mecânicos.** 166 skills em
    `.claude/skills/core`, `.claude/skills/frontend`, e
    `.claude/skills/domains/<dominio>`. Cada skill é um `SKILL.md` com
    regras verificáveis ("use decimal, não float", "valide CSRF",

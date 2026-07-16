@@ -49,7 +49,7 @@ library — you install it *into* an existing repository with
 - **Plan → Debate → Execute gating** for risky (L3+) changes, with vetoes and a three-strike rule (see `PROTOCOL.md`).
 - **A tamper-evident audit log** — every agent spawn, edit, and ceremony is appended to an HMAC-chained log; `verify_chain()` (`.claude/hooks/_lib/audit_hmac.py`) **detects** any break in the chain.
 - **A cross-LLM pair-rail** — a second model (Codex) reviews canonical edits Claude proposes, so no single model is both author and sole reviewer.
-- **A skill library** — **164 skills** ready-made (42 core + 8 frontend + 114 domain).
+- **A skill library** — **166 skills** ready-made (42 core + 8 frontend + 116 domain).
 - **Governance hooks** — 55 Python hook scripts on disk (44 wired into `.claude/settings.json` (46 event registrations)), built on 68 stdlib-only `_lib/` modules.
 - **178 ADRs** (architecture decision records, `.claude/adr/`) and **26 slash commands** (`.claude/commands/`).
 

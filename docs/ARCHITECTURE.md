@@ -52,7 +52,7 @@ ceo-orchestration/
     ├── skills/
     │   ├── core/                   # 42 universal backend skills
     │   ├── frontend/               # 8 universal frontend skills
-    │   └── domains/                # 114 skills across 33 domain profiles
+    │   └── domains/                # 116 skills across 33 domain profiles
     ├── adr/                        # 171 architecture decision records
     └── plans/                      # plan schemas + per-plan working files
 ```
@@ -62,8 +62,8 @@ faith — run the commands:
 
 | Component          | Count                        | Verify command                                            |
 |--------------------|------------------------------|-----------------------------------------------------------|
-| Skills             | 164                          | `find .claude/skills -name SKILL.md \| wc -l`             |
-| └ core / frontend / domain | 42 / 8 / 114         | `find .claude/skills/core -name SKILL.md \| wc -l` (etc.) |
+| Skills             | 166                          | `find .claude/skills -name SKILL.md \| wc -l`             |
+| └ core / frontend / domain | 42 / 8 / 116         | `find .claude/skills/core -name SKILL.md \| wc -l` (etc.) |
 | Hook scripts       | 53 on disk                   | `ls .claude/hooks/*.py \| wc -l`                          |
 | Hook registrations | 44 wired into `settings.json`| (parse the `hooks` block of `.claude/settings.json`)      |
 | `_lib` modules     | 67 top-level (137 recursive) | `ls .claude/hooks/_lib/*.py \| grep -v __init__ \| wc -l` |
@@ -141,10 +141,10 @@ are organized in three tiers under `.claude/skills/`:
 ```
 core/        42 universal backend skills      (always available)
 frontend/     8 universal frontend skills     (always available)
-domains/    114 skills across 33 profiles     (opt-in per install)
+domains/    116 skills across 33 profiles     (opt-in per install)
 ```
 
-The 114 domain skills span 33 profiles — the largest being `marketing-global`,
+The 116 domain skills span 33 profiles — the largest being `marketing-global`,
 `fintech`, and `sales`; the smallest are single-skill seeds (e.g. `mobile`,
 `voice-ai`, `embedded`) scaffolded for expansion. The authoritative per-domain
 inventory with descriptions is auto-generated into
