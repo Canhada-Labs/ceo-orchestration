@@ -195,15 +195,30 @@ Check: council run report shows quorum 3-lane + one council_lane_invoked per lan
 
 ## How to continue
 
-Read this plan + parent PLAN-156. If `draft`: run Wave 0 debate. Waves
-1+2+3 are ALL canonical (council-audit.js included — it is on the guard
-list) → stage + one sentinel ceremony (the `land-plan156.sh` pattern).
-Wave 4 needs grok CLI local + codex budget; run with no concurrent
-codex processes.
+**STATE (S276, 2026-07-16):** status = `reviewed`. **Waves 1+2+3 LANDED**
+via the `land-followup.sh` ceremony — 2 GPG sentinels (FU-MAIN `927c5ca`,
+FU-KERNEL `7224e8f`); 72/72 F1-F7 regression tests green; F3 oracle guards
+sibling `.claude/workflows/*.js`. **Only Wave 4 remains, and it is
+Owner-gated on EGRESS**, not on effort: the 3-lane live-fire transmits the
+audited hook source to xAI + OpenAI (redacted). A general "finish
+everything" directive is NOT specific egress authorization (S270 required
+an explicit per-run OQ5 auth). To finish: (1) Owner explicitly authorizes
+the council egress for scope `.claude/hooks/`; (2) `cp
+templates/grok/sandbox.toml.example ~/.grok/sandbox.toml` (review first);
+(3) run `/council` with no concurrent codex; (4) verify 3-lane quorum +
+planted employer-class redaction + fail-loud crash check. Then plan →
+`done`. Until then this plan correctly rests at `reviewed` with the fixes
+shipped and locally verified.
 
 ## Success criteria
 
-- [ ] All 7 findings closed with regression tests; suites green.
+- [x] All 7 findings closed with regression tests; suites green. (S276:
+  72/72 F1-F7 regression tests + 20 redactor-invariant tests green;
+  landed `927c5ca` + `7224e8f`.)
 - [ ] Full-quorum council run recorded (3 lanes AVAILABLE, scoped,
-  redaction proven on planted fixture).
-- [ ] Validate workflow green on closeout commit.
+  redaction proven on planted fixture). **BLOCKED on Owner egress auth
+  (Wave 4).** Locally provable parts done (redactor is not a no-op;
+  fail-loud); the 3-lane egress itself needs Owner sign-off.
+- [ ] Validate workflow green on closeout commit. (Perf-gate load-flake
+  in the current runner regime may require a job re-run — see PLAN-159
+  post-land checkpoint #2; not a code defect.)
