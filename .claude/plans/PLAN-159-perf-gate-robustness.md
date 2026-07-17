@@ -165,6 +165,58 @@ Check: gh run list --workflow validate.yml — 3 consecutive green pushes incl. 
   related_commits); memory updated (gate now N=200 + capped fail-closed
   retry; root cause = percentile-index collapse; ADR-163 pointer).
 
+### Post-land data checkpoint #2 (2026-07-16, S276 — D1/D2/D3 revisited)
+Wider window now available (v1.1.0 GA + FOLLOWUP land). Reading of the
+`opus-4-7-profiler-smoke` job across all post-land Validate runs:
+- **~11 runs sampled** (`553d796`, `93371c6`, `0dc0461`, `0e4fb6b4`,
+  `01cf1eb3`, `c7db400`, `bb804e3`, `d5fe71d`, `d0edd88`, `0f226a4`, plus
+  the FOLLOWUP push). Of these, **10 passed on attempt 1** (no `::warning`,
+  retry never fired) and **1 failed BOTH attempts**: `d0edd88`
+  (2026-07-16T23:38Z, `check_output_secrets[observe=1]` p95=257 ms /
+  p99=500 ms vs 120/160 ceilings; rc1=1 rc2=1). The very next commit
+  `0f226a4` (+32 min) passed attempt-1 clean.
+- **Diagnosis:** `d0edd88` is a doc-only commit (GA verdict + 14k-line
+  transcript). The profiler measures hook latency against FIXED synthetic
+  input N=200 — it never scans the commit — so the breach is **not**
+  input-size-correlated; it is a **sustained** runner-load spike lasting
+  longer than both attempts (~2 min each). This is the first observed
+  case of the 2-attempt retry being **defeated** by sustained (not
+  bursty) contention.
+- **D3 (retire the retry) — NOT retired; re-confirmed as load-bearing.**
+  The retry saved 0 of 11 runs here, but `d0edd88` shows the failure mode
+  it targets is real AND that 2 attempts is a floor, not a ceiling.
+  Retiring it would have converted a known-flaky doc commit into a hard
+  red. Keep.
+- **ESCALATION (S276, second datapoint same night):** commit `3cf2d2d`
+  (S276 FOLLOWUP plan-doc-only, zero code) ALSO failed BOTH attempts
+  (attempt1 `check_output_secrets[observe=1]` p95=244.5; attempt2
+  `[observe=unset]` p95=364.2 / p99=502.1). Wildly inconsistent per-
+  attempt magnitudes (244/174 → 162/364) = load-flake signature, NOT a
+  consistent regression; confirmed non-code by two independent facts:
+  (a) `3cf2d2d` touches one `.md`; (b) the profiler invokes each hook
+  DIRECTLY via `subprocess.run([python3, hook_path])`
+  (`hook-profiler.py:178`), NOT through `_python-hook.sh`, so the F6
+  exit-2-map change is provably OFF the measured path.
+  **Two consecutive both-attempts failures on doc-only commits, ~2.5h
+  apart, mean the 2-attempt retry is being systematically defeated in the
+  current runner-load regime** — no longer "one datapoint." Recommendation
+  PROMOTED from deferred to **open a scoped PLAN-159 follow-up**: add a
+  short inter-attempt backoff (drain the load window) and/or a bounded 3rd
+  attempt; the gate script lives in `validate.yml` (CANONICAL → ceremony)
+  so this needs its own debate + sentinel, not an in-session patch.
+  Interim recovery for a red caused by this flake: re-run the
+  `opus-4-7-profiler-smoke` job (documented flake-recovery), never a code
+  revert.
+- **D1 (p99 advisory) / D2 (trimmed percentile) — still deferred, no new
+  signal.** p99 gated independently as designed (the `d0edd88` p99=500 ms
+  breach was a true co-breach with p95, not a p99-only artifact), so no
+  evidence yet that p99 should be demoted to advisory or that a trimmed
+  percentile would change any verdict. Re-check at the next sweep.
+- **Ledger correction:** the S275 memory note "gate novo verde em TODOS
+  os runs pós-land" is now **imprecise** — `d0edd88` was a post-land RED
+  (non-blocking; the GA publish used its own tag path). Recorded here so
+  the record is honest.
+
 ## Open questions
 
 - **OQ1 (lever mix) — RATIFIED (Owner, 2026-07-15, AskUserQuestion):**

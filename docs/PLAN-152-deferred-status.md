@@ -1,5 +1,17 @@
 # PLAN-152 §Deferred — consolidated disposition record
 
+> **Refresh 2026-07-16 (S276, post-v1.1.0 GA):** items **5** (`backlog-oidc`)
+> and **8** (`spec-npm-shim-oidc-wording`) are now **DONE** — both shipped in
+> the v1.1.0 GA train (`d6cad0b`/`09f0040`). The first OIDC/tokenless publish
+> succeeded, `NPM_TOKEN` was revoked and its secret deleted, so **no calendar
+> deadline remains anywhere in this ledger** (the ~2026-09-28 expiry is moot).
+> Still genuinely open: **1** (kernel-paths), **2** (NotebookEdit), **4**
+> (`_lib/tests` env-hygiene), **6** (`nested-subagent-redteam` — needs a SPEC
+> minor bump for a new corpus target enum), **7** (`canonical-models-sonnet5`
+> — Owner-only `--fetch` blob prereq), **9** (`plan128-wave1-tooling` —
+> private-archive prereq). Items 10/11 remain STAGED pending their SENT-B
+> ceremony.
+
 > **Date:** 2026-07-07 (post-v1.0.1 backlog pass, PLAN-153 cycle)
 > **Source of truth:** `.claude/plans/PLAN-152-v1-0-1-hardening-sweep.md` §Deferred
 > (lines 203–262 at the time of writing). This note records where each deferred
@@ -25,10 +37,10 @@ silently dropped.
 | 2 | `governance-07` — NotebookEdit coverage | **Deferred** (unchanged) | Folds into the governance-04 plan |
 | 3 | ~~`tests-07`~~ — serial markers | **Resolved in v1.0.1** (not deferred) | Done, commit `0396b71` (Wave B, debate C2) |
 | 4 | `burndown-lib-tests` — 128-site `_lib/tests` env-hygiene | **Deferred** (unchanged) | v1.0.2; ceremony-scoped (`.claude/hooks/_lib/**` canonical-guarded) |
-| 5 | `backlog-oidc` — npm Trusted Publishing | **In execution — PLAN-158 Wave 1** | **Owner web-console prereq**; NPM_TOKEN expires ~2026-09-28 |
+| 5 | `backlog-oidc` — npm Trusted Publishing | **DONE — v1.1.0 GA (2026-07-16)** | Shipped `d6cad0b`/`09f0040`; first OIDC/tokenless publish; `NPM_TOKEN` revoked + secret deleted (no calendar deadline remains) |
 | 6 | `nested-subagent-redteam` — red-team corpus cases | **Deferred** (unchanged) | v1.0.2 / follow-on scoped corpus effort |
 | 7 | `canonical-models-sonnet5-entry` — pricing entry | **Deferred** (unchanged) | **Owner prereq**: next Owner-run `build-canonical-models.py --fetch` refresh |
-| 8 | `spec-npm-shim-oidc-wording` — SPEC false-claim fix | **Addressed — STAGED** (this pass) | Owner GPG ceremony; sentinel Scope must carry `SPEC/v1/npm-shim.md` (Amends clause, PLAN-085 E.5) |
+| 8 | `spec-npm-shim-oidc-wording` — SPEC false-claim fix | **DONE — v1.1.0 (2026-07-16)** | Landed `09f0040` (SENT-RC-SPEC); `SPEC/v1/npm-shim.md` §Publishing now states OIDC Trusted Publishing |
 | 9 | `plan128-wave1-tooling` — measurement tooling gap | **Deferred** (unchanged) | v1.0.2; **Owner prereq**: private-archive access for the de-identified restore |
 | 10 | `release-gate-rc-version-mismatch` — RC tag reds its own run | **Addressed — STAGED** (PLAN-153 Wave B item B5) | Owner GPG ceremony (SENT-B series) |
 | 11 | `release-notes-hardcoded-first-release` — stale notes string | **Addressed — STAGED** (PLAN-153 Wave B item B5) | Owner GPG ceremony (SENT-B series) |
@@ -65,18 +77,19 @@ v1.0.1 itself.
   item; it travels WITH its `_DEFAULT_SCAN_ROOTS` tuple entry.
 - **Successor:** v1.0.2.
 
-### 5. `backlog-oidc` — npm Trusted Publishing migration
-- **Where:** PLAN-152:220-222 (debate C6).
-- **Status:** deferred, unchanged. **Owner-console prerequisite:** registering
-  the trusted publisher happens on the npmjs.com web console — not CI-verifiable,
-  Owner-only. Migration plan must keep a fallback window (NPM_TOKEN stays until
-  the first OIDC publish succeeds).
-- **Standing risk flag (live):** NPM_TOKEN (repo-scoped granular token, env
-  `production-npm`) **expires ~2026-09-28** — calendar-flagged at
-  `.github/workflows/GOVERNANCE-MAP.md:56` and `CHANGELOG.md` (v1.0.1 entry).
-  Any release after expiry fails at publish until the token is regenerated or
-  Trusted Publishing lands.
-- **Successor:** PLAN-158 Wave 1 (v1.1.0, in execution); item 8 below rides its sentinel.
+### 5. `backlog-oidc` — npm Trusted Publishing migration — **DONE (v1.1.0 GA, 2026-07-16)**
+- **Where:** PLAN-152:220-222 (debate C6) → executed as PLAN-158 Wave 1.
+- **Status:** **CLOSED.** The npmjs.com trusted-publisher was registered
+  (Owner web-console, 2FA) and the **first OIDC/tokenless publish succeeded**
+  for v1.1.0 with sigstore provenance (`d6cad0b` flip + doc cascade). The
+  fallback window closed as designed: once the OIDC publish landed, the
+  `NPM_TOKEN` granular token was **revoked** on npm and its `production-npm`
+  secret **deleted** from the environment.
+- **Standing risk flag — RESOLVED:** the ~2026-09-28 NPM_TOKEN expiry is now
+  moot (token no longer exists). No calendar deadline remains in this ledger.
+  The `GOVERNANCE-MAP.md` citation was reconciled in the W0 rider.
+- **Landed:** `d6cad0b` (SENT-OIDC), `09f0040` (SENT-RC-SPEC); GA closeout
+  `0f226a4` (rotation-log §Log written).
 
 ### 6. `nested-subagent-redteam` — corpus cases for nested subagents + background auto-push
 - **Where:** PLAN-152:223-229 (Wave F execution decision, via the item's own
@@ -93,13 +106,16 @@ v1.0.1 itself.
   in-repo meanwhile. **Prerequisite:** Owner-run refresh (not authorable by an
   agent by design). **Successor:** next Owner models.dev refresh.
 
-### 8. `spec-npm-shim-oidc-wording` — SPEC/v1 false "OIDC trusted publisher" claim
-- **Where:** `SPEC/v1/npm-shim.md:54` (live) still says CI publishes "via OIDC
-  trusted publisher" — same false-claim class as the `npm-publish.yml` header
-  fixed by PLAN-152 tarball-01. All non-SPEC surfaces were already corrected in
-  v1.0.1 (workflow header `npm-publish.yml:4-7`, `scripts/install-npm.sh:22-23`
-  and `:60`, `.github/workflows/GOVERNANCE-MAP.md:56`).
-- **Status:** **addressed in STAGED form (this pass).** A complete corrected
+### 8. `spec-npm-shim-oidc-wording` — SPEC/v1 false "OIDC trusted publisher" claim — **DONE (v1.1.0, 2026-07-16)**
+- **Where:** `SPEC/v1/npm-shim.md` §Publishing / §Cross-reference.
+- **Status — CLOSED:** landed in the v1.1.0 GA ceremony. As of `09f0040`
+  (SENT-RC-SPEC) the SPEC now states the SHIPPED reality — registry auth
+  migrated to **npm Trusted Publishing (OIDC)**, `NPM_TOKEN` revoked after the
+  first OIDC publish — which is no longer a false claim because OIDC actually
+  shipped (item 5). Spec version amended to 1.1.0 under the PLAN-085 E.5 Amends
+  clause; the sentinel Scope carried `SPEC/v1/npm-shim.md` as required.
+- **Historical (pre-GA) staging note follows for provenance:**
+- **Prior status:** **addressed in STAGED form (PLAN-153 pass).** A complete corrected
   copy is staged at
   `.claude/plans/PLAN-153/staged/wave-backlog/SPEC/v1/npm-shim.md`
   (base = LIVE at `314891a`, base sha256
