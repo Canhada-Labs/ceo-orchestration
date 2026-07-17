@@ -1,7 +1,9 @@
 ---
 id: PLAN-158
 title: Release v1.1.0 — ship PLAN-153..156 + OIDC before token expiry
-status: executing
+status: done
+completed_at: 2026-07-16
+related_commits: [132f26d, d6cad0b, 264a8c4, 3335172c, d5fe71d, d0edd88]
 created: 2026-07-13
 reviewed_at: 2026-07-13
 execution_started: 2026-07-13
@@ -104,10 +106,14 @@ Check: bash .claude/scripts/validate-governance.sh --fast
 
 ### Wave 1 — backlog-oidc: npm Trusted Publishing — flip+playbook LANDED S271, commit `d6cad0b`, Validate green (S272 rerun após perf-flake); pendem: Owner console (prereq GA) + revoke pós-GA
 Check: none (Owner console work + guarded workflow edit; mechanical proof lands at the Wave 4 GA publish — RC tags skip npm-publish entirely, so no earlier proof point exists)
-- [ ] **Owner (web console, prereq):** configure the GitHub Actions
-  trusted publisher for `ceo-orchestration` on npmjs.com
-  (repo `Canhada-Labs/ceo-orchestration`, workflow `npm-publish.yml`,
-  environment `production-npm`).
+- [x] **Owner (web console, prereq):** trusted publisher registered
+  2026-07-16 (repo `Canhada-Labs/ceo-orchestration`, workflow
+  `npm-publish.yml`, env `production-npm`; browser co-driven, npm 2FA
+  by Owner). NOTE: the first GA publish attempt ran BEFORE this
+  registration and died `E404` on the PUT (the playbook's
+  registration-mismatch class, OIDC exchange + provenance had already
+  succeeded); Recovery A applied — register + re-run same run — and
+  the re-run published clean.
 - [x] Flip `npm-publish.yml` publish step to OIDC — **guarded workflow →
   sentinel ceremony**, scope MUST also carry the kernel-guarded
   `SPEC/v1/npm-shim.md` doc cascade (PLAN-152 §Deferred assigned it to
@@ -126,8 +132,12 @@ Check: none (Owner console work + guarded workflow edit; mechanical proof lands 
   workflow_dispatch and tag runs pin the workflow to the tag's tree): a
   failed OIDC-only GA publish means delete/re-tag with the rollback
   diff applied. Document the exact command sequence in the wave.
-- [ ] After the GA publish proves OIDC end-to-end: **explicitly REVOKE**
-  the old granular token (not just stop using it) and record revocation.
+- [x] After the GA publish proved OIDC end-to-end (2026-07-16):
+  granular token `ceo-orchestration-ci` DELETED on npmjs.com (tokens
+  list now empty); `NPM_TOKEN` secret DELETED from the
+  `production-npm` environment (never existed at repo scope — the 404
+  on `gh secret delete` was scope, not absence); revocation recorded
+  in `docs/rotation-log.md` §Log.
 - [ ] (N/A — OQ1 ratificada OIDC-now) Fallback if Owner defers OIDC (OQ1): regenerate the granular
   token NOW, re-date the expiry flags (deferred-status tracker +
   npm-publish.yml header), fix the stale GOVERNANCE-MAP citation.
@@ -155,43 +165,42 @@ Check: python3 -m pytest .claude/hooks/tests/ -q -k adversary
 
 ### Wave 3 — RC ceremony — PREP DONE S272: pair-rail R1 GO-WITH-CONDITIONS → SPEC stale-xref staged (SENT-RC-SPEC) → R2 APPROVE = 16/16 GO; advisories 6/6 verdes; Owner roda `owner-rc-ceremony.sh` (envelope computado na hora, TTL 24h)
 Check: gh run list --workflow release.yml --limit 1 (release-gate green on the RC tag)
-- [ ] Codex pair-rail verdict for the RC: signed
-  **`.claude/governance/pair-rail-verdict-v1.1.0-rc.1.md`** — the gate
-  keys the filename on `GITHUB_REF_NAME`, so the RC tag needs an
-  RC-named verdict (debate consensus #1; precedent: v1.0.1-rc.1's gate
-  run failed and no RC verdict ever existed in history). ≤24h old,
-  bound to parent sha, codex-cli inside `codex-cli-pin.txt` (<0.145.0)
-  + binary sha256 (release.yml:641-695 hard-block).
+- [x] Codex pair-rail verdict for the RC: signed
+  **`.claude/governance/pair-rail-verdict-v1.1.0-rc.1.md`** landed
+  `3335172c` (S273) — gate keyed on `GITHUB_REF_NAME`, bound to parent
+  sha, pinned codex-cli.
 - [x] Advisory-workflow freshness gate (release.yml:457-557): all 6
   advisory workflows non-red AND fresh ≤14d; manual dispatch any stale
   one BEFORE cutting the tag (the v1.0.1 lesson — otel/adapter needed
   dispatch). — Verificado S272: 6/6 latest=success, todos ≤8d; o
   owner-rc-ceremony.sh re-verifica no preflight.
   Check: gh run list --limit 20 --json workflowName,conclusion,createdAt
-- [ ] **Owner:** cut signed `v1.1.0-rc.1` (VERSION already 1.1.0;
-  release.yml:42-53 RC flow). RC runs the full gate, publishes GitHub
-  prerelease, does NOT touch npm (npm-publish.yml:54).
-- [ ] RC-hold 24h (ADR-103; release.yml:231-291) — Codex re-pass window.
-  Waivable only via `rc_hold:` in governance-waivers.yaml. NOTE
-  (debate): the advisory-freshness gate evaluates AGAIN at GA — a
-  scheduled cron (e.g. Monday) can interpose a red between RC and GA;
-  if so, re-dispatch the affected advisory workflow before the GA tag.
-  Check: none (calendar wait)
+- [x] **Owner:** signed `v1.1.0-rc.1` cut S273 (2026-07-14); release-gate
+  green; GitHub prerelease published; npm untouched by design.
+- [x] RC-hold 24h (ADR-103) — satisfied with margin: GA preflight
+  measured the RC gate green 51–59h before the GA tag. The
+  advisory-freshness re-check at GA found 6/6 green (no interposed
+  cron red).
 
-### Wave 4 — GA + publish
-Check: npx ceo-orchestration@latest --help exits 0 (post-publish smoke)
-- [ ] Fresh pair-rail verdict for the GA tag: signed
-  `.claude/governance/pair-rail-verdict-v1.1.0.md` (verdicts are
-  per-tag, filename keyed on the tag name).
-- [ ] **Owner:** cut signed `v1.1.0` GA (signature verified against
-  `.claude/trust/owner.asc`, release.yml:588-610); release-gate suites +
-  smoke install + SBOM must pass (release.yml:312-433).
-- [ ] **Owner:** approve the `production-npm` environment gate
-  (npm-publish.yml:56); publish runs with provenance; verify
-  `already_published` guard honored on any re-run.
-- [ ] Closeout: plan → done with `completed_at` + `related_commits`;
-  memory + CLAUDE.md version references updated at session closeout.
-  Check: python3 .claude/scripts/check-claude-md-claims.py
+### Wave 4 — GA + publish — DONE 2026-07-16
+Check: npx ceo-orchestration@latest --help exits 0 (post-publish smoke) — **rc=0 ✓**
+- [x] Fresh pair-rail verdict for the GA tag:
+  `.claude/governance/pair-rail-verdict-v1.1.0.md` landed `d0edd88` —
+  the ceremony's self-contained codex review of rc.1..HEAD returned
+  NO-GO once (REAL find: ADR-count drift 171/177 vs 178 in 8 docs
+  unwatched by verify-counts — fixed in `d5fe71d`) then **GO** ("roster
+  24/24 reconciles, perf gate fail-closed, no release-blocking defect").
+- [x] **Owner:** signed `v1.1.0` GA cut 2026-07-16 (`d0edd88`; gpg
+  "Good signature"); release-gate + smoke install + SBOM passed —
+  GitHub Release live with `sbom.cyclonedx.json` + `install.sh.sha256`.
+- [x] **Owner:** `production-npm` gate approved (twice — attempt 1 died
+  E404 pre-registration; Recovery A: trusted publisher registered, same
+  run re-run, publish clean). **First OIDC/tokenless publish in the
+  repo's history, with sigstore provenance.** npm `latest` = 1.1.0;
+  `npx` smoke rc=0.
+- [x] Closeout (2026-07-16): plan → done with `completed_at` +
+  `related_commits`; rotation-log entry written; memory updated at
+  session closeout.
 
 ## Open questions
 
@@ -244,9 +253,15 @@ pattern). Release mechanics reference: release.yml:38-53 (RC flow),
 
 ## Success criteria
 
-- [ ] `v1.1.0` GA on GitHub Releases with SBOM + install.sh.sha256.
-- [ ] npm `ceo-orchestration@latest` = 1.1.0; `npx` smoke rc=0.
-- [ ] npm auth: OIDC trusted publisher live, OR token regenerated with
-  expiry re-dated and flagged.
-- [ ] No open `[NEEDS CLARIFICATION]` markers; all OQs ratified.
-- [ ] Validate + release-gate green on the GA tag.
+- [x] `v1.1.0` GA on GitHub Releases with SBOM + install.sh.sha256
+  (verified: release live, not draft, both assets attached).
+- [x] npm `ceo-orchestration@latest` = 1.1.0; `npx` smoke rc=0
+  (verified 2026-07-16).
+- [x] npm auth: OIDC trusted publisher LIVE (first tokenless publish
+  succeeded with provenance); old granular token REVOKED + env secret
+  deleted + rotation-log entry.
+- [x] No open `[NEEDS CLARIFICATION]` markers; all OQs ratified
+  (OQ1 OIDC-now / OQ2 rider-IN / OQ3 RC-hold-full — S270).
+- [x] Validate + release-gate green on the GA tag (release-gate proven
+  by the published release; Validate green through `d5fe71d`, the GA
+  verdict commit `d0edd88` is release artifacts + docs only).
