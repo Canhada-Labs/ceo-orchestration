@@ -468,15 +468,23 @@ class FindingCDeadnessTest(TestEnvContext):
         hooks.mkdir(parents=True, exist_ok=True)
         (hooks / "check_probe.py").write_text("# hook", encoding="utf-8")
 
-    def test_c_property_canonical_implies_decide_resolve_succeeds(self) -> None:
-        """PROPERTY (passes on HEAD): over a varied path set — relative,
-        absolute, dot-dot, symlink (inside + outside the repo),
-        over-long, unicode — ``_is_canonical(p) is True`` implies the
-        decide()-equivalent resolve (L1136-1139:
-        ``Path(p).resolve().relative_to(repo_root.resolve())``) also
-        succeeds. Proves the except is unreachable except via
-        same-process TOCTOU. Anti-vacuity: at least 3 paths must
-        actually classify canonical.
+    def test_c_property_canonical_implies_decide_never_fail_opens(self) -> None:
+        """PROPERTY (passes on HEAD AND after the Wave-2 fix): over a varied
+        path set — relative, absolute, dot-dot, symlink (inside + outside
+        the repo), over-long, unicode — ``_is_canonical(p) is True`` implies
+        ``decide(file_path=p)`` with NO sentinel present BLOCKS (never
+        fail-opens to allow).
+
+        This is the behavioral form of finding C's safety invariant: a
+        confirmed-canonical path must never be allowed through unsigned,
+        whether the repo-relative resolve succeeds (clean sentinel block) or
+        faults (finding-C fail-closed block). It replaces the earlier
+        resolve-introspection 'deadness' property, which encoded the HEAD
+        anchoring invariant that finding-D's fix DELIBERATELY breaks
+        (``_is_canonical`` now classifies repo_root-anchored relative paths
+        canonical, so the CWD-anchored decide() resolve no longer always
+        succeeds — finding C is exactly what keeps that new branch safe).
+        Anti-vacuity: at least 3 paths must actually classify canonical.
         """
         mod = _load_hook_module()
         self._layout()
@@ -531,22 +539,20 @@ class FindingCDeadnessTest(TestEnvContext):
 
         canonical_true = 0
         for p in varied:
-            canon = mod._is_canonical(p, repo_root)
-            if not canon:
+            if not mod._is_canonical(p, repo_root):
                 continue
             canonical_true += 1
-            try:
-                rel = str(
-                    Path(p).resolve().relative_to(repo_root.resolve())
-                ).replace(os.sep, "/")
-            except (ValueError, OSError) as exc:  # pragma: no cover
-                self.fail(
-                    "deadness property violated: _is_canonical(%r) is True "
-                    "but the decide()-equivalent resolve raised %r — the "
-                    "decide() except branch IS reachable without TOCTOU"
-                    % (p, exc)
-                )
-            self.assertTrue(rel, msg=p)
+            out = mod.decide(file_path=p, repo_root=repo_root)
+            d = json.loads(out)
+            self.assertEqual(
+                d.get("decision"),
+                "block",
+                msg=(
+                    "fail-open property violated: _is_canonical(%r) is True "
+                    "but decide() did not block (no sentinel present): %r"
+                    % (p, d)
+                ),
+            )
         self.assertGreaterEqual(
             canonical_true,
             3,
