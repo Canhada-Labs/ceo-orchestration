@@ -2,8 +2,9 @@
 id: PLAN-160-canonical-edit-council-findings
 parent: PLAN-156-FOLLOWUP
 title: check_canonical_edit.py hardening — verify + fix the S276 council findings (A/C/B/D)
-status: reviewed
+status: executing
 reviewed_at: 2026-07-17
+started_at: 2026-07-17
 created: 2026-07-17
 owner: CEO
 # W0 debate DONE 2026-07-17 (3× ADJUST → PROCEED, design-coherent; consensus in
