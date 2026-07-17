@@ -317,7 +317,16 @@ _CANONICAL_GUARDS = [
     # KERNEL HARD-DENY (this guard list is in _KERNEL_PATHS): extending it
     # requires CEO_KERNEL_OVERRIDE=PLAN-156-COUNCIL-GUARD-EXTENSION AND
     # CEO_KERNEL_OVERRIDE_ACK=I-ACCEPT in addition to SENT-GK-F.
-    ".claude/workflows/council-audit.js",
+    #
+    # PLAN-156-FOLLOWUP F3 (S270 live-fire finding, OQ1 Owner-ratified):
+    # the exact-path entry guarded the INSTANCE, not the CLASS. A sibling
+    # (or nested) workflow could carry the same external-lane egress and be
+    # ordinary-writable — "a file we choose not to ship is exactly the file
+    # an attacker would CREATE". The glob covers subdirectories too; `**`
+    # matches zero or more segments in _fnmatch_segments (Sprint 9).
+    # Cost accepted at ratification: authoring ANY .claude/workflows/*.js
+    # becomes a sentinel ceremony.
+    ".claude/workflows/**/*.js",
     ".claude/commands/council.md",
 ]
 
@@ -1219,6 +1228,66 @@ def _adapter_emit(adapter, decision, event=None) -> None:
     adapter.emit_decision(decision, event=event)
 
 
+def _cli_is_canonical(args: List[str]) -> int:
+    """PLAN-156-FOLLOWUP F5 (debate C2(b)) — read-only canonical-path
+    classification ORACLE.
+
+    Single-source-of-truth CLI so shell consumers (the grok/codex pre-push
+    review gates) classify paths with the SAME ``_is_canonical`` predicate
+    the edit-time guard and the Stop-review recorder use — re-implementing
+    the guard glob list in bash IS the drift class F5 fixes.
+
+    Usage:
+        python3 check_canonical_edit.py --is-canonical <path>...
+        python3 check_canonical_edit.py --is-canonical -   # paths on stdin,
+                                                           # one per line
+                                                           # (ARG_MAX-safe)
+
+    Output: one line per input path, ``<path>\\t<0|1>`` (1 = canonical),
+    in input order. Exit 0 on successful classification of every path.
+    Exit 2 when no path argument/stdin is supplied (consumers must treat
+    ANY nonzero exit as oracle failure and fall back fail-CLOSED to their
+    coarse over-triggering classifier).
+
+    Contract notes:
+    - Pure read-only classification. NO hook semantics run in this mode:
+      no event parse, no adapter, no sentinel lookup, no emission on the
+      hook wire. The hook entry (``main()``) is byte-identical when the
+      script is invoked as a hook (argv empty — ``_python-hook.sh`` passes
+      no arguments).
+    - Repo root resolves exactly like the hook path does
+      (``CLAUDE_PROJECT_DIR`` or cwd — see ``main()``), so oracle and hook
+      can never disagree on anchoring.
+    - Per-path classification fault → that path is reported ``1``
+      (canonical). Over-triggering review on an unclassifiable path is the
+      safe direction (fail-CLOSED); under-triggering would let an
+      unreviewed L3 touch through. ``_is_canonical`` itself already
+      returns False for paths outside the repo root — that is the
+      oracle's own semantics, not a fault.
+    """
+    repo_root = Path(os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd())
+    paths: List[str] = list(args)
+    if paths == ["-"]:
+        paths = [ln.rstrip("\n") for ln in sys.stdin.read().splitlines()]
+        paths = [p for p in paths if p]
+    if not paths:
+        sys.stderr.write(
+            "usage: check_canonical_edit.py --is-canonical <path>... | -\n"
+        )
+        return 2
+    out_lines: List[str] = []
+    for raw in paths:
+        try:
+            flag = 1 if _is_canonical(raw, repo_root) else 0
+        except Exception:
+            # Fail-CLOSED per path: unclassifiable → treat as canonical
+            # (over-trigger review, never under-trigger).
+            flag = 1
+        out_lines.append("%s\t%d" % (raw, flag))
+    sys.stdout.write("\n".join(out_lines) + "\n")
+    return 0
+
+
 def main() -> int:
     """Hook entry point.
 
@@ -1373,4 +1442,11 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    # PLAN-156-FOLLOWUP F5 — oracle CLI mode is gated on an EXPLICIT argv
+    # sentinel so hook invocations (argv always empty: `_python-hook.sh`
+    # execs `$FOUND_PY $HOOK_SCRIPT "$@"` with no extra args from
+    # settings.json) can never reach it. Any other argv shape falls
+    # through to the unchanged hook entry.
+    if len(sys.argv) >= 2 and sys.argv[1] == "--is-canonical":
+        sys.exit(_cli_is_canonical(sys.argv[2:]))
     sys.exit(main())
