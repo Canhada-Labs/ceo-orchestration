@@ -143,20 +143,47 @@ Check: python3 -m pytest .claude/hooks/tests/ -q -k "canonical or python_hook" &
   "nonzero→deny"). Regressions BOTH directions: allow-with-quoted-"deny"
   → 0; decoy-allow-before-real-deny → 2.
 
-### Wave 4 — full-quorum live-fire (positive control) — GATED on F1+F2 landed + F2 fixture green (debate: nunca egress live com o verify vácuo)
+### Wave 4 — full-quorum live-fire (positive control) — RAN S276 (Owner-authorized egress); **DEGRADED 2-lane, NOT clean 3-lane**
 Check: council run report shows quorum 3-lane + one council_lane_invoked per lane
-- [ ] **Owner (or CEO with Owner ack):** install grok council sandbox
-  profile: `cp templates/grok/sandbox.toml.example ~/.grok/sandbox.toml`
-  (review contents first).
-- [ ] Re-run `/council` on the ORIGINAL intended scope
-  (`.claude/hooks/`), no concurrent codex processes; verify 3-lane
-  quorum, scoped prompts (the re-anchored F7 assertion), `ProfileApplied
-  +enforced` in `~/.grok/sandbox-events.jsonl`, and redaction smoke on a
-  planted fixture that includes an **employer-class token** (não só um
-  fake key genérico — a lição pair-rail-catches-employer-class).
-- [ ] Fail-loud crash check (Critic-A Unseen 3): with the redactor
-  deliberately broken, the lane must yield `status: unavailable` —
-  never a crash; that invariant is what the council rests on.
+- [x] **Owner-authorized egress + grok council sandbox installed & VERIFIED
+  ENFORCING** (S276): `~/.grok/sandbox.toml` from template; `ProfileApplied
+  profile:council enforced:true restrict_network:true` landed for the run
+  (15:11:12Z / 15:12:46Z) with the full credential-surface deny-list. The
+  S270 blocker (grok refused, no sandbox) is RESOLVED.
+- [~] **`/council .claude/hooks/` ran (run wf_6ff53f95-2aa)** — real egress:
+  **grok lane AVAILABLE**, returned 7 findings (F1 redactor now executable +
+  sandbox enforced = the S270 1-lane structural blocker is FIXED, proven
+  live). **codex lane UNAVAILABLE** — hit the ~180s wall-clock hard budget
+  (SIGTERM at 3m) mid-probe on the large scope; not retried, not substituted
+  (fail-loud held). Claude lane AVAILABLE (2 findings). → **quorum 2-lane
+  DEGRADED**, not the 3-lane the criterion requires.
+- [~] **verify_failed = 9** — the adversarial verifier agent died on a
+  transient API error ("Connection closed mid-response"); all 9 raised
+  groups went UNADJUDICATED. Verdict correctly DEGRADED (confirmed=0,
+  verify_failed=9). The 9 are OPEN QUESTIONS, not confirmed bugs (several —
+  git_bypass token-matcher evasion, env-hijack default-OFF — are known
+  ACCEPTED boundaries; the credential-guard ones are the known example-token
+  class). Re-verify before treating any as a finding.
+- [x] Fail-loud crash check — proven LOCALLY (broken redactor under pipefail
+  → pipe exit≠0 → lane `unavailable`, never crash; redactor fail-closed
+  contract 5/5 green). Live corroboration: codex went `unavailable` on
+  timeout without crashing the run or substituting.
+- [!] **OQ2 planted-employer-class-token proof — RE-FRAMED, not run.** The
+  vendor CLIs read the repo THEMSELVES under read-only sandbox; the ADR-114
+  redactor only guards the BRIEF (instruction text), NOT vendor-read file
+  content — and does not catch employer-class strings anyway (that is the
+  pair-rail's separate scan). Planting a real foxbit token would LEAK it, not
+  prove redaction. File-content containment is scope-choice + sandbox
+  deny-list, not the brief redactor. This criterion needs rewording (a
+  future revision) before it can be a meaningful proof.
+
+**W4 disposition:** the FOLLOWUP fixes are VALIDATED in live-fire (grok lane
+went from S270-refused → functional; redaction pipe + sandbox enforced), but
+the literal "clean 3-lane quorum" criterion is UNMET because codex times out
+on the full `.claude/hooks/` scope in its 180s budget (an operational tuning
+gap, not a fix defect) and the verifier hit a transient API blip. Getting a
+clean 3-lane needs either a narrower codex scope or a longer codex wall-clock
+budget — a small council-tuning follow-up, tracked separately.
 
 ## Open questions
 
@@ -195,20 +222,28 @@ Check: council run report shows quorum 3-lane + one council_lane_invoked per lan
 
 ## How to continue
 
-**STATE (S276, 2026-07-16):** status = `reviewed`. **Waves 1+2+3 LANDED**
-via the `land-followup.sh` ceremony — 2 GPG sentinels (FU-MAIN `927c5ca`,
-FU-KERNEL `7224e8f`); 72/72 F1-F7 regression tests green; F3 oracle guards
-sibling `.claude/workflows/*.js`. **Only Wave 4 remains, and it is
-Owner-gated on EGRESS**, not on effort: the 3-lane live-fire transmits the
-audited hook source to xAI + OpenAI (redacted). A general "finish
-everything" directive is NOT specific egress authorization (S270 required
-an explicit per-run OQ5 auth). To finish: (1) Owner explicitly authorizes
-the council egress for scope `.claude/hooks/`; (2) `cp
-templates/grok/sandbox.toml.example ~/.grok/sandbox.toml` (review first);
-(3) run `/council` with no concurrent codex; (4) verify 3-lane quorum +
-planted employer-class redaction + fail-loud crash check. Then plan →
-`done`. Until then this plan correctly rests at `reviewed` with the fixes
-shipped and locally verified.
+**STATE (S276, 2026-07-16/17):** status = `reviewed`. **Waves 1+2+3 LANDED**
+via `land-followup.sh` — 2 GPG sentinels (FU-MAIN `927c5ca`, FU-KERNEL
+`7224e8f`); 72/72 F1-F7 regression tests green; F3 oracle guards sibling
+`.claude/workflows/*.js`. **Wave 4 RAN** (Owner-authorized egress, run
+`wf_6ff53f95-2aa`) and **validated the fixes in live-fire**: the grok lane —
+refused/1-lane in S270 — is now FUNCTIONAL (F1 redactor executable + council
+sandbox enforced), returning findings under contained egress. **But it
+degraded to 2-lane** (codex timed out at its 180s budget on the full
+`.claude/hooks/` scope) with the verifier hitting a transient API error
+(verify_failed=9), so the literal "clean 3-lane quorum" criterion is UNMET.
+
+**To reach `done`, the only remaining item is a clean 3-lane run**, which
+needs codex to finish inside budget — either (a) re-run `/council` on a
+NARROWER scope (a hooks subdir) so codex fits its wall-clock, or (b) raise
+the codex lane's time budget. This is council operational tuning, not a
+FOLLOWUP fix gap. Also reword the OQ2 employer-class proof first (see W4
+notes: the brief redactor cannot guard vendor-read file content — that is
+scope-choice + sandbox deny-list). Until a clean 3-lane lands, this plan
+rests at `reviewed` with all fixes shipped, locally verified, AND
+live-fire-validated (grok functional). Owner may alternatively ACCEPT the
+2-lane live-fire as sufficient proof and close W4 with the clean-3-lane as a
+documented council-tuning follow-up.
 
 ## Success criteria
 
