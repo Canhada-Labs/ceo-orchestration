@@ -177,13 +177,65 @@ Check: council run report shows quorum 3-lane + one council_lane_invoked per lan
   deny-list, not the brief redactor. This criterion needs rewording (a
   future revision) before it can be a meaningful proof.
 
-**W4 disposition:** the FOLLOWUP fixes are VALIDATED in live-fire (grok lane
-went from S270-refused → functional; redaction pipe + sandbox enforced), but
-the literal "clean 3-lane quorum" criterion is UNMET because codex times out
-on the full `.claude/hooks/` scope in its 180s budget (an operational tuning
-gap, not a fix defect) and the verifier hit a transient API blip. Getting a
-clean 3-lane needs either a narrower codex scope or a longer codex wall-clock
-budget — a small council-tuning follow-up, tracked separately.
+**W4 disposition (run 1, full scope):** the FOLLOWUP fixes are VALIDATED in
+live-fire (grok lane went from S270-refused → functional; redaction pipe +
+sandbox enforced), but the literal "clean 3-lane quorum" criterion is UNMET
+because codex times out on the full `.claude/hooks/` scope in its 180s budget
+(an operational tuning gap, not a fix defect) and the verifier hit a transient
+API blip.
+
+**W4 run 2 (S276, scope narrowed to `check_canonical_edit.py`, run
+`wf_cd40731f-205`):** verifier worked this time — **verify_failed=0** (clean
+verification cascade), **7 confirmed / 6 distinct findings**. STILL 2-lane,
+but the down lane FLIPPED: **codex AVAILABLE, grok UNAVAILABLE**. Grok's
+failure is a REAL substrate-drift finding: **grok 0.2.93 `-p/--single` takes
+the prompt as a CLI arg value and does NOT read stdin**, so the mandated
+ADR-114 one-pipe egress (`redactor-stdout → grok-stdin`) is structurally
+uncomposable — grok exits rc=2 at clap arg-parse, no bytes reach xAI. (Run 1's
+grok "worked" → the lane's behavior is non-deterministic on how the conductor
+invokes grok; run 1 may have used a non-pipe path. This is a genuine council
+grok-lane bug — the redactor pipe vs grok's arg contract — and is why a clean
+3-lane never lands in one run.)
+
+**Confirmed findings on `check_canonical_edit.py` (ADVISORY — route to
+plan/debate/ADR, do NOT treat as gate decisions; several touch code the
+FOLLOWUP just modified):**
+- **A [claude+codex CONVERGENT, gate-bypass]** — `main()` L1367-1374 `break`s
+  at the FIRST canonical candidate + `decide()` runs ONCE (L1377); a
+  multi-candidate MCP apply_patch with a sentinel-granted canonical path
+  ordered BEFORE an ungranted canonical path lets the latter bypass.
+  **CEO-verified grounded in real code** (matches an unverified run-1 claim,
+  now double-confirmed). Highest priority.
+- **C [claude, fail-open contract violation]** — `decide()` L1136-1139
+  re-resolves a confirmed-canonical path and returns allow on
+  `ValueError/OSError` = fail-OPEN on a canonical path, which the F-01-07
+  fail-closed `except` in `main()` (L1378+) never sees because this inner
+  `except` swallows it.
+- **B [claude, revocation staleness]** — `_compute_sentinel_cache_key`
+  L827-840 hashes only the sentinel bytes, omitting `.asc`/signer-allowlist/
+  registry → mid-session signer revocation not honored until process death;
+  the "`.asc`-covered" comment is false.
+- **D [claude, path-resolution bypass]** — `_is_canonical` L689-699 resolves
+  CWD-anchored but compares vs `CLAUDE_PROJECT_DIR` repo_root; relative
+  canonical path when `CWD != project dir` → `relative_to` raises → treated
+  non-canonical → allowed.
+- **E [codex, CONTESTED — likely NOT a defect]** — envelope `parse_error →
+  allow` (L1323-1325); verifier caveat: this is ENVELOPE (infra) parse →
+  fail-open is CORRECT per CLAUDE.md §4, not a content-matcher. Accept.
+- **F [codex, documented boundary]** — MCP `apply_patch` blobs not parsed
+  (L340-343), relies on Layer B by design. Not a defect; a dependency note.
+
+**W4 outcome:** across runs 1+2, all three vendors demonstrated functional
+containerized egress at least once (claude always; grok run1; codex run2), the
+redaction pipe + sandboxes held, and run 2 produced a clean-verification
+cross-vendor audit with a convergent, code-grounded gate-bypass finding. The
+"clean 3-lane in ONE run" badge remains UNMET for a now-diagnosed reason: the
+grok 0.2.93 stdin/arg-contract bug in the council grok lane (a code fix, not a
+retry) + the codex budget on large scopes. **Recommended follow-ups (each its
+own scoped plan):** (i) verify+fix findings A/C/B/D under debate/ADR; (ii) fix
+the council grok-lane arg-contract (reconcile grok's arg-based prompt with the
+ADR-114 redactor without a forbidden unredacted-arg path); (iii) then a clean
+3-lane on this scope is achievable. FOLLOWUP stays `reviewed`.
 
 ## Open questions
 
