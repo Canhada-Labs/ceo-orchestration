@@ -273,6 +273,88 @@ _grok_print_trust_flow() {
 }
 
 # ---------------------------------------------------------------------------
+# Trust-probe helpers (PLAN-156-FOLLOWUP F4, consensus C6).
+# ---------------------------------------------------------------------------
+# Canonicalize a path: symlink + lexical normalization. Works for paths that
+# do not exist (python os.path.realpath normalizes lexically). Falls back to
+# the raw string when no normalizer is available — identical raw strings are
+# identical paths, so the fallback can never over-claim a match.
+_grok_realpath() {
+  local p="$1" out=""
+  out="$(readlink -f "$p" 2>/dev/null || true)"
+  if [[ -z "$out" ]] && command -v python3 >/dev/null 2>&1; then
+    out="$(python3 -c 'import os,sys;print(os.path.realpath(sys.argv[1]))' "$p" 2>/dev/null || true)"
+  fi
+  [[ -n "$out" ]] || out="$p"
+  printf '%s\n' "$out"
+}
+
+# _grok_trust_probe <trusted_folders.toml> <target> — prints "1" iff the file
+# carries an entry whose normalized path EXACTLY equals the normalized target
+# AND that entry says `trusted = true`; prints "0" otherwise.
+#
+# F4: the original probe was a substring `grep -qF "$target"` over the whole
+# file, so a prefix sibling (/x/repo matching an entry for /x/repo-backup) or
+# a commented-out entry produced a false `VERDICT: ARMED`. This parses the
+# file LINE-WISE against the REAL schema captured 2026-07-13 from the pinned
+# grok binary (grok 0.2.93, f00f96316d4b — read-only characterization of
+# ~/.grok/trusted_folders.toml; fixture:
+# .claude/plans/PLAN-156-FOLLOWUP/staged/fixtures/trusted_folders.toml):
+#
+#     [folders."/absolute/path"]
+#     trusted = true
+#     decided_at = <unix-seconds>
+#
+# Rules (bias: the probe must NEVER over-claim ARMED):
+#   - comment lines (first non-space char '#') and blank lines are skipped;
+#   - a path is anchored ONLY to the quoted value of a [folders."..."] table
+#     header — never a substring match;
+#   - both sides are realpath-normalized before the EXACT-equality compare;
+#   - `trusted = true` must appear inside the matching table (an entry with
+#     `trusted = false` — grok records declines too — is NOT trusted);
+#   - ANY line the parser cannot anchor (including an unrecognized table
+#     header) contributes nothing and CLOSES the current table section, so
+#     parse ambiguity can only resolve toward NOT-ARMED.
+_grok_trust_probe() {
+  local tf="$1" target="$2"
+  local norm_target=""
+  norm_target="$(_grok_realpath "$target")"
+  if [[ ! -f "$tf" || -z "$norm_target" ]]; then
+    printf '0\n'
+    return 0
+  fi
+  local hdr_re='^[[:space:]]*\[folders\."([^"]+)"\][[:space:]]*$'
+  local tbl_re='^[[:space:]]*\['
+  local true_re='^[[:space:]]*trusted[[:space:]]*=[[:space:]]*true[[:space:]]*$'
+  local line="" entry="" norm_entry="" in_target=0 found=0
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    if [[ "$line" =~ ^[[:space:]]*# ]]; then
+      continue  # comment — never arms, never opens/closes a section
+    fi
+    if [[ "$line" =~ $hdr_re ]]; then
+      entry="${BASH_REMATCH[1]}"
+      norm_entry="$(_grok_realpath "$entry")"
+      if [[ -n "$norm_entry" && "$norm_entry" == "$norm_target" ]]; then
+        in_target=1
+      else
+        in_target=0
+      fi
+      continue
+    fi
+    if [[ "$line" =~ $tbl_re ]]; then
+      # Any OTHER table header (incl. one we cannot parse) closes the
+      # current section — ambiguity never extends a match.
+      in_target=0
+      continue
+    fi
+    if [[ "$in_target" -eq 1 && "$line" =~ $true_re ]]; then
+      found=1
+    fi
+  done < "$tf"
+  printf '%s\n' "$found"
+}
+
+# ---------------------------------------------------------------------------
 # grok_arming_check — the post-install doctor. Prints exactly one verdict:
 # ARMED / NOT-ARMED-(untrusted) / BROKEN. Refuse-on-drift (debate C11 / Sec
 # R-SEC7): a version OR binary-SHA mismatch is BROKEN — refuse to certify
@@ -327,11 +409,13 @@ grok_arming_check() {
   fi
 
   # (d) folder trust (best-effort positive check; NEVER assume trusted).
+  # F4 (PLAN-156-FOLLOWUP): exact-entry parse via _grok_trust_probe — the old
+  # substring grep armed on prefix siblings and commented entries.
   local trusted=0
   local grok_home="${GROK_HOME:-$HOME/.grok}"
   local tf="$grok_home/trusted_folders.toml"
-  if [[ -f "$tf" ]] && grep -qF "$target" "$tf" 2>/dev/null; then
-    trusted=1
+  if [[ -f "$tf" ]]; then
+    trusted="$(_grok_trust_probe "$tf" "$target")"
   fi
 
   echo ""

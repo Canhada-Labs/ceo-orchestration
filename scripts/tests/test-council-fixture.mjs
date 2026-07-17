@@ -14,8 +14,16 @@
 //   3. a council with < 3 available lanes is NEVER verdict CLEAN;
 //   4. a confirmed finding raised by only one vendor is flagged as a
 //      cross-vendor DISAGREEMENT (the council's headline signal).
+// PLAN-156-FOLLOWUP W2 (F2) adds the verify-stage split:
+//   5. a refuter crash/null/omitted key synthesizes verify_failed (never
+//      the explicit `unverifiable` judgment) and BLOCKS CLEAN;
+//   6. explicit refute-everything / unverifiable judgments keep CLEAN
+//      reachable at full quorum (split, not rename).
 //
 // Run: node scripts/tests/test-council-fixture.mjs   (exit 0 = pass)
+// CI home for these semantics (debate C7): the Python structural twin
+// .claude/scripts/tests/test_council_verify_semantics.py — this .mjs runs
+// in no CI job and stays the local node behavioral harness.
 
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -25,7 +33,21 @@ import { existsSync } from 'node:fs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const REPO = resolve(HERE, '..', '..')
-const WORKFLOW = resolve(REPO, '.claude', 'workflows', 'council-audit.js')
+// PLAN-156-FOLLOWUP W2: pre-ceremony the FIXED workflow lives under the
+// plan's STAGED root; post-ceremony it is canonical. Resolution mirrors
+// .claude/scripts/tests/test_council_verify_semantics.py (the CI-load-
+// bearing Python twin — this .mjs runs in no CI job, debate C7):
+//   1. $CEO_FU_STAGED_ROOT (repo-relative or absolute; set '.' to force
+//      the canonical file explicitly);
+//   2. the default staged root, if it holds the staged workflow;
+//   3. the canonical path.
+const REL = ['.claude', 'workflows', 'council-audit.js']
+const DEFAULT_STAGED = resolve(REPO, '.claude', 'plans', 'PLAN-156-FOLLOWUP', 'staged', 'root')
+const ENV_ROOT = process.env.CEO_FU_STAGED_ROOT
+const ROOT = ENV_ROOT
+  ? resolve(REPO, ENV_ROOT)
+  : (existsSync(resolve(DEFAULT_STAGED, ...REL)) ? DEFAULT_STAGED : REPO)
+const WORKFLOW = resolve(ROOT, ...REL)
 
 // The workflow and this test land together (PLAN-156 SENT-GK-F), so in any
 // committed state both are present. A clear message beats a raw ENOENT stack
@@ -50,7 +72,9 @@ function makeStubs(fixtureLanes, verifyVerdicts, reduceReport) {
     // so any agent() call here is verify or reduce — return the canned result.
     agent: async (prompt, opts) => {
       const label = (opts && opts.label) || ''
-      if (label === 'verify') return { verdicts: verifyVerdicts }
+      // verifyVerdicts === null simulates a refuter CRASH (agent resolved
+      // null) — PLAN-156-FOLLOWUP F2 exercises this path.
+      if (label === 'verify') return verifyVerdicts === null ? null : { verdicts: verifyVerdicts }
       if (label === 'reduce') return { verdict: 'FINDINGS', report: reduceReport }
       // A lane agent must NEVER be called in fixture mode — fail loudly.
       throw new Error(`unexpected live agent() call in fixture mode: label=${label}`)
@@ -158,6 +182,102 @@ const mkFinding = (vendor, n, file, claim) => ({
 }
 
 // ===========================================================================
+// Scenario D (PLAN-156-FOLLOWUP F2) — refuter CRASH (resolves null) with a
+// full 3-lane quorum and raised findings. Pre-fix this laundered into
+// unverifiable -> confirmed=0 -> mechanical CLEAN (the S270 false-green).
+// Expect: every group verify_failed, verdict DEGRADED, loud banner.
+// ===========================================================================
+{
+  const fixture_lanes = {
+    claude: { vendor: 'claude', status: 'ok', findings: [mkFinding('claude', 1, 'foo.py', 'raised but never re-checked')] },
+    codex: { vendor: 'codex', status: 'ok', findings: [] },
+    grok: { vendor: 'grok', status: 'ok', findings: [] },
+  }
+  const stubs = makeStubs(fixture_lanes, null /* refuter crash */, '# crash')
+  const out = await runCouncil({ scope: '.', fixture_lanes }, stubs)
+  if (out.verdict === 'DEGRADED') ok('D1: refuter crash + raised findings → DEGRADED (never CLEAN)')
+  else bad(`D1: expected DEGRADED, got ${out.verdict}`)
+  if (out.stats.verify_failed === 1) ok('D2: crashed group counted as verify_failed in stats')
+  else bad(`D2: stats.verify_failed expected 1, got ${JSON.stringify(out.stats)}`)
+  const vf = (out.verify_failed_findings || [])[0]
+  if (vf && vf.verdict === 'verify_failed' && vf.file === 'foo.py') ok('D3: group labeled verify_failed (a crash, NOT an unverifiable judgment)')
+  else bad(`D3: verify_failed_findings wrong: ${JSON.stringify(out.verify_failed_findings)}`)
+  if (/VERIFY_FAILED = 1/.test(out.report)) ok('D4: verify_failed count surfaced loudly at the top of the report')
+  else bad('D4: report does not surface the verify_failed count')
+}
+
+// ===========================================================================
+// Scenario E (PLAN-156-FOLLOWUP F2) — refuter RAN but OMITTED one group key.
+// The judged group keeps its explicit verdict; the omitted one is
+// verify_failed (synthesized default). Expect DEGRADED.
+// ===========================================================================
+{
+  const fixture_lanes = {
+    claude: { vendor: 'claude', status: 'ok', findings: [mkFinding('claude', 1, 'foo.py', 'claim one')] },
+    codex: { vendor: 'codex', status: 'ok', findings: [mkFinding('codex', 1, 'bar.py', 'claim two')] },
+    grok: { vendor: 'grok', status: 'ok', findings: [] },
+  }
+  const key = (file, claim) => `${file}|${String(claim).toLowerCase().replace(/\s+/g, ' ').trim()}`
+  // Verdict for foo.py only — bar.py's key is OMITTED.
+  const verifyVerdicts = [
+    { key: key('foo.py', 'claim one'), verdict: 'refuted', evidence_check: 're-read foo.py:1 — stale' },
+  ]
+  const stubs = makeStubs(fixture_lanes, verifyVerdicts, '# omission')
+  const out = await runCouncil({ scope: '.', fixture_lanes }, stubs)
+  if (out.verdict === 'DEGRADED') ok('E1: omitted group key → DEGRADED (never CLEAN)')
+  else bad(`E1: expected DEGRADED, got ${out.verdict}`)
+  const vfFiles = (out.verify_failed_findings || []).map((g) => g.file)
+  if (out.stats.verify_failed === 1 && vfFiles.includes('bar.py') && !vfFiles.includes('foo.py')) {
+    ok('E2: ONLY the omitted group is verify_failed; the explicitly judged one is not')
+  } else {
+    bad(`E2: verify_failed split wrong: stats=${JSON.stringify(out.stats)} files=${JSON.stringify(vfFiles)}`)
+  }
+}
+
+// ===========================================================================
+// Scenario F (PLAN-156-FOLLOWUP F2) — legitimate refute-everything: the
+// refuter RAN and explicitly refuted every group. confirmed=0 AND
+// verify_failed=0 at full quorum → CLEAN must stay REACHABLE.
+// ===========================================================================
+{
+  const fixture_lanes = {
+    claude: { vendor: 'claude', status: 'ok', findings: [mkFinding('claude', 1, 'foo.py', 'stale claim')] },
+    codex: { vendor: 'codex', status: 'ok', findings: [mkFinding('codex', 1, 'bar.py', 'another stale claim')] },
+    grok: { vendor: 'grok', status: 'ok', findings: [] },
+  }
+  const key = (file, claim) => `${file}|${String(claim).toLowerCase().replace(/\s+/g, ' ').trim()}`
+  const verifyVerdicts = [
+    { key: key('foo.py', 'stale claim'), verdict: 'refuted', evidence_check: 're-read foo.py:1 — code moved' },
+    { key: key('bar.py', 'another stale claim'), verdict: 'refuted', evidence_check: 're-read bar.py:1 — fixed in HEAD' },
+  ]
+  const stubs = makeStubs(fixture_lanes, verifyVerdicts, '# refuted all')
+  const out = await runCouncil({ scope: '.', fixture_lanes }, stubs)
+  if (out.verdict === 'CLEAN' && out.stats.verify_failed === 0) ok('F1: explicit refute-everything at full quorum → CLEAN stays reachable')
+  else bad(`F1: expected CLEAN with verify_failed=0, got ${out.verdict} / ${JSON.stringify(out.stats)}`)
+}
+
+// ===========================================================================
+// Scenario G (PLAN-156-FOLLOWUP F2) — an EXPLICIT refuter `unverifiable`
+// judgment stays `unverifiable`: it is a judgment, not a crash, so it does
+// NOT count as verify_failed and does NOT block CLEAN at full quorum.
+// ===========================================================================
+{
+  const fixture_lanes = {
+    claude: { vendor: 'claude', status: 'ok', findings: [mkFinding('claude', 1, 'gone.py', 'pointer into a deleted file')] },
+    codex: { vendor: 'codex', status: 'ok', findings: [] },
+    grok: { vendor: 'grok', status: 'ok', findings: [] },
+  }
+  const key = (file, claim) => `${file}|${String(claim).toLowerCase().replace(/\s+/g, ' ').trim()}`
+  const verifyVerdicts = [
+    { key: key('gone.py', 'pointer into a deleted file'), verdict: 'unverifiable', evidence_check: 'gone.py absent — cannot check read-only' },
+  ]
+  const stubs = makeStubs(fixture_lanes, verifyVerdicts, '# unverifiable')
+  const out = await runCouncil({ scope: '.', fixture_lanes }, stubs)
+  if (out.stats.verify_failed === 0 && out.verdict === 'CLEAN') ok('G1: explicit unverifiable judgment is NOT verify_failed (split, not rename) — CLEAN preserved')
+  else bad(`G1: expected CLEAN with verify_failed=0, got ${out.verdict} / ${JSON.stringify(out.stats)}`)
+}
+
+// ===========================================================================
 // Source-contract guards — the four BLOCKING invariants must be present in
 // the workflow source (RED-on-absence if a future edit strips them).
 // ===========================================================================
@@ -171,6 +291,12 @@ const mkFinding = (vendor, n, file, claim) => ({
   else bad('SRC3: fail-loud unavailable path MISSING')
   if (/IS_FIXTURE_MODE|fixture_lanes/.test(src)) ok('SRC4: fixture-mode branch present (CI can test without live egress, invariant 4)')
   else bad('SRC4: fixture-mode branch MISSING — CI cannot test without live egress')
+  // PLAN-156-FOLLOWUP W2 additions:
+  if (/set -o pipefail/.test(src) && /codex_egress_redact\.py --outgoing \| \$\{cli\}/.test(src)) {
+    ok('SRC5: redact-and-send is ONE pipeline under pipefail (pipe fold)')
+  } else bad('SRC5: redactor | vendor-cli pipe fold MISSING — a skipped redaction could yield a sendable prompt')
+  if (/verifyFailed\.length === 0/.test(src)) ok('SRC6: CLEAN mechanically gated on verify_failed==0 (F2)')
+  else bad('SRC6: CLEAN condition does NOT include verify_failed==0 — refuter crash could launder into CLEAN')
 }
 
 console.log(`\n==> Results: ${PASS} passed, ${FAIL} failed`)

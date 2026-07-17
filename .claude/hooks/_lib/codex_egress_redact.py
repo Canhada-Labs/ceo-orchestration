@@ -38,13 +38,40 @@ Performance budget: ``scan_and_redact()`` accepts a
 exceeds 256 KB, the redactor truncates to the first 256 KB before
 scanning (extreme tail of distribution; live measurement Phase 0A
 median 4.2 KB).
+
+**CLI (PLAN-156-FOLLOWUP F1, debate C4):** the module is also directly
+executable — ``python3 .claude/hooks/_lib/codex_egress_redact.py
+--outgoing`` reads stdin, writes REDACTED text to stdout. This is the
+egress boundary mandated by ``council-audit.js:145``. The CLI is
+fail-CLOSED: on ANY error it exits nonzero with NOTHING on stdout and
+never echoes input (see the ``_cli_main`` block at the bottom).
 """
 
 from __future__ import annotations
 
+import os
+import sys
 from typing import List, Optional, Tuple
 
-from . import secret_patterns as _patterns
+# ---------------------------------------------------------------------------
+# Import shim (PLAN-156-FOLLOWUP F1, debate C4).
+#
+# This module is BOTH a package member (`from _lib import
+# codex_egress_redact`) AND a run-as-file CLI — `council-audit.js:145`
+# mandates the literal invocation
+# `python3 .claude/hooks/_lib/codex_egress_redact.py --outgoing` from the
+# repo root (never `python3 -m`, which would mask the failure this shim
+# fixes). Run as a file there is no package context, so the relative
+# import raises ImportError; fall back to inserting this file's own
+# directory at sys.path[0] (position 0 so a PYTHONPATH-planted
+# `secret_patterns` can never shadow the sibling) and importing the
+# sibling module absolutely.
+# ---------------------------------------------------------------------------
+try:
+    from . import secret_patterns as _patterns
+except ImportError:
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import secret_patterns as _patterns  # type: ignore[no-redef]
 
 #: Hard cap on input text size. Codex outputs >256 KB are truncated
 #: at this boundary (with a sentinel marker injected). Phase 0A
@@ -182,4 +209,105 @@ def redact_outgoing_with_findings(text: str) -> Tuple[str, List[_patterns.Findin
     NEVER raises. Empty/non-str in → ``("", [])`` out.
     """
     return redact_with_findings(text)
+
+
+# ---------------------------------------------------------------------------
+# CLI entrypoint (PLAN-156-FOLLOWUP F1, debate C4 — fail-CLOSED contract).
+#
+# `council-audit.js:145` pipes each external-lane brief through:
+#
+#     printf '%s' "$BRIEF" | python3 .claude/hooks/_lib/codex_egress_redact.py --outgoing
+#
+# This is the single point where repo bytes become vendor-CLI input, so
+# the CLI is fail-CLOSED end to end:
+#
+#   * The output is fully redacted IN MEMORY before a single byte
+#     touches stdout — there is exactly ONE stdout write, and it happens
+#     only after redaction has completed without error (no partial
+#     output is possible).
+#   * On ANY internal error (bad flag, undecodable stdin, import
+#     breakage, redaction failure): exit NONZERO and emit NOTHING to
+#     stdout. Errors go to stderr only, and carry only the exception
+#     TYPE name — never str(exc), which could embed input bytes.
+#   * The input is NEVER echoed on any error path (VETO line).
+#
+# The library API above (`redact()` / `redact_outgoing()` /
+# `*_with_findings()`) is untouched by the CLI: `_cli_main` is a thin
+# caller of `redact_outgoing()` and preserves the R1 S-Sec-1 single-pass
+# invariant by construction.
+# ---------------------------------------------------------------------------
+
+
+def _cli_main(argv: Optional[List[str]] = None) -> int:
+    """Run the egress-redaction CLI. Returns the process exit code.
+
+    Reads ALL of stdin (strict UTF-8 — undecodable input is input this
+    redactor cannot certify, so it fails CLOSED), redacts it fully in
+    memory via ``redact_outgoing()``, then performs a single buffered
+    stdout write. Any exception escapes to the ``__main__`` fail-CLOSED
+    wrapper below (exit nonzero, empty stdout).
+    """
+    # Deferred import: routes even argparse import-time breakage through
+    # the fail-CLOSED wrapper instead of an interpreter-level traceback.
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        prog="codex_egress_redact.py",
+        description=(
+            "ADR-114 egress redactor CLI. Reads text on stdin, writes the "
+            "REDACTED text to stdout. Fail-CLOSED: on any error, exits "
+            "nonzero with NOTHING on stdout (input is never echoed)."
+        ),
+    )
+    parser.add_argument(
+        "--outgoing",
+        action="store_true",
+        help=(
+            "Redact an OUTGOING prompt (framework -> external vendor CLI). "
+            "Required: the CLI refuses to run without an explicit direction."
+        ),
+    )
+    args = parser.parse_args(argv)
+
+    if not args.outgoing:
+        sys.stderr.write(
+            "codex_egress_redact: ERROR: --outgoing is required "
+            "(refusing to guess a redaction direction; fail-closed)\n"
+        )
+        return 2
+
+    # Step 1 — read ALL of stdin as bytes, decode strict UTF-8. A decode
+    # failure raises → fail-CLOSED wrapper → exit nonzero, empty stdout.
+    raw_text = sys.stdin.buffer.read().decode("utf-8")
+
+    # Step 2 — redact FULLY IN MEMORY. No stdout has been touched yet;
+    # if this raises, nothing was emitted.
+    out_bytes = redact_outgoing(raw_text).encode("utf-8")
+
+    # Step 3 — single buffered write, only after full success.
+    sys.stdout.buffer.write(out_bytes)
+    sys.stdout.buffer.flush()
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(_cli_main())
+    except SystemExit:
+        # Deliberate exits (including argparse's usage-error exit 2)
+        # propagate unchanged. argparse errors write to stderr only.
+        raise
+    except BaseException as _exc:  # noqa: BLE001 — fail-CLOSED boundary
+        # VETO line: on ANY internal error exit NONZERO and emit NOTHING
+        # to stdout — never echo input. Only the exception TYPE name is
+        # reported: str(exc) could embed input bytes (e.g. a
+        # UnicodeDecodeError repr carries the offending byte sequence).
+        try:
+            sys.stderr.write(
+                "codex_egress_redact: FATAL: {0} — no output emitted "
+                "(fail-closed)\n".format(type(_exc).__name__)
+            )
+        except Exception:
+            pass
+        sys.exit(3)
 

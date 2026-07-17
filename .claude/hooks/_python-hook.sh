@@ -448,23 +448,98 @@ if [ -n "$_CEO_HOOK_STDOUT" ]; then
     | sed -E 's/"decision"[[:space:]]*:[[:space:]]*"block"/"decision": "deny"/g')"
 fi
 
-# Re-emit the hook's stdout: on grok the JSON decision is what actually blocks.
-if [ -n "$_CEO_HOOK_STDOUT" ]; then
-  printf '%s\n' "$_CEO_HOOK_STDOUT"
-fi
+# NOTE (pair-rail R1 P1, S272): stdout is emitted AFTER the decision parse
+# below, not here. On grok the JSON on stdout is the PRIMARY block; emitting a
+# malformed deny-bearing payload first hands grok garbage (it fails open on it)
+# and leaves only the secondary exit-2 rail — turning the belt-and-suspenders
+# design into a single strap. The parse block decides, then emits: verbatim on
+# every normal path, and a well-formed `{"decision":"deny"}` when the payload
+# is unparseable BUT carries a deny token.
 
 # Exit-2 mapping (belt-and-suspenders; CEO_HOOK_EXIT_MAP=0 disables JUST this
 # half, never the vocabulary rewrite above). After the rewrite the only deny
 # vocabulary on stdout is grok's `deny` (or a codex-shaped permissionDecision
-# from a legacy hook that also routed here). A crash leaves stdout empty ->
-# fall through to the hook's own (fail-open) exit code; a nonzero-with-no
-# -decision is NEVER turned into a deny.
-if [ "${CEO_HOOK_EXIT_MAP:-1}" = "1" ]; then
-  case "$_CEO_HOOK_STDOUT" in
-    *'"decision"'*'"deny"'*|*'"permissionDecision"'*'"deny"'*)
+# from a legacy hook that also routed here).
+#
+# F6 (PLAN-156-FOLLOWUP, consensus C5 — security-VETO direction): the original
+# mapping was an order-sensitive whole-stdout case glob
+# (*'"decision"'*'"deny"'*), which mis-fires BOTH ways: an ALLOW payload whose
+# other fields merely QUOTE a deny shape exited 2 (spurious block — the S270
+# live-fire finding), and a first-occurrence variant would let a decoy nested
+# `"decision":"allow"` mask a real top-level deny. Replaced with a STRUCTURAL
+# parse of the TOP-LEVEL `decision` / `hookSpecificOutput.permissionDecision`
+# via the already-resolved $FOUND_PY (one extra subprocess on the rare
+# blocking path — cost accepted by the debate).
+#
+# Dual fail-direction semantics (NEVER "nonzero -> deny"):
+#   parse OK      -> the FIELD governs: deny -> exit 2, anything else -> the
+#                    hook's own rc below.
+#   parse FAILURE -> deny token ('"deny"') present on stdout -> exit 2
+#                    (fail-CLOSED: content the mapper cannot parse is never
+#                    waved through when it may carry a real deny — the
+#                    CLAUDE.md §4 INPUT half);
+#                 -> no deny token -> the hook's own rc below (the
+#                    INFRASTRUCTURE fail-open half, preserved: a crash or
+#                    garbage with no decision never blocks the session).
+# A crash with EMPTY stdout skips this block entirely -> hook rc (fail-open).
+if [ "${CEO_HOOK_EXIT_MAP:-1}" = "1" ] && [ -n "$_CEO_HOOK_STDOUT" ]; then
+  _CEO_DECISION="$(printf '%s' "$_CEO_HOOK_STDOUT" | "$FOUND_PY" -c '
+import json, sys
+
+try:
+    obj = json.load(sys.stdin)
+except Exception:
+    print("__CEO_PARSE_FAILURE__")
+    raise SystemExit(0)
+decision = ""
+if isinstance(obj, dict):
+    d = obj.get("decision")
+    if isinstance(d, str):
+        decision = d
+    else:
+        hso = obj.get("hookSpecificOutput")
+        if isinstance(hso, dict):
+            pd = hso.get("permissionDecision")
+            if isinstance(pd, str):
+                decision = pd
+print(decision)
+' 2>/dev/null)" || _CEO_DECISION="__CEO_PARSE_FAILURE__"
+  case "$_CEO_DECISION" in
+    deny)
+      # Structural top-level deny — emit the (valid) payload so the PRIMARY
+      # stdout rail blocks, then enforce the secondary exit-2 rail.
+      printf '%s\n' "$_CEO_HOOK_STDOUT"
       exit 2
       ;;
+    __CEO_PARSE_FAILURE__)
+      # Sentinel also covers the parser subprocess itself failing to spawn:
+      # that infra failure degrades to the token scan, never to a silent allow
+      # of a deny-bearing payload.
+      case "$_CEO_HOOK_STDOUT" in
+        *'"deny"'*)
+          # Unparseable BUT deny-bearing: emitting the garbage would fail OPEN
+          # on grok's primary rail. Emit a well-formed deny instead — both
+          # rails now block. The original payload is preserved on stderr for
+          # forensics (stderr never feeds the decision).
+          printf '%s\n' "$_CEO_HOOK_STDOUT" >&2
+          printf '%s\n' '{"decision": "deny", "reason": "hook emitted an unparseable deny-bearing payload; blocked fail-CLOSED by _python-hook.sh (original payload on stderr)"}'
+          exit 2
+          ;;
+      esac
+      # Unparseable and NO deny token: emit verbatim (a malformed allow is the
+      # hook's own business) and fall through to its rc — INFRASTRUCTURE
+      # fail-open half, preserved.
+      printf '%s\n' "$_CEO_HOOK_STDOUT"
+      ;;
+    *)
+      # Parsed, not a deny (allow / ask / absent) — emit verbatim.
+      printf '%s\n' "$_CEO_HOOK_STDOUT"
+      ;;
   esac
+elif [ -n "$_CEO_HOOK_STDOUT" ]; then
+  # Exit-map disabled (CEO_HOOK_EXIT_MAP=0): the vocabulary rewrite above still
+  # ran; emit the hook's stdout unchanged — the JSON rail is on its own.
+  printf '%s\n' "$_CEO_HOOK_STDOUT"
 fi
 
 exit "$_CEO_HOOK_RC"

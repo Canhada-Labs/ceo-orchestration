@@ -43,24 +43,46 @@ unavailable`** — never a silent substitution. Quorum degrades explicitly
 
 ## Execution
 
+The user invoked: `/council $ARGUMENTS`
+
+**Parse `$ARGUMENTS` FIRST** as `<scope> [vendors=claude,codex,grok]
+[budget=<n>]`. The scope is the FIRST token (or quoted phrase) of
+`$ARGUMENTS` and it is **MANDATORY**:
+
+- **`scope` is the egress boundary the Owner authorized.** It MUST be the
+  operator's literal typed argument, threaded verbatim into `args.scope`
+  below. If `$ARGUMENTS` is empty or yields no scope, **STOP and ask the
+  operator for one — do NOT launch the workflow.** `council-audit.js`
+  silently defaults a missing/non-string `args.scope` to `.` (the WHOLE
+  repo), which widens what leaves the process beyond what was authorized
+  (the S270 F7 failure: scope `.claude/hooks/` was requested, scope `.`
+  was transmitted).
+- `vendors=` (optional) — subset of `claude,codex,grok` (default: all
+  three).
+- `budget=` (optional) — per-lane token ceiling, clamped to
+  [10000, 400000] (default 120000). This is a **hard kill**, not advisory.
+
 `/council` runs the `council-audit` workflow. This is multi-agent
 orchestration with live external egress, so it requires the user to have
 opted into workflows (the "ultracode"/explicit-workflow gate) — do NOT
 launch it silently.
 
-```
-Workflow({ name: "council-audit", args: { scope: "<scope>", vendors: [...], budget_tokens_per_lane: <n> } })
-```
+Before launching, echo the parsed scope back to the operator on one line
+(`council scope = <parsed scope>`) so a scope drop is visible BEFORE any
+egress. Then launch with the parsed values — `scope` must never be a
+placeholder, never omitted, never invented:
 
-Arguments:
-- `scope` (required) — a subtree, file set, or topic to audit.
-- `vendors` (optional) — subset of `claude,codex,grok` (default: all three).
-- `budget` (optional) — per-lane token ceiling, clamped to [10000, 400000]
-  (default 120000). This is a **hard kill**, not advisory.
+```
+Workflow({ name: "council-audit", args: { scope: "<the scope parsed from $ARGUMENTS, verbatim>", vendors: [...], budget_tokens_per_lane: <n> } })
+```
 
 The workflow returns `{ verdict, quorum, report, lanes, stats,
-confirmed_findings, cross_vendor_disagreements }`. Render the `report`
-markdown and lead with the quorum line + any cross-vendor disagreements.
+confirmed_findings, verify_failed_findings, cross_vendor_disagreements }`.
+**Post-run scope assertion:** check the returned `scope` field equals the
+scope you parsed; on mismatch, flag it at the top of your rendering — the
+run's egress did not match the authorization. Render the `report` markdown
+and lead with the quorum line, any `verify_failed` count, and any
+cross-vendor disagreements.
 
 ## Audit trail
 
