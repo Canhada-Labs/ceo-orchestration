@@ -2,11 +2,11 @@
 id: PLAN-156-FOLLOWUP-council-livefire-findings
 parent: PLAN-156
 title: Council live-fire S270 findings — redactor CLI, fail-open verify, guard gaps
-status: draft
+status: reviewed
 created: 2026-07-13
 owner: CEO
-# OQ1/OQ2 Owner-ratified S270 (see §Clarifications); stays draft until
-# its own Wave 0 debate runs (canonical-heavy touch set).
+# OQ1/OQ2 Owner-ratified S270 (see §Clarifications); W0 debate DONE S272;
+# draft→reviewed ratified by Owner directive S276 (see §Clarifications).
 depends_on: [PLAN-156]
 budget_tokens: 90-140k
 budget_sessions: 1
@@ -57,11 +57,13 @@ Check: none (ceremony gate)
   set: `_lib`, hooks, shim, guard list) — round 1 3×ADJUST, consensus
   `PLAN-156-FOLLOWUP/debate/round-1/consensus.md` (7 consensus findings
   folded nesta revisão; verdict PROCEED = design-coherent).
-- [ ] **Owner ratifica `draft → reviewed`** (gate deste plano; C1-C7 já
-  aplicados abaixo).
+- [x] **Owner ratifica `draft → reviewed`** (gate deste plano; C1-C7 já
+  aplicados abaixo). Ratificado 2026-07-16 (S276) por diretiva Owner em
+  chat ("finaliza absolutamente tudo que tá pendente"), escopo = executar
+  este plano até done incluindo cerimônia e W4.
 
-### Wave 1 — F1 redactor CLI (canonical `_lib` → ceremony) [C4+C7]
-Check: printf 'x' | python3 .claude/hooks/_lib/codex_egress_redact.py --outgoing (exit 0, redacted output — run from repo root as a SUBPROCESS, never `python3 -m`)
+### Wave 1 — F1 redactor CLI (canonical `_lib` → ceremony) [C4+C7] — LANDED S276 `927c5ca` (FU-MAIN sentinel)
+Check: printf 'x' | python3 .claude/hooks/_lib/codex_egress_redact.py --outgoing (exit 0, redacted output — run from repo root as a SUBPROCESS, never `python3 -m`) — VERIFIED S276: rc=0 redacted; 72/72 F1-F7 regression tests green
 - [ ] Script-safe import (try relative → except ImportError: sys.path
   insert + absolute) + `__main__`/argparse — argparse ALONE does not fix
   run-as-file (debate C4). Library `redact()` single-pass /
@@ -77,8 +79,8 @@ Check: printf 'x' | python3 .claude/hooks/_lib/codex_egress_redact.py --outgoing
   is not covered by the 3.9-3.12 matrix (debate C7) and this is
   literally an import-safety fix.
 
-### Wave 2 — F2 fail-loud + F7 re-anchored (council-audit.js GUARDED — rides the ceremony) [C1+C5-sem+C7]
-Check: python3 -m pytest .claude/scripts/tests/test_council_verify_semantics.py -q (Python mirror — the .mjs fixture runs in NO CI job today, debate C7)
+### Wave 2 — F2 fail-loud + F7 re-anchored (council-audit.js GUARDED — rides the ceremony) [C1+C5-sem+C7] — LANDED S276 `927c5ca` (FU-MAIN sentinel)
+Check: python3 -m pytest .claude/scripts/tests/test_council_verify_semantics.py -q (Python mirror — the .mjs fixture runs in NO CI job today, debate C7) — VERIFIED S276 green
 - [ ] F2 **split** `verify_failed` (refuter crash/omission — synthesized
   default) from explicit `unverifiable` (refuter ran and judged): CLEAN
   ⇔ `lanes>=3 AND confirmed==0 AND verify_failed==0`; legitimate
@@ -101,7 +103,7 @@ Check: python3 -m pytest .claude/scripts/tests/test_council_verify_semantics.py 
 - [ ] `.mjs` fixture cases still added/kept for local runs; the CI-load-
   bearing assertions are the Python mirror (matrix dir).
 
-### Wave 3 — F3 guard glob + F4/F5/F6 grok-rail fixes (canonical → ceremony) [C2+C3+C5+C6+C7]
+### Wave 3 — F3 guard glob + F4/F5/F6 grok-rail fixes (canonical → ceremony) [C2+C3+C5+C6+C7] — LANDED S276 `7224e8f` (FU-KERNEL sentinel, CEO_KERNEL_OVERRIDE=PLAN-156-FOLLOWUP-GUARD-GLOB) + `927c5ca` (F4/F6 in FU-MAIN); VERIFIED S276: --is-canonical oracle guards sibling .claude/workflows/*.js; shellcheck -S warning rc=0
 Check: python3 -m pytest .claude/hooks/tests/ -q -k "canonical or python_hook" && python3 -m pytest .claude/hooks/tests/test_codex_stop_review.py .claude/scripts/tests/test_grok_trust_probe.py .claude/scripts/tests/test_fingerprint_parity.py -q && shellcheck -S warning scripts/_grok_harness.sh templates/grok/pre-push-review-gate.sh
 (named files — `-k grok` seleciona 0 testes hoje → pytest exit 5 = red espúrio, debate C7)
 - [ ] F3 `check_canonical_edit.py`: guard `.claude/workflows/**/*.js` as
@@ -173,6 +175,11 @@ Check: council run report shows quorum 3-lane + one council_lane_invoked per lan
   become ceremony-gated; egress-bearing surface warrants it); OQ2 →
   **planted-fixture redaction proof ratified** for the Wave 4 full-quorum
   re-run.
+- 2026-07-16 (S276, Owner via chat): **draft → reviewed ratificado** por
+  diretiva explícita ("finaliza absolutamente tudo que tá pendente…
+  termina o backlog completo") — cobre a cerimônia de landing (F1-F7) e
+  o W4 full-quorum live-fire (egress redigida, mesmo enquadramento do
+  OQ5/S270).
 - 2026-07-13 (S272, debate round-1 consensus — accepted residuals +
   deferrals, recorded per Critic-B/Critic-A): (a) the egress workflow
   remains SINGLE-guarded by a fail-open hook (framework-wide posture;
