@@ -129,7 +129,20 @@ Check: none (design gate)
 
 ### Wave 1 — VERIFY (per-finding INSTRUMENT — not a uniform failing-first repro; debate CF1/CF5)
 Check: `python3 -m pytest .claude/hooks/tests/test_canonical_edit_council_findings.py -q` — A/D repros FAIL on HEAD; B characterization + C deadness-property PASS on HEAD; C forced-branch PASSES (asserts the not-yet-added defense). Each finding's acceptance names its instrument type (a uniform "all FAIL on HEAD" gate is green-vacuous for B and absent for C).
-- [ ] **A → failing-first repro (FAILS on HEAD).** Drive `main()` end-to-end via
+
+> **[x] WAVE 1 DONE (S277, commit `489996f`).** `.claude/hooks/tests/test_canonical_edit_council_findings.py`
+> authored + CEO-verified: HEAD `8 passed, 4 xfailed`; `--runxfail` fails
+> exactly the 4 repros; full `.claude/hooks/tests/` `6231 passed`, zero
+> regression. A + D failing-first repros drive `main()` via the subprocess
+> `_invoke` harness (NOT `_LayerABase._decide`); C = deadness property (later
+> rewritten to behavioral, see W2) + forced-branch; B = characterization.
+> Feature-detect contract `PLAN160_FIX_A/C/D` validated live with a
+> marker-only staged copy (markers flip xfails → RED, proving the strict
+> contract forces behavior not markers). All 4 findings CEO-re-read against
+> real lines (A main L1367-74 break; C decide L1136-39 fail-open; D
+> `_is_canonical` L689-94 CWD-anchor; B cache key).
+
+- [x] **A → failing-first repro (FAILS on HEAD).** Drive `main()` end-to-end via
   the subprocess `_invoke` harness (`test_check_canonical_edit.py:30-56` +
   `CEO_SENTINEL_UNLOCK`); NEVER `_LayerABase._decide` (re-implements the bug incl.
   `break` at `test_check_canonical_edit_mcp.py:81` → false-green, SK2). Assert the
@@ -159,7 +172,42 @@ Check: `python3 -m pytest .claude/hooks/tests/test_canonical_edit_council_findin
 ### Wave 2 — FIX (only the Wave-1-confirmed defects)
 Check: the Wave-1 repros now PASS; full `.claude/hooks/tests/` green; no
 existing canonical-guard test regresses
-- [ ] **A** (if confirmed): evaluate a **pure grant predicate** over EVERY
+
+> **[x] WAVE 2 DONE (S277).** Fix authored in the STAGED tree
+> (`.claude/plans/PLAN-160/staged/check_canonical_edit.py`, gitignored). All
+> Wave-1 repros flip green against staged (`PLAN160_HOOK_PATH`): **19 passed**
+> (grew from 12 with the pair-rail regression guards). HEAD stays
+> `9 passed / 5 skipped / 5 xfailed` (CI-safe). Clean-clone mirror (staged
+> overlaid on canonical): full `.claude/hooks/tests/` **6242 passed, 0 failed**.
+>
+> **Fix shape (all debate-consensus points landed):** A = single-source
+> most-restrictive scan selecting the offending candidate, `decide()`
+> emit-once, `_find_sentinels` lazy+hoisted+guarded (`_safe_sentinel_count`),
+> cap 512 fail-CLOSED, scan/classification fault fail-CLOSED via `_forced_out`
+> **bypassing** `decide()`; C = `decide()` resolve fault → fail-CLOSED
+> (`canonical_edit_hook_fault`); D = `_repo_rels`/`_canonical_rel` dual-anchor
+> single source, made **TOTAL** (`except Exception`). C property rewritten to
+> behavioral (`canonical ⇒ decide blocks`) — the deadness property encoded the
+> HEAD anchoring invariant that D deliberately breaks.
+>
+> **Pair-rail (ran to APPROVE, not to "enough" — [[feedback-pair-rail-finds-range-bugs-debate-misses]]):**
+> - **codex round-1 REJECT** (2 HIGH + 1 MED): per-candidate fault routed
+>   through `decide()` → outer handler fail-OPEN; `_find_sentinels` hoisted
+>   outside the try → zero-emit; cap-after-materialization.
+> - **security round-1 VETO** (blocker): same class, root-caused deeper — a
+>   **symlink loop** makes `Path.resolve()` raise **`RuntimeError`** (not
+>   caught by the draft's `_repo_rels` `except (ValueError, OSError)`), so the
+>   fix REGRESSED vs HEAD (`[loop, ungranted]` allowed where HEAD blocked).
+> - **Fixes:** `_repo_rels` → `except Exception` (total `_is_canonical`) +
+>   `_forced_out` scan-fault fail-close + lazy/guarded sentinels + 4 new
+>   regression tests (symlink-loop both orders, over-cap, in-process
+>   sentinel-fault, dual-anchor units).
+> - **Round-2: codex APPROVE (no findings); security VETO LIFTED**
+>   (re-ran the exploit → blocks; fuzzed totality → zero raises; 591 passed).
+>   2 non-blocking nits applied (single-candidate totality comment; audit-label
+>   clarification). **QA APPROVE_WITH_NITS** (all nits addressed).
+
+- [x] **A** (if confirmed): evaluate a **pure grant predicate** over EVERY
   canonical candidate, most-restrictive-wins (ANY ungranted canonical path
   blocks the event) — do NOT call side-effecting `decide()` per candidate (it
   fires `_emit_persona_coverage_synthesized` L1146); emit allow/block/coverage
@@ -178,15 +226,31 @@ existing canonical-guard test regresses
 - [ ] **B**: at minimum fix the false comment; add allowlist/`.asc` to the key
   only if Wave 1 found a same-process re-entrancy window.
 
-### Wave 3 — ceremony land (KERNEL)
+### Wave 3 — ceremony land (KERNEL) — **OWNER-GATED, PREP DONE (S277)**
 Check: `land-*.sh --dry-run` green (full named test set in STAGED mode);
 touched ⊆ sentinel scope
-- [ ] `check_canonical_edit.py` is a `_KERNEL_PATHS` entry → stage + GPG
+
+> **[~] PREP COMPLETE — awaiting Owner GPG.** Everything is staged and
+> committed except the signature. See `HANDOFF-S277-PLAN160.md`. To land:
+> ```
+> bash .claude/plans/PLAN-160/land-plan160.sh --dry-run   # rehearsal (restores)
+> bash .claude/plans/PLAN-160/land-plan160.sh             # real: signs + commits
+> git verify-commit HEAD && git push origin main
+> ```
+> The `--dry-run` cp onto the canonical kernel path is why the CEO could not
+> rehearse it in-session (the `check_bash_safety` Wave-E.3 interceptor blocks
+> Claude-driven cp onto canonical); the Owner shell is not gated.
+
+- [x] `check_canonical_edit.py` is a `_KERNEL_PATHS` entry → stage + GPG
   sentinel ceremony with `CEO_KERNEL_OVERRIDE`; the `land-followup.sh` pattern.
   A behavioral oracle in preflight must FAIL unless the staged bytes actually
-  carry the A-fix (never sign a claim the bytes don't hold).
-- [ ] ADR for any decision that changes the gate's fail-open/closed contract
-  (C) or the multi-candidate policy (A).
+  carry the A-fix (never sign a claim the bytes don't hold). **DONE:**
+  `land-plan160.sh` + `architect/round-1/approved.body.md` +
+  `check_canonical_edit.py.basepin` + `inputs.sha256` (tracked manifest).
+- [x] ADR for any decision that changes the gate's fail-open/closed contract
+  (C) or the multi-candidate policy (A). **DONE:** ADR-164 (A+C), ADR-165 (D)
+  staged under `.claude/plans/PLAN-160/staged/adr/`; the ceremony applies them
+  to `.claude/adr/` + bumps the ADR count 178→180 (CLAUDE.md CI-gate + 7 docs).
 
 ### Wave 4 — closeout
 Check: CI green on closeout commit; plan → done
@@ -231,7 +295,25 @@ Check: CI green on closeout commit; plan → done
 
 ## How to continue
 
-**START HERE next terminal — status is `reviewed`, Wave 0 debate is DONE**
+**START HERE next terminal (S278+) — status is `executing`; W1+W2 DONE, W3
+prep DONE, W3 land is OWNER-GATED.** The only remaining action is the Owner
+GPG ceremony:
+
+```
+bash .claude/plans/PLAN-160/land-plan160.sh --dry-run   # green rehearsal (auto-restores)
+bash .claude/plans/PLAN-160/land-plan160.sh             # signs sentinel + commits (kernel + 2 ADRs + count bump)
+git verify-commit HEAD && git push origin main
+gh run watch $(gh run list --workflow validate.yml --branch main --limit 1 --json databaseId --jq '.[0].databaseId')
+```
+
+Then flip the plan `executing → done` (add `completed_at` + `related_commits`
+— the `reviewed→done` shortcut is ILLEGAL). Optional Wave 4: re-run `/council`
+on the fixed file once the grok-lane arg-contract sibling follow-up lands.
+Full Owner runbook: `HANDOFF-S277-PLAN160.md`.
+
+---
+
+**(historical) START HERE next terminal — status is `reviewed`, Wave 0 debate is DONE**
 (3× ADJUST → PROCEED, 2026-07-17; consensus + the 8 applied adjustments are in
 `.claude/plans/PLAN-160/debate/round-1/consensus.md` and the "Round-1 debate
 adjustments" section above — the adjustments GOVERN where any wave text below
