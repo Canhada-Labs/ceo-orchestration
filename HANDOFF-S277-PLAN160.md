@@ -1,8 +1,12 @@
 # HANDOFF — S277 — PLAN-160 canonical-edit hardening (Owner-gated ceremony)
 
-**Status:** W1 + W2 DONE and committed; W3 prep DONE; **only the Owner GPG
-ceremony remains.** Nothing has been pushed by the autonomous run — review the
-commits, then run the ceremony and push.
+**Status:** W1 + W2 DONE; W3 prep DONE; **only the Owner GPG ceremony
+remains.** The prep commits (tests + plan + ceremony materials) are **already
+pushed to origin/main** (they passed the pre-push CI-equivalent gate) — this is
+intentional so the ceremony's origin-sync preflight passes. The **security fix
+itself is NOT on origin**: it lives in `staged/` (gitignored) and lands ONLY
+via your GPG ceremony below. Review, then run the ceremony and push the
+ceremony commit.
 
 ## What landed autonomously (main, local — NOT pushed)
 
