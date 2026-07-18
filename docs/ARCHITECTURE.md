@@ -53,7 +53,7 @@ ceo-orchestration/
     │   ├── core/                   # 42 universal backend skills
     │   ├── frontend/               # 8 universal frontend skills
     │   └── domains/                # 116 skills across 33 domain profiles
-    ├── adr/                        # 178 architecture decision records
+    ├── adr/                        # 180 architecture decision records
     └── plans/                      # plan schemas + per-plan working files
 ```
 
@@ -234,7 +234,7 @@ this repository happens to implement it today*. An install pins a SPEC version;
 internal refactors that keep the schemas stable do not break adopters.
 
 Decisions that shape these contracts are recorded as Architecture Decision
-Records in `.claude/adr/` (178 to date), with a documented lifecycle
+Records in `.claude/adr/` (180 to date), with a documented lifecycle
 (PROPOSED → ACCEPTED, plus SUPERSEDED / RETRACTED).[^adr]
 
 The repository also includes a TLA+ specification of the core state machine

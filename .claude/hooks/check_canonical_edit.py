@@ -680,19 +680,66 @@ _CANONICAL_PREFIXES = frozenset({
 })
 
 
-def _is_canonical(path_str: str, repo_root: Path) -> bool:
-    """True if path_str matches one of the canonical guard patterns.
+# PLAN160_FIX_A — upper bound on candidates classified per multi-candidate
+# event. Beyond this the event is fail-CLOSED (blocked) rather than risk an
+# unexamined canonical candidate riding through past a truncated scan. Real
+# apply_patch / MCP bulk events carry a handful of paths; this is a DoS-shape
+# backstop, not a normal-path limit.
+_PLAN160_MAX_CANDIDATES = 512
 
-    PLAN-025 F-perf-004: fast-path prefix check bails out on the vast
-    majority of non-canonical paths without invoking fnmatch.
+
+def _repo_rels(path_str: str, repo_root: Path) -> List[str]:
+    """All repo-relative POSIX forms of ``path_str`` (0, 1, or 2 entries).
+
+    PLAN160_FIX_D (finding D — relative-path classification bypass,
+    most-restrictive-wins): a RELATIVE path is resolved against BOTH the
+    process CWD (historical anchoring) AND ``repo_root``. A canonical file
+    addressed by a relative ``path_str`` from a CWD outside the repo
+    previously resolved outside ``repo_root`` → ``relative_to`` raised →
+    treated non-canonical → the unsigned edit sailed through ungated.
+    Yielding the repo_root-anchored form too closes that bypass. Absolute
+    paths yield ONLY the CWD-form (``repo_root / p`` discards ``repo_root``
+    when ``p`` is absolute), so classification AND per-call resolve cost
+    stay byte-identical on the Edit/Write hot path. Returned in anchoring
+    order (CWD-form first) so callers pick the historical rel when both
+    land inside the repo (the CWD==repo_root common case → one entry).
+
+    TOTAL by construction (PLAN-160 finding-A blocker, codex + security
+    pair-rail): every resolve is caught with a BROAD ``except Exception``.
+    ``Path.resolve()`` raises ``RuntimeError`` — NOT ``ValueError``/``OSError``
+    — on a symlink loop; if that propagated, ``_is_canonical`` would raise,
+    and a raising candidate in the multi-candidate scan would route through
+    ``decide()`` and the outer handler would fail-OPEN (allow) the whole
+    event — a gate-bypass strictly worse than HEAD. An unresolvable path is
+    simply non-canonical here (its write fails at the OS anyway); the other
+    candidates in a multi-candidate event are still scanned and gated.
     """
     p = Path(path_str)
     try:
-        rel = p.resolve().relative_to(repo_root.resolve())
-    except (ValueError, OSError):
-        # Path is outside repo root → not canonical.
-        return False
-    rel_str = str(rel).replace(os.sep, "/")
+        root_resolved = repo_root.resolve()
+    except Exception:
+        return []
+    anchorings = [p]
+    if not p.is_absolute():
+        anchorings.append(repo_root / p)
+    rels: List[str] = []
+    for cand in anchorings:
+        try:
+            rels.append(
+                str(cand.resolve().relative_to(root_resolved)).replace(os.sep, "/")
+            )
+        except Exception:
+            continue
+    return rels
+
+
+def _matches_canonical_guard(rel_str: str) -> bool:
+    """True if a repo-relative POSIX path matches a canonical guard pattern.
+
+    Split out of ``_is_canonical`` (PLAN160_FIX_D) so the identical
+    fast-path prefix check + glob loop runs against each candidate path
+    anchoring without duplication. PLAN-025 F-perf-004 fast-path preserved.
+    """
     # Fast path: check the first path segment against known prefixes.
     first_seg = rel_str.split("/", 1)[0]
     if first_seg not in _CANONICAL_PREFIXES:
@@ -701,6 +748,35 @@ def _is_canonical(path_str: str, repo_root: Path) -> bool:
         if _fnmatch_segments(rel_str, pattern):
             return True
     return False
+
+
+def _canonical_rel(path_str: str, repo_root: Path) -> Optional[str]:
+    """The repo-relative form of ``path_str`` that matches a canonical
+    guard, or ``None`` if no anchoring is canonical.
+
+    PLAN160_FIX_D: single source of truth for canonicality AND the
+    repo-relative form used downstream (decide() sentinel matching,
+    ``_candidate_is_granted``), so a canonical path is ALWAYS paired with
+    the exact rel that classified it — the CWD-anchored ``decide()`` resolve
+    could otherwise raise on a repo_root-anchored canonical path and route a
+    clean sentinel-block through finding C's fault branch instead.
+    """
+    for rel_str in _repo_rels(path_str, repo_root):
+        if _matches_canonical_guard(rel_str):
+            return rel_str
+    return None
+
+
+def _is_canonical(path_str: str, repo_root: Path) -> bool:
+    """True if path_str matches one of the canonical guard patterns.
+
+    Thin wrapper over ``_canonical_rel`` (PLAN160_FIX_D). NOTE: this is a
+    SHARED predicate (hook Layer-A, the ``--is-canonical`` CLI oracle, and
+    ``_candidate_is_granted``); the finding-D change WIDENS classification
+    (relative paths from a foreign CWD now classify canonical → more
+    blocks), never narrows it — see the ADR.
+    """
+    return _canonical_rel(path_str, repo_root) is not None
 
 
 def _fnmatch_segments(path: str, pattern: str) -> bool:
@@ -1131,12 +1207,29 @@ def decide(
     if not _is_canonical(file_path, repo_root):
         return _emit_allow()
 
-    # Resolve to repo-relative form for sentinel matching
-    p = Path(file_path)
-    try:
-        rel = str(p.resolve().relative_to(repo_root.resolve())).replace(os.sep, "/")
-    except (ValueError, OSError):
-        return _emit_allow()
+    # Confirmed canonical. Re-derive the repo-relative form for sentinel
+    # matching via the SAME dual-anchor resolution as _is_canonical
+    # (PLAN160_FIX_D), so the path is paired with the rel that classified
+    # it (a repo_root-anchored canonical path would otherwise fault the
+    # historical CWD-anchored resolve and route a clean sentinel-block
+    # through the finding-C fault branch).
+    rel = _canonical_rel(file_path, repo_root)
+    if rel is None:
+        # PLAN160_FIX_C (finding C): fail-CLOSED. ``_is_canonical`` (guard
+        # above) returned True, yet no anchoring yields a canonical rel
+        # HERE — only a same-process TOCTOU between those two resolves can
+        # reach this. The historical code fail-OPENED via
+        # ``return _emit_allow()`` on the resolve fault; a confirmed-canonical
+        # path MUST block (PLAN-045 F-01-07). Dead in same-process terms;
+        # defense-in-depth.
+        return _emit_block(
+            reason=(
+                "CANONICAL-EDIT-BLOCKED: canonical_edit_hook_fault — a "
+                "confirmed-canonical path could not be resolved repo-relative "
+                "for sentinel matching (same-process TOCTOU). PLAN-045 "
+                "F-01-07 / PLAN-160 finding C fail-closed."
+            )
+        )
 
     sentinels = _find_sentinels(repo_root)
     for sentinel in sentinels:
@@ -1159,6 +1252,46 @@ def decide(
             f"this path declared in the Scope: block. See ADR-010."
         )
     )
+
+
+def _candidate_is_granted(path_str: str, repo_root: Path, sentinels) -> bool:
+    """PLAN160_FIX_A helper — pure grant predicate for one candidate.
+
+    True iff the (assumed-canonical) ``path_str`` resolves repo-relative
+    AND some sentinel in ``sentinels`` grants that repo-relative path. A
+    resolve fault on a canonical path is NOT a grant → returns False, so
+    the caller treats the candidate as the offender and blocks
+    (fail-CLOSED, mirroring finding C's decide() contract).
+
+    Pure: NO side effects (does not emit persona coverage or audit) — those
+    stay once-per-event concerns owned by ``decide()``. Uses the SAME
+    ``_canonical_rel`` anchoring as ``_is_canonical`` and ``decide()``
+    (PLAN160_FIX_D), so grant is checked against the exact rel that
+    classified the candidate canonical; a candidate with no canonical rel
+    is conservatively treated as ungranted (→ offender → block).
+    """
+    rel = _canonical_rel(path_str, repo_root)
+    if rel is None:
+        return False
+    for sentinel in sentinels:
+        if _sentinel_grants_path(sentinel, rel):
+            return True
+    return False
+
+
+def _safe_sentinel_count(repo_root: Path) -> int:
+    """Best-effort sentinel count for the veto-audit breadcrumb.
+
+    PLAN160_FIX_A (codex pair-rail HIGH#2): the audit breadcrumb must never
+    let a ``_find_sentinels`` fault (a malformed sentinel dir, an OSError
+    walking the tree) propagate out of ``main()`` and produce a ZERO-emit
+    hook on a governance event. Returns 0 on any fault — the count is
+    forensic only; the block/allow decision is already made.
+    """
+    try:
+        return len(_find_sentinels(repo_root))
+    except Exception:
+        return 0
 
 
 def _audit_block(rel: str, sentinels_count: int) -> None:
@@ -1359,20 +1492,115 @@ def main() -> int:
 
     repo_root = Path(os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd())
 
-    # Layer A: if ANY candidate is canonical, gate using that canonical
-    # path (most restrictive policy). Historically mcp__*-only; PLAN-155
-    # extends the scan to any multi-candidate event (apply_patch multi-
-    # file, S265 P1#3). Single-candidate events (every Claude Code
-    # Edit/Write) skip the loop body outcome-identically.
-    if tool_name.startswith("mcp__") or len(candidate_paths) > 1:
-        for candidate in candidate_paths:
-            try:
-                if _is_canonical(candidate, repo_root):
-                    file_path = candidate
-                    break
-            except Exception:
-                continue
+    # Layer A: gate a multi-candidate event using the MOST RESTRICTIVE
+    # canonical candidate. Historically mcp__*-only; PLAN-155 extends the
+    # scan to any multi-candidate event (apply_patch multi-file, S265
+    # P1#3). Single-candidate events (every Claude Code Edit/Write) skip
+    # this block entirely — byte-identical fast path.
+    #
+    # PLAN160_FIX_A (finding A — multi-candidate gate bypass): the prior
+    # loop ``break``-ed at the FIRST canonical candidate and gated ONLY
+    # that path via decide(). A multi-file MCP event whose first canonical
+    # candidate was sentinel-GRANTED let every LATER canonical candidate
+    # ride through UNGATED. The fix scans ALL candidates and selects the
+    # OFFENDING candidate (canonical + ungranted) if any —
+    # most-restrictive-wins — so decide() is still invoked at most ONCE
+    # (emit-once: decide() fires _emit_persona_coverage_synthesized on the
+    # allow path; a per-candidate decide() would double-emit).
+    #
+    # ``_forced_out``: a pre-built decision that BYPASSES decide(). Set for
+    # the two fail-CLOSED cases that must NOT be re-routed through decide()
+    # — over-cap, and any scan fault (classification OR sentinel discovery).
+    # Routing a classification-fault candidate through decide() would
+    # re-raise inside decide(), and the outer handler below would then
+    # fail-classify it as non-canonical and ALLOW (the V-A hole the codex
+    # pair-rail REJECTed). ``_find_sentinels`` is loaded LAZILY, only once a
+    # canonical candidate is seen, and the whole scan is wrapped so a
+    # sentinel-discovery fault fail-CLOSES with an emit instead of
+    # propagating out of main() (zero-emit hole).
+    _multi = tool_name.startswith("mcp__") or len(candidate_paths) > 1
+    _forced_out = None
+    if _multi:
+        try:
+            if len(candidate_paths) > _PLAN160_MAX_CANDIDATES:
+                # Fail-CLOSED: more candidates than we will classify —
+                # cannot prove every canonical candidate is granted, so
+                # block the whole event rather than truncate the scan and
+                # risk an unexamined offender beyond the cap.
+                _forced_out = _emit_block(
+                    reason=(
+                        "CANONICAL-EDIT-BLOCKED: canonical_edit_hook_fault — "
+                        f"multi-candidate event carries {len(candidate_paths)} "
+                        f"paths (> cap {_PLAN160_MAX_CANDIDATES}); cannot clear "
+                        "all — fail-closed. PLAN-160 finding A."
+                    )
+                )
+            else:
+                sentinels = None  # lazy: only load once a canonical candidate exists
+                first_canonical = None
+                offender = None
+                for candidate in candidate_paths:
+                    if not _is_canonical(candidate, repo_root):
+                        continue
+                    if first_canonical is None:
+                        first_canonical = candidate
+                    if sentinels is None:
+                        sentinels = _find_sentinels(repo_root)
+                    if not _candidate_is_granted(candidate, repo_root, sentinels):
+                        offender = candidate
+                        break
+                # decide() runs ONCE: on the offender (→ block naming it) if
+                # any, else the first canonical candidate (→ sentinel allow +
+                # persona coverage), else candidate_paths[0] (non-canonical →
+                # allow).
+                file_path = offender or first_canonical or file_path
+        except Exception as _scan_exc:
+            # Classification OR sentinel-discovery fault on a MULTI-candidate
+            # event → fail-CLOSED with an emit. We are on a multi-file event
+            # we could not fully clear; a re-route through decide() would
+            # re-raise on the unclassifiable path and the outer handler would
+            # ALLOW it (V-A). Blocking here is the only safe outcome.
+            print(
+                f"[check_canonical_edit] SCAN FAULT: "
+                f"{type(_scan_exc).__name__}: {_scan_exc}",
+                file=sys.stderr,
+            )
+            _forced_out = _emit_block(
+                reason=(
+                    "CANONICAL-EDIT-BLOCKED: canonical_edit_hook_fault — "
+                    f"multi-candidate scan fault ({type(_scan_exc).__name__}); "
+                    "fail-closed. PLAN-160 finding A."
+                )
+            )
 
+    if _forced_out is not None:
+        # Pre-built fail-closed decision (over-cap or scan fault). Emit
+        # through the same legacy seam + best-effort veto audit as a normal
+        # block, BYPASSING decide() — routing a scan-fault path through
+        # decide() would re-raise and the outer handler would fail-OPEN
+        # (the V-A hole the codex pair-rail REJECTed).
+        _fparsed = json.loads(_forced_out)
+        if _fparsed.get("decision") == "block":
+            # Forensic breadcrumb only. On over-cap / scan-fault the specific
+            # offending candidate is unknown or unreachable, so we record the
+            # event's FIRST candidate (not necessarily the offender); the
+            # fail-CLOSED decision itself is correct regardless.
+            _audit_block(
+                candidate_paths[0] if candidate_paths else file_path,
+                _safe_sentinel_count(repo_root),
+            )
+        _emit_legacy_decision_json(_forced_out, _adapter, event)
+        return 0
+
+    # Single-candidate hot path (and the all-canonical-granted multi path)
+    # reaches decide() here. SECURITY INVARIANT: this call is NOT wrapped by
+    # the multi-candidate fail-CLOSED scan above, so its safety relies on
+    # ``_is_canonical`` / ``_repo_rels`` being TOTAL (never raising on str
+    # input — guaranteed by their broad ``except Exception``, PLAN160_FIX_D,
+    # and fenced by the totality unit tests). If a future refactor
+    # reintroduces a raise in classification, the outer handler below
+    # re-classifies and could fail-OPEN a single-candidate canonical edit —
+    # keep the totality tests as the regression fence.
     try:
         out = decide(file_path=file_path, repo_root=repo_root)
     except Exception as e:
@@ -1412,7 +1640,7 @@ def main() -> int:
             rel = str(Path(file_path).resolve().relative_to(repo_root.resolve())).replace(os.sep, "/")
         except Exception:
             rel = file_path
-        _audit_block(rel, len(_find_sentinels(repo_root)))
+        _audit_block(rel, _safe_sentinel_count(repo_root))
 
     # PLAN-133 A2 — invisible-unicode guard at SKILL.md authoring. Only on a
     # would-allow canonical SKILL.md edit (so we never relax the sentinel gate;

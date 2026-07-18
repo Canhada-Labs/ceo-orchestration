@@ -163,7 +163,7 @@ For those, use Claude Code directly. Spawn overhead > benefit.
   is deferred to v2+.
 - **Audited.** Every spawn, every decision, every veto becomes a JSONL
   event.
-- **Governed by ADR.** 178 ADRs document every architectural decision.
+- **Governed by ADR.** 180 ADRs document every architectural decision.
 
 ### It is NOT:
 - **A product.** No UI, no SaaS, no login.
@@ -1221,7 +1221,7 @@ mv .claude .claude.disabled
 - `.claude/frontend-team.md` — frontend roster
 - `.claude/pitfalls-catalog.yaml` — universal pitfalls
 - `.claude/task-chains.yaml` — 6 universal workflows
-- `.claude/adr/` — 178 Architecture Decision Records
+- `.claude/adr/` — 180 Architecture Decision Records
 - `.claude/plans/` — active plans + archive
 - `.claude/skills/core/` — 42 universal skills
 - `.claude/skills/frontend/` — 8 frontend skills

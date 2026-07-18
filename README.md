@@ -56,7 +56,7 @@ All counts below are verifiable from a clean checkout (see *Verifying the number
 | Hooks wired in `settings.json` | **44** | distinct scripts, 46 event registrations |
 | Shared library modules | **68** | stdlib-only, under `.claude/hooks/_lib/` (excluding the package `__init__.py`) |
 | Slash commands | **26** | under `.claude/commands/` |
-| Architecture decision records | **178** | under `.claude/adr/` |
+| Architecture decision records | **180** | under `.claude/adr/` |
 | Tests | **~12,000 cases** | reported by `pytest --collect-only` across the hook, script, and conformance suites |
 
 The gap between **55 on disk** and **44 wired** is benign: several non-event modules are activated through in-process dispatch (invoked by other hooks) rather than by a direct `settings.json` event registration.
@@ -183,7 +183,7 @@ Don't take the table on faith. From a clean checkout:
 ```bash
 find .claude/skills -name SKILL.md | wc -l        # 166 skills
 ls .claude/commands/*.md | wc -l                  # 26 slash commands
-ls .claude/adr | grep -c '^ADR-'                  # 178 ADRs
+ls .claude/adr | grep -c '^ADR-'                  # 180 ADRs
 python3 -m pytest --collect-only -q | tail -1     # ~12,000 collected cases
 ```
 
