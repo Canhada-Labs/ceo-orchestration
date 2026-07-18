@@ -520,10 +520,14 @@ class FindingCDeadnessTest(TestEnvContext):
             # symlinks
             str(link_inside),
             str(link_outside),
-            # relative forms (resolve against the pytest process cwd —
-            # OUTSIDE this tmp repo root, so classified non-canonical;
-            # the property is implication-shaped, these exercise the
-            # False side. This is exactly finding D's surface.)
+            # Relative forms: on HEAD these resolve against the pytest
+            # process cwd (outside this tmp repo root) → non-canonical (the
+            # False side). On the fixed code, finding D's dual-anchor also
+            # tries the repo_root-anchored form, so ".claude/team.md"
+            # classifies canonical (the True side) while "docs/notes.md"
+            # stays non-canonical. The implication holds either way; on the
+            # fixed code the True side raises canonical_true. Finding D's
+            # own surface.
             ".claude/team.md",
             "docs/notes.md",
             # outside the repo
@@ -639,6 +643,174 @@ class FindingBCacheBlastRadiusTest(_CouncilFindingsBase):
         d2 = self._decision(payload)
         self.assertEqual(d2.get("decision"), "block", msg=d2)
         self.assertIn(self.TARGET_REL, d2.get("reason", ""), msg=d2)
+
+
+# ===========================================================================
+# Finding A — Wave-2 pair-rail regression guards (blocker + fail-closed branches)
+# ===========================================================================
+class FindingABlockerRegressionTest(_CouncilFindingsBase):
+    """Guards the two defects the W2 codex+security pair-rail REJECTed on the
+    first fix draft:
+
+    - a classification-raising candidate (symlink loop → ``RuntimeError`` from
+      ``Path.resolve()``, which ``_repo_rels`` did not catch) must NOT
+      fail-open the whole multi-candidate event;
+    - the > cap candidate count must fail-CLOSED.
+    """
+
+    GRANTED_REL = ".claude/team.md"
+    UNGRANTED_REL = ".claude/frontend-team.md"
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._make_repo_layout()
+        self.ungranted_abs = str(self.project_dir / self.UNGRANTED_REL)
+
+    def test_symlink_loop_candidate_does_not_fail_open(self) -> None:
+        """A symlink-loop candidate alongside an ungranted canonical path
+        must BLOCK in BOTH orders (passes on HEAD AND after the fix).
+
+        On HEAD ``_is_canonical`` raises ``RuntimeError`` on the loop and the
+        old ``except: continue`` skipped it, still gating the ungranted
+        canonical. The first W2 draft's ``except: offender = candidate; break``
+        + route-through-decide() fail-OPENED the whole event (worse than
+        HEAD); the shipped fix makes ``_repo_rels`` total so the loop
+        classifies non-canonical and the scan continues to gate the ungranted
+        path. This test fails on that broken draft, passes on HEAD and on the
+        real fix.
+        """
+        loop_a = self.project_dir / "loopA"
+        loop_b = self.project_dir / "loopB"
+        try:
+            loop_a.symlink_to(loop_b)
+            loop_b.symlink_to(loop_a)
+        except OSError:  # pragma: no cover - fs without symlink support
+            self.skipTest("filesystem does not support symlinks")
+        loop_abs = str(loop_a)
+        for order in (
+            [loop_abs, self.ungranted_abs],
+            [self.ungranted_abs, loop_abs],
+        ):
+            d = self._decision(self._mcp_bulk_write_event(order))
+            self.assertEqual(
+                d.get("decision"), "block", msg=f"order={order}: {d}"
+            )
+            self.assertIn(
+                self.UNGRANTED_REL, d.get("reason", ""), msg=f"order={order}: {d}"
+            )
+
+    @_XFAIL_A
+    def test_over_cap_fails_closed(self) -> None:
+        """A multi-candidate event exceeding the classification cap must
+        fail-CLOSED with ``canonical_edit_hook_fault`` (xfail-strict on HEAD:
+        HEAD has no cap and allows the all-granted event).
+        """
+        self._write_sentinel("PLAN-204", [self.GRANTED_REL])
+        granted_abs = str(self.project_dir / self.GRANTED_REL)
+        paths = [granted_abs] * 513
+        d = self._decision(self._mcp_bulk_write_event(paths))
+        self.assertEqual(d.get("decision"), "block", msg={"n": len(paths)})
+        self.assertIn("canonical_edit_hook_fault", d.get("reason", ""), msg=d)
+
+    def test_sentinel_discovery_fault_fails_closed(self) -> None:
+        """A ``_find_sentinels`` fault during the multi-candidate scan (a
+        canonical candidate is present) must fail-CLOSED with a block emit,
+        never a zero-emit crash or an allow (codex pair-rail HIGH#2).
+
+        Driven in-process (the fault is injected by monkeypatch, impossible to
+        stage on disk portably): ``main()`` is invoked with a patched stdin +
+        env and ``_find_sentinels`` raising.
+        """
+        import io
+        import contextlib
+        from unittest import mock
+
+        mod = _load_hook_module()
+        if not hasattr(mod, "_safe_sentinel_count"):
+            self.skipTest("fix not present (HEAD): no _find_sentinels fault path")
+        self._make_repo_layout()
+        payload = self._mcp_bulk_write_event([self.ungranted_abs])
+        env = {
+            **os.environ,
+            "CLAUDE_PROJECT_DIR": str(self.project_dir),
+            "CEO_SENTINEL_UNLOCK": "PLAN-160-council-fixture",
+            "CEO_SENTINEL_UNLOCK_ACK": "I-ACCEPT",
+        }
+        stdout = io.StringIO()
+
+        def _boom(_repo_root):
+            raise OSError("PLAN-160 injected: sentinel discovery fault")
+
+        with mock.patch.dict(os.environ, env, clear=True), mock.patch.object(
+            mod, "_find_sentinels", _boom
+        ), mock.patch("sys.stdin", io.StringIO(json.dumps(payload))), \
+                contextlib.redirect_stdout(stdout):
+            rc = mod.main()
+
+        self.assertEqual(rc, 0)
+        out = stdout.getvalue().strip()
+        self.assertTrue(out, msg="ZERO-EMIT: main() produced no decision")
+        d = json.loads(out.splitlines()[-1])
+        self.assertEqual(d.get("decision"), "block", msg=d)
+        self.assertIn("canonical_edit_hook_fault", d.get("reason", ""), msg=d)
+
+
+@pytest.mark.skipif(
+    not FIXED_D, reason="dual-anchor helpers only exist in the fixed hook"
+)
+class RepoDualAnchorUnitTest(TestEnvContext):
+    """Direct unit coverage for the finding-D single-source anchoring helpers
+    (``_repo_rels`` / ``_canonical_rel`` / ``_is_canonical`` totality), which
+    were previously exercised only through subprocess + monkeypatch.
+    """
+
+    def _layout(self) -> None:
+        (self.project_dir / ".claude").mkdir(exist_ok=True)
+        (self.project_dir / ".claude" / "team.md").write_text("t", encoding="utf-8")
+
+    def test_is_canonical_total_on_symlink_loop(self) -> None:
+        mod = _load_hook_module()
+        loop_a = self._tmp_root / "la"
+        loop_b = self._tmp_root / "lb"
+        try:
+            loop_a.symlink_to(loop_b)
+            loop_b.symlink_to(loop_a)
+        except OSError:  # pragma: no cover
+            self.skipTest("no symlink support")
+        # Must NOT raise (RuntimeError from resolve() is swallowed) and must
+        # classify non-canonical.
+        self.assertEqual(mod._repo_rels(str(loop_a), self.project_dir), [])
+        self.assertFalse(mod._is_canonical(str(loop_a), self.project_dir))
+
+    def test_repo_rels_absolute_single_anchor(self) -> None:
+        mod = _load_hook_module()
+        self._layout()
+        abs_path = str(self.project_dir / ".claude" / "team.md")
+        self.assertEqual(len(mod._repo_rels(abs_path, self.project_dir)), 1)
+
+    def test_repo_rels_relative_dual_anchor_classifies_canonical(self) -> None:
+        mod = _load_hook_module()
+        self._layout()
+        # Relative canonical path: CWD-anchoring (pytest cwd, outside this tmp
+        # repo) drops out; repo_root-anchoring yields ".claude/team.md".
+        self.assertEqual(
+            mod._canonical_rel(".claude/team.md", self.project_dir),
+            ".claude/team.md",
+        )
+        self.assertTrue(mod._is_canonical(".claude/team.md", self.project_dir))
+        # A relative NON-canonical path stays non-canonical under both.
+        self.assertIsNone(mod._canonical_rel("docs/notes.md", self.project_dir))
+
+    def test_candidate_is_granted_ungranted_and_unresolvable(self) -> None:
+        mod = _load_hook_module()
+        self._layout()
+        abs_path = str(self.project_dir / ".claude" / "team.md")
+        # No sentinels → ungranted.
+        self.assertFalse(mod._candidate_is_granted(abs_path, self.project_dir, []))
+        # Non-canonical (no canonical rel) → not granted, never raises.
+        self.assertFalse(
+            mod._candidate_is_granted("docs/notes.md", self.project_dir, [])
+        )
 
 
 if __name__ == "__main__":  # pragma: no cover
