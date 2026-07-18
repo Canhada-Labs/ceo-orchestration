@@ -206,7 +206,7 @@ sdir.mkdir(parents=True)
     "Scope:\n  - .claude/team.md\n"
 )
 env = {**os.environ, "CLAUDE_PROJECT_DIR": str(tmp),
-       "CEO_SENTINEL_UNLOCK": "x", "CEO_SENTINEL_UNLOCK_ACK": "I-ACCEPT"}
+       "CEO_SENTINEL_UNLOCK": "PLAN-160-oracle-probe", "CEO_SENTINEL_UNLOCK_ACK": "I-ACCEPT"}
 granted = str(tmp / ".claude" / "team.md")
 ungranted = str(tmp / ".claude" / "frontend-team.md")
 def decide(paths):
@@ -354,7 +354,7 @@ sdir.mkdir(parents=True)
     "Scope:\n  - .claude/team.md\n"
 )
 env = {**os.environ, "CLAUDE_PROJECT_DIR": str(tmp),
-       "CEO_SENTINEL_UNLOCK": "x", "CEO_SENTINEL_UNLOCK_ACK": "I-ACCEPT"}
+       "CEO_SENTINEL_UNLOCK": "PLAN-160-oracle-probe", "CEO_SENTINEL_UNLOCK_ACK": "I-ACCEPT"}
 g = str(tmp / ".claude" / "team.md"); u = str(tmp / ".claude" / "frontend-team.md")
 def decide(paths):
     ev = {"hook_event_name": "PreToolUse", "session_id": "probe",
