@@ -20,7 +20,10 @@
 # The U3 purge assertions (E.3) are the STAGED-ORACLE contract for the new
 # opt-in flag: plain FAILs on HEAD (feature absent — no marker), green only
 # once the W2 pack lands. Staged-oracle hook: UPGRADE_SOURCE_DIR points at a
-# patched framework checkout.
+# patched framework checkout. E.2b (W2 fix-3, codex r3 F11b) is likewise a
+# staged-oracle contract: it PROVES adopter-owned excluded-tree content —
+# regular files AND symlinks (targets untouched, F11a) — survives a plain
+# legacy upgrade; RED on HEAD (wholesale find -delete destroys the seeds).
 #
 # bash 3.2-safe. Run: bash scripts/tests/test-upgrade-exclusions.sh; echo rc=$?
 
@@ -136,6 +139,100 @@ else
   tail -20 "$WORKROOT/e2-upgrade.log" >&2
 fi
 assert_excluded_absent "$T2" "E.2" 1
+
+echo "==> E.2b — manifest-LESS adopter: pre-existing excluded content SURVIVES a plain upgrade (W2 F11/F11a survivor guarantee)"
+# A SECOND manifest-less adopter: seeding survivors into T2 itself would void
+# E.2's absence assertions (survivors legitimately keep the excluded tree
+# present). This leg proves the F11 contract a plain legacy upgrade (NO flag)
+# must honor: adopter-owned excluded-tree content stays byte-identical —
+# including symlinks, whose targets must NEVER be touched (F11a: never test
+# or delete THROUGH a symlinked dir into adopter data outside the tree).
+T2B="$( fresh_install )" || scaffold "E.2b install failed"
+rm -f "$T2B/.claude/.install-manifest.sha256"
+mkdir -p "$T2B/.claude/hooks/tests" || scaffold "E.2b seed mkdir failed"
+
+# (i) adopter-owned regular file inside an excluded tree (matches nothing)
+KEEP2B_REL=".claude/hooks/tests/adopter_keep_p161.py"
+printf '# adopter-owned survivor probe p161 — content matches no framework file\n' \
+  > "$T2B/$KEEP2B_REL"
+cp "$T2B/$KEEP2B_REL" "$WORKROOT/e2b-keep.ref" || scaffold "E.2b keep ref failed"
+
+# (ii) symlink inside the excluded tree -> adopter file OUTSIDE it
+LINK2B_TARGET="$T2B/adopter-e2b-link-target.txt"
+printf 'e2b sentinel: adopter content behind excluded-tree symlink\n' \
+  > "$LINK2B_TARGET"
+LINK2B_REL=".claude/hooks/tests/adopter_link_p161.txt"
+ln -s ../../../adopter-e2b-link-target.txt "$T2B/$LINK2B_REL" \
+  || scaffold "E.2b seed file-symlink failed"
+
+# (iii) F11a probe: a symlinked DIRECTORY at an excluded relpath that SHADOWS
+# real excluded source content, pointing OUTSIDE the target tree; the outside
+# dir holds a file at the same tail relpath as an excluded source file. An
+# unguarded prune resolves dst tests THROUGH the link and deletes the outside
+# file; a guarded upgrade must leave link + target byte-identical.
+SUBD_ABS="$( find "$SOURCE_DIR/.claude/hooks/tests" -mindepth 1 -maxdepth 1 \
+  -type d ! -name '__pycache__' 2>/dev/null | LC_ALL=C sort | head -1 )"
+DIRLINK_REL=""; SHADOW_OUT=""; SHADOW_SRC=""
+if [ -n "$SUBD_ABS" ]; then
+  SHADOW_SRC="$( find "$SUBD_ABS" -type f ! -name '*.pyc' 2>/dev/null \
+    | LC_ALL=C sort | head -1 )"
+fi
+if [ -n "$SHADOW_SRC" ]; then
+  SUBD_NAME="$( basename "$SUBD_ABS" )"
+  SHADOW_TAIL="${SHADOW_SRC#"$SUBD_ABS"/}"
+  OUTSIDE_DIR="$WORKROOT/e2b-outside-tree"
+  mkdir -p "$OUTSIDE_DIR/$( dirname "$SHADOW_TAIL" )" \
+    || scaffold "E.2b outside mkdir failed"
+  SHADOW_OUT="$OUTSIDE_DIR/$SHADOW_TAIL"
+  printf 'e2b sentinel: OUTSIDE-tree adopter data shadowing %s\n' "$SHADOW_TAIL" \
+    > "$SHADOW_OUT"
+  cp "$SHADOW_OUT" "$WORKROOT/e2b-shadow.ref" || scaffold "E.2b shadow ref failed"
+  DIRLINK_REL=".claude/hooks/tests/$SUBD_NAME"
+  ln -s "$OUTSIDE_DIR" "$T2B/$DIRLINK_REL" \
+    || scaffold "E.2b seed dir-symlink failed"
+else
+  printf '  note: no shadowable subdir under source .claude/hooks/tests — dir-symlink probe skipped\n'
+fi
+
+if bash "$SOURCE_DIR/scripts/upgrade.sh" "$T2B" --profile core \
+     > "$WORKROOT/e2b-upgrade.log" 2>&1; then
+  ok "E.2b upgrade returned 0"
+else
+  bad "E.2b upgrade failed (see $WORKROOT/e2b-upgrade.log)"
+  tail -20 "$WORKROOT/e2b-upgrade.log" >&2
+fi
+if [ -f "$T2B/$KEEP2B_REL" ] && cmp -s "$T2B/$KEEP2B_REL" "$WORKROOT/e2b-keep.ref"; then
+  ok "E.2b adopter file in excluded tree survived byte-identical: $KEEP2B_REL"
+else
+  bad "E.2b adopter file in excluded tree LOST/ALTERED by plain upgrade: $KEEP2B_REL"
+fi
+if [ -L "$T2B/$LINK2B_REL" ] \
+   && [ "$( readlink "$T2B/$LINK2B_REL" )" = "../../../adopter-e2b-link-target.txt" ]; then
+  ok "E.2b excluded-tree symlink survived unchanged: $LINK2B_REL"
+else
+  bad "E.2b excluded-tree symlink LOST/REWRITTEN by plain upgrade: $LINK2B_REL"
+fi
+if [ -f "$LINK2B_TARGET" ] && cmp -s "$LINK2B_TARGET" /dev/null; then
+  bad "E.2b symlink target EMPTIED by plain upgrade"
+elif [ -f "$LINK2B_TARGET" ] \
+   && grep -q 'e2b sentinel: adopter content behind excluded-tree symlink' "$LINK2B_TARGET"; then
+  ok "E.2b symlink target content untouched"
+else
+  bad "E.2b symlink TARGET damaged by plain upgrade"
+fi
+if [ -n "$DIRLINK_REL" ]; then
+  if [ -L "$T2B/$DIRLINK_REL" ] \
+     && [ "$( readlink "$T2B/$DIRLINK_REL" )" = "$OUTSIDE_DIR" ]; then
+    ok "E.2b symlinked DIR at excluded relpath survived: $DIRLINK_REL"
+  else
+    bad "E.2b symlinked DIR at excluded relpath LOST/REWRITTEN: $DIRLINK_REL"
+  fi
+  if [ -f "$SHADOW_OUT" ] && cmp -s "$SHADOW_OUT" "$WORKROOT/e2b-shadow.ref"; then
+    ok "E.2b OUTSIDE-tree file behind dir-symlink untouched (F11a no delete-through)"
+  else
+    bad "E.2b OUTSIDE-tree file behind dir-symlink DELETED/ALTERED (F11a: prune followed the link)"
+  fi
+fi
 
 echo "==> E.3 — opt-in hash-gated purge matrix (U3 staged-oracle contract)"
 T3="$( fresh_install )" || scaffold "E.3 install failed"
