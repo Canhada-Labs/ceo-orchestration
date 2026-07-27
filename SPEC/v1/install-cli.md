@@ -112,6 +112,46 @@ freshly-installed files).
 | `--dry-run`| none     | off     | (upgrade.sh only) Print per-file diff-q warning; no changes |
 | `--no-diff-warn` | none | off | (upgrade.sh only) Silence the "customization will be replaced" warnings for files that differ from the framework source |
 | `--skip <glob>` | glob pattern | — | (upgrade.sh only) Exclude files matching the glob from overwrite; repeat for multiple patterns. Example: `--skip='.claude/scripts/local/*'` |
+| `--purge-misinstalled` | none | off | (upgrade.sh only, PLAN-161 U3) Opt-in, hash-gated purge of mis-installed framework-internal files found inside the excluded test/legacy trees. NEVER default-on; see §`upgrade.sh --purge-misinstalled` semantics below |
+
+## `upgrade.sh --purge-misinstalled` semantics (PLAN-161 U3, ADR-155 Amendment)
+
+Earlier upgrade builds could mis-install the framework's own internal
+test/legacy trees (`.claude/hooks/tests/`, `.claude/hooks/legacy/`,
+`.claude/scripts/tests/`, `.claude/hooks/_lib/tests/`, plus
+`.claude/hooks/_lib/test_isolation.py` and `.claude/hooks/_lib/testing.py`)
+into adopter targets. `--purge-misinstalled` is the opt-in cleanup for
+that residue:
+
+1. **Opt-in, preview by default.** With the flag ABSENT (including under
+   `--dry-run`), the upgrade only PREVIEWS: it prints one
+   `would PURGE (mis-installed framework-internal): <rel>` line per
+   authorized candidate plus a hint naming `--purge-misinstalled`.
+   Nothing is deleted. With the flag present AND `--dry-run`, it is
+   still preview-only.
+2. **Nomination is structural, never manifest-driven.** Candidates come
+   ONLY from a hardcoded walk of the excluded trees + the two excluded
+   `_lib` files above, under `$TARGET`. The walk is lstat/no-follow:
+   symlinks are reported and skipped, never followed; relpaths that fail
+   the manifest-grade sanitizer (absolute, `..`, control chars, a
+   symlinked path component) are kept with a warning.
+3. **Hash authorization, same relpath only.** A candidate is deleted
+   only when its SHA-256 equals the CURRENT framework source bytes at
+   the SAME relpath, OR equals the target manifest's recorded baseline
+   digest for that relpath. A byte-identical copy at a DIFFERENT relpath
+   is NEVER authorized. Anything else prints
+   `KEPT (excluded-tree file outside provenance rails — not purged)` and
+   survives.
+4. **Backup-always.** With the flag present and not `--dry-run`, every
+   purged file is first copied (`cp -P`) to
+   `.claude.bak/<timestamp>/<rel>` and then deleted; now-empty excluded
+   directories are removed with `rmdir` (never `rm -rf`). A second run
+   finds nothing authorized remaining and purges nothing (no new backup
+   content).
+5. **Exit behavior.** The scan never changes the upgrade's exit status:
+   kept/unauthorized candidates are advisory output, not errors. Infra
+   problems (missing hash helpers) degrade to a stderr NOTE and the scan
+   is skipped (fail-open per CLAUDE.md §5).
 
 ## `upgrade.sh --pin` contract (ADR-007)
 
@@ -232,3 +272,4 @@ verification SHOULD use OS-level package signing (deb / rpm / brew).
 | 1.7.0-rc.2 (2026-04-21) | PLAN-045 F-14 supply-chain: `--verify` / `--verify-sigstore` advisory flags + §Release verification procedure |
 | 1.11.3 (2026-04-29 Session 75) | Codex Finding 5 closure: `--verify-sigstore` REMOVED per Owner D2; `--strict-placeholders` documented (was wired but undocumented); `--verify` reframed as installed-skill checksum verification (sigstore out of scope); `--dry-run` no longer creates target dir |
 | 1.11.4 (2026-04-29 Session 76) | Codex audit-v3 Finding D / DIM-19 closure: `--verify-sigstore` RESTORED as deprecated alias for `--verify` per SemVer policy. Alias emits stderr warning and delegates to `--verify`; sigstore backend remains out of scope (Owner D2 unchanged). `deprecated_in: 1.11.4` / `removed_in: 2.0.0`. |
+| (2026-07-27 PLAN-161) | U3: `--purge-misinstalled` added (opt-in, hash-gated, backup-always purge of mis-installed framework-internal excluded trees; preview default). Upgrade `--dry-run` hardened to write NOTHING in the target (U1); the install.sh framework-internal exclusion set is now honored by upgrade.sh via the shared `_framework_path_excluded` predicate (U2). See ADR-155 Amendment. |

@@ -997,17 +997,65 @@ done
 # subdirs adapters/ estimation/ federation/ mcp/ otel/ tier_policy/ +
 # __init__.py) ships. New runtime modules are picked up automatically by
 # the glob, matching the install_scripts_selective convention.
+# PLAN-161 U2 (codex r1 F7): prune nested __pycache__/ dirs + *.pyc files
+# under a freshly-copied destination directory. The exclusion predicate above
+# screens only TOP-LEVEL _lib entries; a permitted SUBDIRECTORY (e.g.
+# _lib/adapters) is cp -R'd wholesale, dragging nested __pycache__ dirs and
+# .pyc files the predicate declares globally excluded. Per-file delete +
+# rmdir only — NEVER rm -rf. Refuses to operate through a symlink root
+# (link-mode dst is a symlink into the SOURCE tree). Fail-open: every step
+# is guarded; never changes the install exit status.
+_prune_pycache_under() {
+  local _pp_root="$1" _pp_d _pp_f
+  [[ -d "$_pp_root" && ! -L "$_pp_root" ]] || return 0
+  # 1) *.pyc files anywhere under the copied destination (find without -L:
+  #    symlinks are never followed).
+  while IFS= read -r _pp_f; do
+    [[ -n "$_pp_f" ]] || continue
+    rm -f "$_pp_f" 2>/dev/null || true
+  done < <( find "$_pp_root" -type f -name '*.pyc' -print 2>/dev/null )
+  # 2) __pycache__ dirs, deepest first (-depth): delete their files one by
+  #    one, then rmdir. A dir still holding anything unexpected simply stays.
+  while IFS= read -r _pp_d; do
+    [[ -n "$_pp_d" && -d "$_pp_d" && ! -L "$_pp_d" ]] || continue
+    while IFS= read -r _pp_f; do
+      [[ -n "$_pp_f" ]] || continue
+      rm -f "$_pp_f" 2>/dev/null || true
+    done < <( find "$_pp_d" \( -type f -o -type l \) -print 2>/dev/null )
+    rmdir "$_pp_d" 2>/dev/null || true
+  done < <( find "$_pp_root" -depth -type d -name '__pycache__' -print 2>/dev/null )
+  return 0
+}
+
 install_lib_selective() {
   echo ""
   echo "==> Installing hooks/_lib (runtime only — tests/, test_isolation.py, testing.py excluded)"
-  local e base
+  local e base preexisting
   for e in "$SOURCE_DIR/.claude/hooks/_lib/"*; do
     [[ -e "$e" ]] || continue
     base="$( basename "$e" )"
-    case "$base" in
-      tests|test_isolation.py|testing.py|__pycache__) continue ;;
-    esac
+    # PLAN-161 U2 (CF-7): route through the ONE canonical framework-internal
+    # exclusion predicate (scripts/_framework_manifest_set.sh) so install and
+    # upgrade can never drift apart again. Behavior identical to the previous
+    # literal case; the fallback case below only serves a partial checkout
+    # where the helper file was absent at source time (fail-open parity).
+    if command -v _framework_path_excluded >/dev/null 2>&1; then
+      if _framework_path_excluded ".claude/hooks/_lib/$base"; then continue; fi
+    else
+      case "$base" in
+        tests|test_isolation.py|testing.py|__pycache__) continue ;;
+      esac
+    fi
+    preexisting=0
+    [[ -e "$TARGET/.claude/hooks/_lib/$base" || -L "$TARGET/.claude/hooks/_lib/$base" ]] && preexisting=1
     install_one ".claude/hooks/_lib/$base"
+    # PLAN-161 U2 (codex r1 F7): only a directory we JUST copied is pruned —
+    # a pre-existing (EXISTS-skipped) adopter dir is left untouched, link
+    # mode installs a symlink (the prune helper refuses symlink roots), and
+    # dry-run copies nothing.
+    if [[ "$DRY_RUN" -eq 0 && "$MODE" != "link" && "$preexisting" -eq 0 && -d "$e" && ! -L "$e" ]]; then
+      _prune_pycache_under "$TARGET/.claude/hooks/_lib/$base"
+    fi
   done
 }
 

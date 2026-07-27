@@ -62,6 +62,31 @@ _fms_has_profile() {
   return 1
 }
 
+# _framework_path_excluded — PLAN-161 U2 (CF-7): the SINGLE canonical
+# framework-internal exclusion predicate. $1 = repo-relative path. Returns 0
+# (excluded) for content the framework NEVER ships to adopters — the dogfood
+# test/legacy trees, the two pytest-importing _lib helpers, __pycache__ dirs
+# and *.pyc anywhere. Also matches the bare directory paths themselves (no
+# trailing slash/content) so callers can test dirs. Mirrors install.sh's
+# structural exclusions (install_hooks_selective / install_lib_selective /
+# install_scripts_selective); install.sh's _lib walk now calls THIS predicate,
+# and upgrade.sh applies it at its three write surfaces (classified union
+# walk, legacy cp -R prune, manifest enumeration below).
+# bash 3.2-safe: pure case globs, no arrays.
+_framework_path_excluded() {
+  case "$1" in
+    .claude/hooks/tests|.claude/hooks/tests/*) return 0 ;;
+    .claude/hooks/legacy|.claude/hooks/legacy/*) return 0 ;;
+    .claude/scripts/tests|.claude/scripts/tests/*) return 0 ;;
+    .claude/hooks/_lib/tests|.claude/hooks/_lib/tests/*) return 0 ;;
+    .claude/hooks/_lib/test_isolation.py) return 0 ;;
+    .claude/hooks/_lib/testing.py) return 0 ;;
+    __pycache__|*/__pycache__|__pycache__/*|*/__pycache__/*) return 0 ;;
+    *.pyc) return 0 ;;
+  esac
+  return 1
+}
+
 # _framework_target_entries — the top-level target relpaths (files + dirs),
 # profile-aware, sorted + deduped. This is the STATIC intended set; it does not
 # touch disk (so install and upgrade derive an identical list regardless of
@@ -131,6 +156,14 @@ _framework_manifest_files() {
             -e '/\.claude\.bak/' \
             -e '/__pycache__/' \
             -e '\.pyc$' \
+    | while IFS= read -r _fms_out; do
+        # PLAN-161 U2 (CF-7): never record framework-internal excluded paths
+        # in the baseline — recording them would legitimize a mis-install
+        # (and the upgrade would re-add what an adopter deleted by hand).
+        if ! _framework_path_excluded "$_fms_out"; then
+          printf '%s\n' "$_fms_out"
+        fi
+      done \
     | LC_ALL=C sort -u
 }
 

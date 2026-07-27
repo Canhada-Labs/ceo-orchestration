@@ -109,6 +109,7 @@ PROFILE="core,frontend"
 STACK="none"
 PIN_REF=""
 DRY_RUN=0
+PURGE_MISINSTALLED=0   # PLAN-161 U3: opt-in hash-gated purge of mis-installed framework-internal files
 DIFF_WARN=1
 DEPRECATION_WARN=1
 SETTINGS_MERGE=1
@@ -143,6 +144,12 @@ while [[ $# -gt 0 ]]; do
       ;;
     --dry-run)
       DRY_RUN=1
+      shift
+      ;;
+    --purge-misinstalled)
+      # PLAN-161 U3 (OQ1 Owner-ratified): opt-in, hash-gated purge of
+      # mis-installed framework-internal excluded-tree files. NEVER default-on.
+      PURGE_MISINSTALLED=1
       shift
       ;;
     --no-diff-warn)
@@ -247,6 +254,16 @@ Options:
   --skip <glob>         Exclude files from the overwrite (repeat for multiple globs).
                         Example: --skip='.claude/scripts/local/*'
   --skip=<glob>         Alternate inline syntax for --skip.
+  --purge-misinstalled  PLAN-161 U3 (opt-in — NEVER default): delete files found
+                        inside the framework-internal excluded trees
+                        (.claude/hooks/{tests,legacy}, .claude/scripts/tests,
+                        .claude/hooks/_lib/tests + test_isolation.py/testing.py)
+                        ONLY when their sha256 matches the current framework
+                        source at the SAME relpath or the recorded baseline
+                        digest for that relpath. Every purged file is backed up
+                        to .claude.bak/ first; symlinks are never followed.
+                        Without this flag (and always under --dry-run) the scan
+                        only PREVIEWS would-purge candidates.
   --on-conflict <mode>  PLAN-138 Wave C (ADR-155): how to handle a CONFLICT — a
                         file that differs from BOTH the recorded install
                         baseline AND the new framework source (adopter and
@@ -390,6 +407,26 @@ emit_git_index_lock_retry(
 #   restore original branch at end
 PINNED_CHECKOUT_DONE=0
 ORIGINAL_BRANCH=""
+
+# PLAN-161 U1 (codex r2 F4) — ONE composed EXIT cleanup. The --pin block used
+# to install an inline EXIT trap restoring the source branch; any later plain
+# `trap ... EXIT` would CLOBBER it. All exit-time duties now live in this
+# single function, installed ONCE: (a) restore the pinned-source branch,
+# guarded by PINNED_CHECKOUT_DONE + ORIGINAL_BRANCH — the non-dry --pin
+# restore semantics are preserved exactly, on success AND on mid-run failure;
+# (b) reap the sanitized baseline-manifest tempfile, which now lives OUTSIDE
+# $TARGET (see _load_baseline_manifest).
+_BASELINE_TMP_FILE=""
+_upgrade_cleanup() {
+  if [[ "${PINNED_CHECKOUT_DONE:-0}" -eq 1 ]] && [[ -n "${ORIGINAL_BRANCH:-}" ]]; then
+    ( cd "$SOURCE_DIR" && git checkout --quiet "$ORIGINAL_BRANCH" 2>/dev/null ) || true
+  fi
+  if [[ -n "${_BASELINE_TMP_FILE:-}" ]]; then
+    rm -f "$_BASELINE_TMP_FILE" 2>/dev/null || true
+  fi
+}
+trap _upgrade_cleanup EXIT
+
 if [[ -n "$PIN_REF" ]]; then
   if ! pushd "$SOURCE_DIR" >/dev/null; then
     echo "ERROR: cannot cd to source repo: $SOURCE_DIR" >&2
@@ -427,13 +464,8 @@ if [[ -n "$PIN_REF" ]]; then
     exit 2
   fi
   PINNED_CHECKOUT_DONE=1
-
-  # Restore source branch on any exit (trap)
-  trap '
-    if [[ "$PINNED_CHECKOUT_DONE" -eq 1 ]] && [[ -n "$ORIGINAL_BRANCH" ]]; then
-      ( cd "$SOURCE_DIR" && git checkout --quiet "$ORIGINAL_BRANCH" 2>/dev/null ) || true
-    fi
-  ' EXIT
+  # Source-branch restore on any exit is handled by the composed
+  # _upgrade_cleanup EXIT trap installed above (PLAN-161 U1, codex r2 F4).
 fi
 
 TARGET="$( cd "$TARGET" && pwd )"
@@ -564,7 +596,14 @@ if [[ -n "$PIN_REF" ]]; then
 fi
 echo ""
 
-mkdir -p "$BAK_DIR"
+# PLAN-161 U1: --dry-run must write NOTHING inside the target — eagerly
+# creating the (timestamped, thus always-new) backup dir was one of the three
+# dry-run-ignoring writer families found live in the 2026-07-21 adopter
+# upgrade. Real runs still create it up front (the U3 purge backup and the
+# agents-pin backup below rely on it existing).
+if [[ "$DRY_RUN" -eq 0 ]]; then
+  mkdir -p "$BAK_DIR"
+fi
 
 # PLAN-153 Wave B item B2 — upgrade operation journal (same shape as the
 # install-side journal): op<TAB>detail lines in a tempfile OUTSIDE $TARGET,
@@ -642,8 +681,31 @@ _load_baseline_manifest() {
   [ -f "$_BASELINE_MANIFEST_RAW" ] && [ -r "$_BASELINE_MANIFEST_RAW" ] || return 0
   command -v _hash_file >/dev/null 2>&1 || return 0
 
+  # PLAN-161 U1: the sanitized manifest used to be mktemp'd INSIDE $BAK_DIR —
+  # a write inside the target even under --dry-run (and the reason dry-run
+  # could not keep classification alive once BAK_DIR creation was gated). It
+  # now lives in a secure temp OUTSIDE $TARGET in ALL runs; the composed
+  # _upgrade_cleanup EXIT trap reaps it via the _BASELINE_TMP_FILE global.
+  #
+  # PLAN-161 U1 (codex r1 F5): "outside $TARGET" must hold even when the
+  # CALLER's TMPDIR is $TARGET or lies under it — otherwise --dry-run writes
+  # in the target again. Resolve the tmp base physically (cd + pwd -P) and
+  # prefix-check it against the physically-resolved $TARGET (trailing-slash
+  # safe case glob, bash-3.2-safe); on equal-or-under, fall back to /tmp.
+  # If the base cannot be resolved (nonexistent), leave it — mktemp fails
+  # below and we return 0 (the existing no-manifest fallback).
+  local _lbm_base _lbm_base_abs _lbm_target_abs
+  _lbm_base="${TMPDIR:-/tmp}"
+  _lbm_base_abs="$( cd "$_lbm_base" 2>/dev/null && pwd -P )" || _lbm_base_abs=""
+  _lbm_target_abs="$( cd "$TARGET" 2>/dev/null && pwd -P )" || _lbm_target_abs=""
+  if [[ -n "$_lbm_base_abs" && -n "$_lbm_target_abs" ]]; then
+    case "${_lbm_base_abs%/}/" in
+      "${_lbm_target_abs%/}/"*) _lbm_base="/tmp" ;;
+    esac
+  fi
   local sanitized
-  sanitized="$( mktemp "$BAK_DIR/.baseline-manifest.XXXXXX" 2>/dev/null )" || return 0
+  sanitized="$( mktemp "$_lbm_base/ceo-baseline-manifest.XXXXXX" 2>/dev/null )" || return 0
+  _BASELINE_TMP_FILE="$sanitized"
 
   local line rest rel digest target
   # Read line-by-line; NEVER `eval` or interpret manifest content.
@@ -798,6 +860,16 @@ _classify_against_baseline() {
 
 _load_baseline_manifest
 
+# PLAN-161 U1 (codex r1 F4) — manifest-load observability. Byte-identity alone
+# cannot prove a --dry-run kept provenance classification alive (a dry-run
+# that silently lost the baseline would also write nothing), so EVERY run
+# states which classification mode it operates in.
+if [ -n "$_BASELINE_MANIFEST_FILE" ]; then
+  echo "==> Baseline manifest: loaded (provenance classification ACTIVE)"
+else
+  echo "==> Baseline manifest: none — fallback diff -q classification"
+fi
+
 # F-CHAOS-3: match a relative path against the --skip globs list.
 # Returns 0 (true) if matched.
 _path_is_skipped() {
@@ -892,6 +964,13 @@ _per_file_classified_update() {
 
   printf '%s\n' "$listing" | while IFS= read -r rel; do
     [[ -n "$rel" ]] || continue
+    # PLAN-161 U2 (CF-7): the canonical framework-internal exclusion set —
+    # never install, never re-add after an adopter deletes, never report.
+    # Silent skip; the opt-in U3 purge is the ONLY code allowed to touch
+    # these paths (and only hash-gated).
+    if command -v _framework_path_excluded >/dev/null 2>&1 && _framework_path_excluded "$rel"; then
+      continue
+    fi
     if _path_is_skipped "$rel"; then
       echo "    SKIPPED (--skip): $rel"
       continue
@@ -954,6 +1033,23 @@ _per_file_classified_update() {
   done
 }
 
+# PLAN-161 W2 fix-3 (codex r3 F11a): TRUE (rc 0) iff any STRICT ancestor
+# component of relpath $2 under root $1 is a symlink. A preserved excluded
+# SYMLINK must be an opaque leaf: a -f/-d/-L test (or rm/rmdir) on a path
+# that runs THROUGH it resolves into the link TARGET, so an unguarded
+# prune could delete adopter data OUTSIDE the tree. Every prune-side
+# test/delete on "$TARGET/$rel" must first pass this lstat-walk guard.
+# bash 3.2-safe: pure string splitting, [[ -L ]] never follows the leaf.
+_lg_ancestor_is_symlink() {
+  local _as_root="$1" _as_rel="$2" _as_walk=""
+  while [[ "$_as_rel" == */* ]]; do
+    _as_walk="${_as_walk:+$_as_walk/}${_as_rel%%/*}"
+    _as_rel="${_as_rel#*/}"
+    if [[ -L "$_as_root/$_as_walk" ]]; then return 0; fi
+  done
+  return 1
+}
+
 backup_and_replace() {
   local rel_path="$1"
   local src="$SOURCE_DIR/$rel_path"
@@ -981,6 +1077,28 @@ backup_and_replace() {
   fi
 
   if [[ "$DRY_RUN" -eq 1 ]]; then
+    # PLAN-161 U1 (codex r1 F4): classification-aware preview for single-FILE
+    # targets when a baseline manifest is loaded — the dry-run log must PROVE
+    # the provenance classifier still runs (byte-identity alone would pass on
+    # a dry-run that silently lost classification). DIRECTORY targets keep
+    # the legacy one-line preview.
+    if [[ -f "$dst" && -f "$src" && -n "$_BASELINE_MANIFEST_FILE" ]]; then
+      local _drv
+      _drv="$( _classify_against_baseline "$rel_path" )"
+      case "$_drv" in
+        IDENTICAL)
+          echo "    (dry-run) would SKIP (IDENTICAL): $rel_path" ;;
+        ADOPTER-CUSTOMIZED)
+          echo "    (dry-run) would PRESERVE (ADOPTER-CUSTOMIZED): $rel_path" ;;
+        CONFLICT)
+          echo "    (dry-run) would apply --on-conflict=$ON_CONFLICT (CONFLICT): $rel_path" ;;
+        FRAMEWORK-CHANGED)
+          echo "    (dry-run) would UPDATE (FRAMEWORK-CHANGED; original would be backed up to $BAK_DIR/$rel_path): $rel_path" ;;
+        FALLBACK|*)
+          echo "    (dry-run) would BACKUP + UPDATE (no usable baseline): $rel_path" ;;
+      esac
+      return
+    fi
     echo "    (dry-run) would BACKUP + UPDATE: $rel_path"
     return
   fi
@@ -1043,7 +1161,58 @@ backup_and_replace() {
     echo "    BACKED UP: $rel_path"
   fi
 
-  if [[ -d "$dst" ]]; then
+  # PLAN-161 W2 fix-2 (codex r2 F11): the legacy DIRECTORY branch used to
+  # empty $dst WHOLESALE (find -delete + rmdir) before the copy — which
+  # silently DELETED any excluded-tree content already present at dst
+  # (adopter-owned OR mis-installed), before any preview/hash gate: an
+  # implicit purge that violated the opt-in-only --purge-misinstalled
+  # contract (U3). The pre-copy delete now SKIPS excluded paths (files AND
+  # dirs, contents intact) and the copy below never writes them, so a
+  # legacy upgrade neither ADDS nor REMOVES excluded-tree files; the U3
+  # opt-in flag remains the ONLY path that deletes them. Survivors are
+  # recorded (relpaths, one per line) so the r1 post-copy prune can tell
+  # pre-existing excluded content (keep byte-for-byte) from a copy-path
+  # regression artifact (prune). Fail-open: predicate unavailable (older
+  # sourced lib) => exactly the pre-U2 wholesale behavior. NEVER rm -rf.
+  local _lg_excl_aware=0
+  local _lg_survivors=""
+  if command -v _framework_path_excluded >/dev/null 2>&1 \
+     && [[ -d "$dst" && -d "$src" ]]; then
+    _lg_survivors="$( mktemp "${TMPDIR:-/tmp}/ceo-upg-survivors.XXXXXX" )"
+    _lg_excl_aware=1
+  fi
+
+  if [[ "$_lg_excl_aware" -eq 1 ]]; then
+    local _lg_hit _lg_rel
+    # F11a symlink-safety note: find runs PHYSICAL traversal (no -L/-H/
+    # -follow), so it never descends into a symlinked dir — a symlink is
+    # emitted as its own leaf (matches ! -type d, never -type d) and
+    # rm -f unlinks the LINK itself, never its target. Every path find
+    # emits here is symlink-free above the leaf by construction.
+    # Non-dir entries (files/symlinks/etc): delete non-excluded, record
+    # excluded survivors untouched.
+    while IFS= read -r _lg_hit; do
+      [[ -n "$_lg_hit" ]] || continue
+      _lg_rel="${_lg_hit#"$TARGET"/}"
+      if _framework_path_excluded "$_lg_rel"; then
+        printf '%s\n' "$_lg_rel" >> "$_lg_survivors"
+      else
+        rm -f "$_lg_hit"
+      fi
+    done < <( find "$dst" ! -type d -print 2>/dev/null )
+    # Dirs, children before parents (-depth): rmdir non-excluded (only
+    # succeeds once empty — a dir still holding excluded survivors stays);
+    # record excluded dirs so the prune's rmdir pass keeps them too.
+    while IFS= read -r _lg_hit; do
+      [[ -n "$_lg_hit" ]] || continue
+      _lg_rel="${_lg_hit#"$TARGET"/}"
+      if _framework_path_excluded "$_lg_rel"; then
+        printf '%s\n' "$_lg_rel" >> "$_lg_survivors"
+      else
+        rmdir "$_lg_hit" 2>/dev/null || true
+      fi
+    done < <( find "$dst" -depth -type d -print 2>/dev/null )
+  elif [[ -d "$dst" ]]; then
     # Use find+delete instead of rm -rf to satisfy safety hooks on dev machines
     find "$dst" -mindepth 1 -delete
     rmdir "$dst"
@@ -1053,9 +1222,85 @@ backup_and_replace() {
 
   mkdir -p "$( dirname "$dst" )"
   if [[ -d "$src" ]]; then
-    cp -R "$src" "$dst"
+    if [[ "$_lg_excl_aware" -eq 1 ]]; then
+      # PLAN-161 W2 fix-2 (codex r2 F11): exclusion-aware per-file copy —
+      # non-excluded dirs first (preserves empty framework dirs), then
+      # non-excluded files + symlinks (per-operand cp -R copies a symlink
+      # as a symlink, POSIX). Excluded SOURCE paths are NEVER written, so
+      # pre-existing excluded dst content (the pre-delete survivors) stays
+      # byte-for-byte identical across the upgrade — neither deleted,
+      # re-copied, nor overwritten by source bytes at a shadowed relpath.
+      while IFS= read -r _lg_hit; do
+        [[ -n "$_lg_hit" ]] || continue
+        _lg_rel="${_lg_hit#"$SOURCE_DIR"/}"
+        if _framework_path_excluded "$_lg_rel"; then continue; fi
+        mkdir -p "$TARGET/$_lg_rel"
+      done < <( find "$src" -type d -print 2>/dev/null )
+      while IFS= read -r _lg_hit; do
+        [[ -n "$_lg_hit" ]] || continue
+        _lg_rel="${_lg_hit#"$SOURCE_DIR"/}"
+        if _framework_path_excluded "$_lg_rel"; then continue; fi
+        mkdir -p "$( dirname "$TARGET/$_lg_rel" )"
+        cp -R "$_lg_hit" "$TARGET/$_lg_rel"
+      done < <( find "$src" \( -type f -o -type l \) -print 2>/dev/null )
+    else
+      cp -R "$src" "$dst"
+    fi
+    # PLAN-161 U2 (CF-7) r1 prune, F11-NARROWED (belt-and-suspenders): in
+    # the wholesale-cp fallback this removes the excluded source content
+    # cp -R just dragged in (~967 files in the live 2026-07-21 adopter
+    # upgrade). In the exclusion-aware path above the copy never writes
+    # excluded paths, so an excluded file found at dst here is either a
+    # recorded pre-delete SURVIVOR (adopter-owned or mis-installed — F11:
+    # MUST be left exactly as-is; only U3 --purge-misinstalled may delete
+    # it) or the artifact of a future copy-path regression (prune it).
+    # Per-file rm -f plus rmdir for the emptied dirs — NEVER rm -rf.
+    if command -v _framework_path_excluded >/dev/null 2>&1; then
+      local _pr_hit _pr_rel
+      while IFS= read -r _pr_hit; do
+        [[ -n "$_pr_hit" ]] || continue
+        _pr_rel="${_pr_hit#"$SOURCE_DIR"/}"
+        if _framework_path_excluded "$_pr_rel"; then
+          # F11a: never test or delete THROUGH a symlinked ancestor — the
+          # dst path would resolve into the link target (adopter data
+          # possibly outside the tree). Preserved symlink == opaque leaf.
+          if _lg_ancestor_is_symlink "$TARGET" "$_pr_rel"; then continue; fi
+          # Leaf: -L before -f (lstat-first; -f alone would follow a link).
+          if [[ -L "$TARGET/$_pr_rel" || -f "$TARGET/$_pr_rel" ]]; then
+            if [[ -n "$_lg_survivors" ]] \
+               && grep -Fxq "$_pr_rel" "$_lg_survivors" 2>/dev/null; then
+              :  # pre-existing excluded content — keep exactly as-is (F11)
+            else
+              rm -f "$TARGET/$_pr_rel"
+            fi
+          fi
+        fi
+      done < <( find "$src" \( -type f -o -type l \) -print 2>/dev/null )
+      # Remove the now-empty excluded dirs, children before parents (-depth)
+      # — but never a recorded survivor dir (pre-existing, adopter-held).
+      while IFS= read -r _pr_hit; do
+        [[ -n "$_pr_hit" ]] || continue
+        _pr_rel="${_pr_hit#"$SOURCE_DIR"/}"
+        # F11a: ancestor-symlink guard first, then -L BEFORE -d (lstat-first
+        # — -d follows a leaf symlink; a preserved excluded symlink-to-dir
+        # must be kept whole and its target never rmdir'd).
+        if _framework_path_excluded "$_pr_rel" \
+           && ! _lg_ancestor_is_symlink "$TARGET" "$_pr_rel" \
+           && [[ ! -L "$TARGET/$_pr_rel" && -d "$TARGET/$_pr_rel" ]]; then
+          if [[ -n "$_lg_survivors" ]] \
+             && grep -Fxq "$_pr_rel" "$_lg_survivors" 2>/dev/null; then
+            :  # pre-existing excluded dir — keep (F11)
+          else
+            rmdir "$TARGET/$_pr_rel" 2>/dev/null || true
+          fi
+        fi
+      done < <( find "$src" -depth -type d -print 2>/dev/null )
+    fi
   else
     cp "$src" "$dst"
+  fi
+  if [[ -n "$_lg_survivors" ]]; then
+    rm -f "$_lg_survivors"
   fi
   echo "    UPDATED: $rel_path"
 }
@@ -1323,6 +1568,199 @@ def _reg($event; $name; $entry):
   return 0
 }
 
+# ===========================================================================
+# PLAN-161 U3 — opt-in hash-gated purge of mis-installed framework-internal
+# files (--purge-misinstalled; OQ1 Owner-ratified; ADR-155 Amendment).
+# ---------------------------------------------------------------------------
+# The 2026-07-21 adopter upgrade (bug 2b) shipped the framework's OWN dogfood
+# test trees (~967 files) into adopters. U2 stops the (re)install; this scan
+# is the cleanup for residue already present:
+#   * NOMINATION is a hardcoded walk of the excluded TREES + 2 files under
+#     $TARGET only — NEVER manifest-driven (an unsigned manifest must never
+#     be able to nominate arbitrary paths for deletion).
+#   * lstat/no-follow: find WITHOUT -L; symlinks are reported + skipped.
+#   * Relpaths pass the manifest-grade sanitizer (_baseline_relpath_unsafe);
+#     anything unsafe is kept + warned, never purged.
+#   * AUTHORIZATION per candidate: sha256(target file) equals the CURRENT
+#     framework source bytes at the SAME relpath, OR equals the recorded
+#     target-manifest baseline digest for that rel (_baseline_lookup). A
+#     byte-identical copy at a DIFFERENT relpath is NEVER authorized.
+#     Neither match => keep + warn.
+#   * Default (flag absent) and ALL --dry-run runs: preview only ('would
+#     PURGE' lines + a --purge-misinstalled hint). Deletion requires the
+#     explicit flag on a non-dry run, is backed up first (cp -P into
+#     $BAK_DIR/<rel>), and a second run is a no-op (nothing authorized left).
+# ===========================================================================
+_PM_AUTH_COUNT=0
+_PM_PURGED_COUNT=0
+
+# PLAN-161 U3 (codex r4 F2): find(1) resolves its COMMAND-LINE path through
+# symlinked ANCESTORS even without -L — only descent below the start point is
+# no-follow. So a nominated excluded tree whose ancestor (e.g. .claude/hooks
+# preserved via --skip as an adopter symlink) is a symlink would be walked —
+# and, once any purge elsewhere makes _PM_PURGED_COUNT positive, rmdir'd —
+# INSIDE the symlink's external target. Guard: before any find/rmdir over a
+# nominated path, walk every component from $TARGET down to the leaf with a
+# per-component lstat (same idiom as _baseline_relpath_unsafe) and refuse the
+# whole tree when ANY component is a symlink. On hit, prints the first
+# symlinked component's target-relative path to stdout and returns 0; returns
+# 1 when the component chain is symlink-free. bash-3.2-safe (IFS walk).
+_purge_tree_symlinked_component() {
+  _pts_rel="$1"
+  _pts_cur="$TARGET"
+  _pts_relcur=""
+  _pts_oldIFS="$IFS"
+  IFS='/'
+  for _pts_comp in $_pts_rel; do
+    [ -n "$_pts_comp" ] || continue
+    [ "$_pts_comp" = "." ] && continue
+    _pts_cur="$_pts_cur/$_pts_comp"
+    if [ -n "$_pts_relcur" ]; then
+      _pts_relcur="$_pts_relcur/$_pts_comp"
+    else
+      _pts_relcur="$_pts_comp"
+    fi
+    if [ -L "$_pts_cur" ]; then
+      IFS="$_pts_oldIFS"
+      printf '%s\n' "$_pts_relcur"
+      return 0
+    fi
+  done
+  IFS="$_pts_oldIFS"
+  return 1
+}
+
+# Evaluate ONE nominated candidate relpath (already lstat-screened as a
+# regular file by the caller). Prints exactly one verdict line.
+_purge_consider_one() {
+  local _pc_rel="$1"
+  local _pc_dst="$TARGET/$_pc_rel"
+  local _pc_h_dst="" _pc_h_src="" _pc_h_base="" _pc_auth=0
+  if _baseline_relpath_unsafe "$_pc_rel"; then
+    echo "    KEPT (excluded-tree file outside provenance rails — not purged): $_pc_rel"
+    return 0
+  fi
+  _pc_h_dst="$( _hash_file "$_pc_dst" 2>/dev/null || true )"
+  if [[ -n "$_pc_h_dst" && -f "$SOURCE_DIR/$_pc_rel" && ! -L "$SOURCE_DIR/$_pc_rel" ]]; then
+    _pc_h_src="$( _hash_file "$SOURCE_DIR/$_pc_rel" 2>/dev/null || true )"
+  fi
+  _pc_h_base="$( _baseline_lookup "$_pc_rel" 2>/dev/null || true )"
+  if [[ -n "$_pc_h_dst" && -n "$_pc_h_src" && "$_pc_h_dst" == "$_pc_h_src" ]]; then
+    _pc_auth=1
+  elif [[ -n "$_pc_h_dst" && -n "$_pc_h_base" && "$_pc_h_dst" == "$_pc_h_base" ]]; then
+    _pc_auth=1
+  fi
+  if [[ "$_pc_auth" -ne 1 ]]; then
+    echo "    KEPT (excluded-tree file outside provenance rails — not purged): $_pc_rel"
+    return 0
+  fi
+  _PM_AUTH_COUNT=$(( _PM_AUTH_COUNT + 1 ))
+  if [[ "$PURGE_MISINSTALLED" -eq 1 && "$DRY_RUN" -eq 0 ]]; then
+    # PLAN-161 U3 (codex r1 F6): every filesystem step here is per-candidate
+    # guarded — under `set -e` an unguarded mkdir/cp/rm permission error would
+    # abort the WHOLE upgrade mid-purge. Backup failure => KEPT (never delete
+    # without a good backup); delete failure AFTER a good backup => warn +
+    # continue. The purge scan never changes the upgrade exit status.
+    if ! mkdir -p "$( dirname "$BAK_DIR/$_pc_rel" )" 2>/dev/null; then
+      echo "    KEPT (backup dir create failed — not purged): $_pc_rel" >&2
+      return 0
+    fi
+    if ! cp -P "$_pc_dst" "$BAK_DIR/$_pc_rel" 2>/dev/null; then
+      echo "    KEPT (backup copy failed — not purged): $_pc_rel" >&2
+      return 0
+    fi
+    if ! rm -f "$_pc_dst" 2>/dev/null; then
+      echo "    KEPT (delete failed after backup — file left in place): $_pc_rel" >&2
+      return 0
+    fi
+    _up_record_op "purge_misinstalled" "$_pc_rel"
+    echo "    PURGED (mis-installed framework-internal; backup in $BAK_DIR/$_pc_rel): $_pc_rel"
+    _PM_PURGED_COUNT=$(( _PM_PURGED_COUNT + 1 ))
+  else
+    echo "    would PURGE (mis-installed framework-internal): $_pc_rel"
+  fi
+  return 0
+}
+
+_purge_misinstalled_scan() {
+  if ! command -v _hash_file >/dev/null 2>&1; then
+    echo "    NOTE: mis-install scan skipped — hash helpers not sourced (fail-open)" >&2
+    return 0
+  fi
+  local _pm_trees=( ".claude/hooks/tests" ".claude/hooks/legacy" ".claude/scripts/tests" ".claude/hooks/_lib/tests" )
+  local _pm_files=( ".claude/hooks/_lib/test_isolation.py" ".claude/hooks/_lib/testing.py" )
+  local _pm_t _pm_cand _pm_rel _pm_link
+  _PM_AUTH_COUNT=0
+  _PM_PURGED_COUNT=0
+
+  for _pm_t in "${_pm_trees[@]}"; do
+    # codex r4 F2: refuse the whole tree when ANY component from $TARGET down
+    # to the leaf is a symlink — never hand find(1) a path it would resolve
+    # through a symlinked ancestor into an external target.
+    _pm_link="$( _purge_tree_symlinked_component "$_pm_t" )" || _pm_link=""
+    if [[ -n "$_pm_link" ]]; then
+      if [[ "$_pm_link" == "$_pm_t" ]]; then
+        echo "    KEPT (symlink in excluded tree — never followed): $_pm_t"
+      else
+        echo "    KEPT (symlinked ancestor '$_pm_link' — tree never walked): $_pm_t"
+      fi
+      continue
+    fi
+    [[ -d "$TARGET/$_pm_t" ]] || continue
+    while IFS= read -r _pm_cand; do
+      [[ -n "$_pm_cand" ]] || continue
+      _pm_rel="${_pm_cand#"$TARGET"/}"
+      if [[ -L "$_pm_cand" ]]; then
+        echo "    KEPT (symlink in excluded tree — never followed): $_pm_rel"
+        continue
+      fi
+      _purge_consider_one "$_pm_rel"
+    done < <( find "$TARGET/$_pm_t" \( -type f -o -type l \) -print 2>/dev/null | LC_ALL=C sort )
+  done
+  for _pm_rel in "${_pm_files[@]}"; do
+    # codex r4 F2: same ancestor guard for the two nominated single files —
+    # `-L`/`-f` on the full path would themselves resolve through a symlinked
+    # ancestor (e.g. .claude/hooks -> external).
+    _pm_link="$( _purge_tree_symlinked_component "$_pm_rel" )" || _pm_link=""
+    if [[ -n "$_pm_link" ]]; then
+      if [[ "$_pm_link" == "$_pm_rel" ]]; then
+        echo "    KEPT (symlink in excluded tree — never followed): $_pm_rel"
+      else
+        echo "    KEPT (symlinked ancestor '$_pm_link' — file never touched): $_pm_rel"
+      fi
+      continue
+    fi
+    [[ -f "$TARGET/$_pm_rel" ]] || continue
+    _purge_consider_one "$_pm_rel"
+  done
+
+  if [[ "$_PM_PURGED_COUNT" -gt 0 ]]; then
+    # Remove the now-empty excluded dirs, children before parents. rmdir
+    # only — a dir still holding adopter-owned (kept) files simply stays.
+    # codex r4 F2: re-check the component chain HERE too (not only at
+    # nomination) — the sweep must never rmdir through a symlinked ancestor
+    # into an external target. Silent skip: the KEPT line already printed
+    # during nomination.
+    for _pm_t in "${_pm_trees[@]}"; do
+      if _purge_tree_symlinked_component "$_pm_t" >/dev/null; then
+        continue
+      fi
+      [[ -d "$TARGET/$_pm_t" && ! -L "$TARGET/$_pm_t" ]] || continue
+      while IFS= read -r _pm_cand; do
+        [[ -n "$_pm_cand" ]] || continue
+        rmdir "$_pm_cand" 2>/dev/null || true
+      done < <( find "$TARGET/$_pm_t" -depth -type d -print 2>/dev/null )
+    done
+  fi
+  if [[ "$_PM_AUTH_COUNT" -gt 0 && "$PURGE_MISINSTALLED" -eq 0 ]]; then
+    echo "    HINT: $_PM_AUTH_COUNT hash-authorized mis-installed file(s) found — re-run with --purge-misinstalled to delete them (each is backed up to .claude.bak/ first)."
+  fi
+  if [[ "$_PM_AUTH_COUNT" -eq 0 && "$_PM_PURGED_COUNT" -eq 0 ]]; then
+    echo "    clean: no hash-authorized mis-installed framework-internal files"
+  fi
+  return 0
+}
+
 # Team rosters (templates — user may have customized, still overwrite with backup so they can diff)
 backup_and_replace ".claude/team.md"
 backup_and_replace ".claude/frontend-team.md"
@@ -1373,6 +1811,13 @@ upgrade_agents_canonical_only() {
   )
   if [[ ! -d "$SOURCE_DIR/.claude/agents" ]]; then
     echo "    NOTE: source has no .claude/agents/ — skipping native rail"
+    return 0
+  fi
+  # PLAN-161 U1: this writer family (mkdir + cp + awk-rewrite + $BAK_DIR
+  # backups) ignored --dry-run entirely (bug 2a, live 2026-07-21). Preview
+  # and return before ANY target write.
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    echo "    (dry-run) would REFRESH agent pins: canonical-5"
     return 0
   fi
   echo ""
@@ -1428,6 +1873,14 @@ _merge_lifecycle_hooks_into_settings
 echo ""
 echo "==> Refreshing PROTOCOL.md pointer"
 _refresh_protocol_pointer
+
+# PLAN-161 U3 — mis-install scan/purge. Runs in ALL modes (flag-absent and
+# --dry-run runs emit the would-purge PREVIEW; deletion requires the explicit
+# --purge-misinstalled flag AND a non-dry run). Runs BEFORE the baseline-
+# manifest rewrite below so a purged path is never re-recorded.
+echo ""
+echo "==> Scanning excluded trees for mis-installed framework-internal files (PLAN-161 U3)"
+_purge_misinstalled_scan
 
 # PLAN-138 Wave C (ADR-155) C.7 — (re)write the baseline manifest AFTER a
 # successful upgrade, so a long-lived adopter who upgrades but never re-runs
@@ -1619,7 +2072,11 @@ except BaseException:
 # state rewrite so codex ops are journaled.
 # ----------------------------------------------------------------------
 if [[ "$HARNESS" == "codex" ]]; then
-  if ! command -v codex_emit_bundle >/dev/null 2>&1; then
+  # PLAN-161 U1 writer-family audit: this refresh block ignored --dry-run
+  # (codex_emit_bundle writes the .codex/ bundle). Preview + skip.
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    echo "    (dry-run) would REFRESH: .codex/ harness bundle (--harness codex; on-conflict=$ON_CONFLICT)"
+  elif ! command -v codex_emit_bundle >/dev/null 2>&1; then
     echo "    NOTE: recorded harness is codex but scripts/_codex_harness.sh is not" >&2
     echo "          sourced — skipping the .codex/ refresh (fail-open)." >&2
   else
@@ -1649,7 +2106,11 @@ fi
 # RE-ARMS nothing silently (no live hooks). Runs on an explicit or replayed
 # --harness grok. A refusal WARNS, never fails the upgrade.
 if [[ "$HARNESS" == "grok" ]]; then
-  if ! command -v grok_emit_bundle >/dev/null 2>&1; then
+  # PLAN-161 U1 writer-family audit: this refresh block ignored --dry-run
+  # (grok_emit_bundle writes the grok operator surface). Preview + skip.
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    echo "    (dry-run) would REFRESH: grok harness operator surface (--harness grok; on-conflict=$ON_CONFLICT)"
+  elif ! command -v grok_emit_bundle >/dev/null 2>&1; then
     echo "    NOTE: recorded harness is grok but scripts/_grok_harness.sh is not" >&2
     echo "          sourced — skipping the grok surface refresh (fail-open)." >&2
   else
@@ -1692,3 +2153,13 @@ echo "    re-run install.sh manually:"
 echo "      cp $TARGET/.claude/settings.json $TARGET/.claude/settings.json.bak"
 echo "      rm $TARGET/.claude/settings.json"
 echo "      $SCRIPT_DIR/install.sh $TARGET --profile $PROFILE --stack $STACK"
+echo ""
+echo "    NOTE (PLAN-161 L5 advisory): installs made before PLAN-161 seeded a"
+echo "    deny-list baseline into .claude/settings.json that newer framework"
+echo "    versions no longer ship. If present in YOUR permissions.deny and"
+echo "    unwanted, delete these THREE EXACT rule strings BY HAND — the upgrade"
+echo "    never rewrites your deny list (the settings-merge above is"
+echo "    additive-only and stays so):"
+echo "      \"Write(PROTOCOL.md)\""
+echo "      \"Write(.claude/settings.json)\""
+echo "      \"Write(SPEC/**)\""
