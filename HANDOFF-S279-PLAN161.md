@@ -1,12 +1,18 @@
 # HANDOFF S279 — PLAN-161 maintenance sweep: cerimônia W2 + L3 egress (Owner)
 
 > **Estado ao entregar:** W1 LANDADO em main (testes red-first + V1 docs/verify-counts
-> + H1). Pack W2 (37 arquivos, 6 concerns, 3 segmentos KERNEL) construído, verificado
-> em clone limpo por concern, verificado COMBINADO pelo preflight do land script, e
-> revisado pelo pair-rail codex até APPROVE (transcripts em
-> `.claude/plans/PLAN-161/pair-rail/w2-round-*.md`). Manifesto sha256 RASTREADO
-> (`inputs.sha256`, 37 entradas) + 3 basepins de kernel. O staged/ é gitignored e
+> + H1). Pack W2 (**38 arquivos**, 6 concerns, 3 segmentos KERNEL) construído, verificado
+> em clone limpo por concern, verificado COMBINADO pelo `land-plan161.sh --preflight-only`
+> (**15/15 oracles GREEN, 6/6 concerns APPLY**), e revisado pelo pair-rail codex por
+> **8 rodadas até APPROVE explícito** (findings 10→5→4→4→3→2→1→APPROVE; cada finding
+> corrigido ou rebatido-com-evidência, cada fix provado red-first; transcripts em
+> `.claude/plans/PLAN-161/pair-rail/w2-round-{1..8}*.md`). Manifesto sha256 RASTREADO
+> (`inputs.sha256`, **38 entradas**) + 3 basepins de kernel. O staged/ é gitignored e
 > MACHINE-LOCAL — rode tudo a partir DESTE checkout.
+>
+> **AINDA NÃO PUSHADO.** Os commits de materiais (W1 + plano + pair-rail) estão em
+> main local; `git push origin main` antes da cerimônia (o preflight exige
+> HEAD==origin/main no run real). A cerimônia em si adiciona ATÉ 6 commits novos.
 
 ## Passo 1 — Cerimônia W2 (GPG)
 
