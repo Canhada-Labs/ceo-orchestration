@@ -17,6 +17,10 @@
 #   nonzero probe exit + below-threshold JSON     -> CONTENDED (rc overrides
 #                                                    JSON — codex r4 F4)
 #   boundary p50 == 200 (threshold is <=)         -> UNCONTENDED
+#   probe rc=0 + p50 = JSON true (bool)           -> CONTENDED (no float()
+#                                                    coercion — codex r1 F8)
+#   probe rc=0 + p50 = JSON string "-1"           -> CONTENDED (numeric-string
+#                                                    coercion — codex r1 F8)
 #
 # The contention-verdict PARSER runs REAL (codex r3 F4): only the profiler
 # subprocess (probe_floor_raw) and run_gate are mocked. Backoffs are exercised
@@ -176,4 +180,14 @@ grep -q "gate:3" "$LAST_CALLS" && die "rc-override: 3rd attempt ran despite nonz
 run_case "boundary p50==200 uncontended" 1 1 0 1 1 1 0 "$(floor_json 200)" 0
 grep -q "gate:3" "$LAST_CALLS" || die "boundary: p50==200 must be UNCONTENDED (<= threshold)"
 
-say "PROOF GREEN: extended retry matrix holds on the staged step text (9/9 cases)"
+# 10. probe rc=0 + p50 = JSON true — bool is NOT a number (r1 F8) — CONTENDED.
+run_case "p50 json-true contended" 1 1 0 1 1 1 0 "$(floor_json true)" 1
+grep -q "still-contended VM" "$LAST_LOG" || die "json-true: not treated as contended"
+grep -q "gate:3" "$LAST_CALLS" && die "json-true: 3rd attempt ran on a bool p50 (float() coercion regressed)"
+
+# 11. probe rc=0 + p50 = JSON string "-1" — numeric string is NOT a number (r1 F8) — CONTENDED.
+run_case 'p50 json-string "-1" contended' 1 1 0 1 1 1 0 "$(floor_json '"-1"')" 1
+grep -q "still-contended VM" "$LAST_LOG" || die "json-string: not treated as contended"
+grep -q "gate:3" "$LAST_CALLS" && die "json-string: 3rd attempt ran on a string p50 (float() coercion regressed)"
+
+say "PROOF GREEN: extended retry matrix holds on the staged step text (11/11 cases)"
