@@ -5,6 +5,7 @@ status: executing
 created: 2026-07-21
 reviewed_at: 2026-07-21
 executing_at: 2026-07-27
+related_commits: [86550da, 042dc09, 1074ff1, 7c6c8ce, 712595c]
 reviewed_by: "Owner (João) — chat directive S278 + OQ1/OQ5 structured tie-breaks"
 owner: CEO
 depends_on: [PLAN-156, PLAN-159, PLAN-160]
@@ -302,7 +303,7 @@ python3 -m pytest .claude/scripts/tests/ -q -k "counts" \
 `REPRO-CONFIRMED` marker AND no `SCAFFOLD-ERROR` marker, validated
 independently per test; new `.sh` tests named explicitly — pytest
 `-k` cannot collect them)
-- [ ] **W1a — author the new regression tests** (files under
+- [x] **W1a — author the new regression tests** (LANDED `042dc09`, S279 — both RED on HEAD with REPRO-CONFIRMED, W1 check block green) (files under
   `scripts/tests/` are unguarded; they land here, RED against current
   sources where the bug reproduces, and flip green when W2 lands —
   each W2 concern's staged oracle):
@@ -332,7 +333,7 @@ independently per test; new `.sh` tests named explicitly — pytest
   - `PLAN-161/proof-retry-matrix.sh` (codex r2 F5): the C4 extended
     truth-table proof (see C4) — authored here, cited by the ADR-163
     amendment, run in the W2 staged oracle.
-- [ ] **V1 — verify-counts coverage + doc correction (codex r1 F8):**
+- [x] **V1 — verify-counts coverage + doc correction (codex r1 F8)** (LANDED `042dc09`, S279 — 4 docs corrected + table-cell rules + 3 seeded-drift tests):
   FIRST derive current counts from disk and correct the stale claims
   in the four newly-governed docs (`docs/ARCHITECTURE.md`,
   `docs/GUIA-COMPLETO.md`, `docs/FAQ.md`, `npm/README.md` — all
@@ -344,7 +345,7 @@ independently per test; new `.sh` tests named explicitly — pytest
   a drift in a table cell and asserts it is caught. Ordering matters:
   enabling tolerance-0 scanning before correcting the docs reds the
   oracle instantly.
-- [ ] **H1 — housekeeping:** `git rm HANDOFF-S277-PLAN160.md` (content
+- [x] **H1 — housekeeping** (LANDED `86550da`, S279)**:** `git rm HANDOFF-S277-PLAN160.md` (content
   preserved in git history + PLAN-160 §How-to-continue).
 
 ### Wave 2 — canonical batch (ONE sentinel ceremony, scope table above)
@@ -704,7 +705,19 @@ r1 REJECT (12 findings) → r2 (9) → r3 (7) → r4 (4) → r5 (2) → r6 (1)
 transcripts at `PLAN-161/pair-rail/`; Owner OQ1/OQ5 tie-breaks
 recorded; `draft → reviewed` flipped under the Owner's
 pre-authorization.
-**Execution session (S279+) START HERE:** Wave 1 first (author the
+**S279 (2026-07-27) EXECUTION STATE:** W1 LANDED (`042dc09` tests
+red-first + V1 + H1 via `86550da`). W2 pack BUILT by 5 parallel concern
+builders + VERIFIED per-concern in clean clones + COMBINED via
+`land-plan161.sh --preflight-only` (15/15 oracles green, 6/6 concerns
+APPLY). Ceremony materials committed (`1074ff1`): land-plan161.sh (6
+segments, 3 kernel overrides, CF-8 drop-out), sentinel body (37-path
+scope, 5-guard-class concentration), tracked inputs.sha256 + 3 basepins.
+Codex pair-rail: r1 REJECT 10 findings -> 7 fixed / 3 rebutted-with-
+evidence (`7c6c8ce`, transcripts in PLAN-161/pair-rail/); rounds continue
+until APPROVE. Owner gate = HANDOFF-S279-PLAN161.md (`712595c`): W2 GPG
+ceremony + L3 egress + L4 review.
+
+**Original execution plan:** Wave 1 first (author the
 regression tests — they must come up RED on HEAD with
 `REPRO-CONFIRMED`, per the W1 check block — plus V1 doc corrections
 and H1), then stage Wave 2 behind `land-plan161.sh` (34-file sentinel
