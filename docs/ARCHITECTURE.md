@@ -44,11 +44,11 @@ ceo-orchestration/
     ├── settings.json               # hook registrations for this repo (dogfood)
     ├── hooks/
     │   ├── _python-hook.sh         # resolves newest Python ≥ 3.9, fails with guidance
-    │   ├── _lib/                   # 67 stdlib-only shared modules (137 incl. subpackages)
-    │   ├── *.py                    # 53 hook scripts on disk
+    │   ├── _lib/                   # 68 stdlib-only shared modules (140 recursive)
+    │   ├── *.py                    # 55 hook scripts on disk
     │   └── tests/                  # hook unit tests
     ├── scripts/                    # protocol toolkit (validate, inject, audit-query, …)
-    ├── commands/                   # 22 slash commands (*.md)
+    ├── commands/                   # 26 slash commands (*.md)
     ├── skills/
     │   ├── core/                   # 42 universal backend skills
     │   ├── frontend/               # 8 universal frontend skills
@@ -64,13 +64,13 @@ faith — run the commands:
 |--------------------|------------------------------|-----------------------------------------------------------|
 | Skills             | 166                          | `find .claude/skills -name SKILL.md \| wc -l`             |
 | └ core / frontend / domain | 42 / 8 / 116         | `find .claude/skills/core -name SKILL.md \| wc -l` (etc.) |
-| Hook scripts       | 53 on disk                   | `ls .claude/hooks/*.py \| wc -l`                          |
+| Hook scripts       | 55 on disk                   | `ls .claude/hooks/*.py \| wc -l`                          |
 | Hook registrations | 44 wired into `settings.json`| (parse the `hooks` block of `.claude/settings.json`)      |
-| `_lib` modules     | 67 top-level (137 recursive) | `ls .claude/hooks/_lib/*.py \| grep -v __init__ \| wc -l` |
-| Slash commands     | 22                           | `ls .claude/commands/*.md \| wc -l`                       |
-| ADRs               | 178                          | `ls .claude/adr/ADR-*.md \| wc -l`                        |
+| `_lib` modules     | 68 top-level (140 recursive) | `ls .claude/hooks/_lib/*.py \| grep -v __init__ \| wc -l` |
+| Slash commands     | 26                           | `ls .claude/commands/*.md \| wc -l`                       |
+| ADRs               | 180                          | `ls .claude/adr/ADR-*.md \| wc -l`                        |
 | SPEC/v1 files      | 32 (28 `*.schema.md`)        | `ls SPEC/v1/*.md \| wc -l`                                |
-| Test files         | ~670                         | `git ls-files '*test_*.py' '*_test.py' \| wc -l`          |
+| Test files         | ~720                         | `git ls-files '*test_*.py' '*_test.py' \| wc -l`          |
 | Collected cases    | ~12k parametrized            | `make test-collect` (pytest `--collect-only`)             |
 
 > **On the "53 vs 44" hook gap.** 53 is the number of hook *scripts* present in
@@ -223,7 +223,7 @@ the honest *Risks / Not-For* caveat in the [README](../README.md).
 ## 4. The SPEC contract
 
 `SPEC/v1/` is the published, versioned compliance contract (SemVer; currently
-v1.0.0, aligned with the repo `VERSION`). It contains 28 schema files defining
+v1.1.0, aligned with the repo `VERSION`). It contains 28 schema files defining
 the stable interfaces an adopter can pin to — among them `audit-log.schema.md`,
 `hook-io.schema.md`, `plan.schema.md`, `debate.schema.md`,
 `skill-frontmatter.schema.md`, `tier-policy.schema.md`, and

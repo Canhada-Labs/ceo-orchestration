@@ -102,8 +102,8 @@ It removes the governance hooks, scripts, and skill profiles it added, leaving y
 Don't take the README table on faith. From a clean checkout:
 
 ```bash
-find .claude/skills -name SKILL.md | wc -l        # 151 skills (42 core + 8 frontend + 101 domain)
-ls .claude/commands/*.md | wc -l                  # 22 slash commands
+find .claude/skills -name SKILL.md | wc -l        # 166 skills (42 core + 8 frontend + 116 domain)
+ls .claude/commands/*.md | wc -l                  # 26 slash commands
 ls .claude/adr | grep -c '^ADR-'                  # 180 ADRs
 python3 -m pytest --collect-only -q | tail -1     # ~12,000 collected cases
 ```

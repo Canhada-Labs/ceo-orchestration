@@ -129,9 +129,63 @@ class TestVerifyCounts(unittest.TestCase):
             self.assertEqual(r.returncode, 1, "cross-file disagreement must fail")
 
     def test_real_repo_docs_pass(self):
-        """Regression sentinel: live CLAUDE.md/README/INSTALL match live counts."""
+        """Regression sentinel: live CLAUDE.md/README/INSTALL match live counts.
+
+        PLAN-161 V1: the scan set now also covers docs/ARCHITECTURE.md,
+        docs/GUIA-COMPLETO.md, docs/FAQ.md and npm/README.md — the four docs
+        that drifted silently twice (S275, S278).
+        """
         r = _run(root=None)  # default REPO_ROOT, --no-tests
         self.assertEqual(r.returncode, 0, f"live docs drift; stdout={r.stdout}")
+
+
+class TestTableCellRules(unittest.TestCase):
+    """PLAN-161 V1 — the S275 miss class: number and label in SEPARATE
+    markdown-table cells (`| ADRs | 178 |`), invisible to prose regexes."""
+
+    def _with_table(self, adrs_cited: int):
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            c = _scaffold(root)
+            _write_docs(root, **c)
+            arch = root / "docs"
+            arch.mkdir()
+            (arch / "ARCHITECTURE.md").write_text(
+                "| Component | Count | Verify |\n"
+                "|---|---|---|\n"
+                f"| ADRs | {adrs_cited} | `ls .claude/adr/ADR-*.md \\| wc -l` |\n",
+                encoding="utf-8",
+            )
+            return _run(root)
+
+    def test_seeded_table_cell_drift_is_caught(self):
+        c_adrs = 5  # _scaffold default
+        r = self._with_table(adrs_cited=c_adrs + 173)  # the S275 shape: 178 vs 5
+        self.assertEqual(r.returncode, 1, "table-cell ADR drift must fail the gate")
+
+    def test_correct_table_cell_passes(self):
+        r = self._with_table(adrs_cited=5)
+        self.assertEqual(r.returncode, 0, f"correct table cell must pass; {r.stdout}")
+
+    def test_bold_wrapped_table_cell_drift_is_caught(self):
+        """npm/README shape: label spelled out, value bold-wrapped in its own
+        cell (`| Architecture decision records | **N** | ... |`)."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            c = _scaffold(root)
+            _write_docs(root, **c)
+            npm = root / "npm"
+            npm.mkdir()
+            (npm / "README.md").write_text(
+                "| Component | Count | Notes |\n"
+                "|---|---|---|\n"
+                "| Architecture decision records | **999** | under `.claude/adr/` |\n",
+                encoding="utf-8",
+            )
+            r = _run(root)
+            self.assertEqual(r.returncode, 1, "bold table-cell ADR drift must fail")
 
 
 if __name__ == "__main__":

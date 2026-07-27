@@ -30,23 +30,23 @@
 #   core skills       find .claude/skills/core -name SKILL.md       exact (42)
 #   frontend skills   find .claude/skills/frontend -name SKILL.md   exact (8)
 #   domain skills     find .claude/skills/domains -name SKILL.md    exact (116)
-#   ADRs              ls .claude/adr/ADR-*.md                        exact (167)
-#   hook .py files    ls .claude/hooks/*.py                          exact (53)
+#   ADRs              ls .claude/adr/ADR-*.md                        exact (180)
+#   hook .py files    ls .claude/hooks/*.py                          exact (55)
 #   registered hooks  distinct *.py in settings.json "command" lines exact (45)
-#   _lib modules      ls .claude/hooks/_lib/*.py  (TOP-LEVEL glob)   exact (67)
+#   _lib modules      ls .claude/hooks/_lib/*.py  (TOP-LEVEL glob)   exact (68)
 #   SPEC v1 files     ls SPEC/v1/*.md                                exact (32)
 #   tests             pytest --collect-only -q .claude/             floor (N+)
 #   release_steps     grep -c '      - name:' release.yml           exact (21)
-#   commands          find .claude/commands -name '*.md'             exact (21)
-#   workflows         find .github/workflows -name '*.yml'           exact (20)
+#   commands          find .claude/commands -name '*.md'             exact (26)
+#   workflows         find .github/workflows -name '*.yml'           exact (21)
 #
 # NOTE on the two glob-ambiguous / underivable numbers (code-reviewer P2):
-#   - "_lib modules" is pinned to the TOP-LEVEL `_lib/*.py` glob (67). The
+#   - "_lib modules" is pinned to the TOP-LEVEL `_lib/*.py` glob (68). The
 #     recursive `_lib/**/*.py` count (incl. adapters/ + subdirs) is larger
-#     (~136); docs must state the top-level number to match this gate.
+#     (~140); docs must state the top-level number to match this gate.
 #   - "registered hooks" (45) = distinct `*.py` script basenames appearing in
 #     settings.json hooks{} "command" lines (matches the hook_live_smoke
-#     check). This is distinct from "hook .py files on disk" (53) — some
+#     check). This is distinct from "hook .py files on disk" (55) — some
 #     on-disk hooks are not wired into settings.json.
 # The historical "6 core hooks" enumeration in CLAUDE.md is a labelled
 # historical subset, NOT a live total — it is not gated here.
@@ -87,9 +87,9 @@ DERIVED_DOMAIN=$(find "$REPO_ROOT/.claude/skills/domains" -name SKILL.md 2>/dev/
 DERIVED_ADRS=$(ls "$REPO_ROOT"/.claude/adr/ADR-*.md 2>/dev/null | wc -l | tr -d ' ')
 DERIVED_HOOK_PY=$(ls "$REPO_ROOT"/.claude/hooks/*.py 2>/dev/null | wc -l | tr -d ' ')
 # "_lib modules" = importable application modules, which EXCLUDES the
-# package marker __init__.py (the docs cite "67 modules, excluding the
-# package __init__.py"; the raw glob is 68 incl. __init__.py). Aligns the
-# live count to the documented contract (header note: exact 67).
+# package marker __init__.py (the docs cite "68 modules, excluding the
+# package __init__.py"; the raw glob is 69 incl. __init__.py). Aligns the
+# live count to the documented contract (header note: exact 68).
 DERIVED_LIB=$( { find "$REPO_ROOT/.claude/hooks/_lib" -maxdepth 1 -name '*.py' ! -name '__init__.py' 2>/dev/null || true; } | wc -l | tr -d ' ')
 # Recursive _lib count (E9-F10 i): find descends adapters/ + subdirs. Guard the
 # pipeline against set -e/pipefail when the tree has zero matches.
@@ -232,7 +232,14 @@ no_tests = os.environ.get("VC_NO_TESTS") == "1"
 # Docs scanned for ALL count rules (live-count claims must be exact/floor).
 # RELEASE.md is RETIRED — its body has historical numbers; only scan it for
 # the release_steps rule via RELEASE_DOCS below to avoid false positives.
-DOCS = ["CLAUDE.md", "README.md", "INSTALL.md"]
+# PLAN-161 V1 ([[feedback-adr-count-drift-unwatched-docs]], S275): the four
+# previously-unwatched drift-prone docs are now first-class scan targets —
+# they drifted silently twice (GA v1.1.0 and again by S278).
+DOCS = [
+    "CLAUDE.md", "README.md", "INSTALL.md",
+    "docs/ARCHITECTURE.md", "docs/GUIA-COMPLETO.md", "docs/FAQ.md",
+    "npm/README.md",
+]
 # Additional docs scanned for the subset of rules that reference them.
 RELEASE_DOCS = ["RELEASE.md"]  # only release_steps rule applies
 texts = {}
@@ -253,11 +260,15 @@ RULES = [
         r'(\d+) reusable skills', r'(\d+)-skill inventory',
         r'(\d+) skill folders', r'(\d+) skills organizadas',
         r'(\d+) skills retained',
+        # PLAN-161 V1 — phrasings carried by the four newly-watched docs.
+        # "# N skills across" is the DOMAIN tree comment, not the total.
+        r'# (\d+) skills(?! across)', r'(\d+) skill files',
     ]),
     ("core", "exact", [
         r'\((\d+) universal\)', r'\((\d+)\s+universais\)',
         r'# (\d+) universal skills', r'\((\d+) core ',
         r'CORE\*\* \(universal\) \| (\d+)',
+        r'(\d+) core \+',   # "42 core + 8 frontend + 116 domain" split cells
     ]),
     ("frontend", "exact", [
         r'\((\d+) universal frontend\)', r'\((\d+) frontend skills',
@@ -266,6 +277,8 @@ RULES = [
     ]),
     ("domain", "exact", [
         r'(\d+) domain across',
+        r'\+ (\d+) domain',      # "42 core + 8 frontend + 116 domain" split cells
+        r'# (\d+) skills across', # ARCHITECTURE.md domains/ tree comment
     ]),
     ("adrs", "exact", [r'(\d+) ADRs total', r'(\d+) ADRs on disk']),
     ("hook_py", "exact", [
@@ -275,6 +288,7 @@ RULES = [
     ("lib", "exact", [
         r'(\d+) shared (?:Python )?modules',
         r'(\d+) [`]?_lib[`/]* modules',   # catches "N `_lib/` modules" / "N _lib modules"
+        r'(\d+) stdlib-only shared modules',   # ARCHITECTURE.md tree comment
     ]),
     ("schema_files", "exact", [r'(\d+) schema files']),
     ("tests", "floor", [r'(\d+)\+ tests', r'(\d+)\+ unit tests']),
@@ -296,7 +310,48 @@ RULES = [
     ]),
 ]
 
+# ---- PLAN-161 V1: markdown-table-cell rules (the S275 miss class) ----
+# A prose regex like "(\d+) ADRs" never matches "| ADRs | 178 |" — the number
+# and its label sit in SEPARATE cells. These rules match on the LABEL cell
+# (first cell, markdown emphasis stripped) and read the FIRST integer of the
+# VALUE cell (second cell). Applied to every doc in DOCS. Tolerance 0.
+TABLE_RULES = [
+    ("adrs",      "exact", r'^(?:ADRs|Architecture decision records)\b'),
+    ("hook_py",   "exact", r'^Hook scripts\b'),
+    ("lib",       "exact", r'^(?:_lib modules|Shared library modules)\b'),
+    ("commands",  "exact", r'^Slash commands\b'),
+    ("skills",    "exact", r'^(?:Skills|Skill checklists)\b'),
+    ("spec_v1",   "exact", r'^SPEC/v1 files\b'),
+    ("workflows", "exact", r'^Workflows\b'),
+]
+
+def iter_table_rows(text):
+    for line in text.splitlines():
+        s = line.strip()
+        if not (s.startswith('|') and s.endswith('|') and s.count('|') >= 3):
+            continue
+        cells = [c.strip() for c in s.strip('|').split('|')]
+        if len(cells) >= 2:
+            yield cells
+
 violations = []
+for metric, kind, label_rx in TABLE_RULES:
+    lv = live[metric]
+    for doc in DOCS:
+        for cells in iter_table_rows(texts.get(doc, "")):
+            label = re.sub(r'[*`]', '', cells[0]).strip()
+            if not re.match(label_rx, label, re.IGNORECASE):
+                continue
+            value_cell = re.sub(r'[*`,]', '', cells[1])
+            m = re.search(r'(\d+)', value_cell)
+            if m is None:
+                continue
+            v = int(m.group(1))
+            if kind == "exact" and v != lv:
+                violations.append(
+                    f"{doc}: table row '{label}' cites {metric}={v}, live={lv}  (rule: exact/table-cell)"
+                )
+
 for metric, kind, regexes in RULES:
     if metric == "tests" and no_tests:
         continue
@@ -328,6 +383,11 @@ if live_version:
         ("CLAUDE.md", r'VERSION=(\d+\.\d+\.\d+)'),
         ("INSTALL.md", r'--pin v(\d+\.\d+\.\d+)'),
         ("README.md", r'VERSION=(\d+\.\d+\.\d+)'),
+        # PLAN-161 V1 — current-version declaration sites in the newly-watched
+        # docs (the npm README review stamp is a deliberate release tripwire:
+        # a version bump forces a fresh review of the npm-facing copy).
+        ("docs/ARCHITECTURE.md", r'currently\s+v(\d+\.\d+\.\d+), aligned with the repo'),
+        ("npm/README.md", r'last-reviewed: \d{4}-\d{2}-\d{2} v(\d+\.\d+\.\d+)'),
     ]
     for doc, rx in VERSION_SITES:
         for m in re.finditer(rx, texts.get(doc, "")):
