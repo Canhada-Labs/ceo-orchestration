@@ -1,9 +1,10 @@
 ---
 id: PLAN-161
 title: Consolidated maintenance sweep — substrate lint, upgrade.sh, council 3-lane, telemetry
-status: reviewed
+status: executing
 created: 2026-07-21
 reviewed_at: 2026-07-21
+executing_at: 2026-07-27
 reviewed_by: "Owner (João) — chat directive S278 + OQ1/OQ5 structured tie-breaks"
 owner: CEO
 depends_on: [PLAN-156, PLAN-159, PLAN-160]
