@@ -95,8 +95,10 @@ consistent with the framing: a coarse backstop, not coverage.
 4. **Not tamper-proof.** The entries live in the target repo's
    `.claude/settings.json`; anything that can edit that file can remove them.
    In this repo that file is itself canonical-guarded; in target repos the
-   installed template ships `Edit/Write(.claude/settings.json)` deny entries,
-   which raises the bar but is the same class of self-referential guard.
+   installed template ships an `Edit(.claude/settings.json)` deny entry
+   (on current CLIs it covers all file-editing tools; PLAN-161 C1 removed
+   the unconsulted `Write` twin), which raises the bar but is the same
+   class of self-referential guard.
 5. **No behavioral certification of enforcement.** Our test
    (`scripts/tests/test-install-deny-baseline.sh`) behaviorally certifies the
    *install mechanism* — entries land, dedup, order, opt-out, exclusions,

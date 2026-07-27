@@ -169,13 +169,16 @@ def check(cond, msg):
 
 deny = d.get("permissions", {}).get("deny", [])
 # Template-shipped deny entries must survive, and must come FIRST
-# (order-preserving append, not a rewrite).
+# (order-preserving append, not a rewrite). Since PLAN-161 C1 the template
+# ships exactly these 4 entries (the Write() twins were removed: on current
+# CLIs an Edit(X) deny rule covers all file-editing tools).
 template_head = [
     "Bash(git push --force*)",
     "Edit(PROTOCOL.md)",
-    "Write(PROTOCOL.md)",
+    "Edit(.claude/settings.json)",
+    "Edit(SPEC/**)",
 ]
-check(deny[:3] == template_head,
+check(deny[:4] == template_head,
       "template deny entries preserved in original order at the head")
 # The rewrite must not drop sibling keys (smoke-install.sh contract).
 sl = d.get("statusLine") or {}

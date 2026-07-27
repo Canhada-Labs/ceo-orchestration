@@ -723,16 +723,13 @@
   "fallbackModel": [
     "claude-opus-4-8"
   ],
-  "_deny_baseline_comment": "PLAN-153 Wave E item 3 — coarse harness-level deny baseline (docs/deny-baseline.md). Entries 8-27 of permissions.deny below mirror scripts/install.sh DENY_BASELINE_ENTRIES exactly: credential-store reads (~/.ssh, ~/.aws, npm/gcloud/kube/docker/git-credentials/netrc/pypirc), dotenv-family reads (SPECIFIC .env variants only — a deny rule cannot carry allow exceptions, so .env.example/.sample/.template stay readable by omission; unlisted variants like .env.secret pass this backstop), and the curl|bash tripwire. Honest limits: Read deny does not cover arbitrary subprocesses opening files, Bash(curl * | bash) is bypassable by rephrasing (that class is owned by check_bash_safety.py), and **/.env is cwd-anchored. Gate floor: check_harness_config.py DENY_BASELINE (the original 7 entries) must remain a subset of this list.",
+  "_deny_baseline_comment": "PLAN-153 Wave E item 3 — coarse harness-level deny baseline (docs/deny-baseline.md). Entries 5-24 of permissions.deny below mirror scripts/install.sh DENY_BASELINE_ENTRIES exactly: credential-store reads (~/.ssh, ~/.aws, npm/gcloud/kube/docker/git-credentials/netrc/pypirc), dotenv-family reads (SPECIFIC .env variants only — a deny rule cannot carry allow exceptions, so .env.example/.sample/.template stay readable by omission; unlisted variants like .env.secret pass this backstop), and the curl|bash tripwire. Honest limits: Read deny does not cover arbitrary subprocesses opening files, Bash(curl * | bash) is bypassable by rephrasing (that class is owned by check_bash_safety.py), and **/.env is cwd-anchored. Gate floor: check_harness_config.py DENY_BASELINE (4 entries — PLAN-161 C1 removed the three Write() twins: on current CLIs (>=2.1.216) Edit(X) deny rules cover ALL file-editing tools and Write(X) rules are unconsulted; the Owner accepted the old-CLI residual) must remain a subset of this list.",
   "permissions": {
     "deny": [
       "Bash(git push --force*)",
       "Edit(PROTOCOL.md)",
-      "Write(PROTOCOL.md)",
       "Edit(.claude/settings.json)",
-      "Write(.claude/settings.json)",
       "Edit(SPEC/**)",
-      "Write(SPEC/**)",
       "Read(~/.ssh/**)",
       "Read(~/.aws/**)",
       "Read(~/.npmrc)",

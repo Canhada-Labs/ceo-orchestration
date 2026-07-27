@@ -36,8 +36,8 @@ static scan structurally cannot see:
 
 3. **Missing-deny detection (check ``deny_baseline``)** — ``DENY_BASELINE``
    (module-level constant, integrator-owned) must be a subset of
-   ``permissions.deny``. Live baseline mirrors ``.claude/settings.json``
-   lines 644-653 at authoring time.
+   ``permissions.deny``. Live baseline mirrors the head of
+   ``permissions.deny`` in ``.claude/settings.json``.
 
 4. **Intentional no-op annotation (check ``noop_hook``)** — a hook whose
    command is a constant emitter (``echo``/``printf``/``true``/``:``) is a
@@ -111,16 +111,15 @@ except Exception:  # pragma: no cover - staged/degraded environments
 #: Deny entries that MUST be present in ``permissions.deny`` of every
 #: settings file that declares a ``permissions`` object. INTEGRATOR-OWNED:
 #: extend here (single source of truth) — the settings check reads this.
-#: Seeded from the live ``.claude/settings.json`` permissions.deny
-#: (lines 644-653 at PLAN-153 Wave E authoring time).
+#: Seeded from the head of ``permissions.deny`` in the live
+#: ``.claude/settings.json`` (PLAN-161 C1: the three Write() twins were
+#: removed — on current Claude Code CLIs an Edit(X) deny rule covers ALL
+#: file-editing tools and Write(X) rules are unconsulted).
 DENY_BASELINE: Tuple[str, ...] = (
     "Bash(git push --force*)",
     "Edit(PROTOCOL.md)",
-    "Write(PROTOCOL.md)",
     "Edit(.claude/settings.json)",
-    "Write(.claude/settings.json)",
     "Edit(SPEC/**)",
-    "Write(SPEC/**)",
 )
 
 #: Marker an integrator places inside a matcher entry's ``_comment`` to

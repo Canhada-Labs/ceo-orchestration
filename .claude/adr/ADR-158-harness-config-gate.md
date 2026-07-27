@@ -107,7 +107,7 @@ blind to the class that actually shipped:
    **coarse harness backstop** complementary to `check_bash_safety.py`'s
    parse gate (which owns the pipe-to-shell class) — never sold as
    coverage. `docs/deny-baseline.md` records the five explicit non-claims.
-   The gate's `DENY_BASELINE` floor (7 entries) is deliberately narrower
+   The gate's `DENY_BASELINE` floor (4 entries) is deliberately narrower
    than the installer's 20 until the template-parity decision lands (Wave-E
    MANIFEST, cross-report finding 1).
 6. **CI wiring, same commit** (consensus #5). `validate.yml` gains a
@@ -147,3 +147,21 @@ blind to the class that actually shipped:
 - **Selling the deny baseline as command-coverage** — rejected: glob-level
   deny is trivially bypassable in ways the parse gate is not; honesty-first
   framing is a plan invariant.
+## Amendment (PLAN-161 C1, 2026-07-27)
+
+Claude Code >= 2.1.216 changed permission-rule semantics: an `Edit(path)`
+deny rule now covers ALL file-editing tools, and `Write(path)` rules are no
+longer consulted — each of the three `Write(...)` twins only produced a
+startup deprecation warning. PLAN-161 C1 therefore removed
+`Write(PROTOCOL.md)`, `Write(.claude/settings.json)` and `Write(SPEC/**)`
+from the live `.claude/settings.json` deny head, the shipped template
+(`templates/settings/settings.base.json`), the gate's `DENY_BASELINE`
+floor (now 4 entries: `Bash(git push --force*)`, `Edit(PROTOCOL.md)`,
+`Edit(.claude/settings.json)`, `Edit(SPEC/**)`) and the harness-config
+settings fixtures. Zero protection is lost on current CLIs: the `Edit(X)`
+twin carries the full file-editing deny, and `check_canonical_edit.py`
+remains the independent hook-side rail over the same surfaces. Residual:
+an adopter on a pre-2.1.216 CLI that still consulted `Write` rules loses
+only the redundant twin — the Owner accepted this version-conditional
+residual (OQ5(a); Security VETO lift condition (ii)). Any "seven-entry"
+phrasing elsewhere in this record survives only as historical text.

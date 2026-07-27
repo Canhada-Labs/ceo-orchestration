@@ -289,16 +289,21 @@ floor is the static layer that survives those failure modes.
 
 ### 10.1 The S2 baseline rule set
 
-`permissions.deny` (7 rules — Tool(specifier) syntax exactly as recorded in
+`permissions.deny` (4 rules — Tool(specifier) syntax exactly as recorded in
 the harvest pack: `Edit(PROTOCOL.md)`, `Bash(git push --force*)` glob-`*`
 suffix):
 
 | Rule | Why |
 |---|---|
 | `Bash(git push --force*)` | History destruction; pairs with the hook-side git-bypass guard (ADR-143 family). Matches `--force` and `--force-with-lease`. |
-| `Edit(PROTOCOL.md)` / `Write(PROTOCOL.md)` | Governance contract — canonical-guarded; floor backs `check_canonical_edit.py`. |
-| `Edit(.claude/settings.json)` / `Write(.claude/settings.json)` | The rail's own arming state (hook registry + this very floor) — self-protection. |
-| `Edit(SPEC/**)` / `Write(SPEC/**)` | Published Compliance contract (28 schema files) — canonical-guarded. |
+| `Edit(PROTOCOL.md)` | Governance contract — canonical-guarded; floor backs `check_canonical_edit.py`. |
+| `Edit(.claude/settings.json)` | The rail's own arming state (hook registry + this very floor) — self-protection. |
+| `Edit(SPEC/**)` | Published Compliance contract (28 schema files) — canonical-guarded. |
+
+PLAN-161 C1 removed the former `Write(...)` twin of each `Edit(...)` rule:
+on current Claude Code CLIs (>= 2.1.216) an `Edit(path)` deny rule covers
+all file-editing tools and `Write(path)` rules are no longer consulted, so
+the twins added startup deprecation warnings and no protection.
 
 `permissions.allow` (9 rules — conservative read-only set, shape from the
 `fewer-permission-prompts` scan): `Bash(git status*)`, `Bash(git log*)`,
