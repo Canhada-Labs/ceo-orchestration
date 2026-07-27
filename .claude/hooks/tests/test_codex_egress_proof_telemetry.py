@@ -108,7 +108,9 @@ class TestAllowlistAndContract(unittest.TestCase):
         #    the egress-pin does not red the landing (MANIFEST-A open issue #1).
         # PLAN-156 Wave 4/6 (SENT-GK-B/F): 316 -> 319 (+grok_tool_recorded,
         # +grok_turn_ended, +council_lane_invoked).
-        self.assertEqual(len(audit_emit._KNOWN_ACTIONS), 319)
+        # PLAN-161 W2 C5: 319 -> 321 (+codex_review_verdict,
+        # +pair_rail_review_expected — pair-rail liveness telemetry).
+        self.assertEqual(len(audit_emit._KNOWN_ACTIONS), 321)
         self.assertIn("pair_rail_outgoing_redaction_applied", audit_emit._KNOWN_ACTIONS)
 
     def test_dispatch_scrub_accepts_empty_findings(self):

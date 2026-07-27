@@ -398,6 +398,14 @@ _EXPECTED_PUBLIC_SYMBOLS = frozenset({
     "emit_eval_task_completed",
     "emit_hint_provenance_recorded",
     "emit_persistent_instructions_blocked",
+    # PLAN-161 W2 C5 (CF-9, pair-rail liveness telemetry) — TWO new typed
+    # emitters closing the permanent-yellow failopen_rail_liveness_7d signal
+    # gap. Deny-by-default scrub branches + per-action allowlists
+    # (_CODEX_REVIEW_VERDICT_ALLOWLIST / _PAIR_RAIL_REVIEW_EXPECTED_ALLOWLIST);
+    # closed enums (outcome coerced to skipped_failopen — never healthy;
+    # tool_name coerced to unknown); NEVER _EMIT_GENERIC_PASSTHROUGH.
+    "emit_codex_review_verdict",
+    "emit_pair_rail_review_expected",
 })
 
 
@@ -663,7 +671,22 @@ _EXPECTED_KNOWN_ACTIONS_SHA256 = (
     # lane; deny-by-default _COUNCIL_LANE_INVOKED_ALLOWLIST, closed enums
     # vendor/lane_status, NEVER the audited scope). One new public typed
     # emitter emit_council_lane_invoked. Count: 318 -> 319.
-    "93c985df13a884cc663cf53e39fd69455a3fa1654b0314c2a8071cab9856b246"
+    # Updated PLAN-161 W2 C5 (CF-9 pair-rail liveness telemetry, ceremony
+    # CEO_KERNEL_OVERRIDE=PLAN-161-C5-LIVENESS-ACTIONS) — +2 metadata-only
+    # actions: codex_review_verdict (Stop-hook cross-review outcome; closed
+    # enum clean/findings/skipped_failopen/detected_only + shape-validated
+    # diff_sha256; emitted by codex_review_user_code.py once per distinct
+    # (diff, outcome) pair) + pair_rail_review_expected (canonical-edit
+    # review-ENTERED denominator; emitted by check_pair_rail.py _decide()
+    # after the sentinel-bypass arm; session-correlated). Both route through
+    # dedicated Sec MF-3 dispatch branches + per-action allowlists
+    # (_CODEX_REVIEW_VERDICT_ALLOWLIST / _PAIR_RAIL_REVIEW_EXPECTED_ALLOWLIST),
+    # NEVER _EMIT_GENERIC_PASSTHROUGH. TWO new public typed emitters:
+    # emit_codex_review_verdict + emit_pair_rail_review_expected (added to
+    # _EXPECTED_PUBLIC_SYMBOLS). SPEC amend v2.52. SHA re-derived from the
+    # STAGED audit_emit.py under .claude/plans/PLAN-161/staged/ via
+    # sha256(json.dumps(sorted(_KNOWN_ACTIONS))). Count: 319 -> 321.
+    "0d1a5be5eacb7cf7470c288f6f406040cb645ee9bfb3d079e121b1ac34c426a1"
 )
 
 
@@ -705,13 +728,15 @@ class AuditEmitPublicSurfaceTests(unittest.TestCase):
         self.assertEqual(
             actual, _EXPECTED_KNOWN_ACTIONS_SHA256,
             f"_KNOWN_ACTIONS drift detected. "
-            f"Count={len(actions)} (expected 319). "
+            f"Count={len(actions)} (expected 321). "
             f"Rebaseline this test + add audit-registry entry if the change is intentional.",
         )
 
     def test_known_actions_count_fixed(self) -> None:
+        # 321 = 319 + 2 PLAN-161 W2 C5 (codex_review_verdict +
+        # pair_rail_review_expected — pair-rail liveness telemetry, CF-9).
         self.assertEqual(
-            len(audit_emit._KNOWN_ACTIONS), 319,
+            len(audit_emit._KNOWN_ACTIONS), 321,
             "_KNOWN_ACTIONS count drifted from 163 baseline (PLAN-088 S114 Wave 1 +11 actions: "
             "cache_discipline_alerted + first_run_wizard_dispatched + "
             "estimate_calibrator_pipeline_run + subagent_findings_partial_drop + "

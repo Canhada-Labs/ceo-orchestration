@@ -83,6 +83,43 @@ if str(_LIB_PARENT) not in sys.path:
     sys.path.insert(0, str(_LIB_PARENT))
 
 # ---------------------------------------------------------------------------
+# PLAN-161 C5 r6 F9 — env + durable-emit isolation for the matrix tests.
+#
+# `_decide_with_matrix` invokes the REAL audit_emit emitters
+# (`emit_pair_rail_review_expected` writes NO sink breadcrumb by design —
+# check_pair_rail.py `_emit_pair_rail_review_expected` docstring), so any
+# test that reaches the matrix arm writes DURABLE audit rows through the
+# inherited $HOME / CEO_AUDIT_LOG_* env. `TestEnvContext` (the PLAN-019
+# P1-QA-3 mandate base) snapshots + redirects HOME / CLAUDE_PROJECT_DIR /
+# CEO_AUDIT_LOG_* at a per-test tmp tree, so those emits can never touch
+# the real ~/.claude audit log. Import is position-robust: at canonical
+# position `_lib.testing` resolves off _LIB_PARENT; from a staged-pack
+# position (whose _lib/ ships only audit_emit.py) fall back to loading
+# testing.py from the enclosing repo's canonical hooks/_lib via importlib
+# (fail-LOUD if neither resolves — silent un-isolation is the bug class).
+# ---------------------------------------------------------------------------
+try:
+    from _lib.testing import TestEnvContext
+except Exception:  # pragma: no cover — staged-position fallback
+    TestEnvContext = None  # type: ignore[assignment]
+    for _anc in _THIS_FILE.parents:
+        _cand = _anc / ".claude" / "hooks" / "_lib" / "testing.py"
+        if _cand.exists():
+            _tspec = importlib.util.spec_from_file_location(
+                "_ceo_matrix_testing_fallback", str(_cand)
+            )
+            _tmod = importlib.util.module_from_spec(_tspec)  # type: ignore[arg-type]
+            _tspec.loader.exec_module(_tmod)  # type: ignore[union-attr]
+            TestEnvContext = _tmod.TestEnvContext
+            break
+    if TestEnvContext is None:
+        raise ImportError(
+            "TestEnvContext unavailable: _lib.testing not importable and no "
+            "canonical .claude/hooks/_lib/testing.py found above "
+            f"{_THIS_FILE}"
+        )
+
+# ---------------------------------------------------------------------------
 # Load check_pair_rail via importlib from resolved hooks dir.
 # ---------------------------------------------------------------------------
 _HOOK_PATH = _HOOKS_DIR / "check_pair_rail.py"
@@ -517,30 +554,27 @@ class TestResolveHumanTriageGraceH(unittest.TestCase):
 # 6. _decide_with_matrix (integration — fixture-driven)
 # ===========================================================================
 
-class TestDecideWithMatrix(unittest.TestCase):
-    """Matrix arm integration tests using CEO_PAIR_RAIL_FIXTURE_RESPONSE."""
+class TestDecideWithMatrix(TestEnvContext):
+    """Matrix arm integration tests using CEO_PAIR_RAIL_FIXTURE_RESPONSE.
+
+    r6 F9: subclasses ``TestEnvContext`` (not bare ``unittest.TestCase``)
+    because every test that reaches the matrix arm triggers the REAL
+    durable audit emits (`emit_pair_rail_review_expected` +
+    `emit_pair_rail_case` via audit_emit `_write_event`) — the
+    `CEO_PAIR_RAIL_AUDIT_SINK` breadcrumb is only the `pair_rail_case`
+    capture surface, NOT where the durable rows go. TestEnvContext
+    redirects HOME / CLAUDE_PROJECT_DIR / CEO_AUDIT_LOG_* to a per-test
+    tmp tree (snapshot-restored in tearDown), so no test can write a row
+    into the real ~/.claude audit log through inherited env.
+    """
 
     def setUp(self) -> None:
+        super().setUp()  # isolate HOME / CLAUDE_PROJECT_DIR / CEO_* env
         _reset_catalogue_cache()
-        # Snapshot env vars that tests may mutate
-        self._orig = {
-            k: os.environ.get(k)
-            for k in (
-                "CEO_PAIR_RAIL_FIXTURE_RESPONSE",
-                "CEO_PAIR_RAIL_AUDIT_SINK",
-                "CEO_PAIR_RAIL_DISABLE",
-                "CEO_PAIR_RAIL_CODEX_BIN",
-                "CEO_PAIR_RAIL_HUMAN_TRIAGE_HOURS",
-            )
-        }
 
     def tearDown(self) -> None:
         _reset_catalogue_cache()
-        for key, val in self._orig.items():
-            if val is None:
-                os.environ.pop(key, None)
-            else:
-                os.environ[key] = val
+        super().tearDown()  # restore snapshotted env exactly
 
     def _make_repo(self) -> Path:
         import tempfile
@@ -552,27 +586,107 @@ class TestDecideWithMatrix(unittest.TestCase):
         return sink
 
     def test_case_a_clean_review_allows_and_emits(self):
-        """Fixture returns clean review → Case A, decision=allow, emits case=A."""
+        """Structured PASS verdict → Case A, decision=allow, emits case=A.
+
+        PLAN-161 C5 r6: de-vacuized. The old fixture was FREE TEXT
+        ("Code looks good...") which the strict parser (PLAN-142
+        R-SEC-2) degrades to ADVISORY — no Case-A emit was ever
+        produced and the `if case_events:` guard silently skipped the
+        assertion (a vacuous green). A clean review IS a structured
+        PASS object; the guard is now a hard assertion.
+        """
         import tempfile
         with tempfile.TemporaryDirectory() as td:
             repo = _make_repo(Path(td))
             sink = Path(td) / "sink.jsonl"
-            # Clean review fixture — no write-shaped patch.
-            os.environ["CEO_PAIR_RAIL_FIXTURE_RESPONSE"] = "Code looks good. No issues found."
-            os.environ["CEO_PAIR_RAIL_AUDIT_SINK"] = str(sink)
-            result = _CPR._decide_with_matrix(
-                tool_name="Write",
-                file_path=_l3_abs(repo),
-                proposed_content="x = 1",
-                repo_root=repo,
-                timeout_s=5.0,
-            )
+            # Clean review fixture — STRUCTURED PASS (strict-parser shape).
+            # r6 F9: env via mock.patch.dict (never bare os.environ writes).
+            with patch.dict(os.environ, {
+                "CEO_PAIR_RAIL_FIXTURE_RESPONSE": json.dumps({
+                    "verdict": "PASS",
+                    "findings": [],
+                    "summary": "Clean review. No issues found.",
+                }),
+                "CEO_PAIR_RAIL_AUDIT_SINK": str(sink),
+            }, clear=False):
+                result = _CPR._decide_with_matrix(
+                    tool_name="Write",
+                    file_path=_l3_abs(repo),
+                    proposed_content="x = 1",
+                    repo_root=repo,
+                    timeout_s=5.0,
+                )
             self.assertEqual(result.get("decision", "allow"), "allow")
             events = _read_sink(sink)
             # Find the case-emit event from _emit_pair_rail_case → _emit_audit sink
             case_events = [e for e in events if "case" in e]
-            if case_events:
-                self.assertEqual(case_events[0]["case"], "A")
+            self.assertTrue(
+                case_events,
+                f"Expected a Case-A emit for a structured PASS; events={events}",
+            )
+            self.assertEqual(case_events[0]["case"], "A")
+
+    def test_advisory_parse_miss_emits_paired_case_f_advisory(self):
+        """PLAN-161 C5 r6 F1 — an ENTERED review whose codex answer does
+        NOT parse into a structured PASS/BLOCK (free text → ADVISORY)
+        must STILL emit exactly one `pair_rail_case` (case=F,
+        codex_verdict=ADVISORY) carrying the SAME `review_id` as its own
+        `pair_rail_review_expected` emit. Before r6 this arm emitted NO
+        case (`_base_to_verdicts` Arm 5 → detect_case None → bare
+        `return base`), so the expected review_id stayed OUTSTANDING
+        forever and /ceo-boot escalated a FALSE S254 deficit ("hook died
+        between the two emits") for a rail that actually RAN and
+        ANSWERED.
+        """
+        import tempfile
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as td:
+            repo = _make_repo(Path(td))
+            sink = Path(td) / "sink.jsonl"
+            # Free text — a strict-parser miss → verdict ADVISORY.
+            # r6 F9: env via mock.patch.dict (never bare os.environ
+            # writes); the REAL expected emitter still runs underneath
+            # the capture wrapper, but its durable row lands in the
+            # TestEnvContext-isolated CEO_AUDIT_LOG_PATH, never the real
+            # ~/.claude audit log.
+            expected_ids = []
+            real_expected = _CPR._emit_pair_rail_review_expected
+
+            def _capture_expected(**kwargs):
+                expected_ids.append(kwargs.get("review_id", ""))
+                return real_expected(**kwargs)
+
+            with patch.dict(os.environ, {
+                "CEO_PAIR_RAIL_FIXTURE_RESPONSE": (
+                    "Code looks good. No issues found."
+                ),
+                "CEO_PAIR_RAIL_AUDIT_SINK": str(sink),
+            }, clear=False), patch.object(
+                _CPR, "_emit_pair_rail_review_expected", _capture_expected
+            ):
+                result = _CPR._decide_with_matrix(
+                    tool_name="Write",
+                    file_path=_l3_abs(repo),
+                    proposed_content="x = 1",
+                    repo_root=repo,
+                    timeout_s=5.0,
+                )
+            # Advisory fail-open: allow, no top-level decision key.
+            self.assertNotIn("decision", result)
+            self.assertIn("ADVISORY", result.get("systemMessage", ""))
+            # The review was ENTERED exactly once with a nonempty id.
+            self.assertEqual(len(expected_ids), 1)
+            self.assertTrue(expected_ids[0], "expected emit carried no review_id")
+            # Exactly ONE paired terminal case: F/ADVISORY, SAME review_id.
+            events = _read_sink(sink)
+            case_events = [e for e in events if "case" in e]
+            self.assertEqual(
+                len(case_events), 1,
+                f"Expected exactly one paired case emit; events={events}",
+            )
+            self.assertEqual(case_events[0]["case"], "F")
+            self.assertEqual(case_events[0]["codex_verdict"], "ADVISORY")
+            self.assertEqual(case_events[0]["review_id"], expected_ids[0])
 
     def test_case_b_write_shape_emits_case_b(self):
         """Fixture contains write-shaped patch → Case B advisory (PLAN-092 Wave B).
@@ -751,19 +865,23 @@ class TestDecideWithMatrix(unittest.TestCase):
 # 7. _emit_pair_rail_case fail-OPEN
 # ===========================================================================
 
-class TestEmitPairRailCaseFailOpen(unittest.TestCase):
-    """_emit_pair_rail_case must never raise, even when audit_emit is absent."""
+class TestEmitPairRailCaseFailOpen(TestEnvContext):
+    """_emit_pair_rail_case must never raise, even when audit_emit is absent.
+
+    r6 F9: subclasses ``TestEnvContext`` — `test_emit_pair_rail_case_accepts_
+    optional_fields` reaches the REAL `audit_emit.emit_pair_rail_case`
+    (canonical resolution), which wrote a durable row through the inherited
+    $HOME / CEO_AUDIT_LOG_* env. Isolation redirects it to a per-test tmp
+    tree.
+    """
 
     def setUp(self) -> None:
+        super().setUp()  # isolate HOME / CLAUDE_PROJECT_DIR / CEO_* env
         _reset_catalogue_cache()
-        self._orig_sink = os.environ.get("CEO_PAIR_RAIL_AUDIT_SINK")
 
     def tearDown(self) -> None:
         _reset_catalogue_cache()
-        if self._orig_sink is None:
-            os.environ.pop("CEO_PAIR_RAIL_AUDIT_SINK", None)
-        else:
-            os.environ["CEO_PAIR_RAIL_AUDIT_SINK"] = self._orig_sink
+        super().tearDown()
 
     def test_emit_fail_open_when_audit_emit_unavailable(self):
         """Patching import to raise → _emit_pair_rail_case returns silently."""
@@ -822,27 +940,28 @@ class TestEmitPairRailCaseFailOpen(unittest.TestCase):
 # 8. Performance: Case-A path < 5 ms p99 over N=100 (fixture only)
 # ===========================================================================
 
-class TestDecideWithMatrixPerformance(unittest.TestCase):
-    """Tight-loop p99 under 5 ms — excludes subprocess; fixture-injected."""
+class TestDecideWithMatrixPerformance(TestEnvContext):
+    """Tight-loop p99 under 5 ms — excludes subprocess; fixture-injected.
+
+    r6 F9: subclasses ``TestEnvContext`` so the ~309 durable emits of the
+    timed loop (and the spool writer's `state/audit-pending.*.journal`,
+    which keys off $HOME even when CEO_AUDIT_LOG_DIR is redirected) land
+    in a per-test tmp tree, never the real ~/.claude.
+    ``SYNC_MODE_DEFAULT = False``: the probe measures the hook's decision
+    latency under the PRODUCTION async-spool write mode — forcing
+    fsync-per-emit sync mode would time a different (slower) code path
+    and flake the 5 ms budget.
+    """
+
+    SYNC_MODE_DEFAULT = False  # keep production async-spool for the timing
 
     def setUp(self) -> None:
+        super().setUp()  # isolate HOME / CLAUDE_PROJECT_DIR / CEO_* env
         _reset_catalogue_cache()
-        self._orig = {
-            k: os.environ.get(k)
-            for k in (
-                "CEO_PAIR_RAIL_FIXTURE_RESPONSE",
-                "CEO_PAIR_RAIL_AUDIT_SINK",
-                "CEO_PAIR_RAIL_DISABLE",
-            )
-        }
 
     def tearDown(self) -> None:
         _reset_catalogue_cache()
-        for key, val in self._orig.items():
-            if val is None:
-                os.environ.pop(key, None)
-            else:
-                os.environ[key] = val
+        super().tearDown()
 
     def test_case_a_p99_under_5ms(self):
         """N=100 Case-A fixture invocations: p99 < 5 ms."""
@@ -900,6 +1019,15 @@ class TestDecideWithMatrixPerformance(unittest.TestCase):
                     )
                     times_ms.append((time.perf_counter() - t0) * 1000.0)
             finally:
+                # r6 F9 — drain the async spool + journal buffer INSIDE the
+                # isolated env (outside the timed window): otherwise the
+                # leftover buffered journal envelopes flush at the ATEXIT
+                # drain, after tearDown restored the env, and land in the
+                # real (inherited) $HOME state dir.
+                try:
+                    _sw.drain_now(force=True)
+                except Exception:
+                    pass
                 _sw.DRAIN_TRIGGER_SIZE = _orig_size
                 _sw.DRAIN_TRIGGER_MTIME_MS = _orig_mtime
                 if _orig_audit_dir is None:

@@ -1660,11 +1660,13 @@ def check_settings_tamper_tripwires() -> Tuple[str, str, Any]:
 # zero on-disk events, so "no signal" must stay visible).
 #
 # Data source (canonical audit-log.jsonl typed events only):
-#   - `pair_rail_case` (check_pair_rail.py:1655/1673/1686 via
-#     _lib/audit_emit.emit_pair_rail_case): closed-enum `case` A-F.
-#     A/B/C/D/E == a COMPLETED Codex review (rail demonstrably alive;
-#     B is a block — the strongest liveness proof). F == the ADR-106
-#     fail-open path (Codex unavailable / timeout / malformed).
+#   - `pair_rail_case` (check_pair_rail.py `_decide_with_matrix` case
+#     arms via _lib/audit_emit.emit_pair_rail_case): closed-enum `case`
+#     A-F. A/B/C/D/E == a COMPLETED Codex review (rail demonstrably
+#     alive; B is a block — the strongest liveness proof). F == the
+#     ADR-106 fail-open path (Codex unavailable / timeout / malformed)
+#     — still an EMITTED, accounted outcome (r3 F2: an outage is not
+#     silence).
 #   - Legacy/typed labels `pair_rail_review_passed` /
 #     `pair_rail_codex_unavailable` (emitted by codex_invoke.py:366-390;
 #     check_pair_rail's own copies go to a local sink + stderr only).
@@ -1676,6 +1678,35 @@ def check_settings_tamper_tripwires() -> Tuple[str, str, Any]:
 # attributes lines to infra writers (spool_writer/check_budget/audit_emit),
 # not to security rails. Those windows degrade to the yellow "no signal"
 # verdict — never to green.
+#
+# PLAN-161 C5 (CF-9) — the signal was broken, not the rail: the Stop-hook
+# cross-review that actually runs in this repo is codex_review_user_code.py,
+# which emitted only a GENERIC event this check never observed → permanent
+# yellow. Two typed actions close the gap:
+#   - `codex_review_verdict` (outcome enum clean/findings/skipped_failopen/
+#     detected_only) feeds the NEW `stop_review` sub-rail row (sub-rails
+#     SPLIT, not merged — a healthy Stop review must never mask a silent
+#     canonical pair-rail, r2 F3).
+#   - `pair_rail_review_expected` (check_pair_rail.py `_decide()` after the
+#     sentinel-bypass arm) is the durable DENOMINATOR that makes the
+#     `pair_rail` row ACTIVITY-CONDITIONED with INVOCATION-ID-EXACT
+#     pairing (codex r1 F2 → r4 F2 → terminal fix r5 F2): both the
+#     expected emit and the same invocation's `pair_rail_case` carry one
+#     freshly minted 16-hex `review_id`, so a specific expected pairs
+#     ONLY with its OWN case. Counting — even (session, file-hash)
+#     BUCKET counting — fundamentally cannot do that: an old completed
+#     case for the SAME (session, file) offset a later dead expected 1:1
+#     (the r5 interleaving false-green). Semantics: zero expected + zero
+#     outcomes → vacuous green; any EXPECTED `review_id` with no matching
+#     `pair_rail_case` in-window (terminal set = `pair_rail_case` ONLY —
+#     codex r2 F2; see PAIR_RAIL_TERMINAL_ACTIONS) → an OUTSTANDING
+#     (dead) review → RED escalation (the S254 class); id-less events
+#     (legacy pre-land emits, or a fail-open no-id emit) fall back to the
+#     r4 (session, file-hash) bucket-count heuristic applied ONLY to the
+#     "" review_id subset (best-effort — post-land every review carries
+#     an id, so the exact path dominates); outcomes present with no
+#     deficit → the original ladder. The liveness signal is exactly as
+#     trustworthy as the review path it observes — no new authority.
 
 FAILOPEN_RAIL_WINDOW_HOURS_DEFAULT = 168.0  # 7d
 
@@ -1721,12 +1752,95 @@ def _classify_pair_rail_event(ev: Dict[str, Any]) -> Optional[str]:
     return None
 
 
+# PLAN-161 C5 (codex r1 F2, tightened by codex r2 F2) — actions that count
+# as a TERMINAL, accounted signal for the expected/terminal count-deficit
+# pairing. The terminal set is EXACTLY `pair_rail_case`: the per-decision
+# completion signal emitted by the SAME producer (check_pair_rail.py) that
+# emits the `pair_rail_review_expected` denominator. `pair_rail_codex_unavailable`
+# is deliberately NOT terminal (r2 F2): it is also emitted by a DIFFERENT
+# rail (codex_invoke.py, e.g. on parse_error), so counting it here would
+# let an unrelated outage in the same session consume a terminal count and
+# MASK a genuinely missing `pair_rail_case` — defeating the deficit
+# escalation.
+#
+# What a DEFICIT means (r3 F2, pairing made invocation-id-exact by r5
+# F2): an EXPECTED `review_id` with no matching `pair_rail_case` carrying
+# the SAME id in-window (or, for id-less legacy events only, an
+# expected_count > case count inside a (session, file-hash) bucket of the
+# "" review_id subset — the r4 fallback) means the review path was
+# ENTERED but produced NO `pair_rail_case` of its own — the hook died /
+# was killed BETWEEN the `pair_rail_review_expected` emit and the case
+# emit. That is the genuine S254 dead-rail signal. A Codex OUTAGE is
+# NOT a deficit: an outage during an entered review is Case F, and the
+# `_decide_with_matrix` Case-F arm STILL emits a `pair_rail_case`
+# (case=F), so the outage session pairs expected==terminal and is
+# laddered normally by its `failopen` bucket; the outage also remains
+# separately visible via the dispatcher `codex_outage_minutes` metric
+# (disable_predicate_eval.py). (check_pair_rail's own
+# `pair_rail_codex_unavailable` copy goes to a local test sink + stderr
+# only — it never reaches the canonical log, so Case F IS the canonical
+# outage record.) The legacy labels (`pair_rail_review_passed` /
+# `pair_rail_codex_violation` / `pair_rail_fatal_failopen`) come from
+# producers that never emit the `pair_rail_review_expected` denominator —
+# they still classify into buckets but do not pair.
+PAIR_RAIL_TERMINAL_ACTIONS = (
+    "pair_rail_case",
+)
+
+# PLAN-161 C5 r6 F2 — the ONLY shape accepted as an invocation-exact
+# pairing key: EXACTLY 16 lowercase hex (`os.urandom(8).hex()` as minted
+# by check_pair_rail.py `_decide()`). Mirrors audit_emit's
+# `_PAIR_RAIL_REVIEW_ID_RE` (`^([0-9a-f]{16})?$`) on the consumer side:
+# any other nonempty value on a log row (forged / version-skewed
+# producer) is coerced to the "" legacy bucket by `_review_id` below and
+# can never act as a unique pairing token.
+_REVIEW_ID_EXACT_RE = re.compile(r"^[0-9a-f]{16}$")
+
+
+def _classify_stop_review_event(ev: Dict[str, Any]) -> Optional[str]:
+    """Classify one `codex_review_verdict` event for the stop_review sub-rail.
+
+    PLAN-161 C5 (r2 F3 — sub-rails split, NOT merged): the Stop-hook
+    cross-review (`codex_review_user_code.py`) gets its OWN row so a healthy
+    Stop review can never MASK a silent canonical pair-rail (and vice versa).
+
+    Returns "healthy" | "failopen" | "neutral" | "unclassified" | None:
+
+      clean / findings   -> "healthy"   (a strictly PARSED verdict ran)
+      skipped_failopen   -> "failopen"  (infra skip OR malformed verdict)
+      detected_only      -> "neutral"   (r3 F3: DETECT-ONLY mode nudged a
+                            review that never ran — neither health nor
+                            failopen; visible in counts, never
+                            green-contributing, never red-contributing)
+      anything else      -> "unclassified" (hand-forged log line — the typed
+                            emitter coerces off-enum to skipped_failopen;
+                            never green)
+    """
+    if ev.get("action") != "codex_review_verdict":
+        return None
+    outcome = ev.get("outcome")
+    if outcome in ("clean", "findings"):
+        return "healthy"
+    if outcome == "skipped_failopen":
+        return "failopen"
+    if outcome == "detected_only":
+        return "neutral"
+    return "unclassified"
+
+
 # Deterministic rail registry (list order == render order). Future fail-open
 # rails append (name, classifier) here; the check aggregates worst-of.
+# PLAN-161 C5: `stop_review` observes the Stop-hook cross-review of the
+# ADOPTER's code; `pair_rail` keeps observing check_pair_rail.py (canonical
+# framework edits) and is additionally ACTIVITY-CONDITIONED on the
+# `pair_rail_review_expected` denominator (handled in the check function —
+# it is a denominator signal, not an outcome, so it does NOT go through a
+# classifier).
 FAILOPEN_RAIL_CLASSIFIERS: List[
     Tuple[str, Callable[[Dict[str, Any]], Optional[str]]]
 ] = [
     ("pair_rail", _classify_pair_rail_event),
+    ("stop_review", _classify_stop_review_event),
 ]
 
 _STATUS_RANK = {"green": 0, "yellow": 1, "red": 2}
@@ -1736,16 +1850,65 @@ def check_failopen_rail_liveness_7d() -> Tuple[str, str, Any]:
     """PLAN-153 Wave E item 2 — 22nd Tier-S check: fail-open rail liveness.
 
     Single streaming pass over the canonical audit-log window; per-rail
-    verdicts (deterministic registry order), overall = worst-of:
+    verdicts (deterministic registry order), overall = worst-of. Base
+    bucket-ladder per rail (unchanged from PLAN-153, PLUS the C5 `neutral`
+    bucket):
 
       failopen > 0 and healthy == 0 → red    (fail-opened on EVERY
                                               classified invocation)
-      failopen > 0 and healthy > 0  → yellow (partial fail-open)
+      failopen > 0 and healthy > 0  → yellow (partial fail-open — the
+                                              mixed-window rule)
       healthy > 0                   → green
       unclassified only             → yellow (signal present, unparseable)
+      neutral only                  → yellow (C5: detected_only nudges —
+                                      review never RAN; never green)
       zero events                   → yellow "no signal" (silence from a
-                                      fail-open rail is not health — the
-                                      live S254 state renders THIS row)
+                                      fail-open rail is not health)
+
+    PLAN-161 C5 overrides for the `pair_rail` row only (r3 F2 + r4 F1 +
+    codex r1 F2 → r4 F2, terminal fix r5 F2 — ACTIVITY-CONDITIONED on
+    `pair_rail_review_expected` with INVOCATION-ID-EXACT pairing: the
+    producer mints one 16-hex `review_id` per entered review and stamps
+    it on BOTH that review's expected emit and its own `pair_rail_case`,
+    so a specific expected pairs only with its OWN case. An EXPECTED
+    `review_id` with no matching case in-window = an OUTSTANDING (dead)
+    review → deficit. This is what COUNTING could not do: neither a
+    healthy outcome from session B (r4 F1), nor one early healthy outcome
+    in the SAME session (r1 F2), nor an older completed case for a
+    DIFFERENT file (r4 F2), nor — the r5 interleaving — an older
+    completed case for the SAME (session, file) can satisfy a different
+    review's expected. FALLBACK for empty `review_id` ONLY (legacy
+    pre-land events, or a fail-open no-id emit): the r4 (session,
+    file-hash) bucket-count heuristic, applied to the "" review_id
+    subset (best-effort — post-land every review carries an id, so the
+    exact path dominates). Terminal
+    signals = PAIR_RAIL_TERMINAL_ACTIONS (`pair_rail_case` ONLY — codex
+    r2 F2: `pair_rail_codex_unavailable` is shared with codex_invoke.py
+    and must not consume a terminal count. r3 F2 correction: a mid-review
+    Codex OUTAGE is NOT a deficit — Case F still emits `pair_rail_case`
+    carrying the same review_id, so the outage invocation pairs
+    expected==case and is laddered by its failopen bucket; a deficit
+    means the hook died BETWEEN the expected emit and the case emit —
+    zero `pair_rail_case` for that invocation):
+
+      any outstanding expected review_id, OR (id-less subset) any
+      (session, file-hash) bucket with expected_count >
+      terminal_count               → RED escalation
+                                      (the S254 dead-rail class — a review
+                                      path was ENTERED and NO pair_rail_case
+                                      came back for it; flat yellow
+                                      understates it; subsumes the
+                                      zero-outcome case)
+      zero expected AND zero outcomes → GREEN (vacuous-but-true: no
+                                      canonical-edit review activity was
+                                      expected in the window)
+      matched pairs / outcomes present (no deficit) → the base ladder
+                                      above (laddered by the case verdict)
+
+    The `stop_review` row (codex_review_verdict) uses the base ladder only:
+    healthy>=1 AND failopen==0 in-window → green; any mixture stays yellow;
+    silence stays yellow (its healthy signal arrives with the first
+    post-land Stop review of a risky diff — L4).
 
     ADVISORY fail-open on infra: missing/unreadable log degrades to the
     no-signal yellow via `_iter_audit_events_since`; any internal error is
@@ -1753,16 +1916,102 @@ def check_failopen_rail_liveness_7d() -> Tuple[str, str, Any]:
     """
     window_h = _failopen_rail_window_hours()
     counts: Dict[str, Dict[str, int]] = {
-        rail: {"healthy": 0, "failopen": 0, "unclassified": 0}
+        rail: {"healthy": 0, "failopen": 0, "unclassified": 0, "neutral": 0}
         for rail, _ in FAILOPEN_RAIL_CLASSIFIERS
     }
+    # PLAN-161 C5 — pair_rail activity correlation ledgers. Pairing is
+    # INVOCATION-ID-EXACT (codex r1 F2 → r4 F2 → terminal fix r5 F2):
+    # the producer mints one 16-hex `review_id` per entered review and
+    # stamps it on BOTH that review's `pair_rail_review_expected` and its
+    # own `pair_rail_case`, so a specific expected can only be satisfied
+    # by its OWN case. Counting — even the r4 (session, file-hash)
+    # BUCKET counting — cannot pair a specific expected with its own
+    # case: an old completed case for the SAME (session, file) in the
+    # same session balanced a later dead expected 1:1 and false-greened
+    # the row (the r5 interleaving). The id ledgers key per
+    # (session_id, review_id) — the id is random per invocation, the
+    # session axis is kept so a forged same-id event from another
+    # session can never satisfy an expected (conservative direction).
+    expected_ids: set = set()   # {(session_id, review_id)} — id-ful only
+    terminal_ids: set = set()   # {(session_id, review_id)} — id-ful only
+    expected_events_total = 0
+    # LEGACY fallback ledgers (r4 F2 heuristic), fed ONLY by id-less
+    # events ("" review_id — pre-land emits, or a fail-open no-id emit):
+    # best-effort bucket-count pairing per (session, file-hash). Post-land
+    # every review carries an id, so the exact path dominates.
+    expected_by_bucket: Dict[Tuple[str, str], int] = {}
+    terminal_by_bucket: Dict[Tuple[str, str], int] = {}
+
+    def _pair_bucket(ev: Dict[str, Any]) -> Tuple[str, str]:
+        # "" is itself a correlation key on BOTH axes: an unattributed /
+        # legacy event still pairs with its unattributed sibling instead
+        # of going blind.
+        return (
+            str(ev.get("session_id") or ""),
+            str(ev.get("file_path_hash_prefix") or ""),
+        )
+
+    def _review_id(ev: Dict[str, Any]) -> str:
+        # r5 F2 — the invocation correlation key. "" (or absent) routes
+        # the event to the legacy bucket-count fallback.
+        # r6 F2 — HARD shape gate: only EXACTLY 16 lowercase hex is a
+        # valid pairing key. Any other nonempty value (short/partial,
+        # oversize, uppercase, non-hex — a forged row or a
+        # version-skewed producer) is coerced to the "" legacy bucket
+        # and can NEVER act as a unique pairing token: the r5 "no shape
+        # gate here" stance let an off-shape id serve as an exact key,
+        # and combined with the emitters' then truncate-before-validate
+        # two distinct oversize ids sharing a 16-hex prefix ALIASED to
+        # one key — an older terminal could offset a later dead review
+        # again (the F2 false-green). The producer + audit_emit gates
+        # coerce off-shape to "" on the wire; this mirrors the same
+        # exact-16 gate at the consumer so a row that BYPASSED the
+        # emitters (forged/legacy) gets identical treatment.
+        # r7 F1 — reject non-STRING raw values BEFORE the regex: a JSON
+        # number like 1234567890123456 would str() into a 16-digit token
+        # that matches ^[0-9a-f]{16}$ and alias a real string id. Only a
+        # genuine str is eligible; anything else routes to the "" legacy
+        # bucket.
+        raw = ev.get("review_id")
+        rid = raw if isinstance(raw, str) else ""
+        return rid if _REVIEW_ID_EXACT_RE.fullmatch(rid) else ""
+
     for ev in _iter_audit_events_since(window_h):
         if not isinstance(ev, dict) or _is_test_pollution_event(ev):
+            continue
+        if ev.get("action") == "pair_rail_review_expected":
+            # Denominator signal, not an outcome — never enters a bucket.
+            expected_events_total += 1
+            rid = _review_id(ev)
+            if rid:
+                expected_ids.add((str(ev.get("session_id") or ""), rid))
+            else:
+                key = _pair_bucket(ev)
+                expected_by_bucket[key] = expected_by_bucket.get(key, 0) + 1
             continue
         for rail, classify in FAILOPEN_RAIL_CLASSIFIERS:
             bucket = classify(ev)
             if bucket is not None:
                 counts[rail][bucket] += 1
+                if (
+                    rail == "pair_rail"
+                    and ev.get("action") in PAIR_RAIL_TERMINAL_ACTIONS
+                ):
+                    # codex r1 F2 + r5 F2 — only the paired producer's
+                    # terminal actions count, and an id-ful case can only
+                    # satisfy the expected carrying the SAME review_id;
+                    # id-less cases fall back to their (session,
+                    # file-hash) bucket.
+                    rid = _review_id(ev)
+                    if rid:
+                        terminal_ids.add(
+                            (str(ev.get("session_id") or ""), rid)
+                        )
+                    else:
+                        key = _pair_bucket(ev)
+                        terminal_by_bucket[key] = (
+                            terminal_by_bucket.get(key, 0) + 1
+                        )
                 break
 
     worst = "green"
@@ -1770,35 +2019,88 @@ def check_failopen_rail_liveness_7d() -> Tuple[str, str, Any]:
     detail: Dict[str, Any] = {"window_hours": window_h, "rails": {}}
     for rail, _ in FAILOPEN_RAIL_CLASSIFIERS:
         c = counts[rail]
-        if c["failopen"] > 0 and c["healthy"] == 0:
-            rail_status = "red"
-            msg = (
-                f"{rail}: fail-opened on ALL {c['failopen']} classified "
-                f"invocation(s) in {window_h:.0f}h"
+        rail_status: Optional[str] = None
+        msg = ""
+        extra: Dict[str, Any] = {}
+        if rail == "pair_rail":
+            # C5 activity-conditioning — pairing is invocation-id-EXACT
+            # (r5 F2): an expected (session, review_id) with no matching
+            # case tuple is an OUTSTANDING (dead) review. An old case
+            # with a DIFFERENT review_id can never satisfy a new dead
+            # expected — not cross-session (r4 F1), not an early healthy
+            # outcome in the same session (r1 F2), not another file
+            # (r4 F2), not even the SAME (session, file) (r5 F2 — the
+            # interleaving bucket-counting false-greened). The r4
+            # (session, file-hash) bucket-count heuristic survives ONLY
+            # for the id-less ("" review_id) legacy subset, where "" is
+            # itself a correlation key on both axes so unattributed
+            # events still pair up instead of going blind.
+            outstanding_ids = expected_ids - terminal_ids
+            deficit_buckets = [
+                b for b, n in expected_by_bucket.items()
+                if n > terminal_by_bucket.get(b, 0)
+            ]
+            deficit_sessions = (
+                {s for s, _ in outstanding_ids}
+                | {b[0] for b in deficit_buckets}
             )
-        elif c["failopen"] > 0:
-            rail_status = "yellow"
-            msg = (
-                f"{rail}: partial fail-open ({c['failopen']} fail-open / "
-                f"{c['healthy']} healthy in {window_h:.0f}h)"
+            total_outcomes = (
+                c["healthy"] + c["failopen"] + c["unclassified"]
             )
-        elif c["healthy"] > 0:
-            rail_status = "green"
-            msg = f"{rail}: {c['healthy']} healthy invocation(s) in {window_h:.0f}h"
-        elif c["unclassified"] > 0:
-            rail_status = "yellow"
-            msg = (
-                f"{rail}: {c['unclassified']} unclassified event(s), no "
-                f"classified signal in {window_h:.0f}h"
-            )
-        else:
-            rail_status = "yellow"
-            msg = (
-                f"{rail}: no signal in {window_h:.0f}h (silence from a "
-                f"fail-open rail is not health)"
-            )
+            extra = {
+                "expected": expected_events_total,
+                "expected_without_outcome_sessions": len(deficit_sessions),
+            }
+            if outstanding_ids or deficit_buckets:
+                rail_status = "red"
+                msg = (
+                    f"{rail}: {len(deficit_sessions)} session(s) entered "
+                    f"review with missing terminal outcome(s) in "
+                    f"{window_h:.0f}h (S254 class)"
+                )
+            elif total_outcomes == 0:
+                rail_status = "green"
+                msg = (
+                    f"{rail}: no review activity expected or observed in "
+                    f"{window_h:.0f}h (vacuously green)"
+                )
+            # else: outcomes present, no deficit → base ladder below.
+        if rail_status is None:
+            if c["failopen"] > 0 and c["healthy"] == 0:
+                rail_status = "red"
+                msg = (
+                    f"{rail}: fail-opened on ALL {c['failopen']} classified "
+                    f"invocation(s) in {window_h:.0f}h"
+                )
+            elif c["failopen"] > 0:
+                rail_status = "yellow"
+                msg = (
+                    f"{rail}: partial fail-open ({c['failopen']} fail-open / "
+                    f"{c['healthy']} healthy in {window_h:.0f}h)"
+                )
+            elif c["healthy"] > 0:
+                rail_status = "green"
+                msg = f"{rail}: {c['healthy']} healthy invocation(s) in {window_h:.0f}h"
+            elif c["unclassified"] > 0:
+                rail_status = "yellow"
+                msg = (
+                    f"{rail}: {c['unclassified']} unclassified event(s), no "
+                    f"classified signal in {window_h:.0f}h"
+                )
+            elif c["neutral"] > 0:
+                rail_status = "yellow"
+                msg = (
+                    f"{rail}: {c['neutral']} nudge-only event(s) (review "
+                    f"never ran), no classified signal in {window_h:.0f}h"
+                )
+            else:
+                rail_status = "yellow"
+                msg = (
+                    f"{rail}: no signal in {window_h:.0f}h (silence from a "
+                    f"fail-open rail is not health)"
+                )
         parts.append(msg)
-        detail["rails"][rail] = {"status": rail_status, **c}
+        detail["rails"][rail] = {"status": rail_status, **c, **extra}
         if _STATUS_RANK[rail_status] > _STATUS_RANK[worst]:
             worst = rail_status
     return worst, _sanitize_for_recs("; ".join(parts)), detail

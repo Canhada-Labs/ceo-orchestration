@@ -21,6 +21,18 @@ approval is visible on the same Stop event). See _approve_review_loop for the TO
 
 Advisory by default; CEO_CODEX_USER_REVIEW_BLOCK=1 hard-blocks; CEO_CODEX_USER_REVIEW=0 disables. Fail-open.
 Stdlib only, Python >= 3.9.
+
+PLAN-161 W2 C5 (CF-9) — liveness telemetry (fail-open UX, fail-closed TELEMETRY):
+  a. STRICT BOUNDED verdict parser (parse_verdict) replaces any-nonempty-stdout: "clean" IFF stripped
+     stdout upper()=="CLEAN"; "findings" IFF <=6000 chars AND <=50 non-empty lines AND every non-empty
+     line matches the prompt-pinned '- <file>: <issue>' shape; anything else is MALFORMED -> the
+     telemetry outcome is skipped_failopen (NEVER healthy) and the diff is NOT marked reviewed, while
+     the user-facing advisory/allow behavior is unchanged.
+  b. typed `codex_review_verdict` emit per outcome (clean / findings / skipped_failopen /
+     detected_only), deduped by (diff_sha256, outcome) SEPARATELY from the review-status dedupe so
+     Stop-retry loops re-review without re-emitting. Replaces the generic codex_review_invoked emit.
+  c. session_id threaded from the Stop-hook stdin event (fallback CLAUDE_SESSION_ID env, then "").
+  d. hasattr-guarded: a pre-ceremony audit_emit without the registered action never breaks the hook.
 """
 from __future__ import annotations
 
@@ -38,6 +50,8 @@ import route  # noqa: E402
 DIFF_CAP = 16000
 PER_FILE_CAP = 8000          # one untracked file can't eat the whole review budget (Codex residual #3)
 CODEX_TIMEOUT_S = 120
+VERDICT_MAX_CHARS = 6000     # PLAN-161 C5 (r2 F2) — strict bounded verdict parser caps
+VERDICT_MAX_LINES = 50
 
 
 def _git(args: List[str], cwd: str) -> Tuple[int, str]:
@@ -154,6 +168,82 @@ def _mark(cwd: str, diff: str, status: str) -> None:
         pass
 
 
+def parse_verdict(text: Optional[str]) -> Optional[str]:
+    """STRICT BOUNDED verdict parser (PLAN-161 C5; codex r2 F2 + r3 F3 + r4 F1).
+
+    Returns "clean" | "findings" | None (MALFORMED). "clean" IFF the stripped stdout upper()=="CLEAN".
+    "findings" IFF the total is <=VERDICT_MAX_CHARS AND there are 1..VERDICT_MAX_LINES non-empty lines
+    AND every non-empty line (whitespace-stripped) starts with '- ' and contains ': ' — the exact
+    '- <file>: <issue>' shape the review prompt pins. Anything else is None: the caller maps it to the
+    skipped_failopen telemetry outcome (NEVER healthy) and does NOT mark the diff reviewed.
+    """
+    if not isinstance(text, str):
+        return None
+    stripped = text.strip()
+    if not stripped:
+        return None
+    if stripped.upper() == "CLEAN":
+        return "clean"
+    if len(stripped) > VERDICT_MAX_CHARS:
+        return None
+    lines = [ln.strip() for ln in stripped.splitlines() if ln.strip()]
+    if not lines or len(lines) > VERDICT_MAX_LINES:
+        return None
+    for ln in lines:
+        if not (ln.startswith("- ") and ": " in ln):
+            return None
+    return "findings"
+
+
+# ACCEPTED RESIDUAL (PLAN-161 W2 pair-rail r1 F10): the dedupe slot for a
+# (diff_sha256, outcome) pair is consumed after the typed emitter RETURNS,
+# but audit_emit._write_event deliberately swallows write failures (kernel
+# LLM06 fail-open policy — no success signal is exposed to callers). A
+# dropped event therefore suppresses re-emission for THAT pair only; any
+# new diff or outcome re-emits. Reading the audit log back from a Stop
+# hook to confirm the write would invert the emit-only contract.
+def _telemetry_path(cwd: str) -> str:
+    """TELEMETRY dedupe state — SEPARATE from the review-status state (PLAN-161 C5): key is
+    (diff_sha256, outcome), one typed emit per distinct pair, so Stop-retry loops re-review a
+    not-marked diff without re-emitting. Lives beside the review-status state file."""
+    return os.path.join(os.path.dirname(_state_path(cwd)), ".ceo_codex_review_telemetry.json")
+
+
+def _emit_verdict_telemetry(cwd: str, diff: str, outcome: str, session_id: str) -> None:
+    """Typed codex_review_verdict emit, deduped by (diff_sha256, outcome). Fail-open: any failure
+    (import, emit, state I/O) is swallowed and the dedupe slot is only consumed AFTER a successful
+    emit. hasattr-guarded so a pre-ceremony audit_emit (action not yet registered) never breaks the
+    hook — and never burns the dedupe slot."""
+    try:
+        dh = _h(diff)
+        key = dh + ":" + outcome
+        tp = _telemetry_path(cwd)
+        try:
+            st = json.load(open(tp))
+        except Exception:
+            st = {}
+        if not isinstance(st, dict):
+            st = {}
+        if st.get(key):
+            return                                 # this (diff, outcome) pair already emitted
+        _clib = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_lib")
+        if _clib not in sys.path:
+            sys.path.insert(0, _clib)
+        import audit_emit as _ae
+        if not hasattr(_ae, "emit_codex_review_verdict"):
+            return                                 # pre-ceremony audit_emit — action not registered yet
+        _ae.emit_codex_review_verdict(outcome=outcome, diff_sha256=dh, session_id=session_id)
+        st[key] = 1
+        if len(st) > 100:
+            st = dict(list(st.items())[-50:])
+        try:
+            json.dump(st, open(tp, "w"))
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+
 def _allow(extra: Optional[str] = None) -> Dict:
     if extra:
         return {"hookSpecificOutput": {"hookEventName": "Stop", "additionalContext": extra}}
@@ -191,13 +281,13 @@ def _approve_review_loop(cwd: str, sig0: str) -> None:
         pass
 
 
-def gate(cwd: Optional[str] = None) -> Dict:
+def gate(cwd: Optional[str] = None, session_id: str = "") -> Dict:
     if os.environ.get("CEO_CODEX_USER_REVIEW", "1") == "0":
         return _allow()
     cwd = os.path.realpath(cwd or os.getcwd())
     files, diff = risky_diff(cwd)
     if not files or not diff.strip():
-        return _allow()
+        return _allow()                            # no-risky-diff no-op emits NOTHING (PLAN-161 C5)
     auto = os.environ.get("CEO_CODEX_USER_REVIEW_AUTO") == "1"
     status = _status(cwd, diff)
     # DEFAULT-ON (Codex residual #2): cheap DETECT-only — never launch a 120s Codex run unasked. Dedupe so
@@ -206,6 +296,8 @@ def gate(cwd: Optional[str] = None) -> Dict:
         if status in ("detected", "reviewed"):
             return _allow()
         _mark(cwd, diff, "detected")
+        # PLAN-161 C5 (r3 F3): a nudged-but-not-run review is neither a verdict nor an infra failure.
+        _emit_verdict_telemetry(cwd, diff, "detected_only", session_id)
         return _allow("RISKY DIFF in %s — get a cross-model review before committing: run "
                       "`codex review --uncommitted` (or set CEO_CODEX_USER_REVIEW_AUTO=1 to auto-run it "
                       "here)." % ", ".join(files))
@@ -215,21 +307,25 @@ def gate(cwd: Optional[str] = None) -> Dict:
     rl_sig0 = _review_loop_sig(cwd)                # E2-F1: TOCTOU snapshot BEFORE the Codex run
     available, verdict = run_codex_review(diff, cwd)
     if not available:
+        _emit_verdict_telemetry(cwd, diff, "skipped_failopen", session_id)
         return _allow("CROSS-MODEL REVIEW SKIPPED — Codex CLI not found for risky change in: %s." % ", ".join(files))
     if verdict is None:
+        _emit_verdict_telemetry(cwd, diff, "skipped_failopen", session_id)
         return _allow("CROSS-MODEL REVIEW SKIPPED (codex returned no clean result) for risky change in: %s "
                       "— re-run before committing." % ", ".join(files))
-    _mark(cwd, diff, "reviewed")                   # mark ONLY on a real Codex outcome
-    try:  # PLAN-128 §7 — fail-open catch telemetry (never blocks the hook)
-        _clib = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_lib")
-        if _clib not in sys.path:
-            sys.path.insert(0, _clib)
-        import audit_emit as _ae
-        _ae.emit_generic("codex_review_invoked", review_status="invoked",
-                         violations_found_count=0 if verdict.upper().strip() == "CLEAN" else 1)
-    except Exception:
-        pass
-    if verdict.upper().strip() != "CLEAN":
+    outcome = parse_verdict(verdict)               # PLAN-161 C5: strict bounded parse, not any-nonempty-stdout
+    if outcome is None:
+        # MALFORMED (r2 F2): fail-open UX (same advisory / opt-in block as a finding), fail-closed
+        # TELEMETRY: skipped_failopen + the diff is NOT marked reviewed, so the next Stop re-reviews.
+        _emit_verdict_telemetry(cwd, diff, "skipped_failopen", session_id)
+        msg = ("CODEX CROSS-REVIEW of your risky change (%s) found:\n\n%s\n\nAddress these before committing."
+               % (", ".join(files), verdict[:6000]))
+        if os.environ.get("CEO_CODEX_USER_REVIEW_BLOCK") == "1":
+            return {"decision": "block", "reason": msg}
+        return _allow(msg)
+    _mark(cwd, diff, "reviewed")                   # mark ONLY on a real PARSED Codex outcome
+    _emit_verdict_telemetry(cwd, diff, outcome, session_id)
+    if outcome == "findings":
         msg = ("CODEX CROSS-REVIEW of your risky change (%s) found:\n\n%s\n\nAddress these before committing."
                % (", ".join(files), verdict[:6000]))
         if os.environ.get("CEO_CODEX_USER_REVIEW_BLOCK") == "1":
@@ -244,8 +340,13 @@ def main() -> None:
         hi = json.loads(sys.stdin.read() or "{}")
     except Exception:
         hi = {}
+    if not isinstance(hi, dict):
+        hi = {}
+    # PLAN-161 C5 (r3 F2): thread the Stop-hook event's session id into the typed emit;
+    # fall back to CLAUDE_SESSION_ID env, then "".
+    sid = str(hi.get("session_id") or os.environ.get("CLAUDE_SESSION_ID") or "")
     try:
-        print(json.dumps(gate(hi.get("cwd"))))
+        print(json.dumps(gate(hi.get("cwd"), session_id=sid)))
     except Exception as exc:
         sys.stderr.write("# codex_review_user_code fail-open: %s\n" % str(exc)[:120])
         print("{}")

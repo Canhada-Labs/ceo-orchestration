@@ -80,7 +80,9 @@ class TestW5OffPassthrough(TestEnvContext):
         # PLAN-155 Wave 4 (+codex_tool_recorded +codex_turn_ended) -> 316.
         # PLAN-156 Wave 4/6 (+grok_tool_recorded +grok_turn_ended
         # +council_lane_invoked) -> 319.
-        self.assertEqual(len(audit_emit._KNOWN_ACTIONS), 319)
+        # PLAN-161 W2 C5 (+codex_review_verdict +pair_rail_review_expected —
+        # pair-rail liveness telemetry) -> 321.
+        self.assertEqual(len(audit_emit._KNOWN_ACTIONS), 321)
 
 
 class TestAdminKeyScrub(_W5Base):

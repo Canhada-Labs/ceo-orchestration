@@ -1002,6 +1002,40 @@ _KNOWN_ACTIONS = {
     # in Wave 4, so a slipped Wave 6 never publishes a contract action the
     # framework cannot yet emit (pair-rail R11). Completeness-bounded.
     "council_lane_invoked",
+    # PLAN-161 W2 C5 (CF-9) — pair-rail liveness telemetry pair. Registered
+    # via the PLAN-161 W2 ceremony (CEO_KERNEL_OVERRIDE=
+    # PLAN-161-C5-LIVENESS-ACTIONS); _KNOWN_ACTIONS 319 -> 321. Both are
+    # deny-by-default: dedicated _scrub_ branches +
+    # _CODEX_REVIEW_VERDICT_ALLOWLIST / _PAIR_RAIL_REVIEW_EXPECTED_ALLOWLIST
+    # below, NEVER _EMIT_GENERIC_PASSTHROUGH
+    # ([[feedback-closed-enum-breadcrumb-must-not-echo-rejected-value]]).
+    #
+    # (A) Stop-hook cross-review OUTCOME, emitted by
+    # codex_review_user_code.py (the Stop hook wired in settings.json) once
+    # per distinct (diff_sha256, outcome) pair: closed-enum `outcome`
+    # {clean, findings, skipped_failopen, detected_only} (unrecognized
+    # COERCED to skipped_failopen — never a healthy-class value) +
+    # `diff_sha256` (64-lowercase-hex shape-validated, else ""). DENIED on
+    # the wire: the verdict TEXT, the diff content, file paths (a Codex
+    # finding can quote secrets from the reviewed diff). Deliberately NOT
+    # `pair_rail_codex_unavailable` — that would pollute the dispatcher's
+    # Codex-outage predicate (disable_predicate_eval.py).
+    "codex_review_verdict",
+    # (B) canonical-edit review ENTERED, emitted by check_pair_rail.py
+    # _decide() only after the kill-switch / non-write-tool / not-L3+ /
+    # sentinel-bypass arms have all returned: the durable session-correlated
+    # DENOMINATOR for the /ceo-boot `pair_rail` activity-conditioned
+    # liveness row (the S254 class — expected-without-outcome must escalate,
+    # and a healthy outcome from session B must never mask session A). The
+    # ONLY caller fields are `session_id` + closed-enum `tool_name` + the
+    # bounded 16-hex `file_path_hash_prefix` (r4 F2 legacy bucket key —
+    # same token as `pair_rail_case`) + the exact-16-hex-or-"" `review_id`
+    # (r5 F2 — per-invocation correlation id minted at review entry and
+    # identical on this emit and its own `pair_rail_case`, so the
+    # /ceo-boot deficit pairs invocation-EXACT: no completed case — even
+    # for the SAME (session, file) — can ever offset a different dead
+    # review).
+    "pair_rail_review_expected",
 }
 
 
@@ -2084,6 +2118,11 @@ _PAIR_RAIL_CASE_EMIT_ALLOWLIST = frozenset({
     "precondition_met", "rubric_violation_id", "severity",
     "jaccard_similarity_bucket", "file_path_hash_prefix",
     "tool_name", "human_triage_grace_h",
+    # PLAN-161 C5 r5 F2 — per-invocation correlation id (16-hex, minted
+    # at review entry; identical on this case emit and its own
+    # `pair_rail_review_expected`). Shape-gated in the typed wrapper AND
+    # re-coerced in the emit_generic dispatch branch.
+    "review_id",
 })
 
 
@@ -5651,6 +5690,17 @@ def emit_generic(action: str, **kwargs: Any) -> None:
             )
     # PLAN-081 Phase 3 — pair_rail_case dispatch gate.
     elif action == "pair_rail_case":
+        # PLAN-161 C5 r5 F2 + r6 F2 — VALUE re-coercion for the new
+        # `review_id` correlation field (exact-16-hex-or-"" gate on the
+        # RAW value; mirrors the `file_path_hash_prefix` gate on
+        # `pair_rail_review_expected`): closes the direct emit_generic
+        # caller path so an off-shape value (free text, oversize, raw
+        # path) can never reach the signed chain — off-shape -> ""
+        # (dropped, never truncated).
+        _prc_rid = event.get("review_id")
+        if not (isinstance(_prc_rid, str)
+                and _PAIR_RAIL_REVIEW_ID_RE.fullmatch(_prc_rid)):
+            event["review_id"] = ""
         event, dropped = _scrub_ceo_boot_event(
             event, _PAIR_RAIL_CASE_EMIT_ALLOWLIST
         )
@@ -7075,6 +7125,48 @@ def emit_generic(action: str, **kwargs: Any) -> None:
         if dropped:
             _breadcrumb("emit_generic council_lane_invoked dropped: %s"
                         % sorted(dropped)[:10])
+    # PLAN-161 W2 C5 — Stop-hook cross-review outcome. Dedicated scrub branch
+    # (NEVER _EMIT_GENERIC_PASSTHROUGH). VALUE re-coercion closes the direct
+    # emit_generic caller path: an off-enum `outcome` (e.g. raw Codex verdict
+    # text) is reset to "skipped_failopen" (never a healthy-class value) and
+    # an off-shape `diff_sha256` is reset to "" — so a smuggled finding body
+    # / diff excerpt can never reach the signed chain.
+    elif action == "codex_review_verdict":
+        if event.get("outcome") not in _CODEX_REVIEW_VERDICT_OUTCOME_ENUM:
+            event["outcome"] = "skipped_failopen"
+        _crv_sha = event.get("diff_sha256")
+        if not (isinstance(_crv_sha, str)
+                and _CODEX_REVIEW_DIFF_SHA256_RE.fullmatch(_crv_sha)):
+            event["diff_sha256"] = ""
+        event, dropped = _scrub_ceo_boot_event(
+            event, _CODEX_REVIEW_VERDICT_ALLOWLIST)
+        if dropped:
+            _breadcrumb("emit_generic codex_review_verdict dropped: %s"
+                        % sorted(dropped)[:10])
+    # PLAN-161 W2 C5 — canonical-edit review-ENTERED denominator. Dedicated
+    # scrub branch (NEVER _EMIT_GENERIC_PASSTHROUGH). The ONLY caller fields
+    # are session_id + closed-enum tool_name (off-enum -> "unknown") + the
+    # bounded 16-hex `file_path_hash_prefix` (r4 F2 legacy bucket key;
+    # off-shape -> "") + the exact-16-hex-or-"" `review_id` (r5 F2
+    # invocation correlation key; r6 F2: off-shape incl. oversize ->
+    # "", dropped never truncated); a raw file path / content body /
+    # free text can never reach the wire.
+    elif action == "pair_rail_review_expected":
+        if event.get("tool_name") not in _PAIR_RAIL_REVIEW_EXPECTED_TOOL_ENUM:
+            event["tool_name"] = "unknown"
+        _pre_prefix = event.get("file_path_hash_prefix")
+        if not (isinstance(_pre_prefix, str)
+                and _PAIR_RAIL_FILE_HASH_PREFIX_RE.fullmatch(_pre_prefix)):
+            event["file_path_hash_prefix"] = ""
+        _pre_rid = event.get("review_id")
+        if not (isinstance(_pre_rid, str)
+                and _PAIR_RAIL_REVIEW_ID_RE.fullmatch(_pre_rid)):
+            event["review_id"] = ""
+        event, dropped = _scrub_ceo_boot_event(
+            event, _PAIR_RAIL_REVIEW_EXPECTED_ALLOWLIST)
+        if dropped:
+            _breadcrumb("emit_generic pair_rail_review_expected dropped: %s"
+                        % sorted(dropped)[:10])
     # PLAN-113 Phase B B-STRUCTURAL — verbatim passthrough for the documented
     # set of TRUSTED first-party producers (see _EMIT_GENERIC_PASSTHROUGH).
     # Their field sets are controlled at the producer site; pass through as-is
@@ -7368,6 +7460,61 @@ _COUNCIL_VENDOR_ENUM = frozenset({"claude", "codex", "grok", "other"})
 _COUNCIL_LANE_STATUS_ENUM = frozenset({"ok", "unavailable", "other"})
 _COUNCIL_LANE_INVOKED_ALLOWLIST = _CODEX_AUDIT_ENVELOPE | frozenset({
     "vendor", "lane_status",
+})
+
+
+# ---------------------------------------------------------------------------
+# PLAN-161 W2 C5 — pair-rail liveness telemetry pair (CF-9). Sec MF-3
+# deny-by-default; every branch also re-coerces VALUES by closed-set
+# membership / bounded shape so a direct emit_generic caller can never sign
+# free text into the HMAC chain. NEVER _EMIT_GENERIC_PASSTHROUGH.
+# ---------------------------------------------------------------------------
+
+# Closed outcome enum for the Stop-hook cross-review. The COERCION TARGET for
+# an unrecognized value is "skipped_failopen" (never a healthy-class value):
+# unparseable telemetry input must not be able to claim rail health.
+_CODEX_REVIEW_VERDICT_OUTCOME_ENUM = frozenset({
+    "clean", "findings", "skipped_failopen", "detected_only",
+})
+
+# 64-lowercase-hex sha256 shape gate for diff_sha256; off-shape -> "".
+_CODEX_REVIEW_DIFF_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+
+_CODEX_REVIEW_VERDICT_ALLOWLIST = _CODEX_AUDIT_ENVELOPE | frozenset({
+    "outcome", "diff_sha256",
+})
+
+# Mirrors emit_pair_rail_case's write-tool coercion set (+ the "unknown"
+# coercion target itself).
+_PAIR_RAIL_REVIEW_EXPECTED_TOOL_ENUM = frozenset({
+    "Edit", "Write", "MultiEdit", "NotebookEdit", "unknown",
+})
+
+# r4 F2 — bounded shape gate for `file_path_hash_prefix` (same 16-hex
+# SHA-256-prefix token `pair_rail_case` carries; raw path forbidden per
+# LLM06). 0..16 lowercase hex; off-shape -> "". Kept as the legacy
+# fallback bucket key (+ harmless secondary key) for id-less events.
+_PAIR_RAIL_FILE_HASH_PREFIX_RE = re.compile(r"^[0-9a-f]{0,16}$")
+
+# r5 F2 — bounded shape gate for `review_id`, the PER-INVOCATION
+# correlation id (os.urandom(8).hex() minted by check_pair_rail.py
+# `_decide()` at review entry; identical on a review's
+# `pair_rail_review_expected` AND its own `pair_rail_case`).
+# r6 F2 tightening: EXACTLY 16 lowercase hex, or exactly "" (legacy
+# id-less emit — falls back to the r4 (session, file-hash) bucket-count
+# heuristic in /ceo-boot). Any other value (short/partial, oversize,
+# uppercase, non-hex) is DROPPED to "" — never truncated: the r5
+# `{0,16}` + truncate-before-validate let two distinct off-shape ids
+# sharing their first 16 chars ALIAS to one pairing key, so an older
+# terminal could offset a later dead review again (the exact F2
+# false-green this id exists to prevent). The exact-id pairing is what
+# counting could not do: pair a specific expected with its OWN case, so
+# an old completed case for the SAME (session, file) can never offset a
+# later dead expected.
+_PAIR_RAIL_REVIEW_ID_RE = re.compile(r"^([0-9a-f]{16})?$")
+
+_PAIR_RAIL_REVIEW_EXPECTED_ALLOWLIST = _CODEX_AUDIT_ENVELOPE | frozenset({
+    "tool_name", "file_path_hash_prefix", "review_id",
 })
 
 
@@ -8530,6 +8677,151 @@ def emit_council_lane_invoked(
         )
 
 
+def emit_codex_review_verdict(
+    *,
+    outcome: str,
+    diff_sha256: str = "",
+    session_id: str = "",
+    project: str = "",
+) -> None:
+    """Emit codex_review_verdict (PLAN-161 W2 C5 / CF-9 liveness telemetry).
+
+    Fired by `codex_review_user_code.py` (the Stop-hook cross-model review of
+    the adopter's own risky diff) once per distinct (diff_sha256, outcome)
+    pair — the producer dedupes so Stop-retry loops re-review without
+    re-emitting. Closed outcome enum:
+
+      clean / findings     — a strictly PARSED verdict on a risky diff
+                             (the healthy class for the /ceo-boot
+                             `stop_review` liveness sub-rail)
+      skipped_failopen     — infra fail-open (codex missing / rc!=0 / empty
+                             stdout / timeout) OR a MALFORMED verdict; the
+                             coercion target for any unrecognized value
+      detected_only        — DETECT-ONLY default mode nudged a review but
+                             never ran one (neutral: never healthy, never
+                             failopen — r3 F3)
+
+    Deny-by-default field allowlist enforced: the ONLY caller fields are the
+    closed-enum `outcome` + shape-validated `diff_sha256` (64-lowercase-hex,
+    else COERCED to ""). The verdict TEXT, the diff content, and file paths
+    are NEVER persisted (a Codex finding can quote secrets from the diff).
+
+    Fail-open per audit_emit contract — exceptions are swallowed by
+    _write_event. NEVER routes through _EMIT_GENERIC_PASSTHROUGH.
+    """
+    safe_outcome = (
+        outcome
+        if outcome in _CODEX_REVIEW_VERDICT_OUTCOME_ENUM
+        else "skipped_failopen"
+    )
+    safe_sha = (
+        diff_sha256
+        if (isinstance(diff_sha256, str)
+            and _CODEX_REVIEW_DIFF_SHA256_RE.fullmatch(diff_sha256))
+        else ""
+    )
+    raw_event: Dict[str, Any] = {
+        "action": "codex_review_verdict",
+        "session_id": session_id,
+        "project": project,
+        "outcome": safe_outcome,
+        "diff_sha256": safe_sha,
+    }
+    cleaned, dropped = _scrub_ceo_boot_event(
+        raw_event, _CODEX_REVIEW_VERDICT_ALLOWLIST
+    )
+    _write_event(cleaned)
+    if dropped:  # pragma: no cover — impossible from the typed wrapper
+        _breadcrumb(
+            f"codex_review_verdict dropped forbidden field(s): "
+            f"{sorted(dropped)[:10]}"
+        )
+
+
+def emit_pair_rail_review_expected(
+    *,
+    session_id: str,
+    tool_name: str = "unknown",
+    file_path_hash_prefix: str = "",
+    review_id: str = "",
+    project: str = "",
+) -> None:
+    """Emit pair_rail_review_expected (PLAN-161 W2 C5 / CF-9 denominator).
+
+    Fired by `check_pair_rail.py:_decide()` at the point a canonical-edit
+    Codex review is definitely ENTERED — only after the kill-switch,
+    non-write-tool, not-L3+ and sentinel-bypass arms have all returned. It is
+    the durable session-correlated DENOMINATOR for the /ceo-boot `pair_rail`
+    activity-conditioned liveness row: a window session with
+    expected-but-no-outcome is the S254 dead-rail class and must escalate,
+    and a healthy outcome from session B must never mask session A
+    (`session_id` is therefore an explicit required kwarg — the hook threads
+    the Stop/PreToolUse event's own session id, not a default).
+
+    r5 F2 + r6 F2: `review_id` (EXACTLY 16 lowercase hex or exactly "";
+    the RAW value is validated BEFORE any bounding — off-shape incl.
+    oversize is DROPPED to "", never truncated, so two distinct off-shape
+    ids sharing a 16-hex prefix can never alias to one pairing key) is
+    the PER-INVOCATION correlation key — minted by
+    `check_pair_rail.py:_decide()` at review entry (`os.urandom(8).hex()`)
+    and identical on this emit and the same invocation's `pair_rail_case`.
+    It is what makes the /ceo-boot pairing invocation-EXACT: counting
+    (even the r4 (session, file-hash) BUCKET counting) fundamentally
+    cannot pair a specific expected with its OWN case — an old completed
+    case for the SAME (session, file) offset a later dead expected 1:1.
+    An expected `review_id` with no matching `pair_rail_case` in-window is
+    an outstanding (dead) review -> RED.
+
+    r4 F2 (retained as legacy fallback + harmless secondary key):
+    `file_path_hash_prefix` (the SAME 16-hex SHA-256 path-prefix
+    token `pair_rail_case` carries, computed by the hook with the same
+    helper; bounded shape `[0-9a-f]{0,16}`, off-shape COERCED to "") keys
+    the /ceo-boot expected/terminal pairing per (session, file-hash)
+    BUCKET for id-less (pre-land / fail-open no-id) events only.
+
+    Deny-by-default: the ONLY caller fields are `session_id` + the
+    closed-enum `tool_name` (off-enum COERCED to "unknown") + the bounded
+    `file_path_hash_prefix` + the bounded `review_id`. Raw file paths and
+    content bodies are NEVER persisted. Fail-open per audit_emit contract.
+    NEVER routes through _EMIT_GENERIC_PASSTHROUGH.
+    """
+    safe_tool = (
+        tool_name
+        if tool_name in _PAIR_RAIL_REVIEW_EXPECTED_TOOL_ENUM
+        else "unknown"
+    )
+    _raw_prefix = (file_path_hash_prefix or "")[:16]
+    safe_prefix = (
+        _raw_prefix
+        if (isinstance(_raw_prefix, str)
+            and _PAIR_RAIL_FILE_HASH_PREFIX_RE.fullmatch(_raw_prefix))
+        else ""
+    )
+    # r6 F2 — validate the RAW value (no [:16] truncate-before-validate:
+    # truncation collapsed distinct oversize ids to one 16-hex key).
+    _raw_rid = review_id if isinstance(review_id, str) else ""
+    safe_rid = (
+        _raw_rid if _PAIR_RAIL_REVIEW_ID_RE.fullmatch(_raw_rid) else ""
+    )
+    raw_event: Dict[str, Any] = {
+        "action": "pair_rail_review_expected",
+        "session_id": session_id,
+        "project": project,
+        "tool_name": safe_tool,
+        "file_path_hash_prefix": safe_prefix,
+        "review_id": safe_rid,
+    }
+    cleaned, dropped = _scrub_ceo_boot_event(
+        raw_event, _PAIR_RAIL_REVIEW_EXPECTED_ALLOWLIST
+    )
+    _write_event(cleaned)
+    if dropped:  # pragma: no cover — impossible from the typed wrapper
+        _breadcrumb(
+            f"pair_rail_review_expected dropped forbidden field(s): "
+            f"{sorted(dropped)[:10]}"
+        )
+
+
 def emit_learning_rail_disabled(
     *,
     rail: str,
@@ -9626,9 +9918,21 @@ def emit_pair_rail_case(
     jaccard_similarity_bucket: str = "",
     human_triage_grace_h: int = 0,
     session_id: str = "",
+    review_id: str = "",
     project: str = "",
 ) -> None:
-    """Emit ``pair_rail_case`` event from check_pair_rail.py:_decide_with_matrix."""
+    """Emit ``pair_rail_case`` event from check_pair_rail.py:_decide_with_matrix.
+
+    PLAN-161 C5 r5 F2 + r6 F2: ``review_id`` (EXACTLY 16 lowercase hex or
+    exactly ""; the RAW value is validated before any bounding — off-shape
+    incl. oversize is DROPPED to "", never truncated) is the
+    per-invocation correlation key minted by ``_decide()`` at review entry
+    — identical on this case emit and the same invocation's
+    ``pair_rail_review_expected``, so the /ceo-boot liveness deficit pairs
+    a specific expected with its OWN case (invocation-exact; bucket
+    counting could not). "" = legacy/id-less emit (falls back to the r4
+    (session, file-hash) bucket heuristic).
+    """
     import re as _re
     safe_case = case if case in ("A", "B", "C", "D", "E", "F") else "F"
     safe_claude = claude_verdict if claude_verdict in ("PASS", "BLOCK") else "PASS"
@@ -9640,6 +9944,11 @@ def emit_pair_rail_case(
     ) else "unknown"
     raw_prefix = (file_path_hash_prefix or "")[:16]
     safe_prefix = raw_prefix if _re.fullmatch(r"[0-9a-f]{0,16}", raw_prefix) else ""
+    # r5 F2 + r6 F2 — the SAME exact-16-or-empty gate as the module-level
+    # _PAIR_RAIL_REVIEW_ID_RE, applied to the RAW value (no truncation:
+    # truncate-then-accept collapsed distinct oversize ids to one key).
+    raw_rid = review_id if isinstance(review_id, str) else ""
+    safe_rid = raw_rid if _PAIR_RAIL_REVIEW_ID_RE.fullmatch(raw_rid) else ""
     raw_rubric = (rubric_violation_id or "")[:64]
     if raw_rubric and not _re.fullmatch(r"[a-z][a-z0-9-]{0,63}", raw_rubric):
         safe_rubric = "unknown_rubric_id"
@@ -9666,6 +9975,7 @@ def emit_pair_rail_case(
         severity=safe_severity,
         jaccard_similarity_bucket=safe_jaccard,
         human_triage_grace_h=safe_grace_h,
+        review_id=safe_rid,
         project=project,
     )
 
