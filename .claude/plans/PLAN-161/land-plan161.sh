@@ -108,6 +108,7 @@ SPEC/v1/audit-log.schema.md
 .claude/hooks/tests/test_git_bypass_guard.py
 .claude/hooks/tests/test_codex_egress_proof_telemetry.py
 .claude/hooks/tests/test_codex_review_user_code.py
+.claude/hooks/tests/test_check_pair_rail_matrix.py
 .claude/scripts/tests/test_ceo_boot_liveness.py
 "
 FILES_CI="
