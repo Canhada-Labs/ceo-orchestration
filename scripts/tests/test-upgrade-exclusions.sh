@@ -24,6 +24,10 @@
 # staged-oracle contract: it PROVES adopter-owned excluded-tree content —
 # regular files AND symlinks (targets untouched, F11a) — survives a plain
 # legacy upgrade; RED on HEAD (wholesale find -delete destroys the seeds).
+# E.3d (W2 fix-5, codex r5 U3) folds the r4 F2 ancestor-symlink purge
+# regression into the tracked oracle: an excluded-tree ANCESTOR that is an
+# adopter symlink must never be walked by the purge scan nor swept by its
+# rmdir pass — see the leg's own comment for the full regression shape.
 #
 # bash 3.2-safe. Run: bash scripts/tests/test-upgrade-exclusions.sh; echo rc=$?
 
@@ -360,6 +364,88 @@ if [ "$BAK_BEFORE" = "$BAK_AFTER" ]; then
   ok "E.3c no new backup content for already-purged files"
 else
   bad "E.3c backup content grew on the no-op run ($BAK_BEFORE -> $BAK_AFTER)"
+fi
+
+echo "==> E.3d — ancestor-SYMLINK excluded tree: purge scan + rmdir sweep never walk through it"
+# STAGED-ORACLE contract like the E.3 purge legs (green only with the W2
+# pack; plain FAILs on HEAD, where --purge-misinstalled does not exist).
+# Regression shape (codex r4 F2, folded into the tracked oracle per r5 U3):
+# find(1) resolves its COMMAND-LINE path through symlinked ANCESTORS even
+# without -L — only descent below the start point is no-follow. So a
+# nominated excluded tree behind an adopter symlink (.claude/hooks ->
+# external dir OUTSIDE $TARGET) was walked by the pre-fix scan, and — once
+# an authorized purge in any OTHER tree made the global purge count
+# positive — the rmdir sweep deleted empty dirs INSIDE the external target.
+# This leg makes that regression load-bearing: ancestor symlink + external
+# rmdir canary (empty subdir) + external decoy file the pre-fix scan would
+# nominate + a hash-authorized mis-install in a DIFFERENT tree to arm the
+# sweep. The --skip globs keep the refresh/replace walk off the symlink
+# (matching the r4 probe): the leg tests the U3 purge path in isolation.
+T3D="$( fresh_install )" || scaffold "E.3d install failed"
+
+# (i) hash-AUTHORIZED mis-install in a DIFFERENT excluded tree — arms the
+# rmdir sweep (it only runs when the purge count goes positive).
+MISB2_SRC="$( find "$SOURCE_DIR/.claude/scripts/tests" -maxdepth 1 -type f -name 'test_*.py' 2>/dev/null | LC_ALL=C sort | head -1 )"
+[ -n "$MISB2_SRC" ] || scaffold "E.3d no source scripts test to seed the sweep-arming mis-install"
+MISB2_REL=".claude/scripts/tests/$( basename "$MISB2_SRC" )"
+mkdir -p "$T3D/.claude/scripts/tests" || scaffold "E.3d seed mkdir failed"
+cp "$MISB2_SRC" "$T3D/$MISB2_REL" || scaffold "E.3d seed misB2 cp failed"
+
+# (ii) make the excluded-tree ANCESTOR .claude/hooks a symlink to an
+# external dir OUTSIDE $TARGET: tests/<empty subdir> is the rmdir canary,
+# tests/<decoy file> is what the pre-fix scan would nominate as a candidate.
+OUT3D="$WORKROOT/e3d-outside-hooks"
+mkdir -p "$OUT3D/tests/e3d_empty_canary_p161" || scaffold "E.3d outside mkdir failed"
+DECOY3D="$OUT3D/tests/e3d_decoy_probe_p161.py"
+printf '# e3d decoy: external adopter data behind a symlinked ancestor\n' \
+  > "$DECOY3D"
+cp "$DECOY3D" "$WORKROOT/e3d-decoy.ref" || scaffold "E.3d decoy ref failed"
+mv "$T3D/.claude/hooks" "$T3D/.claude/hooks.aside" \
+  || scaffold "E.3d hooks move-aside failed"
+ln -s "$OUT3D" "$T3D/.claude/hooks" || scaffold "E.3d ancestor symlink failed"
+
+bash "$SOURCE_DIR/scripts/upgrade.sh" "$T3D" --profile core --purge-misinstalled \
+  --skip='.claude/hooks' --skip='.claude/hooks/*' \
+  > "$WORKROOT/e3d-upgrade.log" 2>&1
+RC_D=$?
+if [ "$RC_D" -eq 0 ]; then
+  ok "E.3d upgrade --purge-misinstalled returned 0"
+else
+  bad "E.3d upgrade --purge-misinstalled exited $RC_D (flag unknown on HEAD?)"
+  tail -5 "$WORKROOT/e3d-upgrade.log" >&2
+fi
+if [ ! -e "$T3D/$MISB2_REL" ] \
+   && grep -F 'PURGED' "$WORKROOT/e3d-upgrade.log" | grep -qF "$MISB2_REL"; then
+  ok "E.3d different-tree mis-install purged (sweep armed): $MISB2_REL"
+else
+  bad "E.3d different-tree mis-install NOT purged — sweep never armed: $MISB2_REL"
+fi
+if grep -F "symlinked ancestor '.claude/hooks'" "$WORKROOT/e3d-upgrade.log" \
+     | grep -qF '.claude/hooks/tests'; then
+  ok "E.3d KEPT line names the symlinked ancestor for .claude/hooks/tests"
+else
+  bad "E.3d no KEPT symlinked-ancestor line for .claude/hooks/tests (tree walked?)"
+fi
+if grep -Eq 'e3d_decoy_probe_p161|e3d_empty_canary_p161' "$WORKROOT/e3d-upgrade.log"; then
+  bad "E.3d candidate line(s) from INSIDE the symlinked tree (scan walked the ancestor)"
+else
+  ok "E.3d zero candidate lines from inside the symlinked tree"
+fi
+if [ -d "$OUT3D/tests/e3d_empty_canary_p161" ]; then
+  ok "E.3d external empty subdir NOT rmdir'd (sweep respected the ancestor)"
+else
+  bad "E.3d external empty subdir REMOVED (rmdir sweep walked the symlinked ancestor)"
+fi
+if [ -f "$DECOY3D" ] && cmp -s "$DECOY3D" "$WORKROOT/e3d-decoy.ref"; then
+  ok "E.3d external decoy file intact byte-identical"
+else
+  bad "E.3d external decoy file DELETED/ALTERED through the symlinked ancestor"
+fi
+if [ -L "$T3D/.claude/hooks" ] \
+   && [ "$( readlink "$T3D/.claude/hooks" )" = "$OUT3D" ]; then
+  ok "E.3d ancestor symlink itself intact"
+else
+  bad "E.3d ancestor symlink LOST/REWRITTEN by the upgrade"
 fi
 
 echo ""
