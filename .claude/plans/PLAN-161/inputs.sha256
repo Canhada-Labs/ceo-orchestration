@@ -18,8 +18,8 @@ b3215225bb9ba2878368bc0136d1df3c8a99864e46c51a264c20a51f57bfc37b  .claude/plans/
 7db7cb4e32e90e161a30bd5848e67cad2da58d4f300c14318dda33b68fa77acc  .claude/plans/PLAN-161/staged/.claude/hooks/tests/test_codex_review_user_code.py
 206de9cfd9f95fabc71d517a59cb3bd757dac55b75b27a53d38d993e6952151d  .claude/plans/PLAN-161/staged/.claude/hooks/tests/test_git_bypass_guard.py
 e5eec3f66349f1b348339bad22280a14eddab5f6a3db5547bafb979b28954efd  .claude/plans/PLAN-161/staged/.claude/hooks/tests/test_w5_scrub_enforcement.py
-1272422f2f868de6eaa82b5f639d5632a11f675f72138b1f25cf3fa32048fefd  .claude/plans/PLAN-161/staged/.claude/scripts/ceo-boot.py
-22872ed4748399deb38760fdaff6c738d4fbd6cf6defeb5f2b8fa8cdcda40519  .claude/plans/PLAN-161/staged/.claude/scripts/tests/test_ceo_boot_liveness.py
+8cd3a5ae0a3cfe85c4e8f2a239285e8030152f4c80d3f24fc6ce2b343ec3d942  .claude/plans/PLAN-161/staged/.claude/scripts/ceo-boot.py
+d288288933a70f09956eaab6e8125ce6adc497bb3071bf05ddbaf460a2205270  .claude/plans/PLAN-161/staged/.claude/scripts/tests/test_ceo_boot_liveness.py
 868596ae88111d59ac3aeb96092c4adbc3c5ade4e56001ca4fb2fcde08c6f89e  .claude/plans/PLAN-161/staged/.claude/scripts/tests/test_council_verify_semantics.py
 370d9c6ffc05f6a573aa475f9ea6b376724bd5982baa9e4b72ea4f84fd3afee3  .claude/plans/PLAN-161/staged/.claude/settings.json
 322a1d3c485fa030de05e5272052a9fbb2fcfc1545e6e396aaf8ab7c91e305cc  .claude/plans/PLAN-161/staged/.claude/workflows/council-audit.js
