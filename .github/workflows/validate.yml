@@ -1178,9 +1178,12 @@ jobs:
   opus-4-7-profiler-smoke:
     if: vars.CEO_SOTA_DISABLE != '1'
     runs-on: ubuntu-latest
-    # PLAN-159/ADR-163: 2 capped gate attempts (2x420s) + smoke + floor +
-    # checkout/setup — sized for the CONTENDED case, not the nominal one.
-    timeout-minutes: 16
+    # PLAN-159/ADR-163 (amended PLAN-161 C4): sized for the WORST case —
+    # 3x420s (capped attempts) + 2x60s (backoffs) + 30s (probe cap) +
+    # 30s (floor-sanity cap) + ~180s (checkout/setup/smoke headroom)
+    # ~= 1620s ~= 27min -> 28. Both 30s terms are ENFORCED `timeout 30`
+    # wall-caps (probe_floor_raw + the floor-sanity step; codex r3 F4).
+    timeout-minutes: 28
     permissions:
       contents: read
     steps:
@@ -1219,20 +1222,29 @@ jobs:
           # Detection is per-entry vs the ABSOLUTE ceiling (~1.6x-2.2x of
           # the per-entry baseline — ADR-163 §Detection contract).
           #
-          # Retry contract (ADR-163 invariant — EXACTLY 2 attempts, never
-          # more, never unbounded): contention is bursty, so one retry
-          # relocates the measurement to a different scheduler window.
-          # Each attempt is wall-capped (coreutils timeout 420s ~= 5.5x
-          # the 77s local N=200 cost) so a pathologically contended
-          # attempt 1 is killed in time for attempt 2 to run and two
-          # attempts always fit the job budget. A genuine regression
-          # shifts the whole distribution and fails BOTH attempts ->
-          # explicit exit 1 (fail-closed; NOT continue-on-error, no
-          # third-party retry action). Attempt percentiles go to the step
-          # summary whenever the attempt leaves a parseable report — a
-          # cap-killed attempt that leaves none is NOTED explicitly — so
-          # a green-on-attempt-2 pattern (drift toward the ceiling)
-          # stays visible.
+          # Retry contract (ADR-163 invariant, §Amendment PLAN-161 C4 —
+          # 2 unconditional attempts + inter-attempt backoff + AT MOST
+          # one probe-gated 3rd attempt; never unbounded): contention is
+          # bursty, so each retry relocates the measurement to a fresh
+          # scheduler window, and a sleep of CEO_PERF_GATE_BACKOFF_S
+          # (default 60s) between windows defends against SUSTAINED load
+          # (two doc-only commits defeated the back-to-back 2-attempt
+          # shape). After a double failure an explicit contention
+          # pre-probe (30s-capped --floor run; verdict: nonzero exit or
+          # malformed JSON => CONTENDED fail-safe, else p50<=200ms =>
+          # UNCONTENDED) decides: a still-contended VM fail-fasts with a
+          # distinct infrastructure label and NO 3rd attempt; an
+          # uncontended VM earns exactly one 3rd attempt whose failure
+          # IS the regression verdict. Each attempt stays wall-capped
+          # (coreutils timeout 420s ~= 5.5x the 77s local N=200 cost);
+          # every failure path is an explicit exit 1 (fail-closed; NOT
+          # continue-on-error, no third-party retry action). Attempt
+          # percentiles go to the step summary whenever the attempt
+          # leaves a parseable report — a cap-killed attempt that leaves
+          # none is NOTED explicitly — so green-on-retry drift stays
+          # visible. Truth table proven case-by-case by
+          # .claude/plans/PLAN-161/proof-retry-matrix.sh (the script's
+          # run_case list is the canonical case inventory).
           run_gate() {
             timeout 420 python3 .claude/scripts/profile-opus-4-7.py \
               --hook-latency \
@@ -1269,29 +1281,94 @@ jobs:
               note(f"hook-latency attempt {att}: report parsed but carries no per-hook stats (early-error report: {str(d.get('error','?'))[:120]})")
           PYSUM
           }
+          BACKOFF_S="${CEO_PERF_GATE_BACKOFF_S:-60}"
+          probe_floor_raw() {
+            timeout 30 python3 .claude/scripts/profile-opus-4-7.py --floor 2>/dev/null
+          }
+          contention_probe() {
+            # Contention verdict (ADR-163 §Amendment, PLAN-161 C4): the
+            # floor probe's EXIT STATUS overrides apparently-uncontended
+            # JSON (codex r4 F4; covers timeout rc 124); else p50<=200ms
+            # (boundary == is UNCONTENDED) parsed fail-safe: malformed
+            # output reads as CONTENDED, never as permission to retry.
+            # p50 must be a REAL JSON number (int/float, never bool), finite
+            # and >= 0 — true/"-1"/-Infinity coercions read as CONTENDED
+            # (codex r1 F8).
+            local probe_out="" probe_rc=0
+            probe_out="$(probe_floor_raw)" || probe_rc=$?
+            if [ "$probe_rc" -ne 0 ]; then
+              echo "contention probe: floor probe exited $probe_rc (124 = 30s cap) -> CONTENDED (exit status overrides JSON)"
+              return 1
+            fi
+            CEO_PROBE_JSON="$probe_out" python3 - <<'PYPROBE'
+          import json, math, os, sys
+          try:
+              p50 = json.loads(os.environ.get("CEO_PROBE_JSON", ""))["subprocess_floor_ms"]["p50"]
+          except Exception as e:
+              print(f"contention probe: floor JSON unparseable ({type(e).__name__}) -> CONTENDED (fail-safe)")
+              sys.exit(1)
+          if isinstance(p50, bool) or not isinstance(p50, (int, float)) \
+                  or not math.isfinite(p50) or p50 < 0:
+              print(f"contention probe: floor p50 is not a finite non-negative JSON number ({p50!r}) -> CONTENDED (fail-safe; codex r1 F8)")
+              sys.exit(1)
+          if p50 <= 200:
+              print(f"contention probe: subprocess floor p50={p50}ms <= 200ms -> UNCONTENDED")
+              sys.exit(0)
+          print(f"contention probe: subprocess floor p50={p50}ms > 200ms -> CONTENDED")
+          sys.exit(1)
+          PYPROBE
+          }
           if run_gate 1; then
             publish 1
             echo "✓ hook latency p95/p99 within budget (attempt 1)"
           else
             rc=$?
             publish 1
-            echo "::warning::hook-latency gate attempt 1 FAILED (exit $rc; 124 = 420s per-attempt cap) — single deterministic retry (PLAN-159/ADR-163; a real regression fails both attempts)"
+            echo "::warning::hook-latency gate attempt 1 FAILED (exit $rc; 124 = 420s per-attempt cap) — deterministic retry after ${BACKOFF_S}s backoff (PLAN-159/ADR-163, amended PLAN-161)"
+            sleep "$BACKOFF_S"
             if run_gate 2; then
               publish 2
               echo "✓ hook latency p95/p99 within budget (attempt 2 — attempt 1 was a load-flake; see ::warning)"
             else
               rc2=$?
               publish 2
-              echo "::error::hook-latency gate FAILED on BOTH attempts (rc1=$rc rc2=$rc2) — treating as a real regression"
-              exit 1
+              sleep "$BACKOFF_S"
+              if contention_probe; then
+                echo "::warning::hook-latency gate failed twice (rc1=$rc rc2=$rc2) but the contention probe reads UNCONTENDED — granting the probe-gated 3rd attempt (ADR-163 §Amendment, PLAN-161 C4; its verdict is final)"
+                if run_gate 3; then
+                  publish 3
+                  echo "✓ hook latency p95/p99 within budget (attempt 3 — probe-gated; attempts 1+2 were load-flakes on a since-quiet runner)"
+                else
+                  rc3=$?
+                  publish 3
+                  echo "::error::hook-latency gate FAILED on BOTH attempts (rc1=$rc rc2=$rc2) AND on the probe-gated 3rd attempt (rc3=$rc3) with an uncontended runner — treating as a real regression"
+                  exit 1
+                fi
+              else
+                echo "::error::hook-latency gate FAILED on BOTH attempts (rc1=$rc rc2=$rc2) — still-contended VM (contention probe) — infrastructure, re-run when quiet (NOT a regression verdict)"
+                exit 1
+              fi
             fi
           fi
 
       - name: Run profile-opus-4-7.py --floor (sanity)
         run: |
           set -euo pipefail
-          # ~2s; subprocess startup floor measurement
-          python3 .claude/scripts/profile-opus-4-7.py --floor > /tmp/floor.json
+          # ~2s; subprocess startup floor measurement. Wall-capped at 30s so
+          # the "30s (floor-sanity cap)" term of the pinned timeout-minutes
+          # inequality is ENFORCED, not merely budgeted (codex r3 F4) —
+          # matching probe_floor_raw's cap in the hook-latency step above.
+          # A cap-kill (rc 124) is a DISTINCT infrastructure outcome, never
+          # a floor-regression verdict.
+          floor_rc=0
+          timeout 30 python3 .claude/scripts/profile-opus-4-7.py --floor > /tmp/floor.json || floor_rc=$?
+          if [ "$floor_rc" -eq 124 ]; then
+            echo "::error::floor sanity: profiler hit the 30s wall cap (timeout rc 124) — INFRASTRUCTURE (hung/overloaded runner), NOT a floor regression; re-run when quiet"
+            exit 1
+          elif [ "$floor_rc" -ne 0 ]; then
+            echo "::error::floor sanity: profiler exited $floor_rc before producing a report — profiler/infrastructure error, NOT a floor-regression verdict"
+            exit 1
+          fi
           # Sanity assertion: p50 floor must be < 200ms (CI runners are slow
           # but not pathologically so). Fails CI if regression > 4x macOS.
           python3 - <<'PY'

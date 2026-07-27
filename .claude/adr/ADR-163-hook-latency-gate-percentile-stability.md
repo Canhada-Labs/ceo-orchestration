@@ -52,27 +52,39 @@ The gate exists to catch **gross regressions** (PLAN-120 WS-J class:
    `_pct_of_sorted` formula itself is deliberately UNCHANGED (changing
    percentile semantics for every consumer is a wider blast radius than
    this fix warrants; the precondition covers the defect class).
-3. **Single deterministic in-step retry, fail-closed by construction**
-   — the retry contract is an **invariant**: *exactly 2 attempts, never
-   more, never unbounded*. `if ! run_gate`-form under `set -euo
-   pipefail`; per-attempt wall-cap `timeout 420` (coreutils; ≈5.5× the
-   measured 76.6 s local N=200 cost — a pathologically contended
-   attempt-1 is killed in time for attempt-2 to run in a fresh scheduler
-   window); explicit `exit 1` on double failure (never implicit `$?`);
-   attempt-1 failure `::warning`-logged. No third-party retry action
-   (zero new supply-chain surface: the job keeps SHA-pinned
-   checkout/setup-python and `permissions: contents: read`); NOT
-   `continue-on-error`. The wrapper truth table (pass@1→0,
-   fail@1+pass@2→0+warning, fail-both→1, cap-kill-without-report→noted)
-   is proven by the repeatable artifact
-   `.claude/plans/PLAN-159/wave1-wrapper-matrix-proof.sh`, which
-   extracts the run-block from the STAGED patch and mocks only
-   `run_gate`; the land ceremony runs it as a hard gate.
+3. **Bounded deterministic in-step retry, fail-closed by construction**
+   *(rewritten in place by the PLAN-161 C4 amendment below; the
+   original invariant read "exactly 2 attempts, never more")* — the
+   retry contract is an **invariant**: *2 unconditional attempts +
+   inter-attempt backoff `B = CEO_PERF_GATE_BACKOFF_S` (default 60 s) +
+   AT MOST one 3rd attempt gated on an explicit contention pre-probe +
+   a fail-fast still-contended path — never unbounded.* `if !
+   run_gate`-form under `set -euo pipefail`; per-attempt wall-cap
+   `timeout 420` (coreutils; ≈5.5× the measured 76.6 s local N=200
+   cost — a pathologically contended attempt is killed in time for the
+   next one to run in a fresh scheduler window); the backoff sleeps
+   between windows so SUSTAINED contention cannot defeat back-to-back
+   attempts (the S27x failure mode: two doc-only commits failed both
+   attempts under sustained load); after a double failure a 30 s-capped
+   `--floor` contention pre-probe decides — still-contended ⇒ explicit
+   `exit 1` with a distinct infrastructure label and NO 3rd attempt;
+   uncontended ⇒ exactly one probe-gated 3rd attempt whose failure IS
+   the regression verdict (explicit `exit 1`, never implicit `$?`);
+   attempt-1 failure and the probe-gated grant are `::warning`-logged.
+   No third-party retry action (zero new supply-chain surface: the job
+   keeps SHA-pinned checkout/setup-python and `permissions: contents:
+   read`); NOT `continue-on-error`. The extended truth table is proven
+   by the repeatable artifact
+   `.claude/plans/PLAN-161/proof-retry-matrix.sh` (see Amendment); the
+   original 2-attempt table remains archived at
+   `.claude/plans/PLAN-159/wave1-wrapper-matrix-proof.sh`.
 4. **Job `timeout-minutes: 5 → 16`** — sized for the CONTENDED case
    (2×420 s attempts + `--smoke` + `--floor` + checkout/setup), not the
    nominal one. (Debate consensus C1: a timeout sized for the clean
    runner makes the retry inert in exactly the scenario it defends
    against, converting a fast flake into a slow timeout-fail.)
+   *Superseded by the PLAN-161 C4 amendment: 16 → 28, re-sized for the
+   extended worst case — see Amendment.*
 5. **Ceilings unchanged** (p95<120 ms / p99<160 ms). Measured N=200
    baselines (local p95 55–76 ms / p99 64–98 ms) leave ample margin.
 6. **Drift stays visible through the retry** (consensus C3): per-attempt
@@ -172,3 +184,72 @@ profiler hardening + its tests). No data migration; no consumer depends
 on the gate's sampling parameters. The revert path needs no second
 ceremony design — it is the pre-recorded back-out for a wrong-N
 surprise.
+
+## Amendment (PLAN-161 C4, 2026-07-27)
+
+**Trigger:** two doc-only commits failed the gate on BOTH attempts
+under *sustained* runner load (S276 "2ª falha both-attempts"), the
+exact scenario the back-to-back 2-attempt shape cannot defend against:
+when contention outlasts both 420 s windows, relocation to an adjacent
+scheduler window relocates *into the same load*. Debate CF-2 + codex
+pair-rail r1 F7 / r2 F5 / r3 F4 / r4 F4.
+
+**Amended retry invariant** (rewrites Decision item 3 in place):
+*2 unconditional attempts + inter-attempt backoff
+`B = CEO_PERF_GATE_BACKOFF_S` (default **60 s**, env-fakeable to 0 in
+proofs) + AT MOST one 3rd attempt gated on an explicit contention
+pre-probe + a fail-fast still-contended path — never unbounded.*
+
+**Contention verdict definition:** the pre-probe wraps
+`timeout 30 python3 .claude/scripts/profile-opus-4-7.py --floor`
+(stderr discarded — the floor probe finally gets the explicit wall-cap
+it lacked). CONTENDED iff **any** of: nonzero probe exit — the **exit
+status OVERRIDES apparently-uncontended JSON** (codex r4 F4; covers
+`timeout` rc 124) — or unparseable/malformed floor JSON (fail-safe).
+Otherwise UNCONTENDED iff `subprocess_floor_ms.p50 <= 200` ms parsed
+from the floor JSON (threshold is `<=`: boundary p50 == 200 is
+UNCONTENDED; same 200 ms bound as the long-standing floor sanity
+step). A CONTENDED verdict fail-fasts with a distinctly-labeled
+infrastructure outcome ("still-contended VM … NOT a regression
+verdict") and burns NO 3rd 420 s attempt; an UNCONTENDED verdict
+grants exactly one `::warning`-logged 3rd attempt whose failure is the
+final real-regression verdict.
+
+**Back-compat marker:** the literal `FAILED on BOTH attempts (rc1=`
+survives in EVERY both-attempts-failed outcome (still-contended AND
+uncontended-fail@3) — `PLAN-159/wave2-regression-proof.sh:134` greps
+it; the 3rd-attempt markers are ADDITIVE.
+
+**Job budget** (supersedes Decision item 4): `timeout-minutes: 16 →
+28`, pinned worst-case inequality: 3×420 s (capped attempts) + 2×60 s
+(backoffs) + 30 s (probe cap) + 30 s (floor sanity) + ~180 s
+(checkout/setup/smoke headroom) ≈ 1620 s ≈ 27 min → 28. Both 30 s
+terms are ENFORCED wall-caps — the pre-probe AND the floor-sanity step
+each wrap the profiler in `timeout 30` (codex r3 F4), and a cap-killed
+floor-sanity run fails with a distinct infrastructure label, never a
+floor-regression verdict — so the inequality holds by construction,
+not by assumption.
+
+**Executable proof:** the extended truth table (pass@1;
+flake+pass@2; both-fail+contended fail-fast; both-fail+uncontended
+pass@3; both-fail+uncontended fail@3; malformed probe JSON; probe
+timeout rc 124; nonzero probe rc overriding below-threshold JSON;
+boundary p50==200; non-numeric p50 JSON — boolean `true` and string
+`"-1"` — treated as CONTENDED) is proven by
+`.claude/plans/PLAN-161/proof-retry-matrix.sh` — the script's
+`run_case` list is the canonical case inventory — which extracts the
+run-block from the staged/landed `validate.yml`, mocks ONLY `run_gate`
+and `probe_floor_raw`, and runs the `contention_probe` parser REAL. It
+**supersedes the PLAN-159 wave1 matrix for the extended contract**
+(`wave1-wrapper-matrix-proof.sh` stays archived as the 2-attempt-era
+proof).
+
+**Reconciled acceptance:** the gate never requires a manual re-run for
+a probe-UNCONTENDED failure — that path always gets its 3rd attempt
+in-job. A still-contended fail-fast is an **accepted,
+distinctly-labeled infrastructure outcome** (the probe runs only after
+≥900 s of elapsed job time — 2×420 s attempts + 60 s backoff — so a
+still-contended verdict means sustained multi-window load, rare by
+construction); its remedy is a re-run when quiet, and its label
+explicitly disclaims a regression verdict. N=200 percentile semantics
+(Decision items 1, 2, 5) are untouched by this amendment.
