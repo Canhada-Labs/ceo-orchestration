@@ -18,13 +18,26 @@
 # irreversible thereafter. Child processes (`bash`, `grep`, subagents)
 # inherit it automatically.
 #
-# The framework's council invokes:
+# The framework's council invokes (PLAN-161 C2 — grok 0.2.93 `-p` takes
+# its prompt as a CLI ARGUMENT and does NOT read stdin, so the brief
+# NEVER appears in argv: the ADR-114 redactor writes it to a mode-0600
+# artifact in a fresh mode-0700 mkdtemp dir, rename-into-place so the
+# artifact exists only if the redactor exited 0, and grok receives only
+# a FIXED pointer instruction):
 #
-#   grok -p "<brief>" --sandbox council --output-format json \
-#        --no-leader --disallowed-tools "search_replace,run_terminal_command"
+#   grok --sandbox council --no-leader --output-format json \
+#        --disallowed-tools "search_replace,run_terminal_command" \
+#        -p "<fixed pointer: read the audit brief at <tmpdir>/brief.txt>"
 #
 # The `--disallowed-tools` list is defense-in-depth ONLY. The kernel
 # profile below is the load-bearing layer.
+#
+# Residual guidance (PLAN-161 C2): the artifact holds POST-redaction
+# bytes only and is removed by a trap on lane exit; a SIGKILL (e.g. a
+# budget kill) can strand it — still 0600 in a 0700 temp dir — until the
+# next run's stale-dir sweep. The TEMP-DIRS-ARE-WRITABLE caveat below
+# applies: this sandbox profile does not guard the artifact; its
+# 0600/0700 modes and the redaction itself do.
 #
 # ⚠ VERIFIED CAVEAT (grok 0.2.93 — the docs oversell this): grok fails
 # closed only for a MALFORMED profile (e.g. an unsupported glob) —

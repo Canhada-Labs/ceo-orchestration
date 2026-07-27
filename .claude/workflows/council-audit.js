@@ -16,10 +16,20 @@ export const meta = {
 //   1. EGRESS THROUGH THE ADR-114 REDACTOR (BLOCKING). Every prompt sent to
 //      an EXTERNAL lane (codex/grok) is redacted by
 //      `.claude/hooks/_lib/codex_egress_redact.py` FIRST. There is exactly
-//      ONE egress chokepoint: the lane agent's single `redactor | vendor-cli`
-//      pipeline under `set -o pipefail` (PLAN-156-FOLLOWUP W2 pipe fold — a
-//      skipped/failed redaction cannot yield a sendable prompt); a second
-//      unredacted path is forbidden.
+//      ONE redaction chokepoint with TWO vendor transports (PLAN-161 C2 —
+//      ADR-114 mandates redaction-before-egress, not a pipe shape):
+//      codex = the lane agent's single `redactor | wrapped-vendor-cli`
+//      stdin pipeline under `set -o pipefail` (PLAN-156-FOLLOWUP W2 pipe
+//      fold); grok = grok 0.2.93 `-p` takes its prompt as a CLI ARGUMENT
+//      and cannot read stdin, so the redactor's stdout becomes a 0600
+//      artifact in a fresh 0700 mkdtemp dir (rename-into-place: the
+//      artifact exists ONLY if the redactor exited 0) and grok's argv
+//      carries a FIXED pointer instruction, never brief-derived bytes. In
+//      both shapes a skipped/failed redaction cannot yield a sendable
+//      prompt; a second unredacted path is forbidden. Accepted residual: a
+//      SIGKILL between artifact creation and trap cleanup can strand
+//      POST-REDACTION bytes in the 0700 temp dir until the next run's
+//      stale-dir sweep.
 //   2. OS-LEVEL READ-ONLY CONTAINMENT per external lane (BLOCKING). Codex:
 //      `--sandbox read-only`. Grok: `--sandbox council` (the kernel profile
 //      in templates/grok/sandbox.toml.example). NOT hooks-based — hooks
@@ -69,6 +79,19 @@ if (!IS_FIXTURE_MODE && (typeof _RAW_SCOPE !== 'string' || !_RAW_SCOPE.trim())) 
 }
 const SCOPE = (typeof _RAW_SCOPE === 'string' && _RAW_SCOPE.trim())
   ? _RAW_SCOPE.trim() : '.'
+// PLAN-161 W2 fix-round-3 (codex r3 F3) — POSIX shell-quote for the ONE
+// operator-controlled string interpolated into shell SOURCE: the codex
+// lane's `git ls-files` scope argument. Interpolated raw inside single
+// quotes, a scope containing a single quote breaks OUT of the quoting and
+// injects commands into the very block that runs the redactor/vendor
+// pipeline — defeating the read-only + redacted-egress guarantees. shq()
+// renders the scope as exactly ONE inert argv token: wrap the whole string
+// in single quotes and escape each embedded single quote as the POSIX
+// close-escape-reopen sequence (quote, backslash-quote, quote). The brief
+// is NOT shell source (it reaches the shell only as $BRIEF data through
+// the redactor chokepoint) and `cli` is a code-controlled constant — the
+// scope is the only operator string that crosses into shell source.
+const shq = (s) => "'" + String(s).replace(/'/g, "'\\''") + "'"
 const REQUESTED_VENDORS = (typeof args === 'object' && args !== null && Array.isArray(args.vendors) && args.vendors.length)
   ? args.vendors.filter((v) => ['claude', 'codex', 'grok'].includes(v))
   : ['claude', 'codex', 'grok']
@@ -113,6 +136,13 @@ const LANE_SCHEMA = {
     vendor: { type: 'string', enum: ['claude', 'codex', 'grok'] },
     status: { type: 'string', enum: ['ok', 'unavailable'] },
     unavailable_reason: { type: 'string' },
+    // PLAN-161 C2 — grok artifact-transport attestation: sha256 of the
+    // redacted artifact actually handed to the vendor (the grok lane
+    // copies the compose block's artifact_sha256= line here). MANDATORY
+    // for a status-ok grok lane: the demotion gate after the lane fanout
+    // (codex r1 F3) demotes a grok "ok" without a 64-lowercase-hex value
+    // to status "unavailable" BEFORE quorum/verdict computation.
+    artifact_sha256: { type: 'string' },
     findings: { type: 'array', items: FINDING_SCHEMA },
   },
 }
@@ -140,35 +170,132 @@ risk_tags, author="council/${vendor}", file, claim (<=200 chars), vendor="${vend
 Return ONLY JSON {vendor, status:"ok", findings}. On any error return {vendor, status:"unavailable", unavailable_reason, findings:[]}.`
 
 // The instruction that drives an EXTERNAL CLI lane. The Claude agent that
-// owns this lane must: (a) redact-and-send as ONE `redactor | vendor-cli`
-// pipeline under `set -o pipefail` (ADR-114; OS read-only containment on the
-// vendor side), (b) parse the CLI's JSON output into the shard schema, (c) fail
-// LOUD (status:"unavailable") on any binary-missing / auth / timeout /
+// owns this lane must: (a) route the brief through the ADR-114 redactor as
+// the ONLY writer of what the vendor ever sees — the redaction chokepoint
+// is identical for both vendors, the TRANSPORT is vendor-specific (PLAN-161
+// C2, debate CF-3): codex reads stdin, so redactor stdout pipes straight
+// into the watchdog-wrapped CLI; grok 0.2.93 `-p` takes its prompt as an
+// ARGUMENT and cannot read stdin (a piped brief transmits zero bytes and
+// dies at clap parse), so redactor stdout becomes a 0600 artifact in a
+// fresh 0700 mkdtemp dir and grok's argv carries a FIXED pointer — (b)
+// parse the CLI's JSON output into the shard schema, (c) fail LOUD
+// (status:"unavailable") on any binary-missing / auth / timeout /
 // over-budget / parse error — NEVER fabricate findings, NEVER substitute
 // another vendor.
+//
+// PLAN-161 C3 — the codex wall-clock budget is MECHANICAL, not prose:
+//   BUDGET_S = 180 + 2*N, N = `git ls-files -- <scope> | wc -l` (the
+//   RESOLVED scope size — not the brief length), HARD-capped at 600s. The
+//   cap is a cost-DoS control: an external LLM lane is a burn surface if
+//   it loops. Enforcement is a probed wrapper: `timeout`, else `gtimeout`,
+//   else a fully-specified python3 stdlib watchdog (process-group spawn,
+//   SIGTERM -> 10s grace -> SIGKILL, DISTINCT timeout exit status 124);
+//   if python3 itself is missing the lane reports status:"unavailable"
+//   (python3 is also the redactor runtime — the vendor CLI is NEVER run
+//   unbounded; the install.sh probe is precedent for the PROBE shape only,
+//   its callee is internally bounded, so its bare fallback is deliberately
+//   NOT copied here).
 const externalLaneOrchestration = (vendor) => {
   const cli = vendor === 'codex'
     ? `codex exec --sandbox read-only --skip-git-repo-check -`
-    : `grok -p --sandbox council --no-leader --output-format json --disallowed-tools "search_replace,run_terminal_command"`
+    : `grok --sandbox council --no-leader --output-format json --disallowed-tools "search_replace,run_terminal_command" -p`
   const sandboxNote = vendor === 'codex'
     ? 'OS containment: codex `--sandbox read-only` (Seatbelt/Landlock).'
     : 'OS containment: grok `--sandbox council` (the kernel profile in .grok/sandbox.toml). Verify a ProfileApplied+enforced line landed in ~/.grok/sandbox-events.jsonl; if not, this lane is unavailable.'
+  const step1 = vendor === 'codex'
+    ? `STEP 1 — REDACT-AND-SEND AS ONE PIPE, WATCHDOG-WRAPPED (BLOCKING, ADR-114 + PLAN-161 C3). ${sandboxNote}
+The brief below is repo-derived and MUST be redacted before it leaves the process. Redaction and vendor
+invocation are ONE shell pipeline — the redactor's stdout feeds the vendor CLI's stdin directly, so a skipped
+or failed redaction can never yield a sendable prompt — and the vendor CLI is MECHANICALLY wall-clock-bounded:
+BUDGET_S = 180s base + 2s per in-scope file (the RESOLVED scope size via git ls-files, never the brief
+length), HARD-capped at 600s (the cap is a cost-DoS control — never raise it ad hoc). From the repo root run
+EXACTLY this block (never a two-step redact-to-variable-then-send, never the unredacted $BRIEF as a CLI
+argument or CLI stdin, never the vendor CLI unwrapped/unbounded):
+
+set -o pipefail
+N=$( git ls-files -- ${shq(SCOPE)} 2>/dev/null | wc -l | tr -d ' ' ); [ -n "$N" ] || N=0
+BUDGET_S=$(( 180 + 2 * N )); [ "$BUDGET_S" -gt 600 ] && BUDGET_S=600
+TOUT="$( command -v timeout 2>/dev/null || command -v gtimeout 2>/dev/null || true )"
+if [ -n "$TOUT" ]; then
+printf '%s' "$BRIEF" | python3 .claude/hooks/_lib/codex_egress_redact.py --outgoing | "$TOUT" -k 10 "$BUDGET_S" ${cli}
+else
+printf '%s' "$BRIEF" | python3 .claude/hooks/_lib/codex_egress_redact.py --outgoing | python3 -c '
+import os, signal, subprocess, sys
+b = int(sys.argv[1])
+p = subprocess.Popen(sys.argv[2:], preexec_fn=os.setsid)
+try:
+    rc = p.wait(timeout=b)
+except subprocess.TimeoutExpired:
+    os.killpg(os.getpgid(p.pid), signal.SIGTERM)
+    try:
+        p.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        os.killpg(os.getpgid(p.pid), signal.SIGKILL)
+        p.wait()
+    sys.exit(124)
+sys.exit(rc)
+' "$BUDGET_S" ${cli}
+fi
+
+If neither timeout nor gtimeout exists AND python3 is missing, do NOT run the vendor CLI unbounded — python3
+is also the redactor runtime, so the lane is status:"unavailable", unavailable_reason:"no watchdog runtime"
+(fail-loud). If the pipeline exits nonzero — \`set -o pipefail\` makes a redactor failure fatal even when the
+vendor CLI itself exits 0 — or the redactor module/flag is unavailable, DO NOT retry without redaction: return
+status:"unavailable", unavailable_reason:"egress redactor unavailable/failed". A watchdog kill (exit 124, or
+137 after SIGKILL) or exceeding ~${BUDGET_PER_LANE} tokens of output is status:"unavailable",
+unavailable_reason:"budget/timeout". A missing binary, an auth failure, or a lapsed subscription is likewise
+status:"unavailable" — NEVER an error, NEVER a substitution with another vendor.`
+    : `STEP 1 — REDACT TO A 0600 ARTIFACT, SEND A FIXED POINTER (BLOCKING, ADR-114 + PLAN-161 C2). ${sandboxNote}
+grok 0.2.93 \`-p\` takes its prompt as a CLI ARGUMENT and does NOT read stdin, so the codex-style stdin pipe
+cannot compose here. The redaction chokepoint is UNCHANGED — ADR-114 mandates redaction-before-egress, not a
+pipe shape — the redactor stays the ONLY writer of what grok ever sees: its stdout becomes a mode-0600
+artifact inside a fresh mode-0700 mkdtemp dir (never the repo tree, never a bare /tmp file), renamed into
+place ONLY after the redactor exits 0, and grok's argv carries a FIXED pointer instruction — never the brief,
+never any repo-derived bytes, never a dollar-paren cat of the artifact. The mkdtemp base is PINNED to the
+explicit /tmp template below (codex r2 F12): the -t flag form honors an inherited TMPDIR, and a TMPDIR
+pointing inside the repo would both relocate the artifact INTO the repo tree and aim the stale sweep's
+recursive delete at repo directories — the explicit template ignores TMPDIR, and the sweep targets the same
+fixed /tmp base. From the repo root run EXACTLY this block:
+
+# --- GROK-ARTIFACT-COMPOSE BEGIN ---
+set -o pipefail
+umask 077
+mode_of() { stat -f '%Lp' "$1" 2>/dev/null || stat -c '%a' "$1"; }
+ART_DIR="$( mktemp -d /tmp/ceo-council-grok.XXXXXXXX )" || exit 3
+trap 'rm -rf "$ART_DIR"' EXIT
+find /tmp -maxdepth 1 -type d -name 'ceo-council-grok.*' ! -path "$ART_DIR" -mmin +240 -exec rm -rf '{}' + 2>/dev/null
+printf '%s' "$BRIEF" | python3 .claude/hooks/_lib/codex_egress_redact.py --outgoing > $ART_DIR/brief.tmp
+[ $? -eq 0 ] || exit 3
+chmod 600 $ART_DIR/brief.tmp &&
+[ "$( mode_of $ART_DIR/brief.tmp )" = "600" ] &&
+[ "$( mode_of $ART_DIR )" = "700" ] &&
+SUM="$( shasum -a 256 $ART_DIR/brief.tmp 2>/dev/null || sha256sum $ART_DIR/brief.tmp )" &&
+SUM="$( printf '%s' "$SUM" | cut -d' ' -f1 )" &&
+mv $ART_DIR/brief.tmp $ART_DIR/brief.txt &&
+echo "artifact_sha256=$SUM" &&
+${cli} "You are the grok council lane. Your ONLY input is the audit brief file brief.txt at this absolute path: $ART_DIR/brief.txt - read that file and execute its instructions exactly."
+# --- GROK-ARTIFACT-COMPOSE END ---
+
+The block prints one artifact_sha256=<hex> line — the sha256 of the exact redacted bytes handed to grok.
+ATTESTATION (MANDATORY — PLAN-161 W2, codex r1 F3): copy that exact value into your lane JSON as
+artifact_sha256. The workflow mechanically DEMOTES a status:"ok" grok lane whose artifact_sha256 is missing
+or not 64 lowercase hex to status:"unavailable" BEFORE quorum — an unattested artifact transport never
+counts. The find line is the start-of-run sweep of stale artifact dirs from prior runs; both the mkdtemp and
+the sweep are pinned to the fixed /tmp base — TMPDIR can neither redirect artifact writes nor point the
+sweep at the repo (codex r2 F12).
+Accepted residual (also documented in council.md): a SIGKILL (e.g. a budget kill) landing between rename and
+the trap-EXIT cleanup can strand POST-REDACTION bytes — mode 0600 in a 0700 temp dir, never the unredacted
+brief, never in the repo tree — until the next run's sweep reclaims them.
+If the block exits nonzero (the redactor failed, a mode check failed, or grok itself failed), return
+status:"unavailable" — brief.txt exists ONLY IF the redactor exited 0, so there is NO fallback transport:
+DO NOT retry with $BRIEF in argv, on stdin, or via any other path. Hard budget: if the lane exceeds
+~${BUDGET_PER_LANE} tokens of output or ~180s wall-clock, KILL it and return status:"unavailable",
+unavailable_reason:"budget/timeout". A missing binary, an auth failure, or a lapsed subscription is likewise
+status:"unavailable" — NEVER an error, NEVER a substitution with another vendor.`
   return `You orchestrate the ${vendor.toUpperCase()} council lane. You are a READ-ONLY conductor: you run the
 external CLI and parse its output. You do NOT audit the repo yourself and you do NOT write files.
 
-STEP 1 — REDACT-AND-SEND AS ONE PIPE (BLOCKING, ADR-114). ${sandboxNote}
-The brief below is repo-derived and MUST be redacted before it leaves the process. Redaction and vendor
-invocation are ONE shell pipeline — the redactor's stdout feeds the vendor CLI's stdin directly, so a skipped
-or failed redaction can never yield a sendable prompt. Run EXACTLY this pipeline shape (never a two-step
-redact-to-variable-then-send, and never the unredacted $BRIEF as a CLI argument or CLI stdin):
-    set -o pipefail
-    printf '%s' "$BRIEF" | python3 .claude/hooks/_lib/codex_egress_redact.py --outgoing | ${cli}
-If the pipeline exits nonzero — \`set -o pipefail\` makes a redactor failure fatal even when the vendor CLI
-itself exits 0 — or the redactor module/flag is unavailable, DO NOT retry without redaction: return
-status:"unavailable", unavailable_reason:"egress redactor unavailable/failed".
-Hard budget: if the lane exceeds ~${BUDGET_PER_LANE} tokens of output or ~180s wall-clock, KILL it and return
-status:"unavailable", unavailable_reason:"budget/timeout". A missing binary, an auth failure, or a lapsed
-subscription is likewise status:"unavailable" — NEVER an error, NEVER a substitution with another vendor.
+${step1}
 
 STEP 2 — PARSE the CLI's JSON output into the 8-field shard schema (vendor="${vendor}"). If the output is not
 parseable JSON, return status:"unavailable", unavailable_reason:"unparseable lane output" with findings:[].
@@ -202,7 +329,46 @@ const laneThunks = REQUESTED_VENDORS.map((vendor) => () => {
     .catch((e) => ({ vendor, status: 'unavailable', unavailable_reason: String(e).slice(0, 160), findings: [] }))
 })
 
-const laneResults = await parallel(laneThunks)
+const rawLaneResults = await parallel(laneThunks)
+
+// PLAN-161 W2 (codex r1 F3) — grok attestation is ENFORCED, not decorative.
+// The grok artifact transport (ADR-114) is attestable ONLY through the
+// artifact_sha256 the lane copies from the compose block. A grok lane
+// claiming status "ok" WITHOUT a well-formed value (64 lowercase hex) is
+// mechanically DEMOTED to status "unavailable" HERE — before quorum,
+// verify, and verdict — so its findings never count and the quorum
+// degrades loudly instead of an unattested lane counting toward CLEAN.
+// Lane identity comes from REQUESTED_VENDORS position, never the
+// model-written vendor field. Applies identically in fixture mode:
+// fixture grok lanes carry a valid dummy sha256 and the demotion path
+// itself is fixture-tested (test-council-fixture.mjs scenario H).
+//
+// PLAN-161 W2 fix-round-2 (codex r2 F13) — the canonical identity is
+// also WRITTEN BACK onto every lane object here. Downstream consumers
+// (finding attribution at f.vendor, availability/unavailable accounting,
+// disagreement math, the lanes.artifact_sha256 attestation map) all read
+// lane.vendor — without the write-back a lane could IMPERSONATE another
+// vendor simply by lying in its own JSON. Fixture-tested:
+// test-council-fixture.mjs scenario J.
+const SHA256_HEX = /^[0-9a-f]{64}$/
+const laneResults = rawLaneResults.map((l, i) => {
+  const requested = REQUESTED_VENDORS[i]
+  if (!l) return { vendor: requested, status: 'unavailable', unavailable_reason: 'lane resolved empty', findings: [] }
+  if (requested === 'grok' && l.status === 'ok'
+      && !(typeof l.artifact_sha256 === 'string' && SHA256_HEX.test(l.artifact_sha256))) {
+    return {
+      vendor: 'grok',
+      status: 'unavailable',
+      unavailable_reason: 'missing/malformed artifact attestation (artifact_sha256 must be the '
+        + '64-lowercase-hex sha256 of the redacted artifact handed to grok — ADR-114); '
+        + 'ok-lane demoted, findings discarded',
+      findings: [],
+    }
+  }
+  // F13 canonicalization: overwrite the untrusted model-written vendor
+  // field with the requested-position identity on EVERY surviving lane.
+  return { ...l, vendor: requested }
+})
 
 // Emit one council_lane_invoked audit action per lane (who asked what, when)
 // so cross-vendor egress is itself auditable. The workflow cannot emit
@@ -217,7 +383,7 @@ log(`council-audit: ${availableLanes.length}/${REQUESTED_VENDORS.length} lanes a
 const allFindings = []
 for (const lane of availableLanes) {
   for (const f of (lane.findings || []).slice(0, MAX_FINDINGS_PER_LANE)) {
-    f.vendor = lane.vendor // trust the LANE identity, not the field the model wrote
+    f.vendor = lane.vendor // the LANE identity — canonicalized to REQUESTED_VENDORS position above (F13), never the field the model wrote
     f.claim = String(f.claim || '').slice(0, 200)
     allFindings.push(f)
   }
@@ -395,6 +561,12 @@ return {
   lanes: {
     requested: REQUESTED_VENDORS,
     available: availableLanes.map((l) => l.vendor),
+    // PLAN-161 C2 — per-lane artifact attestation (vendor -> sha256 of the
+    // redacted artifact transport); present only for lanes that report one
+    // (a status-ok grok lane always does — the F3 demotion gate above).
+    artifact_sha256: Object.fromEntries(availableLanes
+      .filter((l) => l && typeof l.artifact_sha256 === 'string' && l.artifact_sha256)
+      .map((l) => [l.vendor, l.artifact_sha256])),
     unavailable: unavailableLanes.map((l) => ({ vendor: l.vendor, reason: l.unavailable_reason || 'unknown' })),
   },
   stats: {
@@ -407,5 +579,5 @@ return {
   confirmed_findings: confirmed,
   verify_failed_findings: verifyFailed,
   cross_vendor_disagreements: disagreements,
-  egress: 'every external-lane prompt routed through the ADR-114 redactor; codex --sandbox read-only, grok --sandbox council; fail-loud on unavailable; ADVISORY only.',
+  egress: 'every external-lane brief routed through the ADR-114 redactor (codex: stdin pipe into the watchdog-wrapped CLI; grok: 0600 redacted artifact + fixed pointer argv, since grok -p cannot read stdin); codex --sandbox read-only, grok --sandbox council; fail-loud on unavailable; ADVISORY only.',
 }

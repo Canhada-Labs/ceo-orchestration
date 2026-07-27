@@ -33,13 +33,28 @@ refuted, and (the headline signal) where the vendors **disagree**.
 | Lane | Containment | Egress |
 |---|---|---|
 | Claude | ADR-136-AMEND-1 workflow read-only confinement (writes no files) | in-harness, no external egress |
-| Codex | `codex exec --sandbox read-only` (Seatbelt/Landlock) | prompt redacted via ADR-114 first |
-| Grok | `grok --sandbox council` (kernel profile, `.grok/sandbox.toml`) | prompt redacted via ADR-114 first |
+| Codex | `codex exec --sandbox read-only` (Seatbelt/Landlock) | ADR-114-redacted stdin pipe into the watchdog-wrapped CLI |
+| Grok | `grok --sandbox council` (kernel profile, `.grok/sandbox.toml`) | ADR-114-redacted 0600 artifact + fixed pointer argv (grok `-p` cannot read stdin) |
+
+One redaction chokepoint, two vendor transports (PLAN-161 C2): codex
+reads stdin, so the redactor's stdout pipes straight into the CLI; grok
+0.2.93 `-p` takes its prompt as a CLI argument and does **not** read
+stdin, so the redactor's stdout is written to a mode-0600 artifact in a
+fresh mode-0700 temp dir (rename-into-place: the artifact exists only if
+the redactor exited 0) and grok's argv carries a fixed pointer
+instruction — never the brief, never repo-derived bytes.
 
 A lane that cannot establish its containment, is missing its binary, has
 lapsed auth, or exceeds its token/time budget reports **`STATUS:
 unavailable`** — never a silent substitution. Quorum degrades explicitly
 (3-lane → 2-lane, labeled).
+
+**Accepted residual (PLAN-161 C2):** if a grok lane is SIGKILLed (e.g. a
+budget kill) between artifact creation and its trap-EXIT cleanup, the
+0600 redacted artifact can persist in its 0700 temp dir until the next
+run's stale-dir sweep reclaims it. The stranded bytes are
+POST-redaction only — never the unredacted brief, never in the repo
+tree.
 
 ## Execution
 
@@ -52,15 +67,24 @@ The user invoked: `/council $ARGUMENTS`
 - **`scope` is the egress boundary the Owner authorized.** It MUST be the
   operator's literal typed argument, threaded verbatim into `args.scope`
   below. If `$ARGUMENTS` is empty or yields no scope, **STOP and ask the
-  operator for one — do NOT launch the workflow.** `council-audit.js`
-  silently defaults a missing/non-string `args.scope` to `.` (the WHOLE
-  repo), which widens what leaves the process beyond what was authorized
-  (the S270 F7 failure: scope `.claude/hooks/` was requested, scope `.`
-  was transmitted).
+  operator for one — do NOT launch the workflow.** Since the R1 P1 fix,
+  `council-audit.js` THROWS on a missing/empty/non-string `args.scope` —
+  it no longer silently defaults to `.` (the whole-repo widening was the
+  S270 F7 failure: scope `.claude/hooks/` was requested, scope `.` was
+  transmitted; the only remaining `.` fallback is fixture-mode-only,
+  which performs no egress). The operator rule above stays because the
+  workflow's throw fires after launch — asking FIRST keeps the scope
+  decision with the Owner instead of surfacing as a late error.
 - `vendors=` (optional) — subset of `claude,codex,grok` (default: all
   three).
 - `budget=` (optional) — per-lane token ceiling, clamped to
   [10000, 400000] (default 120000). This is a **hard kill**, not advisory.
+  The codex lane's wall-clock is additionally bounded MECHANICALLY
+  (PLAN-161 C3): `180s + 2s × in-scope files` (scope size resolved via
+  `git ls-files`), hard-capped at 600s, enforced by `timeout`/`gtimeout`
+  or a python3 process-group watchdog (SIGTERM → grace → SIGKILL, exit
+  124) — never prose-only, never unbounded. A watchdog kill reports
+  `STATUS: unavailable` (`budget/timeout`), unchanged fail-loud semantics.
 
 `/council` runs the `council-audit` workflow. This is multi-agent
 orchestration with live external egress, so it requires the user to have
