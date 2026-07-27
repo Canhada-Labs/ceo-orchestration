@@ -5,6 +5,11 @@ on:
     paths:
       - "scripts/install.sh"
       - "scripts/upgrade.sh"
+      # PLAN-161 (CI wiring): upgrade oracles + the manifest lib they
+      # exercise — keep BOTH filter lists (pull_request + push) in sync.
+      - "scripts/_framework_manifest_set.sh"
+      - "scripts/tests/test-upgrade-dryrun-identity.sh"
+      - "scripts/tests/test-upgrade-exclusions.sh"
       - "scripts/tests/smoke-install.sh"
       - "templates/**"
       - "SPEC/v1/install-cli.md"
@@ -19,6 +24,9 @@ on:
     paths:
       - "scripts/install.sh"
       - "scripts/upgrade.sh"
+      - "scripts/_framework_manifest_set.sh"
+      - "scripts/tests/test-upgrade-dryrun-identity.sh"
+      - "scripts/tests/test-upgrade-exclusions.sh"
       - "scripts/tests/smoke-install.sh"
       - "templates/**"
       - ".claude/hooks/**"
@@ -32,7 +40,9 @@ jobs:
     # PLAN-012 Phase 2 CEO_SOTA_DISABLE parity.
     if: vars.CEO_SOTA_DISABLE != '1'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # PLAN-161: 5 -> 8 — headroom for the two upgrade oracles (each runs
+    # full install + upgrade legs against fixture adopter repos).
+    timeout-minutes: 8
     permissions:
       contents: read
     steps:
@@ -61,6 +71,18 @@ jobs:
         run: |
           set -euo pipefail
           bash scripts/tests/smoke-install.sh
+
+      # PLAN-161 upgrade oracles (green only once the U1/U2/U3 upgrade.sh
+      # fixes are in-tree — land atomically with them).
+      - name: Upgrade oracle — --dry-run identity (U1)
+        run: |
+          set -euo pipefail
+          bash scripts/tests/test-upgrade-dryrun-identity.sh
+
+      - name: Upgrade oracle — exclusion parity + opt-in purge (U2/U3)
+        run: |
+          set -euo pipefail
+          bash scripts/tests/test-upgrade-exclusions.sh
 
       # WS4-user-ceremony-leg
       - name: Install with --ceremony user (governance rc=0 + no out-of-.claude writes)
