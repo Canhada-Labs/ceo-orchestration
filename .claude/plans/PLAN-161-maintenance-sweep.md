@@ -5,7 +5,7 @@ status: executing
 created: 2026-07-21
 reviewed_at: 2026-07-21
 executing_at: 2026-07-27
-related_commits: [86550da, 042dc09, 1074ff1, 7c6c8ce, 712595c]
+related_commits: [86550da, 042dc09, 1074ff1, 7c6c8ce, 08e4751, 2cd6a78, 1588eff, 6d41bf4, f49c753, b4a3eaa]
 reviewed_by: "Owner (João) — chat directive S278 + OQ1/OQ5 structured tie-breaks"
 owner: CEO
 depends_on: [PLAN-156, PLAN-159, PLAN-160]
@@ -712,9 +712,11 @@ builders + VERIFIED per-concern in clean clones + COMBINED via
 APPLY). Ceremony materials committed (`1074ff1`): land-plan161.sh (6
 segments, 3 kernel overrides, CF-8 drop-out), sentinel body (37-path
 scope, 5-guard-class concentration), tracked inputs.sha256 + 3 basepins.
-Codex pair-rail: r1 REJECT 10 findings -> 7 fixed / 3 rebutted-with-
-evidence (`7c6c8ce`, transcripts in PLAN-161/pair-rail/); rounds continue
-until APPROVE. Owner gate = HANDOFF-S279-PLAN161.md (`712595c`): W2 GPG
+Codex pair-rail: **8 rounds -> APPROVE** (findings 10->5->4->4->3->2->1->
+APPROVE, `b4a3eaa`; transcripts w2-round-{1..8} in PLAN-161/pair-rail/);
+every finding fixed or rebutted-with-evidence, each fix red-first proven.
+Combined `land-plan161.sh --preflight-only`: 15/15 oracles GREEN, 6/6 APPLY.
+W2 pack RATIFIED (38 staged inputs, manifest re-cut). Owner gate = HANDOFF-S279-PLAN161.md (`712595c`): W2 GPG
 ceremony + L3 egress + L4 review.
 
 **Original execution plan:** Wave 1 first (author the
