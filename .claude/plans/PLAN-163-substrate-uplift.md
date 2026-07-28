@@ -1,9 +1,10 @@
 ---
 id: PLAN-163
 title: Substrate uplift — reconcile CC 2.1.198→2.1.220 + Claude 5 family (Opus 5 / Sonnet 5) adoption
-status: reviewed
+status: executing
 created: 2026-07-27
 reviewed_at: 2026-07-27
+executing_since: 2026-07-28
 reviewed_by: "Owner (João) — chat directive S281/S282 (montar plano + debate + review codex/grok); debate 3×ADJUST→PROCEED; cross-vendor codex r5 APPROVE + grok APPROVE"
 owner: CEO
 depends_on: [PLAN-161]
@@ -106,22 +107,34 @@ Ordem obrigatória: **GATE-PIN → GATE-V2 (sob o pin novo) → review do pack W
 - **GATE-PIN (CF-4):** cerimônia do pin codex (T5.2) PRIMEIRO — atestação
   payload-real + enforcement unstubbed. Liveness coletada sob o pin velho
   NÃO atesta o reviewer novo.
-- **GATE-V2 (CF-8, endurecido por codex F3/grok F2):** NÃO basta o row
-  `pair_rail` do `failopen_rail_liveness_7d` estar verde — zero-expected +
-  zero-outcomes classifica GREEN vácuo (`ceo-boot.py:1902-1905`), e a
-  expiração natural (≈2026-08-03) satisfaria sem prova. O gate exige, SOB O
-  PIN NOVO: ≥1 invocação fresca classe A-E com `expected >= 1`, outcome
-  terminal, `healthy >= 1`, `failopen == 0`, sem missing/duplicate/coverage
-  deficit. São **duas cerimônias** (pin + pack GPG), declaradas.
+- **GATE-V2 (CF-8, endurecido por codex F3/grok F2; RE-ESCOPADO por
+  stop-review S283):** NÃO basta o row `pair_rail` do
+  `failopen_rail_liveness_7d` estar verde — zero-expected + zero-outcomes
+  classifica GREEN vácuo (`ceo-boot.py:1902-1905`), e a expiração natural
+  (≈2026-08-03) satisfaria sem prova. **Correção S283 (any-in-window):** a
+  janela de avaliação do gate é **exclusivamente os eventos com timestamp
+  POSTERIOR à cerimônia do pin** (âncora = ts do commit assinado do
+  GATE-PIN), nunca a janela 168h inteira — senão (a) fail-opens antigos
+  pré-pin bloqueariam o gate até 08-03 sem razão, e (b) após 08-03 a
+  expiração satisfaria vacuosamente. Sobre o conjunto pós-pin o gate exige:
+  ≥1 invocação fresca classe A-E com `expected >= 1`, outcome terminal,
+  `healthy >= 1`, `failopen == 0`, sem missing/duplicate/coverage deficit.
+  São **duas cerimônias** (pin + pack GPG), declaradas.
 
 ## Threads / Waves
 
 ### W0 — Debate + tie-breaks
 Debate round-1 CONCLUÍDO (3×ADJUST→PROCEED, 14 ajustes). Review cross-vendor
 CONCLUÍDO até APPROVE duplo (codex r5 + grok delta-confirm — ver Context).
-Resta APENAS o W0b: OQs ratificadas pelo Owner (AskUserQuestion
-estruturado) na abertura da sessão de execução, materializando os literais
-da tabela de migração (T5.4).
+**W0b CONCLUÍDO (S284, 2026-07-28):** OQs ratificadas pelo Owner via
+AskUserQuestion estruturado — **OQ1=(b) refresh completo** (fallback →
+opus-5 imediato, SEM soak); **OQ2=migrar advisory já** (sonnet-5 neste
+pack, com a contingência T1.1 mantida: se o fail-open de
+`enforceAvailableModels` confirmar, o default de sessão é pinado
+explicitamente no MESMO commit); **OQ3=pin=1** + 4 probes;
+**OQ4=documentar** postura; **OQ5=(c) expor + LIGAR dogfood**
+(recomendação do crítico de segurança acatada); **OQ6=guidance**.
+Literais materializados na tabela T5.4.
 Check: none (gate de cerimônia).
 
 ### T1 — Model refresh Claude 5 (W2 mecânico + W3 canônico)
@@ -341,8 +354,8 @@ depth registrados; env pin (ou re-escopo justificado) no pack.
    exige justificativa no ADR-181. Arrays literais pós-W0b por opção:
    | Chave-folha | Baseline velho (literal) | Baseline novo (literal, por opção OQ1) |
    |---|---|---|
-   | `availableModels` | `["claude-opus-4-8","claude-fable-5","claude-sonnet-4-6","claude-haiku-4-5"]` | (a)/(b)/(b-soak) idem: `["claude-opus-4-8","claude-fable-5","claude-sonnet-4-6","claude-haiku-4-5","claude-opus-5"]`; `"claude-sonnet-5"` apendado APÓS resolvida a contingência T1.1/OQ2 |
-   | `fallbackModel` (ORDEM inclusa) | `["claude-opus-4-8"]` | (a): `["claude-opus-4-8"]` · (b): `["claude-opus-5"]` · (b-soak): `["claude-opus-4-8"]` até o evento de fim-de-soak, depois `["claude-opus-5"]` |
+   | `availableModels` | `["claude-opus-4-8","claude-fable-5","claude-sonnet-4-6","claude-haiku-4-5"]` | **RATIFICADO (OQ1=b, OQ2=migrar-já):** `["claude-opus-4-8","claude-fable-5","claude-sonnet-4-6","claude-haiku-4-5","claude-opus-5","claude-sonnet-5"]` — sonnet-5 apendado NESTE pack, condicionado à resolução da contingência T1.1 no mesmo commit (pin explícito de default de sessão se o fail-open confirmar) |
+   | `fallbackModel` (ORDEM inclusa) | `["claude-opus-4-8"]` | **RATIFICADO (OQ1=b):** `["claude-opus-5"]` |
    | `permissions.defaultMode` (contrato exato: `effective_config.py:178-180,534-542`) | `"default"` | `"manual"` (todas as opções) |
    | registrations novas (`DirectoryAdded`, `Notification`) | ausentes | entries canônicas (gated T3.4) |
    W0b MATERIALIZA na tabela os literais da opção escolhida ANTES de
@@ -384,23 +397,57 @@ expectativas derivadas; migração de upgrade provada em fixture.
 Check: Validate GREEN no closeout; verify-counts sem drift, incluindo docs
 não-vigiados e a tripla de counts.
 
-## Open questions (tie-breaks do Owner — W0b, AskUserQuestion estruturado)
+## Addendum pós-review — findings do stop-review S283 (incorporados S284)
 
-- **OQ1 — Profundidade do refresh Opus 5:** (a) allowlist-only; (b) refresh
-  completo; (b-soak) refresh completo MAS `FALLBACK_MODEL_CHAIN` mantém
-  opus-4-8 por janela de soak (Opus 5 GA 24/07). Draft do CEO: **(b-soak)**.
-- **OQ2 — Advisory tier → Sonnet 5:** permitido já; migrar default advisory
-  só após re-baseline `count_tokens` dos prompts de spawn (W1) E resolvida a
-  contingência de default-flip (T1.1). Draft: manter.
-- **OQ3 — Nesting depth:** pin=1 com 4 probes (draft) vs depth-3 com probe
-  de cobertura. Draft: pin=1.
-- **OQ4 — Agent teams/SendMessage:** documentar postura "não adotado —
-  governança de peer-messages não modelada". Draft: documentar.
-- **OQ5 — Settings de postura:** (a) expor comentado nos templates; (b) não
-  expor; (c) expor + LIGAR neste repo (dogfood fail-closed). Draft: (a);
-  (c) é a recomendação do crítico de segurança.
-- **OQ6 — Fast mode:** guidance no ACCELERATORS.md (trade-off custo×latência,
-  Opus 5/4.8 only, sem promessa de speedup) vs silêncio. Draft: guidance.
+Quatro findings do stop-review cross-model da S283 sobre o texto reviewed,
+incorporados ANTES da execução (fonte: handoff S283→S284):
+
+1. **GATE-V2 any-in-window / expiração-vacuosa** — RESOLVIDO acima: a
+   prova do gate é escopada a eventos PÓS-cerimônia-do-pin (âncora = ts do
+   commit assinado), não à janela 168h.
+2. **CF-9 fallback é só-ESCRITA** — no ramo notification-only do T3.1, o
+   observer-writer + write-guard cobre apenas Edit|Write|MultiEdit sob
+   root registrado. **LEITURA sob root adicionado (Read/Grep/Glob de
+   `~/.claude/` alheio) permanece descoberta** — registrar como residual
+   NOMEADO no ADR do T3 com disposição explícita (extensão de read-guard é
+   follow-up; não silenciar).
+3. **DirectoryAdded é PÓS-facto** — o evento dispara DEPOIS do root já
+   adicionado; mesmo no ramo blockable, pode existir janela entre a adição
+   e a decisão de block (reads podem ocorrer antes do deny). O probe do
+   T3.1 DEVE medir e registrar essa janela (o block remove o root ou só
+   impede uso futuro?); o ADR do T3 documenta a semântica pós-facto como
+   limite do controle, e o floor/deny não pode ser vendido como prevenção
+   total de exposição.
+4. **Speed multipliers** — scrub de conformidade: nenhuma superfície deste
+   plano (incl. guidance de fast-mode do T6/OQ6 e doutrina async do T4)
+   pode citar multiplicadores/números de velocidade do CHANGELOG como
+   benefício do framework (AGENTS.md no-speed-claim). Fast-mode guidance é
+   trade-off custo×latência SEM números herdados; T6 ganha check de scrub
+   (grep por padrões `[0-9]+(\.[0-9]+)?x|faster|speedup` nas superfícies
+   tocadas).
+
+## Open questions — RATIFICADAS pelo Owner em S284 (W0b fechado; ver W0)
+
+- **OQ1 → (b) refresh completo** (Owner, S284): working-set + VETO floor +
+  routing debate/arch → opus-5 E `FALLBACK_MODEL_CHAIN` → `claude-opus-5`
+  imediato, sem janela de soak. (Draft era b-soak; Owner escolheu b.)
+- **OQ2 → migrar advisory JÁ** (Owner, S284): advisory roles →
+  claude-sonnet-5 neste pack, aceitando o risco tokenizer +30% sem
+  re-baseline prévio (re-baseline `count_tokens` vira item do pack, não
+  pré-condição). Contingência T1.1 MANTIDA como pré-condição técnica: se o
+  fail-open de `enforceAvailableModels` confirmar, pin explícito do default
+  de sessão no MESMO commit.
+- **OQ3 → pin=1** com 4 probes red-first (draft acatado).
+- **OQ4 → documentar** postura "não adotado — governança de peer-messages
+  não modelada" (draft acatado).
+- **OQ5 → (c) expor + LIGAR neste repo** (Owner acatou a recomendação do
+  crítico de segurança): templates ganham as chaves comentadas E o dogfood
+  liga postura fail-closed (`sandbox.network.strictAllowlist`,
+  `sandbox.filesystem.disabled` avaliada contra os fluxos reais,
+  `disableAutoMode`, `defaultMode: "manual"`, `workflowSizeGuideline`).
+  Rollback documentado no pack.
+- **OQ6 → guidance** no ACCELERATORS.md (trade-off custo×latência, Opus
+  5/4.8 only, sem números de velocidade — ver Addendum item 4).
 
 ## Success criteria
 
