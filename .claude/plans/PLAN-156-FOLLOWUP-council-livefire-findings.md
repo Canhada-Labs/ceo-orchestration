@@ -2,11 +2,17 @@
 id: PLAN-156-FOLLOWUP-council-livefire-findings
 parent: PLAN-156
 title: Council live-fire S270 findings — redactor CLI, fail-open verify, guard gaps
-status: reviewed
+status: done
 created: 2026-07-13
+executing_at: 2026-07-27
+completed_at: 2026-07-27
+related_commits: [927c5ca, 7224e8f]
 owner: CEO
 # OQ1/OQ2 Owner-ratified S270 (see §Clarifications); W0 debate DONE S272;
-# draft→reviewed ratified by Owner directive S276 (see §Clarifications).
+# draft→reviewed ratified by Owner directive S276 (see §Clarifications);
+# S280 Owner ratified close on the full-3-lane council run (see §Clarifications).
+# related_commits = the FU-MAIN/FU-KERNEL fix commits (S276); closure EVIDENCE
+# is the S280 full-3-lane council run wf_ef98734e-7ec (PLAN-156-FOLLOWUP/council-3lane-S280.md).
 depends_on: [PLAN-156]
 budget_tokens: 90-140k
 budget_sessions: 1
@@ -254,6 +260,23 @@ ADR-114 redactor without a forbidden unredacted-arg path); (iii) then a clean
   become ceremony-gated; egress-bearing surface warrants it); OQ2 →
   **planted-fixture redaction proof ratified** for the Wave 4 full-quorum
   re-run.
+- 2026-07-27 (S280, Owner via AskUserQuestion structured tie-break): **close
+  ratified on the full-3-lane council run.** `/council check_canonical_edit.py`
+  (Owner-authorized egress, run `wf_ef98734e-7ec`) reached quorum FULL 3-lane
+  after a one-off BUDGET_S pin at the reviewed 600s hard cap (OQ3 — the
+  180+2*N formula under-budgeted the 1-file deep scope; both external lanes
+  died at 182s exit 124 on the first attempt). verify_failed=0; the FINDINGS
+  verdict is on the AUDITED TARGET (`check_canonical_edit.py`, 12 distinct
+  ADVISORY defects), not on the council instrument — the plan's open criterion
+  was full-quorum availability, now MET. The 12 findings are triaged into a new
+  plan (canonical/kernel surfaces → debate + ceremony), NOT fixed inline here.
+  Two durable follow-ups recorded for the council instrument itself: (i) the
+  C3 wall-clock formula `180+2*N` ignores scope DEPTH and under-budgets
+  low-file-count deep audits — recalibrate via the normal path (red-first +
+  pair-rail); (ii) the live workflow received `args` as a JSON-ENCODED STRING,
+  which the fail-closed scope guard correctly rejected until a transport-decode
+  normalization was added — fold that decode into the canonical
+  `.claude/workflows/council-audit.js` (this session patched only the run copy).
 - 2026-07-16 (S276, Owner via chat): **draft → reviewed ratificado** por
   diretiva explícita ("finaliza absolutamente tudo que tá pendente…
   termina o backlog completo") — cobre a cerimônia de landing (F1-F7) e
@@ -302,10 +325,16 @@ documented council-tuning follow-up.
 - [x] All 7 findings closed with regression tests; suites green. (S276:
   72/72 F1-F7 regression tests + 20 redactor-invariant tests green;
   landed `927c5ca` + `7224e8f`.)
-- [ ] Full-quorum council run recorded (3 lanes AVAILABLE, scoped,
-  redaction proven on planted fixture). **BLOCKED on Owner egress auth
-  (Wave 4).** Locally provable parts done (redactor is not a no-op;
-  fail-loud); the 3-lane egress itself needs Owner sign-off.
-- [ ] Validate workflow green on closeout commit. (Perf-gate load-flake
-  in the current runner regime may require a job re-run — see PLAN-159
-  post-land checkpoint #2; not a code defect.)
+- [x] Full-quorum council run recorded (3 lanes AVAILABLE, scoped). **MET
+  S280** — run `wf_ef98734e-7ec` over `check_canonical_edit.py`: quorum
+  FULL 3-lane (claude+codex+grok all AVAILABLE), verify_failed=0,
+  scope-asserted, 9/12 unique-catch cross-vendor signal. Report:
+  `PLAN-156-FOLLOWUP/council-3lane-S280.md`. The "redaction proven on
+  planted fixture" sub-clause is **reworded-N/A** per the plan's own W4
+  notes (planting a real employer token would LEAK it; the brief redactor
+  does not guard vendor-read file content — that is scope-choice + sandbox
+  deny-list, a separate control). Owner ratified this reading S280.
+- [ ] Validate workflow green on closeout commit. (Owner ceremony boundary —
+  the reviewed→executing→done flip is staged; the closeout commit + its
+  Validate run are the Owner's. Perf-gate load-flake may require a job
+  re-run — see PLAN-159 post-land checkpoint #2; not a code defect.)
