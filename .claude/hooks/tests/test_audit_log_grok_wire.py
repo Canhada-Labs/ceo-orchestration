@@ -82,7 +82,7 @@ class _LogReader:
         return events[-1]
 
 
-class TestGrokToolEnum(unittest.TestCase):
+class TestGrokToolEnum(TestEnvContext):
     """`_grok_tool_enum` — pure mapping, never raises."""
 
     def test_empty_and_non_str_fold_to_other(self):
