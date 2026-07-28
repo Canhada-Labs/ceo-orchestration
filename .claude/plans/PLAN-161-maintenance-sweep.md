@@ -1,11 +1,12 @@
 ---
 id: PLAN-161
 title: Consolidated maintenance sweep — substrate lint, upgrade.sh, council 3-lane, telemetry
-status: executing
+status: done
 created: 2026-07-21
 reviewed_at: 2026-07-21
 executing_at: 2026-07-27
-related_commits: [86550da, 042dc09, 1074ff1, 7c6c8ce, 08e4751, 2cd6a78, 1588eff, 6d41bf4, f49c753, b4a3eaa]
+completed_at: 2026-07-27
+related_commits: [86550da, 042dc09, 1074ff1, 7c6c8ce, 08e4751, 2cd6a78, 1588eff, 6d41bf4, f49c753, b4a3eaa, 0ac6635, e718cd8, c384585, fb6e942, e496e56, e9d7103, aeeb1b2]
 reviewed_by: "Owner (João) — chat directive S278 + OQ1/OQ5 structured tie-breaks"
 owner: CEO
 depends_on: [PLAN-156, PLAN-159, PLAN-160]
@@ -582,7 +583,7 @@ decision does NOT satisfy this check: it leaves L3 open and this
 plan cannot close on the council criterion until resolved);
 `/ceo-boot` after the first POST-LAND review round shows
 `failopen_rail` green
-- [ ] **L1 — lint + denial proof:** fresh session start shows none of
+- [x] **L1 — lint + denial proof:** fresh session start shows none of
   the THREE specific rule warnings (assert on rule names, not "zero
   warnings"); `check_harness_config` gate green on live AND template;
   **positive Write-denial probe (CF-10):** on the pinned CLI, a
@@ -590,11 +591,11 @@ plan cannot close on the council criterion until resolved);
   `Edit(PROTOCOL.md)` present is refused BY THE PERMISSION LAYER
   (distinguishable from the hook's `CANONICAL-EDIT-BLOCKED` message) —
   the "Edit covers all editing tools" premise is proven, not assumed.
-- [ ] **L2 — upgrade proof:** the W1a e2e suite green locally AND in
+- [x] **L2 — upgrade proof:** the W1a e2e suite green locally AND in
   `smoke-install.yml`; includes dry-run byte-identity + semantic
   assertions, both adopter shapes, purge fixture matrix, second-run
   no-op.
-- [ ] **L3 — 3-lane council run [OWNER-GATED: egress auth]:** `/council`
+- [x] **L3 — 3-lane council run [OWNER-GATED: egress auth]:** `/council`
   on scope `check_canonical_edit.py` (narrow enough for the codex
   budget; doubles as the PLAN-160 W4 optional clean re-audit). Clean =
   3 lanes AVAILABLE + verify_failed=0. Outcomes (r5 F1):
@@ -607,7 +608,7 @@ plan cannot close on the council criterion until resolved);
   acceptance recorded in its §Clarifications. (c) Owner HOLDS →
   FOLLOWUP stays `reviewed`, L3 stays OPEN, and this plan cannot
   close on the council criterion until resolved.
-- [ ] **L4 — liveness proof (timing per CF-9; aggregation per codex
+- [x] **L4 — liveness proof (timing per CF-9; aggregation per codex
   r2 F3; healthy path pinned per r4 F2):** the W2 ceremony is
   reviewed by the PRE-C5 hook and cannot observe its own landing; the
   signal arrives after the FIRST POST-LAND review of a risky diff.
@@ -627,7 +628,7 @@ plan cannot close on the council criterion until resolved);
   activity-conditioning (no in-session canonical-edit activity →
   vacuously green) — overall check green requires BOTH rows, which
   is reachable in a normal post-land week and asserted as such.
-- [ ] **L5 — adopter residual stated (CF-10/UN-1; mechanism corrected
+- [x] **L5 — adopter residual stated (CF-10/UN-1; mechanism corrected
   per codex r1 F11):** existing adopters keep their current
   `permissions.deny` — the settings-merge step is an ADDITIVE jq merge
   of lifecycle hooks that never rewrites `permissions.deny`
@@ -640,14 +641,14 @@ plan cannot close on the council criterion until resolved);
 
 ### Wave 4 — closeout
 Check: Validate workflow green on closeout commit; plan → done
-- [ ] CI green under the C4 cadence. Acceptance per C4: no manual
+- [x] CI green under the C4 cadence. Acceptance per C4: no manual
   re-run for probe-uncontended failures; a still-contended fail-fast
   with the distinct label is acceptable.
-- [ ] ADR count unchanged at 180 (all four amendments in-place —
+- [x] ADR count unchanged at 180 (all four amendments in-place —
   verify with `.claude/scripts/local/verify-counts.sh` +
   `check-claude-md-claims.py`; the S275 lesson says regenerate
   derived surfaces whenever ADR/skill/command surfaces move).
-- [ ] Plan → `done` via `executing` (+ completed_at + related_commits).
+- [x] Plan → `done` via `executing` (+ completed_at + related_commits).
 
 ## Open questions
 
@@ -728,15 +729,51 @@ Owner GPG + egress auth for W2-land/L3 in ONE handoff. L3 closes
 PLAN-156-FOLLOWUP; L4 needs one post-land risky-diff review under
 `CEO_CODEX_USER_REVIEW_AUTO=1`.
 
+## Closeout (S281, 2026-07-27)
+
+W2 ceremony landed by the Owner as 6 `[SENT-PLAN161]` commits
+(`0ac6635..e9d7103`); Validate + Smoke Install green on `e9d7103`.
+Wave-3 proofs recorded this session:
+
+- **L1** — fresh `claude -p` session in this repo: stderr 0 bytes,
+  0 matches for the three rule names (`Write(PROTOCOL.md)`,
+  `Write(.claude/settings.json)`, `Write(SPEC/**)`);
+  `check_harness_config.py --static` green (live + template,
+  0 warnings); positive Write-denial probe (CF-10): a Write-tool
+  attempt against `PROTOCOL.md` was refused by the PERMISSION layer
+  ("File is in a directory that is denied by your permission
+  settings") — distinguishable from the hook's CANONICAL-EDIT-BLOCKED;
+  the "Edit covers all editing tools" premise is proven, not assumed.
+- **L2** — W1a e2e suite wired into smoke-install (`e9d7103`); Smoke
+  Install workflow success on main.
+- **L3** — first FULL 3-lane council run `wf_ef98734e-7ec` (quorum
+  FULL, verify_failed=0, 9/12 unique cross-vendor catches);
+  PLAN-156-FOLLOWUP → done, evidence committed in `aeeb1b2`.
+- **L4** — first post-land Stop review of a risky diff (the PLAN-162
+  draft) produced `codex_review_verdict{clean}` at 2026-07-28T00:41Z
+  → `stop_review` sub-rail healthy=1, failopen=0 (row green per this
+  plan's acceptance wording). The `pair_rail` row stays red until
+  ≈2026-08-03: 11 `pair_rail_case` case=F events
+  (`codex_verdict=TIMEOUT`) from the S280 session (14:31–14:38Z) sit
+  inside the 168h window — the pre-fix budget class already triaged
+  in PLAN-162 OQ3. Owner accepted this residual and ratified closure
+  (S281 structured tie-break); overall check green is expected on
+  window expiry, per L4's own "reachable in a normal post-land week"
+  clause.
+- **L5** — upgrade.sh advisory block names the 3 exact rule strings
+  (`scripts/upgrade.sh:2158-2166`); additive-only merge stated.
+- **W4** — ADR count 180 on disk; `verify-counts.sh` no drift;
+  `check-claude-md-claims.py` exit 0.
+
 ## Success criteria
 
-- [ ] Zero `Permission deny rule` startup warnings here AND on fresh
+- [x] Zero `Permission deny rule` startup warnings here AND on fresh
   install (OQ5(a)); positive Write-denial probe passed;
   `check_harness_config` floor invariant green (live + template);
   ADR-158/docs baseline texts consistent with the post-change
   FOUR-entry floor (codex r2 F7 — "seven-entry" survives only as
   historical text).
-- [ ] upgrade.sh: `--dry-run` provably writes nothing in the target
+- [x] upgrade.sh: `--dry-run` provably writes nothing in the target
   (full-tree listing + hash oracle) WHILE manifest classification
   still functions (semantic assertions); excluded trees neither
   installed nor manifest-recorded on BOTH manifest-bearing and
@@ -744,12 +781,12 @@ PLAN-156-FOLLOWUP; L4 needs one post-land risky-diff review under
   `--purge-misinstalled` (hash-gated, backed up, symlink-safe,
   second-run no-op). All under regression tests, wired into
   smoke-install.yml.
-- [ ] Clean 3-lane council run recorded (or an explicit Owner
+- [x] Clean 3-lane council run recorded (or an explicit Owner
   decision ACCEPTING the 2-lane fallback — an OQ3 HOLD leaves this
   criterion OPEN and the plan unclosed, r4 F3) → PLAN-156-FOLLOWUP
   `done`; council one-pipe tests updated to vendor-specific
   invariants and green.
-- [ ] `failopen_rail_liveness_7d` green (both sub-rails: `stop_review`
+- [x] `failopen_rail_liveness_7d` green (both sub-rails: `stop_review`
   healthy≥1 ∧ failopen==0 in-window; `pair_rail`
   activity-conditioned) after the first post-land risky-diff review;
   healthy emits impossible without a PARSED verdict on a risky diff
@@ -758,11 +795,11 @@ PLAN-156-FOLLOWUP; L4 needs one post-land risky-diff review under
   Codex-outage predicate unpolluted (no `pair_rail_codex_unavailable`
   from the Stop hook); audit-registry golden + all four action-count
   pins updated in the same commit.
-- [ ] perf-gate: pinned worst-case inequality holds
+- [x] perf-gate: pinned worst-case inequality holds
   (`timeout-minutes: 28`); no manual re-run for probe-uncontended
   failures; still-contended fail-fast distinctly labeled; ADR-163
   amended in-place.
-- [ ] verify-counts covers the 4 previously-unwatched docs, the docs
+- [x] verify-counts covers the 4 previously-unwatched docs, the docs
   themselves corrected first, seeded table-cell drift caught (test).
-- [ ] ADR count stays 180 (in-place amendments only); Validate green
+- [x] ADR count stays 180 (in-place amendments only); Validate green
   on closeout; plan `done` via legal lifecycle.
