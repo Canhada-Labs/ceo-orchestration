@@ -1,0 +1,24 @@
+# MANIFEST.sha256 — PLAN-163 pin-pack (consolidated; remanifest post fix-pass R3, 2026-07-28)
+# format: sha256  path-staged  ->  path-destino-real
+# Hashes RECOMPUTED after FIX-R3 (FXalpha fixture-removal + FXbeta manifest-malformed fail-closed);
+#   +2 rows = migrated test_check_pair_rail_{golden,matrix}.py (18 -> 20). THIS file is authoritative.
+9562f3e89e9a34087eb36247acc5765303184a756d2c8d969bd80efedd357da4  .claude/plans/PLAN-163/staged/pin-pack/.claude/adr/ADR-111-locked-corpus-governance.md  ->  .claude/adr/ADR-111-locked-corpus-governance.md
+f278083927b9bf46babcbbd61d06cfbd51f9ad91a3f7193151b217fcf4d1a5f6  .claude/plans/PLAN-163/staged/pin-pack/.claude/adr/ADR-182-codex-payload-pin-enforcement.md  ->  .claude/adr/ADR-182-codex-payload-pin-enforcement.md
+0145cc21f84a83a6be2083a8c0a45514072d6e419c6bf743bfcebe5288b08d3e  .claude/plans/PLAN-163/staged/pin-pack/.claude/adr/README.md  ->  .claude/adr/README.md
+3e17aab56476d3f1c3437ffb9ff119c4230562b6781c97c55c4b40dfa834c629  .claude/plans/PLAN-163/staged/pin-pack/.claude/governance/README.md  ->  .claude/governance/README.md
+515e852181f2cf01adefe6ae27b8c7c4a402db2f152e0c9130432281076ff285  .claude/plans/PLAN-163/staged/pin-pack/.claude/governance/codex-cli-binary-sha256.txt  ->  .claude/governance/codex-cli-binary-sha256.txt
+6729c2b2b5a1c647c497c140e8c8104619763ba7625d99fe0afe8e78b57c54ba  .claude/plans/PLAN-163/staged/pin-pack/.claude/governance/codex-cli-pin-manifest.json  ->  .claude/governance/codex-cli-pin-manifest.json
+2309a60725a0ff30a159c12b2ca2556567ee2174508644105ca4947a27f26adf  .claude/plans/PLAN-163/staged/pin-pack/.claude/governance/pair-rail-verdict-template.md  ->  .claude/governance/pair-rail-verdict-template.md
+7809f0aa32a7969d8370cc24d03feb50981b6973b6ca5fd66702b342ec53ea7a  .claude/plans/PLAN-163/staged/pin-pack/.claude/hooks/check_arbitration_kernel.py  ->  .claude/hooks/check_arbitration_kernel.py
+348704085a9e592108a27a06e87bb4569ac2de4636dd1890fdc102946538da21  .claude/plans/PLAN-163/staged/pin-pack/.claude/hooks/check_pair_rail.py  ->  .claude/hooks/check_pair_rail.py
+fcfbb165d980ed9b86a00809cfe697c6dfd6b288d2d44a717abea0a1bfb102ba  .claude/plans/PLAN-163/staged/pin-pack/.claude/hooks/tests/test_check_pair_rail.py  ->  .claude/hooks/tests/test_check_pair_rail.py
+94664eebe2c31dfd886d68f11629089ffc6b5d7c5145cf5ff26d0e5e35d1069c  .claude/plans/PLAN-163/staged/pin-pack/.claude/hooks/tests/test_check_pair_rail_golden.py  ->  .claude/hooks/tests/test_check_pair_rail_golden.py
+72fb0fa5971e228bbbab3d410cd8c0ae7dcfed0c2909bdeac208c3c83b911ee9  .claude/plans/PLAN-163/staged/pin-pack/.claude/hooks/tests/test_check_pair_rail_matrix.py  ->  .claude/hooks/tests/test_check_pair_rail_matrix.py
+420fc312f21a42b5fbf379c8cf04ee3503e485b4ff2dc0f0990e461fe7e90348  .claude/plans/PLAN-163/staged/pin-pack/.claude/hooks/tests/test_check_pair_rail_payload_pin.py  ->  .claude/hooks/tests/test_check_pair_rail_payload_pin.py
+0fc920b2b1000be46f488660f0a3a0c9e446d5b6f6907a1a7b3f412743dd8b3a  .claude/plans/PLAN-163/staged/pin-pack/.claude/scripts/check-substrate-watch.py  ->  .claude/scripts/check-substrate-watch.py
+c52131f2fb667700e4e6a796dac37bb23bc3ceb86db40dfa95b7c6ee221b9cac  .claude/plans/PLAN-163/staged/pin-pack/.claude/scripts/local/pair-rail-gate.sh  ->  .claude/scripts/local/pair-rail-gate.sh
+a2dad9af452dbc43bc233d077ab6f97197f774bb2f3bc2e075a9e6c3cff7c367  .claude/plans/PLAN-163/staged/pin-pack/.claude/scripts/tests/test_check_substrate_watch.py  ->  .claude/scripts/tests/test_check_substrate_watch.py
+52a11425c2f0fc27345c132d83a97c8882192635261d5ca9b5a9d33a5dbe62e3  .claude/plans/PLAN-163/staged/pin-pack/.github/scripts/tests/test_validate_pair_rail_verdict.py  ->  .github/scripts/tests/test_validate_pair_rail_verdict.py
+afedc5f8fdf47cbd56228161013640c49923aeffb21fd2ae3b0471d473c4f5c8  .claude/plans/PLAN-163/staged/pin-pack/.github/scripts/validate-pair-rail-verdict.py  ->  .github/scripts/validate-pair-rail-verdict.py
+49fb93f588a3c4de26c72532c77ff8b5c7e01168f5f0b9812c05d35b04fdef91  .claude/plans/PLAN-163/staged/pin-pack/.github/workflows/release.yml  ->  .github/workflows/release.yml
+1eef0ce2e06a48bd1f6fcd7e797dbf6b44a4e9f6e490bdeb6a2935a4013786be  .claude/plans/PLAN-163/staged/pin-pack/docs/CROSS-LLM-THREAT-MODEL.md  ->  docs/CROSS-LLM-THREAT-MODEL.md
