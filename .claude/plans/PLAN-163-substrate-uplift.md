@@ -476,3 +476,26 @@ incorporados ANTES da execução (fonte: handoff S283→S284):
 - [ ] Edits canônicos/kernel via staged pack + pair-rail APPROVE + cerimônia
   GPG (padrão PLAN-160/161); CLAUDE.md tripla de counts no closeout.
 - [ ] Validate GREEN no closeout; plano → done com related_commits.
+
+## Progress log
+
+- **2026-07-29 (S285):** GATE-PIN landado pelo Owner (`a4371c7`,
+  `[SENT-PLAN163-PIN]`) + closeout do pin executado (ADR count 181 em 7
+  superfícies, claims + verify-counts PASS, anchor tracked; `7860d62`,
+  Validate GREEN). **GATE-V2 = FAIL**: probe fresco S281-pattern emitiu
+  `case F / codex TIMEOUT` aos 30 s exatos; root cause MEDIDO = default
+  `CEO_PAIR_RAIL_TIMEOUT_S=30` < 36,3 s reais de um verdito codex (12/12
+  cases da história do log são F/TIMEOUT — o rail nunca completou review
+  vivo; o pin corrigiu integridade, não latência). Evidência:
+  `PLAN-163/probes/GATE-V2-2026-07-29-FAIL-diagnosis.md` (`e540cd9`).
+  **Owner ratificou opção C (tie-break S285): incidente formal do rail,
+  pack ADIADO** até o fix durável + re-âncora via **PLAN-164** (draft).
+
+## Blockers
+
+- **Leaf:** PLAN-164 (timeout uplift + re-âncora) precisa chegar a `done`
+  — o case-F pós-âncora tornou `failopen==0` insatisfazível contra a
+  âncora `a4371c7`; o GATE-V2 só é satisfazível sob âncora nova. Cerimônia
+  do pack (Passo 4 do runbook) proibida até GATE-V2 PASS.
+- **Next (deste plano):** após PLAN-164 W3, retomar CEREMONY-RUNBOOK.md
+  Passo 4 com `--confirm-gate-pin-done --confirm-gate-v2-fresh`.
