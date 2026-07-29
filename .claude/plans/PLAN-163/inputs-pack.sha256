@@ -1,0 +1,47 @@
+# MANIFEST.sha256 — PLAN-163 main-pack (consolidated; remanifest post fix-pass R3, 2026-07-28)
+# format: sha256  path-staged  ->  path-destino-real
+# Hashes RECOMPUTED after FIX-R3 (FXgamma/C3: check_canonical_edit.py + test_session_roots_write_guard.py)
+#   over current on-disk staged bytes (FULL PREFLIGHT remanifest). THIS file is authoritative.
+a2dc9eacf385e1040cdf0558216411f24b81f093bc3ad8637f6d57687f626b9e  .claude/plans/PLAN-163/staged/main-pack/.claude/adr/ADR-149-model-id-allowlist.md  ->  .claude/adr/ADR-149-model-id-allowlist.md
+abf06fb242ddb0d9f44d7725dd8d6c881a30fbed249b545ca3b23ffbfca0e297  .claude/plans/PLAN-163/staged/main-pack/.claude/adr/ADR-181-claude-5-model-refresh.md  ->  .claude/adr/ADR-181-claude-5-model-refresh.md
+a4e21ca8f04f94469b4e79262a256b848e30e8912310d74e8ef42dedc967c7fd  .claude/plans/PLAN-163/staged/main-pack/.claude/adr/ADR-183-directory-added-notification-events.md  ->  .claude/adr/ADR-183-directory-added-notification-events.md
+acd9b05f8bf1d789c743f390a5218ababfe2c733ff13cdd49e78785c479abcee  .claude/plans/PLAN-163/staged/main-pack/.claude/data/hook-schema-2.1.220.json  ->  .claude/data/hook-schema-2.1.220.json
+b4d62a956f7365fccc4ff02c565dcc16319342b685a5f80131a39983916b7c7f  .claude/plans/PLAN-163/staged/main-pack/.claude/hooks/_lib/agent_frontmatter.py  ->  .claude/hooks/_lib/agent_frontmatter.py
+419ca275c8f968f7caf8117ad12baef52e397ad343e69430333fb720d49d22a9  .claude/plans/PLAN-163/staged/main-pack/.claude/hooks/_lib/audit_emit.py  ->  .claude/hooks/_lib/audit_emit.py
+9f0d41aa1f6fafbb20ad5af61093e031ac5b7f66e6891a8bdde62c151643c0b7  .claude/plans/PLAN-163/staged/main-pack/.claude/hooks/_lib/model_routing.py  ->  .claude/hooks/_lib/model_routing.py
+fedbc2b198b83fe34d618ac97bca2fd8f42a4320295a5c76ff5771da0518c865  .claude/plans/PLAN-163/staged/main-pack/.claude/hooks/audit_log.py  ->  .claude/hooks/audit_log.py
+dc10bc8f547e6b94dcb4955d8f11f25d8585b359f6b9955e2a186a2a823b5571  .claude/plans/PLAN-163/staged/main-pack/.claude/hooks/check_canonical_edit.py  ->  .claude/hooks/check_canonical_edit.py
+22362a02116ebd36f5fc8dbbfbfbf8569b73badea18090d2cbf7ae7dd84327cc  .claude/plans/PLAN-163/staged/main-pack/.claude/hooks/check_directory_added.py  ->  .claude/hooks/check_directory_added.py
+b707fd05c775b7126a56ce6b145531f47d244986f7e85a6a308b2acda10582ed  .claude/plans/PLAN-163/staged/main-pack/.claude/hooks/check_notification.py  ->  .claude/hooks/check_notification.py
+266fa340d4da68197109a2bf32cc65cd0f2a0f554b77cc258ddefe9fb0d174e5  .claude/plans/PLAN-163/staged/main-pack/.claude/hooks/tests/test_adr149_validator_parity.py  ->  .claude/hooks/tests/test_adr149_validator_parity.py
+ef1ca23ab42b28e3a4ee5ab11e83c53bd24e985f63a75b6b20b2845cc4e410b0  .claude/plans/PLAN-163/staged/main-pack/.claude/hooks/tests/test_adr_052_role_to_model_coverage.py  ->  .claude/hooks/tests/test_adr_052_role_to_model_coverage.py
+488e36f93133b1ec16552b58022b8d6354a0d18f5a6e0798d4ac103343085a95  .claude/plans/PLAN-163/staged/main-pack/.claude/hooks/tests/test_audit_emit_api_contract.py  ->  .claude/hooks/tests/test_audit_emit_api_contract.py
+ff1bb426537bc166ff5ebb96eae790774b44c3302fca59b33806ccf45aad3bd3  .claude/plans/PLAN-163/staged/main-pack/.claude/hooks/tests/test_audit_emit_plan163_lifecycle_actions.py  ->  .claude/hooks/tests/test_audit_emit_plan163_lifecycle_actions.py
+9e7dce1cf70762fc7b1910c4f867f8913f3362289eafe790bb52682ac337d070  .claude/plans/PLAN-163/staged/main-pack/.claude/hooks/tests/test_check_directory_added.py  ->  .claude/hooks/tests/test_check_directory_added.py
+3416a76a4f13be8b2668891b6942374823717b11da89581b156bffe698ae0fdc  .claude/plans/PLAN-163/staged/main-pack/.claude/hooks/tests/test_check_notification.py  ->  .claude/hooks/tests/test_check_notification.py
+93d58e73f9d4664e5c9522d4e3446086723c722cf850a52514c81facea09f5d0  .claude/plans/PLAN-163/staged/main-pack/.claude/hooks/tests/test_check_tier_policy_misrouting_24h.py  ->  .claude/hooks/tests/test_check_tier_policy_misrouting_24h.py
+335f39dbb10e69bfb388f2a8d0fa57db07b09ed8656f2728d51d25e0be17c55b  .claude/plans/PLAN-163/staged/main-pack/.claude/hooks/tests/test_codex_egress_proof_telemetry.py  ->  .claude/hooks/tests/test_codex_egress_proof_telemetry.py
+5958d27b5dba25ba550c54f7909da587a9c766bb403d235b62ffdd743e58233c  .claude/plans/PLAN-163/staged/main-pack/.claude/hooks/tests/test_git_bypass_guard.py  ->  .claude/hooks/tests/test_git_bypass_guard.py
+7419da4bca92fc782bf8c308f1d72ae6dbb598f1d511fc2e6e0eb7dabd2c9a59  .claude/plans/PLAN-163/staged/main-pack/.claude/hooks/tests/test_model_routing_resolve.py  ->  .claude/hooks/tests/test_model_routing_resolve.py
+c281ce9d48cd8f41883c4b6d775d789f50664bb4b9253bc36d9b6b77a498265e  .claude/plans/PLAN-163/staged/main-pack/.claude/hooks/tests/test_model_routing_resolve_full.py  ->  .claude/hooks/tests/test_model_routing_resolve_full.py
+f9428e8f38ce05d6c1ab0851bb96c2375f3a7c5fbac011b41c4bc36a5041ea89  .claude/plans/PLAN-163/staged/main-pack/.claude/hooks/tests/test_session_roots_write_guard.py  ->  .claude/hooks/tests/test_session_roots_write_guard.py
+e17b847fbcf055e4989b413bb6e6857199717b03ea2462f860b7f255c1d65759  .claude/plans/PLAN-163/staged/main-pack/.claude/hooks/tests/test_template_dogfood_parity.py  ->  .claude/hooks/tests/test_template_dogfood_parity.py
+0bb9f6f18b5b70fa72d9e0167df84e1f5af544c413e53267440e929e0cb1aced  .claude/plans/PLAN-163/staged/main-pack/.claude/hooks/tests/test_w5_scrub_enforcement.py  ->  .claude/hooks/tests/test_w5_scrub_enforcement.py
+b709f4c9325c5483bfe55cefbe0e7db64733118e7e173ce4299cbbe3d012cd7a  .claude/plans/PLAN-163/staged/main-pack/.claude/scripts/check-hook-stdout-schema.py  ->  .claude/scripts/check-hook-stdout-schema.py
+861e5fb69986e065b5bf8cb9d42c3708ed3793b91306abcf29542094b41be728  .claude/plans/PLAN-163/staged/main-pack/.claude/scripts/tests/test_check_hook_stdout_schema.py  ->  .claude/scripts/tests/test_check_hook_stdout_schema.py
+c7fab564952fc6534fcb9a4e23bb164a146a43c4b2e8c05b3a827b61421e80b3  .claude/plans/PLAN-163/staged/main-pack/.claude/scripts/tests/test_generate_available_models.py  ->  .claude/scripts/tests/test_generate_available_models.py
+fece649605850aadfdfe6ce536377f4071eb973d825facc8008b28bcd9a22023  .claude/plans/PLAN-163/staged/main-pack/.claude/scripts/tests/test_upgrade_settings_migration.py  ->  .claude/scripts/tests/test_upgrade_settings_migration.py
+c0fa57ddff14cbd0ba7aea3b855040799dd61e3d79bad8d473e82ef3b0c8ce03  .claude/plans/PLAN-163/staged/main-pack/.claude/scripts/tier_policy_cli/_types.py  ->  .claude/scripts/tier_policy_cli/_types.py
+5ed4794dcf4b746f360cb17a16f3337344bb75e04291124f14b781e676fdfa8d  .claude/plans/PLAN-163/staged/main-pack/.claude/scripts/tier_policy_cli/tests/test_types.py  ->  .claude/scripts/tier_policy_cli/tests/test_types.py
+a39a873540e7cc644d19cdf9a4d3ee41530074fba9a041afbc2e74112bb9ab29  .claude/plans/PLAN-163/staged/main-pack/.claude/scripts/validate-governance.sh  ->  .claude/scripts/validate-governance.sh
+df2f7748e3e11bc2c29383a4b0c07f8179652023d8c9a3731c7092dba03218c3  .claude/plans/PLAN-163/staged/main-pack/.claude/settings.json  ->  .claude/settings.json
+21e250429471ec8f43e95e5dc40629bb3e5e705e9f385fc5c2ea5cb49272ebc9  .claude/plans/PLAN-163/staged/main-pack/.github/workflows/validate.yml  ->  .github/workflows/validate.yml
+1324249a3a1bae22984e5b623a3c9683094ec557c431f5e9098203b0c82b4e4e  .claude/plans/PLAN-163/staged/main-pack/.gitignore  ->  .gitignore
+595cf5fb3e23830272b6f5e0245ef01aea4557712994ffcd7a64903f8b8b4772  .claude/plans/PLAN-163/staged/main-pack/SPEC/v1/audit-log.schema.md  ->  SPEC/v1/audit-log.schema.md
+ca3e1d2ec802d0c8ab39886897b6899e66fdb4969af26c0809e8448625ce92f1  .claude/plans/PLAN-163/staged/main-pack/docs/ACCELERATORS.md  ->  docs/ACCELERATORS.md
+cd2e4ae631cede12e4752a322bb1a9aabea41e97e30ba24acd674f5690880192  .claude/plans/PLAN-163/staged/main-pack/docs/CEO-MODEL-ROUTING.md  ->  docs/CEO-MODEL-ROUTING.md
+f8661e573403dd19c18d02e60ad5b2ecfe1bb5b880fbfbe138f0f8c736f2b174  .claude/plans/PLAN-163/staged/main-pack/docs/substrate-adopt-2026-08.md  ->  docs/substrate-adopt-2026-08.md
+aa047a50120ab7f7ed03bdd04cc390edbe09955ea2955e4702a2c50f7c0fec27  .claude/plans/PLAN-163/staged/main-pack/scripts/local/smoke-install-parity.sh  ->  scripts/local/smoke-install-parity.sh
+3b7abd7320babe3224d6b22b79ff1cb0b3f2c8969e3260e50cfa64ed29f96e27  .claude/plans/PLAN-163/staged/main-pack/scripts/upgrade.sh  ->  scripts/upgrade.sh
+cf72041ee70be4f8c627d353eb2b21db16af9856d86180e694fcf32a6eb71db8  .claude/plans/PLAN-163/staged/main-pack/templates/settings/settings.base.json  ->  templates/settings/settings.base.json
+1af4008169286eec3f94479d7bcbe687877342f14823e4fa6d20cb7f0b10c953  .claude/plans/PLAN-163/staged/main-pack/templates/settings/settings.user.json  ->  templates/settings/settings.user.json
