@@ -490,6 +490,16 @@ incorporados ANTES da execução (fonte: handoff S283→S284):
   `PLAN-163/probes/GATE-V2-2026-07-29-FAIL-diagnosis.md` (`e540cd9`).
   **Owner ratificou opção C (tie-break S285): incidente formal do rail,
   pack ADIADO** até o fix durável + re-âncora via **PLAN-164** (draft).
+- **2026-07-29 (S285, codex review dos W2 vivos):** 2 P2 ABERTOS a resolver
+  ANTES do commit W2 da cerimônia do pack: (a) pricing Sonnet 5 estático
+  não atravessa o cutoff 2026-08-31 — `_compute_event_cost_usd` ignora o
+  ts do evento; design duplicado em `audit-telemetry.py` + `ceo-cost.py` +
+  `budget-summary.py` (fix = pricing event-date-aware, não mutação da
+  linha global); (b) falta a linha `claude-opus-4-8-fast` nas 4
+  superfícies de pricing + fleet oracle (id válido em
+  `canonical_models.json` / `model-deprecations.json` → hoje reporta
+  custo zero/unknown). 3º finding (estado review-loop commitável)
+  RESOLVIDO no ato via `.gitignore` (`.claude/state/review-loop/`).
 
 ## Blockers
 

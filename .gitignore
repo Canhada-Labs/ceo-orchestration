@@ -60,6 +60,12 @@ state/mcp_client_secrets/
 # framework source.
 .claude/state/turbo/
 
+# S285 codex-review finding: review-loop approval state (machine-local
+# approved-diff signatures written by the review hook at runtime). If
+# committed, every checkout would inherit a pre-approved signature and
+# `review_loop.decide()` would short-circuit on matching future diffs.
+.claude/state/review-loop/
+
 # PLAN-044 audit-v2 C5-P0-03: per-machine local Claude Code permission
 # overrides (`claude /permissions`). This file is written by Claude Code
 # at runtime and is intentionally per-developer / per-machine — it MUST
