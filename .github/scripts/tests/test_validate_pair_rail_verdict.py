@@ -18,6 +18,15 @@ Coverage:
 - Legacy --commit-sha mismatch → exit VERDICT_INVALID (3)
 - --parent-sha takes precedence when both args passed
 
+ADR-182 payload pin (PLAN-163 T5.2 pin-pack):
+- --codex-pin-manifest-file + matching triple/sha envelope → exit 0
+- payload sha mismatch → VERDICT_INVALID (3)
+- targetTriple absent from manifest → VERDICT_INVALID (3)
+- envelope missing triple/sha fields → VERDICT_INVALID (3)
+- manifest file unreadable → infra (1)
+- comment-only tombstone as --codex-cli-binary-sha256-file → legacy
+  launcher pin skipped (exit 0)
+
 Stdlib only. Python ≥3.9. Run via pytest from repo root.
 """
 
@@ -216,6 +225,153 @@ class TestReleaseTagReplayDefense(unittest.TestCase):
         )
         self.assertEqual(r.returncode, EXIT_VERDICT_INVALID)
         self.assertIn("release_tag mismatch", r.stderr)
+
+
+# ---------------------------------------------------------------------
+# ADR-182 payload pin (PLAN-163 T5.2 pin-pack)
+# ---------------------------------------------------------------------
+
+_TRIPLE = "aarch64-apple-darwin"
+_PAYLOAD_SHA = "80a3933d11a9d13ef806aa24f7bb8afc9169cfe4e9b09d6da6a92922cbde9cff"
+
+
+def _adr182_tool_versions(
+    *, triple: str = _TRIPLE, payload_sha: str = _PAYLOAD_SHA
+) -> str:
+    return (
+        "  codex_cli: 0.129.0\n"
+        f"  codex_target_triple: {triple}\n"
+        f"  codex_payload_sha256: {payload_sha}"
+    )
+
+
+def _manifest_json(
+    *, triple: str = _TRIPLE, payload_sha: str = _PAYLOAD_SHA
+) -> str:
+    import json as _json
+    return _json.dumps(
+        {
+            "schema": 1,
+            "package_version": "0.144.6",
+            "npm_integrity": "sha512-test-only",
+            "payloads": {
+                triple: {
+                    "path": (
+                        "@openai/codex-darwin-arm64/vendor/"
+                        + triple + "/bin/codex"
+                    ),
+                    "sha256": payload_sha,
+                }
+            },
+        }
+    )
+
+
+def _run_with_manifest(args, verdict_text: str, manifest_text):
+    """Run validator with a tmpdir-scoped verdict + manifest pair.
+
+    ``manifest_text`` None → pass a nonexistent manifest path (the
+    infra arm).
+    """
+    with tempfile.TemporaryDirectory() as td:
+        verdict_path = Path(td) / "verdict.md"
+        verdict_path.write_text(verdict_text, encoding="utf-8")
+        manifest_path = Path(td) / "codex-cli-pin-manifest.json"
+        if manifest_text is not None:
+            manifest_path.write_text(manifest_text, encoding="utf-8")
+        cmd = [
+            sys.executable, str(SCRIPT),
+            "--verdict-file", str(verdict_path),
+            "--codex-pin-manifest-file", str(manifest_path),
+            *args,
+        ]
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+
+
+class TestAdr182PayloadPin(unittest.TestCase):
+    """--codex-pin-manifest-file: fail-CLOSED payload-pin enforcement."""
+
+    BASE_ARGS = ["--parent-sha", "a" * 40, "--release-tag", "v1.99.0"]
+
+    def _verdict(self, tool_versions_block: str) -> str:
+        return _make_verdict(
+            parent_sha="a" * 40,
+            release_tag="v1.99.0",
+            tool_versions_block=tool_versions_block,
+        )
+
+    def test_matching_triple_and_sha_passes(self):
+        v = self._verdict(_adr182_tool_versions())
+        r = _run_with_manifest(self.BASE_ARGS, v, _manifest_json())
+        self.assertEqual(r.returncode, EXIT_OK, msg=r.stderr)
+
+    def test_payload_sha_mismatch_returns_invalid(self):
+        v = self._verdict(_adr182_tool_versions(payload_sha="f" * 64))
+        r = _run_with_manifest(self.BASE_ARGS, v, _manifest_json())
+        self.assertEqual(r.returncode, EXIT_VERDICT_INVALID)
+        self.assertIn("codex_payload_sha256 mismatch", r.stderr)
+
+    def test_triple_absent_from_manifest_returns_invalid(self):
+        v = self._verdict(
+            _adr182_tool_versions(triple="x86_64-unknown-linux-musl")
+        )
+        r = _run_with_manifest(self.BASE_ARGS, v, _manifest_json())
+        self.assertEqual(r.returncode, EXIT_VERDICT_INVALID)
+        self.assertIn("absent from", r.stderr)
+
+    def test_envelope_missing_pin_fields_returns_invalid(self):
+        # Old-style envelope (launcher sha only, no triple/payload sha)
+        v = self._verdict(
+            "  codex_cli: 0.129.0\n"
+            "  codex_cli_binary_sha256: " + "a" * 64
+        )
+        r = _run_with_manifest(self.BASE_ARGS, v, _manifest_json())
+        self.assertEqual(r.returncode, EXIT_VERDICT_INVALID)
+        self.assertIn("lacks tool_versions.codex_target_triple", r.stderr)
+
+    def test_manifest_unreadable_is_infra(self):
+        v = self._verdict(_adr182_tool_versions())
+        r = _run_with_manifest(self.BASE_ARGS, v, None)
+        self.assertEqual(r.returncode, EXIT_INFRA_ERROR)
+        self.assertIn("INFRA", r.stderr)
+
+    def test_manifest_bad_schema_returns_invalid(self):
+        v = self._verdict(_adr182_tool_versions())
+        r = _run_with_manifest(self.BASE_ARGS, v, '{"schema": 2}')
+        self.assertEqual(r.returncode, EXIT_VERDICT_INVALID)
+        self.assertIn("schema violation", r.stderr)
+
+
+class TestLegacyLauncherPinTombstone(unittest.TestCase):
+    """The retired codex-cli-binary-sha256.txt is comment-only; the
+    legacy --codex-cli-binary-sha256-file path must treat it as "no
+    launcher pin" and skip (ADR-182 tombstone semantics)."""
+
+    def test_comment_only_pin_file_skips_legacy_check(self):
+        v = _make_verdict(
+            parent_sha="a" * 40,
+            release_tag="v1.99.0",
+            tool_versions_block="  codex_cli: 0.129.0",
+        )
+        with tempfile.TemporaryDirectory() as td:
+            verdict_path = Path(td) / "verdict.md"
+            verdict_path.write_text(v, encoding="utf-8")
+            pin_path = Path(td) / "codex-cli-binary-sha256.txt"
+            pin_path.write_text(
+                "# RETIRED tombstone (ADR-182) — no pin hex here\n",
+                encoding="utf-8",
+            )
+            r = subprocess.run(
+                [
+                    sys.executable, str(SCRIPT),
+                    "--verdict-file", str(verdict_path),
+                    "--codex-cli-binary-sha256-file", str(pin_path),
+                    "--parent-sha", "a" * 40,
+                    "--release-tag", "v1.99.0",
+                ],
+                capture_output=True, text=True, timeout=30,
+            )
+        self.assertEqual(r.returncode, EXIT_OK, msg=r.stderr)
 
 
 if __name__ == "__main__":

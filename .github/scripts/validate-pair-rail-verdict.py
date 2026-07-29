@@ -15,7 +15,23 @@ R1 S-Sec-4 inputs_hash determinism + R1 C5 Codex CLI pin enforcement
       --max-age-hours 24 \\
       --recompute-inputs-hash \\
       --codex-cli-pin-file .claude/governance/codex-cli-pin.txt \\
+      --codex-pin-manifest-file .claude/governance/codex-cli-pin-manifest.json \\
       --inputs-hash-paths-file .claude/governance/pair-rail-inputs-hash-manifest.txt
+
+## ADR-182 payload pin (PLAN-163 T5.2)
+
+`--codex-pin-manifest-file` enforces the payload pin: the verdict
+envelope MUST declare `tool_versions.codex_target_triple` (the platform
+triple of the run that generated the verdict) and
+`tool_versions.codex_payload_sha256` (sha256 of the NATIVE codex
+payload for that triple — NOT the npm JS launcher). The validator
+compares the declared sha against
+`manifest.payloads[<triple>].sha256`. Fail-CLOSED: missing fields,
+triple absent from the manifest, malformed entry, or sha mismatch →
+VERDICT_INVALID (3). Manifest file unreadable → infra (1). The legacy
+`--codex-cli-binary-sha256-file` launcher-hash pin is retained only for
+pre-ADR-182 tags; the live pin file is a comment-only tombstone, which
+that legacy path treats as "no pin" (skip).
 
 ## parent_sha vs commit_sha (S104 redesign)
 
@@ -186,6 +202,16 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--recompute-inputs-hash", action="store_true")
     parser.add_argument("--codex-cli-pin-file", default="")
     parser.add_argument("--codex-cli-binary-sha256-file", default="")
+    parser.add_argument(
+        "--codex-pin-manifest-file",
+        default="",
+        help=(
+            "ADR-182 payload-pin manifest (codex-cli-pin-manifest.json). "
+            "When passed, verdict.tool_versions.codex_target_triple + "
+            ".codex_payload_sha256 MUST match the manifest entry "
+            "(fail-CLOSED — VERDICT_INVALID on any miss)."
+        ),
+    )
     parser.add_argument("--inputs-hash-paths-file", default="")
     args = parser.parse_args(argv)
 
@@ -378,6 +404,95 @@ def main(argv: Optional[List[str]] = None) -> int:
                     file=sys.stderr,
                 )
                 return EXIT_VERDICT_INVALID
+
+    # ADR-182 (PLAN-163 T5.2): payload-pin manifest enforcement. The
+    # verdict envelope carries the sha256 of the NATIVE codex payload
+    # for the platform triple of the generating run (wire-shape defined
+    # in ADR-182: scalar `tool_versions.codex_payload_sha256` + scalar
+    # `tool_versions.codex_target_triple`); the validator compares it
+    # against `payloads[<triple>].sha256` in the manifest. Fail-CLOSED
+    # on everything except an unreadable manifest file (infra).
+    if args.codex_pin_manifest_file:
+        manifest_path = Path(args.codex_pin_manifest_file)
+        try:
+            manifest_raw = manifest_path.read_text(encoding="utf-8")
+        except OSError as e:
+            print(
+                f"INFRA: codex-pin-manifest-file unreadable at "
+                f"{manifest_path}: {e}",
+                file=sys.stderr,
+            )
+            return EXIT_INFRA_ERROR
+        try:
+            manifest = json.loads(manifest_raw)
+        except ValueError as e:
+            print(
+                f"INVALID: codex-pin-manifest-file is not valid JSON "
+                f"({e}) — fail-CLOSED per ADR-182",
+                file=sys.stderr,
+            )
+            return EXIT_VERDICT_INVALID
+        if (
+            not isinstance(manifest, dict)
+            or manifest.get("schema") != 1
+            or not isinstance(manifest.get("payloads"), dict)
+        ):
+            print(
+                "INVALID: codex-pin-manifest-file schema violation "
+                "(expected schema=1 + payloads dict) — fail-CLOSED per "
+                "ADR-182",
+                file=sys.stderr,
+            )
+            return EXIT_VERDICT_INVALID
+        tool_versions = verdict.get("tool_versions", {})
+        if not isinstance(tool_versions, dict):
+            print(
+                f"INVALID: tool_versions field must be a dict for "
+                f"payload-pin check, got "
+                f"{type(tool_versions).__name__}: {tool_versions!r}",
+                file=sys.stderr,
+            )
+            return EXIT_VERDICT_INVALID
+        declared_triple = str(
+            tool_versions.get("codex_target_triple", "")
+        ).strip()
+        declared_payload_sha = str(
+            tool_versions.get("codex_payload_sha256", "")
+        ).strip()
+        if not declared_triple or not declared_payload_sha:
+            print(
+                "INVALID: ADR-182 payload pin requested "
+                f"(manifest='{manifest_path}') but verdict envelope "
+                "lacks tool_versions.codex_target_triple and/or "
+                "tool_versions.codex_payload_sha256",
+                file=sys.stderr,
+            )
+            return EXIT_VERDICT_INVALID
+        entry = manifest["payloads"].get(declared_triple)
+        if not isinstance(entry, dict):
+            print(
+                f"INVALID: targetTriple '{declared_triple}' absent from "
+                f"codex-pin-manifest payloads — fail-CLOSED per ADR-182",
+                file=sys.stderr,
+            )
+            return EXIT_VERDICT_INVALID
+        expected_payload_sha = str(entry.get("sha256", "")).strip()
+        if not re.match(r"^[0-9a-f]{64}$", expected_payload_sha):
+            print(
+                f"INVALID: manifest entry for '{declared_triple}' has "
+                f"malformed sha256 — fail-CLOSED per ADR-182",
+                file=sys.stderr,
+            )
+            return EXIT_VERDICT_INVALID
+        if declared_payload_sha != expected_payload_sha:
+            print(
+                f"INVALID: codex_payload_sha256 mismatch for "
+                f"'{declared_triple}' — "
+                f"declared='{declared_payload_sha[:16]}', "
+                f"pin='{expected_payload_sha[:16]}'",
+                file=sys.stderr,
+            )
+            return EXIT_VERDICT_INVALID
 
     # GPG signature presence (verifies via separate `git verify-tag` in
     # release.yml; here we just assert the field is present + non-empty)

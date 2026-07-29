@@ -278,7 +278,11 @@ class SubstrateWatchTest(unittest.TestCase):
         row = report["components"][0]
         self.assertTrue(row["drift"])
         self.assertIsNotNone(row["runbook"])
-        self.assertIn("ADR-111", row["runbook"])
+        # PLAN-163 T5.2 (pin-pack): the pin ceremony moved from the
+        # ADR-111 launcher-hash procedure to the ADR-182 payload-pin
+        # manifest; the runbook must name the NEW ceremony + manifest.
+        self.assertIn("ADR-182", row["runbook"])
+        self.assertIn("codex-cli-pin-manifest.json", row["runbook"])
         self.assertIn("re-record", row["runbook"])
         self.assertIn("fixtures/adapters/codex", row["runbook"])
 

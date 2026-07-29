@@ -101,8 +101,10 @@ _PROBE_ARGV: Dict[str, List[str]] = {
 _CODEX_FIXTURE_RUNBOOK = (
     "codex-cli drift — fixture re-record runbook (PLAN-155 debate A12): do "
     "NOT re-record fixtures against the new binary directly. (1) bump the "
-    "pin FIRST via the ADR-111 pin ceremony (codex-cli-pin.txt + "
-    "codex-cli-binary-sha256.txt); (2) THEN re-record the PLAN-155 Wave-1 "
+    "pin FIRST via the ADR-182 pin ceremony (codex-cli-pin.txt semver range "
+    "+ codex-cli-pin-manifest.json per-triple PAYLOAD sha256 — the retired "
+    "codex-cli-binary-sha256.txt launcher hash is a tombstone); (2) THEN "
+    "re-record the PLAN-155 Wave-1 "
     "host-adapter fixtures under .claude/hooks/tests/fixtures/adapters/codex/ "
     "(each fixture carries _meta.codex_cli_version; the pin-range test stays "
     "RED until fixtures are re-recorded or explicitly waived); (3) run the "

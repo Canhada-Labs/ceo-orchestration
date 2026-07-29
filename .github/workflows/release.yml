@@ -630,7 +630,13 @@ jobs:
       #   - verdict.parent_sha == git log -n1 --format=%H -- <verdict-file>^
       #   - verdict.release_tag == ${GITHUB_REF_NAME}  (replay defense)
       #   - verdict.tool_versions.codex_cli in codex-cli-pin.txt range
-      #   - verdict.tool_versions.codex_cli_binary_sha256 == codex-cli-binary-sha256.txt
+      #   - verdict.tool_versions.codex_payload_sha256 (+ codex_target_triple)
+      #     == codex-cli-pin-manifest.json payloads[<triple>].sha256
+      #     (ADR-182 payload pin — the sha of the NATIVE codex payload,
+      #     not the npm JS launcher; PLAN-163 T5.2. The legacy
+      #     codex_cli_binary_sha256 launcher pin is retained only for
+      #     pre-ADR-182 tags; its pin file is a comment-only tombstone,
+      #     which the validator treats as "no launcher pin".)
       #   - verdict generated_at within 24h (TTL per ADR-103)
       #   - inputs_hash deterministically recomputed via inputs-hash-manifest.txt
       #   - GPG signature present + verifies against owner.asc
@@ -692,6 +698,7 @@ jobs:
             --recompute-inputs-hash \
             --codex-cli-pin-file .claude/governance/codex-cli-pin.txt \
             --codex-cli-binary-sha256-file .claude/governance/codex-cli-binary-sha256.txt \
+            --codex-pin-manifest-file .claude/governance/codex-cli-pin-manifest.json \
             --inputs-hash-paths-file .claude/governance/pair-rail-inputs-hash-manifest.txt
 
   publish-release:

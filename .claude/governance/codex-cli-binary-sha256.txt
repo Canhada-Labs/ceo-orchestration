@@ -1,38 +1,29 @@
-# Codex CLI binary SHA-256 pin — PLAN-081 Phase 6-bis / Codex iter 1 R-NEW-4 / T-8
+# Codex CLI binary SHA-256 pin — RETIRED (PLAN-163 T5.2 / ADR-182)
 #
-# Format: ONE 64-hex SHA-256 line (no path; the binary at `which codex`
-# resolution time is hashed by `pair-rail-gate.sh` pre-flight, compared
-# against this pin, and asserts equality).
+# This file is a TOMBSTONE. It intentionally carries NO pin hex.
 #
-# Rationale: T-8 (Codex CLI binary swap / supply-chain) — a malicious
-# package upgrade or PATH-prepended decoy could replace the trusted
-# binary mid-session. `subprocess.run(["codex", ...])` resolves PATH at
-# invocation; without a pin, the framework trusts whatever `which codex`
-# returns. The pin closes this vector: `pair-rail-gate.sh` computes
-# `shasum -a 256 $(which codex)` and asserts == this file's hex.
+# Why retired: the hex this file used to carry was computed via
+# `shasum -a 256 $(which codex)`, which follows the npm symlink to the
+# JS *launcher* (`@openai/codex/bin/codex.js`) — NOT the native Rust
+# payload that actually executes. The launcher is version-stable, so
+# the 0.144.1 -> 0.144.6 payload bump passed the "pin" without any gate
+# trip (PLAN-163 T5.2a evidence,
+# `.claude/plans/PLAN-163/probes/payload-sha-evidence.md`). The pin
+# attested the wrong artifact.
 #
-# Pin update ceremony:
-# 1. Owner runs `shasum -a 256 $(which codex)` after legitimate upgrade
-# 2. Owner edits this file with new hex (sentinel-gated — canonical-guarded
-#    under .claude/governance/*.txt per Phase 6-bis _CANONICAL_GUARDS extension)
-# 3. Phase 4-bis promotion gate re-runs if codex-cli-pin.txt semver bumped
-# 4. ADR amendment if catch_rate shifts >5pp post-upgrade
+# Replacement: `.claude/governance/codex-cli-pin-manifest.json`
+# (ADR-182 — codex payload pin + verify-then-invoke enforcement).
+# The manifest pins the sha256 of the NATIVE payload per targetTriple,
+# and `check_pair_rail.py` verifies the payload it is about to execute
+# against that entry at every invocation (verify-then-invoke).
 #
-# Verification:
-#   bash .claude/scripts/local/pair-rail-gate.sh
-#   # emits pair_rail_codex_binary_verified audit event with sha256[:16] prefix
+# Pin update ceremony: see ADR-182 §Ceremony (per-triple payload sha,
+# npm dist.integrity provenance, sentinel-gated edit of the manifest).
 #
-# Audit emit: pair_rail_codex_binary_verified (PLAN-081 Phase 6-bis NEW)
-# Allowlist fields: codex_cli_version, binary_sha256_prefix (16-hex), match (bool)
-#
-# PLAN-142 re-pin (S246 2026-06-19): codex-cli 0.139.0 binary at
-# /opt/homebrew/bin/codex. Computed via `shasum -a 256 $(which codex)` and
-# re-verified at execution. Supersedes the 0.130.x pin (baefc109...).
-#
-# PLAN-156 re-pin (S269 2026-07-12, SENT-CX-PIN): codex-cli 0.144.1 binary
-# at /opt/homebrew/bin/codex (npm symlink → @openai/codex/bin/codex.js;
-# shasum follows the symlink). Computed via `shasum -a 256 $(which codex)`
-# on the Owner's machine at characterization time and re-verified at
-# ceremony. Supersedes the 0.139.0 pin (d3be844c...).
-
-134063e133f0b4244fa3b251acf973d4fe4b4aeeacbdc135211bf480f59f1477
+# This tombstone stays on disk (and stays kernel/canonical-guarded) so
+# that (a) historical verdict files that declared
+# `tool_versions.codex_cli_binary_sha256` keep a resolvable referent,
+# and (b) a revived launcher-hash "pin" cannot be silently reintroduced
+# at this path. `validate-pair-rail-verdict.py` treats an empty
+# (comment-only) pin file as "no launcher pin" and enforces the
+# manifest-based payload pin instead.

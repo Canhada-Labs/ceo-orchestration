@@ -216,6 +216,14 @@ _KERNEL_PATHS: List[str] = [
     ".claude/governance/governance-waivers.yaml",
     ".claude/governance/codex-cli-pin.txt",
     ".claude/governance/codex-cli-binary-sha256.txt",
+    # PLAN-163 T5.2 (ADR-182): the payload-pin manifest replaces the
+    # launcher-hash pin above (now a comment-only tombstone, kept
+    # guarded). The manifest is the runtime verify-then-invoke trust
+    # root for check_pair_rail.py AND the release.yml step-15 payload
+    # gate — enrolled in the SAME wave that creates it, so the new pin
+    # meets an already-guarded path, not a surprise (PLAN-156 SENT-GK-0
+    # precedent).
+    ".claude/governance/codex-cli-pin-manifest.json",
     # PLAN-156 W0b (SENT-GK-0): the grok pin pair, enrolled in the same
     # guarded step that creates it (debate C12) so the Wave-4 registry
     # edit meets an already-guarded pin, not a surprise. The binary-SHA

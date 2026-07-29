@@ -23,6 +23,10 @@ a double-booking emerged. ADR-117 (collision-rename policy, ACCEPTED
 `ADR-120-pii-core-promotion.md` (id: ADR-120, `original_id: ADR-111`).
 The old file was deleted in PLAN-085 Wave B.1. The locked-corpus
 file retains `id: ADR-111` as the sole holder going forward.
+(Ledger-bug note, repaired PLAN-163: the rename ceremony had ALSO
+mismarked the locked-corpus ADR-111 as `SUPERSEDED by ADR-120` — false;
+ADR-120 is the PII ADR and never absorbed the locked-corpus substance.
+ADR-111 is ACCEPTED, with only its pin clauses amended by ADR-182.)
 
 **Pattern 2 — Base-ID share with `a` suffix (ADR-049 + ADR-049a):**
 `ADR-049-dual-path` and `ADR-049a-worktree` intentionally share base-ID
@@ -329,7 +333,7 @@ _Auto-generated: 170 ADR(s) on disk. Run `python3 .claude/scripts/generate-adr-i
 | [ADR-108](ADR-108-cross-llm-veto-floor.md) | Cross-LLM VETO Floor — Extends ADR-052 | ACCEPTED |
 | [ADR-109](ADR-109-codex-skill-rehash-protocol.md) | Codex SKILL.md Re-Hash Protocol — Format B Compatibility for Cross-LLM | ACCEPTED |
 | [ADR-110](ADR-110-codex-pretool-enforcement.md) | Codex Pre-Tool Enforcement Hook — Block Mechanism for Asymmetric VETO Matrix | ACCEPTED |
-| [ADR-111](ADR-111-locked-corpus-governance.md) | Locked Corpus Governance — Pair-Rail Promotion Gate | SUPERSEDED |
+| [ADR-111](ADR-111-locked-corpus-governance.md) | Locked Corpus Governance — Pair-Rail Promotion Gate (pin clauses amended by ADR-182; the old SUPERSEDED-by-120 marking was a ledger bug, repaired in PLAN-163) | ACCEPTED |
 | [ADR-112](ADR-112-grandfather-cap-scope-clarification.md) | Grandfather-cap scope clarification — individual_skills cap vs domain_bundles cap | ACCEPTED |
 | [ADR-113](ADR-113-plan-084-canonical-guard-extension.md) | PLAN-084 canonical guard extension — `.claude/plans/PLAN-084/canonical/*` | ACCEPTED |
 | [ADR-114](ADR-114-codex-egress-redaction-symmetry.md) | Codex MCP egress redaction symmetry across ALL callsites | ACCEPTED |
@@ -379,8 +383,16 @@ _Auto-generated: 170 ADR(s) on disk. Run `python3 .claude/scripts/generate-adr-i
 | [ADR-154](ADR-154-updatedinput-single-rewriter.md) | `updatedInput` corrective rewrites: the single-rewriter invariant (H5 force-push pilot) | ACCEPTED |
 | [ADR-155](ADR-155-install-baseline-manifest.md) | Install/upgrade baseline SHA-256 manifest — preserve adopter customizations, recover the root PROTOCOL.md | ACCEPTED |
 | [ADR-156](ADR-156-constitution-sync-cascade.md) | Constitution sync-cascade — advisory dependent-set re-verify + Sync Impact Report | ACCEPTED |
+| [ADR-182](ADR-182-codex-payload-pin-enforcement.md) | Codex payload pin + verify-then-invoke enforcement — supersedes the Phase-6-bis launcher-hash pin + ADR-111 pin clauses | PROPOSED |
 
 <!-- END ADR-INDEX -->
+
+> Index staleness note (pre-existing, PLAN-163 T5.2): rows ADR-157
+> through ADR-181 are not yet listed above — the tail of this index has
+> lagged the on-disk ledger since ADR-157. Regenerate the index (or
+> backfill the missing rows) at the next derived-surfaces refresh;
+> ADR-182 is listed out-of-band here because the pin-pack repairs the
+> ADR-111 row in the same edit.
 
 ## Why retroactive ADRs
 

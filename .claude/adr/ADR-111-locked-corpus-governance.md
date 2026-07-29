@@ -1,22 +1,43 @@
 ---
 id: ADR-111
 title: Locked Corpus Governance — Pair-Rail Promotion Gate
-status: SUPERSEDED
-superseded_by: ADR-120
+status: ACCEPTED
+amended_by: ADR-182
 proposed: 2026-05-09
 accepted: 2026-05-10
-related_plan: [PLAN-075, PLAN-081]
-related_adr: [ADR-052, ADR-105, ADR-106, ADR-107, ADR-108, ADR-120]
+related_plan: [PLAN-075, PLAN-081, PLAN-163]
+related_adr: [ADR-052, ADR-105, ADR-106, ADR-107, ADR-108, ADR-117, ADR-182]
 enforcement_commit: <set at Phase 4 ceremony commit time>
 ---
 
 # ADR-111 — Locked Corpus Governance
 
-## Status: SUPERSEDED by ADR-120 (2026-05-12)
+## Status: ACCEPTED (ledger repaired 2026-07-28, PLAN-163 T5.2)
 
-Original ACCEPTED (PLAN-081 Phase 4 ceremony, 2026-05-10). Renamed + superseded by ADR-120 per ADR-117 collision-rename policy (PLAN-085 Wave 0 + Wave B.1). Substance is fully preserved in ADR-120; this file is the retired original-numbered record.
+Original ACCEPTED at the PLAN-081 Phase 4 ceremony, 2026-05-10. This
+record remains the sole holder of id ADR-111 per ADR-117.
 
-**Superseded-By:** ADR-120
+**Ledger-bug errata (PLAN-163 T5.2, 2026-07-28):** from 2026-05-12
+until this repair, the frontmatter here read `status: SUPERSEDED` /
+`superseded_by: ADR-120` with the claim "substance is fully preserved
+in ADR-120". That was FALSE — a ledger bug from the ADR-117
+collision-rename ceremony (PLAN-085 Wave 0 + B.1). What actually
+happened in that ceremony: the *other* file holding id ADR-111
+(`ADR-111-pii-core-promotion.md`) was renamed to
+`ADR-120-pii-core-promotion.md`. ADR-120 is the **PII core-promotion**
+ADR; it contains none of this locked-corpus substance and never
+superseded this decision. The false relation was flagged in the
+PLAN-163 S282 cross-vendor review and is repaired here; ADR-120 itself
+is deliberately untouched.
+
+**Amended-By: ADR-182 (pin clauses only).** The Codex CLI *pin
+mechanics* referenced by §2 ("Codex CLI version bump" reopen
+criterion) — i.e. the PLAN-081 Phase 6-bis
+`codex-cli-binary-sha256.txt` launcher-hash procedure — are superseded
+by the ADR-182 payload-pin manifest + verify-then-invoke enforcement
+(`codex-cli-pin-manifest.json`). The >5pp catch_rate reopen trigger
+itself, and everything else in this ADR (corpus immutability,
+add/retire protocol, stratification), remain in force unchanged.
 
 R1 PLAN-081 consensus C4 + S-QA-Unseen lifted ADR-111 from PROPOSED-OPTIONAL
 → RECOMMENDED → ACCEPTED at Phase 4 (corpus-driven governance precedent

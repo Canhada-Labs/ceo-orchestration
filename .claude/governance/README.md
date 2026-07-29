@@ -11,7 +11,8 @@ updating the corresponding CI step.**
 | `governance-waivers.yaml` | Per-plan release-gate waivers (rc_hold, workflow_staleness). Active waivers allow a tag to pass release.yml checks that would otherwise block. | `release.yml` §waiver gate |
 | `pair-rail-inputs-hash-manifest.txt` | Declares the input-files that Codex pair-rail reviewed; HMAC-verified by the release gate. | `release.yml` §validate-pair-rail-verdict |
 | `codex-cli-pin.txt` | Pinned Codex CLI version range accepted by pair-rail verification. | `release.yml` §codex-pin |
-| `codex-cli-binary-sha256.txt` | Expected SHA-256 of the Codex CLI binary for pair-rail verification. | `release.yml` §codex-pin |
+| `codex-cli-binary-sha256.txt` | RETIRED tombstone (ADR-182): the old launcher-hash pin. Comment-only; carries no hex. Kept so historical verdicts keep a referent and the path stays guarded. | `release.yml` §codex-pin (legacy tags only) |
+| `codex-cli-pin-manifest.json` | ADR-182 payload pin: sha256 of the NATIVE Codex payload per targetTriple (+ npm dist.integrity provenance). Enforced verify-then-invoke by `check_pair_rail.py`, at pre-flight by `pair-rail-gate.sh` Gate 4, and at tag time by `release.yml` step 15. | `check_pair_rail.py`, `pair-rail-gate.sh`, `release.yml` §codex-pin |
 | `audit_tokens_allowlist.json` | Allowlist of audit-token patterns exempt from the canonical-edit sentinel content ban (ADR-031). | `check_arbitration_kernel.py` (PreToolUse hook) |
 | `function-length-grandfather.yaml` | Grandfather list of functions that exceed the length policy but predate enforcement (PLAN-066 DIM-07). New functions are not grandfathered. | `check-function-length.py` (local script) |
 | `pair-rail-verdict-template.md` | Template for authoring new Codex pair-rail verdict files. | Documentation only |

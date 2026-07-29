@@ -32,7 +32,15 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
-REPO_ROOT="${REPO_ROOT_OVERRIDE:-$REPO_ROOT}"
+# PLAN-163 C4 (codex/grok R4): REPO_ROOT_OVERRIDE is a TEST-ONLY seam — it
+# redirects Gate 4 pin verification AND the subsequent codex exec onto an
+# arbitrary tree, so it is honored ONLY under the explicit
+# CEO_PAIR_RAIL_TEST_MODE=1 marker (mirrors the hook's triple/manifest seams).
+# On the live path it is IGNORED: a stray/hostile REPO_ROOT_OVERRIDE cannot
+# point pin verification at an attacker-controlled tree/verifier.
+if [ "${CEO_PAIR_RAIL_TEST_MODE:-}" = "1" ] && [ -n "${REPO_ROOT_OVERRIDE:-}" ]; then
+  REPO_ROOT="$REPO_ROOT_OVERRIDE"
+fi
 cd "$REPO_ROOT"
 
 PHASE="${1:-}"
@@ -117,7 +125,13 @@ else
   fi
 fi
 
-# ---- Gate 3: Codex CLI present + warm startup ----
+# ---- Gate 3a: Codex CLI PRESENT (path resolution only — NO exec yet) ----
+# M4 (PLAN-163 fix-pass): `command -v` resolves the launcher path WITHOUT
+# executing the binary. The warm-startup `codex --version` exec is deferred
+# to Gate 3b, AFTER the ADR-182 pin verification (Gate 4) has run — so on
+# Phase 6 an unverified / swapped payload is NEVER exec'd. The pin check
+# itself (check_pair_rail.py --verify-codex-pin) only HASHES the payload; it
+# never spawns it.
 echo ""
 echo "Gate 3: Codex CLI present + warm startup"
 if ! command -v codex >/dev/null 2>&1; then
@@ -128,26 +142,61 @@ fi
 CODEX_PATH="$(command -v codex)"
 echo "  Codex CLI path: $CODEX_PATH"
 
-# Run --version (5s timeout — Codex CLI cold start is typically <2s)
+# ---- Gate 4 (Phase 6): codex pin check — semver file + ADR-182 payload sha ----
+# M4: MUST run BEFORE the Gate 3b warm-startup exec. If the pin fails we
+# abort here, having never executed the unverified codex payload.
+if [ "$PHASE_NUM" = "6" ]; then
+  echo ""
+  echo "Gate 4: Codex CLI version pin check (BEFORE any binary exec — M4)"
+  PIN_FILE=".claude/governance/codex-cli-pin.txt"
+  if [ ! -f "$PIN_FILE" ]; then
+    echo "  FAIL: $PIN_FILE missing (Phase 6 deliverable)"
+    exit 1
+  fi
+  # ADR-182 (PLAN-163 T5.2): the old "binary sha" here compared only the
+  # semver / launcher artifact — `shasum -a 256 $(which codex)` hashes
+  # the npm JS launcher, not the native payload that executes. Gate 4
+  # now performs the REAL payload-sha comparison via the SAME helper the
+  # runtime hook uses (`check_pair_rail.py verify_codex_payload()`), so
+  # the pre-flight and the per-invocation check can never disagree on
+  # algorithm or manifest. Exit contract of the helper CLI:
+  #   0 = verified; 1 = mismatch/triple-missing (fail-CLOSED);
+  #   3 = infra (manifest unreadable, payload unresolvable, ...).
+  # The Owner pre-flight is strict: ANY non-zero fails the gate — an
+  # infra arm at pre-flight means the pin ceremony is incomplete.
+  echo "  Gate 4b: ADR-182 payload-pin verification (codex-cli-pin-manifest.json)"
+  PIN_MANIFEST=".claude/governance/codex-cli-pin-manifest.json"
+  if [ ! -f "$PIN_MANIFEST" ]; then
+    echo "  FAIL: $PIN_MANIFEST missing (ADR-182 deliverable)"
+    exit 1
+  fi
+  set +e
+  PIN_JSON=$(python3 .claude/hooks/check_pair_rail.py --verify-codex-pin "$CODEX_PATH")
+  PIN_RC=$?
+  set -e
+  echo "  verify-codex-pin: $PIN_JSON"
+  if [ "$PIN_RC" -ne 0 ]; then
+    echo "  FAIL: ADR-182 payload-pin verification exited rc=$PIN_RC"
+    echo "  (1=sha mismatch / triple missing — possible supply-chain swap;"
+    echo "   3=infra — manifest unreadable or payload unresolvable)"
+    echo "  If a codex upgrade is legitimate, re-pin via the ADR-182 ceremony."
+    echo "  Refusing to exec the unverified codex payload (M4 ordering)."
+    exit 1
+  fi
+  echo "  OK: native payload sha256 matches codex-cli-pin-manifest.json"
+fi
+
+# ---- Gate 3b: Codex CLI warm startup (exec) — gated behind Gate 4 on Phase 6 ----
+echo ""
+echo "Gate 3b: codex --version warm startup"
+# Run --version (5s timeout — Codex CLI cold start is typically <2s). On
+# Phase 6 this line is reached ONLY after Gate 4 verified the payload sha.
 CODEX_VERSION=$(timeout 5 codex --version 2>&1 || echo "TIMEOUT")
 if [ "$CODEX_VERSION" = "TIMEOUT" ]; then
   echo "  FAIL: codex --version timed out (>5s)"
   exit 1
 fi
 echo "  Codex CLI version: $CODEX_VERSION"
-
-# ---- Gate 4 (Phase 6): codex-cli-pin.txt semver range check ----
-if [ "$PHASE_NUM" = "6" ]; then
-  echo ""
-  echo "Gate 4: Codex CLI version pin check"
-  PIN_FILE=".claude/governance/codex-cli-pin.txt"
-  if [ ! -f "$PIN_FILE" ]; then
-    echo "  FAIL: $PIN_FILE missing (Phase 6 deliverable)"
-    exit 1
-  fi
-  # Phase 6 will codify this — for Phase 1 we stub-pass
-  echo "  STUB: Phase 6 implements semver-range check (Phase 1 stub-pass)"
-fi
 
 echo ""
 echo "============================================"

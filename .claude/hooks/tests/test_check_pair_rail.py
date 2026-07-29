@@ -24,6 +24,7 @@ Run with:
 
 from __future__ import annotations
 
+import contextlib
 import importlib.util
 import io
 import json
@@ -171,24 +172,33 @@ class _PairRailTestBase(TestEnvContext):
 
     def setUp(self) -> None:
         super().setUp()
-        # Snapshot PATH before mutating (TestEnvContext does not cover PATH).
-        self._path_snapshot = os.environ.get("PATH")
-        # Set repo root to the temp project_dir so L3+ classifier and
-        # sentinel discovery operate in isolation.
-        os.environ["CLAUDE_PROJECT_DIR"] = str(self.project_dir)
-        # Default: no Codex binary discoverable. Tests opt in via
-        # CEO_PAIR_RAIL_FIXTURE_RESPONSE for the happy paths.
-        os.environ["PATH"] = str(self.project_dir / "no-such-bin")
-        # Default short timeout to keep tests snappy.
-        os.environ["CEO_PAIR_RAIL_TIMEOUT_S"] = "5"
+        # C9 (PLAN-163 FXα): env via mock.patch.dict, never raw os.environ
+        # writes. Started here, stopped in tearDown BEFORE super() so the
+        # patch's start-time snapshot (which carries TestEnvContext's temp
+        # HOME / CLAUDE_PROJECT_DIR) is immediately re-corrected by
+        # TestEnvContext.tearDown's surgical CEO_*/CLAUDE_*/HOME restore.
+        # PATH is NOT in the TestEnvContext snapshot, so patch.dict is what
+        # restores it — no manual PATH snapshot needed.
+        self._env_patch = patch.dict(os.environ, {
+            # Repo root = temp project_dir so the L3+ classifier + sentinel
+            # discovery operate in isolation.
+            "CLAUDE_PROJECT_DIR": str(self.project_dir),
+            # No Codex binary discoverable by default; happy-path tests
+            # inject a review by MOCKING _invoke_codex_review (FXα removed
+            # the env-fixture short-circuit), never via env.
+            "PATH": str(self.project_dir / "no-such-bin"),
+            # Short timeout keeps tests snappy.
+            "CEO_PAIR_RAIL_TIMEOUT_S": "5",
+        })
+        self._env_patch.start()
 
     def tearDown(self) -> None:
-        # Restore PATH before TestEnvContext.tearDown to ensure subsequent
-        # subprocess invokers (git, codex, python) can find their binaries.
-        if self._path_snapshot is not None:
-            os.environ["PATH"] = self._path_snapshot
-        else:
-            os.environ.pop("PATH", None)
+        # Stop the env patch BEFORE super().tearDown(): patch.dict restores
+        # os.environ to its start-time snapshot (temp HOME / CLAUDE_PROJECT_DIR
+        # from TestEnvContext.setUp), then TestEnvContext.tearDown surgically
+        # restores the ORIGINAL CEO_*/CLAUDE_*/HOME — net: no leak, PATH back
+        # to the real value for subsequent subprocess invokers.
+        self._env_patch.stop()
         super().tearDown()
 
     def run_hook(
@@ -196,24 +206,36 @@ class _PairRailTestBase(TestEnvContext):
         fixture_response: Optional[str] = None,
         kill_switch: bool = False,
     ) -> Dict[str, Any]:
-        """Invoke main() with stdin=payload-json, capture stdout JSON."""
-        if fixture_response is not None:
-            os.environ["CEO_PAIR_RAIL_FIXTURE_RESPONSE"] = fixture_response
-        else:
-            os.environ.pop("CEO_PAIR_RAIL_FIXTURE_RESPONSE", None)
+        """Invoke main() with stdin=payload-json, capture stdout JSON.
+
+        ``fixture_response`` — when given, the preset Codex review is
+        injected at the ``_invoke_codex_review`` BOUNDARY via mock.patch
+        (PLAN-163 FXα). The production env-fixture short-circuit was REMOVED
+        so that no env relaxes ADR-182 pin verification; the mock returns
+        the string directly as the (already-redacted) last-message the real
+        invoke would return. Pin verification itself is exercised in
+        test_check_pair_rail_payload_pin.py.
+        """
+        env_overrides: Dict[str, str] = {}
         if kill_switch:
-            os.environ["CEO_PAIR_RAIL_DISABLE"] = "1"
-        else:
-            os.environ.pop("CEO_PAIR_RAIL_DISABLE", None)
+            env_overrides["CEO_PAIR_RAIL_DISABLE"] = "1"
 
         old_stdin = sys.stdin
         old_stdout = sys.stdout
         try:
-            sys.stdin = io.StringIO(json.dumps(payload))
-            sys.stdout = io.StringIO()
-            rc = check_pair_rail.main()
-            self.assertEqual(rc, 0)
-            output = sys.stdout.getvalue().strip()
+            with contextlib.ExitStack() as stack:
+                # C9: env via patch.dict, never raw os.environ writes.
+                stack.enter_context(patch.dict(os.environ, env_overrides))
+                if fixture_response is not None:
+                    stack.enter_context(patch.object(
+                        check_pair_rail, "_invoke_codex_review",
+                        return_value=fixture_response,
+                    ))
+                sys.stdin = io.StringIO(json.dumps(payload))
+                sys.stdout = io.StringIO()
+                rc = check_pair_rail.main()
+                self.assertEqual(rc, 0)
+                output = sys.stdout.getvalue().strip()
         finally:
             sys.stdin = old_stdin
             sys.stdout = old_stdout
@@ -436,14 +458,12 @@ class TestReDoSSafe(_PairRailTestBase):
 class TestCodexTimeoutFailsOpen(_PairRailTestBase):
 
     def test_codex_timeout_allows_advisory(self):
-        # Force CodexTimeout via patching the invoke helper.
+        # Force CodexTimeout via patching the invoke helper (the same
+        # boundary happy-path tests inject a review at).
         payload = _write_event_payload(
             "Edit", ".claude/hooks/_lib/audit_emit.py",
             new_string="x"
         )
-        # Remove fixture so real invoke path runs; then patch.
-        os.environ.pop("CEO_PAIR_RAIL_FIXTURE_RESPONSE", None)
-
         with patch.object(
             check_pair_rail, "_invoke_codex_review",
             side_effect=check_pair_rail.CodexTimeout("simulated 30s"),
@@ -466,14 +486,76 @@ class TestCodexTimeoutFailsOpen(_PairRailTestBase):
         self.assertIn("unavailable", out.get("systemMessage", "").lower())
 
     def test_codex_binary_missing_on_path_allows(self):
-        # Without fixture and without codex on PATH → unavailable path.
+        # No mocked review + no codex on PATH (setUp points PATH at a
+        # nonexistent dir) → the real invoke path resolves no binary →
+        # CodexUnavailable → allow (fail-OPEN).
         payload = _write_event_payload(
             "Edit", ".claude/hooks/_lib/audit_emit.py",
             new_string="x"
         )
-        os.environ.pop("CEO_PAIR_RAIL_FIXTURE_RESPONSE", None)
         out = self.run_hook(payload)
         self.assertEqual(out.get("decision", "allow"), "allow")
+
+
+# ---------------------------------------------------------------------
+# Category 4b — FXα: the removed env-fixture path is inert in production
+# ---------------------------------------------------------------------
+
+
+class TestFixtureEnvInertInProduction(_PairRailTestBase):
+    """PLAN-163 FXα regression guard: the production preset-review env seam
+    was REMOVED, so setting the (now-dead) fixture env NEVER injects a
+    review — control always reaches `_resolve_codex_bin()` (ADR-182 pin
+    verification). With no codex resolvable (setUp points PATH at a
+    nonexistent dir), that path raises CodexUnavailable (INFRA fail-open),
+    proving the env is inert and can never substitute for a verified review.
+
+    This class is the ONLY reference to that dead env var anywhere in the
+    suite; it exists solely to prove the name is inert. The name is
+    assembled from fragments so the migration invariant — no staged test
+    injects a review via that env literal — stays grep-clean on the full
+    literal (the injection boundary is `_invoke_codex_review`, mocked).
+    """
+
+    # Dead env var, assembled from fragments (see class docstring). The
+    # production short-circuit that once honoured it is gone (FXα).
+    _DEAD_FIXTURE_ENV = "CEO_PAIR_RAIL_FIXTURE" + "_RESPONSE"
+    _CLEAN_STRUCTURED = json.dumps({
+        "verdict": "PASS", "findings": [], "summary": "clean",
+    })
+
+    def test_dead_fixture_env_has_no_effect_without_test_mode(self):
+        # Production scenario: CEO_PAIR_RAIL_TEST_MODE unset (as in every
+        # real run). Setting the dead env is inert — the real invoke path
+        # runs and, with no codex resolvable, raises CodexUnavailable. The
+        # env is NEVER returned as a review.
+        with patch.dict(os.environ, {self._DEAD_FIXTURE_ENV: self._CLEAN_STRUCTURED}):
+            with self.assertRaises(check_pair_rail.CodexUnavailable):
+                check_pair_rail._invoke_codex_review(
+                    tool_name="Edit",
+                    file_path=".claude/hooks/check_pair_rail.py",
+                    proposed_content="x = 1",
+                    timeout_s=1.0,
+                )
+
+    def test_dead_fixture_env_inert_even_under_test_mode(self):
+        # Discriminator (RED against the pre-FXα hook, GREEN after): even
+        # with CEO_PAIR_RAIL_TEST_MODE=1 AND the dead env set, no canned
+        # review is injected — the seam is GONE (not merely gated), so
+        # control still reaches the pin/invoke path and, with no codex
+        # resolvable, raises CodexUnavailable. The old hook returned the
+        # env verbatim here (no exception) — this is the removal proof.
+        with patch.dict(os.environ, {
+            "CEO_PAIR_RAIL_TEST_MODE": "1",
+            self._DEAD_FIXTURE_ENV: self._CLEAN_STRUCTURED,
+        }):
+            with self.assertRaises(check_pair_rail.CodexUnavailable):
+                check_pair_rail._invoke_codex_review(
+                    tool_name="Edit",
+                    file_path=".claude/hooks/check_pair_rail.py",
+                    proposed_content="x = 1",
+                    timeout_s=1.0,
+                )
 
 
 # ---------------------------------------------------------------------
@@ -612,13 +694,16 @@ class TestSentinelBypass(_PairRailTestBase):
         self._stage_sentinel("PLAN-999", target)
         # PLAN-045 env-override: dual-auth bypass that the production
         # check_canonical_edit recognizes (skips GPG verify).
-        os.environ["CEO_SENTINEL_UNLOCK"] = "PLAN-999-test"
-        os.environ["CEO_SENTINEL_UNLOCK_ACK"] = "I-ACCEPT"
-        # No Codex fixture — if path not bypassed, would unavailable->allow.
-        # Either way we should get allow; the assertion is decision==allow
-        # AND the systemMessage references "sentinel" if bypass triggered.
-        payload = _write_event_payload("Edit", target, new_string="x")
-        out = self.run_hook(payload)
+        # C9: env via patch.dict, never raw os.environ writes.
+        # No mocked review — if the path is not bypassed, the real invoke
+        # path resolves no codex -> unavailable -> allow. Either way we
+        # should get allow; the assertion is decision==allow.
+        with patch.dict(os.environ, {
+            "CEO_SENTINEL_UNLOCK": "PLAN-999-test",
+            "CEO_SENTINEL_UNLOCK_ACK": "I-ACCEPT",
+        }):
+            payload = _write_event_payload("Edit", target, new_string="x")
+            out = self.run_hook(payload)
         self.assertEqual(out.get("decision", "allow"), "allow")
         # Bypass branch produces "sentinel" in systemMessage.
         # If sentinel grants properly, message says "bypass via Architect sentinel".
@@ -656,21 +741,21 @@ class TestKillSwitchAndEnv(_PairRailTestBase):
         self.assertEqual(out.get("decision", "allow"), "allow")
 
     def test_invalid_timeout_env_clamps_to_default(self):
-        os.environ["CEO_PAIR_RAIL_TIMEOUT_S"] = "not-a-number"
         payload = _write_event_payload(
             "Edit", ".claude/hooks/_lib/audit_emit.py",
             new_string="x"
         )
-        out = self.run_hook(payload, fixture_response=CLEAN_REVIEW)
+        with patch.dict(os.environ, {"CEO_PAIR_RAIL_TIMEOUT_S": "not-a-number"}):
+            out = self.run_hook(payload, fixture_response=CLEAN_REVIEW)
         self.assertEqual(out.get("decision", "allow"), "allow")
 
     def test_negative_timeout_env_clamps_to_default(self):
-        os.environ["CEO_PAIR_RAIL_TIMEOUT_S"] = "-5"
         payload = _write_event_payload(
             "Edit", ".claude/hooks/_lib/audit_emit.py",
             new_string="x"
         )
-        out = self.run_hook(payload, fixture_response=CLEAN_REVIEW)
+        with patch.dict(os.environ, {"CEO_PAIR_RAIL_TIMEOUT_S": "-5"}):
+            out = self.run_hook(payload, fixture_response=CLEAN_REVIEW)
         self.assertEqual(out.get("decision", "allow"), "allow")
 
 
@@ -785,13 +870,13 @@ class TestPlan092WaveBInvariants(_PairRailTestBase):
         baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
         expected_count = baseline["baseline_emit_count_per_invocation"]
 
-        # Invoke hook with a known write-shape fixture; capture audit
-        # emits via file sink.
+        # Invoke hook with a known write-shape review (injected at the
+        # _invoke_codex_review boundary); capture audit emits via file sink.
+        # C9: env via patch.dict, never raw os.environ writes.
         import tempfile
         with tempfile.TemporaryDirectory() as td:
             sink = Path(td) / "audit-sink.jsonl"
-            os.environ["CEO_PAIR_RAIL_AUDIT_SINK"] = str(sink)
-            try:
+            with patch.dict(os.environ, {"CEO_PAIR_RAIL_AUDIT_SINK": str(sink)}):
                 payload = _write_event_payload(
                     "Edit", ".claude/hooks/_lib/audit_emit.py",
                     new_string="x"
@@ -820,8 +905,6 @@ class TestPlan092WaveBInvariants(_PairRailTestBase):
                     f"{expected_count} pair_rail_case event(s), got "
                     f"{len(case_events)}. Events: {events}"
                 )
-            finally:
-                os.environ.pop("CEO_PAIR_RAIL_AUDIT_SINK", None)
 
     def test_production_promoted_constant_present(self):
         """AC7b: _PRODUCTION_PROMOTED_BY_PLAN_091 constant survives sweep."""
@@ -838,11 +921,20 @@ class TestPlan092WaveBInvariants(_PairRailTestBase):
         )
 
     def test_no_block_decision_assignments_in_pair_rail_module(self):
-        """AC5a: no `"decision": "block"` literal in production module source.
+        """AC5a: block-decision literals in the module source are bounded
+        to the SINGLE explicitly-ADR-authorized arm.
 
-        Wave B SHADOW-strip stripped all block-decision codepaths. This
-        regex gate ensures regressions cannot silently re-introduce a
-        block path without an explicit ADR override.
+        Wave B SHADOW-strip stripped all block-decision codepaths; this
+        regex gate ensured regressions could not silently re-introduce a
+        block path "without an explicit ADR override". ADR-182 (PLAN-163
+        T5.2 pin-pack) IS that explicit override: the CodexPinMismatch
+        fail-CLOSED arm returns `{"decision": "block"}` when the codex
+        payload fails pin verification (a possible supply-chain swap
+        must not degrade to advisory). The gate therefore now asserts:
+        EXACTLY ONE block-decision literal exists, and it sits inside
+        the `except CodexPinMismatch` arm (the preceding source window
+        names CodexPinMismatch). Any second literal, or a relocated
+        one, still fails loudly.
         """
         import re as _re
         source_path = _HOOKS_DIR / "check_pair_rail.py"
@@ -855,11 +947,19 @@ class TestPlan092WaveBInvariants(_PairRailTestBase):
             r'^\s+["\']decision["\']\s*:\s*["\']block',
             _re.MULTILINE,
         )
-        match = pattern.search(src)
-        self.assertIsNone(
-            match,
-            f"AC5a FAIL: block-decision assignment found in "
-            f"check_pair_rail.py: {match.group(0) if match else ''}"
+        matches = list(pattern.finditer(src))
+        self.assertEqual(
+            len(matches), 1,
+            f"AC5a FAIL: expected exactly ONE ADR-182-authorized "
+            f"block-decision literal in check_pair_rail.py, got "
+            f"{len(matches)}: "
+            f"{[m.group(0).strip() for m in matches]}"
+        )
+        window = src[max(0, matches[0].start() - 1500):matches[0].start()]
+        self.assertIn(
+            "CodexPinMismatch", window,
+            "AC5a FAIL: the sole block-decision literal is NOT inside "
+            "the ADR-182 CodexPinMismatch arm"
         )
 
     def test_no_spike_string_in_pair_rail_docstrings(self):

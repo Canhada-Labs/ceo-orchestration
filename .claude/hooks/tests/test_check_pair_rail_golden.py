@@ -184,23 +184,15 @@ class TestGoldenInputFreeze(unittest.TestCase):
 
     def setUp(self) -> None:
         _reset_catalogue_cache()
-        self._orig = {
-            k: os.environ.get(k)
-            for k in (
-                "CEO_PAIR_RAIL_FIXTURE_RESPONSE",
-                "CEO_PAIR_RAIL_AUDIT_SINK",
-                "CEO_PAIR_RAIL_DISABLE",
-                "CEO_PAIR_RAIL_CODEX_BIN",
-            )
-        }
 
     def tearDown(self) -> None:
         _reset_catalogue_cache()
-        for key, val in self._orig.items():
-            if val is None:
-                os.environ.pop(key, None)
-            else:
-                os.environ[key] = val
+
+    # PLAN-163 FXα migration: every case injects the Codex review by MOCKING
+    # `_CPR._invoke_codex_review` at the invoke boundary (the production
+    # env-fixture short-circuit was removed), and every env mutation goes
+    # through `mock.patch.dict` (never raw os.environ), so setUp/tearDown no
+    # longer need a manual snapshot/restore — patch.dict auto-restores.
 
     # ------------------------------------------------------------------
     # Case A
@@ -209,25 +201,27 @@ class TestGoldenInputFreeze(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             repo = _make_repo(Path(td))
             sink = Path(td) / "sink.jsonl"
-            # PLAN-142: Case A (clean review -> PASS/PASS) now comes from a
-            # STRUCTURED verdict object, not free text. A forged free-text
-            # "looks good" degrades to ADVISORY (R-SEC-2), which is no longer
-            # Case A. The golden input is updated to the structured PASS object
-            # the 0.139 rail actually parses; the observable output (sysmsg
-            # "review clean" + case=A PASS/PASS) is preserved.
-            os.environ["CEO_PAIR_RAIL_FIXTURE_RESPONSE"] = json.dumps({
+            # PLAN-142: Case A (clean review -> PASS/PASS) comes from a
+            # STRUCTURED verdict object, not free text. PLAN-163 FXα: the
+            # review is injected at the _invoke_codex_review boundary via
+            # mock (the env-fixture short-circuit was removed from
+            # production); the observable output (sysmsg "review clean" +
+            # case=A PASS/PASS) is preserved byte-identically.
+            clean_review = json.dumps({
                 "verdict": "PASS",
                 "findings": [],
                 "summary": "Code looks good. No issues found.",
             })
-            os.environ["CEO_PAIR_RAIL_AUDIT_SINK"] = str(sink)
-            result = _CPR._decide_with_matrix(
-                tool_name="Write",
-                file_path=_l3_abs(repo),
-                proposed_content="x = 1",
-                repo_root=repo,
-                timeout_s=5.0,
-            )
+            with patch.dict(os.environ, {"CEO_PAIR_RAIL_AUDIT_SINK": str(sink)}), \
+                    patch.object(_CPR, "_invoke_codex_review",
+                                 return_value=clean_review):
+                result = _CPR._decide_with_matrix(
+                    tool_name="Write",
+                    file_path=_l3_abs(repo),
+                    proposed_content="x = 1",
+                    repo_root=repo,
+                    timeout_s=5.0,
+                )
             self.assertNotIn("decision", result)
             self.assertIn(_GOLDEN_A["sysmsg_substr"], result.get("systemMessage", ""))
             rows = _case_rows(_read_sink(sink))
@@ -245,18 +239,20 @@ class TestGoldenInputFreeze(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             repo = _make_repo(Path(td))
             sink = Path(td) / "sink.jsonl"
-            os.environ["CEO_PAIR_RAIL_FIXTURE_RESPONSE"] = (
+            write_shaped_review = (
                 "*** Update File: .claude/hooks/_lib/payload.py\n"
                 "+ x = 1\n"
             )
-            os.environ["CEO_PAIR_RAIL_AUDIT_SINK"] = str(sink)
-            result = _CPR._decide_with_matrix(
-                tool_name="Write",
-                file_path=_l3_abs(repo),
-                proposed_content="y = 2",
-                repo_root=repo,
-                timeout_s=5.0,
-            )
+            with patch.dict(os.environ, {"CEO_PAIR_RAIL_AUDIT_SINK": str(sink)}), \
+                    patch.object(_CPR, "_invoke_codex_review",
+                                 return_value=write_shaped_review):
+                result = _CPR._decide_with_matrix(
+                    tool_name="Write",
+                    file_path=_l3_abs(repo),
+                    proposed_content="y = 2",
+                    repo_root=repo,
+                    timeout_s=5.0,
+                )
             self.assertNotIn("decision", result)
             self.assertIn(_GOLDEN_B["sysmsg_substr"], result.get("systemMessage", ""))
             rows = _case_rows(_read_sink(sink))
@@ -279,21 +275,23 @@ class TestGoldenInputFreeze(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             repo = _make_repo(Path(td))
             sink = Path(td) / "sink.jsonl"
-            # CRITICAL: the fixture env MUST be UNSET. With a fixture set
-            # (even ""), _invoke_codex_review returns it verbatim as a
-            # "review" — empty string parses as a clean review (Case A),
-            # NOT unavailable. Real Case F requires the subprocess spawn
-            # path to fail; we force that with a nonexistent binary.
-            os.environ.pop("CEO_PAIR_RAIL_FIXTURE_RESPONSE", None)
-            os.environ["CEO_PAIR_RAIL_AUDIT_SINK"] = str(sink)
-            os.environ["CEO_PAIR_RAIL_CODEX_BIN"] = "/nonexistent/codex-bin-zzz"
-            result = _CPR._decide_with_matrix(
-                tool_name="Write",
-                file_path=_l3_abs(repo),
-                proposed_content="z = 3",
-                repo_root=repo,
-                timeout_s=1.0,
-            )
+            # PLAN-163 FXα: Case F (Codex unavailable) is forced by raising
+            # CodexUnavailable at the invoke boundary — deterministic, and it
+            # does NOT depend on a nonexistent CEO_PAIR_RAIL_CODEX_BIN, which
+            # under ADR-182 pin enforcement now fail-CLOSES to a BLOCK
+            # (CodexPinMismatch on a set-but-missing override), NOT a
+            # fail-open Case F. The observable Case-F output is preserved.
+            with patch.dict(os.environ, {"CEO_PAIR_RAIL_AUDIT_SINK": str(sink)}), \
+                    patch.object(_CPR, "_invoke_codex_review",
+                                 side_effect=_CPR.CodexUnavailable(
+                                     "no codex payload resolvable")):
+                result = _CPR._decide_with_matrix(
+                    tool_name="Write",
+                    file_path=_l3_abs(repo),
+                    proposed_content="z = 3",
+                    repo_root=repo,
+                    timeout_s=1.0,
+                )
             self.assertNotIn("decision", result)
             sysmsg = result.get("systemMessage", "")
             # The exact unavailable-vs-timeout wording can vary by platform
@@ -320,15 +318,17 @@ class TestGoldenInputFreeze(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             repo = _make_repo(Path(td))
             sink = Path(td) / "sink.jsonl"
-            os.environ["CEO_PAIR_RAIL_DISABLE"] = "1"
-            os.environ["CEO_PAIR_RAIL_AUDIT_SINK"] = str(sink)
-            result = _CPR._decide_with_matrix(
-                tool_name="Write",
-                file_path=_l3_abs(repo),
-                proposed_content="z = 42",
-                repo_root=repo,
-                timeout_s=5.0,
-            )
+            with patch.dict(os.environ, {
+                "CEO_PAIR_RAIL_DISABLE": "1",
+                "CEO_PAIR_RAIL_AUDIT_SINK": str(sink),
+            }):
+                result = _CPR._decide_with_matrix(
+                    tool_name="Write",
+                    file_path=_l3_abs(repo),
+                    proposed_content="z = 42",
+                    repo_root=repo,
+                    timeout_s=5.0,
+                )
             self.assertNotIn("decision", result)
             rows = _case_rows(_read_sink(sink))
             matrix_rows = [r for r in rows if r.get("case") in ("A", "B", "C", "D", "E", "F")]
@@ -341,9 +341,17 @@ class TestGoldenInputFreeze(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             repo = _make_repo(Path(td))
             sink = Path(td) / "sink.jsonl"
-            os.environ["CEO_PAIR_RAIL_AUDIT_SINK"] = str(sink)
-            os.environ["CEO_PAIR_RAIL_FIXTURE_RESPONSE"] = "Looks good."
-            with patch.object(_CPR, "_sentinel_grants_pair_rail_bypass", return_value=True):
+            # The sentinel bypass short-circuits BEFORE the invoke boundary,
+            # so the mocked review below is dormant — it is present only to
+            # keep this test independent of any real codex / env fixture
+            # (FXα removed the env-fixture seam entirely).
+            with patch.dict(os.environ, {"CEO_PAIR_RAIL_AUDIT_SINK": str(sink)}), \
+                    patch.object(_CPR, "_sentinel_grants_pair_rail_bypass",
+                                 return_value=True), \
+                    patch.object(_CPR, "_invoke_codex_review",
+                                 return_value=json.dumps({
+                                     "verdict": "PASS", "findings": [],
+                                     "summary": "clean"})):
                 result = _CPR._decide_with_matrix(
                     tool_name="Write",
                     file_path=_l3_abs(repo),

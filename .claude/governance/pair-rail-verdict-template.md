@@ -20,7 +20,9 @@ inputs_hash: <SHA256 of canonical_json envelope of git-hash-object SHAs for ALL 
 inputs_hash_paths_manifest_sha: <SHA-256 of pair-rail-inputs-hash-manifest.txt itself>
 tool_versions:
   codex_cli: <version, must match codex-cli-pin.txt range>
-  codex_cli_binary_sha256: <hex; matches codex-cli-binary-sha256.txt>
+  codex_target_triple: <targetTriple of the run that generated this verdict, e.g. aarch64-apple-darwin (ADR-182 wire-shape)>
+  codex_payload_sha256: <64-hex; sha256 of the NATIVE codex payload for that triple — must equal codex-cli-pin-manifest.json payloads.<triple>.sha256. Compute via `python3 .claude/hooks/check_pair_rail.py --verify-codex-pin` (the `sha256` field). NOT the hash of `which codex` (that is the npm JS launcher).>
+  # codex_cli_binary_sha256: <DEPRECATED (ADR-182) — launcher-hash pin, pre-ADR-182 tags only. The pin file is now a comment-only tombstone; do not declare this field in new verdicts.>
   claude_code: <version>
   python: <e.g. 3.9.6>
 transcript_hash: <SHA-256 of session transcript that produced this verdict>
@@ -43,6 +45,12 @@ gpg_signature: <armored GPG signature of the above fields>
   error; release.yml routes appropriately per R1 S-QA-Unseen-2).
 - `--codex-cli-pin-file`: assert `tool_versions.codex_cli` in pin
   range (R1 C5 enforcement).
+- `--codex-pin-manifest-file`: assert
+  `tool_versions.codex_payload_sha256` equals
+  `payloads[tool_versions.codex_target_triple].sha256` in
+  `codex-cli-pin-manifest.json` (ADR-182 payload pin). Missing
+  fields, triple absent from the manifest, or sha mismatch → exit
+  `VERDICT_INVALID` (3), fail-CLOSED.
 - `--inputs-hash-paths-file`: read manifest + recompute
   `inputs_hash` via git hash-object + canonical_json (R1 S-Sec-4).
   Mismatch → exit non-zero.

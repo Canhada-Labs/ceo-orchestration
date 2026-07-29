@@ -555,7 +555,18 @@ class TestResolveHumanTriageGraceH(unittest.TestCase):
 # ===========================================================================
 
 class TestDecideWithMatrix(TestEnvContext):
-    """Matrix arm integration tests using CEO_PAIR_RAIL_FIXTURE_RESPONSE.
+    """Matrix arm integration tests — Codex review injected at the
+    ``_CPR._invoke_codex_review`` mock boundary.
+
+    PLAN-163 FXα migration: the production env-fixture short-circuit was
+    REMOVED from ``_invoke_codex_review`` entirely (pin verification is now
+    unconditional), so a review can no longer be injected via env. Every case
+    here now mocks ``_CPR._invoke_codex_review`` at the invoke boundary
+    (``return_value`` for an entered review, ``side_effect=
+    _CPR.CodexUnavailable`` for Case F — never a set-but-missing codex-bin
+    override, which under ADR-182 now fail-CLOSES to a CodexPinMismatch BLOCK,
+    NOT a fail-open Case F), and every env mutation goes through
+    ``mock.patch.dict`` (never bare ``os.environ`` writes).
 
     r6 F9: subclasses ``TestEnvContext`` (not bare ``unittest.TestCase``)
     because every test that reaches the matrix arm triggers the REAL
@@ -599,16 +610,20 @@ class TestDecideWithMatrix(TestEnvContext):
         with tempfile.TemporaryDirectory() as td:
             repo = _make_repo(Path(td))
             sink = Path(td) / "sink.jsonl"
-            # Clean review fixture — STRUCTURED PASS (strict-parser shape).
-            # r6 F9: env via mock.patch.dict (never bare os.environ writes).
+            # Clean review — STRUCTURED PASS (strict-parser shape). PLAN-163
+            # FXα: injected at the _invoke_codex_review boundary via mock (the
+            # env-fixture short-circuit was removed from production); env via
+            # mock.patch.dict (never bare os.environ writes).
+            clean_review = json.dumps({
+                "verdict": "PASS",
+                "findings": [],
+                "summary": "Clean review. No issues found.",
+            })
             with patch.dict(os.environ, {
-                "CEO_PAIR_RAIL_FIXTURE_RESPONSE": json.dumps({
-                    "verdict": "PASS",
-                    "findings": [],
-                    "summary": "Clean review. No issues found.",
-                }),
                 "CEO_PAIR_RAIL_AUDIT_SINK": str(sink),
-            }, clear=False):
+            }, clear=False), patch.object(
+                _CPR, "_invoke_codex_review", return_value=clean_review
+            ):
                 result = _CPR._decide_with_matrix(
                     tool_name="Write",
                     file_path=_l3_abs(repo),
@@ -656,12 +671,17 @@ class TestDecideWithMatrix(TestEnvContext):
                 expected_ids.append(kwargs.get("review_id", ""))
                 return real_expected(**kwargs)
 
+            # PLAN-163 FXα: the ENTERED-but-unparseable review is injected at
+            # the _invoke_codex_review boundary (free text → strict-parser
+            # miss → ADVISORY). This is DISTINCT from Case-F-unavailable: the
+            # review WAS entered (return_value), so the expected/terminal
+            # review_id pair still fires — the r6 F1 invariant under test.
+            free_text_review = "Code looks good. No issues found."
             with patch.dict(os.environ, {
-                "CEO_PAIR_RAIL_FIXTURE_RESPONSE": (
-                    "Code looks good. No issues found."
-                ),
                 "CEO_PAIR_RAIL_AUDIT_SINK": str(sink),
             }, clear=False), patch.object(
+                _CPR, "_invoke_codex_review", return_value=free_text_review
+            ), patch.object(
                 _CPR, "_emit_pair_rail_review_expected", _capture_expected
             ):
                 result = _CPR._decide_with_matrix(
@@ -701,19 +721,25 @@ class TestDecideWithMatrix(TestEnvContext):
         with tempfile.TemporaryDirectory() as td:
             repo = _make_repo(Path(td))
             sink = Path(td) / "sink.jsonl"
-            # Write-shaped fixture (Codex envelope grammar).
-            os.environ["CEO_PAIR_RAIL_FIXTURE_RESPONSE"] = (
+            # Write-shaped review (Codex envelope grammar) → Case B advisory.
+            # PLAN-163 FXα: injected at the _invoke_codex_review boundary;
+            # env via mock.patch.dict (never bare os.environ writes).
+            write_shaped_review = (
                 "*** Update File: .claude/hooks/_lib/payload.py\n"
                 "+ x = 1\n"
             )
-            os.environ["CEO_PAIR_RAIL_AUDIT_SINK"] = str(sink)
-            result = _CPR._decide_with_matrix(
-                tool_name="Write",
-                file_path=_l3_abs(repo),
-                proposed_content="y = 2",
-                repo_root=repo,
-                timeout_s=5.0,
-            )
+            with patch.dict(os.environ, {
+                "CEO_PAIR_RAIL_AUDIT_SINK": str(sink),
+            }, clear=False), patch.object(
+                _CPR, "_invoke_codex_review", return_value=write_shaped_review
+            ):
+                result = _CPR._decide_with_matrix(
+                    tool_name="Write",
+                    file_path=_l3_abs(repo),
+                    proposed_content="y = 2",
+                    repo_root=repo,
+                    timeout_s=5.0,
+                )
             # SHADOW-strip: advisory-only, NO top-level decision key.
             self.assertNotIn("decision", result,
                              f"Expected advisory (no block decision), got: {result}")
@@ -728,34 +754,44 @@ class TestDecideWithMatrix(TestEnvContext):
             )
 
     def test_case_f_codex_unavailable_emits_case_f(self):
-        """Codex unavailable (empty fixture + binary missing) → Case F, allow."""
+        """Codex unavailable → Case F, allow.
+
+        PLAN-163 FXα: Case F is forced by raising CodexUnavailable at the
+        _invoke_codex_review boundary — NOT by CEO_PAIR_RAIL_CODEX_BIN=
+        /nonexistent, which under ADR-182 pin enforcement now fail-CLOSES to a
+        CodexPinMismatch BLOCK (a set-but-missing override), not a fail-open
+        Case F. The raise is deterministic, so the Case-F assertion is firm.
+        """
         import tempfile
         with tempfile.TemporaryDirectory() as td:
             repo = _make_repo(Path(td))
             sink = Path(td) / "sink.jsonl"
-            # Empty fixture triggers CodexUnavailable in _invoke_codex
-            os.environ["CEO_PAIR_RAIL_FIXTURE_RESPONSE"] = ""
-            os.environ["CEO_PAIR_RAIL_AUDIT_SINK"] = str(sink)
-            # Ensure codex binary is not found (non-existent path)
-            os.environ["CEO_PAIR_RAIL_CODEX_BIN"] = "/nonexistent/codex-bin-zzz"
-            result = _CPR._decide_with_matrix(
-                tool_name="Write",
-                file_path=_l3_abs(repo),
-                proposed_content="z = 3",
-                repo_root=repo,
-                timeout_s=1.0,
-            )
+            with patch.dict(os.environ, {
+                "CEO_PAIR_RAIL_AUDIT_SINK": str(sink),
+            }, clear=False), patch.object(
+                _CPR, "_invoke_codex_review",
+                side_effect=_CPR.CodexUnavailable("no codex payload resolvable"),
+            ):
+                result = _CPR._decide_with_matrix(
+                    tool_name="Write",
+                    file_path=_l3_abs(repo),
+                    proposed_content="z = 3",
+                    repo_root=repo,
+                    timeout_s=1.0,
+                )
             self.assertEqual(result.get("decision", "allow"), "allow")
-            # Case F is emitted when sysmsg contains Codex unavailable/timeout
+            sysmsg = result.get("systemMessage", "")
+            self.assertTrue(
+                any(s in sysmsg for s in
+                    ("Codex unavailable", "Codex timeout", "Codex malformed")),
+                f"expected a Codex-fail sysmsg; got {sysmsg!r}",
+            )
             events = _read_sink(sink)
             case_f_events = [e for e in events if e.get("case") == "F"]
-            # Only assert Case F if the sysmsg route was taken
-            sysmsg = result.get("systemMessage", "")
-            if "Codex unavailable" in sysmsg or "Codex timeout" in sysmsg or "Codex malformed" in sysmsg:
-                self.assertTrue(
-                    len(case_f_events) >= 1,
-                    f"Expected case=F emit; events={events}",
-                )
+            self.assertTrue(
+                len(case_f_events) >= 1,
+                f"Expected case=F emit; events={events}",
+            )
 
     def test_sentinel_bypass_no_matrix_emit(self):
         """Sentinel bypass route → no case=A/B/C/D/E/F emit (Owner-authorized)."""
@@ -763,11 +799,19 @@ class TestDecideWithMatrix(TestEnvContext):
         with tempfile.TemporaryDirectory() as td:
             repo = _make_repo(Path(td))
             sink = Path(td) / "sink.jsonl"
-            os.environ["CEO_PAIR_RAIL_AUDIT_SINK"] = str(sink)
-            # Patch _sentinel_grants_pair_rail_bypass to return True
-            with patch.object(_CPR, "_sentinel_grants_pair_rail_bypass", return_value=True):
-                # Clean review fixture
-                os.environ["CEO_PAIR_RAIL_FIXTURE_RESPONSE"] = "Looks good."
+            # The sentinel bypass short-circuits BEFORE the invoke boundary,
+            # so the mocked review below is dormant — present only to keep the
+            # test independent of any real codex / env fixture (PLAN-163 FXα
+            # removed the env-fixture seam). Env via mock.patch.dict.
+            with patch.dict(os.environ, {
+                "CEO_PAIR_RAIL_AUDIT_SINK": str(sink),
+            }, clear=False), patch.object(
+                _CPR, "_sentinel_grants_pair_rail_bypass", return_value=True
+            ), patch.object(
+                _CPR, "_invoke_codex_review",
+                return_value=json.dumps({"verdict": "PASS", "findings": [],
+                                         "summary": "clean"}),
+            ):
                 result = _CPR._decide_with_matrix(
                     tool_name="Write",
                     file_path=_l3_abs(repo),
@@ -791,15 +835,18 @@ class TestDecideWithMatrix(TestEnvContext):
         with tempfile.TemporaryDirectory() as td:
             repo = _make_repo(Path(td))
             sink = Path(td) / "sink.jsonl"
-            os.environ["CEO_PAIR_RAIL_FIXTURE_RESPONSE"] = "Fine."
-            os.environ["CEO_PAIR_RAIL_AUDIT_SINK"] = str(sink)
-            result = _CPR._decide_with_matrix(
-                tool_name="Write",
-                file_path=str(repo / "README.md"),  # not L3+
-                proposed_content="# hello",
-                repo_root=repo,
-                timeout_s=5.0,
-            )
+            # Out-of-scope (non-L3+) path short-circuits BEFORE the invoke
+            # boundary — no review needed. Env via mock.patch.dict.
+            with patch.dict(os.environ, {
+                "CEO_PAIR_RAIL_AUDIT_SINK": str(sink),
+            }, clear=False):
+                result = _CPR._decide_with_matrix(
+                    tool_name="Write",
+                    file_path=str(repo / "README.md"),  # not L3+
+                    proposed_content="# hello",
+                    repo_root=repo,
+                    timeout_s=5.0,
+                )
             self.assertEqual(result.get("decision", "allow"), "allow")
             events = _read_sink(sink)
             matrix_events = [
@@ -816,15 +863,19 @@ class TestDecideWithMatrix(TestEnvContext):
         with tempfile.TemporaryDirectory() as td:
             repo = _make_repo(Path(td))
             sink = Path(td) / "sink.jsonl"
-            os.environ["CEO_PAIR_RAIL_DISABLE"] = "1"
-            os.environ["CEO_PAIR_RAIL_AUDIT_SINK"] = str(sink)
-            result = _CPR._decide_with_matrix(
-                tool_name="Write",
-                file_path=_l3_abs(repo),
-                proposed_content="z = 42",
-                repo_root=repo,
-                timeout_s=5.0,
-            )
+            # Kill-switch short-circuits before the invoke boundary. Env via
+            # mock.patch.dict.
+            with patch.dict(os.environ, {
+                "CEO_PAIR_RAIL_DISABLE": "1",
+                "CEO_PAIR_RAIL_AUDIT_SINK": str(sink),
+            }, clear=False):
+                result = _CPR._decide_with_matrix(
+                    tool_name="Write",
+                    file_path=_l3_abs(repo),
+                    proposed_content="z = 42",
+                    repo_root=repo,
+                    timeout_s=5.0,
+                )
             self.assertEqual(result.get("decision", "allow"), "allow")
             events = _read_sink(sink)
             matrix_events = [
@@ -841,15 +892,18 @@ class TestDecideWithMatrix(TestEnvContext):
         with tempfile.TemporaryDirectory() as td:
             repo = _make_repo(Path(td))
             sink = Path(td) / "sink.jsonl"
-            os.environ["CEO_PAIR_RAIL_FIXTURE_RESPONSE"] = "Fine."
-            os.environ["CEO_PAIR_RAIL_AUDIT_SINK"] = str(sink)
-            result = _CPR._decide_with_matrix(
-                tool_name="Read",
-                file_path=_l3_abs(repo),
-                proposed_content="",
-                repo_root=repo,
-                timeout_s=5.0,
-            )
+            # Non-write tool short-circuits before the invoke boundary. Env
+            # via mock.patch.dict.
+            with patch.dict(os.environ, {
+                "CEO_PAIR_RAIL_AUDIT_SINK": str(sink),
+            }, clear=False):
+                result = _CPR._decide_with_matrix(
+                    tool_name="Read",
+                    file_path=_l3_abs(repo),
+                    proposed_content="",
+                    repo_root=repo,
+                    timeout_s=5.0,
+                )
             self.assertEqual(result.get("decision", "allow"), "allow")
             events = _read_sink(sink)
             matrix_events = [
@@ -979,65 +1033,69 @@ class TestDecideWithMatrixPerformance(TestEnvContext):
         from _lib import spool_writer as _sw  # type: ignore[import]
         _orig_size = _sw.DRAIN_TRIGGER_SIZE
         _orig_mtime = _sw.DRAIN_TRIGGER_MTIME_MS
-        _orig_audit_dir = os.environ.get("CEO_AUDIT_LOG_DIR")
-        _orig_audit_path = os.environ.get("CEO_AUDIT_LOG_PATH")
-        with tempfile.TemporaryDirectory() as td:
+        # PLAN-163 FXα: the Case-A review is injected at the
+        # _invoke_codex_review boundary (a real `with patch.object` context —
+        # this also repairs a prior DANGLING `.stop()` on an unstarted patcher,
+        # left behind when the env-fixture seam was removed), NOT via the
+        # retired env-fixture. The CEO_AUDIT_LOG_* redirect goes through
+        # mock.patch.dict (never bare os.environ writes); the drain runs INSIDE
+        # that patch so leftover journal envelopes never flush to the real
+        # (inherited) $HOME.
+        clean_review = json.dumps(
+            {"verdict": "PASS", "findings": [], "summary": "clean"}
+        )
+        times_ms: list = []
+        with tempfile.TemporaryDirectory() as td, \
+                patch.object(_CPR, "_invoke_codex_review",
+                             return_value=clean_review):
             repo = _make_repo(Path(td))
-            os.environ["CEO_PAIR_RAIL_FIXTURE_RESPONSE"] = "All good, no issues."
-            os.environ.pop("CEO_PAIR_RAIL_AUDIT_SINK", None)
             # Isolate the durable audit sink (defense-in-depth: the probe never
             # touches the live chain) + pin the drain triggers so no drain fires
             # during the warm-up or the 100 timed iterations.
             _audit_dir = Path(td) / "ws3-perf-audit"
             _audit_dir.mkdir(parents=True, exist_ok=True)
-            os.environ["CEO_AUDIT_LOG_DIR"] = str(_audit_dir)
-            os.environ["CEO_AUDIT_LOG_PATH"] = str(_audit_dir / "audit-log.jsonl")
-            _sw.DRAIN_TRIGGER_SIZE = 10 ** 9
-            _sw.DRAIN_TRIGGER_MTIME_MS = 10 ** 9
-            try:
-                # Warm-up
-                for _ in range(3):
-                    _CPR._decide_with_matrix(
-                        tool_name="Write",
-                        file_path=_l3_abs(repo),
-                        proposed_content="x = 1",
-                        repo_root=repo,
-                        timeout_s=5.0,
-                    )
-                _reset_catalogue_cache()
-                # Timed run
-                times_ms: list = []
-                for _ in range(100):
-                    _reset_catalogue_cache()
-                    t0 = time.perf_counter()
-                    _CPR._decide_with_matrix(
-                        tool_name="Write",
-                        file_path=_l3_abs(repo),
-                        proposed_content="x = 1",
-                        repo_root=repo,
-                        timeout_s=5.0,
-                    )
-                    times_ms.append((time.perf_counter() - t0) * 1000.0)
-            finally:
-                # r6 F9 — drain the async spool + journal buffer INSIDE the
-                # isolated env (outside the timed window): otherwise the
-                # leftover buffered journal envelopes flush at the ATEXIT
-                # drain, after tearDown restored the env, and land in the
-                # real (inherited) $HOME state dir.
+            with patch.dict(os.environ, {
+                "CEO_AUDIT_LOG_DIR": str(_audit_dir),
+                "CEO_AUDIT_LOG_PATH": str(_audit_dir / "audit-log.jsonl"),
+            }, clear=False):
+                os.environ.pop("CEO_PAIR_RAIL_AUDIT_SINK", None)
+                _sw.DRAIN_TRIGGER_SIZE = 10 ** 9
+                _sw.DRAIN_TRIGGER_MTIME_MS = 10 ** 9
                 try:
-                    _sw.drain_now(force=True)
-                except Exception:
-                    pass
-                _sw.DRAIN_TRIGGER_SIZE = _orig_size
-                _sw.DRAIN_TRIGGER_MTIME_MS = _orig_mtime
-                if _orig_audit_dir is None:
-                    os.environ.pop("CEO_AUDIT_LOG_DIR", None)
-                else:
-                    os.environ["CEO_AUDIT_LOG_DIR"] = _orig_audit_dir
-                if _orig_audit_path is None:
-                    os.environ.pop("CEO_AUDIT_LOG_PATH", None)
-                else:
-                    os.environ["CEO_AUDIT_LOG_PATH"] = _orig_audit_path
+                    # Warm-up
+                    for _ in range(3):
+                        _CPR._decide_with_matrix(
+                            tool_name="Write",
+                            file_path=_l3_abs(repo),
+                            proposed_content="x = 1",
+                            repo_root=repo,
+                            timeout_s=5.0,
+                        )
+                    _reset_catalogue_cache()
+                    # Timed run
+                    for _ in range(100):
+                        _reset_catalogue_cache()
+                        t0 = time.perf_counter()
+                        _CPR._decide_with_matrix(
+                            tool_name="Write",
+                            file_path=_l3_abs(repo),
+                            proposed_content="x = 1",
+                            repo_root=repo,
+                            timeout_s=5.0,
+                        )
+                        times_ms.append((time.perf_counter() - t0) * 1000.0)
+                finally:
+                    # r6 F9 — drain the async spool + journal buffer INSIDE the
+                    # isolated env (outside the timed window): otherwise the
+                    # leftover buffered journal envelopes flush at the ATEXIT
+                    # drain, after the env is restored, and land in the real
+                    # (inherited) $HOME state dir.
+                    try:
+                        _sw.drain_now(force=True)
+                    except Exception:
+                        pass
+                    _sw.DRAIN_TRIGGER_SIZE = _orig_size
+                    _sw.DRAIN_TRIGGER_MTIME_MS = _orig_mtime
             times_ms.sort()
             # p99 = index 98 (0-based) of 100 sorted values.
             # PLAN-112-FOLLOWUP (S157): on a shared CI runner the p99 of N=100

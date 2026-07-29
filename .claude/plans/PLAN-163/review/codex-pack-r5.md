@@ -1,0 +1,14 @@
+VERDICT: REJECT
+- .claude/plans/PLAN-163/staged/main-pack/.claude/hooks/check_canonical_edit.py:1523-1528,2105-2114: HIGH — C3 regression: `PermissionError` correctly fails open, but present non-UTF-8 registry bytes raise `UnicodeDecodeError` before the parse handler; the caller treats that as infrastructure and allows the external write, violating fail-closed-on-unparseable-input.
+- .claude/plans/PLAN-163/land-plan163-pack.sh:183-192: HIGH — ceremony-death remains: `RE_W2` still omits `.claude/scripts/detectors/tests/test_overpowered.py`, so current W2 dirt enters `BAD` and aborts before the W2 commit, despite the file appearing in `W2_MODIFIED` at line 96.
+- .claude/plans/PLAN-163/staged/main-pack/.claude/hooks/check_canonical_edit.py:1659-1662: LOW — stale comment still describes a corrupt whole registry as `INFRA → allow`, contradicting the external-write fail-closed implementation.
+- .claude/plans/PLAN-163/staged/main-pack/.claude/adr/ADR-183-directory-added-notification-events.md:210-219: LOW — core C3 semantics are corrected, but line 217 still calls corrupt/unknown-schema handling “fail-open”; documentation-only drift.
+- .claude/plans/PLAN-163/staged/pin-pack/.claude/hooks/check_pair_rail.py:499-523,664-673: ACCEPTED — C2 closes; `RecursionError` is converted to `CodexPinManifestMalformed` and then `mismatch`.
+- .claude/plans/PLAN-163/staged/pin-pack/.claude/scripts/local/pair-rail-gate.sh:34-44,167-194: ACCEPTED — C4 closes; `REPO_ROOT_OVERRIDE` is ignored live and honored only with `CEO_PAIR_RAIL_TEST_MODE=1`.
+- .claude/plans/PLAN-163/staged/main-pack/docs/ACCELERATORS.md:51-85: ACCEPTED — “reduced waiting” is removed; the added section asserts no speed or throughput benefit.
+- .claude/plans/PLAN-163/land-plan163-pin.sh:289-300: ACCEPTED — the pin ceremony’s W2 regex includes the C8 regression test.
+- .claude/plans/PLAN-163/staged/main-pack/scripts/upgrade.sh:126-139: ACCEPTED — baseline comment now documents withholding Opus 5 when the effective allowlist excludes it.
+- .claude/plans/PLAN-163/staged/main-pack/.claude/scripts/tier_policy_cli/_types.py:26-38; .claude/plans/PLAN-163/staged/main-pack/.claude/hooks/check_canonical_edit.py:1584-1640; .claude/plans/PLAN-163/staged/pin-pack/.claude/hooks/check_pair_rail.py:449-455: ACCEPTED — all enumerated known residuals remain non-blocking.
+- .claude/plans/PLAN-163/land-plan163-pack.sh:165-170; .claude/plans/PLAN-163/land-plan163-pin.sh:321-327: ACCEPTED — manifests self-verify 43/43 and 20/20, row gates match, sentinel scopes match, and staged Python/shell/JSON syntax is clean.
+Summary: C2 and C4 close, but C3 still has a real invalid-UTF input bypass and the main ceremony still aborts on the C8 test.
+Coverage: Final scan found no additional runtime dependency, contamination, Python 3.9, count-claim, or prohibited speed-claim blocker.
