@@ -48,7 +48,7 @@ Documented in `routing-matrix.md` §L3-classifier.
 ##  a preset review on ANY path; tests inject a review by mocking
 ##  `_invoke_codex_review` at the invoke boundary, never via env.)
 
-- `CEO_PAIR_RAIL_TIMEOUT_S` (default 30) — Codex invoke wall-clock
+- `CEO_PAIR_RAIL_TIMEOUT_S` (default 120) — Codex invoke wall-clock
   cap. On timeout: fail-OPEN.
 - `CEO_PAIR_RAIL_DISABLE` — kill-switch: when set to `1`, hook is a
   no-op (allow). For incident response.
@@ -1714,12 +1714,12 @@ def main() -> int:
         )
         try:
             timeout_s = float(
-                os.environ.get("CEO_PAIR_RAIL_TIMEOUT_S", "30")
+                os.environ.get("CEO_PAIR_RAIL_TIMEOUT_S", "120")
             )
         except (TypeError, ValueError):
-            timeout_s = 30.0
+            timeout_s = 120.0
         if timeout_s <= 0 or timeout_s > 600:
-            timeout_s = 30.0
+            timeout_s = 120.0
 
         # PLAN-081 Phase 3: route through the asymmetric VETO matrix
         # wrapper instead of the spike _decide() directly. The matrix

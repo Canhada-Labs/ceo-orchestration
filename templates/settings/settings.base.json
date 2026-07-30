@@ -89,13 +89,14 @@
         ]
       },
       {
-        "_comment": "PLAN-152 governance-03 (mirror of dogfood ADR-106 + ADR-110): PreToolUse Pair-Rail Multi-LLM hook. When Edit|Write|MultiEdit targets an L3+ canonical-guarded path, invokes Codex MCP in read-only review mode and validates the response contains no write-shaped patches. Adopters get the codex .mcp.json from install.sh, so the rail is meaningful out of the box; on Codex unavailable it fail-OPENs with a breadcrumb (adopters without Codex pay only the no-op). Kill-switches: CEO_PAIR_RAIL_DISABLE=1, CEO_PAIR_RAIL_TIMEOUT_S (default 30s).",
+        "_comment": "PLAN-152 governance-03 (mirror of dogfood ADR-106 + ADR-110): PreToolUse Pair-Rail Multi-LLM hook. When Edit|Write|MultiEdit targets an L3+ canonical-guarded path, invokes Codex MCP in read-only review mode and validates the response contains no write-shaped patches. Adopters get the codex .mcp.json from install.sh, so the rail is meaningful out of the box; on Codex unavailable it fail-OPENs with a breadcrumb (adopters without Codex pay only the no-op). Kill-switches: CEO_PAIR_RAIL_DISABLE=1, CEO_PAIR_RAIL_TIMEOUT_S (default 120s; registration cap 150s — invariant guarded by test_pair_rail_timeout_invariant.py).",
         "matcher": "Edit|Write|MultiEdit",
         "hooks": [
           {
             "type": "command",
             "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_pair_rail.py",
-            "timeout": 60
+            "timeout": 150,
+            "statusMessage": "Pair-rail cross-model review (may take 1-2 min)"
           }
         ]
       },

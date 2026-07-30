@@ -644,6 +644,57 @@ if [ "$NO_ORPHAN_SCAN" -eq 0 ]; then
 fi
 
 # ---------------------------------------------------------------------------
+# Pair-rail timeout coherence (PLAN-164 / ADR-110-AMEND-1 — ADVISORY,
+# report-only, NEVER drives the exit code): the harness kills a hook at its
+# settings.json registration timeout, so a check_pair_rail.py registration
+# below the hook's INTERNAL default (CEO_PAIR_RAIL_TIMEOUT_S) + the 30s
+# invariant margin means the codex verdict can be killed mid-flight — the
+# historical 12/12 pair_rail_case F/TIMEOUT class (hook-kill risk). The
+# internal default is read with the SAME regex the invariant uses:
+# os.environ.get("CEO_PAIR_RAIL_TIMEOUT_S", "NNN"). Fail-open: missing
+# jq/hook/settings or an unparseable value => NOTE + skip.
+# ---------------------------------------------------------------------------
+_pair_rail_timeout_check() {
+  _prt_settings="$TARGET/.claude/settings.json"
+  _prt_hook="$TARGET/.claude/hooks/check_pair_rail.py"
+  if [ ! -f "$_prt_settings" ] || [ ! -f "$_prt_hook" ]; then
+    return 0
+  fi
+  if ! command -v jq >/dev/null 2>&1; then
+    _log "    NOTE: pair-rail timeout check skipped (jq not found) — advisory only"
+    return 0
+  fi
+  _prt_reg="$( jq -r '[ .hooks // {} | to_entries[] | .value
+      | select(type == "array") | .[] | .hooks[]?
+      | select((type == "object")
+          and ((.command? | type) == "string")
+          and (.command | test("check_pair_rail\\.py")))
+      | .timeout ] | first // empty' "$_prt_settings" 2>/dev/null || true )"
+  _prt_int="$( sed -n 's/.*os\.environ\.get("CEO_PAIR_RAIL_TIMEOUT_S", "\([0-9][0-9]*\)").*/\1/p' "$_prt_hook" 2>/dev/null | head -n 1 )"
+  case "$_prt_reg" in
+    ''|*[!0-9]*)
+      _log "    NOTE: pair-rail timeout check skipped (no numeric check_pair_rail.py registration timeout in settings.json) — advisory only"
+      return 0 ;;
+  esac
+  case "$_prt_int" in
+    ''|*[!0-9]*)
+      _log "    NOTE: pair-rail timeout check skipped (internal CEO_PAIR_RAIL_TIMEOUT_S default not found in check_pair_rail.py) — advisory only"
+      return 0 ;;
+  esac
+  if [ "$_prt_reg" -lt $((_prt_int + 30)) ]; then
+    _log ""
+    _log "    WARN: check_pair_rail.py registration timeout (${_prt_reg}s) < internal default (${_prt_int}s) + 30s margin —"
+    _log "          the harness can KILL the hook before the codex verdict lands (PLAN-164 hook-kill risk;"
+    _log "          the historical 12/12 pair_rail_case F/TIMEOUT class). Raise the settings.json registration"
+    _log "          timeout to >= $((_prt_int + 30))s (upgrade.sh migrates the old default 60 -> 150)."
+  elif [ "$VERBOSE" -eq 1 ]; then
+    _log "    OK (pair-rail timeouts): registration ${_prt_reg}s >= internal ${_prt_int}s + 30s margin"
+  fi
+  return 0
+}
+_pair_rail_timeout_check
+
+# ---------------------------------------------------------------------------
 # Summary + exit code
 # ---------------------------------------------------------------------------
 _log ""
