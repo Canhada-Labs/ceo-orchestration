@@ -1,4 +1,8 @@
 # MANIFEST.sha256 — PLAN-163 main-pack (consolidated; remanifest post fix-pass R3, 2026-07-28)
+# REMANIFEST 2026-07-29 (PLAN-164 W1 sync): 4 rows re-hashed — settings.json,
+# settings.base.json (timeout 150 + statusMessage + _comment), upgrade.sh
+# (pair-rail value migration, template-derived cap), test_upgrade_settings_migration.py
+# (+TestPairRailTimeoutValueMigration). Delta-review: PLAN-164/review/ r1+r2.
 # format: sha256  path-staged  ->  path-destino-real
 # Hashes RECOMPUTED after FIX-R3 (FXgamma/C3: check_canonical_edit.py + test_session_roots_write_guard.py)
 #   over current on-disk staged bytes (FULL PREFLIGHT remanifest). THIS file is authoritative.
@@ -30,11 +34,11 @@ e17b847fbcf055e4989b413bb6e6857199717b03ea2462f860b7f255c1d65759  .claude/plans/
 b709f4c9325c5483bfe55cefbe0e7db64733118e7e173ce4299cbbe3d012cd7a  .claude/plans/PLAN-163/staged/main-pack/.claude/scripts/check-hook-stdout-schema.py  ->  .claude/scripts/check-hook-stdout-schema.py
 861e5fb69986e065b5bf8cb9d42c3708ed3793b91306abcf29542094b41be728  .claude/plans/PLAN-163/staged/main-pack/.claude/scripts/tests/test_check_hook_stdout_schema.py  ->  .claude/scripts/tests/test_check_hook_stdout_schema.py
 c7fab564952fc6534fcb9a4e23bb164a146a43c4b2e8c05b3a827b61421e80b3  .claude/plans/PLAN-163/staged/main-pack/.claude/scripts/tests/test_generate_available_models.py  ->  .claude/scripts/tests/test_generate_available_models.py
-fece649605850aadfdfe6ce536377f4071eb973d825facc8008b28bcd9a22023  .claude/plans/PLAN-163/staged/main-pack/.claude/scripts/tests/test_upgrade_settings_migration.py  ->  .claude/scripts/tests/test_upgrade_settings_migration.py
+861da55c69ad96b111b43d453cb2526569009f6cddbd2b97c4f1e03fac1dc135  .claude/plans/PLAN-163/staged/main-pack/.claude/scripts/tests/test_upgrade_settings_migration.py  ->  .claude/scripts/tests/test_upgrade_settings_migration.py
 c0fa57ddff14cbd0ba7aea3b855040799dd61e3d79bad8d473e82ef3b0c8ce03  .claude/plans/PLAN-163/staged/main-pack/.claude/scripts/tier_policy_cli/_types.py  ->  .claude/scripts/tier_policy_cli/_types.py
 5ed4794dcf4b746f360cb17a16f3337344bb75e04291124f14b781e676fdfa8d  .claude/plans/PLAN-163/staged/main-pack/.claude/scripts/tier_policy_cli/tests/test_types.py  ->  .claude/scripts/tier_policy_cli/tests/test_types.py
 a39a873540e7cc644d19cdf9a4d3ee41530074fba9a041afbc2e74112bb9ab29  .claude/plans/PLAN-163/staged/main-pack/.claude/scripts/validate-governance.sh  ->  .claude/scripts/validate-governance.sh
-df2f7748e3e11bc2c29383a4b0c07f8179652023d8c9a3731c7092dba03218c3  .claude/plans/PLAN-163/staged/main-pack/.claude/settings.json  ->  .claude/settings.json
+4c82e41b03afcedcc19029f176b0a5d15942e9da2d757f2df1d96a2cd28f4cfa  .claude/plans/PLAN-163/staged/main-pack/.claude/settings.json  ->  .claude/settings.json
 21e250429471ec8f43e95e5dc40629bb3e5e705e9f385fc5c2ea5cb49272ebc9  .claude/plans/PLAN-163/staged/main-pack/.github/workflows/validate.yml  ->  .github/workflows/validate.yml
 1324249a3a1bae22984e5b623a3c9683094ec557c431f5e9098203b0c82b4e4e  .claude/plans/PLAN-163/staged/main-pack/.gitignore  ->  .gitignore
 595cf5fb3e23830272b6f5e0245ef01aea4557712994ffcd7a64903f8b8b4772  .claude/plans/PLAN-163/staged/main-pack/SPEC/v1/audit-log.schema.md  ->  SPEC/v1/audit-log.schema.md
@@ -42,6 +46,6 @@ ca3e1d2ec802d0c8ab39886897b6899e66fdb4969af26c0809e8448625ce92f1  .claude/plans/
 cd2e4ae631cede12e4752a322bb1a9aabea41e97e30ba24acd674f5690880192  .claude/plans/PLAN-163/staged/main-pack/docs/CEO-MODEL-ROUTING.md  ->  docs/CEO-MODEL-ROUTING.md
 f8661e573403dd19c18d02e60ad5b2ecfe1bb5b880fbfbe138f0f8c736f2b174  .claude/plans/PLAN-163/staged/main-pack/docs/substrate-adopt-2026-08.md  ->  docs/substrate-adopt-2026-08.md
 aa047a50120ab7f7ed03bdd04cc390edbe09955ea2955e4702a2c50f7c0fec27  .claude/plans/PLAN-163/staged/main-pack/scripts/local/smoke-install-parity.sh  ->  scripts/local/smoke-install-parity.sh
-3b7abd7320babe3224d6b22b79ff1cb0b3f2c8969e3260e50cfa64ed29f96e27  .claude/plans/PLAN-163/staged/main-pack/scripts/upgrade.sh  ->  scripts/upgrade.sh
-cf72041ee70be4f8c627d353eb2b21db16af9856d86180e694fcf32a6eb71db8  .claude/plans/PLAN-163/staged/main-pack/templates/settings/settings.base.json  ->  templates/settings/settings.base.json
+bb0bc463f5970b87e9ac4b9c8d3578bdac3ee91d47a19641e636b4dc5b2c42e2  .claude/plans/PLAN-163/staged/main-pack/scripts/upgrade.sh  ->  scripts/upgrade.sh
+bf13c7315f9a21fcb84245e9f8dd9555ea00f03bf57d2bf4d1e283ae02fb0978  .claude/plans/PLAN-163/staged/main-pack/templates/settings/settings.base.json  ->  templates/settings/settings.base.json
 1af4008169286eec3f94479d7bcbe687877342f14823e4fa6d20cb7f0b10c953  .claude/plans/PLAN-163/staged/main-pack/templates/settings/settings.user.json  ->  templates/settings/settings.user.json

@@ -1,8 +1,9 @@
 ---
 id: PLAN-164
 title: Pair-rail liveness — timeout uplift + re-âncora do GATE-V2
-status: reviewed
+status: executing
 created: 2026-07-29
+executing_since: 2026-07-29
 reviewed_at: 2026-07-29
 reviewed_by: "Owner (João) — tie-break estruturado S285: OQ1=120s / OQ2=150s / OQ3=mecânica-do-pin / OQ4=delta-1-round (todas nas recomendações do consenso round 1)"
 owner: CEO
@@ -64,12 +65,20 @@ round 1 EXECUTADO em 2026-07-29: 3× ADJUST → PROCEED** (consenso em
 incorporados abaixo).
 
 **Registro: AMEND-1 do ADR-110** (pretool enforcement — contrato operativo
-do rail), cross-ref ADR-106. NÃO um ADR novo — restrição dura verificada
-pelo debate: `land-plan163-pack.sh:242/:477` são fail-closed na contagem de
-ADRs (181 pré-apply → 183 pós) e o número ADR-183 já está consumido por
-bytes double-APPROVEd do pack congelado; amend não muda contagem nem consome
-número (precedente ADR-136-AMEND-1; o pack não contém cópia staged do
-ADR-110, então o amend vivo sobrevive ao apply do pack). O amend nomeia:
+do rail), cross-ref ADR-106. NÃO um ADR de número novo — restrição dura
+verificada pelo debate: o número ADR-183 já está consumido por bytes
+double-APPROVEd do pack congelado. **Correção W1 (verificada na
+execução):** a convenção da casa materializa AMENDs como ARQUIVO SEPARADO
+(`ADR-NNN-AMEND-M-slug.md`, 17 precedentes) — o arquivo
+`ADR-110-AMEND-1-rail-timeout-contract.md` MOVE a contagem de arquivos
+181→182 (a premissa original do debate, "amend não muda contagem", valia
+para amend-in-place, que não é a convenção). Consequência absorvida no
+pack: o rail-pack também stage-ia `land-plan163-pack.sh` com os gates
+fail-closed de contagem bumpados (pré-apply 182 / pós-apply 184, expect
+dict e closeout em sincronia) e o closeout do rail faz o sweep de docs
+181→182 (sed list impresso pela cerimônia). O pack congelado não contém
+cópia staged do ADR-110, então o amend vivo sobrevive ao apply. O amend
+nomeia:
 residual do env-knob sub-piso (auditável via case F), o gatilho de
 recalibração (≥10 healthy → p95 de `case.ts − expected.ts` revisita os
 números), as alternativas rejeitadas (review assíncrono pós-facto — o valor
@@ -155,12 +164,16 @@ Check: none (doc-only)
   rail; statusMessage presente nas 4 cópias.
 
 ### W2 — Cerimônia (Owner-run via `!`, GPG)
-- [ ] Fix do `resolve_anchor()` (consenso C1, mesmo commit da cerimônia):
+- [ ] Fix do `resolve_anchor()` (consenso C1; revisado no r2 do review):
   âncora tratada como PONTEIRO — `ts` derivado de `git log -1 --format=%cI
-  <sha>` (nunca lido do arquivo); `sha` deve resolver a commit com tag
-  `[SENT-PLAN163-PIN]` OU `[SENT-PLAN164-RAIL]`; fallback git-log aceita as
-  duas tags preferindo a mais nova; qualquer falha → die (fail-closed).
-  Script em `PLAN-163/` (não-canônico).
+  <sha>` (nunca lido do arquivo); `sha` deve ser um commit de CERIMÔNIA
+  (subject TERMINANDO em `[SENT-PLAN163-PIN]` ou `[SENT-PLAN164-RAIL]` —
+  a regra de sufixo mata o vetor de laundering por menção no meio da
+  mensagem, e mensagens de closeout/rollback nunca carregam o tag);
+  fallback (arquivo ausente) = o commit de cerimônia MAIS NOVO, o que
+  mantém a recuperação pós-revert possível (o canonical-oldest do r1
+  criava deadlock — codex r2 HIGH-1); qualquer falha → die (fail-closed,
+  sem command substitution). Script em `PLAN-163/` (não-canônico).
   Check: com âncora adulterada (ts movido / sha não-sentinel), `--gate-v2`
   ABORTA; com âncora íntegra, resolve normal.
 - [ ] Sentinel round novo (escopo exato = arquivos do W1 vivos); apply sob
@@ -223,6 +236,26 @@ Check: none (doc-only)
   antigo→novo por arquivo). Full re-review rejeitado como custo sem ganho
   (S284: 17,5M tokens).
 
+## Progress log
+
+- **2026-07-29 (S285, W1 EXECUTADO):** staging completo via workflow
+  (8 builders + 2 verifiers, opus) + fix agent. Rail-pack final = 8
+  arquivos (MANIFEST + gêmeo tracked `inputs-rail.sha256`). Dois achados
+  estruturais corrigidos em voo: (a) convenção da casa faz o AMEND ser
+  ARQUIVO (17 precedentes) → contagem 181→182 → pack-script staged com
+  gates 182/184 entrou no rail-pack e o closeout do rail ganhou o sweep
+  181→182; (b) clobber cross-pack em `scripts/upgrade.sh` (main-pack
+  congelado carrega a maquinaria T5.4) → migração movida para o upgrade.sh
+  DO main-pack (cap derivado do template em runtime; 36/36 verde no
+  overlay combinado), rail-pack ficou sem upgrade.sh; doctor.sh ficou
+  (sem clobber). Baseline R6 do pack commitado ANTES do sync (`341ffc3`,
+  ordem C3). Preflight-only do `land-plan164-rail.sh`: PASSED fim-a-fim
+  (twin, scope set-equality 8/8, value-gate 120/150/statusMessage,
+  oráculos overlay verdes). Validate red em `341ffc3` = flake xdist-race
+  de `__pycache__` no copytree (4 errors, 10.284 passed) — rerun
+  disparado. Review cross-vendor r1 (codex+grok) em execução sobre os
+  bytes finais.
+
 ## How to continue
 
 Sessão nova: Gate 1-3; ler este plano + o diagnóstico em
@@ -249,7 +282,9 @@ canônicos até o W3 PASS.
 ## Owners / Blockers / Next
 
 - **Owner:** CEO (execução) + Owner humano (tie-breaks OQ1-OQ4, GPG W2).
-- **Blocker atual:** ratificação Owner das OQ1-OQ4 (debate round 1 DONE:
-  3× ADJUST → PROCEED, consenso aplicado; números pós-medição 120/150).
-- **Next:** ratificar OQs → `draft → reviewed` → W1 staging (CEO) →
-  cerimônia W2 via `!` (Owner) → prova W3 em sessão nova.
+- **Blocker atual:** APPROVE duplo do review cross-vendor r2 (r1: codex
+  REJECT 2H/3M/1L + grok REJECT 1H/1M/2L — todos os findings aplicados;
+  ver `PLAN-164/review/`) e, depois, a cerimônia W2 (Owner GPG via `!`).
+- **Next:** r2 delta-confirm (codex+grok) → commit dos artefatos tracked →
+  `! bash .claude/plans/PLAN-164/land-plan164-rail.sh --preflight-only` →
+  `--dry-run` → real → closeout impresso pelo script → W3 em SESSÃO NOVA.

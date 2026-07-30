@@ -1,0 +1,29 @@
+I'll re-verify each round-1 finding against the current staged bytes (not the summary), starting with both r1 verdicts and the files they cited.Nothing is git-staged; I'll inspect the PLAN-164 staged pack trees and the files r1 cited.Reading the fixed files and running verification probes against each r1 finding.Running mechanical checks: manifests, mutation probe, and index/material coverage.Manifest check paths were wrong; rechecking from repo root and comparing the rail twin.One more check on the ADR claim gap and whether the closeout warning contradicts the oldest rule.VERDICT: APPROVE
+
+## Closure table (round-1 findings → current bytes)
+
+| r1 id | Vendor | Severity | Status | Evidence |
+|---|---|---|---|---|
+| **H1** — anchor accepts newer closeout / newest-tag fallback | Codex | HIGH | **CLOSED** | `land-plan163-pin.sh:106-130` — canonical = **oldest** per tag (`git log … \| tail -1`); pointer must `== pin_canon \|\| rail_canon`; absent-file fallback prefers rail then pin. Closeout subject has **no** `[SENT-PLAN164-RAIL]` (`land-plan164-rail.sh:549`); ceremony subject still carries the tag by design (`:465`). Explicit anti-reuse comment (`:551-554`). |
+| **H2 / Grok H1** — main-pack MANIFEST pins stale R6 digests | Codex+Grok | HIGH | **CLOSED** | `shasum -a 256 -c` from repo root: **43/43 OK**. Twin `inputs-pack.sha256` **byte-identical** to staged MANIFEST. vs `341ffc3`: **exactly 4 rows** re-hashed (`settings.json`, `settings.base.json`, `upgrade.sh`, `test_upgrade_settings_migration.py`); header remanifest note present. Disk digests match pinned rows (`4c82e41b…`, `bf13c731…`, `3c69f804…`, `7a253506…`). |
+| **M3 / Grok M2** — invariant green on unilateral downward internal flip; no absolute pin | Codex+Grok | MED | **CLOSED** | `test_pair_rail_timeout_invariant.py:103-104,234-267` — invariant-4 pins internal **120** (env seam) + both `timeout_s = 120.0` fallbacks + registration **150** both files. **Mutation probe (overlay):** base PASS; env-seam `120→50` FAIL; all-literals `50` FAIL; reg `150→100` FAIL; one fallback `120.0→99.0` FAIL. |
+| **M3b / F5** — invariant absent from main-pack preflight | Codex | MED | **CLOSED** | Staged `land-plan163-pack.sh:345-346` overlay oracle + `:474` post-apply pytest list include `test_pair_rail_timeout_invariant.py`. |
+| **M4** — `git commit` can include pre-staged out-of-scope paths | Codex | MED | **CLOSED** | `land-plan164-rail.sh:453-463` — index assert `git diff --cached` ⊆ `RE_SCOPE \| RE_MATERIALS`. Simulation: 8 dests + PLAN-164 materials + plan md **ALLOW**; W2 `audit-telemetry.py` / state **BLOCK**. Ceremony-required adds (dests, `PIN_SCRIPT` via scope, `PLAN_DIR`) covered. |
+| **M5** — dry-run restore can destroy pre-existing dest dirt | Codex | MED | **CLOSED** | `land-plan164-rail.sh:255-261` dest-paths-clean preflight (worktree **and** index via porcelain). Closes the clobber class by **refusing** dirty dests before apply/restore. Interaction with plan-dir allowlist (`:208-216`): allowlist still tolerates non-dest plan dirt; dest-clean is **stricter** for the 8 scope paths only (including `PLAN-163` scripts that are both under `plans/` and in scope) — no false block of review/architect materials. |
+| **L6** — plan prose stale (AMEND count + blockers) | Codex | LOW | **CLOSED** | Plan `:67-79` AMEND-as-file **181→182**; blockers `:281-283` now dual r2 APPROVE + W2 GPG (not “Owner ratification” only). |
+| **Grok L3** — upgrade migrates timeout only, not `statusMessage` | Grok | LOW | **OPEN (residual)** | Staged main-pack `upgrade.sh` still only writes `h["timeout"]` under IFF-60. Dogfood/template land `statusMessage` via rail/main settings surfaces; adopter **upgrade** path still omits it. Non-blocking for rail land. |
+| **Grok L4** — `die` inside `$(resolve_anchor)` subshell | Grok | LOW | **OPEN (residual)** | Still `if ! pair="$(resolve_anchor)"` at pin `:142-143` with `die` inside function. Fail-closed preserved; dual FATAL text possible. Non-blocking. |
+
+Rail-pack packaging also re-verified: **8/8** `shasum -c` OK; twin `inputs-rail.sha256` **identical**; Scope == dest-set (8 names).
+
+## New findings (from the fixes)
+
+| ID | Severity | Finding |
+|---|---|---|
+| **N1** | **LOW** | **Post-revert re-ceremony path is not operationalized under CANONICAL-OLDEST.** Oldest-of-tag is the correct anti-laundering rule for closeouts/reverts that *mention* a tag. A *second* real ceremony with the same `[SENT-PLAN164-RAIL]` tag cannot become the GATE-V2 cutoff without a new tag or deliberate `resolve_anchor` amendment; the already-landed guard (`land-plan164-rail.sh:192-199`) already refuses re-run. Rollback text at `:567` (“then re-run the ceremony”) overclaims. Acceptable fail-closed residual for first land; document a re-anchor playbook later if needed. |
+| **N2** | **LOW** | Closeout warning (`:552-553`) and already-landed die text (`:198`) still describe **newest-wins** laundering. Under the new rule, a later message that merely greps the tag does **not** move the cutoff (oldest wins). Defense-in-depth (no tag in closeout) remains correct; wording is slightly stale. |
+| **N3** | **LOW** | ADR-110-AMEND-1 §1.3 still only names layering checks (a)(b) and “three literals” (`ADR-…:42-48`); it does not yet document invariant-4 absolute 120/150. Behavior is correct; claim no longer overreaches after inv-4. Soft doc lag only. |
+
+## Net
+
+All **HIGH/MED** r1 findings are closed in current staged bytes with mechanical proof (manifest check, 4-row twin delta vs `341ffc3`, mutation probe). Fixes do not introduce a new HIGH/MED defect: CANONICAL-OLDEST is intentionally fail-closed; index assert covers ceremony materials; dest-clean correctly supersedes the plan-dir dirt allowlist for scope dests. Residual LOWs (upgrade `statusMessage`, `die` in subshell, doc wording, re-ceremony playbook) do not block W2 rail ceremony.

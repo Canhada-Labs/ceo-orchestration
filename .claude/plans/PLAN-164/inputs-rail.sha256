@@ -1,0 +1,12 @@
+# MANIFEST.sha256 — PLAN-164 rail-pack (consolidated; remanifest post fix-pass r4, 2026-07-29)
+# format: sha256  path-staged  ->  path-destino-real
+# 6 files: hook 120s + kernel/template 150s+statusMessage + invariant test (absolutos 120/150)
+# + doctor.sh warn + ADR-110-AMEND-1 (count 181->182). Os DOIS scripts do PLAN-163 (resolve_anchor
+# suffix-newest+revert-aware, retirement guard, count-gates 182/184) landam PRÉ-cerimônia em commit
+# próprio que SOBREVIVE ao rollback da cerimônia (codex r4 HIGH). Twin: inputs-rail.sha256.
+b0fb7a720db95569d903a24eeb489bdc5c15f0510f01b4de6c75bcecee7dd070  .claude/plans/PLAN-164/staged/rail-pack/.claude/adr/ADR-110-AMEND-1-rail-timeout-contract.md  ->  .claude/adr/ADR-110-AMEND-1-rail-timeout-contract.md
+ef5b6a6c5934fdd77621fea8e1b9a5fd5960b0beb74f7da7cbba31f4df91ece3  .claude/plans/PLAN-164/staged/rail-pack/.claude/hooks/check_pair_rail.py  ->  .claude/hooks/check_pair_rail.py
+77ac63efe2e59acd750f89f44260ad32e6cb542167496709e04b746a1f02c118  .claude/plans/PLAN-164/staged/rail-pack/.claude/hooks/tests/test_pair_rail_timeout_invariant.py  ->  .claude/hooks/tests/test_pair_rail_timeout_invariant.py
+2a755d578dd570222fcc733b81b2e3482bdcc710d9d1800e1052739c79b87c61  .claude/plans/PLAN-164/staged/rail-pack/.claude/settings.json  ->  .claude/settings.json
+2b002885abee592947b360208443ef076c014b443679231002638b57414797c6  .claude/plans/PLAN-164/staged/rail-pack/scripts/doctor.sh  ->  scripts/doctor.sh
+247b491e70ed67c7231426442594272421061dd7266d3cf8906557aeaefb4adc  .claude/plans/PLAN-164/staged/rail-pack/templates/settings/settings.base.json  ->  templates/settings/settings.base.json

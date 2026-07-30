@@ -1,6 +1,19 @@
 # PLAN-163 — CEREMONY RUNBOOK (Owner-run, duas cerimônias declaradas)
 
-> Ordem OBRIGATÓRIA (plan §Gates, codex F5/grok F3 + correção S283):
+> **ADDENDUM S285 (PLAN-164 interposto):** o GATE-V2 provou FAIL com root
+> cause medido (timeout 30s < 36-75s reais; 12/12 case-F históricos) e o
+> case-F fresco tornou `failopen==0` insatisfazível contra a âncora
+> `a4371c7`. A ordem viva agora é:
+> **GATE-PIN ✅ → closeout(181) ✅ (`7860d62`) → CERIMÔNIA RAIL do
+> PLAN-164 (`land-plan164-rail.sh` — uplift 120/150 + RE-ÂNCORA) →
+> closeout do rail (ADRs 181→**182**, sweep sed impresso pelo script) →
+> GATE-V2 (prova fresca em SESSÃO NOVA, âncora nova) → cerimônia do
+> main-pack → closeout(tripla, ADRs →**184**).**
+> O apply do `land-plan163-pin.sh` fica APOSENTADO após o rail (guard no
+> script); `--gate-v2` segue sendo o verdito. Freeze de edits canônicos
+> em todas as sessões entre a cerimônia rail e o registro do W3 PASS.
+
+> Ordem original (plan §Gates, codex F5/grok F3 + correção S283):
 > **GATE-PIN → closeout(181)+push → GATE-V2 (prova FRESCA pós-âncora) →
 > review 3-vendor do pack (APPROVE) → cerimônia do main-pack →
 > closeout(tripla)+push.**
