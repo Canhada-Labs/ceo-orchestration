@@ -1,9 +1,11 @@
 ---
 id: PLAN-164
 title: Pair-rail liveness — timeout uplift + re-âncora do GATE-V2
-status: executing
+status: done
 created: 2026-07-29
 executing_since: 2026-07-29
+completed_at: 2026-07-30
+related_commits: [8f21b25, 35fad10, 7628a97, 2761462, 341ffc3]
 reviewed_at: 2026-07-29
 reviewed_by: "Owner (João) — tie-break estruturado S285: OQ1=120s / OQ2=150s / OQ3=mecânica-do-pin / OQ4=delta-1-round (todas nas recomendações do consenso round 1)"
 owner: CEO
@@ -105,22 +107,22 @@ Check: none (doc-only)
   Check: none (doc-only)
 
 ### W1 — Staging + testes (nada toca a árvore canônica viva)
-- [ ] Staged `check_pair_rail.py`: default `"30"` → literal OQ1 no
+- [x] Staged `check_pair_rail.py`: default `"30"` → literal OQ1 no
   `os.environ.get("CEO_PAIR_RAIL_TIMEOUT_S", ...)` (~L1717), fallback
   `timeout_s = 30.0` (~L1720/1722) e docstring (~L51-52); clamp `>600`
   mantido. Check: `python3 -m pytest .claude/hooks/tests/ -k pair_rail -q`
   verde no overlay de staging.
-- [ ] Staged kernel `settings.json`: registration do `check_pair_rail.py`
+- [x] Staged kernel `settings.json`: registration do `check_pair_rail.py`
   `timeout: 60` → literal OQ2 + `_comment` "(default 30s)" atualizado.
   Check: oracle hook-stdout-schema + settings-parity verdes no overlay.
-- [ ] Paridade de template: `templates/settings/settings.base.json`
+- [x] Paridade de template: `templates/settings/settings.base.json`
   (registration ~L97) mesmo timeout OQ2. Check: diff mecânico das duas
   registrations idêntico (mesmo valor), suíte de parity verde.
-- [ ] Sweep de testes que assertam o default antigo (30/60): atualizar
+- [x] Sweep de testes que assertam o default antigo (30/60): atualizar
   espelhos + adicionar teste explícito do valor default novo.
   Check: `grep -rn "TIMEOUT_S" .claude/hooks/tests/` não retorna
   asserções do valor antigo; suíte cheia verde.
-- [ ] Sync do pack congelado PLAN-163 na ORDEM NORMATIVA (consenso C3, a
+- [x] Sync do pack congelado PLAN-163 na ORDEM NORMATIVA (consenso C3, a
   única sequência que não aborta o preflight): (0) commitar o gêmeo
   `inputs-pack.sha256` do estado R6 ATUAL — baseline tamper-evidente; o
   gêmeo NÃO existe hoje → (1) editar os arquivos staged do delta →
@@ -132,21 +134,21 @@ Check: none (doc-only)
   Check: `shasum -c` dos manifests PASS; diff dos dois gêmeos tracked ==
   exatamente as entradas do delta; artefato de review delta commitado em
   `PLAN-163/review/`.
-- [ ] Teste de invariante entre camadas (consenso C2): parseia
+- [x] Teste de invariante entre camadas (consenso C2): parseia
   `settings.json`, `templates/settings/settings.base.json` e o default
   literal do hook; asserta registration kernel == registration template E
   `registration ≥ interno + 30`. Roda na suíte e no overlay do preflight
   do pack.
   Check: teste novo verde; vermelho se qualquer literal flipar
   unilateralmente (provar com mutação local dos 3 valores).
-- [ ] Migração de adopter (consenso C4-ii): passo idempotente no
+- [x] Migração de adopter (consenso C4-ii): passo idempotente no
   settings-merge do `scripts/upgrade.sh` — bump da registration do
   `check_pair_rail.py` 60→150 IFF valor atual == 60 (custom preservado);
   check no `scripts/doctor.sh` (warn se registration < interno + 30); caso
   novo na família `test_upgrade_settings_migration.py`.
   Check: fixture de upgrade 2× (idempotência) verde com o bump aplicado
   exatamente uma vez; doctor.sh warn provado com fixture 60/120.
-- [ ] Guard de aposentadoria do pin-pack (consenso C4-i): o APPLY de
+- [x] Guard de aposentadoria do pin-pack (consenso C4-i): o APPLY de
   `land-plan163-pin.sh` passa a morrer se `git log
   --grep='\[SENT-PLAN164-RAIL\]'` encontrar o commit ("pin superado pelo
   PLAN-164; só --gate-v2 permanece válido") — o pin-pack staged contém
@@ -154,7 +156,7 @@ Check: none (doc-only)
   preflight verde.
   Check: guard provado (com o commit presente, apply aborta; --gate-v2
   segue funcionando).
-- [ ] UX + comments (consenso kept-5 + Critic-C): `statusMessage` na
+- [x] UX + comments (consenso kept-5 + Critic-C): `statusMessage` na
   registration do pair-rail (kernel + template + cópias staged do pack,
   ex.: "Pair-rail cross-model review — pode levar 1-2 min"); atualizar
   `_comment` "(default 30s)" no kernel E template; sweep de literais no
@@ -164,7 +166,7 @@ Check: none (doc-only)
   rail; statusMessage presente nas 4 cópias.
 
 ### W2 — Cerimônia (Owner-run via `!`, GPG)
-- [ ] Fix do `resolve_anchor()` (consenso C1; revisado no r2 do review):
+- [x] Fix do `resolve_anchor()` (consenso C1; revisado no r2 do review):
   âncora tratada como PONTEIRO — `ts` derivado de `git log -1 --format=%cI
   <sha>` (nunca lido do arquivo); `sha` deve ser um commit de CERIMÔNIA
   (subject TERMINANDO em `[SENT-PLAN163-PIN]` ou `[SENT-PLAN164-RAIL]` —
@@ -176,36 +178,39 @@ Check: none (doc-only)
   sem command substitution). Script em `PLAN-163/` (não-canônico).
   Check: com âncora adulterada (ts movido / sha não-sentinel), `--gate-v2`
   ABORTA; com âncora íntegra, resolve normal.
-- [ ] Sentinel round novo (escopo exato = arquivos do W1 vivos); apply sob
+- [x] Sentinel round novo (escopo exato = arquivos do W1 vivos); apply sob
   `CEO_KERNEL_OVERRIDE`; commit assinado `[SENT-PLAN164-RAIL]`.
   Check: `touched − scope = ∅`; suíte pós-apply verde.
-- [ ] Re-âncora na MECÂNICA DO PIN (consenso kept-3 — um commit não contém
+- [x] Re-âncora na MECÂNICA DO PIN (consenso kept-3 — um commit não contém
   o próprio sha): pós-commit da cerimônia, escrever
   `.claude/plans/PLAN-163/GATE-PIN-ANCHOR` com sha+ts do commit
   `[SENT-PLAN164-RAIL]` e commitá-la no closeout IMEDIATO (arquivo já é
   tracked). Transparência declarada no Scope do sentinel.
   Check: `land-plan163-pin.sh --gate-v2` imprime a âncora nova e validada.
-- [ ] DISCIPLINA DA JANELA DE ASSIMETRIA (consenso kept-2): pós-apply, na
+- [x] DISCIPLINA DA JANELA DE ASSIMETRIA (consenso kept-2): pós-apply, na
   sessão da cerimônia, NENHUM Edit/Write/MultiEdit em path canônico —
   closeout inteiro via `!`/bash (interno novo vale por-invocação;
   registration 150 só vale pós-restart; um edit canônico nessa janela vira
   deficit pós-âncora e re-envenena o gate). FREEZE de edits canônicos em
   TODAS as sessões até o W3 PASS registrado.
   Check: none (doc-runbook — disciplina operacional declarada no sentinel)
-- [ ] Closeout: claims + verify-counts + push + Validate.
+- [x] Closeout: claims + verify-counts + push + Validate.
   Check: `gh run watch` do Validate = success.
 
 ### W3 — Prova fresca + desbloqueio do PLAN-163
-- [ ] Sessão NOVA (a registration nova só vale pós-restart do harness);
+- [x] Sessão NOVA (a registration nova só vale pós-restart do harness);
   probe bytes-idênticos (padrão S281) → case A-E esperado.
   Check: `land-plan163-pin.sh --gate-v2` = PASS (expected≥1 ∧ healthy≥1 ∧
   failopen==0 ∧ unclassified==0 ∧ deficit==0 pós-âncora-nova).
-- [ ] Registrar o PASS em `PLAN-163/probes/` com a semântica EXPLÍCITA
+  **EXECUTADO 2026-07-30 (S286): case=A (PASS/PASS), review vivo em
+  115 s — 1º healthy em 13 invocações da história; gate PASS 1/1/0/0/0.**
+- [x] Registrar o PASS em `PLAN-163/probes/` com a semântica EXPLÍCITA
   (consenso kept-8): o gate re-ancorado prova "liveness sob pin ADR-182 +
   timeout novo" — estritamente mais forte que a prova original (o pin não
   foi tocado); registrar para o leitor futuro não concluir que a prova do
   pin nunca existiu. Check: arquivo commitado.
-- [ ] Handoff: PLAN-163 Passo 4 (cerimônia do pack) liberado com
+  **→ `PLAN-163/probes/GATE-V2-2026-07-30-PASS.md`.**
+- [x] Handoff: PLAN-163 Passo 4 (cerimônia do pack) liberado com
   `--confirm-gate-pin-done --confirm-gate-v2-fresh` verdadeiras.
   Check: none (executa no PLAN-163).
 
@@ -238,6 +243,24 @@ Check: none (doc-only)
 
 ## Progress log
 
+- **2026-07-30 (S286, W3 EXECUTADO — PLANO DONE):** sessão nova; probe
+  bytes-idênticos (S281, `cmp` provado, canonical guard bloqueou — árvore
+  intacta) → **case=A (claude=PASS, codex=PASS), review vivo em 115 s —
+  o 1º healthy em 13 invocações da história do log**. `land-plan163-pin.sh
+  --gate-v2` = **PASS** (post-anchor 1/1/0/0/0; self-check ADR-182 OK;
+  âncora `35fad10` validada fail-closed). Registro kept-8 em
+  `PLAN-163/probes/GATE-V2-2026-07-30-PASS.md`. Nota de recalibração:
+  115 s ≫ p95≈75 s medido — margem real ~5 s; gatilho ≥10 healthy do
+  AMEND é prioritário. PLAN-163 Passo 4 (pack) LIBERADO
+  (`--confirm-gate-pin-done --confirm-gate-v2-fresh`).
+- **2026-07-30 (S285→S286, W2 EXECUTADO — cerimônia Owner):** tooling
+  pré-cerimônia `8f21b25` (resolve_anchor suffix-newest revert-aware
+  fail-closed + retirement guard + count-gates 182/184); cerimônia GPG
+  `35fad10` `[SENT-PLAN164-RAIL]` (touched−scope=∅); re-âncora
+  `7628a97` (closeout imediato, ADRs 182); sweep de superfícies
+  `2761462` (COMMAND-SKILL-HOOK-MAP). Janela de assimetria respeitada
+  (closeout inteiro via bash, zero edits canônicos). Validate = success
+  em `7628a97` e `2761462`.
 - **2026-07-29 (S285, W1 EXECUTADO):** staging completo via workflow
   (8 builders + 2 verifiers, opus) + fix agent. Rail-pack final = 8
   arquivos (MANIFEST + gêmeo tracked `inputs-rail.sha256`). Dois achados
@@ -269,27 +292,31 @@ canônicos até o W3 PASS.
 
 ## Success criteria
 
-- [ ] GATE-V2 do PLAN-163 = PASS registrado sob a âncora nova.
-- [ ] Rail com pelo menos 1 case healthy (A-E) real no audit-log — o
+- [x] GATE-V2 do PLAN-163 = PASS registrado sob a âncora nova.
+- [x] Rail com pelo menos 1 case healthy (A-E) real no audit-log — o
   primeiro da história do log.
-- [ ] Paridade dogfood ↔ template mantida; pack congelado sincronizado com
+- [x] Paridade dogfood ↔ template mantida; pack congelado sincronizado com
   manifests self-consistentes e re-review delta registrado.
-- [ ] Suíte + Validate verdes; claims/verify-counts sem drift.
-- [ ] Nota honesta: o row 168h do ceo-boot segue RED até os 12 case-F
+- [x] Suíte + Validate verdes; claims/verify-counts sem drift.
+- [x] Nota honesta: o row 168h do ceo-boot segue RED até os 12 case-F
   antigos saírem da janela (~2026-08-05) — esperado, registrar e ignorar
   (mesma nota do runbook do PLAN-163).
 
 ## Owners / Blockers / Next
 
 - **Owner:** CEO (execução) + Owner humano (tie-breaks OQ1-OQ4, GPG W2).
-- **Blocker atual:** SÓ a cerimônia W2 (Owner GPG via `!`). **Review
-  cross-vendor: APPROVE DUPLO no r6** (2026-07-29; 6 rounds, ~20 findings
-  reais aplicados — r1: 12 incl. 2 vetores de laundering da âncora; r2:
-  deadlock pós-revert do canonical-oldest; r3: rollback CI-red +
-  âncora-revertida-válida; r4: validador se auto-revertia com a cerimônia
-  → split estrutural, tooling pré-cerimônia `8f21b25`; r5: consistência
-  do payload de assinatura; r6: limpo. Verditos em `PLAN-164/review/`).
-- **Next:** Owner roda via `!`: `land-plan164-rail.sh --preflight-only` →
-  `--dry-run` → real → closeout impresso pelo script (TUDO via bash;
-  ZERO edits canônicos na sessão) → W3 em SESSÃO NOVA (probe fresco +
-  `land-plan163-pin.sh --gate-v2` = PASS) → pack do PLAN-163 liberado.
+- **Blocker atual:** NENHUM — plano DONE 2026-07-30 (W3 PASS registrado).
+  **Review cross-vendor: APPROVE DUPLO no r6** (2026-07-29; 6 rounds,
+  ~20 findings reais aplicados — r1: 12 incl. 2 vetores de laundering da
+  âncora; r2: deadlock pós-revert do canonical-oldest; r3: rollback
+  CI-red + âncora-revertida-válida; r4: validador se auto-revertia com a
+  cerimônia → split estrutural, tooling pré-cerimônia `8f21b25`; r5:
+  consistência do payload de assinatura; r6: limpo. Verditos em
+  `PLAN-164/review/`).
+- **Next (executa no PLAN-163):** cerimônia do main-pack via
+  `land-plan163-pack.sh` com `--confirm-gate-pin-done
+  --confirm-gate-v2-fresh` (ambas verdadeiras desde
+  `PLAN-163/probes/GATE-V2-2026-07-30-PASS.md`); resolver os 2 P2 de
+  pricing ANTES do commit W2 do pack. Follow-up deste plano: gatilho de
+  recalibração do ADR-110-AMEND-1 quando houver ≥10 healthy (1ª amostra
+  vivo = 115 s, margem ~5 s sob o budget de 120 s).
