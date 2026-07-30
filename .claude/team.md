@@ -576,6 +576,9 @@ Extend this table with domain-specific routes when you install a domain profile.
 > `CEO_MODEL_DOWNSHIFT=0` reverts to Opus-always (experiment kill-switch).
 
 **Default CEO model:** Sonnet 4.6. **Upgrade to Opus 4.8 upfront** if ANY:
+*[UPDATED PLAN-163 (ADR-181): current-generation equivalents — default
+Sonnet 5, upfront-upgrade Opus 5; the routing conditions below are
+unchanged.]*
 
 | # | Condition | Why |
 |---|---|---|
@@ -589,6 +592,10 @@ Extend this table with domain-specific routes when you install a domain profile.
 - **VETO roles (code-reviewer, security-engineer) ALWAYS Opus 4.8.**
   ADR-052 VETO floor is hardcoded in dispatcher. This rule only
   shifts the CEO orchestrator identity.
+  *[UPDATED PLAN-163: the VETO floor family is governed by the ADR-149
+  allowlist — `claude-fable-5` is the ceiling and `VETO_FLOOR_ALLOWED`
+  now includes `claude-opus-5`; the invariant that no flag can downshift
+  a VETO role below the floor is unchanged.]*
 - **Sub-agent tier unchanged.** ADR-052 role-to-model mapping is
   independent of CEO tier.
 - **Kill-switch `CEO_MODEL_DOWNSHIFT=0` preserves adopter escape.**

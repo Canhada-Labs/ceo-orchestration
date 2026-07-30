@@ -65,6 +65,8 @@ Events sorted alphabetically; within an event, rows keep registration order (= r
 | Event | Matcher | Hook | Timeout (s) |
 |---|---|---|---|
 | ConfigChange | `(all)` | `check_config_change.py` | 5 |
+| DirectoryAdded | `(all)` | `check_directory_added.py` | 5 |
+| Notification | `(all)` | `check_notification.py` | 5 |
 | PostCompact | `(all)` | `check_postcompact_reinject.py` | 5 |
 | PostToolUse | `Agent` | `audit_log.py` | 5 |
 | PostToolUse | `Agent` | `check_confidence_gate.py` | 10 |
@@ -125,4 +127,4 @@ Derivation rule: a registered hook guards a surface iff its source file under `.
 - Commands: 26
 - Skills (SKILL.md-bearing dirs): 166 — core 42, frontend 8, domain 116 (across 32 domains)
 - Skills with >=1 `activation_triggers` entry: 62
-- Hook registrations: 46 across 13 events (45 unique hook labels)
+- Hook registrations: 48 across 15 events (47 unique hook labels)
