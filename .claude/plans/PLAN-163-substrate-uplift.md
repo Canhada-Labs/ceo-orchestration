@@ -1,10 +1,12 @@
 ---
 id: PLAN-163
 title: Substrate uplift — reconcile CC 2.1.198→2.1.220 + Claude 5 family (Opus 5 / Sonnet 5) adoption
-status: executing
+status: done
 created: 2026-07-27
 reviewed_at: 2026-07-27
 executing_since: 2026-07-28
+completed_at: 2026-07-30
+related_commits: [55e8e27, a4371c7, 7860d62, e540cd9, 341ffc3, 9477bde, 8ed9f6f, 3bce87c, 1241795]
 reviewed_by: "Owner (João) — chat directive S281/S282 (montar plano + debate + review codex/grok); debate 3×ADJUST→PROCEED; cross-vendor codex r5 APPROVE + grok APPROVE"
 owner: CEO
 depends_on: [PLAN-161]
@@ -451,34 +453,47 @@ incorporados ANTES da execução (fonte: handoff S283→S284):
 
 ## Success criteria
 
-- [ ] G1-G17 com disposição executada ou registrada (evidência por item).
-- [ ] Gates honrados NA ORDEM CORRIGIDA: GATE-PIN → GATE-V2 (fresco, sob pin
+- [x] G1-G17 com disposição executada ou registrada (evidência por item).
+- [x] Gates honrados NA ORDEM CORRIGIDA: GATE-PIN → GATE-V2 (fresco, sob pin
   novo, healthy≥1 ∧ failopen==0 ∧ expected≥1) → review do pack → cerimônia
   GPG do pack.
-- [ ] Oracle `hook-stdout-schema-check` verde (conjunto WIRED derivado;
+- [x] Oracle `hook-stdout-schema-check` verde (conjunto WIRED derivado;
   schema + exit-0 nos caminhos allow/block + check estático
   argparse/SystemExit) no CI e pre-push; artefato de schema 2.1.220
   commitado; contratos CLI (check_harness_config exit≠0) intactos.
-- [ ] Oracle presence-based nasceu vermelho e ficou verde; mirror test do
+- [x] Oracle presence-based nasceu vermelho e ficou verde; mirror test do
   ADR-149 verde pós-regen; asserção de availableModels instalado verde;
   STALE_RE com fixture negativa provando red path.
-- [ ] Medição flock/index-lock/tally 2.1.220 commitada; cap decidido pelos
+- [x] Medição flock/index-lock/tally 2.1.220 commitada; cap decidido pelos
   números e escopo.
-- [ ] 4 probes de depth registrados; pin (ou re-escopo) aplicado.
-- [ ] `check-substrate-watch.py --check` exit 0; teste launcher≠payload
+- [x] 4 probes de depth registrados; pin (ou re-escopo) aplicado.
+- [x] `check-substrate-watch.py --check` exit 0; teste launcher≠payload
   verde; compare de sha BLOQUEANTE no rail vivo (`check_pair_rail.py`) +
   Gate 4 unstubbed; ADR novo do pin landado + ledger do ADR-111 reparado
   (relação falsa com ADR-120-pii removida).
-- [ ] Oracles smoke-install com expectativas DERIVADAS (47/48) verdes
+- [x] Oracles smoke-install com expectativas DERIVADAS (47/48) verdes
   pós-install e pós-upgrade; migração idempotente de upgrade provada.
-- [ ] Probe de version-floor/unknown-event registrado antes de emitir
+- [x] Probe de version-floor/unknown-event registrado antes de emitir
   eventos novos em templates.
-- [ ] Edits canônicos/kernel via staged pack + pair-rail APPROVE + cerimônia
+- [x] Edits canônicos/kernel via staged pack + pair-rail APPROVE + cerimônia
   GPG (padrão PLAN-160/161); CLAUDE.md tripla de counts no closeout.
-- [ ] Validate GREEN no closeout; plano → done com related_commits.
+- [x] Validate GREEN no closeout; plano → done com related_commits.
+  **(Validate success em `1241795`, 2026-07-30; done neste commit.)**
 
 ## Progress log
 
+- **2026-07-30 (S286): PLANO DONE.** Sequência completa do Passo 4: W2
+  live fixes commitados (`9477bde` — 2 P2 do codex resolvidos: pricing
+  event-date-aware + opus-4-8-fast; Validate GREEN) → cerimônia do
+  main-pack Owner-run (`8ed9f6f` `[SENT-PLAN163-PACK]`, GPG verified) →
+  closeout de docs (`3bce87c` — tripla 57/46/48 + ADRs 184, riders
+  team.md :578/:589, regen MAP, sweep de 6 docs; claims + verify-counts
+  PASS) → red pós-pack corrigido (`1241795` — golden audit-registry
+  +2 actions T3, exec bit em 3 hooks wired, TestEnvContext nas 2 classes
+  bare do teste de migração; 94/94 local) → **Validate GREEN em
+  `1241795`**. L-proof pós-land: smoke-install-parity PASS na árvore
+  landada. Pré-requisito honrado: GATE-V2 PASS fresco sob âncora
+  PLAN-164 (`PLAN-163/probes/GATE-V2-2026-07-30-PASS.md`).
 - **2026-07-29 (S285):** GATE-PIN landado pelo Owner (`a4371c7`,
   `[SENT-PLAN163-PIN]`) + closeout do pin executado (ADR count 181 em 7
   superfícies, claims + verify-counts PASS, anchor tracked; `7860d62`,
