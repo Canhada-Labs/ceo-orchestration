@@ -282,9 +282,14 @@ canônicos até o W3 PASS.
 ## Owners / Blockers / Next
 
 - **Owner:** CEO (execução) + Owner humano (tie-breaks OQ1-OQ4, GPG W2).
-- **Blocker atual:** APPROVE duplo do review cross-vendor r2 (r1: codex
-  REJECT 2H/3M/1L + grok REJECT 1H/1M/2L — todos os findings aplicados;
-  ver `PLAN-164/review/`) e, depois, a cerimônia W2 (Owner GPG via `!`).
-- **Next:** r2 delta-confirm (codex+grok) → commit dos artefatos tracked →
-  `! bash .claude/plans/PLAN-164/land-plan164-rail.sh --preflight-only` →
-  `--dry-run` → real → closeout impresso pelo script → W3 em SESSÃO NOVA.
+- **Blocker atual:** SÓ a cerimônia W2 (Owner GPG via `!`). **Review
+  cross-vendor: APPROVE DUPLO no r6** (2026-07-29; 6 rounds, ~20 findings
+  reais aplicados — r1: 12 incl. 2 vetores de laundering da âncora; r2:
+  deadlock pós-revert do canonical-oldest; r3: rollback CI-red +
+  âncora-revertida-válida; r4: validador se auto-revertia com a cerimônia
+  → split estrutural, tooling pré-cerimônia `8f21b25`; r5: consistência
+  do payload de assinatura; r6: limpo. Verditos em `PLAN-164/review/`).
+- **Next:** Owner roda via `!`: `land-plan164-rail.sh --preflight-only` →
+  `--dry-run` → real → closeout impresso pelo script (TUDO via bash;
+  ZERO edits canônicos na sessão) → W3 em SESSÃO NOVA (probe fresco +
+  `land-plan163-pin.sh --gate-v2` = PASS) → pack do PLAN-163 liberado.

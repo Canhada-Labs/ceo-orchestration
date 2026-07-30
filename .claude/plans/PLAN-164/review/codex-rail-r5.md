@@ -1,0 +1,16 @@
+VERDICT: REJECT
+
+The r4 HIGH is structurally closed:
+
+- `8f21b25` changes only the two PLAN-163 scripts. The revert-aware resolver is present at [land-plan163-pin.sh:96](/Users/joaocanhada/canhada-labs/ceo-orchestration/.claude/plans/PLAN-163/land-plan163-pin.sh:96), and the 182/184 gates are present at [land-plan163-pack.sh:240](/Users/joaocanhada/canhada-labs/ceo-orchestration/.claude/plans/PLAN-163/land-plan163-pack.sh:240). Both remain byte-identical through HEAD, and `8f21b25` is an ancestor of `origin/main`.
+- The six-row manifest contains neither PLAN-163 script ([inputs-rail.sha256:7](/Users/joaocanhada/canhada-labs/ceo-orchestration/.claude/plans/PLAN-164/inputs-rail.sha256:7)). All six hashes verify and the staged manifest is byte-identical to the tracked twin.
+- The ceremony adds only manifest destinations and PLAN-164 materials ([land-plan164-rail.sh:466](/Users/joaocanhada/canhada-labs/ceo-orchestration/.claude/plans/PLAN-164/land-plan164-rail.sh:466)); its cached-index guard rejects PLAN-163 paths ([land-plan164-rail.sh:479](/Users/joaocanhada/canhada-labs/ceo-orchestration/.claude/plans/PLAN-164/land-plan164-rail.sh:479)). Reverting that future commit therefore cannot restore the old resolver.
+- Sentinel Scope exactly equals the six manifest destinations ([approved.body.md:114](/Users/joaocanhada/canhada-labs/ceo-orchestration/.claude/plans/PLAN-164/architect/round-1/approved.body.md:114)).
+- Core hook/kernel/template/invariant assertions remain intact ([land-plan164-rail.sh:285](/Users/joaocanhada/canhada-labs/ceo-orchestration/.claude/plans/PLAN-164/land-plan164-rail.sh:285)); all three shell scripts pass `bash -n`.
+- The committed resolver accepts `a4371c7`, recomputes its timestamp, and the codex payload-pin self-check verifies. The classifier still reports the known pre-uplift `failopen=1`, not an anchor-resolution regression.
+
+New blocking finding:
+
+1. **MED — The Owner signing payload and generated signed commit message contradict the structural split.** Sentinel item 5 still says the rail pack “ALSO stages” `land-plan163-pack.sh` ([approved.body.md:55](/Users/joaocanhada/canhada-labs/ceo-orchestration/.claude/plans/PLAN-164/architect/round-1/approved.body.md:55)), while the same sentinel later says both scripts are not Scope entries and were pre-landed ([approved.body.md:76](/Users/joaocanhada/canhada-labs/ceo-orchestration/.claude/plans/PLAN-164/architect/round-1/approved.body.md:76)). The ceremony header repeats the false inclusion ([land-plan164-rail.sh:14](/Users/joaocanhada/canhada-labs/ceo-orchestration/.claude/plans/PLAN-164/land-plan164-rail.sh:14)), and its future signed commit body says both “this pack also stages” the script and that it pre-landed separately ([land-plan164-rail.sh:504](/Users/joaocanhada/canhada-labs/ceo-orchestration/.claude/plans/PLAN-164/land-plan164-rail.sh:504)). It also retains “8 scope paths” instead of six ([land-plan164-rail.sh:475](/Users/joaocanhada/canhada-labs/ceo-orchestration/.claude/plans/PLAN-164/land-plan164-rail.sh:475)).
+
+The executable rollback guarantee is fixed, but the authorization and provenance records must describe that guarantee consistently before signing.
