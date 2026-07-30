@@ -1456,3 +1456,68 @@ jobs:
           python3 -m pytest .claude/hooks/tests/ .claude/scripts/tests/ .claude/scripts/optimizer/tests/ \
             -m 'serial' --strict-markers --tb=no -q
           echo "Tests green on Python ${{ matrix.python-version }}"
+
+  # =========================================================================
+  # PLAN-163 T2.1/T2.2 — hook stdout/exit-code contract oracle
+  # ---------------------------------------------------------------------------
+  # The shim .claude/hooks/_python-hook.sh (lines 409-413) is a pure exec on
+  # the Claude adapter path: a wired hook's exit code reaches the harness
+  # UNALTERED, and under Claude Code >= 2.1.214 an accidental exit 2 on a
+  # blocking event BLOCKS the tool call. check-hook-stdout-schema.py derives
+  # the wired-hook set from .claude/settings.json at RUNTIME (zero hardcoded
+  # counts) and asserts, per registration: (b) an INFRA-failure fixture
+  # (benign payload + broken env) fail-OPENs with {} / allow-JSON + exit 0;
+  # (c) a security-matcher INPUT-parse-failure fixture (check_bash_safety.py
+  # _e3 precedent, PLAN-152 C4) fail-CLOSEs with block-JSON + exit 0;
+  # (d) stdout schema on both paths (plus the versioned CC 2.1.220 snapshot
+  # at .claude/data/hook-schema-2.1.220.json when present); (e) static: no
+  # `import argparse` / constant-nonzero SystemExit in any wired hook. The
+  # three argparse CLIs under .claude/hooks/ (check_harness_config.py —
+  # which KEEPS its exit!=0 contract per the harness-config gate above —
+  # emit_architect_outcome.py, policy_dispatch.py) are out of scope while
+  # unwired; the oracle REDs if one ever appears wired through the shim.
+  # Hermetic: subprocesses run with an explicit env (temp HOME, controlled
+  # CLAUDE_PROJECT_DIR) — no network, no credential, safe on fork PRs.
+  # Local twin: validate-governance.sh runs the same oracle outside CI
+  # (pre-push gate entry), guarded on ${CI:-} to avoid a double-run here.
+  # Exit contract: 0 green / 1 violation(s) / 2 unusable input — non-zero
+  # fails the job (fail-closed gate context).
+  # =========================================================================
+  hook-stdout-schema-oracle:
+    name: Hook stdout/exit-code contract oracle (PLAN-163 T2)
+    # PLAN-012 Phase 2 CEO_SOTA_DISABLE parity (matches sibling jobs).
+    if: vars.CEO_SOTA_DISABLE != '1'
+    runs-on: ubuntu-latest
+    # Full run measured ~9s locally (44 wired scripts x 1-2 subprocesses);
+    # 10 minutes is a generous ceiling covering checkout + setup + a
+    # worst-case hung-hook subprocess timeout (150s cap in-oracle).
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        # SHA-pinned: actions/checkout@v6.0.2 (matches sibling jobs)
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Setup Python 3.11
+        # SHA-pinned: actions/setup-python@v6.2.0 (matches sibling jobs)
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.11"
+
+      - name: Run check-hook-stdout-schema.py (wired-hook contract oracle)
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          # M3/C7: CI is fail-CLOSED on the versioned schema authority. A
+          # missing / unreadable / unrecognized snapshot must RED this job,
+          # never warn-and-skip (a governance gate must not pass after losing
+          # its versioned authority). --require-snapshot makes the demand
+          # explicit (the oracle also auto-detects $GITHUB_ACTIONS); the
+          # snapshot ships committed at $SNAP (PLAN-163 T2.2, staged verbatim
+          # from the S284 schema-extract probe). If it ever RED-s here, the
+          # oracle prints the regeneration recipe.
+          SNAP=.claude/data/hook-schema-2.1.220.json
+          python3 .claude/scripts/check-hook-stdout-schema.py \
+            --schema-snapshot "$SNAP" --require-snapshot --verbose
+          echo "hook stdout/exit-code contract oracle green"

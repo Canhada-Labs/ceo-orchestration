@@ -32,7 +32,8 @@ with membership in ONE Owner-signed allowlist:
 ```python
 VETO_FLOOR_ALLOWED: frozenset = frozenset({
     "claude-opus-4-8",   # ADR-142 generation — remains valid (additive)
-    "claude-fable-5",    # S225/PLAN-134 W0 — the running generation
+    "claude-fable-5",    # S225/PLAN-134 W0 — the running generation (ceiling pin)
+    "claude-opus-5",     # ADR-181 (PLAN-163 T1.3, OQ1=b) — Claude 5 Opus joins the floor
 })
 ```
 
@@ -83,12 +84,17 @@ AVAILABLE_MODELS_WORKING_SET: tuple = (
     # -- routing tiers (ADR-144 / _lib/model_routing.py _ROUTING_TABLE) --
     "claude-sonnet-4-6",  # code_gen / finops tier target
     "claude-haiku-4-5",   # file_read / line_audit / digest tier target
+    # -- Claude 5 refresh (ADR-181; new ids APPENDED AT END — order is
+    #    normative per the Semantics below; any other order needs an
+    #    ADR-181 justification) --
+    "claude-opus-5",      # debate/arch routing + fallback target + floor member
+    "claude-sonnet-5",    # advisory tier target (ADR-157 member; OQ2 migrate-now)
 )
 ```
 
 ```python
 FALLBACK_MODEL_CHAIN: tuple = (
-    "claude-opus-4-8",    # the OTHER VETO-floor member — degradation never leaves the floor
+    "claude-opus-5",      # VETO-floor member (ADR-181 refresh, OQ1=b) — degradation never leaves the floor
 )
 ```
 
@@ -106,7 +112,8 @@ Semantics:
   by the spawn gate. The two blocks intersect but are never merged.
 - `FALLBACK_MODEL_CHAIN` is deliberately length 1 (cap is 3): the primary
   session model is `claude-fable-5` and the sole fallback is
-  `claude-opus-4-8`, the other VETO-floor member. Rationale: (i) an
+  `claude-opus-5`, a fellow VETO-floor member (ADR-181 refresh; the
+  pre-refresh chain pointed at `claude-opus-4-8`). Rationale: (i) an
   availability degradation therefore never drops a session below the VETO
   floor; (ii) it matches the harness's own content-classifier fallback
   target for Fable 5 (default Opus), so availability-fallback and

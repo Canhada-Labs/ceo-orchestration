@@ -25,6 +25,13 @@ env var.
 > `_constants.py` + `VETO_FLOOR_MODEL`); this document is being
 > updated to reflect the new current policy.
 
+> **UPDATED S284 (PLAN-163, 2026-07-28):** the Claude 5 family
+> landed — see **§Current fleet & routing (PLAN-163)** below for
+> the ratified working set, fallback, and role mapping. Sections
+> outside that one keep their original dates and describe the
+> pre-Claude-5 policy era; where they name a concrete model id
+> (Opus 4.8, Sonnet 4.6) read them through the fleet table.
+
 **Default today (HEAD / S211):** CEO orchestrator runs **Opus 4.8
 always** (`claude-opus-4-8[1m]`). This is by *omission* of the
 runtime read, not by the kill-switch behavior described below.
@@ -37,6 +44,42 @@ This is a **simulation**, not measured live spend at v1.11.0.
 CEO_MODEL_DOWNSHIFT=0` in the session shell will revert to
 Opus-always once the runtime read ships. **At v1.11.0 the kill-
 switch is a no-op — the upgraded path doesn't exist.**
+
+---
+
+## Current fleet & routing (PLAN-163, ratified S284 — 2026-07-28)
+
+> Staged with the PLAN-163 main-pack; live only after the pack's GPG
+> ceremony lands the canonical mirrors (ADR-149 amendment + generator
+> regen). **NO-SPEED-CLAIM:** the role changes below are capability/cost
+> routing decisions; nothing here claims throughput.
+
+**Working set (`availableModels`, order is normative — new ids appended):**
+
+```
+["claude-opus-4-8","claude-fable-5","claude-sonnet-4-6","claude-haiku-4-5","claude-opus-5","claude-sonnet-5"]
+```
+
+**Fallback (`fallbackModel`, OQ1=b — full refresh, no soak):** `["claude-opus-5"]`
+
+| Role / surface | Model (post-PLAN-163) | Notes |
+|---|---|---|
+| VETO roles (`code-reviewer`, `security-engineer`) | **`claude-fable-5` remains the ceiling** | `VETO_FLOOR_ALLOWED` += `claude-opus-5` (ADR-149 amendment) — opus-5 becomes an allowed floor member, Fable 5 stays the top of the VETO family |
+| Debate / arch task classes (`model_routing.py`) | `claude-opus-5` | was `claude-opus-4-8`; $5/$25 drop-in rate, 1M ctx default |
+| Advisory tier (qa / perf / non-VETO staff, `code_gen`/`finops`) | `claude-sonnet-5` | OQ2 = migrate now; intro pricing $2/$10 through 2026-08-31 (then $3/$15); tokenizer ~+30% tokens — shipped budgets NOT re-baselined yet (follow-up plan, see `docs/substrate-adopt-2026-08.md` §Tokenizer note) |
+| Explore / digest / mechanical scans | `claude-haiku-4-5` | unchanged |
+
+**Opus 5 rate-limit bucket (compatibility fact, not a routing input):**
+the provider accounts `claude-opus-5` usage in a **separate rate-limit
+bucket** from the 4.x Opus ids. The framework records this only as a
+quota-accounting compatibility fact — e.g. parallel ceremonies on mixed
+opus-4-8/opus-5 fleets draw on different buckets. It is **not** treated as
+extra capacity to exploit and no fan-out cap decision cites it (the cap is
+governed by the measured lock-contention baseline, `PLAN-163/probes/flock-2.1.220.md`).
+
+**What did NOT change:** the VETO floor mechanism (ADR-149 allowlist +
+`agent_frontmatter.py` enforcement), the spawn protocol, the cross-vendor
+pair-rail requirement (ADR-145), and the fast-mode kill-ledger entry below.
 
 ---
 
@@ -88,9 +131,15 @@ routing rule above:
   ADR-052 VETO floor is hardcoded in `_lib/adapters/*`. No flag can
   override this. Phase 1 routing only shifts the CEO orchestrator
   identity, never the staff-veto dispatch tier.
+  *[UPDATED PLAN-163: the VETO floor family is governed by the ADR-149
+  allowlist — `claude-fable-5` is the ceiling and `VETO_FLOOR_ALLOWED`
+  now includes `claude-opus-5`; the invariant that no flag can downshift
+  a VETO role below the floor is unchanged.]*
 - **Sub-agent dispatch tier unchanged.** ADR-052 role-to-model mapping
   (`_lib/policy.py`) governs sub-agent tiering independently of CEO
   tier. Haiku for Explore, Sonnet for non-VETO staff, Opus 4.8 for VETO.
+  *[UPDATED PLAN-163: read the concrete ids through §Current fleet &
+  routing above.]*
 - **Debate round agents receive default Anthropic thinking budget.**
   The `/effort` slash-command is CEO-only (see PROTOCOL.md §Step 3).
   Spawn prompts never embed `/effort` tokens.
@@ -104,13 +153,15 @@ pre-registration.
 - **Fast mode is not a routing tier.** The speed thesis is dead 5-6
   ways (PLAN-123 E2 $250 pilot through PLAN-134 W2 E5 parallel-read —
   p50 51% slower, 37% costlier at the quality ceiling). Anthropic fast
-  mode (`speed: "fast"` — Opus 4.6 only at this writing) is an
-  **API-billed premium** outside subscription quota; no route in this
-  document may select it. Future use = a **pilot lane ONLY** via a
-  PLAN-134 W3-style pre-registration (frozen kill criteria + falsifier
-  + budget cap) before the first paid call. See
+  mode (`speed: "fast"` — **Opus 5 / Opus 4.8 at this writing, $10/$50;
+  removed from Opus 4.7 with the 2026-07-24 `claude-opus-4-7-fast`
+  retirement**) is an **API-billed premium** outside subscription quota;
+  no route in this document may select it. Future use = a **pilot lane
+  ONLY** via a PLAN-134 W3-style pre-registration (frozen kill criteria
+  + falsifier + budget cap) before the first paid call. See
   `docs/HONEST-LIMITATIONS.md` §14 + `docs/provider-pricing.md`
-  §Fast mode.
+  §Fast mode + `docs/ACCELERATORS.md` §Fast mode (PLAN-163 OQ6
+  cost×latency guidance — deliberately number-free on latency).
 - **Advisor never satisfies the cross-model VETO.** The server-side
   Advisor tool (`advisor_20260301`, beta `advisor-tool-2026-03-01`)
   is same-vendor guidance — a Claude consulting a Claude. It MAY
@@ -118,11 +169,15 @@ pre-registration.
   cross-model `code-reviewer` / security persona-demand is discharged
   ONLY by the cross-vendor Codex pair-rail (or an equivalent
   non-Anthropic reviewer). An Advisor consult is never a review
-  verdict and never moves a VETO gate.
+  verdict and never moves a VETO gate. (The native `/code-review`
+  background subagent — CC 2.1.218 — is the same class: same-vendor
+  advisory, never a VETO discharge. See
+  `docs/substrate-adopt-2026-08.md` §/code-review doctrine.)
 - **Eval/ceremony sessions pin `--model` explicitly.** The `/model`
   picker choice persists across sessions, and Workflow `opts.model`
   is INERT (PLAN-134 GATE-W0a verdict — the double-ground-truth
-  lesson; reinforced by S1b). Any session whose result depends on
+  lesson; reinforced by S1b; **re-verified still-INERT on 2.1.220,
+  PLAN-163 G16 probe**). Any session whose result depends on
   which model actually ran — baselines, pilots, kill-gates, Owner
   ceremonies — MUST launch with an explicit `claude --model <id>`
   (or per-task `claude -p --model <id>` subprocess) and reconcile the
@@ -279,3 +334,4 @@ Do not use the kill-switch as a "dodge the evidence" shortcut.
 - `.claude/plans/PLAN-048/staged-code/team-md-ceo-model-routing.md` — pending sentinel patch
 - `.claude/adr/ADR-052-*.md` — dispatch tier policy (VETO floor)
 - `PROTOCOL.md` — Spawn Protocol + `/effort` scope clause
+- `docs/substrate-adopt-2026-08.md` — PLAN-163 adoption record (fleet, gates, residuals)

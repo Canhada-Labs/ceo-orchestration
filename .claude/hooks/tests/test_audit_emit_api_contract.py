@@ -406,6 +406,18 @@ _EXPECTED_PUBLIC_SYMBOLS = frozenset({
     # tool_name coerced to unknown); NEVER _EMIT_GENERIC_PASSTHROUGH.
     "emit_codex_review_verdict",
     "emit_pair_rail_review_expected",
+    # PLAN-163 T3.1/T3.2 (CC 2.1.220 substrate uplift / ADR-183) — TWO new
+    # typed emitters for the two NEW harness lifecycle events. Deny-by-default
+    # scrub branches + per-action allowlists
+    # (_DIRECTORY_ADDED_RECORDED_ALLOWLIST / _NOTIFICATION_LIFECYCLE_ALLOWLIST);
+    # closed enums (source -> other; notification_type -> other — the harness
+    # Notification enum is OPEN, so the coercion is the no-value-echo
+    # boundary); hash-prefix shape gates (exact 16-hex / 12-hex or "", raw
+    # value validated, off-shape DROPPED never truncated); NEVER
+    # _EMIT_GENERIC_PASSTHROUGH. Raw directory path / message / title TEXT
+    # never persist.
+    "emit_directory_added_recorded",
+    "emit_notification_lifecycle",
 })
 
 
@@ -686,7 +698,26 @@ _EXPECTED_KNOWN_ACTIONS_SHA256 = (
     # _EXPECTED_PUBLIC_SYMBOLS). SPEC amend v2.52. SHA re-derived from the
     # STAGED audit_emit.py under .claude/plans/PLAN-161/staged/ via
     # sha256(json.dumps(sorted(_KNOWN_ACTIONS))). Count: 319 -> 321.
-    "0d1a5be5eacb7cf7470c288f6f406040cb645ee9bfb3d079e121b1ac34c426a1"
+    # Updated PLAN-163 T3.1/T3.2 (CC 2.1.220 substrate uplift / ADR-183,
+    # PLAN-163 pack ceremony) — +2 metadata-only actions for the two NEW
+    # harness lifecycle events: directory_added_recorded (DirectoryAdded
+    # workspace-root append, emitted by check_directory_added.py; closed enum
+    # source {slash_command, register_repo_root, session_start_snapshot,
+    # other} + exact-12-hex-or-"" directory_hash_prefix — the raw path NEVER
+    # persists) + notification_lifecycle (Notification observer telemetry,
+    # emitted by check_notification.py; closed vocabulary notification_type
+    # {agent_needs_input, agent_completed, permission_request, other} —
+    # harness enum is OPEN, off-enum coerces to other, never echoed — +
+    # has_title bool + exact-12-hex-or-"" message_sha256_prefix — message/
+    # title TEXT never persists). Both route through dedicated Sec MF-3
+    # dispatch branches + per-action allowlists
+    # (_DIRECTORY_ADDED_RECORDED_ALLOWLIST / _NOTIFICATION_LIFECYCLE_ALLOWLIST),
+    # NEVER _EMIT_GENERIC_PASSTHROUGH. TWO new public typed emitters:
+    # emit_directory_added_recorded + emit_notification_lifecycle (added to
+    # _EXPECTED_PUBLIC_SYMBOLS). SHA re-derived from the STAGED audit_emit.py
+    # under .claude/plans/PLAN-163/staged/main-pack/ via
+    # sha256(json.dumps(sorted(_KNOWN_ACTIONS))). Count: 321 -> 323.
+    "5b44585d2cf88c60207e5bef80537e55c9af014b38dddc03bbef696d0d834fc5"
 )
 
 
@@ -728,15 +759,17 @@ class AuditEmitPublicSurfaceTests(unittest.TestCase):
         self.assertEqual(
             actual, _EXPECTED_KNOWN_ACTIONS_SHA256,
             f"_KNOWN_ACTIONS drift detected. "
-            f"Count={len(actions)} (expected 321). "
+            f"Count={len(actions)} (expected 323). "
             f"Rebaseline this test + add audit-registry entry if the change is intentional.",
         )
 
     def test_known_actions_count_fixed(self) -> None:
         # 321 = 319 + 2 PLAN-161 W2 C5 (codex_review_verdict +
         # pair_rail_review_expected — pair-rail liveness telemetry, CF-9).
+        # 323 = 321 + 2 PLAN-163 T3.1/T3.2 (directory_added_recorded +
+        # notification_lifecycle — CC 2.1.220 lifecycle events, ADR-183).
         self.assertEqual(
-            len(audit_emit._KNOWN_ACTIONS), 321,
+            len(audit_emit._KNOWN_ACTIONS), 323,
             "_KNOWN_ACTIONS count drifted from 163 baseline (PLAN-088 S114 Wave 1 +11 actions: "
             "cache_discipline_alerted + first_run_wizard_dispatched + "
             "estimate_calibrator_pipeline_run + subagent_findings_partial_drop + "

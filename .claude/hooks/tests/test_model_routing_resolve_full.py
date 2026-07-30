@@ -29,8 +29,8 @@ class TestResolveFull(TestEnvContext):
 
     def test_architect_default_budget_4096(self) -> None:
         result = model_routing.resolve_full(task_class="arch")
-        # arch maps to opus-4-7 in stub routing
-        self.assertEqual(result["model"], "claude-opus-4-8")
+        # arch maps to the Opus tier in stub routing (ADR-181: opus-5)
+        self.assertEqual(result["model"], "claude-opus-5")
         # arch task_class lookup is via "arch" key in stub, but the
         # cap_table key is "architect"; for arch task_class, the
         # general budget (0) applies — verify pricing class lookup.
@@ -84,7 +84,7 @@ class TestResolveFull(TestEnvContext):
     def test_backward_compat_resolve_still_returns_str(self) -> None:
         # PLAN-086 callers expect resolve() to return Optional[str]
         result = model_routing.resolve("debate")
-        self.assertEqual(result, "claude-opus-4-8")
+        self.assertEqual(result, "claude-opus-5")
         self.assertIsInstance(result, str)
 
 
@@ -157,15 +157,15 @@ class TestResolveFullExpansion(TestEnvContext):
 
     def test_debate_maps_to_opus(self) -> None:
         result = model_routing.resolve_full(task_class="debate")
-        self.assertEqual(result["model"], "claude-opus-4-8")
+        self.assertEqual(result["model"], "claude-opus-5")
 
     def test_code_gen_maps_to_sonnet(self) -> None:
         result = model_routing.resolve_full(task_class="code_gen")
-        self.assertEqual(result["model"], "claude-sonnet-4-6")
+        self.assertEqual(result["model"], "claude-sonnet-5")
 
     def test_finops_maps_to_sonnet(self) -> None:
         result = model_routing.resolve_full(task_class="finops")
-        self.assertEqual(result["model"], "claude-sonnet-4-6")
+        self.assertEqual(result["model"], "claude-sonnet-5")
 
     def test_digest_maps_to_haiku(self) -> None:
         result = model_routing.resolve_full(task_class="digest")

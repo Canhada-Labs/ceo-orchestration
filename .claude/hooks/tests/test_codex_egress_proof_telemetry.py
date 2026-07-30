@@ -110,7 +110,9 @@ class TestAllowlistAndContract(unittest.TestCase):
         # +grok_turn_ended, +council_lane_invoked).
         # PLAN-161 W2 C5: 319 -> 321 (+codex_review_verdict,
         # +pair_rail_review_expected — pair-rail liveness telemetry).
-        self.assertEqual(len(audit_emit._KNOWN_ACTIONS), 321)
+        # PLAN-163 T3.1/T3.2: 321 -> 323 (+directory_added_recorded,
+        # +notification_lifecycle — CC 2.1.220 lifecycle events, ADR-183).
+        self.assertEqual(len(audit_emit._KNOWN_ACTIONS), 323)
         self.assertIn("pair_rail_outgoing_redaction_applied", audit_emit._KNOWN_ACTIONS)
 
     def test_dispatch_scrub_accepts_empty_findings(self):

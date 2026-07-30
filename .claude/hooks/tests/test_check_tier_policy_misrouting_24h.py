@@ -103,7 +103,7 @@ class TestAllRoutedCorrectly(TestEnvContext):
              "model_advised": "claude-haiku-4-5"},
             {"event": "model_routing_advised",
              "ts": now, "task_class": "code_gen",
-             "model_advised": "claude-sonnet-4-6"},
+             "model_advised": "claude-sonnet-5"},
         ])
         status, summary, detail = _mod.check_tier_policy_misrouting_24h()
         self.assertEqual(status, "green")
@@ -150,7 +150,7 @@ class TestRedBand(TestEnvContext):
             entries.append({
                 "event": "model_routing_advised",
                 "ts": now, "task_class": "code_gen",
-                "model_advised": "claude-sonnet-4-6",
+                "model_advised": "claude-sonnet-5",
             })
         for _ in range(2):
             entries.append({

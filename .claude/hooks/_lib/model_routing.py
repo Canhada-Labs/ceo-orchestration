@@ -55,13 +55,18 @@ TASK_CLASSES = (
 
 
 #: STUB routing table — static floor per task class.
+#: PLAN-163 T1.4 (ADR-181, OQ1=b + OQ2=migrate-now): debate/arch move to
+#: the Claude 5 flagship ``claude-opus-5``; the advisory (Sonnet) tier
+#: moves to ``claude-sonnet-5`` (ADR-157 deferred flip, executed here).
+#: Every value MUST stay inside the ADR-149 AVAILABLE_MODELS_WORKING_SET
+#: (tied by test_adr149_validator_parity.py).
 _ROUTING_TABLE: Dict[str, str] = {
     "file_read": "claude-haiku-4-5",
     "line_audit": "claude-haiku-4-5",
-    "debate": "claude-opus-4-8",
-    "arch": "claude-opus-4-8",
-    "code_gen": "claude-sonnet-4-6",
-    "finops": "claude-sonnet-4-6",
+    "debate": "claude-opus-5",
+    "arch": "claude-opus-5",
+    "code_gen": "claude-sonnet-5",
+    "finops": "claude-sonnet-5",
     "digest": "claude-haiku-4-5",
 }
 

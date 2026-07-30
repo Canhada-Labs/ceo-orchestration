@@ -28,13 +28,15 @@ _FOUR_ARCHETYPES = (
     "threat-detection-engineer", "llm-finops-architect",
 )
 
+# PLAN-163 T1.4 (ADR-181): debate/arch -> claude-opus-5; advisory tier
+# (code_gen/finops) -> claude-sonnet-5 (ADR-157 deferred flip executed).
 _EXPECTED_FLOOR = {
     "file_read": "claude-haiku-4-5",
     "line_audit": "claude-haiku-4-5",
-    "debate": "claude-opus-4-8",
-    "arch": "claude-opus-4-8",
-    "code_gen": "claude-sonnet-4-6",
-    "finops": "claude-sonnet-4-6",
+    "debate": "claude-opus-5",
+    "arch": "claude-opus-5",
+    "code_gen": "claude-sonnet-5",
+    "finops": "claude-sonnet-5",
     "digest": "claude-haiku-4-5",
 }
 
@@ -53,7 +55,7 @@ class TestResolveReturnsNonNull(unittest.TestCase):
             self.assertIsNotNone(model_routing.resolve(tc))
 
     def test_all_seven_valid_floor(self) -> None:
-        valid = {"claude-opus-4-8", "claude-sonnet-4-6", "claude-haiku-4-5"}
+        valid = {"claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5"}
         for tc in _TASK_CLASSES:
             self.assertIn(model_routing.resolve(tc), valid)
 

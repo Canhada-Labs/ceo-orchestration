@@ -31,11 +31,15 @@ GENERATOR = _SCRIPTS_DIR / "generate-available-models.py"
 LIVE_ADR = _REPO_ROOT / ".claude" / "adr" / "ADR-149-model-id-allowlist.md"
 
 VETO_FLOOR = ["claude-opus-4-8", "claude-fable-5"]
+# PLAN-163 T1.2 (ADR-181): the live-ADR state-agnostic test bounds ids by
+# this union — Claude 5 refresh members appended (order-preserving).
 WORKING_SET = [
     "claude-opus-4-8",
     "claude-fable-5",
     "claude-sonnet-4-6",
     "claude-haiku-4-5",
+    "claude-opus-5",
+    "claude-sonnet-5",
 ]
 
 AMENDED_ADR = """# ADR-149 fixture (amended)
@@ -55,6 +59,8 @@ AVAILABLE_MODELS_WORKING_SET: tuple = (
     "claude-fable-5",     # floor
     "claude-sonnet-4-6",  # tier
     "claude-haiku-4-5",   # tier
+    "claude-opus-5",      # ADR-181 refresh
+    "claude-sonnet-5",    # ADR-181 refresh
 )
 ```
 """

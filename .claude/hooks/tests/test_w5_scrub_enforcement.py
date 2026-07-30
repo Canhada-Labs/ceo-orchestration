@@ -82,7 +82,9 @@ class TestW5OffPassthrough(TestEnvContext):
         # +council_lane_invoked) -> 319.
         # PLAN-161 W2 C5 (+codex_review_verdict +pair_rail_review_expected —
         # pair-rail liveness telemetry) -> 321.
-        self.assertEqual(len(audit_emit._KNOWN_ACTIONS), 321)
+        # PLAN-163 T3.1/T3.2 (+directory_added_recorded +notification_lifecycle
+        # — CC 2.1.220 lifecycle events, ADR-183) -> 323.
+        self.assertEqual(len(audit_emit._KNOWN_ACTIONS), 323)
 
 
 class TestAdminKeyScrub(_W5Base):

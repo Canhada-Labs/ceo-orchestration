@@ -1036,6 +1036,40 @@ _KNOWN_ACTIONS = {
     # for the SAME (session, file) — can ever offset a different dead
     # review).
     "pair_rail_review_expected",
+    # PLAN-163 T3.1/T3.2 (CC 2.1.220 substrate uplift, ADR-183) — 2 NEW
+    # metadata-only actions for the two NEW harness lifecycle events
+    # (DirectoryAdded + Notification). Registered via the PLAN-163 pack
+    # ceremony; _KNOWN_ACTIONS 321 -> 323. Both are deny-by-default:
+    # dedicated _scrub_ branches + _DIRECTORY_ADDED_RECORDED_ALLOWLIST /
+    # _NOTIFICATION_LIFECYCLE_ALLOWLIST below, NEVER
+    # _EMIT_GENERIC_PASSTHROUGH
+    # ([[feedback-closed-enum-breadcrumb-must-not-echo-rejected-value]]).
+    #
+    # (A) DirectoryAdded workspace-root append, emitted by
+    # check_directory_added.py (the DirectoryAdded observer — the event is
+    # NOTIFICATION-ONLY on CC 2.1.220: permission/sandbox already include
+    # the dir BEFORE dispatch, so this row is the POST-FACTO forensic
+    # record that the session's write surface grew). Closed-enum `source`
+    # {slash_command, register_repo_root, session_start_snapshot, other}
+    # (the wire carries the first two; session_start_snapshot is reserved
+    # for the documented --add-dir-at-LAUNCH blind-spot mitigation — the
+    # launch flag never fires the event, so a SessionStart roots snapshot
+    # is the only producer that can cover it) + `directory_hash_prefix`
+    # (exact 12-lowercase-hex sha256 prefix of the absolute path, or "";
+    # the RAW directory path is NEVER persisted — LLM06 side-channel
+    # guard, same 12-hex token class as message_sha256_prefix below and
+    # the exact length check_directory_added.py computes).
+    "directory_added_recorded",
+    # (B) Notification lifecycle telemetry, emitted by
+    # check_notification.py (pure observer on the Notification event).
+    # Closed-enum `notification_type` {agent_needs_input, agent_completed,
+    # permission_request, other} — the harness enum is OPEN, so any
+    # unrecognized wire value COERCES to `other` (never echoed) — +
+    # `has_title` (bool) + `message_sha256_prefix` (exact 12-lowercase-hex
+    # sha256 prefix of the message body, or ""; the message/title TEXT is
+    # NEVER persisted — no-value-echo, a notification message can quote
+    # tool output or secrets).
+    "notification_lifecycle",
 }
 
 
@@ -7167,6 +7201,54 @@ def emit_generic(action: str, **kwargs: Any) -> None:
         if dropped:
             _breadcrumb("emit_generic pair_rail_review_expected dropped: %s"
                         % sorted(dropped)[:10])
+    # PLAN-163 T3.1 — DirectoryAdded workspace-root append. Dedicated scrub
+    # branch (NEVER _EMIT_GENERIC_PASSTHROUGH). VALUE re-coercion closes the
+    # direct emit_generic caller path: an off-enum `source` is reset to
+    # "other" (never echoed) and an off-shape `directory_hash_prefix` is
+    # reset to "" — so a raw directory path can never reach the signed chain.
+    elif action == "directory_added_recorded":
+        # H4 (PLAN-163 fix-pass): membership over an ARBITRARY caller value —
+        # an unhashable `source` (dict/list) would raise TypeError on
+        # `x in frozenset`, breaking emit_generic's never-raises contract
+        # (fail-OPEN by exception). isinstance-guard first: a non-str value
+        # is off-enum → reset to the closed default "other" (never echoed).
+        _dar_src = event.get("source")
+        if not isinstance(_dar_src, str) or _dar_src not in _DIRECTORY_ADDED_SOURCE_ENUM:
+            event["source"] = "other"
+        _dar_prefix = event.get("directory_hash_prefix")
+        if not (isinstance(_dar_prefix, str)
+                and _DIRECTORY_ADDED_HASH_PREFIX_RE.fullmatch(_dar_prefix)):
+            event["directory_hash_prefix"] = ""
+        event, dropped = _scrub_ceo_boot_event(
+            event, _DIRECTORY_ADDED_RECORDED_ALLOWLIST)
+        if dropped:
+            _breadcrumb("emit_generic directory_added_recorded dropped: %s"
+                        % sorted(dropped)[:10])
+    # PLAN-163 T3.2 — Notification lifecycle telemetry. Dedicated scrub
+    # branch (NEVER _EMIT_GENERIC_PASSTHROUGH). The harness notification_type
+    # enum is OPEN, so an off-enum value (which could be free text) is reset
+    # to "other"; `has_title` is coerced to a strict bool; an off-shape
+    # `message_sha256_prefix` is reset to "" — message/title TEXT can never
+    # reach the signed chain (no-value-echo).
+    elif action == "notification_lifecycle":
+        # H4 (PLAN-163 fix-pass): same unhashable-value TypeError class as the
+        # directory_added_recorded branch above — a dict/list
+        # `notification_type` would crash `x in frozenset`. isinstance-guard
+        # first so a non-str value is off-enum → reset to "other" (never
+        # echoed). has_title below is already bool()-coerced.
+        _nl_type = event.get("notification_type")
+        if not isinstance(_nl_type, str) or _nl_type not in _NOTIFICATION_TYPE_ENUM:
+            event["notification_type"] = "other"
+        event["has_title"] = bool(event.get("has_title"))
+        _nl_prefix = event.get("message_sha256_prefix")
+        if not (isinstance(_nl_prefix, str)
+                and _NOTIFICATION_MSG_SHA256_PREFIX_RE.fullmatch(_nl_prefix)):
+            event["message_sha256_prefix"] = ""
+        event, dropped = _scrub_ceo_boot_event(
+            event, _NOTIFICATION_LIFECYCLE_ALLOWLIST)
+        if dropped:
+            _breadcrumb("emit_generic notification_lifecycle dropped: %s"
+                        % sorted(dropped)[:10])
     # PLAN-113 Phase B B-STRUCTURAL — verbatim passthrough for the documented
     # set of TRUSTED first-party producers (see _EMIT_GENERIC_PASSTHROUGH).
     # Their field sets are controlled at the producer site; pass through as-is
@@ -7515,6 +7597,58 @@ _PAIR_RAIL_REVIEW_ID_RE = re.compile(r"^([0-9a-f]{16})?$")
 
 _PAIR_RAIL_REVIEW_EXPECTED_ALLOWLIST = _CODEX_AUDIT_ENVELOPE | frozenset({
     "tool_name", "file_path_hash_prefix", "review_id",
+})
+
+
+# ---------------------------------------------------------------------------
+# PLAN-163 T3.1/T3.2 (CC 2.1.220 substrate uplift / ADR-183) — the two new
+# harness lifecycle actions. Sec MF-3 deny-by-default; every branch also
+# re-coerces VALUES by closed-set membership / bounded shape so a direct
+# emit_generic caller can never sign free text into the HMAC chain.
+# NEVER _EMIT_GENERIC_PASSTHROUGH.
+# ---------------------------------------------------------------------------
+
+# directory_added_recorded — how the workspace root was added. The CC 2.1.220
+# wire carries `slash_command` (/add-dir) and `register_repo_root` (the SDK
+# control_request); `session_start_snapshot` is RESERVED for the documented
+# --add-dir-at-LAUNCH blind spot (the launch flag never fires DirectoryAdded,
+# so a SessionStart roots snapshot is the only producer that can record those
+# roots — keeping the discriminator here means that mitigation never needs a
+# second kernel-file ceremony). Off-enum COERCES to "other" (never echoed).
+_DIRECTORY_ADDED_SOURCE_ENUM = frozenset({
+    "slash_command", "register_repo_root", "session_start_snapshot", "other",
+})
+
+# Exact 12-lowercase-hex sha256 prefix of the ABSOLUTE directory path, or
+# exactly "" — the raw path is forbidden on the wire (LLM06 side-channel
+# guard; same 12-hex token class as `message_sha256_prefix` below and the
+# federation path re-hash, and the EXACT length the producer
+# check_directory_added.py `_hash_prefix()` computes). The RAW value is
+# validated (r6 F2 precedent: off-shape incl. oversize is DROPPED to "",
+# never truncated — truncate-before-validate lets two distinct oversize
+# values alias to one 12-hex key).
+_DIRECTORY_ADDED_HASH_PREFIX_RE = re.compile(r"^([0-9a-f]{12})?$")
+
+_DIRECTORY_ADDED_RECORDED_ALLOWLIST = _CODEX_AUDIT_ENVELOPE | frozenset({
+    "source", "directory_hash_prefix",
+})
+
+# notification_lifecycle — the harness `notification_type` enum is OPEN
+# (matcher-visible string), so the wire vocabulary here is CLOSED and any
+# unrecognized value COERCES to "other" — the raw type string is NEVER
+# echoed into the signed chain (no-value-echo).
+_NOTIFICATION_TYPE_ENUM = frozenset({
+    "agent_needs_input", "agent_completed", "permission_request", "other",
+})
+
+# Exact 12-lowercase-hex sha256 prefix of the notification message body, or
+# exactly "" (empty/absent message). Hash, never content: a notification
+# message can quote tool output, file paths, or secrets. RAW value
+# validated; off-shape incl. oversize DROPPED to "", never truncated.
+_NOTIFICATION_MSG_SHA256_PREFIX_RE = re.compile(r"^([0-9a-f]{12})?$")
+
+_NOTIFICATION_LIFECYCLE_ALLOWLIST = _CODEX_AUDIT_ENVELOPE | frozenset({
+    "notification_type", "has_title", "message_sha256_prefix",
 })
 
 
@@ -8818,6 +8952,164 @@ def emit_pair_rail_review_expected(
     if dropped:  # pragma: no cover — impossible from the typed wrapper
         _breadcrumb(
             f"pair_rail_review_expected dropped forbidden field(s): "
+            f"{sorted(dropped)[:10]}"
+        )
+
+
+def emit_directory_added_recorded(
+    *,
+    source: str,
+    directory_hash_prefix: str = "",
+    session_id: str = "",
+    project: str = "",
+) -> None:
+    """Emit directory_added_recorded (PLAN-163 T3.1 / ADR-183).
+
+    Fired by `check_directory_added.py` (the DirectoryAdded observer, CC
+    2.1.220) once per workspace root the harness adds mid-session. The
+    event is NOTIFICATION-ONLY on 2.1.220 — permission/sandbox already
+    include the directory BEFORE the hook dispatches — so this row is the
+    POST-FACTO forensic record that the session's read+write surface grew
+    (the auditability half the harness does not provide).
+
+    Sec MF-3 field-safety rationale (why each field is safe to sign):
+
+      source                 — CLOSED enum {slash_command,
+                               register_repo_root, session_start_snapshot,
+                               other}; an unrecognized value is COERCED to
+                               "other" and NEVER echoed. The wire carries
+                               the first two; `session_start_snapshot` is
+                               reserved for the --add-dir-at-LAUNCH blind
+                               spot (the launch flag never fires the
+                               event — a SessionStart roots snapshot is
+                               the only producer that can cover it).
+      directory_hash_prefix  — exact 12-lowercase-hex sha256 prefix of
+                               the ABSOLUTE path, or ""; a hash prefix
+                               identifies recurrence without disclosing
+                               the path (LLM06 side-channel guard — same
+                               12-hex token class as
+                               message_sha256_prefix, and the exact
+                               length the producer's _hash_prefix()
+                               computes). RAW value validated; off-shape
+                               incl. oversize is DROPPED to "", never
+                               truncated.
+      session_id / project   — baseline correlation scalars, envelope-
+                               allowed on every action.
+
+    DENIED on the wire: the raw `directory` path (or any substring of
+    it), cwd, transcript_path — a directory path can carry usernames,
+    client names, or project identity. Deny-by-default allowlist
+    `_DIRECTORY_ADDED_RECORDED_ALLOWLIST` enforced; fail-open per
+    audit_emit contract (exceptions swallowed by _write_event). NEVER
+    routes through _EMIT_GENERIC_PASSTHROUGH.
+    """
+    safe_source = (
+        source
+        if isinstance(source, str) and source in _DIRECTORY_ADDED_SOURCE_ENUM
+        else "other"
+    )
+    _raw_prefix = (
+        directory_hash_prefix if isinstance(directory_hash_prefix, str) else ""
+    )
+    safe_prefix = (
+        _raw_prefix
+        if _DIRECTORY_ADDED_HASH_PREFIX_RE.fullmatch(_raw_prefix)
+        else ""
+    )
+    raw_event: Dict[str, Any] = {
+        "action": "directory_added_recorded",
+        "session_id": session_id,
+        "project": project,
+        "source": safe_source,
+        "directory_hash_prefix": safe_prefix,
+    }
+    cleaned, dropped = _scrub_ceo_boot_event(
+        raw_event, _DIRECTORY_ADDED_RECORDED_ALLOWLIST
+    )
+    _write_event(cleaned)
+    if dropped:  # pragma: no cover — impossible from the typed wrapper
+        _breadcrumb(
+            f"directory_added_recorded dropped forbidden field(s): "
+            f"{sorted(dropped)[:10]}"
+        )
+
+
+def emit_notification_lifecycle(
+    *,
+    notification_type: str,
+    has_title: bool = False,
+    message_sha256_prefix: str = "",
+    session_id: str = "",
+    project: str = "",
+) -> None:
+    """Emit notification_lifecycle (PLAN-163 T3.2 / ADR-183).
+
+    Fired by `check_notification.py` (pure observer on the CC 2.1.220
+    Notification event) once per notification the harness surfaces —
+    the durable record of the agent-attention lifecycle
+    (needs-input / completed / permission-request) that /ceo-boot
+    liveness telemetry can pivot without a transcript.
+
+    Sec MF-3 field-safety rationale (why each field is safe to sign):
+
+      notification_type      — CLOSED vocabulary {agent_needs_input,
+                               agent_completed, permission_request,
+                               other}. The harness enum is OPEN (any
+                               string can arrive on the wire), so an
+                               unrecognized value is COERCED to "other"
+                               and NEVER echoed — the raw type string
+                               could otherwise smuggle free text into
+                               the signed chain.
+      has_title              — strict bool (presence signal only; the
+                               title TEXT never leaves the process).
+      message_sha256_prefix  — exact 12-lowercase-hex sha256 prefix of
+                               the message body, or "" (absent/empty
+                               message). A hash prefix supports
+                               recurrence/dedupe analysis without
+                               disclosing content. RAW value validated;
+                               off-shape incl. oversize is DROPPED to
+                               "", never truncated.
+      session_id / project   — baseline correlation scalars, envelope-
+                               allowed on every action.
+
+    DENIED on the wire: `message` and `title` TEXT in any form — a
+    notification message can quote tool output, file paths, or secrets
+    (no-value-echo, S172 doctrine). Deny-by-default allowlist
+    `_NOTIFICATION_LIFECYCLE_ALLOWLIST` enforced; fail-open per
+    audit_emit contract (exceptions swallowed by _write_event). NEVER
+    routes through _EMIT_GENERIC_PASSTHROUGH.
+    """
+    safe_type = (
+        notification_type
+        if isinstance(notification_type, str)
+        and notification_type in _NOTIFICATION_TYPE_ENUM
+        else "other"
+    )
+    _raw_msg_prefix = (
+        message_sha256_prefix
+        if isinstance(message_sha256_prefix, str)
+        else ""
+    )
+    safe_msg_prefix = (
+        _raw_msg_prefix
+        if _NOTIFICATION_MSG_SHA256_PREFIX_RE.fullmatch(_raw_msg_prefix)
+        else ""
+    )
+    raw_event: Dict[str, Any] = {
+        "action": "notification_lifecycle",
+        "session_id": session_id,
+        "project": project,
+        "notification_type": safe_type,
+        "has_title": bool(has_title),
+        "message_sha256_prefix": safe_msg_prefix,
+    }
+    cleaned, dropped = _scrub_ceo_boot_event(
+        raw_event, _NOTIFICATION_LIFECYCLE_ALLOWLIST
+    )
+    _write_event(cleaned)
+    if dropped:  # pragma: no cover — impossible from the typed wrapper
+        _breadcrumb(
+            f"notification_lifecycle dropped forbidden field(s): "
             f"{sorted(dropped)[:10]}"
         )
 

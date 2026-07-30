@@ -1,6 +1,6 @@
 # Solo-dev accelerators (PLAN-128) — what's on, what's opt-in, what's measured
 
-<!-- last-reviewed: 2026-06-07 v1.0.0 (S218: removed the global CLAUDE_CODE_SUBAGENT_MODEL=haiku override) -->
+<!-- last-reviewed: 2026-07-28 PLAN-163 (added §Fast mode cost×latency guidance, OQ6) -->
 
 > **Honest status up front:** the accelerators below are **wired and live**, but their
 > throughput/cost **multiplier is UNMEASURED**. The framework is a META repo (it builds
@@ -47,6 +47,42 @@ by default nothing blocks your session on an accelerator.
 | Advisor executor (Haiku exec + Opus advisor, paid API) | `CEO_ADVISOR_EXEC=1` | only paid path; hard weekly cap `CEO_ADVISOR_MAX_WEEKLY_USD` (default $5) |
 | Cascade router (cheap→strong escalation) | `CEO_WAVE3_CASCADE_ROUTER=1` | unmeasured; deterministic but needs an A/B week |
 | Speculative draft (Haiku drafts, Opus verifies) | `CEO_SPECULATIVE=1` | stub; fails closed, no draft leak until measured |
+
+## Fast mode (Opus 5 / Opus 4.8) — a cost×latency trade-off, NOT an accelerator and NOT a routing tier
+
+<!-- PLAN-163 T6/OQ6 (2026-07-28). NO-SPEED-CLAIM discipline: this section
+deliberately carries no latency/throughput numbers — neither measured nor
+quoted from provider material. The only numbers here are prices. -->
+
+Anthropic **fast mode** is a premium serving option for `claude-opus-5` and
+`claude-opus-4-8` at **$10 / $50 per MTok** (vs the standard $5 / $25 —
+double the per-token rate). It was **removed from Opus 4.7** with the
+`claude-opus-4-7-fast` retirement (2026-07-24). It is **API-billed outside
+subscription quota**: every fast-mode token is real money even on Pro/Max.
+
+**Framework posture (unchanged by PLAN-163):**
+
+- **No route selects it.** The kill ledger in
+  [`docs/CEO-MODEL-ROUTING.md`](CEO-MODEL-ROUTING.md) §Routing one-liners
+  stands: fast mode is not a routing tier, and the framework makes no claim
+  about what it does for wall-clock time — that is the operator's own
+  trade-off to evaluate, on their workload, with their money.
+- **When would an operator even consider it?** Only when a single,
+  serial, Opus-class call sits on a human-blocking critical path AND the
+  operator has decided that paying double per token is worth whatever
+  wall-clock change it yields on their own workload — a number only they
+  can measure, which this framework does not assert. That decision is a
+  **cost×latency** judgment the operator makes deliberately — never a
+  default, never inherited from provider marketing.
+- **Any systematic use = pilot lane.** Recurring fast-mode use requires a
+  PLAN-134-W3-style pre-registration (frozen kill criteria + falsifier +
+  budget cap) before the first paid call — same rule the routing doc
+  already imposes.
+- **Spend is visible after the fact.** PLAN-163 T1.5 added the
+  `claude-opus-5-fast` pricing rows to `cost-table.yaml`, `ceo-cost.py`,
+  `budget-summary.py`, and `audit-telemetry.py`, so any fast-mode spend
+  shows up (at the premium rate) in every cost rollup instead of pricing
+  at $0. Visibility is not authorization.
 
 ## Prompt caching (1h TTL) — already optimal on a subscription, NOT a framework default
 

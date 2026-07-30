@@ -23,14 +23,21 @@ from typing import Dict, Final, List, Literal, Optional, Tuple
 # Model ID type alias (C-P0-9 — full IDs only; no short names).
 # Matches ADR-052 canonical form + .claude/agents/<slug>.md model: field.
 # ---------------------------------------------------------------------
-MODEL_ID = "Literal['claude-fable-5', 'claude-opus-4-8', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001']"
+MODEL_ID = "Literal['claude-fable-5', 'claude-opus-4-8', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001', 'claude-opus-5', 'claude-sonnet-5']"
 # Runtime constant — used by loader.py / learn.py for allowlist checks.
 # ADR-149: claude-fable-5 added (flagship generation bump, additive).
+# ADR-181 (PLAN-163 T1.2d): claude-opus-5 + claude-sonnet-5 added — the
+# Claude 5 refresh working-set members; additive, historical ids stay.
+# Independent mirror of the ADR-149 AVAILABLE_MODELS_WORKING_SET
+# (defense-in-depth literal; parity enforced by
+# hooks/tests/test_adr149_validator_parity.py).
 VALID_MODEL_IDS: "Final[Tuple[str, ...]]" = (
     "claude-fable-5",
     "claude-opus-4-8",
     "claude-sonnet-4-6",
     "claude-haiku-4-5-20251001",
+    "claude-opus-5",
+    "claude-sonnet-5",
 )
 
 

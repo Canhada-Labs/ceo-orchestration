@@ -705,8 +705,13 @@ if [ -d "$AGENTS_DIR" ]; then
     done
 
     # PLAN-021 ADR-052: model field lint (advisory WARNING if missing;
-    # ERROR if present but not one of the 4 canonical IDs — ADR-149
-    # allowlist: fable-5 flagship + the 3 Claude 4.x IDs, additive).
+    # ERROR if present but not in the ADR-149 working set — PLAN-163
+    # T1.2d/ADR-181 refresh: the accepted set is the ADR-149
+    # AVAILABLE_MODELS_WORKING_SET (opus-4-8, fable-5, sonnet-4-6,
+    # haiku-4-5, opus-5, sonnet-5) plus the dated haiku id that agent
+    # files carry historically. Independent-mirror doctrine (ADR-149
+    # Decision): this literal deliberately duplicates the ADR block;
+    # test_adr149_validator_parity.py reddens on drift.
     model_line=$(grep -E "^model:" "$agent_file" | head -1)
     if [ -z "$model_line" ]; then
       echo "  WARN: $base missing 'model:' frontmatter field (ADR-052 recommends explicit)"
@@ -714,11 +719,11 @@ if [ -d "$AGENTS_DIR" ]; then
     else
       model_val=$(echo "$model_line" | sed -E 's/^model:[[:space:]]*//' | tr -d '[:space:]')
       case "$model_val" in
-        claude-fable-5|claude-opus-4-8|claude-sonnet-4-6|claude-haiku-4-5-20251001|"")
+        claude-fable-5|claude-opus-4-8|claude-sonnet-4-6|claude-haiku-4-5|claude-haiku-4-5-20251001|claude-opus-5|claude-sonnet-5|"")
           : ;;
         *)
           echo "  ERROR: $base has invalid model value: '$model_val'"
-          echo "    Expected one of: claude-fable-5, claude-opus-4-8, claude-sonnet-4-6, claude-haiku-4-5-20251001, or empty (inherit)"
+          echo "    Expected one of: claude-fable-5, claude-opus-4-8, claude-sonnet-4-6, claude-haiku-4-5, claude-haiku-4-5-20251001, claude-opus-5, claude-sonnet-5, or empty (inherit)"
           ERRORS=$((ERRORS + 1))
           ;;
       esac
@@ -1248,6 +1253,36 @@ PY
   echo ""
 fi
 # ---- end PLAN-138 Wave A advisory ----
+
+# ---- 6-quater. PLAN-163 T2.1 — hook stdout/exit-code contract oracle ----
+# The shim .claude/hooks/_python-hook.sh is a pure exec on the Claude path:
+# a wired hook's exit code reaches the harness unaltered, and under Claude
+# Code >= 2.1.214 an accidental exit 2 on a blocking event BLOCKS the tool
+# call. check-hook-stdout-schema.py derives the wired-hook set from
+# .claude/settings.json at runtime and asserts the CLAUDE.md §4 contract:
+# infra failure -> {} / allow-JSON + exit 0 (fail-OPEN); security-matcher
+# input-parse failure -> block-JSON + exit 0 (fail-CLOSED); no argparse /
+# constant-nonzero SystemExit in any wired hook.
+#
+# LOCAL/PRE-PUSH ONLY here: CI runs the same oracle as the dedicated
+# validate.yml job `hook-stdout-schema-oracle`; the ${CI:-} guard avoids a
+# double-run in the validate job (which invokes this script as step 1).
+# Fail-open when the oracle script is absent (older/partial installs).
+if [ -z "${CI:-}" ] && [ -f "$REPO_ROOT/.claude/scripts/check-hook-stdout-schema.py" ]; then
+  echo "--- PLAN-163 hook stdout/exit-code contract oracle ---"
+  set +e
+  p163_oracle_out=$(python3 "$REPO_ROOT/.claude/scripts/check-hook-stdout-schema.py" 2>&1)
+  p163_oracle_rc=$?
+  set -e
+  if [ "$p163_oracle_rc" -ne 0 ]; then
+    echo "$p163_oracle_out" | tail -25 | sed 's/^/  /'
+    echo "  FAIL: hook stdout/exit-code contract violation(s) (rc=$p163_oracle_rc)"
+    ERRORS=$((ERRORS + 1))
+  else
+    echo "  OK: $(echo "$p163_oracle_out" | tail -1)"
+  fi
+  echo ""
+fi
 
 # ---- 7. Summary ----
 

@@ -17,6 +17,18 @@
 #   5. CLAUDE_CODE_SUBAGENT_MODEL in any installed/template settings
 #      JSON must be in the allowed set (ADR-144: frontmatter is SoT;
 #      the env knob must never re-pin a stale generation).
+#   6. Installed availableModels/fallbackModel assert (PLAN-163 T1.7,
+#      codex F9): the installed .claude/settings.json must carry the
+#      ADR-149 working set EXACTLY and IN ORDER (order is normative —
+#      the first entry participates in default resolution) and the
+#      fallback chain must be exactly ["claude-opus-5"] (ADR-181/OQ1=b).
+#      ALLOWED_MODELS membership alone is NOT evidence — this step
+#      byte-compares the arrays. It ALSO asserts the installed top-level
+#      default `model` == claude-opus-5 (PLAN-163 T1.1 pin; R2-B3): a
+#      stale default can regress post-install WITHOUT touching the arrays
+#      above, so array parity alone does not prove the default pin. The
+#      default must additionally be a member of the installed
+#      availableModels (an unresolvable default is a parity failure).
 #
 # Exit 0 = parity OK. Exit 1 = offenders listed on stderr. bash-3.2-safe.
 #
@@ -40,7 +52,10 @@ FAIL=0
 # Mirrors validate-governance.sh agent-frontmatter case (ADR-149 allowlist
 # {claude-opus-4-8, claude-fable-5} + the two governance-ratified tier ids)
 # plus the harness tier aliases. Empty value == inherit (allowed).
-ALLOWED_MODELS="claude-opus-4-8 claude-fable-5 claude-sonnet-4-6 claude-haiku-4-5-20251001 haiku sonnet opus inherit"
+# PLAN-163 T1.7 (ADR-181): claude-opus-5 + claude-sonnet-5 appended —
+# Claude 5 refresh working-set members (additive; membership here is a
+# frontmatter/env lint only, NOT the availableModels evidence — see [6/6]).
+ALLOWED_MODELS="claude-opus-4-8 claude-fable-5 claude-sonnet-4-6 claude-haiku-4-5-20251001 claude-opus-5 claude-sonnet-5 haiku sonnet opus inherit"
 
 is_allowed_model() {
   # $1 = candidate value (already trimmed). Empty == inherit == allowed.
@@ -95,7 +110,7 @@ EXEMPT_PATH_RE='(^|/)(tests|fixtures)/|(^|/)test_[^/]*\.py$|_test\.py$|\.bak(\.|
 ALLOWLIST_RE='\.claude/scripts/(ceo-cost\.py|cost-table\.yaml|budget-summary\.py|audit-telemetry\.py|success-receipt\.py|value-dashboard\.py|generate-dispatch\.py|spot-check-findings\.py|check-model-deprecations\.py|detectors/(wasteful_thinking|overpowered)\.py|optimizer/model_normalize\.py)|\.claude/hooks/_lib/adapters/live/claude\.py|\.claude/skills/core/(ai-llm-orchestration/SKILL\.md|security-and-auth/(SKILL\.md|benchmarks/owasp-llm-top-10\.yaml|references/owasp\.md))'
 
 # ---------------------------------------------------------------------------
-echo "==> [1/5] install.sh (maintainer ceremony) into: $TARGET"
+echo "==> [1/6] install.sh (maintainer ceremony) into: $TARGET"
 ( cd "$TARGET" && git init -q )
 if ! CEO_INSTALL_SKIP_SELF_SHA=1 CEO_RAG_INSTALL_PROMPT=0 \
     bash "$REPO_ROOT/scripts/install.sh" "$TARGET" --profile core,frontend \
@@ -107,7 +122,7 @@ fi
 echo "    install.sh rc=0"
 
 # ---------------------------------------------------------------------------
-echo "==> [2/5] installed validate-governance.sh"
+echo "==> [2/6] installed validate-governance.sh"
 if ! ( cd "$TARGET" && bash .claude/scripts/validate-governance.sh >"$LOG" 2>&1 ); then
   echo "ERROR: validate-governance.sh FAILED in installed tree" >&2
   tail -40 "$LOG" >&2
@@ -116,7 +131,7 @@ fi
 echo "    validate-governance rc=0"
 
 # ---------------------------------------------------------------------------
-echo "==> [3/5] frontmatter model: pin check (installed tree + templates/)"
+echo "==> [3/6] frontmatter model: pin check (installed tree + templates/)"
 scan_frontmatter() {
   # $1 = scan root, $2 = label for offender lines
   local root="$1" label="$2" f val
@@ -136,7 +151,7 @@ scan_frontmatter "$REPO_ROOT/templates" "templates"
 echo "    frontmatter scan done"
 
 # ---------------------------------------------------------------------------
-echo "==> [4/5] stale model-id literal scan (installed tree + templates/)"
+echo "==> [4/6] stale model-id literal scan (installed tree + templates/)"
 scan_stale_literals() {
   # $1 = scan root, $2 = label. Filter at the FILE level (paths only) so
   # exemption regexes can never accidentally match line content.
@@ -157,7 +172,7 @@ scan_stale_literals "$REPO_ROOT/templates" "templates"
 echo "    literal scan done"
 
 # ---------------------------------------------------------------------------
-echo "==> [5/5] CLAUDE_CODE_SUBAGENT_MODEL in settings JSON"
+echo "==> [5/6] CLAUDE_CODE_SUBAGENT_MODEL in settings JSON"
 scan_settings_env() {
   # $1 = scan root, $2 = label
   local root="$1" label="$2" f val
@@ -175,6 +190,83 @@ scan_settings_env() {
 scan_settings_env "$TARGET" "installed"
 scan_settings_env "$REPO_ROOT/templates" "templates"
 echo "    settings scan done"
+
+# ---------------------------------------------------------------------------
+echo "==> [6/6] installed model pin + availableModels order + fallbackModel assert"
+INSTALLED_SETTINGS="$TARGET/.claude/settings.json"
+if [ ! -f "$INSTALLED_SETTINGS" ]; then
+  echo "OFFENDER(models): installed .claude/settings.json missing" >&2
+  FAIL=1
+elif ! python3 - "$INSTALLED_SETTINGS" <<'PY'
+import json, sys
+
+# ADR-149 AVAILABLE_MODELS_WORKING_SET — order is normative (ADR-149
+# Amendment 1 A1.1; new ids appended at the end per ADR-181). Regen via
+# python3 .claude/scripts/generate-available-models.py on drift.
+EXPECTED_AVAILABLE = [
+    "claude-opus-4-8",
+    "claude-fable-5",
+    "claude-sonnet-4-6",
+    "claude-haiku-4-5",
+    "claude-opus-5",
+    "claude-sonnet-5",
+]
+# ADR-149 FALLBACK_MODEL_CHAIN (ADR-181 / PLAN-163 OQ1=b).
+EXPECTED_FALLBACK = ["claude-opus-5"]
+# PLAN-163 T1.1 (ADR-181) — the installed top-level default `model` pin.
+# This is the value the harness resolves to when no per-turn override is
+# given; a stale default can regress post-install WITHOUT perturbing the
+# arrays above, so it is asserted independently (R2-B3).
+EXPECTED_MODEL = "claude-opus-5"
+
+try:
+    data = json.load(open(sys.argv[1], encoding="utf-8"))
+except Exception as exc:  # unreadable/invalid settings = parity failure
+    sys.stderr.write("OFFENDER(models): settings unreadable: %s\n" % exc)
+    sys.exit(1)
+
+rc = 0
+avail = data.get("availableModels")
+if avail != EXPECTED_AVAILABLE:
+    sys.stderr.write(
+        "OFFENDER(models): installed availableModels != ADR-149 working "
+        "set (ORDER included)\n  expected: %s\n  actual  : %s\n"
+        % (EXPECTED_AVAILABLE, avail)
+    )
+    rc = 1
+fb = data.get("fallbackModel")
+if isinstance(fb, str):
+    fb = [fb]
+if fb != EXPECTED_FALLBACK:
+    sys.stderr.write(
+        "OFFENDER(models): installed fallbackModel != %s (actual: %s)\n"
+        % (EXPECTED_FALLBACK, fb)
+    )
+    rc = 1
+# PLAN-163 T1.1 / R2-B3 — top-level default `model` pin. Full equality
+# (order-irrelevant scalar); membership in availableModels is NOT the
+# same evidence — the pin can regress without touching the arrays.
+model = data.get("model")
+if model != EXPECTED_MODEL:
+    sys.stderr.write(
+        "OFFENDER(models): installed top-level model != %r (actual: %r)\n"
+        % (EXPECTED_MODEL, model)
+    )
+    rc = 1
+# The pinned default must also be a member of the installed working set
+# (a default outside availableModels is unresolvable at runtime).
+if isinstance(avail, list) and model is not None and model not in avail:
+    sys.stderr.write(
+        "OFFENDER(models): installed top-level model %r not in "
+        "installed availableModels %s\n" % (model, avail)
+    )
+    rc = 1
+sys.exit(rc)
+PY
+then
+  FAIL=1
+fi
+echo "    model/availableModels/fallbackModel assert done"
 
 # ---------------------------------------------------------------------------
 if [ "$FAIL" -ne 0 ]; then

@@ -19,7 +19,9 @@ _REQUIRED = (
     "threat-detection-engineer",
     "llm-finops-architect",
 )
-_EXPECTED_FLOOR = "claude-opus-4-8"
+# PLAN-163 T1.4 (ADR-181): the Opus-floor routing fallback moved to the
+# Claude 5 flagship (opus-5 is a VETO_FLOOR_ALLOWED member post-ADR-181).
+_EXPECTED_FLOOR = "claude-opus-5"
 
 
 def _repo_root() -> Path:

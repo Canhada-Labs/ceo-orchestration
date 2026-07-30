@@ -1,0 +1,181 @@
+{
+  "_meta": {
+    "artifact": "PLAN-163 T2.2 / CF-5 — versioned hook-schema extraction from the Claude Code 2.1.220 binary",
+    "extraction_date": "2026-07-28",
+    "extracted_by": "schema-extract probe (subagent, S284 wave-probes workflow)",
+    "target": {
+      "claude_code_version": "2.1.220",
+      "bundle_path": "~/.local/share/claude/versions/2.1.220",
+      "bundle_format": "Mach-O 64-bit arm64 (Bun-compiled; compiled string tables + embedded plain-JS bundle segment)",
+      "bundle_sha256": "8addc857f3fe64d5a0368af9ee50321b50afb4a6918ba3ef018ab84f5dbbe081",
+      "js_segment_carved": "byte range 226214400..247185920 (20971520 bytes, >99% printable ASCII; contains the minified cli bundle with zod schemas as source text)"
+    },
+    "baseline_for_diff": {
+      "claude_code_version": "2.1.202",
+      "source": "npm registry, package @anthropic-ai/claude-code-darwin-arm64@2.1.202 (file package/claude)",
+      "tarball_sha256": "18faddfb6b9ef208a727bfe5bc5e01f53892d8fa2fb0d473c4ce98532f360372",
+      "binary_sha256": "7414f707861e2fe5afef33a466f888a8d2170e5028f5e9d2858f1d3ef45ffca5",
+      "binary_version_check": "`./claude --version` printed `2.1.202 (Claude Code)`",
+      "js_segment_carved": "byte range 215651584..236623104 (20971520 bytes)"
+    },
+    "recipe": [
+      "1. B=~/.local/share/claude/versions/<ver>; shasum -a 256 $B (record). The file is a Mach-O binary; grep needs -a.",
+      "2. Carve the embedded JS bundle: scan 1MiB windows for printable-ASCII ratio >0.99 (python) starting ~200MB into the file; the single ~20MB contiguous run is the minified cli.js. dd/python-slice it out.",
+      "3. Baseline binary: curl the npm tarball @anthropic-ai/claude-code-darwin-arm64@<baseline> (registry.npmjs.org), extract package/claude, sha256, repeat step 2 (run starts ~215MB for 2.1.202).",
+      "4. Hook event enum: grep -a for the literal array starting '\"PreToolUse\",\"PostToolUse\"' in the carved JS; the 31-element array assigned to a module var (cB in 2.1.220) is the canonical registry used by settings validation (verified: cleanup fn uses `new Set(cB)` and warns 'Unknown hook event ... Valid events: ${cB.join}').",
+      "5. Per-event input schemas: locate the cluster of `hook_event_name:<z>.literal(\"<Event>\")` definitions (one contiguous cluster per bundle; 2.1.220 at JS-blob offsets ~19914215..19924068). All events .and() a shared base object (hA in 2.1.220: session_id, transcript_path, cwd, prompt_id?, permission_mode?, agent_id?, agent_type?, effort?).",
+      "6. Hook JSON-output schema: locate `hookSpecificOutput:<z>.union([` (2.1.220 JS-blob offset ~4050813). The wrapping object is the common output schema (continue, suppressOutput, stopReason, decision, reason, systemMessage, terminalSequence, hookSpecificOutput); an async variant {async:true, asyncTimeout?} unions over it.",
+      "7. Settings-side validation: grep -a 'Unknown hook event' (cleanup path, severity=warning, key deleted) and 'unknown hook event. Valid events' (parse path, per-entry invalid).",
+      "8. enforceAvailableModels: grep -a 'enforceAvailableModels' in the JS blob; read (a) the .describe() text in the settings schema, (b) the .catch() loader coercions, (c) the resolution function neighborhood around the literal 'no availableModels entry survived'.",
+      "9. Diff vs baseline: extract the same regions from both carved blobs, normalize the zod namespace prefix (E./v.) and minified identifiers, and compare per-event field lists (script pattern preserved in the S284 probe transcript)."
+    ],
+    "confidence_notes": [
+      "All schema claims below are read from zod source text inside the shipped 2.1.220 binary, not from docs or memory.",
+      "The binary also contains a second, bytecode-compiled copy of the app whose string tables carry the same literals (event enum cluster at whole-binary offset ~208271744; enforceAvailableModels warning strings at ~78773856..78796224); the JS segment was used as ground truth because it preserves structure.",
+      "Version floor residual: unknown-event-key tolerance was binary-verified for 2.1.202 and 2.1.220 only; no 2.0.x binary was probed (recipe step 3 works for any npm-published version)."
+    ]
+  },
+  "hook_event_enum_2_1_220": [
+    "PreToolUse", "PostToolUse", "PostToolUseFailure", "PostToolBatch", "Notification",
+    "UserPromptSubmit", "UserPromptExpansion", "SessionStart", "SessionEnd", "Stop",
+    "StopFailure", "SubagentStart", "SubagentStop", "PreCompact", "PostCompact",
+    "PermissionRequest", "PermissionDenied", "Setup", "TeammateIdle", "TaskCreated",
+    "TaskCompleted", "Elicitation", "ElicitationResult", "ConfigChange", "WorktreeCreate",
+    "WorktreeRemove", "InstructionsLoaded", "CwdChanged", "FileChanged", "DirectoryAdded",
+    "MessageDisplay"
+  ],
+  "matcher_semantics": {
+    "tool_matcher_events": ["PreToolUse", "PostToolUse", "PostToolUseFailure", "PermissionRequest", "PermissionDenied"],
+    "literal_matcher_events_set": ["PreToolUse", "PostToolUse", "PostToolUseFailure", "PermissionRequest", "PermissionDenied", "UserPromptExpansion", "SessionStart", "SessionEnd", "Setup", "PreCompact", "PostCompact", "Notification", "SubagentStart", "SubagentStop", "Elicitation", "ElicitationResult", "ConfigChange", "InstructionsLoaded", "DirectoryAdded"],
+    "matcher_query_field_by_event_verified": {
+      "PreToolUse/PostToolUse/PostToolUseFailure/PermissionRequest/PermissionDenied": "tool_name",
+      "Notification": "notification_type",
+      "SessionEnd": "reason",
+      "StopFailure": "error",
+      "SubagentStart": "agent_type",
+      "SubagentStop": "agent_type",
+      "TeammateIdle/TaskCreated/TaskCompleted": "(none — matcher not queried)",
+      "Elicitation": "mcp_server_name",
+      "ElicitationResult": "mcp_server_name",
+      "ConfigChange": "source",
+      "DirectoryAdded": "source",
+      "InstructionsLoaded": "load_reason",
+      "FileChanged": "basename(file_path)"
+    }
+  },
+  "common_input_base": {
+    "session_id": "string",
+    "transcript_path": "string",
+    "cwd": "string",
+    "prompt_id": "string? — UUID correlating a user prompt with all subsequent events until the next prompt (joins to OTel prompt.id)",
+    "permission_mode": "string?",
+    "agent_id": "string? — present only when the hook fires from within a subagent",
+    "agent_type": "string? — subagent type name, or main-thread --agent sessions (without agent_id)",
+    "effort": "{level:string}? — present for hooks firing in a tool-use context on effort-capable models"
+  },
+  "input_schema_by_event": {
+    "PreToolUse": { "tool_name": "string", "tool_input": "unknown", "tool_use_id": "string" },
+    "PostToolUse": { "tool_name": "string", "tool_input": "unknown", "tool_response": "unknown", "tool_use_id": "string", "duration_ms": "number? — tool execution time, excludes permission-prompt and hook time" },
+    "PostToolUseFailure": { "tool_name": "string", "tool_input": "unknown", "tool_use_id": "string", "error": "string", "is_interrupt": "boolean?", "duration_ms": "number?" },
+    "PostToolBatch": { "tool_calls": "array<{tool_name, tool_input, tool_use_id, tool_response?}>" },
+    "PermissionRequest": { "tool_name": "string", "tool_input": "unknown", "permission_suggestions": "array<PermissionUpdate>?" },
+    "PermissionDenied": { "tool_name": "string", "tool_input": "unknown", "tool_use_id": "string", "reason": "string" },
+    "Notification": { "message": "string", "title": "string?", "notification_type": "string" },
+    "UserPromptSubmit": { "prompt": "string", "source": "enum[user,sdk,system,loop_wakeup,schedule_wakeup]? — NEW in 2.1.220 vs 2.1.202; describe says currently only set for Anthropic-internal sessions while trialed", "session_title": "string?" },
+    "UserPromptExpansion": { "expansion_type": "enum[slash_command,mcp_prompt]", "command_name": "string", "command_args": "string", "command_source": "string?", "prompt": "string" },
+    "SessionStart": { "source": "enum[startup,resume,clear,compact,fork] — 'fork' NEW in 2.1.220", "agent_type": "string?", "model": "string?", "session_title": "string?" },
+    "SessionEnd": { "reason": "enum[clear,resume,logout,prompt_input_exit,other,bypass_permissions_disabled]" },
+    "Stop": { "stop_hook_active": "boolean", "last_assistant_message": "string?", "background_tasks": "array<TaskSummary>? — in-flight background work; distinguishes done from paused-waiting", "session_crons": "array<CronSummary>?" },
+    "StopFailure": { "error": "enum(ref)", "error_details": "string?", "last_assistant_message": "string?" },
+    "SubagentStart": { "agent_id": "string", "agent_type": "string" },
+    "SubagentStop": { "stop_hook_active": "boolean", "agent_id": "string", "agent_transcript_path": "string", "agent_type": "string", "last_assistant_message": "string?", "background_tasks": "array<TaskSummary>?", "session_crons": "array<CronSummary>?" },
+    "PreCompact": { "trigger": "enum[manual,auto]", "custom_instructions": "string|null" },
+    "PostCompact": { "trigger": "enum[manual,auto]", "compact_summary": "string" },
+    "TeammateIdle": { "teammate_name": "string", "team_name": "string (@deprecated)" },
+    "TaskCreated": { "task_id": "string", "task_subject": "string", "task_description": "string?", "teammate_name": "string?", "team_name": "string? (@deprecated)" },
+    "TaskCompleted": { "task_id": "string", "task_subject": "string", "task_description": "string?", "teammate_name": "string?", "team_name": "string? (@deprecated)" },
+    "Elicitation": { "mcp_server_name": "string", "message": "string", "mode": "enum[form,url]?", "url": "string?", "elicitation_id": "string?", "requested_schema": "record?" },
+    "ElicitationResult": { "mcp_server_name": "string", "elicitation_id": "string?", "mode": "enum[form,url]?", "action": "enum[accept,decline,cancel]", "content": "record?" },
+    "ConfigChange": { "source": "enum[user_settings,project_settings,local_settings,policy_settings,skills]", "file_path": "string?" },
+    "InstructionsLoaded": { "file_path": "string", "memory_type": "enum[User,Project,Local,Managed]", "load_reason": "enum[session_start,nested_traversal,path_glob_match,include,compact]", "globs": "array<string>?", "trigger_file_path": "string?", "parent_file_path": "string?" },
+    "WorktreeCreate": { "name": "string" },
+    "WorktreeRemove": { "worktree_path": "string" },
+    "CwdChanged": { "old_cwd": "string", "new_cwd": "string" },
+    "FileChanged": { "file_path": "string", "event": "enum[change,add,unlink]" },
+    "DirectoryAdded": { "directory": "string — absolute path of the directory that was added", "source": "enum[slash_command,register_repo_root] — slash_command for /add-dir, register_repo_root for the SDK control_request" },
+    "MessageDisplay": { "turn_id": "string (UUID)", "message_id": "string (UUID, stable across flushes)", "index": "int (zero-based delta index)", "final": "boolean", "delta": "string" }
+  },
+  "common_output_schema": {
+    "continue": "boolean? — whether Claude should continue after hook (default: true)",
+    "suppressOutput": "boolean? — hide stdout from transcript (default: false)",
+    "stopReason": "string? — message shown when continue is false",
+    "decision": "enum[approve,block]?",
+    "reason": "string? — explanation for the decision",
+    "systemMessage": "string? — warning message shown to the user",
+    "terminalSequence": "string? — terminal escape sequence; only notification/title OSCs (0,1,2,9,99,777) and BEL permitted, anything else dropped",
+    "hookSpecificOutput": "discriminated union on hookEventName (see below)?",
+    "async_variant": "{async: literal true, asyncTimeout?: number} unions with the whole object"
+  },
+  "hookSpecificOutput_arms": {
+    "PreToolUse": { "permissionDecision": "enum[allow,deny,ask,defer]?", "permissionDecisionReason": "string?", "updatedInput": "record?", "additionalContext": "string?" },
+    "UserPromptSubmit": { "additionalContext": "string?", "sessionTitle": "string?", "suppressOriginalPrompt": "boolean? — when decision is block, omit the original prompt from the block message" },
+    "UserPromptExpansion": { "additionalContext": "string?" },
+    "SessionStart": { "additionalContext": "string?", "initialUserMessage": "string?", "sessionTitle": "string?", "watchPaths": "array<string>?", "reloadSkills": "boolean?" },
+    "Setup": { "additionalContext": "string?" },
+    "SubagentStart": { "additionalContext": "string?" },
+    "PostToolUse": { "additionalContext": "string?", "updatedToolOutput": "unknown? — replaces the tool output before it is sent to the model", "updatedMCPToolOutput": "unknown?" },
+    "PostToolUseFailure": { "additionalContext": "string?" },
+    "PostToolBatch": { "additionalContext": "string?" },
+    "Stop": { "additionalContext": "string?" },
+    "SubagentStop": { "additionalContext": "string?" },
+    "PermissionDenied": { "retry": "boolean?" },
+    "Notification": { "additionalContext": "string?" },
+    "PermissionRequest": { "decision": "union[{behavior:allow, updatedInput?, updatedPermissions?}, {behavior:deny, message?, interrupt?}]" },
+    "Elicitation": { "action": "enum[accept,decline,cancel]?", "content": "record?" },
+    "ElicitationResult": { "action": "enum[accept,decline,cancel]?", "content": "record?" },
+    "CwdChanged": { "watchPaths": "array<string>?" },
+    "FileChanged": { "watchPaths": "array<string>?" },
+    "WorktreeCreate": { "worktreePath": "string (required)" },
+    "MessageDisplay": { "displayContent": "string?" },
+    "_absent_arms_note": "No arms exist for: DirectoryAdded, SessionEnd, PreCompact, PostCompact, StopFailure, TeammateIdle, TaskCreated, TaskCompleted, ConfigChange, WorktreeRemove, InstructionsLoaded. Those events can still return the common fields (systemMessage etc.); whether any field is CONSUMED is per-event runtime behavior."
+  },
+  "settings_hooks_validation": {
+    "hooks_not_object": "\"hooks\" must be an object mapping event names to matcher arrays; received <type>. This field was ignored. (hooks dropped, rest of settings kept)",
+    "unknown_event_key": "Unknown hook event \"<key>\" was ignored. Valid events: <full 31-event enum>. — severity: warning; the key is delete-d from the hooks object; other keys and all other settings keep loading. Valid-set is `new Set(cB)` (the full enum).",
+    "event_value_not_array": "Hook event \"<key>\" must be an array of matchers... — key deleted, warning, rest kept",
+    "parse_path_per_entry": "settings zod parse also maps unknown event entries to {invalid: {path: hooks.<event>, reason: 'unknown hook event. Valid events: ...'}} — per-entry, not whole-file rejection",
+    "identical_in_2_1_202": true
+  },
+  "directory_added_runtime_2_1_220": {
+    "executor": "builds input {**base, hook_event_name:'DirectoryAdded', directory, source}, runs matching hooks with matchQuery=source, then only collects per-hook systemMessage strings; returns {results, systemMessages}",
+    "call_sites": [
+      "/add-dir slash command: hook fired via fire-and-forget .then() AFTER 'Added <dir> as a working directory' is already applied/saved; hook failures only logged ('N DirectoryAdded hook(s) failed; output is in the debug log')",
+      "SDK register_repo_root control_request: toolPermissionContext addDirectories mutation is applied BEFORE the hook fires; hook results only logged"
+    ],
+    "blockability": "NOT blockable. decision:'block' parses as schema-valid (common field) but no call site consumes decision/blockingError for this event, and the directory registration has already happened when hooks run (post-facto observer event). No DirectoryAdded arm exists in hookSpecificOutput.",
+    "sdk_tool_description_quote": "A directory that is already a registered working directory (including a duplicate of an earlier request) is denied with an error; the registration pipeline and DirectoryAdded hooks do not re-run."
+  },
+  "enforce_available_models_2_1_220": {
+    "schema_describe": "When true and availableModels is a non-empty array, the Default model selection is also constrained: if the default model for the user tier is not in availableModels, Default resolves to the first allowed availableModels entry instead. Has no effect when availableModels is unset or an empty array. Typically set in managed settings by enterprise administrators. (VERBATIM-IDENTICAL to 2.1.202)",
+    "loader_coercions": {
+      "invalid_flag": "\"enforceAvailableModels\" was present but invalid; treating it as true until it is fixed. (fail-closed on the flag)",
+      "invalid_array": "\"availableModels\" was present but invalid; enforcing an empty allowlist (only the default model is available) until it is fixed. (fail-closed on the list; non-string entries individually ignored with warning)"
+    },
+    "default_resolution_runtime": {
+      "first_entry_participates": "YES — the resolver iterates availableModels IN LIST ORDER and returns the first entry that (a) expands to an allowed model and (b) is server-available; that entry becomes the effective Default when the tier default is not allowed.",
+      "server_unavailable_skip": "entries allowed but server-unavailable are skipped and named in the warning 'no availableModels entry survived; N entr(y/ies) allowed but skipped as server-unavailable (...)'",
+      "no_survivor_fallback": "if NO entry survives (or none expands to an allowed model): warn and KEEP THE TIER DEFAULT ('keeping the tier default') — i.e. fail-open to the unconstrained tier default — unless user steering is detected, in which case it pins the env-free tier builtin (policy-mapped if applicable)",
+      "managed_modelOverrides_unavailable": "if the managed modelOverrides target is server-unavailable: warn and use the unmapped candidate"
+    },
+    "managed_policy_fail_open_still_present": {
+      "verbatim": "enforceAvailableModels: a policy source exists but failed to load; refusing cascade-trust mode (model enforcement from user/project settings is disabled until the policy source is fixed)",
+      "partial_failure_nuance_both_versions": "if an admin policy source failed but a surviving admin tier carries model policy, the surviving tier is enforced; if the surviving tier carries no model policy, enforcement is OFF with warning 'the failed source may have carried it'",
+      "flag_without_allowlist_policy_mode": "enforceAvailableModels: the policy view sets the enforce flag but not availableModels; enforcement is disabled (the flag requires a policy-owned allowlist)"
+    },
+    "new_in_2_1_220": [
+      "model_access ENTITLEMENT joins availableModels as a second restriction source: warnings now read 'not permitted by the org model restrictions (availableModels allowlist or model_access entitlement)'",
+      "Plan mode: opusplan upgrade model not permitted -> 'planning uses the newest permitted Opus instead'; haiku-plan upgrade -> 'newest permitted Sonnet instead'",
+      "default-model pick carries an attribution (settings vs entitlement) and a new resolution branch consults entitlements (e.g. sonnet-entitled-but-not-opus with enforcement off -> sonnet-family default)"
+    ]
+  }
+}

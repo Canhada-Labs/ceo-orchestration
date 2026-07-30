@@ -577,16 +577,23 @@
     "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR": "1",
     "ENABLE_TOOL_SEARCH": "auto"
   },
+  "_model_pin_comment": "PLAN-163 T1.1 contingency (ADR-181 §Contingency) — session-default pin. CC 2.1.220 honors the top-level settings key \"model\" (zod: E.string().optional(); describe \"Override the default model used by Claude Code\"; source at 2.1.220 binary offset 226819212, sha256 8addc857..., between \"permissions\" and \"fallbackModel\"). Pinned to claude-opus-5 so that adding claude-sonnet-5 to availableModels cannot silently flip the session default to the 2.1.220 sonnet-5 tier-default (enforceAvailableModels stops redirecting once sonnet-5 is allowed). ADOPTER NOTE: a fresh install therefore inherits claude-opus-5 as the session default (Opus pricing $5/$25 per MTok). If that is not desired for your workload, override the value here (e.g. \"claude-sonnet-5\" or your tier default) or set env ANTHROPIC_MODEL / pass CLI --model per-session; the pinned value MUST stay a member of availableModels below or enforceAvailableModels rejects it. Keep this key mirrored with .claude/settings.json in the framework repo (test_session_default_pin).",
+  "model": "claude-opus-5",
   "availableModels": [
     "claude-opus-4-8",
     "claude-fable-5",
     "claude-sonnet-4-6",
-    "claude-haiku-4-5"
+    "claude-haiku-4-5",
+    "claude-opus-5",
+    "claude-sonnet-5"
   ],
   "fallbackModel": [
-    "claude-opus-4-8"
+    "claude-opus-5"
   ],
+  "_posture_keys_comment": "PLAN-163 T5.3/OQ5 — fail-closed posture keys (CC >=2.1.220). Key (1) permissions.defaultMode ships LIVE below (see _default_mode_arbitration_comment); the REMAINING keys ship COMMENTED for adopters (the dogfood repo enables them; see .claude/settings.json in the framework repo). To adopt, add the keys literally: (2) top-level \"disableAutoMode\": true — prevents automatic permission-mode escalation mid-session. (3) top-level \"workflowSizeGuideline\": <per your workflow scale; advisory sizing guideline for Workflow-tool fan-outs>. (4) \"sandbox\": { \"network\": { \"strictAllowlist\": true } } — tightens allowedDomains matching to the strict form. (5) \"sandbox\": { \"filesystem\": { \"disabled\": false } } — keeps filesystem confinement armed when the sandbox is enabled (true would fail-OPEN the FS layer). All keys are independent and additive; rollback is deleting the key. NEW-EVENT hook registrations (DirectoryAdded/Notification) are deliberately NOT in this template yet — T3.4 version-floor feature gate (upgrade.sh, default OFF), ADR-183 residual (e); this template stays at 45 registrations until the floor probe is recorded. This block is documentation only — underscore-prefixed keys are ignored by the harness.",
+  "_default_mode_arbitration_comment": "PLAN-163 T3.5/T5.3 ARBITRATION (CEO S284, ADR-183): permissions.defaultMode='manual' is a LIVE key in this template, not a commented posture option. Rationale: install.sh copies this file verbatim on a fresh install, and the U1 post-install oracle (test_upgrade_settings_migration.py TestU1TemplateParity) asserts the template already carries the T5.4 NEW baseline (defaultMode='manual', the 2.1.2xx rename of the ask-first permission mode — every non-allowlisted tool call prompts) — a commented-only defaultMode would red U1 and ship fresh installs on the OLD 'default' posture. Rollback: delete the defaultMode key (single-line revert; no hook consumes it — harness-level only).",
   "permissions": {
+    "defaultMode": "manual",
     "deny": [
       "Bash(git push --force*)",
       "Edit(PROTOCOL.md)",

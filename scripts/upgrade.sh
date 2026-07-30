@@ -55,6 +55,24 @@
 #     ADR-155 decision iv for the manifest). Replayed values are charset-
 #     validated data — the state file is UNSIGNED and advisory, never a
 #     trust anchor, and is never eval-ed.
+#   - (PLAN-163 T5.4) BASELINE-AWARE SETTINGS MIGRATION: availableModels,
+#     fallbackModel and permissions.defaultMode are migrated with an explicit
+#     IDEMPOTENT 3-state policy PER LEAF KEY (absent -> write the new
+#     baseline; equal to the OLD baseline (arrays byte-compared, exact order)
+#     -> updated to the new baseline; customized -> PRESERVED + a named
+#     WARNING). The new DirectoryAdded/Notification hook registrations are
+#     added only when not yet registered AND the T3.4 version-floor feature
+#     gate is on; customized registrations under the same events are always
+#     preserved. Opt out with --no-settings-migrate. Oracles derive their
+#     expectations from `upgrade.sh --print-settings-baselines` (the
+#     normative table IS the artifact — literals are never re-hardcoded).
+#   - (PLAN-164 W1, ADR-110-AMEND-1) PAIR-RAIL REGISTRATION-TIMEOUT VALUE
+#     MIGRATION: the check_pair_rail.py PreToolUse registration timeout is
+#     bumped from the frozen OLD cap (60) to the template-derived cap IFF the
+#     adopter's current value == 60; any other adopter-chosen value is
+#     PRESERVED + a named WARNING; idempotent. Runs inside the same T5.4
+#     migration step (same opt-out, same --dry-run preview); the NEW cap is
+#     derived from templates/settings/settings.base.json, never hardcoded.
 #
 # Run after `git pull` in the source ceo-orchestration repo.
 
@@ -100,6 +118,92 @@ if [ -f "$SCRIPT_DIR/_grok_harness.sh" ]; then
   . "$SCRIPT_DIR/_grok_harness.sh"
 fi
 
+# ===========================================================================
+# PLAN-163 T5.4 — settings baseline-migration NORMATIVE TABLE (W0b literals).
+# ---------------------------------------------------------------------------
+# ONE source of truth for the baseline-aware settings migration below
+# (_migrate_settings_baseline). Oracles derive their expectations from
+# `upgrade.sh --print-settings-baselines` (this exact JSON) instead of
+# hardcoding the literals — keep the table and the migration in lockstep.
+# Order is NORMATIVE: new model ids are APPENDED AT THE END (the arrays are
+# byte-compared and the first entry participates in default resolution —
+# ADR-149:95-102; mirror test :127-149,193-200); any other order needs an
+# ADR-181 justification. permissions.defaultMode follows the exact read
+# contract of _lib/effective_config.py:178-180,534-542 (stripped string).
+# The top-level scalar "model" leaf (the CC 2.1.220 session-default pin,
+# ADR-181 T1.1) has NO old-baseline value — old installs carry NO top-level
+# "model" key at all ("old": null documents that ABSENCE). Absence therefore
+# IS the old baseline: it is migrated to the new pin (claude-opus-5), closing
+# the T1.1 silent-flip (adding claude-sonnet-5 to availableModels must not
+# re-flip the session default) — BUT ONLY when claude-opus-5 is actually in
+# the resulting effective availableModels. C6 (codex R4): if an adopter has
+# CUSTOMIZED availableModels to a set that EXCLUDES claude-opus-5, setting the
+# pin would place it outside the allowlist and enforceAvailableModels would
+# reject it, so in that case the pin is NOT set and a named warning is emitted
+# (session default left to the adopter/harness). In the normal migrated case
+# claude-opus-5 IS present, so the pin is set and enforceAvailableModels
+# accepts it. Any PRESENT model value != the new pin is adopter-custom and
+# PRESERVED with a named warning (never re-flipped).
+# Each registration carries a "match" filename used for the idempotent
+# append (mirrors the H8 jq `_reg` semantics: an event entry whose
+# hooks[].command references the filename counts as already registered).
+_T54_BASELINES_JSON='{
+  "availableModels": {
+    "old": ["claude-opus-4-8","claude-fable-5","claude-sonnet-4-6","claude-haiku-4-5"],
+    "new": ["claude-opus-4-8","claude-fable-5","claude-sonnet-4-6","claude-haiku-4-5","claude-opus-5","claude-sonnet-5"]
+  },
+  "fallbackModel": {
+    "old": ["claude-opus-4-8"],
+    "new": ["claude-opus-5"]
+  },
+  "model": {
+    "old": null,
+    "new": "claude-opus-5"
+  },
+  "permissions.defaultMode": {
+    "old": "default",
+    "new": "manual"
+  },
+  "registrations": {
+    "DirectoryAdded": {
+      "match": "check_directory_added.py",
+      "entry": {
+        "_comment": "PLAN-163 T3.1: DirectoryAdded observer-writer - records session-added workspace roots into the session-roots registry (and, where the harness supports a block decision, enforces the narrowed hardblock floor). Posture per the T3.1 blockability probe; fail-open on infra. Kill: CEO_DIRECTORY_ADDED_GUARD=0.",
+        "matcher": "",
+        "hooks": [ { "type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_directory_added.py", "timeout": 5, "statusMessage": "Recording added workspace root..." } ]
+      }
+    },
+    "Notification": {
+      "match": "check_notification.py",
+      "entry": {
+        "_comment": "PLAN-163 T3.2: Notification lifecycle telemetry (agent_needs_input / agent_completed) -> typed audit emit with no-value-echo; feeds liveness telemetry. ADVISORY, fail-open. Kill: CEO_NOTIFICATION_TELEMETRY=0.",
+        "matcher": "",
+        "hooks": [ { "type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_notification.py", "timeout": 5, "statusMessage": "Recording notification lifecycle event..." } ]
+      }
+    }
+  }
+}'
+
+# PLAN-163 T3.4 FEATURE GATE — new-event registrations (DirectoryAdded,
+# Notification). SUPPORT.md declares the adopter floor >=2.0; until the
+# T3.4 version-floor probe (unknown-event-key tolerance on the floor
+# version) is recorded — or the floor is explicitly raised with
+# SUPPORT/install/upgrade kept coherent — emitting the new event keys into
+# ADOPTER settings stays OFF. Flip _T34_VERSION_FLOOR_PROBE_PASSED to 1 in
+# the SAME change that records the probe verdict
+# ({{FILL-FROM-PROBES}}: T3.4 version-floor probe — pending at authoring
+# time). Env override CEO_T34_NEW_EVENT_REGISTRATIONS={1|0} always wins
+# (test seam + operator escape hatch). The gate NEVER affects the three
+# model/permission leaf keys — those migrate regardless.
+_T34_VERSION_FLOOR_PROBE_PASSED=0
+_t34_new_event_registrations_enabled() {
+  case "${CEO_T34_NEW_EVENT_REGISTRATIONS:-}" in
+    1) return 0 ;;
+    0) return 1 ;;
+  esac
+  [ "$_T34_VERSION_FLOOR_PROBE_PASSED" -eq 1 ]
+}
+
 # PLAN-153 Wave B item B2 — capture the ORIGINAL upgrade argv verbatim BEFORE
 # parsing, for the post-upgrade state record (data only, never eval-ed).
 ORIG_UP_ARGV=( "$@" )
@@ -113,6 +217,8 @@ PURGE_MISINSTALLED=0   # PLAN-161 U3: opt-in hash-gated purge of mis-installed f
 DIFF_WARN=1
 DEPRECATION_WARN=1
 SETTINGS_MERGE=1
+SETTINGS_MIGRATE=1       # PLAN-163 T5.4: baseline-aware settings migration (opt out: --no-settings-migrate)
+SETTINGS_MIGRATE_ONLY=0  # PLAN-163 T5.4: run ONLY the settings migration (test/ops seam)
 ON_CONFLICT="refuse"   # PLAN-138 Wave C (ADR-155): {refuse|theirs|backup}; default refuse (OQ2)
 REPLAY=1               # PLAN-153 Wave B item B2: replay the recorded install request (opt out: --no-replay)
 HARNESS=""             # PLAN-155 Wave 5: "" = infer from recorded request.harness (B2 mirror)
@@ -163,6 +269,23 @@ while [[ $# -gt 0 ]]; do
     --no-settings-merge)
       SETTINGS_MERGE=0
       shift
+      ;;
+    --no-settings-migrate)
+      # PLAN-163 T5.4: skip the baseline-aware settings migration.
+      SETTINGS_MIGRATE=0
+      shift
+      ;;
+    --settings-migrate-only)
+      # PLAN-163 T5.4: run ONLY the settings migration against <target>
+      # and exit (test/ops seam; honors --dry-run + --no-settings-migrate).
+      SETTINGS_MIGRATE_ONLY=1
+      shift
+      ;;
+    --print-settings-baselines)
+      # PLAN-163 T5.4: introspection for oracles — the normative baseline
+      # table IS the artifact; tests parse this output (never hardcode).
+      printf '%s\n' "$_T54_BASELINES_JSON"
+      exit 0
       ;;
     --no-replay)
       # PLAN-153 Wave B item B2: ignore .claude/.install-state.json entirely.
@@ -216,7 +339,13 @@ What it does:
   Refreshes the framework-derived content (team.md, skills/, hooks/,
   scripts/, commands/, pitfalls-catalog.yaml, task-chains.yaml) in an
   existing adopter install. User-customized files (CLAUDE.md, MEMORY.md,
-  .claude/settings.json, .claude/agent-metrics.md) are NOT touched.
+  .claude/agent-metrics.md) are NOT touched. NOTE: .claude/settings.json IS
+  updated in place by the default-on baseline migration (the model/permission
+  leaf keys: model, availableModels, fallbackModel, permissions.defaultMode)
+  and the idempotent settings-merge (new lifecycle-hook registrations) —
+  adopter-CUSTOMIZED values are always preserved with a named warning, and a
+  pre-migration backup is written to .claude.bak/. Opt out with
+  --no-settings-migrate / --no-settings-merge to manage settings.json by hand.
 
 Options:
   --profile <list>      Comma-separated profiles to refresh (default: core,frontend).
@@ -237,6 +366,22 @@ Options:
                         existing .claude/settings.json. The merge is idempotent
                         + fail-open (never blocks the upgrade); pass this to opt
                         out entirely and manage settings.json by hand.
+  --no-settings-migrate PLAN-163 T5.4: skip the baseline-aware settings
+                        migration (model, availableModels, fallbackModel,
+                        permissions.defaultMode + T3.4-gated new-event
+                        registrations). 3-state policy per LEAF KEY:
+                        absent -> write the new baseline; equal to the OLD
+                        baseline (byte-compared) -> update; customized ->
+                        PRESERVE + named WARNING. Idempotent + fail-open;
+                        never blocks the upgrade.
+  --settings-migrate-only
+                        Run ONLY the T5.4 settings baseline migration
+                        against <target-repo-path> and exit 0 (test/ops
+                        seam; honors --dry-run + --no-settings-migrate).
+  --print-settings-baselines
+                        Print the normative T5.4 baseline table (JSON) and
+                        exit 0. Oracles derive their expectations from this
+                        output instead of hardcoding the literals.
   --no-replay           PLAN-153 Wave B (B2): do NOT replay the recorded
                         install request from .claude/.install-state.json.
                         By default, when that file exists and validates,
@@ -1568,6 +1713,383 @@ def _reg($event; $name; $entry):
   return 0
 }
 
+
+# ===========================================================================
+# PLAN-163 T5.4 — BASELINE-AWARE settings migration (3-state per LEAF KEY).
+# ---------------------------------------------------------------------------
+# WHY: the H8 merge above only registers lifecycle hooks — an adopter whose
+# settings.json is otherwise preserved would NEVER receive the Claude-5
+# fleet refresh (availableModels/fallbackModel) nor the defaultMode posture.
+# This step migrates EXACTLY the leaf keys enumerated in _T54_BASELINES_JSON
+# (the normative table above) with an explicit, IDEMPOTENT policy per key:
+#   ABSENT                    -> write the NEW baseline
+#   EQUAL to the OLD baseline -> update to the NEW baseline
+#       (arrays byte-compared: exact values in exact order)
+#   CUSTOMIZED (anything else)-> PRESERVE + named WARNING (never clobber)
+#   already at the NEW baseline -> no-op (so a re-run changes nothing)
+# New-event registrations (DirectoryAdded/Notification) are added ONLY when
+# not yet registered AND the T3.4 version-floor feature gate is on
+# (_t34_new_event_registrations_enabled). Customized registrations under the
+# same events — and every other hooks entry/settings key — stay untouched.
+# PLAN-164 W1 (ADR-110-AMEND-1): the check_pair_rail.py PreToolUse
+# registration TIMEOUT VALUE migrates under the same 3-state policy — the
+# frozen OLD cap (60) -> the cap DERIVED from the template artifact
+# (templates/settings/settings.base.json pair-rail entry; install.sh copies
+# it verbatim, so template value == post-install value == migration target);
+# any other adopter-chosen value is PRESERVED + named WARNING; idempotent.
+# The file is rewritten ONLY when at least one key actually changed (atomic
+# same-directory tempfile + os.replace), so running the upgrade twice is
+# byte-identical (idempotency oracle). Fail-open per CLAUDE.md §4: missing
+# python3 / unreadable settings / write error => stderr NOTE + the upgrade
+# proceeds; a backup always lands under $BAK_DIR first on non-dry runs.
+# Opt out: --no-settings-migrate. --dry-run previews every verdict.
+# ===========================================================================
+_migrate_settings_baseline() {
+  [[ "$SETTINGS_MIGRATE" -eq 1 ]] || return 0
+  local settings="$TARGET/.claude/settings.json"
+  if [[ ! -f "$settings" ]]; then
+    echo "    NOTE: settings baseline migration skipped — no $settings (fresh install builds it from template)" >&2
+    return 0
+  fi
+  if ! command -v python3 >/dev/null 2>&1; then
+    echo "    NOTE: settings baseline migration skipped (python3 not found) — advisory only" >&2
+    return 0
+  fi
+
+  echo ""
+  echo "==> Settings baseline migration (PLAN-163 T5.4 — 3-state per leaf key)"
+
+  local _mig_mode="apply"
+  local _mig_gate="0"
+  # PLAN-164 W1: the pair-rail registration-timeout migration target is
+  # DERIVED from the source template artifact (see the helper below).
+  local _mig_template="$SOURCE_DIR/templates/settings/settings.base.json"
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    _mig_mode="preview"
+  fi
+  if _t34_new_event_registrations_enabled; then
+    _mig_gate="1"
+  fi
+
+  if [[ "$_mig_mode" == "apply" ]]; then
+    _up_record_op "migrate_settings_baseline" "3-state per-leaf-key settings migration (T5.4)"
+    mkdir -p "$BAK_DIR/.claude" 2>/dev/null || true
+    cp "$settings" "$BAK_DIR/.claude/settings.json.pre-t54-migration" 2>/dev/null || true
+    echo "    BACKED UP: .claude/settings.json -> $BAK_DIR/.claude/settings.json.pre-t54-migration"
+  fi
+
+  # argv-pass invocation (never source-string interpolation); python3 -I +
+  # PYTHONNOUSERSITE=1 shrink the env-driven import surface (same idiom as
+  # the B2 state reader/writer above).
+  if ! PYTHONNOUSERSITE=1 python3 -I -c '
+import json, os, sys, tempfile
+
+mode = sys.argv[1]
+path = sys.argv[2]
+baselines = json.loads(sys.argv[3])
+emit_new = sys.argv[4] == "1"
+dry = mode == "preview"
+MISSING = object()
+
+
+def out(msg):
+    sys.stdout.write("    " + msg + "\n")
+
+
+def warn(msg):
+    sys.stderr.write("    " + msg + "\n")
+
+
+def act(msg):
+    if dry:
+        out("(dry-run) would " + msg)
+    else:
+        out(msg)
+
+
+try:
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+except (OSError, ValueError):
+    sys.exit(3)
+if not isinstance(data, dict):
+    sys.exit(3)
+
+changed = [False]
+
+# --- 3-state policy, top-level ARRAY leaf keys (byte-compared: exact
+# --- values in exact order; a re-ordered array counts as CUSTOMIZED).
+# --- eff_available_models captures the EFFECTIVE availableModels value AFTER
+# --- this loop resolves its branch (SET/MIGRATE => new baseline; already-new
+# --- or CUSTOMIZED => the current value PRESERVED). It is computed
+# --- independently of the `if not dry` write guard so it holds in BOTH apply
+# --- and dry-run modes, and it is the allowlist the model-pin SET below must
+# --- respect (this loop runs BEFORE the model leaf — order is normative).
+eff_available_models = MISSING
+for key in ("availableModels", "fallbackModel"):
+    spec = baselines[key]
+    cur = data.get(key, MISSING)
+    resolved = cur  # the effective value the key WILL carry post-migration
+    if cur is MISSING:
+        if not dry:
+            data[key] = list(spec["new"])
+        resolved = list(spec["new"])
+        changed[0] = True
+        act("SET (absent -> new baseline): " + key)
+    elif cur == spec["new"]:
+        out("OK (already at new baseline): " + key)
+    elif cur == spec["old"]:
+        if not dry:
+            data[key] = list(spec["new"])
+        resolved = list(spec["new"])
+        changed[0] = True
+        act("MIGRATE (matched OLD baseline -> new baseline): " + key)
+    else:
+        warn("WARNING: " + key + " is ADOPTER-CUSTOMIZED - PRESERVED "
+             "(not migrated to the new baseline)")
+    if key == "availableModels":
+        eff_available_models = resolved
+
+# --- model (top-level SCALAR session-default pin; ADR-181 T1.1 anti-silent-
+# --- flip). The OLD baseline has NO top-level "model" leaf, so ABSENCE == the
+# --- old baseline: SET the new pin. An EXPLICIT null is treated as ABSENT for
+# --- the SET decision (null is not a deliberate model choice — no session-
+# --- default pin), NOT as a customized value. The SET is CONDITIONAL on the
+# --- pin being a member of the EFFECTIVE availableModels resolved above (C6):
+# --- an adopter who customized availableModels to EXCLUDE claude-opus-5 would
+# --- otherwise get a session-default pin OUTSIDE their own allowlist, which
+# --- enforceAvailableModels rejects. If the pin is not provably in the
+# --- effective allowlist (excluded, or the allowlist is not a JSON list we can
+# --- test) we do NOT pin and emit a NAMED warn, leaving the session default to
+# --- the harness/adopter. Any PRESENT non-null value != the new pin is adopter-
+# --- custom -> PRESERVED with a named WARN (never re-flipped); no-value-echo
+# --- (the adopter value is not printed, only the key name).
+spec = baselines["model"]
+pin = spec["new"]
+cur = data.get("model", MISSING)
+absent_or_null = cur is MISSING or cur is None
+pin_in_effective_allowlist = (
+    isinstance(eff_available_models, list) and pin in eff_available_models
+)
+if absent_or_null:
+    if pin_in_effective_allowlist:
+        if not dry:
+            data["model"] = pin
+        changed[0] = True
+        act("SET (absent [== old baseline] -> new baseline): model")
+    else:
+        warn("WARNING: model pin NOT applied: adopter availableModels "
+             "excludes claude-opus-5 (session default left to "
+             "harness/adopter)")
+elif cur == pin:
+    out("OK (already at new baseline): model")
+else:
+    warn("WARNING: model is ADOPTER-CUSTOMIZED - PRESERVED "
+         "(not migrated to the new baseline)")
+
+# --- permissions.defaultMode (read contract: effective_config.py
+# --- :178-180,534-542 - a stripped string under the permissions object).
+spec = baselines["permissions.defaultMode"]
+perms = data.get("permissions", MISSING)
+if perms is MISSING:
+    if not dry:
+        data["permissions"] = {"defaultMode": spec["new"]}
+    changed[0] = True
+    act("SET (absent -> new baseline): permissions.defaultMode")
+elif not isinstance(perms, dict):
+    warn("WARNING: permissions is not an object - PRESERVED "
+         "(permissions.defaultMode not migrated)")
+else:
+    cur = perms.get("defaultMode", MISSING)
+    curs = cur.strip() if isinstance(cur, str) else None
+    if cur is MISSING:
+        if not dry:
+            perms["defaultMode"] = spec["new"]
+        changed[0] = True
+        act("SET (absent -> new baseline): permissions.defaultMode")
+    elif curs == spec["new"]:
+        out("OK (already at new baseline): permissions.defaultMode")
+    elif curs == spec["old"]:
+        if not dry:
+            perms["defaultMode"] = spec["new"]
+        changed[0] = True
+        act("MIGRATE (matched OLD baseline -> new baseline): "
+            "permissions.defaultMode")
+    else:
+        extra = ""
+        if curs == "bypassPermissions":
+            extra = (" (NOTE: bypassPermissions is flagged by the "
+                     "ConfigChange tamper guard)")
+        warn("WARNING: permissions.defaultMode is ADOPTER-CUSTOMIZED - "
+             "PRESERVED (not migrated)" + extra)
+
+
+def registers(block, fname):
+    if not isinstance(block, dict):
+        return False
+    hs = block.get("hooks")
+    if not isinstance(hs, list):
+        return False
+    for h in hs:
+        if isinstance(h, dict) and fname in str(h.get("command", "")):
+            return True
+    return False
+
+
+# --- New-event registrations (T3.4 FEATURE-GATED). Customized entries under
+# --- the same events, and every other hooks key, are preserved untouched.
+regs = baselines.get("registrations", {})
+if not emit_new:
+    out("NOTE: new-event registrations (" + ", ".join(sorted(regs))
+        + ") GATED OFF (T3.4 version-floor) - not added")
+else:
+    hooks = data.get("hooks", MISSING)
+    if hooks is MISSING:
+        hooks = {}
+        if not dry:
+            data["hooks"] = hooks
+    if not isinstance(hooks, dict):
+        warn("WARNING: hooks is not an object - PRESERVED "
+             "(new-event registrations not added)")
+    else:
+        for event in sorted(regs):
+            fname = regs[event]["match"]
+            entry = regs[event]["entry"]
+            lst = hooks.get(event, MISSING)
+            if lst is MISSING:
+                if not dry:
+                    hooks[event] = [entry]
+                changed[0] = True
+                act("ADD (absent -> canonical registration): hooks." + event)
+            elif isinstance(lst, list):
+                if any(registers(b, fname) for b in lst):
+                    out("OK (canonical registration already present): hooks."
+                        + event)
+                else:
+                    if not dry:
+                        lst.append(entry)
+                    changed[0] = True
+                    act("ADD (canonical registration appended; existing "
+                        "custom entries preserved): hooks." + event)
+            else:
+                warn("WARNING: hooks." + event + " is not a list - PRESERVED "
+                     "(canonical registration not added)")
+
+# --- PLAN-164 W1 (ADR-110-AMEND-1) — pair-rail registration-timeout VALUE
+# --- migration. WHY: the harness kills a hook at its settings.json
+# --- registration timeout, and the pre-PLAN-164 cap (60s) sat BELOW the
+# --- measured codex verdict latency (p95 ~75s under load; 12/12 historical
+# --- pair_rail_case rows were F/TIMEOUT — PLAN-163/probes/
+# --- GATE-V2-2026-07-29-FAIL-diagnosis.md). Ratified semantics (OQ2=150):
+# --- bump the check_pair_rail.py PreToolUse registration timeout IFF the
+# --- current value == the OLD cap; ANY other adopter-chosen value is
+# --- PRESERVED (named WARN); already-at-target is a no-op; an entry with NO
+# --- timeout key is left untouched (harness default, not an adopter choice
+# --- of the old cap). The NEW cap is DERIVED from the template artifact
+# --- (settings.base.json pair-rail entry — install.sh copies it verbatim,
+# --- so template value == post-install value == migration target); the OLD
+# --- cap is a frozen historical literal (it no longer exists in any live
+# --- artifact once this migration lands), exactly like the "old" column of
+# --- the T5.4 table above. Fail-open: an unreadable template or a
+# --- non-unique/non-int template cap skips ONLY this leaf (stderr NOTE) —
+# --- the rest of the migration is unaffected.
+OLD_PAIR_RAIL_CAP = 60  # frozen pre-PLAN-164 registration cap (never derived)
+template_path = sys.argv[5]
+
+
+def pair_rail_hooks(obj):
+    found = []
+    hooks_obj = obj.get("hooks")
+    blocks = hooks_obj.get("PreToolUse") if isinstance(hooks_obj, dict) else None
+    for block in blocks if isinstance(blocks, list) else []:
+        if not isinstance(block, dict):
+            continue
+        hs = block.get("hooks")
+        if not isinstance(hs, list):
+            continue
+        for h in hs:
+            if isinstance(h, dict) and \
+                    "check_pair_rail.py" in str(h.get("command", "")):
+                found.append(h)
+    return found
+
+
+new_cap = None
+tpl_status = None
+try:
+    with open(template_path, "r", encoding="utf-8") as f:
+        _tpl_hooks = pair_rail_hooks(json.load(f))
+    tpl_caps = [h.get("timeout") for h in _tpl_hooks]
+    if len(tpl_caps) == 1 and type(tpl_caps[0]) is int:
+        new_cap = tpl_caps[0]
+        _sm = _tpl_hooks[0].get("statusMessage")
+        if isinstance(_sm, str) and _sm.strip():
+            tpl_status = _sm
+except (OSError, ValueError):
+    new_cap = None
+if new_cap is None:
+    warn("NOTE: pair-rail registration-timeout migration skipped - template "
+         "pair-rail cap not derivable (advisory only; other keys unaffected)")
+else:
+    for h in pair_rail_hooks(data):
+        cur = h.get("timeout", MISSING)
+        if cur is MISSING:
+            continue
+        if cur == new_cap:
+            out("OK (already at template cap): pair-rail registration timeout")
+        elif cur == OLD_PAIR_RAIL_CAP:
+            if not dry:
+                h["timeout"] = new_cap
+                # grok r1 LOW-3 / codex r2: bring the template statusMessage
+                # along IFF absent (same leaf, same migration event; an
+                # adopter-customized statusMessage is never overwritten).
+                if tpl_status is not None and "statusMessage" not in h:
+                    h["statusMessage"] = tpl_status
+            changed[0] = True
+            act("MIGRATE (matched OLD pair-rail cap -> template cap"
+                " + statusMessage if absent): "
+                "hooks.PreToolUse[check_pair_rail.py].timeout")
+        else:
+            warn("WARNING: pair-rail registration timeout is "
+                 "ADOPTER-CUSTOMIZED - PRESERVED (not migrated)")
+
+if dry:
+    sys.exit(0)
+if not changed[0]:
+    out("no changes - settings.json already at baseline (idempotent no-op)")
+    sys.exit(0)
+d = os.path.dirname(path) or "."
+fd, tmp = tempfile.mkstemp(prefix=".settings-t54-migrate.", suffix=".tmp",
+                           dir=d)
+try:
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+        f.write("\n")
+    os.replace(tmp, path)
+except BaseException:
+    try:
+        os.unlink(tmp)
+    except OSError:
+        pass
+    sys.exit(3)
+out("WROTE: .claude/settings.json (atomic; only migrated leaf keys changed)")
+' "$_mig_mode" "$settings" "$_T54_BASELINES_JSON" "$_mig_gate" "$_mig_template"; then
+    # NAMED skip (not a silent one): the helper exits 3 on an unparseable /
+    # unreadable settings.json (json.load failed) OR on an atomic-write
+    # failure. Either way the leaf keys were NOT migrated. Preservation is
+    # correct (we never clobber a file we could not parse), but the skip
+    # MUST be visible + actionable — hence the explicit re-run pointer.
+    echo "    NOTE: settings baseline migration SKIPPED — settings.json was not migrated" >&2
+    echo "          (most likely .claude/settings.json is unparseable/corrupt JSON, or the" >&2
+    echo "          atomic write failed). settings.json is UNCHANGED (fail-open; the write is" >&2
+    echo "          atomic, a partial write never lands). Model/permission baselines were NOT" >&2
+    echo "          applied — ACTION: fix/validate the JSON, then re-run the migration alone:" >&2
+    echo "              scripts/upgrade.sh \"$TARGET\" --settings-migrate-only" >&2
+    echo "          Pre-migration backup: $BAK_DIR/.claude/settings.json.pre-t54-migration" >&2
+  fi
+  return 0
+}
+
 # ===========================================================================
 # PLAN-161 U3 — opt-in hash-gated purge of mis-installed framework-internal
 # files (--purge-misinstalled; OQ1 Owner-ratified; ADR-155 Amendment).
@@ -1761,6 +2283,22 @@ _purge_misinstalled_scan() {
   return 0
 }
 
+# ===========================================================================
+# PLAN-163 T5.4 — test/ops seam: run ONLY the settings baseline migration.
+# Everything else (tree refresh, agents pin, H8 merge, PROTOCOL pointer,
+# purge scan, manifest/state rewrite) is skipped. Honors --dry-run and
+# --no-settings-migrate. The fixtures/oracles in
+# test_upgrade_settings_migration.py drive the migration through THIS path
+# so each key x branch is provable without a full-tree copy.
+# ===========================================================================
+if [[ "$SETTINGS_MIGRATE_ONLY" -eq 1 ]]; then
+  _migrate_settings_baseline
+  if [[ -n "${_UP_OPS_FILE:-}" ]]; then rm -f "$_UP_OPS_FILE" 2>/dev/null || true; fi
+  echo ""
+  echo "==> Done (--settings-migrate-only: no other upgrade surface touched)."
+  exit 0
+fi
+
 # Team rosters (templates — user may have customized, still overwrite with backup so they can diff)
 backup_and_replace ".claude/team.md"
 backup_and_replace ".claude/frontend-team.md"
@@ -1789,8 +2327,9 @@ backup_and_replace ".claude/commands"
 backup_and_replace ".claude/pitfalls-catalog.yaml"
 backup_and_replace ".claude/task-chains.yaml"
 # agent-metrics.md preserved (user data). settings.json is preserved here too —
-# the PLAN-135 W2 H8 settings-merge step below is the ONLY thing that touches it,
-# and only additively (registers new framework lifecycle hooks; never clobbers).
+# ONLY the PLAN-135 W2 H8 settings-merge (additive lifecycle-hook registration)
+# and the PLAN-163 T5.4 baseline migration (3-state per leaf key; customized
+# values PRESERVED + named WARNING) below touch it; neither clobbers.
 
 # ===========================================================================
 # PLAN-020 Phase 1 (ADR-050) — native subagents canonical-5 preservation
@@ -1867,6 +2406,11 @@ upgrade_agents_canonical_only
 # PLAN-135 W2 H8: register new lifecycle hooks (Setup/init self-verification)
 # into the adopter's existing settings.json (install.sh would EXISTS-SKIP it).
 _merge_lifecycle_hooks_into_settings
+
+# PLAN-163 T5.4: baseline-aware settings migration — fleet/permission leaf
+# keys + (T3.4-gated) new-event registrations. 3-state per key; idempotent;
+# customized values are always PRESERVED with a named WARNING.
+_migrate_settings_baseline
 
 # DevOps-P1-4: PROTOCOL.md is framework-derived (pointer), not user data —
 # refresh it so it stays aligned with the current source layout.
@@ -2141,9 +2685,12 @@ echo ""
 echo "==> Upgrade complete."
 echo "    Preserved: CLAUDE.md, MEMORY.md, .claude/agent-metrics.md (and existing"
 echo "    .claude/settings.json keys — only NEW framework lifecycle hooks were"
-echo "    additively registered into it; see PLAN-135 W2 H8 above)."
+echo "    additively registered into it (PLAN-135 W2 H8) and only the PLAN-163"
+echo "    T5.4 baseline leaf keys were migrated — customized values PRESERVED"
+echo "    with a named WARNING; see above)."
 echo "    To roll back, restore from: $BAK_DIR"
-echo "    (pre-merge settings.json backup: $BAK_DIR/.claude/settings.json.pre-h8-merge)"
+echo "    (pre-merge settings.json backup: $BAK_DIR/.claude/settings.json.pre-h8-merge;"
+echo "     pre-migration backup: $BAK_DIR/.claude/settings.json.pre-t54-migration)"
 echo ""
 echo "    NOTE: The settings-merge step (PLAN-135 W2) only ADDS missing framework"
 echo "    lifecycle hooks idempotently; it never rewrites your custom keys. If you"

@@ -60,11 +60,15 @@ state/mcp_client_secrets/
 # framework source.
 .claude/state/turbo/
 
-# S285 codex-review finding: review-loop approval state (machine-local
-# approved-diff signatures written by the review hook at runtime). If
-# committed, every checkout would inherit a pre-approved signature and
-# `review_loop.decide()` would short-circuit on matching future diffs.
-.claude/state/review-loop/
+# PLAN-163 T3.1 — `.claude/state/` is declared NON-COMMIT as a whole
+# (runtime state, never framework source). The DirectoryAdded
+# observer-writer hook (check_directory_added.py) persists raw local
+# workspace-root paths in `.claude/state/session-roots.json` (+ its
+# `.lock` sibling) — per-machine, per-session data that must never be
+# committed (no-value-echo: only hash prefixes reach the audit log; raw
+# paths live ONLY here). The blanket entry supersedes (and keeps, for
+# history) the narrower `.claude/state/turbo/` entry above.
+.claude/state/
 
 # PLAN-044 audit-v2 C5-P0-03: per-machine local Claude Code permission
 # overrides (`claude /permissions`). This file is written by Claude Code

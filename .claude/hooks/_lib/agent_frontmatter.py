@@ -135,6 +135,9 @@ VETO_FLOOR_MODEL: str = "claude-opus-4-8"
 VETO_FLOOR_ALLOWED: FrozenSet[str] = frozenset({
     "claude-opus-4-8",
     "claude-fable-5",
+    "claude-opus-5",   # ADR-181 (PLAN-163 T1.3, OQ1=b): Claude 5 Opus joins
+                       # the floor; claude-fable-5 remains the preferred
+                       # ceiling pin for VETO personas (frontmatter unchanged).
 })
 
 

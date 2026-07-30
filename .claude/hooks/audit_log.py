@@ -885,36 +885,43 @@ def _extract_model(
 # of Task-dispatched spawns at v1.11.0). Pinned to canonical IDs from
 # ADR-052; if an adopter overrides ADR-052 they should also override
 # this table OR pre-populate tool_response.model upstream.
+# PLAN-163 T1.4 (ADR-181, OQ1=b + OQ2=migrate-now): ROUTING refresh only —
+# Opus-tier fallbacks move claude-opus-4-8 -> claude-opus-5 and the advisory
+# (Sonnet) tier moves claude-sonnet-4-6 -> claude-sonnet-5. This table is a
+# routing-policy fallback, NOT a pricing surface (grok F11): historical
+# pricing/replay tables keep the old ids. Every value MUST stay inside the
+# ADR-149 AVAILABLE_MODELS_WORKING_SET (tied by
+# test_adr149_validator_parity.py).
 _ADR_052_ROLE_TO_MODEL: Dict[str, str] = {
     # Canonical-5 VETO archetypes — Opus floor per ADR-052 + ADR-080
-    "code-reviewer": "claude-opus-4-8",
-    "security-engineer": "claude-opus-4-8",
-    "qa-architect": "claude-sonnet-4-6",
-    "performance-engineer": "claude-sonnet-4-6",
+    "code-reviewer": "claude-opus-5",
+    "security-engineer": "claude-opus-5",
+    "qa-architect": "claude-sonnet-5",
+    "performance-engineer": "claude-sonnet-5",
     "devops": "claude-haiku-4-5-20251001",  # E5-F7: align to ADR-052 + devops.md
     # Mitigated rail — general-purpose dispatch inherits CEO model.
-    # Default-CEO is Opus 4.8 unless CEO_MODEL_DOWNSHIFT is honored.
-    "general-purpose": "claude-opus-4-8",
+    # Default-CEO is Opus-tier unless CEO_MODEL_DOWNSHIFT is honored.
+    "general-purpose": "claude-opus-5",
     # Probe / specialty archetypes
-    "growth-engineer": "claude-sonnet-4-6",
-    "billing-engineer": "claude-sonnet-4-6",
-    "compliance-specialist": "claude-sonnet-4-6",
-    "chaos-engineer": "claude-sonnet-4-6",
-    "data-engineer": "claude-sonnet-4-6",
-    "real-time-systems-engineer": "claude-sonnet-4-6",
-    "refactoring-lead": "claude-sonnet-4-6",
-    "vp-engineering": "claude-opus-4-8",
-    "vp-product": "claude-sonnet-4-6",
-    "vp-operations": "claude-sonnet-4-6",
+    "growth-engineer": "claude-sonnet-5",
+    "billing-engineer": "claude-sonnet-5",
+    "compliance-specialist": "claude-sonnet-5",
+    "chaos-engineer": "claude-sonnet-5",
+    "data-engineer": "claude-sonnet-5",
+    "real-time-systems-engineer": "claude-sonnet-5",
+    "refactoring-lead": "claude-sonnet-5",
+    "vp-engineering": "claude-opus-5",
+    "vp-product": "claude-sonnet-5",
+    "vp-operations": "claude-sonnet-5",
     # PLAN-074 Wave 1c provenance — see docs/PLAN-086-adr-052-role-extension.md
     # 4 VETO-floor archetypes added per PLAN-086 Wave B (R-019 ROLE_TO_MODEL ext).
     # ADR-052 §Veto-floor expansion (lines 186-210) names these as VETO-floor;
     # llm-finops-architect carries Opus floor for cost-ceiling integrity (see
     # docs §2 §Why llm-finops-architect). ADR-052 bytes NOT mutated (anti-churn).
-    "incident-commander": "claude-opus-4-8",
-    "identity-trust-architect": "claude-opus-4-8",
-    "threat-detection-engineer": "claude-opus-4-8",
-    "llm-finops-architect": "claude-opus-4-8",
+    "incident-commander": "claude-opus-5",
+    "identity-trust-architect": "claude-opus-5",
+    "threat-detection-engineer": "claude-opus-5",
+    "llm-finops-architect": "claude-opus-5",
 }
 
 
