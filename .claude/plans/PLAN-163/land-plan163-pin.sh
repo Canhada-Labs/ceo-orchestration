@@ -94,29 +94,86 @@ manifest_dests() { manifest_rows | cut -f3 | sort; }
 # GATE-V2 — post-anchor fresh-liveness verdict (also called at end of apply)
 # =============================================================================
 resolve_anchor() {
-  # Prefer the recorded anchor file; fall back to the tagged commit in log.
-  local sha="" ts=""
+  # PLAN-164 C1 (r2 revision) — fail-closed POINTER validation. The anchor
+  # file is only a pointer, never an authority: the sha it names must be a
+  # CEREMONY commit, and ts is ALWAYS recomputed from git (a ts= line in
+  # the file is IGNORED — a tampered/hand-edited ts can no longer widen or
+  # shrink the GATE-V2 window). File present but invalid = die, NOT
+  # fallback.
+  #
+  # CEREMONY commit definition (codex r1 HIGH-1 + r2 HIGH-1 balance): a
+  # commit whose SUBJECT (first line) ENDS with [SENT-PLAN163-PIN] or
+  # [SENT-PLAN164-RAIL]. Ceremony scripts put the tag as the subject
+  # SUFFIX; closeout/rollback messages must never carry the bracketed tag
+  # at all (enforced by instruction + comment in land-plan164-rail.sh).
+  # Suffix-match kills the r1 laundering vector (a message that merely
+  # MENTIONS a tag mid-text can never anchor) while newest-wins keeps
+  # post-revert recovery possible (a re-run ceremony commit is newer and
+  # anchors naturally — the r2 canonical-oldest rule deadlocked that path).
+  # Sets ANCHOR_SHA_OUT / ANCHOR_TS_OUT globals (no command substitution:
+  # die() must reach the terminal directly — grok r1 LOW-4).
+  ANCHOR_SHA_OUT=""
+  ANCHOR_TS_OUT=""
+  local sha="" subject=""
+  _is_ceremony_subject() { # $1 = subject line
+    case "$1" in
+      *"[SENT-PLAN163-PIN]") return 0 ;;
+      *"[SENT-PLAN164-RAIL]") return 0 ;;
+      *) return 1 ;;
+    esac
+  }
+  _is_reverted() { # $1 = full sha — codex r3 MED-N2: during a rollback
+    # window the gate must fail CLOSED; a reverted ceremony never anchors.
+    [ -n "$(git log --format='%H' --grep="This reverts commit $1" -n 1 || true)" ]
+  }
+  _newest_ceremony_sha() {
+    # newest-first walk over tag-mentioning commits; first SUFFIX match
+    # that has NOT been reverted wins (a recovery ceremony is newest and
+    # anchors naturally; mid-rollback, everything reverted -> no anchor).
+    local h subj
+    while IFS=$'\t' read -r h subj; do
+      if _is_ceremony_subject "$subj" && ! _is_reverted "$h"; then
+        printf '%s\n' "$h"; return 0
+      fi
+    done < <(git log --format="%H%x09%s" -E \
+               --grep='\[SENT-PLAN163-PIN\]|\[SENT-PLAN164-RAIL\]' || true)
+    return 1
+  }
   if [ -f "$ANCHOR_FILE" ]; then
     sha="$(sed -n 's/^sha=//p' "$ANCHOR_FILE" | head -1)"
-    ts="$(sed -n 's/^ts=//p' "$ANCHOR_FILE" | head -1)"
+    [ -n "$sha" ] \
+      || die "anchor file $ANCHOR_FILE exists but carries no sha= line — repair it or remove it to fall back to git log"
+    git cat-file -e "${sha}^{commit}" 2>/dev/null \
+      || die "anchor sha $sha (from $ANCHOR_FILE) is not a commit in this repo — stale or tampered pointer"
+    sha="$(git rev-parse "${sha}^{commit}")"
+    subject="$(git log -1 --format='%s' "$sha")" \
+      || die "cannot read the subject of anchor commit $sha"
+    _is_ceremony_subject "$subject" \
+      || die "anchor sha $sha is not a ceremony commit — its subject does not END with [SENT-PLAN163-PIN]/[SENT-PLAN164-RAIL]: $subject"
+    if _is_reverted "$sha"; then
+      die "anchor ceremony $sha has been REVERTED — the gate fails CLOSED during a rollback window (finish the recovery: revert closeout+ceremony, push green, re-run the ceremony with --rerun-after-revert, re-anchor)"
+    fi
+  else
+    sha="$(_newest_ceremony_sha || true)"
+    [ -n "$sha" ] \
+      || die "no anchor: $ANCHOR_FILE absent and no ceremony commit (subject ending in [SENT-PLAN163-PIN]/[SENT-PLAN164-RAIL]) in git log — run the ceremony first"
   fi
-  if [ -z "$sha" ]; then
-    sha="$(git log --format='%H' --grep='\[SENT-PLAN163-PIN\]' -n 1 || true)"
-    [ -n "$sha" ] && ts="$(git log -1 --format='%cI' "$sha")"
-  fi
-  [ -n "$sha" ] && [ -n "$ts" ] || return 1
-  printf '%s\t%s\n' "$sha" "$ts"
+  ANCHOR_TS_OUT="$(git log -1 --format='%cI' "$sha")" \
+    || die "cannot recompute anchor ts for $sha (git log failed)"
+  [ -n "$ANCHOR_TS_OUT" ] \
+    || die "recomputed anchor ts for $sha is empty — git metadata unreadable"
+  ANCHOR_SHA_OUT="$sha"
 }
 
 gate_v2() {
   say "GATE-V2 — fresh liveness under the NEW pin (post-anchor set ONLY)"
-  local pair
-  if ! pair="$(resolve_anchor)"; then
-    die "GATE-V2: no anchor — the GATE-PIN ceremony commit was not found (run the ceremony first)"
-  fi
+  # resolve_anchor sets globals and die()s directly on any failure — no
+  # command substitution, so the specific FATAL reaches the terminal
+  # (grok r1 LOW-4 closed).
+  resolve_anchor
   local ANCHOR_SHA ANCHOR_TS
-  ANCHOR_SHA="$(printf '%s' "$pair" | cut -f1)"
-  ANCHOR_TS="$(printf '%s' "$pair" | cut -f2)"
+  ANCHOR_SHA="$ANCHOR_SHA_OUT"
+  ANCHOR_TS="$ANCHOR_TS_OUT"
   echo "    anchor commit: $ANCHOR_SHA"
   echo "    anchor ts:     $ANCHOR_TS (events strictly AFTER this count)"
 
@@ -274,6 +331,20 @@ EOF
 if [ "$GATE_V2_ONLY" = 1 ]; then
   gate_v2
   exit 0
+fi
+
+# =============================================================================
+# PLAN-164 C4-i — pin-pack retirement guard (apply + --dry-run ONLY)
+# =============================================================================
+# Once the PLAN-164 rail ceremony has landed, this pin-pack is superseded:
+# it stages check_pair_rail.py with the pre-PLAN-164 timeout default, so a
+# (re-)apply would silently revert the rail fix. The read-only modes stay
+# valid: --gate-v2 already exited above; --preflight-only is exempted here.
+if [ "$PREFLIGHT_ONLY" != 1 ]; then
+  _rail_sha="$(git log --format='%H' --grep='\[SENT-PLAN164-RAIL\]' -n 1 || true)"
+  if [ -n "$_rail_sha" ]; then
+    die "pin-pack superado pelo PLAN-164 (contém check_pair_rail.py com default antigo; re-apply reverteria o fix). Somente --gate-v2 / --preflight-only permanecem válidos."
+  fi
 fi
 
 # =============================================================================

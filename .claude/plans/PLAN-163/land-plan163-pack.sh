@@ -30,7 +30,7 @@
 #
 # COUNTS: this ceremony does NOT edit CLAUDE.md (cache discipline). It
 # VALIDATES the mechanical post-apply counts (hooks 55→57, wired 44→46,
-# registrations 46→48, ADRs 181→183) and PRINTS the closeout deltas; the
+# registrations 46→48, ADRs 182→184 — inclui ADR-110-AMEND-1 do PLAN-164) and PRINTS the closeout deltas; the
 # CLAUDE.md/docs closeout commit must land BEFORE push.
 #
 # Usage:
@@ -237,9 +237,9 @@ grep -q "$KEY" .claude/security/sentinel-signers-registry.yaml \
   || die "key $KEY absent from .claude/security/sentinel-signers-registry.yaml (rail 2, ADR-121)"
 echo "    both signer rails carry the ceremony key"
 
-say "ADR count pre-apply (pin landed → must be 181; pack makes it 183)"
+say "ADR count pre-apply (pin+PLAN-164 landed → must be 182; pack makes it 184)"
 _adr_now="$(ls .claude/adr/ADR-*.md | wc -l | tr -d ' ')"
-[ "$_adr_now" = "181" ] || die "pre-apply ADR count is $_adr_now, expected 181 (is GATE-PIN really landed?)"
+[ "$_adr_now" = "182" ] || die "pre-apply ADR count is $_adr_now, expected 182 (are GATE-PIN + [SENT-PLAN164-RAIL] really landed? PLAN-164 adds ADR-110-AMEND-1)"
 
 # =============================================================================
 # W2 oracles (live tree) — run BEFORE committing W2, and again in overlay
@@ -342,6 +342,9 @@ run_oracle "availableModels mirror test (fallback equality enforced)" "$SCRATCH/
 run_oracle "hook-stdout-schema oracle (T2, wired set DERIVED from settings.json)" "$SCRATCH/o-p6.log" \
   python3 .claude/scripts/check-hook-stdout-schema.py --repo "$OVERLAY"
 
+run_oracle "pair-rail timeout invariant (PLAN-164 C2 — kernel==template, margin, absolutes)" "$SCRATCH/o-p7a.log" \
+  python3 -m pytest .claude/hooks/tests/test_pair_rail_timeout_invariant.py -q
+
 run_oracle "upgrade settings-migration fixtures — pass 1" "$SCRATCH/o-p7.log" \
   python3 -m pytest .claude/scripts/tests/test_upgrade_settings_migration.py -q
 run_oracle "upgrade settings-migration fixtures — pass 2 (idempotency re-run)" "$SCRATCH/o-p8.log" \
@@ -366,7 +369,7 @@ for event, arr in s.get("hooks", {}).items():
                 if tok.endswith(".py"):
                     scripts.add(tok.split("/")[-1])
 wired = len(scripts)
-expect = {"hooks_on_disk": 57, "wired": 46, "registrations": 48, "adrs": 183}
+expect = {"hooks_on_disk": 57, "wired": 46, "registrations": 48, "adrs": 184}
 got = {"hooks_on_disk": hooks_on_disk, "wired": wired,
        "registrations": regs, "adrs": adrs}
 ok = True
@@ -467,15 +470,16 @@ python3 -m pytest \
   .claude/hooks/tests/test_check_notification.py \
   .claude/hooks/tests/test_session_roots_write_guard.py \
   .claude/hooks/tests/test_template_dogfood_parity.py \
-  .claude/hooks/tests/test_available_models_mirror.py -q \
+  .claude/hooks/tests/test_available_models_mirror.py \
+  .claude/hooks/tests/test_pair_rail_timeout_invariant.py -q \
   > "$SCRATCH/post-1.log" 2>&1 || die "post-apply pytest RED ($SCRATCH/post-1.log)"
 python3 .claude/scripts/generate-available-models.py --check \
   > "$SCRATCH/post-2.log" 2>&1 || die "post-apply generate --check RED ($SCRATCH/post-2.log)"
 python3 .claude/scripts/check-hook-stdout-schema.py --repo "$REPO" \
   > "$SCRATCH/post-3.log" 2>&1 || die "post-apply hook-stdout-schema RED ($SCRATCH/post-3.log)"
 _adr_post="$(ls .claude/adr/ADR-*.md | wc -l | tr -d ' ')"
-[ "$_adr_post" = "183" ] || die "post-apply ADR count is $_adr_post, expected 183"
-echo "    pytest + generate --check + stdout-schema + ADR-count(183) OK"
+[ "$_adr_post" = "184" ] || die "post-apply ADR count is $_adr_post, expected 184"
+echo "    pytest + generate --check + stdout-schema + ADR-count(184) OK"
 
 build_scope_re() {
   local re="" f esc
@@ -525,7 +529,7 @@ baseline-aware idempotent settings migration (3-state per leaf key) +
 oracles; smoke-install-parity fleet assert. T6: substrate-adopt-2026-08,
 CEO-MODEL-ROUTING, ACCELERATORS (fast mode = cost-latency trade-off, no
 speed numbers — AGENTS.md scrub). CLAUDE.md count triple (57/46/48 +
-ADRs 183) lands in the closeout commit before push (cache discipline).
+ADRs 184) lands in the closeout commit before push (cache discipline).
 
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
 MSG
@@ -537,7 +541,7 @@ say "DONE — main-pack ceremony landed. CLOSEOUT (before push):"
 cat <<'EOF'
   1. Closeout commit — count surfaces (tolerance=0 in CI):
      - CLAUDE.md triple: hooks on disk 55->57, wired 44->46,
-       registrations 46->48; ADRs 180->183; skills/commands unchanged.
+       registrations 46->48; ADRs 182->184; skills/commands unchanged.
      - team.md :578/:589 model drift (T1.6, cache-stable file).
      - Regenerate COMMAND-SKILL-HOOK-MAP (gen---write) if hook surfaces
        feed it; sweep unwatched docs (ARCHITECTURE/GUIA-COMPLETO/FAQ/
