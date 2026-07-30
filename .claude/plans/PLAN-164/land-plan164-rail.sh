@@ -11,9 +11,11 @@
 # cross-layer invariant test; doctor.sh margin warn — the adopter
 # upgrade.sh migration MOVED to the PLAN-163 main-pack after the
 # cross-pack clobber finding, it does NOT land here; ADR-110-AMEND-1 as a
-# SEPARATE FILE per house convention (17 precedents) — ADR COUNT 181->182,
-# so this pack also stages land-plan163-pack.sh with its fail-closed
-# count gates bumped 181/183 -> 182/184). Integrity is pinned by the TRACKED
+# SEPARATE FILE per house convention (17 precedents) — ADR COUNT 181->182;
+# the PLAN-163 gate tooling (anchor validator + retirement guard +
+# count gates 182/184) landed PRE-ceremony in commit 8f21b25 so it
+# survives a rollback of this ceremony — it is NOT in this pack).
+# Integrity is pinned by the TRACKED
 # manifest twin `.claude/plans/PLAN-164/inputs-rail.sha256` (byte-copy of
 # the staged MANIFEST.sha256; `shasum -a 256 -c` fail-closed — staged/ is
 # gitignored, so the twin is the tamper-evidence rail, S274 lesson).
@@ -475,7 +477,7 @@ echo "    touched ⊆ scope OK"
 # codex r1 MED-4: `git commit` commits the WHOLE index — assert the CACHED
 # set is exactly what this ceremony added (dests + PLAN-164 materials).
 # A W2/state file someone pre-staged would otherwise ride into the signed
-# commit despite the sentinel declaring only the 8 scope paths.
+# commit despite the sentinel declaring only the 6 scope paths.
 RE_MATERIALS='^\.claude/plans/PLAN-164/|^\.claude/plans/PLAN-164-pair-rail-timeout-uplift\.md$'
 BAD_IDX="$(git diff --cached --name-only | grep -vE "${RE_SCOPE}|${RE_MATERIALS}" || true)"
 if [ -n "$BAD_IDX" ]; then
@@ -503,9 +505,10 @@ main-pack instead — upgrade.sh lives there with its settings-migration
 machinery and test_upgrade_settings_migration.py; carrying a live-based
 copy here would cross-clobber (S284 class). Record is AMEND-1 of
 ADR-110 as a separate file per house convention (not a new numbered
-ADR), which moves the ADR file count 181 -> 182 — therefore this pack
-also stages land-plan163-pack.sh with its fail-closed ADR-count gates
-bumped 181/183 -> 182/184 (the frozen main-pack bytes stay untouched);
+ADR), which moves the ADR file count 181 -> 182 — the fail-closed
+ADR-count gates of land-plan163-pack.sh were bumped 181/183 -> 182/184
+in the pre-ceremony tooling commit, not in this pack (frozen main-pack
+bytes untouched);
 the amend names the env-knob sub-floor residual, the >=10-healthy p95
 recalibration trigger, and the rejected alternatives. The PLAN-163
 gate tooling (land-plan163-pin.sh: resolve_anchor fail-closed pointer

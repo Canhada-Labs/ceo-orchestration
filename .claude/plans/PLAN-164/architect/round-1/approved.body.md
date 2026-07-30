@@ -54,11 +54,13 @@ never completed a live review). This ceremony lands:
    overlay proof: migration suite 36/36 green).
 5. **Record (AMEND-1 of ADR-110) as a SEPARATE FILE per house convention**
    (`ADR-110-AMEND-1-rail-timeout-contract.md`; 17 AMEND-file precedents).
-   This moves the ADR file count 181 -> 182 — therefore this pack ALSO
-   stages `land-plan163-pack.sh` with its fail-closed ADR-count gates
-   bumped (pre-apply 181 -> 182; post-apply 183 -> 184; expect dict and
-   closeout text in sync). The frozen main-pack BYTES are not touched by
-   this bump — only the (non-canonical) ceremony script that gates them.
+   This moves the ADR file count 181 -> 182 — the fail-closed ADR-count
+   gates of `land-plan163-pack.sh` were therefore bumped (pre-apply
+   181 -> 182; post-apply 183 -> 184; expect dict and closeout text in
+   sync) in the PRE-ceremony tooling commit `8f21b25`, NOT in this pack
+   (see the split rationale below). The frozen main-pack BYTES are not
+   touched by that bump — only the (non-canonical) ceremony script that
+   gates them.
    The rail closeout MUST bump the ADR count 181 -> 182 across CLAUDE.md
    + the 6-doc sweep BEFORE the claims check (the ceremony prints the
    exact sed list). The amend names: the env-knob sub-floor residual, the
