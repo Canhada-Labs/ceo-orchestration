@@ -89,10 +89,11 @@ def _clean_env(extra: Optional[Dict[str, str]] = None) -> Dict[str, str]:
     return env
 
 
-class _MigrationHarness(unittest.TestCase):
+class _MigrationHarness(TestEnvContext):
     """Scratch-target harness driving upgrade.sh --settings-migrate-only."""
 
     def setUp(self) -> None:
+        super().setUp()
         self._tmp = tempfile.mkdtemp(prefix="t54-mig-")
         self.addCleanup(shutil.rmtree, self._tmp, True)
         self.target = Path(self._tmp) / "target"
@@ -708,7 +709,7 @@ class TestPairRailTimeoutValueMigration(_MigrationHarness, TestEnvContext):
         self.assertEqual(self._migrated_pair_rail_timeout(), custom)
 
 
-class TestU1TemplateParity(unittest.TestCase):
+class TestU1TemplateParity(TestEnvContext):
     """U1 (post-install): the fresh-install template must already carry the
     NEW baselines — install.sh copies templates/settings/settings.base.json
     verbatim, so template parity IS the post-install oracle. Expectations are
