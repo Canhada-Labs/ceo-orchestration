@@ -112,3 +112,36 @@ def test_negative_devops_opus_large_bucket_ok(tmp_path):
     ]
     log = write_log(tmp_path, events)
     assert detect(log) == []
+
+
+# -------- PLAN-163 FXeta (C8): claude-sonnet-5 advisory tier --------
+
+def test_positive_sonnet5_short_devops_flagged(tmp_path):
+    """W2 fleet uplift added fable-5/opus-5 but omitted claude-sonnet-5;
+    a short devops spawn on the new advisory-tier model must be flagged."""
+    events = [
+        make_event(
+            model="claude-sonnet-5",
+            subagent_type="devops",
+            prompt_len_bucket="<256",
+            desc_seed="op-sonnet5",
+        )
+    ]
+    log = write_log(tmp_path, events)
+    findings = detect(log)
+    assert len(findings) == 1
+    assert findings[0].evidence["model_counts"] == {"claude-sonnet-5": 1}
+
+
+def test_historical_large_ids_preserved(tmp_path):
+    """Adding sonnet-5 must not drop replay coverage of historical ids."""
+    events = [
+        make_event(
+            model="claude-opus-4-8",
+            subagent_type="devops",
+            prompt_len_bucket="<256",
+            desc_seed="op-hist",
+        )
+    ]
+    log = write_log(tmp_path, events)
+    assert len(detect(log)) == 1

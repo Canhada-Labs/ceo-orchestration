@@ -26,7 +26,19 @@ from .schema import Finding, emit_findings, is_agent_spawn, iter_events
 
 
 _DETECTOR = "overpowered"
-_LARGE_MODELS = frozenset({"claude-opus-4-8", "claude-opus-4-7", "claude-sonnet-4-6"})
+# PLAN-163 T1.5a: += claude-fable-5, claude-opus-5 (current large fleet);
+# PLAN-163 FXeta (C8): += claude-sonnet-5 — W2 uplift added fable-5/opus-5
+# but omitted the advisory (sonnet) tier, blinding the detector to short
+# devops spawns on the new-generation Sonnet.
+# historical ids retained for audit-log replay (ADR-142).
+_LARGE_MODELS = frozenset({
+    "claude-opus-5",
+    "claude-fable-5",
+    "claude-sonnet-5",
+    "claude-opus-4-8",
+    "claude-opus-4-7",
+    "claude-sonnet-4-6",
+})
 _TARGET_SUBAGENT = "devops"
 _SHORT_BUCKETS = frozenset({"<256", "<1024"})
 

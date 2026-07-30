@@ -24,7 +24,14 @@ from .schema import Finding, emit_findings, is_agent_spawn, iter_events
 
 
 _DETECTOR = "wasteful_thinking"
-_TARGET_MODELS = frozenset({"claude-opus-4-8", "claude-opus-4-7"})  # 4-7 kept for historical-log replay (ADR-142)
+# PLAN-163 T1.5a: += claude-fable-5, claude-opus-5 (current Opus-class
+# fleet); 4-7 kept for historical-log replay (ADR-142).
+_TARGET_MODELS = frozenset({
+    "claude-opus-5",
+    "claude-fable-5",
+    "claude-opus-4-8",
+    "claude-opus-4-7",
+})
 _SHORT_BUCKETS = frozenset({"<256", "<1024"})
 _VETO_SUBAGENTS = frozenset({"code-reviewer", "security-engineer"})
 

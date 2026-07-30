@@ -11,9 +11,9 @@
 #      frontmatter (installed tree + repo templates/) must be in the
 #      ADR-149 allowlist + governance tier ids + tier aliases.
 #   4. Stale-literal scan: claude-opus-4-7 / claude-opus-4-6 /
-#      claude-sonnet-3 / claude-3- anywhere in the installed tree or
-#      templates/, minus test/fixture paths and a NARROW commented
-#      allowlist of by-design historical-replay tables.
+#      claude-opus-4-1 / claude-sonnet-3 / claude-3- anywhere in the
+#      installed tree or templates/, minus test/fixture paths and a NARROW
+#      commented allowlist of by-design historical-replay tables.
 #   5. CLAUDE_CODE_SUBAGENT_MODEL in any installed/template settings
 #      JSON must be in the allowed set (ADR-144: frontmatter is SoT;
 #      the env knob must never re-pin a stale generation).
@@ -54,7 +54,18 @@ is_allowed_model() {
 
 # Stale model-id literals that must never reach an adopter outside the
 # exempted by-design files below.
-STALE_RE='claude-opus-4-7|claude-opus-4-6|claude-sonnet-3|claude-3-'
+# PLAN-163 T1.8 (CF-11): += claude-opus-4-1 — retires 2026-08-05
+# (model-deprecations.json fuse). Born-green in the live tree, so the
+# addition is proven by the planted positive control in
+# scripts/tests/test-parity-stale-planted.sh (FOLLOWUP planted-fixture
+# pattern). Allowlist-delta audit (static enumeration + live-fire run of
+# THIS script, 2026-07-28): model-deprecations.json and
+# .claude/data/canonical_models.json carry the id by design but sit
+# OUTSIDE this scan's scope (not installed / not under templates/) — no
+# delta; check-model-deprecations.py IS installed and its build_matcher
+# docstring carries opus-4-1 literals by design → ALLOWLIST_RE delta below
+# (the static audit missed it; the live-fire run caught it).
+STALE_RE='claude-opus-4-7|claude-opus-4-6|claude-opus-4-1|claude-sonnet-3|claude-3-'
 
 # Path-CLASS exemptions (relative paths): test suites + fixtures keep old
 # ids on purpose (negative cases, historical-log replay), backups and
@@ -71,11 +82,17 @@ EXEMPT_PATH_RE='(^|/)(tests|fixtures)/|(^|/)test_[^/]*\.py$|_test\.py$|\.bak(\.|
 #   optimizer/model_normalize — docstring on stripping claude-3-5- prefixes
 #   generate-dispatch — label mapping for pre-4.8 ledger entries
 #   spot-check-findings — known-id list for replaying old findings
+#   check-model-deprecations — the deprecation instrument itself; its
+#     build_matcher docstring cites retired ids by design (PLAN-163 T1.8;
+#     mirrors the ledger's own 'deprecation-instrument' inert rule)
 #   hooks/_lib/adapters/live/claude.py — adaptive-thinking known-id table
 #     (must recognize older generations in old transcripts)
-#   skills ai-llm-orchestration / security-and-auth (+ owasp benchmark) —
-#     instructional examples + model_baseline_version measurement anchor
-ALLOWLIST_RE='\.claude/scripts/(ceo-cost\.py|cost-table\.yaml|budget-summary\.py|audit-telemetry\.py|success-receipt\.py|value-dashboard\.py|generate-dispatch\.py|spot-check-findings\.py|detectors/(wasteful_thinking|overpowered)\.py|optimizer/model_normalize\.py)|\.claude/hooks/_lib/adapters/live/claude\.py|\.claude/skills/core/(ai-llm-orchestration/SKILL\.md|security-and-auth/(SKILL\.md|benchmarks/owasp-llm-top-10\.yaml))'
+#   skills ai-llm-orchestration / security-and-auth (+ owasp benchmark +
+#     references/owasp.md) — instructional examples +
+#     model_baseline_version measurement anchor (references/owasp.md added
+#     PLAN-163 T1.8: the PLAN-153 skill import landed it AFTER this scan
+#     was authored — latent pre-existing offender caught by live-fire)
+ALLOWLIST_RE='\.claude/scripts/(ceo-cost\.py|cost-table\.yaml|budget-summary\.py|audit-telemetry\.py|success-receipt\.py|value-dashboard\.py|generate-dispatch\.py|spot-check-findings\.py|check-model-deprecations\.py|detectors/(wasteful_thinking|overpowered)\.py|optimizer/model_normalize\.py)|\.claude/hooks/_lib/adapters/live/claude\.py|\.claude/skills/core/(ai-llm-orchestration/SKILL\.md|security-and-auth/(SKILL\.md|benchmarks/owasp-llm-top-10\.yaml|references/owasp\.md))'
 
 # ---------------------------------------------------------------------------
 echo "==> [1/5] install.sh (maintainer ceremony) into: $TARGET"

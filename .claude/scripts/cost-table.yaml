@@ -72,6 +72,21 @@ models:
     output_per_mtok: 25.00
     tier: opus
     source_url: "https://www.anthropic.com/api"
+  claude-opus-4-8-fast:
+    input_per_mtok: 10.00
+    output_per_mtok: 50.00
+    tier: opus
+    source_url: "https://docs.anthropic.com/en/docs/about-claude/pricing"  # PLAN-163 W2 P2b: fast-mode premium row for the 4.8 flagship — live replacement id in model-deprecations.json (4-6-fast/4-7-fast both point here); was silently priced $0/unknown
+  claude-opus-5:
+    input_per_mtok: 5.00
+    output_per_mtok: 25.00
+    tier: opus
+    source_url: "https://docs.anthropic.com/en/docs/about-claude/pricing"  # PLAN-163 T1.5b: 2026-07-24 launch, drop-in at the 4.8 rate; 1M ctx default (flat rate, no long-context premium published)
+  claude-opus-5-fast:
+    input_per_mtok: 10.00
+    output_per_mtok: 50.00
+    tier: opus
+    source_url: "https://docs.anthropic.com/en/docs/about-claude/pricing"  # PLAN-163 T1.5b: fast-mode premium row (Opus 5/4.8 only; removed from 4.7) — cost/latency trade-off, see docs/ACCELERATORS.md
   claude-opus-4-7:
     input_per_mtok: 5.00
     output_per_mtok: 25.00

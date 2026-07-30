@@ -36,7 +36,25 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 # Mirrors `.claude/scripts/ceo-cost.py:_DEFAULT_PRICING` (Haiku at $1/$5 per
 # Mtok, post-C3-P0-06 fix). Override via CEO_COST_PRICING_JSON to point at
 # a JSON file with `{model_id: {input_per_mtok, output_per_mtok}}` shape.
+#
+# PLAN-163 T1.5a (CF-2, gap G3) — ADDITIVE presence fix: the map lacked the
+# current fleet entirely (opus-4-8 and fable-5 were missing while both were
+# live routing targets — cost rollup silently priced them at $0). Historical
+# ids are NEVER removed (audit-log replay, ADR-142); the opus-4-7 rows keep
+# the retained-historical $15/$75 replay rate.
 _PRICING_PER_MTOK: Dict[str, Dict[str, float]] = {
+    # -- current fleet (PLAN-163 T1.5a) --
+    "claude-opus-4-8": {"input": 5.00, "output": 25.00},
+    "claude-opus-4-8[1m]": {"input": 5.00, "output": 25.00},
+    "claude-opus-4-8-fast": {"input": 10.00, "output": 50.00},  # fast-mode premium row (W2 P2b)
+    "claude-fable-5": {"input": 10.00, "output": 50.00},
+    "claude-opus-5": {"input": 5.00, "output": 25.00},  # drop-in at 4.8 rate; 1M ctx default
+    "claude-opus-5-fast": {"input": 10.00, "output": 50.00},  # fast-mode premium row
+    # Sonnet 5: INTRO pricing through 2026-08-31 — the dated row in
+    # _DATED_PRICING_PER_MTOK carries the post-intro sticker; this base row
+    # is the fallback for events with no parseable ts (W2 P2a).
+    "claude-sonnet-5": {"input": 2.00, "output": 10.00},
+    # -- retained historical (ADR-142 replay — never remove) --
     "claude-opus-4-7": {"input": 15.00, "output": 75.00},
     "claude-opus-4-7[1m]": {"input": 15.00, "output": 75.00},
     "claude-sonnet-4-6": {"input": 3.00, "output": 15.00},
@@ -88,19 +106,50 @@ def resolve_log_path() -> Optional[Path]:
     return None
 
 
+#: PLAN-163 W2 P2a — event-date-aware rows: models whose public rate changes
+#: on a date boundary. An event is priced by its OWN ``ts`` (never by
+#: "today", and never by mutating the global row — mutation would repaint
+#: history on replay). Shape: model -> (cutoff_iso_date,
+#: rates_through_cutoff_inclusive, rates_after). Sonnet 5: $2/$10 intro
+#: through 2026-08-31, $3/$15 sticker after.
+_DATED_PRICING_PER_MTOK: Dict[str, Tuple[str, Dict[str, float], Dict[str, float]]] = {
+    "claude-sonnet-5": (
+        "2026-08-31",
+        {"input": 2.00, "output": 10.00},
+        {"input": 3.00, "output": 15.00},
+    ),
+}
+
+
+def _rates_for_event(model: str, ts: Any) -> Optional[Dict[str, float]]:
+    """Resolve the pricing row for ONE event, honouring dated rows (P2a).
+
+    ISO-8601 ``ts`` dates compare lexicographically, so ``ts[:10]`` against
+    the cutoff needs no datetime parse. Events with a missing/unparseable
+    ``ts`` fall back to the static ``_PRICING_PER_MTOK`` row (pre-P2a
+    behaviour preserved).
+    """
+    dated = _DATED_PRICING_PER_MTOK.get(model)
+    if dated is not None and isinstance(ts, str) and len(ts) >= 10:
+        cutoff, through, after = dated
+        return through if ts[:10] <= cutoff else after
+    return _PRICING_PER_MTOK.get(model)
+
+
 def _compute_event_cost_usd(ev: Dict[str, Any]) -> float:
     """PLAN-044 audit-v2 C3-P0-02 (Wave B) — per-event cost in USD.
 
     Reads ``model`` + ``tokens_in`` + ``tokens_out`` from an audit-log
-    entry and looks up the rate in ``_PRICING_PER_MTOK``. Returns 0.0
-    on missing fields or unknown model (silent fallback — caller can
-    surface the unknown_model count separately if needed). Mirrors the
-    `actual_cost_usd` formula in `_lib/adapters/live/_cost.py`.
+    entry and looks up the rate via ``_rates_for_event`` (dated rows keyed
+    on the event's own ``ts``, base table otherwise — PLAN-163 W2 P2a).
+    Returns 0.0 on missing fields or unknown model (silent fallback —
+    caller can surface the unknown_model count separately if needed).
+    Mirrors the `actual_cost_usd` formula in `_lib/adapters/live/_cost.py`.
     """
     model = ev.get("model")
     if not isinstance(model, str) or not model:
         return 0.0
-    rates = _PRICING_PER_MTOK.get(model)
+    rates = _rates_for_event(model, ev.get("ts"))
     if rates is None:
         return 0.0
     t_in = ev.get("tokens_in") or 0

@@ -94,8 +94,17 @@ _DEDUP_STRIP_FIELDS: Tuple[str, ...] = ("hmac", "hmac_error", "hook_duration_ms"
 #: USD). claude-opus-4-8 = current flagship $5/$25 per MTok (0.005/0.025 per-1k);
 #: claude-opus-4-7 RETAINED HISTORICAL ($15/$75) for log replay of pre-4.8
 #: sessions; Sonnet 4.6 = $3/$15; Haiku 4.5 = $1/$5 (was 4x underpriced).
+#: PLAN-163 T1.5b — ADDITIVE Claude 5 fleet rows (historical rows retained,
+#: ADR-142): fable-5 $10/$50; opus-5 $5/$25 (drop-in at the 4.8 rate);
+#: opus-5-fast $10/$50 premium row; sonnet-5 $2/$10 INTRO rate through
+#: 2026-08-31 (post-intro sticker $3/$15 — bump when the window lapses).
 _DEFAULT_PRICING: Dict[str, Dict[str, float]] = {
     "claude-opus-4-8":             {"in": 0.005, "out": 0.025},
+    "claude-opus-4-8-fast":       {"in": 0.010, "out": 0.050},
+    "claude-fable-5":             {"in": 0.010, "out": 0.050},
+    "claude-opus-5":              {"in": 0.005, "out": 0.025},
+    "claude-opus-5-fast":         {"in": 0.010, "out": 0.050},
+    "claude-sonnet-5":            {"in": 0.002, "out": 0.010},
     "claude-opus-4-7":            {"in": 0.015, "out": 0.075},
     "claude-opus-4":              {"in": 0.015, "out": 0.075},
     "claude-sonnet-4-6":          {"in": 0.003, "out": 0.015},
@@ -319,18 +328,49 @@ def build_plan_attribution(
 # ---------------------------------------------------------------------------
 
 
+#: PLAN-163 W2 P2a — event-date-aware rows (per-1k twin of the tables in
+#: audit-telemetry.py / ceo-cost.py): an event is priced by its OWN ``ts``,
+#: never by "today" and never by mutating the global row. Sonnet 5: $2/$10
+#: per MTok intro through 2026-08-31 (inclusive), $3/$15 sticker after.
+_DATED_PRICING: Dict[str, Tuple[str, Dict[str, float], Dict[str, float]]] = {
+    "claude-sonnet-5": (
+        "2026-08-31",
+        {"in": 0.002, "out": 0.010},
+        {"in": 0.003, "out": 0.015},
+    ),
+}
+
+
 def compute_cost_usd(
     model: Optional[str],
     tokens_in: int,
     tokens_out: int,
     pricing: Optional[Dict[str, Dict[str, float]]] = None,
+    ts: Optional[str] = None,
 ) -> Optional[float]:
-    """Compute USD cost from model + token counts; None on unknown model."""
+    """Compute USD cost from model + token counts; None on unknown model.
+
+    P2a: when ``ts`` (the event's own ISO-8601 timestamp) is given and the
+    model has a dated row, the rate is resolved against that date
+    (``ts[:10]`` lexicographic compare — no parse). A caller-supplied
+    custom row for the model always wins over the built-in dated row; a
+    missing ``ts`` falls back to the static row (pre-P2a behaviour).
+    """
     if pricing is None:
         pricing = _DEFAULT_PRICING
     if not isinstance(model, str) or not model:
         return None
-    row = pricing.get(model.lower())
+    key = model.lower()
+    row = pricing.get(key)
+    dated = _DATED_PRICING.get(key)
+    if (
+        dated is not None
+        and isinstance(ts, str)
+        and len(ts) >= 10
+        and row == _DEFAULT_PRICING.get(key)
+    ):
+        cutoff, through, after = dated
+        row = through if ts[:10] <= cutoff else after
     if not row:
         return None
     cost = (tokens_in / 1000.0) * row.get("in", 0.0)
@@ -429,7 +469,8 @@ def rollup(
             # Codex events default to gpt-5-codex when model not annotated.
             model = "gpt-5-codex"
         cost = compute_cost_usd(model if isinstance(model, str) else None,
-                                t_in, t_out, pricing=pricing)
+                                t_in, t_out, pricing=pricing,
+                                ts=ev.get("ts"))
         if cost is not None:
             cost_known = True
             tot_cost += cost

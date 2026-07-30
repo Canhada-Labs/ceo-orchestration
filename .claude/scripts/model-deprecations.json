@@ -224,8 +224,8 @@
     },
     {
       "rule_id": "deprecation-instrument",
-      "pattern": "(^|/)(check-model-deprecations\\.py|model-deprecations\\.json|sweep_deprecated_models\\.py|test_check_model_deprecations\\.py|SWEEP-DEPRECATIONS-[A-Za-z0-9-]+\\.txt)$",
-      "reason": "the checker, its ledger, its tests and the S230 sweep instrument carry the deprecated ids by design"
+      "pattern": "(^|/)(check-model-deprecations\\.py|model-deprecations\\.json|sweep_deprecated_models\\.py|test_check_model_deprecations\\.py|smoke-install-parity\\.sh|SWEEP-DEPRECATIONS-[A-Za-z0-9-]+\\.txt)$",
+      "reason": "the checker, its ledger, its tests, the S230 sweep instrument and the parity stale-literal scanner (PLAN-163 T1.8: STALE_RE carries retiring ids by design) carry the deprecated ids by design"
     },
     {
       "rule_id": "plan-artifacts",

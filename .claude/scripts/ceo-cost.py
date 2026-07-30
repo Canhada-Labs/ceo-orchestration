@@ -66,9 +66,20 @@ from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple
 # live-confirmed 2026-05-29). The claude-opus-4-7 rows ($15/$75) are RETAINED
 # as HISTORICAL so cost rollups over audit logs of pre-4.8 sessions stay
 # accurate (those sessions genuinely billed at the 4-7 rate).
+# PLAN-163 T1.5b — ADDITIVE Claude 5 fleet rows (never remove historical ids,
+# ADR-142): fable-5 $10/$50 (rate the repo already carries in cost-table.yaml);
+# opus-5 $5/$25 drop-in at the 4.8 rate (1M ctx default); opus-5-fast $10/$50
+# premium row; sonnet-5 at the $2/$10 INTRO rate through 2026-08-31 (post-intro
+# sticker $3/$15 — bump the row when the intro window lapses; this table prices
+# actual logged spend, unlike the forward-looking cost-table.yaml sticker).
 _DEFAULT_PRICING: Dict[str, Dict[str, float]] = {
     "claude-opus-4-8": {"input_per_mtok": 5.00, "output_per_mtok": 25.00},
     "claude-opus-4-8[1m]": {"input_per_mtok": 5.00, "output_per_mtok": 25.00},
+    "claude-opus-4-8-fast": {"input_per_mtok": 10.00, "output_per_mtok": 50.00},
+    "claude-fable-5": {"input_per_mtok": 10.00, "output_per_mtok": 50.00},
+    "claude-opus-5": {"input_per_mtok": 5.00, "output_per_mtok": 25.00},
+    "claude-opus-5-fast": {"input_per_mtok": 10.00, "output_per_mtok": 50.00},
+    "claude-sonnet-5": {"input_per_mtok": 2.00, "output_per_mtok": 10.00},
     "claude-opus-4-7": {"input_per_mtok": 15.00, "output_per_mtok": 75.00},
     "claude-opus-4-7[1m]": {"input_per_mtok": 15.00, "output_per_mtok": 75.00},
     "claude-sonnet-4-6": {"input_per_mtok": 3.00, "output_per_mtok": 15.00},
@@ -182,14 +193,45 @@ def load_pricing() -> Dict[str, Dict[str, float]]:
         return dict(_DEFAULT_PRICING)
 
 
+#: PLAN-163 W2 P2a — event-date-aware rows (see audit-telemetry.py twin):
+#: an event is priced by its OWN ``ts``, never by "today" and never by
+#: mutating the global row. Sonnet 5: $2/$10 intro through 2026-08-31
+#: (inclusive), $3/$15 sticker after.
+_DATED_PRICING: Dict[str, Tuple[str, Dict[str, float], Dict[str, float]]] = {
+    "claude-sonnet-5": (
+        "2026-08-31",
+        {"input_per_mtok": 2.00, "output_per_mtok": 10.00},
+        {"input_per_mtok": 3.00, "output_per_mtok": 15.00},
+    ),
+}
+
+
 def cost_usd(
     pricing: Dict[str, Dict[str, float]],
     model: str,
     tokens_in: int,
     tokens_out: int,
+    ts: Optional[str] = None,
 ) -> float:
-    """Return cost in USD; 0.0 for unknown models."""
+    """Return cost in USD; 0.0 for unknown models.
+
+    P2a: when ``ts`` (the event's own ISO-8601 timestamp) is given and the
+    model has a dated row, the rate is resolved against that date —
+    ISO dates compare lexicographically, so ``ts[:10]`` needs no parse.
+    A caller-supplied custom row for the model (CEO_COST_PRICING_JSON)
+    always wins over the built-in dated row; a missing ``ts`` falls back
+    to the static row (pre-P2a behaviour preserved).
+    """
     row = pricing.get(model)
+    dated = _DATED_PRICING.get(model)
+    if (
+        dated is not None
+        and isinstance(ts, str)
+        and len(ts) >= 10
+        and row == _DEFAULT_PRICING.get(model)
+    ):
+        cutoff, through, after = dated
+        row = through if ts[:10] <= cutoff else after
     if not row:
         return 0.0
     return (tokens_in / 1_000_000.0) * row["input_per_mtok"] + (
@@ -318,7 +360,7 @@ def aggregate(
             ti = ti or 0
             to = to or 0
 
-        c = cost_usd(pricing, model, ti, to)
+        c = cost_usd(pricing, model, ti, to, ts=entry.get("ts"))
 
         bm = by_model[model]
         bm["spawns"] += 1
@@ -663,11 +705,13 @@ class CostStreamer:
         tokens_out = int(entry.get("tokens_out") or 0)
         if not model or (tokens_in == 0 and tokens_out == 0):
             return None
-        cost = cost_usd(self.pricing, model, tokens_in, tokens_out)
+        ts_iso = entry.get("ts") or entry.get("timestamp") or ""
+        cost = cost_usd(
+            self.pricing, model, tokens_in, tokens_out, ts=ts_iso or None
+        )
         session_id = str(entry.get("session_id") or "unknown")
         plan_id = entry.get("plan_id")
         skill = entry.get("skill_slug") or entry.get("skill")
-        ts_iso = entry.get("ts") or entry.get("timestamp") or ""
         # Compute running totals
         self._session_total[session_id] += cost
         day_bucket = ts_iso[:10] if ts_iso else "unknown-day"
