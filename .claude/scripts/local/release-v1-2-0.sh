@@ -62,6 +62,8 @@ VERSION_FILES=(
   "docs/ARCHITECTURE.md"
   "npm/README.md"
   "README.md"
+  ".claude-plugin/plugin.json"
+  ".claude-plugin/marketplace.json"
 )
 # Continuity: the key that signed v1.1.0. Overridable, but never guessed at
 # signing time — the preflight proves it can actually produce a signature.
@@ -331,8 +333,21 @@ for path, rx, repl in SITES:
     print("  ok   %s (%d site%s -> %s)" % (path, n, "" if n == 1 else "s", target))
 PY
 
-  # verify-counts is the ORACLE for this phase, not the table above. If a
-  # seventh site is ever added upstream, this is what catches it.
+  # Plugin manifests (.claude-plugin/{plugin,marketplace}.json) are GENERATED
+  # from VERSION, never hand-patched. release.yml's "Assert plugin manifest
+  # versions match VERSION" gate enforces them — and verify-counts does NOT,
+  # which is exactly how the v1.2.0-rc.1 run went red: the manifests were the
+  # seventh and eighth version sites, invisible to the local oracle.
+  python3 scripts/build-plugin.py --write-manifests >/dev/null 2>&1 \
+    || die "build-plugin.py --write-manifests failed"
+  python3 scripts/build-plugin.py --check >/dev/null 2>&1 \
+    || die "plugin manifests still out of sync with the generator"
+  ok "plugin manifests regenerated from VERSION (build-plugin.py)"
+
+  # verify-counts covers the six doc/package sites above; release.yml's gate
+  # family covers the plugin manifests. NEITHER alone is the full oracle — the
+  # union is. If a new site is added upstream, expect it to surface in one of
+  # these two, and mirror it here.
   bash .claude/scripts/local/verify-counts.sh --quiet --no-tests >/dev/null 2>&1 \
     || {
       bash .claude/scripts/local/verify-counts.sh --json --no-tests 2>&1 \
@@ -342,7 +357,7 @@ for v in d.get("violations", []):
     print("  !!   " + v, file=sys.stderr)' || true
       die "verify-counts still reports version drift — a site is unpatched (see above)"
     }
-  ok "verify-counts clean across every version site"
+  ok "verify-counts clean across the doc/package version sites"
 
   if [ "$DRY_RUN" -eq 1 ]; then
     git --no-pager diff --stat || true
