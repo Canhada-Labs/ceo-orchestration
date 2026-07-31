@@ -1,6 +1,6 @@
 # Security Policy
 
-<!-- last-reviewed: 2026-05-25 v1.0.0 -->
+<!-- last-reviewed: 2026-07-31 v1.2.0 -->
 
 > **Status:** pre-adopter (framework dogfooded by Owner; no third-party
 > install in production yet). This policy mirrors the maturity level
@@ -78,11 +78,11 @@ registry's own abuse channel.
 
 Honest limits of this defense: there is no aggregate `SHA256SUMS`
 covering every file — release checksum coverage is `install.sh` only.
-npm "trusted publishing" (OIDC-authenticated publish) is not yet
-configured — provenance attestation IS active; the gap is noted in the
-`npm-publish.yml` header. And none of this stops someone registering a
-look-alike name: verification, not name similarity, is the trust
-signal.
+npm **Trusted Publishing** (OIDC token exchange, no long-lived
+registry token) has been active since v1.1.0 (PLAN-158 Wave 1; see the
+`npm-publish.yml` header), feeding the same Sigstore `--provenance`
+attestation. And none of this stops someone registering a look-alike
+name: verification, not name similarity, is the trust signal.
 
 ## Reporting a vulnerability
 
@@ -124,8 +124,8 @@ attackers.
 |-------|--------|--------------|
 | **Acknowledgement** | ≤ 48 hours | Owner confirms receipt; assigns severity tier (Critical / High / Medium / Low). |
 | **Initial assessment** | ≤ 7 days | Owner reproduces or refutes; opens a tracking ADR if accepted; communicates the plan. |
-| **Critical fix** | ≤ 14 days | Patch lands on `main`; cut a `-rc` tag; 48-hour expedited RC hold instead of 7. |
-| **High fix** | ≤ 30 days | Patch lands; standard 7-day RC hold; advisory published. |
+| **Critical fix** | ≤ 14 days | Patch lands on `main`; cut a `-rc` tag; ships as soon as the mechanical 24-hour RC re-pass window clears (ADR-103). |
+| **High fix** | ≤ 30 days | Patch lands; standard 24-hour RC hold (ADR-103); advisory published. |
 | **Medium / Low fix** | next MINOR release | Tracked in plan + ADR; rolls into the next scheduled release. |
 | **Coordinated disclosure** | with you | Joint statement on the GitHub Security Advisory; CHANGELOG entry under `### Security`. |
 
@@ -160,7 +160,7 @@ support agreement (none exists today; see [`SUPPORT.md`](SUPPORT.md)).
 |-------|--------|--------|
 | **Contain** | ≤ 6 hours from confirmation | Cut an emergency `-hotfix` tag on `main`; disable the affected code path behind a kill switch (`CEO_SOTA_DISABLE=1` or the targeted `CEO_*_DISABLE` env var); publish a GitHub Security Advisory in **draft** state. |
 | **Notify** | ≤ 24 hours | Publish the GitHub Security Advisory (public). Email the reporter with the fix plan. Post to `CHANGELOG.md` under `### Security`. Reach out to known adopters (the Owner maintains an informal adopter list — currently: internal only, see `docs/HONEST-LIMITATIONS.md` §2). |
-| **Remediate** | ≤ 14 days for Critical; ≤ 30 days for High | Land the real fix on `main` + cut the next `-rc` with 48-hour RC hold (Critical) or standard 7-day hold (High). Update the GitHub Advisory with CVE ID once assigned. |
+| **Remediate** | ≤ 14 days for Critical; ≤ 30 days for High | Land the real fix on `main` + cut the next `-rc`; both tiers ship after the mechanical 24-hour RC re-pass window (ADR-103). Update the GitHub Advisory with CVE ID once assigned. |
 | **Disclose** | Joint with reporter | Public post-mortem in `docs/incidents/YYYY-MM-DD-<slug>.md` including timeline, affected versions, root cause, and prevention measures. |
 | **Learn** | Within 60 days | Author an ADR if the incident reveals a structural gap. Add a regression test or threat-model entry. Update this SECURITY.md if the gap is in the policy itself. |
 
@@ -274,8 +274,8 @@ get a "by-design" response:
 
 Active support window per [`SUPPORT.md`](SUPPORT.md):
 
-- **Current MINOR** (`v1.45.x`) — full security support.
-- **Previous MINOR** (`v1.44.x`) — security-only patches for 6 months
+- **Current MINOR** (`v1.2.x`) — full security support.
+- **Previous MINOR** (`v1.1.x`) — security-only patches for 6 months
   after the next MINOR ships.
 - **Older** — best-effort; we will tell you the upgrade path, not ship
   a back-port.
@@ -290,4 +290,6 @@ it on `main` and patch forward; no back-port.
 - **Public discussion of accepted vulnerabilities:** GitHub Releases +
   CHANGELOG `### Security` section
 
-Last reviewed: 2026-05-25 (Session 160 / PLAN-112-FOLLOWUP-canonical-doc-refresh-gate).
+Last reviewed: 2026-07-31 (v1.2.0 release train — RC-hold references updated
+to the ADR-103 24-hour mechanical window; npm Trusted Publishing marked
+active since v1.1.0; support window updated to v1.2.x / v1.1.x).

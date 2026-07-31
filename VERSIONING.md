@@ -1,6 +1,6 @@
 # Versioning Policy
 
-<!-- last-reviewed: 2026-06-20 v1.0.0 -->
+<!-- last-reviewed: 2026-07-31 v1.2.0 -->
 
 > **TL;DR** — SemVer at the **Compliance SPEC level** (`SPEC/v1/`),
 > not at every internal symbol. Tagged releases mark SPEC-level
@@ -53,15 +53,13 @@ Bumped when:
   (e.g. ADR-051 skill-by-reference → `v1.5 → v1.6`)
 - A new SPEC file is published under `SPEC/v1/`
 
-**Historic examples:**
+**Historic examples (public series — `v1.0.0` is the public genesis;
+pre-genesis history is condensed into CHANGELOG `[1.0.0]`):**
 
 | Bump | What changed |
 |------|--------------|
-| `v1.0 → v1.4` | Sprint cadence, audit-log v2.1 → v2.5 (additive events) |
-| `v1.4 → v1.5` | PLAN-014 — policy DSL, replay schema, predict-budget, memory-shared (4 new SPEC files) |
-| `v1.5 → v1.6` | PLAN-020 ADR-051 — skill-by-reference expanded trust boundary; PLAN-021 ADR-052 — multi-model dispatch (additive `model:` frontmatter field + audit-log v2.8) |
-| `v1.6 → v1.44` | Multiple MINOR bumps: federation, autonomous-loop, confidence-gate, coverage-doctrine, and security-event additions. See CHANGELOG.md for per-release detail. |
-| `v1.44 → v1.45` | PLAN-113 Phase B remediation (framework-closure long-tail). See CHANGELOG.md `[1.45.0]`. |
+| `v1.0.0 → v1.1.0` | PLAN-153/155/156 — two new host harnesses (Codex CLI, Grok Build) = new trust boundaries an adopter must accept; cross-vendor audit council; gated learning loop. |
+| `v1.1.0 → v1.2.0` | PLAN-160/161/163/164 — Claude 5 model registry (ADR-181, additive `model:` contract), Codex payload-pin enforcement (ADR-182), pair-rail timeout contract (ADR-110-AMEND-1), new typed audit actions. |
 
 ### PATCH — bug fixes, additive features within SPEC
 
@@ -73,9 +71,9 @@ Bumped for:
 - Documentation that aligns with existing contract
 - Test infrastructure expansion
 
-**Historic example:** between `v1.4.0` and `v1.5.0-rc.1` there were
-no PATCH releases — Sprint 14 batched all changes into one MINOR.
-This is fine. PATCH is available when needed, not mandatory.
+**Historic example:** `v1.0.0 → v1.0.1` (2026-07-06) — the PLAN-152
+hardening sweep: hook fixes and gate hardening with no SPEC or
+trust-boundary change. PATCH is available when needed, not mandatory.
 
 ### Pre-release (`-rc.N`) — release candidate
 
@@ -149,14 +147,15 @@ full step-by-step adopter playbook.
 ## Model ID bumps (Anthropic model family changes)
 
 The framework names specific Claude model IDs in canonical-5 native
-agent frontmatter (per ADR-052):
+agent frontmatter (per ADR-052; current IDs set by the ADR-181
+Claude 5 refresh, PLAN-163):
 
-- `claude-opus-4-8` (code-reviewer + security-engineer)
-- `claude-sonnet-4-6` (qa-architect + performance-engineer)
-- `claude-haiku-4-5-20251001` (devops)
+- `claude-fable-5` (code-reviewer + security-engineer)
+- `claude-sonnet-4-6` (qa-architect + performance-engineer + devops)
 
-When Anthropic releases the next model family (Opus 5, Sonnet 5,
-etc.), the IDs become stale. The bump process is **not silent**:
+When Anthropic releases the next model family, the IDs become stale.
+The bump process is **not silent** — it was exercised in full for the
+Claude 5 family (PLAN-163 / ADR-181, shipped in v1.2.0):
 
 1. Benchmark the new model against canonical-5 rubrics
    (`.claude/plans/PLAN-020/rubrics/<archetype>.yaml`). Pass-rate
@@ -180,16 +179,14 @@ upgrade_agents_canonical_only`).
 
 | Window | Status |
 |--------|--------|
-| Current MINOR (`v1.46.x`) | Full support — features + security + bug fixes |
-| Previous MINOR (`v1.45.x`) | Security-only patches for **6 months** after the next MINOR ships |
-| Older MINORs (`v1.0–v1.44`) | Best-effort — we describe the upgrade path; no back-ports |
+| Current MINOR (`v1.2.x`) | Full support — features + security + bug fixes |
+| Previous MINOR (`v1.1.x`) | Security-only patches for **6 months** after the next MINOR ships |
+| Older (`v1.0.x`) | Best-effort — we describe the upgrade path; no back-ports |
 
-If you are still on a pre-`v1.6.0` install, upgrade incrementally via
-`bash scripts/upgrade.sh --pin vX.Y.Z` (consult CHANGELOG.md for the
-sequence). Skipping a MINOR is supported across the v1 series but
-discouraged because each MINOR adds tests and adopter-facing behavior
-worth dogfooding individually. Adopters on `v1.6.x` can upgrade
-directly to the current tag.
+Upgrade via `bash scripts/upgrade.sh --pin vX.Y.Z` (consult
+CHANGELOG.md for the sequence). Skipping a MINOR is supported across
+the v1 series but discouraged because each MINOR adds tests and
+adopter-facing behavior worth dogfooding individually.
 
 ## Backward compatibility within a MINOR
 
@@ -205,9 +202,9 @@ upgrade to catch drift.
 
 ## Cadence (best-effort)
 
-| Cadence | Real-world frequency observed Sprints 1-22 |
+| Cadence | Real-world frequency observed in the public series (from 2026-07-01) |
 |---------|---------------------------------------------|
-| MINOR releases | ~ every 6 weeks (Sprint cadence) |
+| MINOR releases | ~ every 2–3 weeks so far (`v1.0.0` 07-01 → `v1.1.0` 07-13 → `v1.2.0` 07-30) |
 | PATCH releases | as needed (rarely batched) |
 | RC tags | one per intended MINOR/MAJOR (re-cut on fix during hold) |
 | GA tags | one per intended MINOR/MAJOR (after ≥ 24h RC hold per ADR-103) |
@@ -227,4 +224,6 @@ If you find a SPEC file that contradicts behavior, that is a bug:
 file via [`SECURITY.md`](SECURITY.md) if it has security implications,
 or open a GitHub issue otherwise.
 
-Last reviewed: 2026-06-29 (v1.0.0 genesis).
+Last reviewed: 2026-07-31 (v1.2.0 release train — historic examples and
+EOL window rebased onto the public series; model-ID section updated to the
+ADR-181 Claude 5 refresh).

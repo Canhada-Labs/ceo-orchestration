@@ -1,8 +1,8 @@
 # SBOM — ceo-orchestration
 
-<!-- last-reviewed: 2026-07-02 v1.0.1 -->
+<!-- last-reviewed: 2026-07-31 v1.2.0 -->
 
-**Version:** `1.0.1` (tracks repo-root `VERSION`)
+**Version:** `1.2.0` (tracks repo-root `VERSION`)
 **Format:** manual markdown (CycloneDX-minimal; no tooling runtime dependency).
 **Attestation (framework CORE):** the framework **core** — the PreToolUse/
 PostToolUse hooks in `.claude/hooks/` and the shared `.claude/hooks/_lib/`
@@ -175,14 +175,14 @@ exclusively under `.claude/sidecars/**` and are opt-in per ADR-126.
 
 ## 3. GitHub Actions (supply chain)
 
-All 20 workflows (`.github/workflows/*.yml`) pin by full 40-char commit SHA.
-**SHA-pinned references: 63 / 63 (100%).**
+All 21 workflows (`.github/workflows/*.yml`) pin by full 40-char commit SHA.
+**SHA-pinned references: 69 / 69 (100%).**
 
 Verify:
 
 ```bash
 # Total pinned refs
-grep -rE 'uses:.*@[a-f0-9]{40}' .github/workflows/ | wc -l   # 63
+grep -rE 'uses:.*@[a-f0-9]{40}' .github/workflows/ | wc -l   # 69
 # Any non-SHA floating ref (must be empty)
 grep -rE 'uses: [^#]+@(v[0-9]+|main|master|latest)\s*$' .github/workflows/
 ```
@@ -216,10 +216,19 @@ NOT installed by default and require explicit opt-in (ADR-126).
 
 ## 6. Known non-transitive attestations
 
-- No network call on hook execution (verified by grep for `urllib`, `socket`,
-  `subprocess` in `check_*.py` — only `audit_log.py` calls `socket` for the
-  local dashboard, loopback-bound).
-- No telemetry. No phone-home. Audit log is local-only at
-  `~/.claude/projects/<slug>/audit-log.jsonl` with mode 600.
-- No dynamic code loading: `eval` / `exec` absent from `.claude/hooks/`
-  (grep confirms).
+- **No network call on hook execution by default.** Named exceptions, each
+  local-only or fail-closed (re-verified at the v1.2.0 review):
+  `audit_log.py` binds `socket` for the local dashboard (loopback-bound);
+  `_lib/rag_router.py` / `_lib/rag_bridge.py` probe the C2 sidecar over a
+  local **Unix socket** (sidecar is opt-in, ADR-126); `_lib/otel_emit.py`
+  can POST spans over HTTPS but its host allowlist
+  (`CEO_OTEL_ALLOWED_HOSTS`) **defaults to empty ⇒ every endpoint is
+  rejected** — export requires explicit per-host opt-in.
+- No telemetry by default. No phone-home. Audit log is local-only at
+  `~/.claude/projects/<slug>/audit-log.jsonl` with mode 600. The OTEL
+  exporter above is the only egress-capable module and ships structurally
+  disabled (empty allowlist).
+- No dynamic code loading of external input on any hook path. One
+  documented `exec()` site exists: `adequacy_gate.py` `_selftest()` execs
+  its **own generated fixture** inside a throwaway temp sandbox (self-test
+  canary; never adopter code, never on the PreToolUse path).

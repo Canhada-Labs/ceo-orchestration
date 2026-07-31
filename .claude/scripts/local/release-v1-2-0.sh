@@ -227,6 +227,18 @@ if not any(r.get("conclusion") == "success" for r in val):
     || die "CHANGELOG.md has no '## [${TARGET_BASE}]' entry"
   ok "CHANGELOG has [${TARGET_BASE}]"
 
+  # The two gates that burned rc.1 and rc.2 — release.yml enforces both and
+  # neither is covered by verify-counts, so the preflight mirrors them:
+  python3 scripts/build-plugin.py --check >/dev/null 2>&1 \
+    || die "plugin manifests out of sync (run: python3 scripts/build-plugin.py --write-manifests) — this is what killed v1.2.0-rc.1"
+  ok "plugin manifests in sync with generator"
+  python3 .claude/scripts/check-canonical-doc-freshness.py >/dev/null 2>&1 \
+    || {
+      python3 .claude/scripts/check-canonical-doc-freshness.py 2>&1 | grep '!!' >&2 || true
+      die "canonical doc freshness gate red (stale last-reviewed stamps; review + re-stamp the docs listed above) — this is what killed v1.2.0-rc.2"
+    }
+  ok "canonical doc freshness (review stamps current)"
+
   cur_version="$(tr -d ' \n' < VERSION)"
   if [ "$cur_version" = "$TARGET_BASE" ]; then
     note "VERSION already $TARGET_BASE — bump phase is a no-op (expected on promote)"
