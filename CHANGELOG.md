@@ -9,9 +9,98 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > commands, schema/contract changes, and behavior an adopter would notice after
 > installing or upgrading the framework. Internal refactors, test-only churn, and
 > release-engineering bookkeeping are omitted. Counts cited below (as of
-> v1.1.0: 166 skills, 26 slash commands, 178 ADRs, 68 `_lib` modules) are
+> v1.2.0: 166 skills, 26 slash commands, 184 ADRs, 68 `_lib` modules) are
 > reproducible from the repository via
 > `bash .claude/scripts/local/verify-counts.sh`.
+
+---
+
+## [1.2.0] - 2026-07-30
+
+Substrate + rail release (PLAN-160/161/163/164). The headline is not a new
+feature: it is that the cross-model pair-rail **completed a live in-hook
+review for the first time in the audit log's history**. Everything else is
+the substrate work that made that possible. As always: governance and
+auditability — no speed claim.
+
+### Fixed — the pair-rail was 100% fail-open (PLAN-164, ADR-110-AMEND-1)
+
+- **`CEO_PAIR_RAIL_TIMEOUT_S` internal default 30 → 120 s**, and the
+  `check_pair_rail.py` PreToolUse **registration timeout 60 → 150 s** in both
+  kernel `.claude/settings.json` and `templates/settings/settings.base.json`
+  (parity enforced). The 30 s value was an implementation literal, never a
+  decided one, and it sat structurally *below* the latency of a real Codex
+  verdict: **every one of the 12 `pair_rail_case` events in the entire life of
+  the audit log was case F / TIMEOUT.** The rail had never once completed a
+  live review. Measured calibration (N=9, same machine): p95 ≈ 75 s, which
+  crosses the measurement protocol's own 70 s escalation threshold and selects
+  120/150 rather than the 100/120 first draft.
+- **The layering invariant is now tested, not assumed**
+  (`test_pair_rail_timeout_invariant.py`): kernel registration == template
+  registration, and `registration >= internal + 30`. A unilateral flip of any
+  of the three literals now goes red in the suite and in the pack preflight.
+- **`statusMessage` on the registration** — a session held by a synchronous
+  cross-model review shows "may take 1-2 min" instead of appearing frozen.
+- **From zero completed reviews to ten.** The log now holds 10 healthy cases
+  (7 × case A, 3 × case B) alongside 14 case F. Median verdict latency 70.5 s;
+  observed maximum 120.0 s.
+- **The §3 recalibration trigger (≥10 healthy cases) is met, and it points
+  upward — with the caveat it deserves.** No sample actually exceeded 120 s;
+  the p95 figure of 122.2 s is an *interpolation above the observed maximum*
+  on exactly ten points, not a measured latency. What is solid: the three
+  slowest healthy reviews (115 / 115 / 120 s) leave 0–5 s of headroom, and the
+  trigger's own query is **right-censored by construction** — any review slower
+  than the budget becomes a case F and never enters the healthy set, so this
+  p95 can only ever under-report the true distribution. An upward
+  `ADR-110-AMEND-2` is therefore indicated, but the new pair is deliberately
+  **not** chosen here: §3 requires a new amendment via ceremony, and the number
+  belongs to the C5 measurement protocol plus a debate, not to a changelog
+  line.
+
+### Changed — substrate uplift to Claude Code 2.1.220 + Claude 5 (PLAN-163, ADR-181)
+
+- Model registry refreshed to the **Claude 5 family**; adopter installs migrate
+  **60 → 150 registry entries** through the landed `scripts/upgrade.sh`.
+- **Dated pricing is now event-date-aware** rather than resolved against wall
+  clock, so a historical audit event prices at the rate in force when it
+  happened.
+- `opus-4-8-fast` recognized; stale-model scan updated.
+
+### Added — Codex payload pin enforcement (PLAN-163, ADR-182)
+
+- **Verify-then-invoke.** The previous SHA pin attested the *launcher*, not the
+  payload it executed — a pin that proved the wrong artifact. The pin now
+  verifies the payload before invocation and fails closed.
+
+### Changed — canonical-edit gate hardening (PLAN-160/161, ADR-164, ADR-165)
+
+- Multi-candidate sentinel resolution is **fail-closed**, with a shared
+  predicate and dual-anchor validation; `resolve_anchor` is suffix-newest and
+  revert-aware. Three redundant `Write()` deny twins removed.
+
+### Added — upgrade + liveness instrumentation (PLAN-161)
+
+- Red-first **upgrade oracles** (dry-run identity, exclusion predicate, opt-in
+  purge) wired into the `smoke-install` CI job — an adopter upgrade that
+  silently changes behavior now fails a gate instead of shipping.
+- **Pair-rail liveness telemetry**: two typed audit actions, so "the rail is
+  fail-open" is a queryable fact rather than an inference.
+- Perf-gate backoff with a probe-gated third attempt (runner-load flake).
+- `ADR-183` — directory-added notification events.
+
+### Fixed — `disableAutoMode` silently disabled every hook
+
+- The value was a boolean; Claude Code 2.1.220's settings schema rejects it and
+  **skips the entire `settings.json`** — a session would boot with none of the
+  48 hook registrations, governance fully absent, and no error surfaced. Now
+  the string `"disable"`. Found by live-fire on the first boot after the
+  substrate pack, not by any fixture.
+
+### Counts (reproducible via `verify-counts.sh`)
+
+166 skills (42 core / 8 frontend / 116 domain) · 26 slash commands · **184
+ADRs** (178 → 184) · 57 hook scripts on disk, 46 wired into `settings.json`
+across 48 event registrations · 68 `_lib` modules.
 
 ---
 
