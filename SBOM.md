@@ -216,18 +216,25 @@ NOT installed by default and require explicit opt-in (ADR-126).
 
 ## 6. Known non-transitive attestations
 
-- **No network call on hook execution by default.** Named exceptions, each
-  local-only or fail-closed (re-verified at the v1.2.0 review):
-  `audit_log.py` binds `socket` for the local dashboard (loopback-bound);
-  `_lib/rag_router.py` / `_lib/rag_bridge.py` probe the C2 sidecar over a
-  local **Unix socket** (sidecar is opt-in, ADR-126); `_lib/otel_emit.py`
-  can POST spans over HTTPS but its host allowlist
-  (`CEO_OTEL_ALLOWED_HOSTS`) **defaults to empty ⇒ every endpoint is
-  rejected** — export requires explicit per-host opt-in.
-- No telemetry by default. No phone-home. Audit log is local-only at
-  `~/.claude/projects/<slug>/audit-log.jsonl` with mode 600. The OTEL
-  exporter above is the only egress-capable module and ships structurally
-  disabled (empty allowlist).
+- **Network posture on hook execution — named exceptions, re-verified at
+  the v1.2.0 review.** Local-only or fail-closed: `audit_log.py` binds
+  `socket` for the local dashboard (loopback-bound); `_lib/rag_router.py` /
+  `_lib/rag_bridge.py` probe the C2 sidecar over a local **Unix socket**
+  (sidecar is opt-in, ADR-126); `_lib/otel_emit.py` can POST spans over
+  HTTPS but its host allowlist (`CEO_OTEL_ALLOWED_HOSTS`) **defaults to
+  empty ⇒ every endpoint is rejected**. The one egress-capable path that
+  is ON by default: **the pair-rail** (`check_pair_rail.py`) invokes the
+  pinned native Codex CLI on canonical-edit review paths, which sends the
+  proposed edit to the vendor — that is the rail's entire purpose
+  (cross-model review). Egress is routed through the ADR-114 redactor,
+  the payload binary is verified against the ADR-182 pin manifest before
+  every invocation, and the rail is operator-disableable via
+  `CEO_PAIR_RAIL_DISABLE`.
+- No telemetry. No phone-home. Audit log is local-only at
+  `~/.claude/projects/<slug>/audit-log.jsonl` with mode 600. Egress-capable
+  modules are exactly the two named above: the OTEL exporter
+  (structurally disabled — empty allowlist) and the pair-rail
+  (on by default, redacted, pinned, disableable).
 - No dynamic code loading of external input on any hook path. One
   documented `exec()` site exists: `adequacy_gate.py` `_selftest()` execs
   its **own generated fixture** inside a throwaway temp sandbox (self-test

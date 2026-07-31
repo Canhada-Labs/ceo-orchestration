@@ -59,8 +59,11 @@ auditability — no speed claim.
 
 ### Changed — substrate uplift to Claude Code 2.1.220 + Claude 5 (PLAN-163, ADR-181)
 
-- Model registry refreshed to the **Claude 5 family**; adopter installs migrate
-  **60 → 150 registry entries** through the landed `scripts/upgrade.sh`.
+- Model registry refreshed to the **Claude 5 family**. Adopter installs are
+  migrated in place by the landed `scripts/upgrade.sh` — including the
+  pair-rail **registration-timeout cap 60 → 150 s** (the settings half of
+  ADR-110-AMEND-1; applied only when the adopter's value is still the old
+  default, so an operator-chosen value is never clobbered).
 - **Dated pricing is now event-date-aware** rather than resolved against wall
   clock, so a historical audit event prices at the rate in force when it
   happened.

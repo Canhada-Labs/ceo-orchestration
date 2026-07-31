@@ -136,10 +136,13 @@ Behavior of `--pin`:
 - Backs up the previous install to `.claude.bak/<timestamp>/` for
   manual recovery.
 
-A pin is durable — the adopter's `package.json` (if using npm
-distribution) and any project-level lockfile records the pinned
-version. Subsequent `bash scripts/upgrade.sh` calls without `--pin`
-honor the pinned version.
+A pin is **one-shot, not durable**: `--pin` checks out exactly that tag
+for that upgrade run, and nothing replays it afterwards — a later
+`bash scripts/upgrade.sh` without `--pin` follows the current default
+source, not the previously pinned tag. If you want to stay pinned,
+pass `--pin vX.Y.Z` explicitly on every upgrade (your npm
+`package.json` / lockfile records the version you installed and is a
+good place to look it up).
 
 See [`docs/UPGRADE-PROCEDURE.md`](docs/UPGRADE-PROCEDURE.md) for the
 full step-by-step adopter playbook.
