@@ -1,0 +1,24 @@
+===== ROUND 1 (codex exec --sandbox read-only, 2026-07-31, prompt 98307 bytes via ADR-114 redactor) =====
+FILE: .claude-plugin/marketplace.json — APPROVE — Version 1.2.0 matches VERSION and the deterministic plugin build output.
+FILE: .claude-plugin/plugin.json — APPROVE — Version 1.2.0 matches VERSION and the deterministic plugin build output.
+FILE: .github/workflows/release.yml — REJECT — The payload-pin gate is mechanically wired, but its governing record is not accepted. FINDINGS: P1 — .github/workflows/release.yml:633 — The mandatory gate declares ADR-182 authority while ADR-182 remains PROPOSED with an unset enforcement_commit, leaving guarded release mechanics ahead of their required governance record.
+FILE: CHANGELOG.md — REJECT — The release notes contain a false migration claim. FINDINGS: P2 — CHANGELOG.md:63 — “60 → 150 registry entries” is false because the canonical registry remains at 91 entries and upgrade.sh changes a 60-to-150-second timeout, not registry cardinality.
+FILE: INSTALL.md — REJECT — The documented upgrade contract contradicts the new default behavior. FINDINGS: P2 — INSTALL.md:625 — It says .claude/settings.json is not touched, but upgrade.sh now mutates several baseline settings and the pair-rail timeout by default.
+FILE: SBOM.md — REJECT — The revised egress attestation omits a default network-capable hook path. FINDINGS: P1 — SBOM.md:219 — The claim of no network calls by default and OTEL as the only egress-capable module is false because the wired L3+ pair-rail invokes the native Codex CLI with proposed content.
+FILE: SECURITY.md — APPROVE — Trusted Publishing, the 24-hour ADR-103 release window, and the v1.2.x support window align with local release governance.
+FILE: VERSION — APPROVE — The canonical version is consistently set to 1.2.0.
+FILE: VERSIONING.md — REJECT — The documented durable pinning behavior is not implemented. FINDINGS: P2 — VERSIONING.md:139 — upgrade.sh records last_upgrade.pin but does not replay it, so a later invocation without --pin does not honor the supposedly durable pin.
+FILE: docs/ARCHITECTURE.md — REJECT — The document contains internally inconsistent hardcoded counts. FINDINGS: P2 — docs/ARCHITECTURE.md:237 — It reports 182 ADRs despite 184 existing on disk and being reported earlier in the same document.
+FILE: npm/README.md — APPROVE — Updated skill, hook, command, module, and ADR counts match the checkout.
+FILE: npm/package.json — APPROVE — Package version 1.2.0 matches every canonical version site.
+FILE: pyproject.toml — APPROVE — Project version 1.2.0 is consistent and the Python ≥3.9 contract is unchanged.
+FILE: scripts/install.sh — APPROVE — Shared exclusions and no-follow pycache pruning preserve fail-open installation behavior without introducing broad deletion.
+FILE: scripts/upgrade.sh — REJECT — Settings may be modified without the promised recovery backup. FINDINGS: P2 — scripts/upgrade.sh:1776 — Backup creation and copying suppress failures and still proceed with migration while unconditionally reporting “BACKED UP.”
+OVERALL: NO-GO — An unaccepted release-gate ADR, false release and security claims, documentation drift, and an unsafe settings-backup path must be resolved before GO.
+===== ROUND 2 — fold re-review (corrected files only) =====
+FILE: CHANGELOG.md — APPROVE — The 60 → 150 change is correctly identified as the pair-rail registration-timeout cap, not registry cardinality.
+FILE: INSTALL.md — APPROVE — The settings baseline migration, operator-value preservation, and pre-migration backup are now documented.
+FILE: SBOM.md — APPROVE — The default pair-rail vendor egress and its redaction, pin verification, and kill switch are now disclosed.
+FILE: VERSIONING.md — APPROVE — The documentation now accurately describes --pin as one-shot rather than durable.
+FILE: docs/ARCHITECTURE.md — APPROVE — The stated count of 184 ADRs exactly matches the files on disk.
+OVERALL: GO — All five Round-1 documentation findings are corrected within this re-review scope.

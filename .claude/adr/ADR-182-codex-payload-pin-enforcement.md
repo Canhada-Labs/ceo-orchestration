@@ -1,17 +1,17 @@
 ---
 id: ADR-182
 title: Codex payload pin + verify-then-invoke enforcement
-status: PROPOSED
+status: ACCEPTED
 proposed: 2026-07-28
 related_plan: [PLAN-163, PLAN-081, PLAN-156]
 related_adr: [ADR-111, ADR-117, ADR-161]
 supersedes: "ADR-111 §pin clauses + PLAN-081 Phase 6-bis launcher-hash pin (codex-cli-binary-sha256.txt)"
-enforcement_commit: <set at the GATE-PIN ceremony commit>
+enforcement_commit: a4371c7fe0cfb09cf0fee22c2e8bedd5a143215e
 ---
 
 # ADR-182 — Codex payload pin + verify-then-invoke enforcement
 
-> Status: PROPOSED — to be ACCEPTED at the PLAN-163 GATE-PIN ceremony
+> Status: ACCEPTED — recorded at the v1.2.0-rc.3 verdict ceremony (S287); enforcement landed at the GATE-PIN ceremony commit a4371c7fe0cfb09cf0fee22c2e8bedd5a143215e [SENT-PLAN163-PIN]
 > (a SEPARATE, Owner-signed sentinel ceremony that lands the pin-pack:
 > manifest + hook + gate + validator + this ADR atomically).
 

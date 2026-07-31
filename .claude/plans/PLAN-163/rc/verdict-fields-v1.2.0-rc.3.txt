@@ -1,0 +1,15 @@
+verdict: GO
+generated_at: 2026-07-31T12:24:51Z
+ttl_hours: 24
+parent_sha: ad0c1dbcbb3ed9df43e1bc1d8e9d06d43df96806
+release_tag: v1.2.0-rc.3
+inputs_hash: 4cac9ac85ae02d246d5ab9c45d26aa5fdf3474008636e1001fd33a75f06e6d70
+inputs_hash_paths_manifest_sha: b3ab0242a6ff4e12fdf2fd90c47cbc23649ab07226340c8b7aacbb0f9cc093e0
+tool_versions:
+  codex_cli: 0.144.6
+  codex_target_triple: aarch64-apple-darwin
+  codex_payload_sha256: 80a3933d11a9d13ef806aa24f7bb8afc9169cfe4e9b09d6da6a92922cbde9cff
+  claude_code: claude-opus-5
+  python: 3.9.6
+transcript_hash: 1e12b08399e906a0af7998a8a68fe9dde2bed44b8574c8c6d346428ebdd4522c
+findings: [RC3-F7-upgrade-backup-P2-open]
