@@ -1,6 +1,6 @@
 # ceo-orchestration
 
-<!-- last-reviewed: 2026-06-22 v1.0.0 -->
+<!-- last-reviewed: 2026-08-02 v1.2.0 -->
 
 > **Português:** [`README.pt-BR.md`](README.pt-BR.md)
 
@@ -57,7 +57,7 @@ All counts below are verifiable from a clean checkout (see *Verifying the number
 | Shared library modules | **68** | stdlib-only, under `.claude/hooks/_lib/` (excluding the package `__init__.py`) |
 | Slash commands | **26** | under `.claude/commands/` |
 | Architecture decision records | **184** | under `.claude/adr/` |
-| Tests | **~12,000 cases** | reported by `pytest --collect-only` across the hook, script, and conformance suites |
+| Tests | **~13,000 cases** | reported by `pytest --collect-only` across the hook, script, and conformance suites |
 
 The gap between **57 on disk** and **46 wired** is benign: several non-event modules are activated through in-process dispatch (invoked by other hooks) rather than by a direct `settings.json` event registration.
 
@@ -184,7 +184,7 @@ Don't take the table on faith. From a clean checkout:
 find .claude/skills -name SKILL.md | wc -l        # 166 skills
 ls .claude/commands/*.md | wc -l                  # 26 slash commands
 ls .claude/adr | grep -c '^ADR-'                  # 184 ADRs
-python3 -m pytest --collect-only -q | tail -1     # ~12,000 collected cases
+python3 -m pytest --collect-only -q | tail -1     # ~13,000 collected cases
 ```
 
 ---
