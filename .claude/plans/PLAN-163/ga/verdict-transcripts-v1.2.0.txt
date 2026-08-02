@@ -1,0 +1,24 @@
+===== ROUND 1 (codex exec --sandbox read-only, 2026-08-02, prompt 104026 bytes via ADR-114 redactor) =====
+FILE: .claude-plugin/marketplace.json - APPROVE - Version 1.2.0 matches VERSION and the generated marketplace manifest.
+FILE: .claude-plugin/plugin.json - APPROVE - Version 1.2.0 matches VERSION and the generated plugin manifest.
+FILE: .github/workflows/release.yml - APPROVE - Payload-pin validation is mechanically wired and ADR-182 is now ACCEPTED with its enforcement commit recorded.
+FILE: CHANGELOG.md - APPROVE - The corrected timeout claim, release counts, and adopter-visible behavior match the reviewed tree without making a speed claim.
+FILE: INSTALL.md - APPROVE - The operative version pin is bare v1.2.0 and the settings-migration behavior is documented subject to the already-dispositioned RC3-F7 residual.
+FILE: README.md - REJECT - The required current-version consistency fails because its only version-bearing review marker remains v1.0.0. FINDINGS: P2 - README.md:3 - The review marker reads v1.0.0 rather than the required pure v1.2.0 and is also the marker that npm staging will publish.
+FILE: SBOM.md - APPROVE - The v1.2.0 stamp is current, the verified 21-workflow/69-reference counts match disk, and default pair-rail egress is disclosed.
+FILE: SECURITY.md - APPROVE - The v1.2.0 freshness stamp, Trusted Publishing posture, 24-hour RC window, and support versions are consistent.
+FILE: VERSION - APPROVE - The canonical version is the pure value 1.2.0.
+FILE: VERSIONING.md - APPROVE - The v1.2.0 stamp is current and the corrected one-shot pin semantics match upgrade.sh.
+FILE: docs/ARCHITECTURE.md - REJECT - The version declaration is current but the explanatory count prose contradicts both disk and the corrected table. FINDINGS: P2 - docs/ARCHITECTURE.md:76 - The hook-gap explanation still claims 53 scripts and 44 wired instead of 57 and 46; P2 - docs/ARCHITECTURE.md:84 - The test-file explanation still says roughly 660 despite 729 tracked test files and the adjacent ~720 table.
+FILE: npm/README.md - REJECT - Although its v1.2.0 content is current, the GA publication workflow overwrites it with root README.md before packing. FINDINGS: P2 - .github/workflows/npm-publish.yml:163 - The staging loop includes root README.md and rsyncs it into npm/, replacing the reviewed npm/README.md and its GA review stamp.
+FILE: npm/package.json - APPROVE - Package version 1.2.0 matches VERSION and the package declares zero runtime dependencies.
+FILE: pyproject.toml - APPROVE - Project version 1.2.0 is consistent and the Python ≥3.9 requirement is unchanged.
+FILE: scripts/install.sh - APPROVE - Shared exclusions and no-follow pycache pruning preserve the reviewed fail-open installer behavior without broad deletion.
+FILE: scripts/upgrade.sh - APPROVE - The rc.3-reviewed implementation is unchanged, and RC3-F7 remains a non-blocking P2 because it impairs recovery and reports backup success falsely but atomic replacement still protects settings integrity pending the future guarded ceremony.
+OVERALL: NO-GO - GA promotion is blocked by the stale public version marker, npm staging that publishes the wrong README, and zero-tolerance architecture count drift; RC3-F7 remains non-blocking.===== ROUND 2 — fold re-review (corrected files + GA-F3 disposition, prompt 30532 bytes via ADR-114 redactor) =====
+FILE: README.md - REJECT - README.md:148 says the hooks run under two harnesses, but the section and installer define three: Claude, Codex, and Grok.
+FILE: docs/ARCHITECTURE.md - APPROVE - The corrected 57/46/48 hook figures and ~720/~13k test figures align with the live counts and floor discipline.
+DISPOSITION: GA-F3-carry-open - ACCEPT - The disclosed P2 process-integrity gap has a named sentinel remediation path and RC3-F7 precedent, so it may remain open after the shipping README is approved.
+OVERALL: NO-GO - README.md:148 leaves the shipping README factually inconsistent and requires correction plus fold re-review.===== ROUND 3 — fold re-review (README.md GA-F4 fix only) =====
+FILE: README.md - APPROVE - GA-F4 is resolved: the prose now correctly matches the three documented harnesses.
+OVERALL: GO - The scoped Round 3 remediation is complete with no remaining finding.
