@@ -145,7 +145,7 @@ Two install modes:
 
 ### Harness: Claude Code (default), Codex CLI, or Grok Build
 
-The same enforcement hooks run under two harnesses. `--harness claude` (the default; byte-identical to omitting the flag) registers the hooks for Claude Code. `--harness codex` additionally emits a Codex bundle — `.codex/hooks.json`, `.codex/rules/ceo.rules`, and an operator `AGENTS.md` — that invokes the **same** hooks with `CEO_HOOK_ADAPTER=codex`:
+The same enforcement hooks run under three harnesses. `--harness claude` (the default; byte-identical to omitting the flag) registers the hooks for Claude Code. `--harness codex` additionally emits a Codex bundle — `.codex/hooks.json`, `.codex/rules/ceo.rules`, and an operator `AGENTS.md` — that invokes the **same** hooks with `CEO_HOOK_ADAPTER=codex`:
 
 ```bash
 ./scripts/install.sh /path/to/your-app --harness codex
