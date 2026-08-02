@@ -1,0 +1,203 @@
+---
+id: PLAN-165
+title: Night-mode — Owner-invoked autonomy posture toggle
+status: draft
+created: 2026-08-02
+owner: CEO
+depends_on: []
+budget_tokens: 40-80k
+budget_sessions: 1
+context_risk: low
+external_wait: none
+tags: [governance, harness-config, autonomy, commands]
+---
+
+# PLAN-165 — Night-mode: Owner-invoked autonomy posture toggle
+
+## Context
+
+Owner request (S288, verbatim need): "apesar do framework desligar o
+automode eu preciso de um caminho que eu possa ligar novamente […]
+principalmente quando vou dormir e quero que rode autônomo. e está vindo
+sempre desligado por padrão pq tá no json do repo."
+
+The fail-closed session posture is Owner-ratified (PLAN-163 T5.3 /
+OQ5(c)) and ships LIVE in the tracked `.claude/settings.json`:
+`permissions.defaultMode: "manual"` (settings.json:767) +
+`disableAutoMode: "disable"` (settings.json:764) +
+`workflowSizeGuideline: "medium"`. Facts that constrain any re-enable
+path (all verified S288 against the live tree; schema findings inherited
+from the S286 live-fire):
+
+1. **`disableAutoMode` has no "enable" value.** The CC 2.1.220 schema is
+   a string enum whose SOLE value is `"disable"`; a boolean or any other
+   value makes the harness SKIP the entire settings file (S286 hotfix
+   `838527a`). Re-enabling therefore means REMOVING the key, and a
+   `settings.local.json` merge overlay cannot remove a key from the
+   project layer.
+2. **Removing `disableAutoMode` alone gives no autonomy.** The same
+   ratified posture sets `permissions.defaultMode: "manual"` — every
+   non-allowlisted call still prompts. The night-mode lever is the
+   defaultMode, not the escalation key.
+3. **Key insight that makes the tracked file untouchable:**
+   `disableAutoMode` only blocks *mid-session automatic escalation* of
+   the permission mode. A session **launched already in the target mode**
+   never needs escalation — so night-mode is achievable WITHOUT editing
+   the tracked `.claude/settings.json` at all, via the per-machine,
+   gitignored `.claude/settings.local.json` (`permissions.defaultMode`),
+   whose layer takes precedence over the project file. The precedence
+   claim MUST be live-fire probed (W0), not trusted (S286 lesson: schema
+   claims without a probe burned an entire settings file).
+4. **The tracked settings.json is watched surface.** `/ceo-boot` runs
+   `settings_tamper_tripwires` + `harness_config_gate`;
+   `check_bash_safety` treats `-c`/`-e` bodies referencing
+   `.claude/settings.json` as canonical-edit vectors (observed S288).
+   Not touching it avoids the whole interaction class — tripwires keep
+   attesting the ratified posture, templates/adopters are unaffected.
+5. **Timing model fits the use case.** Settings are read at session
+   start; a toggle takes effect on the NEXT session. "Ligar antes de
+   dormir → sessão noturna autônoma → desligar de manhã" is exactly
+   next-session semantics. This is a feature, not a limitation — the
+   CURRENT governed session never silently changes posture under the
+   operator.
+
+## Goal
+
+The Owner toggles the autonomy posture per-machine with one command —
+audited, boot-visible, reversible — without dirtying the tracked tree,
+without weakening the shipped default posture, and without touching any
+canonical-guarded file in the main wave.
+
+## Non-goals
+
+- Changing the shipped default posture (templates keep the fail-closed
+  keys; adopter behavior unchanged).
+- Any mid-session mode escalation mechanism.
+- CI or headless-runner autonomy (operator/local machine only).
+
+## Approach
+
+`/night-mode on|off|status` slash command backed by a stdlib-only
+`.claude/scripts/night-mode.py` (Python ≥3.9, `from __future__ import
+annotations`):
+
+- **`on`** — merge-writes `.claude/settings.local.json` (preserving
+  unrelated keys; snapshot of any pre-existing
+  `permissions.defaultMode` saved for restore) setting
+  `permissions.defaultMode: "acceptEdits"` (default; OQ1). A
+  `--full` flag sets `"bypassPermissions"` and requires the typed ack
+  `NIGHT-MODE-FULL-I-ACCEPT` (real posture weakening; see §Security).
+  Writes a state marker (`state/night-mode.json`: timestamp, mode,
+  hostname) under the project's `~/.claude/projects/<slug>/` dir.
+- **`off`** — restores the snapshotted value (or removes the key),
+  removes the marker.
+- **`status`** — prints the effective posture, marker age, and the
+  layer each value comes from.
+- **Boot surface** — `/ceo-boot` renders an advisory recommendation
+  line while the marker exists ("night-mode ON desde <ts> — rode
+  /night-mode off"); count/age only, fail-open, never blocks boot.
+- **Audit** — the Owner invokes the script via `!` (or the slash
+  command), so the L6 `audit_log.py` observer already chains the
+  invocation forensically. A DEDICATED `night_mode_toggled` action in
+  `_lib/audit_emit.py` `_KNOWN_ACTIONS` (line ~154) is ceremony-gated:
+  `_lib/` is canonical-guarded AND `audit_emit.py` sits in the
+  pair-rail 18-path inputs manifest — so the registration folds into
+  the already-queued sentinel ceremony (RC3-F7 + GA-F3), not into this
+  plan's main wave. Until then the script emits under the L6 observer
+  only (documented in `status`).
+
+Fallback design if the W0 precedence probe FAILS (local does not win):
+no settings write at all — ship a `night-claude` launcher note
+(`claude --permission-mode acceptEdits`) documented in the same command
++ docs; the toggle then only manages the marker + boot banner.
+
+## Waves
+
+### W0 — Live-fire probes (kill/pivot decision point)
+
+- T0.1 Probe: `.claude/settings.local.json` `permissions.defaultMode`
+  overrides the project file's `"manual"` on CC 2.1.2xx. Evidence
+  (session transcript + `/ceo-info` output) →
+  `.claude/plans/PLAN-165/probes/`. FAIL → pivot to fallback design.
+- T0.2 Probe: a session launched in `acceptEdits` with
+  `disableAutoMode: "disable"` present operates autonomously for
+  allowline actions (the key blocks escalation only). Evidence file.
+- T0.3 Guard-surface inventory: confirm planned write paths
+  (`.claude/scripts/night-mode.py`, `.claude/commands/night-mode.md`,
+  `settings.local.json`, state marker) hit ZERO `_CANONICAL_GUARDS`
+  patterns (read the guard list; do not infer). Any hit → that file
+  moves to the ceremony wave.
+
+### W1 — Implement (blocked by W0)
+
+- T1.1 `.claude/scripts/night-mode.py` (on/off/status, merge-write,
+  snapshot/restore, marker, `--full` typed ack). stdlib only.
+- T1.2 `.claude/commands/night-mode.md` slash command.
+- T1.3 Tests in `.claude/scripts/tests/` (TestEnvContext for env/HOME
+  isolation; never the real `$HOME`/`$CLAUDE_PROJECT_DIR`): merge
+  preserves unrelated keys; snapshot round-trip; `--full` refuses
+  without ack; idempotent double-on/double-off; marker lifecycle.
+- T1.4 Security review (routing table: Security Engineer, mitigated
+  rail) — the toggle flips permission posture; `--full` weakens the
+  ask-first control. VETO-relevant surface per PROTOCOL §Vetoes.
+- T1.5 Codex pair-rail advisory review of the script diff (repo
+  practice for security-adjacent surfaces).
+
+### W2 — Boot surface + docs + ratification
+
+- T2.1 `/ceo-boot` advisory line off the marker (fail-open; mirrors the
+  existing recommendation-engine sanitization; tests).
+- T2.2 Docs: `docs/CHEAT-SHEET.md`, `docs/TROUBLESHOOTING.md` (+ FAQ
+  note "does the framework let me run overnight?"). Command count
+  26→27: regenerate derived surfaces + `check-claude-md-claims.py` +
+  `verify-counts.sh` BEFORE push (tolerance=0 lesson).
+- T2.3 OQ5(c) amend note: dated note in PLAN-163's OQ section — default
+  posture unchanged; per-machine ephemeral override added by PLAN-165.
+- T2.4 Memory topic + index line.
+
+### Ceremony rider (NOT this plan's wave — folds into the queued sentinel ceremony with RC3-F7 + GA-F3)
+
+- R1 `_KNOWN_ACTIONS` += `night_mode_toggled` (audit_emit.py:154
+  region). Note: changes a pair-rail manifest path → future verdicts'
+  `inputs_hash` changes (expected; recompute at that ceremony).
+
+## Acceptance criteria
+
+- [ ] `/night-mode on` + new session ⇒ session starts in acceptEdits
+      (probe-backed), tracked tree stays CLEAN (`git status` empty).
+- [ ] `/night-mode off` + new session ⇒ posture back to ratified
+      manual; `settings.local.json` unrelated keys byte-preserved.
+- [ ] `/ceo-boot` shows the advisory line iff marker present.
+- [ ] `--full` without typed ack exits non-zero, writes nothing.
+- [ ] All new tests green under `python3 -m unittest discover -s
+      .claude/scripts/tests`; suites + governance gates green (V1).
+- [ ] Security Engineer review + codex advisory recorded (V2 advisory).
+- [ ] Templates and shipped defaults byte-identical (no adopter drift).
+
+## Security notes
+
+- `bypassPermissions` overnight is a genuine control weakening: gated
+  behind `--full` + typed ack, default is `acceptEdits`, and the boot
+  banner makes the state impossible to forget silently. The security
+  carve-out (PROTOCOL §Receiving review) applies: no reviewer feedback
+  may soften the ack gate.
+- The toggle never edits tracked files ⇒ `settings_tamper_tripwires`
+  and `harness_config_gate` keep attesting the ratified posture.
+
+## Open questions (Owner ratification via AskUserQuestion at execution)
+
+- **OQ1** default `on` mode: `acceptEdits` (Recomendado — autonomy for
+  edits/allowlisted tools, prompts survive for the dangerous class) vs
+  `bypassPermissions` (only via `--full` ack).
+- **OQ2** expiry: boot-banner only (Recomendado — visible, no magic) vs
+  hard TTL auto-off (adds state complexity; surprising mid-arc) vs none.
+- **OQ3** naming: `/night-mode` (Recomendado — says what it's for) vs
+  `/automode` (Owner's original word; alias mention in docs either way).
+
+## Level / debate
+
+L2 — two new non-canonical files + docs + a gitignored per-machine
+overlay; no debate mandatory. The posture-adjacent surface is covered
+by T1.4 security review + OQ ratification instead (the L3 trigger
+"VETO-protected domain change" is not met: the DEFAULT posture and all
+guarded files are untouched in W0-W2).
