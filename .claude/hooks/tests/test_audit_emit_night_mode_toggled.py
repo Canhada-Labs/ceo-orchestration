@@ -1,0 +1,143 @@
+"""night_mode_toggled per-action coverage — PLAN-165 P2 (ADR-185).
+
+The pack's 4-source checklist item 4: emit -> read back -> the four
+allowlisted fields survive, a ghost field is dropped, an off-enum mode
+coerces to "other" (never echoed), an off-shape hostname_hash coerces to
+"", and verify_chain() still passes. Lands in the SAME ceremony commit as
+the p2 registration (atomicity: no commit has an unregistered emit or an
+untested registration).
+
+Stdlib-only, Python >= 3.9, ``from __future__ import annotations``.
+"""
+
+from __future__ import annotations
+
+import json
+import sys
+import unittest
+from pathlib import Path
+
+_THIS = Path(__file__).resolve()
+_repo_root = None
+for parent in _THIS.parents:
+    if (parent / ".claude" / "hooks" / "_lib").is_dir() and (
+        parent / ".claude" / "plans"
+    ).is_dir():
+        _repo_root = parent
+        break
+assert _repo_root is not None, "could not locate repo root from test path"
+
+_LIVE_HOOKS = _repo_root / ".claude" / "hooks"
+if str(_LIVE_HOOKS) not in sys.path:
+    sys.path.insert(0, str(_LIVE_HOOKS))
+
+from _lib.testing import TestEnvContext  # noqa: E402
+from _lib import audit_emit  # noqa: E402
+from _lib import audit_hmac  # noqa: E402
+
+
+class _NightModeEmitBase(TestEnvContext):
+    def setUp(self) -> None:
+        super().setUp()
+        # Per-process HMAC key cache: the key cached by a prior test (from
+        # that other isolated audit dir) poisons this fresh chain — emits
+        # sign with the stale key while verify_chain resolves the new
+        # key. The sanctioned reset helper exists for exactly this.
+        audit_hmac._reset_key_cache_for_test()
+        self.addCleanup(audit_hmac._reset_key_cache_for_test)
+
+    def _events(self) -> list:
+        events = []
+        for line in self.read_audit_log().splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                ev = json.loads(line)
+            except Exception:
+                continue
+            if ev.get("action") == "night_mode_toggled":
+                events.append(ev)
+        return events
+
+    def _one(self) -> dict:
+        events = self._events()
+        self.assertEqual(len(events), 1, "expected exactly 1 event")
+        return events[0]
+
+
+class TestNightModeToggledEmit(_NightModeEmitBase):
+    def test_registered_and_branched(self) -> None:
+        self.assertIn("night_mode_toggled", audit_emit._KNOWN_ACTIONS)
+        # Branched, never passthrough (P2 topology invariant).
+        self.assertNotIn(
+            "night_mode_toggled",
+            getattr(audit_emit, "_EMIT_GENERIC_PASSTHROUGH", frozenset()),
+        )
+
+    def test_emit_roundtrip_allowlisted_fields_survive(self) -> None:
+        audit_emit.emit_night_mode_toggled(
+            mode="acceptEdits",
+            previous_mode="manual",
+            result="applied",
+            hostname_hash="ab12cd34ef56",
+        )
+        ev = self._one()
+        self.assertEqual(ev["mode"], "acceptEdits")
+        self.assertEqual(ev["previous_mode"], "manual")
+        self.assertEqual(ev["result"], "applied")
+        self.assertEqual(ev["hostname_hash"], "ab12cd34ef56")
+
+    def test_ghost_field_dropped_via_generic(self) -> None:
+        audit_emit.emit_generic(
+            "night_mode_toggled",
+            mode="manual",
+            previous_mode="acceptEdits",
+            result="applied",
+            hostname_hash="",
+            settings_path="/etc/never",  # ghost — must be dropped
+        )
+        ev = self._one()
+        self.assertNotIn("settings_path", ev)
+        self.assertEqual(ev["mode"], "manual")
+
+    def test_off_enum_mode_coerces_never_echoes(self) -> None:
+        audit_emit.emit_night_mode_toggled(
+            mode="bypassPermissions",  # off-enum by design — never echoed
+            previous_mode="manual",
+            result="refused",
+            hostname_hash="",
+        )
+        ev = self._one()
+        self.assertEqual(ev["mode"], "other")
+        self.assertNotIn("bypassPermissions", json.dumps(ev))
+
+    def test_off_shape_hostname_hash_coerces_empty(self) -> None:
+        audit_emit.emit_night_mode_toggled(
+            mode="manual",
+            previous_mode="absent",
+            result="noop",
+            hostname_hash="NOT-A-HEX-HASH!",
+        )
+        ev = self._one()
+        self.assertEqual(ev["hostname_hash"], "")
+
+    def test_chain_still_verifies(self) -> None:
+        audit_emit.emit_night_mode_toggled(
+            mode="acceptEdits", previous_mode="manual",
+            result="applied", hostname_hash="",
+        )
+        audit_emit.emit_night_mode_toggled(
+            mode="manual", previous_mode="acceptEdits",
+            result="applied", hostname_hash="",
+        )
+        log = self.audit_dir / "audit-log.jsonl"
+        res = audit_hmac.verify_chain(log)
+        self.assertEqual(
+            res.status, audit_hmac.STATUS_INTACT,
+            f"HMAC chain broke after emits: {res}",
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()

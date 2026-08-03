@@ -1757,7 +1757,48 @@ install_mcp_secrets_dir() {
   fi
 }
 
+
+# PLAN-165 CX-3: night-mode / posture runtime state must never reach the
+# adopter's VCS. `.claude/state/` is per-machine runtime state as a whole
+# (PLAN-163 T3.1 declared it NON-COMMIT in the framework repo; an adopter
+# tree needs the same posture) and `.claude/settings.local.json` is the
+# per-machine permission overlay that decides the NEXT session's posture
+# (PLAN-165). Without these entries, `/night-mode on` in an adopter leaves
+# the overlay + marker as untracked files — falsifying PLAN-165 AC-1
+# ("git status stays empty" after `on`) and risking an accidental commit
+# of a machine-specific permission posture. Additive + idempotent, same
+# contract as install_mcp_secrets_dir above.
+install_posture_state_ignores() {
+  local gitignore="$TARGET/.gitignore"
+  local entries=".claude/state/ .claude/settings.local.json"
+
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    echo ""
+    echo "==> Posture-state .gitignore entries (PLAN-165 CX-3)"
+    echo "    (dry-run) would ENSURE .gitignore excludes: $entries"
+    return 0
+  fi
+
+  echo ""
+  echo "==> Posture-state .gitignore entries (PLAN-165 CX-3)"
+  _state_record_op "ensure_posture_state_ignores" "$entries"
+  local line
+  for line in $entries; do
+    if [[ -f "$gitignore" ]] && grep -Fxq "$line" "$gitignore" 2>/dev/null; then
+      echo "    .gitignore already excludes $line"
+      continue
+    fi
+    {
+      echo ""
+      echo "# PLAN-165 CX-3: per-machine posture/runtime state (never commit)"
+      echo "$line"
+    } >> "$gitignore"
+    echo "    APPENDED to .gitignore: $line"
+  done
+}
+
 if [[ "$CEREMONY" != "user" ]]; then install_mcp_secrets_dir; fi  # WS4-guard-mcp
+if [[ "$CEREMONY" != "user" ]]; then install_posture_state_ignores; fi  # PLAN-165 CX-3
 
 # ---- 7. Project-local templates (CLAUDE.md, MEMORY.md, .mcp.json — never overwrite) ----
 

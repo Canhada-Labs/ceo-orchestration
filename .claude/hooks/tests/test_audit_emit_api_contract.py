@@ -107,6 +107,7 @@ _EXPECTED_PUBLIC_SYMBOLS = frozenset({
     "emit_mcp_injection_finding",  # PLAN-044 audit-v2 Wave B (ADR-083)
     "emit_mcp_server_disabled_by_kill_switch",
     "emit_mcp_server_started",
+    "emit_night_mode_toggled",  # PLAN-165 P2 (ADR-185) — /night-mode toggle
     "emit_otel_export_dropped",
     "emit_output_safety_flag",
     "emit_output_scan_finding",
@@ -716,8 +717,10 @@ _EXPECTED_KNOWN_ACTIONS_SHA256 = (
     # emit_directory_added_recorded + emit_notification_lifecycle (added to
     # _EXPECTED_PUBLIC_SYMBOLS). SHA re-derived from the STAGED audit_emit.py
     # under .claude/plans/PLAN-163/staged/main-pack/ via
-    # sha256(json.dumps(sorted(_KNOWN_ACTIONS))). Count: 321 -> 323.
-    "5b44585d2cf88c60207e5bef80537e55c9af014b38dddc03bbef696d0d834fc5"
+    # sha256(json.dumps(sorted(_KNOWN_ACTIONS))). Count: 321 -> 323 -> 324
+    # (PLAN-165 P2 ceremony: +1 night_mode_toggled — the /night-mode
+    # posture-toggle audit action, branched + deny-by-default scrub).
+    "35696184ea595e36de5fbfba555264183fb593cfc73eb5f6b35d4c37187c60ba"
 )
 
 
@@ -759,7 +762,7 @@ class AuditEmitPublicSurfaceTests(unittest.TestCase):
         self.assertEqual(
             actual, _EXPECTED_KNOWN_ACTIONS_SHA256,
             f"_KNOWN_ACTIONS drift detected. "
-            f"Count={len(actions)} (expected 323). "
+            f"Count={len(actions)} (expected 324). "
             f"Rebaseline this test + add audit-registry entry if the change is intentional.",
         )
 
@@ -768,8 +771,10 @@ class AuditEmitPublicSurfaceTests(unittest.TestCase):
         # pair_rail_review_expected — pair-rail liveness telemetry, CF-9).
         # 323 = 321 + 2 PLAN-163 T3.1/T3.2 (directory_added_recorded +
         # notification_lifecycle — CC 2.1.220 lifecycle events, ADR-183).
+        # 324 = 323 + 1 PLAN-165 P2 (night_mode_toggled — /night-mode
+        # posture toggle, ADR-185; ceremony [SENT-PLAN165]).
         self.assertEqual(
-            len(audit_emit._KNOWN_ACTIONS), 323,
+            len(audit_emit._KNOWN_ACTIONS), 324,
             "_KNOWN_ACTIONS count drifted from 163 baseline (PLAN-088 S114 Wave 1 +11 actions: "
             "cache_discipline_alerted + first_run_wizard_dispatched + "
             "estimate_calibrator_pipeline_run + subagent_findings_partial_drop + "

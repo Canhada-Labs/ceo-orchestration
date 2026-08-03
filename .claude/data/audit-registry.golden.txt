@@ -1,7 +1,7 @@
 # audit-action registry golden (generated — do not hand-edit)
 # format: v1  source: .claude/hooks/_lib/audit_emit.py::_KNOWN_ACTIONS
 # regenerate: python3 .claude/scripts/check-audit-registry-coverage.py --write-golden
-# count: 323
+# count: 324
 action_required_held
 action_required_rejected
 action_required_resumed
@@ -183,6 +183,7 @@ model_refusal_observed
 model_routing_advised
 model_routing_enforced
 model_routing_eval_error
+night_mode_toggled
 notification_lifecycle
 optimizer_route_recommended
 otel_export_dropped

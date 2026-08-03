@@ -328,6 +328,19 @@ _CANONICAL_GUARDS = [
     # becomes a sentinel ceremony.
     ".claude/workflows/**/*.js",
     ".claude/commands/council.md",
+    # PLAN-165 p1-corrected (CX-1, S290): the night-mode posture-write
+    # surface. The per-tool deny entries in settings.json close the
+    # Edit/Write rail; THESE entries are the load-bearing rail for Bash —
+    # check_bash_safety keys write-shaped (and -c/-e-body) command
+    # references off this list, so without them
+    # `echo '{...}' > settings.local.json` passes under acceptEdits with
+    # the deny applied (the codex CX-1 refutation of the original p1).
+    # Listing the WRITER script here also removes model-rail invocation
+    # of the toggle (OQ1-redo, Owner-ratified 2026-08-03: presence =
+    # only a human at the keyboard runs on/off, via `!` or a terminal).
+    ".claude/settings.local.json",
+    ".claude/state/night-mode.json",
+    ".claude/scripts/night-mode.py",
 ]
 
 

@@ -251,6 +251,16 @@ _KERNEL_PATHS: List[str] = [
     ".claude/data/federation/lan-enabled.md",
     ".claude/data/federation/lan-enabled.md.asc",
     ".claude/data/federation/**/*",
+    # PLAN-165 p1-corrected (NM-01/CX-1): machine-local posture STATE.
+    # The overlay decides the NEXT session's permission mode and the
+    # marker's prev_value is restored into it by night-mode off —
+    # posture-write by proxy. No ceremony ever tool-edits these
+    # (night-mode.py writes them as a process), so they sit at kernel
+    # tier: no sentinel can grant a tool write. The WRITER script is
+    # deliberately canonical-tier only (future ceremonies must be able
+    # to evolve it under sentinel).
+    ".claude/settings.local.json",
+    ".claude/state/night-mode.json",
 ]
 
 
