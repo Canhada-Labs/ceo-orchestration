@@ -409,6 +409,50 @@ Estado durável entre sessões:
 - A postura fica visível: nenhuma sessão começa em modo não-ratificado sem
   que `/ceo-boot` diga.
 
+## ⚠ Questão aberta que ameaça a premissa (2026-08-03, sonda interativa)
+
+A sonda interativa do Owner provou a AC-1 **e** levantou uma dúvida maior
+que o resto do plano.
+
+**Provado (harness, não só resolver):** num projeto de rascunho com
+`settings.json` = `manual` + `disableAutoMode: "disable"` e
+`settings.local.json` = `acceptEdits`, o rodapé da sessão mostra
+`⏵⏵ accept edits on`. O overlay local vence a camada de projeto, e vence
+mesmo com `disableAutoMode` presente — porque a sessão **nasce** no modo em
+vez de escalar para ele. O mecanismo do plano funciona. Sem fallback.
+
+**A dúvida:** o `~/.claude/settings.json` do Owner (camada de usuário,
+válida para todo projeto) contém
+`permissions.allow = ["Bash(*)","Read","Edit","Write","Grep","Glob","Agent","WebFetch"]`,
+`defaultMode: "auto"` e `skipAutoPermissionPrompt: true`. Com `Bash(*)`
+liberado globalmente, o Owner **ainda assim** levou prompts a noite inteira
+no repo real. Logo os prompts que ele aprova NÃO vêm do `defaultMode` — vêm
+de um destes:
+
+(a) a camada de projeto substitui o bloco `permissions` da camada de
+    usuário (merge shallow por chave top-level, como o resolver do repo
+    faz), trocando `Bash(*)` pelas 9 entradas do repo; ou
+(b) os hooks de governança do próprio framework, que não olham para
+    `defaultMode` nenhum.
+
+**Se for (b), este plano não entrega o objetivo declarado.** O
+`/night-mode` mexe só no `defaultMode`; hook que pede aprovação continua
+pedindo. O toggle ficaria correto, testado, auditado — e inútil para a
+fricção real.
+
+Resolver isto é pré-requisito de valor (não de segurança) e vem ANTES do
+W1: sonda interativa com a camada de usuário neutralizada
+(`CLAUDE_CONFIG_DIR` apontando para um dir vazio), comparando `manual` vs
+`acceptEdits` vs `dontAsk`. Se o veredito for (b), a alavanca certa é
+estender `permissions.allow` para as famílias recorrentes (`pytest`,
+`gh run list`, `python3 .claude/scripts/*`) — o que é ortogonal ao modo,
+funciona até em `manual`, e também é cerimônia por editar `settings.json`.
+
+Nota de método: a primeira sonda foi INVÁLIDA e quase passou por válida.
+O controle (`manual`) não perguntou nada, exatamente como o tratamento —
+porque a allowlist global dominava os dois. Um controle que não falha
+quando deveria falhar é a única defesa contra medir a coisa errada.
+
 ## Level / debate
 
 **L3.** O v1 se auto-declarava L2 para pular debate, enquanto sua própria
@@ -424,3 +468,64 @@ v1 → esta reescrita. Artefatos em `PLAN-165/architect/round-1/`.
 > pedido debate explicitamente. Um plano que se auto-declara L2 nunca
 > encontra o revisor que descobriria que ele é L3. Isso é evidência sobre o
 > gate de auto-classificação, não sobre este plano.
+
+## Round 2 — implementation review (2026-08-03)
+
+Revisão adversarial de segurança sobre a IMPLEMENTAÇÃO
+(`PLAN-165/architect/round-2/security-review.md`) + verificação de testes
+na invocação do CI (`round-2/test-verification.md`). Resultado: **11
+findings (NM-01..NM-11), 1 CRITICAL** — NM-01, *confused deputy* via o
+marker não-guarded: `.claude/state/night-mode.json` é tool-writable sob o
+próprio `acceptEdits` que o night-mode arma, e `off` restaurava
+`prev_value` sem validação nenhuma — um write no marker se lavava em
+write de overlay que o deny do P1 não vê, com escalação reproduzida ao
+vivo até `bypassPermissions` pela mão do Owner no `/night-mode off` da
+manhã. Verdict do reviewer: REJECT → este passe de fixes + re-review.
+
+O que mudou em resposta (fixes do round-2, neste branch):
+
+- **Validação de restore em conjunto fechado** (NM-01, NM-10): `off` só
+  restaura `prev_value` se for string num conjunto fechado de modos que o
+  night-mode poderia ter legitimamente snapshotado — `bypassPermissions`
+  excluído explicitamente; fora do conjunto ⇒ fail-CLOSED exit 2 com o
+  marker preservado.
+- **Normalização do desync** (NM-02): `on` nunca snapshota o valor que o
+  próprio night-mode escreve (overlay corrente já em `acceptEdits` ⇒
+  `prev_present=False`/`prev_value=None`), fechando o enfraquecimento
+  permanente via crash→`on`→`off` que o próprio doc de remediação
+  prescrevia; caso desync-then-on-then-off entra na matriz de testes.
+- **Confinamento de `--project-root`** (NM-04): alvo que não resolve para
+  dentro do repo é recusado salvo seam de teste explícito; o alvo tem de
+  já conter `.claude/settings.json`.
+- **Superfície de deny estendida** (NM-01, NM-03): o patch P1 da cerimônia
+  passa a cobrir, além do overlay, o marker e o próprio `night-mode.py` —
+  o escritor único não fica mais mole que o arquivo que ele escreve.
+- **Emissão de auditoria movida para dentro da cerimônia P2** (NM-05 + os
+  2 reds da suíte cheia): a chamada viva a `night_mode_toggled` — ação
+  ainda não registrada em `_KNOWN_ACTIONS`, causa exata dos 2 fails de
+  `test_reality_ledger` / `test_check_audit_registry_coverage` — sai do
+  script pré-cerimônia e entra atomicamente no P2 junto do registro da
+  ação + schema, emitindo em TODO caminho terminante
+  (applied/noop/refused/failed), não só no sucesso.
+
+Os demais findings (NM-06 advisory de boot vs "ratified" hardcoded, NM-09
+fsync de diretório, NM-11 linha de sucesso incondicional) são endereçados
+no mesmo passe; a autoridade de verificação é o re-review sobre o diff,
+não esta narrativa. Registro de evidência corrigido (NM-07):
+`PLAN-165/probes/W0-EVIDENCE.md` T0.3 reescrito com a lista REAL de
+`_CANONICAL_GUARDS` (67 padrões, `check_canonical_edit.py:113-331`) e
+ZERO-hits re-derivado alvo a alvo; T0.1 re-carimbado como resolver-level
+apenas.
+
+Estado das ACs após o round-2:
+
+- **AC-1: ABERTA (OPEN-pending-interactive-session).** Precedência provada
+  só no resolver (W0 T0.1); a obediência do harness ao `defaultMode` em
+  sessão interativa segue não provada. Fecha na primeira sessão interativa
+  pós-`on`.
+- **AC-7 e AC-8: BLOQUEADAS na cerimônia de sentinel (NM-08).** P1/P2 são
+  patches staged (`PLAN-165/ceremony-staged/`, MANIFEST 3/3 OK, `git apply
+  --check` limpo contra o HEAD canônico) — sem P1 não há deny a observar
+  (AC-8), sem P2 `night_mode_toggled` não existe em `_KNOWN_ACTIONS` e a
+  emissão degrada em breadcrumb (AC-7). **Este branch não merge antes de
+  P1/P2 landarem**; o probe positivo da AC-8 roda depois da cerimônia.

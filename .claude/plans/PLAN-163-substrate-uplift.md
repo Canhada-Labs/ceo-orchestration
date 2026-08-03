@@ -448,6 +448,12 @@ incorporados ANTES da execução (fonte: handoff S283→S284):
   `sandbox.filesystem.disabled` avaliada contra os fluxos reais,
   `disableAutoMode`, `defaultMode: "manual"`, `workflowSizeGuideline`).
   Rollback documentado no pack.
+  > **Nota (2026-08-02, PLAN-165):** a postura default acima segue
+  > INALTERADA — tracked settings e templates continuam fail-closed.
+  > O PLAN-165 adicionou apenas um override efêmero per-machine
+  > (`/night-mode` → `permissions.defaultMode: "acceptEdits"` no
+  > `.claude/settings.local.json` gitignored, snapshot/restore no `off`),
+  > sem tocar a decisão do OQ5(c). Ver ADR-185.
 - **OQ6 → guidance** no ACCELERATORS.md (trade-off custo×latência, Opus
   5/4.8 only, sem números de velocidade — ver Addendum item 4).
 

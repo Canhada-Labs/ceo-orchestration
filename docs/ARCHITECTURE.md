@@ -48,12 +48,12 @@ ceo-orchestration/
     │   ├── *.py                    # 57 hook scripts on disk
     │   └── tests/                  # hook unit tests
     ├── scripts/                    # protocol toolkit (validate, inject, audit-query, …)
-    ├── commands/                   # 26 slash commands (*.md)
+    ├── commands/                   # 27 slash commands (*.md)
     ├── skills/
     │   ├── core/                   # 42 universal backend skills
     │   ├── frontend/               # 8 universal frontend skills
     │   └── domains/                # 116 skills across 33 domain profiles
-    ├── adr/                        # 184 architecture decision records
+    ├── adr/                        # 185 architecture decision records
     └── plans/                      # plan schemas + per-plan working files
 ```
 
@@ -67,8 +67,8 @@ faith — run the commands:
 | Hook scripts       | 57 on disk                   | `ls .claude/hooks/*.py \| wc -l`                          |
 | Hook registrations | 46 wired into `settings.json`| (parse the `hooks` block of `.claude/settings.json`)      |
 | `_lib` modules     | 68 top-level (140 recursive) | `ls .claude/hooks/_lib/*.py \| grep -v __init__ \| wc -l` |
-| Slash commands     | 26                           | `ls .claude/commands/*.md \| wc -l`                       |
-| ADRs               | 184                          | `ls .claude/adr/ADR-*.md \| wc -l`                        |
+| Slash commands     | 27                           | `ls .claude/commands/*.md \| wc -l`                       |
+| ADRs               | 185                          | `ls .claude/adr/ADR-*.md \| wc -l`                        |
 | SPEC/v1 files      | 32 (28 `*.schema.md`)        | `ls SPEC/v1/*.md \| wc -l`                                |
 | Test files         | ~720                         | `git ls-files '*test_*.py' '*_test.py' \| wc -l`          |
 | Collected cases    | ~13k parametrized            | `make test-collect` (pytest `--collect-only`)             |
@@ -234,7 +234,7 @@ this repository happens to implement it today*. An install pins a SPEC version;
 internal refactors that keep the schemas stable do not break adopters.
 
 Decisions that shape these contracts are recorded as Architecture Decision
-Records in `.claude/adr/` (184 to date), with a documented lifecycle
+Records in `.claude/adr/` (185 to date), with a documented lifecycle
 (PROPOSED → ACCEPTED, plus SUPERSEDED / RETRACTED).[^adr]
 
 The repository also includes a TLA+ specification of the core state machine
@@ -267,7 +267,7 @@ gates:
 - `local/verify-counts.sh` — derives the component counts in this document so
   docs and reality cannot silently drift apart.
 
-The slash commands in `.claude/commands/` (22 of them — e.g. `/spawn`,
+The slash commands in `.claude/commands/` (27 of them — e.g. `/spawn`,
 `/debate`, `/status`, `/architect`, `/onboard`, `/pitfall`) are the
 human-facing entry points that drive this toolkit.
 

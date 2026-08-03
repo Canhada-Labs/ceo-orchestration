@@ -321,6 +321,51 @@ Esquece X.
 
 CEO will search for the entry in memory and remove it.
 
+## "Automode comes disabled by default — how do I run autonomously overnight?"
+
+By design. The tracked `.claude/settings.json` ships the fail-closed
+posture (`permissions.defaultMode: "manual"` + `disableAutoMode:
+"disable"`), so every fresh clone and every machine starts asking
+before acting. That file is canonical-guarded — do not edit it.
+
+To arm autonomy on **your machine only**, use the Owner toggle:
+
+```
+/night-mode on       # next session starts in acceptEdits
+/night-mode status   # show the resolved posture per layer
+/night-mode off      # restore the ratified manual posture
+```
+
+It writes `.claude/settings.local.json` (per-machine, gitignored) —
+`git status` stays clean, the published default is untouched, and the
+toggle takes effect on the NEXT session (settings are read at session
+start; the current session never changes posture under you). `/ceo-boot`
+shows an advisory line while the non-ratified posture is active.
+
+If `off` **refuses** ("not a healthy night-mode marker"), the gitignored
+marker at `.claude/state/night-mode.json` was written by something other
+than night-mode, and restoring an unvalidated snapshot is exactly the
+escalation the refusal exists to stop. The refusal never strands you:
+
+```bash
+python3 .claude/scripts/night-mode.py off --discard-snapshot
+```
+
+That removes the local `defaultMode` override **and** the marker without
+honoring the snapshot, printing what it discarded. It also disarms the
+"overlay armed but marker gone" state, where plain `off` is a no-op.
+
+Escape valve for a single fully-unattended session (no persistent
+state, explicit, ephemeral):
+
+```bash
+claude --permission-mode bypassPermissions
+```
+
+`/night-mode` never writes `bypassPermissions` — a persistent bypass in
+any settings layer trips the `settings_tamper_tripwires` check and turns
+`/ceo-boot` red on purpose.
+
 ## "I want to disable everything temporarily"
 
 ```bash

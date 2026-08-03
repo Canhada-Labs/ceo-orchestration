@@ -21,6 +21,7 @@ implemented as Markdown command files under `.claude/commands/`.
 | `/debate round2 <PLAN-NNN>` | Continue a debate to round 2 (consensus check) | After round 1 produces critiques |
 | `/debate status <PLAN-NNN>` | Show round-by-round agent verdicts and convergence score | "Did we reach consensus?" |
 | `/status` | Single-glance project state — plan, phase, vetoes, recent audit, ahead/behind | Start of every working session |
+| `/night-mode on\|off\|status` | Owner-invoked per-machine autonomy toggle — next session starts in `acceptEdits` (writes `.claude/settings.local.json`, gitignored; never the tracked settings) | Arm before an overnight autonomous run; `off` in the morning |
 | `/audit-page` | Audit a frontend page across 16 UX + technical dimensions | Before shipping a UI change |
 | `/skill-review` | List pending skill-patch proposals + approve/reject | Maintainer task |
 | `/lesson-review` | List recent lessons; optionally undo a lesson outcome | Weekly hygiene |

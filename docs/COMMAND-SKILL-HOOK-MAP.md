@@ -31,6 +31,7 @@ Derived deterministically (sorted, no timestamps) from three committed sources:
 | `/lesson-evolve` | — | `.claude/scripts/lesson_evolve.py` |
 | `/lesson-review` | — | `.claude/scripts/lessons.py` |
 | `/memory-scratchpad` | — | `.claude/scripts/scratchpad.py` |
+| `/night-mode` | — | `.claude/scripts/night-mode.py` |
 | `/onboard` | `codebase-onboarding` | — |
 | `/pitfall` | — | `.claude/scripts/pitfall-query.py` |
 | `/resume` | — | `.claude/scripts/session-graph-build.py`, `.claude/scripts/session-resume.py` |
@@ -124,7 +125,7 @@ Derivation rule: a registered hook guards a surface iff its source file under `.
 
 ## 5. Catalog totals
 
-- Commands: 26
+- Commands: 27
 - Skills (SKILL.md-bearing dirs): 166 — core 42, frontend 8, domain 116 (across 32 domains)
 - Skills with >=1 `activation_triggers` entry: 62
 - Hook registrations: 48 across 15 events (47 unique hook labels)

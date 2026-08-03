@@ -53,8 +53,8 @@ Todas as contagens abaixo são verificáveis a partir de um checkout limpo (veja
 | Scripts de hook (em disco) | **55** | entrypoints Python em `.claude/hooks/` |
 | Hooks ligados em `settings.json` | **44** | scripts distintos, 46 registros de evento |
 | Módulos de biblioteca compartilhada | **68** | apenas stdlib, em `.claude/hooks/_lib/` (excluindo o `__init__.py` do pacote) |
-| Slash commands | **26** | em `.claude/commands/` |
-| Architecture decision records | **180** | em `.claude/adr/` |
+| Slash commands | **27** | em `.claude/commands/` |
+| Architecture decision records | **185** | em `.claude/adr/` |
 | Testes | **~12.000 casos** | reportados por `pytest --collect-only` nas suítes de hook, script e conformidade |
 
 A diferença entre **55 em disco** e **44 ligados** é benigna: vários módulos que não respondem a eventos são ativados via dispatch in-process (invocados por outros hooks), e não por um registro de evento direto em `settings.json`.
@@ -162,8 +162,8 @@ Não acredite na tabela por fé. A partir de um checkout limpo:
 
 ```bash
 find .claude/skills -name SKILL.md | wc -l        # 166 skills
-ls .claude/commands/*.md | wc -l                  # 22 slash commands
-ls .claude/adr | grep -c '^ADR-'                  # 180 ADRs
+ls .claude/commands/*.md | wc -l                  # 27 slash commands
+ls .claude/adr | grep -c '^ADR-'                  # 185 ADRs
 python3 -m pytest --collect-only -q | tail -1     # ~12.000 casos coletados
 ```
 

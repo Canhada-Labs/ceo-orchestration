@@ -194,6 +194,13 @@ except Exception:  # noqa: BLE001
     _TAMPER_ENV_SNAPSHOT = {}
 
 
+# PLAN-165 NF-07 (2026-08-03) — every character Python's own
+# `str.splitlines()` treats as a line boundary, plus TAB. Written as ESCAPES
+# on purpose: a literal U+2028 in the source is invisible.
+_RECS_LINE_BREAKS = "\n\r\v\f\x1c\x1d\x1e\x85\u2028\u2029\t"
+_RECS_ONE_LINE_TABLE = {ord(ch): " " for ch in _RECS_LINE_BREAKS}
+
+
 def _sanitize_for_recs(s: str) -> str:
     """Sanitize a disk-sourced string before recommendation rendering (Sec MF-4).
 
@@ -203,11 +210,30 @@ def _sanitize_for_recs(s: str) -> str:
     2. Strip NUL bytes (defense vs. accidental binary in audit-log).
     3. NFKC normalize (PLAN-065 Sec MF-4 — collapse homoglyph escapes:
        fullwidth, ligatures, mathematical alphanumerics).
-    4. Length-bound to 200 chars (post-NFKC; NFKC may expand a few code
+    4. Collapse every line-boundary character (and TAB) to a single space
+       (PLAN-165 NF-07, 2026-08-03). Recommendations render one per line
+       (``f"{i}. {rec}"``), so a rec carrying a newline became TWO digest
+       lines — the second one arbitrary text in the surface the Owner reads
+       at boot. Verified end to end: a planted night-mode marker field
+       produced a forged ``- [OK] night-mode: DISARMED, posture is the
+       ratified manual`` line directly under the true line saying the
+       opposite. This step is deliberately INSIDE the shared sanitizer, not
+       at the night-mode call site: EVERY rec consumer echoes disk-sourced
+       text (check summaries, audit-log classes, stale-plan names), so the
+       fix belongs where they all pass. Runs BEFORE the bound (the bound
+       must apply to the final string) and BEFORE the scan (a pattern split
+       across a line break becomes visible to the scanner).
+    5. Length-bound to 200 chars (post-NFKC; NFKC may expand a few code
        points but bound applies to final rendered string).
-    5. injection_patterns scan; substitute [REDACTED-INJECTION-PATTERN] on hit.
-    6. Strip HTML angle brackets + markdown link URL + backticks (defensive
+    6. injection_patterns scan; substitute [REDACTED-INJECTION-PATTERN] on hit.
+    7. Strip HTML angle brackets + markdown link URL + backticks (defensive
        belt-and-suspenders if patterns library missed a variant).
+
+    Note this is a COLLAPSE, not a rejection: recs are advisory text and the
+    boot digest must never be blocked by unexpected input (fail-open on
+    infrastructure). Callers that need fail-CLOSED rejection of a line break
+    do it on the RAW text before calling here — see
+    `_lesson_render_safe`'s bounded-vocabulary gate (A5).
     """
     if not isinstance(s, str):
         s = str(s)
@@ -220,6 +246,9 @@ def _sanitize_for_recs(s: str) -> str:
         s = unicodedata.normalize("NFKC", s)
     except (TypeError, ValueError):
         pass
+    # NF-07 (2026-08-03): line-break collapse — post-NFKC, pre-bound,
+    # pre-scan (see step 4 of the docstring pipeline).
+    s = s.translate(_RECS_ONE_LINE_TABLE)
     s = s[:200]
     if _injection_patterns is not None:
         try:
@@ -2538,6 +2567,150 @@ def cached_store(results: List[CheckResult]) -> None:
 
 # ---- Recommendations engine (PLAN-065 §4.3 Phase 3-D) ---------------------
 
+# PLAN-165 W2 T2.1 (design decision D3) — night-mode posture advisory.
+#
+# The advisory derives from the RESOLVER (`_lib/effective_config.
+# resolve_settings`), never from the night-mode marker: marker and
+# settings are two sources of truth that can desync (crash between the
+# two writes, Owner hand-editing the overlay). The marker at
+# `.claude/state/night-mode.json` is DECORATION only — it enriches the
+# text iff it parses; a missing/corrupt marker never changes whether the
+# line renders.
+#
+# Advisory contract: this is a recommendation entry, NEVER a check row —
+# it can never go red, never flips gate_pass, never blocks boot. It is
+# fail-OPEN end to end: any exception skips the line silently (stderr
+# breadcrumb only under CEO_BOOT_DEBUG=1).
+#
+# Sort key "008-*" lands after the 005/006/007 rail-integrity rules and
+# before 01-owner-sentinels (lexicographic "007" < "008" < "01-"), so a
+# non-ratified posture survives the recs[:5] cap without restructuring
+# the cap. Shared helper (single source of the sort key + text) so the
+# two hand-mirrored pipelines — `_make_recommendations` and
+# `_recommendations_with_severity` — cannot drift on this rule.
+#
+# "Ratified" (NM-06, round-2 security review): the ratified posture is
+# what the Owner tracked in git — the PROJECT layer's own
+# ``permissions.defaultMode`` — never a hardcoded literal. The constant
+# below is only the FALLBACK for when the tracked project settings do
+# not declare a defaultMode (the harness default posture). The advisory
+# renders ONLY when an OVERLAY layer ("local" or "user") wins the
+# ``permissions`` key AND its value differs from the project-ratified
+# value; if the project (or managed) layer itself wins, its value IS the
+# ratified posture and nothing renders — a repo whose tracked
+# settings.json ratifies acceptEdits/plan must never burn a rec slot on
+# a false "not the ratified" claim about the Owner's own choice.
+_NIGHT_MODE_RATIFIED_FALLBACK_MODE = "manual"
+_NIGHT_MODE_OVERLAY_LAYERS = ("local", "user")
+_NIGHT_MODE_REC_SORT_KEY = "008-night-mode"
+
+
+def _night_mode_project_root() -> Path:
+    """Project root for the posture advisory, resolved at CALL time.
+
+    Prefers ``CLAUDE_PROJECT_DIR`` (same pattern as ``main()``'s
+    project_dir resolution) and falls back to ``REPO_ROOT``. Call-time
+    resolution — never an import-time constant — is what keeps this rule
+    hermetic under ``TestEnvContext`` (which points CLAUDE_PROJECT_DIR at
+    a sandbox project): the recommendations pipelines are exercised by
+    many unrelated suites, and an import-time anchor on the live repo
+    would make their exact-output assertions depend on whether night-mode
+    happens to be armed on the developer machine (PLAN-165 T1.3 class).
+    """
+    env_root = os.environ.get("CLAUDE_PROJECT_DIR")
+    return Path(env_root) if env_root else REPO_ROOT
+
+
+def _night_mode_marker_note() -> str:
+    """Decoration-only marker suffix; empty on ANY failure (fail-open)."""
+    try:
+        marker_file = (
+            _night_mode_project_root() / ".claude" / "state" / "night-mode.json"
+        )
+        marker = json.loads(marker_file.read_text(encoding="utf-8"))
+        if not isinstance(marker, dict):
+            return ""
+        ts = marker.get("ts")
+        armed = (
+            f", armed {_sanitize_for_recs(str(ts))}"
+            if isinstance(ts, str) and ts else ""
+        )
+        return f" [night-mode marker present{armed}]"
+    except Exception:
+        return ""
+
+
+def _night_mode_ratified_mode(resolved: Dict[str, Any]) -> str:
+    """The Owner-ratified posture: PROJECT layer's ``permissions.defaultMode``.
+
+    NM-06: "ratified" is derived from the tracked project layer of the
+    ``resolve_settings`` payload, never from a hardcoded literal. Falls
+    back to ``_NIGHT_MODE_RATIFIED_FALLBACK_MODE`` (the harness default)
+    when the project layer does not declare a string defaultMode.
+    """
+    layers = resolved.get("layers")
+    if isinstance(layers, list):
+        for layer in layers:
+            if not isinstance(layer, dict) or layer.get("name") != "project":
+                continue
+            data = layer.get("data")
+            perms = data.get("permissions") if isinstance(data, dict) else None
+            value = perms.get("defaultMode") if isinstance(perms, dict) else None
+            if isinstance(value, str) and value:
+                return value
+    return _NIGHT_MODE_RATIFIED_FALLBACK_MODE
+
+
+def _night_mode_advisory_rec() -> Optional[Tuple[str, str]]:
+    """Return the ("008-night-mode", text) rec pair, or None.
+
+    Renders iff an OVERLAY layer ("local"/"user") wins the resolver's
+    ``permissions`` key with a string ``defaultMode`` that differs from
+    the project-layer-ratified value (``_night_mode_ratified_mode``). A
+    winning project (or managed) layer never renders: its value IS the
+    ratified posture (NM-06). Fail-OPEN: any exception (resolver import
+    gap, resolver blow-up, filesystem error) returns None so the boot
+    digest is never blocked by this advisory.
+    """
+    try:
+        if _effective_config is None:
+            return None
+        resolved = _effective_config.resolve_settings(_night_mode_project_root())
+        effective = resolved.get("effective")
+        perms = (
+            effective.get("permissions") if isinstance(effective, dict) else None
+        )
+        mode = perms.get("defaultMode") if isinstance(perms, dict) else None
+        if not isinstance(mode, str):
+            return None
+        sources = resolved.get("sources")
+        layer = sources.get("permissions") if isinstance(sources, dict) else None
+        # NM-06: only an overlay layer can contradict the ratified
+        # posture. Project/managed winner (or no winner at all) ⇒ silent.
+        if layer not in _NIGHT_MODE_OVERLAY_LAYERS:
+            return None
+        ratified = _night_mode_ratified_mode(resolved)
+        if mode == ratified:
+            return None
+        layer_note = f" (layer: {_sanitize_for_recs(str(layer))})"
+        return (
+            _NIGHT_MODE_REC_SORT_KEY,
+            f"Session permission posture is "
+            f"'{_sanitize_for_recs(mode)}'{layer_note}, not the ratified "
+            f"'{_sanitize_for_recs(ratified)}'"
+            f"{_night_mode_marker_note()} — run /night-mode status "
+            f"(or /night-mode off) if autonomy is no longer intended",
+        )
+    except Exception as exc:  # fail-OPEN: advisory must never block boot
+        if os.environ.get("CEO_BOOT_DEBUG") == "1":
+            print(
+                "[ceo-boot] night-mode advisory skipped (fail-open): "
+                f"{type(exc).__name__}",
+                file=sys.stderr,
+            )
+        return None
+
+
 def _make_recommendations(results: List[CheckResult]) -> List[str]:
     """Rule-based prioritizer ≤5 actionable items (Sec MF-4 sanitized).
 
@@ -2614,6 +2787,15 @@ def _make_recommendations(results: List[CheckResult]) -> List[str]:
             f"— a registered hook may not resolve at runtime (dead rail)",
         ))
 
+    # PLAN-165 W2 T2.1 — night-mode posture advisory (resolver-derived,
+    # D3). Shared helper = same sort key + same text as the
+    # `_recommendations_with_severity` mirror below, so the two pipelines
+    # never drift on this rule. Fail-open: helper returns None on any
+    # exception; advisory only, never a check row, never blocks boot.
+    night_mode_rec = _night_mode_advisory_rec()
+    if night_mode_rec:
+        recs.append(night_mode_rec)
+
     # Owner-pending GPG sentinels — highest priority (HARD blocker for ceremony)
     sent = by_name.get("sentinels_pending_gpg")
     if sent and sent.status == "yellow" and sent.detail:
@@ -2679,6 +2861,7 @@ def _make_recommendations(results: List[CheckResult]) -> List[str]:
 #
 #   00-* (timeout/error gate-blockers) → high
 #   005-settings-tamper                → high (PLAN-135 W1 S3 rail integrity)
+#   008-night-mode                     → high (PLAN-165 W2 T2.1 posture advisory)
 #   01-owner-sentinels                 → high
 #   02-stranded-plans                  → high
 #   03-skill-unknown                   → medium
@@ -2754,6 +2937,13 @@ def _recommendations_with_severity(
             f"— a registered hook may not resolve at runtime (dead rail)",
         ))
 
+    # PLAN-165 W2 T2.1 — mirror of the _make_recommendations night-mode
+    # rule (SAME shared helper → same sort key + same text by
+    # construction, so the two pipelines cannot drift on this rule).
+    night_mode_rec = _night_mode_advisory_rec()
+    if night_mode_rec:
+        recs.append(night_mode_rec)
+
     sent = by_name.get("sentinels_pending_gpg")
     if sent and sent.status == "yellow" and sent.detail:
         items = sent.detail if isinstance(sent.detail, list) else []
@@ -2808,6 +2998,7 @@ def _recommendations_with_severity(
             "005-settings-tamper",  # PLAN-135 W1 S3 — rail-integrity = high
             "006-failopen-rail",    # PLAN-153 Wave E item 2 — S254 class = high
             "007-harness-config",   # PLAN-153 Wave E item 1 wire — dead rail = high
+            "008-night-mode",       # PLAN-165 W2 T2.1 — non-ratified posture = high
             "01-owner-sentinels", "02-stranded-plans"
         ):
             severity = "high"
