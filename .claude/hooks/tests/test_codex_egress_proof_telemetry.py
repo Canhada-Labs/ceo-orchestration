@@ -112,7 +112,9 @@ class TestAllowlistAndContract(unittest.TestCase):
         # +pair_rail_review_expected — pair-rail liveness telemetry).
         # PLAN-163 T3.1/T3.2: 321 -> 323 (+directory_added_recorded,
         # +notification_lifecycle — CC 2.1.220 lifecycle events, ADR-183).
-        self.assertEqual(len(audit_emit._KNOWN_ACTIONS), 323)
+        # PLAN-165 P2: 323 -> 324 (+night_mode_toggled — /night-mode
+        # posture toggle, ADR-185; ceremony 610d9ec [SENT-S291]).
+        self.assertEqual(len(audit_emit._KNOWN_ACTIONS), 324)
         self.assertIn("pair_rail_outgoing_redaction_applied", audit_emit._KNOWN_ACTIONS)
 
     def test_dispatch_scrub_accepts_empty_findings(self):
