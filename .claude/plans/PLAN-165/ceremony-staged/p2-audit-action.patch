@@ -1,0 +1,242 @@
+PLAN-165 P2 — register `night_mode_toggled` (round-2 revision, NM-05 / NM-08)
+
+ATOMICITY REQUIREMENT (why this patch and the script emit are ONE ceremony
+deliverable): emitting an unregistered action makes reality-ledger detector 6
+(`test_reality_ledger.py::test_detector_6_no_phantoms_at_head`) and the
+audit-registry coverage checker
+(`test_check_audit_registry_coverage.py::TestRealRepoSmoke::test_real_repo_exit_0`)
+go red — and those guards are CORRECT: an emit call site with no registration
+is exactly the phantom-action class they exist to catch. So the emit in
+`.claude/scripts/night-mode.py` and its registration here must land in the
+SAME ceremony, atomically — never a commit at whose HEAD the emit exists
+unregistered. The round-2 fix pass therefore REMOVED the pre-registration
+emit from the staged `night-mode.py` (it was a breadcrumb-only dead call and
+it redded both guards), and this ceremony re-adds it.
+
+Mechanics: `night-mode.py` does not exist at canonical HEAD (W1 is blocked on
+this very ceremony), so the script-side emit CANNOT be expressed as a diff
+hunk in this patch — a hunk against a nonexistent file fails
+`git apply --check`, and the staged script is still being revised by the
+round-2 fix pass, so no context lines can be guaranteed. The emit is instead
+specified as a mandatory, precisely-located instruction block + self-contained
+snippet in README.md §"P2 emit re-insertion (MANDATORY — same ceremony)".
+The ceremony executor MUST complete that block: registration lands with this
+patch; the emit lands in the same ceremony's W1-land commit (the first commit
+that puts `night-mode.py` at HEAD), with-or-after registration, never before.
+Per NM-05 the emit fires on EVERY terminating path of `on`/`off` with the
+matching result enum member (applied / noop / refused / failed), inside a
+try/except no-op envelope, with ONLY the fields mode, previous_mode, result,
+hostname_hash.
+
+diff --git a/.claude/hooks/_lib/audit_emit.py b/.claude/hooks/_lib/audit_emit.py
+index 49d5257..e18bf3e 100644
+--- a/.claude/hooks/_lib/audit_emit.py
++++ b/.claude/hooks/_lib/audit_emit.py
+@@ -1070,6 +1070,22 @@ _KNOWN_ACTIONS = {
+     # NEVER persisted — no-value-echo, a notification message can quote
+     # tool output or secrets).
+     "notification_lifecycle",
++    # PLAN-165 P2 (night-mode / D2) — Owner-invoked autonomy posture toggle
++    # forensic record, emitted by .claude/scripts/night-mode.py (the SINGLE
++    # writer of the per-machine overlay .claude/settings.local.json — the
++    # PLAN-165 P1 deny rule closes the tool Edit/Write path) once per on|off
++    # invocation. Registered via the PLAN-165 prerequisite ceremony;
++    # _KNOWN_ACTIONS 323 -> 324. Deny-by-default: dedicated _scrub_ branch +
++    # _NIGHT_MODE_TOGGLED_ALLOWLIST below, NEVER _EMIT_GENERIC_PASSTHROUGH
++    # ([[feedback-closed-enum-breadcrumb-must-not-echo-rejected-value]]).
++    # Closed-enum `mode` / `previous_mode` {acceptEdits, manual, absent,
++    # other} + closed-enum `result` {applied, noop, refused, failed, other}
++    # + `hostname_hash` (exact 12-lowercase-hex sha256 prefix of the machine
++    # hostname, or ""). DENIED on the wire: the overlay PATH, settings file
++    # CONTENT, marker content, the RAW hostname — settings JSON and paths
++    # can carry usernames, allowlists, and project identity (LLM06
++    # side-channel guard).
++    "night_mode_toggled",
+ }
+ 
+ 
+@@ -7249,6 +7265,36 @@ def emit_generic(action: str, **kwargs: Any) -> None:
+         if dropped:
+             _breadcrumb("emit_generic notification_lifecycle dropped: %s"
+                         % sorted(dropped)[:10])
++    # PLAN-165 P2 — night-mode posture-toggle forensic record. Dedicated
++    # scrub branch (NEVER _EMIT_GENERIC_PASSTHROUGH). VALUE re-coercion
++    # closes the direct emit_generic caller path: off-enum mode /
++    # previous_mode / result reset to the closed defaults (never echoed) and
++    # an off-shape hostname_hash resets to "" — no path, no settings
++    # content, no raw hostname can ever reach the signed chain.
++    elif action == "night_mode_toggled":
++        # isinstance-guard FIRST (H4 class, PLAN-163 fix-pass precedent):
++        # membership over an ARBITRARY caller value — an unhashable dict/list
++        # would raise TypeError on `x in frozenset`, breaking emit_generic's
++        # never-raises contract (fail-OPEN by exception).
++        _nm_mode = event.get("mode")
++        if not isinstance(_nm_mode, str) or _nm_mode not in _NIGHT_MODE_MODE_ENUM:
++            event["mode"] = "other"
++        _nm_prev = event.get("previous_mode")
++        if not isinstance(_nm_prev, str) or _nm_prev not in _NIGHT_MODE_MODE_ENUM:
++            event["previous_mode"] = "other"
++        _nm_result = event.get("result")
++        if (not isinstance(_nm_result, str)
++                or _nm_result not in _NIGHT_MODE_RESULT_ENUM):
++            event["result"] = "other"
++        _nm_hh = event.get("hostname_hash")
++        if not (isinstance(_nm_hh, str)
++                and _NIGHT_MODE_HOSTNAME_HASH_RE.fullmatch(_nm_hh)):
++            event["hostname_hash"] = ""
++        event, dropped = _scrub_ceo_boot_event(
++            event, _NIGHT_MODE_TOGGLED_ALLOWLIST)
++        if dropped:
++            _breadcrumb("emit_generic night_mode_toggled dropped: %s"
++                        % sorted(dropped)[:10])
+     # PLAN-113 Phase B B-STRUCTURAL — verbatim passthrough for the documented
+     # set of TRUSTED first-party producers (see _EMIT_GENERIC_PASSTHROUGH).
+     # Their field sets are controlled at the producer site; pass through as-is
+@@ -7652,6 +7698,47 @@ _NOTIFICATION_LIFECYCLE_ALLOWLIST = _CODEX_AUDIT_ENVELOPE | frozenset({
+ })
+ 
+ 
++# ---------------------------------------------------------------------------
++# PLAN-165 P2 (night-mode) — Owner-invoked autonomy posture toggle. Sec MF-3
++# deny-by-default; the branch also re-coerces VALUES by closed-set membership
++# / bounded shape so a direct emit_generic caller can never sign free text
++# into the HMAC chain. NEVER _EMIT_GENERIC_PASSTHROUGH.
++# ---------------------------------------------------------------------------
++
++# night_mode_toggled — the posture the invocation wrote / restored. CLOSED
++# vocabulary: the harness accepts a wider defaultMode enum, but night-mode
++# only ever writes "acceptEdits" (on) or restores "manual" / removes the key
++# ("absent" — the overlay had no defaultMode). Off-enum COERCES to "other"
++# and is NEVER echoed — a free-text mode string could smuggle content into
++# the signed chain.
++_NIGHT_MODE_MODE_ENUM = frozenset({
++    "acceptEdits", "manual", "absent", "other",
++})
++
++# night_mode_toggled — invocation outcome. Off-enum COERCES to "other".
++#   applied — settings write + marker landed (on/off took effect)
++#   noop    — idempotent second on / second off (exit 0, nothing written)
++#   refused — a guard refused (CI env set; malformed settings.local.json
++#             fail-closed exit; lock contention)
++#   failed  — write attempted but read-back diverged / replace failed
++_NIGHT_MODE_RESULT_ENUM = frozenset({
++    "applied", "noop", "refused", "failed", "other",
++})
++
++# Exact 12-lowercase-hex sha256 prefix of the machine hostname, or exactly
++# "" — the toggle is per-machine state, so recurrence analysis needs a
++# machine discriminator, but the RAW hostname can carry usernames or org
++# identity (LLM06 side-channel guard; same 12-hex token class as
++# directory_hash_prefix above). RAW value validated; off-shape incl.
++# oversize is DROPPED to "", never truncated (truncate-before-validate
++# lets two distinct oversize values alias to one 12-hex key).
++_NIGHT_MODE_HOSTNAME_HASH_RE = re.compile(r"^([0-9a-f]{12})?$")
++
++_NIGHT_MODE_TOGGLED_ALLOWLIST = _CODEX_AUDIT_ENVELOPE | frozenset({
++    "mode", "previous_mode", "result", "hostname_hash",
++})
++
++
+ # ---------------------------------------------------------------------------
+ # PLAN-154 (Gated Learning Loop / ADR-160) — Sec MF-3 closed enums + field
+ # allowlists for the 11 learning-loop actions. All deny-by-default; every
+@@ -9114,6 +9201,99 @@ def emit_notification_lifecycle(
+         )
+ 
+ 
++def emit_night_mode_toggled(
++    *,
++    mode: str,
++    result: str,
++    previous_mode: str = "absent",
++    hostname_hash: str = "",
++    session_id: str = "",
++    project: str = "",
++) -> None:
++    """Emit night_mode_toggled (PLAN-165 P2; ADR per PLAN-165 T1.6).
++
++    Fired by `.claude/scripts/night-mode.py` — the SINGLE writer of the
++    per-machine autonomy-posture overlay `.claude/settings.local.json`
++    (the PLAN-165 P1 deny rule closes the tool Edit/Write path to it) —
++    once per `on` / `off` invocation, whether applied, idempotent-noop,
++    refused, or failed. This row is the forensic record PLAN-165 AC-7
++    requires: without it a posture flip between sessions is invisible to
++    the HMAC chain (the overlay is NOT in _CANONICAL_GUARDS, so no
++    PostToolUse observer covers it — v1's claim that one did was false).
++
++    Sec MF-3 field-safety rationale (why each field is safe to sign):
++
++      mode           — CLOSED enum {acceptEdits, manual, absent, other};
++                       the posture the invocation wrote (on ->
++                       acceptEdits; off -> manual, or absent when the
++                       key was removed). An unrecognized value is
++                       COERCED to "other" and NEVER echoed.
++      previous_mode  — same CLOSED enum; the snapshotted posture the
++                       write replaced ("absent" when the overlay had no
++                       defaultMode key).
++      result         — CLOSED enum {applied, noop, refused, failed,
++                       other}; invocation outcome (refused covers the
++                       CI guard and the malformed-input fail-closed
++                       exit).
++      hostname_hash  — exact 12-lowercase-hex sha256 prefix of the
++                       machine hostname, or ""; identifies per-machine
++                       recurrence without disclosing the hostname
++                       (LLM06 side-channel guard — same 12-hex token
++                       class as directory_hash_prefix). RAW value
++                       validated; off-shape incl. oversize is DROPPED
++                       to "", never truncated.
++      session_id / project — baseline correlation scalars, envelope-
++                       allowed on every action.
++
++    DENIED on the wire: the overlay PATH, the settings file CONTENT
++    (before or after), the marker content, the RAW hostname — settings
++    JSON and paths can carry usernames, allowlists, and project
++    identity. Deny-by-default allowlist `_NIGHT_MODE_TOGGLED_ALLOWLIST`
++    enforced; fail-open per audit_emit contract (exceptions swallowed by
++    _write_event). NEVER routes through _EMIT_GENERIC_PASSTHROUGH.
++    """
++    safe_mode = (
++        mode
++        if isinstance(mode, str) and mode in _NIGHT_MODE_MODE_ENUM
++        else "other"
++    )
++    safe_prev = (
++        previous_mode
++        if isinstance(previous_mode, str)
++        and previous_mode in _NIGHT_MODE_MODE_ENUM
++        else "other"
++    )
++    safe_result = (
++        result
++        if isinstance(result, str) and result in _NIGHT_MODE_RESULT_ENUM
++        else "other"
++    )
++    _raw_hh = hostname_hash if isinstance(hostname_hash, str) else ""
++    safe_hh = (
++        _raw_hh
++        if _NIGHT_MODE_HOSTNAME_HASH_RE.fullmatch(_raw_hh)
++        else ""
++    )
++    raw_event: Dict[str, Any] = {
++        "action": "night_mode_toggled",
++        "session_id": session_id,
++        "project": project,
++        "mode": safe_mode,
++        "previous_mode": safe_prev,
++        "result": safe_result,
++        "hostname_hash": safe_hh,
++    }
++    cleaned, dropped = _scrub_ceo_boot_event(
++        raw_event, _NIGHT_MODE_TOGGLED_ALLOWLIST
++    )
++    _write_event(cleaned)
++    if dropped:  # pragma: no cover — impossible from the typed wrapper
++        _breadcrumb(
++            f"night_mode_toggled dropped forbidden field(s): "
++            f"{sorted(dropped)[:10]}"
++        )
++
++
+ def emit_learning_rail_disabled(
+     *,
+     rail: str,

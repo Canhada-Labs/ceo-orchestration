@@ -1,0 +1,53 @@
+diff --git a/.claude/settings.json b/.claude/settings.json
+index 6237276..477351d 100644
+--- a/.claude/settings.json
++++ b/.claude/settings.json
+@@ -763,6 +763,7 @@
+   "_posture_comment": "PLAN-163 T5.3/OQ5(c) — Owner-ratified fail-closed session posture for the dogfood repo (CC 2.1.220 keys): permissions.defaultMode='manual' (2.1.2xx rename of the ask-first mode — every non-allowlisted tool call prompts), disableAutoMode=true (no automatic permission-mode escalation mid-session), workflowSizeGuideline='medium' (advisory sizing guideline for Workflow-tool fan-outs; 2.1.220 binary schema: optional string enum ['unrestricted','small','medium','large'] — describe text: 'small' aims for fewer than 5 agents, 'medium' (the default) fewer than 15, 'large' fewer than 50, 'unrestricted' sends no guideline; a set value, including from managed settings, takes precedence over the /config toggle. Evidence: zod source at byte offset 226825131 of the 2.1.220 binary, sha256 8addc857..., T2.2 extraction. 'medium' matches the current session guideline, ~15 agents), sandbox.network.strictAllowlist=true + sandbox.filesystem.disabled=false above. Templates carry the same keys COMMENTED (adopters opt in). Rollback: remove defaultMode/disableAutoMode/workflowSizeGuideline + strictAllowlist in one commit — each key is independent and additive; no hook consumes them (harness-level only).",
+   "disableAutoMode": "disable",
+   "workflowSizeGuideline": "medium",
++  "_night_mode_deny_surface_comment": "PLAN-165 P1 (D2; deny surface EXTENDED by the round-2 adversarial security review, findings NM-01 + NM-03) — under defaultMode=acceptEdits a tool Edit/Write is auto-accepted, so every file that can DECIDE the next session's posture must be deny-listed, not merely audited. Three files, six entries at the TAIL of permissions.deny: (1) .claude/settings.local.json — the per-machine posture overlay (gitignored); a tool write of it is the direct escalation ladder (agent enters acceptEdits, rewrites the overlay, the next session boots wider without anyone typing). (2) .claude/state/night-mode.json — the night-mode marker/snapshot (gitignored, NOT in _CANONICAL_GUARDS): night-mode off restores marker.prev_value into the overlay, so a tool write of the MARKER is a posture-write primitive BY PROXY — the Owner's own designed morning off becomes the trigger, laundering a marker write into an overlay write the overlay deny cannot see (NM-01). (3) .claude/scripts/night-mode.py — the single sanctioned writer itself; a toggle whose own writer is tool-editable under the very posture it creates leaves the ladder's last rung open (NM-03: do not ship the toggle with its writer softer than the file it writes). night-mode.py writes the overlay and the marker as a PROCESS (tempfile + os.replace), never via the Edit/Write tools, so all six entries cost no legitimate path. The Write() twins are kept deliberately despite PLAN-161 C1 (on CLIs >=2.1.216 Edit(X) deny covers all file-editing tools): these entries guard POSTURE-CONTROLLING files, so the old-CLI residual accepted for the credential-read baseline is NOT accepted here. Appended AFTER the curl|bash tripwire so entries 5-24 keep mirroring install.sh DENY_BASELINE_ENTRIES by position (see _deny_baseline_comment); these six entries are NOT part of that mirror. The six entries are byte-identical in templates/settings/settings.base.json (dogfood parity).",
+   "permissions": {
+     "defaultMode": "manual",
+     "deny": [
+@@ -789,7 +790,13 @@
+       "Read(**/.env.staging)",
+       "Read(**/.env.test)",
+       "Read(**/.env.ci)",
+-      "Bash(curl * | bash)"
++      "Bash(curl * | bash)",
++      "Edit(.claude/settings.local.json)",
++      "Write(.claude/settings.local.json)",
++      "Edit(.claude/state/night-mode.json)",
++      "Write(.claude/state/night-mode.json)",
++      "Edit(.claude/scripts/night-mode.py)",
++      "Write(.claude/scripts/night-mode.py)"
+     ],
+     "allow": [
+       "Bash(git status*)",
+diff --git a/templates/settings/settings.base.json b/templates/settings/settings.base.json
+index c899569..508f4ac 100644
+--- a/templates/settings/settings.base.json
++++ b/templates/settings/settings.base.json
+@@ -592,13 +592,20 @@
+   ],
+   "_posture_keys_comment": "PLAN-163 T5.3/OQ5 — fail-closed posture keys (CC >=2.1.220). Key (1) permissions.defaultMode ships LIVE below (see _default_mode_arbitration_comment); the REMAINING keys ship COMMENTED for adopters (the dogfood repo enables them; see .claude/settings.json in the framework repo). To adopt, add the keys literally: (2) top-level \"disableAutoMode\": \"disable\" — string enum whose sole value is 'disable' (the 2.1.220 schema rejects a boolean and SKIPS THE WHOLE settings file on mismatch — S286 live-fire); prevents automatic permission-mode escalation mid-session. (3) top-level \"workflowSizeGuideline\": <per your workflow scale; advisory sizing guideline for Workflow-tool fan-outs>. (4) \"sandbox\": { \"network\": { \"strictAllowlist\": true } } — tightens allowedDomains matching to the strict form. (5) \"sandbox\": { \"filesystem\": { \"disabled\": false } } — keeps filesystem confinement armed when the sandbox is enabled (true would fail-OPEN the FS layer). All keys are independent and additive; rollback is deleting the key. NEW-EVENT hook registrations (DirectoryAdded/Notification) are deliberately NOT in this template yet — T3.4 version-floor feature gate (upgrade.sh, default OFF), ADR-183 residual (e); this template stays at 45 registrations until the floor probe is recorded. This block is documentation only — underscore-prefixed keys are ignored by the harness.",
+   "_default_mode_arbitration_comment": "PLAN-163 T3.5/T5.3 ARBITRATION (CEO S284, ADR-183): permissions.defaultMode='manual' is a LIVE key in this template, not a commented posture option. Rationale: install.sh copies this file verbatim on a fresh install, and the U1 post-install oracle (test_upgrade_settings_migration.py TestU1TemplateParity) asserts the template already carries the T5.4 NEW baseline (defaultMode='manual', the 2.1.2xx rename of the ask-first permission mode — every non-allowlisted tool call prompts) — a commented-only defaultMode would red U1 and ship fresh installs on the OLD 'default' posture. Rollback: delete the defaultMode key (single-line revert; no hook consumes it — harness-level only).",
++  "_night_mode_deny_surface_comment": "PLAN-165 P1 (D2; deny surface EXTENDED by the round-2 adversarial security review, findings NM-01 + NM-03) — under defaultMode=acceptEdits a tool Edit/Write is auto-accepted, so every file that can DECIDE the next session's posture must be deny-listed: (1) .claude/settings.local.json, the per-machine overlay (gitignored) that decides the NEXT session's permission posture — a tool write of it is a real escalation ladder; (2) .claude/state/night-mode.json, the night-mode marker/snapshot whose prev_value is restored into the overlay by night-mode off — a tool write of the marker is a posture write BY PROXY (NM-01); (3) .claude/scripts/night-mode.py, the single sanctioned writer itself (NM-03). The script writes as a PROCESS, never via the Edit/Write tools, so the deny costs no legitimate path. The Write() twins are kept deliberately (posture-controlling files; the old-CLI residual accepted for the credential-read baseline is NOT accepted here). Mirrors .claude/settings.json in the framework repo (dogfood parity) — the six entries are byte-identical in both files.",
+   "permissions": {
+     "defaultMode": "manual",
+     "deny": [
+       "Bash(git push --force*)",
+       "Edit(PROTOCOL.md)",
+       "Edit(.claude/settings.json)",
+-      "Edit(SPEC/**)"
++      "Edit(SPEC/**)",
++      "Edit(.claude/settings.local.json)",
++      "Write(.claude/settings.local.json)",
++      "Edit(.claude/state/night-mode.json)",
++      "Write(.claude/state/night-mode.json)",
++      "Edit(.claude/scripts/night-mode.py)",
++      "Write(.claude/scripts/night-mode.py)"
+     ],
+     "allow": [
+       "Bash(git status*)",
