@@ -1,8 +1,9 @@
 ---
 id: PLAN-165
 title: Night-mode — Owner-invoked autonomy posture toggle
-status: draft
+status: reviewed
 created: 2026-08-02
+reviewed_at: 2026-08-02
 owner: CEO
 depends_on: [PLAN-163]
 budget_tokens: 90-140k
