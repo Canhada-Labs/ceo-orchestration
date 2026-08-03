@@ -409,7 +409,49 @@ Estado durável entre sessões:
 - A postura fica visível: nenhuma sessão começa em modo não-ratificado sem
   que `/ceo-boot` diga.
 
-## ⚠ Questão aberta que ameaça a premissa (2026-08-03, sonda interativa)
+## Resolução da questão de premissa (2026-08-03, sonda concluída)
+
+A sonda interativa fechou as duas perguntas. Resultado, com a camada de
+usuário neutralizada (`CLAUDE_CONFIG_DIR` para um dir vazio):
+
+| overlay local | rodapé | Bash `date` | Edit | Write |
+|---|---|---|---|---|
+| (nenhum) | `manual mode on` | **pediu** | pediu | pediu |
+| `acceptEdits` | `accept edits on` | passou | passou | passou |
+
+**AC-1: FECHADA.** O overlay local vence o `manual` do projeto, no harness
+e não só no resolver, e vence com `disableAutoMode` presente — a sessão
+nasce no modo em vez de escalar. O mecanismo do plano funciona.
+
+**A ameaça à premissa: resolvida, e contra o plano.** `acceptEdits` cobre
+Bash, Edit e Write. E o operador já chega em `acceptEdits` pelo shift+tab
+nativo, dentro do repo, sem plano nenhum. Ou seja: **para o caso de uso que
+originou este plano — "abro a sessão antes de dormir e quero que rode
+sozinha" — o shift+tab basta.** O PLAN-165 não é necessário para isso.
+
+O valor marginal que sobra é estreito e honesto:
+
+| shift+tab | /night-mode |
+|---|---|
+| vale só na sessão atual | a PRÓXIMA sessão já nasce no modo |
+| exige alguém no teclado no início | sessão iniciada sem ninguém presente (cron, agente agendado, restart pós-crash/compactação) |
+| não deixa rastro | auditado (pós-P2) + visível no boot |
+
+Decisão do Owner: manter o plano, porque a implementação já está feita e
+revisada, reposicionado como **infraestrutura para autonomia
+não-assistida** — não como a solução da fricção diária, que o harness já
+resolvia.
+
+E a fricção diária foi endereçada separadamente e de forma mais barata: a
+remoção do `disableAutoMode` (`ceremony-staged/p3`), que devolve ao
+operador o ciclo shift+tab completo.
+
+Nota de método que vale mais que o resultado: eu otimizei o mecanismo por
+quatro rodadas de review sem revalidar a premissa. As rodadas acharam bugs
+reais no *como* — inclusive um crítico. Nenhuma perguntou se o *quê* era
+necessário. Foi o Owner que perguntou.
+
+## ⚠ Questão de premissa — registro original (2026-08-03, antes da sonda)
 
 A sonda interativa do Owner provou a AC-1 **e** levantou uma dúvida maior
 que o resto do plano.

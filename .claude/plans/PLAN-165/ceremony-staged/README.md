@@ -275,3 +275,58 @@ stay valid.
   block, not a diff hunk (the file does not exist at HEAD — see that
   section for the full rationale).
 - No `bypassPermissions` anywhere (plan D1 — cut in v2).
+
+---
+
+## p3-remove-disableautomode.patch — reversão de decisão ratificada
+
+**O que faz.** Remove `"disableAutoMode": "disable"` do
+`.claude/settings.json` e reescreve o `_posture_comment` que a descrevia.
+Nada mais muda: `permissions.defaultMode` continua `"manual"`.
+
+**Por que.** Decisão do Owner em 2026-08-03, revertendo explicitamente a
+ratificação do PLAN-163 T5.3/OQ5(c). O argumento dele, verbatim: *"o
+disableautomode já é escolha do usuário usando o shift+tab, não deveria
+nunca ter saído — não é o framework que decide isso."*
+
+O efeito observado da chave é maior que o documentado. O comentário dizia
+"no automatic permission-mode escalation mid-session"; na prática ela
+também **remove `auto` do ciclo shift+tab do operador**. Ou seja: o
+framework estava retirando uma afordância nativa do Claude Code do próprio
+dono da máquina. Escolher o modo da sessão é decisão do operador.
+
+**O que NÃO muda.** O default fail-closed continua: toda sessão **começa**
+em `manual`, perguntando. O que volta é a capacidade de sair disso
+deliberadamente, no teclado, e só para aquela sessão.
+
+**Medição que embasa (2026-08-03, camada de usuário neutralizada via
+`CLAUDE_CONFIG_DIR`, projetos de rascunho em `/tmp/nm`):**
+
+| overlay local | rodapé | Bash `date` | Edit | Write |
+|---|---|---|---|---|
+| (nenhum) | `manual mode on` | pediu aprovação | pediu | pediu |
+| `acceptEdits` | `accept edits on` | passou | passou | passou |
+
+A primeira execução da mesma sonda foi INVÁLIDA e quase passou por válida:
+sem neutralizar a camada de usuário (que tem `Bash(*)`, `Edit`, `Write`
+liberados globalmente), o controle `manual` não perguntou nada — idêntico
+ao tratamento. Um controle que não falha quando deveria falhar é a única
+defesa contra medir a coisa errada.
+
+**Superfície de risco.** Nenhum teste afirma que a chave existe; o
+`check_harness_config.py` não a exige; o `effective_config.py` não a
+consome; no `templates/settings/settings.base.json` ela aparece apenas
+dentro de um comentário de documentação para adopters (a chave nunca foi
+enviada viva no template). Logo a remoção não redenna nada e não muda
+comportamento de adopter.
+
+**Ordem na cerimônia.** p3 é independente de p1/p2 — pode landar antes,
+depois ou junto. Se landar junto com p1, os dois tocam
+`.claude/settings.json`: aplique **p1 primeiro** (ele acrescenta entradas
+ao `permissions.deny`), depois p3 (que remove uma chave top-level). Os
+hunks não se sobrepõem, mas a ordem mantém o contexto previsível.
+
+**Registro formal.** Isto reverte uma decisão de postura ratificada em L3.
+O registro mínimo está aqui e na nota datada do PLAN-163. Se o Owner quiser
+o registro formal, cabe uma emenda ao ADR de postura — não foi criada
+unilateralmente para não inflar a contagem de ADRs sem ele pedir.
