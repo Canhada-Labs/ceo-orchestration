@@ -30,24 +30,36 @@
 #   core skills       find .claude/skills/core -name SKILL.md       exact (42)
 #   frontend skills   find .claude/skills/frontend -name SKILL.md   exact (8)
 #   domain skills     find .claude/skills/domains -name SKILL.md    exact (116)
-#   ADRs              ls .claude/adr/ADR-*.md                        exact (180)
-#   hook .py files    ls .claude/hooks/*.py                          exact (55)
-#   registered hooks  distinct *.py in settings.json "command" lines exact (45)
+#   ADRs              ls .claude/adr/ADR-*.md                        exact (184)
+#   hook .py files    ls .claude/hooks/*.py                          exact (57)
+#   registered hooks  distinct *.py in settings.json hooks{} tree   exact (46)
+#   registrations     total hook entries in settings.json hooks{}   exact (48)
 #   _lib modules      ls .claude/hooks/_lib/*.py  (TOP-LEVEL glob)   exact (68)
 #   SPEC v1 files     ls SPEC/v1/*.md                                exact (32)
 #   tests             pytest --collect-only -q .claude/             floor (N+)
-#   release_steps     grep -c '      - name:' release.yml           exact (21)
+#   release_steps     grep -c '      - name:' release.yml           exact (29)
 #   commands          find .claude/commands -name '*.md'             exact (26)
-#   workflows         find .github/workflows -name '*.yml'           exact (21)
+#   workflows         find .github/workflows -name '*.yml'           derived only (no doc cites it — not doc-gated)
 #
 # NOTE on the two glob-ambiguous / underivable numbers (code-reviewer P2):
 #   - "_lib modules" is pinned to the TOP-LEVEL `_lib/*.py` glob (68). The
 #     recursive `_lib/**/*.py` count (incl. adapters/ + subdirs) is larger
 #     (~140); docs must state the top-level number to match this gate.
-#   - "registered hooks" (45) = distinct `*.py` script basenames appearing in
-#     settings.json hooks{} "command" lines (matches the hook_live_smoke
-#     check). This is distinct from "hook .py files on disk" (55) — some
-#     on-disk hooks are not wired into settings.json.
+#   - "registered hooks" (46) = distinct `*.py` script basenames appearing in
+#     command strings of the settings.json hooks{} SUBTREE, parsed as JSON
+#     (matches the hook_live_smoke check). S287: the old whole-file grep with
+#     a hyphenless regex captured the statusLine `statusline-ceo.py` as a
+#     phantom `ceo.py` (47). This is distinct from "hook .py files on disk"
+#     (57) — some on-disk hooks are not wired into settings.json — and from
+#     "registrations" (48): total hook ENTRIES incl. non-.py commands (one
+#     script can fire on several events).
+#
+# RULE-LIVENESS CONTRACT (S287 vacuous-gate lesson): a metric whose regexes
+# match ZERO watched docs reports "no drift" with a number nobody checks —
+# a dead gate. The per-metric match count is exported as `rule_matches` in
+# --json, and the real-repo test suite asserts every doc-gated metric
+# matches >=1 site (test_verify_counts.py). Synthetic test trees are exempt
+# by construction (the assertion lives in the real-repo test, not here).
 # The historical "6 core hooks" enumeration in CLAUDE.md is a labelled
 # historical subset, NOT a live total — it is not gated here.
 # ============================================================================
@@ -104,11 +116,39 @@ DERIVED_SPEC_V1=$(ls "$REPO_ROOT"/SPEC/v1/*.md 2>/dev/null | wc -l | tr -d ' ')
 # "schema files" = the *.schema.md subset (excludes README/compat/cli/shim docs).
 # Use find (not ls glob) so a zero-match tree does not trip set -e/pipefail.
 DERIVED_SCHEMA_FILES=$(find "$REPO_ROOT/SPEC/v1" -maxdepth 1 -name '*.schema.md' 2>/dev/null | wc -l | tr -d ' ')
-# Registered hooks = distinct *.py basenames in settings.json "command" lines.
-DERIVED_REGISTERED=$(
-  grep '"command"' "$REPO_ROOT/.claude/settings.json" 2>/dev/null \
-    | grep -oE '[A-Za-z_][A-Za-z0-9_]*\.py' | sort -u | wc -l | tr -d ' '
-)
+# Registered hooks (46) + registrations (48) — parsed from the settings.json
+# hooks{} SUBTREE as JSON, never a whole-file grep (S287: the old grep +
+# hyphenless regex counted the statusLine `statusline-ceo.py` as a phantom
+# `ceo.py`). registered = distinct *.py basenames across hook command
+# strings (hyphens admitted); registrations = total hook entries (incl.
+# non-.py commands). Unparseable settings.json derives 0/0 (a synthetic
+# tree citing non-zero then fails loud — fail-closed on input).
+_reg_out=$(python3 - "$REPO_ROOT/.claude/settings.json" <<'PYREG' 2>/dev/null
+import json, os, re, sys
+try:
+    s = json.load(open(sys.argv[1], encoding="utf-8"))
+except Exception:
+    print("0 0"); raise SystemExit(0)
+hooks = s.get("hooks", {})
+distinct, total = set(), 0
+if isinstance(hooks, dict):
+    for _event, matchers in hooks.items():
+        if not isinstance(matchers, list):
+            continue
+        for m in matchers:
+            if not isinstance(m, dict):
+                continue
+            for h in m.get("hooks", []):
+                if not isinstance(h, dict):
+                    continue
+                total += 1
+                for tok in re.findall(r"[A-Za-z0-9_.-]+\.py", str(h.get("command", ""))):
+                    distinct.add(os.path.basename(tok))
+print("%d %d" % (len(distinct), total))
+PYREG
+) || _reg_out="0 0"
+DERIVED_REGISTERED=${_reg_out% *}
+DERIVED_REGISTRATIONS=${_reg_out#* }
 
 # Test count: collect-only across .claude/. Collection errors in plan-specific
 # fixture suites are tolerated (they don't represent code regressions). The
@@ -198,6 +238,7 @@ export VC_REPO_ROOT="$REPO_ROOT"
 export VC_SKILLS="$DERIVED_SKILLS" VC_CORE="$DERIVED_CORE" VC_FRONTEND="$DERIVED_FRONTEND"
 export VC_DOMAIN="$DERIVED_DOMAIN" VC_ADRS="$DERIVED_ADRS" VC_HOOK_PY="$DERIVED_HOOK_PY"
 export VC_LIB="$DERIVED_LIB" VC_SPEC="$DERIVED_SPEC_V1" VC_REGISTERED="$DERIVED_REGISTERED"
+export VC_REGISTRATIONS="$DERIVED_REGISTRATIONS"
 export VC_SCHEMA="$DERIVED_SCHEMA_FILES"
 export VC_TESTS="$DERIVED_TESTS" VC_QUIET="$QUIET" VC_JSON="$JSON" VC_NO_TESTS="$NO_TESTS"
 export VC_RELEASE_STEPS="$DERIVED_RELEASE_STEPS" VC_COMMANDS="$DERIVED_COMMANDS"
@@ -216,6 +257,7 @@ live = {
     "skills": iv("VC_SKILLS"), "core": iv("VC_CORE"), "frontend": iv("VC_FRONTEND"),
     "domain": iv("VC_DOMAIN"), "adrs": iv("VC_ADRS"), "hook_py": iv("VC_HOOK_PY"),
     "lib": iv("VC_LIB"), "spec_v1": iv("VC_SPEC"), "registered": iv("VC_REGISTERED"),
+    "registrations": iv("VC_REGISTRATIONS"),
     "schema_files": iv("VC_SCHEMA"),
     "tests": iv("VC_TESTS"),
     "release_steps": iv("VC_RELEASE_STEPS"),
@@ -284,7 +326,25 @@ RULES = [
     ("hook_py", "exact", [
         r'(\d+) hooks total', r'(\d+) Python hook scripts', r'(\d+) hook scripts',
     ]),
-    ("registered", "exact", [r'(\d+) registered hooks']),
+    # S287 vacuous-gate fix: no watched doc ever used the literal
+    # "N registered hooks" — the real phrasings are "46 wired into
+    # `.claude/settings.json`" (CLAUDE.md §1, ARCHITECTURE prose + table)
+    # and the "Hooks wired in" table rows (README/npm, TABLE_RULES below).
+    ("registered", "exact", [
+        r'(\d+) registered hooks',
+        # BOTH prepositions: CLAUDE.md/ARCHITECTURE say "46 wired into
+        # `.claude/settings.json`", GUIA-COMPLETO says "46 hooks wired in
+        # `settings.json`". The pair-rail caught the missing `wired in`
+        # form against a doc that was stale at 44 — the vacuous-gate class
+        # one layer deeper (a rule that matches SOME docs looks alive
+        # while the doc it misses drifts).
+        r'(\d+) wired into',
+        r'(\d+) hooks wired in\b',
+    ]),
+    # Total hook ENTRIES in the hooks{} subtree (one script can fire on
+    # several events; includes non-.py commands). CLAUDE.md §1 +
+    # ARCHITECTURE prose + the README/npm table Notes cells.
+    ("registrations", "exact", [r'(\d+) event registrations']),
     ("lib", "exact", [
         r'(\d+) shared (?:Python )?modules',
         r'(\d+) [`]?_lib[`/]* modules',   # catches "N `_lib/` modules" / "N _lib modules"
@@ -293,16 +353,19 @@ RULES = [
     ("schema_files", "exact", [r'(\d+) schema files']),
     ("tests", "floor", [r'(\d+)\+ tests', r'(\d+)\+ unit tests']),
     # New mechanics-derived counts (F-3.2/F-4 blind-spot closure — PLAN-113 RW-E)
+    # S287 vacuous-gate fix: the two historical phrasings matched no doc
+    # (rule dead since the RELEASE.md rewrite); the live citation site is
+    # RELEASE.md's pointer block "`release.yml` — release-gate +
+    # publish-release (N steps, ...)".
     ("release_steps", "exact", [
-        r'release[.-]gate atual \((\d+) steps',   # RELEASE.md (PT)
-        r'release\.yml.*?with (\d+) steps',        # CLAUDE.md §1
+        r'release\.yml[^()\n]*\((\d+) steps',
     ]),
     ("commands", "exact", [
         r'(\d+) slash commands',
     ]),
-    ("workflows", "exact", [
-        r'(\d+) workflows',
-    ]),
+    # "workflows" is deliberately NOT doc-gated: no watched doc cites the
+    # workflow count (S287 liveness sweep). The derived value stays in the
+    # --json/human output; re-add a rule here TOGETHER with the doc claim.
     # E9-F10 (i): recursive `_lib` count. Only CLAUDE.md states "N recursive";
     # README/INSTALL lack the literal, so scanning all DOCS is safe.
     ("lib_recursive", "exact", [
@@ -322,7 +385,9 @@ TABLE_RULES = [
     ("commands",  "exact", r'^Slash commands\b'),
     ("skills",    "exact", r'^(?:Skills|Skill checklists)\b'),
     ("spec_v1",   "exact", r'^SPEC/v1 files\b'),
-    ("workflows", "exact", r'^Workflows\b'),
+    # S287: README/npm "| Hooks wired in `settings.json` | **46** | ..." and
+    # ARCHITECTURE "| Hook registrations | 46 wired into `settings.json`|".
+    ("registered", "exact", r'^(?:Hooks wired in|Hook registrations)\b'),
 ]
 
 def iter_table_rows(text):
@@ -335,6 +400,28 @@ def iter_table_rows(text):
             yield cells
 
 violations = []
+# S287 rule-liveness accounting: per-metric count of doc sites each rule
+# actually matched (prose + table cells). Exported in --json as
+# `rule_matches`; the real-repo test asserts every doc-gated metric >= 1
+# (a metric at 0 is a dead gate reporting "no drift" unchecked).
+rule_matches = {m: 0 for m, _, _ in RULES}
+for m, _, _ in TABLE_RULES:
+    rule_matches.setdefault(m, 0)
+# PER-DOCUMENT accounting (pair-rail R3, P2). Aggregate-per-metric
+# liveness is a FLOOR, not the proof: a rule matching 5 of 6 watched docs
+# looks alive while the 6th drifts — which is exactly how
+# `docs/GUIA-COMPLETO.md` sat stale at 44 hooks after the metric-level
+# rule was "fixed". `rule_matches_by_doc[(metric, doc)]` lets the
+# real-repo test assert an explicit expectation SET, so a document that
+# silently stops matching is a failure rather than an invisible hole.
+rule_matches_by_doc = {}
+
+
+def _note(metric, doc):
+    rule_matches[metric] = rule_matches.get(metric, 0) + 1
+    key = "%s@%s" % (metric, doc)
+    rule_matches_by_doc[key] = rule_matches_by_doc.get(key, 0) + 1
+
 for metric, kind, label_rx in TABLE_RULES:
     lv = live[metric]
     for doc in DOCS:
@@ -346,6 +433,7 @@ for metric, kind, label_rx in TABLE_RULES:
             m = re.search(r'(\d+)', value_cell)
             if m is None:
                 continue
+            _note(metric, doc)
             v = int(m.group(1))
             if kind == "exact" and v != lv:
                 violations.append(
@@ -353,8 +441,9 @@ for metric, kind, label_rx in TABLE_RULES:
                 )
 
 for metric, kind, regexes in RULES:
-    if metric == "tests" and no_tests:
-        continue
+    # tests under --no-tests: still COUNT matches (liveness stays
+    # observable) but never enforce against the skipped live value.
+    enforce = not (metric == "tests" and no_tests)
     lv = live[metric]
     # release_steps scans both DOCS and RELEASE_DOCS; all others scan only DOCS.
     scan_docs = (DOCS + list(_RELEASE_STEPS_EXTRA_DOCS)
@@ -363,6 +452,9 @@ for metric, kind, regexes in RULES:
         text = texts.get(doc, "")
         for rx in regexes:
             for m in re.finditer(rx, text):
+                _note(metric, doc)
+                if not enforce:
+                    continue
                 v = int(m.group(1))
                 if kind == "exact" and v != lv:
                     violations.append(
@@ -379,10 +471,15 @@ for metric, kind, regexes in RULES:
 # must equal the live VERSION file. npm/package.json is read here (it is not in
 # DOCS). A doc with zero matches contributes no violation.
 if live_version:
+    # S291 (pair-rail R2, P2): `VERSION=` NEVER existed in CLAUDE.md or
+    # README.md — `git log -S 'VERSION='` finds no commit that added or
+    # removed it. Both rules were dead from birth (the `registered` class
+    # again), while the release checklist advertised them as checked.
+    # Removed rather than faked: neither doc declares a version literal by
+    # design (they point at the VERSION file). Every remaining site is
+    # liveness-accounted below — a site that matches nothing now FAILS.
     VERSION_SITES = [
-        ("CLAUDE.md", r'VERSION=(\d+\.\d+\.\d+)'),
         ("INSTALL.md", r'--pin v(\d+\.\d+\.\d+)'),
-        ("README.md", r'VERSION=(\d+\.\d+\.\d+)'),
         # PLAN-161 V1 — current-version declaration sites in the newly-watched
         # docs (the npm README review stamp is a deliberate release tripwire:
         # a version bump forces a fresh review of the npm-facing copy).
@@ -390,21 +487,52 @@ if live_version:
         ("npm/README.md", r'last-reviewed: \d{4}-\d{2}-\d{2} v(\d+\.\d+\.\d+)'),
     ]
     for doc, rx in VERSION_SITES:
-        for m in re.finditer(rx, texts.get(doc, "")):
+        _text = texts.get(doc, "")
+        _hits = 0
+        for m in re.finditer(rx, _text):
+            _hits += 1
             if m.group(1) != live_version:
                 violations.append(
                     f"{doc}: cites version={m.group(1)}, live VERSION={live_version}  (rule: exact)"
                 )
+        rule_matches["version:" + doc] = _hits
+        # Liveness for the version family (pair-rail R2 P2 / R3 P1). The
+        # discrimination that matters: a doc that EXISTS but no longer
+        # carries its version literal is a DEAD release gate reporting
+        # "clean" — fail loudly. A doc that does not exist at all is a
+        # site that does not apply to this tree (synthetic fixtures ship
+        # a subset of the docs by design) — skip, do not invent a
+        # violation. The first pass of this gate failed unconditionally
+        # and red-lit two existing fixture tests; the pair-rail caught
+        # it because I added the gate without re-running the suite that
+        # covers it.
+        # EXISTENCE, not truthiness (pair-rail R4 P2): an empty file has
+        # falsy text, so the truthiness form reported "clean" after any
+        # version site was truncated to zero bytes — the exact opposite
+        # of the stated exists-without-literal contract.
+        if _hits == 0 and os.path.isfile(os.path.join(root, doc)):
+            violations.append(
+                f"{doc}: version site declared but matched ZERO occurrences "
+                f"— dead release gate (rule: version-liveness)"
+            )
     pkg_path = os.path.join(root, "npm", "package.json")
     try:
         pkg_text = open(pkg_path, encoding="utf-8").read()
     except OSError:
         pkg_text = ""
+    _pkg_hits = 0
     for m in re.finditer(r'"version"\s*:\s*"(\d+\.\d+\.\d+)"', pkg_text):
+        _pkg_hits += 1
         if m.group(1) != live_version:
             violations.append(
                 f"npm/package.json: cites version={m.group(1)}, live VERSION={live_version}  (rule: exact)"
             )
+    rule_matches["version:npm/package.json"] = _pkg_hits
+    if _pkg_hits == 0 and os.path.isfile(pkg_path):
+        violations.append(
+            "npm/package.json: version field matched ZERO occurrences "
+            "— dead release gate (rule: version-liveness)"
+        )
     # OSS-D1: pyproject.toml [project] version must equal live VERSION.
     # Read independently (it is not in DOCS/texts), mirroring the
     # npm/package.json site above -- closes the silent-drift gap that let
@@ -414,11 +542,19 @@ if live_version:
         pyproject_text = open(pyproject_path, encoding="utf-8").read()
     except OSError:
         pyproject_text = ""
+    _pyp_hits = 0
     for m in re.finditer(r'^version\s*=\s*"(\d+\.\d+\.\d+)"', pyproject_text, re.M):
+        _pyp_hits += 1
         if m.group(1) != live_version:
             violations.append(
                 f"pyproject.toml: cites version={m.group(1)}, live VERSION={live_version}  (rule: exact)"
             )
+    rule_matches["version:pyproject.toml"] = _pyp_hits
+    if _pyp_hits == 0 and os.path.isfile(pyproject_path):
+        violations.append(
+            "pyproject.toml: version field matched ZERO occurrences "
+            "— dead release gate (rule: version-liveness)"
+        )
 
 # ---- E9-F10 (ii): CLAUDE.md §1 RESERVED-ADR list must be exactly {130,134} ----
 # Parse the "ADR-<a>/<b> RESERVED (no file ..." enumeration (PLAN-120-FOLLOWUP
@@ -449,14 +585,17 @@ for _line in (os.environ.get("VC_ADR_VIOLATIONS", "") or "").splitlines():
 if as_json:
     out_live = dict(live)
     out_live["version"] = live_version
-    print(json.dumps({"live": out_live, "violations": violations}, indent=2))
+    print(json.dumps({"live": out_live, "violations": violations,
+                      "rule_matches": rule_matches,
+                      "rule_matches_by_doc": rule_matches_by_doc}, indent=2))
     sys.exit(1 if violations else 0)
 
 if not quiet:
     print("=== verify-counts.sh — bidirectional drift check ===")
     print("Live-derived counts:")
     for k in ("skills", "core", "frontend", "domain", "adrs", "hook_py",
-              "registered", "lib", "lib_recursive", "spec_v1", "schema_files",
+              "registered", "registrations", "lib", "lib_recursive",
+              "spec_v1", "schema_files",
               "tests", "release_steps", "commands", "workflows"):
         v = live[k]
         if k == "tests" and no_tests:

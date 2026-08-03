@@ -448,6 +448,20 @@ incorporados ANTES da execução (fonte: handoff S283→S284):
   `sandbox.filesystem.disabled` avaliada contra os fluxos reais,
   `disableAutoMode`, `defaultMode: "manual"`, `workflowSizeGuideline`).
   Rollback documentado no pack.
+
+  > **Emenda datada 2026-08-03 (cerimônia S290, commits `9f53628` +
+  > `93a1938` `[SENT-PLAN165]`):** o Owner REVERTEU parcialmente esta
+  > ratificação — `disableAutoMode` foi **REMOVIDO** do
+  > `.claude/settings.json` dogfood por cerimônia assinada. Decisão
+  > verbatim: *"escolher o modo é do usuário via shift+tab, não é o
+  > framework que decide"*. Motivo adicional (live-fire S290): a chave faz
+  > mais do que o documentado — além de barrar escalação automática,
+  > remove `auto` do ciclo shift+tab do operador. `defaultMode: "manual"`
+  > e as demais chaves da postura seguem vivas e inalteradas. O comentário
+  > `_posture_keys_comment` do template (que ainda diz "the dogfood repo
+  > enables them") é doc publicada canonical-guarded — a correção
+  > acompanha o patch p1-corrected da cerimônia do PLAN-165. Override
+  > efêmero per-machine de postura: PLAN-165 (`/night-mode`).
 - **OQ6 → guidance** no ACCELERATORS.md (trade-off custo×latência, Opus
   5/4.8 only, sem números de velocidade — ver Addendum item 4).
 

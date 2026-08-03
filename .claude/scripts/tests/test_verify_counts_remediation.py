@@ -22,6 +22,7 @@ The script is pointed at a synthetic tree via VERIFY_COUNTS_ROOT and run with
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import tempfile
@@ -114,11 +115,22 @@ def _scaffold(
     spec_dir.mkdir(parents=True)
     _mk(spec, lambda i: (spec_dir / f"s{i}.md").write_text("x", encoding="utf-8"))
 
-    cmds = "\n".join(
-        f'      {{"command": "bash _python-hook.sh reg_{i}.py"}},' for i in range(registered)
-    )
+    # Valid hooks{} SUBTREE (the S287 fix parses JSON instead of grepping);
+    # statusLine decoy outside hooks{} must not be counted.
+    settings = {
+        "statusLine": {"type": "command", "command": "python3 statusline-ceo.py"},
+        "hooks": {
+            "PreToolUse": [{
+                "matcher": "*",
+                "hooks": [
+                    {"command": f"bash _python-hook.sh reg_{i}.py"}
+                    for i in range(registered)
+                ],
+            }]
+        },
+    }
     (hooks.parent / "settings.json").write_text(
-        '{ "hooks": {\n' + cmds + "\n} }\n", encoding="utf-8"
+        json.dumps(settings, indent=2) + "\n", encoding="utf-8"
     )
 
     # VERSION file (E9-F10 iii single source of truth).
@@ -218,14 +230,32 @@ class TestE9F10RecurrenceGuards(unittest.TestCase):
             self.assertIn("RESERVED", r.stdout)
 
     # ---- (iii) VERSION coherence gate ----
-    def test_claude_md_version_drift_fails(self):
+    def test_claude_md_carries_no_enforced_version_literal(self):
+        """S291 (pair-rail R2/R3): the CLAUDE.md `VERSION=` rule was
+        written for the shape of THIS SCAFFOLD, not of the real repo.
+        `git log -S 'VERSION='` finds no commit that ever added or removed
+        such a literal from CLAUDE.md — the rule matched zero real
+        documents from birth while the release checklist advertised it as
+        checked (the vacuous-gate class, version family).
+
+        The rule is retired rather than faked: CLAUDE.md declares no
+        version by design, it points at the VERSION file. This test now
+        pins THAT decision — a synthetic CLAUDE.md whose `VERSION=`
+        disagrees with the live VERSION must NOT fail the gate, because
+        the gate deliberately does not read it. If someone later decides
+        CLAUDE.md should declare its version, they must add the site back
+        to VERSION_SITES *and* flip this test, so the decision cannot
+        change silently in either direction."""
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
-            # live VERSION=9.9.9 but CLAUDE.md says 9.9.8 (the exact E9-F9 shape).
             _scaffold(root, version="9.9.9", claude_version="9.9.8")
             r = _run(root)
-            self.assertEqual(r.returncode, 1, "CLAUDE.md VERSION drift must fail")
-            self.assertIn("version", r.stdout.lower())
+            self.assertEqual(
+                r.returncode, 0,
+                "CLAUDE.md carries no enforced version literal; a drifted "
+                "VERSION= there must not fail the gate. stdout={0}".format(
+                    r.stdout),
+            )
 
     def test_install_md_pin_version_drift_fails(self):
         with tempfile.TemporaryDirectory() as td:

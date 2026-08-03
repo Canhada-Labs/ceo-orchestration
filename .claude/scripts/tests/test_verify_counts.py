@@ -13,6 +13,7 @@ The script is pointed at a synthetic tree via VERIFY_COUNTS_ROOT and run with
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import unittest
@@ -58,12 +59,26 @@ def _scaffold(root: Path, *, core=3, frontend=2, domain=4, adrs=5,
     spec_dir = root / "SPEC" / "v1"; spec_dir.mkdir(parents=True)
     _mk(spec, lambda i: (spec_dir / f"s{i}.md").write_text("x", encoding="utf-8"))
 
-    # settings.json with `registered` distinct hook .py in "command" lines.
-    cmds = "\n".join(
-        f'      {{"command": "bash _python-hook.sh reg_{i}.py"}},' for i in range(registered)
-    )
+    # settings.json hooks{} SUBTREE with `registered` distinct hook .py
+    # entries — VALID JSON (the S287 fix parses the subtree instead of
+    # grepping the whole file). The top-level statusLine decoy references a
+    # hyphenated .py OUTSIDE hooks{}: the old whole-file grep mangled it
+    # into a phantom `ceo.py` and over-counted; the subtree parse must
+    # ignore it entirely.
+    settings = {
+        "statusLine": {"type": "command", "command": "python3 statusline-ceo.py"},
+        "hooks": {
+            "PreToolUse": [{
+                "matcher": "*",
+                "hooks": [
+                    {"command": f"bash _python-hook.sh reg_{i}.py"}
+                    for i in range(registered)
+                ],
+            }]
+        },
+    }
     (hooks.parent / "settings.json").write_text(
-        '{ "hooks": {\n' + cmds + "\n} }\n", encoding="utf-8"
+        json.dumps(settings, indent=2) + "\n", encoding="utf-8"
     )
     total = core + frontend + domain
     return dict(total=total, core=core, frontend=frontend, domain=domain,
@@ -137,6 +152,141 @@ class TestVerifyCounts(unittest.TestCase):
         """
         r = _run(root=None)  # default REPO_ROOT, --no-tests
         self.assertEqual(r.returncode, 0, f"live docs drift; stdout={r.stdout}")
+
+    def test_statusline_decoy_not_counted(self):
+        """S287 phantom-`ceo.py` class: a hyphenated .py referenced OUTSIDE
+        the hooks{} subtree (statusLine) must not inflate `registered`.
+
+        The scaffold docs cite what the old whole-file grep derived
+        (registered + 1 phantom); the subtree parse derives `registered`,
+        so the inflated doc claim MUST now fail the gate."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            c = _scaffold(root, registered=3)
+            inflated = dict(c)
+            inflated["registered"] = c["registered"] + 1  # the phantom count
+            _write_docs(root, **inflated)
+            r = _run(root)
+            self.assertEqual(
+                r.returncode, 1,
+                "doc citing the grep-era phantom count must fail against the "
+                f"subtree-parsed truth; stdout={r.stdout}")
+
+    # PER-DOCUMENT expectation set (pair-rail R3, P2). Aggregate liveness
+    # is a FLOOR: a metric matching 5 of 6 watched docs looks alive while
+    # the 6th drifts — exactly how docs/GUIA-COMPLETO.md sat stale at 44
+    # hooks AFTER the metric-level rule was "fixed". These pairs are the
+    # sites that actually carry each claim today; dropping one is a
+    # silent coverage loss, so it must fail here and be re-ratified
+    # deliberately (add/remove a pair) rather than vanish.
+    # EXHAUSTIVE manifest, with EXACT counts (pair-rail R5). Two earlier
+    # shapes of this guard were still vacuous:
+    #   - covering 3 metrics of the 54 live pairs left every unlisted
+    #     claim (skills@INSTALL.md, hook_py@CLAUDE.md, …) able to drift
+    #     while aggregate rule_matches stayed nonzero from other docs;
+    #   - asserting PRESENCE (>=1) let a doc carrying TWO independent
+    #     claims for one metric (registered@docs/ARCHITECTURE.md: table +
+    #     prose) lose one silently.
+    # So: every pair, with its exact count. Editing a watched doc is
+    # SUPPOSED to fail here — that forces the manifest to be re-ratified
+    # deliberately instead of coverage evaporating unnoticed. Regenerate
+    # with: verify-counts.sh --json --no-tests | jq .rule_matches_by_doc
+    _EXPECTED_SITES = {
+        "adrs@README.md": 1,
+        "adrs@docs/ARCHITECTURE.md": 1,
+        "adrs@npm/README.md": 1,
+        "commands@CLAUDE.md": 1,
+        "commands@README.md": 2,
+        "commands@docs/ARCHITECTURE.md": 2,
+        "commands@docs/FAQ.md": 1,
+        "commands@npm/README.md": 2,
+        "core@CLAUDE.md": 2,
+        "core@INSTALL.md": 3,
+        "core@README.md": 1,
+        "core@docs/FAQ.md": 2,
+        "core@npm/README.md": 1,
+        "domain@CLAUDE.md": 1,
+        "domain@INSTALL.md": 2,
+        "domain@README.md": 1,
+        "domain@docs/ARCHITECTURE.md": 1,
+        "domain@docs/FAQ.md": 1,
+        "domain@npm/README.md": 1,
+        "frontend@CLAUDE.md": 1,
+        "frontend@INSTALL.md": 3,
+        "frontend@README.md": 1,
+        "frontend@docs/ARCHITECTURE.md": 1,
+        "frontend@docs/FAQ.md": 1,
+        "frontend@npm/README.md": 1,
+        "hook_py@CLAUDE.md": 1,
+        "hook_py@INSTALL.md": 1,
+        "hook_py@README.md": 1,
+        "hook_py@docs/ARCHITECTURE.md": 2,
+        "hook_py@npm/README.md": 2,
+        "lib@INSTALL.md": 2,
+        "lib@README.md": 1,
+        "lib@docs/ARCHITECTURE.md": 2,
+        "lib@npm/README.md": 1,
+        "lib_recursive@docs/ARCHITECTURE.md": 2,
+        "registered@CLAUDE.md": 1,
+        "registered@README.md": 1,
+        "registered@docs/ARCHITECTURE.md": 2,
+        "registered@docs/GUIA-COMPLETO.md": 1,
+        "registered@npm/README.md": 1,
+        "registrations@CLAUDE.md": 1,
+        "registrations@README.md": 1,
+        "registrations@docs/ARCHITECTURE.md": 1,
+        "registrations@npm/README.md": 1,
+        "release_steps@RELEASE.md": 1,
+        "schema_files@docs/ARCHITECTURE.md": 2,
+        "skills@INSTALL.md": 1,
+        "skills@README.md": 3,
+        "skills@docs/ARCHITECTURE.md": 1,
+        "skills@docs/FAQ.md": 1,
+        "skills@npm/README.md": 3,
+        "spec_v1@docs/ARCHITECTURE.md": 1,
+        "tests@INSTALL.md": 1,
+        "tests@docs/GUIA-COMPLETO.md": 1,
+    }
+
+    def test_real_repo_per_document_liveness(self):
+        """Every watched (metric, doc) pair must match its EXACT count.
+
+        Both directions are failures: a pair that drops below its count
+        is silent coverage loss; a pair that appears or grows without the
+        manifest being updated is an unratified claim site."""
+        r = subprocess.run(
+            ["bash", str(SCRIPT), "--json", "--no-tests"],
+            capture_output=True, text=True, timeout=60, env=os.environ.copy())
+        self.assertEqual(r.returncode, 0, r.stdout)
+        by_doc = json.loads(r.stdout).get("rule_matches_by_doc", {})
+        # The dict diff is long and unreadable; the named lists below are
+        # the actionable part, so show them rather than the raw diff.
+        self.maxDiff = None
+        self.assertEqual(
+            by_doc, self._EXPECTED_SITES,
+            "watched claim sites drifted from the ratified manifest. "
+            "Lost: {0}. Unratified/new: {1}.".format(
+                sorted(k for k in self._EXPECTED_SITES
+                       if by_doc.get(k, 0) != self._EXPECTED_SITES[k]),
+                sorted(k for k in by_doc if k not in self._EXPECTED_SITES),
+            ))
+
+    def test_real_repo_rule_liveness(self):
+        """S287 vacuous-gate class: every doc-gated metric must match >=1
+        site in the real repo's watched docs. A metric at 0 matches is a
+        DEAD gate — it reports "no drift" with a number nobody compares
+        (`registered` was dead from birth: derived 47 phantom, matched no
+        doc, said "no drift" for months)."""
+        env = os.environ.copy()
+        r = subprocess.run(
+            ["bash", str(SCRIPT), "--json", "--no-tests"],
+            capture_output=True, text=True, timeout=60, env=env)
+        self.assertEqual(r.returncode, 0, r.stdout)
+        data = json.loads(r.stdout)
+        self.assertIn("rule_matches", data)
+        dead = sorted(k for k, v in data["rule_matches"].items() if v == 0)
+        self.assertEqual(dead, [], f"dead doc-gate rules (0 matches): {dead}")
 
 
 class TestTableCellRules(unittest.TestCase):

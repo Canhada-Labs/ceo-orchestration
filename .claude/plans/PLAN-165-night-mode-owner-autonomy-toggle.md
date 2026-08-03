@@ -377,20 +377,48 @@ primário se W0 ficar apertado.
   (`~/.ssh`, `~/.aws`, `~/.netrc`, família `.env`) são as que não têm gêmeo
   em hook. Registrar aqui em vez de assumir piso.
 
-## Open questions (ratificação do Owner no início da execução)
+## Open questions — RATIFICADAS pelo Owner (2026-08-03, AskUserQuestion)
 
-- **OQ1** controle de presença do Owner para `on`: tty-check (Recomendado
-  se T0.6 mostrar que `!` dá tty) vs variável de ambiente do processo pai
-  no molde de `check_arbitration_kernel.py` vs nenhum, confiando só em P1.
-  *v1 propunha ack digitado; descartado — qualquer modelo com Bash digita o
-  token, então não é controle de presença.*
-- **OQ2** expiração: só banner (Recomendado) vs TTL duro com auto-off.
-  Nota: a justificativa do v1 para recusar TTL era "impossível esquecer
-  silenciosamente", o que se mostrou falso (D3) — então TTL merece
-  reconsideração honesta e não é mais escolha óbvia.
-- **OQ3** nome: `/night-mode` (Recomendado) vs `/automode` (palavra
-  original do Owner). Decide nome de arquivo e a contagem nos sites, então
-  ratificar **antes** do W1, não durante.
+> A decisão de OQ1 registrada em W0-EVIDENCE ("sem tty-gate; P1 + recusa
+> CI") CAIU com CX-1/CX-2/CX-6 e foi refeita com o Owner. Registro
+> verbatim das opções selecionadas:
+
+- **OQ1-redo → "Guard total no rail Bash (Recomendado)"** — *"Overlay +
+  marker + night-mode.py entram em _CANONICAL_GUARDS: o modelo não
+  escreve neles nem invoca o script. Ligar/desligar vira comando SEU (via
+  `!` ou terminal). Fecha CX-1, CX-2 e CX-6 num movimento."* Implementado
+  no p1-corrected (`ceremony-staged/p1-deny-overlay.patch`, 4 arquivos:
+  deny + template + `_CANONICAL_GUARDS` + `_KERNEL_PATHS` para
+  overlay/marker). Consequência de UX aceita: `/night-mode on|off` são
+  ações humanas; o comando `/night-mode` responde com a linha pronta para
+  o Owner rodar via `!`.
+
+  > ⚠ **O artefato corrigido vive no branch `plan-165-draft` (worktree
+  > `.claude/worktrees/plan165`), NÃO nesta árvore.** O
+  > `p1-deny-overlay.patch` commitado aqui ainda é o ANTIGO — só
+  > deny/template, sem os dois rails — e **não aplica mais**: o p3
+  > (`9f53628`) reescreveu exatamente o `settings.json:763` que ele usa
+  > de contexto. Passo 0 da cerimônia é commitar o pack no branch. Um
+  > ensaio em clone limpo falhou no `git apply --check` por isso e passa
+  > com o pack corrigido (S291). Enquanto o pack não for commitado, este
+  > parágrafo descreve intenção, não o byte em disco desta branch —
+  > apontado pelo pair-rail R3 (P1).
+- **OQ2 → "Banner-only (Recomendado)"** — *"Como já implementado e
+  revisado 4x no branch: /ceo-boot avisa quando a postura não é a
+  ratificada. Menos estado, menos código. Residual: armado persiste até
+  você desligar."*
+- **OQ3 → `/night-mode`** (implementação e docs do branch já usam o nome;
+  ratificado implicitamente na decisão "mantém o PLAN-165" e não
+  contestado na rodada de 2026-08-03).
+
+Nota de execução (2026-08-03): NM-04 endurecido no branch — o seam
+`CEO_NIGHT_MODE_TEST_SEAM` deixou de ser bypass geral e só alarga o
+confinamento para alvos sob o tempdir do sistema (classe S284
+"TEST_MODE-é-bypass" fechada; teste vermelho-primeiro
+`test_seam_does_not_widen_outside_tempdir`). CX-6 fecha pelo mesmo
+mecanismo do OQ1-redo (o rail bloqueia a invocação; a recusa sob `CI`
+vira cinto-e-suspensório contra runners honestos, não contra
+adversários). CX-3 vira `p4-install-gitignore.patch` na cerimônia.
 
 ## How to continue
 

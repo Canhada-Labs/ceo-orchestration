@@ -83,7 +83,7 @@ a dev to read the rest.
    (`check_agent_spawn.py`) blocks spawns that do not follow the
    format. Result: no more "generic agent with a pretty name".
 
-3. **Mechanical Python hooks.** 44 hooks wired in `settings.json` run on
+3. **Mechanical Python hooks.** 46 hooks wired in `settings.json` run on
    Claude Code's lifecycle events (`PreToolUse`, `PostToolUse`, `Stop`, …),
    including:
    - `check_agent_spawn` — persona+skill required

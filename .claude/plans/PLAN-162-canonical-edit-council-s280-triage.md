@@ -1,8 +1,9 @@
 ---
 id: PLAN-162
 title: check_canonical_edit.py — S280 council 3-lane findings triage (12 advisory defects)
-status: draft
+status: reviewed
 created: 2026-07-27
+reviewed_at: 2026-08-03
 owner: CEO
 depends_on: [PLAN-156-FOLLOWUP, PLAN-160]
 budget_tokens: 120-180k
@@ -54,31 +55,102 @@ already fixed or already accepted is not re-litigated.
 | 11 | grok | Invisible-unicode SKILL.md guard keys only on single `file_path` (L1556/L1649-1651); other GRANTED SKILL.md paths in a multi-candidate event unscanned under `CEO_UNICODE_HARDBLOCK=1` | VERIFY |
 | 12 | grok | Dispatcher YAML guarded as `*.{yaml,yml}` while `**` applies only to `*.py` (L164-167) → nested `dispatcher/**/*.yaml` ungated | LOW (no nested YAML on disk; mitigant: kernel hard-deny covers `dispatcher/**/*`) |
 
-## Waves (draft — finalize after debate)
+## Waves
 
-- **W0 — debate + dedup.** L3+ → run `/debate start PLAN-162`. Reconcile the
-  12 against S276 A/C/B/D + PLAN-160. Output: per-finding disposition
-  (FIX / ACCEPT / DOC-GAP) with the convergent 3/3 trio (#1/#2/#3) as the
-  priority spine.
-- **W1 — red-first tests** for every FIX-classified finding (a failing test
-  that encodes the defect before any code moves).
-- **W2 — fixes** (canonical/kernel edits → staged pack + pair-rail to APPROVE
-  + Owner GPG ceremony, PLAN-160/161 pattern).
-- **W3 — council re-run** on the post-fix file (optional confirmation the
-  convergent trio is closed).
+- **W0 — debate + dedup. ✅ DONE 2026-08-03.** Três lanes (Security /
+  Code Reviewer / QA), **3× ADJUST, zero VETO**, veredito
+  `PROCEED` / `design-coherent`. Consenso completo, com as 14 revisões de
+  disposição, em `.claude/plans/PLAN-162/debate/round-1/consensus.md`.
+  Resumo do que MUDOU (a triagem sobreviveu; a especificação dos fixes
+  não):
+  - **12/12 findings reproduzem no HEAD** — nenhuma STALE em substância;
+    três com line numbers deslocados (#5 real `:1902-1909`, #11 real
+    `:2133-2145`, #9 sub-escopado).
+  - **#1 re-diagnosticado**: não é latência (1 GPG ≈ 17 ms), é
+    amplificação O(candidatos × sentinels) — a chave de cache inclui
+    `target_rel` enquanto a verificação de assinatura é independente do
+    alvo. Medido: **4.16 s de um budget de 5 s** num evento de 20
+    caminhos, 0 hits / 320 misses. Fix = partição de cache; **fold #1+#10**.
+  - **Cap de sentinels REMOVIDO** (era regressão: o sentinel que pararia
+    de conceder é o da cerimônia recém-assinada). Deadline global
+    fail-closed no lugar, constante de módulo + teste de drift (ler o
+    budget de `settings.json` em runtime é circular).
+  - **A citação de ADR-010 para o #5 é FALSA** (zero ocorrências de
+    postura de falha no ADR). #5 racha: 5a `read_event` → ACCEPT;
+    5b `parse_error` → **FIX fail-closed**.
+  - **#4 estreitado** ("parse só dentro dos markers" brickaria 5 dos 16
+    sentinels vivos); **#9 ampliado** para 4 sítios + validação de
+    `tool_name`; **#11 → DOC-GAP** (inexequível sob Layer-A v1);
+    **#2 → fix independente de profundidade**.
+  - **Rider R1 (check_budget) REJEITADO como proposto** — 3/3: o
+    breadcrumb já existe, o hook não tem caminho de bloqueio nenhum
+    (advisory por ADR-033), e a heurística CWD/branch contradiz T-001.
+    Re-desenhado: comparar cada plano ativo contra o PRÓPRIO cap.
+  - **P0 NOVO, fora das 12 (S1)**: `fnmatch.fnmatchcase` nos dois rails +
+    filesystem case-insensitive (APFS) ⇒ `.claude/settings.JSON` e
+    `.claude/hooks/_lib/audit_emit.PY` furam **canonical E kernel**, e a
+    escrita sobrescreve o arquivo real. Verificado em primeira mão pelo
+    CEO. Entra como FIX P0.
+  - **S3**: #1 já é residual ACEITO em `ADR-164:119-127` ⟹ o entregável
+    inclui **`ADR-164-AMEND-1`** (a medição refuta a premissa "512 paths,
+    operationally absurd": 47 bastam).
+  - **S8** (adendo pós-consenso): o deadline do #1 exige **clock
+    injetável no FIX** — sem seam, o teste red-first vira `sleep` real e
+    flaky sob carga (classe já documentada neste repo).
 
-## Open questions
+- **W0-B — pair-rail cross-model sobre o diff (3 rodadas, S291).** O
+  Stop-hook exigiu review antes do commit; rodei até parar de achar.
+  Duas correções que nenhum dos 3 lanes do debate pegou:
+  - **R1/P1 — a classe vacuous-gate tem CAMADAS.** Eu consertei a regra
+    morta (`registered` casava 0 docs) e a corrigida passou a casar 5,
+    o que a fez PARECER viva — enquanto `docs/GUIA-COMPLETO.md:86`, com a
+    preposição diferente ("hooks wired **in**"), seguia stale em 44 com 46
+    vivos. Meu próprio teste de liveness não pegou (a métrica tinha
+    matches > 0). **Uma regra que casa ALGUNS documentos é
+    indistinguível de uma que casa todos**: a prova é controle positivo
+    por SITE, não contagem por métrica.
+  - **R2/P1 — a mitigação do S2 que eu escrevi era defeituosa.** "Aceitar
+    sentinels rastreados no git **ou** pré-existentes à sessão" é
+    derrotável em um comando: o agente escreve o `approved.md` e roda
+    `git add`; `ls-files --error-unmatch` passa a chamá-lo tracked. Pior,
+    o teste de controle comitava um sentinel criado pelo próprio teste e
+    afirmava que ele CONCEDE — codificando o bypass como comportamento
+    desejado. Corrigido: anchor = **início da sessão**, três negativos
+    (untracked / staged / committed).
+  - **R2/P2 — dois sites de versão mortos de nascença.** `CLAUDE.md` e
+    `README.md` nunca tiveram `VERSION=` (`git log -S` não acha commit
+    que o adicionasse), e o checklist de release que escrevi nesta mesma
+    sessão os anunciava como checados. Removidos + liveness estendida à
+    família inteira de versão (incl. `npm/package.json`,
+    `pyproject.toml`): site declarado com zero matches agora FALHA como
+    "dead release gate".
+- **W1 — red-first tests** para cada FIX, na convenção `PLAN162_FIX_<N>` +
+  `xfail(strict=True)` herdada de `test_canonical_edit_council_findings.py`
+  (o precedente do PLAN-160 para provar fix em hook canonical-guarded).
+  #10 exige teste IN-PROCESS (subprocess mata o cache e dá XPASS por
+  acidente). Inclui ≥1 passada de INTERAÇÃO entre findings.
+- **W2 — fixes** em staged pack + pair-rail APPROVE + cerimônia GPG do
+  Owner. O Scope do sentinel deve deixar os fixes fail-closed
+  SEPARÁVEIS dos riders (um REJECT do rail num rider não pode travar
+  todos).
+- **W3 — council re-run: PULADO.** Ratificado pelo Owner 2026-08-03
+  (AskUserQuestion, opção "Pular W3"): *"Cada FIX exige teste red-first
+  (falha antes, passa depois) + o diff inteiro passa pelo pair-rail codex
+  na cerimônia."* 3/3 lanes concordaram.
 
-- **OQ1** — Is #5 (parse-error fail-open) a defect or the intended ADR-010
-  envelope contract? The sibling kernel hook is fail-closed on parse_error
-  "UNLIKE the sentinel hook" — is that asymmetry deliberate or drift?
-- **OQ2** — #3 and #8 both say "the guard registry guards everything except
-  itself." Fold into one "guard-the-guardfiles" fix, or keep separate?
-- **OQ3** — Council-instrument follow-ups from S280 (NOT about this file):
-  (i) recalibrate the C3 wall-clock formula `180+2*N` (ignores scope depth,
-  under-budgets low-file-count deep scopes); (ii) fold the `args`
-  JSON-string transport-decode into canonical `council-audit.js`. Own plan
-  or ride here as a separate wave?
+## Open questions — RESOLVIDAS no W0
+
+- **OQ1 → 5a ACCEPT / 5b FIX.** A assimetria alegada é metade falsa: o
+  kernel irmão é fail-open IDÊNTICO em `read_event`
+  (`check_arbitration_kernel.py:541-543`); os hooks divergem só em
+  `parse_error`, e ali o sentinel é o DRIFT (CLAUDE.md §4 é literal:
+  fail-closed on INPUT). Não há emenda a fazer em ADR-010 — não há texto
+  para emendar; falta DOCUMENTAR a postura. **Teste-alfinete obrigatório
+  de qualquer jeito**: `grep parse_error` nos 8 arquivos de teste = ZERO.
+- **OQ2 → FOLD mantido** (3/3), sem herdar o enquadramento "low" do #12:
+  #3 e #8 estão DUPLAMENTE desguardados (nem canonical nem kernel),
+  enquanto #12 tem kernel hard-deny.
+- **OQ3 → DEFER** para plano próprio (3/3). Não é `check_canonical_edit`.
 
 ## Success criteria
 
