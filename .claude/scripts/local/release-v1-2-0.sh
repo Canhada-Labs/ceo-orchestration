@@ -200,12 +200,31 @@ if not any(r.get("conclusion") == "success" for r in val):
     die "gh CLI not available — cannot confirm CI (fail-closed)"
   fi
 
+  # These MUST be the invocations validate.yml uses (:341-342, :424-425), not
+  # `unittest discover`. The suite is pytest-only BY CONSTRUCTION: conftest.py
+  # carries the sys.path bootstrap and the _lib resolution guards as pytest
+  # collection hooks, and several modules isolate their environment with
+  # pytest `autouse` fixtures. `unittest discover` loads none of that, so those
+  # modules run with their declared isolation silently disabled — which leaks
+  # CLAUDE_PROJECT_DIR into later modules. test_flip_closures then resolves
+  # settings.json / red-team.yml under a dead tmp dir and reports that files
+  # which plainly exist "must exist". It passes 12/12 when run alone.
+  # Diagnosed 2026-08-02 during the v1.2.0 GA promote; the old invocation made
+  # this gate a FALSE RED that blocked a release whose CI was green.
   hdr "test suites (the same ones CI runs)"
-  python3 -m unittest discover -s .claude/hooks/tests >/dev/null 2>&1 \
-    || die "hooks test suite failed"
+  python3 -m pytest .claude/hooks/tests/ -n auto -m 'not serial' \
+    --strict-markers --tb=no -q >/dev/null 2>&1 \
+    || die "hooks test suite failed (not serial)"
+  python3 -m pytest .claude/hooks/tests/ -m 'serial' \
+    --strict-markers --tb=no -q >/dev/null 2>&1 \
+    || die "hooks test suite failed (serial)"
   ok "hooks tests pass"
-  python3 -m unittest discover -s .claude/scripts/tests >/dev/null 2>&1 \
-    || die "scripts test suite failed"
+  python3 -m pytest .claude/scripts/tests/ .claude/scripts/optimizer/tests/ \
+    -n auto -m 'not serial' --strict-markers --tb=no -q >/dev/null 2>&1 \
+    || die "scripts test suite failed (not serial)"
+  python3 -m pytest .claude/scripts/tests/ .claude/scripts/optimizer/tests/ \
+    -m 'serial' --strict-markers --tb=no -q >/dev/null 2>&1 \
+    || die "scripts test suite failed (serial)"
   ok "scripts tests pass"
 
   hdr "governance gates"
@@ -457,9 +476,17 @@ irreversible, outward-facing step — it stays yours:
 
 Then, per .github/release-checklist.md:
   - gh run watch                      (all release.yml steps green)
+$( if [ "$STABLE" -eq 1 ]; then cat <<'GA'
+  - GitHub Release from the tag, "pre-release" NOT checked (this is the GA)
+  - npm view <pkg> version            (OIDC publish landed the bare semver)
+  - close the release: CHANGELOG links, memory topic, archive the RC hold
+GA
+else cat <<'RC'
   - GitHub Release from the tag, "pre-release" checked while this is an RC
   - ADR-103 hold: >=24 h, Codex re-pass against the RC, adopter smoke test
   - promote: bash $0 bump --stable && bash $0 tag --stable
+RC
+fi )
 EOF
 }
 
