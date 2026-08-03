@@ -658,6 +658,28 @@ def _summary(mode: str, previous_mode: str, result: str) -> None:
     )
 
 
+def _seam_widens_to(root: Path) -> bool:
+    """NM-04 hardening (S290 review, the S284 'TEST_MODE-is-a-bypass'
+    class): the test seam is NO LONGER a general confinement bypass.
+
+    Even with `CEO_NIGHT_MODE_TEST_SEAM` set, the widened target must
+    resolve UNDER the system temp directory — which is all the test
+    suite ever needs (every test root is an isolated tmp tree). A seam
+    that reopened arbitrary-path writes ("arm acceptEdits in ANY repo on
+    the machine") was the exact primitive NM-04 exists to remove; a
+    tmp-tree write escalates nothing (a tmp repo's sessions belong to
+    whoever created it).
+    """
+    if not os.environ.get(_TEST_SEAM_ENV):
+        return False
+    try:
+        tmp = Path(tempfile.gettempdir()).resolve()
+        resolved = root.resolve()
+    except OSError:
+        return False
+    return resolved == tmp or tmp in resolved.parents
+
+
 def _validate_root(root: Path) -> Optional[str]:
     """NM-04 — confine --project-root; returns a diagnostic or None.
 
@@ -665,18 +687,20 @@ def _validate_root(root: Path) -> Optional[str]:
     primitive: any Bash-capable agent could arm `acceptEdits` in ANY repo
     on the machine, including targets without the P1 deny rule. Reject
     (fail-closed) any target that is not this repository's root or under
-    it, unless the test-only `CEO_NIGHT_MODE_TEST_SEAM` env var is set
-    (isolated tmp trees in the test suite). In BOTH cases the target must
-    already look like an installed project (`.claude/settings.json`
-    present) — night-mode never bootstraps a posture into a bare tree.
+    it. The test seam (`CEO_NIGHT_MODE_TEST_SEAM`) widens the confinement
+    ONLY to targets under the system temp directory (`_seam_widens_to`)
+    — never to arbitrary paths. In ALL cases the target must already look
+    like an installed project (`.claude/settings.json` present) —
+    night-mode never bootstraps a posture into a bare tree.
     """
-    if not os.environ.get(_TEST_SEAM_ENV):
-        if root != REPO_ROOT and REPO_ROOT not in root.parents:
+    if root != REPO_ROOT and REPO_ROOT not in root.parents:
+        if not _seam_widens_to(root):
             return (
                 f"--project-root {root} is outside this repository "
                 f"({REPO_ROOT}); refusing (NM-04 confinement — the toggle "
-                f"only manages THIS repo's overlay). {_TEST_SEAM_ENV} is a "
-                "test-only escape hatch for isolated test trees."
+                f"only manages THIS repo's overlay). {_TEST_SEAM_ENV} widens "
+                "confinement only to isolated trees under the system temp "
+                "directory, never to arbitrary paths."
             )
     if not (root / ".claude" / "settings.json").is_file():
         return (

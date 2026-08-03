@@ -1,3 +1,36 @@
+> **STATUS 2026-08-03 (2ª revisão) — p1 CORRIGIDO (p1-corrected), p3 já
+> LANDADO.** Historia: o review cross-model (codex, CX-1) mostrou que o p1
+> original NAO fechava a escada de escalacao — as entradas de `deny` sao
+> por FERRAMENTA (Edit/Write), enquanto `check_bash_safety.py` protege
+> escrita via Bash usando `_CANONICAL_GUARDS`, e os tres caminhos estavam
+> FORA dessa lista (`echo '{...}' > .claude/settings.local.json` passava
+> sob `acceptEdits` com o p1 aplicado). O p3 (remocao do disableAutoMode)
+> foi landado standalone em `9f53628` + `93a1938` `[SENT-PLAN165]`.
+>
+> O `p1-deny-overlay.patch` deste diretorio e agora o **p1-corrected**,
+> regenerado contra o HEAD pos-p3 (`93a1938`), tocando QUATRO arquivos:
+>
+> 1. `.claude/settings.json` — as 6 entradas de deny + comment (rail
+>    Edit/Write; escopo honesto do CX-1 declarado no proprio comment).
+> 2. `templates/settings/settings.base.json` — espelho das 6 entradas +
+>    comment + correcao do claim stale do `_posture_keys_comment` ("the
+>    dogfood repo enables them" — falso para disableAutoMode desde o p3).
+> 3. `.claude/hooks/check_canonical_edit.py` — os 3 caminhos entram em
+>    `_CANONICAL_GUARDS` (o rail load-bearing: bash_safety keia off dessa
+>    lista → fecha CX-1; e listar o ESCRITOR bloqueia invocacao do toggle
+>    pelo rail do modelo → fecha CX-2 e CX-6, OQ1-redo ratificado pelo
+>    Owner 2026-08-03: "Guard total no rail Bash" — on/off viram acoes
+>    HUMANAS, via `!` ou terminal).
+> 4. `.claude/hooks/check_arbitration_kernel.py` — overlay + marker entram
+>    em `_KERNEL_PATHS` (estado de postura e kernel-tier: nenhum sentinel
+>    autoriza tool-write; o escritor fica canonical-tier para poder
+>    evoluir via cerimonia futura).
+>
+> Preflight: `git apply --check` limpo contra `93a1938`; suites alvo
+> rodadas em clone limpo com p1-corrected + p2 aplicados (log da sessao
+> S291). CX-3 (install.sh sem as regras de ignore) é patch SEPARADO na
+> cerimônia consolidada — ver `p4-install-gitignore.patch` se presente.
+
 # PLAN-165 — ceremony-staged bundle (prerequisites P1 + P2)
 
 Staged inputs for the sentinel ceremony already queued (with RC3-F7 and
@@ -320,13 +353,27 @@ dentro de um comentário de documentação para adopters (a chave nunca foi
 enviada viva no template). Logo a remoção não redenna nada e não muda
 comportamento de adopter.
 
-**Ordem na cerimônia.** p3 é independente de p1/p2 — pode landar antes,
-depois ou junto. Se landar junto com p1, os dois tocam
-`.claude/settings.json`: aplique **p1 primeiro** (ele acrescenta entradas
-ao `permissions.deny`), depois p3 (que remove uma chave top-level). Os
-hunks não se sobrepõem, mas a ordem mantém o contexto previsível.
+**Ordem — LEIA O STATUS NO TOPO.** Hoje so o p3 vai a cerimonia, e ele e STANDALONE: `git apply p3-remove-disableautomode.patch` contra o HEAD canonico, sozinho. A regra abaixo vale APENAS para quando o p1 corrigido voltar — e nesse dia o p3 tem de ser REGERADO contra o estado pos-p1 (o metodo esta em `scratchpad/gen-p3-standalone.py`: aplicar e COMMITAR o p1 numa arvore temporaria, editar, `git diff`).
+
+**Quando o p1 voltar: p1 ANTES de p3, obrigatoriamente.** Os hunks SE
+SOBREPÕEM — uma versão anterior deste README afirmava o contrário e estava
+errada; o teste da receita pegou (`patch failed: .claude/settings.json:760`).
+p1 acrescenta a chave `_night_mode_deny_surface_comment` na região 763-769,
+que é exatamente o contexto onde p3 remove o `disableAutoMode`. O p3 aqui
+foi **regerado contra o estado pós-p1**, então:
+
+    git apply p1-deny-overlay.patch
+    git apply p3-remove-disableautomode.patch    # nesta ordem, sempre
+
+Aplicar p3 sozinho contra o HEAD canônico FALHA por desenho. Se algum dia
+p1 for descartado, p3 tem de ser regerado (`scratchpad/gen-p3-v2.py` mostra
+o método: aplicar e COMMITAR p1 numa árvore temporária, editar, `git diff`).
+
+Sequência verificada de ponta a ponta: JSON válido nos dois arquivos, deny
+vivo 24→30, deny do template 4→10, as 6 entradas idênticas nos dois
+espelhos, `defaultMode` intacto em `"manual"`.
 
 **Registro formal.** Isto reverte uma decisão de postura ratificada em L3.
-O registro mínimo está aqui e na nota datada do PLAN-163. Se o Owner quiser
+O registro mínimo está aqui e nesta secao. NOTA: a nota datada no PLAN-163 ainda NAO foi escrita — o PLAN-163 continua registrando `disableAutoMode` como ratificado e ativo, e o comentario do template ainda diz que o repo dogfood a habilita. Ambos ficam contraditorios com o settings.json vivo apos o p3. Atualizar os dois e divida aberta, registrada aqui em vez de afirmada como feita (codex r2). Se o Owner quiser
 o registro formal, cabe uma emenda ao ADR de postura — não foi criada
 unilateralmente para não inflar a contagem de ADRs sem ele pedir.

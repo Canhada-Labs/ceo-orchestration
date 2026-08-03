@@ -809,6 +809,32 @@ class NightModeRootConfinementTest(_NightModeBase):
             "no overlay may be bootstrapped into a bare tree",
         )
 
+    def test_seam_does_not_widen_outside_tempdir(self):
+        # NM-04 hardening (S290 review): the seam widens confinement ONLY
+        # to targets under the system temp directory. With the seam SET
+        # but the child's TMPDIR redirected to a tree DISJOINT from the
+        # target root, the invocation must still be refused — the
+        # "TEST_MODE-is-a-bypass" class (S284) stays closed even when the
+        # env var leaks into a live session.
+        faketmp = Path(self.project_dir) / "faketmp"
+        faketmp.mkdir()
+        dropped = set(_CI_KEYS)
+        env = {k: v for k, v in os.environ.items() if k not in dropped}
+        env[_SEAM_ENV] = "1"
+        env["TMPDIR"] = str(faketmp)  # child gettempdir() != self.root's tree
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), "on", "--project-root", str(self.root)],
+            capture_output=True, text=True, timeout=30,
+            cwd=str(self.project_dir), env=env,
+        )
+        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+        self.assertFalse(
+            self.local_settings.exists(),
+            "a seam that widens beyond the temp directory is the NM-04 "
+            "bypass class — no overlay may be written",
+        )
+        self.assertIn("result=refused", result.stdout)
+
 
 # ---------------------------------------------------------------------------
 # NM-05 — machine-readable one-line summary on every terminating path
