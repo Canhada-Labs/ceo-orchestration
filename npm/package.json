@@ -1,6 +1,6 @@
 {
   "name": "ceo-orchestration",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "NPM shim that runs the ceo-orchestration install.sh inside a published bundle.",
   "type": "commonjs",
   "bin": {

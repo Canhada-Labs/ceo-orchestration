@@ -223,7 +223,7 @@ the honest *Risks / Not-For* caveat in the [README](../README.md).
 ## 4. The SPEC contract
 
 `SPEC/v1/` is the published, versioned compliance contract (SemVer; currently
-v1.2.0, aligned with the repo `VERSION`). It contains 28 schema files defining
+v1.3.0, aligned with the repo `VERSION`). It contains 28 schema files defining
 the stable interfaces an adopter can pin to — among them `audit-log.schema.md`,
 `hook-io.schema.md`, `plan.schema.md`, `debate.schema.md`,
 `skill-frontmatter.schema.md`, `tier-policy.schema.md`, and

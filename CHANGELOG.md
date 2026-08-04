@@ -9,11 +9,101 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > commands, schema/contract changes, and behavior an adopter would notice after
 > installing or upgrading the framework. Internal refactors, test-only churn, and
 > release-engineering bookkeeping are omitted. Counts cited below (as of
-> v1.2.0: 166 skills, 26 slash commands, 184 ADRs, 68 `_lib` modules) are
+> v1.3.0: 166 skills, 27 slash commands, 188 ADRs, 68 `_lib` modules) are
 > reproducible from the repository via
 > `bash .claude/scripts/local/verify-counts.sh`.
 
 ---
+
+## [1.3.0] - 2026-08-04
+
+Night-mode + doctrine release (PLAN-162/165, ceremony 2). One user-facing
+feature, one cross-rail security P0 closed, and one published-contract
+conflict settled by ADR instead of by silence. As always: governance and
+auditability — no speed claim.
+
+### Added — night-mode: Owner-invoked autonomy posture toggle (PLAN-165, ADR-185)
+
+- **`/night-mode` command + `.claude/scripts/night-mode.py`**: the Owner
+  flips the per-machine autonomy posture (`permissions.defaultMode`
+  overlay in the gitignored `.claude/settings.local.json`) with
+  next-session semantics — "arm before sleep, autonomous overnight
+  session, disarm in the morning". The tracked `settings.json` posture is
+  never touched; templates and adopter defaults are unchanged.
+- **Arming autonomy is a HUMAN action** (Owner-ratified OQ1-redo): the
+  toggle refuses under CI; the writer script carries a self-path guard
+  and the Bash rail carries a best-effort invocation matcher (defense in
+  depth — the real boundary is the script's own guard plus the session
+  deny surface, and the docs say exactly that, not more).
+- **Audited**: every `on`/`off`/refusal emits `night_mode_toggled` into
+  the HMAC chain (schema row in `SPEC/v1/audit-log.schema.md`); live-fire
+  proven — toggle events and a negative-control `refused` line verified
+  on-chain before this release.
+- `bypassPermissions` was deliberately CUT from the design: it would trip
+  the `settings_tamper_tripwires` boot check by construction. The honest
+  escape valve stays `claude --permission-mode bypassPermissions` (one
+  session, explicit, ephemeral).
+
+### Fixed — case-fold bypass on canonical AND kernel rails (PLAN-162 W2, P0)
+
+- On case-insensitive filesystems (APFS default), `fnmatch.fnmatchcase`
+  let `.claude/settings.JSON` / `.claude/hooks/_lib/audit_emit.PY` slip
+  past BOTH guard rails while the write lands on the real file. Both
+  rails now case-fold before matching. Found first-hand during the
+  PLAN-162 debate; verified by red-first tests on both rails.
+
+### Changed — hook-deadline doctrine settled by ADR-186 (fail-CLOSED)
+
+- The canonical-edit matcher now enforces a **per-invocation wall
+  deadline that fails CLOSED** (`_HOOK_WALL_BUDGET_S`, injectable clock),
+  replacing the unbounded sentinel sweep — and the published
+  fail-open-on-infrastructure contract in `CLAUDE.md` §4 / `AGENTS.md` §1
+  now names this exception explicitly: a timeout *inside the matcher* is
+  an incomplete verification, not infrastructure. Recovery route:
+  provenance-pinned unlock (`CEO_SENTINEL_UNLOCK` +
+  `CEO_SESSION_ANCHOR_SHA` or `CEO_SENTINEL_UNLOCK_SHA256`).
+- Sentinel-verification **cache partitioned** (signature validity no
+  longer keyed per-target): the measured O(candidates × sentinels)
+  amplification — 4.16 s of a 5 s budget at 20 paths — collapses to one
+  verification per sentinel (ADR-164-AMEND-1).
+- Deadline blocks are **countable in the chain**: the veto breadcrumb
+  carries `reason_code=canonical_edit_hook_fault` instead of
+  masquerading as a missing-sentinel block.
+
+### Changed — pair-rail recalibrated 120/150 → 180/210 (ADR-110-AMEND-2)
+
+- Internal cap 180 s under a 210 s registration, ratified only after a
+  live substrate probe proved the harness honors a 210 s hook
+  registration (evidence committed:
+  `.claude/plans/PLAN-162/probe-210s-GO-EVIDENCE.md`).
+- `pair_rail_case` events now carry `timeout_ms` (int — a float in an
+  HMAC-covered field silently drops the whole event), and the §3
+  escalation trigger is the **censoring rate**, not p95 (the p95 of a
+  censored sample is inestimable).
+
+### Fixed — scheduled workflows that were red without surfacing in push CI
+
+- **mutation-gate**: kill-rate now parsed from mutmut's junitxml (the old
+  regex parser NEVER reported a rate — historical "96.7%" came from an
+  inflated formula), artifact redaction inlined and fail-closed, and the
+  `actions/checkout` SHA re-pinned (which also cures the
+  supply-chain-watch drift red present since 2026-07-20).
+- **tournament**: stderr banner no longer merged into the cost-projection
+  JSON (`2>&1` unmerge).
+- **reality-ledger**: required labels created idempotently
+  (`gh label create --force`) so fresh installs cannot red on a missing
+  label.
+- **ceo-boot**: 24th Tier-S check `scheduled_workflows_red` closes the
+  "scheduled gate red for weeks, invisible" class — with cure-detection
+  (a red scheduled lane whose newest completed run across ALL trigger
+  events is green reports `cured_pending_cron`, not red).
+
+### Governance
+
+- ADRs 184 → **188** (ADR-185 night-mode; ADR-186 hook-deadline policy;
+  ADR-110-AMEND-2; ADR-164-AMEND-1). Slash commands 26 → **27**
+  (`/night-mode`). All four ceremony phases landed as separable
+  Owner-GPG-signed commits with per-phase sentinels and closed scopes.
 
 ## [1.2.0] - 2026-07-30
 
