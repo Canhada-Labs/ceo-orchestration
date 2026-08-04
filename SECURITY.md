@@ -274,8 +274,8 @@ get a "by-design" response:
 
 Active support window per [`SUPPORT.md`](SUPPORT.md):
 
-- **Current MINOR** (`v1.2.x`) — full security support.
-- **Previous MINOR** (`v1.1.x`) — security-only patches for 6 months
+- **Current MINOR** (`v1.3.x`) — full security support.
+- **Previous MINOR** (`v1.2.x`) — security-only patches for 6 months
   after the next MINOR ships.
 - **Older** — best-effort; we will tell you the upgrade path, not ship
   a back-port.

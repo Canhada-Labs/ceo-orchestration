@@ -479,21 +479,42 @@ if live_version:
     # design (they point at the VERSION file). Every remaining site is
     # liveness-accounted below — a site that matches nothing now FAILS.
     VERSION_SITES = [
-        ("INSTALL.md", r'--pin v(\d+\.\d+\.\d+)'),
+        ("INSTALL.md", r'--pin v(\d+\.\d+\.\d+)', "full"),
         # PLAN-161 V1 — current-version declaration sites in the newly-watched
         # docs (the npm README review stamp is a deliberate release tripwire:
         # a version bump forces a fresh review of the npm-facing copy).
-        ("docs/ARCHITECTURE.md", r'currently\s+v(\d+\.\d+\.\d+), aligned with the repo'),
-        ("npm/README.md", r'last-reviewed: \d{4}-\d{2}-\d{2} v(\d+\.\d+\.\d+)'),
+        ("docs/ARCHITECTURE.md", r'currently\s+v(\d+\.\d+\.\d+), aligned with the repo', "full"),
+        ("npm/README.md", r'last-reviewed: \d{4}-\d{2}-\d{2} v(\d+\.\d+\.\d+)', "full"),
+        # S293 (codex NO-GO no rc.1 do v1.3.0 — P0s 2-4): TRÊS declarações de
+        # versão corrente que estavam FORA desta lista e ficaram stale no
+        # bump (a classe unwatched-doc de S291, de novo). SBOM declara o
+        # triple completo; SECURITY/VERSIONING declaram a janela de suporte
+        # como vMAJOR.MINOR.x — comparadas ao major.minor do VERSION vivo.
+        ("SBOM.md", r'\*\*Version:\*\* `(\d+\.\d+\.\d+)`', "full"),
+        ("SECURITY.md", r'\*\*Current MINOR\*\* \(`v(\d+\.\d+)\.x`\)', "minor"),
+        ("VERSIONING.md", r'Current MINOR \(`v(\d+\.\d+)\.x`\)', "minor"),
     ]
-    for doc, rx in VERSION_SITES:
+    _live_minor = ".".join(live_version.split(".")[:2])
+    for doc, rx, mode in VERSION_SITES:
         _text = texts.get(doc, "")
+        # S293: SBOM/SECURITY/VERSIONING não estão em DOCS (as regras de
+        # contagem não se aplicam a eles) — carregue direto, senão o site
+        # nasce "morto" sobre texto nunca lido.
+        if not _text:
+            _p = os.path.join(root, doc)
+            if os.path.isfile(_p):
+                try:
+                    _text = open(_p, encoding="utf-8").read()
+                except OSError:
+                    _text = ""
         _hits = 0
+        _expected = live_version if mode == "full" else _live_minor
         for m in re.finditer(rx, _text):
             _hits += 1
-            if m.group(1) != live_version:
+            if m.group(1) != _expected:
                 violations.append(
-                    f"{doc}: cites version={m.group(1)}, live VERSION={live_version}  (rule: exact)"
+                    f"{doc}: cites version={m.group(1)}, live VERSION={_expected}"
+                    f" ({mode})  (rule: exact)"
                 )
         rule_matches["version:" + doc] = _hits
         # Liveness for the version family (pair-rail R2 P2 / R3 P1). The

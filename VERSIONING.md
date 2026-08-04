@@ -60,6 +60,7 @@ pre-genesis history is condensed into CHANGELOG `[1.0.0]`):**
 |------|--------------|
 | `v1.0.0 → v1.1.0` | PLAN-153/155/156 — two new host harnesses (Codex CLI, Grok Build) = new trust boundaries an adopter must accept; cross-vendor audit council; gated learning loop. |
 | `v1.1.0 → v1.2.0` | PLAN-160/161/163/164 — Claude 5 model registry (ADR-181, additive `model:` contract), Codex payload-pin enforcement (ADR-182), pair-rail timeout contract (ADR-110-AMEND-1), new typed audit actions. |
+| `v1.2.0 → v1.3.0` | PLAN-162/165 — night-mode posture toggle (new trust boundary, ADR-185); sentinel-unlock provenance inside git worktrees (ADR-119 Invariant 5 — closes in-window self-authored-sentinel escalation); fail-CLOSED matcher deadline (ADR-186); pair-rail 180/210 + `timeout_ms` (ADR-110-AMEND-2). |
 
 ### PATCH — bug fixes, additive features within SPEC
 
@@ -182,9 +183,9 @@ upgrade_agents_canonical_only`).
 
 | Window | Status |
 |--------|--------|
-| Current MINOR (`v1.2.x`) | Full support — features + security + bug fixes |
-| Previous MINOR (`v1.1.x`) | Security-only patches for **6 months** after the next MINOR ships |
-| Older (`v1.0.x`) | Best-effort — we describe the upgrade path; no back-ports |
+| Current MINOR (`v1.3.x`) | Full support — features + security + bug fixes |
+| Previous MINOR (`v1.2.x`) | Security-only patches for **6 months** after the next MINOR ships |
+| Older (`v1.0.x`, `v1.1.x`) | Best-effort — we describe the upgrade path; no back-ports |
 
 Upgrade via `bash scripts/upgrade.sh --pin vX.Y.Z` (consult
 CHANGELOG.md for the sequence). Skipping a MINOR is supported across

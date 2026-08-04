@@ -1,8 +1,8 @@
 # SBOM — ceo-orchestration
 
-<!-- last-reviewed: 2026-07-31 v1.2.0 -->
+<!-- last-reviewed: 2026-08-04 v1.3.0 -->
 
-**Version:** `1.2.0` (tracks repo-root `VERSION`)
+**Version:** `1.3.0` (tracks repo-root `VERSION`)
 **Format:** manual markdown (CycloneDX-minimal; no tooling runtime dependency).
 **Attestation (framework CORE):** the framework **core** — the PreToolUse/
 PostToolUse hooks in `.claude/hooks/` and the shared `.claude/hooks/_lib/`

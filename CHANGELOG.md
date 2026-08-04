@@ -44,6 +44,24 @@ auditability — no speed claim.
   escape valve stays `claude --permission-mode bypassPermissions` (one
   session, explicit, ephemeral).
 
+### Security — sentinel unlock now requires provenance inside git worktrees (ADR-119 Invariant 5)
+
+- **Adopter-visible tightening of the recovery contract** (SPEC/v1
+  `sentinel-format.schema.md` §unlock): inside a git work tree, the
+  `CEO_SENTINEL_UNLOCK` + `CEO_SENTINEL_UNLOCK_ACK` pair alone no longer
+  grants — you must also provide provenance via
+  `CEO_SESSION_ANCHOR_SHA=$(git rev-parse HEAD)` (captured BEFORE the
+  session) **or** `CEO_SENTINEL_UNLOCK_SHA256=<sha256 of approved.md>`.
+  The block message teaches both forms when a window is armed. This
+  closes a real escalation: during an unlock window the agent could
+  author its own `approved.md` (a path guarded by neither rail) and
+  self-grant. Classified MINOR under this repo's published policy
+  (`VERSIONING.md` §MINOR: "a new trust boundary adopters must
+  understand"); MAJOR is reserved for schema-consumer breakage
+  (removed/renamed fields, dropped event types), which this is not.
+  **Action needed only if you scripted the 2-var unlock inside a git
+  worktree** — add one of the two exports above.
+
 ### Fixed — case-fold bypass on canonical AND kernel rails (PLAN-162 W2, P0)
 
 - On case-insensitive filesystems (APFS default), `fnmatch.fnmatchcase`
