@@ -1,9 +1,10 @@
 ---
 id: PLAN-162
 title: check_canonical_edit.py — S280 council 3-lane findings triage (12 advisory defects)
-status: reviewed
+status: executing
 created: 2026-07-27
 reviewed_at: 2026-08-03
+executing_at: 2026-08-04
 owner: CEO
 depends_on: [PLAN-156-FOLLOWUP, PLAN-160]
 budget_tokens: 120-180k
