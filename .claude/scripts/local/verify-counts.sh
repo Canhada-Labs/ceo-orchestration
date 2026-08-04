@@ -493,8 +493,20 @@ if live_version:
         ("SBOM.md", r'\*\*Version:\*\* `(\d+\.\d+\.\d+)`', "full"),
         ("SECURITY.md", r'\*\*Current MINOR\*\* \(`v(\d+\.\d+)\.x`\)', "minor"),
         ("VERSIONING.md", r'Current MINOR \(`v(\d+\.\d+)\.x`\)', "minor"),
+        # S293 r3 P1: vigiar SÓ o Current deixa o PREVIOUS envelhecer em
+        # silêncio — e a janela de suporte publicada é uma promessa a
+        # adopters, não decoração. Previous = minor imediatamente anterior
+        # ao vivo (rebase de MAJOR não é expressável aqui e falharia alto,
+        # que é o comportamento correto para uma transição que exige juízo).
+        ("SECURITY.md", r'\*\*Previous MINOR\*\* \(`v(\d+\.\d+)\.x`\)', "prev_minor"),
+        ("VERSIONING.md", r'Previous MINOR \(`v(\d+\.\d+)\.x`\)', "prev_minor"),
     ]
     _live_minor = ".".join(live_version.split(".")[:2])
+    try:
+        _maj, _min = (int(x) for x in _live_minor.split("."))
+        _prev_minor = "%d.%d" % (_maj, _min - 1) if _min > 0 else ""
+    except ValueError:
+        _prev_minor = ""
     for doc, rx, mode in VERSION_SITES:
         _text = texts.get(doc, "")
         # S293: SBOM/SECURITY/VERSIONING não estão em DOCS (as regras de
@@ -508,15 +520,24 @@ if live_version:
                 except OSError:
                     _text = ""
         _hits = 0
-        _expected = live_version if mode == "full" else _live_minor
+        if mode == "full":
+            _expected = live_version
+        elif mode == "prev_minor":
+            _expected = _prev_minor
+        else:
+            _expected = _live_minor
+        if not _expected:
+            # Sem previous derivável (X.0): o site não é checável por valor;
+            # a liveness abaixo ainda exige que ele EXISTA.
+            _expected = None
         for m in re.finditer(rx, _text):
             _hits += 1
-            if m.group(1) != _expected:
+            if _expected is not None and m.group(1) != _expected:
                 violations.append(
                     f"{doc}: cites version={m.group(1)}, live VERSION={_expected}"
                     f" ({mode})  (rule: exact)"
                 )
-        rule_matches["version:" + doc] = _hits
+        rule_matches["version:" + doc + ":" + mode] = _hits
         # Liveness for the version family (pair-rail R2 P2 / R3 P1). The
         # discrimination that matters: a doc that EXISTS but no longer
         # carries its version literal is a DEAD release gate reporting

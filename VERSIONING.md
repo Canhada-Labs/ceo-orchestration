@@ -228,6 +228,7 @@ If you find a SPEC file that contradicts behavior, that is a bug:
 file via [`SECURITY.md`](SECURITY.md) if it has security implications,
 or open a GitHub issue otherwise.
 
-Last reviewed: 2026-07-31 (v1.2.0 release train — historic examples and
-EOL window rebased onto the public series; model-ID section updated to the
-ADR-181 Claude 5 refresh).
+Last reviewed: 2026-08-04 (v1.3.0 release train — EOL window shifted to
+v1.3.x / v1.2.x; historic MINOR table gained the 1.2.0 -> 1.3.0 row naming
+the night-mode trust boundary and the sentinel-unlock provenance
+requirement).

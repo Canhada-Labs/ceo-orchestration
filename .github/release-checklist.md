@@ -34,14 +34,22 @@
 - [ ] `VERSION` file coerente com a tag: em tag **`-rc.N` o VERSION fica
       PURO** (`X.Y.Z`, sem sufixo — o `release.yml` strippa `-rc.N` na
       validação); em tag stable, idêntico. E o bump NÃO é 1 site. Os
-      sites que `verify-counts.sh` de fato checa — **os cinco**
-      (§VERSION_SITES + os dois lidos à parte), mais o `VERSION` que é a
-      fonte da verdade:
+      sites que `verify-counts.sh` de fato checa (§VERSION_SITES + os
+      lidos à parte), mais o `VERSION` que é a fonte da verdade:
       `VERSION` (fonte) ·
       `INSTALL.md` (`--pin vX.Y.Z`) ·
       `docs/ARCHITECTURE.md` (`currently vX.Y.Z, aligned with the repo`) ·
       `npm/README.md` (`last-reviewed: <data> vX.Y.Z`) ·
-      `npm/package.json` (`"version"`) · `pyproject.toml` (`version =`).
+      `npm/package.json` (`"version"`) · `pyproject.toml` (`version =`) ·
+      `SBOM.md` (`**Version:** \`X.Y.Z\``) ·
+      `SECURITY.md` + `VERSIONING.md` (janela de suporte
+      `Current/Previous MINOR (vX.Y.x)` — **família minor**).
+      ⚠ **O driver NÃO cobre tudo** (S293, codex r2/r3): ele reescreve os
+      stamps `last-reviewed` e o triple do SBOM, mas o **shift da janela
+      de suporte** (`Previous` ← `Current`) e a **anotação da tag** são
+      MANUAIS de propósito — ambos exigem juízo de release-train. O
+      `verify-counts` falha alto na janela; a prosa da tag **nenhum gate
+      prova**, então releia-a antes de assinar.
       **`CLAUDE.md` e `README.md` NÃO são sites de versão** — nunca
       carregaram literal de versão (`git log -S 'VERSION='` não acha
       commit que o tenha adicionado); procurá-los num bump é perder tempo

@@ -62,6 +62,9 @@ VERSION_FILES=(
   "docs/ARCHITECTURE.md"
   "npm/README.md"
   "README.md"
+  "SBOM.md"
+  "SECURITY.md"
+  "VERSIONING.md"
   ".claude-plugin/plugin.json"
   ".claude-plugin/marketplace.json"
 )
@@ -445,23 +448,31 @@ tag() {
     && die "tag $TARGET_TAG already exists"
 
   anchor="$(git rev-parse HEAD)"
-  msg="$TARGET_TAG — substrate + rail release
+  # S293 (codex re-pass r3, P1): a anotação é ASSINADA — descrever a release
+  # anterior seria claim falsa num artefato assinado, a classe P0 deste repo.
+  # Ao preparar a PRÓXIMA release, reescreva este bloco junto com TARGET_BASE
+  # (o preflight não consegue provar que a prosa corresponde ao diff).
+  msg="$TARGET_TAG — night-mode + doctrine release
 
 Anchor: $anchor
-Scope:  PLAN-160 / PLAN-161 / PLAN-163 / PLAN-164 (ADRs 178 -> 184)
+Scope:  PLAN-162 / PLAN-165 (ADRs 184 -> 188)
 
-Headline: the cross-model pair-rail completed a live in-hook review for the
-first time in the audit log's history (case A, 115 s). Before this release
-all 12 pair_rail_case events on record were case F / TIMEOUT — the rail was
-100% fail-open because its 30 s internal default sat below real verdict
-latency (ADR-110-AMEND-1: internal 30->120, registration 60->150, invariant
-now tested).
+Headline: night-mode — the Owner arms per-machine autonomy for one upcoming
+session (gitignored overlay, next-session semantics), and arming it is a
+HUMAN action by construction: the writer script self-path-guards, the Bash
+rail matches invocation best-effort, and every on/off/refusal lands in the
+HMAC chain as night_mode_toggled (proven live, not by fixture).
 
-Also: Claude Code 2.1.220 + Claude 5 model registry (ADR-181), Codex payload
-pin with verify-then-invoke (ADR-182), canonical-edit fail-closed
-multi-candidate resolution (ADR-164/165), adopter upgrade oracles in
-smoke-install, and the disableAutoMode fix (a boolean there makes 2.1.220
-skip the ENTIRE settings.json — governance silently absent).
+Also: a case-fold bypass that let .claude/settings.JSON slip past BOTH the
+canonical and kernel rails on case-insensitive filesystems (P0, fixed on
+both rails); ADR-186 settles the hook-deadline conflict — the canonical
+matcher's wall deadline fails CLOSED as a named exception to the published
+fail-open-on-infrastructure contract, with a provenance-pinned unlock as the
+recovery route; sentinel unlock inside a git worktree now REQUIRES that
+provenance (ADR-119 Invariant 5); pair-rail 120/150 -> 180/210 with
+timeout_ms and a censoring-rate trigger, ratified only after a live probe
+proved the harness honors a 210 s registration; and four scheduled workflows
+that had been red without ever surfacing in push CI.
 
 No speed claim. See CHANGELOG.md [$TARGET_BASE]."
 
