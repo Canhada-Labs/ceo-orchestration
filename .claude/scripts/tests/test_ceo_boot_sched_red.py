@@ -361,5 +361,108 @@ class TestRecommendations(TestEnvContext):
         self.assertFalse(any(t[0] == "008-scheduled-red" for t in triples))
 
 
+class TestCureDetection(TestEnvContext):
+    """S293 — red scheduled lane + NEWER green completed run = cured.
+
+    The scheduled lane can only turn green at its next cron firing (a
+    monthly workflow would keep the boot red for a month after the fix
+    landed and was dispatch-validated). Cure semantics: for red paths ONLY,
+    consult the newest COMPLETED run across ALL events; green there means
+    the red was surfaced AND fixed — the opposite of the invisible-red
+    class. Fail-visible: a dead probe keeps the path red.
+    """
+
+    FILES = {
+        "tournament.yml": SCHEDULED_YML,
+        "coverage.yml": SCHEDULED_YML,
+    }
+
+    RED_SCHED = [
+        {"path": ".github/workflows/tournament.yml",
+         "status": "completed", "conclusion": "failure"},
+        {"path": ".github/workflows/coverage.yml",
+         "status": "completed", "conclusion": "success"},
+    ]
+
+    def test_cured_by_newer_green_completed_run(self):
+        _SchedRepo(self, dict(self.FILES))
+        probe = [{"path": ".github/workflows/tournament.yml",
+                  "status": "completed", "conclusion": "success"}]
+        with mock.patch.object(
+            _mod.subprocess, "run",
+            side_effect=[_completed(0, _runs_payload(self.RED_SCHED)),
+                         _completed(0, _runs_payload(probe))],
+        ) as m:
+            status, summary, detail = _mod.check_scheduled_workflows_red()
+        self.assertEqual(status, "green")
+        self.assertEqual(detail["red"], [])
+        self.assertEqual(
+            detail["cured_pending_cron"],
+            {".github/workflows/tournament.yml": "success"},
+        )
+        self.assertIn("cured", summary)
+        self.assertEqual(m.call_count, 2)
+
+    def test_probe_red_stays_red(self):
+        _SchedRepo(self, dict(self.FILES))
+        probe = [{"path": ".github/workflows/tournament.yml",
+                  "status": "completed", "conclusion": "failure"}]
+        with mock.patch.object(
+            _mod.subprocess, "run",
+            side_effect=[_completed(0, _runs_payload(self.RED_SCHED)),
+                         _completed(0, _runs_payload(probe))],
+        ):
+            status, _, detail = _mod.check_scheduled_workflows_red()
+        self.assertEqual(status, "red")
+        self.assertEqual(detail["cured_pending_cron"], {})
+        self.assertEqual(
+            detail["red"], [".github/workflows/tournament.yml"])
+
+    def test_probe_failure_keeps_red_fail_visible(self):
+        # A dead cure-probe must under-cure, never under-report.
+        _SchedRepo(self, dict(self.FILES))
+        with mock.patch.object(
+            _mod.subprocess, "run",
+            side_effect=[_completed(0, _runs_payload(self.RED_SCHED)),
+                         subprocess.TimeoutExpired(cmd="gh", timeout=3.5)],
+        ):
+            status, _, detail = _mod.check_scheduled_workflows_red()
+        self.assertEqual(status, "red")
+        self.assertEqual(detail["cured_pending_cron"], {})
+
+    def test_probe_in_progress_rows_do_not_cure(self):
+        # per_page window with only a non-completed row for the path ->
+        # no completed conclusion -> stays red (server-side status filter
+        # is not trusted).
+        _SchedRepo(self, dict(self.FILES))
+        probe = [{"path": ".github/workflows/tournament.yml",
+                  "status": "in_progress", "conclusion": None}]
+        with mock.patch.object(
+            _mod.subprocess, "run",
+            side_effect=[_completed(0, _runs_payload(self.RED_SCHED)),
+                         _completed(0, _runs_payload(probe))],
+        ):
+            status, _, _ = _mod.check_scheduled_workflows_red()
+        self.assertEqual(status, "red")
+
+    def test_steady_state_green_makes_no_extra_calls(self):
+        # Zero reds -> the cure probe must not fire at all.
+        _SchedRepo(self, dict(self.FILES))
+        green = [
+            {"path": ".github/workflows/tournament.yml",
+             "status": "completed", "conclusion": "success"},
+            {"path": ".github/workflows/coverage.yml",
+             "status": "completed", "conclusion": "success"},
+        ]
+        with mock.patch.object(
+            _mod.subprocess, "run",
+            return_value=_completed(0, _runs_payload(green)),
+        ) as m:
+            status, summary, _ = _mod.check_scheduled_workflows_red()
+        self.assertEqual(status, "green")
+        self.assertNotIn("cured", summary)
+        self.assertEqual(m.call_count, 1)
+
+
 if __name__ == "__main__":
     unittest.main()

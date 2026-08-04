@@ -2291,11 +2291,66 @@ def _scheduled_workflow_paths() -> List[str]:
     return out
 
 
+def _sched_red_newest_completed_any_event(
+    path: str, timeout_s: float
+) -> Optional[str]:
+    """Newest COMPLETED conclusion for ONE workflow, across ALL trigger events.
+
+    S293 cure-detection. A red SCHEDULED lane stays red until its next cron
+    fires even after the fix landed and a `workflow_dispatch` validation came
+    back green — but a red that was surfaced AND fixed is the opposite of the
+    "invisible red" this check exists to catch. Consulted ONLY for paths
+    whose latest scheduled run is red (zero extra calls in the steady state).
+    Fail-visible: any error here returns None and the caller KEEPS the path
+    red — a dead probe can only under-cure, never under-report.
+    """
+    name = path.rsplit("/", 1)[-1]
+    try:
+        proc = subprocess.run(
+            [
+                "gh", "api",
+                "repos/{owner}/{repo}/actions/workflows/"
+                + name + "/runs?status=completed&per_page=5",
+                "--jq",
+                "[.workflow_runs[] | {path: .path, status: .status, "
+                "conclusion: .conclusion}]",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=timeout_s,
+            cwd=str(REPO_ROOT),
+            stdin=subprocess.DEVNULL,
+        )
+    except Exception:
+        return None
+    if proc.returncode != 0:
+        return None
+    try:
+        rows = json.loads(proc.stdout or "[]")
+    except ValueError:
+        return None
+    if not isinstance(rows, list):
+        return None
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        rp = str(r.get("path") or "")
+        if rp and rp != path:
+            continue
+        if r.get("status") != "completed":
+            continue
+        return str(r.get("conclusion") or "")
+    return None
+
+
 def check_scheduled_workflows_red() -> Tuple[str, str, Any]:
     """S292 — 24th Tier-S check: latest scheduled-run conclusion per workflow.
 
     red    — ≥1 scheduled workflow whose latest COMPLETED scheduled run
-             concluded failure/timed_out/startup_failure;
+             concluded failure/timed_out/startup_failure AND whose newest
+             completed run across ALL events is not green (S293
+             cure-detection: a newer green `workflow_dispatch` validation
+             counts as cured-pending-cron, not red);
     yellow — data unavailable (gh missing/timeout/error/unparseable) or
              zero scheduled-run coverage — never green on missing data;
     green  — every covered workflow green at its latest scheduled run
@@ -2384,20 +2439,39 @@ def check_scheduled_workflows_red() -> Tuple[str, str, Any]:
             continue
         latest[path] = str(r.get("conclusion") or "")
     red = sorted(p for p, c in latest.items() if c in _SCHED_RED_BAD_CONCLUSIONS)
+    # S293 cure-detection (probe per red path only; see helper docstring).
+    cured: Dict[str, str] = {}
+    if red:
+        _still_red: List[str] = []
+        for p in red:
+            _newest = _sched_red_newest_completed_any_event(p, timeout_s)
+            if _newest is not None and _newest not in _SCHED_RED_BAD_CONCLUSIONS:
+                cured[p] = _newest
+            else:
+                _still_red.append(p)
+        red = _still_red
     uncovered = sorted(scheduled_set - set(latest))
     detail = {
         "scheduled": scheduled,
         "fetched_runs": len(runs),
         "latest": latest,
         "red": red,
+        "cured_pending_cron": cured,
         "no_recent_scheduled_run": uncovered,
     }
+    cured_note = (
+        " ({0} cured post-red by a newer completed run; awaiting next "
+        "cron)".format(len(cured))
+        if cured
+        else ""
+    )
     if red:
         names = ", ".join(p.rsplit("/", 1)[-1] for p in red)
         return (
             "red",
             _sanitize_for_recs(
-                f"{len(red)} scheduled workflow(s) red at latest run: {names}"
+                f"{len(red)} scheduled workflow(s) red at latest run: "
+                f"{names}{cured_note}"
             )[:200],
             detail,
         )
@@ -2414,7 +2488,16 @@ def check_scheduled_workflows_red() -> Tuple[str, str, Any]:
             "yellow",
             _sanitize_for_recs(
                 f"{len(latest)}/{len(scheduled)} green at latest run; "
-                f"{len(uncovered)} with no run in window: {names}"
+                f"{len(uncovered)} with no run in window: {names}{cured_note}"
+            )[:200],
+            detail,
+        )
+    if cured:
+        return (
+            "green",
+            _sanitize_for_recs(
+                f"{len(latest)}/{len(scheduled)} scheduled workflows "
+                f"healthy{cured_note}"
             )[:200],
             detail,
         )

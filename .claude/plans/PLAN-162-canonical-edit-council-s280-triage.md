@@ -1,10 +1,12 @@
 ---
 id: PLAN-162
 title: check_canonical_edit.py — S280 council 3-lane findings triage (12 advisory defects)
-status: executing
+status: done
 created: 2026-07-27
 reviewed_at: 2026-08-03
 executing_at: 2026-08-04
+completed_at: 2026-08-04
+related_commits: [6b5dd10, 4f05eb7, 2aceb05, af09bb1]
 owner: CEO
 depends_on: [PLAN-156-FOLLOWUP, PLAN-160]
 budget_tokens: 120-180k
@@ -155,8 +157,29 @@ already fixed or already accepted is not re-litigated.
 
 ## Success criteria
 
-- [ ] Every one of the 12 findings has a recorded disposition (FIX / ACCEPT /
+- [x] Every one of the 12 findings has a recorded disposition (FIX / ACCEPT /
   DOC-GAP) with evidence, deduped against S276 + PLAN-160.
-- [ ] Every FIX has a red-first test that fails before and passes after.
-- [ ] Canonical/kernel fixes land via pair-rail-APPROVE + Owner GPG ceremony.
-- [ ] Validate green on the closeout commit.
+- [x] Every FIX has a red-first test that fails before and passes after.
+- [x] Canonical/kernel fixes land via pair-rail-APPROVE + Owner GPG ceremony.
+- [x] Validate green on the closeout commit.
+
+
+---
+
+## Fechamento S293 (2026-08-04)
+
+- **12/12 disposições registradas** com evidência: `debate/round-1/consensus.md`
+  (W0, 3 lanes, 14 revisões de disposição) + `OPEN-FINDINGS.md` do pack.
+- **Red-first por FIX**: convenção `PLAN162_FIX_<N>` + xfail(strict);
+  pós-land `test_canonical_edit_plan162_findings.py` = 64 passed (0 skip —
+  o teste do deadline foi reabilitado pinando BLOCK sob ADR-186).
+- **Cerimônia**: `6b5dd10` [SENT-S292-B] (W2 fixes + deny-twins + ADR-186)
+  e `4f05eb7` [SENT-S292-C] (AMEND-2 + AMEND-1 + pair-rail 180/210, sonda
+  GO em `probe-210s-GO-EVIDENCE.md`), pair-rail codex 8 rounds / 56
+  findings triados. `2aceb05` [SENT-S292-D] workflows.
+- **Validate verde**: `af09bb1` ✓ (e o commit de closeout é selado pelo
+  Validate do push correspondente).
+- W3 PULADO por ratificação do Owner (2026-08-03), registrada em §Waves.
+- Residual honesto (OPEN-FINDINGS #3): estratificação de p95 por budget
+  só vira código quando existir dataset misto pós-AMEND-2 — hoje 41/41
+  linhas são legadas; `--json` já expõe `rows_scored_by_*` para detectar.
