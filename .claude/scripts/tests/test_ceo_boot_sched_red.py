@@ -361,15 +361,35 @@ class TestRecommendations(TestEnvContext):
         self.assertFalse(any(t[0] == "008-scheduled-red" for t in triples))
 
 
+def _two_call_router(sched_rows, mixed):
+    """Thread-safe side_effect: roteia pela URL.
+
+    As DUAS buscas do check são CONCORRENTES (a de cura dispara em thread
+    antes da principal), então `side_effect=[a, b]` seria uma corrida.
+    `mixed` pode ser rows (payload de cura) ou uma exceção (sonda morta).
+    """
+    def _run(args, **kwargs):
+        joined = " ".join(str(a) for a in args)
+        if "event=schedule" in joined:
+            return _completed(0, _runs_payload(sched_rows))
+        if isinstance(mixed, BaseException):
+            raise mixed
+        return _completed(0, _runs_payload(mixed))
+    return _run
+
+
 class TestCureDetection(TestEnvContext):
     """S293 — red scheduled lane + NEWER green completed run = cured.
 
     The scheduled lane can only turn green at its next cron firing (a
     monthly workflow would keep the boot red for a month after the fix
-    landed and was dispatch-validated). Cure semantics: for red paths ONLY,
-    consult the newest COMPLETED run across ALL events; green there means
-    the red was surfaced AND fixed — the opposite of the invisible-red
-    class. Fail-visible: a dead probe keeps the path red.
+    landed and was dispatch-validated). Cure semantics: ONE batched fetch
+    across ALL events, launched CONCURRENTLY with the scheduled fetch
+    (the first design — N sequential per-red calls — blew the 5s aggregate
+    budget on its first live run); consumed only when reds exist. Green
+    newest-completed there means the red was surfaced AND fixed — the
+    opposite of the invisible-red class. Fail-visible: a dead probe keeps
+    the path red.
     """
 
     FILES = {
@@ -386,12 +406,17 @@ class TestCureDetection(TestEnvContext):
 
     def test_cured_by_newer_green_completed_run(self):
         _SchedRepo(self, dict(self.FILES))
-        probe = [{"path": ".github/workflows/tournament.yml",
-                  "status": "completed", "conclusion": "success"}]
+        mixed = [
+            {"path": ".github/workflows/validate.yml",
+             "status": "completed", "conclusion": "success"},
+            {"path": ".github/workflows/tournament.yml",
+             "status": "completed", "conclusion": "success"},
+            {"path": ".github/workflows/tournament.yml",
+             "status": "completed", "conclusion": "failure"},
+        ]
         with mock.patch.object(
             _mod.subprocess, "run",
-            side_effect=[_completed(0, _runs_payload(self.RED_SCHED)),
-                         _completed(0, _runs_payload(probe))],
+            side_effect=_two_call_router(self.RED_SCHED, mixed),
         ) as m:
             status, summary, detail = _mod.check_scheduled_workflows_red()
         self.assertEqual(status, "green")
@@ -405,12 +430,11 @@ class TestCureDetection(TestEnvContext):
 
     def test_probe_red_stays_red(self):
         _SchedRepo(self, dict(self.FILES))
-        probe = [{"path": ".github/workflows/tournament.yml",
+        mixed = [{"path": ".github/workflows/tournament.yml",
                   "status": "completed", "conclusion": "failure"}]
         with mock.patch.object(
             _mod.subprocess, "run",
-            side_effect=[_completed(0, _runs_payload(self.RED_SCHED)),
-                         _completed(0, _runs_payload(probe))],
+            side_effect=_two_call_router(self.RED_SCHED, mixed),
         ):
             status, _, detail = _mod.check_scheduled_workflows_red()
         self.assertEqual(status, "red")
@@ -423,30 +447,33 @@ class TestCureDetection(TestEnvContext):
         _SchedRepo(self, dict(self.FILES))
         with mock.patch.object(
             _mod.subprocess, "run",
-            side_effect=[_completed(0, _runs_payload(self.RED_SCHED)),
-                         subprocess.TimeoutExpired(cmd="gh", timeout=3.5)],
+            side_effect=_two_call_router(
+                self.RED_SCHED,
+                subprocess.TimeoutExpired(cmd="gh", timeout=3.5),
+            ),
         ):
             status, _, detail = _mod.check_scheduled_workflows_red()
         self.assertEqual(status, "red")
         self.assertEqual(detail["cured_pending_cron"], {})
 
     def test_probe_in_progress_rows_do_not_cure(self):
-        # per_page window with only a non-completed row for the path ->
-        # no completed conclusion -> stays red (server-side status filter
-        # is not trusted).
+        # Cure window carrying only a non-completed row for the path ->
+        # no completed conclusion -> stays red (server payload is not
+        # trusted to be pre-filtered).
         _SchedRepo(self, dict(self.FILES))
-        probe = [{"path": ".github/workflows/tournament.yml",
+        mixed = [{"path": ".github/workflows/tournament.yml",
                   "status": "in_progress", "conclusion": None}]
         with mock.patch.object(
             _mod.subprocess, "run",
-            side_effect=[_completed(0, _runs_payload(self.RED_SCHED)),
-                         _completed(0, _runs_payload(probe))],
+            side_effect=_two_call_router(self.RED_SCHED, mixed),
         ):
             status, _, _ = _mod.check_scheduled_workflows_red()
         self.assertEqual(status, "red")
 
-    def test_steady_state_green_makes_no_extra_calls(self):
-        # Zero reds -> the cure probe must not fire at all.
+    def test_steady_state_green_reports_no_cure(self):
+        # Zero reds -> the parallel cure fetch is never CONSUMED: no
+        # "cured" note, no cured entries (the fetch itself still fires —
+        # that is the wall-clock trade recorded in the class docstring).
         _SchedRepo(self, dict(self.FILES))
         green = [
             {"path": ".github/workflows/tournament.yml",
@@ -456,12 +483,12 @@ class TestCureDetection(TestEnvContext):
         ]
         with mock.patch.object(
             _mod.subprocess, "run",
-            return_value=_completed(0, _runs_payload(green)),
-        ) as m:
-            status, summary, _ = _mod.check_scheduled_workflows_red()
+            side_effect=_two_call_router(green, green),
+        ):
+            status, summary, detail = _mod.check_scheduled_workflows_red()
         self.assertEqual(status, "green")
         self.assertNotIn("cured", summary)
-        self.assertEqual(m.call_count, 1)
+        self.assertEqual(detail["cured_pending_cron"], {})
 
 
 if __name__ == "__main__":

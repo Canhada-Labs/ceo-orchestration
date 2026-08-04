@@ -41,6 +41,7 @@ from concurrent.futures import (
     TimeoutError as FuturesTimeout,
     as_completed,
 )
+import threading
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -2291,26 +2292,24 @@ def _scheduled_workflow_paths() -> List[str]:
     return out
 
 
-def _sched_red_newest_completed_any_event(
-    path: str, timeout_s: float
-) -> Optional[str]:
-    """Newest COMPLETED conclusion for ONE workflow, across ALL trigger events.
+def _sched_red_fetch_mixed_rows(timeout_s: float) -> Optional[List[Any]]:
+    """One batched fetch of the newest runs across ALL trigger events.
 
     S293 cure-detection. A red SCHEDULED lane stays red until its next cron
     fires even after the fix landed and a `workflow_dispatch` validation came
     back green — but a red that was surfaced AND fixed is the opposite of the
-    "invisible red" this check exists to catch. Consulted ONLY for paths
-    whose latest scheduled run is red (zero extra calls in the steady state).
-    Fail-visible: any error here returns None and the caller KEEPS the path
-    red — a dead probe can only under-cure, never under-report.
+    "invisible red" this check exists to catch. This runs CONCURRENTLY with
+    the scheduled-lane fetch (one extra REST call per boot, wall-clock cost
+    ~zero — the first cure-probe design was N sequential per-red calls and
+    blew the 5s aggregate budget on its first live run).
+    Fail-visible: any error returns None and the caller KEEPS reds red —
+    a dead probe can only under-cure, never under-report.
     """
-    name = path.rsplit("/", 1)[-1]
     try:
         proc = subprocess.run(
             [
                 "gh", "api",
-                "repos/{owner}/{repo}/actions/workflows/"
-                + name + "/runs?status=completed&per_page=5",
+                "repos/{owner}/{repo}/actions/runs?per_page=100",
                 "--jq",
                 "[.workflow_runs[] | {path: .path, status: .status, "
                 "conclusion: .conclusion}]",
@@ -2329,18 +2328,7 @@ def _sched_red_newest_completed_any_event(
         rows = json.loads(proc.stdout or "[]")
     except ValueError:
         return None
-    if not isinstance(rows, list):
-        return None
-    for r in rows:
-        if not isinstance(r, dict):
-            continue
-        rp = str(r.get("path") or "")
-        if rp and rp != path:
-            continue
-        if r.get("status") != "completed":
-            continue
-        return str(r.get("conclusion") or "")
-    return None
+    return rows if isinstance(rows, list) else None
 
 
 def check_scheduled_workflows_red() -> Tuple[str, str, Any]:
@@ -2369,6 +2357,16 @@ def check_scheduled_workflows_red() -> Tuple[str, str, Any]:
         return "green", "no scheduled workflows", {"scheduled": []}
     scheduled_set = set(scheduled)
     timeout_s = _sched_red_gh_timeout_s()
+    # S293: dispara a busca de cura EM PARALELO com a principal (custo de
+    # wall ~zero; ver docstring de _sched_red_fetch_mixed_rows).
+    _cure_box: Dict[str, Any] = {}
+    _cure_thread = threading.Thread(
+        target=lambda: _cure_box.__setitem__(
+            "rows", _sched_red_fetch_mixed_rows(timeout_s)
+        ),
+        daemon=True,
+    )
+    _cure_thread.start()
     try:
         proc = subprocess.run(
             [
@@ -2439,17 +2437,27 @@ def check_scheduled_workflows_red() -> Tuple[str, str, Any]:
             continue
         latest[path] = str(r.get("conclusion") or "")
     red = sorted(p for p, c in latest.items() if c in _SCHED_RED_BAD_CONCLUSIONS)
-    # S293 cure-detection (probe per red path only; see helper docstring).
+    # S293 cure-detection: consome a busca paralela SÓ se houver red.
     cured: Dict[str, str] = {}
     if red:
-        _still_red: List[str] = []
-        for p in red:
-            _newest = _sched_red_newest_completed_any_event(p, timeout_s)
-            if _newest is not None and _newest not in _SCHED_RED_BAD_CONCLUSIONS:
-                cured[p] = _newest
-            else:
-                _still_red.append(p)
-        red = _still_red
+        _cure_thread.join(timeout=timeout_s)
+        rows2 = _cure_box.get("rows")
+        if isinstance(rows2, list):
+            newest_any: Dict[str, str] = {}
+            for r in rows2:  # newest-first; 1º COMPLETED por path vence
+                if not isinstance(r, dict):
+                    continue
+                rp = str(r.get("path") or "")
+                if rp not in scheduled_set or rp in newest_any:
+                    continue
+                if r.get("status") != "completed":
+                    continue
+                newest_any[rp] = str(r.get("conclusion") or "")
+            for p in red:
+                c = newest_any.get(p)
+                if c is not None and c not in _SCHED_RED_BAD_CONCLUSIONS:
+                    cured[p] = c
+        red = [p for p in red if p not in cured]
     uncovered = sorted(scheduled_set - set(latest))
     detail = {
         "scheduled": scheduled,
