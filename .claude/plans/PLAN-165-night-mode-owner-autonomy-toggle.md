@@ -1,16 +1,18 @@
 ---
 id: PLAN-165
 title: Night-mode — Owner-invoked autonomy posture toggle
-status: executing
+status: done
 created: 2026-08-02
 reviewed_at: 2026-08-02
 executing_at: 2026-08-04
+completed_at: 2026-08-04
+related_commits: [d2d46fd, 6b5dd10, 4f05eb7, 2aceb05, 610d9ec, 9f53628]
 owner: CEO
 depends_on: [PLAN-163]
 budget_tokens: 90-140k
 budget_sessions: 2
 context_risk: medium
-external_wait: owner-gpg-ceremony
+external_wait: none
 tags: [governance, harness-config, autonomy, commands, security]
 ---
 
@@ -320,26 +322,26 @@ primário se W0 ficar apertado.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** `/night-mode on` + sessão nova ⇒ sessão inicia em
+- [x] **AC-1** `/night-mode on` + sessão nova ⇒ sessão inicia em
       `acceptEdits` (respaldado por T0.1), e `git status` continua vazio.
       Check: `git status --porcelain` vazio após `on`.
-- [ ] **AC-2** `/night-mode off` + sessão nova ⇒ postura de volta a
+- [x] **AC-2** `/night-mode off` + sessão nova ⇒ postura de volta a
       `manual` ratificado. Check: `resolve_settings()` reporta `manual`.
-- [ ] **AC-3** `on`→`on`→`off` volta a `manual`, não a `acceptEdits`
+- [x] **AC-3** `on`→`on`→`off` volta a `manual`, não a `acceptEdits`
       (snapshot create-only). Check: teste unitário.
-- [ ] **AC-4** `settings.local.json` malformado ⇒ saída não-zero, arquivo
+- [x] **AC-4** `settings.local.json` malformado ⇒ saída não-zero, arquivo
       não modificado. Check: teste compara bytes antes/depois.
-- [ ] **AC-5** Crash simulado entre escrita e marker deixa o arquivo
+- [x] **AC-5** Crash simulado entre escrita e marker deixa o arquivo
       parseável e `status` reportando o desacordo. Check: teste unitário.
-- [ ] **AC-6** `/ceo-boot` mostra a linha advisory sse `resolve_settings()`
+- [x] **AC-6** `/ceo-boot` mostra a linha advisory sse `resolve_settings()`
       mostra postura não-ratificada — derivada do resolver, não do marker.
-- [ ] **AC-7** Após `on` e após `off`, existe linha `night_mode_toggled`
+- [x] **AC-7** Após `on` e após `off`, existe linha `night_mode_toggled`
       correspondente em `audit-log.jsonl` e `verify_chain()` continua
       passando. (Depende de P2.)
-- [ ] **AC-8** Escrita direta em `.claude/settings.local.json` por Edit/Write
+- [x] **AC-8** Escrita direta em `.claude/settings.local.json` por Edit/Write
       é negada. (Depende de P1.) Check: probe positivo — a negação é
       observada, não presumida.
-- [ ] **AC-9** Suítes verdes na **invocação do CI**:
+- [x] **AC-9** Suítes verdes na **invocação do CI**:
       `pytest .claude/scripts/tests/ -n auto -m 'not serial'` **e**
       `pytest .claude/scripts/tests/ -m 'serial'`.
       *Não* `unittest discover`: a suíte é pytest-only por construção
@@ -347,14 +349,14 @@ primário se W0 ficar apertado.
       fixture `autouse`). O v1 nomeava `unittest discover` — a mesma classe
       de defeito que produziu um falso-vermelho no `release-v1-2-0.sh` e
       barrou o promote do GA v1.2.0 em 2026-08-02.
-- [ ] **AC-10** Aprovação do Security Engineer com VETO registrada;
+- [x] **AC-10** Aprovação do Security Engineer com VETO registrada;
       pair-rail codex registrado; ADR landado.
-- [ ] **AC-11** O script recusa quando `CI` está setado (non-goal com
+- [x] **AC-11** O script recusa quando `CI` está setado (non-goal com
       enforcement). Check: teste unitário.
-- [ ] **AC-12** Templates e defaults publicados byte-idênticos, **exceto** a
+- [x] **AC-12** Templates e defaults publicados byte-idênticos, **exceto** a
       regra de deny do P1, que é deliberada e espelhada em
       `templates/settings/settings.base.json`.
-- [ ] **AC-13** `verify-counts.sh` e `build-plugin.py --check` verdes com o
+- [x] **AC-13** `verify-counts.sh` e `build-plugin.py --check` verdes com o
       novo comando em disco, e os sites de contagem atualizados por nome.
 
 ## Security notes
@@ -659,3 +661,38 @@ Estado das ACs após o round-2:
   (AC-8), sem P2 `night_mode_toggled` não existe em `_KNOWN_ACTIONS` e a
   emissão degrada em breadcrumb (AC-7). **Este branch não merge antes de
   P1/P2 landarem**; o probe positivo da AC-8 roda depois da cerimônia.
+
+---
+
+## Fechamento S293 (2026-08-04) — cerimônia 2 executada, ACs fechadas com prova
+
+Cerimônia 2 assinada pelo Owner em 4 fases: `d2d46fd` [SENT-S292-A]
+(W1-land: merge + NF-07 emit + NF-09 + NF-08(a)), `6b5dd10` [SENT-S292-B]
+(W2 PLAN-162 + ADR-186 fail-closed), `4f05eb7` [SENT-S292-C] (AMENDs +
+pair-rail 180/210), `2aceb05` [SENT-S292-D] (workflows agendados).
+
+Evidência das ACs que exigiam probe pós-cerimônia:
+
+- **AC-7 ✅ (probe viva, 2026-08-04):** Owner executou `on`/`off` via rail
+  humano (`!`); duas linhas `night_mode_toggled` na cadeia
+  (`17:48:19Z` on absent→acceptEdits, `17:48:29Z` off acceptEdits→absent,
+  ambas `result=applied`, `hmac` presente) + linha `refused` de controle
+  negativo (03:52Z). `check-audit-hmac-null.py`: OK. NF-07 encerrado —
+  ação registrada COM produtor vivo.
+- **AC-8 ✅ (negação observada, não presumida):** `Write` do modelo em
+  `.claude/settings.local.json` (bytes idênticos) NEGADO pela camada de
+  permissões na sessão viva; controle positivo: o mesmo `Write` funciona
+  em paths não-negados na mesma sessão.
+- **AC-9 ✅:** invocação exata do CI — hooks 6516 not-serial + 476 serial;
+  scripts 4691 not-serial + 343 serial. Verde local pré-push (S293).
+- **AC-10 ✅ (nota de fechamento do residual):** re-review round-3 REAL do
+  Security Engineer = NEEDS_CHANGES (`architect/round-3/security-review.md`)
+  com fixes obrigatórios NF-07 (emit) e NF-09 aplicados na Fase A e NF-08
+  decidido pelo Owner na opção (a) — invocation-guard + self-path-guard +
+  command-doc corrigido. As claims assinadas sobre o matcher foram
+  reescritas para o que o controle FAZ (defesa-em-profundidade; a fronteira
+  é o self-path guard + deny da sessão), residuais nomeados no
+  `nf08-invocation-guard-NOTES.md` §7 — ACEITOS E REGISTRADOS.
+- AC-1: `probes/W0-EVIDENCE.md:132-146` (prova harness-level 2026-08-03).
+  AC-2..AC-6, AC-11..AC-13: testes citados em cada AC, verdes nas suítes
+  acima (86 testes de `test_night_mode.py` incluídos).
