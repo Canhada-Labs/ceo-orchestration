@@ -422,7 +422,13 @@ for v in d.get("violations", []):
   # está satisfeita), não falha. Os gates acima já provaram a coerência.
   if git diff --cached --quiet; then
     ok "nothing to commit — tree already at ${TARGET_BASE} (idempotent no-op)"
-    note "proceed to: bash $0 tag${STABLE:+ --stable}"
+    # `${STABLE:+...}` expande com STABLE=0 (string nao-vazia) e mandaria
+    # o Owner cortar a tag STABLE numa run de RC. Teste o VALOR.
+    if [ "$STABLE" -eq 1 ]; then
+      note "proceed to: bash $0 tag --stable"
+    else
+      note "proceed to: bash $0 tag --rc $RC_NUM"
+    fi
     return 0
   fi
   git commit -q -m "release: v${TARGET_BASE}
