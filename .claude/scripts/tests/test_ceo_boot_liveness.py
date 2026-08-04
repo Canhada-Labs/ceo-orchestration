@@ -151,10 +151,10 @@ class _AuditLogPatch:
 
 
 class TestRegistryWiring(TestEnvContext):
-    def test_registry_has_23_checks(self):
+    def test_registry_has_24_checks(self):
         # PLAN-153 Wave E: 21 → 23 (+failopen_rail_liveness_7d,
-        # +harness_config_gate).
-        self.assertEqual(len(_mod.TIER_S_CHECKS), 23)
+        # +harness_config_gate); S292: 23 → 24 (+scheduled_workflows_red).
+        self.assertEqual(len(_mod.TIER_S_CHECKS), 24)
 
     def test_liveness_check_registered(self):
         names = [name for name, _ in _mod.TIER_S_CHECKS]

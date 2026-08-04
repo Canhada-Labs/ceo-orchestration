@@ -1,5 +1,5 @@
 ---
-description: Session boot autopilot — 15 Tier-S parallel checks + recommendations engine. Run at session start to consolidate governance reads + state digest.
+description: Session boot autopilot — 24 Tier-S parallel checks + recommendations engine. Run at session start to consolidate governance reads + state digest.
 allowed-tools: Read, Glob, Grep, Bash, TaskCreate, TaskList
 ---
 
@@ -7,7 +7,7 @@ allowed-tools: Read, Glob, Grep, Bash, TaskCreate, TaskList
 
 Single command at session start that consolidates governance reads + state digest + recommendations. Per PLAN-065 §4.3 acceptance:
 
-- 15 Tier-S checks dispatched **in parallel** via `concurrent.futures.ThreadPoolExecutor` (stdlib only, max_workers=8)
+- 24 Tier-S checks dispatched **in parallel** via `concurrent.futures.ThreadPoolExecutor` (stdlib only, max_workers=8)
 - Per-check timeout 500 ms; aggregate wall-clock ≤5 s
 - `--short` defaults to cached mode (≤2 s budget; cache-hit ≤200 ms)
 - `--json` emits machine-readable digest (stable order — CR-N7 deterministic ranking)
@@ -21,7 +21,7 @@ Single command at session start that consolidates governance reads + state diges
 
 | Flag | Effect | Budget |
 |---|---|---|
-| (none) | Default — 15 Tier-S parallel checks + recommendations | ≤5 s wall-clock |
+| (none) | Default — 24 Tier-S parallel checks + recommendations | ≤5 s wall-clock |
 | `--short` | Top-line counts + non-green checks one-line | ≤2 s (defaults `--cached`) |
 | `--cached` | Cache-hit path (TTL 1h; key=HEAD+audit-log mtime) | ≤200 ms |
 | `--json` | Machine-readable; stable ordering | preserves above |
@@ -31,15 +31,15 @@ Single command at session start that consolidates governance reads + state diges
 
 ### Step 1 — Gate 1+2 governance reads
 
-Host CLI has already loaded `CLAUDE.md` + `PROTOCOL.md` + `team.md` via `SessionStart` hook. `/ceo-boot` does **NOT** re-read those files; it reads only the live governance + audit state via the 15 Tier-S checks.
+Host CLI has already loaded `CLAUDE.md` + `PROTOCOL.md` + `team.md` via `SessionStart` hook. `/ceo-boot` does **NOT** re-read those files; it reads only the live governance + audit state via the 24 Tier-S checks.
 
-### Step 2 — Dispatch 15 Tier-S checks in parallel
+### Step 2 — Dispatch 24 Tier-S checks in parallel
 
 ```bash
 python3 .claude/scripts/ceo-boot.py $ARGUMENTS
 ```
 
-The script uses `ThreadPoolExecutor(max_workers=8)` to dispatch 15 Tier-S checks across 6 categories:
+The script uses `ThreadPoolExecutor(max_workers=8)` to dispatch 24 Tier-S checks across 6 categories:
 
 1. **Plans state** — `plans_executing` / `plans_reviewed_pending` / `plans_stranded_executing` / `plans_draft`
 2. **Audit-log freshness** — `audit_log_freshness` / `dispatch_count_24h` / `skill_unknown_ratio`
@@ -125,7 +125,7 @@ Pre-canonical-ceremony, the call is a hasattr-guarded no-op (script works in ado
 
 ## Kill switches
 
-- `CEO_BOOT_AUTO_TASK=0` — Wave 5 opt-out: disables `<!-- TASKCREATE-CANDIDATE -->` marker emit. The 15 Tier-S digest + recommendations still print; only the marker blocks (and their `ceo_boot_task_candidate_emitted` audit events + dedup state-file writes) are suppressed.
+- `CEO_BOOT_AUTO_TASK=0` — Wave 5 opt-out: disables `<!-- TASKCREATE-CANDIDATE -->` marker emit. The 24 Tier-S digest + recommendations still print; only the marker blocks (and their `ceo_boot_task_candidate_emitted` audit events + dedup state-file writes) are suppressed.
 - `CEO_BOOT_TASK_STATE_PATH=<path>` — override dedup state file location (tests).
 - `CEO_BOOT_DEBUG=1` — surface fail-open trace from audit emit + marker emit (stderr only; never blocks).
 - `CEO_LEARNING_BOOT_LESSONS=1` — PLAN-154 item 4 opt-in: enables the Step 4.7 past-lessons fenced section. Unset = structurally OFF (no lesson-store I/O — `cost_envelope.py` posture). Any other set value = explicit operator disable (emits the `learning_rail_disabled` liveness breadcrumb). `CEO_SOTA_DISABLE=1` overrides everything (master kill precedence).

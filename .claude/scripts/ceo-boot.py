@@ -133,6 +133,9 @@ PER_CHECK_TIMEOUT_OVERRIDES_S: Dict[str, float] = {
     # E1 gate; subprocess timeout 2.5s default, see
     # _harness_config_gate_timeout_s).
     "harness_config_gate": 3.0,
+    # S292 — network-bound (single gh api call; subprocess timeout 3.5s
+    # default, see _sched_red_gh_timeout_s).
+    "scheduled_workflows_red": 4.0,
 }
 
 # ---- Sentinel mtime cutoff (Codex S82 P2 fix) ------------------------------
@@ -2200,6 +2203,200 @@ def check_harness_config_gate() -> Tuple[str, str, Any]:
     return "red", summary[:200], {"installed": True, "rc": proc.returncode}
 
 
+# === S292 — 24th Tier-S check: scheduled workflows whose latest run is red ==
+# Closes the recurring "scheduled gate red for weeks, invisible" class — six
+# occurrences of the same failure mode (Coverage S283; mutation-gate S290/
+# S291; supply-chain-watch S291; tournament + reality-ledger S292): a
+# workflow that fires only on `schedule:` never appears in the push-triggered
+# CI signal the operator actually looks at, so its red persists unseen.
+#
+# Design constraints:
+# - stdlib-only: the scheduled-workflow set is derived from a line-regex scan
+#   of `.github/workflows/*.y*ml` (no yaml parser in the runtime deps). The
+#   INPUT LIST is carried verbatim in the detail payload — the instrument
+#   prints its inputs (S291 measurement doctrine).
+# - network via the `gh` CLI, ONE batched call (event=schedule, per_page=100)
+#   with its own subprocess timeout. NO DATA IS NEVER GREEN: gh missing /
+#   timeout / rc!=0 / unparseable payload / zero coverage → yellow "no data".
+#   Only the explicit operator disable (CEO_BOOT_SCHED_RED=0) renders green.
+# - no new audit action names (the action registry is canonical); the
+#   timeout path reuses the registered `ceo_boot_check_skipped`.
+
+SCHED_RED_GH_TIMEOUT_S_DEFAULT = 3.5
+_SCHED_RED_BAD_CONCLUSIONS = frozenset(
+    {"failure", "timed_out", "startup_failure"}
+)
+
+
+def _sched_red_gh_timeout_s() -> float:
+    """Subprocess timeout for the gh call, clamped to [0.5, 8.0]s."""
+    raw = os.environ.get("CEO_BOOT_SCHED_RED_TIMEOUT_S", "")
+    if raw:
+        try:
+            return max(0.5, min(8.0, float(raw)))
+        except (TypeError, ValueError):
+            pass
+    return SCHED_RED_GH_TIMEOUT_S_DEFAULT
+
+
+def _scheduled_workflow_paths() -> List[str]:
+    """Repo-relative paths of workflows with a `schedule:` trigger.
+
+    Line-regex derivation (requires BOTH a `schedule:` line and a
+    `- cron:` line) — stdlib-only stand-in for a yaml parse. Sorted for
+    CR-N7 determinism.
+    """
+    wf_dir = REPO_ROOT / ".github" / "workflows"
+    out: List[str] = []
+    if not wf_dir.is_dir():
+        return out
+    for p in sorted(wf_dir.glob("*.y*ml")):
+        try:
+            text = p.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        if re.search(r"(?m)^\s*schedule:\s*$", text) and re.search(
+            r"(?m)^\s*-\s*[\"']?cron[\"']?\s*:", text
+        ):
+            out.append(f".github/workflows/{p.name}")
+    return out
+
+
+def check_scheduled_workflows_red() -> Tuple[str, str, Any]:
+    """S292 — 24th Tier-S check: latest scheduled-run conclusion per workflow.
+
+    red    — ≥1 scheduled workflow whose latest COMPLETED scheduled run
+             concluded failure/timed_out/startup_failure;
+    yellow — data unavailable (gh missing/timeout/error/unparseable) or
+             zero scheduled-run coverage — never green on missing data;
+    green  — every covered workflow green at its latest scheduled run
+             (workflows outside the 100-run window are listed, not hidden),
+             no scheduled workflows at all, or explicit operator disable.
+    ADVISORY — never blocks the session.
+    """
+    if os.environ.get("CEO_BOOT_SCHED_RED", "") == "0":
+        return (
+            "green",
+            "scheduled-red check disabled (CEO_BOOT_SCHED_RED=0)",
+            {"disabled": True},
+        )
+    scheduled = _scheduled_workflow_paths()
+    if not scheduled:
+        return "green", "no scheduled workflows", {"scheduled": []}
+    scheduled_set = set(scheduled)
+    timeout_s = _sched_red_gh_timeout_s()
+    try:
+        proc = subprocess.run(
+            [
+                "gh", "api",
+                "repos/{owner}/{repo}/actions/runs"
+                "?event=schedule&per_page=100",
+                "--jq",
+                "[.workflow_runs[] | {path: .path, status: .status, "
+                "conclusion: .conclusion}]",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=timeout_s,
+            cwd=str(REPO_ROOT),
+            stdin=subprocess.DEVNULL,
+        )
+    except subprocess.TimeoutExpired:
+        _emit_ceo_boot_check_skipped_safe(
+            check_name="scheduled_workflows_red",
+            timeout_ms=int(timeout_s * 1000),
+        )
+        return (
+            "yellow",
+            f"no data — gh timeout >{timeout_s:.1f}s "
+            f"({len(scheduled)} scheduled workflow(s) unwatched)",
+            {"scheduled": scheduled, "timeout": True},
+        )
+    except OSError:
+        return (
+            "yellow",
+            f"no data — gh CLI unavailable "
+            f"({len(scheduled)} scheduled workflow(s) unwatched; "
+            f"set CEO_BOOT_SCHED_RED=0 to silence)",
+            {"scheduled": scheduled, "gh_available": False},
+        )
+    if proc.returncode != 0:
+        first = next(
+            (l.strip() for l in (proc.stderr or "").splitlines() if l.strip()),
+            "",
+        )
+        return (
+            "yellow",
+            _sanitize_for_recs(
+                f"no data — gh rc={proc.returncode}"
+                + (f": {first}" if first else "")
+            )[:200],
+            {"scheduled": scheduled, "rc": proc.returncode},
+        )
+    try:
+        runs = json.loads(proc.stdout or "[]")
+        if not isinstance(runs, list):
+            raise ValueError("payload not a list")
+    except ValueError:
+        return (
+            "yellow",
+            "no data — unparseable gh payload",
+            {"scheduled": scheduled, "parse_error": True},
+        )
+    # API returns newest-first; first COMPLETED run per path wins.
+    latest: Dict[str, str] = {}
+    for r in runs:
+        if not isinstance(r, dict):
+            continue
+        path = str(r.get("path") or "")
+        if path not in scheduled_set or path in latest:
+            continue
+        if r.get("status") != "completed":
+            continue
+        latest[path] = str(r.get("conclusion") or "")
+    red = sorted(p for p, c in latest.items() if c in _SCHED_RED_BAD_CONCLUSIONS)
+    uncovered = sorted(scheduled_set - set(latest))
+    detail = {
+        "scheduled": scheduled,
+        "fetched_runs": len(runs),
+        "latest": latest,
+        "red": red,
+        "no_recent_scheduled_run": uncovered,
+    }
+    if red:
+        names = ", ".join(p.rsplit("/", 1)[-1] for p in red)
+        return (
+            "red",
+            _sanitize_for_recs(
+                f"{len(red)} scheduled workflow(s) red at latest run: {names}"
+            )[:200],
+            detail,
+        )
+    if not latest:
+        return (
+            "yellow",
+            f"no data — 0/{len(scheduled)} scheduled workflows covered "
+            f"by the {len(runs)}-run window",
+            detail,
+        )
+    if uncovered:
+        names = ", ".join(p.rsplit("/", 1)[-1] for p in uncovered)
+        return (
+            "yellow",
+            _sanitize_for_recs(
+                f"{len(latest)}/{len(scheduled)} green at latest run; "
+                f"{len(uncovered)} with no run in window: {names}"
+            )[:200],
+            detail,
+        )
+    return (
+        "green",
+        f"{len(latest)}/{len(scheduled)} scheduled workflows green at "
+        f"latest run",
+        detail,
+    )
+
+
 TIER_S_CHECKS: List[Tuple[str, Callable[[], Tuple[str, str, Any]]]] = [
     ("plans_executing", check_plans_executing),
     ("plans_reviewed_pending", check_plans_reviewed_pending),
@@ -2259,9 +2456,12 @@ TIER_S_CHECKS: List[Tuple[str, Callable[[], Tuple[str, str, Any]]]] = [
     # gate subprocess (file-existence guarded; green "not installed" until
     # the SENT-E ceremony lands check_harness_config.py canonical).
     ("harness_config_gate", check_harness_config_gate),
+    # S292 — 24th Tier-S check: scheduled workflows whose latest scheduled
+    # run is red (6th occurrence of the invisible-scheduled-red class).
+    ("scheduled_workflows_red", check_scheduled_workflows_red),
 ]
 
-assert len(TIER_S_CHECKS) == 23, f"Expected 23 Tier-S checks, got {len(TIER_S_CHECKS)}"
+assert len(TIER_S_CHECKS) == 24, f"Expected 24 Tier-S checks, got {len(TIER_S_CHECKS)}"
 
 
 TIER_A_CHECKS: List[Tuple[str, Callable[[], Tuple[str, str, Any]]]] = [
@@ -2614,6 +2814,15 @@ def _make_recommendations(results: List[CheckResult]) -> List[str]:
             f"— a registered hook may not resolve at runtime (dead rail)",
         ))
 
+    # S292 — scheduled workflows red at latest run (invisible-red class).
+    sched = by_name.get("scheduled_workflows_red")
+    if sched and sched.status == "red":
+        recs.append((
+            "008-scheduled-red",
+            f"Scheduled workflow(s) red: {_sanitize_for_recs(sched.summary)} "
+            f"— schedule-only gates never surface in push CI; triage now",
+        ))
+
     # Owner-pending GPG sentinels — highest priority (HARD blocker for ceremony)
     sent = by_name.get("sentinels_pending_gpg")
     if sent and sent.status == "yellow" and sent.detail:
@@ -2754,6 +2963,16 @@ def _recommendations_with_severity(
             f"— a registered hook may not resolve at runtime (dead rail)",
         ))
 
+    # S292 — mirror of the _make_recommendations 008 rule (same sort key +
+    # same text so the two pipelines never drift).
+    sched = by_name.get("scheduled_workflows_red")
+    if sched and sched.status == "red":
+        recs.append((
+            "008-scheduled-red",
+            f"Scheduled workflow(s) red: {_sanitize_for_recs(sched.summary)} "
+            f"— schedule-only gates never surface in push CI; triage now",
+        ))
+
     sent = by_name.get("sentinels_pending_gpg")
     if sent and sent.status == "yellow" and sent.detail:
         items = sent.detail if isinstance(sent.detail, list) else []
@@ -2808,6 +3027,7 @@ def _recommendations_with_severity(
             "005-settings-tamper",  # PLAN-135 W1 S3 — rail-integrity = high
             "006-failopen-rail",    # PLAN-153 Wave E item 2 — S254 class = high
             "007-harness-config",   # PLAN-153 Wave E item 1 wire — dead rail = high
+            "008-scheduled-red",    # S292 — invisible-scheduled-red class = high
             "01-owner-sentinels", "02-stranded-plans"
         ):
             severity = "high"

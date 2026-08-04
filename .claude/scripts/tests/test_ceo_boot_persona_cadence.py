@@ -385,7 +385,7 @@ class TestTierSChecksRegistry(unittest.TestCase):
         self.assertIn("ceo_boot_persona_coverage_score", names)
 
     def test_tier_s_checks_count_is_21(self) -> None:
-        self.assertEqual(len(_mod.TIER_S_CHECKS), 23)  # PLAN-153 Wave E (+failopen_rail_liveness_7d, harness_config_gate)
+        self.assertEqual(len(_mod.TIER_S_CHECKS), 24)  # S292 (+scheduled_workflows_red)
 
 
 if __name__ == "__main__":

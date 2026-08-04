@@ -149,7 +149,7 @@ class TestRegistryWiring(TestEnvContext):
         self.assertIn(CHECK_NAME, names)
 
     def test_registry_has_21_checks(self):
-        self.assertEqual(len(_mod.TIER_S_CHECKS), 23)  # PLAN-153 Wave E: +2
+        self.assertEqual(len(_mod.TIER_S_CHECKS), 24)  # S292: +1 (scheduled_workflows_red)
 
     def test_check_callable_is_the_tamper_function(self):
         fn = dict(_mod.TIER_S_CHECKS)[CHECK_NAME]
