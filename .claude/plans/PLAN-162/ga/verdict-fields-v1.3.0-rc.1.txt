@@ -1,0 +1,15 @@
+verdict: GO
+generated_at: 2026-08-04T22:03:40Z
+ttl_hours: 24
+parent_sha: 4111a115190d375c39c90cc33ac1d9d5899c1cf2
+release_tag: v1.3.0-rc.1
+inputs_hash: 1c1d8f4404521de942451b7f7c25cba721eedaeb51d6a4f01d3dde20335ed10f
+inputs_hash_paths_manifest_sha: b3ab0242a6ff4e12fdf2fd90c47cbc23649ab07226340c8b7aacbb0f9cc093e0
+tool_versions:
+  codex_cli: 0.144.6
+  codex_target_triple: aarch64-apple-darwin
+  codex_payload_sha256: 80a3933d11a9d13ef806aa24f7bb8afc9169cfe4e9b09d6da6a92922cbde9cff
+  claude_code: claude-fable-5
+  python: 3.9.6
+transcript_hash: f7899f53aa844536a7dace9434a2d26d662f773e9891b39e83f5452b0a8d15e6
+findings: [r4-P1-bump-idempotence-FIXED, r4-P2-checklist-coherence-FIXED]
