@@ -96,7 +96,7 @@ Events sorted alphabetically; within an event, rows keep registration order (= r
 | PreToolUse | `Bash` | `check_scratchpad_access.py` | 5 |
 | PreToolUse | `Agent` | `check_budget.py` | 5 |
 | PreToolUse | `Read` | `check_read_injection.py` | 5 |
-| PreToolUse | `Edit\|Write\|MultiEdit` | `check_pair_rail.py` | 150 |
+| PreToolUse | `Edit\|Write\|MultiEdit` | `check_pair_rail.py` | 210 |
 | PreToolUse | `mcp__codex__codex\|mcp__codex__codex-reply` | `check_codex_filewrite.py` | 30 |
 | PreToolUse | `Agent\|Bash\|Edit\|Write\|MultiEdit\|Read\|Glob\|Grep\|WebFetch\|WebSearch\|NotebookEdit\|TodoWrite\|Task\|mcp__.*` | `check_anti_ceo_overhead.py` | 5 |
 | PreToolUse | `Bash` | `check_cost_envelope.py` | 5 |

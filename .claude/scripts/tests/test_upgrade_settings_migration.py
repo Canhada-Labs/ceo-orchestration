@@ -539,14 +539,24 @@ class TestPairRailTimeoutValueMigration(_MigrationHarness, TestEnvContext):
     verdict latency (N=9, p95 ~75s) — 12/12 historical pair_rail_case rows
     were F/TIMEOUT (PLAN-163/probes/GATE-V2-2026-07-29-FAIL-diagnosis.md).
     Ratified migration semantics: bump the check_pair_rail.py registration
-    timeout 60 -> 150 IFF the adopter's current value == 60 (the old cap);
-    ANY other adopter-chosen value is PRESERVED; round 2 is an idempotent
-    no-op. The NEW expectation is DERIVED from the template artifact
-    (settings.base.json pair-rail entry — install.sh copies it verbatim, so
-    template value == post-install value == migration target); the OLD cap
-    (60) is a frozen historical literal, exactly like the "old" column of
-    the --print-settings-baselines table. The ratified OQ2 literal (150)
+    timeout to the template cap IFF the adopter's current value is one of
+    the SUPERSEDED SHIPPED caps; ANY other adopter-chosen value is
+    PRESERVED; round 2 is an idempotent no-op. The NEW expectation is
+    DERIVED from the template artifact (settings.base.json pair-rail entry
+    — install.sh copies it verbatim, so template value == post-install
+    value == migration target); each superseded cap is a frozen historical
+    literal, exactly like the "old" column of the
+    --print-settings-baselines table. The ratified literal (210)
     materializes ONCE, in the U1 template-parity oracle below.
+
+    ADR-110-AMEND-2: the superseded set is (60, 150), not just 60. 150 was
+    the AMEND-1 cap SHIPPED IN v1.2.0, so every v1.2.0 adopter carries it
+    verbatim. Leaving it as "adopter-customized" is not the conservative
+    reading — with the hook-internal default now 180, a 150s registration
+    means the HARNESS kills the hook before the hook's own codex cap
+    fires, and a killed hook emits NO pair_rail_case at all (§6: fail-open
+    with NO event, invisible to the instrument in both numerator and
+    denominator) — strictly worse than the case F it replaces.
 
     Base order (_MigrationHarness, TestEnvContext): scratch-target fixtures
     from the family harness + S283 env-hygiene isolation; both setUps are
@@ -557,6 +567,13 @@ class TestPairRailTimeoutValueMigration(_MigrationHarness, TestEnvContext):
     #: produced the F/TIMEOUT class (never derived; it no longer exists in
     #: any live artifact once the migration lands).
     OLD_REGISTRATION_CAP = 60
+
+    #: Every SUPERSEDED SHIPPED cap, frozen (ADR-110-AMEND-2). 60 =
+    #: pre-PLAN-164; 150 = the AMEND-1 cap shipped in v1.2.0. Each must
+    #: migrate, because each sits BELOW the current internal default + the
+    #: 30s inter-layer margin — i.e. each leaves the harness able to kill
+    #: the hook before its own codex cap fires (§6, no-event fail-open).
+    SUPERSEDED_SHIPPED_CAPS = (60, 150)
 
     _PAIR_RAIL_CMD = (
         "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\""
@@ -628,15 +645,55 @@ class TestPairRailTimeoutValueMigration(_MigrationHarness, TestEnvContext):
 
     # -- oracles ---------------------------------------------------------
 
-    def test_template_registration_carries_ratified_cap_150(self) -> None:
-        """U1 parity: the ratified OQ2 value (150) — pinned once, here."""
-        self.assertEqual(self._new_registration_cap(), 150)
+    def test_template_registration_carries_ratified_cap_210(self) -> None:
+        """U1 parity: the ratified ADR-110-AMEND-2 value (210) — pinned
+        once, here. Was 150 under PLAN-164 OQ2."""
+        self.assertEqual(self._new_registration_cap(), 210)
 
     def test_old_cap_60_is_migrated_to_new_cap(self) -> None:
         self._seed_with_pair_rail_timeout(self.OLD_REGISTRATION_CAP)
         self.run_migration()
         self.assertEqual(self._migrated_pair_rail_timeout(),
                          self._new_registration_cap())
+
+    def test_every_superseded_shipped_cap_is_migrated(self) -> None:
+        """ADR-110-AMEND-2: the migration matches a SET, not one literal.
+
+        RED-FIRST against the AMEND-1 migration (`cur == 60`): the 150
+        case lands in the `else` arm and is PRESERVED as
+        "adopter-customized" — leaving every v1.2.0 adopter with a
+        registration BELOW internal-default + margin, i.e. the harness
+        kills the hook before its own codex cap fires and NO
+        pair_rail_case is emitted at all.
+        """
+        new_cap = self._new_registration_cap()
+        for old_cap in self.SUPERSEDED_SHIPPED_CAPS:
+            with self.subTest(old_cap=old_cap):
+                self.assertNotEqual(
+                    old_cap, new_cap,
+                    "a superseded cap equal to the live template cap is a "
+                    "bookkeeping error — it can never be observed migrating")
+                self.setUp()  # fresh scratch target per seeded value
+                self._seed_with_pair_rail_timeout(old_cap)
+                self.run_migration()
+                self.assertEqual(
+                    self._migrated_pair_rail_timeout(), new_cap,
+                    "superseded shipped cap %ds was not migrated to the "
+                    "template cap %ds — an adopter left below "
+                    "internal-default + 30s margin has the harness kill "
+                    "the hook before its own codex cap fires, and a killed "
+                    "hook emits NO pair_rail_case (ADR-110-AMEND-2 §6)"
+                    % (old_cap, new_cap))
+
+    def test_superseded_caps_all_below_new_cap(self) -> None:
+        """Every frozen member must be a value the CURRENT contract
+        rejects — otherwise the set has silently grown a live value."""
+        new_cap = self._new_registration_cap()
+        for old_cap in self.SUPERSEDED_SHIPPED_CAPS:
+            self.assertLess(
+                old_cap, new_cap,
+                "superseded cap %ds >= live template cap %ds — the frozen "
+                "set must contain ONLY retired values" % (old_cap, new_cap))
 
     def test_migration_brings_template_status_message_iff_absent(self) -> None:
         """grok r1 LOW-3 / codex r2: the SAME migration event that bumps the

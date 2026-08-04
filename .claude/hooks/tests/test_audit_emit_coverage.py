@@ -91,6 +91,13 @@ class _EmitterTestBase(TestEnvContext):
             out.append(json.loads(line))
         return out
 
+    def _truncate_log(self) -> None:
+        """Empty the isolated audit-log so `_read_one` can be reused for a
+        second emit inside one test (multi-case loops)."""
+        log = Path(os.environ["CEO_AUDIT_LOG_PATH"])
+        if log.exists():
+            log.write_text("", encoding="utf-8")
+
     def _read_one(self) -> Dict[str, Any]:
         """Return the single event (fails if count != 1)."""
         events = self._read_events()
@@ -2487,6 +2494,97 @@ class TestPlan075PairRailEmitters(_EmitterTestBase):
         self.assertEqual(e["claude_verdict"], "PASS")
         self.assertEqual(e["codex_verdict"], "PASS")
         self.assertEqual(e["tool_name"], "Edit")
+
+    def test_pair_rail_timeout_ms_lands_signed_on_both_actions(self):
+        """ADR-110-AMEND-2 §1.6 — the effective budget reaches the SIGNED
+        chain, as an int, on the case AND the denominator.
+
+        This is the field's whole point (§4(i)): a case F under a
+        sub-floor `CEO_PAIR_RAIL_TIMEOUT_S` export must stop being
+        indistinguishable from a genuine Codex outage. A row that carries
+        no `timeout_ms`, or one whose hmac is null, instruments nothing.
+        """
+        audit_emit.emit_pair_rail_case(
+            case="F", claude_verdict="PASS", codex_verdict="TIMEOUT",
+            tool_name="Edit", file_path_hash_prefix="abc123def4567890",
+            timeout_ms=180000, session_id="s-budget", project="/t",
+        )
+        e = self._read_one()
+        self._assert_schema_baseline(e, "pair_rail_case")
+        self.assertEqual(e["timeout_ms"], 180000)
+        self.assertIsInstance(e["timeout_ms"], int)
+        self.assertNotIsInstance(e["timeout_ms"], bool)
+        # The row must be SIGNED — a float would have made canonical_json
+        # raise and the spool writer drop the event entirely.
+        self.assertIsNone(e.get("hmac_error"))
+        self.assertTrue(e.get("hmac"))
+
+        self._truncate_log()
+        audit_emit.emit_pair_rail_review_expected(
+            session_id="s-budget", tool_name="Edit",
+            file_path_hash_prefix="abc123def4567890", timeout_ms=5000,
+        )
+        e2 = self._read_one()
+        self._assert_schema_baseline(e2, "pair_rail_review_expected")
+        self.assertEqual(e2["timeout_ms"], 5000)
+        self.assertIsNone(e2.get("hmac_error"))
+
+    def test_pair_rail_timeout_ms_off_shape_coerces_never_drops(self):
+        """Off-shape budget values coerce to the 0 sentinel.
+
+        The failure mode being closed is NOT a wrong number: a float in
+        an HMAC-covered field makes `canonical_json` raise and the spool
+        writer DROP THE WHOLE EVENT (only an `audit-log.errors`
+        breadcrumb survives). On these two actions a dropped row
+        manufactures the exact /ceo-boot S254 liveness deficit the
+        `review_id` correlation exists to disprove — so every off-shape
+        input must still produce a signed row.
+        """
+        for label, raw in (
+            ("float_seconds", 180.0),          # the shape the ADR prose names
+            ("float_ms", 180000.5),
+            ("string", "180"),
+            ("none", None),
+            ("bool", True),                    # isinstance(True, int) trap
+            ("nan", float("nan")),
+            ("inf", float("inf")),
+            ("negative", -1),
+            ("over_bound", 10 ** 12),
+        ):
+            with self.subTest(label=label):
+                self._truncate_log()
+                audit_emit.emit_pair_rail_case(
+                    case="A", claude_verdict="PASS", codex_verdict="PASS",
+                    tool_name="Edit",
+                    file_path_hash_prefix="abc123def4567890",
+                    timeout_ms=raw, session_id="s-shape", project="/t",
+                )
+                e = self._read_one()  # fails loudly if the row was DROPPED
+                self.assertIsInstance(e["timeout_ms"], int)
+                self.assertNotIsInstance(e["timeout_ms"], bool)
+                self.assertGreaterEqual(e["timeout_ms"], 0)
+                self.assertLessEqual(e["timeout_ms"], 6_000_000)
+                self.assertIsNone(e.get("hmac_error"))
+
+    def test_pair_rail_timeout_ms_direct_emit_generic_is_coerced(self):
+        """The dispatch branch closes the direct-caller path too.
+
+        `emit_generic("pair_rail_case", timeout_s=180.0)` is exactly what
+        a caller following the amendment PROSE would write; the branch
+        must both drop the unknown `timeout_s` key and coerce a float
+        `timeout_ms` rather than let either reach canonical_json.
+        """
+        audit_emit.emit_generic(
+            "pair_rail_case", session_id="s-direct", case="A",
+            claude_verdict="PASS", codex_verdict="PASS", tool_name="Edit",
+            file_path_hash_prefix="abc123def4567890",
+            timeout_s=180.0, timeout_ms=180000.0,
+        )
+        e = self._read_one()
+        self.assertNotIn("timeout_s", e)
+        self.assertEqual(e["timeout_ms"], 180000)
+        self.assertIsInstance(e["timeout_ms"], int)
+        self.assertIsNone(e.get("hmac_error"))
 
     def test_emit_pair_rail_case_invalid_case_coerces(self):
         """Invalid case value coerces to safe default 'F'."""

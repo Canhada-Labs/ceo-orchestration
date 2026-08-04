@@ -40,7 +40,9 @@ auditability — no speed claim.
   registration, and `registration >= internal + 30`. A unilateral flip of any
   of the three literals now goes red in the suite and in the pack preflight.
 - **`statusMessage` on the registration** — a session held by a synchronous
-  cross-model review shows "may take 1-2 min" instead of appearing frozen.
+  cross-model review shows "may take up to ~3 min" instead of appearing
+  frozen. (Shipped in 1.2.0 as "may take 1-2 min"; the wording tracks the
+  budget and was retuned by ADR-110-AMEND-2 when it moved to 180/210 s.)
 - **From zero completed reviews to ten.** The log now holds 10 healthy cases
   (7 × case A, 3 × case B) alongside 14 case F. Median verdict latency 70.5 s;
   observed maximum 120.0 s.

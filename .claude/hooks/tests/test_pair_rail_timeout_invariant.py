@@ -6,10 +6,16 @@ Root cause being closed (measured, not inferred — see
 default `CEO_PAIR_RAIL_TIMEOUT_S=30s` sits BELOW the real codex verdict
 latency (N=9 probe: p95 ~75s), so 12/12 historical `pair_rail_case`
 events were F/TIMEOUT. The ratified fix is layered: internal default
-120s, harness registration timeout 150s, with an invariant margin of
+180s, harness registration timeout 210s, with an invariant margin of
 >= 30s between the layers so the harness never kills the hook before the
 hook's own subprocess cap fires, plus a `statusMessage` on the
 registration so the operator sees WHY a canonical edit stalls.
+
+(The ratified pair was 120/150 under PLAN-164; ADR-110-AMEND-2 ran the
+AMEND-1 §3 recalibration and moved it to 180/210 — 25.9 % of joined
+post-uplift reviews sat AT OR ABOVE the 120s budget, which puts the true
+p95 >= 120 by count, and the folga convention over that yields 180. The
+margin stays 30s and the invariant holds at equality: 210 == 180 + 30.)
 
 This test pins the INVARIANT BETWEEN LAYERS **and** the ratified
 absolute values:
@@ -21,15 +27,16 @@ absolute values:
   2. each registration timeout >= hook-internal default + 30s margin;
   3. `statusMessage` is present on the pair-rail registration in BOTH
      files;
-  4. the ABSOLUTE ratified values hold: internal default == 120 (the env
-     seam AND both fallback literals `timeout_s = 120.0`), registration
-     == 150 in both files. A deliberate recalibration (ADR-110-AMEND-1
-     trigger: >=10 healthy cases -> p95 revisit) must edit THIS test in
-     the same change — that is the contract, not an inconvenience.
-     Without (4), a unilateral downward drift of the internal default
-     (e.g. 120 -> 50) stays green under (2) alone (150 >= 50+30) and
-     silently re-admits the sub-latency class this plan retires
-     (grok r1 MED / codex r1 MED-3).
+  4. the ABSOLUTE ratified values hold: internal default == 180 (the env
+     seam AND both fallback literals `timeout_s = 180.0`), registration
+     == 210 in both files. A deliberate recalibration (ADR-110-AMEND-2
+     trigger: censoring rate > 5 % over n >= 20 post-change reviews —
+     the AMEND-1 p95-of-healthy trigger is retired as unestimable under
+     right-censoring) must edit THIS test in the same change — that is
+     the contract, not an inconvenience. Without (4), a unilateral
+     downward drift of the internal default (e.g. 180 -> 50) stays green
+     under (2) alone (210 >= 50+30) and silently re-admits the
+     sub-latency class this plan retires (grok r1 MED / codex r1 MED-3).
 
 RED-FIRST contract (staged with the rail-pack): against the pre-pack
 live tree — registration timeout 60, internal default "30", NO
@@ -97,11 +104,15 @@ _HOOK_SOURCE = _HOOKS_DIR / "check_pair_rail.py"
 # timeout arm (case F stays diagnosable instead of a silent hook kill).
 _MARGIN_S = 30
 
-# Ratified ABSOLUTE values (PLAN-164 OQ1/OQ2, Owner tie-break 2026-07-29;
-# recalibration path documented in ADR-110-AMEND-1 — edit these constants
-# ONLY together with the hook + both settings surfaces, in a governed change).
-_RATIFIED_INTERNAL_S = 120
-_RATIFIED_REGISTRATION_S = 150
+# Ratified ABSOLUTE values (ADR-110-AMEND-2, S291 ceremony 2026-08-03 —
+# the AMEND-1 §3 recalibration ran and pointed upward: 25.9 % of joined
+# post-uplift reviews sat at or above the 120 s budget, so 1.5x p95 under
+# the AMEND-1 folga convention lands on 180, with the registration at
+# 180 + the 30 s inter-layer margin. Was 120/150 under PLAN-164 OQ1/OQ2,
+# Owner tie-break 2026-07-29.) Edit these constants ONLY together with the
+# hook + both settings surfaces, in a governed change.
+_RATIFIED_INTERNAL_S = 180
+_RATIFIED_REGISTRATION_S = 210
 
 # The two parse-error/clamp-reset fallbacks in check_pair_rail.py
 # (`timeout_s = <N>.0`) must carry the SAME ratified internal value.
@@ -221,7 +232,7 @@ class TestPairRailTimeoutInvariant(TestEnvContext):
                 status,
                 str,
                 "pair-rail registration in %s has no 'statusMessage' — a "
-                "120s+ canonical-edit stall must tell the operator the "
+                "180s+ canonical-edit stall must tell the operator the "
                 "pair-rail review is running, not look like a hang "
                 "(got %r)" % (origin, status),
             )

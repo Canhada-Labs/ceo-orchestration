@@ -914,6 +914,126 @@ class TestDecideWithMatrix(TestEnvContext):
                 f"Expected no matrix emit for Read tool; got {matrix_events}",
             )
 
+    # -- ADR-110-AMEND-2 §1.6 — effective-budget threading ---------------
+
+    def test_effective_budget_threaded_to_case_and_expected(self):
+        """The EFFECTIVE budget reaches BOTH liveness emits, in ms.
+
+        §4(i) is the point: before this field, no event recorded the
+        budget, so `CEO_PAIR_RAIL_TIMEOUT_S=5` produced a case F
+        indistinguishable from a genuine Codex outage — the undocumented
+        knob was stealthier than the documented kill-switch. Asserting
+        only that `audit_emit` ACCEPTS the field would leave the hook
+        free to never pass it; this pins the THREADING.
+        """
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            repo = _make_repo(Path(td))
+            sink = Path(td) / "sink.jsonl"
+            clean_review = json.dumps({
+                "verdict": "PASS",
+                "findings": [],
+                "summary": "Clean review. No issues found.",
+            })
+            seen = []
+            real_expected = _CPR._emit_pair_rail_review_expected
+
+            def _capture_expected(**kwargs):
+                seen.append(kwargs)
+                return real_expected(**kwargs)
+
+            with patch.dict(os.environ, {
+                "CEO_PAIR_RAIL_AUDIT_SINK": str(sink),
+            }, clear=False), patch.object(
+                _CPR, "_invoke_codex_review", return_value=clean_review
+            ), patch.object(
+                _CPR, "_emit_pair_rail_review_expected", _capture_expected
+            ):
+                _CPR._decide_with_matrix(
+                    tool_name="Write",
+                    file_path=_l3_abs(repo),
+                    proposed_content="x = 1",
+                    repo_root=repo,
+                    timeout_s=7.5,
+                )
+            self.assertEqual(len(seen), 1)
+            self.assertEqual(
+                seen[0].get("timeout_s"), 7.5,
+                "the denominator emit did not receive the effective budget",
+            )
+            case_events = [e for e in _read_sink(sink) if "case" in e]
+            self.assertTrue(case_events, "no case emit to carry the budget")
+            self.assertEqual(
+                case_events[0].get("timeout_ms"), 7500,
+                "case emit lost the effective budget (7.5s -> 7500ms)",
+            )
+
+    def test_case_f_outage_arm_carries_effective_budget(self):
+        """The OUTAGE arm is the one §4(i) is about.
+
+        A case F from a genuine Codex outage and a case F manufactured by
+        a sub-floor budget must be TELLABLE APART. This is the terminal
+        path most likely to be missed when threading a new field, because
+        it returns from an exception handler rather than the happy path.
+        """
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            repo = _make_repo(Path(td))
+            sink = Path(td) / "sink.jsonl"
+            with patch.dict(os.environ, {
+                "CEO_PAIR_RAIL_AUDIT_SINK": str(sink),
+            }, clear=False), patch.object(
+                _CPR, "_invoke_codex_review",
+                side_effect=_CPR.CodexUnavailable("no codex payload"),
+            ):
+                _CPR._decide_with_matrix(
+                    tool_name="Write",
+                    file_path=_l3_abs(repo),
+                    proposed_content="z = 3",
+                    repo_root=repo,
+                    timeout_s=5.0,
+                )
+            case_f = [e for e in _read_sink(sink) if e.get("case") == "F"]
+            self.assertTrue(case_f, "expected a case=F emit")
+            self.assertEqual(
+                case_f[0].get("timeout_ms"), 5000,
+                "case F carried no effective budget — a sub-floor knob "
+                "session stays indistinguishable from a Codex outage "
+                "(ADR-110-AMEND-2 §4(i))",
+            )
+
+    def test_effective_budget_is_int_ms_never_float(self):
+        """Encoding is load-bearing, not stylistic.
+
+        `canonical_json` rejects floats in HMAC-covered fields and the
+        spool writer then DROPS the whole event, which on this action
+        manufactures the /ceo-boot S254 deficit `review_id` exists to
+        disprove. A fractional budget must therefore still yield an int.
+        """
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            repo = _make_repo(Path(td))
+            sink = Path(td) / "sink.jsonl"
+            with patch.dict(os.environ, {
+                "CEO_PAIR_RAIL_AUDIT_SINK": str(sink),
+            }, clear=False), patch.object(
+                _CPR, "_invoke_codex_review",
+                side_effect=_CPR.CodexUnavailable("no codex payload"),
+            ):
+                _CPR._decide_with_matrix(
+                    tool_name="Write",
+                    file_path=_l3_abs(repo),
+                    proposed_content="z = 3",
+                    repo_root=repo,
+                    timeout_s=0.25,
+                )
+            case_f = [e for e in _read_sink(sink) if e.get("case") == "F"]
+            self.assertTrue(case_f)
+            value = case_f[0].get("timeout_ms")
+            self.assertIsInstance(value, int)
+            self.assertNotIsInstance(value, bool)
+            self.assertEqual(value, 250)
+
 
 # ===========================================================================
 # 7. _emit_pair_rail_case fail-OPEN

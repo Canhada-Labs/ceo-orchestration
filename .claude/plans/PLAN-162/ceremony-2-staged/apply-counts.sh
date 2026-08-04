@@ -1,7 +1,7 @@
 #!/bin/bash
 # apply-counts.sh — ceremony 2 derived-counts updater (PLAN-162 ceremony-2-staged)
 #
-# WHAT: bumps every ADR-count doc site 185 -> 187 on the POST-MERGE tree.
+# WHAT: bumps every ADR-count doc site 186 -> 188 (ADR-186 landed in phase B).
 # WHEN: run AFTER (a) `git merge plan-165-draft` (docs already at 185/27,
 #       adds .claude/adr/ADR-185-night-mode-posture-toggle.md) AND
 #       (b) the two AMEND files were copied into .claude/adr/:
@@ -24,7 +24,7 @@ set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 ROOT="${1:-$(cd "$SCRIPT_DIR/../../../.." && pwd)}"
-OLD_ADRS=185
+OLD_ADRS=186
 # codex S292 r8 P1: o alvo NÃO pode ser um literal — quais ADRs entram
 # depende de decisões do Owner tomadas DURANTE a cerimônia (AMEND-1 só se
 # a Fase B landar; AMEND-2 só se a sonda der GO; ADR-186 só se o Owner
@@ -52,6 +52,7 @@ for must in \
   ".claude/adr/ADR-185-night-mode-posture-toggle.md" \
   ".claude/adr/ADR-110-AMEND-2-rail-timeout-recalibration.md" \
   ".claude/adr/ADR-164-AMEND-1-cache-partition-and-wall-deadline.md" \
+  ".claude/adr/ADR-186-hook-deadline-policy.md" \
   ".claude/commands/night-mode.md"; do
   if [ -f "$ROOT/$must" ]; then echo "present: $must"; else
     echo "ABORT: missing $must — run only after merge + AMEND copy." >&2; exit 2; fi

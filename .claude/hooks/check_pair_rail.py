@@ -48,7 +48,7 @@ Documented in `routing-matrix.md` §L3-classifier.
 ##  a preset review on ANY path; tests inject a review by mocking
 ##  `_invoke_codex_review` at the invoke boundary, never via env.)
 
-- `CEO_PAIR_RAIL_TIMEOUT_S` (default 120) — Codex invoke wall-clock
+- `CEO_PAIR_RAIL_TIMEOUT_S` (default 180) — Codex invoke wall-clock
   cap. On timeout: fail-OPEN.
 - `CEO_PAIR_RAIL_DISABLE` — kill-switch: when set to `1`, hook is a
   no-op (allow). For incident response.
@@ -1466,9 +1466,14 @@ def _decide(
     global _CURRENT_REVIEW_ID
     review_id = os.urandom(8).hex()
     _CURRENT_REVIEW_ID = review_id
+    # ADR-110-AMEND-2 §1.6 / §4(i): the EFFECTIVE post-clamp budget rides
+    # both liveness emits. Without it a session exporting
+    # CEO_PAIR_RAIL_TIMEOUT_S=5 produces a case F byte-indistinguishable
+    # from a genuine Codex outage — the undocumented knob was stealthier
+    # than the documented kill-switch (which emits its own loud event).
     _emit_pair_rail_review_expected(
         tool_name=tool_name, session_id=session_id, file_path=file_path,
-        review_id=review_id,
+        review_id=review_id, timeout_s=timeout_s,
     )
 
     # Invoke Codex review. `_invoke_codex_review` now returns the REDACTED
@@ -1714,12 +1719,12 @@ def main() -> int:
         )
         try:
             timeout_s = float(
-                os.environ.get("CEO_PAIR_RAIL_TIMEOUT_S", "120")
+                os.environ.get("CEO_PAIR_RAIL_TIMEOUT_S", "180")
             )
         except (TypeError, ValueError):
-            timeout_s = 120.0
+            timeout_s = 180.0
         if timeout_s <= 0 or timeout_s > 600:
-            timeout_s = 120.0
+            timeout_s = 180.0
 
         # PLAN-081 Phase 3: route through the asymmetric VETO matrix
         # wrapper instead of the spike _decide() directly. The matrix
@@ -1974,12 +1979,43 @@ def _resolve_human_triage_grace_h(severity: str) -> int:
         return 24
 
 
+# ADR-110-AMEND-2 §1.6 — the effective-budget field is emitted as an
+# INTEGER in MILLISECONDS, never as float seconds. `canonical_json`
+# REJECTS floats in HMAC-covered fields (`_lib/canonical_json.py:96`),
+# and the rejection is not benign: the spool writer drops the WHOLE event
+# and leaves only an `audit-log.errors` breadcrumb — measured, see the
+# amendment NOTES. A dropped `pair_rail_case` is exactly the /ceo-boot
+# S254 liveness deficit the r5 F2 correlation id exists to prevent, so a
+# float here would have made the rail invisible while claiming to
+# instrument it. Same encoding + same rationale as the sibling
+# `dispatcher_route.wall_clock_ms` (PLAN-081 Phase 2, Codex iter 1 P0-1).
+# Cap 6_000_000 ms = 6000 s = 10x the hook's own 600 s clamp ceiling:
+# wide enough never to distort a legitimate value, tight enough that a
+# caller bug cannot sign an unbounded number. Divide by 1000 for seconds.
+_TIMEOUT_MS_MAX = 6_000_000
+
+
+def _timeout_ms(value_s: float) -> int:
+    """Convert an effective-budget in SECONDS to bounded integer ms.
+
+    Fail-safe: a non-numeric / NaN / infinite input yields 0 (the
+    "unknown budget" sentinel) rather than raising into the emit
+    wrappers' fail-open catch, which would drop the event.
+    """
+    try:
+        ms = int(float(value_s) * 1000)
+    except (TypeError, ValueError, OverflowError):
+        return 0
+    return max(0, min(_TIMEOUT_MS_MAX, ms))
+
+
 def _emit_pair_rail_review_expected(
     *,
     tool_name: str,
     session_id: str = "",
     file_path: str = "",
     review_id: str = "",
+    timeout_s: float = 0.0,
 ) -> None:
     """Best-effort audit emit of pair_rail_review_expected. Fail-OPEN.
 
@@ -2004,6 +2040,16 @@ def _emit_pair_rail_review_expected(
     `pair_rail_case` emit uses (`_hash_file_path_prefix` — 16-hex SHA-256
     prefix, raw path NEVER on the wire per LLM06) so id-less events can
     still pair per (session, file-hash) BUCKET.
+
+    ADR-110-AMEND-2 §1.6: ``timeout_s`` is the EFFECTIVE post-clamp Codex
+    budget for this invocation in SECONDS (resolved in `main()`, threaded
+    through `_decide_with_matrix` → `_decide`). It exists so a case F
+    caused by a sub-floor `CEO_PAIR_RAIL_TIMEOUT_S` export stops being
+    indistinguishable from a genuine Codex outage (§4(i) residual — the
+    quiet knob was stealthier than the documented kill-switch). It reaches
+    the wire as the INTEGER-millisecond `timeout_ms` (see `_timeout_ms`:
+    canonical_json forbids floats in HMAC-covered fields), forwarded under
+    the SAME `__kwdefaults__` skew guard as `review_id`.
 
     Import resolution mirrors `_emit_pair_rail_case` (staged-dir override →
     canonical layout → PYTHONPATH). hasattr-guarded: a pre-ceremony
@@ -2057,6 +2103,12 @@ def _emit_pair_rail_review_expected(
         ) or {}
         if "review_id" in _kwd:
             _kwargs["review_id"] = review_id
+        # ADR-110-AMEND-2 §1.6 — same skew guard: a pre-ceremony
+        # audit_emit without `timeout_ms` degrades to the budget-less
+        # legacy emit instead of a TypeError that would drop the WHOLE
+        # denominator event (fail-open regression class).
+        if "timeout_ms" in _kwd:
+            _kwargs["timeout_ms"] = _timeout_ms(timeout_s)
         _ae.emit_pair_rail_review_expected(**_kwargs)
     except Exception:
         pass  # fail-OPEN — never block on audit
@@ -2076,8 +2128,17 @@ def _emit_pair_rail_case(
     repo_root: Optional[Path] = None,
     session_id: str = "",
     review_id: str = "",
+    timeout_s: float = 0.0,
 ) -> None:
     """Best-effort audit emit of pair_rail_case. Fail-OPEN.
+
+    ADR-110-AMEND-2 §1.6: ``timeout_s`` is the EFFECTIVE post-clamp Codex
+    budget this invocation ran under, in SECONDS. A case F emitted under a
+    sub-floor budget (`CEO_PAIR_RAIL_TIMEOUT_S=5`) and a case F from a
+    genuine Codex outage were byte-identical before this field existed —
+    §4(i). It reaches the wire as the INTEGER-millisecond `timeout_ms`
+    (see `_timeout_ms`), forwarded under the SAME `__kwdefaults__` skew
+    guard as `review_id`.
 
     r5 F2: ``review_id`` is the per-invocation correlation id generated by
     `_decide()` at review entry and threaded here via `_decide_with_matrix`
@@ -2154,6 +2215,12 @@ def _emit_pair_rail_case(
                         "severity": severity,
                         "jaccard_similarity_bucket": jaccard_bucket,
                         "human_triage_grace_h": _resolve_human_triage_grace_h(severity),
+                        # ADR-110-AMEND-2 §1.6 — forensic parity with the
+                        # signed row (same integer-ms encoding). The sink
+                        # BYPASSES audit_emit, so the bound is applied
+                        # here too — never write an unbounded caller
+                        # value to a file.
+                        "timeout_ms": _timeout_ms(timeout_s),
                     }, ensure_ascii=False) + "\n")
             except Exception:
                 pass
@@ -2185,6 +2252,12 @@ def _emit_pair_rail_case(
         ) or {}
         if "review_id" in _kwd:
             _kwargs["review_id"] = review_id
+        # ADR-110-AMEND-2 §1.6 — same skew guard: a version-skewed
+        # audit_emit without `timeout_ms` degrades to the budget-less
+        # legacy emit rather than raising a TypeError that would DROP the
+        # case emit and manufacture a /ceo-boot liveness deficit.
+        if "timeout_ms" in _kwd:
+            _kwargs["timeout_ms"] = _timeout_ms(timeout_s)
         _ae.emit_pair_rail_case(**_kwargs)
     except Exception:
         pass  # fail-OPEN — never block on audit
@@ -2368,6 +2441,7 @@ def _decide_with_matrix(
                 case="F", claude_verdict="PASS", codex_verdict="ADVISORY",
                 tool_name=tool_name, file_path=file_path,
                 session_id=session_id, review_id=review_id,
+                timeout_s=timeout_s,
             )
         return base
 
@@ -2381,6 +2455,7 @@ def _decide_with_matrix(
             case="F", claude_verdict="PASS", codex_verdict=xv,
             tool_name=tool_name, file_path=file_path,
             session_id=session_id, review_id=review_id,
+            timeout_s=timeout_s,
         )
         return base
 
@@ -2403,6 +2478,7 @@ def _decide_with_matrix(
             rubric_violation_id="",
             severity="P0",  # write-shape violation defaulted P0 procedural
             session_id=session_id, review_id=review_id,
+            timeout_s=timeout_s,
         )
         # Advisory-only return — `base` already carries the advisory
         # systemMessage (Site 1). No `decision` key — schema treats
@@ -2414,6 +2490,7 @@ def _decide_with_matrix(
             case="A", claude_verdict="PASS", codex_verdict="PASS",
             tool_name=tool_name, file_path=file_path,
             session_id=session_id, review_id=review_id,
+            timeout_s=timeout_s,
         )
         return base
 

@@ -68,8 +68,10 @@
 #     normative table IS the artifact — literals are never re-hardcoded).
 #   - (PLAN-164 W1, ADR-110-AMEND-1) PAIR-RAIL REGISTRATION-TIMEOUT VALUE
 #     MIGRATION: the check_pair_rail.py PreToolUse registration timeout is
-#     bumped from the frozen OLD cap (60) to the template-derived cap IFF the
-#     adopter's current value == 60; any other adopter-chosen value is
+#     bumped to the template-derived cap IFF the adopter's current value is
+#     one of the frozen SUPERSEDED SHIPPED caps (60 pre-PLAN-164; 150 from
+#     PLAN-164/ADR-110-AMEND-1, shipped in v1.2.0 and superseded by
+#     ADR-110-AMEND-2's 210); any other adopter-chosen value is
 #     PRESERVED + a named WARNING; idempotent. Runs inside the same T5.4
 #     migration step (same opt-out, same --dry-run preview); the NEW cap is
 #     derived from templates/settings/settings.base.json, never hardcoded.
@@ -1731,9 +1733,10 @@ def _reg($event; $name; $entry):
 # not yet registered AND the T3.4 version-floor feature gate is on
 # (_t34_new_event_registrations_enabled). Customized registrations under the
 # same events — and every other hooks entry/settings key — stay untouched.
-# PLAN-164 W1 (ADR-110-AMEND-1): the check_pair_rail.py PreToolUse
-# registration TIMEOUT VALUE migrates under the same 3-state policy — the
-# frozen OLD cap (60) -> the cap DERIVED from the template artifact
+# PLAN-164 W1 (ADR-110-AMEND-1, recalibrated by ADR-110-AMEND-2): the
+# check_pair_rail.py PreToolUse registration TIMEOUT VALUE migrates under
+# the same 3-state policy — any frozen SUPERSEDED SHIPPED cap (60, 150)
+# -> the cap DERIVED from the template artifact
 # (templates/settings/settings.base.json pair-rail entry; install.sh copies
 # it verbatim, so template value == post-install value == migration target);
 # any other adopter-chosen value is PRESERVED + named WARNING; idempotent.
@@ -1980,20 +1983,39 @@ else:
 # --- registration timeout, and the pre-PLAN-164 cap (60s) sat BELOW the
 # --- measured codex verdict latency (p95 ~75s under load; 12/12 historical
 # --- pair_rail_case rows were F/TIMEOUT — PLAN-163/probes/
-# --- GATE-V2-2026-07-29-FAIL-diagnosis.md). Ratified semantics (OQ2=150):
-# --- bump the check_pair_rail.py PreToolUse registration timeout IFF the
-# --- current value == the OLD cap; ANY other adopter-chosen value is
-# --- PRESERVED (named WARN); already-at-target is a no-op; an entry with NO
-# --- timeout key is left untouched (harness default, not an adopter choice
-# --- of the old cap). The NEW cap is DERIVED from the template artifact
+# --- GATE-V2-2026-07-29-FAIL-diagnosis.md). Ratified semantics
+# --- (OQ2=150, recalibrated to 210 by ADR-110-AMEND-2): bump the
+# --- check_pair_rail.py PreToolUse registration timeout IFF the current
+# --- value is one of the SUPERSEDED SHIPPED caps; ANY other
+# --- adopter-chosen value is PRESERVED (named WARN); already-at-target is
+# --- a no-op; an entry with NO timeout key is left untouched (harness
+# --- default, not an adopter choice of an old cap). The NEW cap is
+# --- DERIVED from the template artifact
 # --- (settings.base.json pair-rail entry — install.sh copies it verbatim,
-# --- so template value == post-install value == migration target); the OLD
-# --- cap is a frozen historical literal (it no longer exists in any live
+# --- so template value == post-install value == migration target); each
+# --- OLD cap is a frozen historical literal (none exists in any live
 # --- artifact once this migration lands), exactly like the "old" column of
 # --- the T5.4 table above. Fail-open: an unreadable template or a
 # --- non-unique/non-int template cap skips ONLY this leaf (stderr NOTE) —
 # --- the rest of the migration is unaffected.
-OLD_PAIR_RAIL_CAP = 60  # frozen pre-PLAN-164 registration cap (never derived)
+# ADR-110-AMEND-2: the set of SUPERSEDED SHIPPED defaults, not a single
+# literal. 60 was the pre-PLAN-164 cap; 150 was the PLAN-164/AMEND-1 cap
+# shipped in v1.2.0 and superseded by the AMEND-2 value 210. A v1.2.0
+# adopter sits at exactly 150, and leaving it there is NOT conservative:
+# with the hook-internal default now 180, a 150s registration lets the
+# HARNESS kill the hook BEFORE the internal codex cap fires -- and a
+# killed hook emits NO pair_rail_case at all (AMEND-2 section 6:
+# fail-open with no event, invisible to the instrument in both numerator
+# and denominator). That is strictly worse than the case F it replaces,
+# so a shipped default must keep migrating. Every member is a frozen
+# historical literal that no longer exists in any live artifact; an
+# adopter value outside this set is a genuine choice and stays PRESERVED
+# + WARNED.
+# NOTE: this whole block is a bash SINGLE-QUOTED -c string. No apostrophe
+# may appear anywhere in it -- one terminates the string and silently
+# turns the migration into a no-op (the tests then read the seeded value
+# back unchanged, which looks like a logic bug, not a quoting bug).
+OLD_PAIR_RAIL_CAPS = (60, 150)
 template_path = sys.argv[5]
 
 
@@ -2037,7 +2059,7 @@ else:
             continue
         if cur == new_cap:
             out("OK (already at template cap): pair-rail registration timeout")
-        elif cur == OLD_PAIR_RAIL_CAP:
+        elif cur in OLD_PAIR_RAIL_CAPS:
             if not dry:
                 h["timeout"] = new_cap
                 # grok r1 LOW-3 / codex r2: bring the template statusMessage

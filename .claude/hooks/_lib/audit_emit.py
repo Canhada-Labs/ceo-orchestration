@@ -2173,6 +2173,13 @@ _PAIR_RAIL_CASE_EMIT_ALLOWLIST = frozenset({
     # `pair_rail_review_expected`). Shape-gated in the typed wrapper AND
     # re-coerced in the emit_generic dispatch branch.
     "review_id",
+    # ADR-110-AMEND-2 §1.6 — the EFFECTIVE post-clamp codex budget this
+    # invocation ran under, as INTEGER MILLISECONDS (canonical_json
+    # no-float invariant; same encoding as `dispatcher_route.wall_clock_ms`).
+    # Disambiguates a case F caused by a sub-floor CEO_PAIR_RAIL_TIMEOUT_S
+    # export from a genuine Codex outage (§4(i) residual). Bounded in the
+    # typed wrapper AND re-coerced in the emit_generic dispatch branch.
+    "timeout_ms",
 })
 
 
@@ -5751,6 +5758,16 @@ def emit_generic(action: str, **kwargs: Any) -> None:
         if not (isinstance(_prc_rid, str)
                 and _PAIR_RAIL_REVIEW_ID_RE.fullmatch(_prc_rid)):
             event["review_id"] = ""
+        # ADR-110-AMEND-2 §1.6 — VALUE re-coercion for the effective-budget
+        # field: bounded INTEGER milliseconds. A direct emit_generic caller
+        # passing float seconds (the shape the amendment prose names) would
+        # otherwise trip the canonical_json no-float invariant and the spool
+        # writer would DROP the whole case row — manufacturing the /ceo-boot
+        # S254 liveness deficit this action exists to disprove.
+        if "timeout_ms" in event:
+            event["timeout_ms"] = _coerce_pair_rail_timeout_ms(
+                event["timeout_ms"]
+            )
         event, dropped = _scrub_ceo_boot_event(
             event, _PAIR_RAIL_CASE_EMIT_ALLOWLIST
         )
@@ -7212,6 +7229,13 @@ def emit_generic(action: str, **kwargs: Any) -> None:
         if not (isinstance(_pre_rid, str)
                 and _PAIR_RAIL_REVIEW_ID_RE.fullmatch(_pre_rid)):
             event["review_id"] = ""
+        # ADR-110-AMEND-2 §1.6 — see the pair_rail_case branch: bounded
+        # INTEGER milliseconds; float seconds from a direct caller would
+        # drop the whole denominator row at canonical_json.
+        if "timeout_ms" in event:
+            event["timeout_ms"] = _coerce_pair_rail_timeout_ms(
+                event["timeout_ms"]
+            )
         event, dropped = _scrub_ceo_boot_event(
             event, _PAIR_RAIL_REVIEW_EXPECTED_ALLOWLIST)
         if dropped:
@@ -7642,8 +7666,37 @@ _PAIR_RAIL_FILE_HASH_PREFIX_RE = re.compile(r"^[0-9a-f]{0,16}$")
 _PAIR_RAIL_REVIEW_ID_RE = re.compile(r"^([0-9a-f]{16})?$")
 
 _PAIR_RAIL_REVIEW_EXPECTED_ALLOWLIST = _CODEX_AUDIT_ENVELOPE | frozenset({
-    "tool_name", "file_path_hash_prefix", "review_id",
+    # ADR-110-AMEND-2 §1.6 — `timeout_ms`: the EFFECTIVE post-clamp codex
+    # budget in INTEGER MILLISECONDS (canonical_json forbids floats in
+    # HMAC-covered fields; a float here is not merely rejected — the spool
+    # writer DROPS the whole event). Carried on BOTH pair-rail liveness
+    # actions so the expected/case pair records the budget it ran under.
+    "tool_name", "file_path_hash_prefix", "review_id", "timeout_ms",
 })
+
+
+# ADR-110-AMEND-2 §1.6 — shared bound for the pair-rail effective-budget
+# field. 6_000_000 ms = 6000 s = 10x the hook's own 600 s clamp ceiling:
+# wide enough that a legitimate value is never distorted, tight enough
+# that a direct emit_generic caller cannot sign an unbounded number.
+_PAIR_RAIL_TIMEOUT_MS_MAX = 6_000_000
+
+
+def _coerce_pair_rail_timeout_ms(value: Any) -> int:
+    """Bound an effective-budget value to `[0, 6_000_000]` integer ms.
+
+    Deny-by-default VALUE coercion (Sec MF-3): a non-numeric, boolean,
+    NaN or infinite input becomes `0` (the "unknown budget" sentinel)
+    rather than reaching the signed chain. `bool` is rejected explicitly
+    because `isinstance(True, int)` would otherwise sign `1` as a budget.
+    """
+    if isinstance(value, bool):
+        return 0
+    try:
+        ms = int(value)
+    except (TypeError, ValueError, OverflowError):
+        return 0
+    return max(0, min(_PAIR_RAIL_TIMEOUT_MS_MAX, ms))
 
 
 # ---------------------------------------------------------------------------
@@ -8965,6 +9018,7 @@ def emit_pair_rail_review_expected(
     tool_name: str = "unknown",
     file_path_hash_prefix: str = "",
     review_id: str = "",
+    timeout_ms: int = 0,
     project: str = "",
 ) -> None:
     """Emit pair_rail_review_expected (PLAN-161 W2 C5 / CF-9 denominator).
@@ -9000,9 +9054,24 @@ def emit_pair_rail_review_expected(
     the /ceo-boot expected/terminal pairing per (session, file-hash)
     BUCKET for id-less (pre-land / fail-open no-id) events only.
 
+    ADR-110-AMEND-2 §1.6: `timeout_ms` is the EFFECTIVE post-clamp codex
+    budget the paired review ran under, as INTEGER MILLISECONDS (bounded
+    `[0, 6_000_000]`, off-shape COERCED to 0 = "unknown budget"). It is
+    NOT float seconds: `canonical_json` forbids floats in HMAC-covered
+    fields, and the failure is not benign — the spool writer drops the
+    WHOLE event with only an `audit-log.errors` breadcrumb, which for
+    these two actions would manufacture the very /ceo-boot liveness
+    deficit they exist to measure. Same encoding + rationale as
+    `dispatcher_route.wall_clock_ms`; divide by 1000 to recover seconds.
+    Its purpose is §4(i): before it existed, a session exporting
+    `CEO_PAIR_RAIL_TIMEOUT_S=5` produced a case F byte-indistinguishable
+    from a genuine Codex outage — the quiet knob was stealthier than the
+    documented kill-switch.
+
     Deny-by-default: the ONLY caller fields are `session_id` + the
     closed-enum `tool_name` (off-enum COERCED to "unknown") + the bounded
-    `file_path_hash_prefix` + the bounded `review_id`. Raw file paths and
+    `file_path_hash_prefix` + the bounded `review_id` + the bounded
+    integer `timeout_ms`. Raw file paths and
     content bodies are NEVER persisted. Fail-open per audit_emit contract.
     NEVER routes through _EMIT_GENERIC_PASSTHROUGH.
     """
@@ -9031,6 +9100,8 @@ def emit_pair_rail_review_expected(
         "tool_name": safe_tool,
         "file_path_hash_prefix": safe_prefix,
         "review_id": safe_rid,
+        # ADR-110-AMEND-2 §1.6 — bounded integer ms, never float seconds.
+        "timeout_ms": _coerce_pair_rail_timeout_ms(timeout_ms),
     }
     cleaned, dropped = _scrub_ceo_boot_event(
         raw_event, _PAIR_RAIL_REVIEW_EXPECTED_ALLOWLIST
@@ -10391,9 +10462,17 @@ def emit_pair_rail_case(
     human_triage_grace_h: int = 0,
     session_id: str = "",
     review_id: str = "",
+    timeout_ms: int = 0,
     project: str = "",
 ) -> None:
     """Emit ``pair_rail_case`` event from check_pair_rail.py:_decide_with_matrix.
+
+    ADR-110-AMEND-2 §1.6: ``timeout_ms`` is the EFFECTIVE post-clamp codex
+    budget this invocation ran under, as INTEGER MILLISECONDS (bounded
+    `[0, 6_000_000]`, off-shape COERCED to 0). NOT float seconds — see
+    `emit_pair_rail_review_expected` for why a float would drop the whole
+    event. It disambiguates a case F produced by a sub-floor
+    `CEO_PAIR_RAIL_TIMEOUT_S` export from a genuine Codex outage (§4(i)).
 
     PLAN-161 C5 r5 F2 + r6 F2: ``review_id`` (EXACTLY 16 lowercase hex or
     exactly ""; the RAW value is validated before any bounding — off-shape
@@ -10448,6 +10527,8 @@ def emit_pair_rail_case(
         jaccard_similarity_bucket=safe_jaccard,
         human_triage_grace_h=safe_grace_h,
         review_id=safe_rid,
+        # ADR-110-AMEND-2 §1.6 — bounded integer ms, never float seconds.
+        timeout_ms=_coerce_pair_rail_timeout_ms(timeout_ms),
         project=project,
     )
 
