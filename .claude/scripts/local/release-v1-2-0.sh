@@ -414,11 +414,23 @@ for v in d.get("violations", []):
   fi
 
   git add -A
+  # S293 (codex re-pass r4, P1): IDEMPOTÊNCIA. Se a árvore já está na versão
+  # alvo (bump feito à mão, ou `bump` re-rodado), não há nada staged e um
+  # `git commit` incondicional MORRE — o caminho documentado de três fases
+  # ficaria inexecutável exatamente quando os gates já estão verdes. Um
+  # bump sem-mudança é SUCESSO (a pós-condição "árvore na versão alvo"
+  # está satisfeita), não falha. Os gates acima já provaram a coerência.
+  if git diff --cached --quiet; then
+    ok "nothing to commit — tree already at ${TARGET_BASE} (idempotent no-op)"
+    note "proceed to: bash $0 tag${STABLE:+ --stable}"
+    return 0
+  fi
   git commit -q -m "release: v${TARGET_BASE}
 
-Version bump across all six sites verify-counts enforces (VERSION,
+Version bump across every site verify-counts enforces (VERSION,
 npm/package.json, pyproject.toml, INSTALL.md, docs/ARCHITECTURE.md,
-npm/README.md review stamp) for ${TARGET_TAG}.
+npm/README.md review stamp, SBOM.md, and the SECURITY/VERSIONING review
+stamps) for ${TARGET_TAG}.
 
 VERSION carries the BARE semver: the RC lives only in the tag name, matching
 v1.1.0-rc.1 / v1.0.1-rc.1. An -rc.N string in VERSION would match none of the

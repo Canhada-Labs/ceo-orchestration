@@ -59,7 +59,9 @@
       hand-patch; o gate deles vive só no `release.yml`).
       O badge do README **não** é site de versão — é dinâmico e o driver
       não o toca; auditar por ele deixa passar drift real.
-      O driver faz todos (ver §Promote stable)
+      O driver cobre os sites mecânicos listados acima — **exceto** o
+      shift da janela de suporte e a prosa da tag, que são manuais por
+      desenho (ver o aviso acima e §Promote stable).
 
 ### Governança
 
