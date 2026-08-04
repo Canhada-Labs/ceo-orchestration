@@ -1,6 +1,6 @@
 # Security Policy
 
-<!-- last-reviewed: 2026-07-31 v1.2.0 -->
+<!-- last-reviewed: 2026-08-04 v1.3.0 -->
 
 > **Status:** pre-adopter (framework dogfooded by Owner; no third-party
 > install in production yet). This policy mirrors the maturity level
@@ -290,6 +290,6 @@ it on `main` and patch forward; no back-port.
 - **Public discussion of accepted vulnerabilities:** GitHub Releases +
   CHANGELOG `### Security` section
 
-Last reviewed: 2026-07-31 (v1.2.0 release train — RC-hold references updated
-to the ADR-103 24-hour mechanical window; npm Trusted Publishing marked
-active since v1.1.0; support window updated to v1.2.x / v1.1.x).
+Last reviewed: 2026-08-04 (v1.3.0 release train — support window updated to
+v1.3.x / v1.2.x; night-mode trust boundary and the sentinel-unlock provenance
+requirement added to the covered surface).

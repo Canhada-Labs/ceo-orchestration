@@ -81,9 +81,10 @@ auditability — no speed claim.
   provenance-pinned unlock (`CEO_SENTINEL_UNLOCK` +
   `CEO_SESSION_ANCHOR_SHA` or `CEO_SENTINEL_UNLOCK_SHA256`).
 - Sentinel-verification **cache partitioned** (signature validity no
-  longer keyed per-target): the measured O(candidates × sentinels)
-  amplification — 4.16 s of a 5 s budget at 20 paths — collapses to one
-  verification per sentinel (ADR-164-AMEND-1).
+  longer keyed per-target). This closes the measured saturation window —
+  4.16 s consumed of a 5 s budget at 20 candidate paths — that made the
+  old fail-open deadline attacker-reachable by planting sentinels
+  (ADR-164-AMEND-1). A correctness/security fix; no throughput claim.
 - Deadline blocks are **countable in the chain**: the veto breadcrumb
   carries `reason_code=canonical_edit_hook_fault` instead of
   masquerading as a missing-sentinel block.

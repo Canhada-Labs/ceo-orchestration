@@ -30,7 +30,7 @@
 #   core skills       find .claude/skills/core -name SKILL.md       exact (42)
 #   frontend skills   find .claude/skills/frontend -name SKILL.md   exact (8)
 #   domain skills     find .claude/skills/domains -name SKILL.md    exact (116)
-#   ADRs              ls .claude/adr/ADR-*.md                        exact (184)
+#   ADRs              ls .claude/adr/ADR-*.md                        exact (188)
 #   hook .py files    ls .claude/hooks/*.py                          exact (57)
 #   registered hooks  distinct *.py in settings.json hooks{} tree   exact (46)
 #   registrations     total hook entries in settings.json hooks{}   exact (48)
@@ -38,7 +38,7 @@
 #   SPEC v1 files     ls SPEC/v1/*.md                                exact (32)
 #   tests             pytest --collect-only -q .claude/             floor (N+)
 #   release_steps     grep -c '      - name:' release.yml           exact (29)
-#   commands          find .claude/commands -name '*.md'             exact (26)
+#   commands          find .claude/commands -name '*.md'             exact (27)
 #   workflows         find .github/workflows -name '*.yml'           derived only (no doc cites it — not doc-gated)
 #
 # NOTE on the two glob-ambiguous / underivable numbers (code-reviewer P2):

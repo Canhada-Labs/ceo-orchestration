@@ -45,7 +45,7 @@
 # ============================================================================
 set -euo pipefail
 
-TARGET_BASE="1.2.0"
+TARGET_BASE="1.3.0"
 RC_NUM="1"
 STABLE=0
 DRY_RUN=0
@@ -347,6 +347,20 @@ SITES = [
     # Present in the watched list but currently has no such literal; a zero
     # match here is fine — verify-counts is the oracle, not this table.
     ("README.md", r'(VERSION=)' + SEMVER, r'\g<1>' + target),
+    # S293 (codex re-pass v1.3.0-rc.1, P1): os três sites que ficaram stale
+    # no bump 1.3.0 porque não estavam NEM aqui NEM no verify-counts (a
+    # classe unwatched-doc de S291). Agora estão nos DOIS. SBOM declara o
+    # triple + stamp; SECURITY/VERSIONING têm stamp mecânico aqui e a
+    # JANELA de suporte (vX.Y.x Current/Previous) fica MANUAL de propósito —
+    # o shift Previous<-Current pede juízo de release-train; o verify-counts
+    # (família minor) falha ALTO se esquecida, que é o contrato.
+    ("SBOM.md", r'(\*\*Version:\*\* `)' + SEMVER + r'(`)', r'\g<1>' + target + r'\g<2>'),
+    ("SBOM.md", r'(last-reviewed: )\d{4}-\d{2}-\d{2}( v)' + SEMVER,
+     r'\g<1>' + today + r'\g<2>' + target),
+    ("SECURITY.md", r'(last-reviewed: )\d{4}-\d{2}-\d{2}( v)' + SEMVER,
+     r'\g<1>' + today + r'\g<2>' + target),
+    ("VERSIONING.md", r'(last-reviewed: )\d{4}-\d{2}-\d{2}( v)' + SEMVER,
+     r'\g<1>' + today + r'\g<2>' + target),
 ]
 
 for path, rx, repl in SITES:
