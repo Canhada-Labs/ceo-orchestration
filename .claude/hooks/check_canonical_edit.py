@@ -47,7 +47,9 @@ import json
 import os
 import hashlib  # PLAN-094 Wave C — sha256 in cache key
 import re
+import subprocess  # PLAN162_FIX_S2 — session-anchor proof via git
 import sys
+import time  # PLAN162_FIX_1 — per-invocation wall-clock budget
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple  # PLAN-094 Wave C
 
@@ -341,6 +343,27 @@ _CANONICAL_GUARDS = [
     ".claude/settings.local.json",
     ".claude/state/night-mode.json",
     ".claude/scripts/night-mode.py",
+    # PLAN162_FIX_3 (PLAN-162 findings #3 + #8, consensus C10) — guard the
+    # files the guard itself TRUSTS. Both were guarded by NEITHER rail on
+    # HEAD (verified: canonical=False AND kernel=False), which is what
+    # separates them from finding #12 (that one at least has the kernel
+    # hard-deny underneath).
+    #
+    #   1. `.claude/security/sentinel-signers-registry.yaml` — the ADR-121
+    #      identity root read below in `_sentinel_grants_path`. An ordinary
+    #      Edit silently disarmed half the dual signer rail.
+    #   2. `.claude/policies/.drift-manifest.json` — the policy hash-pin
+    #      registry. Rewritable without the sentinel it pins; the parallel
+    #      of #3 ("pin the pinner").
+    #
+    # BOTH are ALSO in `_KERNEL_PATHS` (same wave) — the sentinel rail
+    # alone would let a sentinel authorize an edit to the registry that
+    # decides which signers are valid, i.e. a sentinel bootstrapping its
+    # own successor. C10 explicitly does NOT invert the `.exists()` gate
+    # into "absence ⇒ fail-closed": that would make DELETING a file the
+    # way to pick the posture.
+    ".claude/security/sentinel-signers-registry.yaml",
+    ".claude/policies/.drift-manifest.json",
 ]
 
 
@@ -369,6 +392,44 @@ _MCP_WRITE_PATH_KEYS = (
 )
 
 
+def _normalize_candidate_value(value: str) -> str:
+    """PLAN162_FIX_7 (finding #7) — turn a ``file://`` URI into a path.
+
+    ``uri`` is one of ``_MCP_WRITE_PATH_KEYS``, but HEAD handed the value
+    to ``Path()`` verbatim: ``file:///repo/.claude/settings.json`` became
+    a RELATIVE path whose first segment is ``file:``, resolved against the
+    process CWD, landed outside the repo root and classified
+    NON-canonical — so the edit sailed through ungated even though the
+    MCP server would write the guarded file.
+
+    Normalizing in ONE place (the single function that builds candidates)
+    was the form both debate lanes accepted; the alternative — treating an
+    un-interpretable value as fail-CLOSED — is left to the callers, which
+    already fail-CLOSE on a candidate they cannot classify.
+
+    Only LOCAL file URIs are rewritten (empty or ``localhost`` authority).
+    A ``file://remote-host/...`` URI is NOT a local path and is returned
+    untouched, as is any value with a different scheme. A percent-escape
+    that decodes to an embedded NUL is likewise returned untouched — a
+    path the OS cannot open is not made more gate-able by decoding it.
+    """
+    if len(value) < 7 or value[:7].lower() != "file://":
+        return value
+    try:
+        from urllib.parse import unquote, urlsplit  # noqa: PLC0415
+        parts = urlsplit(value)
+        if parts.scheme.lower() != "file":
+            return value
+        if (parts.netloc or "").lower() not in ("", "localhost"):
+            return value  # remote authority: not a local filesystem path
+        decoded = unquote(parts.path)
+        if not decoded or "\x00" in decoded:
+            return value
+        return decoded
+    except Exception:
+        return value
+
+
 def _extract_mcp_target_paths(tool_input: dict) -> List[str]:
     """Best-effort extraction of canonical-edit candidate paths from MCP
     tool input. Returns a list of string paths whose canonical status
@@ -388,13 +449,14 @@ def _extract_mcp_target_paths(tool_input: dict) -> List[str]:
         if isinstance(value, str) and value:
             # Length cap defense (Sec MF-7 mirror): reject pathological
             # input early. Real MCP paths are <4 KiB; absurdly long
-            # values are likely adversarial.
+            # values are likely adversarial. The cap is applied to the
+            # RAW value (PLAN162_FIX_7 normalization can only shorten it).
             if len(value) <= 4096:
-                paths.append(value)
+                paths.append(_normalize_candidate_value(value))
         elif isinstance(value, list):
             for item in value:
                 if isinstance(item, str) and item and len(item) <= 4096:
-                    paths.append(item)
+                    paths.append(_normalize_candidate_value(item))
     return paths
 
 
@@ -423,10 +485,18 @@ _SCOPE_HEADER_RE = re.compile(
 # Top-level continuation headers that mark the end of the Scope block.
 # Sub-section headers WITHIN Scope (e.g. "Hook code (PLAN-052):") are
 # NOT in this set and are silently skipped during bullet collection.
+#
+# PLAN162_FIX_4 rule 3 (finding #4, consensus C5): the END scope marker
+# is now a terminator too. Without it a marker-LESS (Tier-2) sentinel
+# could carry `Scope:` bullets, an `<!-- END SIGNED SCOPE -->` line, and
+# then MORE bullets — the comment line is not bullet-shaped, so
+# collection simply continued straight past it and the post-END bullets
+# granted. Listed FIRST in the alternation so the cheap literal wins.
 _SCOPE_TERMINATOR_RE = re.compile(
-    r"^(?:Effective|Plans|Rationale(?:\s+by\s+path)?|"
+    r"^(?:\s*<!--\s*END\s+SIGNED\s+SCOPE\s*-->"
+    r"|(?:Effective|Plans|Rationale(?:\s+by\s+path)?|"
     r"Authorization(?:\s+source)?|Anchor\s+commit|Approved-By)"
-    r"\s*[:.]",
+    r"\s*[:.])",
     flags=re.IGNORECASE,
 )
 # Markdown horizontal rule — also terminates Scope block.
@@ -464,6 +534,10 @@ _SCOPE_MARKER_RE = re.compile(
     flags=re.DOTALL,
 )
 _SCOPE_MARKER_CAP_BYTES = 64 * 1024
+# PLAN162_FIX_4 rule 1 — BEGIN-marker PRESENCE, independent of whether a
+# well-formed PAIR exists. Detecting the two separately is what lets a
+# lone/malformed BEGIN fail-CLOSE instead of quietly falling to Tier-2.
+_BEGIN_MARKER_RE = re.compile(r"<!--\s*BEGIN\s+SIGNED\s+SCOPE\s*-->")
 
 
 def _parse_scope_paths_from_text(scope_text: str) -> "Set[str]":
@@ -506,6 +580,49 @@ def _parse_scope_paths_from_text(scope_text: str) -> "Set[str]":
             continue
         declared_paths.add(normalized)
     return declared_paths
+
+
+# ---------------------------------------------------------------------------
+# PLAN162_FIX_9 — blocked_tool must be forensic, not decorative (C6)
+# ---------------------------------------------------------------------------
+# FOUR sites write ``blocked_tool`` into the HMAC audit chain: three
+# carried the literal "Edit|Write|MultiEdit" regardless of which tool
+# actually fired, and one carried the empty string. This hook is
+# registered for ``mcp__.*`` too, so a human reading the chain after an
+# incident was told the wrong tool — the two newest sites (the
+# session-roots deny and the registry-tamper emit) were born after the
+# council that found this.
+#
+# The fix plumbs the EVENT's tool name through. It is VALIDATED first,
+# against a closed enum plus the ``mcp__`` shape, because the value is
+# attacker-influenced input landing in a log humans read: an unvalidated
+# fix would turn a forensics repair into a log-injection vector. Anything
+# unrecognized becomes the literal "unknown" — never truncated (a
+# truncation would let two distinct hostile names alias to one string).
+_EDIT_CLASS_TOOLS = frozenset({"Edit", "Write", "MultiEdit", "NotebookEdit"})
+_MCP_TOOL_NAME_RE = re.compile(r"^mcp__[a-z0-9_]+$")
+_BLOCKED_TOOL_UNKNOWN = "unknown"
+
+# Set ONCE per invocation by ``main()`` from the parsed event, and reset
+# in its ``finally`` so a value can never leak into a later in-process
+# caller. Helpers deep in the call graph (``_emit_unlock_audit`` has no
+# event in scope) read it through ``_blocked_tool_field()``.
+_CURRENT_TOOL_NAME = ""
+
+
+def _validated_tool_name(tool_name) -> str:
+    """Closed-enum / shape validation for an event-derived tool name."""
+    raw = tool_name.strip() if isinstance(tool_name, str) else ""
+    if raw in _EDIT_CLASS_TOOLS:
+        return raw
+    if _MCP_TOOL_NAME_RE.match(raw):
+        return raw
+    return _BLOCKED_TOOL_UNKNOWN
+
+
+def _blocked_tool_field() -> str:
+    """The validated ``blocked_tool`` value for this invocation."""
+    return _validated_tool_name(_CURRENT_TOOL_NAME)
 
 
 def _emit_allow(system_message: Optional[str] = None) -> str:
@@ -746,19 +863,56 @@ def _repo_rels(path_str: str, repo_root: Path) -> List[str]:
     return rels
 
 
+# PLAN162_FIX_CASEFOLD (PLAN-162 consensus S1, P0 — BOTH rails).
+#
+# ``_match_segments`` matches with ``fnmatch.fnmatchcase`` (exact case)
+# and ``_CANONICAL_PREFIXES`` is an exact-case frozenset. On a
+# case-INSENSITIVE filesystem — APFS, the default on this repo's
+# platform — ``.claude/settings.JSON`` IS ``.claude/settings.json``, and
+# writing through the variant OVERWRITES the guarded file. Measured on
+# HEAD: `.claude/settings.JSON`, `.claude/hooks/_lib/audit_emit.PY` and
+# `.CLAUDE/settings.json` all classified NON-canonical AND non-kernel,
+# reaching files the threat model assumes unreachable.
+#
+# Both halves must fold or the guard only LOOKS fixed: the prefix
+# fast-path bails out in O(1) BEFORE any glob runs, so folding the glob
+# matcher alone would leave `.CLAUDE/...` inert — the dead-gate class
+# this file was already bitten by twice (the `.codex` and `.grok` prefix
+# omissions).
+#
+# ``str.lower`` — not ``str.casefold`` — deliberately: casefold expands
+# 'ß'→'ss', changing segment LENGTH and hence what a glob matches. The
+# exploited class is ASCII case variance, which ``lower()`` covers
+# exactly; identical inputs always fold identically, so the
+# normalization can only ADD matches (over-classify = the safe
+# direction), never remove one.
+#
+# Precomputed at import: the hot path pays one ``str.lower()`` per
+# classification instead of one per (segment x pattern).
+_CANONICAL_GUARDS_FOLDED = [pat.lower() for pat in _CANONICAL_GUARDS]
+_CANONICAL_PREFIXES_FOLDED = frozenset(
+    prefix.lower() for prefix in _CANONICAL_PREFIXES
+)
+
+
 def _matches_canonical_guard(rel_str: str) -> bool:
     """True if a repo-relative POSIX path matches a canonical guard pattern.
 
     Split out of ``_is_canonical`` (PLAN160_FIX_D) so the identical
     fast-path prefix check + glob loop runs against each candidate path
     anchoring without duplication. PLAN-025 F-perf-004 fast-path preserved.
+
+    PLAN162_FIX_CASEFOLD: the rel and the patterns are compared
+    case-INSENSITIVELY (see the module note above) — on APFS the case
+    variant addresses the very same inode.
     """
+    rel_folded = rel_str.lower()
     # Fast path: check the first path segment against known prefixes.
-    first_seg = rel_str.split("/", 1)[0]
-    if first_seg not in _CANONICAL_PREFIXES:
+    first_seg = rel_folded.split("/", 1)[0]
+    if first_seg not in _CANONICAL_PREFIXES_FOLDED:
         return False
-    for pattern in _CANONICAL_GUARDS:
-        if _fnmatch_segments(rel_str, pattern):
+    for pattern in _CANONICAL_GUARDS_FOLDED:
+        if _fnmatch_segments(rel_folded, pattern):
             return True
     return False
 
@@ -866,14 +1020,62 @@ def _find_sentinels(repo_root: Path) -> List[Path]:
             if c not in seen:
                 seen.add(c)
                 candidates.append(c)
+    # PLAN162_FIX_2 (PLAN-162 finding #2, consensus C9) — the symlink
+    # rejection must be DEPTH-INDEPENDENT.
+    #
+    # HEAD checked exactly three levels (``p``, ``p.parent``,
+    # ``p.parent.parent``), hard-coded to the depth of
+    # ``PLAN-*/architect/round-*/approved.md``. The ``PLAN-*`` segment one
+    # level further up was never checked, so
+    # ``.claude/plans/PLAN-EVIL -> /tmp/evil`` smuggled a foreign
+    # ``architect/round-1/approved.md`` into the TRUSTED sentinel set —
+    # every intermediate directory is a real directory INSIDE the link
+    # target, so all three checks passed.
+    #
+    # "Cover the real depth of the patterns" was rejected in debate: it
+    # re-couples the guard to the pattern list, and the next 6-segment
+    # pattern silently reopens the hole (the dead-gate class this file has
+    # already suffered twice). Instead we do both depth-free checks:
+    #
+    #   (a) walk EVERY segment from ``p`` up to (excluding) ``base``,
+    #       rejecting any symlinked component; and
+    #   (b) assert ``realpath(p)`` stays under ``realpath(base)``, which
+    #       also catches a symlink that resolves out of the tree without a
+    #       symlinked component we happen to walk.
+    #
+    # RESIDUAL, deliberately not closed here: a symlink at ``base`` itself
+    # (``.claude/plans``) satisfies both forms — (a) excludes base and (b)
+    # resolves base through the same link. Named in the W1 instrument;
+    # pinning today's behaviour there would pin a bypass.
+    try:
+        base_rp = os.path.realpath(str(base))
+    except Exception:
+        return []
     safe: List[Path] = []
     for p in candidates:
         try:
-            if p.is_symlink():
+            # (a) depth-free ancestor walk: p, then every directory above
+            # it, up to but not including `base`. A bound of 64 hops is a
+            # runaway guard, never a semantic limit (real sentinels sit 2-4
+            # levels under base).
+            node = p
+            contained = False
+            for _hop in range(64):
+                if node.is_symlink():
+                    break
+                parent = node.parent
+                if parent == node:  # walked past the filesystem root
+                    break
+                if parent == base:
+                    contained = True
+                    break
+                node = parent
+            if not contained:
                 continue
-            if p.parent.is_symlink():
-                continue
-            if p.parent.parent.is_symlink():
+            # (b) realpath containment — independent of how many segments
+            # the pattern happens to have.
+            p_rp = os.path.realpath(str(p))
+            if not p_rp.startswith(base_rp + os.sep):
                 continue
         except OSError:
             continue
@@ -897,6 +1099,192 @@ _SENTINEL_VERIFY_CACHE: Dict[
 ] = {}
 _SENTINEL_CACHE_HITS = 0
 _SENTINEL_CACHE_MISSES = 0
+
+# PLAN162_FIX_1 (PLAN-162 findings #1 + #10, consensus C1 + C2 + C3 + S8).
+#
+# ## The defect (#1, re-diagnosed in debate: AMPLIFICATION, not latency)
+#
+# The cache above folds ``target_rel`` into its key, but
+# ``_gpg_verify.verify_detached`` never RECEIVES a target — signature
+# validity is target-INDEPENDENT. So the same sentinel was
+# cryptographically re-verified once per distinct target: a subprocess
+# count of O(candidates x sentinels). Measured in debate, gpg-agent
+# healthy: 1 GPG ~ 17 ms, but a 20-path ceremony pack cost **4.16 s of a
+# 5 s hook budget** with 0 cache hits and 320 misses (40 paths: 4.23 s).
+#
+# ## The fix — two caches, not one
+#
+#   * ``_SIG_VERIFY_CACHE`` — the SIGNATURE rail, keyed on the signing
+#     MATERIAL and NOT on the target. 320 subprocesses collapse to 16.
+#   * ``_GRANT_CACHE`` — the SCOPE rail, target-keyed and cheap. This is
+#     the SAME object as ``_SENTINEL_VERIFY_CACHE`` (an alias, not a
+#     copy): the PLAN-094 key shape and counters are pinned by
+#     ``test_sentinel_session_cache.py`` and stay byte-compatible.
+#
+# ## Why the signature rail must run FIRST (this is finding #10)
+#
+# #10 observed that the grant key hashes only ``approved.md``'s bytes, so
+# mutating the ``.asc`` / signer allowlist / ADR-121 registry left a
+# stale ``True`` riding the cache in-process. Rather than smuggle a
+# digest of three more files into a key shape other tests pin, the
+# signature rail is consulted BEFORE the grant fast-path and keys on
+# those bytes itself. A revocation in any of the three now invalidates
+# the decision even when ``approved.md`` is byte-identical — closing the
+# "signer rotation window" that PLAN-094 §8 had consciously accepted.
+_SIG_CACHE_FORMAT_VERSION = 1
+_SIG_VERIFY_CACHE: Dict[tuple, bool] = {}
+_GRANT_CACHE = _SENTINEL_VERIFY_CACHE  # alias — same dict object
+
+# ---------------------------------------------------------------------------
+# PLAN162_FIX_1 — per-invocation wall-clock budget (consensus C2 + C3 + S8)
+# ---------------------------------------------------------------------------
+# C2 REMOVED the sentinel cap from the design: ``_find_sentinels`` returns
+# SORTED, so the highest-numbered pack — the ceremony the Owner just
+# signed — is exactly the sentinel a cap would drop. Self-DoS with the
+# signature in hand, and it does not even fix a hung gpg (one hang costs
+# the full timeout at cap=1). What replaces it is a global wall-clock
+# deadline per INVOCATION, checked at the top of the sentinel loops.
+#
+# C3: the budget is a MODULE CONSTANT, never read from settings.json at
+# runtime — the budget lives in the file this hook guards (circular), and
+# parsing JSON on the hot path would worsen the very path being
+# optimized. Drift against the registered timeout is a STATIC test
+# instead (the shape verify-counts.sh already uses):
+# ``test_1_repro_wall_deadline_constant_has_slack_under_registration``.
+# 4.0 s under the registered 5 s leaves ~1 s to emit the decision.
+#
+# S8: the clock is an injectable module-level seam (``_now``). Without
+# it the red-first test's only options were a multi-second real sleep
+# (a documented flake class in this repo) or no deterministic coverage
+# of the slow path at all. This is a requirement OF the fix.
+#
+# ORDER IS NOT NEGOTIABLE (C3): the deadline and the cache partition ship
+# in the SAME patch under the SAME marker. A deadline without the
+# partition fires on the 4.16 s measured above and denies the ceremony
+# itself.
+_HOOK_WALL_BUDGET_S = 4.0
+_now = time.monotonic
+_WALL_DEADLINE_AT = None  # type: Optional[float]
+_WALL_BUDGET_EXHAUSTED = False
+
+
+def _start_wall_budget() -> None:
+    """Arm the per-invocation wall-clock deadline (called once by main)."""
+    global _WALL_DEADLINE_AT, _WALL_BUDGET_EXHAUSTED
+    _WALL_BUDGET_EXHAUSTED = False
+    _WALL_DEADLINE_AT = _now() + _HOOK_WALL_BUDGET_S
+
+
+def _reset_wall_budget() -> None:
+    """Disarm the deadline.
+
+    Called from ``main()``'s ``finally`` so a module-scope deadline can
+    never leak into a LATER in-process caller (the test suite drives
+    ``decide()`` directly in the same process; a stale expired deadline
+    would fail those closed for no reason).
+    """
+    global _WALL_DEADLINE_AT, _WALL_BUDGET_EXHAUSTED
+    _WALL_DEADLINE_AT = None
+    _WALL_BUDGET_EXHAUSTED = False
+
+
+def _mark_wall_budget_exhausted() -> None:
+    """Latch the budget as spent (see ``_gpg_verify_timeout``).
+
+    Set when a signature verification is REFUSED for want of budget. The
+    clock has not necessarily elapsed yet, but the invocation can no
+    longer reach a verdict, so every subsequent poll must report expiry —
+    otherwise the loop runs to its end and the operator is handed the
+    generic "declare this path in Scope" block, which misdiagnoses a
+    budget fault as a missing sentinel and omits the recovery route.
+    """
+    global _WALL_BUDGET_EXHAUSTED
+    _WALL_BUDGET_EXHAUSTED = True
+
+
+def _wall_budget_expired() -> bool:
+    """True once the armed invocation budget has elapsed (or is spent).
+
+    Disarmed (``None``) => never expired, so direct ``decide()`` callers
+    outside a hook invocation are unaffected.
+    """
+    if _WALL_DEADLINE_AT is None:
+        return False
+    if _WALL_BUDGET_EXHAUSTED:
+        return True
+    return _now() > _WALL_DEADLINE_AT
+
+
+# ---------------------------------------------------------------------------
+# PLAN162_FIX_1 — the gpg subprocess is bounded by the REMAINING budget
+# ---------------------------------------------------------------------------
+# Codex pair-rail P1 (S292) against this patch, staged:
+#
+#   "Bound GPG verification by the remaining hook budget. When gpg or
+#   gpg-agent stalls, this call can block for 15 seconds although the
+#   hook is registered for 5 seconds and the new internal deadline is 4
+#   seconds. Because the deadline is checked only between sentinel
+#   iterations, the harness can kill the process before it emits the
+#   intended fail-closed decision, recreating the silent fail-open that
+#   ADR-164-AMEND-1 §3 explicitly says the patch prevents."
+#
+# The deadline above is POLLED: read at the top of the sentinel loops, it
+# can only bound work that happens BETWEEN iterations. One
+# ``verify_detached`` at the library default (``timeout=15.0``,
+# ``_lib/gpg_verify.py``) is 3x the entire registration — the poll never
+# gets its turn, the harness kills a hook that has emitted NOTHING, and
+# "no decision" is indistinguishable from allow. ADR-164-AMEND-1 §3 D2
+# already states the intended behaviour ("per-verify subprocess timeout
+# bounded by remaining budget"); this is the code that makes the text
+# true.
+#
+# Two constants, both about EMITTING rather than about gpg:
+#
+#   * ``_GPG_EMIT_MARGIN_S`` — wall time reserved AFTER gpg returns so the
+#     rest of the decision plus the JSON emit still fit inside the
+#     internal deadline. A verification bounded to land exactly ON the
+#     deadline would merely have moved the kill.
+#   * ``_GPG_MIN_SPAWN_S`` — the floor below which spawning is pointless:
+#     a fork we cannot afford to wait out cannot tell "bad signature"
+#     from "slow agent", so it must not start at all.
+#
+# Their sum must stay well under ``_HOOK_WALL_BUDGET_S``, or the FIRST
+# sentinel of a fresh invocation could never be verified — self-DoS with
+# the Owner's signature in hand, the C3 class. Pinned by
+# ``test_control_gpg_bound_constants_leave_room_for_a_first_verify``.
+_GPG_VERIFY_TIMEOUT_CAP_S = 15.0  # the historical _lib.gpg_verify default
+_GPG_EMIT_MARGIN_S = 0.5
+_GPG_MIN_SPAWN_S = 0.5
+
+
+def _gpg_verify_timeout() -> Optional[float]:
+    """Subprocess timeout for ONE detached-signature verification.
+
+    ``None`` means DO NOT SPAWN — what is left of the invocation budget
+    cannot cover both a meaningful verification and the emit that has to
+    follow it. Callers translate that into the fail-CLOSED wall-deadline
+    block, never into an allow and never into a silent zero-emit.
+
+    With the budget disarmed (direct ``decide()`` callers, importers such
+    as ``check_pair_rail``) the historical cap is returned unchanged:
+    this narrows the hook-invocation path only.
+    """
+    if _WALL_DEADLINE_AT is None:
+        return _GPG_VERIFY_TIMEOUT_CAP_S
+    usable = (_WALL_DEADLINE_AT - _now()) - _GPG_EMIT_MARGIN_S
+    if usable < _GPG_MIN_SPAWN_S:
+        return None
+    return min(_GPG_VERIFY_TIMEOUT_CAP_S, usable)
+
+
+_WALL_DEADLINE_BLOCK_REASON = (
+    "CANONICAL-EDIT-BLOCKED: canonical_edit_hook_fault — the hook's "
+    "per-invocation wall-clock budget ({0}s) elapsed before authorization "
+    "for this canonical path could be established. A security matcher that "
+    "cannot finish deciding does NOT allow (PLAN-045 F-01-07 posture; "
+    "PLAN-162 consensus C2). Recovery: re-issue the edit, or use the "
+    "documented CEO_SENTINEL_UNLOCK / CEO_KERNEL_OVERRIDE ceremony."
+).format(_HOOK_WALL_BUDGET_S)
 
 
 def _sentinel_cache_disabled() -> bool:
@@ -929,6 +1317,54 @@ def _compute_sentinel_cache_key(
     )
 
 
+def _file_digest(path: Optional[Path]) -> str:
+    """sha256 of a file's bytes, or a stable marker when unreadable.
+
+    PLAN162_FIX_1 helper. ``"-"`` distinguishes "no such file" from any
+    real digest, so a signer allowlist APPEARING (or vanishing) changes
+    the signature cache key just like editing it does.
+    """
+    if path is None:
+        return "-"
+    try:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError:
+        return "-"
+
+
+def _compute_sig_cache_key(sentinel_path: Path) -> Optional[tuple]:
+    """Target-FREE key over everything the SIGNATURE decision depends on.
+
+    PLAN162_FIX_1 (#1 partition + #10 staleness). Covers the sentinel's
+    own identity/bytes AND the three signing-material inputs — the
+    detached ``.asc``, the legacy signer allowlist, and the ADR-121 YAML
+    registry — plus the PATH of the latter two (they are module-level
+    seams; a different file is a different decision).
+
+    Returns ``None`` on stat/read failure of the sentinel itself, which
+    means "do not cache" — errors are never memoized.
+    """
+    try:
+        st = sentinel_path.stat()
+        content = sentinel_path.read_bytes()
+    except OSError:
+        return None
+    sig_path = sentinel_path.with_name(sentinel_path.name + ".asc")
+    return (
+        str(sentinel_path),
+        st.st_ino,
+        st.st_mtime_ns,
+        st.st_size,
+        hashlib.sha256(content).hexdigest(),
+        _file_digest(sig_path),
+        str(_SENTINEL_SIGNERS_FILE),
+        _file_digest(_SENTINEL_SIGNERS_FILE),
+        str(_SENTINEL_SIGNERS_REGISTRY_YAML),
+        _file_digest(_SENTINEL_SIGNERS_REGISTRY_YAML),
+        _SIG_CACHE_FORMAT_VERSION,
+    )
+
+
 def sentinel_cache_stats() -> Dict[str, int]:
     """Return session-scoped cache counters (skill_cache_stats sibling)."""
     return {
@@ -936,6 +1372,408 @@ def sentinel_cache_stats() -> Dict[str, int]:
         "miss_count": _SENTINEL_CACHE_MISSES,
         "size": len(_SENTINEL_VERIFY_CACHE),
     }
+
+
+def _verify_signature_rail(sentinel_path: Path) -> bool:
+    """The full detached-GPG + dual signer-registry rail for ONE sentinel.
+
+    Extracted verbatim from ``_sentinel_grants_path`` (PLAN162_FIX_1) so
+    the decision it produces — which is INDEPENDENT of the edit target —
+    can be cached target-free. Behaviour is unchanged: fail-CLOSED on a
+    missing helper, bad signature, unlisted fingerprint, bootstrap-SHA
+    mismatch, or (post-GENESIS) a registry parse failure.
+    """
+    if _gpg_verify is None:
+        # _lib.gpg_verify is unavailable — fail-CLOSED. No sentinel
+        # can grant canonical edits without the verification helper.
+        return False
+    sig_path = sentinel_path.with_name(sentinel_path.name + ".asc")
+    # PLAN-089 Wave C.4 — dual-rail signer verification (ADR-121).
+    # First-class path: legacy `.claude/sentinel-signers.txt` (existing).
+    # Defense-in-depth: if YAML registry exists, re-check fingerprint via
+    # _lib.sentinel_signers + bootstrap-SHA pin. Either rail rejecting
+    # → fail-CLOSED. Post-GENESIS (_BOOTSTRAP_REGISTRY_SHA256 set),
+    # parse/hash failure → fail-CLOSED (R2 Codex iter-1 Q5+Q7 fold);
+    # pre-GENESIS (None), parse failure → legacy-only fallback.
+    # PLAN162_FIX_1 (Codex P1 fold) — the subprocess is bounded by what is
+    # LEFT of the invocation budget, minus the margin needed to still emit
+    # a decision. ``None`` => not enough budget to verify AND emit: refuse
+    # the spawn and latch, so the caller's next deadline poll produces the
+    # fail-closed wall-deadline block instead of a harness kill.
+    _timeout = _gpg_verify_timeout()
+    if _timeout is None:
+        _mark_wall_budget_exhausted()
+        return False
+    ok, _fpr, _reason = _gpg_verify.verify_detached(
+        sentinel_path,
+        sig_path,
+        allowlist_path=_SENTINEL_SIGNERS_FILE,
+        timeout=_timeout,
+    )
+    if not ok:
+        return False
+    if (
+        _sentinel_signers is not None
+        and _SENTINEL_SIGNERS_REGISTRY_YAML.exists()
+        and _fpr
+    ):
+        _post_genesis = _BOOTSTRAP_REGISTRY_SHA256 is not None
+        try:
+            # Bootstrap SHA pin verification (post-GENESIS only).
+            if _post_genesis:
+                import hashlib as _hashlib
+                _yaml_bytes = _SENTINEL_SIGNERS_REGISTRY_YAML.read_bytes()
+                _computed_sha = _hashlib.sha256(_yaml_bytes).hexdigest()
+                if _computed_sha != _BOOTSTRAP_REGISTRY_SHA256:
+                    try:
+                        from _lib import audit_emit as _audit_emit
+                        if hasattr(_audit_emit, "emit_sentinel_signer_quorum_failed"):
+                            _audit_emit.emit_sentinel_signer_quorum_failed(
+                                key_id=_fpr,
+                                reason="bootstrap_sha_mismatch",
+                                source="canonical_edit_bootstrap_pin",
+                            )
+                    except Exception:  # pragma: no cover
+                        pass
+                    return False
+            _registry = _sentinel_signers.load_registry(
+                _SENTINEL_SIGNERS_REGISTRY_YAML
+            )
+            _valid, _why = _sentinel_signers.is_valid_signer(
+                _fpr, registry=_registry
+            )
+            # PLAN-113 WIRE-AUDIT: emit quorum_attempted on EVERY
+            # signer verification attempt (success + failure).
+            try:
+                from _lib import audit_emit as _audit_emit_qa
+                if hasattr(_audit_emit_qa, "emit_sentinel_signer_quorum_attempted"):
+                    _audit_emit_qa.emit_sentinel_signer_quorum_attempted(
+                        distinct_signers=1,
+                        threshold_required=1,
+                        outcome="valid" if _valid else "failed",
+                        source="canonical_edit_sentinel_verify",
+                    )
+            except Exception:  # pragma: no cover
+                pass
+            if not _valid:
+                try:
+                    from _lib import audit_emit as _audit_emit
+                    if hasattr(_audit_emit, "emit_sentinel_signer_quorum_failed"):
+                        _audit_emit.emit_sentinel_signer_quorum_failed(
+                            key_id=_fpr,
+                            reason=_why,
+                            source="canonical_edit_sentinel_verify",
+                        )
+                except Exception:  # pragma: no cover
+                    pass
+                return False
+        except Exception:  # pragma: no cover
+            # Pre-GENESIS (constant None) — degrade to legacy-only.
+            # Post-GENESIS — fail-CLOSED (R2 Codex Q7 fold).
+            if _BOOTSTRAP_REGISTRY_SHA256 is not None:
+                return False
+    return True
+
+
+def _signature_rail_ok(sentinel_path: Path) -> bool:
+    """``_verify_signature_rail`` behind the target-FREE signature cache.
+
+    PLAN162_FIX_1: this is the O(sentinels) rail. The caller's grant
+    lookup stays O(sentinels x targets) but is pure string work.
+    """
+    if _sentinel_cache_disabled():
+        return _verify_signature_rail(sentinel_path)
+    sig_key = _compute_sig_cache_key(sentinel_path)
+    if sig_key is None:
+        return _verify_signature_rail(sentinel_path)
+    cached = _SIG_VERIFY_CACHE.get(sig_key)
+    if cached is not None:
+        return cached
+    result = _verify_signature_rail(sentinel_path)
+    if _WALL_BUDGET_EXHAUSTED:
+        # PLAN162_FIX_1 (Codex P1 fold): a budget REFUSAL is not a verdict
+        # on this sentinel — memoizing it would poison the signature cache
+        # for the rest of the process with a `False` no gpg ever produced.
+        # Same contract as the `sig_key is None` path above: errors and
+        # non-verdicts are never cached.
+        return result
+    _SIG_VERIFY_CACHE[sig_key] = result
+    return result
+
+
+# ---------------------------------------------------------------------------
+# PLAN162_FIX_S2 — the sentinel SET is a trust anchor (consensus S2)
+# ---------------------------------------------------------------------------
+# ``.claude/plans/PLAN-*/**/approved.md`` is guarded by NEITHER rail, and
+# under an Owner ``CEO_SENTINEL_UNLOCK`` window the GPG rail is skipped
+# entirely — so an ``approved.md`` the AGENT writes mid-window GRANTS.
+# That is a bypass of AUTHORIZATION, not merely a DoS on the gate's cost.
+#
+# The first mitigation drafted for this ("tracked in git OR pre-existing")
+# was DEFEATED by the pair-rail in one command: inside the window the
+# agent writes the file and runs an ordinary ``git add``; ``ls-files
+# --error-unmatch`` then calls it TRACKED, and a HEAD-based check would
+# accept an agent-authored COMMIT just the same. **Git state is a
+# statement about the index, not about who authorized the file.**
+#
+# The trust anchor is therefore SESSION START: under ``env_override``,
+# accept only a sentinel that already existed in the tree at the commit
+# the Owner names in ``CEO_SESSION_ANCHOR_SHA``. The anchor is an ENV
+# var, which is exactly the same trust primitive the unlock itself rests
+# on (a sub-agent cannot set env in the parent shell) — so requiring it
+# adds no new assumption. No anchor => no proof => no grant.
+#
+# ## PLAN162_FIX_S2R2 — what the codex round-2 pair-rail corrected
+#
+# The first draft of this rail proved only that the sentinel PATH existed
+# at the anchor, then parsed the CURRENT bytes. Codex defeated it in one
+# move (P1-1): inside a legitimate window, take any pre-existing
+# unguarded ``approved.md``, keep its ``Approved-By:`` line, ADD a target
+# to ``Scope:`` — path-existence still holds, GPG is skipped, and the
+# hook authorizes off attacker-modified bytes. **A trust decision must be
+# made on the ANCHORED bytes, not on bytes that merely live at an
+# anchored path.** ``git cat-file blob`` now supplies the text that is
+# parsed; what is on disk is never consulted on this path.
+#
+# Two more round-2 corrections ride the same fold:
+#
+#   * P1-2 — the git subprocess is bounded by the REMAINING wall budget
+#     (``_git_anchor_timeout``), exactly as the gpg spawn already is. A
+#     5 s probe inside a 4 s budget lets the harness kill the process
+#     before it emits the intended BLOCK, which is the zero-emit
+#     fail-open this whole patch exists to remove.
+#   * P1-3 — a fail-closed gate with no recovery route is a brick. The
+#     anchor alone bricks the ONE use ADR-119 names for the unlock
+#     ("ceremony authoring where the .asc is being signed in parallel"):
+#     a freshly authored sentinel predates nothing. So the Owner may
+#     instead PIN the sentinel's content hash
+#     (``CEO_SENTINEL_UNLOCK_SHA256``, space/comma-separated for several).
+#     It rests on the same trust primitive as the unlock itself — env a
+#     sub-agent cannot set in the parent shell — and it is strictly
+#     stronger than the anchor: it binds CONTENT, not a path. Reading the
+#     value gains an attacker nothing (sha256 preimage), and it works in
+#     a non-git tree, where the anchor cannot.
+#
+# ## RESIDUAL — read before ratifying
+#
+# The ANCHOR rail arms only when the project is a git work tree (``.git``
+# present); otherwise no anchor proof exists and the legacy accept
+# stands. Consequence: ``rm -rf .git`` disarms the anchor half. Named
+# here rather than buried. The digest-pin half is unaffected by it — it
+# is the git-free proof form the first draft said "is a separate
+# decision", and this is that decision.
+#
+# DECIDED, not overlooked: in a NON-git tree a digest pin does not make
+# the unpinned sentinels stricter — a pin-miss falls through to the
+# residual accept there, exactly as it falls through to the anchor rail
+# in a git tree. Making the pin authoritative in a non-git tree would
+# mean "pin one file, reject every other sentinel in the pack" in the
+# one tree shape that has no second proof form: the C3 self-DoS class,
+# traded for a tightening that only bites where the legacy accept
+# already applies.
+#
+# Landing this CHANGES a documented operator contract (ADR-119,
+# SPEC/v1/sentinel-format.schema.md, docs/FAQ.md, the READMEs): an
+# unlock window now needs a THIRD value. Those surfaces are updated in
+# this same patch, and ``_unlock_trust_hint`` teaches both forms in the
+# block reason itself — a required value that only exists in the diff is
+# the lockout P1-3 named. Owner ratification: ADR-164-AMEND-1.
+_SESSION_ANCHOR_ENV = "CEO_SESSION_ANCHOR_SHA"
+_UNLOCK_DIGEST_ENV = "CEO_SENTINEL_UNLOCK_SHA256"
+_ANCHOR_SHA_RE = re.compile(r"^[0-9a-fA-F]{7,64}$")
+_SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
+_GIT_ANCHOR_TIMEOUT_CAP_S = 5.0
+# (repo_root, anchor, rel) -> anchored text, or None for "proven absent".
+# A key is absent from the map when no VERDICT was reached (budget
+# refusal, git fault) — errors are never memoized, same contract as
+# ``_SIG_VERIFY_CACHE``.
+_ANCHOR_BLOB_CACHE = {}  # type: Dict[tuple, Optional[str]]
+
+# Why the unlock rail refused, for the block reason. First refusal wins;
+# reset per ``decide()`` call.
+_UNLOCK_TRUST_DIAG = None  # type: Optional[str]
+
+
+def _repo_root_for_sentinels() -> Path:
+    """Repo root, resolved exactly as ``main()`` resolves it."""
+    return Path(os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd())
+
+
+def _reset_unlock_trust_diag() -> None:
+    global _UNLOCK_TRUST_DIAG
+    _UNLOCK_TRUST_DIAG = None
+
+
+def _note_unlock_trust_diag(code: str) -> None:
+    global _UNLOCK_TRUST_DIAG
+    if _UNLOCK_TRUST_DIAG is None:
+        _UNLOCK_TRUST_DIAG = code
+
+
+def _git_anchor_timeout() -> Optional[float]:
+    """Subprocess timeout for ONE ``git cat-file`` anchor probe.
+
+    PLAN162_FIX_S2R2 (codex P1-2). Same shape and the same two constants
+    as ``_gpg_verify_timeout``: the probe must finish AND leave room to
+    emit. ``None`` means DO NOT SPAWN — callers translate that into
+    fail-CLOSED plus a latched budget, never into an allow and never into
+    a fork the harness kills mid-flight.
+    """
+    if _WALL_DEADLINE_AT is None:
+        return _GIT_ANCHOR_TIMEOUT_CAP_S
+    usable = (_WALL_DEADLINE_AT - _now()) - _GPG_EMIT_MARGIN_S
+    if usable < _GPG_MIN_SPAWN_S:
+        return None
+    return min(_GIT_ANCHOR_TIMEOUT_CAP_S, usable)
+
+
+def _anchored_blob_text(repo_root: Path, anchor: str, rel: str) -> Optional[str]:
+    """Text of ``rel`` AS OF ``anchor``, or ``None`` when unprovable."""
+    cache_key = (str(repo_root), anchor, rel)
+    if cache_key in _ANCHOR_BLOB_CACHE:
+        return _ANCHOR_BLOB_CACHE[cache_key]
+    timeout = _git_anchor_timeout()
+    if timeout is None:
+        # P1-2: refuse the spawn and latch, so the caller's next deadline
+        # poll produces the fail-closed wall-deadline block instead of a
+        # harness kill. NOT memoized — a budget refusal is not a verdict.
+        _mark_wall_budget_exhausted()
+        return None
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(repo_root), "cat-file", "blob",
+             "{0}:{1}".format(anchor, rel)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            timeout=timeout,
+        )
+    except Exception:
+        # git missing / hung / unusable: the work tree says the proof
+        # mechanism SHOULD exist, so an unusable one is fail-CLOSED.
+        return None
+    if proc.returncode != 0:
+        _ANCHOR_BLOB_CACHE[cache_key] = None
+        return None
+    try:
+        text = proc.stdout.decode("utf-8")
+    except Exception:
+        _ANCHOR_BLOB_CACHE[cache_key] = None
+        return None
+    _ANCHOR_BLOB_CACHE[cache_key] = text
+    return text
+
+
+def _pinned_sentinel_digests(src_env) -> Tuple[Set[str], bool]:
+    """``(digests, malformed)`` from ``CEO_SENTINEL_UNLOCK_SHA256``.
+
+    Empty + not-malformed means "the Owner pinned nothing" (rail B
+    decides). ANY unparseable token makes the whole value malformed:
+    a typo'd trust input is never silently narrowed to the tokens that
+    happened to parse.
+    """
+    raw = (src_env.get(_UNLOCK_DIGEST_ENV) or "").strip()
+    if not raw:
+        return (set(), False)
+    tokens = [t for t in re.split(r"[,\s]+", raw) if t]
+    digests = set()  # type: Set[str]
+    for token in tokens:
+        if not _SHA256_RE.match(token):
+            return (set(), True)
+        digests.add(token.lower())
+    return (digests, not digests)
+
+
+def _unlock_trusted_text(sentinel_path: Path, env=None) -> Tuple[bool, Optional[str]]:
+    """``(authorized, text_to_parse)`` for ONE sentinel under an unlock.
+
+    PLAN162_FIX_S2 / PLAN162_FIX_S2R2. Consulted ONLY on the
+    ``env_override`` path, where the GPG rail is skipped entirely and the
+    only thing separating an Owner-signed sentinel from one the AGENT
+    just wrote is provenance.
+
+    ``text_to_parse`` is ``None`` for "parse what is on disk" — returned
+    only by the two paths where disk bytes ARE the authorized bytes: an
+    Owner-pinned digest (which covers exactly those bytes) and the
+    non-git residual.
+    """
+    src_env = env if env is not None else os.environ
+    repo_root = _repo_root_for_sentinels()
+
+    # ---- Rail A: the Owner pinned this sentinel's CONTENT (P1-3) ----
+    pinned, malformed = _pinned_sentinel_digests(src_env)
+    if malformed:
+        _note_unlock_trust_diag("digest_malformed")
+        return (False, None)
+    if pinned:
+        try:
+            raw = sentinel_path.read_bytes()
+        except OSError:
+            _note_unlock_trust_diag("sentinel_unreadable")
+            return (False, None)
+        if hashlib.sha256(raw).hexdigest() in pinned:
+            try:
+                return (True, raw.decode("utf-8"))
+            except Exception:
+                _note_unlock_trust_diag("sentinel_undecodable")
+                return (False, None)
+        # A pin that does not cover THIS sentinel is not a verdict on the
+        # others: fall through to the anchor rail, or the pack's
+        # pre-existing sentinels would be self-DoS'd by pinning one file.
+        _note_unlock_trust_diag("digest_mismatch")
+
+    # ---- Rail B: the sentinel predates the session (anchored bytes) ----
+    try:
+        is_git = (repo_root / ".git").exists()
+    except OSError:
+        is_git = False
+    if not is_git:
+        return (True, None)  # documented residual: no anchor mechanism
+    anchor = (src_env.get(_SESSION_ANCHOR_ENV) or "").strip()
+    if not _ANCHOR_SHA_RE.match(anchor):
+        _note_unlock_trust_diag("anchor_missing" if not anchor else "anchor_malformed")
+        return (False, None)
+    try:
+        rel = str(sentinel_path.relative_to(repo_root)).replace(os.sep, "/")
+    except ValueError:
+        # A sentinel outside the repo root can never be anchored.
+        _note_unlock_trust_diag("sentinel_outside_repo")
+        return (False, None)
+    text = _anchored_blob_text(repo_root, anchor, rel)
+    if text is None:
+        _note_unlock_trust_diag("not_anchored")
+        return (False, None)
+    # P1-1: the ANCHORED bytes are the authorization, not the bytes an
+    # in-window writer left at that path.
+    return (True, text)
+
+
+def _unlock_trust_hint() -> str:
+    """Teaching suffix for a block an armed unlock window could not lift.
+
+    PLAN162_FIX_S2R2 (codex P1-3). Without this, the operator whose
+    recovery route just started failing closed reads "declare the path in
+    the Scope: block" about a path that IS declared, and has no way to
+    learn which value is missing. Empty string when the unlock rail was
+    never the reason.
+    """
+    if _UNLOCK_TRUST_DIAG is None:
+        return ""
+    return (
+        "\n\nUNLOCK WINDOW ARMED, NO TRUSTED SENTINEL ({diag}). Inside a "
+        "CEO_SENTINEL_UNLOCK window the GPG rail is skipped, so a sentinel "
+        "must prove it was not written by the agent, by ONE of:\n"
+        "  (a) predating the session — export {anchor}=<sha of a commit "
+        "taken BEFORE this agent session started>; capture it in your own "
+        "shell (`git rev-parse HEAD`) before launching, never after;\n"
+        "  (b) Owner-pinned content — export {digest}=<sha256 of the "
+        "approved.md>, e.g. `shasum -a 256 <approved.md> | cut -d' ' -f1` "
+        "(space- or comma-separate several).\n"
+        "See ADR-119 Invariant 5."
+    ).format(
+        diag=_UNLOCK_TRUST_DIAG,
+        anchor=_SESSION_ANCHOR_ENV,
+        digest=_UNLOCK_DIGEST_ENV,
+    )
 
 
 def _sentinel_grants_path(sentinel_path: Path, target_rel: str) -> bool:
@@ -969,33 +1807,8 @@ def _sentinel_grants_path(sentinel_path: Path, target_rel: str) -> bool:
     # target_rel, fmt_version). Cache value: granted (bool). env_override path
     # bypasses cache (CEO_SENTINEL_UNLOCK semantic: must re-verify).
     global _SENTINEL_CACHE_HITS, _SENTINEL_CACHE_MISSES
-    _cache_key = None
-    _unlock_reason_pre = (os.environ.get("CEO_SENTINEL_UNLOCK") or "").strip()
-    _unlock_ack_pre = (os.environ.get("CEO_SENTINEL_UNLOCK_ACK") or "").strip()
-    _env_override_pre = bool(
-        _unlock_reason_pre
-        and _unlock_ack_pre == "I-ACCEPT"
-        and re.match(r'^(ADR-\d{3,4}|PLAN-\d{3})-[a-z0-9-]{3,100}$', _unlock_reason_pre)
-    )
-    if not _sentinel_cache_disabled() and not _env_override_pre:
-        _cache_key = _compute_sentinel_cache_key(sentinel_path, target_rel)
-        if _cache_key is not None:
-            _cached = _SENTINEL_VERIFY_CACHE.get(_cache_key)
-            if _cached is not None:
-                _SENTINEL_CACHE_HITS += 1
-                return _cached
-            _SENTINEL_CACHE_MISSES += 1
 
-    try:
-        text = sentinel_path.read_text(encoding="utf-8")
-    except OSError:
-        return False
-
-    # Check plaintext signature marker first (cheap).
-    if not _APPROVED_BY_RE.search(text):
-        return False
-
-    # PLAN-045 Wave 1 P0-01: verify detached GPG signature.
+    # PLAN-045 Wave 1 P0-01: env-override (CEO_SENTINEL_UNLOCK) detection.
     env = os.environ
     unlock_reason = (env.get("CEO_SENTINEL_UNLOCK") or "").strip()
     unlock_ack = (env.get("CEO_SENTINEL_UNLOCK_ACK") or "").strip()
@@ -1004,87 +1817,58 @@ def _sentinel_grants_path(sentinel_path: Path, target_rel: str) -> bool:
         and unlock_ack == "I-ACCEPT"
         and re.match(r'^(ADR-\d{3,4}|PLAN-\d{3})-[a-z0-9-]{3,100}$', unlock_reason)  # PLAN-086 Wave I.1 — ADR-119 tightening
     )
+
+    # PLAN162_FIX_1 — SIGNATURE RAIL FIRST, and it is target-FREE.
+    #
+    # Two reasons the order changed (both are the fix):
+    #   * #1 — verifying once per SENTINEL instead of once per
+    #     (sentinel x target) is the whole amplification collapse; and
+    #   * #10 — the target-keyed grant cache below hashes only
+    #     approved.md, so a mutated .asc / allowlist / registry would ride
+    #     a stale True if the grant fast-path ran first. Consulting the
+    #     material-keyed rail up front makes a revocation land immediately.
+    _trusted_text = None  # type: Optional[str]
     if not env_override:
-        if _gpg_verify is None:
-            # _lib.gpg_verify is unavailable — fail-CLOSED. No sentinel
-            # can grant canonical edits without the verification helper.
+        if not _signature_rail_ok(sentinel_path):
             return False
-        sig_path = sentinel_path.with_name(sentinel_path.name + ".asc")
-        # PLAN-089 Wave C.4 — dual-rail signer verification (ADR-121).
-        # First-class path: legacy `.claude/sentinel-signers.txt` (existing).
-        # Defense-in-depth: if YAML registry exists, re-check fingerprint via
-        # _lib.sentinel_signers + bootstrap-SHA pin. Either rail rejecting
-        # → fail-CLOSED. Post-GENESIS (_BOOTSTRAP_REGISTRY_SHA256 set),
-        # parse/hash failure → fail-CLOSED (R2 Codex iter-1 Q5+Q7 fold);
-        # pre-GENESIS (None), parse failure → legacy-only fallback.
-        ok, _fpr, _reason = _gpg_verify.verify_detached(
-            sentinel_path,
-            sig_path,
-            allowlist_path=_SENTINEL_SIGNERS_FILE,
-            timeout=15.0,
-        )
-        if not ok:
+    else:
+        # PLAN162_FIX_S2 — inside an unlock window the GPG rail is skipped
+        # entirely, so the only thing separating an Owner-signed sentinel
+        # from one the AGENT just wrote is provenance. See the module note
+        # above for the two proof forms and the residual.
+        _authorized, _trusted_text = _unlock_trusted_text(sentinel_path, env=env)
+        if not _authorized:
             return False
-        if (
-            _sentinel_signers is not None
-            and _SENTINEL_SIGNERS_REGISTRY_YAML.exists()
-            and _fpr
-        ):
-            _post_genesis = _BOOTSTRAP_REGISTRY_SHA256 is not None
-            try:
-                # Bootstrap SHA pin verification (post-GENESIS only).
-                if _post_genesis:
-                    import hashlib as _hashlib
-                    _yaml_bytes = _SENTINEL_SIGNERS_REGISTRY_YAML.read_bytes()
-                    _computed_sha = _hashlib.sha256(_yaml_bytes).hexdigest()
-                    if _computed_sha != _BOOTSTRAP_REGISTRY_SHA256:
-                        try:
-                            from _lib import audit_emit as _audit_emit
-                            if hasattr(_audit_emit, "emit_sentinel_signer_quorum_failed"):
-                                _audit_emit.emit_sentinel_signer_quorum_failed(
-                                    key_id=_fpr,
-                                    reason="bootstrap_sha_mismatch",
-                                    source="canonical_edit_bootstrap_pin",
-                                )
-                        except Exception:  # pragma: no cover
-                            pass
-                        return False
-                _registry = _sentinel_signers.load_registry(
-                    _SENTINEL_SIGNERS_REGISTRY_YAML
-                )
-                _valid, _why = _sentinel_signers.is_valid_signer(
-                    _fpr, registry=_registry
-                )
-                # PLAN-113 WIRE-AUDIT: emit quorum_attempted on EVERY
-                # signer verification attempt (success + failure).
-                try:
-                    from _lib import audit_emit as _audit_emit_qa
-                    if hasattr(_audit_emit_qa, "emit_sentinel_signer_quorum_attempted"):
-                        _audit_emit_qa.emit_sentinel_signer_quorum_attempted(
-                            distinct_signers=1,
-                            threshold_required=1,
-                            outcome="valid" if _valid else "failed",
-                            source="canonical_edit_sentinel_verify",
-                        )
-                except Exception:  # pragma: no cover
-                    pass
-                if not _valid:
-                    try:
-                        from _lib import audit_emit as _audit_emit
-                        if hasattr(_audit_emit, "emit_sentinel_signer_quorum_failed"):
-                            _audit_emit.emit_sentinel_signer_quorum_failed(
-                                key_id=_fpr,
-                                reason=_why,
-                                source="canonical_edit_sentinel_verify",
-                            )
-                    except Exception:  # pragma: no cover
-                        pass
-                    return False
-            except Exception:  # pragma: no cover
-                # Pre-GENESIS (constant None) — degrade to legacy-only.
-                # Post-GENESIS — fail-CLOSED (R2 Codex Q7 fold).
-                if _BOOTSTRAP_REGISTRY_SHA256 is not None:
-                    return False
+
+    # PLAN-094 Wave C — session cache fast-path (now scope-only).
+    # Cache key (iter-1 P0 fix): (path, inode, mtime_ns, file_size, sha256_full,
+    # target_rel, fmt_version). Cache value: granted (bool). env_override path
+    # bypasses cache (CEO_SENTINEL_UNLOCK semantic: must re-verify).
+    _cache_key = None
+    if not _sentinel_cache_disabled() and not env_override:
+        _cache_key = _compute_sentinel_cache_key(sentinel_path, target_rel)
+        if _cache_key is not None:
+            _cached = _SENTINEL_VERIFY_CACHE.get(_cache_key)
+            if _cached is not None:
+                _SENTINEL_CACHE_HITS += 1
+                return _cached
+            _SENTINEL_CACHE_MISSES += 1
+
+    # PLAN162_FIX_S2R2 (codex P1-1): under an unlock window the bytes that
+    # decide are the ANCHORED bytes, never whatever an in-window writer
+    # left at that path. ``None`` means "disk bytes ARE the authorized
+    # bytes" (Owner-pinned digest, or the non-git residual).
+    if _trusted_text is not None:
+        text = _trusted_text
+    else:
+        try:
+            text = sentinel_path.read_text(encoding="utf-8")
+        except OSError:
+            return False
+
+    # Check plaintext signature marker first (cheap).
+    if not _APPROVED_BY_RE.search(text):
+        return False
 
     # Parse Scope: block.
     #
@@ -1129,32 +1913,67 @@ def _sentinel_grants_path(sentinel_path: Path, target_rel: str) -> bool:
     # or end-of-file. Sub-headers within Scope (lines ending with `:`
     # that are NOT in the terminator set) are silently skipped.
 
-    # Tier 1 — lexical scope markers (PLAN-064 Option D).
-    # Length cap before regex invocation (ReDoS defense).
+    # ---- PLAN162_FIX_4 (finding #4, consensus C5 — narrowed) ----
+    #
+    # The original council proposal ("parse ONLY inside the markers")
+    # would have bricked 31% of live sentinels: 5 of 16 carry no BEGIN
+    # marker, including the two most recent ceremonies. What ships is
+    # three narrow rules instead:
+    #
+    #   1. A BEGIN marker with no well-formed PAIR must NEVER silently
+    #      downgrade to the Tier-2 whole-file parser. The code already
+    #      fail-CLOSES on that exact principle for a marker region with an
+    #      unparseable INTERIOR; a BEGIN with a missing/malformed END did
+    #      the opposite, which is the containment loss #4 reported —
+    #      Scope bullets OUTSIDE the Owner's intended region were honored.
+    #   2. Oversize (> _SCOPE_MARKER_CAP_BYTES) REJECTS fail-closed
+    #      rather than downgrading to Tier-2. Blast measured ~zero (the
+    #      largest live sentinel is 6,801 B = 10.4% of the cap).
+    #   3. The END marker terminates a Tier-2 Scope block (added to
+    #      _SCOPE_TERMINATOR_RE), so a bullet placed AFTER an END in a
+    #      marker-less file is no longer collected.
+    #
+    # CHARS-vs-BYTES, decided explicitly (C5 required a decision): the cap
+    # is named in BYTES, so it is now measured in BYTES. HEAD compared
+    # len(text) in CHARACTERS, which for a non-ASCII sentinel understated
+    # the real size. Since oversize is now a REJECT (rule 2) rather than a
+    # silent downgrade, the stricter of the two readings is also the
+    # safer one.
     declared_paths: Set[str] = set()
-    if len(text) <= _SCOPE_MARKER_CAP_BYTES:
+    try:
+        _text_bytes = len(text.encode("utf-8", "surrogatepass"))
+    except Exception:  # pragma: no cover - defensive
+        _text_bytes = len(text)
+    if _text_bytes > _SCOPE_MARKER_CAP_BYTES:
+        # Rule 2 — fail-CLOSED. An oversize sentinel is not parsed by
+        # EITHER tier; it is rejected.
+        return False
+    if _BEGIN_MARKER_RE.search(text):
         marker_match = _SCOPE_MARKER_RE.search(text)
-        if marker_match:
-            scope_region = marker_match.group(1)
-            declared_paths = _parse_scope_paths_from_text(scope_region)
-            # If markers present but no scope paths extracted (malformed
-            # interior), fail-CLOSED rather than silently fall through
-            # to Tier 2 — markers are an explicit Owner intent signal.
-            if not declared_paths:
-                return False
-            granted = target_rel in declared_paths
-            if granted and env_override:
-                _emit_unlock_audit(target_rel, unlock_reason)
-            # PLAN-094-FOLLOWUP Wave C-tier1 — store Tier-1 grant decision
-            # in cache (parity with Tier-2 store path below). env_override
-            # path is NOT cached (mirrors Tier-2 invariant).
-            if (
-                _cache_key is not None
-                and not env_override
-                and not _sentinel_cache_disabled()
-            ):
-                _SENTINEL_VERIFY_CACHE[_cache_key] = granted
-            return granted
+        if marker_match is None:
+            # Rule 1 — a BEGIN marker is an explicit (if broken) Owner
+            # intent signal. Never Tier-2 behind its back.
+            return False
+        scope_region = marker_match.group(1)
+        declared_paths = _parse_scope_paths_from_text(scope_region)
+        # If markers present but no scope paths extracted (malformed
+        # interior), fail-CLOSED rather than silently fall through
+        # to Tier 2 — markers are an explicit Owner intent signal.
+        if not declared_paths:
+            return False
+        granted = target_rel in declared_paths
+        if granted and env_override:
+            _emit_unlock_audit(target_rel, unlock_reason)
+        # PLAN-094-FOLLOWUP Wave C-tier1 — store Tier-1 grant decision
+        # in cache (parity with Tier-2 store path below). env_override
+        # path is NOT cached (mirrors Tier-2 invariant).
+        if (
+            _cache_key is not None
+            and not env_override
+            and not _sentinel_cache_disabled()
+        ):
+            _SENTINEL_VERIFY_CACHE[_cache_key] = granted
+        return granted
 
     # Tier 2 — legacy _SCOPE_HEADER_RE parser (no markers in file).
     declared_paths = _parse_scope_paths_from_text(text)
@@ -1196,7 +2015,7 @@ def _emit_unlock_audit(target_rel: str, unlock_reason: str) -> None:
                 f"sentinel env-override granted edit to {target_rel}; "
                 f"reason={unlock_reason!r}"
             ),
-            blocked_tool="Edit|Write|MultiEdit",
+            blocked_tool=_blocked_tool_field(),  # PLAN162_FIX_9
             caller=os.environ.get("CLAUDE_AGENT_NAME", "ceo"),
             session_id=os.environ.get("CLAUDE_SESSION_ID", ""),
             project=os.environ.get("CLAUDE_PROJECT_DIR", ""),
@@ -1214,6 +2033,11 @@ def decide(
 
     Returns the JSON payload to write to stdout.
     """
+    # PLAN162_FIX_S2R2 — per-decision state, so an in-process caller
+    # (``check_pair_rail``, the tests) never inherits a previous event's
+    # unlock diagnosis.
+    _reset_unlock_trust_diag()
+
     if not file_path:
         return _emit_allow()
 
@@ -1246,6 +2070,13 @@ def decide(
 
     sentinels = _find_sentinels(repo_root)
     for sentinel in sentinels:
+        # PLAN162_FIX_1 (C2) — wall-clock deadline, checked at the TOP of
+        # the sentinel loop and fail-CLOSED. Never "allow because we ran
+        # out of time", and never "stop checking sentinels" (a cap would
+        # drop the highest-numbered pack, i.e. the ceremony the Owner just
+        # signed — self-DoS with the signature in hand).
+        if _wall_budget_expired():
+            return _emit_block(reason=_WALL_DEADLINE_BLOCK_REASON)
         if _sentinel_grants_path(sentinel, rel):
             # PLAN-106 Wave C — persona coverage emit at canonical-edit
             # sentinel-approved allow path.
@@ -1257,12 +2088,23 @@ def decide(
                 )
             )
 
+    # PLAN162_FIX_1 (Codex P1 fold) — the budget can run out DURING the
+    # last sentinel's verification, after the final top-of-loop poll. Both
+    # outcomes block, but only this one names the cause and carries the
+    # recovery route; the generic block below would tell the Owner to
+    # declare a path that IS already declared.
+    if _wall_budget_expired():
+        return _emit_block(reason=_WALL_DEADLINE_BLOCK_REASON)
+
     return _emit_block(
         reason=(
             f"CANONICAL-EDIT-BLOCKED: '{rel}' is a canonical governance "
             "path. Edits require an Owner-signed sentinel at "
             ".claude/plans/PLAN-NNN/architect/round-N/approved.md with "
             f"this path declared in the Scope: block. See ADR-010."
+            # PLAN162_FIX_S2R2 (P1-3): when an unlock window IS armed and
+            # the trust rail is what refused, say so and name the value.
+            + _unlock_trust_hint()
         )
     )
 
@@ -1307,18 +2149,58 @@ def _safe_sentinel_count(repo_root: Path) -> int:
         return 0
 
 
-def _audit_block(rel: str, sentinels_count: int) -> None:
-    """Best-effort emit of veto_triggered event. Never raises."""
+def _block_reason_code(reason: str) -> str:
+    """Which ``reason_code`` the CHAIN gets for a block decision.
+
+    PLAN162_FIX_1B (r8 P2). ``_emit_block`` already names the class in the
+    DECISION text, but the audit breadcrumb hard-coded
+    ``canonical_edit_unsigned`` for every block — so the wall-deadline
+    fail-CLOSED (and the pre-existing over-cap / scan-fault blocks) landed
+    in the HMAC chain labelled as an unsigned edit: indistinguishable from
+    a legitimate missing-sentinel block, and therefore UNCOUNTABLE for the
+    ADR-110-AMEND-2 §3 censorship RATE. ``wave-readonly-monitor.py``
+    already lists ``canonical_edit_hook_fault`` in
+    ``_LAYER_3A_REASON_CODES``: a consumer with zero producers.
+
+    Closed 2-value derivation, read off the decision this hook itself
+    built — never off attacker-shaped input.
+    """
+    return (
+        "canonical_edit_hook_fault"
+        if "canonical_edit_hook_fault" in (reason or "")
+        else "canonical_edit_unsigned"
+    )
+
+
+def _audit_block(
+    rel: str,
+    sentinels_count: int,
+    reason_code: str = "canonical_edit_unsigned",
+) -> None:
+    """Best-effort emit of veto_triggered event. Never raises.
+
+    ``reason_code`` defaults to the historical value, so every existing
+    caller is byte-identical. NO new ACTION is invented — ``veto_triggered``
+    stays the registered action, same precedent as
+    ``_audit_registry_unreadable``'s ``session_roots_registry_unreadable``.
+    """
     try:
         from _lib import audit_emit
-        audit_emit.emit_veto_triggered(
-            hook="check_canonical_edit",
-            reason_code="canonical_edit_unsigned",
-            reason_preview=(
+        if reason_code == "canonical_edit_unsigned":
+            _preview = (
                 f"blocked edit to {rel}; {sentinels_count} sentinel(s) checked, "
                 "none grant this path"
-            ),
-            blocked_tool="Edit|Write|MultiEdit",
+            )
+        else:
+            _preview = (
+                f"blocked edit to {rel}; fail-CLOSED before the sentinel sweep "
+                f"could complete ({sentinels_count} sentinel(s) on disk)"
+            )
+        audit_emit.emit_veto_triggered(
+            hook="check_canonical_edit",
+            reason_code=reason_code,
+            reason_preview=_preview,
+            blocked_tool=_blocked_tool_field(),  # PLAN162_FIX_9
             project=os.environ.get("CLAUDE_PROJECT_DIR") or "",
         )
     except Exception:
@@ -1748,7 +2630,7 @@ def _audit_registry_unreadable(registry_path: Path, exc_name: str) -> None:
                 "fail-CLOSED for external writes (FXγ) + tamper recorded; "
                 f"exc={exc_name}; registry={registry_path}"
             ),
-            blocked_tool="",
+            blocked_tool=_blocked_tool_field(),  # PLAN162_FIX_9
             project=os.environ.get("CLAUDE_PROJECT_DIR") or "",
         )
     except Exception:
@@ -1769,7 +2651,7 @@ def _audit_session_root_block(target: str) -> None:
             reason_preview=(
                 f"blocked write under session-registered root; target={target}"
             ),
-            blocked_tool="Edit|Write|MultiEdit",
+            blocked_tool=_blocked_tool_field(),  # PLAN162_FIX_9
             project=os.environ.get("CLAUDE_PROJECT_DIR") or "",
         )
     except Exception:
@@ -1888,6 +2770,27 @@ def _cli_is_canonical(args: List[str]) -> int:
 def main() -> int:
     """Hook entry point.
 
+    PLAN162_FIX_1 / PLAN162_FIX_9 wrapper: arms the per-invocation
+    wall-clock deadline (consensus C2/C3/S8) around the real entry point
+    and clears BOTH pieces of invocation-scoped module state in a
+    ``finally``. Without the reset, a module-scope deadline (or a stale
+    tool name) armed by one in-process invocation would leak into the
+    next caller in the same process — the test suite drives ``decide()``
+    and ``main()`` in-process, and an expired leftover deadline would
+    fail those closed for no reason at all.
+    """
+    global _CURRENT_TOOL_NAME
+    _start_wall_budget()
+    try:
+        return _main_guarded()
+    finally:
+        _reset_wall_budget()
+        _CURRENT_TOOL_NAME = ""
+
+
+def _main_guarded() -> int:
+    """Hook entry point.
+
     PLAN-006 Phase 1 migration (ADR-014): uses Adapter Layer
     `read_event()` / `emit_decision()`. Byte-identical output.
 
@@ -1918,7 +2821,37 @@ def main() -> int:
         return 0
 
     if event.parse_error:
-        _adapter.emit_decision(_contract.allow())
+        # PLAN162_FIX_5B (finding #5b, consensus C4). HEAD emitted a bare
+        # ALLOW here. ``parse_error`` is, by name and by construction, the
+        # signal that the PAYLOAD did not parse — INPUT, not
+        # infrastructure — and CLAUDE.md §4 is literal about that split:
+        # fail-open on INFRASTRUCTURE, fail-CLOSED on INPUT. The sibling
+        # kernel hook already implements this exact form; THIS hook was
+        # the drift.
+        #
+        # The council justified the old posture by citing "the ADR-010
+        # fail-open contract". That citation is FALSE: ADR-010 contains
+        # zero occurrences of any failure-posture text. The only such text
+        # is this hook's own module docstring, so citing it as the ADR
+        # that authorizes it is circular.
+        #
+        # 5a (``read_event`` RAISING, above) stays fail-OPEN — that IS a
+        # genuine infrastructure failure, and the kernel sibling is
+        # fail-open identically there.
+        _emit_legacy_decision_json(
+            _emit_block(
+                reason=(
+                    "CANONICAL-EDIT-BLOCKED: canonical_edit_payload_parse_error "
+                    "— the PreToolUse payload could not be parsed, so this "
+                    "edit-class event cannot be proven non-canonical. "
+                    "Security-matcher INPUT failure → fail-closed "
+                    "(CLAUDE.md §4; PLAN-162 finding #5b). Re-issue the tool "
+                    "call with a well-formed payload."
+                )
+            ),
+            _adapter,
+            event,
+        )
         return 0
 
     # PLAN-065 Layer A (S81-tris gap closure, 2026-05-04):
@@ -1929,6 +2862,10 @@ def main() -> int:
     # Each candidate is gated independently; if ANY candidate is
     # canonical without sentinel coverage, block.
     tool_name = (event.tool_name or "").strip()
+    # PLAN162_FIX_9 — publish the EVENT's tool name (validated at read
+    # time, not here) for the four audit sites that record ``blocked_tool``.
+    global _CURRENT_TOOL_NAME
+    _CURRENT_TOOL_NAME = tool_name
     candidate_paths: List[str] = []
     if event.file_path:
         candidate_paths.append(event.file_path)
@@ -2004,6 +2941,15 @@ def main() -> int:
                 first_canonical = None
                 offender = None
                 for candidate in candidate_paths:
+                    # PLAN162_FIX_1 (C2) — the second sentinel-loop site.
+                    # Fail-CLOSED on an elapsed budget: a multi-candidate
+                    # event we could not finish clearing is exactly the
+                    # event that must not ride through.
+                    if _wall_budget_expired():
+                        _forced_out = _emit_block(
+                            reason=_WALL_DEADLINE_BLOCK_REASON
+                        )
+                        break
                     if not _is_canonical(candidate, repo_root):
                         continue
                     if first_canonical is None:
@@ -2052,6 +2998,7 @@ def main() -> int:
             _audit_block(
                 candidate_paths[0] if candidate_paths else file_path,
                 _safe_sentinel_count(repo_root),
+                reason_code=_block_reason_code(_fparsed.get("reason", "")),
             )
         _emit_legacy_decision_json(_forced_out, _adapter, event)
         return 0
@@ -2104,7 +3051,11 @@ def main() -> int:
             rel = str(Path(file_path).resolve().relative_to(repo_root.resolve())).replace(os.sep, "/")
         except Exception:
             rel = file_path
-        _audit_block(rel, _safe_sentinel_count(repo_root))
+        _audit_block(
+            rel,
+            _safe_sentinel_count(repo_root),
+            reason_code=_block_reason_code(parsed.get("reason", "")),
+        )
 
     # PLAN-163 T3.1 — session-roots write-guard (DirectoryAdded consumer).
     # Runs AFTER the existing project-relative checks and ONLY on a

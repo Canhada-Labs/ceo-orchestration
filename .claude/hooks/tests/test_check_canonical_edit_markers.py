@@ -279,13 +279,29 @@ class CheckCanonicalEditMarkersTest(TestEnvContext):
     # Adversarial — malformed markers
     # =========================================================================
 
-    def test_adversarial_only_begin_marker_falls_to_tier2(self):
-        """Only BEGIN, no END → marker regex fails → Tier-2 fallback.
+    def test_adversarial_only_begin_marker_fails_closed(self):
+        """Only BEGIN, no END → fail-CLOSED. NEVER a silent Tier-2 fallback.
 
-        Behavior: legacy `Scope:` header below the orphan BEGIN is read
-        by Tier-2 parser. This is acceptable — the file is still
-        GPG-signed end-to-end, and an unfinished marker is treated as
-        legacy format.
+        REWRITTEN in the PLAN-162 W2 patch (was
+        ``..._only_begin_marker_falls_to_tier2``, which asserted ALLOW).
+        It pinned exactly the behaviour finding #4 / consensus C5 rule 1
+        reverses, so it is rewritten in the SAME patch rather than left to
+        turn the closeout red (the C7 precedent).
+
+        Why the old reasoning does not survive: "the file is still
+        GPG-signed end-to-end" is true and beside the point. The markers
+        are a CONTAINMENT boundary, not a trust one — their whole job is
+        to say WHICH of the signed bytes are scope. A BEGIN with no END is
+        an explicit-but-broken Owner intent signal, and silently reading
+        the whole file instead honours Scope bullets the Owner placed
+        OUTSIDE the region they marked. The parser already fail-CLOSES on
+        that identical principle when a well-formed marker region has an
+        unparseable interior; a malformed marker pair used to do the
+        opposite.
+
+        Marker-LESS legacy sentinels are unaffected (5 of 16 live
+        sentinels carry no marker) — they are the Tier-2 path, pinned by
+        ``test_tier2_legacy_no_markers_grants``.
         """
         self._make_repo_layout()
         target_rel = ".claude/team.md"
@@ -302,8 +318,7 @@ class CheckCanonicalEditMarkersTest(TestEnvContext):
         (sentinel_dir / "approved.md").write_text(body, encoding="utf-8")
         rc, out, _ = self._invoke({"tool_input": {"file_path": str(target)}})
         d = json.loads(out)
-        # Tier-2 still works (Scope: header exists, Approved-By present)
-        self.assertEqual(d.get("decision", "allow"), "allow", msg=out)
+        self.assertEqual(d.get("decision"), "block", msg=out)
 
     def test_adversarial_only_end_marker_falls_to_tier2(self):
         """Only END, no BEGIN → marker regex fails → Tier-2 fallback."""

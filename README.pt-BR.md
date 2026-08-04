@@ -54,7 +54,7 @@ Todas as contagens abaixo são verificáveis a partir de um checkout limpo (veja
 | Hooks ligados em `settings.json` | **44** | scripts distintos, 46 registros de evento |
 | Módulos de biblioteca compartilhada | **68** | apenas stdlib, em `.claude/hooks/_lib/` (excluindo o `__init__.py` do pacote) |
 | Slash commands | **27** | em `.claude/commands/` |
-| Architecture decision records | **185** | em `.claude/adr/` |
+| Architecture decision records | **186** | em `.claude/adr/` |
 | Testes | **~12.000 casos** | reportados por `pytest --collect-only` nas suítes de hook, script e conformidade |
 
 A diferença entre **55 em disco** e **44 ligados** é benigna: vários módulos que não respondem a eventos são ativados via dispatch in-process (invocados por outros hooks), e não por um registro de evento direto em `settings.json`.
@@ -163,7 +163,7 @@ Não acredite na tabela por fé. A partir de um checkout limpo:
 ```bash
 find .claude/skills -name SKILL.md | wc -l        # 166 skills
 ls .claude/commands/*.md | wc -l                  # 27 slash commands
-ls .claude/adr | grep -c '^ADR-'                  # 185 ADRs
+ls .claude/adr | grep -c '^ADR-'                  # 186 ADRs
 python3 -m pytest --collect-only -q | tail -1     # ~12.000 casos coletados
 ```
 
@@ -177,7 +177,7 @@ A honestidade intelectual é o ponto central, então as ressalvas são de primei
 - **Ressalva do revisor do mesmo fornecedor.** O pair-rail cross-model reduz os pontos cegos de modelo único, mas o revisor ainda é um modelo de linguagem grande e pode compartilhar modos de falha com o modelo sob revisão. É defesa em profundidade, não um oráculo independente.
 - **O Codex não vem incluído — o pair-rail fica inerte até você instalá-lo.** O trilho de revisão cross-model invoca a [CLI do Codex](https://github.com/openai/codex), que **não** é distribuída com este framework. Em uma instalação nova, sem o Codex presente, o pair-rail **falha em aberto e não contribui com nenhuma revisão** — as edições em caminhos protegidos ainda passam pela cerimônia GPG, mas nenhum segundo modelo as examina. Você só ganha o degrau cross-model depois de instalar o Codex separadamente. Veja [`docs/HONEST-LIMITATIONS.md`](docs/HONEST-LIMITATIONS.md) e o ADR-145.
 - **Custo por edição.** Cada chamada de ferramenta governada roda a cadeia de hooks antes de a ação entrar, adicionando cerca de **~0,3–1,0s** de latência por edição em hardware típico. Esse é o custo do portão; se você quer zero overhead no trabalho rotineiro, a camada de governança não é de graça.
-- **Um portão pode errar — há uma válvula de escape.** Os hooks falham em *aberto* diante de bugs de infraestrutura deles mesmos, mas um portão correto ainda pode emitir um DENY com o qual você discorda (um bloqueio falso em um caminho protegido). O caminho pretendido é o `/architect` (que roteia a mudança pela revisão) ou, para uma mudança estrutural do framework, um PLAN-NNN com um sentinel assinado pelo Owner. Para um override *auditado* e deliberado do gate de edição canônica, o Owner pode definir `CEO_SENTINEL_UNLOCK=<plan-id>` + `CEO_SENTINEL_UNLOCK_ACK=I-ACCEPT` para aquela ação — o próprio override é registrado. Hard-denies em caminhos de kernel exigem a cerimônia mais forte `CEO_KERNEL_OVERRIDE`. Veja [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md). Para experimentar o framework sem nenhum desse atrito, instale com `--ceremony user` (hooks consultivos, sem assinatura).
+- **Um portão pode errar — há uma válvula de escape.** Os hooks falham em *aberto* diante de bugs de infraestrutura deles mesmos, mas um portão correto ainda pode emitir um DENY com o qual você discorda (um bloqueio falso em um caminho protegido). O caminho pretendido é o `/architect` (que roteia a mudança pela revisão) ou, para uma mudança estrutural do framework, um PLAN-NNN com um sentinel assinado pelo Owner. Para um override *auditado* e deliberado do gate de edição canônica, o Owner pode definir `CEO_SENTINEL_UNLOCK=<plan-id>` + `CEO_SENTINEL_UNLOCK_ACK=I-ACCEPT` para aquela ação — o próprio override é registrado. (Como essa janela remove a verificação de assinatura, o sentinel usado dentro dela também precisa provar que não foi o agente que o escreveu; a razão do bloqueio nomeia o valor a definir, e o ADR-119 Invariante 5 explica as duas formas.) Hard-denies em caminhos de kernel exigem a cerimônia mais forte `CEO_KERNEL_OVERRIDE`. Veja [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md). Para experimentar o framework sem nenhum desse atrito, instale com `--ceremony user` (hooks consultivos, sem assinatura).
 - **Detecção, não prevenção, na cadeia de auditoria.** A cadeia HMAC diz a você *que* o log registrado foi alterado; ela não pode impedir que um atacante com acesso de escrita local cause dano, e não substitui controles de acesso adequados nem backups.
 - **A verificação formal tem escopo definido, não é universal.** Existe uma especificação TLA+ para a máquina de estados central, mas o model-checking **não** faz parte do gate de CI obrigatório — não interprete "tem uma especificação TLA+" como "formalmente verificado". A esmagadora maioria do comportamento é coberta por testes convencionais, não por prova mecanizada.
 - **É um framework, não um produto.** Sem UI, sem runtime gerenciado, sem "sistema operacional". Ele se instala no seu repositório e sai do caminho.

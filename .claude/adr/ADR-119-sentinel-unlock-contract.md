@@ -93,6 +93,63 @@ GPG verify entirely — if a `.asc` file is present, it is verified
 against allowlist with the SAME timeout + strict-args discipline. The
 override path is "missing-.asc-allowed" not "any-junk-.asc-accepted".
 
+### Invariant 5 — Sentinel provenance inside the window (PLAN-162 W2)
+
+*Added by the PLAN-162 Wave 2 ceremony (consensus S2 + codex pair-rail
+round 2). Ratified in ADR-164-AMEND-1; recorded here because this file
+is the contract an unlock CALLER reads.*
+
+Invariants 1–4 all assume the sentinel itself is trustworthy. It is not:
+`.claude/plans/PLAN-*/**/approved.md` is guarded by neither the
+canonical nor the kernel rail, so inside an unlock window — where the
+`.asc` requirement is relaxed — an `approved.md` **the agent wrote**
+grants canonical edits. That is a bypass of authorization, not a cost
+problem.
+
+Under `env_override`, a sentinel must therefore prove it was not
+authored by the agent, by ONE of two forms. Neither is a new trust
+assumption: both rest on the parent-shell environment that the unlock
+itself already rests on (a sub-agent cannot set env in the parent
+shell).
+
+**Form A — session anchor.** Export the commit the session started from:
+
+```bash
+# capture this in YOUR shell BEFORE launching the agent session
+export CEO_SESSION_ANCHOR_SHA=$(git rev-parse HEAD)
+```
+
+The hook reads the sentinel **as of that commit** (`git cat-file blob`)
+and authorizes off those bytes. A sentinel that did not exist at the
+anchor grants nothing, and — this is the part a path-existence check
+misses — bytes ADDED to an anchored sentinel inside the window grant
+nothing either.
+
+*Do not capture the anchor after the session is running:* the agent can
+commit its own sentinel, so a `HEAD` sampled mid-session proves nothing.
+
+**Form B — Owner content pin.** For the case this ADR's own Context
+names (*"ceremony authoring where the .asc is being signed in
+parallel"*), the
+sentinel is brand new and predates nothing, so Form A cannot express it.
+The Owner pins the content instead:
+
+```bash
+export CEO_SENTINEL_UNLOCK_SHA256=$(shasum -a 256 \
+  .claude/plans/PLAN-NNN/architect/round-1/approved.md | cut -d' ' -f1)
+# space- or comma-separate several digests for a multi-sentinel pack
+```
+
+A digest that does not cover a given sentinel is not a verdict on the
+others — the anchor rail still decides those, so pinning one file never
+self-DoSes a pack. A **malformed** digest value fails CLOSED for the
+whole window (unparseable security input is never waved through), and
+the block reason names the value that is missing.
+
+**Residual (named, not buried):** Form A arms only in a git work tree,
+so `rm -rf .git` disarms it. Form B is unaffected — it is the git-free
+proof form.
+
 ## Consequences
 
 - ADR-119 is STANDALONE — does NOT amend ADR-010 bytes. The runtime

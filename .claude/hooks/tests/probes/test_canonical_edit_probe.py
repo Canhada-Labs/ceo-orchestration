@@ -156,12 +156,28 @@ class TestCanonicalEditCodexAdapterScope(TestEnvContext):
             f"Non-canonical edit must be allowed; got: {decision!r}",
         )
 
-    def test_hook_fails_open_on_malformed_stdin(self):
-        """check_canonical_edit fails-open (allow) on malformed JSON."""
+    def test_hook_fails_closed_on_malformed_stdin(self):
+        """check_canonical_edit fails-CLOSED (block) on malformed JSON.
+
+        REWRITTEN in the PLAN-162 W2 patch (was
+        ``test_hook_fails_open_on_malformed_stdin``, asserting allow). It
+        pinned the posture finding #5b reverses, so it is rewritten in the
+        SAME patch (the C7 precedent) rather than left to turn the
+        closeout red.
+
+        Malformed JSON sets ``event.parse_error`` — security-matcher
+        INPUT, not infrastructure — and CLAUDE.md §4 splits those: fail
+        OPEN on infra, fail CLOSED on input. The sibling kernel hook has
+        always blocked here. What the probe still guarantees is the part
+        that actually protects the session: exit 0 and a well-formed
+        decision line, never a crash or a zero-emit.
+        """
         rc, stdout = self._run_hook("{NOT JSON}")
         self.assertEqual(rc, 0)
+        self.assertTrue(stdout.strip(), "zero-emit on a governance event")
         decision = self._decision_from_stdout(stdout)
-        self.assertEqual(decision, "allow")
+        self.assertEqual(decision, "block", f"stdout={stdout!r}")
+        self.assertIn("canonical_edit_payload_parse_error", stdout)
 
     def test_constants_adapter_path_matches_guard_list(self):
         """_constants.py adapter path is also canonical-guarded (defense-in-depth)."""

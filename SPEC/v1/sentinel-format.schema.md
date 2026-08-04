@@ -75,6 +75,27 @@ env-var override (interim per ADR-010 amendment, PLAN-058 history)
 short-circuits the GPG verification. Override use emits
 `veto_triggered(reason_code=sentinel_unlock_used)` audit event.
 
+**Provenance inside the window (ADR-119 Invariant 5, PLAN-162 W2).**
+Because that override removes the signature, a sentinel used inside an
+unlock window MUST additionally prove it was not written by the agent —
+a `PLAN-*/**/approved.md` is guarded by neither the canonical nor the
+kernel rail. One of:
+
+```bash
+# Form A — session anchor, captured BEFORE the agent session starts.
+# The hook parses the sentinel AS OF this commit, so bytes added to it
+# in-window do not grant.
+export CEO_SESSION_ANCHOR_SHA=$(git rev-parse HEAD)
+
+# Form B — Owner content pin (works for a sentinel authored in-session,
+# and in a non-git tree, where Form A cannot arm).
+export CEO_SENTINEL_UNLOCK_SHA256=$(shasum -a 256 approved.md | cut -d' ' -f1)
+```
+
+Neither value present (in a git work tree) → no grant, and the block
+reason names both forms. A malformed `CEO_SENTINEL_UNLOCK_SHA256` fails
+CLOSED for the whole window.
+
 ## §4. Scope block format — tier resolution
 
 ### §4.1. Tier 1 — Lexical scope markers (PLAN-064 v2 format)

@@ -89,9 +89,50 @@ class TestFailOpenContract(unittest.TestCase):
                 self._assert_fail_open("check_bash_safety", label, payload)
 
     def test_check_canonical_edit_fail_open(self):
+        """check_canonical_edit: fail-OPEN on infra, fail-CLOSED on INPUT.
+
+        NARROWED by the PLAN-162 W2 patch (finding #5b). This test used to
+        assert a blanket "never block on any malformed stdin", which
+        predates the PLAN-152 C4 doctrine correction now codified in
+        CLAUDE.md §4: hooks fail OPEN on INFRASTRUCTURE (missing file,
+        import failure, timeout) but a security matcher fails CLOSED on
+        INPUT it cannot parse. The blanket rule made this file a contract
+        pin on the very posture #5b reverses, so it is narrowed in the
+        SAME patch (the C7 precedent) — for THIS hook only. The other
+        five hooks keep the unmodified assertion above/below.
+
+        What is unchanged and still asserted for every payload: exit 0,
+        never a crash, never a zero-emit on a governance event.
+
+        The split, measured rather than assumed:
+          * a payload the adapter cannot parse at all (``garbage``) sets
+            ``event.parse_error`` -> BLOCK with the #5b reason code;
+          * payloads that PARSE but carry no usable target (``empty``,
+            ``json_missing_fields``, ``null_tool_input``) are not INPUT
+            failures -> still allow.
+        An EXCEPTION out of ``read_event`` remains fail-OPEN and is pinned
+        separately by ``Finding5FailurePostureTest.test_5a_pin_read_event_
+        exception_still_allows``.
+        """
+        parse_error_labels = {"garbage"}
         for label, payload in MALFORMED_PAYLOADS:
             with self.subTest(payload=label):
-                self._assert_fail_open("check_canonical_edit", label, payload)
+                if label not in parse_error_labels:
+                    self._assert_fail_open("check_canonical_edit", label, payload)
+                    continue
+                exit_code, stdout = _run_hook("check_canonical_edit", payload)
+                self.assertEqual(exit_code, 0, f"stdout={stdout!r}")
+                text = stdout.decode("utf-8", errors="replace").strip()
+                self.assertTrue(text, "zero-emit on a governance event")
+                parsed = json.loads(text)
+                self.assertEqual(
+                    parsed.get("decision"), "block", f"stdout={text!r}"
+                )
+                self.assertIn(
+                    "canonical_edit_payload_parse_error",
+                    parsed.get("reason", ""),
+                    f"stdout={text!r}",
+                )
 
     def test_check_plan_edit_fail_open(self):
         for label, payload in MALFORMED_PAYLOADS:

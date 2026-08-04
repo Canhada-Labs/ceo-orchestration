@@ -19,7 +19,7 @@ REJECT should cite the rule and the offending `file:line`.
 |---|---|---|
 | Stdlib-only runtime | No third-party imports in framework Python (`SBOM.md` lists zero runtime deps) | [CLAUDE.md](CLAUDE.md) §4 · `.claude/scripts/check-stdlib-only.py` |
 | Python ≥ 3.9 compatible | `from __future__ import annotations` present; no runtime PEP 604 unions (use `typing.Optional` / `typing.Union`); no `match` statements | [CLAUDE.md](CLAUDE.md) §4 |
-| Fail-open on infrastructure | Hooks never block the session on a missing file, import failure, or timeout — breadcrumb + `{}` allow | [CLAUDE.md](CLAUDE.md) §4 |
+| Fail-open on infrastructure | Hooks never block the session on a missing file, import failure, or timeout — breadcrumb + `{}` allow. **Deliberate exception (ADR-186):** the canonical-edit matcher's wall deadline fails CLOSED — a timeout there is an incomplete verification, not infrastructure; recovery = the provenance-pinned unlock | [CLAUDE.md](CLAUDE.md) §4 · [ADR-186](.claude/adr/ADR-186-hook-deadline-policy.md) |
 | Fail-closed on input (security matchers) | Content a security matcher cannot parse is BLOCKED, not waved through (precedents in `.claude/hooks/check_bash_safety.py`; codified by PLAN-152 debate C4) | [CLAUDE.md](CLAUDE.md) §4 |
 | Env isolation in tests | Tests touching env use `TestEnvContext` (`.claude/hooks/_lib/testing.py`) + `mock.patch.dict` — never direct `os.environ[...] =` writes, never the real `$HOME` / `$CLAUDE_PROJECT_DIR` | [CLAUDE.md](CLAUDE.md) §4 |
 | No contamination | No personal handles or private project names in framework/template content; neutral placeholders only (`Canhada-Labs`, `your-app`); `.github/CODEOWNERS` is the sole live-handle exception | `.claude/scripts/check-contamination.sh` |

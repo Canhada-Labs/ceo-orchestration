@@ -44,6 +44,7 @@ Hooks fail **open** on their own infrastructure bugs (a parse error or timeout l
 1. `/architect "<change>"` — routes the edit through review (the normal path).
 2. A `PLAN-NNN` with an Owner-signed sentinel — for deliberate framework changes.
 3. **Audited override:** the Owner sets `CEO_SENTINEL_UNLOCK=<plan-id>` + `CEO_SENTINEL_UNLOCK_ACK=I-ACCEPT` for that action. The override itself is recorded in the audit log. Kernel hard-denies use `CEO_KERNEL_OVERRIDE=<plan-id>` + `CEO_KERNEL_OVERRIDE_ACK=I-ACCEPT` instead.
+   Since the unlock removes the signature check, the sentinel you use inside that window must also prove it is not one the *agent* wrote — either `CEO_SESSION_ANCHOR_SHA=$(git rev-parse HEAD)` captured **before** the session started, or `CEO_SENTINEL_UNLOCK_SHA256=<sha256 of approved.md>` if you just authored it. If you forget, the block reason tells you which one to set (ADR-119 Invariant 5).
 
 Never carry an override between sessions — unset it when it is not your current plan.
 
@@ -104,7 +105,7 @@ Don't take the README table on faith. From a clean checkout:
 ```bash
 find .claude/skills -name SKILL.md | wc -l        # 166 skills (42 core + 8 frontend + 116 domain)
 ls .claude/commands/*.md | wc -l                  # 27 slash commands
-ls .claude/adr | grep -c '^ADR-'                  # 185 ADRs
+ls .claude/adr | grep -c '^ADR-'                  # 186 ADRs
 python3 -m pytest --collect-only -q | tail -1     # ~12,000 collected cases
 ```
 

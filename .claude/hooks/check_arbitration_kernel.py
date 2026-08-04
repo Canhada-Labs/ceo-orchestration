@@ -261,6 +261,28 @@ _KERNEL_PATHS: List[str] = [
     # to evolve it under sentinel).
     ".claude/settings.local.json",
     ".claude/state/night-mode.json",
+    # PLAN162_FIX_3 (PLAN-162 findings #3 + #8, consensus C10) — the two
+    # files the guards themselves TRUST, previously guarded by NEITHER
+    # rail (verified on HEAD: canonical=False, kernel=False for both):
+    #
+    #   1. the ADR-121 sentinel signer REGISTRY — the identity root
+    #      `check_canonical_edit._sentinel_grants_path` consults on the
+    #      dual signer rail. Unguarded, an ordinary Edit silently disarms
+    #      half the signer check, asymmetric with the legacy
+    #      `.claude/sentinel-signers.txt` which HAS been kernel-guarded
+    #      since ADR-116.
+    #   2. the policy hash-pin drift MANIFEST — it pins the policy files
+    #      that are themselves guarded; leaving the pinner rewritable
+    #      makes the pin decorative ("pin the pinner").
+    #
+    # Both are KERNEL tier (no sentinel escape) precisely because a
+    # sentinel that grants an edit to the signer registry could authorize
+    # its own future signer. Deliberately NOT paired with an
+    # "absence ⇒ fail-closed" inversion (C10): that would need a
+    # definition of "expected" which is itself editable, and would make
+    # DELETING a file the way to choose the posture.
+    ".claude/security/sentinel-signers-registry.yaml",
+    ".claude/policies/.drift-manifest.json",
 ]
 
 
@@ -306,6 +328,35 @@ def _match_segments(p_parts: List[str], pat_parts: List[str]) -> bool:
     return False
 
 
+# PLAN162_FIX_CASEFOLD (PLAN-162 consensus S1, P0 — BOTH rails).
+#
+# ``_match_segments`` matches with ``fnmatch.fnmatchcase``, i.e. exact
+# case. On a case-INSENSITIVE filesystem — APFS, the default on this
+# repo's platform — ``.claude/settings.JSON`` IS ``.claude/settings.json``:
+# a write through the case variant OVERWRITES the guarded file, yet the
+# variant classified non-kernel and sailed past the HARD-DENY the whole
+# threat model assumes unreachable. Measured on HEAD:
+#
+#     .claude/settings.JSON             canonical=False  kernel=False
+#     .claude/hooks/_lib/audit_emit.PY  canonical=False  kernel=False
+#     .claude/sentinel-signers.TXT      canonical=False  kernel=False
+#
+# The fix normalizes BOTH the candidate rel and the guard patterns to
+# lower case before matching. Over-classifying is the SAFE direction
+# here (a false kernel-classification costs an override ceremony; a
+# false non-classification is a silent bypass of the strictest rail).
+#
+# ``str.lower`` — not ``str.casefold`` — deliberately: casefold expands
+# 'ß'→'ss', changing segment LENGTH and therefore what a glob matches.
+# The exploited class is ASCII case variance, which ``lower()`` covers
+# exactly, and identical inputs always fold identically, so the
+# normalization can only ever ADD matches, never remove one.
+#
+# Precomputed at import so the hot path pays one ``str.lower()`` per
+# classification rather than one per (segment x pattern).
+_KERNEL_PATHS_FOLDED: List[str] = [pat.lower() for pat in _KERNEL_PATHS]
+
+
 def _is_kernel_path(path_str: str, repo_root: Path) -> bool:
     """True if path_str resolves inside the kernel HARD-DENY list."""
     if not path_str:
@@ -318,8 +369,10 @@ def _is_kernel_path(path_str: str, repo_root: Path) -> bool:
     except (ValueError, OSError):
         # Path outside repo root → cannot be a kernel path by definition.
         return False
-    for pattern in _KERNEL_PATHS:
-        if _fnmatch_segments(rel, pattern):
+    # PLAN162_FIX_CASEFOLD — see the module note above.
+    rel_folded = rel.lower()
+    for pattern in _KERNEL_PATHS_FOLDED:
+        if _fnmatch_segments(rel_folded, pattern):
             return True
     return False
 

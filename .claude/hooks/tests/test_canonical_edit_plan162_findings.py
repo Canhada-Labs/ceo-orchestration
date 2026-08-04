@@ -872,15 +872,7 @@ class Finding1WallDeadlineTest(_SentinelParserBase):
                 "registered timeout {1}s".format(budget, registered),
         )
 
-    @pytest.mark.skip(
-        reason="PLAN-162: deadline posture is an UNRESOLVED contract conflict "
-               "(consensus C2 + this file's F-01-07 fail-closed precedent vs "
-               "AGENTS.md §1 / CLAUDE.md §4 'timeout -> breadcrumb + allow'). "
-               "Pair-rail R4 P1. Skipped rather than xfailed: an xfail(strict) "
-               "would stay green under EITHER implementation and hide the "
-               "decision. W2 must land the ADR that settles it, then re-enable "
-               "this test on the ratified side."
-    )
+    @_XFAIL_1
     def test_1_repro_expired_deadline_fails_closed_via_injected_clock(self) -> None:
         """DEFECT REPRO (C2, S8): with the injected clock already past the
         budget, a multi-candidate event whose every path IS granted must
@@ -923,9 +915,33 @@ class Finding1WallDeadlineTest(_SentinelParserBase):
             msg="an expired wall-clock deadline did not fail CLOSED: {0}".format(d),
         )
         self.assertIn("canonical_edit_hook_fault", d.get("reason", ""), msg=d)
+        # ADR-186 sub-item (pair-rail r8 P2): the deadline block must be
+        # COUNTABLE in the HMAC chain — the breadcrumb carries the fault
+        # reason_code, not the missing-sentinel one. Without this the
+        # censorship-RATE trigger of ADR-110-AMEND-2 §3 is uncomputable
+        # (PLAN162_FIX_1B positive control; without the fix this event is
+        # labelled canonical_edit_unsigned and this assertion fails).
+        faults = []
+        for line in self.read_audit_log().splitlines():
+            try:
+                ev = json.loads(line)
+            except ValueError:
+                continue
+            if (
+                isinstance(ev, dict)
+                and ev.get("action") == "veto_triggered"
+                and ev.get("reason_code") == "canonical_edit_hook_fault"
+            ):
+                faults.append(ev)
+        self.assertTrue(
+            faults,
+            msg="deadline block left NO veto_triggered event with "
+                "reason_code=canonical_edit_hook_fault in the chain — "
+                "the block is invisible to the censorship-rate instrument",
+        )
 
     # ---------------------------------------------------------------
-    # CONTRACT CONFLICT — do not silently pick a side (pair-rail R4 P1)
+    # CONTRACT CONFLICT — SETTLED by ADR-186 (pair-rail R4 P1)
     # ---------------------------------------------------------------
     # The assertion above encodes deadline-expiry as fail-CLOSED. That is
     # the consensus C2 decision AND matches this file's own established
@@ -947,14 +963,425 @@ class Finding1WallDeadlineTest(_SentinelParserBase):
     # CEO_KERNEL_OVERRIDE) — a fail-closed gate without a recovery route
     # is a brick, and this one has one.
     #
-    # The CEO does NOT get to settle a documented contract conflict inside
-    # a test. W2 must land an ADR that either (i) carves out "a security
-    # matcher that cannot establish authorization for a CONFIRMED-canonical
-    # path fails closed" as an explicit exception to the infrastructure
-    # rule, or (ii) reverses this assertion to allow-with-breadcrumb. Until
-    # that ADR exists this test is SKIPPED, not xfailed: an xfail(strict)
-    # here would stay green under EITHER implementation and hide the
-    # unresolved decision.
+    # The CEO does NOT settle a documented contract conflict inside a
+    # test — an ADR does. ADR-186 (ACCEPTED 2026-08-04) took option (i):
+    # a security matcher that cannot establish authorization for a
+    # CONFIRMED-canonical path fails CLOSED, recorded as an explicit,
+    # named exception to the infrastructure rule in CLAUDE.md §4 and
+    # AGENTS.md §1 in the SAME commit as this patch. The repro above is
+    # therefore live again, pinning BLOCK, and it carries @_XFAIL_1 like
+    # its sibling so it stays red-first on HEAD and flips with the
+    # PLAN162_FIX_1 marker.
+
+
+# ===========================================================================
+# #1 — the gpg SPAWN must be bounded by what is left of the wall allowance
+# ===========================================================================
+def _registered_hook_ceilings() -> List[float]:
+    """Per-invocation ceilings registered for this hook in the LIVE
+    settings.json (the harness kill line).
+
+    Deliberately a second, independent reader rather than a call into
+    ``Finding1WallDeadlineTest`` — a test class is not an API, and the two
+    uses assert different things (that one: constant-vs-registration
+    drift; this one: total simulated wall against the kill line).
+    """
+    data = json.loads(_SETTINGS_PATH.read_text(encoding="utf-8"))
+    found: List[float] = []
+    for entries in (data.get("hooks") or {}).values():
+        for entry in entries or []:
+            for h in entry.get("hooks") or []:
+                if "check_canonical_edit" in (h.get("command") or ""):
+                    value = h.get("timeout")
+                    if isinstance(value, (int, float)):
+                        found.append(float(value))
+    return found
+
+
+class _FakeClock:
+    """Deterministic ``time.monotonic`` stand-in — nothing here sleeps.
+
+    ``jump_to`` fires AFTER the first reading, which is the one
+    ``_start_wall_budget`` uses to anchor the deadline: it positions the
+    invocation at an arbitrary point inside its allowance without the
+    test having to reach into module state.
+    """
+
+    def __init__(self, start: float = 0.0, jump_to: Optional[float] = None) -> None:
+        self.t = float(start)
+        self._jump_to = jump_to
+        self.calls = 0
+
+    def __call__(self) -> float:
+        self.calls += 1
+        value = self.t
+        if self._jump_to is not None and self.calls == 1:
+            self.t = float(self._jump_to)
+            self._jump_to = None
+        return value
+
+    def advance(self, seconds: float) -> None:
+        self.t += float(seconds)
+
+
+class _SpawnRecordingGpg:
+    """gpg stand-in that RECORDS the per-spawn ceiling it was handed.
+
+    With a ``clock``, it also SIMULATES a stalled ``gpg``/``gpg-agent``:
+    the subprocess is assumed to run to its full limit, so the fake clock
+    is advanced by exactly the ceiling and the call reports the failure
+    ``_lib.gpg_verify`` reports on expiry. That is the whole finding —
+    without a ceiling derived from the remaining allowance, one stalled
+    verification burns 15 s of a 5 s registration.
+    """
+
+    def __init__(self, clock: Optional[_FakeClock] = None, ok: bool = True) -> None:
+        self.clock = clock
+        self.ok = ok
+        self.calls = 0
+        self.ceilings: List[Optional[float]] = []
+
+    def verify_detached(self, *args, **kwargs):
+        self.calls += 1
+        ceiling = kwargs.get("timeout")
+        self.ceilings.append(ceiling)
+        if self.clock is not None:
+            self.clock.advance(float(ceiling or 0.0))
+            return (False, "", "gpg_timeout")
+        return (self.ok, "FPR0", "plan162-stub")
+
+
+class Finding1GpgSpawnBoundedTest(_SentinelParserBase):
+    """Codex pair-rail P1 (S292), raised against the STAGED #1 patch —
+    the half of finding #1 the deadline alone does not cover.
+
+    ``_verify_signature_rail`` called ``verify_detached`` with the library
+    default ``timeout=15.0`` (``_lib/gpg_verify.py``): **three times the
+    hook's entire registration**. The wall deadline C2 introduced is
+    POLLED — read at the top of the sentinel loops — so it bounds only
+    what happens BETWEEN iterations. A single stalled ``gpg`` /
+    ``gpg-agent`` therefore runs straight through the 4 s internal
+    deadline and the 5 s registration alike; the harness kills a process
+    that has emitted nothing, and a zero-emit hook is indistinguishable
+    from an allow. That is precisely the silent fail-open
+    ``ADR-164-AMEND-1`` §3 D2 says this patch removes — and D2's own text
+    ("per-verify subprocess timeout bounded by remaining budget") was
+    ahead of the code until this fold.
+
+    ## What the fix owes, and how each debt is proved here
+
+    * the ceiling handed to each spawn is derived from the REMAINING
+      allowance, never the library default
+      (``..._spawn_ceiling_never_exceeds_the_wall_allowance``);
+    * with too little left to both verify AND emit, gpg is not spawned at
+      all and the decision is the fail-CLOSED deadline block, with its
+      recovery route (``..._near_dead_deadline_refuses_to_spawn_gpg``);
+    * a stalled agent leaves the hook enough wall to still EMIT
+      (``..._stalled_gpg_leaves_room_to_emit_the_decision``) — the
+      assertion is against the LIVE registration, so it tracks
+      settings.json rather than a number recalled here.
+
+    ## Why a refusal must never be cached
+
+    ``_signature_rail_ok`` memoizes into ``_SIG_VERIFY_CACHE``. A refusal
+    is NOT a verdict about the sentinel — caching it would leave a
+    ``False`` no gpg ever produced riding the cache for the rest of the
+    process, i.e. this fix would have introduced a fresh instance of
+    finding #10. Pinned by ``..._spawn_refusal_is_not_memoized``.
+
+    NAMING (deliberate, same trap the sibling class documents): the root
+    ``conftest.py`` auto-marks any test whose NODE ID matches
+    ``budget|timeout|perf|latency|elapsed|...`` as ``serial``. Every test
+    below is deterministic — fake clock, no sleep, no real subprocess —
+    so those words are avoided in the class and method names to keep them
+    in the parallel lane. "allowance", "ceiling" and "deadline" are the
+    substitutes used throughout.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        (self.project_dir / _FRONT_REL).write_text("front", encoding="utf-8")
+        self.mod._SIG_VERIFY_CACHE.clear()
+        self.mod._reset_wall_budget()
+
+    def tearDown(self) -> None:
+        self.mod._SIG_VERIFY_CACHE.clear()
+        self.mod._reset_wall_budget()
+        super().tearDown()
+
+    # ---- helpers ---------------------------------------------------------
+
+    def _three_sentinels(self) -> None:
+        """Three signed, in-scope sentinels.
+
+        More than one matters: the refusal path can only be reached on a
+        LATER sentinel, once an earlier verification has consumed the
+        allowance.
+        """
+        scope = _APPROVED_BY + "Scope:\n  - " + _TEAM_REL + "\n  - " + _FRONT_REL + "\n"
+        for plan_id in ("PLAN-620", "PLAN-621", "PLAN-622"):
+            self._sentinel(plan_id, scope)
+
+    def _multi_event(self) -> dict:
+        return {
+            "hook_event_name": "PreToolUse",
+            "session_id": "plan162-w2",
+            "tool_name": "mcp__future__bulk_write",
+            "tool_input": {
+                "path": [
+                    str(self.project_dir / _TEAM_REL),
+                    str(self.project_dir / _FRONT_REL),
+                ],
+                "content": "x",
+            },
+        }
+
+    def _drive_main(self, gpg, clock=None) -> dict:
+        """``main()`` in-process with the signature rail on ``gpg`` and,
+        optionally, the clock seam replaced. In-process because both seams
+        are monkeypatches — they cannot be staged on disk."""
+        stdout = io.StringIO()
+        env = {**os.environ, "CLAUDE_PROJECT_DIR": str(self.project_dir)}
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(mock.patch.dict(os.environ, env, clear=True))
+            stack.enter_context(mock.patch.object(self.mod, "_gpg_verify", gpg))
+            stack.enter_context(
+                mock.patch.object(
+                    self.mod, "_SENTINEL_SIGNERS_REGISTRY_YAML", self._no_registry
+                )
+            )
+            if clock is not None:
+                stack.enter_context(mock.patch.object(self.mod, "_now", clock))
+            stack.enter_context(
+                mock.patch("sys.stdin", io.StringIO(json.dumps(self._multi_event())))
+            )
+            stack.enter_context(contextlib.redirect_stdout(stdout))
+            rc = self.mod.main()
+
+        self.assertEqual(rc, 0)
+        out = stdout.getvalue().strip()
+        self.assertTrue(out, msg="ZERO-EMIT: main() produced no decision")
+        return json.loads(out.splitlines()[-1])
+
+    # ---- controls --------------------------------------------------------
+
+    def test_control_healthy_rail_still_verifies_and_allows(self) -> None:
+        """Anti-vacuity (always-pass, before and after the fold): the same
+        fixture under a healthy rail spawns at least one verification and
+        is ALLOWED via a sentinel. Every red below therefore comes from
+        the ceiling logic, not from a fixture that never reaches gpg."""
+        self._three_sentinels()
+        gpg = _SpawnRecordingGpg()
+        d = self._drive_main(gpg)
+        self.assertGreaterEqual(
+            gpg.calls, 1, msg="anti-vacuity: the signature rail was never reached"
+        )
+        self.assertNotEqual(d.get("decision"), "block", msg=d)
+        self.assertIn("PLAN-6", d.get("systemMessage", ""), msg=d)
+
+    def test_control_registration_is_discoverable(self) -> None:
+        """Anti-vacuity for the wall assertion below (always-pass): a
+        settings.json walk matching NOTHING would make that assertion
+        compare against an empty set and pass vacuously — the S287
+        verify-counts class."""
+        ceilings = _registered_hook_ceilings()
+        self.assertEqual(
+            len(ceilings),
+            1,
+            msg="expected exactly one check_canonical_edit registration in "
+                "{0}, found {1}".format(_SETTINGS_PATH, ceilings),
+        )
+        self.assertGreater(ceilings[0], 0)
+
+    # ---- repros ----------------------------------------------------------
+
+    @_XFAIL_1
+    def test_repro_spawn_constants_leave_room_for_a_first_verify(self) -> None:
+        """DEFECT REPRO (static): the fold must expose named constants,
+        and their sum must leave room for the FIRST verification of a
+        fresh invocation. Constants that do not (margin + floor >=
+        ``_HOOK_WALL_BUDGET_S``) would refuse every spawn from the first
+        sentinel on — a fail-closed gate that can never open, i.e. the C3
+        self-DoS with the Owner's signature in hand.
+
+        The cap is pinned against the LIVE default of
+        ``_lib.gpg_verify.verify_detached`` so the two cannot drift apart
+        silently."""
+        import inspect
+
+        for name in ("_GPG_EMIT_MARGIN_S", "_GPG_MIN_SPAWN_S", "_GPG_VERIFY_TIMEOUT_CAP_S"):
+            self.assertTrue(
+                hasattr(self.mod, name),
+                msg="the fold must expose {0} as a named module constant "
+                    "(Codex P1: the per-spawn ceiling is derived from the "
+                    "remaining wall allowance, not hard-coded to the "
+                    "library default)".format(name),
+            )
+        margin = float(self.mod._GPG_EMIT_MARGIN_S)
+        floor = float(self.mod._GPG_MIN_SPAWN_S)
+        cap = float(self.mod._GPG_VERIFY_TIMEOUT_CAP_S)
+        budget = float(self.mod._HOOK_WALL_BUDGET_S)
+
+        self.assertGreater(margin, 0.0, msg="a zero emit margin reserves nothing")
+        self.assertGreater(floor, 0.0)
+        self.assertLess(
+            margin + floor,
+            budget,
+            msg="margin {0} + floor {1} >= wall allowance {2}: the FIRST "
+                "sentinel of a fresh invocation could never be verified "
+                "(self-DoS)".format(margin, floor, budget),
+        )
+
+        lib_default = inspect.signature(
+            self.mod._gpg_verify.verify_detached
+        ).parameters["timeout"].default
+        self.assertEqual(
+            cap,
+            float(lib_default),
+            msg="_GPG_VERIFY_TIMEOUT_CAP_S drifted from the _lib.gpg_verify "
+                "default ({0}); the cap exists to preserve the historical "
+                "ceiling for callers with no armed deadline".format(lib_default),
+        )
+
+    @_XFAIL_1
+    def test_repro_spawn_ceiling_never_exceeds_the_wall_allowance(self) -> None:
+        """DEFECT REPRO (real clock, no sleep): every ceiling handed to
+        ``verify_detached`` during an armed invocation must fit inside the
+        wall allowance. Before the fold the constant 15.0 was passed —
+        3x the registration, 3.75x the internal deadline."""
+        self._three_sentinels()
+        gpg = _SpawnRecordingGpg()
+        self._drive_main(gpg)
+        self.assertTrue(gpg.ceilings, msg="anti-vacuity: no spawn was recorded")
+        budget = float(self.mod._HOOK_WALL_BUDGET_S)
+        floor = float(getattr(self.mod, "_GPG_MIN_SPAWN_S", 0.0))
+        for ceiling in gpg.ceilings:
+            self.assertIsNotNone(
+                ceiling, msg="the spawn ceiling must be explicit, never the default"
+            )
+            self.assertLessEqual(
+                float(ceiling),
+                budget,
+                msg="a spawn was allowed {0}s inside a {1}s wall allowance "
+                    "(Codex P1) — ceilings recorded: {2}".format(
+                        ceiling, budget, gpg.ceilings
+                    ),
+            )
+            self.assertGreaterEqual(float(ceiling), floor)
+
+    @_XFAIL_1
+    def test_repro_near_dead_deadline_refuses_to_spawn_gpg(self) -> None:
+        """DEFECT REPRO (injected clock): positioned near the end of its
+        allowance, the hook must NOT spawn gpg at all — a fork it cannot
+        afford to wait out cannot tell a bad signature from a slow agent —
+        and must emit the fail-CLOSED deadline block, not the generic
+        "declare this path in Scope" block, which would misdiagnose a
+        wall fault as a missing sentinel.
+
+        Before the fold this path SPAWNED and, with a healthy stub,
+        ALLOWED: the clock had not formally elapsed, so nothing stopped a
+        15 s subprocess from starting 0.1 s before the deadline."""
+        self._three_sentinels()
+        budget = float(self.mod._HOOK_WALL_BUDGET_S)
+        clock = _FakeClock(start=0.0, jump_to=budget - 0.1)
+        gpg = _SpawnRecordingGpg()
+        d = self._drive_main(gpg, clock=clock)
+        self.assertEqual(
+            gpg.calls,
+            0,
+            msg="gpg was spawned with {0}s of allowance left and no room to "
+                "emit afterwards; ceilings={1}".format(0.1, gpg.ceilings),
+        )
+        self.assertEqual(
+            d.get("decision"),
+            "block",
+            msg="a wall allowance too short to verify did not fail CLOSED: {0}".format(d),
+        )
+        self.assertIn("canonical_edit_hook_fault", d.get("reason", ""), msg=d)
+
+    @_XFAIL_1
+    def test_repro_stalled_gpg_leaves_room_to_emit_the_decision(self) -> None:
+        """DEFECT REPRO — the finding itself, stated as wall accounting.
+
+        The stub simulates a stalled ``gpg`` by advancing the fake clock
+        by exactly the ceiling it was handed. The total simulated wall
+        consumed by the whole invocation must stay under the ceiling
+        REGISTERED for this hook in settings.json, with the emit margin
+        still unspent: otherwise the harness kills the process first and
+        the fail-closed decision is never written — a zero-emit that reads
+        as allow.
+
+        Before the fold: one stalled spawn = 15 s against a 5 s
+        registration, and the sentinel loop would have started two more.
+        """
+        self._three_sentinels()
+        registered = _registered_hook_ceilings()[0]
+        clock = _FakeClock(start=0.0)
+        gpg = _SpawnRecordingGpg(clock=clock)
+        d = self._drive_main(gpg, clock=clock)
+
+        self.assertGreaterEqual(
+            gpg.calls, 1, msg="anti-vacuity: the stall was never exercised"
+        )
+        self.assertLessEqual(
+            clock.t,
+            registered - float(getattr(self.mod, "_GPG_EMIT_MARGIN_S", 0.0)),
+            msg="a stalled gpg consumed {0}s of a {1}s registration — the "
+                "harness kills the hook before it emits, which is the "
+                "silent fail-open ADR-164-AMEND-1 §3 D2 claims to prevent "
+                "(ceilings={2})".format(clock.t, registered, gpg.ceilings),
+        )
+        self.assertEqual(d.get("decision"), "block", msg=d)
+        self.assertIn("canonical_edit_hook_fault", d.get("reason", ""), msg=d)
+
+    @_XFAIL_1
+    def test_repro_spawn_refusal_is_not_memoized(self) -> None:
+        """DEFECT REPRO (cache hygiene, self-inflicted-bug guard): a
+        refusal must not enter ``_SIG_VERIFY_CACHE``.
+
+        It is not a verdict about the sentinel — memoizing it would leave
+        a ``False`` no gpg ever produced riding the cache for the rest of
+        the process, re-creating finding #10 inside its own fix. The
+        second half proves the sentinel still verifies once the allowance
+        is restored."""
+        self._three_sentinels()
+        sentinel = (
+            self.project_dir / ".claude" / "plans" / "PLAN-620"
+            / "architect" / "round-1" / "approved.md"
+        )
+        budget = float(self.mod._HOOK_WALL_BUDGET_S)
+        gpg = _SpawnRecordingGpg()
+        clock = _FakeClock(start=0.0, jump_to=budget - 0.1)
+
+        with mock.patch.object(self.mod, "_gpg_verify", gpg), mock.patch.object(
+            self.mod, "_SENTINEL_SIGNERS_REGISTRY_YAML", self._no_registry
+        ), mock.patch.object(self.mod, "_now", clock):
+            self.mod._start_wall_budget()
+            try:
+                refused = self.mod._signature_rail_ok(sentinel)
+            finally:
+                self.mod._reset_wall_budget()
+
+        self.assertFalse(
+            refused, msg="a refused verification must not report a valid signature"
+        )
+        self.assertEqual(gpg.calls, 0, msg="gpg was spawned despite the refusal")
+        self.assertEqual(
+            dict(self.mod._SIG_VERIFY_CACHE),
+            {},
+            msg="the refusal was memoized — a False no gpg produced now "
+                "rides the signature cache for the rest of the process",
+        )
+
+        with mock.patch.object(self.mod, "_gpg_verify", gpg), mock.patch.object(
+            self.mod, "_SENTINEL_SIGNERS_REGISTRY_YAML", self._no_registry
+        ):
+            self.assertTrue(
+                self.mod._signature_rail_ok(sentinel),
+                msg="the sentinel stayed poisoned after the allowance was "
+                    "restored",
+            )
+        self.assertEqual(gpg.calls, 1)
 
 
 # ===========================================================================
@@ -1627,6 +2054,363 @@ class S2SentinelUnderEnvOverrideTest(_Plan162Base):
             msg="untracked in-session sentinel granted under env_override: "
                 "{0}".format(d),
         )
+
+
+# ===========================================================================
+# S2 round-2 — the three P1s the pair-rail found IN the S2 fix
+# ===========================================================================
+@pytest.mark.skipif(shutil.which("git") is None, reason="git not available")
+class S2AnchorTrustRoundTwoTest(_Plan162Base):
+    """``PLAN162_FIX_S2R2``. The W2 patch closed S2 with a session anchor;
+    the codex round-2 pair-rail then found three P1s IN THAT FIX. These
+    tests are the fence for all three, and unlike the W1 instruments above
+    they carry no ``xfail`` — fix and proof ship in the SAME patch.
+
+    **P1-1 — anchored PATH is not anchored CONTENT.** ``git cat-file -e``
+    proves only that the path EXISTED at the anchor; the first draft then
+    parsed the CURRENT bytes with GPG skipped. So: take any pre-existing
+    unguarded ``approved.md``, keep its ``Approved-By:`` line, add a
+    target to ``Scope:`` — and the new control authorizes off
+    attacker-written bytes.
+
+    Of the two remedies the codex offered — compare the anchored blob
+    against disk and reject divergence, or parse the anchored content —
+    the fix takes the SECOND, and ``test_p1_1_the_anchored_scope_is_what
+    _governs`` pins that choice rather than leaving it implicit. Reason:
+    the sentinel format (SPEC §4.1) explicitly allows lifecycle text
+    OUTSIDE the signed markers to change, so reject-on-divergence would
+    brick an unlock window over a hand-edited ``Status:`` line, while
+    anchored-parse ignores it exactly as the grant logic already does.
+
+    **P1-2 — the probe must fit the wall budget.** Same class as the
+    round-1 gpg fold: a 5 s subprocess inside a 4 s internal deadline
+    lets the harness kill the hook before it emits the intended BLOCK,
+    which is the zero-emit fail-open ADR-164-AMEND-1 §3 says the patch
+    prevents.
+
+    **P1-3 — a fail-closed gate with no recovery route is a brick.** The
+    anchor alone bricks the ONE use ADR-119 names for the unlock
+    ("ceremony authoring where the .asc is being signed in parallel"): a
+    freshly authored sentinel predates nothing, so no anchor value exists
+    that would let it through. Note this is not a small ergonomic point —
+    ``Finding1WallDeadlineTest`` above justifies fail-CLOSED on deadline
+    expiry precisely by pointing at "the existing recovery route
+    (CEO_SENTINEL_UNLOCK + _ACK)". Removing that route silently would
+    knock a leg out from under a decision made elsewhere in this same
+    pack. The fix therefore adds an Owner content pin
+    (``CEO_SENTINEL_UNLOCK_SHA256``), teaches BOTH forms in the block
+    reason, and updates the contract surfaces — all fenced below.
+    """
+
+    UNLOCK = {
+        "CEO_SENTINEL_UNLOCK": "PLAN-162-w2-anchor-round-two",
+        "CEO_SENTINEL_UNLOCK_ACK": "I-ACCEPT",
+    }
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._make_repo_layout()
+        self._git("init", "-q")
+        self._git("config", "user.email", "plan162@example.invalid")
+        self._git("config", "user.name", "plan162")
+        self._git("config", "commit.gpgsign", "false")
+        self.sentinel = self._write_sentinel("PLAN-702", [_FRONT_REL])
+        self.team_payload = self._edit_event(str(self.project_dir / _TEAM_REL))
+        self.front_payload = self._edit_event(str(self.project_dir / _FRONT_REL))
+
+    # ---- helpers ---------------------------------------------------------
+
+    def _git(self, *args: str):
+        return subprocess.run(
+            ["git"] + list(args),
+            cwd=str(self.project_dir),
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+
+    def _anchor_env(self) -> Dict[str, str]:
+        """Commit everything and name THAT commit as the session anchor."""
+        self._git("add", "-A")
+        self.assertEqual(self._git("commit", "-q", "-m", "anchor").returncode, 0)
+        env = dict(self.UNLOCK)
+        env["CEO_SESSION_ANCHOR_SHA"] = self._git(
+            "rev-parse", "HEAD"
+        ).stdout.strip()
+        return env
+
+    def _mutate_sentinel_to_also_grant_team(self) -> None:
+        """The in-window edit: same Approved-By, one more Scope bullet."""
+        text = self.sentinel.read_text(encoding="utf-8")
+        self.sentinel.write_text(
+            text.rstrip("\n") + "\n  - " + _TEAM_REL + "\n", encoding="utf-8"
+        )
+
+    @staticmethod
+    def _sha256_of(path: Path) -> str:
+        import hashlib as _h
+        return _h.sha256(path.read_bytes()).hexdigest()
+
+    # ---- P1-1: the ANCHORED bytes decide ---------------------------------
+
+    def test_p1_1_control_anchored_sentinel_grants_its_own_scope(self) -> None:
+        """Anti-vacuity (always-pass): an untouched anchored sentinel still
+        grants the path it declares. Without this, every block below could
+        be 'the unlock rail rejects everything'."""
+        d = self._decision(self.front_payload, env_extra=self._anchor_env())
+        self.assertNotEqual(d.get("decision"), "block", msg=d)
+        self.assertIn("PLAN-702", d.get("systemMessage", ""), msg=d)
+
+    def test_p1_1_repro_scope_added_after_the_anchor_does_not_grant(self) -> None:
+        """DEFECT REPRO (codex R2 P1-1): the sentinel PATH is anchored, so
+        an existence-only check passes it; the agent then appends its own
+        target to ``Scope:`` inside the window. Authorization must come
+        from the anchored bytes, so this must BLOCK."""
+        env = self._anchor_env()
+        self._mutate_sentinel_to_also_grant_team()
+        d = self._decision(self.team_payload, env_extra=env)
+        self.assertEqual(
+            d.get("decision"), "block",
+            msg="a Scope: bullet ADDED to an anchored sentinel inside the "
+                "unlock window granted the edit: {0}".format(d),
+        )
+
+    def test_p1_1_the_anchored_scope_is_what_governs(self) -> None:
+        """The remedy CHOICE, pinned (see class docstring): with the same
+        mutated file on disk, the ANCHORED scope keeps granting. A
+        reject-on-divergence implementation would block here — that is a
+        different, defensible design, and this test is what makes swapping
+        to it a deliberate act rather than a silent drift."""
+        env = self._anchor_env()
+        self._mutate_sentinel_to_also_grant_team()
+        d = self._decision(self.front_payload, env_extra=env)
+        self.assertNotEqual(
+            d.get("decision"), "block",
+            msg="the anchored Scope: stopped granting after unrelated "
+                "in-window bytes changed — self-DoS: {0}".format(d),
+        )
+
+    def test_p1_1_deleting_the_disk_sentinel_cannot_forge_a_grant(self) -> None:
+        """Interaction: the anchored text is read from git, so an emptied
+        on-disk sentinel neither grants more nor faults the hook. The
+        anchored Scope: is unchanged, so the anchored grant stands and the
+        UNGRANTED path still blocks."""
+        env = self._anchor_env()
+        self.sentinel.write_text("", encoding="utf-8")
+        self.assertEqual(
+            self._decision(self.team_payload, env_extra=env).get("decision"),
+            "block",
+        )
+        self.assertNotEqual(
+            self._decision(self.front_payload, env_extra=env).get("decision"),
+            "block",
+        )
+
+    # ---- P1-2: the git probe fits inside the wall budget ------------------
+    #
+    # NAMING: unlike the two static checks in ``Finding1WallDeadlineTest``,
+    # these DO want the root conftest's ``budget|timeout`` auto-serial
+    # marking — they mutate module globals in-process.
+
+    def test_p1_2_anchor_probe_timeout_is_derived_from_remaining_budget(self) -> None:
+        """The probe timeout must be bounded by what is LEFT of the
+        invocation budget, not by a literal that outlives it."""
+        mod = _load_hook()
+        self.assertTrue(
+            hasattr(mod, "_git_anchor_timeout"),
+            msg="the fix must derive the git anchor probe's timeout from the "
+                "remaining wall budget (codex R2 P1-2), the way "
+                "_gpg_verify_timeout already does",
+        )
+        with mock.patch.object(mod, "_WALL_DEADLINE_AT", None):
+            self.assertIsNotNone(mod._git_anchor_timeout())
+        # 1.6 s left: usable = 1.6 - emit margin. Must be under the budget.
+        with mock.patch.object(mod, "_now", lambda: 100.0), \
+                mock.patch.object(mod, "_WALL_DEADLINE_AT", 101.6):
+            bounded = mod._git_anchor_timeout()
+        self.assertIsNotNone(bounded)
+        self.assertLess(
+            bounded, 1.6,
+            msg="the probe may not consume the whole remainder — the hook "
+                "still has to EMIT after it: {0}".format(bounded),
+        )
+        self.assertLess(
+            bounded, float(mod._HOOK_WALL_BUDGET_S),
+            msg="probe timeout {0} >= the whole budget {1}".format(
+                bounded, mod._HOOK_WALL_BUDGET_S
+            ),
+        )
+
+    def test_p1_2_starved_budget_refuses_the_spawn_and_latches(self) -> None:
+        """With no room to both probe and emit, the fix must NOT fork: a
+        subprocess we cannot afford to wait out is the harness kill this
+        patch exists to remove. It latches instead, so the caller's next
+        deadline poll produces the fail-closed wall-deadline block."""
+        mod = _load_hook()
+        with mock.patch.object(mod, "_now", lambda: 100.0), \
+                mock.patch.object(mod, "_WALL_DEADLINE_AT", 100.1):
+            self.assertIsNone(mod._git_anchor_timeout())
+
+        spawned = []
+
+        class _NoSpawn(object):
+            PIPE = subprocess.PIPE
+            DEVNULL = subprocess.DEVNULL
+
+            @staticmethod
+            def run(*a, **kw):  # pragma: no cover - must never be reached
+                spawned.append(a)
+                raise AssertionError("spawned a git probe with no budget left")
+
+        with mock.patch.object(mod, "_now", lambda: 100.0), \
+                mock.patch.object(mod, "_WALL_DEADLINE_AT", 100.1), \
+                mock.patch.object(mod, "_WALL_BUDGET_EXHAUSTED", False), \
+                mock.patch.object(mod, "subprocess", _NoSpawn), \
+                mock.patch.dict(mod._ANCHOR_BLOB_CACHE, {}, clear=True):
+            out = mod._anchored_blob_text(self.project_dir, "0" * 40, "x.md")
+            self.assertIsNone(out)
+            self.assertTrue(
+                mod._WALL_BUDGET_EXHAUSTED,
+                msg="the refusal did not latch the budget — the caller would "
+                    "fall through to the generic block instead of the "
+                    "wall-deadline one",
+            )
+        self.assertEqual(spawned, [])
+
+    def test_p1_2_the_real_probe_is_called_with_the_bounded_timeout(self) -> None:
+        """Behavioral fence over the SITE, not just the helper: whatever
+        ``git`` call the fix makes, it carries the bounded timeout."""
+        mod = _load_hook()
+        seen = {}
+
+        class _Capture(object):
+            PIPE = subprocess.PIPE
+            DEVNULL = subprocess.DEVNULL
+
+            @staticmethod
+            def run(argv, **kw):
+                seen["argv"] = argv
+                seen["timeout"] = kw.get("timeout")
+                raise RuntimeError("probe intercepted")
+
+        with mock.patch.object(mod, "_now", lambda: 100.0), \
+                mock.patch.object(mod, "_WALL_DEADLINE_AT", 101.6), \
+                mock.patch.object(mod, "subprocess", _Capture), \
+                mock.patch.dict(mod._ANCHOR_BLOB_CACHE, {}, clear=True):
+            mod._anchored_blob_text(self.project_dir, "0" * 40, "x.md")
+        self.assertIn("git", seen.get("argv", [""])[0])
+        self.assertIsNotNone(
+            seen.get("timeout"), msg="git probe spawned with NO timeout"
+        )
+        self.assertLess(float(seen["timeout"]), 1.6)
+
+    # ---- P1-3: the recovery route survives, and it is documented ----------
+
+    def test_p1_3_repro_owner_digest_pin_grants_a_fresh_sentinel(self) -> None:
+        """DEFECT REPRO (codex R2 P1-3), stated as the missing capability:
+        the sentinel was authored in-session (it predates NO commit), which
+        is the exact ADR-119 use case for the unlock. Anchor-only, this is
+        unreachable — there is no value of CEO_SESSION_ANCHOR_SHA that
+        lets it through. With the Owner pinning its digest it must GRANT."""
+        env = dict(self.UNLOCK)
+        env["CEO_SENTINEL_UNLOCK_SHA256"] = self._sha256_of(self.sentinel)
+        d = self._decision(self.front_payload, env_extra=env)
+        self.assertNotEqual(
+            d.get("decision"), "block",
+            msg="an Owner-pinned fresh sentinel did not grant — the "
+                "documented unlock recovery route is bricked: {0}".format(d),
+        )
+
+    def test_p1_3_control_a_digest_pin_is_not_a_wildcard(self) -> None:
+        """The pin must bind CONTENT: a stale pin (the file changed after
+        the Owner hashed it) grants nothing."""
+        env = dict(self.UNLOCK)
+        env["CEO_SENTINEL_UNLOCK_SHA256"] = self._sha256_of(self.sentinel)
+        self._mutate_sentinel_to_also_grant_team()
+        d = self._decision(self.team_payload, env_extra=env)
+        self.assertEqual(d.get("decision"), "block", msg=d)
+        d2 = self._decision(self.front_payload, env_extra=env)
+        self.assertEqual(
+            d2.get("decision"), "block",
+            msg="bytes that no longer match the pinned digest still "
+                "granted: {0}".format(d2),
+        )
+
+    def test_p1_3_control_malformed_digest_fails_closed(self) -> None:
+        """A garbled trust input is never silently ignored — including
+        when a perfectly good anchor is ALSO present. Fail-closed on
+        unparseable security input (CLAUDE.md §4)."""
+        env = self._anchor_env()
+        env["CEO_SENTINEL_UNLOCK_SHA256"] = "not-a-sha256"
+        d = self._decision(self.front_payload, env_extra=env)
+        self.assertEqual(d.get("decision"), "block", msg=d)
+
+    def test_p1_3_control_pinning_one_sentinel_keeps_anchored_ones_working(
+        self,
+    ) -> None:
+        """Anti-self-DoS: a pin that names the NEW sentinel must not
+        invalidate the pack's pre-existing anchored ones — a digest miss
+        falls through to the anchor rail rather than terminating it."""
+        env = self._anchor_env()
+        fresh = self._write_sentinel("PLAN-703", [_TEAM_REL])
+        env["CEO_SENTINEL_UNLOCK_SHA256"] = self._sha256_of(fresh)
+        self.assertNotEqual(
+            self._decision(self.front_payload, env_extra=env).get("decision"),
+            "block",
+            msg="pinning a different sentinel broke the anchored one",
+        )
+        self.assertNotEqual(
+            self._decision(self.team_payload, env_extra=env).get("decision"),
+            "block",
+            msg="the pinned fresh sentinel did not grant",
+        )
+
+    def test_p1_3_block_reason_teaches_the_value_it_now_requires(self) -> None:
+        """The lockout the codex named: an operator following the
+        DOCUMENTED unlock recipe hits a block that tells them to declare a
+        path already declared. The reason must instead name the rail and
+        BOTH ways to satisfy it."""
+        d = self._decision(self.front_payload, env_extra=dict(self.UNLOCK))
+        self.assertEqual(d.get("decision"), "block", msg=d)
+        reason = d.get("reason", "")
+        for needle in ("CEO_SESSION_ANCHOR_SHA", "CEO_SENTINEL_UNLOCK_SHA256"):
+            self.assertIn(
+                needle, reason,
+                msg="the block does not teach {0}: {1!r}".format(needle, reason),
+            )
+
+    def test_p1_3_hint_is_absent_when_no_unlock_window_is_armed(self) -> None:
+        """Anti-noise control: an ordinary unsigned-edit block (no unlock
+        env at all) must NOT grow an unlock lecture."""
+        d = self._decision(self.team_payload)
+        self.assertEqual(d.get("decision"), "block", msg=d)
+        self.assertNotIn("CEO_SESSION_ANCHOR_SHA", d.get("reason", ""), msg=d)
+
+    def test_p1_3_contract_surfaces_document_the_new_requirement(self) -> None:
+        """P1-3 is a DOCUMENTATION defect as much as a code one: the
+        callers' contract (ADR-119, the SPEC) advertises only the old
+        pair. Fence it here so the doc update is load-bearing rather than
+        a promise in a NOTES file.
+
+        Read from the LIVE tree (never ``PLAN162_HOOK_PATH``) — the docs
+        and the hook land in the same commit."""
+        root = _HOOKS_DIR.parents[1]
+        surfaces = [
+            root / ".claude" / "adr" / "ADR-119-sentinel-unlock-contract.md",
+            root / "SPEC" / "v1" / "sentinel-format.schema.md",
+        ]
+        for doc in surfaces:
+            self.assertTrue(doc.exists(), msg="missing contract surface {0}".format(doc))
+            body = doc.read_text(encoding="utf-8")
+            for needle in ("CEO_SESSION_ANCHOR_SHA", "CEO_SENTINEL_UNLOCK_SHA256"):
+                # assertTrue, not assertIn: assertIn dumps the whole
+                # document into the failure message.
+                self.assertTrue(
+                    needle in body,
+                    msg="{0} does not document {1} — an unlock caller "
+                        "following it will fail closed with no way to supply "
+                        "the required value".format(doc.name, needle),
+                )
 
 
 # ===========================================================================

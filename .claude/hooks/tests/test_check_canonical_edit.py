@@ -150,7 +150,29 @@ class CheckCanonicalEditTest(TestEnvContext):
         rc, out, _ = self._invoke({"tool_input": {}})
         self.assertEqual(json.loads(out).get("decision", "allow"), "allow")
 
-    def test_malformed_payload_allows(self):
+    def test_malformed_payload_blocks(self):
+        """PLAN162_FIX_5B — a malformed payload now fails CLOSED.
+
+        REWRITTEN in the PLAN-162 W2 patch (was
+        ``test_malformed_payload_allows``). It pinned the posture finding
+        #5b reverses, so leaving it would have made the fix un-landable —
+        the C7 precedent (``test_indeterminate_plan_skips``): a test that
+        fixes the contract being changed is rewritten in the SAME patch,
+        never after.
+
+        ``event.parse_error`` is by name and construction the signal that
+        the PAYLOAD did not parse, i.e. security-matcher INPUT — and
+        CLAUDE.md §4 is literal that INPUT fails CLOSED while
+        INFRASTRUCTURE fails open. The sibling kernel hook already blocks
+        here; this hook was the drift. (The council's "ADR-010 mandates
+        fail-open" justification was verified FALSE: zero occurrences of
+        any failure-posture text in that ADR.)
+
+        The INFRA half of the old contract is unchanged and is pinned by
+        ``Finding5FailurePostureTest.test_5a_pin_read_event_exception_
+        still_allows`` in the PLAN-162 instrument file: an EXCEPTION out
+        of ``read_event`` still fail-OPENs.
+        """
         self._make_repo_layout()
         proc = subprocess.run(
             [sys.executable, str(_HOOK)],
@@ -160,7 +182,16 @@ class CheckCanonicalEditTest(TestEnvContext):
             timeout=10,
             env={**os.environ},
         )
-        self.assertEqual(json.loads(proc.stdout).get("decision", "allow"), "allow")
+        self.assertEqual(proc.returncode, 0, msg=proc.stderr)
+        decision = json.loads(proc.stdout)
+        self.assertEqual(
+            decision.get("decision"), "block", msg=proc.stdout
+        )
+        self.assertIn(
+            "canonical_edit_payload_parse_error",
+            decision.get("reason", ""),
+            msg=proc.stdout,
+        )
 
 
 class CanonicalGuardsExpansionTest(TestEnvContext):

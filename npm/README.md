@@ -56,7 +56,7 @@ All counts below are verifiable from a clean checkout (see *Verifying the number
 | Hooks wired in `settings.json` | **46** | distinct scripts, 48 event registrations |
 | Shared library modules | **68** | stdlib-only, under `.claude/hooks/_lib/` (excluding the package `__init__.py`) |
 | Slash commands | **27** | under `.claude/commands/` |
-| Architecture decision records | **185** | under `.claude/adr/` |
+| Architecture decision records | **186** | under `.claude/adr/` |
 | Tests | **~12,000 cases** | reported by `pytest --collect-only` across the hook, script, and conformance suites |
 
 The gap between **57 hook scripts** on disk and **46 wired** is benign: several non-event modules are activated through in-process dispatch (invoked by other hooks) rather than by a direct `settings.json` event registration.
@@ -119,7 +119,7 @@ Don't take the table on faith. From a clean checkout:
 ```bash
 find .claude/skills -name SKILL.md | wc -l        # 166 skills
 ls .claude/commands/*.md | wc -l                  # 27 slash commands
-ls .claude/adr | grep -c '^ADR-'                  # 185 ADRs
+ls .claude/adr | grep -c '^ADR-'                  # 186 ADRs
 python3 -m pytest --collect-only -q | tail -1     # ~12,000 collected cases
 ```
 
@@ -133,7 +133,7 @@ Intellectual honesty is the point, so the caveats are first-class:
 - **Same-vendor reviewer caveat.** The cross-model pair-rail reduces single-model blind spots, but the reviewer is still a large language model and can share failure modes with the model under review. It is defense-in-depth, not an independent oracle.
 - **Codex is not bundled — the pair-rail is inert until you install it.** The cross-model review rail invokes the [Codex CLI](https://github.com/openai/codex), which is **not** shipped with this framework. On a fresh install with no Codex present, the pair-rail **fails open and contributes zero review** — protected-path edits still pass the GPG ceremony, but no second model looks at them. You only get the cross-model rung after installing Codex separately. See [`docs/HONEST-LIMITATIONS.md`](docs/HONEST-LIMITATIONS.md) and ADR-145.
 - **Per-edit overhead.** Each governed tool call runs the hook chain before the action lands, adding roughly **~0.3–1.0s** of latency per edit on typical hardware. That is the cost of the gate; if you want zero overhead on routine work, the governance layer is not free.
-- **A gate can be wrong — there is an escape hatch.** Hooks fail *open* on their own infrastructure bugs, but a correct gate can still issue a DENY you disagree with (a false block on a protected path). The intended path is `/architect` (which routes the change through review) or, for a structural framework change, a PLAN-NNN with an Owner-signed sentinel (a GPG-signed approval record that authorizes a specific protected-path edit). For a deliberate, *audited* override of the canonical-edit gate, the Owner can set `CEO_SENTINEL_UNLOCK=<plan-id>` + `CEO_SENTINEL_UNLOCK_ACK=I-ACCEPT` for that action — the override itself is logged. Kernel-path hard-denies (an unconditional block on the most safety-critical files, which no sentinel can lift) need the stronger `CEO_KERNEL_OVERRIDE` ceremony. See [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md). To trial the framework without any of this friction, install with `--ceremony user` (advisory hooks, no signing).
+- **A gate can be wrong — there is an escape hatch.** Hooks fail *open* on their own infrastructure bugs, but a correct gate can still issue a DENY you disagree with (a false block on a protected path). The intended path is `/architect` (which routes the change through review) or, for a structural framework change, a PLAN-NNN with an Owner-signed sentinel (a GPG-signed approval record that authorizes a specific protected-path edit). For a deliberate, *audited* override of the canonical-edit gate, the Owner can set `CEO_SENTINEL_UNLOCK=<plan-id>` + `CEO_SENTINEL_UNLOCK_ACK=I-ACCEPT` for that action — the override itself is logged. (Because that window removes the signature check, the sentinel used inside it must also prove it is not one the agent wrote; the block reason names the value to set, and ADR-119 Invariant 5 explains both forms.) Kernel-path hard-denies (an unconditional block on the most safety-critical files, which no sentinel can lift) need the stronger `CEO_KERNEL_OVERRIDE` ceremony. See [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md). To trial the framework without any of this friction, install with `--ceremony user` (advisory hooks, no signing).
 - **Detection, not prevention, on the audit chain.** The HMAC chain tells you *that* the recorded log was altered; it cannot prevent an attacker with local write access from doing damage, and it is not a substitute for proper access controls or backups.
 - **Formal verification is scoped, not universal.** A TLA+ specification exists for the core state machine, but model-checking is **not** part of the enforcing CI gate — do not read "has a TLA+ spec" as "formally verified." The overwhelming majority of behavior is covered by conventional tests, not mechanized proof.
 - **It is a framework, not a product.** No UI, no managed runtime, no "operating system." It installs into your repo and gets out of the way.
