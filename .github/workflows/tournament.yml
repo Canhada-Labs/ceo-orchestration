@@ -119,9 +119,13 @@ jobs:
             --fixtures-count "$FIXTURES_COUNT" \
             --judge-runs "$JUDGE_RUNS" \
             --budget-usd "$TOURNAMENT_BUDGET_USD" \
-            2>&1 | tee projection.txt
+            | tee projection.txt
 
           # Extract the projected cost (first JSON doc on stdout)
+          # NOTE: stderr is deliberately NOT merged into the pipe — the
+          # runner banner on stderr lands ahead of the JSON and breaks
+          # json.load (JSONDecodeError line 2 col 1). stderr still reaches
+          # the job log directly.
           python3 -c "
           import json
           data = json.load(open('projection.txt'))

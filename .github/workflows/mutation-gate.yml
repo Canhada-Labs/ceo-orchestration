@@ -19,7 +19,11 @@
 # - redact leg ENFORCES kill-rate >= 80% and HARD-FAILS on an unreported
 #   rate (AC4). Slower legs emit partial-progress + ::warning, never fail.
 # - A single aggregate summary table reports module | killed/total | rate% |
-#   within-budget? | coverage full|partial (AC5).
+#   unresolved | within-budget? | coverage full|partial|run-failed (AC5).
+#   `unresolved` and `run-failed` were added by the codex S292 r4 review: the
+#   table used to report a kill-rate that counted UNRESOLVED mutants as killed,
+#   and could report one at all for a run that had crashed (the rate then came
+#   from the restored `.mutmut-cache`, i.e. from a previous run).
 # - Per-leg concurrency keyed on module + ref (legs never cancel each other,
 #   no cross-branch cancellation — AC6).
 # - 9-check security envelope preserved: SHA-pinned uses, contents:read,
@@ -71,8 +75,8 @@ jobs:
             enforce: "false"
     steps:
       - name: checkout
-        # SHA-pinned (PLAN-050 C12) — actions/checkout@v4.
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+        # SHA-pinned (PLAN-050 C12) — actions/checkout@v6.0.2.
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
 
       - name: setup python
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
@@ -127,13 +131,51 @@ jobs:
             --no-progress
           RC=$?
           set -e
+          # CODEX S292 r4 P2 — a FAILED run must not be scored from the cache.
+          #
+          # `.mutmut-cache` is RESTORED by actions/cache, and `mutmut junitxml`
+          # reads that DB rather than this run. So when `mutmut run` dies early
+          # (import error, missing dep, OOM), the exporter happily emits LAST
+          # WEEK's mutants and the leg reports a kill-rate belonging to a run
+          # that did not happen. The old branch made this worse by writing
+          # `full` for every non-124 exit.
+          #
+          # mutmut's exit code is a BIT MASK, not a success flag — verified
+          # against the installed mutmut 2.5.1, `compute_exit_code()` in
+          # mutmut/__init__.py: 1=fatal error, 2=survivors, 4=timeouts,
+          # 8=suspicious, bit-ORed. Non-zero is therefore the NORMAL outcome of
+          # a healthy leg: redact sits near 96%, so bit 1 is set on every green
+          # run. Treating non-zero as failure would paint every leg red — the
+          # trap this fix had to avoid — so the test is bit 0 alone.
+          #
+          #   124      -> `timeout`'s own code (the soft cap): existing partial path
+          #   <=15, even -> a COMPLETED run that found survivors/timeouts/suspicious
+          #   otherwise  -> fatal. Bit 0 set is mutmut's own error flag; >15 is not
+          #                 a mutmut code at all (127 not-found, 137 OOM, 143 TERM).
           if [ "$RC" -eq 124 ]; then
             echo "partial" > coverage.flag
-          else
+          elif [ "$RC" -le 15 ] && [ "$((RC & 1))" -eq 0 ]; then
             echo "full" > coverage.flag
+          else
+            echo "failed" > coverage.flag
+            echo "::error::mutmut run for '${{ matrix.module }}' FAILED (exit $RC) — the restored .mutmut-cache still holds the PREVIOUS run's mutants, so no junit is exported and this leg reports an unmeasured kill-rate"
           fi
-          mutmut results > mutation-results-${{ matrix.module }}.txt || true
-          mutmut junitxml > mutation-junit-${{ matrix.module }}.xml || true
+          if [ "$(cat coverage.flag)" != "failed" ]; then
+            mutmut results > mutation-results-${{ matrix.module }}.txt || true
+            # `--suspicious-policy` and `--untested-policy` both default to
+            # `ignore` (mutmut/__main__.py), which renders an UNRESOLVED mutant
+            # as a testcase with NO failure/error/skip element — i.e. as a PASS,
+            # i.e. as KILLED. Measured on mutmut 2.5.1 with a deliberately
+            # capped run: `mutmut results` reported 10 untested while the
+            # default junit reported tests=25 failures=1 errors=0 skipped=0, so
+            # the leg scored 96.0% on a run that resolved a fraction of its
+            # mutants. Asking for `error` puts them in the `errors` attribute,
+            # where the kill-rate computation below can subtract them. Without
+            # this flag the fix in that step is INERT — the information is not
+            # in the file at all.
+            mutmut junitxml --suspicious-policy=error --untested-policy=error \
+              > mutation-junit-${{ matrix.module }}.xml || true
+          fi
 
       - name: compute kill-rate + AC2b superset check + AC4 enforce + AC5 row
         env:
@@ -141,38 +183,131 @@ jobs:
           ENFORCE: ${{ matrix.enforce }}
         run: |
           python3 - <<'PY'
-          import os, re, sys
+          import os, sys
+          import xml.etree.ElementTree as ET
           from pathlib import Path
           mod = os.environ["MODULE"]
           enforce = os.environ.get("ENFORCE") == "true"
           base = Path(".claude/hooks/_lib")
-          res = base / f"mutation-results-{mod}.txt"
+          jx = base / f"mutation-junit-{mod}.xml"
           cov = (base / "coverage.flag").read_text().strip() if (base / "coverage.flag").exists() else "full"
 
-          killed = survived = total = 0
+          killed = survived = total = unresolved = 0
           rate = None
-          if res.exists():
-              text = res.read_text()
-              killed = sum(int(m) for m in re.findall(r"killed[:\s]+(\d+)", text, re.I))
-              survived = sum(int(m) for m in re.findall(r"survived[:\s]+(\d+)", text, re.I))
-              total = killed + survived
-              if total:
-                  rate = killed / total * 100.0
+          # mutmut 2.x `results` NEVER prints a "killed: N" line, and its
+          # survivor header ("Survived 🙁 (38)") defeats a
+          # `survived[:\s]+(\d+)` regex — so the old txt parse always
+          # yielded 0/0 and every leg reported n/a. Parse the junit XML
+          # from `mutmut junitxml` instead: tests == total mutants,
+          # failures == survived mutants, killed == total - survived.
+          # The st_size guard keeps a timed-out leg (absent or empty XML)
+          # on the existing partial/advisory path (AC4).
+          #
+          # A MALFORMED but non-empty file lands there too (codex S292 r2 P2).
+          # The producer is `mutmut junitxml > ... || true`, so a killed or
+          # failed exporter leaves whatever it had already written — a
+          # truncated document, or a traceback. An unguarded ET.parse then
+          # raised, and the step died BEFORE writing its leg row or its
+          # advisory warning: measured, all four malformed vectors produced a
+          # traceback, no `leg-*.row`, and no summary line, so the aggregate
+          # job lost the leg entirely instead of seeing "unreported".
+          # Catching leaves `rate` unset, which is a state the rest of this
+          # step already handles correctly in BOTH legs — advisory warns and
+          # still emits its row, enforce hard-fails via AC4. The failure mode
+          # is therefore reported, not crashed into.
+          #
+          # ParseError covers the malformed document; ValueError covers a
+          # well-formed document whose `tests`/`failures` are not integers
+          # (same class — the file exists but does not answer the question);
+          # OSError covers an unreadable file. TypeError is deliberately NOT
+          # caught: that would mean this code is wrong, not the input.
+          # A FAILED run is not read at all (codex S292 r4 P2). The junit the
+          # exporter would produce comes from the RESTORED `.mutmut-cache`, so
+          # parsing it here would report a previous run's mutants as this run's
+          # measurement. The producer already skips the export; this is the
+          # second, independent rail — the flag is authoritative even if a
+          # stale XML reaches the workspace some other way.
+          if cov == "failed":
+              print(f"::warning::{mod} mutation run FAILED — junit deliberately "
+                    f"not read (it would score the restored cache, i.e. a "
+                    f"previous run) — kill-rate reported as unmeasured")
+          elif jx.exists() and jx.stat().st_size:
+              try:
+                  root = ET.parse(jx).getroot()
+                  suite = root if root.tag == "testsuite" else root.find("testsuite")
+                  if suite is not None:
+                      # KILLED IS NOT `total - survived` (codex S292 r4 P2).
+                      # That formula counts every mutant mutmut did NOT resolve
+                      # as killed: `errors` are BAD_TIMEOUT plus (with the
+                      # policies this workflow now passes) OK_SUSPICIOUS and
+                      # UNTESTED, and `skipped` is whatever a future policy
+                      # routes there. None of them is evidence the test suite
+                      # caught anything.
+                      #
+                      # Measured on mutmut 2.5.1, one capped run, ONE junit
+                      # file — so this is a paired comparison of two formulas
+                      # over identical input, not two runs: tests=22
+                      # failures=1 errors=8 -> old `total - survived` reports
+                      # 95.5%, this formula reports 59.1%. The 8 were mutants
+                      # the cap never got to.
+                      #
+                      # Unresolved mutants stay in the DENOMINATOR on purpose.
+                      # Dividing by the resolved set instead would let a leg
+                      # that resolved three mutants and killed three of them
+                      # report 100%; keeping `total` whole means an unresolved
+                      # mutant can only ever LOWER the reported rate, which is
+                      # the direction a floor gate must fail in.
+                      total = int(suite.get("tests") or 0)
+                      survived = int(suite.get("failures") or 0)
+                      unresolved = (int(suite.get("errors") or 0)
+                                    + int(suite.get("skipped") or 0))
+                      killed = total - survived - unresolved
+                      if total and killed >= 0:
+                          rate = killed / total * 100.0
+                      else:
+                          # A negative killed count means the document does not
+                          # describe a mutation run (the parts exceed the
+                          # whole). Same treatment as a malformed file.
+                          killed = survived = total = unresolved = 0
+                          print(f"::warning::{mod} junit XML is internally "
+                                f"inconsistent (failures+errors+skipped exceed "
+                                f"tests) — treating the kill-rate as unreported")
+              except (ET.ParseError, ValueError, OSError) as exc:
+                  # Reset: a partial parse must not leak half-numbers into the
+                  # row, where `killed/total` would read as a real measurement.
+                  killed = survived = total = unresolved = 0
+                  rate = None
+                  print(f"::warning::{mod} junit XML is unreadable "
+                        f"({exc.__class__.__name__}: {exc}) — treating the "
+                        f"kill-rate as unreported")
 
-          coverage = "full" if cov == "full" else f"partial({killed + survived}/?)"
+          if cov == "full":
+              coverage = "full"
+          elif cov == "failed":
+              coverage = "run-failed"
+          else:
+              coverage = f"partial({killed + survived}/?)"
           within = "yes" if cov == "full" else "no"
           rate_s = f"{rate:.1f}%" if rate is not None else "n/a"
+          # Reported as its own column rather than folded into the rate: a
+          # leg at 96% with 200 unresolved mutants and a leg at 96% with none
+          # are not the same result, and the aggregate table is the only place
+          # a reader would ever notice the difference.
+          unresolved_s = str(unresolved) if rate is not None else "n/a"
 
           # AC5 row (this job's summary; the aggregate job builds the single table).
           summ = os.environ.get("GITHUB_STEP_SUMMARY")
           if summ:
               with open(summ, "a") as fh:
-                  fh.write(f"| {mod} | {killed}/{total} | {rate_s} | {within} | {coverage} |\n")
+                  fh.write(f"| {mod} | {killed}/{total} | {rate_s} | "
+                           f"{unresolved_s} | {within} | {coverage} |\n")
 
           # Machine-readable row for the aggregate job. MUST live next to the
           # other leg artifacts (the upload step globs `.claude/hooks/_lib/`).
+          # Six fields — the aggregate's header below must match.
           (base / f"leg-{mod}.row").write_text(
-              f"{mod}|{killed}/{total}|{rate_s}|{within}|{coverage}\n", encoding="utf-8")
+              f"{mod}|{killed}/{total}|{rate_s}|{unresolved_s}|{within}|{coverage}\n",
+              encoding="utf-8")
 
           # AC2b — superset-preserving proof for the redact leg: if a recorded
           # baseline kill-rate exists, the narrowed runner must reproduce it
@@ -211,12 +346,113 @@ jobs:
           PY
 
       - name: redact artifact before upload
+        id: redact
         if: always()
         run: |
+          # backup-audit.py has NO --redact flag — the previous call failed
+          # on every run and `|| true` swallowed the error, so the artifact
+          # was uploaded UNREDACTED. Redact via the canonical _lib/redact.py
+          # redactor (max_chars=0 = no preview truncation).
+          #
+          # FAIL-CLOSED ON THE FILE, NOT ON THE EXIT CODE (codex S292 r3 P1).
+          # The first version of this fix only exited non-zero on failure and
+          # left the ORIGINAL in place — and the upload step below runs with
+          # `if: always()`, so it shipped the unredacted file anyway. A step
+          # that "fails" while the artifact still leaves the runner is not
+          # fail-closed; it is a red check next to a leak.
+          #
+          # So the source is REMOVED on any failure — import, read, redact or
+          # write. That outcome does not depend on the uploader's `if:`
+          # expression, which is what makes it a rail rather than an
+          # agreement between two steps. The `quarantine` step below is the
+          # second, independent rail, for the case where this process never
+          # reaches its own error handler (OOM-kill, step timeout).
+          #
+          # The write is TEMP-THEN-REPLACE, not in-place: `write_text`
+          # truncates first, so a crash mid-write used to leave a short file
+          # whose surviving prefix was still unredacted. `os.replace` is
+          # atomic, so the file is either fully redacted or absent.
+          #
+          # A missing file (timed-out leg) is NOT a failure — it is the
+          # documented AC4 partial path — and exits 0 without a row.
           SRC=".claude/hooks/_lib/mutation-results-${{ matrix.module }}.txt"
-          if [ -f "$SRC" ]; then
-            python3 .claude/scripts/backup-audit.py --redact "$SRC" || true
-          fi
+          python3 - "$SRC" <<'PY'
+          import sys
+          from pathlib import Path
+
+          p = Path(sys.argv[1])
+
+
+          def quarantine(why):
+              """Remove the unredacted source, then fail the step."""
+              try:
+                  p.unlink()
+                  fate = "removed"
+              except FileNotFoundError:
+                  fate = "already absent"
+              except OSError as exc:
+                  print(f"::error::redaction failed AND the unredacted "
+                        f"{p} could not be removed ({exc}) — treat this "
+                        f"run's artifact as untrusted")
+                  sys.exit(1)
+              print(f"::error::redaction FAILED ({why}) — unredacted source "
+                    f"{fate}; the leg artifact will not carry it")
+              sys.exit(1)
+
+
+          if not p.is_file():
+              print(f"nothing to redact (missing: {p})")
+              sys.exit(0)
+
+          try:
+              sys.path.insert(0, ".claude/hooks/_lib")
+              from redact import redact_secrets, _MAX_INPUT_CHARS
+              raw = p.read_text(encoding="utf-8")
+              # codex S292 r7 P2: redact_secrets() TRUNCA A ENTRADA em
+              # _MAX_INPUT_CHARS (64 KiB) — `max_chars=0` desliga só o
+              # limite de PREVIEW, não esse. Um artifact de diagnostico
+              # maior que isso subiria silenciosamente cortado. Redigir em
+              # blocos preserva o arquivo inteiro; os padroes de segredo
+              # sao line-oriented, entao cortamos em fronteira de linha
+              # para nenhum match ficar partido entre blocos.
+              chunks, buf, size = [], [], 0
+              for line in raw.splitlines(keepends=True):
+                  if size + len(line) > _MAX_INPUT_CHARS and buf:
+                      chunks.append("".join(buf)); buf, size = [], 0
+                  buf.append(line); size += len(line)
+              if buf:
+                  chunks.append("".join(buf))
+              cleaned = "\n".join(
+                  redact_secrets(c, max_chars=0) for c in chunks) or ""
+          except Exception as exc:
+              quarantine(f"{exc.__class__.__name__}: {exc}")
+
+          tmp = p.with_name(p.name + ".redacted")
+          try:
+              tmp.write_text(cleaned, encoding="utf-8")
+              tmp.replace(p)
+          except Exception as exc:
+              try:
+                  tmp.unlink()
+              except OSError:
+                  pass
+              quarantine(f"write: {exc.__class__.__name__}: {exc}")
+
+          print(f"redacted in-place: {p}")
+          PY
+
+      # Second, INDEPENDENT rail. The step above removes the source from
+      # inside its own error handler; this one covers the case where that
+      # handler never runs (the process is killed, or the step hits the job
+      # timeout). Deliberately NOT a condition on the upload itself: gating
+      # the whole upload would also drop `leg-*.row`, and the r2 fix exists
+      # precisely so a broken leg reports "unreported" instead of vanishing
+      # from the aggregate.
+      - name: quarantine unredacted results if redaction did not succeed
+        if: always() && steps.redact.outcome != 'success'
+        run: |
+          rm -f ".claude/hooks/_lib/mutation-results-${{ matrix.module }}.txt"
+          echo "::warning::redaction step outcome was '${{ steps.redact.outcome }}' — unredacted results file dropped before upload"
 
       - name: upload leg artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
@@ -248,12 +484,14 @@ jobs:
           {
             echo "## mutation-gate-advisory — kill-rate summary"
             echo ""
-            echo "| module | killed/total | rate% | within-budget? | coverage |"
-            echo "|---|---|---|---|---|"
+            echo "| module | killed/total | rate% | unresolved | within-budget? | coverage |"
+            echo "|---|---|---|---|---|---|"
             for row in legs/leg-*.row; do
               [ -f "$row" ] && sed 's/|/ | /g; s/^/| /; s/$/ |/' "$row"
             done
             echo ""
             echo "_redact leg is enforcing (>=80% floor, ADR-044/PLAN-093 AC15); other legs advisory._"
             echo "_A module absent from the table timed out past the 60-min job cap (partial — see AC4)._"
+            echo "_\`unresolved\` = mutants mutmut neither killed nor confirmed survived (timeout / suspicious / untested). They are NOT counted as killed and stay in the denominator, so they can only lower the rate._"
+            echo "_\`coverage: run-failed\` = the mutmut run itself died; no junit was read, because the restored cache would have scored a previous run._"
           } >> "$GITHUB_STEP_SUMMARY"
