@@ -160,7 +160,11 @@ jobs:
             --exclude='*.pyc'
             --exclude='.pytest_cache/'
           )
-          for src in scripts templates .claude SPEC VERSION LICENSE README.md PROTOCOL.md; do
+          # GA-F3 (S288, fechado S293): README.md FORA da lista — rsync do README
+          # raiz sobrescrevia o npm/README.md REVISADO (stamp de review é gate de
+          # release em verify-counts VERSION_SITES). O npm publica o npm/README.md
+          # rastreado, que é a cópia npm-facing revisada a cada bump.
+          for src in scripts templates .claude SPEC VERSION LICENSE PROTOCOL.md; do
             if [[ -e "$src" ]]; then
               rsync -a --delete --delete-excluded "${RSYNC_EXCLUDES[@]}" "$src" "npm/"
             fi
