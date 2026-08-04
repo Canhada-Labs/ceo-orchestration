@@ -1,0 +1,184 @@
+diff --git a/.claude/commands/night-mode.md b/.claude/commands/night-mode.md
+index 9f110fb..9bdf70b 100644
+--- a/.claude/commands/night-mode.md
++++ b/.claude/commands/night-mode.md
+@@ -1,7 +1,7 @@
+ ---
+-description: Owner-invoked autonomy posture toggle — arm acceptEdits for the NEXT session via the per-machine settings overlay, reversibly and audited — /night-mode on|off|status
++description: Owner-invoked autonomy posture toggle — hands you the exact command to arm acceptEdits for the NEXT session, reversibly and audited — /night-mode on|off|status
+ argument-hint: "on|off|status"
+-allowed-tools: Bash, Read
++allowed-tools: Read
+ ---
+ 
+ # /night-mode — Owner autonomy posture toggle (PLAN-165)
+@@ -12,17 +12,54 @@ Arms or disarms a per-machine autonomy posture: `on` sets
+ `permissions.defaultMode: "acceptEdits"` in the gitignored
+ `.claude/settings.local.json` overlay; `off` restores the snapshotted
+ prior value. The tracked `.claude/settings.json` (the published
+-fail-closed default, `defaultMode: "manual"` + `disableAutoMode:
+-"disable"`) is **never touched**. All logic lives in
+-`.claude/scripts/night-mode.py` — this command is a thin driver.
+-
+-## Argument parsing
+-
+-The user invoked: `/night-mode $ARGUMENTS`.
+-
+-Parse the first token as the subcommand. Accept case-insensitive
+-`on` / `off` / `status`. Default (no argument) = `status`. Reject any
+-other token with a short usage line — do not guess.
++fail-closed default, `defaultMode: "manual"`) is **never touched**. All
++logic lives in `.claude/scripts/night-mode.py`.
++
++## ⛔ This command does NOT run the toggle — you do
++
++**Owner-ratified OQ1-redo (2026-08-03): arming or disarming the autonomy
++posture is a HUMAN action.** The model rail does not flip the posture of
++your next session; a human at the keyboard does.
++
++**What actually enforces this, without overclaiming** (codex S292 r7 P1 —
++the earlier wording said "denies every model-rail invocation", which is
++false and measurably so):
++
++- **Closed, both rails:** Edit/Write of the writer, the overlay and the
++  marker (`.claude/settings.json` deny + `_CANONICAL_GUARDS`, which the
++  Bash rail keys off). A tool write or a shell redirect cannot touch them.
++- **Best-effort, not a boundary:** `check_bash_safety`
++  (`_e4_check_posture_toggle_invocation`, PLAN-165 NF-08) blocks the
++  invocation shapes a STATIC shell parse can recognise — and static
++  parsing of bash is not complete. A RENAMED INTERPRETER
++  (`./zz-interp .claude/scripts/night-mode.py on`) is measured to pass
++  both the matcher and the script's self-path guard, because the script
++  that ends up running IS the canonical one
++  (`nf08-invocation-guard-NOTES.md` §7 residual 5).
++- **Therefore:** a session with broad Bash permission can still arm the
++  next session's posture. These controls raise the cost and make the
++  honest path obvious; they do not make it impossible. The real perimeter
++  is the CURRENT session's `defaultMode` + Bash allowlist.
++
++Reading the script and its state (cat/grep/git) stays open.
++
++So this command is a **teleprompter, not a driver**. Claude's whole job
++here is to hand you one line to run yourself.
++
++### How Claude must respond
++
++1. Parse the first token of `$ARGUMENTS` as the subcommand. Accept
++   case-insensitive `on` / `off` / `status`. Default (no argument) =
++   `status`. Reject any other token with a short usage line — do not
++   guess.
++2. Print the matching command from the sections below, prefixed with
++   `!` so the operator can run it on the human rail of this session
++   (the `!` prefix executes in the terminal, not through the model's
++   Bash tool). A terminal outside Claude Code works identically.
++3. Print the one-line reminder that goes with that subcommand.
++4. **Stop.** Do not call Bash. Do not "helpfully" verify by running the
++   script. If the operator pastes the output back, read it and explain
++   it — that is the whole loop.
+ 
+ ## Next-session semantics (the whole point)
+ 
+@@ -37,9 +59,14 @@ operator. If you need autonomy *now*, start a new session after `on`.
+ 
+ ## `on` — arm night mode
+ 
+-```bash
+-python3 .claude/scripts/night-mode.py on
++Command for the operator to run:
++
+ ```
++! python3 .claude/scripts/night-mode.py on
++```
++
++Reminder to print with it:
++`night-mode: takes effect on the NEXT session; run /night-mode off in the morning.`
+ 
+ The script (single writer — direct Edit/Write of the overlay is denied
+ by policy):
+@@ -56,16 +83,13 @@ by policy):
+    mode it wrote.
+ 4. Emits the `night_mode_toggled` audit action (HMAC-chained).
+ 
+-Relay the script's output verbatim. On success, remind the user:
+-`night-mode: ON — takes effect on the NEXT session; run /night-mode off in the morning.`
+-
+ `on` twice is an idempotent no-op (exit 0). The script **refuses to run
+ when `CI` is set** — this is an operator/local-machine control only.
+ 
+ ## `off` — disarm night mode
+ 
+-```bash
+-python3 .claude/scripts/night-mode.py off
++```
++! python3 .claude/scripts/night-mode.py off
+ ```
+ 
+ Restores the snapshotted `defaultMode` (or removes the key if none
+@@ -83,8 +107,8 @@ untouched, marker left in place as evidence. `bypassPermissions` and
+ 
+ ### `off --discard-snapshot` — recovery from a refusal
+ 
+-```bash
+-python3 .claude/scripts/night-mode.py off --discard-snapshot
++```
++! python3 .claude/scripts/night-mode.py off --discard-snapshot
+ ```
+ 
+ The sanctioned exit from **every** fail-closed refusal above: it removes
+@@ -104,8 +128,8 @@ leave the posture armed with no way to disarm it.
+ 
+ ## `status` — report resolved posture
+ 
+-```bash
+-python3 .claude/scripts/night-mode.py status
++```
++! python3 .claude/scripts/night-mode.py status
+ ```
+ 
+ Prints:
+@@ -118,7 +142,15 @@ Prints:
+ - whether the marker and the resolved configuration **agree**.
+ 
+ Truth comes from the resolver, not the marker. The marker is
+-decoration; `/ceo-boot`'s advisory banner is also resolver-derived.
++decoration.
++
++`status` is read-only, and it is denied to the model rail anyway: the
++invocation guard keys off the *script*, not the subcommand, because a
++permissive carve-out driven by argv parsing is exactly the shape the
++fail-closed doctrine rejects. Claude does have a model-rail read of the
++same fact — **`/ceo-boot`'s advisory night-mode banner is
++resolver-derived** and needs no subprocess. Use that when Claude needs
++to *know* the posture; use `! … status` when you want the full report.
+ 
+ ## Escape valve — real bypass is NOT this command
+ 
+@@ -127,7 +159,7 @@ Night-mode tops out at `acceptEdits`. It never writes
+ red in `/ceo-boot` by design, in any layer (PLAN-165 D1). If you truly
+ need a full-bypass session, the honest path is one-shot and explicit:
+ 
+-```bash
++```
+ claude --permission-mode bypassPermissions   # one session, explicit, ephemeral
+ ```
+ 
+@@ -144,6 +176,8 @@ the tree is dirty after a toggle, something wrote outside the contract
+ 
+ ## Troubleshooting
+ 
++- **"Claude refused to run it for me"** — by design (OQ1-redo). Run the
++  `!` line yourself; paste the output back if you want it read.
+ - **"I ran `on` but the session still prompts"** — the toggle is
+   next-session; the running session keeps its boot posture. Start a
+   new session.
+@@ -162,8 +196,8 @@ the tree is dirty after a toggle, something wrote outside the contract
+   fail-CLOSED: the overlay is untouched and the marker is kept as
+   evidence. Recover with:
+ 
+-  ```bash
+-  python3 .claude/scripts/night-mode.py off --discard-snapshot
++  ```
++  ! python3 .claude/scripts/night-mode.py off --discard-snapshot
+   ```
+ 
+   This removes the override and the marker without honoring the

@@ -1,0 +1,972 @@
+diff --git a/.claude/hooks/_lib/audit_emit.py b/.claude/hooks/_lib/audit_emit.py
+index e18bf3e..c2681b0 100644
+--- a/.claude/hooks/_lib/audit_emit.py
++++ b/.claude/hooks/_lib/audit_emit.py
+@@ -2173,6 +2173,13 @@ _PAIR_RAIL_CASE_EMIT_ALLOWLIST = frozenset({
+     # `pair_rail_review_expected`). Shape-gated in the typed wrapper AND
+     # re-coerced in the emit_generic dispatch branch.
+     "review_id",
++    # ADR-110-AMEND-2 §1.6 — the EFFECTIVE post-clamp codex budget this
++    # invocation ran under, as INTEGER MILLISECONDS (canonical_json
++    # no-float invariant; same encoding as `dispatcher_route.wall_clock_ms`).
++    # Disambiguates a case F caused by a sub-floor CEO_PAIR_RAIL_TIMEOUT_S
++    # export from a genuine Codex outage (§4(i) residual). Bounded in the
++    # typed wrapper AND re-coerced in the emit_generic dispatch branch.
++    "timeout_ms",
+ })
+ 
+ 
+@@ -5751,6 +5758,16 @@ def emit_generic(action: str, **kwargs: Any) -> None:
+         if not (isinstance(_prc_rid, str)
+                 and _PAIR_RAIL_REVIEW_ID_RE.fullmatch(_prc_rid)):
+             event["review_id"] = ""
++        # ADR-110-AMEND-2 §1.6 — VALUE re-coercion for the effective-budget
++        # field: bounded INTEGER milliseconds. A direct emit_generic caller
++        # passing float seconds (the shape the amendment prose names) would
++        # otherwise trip the canonical_json no-float invariant and the spool
++        # writer would DROP the whole case row — manufacturing the /ceo-boot
++        # S254 liveness deficit this action exists to disprove.
++        if "timeout_ms" in event:
++            event["timeout_ms"] = _coerce_pair_rail_timeout_ms(
++                event["timeout_ms"]
++            )
+         event, dropped = _scrub_ceo_boot_event(
+             event, _PAIR_RAIL_CASE_EMIT_ALLOWLIST
+         )
+@@ -7212,6 +7229,13 @@ def emit_generic(action: str, **kwargs: Any) -> None:
+         if not (isinstance(_pre_rid, str)
+                 and _PAIR_RAIL_REVIEW_ID_RE.fullmatch(_pre_rid)):
+             event["review_id"] = ""
++        # ADR-110-AMEND-2 §1.6 — see the pair_rail_case branch: bounded
++        # INTEGER milliseconds; float seconds from a direct caller would
++        # drop the whole denominator row at canonical_json.
++        if "timeout_ms" in event:
++            event["timeout_ms"] = _coerce_pair_rail_timeout_ms(
++                event["timeout_ms"]
++            )
+         event, dropped = _scrub_ceo_boot_event(
+             event, _PAIR_RAIL_REVIEW_EXPECTED_ALLOWLIST)
+         if dropped:
+@@ -7642,10 +7666,39 @@ _PAIR_RAIL_FILE_HASH_PREFIX_RE = re.compile(r"^[0-9a-f]{0,16}$")
+ _PAIR_RAIL_REVIEW_ID_RE = re.compile(r"^([0-9a-f]{16})?$")
+ 
+ _PAIR_RAIL_REVIEW_EXPECTED_ALLOWLIST = _CODEX_AUDIT_ENVELOPE | frozenset({
+-    "tool_name", "file_path_hash_prefix", "review_id",
++    # ADR-110-AMEND-2 §1.6 — `timeout_ms`: the EFFECTIVE post-clamp codex
++    # budget in INTEGER MILLISECONDS (canonical_json forbids floats in
++    # HMAC-covered fields; a float here is not merely rejected — the spool
++    # writer DROPS the whole event). Carried on BOTH pair-rail liveness
++    # actions so the expected/case pair records the budget it ran under.
++    "tool_name", "file_path_hash_prefix", "review_id", "timeout_ms",
+ })
+ 
+ 
++# ADR-110-AMEND-2 §1.6 — shared bound for the pair-rail effective-budget
++# field. 6_000_000 ms = 6000 s = 10x the hook's own 600 s clamp ceiling:
++# wide enough that a legitimate value is never distorted, tight enough
++# that a direct emit_generic caller cannot sign an unbounded number.
++_PAIR_RAIL_TIMEOUT_MS_MAX = 6_000_000
++
++
++def _coerce_pair_rail_timeout_ms(value: Any) -> int:
++    """Bound an effective-budget value to `[0, 6_000_000]` integer ms.
++
++    Deny-by-default VALUE coercion (Sec MF-3): a non-numeric, boolean,
++    NaN or infinite input becomes `0` (the "unknown budget" sentinel)
++    rather than reaching the signed chain. `bool` is rejected explicitly
++    because `isinstance(True, int)` would otherwise sign `1` as a budget.
++    """
++    if isinstance(value, bool):
++        return 0
++    try:
++        ms = int(value)
++    except (TypeError, ValueError, OverflowError):
++        return 0
++    return max(0, min(_PAIR_RAIL_TIMEOUT_MS_MAX, ms))
++
++
+ # ---------------------------------------------------------------------------
+ # PLAN-163 T3.1/T3.2 (CC 2.1.220 substrate uplift / ADR-183) — the two new
+ # harness lifecycle actions. Sec MF-3 deny-by-default; every branch also
+@@ -8965,6 +9018,7 @@ def emit_pair_rail_review_expected(
+     tool_name: str = "unknown",
+     file_path_hash_prefix: str = "",
+     review_id: str = "",
++    timeout_ms: int = 0,
+     project: str = "",
+ ) -> None:
+     """Emit pair_rail_review_expected (PLAN-161 W2 C5 / CF-9 denominator).
+@@ -9000,9 +9054,24 @@ def emit_pair_rail_review_expected(
+     the /ceo-boot expected/terminal pairing per (session, file-hash)
+     BUCKET for id-less (pre-land / fail-open no-id) events only.
+ 
++    ADR-110-AMEND-2 §1.6: `timeout_ms` is the EFFECTIVE post-clamp codex
++    budget the paired review ran under, as INTEGER MILLISECONDS (bounded
++    `[0, 6_000_000]`, off-shape COERCED to 0 = "unknown budget"). It is
++    NOT float seconds: `canonical_json` forbids floats in HMAC-covered
++    fields, and the failure is not benign — the spool writer drops the
++    WHOLE event with only an `audit-log.errors` breadcrumb, which for
++    these two actions would manufacture the very /ceo-boot liveness
++    deficit they exist to measure. Same encoding + rationale as
++    `dispatcher_route.wall_clock_ms`; divide by 1000 to recover seconds.
++    Its purpose is §4(i): before it existed, a session exporting
++    `CEO_PAIR_RAIL_TIMEOUT_S=5` produced a case F byte-indistinguishable
++    from a genuine Codex outage — the quiet knob was stealthier than the
++    documented kill-switch.
++
+     Deny-by-default: the ONLY caller fields are `session_id` + the
+     closed-enum `tool_name` (off-enum COERCED to "unknown") + the bounded
+-    `file_path_hash_prefix` + the bounded `review_id`. Raw file paths and
++    `file_path_hash_prefix` + the bounded `review_id` + the bounded
++    integer `timeout_ms`. Raw file paths and
+     content bodies are NEVER persisted. Fail-open per audit_emit contract.
+     NEVER routes through _EMIT_GENERIC_PASSTHROUGH.
+     """
+@@ -9031,6 +9100,8 @@ def emit_pair_rail_review_expected(
+         "tool_name": safe_tool,
+         "file_path_hash_prefix": safe_prefix,
+         "review_id": safe_rid,
++        # ADR-110-AMEND-2 §1.6 — bounded integer ms, never float seconds.
++        "timeout_ms": _coerce_pair_rail_timeout_ms(timeout_ms),
+     }
+     cleaned, dropped = _scrub_ceo_boot_event(
+         raw_event, _PAIR_RAIL_REVIEW_EXPECTED_ALLOWLIST
+@@ -10391,10 +10462,18 @@ def emit_pair_rail_case(
+     human_triage_grace_h: int = 0,
+     session_id: str = "",
+     review_id: str = "",
++    timeout_ms: int = 0,
+     project: str = "",
+ ) -> None:
+     """Emit ``pair_rail_case`` event from check_pair_rail.py:_decide_with_matrix.
+ 
++    ADR-110-AMEND-2 §1.6: ``timeout_ms`` is the EFFECTIVE post-clamp codex
++    budget this invocation ran under, as INTEGER MILLISECONDS (bounded
++    `[0, 6_000_000]`, off-shape COERCED to 0). NOT float seconds — see
++    `emit_pair_rail_review_expected` for why a float would drop the whole
++    event. It disambiguates a case F produced by a sub-floor
++    `CEO_PAIR_RAIL_TIMEOUT_S` export from a genuine Codex outage (§4(i)).
++
+     PLAN-161 C5 r5 F2 + r6 F2: ``review_id`` (EXACTLY 16 lowercase hex or
+     exactly ""; the RAW value is validated before any bounding — off-shape
+     incl. oversize is DROPPED to "", never truncated) is the
+@@ -10448,6 +10527,8 @@ def emit_pair_rail_case(
+         jaccard_similarity_bucket=safe_jaccard,
+         human_triage_grace_h=safe_grace_h,
+         review_id=safe_rid,
++        # ADR-110-AMEND-2 §1.6 — bounded integer ms, never float seconds.
++        timeout_ms=_coerce_pair_rail_timeout_ms(timeout_ms),
+         project=project,
+     )
+ 
+diff --git a/.claude/hooks/check_pair_rail.py b/.claude/hooks/check_pair_rail.py
+index d831aeb..2fc5afa 100755
+--- a/.claude/hooks/check_pair_rail.py
++++ b/.claude/hooks/check_pair_rail.py
+@@ -48,7 +48,7 @@ Documented in `routing-matrix.md` §L3-classifier.
+ ##  a preset review on ANY path; tests inject a review by mocking
+ ##  `_invoke_codex_review` at the invoke boundary, never via env.)
+ 
+-- `CEO_PAIR_RAIL_TIMEOUT_S` (default 120) — Codex invoke wall-clock
++- `CEO_PAIR_RAIL_TIMEOUT_S` (default 180) — Codex invoke wall-clock
+   cap. On timeout: fail-OPEN.
+ - `CEO_PAIR_RAIL_DISABLE` — kill-switch: when set to `1`, hook is a
+   no-op (allow). For incident response.
+@@ -1466,9 +1466,14 @@ def _decide(
+     global _CURRENT_REVIEW_ID
+     review_id = os.urandom(8).hex()
+     _CURRENT_REVIEW_ID = review_id
++    # ADR-110-AMEND-2 §1.6 / §4(i): the EFFECTIVE post-clamp budget rides
++    # both liveness emits. Without it a session exporting
++    # CEO_PAIR_RAIL_TIMEOUT_S=5 produces a case F byte-indistinguishable
++    # from a genuine Codex outage — the undocumented knob was stealthier
++    # than the documented kill-switch (which emits its own loud event).
+     _emit_pair_rail_review_expected(
+         tool_name=tool_name, session_id=session_id, file_path=file_path,
+-        review_id=review_id,
++        review_id=review_id, timeout_s=timeout_s,
+     )
+ 
+     # Invoke Codex review. `_invoke_codex_review` now returns the REDACTED
+@@ -1714,12 +1719,12 @@ def main() -> int:
+         )
+         try:
+             timeout_s = float(
+-                os.environ.get("CEO_PAIR_RAIL_TIMEOUT_S", "120")
++                os.environ.get("CEO_PAIR_RAIL_TIMEOUT_S", "180")
+             )
+         except (TypeError, ValueError):
+-            timeout_s = 120.0
++            timeout_s = 180.0
+         if timeout_s <= 0 or timeout_s > 600:
+-            timeout_s = 120.0
++            timeout_s = 180.0
+ 
+         # PLAN-081 Phase 3: route through the asymmetric VETO matrix
+         # wrapper instead of the spike _decide() directly. The matrix
+@@ -1974,12 +1979,43 @@ def _resolve_human_triage_grace_h(severity: str) -> int:
+         return 24
+ 
+ 
++# ADR-110-AMEND-2 §1.6 — the effective-budget field is emitted as an
++# INTEGER in MILLISECONDS, never as float seconds. `canonical_json`
++# REJECTS floats in HMAC-covered fields (`_lib/canonical_json.py:96`),
++# and the rejection is not benign: the spool writer drops the WHOLE event
++# and leaves only an `audit-log.errors` breadcrumb — measured, see the
++# amendment NOTES. A dropped `pair_rail_case` is exactly the /ceo-boot
++# S254 liveness deficit the r5 F2 correlation id exists to prevent, so a
++# float here would have made the rail invisible while claiming to
++# instrument it. Same encoding + same rationale as the sibling
++# `dispatcher_route.wall_clock_ms` (PLAN-081 Phase 2, Codex iter 1 P0-1).
++# Cap 6_000_000 ms = 6000 s = 10x the hook's own 600 s clamp ceiling:
++# wide enough never to distort a legitimate value, tight enough that a
++# caller bug cannot sign an unbounded number. Divide by 1000 for seconds.
++_TIMEOUT_MS_MAX = 6_000_000
++
++
++def _timeout_ms(value_s: float) -> int:
++    """Convert an effective-budget in SECONDS to bounded integer ms.
++
++    Fail-safe: a non-numeric / NaN / infinite input yields 0 (the
++    "unknown budget" sentinel) rather than raising into the emit
++    wrappers' fail-open catch, which would drop the event.
++    """
++    try:
++        ms = int(float(value_s) * 1000)
++    except (TypeError, ValueError, OverflowError):
++        return 0
++    return max(0, min(_TIMEOUT_MS_MAX, ms))
++
++
+ def _emit_pair_rail_review_expected(
+     *,
+     tool_name: str,
+     session_id: str = "",
+     file_path: str = "",
+     review_id: str = "",
++    timeout_s: float = 0.0,
+ ) -> None:
+     """Best-effort audit emit of pair_rail_review_expected. Fail-OPEN.
+ 
+@@ -2005,6 +2041,16 @@ def _emit_pair_rail_review_expected(
+     prefix, raw path NEVER on the wire per LLM06) so id-less events can
+     still pair per (session, file-hash) BUCKET.
+ 
++    ADR-110-AMEND-2 §1.6: ``timeout_s`` is the EFFECTIVE post-clamp Codex
++    budget for this invocation in SECONDS (resolved in `main()`, threaded
++    through `_decide_with_matrix` → `_decide`). It exists so a case F
++    caused by a sub-floor `CEO_PAIR_RAIL_TIMEOUT_S` export stops being
++    indistinguishable from a genuine Codex outage (§4(i) residual — the
++    quiet knob was stealthier than the documented kill-switch). It reaches
++    the wire as the INTEGER-millisecond `timeout_ms` (see `_timeout_ms`:
++    canonical_json forbids floats in HMAC-covered fields), forwarded under
++    the SAME `__kwdefaults__` skew guard as `review_id`.
++
+     Import resolution mirrors `_emit_pair_rail_case` (staged-dir override →
+     canonical layout → PYTHONPATH). hasattr-guarded: a pre-ceremony
+     audit_emit without `emit_pair_rail_review_expected` is a silent no-op.
+@@ -2057,6 +2103,12 @@ def _emit_pair_rail_review_expected(
+         ) or {}
+         if "review_id" in _kwd:
+             _kwargs["review_id"] = review_id
++        # ADR-110-AMEND-2 §1.6 — same skew guard: a pre-ceremony
++        # audit_emit without `timeout_ms` degrades to the budget-less
++        # legacy emit instead of a TypeError that would drop the WHOLE
++        # denominator event (fail-open regression class).
++        if "timeout_ms" in _kwd:
++            _kwargs["timeout_ms"] = _timeout_ms(timeout_s)
+         _ae.emit_pair_rail_review_expected(**_kwargs)
+     except Exception:
+         pass  # fail-OPEN — never block on audit
+@@ -2076,9 +2128,18 @@ def _emit_pair_rail_case(
+     repo_root: Optional[Path] = None,
+     session_id: str = "",
+     review_id: str = "",
++    timeout_s: float = 0.0,
+ ) -> None:
+     """Best-effort audit emit of pair_rail_case. Fail-OPEN.
+ 
++    ADR-110-AMEND-2 §1.6: ``timeout_s`` is the EFFECTIVE post-clamp Codex
++    budget this invocation ran under, in SECONDS. A case F emitted under a
++    sub-floor budget (`CEO_PAIR_RAIL_TIMEOUT_S=5`) and a case F from a
++    genuine Codex outage were byte-identical before this field existed —
++    §4(i). It reaches the wire as the INTEGER-millisecond `timeout_ms`
++    (see `_timeout_ms`), forwarded under the SAME `__kwdefaults__` skew
++    guard as `review_id`.
++
+     r5 F2: ``review_id`` is the per-invocation correlation id generated by
+     `_decide()` at review entry and threaded here via `_decide_with_matrix`
+     — identical on this case emit and its own `pair_rail_review_expected`.
+@@ -2154,6 +2215,12 @@ def _emit_pair_rail_case(
+                         "severity": severity,
+                         "jaccard_similarity_bucket": jaccard_bucket,
+                         "human_triage_grace_h": _resolve_human_triage_grace_h(severity),
++                        # ADR-110-AMEND-2 §1.6 — forensic parity with the
++                        # signed row (same integer-ms encoding). The sink
++                        # BYPASSES audit_emit, so the bound is applied
++                        # here too — never write an unbounded caller
++                        # value to a file.
++                        "timeout_ms": _timeout_ms(timeout_s),
+                     }, ensure_ascii=False) + "\n")
+             except Exception:
+                 pass
+@@ -2185,6 +2252,12 @@ def _emit_pair_rail_case(
+         ) or {}
+         if "review_id" in _kwd:
+             _kwargs["review_id"] = review_id
++        # ADR-110-AMEND-2 §1.6 — same skew guard: a version-skewed
++        # audit_emit without `timeout_ms` degrades to the budget-less
++        # legacy emit rather than raising a TypeError that would DROP the
++        # case emit and manufacture a /ceo-boot liveness deficit.
++        if "timeout_ms" in _kwd:
++            _kwargs["timeout_ms"] = _timeout_ms(timeout_s)
+         _ae.emit_pair_rail_case(**_kwargs)
+     except Exception:
+         pass  # fail-OPEN — never block on audit
+@@ -2368,6 +2441,7 @@ def _decide_with_matrix(
+                 case="F", claude_verdict="PASS", codex_verdict="ADVISORY",
+                 tool_name=tool_name, file_path=file_path,
+                 session_id=session_id, review_id=review_id,
++                timeout_s=timeout_s,
+             )
+         return base
+ 
+@@ -2381,6 +2455,7 @@ def _decide_with_matrix(
+             case="F", claude_verdict="PASS", codex_verdict=xv,
+             tool_name=tool_name, file_path=file_path,
+             session_id=session_id, review_id=review_id,
++            timeout_s=timeout_s,
+         )
+         return base
+ 
+@@ -2403,6 +2478,7 @@ def _decide_with_matrix(
+             rubric_violation_id="",
+             severity="P0",  # write-shape violation defaulted P0 procedural
+             session_id=session_id, review_id=review_id,
++            timeout_s=timeout_s,
+         )
+         # Advisory-only return — `base` already carries the advisory
+         # systemMessage (Site 1). No `decision` key — schema treats
+@@ -2414,6 +2490,7 @@ def _decide_with_matrix(
+             case="A", claude_verdict="PASS", codex_verdict="PASS",
+             tool_name=tool_name, file_path=file_path,
+             session_id=session_id, review_id=review_id,
++            timeout_s=timeout_s,
+         )
+         return base
+ 
+diff --git a/.claude/hooks/tests/test_audit_emit_coverage.py b/.claude/hooks/tests/test_audit_emit_coverage.py
+index febef93..33d906f 100644
+--- a/.claude/hooks/tests/test_audit_emit_coverage.py
++++ b/.claude/hooks/tests/test_audit_emit_coverage.py
+@@ -91,6 +91,13 @@ class _EmitterTestBase(TestEnvContext):
+             out.append(json.loads(line))
+         return out
+ 
++    def _truncate_log(self) -> None:
++        """Empty the isolated audit-log so `_read_one` can be reused for a
++        second emit inside one test (multi-case loops)."""
++        log = Path(os.environ["CEO_AUDIT_LOG_PATH"])
++        if log.exists():
++            log.write_text("", encoding="utf-8")
++
+     def _read_one(self) -> Dict[str, Any]:
+         """Return the single event (fails if count != 1)."""
+         events = self._read_events()
+@@ -2488,6 +2495,97 @@ class TestPlan075PairRailEmitters(_EmitterTestBase):
+         self.assertEqual(e["codex_verdict"], "PASS")
+         self.assertEqual(e["tool_name"], "Edit")
+ 
++    def test_pair_rail_timeout_ms_lands_signed_on_both_actions(self):
++        """ADR-110-AMEND-2 §1.6 — the effective budget reaches the SIGNED
++        chain, as an int, on the case AND the denominator.
++
++        This is the field's whole point (§4(i)): a case F under a
++        sub-floor `CEO_PAIR_RAIL_TIMEOUT_S` export must stop being
++        indistinguishable from a genuine Codex outage. A row that carries
++        no `timeout_ms`, or one whose hmac is null, instruments nothing.
++        """
++        audit_emit.emit_pair_rail_case(
++            case="F", claude_verdict="PASS", codex_verdict="TIMEOUT",
++            tool_name="Edit", file_path_hash_prefix="abc123def4567890",
++            timeout_ms=180000, session_id="s-budget", project="/t",
++        )
++        e = self._read_one()
++        self._assert_schema_baseline(e, "pair_rail_case")
++        self.assertEqual(e["timeout_ms"], 180000)
++        self.assertIsInstance(e["timeout_ms"], int)
++        self.assertNotIsInstance(e["timeout_ms"], bool)
++        # The row must be SIGNED — a float would have made canonical_json
++        # raise and the spool writer drop the event entirely.
++        self.assertIsNone(e.get("hmac_error"))
++        self.assertTrue(e.get("hmac"))
++
++        self._truncate_log()
++        audit_emit.emit_pair_rail_review_expected(
++            session_id="s-budget", tool_name="Edit",
++            file_path_hash_prefix="abc123def4567890", timeout_ms=5000,
++        )
++        e2 = self._read_one()
++        self._assert_schema_baseline(e2, "pair_rail_review_expected")
++        self.assertEqual(e2["timeout_ms"], 5000)
++        self.assertIsNone(e2.get("hmac_error"))
++
++    def test_pair_rail_timeout_ms_off_shape_coerces_never_drops(self):
++        """Off-shape budget values coerce to the 0 sentinel.
++
++        The failure mode being closed is NOT a wrong number: a float in
++        an HMAC-covered field makes `canonical_json` raise and the spool
++        writer DROP THE WHOLE EVENT (only an `audit-log.errors`
++        breadcrumb survives). On these two actions a dropped row
++        manufactures the exact /ceo-boot S254 liveness deficit the
++        `review_id` correlation exists to disprove — so every off-shape
++        input must still produce a signed row.
++        """
++        for label, raw in (
++            ("float_seconds", 180.0),          # the shape the ADR prose names
++            ("float_ms", 180000.5),
++            ("string", "180"),
++            ("none", None),
++            ("bool", True),                    # isinstance(True, int) trap
++            ("nan", float("nan")),
++            ("inf", float("inf")),
++            ("negative", -1),
++            ("over_bound", 10 ** 12),
++        ):
++            with self.subTest(label=label):
++                self._truncate_log()
++                audit_emit.emit_pair_rail_case(
++                    case="A", claude_verdict="PASS", codex_verdict="PASS",
++                    tool_name="Edit",
++                    file_path_hash_prefix="abc123def4567890",
++                    timeout_ms=raw, session_id="s-shape", project="/t",
++                )
++                e = self._read_one()  # fails loudly if the row was DROPPED
++                self.assertIsInstance(e["timeout_ms"], int)
++                self.assertNotIsInstance(e["timeout_ms"], bool)
++                self.assertGreaterEqual(e["timeout_ms"], 0)
++                self.assertLessEqual(e["timeout_ms"], 6_000_000)
++                self.assertIsNone(e.get("hmac_error"))
++
++    def test_pair_rail_timeout_ms_direct_emit_generic_is_coerced(self):
++        """The dispatch branch closes the direct-caller path too.
++
++        `emit_generic("pair_rail_case", timeout_s=180.0)` is exactly what
++        a caller following the amendment PROSE would write; the branch
++        must both drop the unknown `timeout_s` key and coerce a float
++        `timeout_ms` rather than let either reach canonical_json.
++        """
++        audit_emit.emit_generic(
++            "pair_rail_case", session_id="s-direct", case="A",
++            claude_verdict="PASS", codex_verdict="PASS", tool_name="Edit",
++            file_path_hash_prefix="abc123def4567890",
++            timeout_s=180.0, timeout_ms=180000.0,
++        )
++        e = self._read_one()
++        self.assertNotIn("timeout_s", e)
++        self.assertEqual(e["timeout_ms"], 180000)
++        self.assertIsInstance(e["timeout_ms"], int)
++        self.assertIsNone(e.get("hmac_error"))
++
+     def test_emit_pair_rail_case_invalid_case_coerces(self):
+         """Invalid case value coerces to safe default 'F'."""
+         audit_emit.emit_pair_rail_case(
+diff --git a/.claude/hooks/tests/test_check_pair_rail_matrix.py b/.claude/hooks/tests/test_check_pair_rail_matrix.py
+index 56ae820..2925f56 100644
+--- a/.claude/hooks/tests/test_check_pair_rail_matrix.py
++++ b/.claude/hooks/tests/test_check_pair_rail_matrix.py
+@@ -914,6 +914,126 @@ class TestDecideWithMatrix(TestEnvContext):
+                 f"Expected no matrix emit for Read tool; got {matrix_events}",
+             )
+ 
++    # -- ADR-110-AMEND-2 §1.6 — effective-budget threading ---------------
++
++    def test_effective_budget_threaded_to_case_and_expected(self):
++        """The EFFECTIVE budget reaches BOTH liveness emits, in ms.
++
++        §4(i) is the point: before this field, no event recorded the
++        budget, so `CEO_PAIR_RAIL_TIMEOUT_S=5` produced a case F
++        indistinguishable from a genuine Codex outage — the undocumented
++        knob was stealthier than the documented kill-switch. Asserting
++        only that `audit_emit` ACCEPTS the field would leave the hook
++        free to never pass it; this pins the THREADING.
++        """
++        import tempfile
++        with tempfile.TemporaryDirectory() as td:
++            repo = _make_repo(Path(td))
++            sink = Path(td) / "sink.jsonl"
++            clean_review = json.dumps({
++                "verdict": "PASS",
++                "findings": [],
++                "summary": "Clean review. No issues found.",
++            })
++            seen = []
++            real_expected = _CPR._emit_pair_rail_review_expected
++
++            def _capture_expected(**kwargs):
++                seen.append(kwargs)
++                return real_expected(**kwargs)
++
++            with patch.dict(os.environ, {
++                "CEO_PAIR_RAIL_AUDIT_SINK": str(sink),
++            }, clear=False), patch.object(
++                _CPR, "_invoke_codex_review", return_value=clean_review
++            ), patch.object(
++                _CPR, "_emit_pair_rail_review_expected", _capture_expected
++            ):
++                _CPR._decide_with_matrix(
++                    tool_name="Write",
++                    file_path=_l3_abs(repo),
++                    proposed_content="x = 1",
++                    repo_root=repo,
++                    timeout_s=7.5,
++                )
++            self.assertEqual(len(seen), 1)
++            self.assertEqual(
++                seen[0].get("timeout_s"), 7.5,
++                "the denominator emit did not receive the effective budget",
++            )
++            case_events = [e for e in _read_sink(sink) if "case" in e]
++            self.assertTrue(case_events, "no case emit to carry the budget")
++            self.assertEqual(
++                case_events[0].get("timeout_ms"), 7500,
++                "case emit lost the effective budget (7.5s -> 7500ms)",
++            )
++
++    def test_case_f_outage_arm_carries_effective_budget(self):
++        """The OUTAGE arm is the one §4(i) is about.
++
++        A case F from a genuine Codex outage and a case F manufactured by
++        a sub-floor budget must be TELLABLE APART. This is the terminal
++        path most likely to be missed when threading a new field, because
++        it returns from an exception handler rather than the happy path.
++        """
++        import tempfile
++        with tempfile.TemporaryDirectory() as td:
++            repo = _make_repo(Path(td))
++            sink = Path(td) / "sink.jsonl"
++            with patch.dict(os.environ, {
++                "CEO_PAIR_RAIL_AUDIT_SINK": str(sink),
++            }, clear=False), patch.object(
++                _CPR, "_invoke_codex_review",
++                side_effect=_CPR.CodexUnavailable("no codex payload"),
++            ):
++                _CPR._decide_with_matrix(
++                    tool_name="Write",
++                    file_path=_l3_abs(repo),
++                    proposed_content="z = 3",
++                    repo_root=repo,
++                    timeout_s=5.0,
++                )
++            case_f = [e for e in _read_sink(sink) if e.get("case") == "F"]
++            self.assertTrue(case_f, "expected a case=F emit")
++            self.assertEqual(
++                case_f[0].get("timeout_ms"), 5000,
++                "case F carried no effective budget — a sub-floor knob "
++                "session stays indistinguishable from a Codex outage "
++                "(ADR-110-AMEND-2 §4(i))",
++            )
++
++    def test_effective_budget_is_int_ms_never_float(self):
++        """Encoding is load-bearing, not stylistic.
++
++        `canonical_json` rejects floats in HMAC-covered fields and the
++        spool writer then DROPS the whole event, which on this action
++        manufactures the /ceo-boot S254 deficit `review_id` exists to
++        disprove. A fractional budget must therefore still yield an int.
++        """
++        import tempfile
++        with tempfile.TemporaryDirectory() as td:
++            repo = _make_repo(Path(td))
++            sink = Path(td) / "sink.jsonl"
++            with patch.dict(os.environ, {
++                "CEO_PAIR_RAIL_AUDIT_SINK": str(sink),
++            }, clear=False), patch.object(
++                _CPR, "_invoke_codex_review",
++                side_effect=_CPR.CodexUnavailable("no codex payload"),
++            ):
++                _CPR._decide_with_matrix(
++                    tool_name="Write",
++                    file_path=_l3_abs(repo),
++                    proposed_content="z = 3",
++                    repo_root=repo,
++                    timeout_s=0.25,
++                )
++            case_f = [e for e in _read_sink(sink) if e.get("case") == "F"]
++            self.assertTrue(case_f)
++            value = case_f[0].get("timeout_ms")
++            self.assertIsInstance(value, int)
++            self.assertNotIsInstance(value, bool)
++            self.assertEqual(value, 250)
++
+ 
+ # ===========================================================================
+ # 7. _emit_pair_rail_case fail-OPEN
+diff --git a/.claude/hooks/tests/test_pair_rail_timeout_invariant.py b/.claude/hooks/tests/test_pair_rail_timeout_invariant.py
+index 00a4741..28ee05b 100644
+--- a/.claude/hooks/tests/test_pair_rail_timeout_invariant.py
++++ b/.claude/hooks/tests/test_pair_rail_timeout_invariant.py
+@@ -6,11 +6,17 @@ Root cause being closed (measured, not inferred — see
+ default `CEO_PAIR_RAIL_TIMEOUT_S=30s` sits BELOW the real codex verdict
+ latency (N=9 probe: p95 ~75s), so 12/12 historical `pair_rail_case`
+ events were F/TIMEOUT. The ratified fix is layered: internal default
+-120s, harness registration timeout 150s, with an invariant margin of
++180s, harness registration timeout 210s, with an invariant margin of
+ >= 30s between the layers so the harness never kills the hook before the
+ hook's own subprocess cap fires, plus a `statusMessage` on the
+ registration so the operator sees WHY a canonical edit stalls.
+ 
++(The ratified pair was 120/150 under PLAN-164; ADR-110-AMEND-2 ran the
++AMEND-1 §3 recalibration and moved it to 180/210 — 25.9 % of joined
++post-uplift reviews sat AT OR ABOVE the 120s budget, which puts the true
++p95 >= 120 by count, and the folga convention over that yields 180. The
++margin stays 30s and the invariant holds at equality: 210 == 180 + 30.)
++
+ This test pins the INVARIANT BETWEEN LAYERS **and** the ratified
+ absolute values:
+ 
+@@ -21,15 +27,16 @@ absolute values:
+   2. each registration timeout >= hook-internal default + 30s margin;
+   3. `statusMessage` is present on the pair-rail registration in BOTH
+      files;
+-  4. the ABSOLUTE ratified values hold: internal default == 120 (the env
+-     seam AND both fallback literals `timeout_s = 120.0`), registration
+-     == 150 in both files. A deliberate recalibration (ADR-110-AMEND-1
+-     trigger: >=10 healthy cases -> p95 revisit) must edit THIS test in
+-     the same change — that is the contract, not an inconvenience.
+-     Without (4), a unilateral downward drift of the internal default
+-     (e.g. 120 -> 50) stays green under (2) alone (150 >= 50+30) and
+-     silently re-admits the sub-latency class this plan retires
+-     (grok r1 MED / codex r1 MED-3).
++  4. the ABSOLUTE ratified values hold: internal default == 180 (the env
++     seam AND both fallback literals `timeout_s = 180.0`), registration
++     == 210 in both files. A deliberate recalibration (ADR-110-AMEND-2
++     trigger: censoring rate > 5 % over n >= 20 post-change reviews —
++     the AMEND-1 p95-of-healthy trigger is retired as unestimable under
++     right-censoring) must edit THIS test in the same change — that is
++     the contract, not an inconvenience. Without (4), a unilateral
++     downward drift of the internal default (e.g. 180 -> 50) stays green
++     under (2) alone (210 >= 50+30) and silently re-admits the
++     sub-latency class this plan retires (grok r1 MED / codex r1 MED-3).
+ 
+ RED-FIRST contract (staged with the rail-pack): against the pre-pack
+ live tree — registration timeout 60, internal default "30", NO
+@@ -97,11 +104,15 @@ _HOOK_SOURCE = _HOOKS_DIR / "check_pair_rail.py"
+ # timeout arm (case F stays diagnosable instead of a silent hook kill).
+ _MARGIN_S = 30
+ 
+-# Ratified ABSOLUTE values (PLAN-164 OQ1/OQ2, Owner tie-break 2026-07-29;
+-# recalibration path documented in ADR-110-AMEND-1 — edit these constants
+-# ONLY together with the hook + both settings surfaces, in a governed change).
+-_RATIFIED_INTERNAL_S = 120
+-_RATIFIED_REGISTRATION_S = 150
++# Ratified ABSOLUTE values (ADR-110-AMEND-2, S291 ceremony 2026-08-03 —
++# the AMEND-1 §3 recalibration ran and pointed upward: 25.9 % of joined
++# post-uplift reviews sat at or above the 120 s budget, so 1.5x p95 under
++# the AMEND-1 folga convention lands on 180, with the registration at
++# 180 + the 30 s inter-layer margin. Was 120/150 under PLAN-164 OQ1/OQ2,
++# Owner tie-break 2026-07-29.) Edit these constants ONLY together with the
++# hook + both settings surfaces, in a governed change.
++_RATIFIED_INTERNAL_S = 180
++_RATIFIED_REGISTRATION_S = 210
+ 
+ # The two parse-error/clamp-reset fallbacks in check_pair_rail.py
+ # (`timeout_s = <N>.0`) must carry the SAME ratified internal value.
+@@ -221,7 +232,7 @@ class TestPairRailTimeoutInvariant(TestEnvContext):
+                 status,
+                 str,
+                 "pair-rail registration in %s has no 'statusMessage' — a "
+-                "120s+ canonical-edit stall must tell the operator the "
++                "180s+ canonical-edit stall must tell the operator the "
+                 "pair-rail review is running, not look like a hang "
+                 "(got %r)" % (origin, status),
+             )
+diff --git a/.claude/scripts/tests/test_upgrade_settings_migration.py b/.claude/scripts/tests/test_upgrade_settings_migration.py
+index 833f391..cb67c89 100644
+--- a/.claude/scripts/tests/test_upgrade_settings_migration.py
++++ b/.claude/scripts/tests/test_upgrade_settings_migration.py
+@@ -539,15 +539,25 @@ class TestPairRailTimeoutValueMigration(_MigrationHarness, TestEnvContext):
+     verdict latency (N=9, p95 ~75s) — 12/12 historical pair_rail_case rows
+     were F/TIMEOUT (PLAN-163/probes/GATE-V2-2026-07-29-FAIL-diagnosis.md).
+     Ratified migration semantics: bump the check_pair_rail.py registration
+-    timeout 60 -> 150 IFF the adopter's current value == 60 (the old cap);
+-    ANY other adopter-chosen value is PRESERVED; round 2 is an idempotent
+-    no-op. The NEW expectation is DERIVED from the template artifact
+-    (settings.base.json pair-rail entry — install.sh copies it verbatim, so
+-    template value == post-install value == migration target); the OLD cap
+-    (60) is a frozen historical literal, exactly like the "old" column of
+-    the --print-settings-baselines table. The ratified OQ2 literal (150)
++    timeout to the template cap IFF the adopter's current value is one of
++    the SUPERSEDED SHIPPED caps; ANY other adopter-chosen value is
++    PRESERVED; round 2 is an idempotent no-op. The NEW expectation is
++    DERIVED from the template artifact (settings.base.json pair-rail entry
++    — install.sh copies it verbatim, so template value == post-install
++    value == migration target); each superseded cap is a frozen historical
++    literal, exactly like the "old" column of the
++    --print-settings-baselines table. The ratified literal (210)
+     materializes ONCE, in the U1 template-parity oracle below.
+ 
++    ADR-110-AMEND-2: the superseded set is (60, 150), not just 60. 150 was
++    the AMEND-1 cap SHIPPED IN v1.2.0, so every v1.2.0 adopter carries it
++    verbatim. Leaving it as "adopter-customized" is not the conservative
++    reading — with the hook-internal default now 180, a 150s registration
++    means the HARNESS kills the hook before the hook's own codex cap
++    fires, and a killed hook emits NO pair_rail_case at all (§6: fail-open
++    with NO event, invisible to the instrument in both numerator and
++    denominator) — strictly worse than the case F it replaces.
++
+     Base order (_MigrationHarness, TestEnvContext): scratch-target fixtures
+     from the family harness + S283 env-hygiene isolation; both setUps are
+     chained explicitly because _MigrationHarness.setUp does not call super.
+@@ -558,6 +568,13 @@ class TestPairRailTimeoutValueMigration(_MigrationHarness, TestEnvContext):
+     #: any live artifact once the migration lands).
+     OLD_REGISTRATION_CAP = 60
+ 
++    #: Every SUPERSEDED SHIPPED cap, frozen (ADR-110-AMEND-2). 60 =
++    #: pre-PLAN-164; 150 = the AMEND-1 cap shipped in v1.2.0. Each must
++    #: migrate, because each sits BELOW the current internal default + the
++    #: 30s inter-layer margin — i.e. each leaves the harness able to kill
++    #: the hook before its own codex cap fires (§6, no-event fail-open).
++    SUPERSEDED_SHIPPED_CAPS = (60, 150)
++
+     _PAIR_RAIL_CMD = (
+         "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\""
+         " check_pair_rail.py"
+@@ -628,9 +645,10 @@ class TestPairRailTimeoutValueMigration(_MigrationHarness, TestEnvContext):
+ 
+     # -- oracles ---------------------------------------------------------
+ 
+-    def test_template_registration_carries_ratified_cap_150(self) -> None:
+-        """U1 parity: the ratified OQ2 value (150) — pinned once, here."""
+-        self.assertEqual(self._new_registration_cap(), 150)
++    def test_template_registration_carries_ratified_cap_210(self) -> None:
++        """U1 parity: the ratified ADR-110-AMEND-2 value (210) — pinned
++        once, here. Was 150 under PLAN-164 OQ2."""
++        self.assertEqual(self._new_registration_cap(), 210)
+ 
+     def test_old_cap_60_is_migrated_to_new_cap(self) -> None:
+         self._seed_with_pair_rail_timeout(self.OLD_REGISTRATION_CAP)
+@@ -638,6 +656,45 @@ class TestPairRailTimeoutValueMigration(_MigrationHarness, TestEnvContext):
+         self.assertEqual(self._migrated_pair_rail_timeout(),
+                          self._new_registration_cap())
+ 
++    def test_every_superseded_shipped_cap_is_migrated(self) -> None:
++        """ADR-110-AMEND-2: the migration matches a SET, not one literal.
++
++        RED-FIRST against the AMEND-1 migration (`cur == 60`): the 150
++        case lands in the `else` arm and is PRESERVED as
++        "adopter-customized" — leaving every v1.2.0 adopter with a
++        registration BELOW internal-default + margin, i.e. the harness
++        kills the hook before its own codex cap fires and NO
++        pair_rail_case is emitted at all.
++        """
++        new_cap = self._new_registration_cap()
++        for old_cap in self.SUPERSEDED_SHIPPED_CAPS:
++            with self.subTest(old_cap=old_cap):
++                self.assertNotEqual(
++                    old_cap, new_cap,
++                    "a superseded cap equal to the live template cap is a "
++                    "bookkeeping error — it can never be observed migrating")
++                self.setUp()  # fresh scratch target per seeded value
++                self._seed_with_pair_rail_timeout(old_cap)
++                self.run_migration()
++                self.assertEqual(
++                    self._migrated_pair_rail_timeout(), new_cap,
++                    "superseded shipped cap %ds was not migrated to the "
++                    "template cap %ds — an adopter left below "
++                    "internal-default + 30s margin has the harness kill "
++                    "the hook before its own codex cap fires, and a killed "
++                    "hook emits NO pair_rail_case (ADR-110-AMEND-2 §6)"
++                    % (old_cap, new_cap))
++
++    def test_superseded_caps_all_below_new_cap(self) -> None:
++        """Every frozen member must be a value the CURRENT contract
++        rejects — otherwise the set has silently grown a live value."""
++        new_cap = self._new_registration_cap()
++        for old_cap in self.SUPERSEDED_SHIPPED_CAPS:
++            self.assertLess(
++                old_cap, new_cap,
++                "superseded cap %ds >= live template cap %ds — the frozen "
++                "set must contain ONLY retired values" % (old_cap, new_cap))
++
+     def test_migration_brings_template_status_message_iff_absent(self) -> None:
+         """grok r1 LOW-3 / codex r2: the SAME migration event that bumps the
+         cap also imports the template statusMessage — but only when the
+diff --git a/.claude/settings.json b/.claude/settings.json
+index fe3df26..e82a469 100644
+--- a/.claude/settings.json
++++ b/.claude/settings.json
+@@ -276,14 +276,14 @@
+         ]
+       },
+       {
+-        "_comment": "PLAN-075 v1.13.x narrow-promotion (ADR-106 + ADR-110): PreToolUse Pair-Rail Multi-LLM hook. When Edit|Write|MultiEdit targets an L3+ canonical-guarded path, invokes Codex MCP in read-only review mode and validates the response contains no write-shaped patches (apply_patch envelope, unified diff, JSON Patch RFC 6902). On Codex unavailable: fail-OPEN + breadcrumb. On write-shaped response: BLOCK + audit pair_rail_codex_violation. On clean review: ALLOW + audit pair_rail_review_passed. Sentinel-bypass short-circuits to ALLOW + audit pair_rail_sentinel_bypass. Kill-switches: CEO_PAIR_RAIL_DISABLE=1, CEO_PAIR_RAIL_TIMEOUT_S (default 120s; registration cap 150s — invariant guarded by test_pair_rail_timeout_invariant.py).",
++        "_comment": "PLAN-075 v1.13.x narrow-promotion (ADR-106 + ADR-110): PreToolUse Pair-Rail Multi-LLM hook. When Edit|Write|MultiEdit targets an L3+ canonical-guarded path, invokes Codex MCP in read-only review mode and validates the response contains no write-shaped patches (apply_patch envelope, unified diff, JSON Patch RFC 6902). On Codex unavailable: fail-OPEN + breadcrumb. On write-shaped response: BLOCK + audit pair_rail_codex_violation. On clean review: ALLOW + audit pair_rail_review_passed. Sentinel-bypass short-circuits to ALLOW + audit pair_rail_sentinel_bypass. Kill-switches: CEO_PAIR_RAIL_DISABLE=1, CEO_PAIR_RAIL_TIMEOUT_S (default 180s; registration cap 210s — ADR-110-AMEND-2 recalibration, invariant guarded by test_pair_rail_timeout_invariant.py).",
+         "matcher": "Edit|Write|MultiEdit",
+         "hooks": [
+           {
+             "type": "command",
+             "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_pair_rail.py",
+-            "timeout": 150,
+-            "statusMessage": "Pair-rail cross-model review (may take 1-2 min)"
++            "timeout": 210,
++            "statusMessage": "Pair-rail cross-model review (may take up to ~3 min)"
+           }
+         ]
+       },
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index bb191c3..f895386 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -40,7 +40,9 @@ auditability — no speed claim.
+   registration, and `registration >= internal + 30`. A unilateral flip of any
+   of the three literals now goes red in the suite and in the pack preflight.
+ - **`statusMessage` on the registration** — a session held by a synchronous
+-  cross-model review shows "may take 1-2 min" instead of appearing frozen.
++  cross-model review shows "may take up to ~3 min" instead of appearing
++  frozen. (Shipped in 1.2.0 as "may take 1-2 min"; the wording tracks the
++  budget and was retuned by ADR-110-AMEND-2 when it moved to 180/210 s.)
+ - **From zero completed reviews to ten.** The log now holds 10 healthy cases
+   (7 × case A, 3 × case B) alongside 14 case F. Median verdict latency 70.5 s;
+   observed maximum 120.0 s.
+diff --git a/SPEC/v1/audit-log.schema.md b/SPEC/v1/audit-log.schema.md
+index 176a6cc..7f517db 100644
+--- a/SPEC/v1/audit-log.schema.md
++++ b/SPEC/v1/audit-log.schema.md
+@@ -318,7 +318,7 @@ ${CEO_AUDIT_LOG_PATH:-$HOME/.claude/projects/ceo-orchestration/audit-log.jsonl}
+ | `pair_rail_sentinel_bypass` (v2.22) | `action`, `target_path` (str ≤300), `tool_name` (str ≤50), `sentinel_path` (str ≤300 — path to the sentinel that granted access), `session_id`, `project`, `event_schema`, `ts`, plus baseline HMAC-chain invariant. PLAN-075 v1.13.x patch / ADR-106 — emitted by `.claude/hooks/check_pair_rail.py` when an Owner-signed sentinel (verified by `check_canonical_edit.py` upstream) grants the L3+ path. Pair-rail review short-circuited; allow decision granted without invoking Codex. |
+ | `pair_rail_codex_injection_detected` (v2.23) | `action`, `tool_name` (str ≤50 — `mcp__codex__codex` or `mcp__codex__codex-reply`), `family_ids` (list[str] — sorted unique subset of `harness_mimicry`, `xml_system_tag`, `tool_use_forgery`), `match_count` (int ≥0), `first_offset_bucket` (str — closed enum `0-100` / `100-1k` / `1k-10k` / `10k-100k` / `100k+`), `session_id`, `project`, `event_schema`, `ts`, plus baseline HMAC-chain invariant. PLAN-081 Phase 1-full / R1 S-Sec-5 (S99 ceremony 2026-05-09) — emitted by `.claude/hooks/check_codex_response.py` PostToolUse on Codex MCP tool responses when ingress sanitization detects prompt-injection patterns. ADVISORY only per ADR-106 (PostToolUse cannot block). Sec MF-3 invariant: NEVER persist raw matched content nor raw offset values — `first_offset_bucket` is the bucketed forensic surface. Registered with `KERNEL_OVERRIDE` bypass since `audit_emit.py` is in `_KERNEL_PATHS`. |
+ | `dispatcher_route` (v2.23) | `action`, `archetype` (str ≤64), `rail` (str — closed enum: `pair_rail` / `fallback_claude_only` / `fallback_codex_only`), `reason_code` (str ≤80 — `ok` / `predicate_<id>_fired` / `matrix_sha_mismatch` / `health_prereq_unmet_<u-id>` / `override_coder_<provider>` / `override_reviewer_<provider>` / `invalid_coder_override_<sanitized>` / `invalid_reviewer_override_<sanitized>`), `coder` (str ≤32 — closed enum: `claude` / `codex`), `reviewer` (str ≤32 — closed enum: `claude` / `codex` / empty when fallback), `coder_model` (str ≤32 or null), `reviewer_sandbox` (str ≤32 — closed enum: `read-only` / `workspace-write` / `danger-full-access`), `fallback_provider` (str ≤32), `matrix_sha256_prefix` (str — 16-hex prefix only; raw digest forbidden), `matrix_sha256_match` (bool — true iff CEO_PAIR_RAIL_MATRIX_SHA256 env set AND matched loaded matrix), `wall_clock_ms` (int ≥0 — Codex iter 1 P0-1: integer milliseconds, NOT float seconds; canonical_json no-float invariant), `retry_at_timeout_ms` (int ≥0 OPTIONAL — present when codex.py classifier escalated simple→audit), `session_id`, `project`, `event_schema`, `ts`, plus baseline HMAC-chain invariant. PLAN-081 Phase 2 (S100 ceremony 2026-05-10) — emitted by `.claude/scripts/inject-agent-context.sh --pair-mode` per archetype dispatch via `routing-matrix.yaml`. Source action for `codex_latency_p95_s` predicate aggregator (divide `wall_clock_ms` by 1000 to recover seconds). T-4 archetype-spoofing forensic trail (`dispatcher-routes-summary` Phase 6 audit-query.py sub-command). Sec MF-3 invariant: NEVER persist task description / archetype profile body / skill content / raw file paths. Registered with `KERNEL_OVERRIDE` bypass since `audit_emit.py` is in `_KERNEL_PATHS`. |
+-| `pair_rail_case` (v2.23) | `action`, `case` (str — closed enum: `A` / `B` / `C` / `D` / `E` / `F` per spec.md §11 asymmetric matrix), `claude_verdict` (str — closed enum: `PASS` / `BLOCK`), `codex_verdict` (str — closed enum: `PASS` / `BLOCK` / `ADVISORY` / `TIMEOUT` / `MALFORMED`), `tool_name` (str ≤32 — closed enum: `Edit` / `Write` / `MultiEdit` / `NotebookEdit` / `unknown`), `file_path_hash_prefix` (str — 16-hex SHA-256 prefix of target file path; raw path forbidden per LLM06 side-channel guard), `review_id` (str — exact-shape `([0-9a-f]{16})?` (EXACTLY 16 lowercase hex, or empty) PER-INVOCATION correlation id, PLAN-161 W2 C5 r5 F2: minted by `check_pair_rail.py:_decide()` at review entry (`os.urandom(8).hex()`) and IDENTICAL on this case emit and the same invocation's `pair_rail_review_expected` — the invocation correlation key the /ceo-boot `failopen_rail_liveness_7d` expected/terminal pairing matches on; off-shape COERCED to empty in the typed wrapper AND the `emit_generic` dispatch branch (r6 F2: the RAW value is validated — any other length incl. oversize, uppercase or non-hex is DROPPED, never truncated, so two distinct off-shape ids sharing a 16-hex prefix can never alias to one pairing key); empty = legacy/id-less emit, paired via the (session, file-hash) bucket-count fallback), `precondition_met` (bool — Case-B requires file:line cited + rubric_violation_id ∈ catalogue + severity ∈ {P0, P1}), `rubric_violation_id` (str ≤64 — enumerated ID from `.claude/policies/rubric-violation-catalogue.yaml` or empty when not Case-B; free-form rubric IDs are sanitized to `unknown_rubric_id`), `severity` (str — closed enum: `P0` / `P1` / empty), `jaccard_similarity_bucket` (str — closed enum: `<=0.3` / `0.3-0.5` / `0.5-0.8` / `>0.8` / empty; raw float forbidden per Sec MF-3), `human_triage_grace_h` (int ≥0 — hours remaining in 24h grace window per R1 S-TDE-4; 0 = grace expired = closes-as-advisory; CEO_PAIR_RAIL_HUMAN_TRIAGE_HOURS env override), `session_id`, `project`, `event_schema`, `ts`, plus baseline HMAC-chain invariant. PLAN-081 Phase 3 (S100 ceremony 2026-05-10) — emitted by `.claude/hooks/check_pair_rail.py:_decide_with_matrix()` once per Pair-Rail PreToolUse evaluation that reaches the matrix arm (write tool + L3+ path + no sentinel bypass). Source action for `fp_rate_30d` and `disagreement_rate_30d` predicate aggregators. ADR-107 + ADR-108 ACCEPTED gate. Sec MF-3 invariant: NEVER persist raw Codex review body / proposed-content / file path. Registered with `KERNEL_OVERRIDE` bypass since `audit_emit.py` is in `_KERNEL_PATHS`. |
++| `pair_rail_case` (v2.23) | `action`, `case` (str — closed enum: `A` / `B` / `C` / `D` / `E` / `F` per spec.md §11 asymmetric matrix), `claude_verdict` (str — closed enum: `PASS` / `BLOCK`), `codex_verdict` (str — closed enum: `PASS` / `BLOCK` / `ADVISORY` / `TIMEOUT` / `MALFORMED`), `tool_name` (str ≤32 — closed enum: `Edit` / `Write` / `MultiEdit` / `NotebookEdit` / `unknown`), `file_path_hash_prefix` (str — 16-hex SHA-256 prefix of target file path; raw path forbidden per LLM06 side-channel guard), `review_id` (str — exact-shape `([0-9a-f]{16})?` (EXACTLY 16 lowercase hex, or empty) PER-INVOCATION correlation id, PLAN-161 W2 C5 r5 F2: minted by `check_pair_rail.py:_decide()` at review entry (`os.urandom(8).hex()`) and IDENTICAL on this case emit and the same invocation's `pair_rail_review_expected` — the invocation correlation key the /ceo-boot `failopen_rail_liveness_7d` expected/terminal pairing matches on; off-shape COERCED to empty in the typed wrapper AND the `emit_generic` dispatch branch (r6 F2: the RAW value is validated — any other length incl. oversize, uppercase or non-hex is DROPPED, never truncated, so two distinct off-shape ids sharing a 16-hex prefix can never alias to one pairing key); empty = legacy/id-less emit, paired via the (session, file-hash) bucket-count fallback), `precondition_met` (bool — Case-B requires file:line cited + rubric_violation_id ∈ catalogue + severity ∈ {P0, P1}), `rubric_violation_id` (str ≤64 — enumerated ID from `.claude/policies/rubric-violation-catalogue.yaml` or empty when not Case-B; free-form rubric IDs are sanitized to `unknown_rubric_id`), `severity` (str — closed enum: `P0` / `P1` / empty), `jaccard_similarity_bucket` (str — closed enum: `<=0.3` / `0.3-0.5` / `0.5-0.8` / `>0.8` / empty; raw float forbidden per Sec MF-3), `human_triage_grace_h` (int ≥0 — hours remaining in 24h grace window per R1 S-TDE-4; 0 = grace expired = closes-as-advisory; CEO_PAIR_RAIL_HUMAN_TRIAGE_HOURS env override), `timeout_ms` (int 0..6000000 — ADR-110-AMEND-2 §1.6: the EFFECTIVE POST-CLAMP codex budget this invocation ran under, in integer MILLISECONDS, NOT float seconds; canonical_json no-float invariant, same encoding as `dispatcher_route.wall_clock_ms` — divide by 1000 to recover seconds; off-shape/NaN/inf/bool COERCED to 0 = "unknown budget", bounded in the typed wrapper AND re-coerced in the `emit_generic` dispatch branch. Purpose is §4(i): before this field a case F produced by a sub-floor `CEO_PAIR_RAIL_TIMEOUT_S` export was byte-INDISTINGUISHABLE from a genuine Codex outage, which made the undocumented knob stealthier than the documented kill-switch. Encoding is load-bearing, not stylistic: a float in an HMAC-covered field is rejected by `_lib/canonical_json.py` and the spool writer then DROPS THE WHOLE EVENT with only an `audit-log.errors` breadcrumb — for this action that would manufacture the very /ceo-boot liveness deficit `review_id` exists to disprove), `session_id`, `project`, `event_schema`, `ts`, plus baseline HMAC-chain invariant. PLAN-081 Phase 3 (S100 ceremony 2026-05-10) — emitted by `.claude/hooks/check_pair_rail.py:_decide_with_matrix()` once per Pair-Rail PreToolUse evaluation that reaches the matrix arm (write tool + L3+ path + no sentinel bypass). Source action for `fp_rate_30d` and `disagreement_rate_30d` predicate aggregators. ADR-107 + ADR-108 ACCEPTED gate. Sec MF-3 invariant: NEVER persist raw Codex review body / proposed-content / file path. Registered with `KERNEL_OVERRIDE` bypass since `audit_emit.py` is in `_KERNEL_PATHS`. |
+ | `pair_rail_promotion` (v2.23) | `action`, `run_id` (str ≤36 — UUID hex), `verdict` (str — closed enum: `PASS` / `PASS_AFTER_RETRY` / `TRIAGE` / `FAIL`), `corpus_n` (int ≥0), `corpus_manifest_sha` (str — 16-hex prefix), `catch_rate_num` (int ≥0), `catch_rate_den` (int ≥1), `fp_rate_bucket` (str — closed enum: `<=15%` / `15-30%` / `>30%` / empty), `schema_adherence_pct_bucket` (str — closed enum: `100%` / `95-99%` / `<95%` / empty), `rubric_gap_pp_bucket` (str — closed enum: `<=0pp` / `0-5pp` / `5-10pp` / `>10pp` / empty), `codex_cli_version` (str ≤32), `python_version` (str ≤16), `git_head_sha_prefix` (str — 12-hex prefix), `pass_2_retry_used` (bool), `manual_triage` (bool), `session_id`, `project`, `event_schema`, `ts`, plus baseline HMAC-chain invariant. PLAN-081 Phase 4 (S100 ceremony 2026-05-10) — emitted by `.claude/scripts/run-promotion-gate.py` at end of each locked-corpus promotion-gate run. Source for `u7_rubric_gap_pp` predicate aggregator. ADR-111 ACCEPTED gate. Sec MF-3 invariant: NEVER persist raw fixture content / Codex review body / proposed-content. Registered with `KERNEL_OVERRIDE` bypass. |
+ | `token_budget_guard_paused` (v2.24) | `action`, `plan_id` (str — `^PLAN-[0-9]{3}$`), `estimate_tokens` (int ≥0), `actual_tokens` (int ≥0), `ratio_basis_points` (int ≥0 — actual/estimate×1000, canonical_json no-float invariant), `threshold_basis_points` (int ≥0), `session_id`, `project`, `event_schema`, `ts`, plus baseline HMAC-chain invariant. Emitted by `.claude/scripts/token-budget-guard.py` when cumulative plan tokens cross threshold × estimate from sub-agent 0.2 token-estimator. Volume cap ≤10/hr sliding window per AC5c. Sec MF-3 invariant: NEVER persist token TEXT content, prompt body, file paths, estimator metadata, env values. PLAN-083 Wave 0b sub-agent 0.4 (S106 2026-05-11). Atomic 4-source registration per S100 L6 lesson. |
+ | `anti_ceo_overhead_block` (v2.24) | `action`, `anti_pattern_id` (str — closed enum from P1-P5 predicate set), `count_in_window` (int ≥0 — events in 5-min sliding window), `override_recommended_subagent_type` (str ≤64 — suggested archetype to delegate to), `session_id`, `project`, `event_schema`, `ts`, plus baseline HMAC-chain invariant. Emitted by `.claude/hooks/check_anti_ceo_overhead.py` PreToolUse when CEO-overhead anti-pattern detected (P1 sequential SKILL.md reads / P2 unrelated edits / P3 serial schema authoring / P4 grep-find spam / P5 cross-module tests). Emit budget ≤20/day. Sec MF-3 invariant: NEVER persist tool input content / file paths. PLAN-083 Wave 0a sub-agent 0.5 (S106 2026-05-11). Atomic 4-source registration per S100 L6 lesson. |
+@@ -485,7 +485,7 @@ ${CEO_AUDIT_LOG_PATH:-$HOME/.claude/projects/ceo-orchestration/audit-log.jsonl}
+ | `grok_turn_ended` (v2.50) | `action`, `harness` (str — CLOSED enum: `grok`; coerced), `source` (str — CLOSED enum: `stop` / `subagent_stop` / `other`; coerced to `other` — grok's turn-end surface is narrower than codex's, only the `stop` hook is a reliable boundary; SessionEnd does not fire headless), `session_id`, `project`, `event_schema`, `ts`, plus baseline `tokens_*`/`hmac`/`hmac_error`. PLAN-156 Wave 4 / ADR-162 (2026-07-12) — the turn-level backstop append (grok Stop / SubagentStop hook event, both PASSIVE on grok — the append lands, but a deny there is cosmetic). A DISTINCT action from `grok_tool_recorded`. Unlike the codex twin it carries NO `stop_hook_active` (grok has no analogue). Typed emitter `emit_grok_turn_ended`; dedicated deny-by-default `_GROK_TURN_ENDED_ALLOWLIST` scrub branch, NEVER `_EMIT_GENERIC_PASSTHROUGH`. DENIED on the wire: `last_assistant_message`, transcript path, agent id, command/prompt text. NO ATLAS technique. |
+ | `council_lane_invoked` (v2.51) | `action`, `vendor` (str — CLOSED enum: `claude` / `codex` / `grok` / `other`; coerced), `lane_status` (str — CLOSED enum: `ok` / `unavailable` / `other`; coerced), `session_id`, `project`, `event_schema`, `ts`, plus baseline `tokens_*`/`hmac`/`hmac_error`. PLAN-156 Wave 6 / ADR-162 (2026-07-12) — one append per AVAILABLE external council lane per `/council` run: the auditable record that repo scope LEFT the process to an external vendor (xAI/OpenAI). Typed emitter `emit_council_lane_invoked`; dedicated deny-by-default `_COUNCIL_LANE_INVOKED_ALLOWLIST` scrub branch + closed-enum coercion, NEVER `_EMIT_GENERIC_PASSTHROUGH`. DENIED on the wire: the audited SCOPE text, findings, any prompt bytes — the row records the FACT of egress, never its content (the operator ratifies the egress at OQ5). **Completeness residual (named):** an absent row is not evidence of an absent invocation. NO ATLAS technique (governance/egress breadcrumb). |
+ | `codex_review_verdict` (v2.52) | `action`, `outcome` (str — CLOSED enum: `clean` / `findings` / `skipped_failopen` / `detected_only`; an unrecognized value is COERCED to `skipped_failopen` — never to a healthy-class value, so unparseable telemetry input can never claim rail health), `diff_sha256` (str — 64-lowercase-hex sha256 of the reviewed assembled risky diff, shape-validated; any off-shape value COERCED to `""`), `session_id` (threaded from the Stop-hook stdin event, fallback `CLAUDE_SESSION_ID` env, then `""`), `project`, `event_schema`, `ts`, plus baseline `tokens_*`/`hmac`/`hmac_error`. PLAN-161 W2 C5 / CF-9 (2026-07-27) — Stop-hook cross-model review OUTCOME, emitted by `codex_review_user_code.py` once per distinct (`diff_sha256`, `outcome`) pair (telemetry dedupe SEPARATE from the review-status dedupe, so Stop-retry loops re-review without re-emitting). `clean`/`findings` require a strictly PARSED verdict (bounded `- <file>: <issue>` grammar or exact `CLEAN`); infra fail-open (codex missing / rc!=0 / empty stdout / timeout) AND malformed output both map to `skipped_failopen`; DETECT-ONLY default mode maps its nudge to `detected_only` (neutral). Feeds the /ceo-boot `failopen_rail_liveness_7d` `stop_review` sub-rail. Typed emitter `emit_codex_review_verdict`; dedicated deny-by-default `_CODEX_REVIEW_VERDICT_ALLOWLIST` scrub branch + VALUE re-coercion, NEVER `_EMIT_GENERIC_PASSTHROUGH`. DENIED on the wire: the verdict TEXT, the diff content, file paths (a Codex finding can quote secrets from the reviewed diff). Deliberately NOT `pair_rail_codex_unavailable` — that action feeds the dispatcher's Codex-outage predicate and must stay unpolluted. NO ATLAS technique (liveness telemetry, not a detection signal). |
+-| `pair_rail_review_expected` (v2.52) | `action`, `tool_name` (str — CLOSED enum: `Edit` / `Write` / `MultiEdit` / `NotebookEdit` / `unknown`; off-enum COERCED to `unknown`), `file_path_hash_prefix` (str — 16-hex SHA-256 prefix of target file path, the SAME token/helper as `pair_rail_case`; bounded shape `[0-9a-f]{0,16}`, off-shape COERCED to empty; raw path forbidden per LLM06 side-channel guard; r4 F2, retained as the LEGACY fallback bucket key + harmless secondary key — id-less events still pair per (session, file-hash) BUCKET), `review_id` (str — exact-shape `([0-9a-f]{16})?` (EXACTLY 16 lowercase hex, or empty; r6 F2: raw value validated, off-shape incl. oversize DROPPED to empty — never truncated); r5 F2 — THE invocation correlation key: minted per review entry by `_decide()` (`os.urandom(8).hex()`) and identical on this emit and the same invocation's `pair_rail_case`, so the /ceo-boot deficit pairs a specific expected with its OWN case — counting (even (session, file-hash)-bucketed) cannot: an old completed case for the SAME (session, file) offset a later dead expected 1:1. An EXPECTED `review_id` with no matching `pair_rail_case` in-window = an outstanding (dead) review -> RED; off-shape COERCED to empty; empty falls back to the bucket-count heuristic (best-effort, pre-land events only — post-land every review carries an id)), `session_id` (explicit required kwarg on the typed emitter — the hook threads the PreToolUse event's own session id, no silent default), `project`, `event_schema`, `ts`, plus baseline `tokens_*`/`hmac`/`hmac_error`. PLAN-161 W2 C5 / CF-9 (2026-07-27) — canonical-edit review ENTERED marker, emitted by `check_pair_rail.py:_decide()` only after the kill-switch / non-write-tool / not-L3+ / sentinel-bypass arms have all returned (those paths emit NOTHING). The durable session-correlated DENOMINATOR for the /ceo-boot `pair_rail` activity-conditioned liveness row: a window session with expected-but-no-outcome is the S254 dead-rail class and escalates RED; zero expected + zero outcomes is vacuously green; a healthy outcome from session B never masks session A. Typed emitter `emit_pair_rail_review_expected`; dedicated deny-by-default `_PAIR_RAIL_REVIEW_EXPECTED_ALLOWLIST` scrub branch + closed-enum coercion, NEVER `_EMIT_GENERIC_PASSTHROUGH`. DENIED on the wire: file paths, proposed content, any review text. NO ATLAS technique (liveness telemetry, not a detection signal). |
++| `pair_rail_review_expected` (v2.52) | `action`, `tool_name` (str — CLOSED enum: `Edit` / `Write` / `MultiEdit` / `NotebookEdit` / `unknown`; off-enum COERCED to `unknown`), `file_path_hash_prefix` (str — 16-hex SHA-256 prefix of target file path, the SAME token/helper as `pair_rail_case`; bounded shape `[0-9a-f]{0,16}`, off-shape COERCED to empty; raw path forbidden per LLM06 side-channel guard; r4 F2, retained as the LEGACY fallback bucket key + harmless secondary key — id-less events still pair per (session, file-hash) BUCKET), `review_id` (str — exact-shape `([0-9a-f]{16})?` (EXACTLY 16 lowercase hex, or empty; r6 F2: raw value validated, off-shape incl. oversize DROPPED to empty — never truncated); r5 F2 — THE invocation correlation key: minted per review entry by `_decide()` (`os.urandom(8).hex()`) and identical on this emit and the same invocation's `pair_rail_case`, so the /ceo-boot deficit pairs a specific expected with its OWN case — counting (even (session, file-hash)-bucketed) cannot: an old completed case for the SAME (session, file) offset a later dead expected 1:1. An EXPECTED `review_id` with no matching `pair_rail_case` in-window = an outstanding (dead) review -> RED; off-shape COERCED to empty; empty falls back to the bucket-count heuristic (best-effort, pre-land events only — post-land every review carries an id)), `timeout_ms` (int 0..6000000 — ADR-110-AMEND-2 §1.6: the EFFECTIVE POST-CLAMP codex budget the paired review runs under, in integer MILLISECONDS, NOT float seconds; canonical_json no-float invariant, same encoding as `dispatcher_route.wall_clock_ms` — divide by 1000 to recover seconds; off-shape/NaN/inf/bool COERCED to 0 = "unknown budget", bounded in the typed wrapper AND re-coerced in the `emit_generic` dispatch branch. Carried on the DENOMINATOR as well as the case so the pair records the budget it ran under even when the case never arrives — see the `pair_rail_case` row for the §4(i) rationale and for why the integer encoding is load-bearing), `session_id` (explicit required kwarg on the typed emitter — the hook threads the PreToolUse event's own session id, no silent default), `project`, `event_schema`, `ts`, plus baseline `tokens_*`/`hmac`/`hmac_error`. PLAN-161 W2 C5 / CF-9 (2026-07-27) — canonical-edit review ENTERED marker, emitted by `check_pair_rail.py:_decide()` only after the kill-switch / non-write-tool / not-L3+ / sentinel-bypass arms have all returned (those paths emit NOTHING). The durable session-correlated DENOMINATOR for the /ceo-boot `pair_rail` activity-conditioned liveness row: a window session with expected-but-no-outcome is the S254 dead-rail class and escalates RED; zero expected + zero outcomes is vacuously green; a healthy outcome from session B never masks session A. Typed emitter `emit_pair_rail_review_expected`; dedicated deny-by-default `_PAIR_RAIL_REVIEW_EXPECTED_ALLOWLIST` scrub branch + closed-enum coercion, NEVER `_EMIT_GENERIC_PASSTHROUGH`. DENIED on the wire: file paths, proposed content, any review text. NO ATLAS technique (liveness telemetry, not a detection signal). |
+ | `directory_added_recorded` (v2.53) | `action`, `source` (str — CLOSED enum: `slash_command` / `register_repo_root` / `session_start_snapshot` / `other`; off-enum COERCED to `other`, never echoed — the CC 2.1.220 wire carries only the first two; `session_start_snapshot` is RESERVED for the documented --add-dir-at-LAUNCH blind spot: the launch flag never fires DirectoryAdded, so a SessionStart roots snapshot is the only producer that can record those roots without a second kernel-file ceremony), `directory_hash_prefix` (str — EXACT 12-lowercase-hex sha256 prefix of the ABSOLUTE directory path, or exactly ""; bounded shape `([0-9a-f]{12})?`, RAW value validated — off-shape incl. oversize DROPPED to "", never truncated; the raw path is FORBIDDEN on the wire per the LLM06 side-channel guard and lives ONLY in the gitignored `.claude/state/session-roots.json` registry), `session_id`, `project`, `event_schema`, `ts`, plus baseline `tokens_*`/`hmac`/`hmac_error`. PLAN-163 T3.1 / ADR-183 (2026-07-28) — POST-FACTO forensic record that the session's write surface grew, emitted by `check_directory_added.py` (the DirectoryAdded observer-WRITER; the event is NOTIFICATION-ONLY on CC 2.1.220 — permission/sandbox already include the dir BEFORE dispatch, so no emit here ever claims prevention). Typed emitter `emit_directory_added_recorded`; dedicated deny-by-default `_DIRECTORY_ADDED_RECORDED_ALLOWLIST` scrub branch + closed-enum VALUE coercion, NEVER `_EMIT_GENERIC_PASSTHROUGH`. DENIED on the wire: the raw directory path, registry contents. NO ATLAS technique (perimeter observability, not a detection signal). |
+ | `notification_lifecycle` (v2.53) | `action`, `notification_type` (str — CLOSED enum: `agent_needs_input` / `agent_completed` / `permission_request` / `other`; the harness enum is OPEN (matcher-visible string), so any unrecognized wire value is COERCED to `other` and the raw type string is NEVER echoed into the signed chain), `has_title` (bool), `message_sha256_prefix` (str — EXACT 12-lowercase-hex sha256 prefix of the notification message body, or exactly "" for empty/absent; bounded shape `([0-9a-f]{12})?`, RAW value validated — off-shape incl. oversize DROPPED to "", never truncated; hash, never content — a notification message can quote tool output, file paths, or secrets), `session_id`, `project`, `event_schema`, `ts`, plus baseline `tokens_*`/`hmac`/`hmac_error`. PLAN-163 T3.2 / ADR-183 (2026-07-28) — Notification lifecycle telemetry feeding agent liveness, emitted by `check_notification.py` (pure observer: stdout always `{}` exit 0; kill-switch `CEO_NOTIFICATION_TELEMETRY=0` checked before stdin read; empty payload short-circuits without a vacuous row). Typed emitter `emit_notification_lifecycle`; dedicated deny-by-default `_NOTIFICATION_LIFECYCLE_ALLOWLIST` scrub branch + closed-enum VALUE coercion, NEVER `_EMIT_GENERIC_PASSTHROUGH`. DENIED on the wire: `message`/`title` TEXT (no-value-echo). NO ATLAS technique (liveness telemetry, not a detection signal). |
+ | `night_mode_toggled` (v2.54) | `action`, `mode` (str — CLOSED enum: `acceptEdits` / `manual` / `absent` / `other`; off-enum COERCED to `other`, never echoed — `bypassPermissions` is deliberately ABSENT from the enum so a tampered value can never be laundered into the signed chain as a legitimate posture), `previous_mode` (same closed enum), `result` (str — CLOSED enum: `applied` / `noop` / `refused` / `failed` / `other`), `hostname_hash` (str — EXACT 12-lowercase-hex sha256 prefix of the machine hostname, or exactly ""; bounded shape `([0-9a-f]{12})?`, RAW value validated — off-shape incl. oversize DROPPED to "", never truncated; the raw hostname is FORBIDDEN on the wire), `session_id`, `project`, `event_schema`, `ts`, plus baseline `tokens_*`/`hmac`/`hmac_error`. PLAN-165 P2 / ADR-185 (2026-08-03) — records that the per-machine autonomy posture was toggled by `/night-mode`, emitted by `.claude/scripts/night-mode.py` on EVERY terminating path of `on`/`off` (applied/noop/refused/failed), never by `status` (read-only). Typed emitter `emit_night_mode_toggled`; dedicated deny-by-default `_NIGHT_MODE_TOGGLED_ALLOWLIST` scrub branch + closed-enum VALUE coercion, NEVER `_EMIT_GENERIC_PASSTHROUGH`. DENIED on the wire: any filesystem path (settings overlay, marker), file contents, the raw hostname. NO ATLAS technique (operator-posture provenance, not a detection signal). |
+@@ -569,6 +569,7 @@ The SPEC file tracks **action** additions; `.claude/plans/AUDIT-LOG-SCHEMA.md` 
+ | v2.52 | PLAN-161 W2 C5 / CF-9 (pair-rail liveness telemetry, 2026-07-27) — 2 NEW metadata-only actions closing the permanent-yellow `failopen_rail_liveness_7d` signal gap (the SIGNAL was broken, not the rail): `codex_review_verdict` (Stop-hook cross-review outcome, closed enum `clean`/`findings`/`skipped_failopen`/`detected_only` + shape-validated `diff_sha256`, emitted by `codex_review_user_code.py` once per distinct (diff, outcome) pair) + `pair_rail_review_expected` (canonical-edit review ENTERED denominator, emitted by `check_pair_rail.py:_decide()` after the sentinel-bypass arm; session-correlated so expected-without-outcome escalates). TWO new typed emitters `emit_codex_review_verdict` / `emit_pair_rail_review_expected`; each routes through a dedicated deny-by-default allowlist (`_CODEX_REVIEW_VERDICT_ALLOWLIST` / `_PAIR_RAIL_REVIEW_EXPECTED_ALLOWLIST`) + closed-enum VALUE coercion in its `emit_generic` dispatch branch, NEVER `_EMIT_GENERIC_PASSTHROUGH`. The HMAC chain shape + `verify_chain()` are UNTOUCHED. Registered via PLAN-161 W2 ceremony (`CEO_KERNEL_OVERRIDE=PLAN-161-C5-LIVENESS-ACTIONS`; `_KNOWN_ACTIONS` 319 -> 321). | *(r5 F2: ONE new bounded field `review_id` (per-invocation correlation id, shape-gated `_PAIR_RAIL_REVIEW_ID_RE`; r6 F2 tightening: EXACTLY 16 lowercase hex or empty — raw value validated, off-shape incl. oversize DROPPED to empty, never truncated) on `pair_rail_review_expected` AND on the EXISTING `pair_rail_case`; 2 new per-action allowlists + closed enums `_CODEX_REVIEW_VERDICT_OUTCOME_ENUM` / `_PAIR_RAIL_REVIEW_EXPECTED_TOOL_ENUM` in `audit_emit.py`)* |
+ | v2.53 | PLAN-163 T3.1/T3.2 (CC 2.1.220 substrate uplift / ADR-183, 2026-07-28) — 2 NEW metadata-only actions for the two NEW harness lifecycle events: `directory_added_recorded` (DirectoryAdded workspace-root POST-FACTO append, emitted by `check_directory_added.py`; the event is notification-only on CC 2.1.220 — `decision:block` is structurally ignored, so the row records that the write surface grew, never that anything was prevented) + `notification_lifecycle` (Notification telemetry, emitted by `check_notification.py`). TWO new typed emitters `emit_directory_added_recorded` / `emit_notification_lifecycle`; each routes through a dedicated deny-by-default allowlist (`_DIRECTORY_ADDED_RECORDED_ALLOWLIST` / `_NOTIFICATION_LIFECYCLE_ALLOWLIST`) + closed-enum VALUE coercion in its `emit_generic` dispatch branch, NEVER `_EMIT_GENERIC_PASSTHROUGH`. The HMAC chain shape + `verify_chain()` are UNTOUCHED. Registered via the PLAN-163 pack GPG ceremony (`CEO_KERNEL_OVERRIDE` per the PLAN-161-C5-LIVENESS-ACTIONS precedent; `_KNOWN_ACTIONS` 321 -> 323). | *(no new fields on existing actions; 2 new per-action allowlists + closed enums `_DIRECTORY_ADDED_SOURCE_ENUM` / `_NOTIFICATION_TYPE_ENUM` + bounded shapes `_DIRECTORY_ADDED_HASH_PREFIX_RE` / `_NOTIFICATION_MSG_SHA256_PREFIX_RE` in `audit_emit.py`)* |
+ | v2.54 | PLAN-165 P2 / ADR-185 (night-mode posture toggle, 2026-08-03) — 1 NEW metadata-only action `night_mode_toggled`, emitted by `.claude/scripts/night-mode.py` when the Owner arms or disarms the per-machine autonomy posture. ONE new typed emitter `emit_night_mode_toggled` routing through a dedicated deny-by-default `_NIGHT_MODE_TOGGLED_ALLOWLIST` + closed-enum VALUE coercion in its `emit_generic` dispatch branch, NEVER `_EMIT_GENERIC_PASSTHROUGH`. `bypassPermissions` is deliberately excluded from the mode enum (round-2 NM-01: the marker is a posture-write primitive by proxy, so a tampered value must coerce to `other` rather than be recorded as a real posture). The HMAC chain shape + `verify_chain()` are UNTOUCHED. Registered via the S291 consolidated GPG ceremony (`_KNOWN_ACTIONS` 323 -> 324). | *(no new fields on existing actions; 1 new per-action allowlist + closed enums `_NIGHT_MODE_MODE_ENUM` / `_NIGHT_MODE_RESULT_ENUM` + bounded shape `_NIGHT_MODE_HOSTNAME_HASH_RE` in `audit_emit.py`)* |
++| v2.55 | ADR-110-AMEND-2 §1.6 (pair-rail timeout recalibration 120/150 → 180/210 s, S291 ceremony 2026-08-03) — NO new action (`_KNOWN_ACTIONS` stays 324) and no new allowlist. ONE new bounded field `timeout_ms` (int 0..6000000 — the EFFECTIVE POST-CLAMP codex budget the invocation ran under) added to the EXISTING `pair_rail_case` AND `pair_rail_review_expected` allowlists, coerced in both typed wrappers AND both `emit_generic` dispatch branches (never `_EMIT_GENERIC_PASSTHROUGH`). Motivation is the §4(i) named residual: no event recorded the effective budget, so a session exporting `CEO_PAIR_RAIL_TIMEOUT_S=5` produced a case F byte-INDISTINGUISHABLE from a genuine Codex outage — making the undocumented knob stealthier than the documented `CEO_PAIR_RAIL_DISABLE` kill-switch, which emits its own loud event. A minimum floor on the knob stays DEFERRED (changing a documented knob's semantics is a new contract, AMEND-1 consensus item 2), but the incentive gradient is no longer inverted and the next amendment's historical series is no longer born ambiguous. **Encoding is normative, not stylistic:** MILLISECONDS as an int, NOT the float seconds the amendment prose names — `_lib/canonical_json.py` rejects floats in HMAC-covered fields, and the spool writer then drops the ENTIRE event leaving only an `audit-log.errors` breadcrumb, which on these two actions would manufacture the exact /ceo-boot S254 liveness deficit they exist to measure. Same encoding + rationale as `dispatcher_route.wall_clock_ms` (PLAN-081 Phase 2, Codex iter 1 P0-1). The HMAC chain shape + `verify_chain()` are UNTOUCHED. | *(1 new bounded int field on 2 existing actions; no new actions, no new allowlists; shared coercion `_coerce_pair_rail_timeout_ms` + bound `_PAIR_RAIL_TIMEOUT_MS_MAX` in `audit_emit.py`)* |
+ | v2.27 | PLAN-107 v1.38.0 SPEC v1 backfill (S145) — 62 actions registered closing residual S107-S128 + S134-S143 gaps. Includes: audit_spool_* + audit_flush_dropped_count + skill_cache_stats (PLAN-094); bash_canonical_bypass_invoked (PLAN-085); ceo_boot_persona_coverage_score (PLAN-091); confidence_gate_* (PLAN-100); cost_envelope_capped + execution_context_* + swarm_paused_owner_absent + swarm_runaway_suspected (PLAN-102); federation_* (PLAN-099); goap_* (PLAN-098); kernel_extension_landed + output_scan_finding_suppressed + persona_coverage_synthesized (PLAN-106); persona_auto_* (PLAN-105); phase_c_enforcing_flipped (PLAN-104); rag_* (PLAN-097); sentinel_signer_* (PLAN-099); streaming_* (PLAN-086); mcp_bearer_friction_observed + mcp_cross_tenant_denied + mcp_soak_fpr_breach (PLAN-085); capability_rollout_complete + kill_switch_invoked (PLAN-099). | *(no new fields; per-action allowlists in `audit_emit.py` + spool_writer.py forensic emits)* |
+ | v2.28 | PLAN-107 v1.38.0 Wave B.4 — orphan `stdlib_violation` register via kernel-override sentinel `PLAN-107-WAVE-B-ORPHAN-REGISTER` (S145 2026-05-19). | *(no new fields)* |
+ | v2.30 | PLAN-110 v1.39.0 Wave D (S147 2026-05-20) — 1 NEW action `protocol_edit_missing_amend_paired` for PROTOCOL.md semver-cascade advisory emit (Tier-A; fail-OPEN). Registered via kernel-override sentinel `PLAN-110-WAVE-D-AUDIT-EMIT-EXTENSION`. | *(no new fields; per-action allowlist `_PROTOCOL_EDIT_MISSING_AMEND_PAIRED_ALLOWLIST` in `audit_emit.py`)* |
+diff --git a/scripts/upgrade.sh b/scripts/upgrade.sh
+index 06a7e80..0ec7c4b 100755
+--- a/scripts/upgrade.sh
++++ b/scripts/upgrade.sh
+@@ -68,8 +68,10 @@
+ #     normative table IS the artifact — literals are never re-hardcoded).
+ #   - (PLAN-164 W1, ADR-110-AMEND-1) PAIR-RAIL REGISTRATION-TIMEOUT VALUE
+ #     MIGRATION: the check_pair_rail.py PreToolUse registration timeout is
+-#     bumped from the frozen OLD cap (60) to the template-derived cap IFF the
+-#     adopter's current value == 60; any other adopter-chosen value is
++#     bumped to the template-derived cap IFF the adopter's current value is
++#     one of the frozen SUPERSEDED SHIPPED caps (60 pre-PLAN-164; 150 from
++#     PLAN-164/ADR-110-AMEND-1, shipped in v1.2.0 and superseded by
++#     ADR-110-AMEND-2's 210); any other adopter-chosen value is
+ #     PRESERVED + a named WARNING; idempotent. Runs inside the same T5.4
+ #     migration step (same opt-out, same --dry-run preview); the NEW cap is
+ #     derived from templates/settings/settings.base.json, never hardcoded.
+@@ -1731,9 +1733,10 @@ def _reg($event; $name; $entry):
+ # not yet registered AND the T3.4 version-floor feature gate is on
+ # (_t34_new_event_registrations_enabled). Customized registrations under the
+ # same events — and every other hooks entry/settings key — stay untouched.
+-# PLAN-164 W1 (ADR-110-AMEND-1): the check_pair_rail.py PreToolUse
+-# registration TIMEOUT VALUE migrates under the same 3-state policy — the
+-# frozen OLD cap (60) -> the cap DERIVED from the template artifact
++# PLAN-164 W1 (ADR-110-AMEND-1, recalibrated by ADR-110-AMEND-2): the
++# check_pair_rail.py PreToolUse registration TIMEOUT VALUE migrates under
++# the same 3-state policy — any frozen SUPERSEDED SHIPPED cap (60, 150)
++# -> the cap DERIVED from the template artifact
+ # (templates/settings/settings.base.json pair-rail entry; install.sh copies
+ # it verbatim, so template value == post-install value == migration target);
+ # any other adopter-chosen value is PRESERVED + named WARNING; idempotent.
+@@ -1980,20 +1983,39 @@ else:
+ # --- registration timeout, and the pre-PLAN-164 cap (60s) sat BELOW the
+ # --- measured codex verdict latency (p95 ~75s under load; 12/12 historical
+ # --- pair_rail_case rows were F/TIMEOUT — PLAN-163/probes/
+-# --- GATE-V2-2026-07-29-FAIL-diagnosis.md). Ratified semantics (OQ2=150):
+-# --- bump the check_pair_rail.py PreToolUse registration timeout IFF the
+-# --- current value == the OLD cap; ANY other adopter-chosen value is
+-# --- PRESERVED (named WARN); already-at-target is a no-op; an entry with NO
+-# --- timeout key is left untouched (harness default, not an adopter choice
+-# --- of the old cap). The NEW cap is DERIVED from the template artifact
++# --- GATE-V2-2026-07-29-FAIL-diagnosis.md). Ratified semantics
++# --- (OQ2=150, recalibrated to 210 by ADR-110-AMEND-2): bump the
++# --- check_pair_rail.py PreToolUse registration timeout IFF the current
++# --- value is one of the SUPERSEDED SHIPPED caps; ANY other
++# --- adopter-chosen value is PRESERVED (named WARN); already-at-target is
++# --- a no-op; an entry with NO timeout key is left untouched (harness
++# --- default, not an adopter choice of an old cap). The NEW cap is
++# --- DERIVED from the template artifact
+ # --- (settings.base.json pair-rail entry — install.sh copies it verbatim,
+-# --- so template value == post-install value == migration target); the OLD
+-# --- cap is a frozen historical literal (it no longer exists in any live
++# --- so template value == post-install value == migration target); each
++# --- OLD cap is a frozen historical literal (none exists in any live
+ # --- artifact once this migration lands), exactly like the "old" column of
+ # --- the T5.4 table above. Fail-open: an unreadable template or a
+ # --- non-unique/non-int template cap skips ONLY this leaf (stderr NOTE) —
+ # --- the rest of the migration is unaffected.
+-OLD_PAIR_RAIL_CAP = 60  # frozen pre-PLAN-164 registration cap (never derived)
++# ADR-110-AMEND-2: the set of SUPERSEDED SHIPPED defaults, not a single
++# literal. 60 was the pre-PLAN-164 cap; 150 was the PLAN-164/AMEND-1 cap
++# shipped in v1.2.0 and superseded by the AMEND-2 value 210. A v1.2.0
++# adopter sits at exactly 150, and leaving it there is NOT conservative:
++# with the hook-internal default now 180, a 150s registration lets the
++# HARNESS kill the hook BEFORE the internal codex cap fires -- and a
++# killed hook emits NO pair_rail_case at all (AMEND-2 section 6:
++# fail-open with no event, invisible to the instrument in both numerator
++# and denominator). That is strictly worse than the case F it replaces,
++# so a shipped default must keep migrating. Every member is a frozen
++# historical literal that no longer exists in any live artifact; an
++# adopter value outside this set is a genuine choice and stays PRESERVED
++# + WARNED.
++# NOTE: this whole block is a bash SINGLE-QUOTED -c string. No apostrophe
++# may appear anywhere in it -- one terminates the string and silently
++# turns the migration into a no-op (the tests then read the seeded value
++# back unchanged, which looks like a logic bug, not a quoting bug).
++OLD_PAIR_RAIL_CAPS = (60, 150)
+ template_path = sys.argv[5]
+ 
+ 
+@@ -2037,7 +2059,7 @@ else:
+             continue
+         if cur == new_cap:
+             out("OK (already at template cap): pair-rail registration timeout")
+-        elif cur == OLD_PAIR_RAIL_CAP:
++        elif cur in OLD_PAIR_RAIL_CAPS:
+             if not dry:
+                 h["timeout"] = new_cap
+                 # grok r1 LOW-3 / codex r2: bring the template statusMessage
+diff --git a/templates/settings/settings.base.json b/templates/settings/settings.base.json
+index a15af3a..a530f39 100644
+--- a/templates/settings/settings.base.json
++++ b/templates/settings/settings.base.json
+@@ -89,14 +89,14 @@
+         ]
+       },
+       {
+-        "_comment": "PLAN-152 governance-03 (mirror of dogfood ADR-106 + ADR-110): PreToolUse Pair-Rail Multi-LLM hook. When Edit|Write|MultiEdit targets an L3+ canonical-guarded path, invokes Codex MCP in read-only review mode and validates the response contains no write-shaped patches. Adopters get the codex .mcp.json from install.sh, so the rail is meaningful out of the box; on Codex unavailable it fail-OPENs with a breadcrumb (adopters without Codex pay only the no-op). Kill-switches: CEO_PAIR_RAIL_DISABLE=1, CEO_PAIR_RAIL_TIMEOUT_S (default 120s; registration cap 150s — invariant guarded by test_pair_rail_timeout_invariant.py).",
++        "_comment": "PLAN-152 governance-03 (mirror of dogfood ADR-106 + ADR-110): PreToolUse Pair-Rail Multi-LLM hook. When Edit|Write|MultiEdit targets an L3+ canonical-guarded path, invokes Codex MCP in read-only review mode and validates the response contains no write-shaped patches. Adopters get the codex .mcp.json from install.sh, so the rail is meaningful out of the box; on Codex unavailable it fail-OPENs with a breadcrumb (adopters without Codex pay only the no-op). Kill-switches: CEO_PAIR_RAIL_DISABLE=1, CEO_PAIR_RAIL_TIMEOUT_S (default 180s; registration cap 210s — ADR-110-AMEND-2 recalibration, invariant guarded by test_pair_rail_timeout_invariant.py).",
+         "matcher": "Edit|Write|MultiEdit",
+         "hooks": [
+           {
+             "type": "command",
+             "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_pair_rail.py",
+-            "timeout": 150,
+-            "statusMessage": "Pair-rail cross-model review (may take 1-2 min)"
++            "timeout": 210,
++            "statusMessage": "Pair-rail cross-model review (may take up to ~3 min)"
+           }
+         ]
+       },

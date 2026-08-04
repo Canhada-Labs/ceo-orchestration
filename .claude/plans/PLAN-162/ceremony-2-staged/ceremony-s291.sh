@@ -32,7 +32,7 @@
 
 set -euo pipefail
 
-REPO="/Users/joaocanhada/canhada-labs/ceo-orchestration"
+REPO="$(git rev-parse --show-toplevel)"   # sem path pessoal (repo público)
 # The CORRECTED pack lives on plan-165-draft (commit fdb0f06), not on
 # main — main still carries the stale 3-patch pack whose p1 no longer
 # applies (p3 rewrote its settings.json anchor). Materialize the pack

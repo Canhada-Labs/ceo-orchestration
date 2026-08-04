@@ -49,13 +49,23 @@ ceremony"). The trigger is met (n=20). This amendment:
 5. **The §3 recalibration query becomes a versioned instrument**
    (`.claude/scripts/local/pair-rail-latency.py`) instead of normative
    prose. See §3.
-6. **`timeout_s` (post-clamp) is added to the `pair_rail_case` /
-   `pair_rail_review_expected` events** — see §4 residual (i), which this
-   is the minimum honest cost of keeping true under a 180 s budget.
+6. **`timeout_ms` (post-clamp, integer milliseconds) is added to the
+   `pair_rail_case` / `pair_rail_review_expected` events** — see §4
+   residual (i), which this is the minimum honest cost of keeping true
+   under a 180 s budget. *(Correction during implementation, S292: the
+   first draft specified a float `timeout_s`; `_lib/canonical_json.py:96`
+   forbids floats in HMAC-covered fields and the spool writer DROPS the
+   whole event on violation — a float field here would have blinded the
+   very rail it instruments. Integer milliseconds mirror the
+   `dispatcher_route.wall_clock_ms` precedent; divide by 1000 for
+   seconds.)*
 
 ## §2 Evidence — measured 2026-08-03, cutoff frozen
 
-Instrument: `.claude/scripts/local/pair-rail-latency.py --since 2026-07-29`
+Instrument: `.claude/scripts/local/pair-rail-latency.py --since 2026-07-29 --budget-s 120`
+(o `--budget-s` é OBRIGATÓRIO e sem default: estes números foram colhidos
+sob o orçamento de 120 s, e re-avaliá-los contra 180 daria 0 no lugar do
+7/27 citado — a evidência tem de vir com o budget que a produziu)
 (the union of rotated archives + the live log; 8 files). **Frozen cutoff:
 `ts = 2026-08-03T19:16:53Z`.** Post-uplift partition (the AMEND-1
 ceremony landed 2026-07-29; the fastest healthy sample is 33 s, so no
@@ -73,6 +83,16 @@ sample could have survived the retired 30 s cap — the partition is clean).
 | reviews at or above the 120 s budget | 7/27 = **25.9 %** |
 | F events dropped from the join (no `review_id`, pre-PLAN-161 schema) | 11 |
 | true orphans (`review_expected` with no case at all) | **0** |
+
+> **Re-validação independente (S292, 2026-08-04).** O mesmo instrumento,
+> agora com budget EXPLÍCITO (`--since 2026-07-29 --budget-s 120` — a
+> flag deixou de ter default justamente para que nenhum número apareça
+> sem o budget que o produziu), sobre o dataset crescido para n=41
+> (31 healthy + 10 censored, cutoff `2026-08-03T21:15:06Z`):
+> **taxa de censura 24.4 %** (era 25.9 % em n=27), `p95 >= budget BY
+> COUNT: True`, **0 órfãos verdadeiros**. A conclusão de §2.1 é robusta
+> à ampliação da amostra — o gatilho de >5 % continua largamente
+> ultrapassado e o argumento de contagem continua valendo.
 
 ### §2.1 The decision argument — counting, not interpolation
 
@@ -164,7 +184,8 @@ in its text (this one: `2026-08-03T19:16:53Z`).
   making the undocumented knob **stealthier than the documented
   kill-switch** (`CEO_PAIR_RAIL_DISABLE=1` emits its own loud event
   before any `review_expected`). §1.6 closes the ambiguity by emitting the
-  post-clamp `timeout_s`. A minimum floor on the knob remains DEFERRED
+  post-clamp `timeout_ms` (integer milliseconds — see §1.6 correction).
+  A minimum floor on the knob remains DEFERRED
   (changing a documented knob's semantics is a new contract —
   AMEND-1 consensus item 2), but the incentive gradient is no longer
   inverted, and the next amendment's historical series is no longer born

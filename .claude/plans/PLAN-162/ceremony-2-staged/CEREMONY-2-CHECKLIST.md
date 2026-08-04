@@ -69,7 +69,7 @@ Sonda do teto do harness — bloqueante:
   emite `pair_rail_case`;
 - a contagem de `review_expected` órfãos permanece **0**
   (baseline medido hoje a 150 s: **0** —
-  `python3 .claude/scripts/local/pair-rail-latency.py`).
+  `python3 .claude/scripts/local/pair-rail-latency.py --budget-s 180`).
 
 Se o harness matar o hook antes, o modo de falha resultante é fail-open
 **sem evento nenhum** — invisível ao instrumento no numerador E no

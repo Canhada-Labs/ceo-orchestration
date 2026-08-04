@@ -1,0 +1,336 @@
+diff --git a/.claude/scripts/night-mode.py b/.claude/scripts/night-mode.py
+index 86b3a3d..924cb4c 100755
+--- a/.claude/scripts/night-mode.py
++++ b/.claude/scripts/night-mode.py
+@@ -186,13 +186,29 @@ trust.
+   false restore into the HMAC chain, which is why the two fixes belong in
+   one commit.
+ 
++- NF-08b — the script refuses to run unless the file it was invoked as IS
++  `<repo>/.claude/scripts/night-mode.py`. Round 2 of the cross-vendor
++  review found that the Bash matcher guarding this toggle recognises
++  SPELLINGS, and an alias exists to have a different one: `ln -s
++  <repo>/.claude/scripts/night-mode.py /tmp/nm && python3 /tmp/nm on`
++  armed the posture (measured, `result=applied`), because
++  `Path(__file__).resolve()` follows the link back into the repository.
++  Re-probing widened the class — a renamed copy inside the repo
++  (`.claude/scripts/nm2.py`) armed it too, and no rule about `ln` would
++  have caught that. The guard is here rather than in the hook because it
++  holds however the alias was created and even if the hook never runs;
++  the hook keeps the cheap half (denying `ln` on the toggle) as the
++  earlier signal. An ancestor directory being a symlink is NOT an alias
++  (`/tmp` -> `/private/tmp`), so ancestors are resolved separately.
++
+ Exit codes:
+     0 — success or idempotent no-op
+     1 — read-back mismatch / post-write verification failure
+-    2 — usage error, CI refusal, root confinement (NM-04), tampered or
+-        malformed marker (NM-01 / NF-01..NF-03 / NF-06), or malformed
+-        input (all fail-closed). Recover an armed posture from any of
+-        these with `off --discard-snapshot`.
++    2 — usage error, CI refusal, alias/relocated invocation (NF-08b),
++        root confinement (NM-04), tampered or malformed marker (NM-01 /
++        NF-01..NF-03 / NF-06), or malformed input (all fail-closed).
++        Recover an armed posture from any of these with
++        `off --discard-snapshot`.
+ 
+ Stdlib-only; Python >= 3.9.
+ """
+@@ -214,6 +230,15 @@ from typing import Any, Dict, List, Optional, Tuple
+ 
+ REPO_ROOT = Path(__file__).resolve().parents[2]
+ 
++# NF-08b — the path this script was INVOKED as, before any symlink is
++# followed. Captured at import so it cannot depend on a later `os.chdir`;
++# `absolute()` deliberately does NOT resolve links (that is the whole point —
++# `REPO_ROOT` above already has the resolved form).
++_INVOKED_SELF = Path(__file__).absolute()
++
++# The one relative location this script may legitimately be executed from.
++_CANONICAL_SELF_PARTS = (".claude", "scripts", "night-mode.py")
++
+ # The ONLY mode `on` ever writes (PLAN-165 D1 — bypassPermissions was cut
+ # in review; do not add a mode flag).
+ NIGHT_MODE = "acceptEdits"
+@@ -756,6 +781,89 @@ def _seam_widens_to(root: Path) -> bool:
+     return resolved == tmp or tmp in resolved.parents
+ 
+ 
++def _self_path_diagnostic(anchored: Path, real: Path) -> Optional[str]:
++    """NF-08b — refuse to run as anything but the canonical toggle.
++
++    PURE (no filesystem access): both paths arrive already resolved, so the
++    comparison is testable without a real installation — the S285 shape, a
++    fail-closed validator must be drivable outside the thing it validates.
++
++    ``real``     the file that will actually execute, symlinks resolved.
++    ``anchored`` the path it was INVOKED as, with ancestors resolved but the
++                 FINAL component left alone.
++
++    Two refusals, one per member of the class the S292 r2 review opened:
++
++    1. ``real`` is not at ``<its repo>/.claude/scripts/night-mode.py`` — a
++       RENAMED or RELOCATED copy. Measured: `cp night-mode.py
++       .claude/scripts/nm2.py && python3 .claude/scripts/nm2.py on` armed the
++       posture, because `REPO_ROOT` is derived positionally (`parents[2]`)
++       and a copy two levels deep lands on the real repo root. No rule about
++       `ln` would have caught this one.
++
++    2. ``anchored != real`` — the final component is a LINK, i.e. an ALIAS.
++       Measured: `ln -s <repo>/.claude/scripts/night-mode.py /tmp/nm &&
++       python3 /tmp/nm on` printed `result=applied` and wrote the overlay,
++       because `Path(__file__).resolve()` follows the link back home while
++       the command line names nothing a matcher can recognise.
++
++    Why the ancestors are resolved SEPARATELY: `/tmp` is a symlink to
++    `/private/tmp` on this platform, and plenty of operators keep repos under
++    a symlinked directory. Comparing raw `__file__` against the resolved form
++    would lock every one of them out of their own toggle — a fail-closed gate
++    landing on the useless side. Only the FINAL component being a link is an
++    alias; an ancestor link is just a path spelling.
++    """
++    try:
++        expected = real.parents[2].joinpath(*_CANONICAL_SELF_PARTS)
++    except IndexError:
++        # Fewer than three ancestors — cannot be an installed layout at all.
++        return (
++            f"this script is running from {real} , which is too shallow to be "
++            "an installed project layout; refusing (NF-08b)."
++        )
++    canonical = "/".join(_CANONICAL_SELF_PARTS)
++    if real != expected:
++        return (
++            f"this script is running as {real} , which is not "
++            f"{canonical} of the repository it resolves into ({expected}); "
++            "refusing (NF-08b). A renamed or relocated copy of the posture "
++            "toggle still writes the REAL repository's overlay, so it is a "
++            "second entry point around the OQ1-redo boundary. Run the "
++            f"canonical file instead: `! python3 {canonical} on|off|status`."
++        )
++    if anchored != real:
++        return (
++            f"this script was invoked as {anchored} , an ALIAS of "
++            f"{real} ; refusing (NF-08b). Arming or disarming the autonomy "
++            "posture is a HUMAN action (PLAN-165 OQ1-redo, Owner-ratified "
++            "2026-08-03), and a link is a second entry point that arms it "
++            "without ever naming the guarded path. Run the canonical file "
++            f"instead: `! python3 {canonical} on|off|status`."
++        )
++    return None
++
++
++def _check_self_path() -> Optional[str]:
++    """Resolve THIS script's own paths, then apply `_self_path_diagnostic`.
++
++    Fail-CLOSED on a resolution error: a symlink loop raises `RuntimeError`
++    on some platforms and `OSError` on others, and a guard that cannot
++    determine what it is running as must refuse, not shrug. (The S277 pair
++    rail found exactly this class — an uncaught symlink-loop `RuntimeError`
++    — fail-OPEN in an earlier draft of a different guard in this repo.)
++    """
++    try:
++        real = _INVOKED_SELF.resolve()
++        anchored = _INVOKED_SELF.parent.resolve() / _INVOKED_SELF.name
++    except (OSError, RuntimeError) as exc:
++        return (
++            "cannot resolve this script's own path "
++            f"({exc.__class__.__name__}: {exc}); refusing (NF-08b)."
++        )
++    return _self_path_diagnostic(anchored, real)
++
++
+ def _validate_root(root: Path) -> Optional[str]:
+     """NM-04 — confine --project-root; returns a diagnostic or None.
+ 
+@@ -1579,6 +1687,23 @@ def main(argv: Optional[List[str]] = None) -> int:
+     )
+     args = parser.parse_args(argv)
+ 
++    self_diag = _check_self_path()
++    if self_diag is not None:
++        # NF-08b: BEFORE any other dispatch, including the root confinement —
++        # a script running from an alias has no business resolving a target.
++        # `status` is refused too, matching `_e4`'s scope decision: the SCRIPT
++        # is the surface, and a read-only carve-out would key a PERMISSIVE
++        # branch off argv parsing.
++        sys.stderr.write(f"night-mode: {self_diag}\n")
++        if args.command in ("on", "off"):
++            # A refusal is a terminating path of on/off (NM-05/NF-07), so it
++            # leaves BOTH records. The audit emit resolves through REPO_ROOT,
++            # i.e. the REAL repository the alias points into — which is
++            # exactly where the attempt should be recorded.
++            _summary(mode="none", previous_mode="none", result="refused")
++            _emit_audit("other", "other", "refused")
++        return 2
++
+     if args.discard_snapshot and args.command != "off":
+         sys.stderr.write(
+             "night-mode: --discard-snapshot is only valid with 'off' (got "
+diff --git a/.claude/scripts/tests/test_night_mode.py b/.claude/scripts/tests/test_night_mode.py
+index c553a8a..d3b2a88 100644
+--- a/.claude/scripts/tests/test_night_mode.py
++++ b/.claude/scripts/tests/test_night_mode.py
+@@ -1656,10 +1656,15 @@ _TERMINAL_PATH_FUNCTIONS = ("cmd_on", "cmd_off", "cmd_off_discard_snapshot")
+ 
+ # `main()` is NOT in the tuple above: most of its returns are dispatch
+ # returns (`return cmd_on(root)`), where the record belongs to the callee.
+-# Its three RECORD-bearing paths — the two pre-dispatch fail-closed refusals
++# Its RECORD-bearing paths — the three pre-dispatch fail-closed refusals
++# (NF-08b self-path, `--discard-snapshot` misuse, NM-04 root confinement)
+ # and the catch-all — are pinned separately by
+ # `NightModeMainRecordPairingTest`, which walks the whole module.
+-_MAIN_RECORD_PATHS = 3
++#
++# 3 -> 4 when the NF-08b alias guard landed. Bumping this number is the
++# INTENDED cost of adding a refusal path: the pin exists so that a new
++# terminating path cannot be wired to one record helper and not the other.
++_MAIN_RECORD_PATHS = 4
+ 
+ 
+ def _called_helper_name(stmt: ast.stmt) -> Optional[str]:
+@@ -1891,7 +1896,7 @@ class NightModeMainRecordPairingTest(_NightModeBase):
+             )
+             self.assertEqual(
+                 calls, _MAIN_RECORD_PATHS,
+-                "main() calls %s() %d time(s); expected %d — the two "
++                "main() calls %s() %d time(s); expected %d — the three "
+                 "pre-dispatch refusals and the catch-all. A new "
+                 "record-bearing path in main must add BOTH helpers (and this "
+                 "pin), never one" % (helper, calls, _MAIN_RECORD_PATHS),
+@@ -2202,5 +2207,136 @@ class NightModeOverlayGoneRouteTest(_NightModeBase):
+         )
+ 
+ 
++class NightModeSelfPathGuardTest(_NightModeBase):
++    """NF-08b (codex S292 r2 P1) — refuse to run through an ALIAS.
++
++    `check_bash_safety`'s `_e4` matcher recognises tokens whose SPELLING
++    resolves to `.claude/scripts/night-mode.py`. An alias exists precisely
++    to have a different spelling, and the bypass was MEASURED before this
++    guard, not theorised:
++
++        ln -s <repo>/.claude/scripts/night-mode.py /tmp/nm
++        python3 /tmp/nm on        # -> result=applied, overlay written
++
++    It works because `REPO_ROOT = Path(__file__).resolve().parents[2]`
++    follows the link back into the repository. Re-probing widened the class:
++    a RENAMED COPY inside the repo (`.claude/scripts/nm2.py`) armed the
++    posture too, and no rule about `ln` would have caught it.
++
++    So the boundary lives HERE, in the script, where it holds regardless of
++    how the alias was created and regardless of whether the hook rail runs
++    at all.
++    """
++
++    # -- end-to-end: the exact vector from the review --------------------
++
++    def test_symlink_alias_refuses_to_arm(self):
++        alias = Path(self.project_dir) / "nm"
++        alias.symlink_to(SCRIPT)
++        result = subprocess.run(
++            [sys.executable, str(alias), "on", "--project-root", str(self.root)],
++            capture_output=True, text=True, timeout=30,
++            cwd=str(self.project_dir), env=self._subprocess_env(),
++        )
++        self.assertEqual(
++            result.returncode, 2,
++            "alias invocation was not refused: %s" % (result.stdout + result.stderr),
++        )
++        self.assertFalse(
++            self.local_settings.exists(),
++            "the alias WROTE the posture overlay — NF-08b is not enforced",
++        )
++        self.assertFalse(self.marker.exists(), "the alias wrote a marker")
++        self.assertIn("night-mode.py", result.stderr)
++
++    def test_canonical_invocation_is_the_positive_control(self):
++        """The same command through the real path MUST still work.
++
++        Without this, a guard that refused everything would pass the test
++        above (S291: a probe that cannot fail proves nothing).
++        """
++        result = self.run_cli("on")
++        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
++        self.assertTrue(self.local_settings.exists())
++
++    def test_refusal_leaves_the_record_pair_for_on(self):
++        """A refusal is a terminating path of `on` — NM-05/NF-07 applies."""
++        alias = Path(self.project_dir) / "nm"
++        alias.symlink_to(SCRIPT)
++        result = subprocess.run(
++            [sys.executable, str(alias), "on", "--project-root", str(self.root)],
++            capture_output=True, text=True, timeout=30,
++            cwd=str(self.project_dir), env=self._subprocess_env(),
++        )
++        self.assertIn("night-mode-event", result.stdout)
++        self.assertIn("result=refused", result.stdout)
++
++    def test_status_through_an_alias_is_refused_too(self):
++        """The SCRIPT is the surface, matching `_e4`'s scope decision."""
++        alias = Path(self.project_dir) / "nm"
++        alias.symlink_to(SCRIPT)
++        result = subprocess.run(
++            [sys.executable, str(alias), "status", "--project-root", str(self.root)],
++            capture_output=True, text=True, timeout=30,
++            cwd=str(self.project_dir), env=self._subprocess_env(),
++        )
++        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
++
++    # -- the pure comparison, driven directly ----------------------------
++    #
++    # The renamed-copy half cannot be probed end-to-end without writing into
++    # a real installation, so it is asserted against the pure function. That
++    # is also the S285 shape: a fail-closed validator must be testable
++    # OUTSIDE the thing it validates.
++
++    def test_diagnostic_accepts_the_canonical_layout(self):
++        mod = _load_module()
++        real = Path("/repo/.claude/scripts/night-mode.py")
++        self.assertIsNone(mod._self_path_diagnostic(real, real))
++
++    def test_diagnostic_rejects_an_alias(self):
++        mod = _load_module()
++        real = Path("/repo/.claude/scripts/night-mode.py")
++        diag = mod._self_path_diagnostic(Path("/tmp/nm"), real)
++        self.assertIsNotNone(diag)
++        self.assertIn("/tmp/nm", diag)
++
++    def test_diagnostic_rejects_a_renamed_copy_inside_the_repo(self):
++        """`cp night-mode.py .claude/scripts/nm2.py` armed the posture."""
++        mod = _load_module()
++        copy = Path("/repo/.claude/scripts/nm2.py")
++        diag = mod._self_path_diagnostic(copy, copy)
++        self.assertIsNotNone(diag, "a renamed copy inside the repo was accepted")
++
++    def test_diagnostic_rejects_a_relocated_copy(self):
++        mod = _load_module()
++        copy = Path("/repo/.claude/hooks/night-mode.py")
++        self.assertIsNotNone(mod._self_path_diagnostic(copy, copy))
++
++    def test_diagnostic_tolerates_a_symlinked_ANCESTOR(self):
++        """The FP twin, and the reason the parent is resolved separately.
++
++        `/tmp` is a symlink to `/private/tmp` on this platform, and an
++        operator whose repo path traverses any symlinked directory must not
++        be locked out of their own toggle. Only the FINAL component being a
++        link is an alias.
++        """
++        mod = _load_module()
++        real = Path("/private/repo/.claude/scripts/night-mode.py")
++        self.assertIsNone(mod._self_path_diagnostic(real, real))
++
++    def test_diagnostic_carries_a_recovery_route(self):
++        mod = _load_module()
++        real = Path("/repo/.claude/scripts/night-mode.py")
++        diag = mod._self_path_diagnostic(Path("/tmp/nm"), real) or ""
++        self.assertIn(".claude/scripts/night-mode.py", diag)
++
++    def test_shallow_path_fails_closed_rather_than_raising(self):
++        """`parents[2]` on a 2-component path must not become a traceback."""
++        mod = _load_module()
++        shallow = Path("/nm.py")
++        self.assertIsNotNone(mod._self_path_diagnostic(shallow, shallow))
++
++
+ if __name__ == "__main__":  # pragma: no cover
+     unittest.main()

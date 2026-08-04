@@ -1,0 +1,1020 @@
+diff --git a/.claude/scripts/night-mode.py b/.claude/scripts/night-mode.py
+index eff92e7..86b3a3d 100755
+--- a/.claude/scripts/night-mode.py
++++ b/.claude/scripts/night-mode.py
+@@ -71,20 +71,30 @@ is present (even empty — fail-closed on presence). `status` stays
+ available read-only. No tty gate (W0 T0.6: the Bash rail has no tty;
+ Owner presence is guaranteed by P1 + the CI refusal).
+ 
+-## Observability (NM-05 — interim record until P2 lands)
++## Audit (NM-05 / NF-07 — two records, one per terminating path)
+ 
+-Every `on`/`off` invocation prints ONE machine-readable summary line on
+-EVERY terminating path (stdout, stable key=value shape):
++Every `on`/`off` invocation leaves TWO records on EVERY terminating
++path, written as a pair, never one without the other:
+ 
+-    night-mode-event mode=... previous_mode=... result=applied|noop|refused|failed
++1. ONE machine-readable summary line on stdout (stable key=value shape) —
++   the operator-facing record, unsigned and terminal-scoped:
+ 
+-This script deliberately does NOT emit a `night_mode_toggled` audit
+-event: the action is unregistered until the P2 sentinel ceremony lands
+-(`_KNOWN_ACTIONS` entry + typed wrapper + schema bump), and emitting an
+-unregistered action is exactly what the reality-ledger (detector 6) and
+-audit-registry-coverage guards red on — those guards are correct. The
+-forensic audit trail arrives WITH the P2 ceremony; the one-line summary
+-is the interim record.
++       night-mode-event mode=... previous_mode=... result=applied|noop|refused|failed
++
++2. ONE `night_mode_toggled` row on the HMAC-chained audit log, via
++   `_emit_audit` -> `_lib.audit_emit.emit_night_mode_toggled` — the
++   FORENSIC record PLAN-165 AC-7 requires. The overlay is written by a
++   PROCESS, not by a tool, so no PostToolUse observer covers it: without
++   this row a posture flip between sessions leaves no signed trace.
++
++The action is REGISTERED (`_KNOWN_ACTIONS`, typed wrapper, deny-by-default
++scrub branch, SPEC row — sentinel ceremony `610d9ec`), so the emit is
++live. Only the four allowlisted fields travel (`mode`, `previous_mode`,
++`result`, `hostname_hash`); never a path, never file content, never the
++raw hostname. The emit is best-effort and NEVER raises: observability
++must not be able to block or fail the toggle.
++
++`status` emits NEITHER record — it is read-only, not a toggle.
+ 
+ ## Round-2 security hardening (see PLAN-165/architect/round-2/)
+ 
+@@ -158,6 +168,24 @@ trust.
+   report is emitted through `_one_line` so no future field can forge a
+   record.
+ 
++## Round-3 RE-REVIEW hardening (findings NF-07, NF-09)
++
++- NF-07 — the `night_mode_toggled` action was registered, SPEC'd and
++  documented in signed surfaces, with ZERO production callers: a
++  registered-and-empty action, and three published claims that were
++  false. `_emit_audit` is now the sibling of every `_summary` call (see
++  `## Audit` above), so the signed claim "emitted on EVERY terminating
++  path of on/off" is true of this build. The `ast` oracle pins the PAIR,
++  not just the summary — a later refactor that drops one of the two is a
++  test failure, not a silent regression.
++- NF-09 — `off` on the route where the overlay had ALREADY been removed
++  by hand wrote nothing, then reported `restored to '<snapshot>'` with
++  `result=applied` on both records. It now reports `absent` / `noop` and
++  says plainly that nothing was restored. The bug was harmless while the
++  record was only a stdout line; with NF-07 wired it would have put a
++  false restore into the HMAC chain, which is why the two fixes belong in
++  one commit.
++
+ Exit codes:
+     0 — success or idempotent no-op
+     1 — read-back mismatch / post-write verification failure
+@@ -173,6 +201,7 @@ from __future__ import annotations
+ 
+ import argparse
+ import copy
++import hashlib
+ import json
+ import os
+ import socket
+@@ -240,15 +269,16 @@ _TEST_SEAM_ENV = "CEO_NIGHT_MODE_TEST_SEAM"
+ MARKER_VERSION = 1
+ 
+ _EPILOG = (
+-    "Observability (NM-05): every on/off invocation prints one "
+-    "machine-readable summary line on EVERY terminating path — "
+-    "'night-mode-event mode=... previous_mode=... "
+-    "result=applied|noop|refused|failed'. This is the interim record: the "
+-    "forensic 'night_mode_toggled' audit event ships WITH the P2 sentinel "
+-    "ceremony (registered action + typed wrapper); this script deliberately "
+-    "does not emit it before P2 (an unregistered emit reds the "
+-    "reality-ledger and audit-registry guards, and those guards are "
+-    "correct). Refuses on/off when the CI env var is set (PLAN-165 AC-11). "
++    "Audit (NM-05/NF-07): every on/off invocation leaves TWO records on "
++    "EVERY terminating path — one machine-readable summary line on stdout "
++    "('night-mode-event mode=... previous_mode=... "
++    "result=applied|noop|refused|failed') and one forensic "
++    "'night_mode_toggled' row on the HMAC-chained audit log (registered "
++    "action + typed wrapper, sentinel ceremony 610d9ec). Only mode, "
++    "previous_mode, result and a hashed hostname travel — never a path, "
++    "never file content, never the raw hostname; the emit is best-effort "
++    "and never blocks the toggle. 'status' emits neither (read-only). "
++    "Refuses on/off when the CI env var is set (PLAN-165 AC-11). "
+     "Recovery (NF-02): 'off --discard-snapshot' is the sanctioned exit from "
+     "every fail-closed refusal — it removes the local defaultMode override "
+     "AND the marker WITHOUT honoring the snapshot's prev_value, printing "
+@@ -642,10 +672,9 @@ def _summary(mode: str, previous_mode: str, result: str) -> None:
+ 
+     `result` is one of: applied | noop | refused | failed. Use 'none' for
+     a value that is unknown or not applicable on that path. This is the
+-    INTERIM record — the forensic `night_mode_toggled` audit event ships
+-    with the P2 sentinel ceremony (see module docstring); nothing here
+-    touches `_lib.audit_emit` on purpose (an unregistered emit reds the
+-    reality-ledger + audit-registry guards, correctly).
++    OPERATOR-facing record; its forensic sibling is `_emit_audit` below,
++    and the two are written as a PAIR on every terminating path (the `ast`
++    oracle in the test suite pins the pair — NF-04/NF-07).
+ 
+     Every value is passed through `_summary_token` — the record must stay
+     one parseable line even when a value came from the untrusted marker.
+@@ -658,6 +687,53 @@ def _summary(mode: str, previous_mode: str, result: str) -> None:
+     )
+ 
+ 
++# --------------------------------------------------------------------------- #
++# Audit — NF-07: the forensic `night_mode_toggled` row, one per terminating
++# path, written as the sibling of every `_summary` call.
++# --------------------------------------------------------------------------- #
++def _emit_audit(mode: str, previous_mode: str, result: str) -> None:
++    """Best-effort night_mode_toggled emit (P2, NM-05). NEVER raises,
++    NEVER blocks the toggle.
++
++    Only the P2-allowlisted fields travel: mode, previous_mode, result,
++    hostname_hash (= sha256(hostname)[:12]). Never a file path, never
++    file content, never the raw hostname. Pass "other" explicitly when a
++    value is unknown at the terminating path — the typed wrapper coerces
++    any off-enum value to "other" anyway (never echoed).
++
++    Why this exists (NF-07, round-3 review): the overlay is written by a
++    PROCESS, not by a tool, so no PostToolUse observer covers it. Without
++    this row the highest-forensic-value event PLAN-165 produces — a
++    posture flip that outlives the session — leaves nothing on the
++    HMAC-chained log, and AC-7 is falsifiable. The action is registered
++    (`_KNOWN_ACTIONS`, typed wrapper, scrub branch, SPEC row) by the
++    `610d9ec` sentinel ceremony; this call is the other half of that
++    ceremony's atomicity contract (registration commit, then this emit in
++    the W1-land commit — never an unregistered emit at any HEAD).
++
++    Fail-open by construction: `_lib.audit_emit` is imported INSIDE the
++    try, so a missing/broken hooks tree degrades to "no forensic row",
++    never to a failed toggle. Repo doctrine is fail-closed on INPUT and
++    fail-open on INFRASTRUCTURE — an audit sink is infrastructure.
++    """
++    try:
++        hooks_dir = str(REPO_ROOT / ".claude" / "hooks")
++        if hooks_dir not in sys.path:
++            sys.path.insert(0, hooks_dir)
++        from _lib import audit_emit  # noqa: E402
++
++        audit_emit.emit_night_mode_toggled(
++            mode=mode,
++            previous_mode=previous_mode,
++            result=result,
++            hostname_hash=hashlib.sha256(
++                _hostname().encode("utf-8")
++            ).hexdigest()[:12],
++        )
++    except Exception:  # noqa: BLE001 — observability must never block
++        pass
++
++
+ def _seam_widens_to(root: Path) -> bool:
+     """NM-04 hardening (S290 review, the S284 'TEST_MODE-is-a-bypass'
+     class): the test seam is NO LONGER a general confinement bypass.
+@@ -718,6 +794,7 @@ def cmd_on(root: Path) -> int:
+     refused = _refuse_if_ci()
+     if refused is not None:
+         _summary(mode=NIGHT_MODE, previous_mode="none", result="refused")
++        _emit_audit(NIGHT_MODE, "other", "refused")
+         return refused
+ 
+     FileLock = _import_filelock()
+@@ -731,6 +808,7 @@ def cmd_on(root: Path) -> int:
+                 f"{marker_file}) — no-op. Run 'status' to reconcile."
+             )
+             _summary(mode=NIGHT_MODE, previous_mode="none", result="noop")
++            _emit_audit(NIGHT_MODE, "other", "noop")
+             return 0
+ 
+         settings_file = settings_local_path(root)
+@@ -738,6 +816,7 @@ def cmd_on(root: Path) -> int:
+         if diag is not None:
+             sys.stderr.write(f"night-mode: {diag}\n")
+             _summary(mode=NIGHT_MODE, previous_mode="none", result="refused")
++            _emit_audit(NIGHT_MODE, "other", "refused")
+             return 2
+         created_file = doc is None
+         if doc is None:
+@@ -751,6 +830,7 @@ def cmd_on(root: Path) -> int:
+                 "merge (fail-closed on input).\n"
+             )
+             _summary(mode=NIGHT_MODE, previous_mode="none", result="refused")
++            _emit_audit(NIGHT_MODE, "other", "refused")
+             return 2
+ 
+         prev_present = isinstance(permissions, dict) and "defaultMode" in permissions
+@@ -798,6 +878,7 @@ def cmd_on(root: Path) -> int:
+                 f"({exc.__class__.__name__}: {exc}); nothing changed.\n"
+             )
+             _summary(mode=NIGHT_MODE, previous_mode="none", result="failed")
++            _emit_audit(NIGHT_MODE, "other", "failed")
+             return 1
+         if not _read_back_matches(settings_file, new_doc):
+             # Contract item 3: verified-write failure — do NOT write the
+@@ -808,6 +889,7 @@ def cmd_on(root: Path) -> int:
+                 "created. Inspect the file before retrying.\n"
+             )
+             _summary(mode=NIGHT_MODE, previous_mode="none", result="failed")
++            _emit_audit(NIGHT_MODE, "other", "failed")
+             return 1
+ 
+         marker = {
+@@ -829,6 +911,7 @@ def cmd_on(root: Path) -> int:
+                 "report the disagreement; re-run 'on' after fixing.\n"
+             )
+             _summary(mode=NIGHT_MODE, previous_mode=str(previous), result="failed")
++            _emit_audit(NIGHT_MODE, str(previous), "failed")
+             return 1
+         if not _read_back_matches(marker_file, marker):
+             sys.stderr.write(
+@@ -836,6 +919,7 @@ def cmd_on(root: Path) -> int:
+                 "marker may be torn. Run 'status' to reconcile.\n"
+             )
+             _summary(mode=NIGHT_MODE, previous_mode=str(previous), result="failed")
++            _emit_audit(NIGHT_MODE, str(previous), "failed")
+             return 1
+ 
+         print(
+@@ -855,11 +939,13 @@ def cmd_on(root: Path) -> int:
+                 _bounded_repr(previous),
+             )
+         )
+-        # Summary LAST on every terminating path of on/off (structural rule,
+-        # asserted by the AST oracle in the test suite — NF-04): the P2
+-        # ceremony inserts the forensic `_emit_audit` call right here, and a
+-        # path that returns without it leaves no record.
++        # The two records LAST, as a pair, on every terminating path of
++        # on/off (structural rule, asserted by the `ast` oracle in the test
++        # suite — NF-04/NF-07): operator-facing summary, then the forensic
++        # `night_mode_toggled` row. A path that returns without both leaves
++        # a posture flip only half-witnessed.
+         _summary(mode=NIGHT_MODE, previous_mode=str(previous), result="applied")
++        _emit_audit(NIGHT_MODE, str(previous), "applied")
+         return 0
+ 
+ 
+@@ -870,6 +956,7 @@ def cmd_off(root: Path) -> int:
+     refused = _refuse_if_ci()
+     if refused is not None:
+         _summary(mode="none", previous_mode="none", result="refused")
++        _emit_audit("other", "other", "refused")
+         return refused
+ 
+     FileLock = _import_filelock()
+@@ -879,6 +966,7 @@ def cmd_off(root: Path) -> int:
+             # Contract item 7: idempotent no-op.
+             print("night-mode: already OFF (no marker) — no-op.")
+             _summary(mode="none", previous_mode="none", result="noop")
++            _emit_audit("other", "other", "noop")
+             return 0
+ 
+         marker, diag = _load_json_fail_closed(marker_file, "night-mode marker")
+@@ -890,6 +978,7 @@ def cmd_off(root: Path) -> int:
+                 f"{_DISCARD_HINT}\n"
+             )
+             _summary(mode="none", previous_mode="none", result="refused")
++            _emit_audit("other", "other", "refused")
+             return 2
+ 
+         # NF-03: validate the WHOLE document BEFORE any field is acted on.
+@@ -912,6 +1001,7 @@ def cmd_off(root: Path) -> int:
+             # The marker is rejected, so NOTHING in it — mode_written
+             # included — is echoed into the machine-readable record.
+             _summary(mode="none", previous_mode="none", result="refused")
++            _emit_audit("other", "other", "refused")
+             return 2
+ 
+         # Every field below is now schema-validated: `mode_written` is
+@@ -956,11 +1046,24 @@ def cmd_off(root: Path) -> int:
+                 "it cannot parse.\n"
+             )
+             _summary(mode="none", previous_mode=str(mode_written), result="refused")
++            _emit_audit("other", str(mode_written), "refused")
+             return 2
+ 
+-        if doc is None:
++        overlay_absent = doc is None
++        if overlay_absent:
+             # Overlay vanished since `on` (hand cleanup). Nothing to restore;
+             # removing the marker completes the off.
++            #
++            # NF-09 (round-3 review): this route writes NOTHING, so it must
++            # not claim it did. It used to fall through to the shared tail
++            # and report "restored to 'plan' (snapshot)" with
++            # `result=applied` — a restore that never happened, on both
++            # records. The truth is that the local layer carries no
++            # defaultMode at all and the next session resolves the PROJECT
++            # layer, so `restored` is "absent" and the outcome is `noop`.
++            # The stderr warning corrected an attentive human; the
++            # structured record — the thing a parser reads, and after NF-07
++            # the thing that gets HMAC-signed — stayed wrong.
+             sys.stderr.write(
+                 f"night-mode: warning — {settings_file} is gone; nothing to "
+                 "restore. Removing marker.\n"
+@@ -978,6 +1081,7 @@ def cmd_off(root: Path) -> int:
+                 _summary(
+                     mode="none", previous_mode=str(mode_written), result="refused"
+                 )
++                _emit_audit("other", str(mode_written), "refused")
+                 return 2
+ 
+             current = (permissions or {}).get("defaultMode")
+@@ -1033,6 +1137,7 @@ def cmd_off(root: Path) -> int:
+                         previous_mode=str(mode_written),
+                         result="failed",
+                     )
++                    _emit_audit("other", str(mode_written), "failed")
+                     return 1
+                 _fsync_dir(settings_file.parent)  # NM-09: durable unlink
+             else:
+@@ -1049,6 +1154,7 @@ def cmd_off(root: Path) -> int:
+                         previous_mode=str(mode_written),
+                         result="failed",
+                     )
++                    _emit_audit("other", str(mode_written), "failed")
+                     return 1
+                 if not _read_back_matches(settings_file, new_doc):
+                     sys.stderr.write(
+@@ -1061,9 +1167,21 @@ def cmd_off(root: Path) -> int:
+                         previous_mode=str(mode_written),
+                         result="failed",
+                     )
++                    _emit_audit("other", str(mode_written), "failed")
+                     return 1
+ 
+-        restored = prev_value if prev_present else "absent"
++        if overlay_absent or not prev_present:
++            # NF-09: "absent" on BOTH routes that leave the local layer
++            # without a defaultMode — the snapshot said there was no prior
++            # override, or the overlay holding it had already been removed
++            # by hand. Neither restored a value, so neither may name one.
++            restored = "absent"
++        else:
++            restored = prev_value
++        # NF-09: the overlay-gone route writes no settings file at all, so
++        # its outcome is a no-op, not an `applied`. The marker removal that
++        # still happens below is state cleanup, not a posture write.
++        outcome = "noop" if overlay_absent else "applied"
+         try:
+             os.unlink(marker_file)
+         except OSError as exc:
+@@ -1074,10 +1192,21 @@ def cmd_off(root: Path) -> int:
+             _summary(
+                 mode=str(restored), previous_mode=str(mode_written), result="failed"
+             )
++            _emit_audit(str(restored), str(mode_written), "failed")
+             return 1
+         _fsync_dir(marker_file.parent)  # NM-09: durable unlink
+ 
+-        if prev_present:
++        if overlay_absent:
++            # NF-09: nothing was written on this route. Say that, and say
++            # what governs the next session instead of naming a snapshot
++            # value that was never put anywhere.
++            print(
++                "night-mode: OFF — nothing to restore: the local overlay "
++                "was already gone, so no file was written; the marker is "
++                "removed. Next session resolves the project layer's "
++                "ratified posture."
++            )
++        elif prev_present:
+             # NM-11: name the restored value's relation to the project
+             # layer — a restored local value still OVERRIDES the project
+             # posture; do not claim ratification that did not happen.
+@@ -1092,10 +1221,11 @@ def cmd_off(root: Path) -> int:
+                 f"removed (snapshot: {restored}). Next session resolves the "
+                 "project layer's ratified posture."
+             )
+-        # Summary LAST (NF-04 structural rule — see cmd_on).
++        # Both records LAST, as a pair (NF-04/NF-07 — see cmd_on).
+         _summary(
+-            mode=str(restored), previous_mode=str(mode_written), result="applied"
++            mode=str(restored), previous_mode=str(mode_written), result=outcome
+         )
++        _emit_audit(str(restored), str(mode_written), outcome)
+         return 0
+ 
+ 
+@@ -1129,6 +1259,7 @@ def cmd_off_discard_snapshot(root: Path) -> int:
+     refused = _refuse_if_ci()
+     if refused is not None:
+         _summary(mode="none", previous_mode="none", result="refused")
++        _emit_audit("other", "other", "refused")
+         return refused
+ 
+     FileLock = _import_filelock()
+@@ -1180,6 +1311,7 @@ def cmd_off_discard_snapshot(root: Path) -> int:
+                 "JSON by hand, then re-run. Marker left in place.\n"
+             )
+             _summary(mode="none", previous_mode="none", result="refused")
++            _emit_audit("other", "other", "refused")
+             return 2
+ 
+         removed: Any = "absent"
+@@ -1198,6 +1330,7 @@ def cmd_off_discard_snapshot(root: Path) -> int:
+                     "re-run. Marker left in place.\n"
+                 )
+                 _summary(mode="none", previous_mode="none", result="refused")
++                _emit_audit("other", "other", "refused")
+                 return 2
+             removed = (permissions or {}).get("defaultMode", "absent")
+ 
+@@ -1219,6 +1352,7 @@ def cmd_off_discard_snapshot(root: Path) -> int:
+                     "place.\n"
+                 )
+                 _summary(mode="none", previous_mode="none", result="failed")
++                _emit_audit("other", "other", "failed")
+                 return 1
+             if not _read_back_matches(settings_file, new_doc):
+                 sys.stderr.write(
+@@ -1227,6 +1361,7 @@ def cmd_off_discard_snapshot(root: Path) -> int:
+                     "keeps reporting the disagreement.\n"
+                 )
+                 _summary(mode="none", previous_mode="none", result="failed")
++                _emit_audit("other", "other", "failed")
+                 return 1
+ 
+         if marker_file.exists():
+@@ -1239,6 +1374,7 @@ def cmd_off_discard_snapshot(root: Path) -> int:
+                     "'off --discard-snapshot'.\n"
+                 )
+                 _summary(mode="none", previous_mode="none", result="failed")
++                _emit_audit("other", "other", "failed")
+                 return 1
+             _fsync_dir(marker_file.parent)  # NM-09: durable unlink
+ 
+@@ -1249,8 +1385,9 @@ def cmd_off_discard_snapshot(root: Path) -> int:
+             "restored. The next session resolves the project layer's "
+             "ratified posture."
+         )
+-        # Summary LAST (NF-04 structural rule — see cmd_on).
++        # Both records LAST, as a pair (NF-04/NF-07 — see cmd_on).
+         _summary(mode="none", previous_mode="none", result="applied")
++        _emit_audit("other", "other", "applied")
+         return 0
+ 
+ 
+@@ -1449,7 +1586,11 @@ def main(argv: Optional[List[str]] = None) -> int:
+             "restore, not a mode of arming or reporting.\n"
+         )
+         if args.command == "on":
++            # Pre-dispatch refusals are terminating paths of on/off too —
++            # the SPEC row says EVERY one leaves a `night_mode_toggled`
++            # record, so the pair travels here as well (NF-07).
+             _summary(mode="none", previous_mode="none", result="refused")
++            _emit_audit("other", "other", "refused")
+         return 2
+ 
+     root = Path(args.project_root).resolve() if args.project_root else REPO_ROOT
+@@ -1460,6 +1601,7 @@ def main(argv: Optional[List[str]] = None) -> int:
+         sys.stderr.write(f"night-mode: {diag}\n")
+         if args.command in ("on", "off"):
+             _summary(mode="none", previous_mode="none", result="refused")
++            _emit_audit("other", "other", "refused")
+         return 2
+ 
+     try:
+@@ -1475,8 +1617,34 @@ def main(argv: Optional[List[str]] = None) -> int:
+             f"night-mode: internal error ({exc.__class__.__name__}: {exc})\n"
+         )
+         if args.command in ("on", "off"):
+-            # NM-05: even the catch-all leaves a machine-readable record.
+-            _summary(mode="none", previous_mode="none", result="failed")
++            # NM-05/NF-07: even the catch-all leaves BOTH records.
++            #
++            # Lock contention is a REFUSAL, not a failure: nothing was
++            # attempted, another holder owns the mutation sequence, and this
++            # path exits 2 — which the ceremony's result table maps to
++            # `refused` (`failed` is reserved for exit 1, "a write was
++            # attempted and lost"). NF-11(b) flagged the old blanket
++            # `failed` as diverging from that table. ONE `result` feeds BOTH
++            # records, so the operator-facing line and the signed row can
++            # never disagree about the same invocation (the NF-09 lesson).
++            #
++            # Classifying must not itself be able to raise: the import sits
++            # in its own try, and an unimportable `_lib` degrades to
++            # `failed` — the conservative value, since a build that cannot
++            # import its own lock is not refusing, it is broken.
++            result = "failed"
++            try:
++                hooks_dir = str(REPO_ROOT / ".claude" / "hooks")
++                if hooks_dir not in sys.path:
++                    sys.path.insert(0, hooks_dir)
++                from _lib.filelock import FileLockTimeout  # noqa: E402
++
++                if isinstance(exc, FileLockTimeout):
++                    result = "refused"
++            except Exception:  # noqa: BLE001 — classification is best-effort
++                pass
++            _summary(mode="none", previous_mode="none", result=result)
++            _emit_audit("other", "other", result)
+         return 2
+ 
+ 
+diff --git a/.claude/scripts/tests/test_night_mode.py b/.claude/scripts/tests/test_night_mode.py
+index 967bfd9..c553a8a 100644
+--- a/.claude/scripts/tests/test_night_mode.py
++++ b/.claude/scripts/tests/test_night_mode.py
+@@ -79,6 +79,24 @@ collapsing line breaks):
+   — never AGREE — and a planted line break in ``hostname`` cannot forge
+   an extra ``reconciliation:`` line
+   (``NightModeStatusMarkerValidationTest``).
++
++Round-3 RE-REVIEW (findings NF-07, NF-09 — both about records that claimed
++more than the code did):
++
++- NF-07 — ``night_mode_toggled`` shipped REGISTERED and EMPTY: an entry in
++  ``_KNOWN_ACTIONS``, a typed wrapper, a signed SPEC row and three surfaces
++  claiming the emit, with zero production callers. Both existing gates
++  stayed green because they reconcile NAMES, not LIVENESS. Now the emit is
++  the sibling of every ``_summary`` call, the ``ast`` oracle pins the PAIR
++  (``_TERMINAL_HELPERS``, ``NightModeMainRecordPairingTest``), and the row
++  is asserted on the LOG rather than in the source
++  (``NightModeAuditRowTest``) — including that it never blocks the toggle
++  (``NightModeAuditFailOpenTest``).
++- NF-09 — ``off`` on the route where the overlay had already been removed
++  by hand wrote nothing and reported ``restored to '<snapshot>'`` /
++  ``result=applied`` anyway. It now reports ``absent`` / ``noop``
++  (``NightModeOverlayGoneRouteTest``, with the normal restore kept as the
++  control so the fix cannot pass by breaking ``off``).
+ """
+ 
+ from __future__ import annotations
+@@ -88,6 +106,7 @@ import importlib.util
+ import io
+ import json
+ import os
++import socket
+ import subprocess
+ import sys
+ import unittest
+@@ -1623,18 +1642,25 @@ class NightModeStatusMarkerValidationTest(_NightModeBase):
+ # ---------------------------------------------------------------------------
+ 
+ # The terminal-record helpers that must sit immediately before every
+-# `return` in the toggle commands. TODAY that is the NM-05 one-line summary
+-# only. When the P2 sentinel ceremony re-inserts the forensic audit emit
+-# (ceremony-staged/README.md §"P2 emit re-insertion" specifies it as a
+-# sibling of exactly these call sites), add "_emit_audit" to this tuple and
+-# the oracle then requires BOTH calls on every terminating path — no new
+-# test logic needed.
+-_TERMINAL_HELPERS = ("_summary",)
++# `return` in the toggle commands: the NM-05 operator-facing summary line
++# AND the NF-07 forensic `night_mode_toggled` emit. Both, always, as a pair
++# — the round-3 re-review found the emit registered in `_KNOWN_ACTIONS`,
++# SPEC'd and documented in three signed surfaces with ZERO production
++# callers, and required the oracle to pin the PAIR precisely so the next
++# regression cannot be silent.
++_TERMINAL_HELPERS = ("_summary", "_emit_audit")
+ 
+ # Functions the rule applies to. `status` is deliberately absent (read-only,
+ # not a toggle, must never emit).
+ _TERMINAL_PATH_FUNCTIONS = ("cmd_on", "cmd_off", "cmd_off_discard_snapshot")
+ 
++# `main()` is NOT in the tuple above: most of its returns are dispatch
++# returns (`return cmd_on(root)`), where the record belongs to the callee.
++# Its three RECORD-bearing paths — the two pre-dispatch fail-closed refusals
++# and the catch-all — are pinned separately by
++# `NightModeMainRecordPairingTest`, which walks the whole module.
++_MAIN_RECORD_PATHS = 3
++
+ 
+ def _called_helper_name(stmt: ast.stmt) -> Optional[str]:
+     """Name of the function called by a bare expression statement, or None."""
+@@ -1666,22 +1692,29 @@ def _statement_lists(node: ast.AST) -> List[List[ast.stmt]]:
+ 
+ 
+ class NightModeTerminalPathOracleTest(_NightModeBase):
+-    """NF-04 — the one-record-per-terminating-path rule needs an ORACLE.
++    """NF-04/NF-07 — the two-records-per-terminating-path rule needs an ORACLE.
+ 
+     The requirement is forensic: every terminating path of ``on``/``off``
+-    leaves exactly one machine-readable record, and the P2 ceremony inserts
+-    the ``night_mode_toggled`` audit emit at those same call sites
+-    (``ceremony-staged/README.md`` §"P2 emit re-insertion": "every
+-    ``return`` statement is immediately preceded by exactly one
+-    ``_emit_audit(...)`` call"). Until now that requirement lived ONLY as
+-    prose in a ceremony README — a ceremony executor (or a later refactor)
+-    could wire the record into just the happy path and every behavioural
+-    test would still pass, because no test enumerates the paths.
+-
+-    So this oracle is structural: it parses ``night-mode.py`` with ``ast``
++    leaves exactly one machine-readable summary line AND exactly one
++    ``night_mode_toggled`` audit row (``ceremony-staged/README.md`` §"P2
++    emit re-insertion": "every ``return`` statement is immediately preceded
++    by exactly one ``_emit_audit(...)`` call"). Until the round-3 re-review
++    that requirement lived ONLY as prose in a ceremony README — a ceremony
++    executor (or a later refactor) could wire the record into just the happy
++    path and every behavioural test would still pass, because no test
++    enumerates the paths.
++
++    NF-07 is what that gap actually produced: the action shipped
++    registered, SPEC'd and documented across three signed surfaces with
++    ZERO production callers, and both existing gates
++    (``check-audit-registry-coverage.py``, ``verify-counts``) stayed green
++    over the hole because they compare NAMES and COUNTS, never liveness.
++    So the oracle now pins the PAIR — dropping either helper from any path
++    is a test failure, not a silent regression.
++
++    Structural by construction: it parses ``night-mode.py`` with ``ast``
+     and asserts the invariant on the syntax tree, path by path, including
+-    paths no behavioural test reaches. Extending it to the audit emit after
+-    the ceremony is one entry in ``_TERMINAL_HELPERS``.
++    paths no behavioural test reaches.
+     """
+ 
+     def _tree(self) -> ast.Module:
+@@ -1781,5 +1814,393 @@ class NightModeTerminalPathOracleTest(_NightModeBase):
+         self.fail("cmd_status not found")
+ 
+ 
++class NightModeMainRecordPairingTest(_NightModeBase):
++    """NF-07 — the pair rule, asserted MODULE-WIDE rather than per function.
++
++    ``NightModeTerminalPathOracleTest`` walks the three toggle commands. It
++    cannot walk ``main()``: most of ``main``'s returns are DISPATCH returns
++    (``return cmd_on(root)``) where the record belongs to the callee, so a
++    "record before every return" rule is simply false there. Yet ``main``
++    owns three record-bearing terminating paths of its own — the two
++    pre-dispatch fail-closed refusals (bad ``--discard-snapshot`` pairing,
++    NM-04 root confinement) and the catch-all — and the signed SPEC row
++    claims a ``night_mode_toggled`` on EVERY terminating path of
++    ``on``/``off``, those three included.
++
++    So the invariant asserted here is the one that actually generalises:
++    wherever the module writes ONE of the two records, it writes the OTHER
++    one immediately after. That covers ``main`` today and any function a
++    later change adds, without needing a hand-maintained function list.
++    """
++
++    def _module_statement_lists(self) -> List[List[ast.stmt]]:
++        tree = ast.parse(SCRIPT.read_text(encoding="utf-8"), filename=str(SCRIPT))
++        return _statement_lists(tree)
++
++    def test_summary_and_emit_are_always_adjacent_siblings(self):
++        pairs = 0
++        for stmts in self._module_statement_lists():
++            for index, stmt in enumerate(stmts):
++                name = _called_helper_name(stmt)
++                if name == "_summary":
++                    following = (
++                        _called_helper_name(stmts[index + 1])
++                        if index + 1 < len(stmts) else None
++                    )
++                    self.assertEqual(
++                        following, "_emit_audit",
++                        "the _summary at line %d is not immediately followed "
++                        "by _emit_audit (found %r) — the operator record and "
++                        "the forensic record must travel as a pair on every "
++                        "terminating path (NF-07)"
++                        % (stmt.lineno, following),
++                    )
++                    pairs += 1
++                elif name == "_emit_audit":
++                    preceding = (
++                        _called_helper_name(stmts[index - 1])
++                        if index >= 1 else None
++                    )
++                    self.assertEqual(
++                        preceding, "_summary",
++                        "the _emit_audit at line %d is not immediately "
++                        "preceded by _summary (found %r) — an audit row with "
++                        "no operator line means one of the two records was "
++                        "wired to a path the other one is not on"
++                        % (stmt.lineno, preceding),
++                    )
++        self.assertGreater(
++            pairs, 25,
++            "the module-wide walk found suspiciously few record pairs — it "
++            "is probably not walking the tree it thinks it is",
++        )
++
++    def test_main_owns_exactly_the_expected_record_paths(self):
++        tree = ast.parse(SCRIPT.read_text(encoding="utf-8"), filename=str(SCRIPT))
++        main = next(
++            (n for n in ast.walk(tree)
++             if isinstance(n, ast.FunctionDef) and n.name == "main"),
++            None,
++        )
++        self.assertIsNotNone(main, "main() not found")
++        for helper in _TERMINAL_HELPERS:
++            calls = sum(
++                1 for n in ast.walk(main)
++                if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
++                and n.func.id == helper
++            )
++            self.assertEqual(
++                calls, _MAIN_RECORD_PATHS,
++                "main() calls %s() %d time(s); expected %d — the two "
++                "pre-dispatch refusals and the catch-all. A new "
++                "record-bearing path in main must add BOTH helpers (and this "
++                "pin), never one" % (helper, calls, _MAIN_RECORD_PATHS),
++            )
++
++    def test_the_catch_all_handler_emits_both_records_once(self):
++        tree = ast.parse(SCRIPT.read_text(encoding="utf-8"), filename=str(SCRIPT))
++        main = next(
++            n for n in ast.walk(tree)
++            if isinstance(n, ast.FunctionDef) and n.name == "main"
++        )
++        handlers = [n for n in ast.walk(main) if isinstance(n, ast.ExceptHandler)]
++        self.assertTrue(handlers, "main() has no catch-all handler")
++        found = False
++        for handler in handlers:
++            names = [
++                n.func.id for n in ast.walk(handler)
++                if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
++            ]
++            if "_summary" in names or "_emit_audit" in names:
++                found = True
++                for helper in _TERMINAL_HELPERS:
++                    self.assertEqual(
++                        names.count(helper), 1,
++                        "the catch-all must leave exactly one %s record — an "
++                        "internal error is the path most likely to be the "
++                        "only witness of a half-applied toggle" % helper,
++                    )
++        self.assertTrue(
++            found,
++            "no exception handler in main() leaves a record — an internal "
++            "error would flip nothing but also witness nothing",
++        )
++
++
++# ---------------------------------------------------------------------------
++# NF-07 — the forensic row actually lands (AC-7), and never blocks the toggle
++# ---------------------------------------------------------------------------
++
++
++class NightModeAuditRowTest(_NightModeBase):
++    """AC-7 behaviourally: `on` and `off` leave `night_mode_toggled` rows.
++
++    The round-3 re-review's NF-07 is precisely the failure this class would
++    have caught: action registered, SPEC row signed, three surfaces claiming
++    the emit, and no caller. ``check-audit-registry-coverage.py`` stayed
++    green over it because it reconciles NAMES, not LIVENESS. So the assertion
++    here is on the LOG, not on the source.
++
++    The audit sink is the isolated one TestEnvContext pins
++    (``CEO_AUDIT_LOG_*`` + ``HOME`` under this test's tmp tree, sync mode on),
++    inherited by the child through ``_subprocess_env`` — no test writes to
++    the real chain.
++    """
++
++    def _rows(self) -> List[Dict[str, Any]]:
++        log = Path(self.audit_dir) / "audit-log.jsonl"
++        if not log.is_file():
++            return []
++        rows: List[Dict[str, Any]] = []
++        for line in log.read_text(encoding="utf-8").splitlines():
++            line = line.strip()
++            if not line:
++                continue
++            try:
++                event = json.loads(line)
++            except ValueError:
++                continue
++            if isinstance(event, dict) and event.get("action") == "night_mode_toggled":
++                rows.append(event)
++        return rows
++
++    def test_on_then_off_each_leave_exactly_one_row(self):
++        on = self.run_cli("on")
++        self.assertEqual(on.returncode, 0, on.stdout + on.stderr)
++        rows = self._rows()
++        self.assertEqual(
++            len(rows), 1,
++            "`on` must leave exactly one night_mode_toggled row (AC-7); "
++            "got %d" % len(rows),
++        )
++        self.assertEqual(rows[0].get("mode"), "acceptEdits")
++        self.assertEqual(rows[0].get("previous_mode"), "absent")
++        self.assertEqual(rows[0].get("result"), "applied")
++
++        off = self.run_cli("off")
++        self.assertEqual(off.returncode, 0, off.stdout + off.stderr)
++        rows = self._rows()
++        self.assertEqual(len(rows), 2, "`off` must leave a second row (AC-7)")
++        self.assertEqual(rows[1].get("mode"), "absent")
++        self.assertEqual(rows[1].get("previous_mode"), "acceptEdits")
++        self.assertEqual(rows[1].get("result"), "applied")
++
++    def test_status_leaves_no_row(self):
++        self.run_cli("on")
++        before = len(self._rows())
++        status = self.run_cli("status")
++        self.assertEqual(status.returncode, 0, status.stdout + status.stderr)
++        self.assertEqual(
++            len(self._rows()), before,
++            "status is read-only — it must never write a toggle row",
++        )
++
++    def test_refused_and_noop_paths_are_recorded_too(self):
++        # Malformed overlay -> fail-closed refusal (exit 2).
++        self.local_settings.parent.mkdir(parents=True, exist_ok=True)
++        self.local_settings.write_bytes(b"not json")
++        refused = self.run_cli("on")
++        self.assertEqual(refused.returncode, 2)
++        rows = self._rows()
++        self.assertEqual(len(rows), 1)
++        self.assertEqual(rows[0].get("result"), "refused")
++
++        # `off` with no marker -> idempotent no-op (exit 0).
++        self.local_settings.unlink()
++        noop = self.run_cli("off")
++        self.assertEqual(noop.returncode, 0, noop.stdout + noop.stderr)
++        rows = self._rows()
++        self.assertEqual(len(rows), 2)
++        self.assertEqual(rows[1].get("result"), "noop")
++
++    def test_row_carries_only_the_allowlisted_fields(self):
++        self.run_cli("on")
++        rows = self._rows()
++        self.assertEqual(len(rows), 1)
++        row = rows[0]
++        # Sec MF-3: never a path, never file content, never the raw hostname.
++        for forbidden in (
++            "settings_path", "marker_path", "path", "content", "hostname",
++            "prev_value", "overlay",
++        ):
++            self.assertNotIn(
++                forbidden, row,
++                "%r reached the wire — the night_mode_toggled allowlist is "
++                "deny-by-default for exactly this reason" % forbidden,
++            )
++        self.assertNotIn(
++            socket.gethostname(), json.dumps(row),
++            "the RAW hostname must never appear in the row (only the "
++            "12-hex sha256 prefix)",
++        )
++        self.assertRegex(str(row.get("hostname_hash", "")), r"^[0-9a-f]{12}$")
++
++    def test_lock_contention_records_refused_not_failed(self):
++        """The catch-all's result mapping, proven with a REAL second holder.
++
++        A same-process ``flock`` re-acquire does not contend (S281 lesson),
++        so the lock is held HERE and the toggle runs in a CHILD process. The
++        ceremony's result table maps exit 2 — lock contention included — to
++        `refused`; `failed` is reserved for exit 1, a write that was
++        attempted and lost (NF-11(b)).
++        """
++        from _lib.filelock import FileLock  # noqa: E402
++
++        lock = self.root / ".claude" / "state" / "night-mode.lock"
++        lock.parent.mkdir(parents=True, exist_ok=True)
++        with FileLock(str(lock)):
++            result = self.run_cli("on")
++        self.assertEqual(
++            result.returncode, 2,
++            "lock contention must exit 2:\n" + result.stdout + result.stderr,
++        )
++        self.assertIn("result=refused", result.stdout)
++        self.assertFalse(
++            self.local_settings.exists(),
++            "a refused toggle must not have written the overlay",
++        )
++        rows = self._rows()
++        self.assertEqual(len(rows), 1, "the catch-all must still leave a row")
++        self.assertEqual(
++            rows[0].get("result"), "refused",
++            "lock contention is a refusal, not a failure — the two records "
++            "and the exit code must agree (NF-09 lesson, NF-11(b) mapping)",
++        )
++
++
++class NightModeAuditFailOpenTest(_NightModeBase):
++    """Observability is INFRASTRUCTURE: it may go dark, never block.
++
++    Repo doctrine is fail-CLOSED on input and fail-OPEN on infrastructure.
++    An audit sink that raises must cost the Owner a forensic row, never the
++    ability to disarm a posture.
++    """
++
++    def test_emit_audit_swallows_a_raising_sink(self):
++        mod = _load_module()
++        from _lib import audit_emit  # noqa: E402
++
++        with mock.patch.object(
++            audit_emit, "emit_night_mode_toggled",
++            side_effect=RuntimeError("sink exploded"),
++        ):
++            mod._emit_audit("acceptEdits", "absent", "applied")  # must not raise
++
++    def test_a_raising_sink_does_not_break_the_toggle(self):
++        mod = _load_module()
++        from _lib import audit_emit  # noqa: E402
++
++        with mock.patch.object(
++            audit_emit, "emit_night_mode_toggled",
++            side_effect=RuntimeError("sink exploded"),
++        ):
++            rc, out, err = self.run_inproc(
++                mod, ["on", "--project-root", str(self.root)]
++            )
++        self.assertEqual(rc, 0, err)
++        self.assertIn("result=applied", out)
++        self.assertEqual(
++            self._read_json(self.local_settings)["permissions"]["defaultMode"],
++            "acceptEdits",
++            "a dead audit sink must not stop the posture write",
++        )
++
++
++# ---------------------------------------------------------------------------
++# NF-09 — `off` when the overlay was removed by hand: nothing written, so
++#         nothing may be claimed
++# ---------------------------------------------------------------------------
++
++
++class NightModeOverlayGoneRouteTest(_NightModeBase):
++    """NF-09 — the no-write route must not report a restore.
++
++    Before the fix this route printed a stderr warning ("is gone; nothing to
++    restore") and then fell through to the shared tail, which announced
++    ``restored to 'plan' (snapshot)`` and recorded ``mode=plan
++    result=applied`` — while ``settings.local.json`` did not exist and the
++    next session would resolve the PROJECT layer's ``manual``. The stderr
++    line corrected an attentive human; the structured record, which is what
++    a parser reads and what NF-07 now HMAC-signs, stayed false.
++    """
++
++    def _arm_with_prior_value(self) -> None:
++        self._write_json(
++            self.local_settings,
++            {"permissions": {"defaultMode": "plan"}, "env": {"KEEP": "me"}},
++        )
++        result = self.run_cli("on")
++        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
++        self.assertTrue(self.marker.is_file(), "arming failed")
++
++    def test_off_reports_noop_and_absent_and_writes_nothing(self):
++        self._arm_with_prior_value()
++        self.local_settings.unlink()  # hand cleanup between `on` and `off`
++
++        result = self.run_cli("off")
++        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
++        self.assertIn(
++            "night-mode-event mode=absent previous_mode=acceptEdits "
++            "result=noop",
++            result.stdout,
++            "the machine record must say nothing was restored",
++        )
++        self.assertNotIn("result=applied", result.stdout)
++        self.assertNotIn(
++            "restored to", result.stdout,
++            "the human line must not claim a restore that never happened",
++        )
++        self.assertNotIn(
++            "'plan'", result.stdout,
++            "the snapshot value must not be named as restored — it was not "
++            "written anywhere",
++        )
++        self.assertFalse(
++            self.local_settings.exists(),
++            "this route writes NOTHING: `off` must not resurrect an overlay "
++            "the Owner deleted",
++        )
++        self.assertFalse(
++            self.marker.exists(), "the marker must still be removed",
++        )
++
++    def test_the_audit_row_matches_the_no_write_reality(self):
++        self._arm_with_prior_value()
++        self.local_settings.unlink()
++        self.run_cli("off")
++
++        log = Path(self.audit_dir) / "audit-log.jsonl"
++        rows = [
++            json.loads(line) for line in
++            log.read_text(encoding="utf-8").splitlines() if line.strip()
++        ]
++        toggles = [r for r in rows if r.get("action") == "night_mode_toggled"]
++        self.assertEqual(len(toggles), 2, "one row for `on`, one for `off`")
++        self.assertEqual(
++            toggles[1].get("result"), "noop",
++            "with NF-07 wired, an `applied` here would put a restore that "
++            "never happened into the HMAC chain — which is why NF-07 and "
++            "NF-09 land in one commit",
++        )
++        self.assertEqual(toggles[1].get("mode"), "absent")
++
++    def test_a_normal_off_still_reports_the_restore(self):
++        # Control: the route that DOES write must keep saying so, otherwise
++        # the fix above would be indistinguishable from breaking `off`.
++        self._arm_with_prior_value()
++        result = self.run_cli("off")
++        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
++        self.assertIn("restored to 'plan'", result.stdout)
++        self.assertIn(
++            "night-mode-event mode=plan previous_mode=acceptEdits "
++            "result=applied",
++            result.stdout,
++        )
++        self.assertEqual(
++            self._read_json(self.local_settings)["permissions"]["defaultMode"],
++            "plan",
++        )
++
++
+ if __name__ == "__main__":  # pragma: no cover
+     unittest.main()
