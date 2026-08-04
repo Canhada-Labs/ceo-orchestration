@@ -449,6 +449,13 @@ incorporados ANTES da execução (fonte: handoff S283→S284):
   `disableAutoMode`, `defaultMode: "manual"`, `workflowSizeGuideline`).
   Rollback documentado no pack.
 
+  > **Nota (2026-08-02, PLAN-165):** a postura default acima segue
+  > INALTERADA — tracked settings e templates continuam fail-closed.
+  > O PLAN-165 adicionou apenas um override efêmero per-machine
+  > (`/night-mode` → `permissions.defaultMode: "acceptEdits"` no
+  > `.claude/settings.local.json` gitignored, snapshot/restore no `off`),
+  > sem tocar a decisão do OQ5(c). Ver ADR-185.
+
   > **Emenda datada 2026-08-03 (cerimônia S290, commits `9f53628` +
   > `93a1938` `[SENT-PLAN165]`):** o Owner REVERTEU parcialmente esta
   > ratificação — `disableAutoMode` foi **REMOVIDO** do

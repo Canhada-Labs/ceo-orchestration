@@ -103,8 +103,8 @@ Don't take the README table on faith. From a clean checkout:
 
 ```bash
 find .claude/skills -name SKILL.md | wc -l        # 166 skills (42 core + 8 frontend + 116 domain)
-ls .claude/commands/*.md | wc -l                  # 26 slash commands
-ls .claude/adr | grep -c '^ADR-'                  # 184 ADRs
+ls .claude/commands/*.md | wc -l                  # 27 slash commands
+ls .claude/adr | grep -c '^ADR-'                  # 185 ADRs
 python3 -m pytest --collect-only -q | tail -1     # ~12,000 collected cases
 ```
 
@@ -112,7 +112,13 @@ Every count in the README is reproducible this way. See the README "Verifying th
 
 ---
 
-### 12. Where do I go deeper?
+### 12. Does the framework let me run overnight?
+
+Yes — deliberately, per machine, never by default. The shipped posture is fail-closed (`permissions.defaultMode: "manual"`), so sessions ask before acting. To arm an unattended run on your machine, `/night-mode on` writes `permissions.defaultMode: "acceptEdits"` into the gitignored `.claude/settings.local.json`; the **next** session starts in that mode, `/ceo-boot` shows an advisory banner while it's active, and `/night-mode off` restores the ratified posture. The tracked settings and published defaults never change. For a single fully-unattended session there is an explicit, ephemeral escape valve: `claude --permission-mode bypassPermissions` — `/night-mode` itself never writes `bypassPermissions` (a persistent bypass trips the tamper tripwire by design). See [`docs/TROUBLESHOOTING.md`](TROUBLESHOOTING.md) "Automode comes disabled by default".
+
+---
+
+### 13. Where do I go deeper?
 
 - [`docs/QUICKSTART.md`](QUICKSTART.md) — install and confirm the layer is live.
 - [`docs/DAY-1-CHECKLIST.md`](DAY-1-CHECKLIST.md) — a guided first session.

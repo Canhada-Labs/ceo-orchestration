@@ -1,15 +1,35 @@
-> **STATUS 2026-08-03 — p1 ADIADO.** O review cross-model (codex) mostrou,
-> e a verificacao contra o codigo confirmou, que o p1 NAO fecha a escada de
-> escalacao: as entradas de `deny` sao por FERRAMENTA (Edit/Write), enquanto
-> `check_bash_safety.py` protege escrita via Bash usando `_CANONICAL_GUARDS`
-> — e os tres caminhos do p1 estao FORA dessa lista. Sob `acceptEdits`,
-> `echo '{...}' > .claude/settings.local.json` passa mesmo com o p1
-> aplicado. O conserto exige acrescentar os tres caminhos a
-> `_CANONICAL_GUARDS` (`check_canonical_edit.py`, canonico E kernel).
+> **STATUS 2026-08-03 (2ª revisão) — p1 CORRIGIDO (p1-corrected), p3 já
+> LANDADO.** Historia: o review cross-model (codex, CX-1) mostrou que o p1
+> original NAO fechava a escada de escalacao — as entradas de `deny` sao
+> por FERRAMENTA (Edit/Write), enquanto `check_bash_safety.py` protege
+> escrita via Bash usando `_CANONICAL_GUARDS`, e os tres caminhos estavam
+> FORA dessa lista (`echo '{...}' > .claude/settings.local.json` passava
+> sob `acceptEdits` com o p1 aplicado). O p3 (remocao do disableAutoMode)
+> foi landado standalone em `9f53628` + `93a1938` `[SENT-PLAN165]`.
 >
-> **So o p3 vai a cerimonia agora**, e ele e STANDALONE: foi regerado contra
-> o HEAD canonico limpo, nao contra o estado pos-p1. A secao de ordenacao
-> abaixo (p1 antes de p3) vale apenas para quando o p1 corrigido voltar.
+> O `p1-deny-overlay.patch` deste diretorio e agora o **p1-corrected**,
+> regenerado contra o HEAD pos-p3 (`93a1938`), tocando QUATRO arquivos:
+>
+> 1. `.claude/settings.json` — as 6 entradas de deny + comment (rail
+>    Edit/Write; escopo honesto do CX-1 declarado no proprio comment).
+> 2. `templates/settings/settings.base.json` — espelho das 6 entradas +
+>    comment + correcao do claim stale do `_posture_keys_comment` ("the
+>    dogfood repo enables them" — falso para disableAutoMode desde o p3).
+> 3. `.claude/hooks/check_canonical_edit.py` — os 3 caminhos entram em
+>    `_CANONICAL_GUARDS` (o rail load-bearing: bash_safety keia off dessa
+>    lista → fecha CX-1; e listar o ESCRITOR bloqueia invocacao do toggle
+>    pelo rail do modelo → fecha CX-2 e CX-6, OQ1-redo ratificado pelo
+>    Owner 2026-08-03: "Guard total no rail Bash" — on/off viram acoes
+>    HUMANAS, via `!` ou terminal).
+> 4. `.claude/hooks/check_arbitration_kernel.py` — overlay + marker entram
+>    em `_KERNEL_PATHS` (estado de postura e kernel-tier: nenhum sentinel
+>    autoriza tool-write; o escritor fica canonical-tier para poder
+>    evoluir via cerimonia futura).
+>
+> Preflight: `git apply --check` limpo contra `93a1938`; suites alvo
+> rodadas em clone limpo com p1-corrected + p2 aplicados (log da sessao
+> S291). CX-3 (install.sh sem as regras de ignore) é patch SEPARADO na
+> cerimônia consolidada — ver `p4-install-gitignore.patch` se presente.
 
 # PLAN-165 — ceremony-staged bundle (prerequisites P1 + P2)
 

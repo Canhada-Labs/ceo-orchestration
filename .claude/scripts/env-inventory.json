@@ -1641,6 +1641,13 @@
       ],
       "sites": 3
     },
+    "CEO_NIGHT_MODE_TEST_SEAM": {
+      "evidence": [
+        ".claude/scripts/night-mode.py",
+        ".claude/scripts/tests/test_night_mode.py"
+      ],
+      "sites": 2
+    },
     "CEO_N_BACKEND": {
       "evidence": [
         ".claude/scripts/env-inventory.json",
