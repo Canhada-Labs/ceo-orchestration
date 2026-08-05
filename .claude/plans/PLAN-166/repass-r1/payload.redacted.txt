@@ -1,0 +1,1348 @@
+You are the cross-vendor reviewer on a release hold. Be adversarial and
+concrete. Your output is advisory evidence, not an authorization.
+
+CONTEXT
+- Repo: ceo-orchestration, a governance/auditability framework installed
+  into other repos. Python stdlib-only, >=3.9. No speed claims anywhere.
+- v1.3.0-rc.1 is CUT, signed, CI-green, and published as a GitHub pre-release.
+- A mandatory 24h hold (ADR-103) is running before GA. This re-pass is the
+  hold's review. Nothing has been pushed to npm.
+- A 4-round pair-rail already ran BEFORE the cut against the same scope:
+  18 findings, 17 real and fixed, 1 refuted. Those rounds ran under time
+  pressure at the end of a long session.
+
+ALREADY CLOSED — do NOT re-report these as new. DO report if you find the
+fix itself incorrect, incomplete, or that it introduced a new defect:
+  r1-r3: signed tag annotation still describing v1.2.0; 'bump --dry-run'
+    leaving debris (restore list shorter than write list); three stale
+    current-version declarations (SBOM/SECURITY/VERSIONING) that were also
+    unwatched by any check; a support-window guard watching only
+    'Current MINOR'.
+  r4-P1: 'bump' made idempotent (a no-op bump is success).
+  r4-P2: release checklist no longer claims the driver covers every site.
+  Self-caught after r4: post-bump hint used ${STABLE:+...}, which expands
+    for STABLE=0 and wrongly told the operator to cut the STABLE tag during
+    an RC run.
+  REFUTED (do not re-raise without NEW evidence): that the sentinel-unlock
+    provenance requirement forces a SemVer MAJOR. This repo's published
+    VERSIONING.md scopes MAJOR to schema-consumer breakage; a new trust
+    boundary is the literal MINOR case and is called out in CHANGELOG
+    under Security with the adopter action.
+
+WHAT THIS RE-PASS IS FOR
+The pre-cut rounds asked "is the release machinery correct?". Ask the
+questions a 24h pause is supposed to surface:
+  1. GA EXECUTABILITY. The remaining path is: bump --stable, then
+     tag --stable, then push (push triggers npm publish via OIDC). Read
+     the driver as it now stands. Does that path actually run to
+     completion on a tree already at the RC? Is any step non-idempotent,
+     order-dependent, or dependent on state the RC cut consumed?
+  2. IRREVERSIBILITY. Pushing the GA tag publishes to npm and cannot be
+     undone. What lands wrong and is unrecoverable? Version strings that
+     disagree across published surfaces (npm/package.json vs VERSION vs
+     pyproject vs plugin manifests) are the highest-value class here.
+  3. ADOPTER BLAST RADIUS. Someone on v1.2.0 runs the documented upgrade.
+     Read scripts/upgrade.sh and INSTALL.md against what actually changed.
+     Does the upgrade path handle the new trust-boundary requirement, or
+     does it silently leave an adopter in a broken/locked state?
+  4. HONESTY OF CLAIMS. Every count, capability, and guarantee in the
+     changed docs must match what the code does. Flag any claim that is
+     stale, unfalsifiable, or that describes a gate which cannot fail.
+     A gate that structurally cannot fail is a finding.
+  5. What a tired reviewer at round 4 would most plausibly have missed.
+
+OUTPUT FORMAT
+For each finding: SEVERITY (P0 blocks GA / P1 fix before GA / P2 follow-up),
+FILE:LINE, the concrete failure scenario (inputs -> wrong outcome), and the
+minimal fix. Cite evidence from the diff; do not speculate.
+End with exactly one line: "VERDICT: GO" or "VERDICT: NO-GO" or
+"VERDICT: GO-WITH-CONDITIONS", followed by a one-sentence justification.
+If you find nothing material, say so plainly and return GO — a clean round
+is a legitimate result, but do not manufacture findings to look thorough.
+
+UNIFIED DIFF (v1.2.0..v1.3.0-rc.1, release-mechanics scope) FOLLOWS.
+
+diff --git a/.claude-plugin/marketplace.json b/.claude-plugin/marketplace.json
+index bf1bf06..a99e50f 100644
+--- a/.claude-plugin/marketplace.json
++++ b/.claude-plugin/marketplace.json
+@@ -8,7 +8,7 @@
+       "description": "CEO Orchestration \u2014 governed multi-agent Claude Code with audit + accelerators.",
+       "name": "ceo",
+       "source": "./ceo-plugin",
+-      "version": "1.2.0"
++      "version": "1.3.0"
+     }
+   ]
+ }
+diff --git a/.claude-plugin/plugin.json b/.claude-plugin/plugin.json
+index c941bda..975efb5 100644
+--- a/.claude-plugin/plugin.json
++++ b/.claude-plugin/plugin.json
+@@ -13,5 +13,5 @@
+   ],
+   "license": "MIT",
+   "name": "ceo",
+-  "version": "1.2.0"
++  "version": "1.3.0"
+ }
+diff --git a/.claude/scripts/local/release-v1-2-0.sh b/.claude/scripts/local/release-v1-2-0.sh
+index a2dbdee..af20281 100755
+--- a/.claude/scripts/local/release-v1-2-0.sh
++++ b/.claude/scripts/local/release-v1-2-0.sh
+@@ -45,7 +45,7 @@
+ # ============================================================================
+ set -euo pipefail
+ 
+-TARGET_BASE="1.2.0"
++TARGET_BASE="1.3.0"
+ RC_NUM="1"
+ STABLE=0
+ DRY_RUN=0
+@@ -62,6 +62,9 @@ VERSION_FILES=(
+   "docs/ARCHITECTURE.md"
+   "npm/README.md"
+   "README.md"
++  "SBOM.md"
++  "SECURITY.md"
++  "VERSIONING.md"
+   ".claude-plugin/plugin.json"
+   ".claude-plugin/marketplace.json"
+ )
+@@ -200,12 +203,31 @@ if not any(r.get("conclusion") == "success" for r in val):
+     die "gh CLI not available — cannot confirm CI (fail-closed)"
+   fi
+ 
++  # These MUST be the invocations validate.yml uses (:341-342, :424-425), not
++  # `unittest discover`. The suite is pytest-only BY CONSTRUCTION: conftest.py
++  # carries the sys.path bootstrap and the _lib resolution guards as pytest
++  # collection hooks, and several modules isolate their environment with
++  # pytest `autouse` fixtures. `unittest discover` loads none of that, so those
++  # modules run with their declared isolation silently disabled — which leaks
++  # CLAUDE_PROJECT_DIR into later modules. test_flip_closures then resolves
++  # settings.json / red-team.yml under a dead tmp dir and reports that files
++  # which plainly exist "must exist". It passes 12/12 when run alone.
++  # Diagnosed 2026-08-02 during the v1.2.0 GA promote; the old invocation made
++  # this gate a FALSE RED that blocked a release whose CI was green.
+   hdr "test suites (the same ones CI runs)"
+-  python3 -m unittest discover -s .claude/hooks/tests >/dev/null 2>&1 \
+-    || die "hooks test suite failed"
++  python3 -m pytest .claude/hooks/tests/ -n auto -m 'not serial' \
++    --strict-markers --tb=no -q >/dev/null 2>&1 \
++    || die "hooks test suite failed (not serial)"
++  python3 -m pytest .claude/hooks/tests/ -m 'serial' \
++    --strict-markers --tb=no -q >/dev/null 2>&1 \
++    || die "hooks test suite failed (serial)"
+   ok "hooks tests pass"
+-  python3 -m unittest discover -s .claude/scripts/tests >/dev/null 2>&1 \
+-    || die "scripts test suite failed"
++  python3 -m pytest .claude/scripts/tests/ .claude/scripts/optimizer/tests/ \
++    -n auto -m 'not serial' --strict-markers --tb=no -q >/dev/null 2>&1 \
++    || die "scripts test suite failed (not serial)"
++  python3 -m pytest .claude/scripts/tests/ .claude/scripts/optimizer/tests/ \
++    -m 'serial' --strict-markers --tb=no -q >/dev/null 2>&1 \
++    || die "scripts test suite failed (serial)"
+   ok "scripts tests pass"
+ 
+   hdr "governance gates"
+@@ -328,6 +350,20 @@ SITES = [
+     # Present in the watched list but currently has no such literal; a zero
+     # match here is fine — verify-counts is the oracle, not this table.
+     ("README.md", r'(VERSION=)' + SEMVER, r'\g<1>' + target),
++    # S293 (codex re-pass v1.3.0-rc.1, P1): os três sites que ficaram stale
++    # no bump 1.3.0 porque não estavam NEM aqui NEM no verify-counts (a
++    # classe unwatched-doc de S291). Agora estão nos DOIS. SBOM declara o
++    # triple + stamp; SECURITY/VERSIONING têm stamp mecânico aqui e a
++    # JANELA de suporte (vX.Y.x Current/Previous) fica MANUAL de propósito —
++    # o shift Previous<-Current pede juízo de release-train; o verify-counts
++    # (família minor) falha ALTO se esquecida, que é o contrato.
++    ("SBOM.md", r'(\*\*Version:\*\* `)' + SEMVER + r'(`)', r'\g<1>' + target + r'\g<2>'),
++    ("SBOM.md", r'(last-reviewed: )\d{4}-\d{2}-\d{2}( v)' + SEMVER,
++     r'\g<1>' + today + r'\g<2>' + target),
++    ("SECURITY.md", r'(last-reviewed: )\d{4}-\d{2}-\d{2}( v)' + SEMVER,
++     r'\g<1>' + today + r'\g<2>' + target),
++    ("VERSIONING.md", r'(last-reviewed: )\d{4}-\d{2}-\d{2}( v)' + SEMVER,
++     r'\g<1>' + today + r'\g<2>' + target),
+ ]
+ 
+ for path, rx, repl in SITES:
+@@ -378,11 +414,29 @@ for v in d.get("violations", []):
+   fi
+ 
+   git add -A
++  # S293 (codex re-pass r4, P1): IDEMPOTÊNCIA. Se a árvore já está na versão
++  # alvo (bump feito à mão, ou `bump` re-rodado), não há nada staged e um
++  # `git commit` incondicional MORRE — o caminho documentado de três fases
++  # ficaria inexecutável exatamente quando os gates já estão verdes. Um
++  # bump sem-mudança é SUCESSO (a pós-condição "árvore na versão alvo"
++  # está satisfeita), não falha. Os gates acima já provaram a coerência.
++  if git diff --cached --quiet; then
++    ok "nothing to commit — tree already at ${TARGET_BASE} (idempotent no-op)"
++    # `${STABLE:+...}` expande com STABLE=0 (string nao-vazia) e mandaria
++    # o Owner cortar a tag STABLE numa run de RC. Teste o VALOR.
++    if [ "$STABLE" -eq 1 ]; then
++      note "proceed to: bash $0 tag --stable"
++    else
++      note "proceed to: bash $0 tag --rc $RC_NUM"
++    fi
++    return 0
++  fi
+   git commit -q -m "release: v${TARGET_BASE}
+ 
+-Version bump across all six sites verify-counts enforces (VERSION,
++Version bump across every site verify-counts enforces (VERSION,
+ npm/package.json, pyproject.toml, INSTALL.md, docs/ARCHITECTURE.md,
+-npm/README.md review stamp) for ${TARGET_TAG}.
++npm/README.md review stamp, SBOM.md, and the SECURITY/VERSIONING review
++stamps) for ${TARGET_TAG}.
+ 
+ VERSION carries the BARE semver: the RC lives only in the tag name, matching
+ v1.1.0-rc.1 / v1.0.1-rc.1. An -rc.N string in VERSION would match none of the
+@@ -412,23 +466,31 @@ tag() {
+     && die "tag $TARGET_TAG already exists"
+ 
+   anchor="$(git rev-parse HEAD)"
+-  msg="$TARGET_TAG — substrate + rail release
++  # S293 (codex re-pass r3, P1): a anotação é ASSINADA — descrever a release
++  # anterior seria claim falsa num artefato assinado, a classe P0 deste repo.
++  # Ao preparar a PRÓXIMA release, reescreva este bloco junto com TARGET_BASE
++  # (o preflight não consegue provar que a prosa corresponde ao diff).
++  msg="$TARGET_TAG — night-mode + doctrine release
+ 
+ Anchor: $anchor
+-Scope:  PLAN-160 / PLAN-161 / PLAN-163 / PLAN-164 (ADRs 178 -> 184)
+-
+-Headline: the cross-model pair-rail completed a live in-hook review for the
+-first time in the audit log's history (case A, 115 s). Before this release
+-all 12 pair_rail_case events on record were case F / TIMEOUT — the rail was
+-100% fail-open because its 30 s internal default sat below real verdict
+-latency (ADR-110-AMEND-1: internal 30->120, registration 60->150, invariant
+-now tested).
+-
+-Also: Claude Code 2.1.220 + Claude 5 model registry (ADR-181), Codex payload
+-pin with verify-then-invoke (ADR-182), canonical-edit fail-closed
+-multi-candidate resolution (ADR-164/165), adopter upgrade oracles in
+-smoke-install, and the disableAutoMode fix (a boolean there makes 2.1.220
+-skip the ENTIRE settings.json — governance silently absent).
++Scope:  PLAN-162 / PLAN-165 (ADRs 184 -> 188)
++
++Headline: night-mode — the Owner arms per-machine autonomy for one upcoming
++session (gitignored overlay, next-session semantics), and arming it is a
++HUMAN action by construction: the writer script self-path-guards, the Bash
++rail matches invocation best-effort, and every on/off/refusal lands in the
++HMAC chain as night_mode_toggled (proven live, not by fixture).
++
++Also: a case-fold bypass that let .claude/settings.JSON slip past BOTH the
++canonical and kernel rails on case-insensitive filesystems (P0, fixed on
++both rails); ADR-186 settles the hook-deadline conflict — the canonical
++matcher's wall deadline fails CLOSED as a named exception to the published
++fail-open-on-infrastructure contract, with a provenance-pinned unlock as the
++recovery route; sentinel unlock inside a git worktree now REQUIRES that
++provenance (ADR-119 Invariant 5); pair-rail 120/150 -> 180/210 with
++timeout_ms and a censoring-rate trigger, ratified only after a live probe
++proved the harness honors a 210 s registration; and four scheduled workflows
++that had been red without ever surfacing in push CI.
+ 
+ No speed claim. See CHANGELOG.md [$TARGET_BASE]."
+ 
+@@ -457,9 +519,17 @@ irreversible, outward-facing step — it stays yours:
+ 
+ Then, per .github/release-checklist.md:
+   - gh run watch                      (all release.yml steps green)
++$( if [ "$STABLE" -eq 1 ]; then cat <<'GA'
++  - GitHub Release from the tag, "pre-release" NOT checked (this is the GA)
++  - npm view <pkg> version            (OIDC publish landed the bare semver)
++  - close the release: CHANGELOG links, memory topic, archive the RC hold
++GA
++else cat <<'RC'
+   - GitHub Release from the tag, "pre-release" checked while this is an RC
+   - ADR-103 hold: >=24 h, Codex re-pass against the RC, adopter smoke test
+   - promote: bash $0 bump --stable && bash $0 tag --stable
++RC
++fi )
+ EOF
+ }
+ 
+diff --git a/.claude/scripts/local/verify-counts.sh b/.claude/scripts/local/verify-counts.sh
+index 41f356b..654118f 100755
+--- a/.claude/scripts/local/verify-counts.sh
++++ b/.claude/scripts/local/verify-counts.sh
+@@ -30,24 +30,36 @@
+ #   core skills       find .claude/skills/core -name SKILL.md       exact (42)
+ #   frontend skills   find .claude/skills/frontend -name SKILL.md   exact (8)
+ #   domain skills     find .claude/skills/domains -name SKILL.md    exact (116)
+-#   ADRs              ls .claude/adr/ADR-*.md                        exact (180)
+-#   hook .py files    ls .claude/hooks/*.py                          exact (55)
+-#   registered hooks  distinct *.py in settings.json "command" lines exact (45)
++#   ADRs              ls .claude/adr/ADR-*.md                        exact (188)
++#   hook .py files    ls .claude/hooks/*.py                          exact (57)
++#   registered hooks  distinct *.py in settings.json hooks{} tree   exact (46)
++#   registrations     total hook entries in settings.json hooks{}   exact (48)
+ #   _lib modules      ls .claude/hooks/_lib/*.py  (TOP-LEVEL glob)   exact (68)
+ #   SPEC v1 files     ls SPEC/v1/*.md                                exact (32)
+ #   tests             pytest --collect-only -q .claude/             floor (N+)
+-#   release_steps     grep -c '      - name:' release.yml           exact (21)
+-#   commands          find .claude/commands -name '*.md'             exact (26)
+-#   workflows         find .github/workflows -name '*.yml'           exact (21)
++#   release_steps     grep -c '      - name:' release.yml           exact (29)
++#   commands          find .claude/commands -name '*.md'             exact (27)
++#   workflows         find .github/workflows -name '*.yml'           derived only (no doc cites it — not doc-gated)
+ #
+ # NOTE on the two glob-ambiguous / underivable numbers (code-reviewer P2):
+ #   - "_lib modules" is pinned to the TOP-LEVEL `_lib/*.py` glob (68). The
+ #     recursive `_lib/**/*.py` count (incl. adapters/ + subdirs) is larger
+ #     (~140); docs must state the top-level number to match this gate.
+-#   - "registered hooks" (45) = distinct `*.py` script basenames appearing in
+-#     settings.json hooks{} "command" lines (matches the hook_live_smoke
+-#     check). This is distinct from "hook .py files on disk" (55) — some
+-#     on-disk hooks are not wired into settings.json.
++#   - "registered hooks" (46) = distinct `*.py` script basenames appearing in
++#     command strings of the settings.json hooks{} SUBTREE, parsed as JSON
++#     (matches the hook_live_smoke check). S287: the old whole-file grep with
++#     a hyphenless regex captured the statusLine `statusline-ceo.py` as a
++#     phantom `ceo.py` (47). This is distinct from "hook .py files on disk"
++#     (57) — some on-disk hooks are not wired into settings.json — and from
++#     "registrations" (48): total hook ENTRIES incl. non-.py commands (one
++#     script can fire on several events).
++#
++# RULE-LIVENESS CONTRACT (S287 vacuous-gate lesson): a metric whose regexes
++# match ZERO watched docs reports "no drift" with a number nobody checks —
++# a dead gate. The per-metric match count is exported as `rule_matches` in
++# --json, and the real-repo test suite asserts every doc-gated metric
++# matches >=1 site (test_verify_counts.py). Synthetic test trees are exempt
++# by construction (the assertion lives in the real-repo test, not here).
+ # The historical "6 core hooks" enumeration in CLAUDE.md is a labelled
+ # historical subset, NOT a live total — it is not gated here.
+ # ============================================================================
+@@ -104,11 +116,39 @@ DERIVED_SPEC_V1=$(ls "$REPO_ROOT"/SPEC/v1/*.md 2>/dev/null | wc -l | tr -d ' ')
+ # "schema files" = the *.schema.md subset (excludes README/compat/cli/shim docs).
+ # Use find (not ls glob) so a zero-match tree does not trip set -e/pipefail.
+ DERIVED_SCHEMA_FILES=$(find "$REPO_ROOT/SPEC/v1" -maxdepth 1 -name '*.schema.md' 2>/dev/null | wc -l | tr -d ' ')
+-# Registered hooks = distinct *.py basenames in settings.json "command" lines.
+-DERIVED_REGISTERED=$(
+-  grep '"command"' "$REPO_ROOT/.claude/settings.json" 2>/dev/null \
+-    | grep -oE '[A-Za-z_][A-Za-z0-9_]*\.py' | sort -u | wc -l | tr -d ' '
+-)
++# Registered hooks (46) + registrations (48) — parsed from the settings.json
++# hooks{} SUBTREE as JSON, never a whole-file grep (S287: the old grep +
++# hyphenless regex counted the statusLine `statusline-ceo.py` as a phantom
++# `ceo.py`). registered = distinct *.py basenames across hook command
++# strings (hyphens admitted); registrations = total hook entries (incl.
++# non-.py commands). Unparseable settings.json derives 0/0 (a synthetic
++# tree citing non-zero then fails loud — fail-closed on input).
++_reg_out=$(python3 - "$REPO_ROOT/.claude/settings.json" <<'PYREG' 2>/dev/null
++import json, os, re, sys
++try:
++    s = json.load(open(sys.argv[1], encoding="utf-8"))
++except Exception:
++    print("0 0"); raise SystemExit(0)
++hooks = s.get("hooks", {})
++distinct, total = set(), 0
++if isinstance(hooks, dict):
++    for _event, matchers in hooks.items():
++        if not isinstance(matchers, list):
++            continue
++        for m in matchers:
++            if not isinstance(m, dict):
++                continue
++            for h in m.get("hooks", []):
++                if not isinstance(h, dict):
++                    continue
++                total += 1
++                for tok in re.findall(r"[A-Za-z0-9_.-]+\.py", str(h.get("command", ""))):
++                    distinct.add(os.path.basename(tok))
++print("%d %d" % (len(distinct), total))
++PYREG
++) || _reg_out="0 0"
++DERIVED_REGISTERED=${_reg_out% *}
++DERIVED_REGISTRATIONS=${_reg_out#* }
+ 
+ # Test count: collect-only across .claude/. Collection errors in plan-specific
+ # fixture suites are tolerated (they don't represent code regressions). The
+@@ -198,6 +238,7 @@ export VC_REPO_ROOT="$REPO_ROOT"
+ export VC_SKILLS="$DERIVED_SKILLS" VC_CORE="$DERIVED_CORE" VC_FRONTEND="$DERIVED_FRONTEND"
+ export VC_DOMAIN="$DERIVED_DOMAIN" VC_ADRS="$DERIVED_ADRS" VC_HOOK_PY="$DERIVED_HOOK_PY"
+ export VC_LIB="$DERIVED_LIB" VC_SPEC="$DERIVED_SPEC_V1" VC_REGISTERED="$DERIVED_REGISTERED"
++export VC_REGISTRATIONS="$DERIVED_REGISTRATIONS"
+ export VC_SCHEMA="$DERIVED_SCHEMA_FILES"
+ export VC_TESTS="$DERIVED_TESTS" VC_QUIET="$QUIET" VC_JSON="$JSON" VC_NO_TESTS="$NO_TESTS"
+ export VC_RELEASE_STEPS="$DERIVED_RELEASE_STEPS" VC_COMMANDS="$DERIVED_COMMANDS"
+@@ -216,6 +257,7 @@ live = {
+     "skills": iv("VC_SKILLS"), "core": iv("VC_CORE"), "frontend": iv("VC_FRONTEND"),
+     "domain": iv("VC_DOMAIN"), "adrs": iv("VC_ADRS"), "hook_py": iv("VC_HOOK_PY"),
+     "lib": iv("VC_LIB"), "spec_v1": iv("VC_SPEC"), "registered": iv("VC_REGISTERED"),
++    "registrations": iv("VC_REGISTRATIONS"),
+     "schema_files": iv("VC_SCHEMA"),
+     "tests": iv("VC_TESTS"),
+     "release_steps": iv("VC_RELEASE_STEPS"),
+@@ -284,7 +326,25 @@ RULES = [
+     ("hook_py", "exact", [
+         r'(\d+) hooks total', r'(\d+) Python hook scripts', r'(\d+) hook scripts',
+     ]),
+-    ("registered", "exact", [r'(\d+) registered hooks']),
++    # S287 vacuous-gate fix: no watched doc ever used the literal
++    # "N registered hooks" — the real phrasings are "46 wired into
++    # `.claude/settings.json`" (CLAUDE.md §1, ARCHITECTURE prose + table)
++    # and the "Hooks wired in" table rows (README/npm, TABLE_RULES below).
++    ("registered", "exact", [
++        r'(\d+) registered hooks',
++        # BOTH prepositions: CLAUDE.md/ARCHITECTURE say "46 wired into
++        # `.claude/settings.json`", GUIA-COMPLETO says "46 hooks wired in
++        # `settings.json`". The pair-rail caught the missing `wired in`
++        # form against a doc that was stale at 44 — the vacuous-gate class
++        # one layer deeper (a rule that matches SOME docs looks alive
++        # while the doc it misses drifts).
++        r'(\d+) wired into',
++        r'(\d+) hooks wired in\b',
++    ]),
++    # Total hook ENTRIES in the hooks{} subtree (one script can fire on
++    # several events; includes non-.py commands). CLAUDE.md §1 +
++    # ARCHITECTURE prose + the README/npm table Notes cells.
++    ("registrations", "exact", [r'(\d+) event registrations']),
+     ("lib", "exact", [
+         r'(\d+) shared (?:Python )?modules',
+         r'(\d+) [`]?_lib[`/]* modules',   # catches "N `_lib/` modules" / "N _lib modules"
+@@ -293,16 +353,19 @@ RULES = [
+     ("schema_files", "exact", [r'(\d+) schema files']),
+     ("tests", "floor", [r'(\d+)\+ tests', r'(\d+)\+ unit tests']),
+     # New mechanics-derived counts (F-3.2/F-4 blind-spot closure — PLAN-113 RW-E)
++    # S287 vacuous-gate fix: the two historical phrasings matched no doc
++    # (rule dead since the RELEASE.md rewrite); the live citation site is
++    # RELEASE.md's pointer block "`release.yml` — release-gate +
++    # publish-release (N steps, ...)".
+     ("release_steps", "exact", [
+-        r'release[.-]gate atual \((\d+) steps',   # RELEASE.md (PT)
+-        r'release\.yml.*?with (\d+) steps',        # CLAUDE.md §1
++        r'release\.yml[^()\n]*\((\d+) steps',
+     ]),
+     ("commands", "exact", [
+         r'(\d+) slash commands',
+     ]),
+-    ("workflows", "exact", [
+-        r'(\d+) workflows',
+-    ]),
++    # "workflows" is deliberately NOT doc-gated: no watched doc cites the
++    # workflow count (S287 liveness sweep). The derived value stays in the
++    # --json/human output; re-add a rule here TOGETHER with the doc claim.
+     # E9-F10 (i): recursive `_lib` count. Only CLAUDE.md states "N recursive";
+     # README/INSTALL lack the literal, so scanning all DOCS is safe.
+     ("lib_recursive", "exact", [
+@@ -322,7 +385,9 @@ TABLE_RULES = [
+     ("commands",  "exact", r'^Slash commands\b'),
+     ("skills",    "exact", r'^(?:Skills|Skill checklists)\b'),
+     ("spec_v1",   "exact", r'^SPEC/v1 files\b'),
+-    ("workflows", "exact", r'^Workflows\b'),
++    # S287: README/npm "| Hooks wired in `settings.json` | **46** | ..." and
++    # ARCHITECTURE "| Hook registrations | 46 wired into `settings.json`|".
++    ("registered", "exact", r'^(?:Hooks wired in|Hook registrations)\b'),
+ ]
+ 
+ def iter_table_rows(text):
+@@ -335,6 +400,28 @@ def iter_table_rows(text):
+             yield cells
+ 
+ violations = []
++# S287 rule-liveness accounting: per-metric count of doc sites each rule
++# actually matched (prose + table cells). Exported in --json as
++# `rule_matches`; the real-repo test asserts every doc-gated metric >= 1
++# (a metric at 0 is a dead gate reporting "no drift" unchecked).
++rule_matches = {m: 0 for m, _, _ in RULES}
++for m, _, _ in TABLE_RULES:
++    rule_matches.setdefault(m, 0)
++# PER-DOCUMENT accounting (pair-rail R3, P2). Aggregate-per-metric
++# liveness is a FLOOR, not the proof: a rule matching 5 of 6 watched docs
++# looks alive while the 6th drifts — which is exactly how
++# `docs/GUIA-COMPLETO.md` sat stale at 44 hooks after the metric-level
++# rule was "fixed". `rule_matches_by_doc[(metric, doc)]` lets the
++# real-repo test assert an explicit expectation SET, so a document that
++# silently stops matching is a failure rather than an invisible hole.
++rule_matches_by_doc = {}
++
++
++def _note(metric, doc):
++    rule_matches[metric] = rule_matches.get(metric, 0) + 1
++    key = "%s@%s" % (metric, doc)
++    rule_matches_by_doc[key] = rule_matches_by_doc.get(key, 0) + 1
++
+ for metric, kind, label_rx in TABLE_RULES:
+     lv = live[metric]
+     for doc in DOCS:
+@@ -346,6 +433,7 @@ for metric, kind, label_rx in TABLE_RULES:
+             m = re.search(r'(\d+)', value_cell)
+             if m is None:
+                 continue
++            _note(metric, doc)
+             v = int(m.group(1))
+             if kind == "exact" and v != lv:
+                 violations.append(
+@@ -353,8 +441,9 @@ for metric, kind, label_rx in TABLE_RULES:
+                 )
+ 
+ for metric, kind, regexes in RULES:
+-    if metric == "tests" and no_tests:
+-        continue
++    # tests under --no-tests: still COUNT matches (liveness stays
++    # observable) but never enforce against the skipped live value.
++    enforce = not (metric == "tests" and no_tests)
+     lv = live[metric]
+     # release_steps scans both DOCS and RELEASE_DOCS; all others scan only DOCS.
+     scan_docs = (DOCS + list(_RELEASE_STEPS_EXTRA_DOCS)
+@@ -363,6 +452,9 @@ for metric, kind, regexes in RULES:
+         text = texts.get(doc, "")
+         for rx in regexes:
+             for m in re.finditer(rx, text):
++                _note(metric, doc)
++                if not enforce:
++                    continue
+                 v = int(m.group(1))
+                 if kind == "exact" and v != lv:
+                     violations.append(
+@@ -379,32 +471,110 @@ for metric, kind, regexes in RULES:
+ # must equal the live VERSION file. npm/package.json is read here (it is not in
+ # DOCS). A doc with zero matches contributes no violation.
+ if live_version:
++    # S291 (pair-rail R2, P2): `VERSION=` NEVER existed in CLAUDE.md or
++    # README.md — `git log -S 'VERSION='` finds no commit that added or
++    # removed it. Both rules were dead from birth (the `registered` class
++    # again), while the release checklist advertised them as checked.
++    # Removed rather than faked: neither doc declares a version literal by
++    # design (they point at the VERSION file). Every remaining site is
++    # liveness-accounted below — a site that matches nothing now FAILS.
+     VERSION_SITES = [
+-        ("CLAUDE.md", r'VERSION=(\d+\.\d+\.\d+)'),
+-        ("INSTALL.md", r'--pin v(\d+\.\d+\.\d+)'),
+-        ("README.md", r'VERSION=(\d+\.\d+\.\d+)'),
++        ("INSTALL.md", r'--pin v(\d+\.\d+\.\d+)', "full"),
+         # PLAN-161 V1 — current-version declaration sites in the newly-watched
+         # docs (the npm README review stamp is a deliberate release tripwire:
+         # a version bump forces a fresh review of the npm-facing copy).
+-        ("docs/ARCHITECTURE.md", r'currently\s+v(\d+\.\d+\.\d+), aligned with the repo'),
+-        ("npm/README.md", r'last-reviewed: \d{4}-\d{2}-\d{2} v(\d+\.\d+\.\d+)'),
++        ("docs/ARCHITECTURE.md", r'currently\s+v(\d+\.\d+\.\d+), aligned with the repo', "full"),
++        ("npm/README.md", r'last-reviewed: \d{4}-\d{2}-\d{2} v(\d+\.\d+\.\d+)', "full"),
++        # S293 (codex NO-GO no rc.1 do v1.3.0 — P0s 2-4): TRÊS declarações de
++        # versão corrente que estavam FORA desta lista e ficaram stale no
++        # bump (a classe unwatched-doc de S291, de novo). SBOM declara o
++        # triple completo; SECURITY/VERSIONING declaram a janela de suporte
++        # como vMAJOR.MINOR.x — comparadas ao major.minor do VERSION vivo.
++        ("SBOM.md", r'\*\*Version:\*\* `(\d+\.\d+\.\d+)`', "full"),
++        ("SECURITY.md", r'\*\*Current MINOR\*\* \(`v(\d+\.\d+)\.x`\)', "minor"),
++        ("VERSIONING.md", r'Current MINOR \(`v(\d+\.\d+)\.x`\)', "minor"),
++        # S293 r3 P1: vigiar SÓ o Current deixa o PREVIOUS envelhecer em
++        # silêncio — e a janela de suporte publicada é uma promessa a
++        # adopters, não decoração. Previous = minor imediatamente anterior
++        # ao vivo (rebase de MAJOR não é expressável aqui e falharia alto,
++        # que é o comportamento correto para uma transição que exige juízo).
++        ("SECURITY.md", r'\*\*Previous MINOR\*\* \(`v(\d+\.\d+)\.x`\)', "prev_minor"),
++        ("VERSIONING.md", r'Previous MINOR \(`v(\d+\.\d+)\.x`\)', "prev_minor"),
+     ]
+-    for doc, rx in VERSION_SITES:
+-        for m in re.finditer(rx, texts.get(doc, "")):
+-            if m.group(1) != live_version:
++    _live_minor = ".".join(live_version.split(".")[:2])
++    try:
++        _maj, _min = (int(x) for x in _live_minor.split("."))
++        _prev_minor = "%d.%d" % (_maj, _min - 1) if _min > 0 else ""
++    except ValueError:
++        _prev_minor = ""
++    for doc, rx, mode in VERSION_SITES:
++        _text = texts.get(doc, "")
++        # S293: SBOM/SECURITY/VERSIONING não estão em DOCS (as regras de
++        # contagem não se aplicam a eles) — carregue direto, senão o site
++        # nasce "morto" sobre texto nunca lido.
++        if not _text:
++            _p = os.path.join(root, doc)
++            if os.path.isfile(_p):
++                try:
++                    _text = open(_p, encoding="utf-8").read()
++                except OSError:
++                    _text = ""
++        _hits = 0
++        if mode == "full":
++            _expected = live_version
++        elif mode == "prev_minor":
++            _expected = _prev_minor
++        else:
++            _expected = _live_minor
++        if not _expected:
++            # Sem previous derivável (X.0): o site não é checável por valor;
++            # a liveness abaixo ainda exige que ele EXISTA.
++            _expected = None
++        for m in re.finditer(rx, _text):
++            _hits += 1
++            if _expected is not None and m.group(1) != _expected:
+                 violations.append(
+-                    f"{doc}: cites version={m.group(1)}, live VERSION={live_version}  (rule: exact)"
++                    f"{doc}: cites version={m.group(1)}, live VERSION={_expected}"
++                    f" ({mode})  (rule: exact)"
+                 )
++        rule_matches["version:" + doc + ":" + mode] = _hits
++        # Liveness for the version family (pair-rail R2 P2 / R3 P1). The
++        # discrimination that matters: a doc that EXISTS but no longer
++        # carries its version literal is a DEAD release gate reporting
++        # "clean" — fail loudly. A doc that does not exist at all is a
++        # site that does not apply to this tree (synthetic fixtures ship
++        # a subset of the docs by design) — skip, do not invent a
++        # violation. The first pass of this gate failed unconditionally
++        # and red-lit two existing fixture tests; the pair-rail caught
++        # it because I added the gate without re-running the suite that
++        # covers it.
++        # EXISTENCE, not truthiness (pair-rail R4 P2): an empty file has
++        # falsy text, so the truthiness form reported "clean" after any
++        # version site was truncated to zero bytes — the exact opposite
++        # of the stated exists-without-literal contract.
++        if _hits == 0 and os.path.isfile(os.path.join(root, doc)):
++            violations.append(
++                f"{doc}: version site declared but matched ZERO occurrences "
++                f"— dead release gate (rule: version-liveness)"
++            )
+     pkg_path = os.path.join(root, "npm", "package.json")
+     try:
+         pkg_text = open(pkg_path, encoding="utf-8").read()
+     except OSError:
+         pkg_text = ""
++    _pkg_hits = 0
+     for m in re.finditer(r'"version"\s*:\s*"(\d+\.\d+\.\d+)"', pkg_text):
++        _pkg_hits += 1
+         if m.group(1) != live_version:
+             violations.append(
+                 f"npm/package.json: cites version={m.group(1)}, live VERSION={live_version}  (rule: exact)"
+             )
++    rule_matches["version:npm/package.json"] = _pkg_hits
++    if _pkg_hits == 0 and os.path.isfile(pkg_path):
++        violations.append(
++            "npm/package.json: version field matched ZERO occurrences "
++            "— dead release gate (rule: version-liveness)"
++        )
+     # OSS-D1: pyproject.toml [project] version must equal live VERSION.
+     # Read independently (it is not in DOCS/texts), mirroring the
+     # npm/package.json site above -- closes the silent-drift gap that let
+@@ -414,11 +584,19 @@ if live_version:
+         pyproject_text = open(pyproject_path, encoding="utf-8").read()
+     except OSError:
+         pyproject_text = ""
++    _pyp_hits = 0
+     for m in re.finditer(r'^version\s*=\s*"(\d+\.\d+\.\d+)"', pyproject_text, re.M):
++        _pyp_hits += 1
+         if m.group(1) != live_version:
+             violations.append(
+                 f"pyproject.toml: cites version={m.group(1)}, live VERSION={live_version}  (rule: exact)"
+             )
++    rule_matches["version:pyproject.toml"] = _pyp_hits
++    if _pyp_hits == 0 and os.path.isfile(pyproject_path):
++        violations.append(
++            "pyproject.toml: version field matched ZERO occurrences "
++            "— dead release gate (rule: version-liveness)"
++        )
+ 
+ # ---- E9-F10 (ii): CLAUDE.md §1 RESERVED-ADR list must be exactly {130,134} ----
+ # Parse the "ADR-<a>/<b> RESERVED (no file ..." enumeration (PLAN-120-FOLLOWUP
+@@ -449,14 +627,17 @@ for _line in (os.environ.get("VC_ADR_VIOLATIONS", "") or "").splitlines():
+ if as_json:
+     out_live = dict(live)
+     out_live["version"] = live_version
+-    print(json.dumps({"live": out_live, "violations": violations}, indent=2))
++    print(json.dumps({"live": out_live, "violations": violations,
++                      "rule_matches": rule_matches,
++                      "rule_matches_by_doc": rule_matches_by_doc}, indent=2))
+     sys.exit(1 if violations else 0)
+ 
+ if not quiet:
+     print("=== verify-counts.sh — bidirectional drift check ===")
+     print("Live-derived counts:")
+     for k in ("skills", "core", "frontend", "domain", "adrs", "hook_py",
+-              "registered", "lib", "lib_recursive", "spec_v1", "schema_files",
++              "registered", "registrations", "lib", "lib_recursive",
++              "spec_v1", "schema_files",
+               "tests", "release_steps", "commands", "workflows"):
+         v = live[k]
+         if k == "tests" and no_tests:
+diff --git a/.github/release-checklist.md b/.github/release-checklist.md
+index 423bb48..85ae98c 100644
+--- a/.github/release-checklist.md
++++ b/.github/release-checklist.md
+@@ -9,8 +9,19 @@
+ 
+ - [ ] `git fetch origin && git status` limpo
+ - [ ] `gh run list --branch main --limit 5` todos success
+-- [ ] `python3 -m unittest discover -s .claude/hooks/tests` all pass
+-- [ ] `python3 -m unittest discover -s .claude/scripts/tests` all pass
++- [ ] Suítes na **invocação do CI** (NUNCA `unittest discover` — a suíte é
++      pytest-only por construção: conftest.py e fixtures `autouse` não
++      existem sob unittest, a isolação desliga em silêncio e produz
++      falso-verde/falso-vermelho; foi exatamente isso que barrou o promote
++      do GA v1.2.0 em 2026-08-02):
++  - [ ] `python3 -m pytest .claude/hooks/tests/ -n auto -m 'not serial' --strict-markers -q`
++  - [ ] `python3 -m pytest .claude/hooks/tests/ -m 'serial' --strict-markers -q`
++  - [ ] `python3 -m pytest .claude/scripts/tests/ .claude/scripts/optimizer/tests/ -n auto -m 'not serial' --strict-markers -q`
++  - [ ] `python3 -m pytest .claude/scripts/tests/ .claude/scripts/optimizer/tests/ -m 'serial' --strict-markers -q`
++      ← **as QUATRO**, não três: `validate.yml:425` roda a partição
++      serial dos scripts também (é onde vivem os testes de wall-clock/perf).
++      Rodar só as não-seriais dá falso-verde pré-tag quando um teste
++      serial quebra.
+ - [ ] `bash .claude/scripts/validate-governance.sh` exit 0
+ - [ ] `bash .claude/scripts/check-contamination.sh` exit 0
+ 
+@@ -20,13 +31,46 @@
+ - [ ] `CHANGELOG.md` tem entry pro release mais recente
+ - [ ] Coverage gate ENFORCING verde (`.github/workflows/coverage.yml`)
+ - [ ] `docs/actions-versions.md` tem SHAs atualizados
+-- [ ] `VERSION` file bate com a tag que vai criar
++- [ ] `VERSION` file coerente com a tag: em tag **`-rc.N` o VERSION fica
++      PURO** (`X.Y.Z`, sem sufixo — o `release.yml` strippa `-rc.N` na
++      validação); em tag stable, idêntico. E o bump NÃO é 1 site. Os
++      sites que `verify-counts.sh` de fato checa (§VERSION_SITES + os
++      lidos à parte), mais o `VERSION` que é a fonte da verdade:
++      `VERSION` (fonte) ·
++      `INSTALL.md` (`--pin vX.Y.Z`) ·
++      `docs/ARCHITECTURE.md` (`currently vX.Y.Z, aligned with the repo`) ·
++      `npm/README.md` (`last-reviewed: <data> vX.Y.Z`) ·
++      `npm/package.json` (`"version"`) · `pyproject.toml` (`version =`) ·
++      `SBOM.md` (`**Version:** \`X.Y.Z\``) ·
++      `SECURITY.md` + `VERSIONING.md` (janela de suporte
++      `Current/Previous MINOR (vX.Y.x)` — **família minor**).
++      ⚠ **O driver NÃO cobre tudo** (S293, codex r2/r3): ele reescreve os
++      stamps `last-reviewed` e o triple do SBOM, mas o **shift da janela
++      de suporte** (`Previous` ← `Current`) e a **anotação da tag** são
++      MANUAIS de propósito — ambos exigem juízo de release-train. O
++      `verify-counts` falha alto na janela; a prosa da tag **nenhum gate
++      prova**, então releia-a antes de assinar.
++      **`CLAUDE.md` e `README.md` NÃO são sites de versão** — nunca
++      carregaram literal de versão (`git log -S 'VERSION='` não acha
++      commit que o tenha adicionado); procurá-los num bump é perder tempo
++      atrás de literal inexistente
++      **+ os 2 manifests de plugin** (`.claude-plugin/{plugin,marketplace}.json`,
++      regenerados via `scripts/build-plugin.py --write-manifests`, nunca
++      hand-patch; o gate deles vive só no `release.yml`).
++      O badge do README **não** é site de versão — é dinâmico e o driver
++      não o toca; auditar por ele deixa passar drift real.
++      O driver cobre os sites mecânicos listados acima — **exceto** o
++      shift da janela de suporte e a prosa da tag, que são manuais por
++      desenho (ver o aviso acima e §Promote stable).
+ 
+ ### Governança
+ 
+ - [ ] Branch protection `main` ativo no GitHub
+ - [ ] CODEOWNERS cobre `.claude/team.md`, skills core, ADRs
+-- [ ] GPG signing habilitado (`git config commit.gpgsign`)
++- [ ] Chave GPG de release do Owner disponível (`gpg -K`).
++      `commit.gpgsign`/`tag.gpgsign` ficam **UNSET por design** — commits
++      comuns não são assinados; o driver assina a TAG inline com `-u`
++      (o que o Owner assina no release é a tag, não os commits)
+ - [ ] Todos os ADRs novos têm Status: ACCEPTED
+ 
+ ### Hooks sanity
+@@ -38,16 +82,35 @@
+ 
+ ## Tag + push
+ 
++Preferir o driver (3 fases fail-closed, assina inline, **nunca pusha**):
++
++O driver tem **três** fases e o seletor de alvo (`--rc N` / `--stable`)
++tem de ser o MESMO nas três — `preflight` sem seletor checa o alvo
++errado, e pular `bump` faz o `tag()` abortar no seu próprio check
++`VERSION != TARGET_BASE` (nenhum dos sites de versão foi atualizado).
++
+ ```bash
+-git tag -s v1.0.0-rc.1 -m "..."
+-git push origin v1.0.0-rc.1
++# RC:
++bash .claude/scripts/local/release-v1-2-0.sh preflight --rc N
++bash .claude/scripts/local/release-v1-2-0.sh bump      --rc N --npm-readme-reviewed
++bash .claude/scripts/local/release-v1-2-0.sh tag       --rc N
++git push origin vX.Y.Z-rc.N        # push é manual, sempre
++
++# STABLE (a tag criada é vX.Y.Z, sem sufixo — pushe ESSE nome):
++bash .claude/scripts/local/release-v1-2-0.sh preflight --stable
++bash .claude/scripts/local/release-v1-2-0.sh bump      --stable --npm-readme-reviewed
++bash .claude/scripts/local/release-v1-2-0.sh tag       --stable
++git push origin vX.Y.Z
+ ```
+ 
++O nome da tag muda com a fase; pushar `-rc.N` depois de `tag --stable`
++falha (a tag não existe) ou publica a errada.
++
+ ## Pós-tag (monitorar)
+ 
+ ### Release workflow (automático)
+ 
+-- [ ] `gh run watch` — todos os ~22 steps do `release.yml` green
++- [ ] `gh run watch` — todos os ~29 steps do `release.yml` green
+   (ver `.github/workflows/release.yml`). Inclui, entre outros:
+   version-match (VERSION == tag), freshness de docs canônicos, a
+   janela de re-pass do Codex de 24h (ADR-103, só em tags GA),
+@@ -73,11 +136,20 @@ git push origin v1.0.0-rc.1
+ 
+ ### Promote stable
+ 
+-- [ ] `echo "X.Y.Z" > VERSION` (sem -rcN)
+-- [ ] Commit bump
+-- [ ] `git tag -s vX.Y.Z`
++- [ ] Gate de 24h: delta ≥24h da **rc mais RECENTE por creator-date**
++      (sem rc prévia = fail; rc deletada não conta)
++- [ ] **Novo** `pair-rail-verdict-vX.Y.Z.md` (o verdict é POR TAG — o
++      step do release.yml roda no GA também; o da rc não vale)
++- [ ] `bash .claude/scripts/local/release-v1-2-0.sh preflight --stable`
++      ← **não pule**: é aqui que o driver re-checa árvore limpa/main, CI,
++      governança, usabilidade da chave de assinatura e disponibilidade da
++      tag stable. Ir direto ao `bump` depois do hold pula tudo isso
++- [ ] `bash .claude/scripts/local/release-v1-2-0.sh bump --stable --npm-readme-reviewed`
++      — atualiza os sites doc/package E regenera os 2 manifests de
++      plugin (NUNCA `echo > VERSION` à mão: bump de 1 site com 8 sites
++      vivos foi a causa do red da rc.1)
++- [ ] `bash .claude/scripts/local/release-v1-2-0.sh tag --stable` + `git push origin vX.Y.Z`
+ - [ ] GitHub release (sem pre-release flag)
+-- [ ] Atualiza README badge
+ 
+ ## Rollback
+ 
+diff --git a/.github/workflows/npm-publish.yml b/.github/workflows/npm-publish.yml
+index 5b755b6..aa2e29c 100644
+--- a/.github/workflows/npm-publish.yml
++++ b/.github/workflows/npm-publish.yml
+@@ -160,7 +160,11 @@ jobs:
+             --exclude='*.pyc'
+             --exclude='.pytest_cache/'
+           )
+-          for src in scripts templates .claude SPEC VERSION LICENSE README.md PROTOCOL.md; do
++          # GA-F3 (S288, fechado S293): README.md FORA da lista — rsync do README
++          # raiz sobrescrevia o npm/README.md REVISADO (stamp de review é gate de
++          # release em verify-counts VERSION_SITES). O npm publica o npm/README.md
++          # rastreado, que é a cópia npm-facing revisada a cada bump.
++          for src in scripts templates .claude SPEC VERSION LICENSE PROTOCOL.md; do
+             if [[ -e "$src" ]]; then
+               rsync -a --delete --delete-excluded "${RSYNC_EXCLUDES[@]}" "$src" "npm/"
+             fi
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index bb191c3..0d97ecc 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -9,12 +9,121 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
+ > commands, schema/contract changes, and behavior an adopter would notice after
+ > installing or upgrading the framework. Internal refactors, test-only churn, and
+ > release-engineering bookkeeping are omitted. Counts cited below (as of
+-> v1.2.0: 166 skills, 26 slash commands, 184 ADRs, 68 `_lib` modules) are
++> v1.3.0: 166 skills, 27 slash commands, 188 ADRs, 68 `_lib` modules) are
+ > reproducible from the repository via
+ > `bash .claude/scripts/local/verify-counts.sh`.
+ 
+ ---
+ 
++## [1.3.0] - 2026-08-04
++
++Night-mode + doctrine release (PLAN-162/165, ceremony 2). One user-facing
++feature, one cross-rail security P0 closed, and one published-contract
++conflict settled by ADR instead of by silence. As always: governance and
++auditability — no speed claim.
++
++### Added — night-mode: Owner-invoked autonomy posture toggle (PLAN-165, ADR-185)
++
++- **`/night-mode` command + `.claude/scripts/night-mode.py`**: the Owner
++  flips the per-machine autonomy posture (`permissions.defaultMode`
++  overlay in the gitignored `.claude/settings.local.json`) with
++  next-session semantics — "arm before sleep, autonomous overnight
++  session, disarm in the morning". The tracked `settings.json` posture is
++  never touched; templates and adopter defaults are unchanged.
++- **Arming autonomy is a HUMAN action** (Owner-ratified OQ1-redo): the
++  toggle refuses under CI; the writer script carries a self-path guard
++  and the Bash rail carries a best-effort invocation matcher (defense in
++  depth — the real boundary is the script's own guard plus the session
++  deny surface, and the docs say exactly that, not more).
++- **Audited**: every `on`/`off`/refusal emits `night_mode_toggled` into
++  the HMAC chain (schema row in `SPEC/v1/audit-log.schema.md`); live-fire
++  proven — toggle events and a negative-control `refused` line verified
++  on-chain before this release.
++- `bypassPermissions` was deliberately CUT from the design: it would trip
++  the `settings_tamper_tripwires` boot check by construction. The honest
++  escape valve stays `claude --permission-mode bypassPermissions` (one
++  session, explicit, ephemeral).
++
++### Security — sentinel unlock now requires provenance inside git worktrees (ADR-119 Invariant 5)
++
++- **Adopter-visible tightening of the recovery contract** (SPEC/v1
++  `sentinel-format.schema.md` §unlock): inside a git work tree, the
++  `CEO_SENTINEL_UNLOCK` + `CEO_SENTINEL_UNLOCK_ACK` pair alone no longer
++  grants — you must also provide provenance via
++  `CEO_SESSION_ANCHOR_SHA=$(git rev-parse HEAD)` (captured BEFORE the
++  session) **or** `CEO_SENTINEL_UNLOCK_SHA256=<sha256 of approved.md>`.
++  The block message teaches both forms when a window is armed. This
++  closes a real escalation: during an unlock window the agent could
++  author its own `approved.md` (a path guarded by neither rail) and
++  self-grant. Classified MINOR under this repo's published policy
++  (`VERSIONING.md` §MINOR: "a new trust boundary adopters must
++  understand"); MAJOR is reserved for schema-consumer breakage
++  (removed/renamed fields, dropped event types), which this is not.
++  **Action needed only if you scripted the 2-var unlock inside a git
++  worktree** — add one of the two exports above.
++
++### Fixed — case-fold bypass on canonical AND kernel rails (PLAN-162 W2, P0)
++
++- On case-insensitive filesystems (APFS default), `fnmatch.fnmatchcase`
++  let `.claude/settings.JSON` / `.claude/hooks/_lib/audit_emit.PY` slip
++  past BOTH guard rails while the write lands on the real file. Both
++  rails now case-fold before matching. Found first-hand during the
++  PLAN-162 debate; verified by red-first tests on both rails.
++
++### Changed — hook-deadline doctrine settled by ADR-186 (fail-CLOSED)
++
++- The canonical-edit matcher now enforces a **per-invocation wall
++  deadline that fails CLOSED** (`_HOOK_WALL_BUDGET_S`, injectable clock),
++  replacing the unbounded sentinel sweep — and the published
++  fail-open-on-infrastructure contract in `CLAUDE.md` §4 / `AGENTS.md` §1
++  now names this exception explicitly: a timeout *inside the matcher* is
++  an incomplete verification, not infrastructure. Recovery route:
++  provenance-pinned unlock (`CEO_SENTINEL_UNLOCK` +
++  `CEO_SESSION_ANCHOR_SHA` or `CEO_SENTINEL_UNLOCK_SHA256`).
++- Sentinel-verification **cache partitioned** (signature validity no
++  longer keyed per-target). This closes the measured saturation window —
++  4.16 s consumed of a 5 s budget at 20 candidate paths — that made the
++  old fail-open deadline attacker-reachable by planting sentinels
++  (ADR-164-AMEND-1). A correctness/security fix; no throughput claim.
++- Deadline blocks are **countable in the chain**: the veto breadcrumb
++  carries `reason_code=canonical_edit_hook_fault` instead of
++  masquerading as a missing-sentinel block.
++
++### Changed — pair-rail recalibrated 120/150 → 180/210 (ADR-110-AMEND-2)
++
++- Internal cap 180 s under a 210 s registration, ratified only after a
++  live substrate probe proved the harness honors a 210 s hook
++  registration (evidence committed:
++  `.claude/plans/PLAN-162/probe-210s-GO-EVIDENCE.md`).
++- `pair_rail_case` events now carry `timeout_ms` (int — a float in an
++  HMAC-covered field silently drops the whole event), and the §3
++  escalation trigger is the **censoring rate**, not p95 (the p95 of a
++  censored sample is inestimable).
++
++### Fixed — scheduled workflows that were red without surfacing in push CI
++
++- **mutation-gate**: kill-rate now parsed from mutmut's junitxml (the old
++  regex parser NEVER reported a rate — historical "96.7%" came from an
++  inflated formula), artifact redaction inlined and fail-closed, and the
++  `actions/checkout` SHA re-pinned (which also cures the
++  supply-chain-watch drift red present since 2026-07-20).
++- **tournament**: stderr banner no longer merged into the cost-projection
++  JSON (`2>&1` unmerge).
++- **reality-ledger**: required labels created idempotently
++  (`gh label create --force`) so fresh installs cannot red on a missing
++  label.
++- **ceo-boot**: 24th Tier-S check `scheduled_workflows_red` closes the
++  "scheduled gate red for weeks, invisible" class — with cure-detection
++  (a red scheduled lane whose newest completed run across ALL trigger
++  events is green reports `cured_pending_cron`, not red).
++
++### Governance
++
++- ADRs 184 → **188** (ADR-185 night-mode; ADR-186 hook-deadline policy;
++  ADR-110-AMEND-2; ADR-164-AMEND-1). Slash commands 26 → **27**
++  (`/night-mode`). All four ceremony phases landed as separable
++  Owner-GPG-signed commits with per-phase sentinels and closed scopes.
++
+ ## [1.2.0] - 2026-07-30
+ 
+ Substrate + rail release (PLAN-160/161/163/164). The headline is not a new
+@@ -40,7 +149,9 @@ auditability — no speed claim.
+   registration, and `registration >= internal + 30`. A unilateral flip of any
+   of the three literals now goes red in the suite and in the pack preflight.
+ - **`statusMessage` on the registration** — a session held by a synchronous
+-  cross-model review shows "may take 1-2 min" instead of appearing frozen.
++  cross-model review shows "may take up to ~3 min" instead of appearing
++  frozen. (Shipped in 1.2.0 as "may take 1-2 min"; the wording tracks the
++  budget and was retuned by ADR-110-AMEND-2 when it moved to 180/210 s.)
+ - **From zero completed reviews to ten.** The log now holds 10 healthy cases
+   (7 × case A, 3 × case B) alongside 14 case F. Median verdict latency 70.5 s;
+   observed maximum 120.0 s.
+diff --git a/INSTALL.md b/INSTALL.md
+index 2567769..0b4c0cc 100644
+--- a/INSTALL.md
++++ b/INSTALL.md
+@@ -608,7 +608,7 @@ To refresh framework-derived content in an existing adopter install
+ ```bash
+ cd /path/to/ceo-orchestration   # source framework checkout
+ git pull                         # get the latest framework
+-bash scripts/upgrade.sh /path/to/your/project --pin v1.2.0
++bash scripts/upgrade.sh /path/to/your/project --pin v1.3.0
+ ```
+ 
+ What gets refreshed:
+diff --git a/README.md b/README.md
+index fd1fd37..a87f20b 100644
+--- a/README.md
++++ b/README.md
+@@ -55,8 +55,8 @@ All counts below are verifiable from a clean checkout (see *Verifying the number
+ | Hook scripts (on disk) | **57** | Python entrypoints under `.claude/hooks/` |
+ | Hooks wired in `settings.json` | **46** | distinct scripts, 48 event registrations |
+ | Shared library modules | **68** | stdlib-only, under `.claude/hooks/_lib/` (excluding the package `__init__.py`) |
+-| Slash commands | **26** | under `.claude/commands/` |
+-| Architecture decision records | **184** | under `.claude/adr/` |
++| Slash commands | **27** | under `.claude/commands/` |
++| Architecture decision records | **188** | under `.claude/adr/` |
+ | Tests | **~13,000 cases** | reported by `pytest --collect-only` across the hook, script, and conformance suites |
+ 
+ The gap between **57 on disk** and **46 wired** is benign: several non-event modules are activated through in-process dispatch (invoked by other hooks) rather than by a direct `settings.json` event registration.
+@@ -182,8 +182,8 @@ Don't take the table on faith. From a clean checkout:
+ 
+ ```bash
+ find .claude/skills -name SKILL.md | wc -l        # 166 skills
+-ls .claude/commands/*.md | wc -l                  # 26 slash commands
+-ls .claude/adr | grep -c '^ADR-'                  # 184 ADRs
++ls .claude/commands/*.md | wc -l                  # 27 slash commands
++ls .claude/adr | grep -c '^ADR-'                  # 188 ADRs
+ python3 -m pytest --collect-only -q | tail -1     # ~13,000 collected cases
+ ```
+ 
+@@ -197,7 +197,7 @@ Intellectual honesty is the point, so the caveats are first-class:
+ - **Same-vendor reviewer caveat.** The cross-model pair-rail reduces single-model blind spots, but the reviewer is still a large language model and can share failure modes with the model under review. It is defense-in-depth, not an independent oracle.
+ - **Codex is not bundled — the pair-rail is inert until you install it.** The cross-model review rail invokes the [Codex CLI](https://github.com/openai/codex), which is **not** shipped with this framework. On a fresh install with no Codex present, the pair-rail **fails open and contributes zero review** — protected-path edits still pass the GPG ceremony, but no second model looks at them. You only get the cross-model rung after installing Codex separately. See [`docs/HONEST-LIMITATIONS.md`](docs/HONEST-LIMITATIONS.md) and ADR-145.
+ - **Per-edit overhead.** Each governed tool call runs the hook chain before the action lands, adding roughly **~0.3–1.0s** of latency per edit on typical hardware. That is the cost of the gate; if you want zero overhead on routine work, the governance layer is not free.
+-- **A gate can be wrong — there is an escape hatch.** Hooks fail *open* on their own infrastructure bugs, but a correct gate can still issue a DENY you disagree with (a false block on a protected path). The intended path is `/architect` (which routes the change through review) or, for a structural framework change, a PLAN-NNN with an Owner-signed sentinel (a GPG-signed approval record that authorizes a specific protected-path edit). For a deliberate, *audited* override of the canonical-edit gate, the Owner can set `CEO_SENTINEL_UNLOCK=<plan-id>` + `CEO_SENTINEL_UNLOCK_ACK=I-ACCEPT` for that action — the override itself is logged. Kernel-path hard-denies (an unconditional block on the most safety-critical files, which no sentinel can lift) need the stronger `CEO_KERNEL_OVERRIDE` ceremony. See [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md). To trial the framework without any of this friction, install with `--ceremony user` (advisory hooks, no signing).
++- **A gate can be wrong — there is an escape hatch.** Hooks fail *open* on their own infrastructure bugs, but a correct gate can still issue a DENY you disagree with (a false block on a protected path). The intended path is `/architect` (which routes the change through review) or, for a structural framework change, a PLAN-NNN with an Owner-signed sentinel (a GPG-signed approval record that authorizes a specific protected-path edit). For a deliberate, *audited* override of the canonical-edit gate, the Owner can set `CEO_SENTINEL_UNLOCK=<plan-id>` + `CEO_SENTINEL_UNLOCK_ACK=I-ACCEPT` for that action — the override itself is logged. (Because that window removes the signature check, the sentinel used inside it must also prove it is not one the agent wrote; the block reason names the value to set, and ADR-119 Invariant 5 explains both forms.) Kernel-path hard-denies (an unconditional block on the most safety-critical files, which no sentinel can lift) need the stronger `CEO_KERNEL_OVERRIDE` ceremony. See [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md). To trial the framework without any of this friction, install with `--ceremony user` (advisory hooks, no signing).
+ - **Detection, not prevention, on the audit chain.** The HMAC chain tells you *that* the recorded log was altered; it cannot prevent an attacker with local write access from doing damage, and it is not a substitute for proper access controls or backups.
+ - **Formal verification is scoped, not universal.** A TLA+ specification exists for the core state machine, but model-checking is **not** part of the enforcing CI gate — do not read "has a TLA+ spec" as "formally verified." The overwhelming majority of behavior is covered by conventional tests, not mechanized proof.
+ - **It is a framework, not a product.** No UI, no managed runtime, no "operating system." It installs into your repo and gets out of the way.
+diff --git a/README.pt-BR.md b/README.pt-BR.md
+index ca62878..a0b2630 100644
+--- a/README.pt-BR.md
++++ b/README.pt-BR.md
+@@ -53,8 +53,8 @@ Todas as contagens abaixo são verificáveis a partir de um checkout limpo (veja
+ | Scripts de hook (em disco) | **55** | entrypoints Python em `.claude/hooks/` |
+ | Hooks ligados em `settings.json` | **44** | scripts distintos, 46 registros de evento |
+ | Módulos de biblioteca compartilhada | **68** | apenas stdlib, em `.claude/hooks/_lib/` (excluindo o `__init__.py` do pacote) |
+-| Slash commands | **26** | em `.claude/commands/` |
+-| Architecture decision records | **180** | em `.claude/adr/` |
++| Slash commands | **27** | em `.claude/commands/` |
++| Architecture decision records | **188** | em `.claude/adr/` |
+ | Testes | **~12.000 casos** | reportados por `pytest --collect-only` nas suítes de hook, script e conformidade |
+ 
+ A diferença entre **55 em disco** e **44 ligados** é benigna: vários módulos que não respondem a eventos são ativados via dispatch in-process (invocados por outros hooks), e não por um registro de evento direto em `settings.json`.
+@@ -162,8 +162,8 @@ Não acredite na tabela por fé. A partir de um checkout limpo:
+ 
+ ```bash
+ find .claude/skills -name SKILL.md | wc -l        # 166 skills
+-ls .claude/commands/*.md | wc -l                  # 22 slash commands
+-ls .claude/adr | grep -c '^ADR-'                  # 180 ADRs
++ls .claude/commands/*.md | wc -l                  # 27 slash commands
++ls .claude/adr | grep -c '^ADR-'                  # 188 ADRs
+ python3 -m pytest --collect-only -q | tail -1     # ~12.000 casos coletados
+ ```
+ 
+@@ -177,7 +177,7 @@ A honestidade intelectual é o ponto central, então as ressalvas são de primei
+ - **Ressalva do revisor do mesmo fornecedor.** O pair-rail cross-model reduz os pontos cegos de modelo único, mas o revisor ainda é um modelo de linguagem grande e pode compartilhar modos de falha com o modelo sob revisão. É defesa em profundidade, não um oráculo independente.
+ - **O Codex não vem incluído — o pair-rail fica inerte até você instalá-lo.** O trilho de revisão cross-model invoca a [CLI do Codex](https://github.com/openai/codex), que **não** é distribuída com este framework. Em uma instalação nova, sem o Codex presente, o pair-rail **falha em aberto e não contribui com nenhuma revisão** — as edições em caminhos protegidos ainda passam pela cerimônia GPG, mas nenhum segundo modelo as examina. Você só ganha o degrau cross-model depois de instalar o Codex separadamente. Veja [`docs/HONEST-LIMITATIONS.md`](docs/HONEST-LIMITATIONS.md) e o ADR-145.
+ - **Custo por edição.** Cada chamada de ferramenta governada roda a cadeia de hooks antes de a ação entrar, adicionando cerca de **~0,3–1,0s** de latência por edição em hardware típico. Esse é o custo do portão; se você quer zero overhead no trabalho rotineiro, a camada de governança não é de graça.
+-- **Um portão pode errar — há uma válvula de escape.** Os hooks falham em *aberto* diante de bugs de infraestrutura deles mesmos, mas um portão correto ainda pode emitir um DENY com o qual você discorda (um bloqueio falso em um caminho protegido). O caminho pretendido é o `/architect` (que roteia a mudança pela revisão) ou, para uma mudança estrutural do framework, um PLAN-NNN com um sentinel assinado pelo Owner. Para um override *auditado* e deliberado do gate de edição canônica, o Owner pode definir `CEO_SENTINEL_UNLOCK=<plan-id>` + `CEO_SENTINEL_UNLOCK_ACK=I-ACCEPT` para aquela ação — o próprio override é registrado. Hard-denies em caminhos de kernel exigem a cerimônia mais forte `CEO_KERNEL_OVERRIDE`. Veja [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md). Para experimentar o framework sem nenhum desse atrito, instale com `--ceremony user` (hooks consultivos, sem assinatura).
++- **Um portão pode errar — há uma válvula de escape.** Os hooks falham em *aberto* diante de bugs de infraestrutura deles mesmos, mas um portão correto ainda pode emitir um DENY com o qual você discorda (um bloqueio falso em um caminho protegido). O caminho pretendido é o `/architect` (que roteia a mudança pela revisão) ou, para uma mudança estrutural do framework, um PLAN-NNN com um sentinel assinado pelo Owner. Para um override *auditado* e deliberado do gate de edição canônica, o Owner pode definir `CEO_SENTINEL_UNLOCK=<plan-id>` + `CEO_SENTINEL_UNLOCK_ACK=I-ACCEPT` para aquela ação — o próprio override é registrado. (Como essa janela remove a verificação de assinatura, o sentinel usado dentro dela também precisa provar que não foi o agente que o escreveu; a razão do bloqueio nomeia o valor a definir, e o ADR-119 Invariante 5 explica as duas formas.) Hard-denies em caminhos de kernel exigem a cerimônia mais forte `CEO_KERNEL_OVERRIDE`. Veja [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md). Para experimentar o framework sem nenhum desse atrito, instale com `--ceremony user` (hooks consultivos, sem assinatura).
+ - **Detecção, não prevenção, na cadeia de auditoria.** A cadeia HMAC diz a você *que* o log registrado foi alterado; ela não pode impedir que um atacante com acesso de escrita local cause dano, e não substitui controles de acesso adequados nem backups.
+ - **A verificação formal tem escopo definido, não é universal.** Existe uma especificação TLA+ para a máquina de estados central, mas o model-checking **não** faz parte do gate de CI obrigatório — não interprete "tem uma especificação TLA+" como "formalmente verificado". A esmagadora maioria do comportamento é coberta por testes convencionais, não por prova mecanizada.
+ - **É um framework, não um produto.** Sem UI, sem runtime gerenciado, sem "sistema operacional". Ele se instala no seu repositório e sai do caminho.
+diff --git a/SBOM.md b/SBOM.md
+index 7f49e7f..577d919 100644
+--- a/SBOM.md
++++ b/SBOM.md
+@@ -1,8 +1,8 @@
+ # SBOM — ceo-orchestration
+ 
+-<!-- last-reviewed: 2026-07-31 v1.2.0 -->
++<!-- last-reviewed: 2026-08-04 v1.3.0 -->
+ 
+-**Version:** `1.2.0` (tracks repo-root `VERSION`)
++**Version:** `1.3.0` (tracks repo-root `VERSION`)
+ **Format:** manual markdown (CycloneDX-minimal; no tooling runtime dependency).
+ **Attestation (framework CORE):** the framework **core** — the PreToolUse/
+ PostToolUse hooks in `.claude/hooks/` and the shared `.claude/hooks/_lib/`
+diff --git a/SECURITY.md b/SECURITY.md
+index 3e7493e..1139e4d 100644
+--- a/SECURITY.md
++++ b/SECURITY.md
+@@ -1,6 +1,6 @@
+ # Security Policy
+ 
+-<!-- last-reviewed: 2026-07-31 v1.2.0 -->
++<!-- last-reviewed: 2026-08-04 v1.3.0 -->
+ 
+ > **Status:** pre-adopter (framework dogfooded by Owner; no third-party
+ > install in production yet). This policy mirrors the maturity level
+@@ -274,8 +274,8 @@ get a "by-design" response:
+ 
+ Active support window per [`SUPPORT.md`](SUPPORT.md):
+ 
+-- **Current MINOR** (`v1.2.x`) — full security support.
+-- **Previous MINOR** (`v1.1.x`) — security-only patches for 6 months
++- **Current MINOR** (`v1.3.x`) — full security support.
++- **Previous MINOR** (`v1.2.x`) — security-only patches for 6 months
+   after the next MINOR ships.
+ - **Older** — best-effort; we will tell you the upgrade path, not ship
+   a back-port.
+@@ -290,6 +290,6 @@ it on `main` and patch forward; no back-port.
+ - **Public discussion of accepted vulnerabilities:** GitHub Releases +
+   CHANGELOG `### Security` section
+ 
+-Last reviewed: 2026-07-31 (v1.2.0 release train — RC-hold references updated
+-to the ADR-103 24-hour mechanical window; npm Trusted Publishing marked
+-active since v1.1.0; support window updated to v1.2.x / v1.1.x).
++Last reviewed: 2026-08-04 (v1.3.0 release train — support window updated to
++v1.3.x / v1.2.x; night-mode trust boundary and the sentinel-unlock provenance
++requirement added to the covered surface).
+diff --git a/VERSION b/VERSION
+index 26aaba0..f0bb29e 100644
+--- a/VERSION
++++ b/VERSION
+@@ -1 +1 @@
+-1.2.0
++1.3.0
+diff --git a/VERSIONING.md b/VERSIONING.md
+index 21e3ca3..d5a3987 100644
+--- a/VERSIONING.md
++++ b/VERSIONING.md
+@@ -1,6 +1,6 @@
+ # Versioning Policy
+ 
+-<!-- last-reviewed: 2026-07-31 v1.2.0 -->
++<!-- last-reviewed: 2026-08-04 v1.3.0 -->
+ 
+ > **TL;DR** — SemVer at the **Compliance SPEC level** (`SPEC/v1/`),
+ > not at every internal symbol. Tagged releases mark SPEC-level
+@@ -60,6 +60,7 @@ pre-genesis history is condensed into CHANGELOG `[1.0.0]`):**
+ |------|--------------|
+ | `v1.0.0 → v1.1.0` | PLAN-153/155/156 — two new host harnesses (Codex CLI, Grok Build) = new trust boundaries an adopter must accept; cross-vendor audit council; gated learning loop. |
+ | `v1.1.0 → v1.2.0` | PLAN-160/161/163/164 — Claude 5 model registry (ADR-181, additive `model:` contract), Codex payload-pin enforcement (ADR-182), pair-rail timeout contract (ADR-110-AMEND-1), new typed audit actions. |
++| `v1.2.0 → v1.3.0` | PLAN-162/165 — night-mode posture toggle (new trust boundary, ADR-185); sentinel-unlock provenance inside git worktrees (ADR-119 Invariant 5 — closes in-window self-authored-sentinel escalation); fail-CLOSED matcher deadline (ADR-186); pair-rail 180/210 + `timeout_ms` (ADR-110-AMEND-2). |
+ 
+ ### PATCH — bug fixes, additive features within SPEC
+ 
+@@ -182,9 +183,9 @@ upgrade_agents_canonical_only`).
+ 
+ | Window | Status |
+ |--------|--------|
+-| Current MINOR (`v1.2.x`) | Full support — features + security + bug fixes |
+-| Previous MINOR (`v1.1.x`) | Security-only patches for **6 months** after the next MINOR ships |
+-| Older (`v1.0.x`) | Best-effort — we describe the upgrade path; no back-ports |
++| Current MINOR (`v1.3.x`) | Full support — features + security + bug fixes |
++| Previous MINOR (`v1.2.x`) | Security-only patches for **6 months** after the next MINOR ships |
++| Older (`v1.0.x`, `v1.1.x`) | Best-effort — we describe the upgrade path; no back-ports |
+ 
+ Upgrade via `bash scripts/upgrade.sh --pin vX.Y.Z` (consult
+ CHANGELOG.md for the sequence). Skipping a MINOR is supported across
+@@ -227,6 +228,7 @@ If you find a SPEC file that contradicts behavior, that is a bug:
+ file via [`SECURITY.md`](SECURITY.md) if it has security implications,
+ or open a GitHub issue otherwise.
+ 
+-Last reviewed: 2026-07-31 (v1.2.0 release train — historic examples and
+-EOL window rebased onto the public series; model-ID section updated to the
+-ADR-181 Claude 5 refresh).
++Last reviewed: 2026-08-04 (v1.3.0 release train — EOL window shifted to
++v1.3.x / v1.2.x; historic MINOR table gained the 1.2.0 -> 1.3.0 row naming
++the night-mode trust boundary and the sentinel-unlock provenance
++requirement).
+diff --git a/docs/ARCHITECTURE.md b/docs/ARCHITECTURE.md
+index 309b3bd..75ed90c 100644
+--- a/docs/ARCHITECTURE.md
++++ b/docs/ARCHITECTURE.md
+@@ -48,12 +48,12 @@ ceo-orchestration/
+     │   ├── *.py                    # 57 hook scripts on disk
+     │   └── tests/                  # hook unit tests
+     ├── scripts/                    # protocol toolkit (validate, inject, audit-query, …)
+-    ├── commands/                   # 26 slash commands (*.md)
++    ├── commands/                   # 27 slash commands (*.md)
+     ├── skills/
+     │   ├── core/                   # 42 universal backend skills
+     │   ├── frontend/               # 8 universal frontend skills
+     │   └── domains/                # 116 skills across 33 domain profiles
+-    ├── adr/                        # 184 architecture decision records
++    ├── adr/                        # 188 architecture decision records
+     └── plans/                      # plan schemas + per-plan working files
+ ```
+ 
+@@ -67,8 +67,8 @@ faith — run the commands:
+ | Hook scripts       | 57 on disk                   | `ls .claude/hooks/*.py \| wc -l`                          |
+ | Hook registrations | 46 wired into `settings.json`| (parse the `hooks` block of `.claude/settings.json`)      |
+ | `_lib` modules     | 68 top-level (140 recursive) | `ls .claude/hooks/_lib/*.py \| grep -v __init__ \| wc -l` |
+-| Slash commands     | 26                           | `ls .claude/commands/*.md \| wc -l`                       |
+-| ADRs               | 184                          | `ls .claude/adr/ADR-*.md \| wc -l`                        |
++| Slash commands     | 27                           | `ls .claude/commands/*.md \| wc -l`                       |
++| ADRs               | 188                          | `ls .claude/adr/ADR-*.md \| wc -l`                        |
+ | SPEC/v1 files      | 32 (28 `*.schema.md`)        | `ls SPEC/v1/*.md \| wc -l`                                |
+ | Test files         | ~720                         | `git ls-files '*test_*.py' '*_test.py' \| wc -l`          |
+ | Collected cases    | ~13k parametrized            | `make test-collect` (pytest `--collect-only`)             |
+@@ -223,7 +223,7 @@ the honest *Risks / Not-For* caveat in the [README](../README.md).
+ ## 4. The SPEC contract
+ 
+ `SPEC/v1/` is the published, versioned compliance contract (SemVer; currently
+-v1.2.0, aligned with the repo `VERSION`). It contains 28 schema files defining
++v1.3.0, aligned with the repo `VERSION`). It contains 28 schema files defining
+ the stable interfaces an adopter can pin to — among them `audit-log.schema.md`,
+ `hook-io.schema.md`, `plan.schema.md`, `debate.schema.md`,
+ `skill-frontmatter.schema.md`, `tier-policy.schema.md`, and
+@@ -234,7 +234,7 @@ this repository happens to implement it today*. An install pins a SPEC version;
+ internal refactors that keep the schemas stable do not break adopters.
+ 
+ Decisions that shape these contracts are recorded as Architecture Decision
+-Records in `.claude/adr/` (184 to date), with a documented lifecycle
++Records in `.claude/adr/` (188 to date), with a documented lifecycle
+ (PROPOSED → ACCEPTED, plus SUPERSEDED / RETRACTED).[^adr]
+ 
+ The repository also includes a TLA+ specification of the core state machine
+@@ -267,7 +267,7 @@ gates:
+ - `local/verify-counts.sh` — derives the component counts in this document so
+   docs and reality cannot silently drift apart.
+ 
+-The slash commands in `.claude/commands/` (22 of them — e.g. `/spawn`,
++The slash commands in `.claude/commands/` (27 of them — e.g. `/spawn`,
+ `/debate`, `/status`, `/architect`, `/onboard`, `/pitfall`) are the
+ human-facing entry points that drive this toolkit.
+ 
+diff --git a/npm/README.md b/npm/README.md
+index 799ed28..53a197f 100644
+--- a/npm/README.md
++++ b/npm/README.md
+@@ -1,6 +1,6 @@
+ # ceo-orchestration
+ 
+-<!-- last-reviewed: 2026-08-02 v1.2.0 -->
++<!-- last-reviewed: 2026-08-04 v1.3.0 -->
+ 
+ > **Português:** [`README.pt-BR.md`](README.pt-BR.md)
+ 
+@@ -55,8 +55,8 @@ All counts below are verifiable from a clean checkout (see *Verifying the number
+ | Hook scripts (on disk) | **57** | Python entrypoints under `.claude/hooks/` |
+ | Hooks wired in `settings.json` | **46** | distinct scripts, 48 event registrations |
+ | Shared library modules | **68** | stdlib-only, under `.claude/hooks/_lib/` (excluding the package `__init__.py`) |
+-| Slash commands | **26** | under `.claude/commands/` |
+-| Architecture decision records | **184** | under `.claude/adr/` |
++| Slash commands | **27** | under `.claude/commands/` |
++| Architecture decision records | **188** | under `.claude/adr/` |
+ | Tests | **~12,000 cases** | reported by `pytest --collect-only` across the hook, script, and conformance suites |
+ 
+ The gap between **57 hook scripts** on disk and **46 wired** is benign: several non-event modules are activated through in-process dispatch (invoked by other hooks) rather than by a direct `settings.json` event registration.
+@@ -118,8 +118,8 @@ Don't take the table on faith. From a clean checkout:
+ 
+ ```bash
+ find .claude/skills -name SKILL.md | wc -l        # 166 skills
+-ls .claude/commands/*.md | wc -l                  # 26 slash commands
+-ls .claude/adr | grep -c '^ADR-'                  # 184 ADRs
++ls .claude/commands/*.md | wc -l                  # 27 slash commands
++ls .claude/adr | grep -c '^ADR-'                  # 188 ADRs
+ python3 -m pytest --collect-only -q | tail -1     # ~12,000 collected cases
+ ```
+ 
+@@ -133,7 +133,7 @@ Intellectual honesty is the point, so the caveats are first-class:
+ - **Same-vendor reviewer caveat.** The cross-model pair-rail reduces single-model blind spots, but the reviewer is still a large language model and can share failure modes with the model under review. It is defense-in-depth, not an independent oracle.
+ - **Codex is not bundled — the pair-rail is inert until you install it.** The cross-model review rail invokes the [Codex CLI](https://github.com/openai/codex), which is **not** shipped with this framework. On a fresh install with no Codex present, the pair-rail **fails open and contributes zero review** — protected-path edits still pass the GPG ceremony, but no second model looks at them. You only get the cross-model rung after installing Codex separately. See [`docs/HONEST-LIMITATIONS.md`](docs/HONEST-LIMITATIONS.md) and ADR-145.
+ - **Per-edit overhead.** Each governed tool call runs the hook chain before the action lands, adding roughly **~0.3–1.0s** of latency per edit on typical hardware. That is the cost of the gate; if you want zero overhead on routine work, the governance layer is not free.
+-- **A gate can be wrong — there is an escape hatch.** Hooks fail *open* on their own infrastructure bugs, but a correct gate can still issue a DENY you disagree with (a false block on a protected path). The intended path is `/architect` (which routes the change through review) or, for a structural framework change, a PLAN-NNN with an Owner-signed sentinel (a GPG-signed approval record that authorizes a specific protected-path edit). For a deliberate, *audited* override of the canonical-edit gate, the Owner can set `CEO_SENTINEL_UNLOCK=<plan-id>` + `CEO_SENTINEL_UNLOCK_ACK=I-ACCEPT` for that action — the override itself is logged. Kernel-path hard-denies (an unconditional block on the most safety-critical files, which no sentinel can lift) need the stronger `CEO_KERNEL_OVERRIDE` ceremony. See [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md). To trial the framework without any of this friction, install with `--ceremony user` (advisory hooks, no signing).
++- **A gate can be wrong — there is an escape hatch.** Hooks fail *open* on their own infrastructure bugs, but a correct gate can still issue a DENY you disagree with (a false block on a protected path). The intended path is `/architect` (which routes the change through review) or, for a structural framework change, a PLAN-NNN with an Owner-signed sentinel (a GPG-signed approval record that authorizes a specific protected-path edit). For a deliberate, *audited* override of the canonical-edit gate, the Owner can set `CEO_SENTINEL_UNLOCK=<plan-id>` + `CEO_SENTINEL_UNLOCK_ACK=I-ACCEPT` for that action — the override itself is logged. (Because that window removes the signature check, the sentinel used inside it must also prove it is not one the agent wrote; the block reason names the value to set, and ADR-119 Invariant 5 explains both forms.) Kernel-path hard-denies (an unconditional block on the most safety-critical files, which no sentinel can lift) need the stronger `CEO_KERNEL_OVERRIDE` ceremony. See [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md). To trial the framework without any of this friction, install with `--ceremony user` (advisory hooks, no signing).
+ - **Detection, not prevention, on the audit chain.** The HMAC chain tells you *that* the recorded log was altered; it cannot prevent an attacker with local write access from doing damage, and it is not a substitute for proper access controls or backups.
+ - **Formal verification is scoped, not universal.** A TLA+ specification exists for the core state machine, but model-checking is **not** part of the enforcing CI gate — do not read "has a TLA+ spec" as "formally verified." The overwhelming majority of behavior is covered by conventional tests, not mechanized proof.
+ - **It is a framework, not a product.** No UI, no managed runtime, no "operating system." It installs into your repo and gets out of the way.
+diff --git a/npm/package.json b/npm/package.json
+index 2707a66..a55603e 100644
+--- a/npm/package.json
++++ b/npm/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "ceo-orchestration",
+-  "version": "1.2.0",
++  "version": "1.3.0",
+   "description": "NPM shim that runs the ceo-orchestration install.sh inside a published bundle.",
+   "type": "commonjs",
+   "bin": {
+diff --git a/pyproject.toml b/pyproject.toml
+index c3c1ee4..70cb33a 100644
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -1,6 +1,6 @@
+ [project]
+ name = "ceo-orchestration"
+-version = "1.2.0"
++version = "1.3.0"
+ description = "Portable framework for operating Claude Code as a structured team of specialist agents under a CEO protocol."
+ requires-python = ">=3.9"
+ 
+diff --git a/scripts/upgrade.sh b/scripts/upgrade.sh
+index 06a7e80..0ec7c4b 100755
+--- a/scripts/upgrade.sh
++++ b/scripts/upgrade.sh
+@@ -68,8 +68,10 @@
+ #     normative table IS the artifact — literals are never re-hardcoded).
+ #   - (PLAN-164 W1, ADR-110-AMEND-1) PAIR-RAIL REGISTRATION-TIMEOUT VALUE
+ #     MIGRATION: the check_pair_rail.py PreToolUse registration timeout is
+-#     bumped from the frozen OLD cap (60) to the template-derived cap IFF the
+-#     adopter's current value == 60; any other adopter-chosen value is
++#     bumped to the template-derived cap IFF the adopter's current value is
++#     one of the frozen SUPERSEDED SHIPPED caps (60 pre-PLAN-164; 150 from
++#     PLAN-164/ADR-110-AMEND-1, shipped in v1.2.0 and superseded by
++#     ADR-110-AMEND-2's 210); any other adopter-chosen value is
+ #     PRESERVED + a named WARNING; idempotent. Runs inside the same T5.4
+ #     migration step (same opt-out, same --dry-run preview); the NEW cap is
+ #     derived from templates/settings/settings.base.json, never hardcoded.
+@@ -1731,9 +1733,10 @@ def _reg($event; $name; $entry):
+ # not yet registered AND the T3.4 version-floor feature gate is on
+ # (_t34_new_event_registrations_enabled). Customized registrations under the
+ # same events — and every other hooks entry/settings key — stay untouched.
+-# PLAN-164 W1 (ADR-110-AMEND-1): the check_pair_rail.py PreToolUse
+-# registration TIMEOUT VALUE migrates under the same 3-state policy — the
+-# frozen OLD cap (60) -> the cap DERIVED from the template artifact
++# PLAN-164 W1 (ADR-110-AMEND-1, recalibrated by ADR-110-AMEND-2): the
++# check_pair_rail.py PreToolUse registration TIMEOUT VALUE migrates under
++# the same 3-state policy — any frozen SUPERSEDED SHIPPED cap (60, 150)
++# -> the cap DERIVED from the template artifact
+ # (templates/settings/settings.base.json pair-rail entry; install.sh copies
+ # it verbatim, so template value == post-install value == migration target);
+ # any other adopter-chosen value is PRESERVED + named WARNING; idempotent.
+@@ -1980,20 +1983,39 @@ else:
+ # --- registration timeout, and the pre-PLAN-164 cap (60s) sat BELOW the
+ # --- measured codex verdict latency (p95 ~75s under load; 12/12 historical
+ # --- pair_rail_case rows were F/TIMEOUT — PLAN-163/probes/
+-# --- GATE-V2-2026-07-29-FAIL-diagnosis.md). Ratified semantics (OQ2=150):
+-# --- bump the check_pair_rail.py PreToolUse registration timeout IFF the
+-# --- current value == the OLD cap; ANY other adopter-chosen value is
+-# --- PRESERVED (named WARN); already-at-target is a no-op; an entry with NO
+-# --- timeout key is left untouched (harness default, not an adopter choice
+-# --- of the old cap). The NEW cap is DERIVED from the template artifact
++# --- GATE-V2-2026-07-29-FAIL-diagnosis.md). Ratified semantics
++# --- (OQ2=150, recalibrated to 210 by ADR-110-AMEND-2): bump the
++# --- check_pair_rail.py PreToolUse registration timeout IFF the current
++# --- value is one of the SUPERSEDED SHIPPED caps; ANY other
++# --- adopter-chosen value is PRESERVED (named WARN); already-at-target is
++# --- a no-op; an entry with NO timeout key is left untouched (harness
++# --- default, not an adopter choice of an old cap). The NEW cap is
++# --- DERIVED from the template artifact
+ # --- (settings.base.json pair-rail entry — install.sh copies it verbatim,
+-# --- so template value == post-install value == migration target); the OLD
+-# --- cap is a frozen historical literal (it no longer exists in any live
++# --- so template value == post-install value == migration target); each
++# --- OLD cap is a frozen historical literal (none exists in any live
+ # --- artifact once this migration lands), exactly like the "old" column of
+ # --- the T5.4 table above. Fail-open: an unreadable template or a
+ # --- non-unique/non-int template cap skips ONLY this leaf (stderr NOTE) —
+ # --- the rest of the migration is unaffected.
+-OLD_PAIR_RAIL_CAP = 60  # frozen pre-PLAN-164 registration cap (never derived)
++# ADR-110-AMEND-2: the set of SUPERSEDED SHIPPED defaults, not a single
++# literal. 60 was the pre-PLAN-164 cap; 150 was the PLAN-164/AMEND-1 cap
++# shipped in v1.2.0 and superseded by the AMEND-2 value 210. A v1.2.0
++# adopter sits at exactly 150, and leaving it there is NOT conservative:
++# with the hook-internal default now 180, a 150s registration lets the
++# HARNESS kill the hook BEFORE the internal codex cap fires -- and a
++# killed hook emits NO pair_rail_case at all (AMEND-2 section 6:
++# fail-open with no event, invisible to the instrument in both numerator
++# and denominator). That is strictly worse than the case F it replaces,
++# so a shipped default must keep migrating. Every member is a frozen
++# historical literal that no longer exists in any live artifact; an
++# adopter value outside this set is a genuine choice and stays PRESERVED
++# + WARNED.
++# NOTE: this whole block is a bash SINGLE-QUOTED -c string. No apostrophe
++# may appear anywhere in it -- one terminates the string and silently
++# turns the migration into a no-op (the tests then read the seeded value
++# back unchanged, which looks like a logic bug, not a quoting bug).
++OLD_PAIR_RAIL_CAPS = (60, 150)
+ template_path = sys.argv[5]
+ 
+ 
+@@ -2037,7 +2059,7 @@ else:
+             continue
+         if cur == new_cap:
+             out("OK (already at template cap): pair-rail registration timeout")
+-        elif cur == OLD_PAIR_RAIL_CAP:
++        elif cur in OLD_PAIR_RAIL_CAPS:
+             if not dry:
+                 h["timeout"] = new_cap
+                 # grok r1 LOW-3 / codex r2: bring the template statusMessage

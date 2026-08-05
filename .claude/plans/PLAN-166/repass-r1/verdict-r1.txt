@@ -1,0 +1,31 @@
+1. **P0 — npm publication bypasses every release gate.**  
+   **FILE:LINE:** `.github/workflows/npm-publish.yml:41`, `.github/workflows/npm-publish.yml:55`, `.github/workflows/npm-publish.yml:276`; `.github/workflows/release.yml:13`, `.github/workflows/release.yml:231`, `.github/workflows/release.yml:647`  
+   **Failure scenario:** Push `v1.3.0`; `release.yml` and `npm-publish.yml` start independently. The release gate can reject the 24-hour hold, GPG signature, tests, or GA-specific verdict, while an approved `production-npm` job proceeds directly to `npm publish`. The driver incorrectly says `release.yml` itself publishes npm at `.claude/scripts/local/release-v1-2-0.sh:515`. The rejected version is then irreversibly public.  
+   **Minimal fix:** Put the npm publish job in `release.yml` with `needs: release-gate`, retaining the protected environment; alternatively trigger it only from a successful Release workflow and bind the exact tag SHA.
+
+2. **P1 — the stable bump is not idempotent after the mandatory hold.**  
+   **FILE:LINE:** `.claude/scripts/local/release-v1-2-0.sh:334`, `.claude/scripts/local/release-v1-2-0.sh:347`, `.claude/scripts/local/release-v1-2-0.sh:361`, `.claude/scripts/local/release-v1-2-0.sh:416`; `.github/release-checklist.md:100`  
+   **Failure scenario:** The RC and its four stamps are dated August 4. The earliest legal GA is August 5. `bump --stable` substitutes `date.today()` into npm README, SBOM, SECURITY, and VERSIONING, stages them, and creates a new commit after preflight. `tag()` only checks `VERSION` (`:460-466`), so it signs this unpushed, non-CI-validated commit. This is new evidence that the r4 idempotence fix is incomplete.  
+   **Minimal fix:** On a same-version stable promotion, preserve existing stamps and make bump a deterministic no-op; or move bump before preflight, push main, wait for CI, generate the GA verdict against the final tree, then tag. Add a next-day regression test.
+
+3. **P0 — upgrading v1.2.0 installs v1.3 enforcement without the v1.3 contract or version marker.**  
+   **FILE:LINE:** `scripts/install.sh:1297`, `scripts/install.sh:1312`; `scripts/upgrade.sh:2324`, `scripts/upgrade.sh:2346`, `scripts/upgrade.sh:2590`; `SPEC/v1/sentinel-format.schema.md:73`  
+   **Failure scenario:** A normal v1.2.0 install contains `VERSION=1.2.0` and the old sentinel schema saying the two unlock variables short-circuit verification. The documented upgrade refreshes `.claude/hooks`, so the new hook requires provenance, but it never refreshes `SPEC/v1` or `VERSION`. It nevertheless records `framework_version: 1.3.0` in install state. The adopter is left enforcing v1.3 while its installed contract and forensic/update-check anchor still say v1.2.0.  
+   **Minimal fix:** Treat `SPEC/v1` and `VERSION` as framework-owned upgrade surfaces for applicable installs, with backup/classification semantics; update INSTALL’s refresh list and add a v1.2.0→v1.3.0 end-to-end assertion.
+
+4. **P1 — the install/upgrade parity gate is tautological.**  
+   **FILE:LINE:** `scripts/tests/test_install_baseline_manifest.sh:117`  
+   **Failure scenario:** “Install set” and “upgrade set” are both obtained by calling `_framework_target_entries` twice, then compared. Any real divergence between `install.sh` and `upgrade.sh` therefore passes. The omitted `SPEC/v1` and `VERSION` surfaces demonstrate the false green.  
+   **Minimal fix:** Derive the two sets independently from actual install and upgrade operations, or execute both paths on fixtures and compare resulting framework-owned files.
+
+5. **P1 — the Portuguese README publishes stale exact counts, outside the count gate.**  
+   **FILE:LINE:** `README.pt-BR.md:53`, `README.pt-BR.md:54`, `README.pt-BR.md:60`; `.claude/scripts/local/verify-counts.sh:280`  
+   **Failure scenario:** The changed table updates commands and ADRs but still claims 55 hook scripts, 44 wired hooks, and 46 registrations; disk/current English docs establish 57, 46, and 48. `README.pt-BR.md` is absent from `DOCS`, and the English-only table matchers would not cover its labels, so CI remains green.  
+   **Minimal fix:** Update all four affected occurrences and add the Portuguese README plus Portuguese table-label/registration matchers to the per-document liveness manifest.
+
+6. **P2 — release and upgrade help still describe the prior train.**  
+   **FILE:LINE:** `.claude/scripts/local/release-v1-2-0.sh:3`, `.claude/scripts/local/release-v1-2-0.sh:37`, `.claude/scripts/local/release-v1-2-0.sh:290`; `INSTALL.md:627`  
+   **Failure scenario:** `--help` says this is the v1.2.0 driver and that `--stable` targets v1.2.0, while runtime targets 1.3.0; internal/operator text still claims six version sites. INSTALL’s v1.3 upgrade section describes only the obsolete 60→150 migration although v1.2 adopters are migrated 150→210.  
+   **Minimal fix:** Make driver help release-generic or render `TARGET_BASE`, remove hardcoded site counts, and document the 60/150→210 migration.
+
+VERDICT: NO-GO — npm can publish before mandatory gates finish, and the documented upgrade produces an internally contradictory adopter installation.
