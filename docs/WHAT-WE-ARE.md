@@ -1,8 +1,10 @@
 # What we are — and what we are NOT
 
-<!-- last-reviewed: 2026-06-20 v1.0.0 -->
+<!-- last-reviewed: 2026-08-05 -->
 
-> Status: v1.0.0, public release (vibecoder-stable line, ADR-096).
+> Status: public release (vibecoder-stable line, ADR-096). The current
+> version is whatever `VERSION` says — this document deliberately carries
+> no version literal.
 > Read this before adopting, evaluating, or comparing the framework to a
 > SaaS / IDE plugin / agent SDK.
 
@@ -34,10 +36,10 @@ Cases A–F cover model-collusion failure modes. PostToolUse ingress
 sanitization (`check_codex_response.py`) defends against prompt
 injection in Codex output.
 
-### 4. We are a smart-loading skill catalog of 151 reusable checklists.
+### 4. We are a smart-loading skill catalog of 166 reusable checklists.
 
 Skills live in three tiers: 42 core (universal), 8 frontend (universal
-frontend), and 101 domain (fintech, marketing-global,
+frontend), and 116 domain (fintech, marketing-global,
 sales, trading-hft, legal, lgpd-heavy-saas, etc.). Per-repo profile
 detection auto-activates only relevant skills, with numeric caps per
 profile (frontend ≤10, engine ≤12, fintech ≤15, trading-readonly ≤8,
@@ -53,7 +55,7 @@ Anthropic's (which Claude Code already needs).
 ### 6. We are stdlib-only Python ≥3.9, MIT-licensed, fork-friendly.
 
 Zero third-party runtime dependencies. All GitHub Actions SHA-pinned.
-~12,000 test cases (by `pytest --collect-only`) across hooks + scripts +
+~14,000 test cases (by `pytest --collect-only`) across hooks + scripts +
 formal + integration with tiered coverage (Tier-1 security-critical hooks
 ≥86%; repo floor 67%).
 SBOM published. The framework is auditable end-to-end
@@ -123,7 +125,7 @@ ceremony unavoidable.
 > a 50-person org. We wrap Claude Code with Plan → Debate → Execute,
 > a tamper-evident audit chain, and a Codex Pair-Rail that catches
 > L3+ mistakes before they ship. What you get is governance-as-code:
-> ~12,000 test cases, an inspectable HMAC-chained log, and a cross-LLM
+> ~14,000 test cases, an inspectable HMAC-chained log, and a cross-LLM
 > rail. We make no speed claim — six experiments found no general
 > speedup (PLAN-122), and we publish that null result honestly. Skip us
 > for one-file edits — overhead beats velocity below.

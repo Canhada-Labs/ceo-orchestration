@@ -109,47 +109,86 @@ else
   bad "C.3 canonical guard entries missing"
 fi
 
-echo "==> C.2 — shared enumeration (root PROTOCOL.md; install set == upgrade set)"
-(
-  # shellcheck source=scripts/_framework_manifest_set.sh
-  . "$SOURCE_DIR/scripts/_framework_manifest_set.sh"
-  export FMS_PROFILE_PARTS="core frontend"
-  entries_install="$( _framework_target_entries )"
-  # The enumeration is static (root-independent), so an "install context" and an
-  # "upgrade context" derive an identical target set by construction.
-  entries_upgrade="$( _framework_target_entries )"
-  printf '%s\n' "$entries_install" > "$WORKROOT/.c2-install"
-  printf '%s\n' "$entries_upgrade" > "$WORKROOT/.c2-upgrade"
-  # set equality
-  if diff -q "$WORKROOT/.c2-install" "$WORKROOT/.c2-upgrade" >/dev/null 2>&1; then
-    echo "SETEQ" > "$WORKROOT/.c2eq"
-  fi
-  # required entries present
-  miss=""
-  for need in "PROTOCOL.md" ".claude/team.md" ".claude/frontend-team.md" \
-              ".claude/skills" ".claude/hooks" ".claude/scripts" \
-              ".claude/commands" ".claude/pitfalls-catalog.yaml" ".claude/task-chains.yaml"; do
-    # skills entry is .claude/skills/core (profile-expanded); match prefix.
-    if ! printf '%s\n' "$entries_install" | grep -q "^${need}"; then
-      miss="$miss $need"
-    fi
-  done
-  [ -z "$miss" ] && echo "ALLREQ" > "$WORKROOT/.c2req" || printf 'MISS:%s\n' "$miss" > "$WORKROOT/.c2req"
-  # profile-awareness: a core-only profile must NOT enumerate frontend skills.
-  export FMS_PROFILE_PARTS="core"
-  core_only="$( _framework_target_entries )"
-  if printf '%s\n' "$core_only" | grep -q "^\.claude/skills/frontend"; then
-    echo "FRONTEND_LEAK" > "$WORKROOT/.c2prof"
-  else
-    echo "PROFILE_OK" > "$WORKROOT/.c2prof"
-  fi
-)
-[ -f "$WORKROOT/.c2eq" ] && ok "C.2 install enumeration == upgrade enumeration" || bad "C.2 set equality"
-if grep -q "ALLREQ" "$WORKROOT/.c2req" 2>/dev/null; then ok "C.2 root PROTOCOL.md + all required entries present"; else bad "C.2 required entries ($(cat "$WORKROOT/.c2req" 2>/dev/null))"; fi
-if grep -q "PROFILE_OK" "$WORKROOT/.c2prof" 2>/dev/null; then ok "C.2 profile-aware (core-only omits frontend skills)"; else bad "C.2 profile leak"; fi
-
 echo "==> C.4 — install writes a verifiable manifest with a root PROTOCOL.md line"
 T1="$( fresh_install core )" || { bad "C.4 install failed"; T1=""; }
+
+# ---------------------------------------------------------------------------
+# C.2 — enumeration vs REALITY (PLAN-166 F4 rewrite)
+#
+# WHAT WAS HERE AND WHY IT IS GONE (F4, P1 — the gate was dead twice over):
+#   * A set-equality assertion that called `_framework_target_entries()`, called
+#     it a SECOND time, and diffed the two — with a comment admitting the
+#     tautology ("the enumeration is static (root-independent), so an 'install
+#     context' and an 'upgrade context' derive an identical target set by
+#     construction"). It could not fail.
+#   * A hand-written closed list of "required entries". A closed set recited
+#     from memory errs in BOTH directions: it silently omitted `SPEC/v1` — the
+#     exact path whose install/upgrade asymmetry became F3 — and it was matched
+#     with `grep "^${need}"`, an unanchored prefix, so `.claude/skills` was
+#     "satisfied" by anything starting with it.
+#
+# The install-vs-upgrade question is now answered by comparing REAL RESULTING
+# TREES, per ceremony mode, against BOTH source generations:
+#     scripts/tests/test-install-upgrade-parity-e2e.sh
+# Set-equality of enumerations — even independently derived ones — can never
+# reach a delivery site that lives outside the enumeration, which is precisely
+# where F3 lived.
+#
+# What survives here is the one non-tautological property this file can still
+# prove cheaply, and it is DERIVED, never recited: every entry the enumeration
+# emits must actually EXIST in a real fresh install of the same profile. That
+# catches an enumeration that has drifted into fiction (renamed/removed target).
+# The opposite direction — install delivers paths the enumeration never lists —
+# is the e2e's job.
+# ---------------------------------------------------------------------------
+echo "==> C.2 — enumeration is not fiction (every entry exists in a real install)"
+if [ -n "$T1" ]; then
+  (
+    # shellcheck source=scripts/_framework_manifest_set.sh
+    . "$SOURCE_DIR/scripts/_framework_manifest_set.sh"
+    # Profile MUST match the install under test (T1 is `--profile core`),
+    # otherwise the check would report by-design profile gating as drift.
+    export FMS_PROFILE_PARTS="core"
+    missing=""
+    count=0
+    while IFS= read -r entry; do
+      [ -n "$entry" ] || continue
+      count=$(( count + 1 ))
+      if [ ! -e "$T1/$entry" ]; then
+        missing="$missing $entry"
+      fi
+    done <<EOF
+$( _framework_target_entries )
+EOF
+    echo "    enumerated=$count profile=core target=$T1"
+    if [ "$count" -lt 5 ]; then
+      # A vacuous enumeration would make the existence check pass trivially.
+      printf 'VACUOUS:%s\n' "$count" > "$WORKROOT/.c2exist"
+    elif [ -z "$missing" ]; then
+      echo "ALLEXIST" > "$WORKROOT/.c2exist"
+    else
+      printf 'MISSING:%s\n' "$missing" > "$WORKROOT/.c2exist"
+    fi
+    # profile-awareness: a core-only profile must NOT enumerate frontend skills.
+    if _framework_target_entries | grep -q "^\.claude/skills/frontend"; then
+      echo "FRONTEND_LEAK" > "$WORKROOT/.c2prof"
+    else
+      echo "PROFILE_OK" > "$WORKROOT/.c2prof"
+    fi
+  )
+  if grep -q "ALLEXIST" "$WORKROOT/.c2exist" 2>/dev/null; then
+    ok "C.2 every enumerated target entry exists in a real fresh install"
+  else
+    bad "C.2 enumeration vs reality ($(cat "$WORKROOT/.c2exist" 2>/dev/null))"
+  fi
+  if grep -q "PROFILE_OK" "$WORKROOT/.c2prof" 2>/dev/null; then
+    ok "C.2 profile-aware (core-only omits frontend skills)"
+  else
+    bad "C.2 profile leak"
+  fi
+else
+  bad "C.2 skipped — no install target (see C.4 failure above)"
+fi
 if [ -n "$T1" ]; then
   MAN="$T1/.claude/.install-manifest.sha256"
   if [ -s "$MAN" ]; then ok "C.4 manifest written + non-empty"; else bad "C.4 manifest absent/empty"; fi

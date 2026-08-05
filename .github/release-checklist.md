@@ -91,20 +91,45 @@ errado, e pular `bump` faz o `tag()` abortar no seu próprio check
 
 ```bash
 # RC:
-bash .claude/scripts/local/release-v1-2-0.sh preflight --rc N
-bash .claude/scripts/local/release-v1-2-0.sh bump      --rc N --npm-readme-reviewed
-bash .claude/scripts/local/release-v1-2-0.sh tag       --rc N
+bash .claude/scripts/local/release.sh preflight --rc N
+bash .claude/scripts/local/release.sh bump      --rc N --npm-readme-reviewed
+bash .claude/scripts/local/release.sh tag       --rc N
 git push origin vX.Y.Z-rc.N        # push é manual, sempre
 
 # STABLE (a tag criada é vX.Y.Z, sem sufixo — pushe ESSE nome):
-bash .claude/scripts/local/release-v1-2-0.sh preflight --stable
-bash .claude/scripts/local/release-v1-2-0.sh bump      --stable --npm-readme-reviewed
-bash .claude/scripts/local/release-v1-2-0.sh tag       --stable
+bash .claude/scripts/local/release.sh preflight --stable
+bash .claude/scripts/local/release.sh bump      --stable --npm-readme-reviewed
+bash .claude/scripts/local/release.sh tag       --stable
 git push origin vX.Y.Z
 ```
 
 O nome da tag muda com a fase; pushar `-rc.N` depois de `tag --stable`
 falha (a tag não existe) ou publica a errada.
+
+**O `bump` é idempotente (PLAN-166/F2).** Numa árvore já no alvo com os
+quatro oráculos limpos (`VERSION`, `verify-counts`, `build-plugin
+--check`, `check-canonical-doc-freshness`) ele **não escreve arquivo
+nenhum** e retorna 0 — inclusive no D+1 do hold. Isso é SUCESSO, não
+falha: a pós-condição da fase já está satisfeita. Para uma re-revisão de
+verdade dos docs (mexer nas stamps `last-reviewed:` sem mudar versão) o
+caminho nomeado é `bump --restamp --npm-readme-reviewed`.
+
+**Se o `bump` criou commit, pushe `main` ANTES de taggear.** A fase `tag`
+roda dois guards fail-closed, RC e stable igualmente:
+
+- **ancestralidade** — `HEAD` tem de ser ancestral de `origin/main`.
+  Falha de rede e "HEAD não está em main" são erros DISTINTOS; para
+  operar offline de propósito existe `--offline-ack` (anunciado alto).
+- **delta restrito** — `git diff <parent_sha do verdito>..HEAD` tem de
+  caber na allowlist FECHADA que o verdito assinado
+  (`.claude/governance/pair-rail-verdict-<TAG>.md`) declara: o próprio
+  verdito, o `verdict-fields-<TAG>`, e os artefatos do re-pass por nome
+  exato — com o `sha256` do `MANIFEST.sha256` pinado no verdito e
+  `shasum -a 256 -c` rodado por cima. Nada de wildcard. O invariante é
+  "nada landou depois do que o re-pass revisou".
+
+O assert local **não basta** e não pretende bastar: uma tag assinada à
+mão pula o driver. O mesmo assert entra server-side no `release.yml`.
 
 ## Pós-tag (monitorar)
 
@@ -140,16 +165,32 @@ falha (a tag não existe) ou publica a errada.
       (sem rc prévia = fail; rc deletada não conta)
 - [ ] **Novo** `pair-rail-verdict-vX.Y.Z.md` (o verdict é POR TAG — o
       step do release.yml roda no GA também; o da rc não vale)
-- [ ] `bash .claude/scripts/local/release-v1-2-0.sh preflight --stable`
+- [ ] `bash .claude/scripts/local/release.sh preflight --stable`
       ← **não pule**: é aqui que o driver re-checa árvore limpa/main, CI,
       governança, usabilidade da chave de assinatura e disponibilidade da
       tag stable. Ir direto ao `bump` depois do hold pula tudo isso
-- [ ] `bash .claude/scripts/local/release-v1-2-0.sh bump --stable --npm-readme-reviewed`
-      — atualiza os sites doc/package E regenera os 2 manifests de
-      plugin (NUNCA `echo > VERSION` à mão: bump de 1 site com 8 sites
-      vivos foi a causa do red da rc.1)
-- [ ] `bash .claude/scripts/local/release-v1-2-0.sh tag --stable` + `git push origin vX.Y.Z`
+- [ ] `bash .claude/scripts/local/release.sh bump --stable --npm-readme-reviewed`
+      — atualiza os sites doc/package E regenera os manifests de plugin
+      (NUNCA `echo > VERSION` à mão: bumpar um site com o resto vivo foi
+      a causa do red da rc.1 da v1.2.0). Depois do hold isso normalmente
+      é um **no-op** — a árvore já está no alvo. No-op é sucesso
+- [ ] `bash .claude/scripts/local/release.sh tag --stable` + `git push origin vX.Y.Z`
+      — o guard de delta restrito exige que o único delta desde o
+      `parent_sha` do verdito seja o próprio verdito + evidência pinada
 - [ ] GitHub release (sem pre-release flag)
+
+### Se o `npm-publish.yml` estourar o prazo esperando o gate
+
+O job `await-release-gate` tem prazo próprio. Se ele expirar porque o
+`release-gate` ficou preso em fila, a rota de recuperação é
+**re-rodar o job `await-release-gate`** depois que o `release-gate`
+ficar verde: o run da tag está pinado à ÁRVORE DA TAG, então o re-run é
+seguro e **não** exige deletar/re-criar a tag.
+
+E a aprovação manual do environment `production-npm` é a **última chance
+humana** antes do publish — não é uma segunda opinião sobre o gate. Se o
+gate está vermelho, a resposta é consertar e re-rodar, nunca aprovar por
+cima.
 
 ## Rollback
 

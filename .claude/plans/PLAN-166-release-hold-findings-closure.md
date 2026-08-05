@@ -1,7 +1,7 @@
 ---
 id: PLAN-166
 title: Release-hold findings closure — v1.3.0 GA via rc.2
-status: reviewed
+status: executing
 created: 2026-08-05
 reviewed_at: 2026-08-05
 owner: CEO

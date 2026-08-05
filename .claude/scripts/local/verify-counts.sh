@@ -15,11 +15,13 @@
 #
 # =====================  COUNT CONTRACT (W1, S160/S161)  =====================
 # Each metric below is derived from a single live source of truth and then
-# checked against EVERY occurrence in the three docs (all-matches, NOT
-# head -1). Two rule kinds:
-#   - exact : the doc number MUST equal the live count.
-#   - floor : the doc states "N+"; the live count MUST be >= N (so adding a
-#             test never churns the docs — AC6).
+# checked against EVERY occurrence in the watched docs (all-matches, NOT
+# head -1). Three rule kinds:
+#   - exact  : the doc number MUST equal the live count.
+#   - floor  : the doc states "N+"; the live count MUST be >= N (so adding a
+#              test never churns the docs — AC6).
+#   - approx : the doc states a ROUNDED figure ("~14,000 collected cases",
+#              "~730 test files"). See the APPROX CONTRACT block below.
 # The check is BIDIRECTIONAL (a doc number that disagrees with live fails)
 # and CROSS-FILE (each doc is checked against the live value, so all docs are
 # mutually consistent by transitivity — AC3/AC4).
@@ -36,10 +38,86 @@
 #   registrations     total hook entries in settings.json hooks{}   exact (48)
 #   _lib modules      ls .claude/hooks/_lib/*.py  (TOP-LEVEL glob)   exact (68)
 #   SPEC v1 files     ls SPEC/v1/*.md                                exact (32)
-#   tests             pytest --collect-only -q .claude/             floor (N+)
+#   tests             pytest --collect-only -q  (DOCUMENTED scope)  floor (N+) + approx (~N)
+#   test_files        git ls-files '*test_*.py' '*_test.py'         approx (~N)
 #   release_steps     grep -c '      - name:' release.yml           exact (29)
 #   commands          find .claude/commands -name '*.md'             exact (27)
-#   workflows         find .github/workflows -name '*.yml'           derived only (no doc cites it — not doc-gated)
+#   workflows         find .github/workflows -name '*.yml'           exact (21)
+#   mutation_fixtures find tests/formal_verification/mutation_...    exact (85)
+#   tla_specs         ls docs/formal-verification/*.tla              exact (4)
+#
+# =====================  APPROX CONTRACT (PLAN-166 W0 F5)  ===================
+# WHY a third kind. Two doc claims are deliberately ROUNDED because the exact
+# figure churns on every commit: the collected-case count and the test-file
+# count. `exact` would make every new test rewrite six documents; `floor`
+# only catches OVERSELL ("docs say 12k, live is 11k") and is blind to
+# UNDERSELL — and undersell is precisely the drift observed in the rc.1
+# re-pass (npm/README.md, docs/FAQ.md and README.pt-BR.md all sat at
+# "~12,000" while the live collect had grown past 14,000; the `floor` rule
+# happily reported "no drift" the whole time because 14172 >= 12000).
+#
+# THE RULE, stated in full:
+#   1. BAND. The cited figure, normalized to an integer ("~14,000" / "~14.000"
+#      / "~14k" all -> 14000), must sit within +/- 5% of the live value.
+#      5% of the collected-case count is ~700 cases, which is why (2) exists.
+#   2. CROSS-DOC EQUALITY. Every watched doc must cite the SAME normalized
+#      figure for a given approx metric. A pure band check is not enough:
+#      "~720 test files" (docs/ARCHITECTURE.md) and "~730 test files"
+#      (CLAUDE.md) were BOTH inside a 5% band of the live 736 while
+#      contradicting each other in public — a live divergence between two
+#      watched docs that the gate could not see. Equality makes the release
+#      restate one number, not a range.
+#   3. INPUTS ARE PRINTED. A band without its inputs is a licence to drift:
+#      +/-700 cases can hide an entire test family. The gate prints, for every
+#      approx metric, the exact command used, the observed value, and — for
+#      the collect-driven metric — the COLLECTION-ERROR COUNT. errors > 0 is
+#      a named WARNING, because the observed count is then measured over a
+#      PARTIAL population and the band is being applied to the wrong number.
+#
+# COLLECTION SCOPE (load-bearing — the two populations DIVERGE). Measured
+# 2026-08-05 on the PLAN-166 W0 tree; both figures are OUTPUTS of the two
+# commands, pasted here, not recalled:
+#   `python3 -m pytest --collect-only -q`            -> 14220 tests,  0 errors
+#   `python3 -m pytest --collect-only -q .claude/`   -> 14267 tests, 22 errors
+#   The first is the DOCUMENTED scope: pytest.ini `testpaths` is the single
+#   source of truth for collection and `make test-collect` runs exactly that
+#   invocation — which is also the command every watched doc tells the reader
+#   to run. The second (the pre-PLAN-166 derivation) walks `.claude/`
+#   directly, which drags in `.claude/sidecars/**` (hypothesis/lightrag
+#   probes that need third-party imports) and therefore reports 22 collection
+#   ERRORS plus 47 extra cases the reader can never reproduce. Deriving from
+#   the wrong population makes the gate reject a truthful doc or accept a
+#   stale one, so the derivation is pinned to the documented scope.
+#
+# NON-INVENTORY NUMERALS (registered omission, not silence): this gate governs
+# FRAMEWORK-INVENTORY COUNTS — things you can count in the tree. Latencies
+# ("~0.3-1.0s"), prices ("$30-50"), coverage thresholds ("Tier-1 >= 86%"),
+# per-profile skill caps and reading times are NOT inventory counts and are
+# deliberately outside the contract; they are governed by the artifacts that
+# set them (coverage.yml, the profile config), not by a doc-count gate.
+# Guard against that exemption becoming a hiding place: the UNMATCHED-APPROX
+# SWEEP below flags any thousands-shaped approximation ("~N,NNN", "~N.NNN",
+# "~Nk") in a watched doc that NO approx rule consumed, as a WARNING naming
+# the doc and the numeral.
+#
+# PENDING SITES (registered exemption, never silence). CLAUDE.md line 73
+# carries the collected-case claim as "~13,000 parametrized cases" and CANNOT
+# be edited mid-session: CLAUDE.md §0 pins the Gate-1 files as cache-stable,
+# so the re-statement to "~14,000 parametrized cases" lands at the W0 CLOSEOUT
+# in the same commit as this gate. Until then `APPROX_PENDING` below downgrades
+# that ONE site from violation to a printed PENDING line, and the site is
+# excluded from the cross-doc equality set (otherwise the frozen 13,000 would
+# drag every other doc down with it).
+# The exemption is SELF-CLEARING and NARROW by construction:
+#   - it keys on the doc + metric + the EXACT stale value 13000. Any other
+#     out-of-band figure at that site is a hard violation;
+#   - once the closeout writes 14,000 the site is inside the band and the
+#     exemption never fires again (13,000 can only come back inside the band
+#     if the live collect FALLS below 13,684, which is a regression the floor
+#     rule already fails on);
+#   - it prints on every single run, so it cannot rot unnoticed.
+# At the closeout, `tests@CLAUDE.md` also has to be reflected in
+# _EXPECTED_SITES in .claude/scripts/tests/test_verify_counts.py.
 #
 # NOTE on the two glob-ambiguous / underivable numbers (code-reviewer P2):
 #   - "_lib modules" is pinned to the TOP-LEVEL `_lib/*.py` glob (68). The
@@ -80,7 +158,11 @@ for arg in "$@"; do
     --json)     JSON=1 ;;
     --no-tests) NO_TESTS=1 ;;
     -h|--help)
-      sed -n '2,75p' "$0"
+      # Usage + the full COUNT/APPROX contract. Keep this range in sync with
+      # the header: it ends at the line before "NOTE on the two
+      # glob-ambiguous" (S294 — the old '2,75p' truncated mid-sentence once
+      # the APPROX CONTRACT block landed).
+      sed -n "2,$(( $(grep -n '^# NOTE on the two glob-ambiguous' "$0" | head -1 | cut -d: -f1) - 1 ))p" "$0"
       exit 0
       ;;
     *)
@@ -150,14 +232,25 @@ PYREG
 DERIVED_REGISTERED=${_reg_out% *}
 DERIVED_REGISTRATIONS=${_reg_out#* }
 
-# Test count: collect-only across .claude/. Collection errors in plan-specific
-# fixture suites are tolerated (they don't represent code regressions). The
-# collected integer is the load-bearing floor signal.
+# Test count: collect-only over the DOCUMENTED scope — no path argument, so
+# pytest.ini `testpaths` decides, which is byte-for-byte what `make
+# test-collect` runs and what every watched doc tells the reader to run.
+# The previous derivation passed `.claude/` explicitly; that walks
+# `.claude/sidecars/**` too and reports 22 COLLECTION ERRORS + 47 phantom
+# cases (14219/22 vs 14172/0), i.e. a different population from the one the
+# docs cite. See the APPROX CONTRACT header block.
+#
+# Both the collected count AND the collection-error count are derived: the
+# error count is an INPUT of the approx rule (a band applied to a partially
+# collected population is meaningless), so it is printed, exported and
+# surfaced as a named WARNING when non-zero.
 DERIVED_TESTS=0
+DERIVED_TESTS_ERRORS=0
+DERIVED_TESTS_CMD='python3 -m pytest --collect-only -q   # pytest.ini testpaths == `make test-collect`'
 if [ "$NO_TESTS" -eq 0 ]; then
+  _collect_out=$( { cd "$REPO_ROOT" && python3 -m pytest --collect-only -q 2>&1 | tail -5; } || true )
   DERIVED_TESTS=$(
-    cd "$REPO_ROOT" && \
-    python3 -m pytest --collect-only -q .claude/ 2>&1 | \
+    printf '%s\n' "$_collect_out" | \
     awk '/[0-9]+ tests? collected/ {
       for (i = 1; i <= NF; i++) {
         gsub(/\x1b\[[0-9;]*m/, "", $i)
@@ -166,7 +259,29 @@ if [ "$NO_TESTS" -eq 0 ]; then
     }' || true
   )
   DERIVED_TESTS=${DERIVED_TESTS:-0}
+  # "N errors" appears in the same -q summary line ("14219 tests collected,
+  # 22 errors in 3.98s"). No match => 0 (a clean collect prints no "errors").
+  DERIVED_TESTS_ERRORS=$(
+    printf '%s\n' "$_collect_out" | \
+    sed -e 's/\x1b\[[0-9;]*m//g' | \
+    awk 'match($0, /[0-9]+ error/) {
+      s = substr($0, RSTART, RLENGTH); sub(/ error/, "", s); print s; exit
+    }' || true
+  )
+  DERIVED_TESTS_ERRORS=${DERIVED_TESTS_ERRORS:-0}
 fi
+
+# Test-FILE count (PLAN-166 W0 F5). Live source is the derivation the docs
+# already print in their own "how to verify" cell, verbatim. `git ls-files`
+# needs a git work tree; a synthetic fixture tree is not one, so a failure
+# derives 0 and the metric simply matches no doc there (fail-quiet on
+# INFRASTRUCTURE, per CLAUDE.md §4 — an absent git repo is not doc drift).
+DERIVED_TEST_FILES_CMD="git ls-files '*test_*.py' '*_test.py' | wc -l"
+DERIVED_TEST_FILES=$(
+  { cd "$REPO_ROOT" && git ls-files '*test_*.py' '*_test.py' 2>/dev/null || true; } \
+    | wc -l | tr -d ' '
+)
+DERIVED_TEST_FILES=${DERIVED_TEST_FILES:-0}
 
 # Release steps = count of "      - name:" lines in release.yml (proper 6-space indent
 # distinguishes job-level steps from nested lines). Use grep -c for portability.
@@ -185,6 +300,25 @@ DERIVED_COMMANDS=$(
 # Workflow count = number of *.yml files under .github/workflows/
 DERIVED_WORKFLOWS=$(
   { find "$REPO_ROOT/.github/workflows" -maxdepth 1 -name '*.yml' 2>/dev/null || true; } \
+    | wc -l | tr -d ' '
+)
+
+# PLAN-166 W0 F5 — two counts docs/CTO-GUIDE.md cited with NO live metric
+# behind them ("45 fixtures", "1 component fully specified"). Both were wrong
+# (85 / 4) and invisible because the doc was outside DOCS. Given the choice
+# the plan offers — live metric + matcher, or delete the claim — these two are
+# cheap to derive and load-bearing for an evaluator, so they get metrics.
+# Mutation fixtures = every fixture module under the conformance fixture tree,
+# excluding package markers.
+DERIVED_MUTATION_FIXTURES=$(
+  { find "$REPO_ROOT/tests/formal_verification/mutation_fixtures" -name '*.py' \
+      ! -name '__init__.py' 2>/dev/null || true; } \
+    | wc -l | tr -d ' '
+)
+# Published TLA+ specifications (files, not model-checked components — CI does
+# not model-check any of them; see CLAUDE.md §5).
+DERIVED_TLA_SPECS=$(
+  { find "$REPO_ROOT/docs/formal-verification" -maxdepth 1 -name '*.tla' 2>/dev/null || true; } \
     | wc -l | tr -d ' '
 )
 
@@ -241,8 +375,11 @@ export VC_LIB="$DERIVED_LIB" VC_SPEC="$DERIVED_SPEC_V1" VC_REGISTERED="$DERIVED_
 export VC_REGISTRATIONS="$DERIVED_REGISTRATIONS"
 export VC_SCHEMA="$DERIVED_SCHEMA_FILES"
 export VC_TESTS="$DERIVED_TESTS" VC_QUIET="$QUIET" VC_JSON="$JSON" VC_NO_TESTS="$NO_TESTS"
+export VC_TESTS_ERRORS="$DERIVED_TESTS_ERRORS" VC_TESTS_CMD="$DERIVED_TESTS_CMD"
+export VC_TEST_FILES="$DERIVED_TEST_FILES" VC_TEST_FILES_CMD="$DERIVED_TEST_FILES_CMD"
 export VC_RELEASE_STEPS="$DERIVED_RELEASE_STEPS" VC_COMMANDS="$DERIVED_COMMANDS"
 export VC_WORKFLOWS="$DERIVED_WORKFLOWS"
+export VC_MUTATION_FIXTURES="$DERIVED_MUTATION_FIXTURES" VC_TLA_SPECS="$DERIVED_TLA_SPECS"
 export VC_LIB_RECURSIVE="$DERIVED_LIB_RECURSIVE" VC_VERSION="$DERIVED_VERSION"
 export VC_ADR_VIOLATIONS="$ADR_VIOLATIONS"
 # Inventory echoed so the python3 block can assert CLAUDE.md's RESERVED list.
@@ -260,11 +397,96 @@ live = {
     "registrations": iv("VC_REGISTRATIONS"),
     "schema_files": iv("VC_SCHEMA"),
     "tests": iv("VC_TESTS"),
+    "test_files": iv("VC_TEST_FILES"),
     "release_steps": iv("VC_RELEASE_STEPS"),
     "commands": iv("VC_COMMANDS"),
     "workflows": iv("VC_WORKFLOWS"),
+    "mutation_fixtures": iv("VC_MUTATION_FIXTURES"),
+    "tla_specs": iv("VC_TLA_SPECS"),
     "lib_recursive": iv("VC_LIB_RECURSIVE"),
 }
+
+# ---- APPROX rule: band + inputs (PLAN-166 W0 F5) ----
+# The band is DECLARED here and reproduced in every violation message and in
+# the human/JSON report. See the APPROX CONTRACT block at the top of the file
+# for why +/-5% and why the inputs must be printed.
+APPROX_BAND = 0.05
+# Per-metric measurement provenance. `errors` is None for metrics whose
+# derivation cannot partially fail; for `tests` it is the pytest
+# collection-error count, which is the difference between "the number is
+# rounded" and "the number is measured over a population with holes in it".
+APPROX_INPUTS = {
+    "tests": {
+        "command": os.environ.get("VC_TESTS_CMD", ""),
+        "observed": iv("VC_TESTS"),
+        "collect_errors": iv("VC_TESTS_ERRORS"),
+        "skipped": os.environ.get("VC_NO_TESTS") == "1",
+    },
+    "test_files": {
+        "command": os.environ.get("VC_TEST_FILES_CMD", ""),
+        "observed": iv("VC_TEST_FILES"),
+        "collect_errors": None,
+        "skipped": False,
+    },
+}
+
+# The numeral shape an approx claim MUST be written in: a tilde, then digits
+# with optional thousands separators (`,` EN / `.` pt-BR) or a `k` suffix.
+# One capturing group, always.
+_APPROX_NUM = r'~\s*(\d[\d.,]*\s*[kKmM]?)'
+
+
+def approx_norm(raw):
+    """'14,000' / '14.000' / '14k' / '730' -> int. None when unparseable.
+
+    Separator-agnostic on purpose: README.md writes ~14,000 and
+    README.pt-BR.md writes ~14.000 and they are the SAME claim, so the
+    cross-doc equality check must see the same integer for both.
+    """
+    s = (raw or "").strip().lower().replace(" ", "").rstrip(".,")
+    mult = 1
+    if s.endswith("k"):
+        mult, s = 1000, s[:-1]
+    s = s.replace(",", "").replace(".", "")
+    if not s.isdigit():
+        return None
+    return int(s) * mult
+
+
+# Prose forms, per metric. Every regex embeds _APPROX_NUM exactly once.
+# Adding a phrasing here is cheap; inventing one that matches nothing is a
+# dead rule, so each entry below is pinned to a site that exists today (see
+# the APPROX SITES table printed by --json `approx_sites`).
+APPROX_RULES = [
+    ("tests", [
+        # "~14,000 cases" / "~14,000 collected cases" / "~14,000 parametrized
+        # cases" / "~14,000 test cases" / "~14.000 casos" / '"~14k tests."'
+        # The \** absorbs markdown bold that sits BETWEEN the numeral and its
+        # noun ("reports **~14,000** collected cases" in docs/README.md).
+        _APPROX_NUM + r'\**\s*(?:collected\s+|parametrized\s+|test\s+'
+                      r'|hand-written\s+)?(?:cases|casos|tests)\b',
+    ]),
+    ("test_files", [
+        _APPROX_NUM + r'\**\s*test files\b',
+    ]),
+]
+
+# Table-cell forms: the numeral is alone in the VALUE cell, so no noun follows
+# it and the prose regexes above cannot see it.
+APPROX_TABLE_RULES = [
+    ("tests", r'^Python tests collected\b'),
+    ("test_files", r'^Test files\b'),
+]
+
+# Registered, self-clearing exemptions. See "PENDING SITES" in the header.
+# (doc, metric, frozen_value, why)
+APPROX_PENDING = [
+    ("CLAUDE.md", "tests", 13000,
+     "CLAUDE.md is a Gate-1 cache-stable file (CLAUDE.md §0) and is frozen "
+     "mid-session; line 73 is re-stated to '~14,000 parametrized cases' at "
+     "the PLAN-166 W0 closeout, in the commit that lands this gate."),
+]
+_pending_index = dict(((d, m), (v, w)) for d, m, v, w in APPROX_PENDING)
 # VERSION is a dotted string, not an int — kept separate from the int `live` map.
 live_version = os.environ.get("VC_VERSION", "") or ""
 quiet = os.environ.get("VC_QUIET") == "1"
@@ -277,9 +499,21 @@ no_tests = os.environ.get("VC_NO_TESTS") == "1"
 # PLAN-161 V1 ([[feedback-adr-count-drift-unwatched-docs]], S275): the four
 # previously-unwatched drift-prone docs are now first-class scan targets —
 # they drifted silently twice (GA v1.1.0 and again by S278).
+# PLAN-166 W0 F5 (S294): four MORE unwatched drift-prone docs promoted to
+# first-class scan targets. README.pt-BR.md carried a v1.0.0-era table (55
+# hooks / 44 wired / ~12.000 casos) purely because no rule spoke Portuguese;
+# docs/README.md, docs/WHAT-WE-ARE.md and docs/CTO-GUIDE.md were the
+# outward-facing "verify every claim" set and had drifted a full MINOR line
+# behind (151 skills / 171 ADRs / 53 hooks / 22 commands).
+# NOTE for whoever adds the next doc here: joining DOCS activates EVERY
+# matcher, not just the one you came for — and it does NOT retro-activate
+# claims whose phrasing no matcher knows. Run the gate, read
+# `rule_matches_by_doc`, and add a matcher (or delete the claim) for every
+# number the new doc carries.
 DOCS = [
-    "CLAUDE.md", "README.md", "INSTALL.md",
+    "CLAUDE.md", "README.md", "README.pt-BR.md", "INSTALL.md",
     "docs/ARCHITECTURE.md", "docs/GUIA-COMPLETO.md", "docs/FAQ.md",
+    "docs/README.md", "docs/WHAT-WE-ARE.md", "docs/CTO-GUIDE.md",
     "npm/README.md",
 ]
 # Additional docs scanned for the subset of rules that reference them.
@@ -305,26 +539,41 @@ RULES = [
         # PLAN-161 V1 — phrasings carried by the four newly-watched docs.
         # "# N skills across" is the DOMAIN tree comment, not the total.
         r'# (\d+) skills(?! across)', r'(\d+) skill files',
+        # PLAN-166 W0 F5 — docs/WHAT-WE-ARE.md §1.4 calls them checklists.
+        r'(\d+) reusable checklists',
+        # PLAN-166 W0 F5 (pt) — README.pt-BR.md prose "166 arquivos de skill".
+        r'(\d+) arquivos de skill',
     ]),
     ("core", "exact", [
         r'\((\d+) universal\)', r'\((\d+)\s+universais\)',
         r'# (\d+) universal skills', r'\((\d+) core ',
         r'CORE\*\* \(universal\) \| (\d+)',
         r'(\d+) core \+',   # "42 core + 8 frontend + 116 domain" split cells
+        r'(\d+) core \(universal\)',   # WHAT-WE-ARE.md §1.4 three-tier prose
     ]),
     ("frontend", "exact", [
         r'\((\d+) universal frontend\)', r'\((\d+) frontend skills',
         r'# (\d+) universal frontend', r'# (\d+) frontend skills',
         r'(\d+) frontend universais', r'(\d+) frontend \+',
+        r'(\d+) frontend \(universal frontend\)',   # WHAT-WE-ARE.md §1.4
     ]),
     ("domain", "exact", [
         r'(\d+) domain across',
         r'\+ (\d+) domain',      # "42 core + 8 frontend + 116 domain" split cells
         r'# (\d+) skills across', # ARCHITECTURE.md domains/ tree comment
+        r'(\d+) domain \(fintech',  # WHAT-WE-ARE.md §1.4 three-tier prose
+        # pt split cell: "42 core + 8 frontend + 116 de domínio"
+        r'\+ (\d+) de domínio',
     ]),
-    ("adrs", "exact", [r'(\d+) ADRs total', r'(\d+) ADRs on disk']),
+    # PLAN-166 W0 F5: `# (\d+) ADRs` is the "verify it yourself" comment that
+    # both READMEs put next to `ls .claude/adr | grep -c '^ADR-'`. It matched
+    # nothing before — the same vacuous-site class as S287, found by diffing
+    # the grep census of the docs against `rule_matches_by_doc`.
+    ("adrs", "exact", [r'(\d+) ADRs total', r'(\d+) ADRs on disk',
+                       r'#\s*(\d+) ADRs\b']),
     ("hook_py", "exact", [
         r'(\d+) hooks total', r'(\d+) Python hook scripts', r'(\d+) hook scripts',
+        r'(\d+) em disco',   # pt: "**57 em disco**" (README.pt-BR.md)
     ]),
     # S287 vacuous-gate fix: no watched doc ever used the literal
     # "N registered hooks" — the real phrasings are "46 wired into
@@ -340,17 +589,33 @@ RULES = [
         # while the doc it misses drifts).
         r'(\d+) wired into',
         r'(\d+) hooks wired in\b',
+        # PLAN-166 W0 F5 — docs/README.md states the same number twice, once
+        # in the "Hooks registered" table row and once in the prose that
+        # explains the 57-vs-46 gap. Both read "N distinct scripts".
+        r'(\d+) distinct scripts',
+        r'(\d+) ligados\b',   # pt: "**46 ligados**" (README.pt-BR.md)
     ]),
     # Total hook ENTRIES in the hooks{} subtree (one script can fire on
     # several events; includes non-.py commands). CLAUDE.md §1 +
     # ARCHITECTURE prose + the README/npm table Notes cells.
-    ("registrations", "exact", [r'(\d+) event registrations']),
+    ("registrations", "exact", [
+        r'(\d+) event registrations',
+        r'(\d+) registros de evento',   # pt (README.pt-BR.md table cell)
+    ]),
     ("lib", "exact", [
         r'(\d+) shared (?:Python )?modules',
         r'(\d+) [`]?_lib[`/]* modules',   # catches "N `_lib/` modules" / "N _lib modules"
         r'(\d+) stdlib-only shared modules',   # ARCHITECTURE.md tree comment
     ]),
-    ("schema_files", "exact", [r'(\d+) schema files']),
+    # PLAN-166 W0 F5: spec_v1 had TABLE_RULES coverage only; README.pt-BR.md
+    # states it in prose ("em `SPEC/v1/` (32 arquivos — ...").
+    ("spec_v1", "exact", [r'SPEC/v1/`\s*\((\d+) arquivos']),
+    ("schema_files", "exact", [
+        r'(\d+) schema files',
+        # "32 (28 `*.schema.md`)" in the ARCHITECTURE/CTO-GUIDE tables and
+        # the pt prose "32 arquivos — 28 `*.schema.md`".
+        r'(\d+) `\*\.schema\.md`',
+    ]),
     ("tests", "floor", [r'(\d+)\+ tests', r'(\d+)\+ unit tests']),
     # New mechanics-derived counts (F-3.2/F-4 blind-spot closure — PLAN-113 RW-E)
     # S287 vacuous-gate fix: the two historical phrasings matched no doc
@@ -363,9 +628,17 @@ RULES = [
     ("commands", "exact", [
         r'(\d+) slash commands',
     ]),
-    # "workflows" is deliberately NOT doc-gated: no watched doc cites the
-    # workflow count (S287 liveness sweep). The derived value stays in the
-    # --json/human output; re-add a rule here TOGETHER with the doc claim.
+    # PLAN-166 W0 F5: "workflows" IS doc-gated now. It was exempt because no
+    # watched doc cited it — but docs/CTO-GUIDE.md §2 always did ("| Workflows
+    # | 20 |", live 21), and the doc simply was not in DOCS. The claim is
+    # carried in a table cell, so the live rule is the TABLE_RULE below and
+    # there is deliberately no prose regex here (a prose regex matching
+    # nothing is the dead-gate class this file exists to prevent).
+    # PLAN-166 W0 F5: two counts docs/CTO-GUIDE.md §2 asserted with nothing
+    # behind them. "45 fixtures" (live 85) and "1 component fully specified"
+    # (live 4 published .tla specs).
+    ("mutation_fixtures", "exact", [r'(\d+) mutation fixtures']),
+    ("tla_specs", "exact", [r'(\d+) TLA\+ specs published']),
     # E9-F10 (i): recursive `_lib` count. Only CLAUDE.md states "N recursive";
     # README/INSTALL lack the literal, so scanning all DOCS is safe.
     ("lib_recursive", "exact", [
@@ -381,13 +654,43 @@ RULES = [
 TABLE_RULES = [
     ("adrs",      "exact", r'^(?:ADRs|Architecture decision records)\b'),
     ("hook_py",   "exact", r'^Hook scripts\b'),
-    ("lib",       "exact", r'^(?:_lib modules|Shared library modules)\b'),
+    # PLAN-166 W0 F5: docs/CTO-GUIDE.md §2 labels the row just "Hooks" and
+    # puts BOTH numbers in the value cell ("57 .py on disk; 46 wired into
+    # `settings.json`"). The table extractor reads the FIRST integer, so this
+    # row feeds hook_py; the second number is picked up by the `(\d+) wired
+    # into` prose regex. The `$` anchor is load-bearing — an unanchored
+    # `^Hooks\b` would also swallow "Hooks registered" / "Hooks wired in"
+    # and assert the REGISTERED count against the on-disk metric.
+    ("hook_py",   "exact", r'^Hooks$'),
+    ("lib",       "exact",
+     r'^(?:_lib modules|_lib/ stdlib-only modules|Shared library modules)\b'),
     ("commands",  "exact", r'^Slash commands\b'),
     ("skills",    "exact", r'^(?:Skills|Skill checklists)\b'),
     ("spec_v1",   "exact", r'^SPEC/v1 files\b'),
+    ("workflows", "exact", r'^Workflows\b'),
+    # ---- PLAN-166 W0 F5: README.pt-BR.md label rules (pt) ----
+    # The pt-BR README carried a v1.0.0-era table (55 hooks on disk / 44 wired)
+    # for one reason only: no rule spoke Portuguese. These label matchers are
+    # deliberately SEPARATE entries rather than alternations bolted onto the
+    # English ones, so a pt/EN LABEL COLLISION is impossible to introduce by
+    # accident — see the collision audit in the header of this block:
+    #   * "Architecture decision records" and "Slash commands" are identical in
+    #     both languages AND mean the same metric, so the existing English
+    #     rules already cover them correctly (true positives, not collisions).
+    #   * every other pt label is lexically disjoint from every English label
+    #     ("Scripts de hook" vs "Hook scripts", "Checklists de skills" vs
+    #     "Skills"/"Skill checklists", "Módulos de biblioteca compartilhada" vs
+    #     "Shared library modules", "Hooks ligados em" vs "Hooks wired in").
+    #     No English regex can match a pt label and vice versa.
+    ("hook_py",    "exact", r'^Scripts de hook\b'),
+    ("registered", "exact", r'^Hooks ligados em\b'),
+    ("lib",        "exact", r'^Módulos de biblioteca compartilhada\b'),
+    ("skills",     "exact", r'^Checklists de skills\b'),
     # S287: README/npm "| Hooks wired in `settings.json` | **46** | ..." and
     # ARCHITECTURE "| Hook registrations | 46 wired into `settings.json`|".
-    ("registered", "exact", r'^(?:Hooks wired in|Hook registrations)\b'),
+    # PLAN-166 W0 F5 adds docs/README.md's "| Hooks registered | **46** ... |".
+    ("registered", "exact",
+     r'^(?:Hooks wired in|Hook registrations|Hooks registered)\b'),
 ]
 
 def iter_table_rows(text):
@@ -464,6 +767,162 @@ for metric, kind, regexes in RULES:
                     violations.append(
                         f"{doc}: cites {metric}>={v}+ but live={lv} (regression; rule: floor)"
                     )
+
+# ============================  APPROX EVALUATION  ===========================
+# Three failure modes (band, cross-doc equality, missing `~` marker), one
+# non-failure mode (registered PENDING site), and a printed input record for
+# every metric. See the APPROX CONTRACT block at the top of the file.
+warnings = []
+pending = []
+approx_sites = []        # [{metric, doc, cited, pending}]
+_approx_consumed = {}    # doc -> set of char offsets of `~` already consumed
+
+
+def _consume(doc, off):
+    _approx_consumed.setdefault(doc, set()).add(off)
+
+
+def _record_approx(metric, doc, raw, off):
+    _note(metric, doc)
+    _consume(doc, off)
+    cited = approx_norm(raw)
+    if cited is None:
+        violations.append(
+            "%s: %s approx claim '~%s' is not a parseable figure"
+            "  (rule: approx/shape)" % (doc, metric, raw)
+        )
+        return
+    approx_sites.append({"metric": metric, "doc": doc, "cited": cited})
+
+
+for _metric, _regexes in APPROX_RULES:
+    for _doc in DOCS:
+        _text = texts.get(_doc, "")
+        for _rx in _regexes:
+            for _m in re.finditer(_rx, _text):
+                _record_approx(_metric, _doc, _m.group(1), _m.start())
+
+# Table-cell sites: the numeral sits alone in the VALUE cell with no noun
+# after it, so the prose regexes above are structurally blind to it.
+for _doc in DOCS:
+    _off = 0
+    for _line in texts.get(_doc, "").splitlines(True):
+        _s = _line.strip()
+        if _s.startswith('|') and _s.endswith('|') and _s.count('|') >= 3:
+            _cells = [c.strip() for c in _s.strip('|').split('|')]
+            if len(_cells) >= 2:
+                _label = re.sub(r'[*`]', '', _cells[0]).strip()
+                for _metric, _label_rx in APPROX_TABLE_RULES:
+                    if not re.match(_label_rx, _label, re.IGNORECASE):
+                        continue
+                    _cm = re.search(_APPROX_NUM, _cells[1])
+                    if _cm is None:
+                        # An approx metric written as a bare exact integer
+                        # claims a precision this gate cannot honour, and the
+                        # row would otherwise go completely unchecked (that is
+                        # how docs/CTO-GUIDE.md sat at "| Test files | 676 |").
+                        if re.search(r'\d', _cells[1]):
+                            violations.append(
+                                "%s: table row '%s' cites %s WITHOUT the '~' "
+                                "marker (%r); approx metrics must be written "
+                                "'~N'  (rule: approx/table-cell)"
+                                % (_doc, _label, _metric, _cells[1])
+                            )
+                        continue
+                    _lm = re.search(_APPROX_NUM, _line)
+                    _record_approx(_metric, _doc, _cm.group(1),
+                                   _off + (_lm.start() if _lm else 0))
+        _off += len(_line)
+
+_by_metric = {}
+for _site in approx_sites:
+    _by_metric.setdefault(_site["metric"], []).append(_site)
+
+for _metric in sorted(_by_metric):
+    _sites = _by_metric[_metric]
+    _in = APPROX_INPUTS.get(_metric)
+    _lv = _in["observed"] if _in else live.get(_metric, 0)
+    # A live value of 0 means the derivation could not run in this tree (no
+    # git work tree, --no-tests). A +/-5% band around 0 rejects every possible
+    # doc figure, so enforcement is suspended and the fact is WARNED, never
+    # silently skipped.
+    _skip = bool(_in and _in["skipped"]) or _lv <= 0
+    _tol = _lv * APPROX_BAND
+    _pool = {}
+    for _site in _sites:
+        _frozen = _pending_index.get((_site["doc"], _metric))
+        if _frozen is not None and _site["cited"] == _frozen[0]:
+            _site["pending"] = True
+            pending.append(
+                "%s: %s=~%d is a REGISTERED PENDING site (live=%d, band "
+                "+/-%d%%). %s" % (_site["doc"], _metric, _site["cited"],
+                                  _lv, int(APPROX_BAND * 100), _frozen[1])
+            )
+            continue
+        _site["pending"] = False
+        _pool.setdefault(_site["cited"], []).append(_site["doc"])
+        if _skip:
+            continue
+        if abs(_site["cited"] - _lv) > _tol:
+            violations.append(
+                "%s: cites %s=~%d, live=%d — OUTSIDE the +/-%d%% band "
+                "[%d..%d]  (rule: approx; measured by `%s`)"
+                % (_site["doc"], _metric, _site["cited"], _lv,
+                   int(APPROX_BAND * 100), int(_lv - _tol), int(_lv + _tol),
+                   (_in or {}).get("command", "n/a"))
+            )
+    if len(_pool) > 1:
+        _detail = "; ".join(
+            "~%d in %s" % (v, ", ".join(sorted(set(ds))))
+            for v, ds in sorted(_pool.items())
+        )
+        violations.append(
+            "approx metric '%s' is cited with DIFFERENT figures across "
+            "watched docs: %s  (rule: approx/cross-doc-equality)"
+            % (_metric, _detail)
+        )
+
+# Inputs of the band, surfaced as named WARNINGs (contract clause 3).
+for _metric in sorted(APPROX_INPUTS):
+    _in = APPROX_INPUTS[_metric]
+    if _in["skipped"]:
+        warnings.append(
+            "approx metric '%s': live measurement SKIPPED (--no-tests) — the "
+            "band is NOT enforced this run" % _metric
+        )
+        continue
+    if _in["collect_errors"]:
+        warnings.append(
+            "approx metric '%s': %d COLLECTION ERROR(S) in `%s` — the observed "
+            "value (%d) is measured over a PARTIAL population, so the +/-%d%% "
+            "band is being applied to the wrong number. Fix the collection "
+            "errors before trusting this rule."
+            % (_metric, _in["collect_errors"], _in["command"],
+               _in["observed"], int(APPROX_BAND * 100))
+        )
+    if _in["observed"] <= 0:
+        warnings.append(
+            "approx metric '%s': `%s` returned 0 — the rule is VACUOUS in this "
+            "tree (band suspended)" % (_metric, _in["command"])
+        )
+
+# ---- UNMATCHED-APPROX SWEEP ----
+# The "non-inventory numerals" exemption in the header must not become a
+# hiding place. Any thousands-shaped approximation in a watched doc that no
+# approx rule consumed is named here, with its line, as a WARNING.
+_THOUSANDS_RX = re.compile(r'~\s*(?:\d+[.,]\d{3}\b|\d+\s*[kK]\b)')
+for _doc in DOCS:
+    _text = texts.get(_doc, "")
+    _consumed = _approx_consumed.get(_doc, set())
+    for _m in _THOUSANDS_RX.finditer(_text):
+        if _m.start() in _consumed:
+            continue
+        warnings.append(
+            "%s:%d: thousands-shaped approximation '%s' is consumed by NO "
+            "approx rule — give it a live metric + matcher, or delete the "
+            "numeral  (rule: approx/unmatched-sweep)"
+            % (_doc, _text.count("\n", 0, _m.start()) + 1, _m.group(0).strip())
+        )
 
 # ---- E9-F10 (iii): VERSION-string coherence ----
 # Anchored to the current-version DECLARATION sites ONLY (not historical
@@ -628,6 +1087,10 @@ if as_json:
     out_live = dict(live)
     out_live["version"] = live_version
     print(json.dumps({"live": out_live, "violations": violations,
+                      "warnings": warnings, "pending": pending,
+                      "approx": {"band": APPROX_BAND,
+                                 "inputs": APPROX_INPUTS,
+                                 "sites": approx_sites},
                       "rule_matches": rule_matches,
                       "rule_matches_by_doc": rule_matches_by_doc}, indent=2))
     sys.exit(1 if violations else 0)
@@ -638,13 +1101,44 @@ if not quiet:
     for k in ("skills", "core", "frontend", "domain", "adrs", "hook_py",
               "registered", "registrations", "lib", "lib_recursive",
               "spec_v1", "schema_files",
-              "tests", "release_steps", "commands", "workflows"):
+              "tests", "test_files", "release_steps", "commands", "workflows",
+              "mutation_fixtures", "tla_specs"):
         v = live[k]
         if k == "tests" and no_tests:
             v = "(skipped)"
-        print(f"  {k:16s} = {v}")
-    print(f"  {'version':16s} = {live_version}")
+        print(f"  {k:18s} = {v}")
+    print(f"  {'version':18s} = {live_version}")
     print("")
+    # Contract clause 3: an approx band without its inputs is a licence to
+    # drift, so the inputs are printed on every run — command, observed
+    # value, collection-error count — next to the figure the docs cite.
+    print(f"Approx metrics (band +/-{int(APPROX_BAND * 100)}%):")
+    for _k in sorted(APPROX_INPUTS):
+        _i = APPROX_INPUTS[_k]
+        _cited = sorted(set(s["cited"] for s in approx_sites
+                            if s["metric"] == _k and not s.get("pending")))
+        _obs = "(skipped)" if _i["skipped"] else _i["observed"]
+        _lo = int(_i["observed"] * (1 - APPROX_BAND))
+        _hi = int(_i["observed"] * (1 + APPROX_BAND))
+        print(f"  {_k}")
+        print(f"    command        = {_i['command']}")
+        print(f"    observed       = {_obs}")
+        print(f"    collect errors = "
+              f"{'n/a' if _i['collect_errors'] is None else _i['collect_errors']}")
+        print(f"    accepted band  = [{_lo}..{_hi}]")
+        print(f"    cited in docs  = "
+              f"{', '.join('~%d' % c for c in _cited) if _cited else '(no site)'}")
+    print("")
+    if pending:
+        print("Pending (registered exemptions — NOT failures, but they expire):")
+        for pen in pending:
+            print(f"  PENDING: {pen}")
+        print("")
+    if warnings:
+        print("Warnings (advisory — do not affect the exit code):")
+        for war in warnings:
+            print(f"  WARN: {war}")
+        print("")
     if violations:
         print("Drift / regressions:")
         for vio in violations:

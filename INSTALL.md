@@ -626,7 +626,7 @@ What is **NOT** touched (user data):
 
 `.claude/settings.json` is a special case since v1.2.0: `upgrade.sh` runs a
 3-state per-leaf-key **baseline migration** on it (e.g. the pair-rail
-registration-timeout cap 60 → 150 s, ADR-110-AMEND-1). A key is only
+registration-timeout cap 150 → 210 s, ADR-110-AMEND-2). A key is only
 changed when it still holds the old framework default — operator-chosen
 values are preserved — and the pre-migration file is copied to
 `.claude.bak/<timestamp>/` first.

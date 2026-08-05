@@ -1,6 +1,6 @@
 # ceo-orchestration
 
-<!-- last-reviewed: 2026-06-22 v1.0.0 -->
+<!-- last-reviewed: 2026-08-05 -->
 
 > **English:** [`README.md`](README.md) — fonte canônica.
 
@@ -50,14 +50,14 @@ Todas as contagens abaixo são verificáveis a partir de um checkout limpo (veja
 | Componente | Contagem | Notas |
 |---|---|---|
 | Checklists de skills | **166** | 42 core + 8 frontend + 116 de domínio |
-| Scripts de hook (em disco) | **55** | entrypoints Python em `.claude/hooks/` |
-| Hooks ligados em `settings.json` | **44** | scripts distintos, 46 registros de evento |
+| Scripts de hook (em disco) | **57** | entrypoints Python em `.claude/hooks/` |
+| Hooks ligados em `settings.json` | **46** | scripts distintos, 48 registros de evento |
 | Módulos de biblioteca compartilhada | **68** | apenas stdlib, em `.claude/hooks/_lib/` (excluindo o `__init__.py` do pacote) |
 | Slash commands | **27** | em `.claude/commands/` |
 | Architecture decision records | **188** | em `.claude/adr/` |
-| Testes | **~12.000 casos** | reportados por `pytest --collect-only` nas suítes de hook, script e conformidade |
+| Testes | **~14.000 casos** | reportados por `pytest --collect-only` nas suítes de hook, script e conformidade |
 
-A diferença entre **55 em disco** e **44 ligados** é benigna: vários módulos que não respondem a eventos são ativados via dispatch in-process (invocados por outros hooks), e não por um registro de evento direto em `settings.json`.
+A diferença entre **57 em disco** e **46 ligados** é benigna: vários módulos que não respondem a eventos são ativados via dispatch in-process (invocados por outros hooks), e não por um registro de evento direto em `settings.json`.
 
 **Dependências de runtime: nenhuma.** Hooks e scripts são Python ≥ 3.9, **apenas biblioteca padrão** — zero pacotes de terceiros em runtime. Veja [`SBOM.md`](SBOM.md). (Desenvolvimento e CI usam ferramentas de teste de terceiros, como o pytest; o runtime instalado não usa.)
 
@@ -164,7 +164,7 @@ Não acredite na tabela por fé. A partir de um checkout limpo:
 find .claude/skills -name SKILL.md | wc -l        # 166 skills
 ls .claude/commands/*.md | wc -l                  # 27 slash commands
 ls .claude/adr | grep -c '^ADR-'                  # 188 ADRs
-python3 -m pytest --collect-only -q | tail -1     # ~12.000 casos coletados
+python3 -m pytest --collect-only -q | tail -1     # ~14.000 casos coletados
 ```
 
 ---
