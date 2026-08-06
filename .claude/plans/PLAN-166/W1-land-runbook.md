@@ -151,6 +151,7 @@ S=.claude/plans/PLAN-166/staged
 # Group A (minus release.yml — kernel, §5):
 cp -p "$S/.github/workflows/npm-publish.yml"                     .github/workflows/npm-publish.yml
 cp -p "$S/.claude/governance/npm-trusted-publisher.txt"          .claude/governance/npm-trusted-publisher.txt
+cp -p "$S/.claude/governance/pair-rail-verdict-template.md"      .claude/governance/pair-rail-verdict-template.md
 cp -p "$S/.claude/scripts/tests/test_release_workflow_asserts.py" .claude/scripts/tests/test_release_workflow_asserts.py
 # Group B:
 cp -p "$S/.claude/.framework-version"                            .claude/.framework-version
@@ -346,6 +347,7 @@ git add \
   .github/workflows/npm-publish.yml .github/workflows/release.yml \
   .github/workflows/smoke-install.yml \
   .claude/governance/npm-trusted-publisher.txt \
+  .claude/governance/pair-rail-verdict-template.md \
   .claude/scripts/tests/test_release_workflow_asserts.py \
   .claude/.framework-version \
   .claude/adr/ADR-155-AMEND-1-delivery-record-ownership.md \

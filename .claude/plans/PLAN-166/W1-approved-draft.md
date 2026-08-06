@@ -170,6 +170,7 @@ Scope:
 
 Release train (revert group A):
   - .claude/governance/npm-trusted-publisher.txt
+  - .claude/governance/pair-rail-verdict-template.md
   - .claude/scripts/tests/test_release_workflow_asserts.py
   - .github/workflows/npm-publish.yml
   - .github/workflows/release.yml
