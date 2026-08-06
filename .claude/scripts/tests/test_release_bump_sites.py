@@ -138,12 +138,40 @@ STUB_VERIFY_COUNTS = """#!/usr/bin/env bash
 # Fixture stand-in for verify-counts.sh: version equality across the watched
 # doc/package sites. Deliberately simple — the real oracle is exercised by the
 # real repo, this one only has to be RIGHT about same-tree vs drifted-tree.
+#
+# It DOES model the support-window family (VERSION_SITES modes "minor" and
+# "prev_minor" on SECURITY.md/VERSIONING.md, added S293): the re-pass F-sites
+# finding was a fixture oracle WITHOUT these modes staying green over a writer
+# that never wrote them — the exact fixture!=live class. Derivation mirrors
+# the live oracle: prev = minor-1, empty (value-check skipped) at X.0.
 set -eu
 version="$(tr -d ' \\n' < VERSION)"
+minor="${version%.*}"
+maj="${minor%%.*}"
+min="${minor##*.}"
+prev=""
+if [ "$min" -gt 0 ]; then prev="${maj}.$((min - 1))"; fi
 rc=0
 for f in npm/package.json pyproject.toml INSTALL.md docs/ARCHITECTURE.md npm/README.md; do
   [ -f "$f" ] || continue
   if ! grep -q "$version" "$f"; then rc=1; fi
+done
+for f in SECURITY.md VERSIONING.md; do
+  [ -f "$f" ] || continue
+  cur_line="$(grep 'Current MINOR' "$f" || true)"
+  case "$cur_line" in
+    "") ;;
+    *"v${minor}.x"*) ;;
+    *) rc=1 ;;
+  esac
+  if [ -n "$prev" ]; then
+    prev_line="$(grep 'Previous MINOR' "$f" || true)"
+    case "$prev_line" in
+      "") ;;
+      *"v${prev}.x"*) ;;
+      *) rc=1 ;;
+    esac
+  fi
 done
 exit "$rc"
 """
@@ -197,10 +225,29 @@ sys.exit(1 if bad else 0)
 '''
 
 
+def _support_window(version: str):
+    """(current_minor, previous_minor) the way the live oracle derives them:
+    prev = minor-1, None (not derivable) at X.0."""
+    maj, mnr = (int(x) for x in version.split(".")[:2])
+    prev = "%d.%d" % (maj, mnr - 1) if mnr > 0 else None
+    return "%d.%d" % (maj, mnr), prev
+
+
 def write_sites(repo: Path, version: str, stamp_date: str) -> None:
     (repo / "npm").mkdir(exist_ok=True)
     (repo / "docs").mkdir(exist_ok=True)
     stamp = "<!-- last-reviewed: %s v%s -->" % (stamp_date, version)
+    cur_minor, prev_minor = _support_window(version)
+    prev_sec = (
+        "- **Previous MINOR** (`v%s.x`) — security-only patches.\n" % prev_minor
+        if prev_minor
+        else ""
+    )
+    prev_ver = (
+        "| Previous MINOR (`v%s.x`) | Security-only patches |\n" % prev_minor
+        if prev_minor
+        else ""
+    )
     (repo / "VERSION").write_text(version + "\n", encoding="utf-8")
     (repo / "npm" / "package.json").write_text(
         json.dumps({"name": "fixture", "version": version}, indent=2) + "\n",
@@ -224,9 +271,17 @@ def write_sites(repo: Path, version: str, stamp_date: str) -> None:
         "%s\n\n**Version:** `%s` (tracks repo-root VERSION)\n" % (stamp, version),
         encoding="utf-8",
     )
-    (repo / "SECURITY.md").write_text("%s\n\n# Security\n" % stamp, encoding="utf-8")
+    (repo / "SECURITY.md").write_text(
+        "%s\n\n# Security\n\n"
+        "- **Current MINOR** (`v%s.x`) — full security support.\n"
+        "%s" % (stamp, cur_minor, prev_sec),
+        encoding="utf-8",
+    )
     (repo / "VERSIONING.md").write_text(
-        "%s\n\n# Versioning\n" % stamp, encoding="utf-8"
+        "%s\n\n# Versioning\n\n"
+        "| Current MINOR (`v%s.x`) | Full support |\n"
+        "%s" % (stamp, cur_minor, prev_ver),
+        encoding="utf-8",
     )
     (repo / "CHANGELOG.md").write_text(
         "# Changelog\n\n## [1.3.0]\n\n- fixture\n", encoding="utf-8"
@@ -353,6 +408,101 @@ def test_a_real_version_change_still_writes_every_site(synth):
     for stamped in ("npm/README.md", "SBOM.md", "SECURITY.md", "VERSIONING.md"):
         text = (repo / stamped).read_text()
         assert "last-reviewed: %s v1.3.0" % D1 in text, stamped
+    # the support window moved with the version: Current <- target minor,
+    # Previous <- the minor before it (the oracle's own derivation)
+    for doc in ("SECURITY.md", "VERSIONING.md"):
+        text = (repo / doc).read_text()
+        assert "v1.3.x" in text, doc
+        assert "v1.2.x" in text, doc
+        assert "v1.1.x" not in text, doc
+
+
+# ===========================================================================
+# the support window (re-pass F-sites P1): minor/prev_minor are ORACLE modes
+# (verify-counts VERSION_SITES, S293) — a writer without them dies MID-PHASE
+# at the driver's own verify-counts call on the next MINOR bump, outside
+# --dry-run, with no restore trap: a half-bumped dirty tree.
+# ===========================================================================
+def test_minor_bump_rewrites_the_support_window_sites(synth):
+    repo = synth["repo"]
+    proc = module(synth, "bump", "--target", "1.4.0", "--today", D2)
+    assert proc.returncode == 0, proc.stderr
+    for doc in ("SECURITY.md", "VERSIONING.md"):
+        text = (repo / doc).read_text()
+        assert "v1.4.x" in text, doc  # Current shifted to the target minor
+        assert "v1.3.x" in text, doc  # Previous = the old Current
+        assert "v1.2.x" not in text, doc  # the stale window is GONE
+
+
+def test_major_bump_shifts_current_and_leaves_previous_to_judgment(synth):
+    """X.0.0: Previous MINOR is NOT derivable from the target alone, and the
+    live oracle skips value-checking it there too (it derives prev="" at X.0).
+    The writer must neither guess nor die half-written: Current shifts,
+    Previous is left byte-identical, and the skip is ANNOUNCED — a silent
+    stale support window is the unwatched-doc class wearing a new hat."""
+    repo = synth["repo"]
+    proc = module(synth, "bump", "--target", "2.0.0", "--today", D2)
+    assert proc.returncode == 0, proc.stderr
+    for doc in ("SECURITY.md", "VERSIONING.md"):
+        text = (repo / doc).read_text()
+        assert "v2.0.x" in text, doc
+        assert "v1.2.x" in text, doc  # the old Previous, untouched
+    assert "release-train judgment" in proc.stdout, proc.stdout
+
+
+def test_minor_bump_survives_the_drivers_own_oracle_end_to_end(synth):
+    """The exact death the finding describes, end-to-end: TARGET_BASE moved to
+    the next MINOR, tree at the previous one. Before the fix the phase wrote
+    ten sites and then DIED at its own verify-counts call ("a site is
+    unpatched") — this asserts it reaches its commit with a clean tree."""
+    repo, env = synth["repo"], synth["env"]
+    drv = repo / ".claude/scripts/local/release.sh"
+    src = drv.read_text(encoding="utf-8")
+    m = re.search(r'(?m)^TARGET_BASE="(\d+\.\d+\.\d+)"$', src)
+    assert m, "driver has no bare-semver TARGET_BASE"
+    drv.write_text(
+        src.replace(m.group(0), 'TARGET_BASE="1.4.0"'), encoding="utf-8"
+    )
+    git(repo, env, "add", "-A")
+    git(repo, env, "commit", "-q", "-m", "fixture: retarget driver to 1.4.0")
+    head_before = git(repo, env, "rev-parse", "HEAD")
+
+    proc = driver(synth, "bump", "--stable", "--npm-readme-reviewed", "--today", D2)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "a site is unpatched" not in proc.stderr, proc.stderr
+    assert git(repo, env, "rev-parse", "HEAD") != head_before, "no commit made"
+    index_and_worktree_clean(repo, env)
+    assert (repo / "VERSION").read_text() == "1.4.0\n"
+    for doc in ("SECURITY.md", "VERSIONING.md"):
+        text = (repo / doc).read_text()
+        assert "v1.4.x" in text and "v1.3.x" in text, doc
+
+
+def test_writer_table_covers_every_mode_of_the_live_oracle():
+    """Structural closure of the F-sites class: every (doc, mode) pair in the
+    LIVE verify-counts VERSION_SITES must have a writer site — derived from
+    the authority's own source, never recalled (closed-set lesson). A pair
+    added to the oracle without a writer is a mid-bump death deferred to the
+    next bump that moves that mode."""
+    text = (LOCAL / "verify-counts.sh").read_text(encoding="utf-8")
+    entries = re.findall(
+        r'\(\s*"([^"]+)",\s*r\'[^\']*\',\s*"(full|minor|prev_minor)"\s*\)', text
+    )
+    modes = {mode for _doc, mode in entries}
+    # parser liveness first: all three modes must be found, or the regex above
+    # went stale and "nothing missing" would mean nothing at all
+    assert {"full", "minor", "prev_minor"} <= modes, entries
+    writer = {(path, kind) for path, kind, _rx in bump_sites._SITES}
+    writer_paths = {path for path, _kind in writer}
+    missing = []
+    for doc, mode in entries:
+        covered = doc in writer_paths if mode == "full" else (doc, mode) in writer
+        if not covered:
+            missing.append((doc, mode))
+    assert not missing, (
+        "verify-counts VERSION_SITES entries with NO writer site (the next "
+        "bump that moves these modes dies mid-phase): %s" % missing
+    )
 
 
 def test_restamp_moves_the_stamps_at_an_unchanged_version(synth):
@@ -755,6 +905,67 @@ def test_delta_rejects_an_allowlist_entry_that_is_not_evidence(synth):
     assert "'VERSION'" in proc.stderr
 
 
+@pytest.mark.parametrize(
+    "entry",
+    [
+        # the plan file itself — post-review edits would ride the tag
+        ".claude/plans/PLAN-166-release-hold-findings-closure.md",
+        # ANOTHER tag's verdict-fields — stale evidence smuggled by name
+        ".claude/plans/PLAN-166/verdict-fields-v1.2.0.md",
+        # immutable historical evidence outside the pinned manifest dir
+        ".claude/plans/PLAN-166/repass-r1/old-evidence.txt",
+    ],
+)
+def test_delta_rejects_plan_paths_outside_the_manifest_dir(synth, entry):
+    """Re-pass P2: `.claude/plans/` entries OUTSIDE the manifest directory
+    used to close by NAME alone — no content pin, no manifest coverage, no
+    tag specificity — while the same guard rejected `VERSION` as
+    non-EXHAUSTIVE. Only `verdict-fields-<THIS TAG>.md` may live outside the
+    content-pinned manifest directory; everything else must be IN it."""
+    arm_verdict(synth, "v1.3.0-rc.2", extra_allow=[entry])
+    proc = guard(synth, "delta", "--repo", str(synth["repo"]), "--tag", "v1.3.0-rc.2")
+    assert proc.returncode == tag_guard.E_VERDICT, proc.stdout + proc.stderr
+    assert "verdict-fields" in proc.stderr, proc.stderr
+
+
+def test_delta_accepts_this_tags_verdict_fields_outside_the_manifest_dir(synth):
+    """The one plan-side file the plan PROMISES outside the manifest dir: the
+    verdict-fields carrying the literal target tag in its name."""
+    repo = synth["repo"]
+    vf_rel = ".claude/plans/PLAN-166/verdict-fields-v1.3.0-rc.2.md"
+    vf = repo / vf_rel
+    vf.parent.mkdir(parents=True, exist_ok=True)
+    vf.write_text("inputs_hash fields for v1.3.0-rc.2\n", encoding="utf-8")
+    arm_verdict(synth, "v1.3.0-rc.2", extra_allow=[vf_rel])
+    proc = guard(synth, "delta", "--repo", str(repo), "--tag", "v1.3.0-rc.2")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+
+
+def test_guard_selects_the_yaml_block_like_the_step15_reader(synth):
+    """Re-pass P2 (reader parity): the step-15 validator selects the FIRST
+    ```yaml fence specifically (validate-pair-rail-verdict.py); the guard used
+    to enter the first fence of ANY language, so a verdict with a leading
+    non-yaml fence (a quoted transcript, say) parsed as EMPTY here while the
+    validator read it fine — two readers of the same signed file disagreeing,
+    fail-closed direction but still a disagreement."""
+    repo, env = synth["repo"], synth["env"]
+    armed = arm_verdict(synth, "v1.3.0-rc.2")
+    path = repo / armed["verdict_rel"]
+    text = path.read_text(encoding="utf-8")
+    assert text.count("```yaml") == 1
+    path.write_text(
+        text.replace(
+            "```yaml", "```text\ncodex transcript: GO\n```\n\n```yaml", 1
+        ),
+        encoding="utf-8",
+    )
+    git(repo, env, "add", "-A")
+    git(repo, env, "commit", "-q", "-m", "verdict prose gains a quoted fence")
+    git(repo, env, "push", "-q", "origin", "main")
+    proc = guard(synth, "delta", "--repo", str(repo), "--tag", "v1.3.0-rc.2")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+
+
 def test_delta_refuses_to_pass_vacuously_when_the_verdict_anchors_itself(synth):
     """An anchor at (or after) the verdict makes every assert above trivially
     true: the delta is empty, and "all changed files are allowlisted" is a
@@ -954,6 +1165,22 @@ def test_checklist_documents_the_new_driver_and_the_await_gate_recovery():
     assert "deletar/re-criar a tag" in text
     # and the manual approval is the last human chance, not a second opinion
     assert "última chance" in text
+
+
+def test_checklist_enumerates_the_verdict_fields_the_tag_guard_requires():
+    """The tag guard enforces FOUR verdict fields; the canonical template
+    (.claude/governance/pair-rail-verdict-template.md, W1 ceremony scope)
+    still documents only parent_sha. Until that patch lands, the checklist is
+    the authoring surface — a contract enforced by code but documented on no
+    authoring surface is how the first rc.2 verdict dies at E_VERDICT."""
+    text = (REPO_ROOT / ".github/release-checklist.md").read_text(encoding="utf-8")
+    for field in (
+        "parent_sha",
+        "delta_allowlist",
+        "delta_manifest",
+        "delta_manifest_sha256",
+    ):
+        assert field in text, "checklist does not name the %r field" % field
 
 
 def test_install_md_describes_the_current_pair_rail_migration():

@@ -71,8 +71,13 @@
 #      +/-700 cases can hide an entire test family. The gate prints, for every
 #      approx metric, the exact command used, the observed value, and — for
 #      the collect-driven metric — the COLLECTION-ERROR COUNT. errors > 0 is
-#      a named WARNING, because the observed count is then measured over a
-#      PARTIAL population and the band is being applied to the wrong number.
+#      a VIOLATION whenever the band was actually enforced over >=1 doc site
+#      this run: the observed count is then measured over a PARTIAL population
+#      and a band verdict over the wrong number is untrustworthy — and the
+#      automated callers (validate.yml --quiet; the release preflight, which
+#      discards output) can only see the exit code, so a warning there is
+#      structurally invisible (PLAN-166 W0 re-pass). It stays a named WARNING
+#      only when the band is already suspended (--no-tests / observed 0).
 #
 # COLLECTION SCOPE (load-bearing — the two populations DIVERGE). Measured
 # 2026-08-05 on the PLAN-166 W0 tree; both figures are OUTPUTS of the two
@@ -96,28 +101,33 @@
 # deliberately outside the contract; they are governed by the artifacts that
 # set them (coverage.yml, the profile config), not by a doc-count gate.
 # Guard against that exemption becoming a hiding place: the UNMATCHED-APPROX
-# SWEEP below flags any thousands-shaped approximation ("~N,NNN", "~N.NNN",
-# "~Nk") in a watched doc that NO approx rule consumed, as a WARNING naming
-# the doc and the numeral.
+# SWEEP below fails the gate (a VIOLATION, not a warning) on any
+# thousands-shaped approximation ("~N,NNN", "~N.NNN", "~Nk") in a watched doc
+# that NO approx rule consumed, naming the doc and the numeral. It MUST be a
+# violation: the automated callers (validate.yml runs --quiet, the release
+# preflight discards all output) can only observe the exit code, so an
+# advisory sweep is a census nobody reads — a new doc numeral with no matcher
+# would ship silently, which is exactly the F5 drift class this gate exists
+# to stop (PLAN-166 W0 re-pass).
 #
-# PENDING SITES (registered exemption, never silence). CLAUDE.md line 73
-# carries the collected-case claim as "~13,000 parametrized cases" and CANNOT
-# be edited mid-session: CLAUDE.md §0 pins the Gate-1 files as cache-stable,
-# so the re-statement to "~14,000 parametrized cases" lands at the W0 CLOSEOUT
-# in the same commit as this gate. Until then `APPROX_PENDING` below downgrades
-# that ONE site from violation to a printed PENDING line, and the site is
-# excluded from the cross-doc equality set (otherwise the frozen 13,000 would
-# drag every other doc down with it).
-# The exemption is SELF-CLEARING and NARROW by construction:
-#   - it keys on the doc + metric + the EXACT stale value 13000. Any other
-#     out-of-band figure at that site is a hard violation;
-#   - once the closeout writes 14,000 the site is inside the band and the
-#     exemption never fires again (13,000 can only come back inside the band
-#     if the live collect FALLS below 13,684, which is a regression the floor
-#     rule already fails on);
+# PENDING SITES (registered exemption, never silence). `APPROX_PENDING` below
+# can downgrade ONE (doc, metric, EXACT-frozen-value) triple from violation to
+# a printed PENDING line. The mechanism exists for mid-session freezes of
+# Gate-1 cache-stable files (CLAUDE.md §0), where a re-statement must land at
+# a closeout rather than mid-flight; a pending site is also excluded from the
+# cross-doc equality pool so the frozen value cannot drag other docs down.
+# The registry is EMPTY today: its one historical entry (CLAUDE.md
+# tests=13000, frozen during the PLAN-166 W0 session) was CONSUMED when
+# commit 65daff0 restated CLAUDE.md to "~14,000 parametrized cases" — and
+# keeping the entry past the restatement would have permanently grandfathered
+# the exact stale value (a revert to "~13,000" exited 0, because the pending
+# lookup runs BEFORE the band check; found by the W0 adversarial re-pass).
+# Rules for any future entry:
+#   - key on doc + metric + the EXACT frozen value; any OTHER out-of-band
+#     figure at the site stays a hard violation;
+#   - DELETE the entry in the same commit that lands the restatement — the
+#     exemption is not self-clearing against reverts of that restatement;
 #   - it prints on every single run, so it cannot rot unnoticed.
-# At the closeout, `tests@CLAUDE.md` also has to be reflected in
-# _EXPECTED_SITES in .claude/scripts/tests/test_verify_counts.py.
 #
 # NOTE on the two glob-ambiguous / underivable numbers (code-reviewer P2):
 #   - "_lib modules" is pinned to the TOP-LEVEL `_lib/*.py` glob (68). The
@@ -447,6 +457,15 @@ def approx_norm(raw):
     mult = 1
     if s.endswith("k"):
         mult, s = 1000, s[:-1]
+        # Decimal-k (PLAN-166 W0 re-pass): a '.'/',' followed by 1-2 digits
+        # before the k is a DECIMAL, not a thousands separator — "~1.4k" is
+        # 1,400. The old separator-strip path normalized it to 14,000, a
+        # 10x error in the FALSE-PASS direction (a doc citing ~1.4k sailed
+        # through a band around a live ~14,000). Integer math, no float.
+        _dm = re.fullmatch(r'(\d+)[.,](\d{1,2})', s)
+        if _dm:
+            _whole, _frac = _dm.group(1), _dm.group(2)
+            return int(_whole) * 1000 + int(_frac) * (10 ** (3 - len(_frac)))
     s = s.replace(",", "").replace(".", "")
     if not s.isdigit():
         return None
@@ -478,14 +497,15 @@ APPROX_TABLE_RULES = [
     ("test_files", r'^Test files\b'),
 ]
 
-# Registered, self-clearing exemptions. See "PENDING SITES" in the header.
-# (doc, metric, frozen_value, why)
-APPROX_PENDING = [
-    ("CLAUDE.md", "tests", 13000,
-     "CLAUDE.md is a Gate-1 cache-stable file (CLAUDE.md §0) and is frozen "
-     "mid-session; line 73 is re-stated to '~14,000 parametrized cases' at "
-     "the PLAN-166 W0 closeout, in the commit that lands this gate."),
-]
+# Registered exemptions. See "PENDING SITES" in the header.
+# (doc, metric, frozen_value, why) — EMPTY today. The one historical entry
+# (CLAUDE.md tests=13000, frozen mid-session under Gate-1 cache discipline)
+# was consumed when commit 65daff0 restated CLAUDE.md to ~14,000; left in
+# place it permanently grandfathered the exact stale value — a revert of
+# CLAUDE.md to "~13,000" exited 0 because this lookup runs BEFORE the band
+# check (PLAN-166 W0 re-pass). Delete any future entry in the same commit
+# that lands its restatement.
+APPROX_PENDING = []
 _pending_index = dict(((d, m), (v, w)) for d, m, v, w in APPROX_PENDING)
 # VERSION is a dotted string, not an int — kept separate from the int `live` map.
 live_version = os.environ.get("VC_VERSION", "") or ""
@@ -555,7 +575,11 @@ RULES = [
         r'\((\d+) universal frontend\)', r'\((\d+) frontend skills',
         r'# (\d+) universal frontend', r'# (\d+) frontend skills',
         r'(\d+) frontend universais', r'(\d+) frontend \+',
-        r'(\d+) frontend \(universal frontend\)',   # WHAT-WE-ARE.md §1.4
+        # WHAT-WE-ARE.md §1.4 — \s+ because the doc wraps the phrase across a
+        # newline ("8 frontend (universal\nfrontend)"); a literal space
+        # matched ZERO sites while core/domain in the SAME sentence were
+        # watched (PLAN-166 W0 re-pass, dead-regex class).
+        r'(\d+) frontend \(universal\s+frontend\)',
     ]),
     ("domain", "exact", [
         r'(\d+) domain across',
@@ -572,7 +596,11 @@ RULES = [
     ("adrs", "exact", [r'(\d+) ADRs total', r'(\d+) ADRs on disk',
                        r'#\s*(\d+) ADRs\b']),
     ("hook_py", "exact", [
-        r'(\d+) hooks total', r'(\d+) Python hook scripts', r'(\d+) hook scripts',
+        r'(\d+) hooks total', r'(\d+) Python hook scripts',
+        # \**\s*…\s+ tolerates bold-wrapped numerals and line wraps:
+        # docs/README.md writes "the **57** hook\nscripts on disk" — the
+        # plain '(\d+) hook scripts' form saw NEITHER (PLAN-166 W0 re-pass).
+        r'(\d+)\**\s*hook\s+scripts',
         r'(\d+) em disco',   # pt: "**57 em disco**" (README.pt-BR.md)
     ]),
     # S287 vacuous-gate fix: no watched doc ever used the literal
@@ -591,8 +619,12 @@ RULES = [
         r'(\d+) hooks wired in\b',
         # PLAN-166 W0 F5 — docs/README.md states the same number twice, once
         # in the "Hooks registered" table row and once in the prose that
-        # explains the 57-vs-46 gap. Both read "N distinct scripts".
-        r'(\d+) distinct scripts',
+        # explains the 57-vs-46 gap. Both BOLD-WRAP the numeral
+        # ("**46** distinct scripts"), so the matcher absorbs the closing
+        # `**` — the plain-space form matched ZERO sites (PLAN-166 W0
+        # re-pass, dead-regex class; the approx rules already knew this
+        # via their own \** — the fix just reached the exact rules too).
+        r'(\d+)\**\s*distinct scripts',
         r'(\d+) ligados\b',   # pt: "**46 ligados**" (README.pt-BR.md)
     ]),
     # Total hook ENTRIES in the hooks{} subtree (one script can fire on
@@ -892,7 +924,7 @@ for _metric in sorted(APPROX_INPUTS):
         )
         continue
     if _in["collect_errors"]:
-        warnings.append(
+        _msg = (
             "approx metric '%s': %d COLLECTION ERROR(S) in `%s` — the observed "
             "value (%d) is measured over a PARTIAL population, so the +/-%d%% "
             "band is being applied to the wrong number. Fix the collection "
@@ -900,6 +932,21 @@ for _metric in sorted(APPROX_INPUTS):
             % (_metric, _in["collect_errors"], _in["command"],
                _in["observed"], int(APPROX_BAND * 100))
         )
+        # Contract clause 3 (PLAN-166 W0 re-pass): when the band was actually
+        # ENFORCED over >=1 doc site this run, a partial population makes the
+        # verdict untrustworthy — and the automated callers (validate.yml
+        # --quiet, the release preflight piping to /dev/null) can only see
+        # the exit code, so this MUST fail the gate, not warn into a void.
+        # It stays a warning only when the band is already suspended
+        # (observed<=0) — there is no verdict to corrupt then.
+        _enforced_sites = [
+            s for s in approx_sites
+            if s["metric"] == _metric and not s.get("pending")
+        ]
+        if _enforced_sites and _in["observed"] > 0:
+            violations.append(_msg + "  (rule: approx/collect-errors)")
+        else:
+            warnings.append(_msg)
     if _in["observed"] <= 0:
         warnings.append(
             "approx metric '%s': `%s` returned 0 — the rule is VACUOUS in this "
@@ -909,7 +956,11 @@ for _metric in sorted(APPROX_INPUTS):
 # ---- UNMATCHED-APPROX SWEEP ----
 # The "non-inventory numerals" exemption in the header must not become a
 # hiding place. Any thousands-shaped approximation in a watched doc that no
-# approx rule consumed is named here, with its line, as a WARNING.
+# approx rule consumed is named here, with its line, as a VIOLATION — it
+# fails the gate. A warning here was a dead census (PLAN-166 W0 re-pass):
+# validate.yml runs --quiet and the release preflight discards output, so
+# no automated caller can see anything but the exit code, and an unmatched
+# "~9k" planted in a watched doc shipped through both in total silence.
 _THOUSANDS_RX = re.compile(r'~\s*(?:\d+[.,]\d{3}\b|\d+\s*[kK]\b)')
 for _doc in DOCS:
     _text = texts.get(_doc, "")
@@ -917,7 +968,7 @@ for _doc in DOCS:
     for _m in _THOUSANDS_RX.finditer(_text):
         if _m.start() in _consumed:
             continue
-        warnings.append(
+        violations.append(
             "%s:%d: thousands-shaped approximation '%s' is consumed by NO "
             "approx rule — give it a live metric + matcher, or delete the "
             "numeral  (rule: approx/unmatched-sweep)"

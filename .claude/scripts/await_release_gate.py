@@ -64,6 +64,12 @@ completed FASTER than the skew window can still admit the previous run; the
 skew is a jitter allowance, not a proof, and it is printed with every
 decision so the value used is auditable.
 
+``--self-created-at`` is REQUIRED. It is the input that switches this whole
+leg on, so it gets no default: omitting it (or passing an empty/unparseable
+value) is a usage error (exit 2), never a run that silently grants stale
+successes. Same doctrine as ``_release_bump_sites.py --today``: a parameter
+that changes the verdict has no default.
+
 ## Required fields per run object
 
 ``path`` (or ``workflow_path``), ``event``, ``head_branch``, ``head_sha``,
@@ -374,8 +380,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--now-epoch", type=int, default=None, help="override the clock (tests)")
     parser.add_argument(
         "--self-created-at",
-        default=None,
-        help="created_at of the ASKING run; candidates older than this minus the skew are stale",
+        required=True,
+        help=(
+            "created_at of the ASKING run; candidates older than this minus "
+            "the skew are stale. Required: this input arms the delete+re-tag "
+            "freshness leg, and a verdict-changing parameter has no default"
+        ),
     )
     parser.add_argument(
         "--freshness-skew-seconds", type=int, default=DEFAULT_FRESHNESS_SKEW_SECONDS
@@ -386,12 +396,16 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     args = build_parser().parse_args(argv)
-    self_created_at_epoch = None
-    if args.self_created_at:
-        self_created_at_epoch = parse_timestamp(args.self_created_at)
-        if self_created_at_epoch is None:
-            sys.stderr.write("error: --self-created-at %r is not an ISO-8601 timestamp\n" % args.self_created_at)
-            return EXIT_USAGE
+    # Unconditional parse: `required=True` rejects the OMITTED flag, and this
+    # rejects the empty/garbage value that a truthiness guard would have
+    # silently mapped to "freshness leg off".
+    self_created_at_epoch = parse_timestamp(args.self_created_at)
+    if self_created_at_epoch is None:
+        sys.stderr.write(
+            "error: --self-created-at %r is not an ISO-8601 timestamp "
+            "(the freshness leg cannot run without it)\n" % args.self_created_at
+        )
+        return EXIT_USAGE
     ctx = GateContext(
         tag=args.tag,
         head_sha=args.head_sha,

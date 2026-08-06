@@ -240,6 +240,10 @@ class TestVerifyCounts(unittest.TestCase):
         "frontend@docs/CTO-GUIDE.md": 1,
         "frontend@docs/FAQ.md": 1,
         "frontend@docs/README.md": 1,
+        # PLAN-166 W0 re-pass: the §1.4 phrase wraps across a newline
+        # ("8 frontend (universal\nfrontend)") — the matcher is now \s+
+        # tolerant, so the site exists for the first time.
+        "frontend@docs/WHAT-WE-ARE.md": 1,
         "frontend@npm/README.md": 1,
         "hook_py@CLAUDE.md": 1,
         "hook_py@INSTALL.md": 1,
@@ -247,7 +251,10 @@ class TestVerifyCounts(unittest.TestCase):
         "hook_py@README.pt-BR.md": 2,
         "hook_py@docs/ARCHITECTURE.md": 2,
         "hook_py@docs/CTO-GUIDE.md": 1,
-        "hook_py@docs/README.md": 1,
+        # PLAN-166 W0 re-pass: 1 -> 2. The table row plus the prose site
+        # "the **57** hook\nscripts on disk" (bold-wrapped AND line-wrapped;
+        # the plain regex saw only the table row).
+        "hook_py@docs/README.md": 2,
         "hook_py@npm/README.md": 2,
         "lib@INSTALL.md": 2,
         "lib@README.md": 1,
@@ -264,7 +271,11 @@ class TestVerifyCounts(unittest.TestCase):
         "registered@docs/ARCHITECTURE.md": 2,
         "registered@docs/CTO-GUIDE.md": 2,
         "registered@docs/GUIA-COMPLETO.md": 1,
-        "registered@docs/README.md": 1,
+        # PLAN-166 W0 re-pass: 1 -> 3. The bold-tolerant "distinct scripts"
+        # matcher now sees the "**46** distinct scripts" prose site AND the
+        # same phrase inside the "Hooks registered" table value cell (which
+        # the table rule also reads — both compare to the same live value).
+        "registered@docs/README.md": 3,
         "registered@npm/README.md": 1,
         "registrations@CLAUDE.md": 1,
         "registrations@README.md": 1,
@@ -397,6 +408,202 @@ class TestTableCellRules(unittest.TestCase):
             )
             r = _run(root)
             self.assertEqual(r.returncode, 1, "bold table-cell ADR drift must fail")
+
+
+def _run_json(root: Path, no_tests: bool = True) -> subprocess.CompletedProcess:
+    env = os.environ.copy()
+    env["VERIFY_COUNTS_ROOT"] = str(root)
+    args = ["bash", str(SCRIPT), "--json"]
+    if no_tests:
+        args.append("--no-tests")
+    return subprocess.run(args, capture_output=True, text=True, timeout=60, env=env)
+
+
+def _pytest_scaffold(root: Path, cases: int = 100, broken: bool = False) -> None:
+    """Give the synthetic tree a REAL pytest-collect population so the gate's
+    full run (no --no-tests) derives a live `tests` value inside the tree."""
+    (root / "pytest.ini").write_text("[pytest]\ntestpaths = tests\n",
+                                     encoding="utf-8")
+    tdir = root / "tests"
+    tdir.mkdir(exist_ok=True)
+    (tdir / "test_ok.py").write_text(
+        "import pytest\n"
+        f"@pytest.mark.parametrize('i', range({cases}))\n"
+        "def test_p(i):\n    pass\n",
+        encoding="utf-8",
+    )
+    if broken:
+        (tdir / "test_broken.py").write_text(
+            "import module_that_does_not_exist_plan166_repass\n",
+            encoding="utf-8",
+        )
+
+
+class TestPlan166RepassFindings(unittest.TestCase):
+    """PLAN-166 W0 adversarial re-pass — each test here is the red/green
+    proof for one finding against the gate itself (findings 1-5, 7)."""
+
+    def test_unmatched_thousands_numeral_fails_gate(self):
+        """Finding 1: an unmatched thousands-shaped numeral in a watched doc
+        must FAIL the gate. As a warning it was invisible to every automated
+        caller (validate.yml --quiet, release preflight >/dev/null)."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            c = _scaffold(root)
+            _write_docs(root, **c)
+            with open(root / "CLAUDE.md", "a", encoding="utf-8") as f:
+                f.write("handles ~9k widgets in the steady state.\n")
+            r = _run_json(root)
+            self.assertEqual(r.returncode, 1,
+                             f"unmatched ~9k must fail the gate; {r.stdout}")
+            data = json.loads(r.stdout)
+            self.assertTrue(
+                any("unmatched-sweep" in v for v in data["violations"]),
+                f"expected an approx/unmatched-sweep VIOLATION; {data}")
+
+    def test_stale_pending_value_is_not_grandfathered(self):
+        """Finding 2: the consumed (CLAUDE.md, tests, 13000) APPROX_PENDING
+        entry is gone — a CLAUDE.md citing '~13,000 parametrized cases'
+        against a live collect far outside the band must fail the FULL run.
+        With the entry present this exact configuration exited 0 (PENDING),
+        because the pending lookup ran BEFORE the band check."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            c = _scaffold(root)
+            _write_docs(root, **c)
+            _pytest_scaffold(root, cases=200)
+            with open(root / "CLAUDE.md", "a", encoding="utf-8") as f:
+                f.write("collect reports ~13,000 parametrized cases.\n")
+            r = _run_json(root, no_tests=False)
+            self.assertEqual(
+                r.returncode, 1,
+                f"stale 13,000 vs live 200 must fail, never PEND; {r.stdout}")
+            data = json.loads(r.stdout)
+            self.assertEqual(data["pending"], [],
+                             "no site may be silently exempted")
+            self.assertTrue(
+                any("tests=~13000" in v and "band" in v
+                    for v in data["violations"]),
+                f"expected an approx band violation; {data['violations']}")
+
+    def test_bold_wrapped_prose_counts_are_watched(self):
+        """Finding 3: '**N** distinct scripts' and the line-wrapped
+        '**N** hook\\nscripts' prose sites were invisible to the plain-space
+        regexes (dead-regex class) — drift there must now fail."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            c = _scaffold(root)  # registered=3, hook_py=4
+            _write_docs(root, **c)
+            with open(root / "CLAUDE.md", "a", encoding="utf-8") as f:
+                f.write("wired as **999** distinct scripts today.\n")
+                f.write("the **888** hook\nscripts on disk are canonical.\n")
+            r = _run_json(root)
+            self.assertEqual(r.returncode, 1, f"bold drift must fail; {r.stdout}")
+            vio = "\n".join(json.loads(r.stdout)["violations"])
+            self.assertIn("registered=999", vio)
+            self.assertIn("hook_py=888", vio)
+
+    def test_line_wrapped_frontend_tier_is_watched(self):
+        """Finding 4: 'N frontend (universal\\nfrontend)' wraps across a
+        newline in docs/WHAT-WE-ARE.md §1.4; the literal-space regex matched
+        ZERO sites while core/domain in the same sentence were watched."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            c = _scaffold(root)  # frontend=2
+            _write_docs(root, **c)
+            with open(root / "CLAUDE.md", "a", encoding="utf-8") as f:
+                f.write("tiers: 9 frontend (universal\nfrontend) skills.\n")
+            r = _run_json(root)
+            self.assertEqual(
+                r.returncode, 1,
+                f"line-wrapped frontend drift must fail; {r.stdout}")
+            self.assertTrue(
+                any("frontend=9" in v
+                    for v in json.loads(r.stdout)["violations"]))
+
+    def test_collect_errors_fail_when_band_enforced(self):
+        """Finding 5: collection errors mean the band verdict is computed
+        over a PARTIAL population. When the band was enforced over >=1 site
+        this run, that must be a VIOLATION — the only automated full-run
+        caller (release preflight) discards all output, so a warning is
+        structurally invisible. Positive control: the identical tree with a
+        clean collect passes, so the failure is attributable to the error."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            c = _scaffold(root)
+            _write_docs(root, **c)
+            _pytest_scaffold(root, cases=100, broken=False)
+            with open(root / "CLAUDE.md", "a", encoding="utf-8") as f:
+                f.write("collect reports ~100 parametrized cases.\n")
+            r = _run_json(root, no_tests=False)
+            self.assertEqual(r.returncode, 0,
+                             f"clean-collect control must pass; {r.stdout}")
+            (root / "tests" / "test_broken.py").write_text(
+                "import module_that_does_not_exist_plan166_repass\n",
+                encoding="utf-8")
+            r = _run_json(root, no_tests=False)
+            self.assertEqual(
+                r.returncode, 1,
+                f"in-band cite over a partial collect must fail; {r.stdout}")
+            self.assertTrue(
+                any("collect-errors" in v
+                    for v in json.loads(r.stdout)["violations"]),
+                f"expected approx/collect-errors violation; {r.stdout}")
+
+    def test_decimal_k_normalizes_to_hundreds_not_tenfold(self):
+        """Finding 7: approx_norm parsed '~1.4k' as 14000 (separator-strip
+        after the k-multiplier) — a 10x error in the FALSE-PASS direction.
+        Cross-doc equality proves the parse: '~1400' and '~1.4k' are the
+        SAME claim and must normalize to the same integer (1400)."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            c = _scaffold(root)
+            _write_docs(root, **c)
+            with open(root / "CLAUDE.md", "a", encoding="utf-8") as f:
+                f.write("collect reports ~1400 tests.\n")
+            with open(root / "README.md", "a", encoding="utf-8") as f:
+                f.write("collect reports ~1.4k tests.\n")
+            r = _run_json(root)
+            self.assertEqual(
+                r.returncode, 0,
+                f"~1400 and ~1.4k are the same figure — must pass; {r.stdout}")
+            cited = sorted(set(
+                s["cited"] for s in json.loads(r.stdout)["approx"]["sites"]
+                if s["metric"] == "tests"))
+            self.assertEqual(cited, [1400],
+                             f"decimal-k must normalize to 1400; got {cited}")
+
+
+class TestDocFreshness(unittest.TestCase):
+    """PLAN-166 W0 re-pass finding 6: docs/CTO-GUIDE.md carried v0-era
+    roadmap claims ('HMAC chain queued (DYN-SEC3 / Sprint 16)', Sprint 15-16
+    gating, PLAN-017) under a fresh 'Last reviewed' stamp — the HMAC-chained
+    audit log is a SHIPPED flagship feature. Non-numeric, so the count gate
+    is blind by design; this tripwire stops the stale phrases from being
+    resurrected by a merge-conflict resolution."""
+
+    _STALE_MARKERS = (
+        "HMAC chain queued",
+        "DYN-SEC3",
+        "Sprint 15-16",
+        "Sprint 16",
+        "post-Sprint-16",
+        "PLAN-017",
+    )
+
+    def test_cto_guide_carries_no_v0_roadmap_markers(self):
+        text = (REPO_ROOT / "docs" / "CTO-GUIDE.md").read_text(encoding="utf-8")
+        found = [m for m in self._STALE_MARKERS if m in text]
+        self.assertEqual(
+            found, [],
+            "docs/CTO-GUIDE.md still carries v0-era roadmap claims that "
+            f"contradict shipped reality: {found}")
 
 
 if __name__ == "__main__":

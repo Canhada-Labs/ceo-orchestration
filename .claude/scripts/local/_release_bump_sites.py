@@ -31,6 +31,19 @@
 # watched ONLY by check-canonical-doc-freshness.py. Both oracles decide on the
 # VERSION in the stamp, never on the date — which is what makes freezing the
 # date safe.
+#
+# The support window (kinds "minor"/"prev_minor" — v1.3.0 re-pass, F-sites).
+# verify-counts' VERSION_SITES also watches "Current MINOR (vX.Y.x)" and
+# "Previous MINOR (vX.Y.x)" in SECURITY.md and VERSIONING.md (S293). Those
+# sites were OUTSIDE this table at birth, so the next MINOR bump would write
+# everything else, then DIE at the driver's own verify-counts call with a
+# half-written tree (outside --dry-run there is no restore trap). The rule the
+# oracle enforces is mechanical — Current = the target's minor, Previous = the
+# minor immediately before it — so this writer derives both from --target and
+# the "ONE source of truth" claim above stays true. The single non-derivable
+# case, an X.0.0 target, is SKIPPED loudly and never guessed: the oracle
+# cannot value-check it either (it derives prev="" at X.0), and a MAJOR
+# support-window transition is release-train judgment, not sed.
 # ============================================================================
 """Release version-site table + writer (stdlib only, Python >= 3.9)."""
 
@@ -47,11 +60,16 @@ STAMP_RX = r"(last-reviewed: )(\d{4}-\d{2}-\d{2})( +v)(" + SEMVER + r")"
 DATE_RX = re.compile(r"\A\d{4}-\d{2}-\d{2}\Z")
 
 # Kinds:
-#   "plain" — literal regex substitution, no stamp semantics.
-#   "stamp" — "last-reviewed: <date> v<version>"; skipped wholesale when the
-#             version already equals the target (unless --restamp).
+#   "plain"      — literal regex substitution, no stamp semantics.
+#   "stamp"      — "last-reviewed: <date> v<version>"; skipped wholesale when
+#                  the version already equals the target (unless --restamp).
+#   "minor"      — support-window site carrying the TARGET's minor (vX.Y.x).
+#   "prev_minor" — support-window site carrying the minor immediately BEFORE
+#                  the target; not derivable at X.0.0 (skipped loudly there).
 PLAIN = "plain"
 STAMP = "stamp"
+MINOR = "minor"
+PREV_MINOR = "prev_minor"
 
 # (path, kind, pattern) — patterns anchored exactly as their oracle checks
 # them, so historical version mentions elsewhere in the file are never touched.
@@ -69,6 +87,13 @@ _SITES: List[Tuple[str, str, str]] = [
     # match here is fine — verify-counts is the oracle, not this table.
     ("README.md", PLAIN, r"(VERSION=)" + SEMVER),
     ("SBOM.md", PLAIN, r"(\*\*Version:\*\* `)" + SEMVER + r"(`)"),
+    # --- the support window (oracle: verify-counts VERSION_SITES modes
+    #     "minor"/"prev_minor", S293). Patterns anchored exactly as the
+    #     oracle's — SECURITY.md bolds the label, VERSIONING.md does not. ---
+    ("SECURITY.md", MINOR, r"(\*\*Current MINOR\*\* \(`v)\d+\.\d+(\.x`\))"),
+    ("VERSIONING.md", MINOR, r"(Current MINOR \(`v)\d+\.\d+(\.x`\))"),
+    ("SECURITY.md", PREV_MINOR, r"(\*\*Previous MINOR\*\* \(`v)\d+\.\d+(\.x`\))"),
+    ("VERSIONING.md", PREV_MINOR, r"(Previous MINOR \(`v)\d+\.\d+(\.x`\))"),
     # --- the four review stamps (idempotence-critical) ---
     ("npm/README.md", STAMP, STAMP_RX),
     ("SBOM.md", STAMP, STAMP_RX),
@@ -141,8 +166,25 @@ def bump(
         raise ValueError("--target must be a bare semver, got %r" % (target,))
     stream = out if out is not None else sys.stdout
     base = root or os.getcwd()
+    # Support-window derivation, BEFORE any byte is written: whether every
+    # site is writable is decided up front, never discovered mid-loop with a
+    # half-bumped tree behind it.
+    _maj, _min = (int(x) for x in target.split(".")[:2])
+    minor_target = "%d.%d" % (_maj, _min)
+    prev_minor = "%d.%d" % (_maj, _min - 1) if _min > 0 else None
     changed = 0
     for path, kind, pattern in _SITES:
+        if kind == PREV_MINOR and prev_minor is None:
+            # X.0.0: Previous MINOR is not derivable from the target, and the
+            # oracle skips value-checking it there too (prev="" at X.0). Never
+            # guess a support-window promise — leave it and say so, loudly.
+            print(
+                "  !!   %s: Previous MINOR left untouched — not derivable "
+                "from %s (X.0.0); the support window needs release-train "
+                "judgment here" % (path, target),
+                file=stream,
+            )
+            continue
         full = os.path.join(base, path)
         try:
             with open(full, encoding="utf-8") as fh:
@@ -150,9 +192,18 @@ def bump(
         except OSError:
             print("  --   %s absent, skipped" % path, file=stream)
             continue
+        written = target
         if kind == STAMP:
             new, n = re.subn(pattern, _stamp_replacer(target, today, restamp), src)
             label = "review stamp"
+        elif kind == MINOR:
+            written = minor_target
+            new, n = re.subn(pattern, r"\g<1>" + written + r"\g<2>", src)
+            label = "support-window (Current MINOR) site"
+        elif kind == PREV_MINOR:
+            written = prev_minor
+            new, n = re.subn(pattern, r"\g<1>" + written + r"\g<2>", src)
+            label = "support-window (Previous MINOR) site"
         else:
             new, n = re.subn(pattern, _plain_replacement(pattern, target), src)
             label = "version site"
@@ -165,7 +216,7 @@ def bump(
         if new == src:
             print(
                 "  --   %s: %s already at %s (line untouched)"
-                % (path, label, target),
+                % (path, label, written),
                 file=stream,
             )
             continue
@@ -174,7 +225,7 @@ def bump(
         changed += 1
         print(
             "  ok   %s (%d %s%s -> %s)"
-            % (path, n, label, "" if n == 1 else "s", target),
+            % (path, n, label, "" if n == 1 else "s", written),
             file=stream,
         )
     return changed

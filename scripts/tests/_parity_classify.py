@@ -44,7 +44,10 @@ Every KNOWN_OPEN entry below is MANDATORY-FIRE. When PLAN-166 W1 lands the F3
 fix, those entries stop matching and this classifier goes FATAL on ledger-rot
 BY DESIGN. Deleting them is part of the W1 commit, in the same commit as the
 upgrade.sh/_framework_manifest_set.sh change — that is the mechanism that keeps
-a ledger from outliving its bug, not an accident.
+a ledger from outliving its bug, not an accident. EXPECT_PATHS is the opposite
+shape on purpose: its entries are NOT deleted at W1 — they go quiet when
+satisfied and stay behind as permanent existence asserts (see that list's own
+comment).
 
 Anti-rot
 --------
@@ -196,8 +199,14 @@ KNOWN_OPEN: List[Dict[str, Optional[str]]] = [
     },
 ]
 
-# Paths that must EXIST (and be FRESH) in both routes once W1 lands. Absent
-# today, so each is a mandatory-fire KNOWN_OPEN of the "expect-path" shape.
+# Paths that must EXIST in both routes once W1 lands. Absent today, so each
+# reports as KNOWN-OPEN (class=expect-path) and holds the run at exit 2.
+# DELIBERATELY NOT mandatory-fire, unlike KNOWN_OPEN above: once the path
+# exists in both trees the entry goes quiet and remains as a PERMANENT
+# existence assert — it re-fires if either route ever stops delivering the
+# marker. No W1 deletion is required for these. Content freshness of a path
+# that IS present is not this list's job either: a present-but-stale marker
+# is caught by the main classification loop (STALE there is FATAL).
 EXPECT_PATHS: List[Dict[str, Optional[str]]] = [
     {
         "id": "F3-framework-version-marker",

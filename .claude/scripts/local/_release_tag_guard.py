@@ -30,7 +30,12 @@
 #         * so the set closes by NAME (exact paths, set equality against the
 #           re-pass MANIFEST) *and* by CONTENT (the verdict pins the sha256 of
 #           MANIFEST.sha256, and the manifest itself is verified with
-#           `shasum -a 256 -c`).
+#           `shasum -a 256 -c`);
+#         * and a plan path OUTSIDE the manifest directory — where no sha256
+#           pins content — is admitted ONLY as `verdict-fields-<TAG>.md` with
+#           the literal target tag: the plan file itself, immutable repass
+#           history and another tag's verdict-fields all close by name alone
+#           and would carry a post-review edit onto the tag.
 #
 # THE LOCAL ASSERT IS NOT ENOUGH. A tag signed by hand skips this driver
 # entirely, and the pair-rail step 15 recomputes inputs_hash only over the
@@ -171,22 +176,24 @@ def _parse_verdict(text: str) -> Dict[str, object]:
     Deliberately NOT a YAML parser: it accepts `key: value` and a single level
     of `  - item` list entries, and ignores everything else. Anything it cannot
     read is absent, and every consumer below treats absent as fail-closed.
+
+    Parity with the step-15 reader (`.github/scripts/
+    validate-pair-rail-verdict.py`, parse_verdict_file), stated at its REAL
+    scope: block selection (the regex below is the validator's own — the
+    first ```yaml fence, not the first fence of any language) and inline
+    comment stripping MATCH; list parsing (`- item`) exists ONLY here —
+    parse_verdict_file reads key:value and sub-dicts and would drop
+    `delta_allowlist` silently. The W1 server-side port must therefore extend
+    ONE shared reader (this file is the declared reference), never grow a
+    third parser of the same signed file.
     """
     fields: Dict[str, object] = {}
-    in_block = False
+    block = re.search(r"```yaml\s*\n(.*?)```", text, re.DOTALL)
+    if block is None:
+        # No yaml block -> no fields -> every consumer below fails closed.
+        return fields
     cur_list: Optional[str] = None
-    for raw in text.splitlines():
-        if raw.strip().startswith("```"):
-            if in_block:
-                break
-            in_block = True
-            continue
-        if not in_block:
-            continue
-        # Inline comments are stripped EXACTLY the way the release.yml step-15
-        # reader does it (`.github/scripts/validate-pair-rail-verdict.py`,
-        # parse_verdict_file). Two readers of the same signed file must not be
-        # able to disagree about what the file says.
+    for raw in block.group(1).splitlines():
         line = raw.split("#", 1)[0].rstrip() if "#" in raw else raw.rstrip()
         if not line.strip():
             continue
@@ -391,8 +398,35 @@ def delta(repo: str, tag: str, verdict_rel: Optional[str]) -> int:
         )
     print("  ok   shasum -a 256 -c %s (%d entries)" % (manifest_rel, len(entries)))
 
-    # --- set equality by NAME, both directions, inside the manifest dir ---
+    # --- plan-side entries OUTSIDE the manifest directory ---
+    # Everything inside the manifest directory is content-pinned (sha256 of
+    # the manifest in the signed verdict + shasum -c + name equality below).
+    # An EVIDENCE_PREFIX entry outside it closes by NAME ONLY — the plan file
+    # itself, immutable repass history, or ANOTHER tag's verdict-fields could
+    # be allowlisted and a post-review edit would ride the tag. The one such
+    # file the plan promises is the verdict-fields for THIS tag, literal tag
+    # in the name. Mirror this rule in the W1 server-side port.
     man_dir = os.path.dirname(manifest_rel)
+    vf_name = "verdict-fields-%s.md" % tag
+    for entry in sorted(allow_set):
+        if entry == verdict_rel or entry == manifest_rel:
+            continue
+        if entry.startswith(man_dir + "/"):
+            continue
+        if os.path.basename(entry) != vf_name:
+            return _fail(
+                E_VERDICT,
+                "delta_allowlist entry %r is outside the manifest directory "
+                "(%s/) and is not this tag's verdict-fields (%s).\n"
+                "      Outside the manifest nothing pins content — a "
+                "post-review edit there\n"
+                "      would ride the tag by NAME alone. Move the file into "
+                "the re-pass\n"
+                "      manifest, or it must be verdict-fields-<TAG>.md for "
+                "exactly this tag." % (entry, man_dir, vf_name),
+            )
+
+    # --- set equality by NAME, both directions, inside the manifest dir ---
     listed = set(
         os.path.normpath(os.path.join(man_dir, name)).replace(os.sep, "/")
         for _sha, name in entries

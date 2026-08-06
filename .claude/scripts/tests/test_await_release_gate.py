@@ -20,6 +20,12 @@ Case classes, in AC-2 order:
   ``!= "failure"`` implementation).
 * FRESHNESS — a ``success`` candidate created BEFORE the asking run started
   (delete + re-tag of the same sha) does not count as GRANT.
+* USAGE — the freshness input is load-bearing, so it has no default:
+  omitting ``--self-created-at`` (or passing an empty value) is a usage
+  error (exit 2), NEVER a run with the delete+re-tag leg silently off.
+  Without this class the FRESHNESS tests above prove nothing about the W1
+  wiring — the same stale payload they reject becomes a GRANT the moment
+  the caller forgets one flag.
 """
 
 from __future__ import annotations
@@ -46,6 +52,7 @@ from await_release_gate import (
     BLOCK,
     EXIT_BLOCK,
     EXIT_GRANT,
+    EXIT_USAGE,
     EXIT_WAIT,
     GRANT,
     WAIT,
@@ -124,10 +131,12 @@ def payload(*runs):
     return {"workflow_runs": list(runs)}
 
 
-def run_cli(raw_body, extra=()):
+def run_cli(raw_body, extra=(), self_created_at=SELF_CREATED_AT):
+    """CLI harness. ``self_created_at=None`` OMITS the flag entirely."""
     handle, path = tempfile.mkstemp(suffix=".json")
     with os.fdopen(handle, "w", encoding="utf-8") as fh:
         fh.write(raw_body)
+    freshness = [] if self_created_at is None else ["--self-created-at", self_created_at]
     try:
         return subprocess.run(
             [
@@ -136,10 +145,9 @@ def run_cli(raw_body, extra=()):
                 "--payload-file", path,
                 "--tag", TAG,
                 "--head-sha", HEAD_SHA,
-                "--self-created-at", SELF_CREATED_AT,
                 "--deadline-epoch", str(DEADLINE_OPEN),
                 "--now-epoch", str(NOW),
-            ] + list(extra),
+            ] + freshness + list(extra),
             capture_output=True,
             text=True,
         )
@@ -283,6 +291,37 @@ class FreshnessTests(TestEnvContext):
         result = decide(payload(self_run(), stale, fresh_failure), ctx())
         self.assertEqual(BLOCK, result.decision)
         self.assertEqual("gate-job-failure", result.reason)
+
+
+class UsageTests(TestEnvContext):
+    """A parameter that changes the verdict has no default (FIXER pass, W0).
+
+    ``--self-created-at`` used to be optional with ``default=None`` — and
+    ``None`` DISABLES the freshness floor, so omitting one flag turned the
+    exact stale-success payload FreshnessTests rejects into a GRANT. Same
+    class as F2's ``--today`` in ``_release_bump_sites.py``: the input that
+    flips the verdict must be explicit or the run must refuse.
+    """
+
+    def _stale_only_body(self):
+        # The delete+re-tag payload: ONLY a success predating the asking run.
+        return json.dumps(payload(self_run(), release_run(id=900, created_at=STALE_CREATED_AT)))
+
+    def test_omitting_self_created_at_refuses_instead_of_granting(self):
+        proc = run_cli(self._stale_only_body(), self_created_at=None)
+        self.assertNotEqual(
+            EXIT_GRANT, proc.returncode,
+            "omitting --self-created-at must never GRANT a stale success:\n" + proc.stdout,
+        )
+        self.assertEqual(EXIT_USAGE, proc.returncode, proc.stdout + proc.stderr)
+        self.assertIn("--self-created-at", proc.stderr)
+
+    def test_empty_self_created_at_is_a_usage_error_not_a_disabled_leg(self):
+        # required=True alone would still let `--self-created-at ""` slip
+        # through the old `if args.self_created_at:` truthiness parse-skip.
+        proc = run_cli(self._stale_only_body(), self_created_at="")
+        self.assertNotEqual(EXIT_GRANT, proc.returncode, proc.stdout)
+        self.assertEqual(EXIT_USAGE, proc.returncode, proc.stdout + proc.stderr)
 
 
 if __name__ == "__main__":

@@ -44,12 +44,15 @@
       `SBOM.md` (`**Version:** \`X.Y.Z\``) ·
       `SECURITY.md` + `VERSIONING.md` (janela de suporte
       `Current/Previous MINOR (vX.Y.x)` — **família minor**).
-      ⚠ **O driver NÃO cobre tudo** (S293, codex r2/r3): ele reescreve os
-      stamps `last-reviewed` e o triple do SBOM, mas o **shift da janela
-      de suporte** (`Previous` ← `Current`) e a **anotação da tag** são
-      MANUAIS de propósito — ambos exigem juízo de release-train. O
-      `verify-counts` falha alto na janela; a prosa da tag **nenhum gate
-      prova**, então releia-a antes de assinar.
+      O **shift da janela de suporte** (`Previous` ← `Current`) é COBERTO
+      pelo driver em bump de MINOR (kinds `minor`/`prev_minor` em
+      `_release_bump_sites.py`, derivados do target com a MESMA regra do
+      oráculo: prev = minor−1) — a exceção é target `X.0.0`, onde o
+      `Previous` não é derivável: o driver o deixa intacto e AVISA alto
+      ("release-train judgment"), e o `verify-counts` também não
+      value-checka prev em X.0. ⚠ A **anotação da tag** segue MANUAL de
+      propósito — a prosa da tag **nenhum gate prova**, então releia-a
+      antes de assinar.
       **`CLAUDE.md` e `README.md` NÃO são sites de versão** — nunca
       carregaram literal de versão (`git log -S 'VERSION='` não acha
       commit que o tenha adicionado); procurá-los num bump é perder tempo
@@ -59,9 +62,10 @@
       hand-patch; o gate deles vive só no `release.yml`).
       O badge do README **não** é site de versão — é dinâmico e o driver
       não o toca; auditar por ele deixa passar drift real.
-      O driver cobre os sites mecânicos listados acima — **exceto** o
-      shift da janela de suporte e a prosa da tag, que são manuais por
-      desenho (ver o aviso acima e §Promote stable).
+      O driver cobre TODOS os sites mecânicos listados acima, janela de
+      suporte incluída — **exceto** a prosa da tag, manual por desenho
+      (ver o aviso acima e §Promote stable), e o `Previous MINOR` num
+      target `X.0.0` (avisado alto, nunca adivinhado).
 
 ### Governança
 
@@ -164,7 +168,21 @@ mão pula o driver. O mesmo assert entra server-side no `release.yml`.
 - [ ] Gate de 24h: delta ≥24h da **rc mais RECENTE por creator-date**
       (sem rc prévia = fail; rc deletada não conta)
 - [ ] **Novo** `pair-rail-verdict-vX.Y.Z.md` (o verdict é POR TAG — o
-      step do release.yml roda no GA também; o da rc não vale)
+      step do release.yml roda no GA também; o da rc não vale).
+      Além dos campos do template, o guard de delta do `tag`
+      (`_release_tag_guard.py`) exige QUATRO campos no bloco yaml — o
+      template canônico ainda documenta só o primeiro (patch no W1);
+      até lá, esta lista é a superfície de autoria:
+      - `parent_sha:` 40-hex — o commit que o re-pass revisou (o verdito
+        landa DEPOIS dele; `parent_sha == HEAD` é rejeitado como vácuo)
+      - `delta_allowlist:` lista LITERAL (`  - path`), sem glob: o
+        próprio verdito, o `verdict-fields-<TAG>.md` do plano (tag
+        literal no nome — nenhum outro path de plano fora do diretório
+        do manifest passa), o `MANIFEST.sha256` do re-pass e cada
+        artefato do re-pass por nome exato
+      - `delta_manifest:` path repo-relativo do `MANIFEST.sha256`
+      - `delta_manifest_sha256:` 64-hex do próprio manifest (o pin de
+        conteúdo que o guard confere com `shasum -a 256 -c` por cima)
 - [ ] `bash .claude/scripts/local/release.sh preflight --stable`
       ← **não pule**: é aqui que o driver re-checa árvore limpa/main, CI,
       governança, usabilidade da chave de assinatura e disponibilidade da

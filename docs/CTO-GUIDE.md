@@ -173,11 +173,11 @@ python3 -m pytest .claude/hooks/tests/ -q
 | Axis | Current state | Mitigation | Residual |
 |---|---|---|---|
 | Upstream velocity | Bus factor 1 | Fork-friendly; no server dependency | Patches stack locally if Owner unavailable |
-| Production signal | 0 external adopters | Sprint 15-16 scheduled | You may be adopter #1 |
+| Production signal | 0 external adopters | Dogfood telemetry (`adopter-metrics.py`) + published benchmarks | You may be adopter #1 |
 | Platform | macOS + Linux | WSL2 works empirically, no CI gate | Windows-native: not scoped |
 | LLM dependency | Anthropic Claude | ADR-032 Gemini adapter stubbed | Vendor lock until cross-model parity |
 | Governance drift | Hooks fail-open on infra bugs | `check_canonical_edit.py` sentinel + CODEOWNERS | Intentional: never block operator on hook bug |
-| Audit log tamper | Local-trust file mode 600 | HMAC chain queued (DYN-SEC3 / Sprint 16) | OTEL remote sink available today |
+| Audit log tamper | HMAC-chained JSONL, shipped (tamper-EVIDENT) | `audit-verify-chain.py` detects forgery / reorder / deletion | Detection, not prevention — the key lives on the same host; pair with a remote OTEL sink (`docs/otel-integration.md`) |
 
 Read [`HONEST-LIMITATIONS.md`](./HONEST-LIMITATIONS.md) for the full
 structural list.
@@ -214,16 +214,18 @@ structural list.
   still has to pass on `main`.
 - **It will not port your prompts.** Skill migration from other
   meta-prompting frameworks (e.g. karpathy-skills, GSD) is manual.
-- **It will not run unattended.** PLAN-017 (autonomous-loop) is draft,
-  conditional, and gated on Sprint 15-16 evidence + explicit Owner
-  approval.
+- **It will not run unattended.** There is no autonomous loop. The
+  closest surface is the Owner-invoked `/night-mode` posture toggle —
+  armed per-session, reversible, and audited — and a human still starts
+  and reviews every run.
 
 ---
 
 ## 8. Decision tree
 
 - **You want production-validated framework with large adopter base:**
-  this is not it today. Revisit post-Sprint-16 (Q3 2026 target).
+  this is not it today — external-adopter validation is explicitly out
+  of scope for the current line (HONEST-LIMITATIONS.md §2).
 - **You want hosted / SaaS:** not offered. MIT source.
 - **You want to evaluate Claude Code governance patterns on a real
   codebase with structured critique and mechanical enforcement:** install

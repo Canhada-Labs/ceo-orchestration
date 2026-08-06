@@ -3,7 +3,9 @@
 # PLAN-138 Wave C (ADR-155) — baseline SHA-256 install/upgrade manifest tests.
 #
 # Exercises:
-#   C.2  shared enumeration (root PROTOCOL.md present; set(install)==set(upgrade))
+#   C.2  enumeration vs reality (every enumerated target exists in a fresh
+#        install; profile-aware). Install/upgrade parity moved to
+#        scripts/tests/test-install-upgrade-parity-e2e.sh (PLAN-166 F4)
 #   C.3  _hash_file + _hash_stdin (each hasher mocked alone on PATH) + guard grep
 #   C.4  install writes a verifiable manifest (+ a root PROTOCOL.md line; LINK mode)
 #   C.5  4 classifications (FRAMEWORK-CHANGED / ADOPTER-CUSTOMIZED / CONFLICT /
@@ -149,6 +151,12 @@ if [ -n "$T1" ]; then
     # Profile MUST match the install under test (T1 is `--profile core`),
     # otherwise the check would report by-design profile gating as drift.
     export FMS_PROFILE_PARTS="core"
+    # Capture ONCE: both checks read the same snapshot, and nothing here is a
+    # `producer | grep -q` pipeline. Under `set -o pipefail` a grep -q match
+    # closes the pipe early; if the producer takes SIGPIPE the pipeline exits
+    # 141 and the POSITIVE case (a leak) would print PROFILE_OK — fail-open
+    # (house lesson: grep-q-pipefail-kills-producer; capture + case instead).
+    _ents="$( _framework_target_entries )"
     missing=""
     count=0
     while IFS= read -r entry; do
@@ -158,7 +166,7 @@ if [ -n "$T1" ]; then
         missing="$missing $entry"
       fi
     done <<EOF
-$( _framework_target_entries )
+$_ents
 EOF
     echo "    enumerated=$count profile=core target=$T1"
     if [ "$count" -lt 5 ]; then
@@ -170,11 +178,15 @@ EOF
       printf 'MISSING:%s\n' "$missing" > "$WORKROOT/.c2exist"
     fi
     # profile-awareness: a core-only profile must NOT enumerate frontend skills.
-    if _framework_target_entries | grep -q "^\.claude/skills/frontend"; then
-      echo "FRONTEND_LEAK" > "$WORKROOT/.c2prof"
-    else
-      echo "PROFILE_OK" > "$WORKROOT/.c2prof"
-    fi
+    nl=$'\n'
+    case "${nl}${_ents}" in
+      *"${nl}.claude/skills/frontend"*)
+        echo "FRONTEND_LEAK" > "$WORKROOT/.c2prof"
+        ;;
+      *)
+        echo "PROFILE_OK" > "$WORKROOT/.c2prof"
+        ;;
+    esac
   )
   if grep -q "ALLEXIST" "$WORKROOT/.c2exist" 2>/dev/null; then
     ok "C.2 every enumerated target entry exists in a real fresh install"
