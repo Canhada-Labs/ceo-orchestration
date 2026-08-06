@@ -591,7 +591,7 @@ dizer mais que isso seria claim falsa.
 
 ## Acceptance criteria
 
-- [ ] AC-1 [P0][F2] `bump --stable` em D+1 sobre árvore já no alvo:
+- [x] AC-1 [P0][F2] ✅(W0 f492545: teste D/D+1, HEAD+porcelain+índice; no-op 4-oráculos provado no clone) `bump --stable` em D+1 sobre árvore já no alvo:
       **`git rev-parse HEAD` idêntico antes/depois E
       `git status --porcelain` vazio E índice limpo** (r7: HEAD sozinho
       passa se a implementação escrever/stagear stamps sem commitar — e
@@ -599,7 +599,7 @@ dizer mais que isso seria claim falsa.
       NÃO-ESCRITA, não só não-commit); teste com `--today` D e D+1
       explícitos passa nos dois; e um caso de mudança REAL (versão nova)
       continua escrevendo.
-- [ ] AC-2 [P0][F1] A função de decisão retorna GRANT/WAIT/BLOCK por
+- [x] AC-2 [P0][F1] ✅(W0: bateria completa da enumeração incl. GRANT, null-running, frescura re-tag; GateContext fail-loud) A função de decisão retorna GRANT/WAIT/BLOCK por
       avaliação de ponto; GRANT SÓ com: run de `release.yml` +
       `event==push` + `head_branch==<tag>` + `head_sha==GITHUB_SHA` +
       job `release-gate` `conclusion=="success"`. **Controles plantados
@@ -642,7 +642,7 @@ dizer mais que isso seria claim falsa.
       sem prova exatamente no caso load-bearing.
 - [ ] AC-4 [P1][F4] Divergência plantada install≠upgrade deixa o JOB de
       CI vermelho (run real observada) nos DOIS modos de cerimônia.
-- [ ] AC-5 [P1][F5] Todos os sites `~N.000`/`~N,000`/`~Nk` corrigidos
+- [x] AC-5 [P1][F5] ✅(W0: approx±5% com inputs impressos + sweep decimal-k; controles por rótulo pt plantados e vermelhos) Todos os sites `~N.000`/`~N,000`/`~Nk` corrigidos
       (npm/README, FAQ, e TODAS as ocorrências do pt-BR — **censo pelo
       gate, não por numeral recitado**: a contagem "×6" citada em rounds
       anteriores já provou ser ×7 no r19, terceira falha da classe
@@ -651,7 +651,7 @@ dizer mais que isso seria claim falsa.
       positivo POR RÓTULO no pt-BR (número errado plantado em cada
       rótulo vigiado → falha) + um plantado fora da banda na forma
       `~Nk` → falha.
-- [ ] AC-6 [P2][F6] Driver renomeado `release.sh`; zero strings v1.2.0 /
+- [x] AC-6 [P2][F6] ✅(W0: release.sh renomeado; grep de superfícies vivas = 0; anotação parametrizada com o trem completo) Driver renomeado `release.sh`; zero strings v1.2.0 /
       contagens de sites em comentários; claim de publish correta nas 2
       ocorrências; checklist atualizado; **`INSTALL.md:627` descreve
       150→210 (ADR-110-AMEND-2)**; grep de controle sobre superfícies
