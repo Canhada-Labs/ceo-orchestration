@@ -396,3 +396,19 @@ git commit -S -m "governance(PLAN-166): W1 findings-closure ceremony — await-g
    freshness floor does not invalidate it. Softening (e.g. N consecutive
    listing failures before BLOCK) is a semantics change — post-GA, new
    debate, NOT a ceremony-morning edit.
+
+---
+
+## Adendo de reconcile (2026-08-06 ~04h, CEO)
+
+- Pós-residuais + round codex: `apply --check` **15/15 OK** em `f492545`
+  (14 do pack + `w0-verdict-template-delta-fields.patch` novo).
+- Drift da tabela §1 RESOLVIDO e explicado: `await_release_gate.py`
+  (`GateContext.self_created_at_epoch` agora obrigatório — o YAML staged
+  usa o CLI, contrato de exits intacto) e `_release_tag_guard.py`
+  (+`E_PARENT_NOT_ANCESTOR=12`; verdict-fields por path canônico exato —
+  o patch staged do release.yml JÁ porta ambos, verificado pelo fixer).
+  Shas finais: `a8c6eecc…` / `ce104437…`. `verify-counts.sh` `56286b51…`
+  e `release.sh` `ef318380…` (assert pós-dry-run fail-closed no ERRO do
+  git status — round codex).
+- Manifesto regenerado: **32 entradas**, `shasum -c` OK.

@@ -195,3 +195,17 @@ Adopter upgrade + ADR + count sweep (revert group B):
   - scripts/install.sh
   - scripts/tests/test-upgrade-spec-ownership.sh
   - scripts/upgrade.sh
+
+---
+
+## Adendo (2026-08-06, pré-assinatura — CEO)
+
+**15º patch adicionado ao pack:** o template do verdito
+(`pair-rail-verdict-template.md`, canônico em governance) ganha os 3
+campos que o guard novo EXIGE de todo verdito (`delta_allowlist` /
+`delta_manifest` / `delta_manifest_sha256`) + seção "tag() guard
+semantics". Sem isso, o primeiro verdito de rc.2 autorado a partir do
+template morre em E_VERDICT (achado P2 do round 1 da refutação; o
+template é canônico e por isso entra na cerimônia, não no W0).
+**Scope: adicionar este path ao grupo A (trem de release).**
+Manifesto regenerado: 32 entradas (template staged + patch novo).

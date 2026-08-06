@@ -1,6 +1,7 @@
 64d23f858ef51b0f996e4966d4e27c0371b437e2d2787890b1f7ad22d4ec5663  .claude/plans/PLAN-166/staged/.claude/.framework-version
 3c64b45a627bc4c1a5c9bf9c4e26eff793c0e4c92250bdd307ad267b1576a8af  .claude/plans/PLAN-166/staged/.claude/adr/ADR-155-AMEND-1-delivery-record-ownership.md
 df7be2195cf197dfd881c5a18a3811132d20824cf3b935f1d084aef18b5f7692  .claude/plans/PLAN-166/staged/.claude/governance/npm-trusted-publisher.txt
+d79d36ad28ea73f06d28a8b22ffeecf01ad8286647383f3cef1f96f802b564a8  .claude/plans/PLAN-166/staged/.claude/governance/pair-rail-verdict-template.md
 198dcec214dbb4def43be626eae5a6a74b540a00dad4872e5a601216541bf5f6  .claude/plans/PLAN-166/staged/.claude/scripts/check-framework-updates.sh
 8589420213deb0970b267f15690c33acca31f42363b4b3464d3281d752a9a365  .claude/plans/PLAN-166/staged/.claude/scripts/tests/test_release_workflow_asserts.py
 3ddd855970f8f4b337ba16810f85fdd4d61cc559bf6da4243e39721535d46d1c  .claude/plans/PLAN-166/staged/.github/workflows/npm-publish.yml
@@ -20,6 +21,7 @@ c9c71fc42ad22c1b56b190641c4489758571b590999a10c19d7ae0bfc8be9713  .claude/plans/
 8240fc2f083a64e34690b6760c04489488f4a53ccba86e397a6c0a14579b6e92  .claude/plans/PLAN-166/staged/patches/f3-upgrade-spec-forced-refresh.patch
 a83d8bc2353054d816342978962127e99cbc432c5e0ab8c1b4fe2a2365cfea2d  .claude/plans/PLAN-166/staged/patches/release-yml-verdict-delta-ancestry.patch
 d51a5299e3d17126283b5fe0412bee7fad14f604c1543ab7315130375d207c99  .claude/plans/PLAN-166/staged/patches/smoke-install-parity-e2e-wiring.patch
+c3558235089ae461d4597e203a4c1466a0ca9d3c8b0805b5cffbecc48b6d355d  .claude/plans/PLAN-166/staged/patches/w0-verdict-template-delta-fields.patch
 2903e84dc079c45c085bafca751a20c99d3f199b2001ab6f96b4d04cd7e7307a  .claude/plans/PLAN-166/staged/patches/w1a-npm-publish-await-gate.patch
 7a90547a50be440563e91603e921e51acbec10fa6942f9e25fa1635dd997d4c9  .claude/plans/PLAN-166/staged/patches/w1a-npm-trusted-publisher-txt.patch
 f0d1489af60ef3d1d0c2ac236525d6f827686fc140cd23a282236137b036c440  .claude/plans/PLAN-166/staged/patches/w1a-release-workflow-asserts.patch
