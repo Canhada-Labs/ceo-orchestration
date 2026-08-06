@@ -462,6 +462,34 @@ class TestPlan166RepassFindings(unittest.TestCase):
                 any("unmatched-sweep" in v for v in data["violations"]),
                 f"expected an approx/unmatched-sweep VIOLATION; {data}")
 
+    def test_unmatched_decimal_k_numeral_fails_gate(self):
+        """W0 re-pass round 2: the sweep was blind to decimal-k thousands
+        forms — an unmatched '~1.4k' (EN decimal) or '~13,5k' (pt decimal)
+        in a watched doc shipped with EXIT=0 while '~9k' failed, even
+        though round-1 finding 7 taught approx_norm the very same shape
+        (red proof, pre-fix: '~1.4k widgets' planted in the live README.md
+        ran the gate to EXIT=0). Both decimal shapes must now be swept."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            c = _scaffold(root)
+            _write_docs(root, **c)
+            with open(root / "README.md", "a", encoding="utf-8") as f:
+                f.write("handles ~1.4k widgets in steady state.\n")
+            (root / "README.pt-BR.md").write_text(
+                "processa ~13,5k unidades por dia.\n", encoding="utf-8")
+            r = _run_json(root)
+            self.assertEqual(
+                r.returncode, 1,
+                f"unmatched decimal-k numerals must fail the gate; {r.stdout}")
+            vio = json.loads(r.stdout)["violations"]
+            self.assertTrue(
+                any("unmatched-sweep" in v and "~1.4k" in v for v in vio),
+                f"expected a swept ~1.4k violation; {vio}")
+            self.assertTrue(
+                any("unmatched-sweep" in v and "~13,5k" in v for v in vio),
+                f"expected a swept ~13,5k violation; {vio}")
+
     def test_stale_pending_value_is_not_grandfathered(self):
         """Finding 2: the consumed (CLAUDE.md, tests, 13000) APPROX_PENDING
         entry is gone — a CLAUDE.md citing '~13,000 parametrized cases'
@@ -578,6 +606,160 @@ class TestPlan166RepassFindings(unittest.TestCase):
                 if s["metric"] == "tests"))
             self.assertEqual(cited, [1400],
                              f"decimal-k must normalize to 1400; got {cited}")
+
+
+class TestPtBrLabelControls(unittest.TestCase):
+    """PLAN-166 W0 AC-5 positive controls, pt-BR leg (W0 re-pass round 2).
+
+    The _EXPECTED_SITES manifest proves the pt-BR matchers MATCH (liveness:
+    _note() fires before the enforce branch) — it does NOT prove a match
+    ENFORCES. A kind-binding bug could keep the manifest green while
+    enforcement silently died. These controls plant a WRONG number at every
+    watched pt-BR label/phrasing of README.pt-BR.md and demand one named
+    violation per plant, preceded by a clean-control run so each failure is
+    attributable to its plant, not to the phrasing.
+
+    The metric list is DERIVED from the manifest keys ending in
+    '@README.pt-BR.md' — never a recalled list (the numeral-espelho lesson:
+    recited enumerations failed 4x in this plan) — so ratifying a new pt
+    site into the manifest without adding its control phrasing fails here
+    first, in the coverage test below.
+    """
+
+    _PT_DOC = "README.pt-BR.md"
+
+    # metric -> snippet factory carrying that metric's watched pt-BR
+    # phrasing(s) with the given (planted) value. Phrasings mirror the live
+    # sites in README.pt-BR.md: the four pt table labels (Checklists de
+    # skills / Scripts de hook / Hooks ligados em / Módulos de biblioteca
+    # compartilhada) and the pt prose forms (arquivos de skill / em disco /
+    # ligados / registros de evento / core-frontend-de domínio split /
+    # SPEC-v1 arquivos / `*.schema.md` / '# N ADRs' / N slash commands).
+    _EXACT_PLANTS = {
+        "skills": lambda v: (
+            "| Checklists de skills | **%d** | x |\n"
+            "entrega **%d arquivos de skill** reutilizáveis.\n" % (v, v)),
+        "core": lambda v: "organizadas em %d core + outros tiers.\n" % v,
+        "frontend": lambda v: "mais %d frontend + o resto.\n" % v,
+        "domain": lambda v: "e + %d de domínio no total.\n" % v,
+        "adrs": lambda v: "ls .claude/adr  # %d ADRs\n" % v,
+        "commands": lambda v: (
+            "%d slash commands em `.claude/commands/`.\n" % v),
+        "hook_py": lambda v: (
+            "| Scripts de hook (em disco) | **%d** | x |\n"
+            "a diferença entre **%d em disco** e os ligados.\n" % (v, v)),
+        "registered": lambda v: (
+            "| Hooks ligados em `settings.json` | **%d** | x |\n"
+            "são **%d ligados** no total.\n" % (v, v)),
+        "registrations": lambda v: "com %d registros de evento.\n" % v,
+        "lib": lambda v: (
+            "| Módulos de biblioteca compartilhada | **%d** | x |\n" % v),
+        "spec_v1": lambda v: (
+            "contrato em `SPEC/v1/` (%d arquivos — fixado).\n" % v),
+        "schema_files": lambda v: (
+            "sendo %d `*.schema.md` de contrato.\n" % v),
+    }
+    # `tests` is approx-kind: a wrong EXACT integer is a different rule, so
+    # its control is the out-of-band ~Nk plant below.
+    _APPROX_CONTROLLED = {"tests"}
+
+    def test_pt_control_coverage_is_derived_from_manifest(self):
+        """Every metric the ratified manifest watches at README.pt-BR.md has
+        a planted control here — and no control exists for an unwatched
+        metric. Derived from _EXPECTED_SITES, never recited."""
+        derived = sorted(set(
+            k.split("@")[0] for k in TestVerifyCounts._EXPECTED_SITES
+            if k.endswith("@" + self._PT_DOC)))
+        covered = sorted(set(self._EXACT_PLANTS) | self._APPROX_CONTROLLED)
+        self.assertEqual(
+            covered, derived,
+            "pt-BR positive-control coverage drifted from the ratified "
+            "manifest: every metric watched at README.pt-BR.md needs a "
+            "planted control (and none may be invented).")
+
+    def test_wrong_number_at_each_pt_label_fails(self):
+        """AC-5 control (a): a wrong number planted at EACH watched pt-BR
+        label/phrasing must produce a named violation for that metric."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            c = _scaffold(root)
+            _write_docs(root, **c)
+            clean = {  # live values of the _scaffold tree, per metric
+                "skills": c["total"], "core": c["core"],
+                "frontend": c["frontend"], "domain": c["domain"],
+                "adrs": c["adrs"], "hook_py": c["hook_py"],
+                "registered": c["registered"],
+                # one command string per hook entry in the scaffold
+                # settings.json, so registrations == registered there
+                "registrations": c["registered"],
+                "lib": c["lib"],
+                "spec_v1": 2,       # _scaffold default: SPEC/v1/{s0,s1}.md
+                "schema_files": 0,  # the scaffold ships no *.schema.md
+                "commands": 0,      # the scaffold ships no .claude/commands/
+            }
+            self.assertEqual(sorted(clean), sorted(self._EXACT_PLANTS))
+            pt = root / self._PT_DOC
+            # Clean control: every phrasing planted with the CORRECT live
+            # value passes, so the wrong-plant failures below are
+            # attributable to the number, not the phrasing.
+            pt.write_text(
+                "".join(self._EXACT_PLANTS[m](clean[m])
+                        for m in sorted(self._EXACT_PLANTS)),
+                encoding="utf-8")
+            r = _run_json(root)
+            self.assertEqual(
+                r.returncode, 0,
+                f"clean pt-BR control must pass; {r.stdout}")
+            # Wrong plants: a distinct value per metric so every violation
+            # names its plant unambiguously.
+            planted = dict(
+                (m, 900 + i)
+                for i, m in enumerate(sorted(self._EXACT_PLANTS)))
+            pt.write_text(
+                "".join(self._EXACT_PLANTS[m](planted[m])
+                        for m in sorted(self._EXACT_PLANTS)),
+                encoding="utf-8")
+            r = _run_json(root)
+            self.assertEqual(
+                r.returncode, 1,
+                f"planted pt-BR drift must fail the gate; {r.stdout}")
+            vio = json.loads(r.stdout)["violations"]
+            pt_vio = [v for v in vio if v.startswith(self._PT_DOC)]
+            for m in sorted(planted):
+                self.assertTrue(
+                    any("%s=%d" % (m, planted[m]) in line
+                        for line in pt_vio),
+                    "planted %s=%d produced no %s violation; got: %s"
+                    % (m, planted[m], self._PT_DOC, vio))
+
+    def test_planted_out_of_band_nk_pt_site_fails_band(self):
+        """AC-5 control (b): a CONSUMED approx site in the ~Nk form planted
+        OUTSIDE the +/-5% band (~9k casos vs a real live collect of 200)
+        must fail the approx BAND rule — and must NOT appear in the
+        unmatched sweep, proving the plant exercised the consumed
+        band-check path rather than being caught as an orphan numeral."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            c = _scaffold(root)
+            _write_docs(root, **c)
+            _pytest_scaffold(root, cases=200)
+            (root / self._PT_DOC).write_text(
+                "a coleta reporta ~9k casos hoje.\n", encoding="utf-8")
+            r = _run_json(root, no_tests=False)
+            self.assertEqual(
+                r.returncode, 1,
+                f"out-of-band ~9k vs live 200 must fail; {r.stdout}")
+            data = json.loads(r.stdout)
+            self.assertTrue(
+                any("tests=~9000" in v and "OUTSIDE the +/-5% band" in v
+                    for v in data["violations"]),
+                f"expected an approx band violation; {data['violations']}")
+            self.assertFalse(
+                any("unmatched-sweep" in v for v in data["violations"]),
+                "the ~9k site must be CONSUMED by the approx rule, "
+                f"never swept; {data['violations']}")
 
 
 class TestDocFreshness(unittest.TestCase):

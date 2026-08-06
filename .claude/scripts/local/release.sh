@@ -203,13 +203,49 @@ printf 'release driver — target %s (tag %s), phase=%s, dry-run=%s, today=%s\n'
 SNAPSHOT_ARMED=0
 restore_snapshot() {
   [ "$SNAPSHOT_ARMED" -eq 1 ] || return 0
-  # The bump phase refuses to run on a dirty tree, so HEAD is exactly the
-  # pre-bump state: reset unstages, checkout restores content. Both halves are
-  # needed — an index-only restore leaves the files modified, and a
-  # content-only restore leaves them staged (the S273 trap).
-  git reset --quiet HEAD -- "${VERSION_FILES[@]}" 2>/dev/null || true
-  git checkout --quiet -- "${VERSION_FILES[@]}" 2>/dev/null || true
-  printf '  --   dry-run: working tree AND index restored to HEAD\n'
+  # The bump phase refuses to run on a dirty tree (untracked included), so
+  # HEAD is exactly the pre-bump state: reset unstages, checkout restores
+  # content. Both halves are needed — an index-only restore leaves the files
+  # modified, and a content-only restore leaves them staged (the S273 trap).
+  #
+  # PER PATH, never one multi-path command: `git checkout -- a b c` is
+  # ATOMIC — a single path absent from HEAD (a file the bump CREATED, e.g. a
+  # plugin manifest on its first appearance) aborts the WHOLE command and
+  # restores nothing, and the old `|| true` swallowed that error while the
+  # message below still claimed success. A path HEAD carries is checked out;
+  # a path HEAD does not carry was created by the bump and is removed.
+  local _p _dirty
+  for _p in "${VERSION_FILES[@]}"; do
+    git reset --quiet HEAD -- "$_p" 2>/dev/null || true
+    if git cat-file -e "HEAD:$_p" 2>/dev/null; then
+      git checkout --quiet -- "$_p" 2>/dev/null || true
+    else
+      rm -f "$_p" 2>/dev/null || true
+      # a directory created for that file may remain; drop it only if empty
+      # (never recursive — this is a restore, not a cleanup)
+      rmdir "$(dirname "$_p")" 2>/dev/null || true
+    fi
+  done
+  # ASSERT the postcondition, not the attempt: worktree AND index must be
+  # clean across every derived path, or this dry-run left debris and the only
+  # honest exit is a loud non-zero — printing "restored" over a dirty tree is
+  # the S273 class silenced instead of closed.
+  # The verification itself is fail-CLOSED (codex W0-residuals round): if
+  # `git status` ERRORS (repo/permission/object failure), an `|| true` here
+  # would read as "empty = clean" and print "asserted clean" over a
+  # postcondition that was never checked — capture the exit status instead.
+  _dirty="$(git status --porcelain -- "${VERSION_FILES[@]}" 2>/dev/null)"
+  _status_rc=$?
+  if [ "$_status_rc" -ne 0 ]; then
+    printf 'FAIL: dry-run restore verification could not run (git status rc=%s) — tree state UNVERIFIED, refusing to report clean\n' "$_status_rc" >&2
+    exit 1
+  fi
+  if [ -n "$_dirty" ]; then
+    printf 'FAIL: dry-run restore left these paths dirty (worktree/index != HEAD):\n' >&2
+    printf '%s\n' "$_dirty" >&2
+    exit 1
+  fi
+  printf '  --   dry-run: working tree AND index restored to HEAD (asserted clean)\n'
 }
 
 take_snapshot() {

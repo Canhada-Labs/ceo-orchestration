@@ -16,6 +16,20 @@
 # bash 3.2-safe. Uses mktemp -d (never a hardcoded path) so xdist/parallel runs
 # never collide. Exits 0 on success, non-zero on any failed assertion.
 #
+# EXECUTION POSTURE (PLAN-166 W0 re-pass r2 — declared so the next census
+# does not count this as a live CI gate): this suite is OPERATOR-LOCAL /
+# landing-gate only. NO workflow executes it (grep .github/ for this
+# filename: zero hits) — the same deliberate posture as its siblings
+# test_install_state_replay.sh / test-doctor.sh, recorded in the
+# validate.yml collection-note comment ("local/landing-gate only;
+# smoke-install.yml wiring is a separate ceremony"). A full run costs
+# ~15 min of real install/upgrade legs under load, which is why it is not
+# in push CI. The PLAN-166 W1 staged patch
+# `smoke-install-parity-e2e-wiring.patch` wires the parity e2e
+# (test-install-upgrade-parity-e2e.sh) into smoke-install.yml — NOT this
+# suite. If that ever changes, update THIS header: the declaration is what
+# a census reads.
+#
 # Run:  bash scripts/tests/test_install_baseline_manifest.sh ; echo rc=$?
 
 set -uo pipefail   # NOT -e: we assert on command failures explicitly.

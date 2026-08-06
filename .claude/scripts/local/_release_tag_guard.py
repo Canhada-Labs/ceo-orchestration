@@ -33,9 +33,14 @@
 #           `shasum -a 256 -c`);
 #         * and a plan path OUTSIDE the manifest directory — where no sha256
 #           pins content — is admitted ONLY as `verdict-fields-<TAG>.md` with
-#           the literal target tag: the plan file itself, immutable repass
-#           history and another tag's verdict-fields all close by name alone
-#           and would carry a post-review edit onto the tag.
+#           the literal target tag, at its ONE canonical path (directly in
+#           the plan directory containing the manifest dir): the plan file
+#           itself, immutable repass history, another tag's verdict-fields,
+#           and same-basename look-alikes in any other directory all close by
+#           name alone and would carry a post-review edit onto the tag;
+#         * the reviewed parent itself must be an ANCESTOR of HEAD —
+#           `cat-file -e` proves existence, not lineage, and a fabricated
+#           `commit-tree` anchor makes the whole delta trivially clean.
 #
 # THE LOCAL ASSERT IS NOT ENOUGH. A tag signed by hand skips this driver
 # entirely, and the pair-rail step 15 recomputes inputs_hash only over the
@@ -52,6 +57,10 @@
 #  10 verdict unusable (missing file/field, wildcard, wrong tag, bad parent)
 #  11 the assert would be VACUOUS (the verdict is not inside the delta it
 #     anchors — e.g. parent_sha == HEAD, which makes the verdict review itself)
+#  12 parent_sha is not an ancestor of HEAD (a fabricated/orphan anchor:
+#     `cat-file -e` proves existence, not lineage — a `commit-tree` object
+#     carrying HEAD's own tree makes diff(parent..HEAD) contain only the
+#     verdict while unreviewed work sits on main)
 # ============================================================================
 """Ancestry + restricted-delta asserts for the release tag phase."""
 
@@ -75,6 +84,7 @@ E_MANIFEST_CONTENT = 8
 E_MANIFEST_SET = 9
 E_VERDICT = 10
 E_VACUOUS = 11
+E_PARENT_NOT_ANCESTOR = 12
 
 HEX40 = re.compile(r"\A[0-9a-f]{40}\Z")
 HEX64 = re.compile(r"\A[0-9a-f]{64}\Z")
@@ -297,6 +307,35 @@ def delta(repo: str, tag: str, verdict_rel: Optional[str]) -> int:
             "parent_sha %s from %s is not a commit in this repo."
             % (parent, verdict_rel),
         )
+    # Existence is not lineage. A fabricated anchor (`git commit-tree` over
+    # HEAD's own tree, parented anywhere, on no branch) passes `cat-file -e`
+    # and makes diff(parent..HEAD) contain ONLY the verdict + evidence while
+    # unreviewed work sits on main — every check below then passes and the
+    # guard prints approval over a tree the re-pass never saw. The anchor has
+    # to be a commit HEAD actually descends from. (The staged W1 server-side
+    # port asserts the same against origin/main — keep the two in sync.)
+    rc, _out, err = _git(repo, "merge-base", "--is-ancestor", parent, "HEAD")
+    if rc == 1:
+        return _fail(
+            E_PARENT_NOT_ANCESTOR,
+            "parent_sha %s from %s is not an ancestor of HEAD — the review "
+            "anchor is not in\n"
+            "      the history this tag would sign. `cat-file -e` proves the "
+            "object exists, not\n"
+            "      that main descends from it; a fabricated commit carrying "
+            "HEAD's own tree\n"
+            "      makes the delta below trivially clean while unreviewed "
+            "work rides the tag."
+            % (parent[:12], verdict_rel),
+        )
+    if rc != 0:
+        return _fail(
+            E_PARENT_NOT_ANCESTOR,
+            "`git merge-base --is-ancestor %s HEAD` exited %d (neither yes "
+            "nor no) — refusing to guess (git said: %s)"
+            % (parent[:12], rc, err.strip()),
+        )
+    print("  ok   parent_sha %s is an ancestor of HEAD" % parent[:12])
 
     allow = fields.get("delta_allowlist")
     if not isinstance(allow, list) or not allow:
@@ -404,26 +443,35 @@ def delta(repo: str, tag: str, verdict_rel: Optional[str]) -> int:
     # An EVIDENCE_PREFIX entry outside it closes by NAME ONLY — the plan file
     # itself, immutable repass history, or ANOTHER tag's verdict-fields could
     # be allowlisted and a post-review edit would ride the tag. The one such
-    # file the plan promises is the verdict-fields for THIS tag, literal tag
-    # in the name. Mirror this rule in the W1 server-side port.
+    # file the plan promises is the verdict-fields for THIS tag, at its ONE
+    # canonical path: directly inside the plan directory that CONTAINS the
+    # manifest dir. A basename-only rule would admit any number of
+    # look-alikes anywhere under EVIDENCE_PREFIX (plans/archive/, a sibling
+    # repass dir, ...), each an unpinned name-only pass-through. Mirror this
+    # rule in the W1 server-side port.
     man_dir = os.path.dirname(manifest_rel)
+    plan_dir = os.path.dirname(man_dir)
     vf_name = "verdict-fields-%s.md" % tag
+    vf_expected = "%s/%s" % (plan_dir, vf_name) if plan_dir else vf_name
     for entry in sorted(allow_set):
         if entry == verdict_rel or entry == manifest_rel:
             continue
         if entry.startswith(man_dir + "/"):
             continue
-        if os.path.basename(entry) != vf_name:
+        if entry != vf_expected:
             return _fail(
                 E_VERDICT,
                 "delta_allowlist entry %r is outside the manifest directory "
-                "(%s/) and is not this tag's verdict-fields (%s).\n"
+                "(%s/) and is not this\n"
+                "      tag's verdict-fields at its canonical path (%s).\n"
                 "      Outside the manifest nothing pins content — a "
                 "post-review edit there\n"
-                "      would ride the tag by NAME alone. Move the file into "
-                "the re-pass\n"
-                "      manifest, or it must be verdict-fields-<TAG>.md for "
-                "exactly this tag." % (entry, man_dir, vf_name),
+                "      would ride the tag by NAME alone, and a basename "
+                "match in any other\n"
+                "      directory is a look-alike, not the plan's file. Move "
+                "the file into the\n"
+                "      re-pass manifest, or it must be exactly %s."
+                % (entry, man_dir, vf_expected, vf_expected),
             )
 
     # --- set equality by NAME, both directions, inside the manifest dir ---

@@ -405,6 +405,13 @@ def test_a_real_version_change_still_writes_every_site(synth):
     assert 'version = "1.3.0"' in (repo / "pyproject.toml").read_text()
     assert "--pin v1.3.0" in (repo / "INSTALL.md").read_text()
     assert "currently v1.3.0, aligned" in (repo / "docs/ARCHITECTURE.md").read_text()
+    # README.md is NOT a version site: `VERSION=` never existed there
+    # (verify-counts removed its dead rule in S291 with the archaeology in a
+    # comment; the release checklist says the same). The fixture PLANTS the
+    # literal so this asserts the writer leaves it alone — a writer row for a
+    # site no oracle watches would rewrite a file every other surface
+    # declares out of scope.
+    assert (repo / "README.md").read_text() == "VERSION=1.2.0\n"
     for stamped in ("npm/README.md", "SBOM.md", "SECURITY.md", "VERSIONING.md"):
         text = (repo / stamped).read_text()
         assert "last-reviewed: %s v1.3.0" % D1 in text, stamped
@@ -637,6 +644,34 @@ def test_dry_run_restores_a_site_the_table_grew(synth):
     assert (repo / "EXTRA.md").read_text() == "pinned v1.2.0\n"
 
 
+def test_dry_run_restores_when_a_derived_site_is_absent_from_head(synth):
+    """W0 re-pass r2 P1: `git checkout -- <all paths>` is ATOMIC — one path
+    absent from HEAD (a file the bump CREATED, e.g. a plugin manifest on its
+    first appearance) aborts the whole restore, `|| true` swallowed the error,
+    and the trap still printed "restored to HEAD" over a fully dirty tree.
+    The restore must be per-path (checkout what HEAD has, remove what the
+    bump created) and the trap must ASSERT the postcondition, not the
+    attempt."""
+    repo, env = synth["repo"], synth["env"]
+    write_sites(repo, "1.2.0", D0)
+    git(repo, env, "rm", "-q", "-r", ".claude-plugin")
+    git(repo, env, "add", "-A")
+    git(repo, env, "commit", "-q", "-m", "fixture: 1.2.0 tree, no plugin manifests in HEAD")
+    head_before = git(repo, env, "rev-parse", "HEAD")
+
+    proc = driver(
+        synth, "bump", "--stable", "--npm-readme-reviewed", "--dry-run", "--today", D1
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "restored to HEAD" in proc.stdout
+    assert git(repo, env, "rev-parse", "HEAD") == head_before
+    index_and_worktree_clean(repo, env)
+    assert (repo / "VERSION").read_text() == "1.2.0\n"
+    # the files the bump CREATED (not in HEAD) are gone again, not debris
+    assert not (repo / ".claude-plugin" / "plugin.json").exists()
+    assert not (repo / ".claude-plugin" / "marketplace.json").exists()
+
+
 # ===========================================================================
 # tag guard — ancestry
 # ===========================================================================
@@ -761,6 +796,52 @@ def test_delta_blocks_a_file_that_landed_after_the_review(synth, tag):
     proc = guard(synth, "delta", "--repo", str(repo), "--tag", tag)
     assert proc.returncode == tag_guard.E_DELTA, proc.stdout + proc.stderr
     assert "sneaky.py" in proc.stderr
+
+
+def test_delta_blocks_a_fabricated_parent_outside_head_history(synth):
+    """W0 re-pass r2 P1: `cat-file -e` proves the anchor EXISTS, not that it
+    is in the history this tag signs. A fabricated commit over HEAD's own
+    tree (`git commit-tree`, parented off an older commit, on no branch)
+    makes diff(parent..HEAD) contain ONLY the verdict + evidence while an
+    unreviewed file sits on main — every downstream check (allowlist,
+    manifest pin, set equality, vacuity) then passes and the guard prints
+    "all inside the verdict's closed allowlist" over an unreviewed tree."""
+    repo, env = synth["repo"], synth["env"]
+    h0 = git(repo, env, "rev-parse", "HEAD")
+
+    # unreviewed work lands on main
+    (repo / "unreviewed.py").write_text("print('never reviewed')\n", encoding="utf-8")
+    git(repo, env, "add", "unreviewed.py")
+    git(repo, env, "commit", "-q", "-m", "unreviewed change")
+    m2_tree = git(repo, env, "rev-parse", "HEAD^{tree}")
+
+    # fabricated anchor: HEAD's exact tree, parented off h0, on NO branch —
+    # it exists in the object store but HEAD does not descend from it
+    orphan = git(repo, env, "commit-tree", m2_tree, "-p", h0, "-m", "fabricated anchor")
+    not_anc = run(["git", "merge-base", "--is-ancestor", orphan, "HEAD"], repo, env)
+    assert not_anc.returncode == 1, "fixture broke: orphan IS an ancestor"
+
+    ev = make_repass(repo, "repass-r2", {"verdict-r1.txt": "GO\n"})
+    verdict_rel = ".claude/governance/pair-rail-verdict-v1.3.0-rc.2.md"
+    write_verdict(
+        repo,
+        "v1.3.0-rc.2",
+        orphan,
+        [verdict_rel, ev["manifest_rel"]] + ev["artifact_rels"],
+        ev["manifest_rel"],
+        ev["manifest_sha"],
+    )
+    git(repo, env, "add", "-A")
+    git(repo, env, "commit", "-q", "-m", "verdict anchored on the fabricated commit")
+
+    proc = guard(synth, "delta", "--repo", str(repo), "--tag", "v1.3.0-rc.2")
+    assert proc.returncode == tag_guard.E_PARENT_NOT_ANCESTOR, (
+        proc.stdout + proc.stderr
+    )
+    assert "ancestor" in proc.stderr
+    # and it is a DISTINCT mode from both "bad verdict" and "delta outside"
+    assert tag_guard.E_PARENT_NOT_ANCESTOR != tag_guard.E_VERDICT
+    assert tag_guard.E_PARENT_NOT_ANCESTOR != tag_guard.E_DELTA
 
 
 def test_delta_rejects_a_wildcard_verdict_entry(synth):
@@ -914,14 +995,22 @@ def test_delta_rejects_an_allowlist_entry_that_is_not_evidence(synth):
         ".claude/plans/PLAN-166/verdict-fields-v1.2.0.md",
         # immutable historical evidence outside the pinned manifest dir
         ".claude/plans/PLAN-166/repass-r1/old-evidence.txt",
+        # W0 re-pass r2 P2: the RIGHT basename in the WRONG directory — a
+        # basename-only rule admits any number of look-alikes anywhere under
+        # .claude/plans/; the file must sit at its canonical path (the plan
+        # directory that CONTAINS the manifest dir)
+        ".claude/plans/archive/verdict-fields-v1.3.0-rc.2.md",
+        ".claude/plans/PLAN-166/repass-r1/verdict-fields-v1.3.0-rc.2.md",
     ],
 )
 def test_delta_rejects_plan_paths_outside_the_manifest_dir(synth, entry):
     """Re-pass P2: `.claude/plans/` entries OUTSIDE the manifest directory
     used to close by NAME alone — no content pin, no manifest coverage, no
     tag specificity — while the same guard rejected `VERSION` as
-    non-EXHAUSTIVE. Only `verdict-fields-<THIS TAG>.md` may live outside the
-    content-pinned manifest directory; everything else must be IN it."""
+    non-EXHAUSTIVE. Only `verdict-fields-<THIS TAG>.md` at its CANONICAL
+    path (directly inside the plan directory holding the manifest dir) may
+    live outside the content-pinned manifest directory; everything else —
+    including same-basename look-alikes elsewhere — must be IN it."""
     arm_verdict(synth, "v1.3.0-rc.2", extra_allow=[entry])
     proc = guard(synth, "delta", "--repo", str(synth["repo"]), "--tag", "v1.3.0-rc.2")
     assert proc.returncode == tag_guard.E_VERDICT, proc.stdout + proc.stderr
@@ -1102,16 +1191,24 @@ def test_driver_derives_every_version_string_from_target_base():
     )
 
 
-def test_driver_makes_no_site_count_claim_in_comments():
+@pytest.mark.parametrize(
+    "src", [DRIVER_SRC, SITES_SRC], ids=["driver", "site-module"]
+)
+def test_release_surfaces_make_no_site_count_claim_in_comments(src):
     """The rule is DELETE the count, never correct it: a corrected count is a
-    count that goes stale again the next time the table grows."""
-    text = DRIVER_SRC.read_text(encoding="utf-8")
+    count that goes stale again the next time the table grows. W0 re-pass r2:
+    the control scanned only the DRIVER while the site MODULE — the file the
+    table actually lives in — had reintroduced counted comments."""
+    text = src.read_text(encoding="utf-8")
     offenders = [
         "%d: %s" % (num, line.strip())
         for num, line in enumerate(text.splitlines(), 1)
         if SITE_COUNT_RX.search(line)
     ]
-    assert not offenders, "site-count claim in the driver:\n%s" % "\n".join(offenders)
+    assert not offenders, "site-count claim in %s:\n%s" % (
+        src.name,
+        "\n".join(offenders),
+    )
 
 
 def test_driver_attributes_the_publish_to_the_publishing_workflow():

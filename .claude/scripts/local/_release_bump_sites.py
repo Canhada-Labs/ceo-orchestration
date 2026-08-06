@@ -21,7 +21,7 @@
 #
 # Idempotence contract (F2). A `last-reviewed:` stamp asserts "this document
 # was re-read FOR THIS RELEASE". Re-dating it without re-reading is a false
-# claim on a surface that a signed tag then covers. So the four stamp sites
+# claim on a surface that a signed tag then covers. So the stamp sites
 # skip the ENTIRE line — neither date nor version — when the version already
 # on the stamp is the target. `--restamp` is the named, explicit route for a
 # real re-review.
@@ -83,9 +83,14 @@ _SITES: List[Tuple[str, str, str]] = [
         PLAIN,
         r"(currently\s+v)" + SEMVER + r"(, aligned with the repo)",
     ),
-    # Present in the watched list but currently carries no such literal; a zero
-    # match here is fine — verify-counts is the oracle, not this table.
-    ("README.md", PLAIN, r"(VERSION=)" + SEMVER),
+    # README.md and CLAUDE.md are deliberately NOT rows here: neither is a
+    # version site. `VERSION=` never existed in either (verify-counts dropped
+    # its dead rules for both in S291 — `git log -S 'VERSION='` finds no
+    # commit that added one — and the release checklist states the same). A
+    # writer row for a site no oracle watches would be that dead rule
+    # reintroduced on the WRITE side: the day someone adds a `VERSION=` line
+    # to README.md, the bump would rewrite a file every other surface
+    # declares out of scope.
     ("SBOM.md", PLAIN, r"(\*\*Version:\*\* `)" + SEMVER + r"(`)"),
     # --- the support window (oracle: verify-counts VERSION_SITES modes
     #     "minor"/"prev_minor", S293). Patterns anchored exactly as the
@@ -94,7 +99,8 @@ _SITES: List[Tuple[str, str, str]] = [
     ("VERSIONING.md", MINOR, r"(Current MINOR \(`v)\d+\.\d+(\.x`\))"),
     ("SECURITY.md", PREV_MINOR, r"(\*\*Previous MINOR\*\* \(`v)\d+\.\d+(\.x`\))"),
     ("VERSIONING.md", PREV_MINOR, r"(Previous MINOR \(`v)\d+\.\d+(\.x`\))"),
-    # --- the four review stamps (idempotence-critical) ---
+    # --- the review stamps (idempotence-critical; the table IS the census,
+    #     a numeral here would be a mirror that drifts) ---
     ("npm/README.md", STAMP, STAMP_RX),
     ("SBOM.md", STAMP, STAMP_RX),
     ("SECURITY.md", STAMP, STAMP_RX),

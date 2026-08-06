@@ -97,6 +97,13 @@ errado, e pular `bump` faz o `tag()` abortar no seu próprio check
 # RC:
 bash .claude/scripts/local/release.sh preflight --rc N
 bash .claude/scripts/local/release.sh bump      --rc N --npm-readme-reviewed
+#   se o bump commitou: git push origin main e espere o CI (guard de
+#   ancestralidade). ANTES da tag, o VERDITO é obrigatório — o guard de
+#   delta roda INCONDICIONALMENTE (RC e stable igualmente; sem ele a fase
+#   morre em E_VERDICT "no signed verdict at ..."):
+#   autorar .claude/governance/pair-rail-verdict-vX.Y.Z-rc.N.md com os
+#   4 campos do bloco yaml (lista em §Promote stable), commit + push main.
+#   A sequência POR TAG é sempre: re-pass → verdito → commit → push → tag.
 bash .claude/scripts/local/release.sh tag       --rc N
 git push origin vX.Y.Z-rc.N        # push é manual, sempre
 
@@ -177,9 +184,11 @@ mão pula o driver. O mesmo assert entra server-side no `release.yml`.
         landa DEPOIS dele; `parent_sha == HEAD` é rejeitado como vácuo)
       - `delta_allowlist:` lista LITERAL (`  - path`), sem glob: o
         próprio verdito, o `verdict-fields-<TAG>.md` do plano (tag
-        literal no nome — nenhum outro path de plano fora do diretório
-        do manifest passa), o `MANIFEST.sha256` do re-pass e cada
-        artefato do re-pass por nome exato
+        literal no nome E path canônico exato — direto no diretório do
+        plano que contém o diretório do manifest; basename igual em
+        qualquer outro diretório é look-alike e NÃO passa), o
+        `MANIFEST.sha256` do re-pass e cada artefato do re-pass por
+        nome exato
       - `delta_manifest:` path repo-relativo do `MANIFEST.sha256`
       - `delta_manifest_sha256:` 64-hex do próprio manifest (o pin de
         conteúdo que o guard confere com `shasum -a 256 -c` por cima)

@@ -418,6 +418,20 @@ Evidência: `PLAN-166/repass-r1/` (MANIFEST.sha256 verificado).
    preflight da rc.2 fica red); `README.pt-BR.md` em `DOCS` com matchers
    por RÓTULO pt; controle positivo POR RÓTULO; checar colisão de
    rótulos pt/EN.
+   > **[nota de execução W0, 2026-08-06]** Divergência DELIBERADA do
+   > texto revisado deste item: o plano pina "erros > 0 = WARNING
+   > nomeado" para a regra `approx`; a implementação landada trata erros
+   > de coleta > 0 como **VIOLATION** (`rule: approx/collect-errors`)
+   > sempre que a banda foi de fato aplicada a ≥1 site vigiado na run,
+   > mantendo WARNING apenas com a banda já suspensa (`--no-tests` /
+   > observed 0). Racional: os dois chamadores automatizados só enxergam
+   > o exit code (`validate.yml` roda `--quiet`; o preflight do
+   > `release.sh` descarta todo o output em `/dev/null`), então um
+   > WARNING ali é estruturalmente invisível — a banda seria aplicada a
+   > uma população PARCIAL sem nenhum executor capaz de ver o aviso.
+   > Teste: `test_collect_errors_fail_when_band_enforced`. O código não
+   > será revertido ao texto do plano; a semântica reforçada segue para
+   > ratificação no material de verdito/cerimônia do W1.
 4. **F6 completo**: renomear driver → `release.sh`; derivar strings de
    `TARGET_BASE`; APAGAR contagens de comentários; corrigir claim de
    publish em `:19`+`:515`; **a ANOTAÇÃO ASSINADA da tag

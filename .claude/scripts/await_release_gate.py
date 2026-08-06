@@ -68,7 +68,10 @@ decision so the value used is auditable.
 leg on, so it gets no default: omitting it (or passing an empty/unparseable
 value) is a usage error (exit 2), never a run that silently grants stale
 successes. Same doctrine as ``_release_bump_sites.py --today``: a parameter
-that changes the verdict has no default.
+that changes the verdict has no default. The doctrine holds at BOTH layers:
+``GateContext.self_created_at_epoch`` is likewise a required field with no
+default (and an explicit ``None`` raises), so an in-process caller of
+``decide()`` cannot construct a context with the freshness leg silently off.
 
 ## Required fields per run object
 
@@ -129,11 +132,16 @@ class GateContext(NamedTuple):
     tag: str
     head_sha: str
     now_epoch: int
+    # REQUIRED — no default, one layer below the CLI for the same reason the
+    # CLI has ``required=True``: this field arms the delete+re-tag freshness
+    # leg, and a verdict-changing parameter with a default is a fail-open
+    # waiting for the first in-process caller of ``decide()`` that forgets
+    # it. Enforcing the doctrine only at argparse left exactly that hole.
+    self_created_at_epoch: int
     workflow: str = DEFAULT_WORKFLOW
     gate_job: str = DEFAULT_GATE_JOB
     event: str = DEFAULT_EVENT
     deadline_epoch: Optional[int] = None
-    self_created_at_epoch: Optional[int] = None
     freshness_skew_seconds: int = DEFAULT_FRESHNESS_SKEW_SECONDS
 
     @property
@@ -141,9 +149,15 @@ class GateContext(NamedTuple):
         return self.deadline_epoch is not None and self.now_epoch > self.deadline_epoch
 
     @property
-    def freshness_floor(self) -> Optional[int]:
+    def freshness_floor(self) -> int:
         if self.self_created_at_epoch is None:
-            return None
+            # A NamedTuple cannot stop an explicit None; refusing loudly here
+            # keeps "freshness leg silently off" unrepresentable at every
+            # layer instead of only at the CLI.
+            raise ValueError(
+                "freshness leg unarmed: self_created_at_epoch is None — the "
+                "delete+re-tag freshness leg cannot be silently disabled"
+            )
         return self.self_created_at_epoch - self.freshness_skew_seconds
 
 
@@ -267,7 +281,7 @@ def select_candidate(
                 "candidate run id=%r has an unparseable created_at=%r"
                 % (run.get("id"), run.get("created_at"))
             )
-        if floor is not None and created_at < floor:
+        if created_at < floor:
             census["stale_candidates"] += 1
             continue
         key = _sort_key(run, created_at)

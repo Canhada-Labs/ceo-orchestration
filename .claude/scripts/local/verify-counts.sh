@@ -79,11 +79,16 @@
 #      structurally invisible (PLAN-166 W0 re-pass). It stays a named WARNING
 #      only when the band is already suspended (--no-tests / observed 0).
 #
-# COLLECTION SCOPE (load-bearing — the two populations DIVERGE). Measured
-# 2026-08-05 on the PLAN-166 W0 tree; both figures are OUTPUTS of the two
-# commands, pasted here, not recalled:
-#   `python3 -m pytest --collect-only -q`            -> 14220 tests,  0 errors
-#   `python3 -m pytest --collect-only -q .claude/`   -> 14267 tests, 22 errors
+# COLLECTION SCOPE (load-bearing — the two populations DIVERGE). This block
+# is the ONLY measurement snapshot in this file (W0 re-pass round 2: two
+# divergent pairs coexisted, one undated — the numeral-espelho class; a
+# reader could not tell which measurement backed the scope decision).
+# Measured 2026-08-06 on the PLAN-166 W0 tree AFTER the residual-fix round
+# (the previous snapshot went stale within its own patch — the residual
+# fixers added tests after it was pasted; codex W0-residuals round caught
+# it). Both figures are OUTPUTS of the two commands, pasted, not recalled:
+#   `python3 -m pytest --collect-only -q`            -> 14263 tests,  0 errors
+#   `python3 -m pytest --collect-only -q .claude/`   -> 14310 tests, 22 errors
 #   The first is the DOCUMENTED scope: pytest.ini `testpaths` is the single
 #   source of truth for collection and `make test-collect` runs exactly that
 #   invocation — which is also the command every watched doc tells the reader
@@ -246,14 +251,23 @@ DERIVED_REGISTRATIONS=${_reg_out#* }
 # pytest.ini `testpaths` decides, which is byte-for-byte what `make
 # test-collect` runs and what every watched doc tells the reader to run.
 # The previous derivation passed `.claude/` explicitly; that walks
-# `.claude/sidecars/**` too and reports 22 COLLECTION ERRORS + 47 phantom
-# cases (14219/22 vs 14172/0), i.e. a different population from the one the
-# docs cite. See the APPROX CONTRACT header block.
+# `.claude/sidecars/**` too and reports COLLECTION ERRORS plus phantom
+# cases the reader can never reproduce — a different population from the
+# one the docs cite. The single dated measurement of BOTH populations
+# lives in the COLLECTION SCOPE header block above; do not paste a second
+# pair here (W0 re-pass round 2: an undated pair in this comment drifted
+# from the dated header pair — one file, one snapshot).
 #
 # Both the collected count AND the collection-error count are derived: the
 # error count is an INPUT of the approx rule (a band applied to a partially
-# collected population is meaningless), so it is printed, exported and
-# surfaced as a named WARNING when non-zero.
+# collected population is meaningless), so it is printed and exported, and
+# errors > 0 is a VIOLATION whenever the band was actually enforced over
+# >=1 doc site this run — it stays a named WARNING only when the band is
+# already suspended (--no-tests / observed 0). That is APPROX CONTRACT
+# clause 3 in the header, verbatim; the enforcement is the collect-errors
+# branch in the python block below. (W0 re-pass round 2: this comment used
+# to say "WARNING when non-zero" — the superseded pre-round-1 contract —
+# while header and code both said VIOLATION.)
 DERIVED_TESTS=0
 DERIVED_TESTS_ERRORS=0
 DERIVED_TESTS_CMD='python3 -m pytest --collect-only -q   # pytest.ini testpaths == `make test-collect`'
@@ -961,7 +975,16 @@ for _metric in sorted(APPROX_INPUTS):
 # validate.yml runs --quiet and the release preflight discards output, so
 # no automated caller can see anything but the exit code, and an unmatched
 # "~9k" planted in a watched doc shipped through both in total silence.
-_THOUSANDS_RX = re.compile(r'~\s*(?:\d+[.,]\d{3}\b|\d+\s*[kK]\b)')
+# Decimal-k belongs to the family (W0 re-pass round 2): approx_norm already
+# PARSES '~1.4k' / '~13,5k' as 1400/13500 (round-1 finding 7 declared the
+# form part of the ~Nk family), so a CONSUMED site in that shape is
+# band-checked — but this sweep did not recognize it, and an UNCONSUMED
+# '~1.4k widgets' in a watched doc shipped with EXIT=0: the exact F5
+# false-pass class the sweep was upgraded to VIOLATION to stop. The
+# `[.,]\d{1,2}` alternative admits both EN ('.') and pt (',') decimals;
+# 3-digit groups stay with the thousands alternative.
+_THOUSANDS_RX = re.compile(
+    r'~\s*(?:\d+[.,]\d{3}\b|\d+[.,]\d{1,2}\s*[kK]\b|\d+\s*[kK]\b)')
 for _doc in DOCS:
     _text = texts.get(_doc, "")
     _consumed = _approx_consumed.get(_doc, set())

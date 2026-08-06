@@ -324,5 +324,41 @@ class UsageTests(TestEnvContext):
         self.assertEqual(EXIT_USAGE, proc.returncode, proc.stdout + proc.stderr)
 
 
+class ContextLayerTests(TestEnvContext):
+    """W0 re-pass r2 P2: the CLI closed the fail-open default, but
+    ``GateContext.self_created_at_epoch`` kept ``= None`` one layer down, and
+    ``freshness_floor`` mapped None to "leg silently off" — any in-process
+    caller of ``decide()`` reproduced the exact GRANT-on-stale-success the
+    UsageTests prove the CLI refuses. The doctrine has to hold at EVERY
+    construction surface, not just argparse."""
+
+    def _stale_only_payload(self):
+        return payload(self_run(), release_run(id=900, created_at=STALE_CREATED_AT))
+
+    def test_gate_context_requires_self_created_at_epoch(self):
+        # No default: an in-process caller that forgets the field cannot
+        # construct a context at all — same failure mode as omitting the flag.
+        with self.assertRaises(TypeError):
+            GateContext(
+                tag=TAG,
+                head_sha=HEAD_SHA,
+                now_epoch=NOW,
+                deadline_epoch=DEADLINE_OPEN,
+            )
+
+    def test_explicit_none_fails_loud_instead_of_disarming_the_leg(self):
+        # NamedTuple cannot stop an explicit None; it must refuse loudly,
+        # never decide with the delete+re-tag freshness leg silently off.
+        disarmed = GateContext(
+            tag=TAG,
+            head_sha=HEAD_SHA,
+            now_epoch=NOW,
+            self_created_at_epoch=None,
+            deadline_epoch=DEADLINE_OPEN,
+        )
+        with self.assertRaises(ValueError):
+            decide(self._stale_only_payload(), disarmed)
+
+
 if __name__ == "__main__":
     unittest.main()
