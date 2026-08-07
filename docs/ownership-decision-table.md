@@ -592,6 +592,14 @@ verdicts, the live branch, and ADR-155/AMEND-1 — do **not** agree. PLAN-167
   the harness parses out of prose is a dimension nothing validates.
 
 - **OQ-9 — Is `OMIT_RECORD` an independent verdict at all?**
+  *New evidence from the shadow run:* the `OWN-0030` divergence exists ONLY
+  because the two instruments answer different questions — the suite asks
+  "did a record disappear?" and the function asks "was there a trustworthy
+  prior record?". Both end with no record on disk. **If the two verdicts
+  collapse into one, that divergence stops existing**, which is a second,
+  independent argument for the collapse: a distinction that generates
+  disagreement while having no observable consequence is not carrying its
+  weight.
   Filling the table, every `OMIT_RECORD` row turned out to be a row that would
   read `PRESERVE_UNOWNED` if no prior record had existed. The two are not
   separate outcomes: they are the same outcome observed at different values of
