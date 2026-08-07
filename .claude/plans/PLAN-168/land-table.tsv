@@ -1,0 +1,25 @@
+# PLAN-168 land-table: <repo-rel-path> TAB <sha256 pre-land | ABSENT> TAB <modo f|x>
+.claude/adr/ADR-190-ownership-decision-table-contract.md	ABSENT	f
+.claude/scripts/tests/test_release_workflow_asserts.py	8589420213deb0970b267f15690c33acca31f42363b4b3464d3281d752a9a365	f
+.github/workflows/ownership-nightly.yml	ABSENT	f
+.github/workflows/smoke-install.yml	eaa0f3c9c3d70f96c81777d92dece0ffecd91f2a07ac8db217b5c269b7550d4a	f
+CLAUDE.md	4851c79660ea180df32e905aa75d675cd20e5890514908d6e247dfb9b30b8990	f
+README.md	7521601360e4169f28e63c009e4f0c326e63339c383cc66e07d9f141cefcabb6	f
+README.pt-BR.md	69702ebf7b2e4f8702e8b121d970f80a87888a356b529eba75503b7a1f087660	f
+docs/ARCHITECTURE.md	b8a7808a0c33e50dcb78eee801c357cf31bc3f98a045c7c88ad3323c48b379d1	f
+docs/CTO-GUIDE.md	1887b77bbd4f5a53fc957f73b97596c4b3fae45d3d343b1aec32eb619fdea134	f
+docs/FAQ.md	fdbcb3b010da2ded392280d04ade31b89d2955d2d6117d2d9d4e932dedabd010	f
+docs/README.md	f356153b0fece8142a17b46f602c16bcb827fc408b6ae71ac48d21f6cbeb567c	f
+docs/ownership-decision-table.md	2d2dad0167a0cfa58356799e912e23ee0f9bec700016f6eb4db9fd3d801e3b69	f
+npm/README.md	9a138331d240847b4bbfe4c52cd5271b8643ddb5b6ae8f0e6424e0656743ba95	f
+scripts/_framework_manifest_set.sh	a3075a7ee4ba468480a6d5a03728acbe8a9ed1f780543746cc935766334eee7c	f
+scripts/install.sh	733d19d3d91fb944e8e1010bc65e02916c211d39e7cdf4dcff548632dd1539ce	x
+scripts/tests/ownership-baseline-map.txt	9f5877ab2420063f3160f8e7298d611e430890e2ed007d8da3db765ef47bd944	f
+scripts/tests/ownership-expected-reds.txt	ABSENT	f
+scripts/tests/ownership-nightly-gate.sh	ABSENT	x
+scripts/tests/ownership_table.tsv	ae55aeb9a5ec714489103768440c2ac0e062ef61f0067ac1016db4c55597dc5a	f
+scripts/tests/test-ownership-nightly-gate.sh	ABSENT	x
+scripts/tests/test-ownership-table.sh	8a716d0d9e85bb4fc0ac9b2268d3783816b4e262a575a1720a1de171185efad6	x
+scripts/tests/test-protocol-pointer-inv4.sh	ABSENT	x
+scripts/tests/test-protocol-pointer-render.sh	ABSENT	x
+scripts/upgrade.sh	2083b56480ebeea215f2c83d6bb8b6388a1b17494391b8f7d2fd9816a74c174f	x
