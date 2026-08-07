@@ -420,6 +420,34 @@ was asking the completeness question — *which combinations does this surface
 have, and is each one present?* — which is the one question a per-branch
 review never asks.
 
+### 5.4e Install and upgrade generate DIFFERENT pointers — every upgrade breaks it
+
+Chasing a `HASH_UNCLASSIFIED` observation led to a defect in the live code
+that has nothing to do with ownership records.
+
+`install.sh` writes the root pointer and then **substitutes** its
+placeholders, so the adopter gets a real path. `upgrade.sh` regenerates the
+same file from a heredoc that leaves `{{PROTOCOL_SOURCE}}` **literal**, and
+nothing substitutes it afterwards. Verified against the live tree:
+
+| after | literal `{{PROTOCOL_SOURCE}}` occurrences |
+|---|---:|
+| `install.sh` | 0 — the file names the real checkout path |
+| `upgrade.sh` | 4 — the file names a placeholder |
+
+So **every upgrade degrades the pointer into a non-functional one** for any
+adopter whose framework checkout lives outside the target. The file whose
+entire job is to say where the protocol lives stops saying it.
+
+This is the **install-set ≠ upgrade-set** class that ADR-155 decision (i) was
+written to eliminate — the shared enumeration fixed *which paths* the two
+sides touch, but not *what content* they produce for the same path. It is
+pre-existing, unrelated to PLAN-167's changes, and no ownership assertion
+would ever have caught it: the record is fine, the bytes are wrong.
+
+It is recorded as **INV-4** because it is not a cell — it is a cross-writer
+invariant.
+
 ### 5.5 Two findings are invariants, not cells
 
 Two defects were about the **blast radius** of a fix rather than about any
@@ -436,6 +464,11 @@ asserts them across every applicable row instead:
   `LINK` records before the run. Otherwise an adopter's own symlink,
   preserved inside an enumerated directory, is promoted into a framework
   delivery record.
+- **INV-4** — **install and upgrade must generate byte-identical content for
+  the same surface.** Violated today by the root pointer (§5.4e): install
+  substitutes its placeholders, upgrade does not. No per-cell ownership
+  assertion can see this — the record is correct and the bytes are wrong —
+  so it needs an invariant that compares the two writers' output directly.
 - **INV-3** — **an execution failure never advances the record.** A caller
   that was handed `DELIVER` or `REFRESH` and could not complete it must
   leave the manifest describing the world as it actually is. This is the

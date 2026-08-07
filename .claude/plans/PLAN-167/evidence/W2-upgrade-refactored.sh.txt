@@ -1561,72 +1561,95 @@ To pull updates:
       ;;
   esac
 
-  # PLAN-138 C.7 fix (Codex R2 P0): compute the CANONICAL pointer hash — the
-  # hash of exactly what the framework WOULD write below (heredoc body) — and
-  # export it so the post-upgrade manifest rewrite records THAT as the
-  # PROTOCOL.md baseline, never the current target file. Without this, a
-  # preserved adopter-customized PROTOCOL.md would be re-recorded as its own
-  # baseline and the NEXT upgrade would read H_dst==H_base and clobber it.
-  # Computed on ALL paths (preserve + refresh) so it is set whenever the C.7
-  # rewrite runs. printf reproduces the heredoc byte-for-byte.
+  # The CANONICAL digest: the hash of exactly what the framework WOULD write.
+  # Computed on every path, because the baseline rewrite must record it even
+  # when the pointer is preserved — recording the customised bytes instead
+  # would make the NEXT upgrade read H_dst == H_base and clobber them (C.5).
   _REFRESH_PROTOCOL_CANON_HASH=""
   if command -v _hash_stdin >/dev/null 2>&1; then
     _REFRESH_PROTOCOL_CANON_HASH="$( printf '# Protocol reference\n\n%s\n' "$body" | _hash_stdin 2>/dev/null || true )"
   fi
 
-  if [[ "$DRY_RUN" -eq 1 ]]; then
-    echo "    (dry-run) would REFRESH: PROTOCOL.md pointer"
+  # ---- OBSERVE -------------------------------------------------------------
+  local _lt _pr _lc
+  _lt="$( _ov_obs_live_type "$pointer" )"
+  _pr="$( _ov_obs_prior_record "PROTOCOL.md" )"
+  if [ "$_lt" != "regular" ]; then
+    _lc="-"
+  elif [ -n "$_REFRESH_PROTOCOL_CANON_HASH" ] \
+       && [ "$( _hash_file "$pointer" 2>/dev/null || true )" = "$_REFRESH_PROTOCOL_CANON_HASH" ]; then
+    _lc="pristine"
+  else
+    _lc="edited"
+  fi
+
+  # ---- DECIDE --------------------------------------------------------------
+  local _pair _verdict
+  if ! _pair="$( _ownership_verdict protocol "$_pr" "$_lt" "$_lc" yes copy \
+                   "$CEREMONY_EFFECTIVE" upgrade none )"; then
+    echo "    WARNING: PROTOCOL.md dimensions are not a legal cell — PRESERVED" >&2
     return 0
   fi
+  _verdict="${_pair%% *}"
+  _PROTOCOL_HASH_SOURCE="${_pair##* }"
 
-  _up_record_op "refresh_protocol_pointer" "PROTOCOL.md"
-
-  # PLAN-138 Wave C (ADR-155) C.6 — close the verified S238 driver.
-  #
-  # (a) ALWAYS back up an existing root PROTOCOL.md to $BAK_DIR/PROTOCOL.md
-  #     BEFORE the `cat >` overwrite. The legacy code had NO backup here, so an
-  #     adopter who turned the pointer into a real customized protocol (the
-  #     S238 acme case) lost it irrecoverably. This backup applies EVEN when
-  #     no baseline manifest exists — making the loss recoverable on a first
-  #     upgrade (Codex R1 P0 first-upgrade safety).
-  if [[ -f "$pointer" ]]; then
-    mkdir -p "$BAK_DIR" 2>/dev/null || true
-    cp "$pointer" "$BAK_DIR/PROTOCOL.md" 2>/dev/null || true
-    echo "    BACKED UP: PROTOCOL.md (root) -> $BAK_DIR/PROTOCOL.md"
-  fi
-
-  # (b) When a baseline manifest is loaded, classify the root PROTOCOL.md
-  #     against the recorded install-time pointer hash. The pointer's "source"
-  #     is a generated string (not a file in $SOURCE_DIR), so we compare the
-  #     CURRENT target hash against the recorded BASELINE only:
-  #       H_dst == H_base  -> still the generated pointer -> safe to refresh
-  #       H_dst != H_base  -> adopter customized it -> ADOPTER-CUSTOMIZED:
-  #                           preserve (default/refuse) or overwrite per
-  #                           --on-conflict={theirs|backup}.
-  if [[ -f "$pointer" && -n "$_BASELINE_MANIFEST_FILE" ]] && command -v _hash_file >/dev/null 2>&1; then
-    local _rp_base _rp_dst
-    _rp_base="$( _baseline_lookup "PROTOCOL.md" || true )"
-    _rp_dst="$( _hash_file "$pointer" 2>/dev/null || true )"
-    if [[ -n "$_rp_base" && -n "$_rp_dst" && "$_rp_dst" != "$_rp_base" ]]; then
-      case "$ON_CONFLICT" in
-        theirs|backup)
-          # Original already backed up above; proceed to refresh.
-          echo "    OVERWROTE (root PROTOCOL.md ADOPTER-CUSTOMIZED, --on-conflict=$ON_CONFLICT; original in $BAK_DIR/PROTOCOL.md)" >&2
-          ;;
-        *)  # refuse (default): preserve the customized root PROTOCOL.md.
-          echo "    PRESERVED (root PROTOCOL.md ADOPTER-CUSTOMIZED — pointer NOT refreshed; backup in $BAK_DIR/PROTOCOL.md)" >&2
-          return 0
-          ;;
+  # ---- EXECUTE -------------------------------------------------------------
+  # The guards this surface never had are not new branches: they are what the
+  # decision already says. A destination that is not a regular file is
+  # adopter-owned, so the verdict is unowned and nothing is written — which is
+  # exactly the leaf-symlink / directory / FIFO protection SPEC and the marker
+  # acquired during the S296 rounds and the pointer did not.
+  case "$_verdict" in
+    PRESERVE_UNOWNED|OMIT_RECORD)
+      case "$_lt" in
+        symlink) echo "    SKIP: PROTOCOL.md is a symlink — refusing to write THROUGH it (would mutate a path outside the target)" >&2 ;;
+        dir|dir_empty) echo "    SKIP: PROTOCOL.md is a directory — adopter-owned, refusing to write into it" >&2 ;;
+        special) echo "    SKIP: PROTOCOL.md is an unsupported special file — preserved, surface untouched" >&2 ;;
+        *) echo "    SKIP: PROTOCOL.md pointer (recorded --ceremony user install — a user install never creates root files, WS4)" ;;
       esac
-    fi
-  fi
+      return 0
+      ;;
 
-  cat > "$pointer" <<EOF
+    PRESERVE_OWNED)
+      _PROTOCOL_DELIVERED=1
+      if [ "$_lc" = "edited" ]; then
+        # ADR-155 decision (iii): the verified S238 case. An adopter-customised
+        # pointer is CONTENT, not a fork — it is preserved, and the record keeps
+        # the canonical digest so the next upgrade does not read it as pristine.
+        if [ "$DRY_RUN" -eq 0 ] && [ -f "$pointer" ]; then
+          mkdir -p "$BAK_DIR" 2>/dev/null || true
+          cp "$pointer" "$BAK_DIR/PROTOCOL.md" 2>/dev/null || true
+        fi
+        echo "    PRESERVED (root PROTOCOL.md is adopter-customised — pointer NOT refreshed; backup in $BAK_DIR/PROTOCOL.md)" >&2
+      else
+        echo "    SKIP: PROTOCOL.md pointer (ownership carried forward)"
+      fi
+      return 0
+      ;;
+
+    DELIVER|REFRESH)
+      if [ "$DRY_RUN" -eq 1 ]; then
+        echo "    (dry-run) would REFRESH: PROTOCOL.md pointer"
+        return 0
+      fi
+      _up_record_op "refresh_protocol_pointer" "PROTOCOL.md"
+      # Backup-always before the overwrite, even with no baseline manifest —
+      # this is what made the S238 loss recoverable on a FIRST upgrade.
+      if [ -f "$pointer" ]; then
+        mkdir -p "$BAK_DIR" 2>/dev/null || true
+        cp "$pointer" "$BAK_DIR/PROTOCOL.md" 2>/dev/null || true
+        echo "    BACKED UP: PROTOCOL.md (root) -> $BAK_DIR/PROTOCOL.md"
+      fi
+      cat > "$pointer" <<EOF
 # Protocol reference
 
 $body
 EOF
-  echo "    REFRESHED: PROTOCOL.md pointer"
+      _PROTOCOL_DELIVERED=1
+      echo "    REFRESHED: PROTOCOL.md pointer"
+      return 0
+      ;;
+  esac
 }
 
 # ===========================================================================
