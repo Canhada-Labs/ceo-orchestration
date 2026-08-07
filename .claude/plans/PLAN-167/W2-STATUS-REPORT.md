@@ -134,6 +134,65 @@ punishes a loose instrument exactly as it punishes loose code.
 
 ---
 
+## W2.3 was attempted, regressed 24 cells, and was reverted
+
+`50 green / 11 red` → **`26 green / 35 red`**. Twenty-four previously-green
+cells broke: 13 `marker`, 11 `spec`. Reverted to the coherent W2.2 state;
+the failing map is kept as `evidence/W2.3-FAILED-map.txt`.
+
+**The cause was mine, and it was a sequencing error.** W2.3 makes the
+generator fail-closed: a conditional surface that declares no `hash_source`
+is not recorded. That is correct — and it assumes **every caller declares one
+on every delivery path**. I had refactored exactly one caller (`spec`, on the
+upgrade side) and wired install's declaration only to the continuity path. So
+a fresh install delivered the surfaces and declared nothing, and the
+fail-closed branch correctly declined to record them.
+
+The plan's wave order exists for this: W2.2 converts **all** the callers,
+then W2.3 changes the generator. I ran W2.3 with one of three callers
+converted, which is not a partial step toward the goal — it is an incoherent
+intermediate state that no amount of debugging would have made green.
+
+**Two things went right, and they are why this cost 25 minutes rather than a
+morning:**
+1. The failure was **loud and immediate**. Fail-closed did exactly its job:
+   an undeclared ownership claim became "no record" rather than a silently
+   wrong one. The dangerous version of this bug records the wrong digest and
+   surfaces months later as an overwritten adopter file.
+2. **The table caught it.** 24 cells changed status the moment the change
+   landed. Under the S296 regime this would have been one review round
+   noticing one symptom — the shape of loop the whole plan exists to break.
+
+### What W2.3 needs before it can land
+
+1. Refactor the `marker` and `protocol` callers the way `spec` was done.
+2. Declare `hash_source` on **every** delivery path, not only continuity —
+   including fresh install, where the surfaces are genuinely delivered.
+3. Only then make the generator fail-closed.
+4. Keep `FMS_LINK_PATHS` (see below).
+
+## A second instruction in the plan that is half wrong
+
+§W2.3 says `FMS_HASH_ROOT_PATHS` **and** `FMS_LINK_PATHS` are "removed —
+replaced, not added". Only the first half survives contact:
+
+- **`FMS_HASH_ROOT_PATHS` is genuinely subsumed.** It exists to confine a
+  global switch to the continuity paths, and an explicit per-surface
+  `hash_source` says the same thing directly. It goes.
+- **`FMS_LINK_PATHS` is not.** It encodes **INV-2** — LINK serialization may
+  cover only paths that were already LINK records — and its blast radius is
+  the **whole enumeration**, not the three conditional surfaces. It is what
+  stops an adopter's own symlink inside `.claude/hooks/` from being promoted
+  into a framework delivery record. Nothing in the three-surface decision
+  space covers that path, so removing it would reopen the r10-F2 defect.
+
+This is the third plan instruction to fail verification (after the three
+pruning rules in §4.1 and the clone-from-HEAD step). The pattern is
+consistent and worth naming: **the plan is reliable about the shape of the
+work and unreliable about specific mechanics**, because the mechanics were
+written from memory of the S296 sessions rather than re-derived from the
+code. Verify each one before executing it.
+
 ## Recommended next steps
 
 1. **W2.2** — refactor the two callers to observe → call → execute. The

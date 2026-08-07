@@ -1,0 +1,69 @@
+== PLAN-167 ownership decision table ==
+   table:  /tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/c1f32917-17c3-4a44-a74f-30277a04017a/scratchpad/plan167-overlay-235553/scripts/tests/ownership_table.tsv
+   source: /tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/c1f32917-17c3-4a44-a74f-30277a04017a/scratchpad/plan167-overlay-235553
+   scratch:/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T//plan167-own.jQ3shn
+   timeout:60s/cell   timeout-bin:<fallback>
+
+OWN-0001   RED     exp=DELIVER         /HASH_SOURCE            got=DELIVER         /HASH_NONE              rc=0   adr-155
+OWN-0002   GREEN   exp=DELIVER         /HASH_CANONICAL_POINTER got=DELIVER         /HASH_CANONICAL_POINTER rc=0   adr-155
+OWN-0003   RED     exp=DELIVER         /HASH_SOURCE            got=DELIVER         /HASH_NONE              rc=0   adr-155-amend-1
+OWN-0004   GREEN   exp=PRESERVE_UNOWNED/HASH_NONE              got=PRESERVE_UNOWNED/HASH_NONE              rc=0   adr-155-amend-1
+OWN-0005   GREEN   exp=PRESERVE_UNOWNED/HASH_NONE              got=PRESERVE_UNOWNED/HASH_NONE              rc=0   adr-155-amend-1
+OWN-0006   GREEN   exp=PRESERVE_UNOWNED/HASH_NONE              got=PRESERVE_UNOWNED/HASH_NONE              rc=0   adr-155-amend-1
+OWN-0007   GREEN   exp=PRESERVE_UNOWNED/HASH_NONE              got=PRESERVE_UNOWNED/HASH_NONE              rc=0   adr-155-amend-1
+OWN-0008   RED     exp=DELIVER         /HASH_SOURCE            got=DELIVER         /HASH_NONE              rc=0   adr-155-amend-1
+OWN-0010   RED     exp=PRESERVE_OWNED  /HASH_SOURCE            got=PRESERVE_UNOWNED/HASH_NONE              rc=0   r1-F1
+OWN-0011   GREEN   exp=PRESERVE_OWNED  /HASH_PRIOR_RECORD      got=PRESERVE_OWNED  /HASH_PRIOR_RECORD      rc=0   r1-F1
+OWN-0012   RED     exp=PRESERVE_OWNED  /HASH_SOURCE            got=PRESERVE_UNOWNED/HASH_NONE              rc=0   r1-F1
+OWN-0013   RED     exp=PRESERVE_OWNED  /HASH_SOURCE            got=PRESERVE_UNOWNED/HASH_NONE              rc=0   r5-F1
+OWN-0014   GREEN   exp=PRESERVE_OWNED  /HASH_PRIOR_RECORD      got=PRESERVE_OWNED  /HASH_PRIOR_RECORD      rc=0   r9-F1
+OWN-0015   RED     exp=PRESERVE_OWNED  /HASH_SOURCE            got=PRESERVE_UNOWNED/HASH_NONE              rc=0   r5-F1
+OWN-0016   RED     exp=PRESERVE_OWNED  /HASH_PRIOR_RECORD      got=PRESERVE_UNOWNED/HASH_NONE              rc=0   r11-F2
+OWN-0017   GREEN   exp=REFRESH         /HASH_SOURCE            got=REFRESH         /HASH_SOURCE            rc=0   r3-F2
+OWN-0018   GREEN   exp=REFRESH         /HASH_SOURCE            got=REFRESH         /HASH_SOURCE            rc=0   adr-155-amend-1
+OWN-0019   GREEN   exp=PRESERVE_UNOWNED/HASH_NONE              got=PRESERVE_UNOWNED/HASH_NONE              rc=0   adr-155-amend-1
+OWN-0020   GREEN   exp=PRESERVE_UNOWNED/HASH_NONE              got=PRESERVE_UNOWNED/HASH_NONE              rc=0   r1-F3
+OWN-0021   GREEN   exp=REFRESH         /HASH_SOURCE            got=REFRESH         /HASH_SOURCE            rc=0   adr-155-amend-1
+OWN-0022   RED     exp=REFRESH         /HASH_SOURCE            got=PRESERVE_UNOWNED/HASH_NONE              rc=0   adr-155-amend-1
+OWN-0023   RED     exp=REFRESH         /HASH_SOURCE            got=PRESERVE_UNOWNED/HASH_NONE              rc=0   r3-F1
+OWN-0024   RED     exp=ABORT_SURFACE   /HASH_PRIOR_RECORD      got=PRESERVE_UNOWNED/HASH_NONE              rc=1   r3-F1
+OWN-0025   TIMEOUT exp=OMIT_RECORD     /HASH_NONE              got=TIMEOUT         /TIMEOUT                rc=137 r9-F3
+OWN-0026   RED     exp=REFRESH         /HASH_SOURCE            got=REFRESH         /HASH_NONE              rc=0   adr-155-amend-1
+OWN-0027   RED     exp=ABORT_SURFACE   /HASH_PRIOR_RECORD      got=PRESERVE_UNOWNED/HASH_NONE              rc=1   r4-F5
+OWN-0028   RED     exp=OMIT_RECORD     /HASH_NONE              got=PRESERVE_UNOWNED/HASH_NONE              rc=0   r2-F3
+OWN-0029   TIMEOUT exp=OMIT_RECORD     /HASH_NONE              got=TIMEOUT         /TIMEOUT                rc=137 r2-F3
+OWN-0030   RED     exp=OMIT_RECORD     /HASH_NONE              got=PRESERVE_UNOWNED/HASH_NONE              rc=0   r2-F1
+OWN-0031   RED     exp=OMIT_RECORD     /HASH_NONE              got=PRESERVE_UNOWNED/HASH_NONE              rc=0   r4-F2
+OWN-0032   RED     exp=OMIT_RECORD     /HASH_NONE              got=PRESERVE_OWNED  /HASH_PRIOR_RECORD      rc=1   derived
+OWN-0033   TIMEOUT exp=OMIT_RECORD     /HASH_NONE              got=TIMEOUT         /TIMEOUT                rc=137 derived
+OWN-0034   ESCAPE  exp=OMIT_RECORD     /HASH_NONE              got=PRESERVE_OWNED  /HASH_UNCLASSIFIED      rc=0   derived
+OWN-0040   GREEN   exp=PRESERVE_OWNED  /LINK_RECORD            got=PRESERVE_OWNED  /LINK_RECORD            rc=0   r4-F3
+OWN-0041   GREEN   exp=PRESERVE_OWNED  /LINK_RECORD            got=PRESERVE_OWNED  /LINK_RECORD            rc=0   r4-F4
+OWN-0042   GREEN   exp=OMIT_RECORD     /HASH_NONE              got=OMIT_RECORD     /HASH_NONE              rc=0   r4-F3
+OWN-0043   GREEN   exp=OMIT_RECORD     /HASH_NONE              got=OMIT_RECORD     /HASH_NONE              rc=0   r4-F4
+OWN-0044   GREEN   exp=PRESERVE_UNOWNED/HASH_NONE              got=PRESERVE_UNOWNED/HASH_NONE              rc=0   r8-F2
+OWN-0045   GREEN   exp=PRESERVE_UNOWNED/HASH_NONE              got=PRESERVE_UNOWNED/HASH_NONE              rc=0   r8-F2
+OWN-0046   GREEN   exp=PRESERVE_OWNED  /LINK_RECORD            got=PRESERVE_OWNED  /LINK_RECORD            rc=0   r6-F1
+OWN-0047   GREEN   exp=PRESERVE_OWNED  /LINK_RECORD            got=PRESERVE_OWNED  /LINK_RECORD            rc=0   r6-F1
+OWN-0048   GREEN   exp=PRESERVE_OWNED  /LINK_RECORD            got=PRESERVE_OWNED  /LINK_RECORD            rc=0   r7-F3
+OWN-0049   GREEN   exp=PRESERVE_OWNED  /LINK_RECORD            got=PRESERVE_OWNED  /LINK_RECORD            rc=0   r7-F3
+OWN-0050   GREEN   exp=OMIT_RECORD     /HASH_NONE              got=OMIT_RECORD     /HASH_NONE              rc=0   r10-F1
+OWN-0051   GREEN   exp=OMIT_RECORD     /HASH_NONE              got=OMIT_RECORD     /HASH_NONE              rc=0   r10-F1
+OWN-0052   RED     exp=OMIT_RECORD     /HASH_NONE              got=PRESERVE_UNOWNED/HASH_NONE              rc=0   r11-F1
+OWN-0053   RED     exp=OMIT_RECORD     /HASH_NONE              got=PRESERVE_UNOWNED/HASH_NONE              rc=0   r11-F1
+OWN-0060   RED     exp=PRESERVE_OWNED  /HASH_SOURCE            got=PRESERVE_UNOWNED/HASH_NONE              rc=0   adr-155-amend-1
+OWN-0061   RED     exp=PRESERVE_OWNED  /HASH_SOURCE            got=PRESERVE_UNOWNED/HASH_NONE              rc=0   r2-F2
+OWN-0062   RED     exp=PRESERVE_OWNED  /HASH_SOURCE            got=PRESERVE_UNOWNED/HASH_NONE              rc=0   r5-F3
+OWN-0063   RED     exp=PRESERVE_OWNED  /HASH_SOURCE            got=PRESERVE_UNOWNED/HASH_NONE              rc=0   r10-F3
+OWN-0064   RED     exp=PRESERVE_OWNED  /HASH_SOURCE            got=PRESERVE_UNOWNED/HASH_NONE              rc=0   adr-155-amend-1
+OWN-0070   RED     exp=PRESERVE_OWNED  /HASH_SOURCE            got=PRESERVE_UNOWNED/HASH_NONE              rc=0   r7-F2
+OWN-0071   GREEN   exp=PRESERVE_OWNED  /HASH_PRIOR_RECORD      got=PRESERVE_OWNED  /HASH_PRIOR_RECORD      rc=0   r7-F2
+OWN-0072   GREEN   exp=PRESERVE_OWNED  /HASH_PRIOR_RECORD      got=PRESERVE_OWNED  /HASH_PRIOR_RECORD      rc=0   r9-F2
+OWN-0073   RED     exp=REFRESH         /HASH_SOURCE            got=REFRESH         /HASH_NONE              rc=0   adr-155-amend-1
+OWN-0080   RED     exp=OMIT_RECORD     /HASH_NONE              got=PRESERVE_UNOWNED/HASH_NONE              rc=0   r9-F4
+OWN-0081   RED     exp=OMIT_RECORD     /HASH_NONE              got=PRESERVE_UNOWNED/HASH_NONE              rc=0   r11-F3
+OWN-0082   RED     exp=PRESERVE_OWNED  /HASH_PRIOR_RECORD      got=PRESERVE_UNOWNED/HASH_NONE              rc=0   adr-155-amend-1
+OWN-0090   RED     exp=REFRESH         /HASH_SOURCE            got=REFRESH         /HASH_NONE              rc=0   r7-F1
+OWN-0091   RED     exp=PRESERVE_OWNED  /HASH_SOURCE            got=PRESERVE_UNOWNED/HASH_NONE              rc=0   r7-F1
+
+GREEN=26  RED=35  AMBIG=0  HARNESS-ERR=0
