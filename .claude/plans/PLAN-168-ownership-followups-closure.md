@@ -129,6 +129,13 @@ sobre propriedade, e vive só num `docs/`. Sem ADR, a próxima pessoa que
 **Gate W1:** um PR tocando só `ownership_table.tsv` dispara o workflow (hoje
 não dispara); o job nightly roda o e2e e compara o conjunto de vermelhos.
 
+> **⚠️ GATE VACUOSO NO PRÓPRIO HARNESS (QA must-fix 2, verificado).** A flag
+> `--map` **sai rc=0 mesmo com células vermelhas** — provado:
+> `--only OWN-0016 --map` ⇒ rc=0, sem `--map` ⇒ rc=1. Um passo de CI que use
+> `--map` é um **gate morto que reporta sucesso para sempre**. Mitigado na
+> fonte (o harness agora emite NOTE em stderr quando `--map` suprime uma
+> falha), mas **o passo de CI NÃO PODE usar `--map`** — é regra, não estilo.
+>
 > **QA must-fix 2: entregue o SCRIPT, não a intenção.** O passo de CI precisa
 > vir escrito no plano/pack — roda o harness, extrai os ids RED do stdout,
 > compara com `ownership-expected-reds.txt`, falha em qualquer diferença de
@@ -191,6 +198,9 @@ esperado de vermelhos encolhe para `{OWN-0016, OWN-0024, OWN-0027}`.
 ### W3 — ADR-190 (CANÔNICO: `.claude/adr/`)
 
 Registrar como contrato:
+- que `ABORT_SURFACE` é **resultado de OBSERVAÇÃO do harness**, e não um
+  membro do enum de decisão — a função nunca o devolve (QA advisory 3). Sem
+  essa distinção o ADR contradiz o código;
 - as **10 dimensões** e o enum final (**4 vereditos** após o colapso da OQ-9
   ratificado pelo Owner: `DELIVER · REFRESH · PRESERVE_OWNED ·
   PRESERVE_UNOWNED`; `ABORT_SURFACE` é **falha de execução**, não veredito);

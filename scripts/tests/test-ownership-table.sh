@@ -680,7 +680,18 @@ printf '%s' "$MAP_LINES" | LC_ALL=C sort
 echo ""
 echo "GREEN=$PASS  RED=$FAIL  AMBIG=$AMBIG  HARNESS-ERR=$ERR"
 
-[[ "$MAP_ONLY" -eq 1 ]] && exit 0
+# --map is a REPORTING mode, never a gate. Suppressing a non-zero exit is its
+# whole purpose, so a CI step that uses it becomes a dead gate that reports
+# success forever. Say so loudly on the way out, on stderr, so the mistake is
+# visible in the job log instead of silent (PLAN-168 debate r1, QA must-fix 2).
+if [[ "$MAP_ONLY" -eq 1 ]]; then
+  if [[ "$FAIL" -gt 0 || "$ERR" -gt 0 ]]; then
+    echo "" >&2
+    echo "NOTE: --map is a REPORTING mode and is exiting 0 despite RED=$FAIL ERR=$ERR." >&2
+    echo "      Do NOT use --map in a gate. Run without it to get a pass/fail exit." >&2
+  fi
+  exit 0
+fi
 [[ "$ERR" -gt 0 ]] && exit 2
 [[ "$FAIL" -gt 0 ]] && exit 1
 exit 0
