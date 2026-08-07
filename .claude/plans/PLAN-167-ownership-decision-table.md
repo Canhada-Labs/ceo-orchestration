@@ -645,6 +645,23 @@ verde ali não provaria nada.
 ponteiro raiz para `{{PROTOCOL_SOURCE}}` literal. Sonda reproduzível em
 `evidence/probe-INV4-pointer-substitution.sh`. Merece plano próprio.
 
+### ✅ RATIFICAÇÕES DO OWNER — 2026-08-07 (AskUserQuestion, texto literal)
+
+1. **OQ-9 → "Colapsar".** `OMIT_RECORD` vira `PRESERVE_UNOWNED`; "havia
+   registro antes?" já é a coluna `prior_record`. Enum final de vereditos:
+   `DELIVER · REFRESH · PRESERVE_OWNED · PRESERVE_UNOWNED` (4, com
+   `ABORT_SURFACE` já fora da decisão pelo C2).
+2. **OQ-10 → "Declarar escopo-padrão".** A tabela descreve `refuse`; uma
+   asserção separada cobre que `theirs|backup` invertem exatamente
+   `OWN-0074`. Não vira coluna.
+3. **Fail-closed → "Só as 3 condicionais".** A árvore RENDERIZADA mantém o
+   hashing do alvo intocado (alargar ali foi a regressão P1 r8-F1).
+4. **Escopo → "Corrigir o scanner agora, INV-4 em plano próprio".** O
+   travamento do scanner é superfície LIVRE e destrava as 3 células de
+   TIMEOUT + desmascara guards. A INV-4 sai em plano próprio.
+
+**Com isso o W2.3 está DESBLOQUEADO.**
+
 **Dívidas de infra registradas nesta noite (não bloqueiam):**
 `inject-agent-context.sh` falha a busca de persona mesmo com nome exato do
 `team.md`, e não emite `FILE ASSIGNMENT` que o hook exige — prompts foram
