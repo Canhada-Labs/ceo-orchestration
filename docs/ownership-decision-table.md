@@ -315,6 +315,30 @@ the table forces: *the same cell, on each surface, must have a declared
 answer.* Per PLAN-167 §6 rule 2 it is recorded as rows, not patched
 branch-locally.
 
+### 5.4b The instrument was blind to the damage it was built to detect
+
+The first version of this harness compared only the target tree. For the
+rows where a surface is a symlink, that is not enough: a write that follows
+the link lands **outside** the target, on adopter or system data, and the
+target itself is unchanged. Such a row could report GREEN while the run
+destroyed a file the test never looked at.
+
+The fixture's foreign file is now a **tripwire**, digested before and after
+every run. Any change to it produces status `ESCAPE`, which outranks the
+verdict comparison entirely — a row whose pair matches while the run wrote
+out of tree has not passed.
+
+Arming it immediately converted a suspicion into evidence. `OWN-0034` — the
+`protocol` surface as a leaf symlink — reports `ESCAPE`: `cat >` follows
+the link and writes outside the target. `OWN-0044` (a `spec` symlink, which
+is correctly preserved) does not, so the tripwire is not simply firing on
+every symlink row.
+
+That promotes the §5.1 finding. The missing leaf-symlink guard on the
+pointer is not a hypothetical hardening gap; **it is a demonstrated
+out-of-tree write**, which is the S238 class the whole baseline-manifest
+design exists to close.
+
 ### 5.5 Two findings are invariants, not cells
 
 Two defects were about the **blast radius** of a fix rather than about any
@@ -331,6 +355,14 @@ asserts them across every applicable row instead:
   `LINK` records before the run. Otherwise an adopter's own symlink,
   preserved inside an enumerated directory, is promoted into a framework
   delivery record.
+- **INV-3** — **an execution failure never advances the record.** A caller
+  that was handed `DELIVER` or `REFRESH` and could not complete it must
+  leave the manifest describing the world as it actually is. This is the
+  correction to the C2 proposal below: "the failure inherits the verdict's
+  `hash_source`" would record a delivery that did not happen — the framework
+  claiming bytes it never wrote, which is precisely the over-claiming
+  direction ADR-155-AMEND-1 §3 forbids. The failure path keeps the record
+  the surface had *before* the attempt.
 
 Both are the same shape: a switch that was correct in intent and too wide in
 scope. That is the single most common defect class in this space, and it is

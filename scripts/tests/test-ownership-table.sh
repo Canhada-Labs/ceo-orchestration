@@ -286,9 +286,14 @@ _mutate_surface() {  # $1 surface, $2 live_type, $3 live_content, $4 src root, $
       [[ -e "$p" ]] || { mkdir -p "$( dirname "$p" )"; printf 'adopter regular file\n' > "$p"; }
       ;;
     symlink)
+      # The foreign leaf is a TRIPWIRE, not scenery. A surface written with
+      # `cat >` follows a leaf symlink and mutates whatever it points at —
+      # OUTSIDE the target tree, which is adopter or system data. Comparing
+      # only the target would let that row report GREEN while the run
+      # destroyed a file the test never looked at.
       rm -rf "$p"
       mkdir -p "$( dirname "$p" )" "$WORK/foreign"
-      printf 'foreign content\n' > "$WORK/foreign/leaf"
+      printf 'foreign content — MUST NOT be modified by any run\n' > "$WORK/foreign/leaf"
       ln -s "$WORK/foreign/leaf" "$p"
       ;;
     special)
@@ -343,6 +348,13 @@ _mutate_surface() {  # $1 surface, $2 live_type, $3 live_content, $4 src root, $
       # A REAL v1.2.0 SPEC/v1 tree from the tag the pristine fingerprints were
       # derived from — never a hand-built approximation, which would test the
       # fixture rather than the migration.
+      if ! git -C "$REPO_ROOT" rev-parse -q --verify 'refs/tags/v1.2.0^{}' >/dev/null 2>&1; then
+        echo "FIXTURE-ERR: tag v1.2.0 is not available in this checkout." >&2
+        echo "             legacy_pristine rows need the REAL shipped tree, never an" >&2
+        echo "             approximation. A CI checkout using fetch-depth:1 has NO tags" >&2
+        echo "             — that job needs fetch-depth:0 or fetch-tags:true." >&2
+        return 1
+      fi
       rm -rf "$p"; mkdir -p "$p"
       git -C "$REPO_ROOT" archive v1.2.0 SPEC/v1 2>/dev/null \
         | ( cd "$T" && tar -xf - ) || return 1
@@ -523,6 +535,8 @@ _run_row() {
   b_digest="$( _obs_digest "$T/$rel" )"
   b_rec="$( _obs_record "$T/$MANIFEST_REL" "$rel" )"
   _MTIME_BEFORE="$( _obs_mtime "$T/$rel" )"
+  # Everything outside $T that a run could reach. Any change here is an escape.
+  _ESCAPE_BEFORE="$( _obs_digest "$WORK/foreign/leaf" 2>/dev/null || printf 'absent' )"
 
   # --- run the REAL script -------------------------------------------------
   local out="$WORK/run-$id.log"; : > "$out"
@@ -563,6 +577,7 @@ _run_row() {
   a_digest="$( _obs_digest "$T/$rel" )"
   a_rec="$( _obs_record "$T/$MANIFEST_REL" "$rel" )"
   _MTIME_AFTER="$( _obs_mtime "$T/$rel" )"
+  _ESCAPE_AFTER="$( _obs_digest "$WORK/foreign/leaf" 2>/dev/null || printf 'absent' )"
 
   if [[ "$timed_out" -eq 1 ]]; then
     got_verdict="TIMEOUT"; got_hash="TIMEOUT"
@@ -576,7 +591,13 @@ _run_row() {
   local alt=""
   case "$note" in *indistinguishable=*) alt="${note##*indistinguishable=}"; alt="${alt%% *}" ;; esac
 
-  if [[ "$got_verdict" == "$exp_verdict" && "$got_hash" == "$exp_hash" ]]; then
+  # An escape outranks the verdict comparison. A row whose pair matches while
+  # the run wrote OUTSIDE the target has not passed: it has demonstrated the
+  # exact damage class this table exists to prevent, and calling that GREEN
+  # would be the instrument concealing a data loss.
+  if [[ "$_ESCAPE_BEFORE" != "$_ESCAPE_AFTER" ]]; then
+    status="ESCAPE"; FAIL=$((FAIL+1))
+  elif [[ "$got_verdict" == "$exp_verdict" && "$got_hash" == "$exp_hash" ]]; then
     status="GREEN"; PASS=$((PASS+1))
   elif [[ "$got_verdict" == "$exp_verdict" && -n "$alt" && "$got_hash" == "$alt" ]]; then
     status="AMBIG"; AMBIG=$((AMBIG+1))
