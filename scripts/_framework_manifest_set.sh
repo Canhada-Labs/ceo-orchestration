@@ -32,6 +32,25 @@
 #   * Includes the root PROTOCOL.md plus the .claude/{team.md,frontend-team.md,
 #     skills,hooks,scripts,commands,pitfalls-catalog.yaml,task-chains.yaml}
 #     targets, gated by profile where applicable.
+#   * DELIVERY-RECORD-CONDITIONAL entries (PLAN-166 F3 / ADR-155-AMEND-1):
+#     PROTOCOL.md, SPEC/v1 and .claude/.framework-version are enumerated ONLY
+#     when the caller exports the matching flag as "1":
+#         FMS_DELIVERED_PROTOCOL   root PROTOCOL.md pointer
+#         FMS_DELIVERED_SPEC       SPEC/v1 contract tree
+#         FMS_DELIVERED_MARKER     .claude/.framework-version marker
+#     The flags MUST derive from the REGISTERED DELIVERY (install.sh's
+#     install_one actually wrote the path this run, or the pre-upgrade
+#     baseline manifest already carried the record) — NEVER from the
+#     ceremony alone and NEVER from file presence: a target that already
+#     had the path (install_one EXISTS-skip) stays OUTSIDE framework
+#     ownership, else the baseline hashes an ADOPTER file as
+#     framework-owned, the update-checker trusts a stale value, and
+#     uninstall.sh may delete it. Unset/other values => NOT enumerated:
+#     the deliberate fail direction is UNDER-claiming ownership.
+#   * The root VERSION file is deliberately ABSENT from this enumeration:
+#     install_one is skip-if-exists (an adopter with its own VERSION never
+#     received the framework's), and upgrade.sh never touches it — see
+#     ADR-155-AMEND-1 (the S238/ADR-155 "verified worst case" class, C.5).
 #
 # This file is CANONICAL (added to _CANONICAL_GUARDS in check_canonical_edit.py).
 #
@@ -93,8 +112,34 @@ _framework_path_excluded() {
 # what is currently present).
 _framework_target_entries() {
   {
-    # Root governance pointer (the verified S238 driver target — outside .claude/).
-    printf '%s\n' "PROTOCOL.md"
+    # Root governance pointer (the verified S238 driver target — outside
+    # .claude/). PLAN-166 F3 (ADR-155-AMEND-1): CONDITIONAL on the recorded
+    # delivery. A `--ceremony user` install SKIPS install_protocol_pointer
+    # (install.sh WS4-guard-proto), and a maintainer target that ALREADY had
+    # its own root PROTOCOL.md was never written by the framework —
+    # enumerating it unconditionally records the ADOPTER's file as
+    # framework-owned (r13/r17).
+    if [ "${FMS_DELIVERED_PROTOCOL:-0}" = "1" ]; then
+      printf '%s\n' "PROTOCOL.md"
+    fi
+
+    # SPEC/v1 published contract (PLAN-166 F3): an upgrade surface as of
+    # v1.3.0 — same delivery-record condition (never ceremony alone, never
+    # file presence; r7/r17).
+    if [ "${FMS_DELIVERED_SPEC:-0}" = "1" ]; then
+      printf '%s\n' "SPEC/v1"
+    fi
+
+    # Framework version marker (PLAN-166 F3): a NORMAL tracked-file entry —
+    # present in the source tree, so the FMS_HASH_ROOT baseline rewrite
+    # (below) preserves it with no generated-file special-case — but
+    # ownership still derives from the registered delivery: a target whose
+    # marker pre-existed (install_one EXISTS-skip) stays adopter-owned and
+    # every marker-first reader keyed off this same record falls back to
+    # VERSION (r20).
+    if [ "${FMS_DELIVERED_MARKER:-0}" = "1" ]; then
+      printf '%s\n' ".claude/.framework-version"
+    fi
 
     # Always-installed team rosters + universal catalogs.
     printf '%s\n' ".claude/team.md"
@@ -183,6 +228,95 @@ _framework_manifest_files() {
 # Grammar:
 #   <64hex>  <relpath>          — content hash
 #   LINK  <relpath>  <target>   — link-mode symlink (content == source)
+
+# Does FMS_HASH_ROOT apply to this relpath? UNSET FMS_HASH_ROOT_PATHS means
+# ALL of them — the upgrade posture, where every enumerated file must record
+# what the framework SHIPS. install.sh needs the opposite default for most of
+# the tree: it RENDERS templates (`.claude/team.md`, skills, `{{X}}`
+# placeholders under --project et al), so those legitimately differ from
+# source and their baseline must be the rendered TARGET. A global
+# FMS_HASH_ROOT on an install rerun rewrote every rendered file's hash to the
+# unrendered source, which doctor.sh reads as widespread adopter drift and
+# later upgrades read as customized => the files stop being refreshed (codex
+# W1 round 8, P1). Scoping the override to the ownership-continuity paths
+# keeps the round-5 fix (an EDITED delivered SPEC must not be re-baselined as
+# framework-owned, or uninstall would delete the adopter's fork) without
+# touching the rendered tree. Prefix match: an entry covers the path itself
+# and everything under it.
+_wbm_hash_root_applies() {
+  [ -n "${FMS_HASH_ROOT_PATHS:-}" ] || return 0
+  _hra_rel="$1"
+  _hra_oldIFS="$IFS"
+  IFS='
+'
+  for _hra_p in $FMS_HASH_ROOT_PATHS; do
+    [ -n "$_hra_p" ] || continue
+    case "$_hra_rel" in
+      "$_hra_p"|"$_hra_p"/*)
+        IFS="$_hra_oldIFS"
+        return 0
+        ;;
+    esac
+  done
+  IFS="$_hra_oldIFS"
+  return 1
+}
+
+# May this relpath be serialized as a LINK record? UNSET FMS_LINK_PATHS means
+# ANY live symlink may — correct on the INSTALL path, where the installer
+# itself created every symlink it is about to record. On the UPGRADE rewrite
+# that default is too wide (codex W1 round 10, P2): FMS_MODE=link is inferred
+# from the presence of ANY prior LINK record, and every live symlink then
+# serializes as a delivery record — including an adopter's OWN symlink
+# preserved inside an enumerated directory like `.claude/hooks/`, converting
+# an unowned path into framework-managed content that doctor.sh polices.
+# upgrade.sh passes the exact set of pre-upgrade LINK relpaths instead.
+_wbm_link_allowed() {
+  [ -n "${FMS_LINK_PATHS:-}" ] || return 0
+  _wla_rel="$1"
+  _wla_oldIFS="$IFS"
+  IFS='
+'
+  for _wla_p in $FMS_LINK_PATHS; do
+    [ -n "$_wla_p" ] || continue
+    if [ "$_wla_rel" = "$_wla_p" ]; then
+      IFS="$_wla_oldIFS"
+      return 0
+    fi
+  done
+  IFS="$_wla_oldIFS"
+  return 1
+}
+
+# --- PLAN-167 W2.3: the DECISION reaches the generator ----------------------
+# _ownership_verdict chooses a hash_source per conditional surface; the writer
+# obeys it instead of falling back to a default. Across all 62 rows of the
+# table the default (HASH_TARGET) is never the correct answer, and it is
+# exactly what let three P1 defects re-baseline adopter content as
+# framework-owned (docs §3.4).
+_wbm_declared_hash_source() {
+  case "$1" in
+    SPEC/v1|SPEC/v1/*)          printf '%s' "${FMS_HASH_SOURCE_SPEC:-}" ;;
+    PROTOCOL.md)                printf '%s' "${FMS_HASH_SOURCE_PROTOCOL:-}" ;;
+    .claude/.framework-version) printf '%s' "${FMS_HASH_SOURCE_MARKER:-}" ;;
+    *)                          printf '' ;;
+  esac
+}
+
+_wbm_is_conditional() {
+  case "$1" in
+    SPEC/v1|SPEC/v1/*|PROTOCOL.md|.claude/.framework-version) return 0 ;;
+  esac
+  return 1
+}
+
+# The digest the PRE-run manifest recorded. Empty when unavailable, which the
+# fail-closed branch turns into "do not record" rather than a guess.
+_wbm_prior_digest() {
+  [ -n "${FMS_PRIOR_MANIFEST:-}" ] && [ -f "$FMS_PRIOR_MANIFEST" ] || { printf ''; return 0; }
+  grep -E "^[0-9a-f]{64}  $1\$" "$FMS_PRIOR_MANIFEST" 2>/dev/null | head -1 | cut -d' ' -f1 || printf ''
+}
+
 _write_baseline_manifest() {
   _wbm_manifest="$1"
   if ! command -v _framework_manifest_files >/dev/null 2>&1 \
@@ -215,7 +349,8 @@ _write_baseline_manifest() {
     case "$_wbm_rel" in
       *[$'\n\r\t']*) continue ;;
     esac
-    if [ "${FMS_MODE:-copy}" = "link" ] && [ -L "$_wbm_abs" ]; then
+    if [ "${FMS_MODE:-copy}" = "link" ] && [ -L "$_wbm_abs" ] \
+       && _wbm_link_allowed "$_wbm_rel"; then
       _wbm_target="$( readlink "$_wbm_abs" 2>/dev/null || true )"
       [ -n "$_wbm_target" ] || continue
       case "$_wbm_target" in
@@ -235,6 +370,35 @@ _write_baseline_manifest() {
         else
           _wbm_digest="$( _hash_file "$_wbm_abs" 2>/dev/null || true )"
         fi
+      elif _wbm_is_conditional "$_wbm_rel"; then
+        _wbm_decl="$( _wbm_declared_hash_source "$_wbm_rel" )"
+        case "$_wbm_decl" in
+          HASH_SOURCE)
+            # FMS_SOURCE_ROOT, never FMS_HASH_ROOT: the global override is an
+            # upgrade-only mechanism, and borrowing it here is what dragged
+            # install into the r8-F1 rendered-tree regression.
+            if [ -n "${FMS_SOURCE_ROOT:-}" ] && [ -f "$FMS_SOURCE_ROOT/$_wbm_rel" ]; then
+              _wbm_digest="$( _hash_file "$FMS_SOURCE_ROOT/$_wbm_rel" 2>/dev/null || true )"
+            else
+              continue   # the framework no longer ships it: record nothing
+            fi
+            ;;
+          HASH_PRIOR_RECORD)   _wbm_digest="$( _wbm_prior_digest "$_wbm_rel" )" ;;
+          HASH_CANONICAL_POINTER) _wbm_digest="${FMS_PROTOCOL_HASH:-}" ;;
+          HASH_TARGET)         _wbm_digest="$( _hash_file "$_wbm_abs" 2>/dev/null || true )" ;;
+          HASH_NONE)           continue ;;
+          *)
+            # FAIL-CLOSED, scoped to the three conditional surfaces (Owner
+            # ratified 2026-08-07). Under-claiming is recoverable; over-claiming
+            # is the delete-the-adopter's-file class.
+            echo "    NOTE: $_wbm_rel delivered but declared no hash_source —" >&2
+            echo "          NOT recorded (fail-closed; ownership under-claimed)" >&2
+            continue
+            ;;
+        esac
+        case "$_wbm_digest" in
+          "" ) continue ;;
+        esac
       else
         # Hash the FRAMEWORK version. When FMS_HASH_ROOT is set (upgrade) and the
         # path is ABSENT there, the framework no longer ships it — OMIT it from
@@ -242,7 +406,7 @@ _write_baseline_manifest() {
         # mark it FRAMEWORK-CHANGED if the framework later reintroduces the
         # path). Codex R2 P1.
         _wbm_hash_path="$_wbm_abs"
-        if [ -n "${FMS_HASH_ROOT:-}" ]; then
+        if [ -n "${FMS_HASH_ROOT:-}" ] && _wbm_hash_root_applies "$_wbm_rel"; then
           if [ -f "$_wbm_hash_root/$_wbm_rel" ]; then
             _wbm_hash_path="$_wbm_hash_root/$_wbm_rel"
           else
@@ -267,4 +431,167 @@ _write_baseline_manifest() {
     echo "    NOTE: baseline manifest atomic mv failed — advisory only" >&2
   fi
   return 0
+}
+
+# =============================================================================
+# PLAN-167 — _ownership_verdict: THE ownership decision.
+#
+# install.sh and upgrade.sh stop deciding and start executing. Every defect in
+# the 35-finding S296 review series was a cell of this space whose answer was
+# decided branch-locally, so two branches could disagree about the same
+# question and nothing detected it.
+#
+#   $1 surface        spec | protocol | marker
+#   $2 prior_record   none | hash | link_match | link_retargeted
+#   $3 live_type      absent | dir | dir_empty | regular | symlink | special
+#                     | ancestor_symlink
+#   $4 live_content   pristine | legacy_pristine | legacy_pristine_partial
+#                     | edited | -
+#   $5 source_has     yes | no
+#   $6 mode           copy | link
+#   $7 ceremony       user | maintainer
+#   $8 operation      install_fresh | install_rerun | upgrade
+#   $9 skip_requested none | self | descendant
+#
+#   stdout: "<VERDICT> <HASH_SOURCE>", rc 0
+#   rc 1, no output: a combination the legality rules forbid.
+#
+# PURE: no filesystem, no globals, no environment. Callers observe the nine
+# dimensions and pass them in. That purity is what lets the same table drive a
+# millisecond unit oracle as well as the ~25-minute end-to-end suite; S296 had
+# only the slow instrument, at one cell per ~40-minute round.
+#
+# ABORT_SURFACE is deliberately NOT produced here (round-1 consensus C2). A
+# failed backup is not a property of these nine dimensions — it is the CALLER
+# failing to carry out a verdict it was handed. And per INV-3 that failure
+# NEVER advances the record: recording a delivery that did not happen is the
+# over-claiming direction ADR-155-AMEND-1 §3 forbids.
+#
+# Contract: docs/ownership-decision-table.md · Truth: scripts/tests/ownership_table.tsv
+# =============================================================================
+_ownership_verdict() {
+  _ov_surface="$1"; _ov_prior="$2";  _ov_ltype="$3"; _ov_lcontent="$4"
+  _ov_shas="$5";    _ov_mode="$6";   _ov_cer="$7";   _ov_op="$8"; _ov_skip="$9"
+
+  # Do not touch the surface; decide the RECORD. Ownership continuity and the
+  # digit it carries are separate decisions, and moving one without the other
+  # produced four distinct defects — so they are resolved together, once.
+  _ov_carry() {
+    case "$_ov_prior" in
+      link_match)      printf 'PRESERVE_OWNED LINK_RECORD';  return 0 ;;
+      link_retargeted) printf 'PRESERVE_UNOWNED HASH_NONE'; return 0 ;;
+      none)            printf 'PRESERVE_UNOWNED HASH_NONE';  return 0 ;;
+    esac
+    # prior_record=hash. HASH_TARGET is never an option: it re-baselines the
+    # bytes now on disk, which is how a later upgrade comes to overwrite an
+    # adopter edit and uninstall comes to delete it.
+    if [ "$_ov_surface" = "protocol" ] \
+       || [ "$_ov_shas" = "no" ] \
+       || [ "$_ov_ltype" = "dir_empty" ]; then
+      printf 'PRESERVE_OWNED HASH_PRIOR_RECORD'   # no source bytes to hash
+    else
+      printf 'PRESERVE_OWNED HASH_SOURCE'
+    fi
+  }
+
+  # The framework must not claim this path. Whether a record existed changes
+  # only which NAME the observation takes (OQ-9 — the evidence that these are
+  # one outcome, not two).
+  # OQ-9 (ratificada pelo Owner 2026-08-07): PRESERVE_UNOWNED é o único nome.
+  # OMIT_RECORD dizia a mesma coisa — sem registro no disco — e diferia apenas
+  # por já existir registro antes, que é a coluna prior_record. Um membro de
+  # enum redundante é onde dois ramos discordam sobre qual deles se aplica.
+  _ov_unowned() { printf 'PRESERVE_UNOWNED HASH_NONE'; }
+
+  # --- Stage A: gates that refuse to act, in priority order ------------------
+
+  # A1. The source cannot deliver this surface.
+  if [ "$_ov_shas" = "no" ]; then
+    case "$_ov_surface" in
+      marker)   printf 'PRESERVE_UNOWNED HASH_NONE'; return 0 ;;  # --pin: readers fall back to VERSION
+      protocol) return 1 ;;                                  # R-03: generated, never absent
+      *)        _ov_carry; return 0 ;;
+    esac
+  fi
+
+  # A2. A user ceremony never receives the root surfaces (WS4).
+  if [ "$_ov_cer" = "user" ] && [ "$_ov_surface" != "marker" ]; then
+    if [ "$_ov_op" = "install_fresh" ]; then printf 'PRESERVE_UNOWNED HASH_NONE'
+    else _ov_carry; fi
+    return 0
+  fi
+
+  # A3. Reachable only by writing THROUGH a symlink, out of the target tree.
+  # Always unowned: the relpath sanitizer already dropped any record whose path
+  # crosses a symlink, so there is no record left to carry (docs §5.8).
+  if [ "$_ov_ltype" = "ancestor_symlink" ]; then _ov_unowned; return 0; fi
+
+  # A4. A leaf symlink is healthy ONLY as the recorded link-mode delivery.
+  # The absence of a LINK row is not a match — it is the absence of evidence.
+  if [ "$_ov_ltype" = "symlink" ]; then
+    if [ "$_ov_prior" = "link_match" ]; then printf 'PRESERVE_OWNED LINK_RECORD'
+    else _ov_unowned; fi
+    return 0
+  fi
+
+  # A5. Anything that exists but is not shaped like this surface is
+  # adopter-owned: never write into it, never through it, never block on it.
+  case "$_ov_surface" in
+    spec)
+      case "$_ov_ltype" in special) _ov_unowned; return 0 ;; esac ;;
+    protocol|marker)
+      case "$_ov_ltype" in dir|dir_empty|special) _ov_unowned; return 0 ;; esac ;;
+  esac
+
+  # A6. An explicit skip is honoured as a UNIT — a partial contract refresh is
+  # incoherent, so a descendant skip preserves the whole tree.
+  if [ "$_ov_skip" != "none" ]; then _ov_carry; return 0; fi
+
+  # --- Stage B: ownership resolution ----------------------------------------
+  _ov_owned=""
+  if [ "$_ov_prior" = "hash" ] || [ "$_ov_prior" = "link_match" ]; then
+    _ov_owned=1
+  elif [ "$_ov_ltype" = "absent" ]; then
+    _ov_owned=1                                   # new delivery
+  elif [ "$_ov_lcontent" = "pristine" ] || [ "$_ov_lcontent" = "legacy_pristine" ]; then
+    _ov_owned=1                                   # current-source takeover / legacy migration
+  fi
+  # legacy_pristine_partial is deliberately NOT owned: every regular file may
+  # match a shipped release, but a tree carrying an entry the fingerprint
+  # cannot inventory has not been inventoried, and a partial inventory must
+  # never certify a wholesale replace (ADR-155-AMEND-1 §4).
+
+  if [ -z "$_ov_owned" ]; then _ov_unowned; return 0; fi
+
+  # --- Stage C: execution ---------------------------------------------------
+  if [ "$_ov_ltype" = "absent" ]; then
+    case "$_ov_surface" in
+      protocol) printf 'DELIVER HASH_CANONICAL_POINTER' ;;
+      *)        printf 'DELIVER HASH_SOURCE' ;;
+    esac
+    return 0
+  fi
+
+  # An install rerun does not re-deliver an existing surface; it decides the
+  # record. Only the upgrade's forced route replaces content.
+  if [ "$_ov_op" != "upgrade" ]; then _ov_carry; return 0; fi
+
+  # The pointer is the ONE surface where an adopter edit is PRESERVED rather
+  # than treated as a fork. SPEC/v1 is deliberately the opposite: it is the
+  # published compliance CONTRACT, so an edit is a fork and the forced route
+  # replaces it (ADR-155-AMEND-1 §4). The root PROTOCOL.md is adopter-editable
+  # prose, and overwriting a customised one is the verified S238 data loss that
+  # ADR-155 decision (iii) exists to close.
+  #
+  # The recorded digest stays CANONICAL either way: recording the customised
+  # bytes would make the NEXT upgrade read H_dst==H_base and clobber them.
+  if [ "$_ov_surface" = "protocol" ] && [ "$_ov_lcontent" = "edited" ]; then
+    printf 'PRESERVE_OWNED HASH_CANONICAL_POINTER'
+    return 0
+  fi
+
+  case "$_ov_surface" in
+    protocol) printf 'REFRESH HASH_CANONICAL_POINTER' ;;
+    *)        printf 'REFRESH HASH_SOURCE' ;;
+  esac
 }

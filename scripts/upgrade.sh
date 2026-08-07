@@ -339,9 +339,13 @@ Usage:
 
 What it does:
   Refreshes the framework-derived content (team.md, skills/, hooks/,
-  scripts/, commands/, pitfalls-catalog.yaml, task-chains.yaml) in an
-  existing adopter install. User-customized files (CLAUDE.md, MEMORY.md,
-  .claude/agent-metrics.md) are NOT touched. NOTE: .claude/settings.json IS
+  scripts/, commands/, pitfalls-catalog.yaml, task-chains.yaml, the
+  SPEC/v1 contract (forced route, skipped on --ceremony user installs)
+  and the .claude/.framework-version marker) in an existing adopter
+  install. User-customized files (CLAUDE.md, MEMORY.md,
+  .claude/agent-metrics.md) are NOT touched, and the root VERSION file
+  is NEVER touched (install-time snapshot — ADR-155-AMEND-1; read
+  .claude/.framework-version for the installed framework version). NOTE: .claude/settings.json IS
   updated in place by the default-on baseline migration (the model/permission
   leaf keys: model, availableModels, fallbackModel, permissions.defaultMode)
   and the idempotent settings-merge (new lifecycle-hook registrations) —
@@ -724,6 +728,49 @@ if [[ "$REPLAY" -eq 1 ]]; then
   fi
 fi
 
+# ===========================================================================
+# PLAN-166 F3 (ADR-155-AMEND-1) — resolve the RECORDED install ceremony with
+# a reader of its OWN, INDEPENDENT of the replay path: --no-replay sets
+# REPLAY=0 and the replay block above (incl. _read_install_state_request) is
+# skipped entirely, so if the ceremony rode the replay, the documented
+# `upgrade.sh <target> --no-replay` would treat a `--ceremony user` install
+# as maintainer and force SPEC/protocol into the adopter's root (r9). This
+# reader ALWAYS runs. Fail-open: state absent/unreadable/invalid (ALL
+# pre-Wave-B installs) => "maintainer" — the pre-existing behavior; the
+# consequence is named in INSTALL.md §Upgrade flow. Same trust class as the
+# replay reader: target-side, UNSIGNED, advisory; the value is validated
+# against the closed enum {maintainer,user} and never eval-ed.
+# ===========================================================================
+_read_install_state_ceremony() {
+  command -v python3 >/dev/null 2>&1 || return 3
+  [ -f "$_INSTALL_STATE_FILE" ] && [ -r "$_INSTALL_STATE_FILE" ] || return 3
+  PYTHONNOUSERSITE=1 python3 -I -c '
+import json, sys
+try:
+    with open(sys.argv[1], "r", encoding="utf-8") as f:
+        d = json.load(f)
+except (OSError, ValueError):
+    sys.exit(3)
+if not isinstance(d, dict) or d.get("schema_version") != 1:
+    sys.exit(3)
+req = d.get("request")
+if not isinstance(req, dict):
+    sys.exit(3)
+cer = req.get("ceremony", "")
+if cer not in ("maintainer", "user"):
+    sys.exit(3)
+sys.stdout.write(cer + "\n")
+' "$_INSTALL_STATE_FILE" 2>/dev/null
+}
+
+CEREMONY_EFFECTIVE="maintainer"
+_CEREMONY_SOURCE="default (no readable install-state — pre-Wave-B fail-open)"
+_cer_line=""
+if _cer_line="$(_read_install_state_ceremony)" && [[ -n "$_cer_line" ]]; then
+  CEREMONY_EFFECTIVE="$_cer_line"
+  _CEREMONY_SOURCE="recorded install request (.claude/.install-state.json)"
+fi
+
 TIMESTAMP="$( date +%Y%m%d-%H%M%S )"
 BAK_DIR="$TARGET/.claude.bak/$TIMESTAMP"
 
@@ -735,6 +782,7 @@ echo "    Target:  $TARGET"
 echo "    Backup:  $BAK_DIR"
 echo "    Profile: $PROFILE"
 echo "    Stack:   $STACK"
+echo "    Ceremony: $CEREMONY_EFFECTIVE — $_CEREMONY_SOURCE"  # PLAN-166 F3
 if [[ "$_REPLAY_SOURCE" == "replay" ]]; then
   echo "    Request: replayed from .claude/.install-state.json (PLAN-153 B2)"
 fi
@@ -794,8 +842,23 @@ _BASELINE_INVALID=""         # newline-list of relpaths seen >1x: AMBIGUOUS prov
 # / 1 (accept). Checks: absolute, `..` segment, control chars, and a symlinked
 # component anywhere along the path under $TARGET (lstat per component, never
 # follow). Duplicate relpaths are rejected by the caller via _BASELINE_DUP_GUARD.
+#
+# $2 = record KIND, mirroring doctor.sh `_relpath_unsafe` (family sweep):
+# "link" tolerates a symlinked LEAF, anything else (default "file") does not.
+# A `LINK  <relpath>  <target>` record describes a --mode link delivery whose
+# leaf IS a symlink by construction, so rejecting it here silently dropped the
+# record from the sanitized manifest: _baseline_has_spec_record and both
+# readlink-vs-recorded-target checks could then NEVER match, and every
+# link-mode upgrade lost framework ownership of SPEC/v1 and the marker, with
+# marker-first readers falling back to the stale root VERSION (codex W1
+# round 6, P2). The leaf is never FOLLOWED here — validation stays at the
+# consumers, which compare `readlink` against the recorded target. Hash
+# records keep the strict leaf check: a managed regular file swapped for a
+# symlink must not retain its record (_hash_file WOULD follow it). Symlinked
+# PARENT components remain a genuine traversal hazard for both kinds.
 _baseline_relpath_unsafe() {
   _bru_rel="$1"
+  _bru_kind="${2:-file}"
   case "$_bru_rel" in
     /*) return 0 ;;                       # absolute
     *..*) return 0 ;;                      # parent traversal (covers ../ and /..)
@@ -804,16 +867,30 @@ _baseline_relpath_unsafe() {
   case "$_bru_rel" in
     ""|*[$'\n\r\t']*) return 0 ;;
   esac
-  # Symlinked-component check: walk each path component under $TARGET; if any
-  # EXISTING component is a symlink, reject (do not follow it).
-  _bru_cur="$TARGET"
+  # Count the significant components first, so the leaf can be identified by
+  # INDEX — reconstructing "$TARGET/$_bru_rel" for a leaf test would differ
+  # from the walk on `./` and trailing-slash forms.
+  _bru_n=0
   _bru_oldIFS="$IFS"
   IFS='/'
   for _bru_comp in $_bru_rel; do
     [ -n "$_bru_comp" ] || continue
     [ "$_bru_comp" = "." ] && continue
+    _bru_n=$(( _bru_n + 1 ))
+  done
+  # Symlinked-component check: walk each path component under $TARGET; if any
+  # EXISTING component is a symlink, reject (do not follow it).
+  _bru_cur="$TARGET"
+  _bru_i=0
+  for _bru_comp in $_bru_rel; do
+    [ -n "$_bru_comp" ] || continue
+    [ "$_bru_comp" = "." ] && continue
+    _bru_i=$(( _bru_i + 1 ))
     _bru_cur="$_bru_cur/$_bru_comp"
     if [ -L "$_bru_cur" ]; then
+      if [ "$_bru_kind" = "link" ] && [ "$_bru_i" -eq "$_bru_n" ]; then
+        continue                          # the LINK record's own leaf
+      fi
       IFS="$_bru_oldIFS"
       return 0
     fi
@@ -871,7 +948,9 @@ _load_baseline_manifest() {
             ;;
           *) continue ;;   # malformed LINK (no target) — drop
         esac
-        if _baseline_relpath_unsafe "$rel"; then continue; fi
+        # KIND=link: the leaf of a LINK record IS a symlink by construction
+        # (codex W1 round 6, P2). Symlinked PARENTS still reject.
+        if _baseline_relpath_unsafe "$rel" link; then continue; fi
         # Duplicate relpath? Ambiguous provenance — invalidate the relpath
         # ENTIRELY (not first-wins): the lookup will refuse it -> fallback.
         case "$_BASELINE_DUP_GUARD" in
@@ -1482,72 +1561,579 @@ To pull updates:
       ;;
   esac
 
-  # PLAN-138 C.7 fix (Codex R2 P0): compute the CANONICAL pointer hash — the
-  # hash of exactly what the framework WOULD write below (heredoc body) — and
-  # export it so the post-upgrade manifest rewrite records THAT as the
-  # PROTOCOL.md baseline, never the current target file. Without this, a
-  # preserved adopter-customized PROTOCOL.md would be re-recorded as its own
-  # baseline and the NEXT upgrade would read H_dst==H_base and clobber it.
-  # Computed on ALL paths (preserve + refresh) so it is set whenever the C.7
-  # rewrite runs. printf reproduces the heredoc byte-for-byte.
+  # The CANONICAL digest: the hash of exactly what the framework WOULD write.
+  # Computed on every path, because the baseline rewrite must record it even
+  # when the pointer is preserved — recording the customised bytes instead
+  # would make the NEXT upgrade read H_dst == H_base and clobber them (C.5).
   _REFRESH_PROTOCOL_CANON_HASH=""
   if command -v _hash_stdin >/dev/null 2>&1; then
     _REFRESH_PROTOCOL_CANON_HASH="$( printf '# Protocol reference\n\n%s\n' "$body" | _hash_stdin 2>/dev/null || true )"
   fi
 
-  if [[ "$DRY_RUN" -eq 1 ]]; then
-    echo "    (dry-run) would REFRESH: PROTOCOL.md pointer"
+  # ---- OBSERVE -------------------------------------------------------------
+  local _lt _pr _lc
+  _lt="$( _ov_obs_live_type "$pointer" )"
+  _pr="$( _ov_obs_prior_record "PROTOCOL.md" )"
+  if [ "$_lt" != "regular" ]; then
+    _lc="-"
+  elif [ -n "$_REFRESH_PROTOCOL_CANON_HASH" ] \
+       && [ "$( _hash_file "$pointer" 2>/dev/null || true )" = "$_REFRESH_PROTOCOL_CANON_HASH" ]; then
+    _lc="pristine"
+  else
+    _lc="edited"
+  fi
+
+  # ---- DECIDE --------------------------------------------------------------
+  local _pair _verdict
+  if ! _pair="$( _ownership_verdict protocol "$_pr" "$_lt" "$_lc" yes copy \
+                   "$CEREMONY_EFFECTIVE" upgrade none )"; then
+    echo "    WARNING: PROTOCOL.md dimensions are not a legal cell — PRESERVED" >&2
     return 0
   fi
+  _verdict="${_pair%% *}"
+  _PROTOCOL_HASH_SOURCE="${_pair##* }"
 
-  _up_record_op "refresh_protocol_pointer" "PROTOCOL.md"
-
-  # PLAN-138 Wave C (ADR-155) C.6 — close the verified S238 driver.
-  #
-  # (a) ALWAYS back up an existing root PROTOCOL.md to $BAK_DIR/PROTOCOL.md
-  #     BEFORE the `cat >` overwrite. The legacy code had NO backup here, so an
-  #     adopter who turned the pointer into a real customized protocol (the
-  #     S238 acme case) lost it irrecoverably. This backup applies EVEN when
-  #     no baseline manifest exists — making the loss recoverable on a first
-  #     upgrade (Codex R1 P0 first-upgrade safety).
-  if [[ -f "$pointer" ]]; then
-    mkdir -p "$BAK_DIR" 2>/dev/null || true
-    cp "$pointer" "$BAK_DIR/PROTOCOL.md" 2>/dev/null || true
-    echo "    BACKED UP: PROTOCOL.md (root) -> $BAK_DIR/PROTOCOL.md"
-  fi
-
-  # (b) When a baseline manifest is loaded, classify the root PROTOCOL.md
-  #     against the recorded install-time pointer hash. The pointer's "source"
-  #     is a generated string (not a file in $SOURCE_DIR), so we compare the
-  #     CURRENT target hash against the recorded BASELINE only:
-  #       H_dst == H_base  -> still the generated pointer -> safe to refresh
-  #       H_dst != H_base  -> adopter customized it -> ADOPTER-CUSTOMIZED:
-  #                           preserve (default/refuse) or overwrite per
-  #                           --on-conflict={theirs|backup}.
-  if [[ -f "$pointer" && -n "$_BASELINE_MANIFEST_FILE" ]] && command -v _hash_file >/dev/null 2>&1; then
-    local _rp_base _rp_dst
-    _rp_base="$( _baseline_lookup "PROTOCOL.md" || true )"
-    _rp_dst="$( _hash_file "$pointer" 2>/dev/null || true )"
-    if [[ -n "$_rp_base" && -n "$_rp_dst" && "$_rp_dst" != "$_rp_base" ]]; then
-      case "$ON_CONFLICT" in
-        theirs|backup)
-          # Original already backed up above; proceed to refresh.
-          echo "    OVERWROTE (root PROTOCOL.md ADOPTER-CUSTOMIZED, --on-conflict=$ON_CONFLICT; original in $BAK_DIR/PROTOCOL.md)" >&2
-          ;;
-        *)  # refuse (default): preserve the customized root PROTOCOL.md.
-          echo "    PRESERVED (root PROTOCOL.md ADOPTER-CUSTOMIZED — pointer NOT refreshed; backup in $BAK_DIR/PROTOCOL.md)" >&2
-          return 0
-          ;;
+  # ---- EXECUTE -------------------------------------------------------------
+  # The guards this surface never had are not new branches: they are what the
+  # decision already says. A destination that is not a regular file is
+  # adopter-owned, so the verdict is unowned and nothing is written — which is
+  # exactly the leaf-symlink / directory / FIFO protection SPEC and the marker
+  # acquired during the S296 rounds and the pointer did not.
+  case "$_verdict" in
+    PRESERVE_UNOWNED|OMIT_RECORD)
+      case "$_lt" in
+        symlink) echo "    SKIP: PROTOCOL.md is a symlink — refusing to write THROUGH it (would mutate a path outside the target)" >&2 ;;
+        dir|dir_empty) echo "    SKIP: PROTOCOL.md is a directory — adopter-owned, refusing to write into it" >&2 ;;
+        special) echo "    SKIP: PROTOCOL.md is an unsupported special file — preserved, surface untouched" >&2 ;;
+        *) echo "    SKIP: PROTOCOL.md pointer (recorded --ceremony user install — a user install never creates root files, WS4)" ;;
       esac
-    fi
-  fi
+      return 0
+      ;;
 
-  cat > "$pointer" <<EOF
+    PRESERVE_OWNED)
+      _PROTOCOL_DELIVERED=1
+      if [ "$_lc" = "edited" ]; then
+        # ADR-155 decision (iii): the verified S238 case. An adopter-customised
+        # pointer is CONTENT, not a fork — it is preserved, and the record keeps
+        # the canonical digest so the next upgrade does not read it as pristine.
+        if [ "$DRY_RUN" -eq 0 ] && [ -f "$pointer" ]; then
+          mkdir -p "$BAK_DIR" 2>/dev/null || true
+          cp "$pointer" "$BAK_DIR/PROTOCOL.md" 2>/dev/null || true
+        fi
+        echo "    PRESERVED (root PROTOCOL.md is adopter-customised — pointer NOT refreshed; backup in $BAK_DIR/PROTOCOL.md)" >&2
+      else
+        echo "    SKIP: PROTOCOL.md pointer (ownership carried forward)"
+      fi
+      return 0
+      ;;
+
+    DELIVER|REFRESH)
+      if [ "$DRY_RUN" -eq 1 ]; then
+        echo "    (dry-run) would REFRESH: PROTOCOL.md pointer"
+        return 0
+      fi
+      _up_record_op "refresh_protocol_pointer" "PROTOCOL.md"
+      # Backup-always before the overwrite, even with no baseline manifest —
+      # this is what made the S238 loss recoverable on a FIRST upgrade.
+      if [ -f "$pointer" ]; then
+        mkdir -p "$BAK_DIR" 2>/dev/null || true
+        cp "$pointer" "$BAK_DIR/PROTOCOL.md" 2>/dev/null || true
+        echo "    BACKED UP: PROTOCOL.md (root) -> $BAK_DIR/PROTOCOL.md"
+      fi
+      cat > "$pointer" <<EOF
 # Protocol reference
 
 $body
 EOF
-  echo "    REFRESHED: PROTOCOL.md pointer"
+      _PROTOCOL_DELIVERED=1
+      echo "    REFRESHED: PROTOCOL.md pointer"
+      return 0
+      ;;
+  esac
+}
+
+# ===========================================================================
+# PLAN-166 F3 (ADR-155-AMEND-1) — delivery-record lookups + SPEC/v1 FORCED
+# refresh + framework version marker refresh.
+# ---------------------------------------------------------------------------
+# Ownership of the three conditional surfaces (PROTOCOL.md, SPEC/v1,
+# .claude/.framework-version) derives from the REGISTERED DELIVERY — here,
+# the PRE-upgrade baseline manifest records (the same record install.sh
+# writes and doctor.sh reads) — never from the ceremony alone and never from
+# file presence (r7/r13/r17/r19/r20).
+# ===========================================================================
+_baseline_has_spec_record() {
+  [[ -n "$_BASELINE_MANIFEST_FILE" && -f "$_BASELINE_MANIFEST_FILE" ]] || return 1
+  # `(/|  |$)` and not a bare trailing slash: a --mode link install records
+  # the WHOLE tree as one directory symlink — `LINK  SPEC/v1  <target>`, no
+  # trailing slash — which a `SPEC/v1/` fragment can never match (the same
+  # `(  |$)` treatment the marker/PROTOCOL readers already have; family
+  # swept with doctor.sh _dr_delivered, re-pass closure).
+  grep -Eq '^([0-9a-f]{64}|LINK)  SPEC/v1(/|  |$)' "$_BASELINE_MANIFEST_FILE" 2>/dev/null
+}
+_baseline_has_marker_record() {
+  [[ -n "$_BASELINE_MANIFEST_FILE" && -f "$_BASELINE_MANIFEST_FILE" ]] || return 1
+  grep -Eq '^([0-9a-f]{64}|LINK)  \.claude/\.framework-version(  |$)' "$_BASELINE_MANIFEST_FILE" 2>/dev/null
+}
+# Third sibling of the family (codex W1 round 7, P2): the `--ceremony user`
+# skip needs the same ownership-continuity question the SPEC/marker skips
+# already ask. `_baseline_lookup` is not a substitute — it resolves HASH
+# records only, and a --mode link PROTOCOL.md is a LINK record.
+_baseline_has_protocol_record() {
+  [[ -n "$_BASELINE_MANIFEST_FILE" && -f "$_BASELINE_MANIFEST_FILE" ]] || return 1
+  grep -Eq '^([0-9a-f]{64}|LINK)  PROTOCOL\.md(  |$)' "$_BASELINE_MANIFEST_FILE" 2>/dev/null
+}
+
+# PRISTINE fingerprints of every SPEC/v1 tree the framework shipped at
+# v1.2.0 and earlier (r20 LEGACY MIGRATION: v1.2-and-earlier installs never
+# enumerated SPEC/v1, so no historical delivery record can distinguish a
+# framework-installed SPEC from an adopter's own — the ambiguity resolves by
+# CONTENT). Derivation (deterministic — pinned tag content; run in the
+# framework repo, reproduces _spec_tree_fingerprint byte-for-byte):
+#   for t in v1.0.0 v1.0.1 v1.0.1-rc.1 v1.1.0 v1.1.0-rc.1 \
+#            v1.2.0 v1.2.0-rc.1 v1.2.0-rc.2 v1.2.0-rc.3; do
+#     git ls-tree -r --name-only "$t" -- SPEC/v1 | LC_ALL=C sort \
+#     | while IFS= read -r f; do
+#         printf '%s  %s\n' \
+#           "$(git show "$t:$f" | shasum -a 256 | awk '{print $1}')" "$f"
+#       done | shasum -a 256 | awk '{print $1}'
+#   done
+# Three distinct trees across the nine shipped tags:
+#   a4a4... = v1.0.0 / v1.0.1 / v1.0.1-rc.1
+#   94aa... = v1.1.0 / v1.1.0-rc.1
+#   469a... = v1.2.0 / v1.2.0-rc.1 / v1.2.0-rc.2 / v1.2.0-rc.3
+_SPEC_PRISTINE_FINGERPRINTS="a4a4504a224d72a975a853dd71a75d8e678fef034a70deb49df291dbb712c161 94aa62f781285ce4897ad1220edf15e97b4e9d7b629f9f7ba3389da5d45f22b1 469a49238867be181490214305b43bc7299f2bae3ef0b282a5452f6caf327f0b"
+
+# _spec_tree_fingerprint <root> — sha256 over the LC_ALL=C-sorted
+# "<sha256(file)>  <relpath>" lines of every regular file under
+# <root>/SPEC/v1 (the derivation comment above reproduces this from a tag).
+# Fails (rc 1, no output) on a missing tree/hasher or any unhashable file —
+# a PARTIAL fingerprint must never be compared against a pristine one.
+_spec_tree_fingerprint() {
+  local _sf_root="$1"
+  command -v _hash_file >/dev/null 2>&1 || return 1
+  command -v _hash_stdin >/dev/null 2>&1 || return 1
+  [[ -d "$_sf_root/SPEC/v1" ]] || return 1
+  # COMPLETENESS gate (codex W1-ceremony round, P2): the fingerprint hashes
+  # regular files only, so an adopter-ADDED symlink/fifo/etc would be
+  # invisible — the partial fingerprint could still byte-match a pristine
+  # release and the forced refresh would REPLACE an adopter-modified tree
+  # (the S238 class). Any non-regular, non-directory entry => no
+  # fingerprint (rc 1) => the caller's safe path (ADOPTER-FORK preserve).
+  # A find traversal error (unreadable subdir) is the same: partial
+  # inventory must never be compared against a pristine fingerprint.
+  local _sf_odd
+  _sf_odd="$( ( cd "$_sf_root" && find SPEC/v1 -mindepth 1 ! -type f ! -type d -print 2>&1 ) )" || return 1
+  [[ -z "$_sf_odd" ]] || return 1
+  local _sf_lines
+  _sf_lines="$(
+    ( cd "$_sf_root" && find SPEC/v1 -type f -print 2>/dev/null ) \
+      | LC_ALL=C sort | while IFS= read -r _sf_rel; do
+          [[ -n "$_sf_rel" ]] || continue
+          _sf_h="$( _hash_file "$_sf_root/$_sf_rel" 2>/dev/null || true )"
+          if [[ -z "$_sf_h" ]]; then
+            printf 'HASH-FAILED\n'
+            break
+          fi
+          printf '%s  %s\n' "$_sf_h" "$_sf_rel"
+        done
+  )"
+  case "$_sf_lines" in
+    ""|*HASH-FAILED*) return 1 ;;
+  esac
+  printf '%s\n' "$_sf_lines" | _hash_stdin
+}
+
+
+# =============================================================================
+# PLAN-167 W2.2 — OBSERVERS.
+#
+# The callers no longer decide. They observe the nine dimensions, hand them to
+# _ownership_verdict, and execute what comes back. Everything below answers a
+# question about the world; nothing below chooses an outcome.
+#
+# That separation is the entire point. In S296 the answer to "is this owned?"
+# was recomputed inline at every branch, so two branches could answer the same
+# question differently and nothing detected the contradiction.
+# =============================================================================
+
+# _ov_obs_live_type <abs path> — lstat vocabulary, never following.
+_ov_obs_live_type() {
+  _olt_p="$1"
+  # Classify NON-REGULAR entries before anything opens the path. `ls -A` on a
+  # FIFO blocks forever waiting for a writer, so testing -d before -p turned
+  # the observer itself into the hang it was written to detect.
+  if   [ -L "$_olt_p" ]; then printf 'symlink'
+  elif [ ! -e "$_olt_p" ]; then printf 'absent'
+  elif [ -p "$_olt_p" ] || [ -S "$_olt_p" ]; then printf 'special'
+  elif [ -d "$_olt_p" ]; then
+    if [ -z "$( ls -A "$_olt_p" 2>/dev/null )" ]; then printf 'dir_empty'; else printf 'dir'; fi
+  elif [ -f "$_olt_p" ]; then printf 'regular'
+  else printf 'special'; fi
+}
+
+# _ov_obs_prior_record <relpath> — what the PRE-run sanitized baseline says.
+# link_match only when the recorded target still equals the live readlink; a
+# LINK row whose target moved is link_retargeted, and so is a LINK row whose
+# live path is no longer a symlink at all (readlink yields empty, which never
+# equals a recorded non-empty target).
+_ov_obs_prior_record() {
+  _opr_rel="$1"
+  [ -n "${_BASELINE_MANIFEST_FILE:-}" ] && [ -f "$_BASELINE_MANIFEST_FILE" ] || { printf 'none'; return 0; }
+  _opr_link="$( grep -E "^LINK  ${_opr_rel}  " "$_BASELINE_MANIFEST_FILE" 2>/dev/null | head -1 || true )"
+  if [ -n "$_opr_link" ]; then
+    # Fixed double-space delimiter, never whitespace field-splitting: a
+    # checkout path containing a space made awk '{print $3}' read an unchanged
+    # delivery as redirected.
+    _opr_rec="${_opr_link#LINK  ${_opr_rel}  }"
+    _opr_live="$( readlink "$TARGET/$_opr_rel" 2>/dev/null || true )"
+    if [ -n "$_opr_rec" ] && [ "$_opr_rec" = "$_opr_live" ]; then printf 'link_match'
+    else printf 'link_retargeted'; fi
+    return 0
+  fi
+  if grep -Eq "^[0-9a-f]{64}  ${_opr_rel}(/|$)" "$_BASELINE_MANIFEST_FILE" 2>/dev/null; then
+    printf 'hash'; return 0
+  fi
+  printf 'none'
+}
+
+# _ov_obs_spec_content — pristine | legacy_pristine | legacy_pristine_partial
+#                        | edited | -
+# A tree the fingerprint cannot fully inventory is NOT "pristine with a note":
+# it is its own observable, because a partial inventory must never certify a
+# wholesale replace (ADR-155-AMEND-1 §4).
+_ov_obs_spec_content() {
+  [ -e "$TARGET/SPEC/v1" ] || { printf '-'; return 0; }
+  _osc_fp="$( _spec_tree_fingerprint "$TARGET" 2>/dev/null || true )"
+  if [ -z "$_osc_fp" ]; then
+    # No fingerprint. Distinguish "cannot inventory" (a non-regular entry is
+    # present) from "not comparable at all".
+    _osc_odd="$( ( cd "$TARGET" && find SPEC/v1 -mindepth 1 ! -type f ! -type d -print 2>/dev/null ) )"
+    if [ -n "$_osc_odd" ]; then printf 'legacy_pristine_partial'; else printf 'edited'; fi
+    return 0
+  fi
+  _osc_src="$( _spec_tree_fingerprint "$SOURCE_DIR" 2>/dev/null || true )"
+  if [ -n "$_osc_src" ] && [ "$_osc_fp" = "$_osc_src" ]; then printf 'pristine'; return 0; fi
+  for _osc_pf in $_SPEC_PRISTINE_FINGERPRINTS; do
+    if [ "$_osc_fp" = "$_osc_pf" ]; then printf 'legacy_pristine'; return 0; fi
+  done
+  printf 'edited'
+}
+
+# _ov_obs_skip <relpath> — none | self | descendant.
+# The descendant scan walks the UNION of source and target and includes every
+# removable entry, not just regular files: the forced route find-deletes them
+# all, so a target-only symlink must be visible to skip detection too.
+_ov_obs_skip() {
+  _osk_rel="$1"
+  if _path_is_skipped "$_osk_rel"; then printf 'self'; return 0; fi
+  if [ "$_osk_rel" = "SPEC/v1" ]; then
+    _osk_hit=""
+    while IFS= read -r _osk_f; do
+      [ -n "$_osk_f" ] || continue
+      if _path_is_skipped "$_osk_f"; then _osk_hit=1; break; fi
+    done <<EOF
+$( { ( cd "$SOURCE_DIR" && find SPEC/v1 ! -type d -print 2>/dev/null );
+     [ -d "$TARGET/SPEC/v1" ] && ( cd "$TARGET" && find SPEC/v1 ! -type d -print 2>/dev/null ); } | LC_ALL=C sort -u )
+EOF
+    [ -n "$_osk_hit" ] && { printf 'descendant'; return 0; }
+  fi
+  printf 'none'
+}
+
+# _ov_obs_mode — the delivery mode this run carries. Evidence order: a prior
+# LINK record (authoritative), else a symlink probe on the owned roots.
+_ov_obs_mode() {
+  if [ -n "${_BASELINE_MANIFEST_FILE:-}" ] && [ -f "$_BASELINE_MANIFEST_FILE" ] \
+     && grep -Eq '^LINK  ' "$_BASELINE_MANIFEST_FILE" 2>/dev/null; then
+    printf 'link'; return 0
+  fi
+  if [ -L "$TARGET/SPEC/v1" ] || [ -L "$TARGET/.claude/.framework-version" ]; then
+    printf 'link'; return 0
+  fi
+  printf 'copy'
+}
+
+# _refresh_spec_contract — SPEC/v1 takes a FORCED route, NOT the generic
+# backup_and_replace: for a directory target with a baseline, the classified
+# walk PRESERVES adopter edits — so from the 2nd upgrade on, an edited SPEC
+# would classify ADOPTER-CUSTOMIZED and the stale-contract class would
+# return (r6). SPEC/v1 is the published compliance CONTRACT: an adopter edit
+# is a FORK of the contract, not a customization (OQ-3) => backup to
+# $BAK_DIR/SPEC/v1 + replace.
+#   * ceremony: a recorded `--ceremony user` install NEVER receives SPEC/v1
+#     (mirrors install.sh WS4-guard-spec), independent of --no-replay (r9).
+#   * ownership: baseline SPEC records => framework-owned (forced refresh);
+#     no target SPEC => new delivery; target SPEC with NO record => LEGACY
+#     MIGRATION by pristine content (r20): match => framework-owned refresh,
+#     no match => ADOPTER-FORK: preserve + snapshot + named WARNING.
+#   * root VERSION: this function (and the whole upgrade) NEVER touches it —
+#     install_one is skip-if-exists, so on an adopter with its own VERSION
+#     the framework never wrote there; backup_and_replace would TAKE the
+#     file (the S238/ADR-155 "verified worst case", trap C.5). See
+#     ADR-155-AMEND-1 for why the asymmetry is deliberate.
+_SPEC_DELIVERED=0
+_refresh_spec_contract() {
+  local sdir="$SOURCE_DIR/SPEC/v1"
+  local ddir="$TARGET/SPEC/v1"
+  local bdir="$BAK_DIR/SPEC/v1"
+
+  # ---- OBSERVE -------------------------------------------------------------
+  # Nothing here chooses an outcome. Each line answers one question about the
+  # world, and the answers go to _ownership_verdict as the nine dimensions.
+  local _lt _pr _lc _sh _md _sk
+  if _lg_ancestor_is_symlink "$TARGET" "SPEC/v1"; then
+    _lt="ancestor_symlink"           # reachable only by writing THROUGH a symlink
+  else
+    _lt="$( _ov_obs_live_type "$ddir" )"
+  fi
+  _pr="$( _ov_obs_prior_record "SPEC/v1" )"
+  _lc="$( _ov_obs_spec_content )"
+  _sh=no; [ -d "$sdir" ] && _sh=yes
+  _md="$( _ov_obs_mode )"
+  _sk="$( _ov_obs_skip "SPEC/v1" )"
+
+  # ---- DECIDE --------------------------------------------------------------
+  local _pair _verdict _hash
+  if ! _pair="$( _ownership_verdict spec "$_pr" "$_lt" "$_lc" "$_sh" "$_md" \
+                   "$CEREMONY_EFFECTIVE" upgrade "$_sk" )"; then
+    # The decision function refuses combinations its legality rules forbid.
+    # Fail toward preserve — under-claiming is recoverable, over-claiming is
+    # the delete-the-adopter's-file class (ADR-155-AMEND-1 §3).
+    echo "    WARNING: SPEC/v1 dimensions are not a legal cell" >&2
+    echo "             ($_pr/$_lt/$_lc/$_sh/$_md/$CEREMONY_EFFECTIVE/$_sk) —" >&2
+    echo "             PRESERVED without ownership. Please report this combination." >&2
+    return 0
+  fi
+  _verdict="${_pair%% *}"; _hash="${_pair##* }"
+  _SPEC_HASH_SOURCE="$_hash"   # consumed by the baseline rewrite
+
+  # ---- EXECUTE -------------------------------------------------------------
+  case "$_verdict" in
+    PRESERVE_OWNED)
+      _SPEC_DELIVERED=1
+      case "$_lt/$_sk/$_sh" in
+        ancestor_symlink/*/*) echo "    SKIP: SPEC/v1 has a symlinked ancestor (refusing to write through it — F11a)" ;;
+        symlink/*/*)          echo "    SKIP: SPEC/v1 is the recorded --mode link delivery (target unchanged)" ;;
+        */self/*)             echo "    SKIPPED (--skip): SPEC/v1" ;;
+        */descendant/*)       echo "    SKIPPED (--skip matches a descendant): SPEC/v1 refreshes as ONE contract unit — preserving the whole tree" ;;
+        */*/no)               echo "    SKIP: SPEC/v1 absent in source (ownership carried forward)" ;;
+        *)                    echo "    SKIP: SPEC/v1 (recorded --ceremony user install — root surfaces are out of scope, WS4)" ;;
+      esac
+      return 0
+      ;;
+
+    PRESERVE_UNOWNED|OMIT_RECORD)
+      # An adopter-owned surface. The ONLY case that earns a snapshot plus
+      # recovery guidance is the true ADOPTER-FORK: content the framework
+      # cannot claim, with no gate having refused first.
+      if [ "$_lt" = "dir" ] || [ "$_lt" = "dir_empty" ]; then
+        if [ "$DRY_RUN" -eq 1 ]; then
+          echo "    (dry-run) would PRESERVE (SPEC/v1 ADOPTER-FORK): SPEC/v1"
+          return 0
+        fi
+        local _snap_ok=0
+        if mkdir -p "$( dirname "$bdir" )" 2>/dev/null && cp -R "$ddir" "$bdir" 2>/dev/null; then
+          _snap_ok=1
+        fi
+        echo "    WARNING: SPEC/v1 is not framework-owned (no delivery record, and it" >&2
+        echo "             matches neither this checkout nor any pristine shipped SPEC)" >&2
+        if [ "$_snap_ok" -eq 1 ]; then
+          echo "             — PRESERVED in place (snapshot in $BAK_DIR/SPEC/v1)." >&2
+          echo "             To hand it back to the framework: remove the target SPEC/v1," >&2
+          echo "             copy this checkout's tree in, and re-run — a byte-identical" >&2
+          echo "             tree is taken over and recorded." >&2
+        else
+          # Recovery guidance is WITHHELD without a snapshot: following it
+          # would destroy the only copy of the fork.
+          echo "             — PRESERVED in place, but the forensic snapshot COULD NOT be" >&2
+          echo "             created. Back SPEC/v1 up yourself before any manual takeover." >&2
+        fi
+        _up_record_op "preserve_spec_v1_adopter_fork" "SPEC/v1"
+      else
+        echo "    SKIP: SPEC/v1 is $_lt — adopter-owned, preserved without ownership" >&2
+      fi
+      return 0
+      ;;
+
+    DELIVER|REFRESH)
+      if [ "$DRY_RUN" -eq 1 ]; then
+        if [ "$_verdict" = "REFRESH" ]; then
+          echo "    (dry-run) would FORCE-REFRESH (backup to $BAK_DIR/SPEC/v1): SPEC/v1"
+        else
+          echo "    (dry-run) would ADD: SPEC/v1"
+        fi
+        return 0
+      fi
+      _up_record_op "refresh_spec_v1" "$_pr/$_lc"
+
+      if [ "$_lt" = "dir" ] || [ "$_lt" = "dir_empty" ]; then
+        mkdir -p "$( dirname "$bdir" )" 2>/dev/null || true
+        # `|| true` is load-bearing: under `set -euo pipefail` a failing cp
+        # KILLS the run before the guard below can refuse the surface, so the
+        # upgrade dies mid-way instead of leaving this surface untouched.
+        if ! { cp -R "$ddir" "$bdir" 2>/dev/null || false; }; then
+          # INV-3: an execution failure NEVER advances the record. The surface
+          # is left exactly as it was, and so is its prior ownership record.
+          echo "    WARNING: could not back up SPEC/v1 — REFUSING to replace it" >&2
+          echo "             (backup-before-replace is the contract; surface untouched)" >&2
+          # INV-3: the REFRESH did not happen, so the record must not advance
+          # to source hashes. Retain the prior digest with the ownership.
+          _up_record_op "preserve_spec_v1_backup_failed" "SPEC/v1"
+          if [ "$_pr" = "hash" ]; then
+            _SPEC_DELIVERED=1
+            _SPEC_HASH_SOURCE="HASH_PRIOR_RECORD"
+          fi
+          return 0
+        fi
+        echo "    BACKED UP: SPEC/v1 -> $BAK_DIR/SPEC/v1"
+        find "$ddir" -mindepth 1 -delete
+        rmdir "$ddir" 2>/dev/null || true
+      elif [ "$_lt" = "regular" ]; then
+        mkdir -p "$( dirname "$bdir" )"
+        if cp "$ddir" "$bdir" 2>/dev/null; then
+          rm -f "$ddir"
+          echo "    BACKED UP: SPEC/v1 (non-directory) -> $BAK_DIR/SPEC/v1"
+        else
+          echo "    WARNING: could not back up non-directory SPEC/v1 — REFUSING to remove it" >&2
+          # INV-3: the REFRESH did not happen, so the record must not advance
+          # to source hashes. Retain the prior digest with the ownership.
+          _up_record_op "preserve_spec_v1_backup_failed" "SPEC/v1"
+          if [ "$_pr" = "hash" ]; then
+            _SPEC_DELIVERED=1
+            _SPEC_HASH_SOURCE="HASH_PRIOR_RECORD"
+          fi
+          return 0
+        fi
+      fi
+
+      mkdir -p "$( dirname "$ddir" )"
+      cp -R "$sdir" "$ddir"
+      _SPEC_DELIVERED=1
+      echo "    REFRESHED (forced — $_pr/$_lc): SPEC/v1"
+      return 0
+      ;;
+  esac
+}
+
+# _refresh_framework_marker — FORCED + VALIDATED write (r20 option (a)):
+# the marker is generated-refresh content — the upgrade rewrites it to the
+# source VERSION every run, backs up a differing pre-existing copy, and
+# read-back-validates the write. A marker the upgrade could not validate is
+# NOT recorded as delivered, so the FMS entry (and every marker-first
+# reader keyed off the SAME record) falls back to VERSION instead of
+# trusting a stale value. Delivered in BOTH ceremonies (inside .claude/).
+_MARKER_DELIVERED=0
+_refresh_framework_marker() {
+  local src="$SOURCE_DIR/.claude/.framework-version"
+  local dst="$TARGET/.claude/.framework-version"
+  local bak="$BAK_DIR/.claude/.framework-version"
+
+  # ---- OBSERVE -------------------------------------------------------------
+  local _lt _pr _lc _sh _md _sk
+  if _lg_ancestor_is_symlink "$TARGET" ".claude/.framework-version"; then
+    _lt="ancestor_symlink"
+  else
+    _lt="$( _ov_obs_live_type "$dst" )"
+  fi
+  _pr="$( _ov_obs_prior_record ".claude/.framework-version" )"
+  _sh=no; [ -f "$src" ] && _sh=yes
+  # Inspect CONTENT only for a regular file. `cmp` on a FIFO blocks waiting for
+  # a writer, hanging the upgrade before the verdict can say PRESERVE_UNOWNED —
+  # the third instance of "a reader opens what lstat already classified"
+  # (codex W3 r4 P1; the OWN-0029 timeout).
+  if [ "$_lt" != "regular" ]; then
+    _lc="-"
+  elif [ "$_sh" = yes ] && cmp -s "$src" "$dst" 2>/dev/null; then
+    _lc="pristine"
+  else
+    _lc="edited"
+  fi
+  _md="$( _ov_obs_mode )"
+  _sk="$( _ov_obs_skip ".claude/.framework-version" )"
+
+  # ---- DECIDE --------------------------------------------------------------
+  local _pair _verdict
+  if ! _pair="$( _ownership_verdict marker "$_pr" "$_lt" "$_lc" "$_sh" "$_md" \
+                   "$CEREMONY_EFFECTIVE" upgrade "$_sk" )"; then
+    echo "    WARNING: .claude/.framework-version dimensions are not a legal cell" >&2
+    echo "             — PRESERVED without ownership. Please report this combination." >&2
+    return 0
+  fi
+  _verdict="${_pair%% *}"
+  _MARKER_HASH_SOURCE="${_pair##* }"
+
+  # ---- EXECUTE -------------------------------------------------------------
+  case "$_verdict" in
+    PRESERVE_OWNED)
+      _MARKER_DELIVERED=1
+      case "$_lt/$_sk" in
+        ancestor_symlink/*) echo "    SKIP: .claude/.framework-version has a symlinked ancestor (refusing to write through it — F11a)" ;;
+        symlink/*)          echo "    SKIP: .claude/.framework-version is the recorded --mode link delivery (target unchanged)" ;;
+        */self)             echo "    SKIPPED (--skip): .claude/.framework-version" ;;
+        *)                  echo "    SKIP: .claude/.framework-version (ownership carried forward)" ;;
+      esac
+      return 0
+      ;;
+
+    OMIT_RECORD|PRESERVE_UNOWNED)
+      if [ "$_sh" = no ]; then
+        # The documented --pin downgrade: this source predates the marker, so a
+        # retained record would keep advertising a newer version over older
+        # content. Readers fall back to VERSION, which the pin DID update.
+        echo "    SKIP: .claude/.framework-version absent in source (pre-v1.3.0 checkout)"
+        if [ "$_pr" != "none" ]; then
+          echo "    NOTE: the prior delivery record is NOT carried forward — version" >&2
+          echo "          readers fall back to VERSION (which reflects the pinned source)" >&2
+        fi
+      elif [ "$_lt" = "symlink" ]; then
+        echo "    WARNING: .claude/.framework-version is a symlink that does NOT match the" >&2
+        echo "             recorded LINK delivery — preserved WITHOUT framework ownership" >&2
+        echo "             (readers fall back to VERSION)" >&2
+      else
+        echo "    SKIP: .claude/.framework-version is $_lt — adopter-owned, refusing to write into/through it"
+      fi
+      return 0
+      ;;
+
+    DELIVER|REFRESH)
+      if [ "$DRY_RUN" -eq 1 ]; then
+        echo "    (dry-run) would REFRESH: .claude/.framework-version ($(tr -d '[:space:]' < "$src" 2>/dev/null || true))"
+        return 0
+      fi
+      if [ "$_verdict" = "REFRESH" ] && [ "$_lc" = "edited" ]; then
+        mkdir -p "$( dirname "$bak" )" 2>/dev/null || true
+        if { cp "$dst" "$bak" 2>/dev/null || false; }; then
+          echo "    BACKED UP: .claude/.framework-version -> $bak"
+        else
+          # INV-3: an execution failure never advances the record.
+          echo "    WARNING: could not back up differing .claude/.framework-version —" >&2
+          echo "             REFUSING to overwrite it (backup-before-replace)" >&2
+          # INV-3, same as the SPEC branch above.
+          _up_record_op "preserve_marker_backup_failed" ".claude/.framework-version"
+          if [ "$_pr" = "hash" ]; then
+            _MARKER_DELIVERED=1
+            _MARKER_HASH_SOURCE="HASH_PRIOR_RECORD"
+          fi
+          return 0
+        fi
+      fi
+      mkdir -p "$( dirname "$dst" )"
+      cp "$src" "$dst"
+      # Read-back validation: a write that cannot be confirmed is NOT recorded
+      # as delivered, so every marker-first reader falls back to VERSION rather
+      # than trusting a value the upgrade could not verify.
+      if cmp -s "$src" "$dst" 2>/dev/null; then
+        _MARKER_DELIVERED=1
+        _up_record_op "refresh_framework_marker" "$(tr -d '[:space:]' < "$src" 2>/dev/null || true)"
+        echo "    REFRESHED: .claude/.framework-version ($(tr -d '[:space:]' < "$dst" 2>/dev/null || true))"
+      else
+        echo "    WARNING: .claude/.framework-version write did not validate — NOT recorded as" >&2
+        echo "             delivered (marker-first readers fall back to VERSION; r20)" >&2
+      fi
+      return 0
+      ;;
+  esac
 }
 
 has_profile() {
@@ -2436,9 +3022,60 @@ _migrate_settings_baseline
 
 # DevOps-P1-4: PROTOCOL.md is framework-derived (pointer), not user data —
 # refresh it so it stays aligned with the current source layout.
+# PLAN-166 F3 (ADR-155-AMEND-1): CEREMONY-GATED — the refresh used to run
+# unconditionally and `cat >`-created a root PROTOCOL.md that a
+# `--ceremony user` install deliberately never has (install.sh
+# WS4-guard-proto forbids root files); the F4 tree-comparison e2e exposes
+# exactly this divergence (r7/r13). The gate reads the ceremony from
+# .claude/.install-state.json via the replay-independent reader above.
+_PROTOCOL_DELIVERED=0
 echo ""
 echo "==> Refreshing PROTOCOL.md pointer"
-_refresh_protocol_pointer
+if [[ "$CEREMONY_EFFECTIVE" == "user" ]]; then
+  echo "    SKIP: PROTOCOL.md pointer (recorded --ceremony user install — a user install never creates root files, WS4; r13)"
+  # Ownership continuity on the analogous skip (codex W1 round 7, P2) — see
+  # the SPEC/v1 ceremony skip: preserving the tree while erasing its record
+  # strands a framework-delivered pointer as unowned.
+  #
+  # But the flag alone is NOT enough (codex W1 round 9, P1): this skip never
+  # runs _refresh_protocol_pointer, so _REFRESH_PROTOCOL_CANON_HASH stays
+  # empty, and _write_baseline_manifest then hashes the LIVE pointer —
+  # re-recording an adopter-CUSTOMIZED PROTOCOL.md as the framework baseline,
+  # which the next upgrade overwrites and uninstall can DELETE. Retaining
+  # ownership must never retain the wrong bytes. Carry the PRIOR canonical
+  # digest; a LINK record needs none (the link branch of the rewrite fires
+  # before the PROTOCOL special case). When neither is available, DROP the
+  # claim — the pointer stays adopter-owned and preserved, which is the
+  # pre-continuity behaviour and loses nothing.
+  if _baseline_has_protocol_record; then
+    _REFRESH_PROTOCOL_CANON_HASH="$( _baseline_lookup "PROTOCOL.md" 2>/dev/null || true )"
+    if [[ -n "$_REFRESH_PROTOCOL_CANON_HASH" ]] \
+       || grep -Eq '^LINK  PROTOCOL\.md(  |$)' "$_BASELINE_MANIFEST_FILE" 2>/dev/null; then
+      _PROTOCOL_DELIVERED=1
+    else
+      echo "    NOTE: PROTOCOL.md delivery record present but its canonical digest is" >&2
+      echo "          unrecoverable (ambiguous record) — ownership NOT claimed; the" >&2
+      echo "          pointer stays adopter-owned and preserved" >&2
+    fi
+  fi
+else
+  # _refresh_protocol_pointer sets _PROTOCOL_DELIVERED itself, from the
+  # VERDICT. Forcing it to 1 here overrode a PRESERVE_UNOWNED decision and
+  # recorded an adopter's own pre-existing PROTOCOL.md as framework-owned —
+  # a caller computing the right answer and then ignoring it (codex W3 r1 P1).
+  _refresh_protocol_pointer
+fi
+
+# PLAN-166 F3 (ADR-155-AMEND-1): SPEC/v1 forced refresh + framework version
+# marker. Both run BEFORE the baseline-manifest rewrite so the delivery
+# flags they set are what the rewritten baseline records.
+echo ""
+echo "==> Refreshing SPEC/v1 contract (PLAN-166 F3 — forced route)"
+_refresh_spec_contract
+
+echo ""
+echo "==> Refreshing framework version marker (.claude/.framework-version)"
+_refresh_framework_marker
 
 # PLAN-161 U3 — mis-install scan/purge. Runs in ALL modes (flag-absent and
 # --dry-run runs emit the would-purge PREVIEW; deletion requires the explicit
@@ -2465,14 +3102,60 @@ if [[ "$DRY_RUN" -eq 0 ]] && command -v _write_baseline_manifest >/dev/null 2>&1
                                        # (C.5 idempotency fix). PROTOCOL.md pointer
                                        # still hashes from FMS_ROOT inside the gen.
   export FMS_PROFILE_PARTS="${PROFILE_PARTS[*]}"
-  export FMS_MODE="copy"   # upgrade.sh always copies (never --mode link)
+  # FMS_MODE mirrors the INSTALL's mode, not the upgrade's copy behavior
+  # (codex W1-ceremony round, P2): on a --mode link target the refresh
+  # branches preserve the symlinks, but a `copy`-mode rewrite would OMIT
+  # the SPEC/v1 directory-LINK record and hash the marker symlink as a
+  # file — doctor.sh then reports a type-change drift on a healthy tree.
+  # Evidence order: prior baseline LINK record (authoritative), else a
+  # symlink probe on the framework-owned roots, else copy.
+  FMS_MODE="copy"
+  if [[ -n "$_BASELINE_MANIFEST_FILE" && -f "$_BASELINE_MANIFEST_FILE" ]] \
+     && grep -Eq '^LINK  ' "$_BASELINE_MANIFEST_FILE" 2>/dev/null; then
+    FMS_MODE="link"
+    # Confine LINK serialization to the paths that ALREADY were LINK records
+    # (codex W1 round 10, P2). Without this, inferring link-mode from the
+    # prior manifest also promoted every OTHER live symlink — e.g. an
+    # adopter's own file under `.claude/hooks/` — into a framework delivery
+    # record. The probe branch below leaves FMS_LINK_PATHS unset (no baseline
+    # to derive from), keeping its pre-existing behaviour.
+    FMS_LINK_PATHS="$( awk '
+      {
+        idx = index($0, "  ");
+        if (idx == 0) next;
+        if (substr($0, 1, idx - 1) != "LINK") next;
+        rest = substr($0, idx + 2);
+        j = index(rest, "  ");
+        print (j == 0 ? rest : substr(rest, 1, j - 1));
+      }' "$_BASELINE_MANIFEST_FILE" 2>/dev/null || true )"
+    export FMS_LINK_PATHS
+    echo "    baseline rewrite: --mode link install detected (LINK records in prior manifest) — preserving LINK serialization for $( printf '%s\n' "$FMS_LINK_PATHS" | grep -c . || true ) recorded path(s)"
+  elif [[ -L "$TARGET/.claude/skills" || -L "$TARGET/SPEC/v1" || -L "$TARGET/.claude/.framework-version" ]]; then
+    FMS_MODE="link"
+    echo "    baseline rewrite: --mode link install detected (symlink probe) — preserving LINK serialization"
+  fi
+  export FMS_MODE
   # Canonical PROTOCOL.md pointer hash (Codex R2 P0): record what the framework
   # WOULD generate, never a preserved adopter customization. Empty if the
   # pointer refresh did not run; the generator then falls back to hashing the
   # target (install semantics).
   export FMS_PROTOCOL_HASH="${_REFRESH_PROTOCOL_CANON_HASH:-}"
+  # PLAN-166 F3 (ADR-155-AMEND-1): conditional ownership from what THIS
+  # upgrade delivered/refreshed (or what the pre-upgrade baseline already
+  # recorded — ownership continuity), never the ceremony alone, never file
+  # presence (r17/r19/r20).
+  # The decision travels with the delivery flag.
+  export FMS_SOURCE_ROOT="$SOURCE_DIR"
+  export FMS_PRIOR_MANIFEST="${_BASELINE_MANIFEST_FILE:-}"
+  export FMS_HASH_SOURCE_SPEC="${_SPEC_HASH_SOURCE:-}"
+  export FMS_HASH_SOURCE_MARKER="${_MARKER_HASH_SOURCE:-}"
+  export FMS_HASH_SOURCE_PROTOCOL="${_PROTOCOL_HASH_SOURCE:-}"
+  export FMS_DELIVERED_SPEC="${_SPEC_DELIVERED:-0}"
+  export FMS_DELIVERED_PROTOCOL="${_PROTOCOL_DELIVERED:-0}"
+  export FMS_DELIVERED_MARKER="${_MARKER_DELIVERED:-0}"
   _write_baseline_manifest "$TARGET/.claude/.install-manifest.sha256"
-  unset FMS_ROOT FMS_HASH_ROOT FMS_PROFILE_PARTS FMS_MODE FMS_PROTOCOL_HASH
+  unset FMS_ROOT FMS_HASH_ROOT FMS_PROFILE_PARTS FMS_MODE FMS_PROTOCOL_HASH FMS_LINK_PATHS
+  unset FMS_DELIVERED_SPEC FMS_DELIVERED_PROTOCOL FMS_DELIVERED_MARKER
 fi
 
 # ===========================================================================
@@ -2505,6 +3188,7 @@ _write_upgrade_state() {
     "replay_source" "$_REPLAY_SOURCE"
     "harness" "$HARNESS"
     "managed_hooks" "$CODEX_MANAGED_HOOKS"
+    "ceremony_effective" "$CEREMONY_EFFECTIVE"
   )
   echo ""
   echo "==> (Re)writing install-state (.claude/.install-state.json — PLAN-153 Wave B)"
@@ -2597,6 +3281,7 @@ state = {
         "on_conflict": vals.get("on_conflict", ""),
         "pin": vals.get("pin", ""),
         "replay_source": vals.get("replay_source", ""),
+        "ceremony_effective": vals.get("ceremony_effective", ""),
     },
     "operations": ops,
     "result": {"upgrade_succeeded": True,

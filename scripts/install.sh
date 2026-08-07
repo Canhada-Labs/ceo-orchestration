@@ -777,6 +777,21 @@ _state_record_op() {
   return 0
 }
 
+# ---------------------------------------------------------------------
+# PLAN-166 F3 (ADR-155-AMEND-1) — DELIVERY RECORD for the conditional
+# framework-ownership surfaces. Each flag flips to 1 ONLY when THIS run
+# actually wrote the path (install_one COPIED/LINKED, or the pointer
+# heredoc ran) — an EXISTS-skip is NOT a delivery (r17): the pre-existing
+# file is the ADOPTER's, and recording it as framework-owned would let the
+# baseline hash it, doctor call it drifted, and uninstall delete it.
+# write_install_manifest exports these as FMS_DELIVERED_* so the shared
+# enumeration (_framework_manifest_set.sh) only records what the framework
+# de facto delivered.
+# ---------------------------------------------------------------------
+_DELIVERED_SPEC=0
+_DELIVERED_PROTOCOL=0
+_DELIVERED_MARKER=0
+
 # PLAN-155 Wave 5 — the codex harness helper records its operations through
 # this recorder, mapped onto the install-state journal (overrides the helper's
 # no-op default so codex emissions land in .claude/.install-state.json).
@@ -851,6 +866,11 @@ install_one() {
   local src="$SOURCE_DIR/$rel_path"
   local dst="$TARGET/$rel_path"
 
+  # PLAN-166 F3 (ADR-155-AMEND-1): delivery signal for the caller — 1 only
+  # when THIS call actually wrote the destination (COPIED/LINKED). An
+  # EXISTS-skip, a missing source and a dry-run all leave it 0.
+  INSTALL_ONE_WROTE=0
+
   if [[ ! -e "$src" ]]; then
     echo "    SKIP (source missing): $rel_path"
     return
@@ -877,6 +897,7 @@ install_one() {
 
   if [[ "$MODE" == "link" ]]; then
     ln -s "$src" "$dst"
+    INSTALL_ONE_WROTE=1
     echo "    LINKED: $rel_path"
   else
     if [[ -d "$src" ]]; then
@@ -884,6 +905,7 @@ install_one() {
     else
       cp "$src" "$dst"
     fi
+    INSTALL_ONE_WROTE=1
     echo "    COPIED: $rel_path"
   fi
 }
@@ -1305,6 +1327,14 @@ install_spec_v1() {
   echo "==> Installing SPEC v1 schemas (~$(ls "$SOURCE_DIR"/SPEC/v1/*.md 2>/dev/null | wc -l | tr -d ' ') files)"
   _state_record_op "install_spec_v1" "SPEC/v1"
   install_one "SPEC/v1"
+  # PLAN-166 F3 (ADR-155-AMEND-1): the op line above records the ATTEMPT;
+  # framework ownership requires the REGISTERED DELIVERY — install_one may
+  # have EXISTS-skipped a pre-existing adopter SPEC/v1 (r17), which must
+  # NOT be inventoried as framework-owned.
+  if [[ "${INSTALL_ONE_WROTE:-0}" -eq 1 ]]; then
+    _DELIVERED_SPEC=1
+    _state_record_op "delivered_spec_v1" "SPEC/v1"
+  fi
 }
 
 if [[ "$CEREMONY" != "user" ]]; then install_spec_v1; fi  # WS4-guard-spec
@@ -1323,6 +1353,35 @@ install_version() {
 }
 
 if [[ "$CEREMONY" != "user" ]]; then install_version; fi  # WS4-guard-version
+
+# ---- 5c-bis-3 framework version marker (PLAN-166 F3 / ADR-155-AMEND-1) ----
+# .claude/.framework-version is a TRACKED file of the framework repo (one
+# line, byte-identical to VERSION — the bump writes it as its 12th site and
+# verify-counts.sh cross-checks it every release). It is the forensic anchor
+# that stays true POST-UPGRADE: upgrade.sh deliberately never touches the
+# root VERSION (S238/ADR-155 class), so on an upgraded adopter only this
+# marker reports the installed framework version. It lives inside .claude/,
+# so it is delivered in BOTH ceremonies (the WS4 user-ceremony guard only
+# forbids root files). The write is EXPLICIT — the manifest enumeration
+# never delivers anything, it only records (r7) — and skip-if-exists: a
+# pre-existing marker stays adopter-owned (no delivery record), and every
+# marker-first reader keyed off that record falls back to VERSION (r20).
+install_framework_marker() {
+  if [[ ! -f "$SOURCE_DIR/.claude/.framework-version" ]]; then
+    echo "    SKIP: .claude/.framework-version absent in source (pre-v1.3.0 checkout)"
+    return 0
+  fi
+  echo ""
+  echo "==> Installing framework version marker (.claude/.framework-version — $(tr -d '[:space:]' < "$SOURCE_DIR/.claude/.framework-version"))"
+  _state_record_op "install_framework_marker" ".claude/.framework-version"
+  install_one ".claude/.framework-version"
+  if [[ "${INSTALL_ONE_WROTE:-0}" -eq 1 ]]; then
+    _DELIVERED_MARKER=1
+    _state_record_op "delivered_framework_marker" ".claude/.framework-version"
+  fi
+}
+
+install_framework_marker  # both ceremonies: inside .claude/ (WS4-safe)
 
 # ---- 5c.bis Reference personas (PLAN-004 Phase 10) ----
 
@@ -1871,6 +1930,12 @@ $pointer_body
 EOF
   echo "    CREATED: PROTOCOL.md (pointer)"
   _state_record_op "install_protocol_pointer" "PROTOCOL.md"
+  # PLAN-166 F3 (ADR-155-AMEND-1): registered delivery — this line is only
+  # reached when the heredoc actually wrote the pointer (the pre-existing
+  # early-return above never gets here, so an adopter's own root
+  # PROTOCOL.md is never inventoried as framework-owned; r13/r17).
+  _DELIVERED_PROTOCOL=1
+  _state_record_op "delivered_protocol_pointer" "PROTOCOL.md"
 }
 
 if [[ "$CEREMONY" != "user" ]]; then install_protocol_pointer; fi  # WS4-guard-proto
@@ -2228,8 +2293,169 @@ write_install_manifest() {
   export FMS_ROOT="$TARGET"
   export FMS_PROFILE_PARTS="${PROFILE_PARTS[*]}"
   export FMS_MODE="$MODE"
+  # PLAN-166 F3 (ADR-155-AMEND-1): conditional ownership from the DELIVERY
+  # RECORD — never the ceremony alone, never file presence. A path
+  # install_one EXISTS-skipped stays out of the baseline, so doctor, the
+  # update-checker and uninstall never treat an adopter file as
+  # framework-owned (r7/r13/r17).
+  #
+  # Ownership CONTINUITY on reruns (codex W1-ceremony round, P1): a rerun
+  # over an already-installed target EXISTS-skips all three paths, so the
+  # THIS-RUN flags are 0 — but the manifest rewrite below REPLACES the old
+  # manifest. Without consulting the PRIOR manifest's records, a rerun
+  # would silently drop framework ownership of SPEC/PROTOCOL/marker (and a
+  # v1.3 SPEC would later misclassify as ADOPTER-FORK — it is absent from
+  # the legacy pristine fingerprints). Preserve a valid prior record: the
+  # regexes mirror upgrade.sh _baseline_has_*_record byte-for-byte
+  # (family-swept; `(/|  |$)` covers the --mode link single-LINK-line form).
+  # A prior LINK record carries ownership forward only while the live symlink
+  # still points where it was RECORDED (codex W1 round 10, P2). On a --link
+  # reinstall over a RETARGETED managed symlink, install_one EXISTS-skips the
+  # path and the continuity check used to accept the record blindly; the
+  # rewrite then serialized the redirected target as the new delivery record
+  # and every later upgrade accepted the foreign tree as healthy. Mirrors the
+  # readlink-vs-record checks upgrade.sh already applies on its refresh
+  # routes. Returns 0 (carry on) when there is no LINK record to compare.
+  _prior_link_target_matches() {   # $1 = manifest, $2 = relpath
+    local _plt_line _plt_rec="" _plt_live
+    while IFS= read -r _plt_line || [[ -n "$_plt_line" ]]; do
+      case "$_plt_line" in
+        "LINK  $2  "*) _plt_rec="${_plt_line#LINK  $2  }"; break ;;
+      esac
+    done < "$1"
+    _plt_live="$( readlink "$TARGET/$2" 2>/dev/null || true )"
+    # A live SYMLINK with no prior LINK record is NOT a match — it is the
+    # ABSENCE of evidence. Returning success there let a --link rerun over a
+    # copy-installed path serialize an arbitrary symlink as a trusted delivery,
+    # converting adopter-owned content into framework-owned (r11-F1, open since
+    # S296; codex W3 r2 P1).
+    if [[ -z "$_plt_rec" ]]; then
+      # No prior LINK record. Ownership carries forward ONLY while the live
+      # path still has the shape the record described. A symlink contradicts a
+      # HASH record (r11-F1); so does a DIRECTORY, and that one is worse — the
+      # continuity branch would enumerate the adopter's own children under it
+      # and record their live hashes, so a later uninstall could delete files
+      # the framework never wrote (codex W3 r3 P1).
+      [[ -z "$_plt_live" ]] || return 1
+      # SPEC/v1 IS a directory by design; only the two SINGLE-FILE surfaces are
+      # contradicted by one. Rejecting every directory broke SPEC continuity.
+      case "$2" in
+        SPEC/v1) : ;;
+        *) [[ ! -d "$TARGET/$2" ]] || return 1 ;;
+      esac
+      return 0
+    fi
+    [[ "$_plt_rec" == "$_plt_live" ]]
+  }
+  if [[ "${_DELIVERED_SPEC:-0}" != "1" ]] && [[ -f "$manifest" ]] \
+     && grep -Eq '^([0-9a-f]{64}|LINK)  SPEC/v1(/|  |$)' "$manifest" 2>/dev/null \
+     && _prior_link_target_matches "$manifest" "SPEC/v1"; then
+    _DELIVERED_SPEC=1
+    _CONTINUITY_FIRED=1
+    _CONTINUITY_PATHS="${_CONTINUITY_PATHS:-}
+SPEC/v1"
+    echo "    ownership continuity: SPEC/v1 delivery record preserved from prior manifest"
+  fi
+  if [[ "${_DELIVERED_PROTOCOL:-0}" != "1" ]] && [[ -f "$manifest" ]] \
+     && grep -Eq '^([0-9a-f]{64}|LINK)  PROTOCOL\.md(  |$)' "$manifest" 2>/dev/null \
+     && _prior_link_target_matches "$manifest" "PROTOCOL.md"; then
+    # FMS_HASH_ROOT does NOT reach PROTOCOL.md: _write_baseline_manifest
+    # special-cases the generated pointer and hashes the TARGET unless
+    # FMS_PROTOCOL_HASH is supplied — which install never set. So a rerun over
+    # a CUSTOMIZED delivered pointer re-baselined the adopter's own bytes as
+    # framework-owned; the next upgrade would then overwrite them and
+    # uninstall could DELETE them (codex W1 round 9, P1). Carry the PRIOR
+    # recorded digest. A LINK record needs none (the rewrite's link branch
+    # fires before the PROTOCOL special case); with neither, DROP the
+    # ownership claim rather than record a knowingly wrong baseline.
+    _PRIOR_PROTOCOL_HASH="$( grep -E '^[0-9a-f]{64}  PROTOCOL\.md$' "$manifest" 2>/dev/null | head -1 | cut -d' ' -f1 || true )"
+    if [[ -n "$_PRIOR_PROTOCOL_HASH" ]] \
+       || grep -Eq '^LINK  PROTOCOL\.md(  |$)' "$manifest" 2>/dev/null; then
+      _DELIVERED_PROTOCOL=1
+      _CONTINUITY_FIRED=1
+      _CONTINUITY_PATHS="${_CONTINUITY_PATHS:-}
+PROTOCOL.md"
+      echo "    ownership continuity: PROTOCOL.md delivery record preserved from prior manifest"
+    else
+      echo "    NOTE: PROTOCOL.md record present but its digest is unrecoverable —" >&2
+      echo "          ownership NOT claimed (the pointer stays adopter-owned)" >&2
+    fi
+  fi
+  if [[ "${_DELIVERED_MARKER:-0}" != "1" ]] && [[ -f "$manifest" ]] \
+     && grep -Eq '^([0-9a-f]{64}|LINK)  \.claude/\.framework-version(  |$)' "$manifest" 2>/dev/null \
+     && _prior_link_target_matches "$manifest" ".claude/.framework-version"; then
+    _DELIVERED_MARKER=1
+    _CONTINUITY_FIRED=1
+    _CONTINUITY_PATHS="${_CONTINUITY_PATHS:-}
+.claude/.framework-version"
+    echo "    ownership continuity: .framework-version delivery record preserved from prior manifest"
+  fi
+  # For the continuity-preserved paths ONLY, hash the FRAMEWORK's pristine
+  # copies instead of the (possibly edited) target's (codex W1 round 5, P1):
+  # install normally hashes FMS_ROOT=$TARGET — on a rerun over an EDITED
+  # delivered SPEC that would re-baseline the fork's bytes as framework-owned,
+  # and a later uninstall would happily DELETE the user's modified tree (its
+  # hash matches the manifest). Same C.5 idempotency posture upgrade.sh uses.
+  #
+  # SCOPED, not global (codex W1 round 8, P1): install RENDERS templates
+  # (`.claude/team.md`, skills, `{{X}}` placeholders under --project et al),
+  # so a global FMS_HASH_ROOT rewrote every rendered file's baseline to the
+  # UNRENDERED source — doctor.sh then reports repo-wide adopter drift and
+  # later upgrades classify those files as customized and stop refreshing
+  # them. PLAN-167 W2.3 replaced that confinement with an EXPLICIT per-surface
+  # hash_source: the decision says which paths take the framework's bytes,
+  # so no global override is set here at all.
+  if [[ "${_CONTINUITY_FIRED:-0}" = "1" ]]; then
+    : # per-surface hash_source below replaces the global override
+    case "$_CONTINUITY_PATHS" in
+      *".claude/.framework-version"*) export FMS_HASH_SOURCE_MARKER="HASH_SOURCE" ;;
+    esac
+    case "$_CONTINUITY_PATHS" in
+      # The generated pointer has no source bytes; carry what was recorded.
+      *"PROTOCOL.md"*)               export FMS_HASH_SOURCE_PROTOCOL="HASH_PRIOR_RECORD" ;;
+    esac
+    echo "    ownership continuity: manifest hashes the preserved paths from the framework source (edited target content stays adopter-owned; rendered files keep their target hash)"
+  fi
+  # Declare on EVERY delivery path, not only continuity. A fresh install
+  # genuinely delivers these surfaces, and the previous attempt at this wave
+  # regressed 24 cells precisely because it left fresh installs undeclared.
+  #
+  # Fresh delivery: the target IS the bytes just written, so HASH_TARGET is
+  # both correct and observationally identical to HASH_SOURCE.
+  # Continuity: the target may be an EDITED fork, so the record must come from
+  # the framework's copy (spec/marker) or the prior record (the generated
+  # pointer, which has no source file).
+  export FMS_SOURCE_ROOT="$SOURCE_DIR"
+  export FMS_PRIOR_MANIFEST="$manifest"
+  if [[ "${_DELIVERED_SPEC:-0}" = "1" ]]; then
+    case "${_CONTINUITY_PATHS:-}" in
+      *"SPEC/v1"*) export FMS_HASH_SOURCE_SPEC="HASH_SOURCE" ;;
+      *)           export FMS_HASH_SOURCE_SPEC="HASH_TARGET" ;;
+    esac
+  fi
+  if [[ "${_DELIVERED_MARKER:-0}" = "1" ]]; then
+    case "${_CONTINUITY_PATHS:-}" in
+      *".claude/.framework-version"*) export FMS_HASH_SOURCE_MARKER="HASH_SOURCE" ;;
+      *)                              export FMS_HASH_SOURCE_MARKER="HASH_TARGET" ;;
+    esac
+  fi
+  if [[ "${_DELIVERED_PROTOCOL:-0}" = "1" ]]; then
+    case "${_CONTINUITY_PATHS:-}" in
+      *"PROTOCOL.md"*) export FMS_HASH_SOURCE_PROTOCOL="HASH_PRIOR_RECORD" ;;
+      *)               export FMS_HASH_SOURCE_PROTOCOL="HASH_TARGET" ;;
+    esac
+  fi
+  export FMS_DELIVERED_SPEC="${_DELIVERED_SPEC:-0}"
+  export FMS_DELIVERED_PROTOCOL="${_DELIVERED_PROTOCOL:-0}"
+  export FMS_DELIVERED_MARKER="${_DELIVERED_MARKER:-0}"
+  # Empty on a fresh install (target IS the freshly written pointer, hashing it
+  # is correct); set only by the continuity path above.
+  export FMS_PROTOCOL_HASH="${_PRIOR_PROTOCOL_HASH:-}"
   _write_baseline_manifest "$manifest"
-  unset FMS_ROOT FMS_PROFILE_PARTS FMS_MODE
+  unset FMS_ROOT FMS_PROFILE_PARTS FMS_MODE FMS_HASH_ROOT FMS_PROTOCOL_HASH \
+        FMS_PRIOR_MANIFEST FMS_HASH_SOURCE_SPEC FMS_HASH_SOURCE_PROTOCOL \
+        FMS_HASH_SOURCE_MARKER
+  unset FMS_DELIVERED_SPEC FMS_DELIVERED_PROTOCOL FMS_DELIVERED_MARKER
   return 0
 }
 

@@ -60,7 +60,7 @@ LINES=""
 
 while IFS=$'\t' read -r id surface prior_record live_type live_content \
       source_has mode ceremony operation skip_requested fault \
-      exp_verdict exp_hash origin _note; do
+      exp_verdict exp_hash origin note; do
   [[ -z "${id:-}" ]] && continue
   case "$id" in \#*|id) continue ;; esac
   if [[ -n "$ONLY" && ",$ONLY," != *",$id,"* ]]; then continue; fi
