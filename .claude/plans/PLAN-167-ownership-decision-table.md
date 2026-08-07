@@ -505,9 +505,69 @@ qualquer registro cujo caminho atravesse symlink no LOAD, antes de
 (isso violaria a fence de proveniência da decisão (v) do ADR-155) — é
 **apagar a linha**: promessa que não se cumpre é pior que ausência.
 
-**Próxima ação concreta:** ler o mapa v3, triar falso-vermelho MAIS UMA
-VEZ (o histórico manda), gravar `scripts/tests/ownership-baseline-map.txt`,
-commitar o W0.5 com adds EXPLÍCITOS, então W1.
+### ESTADO EM 2026-08-07 ~00:35 — W0 e W1 FECHADOS, W2 EM CURSO
+
+**Commits locais (não pushados):** `a09427f` W0 · `4fd4ba2` W1 round 1 ·
+`+1` C1 do consenso. Baseline gravado: **50 verde / 11 vermelho**, todos os
+11 atribuídos a defeito real.
+
+**W1 fechado — 3 ADJUST, 0 VETO, `design-coherent`.** Consenso em
+`PLAN-167/debate/round-1/consensus.md`. Decisões que já aterrissaram:
+- **C1** — `fault` virou a 10ª dimensão (TSV a 15 colunas);
+  `legacy_pristine_partial` virou valor de `live_content`. `note` agora é
+  prosa apenas. OQ-7 RESOLVIDA.
+- **C2** — split decisão/execução adotado, cláusula `inherits their
+  hash_source` RISCADA e substituída pela **INV-3** (falha de execução
+  nunca avança o registro). Consequência aplicada: recusar-se a agir sobre
+  arquivo especial é DECISÃO, não falha — o regex de abort foi estreitado.
+- **OQ-9 reconciliada** a uma regra única: `OMIT_RECORD` e
+  `PRESERVE_UNOWNED` diferem só por `prior_record`, que já é coluna.
+- **Achado promovido:** o harness era CEGO a escrita fora da árvore.
+  Tripwire armada (status `ESCAPE`). `OWN-0034` reporta ESCAPE — o `cat >`
+  do ponteiro escreve FORA do alvo. É classe S238 PROVADA, não hipótese.
+
+**W2 em curso — clone overlay:** caminho em `scratchpad/CLONE_PATH`
+(paridade verificada: 29 arquivos modificados no clone e na árvore viva).
+- ✅ `_ownership_verdict()` implementada em `scripts/_framework_manifest_set.sh`
+- ✅ `scripts/tests/test-ownership-verdict-unit.sh` instalado
+- ✅ **Oráculo unitário: 59 PASS / 0 FAIL / 2 excluídos contados**
+  (`OWN-0024`/`OWN-0027` são células de EXECUÇÃO, cobertas pelo e2e)
+
+**W2.2 EM CURSO — método: MODO SOMBRA antes da troca.**
+
+O oráculo unitário prova que a função combina com a TABELA. O e2e prova que
+os callers combinam com a tabela. Nada provava que a função combina com o
+que os callers OBSERVAM — e é essa a lacuna que a troca direta assumiria
+sem medir. Então: observadores instalados no clone (`_ov_obs_*`), a função
+é chamada, o resultado é REGISTRADO e **não age** (`OV-SHADOW` no log).
+
+Isso converte o risco restante em dados: cada divergência é ou a função
+errada ou a cascata errada — a pergunta que a tabela existe para tornar
+respondível. E **linha sem registro de sombra NÃO é aprovação**: significa
+que o caller retornou antes do ponto de observação, ou seja, a função nunca
+foi consultada. Mesma classe do mascaramento do §5.7.
+
+Artefatos prontos no scratchpad (aplicar quando a sombra fechar):
+- `spec_observers.sh` — já instalado no clone
+- `refresh_spec_refactored.sh` — o `_refresh_spec_contract` novo
+  (observe → decide → execute), com a INV-3 no caminho de backup falho
+- `analyse_shadow.py` — a análise de divergência
+
+**Erro de método corrigido:** rodei duas suítes e2e concorrentes (viva +
+clone), o que dobrou a contenção e fez as duas rastejarem. Serializar.
+
+**Erro de medição corrigido:** eu lia o progresso do scratch mais recente
+por mtime, que era um dos preservados com `--keep` nos diagnósticos. Derive
+o scratch do CABEÇALHO do próprio arquivo de saída da corrida.
+
+**DEPOIS:** W2.3 (remover `FMS_HASH_ROOT_PATHS`/`FMS_LINK_PATHS` —
+substituir, não somar), W2.4 (e2e a 100%), W2.5 (gates), W3, W4.
+
+**Dívidas de infra registradas nesta noite (não bloqueiam):**
+`inject-agent-context.sh` falha a busca de persona mesmo com nome exato do
+`team.md`, e não emite `FILE ASSIGNMENT` que o hook exige — prompts foram
+montados à mão. Achados de CI do devops (path filters ausentes,
+`fetch-depth:1` sem tags) vão para o pack do W4: workflows são canônicos.
 
 **Gates já verificados adiantado:** docs-freshness bloqueante = 610
 arquivos / 0 refs quebradas / EXIT=0. shellcheck do CI cobre só

@@ -179,7 +179,11 @@ _obs_record() {  # $1 = manifest abs path, $2 = relpath
 # defined by the framework having ATTEMPTED and declined, which leaves no
 # filesystem trace at all. If this wording changes, this test fails loudly —
 # which is correct, because the operator-visible contract changed.
-_ABORT_MARKERS='REFUSING to|could not back up|unsupported special file|backup-before-replace'
+# Only GENUINE execution failures. Refusing to act on an unsupported
+# destination is a DECISION (the surface is adopter-owned), not a failed
+# attempt — conflating them made the e2e and the decision function disagree
+# about the same cell (round-1 consensus C2).
+_ABORT_MARKERS='REFUSING to|could not back up|backup-before-replace'
 
 # =============================================================================
 # Fixtures

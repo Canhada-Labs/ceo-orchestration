@@ -28,16 +28,16 @@ OWN-0021	spec	hash	dir	pristine	yes	copy	maintainer	upgrade	none	none	REFRESH	HA
 OWN-0022	spec	hash	dir	edited	yes	copy	maintainer	upgrade	none	none	REFRESH	HASH_SOURCE	adr-155-amend-1	contract fork is refreshed, not preserved (OQ-3 of ADR)
 OWN-0023	spec	hash	regular	edited	yes	copy	maintainer	upgrade	none	none	REFRESH	HASH_SOURCE	r3-F1	degenerate: delivered tree replaced by a regular file
 OWN-0024	spec	hash	regular	edited	yes	copy	maintainer	upgrade	none	backup_unwritable	ABORT_SURFACE	HASH_PRIOR_RECORD	r3-F1	backup-before-replace is the contract
-OWN-0025	spec	hash	special	-	yes	copy	maintainer	upgrade	none	none	ABORT_SURFACE	HASH_PRIOR_RECORD	r9-F3	FIFO: cp would block and hang the run mid-upgrade
+OWN-0025	spec	hash	special	-	yes	copy	maintainer	upgrade	none	none	OMIT_RECORD	HASH_NONE	r9-F3	FIFO: cp would block and hang the run mid-upgrade
 OWN-0026	marker	hash	regular	edited	yes	copy	maintainer	upgrade	none	none	REFRESH	HASH_SOURCE	adr-155-amend-1	forced + read-back-validated write
 OWN-0027	marker	hash	regular	edited	yes	copy	maintainer	upgrade	none	backup_unwritable	ABORT_SURFACE	HASH_PRIOR_RECORD	r4-F5	
 OWN-0028	marker	hash	dir	-	yes	copy	maintainer	upgrade	none	none	OMIT_RECORD	HASH_NONE	r2-F3	adopter directory at the marker path: correctly unowned, and a prior record existed => OMIT
-OWN-0029	marker	hash	special	-	yes	copy	maintainer	upgrade	none	none	PRESERVE_UNOWNED	HASH_NONE	r2-F3	FIFO destination blocks the upgrade
+OWN-0029	marker	hash	special	-	yes	copy	maintainer	upgrade	none	none	OMIT_RECORD	HASH_NONE	r2-F3	FIFO destination blocks the upgrade
 OWN-0030	spec	hash	ancestor_symlink	*	yes	copy	maintainer	upgrade	none	none	OMIT_RECORD	HASH_NONE	r2-F1	dead-branch: the continuity line here can never fire — the relpath sanitizer drops any record whose path traverses a symlink BEFORE _baseline_has_*_record is consulted
 OWN-0031	marker	hash	ancestor_symlink	*	yes	copy	maintainer	upgrade	none	none	OMIT_RECORD	HASH_NONE	r4-F2	dead-branch: the continuity line here can never fire — the relpath sanitizer drops any record whose path traverses a symlink BEFORE _baseline_has_*_record is consulted
-OWN-0032	protocol	hash	dir	-	yes	copy	maintainer	upgrade	none	none	PRESERVE_UNOWNED	HASH_NONE	derived	GAP: no non-regular guard; cat > fails and set -e ABORTS the run
-OWN-0033	protocol	hash	special	-	yes	copy	maintainer	upgrade	none	none	PRESERVE_UNOWNED	HASH_NONE	derived	GAP: FIFO blocks the run; sibling of r9-F3/r2-F3
-OWN-0034	protocol	hash	symlink	edited	yes	copy	maintainer	upgrade	none	none	PRESERVE_UNOWNED	HASH_NONE	derived	GAP: cat > follows the leaf symlink OUTSIDE the target
+OWN-0032	protocol	hash	dir	-	yes	copy	maintainer	upgrade	none	none	OMIT_RECORD	HASH_NONE	derived	GAP: no non-regular guard; cat > fails and set -e ABORTS the run
+OWN-0033	protocol	hash	special	-	yes	copy	maintainer	upgrade	none	none	OMIT_RECORD	HASH_NONE	derived	GAP: FIFO blocks the run; sibling of r9-F3/r2-F3
+OWN-0034	protocol	hash	symlink	edited	yes	copy	maintainer	upgrade	none	none	OMIT_RECORD	HASH_NONE	derived	GAP: cat > follows the leaf symlink OUTSIDE the target
 OWN-0040	spec	link_match	symlink	-	yes	link	maintainer	upgrade	none	none	PRESERVE_OWNED	LINK_RECORD	r4-F3	recorded link-mode delivery, target unchanged
 OWN-0041	marker	link_match	symlink	-	yes	link	maintainer	upgrade	none	none	PRESERVE_OWNED	LINK_RECORD	r4-F4	family sibling
 OWN-0042	spec	link_retargeted	symlink	-	yes	link	maintainer	upgrade	none	none	OMIT_RECORD	HASH_NONE	r4-F3	redirected link must not inherit ownership; a prior record existed, so the mechanical observation is OMIT (see OQ-9)
@@ -50,8 +50,8 @@ OWN-0048	spec	link_match	symlink	-	yes	link	maintainer	upgrade	none	none	PRESERV
 OWN-0049	marker	link_match	symlink	-	yes	link	maintainer	upgrade	none	none	PRESERVE_OWNED	LINK_RECORD	r7-F3	sibling site
 OWN-0050	spec	link_retargeted	symlink	-	yes	link	maintainer	install_rerun	none	none	OMIT_RECORD	HASH_NONE	r10-F1	continuity must compare prior LINK target to live readlink; a prior record existed, so the mechanical observation is OMIT (see OQ-9)
 OWN-0051	marker	link_retargeted	symlink	-	yes	link	maintainer	install_rerun	none	none	OMIT_RECORD	HASH_NONE	r10-F1	sibling site; a prior record existed, so the mechanical observation is OMIT (see OQ-9)
-OWN-0052	spec	hash	symlink	-	yes	link	maintainer	install_rerun	none	none	PRESERVE_UNOWNED	HASH_NONE	r11-F1	open=r11-F1; absence of a LINK row is NOT a match
-OWN-0053	marker	hash	symlink	-	yes	link	maintainer	install_rerun	none	none	PRESERVE_UNOWNED	HASH_NONE	r11-F1	open=r11-F1; sibling site
+OWN-0052	spec	hash	symlink	-	yes	link	maintainer	install_rerun	none	none	OMIT_RECORD	HASH_NONE	r11-F1	open=r11-F1; absence of a LINK row is NOT a match
+OWN-0053	marker	hash	symlink	-	yes	link	maintainer	install_rerun	none	none	OMIT_RECORD	HASH_NONE	r11-F1	open=r11-F1; sibling site
 OWN-0060	spec	hash	dir	pristine	yes	copy	maintainer	upgrade	self	none	PRESERVE_OWNED	HASH_SOURCE	adr-155-amend-1	--skip SPEC/v1
 OWN-0061	spec	hash	dir	pristine	yes	copy	maintainer	upgrade	descendant	none	PRESERVE_OWNED	HASH_SOURCE	r2-F2	--skip SPEC/v1/<file> preserves the WHOLE unit
 OWN-0062	spec	hash	dir	edited	yes	copy	maintainer	upgrade	descendant	none	PRESERVE_OWNED	HASH_SOURCE	r5-F3	note: skipped file exists ONLY in the target — union scan required
