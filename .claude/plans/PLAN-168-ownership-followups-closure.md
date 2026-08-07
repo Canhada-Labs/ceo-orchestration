@@ -43,13 +43,40 @@ inteiro**. É literalmente a classe do achado r10-F4 — um teste
 cuja única execução em CI era pulada — reaparecendo no trabalho que a
 consertou.
 
-**W2 — todo upgrade quebra o ponteiro raiz.** `install.sh` escreve
-`PROTOCOL.md` e **substitui** os placeholders; `upgrade.sh` regenera do
-heredoc e deixa `{{PROTOCOL_SOURCE}}` **literal**. Qualquer adotante cujo
-checkout esteja fora do target fica com um arquivo que não diz mais onde o
-protocolo mora. É a classe *install-set ≠ upgrade-set* que a decisão (i) do
-ADR-155 existe para eliminar: a enumeração compartilhada resolveu QUAIS
-caminhos os dois lados tocam, nunca QUE CONTEÚDO produzem.
+**W2 — o framework trata a PRÓPRIA saída como customização do adotante.**
+
+> ⚠️ **PREMISSA CORRIGIDA (debate r1, security).** A versão anterior deste
+> parágrafo dizia "todo upgrade quebra o ponteiro raiz". **Isso era verdade
+> ANTES do land do PLAN-167 e não é mais.** Re-rodei a sonda contra a árvore
+> landada: **0 ocorrências literais, "pointer stays substituted"**. Meu
+> próprio refactor mudou o comportamento sem que eu percebesse — o ponteiro
+> substituído agora classifica `edited`, logo `PRESERVE_OWNED`, logo é
+> **preservado** em vez de regenerado.
+
+A CAUSA continua: `install.sh` **substitui** os placeholders,
+`_refresh_protocol_pointer` calcula o hash canônico do heredoc com
+`{{PROTOCOL_SOURCE}}` **literal**. Dois corpos diferentes para o mesmo
+arquivo. O sintoma só trocou de forma:
+
+| | antes do PLAN-167 | agora |
+|---|---|---|
+| bytes no disco | **degradados** a cada upgrade | preservados |
+| classificação | — | a saída DO PRÓPRIO FRAMEWORK lida como customização do adotante |
+| digest gravado | — | `HASH_CANONICAL_POINTER` que **não bate com o disco** ⇒ `OWN-0074` vermelha |
+
+É a classe *install-set ≠ upgrade-set* que a decisão (i) do ADR-155 existe
+para eliminar: a enumeração compartilhada resolveu QUAIS caminhos os dois
+lados tocam, nunca QUE CONTEÚDO produzem.
+
+> **O Gate W2 anterior era VACUOSO** ("a sonda reporta 0 literais") — já passa
+> hoje, sem fix. Substituído abaixo.
+
+> **E o ramo que escreve os bytes é INALCANÇÁVEL por célula** (security,
+> verificado): das 6 linhas `protocol`+`upgrade` da TSV, **nenhuma** é
+> `REFRESH`/`DELIVER`. O caminho que regenera o ponteiro não é exercitado por
+> nada. Isso colide com o anti-objetivo "não mexer na tabela" ⇒ **decisão do
+> Owner antes de codar**: ou a tabela ganha a célula que falta, ou o
+> anti-objetivo cede.
 
 **W3 — o contrato não tem ADR.** A tabela de decisão é hoje a autoridade
 sobre propriedade, e vive só num `docs/`. Sem ADR, a próxima pessoa que
@@ -186,8 +213,9 @@ não dispara); o job nightly roda o e2e e compara o conjunto de vermelhos.
 5. Reusar a sonda existente (`evidence/probe-INV4-pointer-substitution.sh`)
    como base; ela já reproduz o defeito.
 
-**Gate W2:** a sonda reporta 0 ocorrências literais após o upgrade, o teste
-novo falha se alguém reverter, **e o `OWN-0074` fica VERDE** — o conjunto
+**Gate W2 (o anterior era vacuoso — este não):** o digest gravado para
+`PROTOCOL.md` **bate com os bytes no disco**, o ponteiro deixa de classificar
+`edited` no caminho comum, e **o `OWN-0074` fica VERDE** — o conjunto
 esperado de vermelhos encolhe para `{OWN-0016, OWN-0024, OWN-0027}`.
 
 > **Ordem obrigatória (QA must-fix 1):** o W2 tem de atualizar
