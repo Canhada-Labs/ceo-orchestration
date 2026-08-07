@@ -358,6 +358,37 @@ pointer is not a hypothetical hardening gap; **it is a demonstrated
 out-of-tree write**, which is the S238 class the whole baseline-manifest
 design exists to close.
 
+### 5.4c `prior_record` is ambiguous, and it matters exactly where it hurts
+
+Running the decision function in shadow mode against the real callers — it
+observes and records, it does not act — produced 17 agreements, 2
+divergences and 10 rows the caller never reached. One divergence is a model
+defect, not an implementation defect.
+
+`prior_record` is defined as "what the pre-run baseline manifest says". There
+are **two** such manifests and the definition does not choose between them:
+
+- the **raw** file on disk, and
+- the **sanitized** one the loader produces, which drops every record whose
+  relpath traverses a symlinked component.
+
+They agree everywhere except on the symlink-traversal rows — which are the
+security-critical ones, and the same rows §5.8 is about. An observer reading
+the sanitized manifest sees `none` and concludes `PRESERVE_UNOWNED`; an
+observer reading the raw file sees `hash` and concludes `OMIT_RECORD`. Both
+are defensible readings of a dimension that never said which it meant.
+
+The resolution is not to pick the more convenient one. The **sanitized**
+manifest is the authority, because honouring a record whose path crosses a
+symlink is precisely what the ADR-155 decision-(v) provenance fence exists
+to prevent — but the definition in §2.2 has to say so, and the harness has
+to observe the same thing the caller does, or the two instruments will keep
+disagreeing about cells neither of them is wrong about.
+
+This is the kind of defect that survives eleven rounds of code review: every
+branch reads *a* manifest, each reads a defensible one, and no branch is
+individually wrong.
+
 ### 5.5 Two findings are invariants, not cells
 
 Two defects were about the **blast radius** of a fix rather than about any

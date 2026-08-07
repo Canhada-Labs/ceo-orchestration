@@ -23,11 +23,49 @@ has not touched the live tree.
 | W1 debate | ✅ | 3 ADJUST, 0 VETO, `design-coherent` — `4fd4ba2` |
 | W1 consensus C1 | ✅ | `fault` is a real column; `legacy_pristine_partial` a real value |
 | W2 decision function | ✅ | **unit oracle 59 PASS / 0 FAIL**, 2 counted exclusions |
-| W2.2 caller refactor | ❌ | **not started — this is the gap** |
+| W2.2 caller refactor | ◐ | observers + **shadow run** done; the swap itself is the gap |
 | W3 codex rail | ❌ | not started |
 | W4 pack | ❌ | not built, by design |
 
-## Why W2.2 was not attempted overnight
+## The shadow run — W2.2 measured instead of guessed
+
+Rather than swap the live decision path on an unverified assumption, the
+function was run in **shadow mode** against the real callers: it observes the
+nine dimensions, records what it would decide, and does **not** act. The
+clone's suite then returned `50 green / 11 red` — byte-identical to the live
+tree, confirming the instrumentation is inert.
+
+The unit oracle already proved the function matches the TABLE, and the e2e
+proved the callers match the table. Neither proved the function matches what
+the callers **observe**, and that is the gap a direct swap would have crossed
+blind.
+
+| Outcome | Count | Meaning |
+|---|---:|---|
+| agree | 17 | the function reproduces the live outcome — the swap is behaviour-preserving here |
+| diverge | 2 | the W2.2 work list |
+| never reached | 10 | the caller returned before the observation point |
+
+**Divergence 1 — `OWN-0082`: the function is right and the live code is
+wrong.** Flag-only continuity: ownership is claimed but the rewrite emits no
+record. The row is already red in the baseline; the function encodes the fix.
+
+**Divergence 2 — `OWN-0030`: a defect in the MODEL, not in either
+implementation.** `prior_record` never said whether it means the raw manifest
+or the sanitized one, and the two disagree exactly on the symlink-traversal
+rows. Written up as §5.4c. This is the shape that survives eleven rounds of
+review: every branch reads *a* manifest, each reads a defensible one, and no
+branch is individually wrong.
+
+**The 10 unreached rows decompose cleanly**, and the decomposition matters:
+eight are `install_*` rows that never invoke the upgrade path at all — those
+need the same treatment on `install.sh` — while two are genuinely blocked.
+`OWN-0024` aborts earlier under its injected fault, and `OWN-0025` is killed
+by the scanner hang before control ever arrives. **That is §5.7 confirmed a
+second time, from a different direction**: the guard cannot be reached, so no
+end-to-end result about it means anything.
+
+## Why the swap itself was not attempted overnight
 
 It rewrites the decision paths of `install.sh` and `upgrade.sh` — two
 canonical scripts that **every adopter executes**. The remaining window was

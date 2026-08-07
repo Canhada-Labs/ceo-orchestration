@@ -1,0 +1,49 @@
+==============================================================================
+W2.2 shadow divergence — spec surface
+==============================================================================
+
+AGREE   17   (function would reproduce the live outcome)
+  OWN-0017  REFRESH HASH_SOURCE
+  OWN-0018  REFRESH HASH_SOURCE
+  OWN-0019  PRESERVE_UNOWNED HASH_NONE
+  OWN-0020  PRESERVE_UNOWNED HASH_NONE
+  OWN-0021  REFRESH HASH_SOURCE
+  OWN-0022  REFRESH HASH_SOURCE
+  OWN-0023  REFRESH HASH_SOURCE
+  OWN-0040  PRESERVE_OWNED LINK_RECORD
+  OWN-0042  OMIT_RECORD HASH_NONE
+  OWN-0044  PRESERVE_UNOWNED HASH_NONE
+  OWN-0046  PRESERVE_OWNED LINK_RECORD
+  OWN-0048  PRESERVE_OWNED LINK_RECORD
+  OWN-0060  PRESERVE_OWNED HASH_SOURCE
+  OWN-0061  PRESERVE_OWNED HASH_SOURCE
+  OWN-0062  PRESERVE_OWNED HASH_SOURCE
+  OWN-0063  PRESERVE_OWNED HASH_SOURCE
+  OWN-0070  PRESERVE_OWNED HASH_SOURCE
+
+DIVERGE 2   (the W2.2 work list)
+  OWN-0030  status=GREEN
+      function : PRESERVE_UNOWNED HASH_NONE
+      live     : OMIT_RECORD HASH_NONE
+      observed dims: none/ancestor_symlink/edited/yes/copy/maintainer/none
+  OWN-0082  status=RED
+      function : PRESERVE_OWNED HASH_PRIOR_RECORD
+      live     : OMIT_RECORD HASH_NONE
+      observed dims: hash/dir/edited/no/copy/maintainer/none
+
+NO SHADOW LINE 10
+  OWN-0001  shadow line absent — caller path not reached
+  OWN-0004  shadow line absent — caller path not reached
+  OWN-0006  shadow line absent — caller path not reached
+  OWN-0010  shadow line absent — caller path not reached
+  OWN-0013  shadow line absent — caller path not reached
+  OWN-0016  shadow line absent — caller path not reached
+  OWN-0024  shadow line absent — caller path not reached
+  OWN-0025  shadow line absent — caller path not reached
+  OWN-0050  shadow line absent — caller path not reached
+  OWN-0052  shadow line absent — caller path not reached
+
+A row with no shadow line is NOT a pass: it means the caller returned
+before the observation point, so the function was never asked. Those are
+as important as the divergences — they are the cells the refactor has to
+reach before it can claim to have replaced anything.
