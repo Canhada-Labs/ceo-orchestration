@@ -560,8 +560,47 @@ clone), o que dobrou a contenção e fez as duas rastejarem. Serializar.
 por mtime, que era um dos preservados com `--keep` nos diagnósticos. Derive
 o scratch do CABEÇALHO do próprio arquivo de saída da corrida.
 
-**DEPOIS:** W2.3 (remover `FMS_HASH_ROOT_PATHS`/`FMS_LINK_PATHS` —
-substituir, não somar), W2.4 (e2e a 100%), W2.5 (gates), W3, W4.
+### W2.2 SPEC: APLICADO E VERDE (2026-08-07)
+
+Caller do SPEC trocado por observe → decide → execute; cascata antiga
+REMOVIDA (verificado programaticamente: `_sc_owned` e o loop de
+fingerprints não existem mais). **50/11 com diff de status = 0 linhas
+contra o baseline: nenhuma regressão em 61 células.**
+
+### ⛔ W2.3 TENTADO, REGREDIU 24 CÉLULAS, REVERTIDO — NÃO REPETIR ASSIM
+
+`50/11 → 26/35` (13 marker + 11 spec quebrados). Evidência em
+`PLAN-167/evidence/W2.3-FAILED-map.txt`.
+
+**Causa (minha, de sequenciamento):** o fail-closed do gerador pressupõe
+que TODO caller declare `hash_source` em TODA rota de entrega. Eu tinha
+convertido UM caller (spec/upgrade) e amarrado a declaração do install só
+à rota de continuidade — instalação fresca entrega e não declarava nada.
+
+**A ordem das ondas existe por isso.** W2.2 converte TODOS os callers,
+DEPOIS o W2.3 muda o gerador. Um de três convertidos não é passo parcial:
+é estado incoerente que nenhuma depuração deixa verde.
+
+**Pré-requisitos do W2.3, nesta ordem:**
+1. Converter os callers de `marker` e `protocol` como o `spec` foi.
+2. Declarar `hash_source` em TODA rota de entrega — inclusive install
+   fresco, onde as superfícies são genuinamente entregues.
+3. Só então tornar o gerador fail-closed.
+4. **MANTER `FMS_LINK_PATHS`.** O §W2.3 deste plano manda removê-lo junto
+   com o `FMS_HASH_ROOT_PATHS`, e está ERRADO: ele codifica a INV-2 sobre
+   a ENUMERAÇÃO INTEIRA (impede que symlink do adotante em
+   `.claude/hooks/` vire registro de entrega). Nada no espaço das três
+   superfícies cobre isso. Removê-lo reabre o r10-F2.
+
+**Terceira instrução do plano a falhar na verificação** (após as 3 regras
+de poda e o clone-a-partir-do-HEAD). Padrão: o plano é confiável sobre a
+FORMA do trabalho e não-confiável sobre MECÂNICA específica — ela foi
+escrita de memória da S296, não re-derivada do código. Verifique cada uma
+antes de executar.
+
+**PRÓXIMA AÇÃO CONCRETA:** converter o caller do `marker`
+(`_refresh_framework_marker`) com o mesmo padrão do `spec`, rodar a suíte,
+exigir zero regressões. Depois o `protocol`. Só então W2.3.
 
 **Dívidas de infra registradas nesta noite (não bloqueiam):**
 `inject-agent-context.sh` falha a busca de persona mesmo com nome exato do

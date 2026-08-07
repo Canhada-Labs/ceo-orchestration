@@ -1990,103 +1990,103 @@ _refresh_framework_marker() {
   local dst="$TARGET/.claude/.framework-version"
   local bak="$BAK_DIR/.claude/.framework-version"
 
-  if [[ ! -f "$src" ]]; then
-    echo "    SKIP: .claude/.framework-version absent in source (pre-v1.3.0 checkout)"
-    # Deliberately NOT carrying the delivery record forward here (codex W1
-    # round 9, P2). The documented `--pin v1.2.0` route DOWNGRADES the target
-    # to a source that never shipped the marker, so a retained v1.3 marker
-    # would keep advertising the newer version over older content. The flag
-    # would also contradict the manifest the rewrite actually produces:
-    # _write_baseline_manifest OMITS any path absent from FMS_HASH_ROOT. With
-    # the record dropped, every marker-first reader falls back to VERSION —
-    # which the pin DID update — which is exactly r20's designed fallback.
-    if _baseline_has_marker_record; then
-      echo "    NOTE: the prior .framework-version delivery record is NOT carried" >&2
-      echo "          forward — this source predates the marker, so version readers" >&2
-      echo "          fall back to VERSION (which reflects the pinned source)" >&2
-    fi
-    return 0
-  fi
-  if _path_is_skipped ".claude/.framework-version"; then
-    echo "    SKIPPED (--skip): .claude/.framework-version"
-    if _baseline_has_marker_record; then _MARKER_DELIVERED=1; fi
-    return 0
-  fi
-  # Ancestor symlink guard FIRST (codex W1 round 4, P1): with
-  # $TARGET/.claude itself a symlink, the leaf tests below follow the
-  # ancestor and the cp would write OUTSIDE the target tree — same F11a
-  # class the SPEC route guards.
+  # ---- OBSERVE -------------------------------------------------------------
+  local _lt _pr _lc _sh _md _sk
   if _lg_ancestor_is_symlink "$TARGET" ".claude/.framework-version"; then
-    echo "    SKIP: .claude/.framework-version has a symlinked ancestor (refusing to write through it — F11a)"
-    if _baseline_has_marker_record; then _MARKER_DELIVERED=1; fi
-    return 0
-  fi
-  if [[ -L "$dst" ]]; then
-    # Link-leaf is only healthy when it IS the recorded link-mode delivery
-    # (codex W1 round 4, P2): a copy-mode marker replaced by a symlink, or
-    # a link-mode marker REDIRECTED elsewhere, must not inherit ownership —
-    # the rewrite would record the arbitrary link and marker-first readers
-    # would trust its version. Require a prior LINK record whose target
-    # matches the live readlink; otherwise preserve WITHOUT ownership.
-    local _mk_rec_tgt _mk_live_tgt
-    # Fixed double-space delimiter, not whitespace field-splitting — same
-    # space-in-checkout-path defect as the SPEC lookup (codex W1 round 7, P2).
-    # `|| true`: identical set -e abort-instead-of-preserve mode as the SPEC
-    # lookup (codex W1 round 8, P2).
-    _mk_rec_tgt="$( grep -E '^LINK  \.claude/\.framework-version  ' "$_BASELINE_MANIFEST_FILE" 2>/dev/null | head -1 || true )"
-    _mk_rec_tgt="${_mk_rec_tgt#LINK  .claude/.framework-version  }"
-    _mk_live_tgt="$( readlink "$dst" 2>/dev/null || true )"
-    if [[ -n "$_mk_rec_tgt" && "$_mk_rec_tgt" == "$_mk_live_tgt" ]]; then
-      echo "    SKIP: .claude/.framework-version is the recorded --mode link delivery (target unchanged)"
-      _MARKER_DELIVERED=1
-    else
-      echo "    WARNING: .claude/.framework-version is a symlink that does NOT match the" >&2
-      echo "             recorded LINK delivery (recorded='${_mk_rec_tgt:-<none>}', live='${_mk_live_tgt}')" >&2
-      echo "             — preserved WITHOUT framework ownership (readers fall back to VERSION)" >&2
-    fi
-    return 0
-  fi
-  # Non-file destination guard (codex W1 round 2, P2): an adopter DIRECTORY
-  # at this path would make `cp src dst` copy INSIDE it (stray file left in
-  # adopter-owned space); a FIFO would block the upgrade. Anything that
-  # exists but is not a regular file is adopter-owned => preserve + named
-  # skip, never write.
-  if [[ -e "$dst" && ! -f "$dst" ]]; then
-    echo "    SKIP: .claude/.framework-version exists but is not a regular file (adopter-owned; refusing to write into/through it)"
-    if _baseline_has_marker_record; then _MARKER_DELIVERED=1; fi
-    return 0
-  fi
-  if [[ "$DRY_RUN" -eq 1 ]]; then
-    echo "    (dry-run) would REFRESH: .claude/.framework-version ($(tr -d '[:space:]' < "$src" 2>/dev/null || true))"
-    return 0
-  fi
-
-  if [[ -f "$dst" ]] && ! cmp -s "$src" "$dst" 2>/dev/null; then
-    # Backup-before-replace is the contract (codex W1 round 4, P2 — same
-    # rule the non-directory SPEC branch enforces): a suppressed cp failure
-    # here would let the overwrite below destroy the only copy while the
-    # log claims BACKED UP. Failed backup => preserve, never overwrite.
-    mkdir -p "$( dirname "$bak" )"
-    if cp "$dst" "$bak" 2>/dev/null; then
-      echo "    BACKED UP: .claude/.framework-version -> $bak"
-    else
-      echo "    WARNING: could not back up differing .claude/.framework-version —" >&2
-      echo "             REFUSING to overwrite it (backup-before-replace; readers" >&2
-      echo "             fall back to VERSION)" >&2
-      _up_record_op "preserve_marker_backup_failed" ".claude/.framework-version"
-      return 0
-    fi
-  fi
-  mkdir -p "$( dirname "$dst" )"
-  cp "$src" "$dst"
-  if cmp -s "$src" "$dst" 2>/dev/null; then
-    _MARKER_DELIVERED=1
-    _up_record_op "refresh_framework_marker" "$(tr -d '[:space:]' < "$src" 2>/dev/null || true)"
-    echo "    REFRESHED: .claude/.framework-version ($(tr -d '[:space:]' < "$dst" 2>/dev/null || true))"
+    _lt="ancestor_symlink"
   else
-    echo "    WARNING: .claude/.framework-version write did not validate — NOT recorded as" >&2
-    echo "             delivered (marker-first readers fall back to VERSION; r20)" >&2
+    _lt="$( _ov_obs_live_type "$dst" )"
   fi
+  _pr="$( _ov_obs_prior_record ".claude/.framework-version" )"
+  _sh=no; [ -f "$src" ] && _sh=yes
+  if [ ! -e "$dst" ] || [ -L "$dst" ]; then
+    _lc="-"
+  elif [ "$_sh" = yes ] && cmp -s "$src" "$dst" 2>/dev/null; then
+    _lc="pristine"
+  else
+    _lc="edited"
+  fi
+  _md="$( _ov_obs_mode )"
+  _sk="$( _ov_obs_skip ".claude/.framework-version" )"
+
+  # ---- DECIDE --------------------------------------------------------------
+  local _pair _verdict
+  if ! _pair="$( _ownership_verdict marker "$_pr" "$_lt" "$_lc" "$_sh" "$_md" \
+                   "$CEREMONY_EFFECTIVE" upgrade "$_sk" )"; then
+    echo "    WARNING: .claude/.framework-version dimensions are not a legal cell" >&2
+    echo "             — PRESERVED without ownership. Please report this combination." >&2
+    return 0
+  fi
+  _verdict="${_pair%% *}"
+  _MARKER_HASH_SOURCE="${_pair##* }"
+
+  # ---- EXECUTE -------------------------------------------------------------
+  case "$_verdict" in
+    PRESERVE_OWNED)
+      _MARKER_DELIVERED=1
+      case "$_lt/$_sk" in
+        ancestor_symlink/*) echo "    SKIP: .claude/.framework-version has a symlinked ancestor (refusing to write through it — F11a)" ;;
+        symlink/*)          echo "    SKIP: .claude/.framework-version is the recorded --mode link delivery (target unchanged)" ;;
+        */self)             echo "    SKIPPED (--skip): .claude/.framework-version" ;;
+        *)                  echo "    SKIP: .claude/.framework-version (ownership carried forward)" ;;
+      esac
+      return 0
+      ;;
+
+    OMIT_RECORD|PRESERVE_UNOWNED)
+      if [ "$_sh" = no ]; then
+        # The documented --pin downgrade: this source predates the marker, so a
+        # retained record would keep advertising a newer version over older
+        # content. Readers fall back to VERSION, which the pin DID update.
+        echo "    SKIP: .claude/.framework-version absent in source (pre-v1.3.0 checkout)"
+        if [ "$_pr" != "none" ]; then
+          echo "    NOTE: the prior delivery record is NOT carried forward — version" >&2
+          echo "          readers fall back to VERSION (which reflects the pinned source)" >&2
+        fi
+      elif [ "$_lt" = "symlink" ]; then
+        echo "    WARNING: .claude/.framework-version is a symlink that does NOT match the" >&2
+        echo "             recorded LINK delivery — preserved WITHOUT framework ownership" >&2
+        echo "             (readers fall back to VERSION)" >&2
+      else
+        echo "    SKIP: .claude/.framework-version is $_lt — adopter-owned, refusing to write into/through it"
+      fi
+      return 0
+      ;;
+
+    DELIVER|REFRESH)
+      if [ "$DRY_RUN" -eq 1 ]; then
+        echo "    (dry-run) would REFRESH: .claude/.framework-version ($(tr -d '[:space:]' < "$src" 2>/dev/null || true))"
+        return 0
+      fi
+      if [ "$_verdict" = "REFRESH" ] && [ "$_lc" = "edited" ]; then
+        mkdir -p "$( dirname "$bak" )"
+        if cp "$dst" "$bak" 2>/dev/null; then
+          echo "    BACKED UP: .claude/.framework-version -> $bak"
+        else
+          # INV-3: an execution failure never advances the record.
+          echo "    WARNING: could not back up differing .claude/.framework-version —" >&2
+          echo "             REFUSING to overwrite it (backup-before-replace)" >&2
+          _up_record_op "preserve_marker_backup_failed" ".claude/.framework-version"
+          [ "$_pr" = "hash" ] && _MARKER_DELIVERED=1
+          return 0
+        fi
+      fi
+      mkdir -p "$( dirname "$dst" )"
+      cp "$src" "$dst"
+      # Read-back validation: a write that cannot be confirmed is NOT recorded
+      # as delivered, so every marker-first reader falls back to VERSION rather
+      # than trusting a value the upgrade could not verify.
+      if cmp -s "$src" "$dst" 2>/dev/null; then
+        _MARKER_DELIVERED=1
+        _up_record_op "refresh_framework_marker" "$(tr -d '[:space:]' < "$src" 2>/dev/null || true)"
+        echo "    REFRESHED: .claude/.framework-version ($(tr -d '[:space:]' < "$dst" 2>/dev/null || true))"
+      else
+        echo "    WARNING: .claude/.framework-version write did not validate — NOT recorded as" >&2
+        echo "             delivered (marker-first readers fall back to VERSION; r20)" >&2
+      fi
+      return 0
+      ;;
+  esac
 }
 
 has_profile() {

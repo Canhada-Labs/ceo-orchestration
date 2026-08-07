@@ -517,6 +517,20 @@ _ownership_verdict() {
   # record. Only the upgrade's forced route replaces content.
   if [ "$_ov_op" != "upgrade" ]; then _ov_carry; return 0; fi
 
+  # The pointer is the ONE surface where an adopter edit is PRESERVED rather
+  # than treated as a fork. SPEC/v1 is deliberately the opposite: it is the
+  # published compliance CONTRACT, so an edit is a fork and the forced route
+  # replaces it (ADR-155-AMEND-1 §4). The root PROTOCOL.md is adopter-editable
+  # prose, and overwriting a customised one is the verified S238 data loss that
+  # ADR-155 decision (iii) exists to close.
+  #
+  # The recorded digest stays CANONICAL either way: recording the customised
+  # bytes would make the NEXT upgrade read H_dst==H_base and clobber them.
+  if [ "$_ov_surface" = "protocol" ] && [ "$_ov_lcontent" = "edited" ]; then
+    printf 'PRESERVE_OWNED HASH_CANONICAL_POINTER'
+    return 0
+  fi
+
   case "$_ov_surface" in
     protocol) printf 'REFRESH HASH_CANONICAL_POINTER' ;;
     *)        printf 'REFRESH HASH_SOURCE' ;;

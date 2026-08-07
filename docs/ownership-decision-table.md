@@ -389,6 +389,37 @@ This is the kind of defect that survives eleven rounds of code review: every
 branch reads *a* manifest, each reads a defensible one, and no branch is
 individually wrong.
 
+### 5.4d The missing cell was the most important one
+
+The table had nine `protocol` rows and none for the combination that matters
+most: an **adopter-customised pointer on a normal (maintainer) upgrade**.
+`OWN-0072` covers the same content under `ceremony=user`; the ordinary path
+was simply absent.
+
+Deriving its expected pair exposed a **data-loss defect in the proposed
+decision function**. For that cell the function returned `REFRESH` — it would
+have overwritten a customised root `PROTOCOL.md`. That is the verified S238
+loss that ADR-155 decision (iii) exists to close, and the live code has
+preserved it correctly all along.
+
+The asymmetry the function was missing is deliberate and is now stated in it:
+
+| Surface | An adopter edit is… | Because |
+|---|---|---|
+| `SPEC/v1` | a **fork of the contract** → forced refresh | it is the published compliance contract (ADR-155-AMEND-1 §4) |
+| `PROTOCOL.md` | **adopter content** → preserved | overwriting it is the verified S238 loss (ADR-155 (iii)) |
+
+Both record a **canonical** digest regardless, because recording the
+customised bytes would make the *next* upgrade read `H_dst == H_base` and
+clobber them — the C.5 idempotency trap.
+
+Two things are worth separating here. The defect was in the **new** code, not
+the old: a refactor that had been driven only by "keep the map green" would
+have shipped it, because **no existing row covered the cell**. What found it
+was asking the completeness question — *which combinations does this surface
+have, and is each one present?* — which is the one question a per-branch
+review never asks.
+
 ### 5.5 Two findings are invariants, not cells
 
 Two defects were about the **blast radius** of a fix rather than about any
@@ -606,6 +637,14 @@ verdicts, the live branch, and ADR-155/AMEND-1 — do **not** agree. PLAN-167
   `prior_record`, which is already a column. If that holds under scrutiny, the
   enum has five verdicts, not six — and a redundant enum member is a place for
   two branches to disagree about which one applies.
+
+- **OQ-10 — `--on-conflict` is an eleventh dimension.**
+  Surfacing §5.4d's cell also surfaced its modifier: the live code branches on
+  `--on-conflict={refuse|theirs|backup}` for exactly that cell, and `theirs`
+  or `backup` invert the outcome from preserve to overwrite. The nine
+  dimensions cannot express it, so the table currently describes the default
+  (`refuse`) only. Either it becomes a dimension or the table states in one
+  line that it is default-scoped — silence is the option §4 forbids.
 
 - **OQ-8 — Does the table cover readers, or only writers?**
   One defect was a *reader* trusting a delivered-then-edited marker and
