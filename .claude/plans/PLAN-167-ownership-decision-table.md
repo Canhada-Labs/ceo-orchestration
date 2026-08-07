@@ -598,9 +598,52 @@ FORMA do trabalho e não-confiável sobre MECÂNICA específica — ela foi
 escrita de memória da S296, não re-derivada do código. Verifique cada uma
 antes de executar.
 
-**PRÓXIMA AÇÃO CONCRETA:** converter o caller do `marker`
-(`_refresh_framework_marker`) com o mesmo padrão do `spec`, rodar a suíte,
-exigir zero regressões. Depois o `protocol`. Só então W2.3.
+### W2.2 COMPLETO — 3/3 callers convertidos (2026-08-07)
+
+| Caller | Resultado |
+|---|---|
+| `spec` | diff de status = 0 em 61 células |
+| `marker` | diff de status = 0 em 61 células |
+| `protocol` | `OWN-0032` CUROU · `OWN-0034` deixou de ser ESCAPE |
+
+**A fuga para fora da árvore está FECHADA** — zero ocorrências de `ESCAPE`
+no mapa. Era a classe S238 provada em live-fire. Mapa: **51 verde / 11
+vermelho em 62** (`OWN-0074` adicionada).
+
+Os guards que o `protocol` nunca teve não vieram como ramos novos: vieram
+da decisão. Destino não-regular ⇒ unowned ⇒ nada é escrito.
+
+### ⛔ PARADO AQUI — bloqueado em decisões do Owner
+
+O gate do W2 (§W2.4, mapa 100%) NÃO fecha. Pela regra §6.10 o entregável é
+o RELATÓRIO (`PLAN-167/W2-STATUS-REPORT.md`), não um pack.
+
+**Os 11 vermelhos, classificados:**
+
+| Linhas | Natureza | Desbloqueio |
+|---|---|---|
+| `0016` `0082` | continuidade só-flag | W2.3 |
+| `0024` `0027` | backup falho aborta o run | W2.3 (INV-3) |
+| `0034` `0074` | registro grava digest não-canônico | W2.3 |
+| `0052` `0053` | r11-F1, aberto desde a S296 | W2.3 |
+| `0025` `0029` `0033` | TIMEOUT no scanner (§5.7) | **fora das 3 superfícies** |
+
+**TRÊS DECISÕES DO OWNER bloqueiam o W2.3:**
+1. **OQ-9** — colapsar `OMIT_RECORD` em `PRESERVE_UNOWNED`? Duas evidências
+   independentes a favor. Se sim, o enum cai de 6 vereditos para 4.
+2. **OQ-10** — `--on-conflict={theirs|backup}` INVERTE a célula S238
+   (`OWN-0074`). Vira 11ª dimensão ou a tabela declara escopo-padrão?
+3. **Escopo do fail-closed** (must-fix 4 do security): o hashing da árvore
+   RENDERIZADA fica; alargar exatamente ali causou a regressão P1 r8-F1.
+
+**§5.7 é trabalho SEPARADO:** `check-model-deprecations.py` trava num FIFO
+e mata o upgrade antes de qualquer refresh. Não é superfície deste plano, e
+enquanto não for corrigido as 3 células de TIMEOUT são INALCANÇÁVEIS —
+verde ali não provaria nada.
+
+**INV-4 (§5.4e) é defeito VIVO e independente:** todo upgrade degrada o
+ponteiro raiz para `{{PROTOCOL_SOURCE}}` literal. Sonda reproduzível em
+`evidence/probe-INV4-pointer-substitution.sh`. Merece plano próprio.
 
 **Dívidas de infra registradas nesta noite (não bloqueiam):**
 `inject-agent-context.sh` falha a busca de persona mesmo com nome exato do
