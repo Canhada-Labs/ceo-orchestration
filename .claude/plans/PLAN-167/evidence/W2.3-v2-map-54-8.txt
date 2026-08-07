@@ -1,7 +1,7 @@
 == PLAN-167 ownership decision table ==
    table:  /tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/c1f32917-17c3-4a44-a74f-30277a04017a/scratchpad/plan167-overlay-235553/scripts/tests/ownership_table.tsv
    source: /tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/c1f32917-17c3-4a44-a74f-30277a04017a/scratchpad/plan167-overlay-235553
-   scratch:/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T//plan167-own.toQDrn
+   scratch:/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T//plan167-own.pemGu8
    timeout:60s/cell   timeout-bin:<fallback>
 
 OWN-0001   GREEN   exp=DELIVER         /HASH_SOURCE            got=DELIVER         /HASH_SOURCE            rc=0   adr-155
@@ -26,17 +26,17 @@ OWN-0020   GREEN   exp=PRESERVE_UNOWNED/HASH_NONE              got=PRESERVE_UNOW
 OWN-0021   GREEN   exp=REFRESH         /HASH_SOURCE            got=REFRESH         /HASH_SOURCE            rc=0   adr-155-amend-1
 OWN-0022   GREEN   exp=REFRESH         /HASH_SOURCE            got=REFRESH         /HASH_SOURCE            rc=0   adr-155-amend-1
 OWN-0023   GREEN   exp=REFRESH         /HASH_SOURCE            got=REFRESH         /HASH_SOURCE            rc=0   r3-F1
-OWN-0024   RED     exp=ABORT_SURFACE   /HASH_PRIOR_RECORD      got=REFRESH         /HASH_NONE              rc=0   r3-F1
+OWN-0024   RED     exp=ABORT_SURFACE   /HASH_PRIOR_RECORD      got=PRESERVE_OWNED  /HASH_PRIOR_RECORD      rc=1   r3-F1
 OWN-0025   GREEN   exp=PRESERVE_UNOWNED/HASH_NONE              got=PRESERVE_UNOWNED/HASH_NONE              rc=0   r9-F3
 OWN-0026   GREEN   exp=REFRESH         /HASH_SOURCE            got=REFRESH         /HASH_SOURCE            rc=0   adr-155-amend-1
-OWN-0027   RED     exp=ABORT_SURFACE   /HASH_PRIOR_RECORD      got=REFRESH         /HASH_PRIOR_RECORD      rc=0   r4-F5
+OWN-0027   RED     exp=ABORT_SURFACE   /HASH_PRIOR_RECORD      got=PRESERVE_OWNED  /HASH_PRIOR_RECORD      rc=1   r4-F5
 OWN-0028   GREEN   exp=PRESERVE_UNOWNED/HASH_NONE              got=PRESERVE_UNOWNED/HASH_NONE              rc=0   r2-F3
-OWN-0029   GREEN   exp=PRESERVE_UNOWNED/HASH_NONE              got=PRESERVE_UNOWNED/HASH_NONE              rc=0   r2-F3
+OWN-0029   TIMEOUT exp=PRESERVE_UNOWNED/HASH_NONE              got=TIMEOUT         /TIMEOUT                rc=137 r2-F3
 OWN-0030   GREEN   exp=PRESERVE_UNOWNED/HASH_NONE              got=PRESERVE_UNOWNED/HASH_NONE              rc=0   r2-F1
 OWN-0031   GREEN   exp=PRESERVE_UNOWNED/HASH_NONE              got=PRESERVE_UNOWNED/HASH_NONE              rc=0   r4-F2
 OWN-0032   GREEN   exp=PRESERVE_UNOWNED/HASH_NONE              got=PRESERVE_UNOWNED/HASH_NONE              rc=0   derived
 OWN-0033   GREEN   exp=PRESERVE_UNOWNED/HASH_NONE              got=PRESERVE_UNOWNED/HASH_NONE              rc=0   derived
-OWN-0034   GREEN   exp=PRESERVE_UNOWNED/HASH_NONE              got=PRESERVE_UNOWNED/HASH_NONE              rc=0   derived
+OWN-0034   RED     exp=PRESERVE_UNOWNED/HASH_NONE              got=PRESERVE_OWNED  /HASH_UNCLASSIFIED      rc=0   derived
 OWN-0040   GREEN   exp=PRESERVE_OWNED  /LINK_RECORD            got=PRESERVE_OWNED  /LINK_RECORD            rc=0   r4-F3
 OWN-0041   GREEN   exp=PRESERVE_OWNED  /LINK_RECORD            got=PRESERVE_OWNED  /LINK_RECORD            rc=0   r4-F4
 OWN-0042   GREEN   exp=PRESERVE_UNOWNED/HASH_NONE              got=PRESERVE_UNOWNED/HASH_NONE              rc=0   r4-F3
@@ -49,8 +49,8 @@ OWN-0048   GREEN   exp=PRESERVE_OWNED  /LINK_RECORD            got=PRESERVE_OWNE
 OWN-0049   GREEN   exp=PRESERVE_OWNED  /LINK_RECORD            got=PRESERVE_OWNED  /LINK_RECORD            rc=0   r7-F3
 OWN-0050   GREEN   exp=PRESERVE_UNOWNED/HASH_NONE              got=PRESERVE_UNOWNED/HASH_NONE              rc=0   r10-F1
 OWN-0051   GREEN   exp=PRESERVE_UNOWNED/HASH_NONE              got=PRESERVE_UNOWNED/HASH_NONE              rc=0   r10-F1
-OWN-0052   GREEN   exp=PRESERVE_UNOWNED/HASH_NONE              got=PRESERVE_UNOWNED/HASH_NONE              rc=0   r11-F1
-OWN-0053   GREEN   exp=PRESERVE_UNOWNED/HASH_NONE              got=PRESERVE_UNOWNED/HASH_NONE              rc=0   r11-F1
+OWN-0052   RED     exp=PRESERVE_UNOWNED/HASH_NONE              got=PRESERVE_OWNED  /LINK_RECORD            rc=0   r11-F1
+OWN-0053   RED     exp=PRESERVE_UNOWNED/HASH_NONE              got=PRESERVE_OWNED  /LINK_RECORD            rc=0   r11-F1
 OWN-0060   GREEN   exp=PRESERVE_OWNED  /HASH_SOURCE            got=PRESERVE_OWNED  /HASH_SOURCE            rc=0   adr-155-amend-1
 OWN-0061   GREEN   exp=PRESERVE_OWNED  /HASH_SOURCE            got=PRESERVE_OWNED  /HASH_SOURCE            rc=0   r2-F2
 OWN-0062   GREEN   exp=PRESERVE_OWNED  /HASH_SOURCE            got=PRESERVE_OWNED  /HASH_SOURCE            rc=0   r5-F3
@@ -67,4 +67,4 @@ OWN-0082   GREEN   exp=PRESERVE_OWNED  /HASH_PRIOR_RECORD      got=PRESERVE_OWNE
 OWN-0090   GREEN   exp=REFRESH         /HASH_SOURCE            got=REFRESH         /HASH_SOURCE            rc=0   r7-F1
 OWN-0091   GREEN   exp=PRESERVE_OWNED  /HASH_SOURCE            got=PRESERVE_OWNED  /HASH_SOURCE            rc=0   r7-F1
 
-GREEN=58  RED=4  AMBIG=0  HARNESS-ERR=0
+GREEN=54  RED=8  AMBIG=0  HARNESS-ERR=0

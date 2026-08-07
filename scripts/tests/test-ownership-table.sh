@@ -386,7 +386,9 @@ _mutate_surface() {  # $1 surface, $2 live_type, $3 live_content, $4 src root, $
 # Verdict derivation
 # =============================================================================
 _derive_verdict() {  # $1 bd $2 ad $3 br $4 ar $5 out $6 surface $7 rel $8 operation
-  local bd="$1" ad="$2" br="$3" ar="$4" out="$5" surface="$6" rel="$7" op="${8:-upgrade}"
+  # $3 (before-record) went unused when OQ-9 collapsed OMIT_RECORD into
+  # PRESERVE_UNOWNED: what a record USED to be no longer changes the name.
+  local bd="$1" ad="$2" ar="$4" out="$5" surface="$6" rel="$7" op="${8:-upgrade}"
   if [[ "$bd" != "$ad" ]]; then
     if [[ "$bd" == "absent" ]]; then printf 'DELIVER'; else printf 'REFRESH'; fi
     return 0
@@ -417,7 +419,8 @@ _derive_verdict() {  # $1 bd $2 ad $3 br $4 ar $5 out $6 surface $7 rel $8 opera
   if [[ "$op" == "upgrade" && "$_MTIME_BEFORE" != "$_MTIME_AFTER" ]]; then
     printf 'REFRESH'; return 0
   fi
-  if [[ -n "$br" && -z "$ar" ]]; then printf 'OMIT_RECORD'; return 0; fi
+  # OQ-9 colapsada: sem registro ao final é PRESERVE_UNOWNED, tenha ou não
+  # existido um antes. O 'tinha antes?' é prior_record, que já é uma coluna.
   if [[ -n "$ar" ]]; then printf 'PRESERVE_OWNED'; else printf 'PRESERVE_UNOWNED'; fi
 }
 
@@ -451,7 +454,20 @@ _derive_hash_source() {  # $1 surface $2 after_rec $3 prior_rec $4 src_root
     printf 'HASH_UNCLASSIFIED'; return 0
   fi
 
+  # The canonical pointer digest is the hash of what the framework WOULD
+  # generate — it matches no file on disk when the pointer is customised, so it
+  # has to be recognised explicitly or every correct record reads as
+  # unclassified.
+  # Order matters and is NOT arbitrary. For a PRISTINE pointer the canonical
+  # digest and the prior record are the SAME bytes, so whichever is tested
+  # first wins the name. Testing the prior record first keeps continuity rows
+  # reading as HASH_PRIOR_RECORD, and the canonical name is then reached only
+  # when the two genuinely differ — i.e. when the pointer was customised, which
+  # is the one cell where the distinction carries meaning.
   [[ -n "$c_prior"   && "$got" == "$c_prior"   ]] && { printf 'HASH_PRIOR_RECORD'; return 0; }
+  if [[ "$surface" == "protocol" && -n "$c_pointer" && "$got" == "$c_pointer" ]]; then
+    printf 'HASH_CANONICAL_POINTER'; return 0
+  fi
   [[ -n "$c_source"  && "$got" == "$c_source"  ]] && { printf 'HASH_SOURCE'; return 0; }
   [[ -n "$c_pointer" && "$got" == "$c_pointer" ]] && { printf 'HASH_CANONICAL_POINTER'; return 0; }
   [[ -n "$c_target"  && "$got" == "$c_target"  ]] && { printf 'HASH_TARGET'; return 0; }
@@ -534,8 +550,12 @@ _run_row() {
   local bak_guard=""
   case "$fault" in
     backup_unwritable)
-      bak_guard="$T/.claude.bak"
-      rm -rf "$bak_guard"; mkdir -p "$bak_guard"; chmod 500 "$bak_guard" ;;
+      # Make the SURFACE unbackupable, not the upgrade unstartable. upgrade.sh
+      # creates $BAK_DIR at startup, so locking .claude.bak killed the run
+      # before any surface was reached — the branch under test never ran.
+      # An unreadable SOURCE makes the copy fail while everything else proceeds.
+      bak_guard="$T/$rel"
+      chmod 000 "$bak_guard" 2>/dev/null || true ;;
   esac
 
   # --- BEFORE snapshot -----------------------------------------------------
@@ -575,7 +595,7 @@ _run_row() {
     _run_with_timeout "$CELL_TIMEOUT" "$src/scripts/install.sh" "${iargs[@]}" >> "$out" 2>&1
     rc=$?
   fi
-  [[ -n "$bak_guard" ]] && chmod 700 "$bak_guard" 2>/dev/null
+  [[ -n "$bak_guard" ]] && chmod -R u+rwX "$bak_guard" 2>/dev/null
 
   local timed_out=0
   [[ $rc -eq 124 || $rc -eq 137 ]] && timed_out=1

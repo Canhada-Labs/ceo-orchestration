@@ -288,6 +288,35 @@ _wbm_link_allowed() {
   return 1
 }
 
+# --- PLAN-167 W2.3: the DECISION reaches the generator ----------------------
+# _ownership_verdict chooses a hash_source per conditional surface; the writer
+# obeys it instead of falling back to a default. Across all 62 rows of the
+# table the default (HASH_TARGET) is never the correct answer, and it is
+# exactly what let three P1 defects re-baseline adopter content as
+# framework-owned (docs §3.4).
+_wbm_declared_hash_source() {
+  case "$1" in
+    SPEC/v1|SPEC/v1/*)          printf '%s' "${FMS_HASH_SOURCE_SPEC:-}" ;;
+    PROTOCOL.md)                printf '%s' "${FMS_HASH_SOURCE_PROTOCOL:-}" ;;
+    .claude/.framework-version) printf '%s' "${FMS_HASH_SOURCE_MARKER:-}" ;;
+    *)                          printf '' ;;
+  esac
+}
+
+_wbm_is_conditional() {
+  case "$1" in
+    SPEC/v1|SPEC/v1/*|PROTOCOL.md|.claude/.framework-version) return 0 ;;
+  esac
+  return 1
+}
+
+# The digest the PRE-run manifest recorded. Empty when unavailable, which the
+# fail-closed branch turns into "do not record" rather than a guess.
+_wbm_prior_digest() {
+  [ -n "${FMS_PRIOR_MANIFEST:-}" ] && [ -f "$FMS_PRIOR_MANIFEST" ] || { printf ''; return 0; }
+  grep -E "^[0-9a-f]{64}  $1\$" "$FMS_PRIOR_MANIFEST" 2>/dev/null | head -1 | cut -d' ' -f1 || printf ''
+}
+
 _write_baseline_manifest() {
   _wbm_manifest="$1"
   if ! command -v _framework_manifest_files >/dev/null 2>&1 \
@@ -341,6 +370,35 @@ _write_baseline_manifest() {
         else
           _wbm_digest="$( _hash_file "$_wbm_abs" 2>/dev/null || true )"
         fi
+      elif _wbm_is_conditional "$_wbm_rel"; then
+        _wbm_decl="$( _wbm_declared_hash_source "$_wbm_rel" )"
+        case "$_wbm_decl" in
+          HASH_SOURCE)
+            # FMS_SOURCE_ROOT, never FMS_HASH_ROOT: the global override is an
+            # upgrade-only mechanism, and borrowing it here is what dragged
+            # install into the r8-F1 rendered-tree regression.
+            if [ -n "${FMS_SOURCE_ROOT:-}" ] && [ -f "$FMS_SOURCE_ROOT/$_wbm_rel" ]; then
+              _wbm_digest="$( _hash_file "$FMS_SOURCE_ROOT/$_wbm_rel" 2>/dev/null || true )"
+            else
+              continue   # the framework no longer ships it: record nothing
+            fi
+            ;;
+          HASH_PRIOR_RECORD)   _wbm_digest="$( _wbm_prior_digest "$_wbm_rel" )" ;;
+          HASH_CANONICAL_POINTER) _wbm_digest="${FMS_PROTOCOL_HASH:-}" ;;
+          HASH_TARGET)         _wbm_digest="$( _hash_file "$_wbm_abs" 2>/dev/null || true )" ;;
+          HASH_NONE)           continue ;;
+          *)
+            # FAIL-CLOSED, scoped to the three conditional surfaces (Owner
+            # ratified 2026-08-07). Under-claiming is recoverable; over-claiming
+            # is the delete-the-adopter's-file class.
+            echo "    NOTE: $_wbm_rel delivered but declared no hash_source —" >&2
+            echo "          NOT recorded (fail-closed; ownership under-claimed)" >&2
+            continue
+            ;;
+        esac
+        case "$_wbm_digest" in
+          "" ) continue ;;
+        esac
       else
         # Hash the FRAMEWORK version. When FMS_HASH_ROOT is set (upgrade) and the
         # path is ABSENT there, the framework no longer ships it — OMIT it from
@@ -421,7 +479,7 @@ _ownership_verdict() {
   _ov_carry() {
     case "$_ov_prior" in
       link_match)      printf 'PRESERVE_OWNED LINK_RECORD';  return 0 ;;
-      link_retargeted) printf 'OMIT_RECORD HASH_NONE';       return 0 ;;
+      link_retargeted) printf 'PRESERVE_UNOWNED HASH_NONE'; return 0 ;;
       none)            printf 'PRESERVE_UNOWNED HASH_NONE';  return 0 ;;
     esac
     # prior_record=hash. HASH_TARGET is never an option: it re-baselines the
@@ -439,17 +497,18 @@ _ownership_verdict() {
   # The framework must not claim this path. Whether a record existed changes
   # only which NAME the observation takes (OQ-9 — the evidence that these are
   # one outcome, not two).
-  _ov_unowned() {
-    if [ "$_ov_prior" = "none" ]; then printf 'PRESERVE_UNOWNED HASH_NONE'
-    else                               printf 'OMIT_RECORD HASH_NONE'; fi
-  }
+  # OQ-9 (ratificada pelo Owner 2026-08-07): PRESERVE_UNOWNED é o único nome.
+  # OMIT_RECORD dizia a mesma coisa — sem registro no disco — e diferia apenas
+  # por já existir registro antes, que é a coluna prior_record. Um membro de
+  # enum redundante é onde dois ramos discordam sobre qual deles se aplica.
+  _ov_unowned() { printf 'PRESERVE_UNOWNED HASH_NONE'; }
 
   # --- Stage A: gates that refuse to act, in priority order ------------------
 
   # A1. The source cannot deliver this surface.
   if [ "$_ov_shas" = "no" ]; then
     case "$_ov_surface" in
-      marker)   printf 'OMIT_RECORD HASH_NONE'; return 0 ;;  # --pin: readers fall back to VERSION
+      marker)   printf 'PRESERVE_UNOWNED HASH_NONE'; return 0 ;;  # --pin: readers fall back to VERSION
       protocol) return 1 ;;                                  # R-03: generated, never absent
       *)        _ov_carry; return 0 ;;
     esac

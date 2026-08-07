@@ -1,0 +1,8 @@
+a3075a7ee4ba468480a6d5a03728acbe8a9ed1f780543746cc935766334eee7c  .claude/plans/PLAN-167/staged/_framework_manifest_set.sh
+a82ac052e823e12148e236d2b9cfa7694ca85efafc354b49dbbe971df6d86eb9  .claude/plans/PLAN-167/staged/_framework_manifest_set.sh.patch
+c1cef53bde6c770add1b9f23c90156c3531352c91c7a33e3eeda75d9cecb47ba  .claude/plans/PLAN-167/staged/check-model-deprecations.py
+733d19d3d91fb944e8e1010bc65e02916c211d39e7cdf4dcff548632dd1539ce  .claude/plans/PLAN-167/staged/install.sh
+80b8f05adf3d3577cafd0ce130d10b9cc2a74c88995d9e1e8680dc1b3608f3b0  .claude/plans/PLAN-167/staged/install.sh.patch
+5338bb1fb7967c1efae519b822d834d35fc9d07b698fb4bc1d12bce2c13bc98b  .claude/plans/PLAN-167/staged/test-ownership-verdict-unit.sh
+2083b56480ebeea215f2c83d6bb8b6388a1b17494391b8f7d2fd9816a74c174f  .claude/plans/PLAN-167/staged/upgrade.sh
+46d3b369990af0eefca1024c75a8a7e29bcd40a5f9ad7bb001ea48f168ff3767  .claude/plans/PLAN-167/staged/upgrade.sh.patch

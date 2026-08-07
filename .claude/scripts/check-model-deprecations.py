@@ -43,6 +43,7 @@ import datetime
 import json
 import os
 import re
+import stat
 import sys
 from typing import Dict, List, Optional, Tuple
 
@@ -203,7 +204,17 @@ def scan_root(
         for fn in filenames:
             path = os.path.join(dirpath, fn)
             try:
-                if os.path.getsize(path) > MAX_BYTES:
+                # lstat + S_ISREG, not getsize: opening a FIFO BLOCKS FOREVER
+                # waiting for a writer, and getsize reports 0 for one, so the
+                # size cap never sees it. An adopter with a FIFO anywhere under
+                # the target used to hang the whole upgrade here — mid-run,
+                # after earlier surfaces had already been modified
+                # (PLAN-167 docs §5.7). Symlinks are skipped for the same
+                # no-follow reason the rest of the install surface uses.
+                st = os.lstat(path)
+                if not stat.S_ISREG(st.st_mode):
+                    continue
+                if st.st_size > MAX_BYTES:
                     continue
                 with open(path, "rb") as fh:
                     raw = fh.read()

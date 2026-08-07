@@ -60,10 +60,7 @@ LINES=""
 
 while IFS=$'\t' read -r id surface prior_record live_type live_content \
       source_has mode ceremony operation skip_requested fault \
-      exp_verdict exp_hash origin note; do
-  # `note` is consumed but never read: since round-1 consensus C1 it carries
-  # prose ONLY, and a decision that steers on prose is the defect C1 closed.
-  : "${note:-}"
+      exp_verdict exp_hash origin _note; do
   [[ -z "${id:-}" ]] && continue
   case "$id" in \#*|id) continue ;; esac
   if [[ -n "$ONLY" && ",$ONLY," != *",$id,"* ]]; then continue; fi

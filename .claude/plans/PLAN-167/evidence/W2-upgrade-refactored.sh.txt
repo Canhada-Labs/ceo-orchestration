@@ -1760,11 +1760,14 @@ _spec_tree_fingerprint() {
 # _ov_obs_live_type <abs path> — lstat vocabulary, never following.
 _ov_obs_live_type() {
   _olt_p="$1"
+  # Classify NON-REGULAR entries before anything opens the path. `ls -A` on a
+  # FIFO blocks forever waiting for a writer, so testing -d before -p turned
+  # the observer itself into the hang it was written to detect.
   if   [ -L "$_olt_p" ]; then printf 'symlink'
   elif [ ! -e "$_olt_p" ]; then printf 'absent'
+  elif [ -p "$_olt_p" ] || [ -S "$_olt_p" ]; then printf 'special'
   elif [ -d "$_olt_p" ]; then
     if [ -z "$( ls -A "$_olt_p" 2>/dev/null )" ]; then printf 'dir_empty'; else printf 'dir'; fi
-  elif [ -p "$_olt_p" ] || [ -S "$_olt_p" ]; then printf 'special'
   elif [ -f "$_olt_p" ]; then printf 'regular'
   else printf 'special'; fi
 }
@@ -1965,8 +1968,11 @@ _refresh_spec_contract() {
       _up_record_op "refresh_spec_v1" "$_pr/$_lc"
 
       if [ "$_lt" = "dir" ] || [ "$_lt" = "dir_empty" ]; then
-        mkdir -p "$( dirname "$bdir" )"
-        if ! cp -R "$ddir" "$bdir" 2>/dev/null; then
+        mkdir -p "$( dirname "$bdir" )" 2>/dev/null || true
+        # `|| true` is load-bearing: under `set -euo pipefail` a failing cp
+        # KILLS the run before the guard below can refuse the surface, so the
+        # upgrade dies mid-way instead of leaving this surface untouched.
+        if ! { cp -R "$ddir" "$bdir" 2>/dev/null || false; }; then
           # INV-3: an execution failure NEVER advances the record. The surface
           # is left exactly as it was, and so is its prior ownership record.
           echo "    WARNING: could not back up SPEC/v1 — REFUSING to replace it" >&2
@@ -2082,8 +2088,8 @@ _refresh_framework_marker() {
         return 0
       fi
       if [ "$_verdict" = "REFRESH" ] && [ "$_lc" = "edited" ]; then
-        mkdir -p "$( dirname "$bak" )"
-        if cp "$dst" "$bak" 2>/dev/null; then
+        mkdir -p "$( dirname "$bak" )" 2>/dev/null || true
+        if { cp "$dst" "$bak" 2>/dev/null || false; }; then
           echo "    BACKED UP: .claude/.framework-version -> $bak"
         else
           # INV-3: an execution failure never advances the record.
@@ -3121,6 +3127,12 @@ if [[ "$DRY_RUN" -eq 0 ]] && command -v _write_baseline_manifest >/dev/null 2>&1
   # upgrade delivered/refreshed (or what the pre-upgrade baseline already
   # recorded — ownership continuity), never the ceremony alone, never file
   # presence (r17/r19/r20).
+  # The decision travels with the delivery flag.
+  export FMS_SOURCE_ROOT="$SOURCE_DIR"
+  export FMS_PRIOR_MANIFEST="${_BASELINE_MANIFEST_FILE:-}"
+  export FMS_HASH_SOURCE_SPEC="${_SPEC_HASH_SOURCE:-}"
+  export FMS_HASH_SOURCE_MARKER="${_MARKER_HASH_SOURCE:-}"
+  export FMS_HASH_SOURCE_PROTOCOL="${_PROTOCOL_HASH_SOURCE:-}"
   export FMS_DELIVERED_SPEC="${_SPEC_DELIVERED:-0}"
   export FMS_DELIVERED_PROTOCOL="${_PROTOCOL_DELIVERED:-0}"
   export FMS_DELIVERED_MARKER="${_MARKER_DELIVERED:-0}"
