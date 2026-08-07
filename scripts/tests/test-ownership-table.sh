@@ -359,17 +359,19 @@ _mutate_surface() {  # $1 surface, $2 live_type, $3 live_content, $4 src root, $
       git -C "$REPO_ROOT" archive v1.2.0 SPEC/v1 2>/dev/null \
         | ( cd "$T" && tar -xf - ) || return 1
       ;;
-  esac
-
-  # Structured `note` directives that alter the fixture. Two rows can otherwise
-  # share an identical fixture while asserting opposite outcomes — at least one
-  # of them then passes or fails for a reason that has nothing to do with what
-  # it claims to test. (More evidence for OQ-7: `note` is accumulating
-  # dimensions that nothing validates.)
-  case "${_ROW_NOTE:-}" in
-    *extra=adopter_symlink*)
-      # An adopter-ADDED non-regular entry inside an otherwise pristine tree.
-      # The fingerprint must refuse to certify a tree it cannot fully inventory.
+    legacy_pristine_partial)
+      # A pristine shipped tree that ALSO carries an entry the fingerprint
+      # cannot inventory. Distinct from `edited`: every regular file still
+      # matches a shipped release, so content alone reads "pristine" — and the
+      # tree must STILL be refused, because a partial inventory can never
+      # certify a wholesale replace (ADR-155-AMEND-1 §4).
+      if ! git -C "$REPO_ROOT" rev-parse -q --verify 'refs/tags/v1.2.0^{}' >/dev/null 2>&1; then
+        echo "FIXTURE-ERR: tag v1.2.0 unavailable (see legacy_pristine above)" >&2
+        return 1
+      fi
+      rm -rf "$p"; mkdir -p "$p"
+      git -C "$REPO_ROOT" archive v1.2.0 SPEC/v1 2>/dev/null \
+        | ( cd "$T" && tar -xf - ) || return 1
       ln -s /dev/null "$p/adopter-added.link" 2>/dev/null || true
       ;;
   esac
@@ -471,7 +473,8 @@ MAP_LINES=""
 _run_row() {
   local id="$1" surface="$2" prior_record="$3" live_type="$4" live_content="$5"
   local source_has="$6" mode="$7" ceremony="$8" operation="$9" skip_requested="${10}"
-  local exp_verdict="${11}" exp_hash="${12}" origin="${13}" note="${14}"
+  local fault="${11}"
+  local exp_verdict="${12}" exp_hash="${13}" origin="${14}" note="${15}"
 
   local rel; rel="$( _relpath_for "$surface" )" || { ERR=$((ERR+1)); return; }
 
@@ -518,14 +521,15 @@ _run_row() {
     mkdir -p "$WORK/retarget"; printf 'retargeted\n' > "$WORK/retarget/leaf"
     rm -f "$T/$rel"; ln -s "$WORK/retarget/leaf" "$T/$rel"
   fi
-  _ROW_NOTE="$note"
   _mutate_surface "$surface" "$live_type" "$live_content" "$src" "$prior_record" \
     || { ERR=$((ERR+1)); return; }
 
-  # fault injection (docs OQ-7 — a tenth axis riding in `note` until ratified)
+  # Fault injection from the `fault` COLUMN. It rode in `note` until round-1
+  # consensus C1 ruled that a dimension the harness parses out of prose is a
+  # dimension nothing validates.
   local bak_guard=""
-  case "$note" in
-    *fault=backup_unwritable*)
+  case "$fault" in
+    backup_unwritable)
       bak_guard="$T/.claude.bak"
       rm -rf "$bak_guard"; mkdir -p "$bak_guard"; chmod 500 "$bak_guard" ;;
   esac
@@ -635,7 +639,7 @@ _base_tar maintainer copy >/dev/null || { echo "ERROR: could not prime base" >&2
 # Rows are consumed in file order; the map is sorted by id at emit time so the
 # output is deterministic regardless of table order.
 while IFS=$'\t' read -r id surface prior_record live_type live_content \
-      source_has mode ceremony operation skip_requested \
+      source_has mode ceremony operation skip_requested fault \
       exp_verdict exp_hash origin note; do
   [[ -z "${id:-}" ]] && continue
   case "$id" in \#*|id) continue ;; esac
@@ -644,7 +648,7 @@ while IFS=$'\t' read -r id surface prior_record live_type live_content \
   if [[ -n "$ONLY" && ",$ONLY," != *",$id,"* ]]; then continue; fi
   _run_row "$id" "$surface" "$prior_record" "$live_type" "$live_content" \
            "$source_has" "$mode" "$ceremony" "$operation" "$skip_requested" \
-           "$exp_verdict" "$exp_hash" "$origin" "${note:-}"
+           "${fault:-none}" "$exp_verdict" "$exp_hash" "$origin" "${note:-}"
 done < "$TSV"
 
 printf '%s' "$MAP_LINES" | LC_ALL=C sort

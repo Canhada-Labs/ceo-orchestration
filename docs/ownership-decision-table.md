@@ -154,6 +154,25 @@ structurally: **no pre-existing baseline manifest at the target**.
 `none` · `self` (`--skip SPEC/v1`) · `descendant`
 (`--skip SPEC/v1/local.md`).
 
+### 2.10 `fault` — the tenth dimension (ratified in round 1)
+
+`none` · `backup_unwritable`.
+
+An injected environmental failure. It is not a property of the target, which
+is why it is not `live_type`; it is a genuine tenth axis, and it rode inside
+the `note` column as a prose directive until the round-1 debate ruled that a
+**dimension the harness parses out of prose is a dimension nothing
+validates**.
+
+Dropping those rows was the lower-friction alternative and was rejected:
+they are the backup-failure *safety* cells, and a failed backup followed by a
+delete is the data-loss path the whole backup-before-replace contract exists
+to prevent. A column is cheap; a hole is not.
+
+Consequently `note` now carries **prose only**. `indistinguishable=` and
+`open=` survive as annotations because neither changes what the fixture does
+or what the decision function returns.
+
 ## 3. The verdict enum (draft — W1 ratifies)
 
 The outcome of a cell is a **pair**. Every defect found in the eleven review
@@ -526,7 +545,12 @@ verdicts, the live branch, and ADR-155/AMEND-1 — do **not** agree. PLAN-167
   column for install today. If the answer is "install should honour skips
   too", that is a feature decision, and the pruned cells become legal.
 
-- **OQ-7 — `fault` is a tenth axis the column contract does not have.**
+- **OQ-7 — RESOLVED in round 1.** `fault` is now a real column (§2.10) and
+  `legacy_pristine_partial` a real `live_content` value. Both were prose
+  directives; both are now dimensions. The text below is kept as the record
+  of the question.
+
+  ~~**`fault` is a tenth axis the column contract does not have.**~~
   Three defects are reachable only under an injected environmental failure
   (an unwritable backup directory). That is not a property of the target, so
   it is not `live_type`; it is a genuine tenth dimension. PLAN-167 §W0.2
