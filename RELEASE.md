@@ -16,7 +16,7 @@
 > - `cat VERSION` — versão semântica corrente (`1.0.0`)
 > - `git tag -l 'v*' --sort=-creatordate | head -5` — últimas 5 tags
 > - `CHANGELOG.md` — entries por versão
-> - `.github/workflows/release.yml` — release-gate + publish-release (29 steps,
+> - `.github/workflows/release.yml` — release-gate + publish-release (31 steps,
 >   GPG-signed tags)
 >
 > Histórico preservado abaixo apenas como referência de como o

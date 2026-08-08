@@ -18,6 +18,12 @@ parent_sha: <40-char SHA — the commit the verdict was generated AGAINST (paren
 release_tag: <e.g. v1.16.0-rc.1>
 inputs_hash: <SHA256 of canonical_json envelope of git-hash-object SHAs for ALL paths in pair-rail-inputs-hash-manifest.txt>
 inputs_hash_paths_manifest_sha: <SHA-256 of pair-rail-inputs-hash-manifest.txt itself>
+delta_allowlist:  # PLAN-166 W0 — ENFORCED by tag() (_release_tag_guard.py delta) and by the release.yml fail-closed step. CLOSED set: every path allowed to differ between parent_sha and the tag commit. Literal repo-relative paths, NO glob metacharacters. MUST include this verdict file itself, the tag's verdict-fields file at the plan dir's canonical path (verdict-fields-<TAG>.md — basename elsewhere is rejected), and the re-pass evidence files of THIS tag only.
+  - .claude/governance/pair-rail-verdict-<release-tag>.md
+  - .claude/plans/PLAN-<NNN>/verdict-fields-<release-tag>.md
+  - .claude/plans/PLAN-<NNN>/repass-<N>/<each evidence file, named one by one>
+delta_manifest: <repo-relative path of the re-pass evidence MANIFEST.sha256 — the allowlist closes by CONTENT, not just by name: the guard runs `shasum -a 256 -c` on it>
+delta_manifest_sha256: <64-hex sha256 OF the MANIFEST.sha256 file itself — pins the pin>
 tool_versions:
   codex_cli: <version, must match codex-cli-pin.txt range>
   codex_target_triple: <targetTriple of the run that generated this verdict, e.g. aarch64-apple-darwin (ADR-182 wire-shape)>
@@ -29,6 +35,18 @@ transcript_hash: <SHA-256 of session transcript that produced this verdict>
 findings: []  # List of P0/P1/P2/P3 with file:line if any
 gpg_signature: <armored GPG signature of the above fields>
 ```
+
+## tag() guard semantics (PLAN-166 W0 — local AND server-side)
+
+- `delta_allowlist` / `delta_manifest` / `delta_manifest_sha256` are
+  REQUIRED for every new verdict (RC and stable). `tag()` refuses to
+  sign when `git diff <parent_sha>..HEAD --name-only` contains any path
+  outside the allowlist, when the allowlist carries a glob
+  metacharacter or another tag's artifacts, when the parent_sha is not
+  an ancestor of HEAD (E_PARENT_NOT_ANCESTOR=12), or when
+  `shasum -a 256 -c <delta_manifest>` fails. The same asserts run
+  server-side in release.yml, independent of
+  CEO_PAIR_RAIL_VERDICT_OPTIONAL (fail-closed step).
 
 ## Validator semantics
 

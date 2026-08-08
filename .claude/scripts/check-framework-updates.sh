@@ -79,26 +79,111 @@ out() {
   return 0
 }
 
-# Resolve VERSION
+# Resolve the LOCAL framework version — MARKER-FIRST with VERSION fallback
+# (PLAN-166 F3 / ADR-155-AMEND-1). In an ADOPTER tree the root VERSION is an
+# install-time snapshot: upgrade.sh deliberately never touches it (the
+# S238/ADR-155 clobber class), so reading it post-upgrade reports the OLD
+# version forever and this checker would exit behind-minor demanding the
+# SAME upgrade it just performed, in a loop (r8). The upgrade refreshes
+# .claude/.framework-version instead — but the marker is only TRUSTED when
+# the SAME delivery record the writers use (the ADR-155 baseline manifest,
+# .claude/.install-manifest.sha256) records it as framework-delivered: a
+# pre-existing adopter marker that install EXISTS-skipped must not be read
+# at all (r20). Resolution order:
+#   1. --version-file <path>              (explicit override — unchanged)
+#   2. <root>/.claude/.framework-version  when well-formed AND
+#                                         delivery-recorded in the manifest
+#   3. <root>/VERSION                     (pre-v1.3.0 installs, and the
+#                                          framework repo itself, where the
+#                                          tracked marker == VERSION and
+#                                          VERSION stays the authority)
 if [ -n "$LOCAL_VERSION_FILE" ]; then
   VFILE="$LOCAL_VERSION_FILE"
+  VSOURCE="explicit --version-file"
 else
-  # Walk up from CWD looking for a VERSION file
+  # Walk up from CWD to the first directory carrying either signal.
   cur="$(pwd)"
+  VROOT=""
   VFILE=""
+  VSOURCE=""
   while [ "$cur" != "/" ]; do
-    if [ -f "$cur/VERSION" ]; then
-      VFILE="$cur/VERSION"
+    if [ -f "$cur/.claude/.framework-version" ] || [ -f "$cur/VERSION" ]; then
+      VROOT="$cur"
       break
     fi
     cur="$(dirname "$cur")"
   done
+  if [ -z "$VROOT" ]; then
+    echo "fatal: no .claude/.framework-version or VERSION found (looked from $(pwd))" >&2
+    exit 3
+  fi
+  MARKER="$VROOT/.claude/.framework-version"
+  MANIFEST="$VROOT/.claude/.install-manifest.sha256"
+  if [ -f "$MARKER" ]; then
+    MARKER_REC=""
+    if [ -f "$MANIFEST" ]; then
+      MARKER_REC="$(grep -E '^([0-9a-f]{64}|LINK)  \.claude/\.framework-version(  |$)' "$MANIFEST" 2>/dev/null | head -1 || true)"
+    fi
+    if [ -n "$MARKER_REC" ]; then
+      # r20 answered PROVENANCE (is this marker the framework's delivery?)
+      # but never INTEGRITY: a delivered marker edited afterwards to any
+      # well-formed version still satisfied the record check, so hand-editing
+      # 1.3.0 -> 9.9.9 made the checker report up-to-date against an upstream
+      # 1.3.0 and SUPPRESS a real update (codex W1 round 7, P2). Verify the
+      # live bytes against the record before selecting the marker; anything
+      # unverifiable falls back to VERSION — the same conservative direction
+      # r20 already takes for an unrecorded marker.
+      MARKER_OK=""
+      case "$MARKER_REC" in
+        LINK\ \ *)
+          # Fixed double-space delimiter (targets may contain spaces).
+          _rec_tgt="${MARKER_REC#LINK  .claude/.framework-version  }"
+          _live_tgt="$(readlink "$MARKER" 2>/dev/null || true)"
+          if [ -n "$_rec_tgt" ] && [ "$_rec_tgt" = "$_live_tgt" ]; then MARKER_OK=1; fi
+          ;;
+        *)
+          _rec_dg="${MARKER_REC%%  *}"
+          _live_dg=""
+          if command -v shasum >/dev/null 2>&1; then
+            _live_dg="$(shasum -a 256 "$MARKER" 2>/dev/null | cut -d' ' -f1 || true)"
+          elif command -v sha256sum >/dev/null 2>&1; then
+            _live_dg="$(sha256sum "$MARKER" 2>/dev/null | cut -d' ' -f1 || true)"
+          fi
+          if [ -n "$_live_dg" ] && [ "$_rec_dg" = "$_live_dg" ]; then MARKER_OK=1; fi
+          ;;
+      esac
+      if [ -z "$MARKER_OK" ]; then
+        log "note: .claude/.framework-version does NOT match its delivery record (edited, redirected, or no digest tool available) — falling back to VERSION"
+      else
+        MARKER_VAL="$(tr -d '\n\r ' < "$MARKER" 2>/dev/null || true)"
+        if [[ "$MARKER_VAL" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$ ]]; then
+          VFILE="$MARKER"
+          VSOURCE="marker (.claude/.framework-version, delivery-recorded)"
+        else
+          log "note: .claude/.framework-version malformed ('$MARKER_VAL') — falling back to VERSION"
+        fi
+      fi
+    elif [ ! -f "$MANIFEST" ] && [ ! -f "$VROOT/VERSION" ]; then
+      # No manifest AND no VERSION: the marker is the only signal there is
+      # (fail-open — refusing here would make the checker fatal on a tree
+      # that still has a perfectly readable version value).
+      VFILE="$MARKER"
+      VSOURCE="marker (no manifest — only signal present)"
+    else
+      log "note: .claude/.framework-version present but NOT delivery-recorded in .claude/.install-manifest.sha256 — falling back to VERSION (r20: a pre-existing adopter marker is not the framework's)"
+    fi
+  fi
+  if [ -z "$VFILE" ] && [ -f "$VROOT/VERSION" ]; then
+    VFILE="$VROOT/VERSION"
+    VSOURCE="root VERSION (fallback)"
+  fi
 fi
 
 if [ -z "$VFILE" ] || [ ! -f "$VFILE" ]; then
-  echo "fatal: VERSION file not found (looked from $(pwd))" >&2
+  echo "fatal: version source not found (looked from $(pwd))" >&2
   exit 3
 fi
+log "version source: ${VSOURCE:-unknown} ($VFILE)"
 
 LOCAL="$(tr -d '\n\r ' < "$VFILE")"
 if [ -z "$LOCAL" ]; then

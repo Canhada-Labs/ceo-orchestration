@@ -1,0 +1,33 @@
+ A .claude/.framework-version
+ A .claude/adr/ADR-155-AMEND-1-delivery-record-ownership.md
+ A .claude/governance/npm-trusted-publisher.txt
+ M .claude/governance/pair-rail-verdict-template.md
+ M .claude/plans/PLAN-166/W1-approved-draft.md
+ A .claude/plans/PLAN-166/architect/round-1/approved.md
+ M .claude/plans/PLAN-166/staged-manifest.sha256
+ M .claude/scripts/check-framework-updates.sh
+ M .claude/scripts/tests/test_release_workflow_asserts.py
+ M .github/workflows/npm-publish.yml
+ M .github/workflows/release.yml
+ M .github/workflows/smoke-install.yml
+ M CLAUDE.md
+ M INSTALL.md
+ M README.md
+ M README.pt-BR.md
+ M RELEASE.md
+ M docs/ARCHITECTURE.md
+ M docs/CTO-GUIDE.md
+ M docs/FAQ.md
+ M docs/GUIA-COMPLETO.md
+ M docs/README.md
+ M npm/README.md
+ M scripts/_framework_manifest_set.sh
+ M scripts/doctor.sh
+ M scripts/install.sh
+ M scripts/tests/_parity_classify.py
+ A scripts/tests/test-upgrade-spec-ownership.sh
+ M scripts/upgrade.sh
+?? .claude/plans/PLAN-166/OWNER-W1-LAND-step1.sh
+?? .claude/plans/PLAN-166/W1-ceremony-log.md
+?? .claude/plans/PLAN-166/architect/round-1/approved.md.asc
+?? .claude/plans/PLAN-166/archive/

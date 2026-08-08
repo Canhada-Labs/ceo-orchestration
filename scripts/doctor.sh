@@ -613,10 +613,44 @@ if [ "$NO_ORPHAN_SCAN" -eq 0 ]; then
         done
       fi
     fi
+    # PLAN-166 F3 (ADR-155-AMEND-1): the FMS entries for PROTOCOL.md,
+    # SPEC/v1 and .claude/.framework-version are CONDITIONAL on the
+    # recorded delivery. doctor resolves the flags from the SAME record
+    # the writers use — the sanitized baseline manifest — NEVER from the
+    # ceremony: ceremony-only resolution would re-include paths a
+    # `--ceremony user` install skipped and --strict-orphans would flag
+    # the ADOPTER's own SPEC/PROTOCOL files as orphans (r19), while a
+    # blanket maintainer default would do the same and a blanket user
+    # default would hide a delivered SPEC from a maintainer (r9 P2).
+    _dr_delivered() {  # $1 = ERE fragment anchored at the relpath position
+      grep -Eq "^([0-9a-f]{64}|LINK)  $1" "$SANITIZED" 2>/dev/null
+    }
+    # `SPEC/v1(/|  |$)` and not a bare `SPEC/v1/`: a --mode link install
+    # records the whole tree as ONE directory symlink (`LINK  SPEC/v1
+    # <target>`, no trailing slash) — the same `(  |$)` treatment the
+    # PROTOCOL/marker fragments below already have (re-pass closure; family
+    # swept with upgrade.sh _baseline_has_spec_record).
+    if _dr_delivered 'SPEC/v1(/|  |$)'; then
+      FMS_DELIVERED_SPEC=1
+    else
+      FMS_DELIVERED_SPEC=0
+    fi
+    if _dr_delivered 'PROTOCOL\.md(  |$)'; then
+      FMS_DELIVERED_PROTOCOL=1
+    else
+      FMS_DELIVERED_PROTOCOL=0
+    fi
+    if _dr_delivered '\.claude/\.framework-version(  |$)'; then
+      FMS_DELIVERED_MARKER=1
+    else
+      FMS_DELIVERED_MARKER=0
+    fi
+    export FMS_DELIVERED_SPEC FMS_DELIVERED_PROTOCOL FMS_DELIVERED_MARKER
     export FMS_ROOT="$TARGET"
     export FMS_PROFILE_PARTS="$PROFILE_PARTS_STR"
     _framework_manifest_files > "$WORKDIR/enumerated" 2>/dev/null || : > "$WORKDIR/enumerated"
     unset FMS_ROOT FMS_PROFILE_PARTS
+    unset FMS_DELIVERED_SPEC FMS_DELIVERED_PROTOCOL FMS_DELIVERED_MARKER
     # Manifest relpaths (both record kinds).
     awk '{
       idx = index($0, "  ");

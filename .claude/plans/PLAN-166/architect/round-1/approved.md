@@ -5,38 +5,12 @@ type: architect-sentinel
 segment: W1-FINDINGS-CLOSURE
 ---
 
-<!--
-  ============================ DRAFT — DO NOT SIGN AS-IS ============================
-  This is the assembler's draft of the W1 ceremony sentinel. Before signing, the
-  Owner (or the ceremony session under the Owner's eyes) MUST:
-
-    1. Copy this file to .claude/plans/PLAN-166/architect/round-1/approved.md
-       (generate-ceremony.sh guard G2 requires that exact location/name).
-    2. Replace <<FILL-AT-SIGNING>> in Anchor-SHA with the REAL sha of origin/main
-       at the moment of signing (git rev-parse HEAD after the final fetch) — the
-       placeholder is deliberately non-hex so an unsigned/unedited draft can never
-       parse as a valid anchor.
-    3. RE-DERIVE the Scope block mechanically (PLAN-166 W1 item 6):
-         git status --porcelain | awk '{print $2}' | LC_ALL=C sort
-       run AFTER applying the staged copies + the ADR-count doc sweep, and diff it
-       against the block below. touched−scope=∅ must hold over the WHOLE ceremony
-       commit BEFORE the signature is requested. ONE tolerated exception (runbook
-       §7, PLAN-165 precedent): plan artifacts under .claude/plans/PLAN-166/**
-       (approved.md + .asc, staged-manifest.sha256, W1-approved-draft.md,
-       W1-land-runbook.md) ride in the ceremony commit as NON-canonical evidence
-       and stay OUT of this Scope block — they are the only comm-23 residual §7
-       accepts. Any OTHER difference = fix the tree or fix this file, then
-       re-sign (a rewritten approved.md always re-signs).
-    4. Fill Approved-At with the signing date.
-  ===================================================================================
--->
-
 # PLAN-166 W1 — release-hold findings-closure ceremony (Owner sentinel)
 
-Anchor-SHA: <<FILL-AT-SIGNING>>
+Anchor-SHA: 05e4845060f16d5b5bbce0fe1eea792a14118ed0
 
 Approved-By: @Canhada-Labs (Owner GPG — signed inline by the ceremony)
-Approved-At: <<FILL-AT-SIGNING>>
+Approved-At: 2026-08-07
 
 ## What this sentinel authorizes (sign this KNOWINGLY)
 
@@ -154,8 +128,10 @@ marker file; verified 2-line fixture cure → 47/47). Route A: apply
 (recommended default): SKIP; the fleet lands all three in its own
 follow-up — Forma A (ii) is unconditional either way, and this train
 (VERSION already 1.3.0 == marker) needs no marker bump site before the
-1.4.0 cycle. Whichever route, the mechanical re-derivation of step 3 in
-the header enforces the Scope.
+1.4.0 cycle. Whichever route, the mechanical re-derivation enforces the Scope.
+**OWNER-DECISION resolved at signing (2026-08-06): Route B — deferred-apply
+SKIPPED; the three paths stay OUT of this Scope. The follow-up (free
+surfaces, no sentinel) MUST land before the first 1.4.0-cycle bump.**
 
 Ceremony inputs are integrity-pinned: the TRACKED manifest
 `.claude/plans/PLAN-166/staged-manifest.sha256` covers every staged file;
@@ -211,3 +187,16 @@ template morre em E_VERDICT (achado P2 do round 1 da refutação; o
 template é canônico e por isso entra na cerimônia, não no W0).
 **Scope: adicionar este path ao grupo A (trem de release).**
 Manifesto regenerado: 32 entradas (template staged + patch novo).
+
+---
+
+## Adendo (2026-08-06, re-assinatura — rail codex round 4)
+
+Uma linha adicionada ao Scope grupo B: `scripts/tests/_parity_classify.py`.
+Motivo: as entradas KNOWN_OPEN F3-spec-stale / F3-protocol-user-mode são
+MANDATORY-FIRE por contrato do próprio arquivo — com o F3 fechado por esta
+cerimônia elas param de casar e o gate recém-fiado nasceria FATAL; o
+docstring exige deletá-las NO MESMO commit. Rounds 1-4 do rail: 13 achados
+aplicados (install rerun continuity; FMS_MODE link; fingerprint
+completeness; SPEC/marker ancestor-symlink + LINK-record validation;
+backup-before-replace 2x; recovery por current-source match; KNOWN_OPEN).

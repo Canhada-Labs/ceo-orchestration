@@ -1,0 +1,36 @@
+# npm Trusted Publisher registration — PLAN-166 W1 item 4
+#
+# The npmjs.com Owner console binds OIDC trusted publishing (PLAN-158
+# Wave 1) to EXACTLY this triple: repository + workflow FILENAME +
+# environment. If ANY of the three drifts, the token exchange dies
+# ENEEDAUTH at publish time — at GA, with no earlier proof point,
+# because RC tags skip the publish job. This file is the repo-side
+# record of what the console must say; until it existed the triple
+# lived only in comments inside npm-publish.yml and in the Owner's
+# browser (F1 re-pass finding, PLAN-166).
+#
+# Format: `key=value` lines; `#` lines and blank lines are comments.
+# Keys are exactly: repository, workflow, environment.
+#
+# Consumers:
+# - .claude/scripts/tests/test_release_workflow_asserts.py
+#   (TrustedPublisherBindingTest) READS this file and cross-checks
+#   .github/workflows/npm-publish.yml — the test embeds NO values
+#   (that would be a 4th copy of the truth; the copies are: the npmjs
+#   console, the workflow, and this file — the test collapses the two
+#   repo-side copies into one checked invariant). Includes a positive
+#   control: mutating `environment:` in a copy of the workflow goes red.
+# - Humans re-registering the trusted publisher after an OIDC failure:
+#   .claude/plans/PLAN-158/oidc-failure-playbook.md (binding is by
+#   FILENAME — playbook line 18 — which is why the publish stays in
+#   npm-publish.yml instead of moving into release.yml).
+#
+# Update ceremony: this file matches `.claude/governance/*.txt` in
+# _CANONICAL_GUARDS — edits require an Owner-signed sentinel, same as
+# the workflow it describes. Change the npmjs console FIRST, then this
+# file + the workflow in one ceremony; the structural test keeps the
+# repo side from drifting silently.
+
+repository=Canhada-Labs/ceo-orchestration
+workflow=npm-publish.yml
+environment=production-npm

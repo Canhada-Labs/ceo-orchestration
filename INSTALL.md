@@ -587,16 +587,24 @@ files. A version bump in `VERSION` carries the SemVer guarantee
 that minor/patch changes do NOT break the schemas; major bumps
 publish a new `SPEC/v2/` alongside.
 
-To verify what version you installed:
+To verify what framework version a target is running:
 
 ```bash
-cat TARGET/VERSION
-# Example output: 1.18.0
+cat TARGET/.claude/.framework-version   # preferred — refreshed on every upgrade
+# Example output: 1.3.0
+cat TARGET/VERSION                      # fallback (pre-v1.3.0 installs)
 ```
 
-The `VERSION` file matches the git tag of the source framework
-checkout at install time. Use it as a forensic anchor when an
-adopter reports a bug: ask for the `VERSION` value first.
+Prefer `.claude/.framework-version` as the forensic anchor when an
+adopter reports a bug. The root `VERSION` file matches the git tag of
+the source framework checkout **at install time only**: `upgrade.sh`
+deliberately never touches it (an adopter repo may have its own
+`VERSION`, and taking it over is the S238/ADR-155 clobber class — see
+`ADR-155-AMEND-1`), so on an upgraded install `VERSION` reports the
+ORIGINAL install version, not the current one. The marker is refreshed
+on every upgrade and is cross-checked against `VERSION` in every
+framework release; fall back to `VERSION` only on pre-v1.3.0 installs
+that have not upgraded yet.
 
 ---
 
@@ -617,12 +625,41 @@ What gets refreshed:
 - `.claude/skills/`, `.claude/hooks/`, `.claude/scripts/`,
   `.claude/commands/`
 - `.claude/pitfalls-catalog.yaml`, `.claude/task-chains.yaml`
-- `PROTOCOL.md` pointer
+- `PROTOCOL.md` pointer (skipped on `--ceremony user` installs — a user
+  install never creates root files)
+- `SPEC/v1/` — **forced route** (skipped on `--ceremony user` installs):
+  the SPEC is the published compliance contract, so a local edit is a
+  *fork of the contract*, not a customization — a framework-owned
+  `SPEC/v1` is backed up to `.claude.bak/<timestamp>/SPEC/v1` and
+  replaced wholesale. Ownership follows the recorded delivery (the
+  ADR-155 baseline manifest); a pre-existing `SPEC/v1` with no delivery
+  record is byte-compared against the pristine SPECs shipped at v1.2.0
+  and earlier — a match refreshes it, anything else is preserved in
+  place with a named WARNING (ADR-155-AMEND-1).
+- `.claude/.framework-version` — the framework version marker, rewritten
+  to the source version on every upgrade (this is what
+  `check-framework-updates.sh` and forensic triage read post-upgrade).
 
 What is **NOT** touched (user data):
 
 - `CLAUDE.md`, `MEMORY.md`
 - `.claude/agent-metrics.md`
+- `VERSION` (root) — **deliberately**: `install.sh` is skip-if-exists,
+  so on an adopter repo with its own `VERSION` the framework never
+  wrote there, and an upgrade overwrite would take the adopter's file
+  (the S238/ADR-155 class). The root `VERSION` is an install-time
+  snapshot forever; the current framework version lives in
+  `.claude/.framework-version`. Do not "fix" this asymmetry — see
+  `ADR-155-AMEND-1`.
+
+Ceremony on upgrade: `upgrade.sh` reads the recorded install ceremony
+from `.claude/.install-state.json` with a dedicated reader that runs
+even under `--no-replay`. **Installs without a readable
+`.install-state.json` (all pre-Wave-B installs) are treated as
+`maintainer` on upgrade** — that is the fail-open, pre-existing
+behavior; if your install was `--ceremony user` and predates the state
+file, re-run `install.sh --ceremony user` once so the ceremony is
+recorded before upgrading.
 
 `.claude/settings.json` is a special case since v1.2.0: `upgrade.sh` runs a
 3-state per-leaf-key **baseline migration** on it (e.g. the pair-rail

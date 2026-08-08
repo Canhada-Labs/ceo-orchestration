@@ -1,0 +1,3465 @@
+diff --git a/.claude/.framework-version b/.claude/.framework-version
+new file mode 100644
+index 0000000..f0bb29e
+--- /dev/null
++++ b/.claude/.framework-version
+@@ -0,0 +1 @@
++1.3.0
+diff --git a/.claude/adr/ADR-155-AMEND-1-delivery-record-ownership.md b/.claude/adr/ADR-155-AMEND-1-delivery-record-ownership.md
+new file mode 100644
+index 0000000..66dd0b3
+--- /dev/null
++++ b/.claude/adr/ADR-155-AMEND-1-delivery-record-ownership.md
+@@ -0,0 +1,240 @@
++# ADR-155-AMEND-1 — Framework ownership derives from the REGISTERED DELIVERY; SPEC/v1 joins the upgrade surface (forced route); root VERSION stays out — deliberately
++
++
++---
++adr_id: ADR-155-AMEND-1
++title: Install/upgrade ownership model — every conditional framework-owned entry (PROTOCOL.md, SPEC/v1, .claude/.framework-version) derives from the registered delivery record, never from ceremony alone or file presence; SPEC/v1 gets a FORCED refresh route with pristine-content legacy migration; the root VERSION is exempt from upgrade forever
++status: ACCEPTED
++amends: ADR-155
++proposed_at: 2026-08-05
++proposed_by: CEO (PLAN-166 F3 — ADR-103 re-pass NO-GO finding on v1.3.0-rc.1; debate rounds r6/r7/r8/r9/r13/r17/r19/r20)
++session_origin: 2026-08-05 (S295, W1 ceremony pack)
++accepted_at: 2026-08-05
++authorization: PLAN-166 W1 Owner-GPG ceremony — this file reaches the canonical tree ONLY via that ceremony; a landed copy implies the gate fired
++risk_tier: A
++debate_required: true
++debate_record: .claude/plans/PLAN-166/debate/ (3 rounds, 3 scoped VETOs raised and LIFTED with literal verification) + codex pair-rail 20 rounds (~55 findings applied)
++related_plans: [PLAN-138, PLAN-153, PLAN-161, PLAN-166]
++related_adrs: [ADR-155]
++---
++
++## §1 What this amendment changes
++
++ADR-155 built the baseline-manifest engine on one shared enumeration
++(`scripts/_framework_manifest_set.sh`) and enumerated the root
++`PROTOCOL.md` **unconditionally** (decision (i)). The v1.3.0-rc.1 re-pass
++(PLAN-166 finding F3) showed that unconditional — or ceremony-only —
++enumeration is itself an ownership defect, and that `SPEC/v1` (shipped by
++`install.sh` since PLAN-087 but never enumerated, never refreshed) had
++become a stale, unwatched contract on every upgraded adopter. This
++amendment decides four things:
++
++1. **The delivery-record ownership rule (general).** Every CONDITIONAL
++   entry of the framework-owned enumeration — `PROTOCOL.md`, `SPEC/v1`
++   and the new `.claude/.framework-version` marker — derives from the
++   **registered delivery**, never from the ceremony alone and never from
++   file presence (§3).
++2. **`SPEC/v1` joins the upgrade surface via a FORCED route** — not the
++   generic `backup_and_replace` classified walk — with a deterministic
++   pristine-content migration for v1.2-and-earlier legacy installs (§4).
++3. **`.claude/.framework-version`** becomes a tracked file of the
++   framework repo, written explicitly on install (`install_one`,
++   skip-if-exists) and force-refreshed + read-back-validated on upgrade;
++   marker-first readers consult the SAME delivery record before trusting
++   it (§5).
++4. **The root `VERSION` file stays OUT of the upgrade surface and OUT of
++   the enumeration — permanently and deliberately** (§2). This section
++   exists so the next maintainer does not "fix" the asymmetry and reopen
++   the class.
++
++## §2 Why root VERSION is exempt — do not repair this asymmetry
++
++`install.sh`'s `install_one` is **skip-if-exists**: on an adopter repo
++that already carries its own `VERSION` (most real repos version
++themselves), the framework **never wrote that file**. Any upgrade-side
++refresh of `VERSION` — `backup_and_replace` or a forced route — would
++therefore TAKE an adopter-owned file. That is not hypothetical: it is the
++exact shape of the S238 acme data-loss ("the verified worst case" in
++ADR-155's own words), and the baseline classifier would *confirm* the
++clobber rather than prevent it, because the recorded baseline would hash
++the framework's value (trap C.5, documented inside
++`_framework_manifest_set.sh`).
++
++So the asymmetry is: **every other framework-derived surface refreshes on
++upgrade; `VERSION` does not, ever.** The consequence — the root `VERSION`
++of an upgraded adopter reports the ORIGINAL install version forever — is
++absorbed by the marker (§5) and named in `INSTALL.md` (the forensic-anchor
++section now prefers `.claude/.framework-version` with a `VERSION`
++fallback). A future maintainer who notices "upgrade refreshes the marker
++but not VERSION — inconsistent!" is looking at a decided invariant, not an
++oversight. Reopening it requires amending THIS amendment.
++
++Inside the framework repo itself nothing changes: every framework-repo
++gate (`check-canonical-doc-freshness.py`, `verify-counts.sh`,
++`check_tier_a_spec_version_drift`) keeps reading `VERSION` as the
++authority. The marker-first preference is exclusive to readers operating
++on an ADOPTER tree — today, `.claude/scripts/check-framework-updates.sh`
++(without it, the checker re-reads the stale root `VERSION` post-upgrade,
++exits `behind-minor` and demands the same upgrade in an eternal loop —
++r8). `check_tier_a_npm_version_match` deliberately does NOT adopt the
++marker: in an adopter tree the root `package.json` is the APP's, and
++comparing the framework marker against the app version would be a
++permanent false-red; that check keeps its VERSION×package.json semantics
++(or skips when VERSION is absent).
++
++## §3 The delivery-record ownership rule
++
++**"Delivered" means REGISTERED ACTUAL DELIVERY, not ceremony (r17), and
++not file presence (r7/r13):**
++
++- A `--ceremony user` install SKIPS `install_spec_v1`,
++  `install_version` and `install_protocol_pointer` (WS4 guards). If the
++  enumeration emitted those paths unconditionally,
++  `write_install_manifest` would hash the ADOPTER's own `SPEC/v1` or root
++  `PROTOCOL.md` as framework-owned — and a later `uninstall.sh` (which
++  removes manifest-recorded, hash-matching files) could DELETE the
++  adopter's files (r7/r13).
++- Ceremony-conditional enumeration is still not enough: on a
++  `maintainer` install where the destination ALREADY had its own
++  `SPEC/v1`, `install_one` EXISTS-skips — the file on disk is the
++  adopter's, under a maintainer ceremony (r17).
++
++Mechanics (both writers, one reader):
++
++- `install.sh` flips `_DELIVERED_{SPEC,PROTOCOL,MARKER}` only where the
++  write ACTUALLY happened (`install_one` reports COPIED/LINKED via
++  `INSTALL_ONE_WROTE`; the pointer heredoc sets the flag on its own write
++  path, unreachable from the pre-existing early-return), journals a
++  `delivered_*` op into `.install-state.json`, and exports the flags as
++  `FMS_DELIVERED_*` to the shared enumeration.
++- The **baseline manifest** (`.claude/.install-manifest.sha256`) is
++  thereby the persistent delivery record: it carries records for the
++  three conditional paths **iff** they were delivered.
++- `upgrade.sh` resolves prior ownership from the pre-upgrade baseline
++  records (`_baseline_has_spec_record` / `_baseline_has_marker_record` /
++  the existing `_baseline_lookup "PROTOCOL.md"`), refreshes what it owns,
++  and re-exports the flags for the post-upgrade C.7 rewrite.
++- `doctor.sh` resolves the SAME flags from the sanitized baseline —
++  never from ceremony — before its orphan-scan enumeration: only-ceremony
++  would re-include paths a user install skipped and `--strict-orphans`
++  would flag the adopter's own files as orphans (r19); a blanket
++  maintainer default would do the same, and a blanket user default would
++  hide a delivered SPEC from a maintainer (r9 P2).
++- The enumeration's fail direction is pinned: an unset flag means NOT
++  enumerated. **Under-claiming ownership is recoverable (a file goes
++  unwatched); over-claiming is the delete-the-adopter's-file class.**
++
++The upgrade-side ceremony read is **replay-independent** (r9):
++`upgrade.sh --no-replay` sets `REPLAY=0` and skips
++`_read_install_state_request` entirely, so a ceremony that rode the
++replay would silently revert a user install to maintainer under the
++documented `--no-replay` flag. A dedicated `_read_install_state_ceremony`
++reader always runs, validates against the closed enum
++`{maintainer, user}`, and **fails open to `maintainer`** when the state
++is absent/unreadable (all pre-Wave-B installs) — the pre-existing
++behavior, named as a consequence in `INSTALL.md`. The same read gates
++`_refresh_protocol_pointer`, which previously ran unconditionally and
++`cat >`-created a root `PROTOCOL.md` that a user install deliberately
++never has (the latent bug the PLAN-166 F4 tree-comparison e2e exposes).
++
++## §4 SPEC/v1: forced route + pristine-content legacy migration
++
++The generic route cannot carry the SPEC. For a directory target with a
++baseline, `backup_and_replace` runs the per-file classified walk — which
++PRESERVES adopter edits. From the **second** upgrade on (baseline then
++contains SPEC records), an edited SPEC would classify ADOPTER-CUSTOMIZED
++and the stale-contract failure would return (r6). The declared semantics
++(OQ-3): `SPEC/v1` is the published compliance CONTRACT — an adopter edit
++is a **fork of the contract**, not a customization. Three-way merge is
++complexity without a consumer; refuse-and-instruct would block every
++upgrade that ships a SPEC change. Hence `_refresh_spec_contract`:
++framework-owned ⇒ backup whole tree to `.claude.bak/<ts>/SPEC/v1` +
++replace wholesale; user-ceremony installs never receive it.
++
++**Legacy migration (r20).** v1.2-and-earlier installs have NO delivery
++record for SPEC (the enumeration never included it), so
++framework-installed and adopter-authored `SPEC/v1` are indistinguishable
++by record. The ambiguity resolves by CONTENT: the target tree's
++fingerprint (sha256 over the `LC_ALL=C`-sorted `"<sha256(file)>  <relpath>"`
++lines of every file under `SPEC/v1`) is compared against the PRISTINE
++fingerprints of every SPEC/v1 the framework shipped at **v1.2.0 and
++earlier** — nine tags, three distinct trees, derived deterministically
++from pinned tag content (`git ls-tree` + `git show`; the derivation
++command is embedded next to the constants in `upgrade.sh`):
++
++| pristine fingerprint (sha256) | shipped by |
++|---|---|
++| `a4a4504a224d72a975a853dd71a75d8e678fef034a70deb49df291dbb712c161` | v1.0.0, v1.0.1, v1.0.1-rc.1 |
++| `94aa62f781285ce4897ad1220edf15e97b4e9d7b629f9f7ba3389da5d45f22b1` | v1.1.0, v1.1.0-rc.1 |
++| `469a49238867be181490214305b43bc7299f2bae3ef0b282a5452f6caf327f0b` | v1.2.0, v1.2.0-rc.1, v1.2.0-rc.2, v1.2.0-rc.3 |
++
++Match ⇒ framework-owned (byte-identical to a shipped release; the forced
++refresh loses nothing) ⇒ refresh + named NOTE. No match ⇒ ADOPTER-FORK ⇒
++**preserve in place** + snapshot to `.claude.bak/<ts>/SPEC/v1` + named
++WARNING with the hand-refresh instruction. A partial/unhashable tree
++never produces a fingerprint (fail toward preserve). Both legacy cases
++are fixtures; the pristine-match branch is additionally exercised
++end-to-end by the F4 install-v1.2.0→upgrade comparison job.
++
++## §5 The marker: forced+validated write, record-gated readers
++
++`.claude/.framework-version` is a **tracked file of the framework repo**
++(one line, byte-identical to `VERSION`) — not generated-only-at-destination,
++so the release protections are real and unconditional: the version bump
++writes it as its 12th site, `verify-counts.sh` cross-checks it against
++`VERSION` in every release, and `release.yml` asserts marker == VERSION
++fail-closed. In the enumeration it is a NORMAL file entry (the
++`FMS_HASH_ROOT` baseline rewrite preserves it with no special-case),
++conditional on delivery like the other two.
++
++Delivery is by **explicit writes on both paths** (the enumeration never
++delivers — it only records; r7): `install_one ".claude/.framework-version"`
++on install (skip-if-exists ⇒ a pre-existing adopter marker is NOT
++delivered), and a **forced + read-back-validated** rewrite on upgrade
++(differing pre-existing copy backed up first; a write that fails
++validation is NOT recorded as delivered). It lives inside `.claude/`, so
++both ceremonies receive it (the WS4 guard only forbids root files) and it
++is committable like the rest of `.claude/`.
++
++**Every marker-first reader consults the SAME record** (r20):
++`check-framework-updates.sh` trusts the marker only when the baseline
++manifest carries its delivery record, else falls back to `VERSION` — on a
++target where the marker pre-existed and was skipped, an unconditional
++read would report a stale version in a loop.
++
++## §6 Enforcement
++
++- `scripts/tests/test-upgrade-spec-ownership.sh` — record-owned forced
++  refresh with backup (the 2nd-upgrade scenario), user-ceremony +
++  `--no-replay` skip, legacy adopter-fork preserve, marker delivery +
++  pre-existing-marker fallback, doctor orphan-scan in both modes,
++  update-checker no-loop regression (AC-3).
++- The PLAN-166 F4 e2e (`smoke-install.yml`) compares install-built vs
++  upgrade-built trees per ceremony mode; its historical leg
++  (install v1.2.0 → upgrade) exercises the pristine-match migration.
++- `_framework_manifest_set.sh`, `install.sh`, `upgrade.sh` remain
++  `_CANONICAL_GUARDS` surfaces; this amendment's edits land only via the
++  PLAN-166 W1 Owner-GPG ceremony.
++
++## Consequences
++
++- **(+)** A `--ceremony user` install can never have its own `SPEC/v1`,
++  root `PROTOCOL.md` or marker inventoried as framework-owned — closing
++  the uninstall-deletes-adopter-files corridor (r7/r13/r17).
++- **(+)** Upgraded adopters get a fresh SPEC contract every upgrade, with
++  fork preservation and a deterministic legacy migration.
++- **(+)** Post-upgrade version reporting is truthful (marker), without
++  ever touching the adopter's root `VERSION`.
++- **(−)** Pre-Wave-B installs (no `.install-state.json`) are treated as
++  `maintainer` on upgrade — fail-open, named in `INSTALL.md`; a user-mode
++  pre-Wave-B adopter must re-run `install.sh --ceremony user` once to
++  record the ceremony.
++- **(−)** The delivery record inherits the baseline manifest's trust
++  class: target-side, UNSIGNED, advisory (ADR-155 Consequences). A
++  tampered record can add/remove ownership — the fail direction on a
++  MISSING record is preserve/fallback (today's behavior), never a new
++  escalation.
++- **(~)** An adopter whose fork of `SPEC/v1` is byte-identical to a
++  shipped release is claimed as framework-owned by the legacy migration —
++  accepted: the forced refresh is content-preserving up to the shipped
++  bytes they already had.
+diff --git a/.claude/governance/npm-trusted-publisher.txt b/.claude/governance/npm-trusted-publisher.txt
+new file mode 100644
+index 0000000..0b92c32
+--- /dev/null
++++ b/.claude/governance/npm-trusted-publisher.txt
+@@ -0,0 +1,36 @@
++# npm Trusted Publisher registration — PLAN-166 W1 item 4
++#
++# The npmjs.com Owner console binds OIDC trusted publishing (PLAN-158
++# Wave 1) to EXACTLY this triple: repository + workflow FILENAME +
++# environment. If ANY of the three drifts, the token exchange dies
++# ENEEDAUTH at publish time — at GA, with no earlier proof point,
++# because RC tags skip the publish job. This file is the repo-side
++# record of what the console must say; until it existed the triple
++# lived only in comments inside npm-publish.yml and in the Owner's
++# browser (F1 re-pass finding, PLAN-166).
++#
++# Format: `key=value` lines; `#` lines and blank lines are comments.
++# Keys are exactly: repository, workflow, environment.
++#
++# Consumers:
++# - .claude/scripts/tests/test_release_workflow_asserts.py
++#   (TrustedPublisherBindingTest) READS this file and cross-checks
++#   .github/workflows/npm-publish.yml — the test embeds NO values
++#   (that would be a 4th copy of the truth; the copies are: the npmjs
++#   console, the workflow, and this file — the test collapses the two
++#   repo-side copies into one checked invariant). Includes a positive
++#   control: mutating `environment:` in a copy of the workflow goes red.
++# - Humans re-registering the trusted publisher after an OIDC failure:
++#   .claude/plans/PLAN-158/oidc-failure-playbook.md (binding is by
++#   FILENAME — playbook line 18 — which is why the publish stays in
++#   npm-publish.yml instead of moving into release.yml).
++#
++# Update ceremony: this file matches `.claude/governance/*.txt` in
++# _CANONICAL_GUARDS — edits require an Owner-signed sentinel, same as
++# the workflow it describes. Change the npmjs console FIRST, then this
++# file + the workflow in one ceremony; the structural test keeps the
++# repo side from drifting silently.
++
++repository=Canhada-Labs/ceo-orchestration
++workflow=npm-publish.yml
++environment=production-npm
+diff --git a/.claude/governance/pair-rail-verdict-template.md b/.claude/governance/pair-rail-verdict-template.md
+index 94296a3..fcb1865 100644
+--- a/.claude/governance/pair-rail-verdict-template.md
++++ b/.claude/governance/pair-rail-verdict-template.md
+@@ -18,6 +18,12 @@ parent_sha: <40-char SHA — the commit the verdict was generated AGAINST (paren
+ release_tag: <e.g. v1.16.0-rc.1>
+ inputs_hash: <SHA256 of canonical_json envelope of git-hash-object SHAs for ALL paths in pair-rail-inputs-hash-manifest.txt>
+ inputs_hash_paths_manifest_sha: <SHA-256 of pair-rail-inputs-hash-manifest.txt itself>
++delta_allowlist:  # PLAN-166 W0 — ENFORCED by tag() (_release_tag_guard.py delta) and by the release.yml fail-closed step. CLOSED set: every path allowed to differ between parent_sha and the tag commit. Literal repo-relative paths, NO glob metacharacters. MUST include this verdict file itself, the tag's verdict-fields file at the plan dir's canonical path (verdict-fields-<TAG>.md — basename elsewhere is rejected), and the re-pass evidence files of THIS tag only.
++  - .claude/governance/pair-rail-verdict-<release-tag>.md
++  - .claude/plans/PLAN-<NNN>/verdict-fields-<release-tag>.md
++  - .claude/plans/PLAN-<NNN>/repass-<N>/<each evidence file, named one by one>
++delta_manifest: <repo-relative path of the re-pass evidence MANIFEST.sha256 — the allowlist closes by CONTENT, not just by name: the guard runs `shasum -a 256 -c` on it>
++delta_manifest_sha256: <64-hex sha256 OF the MANIFEST.sha256 file itself — pins the pin>
+ tool_versions:
+   codex_cli: <version, must match codex-cli-pin.txt range>
+   codex_target_triple: <targetTriple of the run that generated this verdict, e.g. aarch64-apple-darwin (ADR-182 wire-shape)>
+@@ -30,6 +36,18 @@ findings: []  # List of P0/P1/P2/P3 with file:line if any
+ gpg_signature: <armored GPG signature of the above fields>
+ ```
+ 
++## tag() guard semantics (PLAN-166 W0 — local AND server-side)
++
++- `delta_allowlist` / `delta_manifest` / `delta_manifest_sha256` are
++  REQUIRED for every new verdict (RC and stable). `tag()` refuses to
++  sign when `git diff <parent_sha>..HEAD --name-only` contains any path
++  outside the allowlist, when the allowlist carries a glob
++  metacharacter or another tag's artifacts, when the parent_sha is not
++  an ancestor of HEAD (E_PARENT_NOT_ANCESTOR=12), or when
++  `shasum -a 256 -c <delta_manifest>` fails. The same asserts run
++  server-side in release.yml, independent of
++  CEO_PAIR_RAIL_VERDICT_OPTIONAL (fail-closed step).
++
+ ## Validator semantics
+ 
+ - `--parent-sha $PARENT_SHA` arg MUST equal the verdict's
+diff --git a/.claude/plans/PLAN-166/W1-approved-draft.md b/.claude/plans/PLAN-166/W1-approved-draft.md
+index 17bd644..cf50f43 100644
+--- a/.claude/plans/PLAN-166/W1-approved-draft.md
++++ b/.claude/plans/PLAN-166/W1-approved-draft.md
+@@ -194,6 +194,7 @@ Adopter upgrade + ADR + count sweep (revert group B):
+   - scripts/_framework_manifest_set.sh
+   - scripts/doctor.sh
+   - scripts/install.sh
++  - scripts/tests/_parity_classify.py
+   - scripts/tests/test-upgrade-spec-ownership.sh
+   - scripts/upgrade.sh
+ 
+diff --git a/.claude/plans/PLAN-166/architect/round-1/approved.md b/.claude/plans/PLAN-166/architect/round-1/approved.md
+new file mode 100644
+index 0000000..da070e7
+--- /dev/null
++++ b/.claude/plans/PLAN-166/architect/round-1/approved.md
+@@ -0,0 +1,202 @@
++---
++plan: PLAN-166
++round: 1
++type: architect-sentinel
++segment: W1-FINDINGS-CLOSURE
++---
++
++# PLAN-166 W1 — release-hold findings-closure ceremony (Owner sentinel)
++
++Anchor-SHA: 516e64e671f6e33b7fcf0f0a28a70caf954bd996
++
++Approved-By: @Canhada-Labs (Owner GPG — signed inline by the ceremony)
++Approved-At: 2026-08-06
++
++## What this sentinel authorizes (sign this KNOWINGLY)
++
++Single declared PLAN-166 W1 ceremony (plan `reviewed` at `92c8c3c`; debate
++3 rounds with 3 scoped VETOs raised-and-lifted + codex rail 20 rounds; the
++re-pass of rc.1 was NO-GO with 6 findings and the Owner mandated closing
++ALL of them — this commit is the canonical half of that closure; W0 free
++surfaces land separately). One commit, two REVERT GROUPS (the Scope below
++is grouped so either half can be reverted without splitting the ceremony
++— with ONE deliberate coupling, sign it knowingly: release.yml (group A)
++carries the UNCONDITIONAL `.claude/.framework-version == VERSION` assert
++while the marker file itself is in group B, so reverting ONLY group B
++leaves every tag run red until release.yml is re-edited, which means a
++NEW kernel-override route. The failure direction is CLOSED — it blocks a
++ship, never publishes — but the operational cost of a partial group-B
++revert is a second ceremony):
++
++**Group A — release train (F1 + F2 server side + item 4):**
++
++1. `npm-publish.yml` gains the `await-release-gate` job (fail-closed
++   poller over release.yml's `release-gate` job via
++   `.claude/scripts/await_release_gate.py`, timeout-minutes 35, GH_TOKEN
++   at job level, NO environment / NO RC exclusion — RC tags are the live
++   positive control) + `needs: await-release-gate` on `publish`. Posture
++   pins STRENGTHENED, not relocated: `environment: production-npm` and
++   the `-rc.` exclusion stay VERBATIM on the publish job.
++2. `release.yml` gains (i) the verdict delta + ancestry gate step
++   (delegates to `.claude/scripts/local/_release_tag_guard.py`; no
++   continue-on-error; fails CLOSED on `CEO_PAIR_RAIL_VERDICT_OPTIONAL=1`;
++   ancestry covers the reviewed parent AND `GITHUB_SHA`, r15+r17+r18) and
++   (ii) the UNCONDITIONAL `.claude/.framework-version == VERSION` assert
++   (Forma A (ii), next to the VERSION↔tag asserts).
++3. `.claude/governance/npm-trusted-publisher.txt` — the npmjs OIDC
++   trusted-publisher triple (repository / workflow FILENAME /
++   environment) as a tracked record.
++4. `test_release_workflow_asserts.py` — structural asserts for 1-3
++   (await-gate pins, W1B delta+ancestry pins merged in by the assembler,
++   trusted-publisher binding asserts that READ the txt, with positive
++   controls).
++5. `RELEASE.md` — derived step count in the release.yml pointer block
++   29 → 31 (item 2 adds two named steps to release-gate; the
++   `verify-counts.sh` release_steps rule is exact/tolerance-0 and scans
++   RELEASE.md, so WITHOUT this edit the ceremony's own §6(d) gate goes
++   red post-apply and forces an out-of-scope fix mid-ceremony).
++
++**Group B — adopter upgrade (F3 + F4 + ADR-155-AMEND-1):**
++
++6. `ADR-155-AMEND-1-delivery-record-ownership.md` — delivery-record
++   ownership of the three conditional surfaces (SPEC/v1, root
++   PROTOCOL.md, `.claude/.framework-version`); ADR file count 188 → 189.
++7. `.claude/.framework-version` — NEW tracked one-line marker,
++   byte-identical to VERSION (1.3.0).
++8. `install.sh` / `upgrade.sh` / `_framework_manifest_set.sh` /
++   `doctor.sh` / `check-framework-updates.sh` — explicit delivery writes
++   + record-gated readers + forced/validated marker refresh + SPEC
++   forced-refresh with pristine-fingerprint legacy migration (v1.0.0..
++   v1.2.0-rc.3 set; ADOPTER-FORK preserved in place). The SPEC
++   delivery-record readers (`upgrade.sh _baseline_has_spec_record`,
++   `doctor.sh _dr_delivered`) match `SPEC/v1(/|  |$)` — a --mode link
++   install records the tree as ONE `LINK  SPEC/v1  <target>` line, no
++   trailing slash (re-pass closure; family swept).
++9. `smoke-install.yml` — wires the F4 parity e2e (+ LOAD-BEARING
++   positive control: rc==1 AND plant evidence greped from the log, else
++   red) AND the F3 spec-ownership e2e (S1-S8) into CI, path filters
++   re-synced between pull_request and push, timeout-minutes 8 → 25.
++   **Explicit plan deviation, ratified by this signature:** PLAN-166 W1
++   item 3 says "8→~15"; the staged value is 25, from MEASURED wall time
++   (F4: 122s gate + 118s control local, 2-3x CI factor; F3 e2e adds
++   ~3-4 min local) + the PLAN-159 N=20-flake lesson — 15 sits inside
++   the noise band. Signing this sentinel ratifies 25 KNOWINGLY, not by
++   silence; re-tighten once real CI runs give a p95.
++10. `scripts/tests/test-upgrade-spec-ownership.sh` — NEW e2e (S1-S8).
++11. `INSTALL.md` — post-upgrade verify instructions prefer the marker;
++    delivery-record consequences documented.
++12. ADR-count sweep 188 → 189 in the SAME commit, sites derived from the
++    `verify-counts.sh` matchers themselves (12 matcher-reachable
++    occurrences across 8 docs — the W1-C census note says "9 docs";
++    recount at land time from the gate, not from either number): the
++    docs listed in Group B below. `docs/ARCHITECTURE.md:56` and `:237`
++    are NOT matcher-reachable but sit in an already-touched file and are
++    updated in the same pass. Same treatment for the TWO
++    matcher-INVISIBLE ADR-count claims in `docs/GUIA-COMPLETO.md`
++    (":167 `188 ADRs document every architectural decision`" and
++    ":1225 `— 188 Architecture Decision Records`") — GUIA is in the
++    gate's DOCS but neither phrasing is reachable by any matcher, so
++    left alone they would silently claim 188 with 189 on disk (the
++    exact [[feedback-adr-count-drift-unwatched-docs]] class W0/F5 just
++    closed elsewhere); swept in §4 of the runbook, file added to this
++    Scope. The 189 in `verify-counts.sh` is DERIVED (file count), not a
++    typed constant — no edit to it for the count.
++
++**Kernel-override route (release.yml ONLY):** `release.yml` is canonical
++AND an exact `_KERNEL_PATHS` entry (`check_arbitration_kernel.py:134`).
++Its apply runs under the PER-CEREMONY pair
++`CEO_KERNEL_OVERRIDE=PLAN-166-W1-RELEASE-YML-AWAIT-GATE` +
++`CEO_KERNEL_OVERRIDE_ACK=I-ACCEPT`, armed inline immediately before the
++apply and disarmed immediately after (never exported in
++settings.local.json or shell profile). The audit-ledger event
++(`plan_id` truncated to `PLAN-166-W1-RELEASE-YML-AWAIT-GA`, 32 chars) is
++the proof artifact — see `staged/notes-w1b-kernel-override.md` and the
++land runbook. Editing release.yml is literally the "CI gate bypass"
++vector the kernel exists to impede; the privilege stays armed only for
++the duration of the signature window.
++
++**Conditional entries (OWNER-DECISION at signing — runbook §4 has the
++verified detail):** the two deferred-apply marker sites of
++`staged/notes-w1c-f3.md` §1 — `.claude/scripts/local/_release_bump_sites.py`
++(12th bump site) and `.claude/scripts/local/verify-counts.sh`
++(VERSION_SITES entry). Status re-checked at closure (2026-08-06, HEAD
++`346f4ea`): the W0 fleet HAS committed both files and the sites are
++absent, so the original condition fires — BUT simulation showed §1a as
++written reds the fleet's new dry-run tests (their fixture lacks the
++marker file; verified 2-line fixture cure → 47/47). Route A: apply
++§1a+§1b+fixture cure and ADD the three paths to Scope. Route B
++(recommended default): SKIP; the fleet lands all three in its own
++follow-up — Forma A (ii) is unconditional either way, and this train
++(VERSION already 1.3.0 == marker) needs no marker bump site before the
++1.4.0 cycle. Whichever route, the mechanical re-derivation enforces the Scope.
++**OWNER-DECISION resolved at signing (2026-08-06): Route B — deferred-apply
++SKIPPED; the three paths stay OUT of this Scope. The follow-up (free
++surfaces, no sentinel) MUST land before the first 1.4.0-cycle bump.**
++
++Ceremony inputs are integrity-pinned: the TRACKED manifest
++`.claude/plans/PLAN-166/staged-manifest.sha256` covers every staged file;
++`shasum -a 256 -c` runs fail-closed BEFORE any apply (lesson
++[[feedback-staged-inputs-need-tracked-hash-manifest]]).
++
++Commit subject tag: `[SENT-PLAN166-W1]`.
++
++## Scope
++
++Scope:
++
++Release train (revert group A):
++  - .claude/governance/npm-trusted-publisher.txt
++  - .claude/governance/pair-rail-verdict-template.md
++  - .claude/scripts/tests/test_release_workflow_asserts.py
++  - .github/workflows/npm-publish.yml
++  - .github/workflows/release.yml
++  - RELEASE.md
++
++Adopter upgrade + ADR + count sweep (revert group B):
++  - .claude/.framework-version
++  - .claude/adr/ADR-155-AMEND-1-delivery-record-ownership.md
++  - .claude/scripts/check-framework-updates.sh
++  - .github/workflows/smoke-install.yml
++  - CLAUDE.md
++  - INSTALL.md
++  - README.md
++  - README.pt-BR.md
++  - docs/ARCHITECTURE.md
++  - docs/CTO-GUIDE.md
++  - docs/FAQ.md
++  - docs/GUIA-COMPLETO.md
++  - docs/README.md
++  - npm/README.md
++  - scripts/_framework_manifest_set.sh
++  - scripts/doctor.sh
++  - scripts/install.sh
++  - scripts/tests/_parity_classify.py
++  - scripts/tests/test-upgrade-spec-ownership.sh
++  - scripts/upgrade.sh
++
++---
++
++## Adendo (2026-08-06, pré-assinatura — CEO)
++
++**15º patch adicionado ao pack:** o template do verdito
++(`pair-rail-verdict-template.md`, canônico em governance) ganha os 3
++campos que o guard novo EXIGE de todo verdito (`delta_allowlist` /
++`delta_manifest` / `delta_manifest_sha256`) + seção "tag() guard
++semantics". Sem isso, o primeiro verdito de rc.2 autorado a partir do
++template morre em E_VERDICT (achado P2 do round 1 da refutação; o
++template é canônico e por isso entra na cerimônia, não no W0).
++**Scope: adicionar este path ao grupo A (trem de release).**
++Manifesto regenerado: 32 entradas (template staged + patch novo).
++
++---
++
++## Adendo (2026-08-06, re-assinatura — rail codex round 4)
++
++Uma linha adicionada ao Scope grupo B: `scripts/tests/_parity_classify.py`.
++Motivo: as entradas KNOWN_OPEN F3-spec-stale / F3-protocol-user-mode são
++MANDATORY-FIRE por contrato do próprio arquivo — com o F3 fechado por esta
++cerimônia elas param de casar e o gate recém-fiado nasceria FATAL; o
++docstring exige deletá-las NO MESMO commit. Rounds 1-4 do rail: 13 achados
++aplicados (install rerun continuity; FMS_MODE link; fingerprint
++completeness; SPEC/marker ancestor-symlink + LINK-record validation;
++backup-before-replace 2x; recovery por current-source match; KNOWN_OPEN).
+diff --git a/.claude/plans/PLAN-166/staged-manifest.sha256 b/.claude/plans/PLAN-166/staged-manifest.sha256
+index c1d4d0d..d6283de 100644
+--- a/.claude/plans/PLAN-166/staged-manifest.sha256
++++ b/.claude/plans/PLAN-166/staged-manifest.sha256
+@@ -15,18 +15,20 @@ fa68c9eccd57031969e9976a35b0f118e573795c8b661d042317bab0d9235b92  .claude/plans/
+ 55af1b44196627f85e14bfdea023205900db74fe4c7e8884f8364bc3dfe14426  .claude/plans/PLAN-166/staged/patches/f3-doctor-delivery-flags.patch
+ 7ed64e92a6f541f58499b560249f012bc712e34e7e5e73baba3f04f36fec58dd  .claude/plans/PLAN-166/staged/patches/f3-fms-conditional-entries.patch
+ f340d81741e7cde417ea11463e56e7cbbd9f04b9227908b5c455eebedbc3f4d4  .claude/plans/PLAN-166/staged/patches/f3-framework-version-marker.patch
+-c9c71fc42ad22c1b56b190641c4489758571b590999a10c19d7ae0bfc8be9713  .claude/plans/PLAN-166/staged/patches/f3-install-delivery-record.patch
++382a614b036d2173284b43152a6911b64b68bf28593ab63f84c52ca80c29c46f  .claude/plans/PLAN-166/staged/patches/f3-install-delivery-record.patch
+ 01c5627b5b449820d2fbf2f33ed020f30b8ea094afe9474fd7b1cf8d35abfed8  .claude/plans/PLAN-166/staged/patches/f3-install-md-consequences.patch
+ 3c027435e5df55dc39e66aa1e5c0fbef1b17f21553e07c64bca0606eb534a29b  .claude/plans/PLAN-166/staged/patches/f3-test-upgrade-spec-ownership.patch
+-8240fc2f083a64e34690b6760c04489488f4a53ccba86e397a6c0a14579b6e92  .claude/plans/PLAN-166/staged/patches/f3-upgrade-spec-forced-refresh.patch
++a2dc680ec52146582883e1a77d902056ad023686d59a3f33bee70f0267168ccf  .claude/plans/PLAN-166/staged/patches/f3-upgrade-spec-forced-refresh.patch
+ a83d8bc2353054d816342978962127e99cbc432c5e0ab8c1b4fe2a2365cfea2d  .claude/plans/PLAN-166/staged/patches/release-yml-verdict-delta-ancestry.patch
+ d51a5299e3d17126283b5fe0412bee7fad14f604c1543ab7315130375d207c99  .claude/plans/PLAN-166/staged/patches/smoke-install-parity-e2e-wiring.patch
+ c3558235089ae461d4597e203a4c1466a0ca9d3c8b0805b5cffbecc48b6d355d  .claude/plans/PLAN-166/staged/patches/w0-verdict-template-delta-fields.patch
++947bff3ff3e2b2c990abc59dd101a27f75065b97476f9814f62ee70c7e4fd88a  .claude/plans/PLAN-166/staged/patches/w1-parity-classify-known-open-purge.patch
+ 2903e84dc079c45c085bafca751a20c99d3f199b2001ab6f96b4d04cd7e7307a  .claude/plans/PLAN-166/staged/patches/w1a-npm-publish-await-gate.patch
+ 7a90547a50be440563e91603e921e51acbec10fa6942f9e25fa1635dd997d4c9  .claude/plans/PLAN-166/staged/patches/w1a-npm-trusted-publisher-txt.patch
+ f0d1489af60ef3d1d0c2ac236525d6f827686fc140cd23a282236137b036c440  .claude/plans/PLAN-166/staged/patches/w1a-release-workflow-asserts.patch
+ 29998d78fb6363c6dd1450435bc57f38d45e52cb8e016651f40a8a71636d1509  .claude/plans/PLAN-166/staged/scripts/_framework_manifest_set.sh
+ c01160165c561e7ae0bb05315b36a187ea4c76d0c4d442426524300a6f14d02e  .claude/plans/PLAN-166/staged/scripts/doctor.sh
+-e1926bd826d23043b2eeb3e812ab4ff55ecaea7cf4f18efbc036c2407db8c267  .claude/plans/PLAN-166/staged/scripts/install.sh
++4a66240e04ce126be536fa9ae99f248d2657d061def3cb143902e054e87f39f6  .claude/plans/PLAN-166/staged/scripts/install.sh
++d8d706554018b5ea326331bd0e66a3924295df2ced0de4f7f89439ce7304e66a  .claude/plans/PLAN-166/staged/scripts/tests/_parity_classify.py
+ 5dbe355071c072cd3e5d78a9155cb6ef3cb4f9636a11cc797116542c47d00f38  .claude/plans/PLAN-166/staged/scripts/tests/test-upgrade-spec-ownership.sh
+-3531a61f3dc0a6f96cec14ad6b591681b3856b8745f4d62e34bab5d7432c01b7  .claude/plans/PLAN-166/staged/scripts/upgrade.sh
++6e609799e99c7de99574830e3ad72b1de18d8a5dcf94e7d9cd2e7e5e342e43e7  .claude/plans/PLAN-166/staged/scripts/upgrade.sh
+diff --git a/.claude/scripts/check-framework-updates.sh b/.claude/scripts/check-framework-updates.sh
+index abe39d0..bc3636a 100755
+--- a/.claude/scripts/check-framework-updates.sh
++++ b/.claude/scripts/check-framework-updates.sh
+@@ -79,26 +79,77 @@ out() {
+   return 0
+ }
+ 
+-# Resolve VERSION
++# Resolve the LOCAL framework version — MARKER-FIRST with VERSION fallback
++# (PLAN-166 F3 / ADR-155-AMEND-1). In an ADOPTER tree the root VERSION is an
++# install-time snapshot: upgrade.sh deliberately never touches it (the
++# S238/ADR-155 clobber class), so reading it post-upgrade reports the OLD
++# version forever and this checker would exit behind-minor demanding the
++# SAME upgrade it just performed, in a loop (r8). The upgrade refreshes
++# .claude/.framework-version instead — but the marker is only TRUSTED when
++# the SAME delivery record the writers use (the ADR-155 baseline manifest,
++# .claude/.install-manifest.sha256) records it as framework-delivered: a
++# pre-existing adopter marker that install EXISTS-skipped must not be read
++# at all (r20). Resolution order:
++#   1. --version-file <path>              (explicit override — unchanged)
++#   2. <root>/.claude/.framework-version  when well-formed AND
++#                                         delivery-recorded in the manifest
++#   3. <root>/VERSION                     (pre-v1.3.0 installs, and the
++#                                          framework repo itself, where the
++#                                          tracked marker == VERSION and
++#                                          VERSION stays the authority)
+ if [ -n "$LOCAL_VERSION_FILE" ]; then
+   VFILE="$LOCAL_VERSION_FILE"
++  VSOURCE="explicit --version-file"
+ else
+-  # Walk up from CWD looking for a VERSION file
++  # Walk up from CWD to the first directory carrying either signal.
+   cur="$(pwd)"
++  VROOT=""
+   VFILE=""
++  VSOURCE=""
+   while [ "$cur" != "/" ]; do
+-    if [ -f "$cur/VERSION" ]; then
+-      VFILE="$cur/VERSION"
++    if [ -f "$cur/.claude/.framework-version" ] || [ -f "$cur/VERSION" ]; then
++      VROOT="$cur"
+       break
+     fi
+     cur="$(dirname "$cur")"
+   done
++  if [ -z "$VROOT" ]; then
++    echo "fatal: no .claude/.framework-version or VERSION found (looked from $(pwd))" >&2
++    exit 3
++  fi
++  MARKER="$VROOT/.claude/.framework-version"
++  MANIFEST="$VROOT/.claude/.install-manifest.sha256"
++  if [ -f "$MARKER" ]; then
++    if [ -f "$MANIFEST" ] \
++       && grep -Eq '^([0-9a-f]{64}|LINK)  \.claude/\.framework-version(  |$)' "$MANIFEST" 2>/dev/null; then
++      MARKER_VAL="$(tr -d '\n\r ' < "$MARKER" 2>/dev/null || true)"
++      if [[ "$MARKER_VAL" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$ ]]; then
++        VFILE="$MARKER"
++        VSOURCE="marker (.claude/.framework-version, delivery-recorded)"
++      else
++        log "note: .claude/.framework-version malformed ('$MARKER_VAL') — falling back to VERSION"
++      fi
++    elif [ ! -f "$MANIFEST" ] && [ ! -f "$VROOT/VERSION" ]; then
++      # No manifest AND no VERSION: the marker is the only signal there is
++      # (fail-open — refusing here would make the checker fatal on a tree
++      # that still has a perfectly readable version value).
++      VFILE="$MARKER"
++      VSOURCE="marker (no manifest — only signal present)"
++    else
++      log "note: .claude/.framework-version present but NOT delivery-recorded in .claude/.install-manifest.sha256 — falling back to VERSION (r20: a pre-existing adopter marker is not the framework's)"
++    fi
++  fi
++  if [ -z "$VFILE" ] && [ -f "$VROOT/VERSION" ]; then
++    VFILE="$VROOT/VERSION"
++    VSOURCE="root VERSION (fallback)"
++  fi
+ fi
+ 
+ if [ -z "$VFILE" ] || [ ! -f "$VFILE" ]; then
+-  echo "fatal: VERSION file not found (looked from $(pwd))" >&2
++  echo "fatal: version source not found (looked from $(pwd))" >&2
+   exit 3
+ fi
++log "version source: ${VSOURCE:-unknown} ($VFILE)"
+ 
+ LOCAL="$(tr -d '\n\r ' < "$VFILE")"
+ if [ -z "$LOCAL" ]; then
+diff --git a/.claude/scripts/tests/test_release_workflow_asserts.py b/.claude/scripts/tests/test_release_workflow_asserts.py
+index bc68a9f..3518bb3 100644
+--- a/.claude/scripts/tests/test_release_workflow_asserts.py
++++ b/.claude/scripts/tests/test_release_workflow_asserts.py
+@@ -25,6 +25,33 @@ workflow-invariant convention (test_workflow_devops_p2.py) with:
+   and against the LIVE workflow once Wave B lands (detected via the
+   "PLAN-153 Wave B item 5" marker). They skip only in the pre-landing
+   CI window where neither context is available.
++
++PLAN-166 W1 items 1 + 4 (F1, P0) extend the same dual-context convention
++(staged mirror under .claude/plans/PLAN-166/staged/ pre-landing,
++"PLAN-166 W1 item 1" marker in the live file post-landing) with:
++
++- await-gate asserts: the publish OBSERVES release.yml's `release-gate`
++  job — `await-release-gate` job present, `needs:` on the publish job,
++  `GH_TOKEN: ${{ github.token }}` in the await job's env (permissions:
++  alone does NOT authenticate the gh CLI on a hosted runner; without the
++  token every poll dies on auth = fail-closed BLOCK breaking every
++  release), permissions/timeout pinned, and NO environment / NO RC
++  exclusion on the await job (RC tags are the live positive control).
++  Posture pins are STRENGTHENED, not relocated: NpmPublishRcPostureTest
++  keeps asserting the RC exclusion + environment on the live file.
++- trusted-publisher binding asserts: the npmjs OIDC registration triple
++  (repository / workflow FILENAME / environment) is cross-checked by
++  READING .claude/governance/npm-trusted-publisher.txt — embedding the
++  values in the test would create a 4th copy of the truth. Includes
++  positive controls: mutating `environment:` (or the repository slug) in
++  a COPY of the workflow text must go red.
++
++PLAN-166 W1-B (F2 server side; merged in by the ceremony assembler —
++one runnable asserts file) adds the W1B* classes at the bottom:
++structural asserts for release.yml's verdict delta + ancestry gate step
++(no continue-on-error, fail-closed on the transition var, delegation to
++_release_tag_guard.py, parent+GITHUB_SHA ancestry, pinned step order,
++`release-gate` job-name pin) plus the guard-module contract pins.
+ """
+ from __future__ import annotations
+ 
+@@ -35,7 +62,30 @@ import unittest
+ from pathlib import Path
+ from typing import Iterator, Optional, Tuple
+ 
+-_REPO = Path(__file__).resolve().parent.parent.parent.parent
++def _find_repo() -> Path:
++    """Repo root — robust to BOTH homes this file can run from.
++
++    At its landed path (.claude/scripts/tests/) four parents reach the
++    root; at its staged path (.claude/plans/PLAN-166/staged/...) they
++    reach the staged mirror instead. Walk up to the first ancestor that
++    actually looks like the repo (has the live workflow AND the hooks
++    tree) so pre-land verification runs from the staged location give
++    the same answers as post-land runs. (Merged in from the W1-B slice
++    by the PLAN-166 ceremony assembler.)
++    """
++    here = Path(__file__).resolve()
++    for candidate in here.parents:
++        if (
++            (candidate / ".github" / "workflows" / "release.yml").is_file()
++            and (candidate / ".claude" / "hooks" / "_lib").is_dir()
++        ):
++            return candidate
++    # Fall back to the landed-layout arithmetic; setUp guards will skip
++    # or fail loudly if this is wrong.
++    return here.parent.parent.parent.parent
++
++
++_REPO = _find_repo()
+ _WF = _REPO / ".github" / "workflows"
+ _STAGED_WF = (
+     _REPO / ".claude" / "plans" / "PLAN-153" / "staged" / "wave-B"
+@@ -57,6 +107,109 @@ _MARKER = "PLAN-153 Wave B item 5"
+ # The load-bearing RC exclusion (PLAN-013 anti-goals #3/#16).
+ _RC_EXCLUSION = "!contains(github.ref, '-rc.')"
+ 
++# --- PLAN-166 W1 items 1 + 4 (F1, P0) --------------------------------
++# Marker written into the PLAN-166 npm-publish.yml edit; its presence in
++# the LIVE file means the W1 ceremony landed and the live copy is
++# authoritative (same convention as _MARKER above).
++_MARKER_166 = "PLAN-166 W1 item 1"
++
++_STAGED_166 = _REPO / ".claude" / "plans" / "PLAN-166" / "staged"
++_STAGED_166_WF = _STAGED_166 / ".github" / "workflows"
++
++# Repo-side record of the npmjs trusted-publisher OIDC binding triple.
++_TRUSTED_PUBLISHER = (
++    _REPO / ".claude" / "governance" / "npm-trusted-publisher.txt"
++)
++_STAGED_166_TRUSTED_PUBLISHER = (
++    _STAGED_166 / ".claude" / "governance" / "npm-trusted-publisher.txt"
++)
++_TRUSTED_PUBLISHER_KEYS = frozenset({"repository", "workflow", "environment"})
++
++
++def _plan166_text(name: str) -> Optional[Tuple[str, str]]:
++    """Return (text, context) for a PLAN-166 workflow edit, or None pre-landing.
++
++    Priority: live copy carrying the PLAN-166 marker (post-landing,
++    authoritative) → staged copy under .claude/plans/PLAN-166/staged/
++    (pre-landing, local ceremony mirror; gitignored so absent in CI) →
++    None (pre-landing CI: skip). Unlike _wave_b_text this tolerates a
++    missing live file — the filename-binding test reports that as a
++    FAILURE, not a collection error.
++    """
++    live = _WF / name
++    if live.is_file():
++        text = live.read_text(encoding="utf-8")
++        if _MARKER_166 in text:
++            return text, "live"
++    staged = _STAGED_166_WF / name
++    if staged.is_file():
++        return staged.read_text(encoding="utf-8"), "staged"
++    return None
++
++
++def _trusted_publisher_values() -> Optional[Tuple[dict, str]]:
++    """Parse npm-trusted-publisher.txt (live → staged), or None pre-landing.
++
++    Format contract (documented in the file itself): `key=value` lines;
++    `#`-prefixed and blank lines are comments; keys are EXACTLY
++    repository/workflow/environment. Malformed content raises — a
++    binding record we cannot parse must never silently skip the binding
++    asserts (fail-closed, ADR-186 posture).
++    """
++    for path, context in (
++        (_TRUSTED_PUBLISHER, "live"),
++        (_STAGED_166_TRUSTED_PUBLISHER, "staged"),
++    ):
++        if not path.is_file():
++            continue
++        values = {}
++        for lineno, raw in enumerate(
++            path.read_text(encoding="utf-8").splitlines(), 1
++        ):
++            line = raw.strip()
++            if not line or line.startswith("#"):
++                continue
++            key, sep, value = line.partition("=")
++            key, value = key.strip(), value.strip()
++            if not sep or not key or not value:
++                raise AssertionError(
++                    "%s:%d: expected key=value, got %r" % (path, lineno, raw)
++                )
++            if key in values:
++                raise AssertionError(
++                    "%s:%d: duplicate key %r" % (path, lineno, key)
++                )
++            values[key] = value
++        if set(values) != set(_TRUSTED_PUBLISHER_KEYS):
++            raise AssertionError(
++                "%s must define exactly %s, got %s"
++                % (path, sorted(_TRUSTED_PUBLISHER_KEYS), sorted(values))
++            )
++        return values, context
++    return None
++
++
++def _binding_mismatches(values: dict, workflow_text: str) -> list:
++    """Which parts of the trusted-publisher triple the workflow does NOT honour.
++
++    Pure text→list (no filesystem) so the positive-control tests can run
++    it against a deliberately mutated COPY of the workflow text.
++    """
++    mismatches = []
++    if ("environment: " + values["environment"]) not in workflow_text:
++        mismatches.append(
++            "workflow does not gate through `environment: %s` — the npmjs "
++            "trusted-publisher registration names that environment"
++            % values["environment"]
++        )
++    if values["repository"] not in workflow_text:
++        mismatches.append(
++            "workflow no longer names the registered repository %r (the "
++            "OIDC registration comment is the in-file record)"
++            % values["repository"]
++        )
++    return mismatches
++
+ 
+ def _wave_b_text(name: str) -> Optional[Tuple[str, str]]:
+     """Return (text, context) for a Wave B workflow, or None pre-landing.
+@@ -219,7 +372,8 @@ class WorkflowHygieneTest(TestEnvContext):
+         except ImportError:  # pragma: no cover - CI installs pyyaml
+             self.skipTest("pyyaml not installed")
+         for name in ("release.yml", "npm-publish.yml"):
+-            for path in ((_WF / name), (_STAGED_WF / name)):
++            for path in ((_WF / name), (_STAGED_WF / name),
++                         (_STAGED_166_WF / name)):
+                 if not path.is_file():
+                     continue
+                 with self.subTest(path=str(path)):
+@@ -233,7 +387,8 @@ class WorkflowHygieneTest(TestEnvContext):
+         pattern = re.compile(r"^\s*(?:-\s+)?uses:\s*(\S+)", re.MULTILINE)
+         pinned = re.compile(r".+@[0-9a-f]{40}$")
+         for name in ("release.yml", "npm-publish.yml"):
+-            for path in ((_WF / name), (_STAGED_WF / name)):
++            for path in ((_WF / name), (_STAGED_WF / name),
++                         (_STAGED_166_WF / name)):
+                 if not path.is_file():
+                     continue
+                 text = path.read_text(encoding="utf-8")
+@@ -335,5 +490,527 @@ class WaveB5NpmPublishYmlTest(TestEnvContext):
+         self.assertIn("environment: production-npm", self.source)
+ 
+ 
++class Plan166AwaitGateTest(TestEnvContext):
++    """PLAN-166 W1 item 1 — the publish must OBSERVE release.yml's gate.
++
++    Dual-context (staged/live) like the Wave B classes above. These pins
++    STRENGTHEN the posture pins — NpmPublishRcPostureTest keeps running
++    against the live file in every context.
++    """
++
++    def setUp(self):
++        super().setUp()
++        resolved = _plan166_text("npm-publish.yml")
++        if resolved is None:
++            self.skipTest(
++                "PLAN-166 npm-publish.yml not landed and staged mirror "
++                "absent (pre-landing CI window)"
++            )
++        self.source, self.context = resolved
++
++    def _jobs(self) -> dict:
++        try:
++            import yaml  # type: ignore
++        except ImportError:  # pragma: no cover - CI installs pyyaml
++            self.skipTest("pyyaml not installed")
++        return yaml.safe_load(self.source)["jobs"]
++
++    def test_publish_needs_await_gate(self):
++        # String-level (runs even without pyyaml): the load-bearing edge.
++        self.assertIn(
++            "needs: await-release-gate", self.source,
++            "publish no longer waits for the await-release-gate job — "
++            "the npm publish would stop observing release.yml's "
++            "release-gate (PLAN-166 F1, P0)",
++        )
++
++    def test_publish_needs_await_gate_structurally(self):
++        jobs = self._jobs()
++        self.assertEqual(
++            jobs["publish"].get("needs"), "await-release-gate",
++            "the `needs:` must sit on the PUBLISH job itself",
++        )
++
++    def test_await_job_authenticates_gh_cli(self):
++        # `permissions:` alone does NOT authenticate the gh CLI on a
++        # hosted runner; without GH_TOKEN every poll dies on auth →
++        # fail-closed BLOCK breaking every release, RC and GA alike.
++        self.assertIn("GH_TOKEN: ${{ github.token }}", self.source)
++        jobs = self._jobs()
++        env = jobs["await-release-gate"].get("env") or {}
++        self.assertEqual(
++            env.get("GH_TOKEN"), "${{ github.token }}",
++            "await-release-gate must carry GH_TOKEN at the JOB level",
++        )
++
++    def test_await_job_permissions_and_timeout(self):
++        jobs = self._jobs()
++        gate = jobs["await-release-gate"]
++        self.assertEqual(
++            gate.get("permissions"),
++            {"contents": "read", "actions": "read"},
++            "await job needs exactly contents:read (checkout) + "
++            "actions:read (runs/jobs REST) — and nothing more (no "
++            "id-token: the gate job must not be able to publish)",
++        )
++        self.assertEqual(
++            gate.get("timeout-minutes"), 35,
++            "35 > the poller's 30-minute deadline so a timeout surfaces "
++            "as the decision function's fail-CLOSED BLOCK, not an opaque "
++            "runner kill",
++        )
++
++    def test_await_job_is_the_rc_positive_control(self):
++        # NO environment (no manual approval before evidence) and NO RC
++        # exclusion: the await job runs on rc tags, so every RC is a live
++        # positive control of the gate before GA depends on it.
++        jobs = self._jobs()
++        gate = jobs["await-release-gate"]
++        self.assertNotIn(
++            "environment", gate,
++            "await-release-gate must NOT gate through an environment — "
++            "manual approval belongs AFTER the machine evidence",
++        )
++        self.assertNotIn(
++            "if", gate,
++            "await-release-gate must NOT exclude RC tags — RC runs are "
++            "the live positive control",
++        )
++
++    def test_await_job_invokes_decision_function(self):
++        self.assertIn(".claude/scripts/await_release_gate.py", self.source)
++        # The deadline is what makes every non-GRANT state collapse to
++        # BLOCK (fail-closed) instead of polling forever.
++        self.assertIn("--deadline-epoch", self.source)
++
++    def test_publish_posture_verbatim(self):
++        jobs = self._jobs()
++        pub = jobs["publish"]
++        self.assertEqual(pub.get("environment"), "production-npm")
++        self.assertIn(_RC_EXCLUSION, pub.get("if", ""))
++
++    def test_already_published_guard_stays_in_publish_after_needs(self):
++        # Deliberate ordering (PLAN-166 OQ-1): gate first, manual
++        # approval second, last-resort idempotency guard INSIDE publish.
++        self.assertLess(
++            self.source.index("needs: await-release-gate"),
++            self.source.index("id: already_published"),
++            "already_published must remain in the publish job, after "
++            "the needs: edge — do not move it into the gate job",
++        )
++
++
++class TrustedPublisherBindingTest(TestEnvContext):
++    """PLAN-166 W1 item 4 — the npmjs OIDC trusted-publisher triple.
++
++    npm trusted publishing binds by repository + workflow FILENAME +
++    environment (oidc-failure-playbook.md:18). This class READS
++    .claude/governance/npm-trusted-publisher.txt and cross-checks the
++    workflow — it embeds NO values (a 4th copy of the truth).
++    """
++
++    def setUp(self):
++        super().setUp()
++        resolved = _trusted_publisher_values()
++        if resolved is None:
++            self.skipTest(
++                "npm-trusted-publisher.txt not landed and staged copy "
++                "absent (pre-landing CI window)"
++            )
++        self.values, self.txt_context = resolved
++        wf_name = self.values["workflow"]
++        wf = _plan166_text(wf_name)
++        if wf is not None:
++            self.workflow_text, self.wf_context = wf
++        else:
++            live = _WF / wf_name
++            if not live.is_file():
++                self.fail(
++                    "trusted publisher registers workflow %r but "
++                    ".github/workflows/%s does not exist — the OIDC "
++                    "binding is by FILENAME; publishing would die "
++                    "ENEEDAUTH at GA" % (wf_name, wf_name)
++                )
++            self.workflow_text = live.read_text(encoding="utf-8")
++            self.wf_context = "live-pre-plan166"
++
++    def test_registered_workflow_file_publishes(self):
++        self.assertIn(
++            "npm publish --provenance", self.workflow_text,
++            "the workflow the npmjs console points at must be the one "
++            "actually publishing",
++        )
++
++    def test_workflow_honours_registered_binding(self):
++        self.assertEqual(
++            _binding_mismatches(self.values, self.workflow_text), [],
++            "npm-publish.yml drifted from the npmjs trusted-publisher "
++            "registration recorded in npm-trusted-publisher.txt",
++        )
++
++    def test_positive_control_environment_mutation_goes_red(self):
++        # PLAN-166 W1 item 4 required control: flipping `environment:`
++        # in a COPY must be detected — otherwise this whole class is a
++        # vacuous gate (registered-vacuous class, S292).
++        needle = "environment: " + self.values["environment"]
++        self.assertIn(needle, self.workflow_text)
++        mutated = self.workflow_text.replace(
++            needle, "environment: NOT-THE-REGISTERED-ENV"
++        )
++        self.assertNotEqual(
++            _binding_mismatches(self.values, mutated), [],
++            "positive control failed: a mutated environment was not "
++            "flagged — the binding check is vacuous",
++        )
++
++    def test_positive_control_repository_mutation_goes_red(self):
++        self.assertIn(self.values["repository"], self.workflow_text)
++        mutated = self.workflow_text.replace(
++            self.values["repository"], "someone-else/some-fork"
++        )
++        self.assertNotEqual(
++            _binding_mismatches(self.values, mutated), [],
++            "positive control failed: a mutated repository slug was not "
++            "flagged — the binding check is vacuous",
++        )
++
++
++# ---------------------------------------------------------------------
++# PLAN-166 W1-B — structural asserts for the release.yml verdict delta +
++# ancestry gate (F2 server side; re-pass r15+r17+r18, debate r3 scoped
++# VETO). Merged verbatim from the W1-B slice file
++# (test_release_workflow_asserts_w1b.py) by the PLAN-166 ceremony
++# assembler — one runnable asserts file per the W1 pack discipline. Only
++# names that would collide with the W1-A section above were renamed
++# (_MARKER → _MARKER_W1B, _LIVE_WF/_STAGED_WF → _W1B_*).
++#
++# What is pinned here, and why each pin exists:
++# - The gate step exists, carries NO continue-on-error, and FAILS CLOSED
++#   on CEO_PAIR_RAIL_VERDICT_OPTIONAL=1 — the step-15 neighbourhood has
++#   two escape hatches keyed to that var (`continue-on-error:` and the
++#   empty `--parent-sha ""` bind, which the validator only binds when
++#   non-empty); the new gate must never inherit the switch.
++# - The delta decision is DELEGATED to
++#   .claude/scripts/local/_release_tag_guard.py (the reference
++#   implementation) — never re-implemented in bash.
++# - Ancestry covers BOTH the reviewed parent AND GITHUB_SHA (r18:
++#   parent-only lets the tag-without-push / orphan-verdict scenario pass).
++# - PINNED ORDER: Verify tag GPG signature → Validate pair-rail verdict →
++#   delta → ancestry.
++# - The job keeps the exact name `release-gate` — the W1-A
++#   await-release-gate poller resolves the job BY NAME via the Actions
++#   jobs endpoint; renaming the job silently breaks the npm-publish gate.
++# ---------------------------------------------------------------------
++
++# Marker written into the W1-B step's comment block; its presence in the
++# LIVE file means the ceremony landed and the live copy is authoritative.
++_MARKER_W1B = "PLAN-166 W1-B"
++
++_W1B_LIVE_WF = _WF / "release.yml"
++_W1B_STAGED_WF = _STAGED_166_WF / "release.yml"
++
++_W1B_STEP_NAME = "Verify verdict delta + ancestry (fail-closed)"
++_W1B_STEP15_NAME = "Validate pair-rail verdict"
++_W1B_GPG_STEP_NAME = "Verify tag GPG signature"
++_GUARD_MODULE = ".claude/scripts/local/_release_tag_guard.py"
++
++
++def _w1b_release_text() -> Optional[Tuple[str, str]]:
++    """Return (text, context) for release.yml, or None pre-landing.
++
++    Priority: live copy carrying the W1-B marker (post-landing,
++    authoritative) → staged ceremony copy (pre-landing local mirror;
++    gitignored so absent in CI) → None (pre-landing CI: skip).
++    """
++    if _W1B_LIVE_WF.is_file():
++        live = _W1B_LIVE_WF.read_text(encoding="utf-8")
++        if _MARKER_W1B in live:
++            return live, "live"
++    if _W1B_STAGED_WF.is_file():
++        return _W1B_STAGED_WF.read_text(encoding="utf-8"), "staged"
++    return None
++
++
++def _step_block(source: str, step_name: str) -> str:
++    """The text of one step: from its `- name:` to the next step/job."""
++    start = source.index("- name: %s" % step_name)
++    nxt = source.find("\n      - name:", start + 1)
++    job = source.find("\n  publish-release:", start + 1)
++    candidates = [i for i in (nxt, job) if i != -1]
++    end = min(candidates) if candidates else len(source)
++    return source[start:end]
++
++
++class W1BReleaseGateDeltaAncestryTest(TestEnvContext):
++    """The verdict delta + ancestry gate step (dual-context)."""
++
++    def setUp(self):
++        super().setUp()
++        resolved = _w1b_release_text()
++        if resolved is None:
++            self.skipTest(
++                "PLAN-166 W1-B release.yml not landed and staged mirror "
++                "absent (pre-landing CI window)"
++            )
++        self.source, self.context = resolved
++
++    # -- existence + independence from the step-15 escape hatches --------
++
++    def test_gate_step_present(self):
++        self.assertIn(
++            "- name: %s" % _W1B_STEP_NAME, self.source,
++            "the W1-B verdict delta + ancestry gate step is missing",
++        )
++
++    def test_gate_step_has_no_continue_on_error(self):
++        block = _step_block(self.source, _W1B_STEP_NAME)
++        self.assertNotIn(
++            "continue-on-error", block,
++            "the W1-B gate must NEVER carry continue-on-error — that is "
++            "exactly the step-15 escape hatch it exists to be independent "
++            "of (debate r3 scoped VETO)",
++        )
++
++    def test_file_carries_exactly_one_continue_on_error(self):
++        # The legacy step 15 keeps its documented transition hatch
++        # UNCHANGED (the plan adds a new step; it does not rewrite the
++        # neighbourhood). Exactly one KEY occurrence pins both
++        # directions at once: the hatch was not silently removed from
++        # step 15, and no step (new or old) gained a second one. Comment
++        # mentions of the phrase do not count — only the YAML key form.
++        key_form = re.findall(
++            r"^\s*continue-on-error:", self.source, re.MULTILINE
++        )
++        self.assertEqual(
++            len(key_form), 1,
++            "release.yml must carry exactly one continue-on-error KEY "
++            "(the legacy step-15 transition hatch); found %d"
++            % len(key_form),
++        )
++
++    def test_gate_fails_closed_on_transition_var(self):
++        block = _step_block(self.source, _W1B_STEP_NAME)
++        self.assertIn(
++            'if [ "${CEO_PAIR_RAIL_VERDICT_OPTIONAL}" = "1" ]', block,
++            "the W1-B gate must test the transition var explicitly",
++        )
++        guard = block.index(
++            'if [ "${CEO_PAIR_RAIL_VERDICT_OPTIONAL}" = "1" ]'
++        )
++        self.assertIn(
++            "exit 1", block[guard:guard + 400],
++            "the transition-var guard must FAIL CLOSED (exit 1), not skip",
++        )
++
++    def test_gate_never_builds_an_empty_parent_bind(self):
++        # The step-15 hatch shape: PARENT_SHA_ARG="" under the var. The
++        # W1-B block must not contain that shape in any form.
++        block = _step_block(self.source, _W1B_STEP_NAME)
++        self.assertNotIn('PARENT_SHA_ARG=""', block)
++        self.assertNotIn('--parent-sha ""', block)
++
++    def test_gate_binds_parent_sha_independently(self):
++        block = _step_block(self.source, _W1B_STEP_NAME)
++        self.assertIn(
++            'VERDICT_FILE_COMMIT="$(git log -n1 --format=%H -- "$VERDICT_FILE")"',
++            block,
++            "the gate must derive the verdict-file commit itself",
++        )
++        self.assertIn(
++            "_parse_verdict", block,
++            "the verdict's parent_sha must be read with the guard "
++            "module's parser — two readers of the same signed file must "
++            "not be able to disagree",
++        )
++
++    # -- delegation to the reference implementation ----------------------
++
++    def test_delta_delegates_to_guard_module(self):
++        block = _step_block(self.source, _W1B_STEP_NAME)
++        self.assertIn(
++            "%s delta" % _GUARD_MODULE, block,
++            "the delta decision must be delegated to the tag-guard "
++            "module (single source of the decision logic)",
++        )
++
++    def test_ancestry_delegates_to_guard_module(self):
++        block = _step_block(self.source, _W1B_STEP_NAME)
++        self.assertIn(
++            "%s ancestry" % _GUARD_MODULE, block,
++            "the HEAD-ancestry judgment (fail-closed fetch included) "
++            "must be delegated to the tag-guard module",
++        )
++
++    def test_delta_semantics_not_reimplemented_in_bash(self):
++        # The bash body must not carry the decision vocabulary of the
++        # module — reading the allowlist or hashing the manifest in
++        # shell would be a second implementation of the same closed-set
++        # semantics. Comment lines are excluded: the step's rationale
++        # comment legitimately NAMES what the module does; only CODE
++        # lines may not do it.
++        block = _step_block(self.source, _W1B_STEP_NAME)
++        code_lines = "\n".join(
++            line for line in block.splitlines()
++            if not line.lstrip().startswith("#")
++        )
++        for forbidden in ("delta_allowlist", "shasum -c", "shasum -a 256"):
++            self.assertNotIn(
++                forbidden, code_lines,
++                "the W1-B step re-implements delta semantics in bash "
++                "(%r found outside comments) — the module is the only "
++                "implementation" % forbidden,
++            )
++
++    # -- ancestry covers parent AND GITHUB_SHA (r18) ----------------------
++
++    def test_ancestry_covers_reviewed_parent(self):
++        block = _step_block(self.source, _W1B_STEP_NAME)
++        self.assertIn(
++            'git merge-base --is-ancestor "$PARENT_SHA" origin/main',
++            block,
++            "the reviewed parent must be judged against origin/main "
++            "(r17: the delta alone never proves the parent was on main)",
++        )
++
++    def test_ancestry_covers_github_sha_via_head_identity(self):
++        block = _step_block(self.source, _W1B_STEP_NAME)
++        self.assertIn(
++            'if [ "$HEAD_SHA" != "${GITHUB_SHA}" ]', block,
++            "HEAD == GITHUB_SHA must be asserted so the module's "
++            "HEAD-ancestry check covers the tagged commit itself (r18)",
++        )
++
++    # -- pinned order (WaveB5 order-assert pattern) -----------------------
++
++    def test_pinned_step_order(self):
++        i_gpg = self.source.index("- name: %s" % _W1B_GPG_STEP_NAME)
++        i_verdict = self.source.index("- name: %s" % _W1B_STEP15_NAME)
++        i_gate = self.source.index("- name: %s" % _W1B_STEP_NAME)
++        self.assertLess(
++            i_gpg, i_verdict,
++            "pinned order broken: GPG verify must precede the verdict "
++            "validation",
++        )
++        self.assertLess(
++            i_verdict, i_gate,
++            "pinned order broken: the verdict validation (step 15) must "
++            "precede the delta+ancestry gate",
++        )
++
++    def test_pinned_order_inside_gate_delta_before_ancestry(self):
++        block = _step_block(self.source, _W1B_STEP_NAME)
++        self.assertLess(
++            block.index("%s delta" % _GUARD_MODULE),
++            block.index("%s ancestry" % _GUARD_MODULE),
++            "pinned order broken inside the gate: delta before ancestry",
++        )
++        self.assertLess(
++            block.index("%s ancestry" % _GUARD_MODULE),
++            block.index('git merge-base --is-ancestor "$PARENT_SHA"'),
++            "pinned order broken inside the gate: module ancestry "
++            "(fetch + HEAD) before the parent merge-base judgment — the "
++            "parent must be judged against the freshly fetched ref",
++        )
++
++    def test_gate_lives_inside_release_gate_job(self):
++        # The step must run in the same job whose success the W1-A await
++        # poller grants on — a gate in another job would not gate the
++        # publish path.
++        i_job = self.source.index("\n  release-gate:")
++        i_next_job = self.source.index("\n  publish-release:")
++        i_gate = self.source.index("- name: %s" % _W1B_STEP_NAME)
++        self.assertTrue(
++            i_job < i_gate < i_next_job,
++            "the delta+ancestry gate must be a step of the release-gate "
++            "job",
++        )
++
++
++class W1BReleaseGateJobNameTest(TestEnvContext):
++    """The exact job name `release-gate` is load-bearing (W1-A await)."""
++
++    def setUp(self):
++        super().setUp()
++        resolved = _w1b_release_text()
++        if resolved is None:
++            self.skipTest(
++                "PLAN-166 W1-B release.yml not landed and staged mirror "
++                "absent (pre-landing CI window)"
++            )
++        self.source, self.context = resolved
++
++    def test_release_gate_job_name_exact(self):
++        self.assertRegex(
++            self.source, re.compile(r"^  release-gate:$", re.MULTILINE),
++            "the job MUST keep the exact name `release-gate` — the "
++            "W1-A await-release-gate poller resolves it BY NAME via the "
++            "Actions jobs endpoint",
++        )
++
++    def test_publish_release_still_needs_release_gate(self):
++        self.assertIn(
++            "needs: release-gate", self.source,
++            "publish-release must stay gated on release-gate",
++        )
++
++
++class W1BGuardModuleContractTest(TestEnvContext):
++    """The live module surface the workflow step depends on.
++
++    These asserts pin the CONTRACT the W1-B step consumes, so a module
++    refactor that renames a subcommand or the parser is caught by the
++    suite before it bricks a release run.
++    """
++
++    def setUp(self):
++        super().setUp()
++        self.module_path = _REPO / _GUARD_MODULE
++        if not self.module_path.is_file():
++            self.fail(
++                "%s missing — the W1-B release.yml step invokes it; "
++                "landing the workflow without the module bricks every "
++                "release run" % _GUARD_MODULE
++            )
++        import importlib.util
++
++        spec = importlib.util.spec_from_file_location(
++            "release_tag_guard_w1b_contract", str(self.module_path)
++        )
++        self.mod = importlib.util.module_from_spec(spec)
++        spec.loader.exec_module(self.mod)
++
++    def test_module_exposes_the_consumed_surface(self):
++        for attr in ("_parse_verdict", "delta", "ancestry", "main"):
++            self.assertTrue(
++                hasattr(self.mod, attr),
++                "module lost %r — the W1-B workflow step consumes it"
++                % attr,
++            )
++
++    def test_parse_verdict_reads_parent_sha(self):
++        fields = self.mod._parse_verdict(
++            "# t\n\n```yaml\nparent_sha: "
++            "4111a115190d375c39c90cc33ac1d9d5899c1cf2\n```\n"
++        )
++        self.assertEqual(
++            fields.get("parent_sha"),
++            "4111a115190d375c39c90cc33ac1d9d5899c1cf2",
++        )
++
++    def test_module_exit_codes_are_distinct_nonzero(self):
++        # The workflow relies on ANY non-zero exit failing the step
++        # (set -euo pipefail); pin that the module's failure codes are
++        # non-zero and mutually distinct so the failure MODE stays
++        # testable.
++        codes = [
++            self.mod.E_USAGE, self.mod.E_FETCH, self.mod.E_NOT_ANCESTOR,
++            self.mod.E_REMOTE_REF, self.mod.E_DELTA,
++            self.mod.E_MANIFEST_PIN, self.mod.E_MANIFEST_CONTENT,
++            self.mod.E_MANIFEST_SET, self.mod.E_VERDICT, self.mod.E_VACUOUS,
++        ]
++        self.assertNotIn(0, codes)
++        self.assertEqual(len(codes), len(set(codes)))
++
++
+ if __name__ == "__main__":
+     unittest.main()
+diff --git a/.github/workflows/npm-publish.yml b/.github/workflows/npm-publish.yml
+index aa2e29c..03071be 100644
+--- a/.github/workflows/npm-publish.yml
++++ b/.github/workflows/npm-publish.yml
+@@ -37,6 +37,47 @@ name: NPM Publish
+ #     Owner-in-the-loop gate covering the Sprint 17 public-launch
+ #     go/no-go decision (private-first strategy per
+ #     `project_closure_strategy.md`).
++#
++# ---------------------------------------------------------------------
++# PLAN-166 W1 item 1 (F1, P0) — the publish now OBSERVES the governance
++# gate. `release.yml` and this workflow both fire on `push: tags: v*` as
++# two INDEPENDENT runs; until PLAN-166 nothing made the publish observe
++# the gate, so the only barrier was a human approving `production-npm`
++# with no machine evidence that `release-gate` was green — a live path
++# to publishing an unreviewed tree. A first job (`await-release-gate` —
++# deliberately NO `environment:` and NO RC exclusion, so it runs on RC
++# tags as a live positive control) polls release.yml's `release-gate`
++# JOB (never the run conclusion: CEO_SOTA_DISABLE=1 skips the job while
++# the run stays green) for THIS tag at THIS commit and fail-CLOSED
++# blocks unless it concluded success. `publish` gains
++# `needs: await-release-gate`; its `environment: production-npm`
++# approval and the RC exclusion are VERBATIM unchanged. Deliberate
++# ordering: the Owner's manual-approval prompt only appears AFTER the
++# gate is green — approval can never race ahead of machine evidence —
++# and the `already_published` idempotency guard STAYS in the publish
++# job (last-resort idempotency), not in the gate job. Do not "optimise"
++# the order back.
++#
++# Alternatives REJECTED (do not resurrect without a new debate):
++#   - `workflow_run` trigger: GitHub executes the workflow file from
++#     the DEFAULT branch, not the tag's tree — that kills the rollback
++#     invariant documented above (tag runs pin this workflow to the
++#     tag's tree; a failed GA publish means rollback + delete/re-tag).
++#   - moving the publish into release.yml: npm trusted publishing binds
++#     OIDC by workflow FILENAME
++#     (.claude/plans/PLAN-158/oidc-failure-playbook.md:18) — renaming
++#     the publishing workflow breaks the npmjs registration, plus ~6
++#     test pins on the npm-publish.yml path.
++#   - a reusable `workflow_call` gate shared by both workflows:
++#     refactor candidate, post-GA only (PLAN-166 §Deferred) — not
++#     during an open release window.
++#
++# The trusted-publisher binding triple (repository / workflow filename /
++# environment) is recorded in
++# .claude/governance/npm-trusted-publisher.txt and cross-checked by
++# .claude/scripts/tests/test_release_workflow_asserts.py, which READS
++# that file (embedding the values in the test would be a 4th copy of
++# the truth).
+ 
+ on:
+   push:
+@@ -52,6 +93,109 @@ permissions:
+   id-token: write   # required for OIDC trusted publishing + provenance
+ 
+ jobs:
++  # ---------------------------------------------------------------------
++  # PLAN-166 W1 item 1 (F1, P0) — OBSERVE THE GOVERNANCE GATE.
++  # This job is the machine evidence that release.yml's `release-gate`
++  # job passed for this exact tag+SHA+push. It deliberately carries NO
++  # `environment:` and NO RC exclusion: it runs on rc tags too, which
++  # makes every RC a live positive control of the gate before GA ever
++  # depends on it.
++  # Decision function + battery: .claude/scripts/await_release_gate.py,
++  # .claude/scripts/tests/test_await_release_gate.py.
++  await-release-gate:
++    name: Await release-gate (release.yml)
++    runs-on: ubuntu-latest
++    # 35 > the poller's own 30-minute deadline, so a timeout surfaces as
++    # the decision function's fail-CLOSED BLOCK (with its inputs printed),
++    # not as an opaque runner kill.
++    timeout-minutes: 35
++    permissions:
++      contents: read   # checkout the tag to get the decision script
++      actions: read    # read release.yml's runs + jobs over the REST API
++    env:
++      # `permissions:` alone does NOT authenticate the `gh` CLI on a
++      # hosted runner. Without GH_TOKEN every poll dies on auth, which is
++      # BLOCK (fail-closed) — i.e. it would break EVERY release, RC and
++      # GA alike. This token is the job's only credential; the job has no
++      # id-token and no environment.
++      GH_TOKEN: ${{ github.token }}
++    steps:
++      - name: Checkout tag
++        # SHA-pinned (Sprint 7 Dependabot bump): actions/checkout@v6.0.2
++        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
++
++      - name: Poll release.yml until release-gate concludes
++        # No `${{ }}` interpolation inside this script by design — every
++        # value arrives through the environment, so no workflow expression
++        # is ever spliced into shell text.
++        run: |
++          set -euo pipefail
++          TAG="${GITHUB_REF_NAME}"
++          DEADLINE=$(( $(date +%s) + 1800 ))
++          SELF_CREATED_AT="$(gh api \
++            "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
++            --jq '.created_at' < /dev/null)"
++          echo "inputs: tag=${TAG} head_sha=${GITHUB_SHA} run_id=${GITHUB_RUN_ID}"
++          echo "inputs: self_created_at=${SELF_CREATED_AT} deadline_epoch=${DEADLINE}"
++
++          fetch_payload() {
++            # One document: every run for THIS head_sha, each carrying its
++            # jobs. A run whose jobs endpoint is unreadable keeps no `jobs`
++            # key — the decision function reads that as WAIT, never GRANT.
++            if ! gh api --paginate \
++                "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${GITHUB_SHA}&per_page=100" \
++                --jq '.workflow_runs[] | {id, run_attempt, path, event, head_branch, head_sha, created_at, status, conclusion}' \
++                > runs.ndjson < /dev/null; then
++              # An API error is BLOCK by design (ADR-186: input we cannot
++              # verify is blocked, not waved through).
++              echo '{"api_error": "runs listing failed"}' > payload.json
++              return 0
++            fi
++            : > runs_with_jobs.ndjson
++            while read -r run; do
++              [ -n "${run}" ] || continue
++              rid="$(printf '%s' "${run}" | jq -r '.id')"
++              if ! run_jobs="$(gh api \
++                  "repos/${GITHUB_REPOSITORY}/actions/runs/${rid}/jobs?per_page=100" \
++                  --jq '[.jobs[] | {name, status, conclusion}]' < /dev/null)"; then
++                printf '%s\n' "${run}" >> runs_with_jobs.ndjson
++                continue
++              fi
++              printf '%s' "${run}" \
++                | jq -c --argjson jobs "${run_jobs}" '. + {jobs: $jobs}' \
++                >> runs_with_jobs.ndjson
++            done < runs.ndjson
++            jq -c -s '{workflow_runs: .}' runs_with_jobs.ndjson > payload.json
++          }
++
++          attempt=0
++          while true; do
++            attempt=$(( attempt + 1 ))
++            fetch_payload
++            set +e
++            python3 .claude/scripts/await_release_gate.py \
++              --payload-file payload.json \
++              --tag "${TAG}" \
++              --head-sha "${GITHUB_SHA}" \
++              --self-created-at "${SELF_CREATED_AT}" \
++              --deadline-epoch "${DEADLINE}"
++            rc=$?
++            set -e
++            case "${rc}" in
++              0)
++                echo "::notice::release-gate green for ${TAG} at ${GITHUB_SHA} — publish authorised (poll ${attempt})"
++                exit 0
++                ;;
++              3)
++                sleep 20
++                ;;
++              *)
++                echo "::error::release-gate did not authorise this publish (decision exit ${rc}, poll ${attempt}) — the printed inputs above name the run and job that were evaluated"
++                exit 1
++                ;;
++            esac
++          done
++
+   publish:
+     # PLAN-013 Phase 0 item 0.2 — RC tag guard.
+     # RC tags contain `-rc.` (e.g. `v1.4.0-rc.1`). Skip them entirely.
+@@ -63,6 +207,13 @@ jobs:
+     # DROPPED by ratified debate. Pinned by
+     # .claude/scripts/tests/test_release_workflow_asserts.py.
+     if: "!contains(github.ref, '-rc.')"
++    # PLAN-166 W1 item 1: publish only starts after `await-release-gate`
++    # proved release.yml's release-gate job green for this exact tag+SHA
++    # (default `success()` semantics of `needs:` — an await failure skips
++    # this job while the run itself goes red). Deliberate ordering: the
++    # production-npm manual-approval prompt appears only AFTER the gate
++    # is green. The `already_published` guard stays below, in this job.
++    needs: await-release-gate
+     runs-on: ubuntu-latest
+     environment: production-npm
+     timeout-minutes: 8
+diff --git a/.github/workflows/release.yml b/.github/workflows/release.yml
+index 69d7836..596197e 100644
+--- a/.github/workflows/release.yml
++++ b/.github/workflows/release.yml
+@@ -69,6 +69,33 @@ jobs:
+             echo "OK: VERSION=$FILE matches tag=$TAG"
+           fi
+ 
++      # -----------------------------------------------------------------
++      # PLAN-166 W1 item 2 (F3, ADR-155-AMEND-1 §5, Forma A (ii)) — the
++      # framework version marker `.claude/.framework-version` is a TRACKED
++      # one-line file, byte-identical to VERSION (the version bump writes
++      # it as a site; verify-counts.sh cross-checks it). This assert is
++      # deliberately UNCONDITIONAL and fail-closed: a missing marker in a
++      # release checkout means the ceremony that introduced it was
++      # reverted or the bump skipped a site — either way the tag must not
++      # ship. Kept NEXT TO the VERSION↔tag assert above so the whole
++      # version-consistency family lives in one place (same convention as
++      # the plugin-manifest step below).
++      # -----------------------------------------------------------------
++      - name: Assert framework-version marker matches VERSION
++        run: |
++          set -euo pipefail
++          FILE="$(tr -d '[:space:]' < VERSION)"
++          if [[ ! -f .claude/.framework-version ]]; then
++            echo "::error::.claude/.framework-version is missing — it is a tracked file (PLAN-166 F3 / ADR-155-AMEND-1); a release checkout without it must not ship"
++            exit 1
++          fi
++          MARKER="$(tr -d '[:space:]' < .claude/.framework-version)"
++          if [[ "$MARKER" != "$FILE" ]]; then
++            echo "::error::.claude/.framework-version ('$MARKER') does not match VERSION ('$FILE') — the marker is byte-identical to VERSION by contract (Forma A (ii), fail-closed)"
++            exit 1
++          fi
++          echo "OK: .claude/.framework-version=$MARKER matches VERSION"
++
+       # -----------------------------------------------------------------
+       # PLAN-153 Wave B item 5 (e) — version↔plugin-manifest sync, kept
+       # NEXT TO the VERSION↔tag assert above so the whole
+@@ -701,6 +728,143 @@ jobs:
+             --codex-pin-manifest-file .claude/governance/codex-cli-pin-manifest.json \
+             --inputs-hash-paths-file .claude/governance/pair-rail-inputs-hash-manifest.txt
+ 
++      # ==========================================================
++      # PLAN-166 W1-B — verdict delta + ancestry gate (F2 server side)
++      # ==========================================================
++      # Re-pass findings r15 + r17 + r18 (PLAN-166), debate r3 scoped VETO.
++      #
++      # WHY A SEPARATE STEP: the step-15 neighbourhood above carries two
++      # escape hatches keyed to CEO_PAIR_RAIL_VERDICT_OPTIONAL —
++      # `continue-on-error:` on the step itself, and an empty
++      # `--parent-sha ""` bind (the validator only binds the field when
++      # args.parent_sha is non-empty). Inheriting that neighbourhood would
++      # inherit the switch. This step therefore:
++      #   - carries NO continue-on-error;
++      #   - FAILS CLOSED when CEO_PAIR_RAIL_VERDICT_OPTIONAL=1: in that
++      #     mode step 15 skipped the parent_sha bind, so the anchor these
++      #     asserts hang off was never validated — there is no transition
++      #     mode here, by design;
++      #   - re-derives and re-binds parent_sha ITSELF (non-empty, 40-hex,
++      #     equal to the verdict's `parent_sha:` read with the SAME parser
++      #     the local tag guard uses) — independent of step 15's outcome,
++      #     which also closes the legacy commit_sha fallback (the
++      #     validator downgrades a missing parent_sha to an ADVISORY when
++      #     a legacy commit_sha is present; this step does not);
++      #   - reuses .claude/scripts/local/_release_tag_guard.py for the
++      #     delta decision — the module marks itself as the reference
++      #     implementation; the semantics are NEVER re-implemented in
++      #     bash (single source of the decision logic);
++      #   - asserts ancestry on origin/main of BOTH the reviewed parent
++      #     AND GITHUB_SHA itself (r18: parent-only lets the
++      #     tag-without-push scenario — verdict V over parent P, tag
++      #     pushed, V never reaches main — pass with P ancestral and V
++      #     orphaned).
++      #
++      # THE INVARIANT (one sentence): nothing landed after what the
++      # re-pass reviewed, other than the verdict for THIS tag and the
++      # evidence it pins by name AND content (sha256 of MANIFEST.sha256
++      # in the signed verdict + `shasum -c` over the evidence set).
++      #
++      # PINNED ORDER (asserted structurally by the W1B* classes of
++      # test_release_workflow_asserts.py, WaveB5 pattern):
++      #   Verify tag GPG signature → Validate pair-rail verdict →
++      #   delta → ancestry.
++      # Do not reorder, do not merge into step 15.
++      - name: Verify verdict delta + ancestry (fail-closed)
++        env:
++          CEO_PAIR_RAIL_VERDICT_OPTIONAL: ${{ vars.CEO_PAIR_RAIL_VERDICT_OPTIONAL || '0' }}
++        run: |
++          set -euo pipefail
++          # (0) No transition mode: with the var on, the parent_sha bind
++          # upstream was skipped — refuse to certify against an
++          # unvalidated anchor. Fail closed, loudly.
++          if [ "${CEO_PAIR_RAIL_VERDICT_OPTIONAL}" = "1" ]; then
++            echo "::error::CEO_PAIR_RAIL_VERDICT_OPTIONAL=1 is set, but the delta+ancestry gate has no transition mode — it fails closed by design (PLAN-166 debate r3). Unset the repo variable (gh variable delete CEO_PAIR_RAIL_VERDICT_OPTIONAL) and re-run."
++            exit 1
++          fi
++          TAG="${GITHUB_REF_NAME}"
++          VERDICT_FILE=".claude/governance/pair-rail-verdict-${TAG}.md"
++          if [ ! -f "$VERDICT_FILE" ]; then
++            echo "::error::no signed verdict at $VERDICT_FILE — the delta+ancestry gate has no optional mode; the re-pass verdict for THIS tag must be committed on the tagged tree."
++            exit 1
++          fi
++          # (1) Checkout sanity: every assert below anchors on HEAD, so
++          # HEAD must BE the tagged commit this run is about.
++          HEAD_SHA="$(git rev-parse HEAD)"
++          if [ "$HEAD_SHA" != "${GITHUB_SHA}" ]; then
++            echo "::error::checkout HEAD ($HEAD_SHA) != GITHUB_SHA (${GITHUB_SHA}) — refusing to assert against the wrong tree"
++            exit 1
++          fi
++          # (2) Independent parent_sha bind — non-empty by construction,
++          # controlled by no variable. Same derivation as step 15 (parent
++          # of the commit that introduced the verdict file); the verdict
++          # field is read with the SAME parser the local tag guard uses
++          # (_parse_verdict), so two readers of the same signed file
++          # cannot disagree about what it says.
++          VERDICT_FILE_COMMIT="$(git log -n1 --format=%H -- "$VERDICT_FILE")"
++          if [ -z "$VERDICT_FILE_COMMIT" ]; then
++            echo "::error::cannot resolve the commit that introduced $VERDICT_FILE — refusing an empty bind"
++            exit 1
++          fi
++          PARENT_SHA="$(git rev-parse "${VERDICT_FILE_COMMIT}^" 2>/dev/null || echo "")"
++          if [ -z "$PARENT_SHA" ]; then
++            echo "::error::cannot resolve parent of ${VERDICT_FILE_COMMIT} — refusing an empty bind"
++            exit 1
++          fi
++          python3 - "$VERDICT_FILE" "$PARENT_SHA" <<'PYBIND'
++          import importlib.util
++          import io
++          import re
++          import sys
++
++          verdict_path, expected = sys.argv[1], sys.argv[2]
++          if not re.match(r"\A[0-9a-f]{40}\Z", expected):
++              sys.exit("FAIL: derived parent %r is not a 40-hex SHA" % expected)
++          spec = importlib.util.spec_from_file_location(
++              "release_tag_guard", ".claude/scripts/local/_release_tag_guard.py"
++          )
++          mod = importlib.util.module_from_spec(spec)
++          spec.loader.exec_module(mod)
++          with io.open(verdict_path, encoding="utf-8") as fh:
++              fields = mod._parse_verdict(fh.read())
++          declared = fields.get("parent_sha")
++          if declared != expected:
++              sys.exit(
++                  "FAIL: verdict parent_sha %r != parent of the verdict-file "
++                  "commit (%s) — the anchor was not validated with a "
++                  "non-empty bind; a legacy commit_sha fallback does NOT "
++                  "count here." % (declared, expected)
++              )
++          print("  ok   parent_sha bind: %s (derived independently of step 15)" % expected)
++          PYBIND
++          # (3) DELTA (r15): git diff <reviewed parent>..<tag commit>
++          # must be contained in the CLOSED set pinned in the signed
++          # verdict — exact names per tag (never the pair-rail-verdict-*
++          # wildcard, never repass-<N>/**), set equality against the
++          # evidence MANIFEST.sha256, AND content equality (the verdict
++          # pins the manifest's sha256; the guard runs `shasum -c` over
++          # it). Any extra path = FAIL. Decision logic lives in the local
++          # tag guard module — reused, never re-implemented in bash.
++          python3 .claude/scripts/local/_release_tag_guard.py delta \
++            --repo . --tag "$TAG"
++          # (4) ANCESTRY (r17+r18): both the reviewed parent AND the
++          # tagged commit itself must be ancestors of origin/main. The
++          # module's ancestry subcommand judges HEAD (== GITHUB_SHA,
++          # asserted in (1)) after a FAIL-CLOSED fetch of origin/main —
++          # a failed fetch is a stop, never a stale-ref approval. The
++          # reviewed parent is then judged against the same freshly
++          # fetched ref.
++          python3 .claude/scripts/local/_release_tag_guard.py ancestry \
++            --repo . --remote origin --branch main
++          if git merge-base --is-ancestor "$PARENT_SHA" origin/main; then
++            echo "  ok   reviewed parent $PARENT_SHA is an ancestor of origin/main"
++          else
++            RC=$?
++            echo "::error::reviewed parent $PARENT_SHA is not on origin/main (merge-base exit $RC) — the verdict is anchored on a commit main never saw (tag-without-push / orphan-verdict scenario, r17+r18)"
++            exit 1
++          fi
++          echo "OK: verdict delta + ancestry asserts all green for $TAG"
++
+   publish-release:
+     name: Publish GitHub Release + assets
+     needs: release-gate
+diff --git a/.github/workflows/smoke-install.yml b/.github/workflows/smoke-install.yml
+index e1317fb..6dcd400 100644
+--- a/.github/workflows/smoke-install.yml
++++ b/.github/workflows/smoke-install.yml
+@@ -11,8 +11,25 @@ on:
+       - "scripts/tests/test-upgrade-dryrun-identity.sh"
+       - "scripts/tests/test-upgrade-exclusions.sh"
+       - "scripts/tests/smoke-install.sh"
++      # PLAN-166 F4 (OQ-4): the install/upgrade parity e2e and its classifier.
++      # The finding this closes is "a red gate nobody runs" (5th instance) --
++      # an unwired test is the same as no test.
++      - "scripts/tests/test-install-upgrade-parity-e2e.sh"
++      - "scripts/tests/_parity_classify.py"
++      # PLAN-166 F3 (ADR-155-AMEND-1): delivery-record ownership e2e —
++      # scripts/tests/*.sh runs ONLY in this workflow (same r11/r20 wiring
++      # rule as the parity e2e above).
++      - "scripts/tests/test-upgrade-spec-ownership.sh"
+       - "templates/**"
+-      - "SPEC/v1/install-cli.md"
++      # Widened from SPEC/v1/install-cli.md: SPEC/v1 is delivered by install.sh
++      # and (until F3) by nothing in upgrade.sh, so ANY SPEC/v1 change is a
++      # parity event, not just the CLI contract doc.
++      - "SPEC/v1/**"
++      # PLAN-166 F4 wiring (r11/r20): scripts/tests/*.sh runs ONLY here, so a
++      # PR touching just one of these would otherwise skip the regression.
++      - "scripts/doctor.sh"
++      - ".claude/.framework-version"
++      - ".claude/scripts/check-framework-updates.sh"
+       - ".github/workflows/smoke-install.yml"
+       # PLAN-006 Phase 1 (Sprint 6): Adapter Layer migration changes
+       # install-time expectations (hook import paths, contract). Scope
+@@ -22,13 +39,25 @@ on:
+     branches:
+       - main
+     paths:
++      # KEEP IDENTICAL to the pull_request list above. The two had already
++      # drifted (push was missing SPEC/v1 and this workflow file); PLAN-166 F4
++      # re-syncs them, because a filter that fires on the PR and not on the
++      # merge is a gate with a hole in it.
+       - "scripts/install.sh"
+       - "scripts/upgrade.sh"
+       - "scripts/_framework_manifest_set.sh"
+       - "scripts/tests/test-upgrade-dryrun-identity.sh"
+       - "scripts/tests/test-upgrade-exclusions.sh"
+       - "scripts/tests/smoke-install.sh"
++      - "scripts/tests/test-install-upgrade-parity-e2e.sh"
++      - "scripts/tests/_parity_classify.py"
++      - "scripts/tests/test-upgrade-spec-ownership.sh"
+       - "templates/**"
++      - "SPEC/v1/**"
++      - "scripts/doctor.sh"
++      - ".claude/.framework-version"
++      - ".claude/scripts/check-framework-updates.sh"
++      - ".github/workflows/smoke-install.yml"
+       - ".claude/hooks/**"
+ 
+ concurrency:
+@@ -42,7 +71,20 @@ jobs:
+     runs-on: ubuntu-latest
+     # PLAN-161: 5 -> 8 — headroom for the two upgrade oracles (each runs
+     # full install + upgrade legs against fixture adopter repos).
+-    timeout-minutes: 8
++    # PLAN-166 F4: 8 -> 20. MEASURED, not guessed. The parity e2e runs 2 full
++    # install legs + 1 upgrade leg PER ceremony mode, and the positive control
++    # runs the same again with a planted divergence: 12 install/upgrade
++    # operations added to this job. Local wall time (Darwin arm64, 16 cores,
++    # 2026-08-05): gate 122s + control 118s = 240s. A 2-core ubuntu-latest
++    # runner is the usual 2-3x slower, i.e. 8-12 min of NEW work on top of the
++    # ~5 min this job already spent. 15 would sit inside the noise band, and
++    # the perf-gate N=20 flake (PLAN-159) was exactly that mistake. Re-tighten
++    # once real CI runs give a p95.
++    # PLAN-166 F3 (assembler): 20 -> 25. The spec-ownership e2e adds 4 more
++    # installs + 3 upgrades (S1-S8; ~3-4 min local per the W1-C measurement),
++    # i.e. up to ~8-10 more CI minutes at the same 2-3x factor. Same
++    # anti-flake sizing rule as the F4 bump above.
++    timeout-minutes: 25
+     permissions:
+       contents: read
+     steps:
+@@ -52,6 +94,20 @@ jobs:
+         with:
+           fetch-depth: 1
+ 
++      # PLAN-166 F4: the parity e2e's historical leg installs from a PINNED
++      # TAG. `fetch-depth: 1` produces a checkout with NO tags, so the pin
++      # would not resolve and the gate would die before comparing a single
++      # tree - "it passes on my clone" is precisely the hole this test exists
++      # to close. The pin is READ FROM THE TEST (--print-pin) so the workflow
++      # never becomes a second copy of that truth.
++      - name: Fetch the parity pin tag
++        run: |
++          set -euo pipefail
++          PIN="$(bash scripts/tests/test-install-upgrade-parity-e2e.sh --print-pin)"
++          echo "parity historical pin: $PIN"
++          git fetch --no-tags --depth 1 origin "+refs/tags/$PIN:refs/tags/$PIN"
++          git rev-parse --verify "refs/tags/$PIN^{commit}"
++
+       - name: Setup Python 3.11
+         # SHA-pinned (Sprint 7 Dependabot bump): actions/setup-python@v6.2.0
+         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+@@ -108,6 +164,59 @@ jobs:
+           fi
+           echo 'user-ceremony leg: PASS'
+ 
++      # PLAN-166 F4 (OQ-4) - install/upgrade parity on the RESULTING TREES,
++      # per ceremony mode. NO continue-on-error, deliberately: the assertion
++      # this replaces was dead twice over (tautological AND wired into no
++      # workflow), and an escape hatch here would reinstate exactly that.
++      # Exit 2 (KNOWN-OPEN) is a FAILURE too - it NAMES the outstanding
++      # PLAN-166 W1 prerequisites instead of skipping them silently.
++      - name: Install/upgrade parity e2e (maintainer + user ceremony)
++        run: |
++          set -euo pipefail
++          bash scripts/tests/test-install-upgrade-parity-e2e.sh
++
++      # Control of the control (AC-4). With ONE backup_and_replace line deleted
++      # from a COPY of upgrade.sh, the gate above must come back RED in EVERY
++      # ceremony mode. rc must be exactly 1: rc 0/2 means the gate went blind,
++      # rc 9 means the plant stopped biting (vacuous control). Both fail here.
++      # This step MUST stay AFTER the plain gate: if the un-planted run were
++      # already fatal, rc=1 here would prove nothing about the plant.
++      - name: Install/upgrade parity - positive control (planted divergence)
++        run: |
++          set -uo pipefail
++          rc=0
++          bash scripts/tests/test-install-upgrade-parity-e2e.sh \
++            --positive-control > /tmp/parity-control.log 2>&1 || rc=$?
++          if [ "$rc" -ne 1 ]; then
++            cat /tmp/parity-control.log
++            echo "::error::parity positive control returned rc=$rc, expected 1 - the planted install/upgrade divergence did NOT turn the gate red, so the gate above proves nothing"
++            exit 1
++          fi
++          # Second factor, LOAD-BEARING (re-pass closure): under `set -uo
++          # pipefail` (no -e) a non-matching grep would NOT fail the step, so
++          # an rc=1 from a failure UNRELATED to the plant (log with none of
++          # the plant markers) would pass — the registered-vacuous class
++          # (S292) this step exists to close. Demand plant evidence or fail.
++          grep -E "PLANTED|per-mode verdicts|positive control:" /tmp/parity-control.log || {
++            cat /tmp/parity-control.log
++            echo "::error::rc=1 but the log carries no PLANTED/per-mode-verdict evidence - the control went red for an unrelated reason, which proves nothing about the plant (vacuous control)"
++            exit 1
++          }
++          echo "positive control OK: planted divergence -> exit 1 in every ceremony mode"
++
++      # PLAN-166 F3 (ADR-155-AMEND-1, AC-3) — delivery-record ownership of
++      # the three conditional framework surfaces (SPEC/v1, root PROTOCOL.md,
++      # .claude/.framework-version) across install -> upgrade -> doctor ->
++      # updater. Scenarios S1-S8 incl. the forced-refresh route (S2), the
++      # legacy ADOPTER-FORK preserve (S4) and the marker-first updater
++      # regression (S6). Same wiring rationale as the parity e2e above:
++      # scripts/tests/*.sh runs ONLY here — unwired = no test. NO
++      # continue-on-error, deliberately.
++      - name: Upgrade SPEC/marker delivery-record ownership (S1-S8)
++        run: |
++          set -euo pipefail
++          bash scripts/tests/test-upgrade-spec-ownership.sh
++
+       - name: Assert npx/npm shim contract (if present)
+         # Phase 4 deliverable; skip if directory missing
+         run: |
+diff --git a/CLAUDE.md b/CLAUDE.md
+index ba8ae08..e0b988c 100644
+--- a/CLAUDE.md
++++ b/CLAUDE.md
+@@ -51,7 +51,7 @@ library — you install it *into* an existing repository with
+ - **A cross-LLM pair-rail** — a second model (Codex) reviews canonical edits Claude proposes, so no single model is both author and sole reviewer.
+ - **A skill library** — **166 skills** ready-made (42 core + 8 frontend + 116 domain).
+ - **Governance hooks** — 57 Python hook scripts on disk (46 wired into `.claude/settings.json` (48 event registrations)), built on 68 stdlib-only `_lib/` modules.
+-- **188 ADRs** (architecture decision records, `.claude/adr/`) and **27 slash commands** (`.claude/commands/`).
++- **189 ADRs** (architecture decision records, `.claude/adr/`) and **27 slash commands** (`.claude/commands/`).
+ 
+ A note this repo keeps deliberately: **there is no speed claim.** Six
+ internal experiments found no general speedup over an optimized solo
+diff --git a/INSTALL.md b/INSTALL.md
+index e9b7471..480ef7f 100644
+--- a/INSTALL.md
++++ b/INSTALL.md
+@@ -587,16 +587,24 @@ files. A version bump in `VERSION` carries the SemVer guarantee
+ that minor/patch changes do NOT break the schemas; major bumps
+ publish a new `SPEC/v2/` alongside.
+ 
+-To verify what version you installed:
++To verify what framework version a target is running:
+ 
+ ```bash
+-cat TARGET/VERSION
+-# Example output: 1.18.0
++cat TARGET/.claude/.framework-version   # preferred — refreshed on every upgrade
++# Example output: 1.3.0
++cat TARGET/VERSION                      # fallback (pre-v1.3.0 installs)
+ ```
+ 
+-The `VERSION` file matches the git tag of the source framework
+-checkout at install time. Use it as a forensic anchor when an
+-adopter reports a bug: ask for the `VERSION` value first.
++Prefer `.claude/.framework-version` as the forensic anchor when an
++adopter reports a bug. The root `VERSION` file matches the git tag of
++the source framework checkout **at install time only**: `upgrade.sh`
++deliberately never touches it (an adopter repo may have its own
++`VERSION`, and taking it over is the S238/ADR-155 clobber class — see
++`ADR-155-AMEND-1`), so on an upgraded install `VERSION` reports the
++ORIGINAL install version, not the current one. The marker is refreshed
++on every upgrade and is cross-checked against `VERSION` in every
++framework release; fall back to `VERSION` only on pre-v1.3.0 installs
++that have not upgraded yet.
+ 
+ ---
+ 
+@@ -617,12 +625,41 @@ What gets refreshed:
+ - `.claude/skills/`, `.claude/hooks/`, `.claude/scripts/`,
+   `.claude/commands/`
+ - `.claude/pitfalls-catalog.yaml`, `.claude/task-chains.yaml`
+-- `PROTOCOL.md` pointer
++- `PROTOCOL.md` pointer (skipped on `--ceremony user` installs — a user
++  install never creates root files)
++- `SPEC/v1/` — **forced route** (skipped on `--ceremony user` installs):
++  the SPEC is the published compliance contract, so a local edit is a
++  *fork of the contract*, not a customization — a framework-owned
++  `SPEC/v1` is backed up to `.claude.bak/<timestamp>/SPEC/v1` and
++  replaced wholesale. Ownership follows the recorded delivery (the
++  ADR-155 baseline manifest); a pre-existing `SPEC/v1` with no delivery
++  record is byte-compared against the pristine SPECs shipped at v1.2.0
++  and earlier — a match refreshes it, anything else is preserved in
++  place with a named WARNING (ADR-155-AMEND-1).
++- `.claude/.framework-version` — the framework version marker, rewritten
++  to the source version on every upgrade (this is what
++  `check-framework-updates.sh` and forensic triage read post-upgrade).
+ 
+ What is **NOT** touched (user data):
+ 
+ - `CLAUDE.md`, `MEMORY.md`
+ - `.claude/agent-metrics.md`
++- `VERSION` (root) — **deliberately**: `install.sh` is skip-if-exists,
++  so on an adopter repo with its own `VERSION` the framework never
++  wrote there, and an upgrade overwrite would take the adopter's file
++  (the S238/ADR-155 class). The root `VERSION` is an install-time
++  snapshot forever; the current framework version lives in
++  `.claude/.framework-version`. Do not "fix" this asymmetry — see
++  `ADR-155-AMEND-1`.
++
++Ceremony on upgrade: `upgrade.sh` reads the recorded install ceremony
++from `.claude/.install-state.json` with a dedicated reader that runs
++even under `--no-replay`. **Installs without a readable
++`.install-state.json` (all pre-Wave-B installs) are treated as
++`maintainer` on upgrade** — that is the fail-open, pre-existing
++behavior; if your install was `--ceremony user` and predates the state
++file, re-run `install.sh --ceremony user` once so the ceremony is
++recorded before upgrading.
+ 
+ `.claude/settings.json` is a special case since v1.2.0: `upgrade.sh` runs a
+ 3-state per-leaf-key **baseline migration** on it (e.g. the pair-rail
+diff --git a/README.md b/README.md
+index a247fe0..e04e721 100644
+--- a/README.md
++++ b/README.md
+@@ -56,7 +56,7 @@ All counts below are verifiable from a clean checkout (see *Verifying the number
+ | Hooks wired in `settings.json` | **46** | distinct scripts, 48 event registrations |
+ | Shared library modules | **68** | stdlib-only, under `.claude/hooks/_lib/` (excluding the package `__init__.py`) |
+ | Slash commands | **27** | under `.claude/commands/` |
+-| Architecture decision records | **188** | under `.claude/adr/` |
++| Architecture decision records | **189** | under `.claude/adr/` |
+ | Tests | **~14,000 cases** | reported by `pytest --collect-only` across the hook, script, and conformance suites |
+ 
+ The gap between **57 on disk** and **46 wired** is benign: several non-event modules are activated through in-process dispatch (invoked by other hooks) rather than by a direct `settings.json` event registration.
+@@ -183,7 +183,7 @@ Don't take the table on faith. From a clean checkout:
+ ```bash
+ find .claude/skills -name SKILL.md | wc -l        # 166 skills
+ ls .claude/commands/*.md | wc -l                  # 27 slash commands
+-ls .claude/adr | grep -c '^ADR-'                  # 188 ADRs
++ls .claude/adr | grep -c '^ADR-'                  # 189 ADRs
+ python3 -m pytest --collect-only -q | tail -1     # ~14,000 collected cases
+ ```
+ 
+diff --git a/README.pt-BR.md b/README.pt-BR.md
+index 344f556..3c1c28c 100644
+--- a/README.pt-BR.md
++++ b/README.pt-BR.md
+@@ -54,7 +54,7 @@ Todas as contagens abaixo são verificáveis a partir de um checkout limpo (veja
+ | Hooks ligados em `settings.json` | **46** | scripts distintos, 48 registros de evento |
+ | Módulos de biblioteca compartilhada | **68** | apenas stdlib, em `.claude/hooks/_lib/` (excluindo o `__init__.py` do pacote) |
+ | Slash commands | **27** | em `.claude/commands/` |
+-| Architecture decision records | **188** | em `.claude/adr/` |
++| Architecture decision records | **189** | em `.claude/adr/` |
+ | Testes | **~14.000 casos** | reportados por `pytest --collect-only` nas suítes de hook, script e conformidade |
+ 
+ A diferença entre **57 em disco** e **46 ligados** é benigna: vários módulos que não respondem a eventos são ativados via dispatch in-process (invocados por outros hooks), e não por um registro de evento direto em `settings.json`.
+@@ -163,7 +163,7 @@ Não acredite na tabela por fé. A partir de um checkout limpo:
+ ```bash
+ find .claude/skills -name SKILL.md | wc -l        # 166 skills
+ ls .claude/commands/*.md | wc -l                  # 27 slash commands
+-ls .claude/adr | grep -c '^ADR-'                  # 188 ADRs
++ls .claude/adr | grep -c '^ADR-'                  # 189 ADRs
+ python3 -m pytest --collect-only -q | tail -1     # ~14.000 casos coletados
+ ```
+ 
+diff --git a/RELEASE.md b/RELEASE.md
+index ccae549..4bc6476 100644
+--- a/RELEASE.md
++++ b/RELEASE.md
+@@ -16,7 +16,7 @@
+ > - `cat VERSION` — versão semântica corrente (`1.0.0`)
+ > - `git tag -l 'v*' --sort=-creatordate | head -5` — últimas 5 tags
+ > - `CHANGELOG.md` — entries por versão
+-> - `.github/workflows/release.yml` — release-gate + publish-release (29 steps,
++> - `.github/workflows/release.yml` — release-gate + publish-release (31 steps,
+ >   GPG-signed tags)
+ >
+ > Histórico preservado abaixo apenas como referência de como o
+diff --git a/docs/ARCHITECTURE.md b/docs/ARCHITECTURE.md
+index af2f07e..d59fb70 100644
+--- a/docs/ARCHITECTURE.md
++++ b/docs/ARCHITECTURE.md
+@@ -53,7 +53,7 @@ ceo-orchestration/
+     │   ├── core/                   # 42 universal backend skills
+     │   ├── frontend/               # 8 universal frontend skills
+     │   └── domains/                # 116 skills across 33 domain profiles
+-    ├── adr/                        # 188 architecture decision records
++    ├── adr/                        # 189 architecture decision records
+     └── plans/                      # plan schemas + per-plan working files
+ ```
+ 
+@@ -68,7 +68,7 @@ faith — run the commands:
+ | Hook registrations | 46 wired into `settings.json`| (parse the `hooks` block of `.claude/settings.json`)      |
+ | `_lib` modules     | 68 top-level (140 recursive) | `ls .claude/hooks/_lib/*.py \| grep -v __init__ \| wc -l` |
+ | Slash commands     | 27                           | `ls .claude/commands/*.md \| wc -l`                       |
+-| ADRs               | 188                          | `ls .claude/adr/ADR-*.md \| wc -l`                        |
++| ADRs               | 189                          | `ls .claude/adr/ADR-*.md \| wc -l`                        |
+ | SPEC/v1 files      | 32 (28 `*.schema.md`)        | `ls SPEC/v1/*.md \| wc -l`                                |
+ | Test files         | ~730                         | `git ls-files '*test_*.py' '*_test.py' \| wc -l`          |
+ | Collected cases    | ~14k parametrized cases      | `make test-collect` (pytest `--collect-only`)             |
+@@ -234,7 +234,7 @@ this repository happens to implement it today*. An install pins a SPEC version;
+ internal refactors that keep the schemas stable do not break adopters.
+ 
+ Decisions that shape these contracts are recorded as Architecture Decision
+-Records in `.claude/adr/` (188 to date), with a documented lifecycle
++Records in `.claude/adr/` (189 to date), with a documented lifecycle
+ (PROPOSED → ACCEPTED, plus SUPERSEDED / RETRACTED).[^adr]
+ 
+ The repository also includes a TLA+ specification of the core state machine
+diff --git a/docs/CTO-GUIDE.md b/docs/CTO-GUIDE.md
+index 812a4aa..b0e59bc 100644
+--- a/docs/CTO-GUIDE.md
++++ b/docs/CTO-GUIDE.md
+@@ -41,7 +41,7 @@ documentation bug.
+ |---|---|---|
+ | Python tests collected | ~14,000 | `make test-collect` (or `python3 -m pytest --collect-only -q \| tail -1` — pytest.ini pins the testpath roots) |
+ | Test files | ~730 | `git ls-files '*test_*.py' '*_test.py' \| wc -l` |
+-| ADRs shipped | 188 | `ls .claude/adr/ADR-*.md \| wc -l` |
++| ADRs shipped | 189 | `ls .claude/adr/ADR-*.md \| wc -l` |
+ | SPEC/v1 files | 32 (28 `*.schema.md`) | `ls SPEC/v1/*.md \| wc -l` |
+ | Workflows | 21 | `ls .github/workflows/*.yml \| wc -l` |
+ | GitHub Actions SHA-pinned refs | every `uses:` pinned | `grep -rEc 'uses: [^#]+@(v[0-9]+\|main\|master\|latest)\s*$' .github/workflows/*` — must be 0 everywhere |
+@@ -109,7 +109,7 @@ grep -rE 'urllib|requests|httpx|socket\.' .claude/hooks/check_*.py
+ ls .claude/hooks/check_*.py .claude/hooks/audit_log.py
+ 
+ # Every ADR title
+-grep -h '^# ADR-' .claude/adr/ADR-*.md | sort             # 188 ADRs on disk
++grep -h '^# ADR-' .claude/adr/ADR-*.md | sort             # 189 ADRs on disk
+ 
+ # SPEC/v1 published contract
+ ls SPEC/v1/*.schema.md                                    # 28 schema files
+diff --git a/docs/FAQ.md b/docs/FAQ.md
+index e0e628f..ad3ad62 100644
+--- a/docs/FAQ.md
++++ b/docs/FAQ.md
+@@ -105,7 +105,7 @@ Don't take the README table on faith. From a clean checkout:
+ ```bash
+ find .claude/skills -name SKILL.md | wc -l        # 166 skills (42 core + 8 frontend + 116 domain)
+ ls .claude/commands/*.md | wc -l                  # 27 slash commands
+-ls .claude/adr | grep -c '^ADR-'                  # 188 ADRs
++ls .claude/adr | grep -c '^ADR-'                  # 189 ADRs
+ python3 -m pytest --collect-only -q | tail -1     # ~14,000 collected cases
+ ```
+ 
+diff --git a/docs/GUIA-COMPLETO.md b/docs/GUIA-COMPLETO.md
+index 41ca561..3aaf2cc 100644
+--- a/docs/GUIA-COMPLETO.md
++++ b/docs/GUIA-COMPLETO.md
+@@ -164,7 +164,7 @@ For those, use Claude Code directly. Spawn overhead > benefit.
+   is deferred to v2+.
+ - **Audited.** Every spawn, every decision, every veto becomes a JSONL
+   event.
+-- **Governed by ADR.** 188 ADRs document every architectural decision.
++- **Governed by ADR.** 189 ADRs document every architectural decision.
+ 
+ ### It is NOT:
+ - **A product.** No UI, no SaaS, no login.
+@@ -1222,7 +1222,7 @@ mv .claude .claude.disabled
+ - `.claude/frontend-team.md` — frontend roster
+ - `.claude/pitfalls-catalog.yaml` — universal pitfalls
+ - `.claude/task-chains.yaml` — 6 universal workflows
+-- `.claude/adr/` — 188 Architecture Decision Records
++- `.claude/adr/` — 189 Architecture Decision Records
+ - `.claude/plans/` — active plans + archive
+ - `.claude/skills/core/` — 42 universal skills
+ - `.claude/skills/frontend/` — 8 frontend skills
+diff --git a/docs/README.md b/docs/README.md
+index 03e3350..4a50bbb 100644
+--- a/docs/README.md
++++ b/docs/README.md
+@@ -78,7 +78,7 @@ full set of commands; here is the summary you can spot-check in a minute.
+ | Hook scripts on disk | **57** Python scripts | count `*.py` in `.claude/hooks/` |
+ | Hooks registered | **46** distinct scripts (48 event registrations) | inspect `.claude/settings.json` |
+ | Slash commands | **27** | count `*.md` in `.claude/commands/` |
+-| Architecture decision records | **188** | count `ADR-*.md` in `.claude/adr/` |
++| Architecture decision records | **189** | count `ADR-*.md` in `.claude/adr/` |
+ | Shared library modules | **68** stdlib-only (top-level `_lib/`) | count `*.py` in `.claude/hooks/_lib/` |
+ | Tests | **~730 test files**; `make test-collect` (pytest `--collect-only`) reports **~14,000** collected cases | `make test-collect` |
+ 
+diff --git a/npm/README.md b/npm/README.md
+index 9203de5..a19a95f 100644
+--- a/npm/README.md
++++ b/npm/README.md
+@@ -56,7 +56,7 @@ All counts below are verifiable from a clean checkout (see *Verifying the number
+ | Hooks wired in `settings.json` | **46** | distinct scripts, 48 event registrations |
+ | Shared library modules | **68** | stdlib-only, under `.claude/hooks/_lib/` (excluding the package `__init__.py`) |
+ | Slash commands | **27** | under `.claude/commands/` |
+-| Architecture decision records | **188** | under `.claude/adr/` |
++| Architecture decision records | **189** | under `.claude/adr/` |
+ | Tests | **~14,000 cases** | reported by `pytest --collect-only` across the hook, script, and conformance suites |
+ 
+ The gap between **57 hook scripts** on disk and **46 wired** is benign: several non-event modules are activated through in-process dispatch (invoked by other hooks) rather than by a direct `settings.json` event registration.
+@@ -119,7 +119,7 @@ Don't take the table on faith. From a clean checkout:
+ ```bash
+ find .claude/skills -name SKILL.md | wc -l        # 166 skills
+ ls .claude/commands/*.md | wc -l                  # 27 slash commands
+-ls .claude/adr | grep -c '^ADR-'                  # 188 ADRs
++ls .claude/adr | grep -c '^ADR-'                  # 189 ADRs
+ python3 -m pytest --collect-only -q | tail -1     # ~14,000 collected cases
+ ```
+ 
+diff --git a/scripts/_framework_manifest_set.sh b/scripts/_framework_manifest_set.sh
+index 937db7f..c54af6b 100644
+--- a/scripts/_framework_manifest_set.sh
++++ b/scripts/_framework_manifest_set.sh
+@@ -32,6 +32,25 @@
+ #   * Includes the root PROTOCOL.md plus the .claude/{team.md,frontend-team.md,
+ #     skills,hooks,scripts,commands,pitfalls-catalog.yaml,task-chains.yaml}
+ #     targets, gated by profile where applicable.
++#   * DELIVERY-RECORD-CONDITIONAL entries (PLAN-166 F3 / ADR-155-AMEND-1):
++#     PROTOCOL.md, SPEC/v1 and .claude/.framework-version are enumerated ONLY
++#     when the caller exports the matching flag as "1":
++#         FMS_DELIVERED_PROTOCOL   root PROTOCOL.md pointer
++#         FMS_DELIVERED_SPEC       SPEC/v1 contract tree
++#         FMS_DELIVERED_MARKER     .claude/.framework-version marker
++#     The flags MUST derive from the REGISTERED DELIVERY (install.sh's
++#     install_one actually wrote the path this run, or the pre-upgrade
++#     baseline manifest already carried the record) — NEVER from the
++#     ceremony alone and NEVER from file presence: a target that already
++#     had the path (install_one EXISTS-skip) stays OUTSIDE framework
++#     ownership, else the baseline hashes an ADOPTER file as
++#     framework-owned, the update-checker trusts a stale value, and
++#     uninstall.sh may delete it. Unset/other values => NOT enumerated:
++#     the deliberate fail direction is UNDER-claiming ownership.
++#   * The root VERSION file is deliberately ABSENT from this enumeration:
++#     install_one is skip-if-exists (an adopter with its own VERSION never
++#     received the framework's), and upgrade.sh never touches it — see
++#     ADR-155-AMEND-1 (the S238/ADR-155 "verified worst case" class, C.5).
+ #
+ # This file is CANONICAL (added to _CANONICAL_GUARDS in check_canonical_edit.py).
+ #
+@@ -93,8 +112,34 @@ _framework_path_excluded() {
+ # what is currently present).
+ _framework_target_entries() {
+   {
+-    # Root governance pointer (the verified S238 driver target — outside .claude/).
+-    printf '%s\n' "PROTOCOL.md"
++    # Root governance pointer (the verified S238 driver target — outside
++    # .claude/). PLAN-166 F3 (ADR-155-AMEND-1): CONDITIONAL on the recorded
++    # delivery. A `--ceremony user` install SKIPS install_protocol_pointer
++    # (install.sh WS4-guard-proto), and a maintainer target that ALREADY had
++    # its own root PROTOCOL.md was never written by the framework —
++    # enumerating it unconditionally records the ADOPTER's file as
++    # framework-owned (r13/r17).
++    if [ "${FMS_DELIVERED_PROTOCOL:-0}" = "1" ]; then
++      printf '%s\n' "PROTOCOL.md"
++    fi
++
++    # SPEC/v1 published contract (PLAN-166 F3): an upgrade surface as of
++    # v1.3.0 — same delivery-record condition (never ceremony alone, never
++    # file presence; r7/r17).
++    if [ "${FMS_DELIVERED_SPEC:-0}" = "1" ]; then
++      printf '%s\n' "SPEC/v1"
++    fi
++
++    # Framework version marker (PLAN-166 F3): a NORMAL tracked-file entry —
++    # present in the source tree, so the FMS_HASH_ROOT baseline rewrite
++    # (below) preserves it with no generated-file special-case — but
++    # ownership still derives from the registered delivery: a target whose
++    # marker pre-existed (install_one EXISTS-skip) stays adopter-owned and
++    # every marker-first reader keyed off this same record falls back to
++    # VERSION (r20).
++    if [ "${FMS_DELIVERED_MARKER:-0}" = "1" ]; then
++      printf '%s\n' ".claude/.framework-version"
++    fi
+ 
+     # Always-installed team rosters + universal catalogs.
+     printf '%s\n' ".claude/team.md"
+diff --git a/scripts/doctor.sh b/scripts/doctor.sh
+index 20548fd..7425a2a 100755
+--- a/scripts/doctor.sh
++++ b/scripts/doctor.sh
+@@ -613,10 +613,44 @@ if [ "$NO_ORPHAN_SCAN" -eq 0 ]; then
+         done
+       fi
+     fi
++    # PLAN-166 F3 (ADR-155-AMEND-1): the FMS entries for PROTOCOL.md,
++    # SPEC/v1 and .claude/.framework-version are CONDITIONAL on the
++    # recorded delivery. doctor resolves the flags from the SAME record
++    # the writers use — the sanitized baseline manifest — NEVER from the
++    # ceremony: ceremony-only resolution would re-include paths a
++    # `--ceremony user` install skipped and --strict-orphans would flag
++    # the ADOPTER's own SPEC/PROTOCOL files as orphans (r19), while a
++    # blanket maintainer default would do the same and a blanket user
++    # default would hide a delivered SPEC from a maintainer (r9 P2).
++    _dr_delivered() {  # $1 = ERE fragment anchored at the relpath position
++      grep -Eq "^([0-9a-f]{64}|LINK)  $1" "$SANITIZED" 2>/dev/null
++    }
++    # `SPEC/v1(/|  |$)` and not a bare `SPEC/v1/`: a --mode link install
++    # records the whole tree as ONE directory symlink (`LINK  SPEC/v1
++    # <target>`, no trailing slash) — the same `(  |$)` treatment the
++    # PROTOCOL/marker fragments below already have (re-pass closure; family
++    # swept with upgrade.sh _baseline_has_spec_record).
++    if _dr_delivered 'SPEC/v1(/|  |$)'; then
++      FMS_DELIVERED_SPEC=1
++    else
++      FMS_DELIVERED_SPEC=0
++    fi
++    if _dr_delivered 'PROTOCOL\.md(  |$)'; then
++      FMS_DELIVERED_PROTOCOL=1
++    else
++      FMS_DELIVERED_PROTOCOL=0
++    fi
++    if _dr_delivered '\.claude/\.framework-version(  |$)'; then
++      FMS_DELIVERED_MARKER=1
++    else
++      FMS_DELIVERED_MARKER=0
++    fi
++    export FMS_DELIVERED_SPEC FMS_DELIVERED_PROTOCOL FMS_DELIVERED_MARKER
+     export FMS_ROOT="$TARGET"
+     export FMS_PROFILE_PARTS="$PROFILE_PARTS_STR"
+     _framework_manifest_files > "$WORKDIR/enumerated" 2>/dev/null || : > "$WORKDIR/enumerated"
+     unset FMS_ROOT FMS_PROFILE_PARTS
++    unset FMS_DELIVERED_SPEC FMS_DELIVERED_PROTOCOL FMS_DELIVERED_MARKER
+     # Manifest relpaths (both record kinds).
+     awk '{
+       idx = index($0, "  ");
+diff --git a/scripts/install.sh b/scripts/install.sh
+index 0535b51..d8b203b 100755
+--- a/scripts/install.sh
++++ b/scripts/install.sh
+@@ -777,6 +777,21 @@ _state_record_op() {
+   return 0
+ }
+ 
++# ---------------------------------------------------------------------
++# PLAN-166 F3 (ADR-155-AMEND-1) — DELIVERY RECORD for the conditional
++# framework-ownership surfaces. Each flag flips to 1 ONLY when THIS run
++# actually wrote the path (install_one COPIED/LINKED, or the pointer
++# heredoc ran) — an EXISTS-skip is NOT a delivery (r17): the pre-existing
++# file is the ADOPTER's, and recording it as framework-owned would let the
++# baseline hash it, doctor call it drifted, and uninstall delete it.
++# write_install_manifest exports these as FMS_DELIVERED_* so the shared
++# enumeration (_framework_manifest_set.sh) only records what the framework
++# de facto delivered.
++# ---------------------------------------------------------------------
++_DELIVERED_SPEC=0
++_DELIVERED_PROTOCOL=0
++_DELIVERED_MARKER=0
++
+ # PLAN-155 Wave 5 — the codex harness helper records its operations through
+ # this recorder, mapped onto the install-state journal (overrides the helper's
+ # no-op default so codex emissions land in .claude/.install-state.json).
+@@ -851,6 +866,11 @@ install_one() {
+   local src="$SOURCE_DIR/$rel_path"
+   local dst="$TARGET/$rel_path"
+ 
++  # PLAN-166 F3 (ADR-155-AMEND-1): delivery signal for the caller — 1 only
++  # when THIS call actually wrote the destination (COPIED/LINKED). An
++  # EXISTS-skip, a missing source and a dry-run all leave it 0.
++  INSTALL_ONE_WROTE=0
++
+   if [[ ! -e "$src" ]]; then
+     echo "    SKIP (source missing): $rel_path"
+     return
+@@ -877,6 +897,7 @@ install_one() {
+ 
+   if [[ "$MODE" == "link" ]]; then
+     ln -s "$src" "$dst"
++    INSTALL_ONE_WROTE=1
+     echo "    LINKED: $rel_path"
+   else
+     if [[ -d "$src" ]]; then
+@@ -884,6 +905,7 @@ install_one() {
+     else
+       cp "$src" "$dst"
+     fi
++    INSTALL_ONE_WROTE=1
+     echo "    COPIED: $rel_path"
+   fi
+ }
+@@ -1305,6 +1327,14 @@ install_spec_v1() {
+   echo "==> Installing SPEC v1 schemas (~$(ls "$SOURCE_DIR"/SPEC/v1/*.md 2>/dev/null | wc -l | tr -d ' ') files)"
+   _state_record_op "install_spec_v1" "SPEC/v1"
+   install_one "SPEC/v1"
++  # PLAN-166 F3 (ADR-155-AMEND-1): the op line above records the ATTEMPT;
++  # framework ownership requires the REGISTERED DELIVERY — install_one may
++  # have EXISTS-skipped a pre-existing adopter SPEC/v1 (r17), which must
++  # NOT be inventoried as framework-owned.
++  if [[ "${INSTALL_ONE_WROTE:-0}" -eq 1 ]]; then
++    _DELIVERED_SPEC=1
++    _state_record_op "delivered_spec_v1" "SPEC/v1"
++  fi
+ }
+ 
+ if [[ "$CEREMONY" != "user" ]]; then install_spec_v1; fi  # WS4-guard-spec
+@@ -1324,6 +1354,35 @@ install_version() {
+ 
+ if [[ "$CEREMONY" != "user" ]]; then install_version; fi  # WS4-guard-version
+ 
++# ---- 5c-bis-3 framework version marker (PLAN-166 F3 / ADR-155-AMEND-1) ----
++# .claude/.framework-version is a TRACKED file of the framework repo (one
++# line, byte-identical to VERSION — the bump writes it as its 12th site and
++# verify-counts.sh cross-checks it every release). It is the forensic anchor
++# that stays true POST-UPGRADE: upgrade.sh deliberately never touches the
++# root VERSION (S238/ADR-155 class), so on an upgraded adopter only this
++# marker reports the installed framework version. It lives inside .claude/,
++# so it is delivered in BOTH ceremonies (the WS4 user-ceremony guard only
++# forbids root files). The write is EXPLICIT — the manifest enumeration
++# never delivers anything, it only records (r7) — and skip-if-exists: a
++# pre-existing marker stays adopter-owned (no delivery record), and every
++# marker-first reader keyed off that record falls back to VERSION (r20).
++install_framework_marker() {
++  if [[ ! -f "$SOURCE_DIR/.claude/.framework-version" ]]; then
++    echo "    SKIP: .claude/.framework-version absent in source (pre-v1.3.0 checkout)"
++    return 0
++  fi
++  echo ""
++  echo "==> Installing framework version marker (.claude/.framework-version — $(tr -d '[:space:]' < "$SOURCE_DIR/.claude/.framework-version"))"
++  _state_record_op "install_framework_marker" ".claude/.framework-version"
++  install_one ".claude/.framework-version"
++  if [[ "${INSTALL_ONE_WROTE:-0}" -eq 1 ]]; then
++    _DELIVERED_MARKER=1
++    _state_record_op "delivered_framework_marker" ".claude/.framework-version"
++  fi
++}
++
++install_framework_marker  # both ceremonies: inside .claude/ (WS4-safe)
++
+ # ---- 5c.bis Reference personas (PLAN-004 Phase 10) ----
+ 
+ install_reference_personas() {
+@@ -1871,6 +1930,12 @@ $pointer_body
+ EOF
+   echo "    CREATED: PROTOCOL.md (pointer)"
+   _state_record_op "install_protocol_pointer" "PROTOCOL.md"
++  # PLAN-166 F3 (ADR-155-AMEND-1): registered delivery — this line is only
++  # reached when the heredoc actually wrote the pointer (the pre-existing
++  # early-return above never gets here, so an adopter's own root
++  # PROTOCOL.md is never inventoried as framework-owned; r13/r17).
++  _DELIVERED_PROTOCOL=1
++  _state_record_op "delivered_protocol_pointer" "PROTOCOL.md"
+ }
+ 
+ if [[ "$CEREMONY" != "user" ]]; then install_protocol_pointer; fi  # WS4-guard-proto
+@@ -2228,8 +2293,58 @@ write_install_manifest() {
+   export FMS_ROOT="$TARGET"
+   export FMS_PROFILE_PARTS="${PROFILE_PARTS[*]}"
+   export FMS_MODE="$MODE"
++  # PLAN-166 F3 (ADR-155-AMEND-1): conditional ownership from the DELIVERY
++  # RECORD — never the ceremony alone, never file presence. A path
++  # install_one EXISTS-skipped stays out of the baseline, so doctor, the
++  # update-checker and uninstall never treat an adopter file as
++  # framework-owned (r7/r13/r17).
++  #
++  # Ownership CONTINUITY on reruns (codex W1-ceremony round, P1): a rerun
++  # over an already-installed target EXISTS-skips all three paths, so the
++  # THIS-RUN flags are 0 — but the manifest rewrite below REPLACES the old
++  # manifest. Without consulting the PRIOR manifest's records, a rerun
++  # would silently drop framework ownership of SPEC/PROTOCOL/marker (and a
++  # v1.3 SPEC would later misclassify as ADOPTER-FORK — it is absent from
++  # the legacy pristine fingerprints). Preserve a valid prior record: the
++  # regexes mirror upgrade.sh _baseline_has_*_record byte-for-byte
++  # (family-swept; `(/|  |$)` covers the --mode link single-LINK-line form).
++  if [[ "${_DELIVERED_SPEC:-0}" != "1" ]] && [[ -f "$manifest" ]] \
++     && grep -Eq '^([0-9a-f]{64}|LINK)  SPEC/v1(/|  |$)' "$manifest" 2>/dev/null; then
++    _DELIVERED_SPEC=1
++    _CONTINUITY_FIRED=1
++    echo "    ownership continuity: SPEC/v1 delivery record preserved from prior manifest"
++  fi
++  if [[ "${_DELIVERED_PROTOCOL:-0}" != "1" ]] && [[ -f "$manifest" ]] \
++     && grep -Eq '^([0-9a-f]{64}|LINK)  PROTOCOL\.md(  |$)' "$manifest" 2>/dev/null; then
++    _DELIVERED_PROTOCOL=1
++    _CONTINUITY_FIRED=1
++    echo "    ownership continuity: PROTOCOL.md delivery record preserved from prior manifest"
++  fi
++  if [[ "${_DELIVERED_MARKER:-0}" != "1" ]] && [[ -f "$manifest" ]] \
++     && grep -Eq '^([0-9a-f]{64}|LINK)  \.claude/\.framework-version(  |$)' "$manifest" 2>/dev/null; then
++    _DELIVERED_MARKER=1
++    _CONTINUITY_FIRED=1
++    echo "    ownership continuity: .framework-version delivery record preserved from prior manifest"
++  fi
++  # When ANY continuity flag fired, hash the FRAMEWORK's pristine copies,
++  # not the (possibly edited) target's (codex W1 round 5, P1): install
++  # normally hashes FMS_ROOT=$TARGET — on a rerun over an EDITED delivered
++  # SPEC that would re-baseline the fork's bytes as framework-owned, and a
++  # later uninstall would happily DELETE the user's modified tree (its hash
++  # matches the manifest). FMS_HASH_ROOT=$SOURCE_DIR is the same C.5
++  # idempotency posture upgrade.sh already uses: manifest carries the
++  # framework hash, an edited target hashes differently, and every
++  # hash-gated consumer (uninstall, doctor) preserves it.
++  if [[ "${_CONTINUITY_FIRED:-0}" = "1" ]]; then
++    export FMS_HASH_ROOT="$SOURCE_DIR"
++    echo "    ownership continuity: manifest hashes from the framework source (edited target content stays adopter-owned)"
++  fi
++  export FMS_DELIVERED_SPEC="${_DELIVERED_SPEC:-0}"
++  export FMS_DELIVERED_PROTOCOL="${_DELIVERED_PROTOCOL:-0}"
++  export FMS_DELIVERED_MARKER="${_DELIVERED_MARKER:-0}"
+   _write_baseline_manifest "$manifest"
+-  unset FMS_ROOT FMS_PROFILE_PARTS FMS_MODE
++  unset FMS_ROOT FMS_PROFILE_PARTS FMS_MODE FMS_HASH_ROOT
++  unset FMS_DELIVERED_SPEC FMS_DELIVERED_PROTOCOL FMS_DELIVERED_MARKER
+   return 0
+ }
+ 
+diff --git a/scripts/tests/_parity_classify.py b/scripts/tests/_parity_classify.py
+index d8809bd..b1f86bd 100644
+--- a/scripts/tests/_parity_classify.py
++++ b/scripts/tests/_parity_classify.py
+@@ -157,48 +157,13 @@ ACCEPTED: List[Tuple[str, Optional[str], str]] = [
+ #   id, modes (None = all), class, regex, reason, unblocked_by
+ # ---------------------------------------------------------------------------
+ KNOWN_OPEN: List[Dict[str, Optional[str]]] = [
+-    {
+-        "id": "F3-spec-stale",
+-        "modes": "maintainer",
+-        "cls": "STALE",
+-        "re": r"^SPEC/v1/",
+-        "reason": (
+-            "upgrade.sh delivers SPEC/v1 through NO surface: it is absent from "
+-            "the backup_and_replace sequence AND from "
+-            "_framework_target_entries(). An adopter upgrading v1.2 -> v1.3 "
+-            "keeps the v1.2 contract — the trust boundary of the sentinel "
+-            "unlock, +21 lines in this very release"
+-        ),
+-        "unblocked_by": (
+-            "PLAN-166 W1 item 2 / OQ-3(a): forced-refresh route for SPEC/v1 in "
+-            "upgrade.sh + delivery-record-gated entry in "
+-            "_framework_target_entries() + INSTALL.md refresh list"
+-        ),
+-    },
+-    {
+-        "id": "F3-protocol-user-mode",
+-        "modes": "user",
+-        "cls": "ONLY_IN_B_OUTSIDE_CLAUDE",
+-        "re": r"^PROTOCOL\.md$",
+-        "reason": (
+-            "upgrade.sh calls _refresh_protocol_pointer() UNCONDITIONALLY "
+-            "(upgrade.sh:2441) and writes PROTOCOL.md at the repo ROOT. A "
+-            "fresh `--ceremony user` install forbids exactly that "
+-            "(install.sh:1876 gates install_protocol_pointer, and "
+-            "smoke-install.yml's WS4 leg fails the build on any top-level "
+-            "write outside .claude/). So `install --ceremony user` followed "
+-            "later by an upgrade silently violates the guarantee the install "
+-            "advertised. This is a latent adjacent bug that only a TREE "
+-            "comparison exposes — not an allowlist case"
+-        ),
+-        "unblocked_by": (
+-            "PLAN-166 W1 item 2 / OQ-3: ceremony-gate the protocol refresh in "
+-            "upgrade.sh from the same .install-state.json read (own read, "
+-            "independent of --no-replay)"
+-        ),
+-    },
++    # (empty — PLAN-166 W1 landed. F3-spec-stale and F3-protocol-user-mode
++    # were deleted IN the W1 ceremony commit, per the mandatory-fire
++    # contract above: a ledger can never outlive its bug. Add new entries
++    # here ONLY with a mandatory-fire reason + unblocked_by.)
+ ]
+ 
++
+ # Paths that must EXIST in both routes once W1 lands. Absent today, so each
+ # reports as KNOWN-OPEN (class=expect-path) and holds the run at exit 2.
+ # DELIBERATELY NOT mandatory-fire, unlike KNOWN_OPEN above: once the path
+diff --git a/scripts/tests/test-upgrade-spec-ownership.sh b/scripts/tests/test-upgrade-spec-ownership.sh
+new file mode 100755
+index 0000000..687db56
+--- /dev/null
++++ b/scripts/tests/test-upgrade-spec-ownership.sh
+@@ -0,0 +1,359 @@
++#!/usr/bin/env bash
++# scripts/tests/test-upgrade-spec-ownership.sh
++# PLAN-166 F3 (ADR-155-AMEND-1) — delivery-record ownership of the three
++# conditional framework surfaces (SPEC/v1, root PROTOCOL.md,
++# .claude/.framework-version) across install → upgrade → doctor → updater.
++#
++# AC-3 scenarios exercised:
++#   S1  maintainer fresh install: SPEC/v1 + PROTOCOL.md + marker DELIVERED
++#       and recorded in the baseline manifest; marker == source VERSION;
++#       delivered_* ops journaled in .install-state.json
++#   S2  2nd-upgrade FORCED route (r6 — the load-bearing fixture): baseline
++#       ALREADY contains SPEC/v1 records, SPEC edited locally => upgrade
++#       REPLACES it (backup in .claude.bak/<ts>/SPEC/v1) — the generic
++#       classified walk would have PRESERVED the edit; root VERSION
++#       sentinel is NOT touched (S238/ADR-155 class)
++#   S3  user-ceremony install + `upgrade --no-replay` (r9 MANDATORY):
++#       neither install nor upgrade creates SPEC/v1 or a root PROTOCOL.md
++#       (the ceremony is read by the replay-INDEPENDENT reader)
++#   S4  legacy ADOPTER-FORK (r20): baseline without SPEC records (v1.2-and-
++#       earlier shape) + locally edited SPEC => PRESERVED in place + named
++#       WARNING + forensic snapshot (no pristine fingerprint match)
++#   S5  pre-existing marker (r20) AND pre-existing root PROTOCOL.md (r13/
++#       r17) on a MAINTAINER install: both EXISTS-skipped => NO delivery
++#       record => neither is inventoried as framework-owned; the checker
++#       refuses the unrecorded marker and falls back to VERSION; doctor
++#       does not flag the adopter's PROTOCOL.md as an orphan
++#   S6  updater no-loop regression (r8): post-upgrade tree with stale root
++#       VERSION reports the NEW version via the recorded marker
++#       (up-to-date, exit 0); stripping the marker record flips it back to
++#       the stale VERSION (behind, exit != 0) — proves marker-first is
++#       load-bearing, not decorative
++#   S7  doctor, user mode (r19): adopter's OWN SPEC/v1 + root PROTOCOL.md
++#       are NOT orphan candidates under --strict-orphans (flags resolved
++#       from the baseline, not from a ceremony default)
++#   S8  doctor, maintainer mode (r9 P2): a stray file inside the DELIVERED
++#       SPEC/v1 IS an orphan candidate (positive control — the enumeration
++#       does include SPEC when the record says delivered)
++#
++# The pristine-match branch of the legacy migration (target SPEC/v1 byte-
++# identical to a shipped v1.2.0-or-earlier tree) deliberately lives in the
++# F4 install-v1.2.0→upgrade e2e (needs real tag content); it is NOT
++# duplicated here.
++#
++# bash 3.2-safe. mktemp -d only (xdist/parallel safe). Exits 0 on success,
++# non-zero on any failed assertion.
++#
++# Run:  bash scripts/tests/test-upgrade-spec-ownership.sh ; echo rc=$?
++
++set -uo pipefail   # NOT -e: we assert on command failures explicitly.
++
++SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
++SOURCE_DIR="$( cd "$SCRIPT_DIR/../.." && pwd )"
++# Override points so the test can be pointed at staged/candidate scripts
++# while they still live in a plan-staging mirror (PLAN-153 discipline).
++# NOTE: an override must point INTO a full framework checkout — install.sh /
++# upgrade.sh derive their source tree from their own resolved location.
++INSTALL="${CEO_INSTALL_UNDER_TEST:-$SOURCE_DIR/scripts/install.sh}"
++UPGRADE="${CEO_UPGRADE_UNDER_TEST:-$SOURCE_DIR/scripts/upgrade.sh}"
++DOCTOR="${CEO_DOCTOR_UNDER_TEST:-$SOURCE_DIR/scripts/doctor.sh}"
++CHECKER="${CEO_UPDATE_CHECKER_UNDER_TEST:-$SOURCE_DIR/.claude/scripts/check-framework-updates.sh}"
++
++export CEO_INSTALL_SKIP_SELF_SHA=1
++export CEO_RAG_INSTALL_PROMPT=0
++
++if ! command -v python3 >/dev/null 2>&1; then
++  echo "==> SKIP: python3 not installed (install-state machinery is python3-backed)"
++  exit 0
++fi
++
++SRC_VERSION="$(tr -d '[:space:]' < "$SOURCE_DIR/VERSION" 2>/dev/null || true)"
++if [ -z "$SRC_VERSION" ]; then
++  echo "FATAL: cannot read $SOURCE_DIR/VERSION" >&2
++  exit 2
++fi
++if [ ! -f "$SOURCE_DIR/.claude/.framework-version" ]; then
++  echo "FATAL: source has no .claude/.framework-version (F3 marker missing)" >&2
++  exit 2
++fi
++
++FAIL=0
++PASS=0
++WORKROOT="$( mktemp -d -t ceo-f3-own-XXXXXX )"
++cleanup() { [ -n "${WORKROOT:-}" ] && rm -rf "$WORKROOT" 2>/dev/null || true; }
++trap cleanup EXIT
++
++ok()   { PASS=$((PASS+1)); printf '  ok   %s\n' "$1"; }
++bad()  { FAIL=$((FAIL+1)); printf '  FAIL %s\n' "$1" >&2; }
++
++_git_init_retry() {
++  local d="$1" n=0
++  while [ "$n" -lt 5 ]; do
++    if ( cd "$d" && git init -q 2>/dev/null ); then return 0; fi
++    n=$((n+1)); sleep 1
++  done
++  ( cd "$d" && git init -q )
++}
++
++run_install() {
++  local t="$1"; shift
++  bash "$INSTALL" "$t" "$@" >"$t.install.log" 2>&1
++}
++
++run_upgrade() {
++  local t="$1"; shift
++  bash "$UPGRADE" "$t" --no-deprecation-warn "$@" >"$t.upgrade.log" 2>&1
++}
++
++fresh_install() {
++  # $1 = leg tag, rest = install args. Echoes the target path.
++  local tag="$1"; shift
++  local t
++  t="$( mktemp -d "$WORKROOT/tgt-$tag-XXXXXX" )"
++  _git_init_retry "$t"
++  if ! run_install "$t" "$@"; then
++    echo "INSTALL_FAILED ($tag)" >&2
++    tail -30 "$t.install.log" >&2
++    return 1
++  fi
++  printf '%s\n' "$t"
++}
++
++MANIFEST_REL=".claude/.install-manifest.sha256"
++MARKER_REL=".claude/.framework-version"
++
++manifest_has() {  # $1 = target, $2 = ERE fragment at the relpath position
++  grep -Eq "^([0-9a-f]{64}|LINK)  $2" "$1/$MANIFEST_REL" 2>/dev/null
++}
++
++# --------------------------------------------------------------------------
++# S1 — maintainer fresh install: delivery recorded end-to-end.
++# --------------------------------------------------------------------------
++echo "==> S1: maintainer install — SPEC/marker/PROTOCOL delivered + recorded"
++T1="$( fresh_install m1 --profile core )" || exit 1
++
++[ -d "$T1/SPEC/v1" ]            && ok "SPEC/v1 installed"            || bad "SPEC/v1 missing after maintainer install"
++[ -f "$T1/PROTOCOL.md" ]        && ok "root PROTOCOL.md installed"   || bad "root PROTOCOL.md missing"
++[ -f "$T1/$MARKER_REL" ]        && ok "marker installed"             || bad "marker missing"
++[ "$(tr -d '[:space:]' < "$T1/$MARKER_REL" 2>/dev/null)" = "$SRC_VERSION" ] \
++  && ok "marker == source VERSION ($SRC_VERSION)" \
++  || bad "marker != source VERSION (got: $(cat "$T1/$MARKER_REL" 2>/dev/null))"
++
++manifest_has "$T1" 'SPEC/v1/'                              && ok "baseline records SPEC/v1/"    || bad "baseline has NO SPEC/v1/ record"
++manifest_has "$T1" 'PROTOCOL\.md(  |$)'                    && ok "baseline records PROTOCOL.md" || bad "baseline has NO PROTOCOL.md record"
++manifest_has "$T1" '\.claude/\.framework-version(  |$)'    && ok "baseline records marker"      || bad "baseline has NO marker record"
++
++grep -q '"delivered_spec_v1"' "$T1/.claude/.install-state.json" 2>/dev/null \
++  && ok "install-state journals delivered_spec_v1" \
++  || bad "install-state missing delivered_spec_v1 op"
++grep -q '"delivered_framework_marker"' "$T1/.claude/.install-state.json" 2>/dev/null \
++  && ok "install-state journals delivered_framework_marker" \
++  || bad "install-state missing delivered_framework_marker op"
++
++# --------------------------------------------------------------------------
++# S2 — 2nd-upgrade forced route: record-owned edited SPEC is REPLACED with
++# backup; root VERSION sentinel untouched (AC-3 load-bearing fixture).
++# --------------------------------------------------------------------------
++echo "==> S2: 2nd upgrade — forced SPEC refresh (baseline already has SPEC)"
++SPEC_FILE="$( ls "$T1"/SPEC/v1/*.md 2>/dev/null | head -1 )"
++if [ -z "$SPEC_FILE" ]; then
++  bad "no SPEC file found to edit"
++else
++  printf '\nADOPTER-EDIT sentinel S2\n' >> "$SPEC_FILE"
++fi
++printf '1.0.0\n' > "$T1/VERSION"   # adopter-owned root VERSION sentinel
++
++if run_upgrade "$T1"; then ok "upgrade rc=0 (record-owned fixture)"; else bad "upgrade failed (see $T1.upgrade.log)"; fi
++
++SPEC_REL="${SPEC_FILE#"$T1"/}"
++if [ -n "$SPEC_FILE" ]; then
++  cmp -s "$SOURCE_DIR/$SPEC_REL" "$SPEC_FILE" \
++    && ok "edited SPEC file was FORCE-replaced with source bytes" \
++    || bad "edited SPEC file NOT replaced (classified walk preserved the fork?)"
++  BAK_HIT="$( ls -d "$T1"/.claude.bak/*/SPEC/v1 2>/dev/null | head -1 )"
++  if [ -n "$BAK_HIT" ] && grep -rq 'ADOPTER-EDIT sentinel S2' "$BAK_HIT" 2>/dev/null; then
++    ok "backup of the edited SPEC present under .claude.bak/<ts>/SPEC/v1"
++  else
++    bad "no .claude.bak backup carrying the edited SPEC content"
++  fi
++fi
++grep -q 'REFRESHED (forced' "$T1.upgrade.log" \
++  && ok "upgrade log names the forced route" \
++  || bad "upgrade log has no 'REFRESHED (forced' line"
++[ "$(tr -d '[:space:]' < "$T1/VERSION" 2>/dev/null)" = "1.0.0" ] \
++  && ok "root VERSION sentinel untouched by upgrade (ADR-155-AMEND-1)" \
++  || bad "root VERSION was modified by upgrade (got: $(cat "$T1/VERSION" 2>/dev/null))"
++[ "$(tr -d '[:space:]' < "$T1/$MARKER_REL" 2>/dev/null)" = "$SRC_VERSION" ] \
++  && ok "marker refreshed to source VERSION post-upgrade" \
++  || bad "marker not refreshed post-upgrade"
++manifest_has "$T1" 'SPEC/v1/' \
++  && ok "rewritten baseline still records SPEC/v1/ (ownership continuity)" \
++  || bad "rewritten baseline dropped the SPEC/v1 records"
++
++# --------------------------------------------------------------------------
++# S6 — updater no-loop (r8) on the S2 fixture: marker-first wins over the
++# stale root VERSION; stripping the marker record flips the source back.
++# --------------------------------------------------------------------------
++echo "==> S6: check-framework-updates.sh — marker-first, record-gated"
++STUB="$WORKROOT/stub-upstream"
++mkdir -p "$STUB"
++_git_init_retry "$STUB"
++( cd "$STUB" \
++  && git -c user.email=t@t -c user.name=t commit -q --allow-empty -m x \
++  && git tag "v$SRC_VERSION" ) 2>/dev/null \
++  && ok "stub upstream tagged v$SRC_VERSION" \
++  || bad "stub upstream construction failed"
++
++CHK_OUT="$WORKROOT/chk1.out"; CHK_ERR="$WORKROOT/chk1.err"
++( cd "$T1" && bash "$CHECKER" --upstream "$STUB" ) >"$CHK_OUT" 2>"$CHK_ERR"
++CHK_RC=$?
++[ "$CHK_RC" -eq 0 ] && grep -q 'up-to-date' "$CHK_OUT" \
++  && ok "post-upgrade tree reports up-to-date via marker (no behind-minor loop)" \
++  || bad "updater loop regression: rc=$CHK_RC (expected 0/up-to-date via marker; VERSION=1.0.0 is stale by design)"
++grep -q 'version source: marker' "$CHK_ERR" \
++  && ok "checker names the marker as its version source" \
++  || bad "checker did not use the marker (stderr: $(head -3 "$CHK_ERR" 2>/dev/null | tr '\n' ' '))"
++
++# Negative control: strip the marker record => fallback to stale VERSION.
++sed -i.bak '/  \.claude\/\.framework-version/d' "$T1/$MANIFEST_REL" 2>/dev/null \
++  || sed -i '' '/  \.claude\/\.framework-version/d' "$T1/$MANIFEST_REL" 2>/dev/null
++( cd "$T1" && bash "$CHECKER" --upstream "$STUB" ) >"$WORKROOT/chk2.out" 2>"$WORKROOT/chk2.err"
++CHK2_RC=$?
++[ "$CHK2_RC" -ne 0 ] \
++  && ok "marker record stripped => fallback to stale VERSION => behind (rc=$CHK2_RC)" \
++  || bad "checker still up-to-date after stripping the marker record — record gate is dead"
++grep -q 'falling back to VERSION' "$WORKROOT/chk2.err" \
++  && ok "checker names the r20 fallback" \
++  || bad "no 'falling back to VERSION' note on stripped record"
++
++# --------------------------------------------------------------------------
++# S8 — doctor, maintainer mode: delivered SPEC IS enumerated (orphan
++# positive control).
++# --------------------------------------------------------------------------
++echo "==> S8: doctor maintainer mode — stray file in delivered SPEC is an orphan"
++# Restore the marker record stripped by S6's negative control (the .bak of
++# the GNU-sed branch, if present, is the pristine manifest).
++if [ -f "$T1/$MANIFEST_REL.bak" ]; then mv "$T1/$MANIFEST_REL.bak" "$T1/$MANIFEST_REL"; fi
++printf 'stray\n' > "$T1/SPEC/v1/zz-orphan-probe.md"
++DOC_OUT="$WORKROOT/doc1.out"
++bash "$DOCTOR" "$T1" --strict-orphans >"$DOC_OUT" 2>&1
++DOC_RC=$?
++grep -q 'ORPHAN?: SPEC/v1/zz-orphan-probe.md' "$DOC_OUT" && [ "$DOC_RC" -ne 0 ] \
++  && ok "delivered SPEC is enumerated: stray file flagged, rc=$DOC_RC" \
++  || bad "stray file in delivered SPEC NOT flagged (rc=$DOC_RC) — FMS_DELIVERED_SPEC resolution dead"
++rm -f "$T1/SPEC/v1/zz-orphan-probe.md"
++
++# --------------------------------------------------------------------------
++# S4 — legacy ADOPTER-FORK (fresh fixture; simulate the v1.2-and-earlier
++# baseline shape by stripping SPEC records, then fork the SPEC).
++# --------------------------------------------------------------------------
++echo "==> S4: legacy baseline (no SPEC records) + edited SPEC => preserve + WARNING"
++T2="$( fresh_install m2 --profile core )" || exit 1
++sed -i.bak '/  SPEC\/v1\//d' "$T2/$MANIFEST_REL" 2>/dev/null \
++  || sed -i '' '/  SPEC\/v1\//d' "$T2/$MANIFEST_REL" 2>/dev/null
++rm -f "$T2/$MANIFEST_REL.bak"
++SPEC2="$( ls "$T2"/SPEC/v1/*.md 2>/dev/null | head -1 )"
++printf '\nADOPTER-FORK sentinel S4\n' >> "$SPEC2"
++
++if run_upgrade "$T2"; then ok "upgrade rc=0 (fork is preserved, never fatal)"; else bad "upgrade failed on adopter-fork fixture"; fi
++grep -q 'ADOPTER-FORK' "$T2.upgrade.log" \
++  && ok "named ADOPTER-FORK warning emitted" \
++  || bad "no ADOPTER-FORK warning in upgrade log"
++grep -q 'ADOPTER-FORK sentinel S4' "$SPEC2" 2>/dev/null \
++  && ok "forked SPEC preserved in place" \
++  || bad "forked SPEC was clobbered despite missing delivery record"
++manifest_has "$T2" 'SPEC/v1/' \
++  && bad "rewritten baseline claims the adopter-fork SPEC as framework-owned" \
++  || ok "rewritten baseline does NOT claim the adopter-fork SPEC"
++SNAP_HIT="$( ls -d "$T2"/.claude.bak/*/SPEC/v1 2>/dev/null | head -1 )"
++[ -n "$SNAP_HIT" ] \
++  && ok "forensic snapshot of the fork present under .claude.bak" \
++  || bad "no forensic snapshot of the preserved fork"
++
++# --------------------------------------------------------------------------
++# S3 — user ceremony + upgrade --no-replay (r9): no SPEC, no root files.
++# --------------------------------------------------------------------------
++echo "==> S3: --ceremony user install + upgrade --no-replay"
++T3="$( fresh_install u1 --profile core --ceremony user )" || exit 1
++[ ! -e "$T3/SPEC" ]        && ok "user install has no SPEC/"            || bad "user install received SPEC/"
++[ ! -e "$T3/PROTOCOL.md" ] && ok "user install has no root PROTOCOL.md" || bad "user install received root PROTOCOL.md"
++[ -f "$T3/$MARKER_REL" ]   && ok "user install DOES receive the marker (inside .claude/)" \
++                           || bad "user install missing the marker"
++manifest_has "$T3" '\.claude/\.framework-version(  |$)' \
++  && ok "user baseline records the marker" || bad "user baseline missing marker record"
++
++if run_upgrade "$T3" --no-replay; then ok "upgrade --no-replay rc=0 on user fixture"; else bad "upgrade --no-replay failed on user fixture"; fi
++[ ! -e "$T3/SPEC" ] \
++  && ok "upgrade --no-replay did NOT deliver SPEC (ceremony read is replay-independent)" \
++  || bad "r9 REGRESSION: upgrade --no-replay forced SPEC into a user install"
++[ ! -e "$T3/PROTOCOL.md" ] \
++  && ok "upgrade --no-replay did NOT create root PROTOCOL.md (gated _refresh_protocol_pointer)" \
++  || bad "r13 REGRESSION: protocol pointer created on a user install"
++grep -Eq 'Ceremony: user' "$T3.upgrade.log" \
++  && ok "upgrade banner names the recorded user ceremony" \
++  || bad "upgrade banner missing 'Ceremony: user'"
++
++# --------------------------------------------------------------------------
++# S7 — doctor, user mode: adopter's own SPEC + root PROTOCOL.md are not
++# orphan candidates.
++# --------------------------------------------------------------------------
++echo "==> S7: doctor user mode — adopter SPEC/PROTOCOL not orphans"
++mkdir -p "$T3/SPEC/v1"
++printf 'the ADOPTERs own contract\n' > "$T3/SPEC/v1/own.md"
++printf 'the ADOPTERs own protocol\n' > "$T3/PROTOCOL.md"
++DOC3_OUT="$WORKROOT/doc3.out"
++bash "$DOCTOR" "$T3" --strict-orphans >"$DOC3_OUT" 2>&1
++DOC3_RC=$?
++if grep -Eq 'ORPHAN\?: (SPEC/v1/|PROTOCOL\.md)' "$DOC3_OUT"; then
++  bad "r19 REGRESSION: doctor flags the adopter's own SPEC/PROTOCOL as orphans (rc=$DOC3_RC)"
++else
++  ok "adopter's own SPEC/PROTOCOL not flagged (rc=$DOC3_RC)"
++fi
++[ "$DOC3_RC" -eq 0 ] \
++  && ok "doctor --strict-orphans clean on the user fixture" \
++  || bad "doctor --strict-orphans rc=$DOC3_RC on user fixture (see $DOC3_OUT)"
++rm -f "$T3/PROTOCOL.md"
++
++# --------------------------------------------------------------------------
++# S5 — pre-existing marker (r20): EXISTS-skip => no record => VERSION wins.
++# --------------------------------------------------------------------------
++echo "==> S5: pre-existing marker + pre-existing root PROTOCOL.md not delivered, not trusted"
++T4="$( mktemp -d "$WORKROOT/tgt-m3-XXXXXX" )"
++_git_init_retry "$T4"
++mkdir -p "$T4/.claude"
++printf '9.9.9\n' > "$T4/$MARKER_REL"
++printf '# the ADOPTERs own protocol (pre-existing)\n' > "$T4/PROTOCOL.md"
++if run_install "$T4" --profile core; then ok "install rc=0 with pre-existing marker+protocol"; else bad "install failed (see $T4.install.log)"; fi
++[ "$(tr -d '[:space:]' < "$T4/$MARKER_REL" 2>/dev/null)" = "9.9.9" ] \
++  && ok "pre-existing marker EXISTS-skipped (adopter bytes intact)" \
++  || bad "install overwrote a pre-existing marker"
++manifest_has "$T4" '\.claude/\.framework-version(  |$)' \
++  && bad "baseline claims a marker the install never wrote (r17/r20)" \
++  || ok "baseline does NOT record the skipped marker"
++grep -q 'ADOPTERs own protocol' "$T4/PROTOCOL.md" 2>/dev/null \
++  && ok "pre-existing root PROTOCOL.md EXISTS-skipped (adopter bytes intact)" \
++  || bad "install overwrote a pre-existing root PROTOCOL.md"
++manifest_has "$T4" 'PROTOCOL\.md(  |$)' \
++  && bad "r13/r17 REGRESSION: baseline claims a PROTOCOL.md the install never wrote" \
++  || ok "baseline does NOT record the skipped PROTOCOL.md"
++DOC4_OUT="$WORKROOT/doc4.out"
++bash "$DOCTOR" "$T4" --strict-orphans >"$DOC4_OUT" 2>&1
++DOC4_RC=$?
++if grep -Eq 'ORPHAN\?: PROTOCOL\.md' "$DOC4_OUT"; then
++  bad "doctor flags the adopter's pre-existing PROTOCOL.md as an orphan (rc=$DOC4_RC)"
++else
++  ok "doctor does not orphan-flag the adopter's pre-existing PROTOCOL.md (rc=$DOC4_RC)"
++fi
++( cd "$T4" && bash "$CHECKER" --upstream "$STUB" ) >"$WORKROOT/chk3.out" 2>"$WORKROOT/chk3.err"
++CHK3_RC=$?
++grep -q 'falling back to VERSION' "$WORKROOT/chk3.err" \
++  && ok "checker refuses the unrecorded marker (r20)" \
++  || bad "checker trusted an unrecorded marker (stderr: $(head -3 "$WORKROOT/chk3.err" 2>/dev/null | tr '\n' ' '))"
++[ "$CHK3_RC" -eq 0 ] && grep -q 'up-to-date' "$WORKROOT/chk3.out" \
++  && ok "fallback VERSION ($SRC_VERSION) matches stub upstream — up-to-date" \
++  || bad "fallback path wrong rc=$CHK3_RC"
++
++echo ""
++echo "==> RESULT: pass=$PASS fail=$FAIL"
++[ "$FAIL" -eq 0 ] || exit 1
++exit 0
+diff --git a/scripts/upgrade.sh b/scripts/upgrade.sh
+index 0ec7c4b..b942357 100755
+--- a/scripts/upgrade.sh
++++ b/scripts/upgrade.sh
+@@ -339,9 +339,13 @@ Usage:
+ 
+ What it does:
+   Refreshes the framework-derived content (team.md, skills/, hooks/,
+-  scripts/, commands/, pitfalls-catalog.yaml, task-chains.yaml) in an
+-  existing adopter install. User-customized files (CLAUDE.md, MEMORY.md,
+-  .claude/agent-metrics.md) are NOT touched. NOTE: .claude/settings.json IS
++  scripts/, commands/, pitfalls-catalog.yaml, task-chains.yaml, the
++  SPEC/v1 contract (forced route, skipped on --ceremony user installs)
++  and the .claude/.framework-version marker) in an existing adopter
++  install. User-customized files (CLAUDE.md, MEMORY.md,
++  .claude/agent-metrics.md) are NOT touched, and the root VERSION file
++  is NEVER touched (install-time snapshot — ADR-155-AMEND-1; read
++  .claude/.framework-version for the installed framework version). NOTE: .claude/settings.json IS
+   updated in place by the default-on baseline migration (the model/permission
+   leaf keys: model, availableModels, fallbackModel, permissions.defaultMode)
+   and the idempotent settings-merge (new lifecycle-hook registrations) —
+@@ -724,6 +728,49 @@ if [[ "$REPLAY" -eq 1 ]]; then
+   fi
+ fi
+ 
++# ===========================================================================
++# PLAN-166 F3 (ADR-155-AMEND-1) — resolve the RECORDED install ceremony with
++# a reader of its OWN, INDEPENDENT of the replay path: --no-replay sets
++# REPLAY=0 and the replay block above (incl. _read_install_state_request) is
++# skipped entirely, so if the ceremony rode the replay, the documented
++# `upgrade.sh <target> --no-replay` would treat a `--ceremony user` install
++# as maintainer and force SPEC/protocol into the adopter's root (r9). This
++# reader ALWAYS runs. Fail-open: state absent/unreadable/invalid (ALL
++# pre-Wave-B installs) => "maintainer" — the pre-existing behavior; the
++# consequence is named in INSTALL.md §Upgrade flow. Same trust class as the
++# replay reader: target-side, UNSIGNED, advisory; the value is validated
++# against the closed enum {maintainer,user} and never eval-ed.
++# ===========================================================================
++_read_install_state_ceremony() {
++  command -v python3 >/dev/null 2>&1 || return 3
++  [ -f "$_INSTALL_STATE_FILE" ] && [ -r "$_INSTALL_STATE_FILE" ] || return 3
++  PYTHONNOUSERSITE=1 python3 -I -c '
++import json, sys
++try:
++    with open(sys.argv[1], "r", encoding="utf-8") as f:
++        d = json.load(f)
++except (OSError, ValueError):
++    sys.exit(3)
++if not isinstance(d, dict) or d.get("schema_version") != 1:
++    sys.exit(3)
++req = d.get("request")
++if not isinstance(req, dict):
++    sys.exit(3)
++cer = req.get("ceremony", "")
++if cer not in ("maintainer", "user"):
++    sys.exit(3)
++sys.stdout.write(cer + "\n")
++' "$_INSTALL_STATE_FILE" 2>/dev/null
++}
++
++CEREMONY_EFFECTIVE="maintainer"
++_CEREMONY_SOURCE="default (no readable install-state — pre-Wave-B fail-open)"
++_cer_line=""
++if _cer_line="$(_read_install_state_ceremony)" && [[ -n "$_cer_line" ]]; then
++  CEREMONY_EFFECTIVE="$_cer_line"
++  _CEREMONY_SOURCE="recorded install request (.claude/.install-state.json)"
++fi
++
+ TIMESTAMP="$( date +%Y%m%d-%H%M%S )"
+ BAK_DIR="$TARGET/.claude.bak/$TIMESTAMP"
+ 
+@@ -735,6 +782,7 @@ echo "    Target:  $TARGET"
+ echo "    Backup:  $BAK_DIR"
+ echo "    Profile: $PROFILE"
+ echo "    Stack:   $STACK"
++echo "    Ceremony: $CEREMONY_EFFECTIVE — $_CEREMONY_SOURCE"  # PLAN-166 F3
+ if [[ "$_REPLAY_SOURCE" == "replay" ]]; then
+   echo "    Request: replayed from .claude/.install-state.json (PLAN-153 B2)"
+ fi
+@@ -1550,6 +1598,390 @@ EOF
+   echo "    REFRESHED: PROTOCOL.md pointer"
+ }
+ 
++# ===========================================================================
++# PLAN-166 F3 (ADR-155-AMEND-1) — delivery-record lookups + SPEC/v1 FORCED
++# refresh + framework version marker refresh.
++# ---------------------------------------------------------------------------
++# Ownership of the three conditional surfaces (PROTOCOL.md, SPEC/v1,
++# .claude/.framework-version) derives from the REGISTERED DELIVERY — here,
++# the PRE-upgrade baseline manifest records (the same record install.sh
++# writes and doctor.sh reads) — never from the ceremony alone and never from
++# file presence (r7/r13/r17/r19/r20).
++# ===========================================================================
++_baseline_has_spec_record() {
++  [[ -n "$_BASELINE_MANIFEST_FILE" && -f "$_BASELINE_MANIFEST_FILE" ]] || return 1
++  # `(/|  |$)` and not a bare trailing slash: a --mode link install records
++  # the WHOLE tree as one directory symlink — `LINK  SPEC/v1  <target>`, no
++  # trailing slash — which a `SPEC/v1/` fragment can never match (the same
++  # `(  |$)` treatment the marker/PROTOCOL readers already have; family
++  # swept with doctor.sh _dr_delivered, re-pass closure).
++  grep -Eq '^([0-9a-f]{64}|LINK)  SPEC/v1(/|  |$)' "$_BASELINE_MANIFEST_FILE" 2>/dev/null
++}
++_baseline_has_marker_record() {
++  [[ -n "$_BASELINE_MANIFEST_FILE" && -f "$_BASELINE_MANIFEST_FILE" ]] || return 1
++  grep -Eq '^([0-9a-f]{64}|LINK)  \.claude/\.framework-version(  |$)' "$_BASELINE_MANIFEST_FILE" 2>/dev/null
++}
++
++# PRISTINE fingerprints of every SPEC/v1 tree the framework shipped at
++# v1.2.0 and earlier (r20 LEGACY MIGRATION: v1.2-and-earlier installs never
++# enumerated SPEC/v1, so no historical delivery record can distinguish a
++# framework-installed SPEC from an adopter's own — the ambiguity resolves by
++# CONTENT). Derivation (deterministic — pinned tag content; run in the
++# framework repo, reproduces _spec_tree_fingerprint byte-for-byte):
++#   for t in v1.0.0 v1.0.1 v1.0.1-rc.1 v1.1.0 v1.1.0-rc.1 \
++#            v1.2.0 v1.2.0-rc.1 v1.2.0-rc.2 v1.2.0-rc.3; do
++#     git ls-tree -r --name-only "$t" -- SPEC/v1 | LC_ALL=C sort \
++#     | while IFS= read -r f; do
++#         printf '%s  %s\n' \
++#           "$(git show "$t:$f" | shasum -a 256 | awk '{print $1}')" "$f"
++#       done | shasum -a 256 | awk '{print $1}'
++#   done
++# Three distinct trees across the nine shipped tags:
++#   a4a4... = v1.0.0 / v1.0.1 / v1.0.1-rc.1
++#   94aa... = v1.1.0 / v1.1.0-rc.1
++#   469a... = v1.2.0 / v1.2.0-rc.1 / v1.2.0-rc.2 / v1.2.0-rc.3
++_SPEC_PRISTINE_FINGERPRINTS="a4a4504a224d72a975a853dd71a75d8e678fef034a70deb49df291dbb712c161 94aa62f781285ce4897ad1220edf15e97b4e9d7b629f9f7ba3389da5d45f22b1 469a49238867be181490214305b43bc7299f2bae3ef0b282a5452f6caf327f0b"
++
++# _spec_tree_fingerprint <root> — sha256 over the LC_ALL=C-sorted
++# "<sha256(file)>  <relpath>" lines of every regular file under
++# <root>/SPEC/v1 (the derivation comment above reproduces this from a tag).
++# Fails (rc 1, no output) on a missing tree/hasher or any unhashable file —
++# a PARTIAL fingerprint must never be compared against a pristine one.
++_spec_tree_fingerprint() {
++  local _sf_root="$1"
++  command -v _hash_file >/dev/null 2>&1 || return 1
++  command -v _hash_stdin >/dev/null 2>&1 || return 1
++  [[ -d "$_sf_root/SPEC/v1" ]] || return 1
++  # COMPLETENESS gate (codex W1-ceremony round, P2): the fingerprint hashes
++  # regular files only, so an adopter-ADDED symlink/fifo/etc would be
++  # invisible — the partial fingerprint could still byte-match a pristine
++  # release and the forced refresh would REPLACE an adopter-modified tree
++  # (the S238 class). Any non-regular, non-directory entry => no
++  # fingerprint (rc 1) => the caller's safe path (ADOPTER-FORK preserve).
++  # A find traversal error (unreadable subdir) is the same: partial
++  # inventory must never be compared against a pristine fingerprint.
++  local _sf_odd
++  _sf_odd="$( ( cd "$_sf_root" && find SPEC/v1 -mindepth 1 ! -type f ! -type d -print 2>&1 ) )" || return 1
++  [[ -z "$_sf_odd" ]] || return 1
++  local _sf_lines
++  _sf_lines="$(
++    ( cd "$_sf_root" && find SPEC/v1 -type f -print 2>/dev/null ) \
++      | LC_ALL=C sort | while IFS= read -r _sf_rel; do
++          [[ -n "$_sf_rel" ]] || continue
++          _sf_h="$( _hash_file "$_sf_root/$_sf_rel" 2>/dev/null || true )"
++          if [[ -z "$_sf_h" ]]; then
++            printf 'HASH-FAILED\n'
++            break
++          fi
++          printf '%s  %s\n' "$_sf_h" "$_sf_rel"
++        done
++  )"
++  case "$_sf_lines" in
++    ""|*HASH-FAILED*) return 1 ;;
++  esac
++  printf '%s\n' "$_sf_lines" | _hash_stdin
++}
++
++# _refresh_spec_contract — SPEC/v1 takes a FORCED route, NOT the generic
++# backup_and_replace: for a directory target with a baseline, the classified
++# walk PRESERVES adopter edits — so from the 2nd upgrade on, an edited SPEC
++# would classify ADOPTER-CUSTOMIZED and the stale-contract class would
++# return (r6). SPEC/v1 is the published compliance CONTRACT: an adopter edit
++# is a FORK of the contract, not a customization (OQ-3) => backup to
++# $BAK_DIR/SPEC/v1 + replace.
++#   * ceremony: a recorded `--ceremony user` install NEVER receives SPEC/v1
++#     (mirrors install.sh WS4-guard-spec), independent of --no-replay (r9).
++#   * ownership: baseline SPEC records => framework-owned (forced refresh);
++#     no target SPEC => new delivery; target SPEC with NO record => LEGACY
++#     MIGRATION by pristine content (r20): match => framework-owned refresh,
++#     no match => ADOPTER-FORK: preserve + snapshot + named WARNING.
++#   * root VERSION: this function (and the whole upgrade) NEVER touches it —
++#     install_one is skip-if-exists, so on an adopter with its own VERSION
++#     the framework never wrote there; backup_and_replace would TAKE the
++#     file (the S238/ADR-155 "verified worst case", trap C.5). See
++#     ADR-155-AMEND-1 for why the asymmetry is deliberate.
++_SPEC_DELIVERED=0
++_refresh_spec_contract() {
++  local sdir="$SOURCE_DIR/SPEC/v1"
++  local ddir="$TARGET/SPEC/v1"
++  local bdir="$BAK_DIR/SPEC/v1"
++
++  if [[ ! -d "$sdir" ]]; then
++    echo "    SKIP: SPEC/v1 absent in source"
++    # Ownership continuity: a source without SPEC must not DROP a recorded
++    # delivery from the rewritten baseline.
++    if _baseline_has_spec_record; then _SPEC_DELIVERED=1; fi
++    return 0
++  fi
++  if [[ "$CEREMONY_EFFECTIVE" == "user" ]]; then
++    echo "    SKIP: SPEC/v1 (recorded --ceremony user install — root surfaces are out of scope, WS4; r9/r13)"
++    return 0
++  fi
++  if [[ -L "$ddir" ]]; then
++    # Link-leaf is only healthy when it IS the recorded link-mode delivery
++    # (codex W1 round 4, P2): a copy-mode SPEC replaced by a symlink, or a
++    # link-mode SPEC REDIRECTED to another tree, must not inherit
++    # ownership — the baseline rewrite would record the arbitrary link and
++    # the compliance contract would go stale silently. Require a prior
++    # `LINK  SPEC/v1  <target>` record whose target matches the live
++    # readlink; otherwise preserve WITHOUT ownership (named warning).
++    local _sc_rec_tgt _sc_live_tgt
++    _sc_rec_tgt="$( grep -E '^LINK  SPEC/v1  ' "$_BASELINE_MANIFEST_FILE" 2>/dev/null | head -1 | awk '{print $3}' )"
++    _sc_live_tgt="$( readlink "$ddir" 2>/dev/null || true )"
++    if [[ -n "$_sc_rec_tgt" && "$_sc_rec_tgt" == "$_sc_live_tgt" ]]; then
++      echo "    SKIP: SPEC/v1 is the recorded --mode link delivery (target unchanged — tracks its source checkout)"
++      _SPEC_DELIVERED=1
++    else
++      echo "    WARNING: SPEC/v1 is a symlink that does NOT match the recorded LINK" >&2
++      echo "             delivery (recorded='${_sc_rec_tgt:-<none>}', live='${_sc_live_tgt}') —" >&2
++      echo "             preserved WITHOUT framework ownership (contract NOT refreshed)" >&2
++    fi
++    return 0
++  fi
++  # ANCESTOR symlink guard (codex W1 round 2, P1): with TARGET/SPEC itself
++  # a symlink, TARGET/SPEC/v1 is NOT `-L` — the leaf guard above misses it,
++  # and the forced route below would fingerprint/`find -delete`/copy
++  # THROUGH the link, mutating a tree OUTSIDE the target (F11a class, same
++  # helper the classified walk uses).
++  if _lg_ancestor_is_symlink "$TARGET" "SPEC/v1"; then
++    echo "    SKIP: SPEC/v1 has a symlinked ancestor (refusing to write through it — F11a)"
++    if _baseline_has_spec_record; then _SPEC_DELIVERED=1; fi
++    return 0
++  fi
++  if _path_is_skipped "SPEC/v1"; then
++    echo "    SKIPPED (--skip): SPEC/v1"
++    if _baseline_has_spec_record; then _SPEC_DELIVERED=1; fi
++    return 0
++  fi
++  # Descendant --skip patterns (codex W1 round 2, P2): SPEC/v1 refreshes as
++  # ONE contract unit — a per-file exclusion like `--skip SPEC/v1/foo.md`
++  # never matches the literal "SPEC/v1" test above, and the wholesale
++  # refresh would overwrite the very file the operator excluded. A skip
++  # that reaches ANY file of the incoming contract makes the unit refresh
++  # incoherent => preserve the whole tree (named skip, ownership
++  # continuity), never a partial refresh.
++  # UNION of source and target files (codex W1 round 5, P2): a TARGET-only
++  # file (e.g. an adopter's SPEC/v1/local.md) with a matching --skip would
++  # be invisible to a source-only scan, and the forced find-delete would
++  # remove exactly the file the operator excluded.
++  local _sc_src_rel
++  while IFS= read -r _sc_src_rel; do
++    [[ -n "$_sc_src_rel" ]] || continue
++    if _path_is_skipped "$_sc_src_rel"; then
++      echo "    SKIPPED (--skip matches $_sc_src_rel): SPEC/v1 refreshes as one contract unit — preserving the WHOLE tree (partial refresh would be incoherent)"
++      if _baseline_has_spec_record; then _SPEC_DELIVERED=1; fi
++      return 0
++    fi
++  done < <(
++    { ( cd "$SOURCE_DIR" && find SPEC/v1 -type f -print 2>/dev/null );
++      [[ -d "$ddir" ]] && ( cd "$TARGET" && find SPEC/v1 -type f -print 2>/dev/null ); } | LC_ALL=C sort -u
++  )
++
++  # Ownership resolution: delivery record first, legacy content second.
++  local _sc_owned="" _sc_why=""
++  if _baseline_has_spec_record; then
++    _sc_owned=1
++    _sc_why="delivery record: pre-upgrade baseline carries SPEC/v1/ records"
++  elif [[ ! -e "$ddir" ]]; then
++    _sc_owned=1
++    _sc_why="new delivery: target has no SPEC/v1"
++  else
++    local _sc_fp="" _sc_pf="" _sc_src_fp=""
++    _sc_fp="$( _spec_tree_fingerprint "$TARGET" 2>/dev/null || true )"
++    # Current-source match FIRST (codex W1 round 3, P2): an unrecorded tree
++    # byte-identical to what THIS checkout would deliver is a harmless
++    # takeover — without it, the recovery instruction below ("cp the
++    # framework SPEC and re-run") could never work for SPEC newer than
++    # v1.2 (the legacy fingerprints stop there) and the install would stay
++    # ADOPTER-FORK forever, permanently outside forced refresh.
++    _sc_src_fp="$( _spec_tree_fingerprint "$SOURCE_DIR" 2>/dev/null || true )"
++    if [[ -n "$_sc_fp" && -n "$_sc_src_fp" && "$_sc_fp" == "$_sc_src_fp" ]]; then
++      _sc_owned=1
++      _sc_why="current-source match: pre-existing SPEC/v1 byte-matches THIS checkout's SPEC — framework-owned takeover"
++    else
++      for _sc_pf in $_SPEC_PRISTINE_FINGERPRINTS; do
++        if [[ -n "$_sc_fp" && "$_sc_fp" == "$_sc_pf" ]]; then
++          _sc_owned=1
++          break
++        fi
++      done
++      if [[ -n "$_sc_owned" ]]; then
++        _sc_why="legacy migration (r20): pre-existing SPEC/v1 byte-matches a PRISTINE shipped SPEC (v1.2.0 or earlier) — framework-owned"
++      fi
++    fi
++  fi
++
++  if [[ -z "$_sc_owned" ]]; then
++    # ADOPTER-FORK: preserve in place + forensic snapshot + named WARNING.
++    if [[ "$DRY_RUN" -eq 1 ]]; then
++      echo "    (dry-run) would PRESERVE (SPEC/v1 ADOPTER-FORK: no delivery record, no pristine match): SPEC/v1"
++      return 0
++    fi
++    # Snapshot VERIFIED before the recovery advice depends on it (codex W1
++    # round 5, P1): a suppressed cp failure here + the printed "rm the
++    # target and re-copy" instruction could destroy the only copy of the
++    # fork. Recovery guidance is withheld unless the snapshot exists.
++    local _sc_snap_ok=0
++    if mkdir -p "$( dirname "$bdir" )" 2>/dev/null && cp -R "$ddir" "$bdir" 2>/dev/null; then
++      _sc_snap_ok=1
++    fi
++    echo "    WARNING: SPEC/v1 pre-exists with NO delivery record and matches NO pristine" >&2
++    echo "             shipped SPEC (v1.2.0 or earlier) — treated as ADOPTER-FORK:" >&2
++    if [[ "$_sc_snap_ok" -eq 1 ]]; then
++      echo "             PRESERVED in place (snapshot in $BAK_DIR/SPEC/v1)." >&2
++      echo "             If this SPEC/v1 did come from the framework, replace it with an" >&2
++      echo "             EXACT copy of this checkout's tree (rm the target SPEC/v1, then" >&2
++      echo "             cp -R <framework>/SPEC/v1 <target>/SPEC/) and re-run the upgrade —" >&2
++      echo "             a byte-identical tree is taken over as framework-owned" >&2
++      echo "             (current-source match) and recorded in the rewritten baseline." >&2
++    else
++      echo "             PRESERVED in place — but the forensic snapshot COULD NOT be" >&2
++      echo "             created (backup dir unwritable, disk full, or unreadable tree)." >&2
++      echo "             NO delete-and-recopy recovery is advised without a snapshot:" >&2
++      echo "             back up SPEC/v1 yourself before any manual takeover." >&2
++    fi
++    _up_record_op "preserve_spec_v1_adopter_fork" "SPEC/v1"
++    return 0
++  fi
++
++  if [[ "$DRY_RUN" -eq 1 ]]; then
++    if [[ -d "$ddir" ]]; then
++      echo "    (dry-run) would FORCE-REFRESH ($_sc_why; backup to $BAK_DIR/SPEC/v1): SPEC/v1"
++    else
++      echo "    (dry-run) would ADD: SPEC/v1"
++    fi
++    return 0
++  fi
++
++  _up_record_op "refresh_spec_v1" "$_sc_why"
++  if [[ -d "$ddir" ]]; then
++    mkdir -p "$( dirname "$bdir" )"
++    cp -R "$ddir" "$bdir"
++    echo "    BACKED UP: SPEC/v1 -> $BAK_DIR/SPEC/v1"
++    # Never rm -rf (house rule): empty the tree, then remove the dir.
++    find "$ddir" -mindepth 1 -delete
++    rmdir "$ddir" 2>/dev/null || true
++  elif [[ -e "$ddir" ]]; then
++    # Degenerate record-owned case: SPEC/v1 exists but is not a directory
++    # (adopter replaced the delivered tree with a file). Back it up and
++    # clear the slot so the forced copy below cannot abort the upgrade.
++    # Backup-BEFORE-delete is load-bearing (codex W1 round 3, P2): a
++    # suppressed cp failure followed by rm -f would destroy the adopter's
++    # only copy — the promise is backup-then-replace, so a failed backup
++    # ABORTS the refresh (preserve in place, named warning, rc 0: the
++    # upgrade continues, this surface is left untouched).
++    mkdir -p "$( dirname "$bdir" )"
++    if cp "$ddir" "$bdir" 2>/dev/null; then
++      rm -f "$ddir"
++      echo "    BACKED UP: SPEC/v1 (non-directory) -> $BAK_DIR/SPEC/v1"
++    else
++      echo "    WARNING: could not back up non-directory SPEC/v1 — REFUSING to remove it" >&2
++      echo "             (backup-before-replace is the contract; surface left untouched)" >&2
++      _up_record_op "preserve_spec_v1_backup_failed" "SPEC/v1"
++      return 0
++    fi
++  fi
++  mkdir -p "$( dirname "$ddir" )"
++  cp -R "$sdir" "$ddir"
++  _SPEC_DELIVERED=1
++  echo "    REFRESHED (forced — $_sc_why): SPEC/v1"
++}
++
++# _refresh_framework_marker — FORCED + VALIDATED write (r20 option (a)):
++# the marker is generated-refresh content — the upgrade rewrites it to the
++# source VERSION every run, backs up a differing pre-existing copy, and
++# read-back-validates the write. A marker the upgrade could not validate is
++# NOT recorded as delivered, so the FMS entry (and every marker-first
++# reader keyed off the SAME record) falls back to VERSION instead of
++# trusting a stale value. Delivered in BOTH ceremonies (inside .claude/).
++_MARKER_DELIVERED=0
++_refresh_framework_marker() {
++  local src="$SOURCE_DIR/.claude/.framework-version"
++  local dst="$TARGET/.claude/.framework-version"
++  local bak="$BAK_DIR/.claude/.framework-version"
++
++  if [[ ! -f "$src" ]]; then
++    echo "    SKIP: .claude/.framework-version absent in source (pre-v1.3.0 checkout)"
++    if _baseline_has_marker_record; then _MARKER_DELIVERED=1; fi
++    return 0
++  fi
++  if _path_is_skipped ".claude/.framework-version"; then
++    echo "    SKIPPED (--skip): .claude/.framework-version"
++    if _baseline_has_marker_record; then _MARKER_DELIVERED=1; fi
++    return 0
++  fi
++  # Ancestor symlink guard FIRST (codex W1 round 4, P1): with
++  # $TARGET/.claude itself a symlink, the leaf tests below follow the
++  # ancestor and the cp would write OUTSIDE the target tree — same F11a
++  # class the SPEC route guards.
++  if _lg_ancestor_is_symlink "$TARGET" ".claude/.framework-version"; then
++    echo "    SKIP: .claude/.framework-version has a symlinked ancestor (refusing to write through it — F11a)"
++    if _baseline_has_marker_record; then _MARKER_DELIVERED=1; fi
++    return 0
++  fi
++  if [[ -L "$dst" ]]; then
++    # Link-leaf is only healthy when it IS the recorded link-mode delivery
++    # (codex W1 round 4, P2): a copy-mode marker replaced by a symlink, or
++    # a link-mode marker REDIRECTED elsewhere, must not inherit ownership —
++    # the rewrite would record the arbitrary link and marker-first readers
++    # would trust its version. Require a prior LINK record whose target
++    # matches the live readlink; otherwise preserve WITHOUT ownership.
++    local _mk_rec_tgt _mk_live_tgt
++    _mk_rec_tgt="$( grep -E '^LINK  \.claude/\.framework-version  ' "$_BASELINE_MANIFEST_FILE" 2>/dev/null | head -1 | awk '{print $3}' )"
++    _mk_live_tgt="$( readlink "$dst" 2>/dev/null || true )"
++    if [[ -n "$_mk_rec_tgt" && "$_mk_rec_tgt" == "$_mk_live_tgt" ]]; then
++      echo "    SKIP: .claude/.framework-version is the recorded --mode link delivery (target unchanged)"
++      _MARKER_DELIVERED=1
++    else
++      echo "    WARNING: .claude/.framework-version is a symlink that does NOT match the" >&2
++      echo "             recorded LINK delivery (recorded='${_mk_rec_tgt:-<none>}', live='${_mk_live_tgt}')" >&2
++      echo "             — preserved WITHOUT framework ownership (readers fall back to VERSION)" >&2
++    fi
++    return 0
++  fi
++  # Non-file destination guard (codex W1 round 2, P2): an adopter DIRECTORY
++  # at this path would make `cp src dst` copy INSIDE it (stray file left in
++  # adopter-owned space); a FIFO would block the upgrade. Anything that
++  # exists but is not a regular file is adopter-owned => preserve + named
++  # skip, never write.
++  if [[ -e "$dst" && ! -f "$dst" ]]; then
++    echo "    SKIP: .claude/.framework-version exists but is not a regular file (adopter-owned; refusing to write into/through it)"
++    if _baseline_has_marker_record; then _MARKER_DELIVERED=1; fi
++    return 0
++  fi
++  if [[ "$DRY_RUN" -eq 1 ]]; then
++    echo "    (dry-run) would REFRESH: .claude/.framework-version ($(tr -d '[:space:]' < "$src" 2>/dev/null || true))"
++    return 0
++  fi
++
++  if [[ -f "$dst" ]] && ! cmp -s "$src" "$dst" 2>/dev/null; then
++    # Backup-before-replace is the contract (codex W1 round 4, P2 — same
++    # rule the non-directory SPEC branch enforces): a suppressed cp failure
++    # here would let the overwrite below destroy the only copy while the
++    # log claims BACKED UP. Failed backup => preserve, never overwrite.
++    mkdir -p "$( dirname "$bak" )"
++    if cp "$dst" "$bak" 2>/dev/null; then
++      echo "    BACKED UP: .claude/.framework-version -> $bak"
++    else
++      echo "    WARNING: could not back up differing .claude/.framework-version —" >&2
++      echo "             REFUSING to overwrite it (backup-before-replace; readers" >&2
++      echo "             fall back to VERSION)" >&2
++      _up_record_op "preserve_marker_backup_failed" ".claude/.framework-version"
++      return 0
++    fi
++  fi
++  mkdir -p "$( dirname "$dst" )"
++  cp "$src" "$dst"
++  if cmp -s "$src" "$dst" 2>/dev/null; then
++    _MARKER_DELIVERED=1
++    _up_record_op "refresh_framework_marker" "$(tr -d '[:space:]' < "$src" 2>/dev/null || true)"
++    echo "    REFRESHED: .claude/.framework-version ($(tr -d '[:space:]' < "$dst" 2>/dev/null || true))"
++  else
++    echo "    WARNING: .claude/.framework-version write did not validate — NOT recorded as" >&2
++    echo "             delivered (marker-first readers fall back to VERSION; r20)" >&2
++  fi
++}
++
+ has_profile() {
+   local p="$1"
+   for part in "${PROFILE_PARTS[@]}"; do
+@@ -2436,9 +2868,36 @@ _migrate_settings_baseline
+ 
+ # DevOps-P1-4: PROTOCOL.md is framework-derived (pointer), not user data —
+ # refresh it so it stays aligned with the current source layout.
++# PLAN-166 F3 (ADR-155-AMEND-1): CEREMONY-GATED — the refresh used to run
++# unconditionally and `cat >`-created a root PROTOCOL.md that a
++# `--ceremony user` install deliberately never has (install.sh
++# WS4-guard-proto forbids root files); the F4 tree-comparison e2e exposes
++# exactly this divergence (r7/r13). The gate reads the ceremony from
++# .claude/.install-state.json via the replay-independent reader above.
++_PROTOCOL_DELIVERED=0
+ echo ""
+ echo "==> Refreshing PROTOCOL.md pointer"
+-_refresh_protocol_pointer
++if [[ "$CEREMONY_EFFECTIVE" == "user" ]]; then
++  echo "    SKIP: PROTOCOL.md pointer (recorded --ceremony user install — a user install never creates root files, WS4; r13)"
++else
++  _refresh_protocol_pointer
++  # Registered delivery for the baseline rewrite below: on this path the
++  # refresh either WROTE the pointer or PRESERVED a customized one that the
++  # baseline already records (the preserve branch requires a baseline hit),
++  # so framework ownership holds in every non-user branch.
++  _PROTOCOL_DELIVERED=1
++fi
++
++# PLAN-166 F3 (ADR-155-AMEND-1): SPEC/v1 forced refresh + framework version
++# marker. Both run BEFORE the baseline-manifest rewrite so the delivery
++# flags they set are what the rewritten baseline records.
++echo ""
++echo "==> Refreshing SPEC/v1 contract (PLAN-166 F3 — forced route)"
++_refresh_spec_contract
++
++echo ""
++echo "==> Refreshing framework version marker (.claude/.framework-version)"
++_refresh_framework_marker
+ 
+ # PLAN-161 U3 — mis-install scan/purge. Runs in ALL modes (flag-absent and
+ # --dry-run runs emit the would-purge PREVIEW; deletion requires the explicit
+@@ -2465,14 +2924,38 @@ if [[ "$DRY_RUN" -eq 0 ]] && command -v _write_baseline_manifest >/dev/null 2>&1
+                                        # (C.5 idempotency fix). PROTOCOL.md pointer
+                                        # still hashes from FMS_ROOT inside the gen.
+   export FMS_PROFILE_PARTS="${PROFILE_PARTS[*]}"
+-  export FMS_MODE="copy"   # upgrade.sh always copies (never --mode link)
++  # FMS_MODE mirrors the INSTALL's mode, not the upgrade's copy behavior
++  # (codex W1-ceremony round, P2): on a --mode link target the refresh
++  # branches preserve the symlinks, but a `copy`-mode rewrite would OMIT
++  # the SPEC/v1 directory-LINK record and hash the marker symlink as a
++  # file — doctor.sh then reports a type-change drift on a healthy tree.
++  # Evidence order: prior baseline LINK record (authoritative), else a
++  # symlink probe on the framework-owned roots, else copy.
++  FMS_MODE="copy"
++  if [[ -n "$_BASELINE_MANIFEST_FILE" && -f "$_BASELINE_MANIFEST_FILE" ]] \
++     && grep -Eq '^LINK  ' "$_BASELINE_MANIFEST_FILE" 2>/dev/null; then
++    FMS_MODE="link"
++    echo "    baseline rewrite: --mode link install detected (LINK records in prior manifest) — preserving LINK serialization"
++  elif [[ -L "$TARGET/.claude/skills" || -L "$TARGET/SPEC/v1" || -L "$TARGET/.claude/.framework-version" ]]; then
++    FMS_MODE="link"
++    echo "    baseline rewrite: --mode link install detected (symlink probe) — preserving LINK serialization"
++  fi
++  export FMS_MODE
+   # Canonical PROTOCOL.md pointer hash (Codex R2 P0): record what the framework
+   # WOULD generate, never a preserved adopter customization. Empty if the
+   # pointer refresh did not run; the generator then falls back to hashing the
+   # target (install semantics).
+   export FMS_PROTOCOL_HASH="${_REFRESH_PROTOCOL_CANON_HASH:-}"
++  # PLAN-166 F3 (ADR-155-AMEND-1): conditional ownership from what THIS
++  # upgrade delivered/refreshed (or what the pre-upgrade baseline already
++  # recorded — ownership continuity), never the ceremony alone, never file
++  # presence (r17/r19/r20).
++  export FMS_DELIVERED_SPEC="${_SPEC_DELIVERED:-0}"
++  export FMS_DELIVERED_PROTOCOL="${_PROTOCOL_DELIVERED:-0}"
++  export FMS_DELIVERED_MARKER="${_MARKER_DELIVERED:-0}"
+   _write_baseline_manifest "$TARGET/.claude/.install-manifest.sha256"
+   unset FMS_ROOT FMS_HASH_ROOT FMS_PROFILE_PARTS FMS_MODE FMS_PROTOCOL_HASH
++  unset FMS_DELIVERED_SPEC FMS_DELIVERED_PROTOCOL FMS_DELIVERED_MARKER
+ fi
+ 
+ # ===========================================================================
+@@ -2505,6 +2988,7 @@ _write_upgrade_state() {
+     "replay_source" "$_REPLAY_SOURCE"
+     "harness" "$HARNESS"
+     "managed_hooks" "$CODEX_MANAGED_HOOKS"
++    "ceremony_effective" "$CEREMONY_EFFECTIVE"
+   )
+   echo ""
+   echo "==> (Re)writing install-state (.claude/.install-state.json — PLAN-153 Wave B)"
+@@ -2597,6 +3081,7 @@ state = {
+         "on_conflict": vals.get("on_conflict", ""),
+         "pin": vals.get("pin", ""),
+         "replay_source": vals.get("replay_source", ""),
++        "ceremony_effective": vals.get("ceremony_effective", ""),
+     },
+     "operations": ops,
+     "result": {"upgrade_succeeded": True,

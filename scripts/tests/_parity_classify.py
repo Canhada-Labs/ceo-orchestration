@@ -157,47 +157,12 @@ ACCEPTED: List[Tuple[str, Optional[str], str]] = [
 #   id, modes (None = all), class, regex, reason, unblocked_by
 # ---------------------------------------------------------------------------
 KNOWN_OPEN: List[Dict[str, Optional[str]]] = [
-    {
-        "id": "F3-spec-stale",
-        "modes": "maintainer",
-        "cls": "STALE",
-        "re": r"^SPEC/v1/",
-        "reason": (
-            "upgrade.sh delivers SPEC/v1 through NO surface: it is absent from "
-            "the backup_and_replace sequence AND from "
-            "_framework_target_entries(). An adopter upgrading v1.2 -> v1.3 "
-            "keeps the v1.2 contract — the trust boundary of the sentinel "
-            "unlock, +21 lines in this very release"
-        ),
-        "unblocked_by": (
-            "PLAN-166 W1 item 2 / OQ-3(a): forced-refresh route for SPEC/v1 in "
-            "upgrade.sh + delivery-record-gated entry in "
-            "_framework_target_entries() + INSTALL.md refresh list"
-        ),
-    },
-    {
-        "id": "F3-protocol-user-mode",
-        "modes": "user",
-        "cls": "ONLY_IN_B_OUTSIDE_CLAUDE",
-        "re": r"^PROTOCOL\.md$",
-        "reason": (
-            "upgrade.sh calls _refresh_protocol_pointer() UNCONDITIONALLY "
-            "(upgrade.sh:2441) and writes PROTOCOL.md at the repo ROOT. A "
-            "fresh `--ceremony user` install forbids exactly that "
-            "(install.sh:1876 gates install_protocol_pointer, and "
-            "smoke-install.yml's WS4 leg fails the build on any top-level "
-            "write outside .claude/). So `install --ceremony user` followed "
-            "later by an upgrade silently violates the guarantee the install "
-            "advertised. This is a latent adjacent bug that only a TREE "
-            "comparison exposes — not an allowlist case"
-        ),
-        "unblocked_by": (
-            "PLAN-166 W1 item 2 / OQ-3: ceremony-gate the protocol refresh in "
-            "upgrade.sh from the same .install-state.json read (own read, "
-            "independent of --no-replay)"
-        ),
-    },
+    # (empty — PLAN-166 W1 landed. F3-spec-stale and F3-protocol-user-mode
+    # were deleted IN the W1 ceremony commit, per the mandatory-fire
+    # contract above: a ledger can never outlive its bug. Add new entries
+    # here ONLY with a mandatory-fire reason + unblocked_by.)
 ]
+
 
 # Paths that must EXIST in both routes once W1 lands. Absent today, so each
 # reports as KNOWN-OPEN (class=expect-path) and holds the run at exit 2.

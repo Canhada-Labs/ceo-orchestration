@@ -8,11 +8,33 @@ on:
       # PLAN-161 (CI wiring): upgrade oracles + the manifest lib they
       # exercise — keep BOTH filter lists (pull_request + push) in sync.
       - "scripts/_framework_manifest_set.sh"
+      # The ownership + parity e2e call _hash_file/_hash_stdin from here, and
+      # this workflow is their ONLY CI execution — without the helper in the
+      # filter, a PR touching only it skips the gate entirely (codex W1
+      # round 10, P2: the "red gate nobody runs" class, one level deeper).
+      - "scripts/_hash_lib.sh"
       - "scripts/tests/test-upgrade-dryrun-identity.sh"
       - "scripts/tests/test-upgrade-exclusions.sh"
       - "scripts/tests/smoke-install.sh"
+      # PLAN-166 F4 (OQ-4): the install/upgrade parity e2e and its classifier.
+      # The finding this closes is "a red gate nobody runs" (5th instance) --
+      # an unwired test is the same as no test.
+      - "scripts/tests/test-install-upgrade-parity-e2e.sh"
+      - "scripts/tests/_parity_classify.py"
+      # PLAN-166 F3 (ADR-155-AMEND-1): delivery-record ownership e2e —
+      # scripts/tests/*.sh runs ONLY in this workflow (same r11/r20 wiring
+      # rule as the parity e2e above).
+      - "scripts/tests/test-upgrade-spec-ownership.sh"
       - "templates/**"
-      - "SPEC/v1/install-cli.md"
+      # Widened from SPEC/v1/install-cli.md: SPEC/v1 is delivered by install.sh
+      # and (until F3) by nothing in upgrade.sh, so ANY SPEC/v1 change is a
+      # parity event, not just the CLI contract doc.
+      - "SPEC/v1/**"
+      # PLAN-166 F4 wiring (r11/r20): scripts/tests/*.sh runs ONLY here, so a
+      # PR touching just one of these would otherwise skip the regression.
+      - "scripts/doctor.sh"
+      - ".claude/.framework-version"
+      - ".claude/scripts/check-framework-updates.sh"
       - ".github/workflows/smoke-install.yml"
       # PLAN-006 Phase 1 (Sprint 6): Adapter Layer migration changes
       # install-time expectations (hook import paths, contract). Scope
@@ -22,13 +44,26 @@ on:
     branches:
       - main
     paths:
+      # KEEP IDENTICAL to the pull_request list above. The two had already
+      # drifted (push was missing SPEC/v1 and this workflow file); PLAN-166 F4
+      # re-syncs them, because a filter that fires on the PR and not on the
+      # merge is a gate with a hole in it.
       - "scripts/install.sh"
       - "scripts/upgrade.sh"
       - "scripts/_framework_manifest_set.sh"
+      - "scripts/_hash_lib.sh"
       - "scripts/tests/test-upgrade-dryrun-identity.sh"
       - "scripts/tests/test-upgrade-exclusions.sh"
       - "scripts/tests/smoke-install.sh"
+      - "scripts/tests/test-install-upgrade-parity-e2e.sh"
+      - "scripts/tests/_parity_classify.py"
+      - "scripts/tests/test-upgrade-spec-ownership.sh"
       - "templates/**"
+      - "SPEC/v1/**"
+      - "scripts/doctor.sh"
+      - ".claude/.framework-version"
+      - ".claude/scripts/check-framework-updates.sh"
+      - ".github/workflows/smoke-install.yml"
       - ".claude/hooks/**"
 
 concurrency:
@@ -42,7 +77,20 @@ jobs:
     runs-on: ubuntu-latest
     # PLAN-161: 5 -> 8 — headroom for the two upgrade oracles (each runs
     # full install + upgrade legs against fixture adopter repos).
-    timeout-minutes: 8
+    # PLAN-166 F4: 8 -> 20. MEASURED, not guessed. The parity e2e runs 2 full
+    # install legs + 1 upgrade leg PER ceremony mode, and the positive control
+    # runs the same again with a planted divergence: 12 install/upgrade
+    # operations added to this job. Local wall time (Darwin arm64, 16 cores,
+    # 2026-08-05): gate 122s + control 118s = 240s. A 2-core ubuntu-latest
+    # runner is the usual 2-3x slower, i.e. 8-12 min of NEW work on top of the
+    # ~5 min this job already spent. 15 would sit inside the noise band, and
+    # the perf-gate N=20 flake (PLAN-159) was exactly that mistake. Re-tighten
+    # once real CI runs give a p95.
+    # PLAN-166 F3 (assembler): 20 -> 25. The spec-ownership e2e adds 4 more
+    # installs + 3 upgrades (S1-S8; ~3-4 min local per the W1-C measurement),
+    # i.e. up to ~8-10 more CI minutes at the same 2-3x factor. Same
+    # anti-flake sizing rule as the F4 bump above.
+    timeout-minutes: 25
     permissions:
       contents: read
     steps:
@@ -51,6 +99,20 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           fetch-depth: 1
+
+      # PLAN-166 F4: the parity e2e's historical leg installs from a PINNED
+      # TAG. `fetch-depth: 1` produces a checkout with NO tags, so the pin
+      # would not resolve and the gate would die before comparing a single
+      # tree - "it passes on my clone" is precisely the hole this test exists
+      # to close. The pin is READ FROM THE TEST (--print-pin) so the workflow
+      # never becomes a second copy of that truth.
+      - name: Fetch the parity pin tag
+        run: |
+          set -euo pipefail
+          PIN="$(bash scripts/tests/test-install-upgrade-parity-e2e.sh --print-pin)"
+          echo "parity historical pin: $PIN"
+          git fetch --no-tags --depth 1 origin "+refs/tags/$PIN:refs/tags/$PIN"
+          git rev-parse --verify "refs/tags/$PIN^{commit}"
 
       - name: Setup Python 3.11
         # SHA-pinned (Sprint 7 Dependabot bump): actions/setup-python@v6.2.0
@@ -107,6 +169,59 @@ jobs:
             exit 1
           fi
           echo 'user-ceremony leg: PASS'
+
+      # PLAN-166 F4 (OQ-4) - install/upgrade parity on the RESULTING TREES,
+      # per ceremony mode. NO continue-on-error, deliberately: the assertion
+      # this replaces was dead twice over (tautological AND wired into no
+      # workflow), and an escape hatch here would reinstate exactly that.
+      # Exit 2 (KNOWN-OPEN) is a FAILURE too - it NAMES the outstanding
+      # PLAN-166 W1 prerequisites instead of skipping them silently.
+      - name: Install/upgrade parity e2e (maintainer + user ceremony)
+        run: |
+          set -euo pipefail
+          bash scripts/tests/test-install-upgrade-parity-e2e.sh
+
+      # Control of the control (AC-4). With ONE backup_and_replace line deleted
+      # from a COPY of upgrade.sh, the gate above must come back RED in EVERY
+      # ceremony mode. rc must be exactly 1: rc 0/2 means the gate went blind,
+      # rc 9 means the plant stopped biting (vacuous control). Both fail here.
+      # This step MUST stay AFTER the plain gate: if the un-planted run were
+      # already fatal, rc=1 here would prove nothing about the plant.
+      - name: Install/upgrade parity - positive control (planted divergence)
+        run: |
+          set -uo pipefail
+          rc=0
+          bash scripts/tests/test-install-upgrade-parity-e2e.sh \
+            --positive-control > /tmp/parity-control.log 2>&1 || rc=$?
+          if [ "$rc" -ne 1 ]; then
+            cat /tmp/parity-control.log
+            echo "::error::parity positive control returned rc=$rc, expected 1 - the planted install/upgrade divergence did NOT turn the gate red, so the gate above proves nothing"
+            exit 1
+          fi
+          # Second factor, LOAD-BEARING (re-pass closure): under `set -uo
+          # pipefail` (no -e) a non-matching grep would NOT fail the step, so
+          # an rc=1 from a failure UNRELATED to the plant (log with none of
+          # the plant markers) would pass — the registered-vacuous class
+          # (S292) this step exists to close. Demand plant evidence or fail.
+          grep -E "PLANTED|per-mode verdicts|positive control:" /tmp/parity-control.log || {
+            cat /tmp/parity-control.log
+            echo "::error::rc=1 but the log carries no PLANTED/per-mode-verdict evidence - the control went red for an unrelated reason, which proves nothing about the plant (vacuous control)"
+            exit 1
+          }
+          echo "positive control OK: planted divergence -> exit 1 in every ceremony mode"
+
+      # PLAN-166 F3 (ADR-155-AMEND-1, AC-3) — delivery-record ownership of
+      # the three conditional framework surfaces (SPEC/v1, root PROTOCOL.md,
+      # .claude/.framework-version) across install -> upgrade -> doctor ->
+      # updater. Scenarios S1-S8 incl. the forced-refresh route (S2), the
+      # legacy ADOPTER-FORK preserve (S4) and the marker-first updater
+      # regression (S6). Same wiring rationale as the parity e2e above:
+      # scripts/tests/*.sh runs ONLY here — unwired = no test. NO
+      # continue-on-error, deliberately.
+      - name: Upgrade SPEC/marker delivery-record ownership (S1-S8)
+        run: |
+          set -euo pipefail
+          bash scripts/tests/test-upgrade-spec-ownership.sh
 
       - name: Assert npx/npm shim contract (if present)
         # Phase 4 deliverable; skip if directory missing
