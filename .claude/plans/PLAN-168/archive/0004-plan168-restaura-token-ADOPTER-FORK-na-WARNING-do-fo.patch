@@ -1,0 +1,38 @@
+From a23976841b86c0674d8915db11812f99c2da15fa Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Jo=C3=A3o=20Canhada?= <joaocanhada@users.noreply.github.com>
+Date: Fri, 7 Aug 2026 21:12:47 -0300
+Subject: [PATCH 4/4] plan168: restaura token ADOPTER-FORK na WARNING do fork
+ preservado
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Regressão do rewrite do PLAN-167 (7c0828a): o comentário §1869 promete
+'named WARNING' e o F3 e2e (S4) grepa o token — a mensagem o perdeu.
+Pego pelo e2e do PLAN-166 no land (44/45); overlay volta a 45/45.
+---
+ scripts/upgrade.sh | 8 ++++++--
+ 1 file changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/scripts/upgrade.sh b/scripts/upgrade.sh
+index 0bce369..cde1ff2 100755
+--- a/scripts/upgrade.sh
++++ b/scripts/upgrade.sh
+@@ -1982,8 +1982,12 @@ _refresh_spec_contract() {
+         if mkdir -p "$( dirname "$bdir" )" 2>/dev/null && cp -R "$ddir" "$bdir" 2>/dev/null; then
+           _snap_ok=1
+         fi
+-        echo "    WARNING: SPEC/v1 is not framework-owned (no delivery record, and it" >&2
+-        echo "             matches neither this checkout nor any pristine shipped SPEC)" >&2
++        # The token "ADOPTER-FORK" is CONTRACT, not prose: the §1869 route
++        # comment promises a NAMED warning, and the F3 e2e (S4) greps for it.
++        # The PLAN-167 rewrite dropped it — caught by that e2e on the PLAN-166
++        # land (44/45) and restored here (PLAN-168).
++        echo "    WARNING: SPEC/v1 ADOPTER-FORK — not framework-owned (no delivery" >&2
++        echo "             record; matches neither this checkout nor any pristine shipped SPEC)" >&2
+         if [ "$_snap_ok" -eq 1 ]; then
+           echo "             — PRESERVED in place (snapshot in $BAK_DIR/SPEC/v1)." >&2
+           echo "             To hand it back to the framework: remove the target SPEC/v1," >&2
+-- 
+2.50.1 (Apple Git-155)
+

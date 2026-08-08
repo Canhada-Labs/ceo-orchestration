@@ -1,0 +1,51 @@
+From fe3ae33c0da1d183f84cfc6d83efae5966bf057d Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Jo=C3=A3o=20Canhada?= <joaocanhada@users.noreply.github.com>
+Date: Fri, 7 Aug 2026 20:45:57 -0300
+Subject: [PATCH 3/4] =?UTF-8?q?plan168:=20baseline=20map=20re-gravado=20?=
+ =?UTF-8?q?=E2=80=94=2062=20GREEN=20/=203=20RED=20(run=202026-08-07=2020:1?=
+ =?UTF-8?q?7,=20header=20est=C3=A1vel)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ scripts/tests/ownership-baseline-map.txt | 15 +++++++++------
+ 1 file changed, 9 insertions(+), 6 deletions(-)
+
+diff --git a/scripts/tests/ownership-baseline-map.txt b/scripts/tests/ownership-baseline-map.txt
+index df2dbd4..05749b0 100644
+--- a/scripts/tests/ownership-baseline-map.txt
++++ b/scripts/tests/ownership-baseline-map.txt
+@@ -1,8 +1,8 @@
+ == PLAN-167 ownership decision table ==
+-   table:  /tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/c1f32917-17c3-4a44-a74f-30277a04017a/scratchpad/plan167-overlay-235553/scripts/tests/ownership_table.tsv
+-   source: /tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/c1f32917-17c3-4a44-a74f-30277a04017a/scratchpad/plan167-overlay-235553
+-   scratch:/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T//plan167-own.toQDrn
+-   timeout:60s/cell   timeout-bin:<fallback>
++   table:  scripts/tests/ownership_table.tsv
++   source: <repo>
++   scratch:<scratch>
++   timeout:60s/cell   timeout-bin:<bin>
+ 
+ OWN-0001   GREEN   exp=DELIVER         /HASH_SOURCE            got=DELIVER         /HASH_SOURCE            rc=0   adr-155
+ OWN-0002   GREEN   exp=DELIVER         /HASH_CANONICAL_POINTER got=DELIVER         /HASH_CANONICAL_POINTER rc=0   adr-155
+@@ -60,11 +60,14 @@ OWN-0070   GREEN   exp=PRESERVE_OWNED  /HASH_SOURCE            got=PRESERVE_OWNE
+ OWN-0071   GREEN   exp=PRESERVE_OWNED  /HASH_PRIOR_RECORD      got=PRESERVE_OWNED  /HASH_PRIOR_RECORD      rc=0   r7-F2
+ OWN-0072   GREEN   exp=PRESERVE_OWNED  /HASH_PRIOR_RECORD      got=PRESERVE_OWNED  /HASH_PRIOR_RECORD      rc=0   r9-F2
+ OWN-0073   GREEN   exp=REFRESH         /HASH_SOURCE            got=REFRESH         /HASH_SOURCE            rc=0   adr-155-amend-1
+-OWN-0074   RED     exp=PRESERVE_OWNED  /HASH_CANONICAL_POINTER got=PRESERVE_OWNED  /HASH_UNCLASSIFIED      rc=0   derived
++OWN-0074   GREEN   exp=PRESERVE_OWNED  /HASH_CANONICAL_POINTER got=PRESERVE_OWNED  /HASH_CANONICAL_POINTER rc=0   derived
+ OWN-0080   GREEN   exp=PRESERVE_UNOWNED/HASH_NONE              got=PRESERVE_UNOWNED/HASH_NONE              rc=0   r9-F4
+ OWN-0081   GREEN   exp=PRESERVE_UNOWNED/HASH_NONE              got=PRESERVE_UNOWNED/HASH_NONE              rc=0   r11-F3
+ OWN-0082   GREEN   exp=PRESERVE_OWNED  /HASH_PRIOR_RECORD      got=PRESERVE_OWNED  /HASH_PRIOR_RECORD      rc=0   adr-155-amend-1
+ OWN-0090   GREEN   exp=REFRESH         /HASH_SOURCE            got=REFRESH         /HASH_SOURCE            rc=0   r7-F1
+ OWN-0091   GREEN   exp=PRESERVE_OWNED  /HASH_SOURCE            got=PRESERVE_OWNED  /HASH_SOURCE            rc=0   r7-F1
++OWN-0092   GREEN   exp=REFRESH         /HASH_CANONICAL_POINTER got=REFRESH         /HASH_CANONICAL_POINTER rc=0   plan-168
++OWN-0093   GREEN   exp=REFRESH         /HASH_CANONICAL_POINTER got=REFRESH         /HASH_CANONICAL_POINTER rc=0   plan-168
++OWN-0094   GREEN   exp=PRESERVE_OWNED  /HASH_PRIOR_RECORD      got=PRESERVE_OWNED  /HASH_PRIOR_RECORD      rc=0   plan-168
+ 
+-GREEN=58  RED=4  AMBIG=0  HARNESS-ERR=0
++GREEN=62  RED=3  AMBIG=0  HARNESS-ERR=0
+-- 
+2.50.1 (Apple Git-155)
+

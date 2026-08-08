@@ -1537,37 +1537,75 @@ backup_and_replace() {
 # regenerate it with the same heuristic install.sh uses.
 _refresh_protocol_pointer() {
   local pointer="$TARGET/PROTOCOL.md"
-  local body
-  case "$SOURCE_DIR" in
-    "$TARGET"/*)
-      local rel="${SOURCE_DIR#$TARGET/}"
-      body="The full CEO orchestration protocol lives at:
-./${rel}/PROTOCOL.md
 
-To pull updates:
-  ( cd ./${rel} && git pull )
-  ./${rel}/scripts/upgrade.sh . --profile $PROFILE --stack $STACK"
-      ;;
-    *)
-      body="The full CEO orchestration protocol lives at:
-{{PROTOCOL_SOURCE}}/PROTOCOL.md
+  # PLAN-168 W2 (AC-6, Owner decision D1-b): the body comes from the ONE
+  # shared generator in _framework_manifest_set.sh — never a private heredoc.
+  # INV-4 existed because this function and install.sh each carried their own
+  # copy of this text: install substituted {{PROTOCOL_SOURCE}}, this one did
+  # not — two bodies for the same file, and the recorded digest never matched
+  # the disk (OWN-0074). A missing generator preserves the surface (upgrade's
+  # fail-toward-preservation posture, same as an illegal cell below).
+  if ! command -v _render_protocol_pointer >/dev/null 2>&1; then
+    echo "    WARNING: _render_protocol_pointer unavailable — PROTOCOL.md pointer PRESERVED" >&2
+    return 0
+  fi
 
-Edit {{PROTOCOL_SOURCE}} to point at your ceo-orchestration checkout
-(e.g. ../ceo-orchestration or \$HOME/src/ceo-orchestration).
+  # Resolve the PROTOCOL_SOURCE the pointer should name (AC-6c, Owner
+  # decision D3). Precedence:
+  #   1. request.placeholders.PROTOCOL_SOURCE from the install-state — the
+  #      install has ALWAYS persisted it there (union across runs; the
+  #      PLAN-168 debate's claim that it was never persisted checked the
+  #      wrong key — codex rail r1 P1).
+  #   2. A HEALTHY on-disk pointer: extract the value it already names and
+  #      keep it — never silently rename a sound pointer to today's checkout.
+  #   3. $SOURCE_DIR (this upgrade's checkout) — last resort, used for
+  #      genuinely old installs with no state and no sound pointer (incl.
+  #      the degraded-cure path, where the pointer names nothing usable).
+  local _ptr_psource=""
+  if [ -f "$_INSTALL_STATE_FILE" ] && command -v python3 >/dev/null 2>&1; then
+    _ptr_psource="$( python3 - "$_INSTALL_STATE_FILE" <<'PYEOF' 2>/dev/null || true
+import json, sys
+try:
+    with open(sys.argv[1], "r", encoding="utf-8") as f:
+        doc = json.load(f)
+    v = (doc.get("request") or {}).get("placeholders", {}).get("PROTOCOL_SOURCE", "")
+    if isinstance(v, str) and v and "{{" not in v:
+        sys.stdout.write(v)
+except Exception:
+    pass
+PYEOF
+)"
+  fi
+  if [ -z "$_ptr_psource" ] && [ -f "$pointer" ]; then
+    # D3 route 2: trust a SOUND pointer. Extract the source it names and
+    # accept it only if re-rendering with that value reproduces the file
+    # byte-for-byte (the same reconstruction discipline as the degraded
+    # recognizer — anything else is adopter content, not a source of truth).
+    local _ptr_cand
+    _ptr_cand="$( sed -n 's|^\(.*\)/PROTOCOL\.md$|\1|p' "$pointer" 2>/dev/null | sed -n '1p' )"
+    if [ -n "$_ptr_cand" ] && [ "${_ptr_cand#\{\{}" = "$_ptr_cand" ]; then
+      if _render_protocol_pointer "$SOURCE_DIR" "$TARGET" "$PROFILE" "$STACK" "$_ptr_cand" \
+           | cmp -s - "$pointer" 2>/dev/null; then
+        _ptr_psource="$_ptr_cand"
+      fi
+    fi
+  fi
+  if [ -z "$_ptr_psource" ]; then
+    _ptr_psource="$SOURCE_DIR"
+  fi
 
-To pull updates:
-  ( cd {{PROTOCOL_SOURCE}} && git pull )
-  {{PROTOCOL_SOURCE}}/scripts/upgrade.sh $TARGET --profile $PROFILE --stack $STACK"
-      ;;
-  esac
+  local _ptr_full
+  _ptr_full="$( _render_protocol_pointer "$SOURCE_DIR" "$TARGET" "$PROFILE" "$STACK" "$_ptr_psource" )"
 
   # The CANONICAL digest: the hash of exactly what the framework WOULD write.
   # Computed on every path, because the baseline rewrite must record it even
   # when the pointer is preserved — recording the customised bytes instead
   # would make the NEXT upgrade read H_dst == H_base and clobber them (C.5).
+  # Post-PLAN-168 this is the hash of the SUBSTITUTED body — the same bytes
+  # install writes — so the recorded digest finally matches the disk (INV-4).
   _REFRESH_PROTOCOL_CANON_HASH=""
   if command -v _hash_stdin >/dev/null 2>&1; then
-    _REFRESH_PROTOCOL_CANON_HASH="$( printf '# Protocol reference\n\n%s\n' "$body" | _hash_stdin 2>/dev/null || true )"
+    _REFRESH_PROTOCOL_CANON_HASH="$( printf '%s\n' "$_ptr_full" | _hash_stdin 2>/dev/null || true )"
   fi
 
   # ---- OBSERVE -------------------------------------------------------------
@@ -1576,6 +1614,14 @@ To pull updates:
   _pr="$( _ov_obs_prior_record "PROTOCOL.md" )"
   if [ "$_lt" != "regular" ]; then
     _lc="-"
+  elif _protocol_pointer_is_degraded "$pointer"; then
+    # PLAN-168 W2 (AC-6b, Owner decision D2): byte-exact reconstruction of
+    # the {{PROTOCOL_SOURCE}}-literal template this script used to write.
+    # Framework garbage, not adopter content — the verdict routes it to the
+    # REFRESH cure below. Checked BEFORE pristine/edited: a degraded body
+    # can never equal the substituted canonical, and classifying it `edited`
+    # is exactly the immortal-defect route this wave closes.
+    _lc="degraded"
   elif [ -n "$_REFRESH_PROTOCOL_CANON_HASH" ] \
        && [ "$( _hash_file "$pointer" 2>/dev/null || true )" = "$_REFRESH_PROTOCOL_CANON_HASH" ]; then
     _lc="pristine"
@@ -1640,13 +1686,13 @@ To pull updates:
         cp "$pointer" "$BAK_DIR/PROTOCOL.md" 2>/dev/null || true
         echo "    BACKED UP: PROTOCOL.md (root) -> $BAK_DIR/PROTOCOL.md"
       fi
-      cat > "$pointer" <<EOF
-# Protocol reference
-
-$body
-EOF
+      printf '%s\n' "$_ptr_full" > "$pointer"
       _PROTOCOL_DELIVERED=1
-      echo "    REFRESHED: PROTOCOL.md pointer"
+      if [ "$_lc" = "degraded" ]; then
+        echo "    CURED: PROTOCOL.md pointer was framework-degraded ({{PROTOCOL_SOURCE}} left literal by an old upgrade) — refreshed; original in $BAK_DIR/PROTOCOL.md"
+      else
+        echo "    REFRESHED: PROTOCOL.md pointer"
+      fi
       return 0
       ;;
   esac
@@ -1936,8 +1982,12 @@ _refresh_spec_contract() {
         if mkdir -p "$( dirname "$bdir" )" 2>/dev/null && cp -R "$ddir" "$bdir" 2>/dev/null; then
           _snap_ok=1
         fi
-        echo "    WARNING: SPEC/v1 is not framework-owned (no delivery record, and it" >&2
-        echo "             matches neither this checkout nor any pristine shipped SPEC)" >&2
+        # The token "ADOPTER-FORK" is CONTRACT, not prose: the §1869 route
+        # comment promises a NAMED warning, and the F3 e2e (S4) greps for it.
+        # The PLAN-167 rewrite dropped it — caught by that e2e on the PLAN-166
+        # land (44/45) and restored here (PLAN-168).
+        echo "    WARNING: SPEC/v1 ADOPTER-FORK — not framework-owned (no delivery" >&2
+        echo "             record; matches neither this checkout nor any pristine shipped SPEC)" >&2
         if [ "$_snap_ok" -eq 1 ]; then
           echo "             — PRESERVED in place (snapshot in $BAK_DIR/SPEC/v1)." >&2
           echo "             To hand it back to the framework: remove the target SPEC/v1," >&2

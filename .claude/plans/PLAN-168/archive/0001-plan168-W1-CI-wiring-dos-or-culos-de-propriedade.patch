@@ -1,0 +1,764 @@
+From e9b5574ed6384427f02102834961789bfad448e0 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Jo=C3=A3o=20Canhada?= <joaocanhada@users.noreply.github.com>
+Date: Fri, 7 Aug 2026 19:52:32 -0300
+Subject: [PATCH 1/4] =?UTF-8?q?plan168(W1):=20CI=20wiring=20dos=20or=C3=A1?=
+ =?UTF-8?q?culos=20de=20propriedade?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- smoke-install.yml: 4 paths novos nos DOIS filtros + step do oráculo
+  unitário por-PR (AC-1/AC-4)
+- ownership-nightly.yml NOVO: e2e nightly via ownership-nightly-gate.sh
+  (conjunto RED exato, zero-tolerância TIMEOUT/ESCAPE/AMBIG, rc semântico,
+  HARNESS-ERR=0; NUNCA --map) + controle positivo 12/12 no próprio job (AC-5)
+- harness: --print-legacy-tag (fonte única do pin v1.2.0) + --stable-header
+  (baseline commitável sem paths de máquina)
+- ownership-expected-reds.txt: 4 ids (W2 encolhe p/ 3 no mesmo pack)
+- test_release_workflow_asserts.py: Plan168OwnershipWiringTest (sincronia
+  name-a-name dos filtros + presença + contrato do nightly; AC-2)
+
+Rail r1+r2 aplicados; controles positivos verificados.
+---
+ .../tests/test_release_workflow_asserts.py    | 150 ++++++++++++++++
+ .github/workflows/ownership-nightly.yml       |  98 +++++++++++
+ .github/workflows/smoke-install.yml           |  24 +++
+ scripts/tests/ownership-expected-reds.txt     |  14 ++
+ scripts/tests/ownership-nightly-gate.sh       | 105 +++++++++++
+ scripts/tests/test-ownership-nightly-gate.sh  | 164 ++++++++++++++++++
+ scripts/tests/test-ownership-table.sh         |  53 ++++--
+ 7 files changed, 593 insertions(+), 15 deletions(-)
+ create mode 100644 .github/workflows/ownership-nightly.yml
+ create mode 100644 scripts/tests/ownership-expected-reds.txt
+ create mode 100755 scripts/tests/ownership-nightly-gate.sh
+ create mode 100755 scripts/tests/test-ownership-nightly-gate.sh
+
+diff --git a/.claude/scripts/tests/test_release_workflow_asserts.py b/.claude/scripts/tests/test_release_workflow_asserts.py
+index 3518bb3..be94c7b 100644
+--- a/.claude/scripts/tests/test_release_workflow_asserts.py
++++ b/.claude/scripts/tests/test_release_workflow_asserts.py
+@@ -1012,5 +1012,155 @@ class W1BGuardModuleContractTest(TestEnvContext):
+         self.assertEqual(len(codes), len(set(codes)))
+ 
+ 
++# --- PLAN-168 W1 (AC-1/AC-2/AC-4) ------------------------------------
++# Marker written into the PLAN-168 smoke-install.yml + ownership-nightly.yml
++# edits; its presence in the LIVE file means the W1 ceremony landed and the
++# live copy is authoritative (same convention as _MARKER / _MARKER_166).
++_MARKER_168 = "PLAN-168 W1"
++_STAGED_168 = _REPO / ".claude" / "plans" / "PLAN-168" / "staged"
++_STAGED_168_WF = _STAGED_168 / ".github" / "workflows"
++
++# AC-1/AC-2: paths that MUST be present in BOTH smoke-install filter lists.
++# _hash_lib.sh is the r10-F4 regression pin (it was already wired; this
++# assert keeps it that way — AC-2 is an assertion, not work).
++_OWNERSHIP_FILTER_PATHS = frozenset({
++    "scripts/_hash_lib.sh",
++    "scripts/tests/test-ownership-verdict-unit.sh",
++    "scripts/tests/test-ownership-table.sh",
++    "scripts/tests/ownership_table.tsv",
++    "docs/ownership-decision-table.md",
++})
++
++
++def _plan168_text(name: str) -> Optional[Tuple[str, str]]:
++    """Return (text, context) for a PLAN-168 workflow edit, or None pre-landing."""
++    live = _WF / name
++    if live.is_file():
++        live_text = live.read_text(encoding="utf-8")
++        if _MARKER_168 in live_text:
++            return live_text, "live"
++    staged = _STAGED_168_WF / name
++    if staged.is_file():
++        return staged.read_text(encoding="utf-8"), "staged"
++    return None
++
++
++def _workflow_paths_lists(text: str) -> Tuple[list, list]:
++    """Extract (pull_request.paths, push.paths) entries from workflow text.
++
++    Text-based on purpose (this file's convention — no yaml dependency in
++    the stdlib-only posture). Collects quoted `- "..."` items under each
++    `paths:` key, skipping comments, stopping at the first line that
++    dedents to the `paths:` level or shallower.
++    """
++    results = []
++    for trigger in ("pull_request:", "push:"):
++        lines = text.splitlines()
++        try:
++            t_idx = next(
++                i for i, ln in enumerate(lines)
++                if ln.strip() == trigger
++                and (len(ln) - len(ln.lstrip())) == 2
++            )
++        except StopIteration:
++            results.append([])
++            continue
++        entries = []
++        paths_indent = None
++        for ln in lines[t_idx + 1:]:
++            stripped = ln.strip()
++            indent = len(ln) - len(ln.lstrip())
++            if stripped and indent <= 2:
++                break  # next trigger / top-level key
++            if paths_indent is None:
++                if stripped == "paths:":
++                    paths_indent = indent
++                continue
++            if not stripped or stripped.startswith("#"):
++                continue
++            if indent <= paths_indent:
++                break
++            m = re.match(r'-\s+"([^"]+)"', stripped)
++            if m:
++                entries.append(m.group(1))
++        results.append(entries)
++    return results[0], results[1]
++
++
++class Plan168OwnershipWiringTest(TestEnvContext):
++    """AC-1/AC-2: the ownership oracles are WIRED, and the two smoke-install
++    filter lists cannot drift apart again (the r10-F4 "red gate nobody
++    runs" class, closed as an assertion instead of a memory)."""
++
++    def _smoke(self) -> Tuple[str, str]:
++        ctx = _plan168_text("smoke-install.yml")
++        if ctx is None:
++            self.skipTest(
++                "PLAN-168 W1 not landed and no staged copy on disk "
++                "(pre-landing CI window)"
++            )
++        return ctx
++
++    def test_filter_lists_are_identical(self):
++        text, _ = self._smoke()
++        pr, push = _workflow_paths_lists(text)
++        self.assertTrue(pr, "pull_request paths filter not found/empty")
++        self.assertTrue(push, "push paths filter not found/empty")
++        # Name-by-name set equality, both directions, duplicates rejected —
++        # the file's own comment says KEEP IDENTICAL.
++        self.assertEqual(
++            len(pr), len(set(pr)), "duplicate entries in pull_request paths")
++        self.assertEqual(
++            len(push), len(set(push)), "duplicate entries in push paths")
++        self.assertEqual(
++            sorted(pr), sorted(push),
++            "smoke-install pull_request and push paths filters have drifted",
++        )
++
++    def test_ownership_paths_present_in_both_filters(self):
++        text, _ = self._smoke()
++        pr, push = _workflow_paths_lists(text)
++        for required in sorted(_OWNERSHIP_FILTER_PATHS):
++            self.assertIn(
++                required, pr, f"{required} missing from pull_request paths")
++            self.assertIn(
++                required, push, f"{required} missing from push paths")
++
++    def test_unit_oracle_step_wired(self):
++        text, _ = self._smoke()
++        self.assertIn(
++            "scripts/tests/test-ownership-verdict-unit.sh",
++            text.split("steps:", 1)[-1],
++            "unit oracle step missing from the smoke job",
++        )
++
++    def test_nightly_workflow_contract(self):
++        ctx = _plan168_text("ownership-nightly.yml")
++        if ctx is None:
++            self.skipTest(
++                "PLAN-168 W1 not landed and no staged copy on disk "
++                "(pre-landing CI window)"
++            )
++        text, _ = ctx
++        self.assertIn("schedule:", text, "nightly trigger missing")
++        self.assertIn("cron:", text, "cron expression missing")
++        self.assertIn("workflow_dispatch:", text, "manual dispatch missing")
++        self.assertIn(
++            "scripts/tests/ownership-nightly-gate.sh", text,
++            "the gate script is not what the nightly runs",
++        )
++        self.assertIn(
++            "scripts/tests/test-ownership-nightly-gate.sh", text,
++            "gate positive control step missing",
++        )
++        # --map is a reporting mode that exits 0 over failures — a dead gate
++        # by construction (harness NOTE, PLAN-168 debate r1 QA must-fix 2).
++        # Prose in comments may mention it; an INVOCATION is the harness
++        # name followed by --map on the same line.
++        for ln in text.splitlines():
++            if "test-ownership-table.sh" in ln and "--map" in ln:
++                self.fail(f"--map wired into the nightly gate: {ln.strip()}")
++
++
+ if __name__ == "__main__":
+     unittest.main()
+diff --git a/.github/workflows/ownership-nightly.yml b/.github/workflows/ownership-nightly.yml
+new file mode 100644
+index 0000000..b42533b
+--- /dev/null
++++ b/.github/workflows/ownership-nightly.yml
+@@ -0,0 +1,98 @@
++name: Ownership Nightly
++
++# PLAN-168 W1 (AC-4/AC-5, Owner decision D4): the ownership e2e runs the FULL
++# truth table — 62 real install/upgrade cells, ~25 min locally, 2-3x that on a
++# 2-core runner — so it cannot live inside smoke-install's 25-min job (that
++# budget was already raised 4x: 5→8→20→25). And `schedule:` events IGNORE
++# `paths:` filters, so the nightly split is a separate WORKFLOW, not a filter
++# entry (debate r1 devops must-fix 1). The fast per-PR half (the unit oracle)
++# stays in smoke-install.yml.
++#
++# The gate compares the observed non-GREEN set against
++# scripts/tests/ownership-expected-reds.txt and fails on ANY difference —
++# including shrinkage. 4 deliberate reds are part of the contract
++# (CLAUDE.md §4): an all-green run means the table changed — STOP and find
++# out why, never celebrate. NEVER run the harness with --map here: --map is a
++# reporting mode that exits 0 over failures (a dead gate by construction).
++
++on:
++  schedule:
++    # Off-peak UTC, off-minute deliberately (fleet etiquette — avoid :00/:30).
++    - cron: "43 6 * * *"
++  # Manual runs for harness/table PRs that want the full e2e before merge.
++  workflow_dispatch: {}
++
++concurrency:
++  group: ownership-nightly
++  cancel-in-progress: true
++
++jobs:
++  ownership-e2e:
++    # PLAN-012 Phase 2 CEO_SOTA_DISABLE parity (same switch as smoke-install).
++    if: vars.CEO_SOTA_DISABLE != '1'
++    runs-on: ubuntu-latest
++    # ~25 min local (Darwin arm64, 16 cores, 2026-08-07); ubuntu-latest is the
++    # usual 2-3x slower => 50-75 min expected. Same anti-flake sizing rule as
++    # the smoke-install budget notes: leave headroom, re-tighten on a real p95.
++    timeout-minutes: 90
++    permissions:
++      contents: read
++    steps:
++      - name: Checkout
++        # SHA-pinned (same pin as smoke-install.yml): actions/checkout@v6.0.2
++        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
++        with:
++          fetch-depth: 1
++
++      # `fetch-depth: 1` produces a checkout with NO tags, and the
++      # legacy_pristine* fixtures build from a REAL shipped tree. The tag is
++      # READ FROM THE HARNESS (--print-legacy-tag) so this workflow never
++      # becomes a second copy of that truth (same --print-pin shape as the
++      # parity e2e in smoke-install.yml).
++      - name: Fetch the legacy_pristine tag
++        run: |
++          set -euo pipefail
++          TAG="$(bash scripts/tests/test-ownership-table.sh --print-legacy-tag)"
++          echo "legacy pristine tag: $TAG"
++          git fetch --no-tags --depth 1 origin "+refs/tags/$TAG:refs/tags/$TAG"
++          git rev-parse --verify "refs/tags/$TAG^{commit}"
++
++      - name: Install jq (install.sh settings merge dependency)
++        run: |
++          set -euo pipefail
++          if ! command -v jq >/dev/null 2>&1; then
++            sudo apt-get update -qq
++            sudo apt-get install -y -qq jq
++          fi
++          jq --version
++
++      # Fast preflight: a broken DECISION should fail in milliseconds here,
++      # not 40 minutes into the observation run.
++      - name: Ownership verdict unit oracle (preflight)
++        run: |
++          set -euo pipefail
++          bash scripts/tests/test-ownership-verdict-unit.sh
++
++      # The gate itself is proven BEFORE it is trusted: every failure mode it
++      # claims to catch is planted with a fake harness and must go red. A CI
++      # gate nobody can test is a gate nobody has proven (PLAN-167: 8
++      # instrument defects).
++      - name: Gate positive control (planted failure modes)
++        run: |
++          set -euo pipefail
++          bash scripts/tests/test-ownership-nightly-gate.sh
++
++      # PLAN-168 AC-5 — the SCRIPT is the gate (debate r1 QA must-fix 2:
++      # describing behavior is not a gate). ownership-nightly-gate.sh runs the
++      # e2e and enforces: rc>=2 = infra error (never comparable); summary line
++      # present with HARNESS-ERR=0 (partial output fails); observed non-GREEN
++      # id set == scripts/tests/ownership-expected-reds.txt exactly; rc
++      # coherent with the set (non-empty => rc=1, empty => rc=0). NEVER --map.
++      - name: Ownership e2e — full table vs expected non-GREEN set
++        env:
++          # 60s/cell flakes on 2-core CI iron (2-3x slower than the local
++          # baseline the default was sized on).
++          CELL_TIMEOUT: "180"
++        run: |
++          set -euo pipefail
++          bash scripts/tests/ownership-nightly-gate.sh
+diff --git a/.github/workflows/smoke-install.yml b/.github/workflows/smoke-install.yml
+index 5794f0b..3718aca 100644
+--- a/.github/workflows/smoke-install.yml
++++ b/.github/workflows/smoke-install.yml
+@@ -25,6 +25,17 @@ on:
+       # scripts/tests/*.sh runs ONLY in this workflow (same r11/r20 wiring
+       # rule as the parity e2e above).
+       - "scripts/tests/test-upgrade-spec-ownership.sh"
++      # PLAN-168 W1 (AC-1): the PLAN-167 ownership oracles + their truth
++      # table + contract doc. The unit oracle runs per-PR in THIS workflow;
++      # the ~25-min e2e runs in ownership-nightly.yml (schedule: ignores
++      # paths:, so it cannot live behind this filter) — but a PR touching
++      # the table/harness/contract must still light up the fast gate here.
++      # Without these entries, a PR changing only the table skips the gate
++      # entirely: the r10-F4 "red gate nobody runs" class, again.
++      - "scripts/tests/test-ownership-verdict-unit.sh"
++      - "scripts/tests/test-ownership-table.sh"
++      - "scripts/tests/ownership_table.tsv"
++      - "docs/ownership-decision-table.md"
+       - "templates/**"
+       # Widened from SPEC/v1/install-cli.md: SPEC/v1 is delivered by install.sh
+       # and (until F3) by nothing in upgrade.sh, so ANY SPEC/v1 change is a
+@@ -58,6 +69,10 @@ on:
+       - "scripts/tests/test-install-upgrade-parity-e2e.sh"
+       - "scripts/tests/_parity_classify.py"
+       - "scripts/tests/test-upgrade-spec-ownership.sh"
++      - "scripts/tests/test-ownership-verdict-unit.sh"
++      - "scripts/tests/test-ownership-table.sh"
++      - "scripts/tests/ownership_table.tsv"
++      - "docs/ownership-decision-table.md"
+       - "templates/**"
+       - "SPEC/v1/**"
+       - "scripts/doctor.sh"
+@@ -129,6 +144,15 @@ jobs:
+           fi
+           jq --version
+ 
++      # PLAN-168 W1 (AC-4, per-PR half): the DECISION oracle — 60 cells of
++      # _ownership_verdict() against the truth table, in milliseconds. The
++      # OBSERVATION half (the ~25-min e2e) runs in ownership-nightly.yml;
++      # this fast half is what makes table/harness PRs cheap to gate.
++      - name: Ownership verdict unit oracle (60 cells, milliseconds)
++        run: |
++          set -euo pipefail
++          bash scripts/tests/test-ownership-verdict-unit.sh
++
+       - name: Run smoke install
+         run: |
+           set -euo pipefail
+diff --git a/scripts/tests/ownership-expected-reds.txt b/scripts/tests/ownership-expected-reds.txt
+new file mode 100644
+index 0000000..d39e501
+--- /dev/null
++++ b/scripts/tests/ownership-expected-reds.txt
+@@ -0,0 +1,14 @@
++# PLAN-168 AC-5 — the EXPECTED set of non-GREEN cells in the ownership e2e.
++# The nightly gate compares the observed set against the OWN- lines below and
++# fails on ANY difference — including shrinkage: an all-green run means the
++# table changed, which is a reason to STOP, not to celebrate (CLAUDE.md §4).
++# Causes are recorded in docs/ownership-decision-table.md and ADR-190.
++#   OWN-0016 — product defect (open)
++#   OWN-0024 — test defect (open)
++#   OWN-0027 — test defect (open)
++#   OWN-0074 — product defect: INV-4 surfacing in the recorded digest
++#              (closes in PLAN-168 W2 — this file shrinks to 3 in that pack)
++OWN-0016
++OWN-0024
++OWN-0027
++OWN-0074
+diff --git a/scripts/tests/ownership-nightly-gate.sh b/scripts/tests/ownership-nightly-gate.sh
+new file mode 100755
+index 0000000..44bab80
+--- /dev/null
++++ b/scripts/tests/ownership-nightly-gate.sh
+@@ -0,0 +1,105 @@
++#!/usr/bin/env bash
++# =============================================================================
++# PLAN-168 W1 (AC-5) — the ownership nightly GATE.
++#
++# Runs the ownership e2e harness and compares the observed RED id set
++# against scripts/tests/ownership-expected-reds.txt. ANY set difference fails
++# — including shrinkage: deliberate reds are part of the contract
++# (CLAUDE.md §4), and an all-green run means the truth table changed, which
++# is a reason to STOP, not to celebrate.
++#
++# This is a separate script (not inline YAML) so it can be exercised by a
++# positive control (test-ownership-nightly-gate.sh) — a gate nobody can test
++# is a gate nobody has proven (PLAN-167: 8 instrument defects; PLAN-168
++# debate r1 QA must-fix 2: describing behavior is not a gate).
++#
++# rc semantics, explicit by design (codex rail r1 P1):
++#   - harness rc >= 2  => harness/infra error, NEVER comparable => gate FAILS
++#   - summary line must exist and report HARNESS-ERR=0 (partial output fails)
++#   - non-empty expected set REQUIRES harness rc == 1 (its designed status)
++#   - empty     expected set REQUIRES harness rc == 0
++#   - observed RED set must equal the expected set exactly
++#   - any OTHER non-GREEN status (TIMEOUT / ESCAPE / AMBIG) fails OUTRIGHT
++#     (codex rail r2 P1): an expected-red id that starts timing out or
++#     escaping the target keeps the id set unchanged — comparing ids alone
++#     would wave a MORE SEVERE regression through as "same set".
++#
++# NEVER wire the harness's --map mode into this gate: --map exits 0 over
++# failures by design (reporting mode) — a dead gate by construction.
++#
++# Test seams (positive control only — CI uses the defaults):
++#   OWNERSHIP_GATE_HARNESS   command to run instead of the real harness
++#   OWNERSHIP_GATE_EXPECTED  expected-reds file to compare against
++#
++# Exit: 0 = set stable. 1 = gate failed (set changed / harness error / vacuous
++#       output). 2 = gate usage/infra error (missing expected file).
++# =============================================================================
++set -uo pipefail
++
++SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
++REPO_ROOT="$( cd "$SCRIPT_DIR/../.." && pwd )"
++
++HARNESS="${OWNERSHIP_GATE_HARNESS:-}"
++if [[ -z "$HARNESS" ]]; then
++  HARNESS="bash '$SCRIPT_DIR/test-ownership-table.sh'"
++fi
++EXPECTED="${OWNERSHIP_GATE_EXPECTED:-$SCRIPT_DIR/ownership-expected-reds.txt}"
++
++[[ -f "$EXPECTED" ]] || { echo "GATE-ERR: expected-reds file not found: $EXPECTED" >&2; exit 2; }
++
++WORK="$( mktemp -d "${TMPDIR:-/tmp}/own-gate.XXXXXX" )" || exit 2
++trap 'rm -rf "$WORK" 2>/dev/null || true' EXIT
++
++MAP="$WORK/map.txt"
++ERRS="$WORK/err.txt"
++
++rc=0
++( cd "$REPO_ROOT" && eval "$HARNESS" ) > "$MAP" 2> "$ERRS" || rc=$?
++
++cat "$MAP"
++sed -n '1,40p' "$ERRS" >&2 || true
++
++if [[ "$rc" -ge 2 ]]; then
++  echo "GATE-RED: harness returned rc=$rc (harness/infra error — not comparable)" >&2
++  exit 1
++fi
++
++# The summary line is load-bearing: without it, a run that died mid-table
++# would present a truncated (smaller) non-GREEN set that could still match a
++# shrunken expectation. HARNESS-ERR must be literally 0.
++if ! grep -E '^GREEN=[0-9]+[[:space:]]+RED=[0-9]+[[:space:]]+AMBIG=[0-9]+[[:space:]]+HARNESS-ERR=0$' "$MAP" >/dev/null; then
++  echo "GATE-RED: summary line missing or HARNESS-ERR>0 — partial or vacuous output cannot pass" >&2
++  exit 1
++fi
++
++# Statuses other than GREEN and RED are never expected and never comparable:
++# TIMEOUT / ESCAPE / AMBIG on an EXPECTED-red id would keep the id set intact
++# while hiding a more severe regression behind "same set" (codex rail r2 P1).
++grep -E '^OWN-[0-9]+[[:space:]]' "$MAP" \
++  | awk '$2 != "GREEN" && $2 != "RED" {print $1" "$2}' > "$WORK/other.txt"
++if [[ -s "$WORK/other.txt" ]]; then
++  echo "GATE-RED: cell(s) in a status that is never acceptable (TIMEOUT/ESCAPE/AMBIG):" >&2
++  sed 's/^/  /' "$WORK/other.txt" >&2
++  exit 1
++fi
++
++grep -E '^OWN-[0-9]+[[:space:]]' "$MAP" \
++  | awk '$2 == "RED" {print $1}' | LC_ALL=C sort > "$WORK/got.txt"
++grep -E '^OWN-' "$EXPECTED" | LC_ALL=C sort > "$WORK/exp.txt"
++
++if ! diff -u "$WORK/exp.txt" "$WORK/got.txt"; then
++  echo "GATE-RED: the RED set CHANGED (shrinkage included: all-green means the table changed — stop and find out why)" >&2
++  exit 1
++fi
++
++if [[ -s "$WORK/exp.txt" && "$rc" -ne 1 ]]; then
++  echo "GATE-RED: rc=$rc but the expected set is non-empty (harness must exit 1 over expected reds)" >&2
++  exit 1
++fi
++if [[ ! -s "$WORK/exp.txt" && "$rc" -ne 0 ]]; then
++  echo "GATE-RED: rc=$rc but the expected set is empty (harness must exit 0 when everything is green)" >&2
++  exit 1
++fi
++
++echo "ownership gate: RED set stable ($(wc -l < "$WORK/exp.txt" | tr -d ' ') expected RED cells, zero TIMEOUT/ESCAPE/AMBIG)"
++exit 0
+diff --git a/scripts/tests/test-ownership-nightly-gate.sh b/scripts/tests/test-ownership-nightly-gate.sh
+new file mode 100755
+index 0000000..4365fdc
+--- /dev/null
++++ b/scripts/tests/test-ownership-nightly-gate.sh
+@@ -0,0 +1,164 @@
++#!/usr/bin/env bash
++# =============================================================================
++# PLAN-168 W1 — positive control for ownership-nightly-gate.sh.
++#
++# The gate is the instrument that watches the ownership e2e in CI; this test
++# watches the GATE. Every failure mode the gate claims to catch is planted
++# here with a fake harness, and the test demands the gate actually goes red —
++# green-without-control proves nothing (PLAN-167: 8 instrument defects).
++#
++# Scenarios:
++#   S1  matching set, rc=1, HARNESS-ERR=0            => gate PASSES
++#   S2  set GREW (one extra red)                     => gate FAILS
++#   S3  set SHRANK (all green, rc=0)                 => gate FAILS
++#   S4  harness rc=2 (infra error)                   => gate FAILS
++#   S5  summary line missing (truncated output)      => gate FAILS
++#   S6  HARNESS-ERR=1 in summary                     => gate FAILS
++#   S7  rc=0 while expected set non-empty            => gate FAILS
++#   S8  set SWAPPED (same size, different ids)       => gate FAILS
++#   S9  empty expected set + all green, rc=0         => gate PASSES
++#   S10 expected id degraded to TIMEOUT (same ids)   => gate FAILS
++#   S11 expected id degraded to ESCAPE  (same ids)   => gate FAILS
++#   S12 green cell degraded to AMBIG                 => gate FAILS
++#
++# Exit: 0 all scenarios behave. 1 at least one does not. 2 harness error.
++# =============================================================================
++set -uo pipefail
++
++SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
++GATE="$SCRIPT_DIR/ownership-nightly-gate.sh"
++[[ -f "$GATE" ]] || { echo "ERROR: gate not found: $GATE" >&2; exit 2; }
++
++WORK="$( mktemp -d "${TMPDIR:-/tmp}/own-gate-test.XXXXXX" )" || exit 2
++trap 'rm -rf "$WORK" 2>/dev/null || true' EXIT
++
++# --- fake harness ------------------------------------------------------------
++# Emits a canned map on stdout and exits with a canned rc. The gate consumes
++# it via OWNERSHIP_GATE_HARNESS exactly as it would the real harness.
++mk_fake() { # $1=out-file $2=rc-file
++  cat > "$WORK/fake-harness.sh" <<EOF
++#!/usr/bin/env bash
++cat "$1"
++exit "\$(cat "$2")"
++EOF
++  chmod +x "$WORK/fake-harness.sh"
++}
++
++map_line() { # $1=id $2=status
++  printf '%-10s %-7s exp=%-16s/%-22s got=%-16s/%-22s rc=%-3s %s\n' \
++    "$1" "$2" "V" "H" "V" "H" "0" "test"
++}
++
++write_map() { # $1=file, then "id:status" pairs; appends summary from counts
++  local f="$1"; shift
++  local green=0 red=0 err="${SUMMARY_ERR:-0}"
++  : > "$f"
++  local pair id st
++  for pair in "$@"; do
++    id="${pair%%:*}"; st="${pair##*:}"
++    map_line "$id" "$st" >> "$f"
++    case "$st" in GREEN) green=$((green+1)) ;; *) red=$((red+1)) ;; esac
++  done
++  if [[ "${SUMMARY_OMIT:-0}" -ne 1 ]]; then
++    printf '\nGREEN=%d  RED=%d  AMBIG=0  HARNESS-ERR=%d\n' "$green" "$red" "$err" >> "$f"
++  fi
++}
++
++expected_4() {
++  printf 'OWN-0016\nOWN-0024\nOWN-0027\nOWN-0074\n' > "$WORK/exp.txt"
++}
++
++run_gate() { # $1=expected-rc  $2=label
++  local want="$1" label="$2" got=0
++  OWNERSHIP_GATE_HARNESS="$WORK/fake-harness.sh" \
++  OWNERSHIP_GATE_EXPECTED="$WORK/exp.txt" \
++    bash "$GATE" > "$WORK/gate-out.txt" 2> "$WORK/gate-err.txt" || got=$?
++  if [[ "$got" -eq "$want" ]]; then
++    echo "PASS  $label (gate rc=$got)"
++    return 0
++  fi
++  echo "FAIL  $label — gate rc=$got, expected $want"
++  sed -n '1,15p' "$WORK/gate-out.txt" | sed 's/^/      out| /'
++  sed -n '1,15p' "$WORK/gate-err.txt" | sed 's/^/      err| /'
++  return 1
++}
++
++FAILURES=0
++
++# S1 — matching set, honest rc=1 => PASS
++expected_4
++write_map "$WORK/map.txt" OWN-0001:GREEN OWN-0016:RED OWN-0024:RED OWN-0027:RED OWN-0074:RED
++echo 1 > "$WORK/rc.txt"; mk_fake "$WORK/map.txt" "$WORK/rc.txt"
++run_gate 0 "S1 matching set + rc=1" || FAILURES=$((FAILURES+1))
++
++# S2 — set grew => FAIL
++write_map "$WORK/map.txt" OWN-0001:RED OWN-0016:RED OWN-0024:RED OWN-0027:RED OWN-0074:RED
++echo 1 > "$WORK/rc.txt"; mk_fake "$WORK/map.txt" "$WORK/rc.txt"
++run_gate 1 "S2 set grew" || FAILURES=$((FAILURES+1))
++
++# S3 — set shrank to zero (all green, honest rc=0) => FAIL (all-green = STOP)
++write_map "$WORK/map.txt" OWN-0001:GREEN OWN-0016:GREEN OWN-0024:GREEN OWN-0027:GREEN OWN-0074:GREEN
++echo 0 > "$WORK/rc.txt"; mk_fake "$WORK/map.txt" "$WORK/rc.txt"
++run_gate 1 "S3 set shrank (all green)" || FAILURES=$((FAILURES+1))
++
++# S4 — harness infra error rc=2 => FAIL
++write_map "$WORK/map.txt" OWN-0016:RED
++echo 2 > "$WORK/rc.txt"; mk_fake "$WORK/map.txt" "$WORK/rc.txt"
++run_gate 1 "S4 harness rc=2" || FAILURES=$((FAILURES+1))
++
++# S5 — summary line missing (truncated run) => FAIL even with matching ids
++# (explicit set/reset: VAR=x prefixed to a FUNCTION call has version-divergent
++# persistence semantics in bash — never rely on it.)
++SUMMARY_OMIT=1
++write_map "$WORK/map.txt" OWN-0016:RED OWN-0024:RED OWN-0027:RED OWN-0074:RED
++SUMMARY_OMIT=0
++echo 1 > "$WORK/rc.txt"; mk_fake "$WORK/map.txt" "$WORK/rc.txt"
++run_gate 1 "S5 summary missing" || FAILURES=$((FAILURES+1))
++
++# S6 — HARNESS-ERR=1 => FAIL even with matching ids
++SUMMARY_ERR=1
++write_map "$WORK/map.txt" OWN-0016:RED OWN-0024:RED OWN-0027:RED OWN-0074:RED
++SUMMARY_ERR=0
++echo 1 > "$WORK/rc.txt"; mk_fake "$WORK/map.txt" "$WORK/rc.txt"
++run_gate 1 "S6 HARNESS-ERR=1" || FAILURES=$((FAILURES+1))
++
++# S7 — rc=0 while expected set non-empty (rc/set incoherence) => FAIL
++write_map "$WORK/map.txt" OWN-0016:RED OWN-0024:RED OWN-0027:RED OWN-0074:RED
++echo 0 > "$WORK/rc.txt"; mk_fake "$WORK/map.txt" "$WORK/rc.txt"
++run_gate 1 "S7 rc=0 with non-empty expected set" || FAILURES=$((FAILURES+1))
++
++# S8 — same size, different ids => FAIL
++write_map "$WORK/map.txt" OWN-0016:RED OWN-0024:RED OWN-0027:RED OWN-0099:RED OWN-0074:GREEN
++echo 1 > "$WORK/rc.txt"; mk_fake "$WORK/map.txt" "$WORK/rc.txt"
++run_gate 1 "S8 set swapped" || FAILURES=$((FAILURES+1))
++
++# S9 — empty expected set + all green + rc=0 => PASS
++: > "$WORK/exp.txt"
++write_map "$WORK/map.txt" OWN-0001:GREEN OWN-0002:GREEN
++echo 0 > "$WORK/rc.txt"; mk_fake "$WORK/map.txt" "$WORK/rc.txt"
++run_gate 0 "S9 empty expected set, all green" || FAILURES=$((FAILURES+1))
++
++# S10-S12 — an EXPECTED-red id degrades to TIMEOUT / ESCAPE / AMBIG: the id
++# set is UNCHANGED, so an ids-only comparison would pass a more severe
++# regression as "same set" (codex rail r2 P1). The gate must go red on the
++# STATUS, not just the set.
++expected_4
++write_map "$WORK/map.txt" OWN-0016:TIMEOUT OWN-0024:RED OWN-0027:RED OWN-0074:RED
++echo 1 > "$WORK/rc.txt"; mk_fake "$WORK/map.txt" "$WORK/rc.txt"
++run_gate 1 "S10 expected id degraded to TIMEOUT" || FAILURES=$((FAILURES+1))
++
++write_map "$WORK/map.txt" OWN-0016:ESCAPE OWN-0024:RED OWN-0027:RED OWN-0074:RED
++echo 1 > "$WORK/rc.txt"; mk_fake "$WORK/map.txt" "$WORK/rc.txt"
++run_gate 1 "S11 expected id degraded to ESCAPE" || FAILURES=$((FAILURES+1))
++
++write_map "$WORK/map.txt" OWN-0001:AMBIG OWN-0016:RED OWN-0024:RED OWN-0027:RED OWN-0074:RED
++echo 1 > "$WORK/rc.txt"; mk_fake "$WORK/map.txt" "$WORK/rc.txt"
++run_gate 1 "S12 green cell degraded to AMBIG" || FAILURES=$((FAILURES+1))
++
++echo ""
++if [[ "$FAILURES" -gt 0 ]]; then
++  echo "ownership-nightly-gate positive control: $FAILURES scenario(s) FAILED"
++  exit 1
++fi
++echo "ownership-nightly-gate positive control: 12/12 scenarios behave"
++exit 0
+diff --git a/scripts/tests/test-ownership-table.sh b/scripts/tests/test-ownership-table.sh
+index ae12049..7cb38e1 100755
+--- a/scripts/tests/test-ownership-table.sh
++++ b/scripts/tests/test-ownership-table.sh
+@@ -16,6 +16,9 @@
+ #   test-ownership-table.sh --map        emit the map only (no pass/fail exit)
+ #   test-ownership-table.sh --list       list row ids and exit
+ #   test-ownership-table.sh --keep       keep the scratch dir (debugging)
++#   test-ownership-table.sh --print-legacy-tag   print the pinned legacy tag
++#   test-ownership-table.sh --stable-header      machine-independent header
++#                                        (for RECORDING a committable baseline)
+ #
+ # Exit: 0 = every row matched its expected pair. 1 = at least one mismatch.
+ #       2 = harness/usage error (never confused with a row failure).
+@@ -29,11 +32,18 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+ REPO_ROOT="$( cd "$SCRIPT_DIR/../.." && pwd )"
+ TSV="$SCRIPT_DIR/ownership_table.tsv"
+ 
++# The ONE copy of the legacy-pristine pin. The legacy_pristine* fixtures build
++# from this tag, and CI fetches it via --print-legacy-tag — the workflow never
++# hardcodes a second copy of this truth (PLAN-168 W1, same --print-pin shape
++# as test-install-upgrade-parity-e2e.sh).
++LEGACY_TAG="v1.2.0"
++
+ CELL_TIMEOUT="${CELL_TIMEOUT:-60}"
+ ONLY=""
+ MAP_ONLY=0
+ LIST_ONLY=0
+ KEEP=0
++STABLE_HEADER=0
+ 
+ while [[ $# -gt 0 ]]; do
+   case "$1" in
+@@ -41,7 +51,9 @@ while [[ $# -gt 0 ]]; do
+     --map)  MAP_ONLY=1; shift ;;
+     --list) LIST_ONLY=1; shift ;;
+     --keep) KEEP=1; shift ;;
+-    -h|--help) sed -n '2,30p' "${BASH_SOURCE[0]}"; exit 0 ;;
++    --print-legacy-tag) printf '%s\n' "$LEGACY_TAG"; exit 0 ;;
++    --stable-header) STABLE_HEADER=1; shift ;;
++    -h|--help) sed -n '2,33p' "${BASH_SOURCE[0]}"; exit 0 ;;
+     *) echo "ERROR: unknown argument: $1" >&2; exit 2 ;;
+   esac
+ done
+@@ -349,18 +361,18 @@ _mutate_surface() {  # $1 surface, $2 live_type, $3 live_content, $4 src root, $
+       fi
+       ;;
+     legacy_pristine)
+-      # A REAL v1.2.0 SPEC/v1 tree from the tag the pristine fingerprints were
+-      # derived from — never a hand-built approximation, which would test the
+-      # fixture rather than the migration.
+-      if ! git -C "$REPO_ROOT" rev-parse -q --verify 'refs/tags/v1.2.0^{}' >/dev/null 2>&1; then
+-        echo "FIXTURE-ERR: tag v1.2.0 is not available in this checkout." >&2
++      # A REAL $LEGACY_TAG SPEC/v1 tree from the tag the pristine fingerprints
++      # were derived from — never a hand-built approximation, which would test
++      # the fixture rather than the migration.
++      if ! git -C "$REPO_ROOT" rev-parse -q --verify "refs/tags/$LEGACY_TAG^{}" >/dev/null 2>&1; then
++        echo "FIXTURE-ERR: tag $LEGACY_TAG is not available in this checkout." >&2
+         echo "             legacy_pristine rows need the REAL shipped tree, never an" >&2
+         echo "             approximation. A CI checkout using fetch-depth:1 has NO tags" >&2
+-        echo "             — that job needs fetch-depth:0 or fetch-tags:true." >&2
++        echo "             — fetch it first: this script --print-legacy-tag names it." >&2
+         return 1
+       fi
+       rm -rf "$p"; mkdir -p "$p"
+-      git -C "$REPO_ROOT" archive v1.2.0 SPEC/v1 2>/dev/null \
++      git -C "$REPO_ROOT" archive "$LEGACY_TAG" SPEC/v1 2>/dev/null \
+         | ( cd "$T" && tar -xf - ) || return 1
+       ;;
+     legacy_pristine_partial)
+@@ -369,12 +381,12 @@ _mutate_surface() {  # $1 surface, $2 live_type, $3 live_content, $4 src root, $
+       # matches a shipped release, so content alone reads "pristine" — and the
+       # tree must STILL be refused, because a partial inventory can never
+       # certify a wholesale replace (ADR-155-AMEND-1 §4).
+-      if ! git -C "$REPO_ROOT" rev-parse -q --verify 'refs/tags/v1.2.0^{}' >/dev/null 2>&1; then
+-        echo "FIXTURE-ERR: tag v1.2.0 unavailable (see legacy_pristine above)" >&2
++      if ! git -C "$REPO_ROOT" rev-parse -q --verify "refs/tags/$LEGACY_TAG^{}" >/dev/null 2>&1; then
++        echo "FIXTURE-ERR: tag $LEGACY_TAG unavailable (see legacy_pristine above)" >&2
+         return 1
+       fi
+       rm -rf "$p"; mkdir -p "$p"
+-      git -C "$REPO_ROOT" archive v1.2.0 SPEC/v1 2>/dev/null \
++      git -C "$REPO_ROOT" archive "$LEGACY_TAG" SPEC/v1 2>/dev/null \
+         | ( cd "$T" && tar -xf - ) || return 1
+       ln -s /dev/null "$p/adopter-added.link" 2>/dev/null || true
+       ;;
+@@ -648,10 +660,21 @@ if [[ "$LIST_ONLY" -eq 1 ]]; then
+ fi
+ 
+ echo "== PLAN-167 ownership decision table =="
+-echo "   table:  $TSV"
+-echo "   source: $REPO_ROOT"
+-echo "   scratch:$WORK"
+-echo "   timeout:${CELL_TIMEOUT}s/cell   timeout-bin:${_TIMEOUT_BIN:-<fallback>}"
++if [[ "$STABLE_HEADER" -eq 1 ]]; then
++  # Machine-independent header, for RECORDING a baseline that gets committed.
++  # The absolute-path variant below leaked runner paths into the repo once
++  # (ownership-baseline-map.txt, PLAN-168 debate r1 devops must-fix 4) — a
++  # committed baseline must diff clean across machines.
++  echo "   table:  scripts/tests/ownership_table.tsv"
++  echo "   source: <repo>"
++  echo "   scratch:<scratch>"
++  echo "   timeout:${CELL_TIMEOUT}s/cell   timeout-bin:<bin>"
++else
++  echo "   table:  $TSV"
++  echo "   source: $REPO_ROOT"
++  echo "   scratch:$WORK"
++  echo "   timeout:${CELL_TIMEOUT}s/cell   timeout-bin:${_TIMEOUT_BIN:-<fallback>}"
++fi
+ echo ""
+ 
+ # Prime the canonical pointer digest for $T from a real install. Structurally
+-- 
+2.50.1 (Apple Git-155)
+

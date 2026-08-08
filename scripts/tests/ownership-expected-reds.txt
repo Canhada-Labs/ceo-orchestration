@@ -1,0 +1,15 @@
+# PLAN-168 AC-5 — the EXPECTED set of non-GREEN cells in the ownership e2e.
+# The nightly gate compares the observed RED set against the OWN- lines below
+# and fails on ANY difference — including shrinkage: an all-green run means
+# the truth table changed, which is a reason to STOP, not to celebrate
+# (CLAUDE.md §4). Any TIMEOUT/ESCAPE/AMBIG status fails outright.
+# Causes are recorded in docs/ownership-decision-table.md and ADR-190.
+#   OWN-0016 — product defect (open)
+#   OWN-0024 — test defect (open)
+#   OWN-0027 — test defect (open)
+# OWN-0074 was closed by PLAN-168 W2 (INV-4 cure): the shared generator makes
+# install and upgrade produce identical pointers, so the recorded digest
+# finally matches the disk. It is history, not an expectation.
+OWN-0016
+OWN-0024
+OWN-0027

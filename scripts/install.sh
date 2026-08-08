@@ -1884,50 +1884,34 @@ install_protocol_pointer() {
     return 0
   fi
 
-  # Compute a relative path from $TARGET to $SOURCE_DIR when possible.
-  # If the framework repo lives outside the target repo (common case),
-  # we fall back to {{PROTOCOL_SOURCE}} which the user substitutes
-  # manually. Absolute paths are NOT hardcoded — they break portability
-  # across dev machines and CI runners.
+  # PLAN-168 W2 (AC-6, Owner decision D1-b): the body comes from the ONE
+  # shared generator in _framework_manifest_set.sh — never a private heredoc.
+  # INV-4 existed because this function and upgrade.sh each carried their own
+  # copy of this text; a silent local fallback would resurrect the class, so
+  # a missing generator is a broken checkout and fails LOUD.
   #
-  # Relative-path heuristic: if $SOURCE_DIR starts with $TARGET, the
-  # framework was copied INTO the target — use a relative pointer. In
-  # ALL other cases (e.g. adopter clones framework elsewhere), we emit
-  # the user-editable {{PROTOCOL_SOURCE}} marker and document next steps.
-  local pointer_body
-  case "$SOURCE_DIR" in
-    "$TARGET"/*)
-      local rel="${SOURCE_DIR#$TARGET/}"
-      pointer_body="The full CEO orchestration protocol lives at:
-./${rel}/PROTOCOL.md
-
-To pull updates:
-  ( cd ./${rel} && git pull )
-  ./${rel}/scripts/upgrade.sh . --profile $PROFILE --stack $STACK"
-      ;;
-    *)
-      pointer_body="The full CEO orchestration protocol lives at:
-{{PROTOCOL_SOURCE}}/PROTOCOL.md
-
-Edit {{PROTOCOL_SOURCE}} to point at your ceo-orchestration checkout
-(e.g. ../ceo-orchestration or \$HOME/src/ceo-orchestration).
-
-To pull updates:
-  ( cd {{PROTOCOL_SOURCE}} && git pull )
-  {{PROTOCOL_SOURCE}}/scripts/upgrade.sh $TARGET --profile $PROFILE --stack $STACK"
-      ;;
-  esac
+  # Relative-path heuristic (unchanged): if $SOURCE_DIR starts with $TARGET,
+  # the framework was copied INTO the target — relative pointer. In ALL other
+  # cases the body is written with the user-editable {{PROTOCOL_SOURCE}}
+  # marker and the placeholder substitution pass below resolves it.
+  command -v _render_protocol_pointer >/dev/null 2>&1 || {
+    echo "    ERROR: _render_protocol_pointer unavailable (scripts/_framework_manifest_set.sh not sourced) — cannot write PROTOCOL.md pointer" >&2
+    return 1
+  }
 
   if [[ "$DRY_RUN" -eq 1 ]]; then
     echo "    (dry-run) would CREATE: PROTOCOL.md (pointer)"
     return 0
   fi
 
-  cat > "$TARGET/PROTOCOL.md" <<EOF
-# Protocol reference
-
-$pointer_body
-EOF
+  case "$SOURCE_DIR" in
+    "$TARGET"/*)
+      _render_protocol_pointer "$SOURCE_DIR" "$TARGET" "$PROFILE" "$STACK" "" > "$TARGET/PROTOCOL.md"
+      ;;
+    *)
+      _render_protocol_pointer_degraded "$TARGET" "$PROFILE" "$STACK" > "$TARGET/PROTOCOL.md"
+      ;;
+  esac
   echo "    CREATED: PROTOCOL.md (pointer)"
   _state_record_op "install_protocol_pointer" "PROTOCOL.md"
   # PLAN-166 F3 (ADR-155-AMEND-1): registered delivery — this line is only

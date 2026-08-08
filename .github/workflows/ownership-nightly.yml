@@ -1,0 +1,107 @@
+name: Ownership Nightly
+
+# PLAN-168 W1 (AC-4/AC-5, Owner decision D4): the ownership e2e runs the FULL
+# truth table — 62 real install/upgrade cells, ~25 min locally, 2-3x that on a
+# 2-core runner — so it cannot live inside smoke-install's 25-min job (that
+# budget was already raised 4x: 5→8→20→25). And `schedule:` events IGNORE
+# `paths:` filters, so the nightly split is a separate WORKFLOW, not a filter
+# entry (debate r1 devops must-fix 1). The fast per-PR half (the unit oracle)
+# stays in smoke-install.yml.
+#
+# The gate compares the observed non-GREEN set against
+# scripts/tests/ownership-expected-reds.txt and fails on ANY difference —
+# including shrinkage. 4 deliberate reds are part of the contract
+# (CLAUDE.md §4): an all-green run means the table changed — STOP and find
+# out why, never celebrate. NEVER run the harness with --map here: --map is a
+# reporting mode that exits 0 over failures (a dead gate by construction).
+
+on:
+  schedule:
+    # Off-peak UTC, off-minute deliberately (fleet etiquette — avoid :00/:30).
+    - cron: "43 6 * * *"
+  # Manual runs for harness/table PRs that want the full e2e before merge.
+  workflow_dispatch: {}
+
+concurrency:
+  group: ownership-nightly
+  cancel-in-progress: true
+
+jobs:
+  ownership-e2e:
+    # PLAN-012 Phase 2 CEO_SOTA_DISABLE parity (same switch as smoke-install).
+    if: vars.CEO_SOTA_DISABLE != '1'
+    runs-on: ubuntu-latest
+    # ~25 min local (Darwin arm64, 16 cores, 2026-08-07); ubuntu-latest is the
+    # usual 2-3x slower => 50-75 min expected. Same anti-flake sizing rule as
+    # the smoke-install budget notes: leave headroom, re-tighten on a real p95.
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        # SHA-pinned (same pin as smoke-install.yml): actions/checkout@v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 1
+
+      # `fetch-depth: 1` produces a checkout with NO tags, and the
+      # legacy_pristine* fixtures build from a REAL shipped tree. The tag is
+      # READ FROM THE HARNESS (--print-legacy-tag) so this workflow never
+      # becomes a second copy of that truth (same --print-pin shape as the
+      # parity e2e in smoke-install.yml).
+      - name: Fetch the legacy_pristine tag
+        run: |
+          set -euo pipefail
+          TAG="$(bash scripts/tests/test-ownership-table.sh --print-legacy-tag)"
+          echo "legacy pristine tag: $TAG"
+          git fetch --no-tags --depth 1 origin "+refs/tags/$TAG:refs/tags/$TAG"
+          git rev-parse --verify "refs/tags/$TAG^{commit}"
+
+      - name: Install jq (install.sh settings merge dependency)
+        run: |
+          set -euo pipefail
+          if ! command -v jq >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq jq
+          fi
+          jq --version
+
+      # Fast preflight: a broken DECISION should fail in milliseconds here,
+      # not 40 minutes into the observation run.
+      - name: Ownership verdict unit oracle (preflight)
+        run: |
+          set -euo pipefail
+          bash scripts/tests/test-ownership-verdict-unit.sh
+
+      # PLAN-168 W2 (AC-6/AC-6b): INV-4 as an executable assertion — install
+      # and upgrade produce the SAME pointer (byte identity + content
+      # soundness), repeat upgrades are idempotent, a degraded body is CURED
+      # with backup, and an adopter-customized pointer is PRESERVED (S238).
+      - name: Protocol pointer INV-4 e2e (4 legs)
+        run: |
+          set -euo pipefail
+          bash scripts/tests/test-protocol-pointer-inv4.sh
+
+      # The gate itself is proven BEFORE it is trusted: every failure mode it
+      # claims to catch is planted with a fake harness and must go red. A CI
+      # gate nobody can test is a gate nobody has proven (PLAN-167: 8
+      # instrument defects).
+      - name: Gate positive control (planted failure modes)
+        run: |
+          set -euo pipefail
+          bash scripts/tests/test-ownership-nightly-gate.sh
+
+      # PLAN-168 AC-5 — the SCRIPT is the gate (debate r1 QA must-fix 2:
+      # describing behavior is not a gate). ownership-nightly-gate.sh runs the
+      # e2e and enforces: rc>=2 = infra error (never comparable); summary line
+      # present with HARNESS-ERR=0 (partial output fails); observed non-GREEN
+      # id set == scripts/tests/ownership-expected-reds.txt exactly; rc
+      # coherent with the set (non-empty => rc=1, empty => rc=0). NEVER --map.
+      - name: Ownership e2e — full table vs expected non-GREEN set
+        env:
+          # 60s/cell flakes on 2-core CI iron (2-3x slower than the local
+          # baseline the default was sized on).
+          CELL_TIMEOUT: "180"
+        run: |
+          set -euo pipefail
+          bash scripts/tests/ownership-nightly-gate.sh

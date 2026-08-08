@@ -16,6 +16,9 @@
 #   test-ownership-table.sh --map        emit the map only (no pass/fail exit)
 #   test-ownership-table.sh --list       list row ids and exit
 #   test-ownership-table.sh --keep       keep the scratch dir (debugging)
+#   test-ownership-table.sh --print-legacy-tag   print the pinned legacy tag
+#   test-ownership-table.sh --stable-header      machine-independent header
+#                                        (for RECORDING a committable baseline)
 #
 # Exit: 0 = every row matched its expected pair. 1 = at least one mismatch.
 #       2 = harness/usage error (never confused with a row failure).
@@ -29,11 +32,18 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 REPO_ROOT="$( cd "$SCRIPT_DIR/../.." && pwd )"
 TSV="$SCRIPT_DIR/ownership_table.tsv"
 
+# The ONE copy of the legacy-pristine pin. The legacy_pristine* fixtures build
+# from this tag, and CI fetches it via --print-legacy-tag — the workflow never
+# hardcodes a second copy of this truth (PLAN-168 W1, same --print-pin shape
+# as test-install-upgrade-parity-e2e.sh).
+LEGACY_TAG="v1.2.0"
+
 CELL_TIMEOUT="${CELL_TIMEOUT:-60}"
 ONLY=""
 MAP_ONLY=0
 LIST_ONLY=0
 KEEP=0
+STABLE_HEADER=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -41,7 +51,9 @@ while [[ $# -gt 0 ]]; do
     --map)  MAP_ONLY=1; shift ;;
     --list) LIST_ONLY=1; shift ;;
     --keep) KEEP=1; shift ;;
-    -h|--help) sed -n '2,30p' "${BASH_SOURCE[0]}"; exit 0 ;;
+    --print-legacy-tag) printf '%s\n' "$LEGACY_TAG"; exit 0 ;;
+    --stable-header) STABLE_HEADER=1; shift ;;
+    -h|--help) sed -n '2,33p' "${BASH_SOURCE[0]}"; exit 0 ;;
     *) echo "ERROR: unknown argument: $1" >&2; exit 2 ;;
   esac
 done
@@ -54,6 +66,15 @@ done
   echo "ERROR: cannot source scripts/_hash_lib.sh" >&2; exit 2; }
 command -v _hash_file  >/dev/null 2>&1 || { echo "ERROR: _hash_file missing"  >&2; exit 2; }
 command -v _hash_stdin >/dev/null 2>&1 || { echo "ERROR: _hash_stdin missing" >&2; exit 2; }
+
+# PLAN-168 W2: the shared pointer generator + degraded recognizer. The
+# `degraded` fixture must be rendered by the ONE template — a hand-built
+# approximation would test the fixture, not the cure.
+# shellcheck source=/dev/null
+. "$REPO_ROOT/scripts/_framework_manifest_set.sh" 2>/dev/null || {
+  echo "ERROR: cannot source scripts/_framework_manifest_set.sh" >&2; exit 2; }
+command -v _render_protocol_pointer_degraded >/dev/null 2>&1 || {
+  echo "ERROR: _render_protocol_pointer_degraded missing (W2 not in tree)" >&2; exit 2; }
 
 # --- scratch ----------------------------------------------------------------
 # NEVER $HOME, NEVER inside the repo (PLAN-167 W0.3 hard requirement).
@@ -348,19 +369,29 @@ _mutate_surface() {  # $1 surface, $2 live_type, $3 live_content, $4 src root, $
         rm -rf "$p"; mkdir -p "$( dirname "$p" )"; cp -R "$src_root/$rel" "$p" 2>/dev/null || true
       fi
       ;;
+    degraded)
+      # PLAN-168 W2 (AC-6b): the framework's OWN damage — the
+      # {{PROTOCOL_SOURCE}}-literal body every pre-fix upgrade wrote. Rendered
+      # by the shared generator (never a hand-built approximation); the
+      # recognizer extracts the invocation values from the file itself, so
+      # the pair used here only has to be internally consistent.
+      if [[ "$surface" == "protocol" && ! -L "$p" && ! -d "$p" ]]; then
+        _render_protocol_pointer_degraded "$T" core generic > "$p"
+      fi
+      ;;
     legacy_pristine)
-      # A REAL v1.2.0 SPEC/v1 tree from the tag the pristine fingerprints were
-      # derived from — never a hand-built approximation, which would test the
-      # fixture rather than the migration.
-      if ! git -C "$REPO_ROOT" rev-parse -q --verify 'refs/tags/v1.2.0^{}' >/dev/null 2>&1; then
-        echo "FIXTURE-ERR: tag v1.2.0 is not available in this checkout." >&2
+      # A REAL $LEGACY_TAG SPEC/v1 tree from the tag the pristine fingerprints
+      # were derived from — never a hand-built approximation, which would test
+      # the fixture rather than the migration.
+      if ! git -C "$REPO_ROOT" rev-parse -q --verify "refs/tags/$LEGACY_TAG^{}" >/dev/null 2>&1; then
+        echo "FIXTURE-ERR: tag $LEGACY_TAG is not available in this checkout." >&2
         echo "             legacy_pristine rows need the REAL shipped tree, never an" >&2
         echo "             approximation. A CI checkout using fetch-depth:1 has NO tags" >&2
-        echo "             — that job needs fetch-depth:0 or fetch-tags:true." >&2
+        echo "             — fetch it first: this script --print-legacy-tag names it." >&2
         return 1
       fi
       rm -rf "$p"; mkdir -p "$p"
-      git -C "$REPO_ROOT" archive v1.2.0 SPEC/v1 2>/dev/null \
+      git -C "$REPO_ROOT" archive "$LEGACY_TAG" SPEC/v1 2>/dev/null \
         | ( cd "$T" && tar -xf - ) || return 1
       ;;
     legacy_pristine_partial)
@@ -369,12 +400,12 @@ _mutate_surface() {  # $1 surface, $2 live_type, $3 live_content, $4 src root, $
       # matches a shipped release, so content alone reads "pristine" — and the
       # tree must STILL be refused, because a partial inventory can never
       # certify a wholesale replace (ADR-155-AMEND-1 §4).
-      if ! git -C "$REPO_ROOT" rev-parse -q --verify 'refs/tags/v1.2.0^{}' >/dev/null 2>&1; then
-        echo "FIXTURE-ERR: tag v1.2.0 unavailable (see legacy_pristine above)" >&2
+      if ! git -C "$REPO_ROOT" rev-parse -q --verify "refs/tags/$LEGACY_TAG^{}" >/dev/null 2>&1; then
+        echo "FIXTURE-ERR: tag $LEGACY_TAG unavailable (see legacy_pristine above)" >&2
         return 1
       fi
       rm -rf "$p"; mkdir -p "$p"
-      git -C "$REPO_ROOT" archive v1.2.0 SPEC/v1 2>/dev/null \
+      git -C "$REPO_ROOT" archive "$LEGACY_TAG" SPEC/v1 2>/dev/null \
         | ( cd "$T" && tar -xf - ) || return 1
       ln -s /dev/null "$p/adopter-added.link" 2>/dev/null || true
       ;;
@@ -464,6 +495,22 @@ _derive_hash_source() {  # $1 surface $2 after_rec $3 prior_rec $4 src_root
   # reading as HASH_PRIOR_RECORD, and the canonical name is then reached only
   # when the two genuinely differ — i.e. when the pointer was customised, which
   # is the one cell where the distinction carries meaning.
+  #
+  # PLAN-168 W2 (codex rail r2 P1): post-INV-4, install and upgrade produce
+  # the SAME bytes, so on continuity rows c_prior == c_pointer even for the
+  # preserved-EDITED cell — the two names collapse into one claim. When they
+  # alias and the record matches that one digest, report the name the TABLE
+  # expects (5th arg): letting probe order pick would manufacture a
+  # distinction the observation cannot make, and the cell would read RED over
+  # a naming artifact. This resolves ONLY the aliased case — when the digests
+  # genuinely differ, the probes below decide exactly as before.
+  local exp_hint="${5:-}"
+  if [[ "$surface" == "protocol" && -n "$c_prior" && -n "$c_pointer" \
+        && "$c_prior" == "$c_pointer" && "$got" == "$c_prior" ]]; then
+    case "$exp_hint" in
+      HASH_PRIOR_RECORD|HASH_CANONICAL_POINTER) printf '%s' "$exp_hint"; return 0 ;;
+    esac
+  fi
   [[ -n "$c_prior"   && "$got" == "$c_prior"   ]] && { printf 'HASH_PRIOR_RECORD'; return 0; }
   if [[ "$surface" == "protocol" && -n "$c_pointer" && "$got" == "$c_pointer" ]]; then
     printf 'HASH_CANONICAL_POINTER'; return 0
@@ -611,7 +658,7 @@ _run_row() {
     got_verdict="TIMEOUT"; got_hash="TIMEOUT"
   else
     got_verdict="$( _derive_verdict "$b_digest" "$a_digest" "$b_rec" "$a_rec" "$out" "$surface" "$rel" "$operation" )"
-    got_hash="$( _derive_hash_source "$surface" "$a_rec" "$b_rec" "$src" )"
+    got_hash="$( _derive_hash_source "$surface" "$a_rec" "$b_rec" "$src" "$exp_hash" )"
   fi
 
   # --- compare -------------------------------------------------------------
@@ -648,10 +695,21 @@ if [[ "$LIST_ONLY" -eq 1 ]]; then
 fi
 
 echo "== PLAN-167 ownership decision table =="
-echo "   table:  $TSV"
-echo "   source: $REPO_ROOT"
-echo "   scratch:$WORK"
-echo "   timeout:${CELL_TIMEOUT}s/cell   timeout-bin:${_TIMEOUT_BIN:-<fallback>}"
+if [[ "$STABLE_HEADER" -eq 1 ]]; then
+  # Machine-independent header, for RECORDING a baseline that gets committed.
+  # The absolute-path variant below leaked runner paths into the repo once
+  # (ownership-baseline-map.txt, PLAN-168 debate r1 devops must-fix 4) — a
+  # committed baseline must diff clean across machines.
+  echo "   table:  scripts/tests/ownership_table.tsv"
+  echo "   source: <repo>"
+  echo "   scratch:<scratch>"
+  echo "   timeout:${CELL_TIMEOUT}s/cell   timeout-bin:<bin>"
+else
+  echo "   table:  $TSV"
+  echo "   source: $REPO_ROOT"
+  echo "   scratch:$WORK"
+  echo "   timeout:${CELL_TIMEOUT}s/cell   timeout-bin:${_TIMEOUT_BIN:-<fallback>}"
+fi
 echo ""
 
 # Prime the canonical pointer digest for $T from a real install. Structurally

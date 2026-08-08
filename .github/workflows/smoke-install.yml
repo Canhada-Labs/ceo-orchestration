@@ -25,6 +25,27 @@ on:
       # scripts/tests/*.sh runs ONLY in this workflow (same r11/r20 wiring
       # rule as the parity e2e above).
       - "scripts/tests/test-upgrade-spec-ownership.sh"
+      # PLAN-168 W1 (AC-1): the PLAN-167 ownership oracles + their truth
+      # table + contract doc. The unit oracle runs per-PR in THIS workflow;
+      # the ~25-min e2e runs in ownership-nightly.yml (schedule: ignores
+      # paths:, so it cannot live behind this filter) — but a PR touching
+      # the table/harness/contract must still light up the fast gate here.
+      # Without these entries, a PR changing only the table skips the gate
+      # entirely: the r10-F4 "red gate nobody runs" class, again.
+      - "scripts/tests/test-ownership-verdict-unit.sh"
+      - "scripts/tests/test-ownership-table.sh"
+      - "scripts/tests/ownership_table.tsv"
+      - "docs/ownership-decision-table.md"
+      # PLAN-168 W1+W2 (rail r3 P1): the nightly gate + its positive control
+      # get fast per-PR steps HERE too — without these entries a PR could
+      # break the gate's rc/status handling while every PR check stays green.
+      # The pointer-generator render control is the per-PR half of INV-4
+      # (the full 4-leg e2e runs in ownership-nightly.yml).
+      - "scripts/tests/ownership-nightly-gate.sh"
+      - "scripts/tests/test-ownership-nightly-gate.sh"
+      - "scripts/tests/ownership-expected-reds.txt"
+      - "scripts/tests/test-protocol-pointer-render.sh"
+      - "scripts/tests/test-protocol-pointer-inv4.sh"
       - "templates/**"
       # Widened from SPEC/v1/install-cli.md: SPEC/v1 is delivered by install.sh
       # and (until F3) by nothing in upgrade.sh, so ANY SPEC/v1 change is a
@@ -58,6 +79,20 @@ on:
       - "scripts/tests/test-install-upgrade-parity-e2e.sh"
       - "scripts/tests/_parity_classify.py"
       - "scripts/tests/test-upgrade-spec-ownership.sh"
+      - "scripts/tests/test-ownership-verdict-unit.sh"
+      - "scripts/tests/test-ownership-table.sh"
+      - "scripts/tests/ownership_table.tsv"
+      - "docs/ownership-decision-table.md"
+      # PLAN-168 W1+W2 (rail r3 P1): the nightly gate + its positive control
+      # get fast per-PR steps HERE too — without these entries a PR could
+      # break the gate's rc/status handling while every PR check stays green.
+      # The pointer-generator render control is the per-PR half of INV-4
+      # (the full 4-leg e2e runs in ownership-nightly.yml).
+      - "scripts/tests/ownership-nightly-gate.sh"
+      - "scripts/tests/test-ownership-nightly-gate.sh"
+      - "scripts/tests/ownership-expected-reds.txt"
+      - "scripts/tests/test-protocol-pointer-render.sh"
+      - "scripts/tests/test-protocol-pointer-inv4.sh"
       - "templates/**"
       - "SPEC/v1/**"
       - "scripts/doctor.sh"
@@ -128,6 +163,32 @@ jobs:
             sudo apt-get install -y -qq jq
           fi
           jq --version
+
+      # PLAN-168 W1 (AC-4, per-PR half): the DECISION oracle —
+      # _ownership_verdict() against every truth-table cell, in milliseconds.
+      # The OBSERVATION half (the ~25-min e2e) runs in ownership-nightly.yml;
+      # this fast half is what makes table/harness PRs cheap to gate.
+      - name: Ownership verdict unit oracle (milliseconds)
+        run: |
+          set -euo pipefail
+          bash scripts/tests/test-ownership-verdict-unit.sh
+
+      # PLAN-168 W1 (rail r3 P1): the nightly gate's fake-harness control is
+      # milliseconds — run it per-PR so a PR touching the gate cannot break
+      # its rc/status handling while PR checks stay green.
+      - name: Ownership nightly-gate positive control (fake harness)
+        run: |
+          set -euo pipefail
+          bash scripts/tests/test-ownership-nightly-gate.sh
+
+      # PLAN-168 W2 (AC-6, per-PR half of INV-4): the shared pointer
+      # generator's 8-scenario control — includes ONE real install (~1-2 min
+      # on CI iron). The full install->upgrade->cure e2e (4 legs, ~5 min CI)
+      # is nightly-only; MEASURED per the smoke budget notes above.
+      - name: Protocol pointer render control (generator parity)
+        run: |
+          set -euo pipefail
+          bash scripts/tests/test-protocol-pointer-render.sh
 
       - name: Run smoke install
         run: |

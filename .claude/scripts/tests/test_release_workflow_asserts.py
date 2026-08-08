@@ -1012,5 +1012,174 @@ class W1BGuardModuleContractTest(TestEnvContext):
         self.assertEqual(len(codes), len(set(codes)))
 
 
+# --- PLAN-168 W1 (AC-1/AC-2/AC-4) ------------------------------------
+# Marker written into the PLAN-168 smoke-install.yml + ownership-nightly.yml
+# edits; its presence in the LIVE file means the W1 ceremony landed and the
+# live copy is authoritative (same convention as _MARKER / _MARKER_166).
+_MARKER_168 = "PLAN-168 W1"
+_STAGED_168 = _REPO / ".claude" / "plans" / "PLAN-168" / "staged"
+_STAGED_168_WF = _STAGED_168 / ".github" / "workflows"
+
+# AC-1/AC-2: paths that MUST be present in BOTH smoke-install filter lists.
+# _hash_lib.sh is the r10-F4 regression pin (it was already wired; this
+# assert keeps it that way — AC-2 is an assertion, not work).
+_OWNERSHIP_FILTER_PATHS = frozenset({
+    "scripts/_hash_lib.sh",
+    "scripts/_framework_manifest_set.sh",
+    "scripts/tests/test-ownership-verdict-unit.sh",
+    "scripts/tests/test-ownership-table.sh",
+    "scripts/tests/ownership_table.tsv",
+    "docs/ownership-decision-table.md",
+    # rail r3 P1: the nightly gate + controls must be per-PR gated too.
+    "scripts/tests/ownership-nightly-gate.sh",
+    "scripts/tests/test-ownership-nightly-gate.sh",
+    "scripts/tests/ownership-expected-reds.txt",
+    "scripts/tests/test-protocol-pointer-render.sh",
+    "scripts/tests/test-protocol-pointer-inv4.sh",
+})
+
+
+def _plan168_text(name: str) -> Optional[Tuple[str, str]]:
+    """Return (text, context) for a PLAN-168 workflow edit, or None pre-landing."""
+    live = _WF / name
+    if live.is_file():
+        live_text = live.read_text(encoding="utf-8")
+        if _MARKER_168 in live_text:
+            return live_text, "live"
+    staged = _STAGED_168_WF / name
+    if staged.is_file():
+        return staged.read_text(encoding="utf-8"), "staged"
+    return None
+
+
+def _workflow_paths_lists(text: str) -> Tuple[list, list]:
+    """Extract (pull_request.paths, push.paths) entries from workflow text.
+
+    Text-based on purpose (this file's convention — no yaml dependency in
+    the stdlib-only posture). Collects quoted `- "..."` items under each
+    `paths:` key, skipping comments, stopping at the first line that
+    dedents to the `paths:` level or shallower.
+    """
+    results = []
+    for trigger in ("pull_request:", "push:"):
+        lines = text.splitlines()
+        try:
+            t_idx = next(
+                i for i, ln in enumerate(lines)
+                if ln.strip() == trigger
+                and (len(ln) - len(ln.lstrip())) == 2
+            )
+        except StopIteration:
+            results.append([])
+            continue
+        entries = []
+        paths_indent = None
+        for ln in lines[t_idx + 1:]:
+            stripped = ln.strip()
+            indent = len(ln) - len(ln.lstrip())
+            if stripped and indent <= 2:
+                break  # next trigger / top-level key
+            if paths_indent is None:
+                if stripped == "paths:":
+                    paths_indent = indent
+                continue
+            if not stripped or stripped.startswith("#"):
+                continue
+            if indent <= paths_indent:
+                break
+            m = re.match(r'-\s+"([^"]+)"', stripped)
+            if m:
+                entries.append(m.group(1))
+        results.append(entries)
+    return results[0], results[1]
+
+
+class Plan168OwnershipWiringTest(TestEnvContext):
+    """AC-1/AC-2: the ownership oracles are WIRED, and the two smoke-install
+    filter lists cannot drift apart again (the r10-F4 "red gate nobody
+    runs" class, closed as an assertion instead of a memory)."""
+
+    def _smoke(self) -> Tuple[str, str]:
+        ctx = _plan168_text("smoke-install.yml")
+        if ctx is None:
+            self.skipTest(
+                "PLAN-168 W1 not landed and no staged copy on disk "
+                "(pre-landing CI window)"
+            )
+        return ctx
+
+    def test_filter_lists_are_identical(self):
+        text, _ = self._smoke()
+        pr, push = _workflow_paths_lists(text)
+        self.assertTrue(pr, "pull_request paths filter not found/empty")
+        self.assertTrue(push, "push paths filter not found/empty")
+        # Name-by-name set equality, both directions, duplicates rejected —
+        # the file's own comment says KEEP IDENTICAL.
+        self.assertEqual(
+            len(pr), len(set(pr)), "duplicate entries in pull_request paths")
+        self.assertEqual(
+            len(push), len(set(push)), "duplicate entries in push paths")
+        self.assertEqual(
+            sorted(pr), sorted(push),
+            "smoke-install pull_request and push paths filters have drifted",
+        )
+
+    def test_ownership_paths_present_in_both_filters(self):
+        text, _ = self._smoke()
+        pr, push = _workflow_paths_lists(text)
+        for required in sorted(_OWNERSHIP_FILTER_PATHS):
+            self.assertIn(
+                required, pr, f"{required} missing from pull_request paths")
+            self.assertIn(
+                required, push, f"{required} missing from push paths")
+
+    def test_unit_oracle_step_wired(self):
+        text, _ = self._smoke()
+        steps = text.split("steps:", 1)[-1]
+        self.assertIn(
+            "scripts/tests/test-ownership-verdict-unit.sh", steps,
+            "unit oracle step missing from the smoke job",
+        )
+        self.assertIn(
+            "scripts/tests/test-ownership-nightly-gate.sh", steps,
+            "nightly-gate positive control step missing from the smoke job",
+        )
+        self.assertIn(
+            "scripts/tests/test-protocol-pointer-render.sh", steps,
+            "pointer render control step missing from the smoke job",
+        )
+
+    def test_nightly_workflow_contract(self):
+        ctx = _plan168_text("ownership-nightly.yml")
+        if ctx is None:
+            self.skipTest(
+                "PLAN-168 W1 not landed and no staged copy on disk "
+                "(pre-landing CI window)"
+            )
+        text, _ = ctx
+        self.assertIn("schedule:", text, "nightly trigger missing")
+        self.assertIn("cron:", text, "cron expression missing")
+        self.assertIn("workflow_dispatch:", text, "manual dispatch missing")
+        self.assertIn(
+            "scripts/tests/ownership-nightly-gate.sh", text,
+            "the gate script is not what the nightly runs",
+        )
+        self.assertIn(
+            "scripts/tests/test-ownership-nightly-gate.sh", text,
+            "gate positive control step missing",
+        )
+        self.assertIn(
+            "scripts/tests/test-protocol-pointer-inv4.sh", text,
+            "INV-4 4-leg e2e step missing from the nightly",
+        )
+        # --map is a reporting mode that exits 0 over failures — a dead gate
+        # by construction (harness NOTE, PLAN-168 debate r1 QA must-fix 2).
+        # Prose in comments may mention it; an INVOCATION is the harness
+        # name followed by --map on the same line.
+        for ln in text.splitlines():
+            if "test-ownership-table.sh" in ln and "--map" in ln:
+                self.fail(f"--map wired into the nightly gate: {ln.strip()}")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -555,6 +555,15 @@ _ownership_verdict() {
     _ov_owned=1                                   # new delivery
   elif [ "$_ov_lcontent" = "pristine" ] || [ "$_ov_lcontent" = "legacy_pristine" ]; then
     _ov_owned=1                                   # current-source takeover / legacy migration
+  elif [ "$_ov_lcontent" = "degraded" ]; then
+    # PLAN-168 W2 (AC-6b, Owner decision D2): a DEGRADED body — byte-exact
+    # reconstruction of the {{PROTOCOL_SOURCE}}-literal template the broken
+    # upgrade wrote (recognized by _protocol_pointer_is_degraded, NEVER by
+    # substring) — is the framework's own output, not adopter content. Owned
+    # even without a delivery record, same content-proven takeover doctrine
+    # as legacy_pristine (the r20 precedent). Downstream this falls into the
+    # protocol REFRESH route: the cure, with the standard backup.
+    _ov_owned=1
   fi
   # legacy_pristine_partial is deliberately NOT owned: every regular file may
   # match a shipped release, but a tree carrying an entry the fingerprint
@@ -594,4 +603,119 @@ _ownership_verdict() {
     protocol) printf 'REFRESH HASH_CANONICAL_POINTER' ;;
     *)        printf 'REFRESH HASH_SOURCE' ;;
   esac
+}
+# =============================================================================
+# PLAN-168 W2 (AC-6, Owner decision D1-b) — the ONE protocol-pointer generator.
+#
+# INV-4 existed because install.sh and upgrade.sh each carried a private copy
+# of the pointer heredoc: install substituted {{PROTOCOL_SOURCE}} in a later
+# pass, upgrade hashed (and on REFRESH wrote) the body with the token still
+# literal. Two bodies for the same file. This library is the cure for the
+# CLASS: both callers render through the same function, so the bodies cannot
+# diverge again (ADR-155 decision (i), applied to CONTENT — the shared
+# enumeration solved WHICH paths both sides touch; this solves WHAT they
+# produce).
+#
+# Sourced by scripts/install.sh and scripts/upgrade.sh (same $SCRIPT_DIR
+# pattern as _hash_lib.sh). Bash 3.2-compatible, stdlib/POSIX-tools only.
+#
+# Functions:
+#   _render_protocol_pointer SOURCE_DIR TARGET PROFILE STACK PROTOCOL_SOURCE
+#       Emit the COMPLETE healthy file content ("# Protocol reference" header
+#       included, trailing newline included). Inside-target checkouts get the
+#       relative form; everything else gets the PROTOCOL_SOURCE-resolved form
+#       (never the literal token — the caller passes the resolved value).
+#   _render_protocol_pointer_degraded TARGET PROFILE STACK
+#       Emit the DEGRADED file content: the outside-target template with
+#       {{PROTOCOL_SOURCE}} kept literal. This is byte-for-byte what the
+#       pre-PLAN-168 upgrade.sh wrote on every refresh — the template text is
+#       IDENTICAL across v1.0.1, v1.1.0, v1.2.0 and HEAD (verified by
+#       extracting and diffing all four), so ONE skeleton covers the shipped
+#       population. Residual out of scope: pre-v1.0.1 trees.
+#   _protocol_pointer_is_degraded FILE
+#       rc=0 iff FILE is EXACTLY a degraded body the framework produced:
+#       the invocation-specific values (TARGET/PROFILE/STACK) are extracted
+#       from the file's own upgrade line, the degraded template is re-rendered
+#       with them, and the reconstruction must be byte-identical. Any parse
+#       failure, any adopter edit anywhere, any deviation => rc=1 (fail toward
+#       PRESERVATION — codex rail r1 P1: substring matching would destroy an
+#       adopter file that legitimately CONTAINS the token; rail r2 P1: static
+#       whole-body hashes cannot match invocation-specific bodies).
+# =============================================================================
+
+_render_protocol_pointer() {
+  # $1=SOURCE_DIR $2=TARGET $3=PROFILE $4=STACK $5=PROTOCOL_SOURCE(resolved)
+  _rpp_src="$1"; _rpp_target="$2"; _rpp_profile="$3"; _rpp_stack="$4"; _rpp_psource="$5"
+  case "$_rpp_src" in
+    "$_rpp_target"/*)
+      _rpp_rel="${_rpp_src#"$_rpp_target"/}"
+      printf '%s\n' \
+        "# Protocol reference" \
+        "" \
+        "The full CEO orchestration protocol lives at:" \
+        "./${_rpp_rel}/PROTOCOL.md" \
+        "" \
+        "To pull updates:" \
+        "  ( cd ./${_rpp_rel} && git pull )" \
+        "  ./${_rpp_rel}/scripts/upgrade.sh . --profile $_rpp_profile --stack $_rpp_stack"
+      ;;
+    *)
+      # The healthy outside-target form: the degraded template with the token
+      # substituted EVERYWHERE — exactly what install.sh's placeholder pass
+      # has always produced, so existing healthy pointers keep their digest.
+      _render_protocol_pointer_degraded "$_rpp_target" "$_rpp_profile" "$_rpp_stack" \
+        | sed "s|{{PROTOCOL_SOURCE}}|$( printf '%s' "$_rpp_psource" | sed 's/[|&\\]/\\&/g' )|g"
+      ;;
+  esac
+}
+
+_render_protocol_pointer_degraded() {
+  # $1=TARGET $2=PROFILE $3=STACK — the token stays LITERAL. This is both the
+  # historical broken-upgrade output (the cure's recognition target) and the
+  # pre-substitution install body (one template, one truth).
+  _rppd_target="$1"; _rppd_profile="$2"; _rppd_stack="$3"
+  printf '%s\n' \
+    "# Protocol reference" \
+    "" \
+    "The full CEO orchestration protocol lives at:" \
+    "{{PROTOCOL_SOURCE}}/PROTOCOL.md" \
+    "" \
+    "Edit {{PROTOCOL_SOURCE}} to point at your ceo-orchestration checkout" \
+    "(e.g. ../ceo-orchestration or \$HOME/src/ceo-orchestration)." \
+    "" \
+    "To pull updates:" \
+    "  ( cd {{PROTOCOL_SOURCE}} && git pull )" \
+    "  {{PROTOCOL_SOURCE}}/scripts/upgrade.sh $_rppd_target --profile $_rppd_profile --stack $_rppd_stack"
+}
+
+_protocol_pointer_is_degraded() {
+  # $1=FILE. rc=0 iff the file is byte-identical to a degraded render whose
+  # TARGET/PROFILE/STACK come from the file's own last line. Everything else
+  # (missing file, unparseable line, values with spaces, any edit) => rc=1.
+  _ppid_file="$1"
+  [ -f "$_ppid_file" ] || return 1
+  # Cheap pre-filter: files without the literal token can never be degraded.
+  grep -F -q '{{PROTOCOL_SOURCE}}' "$_ppid_file" 2>/dev/null || return 1
+
+  # The upgrade line is the ONE line carrying all three invocation values:
+  #   {{PROTOCOL_SOURCE}}/scripts/upgrade.sh <target> --profile <p> --stack <s>
+  _ppid_line="$( grep -F '{{PROTOCOL_SOURCE}}/scripts/upgrade.sh ' "$_ppid_file" 2>/dev/null | head -1 )"
+  [ -n "$_ppid_line" ] || return 1
+
+  # POSIX-safe field extraction; single-token values only. A target/profile/
+  # stack containing whitespace makes the line ambiguous => no match =>
+  # preserved (documented residual, consistent with fail-toward-preservation).
+  _ppid_target="$( printf '%s\n' "$_ppid_line" | sed -n 's|.*scripts/upgrade\.sh \([^ ][^ ]*\) --profile .*|\1|p' )"
+  _ppid_profile="$( printf '%s\n' "$_ppid_line" | sed -n 's|.* --profile \([^ ][^ ]*\) --stack .*|\1|p' )"
+  _ppid_stack="$( printf '%s\n' "$_ppid_line" | sed -n 's|.* --stack \([^ ][^ ]*\)$|\1|p' )"
+  [ -n "$_ppid_target" ] && [ -n "$_ppid_profile" ] && [ -n "$_ppid_stack" ] || return 1
+
+  _ppid_tmp="$( mktemp "${TMPDIR:-/tmp}/ceo-ptr-recon.XXXXXX" )" || return 1
+  _render_protocol_pointer_degraded "$_ppid_target" "$_ppid_profile" "$_ppid_stack" > "$_ppid_tmp"
+  if cmp -s "$_ppid_tmp" "$_ppid_file"; then
+    rm -f "$_ppid_tmp" 2>/dev/null
+    return 0
+  fi
+  rm -f "$_ppid_tmp" 2>/dev/null
+  return 1
 }

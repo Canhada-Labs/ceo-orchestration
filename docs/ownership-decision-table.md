@@ -116,12 +116,35 @@ after earlier surfaces have already been modified.
 |---|---|
 | `pristine` | byte-identical to what **this** source would deliver |
 | `legacy_pristine` | matches a `SPEC/v1` fingerprint the framework shipped at v1.2.0 or earlier |
-| `edited` | neither |
+| `degraded` | (protocol only, PLAN-168 W2) byte-exact reconstruction of the `{{PROTOCOL_SOURCE}}`-literal pointer template a pre-PLAN-168 `upgrade.sh` wrote — the framework's OWN output, never adopter content |
+| `edited` | none of the above |
 
 `legacy_pristine` exists because v1.2-and-earlier installs never enumerated
 `SPEC/v1`, so no record can distinguish a framework-installed tree from an
 adopter-authored one; the ambiguity is resolved by content against three
 pinned fingerprints.
+
+`degraded` is the same doctrine applied to the pointer (the r20 precedent):
+the broken upgrade left `{{PROTOCOL_SOURCE}}` literal while embedding the
+invocation's `TARGET`/`PROFILE`/`STACK`, so recognition is by **template
+reconstruction** — extract the invocation values from the file's own upgrade
+line, re-render the one shipped template (identical across v1.0.1→HEAD,
+verified by extraction), and require byte equality. Substring matching is
+forbidden (an adopter file that legitimately *contains* the token would be
+destroyed); a static whole-body hash is useless (each adopter's degraded
+body embeds different values). Any parse failure or deviation ⇒ `edited` ⇒
+preserved. Recognizer: `_protocol_pointer_is_degraded` in
+`scripts/_framework_manifest_set.sh`.
+
+**Hash-name aliasing (post-INV-4).** Once install and upgrade render through
+the one generator, the canonical pointer digest and the prior record are the
+SAME bytes on continuity rows — `HASH_PRIOR_RECORD` and
+`HASH_CANONICAL_POINTER` collapse into one claim. The e2e harness therefore
+treats the two names as equivalent **only when the candidate digests are
+equal and the record matches them** (`_derive_hash_source`, 5th argument);
+when the digests genuinely differ, the probe order decides exactly as
+before. Choosing by probe order in the aliased case would manufacture a
+distinction the observation cannot make.
 
 ### 2.5 `source_has` — does `$SOURCE_DIR` carry this surface?
 
@@ -258,6 +281,7 @@ indistinguishable from an oversight, which is how a defect class hides.
 | **R-02** | `operation ∈ {install_fresh, install_rerun}` ⇒ `skip_requested=none` | `--skip` is an `upgrade.sh` flag. `install.sh` has no equivalent (verified: zero occurrences). |
 | **R-03** | `surface=protocol` ⇒ `source_has=yes` | The pointer is generated from a heredoc, never copied. There is no source file whose absence could be observed. |
 | **R-04** | `live_content=legacy_pristine` ⇒ `surface=spec` | The pristine fingerprints are a `SPEC/v1`-tree construct. No equivalent exists, or is needed, for a one-line marker or a generated pointer. |
+| **R-04b** | `live_content=degraded` ⇒ `surface=protocol` (PLAN-168 W2) | The degraded template is a pointer construct: only the generated `PROTOCOL.md` ever carried the `{{PROTOCOL_SOURCE}}`-literal body. `SPEC/v1` legacy recognition already has `legacy_pristine`; the marker is a one-line version string with no template to degrade. |
 | **R-05** | `live_type=absent` ⇒ `live_content` undefined | Nothing to hash. |
 | **R-06** | `skip_requested=descendant` ⇒ `surface=spec` | Only `SPEC/v1` is a tree. A path *under* a single file cannot exist. |
 | **R-07** | `live_type=dir_empty` ⇒ `surface=spec` | For the single-file surfaces, an empty directory and a non-empty one behave identically (both yield no record and both are refused as non-regular). The distinction is only load-bearing where per-file records are emitted. |

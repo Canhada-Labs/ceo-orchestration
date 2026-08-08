@@ -1,8 +1,8 @@
 == PLAN-167 ownership decision table ==
-   table:  scripts/tests/ownership_table.tsv
-   source: <repo>
-   scratch:<scratch>
-   timeout:60s/cell   timeout-bin:<bin>
+   table:  /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/619e7994-8171-4443-9eb3-66fb5368512f/scratchpad/plan168-dev/scripts/tests/ownership_table.tsv
+   source: /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/619e7994-8171-4443-9eb3-66fb5368512f/scratchpad/plan168-dev
+   scratch:/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T//plan167-own.KI4nmD
+   timeout:60s/cell   timeout-bin:<fallback>
 
 OWN-0001   GREEN   exp=DELIVER         /HASH_SOURCE            got=DELIVER         /HASH_SOURCE            rc=0   adr-155
 OWN-0002   GREEN   exp=DELIVER         /HASH_CANONICAL_POINTER got=DELIVER         /HASH_CANONICAL_POINTER rc=0   adr-155
@@ -71,3 +71,4 @@ OWN-0093   GREEN   exp=REFRESH         /HASH_CANONICAL_POINTER got=REFRESH      
 OWN-0094   GREEN   exp=PRESERVE_OWNED  /HASH_PRIOR_RECORD      got=PRESERVE_OWNED  /HASH_PRIOR_RECORD      rc=0   plan-168
 
 GREEN=62  RED=3  AMBIG=0  HARNESS-ERR=0
+ownership gate: RED set stable (3 expected RED cells, zero TIMEOUT/ESCAPE/AMBIG)
