@@ -28,8 +28,9 @@
 # failures by design (reporting mode) — a dead gate by construction.
 #
 # Test seams (positive control only — CI uses the defaults):
-#   OWNERSHIP_GATE_HARNESS   command to run instead of the real harness
-#   OWNERSHIP_GATE_EXPECTED  expected-reds file to compare against
+#   OWNERSHIP_GATE_HARNESS       command to run instead of the real harness
+#   OWNERSHIP_GATE_EXPECTED      expected-reds file to compare against
+#   OWNERSHIP_GATE_EXPECTED_ALL  full-id-set file (default: harness --list)
 #
 # Exit: 0 = set stable. 1 = gate failed (set changed / harness error / vacuous
 #       output). 2 = gate usage/infra error (missing expected file).
@@ -69,6 +70,28 @@ fi
 # shrunken expectation. HARNESS-ERR must be literally 0.
 if ! grep -E '^GREEN=[0-9]+[[:space:]]+RED=[0-9]+[[:space:]]+AMBIG=[0-9]+[[:space:]]+HARNESS-ERR=0$' "$MAP" >/dev/null; then
   echo "GATE-RED: summary line missing or HARNESS-ERR>0 — partial or vacuous output cannot pass" >&2
+  exit 1
+fi
+
+# The RED-set comparison alone cannot prove the FULL table ran: a run that
+# silently skipped every GREEN cell would still present the expected REDs and
+# an honest-looking summary (codex pack-review P1). Demand that the observed
+# id set equals the TABLE's id set — authority: the harness's own --list
+# (which reads the TSV), overridable only by the positive control's seam.
+if [[ -n "${OWNERSHIP_GATE_EXPECTED_ALL:-}" ]]; then
+  grep -E '^OWN-' "$OWNERSHIP_GATE_EXPECTED_ALL" | LC_ALL=C sort > "$WORK/all-exp.txt"
+else
+  ( cd "$REPO_ROOT" && bash scripts/tests/test-ownership-table.sh --list ) 2>/dev/null \
+    | awk '{print $1}' | grep -E '^OWN-' | LC_ALL=C sort > "$WORK/all-exp.txt"
+fi
+grep -E '^OWN-[0-9]+[[:space:]]' "$MAP" | awk '{print $1}' | LC_ALL=C sort > "$WORK/all-got.txt"
+if [[ ! -s "$WORK/all-exp.txt" ]]; then
+  echo "GATE-RED: could not derive the full table id set (--list empty) — cannot certify coverage" >&2
+  exit 1
+fi
+if ! diff -u "$WORK/all-exp.txt" "$WORK/all-got.txt" >/dev/null; then
+  echo "GATE-RED: observed cell set != FULL table — a partial run certifies nothing:" >&2
+  diff -u "$WORK/all-exp.txt" "$WORK/all-got.txt" | grep -E '^[+-]OWN' | head -10 >&2
   exit 1
 fi
 

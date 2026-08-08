@@ -20,6 +20,9 @@
 #   S10 expected id degraded to TIMEOUT (same ids)   => gate FAILS
 #   S11 expected id degraded to ESCAPE  (same ids)   => gate FAILS
 #   S12 green cell degraded to AMBIG                 => gate FAILS
+#   S13 PARTIAL run: only the RED rows present, honest summary, correct RED
+#       set — but the table has more cells            => gate FAILS
+#       (codex pack-review P1: RED-set comparison alone certifies nothing)
 #
 # Exit: 0 all scenarios behave. 1 at least one does not. 2 harness error.
 # =============================================================================
@@ -50,13 +53,17 @@ map_line() { # $1=id $2=status
 }
 
 write_map() { # $1=file, then "id:status" pairs; appends summary from counts
+  # Also records every id into $WORK/all.txt — the full-coverage authority
+  # the gate compares against (scenarios that SIMULATE partial coverage
+  # overwrite all.txt afterwards with the larger "true" table).
   local f="$1"; shift
   local green=0 red=0 err="${SUMMARY_ERR:-0}"
-  : > "$f"
+  : > "$f"; : > "$WORK/all.txt"
   local pair id st
   for pair in "$@"; do
     id="${pair%%:*}"; st="${pair##*:}"
     map_line "$id" "$st" >> "$f"
+    printf '%s\n' "$id" >> "$WORK/all.txt"
     case "$st" in GREEN) green=$((green+1)) ;; *) red=$((red+1)) ;; esac
   done
   if [[ "${SUMMARY_OMIT:-0}" -ne 1 ]]; then
@@ -72,6 +79,7 @@ run_gate() { # $1=expected-rc  $2=label
   local want="$1" label="$2" got=0
   OWNERSHIP_GATE_HARNESS="$WORK/fake-harness.sh" \
   OWNERSHIP_GATE_EXPECTED="$WORK/exp.txt" \
+  OWNERSHIP_GATE_EXPECTED_ALL="$WORK/all.txt" \
     bash "$GATE" > "$WORK/gate-out.txt" 2> "$WORK/gate-err.txt" || got=$?
   if [[ "$got" -eq "$want" ]]; then
     echo "PASS  $label (gate rc=$got)"
@@ -155,10 +163,19 @@ write_map "$WORK/map.txt" OWN-0001:AMBIG OWN-0016:RED OWN-0024:RED OWN-0027:RED 
 echo 1 > "$WORK/rc.txt"; mk_fake "$WORK/map.txt" "$WORK/rc.txt"
 run_gate 1 "S12 green cell degraded to AMBIG" || FAILURES=$((FAILURES+1))
 
+# S13 — PARTIAL run: the map carries ONLY the expected RED rows with an
+# honest summary and rc=1; the TABLE (all.txt) says there are more cells.
+# The gate must refuse: a partial run certifies nothing about the greens.
+expected_4
+write_map "$WORK/map.txt" OWN-0016:RED OWN-0024:RED OWN-0027:RED OWN-0074:RED
+printf 'OWN-0001\nOWN-0002\nOWN-0016\nOWN-0024\nOWN-0027\nOWN-0074\n' > "$WORK/all.txt"
+echo 1 > "$WORK/rc.txt"; mk_fake "$WORK/map.txt" "$WORK/rc.txt"
+run_gate 1 "S13 partial run (REDs only) refused" || FAILURES=$((FAILURES+1))
+
 echo ""
 if [[ "$FAILURES" -gt 0 ]]; then
   echo "ownership-nightly-gate positive control: $FAILURES scenario(s) FAILED"
   exit 1
 fi
-echo "ownership-nightly-gate positive control: 12/12 scenarios behave"
+echo "ownership-nightly-gate positive control: 13/13 scenarios behave"
 exit 0

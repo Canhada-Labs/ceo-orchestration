@@ -537,8 +537,34 @@ staged, o Owner assina uma vez.
   168** (`upgrade.sh`, overlay commit `plan168: restaura token…`): overlay
   volta a **45/45** e INV-4 segue 4/4. Manifesto/archive do 168 regenerados
   (24/24). O step1b aceita 44/45 SÓ com essa única falha nomeada.
-- **Próxima ação:** fila do Owner — (1) re-instanciar+re-assinar o sentinel
-  do 166 (anchor=HEAD; draft §header passos 1–4) → `OWNER-W1-LAND-step1b.sh`
-  → commit -S → step 2 do runbook (release.yml, rota kernel); (2)
-  `PLAN-168/OWNER-PREPARE-TO-SIGN.sh` → assinar → `OWNER-LAND.sh`; (3) push.
-  Codex round 6 do 166 em voo — consumir antes de assinar.
+- **LANDADO E PUSHADO (07/08 ~22h05):** `9d3f21d` (cerimônia PLAN-166 W1,
+  48 arquivos — sentinel re-assinado anchor=`05e4845`→re-instanciado; step1
+  original OBSOLETO substituído por `step1b`, sem applies) + **`67a4c75`
+  (este pack, 33 arquivos — sentinel assinado anchor=`9d3f21d`,
+  `OWNER-LAND` 4/4, bateria final render 8/8 + INV-4 4/4)**. Push único
+  (evitou a janela vermelha F3 44/45 entre os lands). Incidente: linha longa
+  de `git add` quebrou no terminal → commit parcial de 7 → guards 2b
+  abortaram tudo → amend completou (lição: blocos do Owner em LINHAS CURTAS).
+- **V2 pack-review (codex sobre o CÓDIGO do pack, `rail/codex-pack-r1.md`)
+  — veredito chegou pós-push; triagem: 1 P1 + 2 P2, todos verificados:**
+  - **P1 ACEITO+CORRIGIDO (fix-forward, livre):** o gate comparava só o
+    conjunto RED — um run PARCIAL (só os 3 vermelhos) passaria. Gate agora
+    exige conjunto de ids observado == TABELA inteira (`--list` como
+    autoridade; seam `OWNERSHIP_GATE_EXPECTED_ALL` p/ o controle). Controle
+    ganhou S13 (run parcial recusado): **13/13**.
+  - **P2 ACEITO+CORRIGIDO (fix-forward, livre):** L3b do INV-4 era vacuoso
+    (glob `.claude/backup*` nunca casa — real é `.claude.bak/<ts>` — e o
+    "BACKED UP" ecoa mesmo com `cp` falho). Agora asserta os BYTES: backup
+    mais novo == corpo degradado plantado. **4/4 re-provado** (e o backup de
+    produção FUNCIONA — o defeito era só a detectabilidade).
+  - **P2 DEFERIDO (canônico → PLAN-169):** `PROTOCOL_SOURCE` malformado no
+    install-state (ex.: newline embutido) passa o filtro e aborta o upgrade
+    via sed inválido sob `set -e` — fail-closed BARULHENTO em estado
+    corrompido do adotante (sem perda de dados; re-run recupera), mas viola
+    a postura de degradar com NOTE. Cura: endurecer o filtro python
+    (rejeitar controle/newline ⇒ cai no fallback D3). Junto com o r6-P2 do
+    166 (2º fator do controle parity) formam o PLAN-169.
+- **CI do push `67a4c75`:** actionlint ✓; smoke + validate em execução ao
+  registrar (o Validate vermelho do push `11cd4f6` era drift transitório
+  claim-189/disco-188 — auto-curado pelos lands). 1º run agendado do
+  `ownership-nightly`: cron 43 6 UTC.

@@ -92,6 +92,7 @@ fi
 
 # --- L3: degraded body is CURED ----------------------------------------------
 _render_protocol_pointer_degraded "$T" "$PROFILE" "$STACK" > "$T/PROTOCOL.md"
+cp "$T/PROTOCOL.md" "$WORK/planted-degraded.md"
 if ! run_upgrade "$T" "$WORK/upgrade3.log"; then
   echo "ERROR: cure upgrade failed"; sed -n '1,12p' "$WORK/upgrade3.log"; exit 2
 fi
@@ -106,11 +107,15 @@ else
     fail "L3 pointer sound but the CURED route was not what ran (check upgrade3.log)"
     grep -n "PROTOCOL.md" "$WORK/upgrade3.log" | head -5
   fi
-  if ls "$T"/.claude/backup*/PROTOCOL.md >/dev/null 2>&1 \
-     || grep -q "BACKED UP: PROTOCOL.md" "$WORK/upgrade3.log"; then
-    echo "PASS  L3b cure kept a backup of the degraded original"
+  # The log line is NOT evidence: upgrade.sh prints "BACKED UP" even when the
+  # cp fails (|| true), and the real location is .claude.bak/<timestamp>, not
+  # .claude/backup* (codex pack-review P2). Assert the BYTES: the newest
+  # backup file must be exactly the degraded body we planted.
+  BKP="$( ls -t "$T"/.claude.bak/*/PROTOCOL.md 2>/dev/null | head -1 )"
+  if [ -n "$BKP" ] && cmp -s "$BKP" "$WORK/planted-degraded.md"; then
+    echo "PASS  L3b cure kept a byte-exact backup of the degraded original"
   else
-    fail "L3b no backup evidence for the cured pointer"
+    fail "L3b backup missing or does not match the planted degraded bytes (BKP=${BKP:-<none>})"
   fi
 fi
 

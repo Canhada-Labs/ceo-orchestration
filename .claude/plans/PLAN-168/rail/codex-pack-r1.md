@@ -3591,3 +3591,2854 @@ PASS  L4 adopter-customized pointer preserved byte-identical
 
 INV-4 assertion: 4/4 legs pass (byte identity + content soundness + cure + preserve)
 
+ succeeded in 180564ms:
+PASS  L1 install->upgrade byte-identical + sound
+PASS  L2 upgrade->upgrade idempotent
+PASS  L3 degraded body cured (REFRESH route taken)
+PASS  L3b cure kept a backup of the degraded original
+PASS  L4 adopter-customized pointer preserved byte-identical
+
+INV-4 assertion: 4/4 legs pass (byte identity + content soundness + cure + preserve)
+
+exec
+/bin/zsh -lc 'for tag in v1.0.1 v1.1.0 v1.2.0 HEAD; do echo ===$tag===; git show "$tag:scripts/upgrade.sh" 2>/dev/null | sed -n '"'/_refresh_protocol_pointer()/,/"'^}/p'"' | head -80; done" in /Users/joaocanhada/canhada-labs/ceo-orchestration
+ exited 1 in 0ms:
+zsh:1: ==v1.0.1=== not found
+
+exec
+/bin/zsh -lc "for tag in v1.0.1 v1.1.0 v1.2.0 HEAD; do printf '\\n=== %s ===\\n' \""'$tag"; git show "$tag:scripts/upgrade.sh" 2>/dev/null | sed -n '"'/_refresh_protocol_pointer()/,/"'^}/p'"' | head -85; done" in /Users/joaocanhada/canhada-labs/ceo-orchestration
+ succeeded in 0ms:
+
+=== v1.0.1 ===
+zsh:1: bad substitution
+
+=== v1.1.0 ===
+zsh:1: bad substitution
+
+=== v1.2.0 ===
+zsh:1: bad substitution
+
+=== HEAD ===
+zsh:1: bad substitution
+
+exec
+/bin/zsh -lc "for tag in v1.0.1 v1.1.0 v1.2.0 HEAD; do printf '\\n=== %s ===\\n' \""'$tag"; git show "${tag}:scripts/upgrade.sh" 2>/dev/null | sed -n '"'/_refresh_protocol_pointer()/,/"'^}/p'"' | head -85; done" in /Users/joaocanhada/canhada-labs/ceo-orchestration
+ succeeded in 0ms:
+
+=== v1.0.1 ===
+_refresh_protocol_pointer() {
+  local pointer="$TARGET/PROTOCOL.md"
+  local body
+  case "$SOURCE_DIR" in
+    "$TARGET"/*)
+      local rel="${SOURCE_DIR#$TARGET/}"
+      body="The full CEO orchestration protocol lives at:
+./${rel}/PROTOCOL.md
+
+To pull updates:
+  ( cd ./${rel} && git pull )
+  ./${rel}/scripts/upgrade.sh . --profile $PROFILE --stack $STACK"
+      ;;
+    *)
+      body="The full CEO orchestration protocol lives at:
+{{PROTOCOL_SOURCE}}/PROTOCOL.md
+
+Edit {{PROTOCOL_SOURCE}} to point at your ceo-orchestration checkout
+(e.g. ../ceo-orchestration or \$HOME/src/ceo-orchestration).
+
+To pull updates:
+  ( cd {{PROTOCOL_SOURCE}} && git pull )
+  {{PROTOCOL_SOURCE}}/scripts/upgrade.sh $TARGET --profile $PROFILE --stack $STACK"
+      ;;
+  esac
+
+  # PLAN-138 C.7 fix (Codex R2 P0): compute the CANONICAL pointer hash — the
+  # hash of exactly what the framework WOULD write below (heredoc body) — and
+  # export it so the post-upgrade manifest rewrite records THAT as the
+  # PROTOCOL.md baseline, never the current target file. Without this, a
+  # preserved adopter-customized PROTOCOL.md would be re-recorded as its own
+  # baseline and the NEXT upgrade would read H_dst==H_base and clobber it.
+  # Computed on ALL paths (preserve + refresh) so it is set whenever the C.7
+  # rewrite runs. printf reproduces the heredoc byte-for-byte.
+  _REFRESH_PROTOCOL_CANON_HASH=""
+  if command -v _hash_stdin >/dev/null 2>&1; then
+    _REFRESH_PROTOCOL_CANON_HASH="$( printf '# Protocol reference\n\n%s\n' "$body" | _hash_stdin 2>/dev/null || true )"
+  fi
+
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    echo "    (dry-run) would REFRESH: PROTOCOL.md pointer"
+    return 0
+  fi
+
+  # PLAN-138 Wave C (ADR-155) C.6 — close the verified S238 driver.
+  #
+  # (a) ALWAYS back up an existing root PROTOCOL.md to $BAK_DIR/PROTOCOL.md
+  #     BEFORE the `cat >` overwrite. The legacy code had NO backup here, so an
+  #     adopter who turned the pointer into a real customized protocol (the
+  #     S238 acme case) lost it irrecoverably. This backup applies EVEN when
+  #     no baseline manifest exists — making the loss recoverable on a first
+  #     upgrade (Codex R1 P0 first-upgrade safety).
+  if [[ -f "$pointer" ]]; then
+    mkdir -p "$BAK_DIR" 2>/dev/null || true
+    cp "$pointer" "$BAK_DIR/PROTOCOL.md" 2>/dev/null || true
+    echo "    BACKED UP: PROTOCOL.md (root) -> $BAK_DIR/PROTOCOL.md"
+  fi
+
+  # (b) When a baseline manifest is loaded, classify the root PROTOCOL.md
+  #     against the recorded install-time pointer hash. The pointer's "source"
+  #     is a generated string (not a file in $SOURCE_DIR), so we compare the
+  #     CURRENT target hash against the recorded BASELINE only:
+  #       H_dst == H_base  -> still the generated pointer -> safe to refresh
+  #       H_dst != H_base  -> adopter customized it -> ADOPTER-CUSTOMIZED:
+  #                           preserve (default/refuse) or overwrite per
+  #                           --on-conflict={theirs|backup}.
+  if [[ -f "$pointer" && -n "$_BASELINE_MANIFEST_FILE" ]] && command -v _hash_file >/dev/null 2>&1; then
+    local _rp_base _rp_dst
+    _rp_base="$( _baseline_lookup "PROTOCOL.md" || true )"
+    _rp_dst="$( _hash_file "$pointer" 2>/dev/null || true )"
+    if [[ -n "$_rp_base" && -n "$_rp_dst" && "$_rp_dst" != "$_rp_base" ]]; then
+      case "$ON_CONFLICT" in
+        theirs|backup)
+          # Original already backed up above; proceed to refresh.
+          echo "    OVERWROTE (root PROTOCOL.md ADOPTER-CUSTOMIZED, --on-conflict=$ON_CONFLICT; original in $BAK_DIR/PROTOCOL.md)" >&2
+          ;;
+        *)  # refuse (default): preserve the customized root PROTOCOL.md.
+          echo "    PRESERVED (root PROTOCOL.md ADOPTER-CUSTOMIZED — pointer NOT refreshed; backup in $BAK_DIR/PROTOCOL.md)" >&2
+          return 0
+          ;;
+      esac
+    fi
+  fi
+
+  cat > "$pointer" <<EOF
+
+=== v1.1.0 ===
+_refresh_protocol_pointer() {
+  local pointer="$TARGET/PROTOCOL.md"
+  local body
+  case "$SOURCE_DIR" in
+    "$TARGET"/*)
+      local rel="${SOURCE_DIR#$TARGET/}"
+      body="The full CEO orchestration protocol lives at:
+./${rel}/PROTOCOL.md
+
+To pull updates:
+  ( cd ./${rel} && git pull )
+  ./${rel}/scripts/upgrade.sh . --profile $PROFILE --stack $STACK"
+      ;;
+    *)
+      body="The full CEO orchestration protocol lives at:
+{{PROTOCOL_SOURCE}}/PROTOCOL.md
+
+Edit {{PROTOCOL_SOURCE}} to point at your ceo-orchestration checkout
+(e.g. ../ceo-orchestration or \$HOME/src/ceo-orchestration).
+
+To pull updates:
+  ( cd {{PROTOCOL_SOURCE}} && git pull )
+  {{PROTOCOL_SOURCE}}/scripts/upgrade.sh $TARGET --profile $PROFILE --stack $STACK"
+      ;;
+  esac
+
+  # PLAN-138 C.7 fix (Codex R2 P0): compute the CANONICAL pointer hash — the
+  # hash of exactly what the framework WOULD write below (heredoc body) — and
+  # export it so the post-upgrade manifest rewrite records THAT as the
+  # PROTOCOL.md baseline, never the current target file. Without this, a
+  # preserved adopter-customized PROTOCOL.md would be re-recorded as its own
+  # baseline and the NEXT upgrade would read H_dst==H_base and clobber it.
+  # Computed on ALL paths (preserve + refresh) so it is set whenever the C.7
+  # rewrite runs. printf reproduces the heredoc byte-for-byte.
+  _REFRESH_PROTOCOL_CANON_HASH=""
+  if command -v _hash_stdin >/dev/null 2>&1; then
+    _REFRESH_PROTOCOL_CANON_HASH="$( printf '# Protocol reference\n\n%s\n' "$body" | _hash_stdin 2>/dev/null || true )"
+  fi
+
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    echo "    (dry-run) would REFRESH: PROTOCOL.md pointer"
+    return 0
+  fi
+
+  _up_record_op "refresh_protocol_pointer" "PROTOCOL.md"
+
+  # PLAN-138 Wave C (ADR-155) C.6 — close the verified S238 driver.
+  #
+  # (a) ALWAYS back up an existing root PROTOCOL.md to $BAK_DIR/PROTOCOL.md
+  #     BEFORE the `cat >` overwrite. The legacy code had NO backup here, so an
+  #     adopter who turned the pointer into a real customized protocol (the
+  #     S238 acme case) lost it irrecoverably. This backup applies EVEN when
+  #     no baseline manifest exists — making the loss recoverable on a first
+  #     upgrade (Codex R1 P0 first-upgrade safety).
+  if [[ -f "$pointer" ]]; then
+    mkdir -p "$BAK_DIR" 2>/dev/null || true
+    cp "$pointer" "$BAK_DIR/PROTOCOL.md" 2>/dev/null || true
+    echo "    BACKED UP: PROTOCOL.md (root) -> $BAK_DIR/PROTOCOL.md"
+  fi
+
+  # (b) When a baseline manifest is loaded, classify the root PROTOCOL.md
+  #     against the recorded install-time pointer hash. The pointer's "source"
+  #     is a generated string (not a file in $SOURCE_DIR), so we compare the
+  #     CURRENT target hash against the recorded BASELINE only:
+  #       H_dst == H_base  -> still the generated pointer -> safe to refresh
+  #       H_dst != H_base  -> adopter customized it -> ADOPTER-CUSTOMIZED:
+  #                           preserve (default/refuse) or overwrite per
+  #                           --on-conflict={theirs|backup}.
+  if [[ -f "$pointer" && -n "$_BASELINE_MANIFEST_FILE" ]] && command -v _hash_file >/dev/null 2>&1; then
+    local _rp_base _rp_dst
+    _rp_base="$( _baseline_lookup "PROTOCOL.md" || true )"
+    _rp_dst="$( _hash_file "$pointer" 2>/dev/null || true )"
+    if [[ -n "$_rp_base" && -n "$_rp_dst" && "$_rp_dst" != "$_rp_base" ]]; then
+      case "$ON_CONFLICT" in
+        theirs|backup)
+          # Original already backed up above; proceed to refresh.
+          echo "    OVERWROTE (root PROTOCOL.md ADOPTER-CUSTOMIZED, --on-conflict=$ON_CONFLICT; original in $BAK_DIR/PROTOCOL.md)" >&2
+          ;;
+        *)  # refuse (default): preserve the customized root PROTOCOL.md.
+          echo "    PRESERVED (root PROTOCOL.md ADOPTER-CUSTOMIZED — pointer NOT refreshed; backup in $BAK_DIR/PROTOCOL.md)" >&2
+          return 0
+          ;;
+      esac
+    fi
+  fi
+
+=== v1.2.0 ===
+_refresh_protocol_pointer() {
+  local pointer="$TARGET/PROTOCOL.md"
+  local body
+  case "$SOURCE_DIR" in
+    "$TARGET"/*)
+      local rel="${SOURCE_DIR#$TARGET/}"
+      body="The full CEO orchestration protocol lives at:
+./${rel}/PROTOCOL.md
+
+To pull updates:
+  ( cd ./${rel} && git pull )
+  ./${rel}/scripts/upgrade.sh . --profile $PROFILE --stack $STACK"
+      ;;
+    *)
+      body="The full CEO orchestration protocol lives at:
+{{PROTOCOL_SOURCE}}/PROTOCOL.md
+
+Edit {{PROTOCOL_SOURCE}} to point at your ceo-orchestration checkout
+(e.g. ../ceo-orchestration or \$HOME/src/ceo-orchestration).
+
+To pull updates:
+  ( cd {{PROTOCOL_SOURCE}} && git pull )
+  {{PROTOCOL_SOURCE}}/scripts/upgrade.sh $TARGET --profile $PROFILE --stack $STACK"
+      ;;
+  esac
+
+  # PLAN-138 C.7 fix (Codex R2 P0): compute the CANONICAL pointer hash — the
+  # hash of exactly what the framework WOULD write below (heredoc body) — and
+  # export it so the post-upgrade manifest rewrite records THAT as the
+  # PROTOCOL.md baseline, never the current target file. Without this, a
+  # preserved adopter-customized PROTOCOL.md would be re-recorded as its own
+  # baseline and the NEXT upgrade would read H_dst==H_base and clobber it.
+  # Computed on ALL paths (preserve + refresh) so it is set whenever the C.7
+  # rewrite runs. printf reproduces the heredoc byte-for-byte.
+  _REFRESH_PROTOCOL_CANON_HASH=""
+  if command -v _hash_stdin >/dev/null 2>&1; then
+    _REFRESH_PROTOCOL_CANON_HASH="$( printf '# Protocol reference\n\n%s\n' "$body" | _hash_stdin 2>/dev/null || true )"
+  fi
+
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    echo "    (dry-run) would REFRESH: PROTOCOL.md pointer"
+    return 0
+  fi
+
+  _up_record_op "refresh_protocol_pointer" "PROTOCOL.md"
+
+  # PLAN-138 Wave C (ADR-155) C.6 — close the verified S238 driver.
+  #
+  # (a) ALWAYS back up an existing root PROTOCOL.md to $BAK_DIR/PROTOCOL.md
+  #     BEFORE the `cat >` overwrite. The legacy code had NO backup here, so an
+  #     adopter who turned the pointer into a real customized protocol (the
+  #     S238 acme case) lost it irrecoverably. This backup applies EVEN when
+  #     no baseline manifest exists — making the loss recoverable on a first
+  #     upgrade (Codex R1 P0 first-upgrade safety).
+  if [[ -f "$pointer" ]]; then
+    mkdir -p "$BAK_DIR" 2>/dev/null || true
+    cp "$pointer" "$BAK_DIR/PROTOCOL.md" 2>/dev/null || true
+    echo "    BACKED UP: PROTOCOL.md (root) -> $BAK_DIR/PROTOCOL.md"
+  fi
+
+  # (b) When a baseline manifest is loaded, classify the root PROTOCOL.md
+  #     against the recorded install-time pointer hash. The pointer's "source"
+  #     is a generated string (not a file in $SOURCE_DIR), so we compare the
+  #     CURRENT target hash against the recorded BASELINE only:
+  #       H_dst == H_base  -> still the generated pointer -> safe to refresh
+  #       H_dst != H_base  -> adopter customized it -> ADOPTER-CUSTOMIZED:
+  #                           preserve (default/refuse) or overwrite per
+  #                           --on-conflict={theirs|backup}.
+  if [[ -f "$pointer" && -n "$_BASELINE_MANIFEST_FILE" ]] && command -v _hash_file >/dev/null 2>&1; then
+    local _rp_base _rp_dst
+    _rp_base="$( _baseline_lookup "PROTOCOL.md" || true )"
+    _rp_dst="$( _hash_file "$pointer" 2>/dev/null || true )"
+    if [[ -n "$_rp_base" && -n "$_rp_dst" && "$_rp_dst" != "$_rp_base" ]]; then
+      case "$ON_CONFLICT" in
+        theirs|backup)
+          # Original already backed up above; proceed to refresh.
+          echo "    OVERWROTE (root PROTOCOL.md ADOPTER-CUSTOMIZED, --on-conflict=$ON_CONFLICT; original in $BAK_DIR/PROTOCOL.md)" >&2
+          ;;
+        *)  # refuse (default): preserve the customized root PROTOCOL.md.
+          echo "    PRESERVED (root PROTOCOL.md ADOPTER-CUSTOMIZED — pointer NOT refreshed; backup in $BAK_DIR/PROTOCOL.md)" >&2
+          return 0
+          ;;
+      esac
+    fi
+  fi
+
+=== HEAD ===
+_refresh_protocol_pointer() {
+  local pointer="$TARGET/PROTOCOL.md"
+
+  # PLAN-168 W2 (AC-6, Owner decision D1-b): the body comes from the ONE
+  # shared generator in _framework_manifest_set.sh — never a private heredoc.
+  # INV-4 existed because this function and install.sh each carried their own
+  # copy of this text: install substituted {{PROTOCOL_SOURCE}}, this one did
+  # not — two bodies for the same file, and the recorded digest never matched
+  # the disk (OWN-0074). A missing generator preserves the surface (upgrade's
+  # fail-toward-preservation posture, same as an illegal cell below).
+  if ! command -v _render_protocol_pointer >/dev/null 2>&1; then
+    echo "    WARNING: _render_protocol_pointer unavailable — PROTOCOL.md pointer PRESERVED" >&2
+    return 0
+  fi
+
+  # Resolve the PROTOCOL_SOURCE the pointer should name (AC-6c, Owner
+  # decision D3). Precedence:
+  #   1. request.placeholders.PROTOCOL_SOURCE from the install-state — the
+  #      install has ALWAYS persisted it there (union across runs; the
+  #      PLAN-168 debate's claim that it was never persisted checked the
+  #      wrong key — codex rail r1 P1).
+  #   2. A HEALTHY on-disk pointer: extract the value it already names and
+  #      keep it — never silently rename a sound pointer to today's checkout.
+  #   3. $SOURCE_DIR (this upgrade's checkout) — last resort, used for
+  #      genuinely old installs with no state and no sound pointer (incl.
+  #      the degraded-cure path, where the pointer names nothing usable).
+  local _ptr_psource=""
+  if [ -f "$_INSTALL_STATE_FILE" ] && command -v python3 >/dev/null 2>&1; then
+    _ptr_psource="$( python3 - "$_INSTALL_STATE_FILE" <<'PYEOF' 2>/dev/null || true
+import json, sys
+try:
+    with open(sys.argv[1], "r", encoding="utf-8") as f:
+        doc = json.load(f)
+    v = (doc.get("request") or {}).get("placeholders", {}).get("PROTOCOL_SOURCE", "")
+    if isinstance(v, str) and v and "{{" not in v:
+        sys.stdout.write(v)
+except Exception:
+    pass
+PYEOF
+)"
+  fi
+  if [ -z "$_ptr_psource" ] && [ -f "$pointer" ]; then
+    # D3 route 2: trust a SOUND pointer. Extract the source it names and
+    # accept it only if re-rendering with that value reproduces the file
+    # byte-for-byte (the same reconstruction discipline as the degraded
+    # recognizer — anything else is adopter content, not a source of truth).
+    local _ptr_cand
+    _ptr_cand="$( sed -n 's|^\(.*\)/PROTOCOL\.md$|\1|p' "$pointer" 2>/dev/null | sed -n '1p' )"
+    if [ -n "$_ptr_cand" ] && [ "${_ptr_cand#\{\{}" = "$_ptr_cand" ]; then
+      if _render_protocol_pointer "$SOURCE_DIR" "$TARGET" "$PROFILE" "$STACK" "$_ptr_cand" \
+           | cmp -s - "$pointer" 2>/dev/null; then
+        _ptr_psource="$_ptr_cand"
+      fi
+    fi
+  fi
+  if [ -z "$_ptr_psource" ]; then
+    _ptr_psource="$SOURCE_DIR"
+  fi
+
+  local _ptr_full
+  _ptr_full="$( _render_protocol_pointer "$SOURCE_DIR" "$TARGET" "$PROFILE" "$STACK" "$_ptr_psource" )"
+
+  # The CANONICAL digest: the hash of exactly what the framework WOULD write.
+  # Computed on every path, because the baseline rewrite must record it even
+  # when the pointer is preserved — recording the customised bytes instead
+  # would make the NEXT upgrade read H_dst == H_base and clobber them (C.5).
+  # Post-PLAN-168 this is the hash of the SUBSTITUTED body — the same bytes
+  # install writes — so the recorded digest finally matches the disk (INV-4).
+  _REFRESH_PROTOCOL_CANON_HASH=""
+  if command -v _hash_stdin >/dev/null 2>&1; then
+    _REFRESH_PROTOCOL_CANON_HASH="$( printf '%s\n' "$_ptr_full" | _hash_stdin 2>/dev/null || true )"
+  fi
+
+  # ---- OBSERVE -------------------------------------------------------------
+  local _lt _pr _lc
+  _lt="$( _ov_obs_live_type "$pointer" )"
+  _pr="$( _ov_obs_prior_record "PROTOCOL.md" )"
+  if [ "$_lt" != "regular" ]; then
+    _lc="-"
+  elif _protocol_pointer_is_degraded "$pointer"; then
+    # PLAN-168 W2 (AC-6b, Owner decision D2): byte-exact reconstruction of
+    # the {{PROTOCOL_SOURCE}}-literal template this script used to write.
+    # Framework garbage, not adopter content — the verdict routes it to the
+    # REFRESH cure below. Checked BEFORE pristine/edited: a degraded body
+    # can never equal the substituted canonical, and classifying it `edited`
+
+exec
+/bin/zsh -lc "printf 'ADRs '; find .claude/adr -maxdepth 1 -type f -name 'ADR-*.md' | wc -l; printf 'workflows '; find .github/workflows -maxdepth 1 -type f -name '*.yml' | wc -l; python3 .claude/scripts/check-claude-md-claims.py; python3 .claude/scripts/check-agents-md.py" in /Users/joaocanhada/canhada-labs/ceo-orchestration
+ succeeded in 0ms:
+ADRs      190
+workflows       22
+OK: AGENTS.md fresh — 52 listed path(s) all exist.
+
+exec
+/bin/zsh -lc "nl -ba scripts/_framework_manifest_set.sh | sed -n '430,735p'; nl -ba scripts/upgrade.sh | sed -n '1515,1720p'" in /Users/joaocanhada/canhada-labs/ceo-orchestration
+ succeeded in 0ms:
+   430	    rm -f "$_wbm_tmp" "$_wbm_tmp.sorted" 2>/dev/null || true
+   431	    echo "    NOTE: baseline manifest atomic mv failed — advisory only" >&2
+   432	  fi
+   433	  return 0
+   434	}
+   435	
+   436	# =============================================================================
+   437	# PLAN-167 — _ownership_verdict: THE ownership decision.
+   438	#
+   439	# install.sh and upgrade.sh stop deciding and start executing. Every defect in
+   440	# the 35-finding S296 review series was a cell of this space whose answer was
+   441	# decided branch-locally, so two branches could disagree about the same
+   442	# question and nothing detected it.
+   443	#
+   444	#   $1 surface        spec | protocol | marker
+   445	#   $2 prior_record   none | hash | link_match | link_retargeted
+   446	#   $3 live_type      absent | dir | dir_empty | regular | symlink | special
+   447	#                     | ancestor_symlink
+   448	#   $4 live_content   pristine | legacy_pristine | legacy_pristine_partial
+   449	#                     | edited | -
+   450	#   $5 source_has     yes | no
+   451	#   $6 mode           copy | link
+   452	#   $7 ceremony       user | maintainer
+   453	#   $8 operation      install_fresh | install_rerun | upgrade
+   454	#   $9 skip_requested none | self | descendant
+   455	#
+   456	#   stdout: "<VERDICT> <HASH_SOURCE>", rc 0
+   457	#   rc 1, no output: a combination the legality rules forbid.
+   458	#
+   459	# PURE: no filesystem, no globals, no environment. Callers observe the nine
+   460	# dimensions and pass them in. That purity is what lets the same table drive a
+   461	# millisecond unit oracle as well as the ~25-minute end-to-end suite; S296 had
+   462	# only the slow instrument, at one cell per ~40-minute round.
+   463	#
+   464	# ABORT_SURFACE is deliberately NOT produced here (round-1 consensus C2). A
+   465	# failed backup is not a property of these nine dimensions — it is the CALLER
+   466	# failing to carry out a verdict it was handed. And per INV-3 that failure
+   467	# NEVER advances the record: recording a delivery that did not happen is the
+   468	# over-claiming direction ADR-155-AMEND-1 §3 forbids.
+   469	#
+   470	# Contract: docs/ownership-decision-table.md · Truth: scripts/tests/ownership_table.tsv
+   471	# =============================================================================
+   472	_ownership_verdict() {
+   473	  _ov_surface="$1"; _ov_prior="$2";  _ov_ltype="$3"; _ov_lcontent="$4"
+   474	  _ov_shas="$5";    _ov_mode="$6";   _ov_cer="$7";   _ov_op="$8"; _ov_skip="$9"
+   475	
+   476	  # Do not touch the surface; decide the RECORD. Ownership continuity and the
+   477	  # digit it carries are separate decisions, and moving one without the other
+   478	  # produced four distinct defects — so they are resolved together, once.
+   479	  _ov_carry() {
+   480	    case "$_ov_prior" in
+   481	      link_match)      printf 'PRESERVE_OWNED LINK_RECORD';  return 0 ;;
+   482	      link_retargeted) printf 'PRESERVE_UNOWNED HASH_NONE'; return 0 ;;
+   483	      none)            printf 'PRESERVE_UNOWNED HASH_NONE';  return 0 ;;
+   484	    esac
+   485	    # prior_record=hash. HASH_TARGET is never an option: it re-baselines the
+   486	    # bytes now on disk, which is how a later upgrade comes to overwrite an
+   487	    # adopter edit and uninstall comes to delete it.
+   488	    if [ "$_ov_surface" = "protocol" ] \
+   489	       || [ "$_ov_shas" = "no" ] \
+   490	       || [ "$_ov_ltype" = "dir_empty" ]; then
+   491	      printf 'PRESERVE_OWNED HASH_PRIOR_RECORD'   # no source bytes to hash
+   492	    else
+   493	      printf 'PRESERVE_OWNED HASH_SOURCE'
+   494	    fi
+   495	  }
+   496	
+   497	  # The framework must not claim this path. Whether a record existed changes
+   498	  # only which NAME the observation takes (OQ-9 — the evidence that these are
+   499	  # one outcome, not two).
+   500	  # OQ-9 (ratificada pelo Owner 2026-08-07): PRESERVE_UNOWNED é o único nome.
+   501	  # OMIT_RECORD dizia a mesma coisa — sem registro no disco — e diferia apenas
+   502	  # por já existir registro antes, que é a coluna prior_record. Um membro de
+   503	  # enum redundante é onde dois ramos discordam sobre qual deles se aplica.
+   504	  _ov_unowned() { printf 'PRESERVE_UNOWNED HASH_NONE'; }
+   505	
+   506	  # --- Stage A: gates that refuse to act, in priority order ------------------
+   507	
+   508	  # A1. The source cannot deliver this surface.
+   509	  if [ "$_ov_shas" = "no" ]; then
+   510	    case "$_ov_surface" in
+   511	      marker)   printf 'PRESERVE_UNOWNED HASH_NONE'; return 0 ;;  # --pin: readers fall back to VERSION
+   512	      protocol) return 1 ;;                                  # R-03: generated, never absent
+   513	      *)        _ov_carry; return 0 ;;
+   514	    esac
+   515	  fi
+   516	
+   517	  # A2. A user ceremony never receives the root surfaces (WS4).
+   518	  if [ "$_ov_cer" = "user" ] && [ "$_ov_surface" != "marker" ]; then
+   519	    if [ "$_ov_op" = "install_fresh" ]; then printf 'PRESERVE_UNOWNED HASH_NONE'
+   520	    else _ov_carry; fi
+   521	    return 0
+   522	  fi
+   523	
+   524	  # A3. Reachable only by writing THROUGH a symlink, out of the target tree.
+   525	  # Always unowned: the relpath sanitizer already dropped any record whose path
+   526	  # crosses a symlink, so there is no record left to carry (docs §5.8).
+   527	  if [ "$_ov_ltype" = "ancestor_symlink" ]; then _ov_unowned; return 0; fi
+   528	
+   529	  # A4. A leaf symlink is healthy ONLY as the recorded link-mode delivery.
+   530	  # The absence of a LINK row is not a match — it is the absence of evidence.
+   531	  if [ "$_ov_ltype" = "symlink" ]; then
+   532	    if [ "$_ov_prior" = "link_match" ]; then printf 'PRESERVE_OWNED LINK_RECORD'
+   533	    else _ov_unowned; fi
+   534	    return 0
+   535	  fi
+   536	
+   537	  # A5. Anything that exists but is not shaped like this surface is
+   538	  # adopter-owned: never write into it, never through it, never block on it.
+   539	  case "$_ov_surface" in
+   540	    spec)
+   541	      case "$_ov_ltype" in special) _ov_unowned; return 0 ;; esac ;;
+   542	    protocol|marker)
+   543	      case "$_ov_ltype" in dir|dir_empty|special) _ov_unowned; return 0 ;; esac ;;
+   544	  esac
+   545	
+   546	  # A6. An explicit skip is honoured as a UNIT — a partial contract refresh is
+   547	  # incoherent, so a descendant skip preserves the whole tree.
+   548	  if [ "$_ov_skip" != "none" ]; then _ov_carry; return 0; fi
+   549	
+   550	  # --- Stage B: ownership resolution ----------------------------------------
+   551	  _ov_owned=""
+   552	  if [ "$_ov_prior" = "hash" ] || [ "$_ov_prior" = "link_match" ]; then
+   553	    _ov_owned=1
+   554	  elif [ "$_ov_ltype" = "absent" ]; then
+   555	    _ov_owned=1                                   # new delivery
+   556	  elif [ "$_ov_lcontent" = "pristine" ] || [ "$_ov_lcontent" = "legacy_pristine" ]; then
+   557	    _ov_owned=1                                   # current-source takeover / legacy migration
+   558	  elif [ "$_ov_lcontent" = "degraded" ]; then
+   559	    # PLAN-168 W2 (AC-6b, Owner decision D2): a DEGRADED body — byte-exact
+   560	    # reconstruction of the {{PROTOCOL_SOURCE}}-literal template the broken
+   561	    # upgrade wrote (recognized by _protocol_pointer_is_degraded, NEVER by
+   562	    # substring) — is the framework's own output, not adopter content. Owned
+   563	    # even without a delivery record, same content-proven takeover doctrine
+   564	    # as legacy_pristine (the r20 precedent). Downstream this falls into the
+   565	    # protocol REFRESH route: the cure, with the standard backup.
+   566	    _ov_owned=1
+   567	  fi
+   568	  # legacy_pristine_partial is deliberately NOT owned: every regular file may
+   569	  # match a shipped release, but a tree carrying an entry the fingerprint
+   570	  # cannot inventory has not been inventoried, and a partial inventory must
+   571	  # never certify a wholesale replace (ADR-155-AMEND-1 §4).
+   572	
+   573	  if [ -z "$_ov_owned" ]; then _ov_unowned; return 0; fi
+   574	
+   575	  # --- Stage C: execution ---------------------------------------------------
+   576	  if [ "$_ov_ltype" = "absent" ]; then
+   577	    case "$_ov_surface" in
+   578	      protocol) printf 'DELIVER HASH_CANONICAL_POINTER' ;;
+   579	      *)        printf 'DELIVER HASH_SOURCE' ;;
+   580	    esac
+   581	    return 0
+   582	  fi
+   583	
+   584	  # An install rerun does not re-deliver an existing surface; it decides the
+   585	  # record. Only the upgrade's forced route replaces content.
+   586	  if [ "$_ov_op" != "upgrade" ]; then _ov_carry; return 0; fi
+   587	
+   588	  # The pointer is the ONE surface where an adopter edit is PRESERVED rather
+   589	  # than treated as a fork. SPEC/v1 is deliberately the opposite: it is the
+   590	  # published compliance CONTRACT, so an edit is a fork and the forced route
+   591	  # replaces it (ADR-155-AMEND-1 §4). The root PROTOCOL.md is adopter-editable
+   592	  # prose, and overwriting a customised one is the verified S238 data loss that
+   593	  # ADR-155 decision (iii) exists to close.
+   594	  #
+   595	  # The recorded digest stays CANONICAL either way: recording the customised
+   596	  # bytes would make the NEXT upgrade read H_dst==H_base and clobber them.
+   597	  if [ "$_ov_surface" = "protocol" ] && [ "$_ov_lcontent" = "edited" ]; then
+   598	    printf 'PRESERVE_OWNED HASH_CANONICAL_POINTER'
+   599	    return 0
+   600	  fi
+   601	
+   602	  case "$_ov_surface" in
+   603	    protocol) printf 'REFRESH HASH_CANONICAL_POINTER' ;;
+   604	    *)        printf 'REFRESH HASH_SOURCE' ;;
+   605	  esac
+   606	}
+   607	# =============================================================================
+   608	# PLAN-168 W2 (AC-6, Owner decision D1-b) — the ONE protocol-pointer generator.
+   609	#
+   610	# INV-4 existed because install.sh and upgrade.sh each carried a private copy
+   611	# of the pointer heredoc: install substituted {{PROTOCOL_SOURCE}} in a later
+   612	# pass, upgrade hashed (and on REFRESH wrote) the body with the token still
+   613	# literal. Two bodies for the same file. This library is the cure for the
+   614	# CLASS: both callers render through the same function, so the bodies cannot
+   615	# diverge again (ADR-155 decision (i), applied to CONTENT — the shared
+   616	# enumeration solved WHICH paths both sides touch; this solves WHAT they
+   617	# produce).
+   618	#
+   619	# Sourced by scripts/install.sh and scripts/upgrade.sh (same $SCRIPT_DIR
+   620	# pattern as _hash_lib.sh). Bash 3.2-compatible, stdlib/POSIX-tools only.
+   621	#
+   622	# Functions:
+   623	#   _render_protocol_pointer SOURCE_DIR TARGET PROFILE STACK PROTOCOL_SOURCE
+   624	#       Emit the COMPLETE healthy file content ("# Protocol reference" header
+   625	#       included, trailing newline included). Inside-target checkouts get the
+   626	#       relative form; everything else gets the PROTOCOL_SOURCE-resolved form
+   627	#       (never the literal token — the caller passes the resolved value).
+   628	#   _render_protocol_pointer_degraded TARGET PROFILE STACK
+   629	#       Emit the DEGRADED file content: the outside-target template with
+   630	#       {{PROTOCOL_SOURCE}} kept literal. This is byte-for-byte what the
+   631	#       pre-PLAN-168 upgrade.sh wrote on every refresh — the template text is
+   632	#       IDENTICAL across v1.0.1, v1.1.0, v1.2.0 and HEAD (verified by
+   633	#       extracting and diffing all four), so ONE skeleton covers the shipped
+   634	#       population. Residual out of scope: pre-v1.0.1 trees.
+   635	#   _protocol_pointer_is_degraded FILE
+   636	#       rc=0 iff FILE is EXACTLY a degraded body the framework produced:
+   637	#       the invocation-specific values (TARGET/PROFILE/STACK) are extracted
+   638	#       from the file's own upgrade line, the degraded template is re-rendered
+   639	#       with them, and the reconstruction must be byte-identical. Any parse
+   640	#       failure, any adopter edit anywhere, any deviation => rc=1 (fail toward
+   641	#       PRESERVATION — codex rail r1 P1: substring matching would destroy an
+   642	#       adopter file that legitimately CONTAINS the token; rail r2 P1: static
+   643	#       whole-body hashes cannot match invocation-specific bodies).
+   644	# =============================================================================
+   645	
+   646	_render_protocol_pointer() {
+   647	  # $1=SOURCE_DIR $2=TARGET $3=PROFILE $4=STACK $5=PROTOCOL_SOURCE(resolved)
+   648	  _rpp_src="$1"; _rpp_target="$2"; _rpp_profile="$3"; _rpp_stack="$4"; _rpp_psource="$5"
+   649	  case "$_rpp_src" in
+   650	    "$_rpp_target"/*)
+   651	      _rpp_rel="${_rpp_src#"$_rpp_target"/}"
+   652	      printf '%s\n' \
+   653	        "# Protocol reference" \
+   654	        "" \
+   655	        "The full CEO orchestration protocol lives at:" \
+   656	        "./${_rpp_rel}/PROTOCOL.md" \
+   657	        "" \
+   658	        "To pull updates:" \
+   659	        "  ( cd ./${_rpp_rel} && git pull )" \
+   660	        "  ./${_rpp_rel}/scripts/upgrade.sh . --profile $_rpp_profile --stack $_rpp_stack"
+   661	      ;;
+   662	    *)
+   663	      # The healthy outside-target form: the degraded template with the token
+   664	      # substituted EVERYWHERE — exactly what install.sh's placeholder pass
+   665	      # has always produced, so existing healthy pointers keep their digest.
+   666	      _render_protocol_pointer_degraded "$_rpp_target" "$_rpp_profile" "$_rpp_stack" \
+   667	        | sed "s|{{PROTOCOL_SOURCE}}|$( printf '%s' "$_rpp_psource" | sed 's/[|&\\]/\\&/g' )|g"
+   668	      ;;
+   669	  esac
+   670	}
+   671	
+   672	_render_protocol_pointer_degraded() {
+   673	  # $1=TARGET $2=PROFILE $3=STACK — the token stays LITERAL. This is both the
+   674	  # historical broken-upgrade output (the cure's recognition target) and the
+   675	  # pre-substitution install body (one template, one truth).
+   676	  _rppd_target="$1"; _rppd_profile="$2"; _rppd_stack="$3"
+   677	  printf '%s\n' \
+   678	    "# Protocol reference" \
+   679	    "" \
+   680	    "The full CEO orchestration protocol lives at:" \
+   681	    "{{PROTOCOL_SOURCE}}/PROTOCOL.md" \
+   682	    "" \
+   683	    "Edit {{PROTOCOL_SOURCE}} to point at your ceo-orchestration checkout" \
+   684	    "(e.g. ../ceo-orchestration or \$HOME/src/ceo-orchestration)." \
+   685	    "" \
+   686	    "To pull updates:" \
+   687	    "  ( cd {{PROTOCOL_SOURCE}} && git pull )" \
+   688	    "  {{PROTOCOL_SOURCE}}/scripts/upgrade.sh $_rppd_target --profile $_rppd_profile --stack $_rppd_stack"
+   689	}
+   690	
+   691	_protocol_pointer_is_degraded() {
+   692	  # $1=FILE. rc=0 iff the file is byte-identical to a degraded render whose
+   693	  # TARGET/PROFILE/STACK come from the file's own last line. Everything else
+   694	  # (missing file, unparseable line, values with spaces, any edit) => rc=1.
+   695	  _ppid_file="$1"
+   696	  [ -f "$_ppid_file" ] || return 1
+   697	  # Cheap pre-filter: files without the literal token can never be degraded.
+   698	  grep -F -q '{{PROTOCOL_SOURCE}}' "$_ppid_file" 2>/dev/null || return 1
+   699	
+   700	  # The upgrade line is the ONE line carrying all three invocation values:
+   701	  #   {{PROTOCOL_SOURCE}}/scripts/upgrade.sh <target> --profile <p> --stack <s>
+   702	  _ppid_line="$( grep -F '{{PROTOCOL_SOURCE}}/scripts/upgrade.sh ' "$_ppid_file" 2>/dev/null | head -1 )"
+   703	  [ -n "$_ppid_line" ] || return 1
+   704	
+   705	  # POSIX-safe field extraction; single-token values only. A target/profile/
+   706	  # stack containing whitespace makes the line ambiguous => no match =>
+   707	  # preserved (documented residual, consistent with fail-toward-preservation).
+   708	  _ppid_target="$( printf '%s\n' "$_ppid_line" | sed -n 's|.*scripts/upgrade\.sh \([^ ][^ ]*\) --profile .*|\1|p' )"
+   709	  _ppid_profile="$( printf '%s\n' "$_ppid_line" | sed -n 's|.* --profile \([^ ][^ ]*\) --stack .*|\1|p' )"
+   710	  _ppid_stack="$( printf '%s\n' "$_ppid_line" | sed -n 's|.* --stack \([^ ][^ ]*\)$|\1|p' )"
+   711	  [ -n "$_ppid_target" ] && [ -n "$_ppid_profile" ] && [ -n "$_ppid_stack" ] || return 1
+   712	
+   713	  _ppid_tmp="$( mktemp "${TMPDIR:-/tmp}/ceo-ptr-recon.XXXXXX" )" || return 1
+   714	  _render_protocol_pointer_degraded "$_ppid_target" "$_ppid_profile" "$_ppid_stack" > "$_ppid_tmp"
+   715	  if cmp -s "$_ppid_tmp" "$_ppid_file"; then
+   716	    rm -f "$_ppid_tmp" 2>/dev/null
+   717	    return 0
+   718	  fi
+   719	  rm -f "$_ppid_tmp" 2>/dev/null
+   720	  return 1
+   721	}
+  1515	           && [[ ! -L "$TARGET/$_pr_rel" && -d "$TARGET/$_pr_rel" ]]; then
+  1516	          if [[ -n "$_lg_survivors" ]] \
+  1517	             && grep -Fxq "$_pr_rel" "$_lg_survivors" 2>/dev/null; then
+  1518	            :  # pre-existing excluded dir — keep (F11)
+  1519	          else
+  1520	            rmdir "$TARGET/$_pr_rel" 2>/dev/null || true
+  1521	          fi
+  1522	        fi
+  1523	      done < <( find "$src" -depth -type d -print 2>/dev/null )
+  1524	    fi
+  1525	  else
+  1526	    cp "$src" "$dst"
+  1527	  fi
+  1528	  if [[ -n "$_lg_survivors" ]]; then
+  1529	    rm -f "$_lg_survivors"
+  1530	  fi
+  1531	  echo "    UPDATED: $rel_path"
+  1532	}
+  1533	
+  1534	# DevOps-P1-4: refresh PROTOCOL.md pointer on upgrade. This is
+  1535	# framework-derived content (not user data), so preserving it as-is
+  1536	# across upgrades traps stale pointers when the framework moves. We
+  1537	# regenerate it with the same heuristic install.sh uses.
+  1538	_refresh_protocol_pointer() {
+  1539	  local pointer="$TARGET/PROTOCOL.md"
+  1540	
+  1541	  # PLAN-168 W2 (AC-6, Owner decision D1-b): the body comes from the ONE
+  1542	  # shared generator in _framework_manifest_set.sh — never a private heredoc.
+  1543	  # INV-4 existed because this function and install.sh each carried their own
+  1544	  # copy of this text: install substituted {{PROTOCOL_SOURCE}}, this one did
+  1545	  # not — two bodies for the same file, and the recorded digest never matched
+  1546	  # the disk (OWN-0074). A missing generator preserves the surface (upgrade's
+  1547	  # fail-toward-preservation posture, same as an illegal cell below).
+  1548	  if ! command -v _render_protocol_pointer >/dev/null 2>&1; then
+  1549	    echo "    WARNING: _render_protocol_pointer unavailable — PROTOCOL.md pointer PRESERVED" >&2
+  1550	    return 0
+  1551	  fi
+  1552	
+  1553	  # Resolve the PROTOCOL_SOURCE the pointer should name (AC-6c, Owner
+  1554	  # decision D3). Precedence:
+  1555	  #   1. request.placeholders.PROTOCOL_SOURCE from the install-state — the
+  1556	  #      install has ALWAYS persisted it there (union across runs; the
+  1557	  #      PLAN-168 debate's claim that it was never persisted checked the
+  1558	  #      wrong key — codex rail r1 P1).
+  1559	  #   2. A HEALTHY on-disk pointer: extract the value it already names and
+  1560	  #      keep it — never silently rename a sound pointer to today's checkout.
+  1561	  #   3. $SOURCE_DIR (this upgrade's checkout) — last resort, used for
+  1562	  #      genuinely old installs with no state and no sound pointer (incl.
+  1563	  #      the degraded-cure path, where the pointer names nothing usable).
+  1564	  local _ptr_psource=""
+  1565	  if [ -f "$_INSTALL_STATE_FILE" ] && command -v python3 >/dev/null 2>&1; then
+  1566	    _ptr_psource="$( python3 - "$_INSTALL_STATE_FILE" <<'PYEOF' 2>/dev/null || true
+  1567	import json, sys
+  1568	try:
+  1569	    with open(sys.argv[1], "r", encoding="utf-8") as f:
+  1570	        doc = json.load(f)
+  1571	    v = (doc.get("request") or {}).get("placeholders", {}).get("PROTOCOL_SOURCE", "")
+  1572	    if isinstance(v, str) and v and "{{" not in v:
+  1573	        sys.stdout.write(v)
+  1574	except Exception:
+  1575	    pass
+  1576	PYEOF
+  1577	)"
+  1578	  fi
+  1579	  if [ -z "$_ptr_psource" ] && [ -f "$pointer" ]; then
+  1580	    # D3 route 2: trust a SOUND pointer. Extract the source it names and
+  1581	    # accept it only if re-rendering with that value reproduces the file
+  1582	    # byte-for-byte (the same reconstruction discipline as the degraded
+  1583	    # recognizer — anything else is adopter content, not a source of truth).
+  1584	    local _ptr_cand
+  1585	    _ptr_cand="$( sed -n 's|^\(.*\)/PROTOCOL\.md$|\1|p' "$pointer" 2>/dev/null | sed -n '1p' )"
+  1586	    if [ -n "$_ptr_cand" ] && [ "${_ptr_cand#\{\{}" = "$_ptr_cand" ]; then
+  1587	      if _render_protocol_pointer "$SOURCE_DIR" "$TARGET" "$PROFILE" "$STACK" "$_ptr_cand" \
+  1588	           | cmp -s - "$pointer" 2>/dev/null; then
+  1589	        _ptr_psource="$_ptr_cand"
+  1590	      fi
+  1591	    fi
+  1592	  fi
+  1593	  if [ -z "$_ptr_psource" ]; then
+  1594	    _ptr_psource="$SOURCE_DIR"
+  1595	  fi
+  1596	
+  1597	  local _ptr_full
+  1598	  _ptr_full="$( _render_protocol_pointer "$SOURCE_DIR" "$TARGET" "$PROFILE" "$STACK" "$_ptr_psource" )"
+  1599	
+  1600	  # The CANONICAL digest: the hash of exactly what the framework WOULD write.
+  1601	  # Computed on every path, because the baseline rewrite must record it even
+  1602	  # when the pointer is preserved — recording the customised bytes instead
+  1603	  # would make the NEXT upgrade read H_dst == H_base and clobber them (C.5).
+  1604	  # Post-PLAN-168 this is the hash of the SUBSTITUTED body — the same bytes
+  1605	  # install writes — so the recorded digest finally matches the disk (INV-4).
+  1606	  _REFRESH_PROTOCOL_CANON_HASH=""
+  1607	  if command -v _hash_stdin >/dev/null 2>&1; then
+  1608	    _REFRESH_PROTOCOL_CANON_HASH="$( printf '%s\n' "$_ptr_full" | _hash_stdin 2>/dev/null || true )"
+  1609	  fi
+  1610	
+  1611	  # ---- OBSERVE -------------------------------------------------------------
+  1612	  local _lt _pr _lc
+  1613	  _lt="$( _ov_obs_live_type "$pointer" )"
+  1614	  _pr="$( _ov_obs_prior_record "PROTOCOL.md" )"
+  1615	  if [ "$_lt" != "regular" ]; then
+  1616	    _lc="-"
+  1617	  elif _protocol_pointer_is_degraded "$pointer"; then
+  1618	    # PLAN-168 W2 (AC-6b, Owner decision D2): byte-exact reconstruction of
+  1619	    # the {{PROTOCOL_SOURCE}}-literal template this script used to write.
+  1620	    # Framework garbage, not adopter content — the verdict routes it to the
+  1621	    # REFRESH cure below. Checked BEFORE pristine/edited: a degraded body
+  1622	    # can never equal the substituted canonical, and classifying it `edited`
+  1623	    # is exactly the immortal-defect route this wave closes.
+  1624	    _lc="degraded"
+  1625	  elif [ -n "$_REFRESH_PROTOCOL_CANON_HASH" ] \
+  1626	       && [ "$( _hash_file "$pointer" 2>/dev/null || true )" = "$_REFRESH_PROTOCOL_CANON_HASH" ]; then
+  1627	    _lc="pristine"
+  1628	  else
+  1629	    _lc="edited"
+  1630	  fi
+  1631	
+  1632	  # ---- DECIDE --------------------------------------------------------------
+  1633	  local _pair _verdict
+  1634	  if ! _pair="$( _ownership_verdict protocol "$_pr" "$_lt" "$_lc" yes copy \
+  1635	                   "$CEREMONY_EFFECTIVE" upgrade none )"; then
+  1636	    echo "    WARNING: PROTOCOL.md dimensions are not a legal cell — PRESERVED" >&2
+  1637	    return 0
+  1638	  fi
+  1639	  _verdict="${_pair%% *}"
+  1640	  _PROTOCOL_HASH_SOURCE="${_pair##* }"
+  1641	
+  1642	  # ---- EXECUTE -------------------------------------------------------------
+  1643	  # The guards this surface never had are not new branches: they are what the
+  1644	  # decision already says. A destination that is not a regular file is
+  1645	  # adopter-owned, so the verdict is unowned and nothing is written — which is
+  1646	  # exactly the leaf-symlink / directory / FIFO protection SPEC and the marker
+  1647	  # acquired during the S296 rounds and the pointer did not.
+  1648	  case "$_verdict" in
+  1649	    PRESERVE_UNOWNED|OMIT_RECORD)
+  1650	      case "$_lt" in
+  1651	        symlink) echo "    SKIP: PROTOCOL.md is a symlink — refusing to write THROUGH it (would mutate a path outside the target)" >&2 ;;
+  1652	        dir|dir_empty) echo "    SKIP: PROTOCOL.md is a directory — adopter-owned, refusing to write into it" >&2 ;;
+  1653	        special) echo "    SKIP: PROTOCOL.md is an unsupported special file — preserved, surface untouched" >&2 ;;
+  1654	        *) echo "    SKIP: PROTOCOL.md pointer (recorded --ceremony user install — a user install never creates root files, WS4)" ;;
+  1655	      esac
+  1656	      return 0
+  1657	      ;;
+  1658	
+  1659	    PRESERVE_OWNED)
+  1660	      _PROTOCOL_DELIVERED=1
+  1661	      if [ "$_lc" = "edited" ]; then
+  1662	        # ADR-155 decision (iii): the verified S238 case. An adopter-customised
+  1663	        # pointer is CONTENT, not a fork — it is preserved, and the record keeps
+  1664	        # the canonical digest so the next upgrade does not read it as pristine.
+  1665	        if [ "$DRY_RUN" -eq 0 ] && [ -f "$pointer" ]; then
+  1666	          mkdir -p "$BAK_DIR" 2>/dev/null || true
+  1667	          cp "$pointer" "$BAK_DIR/PROTOCOL.md" 2>/dev/null || true
+  1668	        fi
+  1669	        echo "    PRESERVED (root PROTOCOL.md is adopter-customised — pointer NOT refreshed; backup in $BAK_DIR/PROTOCOL.md)" >&2
+  1670	      else
+  1671	        echo "    SKIP: PROTOCOL.md pointer (ownership carried forward)"
+  1672	      fi
+  1673	      return 0
+  1674	      ;;
+  1675	
+  1676	    DELIVER|REFRESH)
+  1677	      if [ "$DRY_RUN" -eq 1 ]; then
+  1678	        echo "    (dry-run) would REFRESH: PROTOCOL.md pointer"
+  1679	        return 0
+  1680	      fi
+  1681	      _up_record_op "refresh_protocol_pointer" "PROTOCOL.md"
+  1682	      # Backup-always before the overwrite, even with no baseline manifest —
+  1683	      # this is what made the S238 loss recoverable on a FIRST upgrade.
+  1684	      if [ -f "$pointer" ]; then
+  1685	        mkdir -p "$BAK_DIR" 2>/dev/null || true
+  1686	        cp "$pointer" "$BAK_DIR/PROTOCOL.md" 2>/dev/null || true
+  1687	        echo "    BACKED UP: PROTOCOL.md (root) -> $BAK_DIR/PROTOCOL.md"
+  1688	      fi
+  1689	      printf '%s\n' "$_ptr_full" > "$pointer"
+  1690	      _PROTOCOL_DELIVERED=1
+  1691	      if [ "$_lc" = "degraded" ]; then
+  1692	        echo "    CURED: PROTOCOL.md pointer was framework-degraded ({{PROTOCOL_SOURCE}} left literal by an old upgrade) — refreshed; original in $BAK_DIR/PROTOCOL.md"
+  1693	      else
+  1694	        echo "    REFRESHED: PROTOCOL.md pointer"
+  1695	      fi
+  1696	      return 0
+  1697	      ;;
+  1698	  esac
+  1699	}
+  1700	
+  1701	# ===========================================================================
+  1702	# PLAN-166 F3 (ADR-155-AMEND-1) — delivery-record lookups + SPEC/v1 FORCED
+  1703	# refresh + framework version marker refresh.
+  1704	# ---------------------------------------------------------------------------
+  1705	# Ownership of the three conditional surfaces (PROTOCOL.md, SPEC/v1,
+  1706	# .claude/.framework-version) derives from the REGISTERED DELIVERY — here,
+  1707	# the PRE-upgrade baseline manifest records (the same record install.sh
+  1708	# writes and doctor.sh reads) — never from the ceremony alone and never from
+  1709	# file presence (r7/r13/r17/r19/r20).
+  1710	# ===========================================================================
+  1711	_baseline_has_spec_record() {
+  1712	  [[ -n "$_BASELINE_MANIFEST_FILE" && -f "$_BASELINE_MANIFEST_FILE" ]] || return 1
+  1713	  # `(/|  |$)` and not a bare trailing slash: a --mode link install records
+  1714	  # the WHOLE tree as one directory symlink — `LINK  SPEC/v1  <target>`, no
+  1715	  # trailing slash — which a `SPEC/v1/` fragment can never match (the same
+  1716	  # `(  |$)` treatment the marker/PROTOCOL readers already have; family
+  1717	  # swept with doctor.sh _dr_delivered, re-pass closure).
+  1718	  grep -Eq '^([0-9a-f]{64}|LINK)  SPEC/v1(/|  |$)' "$_BASELINE_MANIFEST_FILE" 2>/dev/null
+  1719	}
+  1720	_baseline_has_marker_record() {
+
+exec
+/bin/zsh -lc "sed -n '1,180p' scripts/tests/test-ownership-table.sh; sed -n '620,760p' scripts/tests/test-ownership-table.sh" in /Users/joaocanhada/canhada-labs/ceo-orchestration
+ succeeded in 0ms:
+#!/usr/bin/env bash
+# =============================================================================
+# PLAN-167 W0.3 — ownership decision table runner.
+#
+# Executes EVERY legal cell of scripts/tests/ownership_table.tsv against the
+# REAL scripts/install.sh and scripts/upgrade.sh. There is no mock of the
+# subject under test: the fixture is a real target tree, the run is a real
+# invocation, and the verdict is DERIVED from observable state, never parsed
+# out of prose.
+#
+# Reasoning + dimension/enum definitions: docs/ownership-decision-table.md
+#
+# Usage:
+#   test-ownership-table.sh              run every row
+#   test-ownership-table.sh --only OWN-0013
+#   test-ownership-table.sh --map        emit the map only (no pass/fail exit)
+#   test-ownership-table.sh --list       list row ids and exit
+#   test-ownership-table.sh --keep       keep the scratch dir (debugging)
+#   test-ownership-table.sh --print-legacy-tag   print the pinned legacy tag
+#   test-ownership-table.sh --stable-header      machine-independent header
+#                                        (for RECORDING a committable baseline)
+#
+# Exit: 0 = every row matched its expected pair. 1 = at least one mismatch.
+#       2 = harness/usage error (never confused with a row failure).
+#
+# NOT `set -e`: this harness OBSERVES scripts that are expected to fail on
+# some rows. Dying on their exit status would erase the observation.
+# =============================================================================
+set -uo pipefail
+
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+REPO_ROOT="$( cd "$SCRIPT_DIR/../.." && pwd )"
+TSV="$SCRIPT_DIR/ownership_table.tsv"
+
+# The ONE copy of the legacy-pristine pin. The legacy_pristine* fixtures build
+# from this tag, and CI fetches it via --print-legacy-tag — the workflow never
+# hardcodes a second copy of this truth (PLAN-168 W1, same --print-pin shape
+# as test-install-upgrade-parity-e2e.sh).
+LEGACY_TAG="v1.2.0"
+
+CELL_TIMEOUT="${CELL_TIMEOUT:-60}"
+ONLY=""
+MAP_ONLY=0
+LIST_ONLY=0
+KEEP=0
+STABLE_HEADER=0
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --only) ONLY="${2:-}"; shift 2 ;;
+    --map)  MAP_ONLY=1; shift ;;
+    --list) LIST_ONLY=1; shift ;;
+    --keep) KEEP=1; shift ;;
+    --print-legacy-tag) printf '%s\n' "$LEGACY_TAG"; exit 0 ;;
+    --stable-header) STABLE_HEADER=1; shift ;;
+    -h|--help) sed -n '2,33p' "${BASH_SOURCE[0]}"; exit 0 ;;
+    *) echo "ERROR: unknown argument: $1" >&2; exit 2 ;;
+  esac
+done
+
+[[ -f "$TSV" ]] || { echo "ERROR: table not found: $TSV" >&2; exit 2; }
+
+# --- framework hash helpers (the same ones the scripts use) ------------------
+# shellcheck source=/dev/null
+. "$REPO_ROOT/scripts/_hash_lib.sh" 2>/dev/null || {
+  echo "ERROR: cannot source scripts/_hash_lib.sh" >&2; exit 2; }
+command -v _hash_file  >/dev/null 2>&1 || { echo "ERROR: _hash_file missing"  >&2; exit 2; }
+command -v _hash_stdin >/dev/null 2>&1 || { echo "ERROR: _hash_stdin missing" >&2; exit 2; }
+
+# PLAN-168 W2: the shared pointer generator + degraded recognizer. The
+# `degraded` fixture must be rendered by the ONE template — a hand-built
+# approximation would test the fixture, not the cure.
+# shellcheck source=/dev/null
+. "$REPO_ROOT/scripts/_framework_manifest_set.sh" 2>/dev/null || {
+  echo "ERROR: cannot source scripts/_framework_manifest_set.sh" >&2; exit 2; }
+command -v _render_protocol_pointer_degraded >/dev/null 2>&1 || {
+  echo "ERROR: _render_protocol_pointer_degraded missing (W2 not in tree)" >&2; exit 2; }
+
+# --- scratch ----------------------------------------------------------------
+# NEVER $HOME, NEVER inside the repo (PLAN-167 W0.3 hard requirement).
+WORK="$( mktemp -d "${TMPDIR:-/tmp}/plan167-own.XXXXXX" )" || exit 2
+T="$WORK/t"                 # the ONE target path every row uses (see §fixtures)
+cleanup() {
+  [[ "$KEEP" -eq 1 ]] && { echo "scratch kept: $WORK" >&2; return; }
+  chmod -R u+w "$WORK" 2>/dev/null || true
+  rm -rf "$WORK" 2>/dev/null || true
+}
+trap cleanup EXIT
+
+# --- portable timeout -------------------------------------------------------
+# macOS ships no timeout(1). A cell that hangs (the FIFO class) must be killed,
+# not waited on — two separate defects in this space were a blocking cp.
+_TIMEOUT_BIN=""
+if command -v timeout  >/dev/null 2>&1; then _TIMEOUT_BIN="timeout"
+elif command -v gtimeout >/dev/null 2>&1; then _TIMEOUT_BIN="gtimeout"; fi
+
+_run_with_timeout() {  # $1 = seconds; rest = command
+  local secs="$1"; shift
+  if [[ -n "$_TIMEOUT_BIN" ]]; then
+    "$_TIMEOUT_BIN" "$secs" "$@"
+    return $?
+  fi
+  # Fallback: background + watchdog. Kills the process group so a blocked cp
+  # inside the script dies with it.
+  "$@" &
+  local pid=$!
+  ( sleep "$secs"; kill -9 "$pid" 2>/dev/null ) &
+  local watch=$!
+  wait "$pid" 2>/dev/null
+  local rc=$?
+  kill "$watch" 2>/dev/null
+  wait "$watch" 2>/dev/null
+  return $rc
+}
+
+# --- surface geometry -------------------------------------------------------
+_relpath_for() {
+  case "$1" in
+    spec)     printf 'SPEC/v1' ;;
+    protocol) printf 'PROTOCOL.md' ;;
+    marker)   printf '.claude/.framework-version' ;;
+    *) return 1 ;;
+  esac
+}
+MANIFEST_REL=".claude/.install-manifest.sha256"
+
+# --- observation primitives -------------------------------------------------
+_obs_type() {  # $1 = abs path -> the live_type vocabulary
+  local p="$1"
+  if   [[ -L "$p" ]]; then printf 'symlink'
+  elif [[ ! -e "$p" ]]; then printf 'absent'
+  elif [[ -d "$p" ]]; then
+    if [[ -z "$( ls -A "$p" 2>/dev/null )" ]]; then printf 'dir_empty'; else printf 'dir'; fi
+  elif [[ -p "$p" || -S "$p" || -b "$p" || -c "$p" ]]; then printf 'special'
+  elif [[ -f "$p" ]]; then printf 'regular'
+  else printf 'special'; fi
+}
+
+# Content digest of a surface, whatever its shape. Directory digest reproduces
+# upgrade.sh's _spec_tree_fingerprint semantics (sorted "<sha>  <rel>" lines).
+_obs_digest() {  # $1 = abs path
+  local p="$1" lines
+  if [[ -L "$p" ]]; then printf 'link:%s' "$( readlink "$p" 2>/dev/null || true )"; return 0; fi
+  if [[ ! -e "$p" ]]; then printf 'absent'; return 0; fi
+  if [[ -d "$p" ]]; then
+    lines="$( ( cd "$p" && find . -type f -print 2>/dev/null ) | LC_ALL=C sort \
+      | while IFS= read -r r; do
+          [[ -n "$r" ]] || continue
+          printf '%s  %s\n' "$( _hash_file "$p/$r" 2>/dev/null || echo FAIL )" "$r"
+        done )"
+    [[ -z "$lines" ]] && { printf 'emptydir'; return 0; }
+    printf '%s' "$( printf '%s\n' "$lines" | _hash_stdin )"
+    return 0
+  fi
+  if [[ -f "$p" ]]; then printf '%s' "$( _hash_file "$p" 2>/dev/null || echo UNREADABLE )"; return 0; fi
+  printf 'special'
+}
+
+# Modification-time signature of a surface. BSD stat takes -f, GNU takes -c;
+# both are tried so the harness behaves the same on macOS and CI.
+_stat_mtime() {  # $1 = abs path
+  stat -f '%m' "$1" 2>/dev/null || stat -c '%Y' "$1" 2>/dev/null || printf '0'
+}
+_obs_mtime() {  # $1 = abs path -> newest mtime under it (or its own)
+  local p="$1" newest=0 m r
+  if [[ -L "$p" || ! -e "$p" ]]; then printf '%s' "$( _stat_mtime "$p" )"; return 0; fi
+  if [[ -d "$p" ]]; then
+    while IFS= read -r r; do
+      [[ -n "$r" ]] || continue
+      m="$( _stat_mtime "$p/$r" )"
+      [[ "$m" =~ ^[0-9]+$ ]] || continue
+      (( m > newest )) && newest="$m"
+    done < <( cd "$p" && find . -type f -print 2>/dev/null )
+    printf '%s' "$newest"; return 0
+  fi
+  printf '%s' "$( _stat_mtime "$p" )"
+}
+
+# The manifest's record for a relpath: "" | "hash:<64hex>" | "link:<target>"
+# For SPEC/v1 the record may be per-file rows; presence of ANY row counts, and
+  # was later re-run as `--ceremony user`. The ceremony is read from
+  # .claude/.install-state.json, so labelling the row is not enough: the
+  # transition has to actually happen, or upgrade.sh still sees `maintainer`
+  # and the row silently tests the wrong branch.
+  if [[ "$transition_to_user" -eq 1 && "$operation" == "upgrade" ]]; then
+    _run_with_timeout "$CELL_TIMEOUT" "$src/scripts/install.sh" "$T" --ceremony user \
+      >> "$out" 2>&1 || true
+  fi
+  if [[ "$operation" == "upgrade" ]]; then
+    local uargs=( "$T" )
+    [[ "$skip_requested" == "self" ]] && uargs+=( --skip "$rel" )
+    if [[ "$skip_requested" == "descendant" ]]; then
+      local victim; victim="$( ( cd "$T/$rel" 2>/dev/null && find . ! -type d -print 2>/dev/null | LC_ALL=C sort | head -1 ) )"
+      victim="${victim#./}"
+      [[ -n "$victim" ]] && uargs+=( --skip "$rel/$victim" )
+    fi
+    _run_with_timeout "$CELL_TIMEOUT" "$src/scripts/upgrade.sh" "${uargs[@]}" >> "$out" 2>&1
+    rc=$?
+  else
+    local iargs=( "$T" --ceremony "$ceremony" )
+    [[ "$mode" == "link" ]] && iargs+=( --link )
+    [[ "$transition_to_user" -eq 1 ]] && iargs=( "$T" --ceremony user )
+    _run_with_timeout "$CELL_TIMEOUT" "$src/scripts/install.sh" "${iargs[@]}" >> "$out" 2>&1
+    rc=$?
+  fi
+  [[ -n "$bak_guard" ]] && chmod -R u+rwX "$bak_guard" 2>/dev/null
+
+  local timed_out=0
+  [[ $rc -eq 124 || $rc -eq 137 ]] && timed_out=1
+
+  # --- AFTER snapshot + derivation ----------------------------------------
+  local a_digest a_rec got_verdict got_hash
+  a_digest="$( _obs_digest "$T/$rel" )"
+  a_rec="$( _obs_record "$T/$MANIFEST_REL" "$rel" )"
+  _MTIME_AFTER="$( _obs_mtime "$T/$rel" )"
+  _ESCAPE_AFTER="$( _obs_digest "$WORK/foreign/leaf" 2>/dev/null || printf 'absent' )"
+
+  if [[ "$timed_out" -eq 1 ]]; then
+    got_verdict="TIMEOUT"; got_hash="TIMEOUT"
+  else
+    got_verdict="$( _derive_verdict "$b_digest" "$a_digest" "$b_rec" "$a_rec" "$out" "$surface" "$rel" "$operation" )"
+    got_hash="$( _derive_hash_source "$surface" "$a_rec" "$b_rec" "$src" "$exp_hash" )"
+  fi
+
+  # --- compare -------------------------------------------------------------
+  local status="RED"
+  local alt=""
+  case "$note" in *indistinguishable=*) alt="${note##*indistinguishable=}"; alt="${alt%% *}" ;; esac
+
+  # An escape outranks the verdict comparison. A row whose pair matches while
+  # the run wrote OUTSIDE the target has not passed: it has demonstrated the
+  # exact damage class this table exists to prevent, and calling that GREEN
+  # would be the instrument concealing a data loss.
+  if [[ "$_ESCAPE_BEFORE" != "$_ESCAPE_AFTER" ]]; then
+    status="ESCAPE"; FAIL=$((FAIL+1))
+  elif [[ "$got_verdict" == "$exp_verdict" && "$got_hash" == "$exp_hash" ]]; then
+    status="GREEN"; PASS=$((PASS+1))
+  elif [[ "$got_verdict" == "$exp_verdict" && -n "$alt" && "$got_hash" == "$alt" ]]; then
+    status="AMBIG"; AMBIG=$((AMBIG+1))
+  elif [[ "$got_verdict" == "TIMEOUT" ]]; then
+    status="TIMEOUT"; FAIL=$((FAIL+1))
+  else
+    FAIL=$((FAIL+1))
+  fi
+
+  MAP_LINES+="$( printf '%-10s %-7s exp=%-16s/%-22s got=%-16s/%-22s rc=%-3s %s\n' \
+      "$id" "$status" "$exp_verdict" "$exp_hash" "$got_verdict" "$got_hash" "$rc" "$origin" )"$'\n'
+}
+
+# =============================================================================
+# Main
+# =============================================================================
+if [[ "$LIST_ONLY" -eq 1 ]]; then
+  awk -F'\t' '!/^#/ && $1!="id" && NF>1 {print $1"\t"$13}' "$TSV"
+  exit 0
+fi
+
+echo "== PLAN-167 ownership decision table =="
+if [[ "$STABLE_HEADER" -eq 1 ]]; then
+  # Machine-independent header, for RECORDING a baseline that gets committed.
+  # The absolute-path variant below leaked runner paths into the repo once
+  # (ownership-baseline-map.txt, PLAN-168 debate r1 devops must-fix 4) — a
+  # committed baseline must diff clean across machines.
+  echo "   table:  scripts/tests/ownership_table.tsv"
+  echo "   source: <repo>"
+  echo "   scratch:<scratch>"
+  echo "   timeout:${CELL_TIMEOUT}s/cell   timeout-bin:<bin>"
+else
+  echo "   table:  $TSV"
+  echo "   source: $REPO_ROOT"
+  echo "   scratch:$WORK"
+  echo "   timeout:${CELL_TIMEOUT}s/cell   timeout-bin:${_TIMEOUT_BIN:-<fallback>}"
+fi
+echo ""
+
+# Prime the canonical pointer digest for $T from a real install. Structurally
+# fresh rows build no base, so without this the protocol candidate would be
+# unavailable exactly where it is needed.
+_base_tar maintainer copy >/dev/null || { echo "ERROR: could not prime base" >&2; exit 2; }
+
+
+# Rows are consumed in file order; the map is sorted by id at emit time so the
+# output is deterministic regardless of table order.
+while IFS=$'\t' read -r id surface prior_record live_type live_content \
+      source_has mode ceremony operation skip_requested fault \
+      exp_verdict exp_hash origin note; do
+  [[ -z "${id:-}" ]] && continue
+  case "$id" in \#*|id) continue ;; esac
+  # --only takes a comma-separated list: iterating on a cluster of related rows
+  # should cost ONE base install, not one per row.
+  if [[ -n "$ONLY" && ",$ONLY," != *",$id,"* ]]; then continue; fi
+  _run_row "$id" "$surface" "$prior_record" "$live_type" "$live_content" \
+           "$source_has" "$mode" "$ceremony" "$operation" "$skip_requested" \
+           "${fault:-none}" "$exp_verdict" "$exp_hash" "$origin" "${note:-}"
+done < "$TSV"
+
+printf '%s' "$MAP_LINES" | LC_ALL=C sort
+
+echo ""
+echo "GREEN=$PASS  RED=$FAIL  AMBIG=$AMBIG  HARNESS-ERR=$ERR"
+
+# --map is a REPORTING mode, never a gate. Suppressing a non-zero exit is its
+# whole purpose, so a CI step that uses it becomes a dead gate that reports
+# success forever. Say so loudly on the way out, on stderr, so the mistake is
+# visible in the job log instead of silent (PLAN-168 debate r1, QA must-fix 2).
+if [[ "$MAP_ONLY" -eq 1 ]]; then
+  if [[ "$FAIL" -gt 0 || "$ERR" -gt 0 ]]; then
+    echo "" >&2
+    echo "NOTE: --map is a REPORTING mode and is exiting 0 despite RED=$FAIL ERR=$ERR." >&2
+    echo "      Do NOT use --map in a gate. Run without it to get a pass/fail exit." >&2
+  fi
+  exit 0
+fi
+[[ "$ERR" -gt 0 ]] && exit 2
+[[ "$FAIL" -gt 0 ]] && exit 1
+exit 0
+
+exec
+/bin/zsh -lc "sed -n '1,190p' .github/workflows/smoke-install.yml" in /Users/joaocanhada/canhada-labs/ceo-orchestration
+ succeeded in 0ms:
+name: Smoke Install
+
+on:
+  pull_request:
+    paths:
+      - "scripts/install.sh"
+      - "scripts/upgrade.sh"
+      # PLAN-161 (CI wiring): upgrade oracles + the manifest lib they
+      # exercise — keep BOTH filter lists (pull_request + push) in sync.
+      - "scripts/_framework_manifest_set.sh"
+      # The ownership + parity e2e call _hash_file/_hash_stdin from here, and
+      # this workflow is their ONLY CI execution — without the helper in the
+      # filter, a PR touching only it skips the gate entirely (codex W1
+      # round 10, P2: the "red gate nobody runs" class, one level deeper).
+      - "scripts/_hash_lib.sh"
+      - "scripts/tests/test-upgrade-dryrun-identity.sh"
+      - "scripts/tests/test-upgrade-exclusions.sh"
+      - "scripts/tests/smoke-install.sh"
+      # PLAN-166 F4 (OQ-4): the install/upgrade parity e2e and its classifier.
+      # The finding this closes is "a red gate nobody runs" (5th instance) --
+      # an unwired test is the same as no test.
+      - "scripts/tests/test-install-upgrade-parity-e2e.sh"
+      - "scripts/tests/_parity_classify.py"
+      # PLAN-166 F3 (ADR-155-AMEND-1): delivery-record ownership e2e —
+      # scripts/tests/*.sh runs ONLY in this workflow (same r11/r20 wiring
+      # rule as the parity e2e above).
+      - "scripts/tests/test-upgrade-spec-ownership.sh"
+      # PLAN-168 W1 (AC-1): the PLAN-167 ownership oracles + their truth
+      # table + contract doc. The unit oracle runs per-PR in THIS workflow;
+      # the ~25-min e2e runs in ownership-nightly.yml (schedule: ignores
+      # paths:, so it cannot live behind this filter) — but a PR touching
+      # the table/harness/contract must still light up the fast gate here.
+      # Without these entries, a PR changing only the table skips the gate
+      # entirely: the r10-F4 "red gate nobody runs" class, again.
+      - "scripts/tests/test-ownership-verdict-unit.sh"
+      - "scripts/tests/test-ownership-table.sh"
+      - "scripts/tests/ownership_table.tsv"
+      - "docs/ownership-decision-table.md"
+      # PLAN-168 W1+W2 (rail r3 P1): the nightly gate + its positive control
+      # get fast per-PR steps HERE too — without these entries a PR could
+      # break the gate's rc/status handling while every PR check stays green.
+      # The pointer-generator render control is the per-PR half of INV-4
+      # (the full 4-leg e2e runs in ownership-nightly.yml).
+      - "scripts/tests/ownership-nightly-gate.sh"
+      - "scripts/tests/test-ownership-nightly-gate.sh"
+      - "scripts/tests/ownership-expected-reds.txt"
+      - "scripts/tests/test-protocol-pointer-render.sh"
+      - "scripts/tests/test-protocol-pointer-inv4.sh"
+      - "templates/**"
+      # Widened from SPEC/v1/install-cli.md: SPEC/v1 is delivered by install.sh
+      # and (until F3) by nothing in upgrade.sh, so ANY SPEC/v1 change is a
+      # parity event, not just the CLI contract doc.
+      - "SPEC/v1/**"
+      # PLAN-166 F4 wiring (r11/r20): scripts/tests/*.sh runs ONLY here, so a
+      # PR touching just one of these would otherwise skip the regression.
+      - "scripts/doctor.sh"
+      - ".claude/.framework-version"
+      - ".claude/scripts/check-framework-updates.sh"
+      - ".github/workflows/smoke-install.yml"
+      # PLAN-006 Phase 1 (Sprint 6): Adapter Layer migration changes
+      # install-time expectations (hook import paths, contract). Scope
+      # broadened for the sprint; narrow back post-Sprint-7 closeout.
+      - ".claude/hooks/**"
+  push:
+    branches:
+      - main
+    paths:
+      # KEEP IDENTICAL to the pull_request list above. The two had already
+      # drifted (push was missing SPEC/v1 and this workflow file); PLAN-166 F4
+      # re-syncs them, because a filter that fires on the PR and not on the
+      # merge is a gate with a hole in it.
+      - "scripts/install.sh"
+      - "scripts/upgrade.sh"
+      - "scripts/_framework_manifest_set.sh"
+      - "scripts/_hash_lib.sh"
+      - "scripts/tests/test-upgrade-dryrun-identity.sh"
+      - "scripts/tests/test-upgrade-exclusions.sh"
+      - "scripts/tests/smoke-install.sh"
+      - "scripts/tests/test-install-upgrade-parity-e2e.sh"
+      - "scripts/tests/_parity_classify.py"
+      - "scripts/tests/test-upgrade-spec-ownership.sh"
+      - "scripts/tests/test-ownership-verdict-unit.sh"
+      - "scripts/tests/test-ownership-table.sh"
+      - "scripts/tests/ownership_table.tsv"
+      - "docs/ownership-decision-table.md"
+      # PLAN-168 W1+W2 (rail r3 P1): the nightly gate + its positive control
+      # get fast per-PR steps HERE too — without these entries a PR could
+      # break the gate's rc/status handling while every PR check stays green.
+      # The pointer-generator render control is the per-PR half of INV-4
+      # (the full 4-leg e2e runs in ownership-nightly.yml).
+      - "scripts/tests/ownership-nightly-gate.sh"
+      - "scripts/tests/test-ownership-nightly-gate.sh"
+      - "scripts/tests/ownership-expected-reds.txt"
+      - "scripts/tests/test-protocol-pointer-render.sh"
+      - "scripts/tests/test-protocol-pointer-inv4.sh"
+      - "templates/**"
+      - "SPEC/v1/**"
+      - "scripts/doctor.sh"
+      - ".claude/.framework-version"
+      - ".claude/scripts/check-framework-updates.sh"
+      - ".github/workflows/smoke-install.yml"
+      - ".claude/hooks/**"
+
+concurrency:
+  group: smoke-install-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    # PLAN-012 Phase 2 CEO_SOTA_DISABLE parity.
+    if: vars.CEO_SOTA_DISABLE != '1'
+    runs-on: ubuntu-latest
+    # PLAN-161: 5 -> 8 — headroom for the two upgrade oracles (each runs
+    # full install + upgrade legs against fixture adopter repos).
+    # PLAN-166 F4: 8 -> 20. MEASURED, not guessed. The parity e2e runs 2 full
+    # install legs + 1 upgrade leg PER ceremony mode, and the positive control
+    # runs the same again with a planted divergence: 12 install/upgrade
+    # operations added to this job. Local wall time (Darwin arm64, 16 cores,
+    # 2026-08-05): gate 122s + control 118s = 240s. A 2-core ubuntu-latest
+    # runner is the usual 2-3x slower, i.e. 8-12 min of NEW work on top of the
+    # ~5 min this job already spent. 15 would sit inside the noise band, and
+    # the perf-gate N=20 flake (PLAN-159) was exactly that mistake. Re-tighten
+    # once real CI runs give a p95.
+    # PLAN-166 F3 (assembler): 20 -> 25. The spec-ownership e2e adds 4 more
+    # installs + 3 upgrades (S1-S8; ~3-4 min local per the W1-C measurement),
+    # i.e. up to ~8-10 more CI minutes at the same 2-3x factor. Same
+    # anti-flake sizing rule as the F4 bump above.
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        # SHA-pinned (Sprint 7 Dependabot bump): actions/checkout@v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 1
+
+      # PLAN-166 F4: the parity e2e's historical leg installs from a PINNED
+      # TAG. `fetch-depth: 1` produces a checkout with NO tags, so the pin
+      # would not resolve and the gate would die before comparing a single
+      # tree - "it passes on my clone" is precisely the hole this test exists
+      # to close. The pin is READ FROM THE TEST (--print-pin) so the workflow
+      # never becomes a second copy of that truth.
+      - name: Fetch the parity pin tag
+        run: |
+          set -euo pipefail
+          PIN="$(bash scripts/tests/test-install-upgrade-parity-e2e.sh --print-pin)"
+          echo "parity historical pin: $PIN"
+          git fetch --no-tags --depth 1 origin "+refs/tags/$PIN:refs/tags/$PIN"
+          git rev-parse --verify "refs/tags/$PIN^{commit}"
+
+      - name: Setup Python 3.11
+        # SHA-pinned (Sprint 7 Dependabot bump): actions/setup-python@v6.2.0
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.11"
+
+      - name: Install jq (for settings.json merge)
+        run: |
+          set -euo pipefail
+          if ! command -v jq >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq jq
+          fi
+          jq --version
+
+      # PLAN-168 W1 (AC-4, per-PR half): the DECISION oracle —
+      # _ownership_verdict() against every truth-table cell, in milliseconds.
+      # The OBSERVATION half (the ~25-min e2e) runs in ownership-nightly.yml;
+      # this fast half is what makes table/harness PRs cheap to gate.
+      - name: Ownership verdict unit oracle (milliseconds)
+        run: |
+          set -euo pipefail
+          bash scripts/tests/test-ownership-verdict-unit.sh
+
+      # PLAN-168 W1 (rail r3 P1): the nightly gate's fake-harness control is
+      # milliseconds — run it per-PR so a PR touching the gate cannot break
+      # its rc/status handling while PR checks stay green.
+      - name: Ownership nightly-gate positive control (fake harness)
+        run: |
+          set -euo pipefail
+          bash scripts/tests/test-ownership-nightly-gate.sh
+
+      # PLAN-168 W2 (AC-6, per-PR half of INV-4): the shared pointer
+      # generator's 8-scenario control — includes ONE real install (~1-2 min
+      # on CI iron). The full install->upgrade->cure e2e (4 legs, ~5 min CI)
+      # is nightly-only; MEASURED per the smoke budget notes above.
+      - name: Protocol pointer render control (generator parity)
+        run: |
+          set -euo pipefail
+
+exec
+/bin/zsh -lc "head -30 .claude/scripts/tests/test_release_workflow_asserts.py; grep -n '"'^import'"\\|"'^from'"' .claude/scripts/tests/test_release_workflow_asserts.py | head -30; python3 .claude/scripts/tests/test_release_workflow_asserts.py" in /Users/joaocanhada/canhada-labs/ceo-orchestration
+ succeeded in 318ms:
+................................................
+----------------------------------------------------------------------
+Ran 56 tests in 0.287s
+
+OK
+
+exec
+/bin/zsh -lc "gpg --status-fd 1 --verify .claude/plans/PLAN-168/approved.md.asc .claude/plans/PLAN-168/approved.md 2>/dev/null | grep -E '"'^'"\\[GNUPG:\\] (GOODSIG|VALIDSIG)' || true; printf '\\n--- plan approval ---\\n'; sed -n '1,220p' .claude/plans/PLAN-168/approved.md; printf '\\n--- OWNER script/status ---\\n'; sed -n '1,220p' .claude/plans/PLAN-167/OWNER-PREPARE-TO-SIGN.sh; sed -n '1,180p' .claude/plans/PLAN-167/W4-approved.md" in /Users/joaocanhada/canhada-labs/ceo-orchestration
+ succeeded in 0ms:
+
+--- plan approval ---
+# PLAN-168 — approved.md (DRAFT, deliberately unsignable)
+
+> **`Anchor-SHA` is a PLACEHOLDER on purpose.** This file cannot be signed as
+> it stands. The Owner pins the anchor to the real HEAD at signing time — that
+> is what binds the approval to a specific tree state instead of to a moving
+> target. **Precondition: the PLAN-166 ceremony must be LANDED first** — the
+> staged copies of the shared files carry that content underneath this pack's
+> edits, and `OWNER-LAND.sh` aborts if the live tree disagrees.
+
+```
+Anchor-SHA: 9d3f21d0caa8252f84410b9ff10c146a8004e805
+Plan: PLAN-168
+Wave: W1+W2+W3 (one pack, one ceremony — §3 of the plan)
+Ceremony: canonical-edit (Owner GPG)
+```
+
+## Scope — the exact paths this approval authorizes
+
+Group **A — canonical (`_CANONICAL_GUARDS`), the reason this ceremony exists**:
+
+```
+.github/workflows/smoke-install.yml
+.github/workflows/ownership-nightly.yml
+scripts/install.sh
+scripts/upgrade.sh
+scripts/_framework_manifest_set.sh
+.claude/adr/ADR-190-ownership-decision-table-contract.md
+```
+
+Group **B — free surface, landed by the same pack, listed for completeness**:
+
+```
+scripts/tests/test-ownership-table.sh
+scripts/tests/test-ownership-verdict-unit.sh        (unchanged — filter target only)
+scripts/tests/ownership_table.tsv
+scripts/tests/ownership-expected-reds.txt           (new)
+scripts/tests/ownership-nightly-gate.sh             (new)
+scripts/tests/test-ownership-nightly-gate.sh        (new)
+scripts/tests/test-protocol-pointer-render.sh       (new)
+scripts/tests/test-protocol-pointer-inv4.sh         (new)
+scripts/tests/ownership-baseline-map.txt            (re-recorded, stable header)
+.claude/scripts/tests/test_release_workflow_asserts.py
+docs/ownership-decision-table.md
+CLAUDE.md                                           (§1 count + §4 rule — ceremony-grade closeout edit)
+README.md · README.pt-BR.md · docs/README.md · docs/FAQ.md
+docs/CTO-GUIDE.md · docs/ARCHITECTURE.md · npm/README.md   (derived counts: 190 ADRs, 22 workflows)
+```
+
+## What this changes
+
+**W1 — the ownership oracles get a CI that actually runs them.** Four filter
+paths + the unit oracle per-PR in `smoke-install.yml`; a NEW
+`ownership-nightly.yml` runs the ~25-min e2e nightly behind
+`ownership-nightly-gate.sh`, which compares the exact RED id set against
+`ownership-expected-reds.txt` (any difference fails — shrinkage included; any
+TIMEOUT/ESCAPE/AMBIG fails outright; never `--map`). The gate itself is
+proven by a 12-scenario fake-harness control that also runs per-PR.
+
+**W2 — INV-4 closed at the class.** The pointer body is rendered by ONE
+shared generator inside `_framework_manifest_set.sh`; install and upgrade
+both call it (byte-identical output, proven against a real install).
+`PROTOCOL_SOURCE` is read from `request.placeholders` (it was ALWAYS
+persisted — the debate's contrary claim checked the wrong key). A
+`{{PROTOCOL_SOURCE}}`-literal pointer is recognized by exact template
+reconstruction (never substring) and CURED with backup; adopter-customized
+pointers stay preserved (S238). TSV gains OWN-0092/0093/0094; OWN-0074 goes
+GREEN; expected reds shrink to `{OWN-0016, OWN-0024, OWN-0027}`.
+
+Also in `upgrade.sh`: the literal `ADOPTER-FORK` token is RESTORED in the
+preserved-fork WARNING — a PLAN-167 rewrite regression caught by the
+PLAN-166 land's F3 e2e (44/45; back to 45/45 with this pack, proven in the
+overlay).
+
+**W3 — ADR-190.** The decision-table contract on the record: 10 dimensions,
+the 4-verdict enum (`ABORT_SURFACE` is an execution failure, not a verdict),
+INV-1..4, the deliberate SPEC/PROTOCOL asymmetry, `degraded` + hash-name
+aliasing, ADR-155-AMEND-1 amended-not-revoked, 3 open cells + OWN-0074 as
+closed history.
+
+## D2 scope nuance the Owner ratifies by signing
+
+D2 said "rows are only ADDED". Two verified consequences of the cure required
+more, both recorded in the plan §7 and ADR-190:
+- `OWN-0074`'s expected pair stays `PRESERVE_OWNED HASH_CANONICAL_POINTER`
+  (verdict column untouched), and the harness resolves the
+  PRIOR/CANONICAL naming ONLY when the two digests are byte-equal (post-fix
+  aliasing) — the observation cannot distinguish names for equal bytes.
+- `live_content` gained the value `degraded` (docs §2.4 + R-04b).
+
+## Evidence (recorded in plan §7 + rail/)
+
+Rail: r1 7 accepted, r2 6 accepted, r3 3 accepted + 1 refuted-with-evidence;
+closed at the AC-8 cap of 3 with the reason recorded. Proofs: render control
+8/8 (byte parity vs real install) · INV-4 e2e 4/4 legs · unit oracle 63/63 ·
+gate control 12/12 · full-table e2e via the real gate (see §7) ·
+claims + verify-counts rc=0.
+
+--- OWNER script/status ---
+#!/usr/bin/env bash
+# =============================================================================
+# PLAN-167 — prepara o approved.md para assinatura.
+#
+#   bash .claude/plans/PLAN-167/OWNER-PREPARE-TO-SIGN.sh
+#
+# Faz só o trabalho mecânico: confere o manifesto, fixa o Anchor-SHA no HEAD
+# atual e gera W4-approved.md a partir do draft. NÃO assina — a assinatura é
+# sua, com a sua chave, e é ela que autoriza a edição canônica.
+# =============================================================================
+set -euo pipefail
+
+D=".claude/plans/PLAN-167"
+[ -f "scripts/install.sh" ] || { echo "ABORT: rode da raiz do repositório" >&2; exit 1; }
+
+echo "== 1. o manifesto do pack confere? =="
+shasum -c "$D/staged-manifest.sha256" >/dev/null 2>&1 \
+  || { echo "ABORT: o manifesto NÃO confere — não assine" >&2; exit 1; }
+echo "   ok — $(wc -l < "$D/staged-manifest.sha256" | tr -d ' ') arquivos íntegros"
+
+echo "== 2. o pack aplica sem conflito? (ensaio, não altera nada) =="
+bash "$D/OWNER-W4-LAND.sh" --dry-run >/dev/null 2>&1 \
+  || { echo "ABORT: o ensaio falhou — não assine" >&2; exit 1; }
+echo "   ok — ensaio limpo"
+
+echo "== 3. fixando o Anchor-SHA no HEAD atual =="
+HEAD_SHA="$( git rev-parse HEAD )"
+sed "s|^Anchor-SHA: .*|Anchor-SHA: $HEAD_SHA|" "$D/W4-approved-draft.md" > "$D/W4-approved.md"
+grep -q "Anchor-SHA: $HEAD_SHA" "$D/W4-approved.md" \
+  || { echo "ABORT: não consegui fixar o anchor" >&2; rm -f "$D/W4-approved.md"; exit 1; }
+echo "   ok — $HEAD_SHA"
+
+cat <<EOF
+
+────────────────────────────────────────────────────────────────────
+PRONTO PARA ASSINAR.
+
+O que a sua assinatura autoriza: substituir a lógica de decisão de
+propriedade em scripts/install.sh, scripts/upgrade.sh e
+scripts/_framework_manifest_set.sh — código que TODO ADOTANTE executa.
+
+Evidência: 58 de 62 células verdes, 0 regressões, 4 rodadas de revisão
+cross-model. Os 4 vermelhos são deliberados (2 são defeito do TESTE) e
+estão nomeados em W4-approved-draft.md.
+
+Agora rode estes dois comandos:
+
+  gpg --detach-sign --armor $D/W4-approved.md
+  bash $D/OWNER-W4-LAND.sh
+
+Se o gpg reclamar de "No pinentry":
+  export GPG_TTY=\$(tty); gpgconf --kill gpg-agent
+────────────────────────────────────────────────────────────────────
+EOF
+# PLAN-167 W4 — approved.md (DRAFT, deliberately unsignable)
+
+> **`Anchor-SHA` is a PLACEHOLDER on purpose.** This file cannot be signed as
+> it stands. The Owner pins the anchor to the real HEAD at signing time — that
+> is what binds the approval to a specific tree state instead of to a moving
+> target.
+
+```
+Anchor-SHA: 08feef1a83d724eb3201518c3dbf12ddc2864d92
+Plan: PLAN-167
+Wave: W4
+Ceremony: canonical-edit (Owner GPG)
+```
+
+## Scope — the exact paths this approval authorizes
+
+Group **A — the ownership decision** (all three are `_CANONICAL_GUARDS`):
+
+```
+scripts/_framework_manifest_set.sh
+scripts/install.sh
+scripts/upgrade.sh
+```
+
+Group **B — free surface, already committed, listed for completeness**:
+
+```
+.claude/scripts/check-model-deprecations.py     (the FIFO hang fix)
+scripts/tests/test-ownership-verdict-unit.sh    (new unit oracle)
+```
+
+Nothing else. `.github/workflows/*` is deliberately **out of scope** — see
+Deferred below.
+
+## What this changes
+
+`install.sh` and `upgrade.sh` stop deciding ownership and start executing a
+decision. One pure function, `_ownership_verdict()`, answers every cell of the
+nine-dimension space; the callers observe the dimensions, call it, and carry
+out the verdict. The branch cascades they used to run are removed.
+
+Evidence, all reproducible from the repo:
+
+| Instrument | Result |
+|---|---|
+| unit oracle (`test-ownership-verdict-unit.sh`) | **60/60**, milliseconds |
+| e2e decision table (62 real installs/upgrades) | **58 green / 4 red** |
+| cross-model rail | **4 rounds, ~14 findings, 6 applied** |
+| regression diff vs the pre-refactor baseline | **0 cells changed status** |
+
+## Defects this closes
+
+1. **An out-of-tree write (S238 class).** The root pointer was written with
+   `cat >`, which follows an adopter's leaf symlink and modifies a file
+   OUTSIDE the target. Proven in live fire, now closed — the suite's escape
+   tripwire reports zero escapes.
+2. **An adopter's own `PROTOCOL.md` recorded as framework-owned.** The caller
+   computed `PRESERVE_UNOWNED` and an unconditional assignment overrode it.
+3. **A failed backup advancing the record.** `hash_source` stayed at
+   `HASH_SOURCE` after a REFRESH that never executed — INV-3.
+4. **r11-F1** (open since S296): absence of a LINK record counted as a match,
+   so a `--link` rerun serialized an arbitrary symlink as a trusted delivery.
+5. **A directory replacing a single-file surface** kept ownership, and the
+   continuity branch then recorded the adopter's own children by their live
+   hashes — which a later uninstall could delete.
+6. **A tree-walking scanner hanging forever on an adopter FIFO**, killing the
+   upgrade mid-run. It also MASKED the existing special-file guards: no e2e
+   could reach them, so green there proved nothing about them.
+
+## Known-open, with named cause (4 cells)
+
+Recorded rather than hidden — this is the §6.10 posture.
+
+| Cell | Cause | Class |
+|---|---|---|
+| `OWN-0016` | manifest enumerates live files only, so an emptied managed tree emits zero records and loses ownership | product, cause named by rail r2 |
+| `OWN-0024` `OWN-0027` | the fault-injection fixture cannot distinguish "backup failed" from "the chmod never blocked the copy" | **instrument** |
+| `OWN-0074` | fixture never customises the pointer, so the cell asserts nothing | **instrument** |
+
+Two of the three are defects in the TEST, not the product. None blocks the
+decision function; all four are reproducible with `--only <id>`.
+
+## Rail termination (AC-8) — by CAP, not by silence
+
+Four rounds ran. Round 4 still returned P1 findings, so the rail **did not
+converge**; the hard cap in §W3 stopped it. Terminating by silence is
+forbidden, so the reason is recorded here explicitly.
+
+Trajectory: `50/12 → 55/7 → 57/5 → 58/4`, no regressions accumulated.
+
+Unapplied round-4 findings, deliberately deferred:
+
+- *Run the ownership oracles in CI* — requires editing
+  `.github/workflows/smoke-install.yml`, which is a canonical surface outside
+  this Scope. **Deferred to its own ceremony** (see below).
+- *Route install ownership through the shared decision* — install's continuity
+  path still decides locally. Real, and larger than a cap-round patch.
+- *Preserve prior SPEC rows outside live enumeration* — the `OWN-0016` cause.
+
+## Deferred — needs its own plan, do NOT fold in here
+
+- **INV-4:** every upgrade degrades the root pointer to a literal
+  `{{PROTOCOL_SOURCE}}`. Install substitutes its placeholders; upgrade does
+  not. **Pre-existing and unrelated to this plan.** Reproducible probe:
+  `evidence/probe-INV4-pointer-substitution.sh`.
+- **CI wiring** (path filters + the `v1.2.0` tag fetch + running both oracles).
+  Three separate rail rounds and the devops critique all raised it. It is a
+  canonical-workflow edit and belongs in a ceremony whose Scope says so.
+
+## Owner checklist
+
+1. Read this file and `W2-STATUS-REPORT.md`.
+2. `shasum -c .claude/plans/PLAN-167/staged-manifest.sha256` **from the repo
+   root** — must be rc=0 (paths are repo-relative).
+3. Pin `Anchor-SHA` to `git rev-parse HEAD`, then sign.
+4. Follow `W4-land-runbook.md`.
+
+exec
+/bin/zsh -lc 'gpg --verify .claude/plans/PLAN-168/approved.md.asc .claude/plans/PLAN-168/approved.md; echo rc=$?; git rev-parse HEAD; grep -R "9d3f21d0caa8252f84410b9ff10c146a8004e805" -n .claude/governance .claude/plans/PLAN-168 2>/dev/null | head -20; git status --short .claude/plans/PLAN-168/approved.md*' in /Users/joaocanhada/canhada-labs/ceo-orchestration
+ succeeded in 0ms:
+gpg: Signature made Fri Aug  7 22:03:00 2026 -03
+gpg:                using EDDSA key AE9B236FDAF0462874060C6BCFCFACF00335DC74
+gpg: failed to create temporary file '/Users/joaocanhada/.gnupg/.#lk0x00000001032362c0.MacBook-Pro-de-Joao-2.local.29349': Operation not permitted
+gpg: can't connect to the keyboxd: Operation not permitted
+gpg: error opening key DB: No Keybox daemon running
+gpg: failed to create temporary file '/Users/joaocanhada/.gnupg/.#lk0x00000001032352b0.MacBook-Pro-de-Joao-2.local.29349': Operation not permitted
+gpg: can't connect to the keyboxd: Operation not permitted
+gpg: error opening key DB: No Keybox daemon running
+gpg: Can't check signature: No public key
+rc=2
+67a4c75c5f136e79f54074a525590e7ad4403903
+.claude/plans/PLAN-168/approved.md:11:Anchor-SHA: 9d3f21d0caa8252f84410b9ff10c146a8004e805
+.claude/plans/PLAN-168/rail/codex-pack-r1.md:5023:Anchor-SHA: 9d3f21d0caa8252f84410b9ff10c146a8004e805
+
+exec
+/bin/zsh -lc 'git merge-base --is-ancestor 9d3f21d0caa8252f84410b9ff10c146a8004e805 HEAD; echo ancestor_rc=$?; git log --oneline --decorate -8; git show -s --format='"'%H %s' 9d3f21d0caa8252f84410b9ff10c146a8004e805" in /Users/joaocanhada/canhada-labs/ceo-orchestration
+ succeeded in 0ms:
+ancestor_rc=0
+67a4c75 (HEAD -> main, origin/main, origin/HEAD) plan(PLAN-168): CI wiring + INV-4 curada + ADR-190 — pack landado
+9d3f21d ceremony(PLAN-166 W1): findings-closure landada — applies+sweep commitados; install/upgrade/FMS subsumidos pelo PLAN-167; F3 44/45 com exceção nomeada (fecha no PLAN-168)
+05e4845 plan(PLAN-168): fix ADOPTER-FORK no pack (regressão do 167 pega pelo e2e do 166 + codex r6 independente); manifesto regenerado; fluxo de land encadeado 166→168 com push único
+c73423e plan(PLAN-168): OWNER-PREPARE-TO-SIGN — ensaio recusa até o PLAN-166 landar; anchor fixado só então
+33f0d7d plan(PLAN-168): W1+W2+W3 executados no overlay — pack pronto-para-assinar
+11cd4f6 plan(PLAN-167): §9 final — cerimônia executada, pack landado
+287c14d governance(PLAN-168): registro de colisão de escrita no debate — erro meu
+ec4bdcf fix(PLAN-168): premissa do W2 estava OBSOLETA — meu próprio land a invalidou
+9d3f21d0caa8252f84410b9ff10c146a8004e805 ceremony(PLAN-166 W1): findings-closure landada — applies+sweep commitados; install/upgrade/FMS subsumidos pelo PLAN-167; F3 44/45 com exceção nomeada (fecha no PLAN-168)
+
+exec
+/bin/zsh -lc "find .claude/trust -maxdepth 2 -type f -print -exec file {} \\; ; find .claude/governance -maxdepth 2 -type f | sort | tail -30; git show --stat --oneline HEAD" in /Users/joaocanhada/canhada-labs/ceo-orchestration
+ succeeded in 0ms:
+.claude/trust/owner.asc
+.claude/trust/owner.asc: PGP public key block Public-Key (old)
+.claude/trust/README.md
+.claude/trust/README.md: Nim source code, Unicode text, UTF-8 text
+.claude/governance/README.md
+.claude/governance/audit_tokens_allowlist.json
+.claude/governance/codex-cli-binary-sha256.txt
+.claude/governance/codex-cli-pin-manifest.json
+.claude/governance/codex-cli-pin.txt
+.claude/governance/function-length-grandfather.yaml
+.claude/governance/governance-waivers.yaml
+.claude/governance/grok-cli-binary-sha256.txt
+.claude/governance/grok-cli-pin.txt
+.claude/governance/npm-trusted-publisher.txt
+.claude/governance/pair-rail-inputs-hash-manifest.txt
+.claude/governance/pair-rail-verdict-template.md
+.claude/governance/pair-rail-verdict-v1.0.1.md
+.claude/governance/pair-rail-verdict-v1.1.0-rc.1.md
+.claude/governance/pair-rail-verdict-v1.1.0.md
+.claude/governance/pair-rail-verdict-v1.16.0-rc.1.md
+.claude/governance/pair-rail-verdict-v1.16.0.md
+.claude/governance/pair-rail-verdict-v1.2.0-rc.3.md
+.claude/governance/pair-rail-verdict-v1.2.0.md
+.claude/governance/pair-rail-verdict-v1.3.0-rc.1.md
+67a4c75 plan(PLAN-168): CI wiring + INV-4 curada + ADR-190 — pack landado
+ .../ADR-190-ownership-decision-table-contract.md   |  137 +
+ .claude/plans/PLAN-168/approved.md                 |   96 +
+ .claude/plans/PLAN-168/approved.md.asc             |    8 +
+ ...-W1-CI-wiring-dos-or-culos-de-propriedade.patch |  764 +++++
+ ...W3-INV-4-curada-pelo-gerador-nico-ADR-190.patch | 1302 +++++++
+ ...eline-map-re-gravado-62-GREEN-3-RED-run-2.patch |   51 +
+ ...taura-token-ADOPTER-FORK-na-WARNING-do-fo.patch |   38 +
+ .../PLAN-168/archive/full-e2e-20260807-2017.log    |   74 +
+ .claude/plans/PLAN-168/archive/pack-full.diff      | 1904 +++++++++++
+ .claude/plans/PLAN-168/rail/codex-pack-r1.md       | 3593 ++++++++++++++++++++
+ .../scripts/tests/test_release_workflow_asserts.py |  169 +
+ .github/workflows/ownership-nightly.yml            |  107 +
+ .github/workflows/smoke-install.yml                |   61 +
+ CLAUDE.md                                          |    4 +-
+ README.md                                          |    4 +-
+ README.pt-BR.md                                    |    4 +-
+ docs/ARCHITECTURE.md                               |    6 +-
+ docs/CTO-GUIDE.md                                  |    6 +-
+ docs/FAQ.md                                        |    2 +-
+ docs/README.md                                     |    2 +-
+ docs/ownership-decision-table.md                   |   26 +-
+ npm/README.md                                      |    4 +-
+ scripts/_framework_manifest_set.sh                 |  124 +
+ scripts/install.sh                                 |   58 +-
+ scripts/tests/ownership-baseline-map.txt           |   15 +-
+ scripts/tests/ownership-expected-reds.txt          |   15 +
+ scripts/tests/ownership-nightly-gate.sh            |  105 +
+ scripts/tests/ownership_table.tsv                  |    3 +
+ scripts/tests/test-ownership-nightly-gate.sh       |  164 +
+ scripts/tests/test-ownership-table.sh              |   90 +-
+ scripts/tests/test-protocol-pointer-inv4.sh        |  136 +
+ scripts/tests/test-protocol-pointer-render.sh      |  130 +
+ scripts/upgrade.sh                                 |  110 +-
+ 33 files changed, 9206 insertions(+), 106 deletions(-)
+
+exec
+/bin/zsh -lc 'git diff --numstat HEAD''^..HEAD -- scripts/_framework_manifest_set.sh scripts/install.sh | cat; git diff --numstat -- scripts/_framework_manifest_set.sh scripts/install.sh; printf '"'\\nHEAD blob tail marker count: '; git show HEAD:scripts/_framework_manifest_set.sh | grep -c 'PLAN-168 W2 (AC-6, Owner decision D1-b)'; printf 'WORK marker count: '; grep -c 'PLAN-168 W2 (AC-6, Owner decision D1-b)' scripts/_framework_manifest_set.sh; git diff --raw; git status --porcelain=v2 | head -30" in /Users/joaocanhada/canhada-labs/ceo-orchestration
+ succeeded in 0ms:
+124	0	scripts/_framework_manifest_set.sh
+21	37	scripts/install.sh
+
+HEAD blob tail marker count: 1
+WORK marker count: 1
+:100644 100644 3f0b8a1 0000000 M	.claude/plans/PLAN-168/rail/codex-pack-r1.md
+1 .M N... 100644 100644 100644 3f0b8a1f8a94ded63bb9a763c448f55a32bb78b2 3f0b8a1f8a94ded63bb9a763c448f55a32bb78b2 .claude/plans/PLAN-168/rail/codex-pack-r1.md
+? .claude/plans/PLAN-166/archive/w1-staged-pack-20260806-0159.tar.gz
+? .claude/plans/PLAN-166/archive/w1-staged-pack-final-20260806-0722.tar.gz
+? .claude/plans/PLAN-167/OWNER-PREPARE-TO-SIGN.sh
+? .claude/plans/PLAN-167/W4-approved.md
+? .claude/plans/PLAN-167/W4-approved.md.asc
+
+exec
+/bin/zsh -lc "git status --short && git log -3 --format='%H %ct %ci %s' && git diff --stat && git diff -- .claude/plans/PLAN-168/rail/codex-pack-r1.md | head -120" in /Users/joaocanhada/canhada-labs/ceo-orchestration
+ succeeded in 0ms:
+ M .claude/plans/PLAN-168/rail/codex-pack-r1.md
+?? .claude/plans/PLAN-166/archive/w1-staged-pack-20260806-0159.tar.gz
+?? .claude/plans/PLAN-166/archive/w1-staged-pack-final-20260806-0722.tar.gz
+?? .claude/plans/PLAN-167/OWNER-PREPARE-TO-SIGN.sh
+?? .claude/plans/PLAN-167/W4-approved.md
+?? .claude/plans/PLAN-167/W4-approved.md.asc
+67a4c75c5f136e79f54074a525590e7ad4403903 1786151348 2026-08-07 22:09:08 -0300 plan(PLAN-168): CI wiring + INV-4 curada + ADR-190 — pack landado
+9d3f21d0caa8252f84410b9ff10c146a8004e805 1786150959 2026-08-07 22:02:39 -0300 ceremony(PLAN-166 W1): findings-closure landada — applies+sweep commitados; install/upgrade/FMS subsumidos pelo PLAN-167; F3 44/45 com exceção nomeada (fecha no PLAN-168)
+05e4845060f16d5b5bbce0fe1eea792a14118ed0 1786148180 2026-08-07 21:16:20 -0300 plan(PLAN-168): fix ADOPTER-FORK no pack (regressão do 167 pega pelo e2e do 166 + codex r6 independente); manifesto regenerado; fluxo de land encadeado 166→168 com push único
+ .claude/plans/PLAN-168/rail/codex-pack-r1.md | 1798 ++++++++++++++++++++++++++
+ 1 file changed, 1798 insertions(+)
+diff --git a/.claude/plans/PLAN-168/rail/codex-pack-r1.md b/.claude/plans/PLAN-168/rail/codex-pack-r1.md
+index 3f0b8a1..849f243 100644
+--- a/.claude/plans/PLAN-168/rail/codex-pack-r1.md
++++ b/.claude/plans/PLAN-168/rail/codex-pack-r1.md
+@@ -3591,3 +3591,1801 @@ PASS  L4 adopter-customized pointer preserved byte-identical
+ 
+ INV-4 assertion: 4/4 legs pass (byte identity + content soundness + cure + preserve)
+ 
++ succeeded in 180564ms:
++PASS  L1 install->upgrade byte-identical + sound
++PASS  L2 upgrade->upgrade idempotent
++PASS  L3 degraded body cured (REFRESH route taken)
++PASS  L3b cure kept a backup of the degraded original
++PASS  L4 adopter-customized pointer preserved byte-identical
++
++INV-4 assertion: 4/4 legs pass (byte identity + content soundness + cure + preserve)
++
++exec
++/bin/zsh -lc 'for tag in v1.0.1 v1.1.0 v1.2.0 HEAD; do echo ===$tag===; git show "$tag:scripts/upgrade.sh" 2>/dev/null | sed -n '"'/_refresh_protocol_pointer()/,/"'^}/p'"' | head -80; done" in /Users/joaocanhada/canhada-labs/ceo-orchestration
++ exited 1 in 0ms:
++zsh:1: ==v1.0.1=== not found
++
++exec
++/bin/zsh -lc "for tag in v1.0.1 v1.1.0 v1.2.0 HEAD; do printf '\\n=== %s ===\\n' \""'$tag"; git show "$tag:scripts/upgrade.sh" 2>/dev/null | sed -n '"'/_refresh_protocol_pointer()/,/"'^}/p'"' | head -85; done" in /Users/joaocanhada/canhada-labs/ceo-orchestration
++ succeeded in 0ms:
++
++=== v1.0.1 ===
++zsh:1: bad substitution
++
++=== v1.1.0 ===
++zsh:1: bad substitution
++
++=== v1.2.0 ===
++zsh:1: bad substitution
++
++=== HEAD ===
++zsh:1: bad substitution
++
++exec
++/bin/zsh -lc "for tag in v1.0.1 v1.1.0 v1.2.0 HEAD; do printf '\\n=== %s ===\\n' \""'$tag"; git show "${tag}:scripts/upgrade.sh" 2>/dev/null | sed -n '"'/_refresh_protocol_pointer()/,/"'^}/p'"' | head -85; done" in /Users/joaocanhada/canhada-labs/ceo-orchestration
++ succeeded in 0ms:
++
++=== v1.0.1 ===
++_refresh_protocol_pointer() {
++  local pointer="$TARGET/PROTOCOL.md"
++  local body
++  case "$SOURCE_DIR" in
++    "$TARGET"/*)
++      local rel="${SOURCE_DIR#$TARGET/}"
++      body="The full CEO orchestration protocol lives at:
++./${rel}/PROTOCOL.md
++
++To pull updates:
++  ( cd ./${rel} && git pull )
++  ./${rel}/scripts/upgrade.sh . --profile $PROFILE --stack $STACK"
++      ;;
++    *)
++      body="The full CEO orchestration protocol lives at:
++{{PROTOCOL_SOURCE}}/PROTOCOL.md
++
++Edit {{PROTOCOL_SOURCE}} to point at your ceo-orchestration checkout
++(e.g. ../ceo-orchestration or \$HOME/src/ceo-orchestration).
++
++To pull updates:
++  ( cd {{PROTOCOL_SOURCE}} && git pull )
++  {{PROTOCOL_SOURCE}}/scripts/upgrade.sh $TARGET --profile $PROFILE --stack $STACK"
++      ;;
++  esac
++
++  # PLAN-138 C.7 fix (Codex R2 P0): compute the CANONICAL pointer hash — the
++  # hash of exactly what the framework WOULD write below (heredoc body) — and
++  # export it so the post-upgrade manifest rewrite records THAT as the
++  # PROTOCOL.md baseline, never the current target file. Without this, a
++  # preserved adopter-customized PROTOCOL.md would be re-recorded as its own
++  # baseline and the NEXT upgrade would read H_dst==H_base and clobber it.
++  # Computed on ALL paths (preserve + refresh) so it is set whenever the C.7
++  # rewrite runs. printf reproduces the heredoc byte-for-byte.
++  _REFRESH_PROTOCOL_CANON_HASH=""
++  if command -v _hash_stdin >/dev/null 2>&1; then
++    _REFRESH_PROTOCOL_CANON_HASH="$( printf '# Protocol reference\n\n%s\n' "$body" | _hash_stdin 2>/dev/null || true )"
++  fi
++
++  if [[ "$DRY_RUN" -eq 1 ]]; then
++    echo "    (dry-run) would REFRESH: PROTOCOL.md pointer"
++    return 0
++  fi
++
++  # PLAN-138 Wave C (ADR-155) C.6 — close the verified S238 driver.
++  #
++  # (a) ALWAYS back up an existing root PROTOCOL.md to $BAK_DIR/PROTOCOL.md
++  #     BEFORE the `cat >` overwrite. The legacy code had NO backup here, so an
++  #     adopter who turned the pointer into a real customized protocol (the
++  #     S238 acme case) lost it irrecoverably. This backup applies EVEN when
++  #     no baseline manifest exists — making the loss recoverable on a first
++  #     upgrade (Codex R1 P0 first-upgrade safety).
++  if [[ -f "$pointer" ]]; then
++    mkdir -p "$BAK_DIR" 2>/dev/null || true
++    cp "$pointer" "$BAK_DIR/PROTOCOL.md" 2>/dev/null || true
++    echo "    BACKED UP: PROTOCOL.md (root) -> $BAK_DIR/PROTOCOL.md"
++  fi
++
++  # (b) When a baseline manifest is loaded, classify the root PROTOCOL.md
++  #     against the recorded install-time pointer hash. The pointer's "source"
++  #     is a generated string (not a file in $SOURCE_DIR), so we compare the
++  #     CURRENT target hash against the recorded BASELINE only:
++  #       H_dst == H_base  -> still the generated pointer -> safe to refresh
++  #       H_dst != H_base  -> adopter customized it -> ADOPTER-CUSTOMIZED:
++  #                           preserve (default/refuse) or overwrite per
++  #                           --on-conflict={theirs|backup}.
++  if [[ -f "$pointer" && -n "$_BASELINE_MANIFEST_FILE" ]] && command -v _hash_file >/dev/null 2>&1; then
++    local _rp_base _rp_dst
++    _rp_base="$( _baseline_lookup "PROTOCOL.md" || true )"
++    _rp_dst="$( _hash_file "$pointer" 2>/dev/null || true )"
++    if [[ -n "$_rp_base" && -n "$_rp_dst" && "$_rp_dst" != "$_rp_base" ]]; then
++      case "$ON_CONFLICT" in
++        theirs|backup)
++          # Original already backed up above; proceed to refresh.
++          echo "    OVERWROTE (root PROTOCOL.md ADOPTER-CUSTOMIZED, --on-conflict=$ON_CONFLICT; original in $BAK_DIR/PROTOCOL.md)" >&2
++          ;;
++        *)  # refuse (default): preserve the customized root PROTOCOL.md.
+
+exec
+/bin/zsh -lc "grep -R \"test_release_workflow_asserts\\|\\.claude/scripts/tests\" -n .github/workflows | head -100; grep -R 'ownership-nightly.yml' -n .github/workflows .claude/scripts | head -100; grep -R 'smoke-install.yml' -n .github/workflows/*.yml | head -100" in /Users/joaocanhada/canhada-labs/ceo-orchestration
+ succeeded in 250ms:
+.github/workflows/smoke-install.yml:30:      # the ~25-min e2e runs in ownership-nightly.yml (schedule: ignores
+.github/workflows/smoke-install.yml:43:      # (the full 4-leg e2e runs in ownership-nightly.yml).
+.github/workflows/smoke-install.yml:90:      # (the full 4-leg e2e runs in ownership-nightly.yml).
+.github/workflows/smoke-install.yml:169:      # The OBSERVATION half (the ~25-min e2e) runs in ownership-nightly.yml;
+.claude/scripts/tests/test_release_workflow_asserts.py:1016:# Marker written into the PLAN-168 smoke-install.yml + ownership-nightly.yml
+.claude/scripts/tests/test_release_workflow_asserts.py:1153:        ctx = _plan168_text("ownership-nightly.yml")
+.github/workflows/formal-verify.yml:39:        # smoke-install.yml. One-at-a-time Dependabot bumps created drift;
+.github/workflows/ownership-nightly.yml:9:# stays in smoke-install.yml.
+.github/workflows/ownership-nightly.yml:42:        # SHA-pinned (same pin as smoke-install.yml): actions/checkout@v6.0.2
+.github/workflows/ownership-nightly.yml:51:      # parity e2e in smoke-install.yml).
+.github/workflows/smoke-install.yml:59:      - ".github/workflows/smoke-install.yml"
+.github/workflows/smoke-install.yml:101:      - ".github/workflows/smoke-install.yml"
+.github/workflows/validate.yml:872:      # MANIFEST residuals; smoke-install.yml wiring is a separate
+
+exec
+/bin/zsh -lc "sed -n '1,100p' .github/workflows/validate.yml; sed -n '1,170p' .github/workflows/coverage.yml; sed -n '340,380p' .github/workflows/release.yml" in /Users/joaocanhada/canhada-labs/ceo-orchestration
+ succeeded in 0ms:
+name: Validate CEO Orchestration governance
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Cancel in-progress runs when a newer commit lands on the same ref.
+# Prevents duplicate compute on rapid-fire PR updates and matches the
+# devops-ci-cd skill's concurrency-control mandate.
+concurrency:
+  group: validate-${{ github.ref }}
+  cancel-in-progress: true
+
+# Least-privilege: this workflow only reads the repo to validate.
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Governance, health, contamination, shellcheck
+    # PLAN-012 Phase 2 CEO_SOTA_DISABLE parity. Job-level `if:` keeps
+    # the kill-switch scoped to a single check instead of per-step
+    # guards across 18 steps. A repo admin sets `CEO_SOTA_DISABLE=1`
+    # as a repo variable to short-circuit without editing YAML.
+    if: vars.CEO_SOTA_DISABLE != '1'
+    runs-on: Ceo
+    # PLAN-014 G.1 ADJ-040 — bumped 5 → 10 to absorb policy-drift + TLA
+    # drift + TestEnvContext mandate steps (Phases A.7 + B.7 + C.4)
+    # without sporadic CI flakes on slower runners. S166/PLAN-114: 15->25 —
+    # validate-governance.sh (47 steps) + lint + pytest + actionlint +
+    # contamination + shellcheck legitimately runs ~10-15min; 15 was marginal
+    # and timed out (->cancelled) under CI load. Job does not hang; 25 gives headroom.
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        # SHA-pinned (Sprint 7 Dependabot bump): actions/checkout@v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      # -----------------------------------------------------------------
+      # Step: Governance structure validation
+      # -----------------------------------------------------------------
+      - name: Run validate-governance.sh
+        run: |
+          set -euo pipefail
+          bash .claude/scripts/validate-governance.sh
+
+      # -----------------------------------------------------------------
+      # Step: CLAUDE.md drift check (PLAN-045 Wave 3 P0-14)
+      #
+      # Mechanical gate that asserts numeric claims in CLAUDE.md match
+      # disk truth (ADR count, skill count, plan count). Closes the
+      # PLAN-044 F-06-01 / F-06-02 / F-06-03 / F-06-06 / F-05-01 /
+      # F-15-04 cross-cutting drift finding — previously 6 dimensions
+      # independently flagged that CLAUDE.md aspired to numbers the
+      # disk did not have.
+      #
+      # Failure remediation: one-shot CLAUDE.md edit at next session
+      # closeout (Gate-1 cache discipline). Run
+      # ``python3 .claude/scripts/check-claude-md-claims.py --verbose``
+      # locally to see exact claim/disk deltas.
+      # -----------------------------------------------------------------
+      - name: Run check-claude-md-claims.py
+        run: |
+          set -euo pipefail
+          python3 .claude/scripts/check-claude-md-claims.py
+
+      # -----------------------------------------------------------------
+      # Step: AGENTS.md freshness gate (PLAN-153 Wave A follow-up)
+      #
+      # AGENTS.md lists the governance entry-point paths coding agents are
+      # told to read; check-agents-md.py asserts every listed path exists
+      # on disk so the file cannot drift into pointing at moved/deleted
+      # files. Static, stdlib-only, NO network, NO credential — safe on
+      # fork PRs. Kill-switch: the job-level `if:` CEO_SOTA_DISABLE gate
+      # above (per-repo variable) covers this step like every other.
+      # Exit contract: 0 fresh / non-zero stale — non-zero fails the job.
+      # -----------------------------------------------------------------
+      - name: Run check-agents-md.py (AGENTS.md freshness)
+        run: |
+          set -euo pipefail
+          python3 .claude/scripts/check-agents-md.py
+
+      # -----------------------------------------------------------------
+      # Step: Doc skill-path resolves (PLAN-112-FOLLOWUP-install-md-skill-path)
+      #
+      # Every `.claude/skills/...SKILL.md` literal in INSTALL/README/CLAUDE.md
+      # must resolve on disk (or be a documented placeholder / allowlisted).
+      # Closes F-4.2 (INSTALL.md once cited a path missing the `core/` tier).
+      # -----------------------------------------------------------------
+      - name: Run check-doc-skill-paths.sh
+        run: |
+          set -euo pipefail
+          bash .claude/scripts/local/check-doc-skill-paths.sh
+
+      # -----------------------------------------------------------------
+      # Step: Doc count drift — bidirectional + cross-file
+      # (PLAN-112-FOLLOWUP-claude-md-count-drift)
+      #
+name: Coverage
+
+# PLAN-004 Phase 7: advisory-only measurement.
+# PLAN-006 Phase 3 (Sprint 6, 2026-04-13): gate flipped to ENFORCING —
+# historical baseline 88%, historical threshold 86 (max(median-2, 80)).
+# CURRENT enforcing floors (PLAN-152 tests-04 reconcile): repo-wide line
+# floor --fail-under=67 (see the enforcing-report step) + Tier-1
+# per-module 86 (parse-coverage step). Drops below those block PRs.
+
+on:
+  pull_request:
+    paths:
+      - ".claude/hooks/**"
+      - ".claude/scripts/**"
+      - ".github/workflows/coverage.yml"
+  schedule:
+    - cron: "0 7 * * *"   # nightly — moved off per-push (S220) so pushes finish on the validate job (~6-8min)
+  workflow_dispatch:
+
+concurrency:
+  group: coverage-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  coverage:
+    name: Coverage (Tier-1 per-module 86 + repo floor 67; subprocess capture)
+    runs-on: Ceo
+    # S157 ADR-139: subprocess capture instruments every spawned hook, so the
+    # suite runs materially slower than the in-process baseline (the no-coverage
+    # matrix already takes ~12 min). 35 min gives headroom for hooks + scripts
+    # under capture + combine. Was 15 (which the captured run overran → cancel).
+    timeout-minutes: 35
+    # PLAN-006 Phase 3: continue-on-error removed. Gate is enforcing.
+
+    steps:
+      - name: Checkout
+        # SHA-pinned (Sprint 7 Dependabot bump): actions/checkout@v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Setup Python 3.11
+        # SHA-pinned (Sprint 7 Dependabot bump): actions/setup-python@v6.2.0
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.11"
+
+      - name: Install coverage.py + pyyaml + pytest (dev deps, not shipped)
+        # pyyaml is used by test_run_benchmark.py (script tests exercise
+        # the yaml-backed benchmark loader).
+        # pytest is used by 4 script test files + several hook tests that
+        # rely on fixtures (tmp_path, capsys, pytest.raises). Adding it
+        # here recovers the ~8pp of coverage these tests contribute —
+        # without it, unittest discover skips them and the total drops
+        # from ~86% → 78%.
+        # Stdlib-only runtime invariant is preserved — these are CI-only
+        # dev deps, never shipped in install.sh / upgrade.sh tarballs.
+        # PLAN-093 Wave A.2 — extend with C5 dev-extras (hypothesis + jsonschema)
+        run: python3 -m pip install --quiet --no-cache-dir "coverage==7.6.*" "pyyaml" "pytest==8.*" "hypothesis==6.100.0" "jsonschema==4.21.1"
+
+      - name: C5 hypothesis sidecar boundary check (ADR-126 §Part 5/6)
+        # PLAN-093 Wave A.2 + Wave B.4 — enforce zero production-path import
+        # of hypothesis / jsonschema; manifest schema validated.
+        # Belt-and-braces non-Python grep is INTENTIONALLY omitted here —
+        # boundary_test.py Part 5 §2c already rejects forbidden imports in
+        # workflow run: bodies. Including a grep line would create a
+        # self-collision: boundary_test.py would flag this workflow at the
+        # grep pattern's literal 'import' substring.
+        run: |
+          set -euo pipefail
+          python3 .claude/scripts/check-sidecar-manifest.py --strict
+          python3 .claude/sidecars/c5-dev-tools/hypothesis/boundary_test.py
+
+      - name: Set up subprocess coverage capture (ADR-139)
+        # PLAN-112-FOLLOWUP-coverage-doctrine-reconcile (S157): the hooks are
+        # tested via `subprocess.run([sys.executable, hook])`, so an in-process
+        # `coverage run` cannot follow the child and under-counts every hook
+        # (e.g. check_read_injection measured 0% line despite a 100%-passing
+        # suite). A `coverage.process_startup()` .pth in the runner's writable
+        # site-packages + COVERAGE_PROCESS_START + parallel + combine captures
+        # the subprocess runs. site-packages is HOME-independent so it survives
+        # TestEnvContext's HOME rewrite. See ADR-139 + .coveragerc.
+        run: |
+          set -euo pipefail
+          SITE="$(python3 -c 'import sysconfig; print(sysconfig.get_path("purelib"))')"
+          echo 'import coverage; coverage.process_startup()' > "$SITE/zzz_ceo_subprocess_cov.pth"
+          echo "wrote subprocess-coverage .pth -> $SITE/zzz_ceo_subprocess_cov.pth"
+
+      - name: Run hook tests under coverage (subprocess capture, parallel)
+        # Canonical subprocess-coverage pattern: plain `python -m pytest`
+        # (NOT `coverage run`) + COVERAGE_PROCESS_START + the .pth above.
+        # The parent pytest AND every subprocess hook self-instrument via
+        # coverage.process_startup() — a single tracer per process (no
+        # double-tracer overhead). .coveragerc declares parallel,
+        # relative_files, source (both trees), [paths] aliasing for tmp-tree
+        # hook copies, and omit .claude/plans/*. `coverage combine` merges.
+        env:
+          COVERAGE_PROCESS_START: ${{ github.workspace }}/.coveragerc
+        run: |
+          set -euo pipefail
+          python3 -m pytest .claude/hooks/tests -q --tb=short
+
+      - name: Drop the subprocess-capture .pth before script tests
+        # The hook capture data is already written. Removing the .pth means the
+        # python subprocesses that script tests spawn (validate-governance.sh
+        # helpers, skill-patch-propose.py, reality-ledger detectors) no longer
+        # even `import coverage` at startup — that per-subprocess import overhead,
+        # multiplied across validate-governance.sh's dozens of python calls, was
+        # enough to push it past its 20s in-test timeout. Restores the pre-S157
+        # subprocess speed for the script step.
+        run: |
+          set -euo pipefail
+          SITE="$(python3 -c 'import sysconfig; print(sysconfig.get_path("purelib"))')"
+          rm -f "$SITE/zzz_ceo_subprocess_cov.pth"
+          echo "removed .pth — script-test subprocesses run uninstrumented"
+
+      - name: Run script tests under coverage (in-process; NO subprocess capture)
+        # IMPORTANT (S157): scripts are measured with plain `coverage run`
+        # (parent instrumentation only), the .pth removed above + no
+        # COVERAGE_PROCESS_START, so the subprocesses these tests spawn are NOT
+        # instrumented (instrumenting them slows each past its in-test hard
+        # timeout 20s/30s/15s). The Tier-1 ENFORCING modules are all HOOKS
+        # (captured above); scripts only feed the advisory repo-wide floor, for
+        # which in-process coverage suffices. The perf/ microbench dir is
+        # excluded — those tests measure TIMING (coverage instrumentation biases
+        # their ratios, e.g. C.6 ASCII-fastpath p99 ratio) and add ~no coverage;
+        # they still run unaltered in validate.yml's matrix + dual-rail jobs.
+        run: |
+          set -euo pipefail
+          python3 -m coverage run --rcfile=.coveragerc \
+            -m pytest .claude/scripts/tests .claude/scripts/optimizer/tests --ignore=.claude/scripts/tests/perf \
+            -q --tb=short
+
+      - name: C5 hypothesis sidecar property tests (PLAN-093 Wave A.2 advisory)
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          python3 -m coverage run --rcfile=.coveragerc \
+            -m pytest .claude/sidecars/c5-dev-tools/hypothesis/tests -q --tb=short
+
+      - name: Combine parallel coverage + JSON export
+        run: |
+          set -euo pipefail
+          python3 -m coverage combine --rcfile=.coveragerc
+          python3 -m coverage json --rcfile=.coveragerc --ignore-errors -o coverage.json
+
+      - name: PLAN-093 parse-coverage gate (advisory — Wave A.5 kill-switch)
+        # CEO_BRANCH_COVERAGE_ENFORCING=0 keeps this step advisory until a
+        # future coverage-uplift sprint raises the baseline past 86%/85%.
+        env:
+          CEO_BRANCH_COVERAGE_ENFORCING: "0"
+        run: |
+          python3 .github/scripts/parse-coverage.py \
+            --branch-min 86 --line-min 85 \
+            --baseline-md .claude/plans/PLAN-093/wave-a-coverage-baseline.md \
+            --max-drop 2.0
+
+      - name: ADR-139 Tier-1 per-module coverage gate (ENFORCING)
+        # PLAN-112-FOLLOWUP-coverage-doctrine-reconcile (S157) / ADR-139.
+        # Per-module enforcing gate at 86% for the modules MEASURED ≥86% under
+        # subprocess capture (S157). check_agent_spawn.py stays ADVISORY (real
+        # gaps in fail-open except branches + decide() core; uplift owner =
+        # follow-on plan) and is intentionally NOT in this list. A module is
+        # promoted here the moment it crosses 86% — no ceremony beyond the edit
+        # (no-silent-LOWER clause: removals require an ADR-139 amendment).
+        # Kill-switch: CEO_TIER1_COVERAGE_ENFORCING=0 (advisory).
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/parse-coverage.py \
+        run: python3 .claude/scripts/registry.py --validate
+
+      - name: Governance structural validation
+        run: bash .claude/scripts/validate-governance.sh
+
+      - name: Install test deps (CI-only, not shipped)
+        # Post-tag-v1.6.0-rc.1 hardening (Session 33 CI batch): Hook +
+        # Script test suites need pytest (4 script tests + several hook
+        # tests use pytest.fixture / tmp_path / capsys / pytest.raises)
+        # and pyyaml (benchmark loader). These are dev-only deps — never
+        # shipped in install.sh / upgrade.sh tarballs. Mirrors coverage.yml
+        # install step.
+        run: python3 -m pip install --quiet --no-cache-dir "pyyaml" "pytest==8.*"
+
+      - name: Hook test suite (all 168+ tests)
+        # pytest discovers both unittest.TestCase and pure-pytest tests.
+        run: python3 -m pytest .claude/hooks/tests -q --tb=short
+
+      - name: Script test suite (all 132+ tests)
+        run: python3 -m pytest .claude/scripts/tests -q --tb=short
+
+      - name: Replay test suite (PLAN-069 Phase 1 / ADR-101)
+        # 89+ tests covering replay-as-fixture mode, PII redaction, HMAC
+        # salt rebind, post-load defense-in-depth. Already wired via
+        # pytest.ini testpaths but invoked explicitly here for the tag
+        # release gate (Codex Session 81 P2#4 close).
+        run: python3 -m pytest .claude/scripts/replay/tests -q --tb=short
+
+      - name: Smoke install on scratch directory
+        run: |
+          set -euo pipefail
+          SCRATCH="$(mktemp -d -t ceo-smoke-XXXXXX)"
+          mkdir -p "$SCRATCH/target"
+          cd "$SCRATCH/target" && git init -q && cd - >/dev/null
+          bash scripts/install.sh "$SCRATCH/target" --profile core,frontend
+          # Essential files present?
+          test -f "$SCRATCH/target/.claude/team.md" || { echo "::error::team.md missing"; exit 1; }
+          test -f "$SCRATCH/target/.claude/settings.json" || { echo "::error::settings.json missing"; exit 1; }
+          test -d "$SCRATCH/target/.claude/skills/core" || { echo "::error::core skills missing"; exit 1; }
+          # Placeholders leaked?
+          if grep -rq "{{OWNER_NAME}}\|{{PROJECT_NAME}}" "$SCRATCH/target/.claude/hooks/" 2>/dev/null; then
+
+exec
+/bin/zsh -lc 'bash .claude/scripts/check-contamination.sh; echo rc=$?' in /Users/joaocanhada/canhada-labs/ceo-orchestration
+ succeeded in 784ms:
+✓ No contamination outside allowed zones
+rc=0
+
+exec
+/bin/zsh -lc "ls npm | head; grep -R \"_framework_manifest_set.sh\" -n npm scripts/install-npm.sh .github/workflows scripts | head -100; grep -R 'scripts/install.sh\\|scripts/upgrade.sh' -n npm/package.json npm/*.js npm/**/*.js 2>/dev/null | head -100" in /Users/joaocanhada/canhada-labs/ceo-orchestration
+ succeeded in 0ms:
+INTEGRITY.md
+README.md
+SHA256SUMS.txt
+bin
+package.json
+.github/workflows/smoke-install.yml:10:      - "scripts/_framework_manifest_set.sh"
+.github/workflows/smoke-install.yml:74:      - "scripts/_framework_manifest_set.sh"
+scripts/install.sh:249:if [ -f "$SCRIPT_DIR/_framework_manifest_set.sh" ]; then
+scripts/install.sh:250:  # shellcheck source=scripts/_framework_manifest_set.sh
+scripts/install.sh:251:  . "$SCRIPT_DIR/_framework_manifest_set.sh"
+scripts/install.sh:788:# enumeration (_framework_manifest_set.sh) only records what the framework
+scripts/install.sh:1060:    # exclusion predicate (scripts/_framework_manifest_set.sh) so install and
+scripts/install.sh:1888:  # shared generator in _framework_manifest_set.sh — never a private heredoc.
+scripts/install.sh:1898:    echo "    ERROR: _render_protocol_pointer unavailable (scripts/_framework_manifest_set.sh not sourced) — cannot write PROTOCOL.md pointer" >&2
+scripts/install.sh:2246:# set from _framework_manifest_set.sh, so the manifest writer (here) and the
+scripts/install.sh:2275:  # generator in _framework_manifest_set.sh does the walk + hashing + LINK
+scripts/_framework_manifest_set.sh:2:# scripts/_framework_manifest_set.sh — the SINGLE canonical enumeration of
+scripts/tests/test_install_baseline_manifest.sh:122:   && grep -q "_framework_manifest_set.sh" "$SOURCE_DIR/.claude/hooks/check_canonical_edit.py"; then
+scripts/tests/test_install_baseline_manifest.sh:163:    # shellcheck source=scripts/_framework_manifest_set.sh
+scripts/tests/test_install_baseline_manifest.sh:164:    . "$SOURCE_DIR/scripts/_framework_manifest_set.sh"
+scripts/tests/test-upgrade-exclusions.sh:11:# (_framework_manifest_files, _framework_manifest_set.sh:129-134) all ignore
+scripts/tests/test-ownership-verdict-unit.sh:33:LIB="$REPO_ROOT/scripts/_framework_manifest_set.sh"
+Binary file scripts/tests/__pycache__/_parity_classify.cpython-311.pyc matches
+scripts/tests/test-protocol-pointer-inv4.sh:26:. "$REPO_ROOT/scripts/_framework_manifest_set.sh" 2>/dev/null || {
+scripts/tests/test-protocol-pointer-inv4.sh:27:  echo "ERROR: cannot source _framework_manifest_set.sh" >&2; exit 2; }
+scripts/tests/_parity_classify.py:46:upgrade.sh/_framework_manifest_set.sh change — that is the mechanism that keeps
+scripts/tests/test-protocol-pointer-render.sh:5:# _protocol_pointer_is_degraded in scripts/_framework_manifest_set.sh).
+scripts/tests/test-protocol-pointer-render.sh:27:. "$REPO_ROOT/scripts/_framework_manifest_set.sh" 2>/dev/null || {
+scripts/tests/test-protocol-pointer-render.sh:28:  echo "ERROR: cannot source _framework_manifest_set.sh" >&2; exit 2; }
+scripts/tests/test-ownership-table.sh:74:. "$REPO_ROOT/scripts/_framework_manifest_set.sh" 2>/dev/null || {
+scripts/tests/test-ownership-table.sh:75:  echo "ERROR: cannot source scripts/_framework_manifest_set.sh" >&2; exit 2; }
+scripts/doctor.sh:184:# _framework_manifest_set.sh is OPTIONAL — only the orphan scan needs it.
+scripts/doctor.sh:186:if [ -f "$SCRIPT_DIR/_framework_manifest_set.sh" ]; then
+scripts/doctor.sh:187:  # shellcheck source=scripts/_framework_manifest_set.sh
+scripts/doctor.sh:188:  . "$SCRIPT_DIR/_framework_manifest_set.sh"
+scripts/doctor.sh:598:# enumeration (_framework_manifest_set.sh, FMS_ROOT=$TARGET) with NO manifest
+scripts/doctor.sh:676:    _log "    NOTE: orphan scan skipped — _framework_manifest_set.sh not found beside doctor.sh"
+scripts/upgrade.sh:105:if [ -f "$SCRIPT_DIR/_framework_manifest_set.sh" ]; then
+scripts/upgrade.sh:106:  # shellcheck source=scripts/_framework_manifest_set.sh
+scripts/upgrade.sh:107:  . "$SCRIPT_DIR/_framework_manifest_set.sh"
+scripts/upgrade.sh:1542:  # shared generator in _framework_manifest_set.sh — never a private heredoc.
+zsh:1: no matches found: npm/*.js
+
+exec
+/bin/zsh -lc "git cat-file -t v1.2.0; git rev-parse 'refs/tags/v1.2.0"'^{commit}'"'" in /Users/joaocanhada/canhada-labs/ceo-orchestration
+ succeeded in 0ms:
+tag
+31c5026a37451a577cde8f60ed95306ee0cd8894
+
+exec
+/bin/zsh -lc "awk -F'\\t' '"'$2=="protocol" || NR==1 {print}'"' scripts/tests/ownership_table.tsv | column -s "'$'"'\\t' -t | sed -n '1,120p'; grep -n 'backup_fail\\|write_fail' scripts/tests/ownership_table.tsv" in /Users/joaocanhada/canhada-labs/ceo-orchestration
+ exited 1 in 0ms:
+# PLAN-167 — ownership decision table. THIS FILE IS THE TRUTH.
+OWN-0002                                                        protocol  none  absent   -         yes  copy  maintainer  install_fresh  none  none  DELIVER           HASH_CANONICAL_POINTER  adr-155          indistinguishable=HASH_TARGET
+OWN-0007                                                        protocol  none  absent   -         yes  copy  user        install_fresh  none  none  PRESERVE_UNOWNED  HASH_NONE               adr-155-amend-1  WS4 guard
+OWN-0011                                                        protocol  hash  regular  pristine  yes  copy  maintainer  install_rerun  none  none  PRESERVE_OWNED    HASH_PRIOR_RECORD       r1-F1            continuity
+OWN-0014                                                        protocol  hash  regular  edited    yes  copy  maintainer  install_rerun  none  none  PRESERVE_OWNED    HASH_PRIOR_RECORD       r9-F1            FMS_HASH_ROOT does not reach the generated pointer
+OWN-0032                                                        protocol  hash  dir      -         yes  copy  maintainer  upgrade        none  none  PRESERVE_UNOWNED  HASH_NONE               derived          GAP: no non-regular guard; cat > fails and set -e ABORTS the run
+OWN-0033                                                        protocol  hash  special  -         yes  copy  maintainer  upgrade        none  none  PRESERVE_UNOWNED  HASH_NONE               derived          GAP: FIFO blocks the run; sibling of r9-F3/r2-F3
+OWN-0034                                                        protocol  hash  symlink  edited    yes  copy  maintainer  upgrade        none  none  PRESERVE_UNOWNED  HASH_NONE               derived          GAP: cat > follows the leaf symlink OUTSIDE the target
+OWN-0071                                                        protocol  hash  regular  pristine  yes  copy  user        upgrade        none  none  PRESERVE_OWNED    HASH_PRIOR_RECORD       r7-F2            analogous PROTOCOL skip
+OWN-0072                                                        protocol  hash  regular  edited    yes  copy  user        upgrade        none  none  PRESERVE_OWNED    HASH_PRIOR_RECORD       r9-F2            flag alone re-baselines the customized pointer
+OWN-0074                                                        protocol  hash  regular  edited    yes  copy  maintainer  upgrade        none  none  PRESERVE_OWNED    HASH_CANONICAL_POINTER  derived          ADOPTER-CUSTOMIZED pointer on the NORMAL upgrade path — the verified S238 case; the digest stays canonical so the next upgrade does not read H_dst==H_base and clobber it
+OWN-0092                                                        protocol  hash  regular  degraded  yes  copy  maintainer  upgrade        none  none  REFRESH           HASH_CANONICAL_POINTER  plan-168         the CURE (AC-6b): framework-degraded body ({{PROTOCOL_SOURCE}} literal, byte-exact template reconstruction) is the framework own garbage - REFRESH with backup, never preserved
+OWN-0093                                                        protocol  none  regular  degraded  yes  copy  maintainer  upgrade        none  none  REFRESH           HASH_CANONICAL_POINTER  plan-168         recordless degraded takeover - content-proven framework origin, same doctrine as legacy_pristine (r20)
+OWN-0094                                                        protocol  hash  regular  degraded  yes  copy  user        upgrade        none  none  PRESERVE_OWNED    HASH_PRIOR_RECORD       plan-168         user ceremony cannot cure - WS4: a user ceremony never writes root surfaces; the A2 carry preserves and the degraded body waits for a maintainer upgrade
+
+exec
+/bin/zsh -lc "set +e; bash -c 'set -o pipefail; . scripts/_framework_manifest_set.sh; _render_protocol_pointer /src /target core generic \""'$'"'\"'bad\\npath'\"'\"' >/tmp/rpp-out' 2>/tmp/rpp-err; rc="'$?; echo rc=$rc; cat /tmp/rpp-err; wc -c /tmp/rpp-out; rm -f /tmp/rpp-out /tmp/rpp-err' in /Users/joaocanhada/canhada-labs/ceo-orchestration
+ exited 1 in 0ms:
+zsh:1: unmatched '
+
+exec
+/bin/zsh -lc "bash <<'EOF'
+set +e
+set -o pipefail
+. scripts/_framework_manifest_set.sh
+v=\""'$(printf '"'bad\\npath')\"
+_render_protocol_pointer /src /target core generic \""'$v" >/tmp/rpp-out 2>/tmp/rpp-err
+rc=$?
+echo rc=$rc
+cat /tmp/rpp-err
+wc -c /tmp/rpp-out
+rm -f /tmp/rpp-out /tmp/rpp-err
+EOF' in /Users/joaocanhada/canhada-labs/ceo-orchestration
+ succeeded in 0ms:
+rc=1
+sed: 1: "s|{{PROTOCOL_SOURCE}}|b ...": unescaped newline inside substitute pattern
+       0 /tmp/rpp-out
+
+2026-08-08T01:14:11.155137Z ERROR codex_core::tools::router: error=exec_command failed for `/bin/zsh -lc 'tmp=$(mktemp -d /tmp/ptr-state.XXXXXX) || exit 1; trap '"'rm -rf \""'$tmp"'"' EXIT; mkdir \""'$tmp/t"; git -C "$tmp/t" init -q; CEO_INSTALL_SKIP_SELF_SHA=1 CEO_RAG_INSTALL_PROMPT=0 bash scripts/install.sh "$tmp/t" --profile core --stack generic >/dev/null 2>&1 || exit 2; python3 - "$tmp/t/.claude/.install-state.json" <<'"'PY'
+import json,sys
+p=sys.argv[1]
+with open(p) as f: d=json.load(f)
+d['request']['placeholders']['PROTOCOL_SOURCE']='bad\\npath'
+with open(p,'w') as f: json.dump(d,f)
+PY
+set +e
+CEO_INSTALL_SKIP_SELF_SHA=1 bash scripts/upgrade.sh \""'$tmp/t" --profile core --stack generic >"$tmp/out" 2>&1
+rc=$?
+echo rc=$rc
+grep -n -E '"'sed:|Refreshing PROTOCOL|ERROR|WARNING' \""'$tmp/out" | tail -10'`: CreateProcess { message: "Rejected(\"`/bin/zsh -lc 'tmp=$(mktemp -d /tmp/ptr-state.XXXXXX) || exit 1; trap '\\\"'rm -rf \\\\\\\"\\\"'$tmp\\\"'\\\"' EXIT; mkdir \\\\\\\"\\\"'$tmp/t\\\"; git -C \\\"$tmp/t\\\" init -q; CEO_INSTALL_SKIP_SELF_SHA=1 CEO_RAG_INSTALL_PROMPT=0 bash scripts/install.sh \\\"$tmp/t\\\" --profile core --stack generic >/dev/null 2>&1 || exit 2; python3 - \\\"$tmp/t/.claude/.install-state.json\\\" <<'\\\"'PY'\\nimport json,sys\\np=sys.argv[1]\\nwith open(p) as f: d=json.load(f)\\nd['request']['placeholders']['PROTOCOL_SOURCE']='bad\\\\\\\\npath'\\nwith open(p,'w') as f: json.dump(d,f)\\nPY\\nset +e\\nCEO_INSTALL_SKIP_SELF_SHA=1 bash scripts/upgrade.sh \\\\\\\"\\\"'$tmp/t\\\" --profile core --stack generic >\\\"$tmp/out\\\" 2>&1\\nrc=$?\\necho rc=$rc\\ngrep -n -E '\\\"'sed:|Refreshing PROTOCOL|ERROR|WARNING' \\\\\\\"\\\"'$tmp/out\\\" | tail -10'` rejected: rm -f style commands are not permitted. Use a safer approach\")" }
+exec
+/bin/zsh -lc "grep -n \"install.state\\|INSTALL_STATE\\|charset\\|placeholders\" scripts/upgrade.sh | head -100; sed -n '240,410p' scripts/upgrade.sh" in /Users/joaocanhada/canhada-labs/ceo-orchestration
+ succeeded in 0ms:
+44:#     $TARGET/.claude/.install-state.json (written by install.sh since Wave B;
+45:#     schema ceo.install-state/v1) is present and valid, --profile/--stack
+55:#     ADR-155 decision iv for the manifest). Replayed values are charset-
+293:      # PLAN-153 Wave B item B2: ignore .claude/.install-state.json entirely.
+392:                        install request from .claude/.install-state.json.
+628:# $TARGET/.claude/.install-state.json (schema ceo.install-state/v1). When
+641:# class). Values are parsed by python3 -I under PYTHONNOUSERSITE=1, charset-
+644:_INSTALL_STATE_FILE="$TARGET/.claude/.install-state.json"
+650:# non-string or charset-violating values) => caller falls back.
+651:_read_install_state_request() {
+653:  [ -f "$_INSTALL_STATE_FILE" ] && [ -r "$_INSTALL_STATE_FILE" ] || return 3
+682:' "$_INSTALL_STATE_FILE" 2>/dev/null
+686:  if [[ -f "$_INSTALL_STATE_FILE" ]]; then
+688:    if _rp_line="$(_read_install_state_request)" && [[ -n "$_rp_line" ]]; then
+695:        echo "    REPLAY: --profile $PROFILE (recorded request in .claude/.install-state.json; pass --profile or --no-replay to override)" >&2
+700:        echo "    REPLAY: --stack $STACK (recorded request in .claude/.install-state.json; pass --stack or --no-replay to override)" >&2
+705:        echo "    REPLAY: --harness $HARNESS (recorded request in .claude/.install-state.json; pass --harness or --no-replay to override)" >&2
+716:      echo "    NOTE: .claude/.install-state.json present but unreadable/invalid — IGNORED." >&2
+724:    echo "    NOTE: no .claude/.install-state.json in target (pre-Wave-B install)." >&2
+734:# REPLAY=0 and the replay block above (incl. _read_install_state_request) is
+744:_read_install_state_ceremony() {
+746:  [ -f "$_INSTALL_STATE_FILE" ] && [ -r "$_INSTALL_STATE_FILE" ] || return 3
+763:' "$_INSTALL_STATE_FILE" 2>/dev/null
+767:_CEREMONY_SOURCE="default (no readable install-state — pre-Wave-B fail-open)"
+769:if _cer_line="$(_read_install_state_ceremony)" && [[ -n "$_cer_line" ]]; then
+771:  _CEREMONY_SOURCE="recorded install request (.claude/.install-state.json)"
+787:  echo "    Request: replayed from .claude/.install-state.json (PLAN-153 B2)"
+805:# folded into .claude/.install-state.json by _write_upgrade_state at the end.
+1555:  #   1. request.placeholders.PROTOCOL_SOURCE from the install-state — the
+1565:  if [ -f "$_INSTALL_STATE_FILE" ] && command -v python3 >/dev/null 2>&1; then
+1566:    _ptr_psource="$( python3 - "$_INSTALL_STATE_FILE" <<'PYEOF' 2>/dev/null || true
+1571:    v = (doc.get("request") or {}).get("placeholders", {}).get("PROTOCOL_SOURCE", "")
+3080:# .claude/.install-state.json via the replay-independent reader above.
+3212:# PLAN-153 Wave B item B2 — (re)write the install-state after a successful
+3216:# ORIGINAL install request (argv, mode, ceremony, placeholders map) and only
+3220:# schema ceo.install-state/v1, fail-open (a write problem emits a NOTE and
+3225:    echo "    NOTE: install-state not (re)written (python3 not found) — the next upgrade uses the ADR-155 fallback path" >&2
+3244:  echo "==> (Re)writing install-state (.claude/.install-state.json — PLAN-153 Wave B)"
+3301:        "placeholders": {},
+3319:    "schema": "ceo.install-state/v1",
+3345:fd, tmp = tempfile.mkstemp(prefix=".install-state.", suffix=".tmp", dir=d)
+3357:' "$_INSTALL_STATE_FILE" "${_UP_OPS_FILE:-}" "$fw_version" "${#pairs[@]}" "${pairs[@]}" \
+3359:    echo "    NOTE: install-state write failed — the next upgrade falls back to the ADR-155 path (fail-open)" >&2
+3361:    echo "    WROTE: .claude/.install-state.json (schema ceo.install-state/v1, atomic)"
+      PROFILE="${2:-}"
+      PROFILE_EXPLICIT=1
+      shift 2
+      ;;
+    --stack)
+      STACK="${2:-}"
+      STACK_EXPLICIT=1
+      shift 2
+      ;;
+    --pin)
+      PIN_REF="${2:-}"
+      shift 2
+      ;;
+    --dry-run)
+      DRY_RUN=1
+      shift
+      ;;
+    --purge-misinstalled)
+      # PLAN-161 U3 (OQ1 Owner-ratified): opt-in, hash-gated purge of
+      # mis-installed framework-internal excluded-tree files. NEVER default-on.
+      PURGE_MISINSTALLED=1
+      shift
+      ;;
+    --no-diff-warn)
+      DIFF_WARN=0
+      shift
+      ;;
+    --no-deprecation-warn)
+      DEPRECATION_WARN=0
+      shift
+      ;;
+    --no-settings-merge)
+      SETTINGS_MERGE=0
+      shift
+      ;;
+    --no-settings-migrate)
+      # PLAN-163 T5.4: skip the baseline-aware settings migration.
+      SETTINGS_MIGRATE=0
+      shift
+      ;;
+    --settings-migrate-only)
+      # PLAN-163 T5.4: run ONLY the settings migration against <target>
+      # and exit (test/ops seam; honors --dry-run + --no-settings-migrate).
+      SETTINGS_MIGRATE_ONLY=1
+      shift
+      ;;
+    --print-settings-baselines)
+      # PLAN-163 T5.4: introspection for oracles — the normative baseline
+      # table IS the artifact; tests parse this output (never hardcode).
+      printf '%s\n' "$_T54_BASELINES_JSON"
+      exit 0
+      ;;
+    --no-replay)
+      # PLAN-153 Wave B item B2: ignore .claude/.install-state.json entirely.
+      REPLAY=0
+      shift
+      ;;
+    --harness)
+      # PLAN-155 Wave 5: explicit override of the replayed harness.
+      HARNESS="${2:-}"
+      case "$HARNESS" in
+        claude|codex|grok) ;;
+        *) echo "ERROR: --harness must be 'claude', 'codex', or 'grok' (got: $HARNESS)" >&2; exit 2 ;;
+      esac
+      HARNESS_EXPLICIT=1
+      shift 2
+      ;;
+    --managed-hooks)
+      CODEX_MANAGED_HOOKS=1
+      shift
+      ;;
+    --skip)
+      SKIP_GLOBS+=( "${2:-}" )
+      shift 2
+      ;;
+    --skip=*)
+      SKIP_GLOBS+=( "${1#--skip=}" )
+      shift
+      ;;
+    --on-conflict)
+      ON_CONFLICT="${2:-}"
+      case "$ON_CONFLICT" in
+        refuse|theirs|backup) ;;
+        *) echo "ERROR: --on-conflict must be refuse|theirs|backup (got: $ON_CONFLICT)" >&2; exit 1 ;;
+      esac
+      shift 2
+      ;;
+    --on-conflict=*)
+      ON_CONFLICT="${1#--on-conflict=}"
+      case "$ON_CONFLICT" in
+        refuse|theirs|backup) ;;
+        *) echo "ERROR: --on-conflict must be refuse|theirs|backup (got: $ON_CONFLICT)" >&2; exit 1 ;;
+      esac
+      shift
+      ;;
+    -h|--help)
+      cat <<'HELP'
+Usage:
+  ./upgrade.sh <target-repo-path> [options]
+
+What it does:
+  Refreshes the framework-derived content (team.md, skills/, hooks/,
+  scripts/, commands/, pitfalls-catalog.yaml, task-chains.yaml, the
+  SPEC/v1 contract (forced route, skipped on --ceremony user installs)
+  and the .claude/.framework-version marker) in an existing adopter
+  install. User-customized files (CLAUDE.md, MEMORY.md,
+  .claude/agent-metrics.md) are NOT touched, and the root VERSION file
+  is NEVER touched (install-time snapshot — ADR-155-AMEND-1; read
+  .claude/.framework-version for the installed framework version). NOTE: .claude/settings.json IS
+  updated in place by the default-on baseline migration (the model/permission
+  leaf keys: model, availableModels, fallbackModel, permissions.defaultMode)
+  and the idempotent settings-merge (new lifecycle-hook registrations) —
+  adopter-CUSTOMIZED values are always preserved with a named warning, and a
+  pre-migration backup is written to .claude.bak/. Opt out with
+  --no-settings-migrate / --no-settings-merge to manage settings.json by hand.
+
+Options:
+  --profile <list>      Comma-separated profiles to refresh (default: core,frontend).
+                        Available: core, frontend, <domain-name>.
+                        Example: --profile core,fintech
+  --stack <name>        Stack-specific hooks override (default: none).
+                        Example: --stack node
+  --pin <tag>           Pin source to specific tag/SHA (SPEC v1 install-cli.md).
+                        Refuses if target has uncommitted .claude/ changes.
+                        Example: --pin v1.18.0
+  --dry-run             Print what WOULD be replaced without modifying $TARGET.
+  --no-diff-warn        Silence the F-CHAOS-3 "customization will be replaced" warnings.
+  --no-deprecation-warn Silence the PLAN-135 advisory model-deprecation scan
+                        (the scan never blocks the upgrade either way).
+  --no-settings-merge   Skip the PLAN-135 W2 idempotent settings-merge step
+                        that registers new lifecycle hooks (e.g. the Setup
+                        post-install self-verification hook) into the adopter's
+                        existing .claude/settings.json. The merge is idempotent
+                        + fail-open (never blocks the upgrade); pass this to opt
+                        out entirely and manage settings.json by hand.
+  --no-settings-migrate PLAN-163 T5.4: skip the baseline-aware settings
+                        migration (model, availableModels, fallbackModel,
+                        permissions.defaultMode + T3.4-gated new-event
+                        registrations). 3-state policy per LEAF KEY:
+                        absent -> write the new baseline; equal to the OLD
+                        baseline (byte-compared) -> update; customized ->
+                        PRESERVE + named WARNING. Idempotent + fail-open;
+                        never blocks the upgrade.
+  --settings-migrate-only
+                        Run ONLY the T5.4 settings baseline migration
+                        against <target-repo-path> and exit 0 (test/ops
+                        seam; honors --dry-run + --no-settings-migrate).
+  --print-settings-baselines
+                        Print the normative T5.4 baseline table (JSON) and
+                        exit 0. Oracles derive their expectations from this
+                        output instead of hardcoding the literals.
+  --no-replay           PLAN-153 Wave B (B2): do NOT replay the recorded
+                        install request from .claude/.install-state.json.
+                        By default, when that file exists and validates,
+                        --profile/--stack DEFAULT to the recorded values
+                        (explicit flags always win). Missing/invalid state
+                        falls back to the ADR-155 drift-classifier path —
+                        never an error, never a no-op.
+  --harness <c|codex>   PLAN-155 Wave 5: override the harness. Defaults to the
+                        recorded request.harness (B2 replay). When codex, the
+                        upgrade also refreshes the .codex/ bundle from the
+                        current templates (collision behavior follows
+                        --on-conflict; refuse leaves local edits).
+  --managed-hooks       PLAN-155 Wave 5 (codex): also refresh requirements.toml
+                        (managed-hooks posture). Replayed from state otherwise.
+  --skip <glob>         Exclude files from the overwrite (repeat for multiple globs).
+                        Example: --skip='.claude/scripts/local/*'
+  --skip=<glob>         Alternate inline syntax for --skip.
+  --purge-misinstalled  PLAN-161 U3 (opt-in — NEVER default): delete files found
+                        inside the framework-internal excluded trees
+                        (.claude/hooks/{tests,legacy}, .claude/scripts/tests,
+
+exec
+/bin/zsh -lc "sed -n '620,735p' scripts/upgrade.sh; sed -n '735,785p' scripts/upgrade.sh" in /Users/joaocanhada/canhada-labs/ceo-orchestration
+ succeeded in 0ms:
+fi
+
+TARGET="$( cd "$TARGET" && pwd )"
+
+# ===========================================================================
+# PLAN-153 Wave B item B2 — replay the RECORDED install request.
+# ===========================================================================
+# install.sh (>= Wave B) records the original request in
+# $TARGET/.claude/.install-state.json (schema ceo.install-state/v1). When
+# present + valid, request.profile / request.stack become the DEFAULTS for
+# this upgrade so an adopter who installed `--profile core,fintech` does not
+# silently get the core,frontend default by forgetting the flag. Explicit
+# flags always win; --no-replay opts out.
+#
+# BACK-COMPAT (debate C must-fix): missing state (ALL pre-Wave-B installs)
+# or unreadable/invalid state NEVER errors and NEVER no-ops — the upgrade
+# proceeds with CLI/default flags on the ADR-155 path (the --dry-run preview
+# and the baseline drift-classifier below), and a state file is (re)written
+# after a successful non-dry upgrade so the NEXT run can replay.
+#
+# TRUST: the state file is target-side, UNSIGNED, advisory (ADR-155 trust
+# class). Values are parsed by python3 -I under PYTHONNOUSERSITE=1, charset-
+# validated (profile: [A-Za-z0-9_,.-]{1,200}; stack: [A-Za-z0-9_.-]{1,100}),
+# and NEVER eval-ed; anything suspect => fallback, exactly as if absent.
+_INSTALL_STATE_FILE="$TARGET/.claude/.install-state.json"
+_REPLAY_SOURCE="cli-default"
+_UP_OPS_FILE=""
+
+# Print "<profile>\t<stack>" from a valid state file; non-zero rc on ANY
+# problem (missing python3, unreadable file, bad JSON, wrong schema_version,
+# non-string or charset-violating values) => caller falls back.
+_read_install_state_request() {
+  command -v python3 >/dev/null 2>&1 || return 3
+  [ -f "$_INSTALL_STATE_FILE" ] && [ -r "$_INSTALL_STATE_FILE" ] || return 3
+  PYTHONNOUSERSITE=1 python3 -I -c '
+import json, re, sys
+try:
+    with open(sys.argv[1], "r", encoding="utf-8") as f:
+        d = json.load(f)
+except (OSError, ValueError):
+    sys.exit(3)
+if not isinstance(d, dict):
+    sys.exit(3)
+if d.get("schema_version") != 1:
+    sys.exit(3)
+req = d.get("request")
+if not isinstance(req, dict):
+    sys.exit(3)
+prof = req.get("profile", "")
+stack = req.get("stack", "")
+if not isinstance(prof, str) or not isinstance(stack, str):
+    sys.exit(3)
+if prof and not re.match(r"^[A-Za-z0-9_,.-]{1,200}$", prof):
+    sys.exit(3)
+if stack and not re.match(r"^[A-Za-z0-9_.-]{1,100}$", stack):
+    sys.exit(3)
+# PLAN-155 Wave 5: harness (closed enum) + managed_hooks bool round-trip.
+harness = req.get("harness", "")
+if harness not in ("", "claude", "codex"):
+    harness = ""  # unknown value => fall back to CLI/default, never trust it
+managed = "1" if req.get("managed_hooks") is True else "0"
+sys.stdout.write(prof + "\t" + stack + "\t" + harness + "\t" + managed + "\n")
+' "$_INSTALL_STATE_FILE" 2>/dev/null
+}
+
+if [[ "$REPLAY" -eq 1 ]]; then
+  if [[ -f "$_INSTALL_STATE_FILE" ]]; then
+    _rp_line=""
+    if _rp_line="$(_read_install_state_request)" && [[ -n "$_rp_line" ]]; then
+      # TAB-separated: profile<TAB>stack<TAB>harness<TAB>managed (PLAN-155 W5).
+      IFS=$'\t' read -r _rp_profile _rp_stack _rp_harness _rp_managed <<< "$_rp_line"
+      _rp_used=0
+      if [[ "$PROFILE_EXPLICIT" -eq 0 && -n "$_rp_profile" ]]; then
+        PROFILE="$_rp_profile"
+        _rp_used=1
+        echo "    REPLAY: --profile $PROFILE (recorded request in .claude/.install-state.json; pass --profile or --no-replay to override)" >&2
+      fi
+      if [[ "$STACK_EXPLICIT" -eq 0 && -n "$_rp_stack" ]]; then
+        STACK="$_rp_stack"
+        _rp_used=1
+        echo "    REPLAY: --stack $STACK (recorded request in .claude/.install-state.json; pass --stack or --no-replay to override)" >&2
+      fi
+      if [[ "$HARNESS_EXPLICIT" -eq 0 && -n "$_rp_harness" ]]; then
+        HARNESS="$_rp_harness"
+        _rp_used=1
+        echo "    REPLAY: --harness $HARNESS (recorded request in .claude/.install-state.json; pass --harness or --no-replay to override)" >&2
+      fi
+      if [[ "$CODEX_MANAGED_HOOKS" -eq 0 && "${_rp_managed:-0}" = "1" ]]; then
+        CODEX_MANAGED_HOOKS=1
+        _rp_used=1
+      fi
+      if [[ "$_rp_used" -eq 1 ]]; then
+        _REPLAY_SOURCE="replay"
+      fi
+    else
+      _REPLAY_SOURCE="fallback-invalid-state"
+      echo "    NOTE: .claude/.install-state.json present but unreadable/invalid — IGNORED." >&2
+      echo "          Proceeding with CLI/default flags on the ADR-155 path (baseline" >&2
+      echo "          drift-classifier; --dry-run previews). Never blocks (PLAN-153" >&2
+      echo "          debate C back-compat must-fix); a valid state file is rewritten" >&2
+      echo "          after this upgrade completes." >&2
+    fi
+  else
+    _REPLAY_SOURCE="fallback-no-state"
+    echo "    NOTE: no .claude/.install-state.json in target (pre-Wave-B install)." >&2
+    echo "          Proceeding with CLI/default flags on the ADR-155 path (baseline" >&2
+    echo "          drift-classifier when a manifest exists, else diff -q warn-then-" >&2
+    echo "          clobber). A state file is recorded after this upgrade completes." >&2
+  fi
+fi
+
+# ===========================================================================
+# PLAN-166 F3 (ADR-155-AMEND-1) — resolve the RECORDED install ceremony with
+# a reader of its OWN, INDEPENDENT of the replay path: --no-replay sets
+# REPLAY=0 and the replay block above (incl. _read_install_state_request) is
+# skipped entirely, so if the ceremony rode the replay, the documented
+# skipped entirely, so if the ceremony rode the replay, the documented
+# `upgrade.sh <target> --no-replay` would treat a `--ceremony user` install
+# as maintainer and force SPEC/protocol into the adopter's root (r9). This
+# reader ALWAYS runs. Fail-open: state absent/unreadable/invalid (ALL
+# pre-Wave-B installs) => "maintainer" — the pre-existing behavior; the
+# consequence is named in INSTALL.md §Upgrade flow. Same trust class as the
+# replay reader: target-side, UNSIGNED, advisory; the value is validated
+# against the closed enum {maintainer,user} and never eval-ed.
+# ===========================================================================
+_read_install_state_ceremony() {
+  command -v python3 >/dev/null 2>&1 || return 3
+  [ -f "$_INSTALL_STATE_FILE" ] && [ -r "$_INSTALL_STATE_FILE" ] || return 3
+  PYTHONNOUSERSITE=1 python3 -I -c '
+import json, sys
+try:
+    with open(sys.argv[1], "r", encoding="utf-8") as f:
+        d = json.load(f)
+except (OSError, ValueError):
+    sys.exit(3)
+if not isinstance(d, dict) or d.get("schema_version") != 1:
+    sys.exit(3)
+req = d.get("request")
+if not isinstance(req, dict):
+    sys.exit(3)
+cer = req.get("ceremony", "")
+if cer not in ("maintainer", "user"):
+    sys.exit(3)
+sys.stdout.write(cer + "\n")
+' "$_INSTALL_STATE_FILE" 2>/dev/null
+}
+
+CEREMONY_EFFECTIVE="maintainer"
+_CEREMONY_SOURCE="default (no readable install-state — pre-Wave-B fail-open)"
+_cer_line=""
+if _cer_line="$(_read_install_state_ceremony)" && [[ -n "$_cer_line" ]]; then
+  CEREMONY_EFFECTIVE="$_cer_line"
+  _CEREMONY_SOURCE="recorded install request (.claude/.install-state.json)"
+fi
+
+TIMESTAMP="$( date +%Y%m%d-%H%M%S )"
+BAK_DIR="$TARGET/.claude.bak/$TIMESTAMP"
+
+IFS=',' read -r -a PROFILE_PARTS <<< "$PROFILE"
+
+echo "==> Upgrading ceo-orchestration"
+echo "    Source:  $SOURCE_DIR"
+echo "    Target:  $TARGET"
+echo "    Backup:  $BAK_DIR"
+echo "    Profile: $PROFILE"
+echo "    Stack:   $STACK"
+echo "    Ceremony: $CEREMONY_EFFECTIVE — $_CEREMONY_SOURCE"  # PLAN-166 F3
+
+exec
+/bin/zsh -lc "nl -ba scripts/tests/ownership-nightly-gate.sh | sed -n '66,93p'; nl -ba scripts/upgrade.sh | sed -n '1562,1577p'; nl -ba scripts/tests/test-protocol-pointer-inv4.sh | sed -n '103,114p'" in /Users/joaocanhada/canhada-labs/ceo-orchestration
+ succeeded in 0ms:
+    66	
+    67	# The summary line is load-bearing: without it, a run that died mid-table
+    68	# would present a truncated (smaller) non-GREEN set that could still match a
+    69	# shrunken expectation. HARNESS-ERR must be literally 0.
+    70	if ! grep -E '^GREEN=[0-9]+[[:space:]]+RED=[0-9]+[[:space:]]+AMBIG=[0-9]+[[:space:]]+HARNESS-ERR=0$' "$MAP" >/dev/null; then
+    71	  echo "GATE-RED: summary line missing or HARNESS-ERR>0 — partial or vacuous output cannot pass" >&2
+    72	  exit 1
+    73	fi
+    74	
+    75	# Statuses other than GREEN and RED are never expected and never comparable:
+    76	# TIMEOUT / ESCAPE / AMBIG on an EXPECTED-red id would keep the id set intact
+    77	# while hiding a more severe regression behind "same set" (codex rail r2 P1).
+    78	grep -E '^OWN-[0-9]+[[:space:]]' "$MAP" \
+    79	  | awk '$2 != "GREEN" && $2 != "RED" {print $1" "$2}' > "$WORK/other.txt"
+    80	if [[ -s "$WORK/other.txt" ]]; then
+    81	  echo "GATE-RED: cell(s) in a status that is never acceptable (TIMEOUT/ESCAPE/AMBIG):" >&2
+    82	  sed 's/^/  /' "$WORK/other.txt" >&2
+    83	  exit 1
+    84	fi
+    85	
+    86	grep -E '^OWN-[0-9]+[[:space:]]' "$MAP" \
+    87	  | awk '$2 == "RED" {print $1}' | LC_ALL=C sort > "$WORK/got.txt"
+    88	grep -E '^OWN-' "$EXPECTED" | LC_ALL=C sort > "$WORK/exp.txt"
+    89	
+    90	if ! diff -u "$WORK/exp.txt" "$WORK/got.txt"; then
+    91	  echo "GATE-RED: the RED set CHANGED (shrinkage included: all-green means the table changed — stop and find out why)" >&2
+    92	  exit 1
+    93	fi
+  1562	  #      genuinely old installs with no state and no sound pointer (incl.
+  1563	  #      the degraded-cure path, where the pointer names nothing usable).
+  1564	  local _ptr_psource=""
+  1565	  if [ -f "$_INSTALL_STATE_FILE" ] && command -v python3 >/dev/null 2>&1; then
+  1566	    _ptr_psource="$( python3 - "$_INSTALL_STATE_FILE" <<'PYEOF' 2>/dev/null || true
+  1567	import json, sys
+  1568	try:
+  1569	    with open(sys.argv[1], "r", encoding="utf-8") as f:
+  1570	        doc = json.load(f)
+  1571	    v = (doc.get("request") or {}).get("placeholders", {}).get("PROTOCOL_SOURCE", "")
+  1572	    if isinstance(v, str) and v and "{{" not in v:
+  1573	        sys.stdout.write(v)
+  1574	except Exception:
+  1575	    pass
+  1576	PYEOF
+  1577	)"
+   103	  if grep -q "CURED: PROTOCOL.md" "$WORK/upgrade3.log"; then
+   104	    echo "PASS  L3 degraded body cured (REFRESH route taken)"
+   105	  else
+   106	    fail "L3 pointer sound but the CURED route was not what ran (check upgrade3.log)"
+   107	    grep -n "PROTOCOL.md" "$WORK/upgrade3.log" | head -5
+   108	  fi
+   109	  if ls "$T"/.claude/backup*/PROTOCOL.md >/dev/null 2>&1 \
+   110	     || grep -q "BACKED UP: PROTOCOL.md" "$WORK/upgrade3.log"; then
+   111	    echo "PASS  L3b cure kept a backup of the degraded original"
+   112	  else
+   113	    fail "L3b no backup evidence for the cured pointer"
+   114	  fi
+
+codex
+The nightly gate can pass without exercising the full decision table, and malformed target state can abort an upgrade despite the documented fail-open posture. The backup assertion is also unable to verify the guarantee it claims to test.
+
+Full review comments:
+
+- [P1] Require every table row before accepting the RED set — /Users/joaocanhada/canhada-labs/ceo-orchestration/scripts/tests/ownership-nightly-gate.sh:86-88
+  If the harness silently skips every GREEN cell, a map containing only the three expected RED rows plus `GREEN=0 RED=3 AMBIG=0 HARNESS-ERR=0` and rc=1 passes this gate. Because only RED IDs are compared, the nightly job does not prove that the full table ran; validate emitted IDs against the TSV or `--list` output before accepting the set.
+
+- [P2] Validate the protocol source read from install state — /Users/joaocanhada/canhada-labs/ceo-orchestration/scripts/upgrade.sh:1566-1573
+  When the target-owned state contains a malformed `PROTOCOL_SOURCE`, such as a string with an embedded newline, this parser accepts it; `_render_protocol_pointer` then produces an invalid sed expression and `set -e` aborts the upgrade. This bypasses the existing schema, charset, and `python3 -I` validation posture for install state, so invalid values should fall back instead of blocking the upgrade.
+
+- [P2] Verify the cure backup instead of its log message — /Users/joaocanhada/canhada-labs/ceo-orchestration/scripts/tests/test-protocol-pointer-inv4.sh:109-110
+  If the cure's backup copy fails or is removed, L3b still passes because `.claude/backup*` does not match the actual `.claude.bak/<timestamp>` location, and the fallback log is emitted even after the production `cp ... || true` fails. Compare the degraded bytes against the actual backup file so this test can detect loss of the promised backup.
+The nightly gate can pass without exercising the full decision table, and malformed target state can abort an upgrade despite the documented fail-open posture. The backup assertion is also unable to verify the guarantee it claims to test.
+
+Full review comments:
+
+- [P1] Require every table row before accepting the RED set — /Users/joaocanhada/canhada-labs/ceo-orchestration/scripts/tests/ownership-nightly-gate.sh:86-88
+  If the harness silently skips every GREEN cell, a map containing only the three expected RED rows plus `GREEN=0 RED=3 AMBIG=0 HARNESS-ERR=0` and rc=1 passes this gate. Because only RED IDs are compared, the nightly job does not prove that the full table ran; validate emitted IDs against the TSV or `--list` output before accepting the set.
+
+- [P2] Validate the protocol source read from install state — /Users/joaocanhada/canhada-labs/ceo-orchestration/scripts/upgrade.sh:1566-1573
+  When the target-owned state contains a malformed `PROTOCOL_SOURCE`, such as a string with an embedded newline, this parser accepts it; `_render_protocol_pointer` then produces an invalid sed expression and `set -e` aborts the upgrade. This bypasses the existing schema, charset, and `python3 -I` validation posture for install state, so invalid values should fall back instead of blocking the upgrade.
+
+- [P2] Verify the cure backup instead of its log message — /Users/joaocanhada/canhada-labs/ceo-orchestration/scripts/tests/test-protocol-pointer-inv4.sh:109-110
+  If the cure's backup copy fails or is removed, L3b still passes because `.claude/backup*` does not match the actual `.claude.bak/<timestamp>` location, and the fallback log is emitted even after the production `cp ... || true` fails. Compare the degraded bytes against the actual backup file so this test can detect loss of the promised backup.
