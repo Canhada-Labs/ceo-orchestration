@@ -525,6 +525,20 @@ staged, o Owner assina uma vez.
   as cópias staged dos arquivos compartilhados carregam aquele conteúdo por
   baixo; o `OWNER-LAND.sh` aborta enquanto qualquer arquivo do pack estiver
   sujo no git.
-- **Próxima ação:** fila do Owner — (1) landar PLAN-166 (runbook próprio),
-  (2) assinar `approved.md` do PLAN-168 (anchor real + Scope), (3)
-  `OWNER-LAND.sh --dry-run` → apply → bateria → commit -S → push.
+- **S297-noite, retomada do land do 166 pelo Owner:** o `step1` original
+  falhou no G2 (anchor `516e64e` ≠ HEAD) — e a auditoria revelou que ele está
+  OBSOLETO: os applies dele reverteriam o PLAN-167 (3 arquivos subsumidos por
+  `7c0828a`), e a árvore JÁ carrega os outros 12 byte-== staged. Escrito
+  `OWNER-W1-LAND-step1b.sh` (sem applies; auditoria de inventário + gates).
+  **Bateria do 166 na árvore de hoje: manifesto 32/32 · claims/counts rc=0 ·
+  asserts 52/52 · parity PASS · F3 44/45** — a única falha é REGRESSÃO DO
+  PLAN-167: a WARNING do fork preservado perdeu o token literal
+  `ADOPTER-FORK` que o §1869 promete e o S4 grepa. **Fix aplicado ao pack do
+  168** (`upgrade.sh`, overlay commit `plan168: restaura token…`): overlay
+  volta a **45/45** e INV-4 segue 4/4. Manifesto/archive do 168 regenerados
+  (24/24). O step1b aceita 44/45 SÓ com essa única falha nomeada.
+- **Próxima ação:** fila do Owner — (1) re-instanciar+re-assinar o sentinel
+  do 166 (anchor=HEAD; draft §header passos 1–4) → `OWNER-W1-LAND-step1b.sh`
+  → commit -S → step 2 do runbook (release.yml, rota kernel); (2)
+  `PLAN-168/OWNER-PREPARE-TO-SIGN.sh` → assinar → `OWNER-LAND.sh`; (3) push.
+  Codex round 6 do 166 em voo — consumir antes de assinar.

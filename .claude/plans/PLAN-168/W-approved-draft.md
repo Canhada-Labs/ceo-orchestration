@@ -66,6 +66,11 @@ reconstruction (never substring) and CURED with backup; adopter-customized
 pointers stay preserved (S238). TSV gains OWN-0092/0093/0094; OWN-0074 goes
 GREEN; expected reds shrink to `{OWN-0016, OWN-0024, OWN-0027}`.
 
+Also in `upgrade.sh`: the literal `ADOPTER-FORK` token is RESTORED in the
+preserved-fork WARNING — a PLAN-167 rewrite regression caught by the
+PLAN-166 land's F3 e2e (44/45; back to 45/45 with this pack, proven in the
+overlay).
+
 **W3 — ADR-190.** The decision-table contract on the record: 10 dimensions,
 the 4-verdict enum (`ABORT_SURFACE` is an execution failure, not a verdict),
 INV-1..4, the deliberate SPEC/PROTOCOL asymmetry, `degraded` + hash-name

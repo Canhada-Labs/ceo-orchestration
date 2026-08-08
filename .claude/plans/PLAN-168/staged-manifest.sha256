@@ -21,4 +21,4 @@ d7a4c49877933e4938e735ba5a063e62159012c1235c1367e05f327d03069402  .claude/plans/
 6ba1e21c1e94d49b37544531372f29f1a0377a241078165d46a7a5a9aed2d838  .claude/plans/PLAN-168/staged/scripts/tests/test-ownership-table.sh
 ce9864e7bb995cec539e07d50bde84afe342c0bb3268a6e1957f0916b7a5a296  .claude/plans/PLAN-168/staged/scripts/tests/test-protocol-pointer-inv4.sh
 52b0f66bad01be7f1737b270a85571fd5b01601b69bac2dc63472312e52c2fb9  .claude/plans/PLAN-168/staged/scripts/tests/test-protocol-pointer-render.sh
-c49f7ffebc729842f10126719ca65888aa52dcdccaef782f71f4a73921daf6f4  .claude/plans/PLAN-168/staged/scripts/upgrade.sh
+8e59d206b8f36babb61cd22ceee0c00d580d7cb132faac4d3cb5c4d1e230aff7  .claude/plans/PLAN-168/staged/scripts/upgrade.sh
