@@ -324,17 +324,27 @@ CEO will search for the entry in memory and remove it.
 ## "Automode comes disabled by default — how do I run autonomously overnight?"
 
 By design. The tracked `.claude/settings.json` ships the fail-closed
-posture (`permissions.defaultMode: "manual"` + `disableAutoMode:
-"disable"`), so every fresh clone and every machine starts asking
-before acting. That file is canonical-guarded — do not edit it.
+DEFAULT (`permissions.defaultMode: "manual"`), so every fresh clone
+and every machine STARTS asking before acting. (The former
+`disableAutoMode` key was removed on 2026-08-03 by Owner decision —
+see `_posture_comment` in the settings file: it also stripped the
+native mode cycle from the operator's keyboard, and choosing the
+session mode is the operator's call. The operator can still cycle
+modes deliberately, per session.) That file is canonical-guarded —
+do not edit it.
 
 To arm autonomy on **your machine only**, use the Owner toggle:
 
 ```
 /night-mode on       # next session starts in acceptEdits
 /night-mode status   # show the resolved posture per layer
-/night-mode off      # restore the ratified manual posture
+/night-mode off      # restore the snapshotted prior local mode (restorable modes only)
 ```
+
+Heads-up: the slash command is a TELEPROMPTER (allowed-tools: Read) —
+it only PRINTS the `! python3 .claude/scripts/night-mode.py ...` line.
+Nothing is written until you EXECUTE that printed line (the `!` prefix
+runs it in the session). Confirm with `/night-mode status` afterwards.
 
 It writes `.claude/settings.local.json` (per-machine, gitignored) —
 `git status` stays clean, the published default is untouched, and the
@@ -354,6 +364,13 @@ python3 .claude/scripts/night-mode.py off --discard-snapshot
 That removes the local `defaultMode` override **and** the marker without
 honoring the snapshot, printing what it discarded. It also disarms the
 "overlay armed but marker gone" state, where plain `off` is a no-op.
+One refusal it keeps on purpose: if `.claude/settings.local.json`
+itself is malformed JSON, or its `permissions` value is not an object,
+the command exits with code 2 and **leaves both the override and the
+marker in place** — it will not guess at a broken file. In that state
+autonomy is NOT disarmed yet: repair the JSON by hand (or delete the
+local file if you own its contents), then rerun the command and check
+`/night-mode status`.
 
 Escape valve for a single fully-unattended session (no persistent
 state, explicit, ephemeral):

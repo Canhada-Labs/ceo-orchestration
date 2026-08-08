@@ -329,6 +329,71 @@ Esquece X.
 
 CEO vai procurar a entrada na memory e remover.
 
+## "O automode vem desligado por default — como rodo autônomo de madrugada?"
+
+Por design. O `.claude/settings.json` rastreado publica o DEFAULT
+fail-closed (`permissions.defaultMode: "manual"`), então todo clone
+novo e toda máquina COMEÇAM perguntando antes de agir. (A antiga
+chave `disableAutoMode` foi removida em 2026-08-03 por decisão do
+Owner — ver `_posture_comment` no settings: ela também tirava o
+ciclo nativo de modos do teclado do operador, e escolher o modo da
+sessão é decisão do operador. O operador segue podendo trocar de
+modo deliberadamente, por sessão.) Esse arquivo é canonical-guarded —
+não o edite.
+
+Para armar autonomia **só na sua máquina**, use o toggle do Owner:
+
+```
+/night-mode on       # a PRÓXIMA sessão inicia em acceptEdits
+/night-mode status   # mostra a postura resolvida por camada
+/night-mode off      # restaura o modo local anterior snapshotado (só modos restauráveis)
+```
+
+Atenção: o slash command é um TELEPROMPTER (allowed-tools: Read) — ele
+só IMPRIME a linha `! python3 .claude/scripts/night-mode.py ...`.
+Nada é escrito até você EXECUTAR essa linha impressa (o prefixo `!`
+roda o comando na sessão). Confira com `/night-mode status` depois.
+
+Ele escreve `.claude/settings.local.json` (por máquina, gitignored) —
+o `git status` continua limpo, o default publicado fica intocado, e o
+toggle vale a partir da PRÓXIMA sessão (settings são lidas no início da
+sessão; a sessão corrente nunca muda de postura por baixo de você). O
+`/ceo-boot` mostra uma linha advisory enquanto a postura não-ratificada
+estiver ativa.
+
+Se o `off` **recusar** ("not a healthy night-mode marker"), o marker
+gitignored em `.claude/state/night-mode.json` foi escrito por outra
+coisa que não o night-mode, e restaurar um snapshot não validado é
+exatamente a escalada que a recusa existe para impedir. A recusa nunca
+te deixa preso:
+
+```bash
+python3 .claude/scripts/night-mode.py off --discard-snapshot
+```
+
+Isso remove o override local de `defaultMode` **e** o marker sem honrar
+o snapshot, imprimindo o que descartou. Também desarma o estado
+"overlay armado mas marker sumiu", em que o `off` puro é no-op.
+Uma recusa que ele mantém de propósito: se o próprio
+`.claude/settings.local.json` estiver com JSON malformado, ou se o
+valor de `permissions` não for um objeto, o comando sai com código 2 e
+**deixa o override E o marker no lugar** — ele não adivinha um arquivo
+quebrado. Nesse estado a autonomia AINDA NÃO foi desarmada: conserte o
+JSON à mão (ou apague o arquivo local se o conteúdo é seu), rode o
+comando de novo e confira `/night-mode status`.
+
+Válvula de escape para UMA sessão totalmente não-assistida (sem estado
+persistente, explícita, efêmera):
+
+```bash
+claude --permission-mode bypassPermissions
+```
+
+`/night-mode` nunca escreve `bypassPermissions` — um bypass persistente
+em qualquer camada de settings dispara o check
+`settings_tamper_tripwires` e deixa o `/ceo-boot` vermelho de
+propósito.
+
 ## "Quero desligar tudo temporariamente"
 
 ```bash

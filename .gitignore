@@ -17,6 +17,12 @@
 staged/
 .plan*-bak/
 finish-*.sh
+# Snapshots tar.gz de árvores staged dentro de archive/ de planos: duplicam
+# conteúdo já landado, os headers do tar embutem o username local
+# (contaminação se adicionados por engano — codex r4 do PLAN-169) e quebram o
+# clean-tree check do release.sh. NUNCA ignorar archive/ inteiro — ele carrega
+# evidência rastreada. (PLAN-169 W0.3)
+.claude/plans/*/archive/*.tar.gz
 
 # PLAN-010 Phase 6: accidental onboarding-pack output if someone runs
 # admin-invite.py with --out-dir pointing inside the repo tree.
