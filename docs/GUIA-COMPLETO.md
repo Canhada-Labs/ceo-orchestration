@@ -1222,7 +1222,7 @@ mv .claude .claude.disabled
 - `.claude/frontend-team.md` — frontend roster
 - `.claude/pitfalls-catalog.yaml` — universal pitfalls
 - `.claude/task-chains.yaml` — 6 universal workflows
-- `.claude/adr/` — 189 Architecture Decision Records
+- `.claude/adr/` — 190 Architecture Decision Records
 - `.claude/plans/` — active plans + archive
 - `.claude/skills/core/` — 42 universal skills
 - `.claude/skills/frontend/` — 8 frontend skills

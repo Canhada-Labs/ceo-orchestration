@@ -156,6 +156,12 @@ for f in npm/package.json pyproject.toml INSTALL.md docs/ARCHITECTURE.md npm/REA
   [ -f "$f" ] || continue
   if ! grep -q "$version" "$f"; then rc=1; fi
 done
+# repass-r2 part-d P2: the marker is a bump site (W2.6) — a fixture oracle
+# that ignores it stays green over a writer that skipped it (fixture!=live).
+if [ -f .claude/.framework-version ]; then
+  marker="$(tr -d ' \\n' < .claude/.framework-version)"
+  [ "$marker" = "$version" ] || rc=1
+fi
 for f in SECURITY.md VERSIONING.md; do
   [ -f "$f" ] || continue
   cur_line="$(grep 'Current MINOR' "$f" || true)"
@@ -249,6 +255,12 @@ def write_sites(repo: Path, version: str, stamp_date: str) -> None:
         else ""
     )
     (repo / "VERSION").write_text(version + "\n", encoding="utf-8")
+    # repass-r2 part-d P2: the marker site (W2.6) exists in the fixture so
+    # the e2e bump exercises the writer AND the stub oracle checks it.
+    (repo / ".claude").mkdir(exist_ok=True)
+    (repo / ".claude" / ".framework-version").write_text(
+        version + "\n", encoding="utf-8"
+    )
     (repo / "npm" / "package.json").write_text(
         json.dumps({"name": "fixture", "version": version}, indent=2) + "\n",
         encoding="utf-8",
@@ -1116,7 +1128,12 @@ def test_tag_annotation_carries_the_whole_train_and_no_stale_release(synth):
     arm_verdict(synth, "v1.3.0")
     proc = driver(synth, "tag", "--stable", "--dry-run")
     assert proc.returncode == 0, proc.stdout + proc.stderr
-    assert "PLAN-162 / PLAN-165 / PLAN-166 (ADRs 184 -> 189)" in proc.stdout
+    # repass-r2 part-d P1: the expectation must track the LIVE train scope —
+    # pinning the rc.1-era string here blessed a stale signed-tag annotation.
+    assert (
+        "PLAN-162 / PLAN-165 / PLAN-166 / PLAN-167 / PLAN-168 / "
+        "PLAN-169 W0-W2 (ADRs 184 -> 190)" in proc.stdout
+    )
     assert "v1.3.0 —" in proc.stdout
 
 
@@ -1125,8 +1142,11 @@ def test_tag_annotation_carries_the_whole_train_and_no_stale_release(synth):
 # ===========================================================================
 SEMVER_RX = re.compile(r"\b\d+\.\d+\.\d+\b")
 # "<number> [word] site(s)" — a census in a comment has no oracle behind it.
+# repass-r2 part-d P2: ordinals count too — "12th site" is as much an
+# oracle-less census claim as "12 sites"; the guard missed the suffix.
 SITE_COUNT_RX = re.compile(
-    r"\b(?:one|two|three|four|five|six|seven|eight|nine|ten|\d+)\s+"
+    r"\b(?:one|two|three|four|five|six|seven|eight|nine|ten|"
+    r"\d+(?:st|nd|rd|th)?)\s+"
     r"(?:\w+\s+)?sites?\b",
     re.IGNORECASE,
 )

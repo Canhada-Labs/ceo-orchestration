@@ -1,0 +1,2411 @@
+You are the cross-model release re-pass reviewer (round 2) for the
+v1.3.0-rc.2 cut of a governance framework. The live-surface delta from
+the reviewed v1.3.0-rc.1 parent is SPLIT across 5 scoped payloads
+(this is one of them; each is judged independently and the cut needs
+APPROVE on all). Everything under .claude/plans/** is plan evidence
+(debate records, staged-NOT-applied ceremony material, runbooks) and
+is excluded by scope, as round 1 scoped by path manifest. The delta
+is closure work landed since rc.1: the PLAN-167/168 ownership-decision
+rewrite of install/upgrade, a Linux port of the e2e harness with
+fail-closed mtime riders, and verified free-surface fixes (perf-probe
+percentile hygiene, injector exact-resolution, pair-rail auth routes,
+bump-site coverage, count watchers, debate-convergence semantics,
+current-fleet model-id data, doc cures).
+
+Your job: find anything in THIS payload that makes cutting rc.2
+UNSAFE — regressions, weakened gates, fail-open introduced, claims the
+diff does not support, broken release mechanics. Classify P1 (blocks
+the cut) / P2 (fix-forward acceptable) / P3 (note). End with exactly
+one line: VERDICT: APPROVE or VERDICT: NEEDS-CHANGES, plus one
+justification paragraph.
+
+PAYLOAD e/5: hooks tests + docs + workflows + root docs
+=== DIFF v1.3.0-rc.1..39fdd2756375cf3d72e7ee11b9e1bac972024601 (parte e, 2388 linhas) ===
+diff --git a/.claude/hooks/tests/test_check_pair_rail_matrix.py b/.claude/hooks/tests/test_check_pair_rail_matrix.py
+index 2925f56..dc238a2 100644
+--- a/.claude/hooks/tests/test_check_pair_rail_matrix.py
++++ b/.claude/hooks/tests/test_check_pair_rail_matrix.py
+@@ -9,7 +9,7 @@ Covers:
+   - _decide_with_matrix (Cases A, B, F; sentinel bypass; out-of-scope;
+     kill-switch; emit side-effects via CEO_PAIR_RAIL_AUDIT_SINK)
+   - _emit_pair_rail_case fail-OPEN (no audit_emit module)
+-  - Performance: Case-A fixture path < 5 ms p99 over N=100
++  - Performance: Case-A fixture path < 5 ms p99 over N=200 (median on CI)
+ 
+ Path-setup note (staging position):
+   <repo>/.claude/plans/PLAN-081/staging/phase-3/tests/<this>.py
+@@ -1111,7 +1111,7 @@ class TestEmitPairRailCaseFailOpen(TestEnvContext):
+ 
+ 
+ # ===========================================================================
+-# 8. Performance: Case-A path < 5 ms p99 over N=100 (fixture only)
++# 8. Performance: Case-A path < 5 ms p99 over N=200, median on CI (fixture only)
+ # ===========================================================================
+ 
+ class TestDecideWithMatrixPerformance(TestEnvContext):
+@@ -1137,9 +1137,30 @@ class TestDecideWithMatrixPerformance(TestEnvContext):
+         _reset_catalogue_cache()
+         super().tearDown()
+ 
++    # PLAN-169 W2.2 — sample size + derived indices (ADR-163 pass).
++    # N=100 put p99 at index 98 with only ONE sample above it; a single
++    # scheduler preemption flaked the gate (S297: 5.25 ms vs 5 ms). N=200
++    # follows the ADR-163 decision (its CI gate + test_hook_latency.py both
++    # sample 200). Indices are DERIVED from the constant via the same
++    # nearest-rank truncation as profile-opus-4-7.py::_pct_of_sorted —
++    # int((n-1)*p/100) — and the ADR-163 collapse precondition
++    # (p95 index != p99 index) is asserted before the timed loop so a
++    # future edit lowering N can never silently re-create the collapsed
++    # gate.
++    _PERF_N = 200
++
+     def test_case_a_p99_under_5ms(self):
+-        """N=100 Case-A fixture invocations: p99 < 5 ms."""
++        """N=_PERF_N Case-A fixture invocations: p99 < 5 ms (median on CI)."""
+         import tempfile
++        n = self._PERF_N
++        i50 = int((n - 1) * 0.50)
++        i95 = int((n - 1) * 0.95)
++        i99 = int((n - 1) * 0.99)
++        self.assertNotEqual(
++            i95, i99,
++            f"ADR-163 percentile precondition violated: N={n} collapses the "
++            f"p95 and p99 indices (both {i95}) — raise N before gating.",
++        )
+         # PLAN-122 WS3 — neutralize the ORTHOGONAL spool-drain trigger so this
+         # probe measures the hook's TRUE decision latency, not the amortized
+         # spool drain/fsync. WS-3's codex_review_invoked emit added a spooled
+@@ -1193,7 +1214,7 @@ class TestDecideWithMatrixPerformance(TestEnvContext):
+                         )
+                     _reset_catalogue_cache()
+                     # Timed run
+-                    for _ in range(100):
++                    for _ in range(n):
+                         _reset_catalogue_cache()
+                         t0 = time.perf_counter()
+                         _CPR._decide_with_matrix(
+@@ -1217,27 +1238,31 @@ class TestDecideWithMatrixPerformance(TestEnvContext):
+                     _sw.DRAIN_TRIGGER_SIZE = _orig_size
+                     _sw.DRAIN_TRIGGER_MTIME_MS = _orig_mtime
+             times_ms.sort()
+-            # p99 = index 98 (0-based) of 100 sorted values.
+-            # PLAN-112-FOLLOWUP (S157): on a shared CI runner the p99 of N=100
+-            # is dominated by scheduling/GC noise — a single preemption spike
+-            # (observed 133 ms against a 0.64 ms median) fails an otherwise-fast
+-            # path. There, gate on the stable MEDIAN (still catches a real ~8x
+-            # regression); keep the strict p99 budget on quiet local machines.
+-            # CEO_FINISH_CEREMONY: finish-plan135.sh runs this suite under heavy
+-            # load on a local machine (no CI env) — treat it like CI and gate on
+-            # the stable median, else one scheduling spike flakes the strict p99.
++            self.assertEqual(len(times_ms), n)
++            # PLAN-169 W2.2 re-evaluated PLAN-112-FOLLOWUP's median switch and
++            # the MEDIAN STAYS — now with live evidence instead of intuition.
++            # The p95-on-CI attempt flaked on its FIRST real run (validate
++            # 31288404989: p95=6.31 ms vs median=3.83 ms against a 5 ms
++            # budget): a loaded shared runner shifts the WHOLE distribution
++            # (~6x the local median), so any real tail percentile prices the
++            # runner, not the code. The median is stable under that shift and
++            # still catches the ~8x regression this probe exists for; quiet
++            # local machines keep the strict p99. What W2.2 KEEPS: N=200,
++            # indices derived from the constant, and the ADR-163 collapse
++            # precondition asserted above. Amendment text (W3 pack) records
++            # the re-evaluation with this run as evidence.
+             on_ci = bool(
+                 os.environ.get("GITHUB_ACTIONS")
+                 or os.environ.get("CI")
+                 or os.environ.get("CEO_FINISH_CEREMONY")
+             )
+-            metric = times_ms[49] if on_ci else times_ms[98]
++            metric = times_ms[i50] if on_ci else times_ms[i99]
+             label = "median (loaded)" if on_ci else "p99"
+             self.assertLess(
+                 metric, 5.0,
+                 f"Case-A {label} = {metric:.2f} ms exceeds 5 ms budget. "
+-                f"Median={times_ms[49]:.2f} ms, p95={times_ms[94]:.2f} ms, "
+-                f"p99={times_ms[98]:.2f} ms.",
++                f"N={n}, median={times_ms[i50]:.2f} ms, "
++                f"p95={times_ms[i95]:.2f} ms, p99={times_ms[i99]:.2f} ms.",
+             )
+ 
+ 
+diff --git a/.claude/hooks/tests/test_claim_producer_pair_end_to_end_loop_perf.py b/.claude/hooks/tests/test_claim_producer_pair_end_to_end_loop_perf.py
+index 41790d4..68f10fe 100644
+--- a/.claude/hooks/tests/test_claim_producer_pair_end_to_end_loop_perf.py
++++ b/.claude/hooks/tests/test_claim_producer_pair_end_to_end_loop_perf.py
+@@ -54,7 +54,7 @@ class TestEndToEndPerf(TestEnvContext):
+         ),
+     )
+     def test_emit_pair_end_to_end_loop_p95_within_budget(self):
+-        """ADVISORY perf-budget probe — 20 trials × emit 200 pairs → p95 wall-clock.
++        """ADVISORY perf-budget probe — 40 trials × emit 200 pairs → p95 wall-clock.
+ 
+         DECISION (PLAN-113 W8): converted PLAN-111-FOLLOWUP's ``run=False``
+         deferral to a RUNNING advisory check (``run=True``, ``strict=False``).
+@@ -64,7 +64,20 @@ class TestEndToEndPerf(TestEnvContext):
+         ``[[feedback-xpass-strict-flake-trap]]``. Marked ``advisory``.
+         """
+         N_CLAIMS = 200
+-        N_TRIALS = 20
++        # PLAN-169 W2.2 (ADR-163 pass): N_TRIALS=20 collapsed the percentile
++        # indices — int(19*.95) == int(19*.99) == 18, the exact class ADR-163
++        # names (a p95 that is the 2nd-from-max order statistic flakes on one
++        # spike). 40 trials keeps the advisory runtime bounded (~2x) while
++        # separating the indices; both are DERIVED from the constant below and
++        # the collapse precondition is asserted before the timed loop.
++        N_TRIALS = 40
++        i95 = int((N_TRIALS - 1) * 0.95)
++        i99 = int((N_TRIALS - 1) * 0.99)
++        self.assertNotEqual(
++            i95, i99,
++            f"ADR-163 percentile precondition violated: N_TRIALS={N_TRIALS} "
++            f"collapses the p95/p99 indices (both {i95}).",
++        )
+         # PLAN-111 v1.39.2 Wave C.1 RELAX (per debate SA-K8 / Wave C.1
+         # decision tree post-A+B measurement):
+         # - Pre-PLAN-111 CI p95: 306-384ms (6 jobs failing) vs 200ms budget
+@@ -105,8 +118,9 @@ class TestEndToEndPerf(TestEnvContext):
+             durations_ms.append(elapsed_ms)
+ 
+         durations_ms.sort()
+-        # p95 of 20 = index 18 (0-indexed)
+-        p95_ms = durations_ms[int(0.95 * (N_TRIALS - 1))]
++        # Index derived from N_TRIALS (nearest-rank truncation, the
++        # profile-opus-4-7.py::_pct_of_sorted semantics) — never hardcoded.
++        p95_ms = durations_ms[i95]
+         self.assertLessEqual(
+             p95_ms, BUDGET_MS,
+             msg=(
+diff --git a/.github/release-checklist.md b/.github/release-checklist.md
+index 85ae98c..406407b 100644
+--- a/.github/release-checklist.md
++++ b/.github/release-checklist.md
+@@ -44,12 +44,15 @@
+       `SBOM.md` (`**Version:** \`X.Y.Z\``) ·
+       `SECURITY.md` + `VERSIONING.md` (janela de suporte
+       `Current/Previous MINOR (vX.Y.x)` — **família minor**).
+-      ⚠ **O driver NÃO cobre tudo** (S293, codex r2/r3): ele reescreve os
+-      stamps `last-reviewed` e o triple do SBOM, mas o **shift da janela
+-      de suporte** (`Previous` ← `Current`) e a **anotação da tag** são
+-      MANUAIS de propósito — ambos exigem juízo de release-train. O
+-      `verify-counts` falha alto na janela; a prosa da tag **nenhum gate
+-      prova**, então releia-a antes de assinar.
++      O **shift da janela de suporte** (`Previous` ← `Current`) é COBERTO
++      pelo driver em bump de MINOR (kinds `minor`/`prev_minor` em
++      `_release_bump_sites.py`, derivados do target com a MESMA regra do
++      oráculo: prev = minor−1) — a exceção é target `X.0.0`, onde o
++      `Previous` não é derivável: o driver o deixa intacto e AVISA alto
++      ("release-train judgment"), e o `verify-counts` também não
++      value-checka prev em X.0. ⚠ A **anotação da tag** segue MANUAL de
++      propósito — a prosa da tag **nenhum gate prova**, então releia-a
++      antes de assinar.
+       **`CLAUDE.md` e `README.md` NÃO são sites de versão** — nunca
+       carregaram literal de versão (`git log -S 'VERSION='` não acha
+       commit que o tenha adicionado); procurá-los num bump é perder tempo
+@@ -59,9 +62,10 @@
+       hand-patch; o gate deles vive só no `release.yml`).
+       O badge do README **não** é site de versão — é dinâmico e o driver
+       não o toca; auditar por ele deixa passar drift real.
+-      O driver cobre os sites mecânicos listados acima — **exceto** o
+-      shift da janela de suporte e a prosa da tag, que são manuais por
+-      desenho (ver o aviso acima e §Promote stable).
++      O driver cobre TODOS os sites mecânicos listados acima, janela de
++      suporte incluída — **exceto** a prosa da tag, manual por desenho
++      (ver o aviso acima e §Promote stable), e o `Previous MINOR` num
++      target `X.0.0` (avisado alto, nunca adivinhado).
+ 
+ ### Governança
+ 
+@@ -91,21 +95,53 @@ errado, e pular `bump` faz o `tag()` abortar no seu próprio check
+ 
+ ```bash
+ # RC:
+-bash .claude/scripts/local/release-v1-2-0.sh preflight --rc N
+-bash .claude/scripts/local/release-v1-2-0.sh bump      --rc N --npm-readme-reviewed
+-bash .claude/scripts/local/release-v1-2-0.sh tag       --rc N
++bash .claude/scripts/local/release.sh preflight --rc N
++bash .claude/scripts/local/release.sh bump      --rc N --npm-readme-reviewed
++#   se o bump commitou: git push origin main e espere o CI (guard de
++#   ancestralidade). ANTES da tag, o VERDITO é obrigatório — o guard de
++#   delta roda INCONDICIONALMENTE (RC e stable igualmente; sem ele a fase
++#   morre em E_VERDICT "no signed verdict at ..."):
++#   autorar .claude/governance/pair-rail-verdict-vX.Y.Z-rc.N.md com os
++#   4 campos do bloco yaml (lista em §Promote stable), commit + push main.
++#   A sequência POR TAG é sempre: re-pass → verdito → commit → push → tag.
++bash .claude/scripts/local/release.sh tag       --rc N
+ git push origin vX.Y.Z-rc.N        # push é manual, sempre
+ 
+ # STABLE (a tag criada é vX.Y.Z, sem sufixo — pushe ESSE nome):
+-bash .claude/scripts/local/release-v1-2-0.sh preflight --stable
+-bash .claude/scripts/local/release-v1-2-0.sh bump      --stable --npm-readme-reviewed
+-bash .claude/scripts/local/release-v1-2-0.sh tag       --stable
++bash .claude/scripts/local/release.sh preflight --stable
++bash .claude/scripts/local/release.sh bump      --stable --npm-readme-reviewed
++bash .claude/scripts/local/release.sh tag       --stable
+ git push origin vX.Y.Z
+ ```
+ 
+ O nome da tag muda com a fase; pushar `-rc.N` depois de `tag --stable`
+ falha (a tag não existe) ou publica a errada.
+ 
++**O `bump` é idempotente (PLAN-166/F2).** Numa árvore já no alvo com os
++quatro oráculos limpos (`VERSION`, `verify-counts`, `build-plugin
++--check`, `check-canonical-doc-freshness`) ele **não escreve arquivo
++nenhum** e retorna 0 — inclusive no D+1 do hold. Isso é SUCESSO, não
++falha: a pós-condição da fase já está satisfeita. Para uma re-revisão de
++verdade dos docs (mexer nas stamps `last-reviewed:` sem mudar versão) o
++caminho nomeado é `bump --restamp --npm-readme-reviewed`.
++
++**Se o `bump` criou commit, pushe `main` ANTES de taggear.** A fase `tag`
++roda dois guards fail-closed, RC e stable igualmente:
++
++- **ancestralidade** — `HEAD` tem de ser ancestral de `origin/main`.
++  Falha de rede e "HEAD não está em main" são erros DISTINTOS; para
++  operar offline de propósito existe `--offline-ack` (anunciado alto).
++- **delta restrito** — `git diff <parent_sha do verdito>..HEAD` tem de
++  caber na allowlist FECHADA que o verdito assinado
++  (`.claude/governance/pair-rail-verdict-<TAG>.md`) declara: o próprio
++  verdito, o `verdict-fields-<TAG>`, e os artefatos do re-pass por nome
++  exato — com o `sha256` do `MANIFEST.sha256` pinado no verdito e
++  `shasum -a 256 -c` rodado por cima. Nada de wildcard. O invariante é
++  "nada landou depois do que o re-pass revisou".
++
++O assert local **não basta** e não pretende bastar: uma tag assinada à
++mão pula o driver. O mesmo assert entra server-side no `release.yml`.
++
+ ## Pós-tag (monitorar)
+ 
+ ### Release workflow (automático)
+@@ -139,18 +175,50 @@ falha (a tag não existe) ou publica a errada.
+ - [ ] Gate de 24h: delta ≥24h da **rc mais RECENTE por creator-date**
+       (sem rc prévia = fail; rc deletada não conta)
+ - [ ] **Novo** `pair-rail-verdict-vX.Y.Z.md` (o verdict é POR TAG — o
+-      step do release.yml roda no GA também; o da rc não vale)
+-- [ ] `bash .claude/scripts/local/release-v1-2-0.sh preflight --stable`
++      step do release.yml roda no GA também; o da rc não vale).
++      Além dos campos do template, o guard de delta do `tag`
++      (`_release_tag_guard.py`) exige QUATRO campos no bloco yaml — o
++      template canônico ainda documenta só o primeiro (patch no W1);
++      até lá, esta lista é a superfície de autoria:
++      - `parent_sha:` 40-hex — o commit que o re-pass revisou (o verdito
++        landa DEPOIS dele; `parent_sha == HEAD` é rejeitado como vácuo)
++      - `delta_allowlist:` lista LITERAL (`  - path`), sem glob: o
++        próprio verdito, o `verdict-fields-<TAG>.md` do plano (tag
++        literal no nome E path canônico exato — direto no diretório do
++        plano que contém o diretório do manifest; basename igual em
++        qualquer outro diretório é look-alike e NÃO passa), o
++        `MANIFEST.sha256` do re-pass e cada artefato do re-pass por
++        nome exato
++      - `delta_manifest:` path repo-relativo do `MANIFEST.sha256`
++      - `delta_manifest_sha256:` 64-hex do próprio manifest (o pin de
++        conteúdo que o guard confere com `shasum -a 256 -c` por cima)
++- [ ] `bash .claude/scripts/local/release.sh preflight --stable`
+       ← **não pule**: é aqui que o driver re-checa árvore limpa/main, CI,
+       governança, usabilidade da chave de assinatura e disponibilidade da
+       tag stable. Ir direto ao `bump` depois do hold pula tudo isso
+-- [ ] `bash .claude/scripts/local/release-v1-2-0.sh bump --stable --npm-readme-reviewed`
+-      — atualiza os sites doc/package E regenera os 2 manifests de
+-      plugin (NUNCA `echo > VERSION` à mão: bump de 1 site com 8 sites
+-      vivos foi a causa do red da rc.1)
+-- [ ] `bash .claude/scripts/local/release-v1-2-0.sh tag --stable` + `git push origin vX.Y.Z`
++- [ ] `bash .claude/scripts/local/release.sh bump --stable --npm-readme-reviewed`
++      — atualiza os sites doc/package E regenera os manifests de plugin
++      (NUNCA `echo > VERSION` à mão: bumpar um site com o resto vivo foi
++      a causa do red da rc.1 da v1.2.0). Depois do hold isso normalmente
++      é um **no-op** — a árvore já está no alvo. No-op é sucesso
++- [ ] `bash .claude/scripts/local/release.sh tag --stable` + `git push origin vX.Y.Z`
++      — o guard de delta restrito exige que o único delta desde o
++      `parent_sha` do verdito seja o próprio verdito + evidência pinada
+ - [ ] GitHub release (sem pre-release flag)
+ 
++### Se o `npm-publish.yml` estourar o prazo esperando o gate
++
++O job `await-release-gate` tem prazo próprio. Se ele expirar porque o
++`release-gate` ficou preso em fila, a rota de recuperação é
++**re-rodar o job `await-release-gate`** depois que o `release-gate`
++ficar verde: o run da tag está pinado à ÁRVORE DA TAG, então o re-run é
++seguro e **não** exige deletar/re-criar a tag.
++
++E a aprovação manual do environment `production-npm` é a **última chance
++humana** antes do publish — não é uma segunda opinião sobre o gate. Se o
++gate está vermelho, a resposta é consertar e re-rodar, nunca aprovar por
++cima.
++
+ ## Rollback
+ 
+ Se `v1.0.0` problem:
+diff --git a/.github/workflows/npm-publish.yml b/.github/workflows/npm-publish.yml
+index aa2e29c..03071be 100644
+--- a/.github/workflows/npm-publish.yml
++++ b/.github/workflows/npm-publish.yml
+@@ -37,6 +37,47 @@ name: NPM Publish
+ #     Owner-in-the-loop gate covering the Sprint 17 public-launch
+ #     go/no-go decision (private-first strategy per
+ #     `project_closure_strategy.md`).
++#
++# ---------------------------------------------------------------------
++# PLAN-166 W1 item 1 (F1, P0) — the publish now OBSERVES the governance
++# gate. `release.yml` and this workflow both fire on `push: tags: v*` as
++# two INDEPENDENT runs; until PLAN-166 nothing made the publish observe
++# the gate, so the only barrier was a human approving `production-npm`
++# with no machine evidence that `release-gate` was green — a live path
++# to publishing an unreviewed tree. A first job (`await-release-gate` —
++# deliberately NO `environment:` and NO RC exclusion, so it runs on RC
++# tags as a live positive control) polls release.yml's `release-gate`
++# JOB (never the run conclusion: CEO_SOTA_DISABLE=1 skips the job while
++# the run stays green) for THIS tag at THIS commit and fail-CLOSED
++# blocks unless it concluded success. `publish` gains
++# `needs: await-release-gate`; its `environment: production-npm`
++# approval and the RC exclusion are VERBATIM unchanged. Deliberate
++# ordering: the Owner's manual-approval prompt only appears AFTER the
++# gate is green — approval can never race ahead of machine evidence —
++# and the `already_published` idempotency guard STAYS in the publish
++# job (last-resort idempotency), not in the gate job. Do not "optimise"
++# the order back.
++#
++# Alternatives REJECTED (do not resurrect without a new debate):
++#   - `workflow_run` trigger: GitHub executes the workflow file from
++#     the DEFAULT branch, not the tag's tree — that kills the rollback
++#     invariant documented above (tag runs pin this workflow to the
++#     tag's tree; a failed GA publish means rollback + delete/re-tag).
++#   - moving the publish into release.yml: npm trusted publishing binds
++#     OIDC by workflow FILENAME
++#     (.claude/plans/PLAN-158/oidc-failure-playbook.md:18) — renaming
++#     the publishing workflow breaks the npmjs registration, plus ~6
++#     test pins on the npm-publish.yml path.
++#   - a reusable `workflow_call` gate shared by both workflows:
++#     refactor candidate, post-GA only (PLAN-166 §Deferred) — not
++#     during an open release window.
++#
++# The trusted-publisher binding triple (repository / workflow filename /
++# environment) is recorded in
++# .claude/governance/npm-trusted-publisher.txt and cross-checked by
++# .claude/scripts/tests/test_release_workflow_asserts.py, which READS
++# that file (embedding the values in the test would be a 4th copy of
++# the truth).
+ 
+ on:
+   push:
+@@ -52,6 +93,109 @@ permissions:
+   id-token: write   # required for OIDC trusted publishing + provenance
+ 
+ jobs:
++  # ---------------------------------------------------------------------
++  # PLAN-166 W1 item 1 (F1, P0) — OBSERVE THE GOVERNANCE GATE.
++  # This job is the machine evidence that release.yml's `release-gate`
++  # job passed for this exact tag+SHA+push. It deliberately carries NO
++  # `environment:` and NO RC exclusion: it runs on rc tags too, which
++  # makes every RC a live positive control of the gate before GA ever
++  # depends on it.
++  # Decision function + battery: .claude/scripts/await_release_gate.py,
++  # .claude/scripts/tests/test_await_release_gate.py.
++  await-release-gate:
++    name: Await release-gate (release.yml)
++    runs-on: ubuntu-latest
++    # 35 > the poller's own 30-minute deadline, so a timeout surfaces as
++    # the decision function's fail-CLOSED BLOCK (with its inputs printed),
++    # not as an opaque runner kill.
++    timeout-minutes: 35
++    permissions:
++      contents: read   # checkout the tag to get the decision script
++      actions: read    # read release.yml's runs + jobs over the REST API
++    env:
++      # `permissions:` alone does NOT authenticate the `gh` CLI on a
++      # hosted runner. Without GH_TOKEN every poll dies on auth, which is
++      # BLOCK (fail-closed) — i.e. it would break EVERY release, RC and
++      # GA alike. This token is the job's only credential; the job has no
++      # id-token and no environment.
++      GH_TOKEN: ${{ github.token }}
++    steps:
++      - name: Checkout tag
++        # SHA-pinned (Sprint 7 Dependabot bump): actions/checkout@v6.0.2
++        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
++
++      - name: Poll release.yml until release-gate concludes
++        # No `${{ }}` interpolation inside this script by design — every
++        # value arrives through the environment, so no workflow expression
++        # is ever spliced into shell text.
++        run: |
++          set -euo pipefail
++          TAG="${GITHUB_REF_NAME}"
++          DEADLINE=$(( $(date +%s) + 1800 ))
++          SELF_CREATED_AT="$(gh api \
++            "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
++            --jq '.created_at' < /dev/null)"
++          echo "inputs: tag=${TAG} head_sha=${GITHUB_SHA} run_id=${GITHUB_RUN_ID}"
++          echo "inputs: self_created_at=${SELF_CREATED_AT} deadline_epoch=${DEADLINE}"
++
++          fetch_payload() {
++            # One document: every run for THIS head_sha, each carrying its
++            # jobs. A run whose jobs endpoint is unreadable keeps no `jobs`
++            # key — the decision function reads that as WAIT, never GRANT.
++            if ! gh api --paginate \
++                "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${GITHUB_SHA}&per_page=100" \
++                --jq '.workflow_runs[] | {id, run_attempt, path, event, head_branch, head_sha, created_at, status, conclusion}' \
++                > runs.ndjson < /dev/null; then
++              # An API error is BLOCK by design (ADR-186: input we cannot
++              # verify is blocked, not waved through).
++              echo '{"api_error": "runs listing failed"}' > payload.json
++              return 0
++            fi
++            : > runs_with_jobs.ndjson
++            while read -r run; do
++              [ -n "${run}" ] || continue
++              rid="$(printf '%s' "${run}" | jq -r '.id')"
++              if ! run_jobs="$(gh api \
++                  "repos/${GITHUB_REPOSITORY}/actions/runs/${rid}/jobs?per_page=100" \
++                  --jq '[.jobs[] | {name, status, conclusion}]' < /dev/null)"; then
++                printf '%s\n' "${run}" >> runs_with_jobs.ndjson
++                continue
++              fi
++              printf '%s' "${run}" \
++                | jq -c --argjson jobs "${run_jobs}" '. + {jobs: $jobs}' \
++                >> runs_with_jobs.ndjson
++            done < runs.ndjson
++            jq -c -s '{workflow_runs: .}' runs_with_jobs.ndjson > payload.json
++          }
++
++          attempt=0
++          while true; do
++            attempt=$(( attempt + 1 ))
++            fetch_payload
++            set +e
++            python3 .claude/scripts/await_release_gate.py \
++              --payload-file payload.json \
++              --tag "${TAG}" \
++              --head-sha "${GITHUB_SHA}" \
++              --self-created-at "${SELF_CREATED_AT}" \
++              --deadline-epoch "${DEADLINE}"
++            rc=$?
++            set -e
++            case "${rc}" in
++              0)
++                echo "::notice::release-gate green for ${TAG} at ${GITHUB_SHA} — publish authorised (poll ${attempt})"
++                exit 0
++                ;;
++              3)
++                sleep 20
++                ;;
++              *)
++                echo "::error::release-gate did not authorise this publish (decision exit ${rc}, poll ${attempt}) — the printed inputs above name the run and job that were evaluated"
++                exit 1
++                ;;
++            esac
++          done
++
+   publish:
+     # PLAN-013 Phase 0 item 0.2 — RC tag guard.
+     # RC tags contain `-rc.` (e.g. `v1.4.0-rc.1`). Skip them entirely.
+@@ -63,6 +207,13 @@ jobs:
+     # DROPPED by ratified debate. Pinned by
+     # .claude/scripts/tests/test_release_workflow_asserts.py.
+     if: "!contains(github.ref, '-rc.')"
++    # PLAN-166 W1 item 1: publish only starts after `await-release-gate`
++    # proved release.yml's release-gate job green for this exact tag+SHA
++    # (default `success()` semantics of `needs:` — an await failure skips
++    # this job while the run itself goes red). Deliberate ordering: the
++    # production-npm manual-approval prompt appears only AFTER the gate
++    # is green. The `already_published` guard stays below, in this job.
++    needs: await-release-gate
+     runs-on: ubuntu-latest
+     environment: production-npm
+     timeout-minutes: 8
+diff --git a/.github/workflows/ownership-nightly.yml b/.github/workflows/ownership-nightly.yml
+new file mode 100644
+index 0000000..e874f21
+--- /dev/null
++++ b/.github/workflows/ownership-nightly.yml
+@@ -0,0 +1,107 @@
++name: Ownership Nightly
++
++# PLAN-168 W1 (AC-4/AC-5, Owner decision D4): the ownership e2e runs the FULL
++# truth table — 62 real install/upgrade cells, ~25 min locally, 2-3x that on a
++# 2-core runner — so it cannot live inside smoke-install's 25-min job (that
++# budget was already raised 4x: 5→8→20→25). And `schedule:` events IGNORE
++# `paths:` filters, so the nightly split is a separate WORKFLOW, not a filter
++# entry (debate r1 devops must-fix 1). The fast per-PR half (the unit oracle)
++# stays in smoke-install.yml.
++#
++# The gate compares the observed non-GREEN set against
++# scripts/tests/ownership-expected-reds.txt and fails on ANY difference —
++# including shrinkage. 4 deliberate reds are part of the contract
++# (CLAUDE.md §4): an all-green run means the table changed — STOP and find
++# out why, never celebrate. NEVER run the harness with --map here: --map is a
++# reporting mode that exits 0 over failures (a dead gate by construction).
++
++on:
++  schedule:
++    # Off-peak UTC, off-minute deliberately (fleet etiquette — avoid :00/:30).
++    - cron: "43 6 * * *"
++  # Manual runs for harness/table PRs that want the full e2e before merge.
++  workflow_dispatch: {}
++
++concurrency:
++  group: ownership-nightly
++  cancel-in-progress: true
++
++jobs:
++  ownership-e2e:
++    # PLAN-012 Phase 2 CEO_SOTA_DISABLE parity (same switch as smoke-install).
++    if: vars.CEO_SOTA_DISABLE != '1'
++    runs-on: ubuntu-latest
++    # ~25 min local (Darwin arm64, 16 cores, 2026-08-07); ubuntu-latest is the
++    # usual 2-3x slower => 50-75 min expected. Same anti-flake sizing rule as
++    # the smoke-install budget notes: leave headroom, re-tighten on a real p95.
++    timeout-minutes: 90
++    permissions:
++      contents: read
++    steps:
++      - name: Checkout
++        # SHA-pinned (same pin as smoke-install.yml): actions/checkout@v6.0.2
++        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
++        with:
++          fetch-depth: 1
++
++      # `fetch-depth: 1` produces a checkout with NO tags, and the
++      # legacy_pristine* fixtures build from a REAL shipped tree. The tag is
++      # READ FROM THE HARNESS (--print-legacy-tag) so this workflow never
++      # becomes a second copy of that truth (same --print-pin shape as the
++      # parity e2e in smoke-install.yml).
++      - name: Fetch the legacy_pristine tag
++        run: |
++          set -euo pipefail
++          TAG="$(bash scripts/tests/test-ownership-table.sh --print-legacy-tag)"
++          echo "legacy pristine tag: $TAG"
++          git fetch --no-tags --depth 1 origin "+refs/tags/$TAG:refs/tags/$TAG"
++          git rev-parse --verify "refs/tags/$TAG^{commit}"
++
++      - name: Install jq (install.sh settings merge dependency)
++        run: |
++          set -euo pipefail
++          if ! command -v jq >/dev/null 2>&1; then
++            sudo apt-get update -qq
++            sudo apt-get install -y -qq jq
++          fi
++          jq --version
++
++      # Fast preflight: a broken DECISION should fail in milliseconds here,
++      # not 40 minutes into the observation run.
++      - name: Ownership verdict unit oracle (preflight)
++        run: |
++          set -euo pipefail
++          bash scripts/tests/test-ownership-verdict-unit.sh
++
++      # PLAN-168 W2 (AC-6/AC-6b): INV-4 as an executable assertion — install
++      # and upgrade produce the SAME pointer (byte identity + content
++      # soundness), repeat upgrades are idempotent, a degraded body is CURED
++      # with backup, and an adopter-customized pointer is PRESERVED (S238).
++      - name: Protocol pointer INV-4 e2e (4 legs)
++        run: |
++          set -euo pipefail
++          bash scripts/tests/test-protocol-pointer-inv4.sh
++
++      # The gate itself is proven BEFORE it is trusted: every failure mode it
++      # claims to catch is planted with a fake harness and must go red. A CI
++      # gate nobody can test is a gate nobody has proven (PLAN-167: 8
++      # instrument defects).
++      - name: Gate positive control (planted failure modes)
++        run: |
++          set -euo pipefail
++          bash scripts/tests/test-ownership-nightly-gate.sh
++
++      # PLAN-168 AC-5 — the SCRIPT is the gate (debate r1 QA must-fix 2:
++      # describing behavior is not a gate). ownership-nightly-gate.sh runs the
++      # e2e and enforces: rc>=2 = infra error (never comparable); summary line
++      # present with HARNESS-ERR=0 (partial output fails); observed non-GREEN
++      # id set == scripts/tests/ownership-expected-reds.txt exactly; rc
++      # coherent with the set (non-empty => rc=1, empty => rc=0). NEVER --map.
++      - name: Ownership e2e — full table vs expected non-GREEN set
++        env:
++          # 60s/cell flakes on 2-core CI iron (2-3x slower than the local
++          # baseline the default was sized on).
++          CELL_TIMEOUT: "180"
++        run: |
++          set -euo pipefail
++          bash scripts/tests/ownership-nightly-gate.sh
+diff --git a/.github/workflows/release.yml b/.github/workflows/release.yml
+index 69d7836..596197e 100644
+--- a/.github/workflows/release.yml
++++ b/.github/workflows/release.yml
+@@ -69,6 +69,33 @@ jobs:
+             echo "OK: VERSION=$FILE matches tag=$TAG"
+           fi
+ 
++      # -----------------------------------------------------------------
++      # PLAN-166 W1 item 2 (F3, ADR-155-AMEND-1 §5, Forma A (ii)) — the
++      # framework version marker `.claude/.framework-version` is a TRACKED
++      # one-line file, byte-identical to VERSION (the version bump writes
++      # it as a site; verify-counts.sh cross-checks it). This assert is
++      # deliberately UNCONDITIONAL and fail-closed: a missing marker in a
++      # release checkout means the ceremony that introduced it was
++      # reverted or the bump skipped a site — either way the tag must not
++      # ship. Kept NEXT TO the VERSION↔tag assert above so the whole
++      # version-consistency family lives in one place (same convention as
++      # the plugin-manifest step below).
++      # -----------------------------------------------------------------
++      - name: Assert framework-version marker matches VERSION
++        run: |
++          set -euo pipefail
++          FILE="$(tr -d '[:space:]' < VERSION)"
++          if [[ ! -f .claude/.framework-version ]]; then
++            echo "::error::.claude/.framework-version is missing — it is a tracked file (PLAN-166 F3 / ADR-155-AMEND-1); a release checkout without it must not ship"
++            exit 1
++          fi
++          MARKER="$(tr -d '[:space:]' < .claude/.framework-version)"
++          if [[ "$MARKER" != "$FILE" ]]; then
++            echo "::error::.claude/.framework-version ('$MARKER') does not match VERSION ('$FILE') — the marker is byte-identical to VERSION by contract (Forma A (ii), fail-closed)"
++            exit 1
++          fi
++          echo "OK: .claude/.framework-version=$MARKER matches VERSION"
++
+       # -----------------------------------------------------------------
+       # PLAN-153 Wave B item 5 (e) — version↔plugin-manifest sync, kept
+       # NEXT TO the VERSION↔tag assert above so the whole
+@@ -701,6 +728,143 @@ jobs:
+             --codex-pin-manifest-file .claude/governance/codex-cli-pin-manifest.json \
+             --inputs-hash-paths-file .claude/governance/pair-rail-inputs-hash-manifest.txt
+ 
++      # ==========================================================
++      # PLAN-166 W1-B — verdict delta + ancestry gate (F2 server side)
++      # ==========================================================
++      # Re-pass findings r15 + r17 + r18 (PLAN-166), debate r3 scoped VETO.
++      #
++      # WHY A SEPARATE STEP: the step-15 neighbourhood above carries two
++      # escape hatches keyed to CEO_PAIR_RAIL_VERDICT_OPTIONAL —
++      # `continue-on-error:` on the step itself, and an empty
++      # `--parent-sha ""` bind (the validator only binds the field when
++      # args.parent_sha is non-empty). Inheriting that neighbourhood would
++      # inherit the switch. This step therefore:
++      #   - carries NO continue-on-error;
++      #   - FAILS CLOSED when CEO_PAIR_RAIL_VERDICT_OPTIONAL=1: in that
++      #     mode step 15 skipped the parent_sha bind, so the anchor these
++      #     asserts hang off was never validated — there is no transition
++      #     mode here, by design;
++      #   - re-derives and re-binds parent_sha ITSELF (non-empty, 40-hex,
++      #     equal to the verdict's `parent_sha:` read with the SAME parser
++      #     the local tag guard uses) — independent of step 15's outcome,
++      #     which also closes the legacy commit_sha fallback (the
++      #     validator downgrades a missing parent_sha to an ADVISORY when
++      #     a legacy commit_sha is present; this step does not);
++      #   - reuses .claude/scripts/local/_release_tag_guard.py for the
++      #     delta decision — the module marks itself as the reference
++      #     implementation; the semantics are NEVER re-implemented in
++      #     bash (single source of the decision logic);
++      #   - asserts ancestry on origin/main of BOTH the reviewed parent
++      #     AND GITHUB_SHA itself (r18: parent-only lets the
++      #     tag-without-push scenario — verdict V over parent P, tag
++      #     pushed, V never reaches main — pass with P ancestral and V
++      #     orphaned).
++      #
++      # THE INVARIANT (one sentence): nothing landed after what the
++      # re-pass reviewed, other than the verdict for THIS tag and the
++      # evidence it pins by name AND content (sha256 of MANIFEST.sha256
++      # in the signed verdict + `shasum -c` over the evidence set).
++      #
++      # PINNED ORDER (asserted structurally by the W1B* classes of
++      # test_release_workflow_asserts.py, WaveB5 pattern):
++      #   Verify tag GPG signature → Validate pair-rail verdict →
++      #   delta → ancestry.
++      # Do not reorder, do not merge into step 15.
++      - name: Verify verdict delta + ancestry (fail-closed)
++        env:
++          CEO_PAIR_RAIL_VERDICT_OPTIONAL: ${{ vars.CEO_PAIR_RAIL_VERDICT_OPTIONAL || '0' }}
++        run: |
++          set -euo pipefail
++          # (0) No transition mode: with the var on, the parent_sha bind
++          # upstream was skipped — refuse to certify against an
++          # unvalidated anchor. Fail closed, loudly.
++          if [ "${CEO_PAIR_RAIL_VERDICT_OPTIONAL}" = "1" ]; then
++            echo "::error::CEO_PAIR_RAIL_VERDICT_OPTIONAL=1 is set, but the delta+ancestry gate has no transition mode — it fails closed by design (PLAN-166 debate r3). Unset the repo variable (gh variable delete CEO_PAIR_RAIL_VERDICT_OPTIONAL) and re-run."
++            exit 1
++          fi
++          TAG="${GITHUB_REF_NAME}"
++          VERDICT_FILE=".claude/governance/pair-rail-verdict-${TAG}.md"
++          if [ ! -f "$VERDICT_FILE" ]; then
++            echo "::error::no signed verdict at $VERDICT_FILE — the delta+ancestry gate has no optional mode; the re-pass verdict for THIS tag must be committed on the tagged tree."
++            exit 1
++          fi
++          # (1) Checkout sanity: every assert below anchors on HEAD, so
++          # HEAD must BE the tagged commit this run is about.
++          HEAD_SHA="$(git rev-parse HEAD)"
++          if [ "$HEAD_SHA" != "${GITHUB_SHA}" ]; then
++            echo "::error::checkout HEAD ($HEAD_SHA) != GITHUB_SHA (${GITHUB_SHA}) — refusing to assert against the wrong tree"
++            exit 1
++          fi
++          # (2) Independent parent_sha bind — non-empty by construction,
++          # controlled by no variable. Same derivation as step 15 (parent
++          # of the commit that introduced the verdict file); the verdict
++          # field is read with the SAME parser the local tag guard uses
++          # (_parse_verdict), so two readers of the same signed file
++          # cannot disagree about what it says.
++          VERDICT_FILE_COMMIT="$(git log -n1 --format=%H -- "$VERDICT_FILE")"
++          if [ -z "$VERDICT_FILE_COMMIT" ]; then
++            echo "::error::cannot resolve the commit that introduced $VERDICT_FILE — refusing an empty bind"
++            exit 1
++          fi
++          PARENT_SHA="$(git rev-parse "${VERDICT_FILE_COMMIT}^" 2>/dev/null || echo "")"
++          if [ -z "$PARENT_SHA" ]; then
++            echo "::error::cannot resolve parent of ${VERDICT_FILE_COMMIT} — refusing an empty bind"
++            exit 1
++          fi
++          python3 - "$VERDICT_FILE" "$PARENT_SHA" <<'PYBIND'
++          import importlib.util
++          import io
++          import re
++          import sys
++
++          verdict_path, expected = sys.argv[1], sys.argv[2]
++          if not re.match(r"\A[0-9a-f]{40}\Z", expected):
++              sys.exit("FAIL: derived parent %r is not a 40-hex SHA" % expected)
++          spec = importlib.util.spec_from_file_location(
++              "release_tag_guard", ".claude/scripts/local/_release_tag_guard.py"
++          )
++          mod = importlib.util.module_from_spec(spec)
++          spec.loader.exec_module(mod)
++          with io.open(verdict_path, encoding="utf-8") as fh:
++              fields = mod._parse_verdict(fh.read())
++          declared = fields.get("parent_sha")
++          if declared != expected:
++              sys.exit(
++                  "FAIL: verdict parent_sha %r != parent of the verdict-file "
++                  "commit (%s) — the anchor was not validated with a "
++                  "non-empty bind; a legacy commit_sha fallback does NOT "
++                  "count here." % (declared, expected)
++              )
++          print("  ok   parent_sha bind: %s (derived independently of step 15)" % expected)
++          PYBIND
++          # (3) DELTA (r15): git diff <reviewed parent>..<tag commit>
++          # must be contained in the CLOSED set pinned in the signed
++          # verdict — exact names per tag (never the pair-rail-verdict-*
++          # wildcard, never repass-<N>/**), set equality against the
++          # evidence MANIFEST.sha256, AND content equality (the verdict
++          # pins the manifest's sha256; the guard runs `shasum -c` over
++          # it). Any extra path = FAIL. Decision logic lives in the local
++          # tag guard module — reused, never re-implemented in bash.
++          python3 .claude/scripts/local/_release_tag_guard.py delta \
++            --repo . --tag "$TAG"
++          # (4) ANCESTRY (r17+r18): both the reviewed parent AND the
++          # tagged commit itself must be ancestors of origin/main. The
++          # module's ancestry subcommand judges HEAD (== GITHUB_SHA,
++          # asserted in (1)) after a FAIL-CLOSED fetch of origin/main —
++          # a failed fetch is a stop, never a stale-ref approval. The
++          # reviewed parent is then judged against the same freshly
++          # fetched ref.
++          python3 .claude/scripts/local/_release_tag_guard.py ancestry \
++            --repo . --remote origin --branch main
++          if git merge-base --is-ancestor "$PARENT_SHA" origin/main; then
++            echo "  ok   reviewed parent $PARENT_SHA is an ancestor of origin/main"
++          else
++            RC=$?
++            echo "::error::reviewed parent $PARENT_SHA is not on origin/main (merge-base exit $RC) — the verdict is anchored on a commit main never saw (tag-without-push / orphan-verdict scenario, r17+r18)"
++            exit 1
++          fi
++          echo "OK: verdict delta + ancestry asserts all green for $TAG"
++
+   publish-release:
+     name: Publish GitHub Release + assets
+     needs: release-gate
+diff --git a/.github/workflows/smoke-install.yml b/.github/workflows/smoke-install.yml
+index e1317fb..ddf2165 100644
+--- a/.github/workflows/smoke-install.yml
++++ b/.github/workflows/smoke-install.yml
+@@ -8,11 +8,54 @@ on:
+       # PLAN-161 (CI wiring): upgrade oracles + the manifest lib they
+       # exercise — keep BOTH filter lists (pull_request + push) in sync.
+       - "scripts/_framework_manifest_set.sh"
++      # The ownership + parity e2e call _hash_file/_hash_stdin from here, and
++      # this workflow is their ONLY CI execution — without the helper in the
++      # filter, a PR touching only it skips the gate entirely (codex W1
++      # round 10, P2: the "red gate nobody runs" class, one level deeper).
++      - "scripts/_hash_lib.sh"
+       - "scripts/tests/test-upgrade-dryrun-identity.sh"
+       - "scripts/tests/test-upgrade-exclusions.sh"
+       - "scripts/tests/smoke-install.sh"
++      # PLAN-166 F4 (OQ-4): the install/upgrade parity e2e and its classifier.
++      # The finding this closes is "a red gate nobody runs" (5th instance) --
++      # an unwired test is the same as no test.
++      - "scripts/tests/test-install-upgrade-parity-e2e.sh"
++      - "scripts/tests/_parity_classify.py"
++      # PLAN-166 F3 (ADR-155-AMEND-1): delivery-record ownership e2e —
++      # scripts/tests/*.sh runs ONLY in this workflow (same r11/r20 wiring
++      # rule as the parity e2e above).
++      - "scripts/tests/test-upgrade-spec-ownership.sh"
++      # PLAN-168 W1 (AC-1): the PLAN-167 ownership oracles + their truth
++      # table + contract doc. The unit oracle runs per-PR in THIS workflow;
++      # the ~25-min e2e runs in ownership-nightly.yml (schedule: ignores
++      # paths:, so it cannot live behind this filter) — but a PR touching
++      # the table/harness/contract must still light up the fast gate here.
++      # Without these entries, a PR changing only the table skips the gate
++      # entirely: the r10-F4 "red gate nobody runs" class, again.
++      - "scripts/tests/test-ownership-verdict-unit.sh"
++      - "scripts/tests/test-ownership-table.sh"
++      - "scripts/tests/ownership_table.tsv"
++      - "docs/ownership-decision-table.md"
++      # PLAN-168 W1+W2 (rail r3 P1): the nightly gate + its positive control
++      # get fast per-PR steps HERE too — without these entries a PR could
++      # break the gate's rc/status handling while every PR check stays green.
++      # The pointer-generator render control is the per-PR half of INV-4
++      # (the full 4-leg e2e runs in ownership-nightly.yml).
++      - "scripts/tests/ownership-nightly-gate.sh"
++      - "scripts/tests/test-ownership-nightly-gate.sh"
++      - "scripts/tests/ownership-expected-reds.txt"
++      - "scripts/tests/test-protocol-pointer-render.sh"
++      - "scripts/tests/test-protocol-pointer-inv4.sh"
+       - "templates/**"
+-      - "SPEC/v1/install-cli.md"
++      # Widened from SPEC/v1/install-cli.md: SPEC/v1 is delivered by install.sh
++      # and (until F3) by nothing in upgrade.sh, so ANY SPEC/v1 change is a
++      # parity event, not just the CLI contract doc.
++      - "SPEC/v1/**"
++      # PLAN-166 F4 wiring (r11/r20): scripts/tests/*.sh runs ONLY here, so a
++      # PR touching just one of these would otherwise skip the regression.
++      - "scripts/doctor.sh"
++      - ".claude/.framework-version"
++      - ".claude/scripts/check-framework-updates.sh"
+       - ".github/workflows/smoke-install.yml"
+       # PLAN-006 Phase 1 (Sprint 6): Adapter Layer migration changes
+       # install-time expectations (hook import paths, contract). Scope
+@@ -22,13 +65,40 @@ on:
+     branches:
+       - main
+     paths:
++      # KEEP IDENTICAL to the pull_request list above. The two had already
++      # drifted (push was missing SPEC/v1 and this workflow file); PLAN-166 F4
++      # re-syncs them, because a filter that fires on the PR and not on the
++      # merge is a gate with a hole in it.
+       - "scripts/install.sh"
+       - "scripts/upgrade.sh"
+       - "scripts/_framework_manifest_set.sh"
++      - "scripts/_hash_lib.sh"
+       - "scripts/tests/test-upgrade-dryrun-identity.sh"
+       - "scripts/tests/test-upgrade-exclusions.sh"
+       - "scripts/tests/smoke-install.sh"
++      - "scripts/tests/test-install-upgrade-parity-e2e.sh"
++      - "scripts/tests/_parity_classify.py"
++      - "scripts/tests/test-upgrade-spec-ownership.sh"
++      - "scripts/tests/test-ownership-verdict-unit.sh"
++      - "scripts/tests/test-ownership-table.sh"
++      - "scripts/tests/ownership_table.tsv"
++      - "docs/ownership-decision-table.md"
++      # PLAN-168 W1+W2 (rail r3 P1): the nightly gate + its positive control
++      # get fast per-PR steps HERE too — without these entries a PR could
++      # break the gate's rc/status handling while every PR check stays green.
++      # The pointer-generator render control is the per-PR half of INV-4
++      # (the full 4-leg e2e runs in ownership-nightly.yml).
++      - "scripts/tests/ownership-nightly-gate.sh"
++      - "scripts/tests/test-ownership-nightly-gate.sh"
++      - "scripts/tests/ownership-expected-reds.txt"
++      - "scripts/tests/test-protocol-pointer-render.sh"
++      - "scripts/tests/test-protocol-pointer-inv4.sh"
+       - "templates/**"
++      - "SPEC/v1/**"
++      - "scripts/doctor.sh"
++      - ".claude/.framework-version"
++      - ".claude/scripts/check-framework-updates.sh"
++      - ".github/workflows/smoke-install.yml"
+       - ".claude/hooks/**"
+ 
+ concurrency:
+@@ -42,7 +112,20 @@ jobs:
+     runs-on: ubuntu-latest
+     # PLAN-161: 5 -> 8 — headroom for the two upgrade oracles (each runs
+     # full install + upgrade legs against fixture adopter repos).
+-    timeout-minutes: 8
++    # PLAN-166 F4: 8 -> 20. MEASURED, not guessed. The parity e2e runs 2 full
++    # install legs + 1 upgrade leg PER ceremony mode, and the positive control
++    # runs the same again with a planted divergence: 12 install/upgrade
++    # operations added to this job. Local wall time (Darwin arm64, 16 cores,
++    # 2026-08-05): gate 122s + control 118s = 240s. A 2-core ubuntu-latest
++    # runner is the usual 2-3x slower, i.e. 8-12 min of NEW work on top of the
++    # ~5 min this job already spent. 15 would sit inside the noise band, and
++    # the perf-gate N=20 flake (PLAN-159) was exactly that mistake. Re-tighten
++    # once real CI runs give a p95.
++    # PLAN-166 F3 (assembler): 20 -> 25. The spec-ownership e2e adds 4 more
++    # installs + 3 upgrades (S1-S8; ~3-4 min local per the W1-C measurement),
++    # i.e. up to ~8-10 more CI minutes at the same 2-3x factor. Same
++    # anti-flake sizing rule as the F4 bump above.
++    timeout-minutes: 25
+     permissions:
+       contents: read
+     steps:
+@@ -52,6 +135,20 @@ jobs:
+         with:
+           fetch-depth: 1
+ 
++      # PLAN-166 F4: the parity e2e's historical leg installs from a PINNED
++      # TAG. `fetch-depth: 1` produces a checkout with NO tags, so the pin
++      # would not resolve and the gate would die before comparing a single
++      # tree - "it passes on my clone" is precisely the hole this test exists
++      # to close. The pin is READ FROM THE TEST (--print-pin) so the workflow
++      # never becomes a second copy of that truth.
++      - name: Fetch the parity pin tag
++        run: |
++          set -euo pipefail
++          PIN="$(bash scripts/tests/test-install-upgrade-parity-e2e.sh --print-pin)"
++          echo "parity historical pin: $PIN"
++          git fetch --no-tags --depth 1 origin "+refs/tags/$PIN:refs/tags/$PIN"
++          git rev-parse --verify "refs/tags/$PIN^{commit}"
++
+       - name: Setup Python 3.11
+         # SHA-pinned (Sprint 7 Dependabot bump): actions/setup-python@v6.2.0
+         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+@@ -67,6 +164,32 @@ jobs:
+           fi
+           jq --version
+ 
++      # PLAN-168 W1 (AC-4, per-PR half): the DECISION oracle —
++      # _ownership_verdict() against every truth-table cell, in milliseconds.
++      # The OBSERVATION half (the ~25-min e2e) runs in ownership-nightly.yml;
++      # this fast half is what makes table/harness PRs cheap to gate.
++      - name: Ownership verdict unit oracle (milliseconds)
++        run: |
++          set -euo pipefail
++          bash scripts/tests/test-ownership-verdict-unit.sh
++
++      # PLAN-168 W1 (rail r3 P1): the nightly gate's fake-harness control is
++      # milliseconds — run it per-PR so a PR touching the gate cannot break
++      # its rc/status handling while PR checks stay green.
++      - name: Ownership nightly-gate positive control (fake harness)
++        run: |
++          set -euo pipefail
++          bash scripts/tests/test-ownership-nightly-gate.sh
++
++      # PLAN-168 W2 (AC-6, per-PR half of INV-4): the shared pointer
++      # generator's 8-scenario control — includes ONE real install (~1-2 min
++      # on CI iron). The full install->upgrade->cure e2e (4 legs, ~5 min CI)
++      # is nightly-only; MEASURED per the smoke budget notes above.
++      - name: Protocol pointer render control (generator parity)
++        run: |
++          set -euo pipefail
++          bash scripts/tests/test-protocol-pointer-render.sh
++
+       - name: Run smoke install
+         run: |
+           set -euo pipefail
+@@ -108,6 +231,59 @@ jobs:
+           fi
+           echo 'user-ceremony leg: PASS'
+ 
++      # PLAN-166 F4 (OQ-4) - install/upgrade parity on the RESULTING TREES,
++      # per ceremony mode. NO continue-on-error, deliberately: the assertion
++      # this replaces was dead twice over (tautological AND wired into no
++      # workflow), and an escape hatch here would reinstate exactly that.
++      # Exit 2 (KNOWN-OPEN) is a FAILURE too - it NAMES the outstanding
++      # PLAN-166 W1 prerequisites instead of skipping them silently.
++      - name: Install/upgrade parity e2e (maintainer + user ceremony)
++        run: |
++          set -euo pipefail
++          bash scripts/tests/test-install-upgrade-parity-e2e.sh
++
++      # Control of the control (AC-4). With ONE backup_and_replace line deleted
++      # from a COPY of upgrade.sh, the gate above must come back RED in EVERY
++      # ceremony mode. rc must be exactly 1: rc 0/2 means the gate went blind,
++      # rc 9 means the plant stopped biting (vacuous control). Both fail here.
++      # This step MUST stay AFTER the plain gate: if the un-planted run were
++      # already fatal, rc=1 here would prove nothing about the plant.
++      - name: Install/upgrade parity - positive control (planted divergence)
++        run: |
++          set -uo pipefail
++          rc=0
++          bash scripts/tests/test-install-upgrade-parity-e2e.sh \
++            --positive-control > /tmp/parity-control.log 2>&1 || rc=$?
++          if [ "$rc" -ne 1 ]; then
++            cat /tmp/parity-control.log
++            echo "::error::parity positive control returned rc=$rc, expected 1 - the planted install/upgrade divergence did NOT turn the gate red, so the gate above proves nothing"
++            exit 1
++          fi
++          # Second factor, LOAD-BEARING (re-pass closure): under `set -uo
++          # pipefail` (no -e) a non-matching grep would NOT fail the step, so
++          # an rc=1 from a failure UNRELATED to the plant (log with none of
++          # the plant markers) would pass — the registered-vacuous class
++          # (S292) this step exists to close. Demand plant evidence or fail.
++          grep -E "PLANTED|per-mode verdicts|positive control:" /tmp/parity-control.log || {
++            cat /tmp/parity-control.log
++            echo "::error::rc=1 but the log carries no PLANTED/per-mode-verdict evidence - the control went red for an unrelated reason, which proves nothing about the plant (vacuous control)"
++            exit 1
++          }
++          echo "positive control OK: planted divergence -> exit 1 in every ceremony mode"
++
++      # PLAN-166 F3 (ADR-155-AMEND-1, AC-3) — delivery-record ownership of
++      # the three conditional framework surfaces (SPEC/v1, root PROTOCOL.md,
++      # .claude/.framework-version) across install -> upgrade -> doctor ->
++      # updater. Scenarios S1-S8 incl. the forced-refresh route (S2), the
++      # legacy ADOPTER-FORK preserve (S4) and the marker-first updater
++      # regression (S6). Same wiring rationale as the parity e2e above:
++      # scripts/tests/*.sh runs ONLY here — unwired = no test. NO
++      # continue-on-error, deliberately.
++      - name: Upgrade SPEC/marker delivery-record ownership (S1-S8)
++        run: |
++          set -euo pipefail
++          bash scripts/tests/test-upgrade-spec-ownership.sh
++
+       - name: Assert npx/npm shim contract (if present)
+         # Phase 4 deliverable; skip if directory missing
+         run: |
+diff --git a/README.md b/README.md
+index a87f20b..68e5bac 100644
+--- a/README.md
++++ b/README.md
+@@ -56,8 +56,8 @@ All counts below are verifiable from a clean checkout (see *Verifying the number
+ | Hooks wired in `settings.json` | **46** | distinct scripts, 48 event registrations |
+ | Shared library modules | **68** | stdlib-only, under `.claude/hooks/_lib/` (excluding the package `__init__.py`) |
+ | Slash commands | **27** | under `.claude/commands/` |
+-| Architecture decision records | **188** | under `.claude/adr/` |
+-| Tests | **~13,000 cases** | reported by `pytest --collect-only` across the hook, script, and conformance suites |
++| Architecture decision records | **190** | under `.claude/adr/` |
++| Tests | **~14,000 cases** | reported by `pytest --collect-only` across the hook, script, and conformance suites |
+ 
+ The gap between **57 on disk** and **46 wired** is benign: several non-event modules are activated through in-process dispatch (invoked by other hooks) rather than by a direct `settings.json` event registration.
+ 
+@@ -183,8 +183,8 @@ Don't take the table on faith. From a clean checkout:
+ ```bash
+ find .claude/skills -name SKILL.md | wc -l        # 166 skills
+ ls .claude/commands/*.md | wc -l                  # 27 slash commands
+-ls .claude/adr | grep -c '^ADR-'                  # 188 ADRs
+-python3 -m pytest --collect-only -q | tail -1     # ~13,000 collected cases
++ls .claude/adr | grep -c '^ADR-'                  # 190 ADRs
++python3 -m pytest --collect-only -q | tail -1     # ~14,000 collected cases
+ ```
+ 
+ ---
+diff --git a/README.pt-BR.md b/README.pt-BR.md
+index a0b2630..ae710fc 100644
+--- a/README.pt-BR.md
++++ b/README.pt-BR.md
+@@ -1,6 +1,6 @@
+ # ceo-orchestration
+ 
+-<!-- last-reviewed: 2026-06-22 v1.0.0 -->
++<!-- last-reviewed: 2026-08-05 -->
+ 
+ > **English:** [`README.md`](README.md) — fonte canônica.
+ 
+@@ -50,14 +50,14 @@ Todas as contagens abaixo são verificáveis a partir de um checkout limpo (veja
+ | Componente | Contagem | Notas |
+ |---|---|---|
+ | Checklists de skills | **166** | 42 core + 8 frontend + 116 de domínio |
+-| Scripts de hook (em disco) | **55** | entrypoints Python em `.claude/hooks/` |
+-| Hooks ligados em `settings.json` | **44** | scripts distintos, 46 registros de evento |
++| Scripts de hook (em disco) | **57** | entrypoints Python em `.claude/hooks/` |
++| Hooks ligados em `settings.json` | **46** | scripts distintos, 48 registros de evento |
+ | Módulos de biblioteca compartilhada | **68** | apenas stdlib, em `.claude/hooks/_lib/` (excluindo o `__init__.py` do pacote) |
+ | Slash commands | **27** | em `.claude/commands/` |
+-| Architecture decision records | **188** | em `.claude/adr/` |
+-| Testes | **~12.000 casos** | reportados por `pytest --collect-only` nas suítes de hook, script e conformidade |
++| Architecture decision records | **190** | em `.claude/adr/` |
++| Testes | **~14.000 casos** | reportados por `pytest --collect-only` nas suítes de hook, script e conformidade |
+ 
+-A diferença entre **55 em disco** e **44 ligados** é benigna: vários módulos que não respondem a eventos são ativados via dispatch in-process (invocados por outros hooks), e não por um registro de evento direto em `settings.json`.
++A diferença entre **57 em disco** e **46 ligados** é benigna: vários módulos que não respondem a eventos são ativados via dispatch in-process (invocados por outros hooks), e não por um registro de evento direto em `settings.json`.
+ 
+ **Dependências de runtime: nenhuma.** Hooks e scripts são Python ≥ 3.9, **apenas biblioteca padrão** — zero pacotes de terceiros em runtime. Veja [`SBOM.md`](SBOM.md). (Desenvolvimento e CI usam ferramentas de teste de terceiros, como o pytest; o runtime instalado não usa.)
+ 
+@@ -163,8 +163,8 @@ Não acredite na tabela por fé. A partir de um checkout limpo:
+ ```bash
+ find .claude/skills -name SKILL.md | wc -l        # 166 skills
+ ls .claude/commands/*.md | wc -l                  # 27 slash commands
+-ls .claude/adr | grep -c '^ADR-'                  # 188 ADRs
+-python3 -m pytest --collect-only -q | tail -1     # ~12.000 casos coletados
++ls .claude/adr | grep -c '^ADR-'                  # 190 ADRs
++python3 -m pytest --collect-only -q | tail -1     # ~14.000 casos coletados
+ ```
+ 
+ ---
+diff --git a/docs/ARCHITECTURE.md b/docs/ARCHITECTURE.md
+index 75ed90c..6d8bec2 100644
+--- a/docs/ARCHITECTURE.md
++++ b/docs/ARCHITECTURE.md
+@@ -53,7 +53,7 @@ ceo-orchestration/
+     │   ├── core/                   # 42 universal backend skills
+     │   ├── frontend/               # 8 universal frontend skills
+     │   └── domains/                # 116 skills across 33 domain profiles
+-    ├── adr/                        # 188 architecture decision records
++    ├── adr/                        # 190 architecture decision records
+     └── plans/                      # plan schemas + per-plan working files
+ ```
+ 
+@@ -68,10 +68,10 @@ faith — run the commands:
+ | Hook registrations | 46 wired into `settings.json`| (parse the `hooks` block of `.claude/settings.json`)      |
+ | `_lib` modules     | 68 top-level (140 recursive) | `ls .claude/hooks/_lib/*.py \| grep -v __init__ \| wc -l` |
+ | Slash commands     | 27                           | `ls .claude/commands/*.md \| wc -l`                       |
+-| ADRs               | 188                          | `ls .claude/adr/ADR-*.md \| wc -l`                        |
++| ADRs               | 190                          | `ls .claude/adr/ADR-*.md \| wc -l`                        |
+ | SPEC/v1 files      | 32 (28 `*.schema.md`)        | `ls SPEC/v1/*.md \| wc -l`                                |
+-| Test files         | ~720                         | `git ls-files '*test_*.py' '*_test.py' \| wc -l`          |
+-| Collected cases    | ~13k parametrized            | `make test-collect` (pytest `--collect-only`)             |
++| Test files         | ~730                         | `git ls-files '*test_*.py' '*_test.py' \| wc -l`          |
++| Collected cases    | ~14k parametrized cases      | `make test-collect` (pytest `--collect-only`)             |
+ 
+ > **On the "57 vs 46" hook gap.** 57 is the number of hook *scripts* present in
+ > `.claude/hooks/`. 46 is the number of those scripts *wired into* this repo's
+@@ -80,9 +80,9 @@ faith — run the commands:
+ > opt-in, stack-specific, superseded, or invoked indirectly by other hooks. Both
+ > numbers are reported here rather than conflated into one impressive figure.
+ 
+-> **On "~13k tests."** That is the count of *collected, parametrized* cases
+-> reported by `pytest --collect-only`, spread across roughly 720 `test_*.py`
+-> files. It is not 13,000 hand-written, independent test functions — many are the
++> **On "~14k tests."** That is the count of *collected, parametrized* cases
++> reported by `pytest --collect-only`, spread across ~730 test files. It is
++> not ~14,000 hand-written cases — many are the
+ > same logic exercised over a table of inputs. We report the collector's number
+ > with that caveat rather than dress it up.
+ 
+@@ -234,7 +234,7 @@ this repository happens to implement it today*. An install pins a SPEC version;
+ internal refactors that keep the schemas stable do not break adopters.
+ 
+ Decisions that shape these contracts are recorded as Architecture Decision
+-Records in `.claude/adr/` (188 to date), with a documented lifecycle
++Records in `.claude/adr/` (190 to date), with a documented lifecycle
+ (PROPOSED → ACCEPTED, plus SUPERSEDED / RETRACTED).[^adr]
+ 
+ The repository also includes a TLA+ specification of the core state machine
+diff --git a/docs/CTO-GUIDE.md b/docs/CTO-GUIDE.md
+index e46aed2..77097a4 100644
+--- a/docs/CTO-GUIDE.md
++++ b/docs/CTO-GUIDE.md
+@@ -1,6 +1,6 @@
+ # CTO evaluation guide — ceo-orchestration
+ 
+-**Version:** 1.0.0 (last-reviewed 2026-06-20; counts refreshed via `bash .claude/scripts/local/verify-counts.sh`)
++**Last reviewed:** 2026-08-05 — counts below are gated by `bash .claude/scripts/local/verify-counts.sh`, which fails if any of them drifts from the live tree. This document carries no version literal on purpose; `VERSION` is the single source of truth.
+ **Audience:** CTO, VP Engineering, Head of Platform, Principal Security.
+ **Reading time:** 30 minutes if you verify every claim.
+ **Companion docs:** [`HONEST-LIMITATIONS.md`](./HONEST-LIMITATIONS.md)
+@@ -31,7 +31,7 @@ replacement. It is a protocol shipped as files.
+ 
+ ---
+ 
+-## 2. What ships in the box (v1.0.0 — 2026-06-20)
++## 2. What ships in the box
+ 
+ Reproduce the table below via the commands in the right column. Counts
+ refresh every release; if a number drifts, file an issue — that is a
+@@ -39,23 +39,28 @@ documentation bug.
+ 
+ | Artifact | Count | Verify |
+ |---|---|---|
+-| Python tests collected | ~12,000 | `make test-collect` (or `python3 -m pytest --collect-only -q \| tail -1` — pytest.ini pins the testpath roots) |
+-| Test files | 676 | `git ls-files '*test_*.py' '*_test.py' \| wc -l` |
+-| ADRs shipped | 171 | `ls .claude/adr/ADR-*.md \| wc -l` |
++| Python tests collected | ~14,000 | `make test-collect` (or `python3 -m pytest --collect-only -q \| tail -1` — pytest.ini pins the testpath roots) |
++| Test files | ~730 | `git ls-files '*test_*.py' '*_test.py' \| wc -l` |
++| ADRs shipped | 190 | `ls .claude/adr/ADR-*.md \| wc -l` |
+ | SPEC/v1 files | 32 (28 `*.schema.md`) | `ls SPEC/v1/*.md \| wc -l` |
+-| Workflows | 20 | `ls .github/workflows/*.yml \| wc -l` |
+-| GitHub Actions SHA-pinned refs | 100% | `grep -rE 'uses:.*@[a-f0-9]{40}' .github/workflows/ \| wc -l` |
+-| Skills | 151 (42 core + 8 frontend + 101 domain) | `find .claude/skills -name SKILL.md \| wc -l` |
+-| Hooks | 53 .py on disk; 44 registered | `ls .claude/hooks/*.py \| wc -l` |
+-| `_lib/` stdlib-only modules | 67 | `ls .claude/hooks/_lib/*.py \| grep -v __init__ \| wc -l` |
++| Workflows | 22 | `ls .github/workflows/*.yml \| wc -l` |
++| GitHub Actions SHA-pinned refs | every `uses:` pinned | `grep -rEc 'uses: [^#]+@(v[0-9]+\|main\|master\|latest)[[:space:]]*$' .github/workflows/*` — must be 0 everywhere |
++| Skills | 166 (42 core + 8 frontend + 116 domain) | `find .claude/skills -name SKILL.md \| wc -l` |
++| Hooks | 57 .py on disk; 46 wired into `settings.json` (48 event registrations) | `ls .claude/hooks/*.py \| wc -l` |
++| `_lib/` stdlib-only modules | 68 | `ls .claude/hooks/_lib/*.py \| grep -v __init__ \| wc -l` |
+ | Runtime 3rd-party deps | 0 | see `SBOM.md` §1 |
+ 
+ Secondary (not strictly reproducible via one-liner, but derivable):
+ 
+-- **Mutation kill rate:** 100% of 45 fixtures killed by the conformance
+-  harness. Reproduce: `python3 -m pytest tests/formal_verification/ -q`.
+-- **TLA+ spec coverage:** 1 component fully specified (`_breaker.py`
+-  state machine, ADR-044). Others listed in `docs/formal-verification/`.
++- **Mutation conformance:** 85 mutation fixtures under
++  `tests/formal_verification/mutation_fixtures/`. The contract is the
++  expected-kills manifest, not a headline percentage: the harness fails if
++  a fixture the manifest expects to die survives. Reproduce:
++  `python3 -m pytest tests/formal_verification/ -q`.
++- **TLA+ spec coverage:** 4 TLA+ specs published under
++  `docs/formal-verification/` (breaker, debate-convergence, plan-lifecycle,
++  swarm-coordinator). None of them is model-checked in CI — they are
++  specifications, not a verified-system claim (CLAUDE.md §5).
+ 
+ ---
+ 
+@@ -67,9 +72,9 @@ modern laptop.
+ ### 3.1 Repo integrity — 2 minutes
+ 
+ ```bash
+-git clone --depth 1 -b v1.0.0 <repo-url> ceo-orch && cd ceo-orch
++git clone --depth 1 <repo-url> ceo-orch && cd ceo-orch
++cat VERSION                                    # the version you are evaluating
+ bash .claude/scripts/validate-governance.sh   # PASS expected
+-cat VERSION                                    # 1.0.0
+ ```
+ 
+ ### 3.2 Test posture — 5 minutes
+@@ -78,18 +83,19 @@ cat VERSION                                    # 1.0.0
+ python3 -m pytest -q \
+   .claude/hooks/tests/ .claude/scripts/tests/
+ # Expect: 0 failures, ≤ handful of skipped (live-adapter gated).
+-# Full collection across ALL testpath roots = ~12,000 (run `make test-collect`).
++# Full collection across ALL testpath roots = ~14,000 collected cases
++# (run `make test-collect`).
+ ```
+ 
+ ### 3.3 Supply-chain — 3 minutes
+ 
+ ```bash
+ # No floating action refs
+-grep -rE 'uses: [^#]+@(v[0-9]+|main|master|latest)\s*$' .github/workflows/
++grep -rE 'uses: [^#]+@(v[0-9]+|main|master|latest)[[:space:]]*$' .github/workflows/
+ # Must print nothing
+ 
+-# Count SHA-pinned refs
+-grep -rE 'uses:.*@[a-f0-9]{40}' .github/workflows/ | wc -l    # 63
++# Every remaining ref is SHA-pinned (compare with the empty result above)
++grep -rE 'uses:.*@[a-f0-9]{40}' .github/workflows/ | wc -l
+ 
+ # No network call inside hooks
+ grep -rE 'urllib|requests|httpx|socket\.' .claude/hooks/check_*.py
+@@ -100,13 +106,13 @@ grep -rE 'urllib|requests|httpx|socket\.' .claude/hooks/check_*.py
+ 
+ ```bash
+ # Every PreToolUse + PostToolUse hook
+-ls .claude/hooks/check_*.py .claude/hooks/audit_log.py   # 37 files
++ls .claude/hooks/check_*.py .claude/hooks/audit_log.py
+ 
+ # Every ADR title
+-grep -h '^# ADR-' .claude/adr/ADR-*.md | sort             # 171 lines
++grep -h '^# ADR-' .claude/adr/ADR-*.md | sort             # 190 ADRs on disk
+ 
+ # SPEC/v1 published contract
+-ls SPEC/v1/*.schema.md                                    # 28 files
++ls SPEC/v1/*.schema.md                                    # 28 schema files
+ ```
+ 
+ ### 3.5 Remediation transparency — 5 minutes
+@@ -145,7 +151,7 @@ bash /tmp/install.sh --profile core,frontend --stack node
+ **B. NPM tarball (OIDC + provenance):**
+ 
+ ```bash
+-npm exec ceo-orchestration-install@1.5.0-rc.1 -- --profile core,frontend
++npm exec "ceo-orchestration-install@$(cat VERSION)" -- --profile core,frontend
+ # Verifies --provenance SLSA L3 attestation
+ ```
+ 
+@@ -167,11 +173,11 @@ python3 -m pytest .claude/hooks/tests/ -q
+ | Axis | Current state | Mitigation | Residual |
+ |---|---|---|---|
+ | Upstream velocity | Bus factor 1 | Fork-friendly; no server dependency | Patches stack locally if Owner unavailable |
+-| Production signal | 0 external adopters | Sprint 15-16 scheduled | You may be adopter #1 |
++| Production signal | 0 external adopters | Dogfood telemetry (`adopter-metrics.py`) + published benchmarks | You may be adopter #1 |
+ | Platform | macOS + Linux | WSL2 works empirically, no CI gate | Windows-native: not scoped |
+ | LLM dependency | Anthropic Claude | ADR-032 Gemini adapter stubbed | Vendor lock until cross-model parity |
+ | Governance drift | Hooks fail-open on infra bugs | `check_canonical_edit.py` sentinel + CODEOWNERS | Intentional: never block operator on hook bug |
+-| Audit log tamper | Local-trust file mode 600 | HMAC chain queued (DYN-SEC3 / Sprint 16) | OTEL remote sink available today |
++| Audit log tamper | HMAC-chained JSONL, shipped (tamper-EVIDENT) | `audit-verify-chain.py` detects forgery / reorder / deletion | Detection, not prevention — the key lives on the same host; pair with a remote OTEL sink (`docs/otel-integration.md`) |
+ 
+ Read [`HONEST-LIMITATIONS.md`](./HONEST-LIMITATIONS.md) for the full
+ structural list.
+@@ -180,16 +186,18 @@ structural list.
+ 
+ ## 6. What it does well (backed by numbers, not adjectives)
+ 
+-- **Deterministic governance in-band with tool use.** 44 hooks gate
+-  every PreToolUse + PostToolUse. Denials are structured JSON, not
+-  English. 100% test coverage on denial branches.
++- **Deterministic governance in-band with tool use.** 46 wired into
++  `.claude/settings.json` gate PreToolUse + PostToolUse. Denials are
++  structured JSON, not English.
+ - **Audit trail that survives restart.** Every governance decision
+   writes a JSONL line to `~/.claude/projects/<slug>/audit-log.jsonl`.
+-  Schema versioned (`audit-log.schema.md v2.6`). Replay-friendly.
+-- **Formally verified core state machine.** `_breaker.py` modeled in
+-  TLA+ (`docs/formal-verification/breaker.tla`, 282 lines) with 45
+-  mutation fixtures + 100% kill. This is one component, not the
+-  framework — see §8 of HONEST-LIMITATIONS.md.
++  Schema versioned (see `SPEC/v1/audit-log.schema.md`, which carries its own
++  version history). Replay-friendly.
++- **Specified core state machine.** `_breaker.py` modeled in TLA+
++  (`docs/formal-verification/breaker.tla`), exercised by the conformance
++  harness that owns the 85 mutation fixtures. The spec is not
++  model-checked in CI, and this is one component, not the framework —
++  see §8 of HONEST-LIMITATIONS.md.
+ - **Zero runtime third-party deps.** Hooks run with just CPython.
+   Install on an air-gapped workstation with Python 3.9+ and you're done.
+ - **Published evaluation artifacts.** `benchmarks/public/` compares this
+@@ -206,16 +214,18 @@ structural list.
+   still has to pass on `main`.
+ - **It will not port your prompts.** Skill migration from other
+   meta-prompting frameworks (e.g. karpathy-skills, GSD) is manual.
+-- **It will not run unattended.** PLAN-017 (autonomous-loop) is draft,
+-  conditional, and gated on Sprint 15-16 evidence + explicit Owner
+-  approval.
++- **It will not run unattended.** There is no autonomous loop. The
++  closest surface is the Owner-invoked `/night-mode` posture toggle —
++  armed per-session, reversible, and audited — and a human still starts
++  and reviews every run.
+ 
+ ---
+ 
+ ## 8. Decision tree
+ 
+ - **You want production-validated framework with large adopter base:**
+-  this is not it today. Revisit post-Sprint-16 (Q3 2026 target).
++  this is not it today — external-adopter validation is explicitly out
++  of scope for the current line (HONEST-LIMITATIONS.md §2).
+ - **You want hosted / SaaS:** not offered. MIT source.
+ - **You want to evaluate Claude Code governance patterns on a real
+   codebase with structured critique and mechanical enforcement:** install
+diff --git a/docs/FAQ.md b/docs/FAQ.md
+index c69f7dc..e7ed310 100644
+--- a/docs/FAQ.md
++++ b/docs/FAQ.md
+@@ -105,8 +105,8 @@ Don't take the README table on faith. From a clean checkout:
+ ```bash
+ find .claude/skills -name SKILL.md | wc -l        # 166 skills (42 core + 8 frontend + 116 domain)
+ ls .claude/commands/*.md | wc -l                  # 27 slash commands
+-ls .claude/adr | grep -c '^ADR-'                  # 188 ADRs
+-python3 -m pytest --collect-only -q | tail -1     # ~12,000 collected cases
++ls .claude/adr | grep -c '^ADR-'                  # 190 ADRs
++python3 -m pytest --collect-only -q | tail -1     # ~14,000 collected cases
+ ```
+ 
+ Every count in the README is reproducible this way. See the README "Verifying the numbers" section.
+diff --git a/docs/GUIA-COMPLETO.md b/docs/GUIA-COMPLETO.md
+index 41ca561..f0a0647 100644
+--- a/docs/GUIA-COMPLETO.md
++++ b/docs/GUIA-COMPLETO.md
+@@ -164,7 +164,7 @@ For those, use Claude Code directly. Spawn overhead > benefit.
+   is deferred to v2+.
+ - **Audited.** Every spawn, every decision, every veto becomes a JSONL
+   event.
+-- **Governed by ADR.** 188 ADRs document every architectural decision.
++- **Governed by ADR.** 190 ADRs document every architectural decision.
+ 
+ ### It is NOT:
+ - **A product.** No UI, no SaaS, no login.
+@@ -1222,7 +1222,7 @@ mv .claude .claude.disabled
+ - `.claude/frontend-team.md` — frontend roster
+ - `.claude/pitfalls-catalog.yaml` — universal pitfalls
+ - `.claude/task-chains.yaml` — 6 universal workflows
+-- `.claude/adr/` — 188 Architecture Decision Records
++- `.claude/adr/` — 189 Architecture Decision Records
+ - `.claude/plans/` — active plans + archive
+ - `.claude/skills/core/` — 42 universal skills
+ - `.claude/skills/frontend/` — 8 frontend skills
+diff --git a/docs/README.md b/docs/README.md
+index 924811f..619c44e 100644
+--- a/docs/README.md
++++ b/docs/README.md
+@@ -74,16 +74,16 @@ full set of commands; here is the summary you can spot-check in a minute.
+ 
+ | Thing | Count | How to verify |
+ |-------|-------|---------------|
+-| Skills | **151** (42 core + 8 frontend + 101 domain) | `find .claude/skills -name SKILL.md \| wc -l` |
+-| Hook scripts on disk | **53** Python scripts | count `*.py` in `.claude/hooks/` |
+-| Hooks registered | **44** distinct scripts (46 event registrations) | inspect `.claude/settings.json` |
+-| Slash commands | **22** | count `*.md` in `.claude/commands/` |
+-| Architecture decision records | **171** | count `ADR-*.md` in `.claude/adr/` |
+-| Shared library modules | **67** stdlib-only (top-level `_lib/`) | count `*.py` in `.claude/hooks/_lib/` |
+-| Tests | **~670 test files**; `make test-collect` (pytest `--collect-only`) reports **~12,000** collected cases | `make test-collect` |
+-
+-Two of these are easy to misread, so we state them plainly: the **53** hook
+-scripts on disk are not all wired at once — **44** distinct scripts (across 46 event registrations) are registered in
++| Skills | **166** (42 core + 8 frontend + 116 domain) | `find .claude/skills -name SKILL.md \| wc -l` |
++| Hook scripts on disk | **57** Python scripts | count `*.py` in `.claude/hooks/` |
++| Hooks registered | **46** distinct scripts (48 event registrations) | inspect `.claude/settings.json` |
++| Slash commands | **27** | count `*.md` in `.claude/commands/` |
++| Architecture decision records | **190** | count `ADR-*.md` in `.claude/adr/` |
++| Shared library modules | **68** stdlib-only (top-level `_lib/`) | count `*.py` in `.claude/hooks/_lib/` |
++| Tests | **~730 test files**; `make test-collect` (pytest `--collect-only`) reports **~14,000** collected cases | `make test-collect` |
++
++Two of these are easy to misread, so we state them plainly: the **57** hook
++scripts on disk are not all wired at once — **46** distinct scripts (across 48 event registrations) are registered in
+ `settings.json` for this repo's install. And the test figure is *collected
+ cases*, not hand-written functions; parametrization inflates the count, which is
+ why we cite `make test-collect` as the authority rather than a grep.
+diff --git a/docs/TROUBLESHOOTING.md b/docs/TROUBLESHOOTING.md
+index 32de388..71aff41 100644
+--- a/docs/TROUBLESHOOTING.md
++++ b/docs/TROUBLESHOOTING.md
+@@ -69,8 +69,18 @@ itself that should be delegated (one of the P1-P5 predicates — e.g.
+ writing bulk code inline instead of spawning a specialist).
+ 
+ **Fix:** delegate via `/spawn`. If the action is genuinely correct and
+-you accept the overhead, set `CEO_OVERHEAD_ACK=1` for that action (the
+-override is itself audited).
++you accept the overhead, what the mechanism delivers today is:
++
++- **Bash commands:** prefix the single command with
++  `CEO_OVERHEAD_ACK=1 ` (e.g. `CEO_OVERHEAD_ACK=1 grep …`) and it
++  proceeds.
++- **Edit/Write tools:** there is NO per-action override channel.
++  The predicates evaluate a **5-minute sliding window** of classified
++  actions — stop the grep/read burst and retry the edit after the
++  window drains.
++- **Session-wide:** exporting `CEO_OVERHEAD_ACK=1` in the environment
++  that launches the session disables blocking for the whole session
++  (the override is audited). Use sparingly.
+ 
+ ### Kernel-path edit hard-denied
+ 
+@@ -324,18 +334,28 @@ CEO will search for the entry in memory and remove it.
+ ## "Automode comes disabled by default — how do I run autonomously overnight?"
+ 
+ By design. The tracked `.claude/settings.json` ships the fail-closed
+-posture (`permissions.defaultMode: "manual"` + `disableAutoMode:
+-"disable"`), so every fresh clone and every machine starts asking
+-before acting. That file is canonical-guarded — do not edit it.
++DEFAULT (`permissions.defaultMode: "manual"`), so every fresh clone
++and every machine STARTS asking before acting. (The former
++`disableAutoMode` key was removed on 2026-08-03 by Owner decision —
++see `_posture_comment` in the settings file: it also stripped the
++native mode cycle from the operator's keyboard, and choosing the
++session mode is the operator's call. The operator can still cycle
++modes deliberately, per session.) That file is canonical-guarded —
++do not edit it.
+ 
+ To arm autonomy on **your machine only**, use the Owner toggle:
+ 
+ ```
+ /night-mode on       # next session starts in acceptEdits
+ /night-mode status   # show the resolved posture per layer
+-/night-mode off      # restore the ratified manual posture
++/night-mode off      # restore the snapshotted prior local mode (restorable modes only)
+ ```
+ 
++Heads-up: the slash command is a TELEPROMPTER (allowed-tools: Read) —
++it only PRINTS the `! python3 .claude/scripts/night-mode.py ...` line.
++Nothing is written until you EXECUTE that printed line (the `!` prefix
++runs it in the session). Confirm with `/night-mode status` afterwards.
++
+ It writes `.claude/settings.local.json` (per-machine, gitignored) —
+ `git status` stays clean, the published default is untouched, and the
+ toggle takes effect on the NEXT session (settings are read at session
+@@ -354,6 +374,13 @@ python3 .claude/scripts/night-mode.py off --discard-snapshot
+ That removes the local `defaultMode` override **and** the marker without
+ honoring the snapshot, printing what it discarded. It also disarms the
+ "overlay armed but marker gone" state, where plain `off` is a no-op.
++One refusal it keeps on purpose: if `.claude/settings.local.json`
++itself is malformed JSON, or its `permissions` value is not an object,
++the command exits with code 2 and **leaves both the override and the
++marker in place** — it will not guess at a broken file. In that state
++autonomy is NOT disarmed yet: repair the JSON by hand (or delete the
++local file if you own its contents), then rerun the command and check
++`/night-mode status`.
+ 
+ Escape valve for a single fully-unattended session (no persistent
+ state, explicit, ephemeral):
+diff --git a/docs/TROUBLESHOOTING.pt-BR.md b/docs/TROUBLESHOOTING.pt-BR.md
+index 42d1cd1..9f071c4 100644
+--- a/docs/TROUBLESHOOTING.pt-BR.md
++++ b/docs/TROUBLESHOOTING.pt-BR.md
+@@ -70,8 +70,18 @@ P1-P5 — ex.: escrever código em massa inline em vez de spawnar um
+ especialista).
+ 
+ **Fix:** delegue via `/spawn`. Se a ação está genuinamente correta e
+-você aceita o overhead, defina `CEO_OVERHEAD_ACK=1` para aquela ação (o
+-override em si é auditado).
++você aceita o overhead, o que o mecanismo entrega hoje é:
++
++- **Comandos Bash:** prefixe o comando único com
++  `CEO_OVERHEAD_ACK=1 ` (ex.: `CEO_OVERHEAD_ACK=1 grep …`) e ele
++  prossegue.
++- **Ferramentas Edit/Write:** NÃO há canal de override por-ação. Os
++  predicados avaliam uma **janela deslizante de 5 minutos** de ações
++  classificadas — pare a rajada de grep/read e tente o edit de novo
++  depois que a janela drenar.
++- **Sessão inteira:** exportar `CEO_OVERHEAD_ACK=1` no ambiente que
++  lança a sessão desativa o bloqueio para a sessão toda (o override é
++  auditado). Use com parcimônia.
+ 
+ ### Edit em caminho de kernel hard-denied
+ 
+@@ -329,6 +339,71 @@ Esquece X.
+ 
+ CEO vai procurar a entrada na memory e remover.
+ 
++## "O automode vem desligado por default — como rodo autônomo de madrugada?"
++
++Por design. O `.claude/settings.json` rastreado publica o DEFAULT
++fail-closed (`permissions.defaultMode: "manual"`), então todo clone
++novo e toda máquina COMEÇAM perguntando antes de agir. (A antiga
++chave `disableAutoMode` foi removida em 2026-08-03 por decisão do
++Owner — ver `_posture_comment` no settings: ela também tirava o
++ciclo nativo de modos do teclado do operador, e escolher o modo da
++sessão é decisão do operador. O operador segue podendo trocar de
++modo deliberadamente, por sessão.) Esse arquivo é canonical-guarded —
++não o edite.
++
++Para armar autonomia **só na sua máquina**, use o toggle do Owner:
++
++```
++/night-mode on       # a PRÓXIMA sessão inicia em acceptEdits
++/night-mode status   # mostra a postura resolvida por camada
++/night-mode off      # restaura o modo local anterior snapshotado (só modos restauráveis)
++```
++
++Atenção: o slash command é um TELEPROMPTER (allowed-tools: Read) — ele
++só IMPRIME a linha `! python3 .claude/scripts/night-mode.py ...`.
++Nada é escrito até você EXECUTAR essa linha impressa (o prefixo `!`
++roda o comando na sessão). Confira com `/night-mode status` depois.
++
++Ele escreve `.claude/settings.local.json` (por máquina, gitignored) —
++o `git status` continua limpo, o default publicado fica intocado, e o
++toggle vale a partir da PRÓXIMA sessão (settings são lidas no início da
++sessão; a sessão corrente nunca muda de postura por baixo de você). O
++`/ceo-boot` mostra uma linha advisory enquanto a postura não-ratificada
++estiver ativa.
++
++Se o `off` **recusar** ("not a healthy night-mode marker"), o marker
++gitignored em `.claude/state/night-mode.json` foi escrito por outra
++coisa que não o night-mode, e restaurar um snapshot não validado é
++exatamente a escalada que a recusa existe para impedir. A recusa nunca
++te deixa preso:
++
++```bash
++python3 .claude/scripts/night-mode.py off --discard-snapshot
++```
++
++Isso remove o override local de `defaultMode` **e** o marker sem honrar
++o snapshot, imprimindo o que descartou. Também desarma o estado
++"overlay armado mas marker sumiu", em que o `off` puro é no-op.
++Uma recusa que ele mantém de propósito: se o próprio
++`.claude/settings.local.json` estiver com JSON malformado, ou se o
++valor de `permissions` não for um objeto, o comando sai com código 2 e
++**deixa o override E o marker no lugar** — ele não adivinha um arquivo
++quebrado. Nesse estado a autonomia AINDA NÃO foi desarmada: conserte o
++JSON à mão (ou apague o arquivo local se o conteúdo é seu), rode o
++comando de novo e confira `/night-mode status`.
++
++Válvula de escape para UMA sessão totalmente não-assistida (sem estado
++persistente, explícita, efêmera):
++
++```bash
++claude --permission-mode bypassPermissions
++```
++
++`/night-mode` nunca escreve `bypassPermissions` — um bypass persistente
++em qualquer camada de settings dispara o check
++`settings_tamper_tripwires` e deixa o `/ceo-boot` vermelho de
++propósito.
++
+ ## "Quero desligar tudo temporariamente"
+ 
+ ```bash
+diff --git a/docs/WHAT-WE-ARE.md b/docs/WHAT-WE-ARE.md
+index 8085a6c..ee55579 100644
+--- a/docs/WHAT-WE-ARE.md
++++ b/docs/WHAT-WE-ARE.md
+@@ -1,8 +1,10 @@
+ # What we are — and what we are NOT
+ 
+-<!-- last-reviewed: 2026-06-20 v1.0.0 -->
++<!-- last-reviewed: 2026-08-05 -->
+ 
+-> Status: v1.0.0, public release (vibecoder-stable line, ADR-096).
++> Status: public release (vibecoder-stable line, ADR-096). The current
++> version is whatever `VERSION` says — this document deliberately carries
++> no version literal.
+ > Read this before adopting, evaluating, or comparing the framework to a
+ > SaaS / IDE plugin / agent SDK.
+ 
+@@ -34,10 +36,10 @@ Cases A–F cover model-collusion failure modes. PostToolUse ingress
+ sanitization (`check_codex_response.py`) defends against prompt
+ injection in Codex output.
+ 
+-### 4. We are a smart-loading skill catalog of 151 reusable checklists.
++### 4. We are a smart-loading skill catalog of 166 reusable checklists.
+ 
+ Skills live in three tiers: 42 core (universal), 8 frontend (universal
+-frontend), and 101 domain (fintech, marketing-global,
++frontend), and 116 domain (fintech, marketing-global,
+ sales, trading-hft, legal, lgpd-heavy-saas, etc.). Per-repo profile
+ detection auto-activates only relevant skills, with numeric caps per
+ profile (frontend ≤10, engine ≤12, fintech ≤15, trading-readonly ≤8,
+@@ -53,7 +55,7 @@ Anthropic's (which Claude Code already needs).
+ ### 6. We are stdlib-only Python ≥3.9, MIT-licensed, fork-friendly.
+ 
+ Zero third-party runtime dependencies. All GitHub Actions SHA-pinned.
+-~12,000 test cases (by `pytest --collect-only`) across hooks + scripts +
++~14,000 test cases (by `pytest --collect-only`) across hooks + scripts +
+ formal + integration with tiered coverage (Tier-1 security-critical hooks
+ ≥86%; repo floor 67%).
+ SBOM published. The framework is auditable end-to-end
+@@ -123,7 +125,7 @@ ceremony unavoidable.
+ > a 50-person org. We wrap Claude Code with Plan → Debate → Execute,
+ > a tamper-evident audit chain, and a Codex Pair-Rail that catches
+ > L3+ mistakes before they ship. What you get is governance-as-code:
+-> ~12,000 test cases, an inspectable HMAC-chained log, and a cross-LLM
++> ~14,000 test cases, an inspectable HMAC-chained log, and a cross-LLM
+ > rail. We make no speed claim — six experiments found no general
+ > speedup (PLAN-122), and we publish that null result honestly. Skip us
+ > for one-file edits — overhead beats velocity below.
+diff --git a/docs/cost-of-operation.md b/docs/cost-of-operation.md
+index e82d1cf..6edb097 100644
+--- a/docs/cost-of-operation.md
++++ b/docs/cost-of-operation.md
+@@ -95,11 +95,16 @@ inheritance surprise.
+ 
+ | Model | Input ($/M tokens) | Output ($/M tokens) | vs Opus 4-8 |
+ |-------|--------------------|----------------------|-------------|
+-| `claude-opus-4-8` (current flagship) | $5.00 | $25.00 | 1.0× |
++| `claude-fable-5` (current — Mythos-class flagship) | $10.00 | $50.00 | 2.0× |
++| `claude-opus-5` (current) | $5.00 | $25.00 | 1.0× |
++| `claude-sonnet-5` (current; intro $2/$10 until 2026-08-31, sticker $3/$15) | $2.00 | $10.00 | 0.4× |
++| `claude-haiku-4-5` (current) | $1.00 | $5.00 | 0.2× |
++| `claude-opus-4-8` (N-1, active) | $5.00 | $25.00 | 1.0× |
+ | `claude-opus-4-7` (historical — retained for log replay) | $15.00 | $75.00 | 3.0× |
+-| `claude-sonnet-4-6` | $3.00 | $15.00 | 0.6× |
+-| `claude-haiku-4-5-2025[REDACTED:rg]$1.00 | $5.00 | 0.2× |
++| `claude-sonnet-4-6` (N-1, active) | $3.00 | $15.00 | 0.6× |
++| `claude-haiku-4-5-2025[REDACTED:rg]ated pin of haiku-4-5) | $1.00 | $5.00 | 0.2× |
+ 
++Gen-5 rows added 2026-08-09 (PLAN-169 W2.10 D7, mirroring `ceo-cost.py`).
+ Live-confirmed 2026-05-29 from https://www.anthropic.com/api (Opus 4.8 = $5/$25, Sonnet 4.6 = $3/$15, Haiku 4.5 = $1/$5). The prior Haiku row ($0.25/$1.25) propagated a stale rate from ADR-052 §Cost magnitude and underpriced Haiku 4x. Adopters with their own contractual
+ pricing should override the table via `CEO_PRICING_PATH=<json>` —
+ the `_lib/adapters/live/_cost.py` resolver picks it up.
+diff --git a/docs/ownership-decision-table.md b/docs/ownership-decision-table.md
+new file mode 100644
+index 0000000..dcaf685
+--- /dev/null
++++ b/docs/ownership-decision-table.md
+@@ -0,0 +1,747 @@
++# Ownership decision table — install/upgrade conditional surfaces
++
++> **Status:** W0 product of PLAN-167. The enum in §3 is a *draft* until the
++> PLAN-167 W1 debate ratifies or amends it. The open questions in §6 are
++> deliberately unresolved here — they are the debate's agenda.
++>
++> **Two known inconsistencies are committed on purpose.** Writing the decision
++> function against this table (the W2 proposal) exposed them, and resolving
++> them unilaterally would pre-decide exactly what the debate exists to settle:
++>
++> 1. **The table is not self-consistent about `OMIT_RECORD`.** Some rows with a
++>    prior record expect `OMIT_RECORD`, others with a prior record expect
++>    `PRESERVE_UNOWNED`. Sixty-one hand-written rows never had to agree with
++>    each other; a function has to. See OQ-9.
++> 2. **`OWN-0018` and `OWN-0020` have identical dimensions and opposite
++>    outcomes**, separated only by a prose directive in `note`. A decision
++>    function cannot read prose, so the distinction has to become a *value* —
++>    the proposal is a `live_content` of `legacy_pristine_partial`, meaning a
++>    tree carrying an entry the fingerprint cannot hash. See OQ-7.
++>
++> The baseline map was measured against the table in this state, so the map and
++> the table agree with each other. Reconciling either one is W2 work, after
++> ratification.
++
++## 1. What this document is, and why it exists
++
++`ADR-155-AMEND-1` decided that framework ownership of the three
++**conditional** surfaces — root `PROTOCOL.md`, the `SPEC/v1` contract tree,
++and the `.claude/.framework-version` marker — derives from the **registered
++delivery record**, never from the ceremony alone and never from file
++presence.
++
++The decision was right. Its *realization* was a cascade of `if` branches
++spread across `scripts/install.sh`, `scripts/upgrade.sh` and
++`scripts/_framework_manifest_set.sh`. That shape has a measured failure
++mode: over eleven consecutive cross-model review rounds on the same code,
++**35 distinct defects** were reported, and roughly half of the later ones
++were regressions introduced by the fix for the round immediately before.
++The 45-check end-to-end suite stayed green throughout — it exercises eight
++scenarios, and the decision space is a nine-dimensional product.
++
++The cause is not carelessness. It is that **"correct" was being decided one
++branch at a time**, so two branches could encode contradictory answers to
++the same question and nothing would notice. This document makes the space
++explicit so that contradictions surface *before* they become defects.
++
++Division of labour, strictly observed:
++
++| Artifact | Role |
++|---|---|
++| this document | defines the dimensions, the legality rules, and the reasoning |
++| `scripts/tests/ownership_table.tsv` | **the truth** — one row per legal cell, with its expected verdict |
++| `scripts/tests/test-ownership-table.sh` | executes every row against the **real** scripts |
++
++**No value is duplicated between this document and the TSV.** If you want to
++know what a given cell decides, read the TSV. If you want to know *why the
++cell exists at all*, read this.
++
++## 2. The nine dimensions
++
++A "cell" is one assignment of all nine. The subject under test is one
++surface's outcome on one run.
++
++### 2.1 `surface`
++
++| Value | Path | Shape |
++|---|---|---|
++| `spec` | `SPEC/v1` | a **tree** |
++| `protocol` | root `PROTOCOL.md` | a **generated pointer** — no source file; the body is a heredoc built from `$SOURCE_DIR`/`$TARGET`/`$PROFILE`/`$STACK` |
++| `marker` | `.claude/.framework-version` | a tracked single-line file |
++
++The three differ in more than their path, and every difference has produced
++at least one defect. `spec` is the only tree (so it is the only surface with
++descendants, per-file records, and a "partially populated" state);
++`protocol` is the only surface with no bytes in the source (so `source_has`
++is meaningless for it, and its baseline digest comes from a *computed*
++canonical hash); `marker` is the only surface inside `.claude/`, so it is
++the only one both ceremonies receive.
++
++### 2.2 `prior_record` — what the PRE-run baseline manifest says
++
++| Value | Meaning |
++|---|---|
++| `none` | no record line for this relpath |
++| `hash` | a `<64-hex>  <relpath>` record |
++| `link_match` | a `LINK  <relpath>  <target>` record whose target equals the live `readlink` |
++| `link_retargeted` | a `LINK` record whose target does **not** equal the live `readlink` |
++
++This dimension describes the **previous** run's testimony, read before
++anything is written this run. It is the operative meaning of "registered
++delivery" in ADR-155-AMEND-1 §3.
++
++### 2.3 `live_type` — `lstat` of the destination, never following
++
++`absent` · `dir` · `dir_empty` · `regular` · `symlink` · `special`
++(FIFO, socket, device) · `ancestor_symlink`.
++
++`ancestor_symlink` is a value of this dimension rather than a tenth
++dimension because the decision function short-circuits on it *before* it
++ever looks at the leaf — exactly as it does for `special`. It answers the
++same question ("what kind of destination is this?") with "one reachable only
++by writing through a symlink out of the target tree".
++
++`dir_empty` is split from `dir` because for `spec` it changes the *manifest*
++outcome without changing the *filesystem* outcome — the enumeration walks
++the target and emits a record per regular file, so an empty tree yields no
++records at all even when every other signal says "owned".
++
++`special` exists because two separate defects were `cp` invoked on a FIFO,
++which blocks forever waiting for a writer and hangs the run **mid-upgrade**,
++after earlier surfaces have already been modified.
++
++### 2.4 `live_content` — only defined when `live_type ∈ {dir, dir_empty, regular}`
++
++| Value | Meaning |
++|---|---|
++| `pristine` | byte-identical to what **this** source would deliver |
++| `legacy_pristine` | matches a `SPEC/v1` fingerprint the framework shipped at v1.2.0 or earlier |
++| `degraded` | (protocol only, PLAN-168 W2) byte-exact reconstruction of the `{{PROTOCOL_SOURCE}}`-literal pointer template a pre-PLAN-168 `upgrade.sh` wrote — the framework's OWN output, never adopter content |
++| `edited` | none of the above |
++
++`legacy_pristine` exists because v1.2-and-earlier installs never enumerated
++`SPEC/v1`, so no record can distinguish a framework-installed tree from an
++adopter-authored one; the ambiguity is resolved by content against three
++pinned fingerprints.
++
++`degraded` is the same doctrine applied to the pointer (the r20 precedent):
++the broken upgrade left `{{PROTOCOL_SOURCE}}` literal while embedding the
++invocation's `TARGET`/`PROFILE`/`STACK`, so recognition is by **template
++reconstruction** — extract the invocation values from the file's own upgrade
++line, re-render the one shipped template (identical across v1.0.1→HEAD,
++verified by extraction), and require byte equality. Substring matching is
++forbidden (an adopter file that legitimately *contains* the token would be
++destroyed); a static whole-body hash is useless (each adopter's degraded
++body embeds different values). Any parse failure or deviation ⇒ `edited` ⇒
++preserved. Recognizer: `_protocol_pointer_is_degraded` in
++`scripts/_framework_manifest_set.sh`.
++
++**Hash-name aliasing (post-INV-4).** Once install and upgrade render through
++the one generator, the canonical pointer digest and the prior record are the
++SAME bytes on continuity rows — `HASH_PRIOR_RECORD` and
++`HASH_CANONICAL_POINTER` collapse into one claim. The e2e harness therefore
++treats the two names as equivalent **only when the candidate digests are
++equal and the record matches them** (`_derive_hash_source`, 5th argument);
++when the digests genuinely differ, the probe order decides exactly as
++before. Choosing by probe order in the aliased case would manufacture a
++distinction the observation cannot make.
++
++### 2.5 `source_has` — does `$SOURCE_DIR` carry this surface?
++
++`yes` · `no`. The reachable `no` case is the documented `--pin` downgrade to
++a pre-v1.3.0 tag, whose checkout has no marker. A `SPEC/v1` absent from
++source means a broken or partial checkout.
++
++### 2.6 `mode` — the delivery mode of **this** run
++
++`copy` · `link`. On `install.sh` this is `--mode`. On `upgrade.sh` there is
++no `--mode` flag: the value is *inferred* for the baseline rewrite, from a
++prior `LINK` record first and a symlink probe second.
++
++> **This dimension is about the current run, not the recorded one.** See
++> pruning rule R-09 for why conflating them would delete a real defect.
++
++### 2.7 `ceremony`
++
++`user` · `maintainer` — the *effective* ceremony, read replay-independently
++from `.claude/.install-state.json`, failing open to `maintainer` when the
++state is absent (every pre-Wave-B install).
++
++### 2.8 `operation`
++
++`install_fresh` · `install_rerun` · `upgrade`. "Fresh" is defined
++structurally: **no pre-existing baseline manifest at the target**.
++
++### 2.9 `skip_requested`
++
++`none` · `self` (`--skip SPEC/v1`) · `descendant`
++(`--skip SPEC/v1/local.md`).
++
++### 2.10 `fault` — the tenth dimension (ratified in round 1)
++
++`none` · `backup_unwritable`.
++
++An injected environmental failure. It is not a property of the target, which
++is why it is not `live_type`; it is a genuine tenth axis, and it rode inside
++the `note` column as a prose directive until the round-1 debate ruled that a
++**dimension the harness parses out of prose is a dimension nothing
++validates**.
++
++Dropping those rows was the lower-friction alternative and was rejected:
++they are the backup-failure *safety* cells, and a failed backup followed by a
++delete is the data-loss path the whole backup-before-replace contract exists
++to prevent. A column is cheap; a hole is not.
++
++Consequently `note` now carries **prose only**. `indistinguishable=` and
++`open=` survive as annotations because neither changes what the fixture does
++or what the decision function returns.
++
++## 3. The verdict enum (draft — W1 ratifies)
++
++The outcome of a cell is a **pair**. Every defect found in the eleven review
++rounds was a cell whose pair was wrong — which is the evidence that the pair
++is the right shape for the answer.
++
++### 3.1 First field — what happens to the target
++
++| Verdict | Meaning |
++|---|---|
++| `DELIVER` | write the framework's version; the target had nothing |
++| `REFRESH` | replace existing content, **backup first** |
++| `PRESERVE_OWNED` | do not touch the target; **keep** the delivery record |
++| `PRESERVE_UNOWNED` | do not touch the target; do **not** record (the adopter owns it) |
++| `OMIT_RECORD` | target stays; its record leaves the manifest |
++| `ABORT_SURFACE` | refuse this surface, rc 0, named warning; the run continues |
++
++`ABORT_SURFACE` is distinct from `PRESERVE_UNOWNED`: it is the outcome when
++the framework *wanted* to act and could not do so safely — a failed backup,
++an unsupported special file — and the distinction matters because the
++operator must be told.
++
++### 3.2 Second field — where the manifest's digest comes from
++
++| `hash_source` | Meaning |
++|---|---|
++| `HASH_TARGET` | hash the bytes now on disk at the target |
++| `HASH_SOURCE` | hash the framework's copy in `$SOURCE_DIR` |
++| `HASH_PRIOR_RECORD` | carry the digest the previous manifest recorded |
++| `HASH_CANONICAL_POINTER` | the computed hash of what the pointer heredoc *would* generate |
++| `HASH_NONE` | emit no record |
++| `LINK_RECORD` | emit `LINK  <relpath>  <target>` instead of a digest |
++
++The two fields are **orthogonal**. `PRESERVE_OWNED` with `HASH_TARGET`
++records the adopter's edited bytes as the framework baseline — which is how
++a later upgrade comes to overwrite them and `uninstall.sh` comes to delete
++them. `PRESERVE_OWNED` with `HASH_PRIOR_RECORD` is the safe reading of the
++same intent. Nothing in the branch structure made that choice visible; a
++column does.
++
++### 3.3 What this replaces
++
++`FMS_HASH_ROOT_PATHS` and `FMS_LINK_PATHS` are per-path override lists added
++during the eleven rounds to narrow two global switches that turned out to be
++too wide. They are **special cases of an explicit `hash_source`**, and the
++implementation replaces them — it does not keep them alongside it. Adding a
++third override list is the failure mode this table exists to prevent.
++
++`FMS_PROTOCOL_HASH` carries **two different meanings** today: the canonical
++pointer hash on the upgrade path, and a *prior record digest* on the install
++continuity path. Under this model those are `HASH_CANONICAL_POINTER` and
++`HASH_PRIOR_RECORD` — distinct values that must not share a channel. See
++OQ-4.
++
++### 3.4 `HASH_TARGET` is the default, and it is never distinctly correct
++
++Filling the table surfaced something no single branch could show: across all
++61 rows, **`HASH_TARGET` is never the right answer.** It appears only as an
++`indistinguishable=` annotation on rows where the target was just written
++from the framework's own bytes, so the two candidates are equal by
++construction and the distinction is unobservable.
++
++Yet `HASH_TARGET` is precisely what the generator falls back to when no
++override is supplied. So the default is right only by coincidence — whenever
++target and source agree — and wrong in exactly the situation the override
++exists to handle: a preserved adopter edit. Three separate P1 defects are
++instances of that one sentence.
++
++This is an argument for making `hash_source` an explicit, required parameter
++of the verdict rather than a set of opt-in overrides on a permissive default.
++Recorded as evidence for the W1 debate, not decided here.
++
++## 4. Legality rules (pruning)
++
++A cell is **illegal** when the combination cannot occur against a real
++target. Every rule below removes cells; **each is named with its reason, and
++silent pruning is forbidden** — an unexplained absence from the TSV is
++indistinguishable from an oversight, which is how a defect class hides.
++
++| Rule | Statement | Reason |
++|---|---|---|
++| **R-01** | `operation=install_fresh` ⇒ `prior_record=none` | The manifest is written at the *end* of install. "Fresh" is defined as "no pre-existing manifest", so there is no prior testimony to read. |
++| **R-02** | `operation ∈ {install_fresh, install_rerun}` ⇒ `skip_requested=none` | `--skip` is an `upgrade.sh` flag. `install.sh` has no equivalent (verified: zero occurrences). |
++| **R-03** | `surface=protocol` ⇒ `source_has=yes` | The pointer is generated from a heredoc, never copied. There is no source file whose absence could be observed. |
++| **R-04** | `live_content=legacy_pristine` ⇒ `surface=spec` | The pristine fingerprints are a `SPEC/v1`-tree construct. No equivalent exists, or is needed, for a one-line marker or a generated pointer. |
++| **R-04b** | `live_content=degraded` ⇒ `surface=protocol` (PLAN-168 W2) | The degraded template is a pointer construct: only the generated `PROTOCOL.md` ever carried the `{{PROTOCOL_SOURCE}}`-literal body. `SPEC/v1` legacy recognition already has `legacy_pristine`; the marker is a one-line version string with no template to degrade. |
++| **R-05** | `live_type=absent` ⇒ `live_content` undefined | Nothing to hash. |
++| **R-06** | `skip_requested=descendant` ⇒ `surface=spec` | Only `SPEC/v1` is a tree. A path *under* a single file cannot exist. |
++| **R-07** | `live_type=dir_empty` ⇒ `surface=spec` | For the single-file surfaces, an empty directory and a non-empty one behave identically (both yield no record and both are refused as non-regular). The distinction is only load-bearing where per-file records are emitted. |
++| **R-08** | `ceremony=user` ⇒ `surface ∈ {spec, protocol}` cannot yield `DELIVER` or `REFRESH` | WS4 guards forbid root surfaces under a user ceremony. **This prunes verdicts, not cells:** those surfaces still legally *appear* under `ceremony=user` as residue of a prior maintainer install, and those residue cells are exactly where two defects lived. |
++| **R-09** | `prior_record ∈ {link_match, link_retargeted}` ∧ `live_type ≠ symlink` ⇒ collapse to `link_retargeted` | `readlink` on a non-symlink yields empty, which never equals a recorded non-empty target. Keeping both would be two names for one observable state. |
++| **R-10** | Rows are **equivalence classes**, not raw tuples; a dimension the row's outcome does not depend on is written `*` | Forced, not preferred. The raw product is ~24,000 tuples; at the mandated per-cell timeout the suite could not run in a day, so it would not be run — and an unrun suite is worse than a smaller honest one. `*` is the harness's instruction to instantiate the canonical representative, and any dimension that turns out to matter must be split into explicit rows. |
++| **R-11** | `live_type=ancestor_symlink` ⇒ `surface ∈ {spec, marker}` | `PROTOCOL.md` sits at the target root, so between `$TARGET` and the leaf there is **no intermediate component** that could be a symlink. The guard is vacuous there, not missing. |
++
++### 4.2 Conventions carried in the TSV
++
++- `*` — don't-care, per R-10.
++- `-` — not applicable under a rule above (e.g. `live_content` when the
++  target is absent).
++- `note` may carry structured directives alongside prose:
++  `fault=<enum>` (an injected environmental failure),
++  `indistinguishable=<enum>` (two `hash_source` candidates that are equal by
++  construction on this row — the harness reports `AMBIG`, never a lucky
++  green), `invariant=<id>`, `open=<round-id>` (a defect this row asserts and
++  the current tree does not yet satisfy).
++
++### 4.1 Three draft rules, REJECTED with reason
++
++PLAN-167 §W0.1 offered five pruning rules as "already known". Three of them
++are wrong, and adopting them would have deleted cells that hold real
++defects. Recording the rejections here so they are not re-proposed.
++
++- **REJECTED: `operation=install_fresh ⇒ live_type=absent`.**
++  A maintainer install onto a target that already carries its own `SPEC/v1`
++  is precisely the case ADR-155-AMEND-1 §3 cites for why ceremony-conditional
++  enumeration is insufficient. `install_one` EXISTS-skips it, and the
++  question of whether the adopter's tree gets inventoried as framework-owned
++  is the whole point. The cell is legal and important.
++
++- **REJECTED: `prior_record=link_* ⇒ mode=link`.**
++  `prior_record` describes the previous run; `mode` describes this one. They
++  are independent. `mode=link ∧ prior_record=hash` is an open, unfixed defect
++  — a `--link` rerun over a copy-installed surface that has since been
++  replaced by a symlink, where the absence of a `LINK` row is read as "no
++  mismatch" and an arbitrary live symlink is recorded as a trusted delivery.
++  `mode=copy ∧ prior_record=link` is a legal re-run after a mode change.
++  Pruning either would delete the finding the table exists to hold.
++
++- **REJECTED: `surface=protocol ⇒ live_type ∈ {absent, regular, symlink}`.**
++  Nothing in `_refresh_protocol_pointer` prevents a directory or a FIFO at
++  `$TARGET/PROTOCOL.md`. It has neither the non-regular-destination guard nor
++  the leaf-symlink guard that `spec` and `marker` both acquired during the
++  review rounds — see §5.1. The cell is not illegal; it is **unguarded**, and
++  those are opposite things. Pruning it would have converted a live defect
++  into an invisible one.
++
++## 5. Cells whose pair is not obvious
++
++Only the reasoning lives here; the pairs themselves are in the TSV.
++
++### 5.1 The `protocol` surface is the family's late sibling
++
++`spec` and `marker` each acquired, over the review rounds, three guards: a
++symlinked-ancestor refusal, a leaf-symlink check validated against the prior
++`LINK` record, and a refusal of any destination that exists but is not a
++regular file. `protocol` acquired **none of them** — and it is the one
++surface written with `cat >`, which follows a leaf symlink out of the target
++tree, fails hard on a directory (aborting the whole run under
++`set -euo pipefail`, mid-upgrade, after other surfaces have changed), and
++blocks forever on a FIFO.
++
++Two of those three are real gaps. The third is not: R-11 shows the
++ancestor guard is **vacuous** for a root-level leaf, so its absence is
++correct rather than missing. That correction is itself the point — the same
++sweep that found the gaps also stopped a plausible-looking third "gap" from
++being patched into existence.
++
++None of this came from the eleven rounds. It came from asking the question
++the table forces: *the same cell, on each surface, must have a declared
++answer.* Per PLAN-167 §6 rule 2 it is recorded as rows, not patched
++branch-locally.
++
++### 5.4b The instrument was blind to the damage it was built to detect
++
++The first version of this harness compared only the target tree. For the
++rows where a surface is a symlink, that is not enough: a write that follows
++the link lands **outside** the target, on adopter or system data, and the
++target itself is unchanged. Such a row could report GREEN while the run
++destroyed a file the test never looked at.
++
++The fixture's foreign file is now a **tripwire**, digested before and after
++every run. Any change to it produces status `ESCAPE`, which outranks the
++verdict comparison entirely — a row whose pair matches while the run wrote
++out of tree has not passed.
++
++Arming it immediately converted a suspicion into evidence. `OWN-0034` — the
++`protocol` surface as a leaf symlink — reports `ESCAPE`: `cat >` follows
++the link and writes outside the target. `OWN-0044` (a `spec` symlink, which
++is correctly preserved) does not, so the tripwire is not simply firing on
++every symlink row.
++
++That promotes the §5.1 finding. The missing leaf-symlink guard on the
++pointer is not a hypothetical hardening gap; **it is a demonstrated
++out-of-tree write**, which is the S238 class the whole baseline-manifest
++design exists to close.
++
++### 5.4c `prior_record` is ambiguous, and it matters exactly where it hurts
++
++Running the decision function in shadow mode against the real callers — it
++observes and records, it does not act — produced 17 agreements, 2
++divergences and 10 rows the caller never reached. One divergence is a model
++defect, not an implementation defect.
++
++`prior_record` is defined as "what the pre-run baseline manifest says". There
++are **two** such manifests and the definition does not choose between them:
++
++- the **raw** file on disk, and
++- the **sanitized** one the loader produces, which drops every record whose
++  relpath traverses a symlinked component.
++
++They agree everywhere except on the symlink-traversal rows — which are the
++security-critical ones, and the same rows §5.8 is about. An observer reading
++the sanitized manifest sees `none` and concludes `PRESERVE_UNOWNED`; an
++observer reading the raw file sees `hash` and concludes `OMIT_RECORD`. Both
++are defensible readings of a dimension that never said which it meant.
++
++The resolution is not to pick the more convenient one. The **sanitized**
++manifest is the authority, because honouring a record whose path crosses a
++symlink is precisely what the ADR-155 decision-(v) provenance fence exists
++to prevent — but the definition in §2.2 has to say so, and the harness has
++to observe the same thing the caller does, or the two instruments will keep
++disagreeing about cells neither of them is wrong about.
++
++This is the kind of defect that survives eleven rounds of code review: every
++branch reads *a* manifest, each reads a defensible one, and no branch is
++individually wrong.
++
++### 5.4d The missing cell was the most important one
++
++The table had nine `protocol` rows and none for the combination that matters
++most: an **adopter-customised pointer on a normal (maintainer) upgrade**.
++`OWN-0072` covers the same content under `ceremony=user`; the ordinary path
++was simply absent.
++
++Deriving its expected pair exposed a **data-loss defect in the proposed
++decision function**. For that cell the function returned `REFRESH` — it would
++have overwritten a customised root `PROTOCOL.md`. That is the verified S238
++loss that ADR-155 decision (iii) exists to close, and the live code has
++preserved it correctly all along.
++
++The asymmetry the function was missing is deliberate and is now stated in it:
++
++| Surface | An adopter edit is… | Because |
++|---|---|---|
++| `SPEC/v1` | a **fork of the contract** → forced refresh | it is the published compliance contract (ADR-155-AMEND-1 §4) |
++| `PROTOCOL.md` | **adopter content** → preserved | overwriting it is the verified S238 loss (ADR-155 (iii)) |
++
++Both record a **canonical** digest regardless, because recording the
++customised bytes would make the *next* upgrade read `H_dst == H_base` and
++clobber them — the C.5 idempotency trap.
++
++Two things are worth separating here. The defect was in the **new** code, not
++the old: a refactor that had been driven only by "keep the map green" would
++have shipped it, because **no existing row covered the cell**. What found it
++was asking the completeness question — *which combinations does this surface
++have, and is each one present?* — which is the one question a per-branch
++review never asks.
++
++### 5.4e Install and upgrade generate DIFFERENT pointers — every upgrade breaks it
++
++Chasing a `HASH_UNCLASSIFIED` observation led to a defect in the live code
++that has nothing to do with ownership records.
++
++`install.sh` writes the root pointer and then **substitutes** its
++placeholders, so the adopter gets a real path. `upgrade.sh` regenerates the
++same file from a heredoc that leaves `{{PROTOCOL_SOURCE}}` **literal**, and
++nothing substitutes it afterwards. Verified against the live tree:
++
++| after | literal `{{PROTOCOL_SOURCE}}` occurrences |
++|---|---:|
++| `install.sh` | 0 — the file names the real checkout path |
++| `upgrade.sh` | 4 — the file names a placeholder |
++
++So **every upgrade degrades the pointer into a non-functional one** for any
++adopter whose framework checkout lives outside the target. The file whose
++entire job is to say where the protocol lives stops saying it.
++
++This is the **install-set ≠ upgrade-set** class that ADR-155 decision (i) was
++written to eliminate — the shared enumeration fixed *which paths* the two
++sides touch, but not *what content* they produce for the same path. It is
++pre-existing, unrelated to PLAN-167's changes, and no ownership assertion
++would ever have caught it: the record is fine, the bytes are wrong.
++
++It is recorded as **INV-4** because it is not a cell — it is a cross-writer
++invariant.
++
++### 5.5 Two findings are invariants, not cells
++
++Two defects were about the **blast radius** of a fix rather than about any
++one surface, and encoding them as rows would understate them. The harness
++asserts them across every applicable row instead:
++
++- **INV-1** — when ownership continuity fires on an install rerun, no
++  enumerated path *outside* the continuity set may change its recorded
++  digest. The original defect switched the whole tree's baseline to the
++  unrendered source, which reads downstream as repo-wide adopter drift and
++  silently stops those files from ever being refreshed again. One row could
++  not have caught it; the damage was to the paths the row was not about.
++- **INV-2** — `LINK` serialization may cover only paths that were already
++  `LINK` records before the run. Otherwise an adopter's own symlink,
++  preserved inside an enumerated directory, is promoted into a framework
++  delivery record.
++- **INV-4** — **install and upgrade must generate byte-identical content for
++  the same surface.** Violated today by the root pointer (§5.4e): install
++  substitutes its placeholders, upgrade does not. No per-cell ownership
++  assertion can see this — the record is correct and the bytes are wrong —
++  so it needs an invariant that compares the two writers' output directly.
++- **INV-3** — **an execution failure never advances the record.** A caller
++  that was handed `DELIVER` or `REFRESH` and could not complete it must
++  leave the manifest describing the world as it actually is. This is the
++  correction to the C2 proposal below: "the failure inherits the verdict's
++  `hash_source`" would record a delivery that did not happen — the framework
++  claiming bytes it never wrote, which is precisely the over-claiming
++  direction ADR-155-AMEND-1 §3 forbids. The failure path keeps the record
++  the surface had *before* the attempt.
++
++Both are the same shape: a switch that was correct in intent and too wide in
++scope. That is the single most common defect class in this space, and it is
++invisible to per-cell assertions by construction.
++
++### 5.2 Ownership continuity and the digest it carries
++
++Carrying ownership forward across a run that did not write anything is
++correct — dropping the record strands a delivered tree as unowned forever.
++But the flag and the digest are separate decisions, and four separate
++defects came from moving one without the other. A `PRESERVE_OWNED` verdict
++therefore always has an explicitly declared `hash_source`, and
++`HASH_TARGET` is never its default.
++
++### 5.3 Deliberate asymmetry: the marker under `--pin`
++
++Where a pinned pre-v1.3.0 source has no marker, the record is **dropped**
++rather than carried forward, so that readers fall back to `VERSION` — which
++the pin did update. This is the one place where `OMIT_RECORD` is chosen over
++`PRESERVE_OWNED` on purpose, and it is recorded here so it is not "fixed"
++into consistency with the other surfaces.
++
++Its residual is real and is open as OQ-3: `VERSION` in an *external* target
++is adopter-owned and never written by the upgrade, so the fallback can still
++report a version newer than the content.
++
++### 5.4 The root `VERSION` file is not a surface
++
++It is out of the enumeration and out of the upgrade, permanently and
++deliberately (ADR-155-AMEND-1 §2). It is named here only so that its absence
++from the table is not read as an omission.
++
++### 5.6 One amendment to the plan's observation contract, and why
++
++PLAN-167 §W0.3 drafted the observation contract so that `ABORT_SURFACE` was
++recognised by *"target unchanged + named warning + rc 0, and **no record**"*.
++Implementing it showed that clause is unsound: it makes the verdict field
++depend on the `hash_source` field, and §3.2 requires the two to be
++orthogonal. Under the draft rule, an `ABORT_SURFACE` that legitimately keeps
++a prior record would be observed as `PRESERVE_OWNED` — which is precisely
++the distinction OQ-2 exists to settle, silently pre-decided by the
++instrument that was supposed to measure it.
++
++The harness therefore recognises `ABORT_SURFACE` by the **refusal being
++emitted at all** — the framework attempted and declined — and reads the
++record independently. A refusal leaves no filesystem trace by construction,
++so this is matched against a small declared set of operator-visible markers.
++That coupling is deliberate and is the reason it is written down: if the
++wording changes, these rows fail, and they *should* — the operator-visible
++contract is part of what `ABORT_SURFACE` promises.
++
++The harness also emits `HASH_UNCLASSIFIED` when a recorded digest matches
++none of the four candidates. That is never an expected value: it means the
++manifest recorded something the model has no name for, which is a gap in the
++enum rather than a failing row.
++
++**`REFRESH` versus `PRESERVE` has no single sound signal.** When the incoming
++content equals what is already on disk, a refresh changes no bytes, and three
++candidate observables each fail somewhere:
++
++| Signal | Fails because |
++|---|---|
++| content digest | an identical-content refresh is invisible to it |
++| backup presence | the ADOPTER-FORK *preserve* path also snapshots — a backup proves the framework **looked**, not that it wrote |
++| modification time | `install.sh` re-runs placeholder substitution every invocation, rewriting the pointer with identical bytes and a fresh mtime — a write with no semantic content |
++
++The harness uses mtime, and **only on the upgrade path**, where the forced
++route is the one thing that rewrites these surfaces. The boundary is stated
++rather than assumed, because each of these signals looked universal until a
++row proved otherwise — and two of them were adopted, and withdrawn, during
++this work.
++
++The general lesson is worth more than the mechanism: in a space this shape,
++**the instrument needs the same adversarial scrutiny as the subject.** Five
++separate fixture defects were found while building this baseline, four of
++which produced a confident green or red that meant nothing.
++
++### 5.7 A guard placed on the right route, reached too late
++
++The `special`-file rows do not fail where they were expected to. The upgrade
++never reaches the SPEC or marker route at all: an earlier stage —
++`_emit_deprecation_warnings`, which shells out to a scanner that walks the
++whole target tree — opens the FIFO and blocks forever. The run dies before
++any surface is refreshed.
++
++Verified in isolation with both controls: the scanner alone, given a target
++whose only anomaly is a FIFO at the marker path, hangs indefinitely; the same
++scanner on the same tree with a regular file there exits 0.
++
++Two consequences, and the second is the more important one:
++
++1. It is a **new defect of a class the eleven rounds did not reach**. The
++   special-file guards were placed on the three routes that *own* the
++   surfaces. A tree-walking reader that runs earlier needs the same guard,
++   and does not have it.
++2. It means the existing guards are **masked**: no end-to-end run can
++   demonstrate that the FIFO branch of `_refresh_spec_contract` works,
++   because control never arrives there. A green suite would have proven
++   nothing about them. The table found this by asserting an outcome the
++   route was believed to produce and observing that the process died first.
++
++Per PLAN-167 §6 rule 2 this is recorded, not patched branch-locally. Per
++rule 5 the family sweep it implies is broader than the three surfaces: every
++tree-walking reader invoked during an upgrade is in scope.
++
++### 5.8 A continuity branch that cannot fire
++
++The symlinked-ancestor guard on `spec` and `marker` ends with a line that
++carries ownership forward when the pre-upgrade baseline holds a record. That
++line is **unreachable**.
++
++The relpath sanitizer rejects any record whose path traverses a symlinked
++component, and it runs when the manifest is *loaded* — before
++`_baseline_has_spec_record` is ever consulted. In the one situation the
++continuity line was written for, the record it looks for has already been
++removed from the sanitized manifest. The observable outcome is
++`OMIT_RECORD`, never the intended `PRESERVE_OWNED`.
++
++The table therefore expects `OMIT_RECORD` here — but the fix is **not** to
++make the branch fire. Making it fire would mean honouring a record whose
++path crosses a symlink, which is exactly the provenance fence ADR-155
++decision (v) exists to enforce. Under-claiming ownership is the recoverable
++direction (ADR-155-AMEND-1 §3). The branch should be **deleted as dead
++code**, because a line that promises something it cannot deliver is worse
++than no line: it reads, to the next maintainer, like a guarantee.
++
++## 6. Open questions — the W1 debate agenda
++
++These are the points where the three input authorities — the eleven review
++verdicts, the live branch, and ADR-155/AMEND-1 — do **not** agree. PLAN-167
++§W0.1 requires that they be recorded rather than resolved unilaterally.
++
++- **OQ-1 — Is `ABORT_SURFACE` one verdict or two?**
++  A failed backup and an unsupported special file both leave the target
++  untouched with a named warning, but they differ in whether the framework
++  *could* have proceeded. If the manifest outcome is identical, the enum
++  should merge them; if the operator's next action differs, it should not.
++
++- **OQ-2 — What is the `hash_source` of `ABORT_SURFACE` when a prior record
++  exists?** Refusing to touch a surface is not evidence about ownership. The
++  live code answers this differently on different branches.
++
++- **OQ-3 — Version reporting under an external-target `--pin` downgrade.**
++  Dropping the marker record makes readers fall back to a `VERSION` the
++  upgrade never writes on an external target. A truthful signal requires
++  deriving from the pinned source; that is a new mechanism, not a cell.
++
++- **OQ-4 — Splitting `FMS_PROTOCOL_HASH`.** It carries
++  `HASH_CANONICAL_POINTER` on one path and `HASH_PRIOR_RECORD` on another.
++  Splitting is the model-faithful move; it also changes a canonical-guarded
++  signature.
++
++- **OQ-5 — Where does `_ownership_verdict()` live?**
++  A new library file is a new canonical path, which requires a
++  `_CANONICAL_GUARDS` entry and therefore a kernel ceremony. PLAN-167 §4
++  states a preference for the already-guarded
++  `scripts/_framework_manifest_set.sh` absent a reasoned veto. A veto
++  escalates to the Owner — it does not become an overnight kernel ceremony.
++
++- **OQ-6 — Does `install_rerun` need `--skip`?** R-02 prunes the whole
++  column for install today. If the answer is "install should honour skips
++  too", that is a feature decision, and the pruned cells become legal.
++
++- **OQ-7 — RESOLVED in round 1.** `fault` is now a real column (§2.10) and
++  `legacy_pristine_partial` a real `live_content` value. Both were prose
++  directives; both are now dimensions. The text below is kept as the record
++  of the question.
++
++  ~~**`fault` is a tenth axis the column contract does not have.**~~
++  Three defects are reachable only under an injected environmental failure
++  (an unwritable backup directory). That is not a property of the target, so
++  it is not `live_type`; it is a genuine tenth dimension. PLAN-167 §W0.2
++  froze the TSV at fourteen columns, so it currently rides in `note` as
++  `fault=<enum>`. This is **declared, not smuggled**: the debate should
++  either bless a fifteenth column or rule those rows out of scope. Leaving
++  it in free text is the one option that should not survive — a dimension
++  the harness parses out of prose is a dimension nothing validates.
++
++- **OQ-9 — Is `OMIT_RECORD` an independent verdict at all?**
++  *New evidence from the shadow run:* the `OWN-0030` divergence exists ONLY
++  because the two instruments answer different questions — the suite asks
++  "did a record disappear?" and the function asks "was there a trustworthy
++  prior record?". Both end with no record on disk. **If the two verdicts
++  collapse into one, that divergence stops existing**, which is a second,
++  independent argument for the collapse: a distinction that generates
++  disagreement while having no observable consequence is not carrying its
++  weight.
++  Filling the table, every `OMIT_RECORD` row turned out to be a row that would
++  read `PRESERVE_UNOWNED` if no prior record had existed. The two are not
++  separate outcomes: they are the same outcome observed at different values of
++  `prior_record`, which is already a column. If that holds under scrutiny, the
++  enum has five verdicts, not six — and a redundant enum member is a place for
++  two branches to disagree about which one applies.
++
++- **OQ-10 — `--on-conflict` is an eleventh dimension.**
++  Surfacing §5.4d's cell also surfaced its modifier: the live code branches on
++  `--on-conflict={refuse|theirs|backup}` for exactly that cell, and `theirs`
++  or `backup` invert the outcome from preserve to overwrite. The nine
++  dimensions cannot express it, so the table currently describes the default
++  (`refuse`) only. Either it becomes a dimension or the table states in one
++  line that it is default-scoped — silence is the option §4 forbids.
++
++- **OQ-8 — Does the table cover readers, or only writers?**
++  One defect was a *reader* trusting a delivered-then-edited marker and
++  therefore suppressing a real update. Its cure follows from the same pair,
++  but the observation contract in `test-ownership-table.sh` derives the
++  verdict from (target state, manifest) — the reader is a third observable.
++  Either the contract grows a third channel, or reader rules live in a
++  sibling table.
++
++## 7. How to change this table
++
++1. A new defect becomes **a row**, never a branch-local patch.
++2. A finding that does not fit as a row is a **gap in the model**: record it
++   and escalate. Do not reshape the finding to fit.
++3. Removing a combination requires a **named rule in §4 with its reason**.
++4. Changing a pair in the TSV without changing the reasoning here — or the
++   reverse — means the two artifacts have drifted. The TSV wins on values;
++   this document wins on why.
++
++## 8. Origin ledger — where the 35 review findings went
++
++PLAN-167 AC-5 requires a **literal enumeration**, not a count. Reading all
++eleven verdicts end to end yields **35** distinct findings, not the 24 the
++session summary recorded — so the count itself was wrong, which is why the
++acceptance criterion demands enumeration. Every one is dispositioned:
++
++| Disposition | Count | Findings |
++|---|---:|---|
++| Became one or more TSV rows | 29 | r1-F1..F3, r2-F1..F3, r3-F1..F2, r4-F2..F5, r5-F1..F3, r6-F1, r7-F1..F3, r8-F2, r9-F1..F4, r10-F1, r10-F3, r11-F1..F3 |
++| Became a cross-surface invariant (§5.5) | 2 | r8-F1 → INV-1, r10-F2 → INV-2 |
++| **Not a cell of this space** | 4 | r4-F1, r8-F3 (landing-script / CI-ledger hygiene), r10-F4 (CI path filter), r11-F4 (`INSTALL.md` forensic guidance) |
++
++The four non-cells are **not dismissed** — they are real, and three of them
++already landed. They are recorded here so that "absent from the TSV" can
++never be confused with "forgotten". They do not belong to the ownership
++decision space: they concern whether CI *runs* the tests and whether the
++documented procedures match the code, which no per-cell assertion can
++express.
++
++Rows also exist that no finding produced — the `derived` origin. Those come
++from the family sweep in §5.1. That a systematic pass over a nine-column
++space found defects eleven sequential review rounds did not is the argument
++for the table, stated as evidence rather than as a claim.

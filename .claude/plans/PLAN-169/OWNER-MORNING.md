@@ -23,10 +23,45 @@
 **A sequência completa e a autoridade é PLAN-166 §W2 +
 `.github/release-checklist.md`.** Resumo operacional:
 
-1. **[1B] Verdito do re-pass r2:** `cat .claude/plans/PLAN-166/repass-r2/verdict-r2.txt`
-   - `VERDICT: APPROVE` → siga. `NEEDS-CHANGES` → triagem comigo antes
-     de qualquer corte (P1 bloqueia; P2 é fix-forward a seu critério).
-   - Evidência/proveniência no mesmo dir (transcript, MANIFEST, PROVENANCE).
+1. **[1B] Re-pass r2 (multi-part) — RESULTADO DA MADRUGADA: round 2 =
+   NEEDS-CHANGES em 4/5 partes; TRIADO; round 3 relançado sobre o
+   candidato corrigido.** Leia `PLAN-166/repass-r2/VERDICTS-SUMMARY.txt`
+   (round vigente) + os `verdict-*.txt`. Estado da triagem (S299):
+   - **CURADO NO FIX-FORWARD (round 2, já em main):** parte d P1s —
+     consumidor `debate-orchestrate.py` alinhado ao §12.4 (teto+threshold
+     = consenso, não impasse) + teste; **anotação da TAG stale**
+     (`release.sh` RELEASE_SCOPE agora nomeia o trem inteiro
+     162→169-W0-W2, ADRs 184→190 — era claim falsa em superfície
+     assinada) + teste; Risks AUSENTE agora é fail-closed (SPEC exige a
+     seção); guard de ordinal + fixture do marcador. Parte e P1s —
+     `docs/ownership-decision-table.md` reconciliada (banner: enum=4,
+     INV-4 fechada, ADR-190 é a autoridade); **2ª frase de ADR do GUIA
+     (1225: "Architecture Decision Records", stale 189→190) curada +
+     matcher + expectation=2** — era a "2ª frase" do ledger E.3 que a 1ª
+     passada não achou. Parte e P2 (prose 62/4→65/3 do nightly.yml) no
+     pack STAGED (canônico). Parte c FATAL de redação: causa =
+     `model-deprecations.json` (redactor reescreve ledger de modelos);
+     round 3 exclui o arquivo por proveniência.
+   - **⚠️ ABERTO — DECISÃO SUA (parte a, PRODUTO 167/168):** 2×P1 + 2×P2
+     em `verdict-a.txt`. **P1-1 symlink fall-through CONFIRMADO
+     estruturalmente na leitura** (`_wbm_link_allowed` rejeita → `-f`
+     segue o symlink → hash record → symlink do adotante vira registro
+     de entrega — fura o espírito da INV-2 por rota nova); P1-2 (--pin
+     pré-v1.3 proveniência falsa) plausível, não-verificado a fundo.
+     São superfícies CANÔNICAS (cerimônia; ADR-190 §3 veta ramo local).
+     Opções: (i) sessão de verificação profunda comigo → se real,
+     mini-cerimônia pré-rc.2 OU exceção nomeada no release-checklist
+     (precedente OQ-5/B.a — mas P1 de ownership pesa mais que B.a);
+     (ii) refutar com evidência (células e2e cobrindo as rotas).
+     **Recomendação do CEO: verificar a fundo ANTES de cortar rc.2.**
+   - **Parte b (INSTRUMENTO harness/parity, não produto embarcado):**
+     6 achados de endurecimento do instrumento (vários reais, ex.:
+     granularidade 1s do mtime, rc ignorado fora de timeout; outros
+     refutáveis, ex.: `.claude.bak` é artefato DE DESIGN do upgrade).
+     Não bloqueiam o corte por si; viram item de wave própria — decida
+     se entram como W1.8 ou plano novo.
+   - **Round 3 (relançado sobre o candidato corrigido):** verditos novos
+     substituem os do round 2 no mesmo dir quando terminar.
 2. Montar+assinar `pair-rail-verdict-v1.3.0-rc.2.md` (+ verdict-fields),
    **commitar em main → push → CI verde no commit do verdito** (o
    único delta legítimo pós-re-pass = artefatos do verdito + repass-r2/**).

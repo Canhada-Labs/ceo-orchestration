@@ -1,0 +1,5 @@
+part a (framework scripts (install/upgrade/generator) + root hygiene): VERDICT: NEEDS-CHANGES [codex rc=0]
+part b (e2e harness scripts/tests (W1 Linux port + riders)): VERDICT: NEEDS-CHANGES [codex rc=0]
+FATAL part c: hunks 59 -> 54
+part d (script test suites .claude/scripts/tests): VERDICT: NEEDS-CHANGES [codex rc=0]
+part e (hooks tests + docs + workflows + root docs): VERDICT: NEEDS-CHANGES [codex rc=0]

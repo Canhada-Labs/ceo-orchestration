@@ -218,12 +218,25 @@ def collect_risk_set(round_dir: Path) -> Set[str]:
         except OSError:
             continue
         items = extract_risks(text)
-        if not items and _risks_heading_present(text):
+        if not items:
+            if _risks_heading_present(text):
+                raise RisksSectionEmptyError(
+                    f"{critique_path}: '## Risks' heading present but ZERO "
+                    f"bullet items parsed — paragraph-style risks are "
+                    f"invisible to the machine; rewrite them as '- ' "
+                    f"bullets. Refusing to count this critique as silently "
+                    f"empty."
+                )
+            # repass-r2 part-d P1: Risks is one of the 7 REQUIRED critique
+            # sections (SPEC/v1/debate.schema.md). A critique with NO Risks
+            # section at all is malformed input, not an empty set — counting
+            # it as zero silently removes a critic's risks and can fake
+            # convergence. Same fail-closed posture, named separately.
             raise RisksSectionEmptyError(
-                f"{critique_path}: '## Risks' heading present but ZERO "
-                f"bullet items parsed — paragraph-style risks are invisible "
-                f"to the machine; rewrite them as '- ' bullets. Refusing to "
-                f"count this critique as silently empty."
+                f"{critique_path}: required '## Risks' section is MISSING "
+                f"(SPEC/v1/debate.schema.md lists it among the 7 required "
+                f"critique sections). Refusing to count this critique as an "
+                f"empty risk set."
             )
         out.update(items)
     return out

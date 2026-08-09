@@ -1,0 +1,3632 @@
+diff --git a/.claude/scripts/tests/test_await_release_gate.py b/.claude/scripts/tests/test_await_release_gate.py
+new file mode 100644
+index 0000000..c8df73d
+--- /dev/null
++++ b/.claude/scripts/tests/test_await_release_gate.py
+@@ -0,0 +1,364 @@
++"""Behaviour battery for ``await_release_gate.decide`` (PLAN-166 W0 item 6, F1).
++
++The AC-2 enumeration in PLAN-166 is the ONLY source for what is covered here.
++No test count is asserted or written anywhere — a mirrored numeral has drifted
++from reality four times in this plan; the enumeration below IS the census.
++
++Case classes, in AC-2 order:
++
++* GRANT — exact candidate (release.yml + push + tag + sha + fresh) whose
++  ``release-gate`` job concluded ``success``. MANDATORY: without it an
++  always-BLOCK implementation would pass the entire battery.
++* NEVER-GRANT — payloads holding ONLY green NON-candidate runs (rc tag,
++  other sha, wrong workflow, workflow_dispatch). Each proves twice over that
++  a look-alike green run neither grants NOR falsely blocks the race.
++* BLOCK — candidate gate ``skipped``; candidate gate ``failure``; no
++  candidate with the deadline elapsed; malformed JSON.
++* WAIT — empty run list in time; candidate present with the ``release-gate``
++  job absent from the jobs payload in time (eventual consistency); candidate
++  with ``conclusion: null`` in time (this one kills the naive
++  ``!= "failure"`` implementation).
++* FRESHNESS — a ``success`` candidate created BEFORE the asking run started
++  (delete + re-tag of the same sha) does not count as GRANT.
++* USAGE — the freshness input is load-bearing, so it has no default:
++  omitting ``--self-created-at`` (or passing an empty value) is a usage
++  error (exit 2), NEVER a run with the delete+re-tag leg silently off.
++  Without this class the FRESHNESS tests above prove nothing about the W1
++  wiring — the same stale payload they reject becomes a GRANT the moment
++  the caller forgets one flag.
++"""
++
++from __future__ import annotations
++
++import calendar
++import json
++import os
++import subprocess
++import sys
++import tempfile
++import unittest
++from pathlib import Path
++
++# Env-hygiene gate (check-test-env-hygiene.py): test classes subclass
++# TestEnvContext, not bare unittest.TestCase, so HOME / CLAUDE_PROJECT_DIR /
++# os.environ / sys.path are snapshot-restored around every test.
++_HOOKS_DIR = Path(__file__).resolve().parents[2] / "hooks"
++if str(_HOOKS_DIR) not in sys.path:
++    sys.path.insert(0, str(_HOOKS_DIR))
++
++from _lib.testing import TestEnvContext  # noqa: E402
++
++from await_release_gate import (
++    BLOCK,
++    EXIT_BLOCK,
++    EXIT_GRANT,
++    EXIT_USAGE,
++    EXIT_WAIT,
++    GRANT,
++    WAIT,
++    GateContext,
++    decide,
++)
++
++SCRIPT = Path(__file__).resolve().parent.parent / "await_release_gate.py"
++
++TAG = "v1.3.0"
++HEAD_SHA = "a" * 40
++OTHER_SHA = "b" * 40
++
++# Independent clock: built with calendar.timegm, NOT with the module's own
++# parser, so the fixtures are not graded by the code under test.
++SELF_CREATED_AT = "2026-08-05T12:00:00Z"
++SELF_EPOCH = calendar.timegm((2026, 8, 5, 12, 0, 0, 0, 1, -1))
++CANDIDATE_CREATED_AT = "2026-08-05T12:00:05Z"       # same push, +5s jitter
++STALE_CREATED_AT = "2026-08-05T11:00:00Z"           # previous tag push, -1h
++NOW = SELF_EPOCH + 60
++DEADLINE_OPEN = SELF_EPOCH + 1800                   # 30 min of head-room
++NOW_PAST_DEADLINE = DEADLINE_OPEN + 1
++
++
++def ctx(now=NOW, deadline=DEADLINE_OPEN):
++    """Context with EVERY input pinned explicitly (no ambient clock)."""
++    return GateContext(
++        tag=TAG,
++        head_sha=HEAD_SHA,
++        now_epoch=now,
++        deadline_epoch=deadline,
++        self_created_at_epoch=SELF_EPOCH,
++        freshness_skew_seconds=120,
++    )
++
++
++def gate_job(conclusion="success", status="completed"):
++    return {"name": "release-gate", "status": status, "conclusion": conclusion}
++
++
++def release_run(**over):
++    """A run that matches the candidate identity on every field by default."""
++    run = {
++        "id": 1001,
++        "run_attempt": 1,
++        "path": ".github/workflows/release.yml",
++        "event": "push",
++        "head_branch": TAG,
++        "head_sha": HEAD_SHA,
++        "created_at": CANDIDATE_CREATED_AT,
++        "status": "completed",
++        "conclusion": "success",
++        "jobs": [gate_job()],
++    }
++    run.update(over)
++    return run
++
++
++def self_run():
++    """The npm-publish run doing the asking — always in its own head_sha list."""
++    return {
++        "id": 1002,
++        "run_attempt": 1,
++        "path": ".github/workflows/npm-publish.yml",
++        "event": "push",
++        "head_branch": TAG,
++        "head_sha": HEAD_SHA,
++        "created_at": SELF_CREATED_AT,
++        "status": "in_progress",
++        "conclusion": None,
++        "jobs": [{"name": "await-release-gate", "status": "in_progress", "conclusion": None}],
++    }
++
++
++def payload(*runs):
++    return {"workflow_runs": list(runs)}
++
++
++def run_cli(raw_body, extra=(), self_created_at=SELF_CREATED_AT):
++    """CLI harness. ``self_created_at=None`` OMITS the flag entirely."""
++    handle, path = tempfile.mkstemp(suffix=".json")
++    with os.fdopen(handle, "w", encoding="utf-8") as fh:
++        fh.write(raw_body)
++    freshness = [] if self_created_at is None else ["--self-created-at", self_created_at]
++    try:
++        return subprocess.run(
++            [
++                sys.executable,
++                str(SCRIPT),
++                "--payload-file", path,
++                "--tag", TAG,
++                "--head-sha", HEAD_SHA,
++                "--deadline-epoch", str(DEADLINE_OPEN),
++                "--now-epoch", str(NOW),
++            ] + freshness + list(extra),
++            capture_output=True,
++            text=True,
++        )
++    finally:
++        os.unlink(path)
++
++
++class GrantTests(TestEnvContext):
++    """The mandatory positive control."""
++
++    def test_exact_candidate_with_successful_gate_job_grants(self):
++        # The list deliberately also holds the asking npm-publish run: the
++        # sibling must be ignored, not raced against.
++        result = decide(payload(self_run(), release_run()), ctx())
++        self.assertEqual(GRANT, result.decision)
++        self.assertEqual("gate-job-success", result.reason)
++        self.assertEqual(1, result.facts["fresh_candidates"])
++
++    def test_grant_exits_zero_and_prints_its_inputs(self):
++        proc = run_cli(json.dumps(payload(self_run(), release_run())))
++        self.assertEqual(EXIT_GRANT, proc.returncode, proc.stderr)
++        self.assertIn("decision=GRANT", proc.stdout)
++        self.assertIn("freshness_skew_s=120", proc.stdout)
++        self.assertIn("head_sha=" + HEAD_SHA, proc.stdout)
++
++
++class NeverGrantTests(TestEnvContext):
++    """Green look-alikes: never GRANT, and never a false BLOCK in time."""
++
++    def _assert_never_grants(self, run):
++        body = payload(self_run(), run)
++        in_time = decide(body, ctx())
++        self.assertEqual(WAIT, in_time.decision)
++        self.assertEqual("candidate-not-yet-created", in_time.reason)
++        self.assertEqual(0, in_time.facts["identity_matches"])
++        expired = decide(body, ctx(now=NOW_PAST_DEADLINE))
++        self.assertEqual(BLOCK, expired.decision)
++
++    def test_release_gate_success_on_a_different_tag_does_not_grant(self):
++        self._assert_never_grants(release_run(head_branch="v1.3.0-rc.2", id=2001))
++
++    def test_release_gate_success_on_another_commit_does_not_grant(self):
++        self._assert_never_grants(release_run(head_sha=OTHER_SHA, id=2002))
++
++    def test_release_gate_success_from_the_wrong_workflow_does_not_grant(self):
++        self._assert_never_grants(
++            release_run(path=".github/workflows/validate.yml", id=2003)
++        )
++
++    def test_release_gate_success_from_workflow_dispatch_does_not_grant(self):
++        self._assert_never_grants(release_run(event="workflow_dispatch", id=2004))
++
++
++class BlockTests(TestEnvContext):
++    def test_candidate_with_skipped_gate_job_blocks(self):
++        # CEO_SOTA_DISABLE=1 skips the job while the RUN stays green.
++        run = release_run(jobs=[gate_job(conclusion="skipped")])
++        result = decide(payload(self_run(), run), ctx())
++        self.assertEqual(BLOCK, result.decision)
++        self.assertEqual("gate-job-skipped", result.reason)
++
++    def test_candidate_with_failed_gate_job_blocks(self):
++        run = release_run(conclusion="failure", jobs=[gate_job(conclusion="failure")])
++        result = decide(payload(self_run(), run), ctx())
++        self.assertEqual(BLOCK, result.decision)
++        self.assertEqual("gate-job-failure", result.reason)
++        proc = run_cli(json.dumps(payload(self_run(), run)))
++        self.assertEqual(EXIT_BLOCK, proc.returncode)
++        self.assertIn("decision=BLOCK", proc.stdout)
++
++    def test_no_candidate_past_the_deadline_blocks(self):
++        result = decide(payload(self_run()), ctx(now=NOW_PAST_DEADLINE))
++        self.assertEqual(BLOCK, result.decision)
++        self.assertEqual("deadline-exceeded:candidate-not-yet-created", result.reason)
++
++    def test_malformed_payloads_block(self):
++        for body in ([], "workflow_runs", {"message": "Bad credentials"},
++                     {"workflow_runs": {"nope": 1}}, {"workflow_runs": ["not-an-object"]}):
++            result = decide(body, ctx())
++            self.assertEqual(BLOCK, result.decision, body)
++            self.assertEqual("malformed-payload", result.reason, body)
++        proc = run_cli("{not json at all")
++        self.assertEqual(EXIT_BLOCK, proc.returncode)
++        self.assertIn("reason=malformed-payload", proc.stdout)
++
++
++class WaitTests(TestEnvContext):
++    def test_empty_run_list_in_time_waits(self):
++        result = decide(payload(), ctx())
++        self.assertEqual(WAIT, result.decision)
++        self.assertEqual("candidate-not-yet-created", result.reason)
++        proc = run_cli(json.dumps(payload()))
++        self.assertEqual(EXIT_WAIT, proc.returncode)
++
++    def test_candidate_without_the_gate_job_yet_waits(self):
++        # Eventual consistency of the jobs endpoint: absent list AND empty list.
++        other_job = {"name": "publish-release", "status": "queued", "conclusion": None}
++        for run in (release_run(jobs=[]), release_run(jobs=[other_job])):
++            body = payload(self_run(), run)
++            result = decide(body, ctx())
++            self.assertEqual(WAIT, result.decision)
++            self.assertEqual("gate-job-not-materialised", result.reason)
++        no_jobs_key = release_run()
++        del no_jobs_key["jobs"]
++        result = decide(payload(self_run(), no_jobs_key), ctx())
++        self.assertEqual(WAIT, result.decision)
++        self.assertEqual("gate-job-not-materialised", result.reason)
++
++    def test_running_gate_job_waits(self):
++        # Kills `conclusion != "failure"` implementations.
++        run = release_run(
++            status="in_progress",
++            conclusion=None,
++            jobs=[gate_job(conclusion=None, status="in_progress")],
++        )
++        result = decide(payload(self_run(), run), ctx())
++        self.assertEqual(WAIT, result.decision)
++        self.assertEqual("gate-job-not-concluded", result.reason)
++        expired = decide(payload(self_run(), run), ctx(now=NOW_PAST_DEADLINE))
++        self.assertEqual(BLOCK, expired.decision)
++
++
++class FreshnessTests(TestEnvContext):
++    def test_success_predating_the_asking_run_does_not_grant(self):
++        # delete + re-tag of the SAME sha: the OLD green run is still listed.
++        stale = release_run(id=900, created_at=STALE_CREATED_AT)
++        body = payload(self_run(), stale)
++        result = decide(body, ctx())
++        self.assertNotEqual(GRANT, result.decision)
++        self.assertEqual(WAIT, result.decision)
++        self.assertEqual("stale-candidates-only", result.reason)
++        self.assertEqual(1, result.facts["stale_candidates"])
++        self.assertEqual(BLOCK, decide(body, ctx(now=NOW_PAST_DEADLINE)).decision)
++
++    def test_fresh_rerun_wins_over_the_stale_success(self):
++        stale = release_run(id=900, created_at=STALE_CREATED_AT)
++        fresh_failure = release_run(
++            id=901, created_at=CANDIDATE_CREATED_AT,
++            conclusion="failure", jobs=[gate_job(conclusion="failure")],
++        )
++        result = decide(payload(self_run(), stale, fresh_failure), ctx())
++        self.assertEqual(BLOCK, result.decision)
++        self.assertEqual("gate-job-failure", result.reason)
++
++
++class UsageTests(TestEnvContext):
++    """A parameter that changes the verdict has no default (FIXER pass, W0).
++
++    ``--self-created-at`` used to be optional with ``default=None`` — and
++    ``None`` DISABLES the freshness floor, so omitting one flag turned the
++    exact stale-success payload FreshnessTests rejects into a GRANT. Same
++    class as F2's ``--today`` in ``_release_bump_sites.py``: the input that
++    flips the verdict must be explicit or the run must refuse.
++    """
++
++    def _stale_only_body(self):
++        # The delete+re-tag payload: ONLY a success predating the asking run.
++        return json.dumps(payload(self_run(), release_run(id=900, created_at=STALE_CREATED_AT)))
++
++    def test_omitting_self_created_at_refuses_instead_of_granting(self):
++        proc = run_cli(self._stale_only_body(), self_created_at=None)
++        self.assertNotEqual(
++            EXIT_GRANT, proc.returncode,
++            "omitting --self-created-at must never GRANT a stale success:\n" + proc.stdout,
++        )
++        self.assertEqual(EXIT_USAGE, proc.returncode, proc.stdout + proc.stderr)
++        self.assertIn("--self-created-at", proc.stderr)
++
++    def test_empty_self_created_at_is_a_usage_error_not_a_disabled_leg(self):
++        # required=True alone would still let `--self-created-at ""` slip
++        # through the old `if args.self_created_at:` truthiness parse-skip.
++        proc = run_cli(self._stale_only_body(), self_created_at="")
++        self.assertNotEqual(EXIT_GRANT, proc.returncode, proc.stdout)
++        self.assertEqual(EXIT_USAGE, proc.returncode, proc.stdout + proc.stderr)
++
++
++class ContextLayerTests(TestEnvContext):
++    """W0 re-pass r2 P2: the CLI closed the fail-open default, but
++    ``GateContext.self_created_at_epoch`` kept ``= None`` one layer down, and
++    ``freshness_floor`` mapped None to "leg silently off" — any in-process
++    caller of ``decide()`` reproduced the exact GRANT-on-stale-success the
++    UsageTests prove the CLI refuses. The doctrine has to hold at EVERY
++    construction surface, not just argparse."""
++
++    def _stale_only_payload(self):
++        return payload(self_run(), release_run(id=900, created_at=STALE_CREATED_AT))
++
++    def test_gate_context_requires_self_created_at_epoch(self):
++        # No default: an in-process caller that forgets the field cannot
++        # construct a context at all — same failure mode as omitting the flag.
++        with self.assertRaises(TypeError):
++            GateContext(
++                tag=TAG,
++                head_sha=HEAD_SHA,
++                now_epoch=NOW,
++                deadline_epoch=DEADLINE_OPEN,
++            )
++
++    def test_explicit_none_fails_loud_instead_of_disarming_the_leg(self):
++        # NamedTuple cannot stop an explicit None; it must refuse loudly,
++        # never decide with the delete+re-tag freshness leg silently off.
++        disarmed = GateContext(
++            tag=TAG,
++            head_sha=HEAD_SHA,
++            now_epoch=NOW,
++            self_created_at_epoch=None,
++            deadline_epoch=DEADLINE_OPEN,
++        )
++        with self.assertRaises(ValueError):
++            decide(self._stale_only_payload(), disarmed)
++
++
++if __name__ == "__main__":
++    unittest.main()
+diff --git a/.claude/scripts/tests/test_debate_converge.py b/.claude/scripts/tests/test_debate_converge.py
+index f43e107..624fe9d 100644
+--- a/.claude/scripts/tests/test_debate_converge.py
++++ b/.claude/scripts/tests/test_debate_converge.py
+@@ -343,6 +343,15 @@ class TestMaxRoundsHardStop(unittest.TestCase):
+                     if risks is not None else f"- unique risk round {r}\n")
+             (d / "a.md").write_text(f"## Risks\n\n{body}", encoding="utf-8")
+ 
++    def _seed_pair(self, round_num: int, prev_risks, cur_risks) -> None:
++        """Populate exactly round N-1 and N with the given risk sets."""
++        base = self.tmp / "PLAN-999" / "debate"
++        for r, risks in ((round_num - 1, prev_risks), (round_num, cur_risks)):
++            d = base / f"round-{r}"
++            d.mkdir(parents=True, exist_ok=True)
++            body = "\n".join(f"- {x}" for x in risks) + "\n"
++            (d / "a.md").write_text(f"## Risks\n\n{body}", encoding="utf-8")
++
+     def test_module_exports_max_rounds_constant(self):
+         self.assertTrue(hasattr(dc, "MAX_ROUNDS"))
+         self.assertEqual(dc.MAX_ROUNDS, 5)
+@@ -363,17 +372,47 @@ class TestMaxRoundsHardStop(unittest.TestCase):
+         self.assertEqual(r["outcome"], "diverged")
+         self.assertEqual(r["round_number"], 4)
+ 
+-    def test_max_rounds_overrides_jaccard(self):
+-        # Identical risks -> Jaccard=1.0 but terminal outcome wins.
++    def test_ceiling_convergence_is_convergence(self):
++        # PLAN-169 W2.9(iii), PROTOCOL §12.4: Jaccard >= threshold at the
++        # MAX_ROUNDS ceiling IS convergence — the old contract forced
++        # convergence_met=False here, masking a met threshold as impasse.
++        # The ceiling still terminates (max_rounds_reached stays True for
++        # orchestrators); only the mislabel is gone.
+         self._seed(5, ["alpha", "beta", "gamma"])
+         r = dc.compute_convergence(self.tmp, "PLAN-999", 5, threshold=0.7)
+         self.assertEqual(r["jaccard_score"], 1.0)
+         self.assertEqual(r["jaccard"], 1.0)
+         self.assertTrue(r["max_rounds_reached"])
+-        self.assertEqual(r["outcome"], "max_rounds_reached")
+-        self.assertFalse(r["convergence_met"])
+-        self.assertFalse(r["converged"])
++        self.assertEqual(r["outcome"], "converged")
++        self.assertTrue(r["convergence_met"])
++        self.assertTrue(r["converged"])
+         self.assertFalse(r["red_team_needed"])
++        self.assertEqual(r["resolved_count"], 0)
++        self.assertEqual(r["novel_count"], 0)
++
++    def test_resolved_vs_novel_reported_separately(self):
++        # PLAN-169 W2.9(ii): a risk leaving the set (cured) and a risk
++        # entering it are reported apart from the Jaccard that conflates
++        # them, so the CEO verdict can see cure vs true divergence.
++        self._seed_pair(3, ["a", "b", "c"], ["b", "c", "d"])
++        r = dc.compute_convergence(self.tmp, "PLAN-999", 3, threshold=0.99)
++        self.assertEqual(r["resolved_count"], 1)
++        self.assertEqual(r["novel_count"], 1)
++        self.assertEqual(r["resolved_risks"], ["a"])
++        self.assertEqual(r["novel_risks"], ["d"])
++
++    def test_risks_heading_without_bullets_fails_loud(self):
++        # PLAN-169 W2.9(i): '## Risks' present + zero bullets = input-parse
++        # failure, fail-closed (exit 4 via CLI), never a silent zero.
++        self._seed(3, ["a"])
++        bad = self.tmp / "PLAN-999" / "debate" / "round-3" / "critic-a.md"
++        bad.write_text("## Risks\n\n**R-1** prose-style, no bullets.\n",
++                       encoding="utf-8")
++        with self.assertRaises(dc.RisksSectionEmptyError):
++            dc.compute_convergence(self.tmp, "PLAN-999", 3, threshold=0.7)
++        rc = dc.main(["--plan", "PLAN-999", "--round", "3",
++                      "--plans-root", str(self.tmp)])
++        self.assertEqual(rc, 4)
+ 
+     def test_convergence_at_round_3_before_max(self):
+         self._seed(3, ["r1", "r2", "r3"])
+diff --git a/.claude/scripts/tests/test_inject_agent_context_exact_resolution.py b/.claude/scripts/tests/test_inject_agent_context_exact_resolution.py
+new file mode 100644
+index 0000000..5bc1c2f
+--- /dev/null
++++ b/.claude/scripts/tests/test_inject_agent_context_exact_resolution.py
+@@ -0,0 +1,93 @@
++"""PLAN-169 W2.3 — inject-agent-context.sh EXACT resolution ladder tests.
++
++The pre-W2.3 matcher used awk ``index()`` substring search and delivered
++"Government Cybersecurity Engineer" for "Security Engineer" in live use
++(the PLAN-169 debate, ledger C.1). The ladder under test:
++
++    1. EXACT persona-heading match (component equality, never substring)
++    2. explicit core-archetype -> .claude/agents/<slug>.md table
++       (slugs not derivable: "DevOps Engineer" -> devops.md)
++    3. SKILL-MAP-row-only role -> synthesized profile, labeled
++    4. unknown name -> hard error exit 3 (fail-closed, never a warning)
++
++Plus the [codex r12-P2] grammar extension: real roster names carry "/"
++and "&" ("UI/UX Lead", "Accessibility & i18n Engineer") and must pass
++input validation (old charset rejected them with exit 2).
++"""
++
++from __future__ import annotations
++
++import os
++import subprocess
++import unittest
++from pathlib import Path
++
++REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
++SCRIPT = REPO_ROOT / ".claude" / "scripts" / "inject-agent-context.sh"
++
++
++def _run(*args, env_extra=None):
++    env = {**os.environ}
++    if env_extra:
++        env.update(env_extra)
++    return subprocess.run(
++        ["bash", str(SCRIPT), *args],
++        capture_output=True,
++        text=True,
++        timeout=15,
++        env=env,
++    )
++
++
++class ExactResolutionLadderTest(unittest.TestCase):
++
++    def test_security_engineer_never_resolves_by_substring(self):
++        # The C.1 defect: "security engineer" is a SUBSTRING of
++        # "cybersecurity engineer". Exact/component matching must never
++        # deliver a Government/Cyber-prefixed persona for this name.
++        result = _run("Security Engineer", "audit")
++        self.assertEqual(result.returncode, 0, result.stderr)
++        self.assertIn("## AGENT PROFILE", result.stdout)
++        self.assertNotIn("Government Cybersecurity", result.stdout)
++        self.assertNotIn("Cybersecurity Engineer", result.stdout)
++
++    def test_devops_engineer_resolves_via_native_table(self):
++        # team.md has no per-persona headings for DevOps Engineer; the
++        # explicit table must route to .claude/agents/devops.md (rung 2).
++        result = _run("DevOps Engineer", "ci work")
++        self.assertEqual(result.returncode, 0, result.stderr)
++        self.assertIn(".claude/agents/devops.md", result.stdout)
++
++    def test_vp_engineering_gets_synthesized_profile(self):
++        # "VP Engineering" exists ONLY as a SKILL MAP row — no persona
++        # section, no agents/ file. Rung 3 synthesizes from the row and
++        # says so explicitly.
++        result = _run("VP Engineering", "design review")
++        self.assertEqual(result.returncode, 0, result.stderr)
++        self.assertIn("SYNTHESIZED FROM THE SKILL MAP ROW", result.stdout)
++        self.assertIn("architecture-decisions", result.stdout)
++
++    def test_unknown_name_fails_closed_exit_3(self):
++        result = _run("Fictitious Nonexistent Person", "anything")
++        self.assertEqual(result.returncode, 3)
++        self.assertIn("resolves to NOTHING", result.stderr)
++
++    def test_grammar_accepts_slash_and_ampersand_names(self):
++        # Roster-real names must pass INPUT validation (not exit 2). They
++        # may still fail RESOLUTION (exit 3) in a backend-only checkout —
++        # both outcomes are fine; the grammar rejection is not.
++        for name in ("UI/UX Lead", "Accessibility & i18n Engineer"):
++            result = _run(name, "frontend work")
++            self.assertNotEqual(
++                result.returncode, 2,
++                f"grammar rejected roster-real name {name!r}: {result.stderr}",
++            )
++
++    def test_grammar_still_rejects_metacharacters(self):
++        for bad in ("$(rm x)", "a;b", "a|b", "../etc", "a\nb"):
++            result = _run(bad, "x")
++            self.assertEqual(result.returncode, 2, f"accepted {bad!r}")
++
++
++if __name__ == "__main__":
++    unittest.main(verbosity=2)
+diff --git a/.claude/scripts/tests/test_pair_rail_inputs_manifest_bump_guard.py b/.claude/scripts/tests/test_pair_rail_inputs_manifest_bump_guard.py
+new file mode 100644
+index 0000000..fc2ea5f
+--- /dev/null
++++ b/.claude/scripts/tests/test_pair_rail_inputs_manifest_bump_guard.py
+@@ -0,0 +1,368 @@
++#!/usr/bin/env python3
++# ============================================================================
++# PLAN-166 / W0 item 5 — guard: NO bump-touched file may enter
++# `.claude/governance/pair-rail-inputs-hash-manifest.txt`.
++# ============================================================================
++"""The exclusion of the release-bump surfaces from the pair-rail inputs
++manifest is DELIBERATE. It is not the blindness.
++
++THE DECISION THIS TEST PINS
++---------------------------
++`validate-pair-rail-verdict.py` recomputes `inputs_hash` by `git hash-object`
++over every path listed in `pair-rail-inputs-hash-manifest.txt` and asserts it
++equals the `inputs_hash` recorded in the signed verdict. That equality is a
++REPLAY defence: it proves the verdict under review was produced over the same
++trust-chain bytes that are on disk now.
++
++Adding a bump-touched file (`VERSION`, `npm/package.json`, the four
++`last-reviewed:` stamps, the two generated plugin manifests, ...) to that
++manifest would make EVERY LEGITIMATE `release.sh bump` change `inputs_hash`.
++The verdict would stop replaying the moment the version moved — which destroys
++the only property the manifest exists to provide. So the bump surfaces stay
++OUT, on purpose.
++
++WHY THAT IS NOT THE step-15 BLINDNESS (refutes review r3 P1, plan §W0 item 5)
++-----------------------------------------------------------------------------
++F2's finding was that a post-preflight bump commit is INVISIBLE to release.yml
++step 15 precisely because none of the bump files is in this manifest. The cure
++is NOT to widen the manifest — that trades a narrow blind spot for a broken
++replay. The cure lands on two other rails, both in PLAN-166:
++
++  * F2's same-tree no-op removes the D+1 commit at the source (there is no
++    extra commit to be blind to);
++  * `tag()`'s restricted-delta assert (local driver AND server-side in
++    release.yml, unconditional for RC and stable) kills any delta between the
++    reviewed parent and the tagged commit that is not on the verdict's pinned
++    allowlist.
++
++CONTRACT OF THIS FILE
++---------------------
++This test FAILS if a bump path ENTERS the manifest, and the failure message
++carries the reasoning above — so the next maintainer who "fixes" the step-15
++blind spot by pasting `VERSION` into the manifest is stopped, and told why.
++
++Read-only by construction: the live manifest is never mutated here (a mutation
++would open a new entry inside the W1 ceremony scope). Positive controls are
++run against SYNTHETIC manifests in a tempdir.
++
++DERIVATIONS (no hand-typed closed sets — PLAN-166 rule: derive from the
++authority, never recall)
++  * manifest path      <- the `--inputs-hash-paths-file` argument as it appears
++                          in `.github/workflows/*.yml` (the consumer).
++  * manifest entries   <- `compute_inputs_hash()` of the real validator,
++                          EXECUTED with `git hash-object` stubbed; the paths it
++                          feeds the stub ARE the authority's parse result.
++  * bump table         <- `_release_bump_sites.site_paths()`.
++  * generated pair     <- `build-plugin.write_manifest_files()` RUN into a
++                          tempdir; the filenames it produces are observed, not
++                          recalled. Deriving only from the bump module would
++                          leave the guard blind to these two, which the driver
++                          regenerates via `build-plugin.py --write-manifests`.
++"""
++
++from __future__ import annotations
++
++import importlib.util
++import re
++import sys
++import tempfile
++import types
++import unittest
++from pathlib import Path
++from typing import List
++from unittest import mock
++
++# Env-hygiene gate (check-test-env-hygiene.py): test classes subclass
++# TestEnvContext, not bare unittest.TestCase, so HOME / CLAUDE_PROJECT_DIR /
++# os.environ / sys.path are snapshot-restored around every test.
++_HOOKS_DIR = Path(__file__).resolve().parents[2] / "hooks"
++if str(_HOOKS_DIR) not in sys.path:
++    sys.path.insert(0, str(_HOOKS_DIR))
++
++from _lib.testing import TestEnvContext  # noqa: E402
++
++REPO = Path(__file__).resolve().parents[3]
++
++
++def _rel(p: Path) -> str:
++    """Repo-relative display path; never raises inside a failure message."""
++    try:
++        return p.resolve().relative_to(REPO.resolve()).as_posix()
++    except ValueError:
++        return str(p)
++
++
++_VALIDATOR_SRC = REPO / ".github" / "scripts" / "validate-pair-rail-verdict.py"
++_BUMP_SRC = REPO / ".claude" / "scripts" / "local" / "_release_bump_sites.py"
++_BUILD_PLUGIN_SRC = REPO / "scripts" / "build-plugin.py"
++
++
++def _load(src: Path, name: str):
++    """Import a dashed/dotted script by path WITHOUT touching sys.modules.
++
++    sys.modules rebinding is not CI-safe (S265 lesson); these three scripts are
++    flat, import nothing relative, so exec_module on an unregistered module is
++    enough.
++    """
++    if not src.is_file():
++        raise AssertionError(
++            "authority missing: %s — this guard derives its reference list "
++            "from that file; a rename must update this test, never silently "
++            "disable it" % src
++        )
++    spec = importlib.util.spec_from_file_location(name, str(src))
++    if spec is None or spec.loader is None:
++        raise AssertionError("cannot build import spec for %s" % src)
++    mod = importlib.util.module_from_spec(spec)
++    spec.loader.exec_module(mod)
++    return mod
++
++
++VALIDATOR = _load(_VALIDATOR_SRC, "_ceo_t166_validate_pair_rail_verdict")
++BUMP = _load(_BUMP_SRC, "_ceo_t166_release_bump_sites")
++BUILD_PLUGIN = _load(_BUILD_PLUGIN_SRC, "_ceo_t166_build_plugin")
++
++_FLAG = "--inputs-hash-paths-file"
++
++
++def manifest_path_from_workflows() -> Path:
++    """The manifest path as the CONSUMER spells it (release.yml step 15)."""
++    wf_dir = REPO / ".github" / "workflows"
++    found = set()
++    for wf in sorted(wf_dir.glob("*.yml")):
++        text = wf.read_text(encoding="utf-8")
++        for m in re.finditer(re.escape(_FLAG) + r"\s+([^\s\\]+)", text):
++            found.add(m.group(1).strip("'\""))
++    if not found:
++        raise AssertionError(
++            "no workflow passes %s — either the pair-rail replay defence was "
++            "removed (a governance regression) or the flag was renamed; this "
++            "guard refuses to pass vacuously" % _FLAG
++        )
++    if len(found) != 1:
++        raise AssertionError(
++            "workflows disagree on the inputs manifest: %s" % sorted(found)
++        )
++    return REPO / sorted(found)[0]
++
++
++def manifest_entries(manifest: Path) -> List[str]:
++    """Parse `manifest` with the validator's OWN parser, executed.
++
++    `compute_inputs_hash()` is run with the module-level `subprocess` reference
++    swapped for a stub, so no `git hash-object` ever runs; the argv the stub
++    receives is the authority's parse result. If the validator changes its
++    comment/blank-line rule, this guard follows it for free instead of drifting
++    against a re-implementation.
++    """
++    seen: List[str] = []
++
++    def _fake_run(cmd, **kwargs):
++        if list(cmd[:2]) != ["git", "hash-object"]:
++            raise AssertionError("unexpected subprocess call: %r" % (cmd,))
++        seen.append(cmd[2])
++        return types.SimpleNamespace(returncode=0, stdout="0" * 40 + "\n", stderr="")
++
++    with mock.patch.object(VALIDATOR, "subprocess", types.SimpleNamespace(run=_fake_run)):
++        VALIDATOR.compute_inputs_hash(REPO, manifest)
++    return seen
++
++
++def generated_manifest_paths() -> List[str]:
++    """Run the generator; observe which manifests it writes (never recall)."""
++    with tempfile.TemporaryDirectory(prefix="ceo-t166-gen-") as td:
++        dest = Path(td) / "out"
++        BUILD_PLUGIN.write_manifest_files(dest)
++        names = sorted(p.name for p in dest.iterdir() if p.is_file())
++    if not names:
++        raise AssertionError("build-plugin wrote no manifests — derivation broken")
++    rel = BUILD_PLUGIN.MANIFESTS.resolve().relative_to(REPO.resolve()).as_posix()
++    return [rel + "/" + n for n in names]
++
++
++def bump_reference_paths() -> List[str]:
++    """Every path a `release.sh bump` may rewrite: module table + generated."""
++    out: List[str] = list(BUMP.site_paths(include_generated=False))
++    for p in generated_manifest_paths():
++        if p not in out:
++            out.append(p)
++    return out
++
++
++def offenders(manifest: Path, reference: List[str]) -> List[str]:
++    """Bump paths present in `manifest`, per the authority's parse."""
++    return sorted(set(manifest_entries(manifest)) & set(reference))
++
++
++_WHY = (
++    "The exclusion is DELIBERATE, not the step-15 blind spot.\n"
++    "  Any bump path inside the inputs manifest makes `inputs_hash` change on\n"
++    "  every legitimate version bump, so the signed verdict stops replaying —\n"
++    "  the single property the manifest exists to provide.\n"
++    "  The F2 blind spot is closed elsewhere: (a) the same-tree no-op removes\n"
++    "  the D+1 bump commit, (b) tag()'s restricted-delta assert (driver AND\n"
++    "  release.yml, RC and stable alike) rejects any parent->tag delta outside\n"
++    "  the verdict's pinned allowlist.\n"
++    "  If you got here while widening step-15 coverage: widen it on those two\n"
++    "  rails, not here. See PLAN-166 W0 item 5."
++)
++
++
++class ManifestPathDerivation(TestEnvContext):
++    def test_manifest_path_comes_from_the_consuming_workflow(self):
++        manifest = manifest_path_from_workflows()
++        self.assertTrue(
++            manifest.is_file(),
++            "release.yml passes %s %s but that file does not exist — step 15 "
++            "would INFRA-fail" % (_FLAG, manifest),
++        )
++
++
++class ReferenceListDerivation(TestEnvContext):
++    """The reference list must not be able to go blind silently."""
++
++    def test_generator_written_manifests_are_in_the_reference(self):
++        generated = generated_manifest_paths()
++        ref = bump_reference_paths()
++        for path in generated:
++            self.assertIn(
++                path,
++                ref,
++                "build-plugin.py writes %s during the bump phase but the guard's "
++                "reference list does not contain it — the guard is blind to it "
++                "(plan W0 item 5: 'derivar so do modulo deixaria o guard cego')"
++                % path,
++            )
++
++    def test_bump_module_export_agrees_with_the_generator(self):
++        """`site_paths(include_generated=True)` must equal the observed union.
++
++        Not a test of the bump module's taste — a test that THIS guard's two
++        derivation routes agree. If build-plugin starts writing a third
++        manifest, or GENERATED_BY_BUMP is dropped, this fails loudly instead of
++        the guard quietly shrinking.
++        """
++        module_view = set(BUMP.site_paths(include_generated=True))
++        observed = set(bump_reference_paths())
++        self.assertEqual(
++            module_view,
++            observed,
++            "derivation routes disagree:\n"
++            "  only in _release_bump_sites.site_paths(include_generated=True): %s\n"
++            "  only in table+generator observation:                            %s"
++            % (
++                sorted(module_view - observed),
++                sorted(observed - module_view),
++            ),
++        )
++
++    def test_reference_is_non_empty_and_deduplicated(self):
++        ref = bump_reference_paths()
++        self.assertGreater(len(ref), 1, "reference list collapsed: %s" % ref)
++        self.assertEqual(len(ref), len(set(ref)), "duplicate in reference: %s" % ref)
++
++
++class LiveManifestGuard(TestEnvContext):
++    def test_no_bump_touched_file_is_listed_in_the_inputs_manifest(self):
++        manifest = manifest_path_from_workflows()
++        ref = bump_reference_paths()
++        entries = manifest_entries(manifest)
++        # INPUTS of the measurement, printed (a verdict-bearing check that hides
++        # its inputs is a licence to drift).
++        print(
++            "\n[T166-W0-5] manifest      : %s"
++            "\n[T166-W0-5] entries parsed: %d (by validate-pair-rail-verdict."
++            "compute_inputs_hash)"
++            "\n[T166-W0-5] bump reference: %d paths"
++            "\n%s"
++            % (
++                _rel(manifest),
++                len(entries),
++                len(ref),
++                "".join("[T166-W0-5]   - %s\n" % p for p in ref),
++            )
++        )
++        self.assertGreater(len(entries), 0, "manifest parsed to zero entries")
++        bad = sorted(set(entries) & set(ref))
++        self.assertEqual(
++            bad,
++            [],
++            "bump-touched path(s) found in %s: %s\n%s"
++            % (_rel(manifest), bad, _WHY),
++        )
++
++
++class PositiveControls(TestEnvContext):
++    """A green fixture is not proof of enforcement — plant the violation."""
++
++    def setUp(self):
++        super().setUp()
++        self._td = tempfile.TemporaryDirectory(prefix="ceo-t166-ctl-")
++        self.tmp = Path(self._td.name)
++        self.ref = bump_reference_paths()
++        self.addCleanup(self._td.cleanup)
++        # Vacuity guard: the fixture filler must NOT itself be a bump path, or
++        # the negative controls below would be green for the wrong reason.
++        filler = [ln for ln in self._HEADER.splitlines() if ln and not ln.startswith("#")]
++        self.assertEqual(
++            sorted(set(filler) & set(self.ref)),
++            [],
++            "fixture filler collides with the bump reference: %s" % filler,
++        )
++
++    def _write(self, body: str) -> Path:
++        p = self.tmp / "synthetic-manifest.txt"
++        p.write_text(body, encoding="utf-8")
++        return p
++
++    _HEADER = (
++        "# synthetic manifest (test fixture)\n"
++        "\n"
++        ".claude/hooks/check_pair_rail.py\n"
++        "SPEC/v1/audit-log.schema.md\n"
++    )
++
++    def test_control_every_single_bump_path_is_detected(self):
++        """Plant each reference path in turn; each must be caught."""
++        for path in self.ref:
++            with self.subTest(planted=path):
++                m = self._write(self._HEADER + path + "\n")
++                self.assertEqual(
++                    offenders(m, self.ref),
++                    [path],
++                    "planted %s but the guard did not flag it" % path,
++                )
++
++    def test_control_inline_trailing_comment_does_not_hide_an_entry(self):
++        planted = generated_manifest_paths()[0]
++        m = self._write(self._HEADER + planted + "   # regenerated by build-plugin\n")
++        self.assertEqual(
++            offenders(m, self.ref),
++            [planted],
++            "an entry with a trailing comment escaped the guard — the parse "
++            "must strip the comment BEFORE comparing",
++        )
++
++    def test_control_clean_synthetic_manifest_is_green(self):
++        """Negative control: the detector is not simply always-red."""
++        m = self._write(self._HEADER)
++        self.assertEqual(offenders(m, self.ref), [])
++
++    def test_control_commented_out_bump_path_is_not_flagged(self):
++        """Over-sensitivity control: a commented line is not an entry.
++
++        Mirrors the authority's own parse (`line.split('#', 1)[0].strip()`),
++        which this guard executes rather than re-implements.
++        """
++        planted = self.ref[0]
++        m = self._write(self._HEADER + "# " + planted + "\n\n   \n")
++        self.assertEqual(
++            offenders(m, self.ref),
++            [],
++            "a COMMENTED bump path was flagged as an entry — the guard is not "
++            "using the validator's parse",
++        )
++
++
++if __name__ == "__main__":
++    sys.exit(0 if unittest.main(exit=False).result.wasSuccessful() else 1)
+diff --git a/.claude/scripts/tests/test_release_bump_sites.py b/.claude/scripts/tests/test_release_bump_sites.py
+new file mode 100644
+index 0000000..d2aee18
+--- /dev/null
++++ b/.claude/scripts/tests/test_release_bump_sites.py
+@@ -0,0 +1,1286 @@
++#!/usr/bin/env python3
++"""PLAN-166 W0 / F2 + F6 — the release driver, its site table and its tag guards.
++
++What is being pinned here, and why each pin exists:
++
++* **AC-1 (F2).** `bump --stable` on a tree already at the target must write
++  NOTHING. Not "must not commit" — must not WRITE. The old behaviour re-dated
++  four `last-reviewed:` stamps with `date.today()`, so on D+1 of the ADR-103
++  hold the phase dirtied the tree, committed AFTER the preflight had proved CI
++  green for a different SHA, and `tag()` signed that commit. `--today` is
++  passed EXPLICITLY as D and D+1 at both layers (module and driver), because a
++  test that lets the code pick the date cannot see the bug.
++* The escape hatch for a real re-review (`--restamp`) must survive the fast
++  path, and must refuse to move a review stamp without the review ack.
++* The `--dry-run` restore list must be DERIVED from the site table. The
++  regression is concrete and has happened (S273): the writer grows a site, the
++  hand-kept restore list does not, and the dry-run leaves debris. It is proven
++  by GROWING the table in the fixture repo and checking the dry-run still
++  restores cleanly.
++* The tag guards must run for RC **and** stable, and must distinguish "could
++  not talk to origin" from "HEAD is not on main" — a single merged message
++  would let an offline operator read a network error as a governance verdict.
++
++Every fixture repo is a throwaway git repo under pytest's tmp_path with its
++own HOME/GNUPGHOME in the SUBPROCESS environment only; `os.environ` of the
++test process is never mutated and the real repo is never touched.
++"""
++
++from __future__ import annotations
++
++import hashlib
++import importlib.util
++import json
++import os
++import re
++import shutil
++import subprocess
++import sys
++from pathlib import Path
++from typing import Dict, List, Optional, Sequence
++
++import pytest
++
++REPO_ROOT = Path(__file__).resolve().parents[3]
++LOCAL = REPO_ROOT / ".claude" / "scripts" / "local"
++DRIVER_SRC = LOCAL / "release.sh"
++SITES_SRC = LOCAL / "_release_bump_sites.py"
++GUARD_SRC = LOCAL / "_release_tag_guard.py"
++
++D0 = "2026-08-04"
++D1 = "2026-08-05"  # D+1 — the ADR-103 hold guarantees this scenario
++D2 = "2026-08-06"
++
++
++def _load(path: Path, name: str):
++    spec = importlib.util.spec_from_file_location(name, str(path))
++    assert spec and spec.loader, path
++    mod = importlib.util.module_from_spec(spec)
++    spec.loader.exec_module(mod)
++    return mod
++
++
++bump_sites = _load(SITES_SRC, "_release_bump_sites_under_test")
++tag_guard = _load(GUARD_SRC, "_release_tag_guard_under_test")
++
++
++# ---------------------------------------------------------------------------
++# helpers
++# ---------------------------------------------------------------------------
++def _env(home: Path) -> Dict[str, str]:
++    """A subprocess environment that cannot reach the real HOME or repo."""
++    env = dict(os.environ)
++    for key in ("CLAUDE_PROJECT_DIR", "GIT_DIR", "GIT_WORK_TREE"):
++        env.pop(key, None)
++    env.update(
++        {
++            "HOME": str(home),
++            "GNUPGHOME": str(home / "gnupg"),
++            "GIT_CONFIG_GLOBAL": str(home / "gitconfig"),
++            "GIT_CONFIG_SYSTEM": os.devnull,
++            "GIT_AUTHOR_NAME": "Release Test",
++            "GIT_AUTHOR_EMAIL": "release-test@example.invalid",
++            "GIT_COMMITTER_NAME": "Release Test",
++            "GIT_COMMITTER_EMAIL": "release-test@example.invalid",
++            "LC_ALL": "C",
++        }
++    )
++    return env
++
++
++def run(args: Sequence[str], cwd: Path, env: Dict[str, str]):
++    return subprocess.run(
++        list(args),
++        cwd=str(cwd),
++        env=env,
++        stdout=subprocess.PIPE,
++        stderr=subprocess.PIPE,
++        universal_newlines=True,
++    )
++
++
++def git(repo: Path, env: Dict[str, str], *args: str) -> str:
++    proc = run(["git"] + list(args), repo, env)
++    assert proc.returncode == 0, "git %s failed: %s%s" % (
++        " ".join(args),
++        proc.stdout,
++        proc.stderr,
++    )
++    return proc.stdout.strip()
++
++
++def sha256_file(path: Path) -> str:
++    return hashlib.sha256(path.read_bytes()).hexdigest()
++
++
++def tree_fingerprint(repo: Path) -> Dict[str, str]:
++    """Content hash of every file the bump may touch (writes are visible here
++    even when they are later committed, unlike `git status`)."""
++    out: Dict[str, str] = {}
++    for rel in bump_sites.site_paths(include_generated=True):
++        full = repo / rel
++        if full.is_file():
++            out[rel] = sha256_file(full)
++    return out
++
++
++def index_and_worktree_clean(repo: Path, env: Dict[str, str]) -> None:
++    porcelain = git(repo, env, "status", "--porcelain")
++    assert porcelain == "", "working tree not clean:\n%s" % porcelain
++    staged = run(["git", "diff", "--cached", "--quiet"], repo, env)
++    assert staged.returncode == 0, "index not clean:\n%s" % git(
++        repo, env, "diff", "--cached", "--name-only"
++    )
++
++
++# --- fixture repo -----------------------------------------------------------
++STUB_VERIFY_COUNTS = """#!/usr/bin/env bash
++# Fixture stand-in for verify-counts.sh: version equality across the watched
++# doc/package sites. Deliberately simple — the real oracle is exercised by the
++# real repo, this one only has to be RIGHT about same-tree vs drifted-tree.
++#
++# It DOES model the support-window family (VERSION_SITES modes "minor" and
++# "prev_minor" on SECURITY.md/VERSIONING.md, added S293): the re-pass F-sites
++# finding was a fixture oracle WITHOUT these modes staying green over a writer
++# that never wrote them — the exact fixture!=live class. Derivation mirrors
++# the live oracle: prev = minor-1, empty (value-check skipped) at X.0.
++set -eu
++version="$(tr -d ' \\n' < VERSION)"
++minor="${version%.*}"
++maj="${minor%%.*}"
++min="${minor##*.}"
++prev=""
++if [ "$min" -gt 0 ]; then prev="${maj}.$((min - 1))"; fi
++rc=0
++for f in npm/package.json pyproject.toml INSTALL.md docs/ARCHITECTURE.md npm/README.md; do
++  [ -f "$f" ] || continue
++  if ! grep -q "$version" "$f"; then rc=1; fi
++done
++for f in SECURITY.md VERSIONING.md; do
++  [ -f "$f" ] || continue
++  cur_line="$(grep 'Current MINOR' "$f" || true)"
++  case "$cur_line" in
++    "") ;;
++    *"v${minor}.x"*) ;;
++    *) rc=1 ;;
++  esac
++  if [ -n "$prev" ]; then
++    prev_line="$(grep 'Previous MINOR' "$f" || true)"
++    case "$prev_line" in
++      "") ;;
++      *"v${prev}.x"*) ;;
++      *) rc=1 ;;
++    esac
++  fi
++done
++exit "$rc"
++"""
++
++STUB_BUILD_PLUGIN = '''#!/usr/bin/env python3
++import json, os, sys
++
++TARGETS = [".claude-plugin/plugin.json", ".claude-plugin/marketplace.json"]
++version = open("VERSION").read().strip()
++mode = sys.argv[1] if len(sys.argv) > 1 else "--check"
++if mode == "--write-manifests":
++    for t in TARGETS:
++        os.makedirs(os.path.dirname(t), exist_ok=True)
++        with open(t, "w") as fh:
++            json.dump({"version": version}, fh, indent=2)
++            fh.write("\\n")
++    sys.exit(0)
++if mode == "--check":
++    for t in TARGETS:
++        try:
++            with open(t) as fh:
++                data = json.load(fh)
++        except Exception:
++            sys.exit(1)
++        if data.get("version") != version:
++            sys.exit(1)
++    sys.exit(0)
++sys.exit(2)
++'''
++
++STUB_FRESHNESS = '''#!/usr/bin/env python3
++"""Fixture stand-in for check-canonical-doc-freshness.py.
++
++Mirrors the property that matters: the gate judges the VERSION on the stamp,
++never the date. That is what makes freezing the date safe.
++"""
++import os, re, sys
++
++version = open("VERSION").read().strip()
++bad = []
++for path in ("npm/README.md", "SBOM.md", "SECURITY.md", "VERSIONING.md"):
++    if not os.path.exists(path):
++        continue
++    m = re.search(r"last-reviewed: \\d{4}-\\d{2}-\\d{2} v(\\d+\\.\\d+\\.\\d+)",
++                  open(path).read())
++    if not m or m.group(1) != version:
++        bad.append(path)
++for path in bad:
++    print("  !!  stale stamp: %s" % path)
++sys.exit(1 if bad else 0)
++'''
++
++
++def _support_window(version: str):
++    """(current_minor, previous_minor) the way the live oracle derives them:
++    prev = minor-1, None (not derivable) at X.0."""
++    maj, mnr = (int(x) for x in version.split(".")[:2])
++    prev = "%d.%d" % (maj, mnr - 1) if mnr > 0 else None
++    return "%d.%d" % (maj, mnr), prev
++
++
++def write_sites(repo: Path, version: str, stamp_date: str) -> None:
++    (repo / "npm").mkdir(exist_ok=True)
++    (repo / "docs").mkdir(exist_ok=True)
++    stamp = "<!-- last-reviewed: %s v%s -->" % (stamp_date, version)
++    cur_minor, prev_minor = _support_window(version)
++    prev_sec = (
++        "- **Previous MINOR** (`v%s.x`) — security-only patches.\n" % prev_minor
++        if prev_minor
++        else ""
++    )
++    prev_ver = (
++        "| Previous MINOR (`v%s.x`) | Security-only patches |\n" % prev_minor
++        if prev_minor
++        else ""
++    )
++    (repo / "VERSION").write_text(version + "\n", encoding="utf-8")
++    (repo / "npm" / "package.json").write_text(
++        json.dumps({"name": "fixture", "version": version}, indent=2) + "\n",
++        encoding="utf-8",
++    )
++    (repo / "pyproject.toml").write_text(
++        '[project]\nname = "fixture"\nversion = "%s"\n' % version, encoding="utf-8"
++    )
++    (repo / "INSTALL.md").write_text(
++        "bash install.sh --pin v%s\n" % version, encoding="utf-8"
++    )
++    (repo / "docs" / "ARCHITECTURE.md").write_text(
++        "The framework is currently v%s, aligned with the repo VERSION.\n" % version,
++        encoding="utf-8",
++    )
++    (repo / "npm" / "README.md").write_text(
++        "# fixture\n\n%s\n" % stamp, encoding="utf-8"
++    )
++    (repo / "README.md").write_text("VERSION=%s\n" % version, encoding="utf-8")
++    (repo / "SBOM.md").write_text(
++        "%s\n\n**Version:** `%s` (tracks repo-root VERSION)\n" % (stamp, version),
++        encoding="utf-8",
++    )
++    (repo / "SECURITY.md").write_text(
++        "%s\n\n# Security\n\n"
++        "- **Current MINOR** (`v%s.x`) — full security support.\n"
++        "%s" % (stamp, cur_minor, prev_sec),
++        encoding="utf-8",
++    )
++    (repo / "VERSIONING.md").write_text(
++        "%s\n\n# Versioning\n\n"
++        "| Current MINOR (`v%s.x`) | Full support |\n"
++        "%s" % (stamp, cur_minor, prev_ver),
++        encoding="utf-8",
++    )
++    (repo / "CHANGELOG.md").write_text(
++        "# Changelog\n\n## [1.3.0]\n\n- fixture\n", encoding="utf-8"
++    )
++
++
++@pytest.fixture()
++def synth(tmp_path):
++    """A throwaway repo shaped like this one: real driver, real site module,
++    real tag guard, and stand-in oracles at the exact paths the driver calls."""
++    home = tmp_path / "home"
++    (home / "gnupg").mkdir(parents=True)
++    env = _env(home)
++    repo = tmp_path / "repo"
++    (repo / ".claude" / "scripts" / "local").mkdir(parents=True)
++    (repo / "scripts").mkdir(parents=True)
++    (repo / ".claude-plugin").mkdir(parents=True)
++
++    for src, dst in (
++        (DRIVER_SRC, repo / ".claude/scripts/local/release.sh"),
++        (SITES_SRC, repo / ".claude/scripts/local/_release_bump_sites.py"),
++        (GUARD_SRC, repo / ".claude/scripts/local/_release_tag_guard.py"),
++    ):
++        shutil.copy2(str(src), str(dst))
++
++    (repo / ".claude/scripts/local/verify-counts.sh").write_text(
++        STUB_VERIFY_COUNTS, encoding="utf-8"
++    )
++    (repo / "scripts/build-plugin.py").write_text(STUB_BUILD_PLUGIN, encoding="utf-8")
++    (repo / ".claude/scripts/check-canonical-doc-freshness.py").write_text(
++        STUB_FRESHNESS, encoding="utf-8"
++    )
++
++    write_sites(repo, "1.3.0", D0)
++    run([sys.executable, "scripts/build-plugin.py", "--write-manifests"], repo, env)
++
++    git(repo, env, "init", "-q")
++    git(repo, env, "symbolic-ref", "HEAD", "refs/heads/main")
++    git(repo, env, "config", "commit.gpgsign", "false")
++    git(repo, env, "config", "tag.gpgsign", "false")
++    git(repo, env, "add", "-A")
++    git(repo, env, "commit", "-q", "-m", "fixture: tree at 1.3.0")
++
++    origin = tmp_path / "origin.git"
++    git(repo, env, "init", "-q", "--bare", str(origin))
++    git(repo, env, "remote", "add", "origin", str(origin))
++    git(repo, env, "push", "-q", "origin", "main")
++    git(repo, env, "fetch", "-q", "origin", "main")
++
++    return {"repo": repo, "env": env, "origin": origin, "home": home}
++
++
++def driver(synth, *args: str):
++    return run(
++        ["bash", ".claude/scripts/local/release.sh"] + list(args),
++        synth["repo"],
++        synth["env"],
++    )
++
++
++def module(synth, *args: str):
++    return run(
++        [sys.executable, ".claude/scripts/local/_release_bump_sites.py"] + list(args),
++        synth["repo"],
++        synth["env"],
++    )
++
++
++def guard(synth, *args: str):
++    return run(
++        [sys.executable, ".claude/scripts/local/_release_tag_guard.py"] + list(args),
++        synth["repo"],
++        synth["env"],
++    )
++
++
++# ===========================================================================
++# the site table is a single source
++# ===========================================================================
++def test_print_sites_enumerates_the_table_and_the_generated_manifests():
++    own = bump_sites.site_paths()
++    both = bump_sites.site_paths(include_generated=True)
++    for stamp_site in ("npm/README.md", "SBOM.md", "SECURITY.md", "VERSIONING.md"):
++        assert stamp_site in own
++    assert "VERSION" in own
++    assert own == both[: len(own)]
++    assert both[len(own):] == bump_sites.GENERATED_BY_BUMP
++    # the manifests are NOT written by this module; they must not be silently
++    # folded into the writer's own list
++    assert ".claude-plugin/plugin.json" not in own
++
++
++def test_today_is_a_required_parameter_with_no_default(synth):
++    proc = module(synth, "bump", "--target", "1.3.0")
++    assert proc.returncode != 0
++    assert "--today" in proc.stderr
++    assert "required" in proc.stderr
++
++
++# ===========================================================================
++# AC-1 — the writer, at the module layer, with D and D+1 explicit
++# ===========================================================================
++@pytest.mark.parametrize("today", [D0, D1])
++def test_stamps_are_frozen_when_the_version_already_matches(synth, today):
++    before = tree_fingerprint(synth["repo"])
++    proc = module(synth, "bump", "--target", "1.3.0", "--today", today)
++    assert proc.returncode == 0, proc.stderr
++    assert tree_fingerprint(synth["repo"]) == before, (
++        "a stamp moved on --today=%s with the version unchanged" % today
++    )
++    assert "line untouched" in proc.stdout or "already at" in proc.stdout
++
++
++def test_a_real_version_change_still_writes_every_site(synth):
++    repo = synth["repo"]
++    write_sites(repo, "1.2.0", D0)
++    proc = module(synth, "bump", "--target", "1.3.0", "--today", D1)
++    assert proc.returncode == 0, proc.stderr
++    assert (repo / "VERSION").read_text() == "1.3.0\n"
++    assert '"version": "1.3.0"' in (repo / "npm/package.json").read_text()
++    assert 'version = "1.3.0"' in (repo / "pyproject.toml").read_text()
++    assert "--pin v1.3.0" in (repo / "INSTALL.md").read_text()
++    assert "currently v1.3.0, aligned" in (repo / "docs/ARCHITECTURE.md").read_text()
++    # README.md is NOT a version site: `VERSION=` never existed there
++    # (verify-counts removed its dead rule in S291 with the archaeology in a
++    # comment; the release checklist says the same). The fixture PLANTS the
++    # literal so this asserts the writer leaves it alone — a writer row for a
++    # site no oracle watches would rewrite a file every other surface
++    # declares out of scope.
++    assert (repo / "README.md").read_text() == "VERSION=1.2.0\n"
++    for stamped in ("npm/README.md", "SBOM.md", "SECURITY.md", "VERSIONING.md"):
++        text = (repo / stamped).read_text()
++        assert "last-reviewed: %s v1.3.0" % D1 in text, stamped
++    # the support window moved with the version: Current <- target minor,
++    # Previous <- the minor before it (the oracle's own derivation)
++    for doc in ("SECURITY.md", "VERSIONING.md"):
++        text = (repo / doc).read_text()
++        assert "v1.3.x" in text, doc
++        assert "v1.2.x" in text, doc
++        assert "v1.1.x" not in text, doc
++
++
++# ===========================================================================
++# the support window (re-pass F-sites P1): minor/prev_minor are ORACLE modes
++# (verify-counts VERSION_SITES, S293) — a writer without them dies MID-PHASE
++# at the driver's own verify-counts call on the next MINOR bump, outside
++# --dry-run, with no restore trap: a half-bumped dirty tree.
++# ===========================================================================
++def test_minor_bump_rewrites_the_support_window_sites(synth):
++    repo = synth["repo"]
++    proc = module(synth, "bump", "--target", "1.4.0", "--today", D2)
++    assert proc.returncode == 0, proc.stderr
++    for doc in ("SECURITY.md", "VERSIONING.md"):
++        text = (repo / doc).read_text()
++        assert "v1.4.x" in text, doc  # Current shifted to the target minor
++        assert "v1.3.x" in text, doc  # Previous = the old Current
++        assert "v1.2.x" not in text, doc  # the stale window is GONE
++
++
++def test_major_bump_shifts_current_and_leaves_previous_to_judgment(synth):
++    """X.0.0: Previous MINOR is NOT derivable from the target alone, and the
++    live oracle skips value-checking it there too (it derives prev="" at X.0).
++    The writer must neither guess nor die half-written: Current shifts,
++    Previous is left byte-identical, and the skip is ANNOUNCED — a silent
++    stale support window is the unwatched-doc class wearing a new hat."""
++    repo = synth["repo"]
++    proc = module(synth, "bump", "--target", "2.0.0", "--today", D2)
++    assert proc.returncode == 0, proc.stderr
++    for doc in ("SECURITY.md", "VERSIONING.md"):
++        text = (repo / doc).read_text()
++        assert "v2.0.x" in text, doc
++        assert "v1.2.x" in text, doc  # the old Previous, untouched
++    assert "release-train judgment" in proc.stdout, proc.stdout
++
++
++def test_minor_bump_survives_the_drivers_own_oracle_end_to_end(synth):
++    """The exact death the finding describes, end-to-end: TARGET_BASE moved to
++    the next MINOR, tree at the previous one. Before the fix the phase wrote
++    ten sites and then DIED at its own verify-counts call ("a site is
++    unpatched") — this asserts it reaches its commit with a clean tree."""
++    repo, env = synth["repo"], synth["env"]
++    drv = repo / ".claude/scripts/local/release.sh"
++    src = drv.read_text(encoding="utf-8")
++    m = re.search(r'(?m)^TARGET_BASE="(\d+\.\d+\.\d+)"$', src)
++    assert m, "driver has no bare-semver TARGET_BASE"
++    drv.write_text(
++        src.replace(m.group(0), 'TARGET_BASE="1.4.0"'), encoding="utf-8"
++    )
++    git(repo, env, "add", "-A")
++    git(repo, env, "commit", "-q", "-m", "fixture: retarget driver to 1.4.0")
++    head_before = git(repo, env, "rev-parse", "HEAD")
++
++    proc = driver(synth, "bump", "--stable", "--npm-readme-reviewed", "--today", D2)
++    assert proc.returncode == 0, proc.stdout + proc.stderr
++    assert "a site is unpatched" not in proc.stderr, proc.stderr
++    assert git(repo, env, "rev-parse", "HEAD") != head_before, "no commit made"
++    index_and_worktree_clean(repo, env)
++    assert (repo / "VERSION").read_text() == "1.4.0\n"
++    for doc in ("SECURITY.md", "VERSIONING.md"):
++        text = (repo / doc).read_text()
++        assert "v1.4.x" in text and "v1.3.x" in text, doc
++
++
++def test_writer_table_covers_every_mode_of_the_live_oracle():
++    """Structural closure of the F-sites class: every (doc, mode) pair in the
++    LIVE verify-counts VERSION_SITES must have a writer site — derived from
++    the authority's own source, never recalled (closed-set lesson). A pair
++    added to the oracle without a writer is a mid-bump death deferred to the
++    next bump that moves that mode."""
++    text = (LOCAL / "verify-counts.sh").read_text(encoding="utf-8")
++    entries = re.findall(
++        r'\(\s*"([^"]+)",\s*r\'[^\']*\',\s*"(full|minor|prev_minor)"\s*\)', text
++    )
++    modes = {mode for _doc, mode in entries}
++    # parser liveness first: all three modes must be found, or the regex above
++    # went stale and "nothing missing" would mean nothing at all
++    assert {"full", "minor", "prev_minor"} <= modes, entries
++    writer = {(path, kind) for path, kind, _rx in bump_sites._SITES}
++    writer_paths = {path for path, _kind in writer}
++    missing = []
++    for doc, mode in entries:
++        covered = doc in writer_paths if mode == "full" else (doc, mode) in writer
++        if not covered:
++            missing.append((doc, mode))
++    assert not missing, (
++        "verify-counts VERSION_SITES entries with NO writer site (the next "
++        "bump that moves these modes dies mid-phase): %s" % missing
++    )
++
++
++def test_restamp_moves_the_stamps_at_an_unchanged_version(synth):
++    repo = synth["repo"]
++    proc = module(synth, "bump", "--target", "1.3.0", "--today", D1, "--restamp")
++    assert proc.returncode == 0, proc.stderr
++    for stamped in ("npm/README.md", "SBOM.md", "SECURITY.md", "VERSIONING.md"):
++        assert "last-reviewed: %s v1.3.0" % D1 in (repo / stamped).read_text()
++
++
++# ===========================================================================
++# AC-1 — the same invariant at the DRIVER layer (the surface the Owner runs)
++# ===========================================================================
++@pytest.mark.parametrize("today", [D0, D1])
++def test_ac1_bump_stable_on_an_already_target_tree_writes_nothing(synth, today):
++    repo, env = synth["repo"], synth["env"]
++    head_before = git(repo, env, "rev-parse", "HEAD")
++    fp_before = tree_fingerprint(repo)
++
++    proc = driver(synth, "bump", "--stable", "--npm-readme-reviewed", "--today", today)
++    assert proc.returncode == 0, proc.stdout + proc.stderr
++    assert "no-op" in proc.stdout
++
++    assert git(repo, env, "rev-parse", "HEAD") == head_before, "a commit was made"
++    index_and_worktree_clean(repo, env)
++    assert tree_fingerprint(repo) == fp_before, "a file was written"
++    # the four oracles must have actually been consulted, and said so
++    for label in ("oracle 1/4", "oracle 2/4", "oracle 3/4", "oracle 4/4"):
++        assert label in proc.stdout, proc.stdout
++
++
++def test_the_noop_path_does_not_demand_the_npm_readme_ack(synth):
++    """A run that writes nothing asserts nothing: requiring the review ack
++    there would be asking the Owner to certify a review that is not happening."""
++    proc = driver(synth, "bump", "--stable", "--today", D1)
++    assert proc.returncode == 0, proc.stdout + proc.stderr
++    assert "no-op" in proc.stdout
++    index_and_worktree_clean(synth["repo"], synth["env"])
++
++
++def test_a_real_bump_still_commits(synth):
++    repo, env = synth["repo"], synth["env"]
++    write_sites(repo, "1.2.0", D0)
++    run([sys.executable, "scripts/build-plugin.py", "--write-manifests"], repo, env)
++    git(repo, env, "add", "-A")
++    git(repo, env, "commit", "-q", "-m", "fixture: back to 1.2.0")
++    head_before = git(repo, env, "rev-parse", "HEAD")
++
++    proc = driver(synth, "bump", "--stable", "--npm-readme-reviewed", "--today", D1)
++    assert proc.returncode == 0, proc.stdout + proc.stderr
++    assert git(repo, env, "rev-parse", "HEAD") != head_before
++    assert (repo / "VERSION").read_text() == "1.3.0\n"
++    index_and_worktree_clean(repo, env)
++    # and it warns that the tag phase will now require a push
++    assert "ancestry guard" in proc.stderr
++
++
++def test_restamp_requires_the_review_ack(synth):
++    proc = driver(synth, "bump", "--stable", "--restamp", "--today", D1)
++    assert proc.returncode != 0
++    assert "--npm-readme-reviewed" in proc.stderr
++    index_and_worktree_clean(synth["repo"], synth["env"])
++
++
++def test_restamp_survives_the_noop_fast_path(synth):
++    """Regression for the r14 hole: with the same version and four clean
++    oracles the predicate would return BEFORE any substitution, and --restamp
++    would be dead letter."""
++    repo, env = synth["repo"], synth["env"]
++    head_before = git(repo, env, "rev-parse", "HEAD")
++    proc = driver(
++        synth, "bump", "--stable", "--npm-readme-reviewed", "--restamp", "--today", D2
++    )
++    assert proc.returncode == 0, proc.stdout + proc.stderr
++    assert "no-op fast path DISABLED" in proc.stdout
++    assert "no-op: tree is already at" not in proc.stdout
++    assert git(repo, env, "rev-parse", "HEAD") != head_before
++    for stamped in ("npm/README.md", "SBOM.md", "SECURITY.md", "VERSIONING.md"):
++        assert "last-reviewed: %s v1.3.0" % D2 in (repo / stamped).read_text()
++
++
++# ===========================================================================
++# dry-run: index AND worktree clean, with a DERIVED restore list
++# ===========================================================================
++def test_dry_run_leaves_index_and_worktree_clean(synth):
++    repo, env = synth["repo"], synth["env"]
++    write_sites(repo, "1.2.0", D0)
++    run([sys.executable, "scripts/build-plugin.py", "--write-manifests"], repo, env)
++    git(repo, env, "add", "-A")
++    git(repo, env, "commit", "-q", "-m", "fixture: back to 1.2.0")
++    head_before = git(repo, env, "rev-parse", "HEAD")
++
++    proc = driver(
++        synth, "bump", "--stable", "--npm-readme-reviewed", "--dry-run", "--today", D1
++    )
++    assert proc.returncode == 0, proc.stdout + proc.stderr
++    assert "restored to HEAD" in proc.stdout
++    assert git(repo, env, "rev-parse", "HEAD") == head_before
++    index_and_worktree_clean(repo, env)
++    assert (repo / "VERSION").read_text() == "1.2.0\n"
++
++
++def test_dry_run_restores_a_site_the_table_grew(synth):
++    """S273 class, closed by derivation. The restore list is not typed: growing
++    the site table must automatically grow what the dry-run puts back."""
++    repo, env = synth["repo"], synth["env"]
++    (repo / "EXTRA.md").write_text("pinned v1.2.0\n", encoding="utf-8")
++    mod = repo / ".claude/scripts/local/_release_bump_sites.py"
++    marker = 'if __name__ == "__main__":'
++    src = mod.read_text(encoding="utf-8")
++    assert marker in src
++    mod.write_text(
++        src.replace(
++            marker,
++            '_SITES.append(("EXTRA.md", PLAIN, r"(pinned v)" + SEMVER))\n\n' + marker,
++        ),
++        encoding="utf-8",
++    )
++    write_sites(repo, "1.2.0", D0)
++    run([sys.executable, "scripts/build-plugin.py", "--write-manifests"], repo, env)
++    git(repo, env, "add", "-A")
++    git(repo, env, "commit", "-q", "-m", "fixture: extra site")
++
++    listed = module(synth, "print-sites", "--include-generated")
++    assert "EXTRA.md" in listed.stdout.split(), listed.stdout
++
++    proc = driver(
++        synth, "bump", "--stable", "--npm-readme-reviewed", "--dry-run", "--today", D1
++    )
++    assert proc.returncode == 0, proc.stdout + proc.stderr
++    index_and_worktree_clean(repo, env)
++    assert (repo / "EXTRA.md").read_text() == "pinned v1.2.0\n"
++
++
++def test_dry_run_restores_when_a_derived_site_is_absent_from_head(synth):
++    """W0 re-pass r2 P1: `git checkout -- <all paths>` is ATOMIC — one path
++    absent from HEAD (a file the bump CREATED, e.g. a plugin manifest on its
++    first appearance) aborts the whole restore, `|| true` swallowed the error,
++    and the trap still printed "restored to HEAD" over a fully dirty tree.
++    The restore must be per-path (checkout what HEAD has, remove what the
++    bump created) and the trap must ASSERT the postcondition, not the
++    attempt."""
++    repo, env = synth["repo"], synth["env"]
++    write_sites(repo, "1.2.0", D0)
++    git(repo, env, "rm", "-q", "-r", ".claude-plugin")
++    git(repo, env, "add", "-A")
++    git(repo, env, "commit", "-q", "-m", "fixture: 1.2.0 tree, no plugin manifests in HEAD")
++    head_before = git(repo, env, "rev-parse", "HEAD")
++
++    proc = driver(
++        synth, "bump", "--stable", "--npm-readme-reviewed", "--dry-run", "--today", D1
++    )
++    assert proc.returncode == 0, proc.stdout + proc.stderr
++    assert "restored to HEAD" in proc.stdout
++    assert git(repo, env, "rev-parse", "HEAD") == head_before
++    index_and_worktree_clean(repo, env)
++    assert (repo / "VERSION").read_text() == "1.2.0\n"
++    # the files the bump CREATED (not in HEAD) are gone again, not debris
++    assert not (repo / ".claude-plugin" / "plugin.json").exists()
++    assert not (repo / ".claude-plugin" / "marketplace.json").exists()
++
++
++# ===========================================================================
++# tag guard — ancestry
++# ===========================================================================
++def test_fetch_failure_and_non_ancestor_are_DISTINCT(synth):
++    repo, env = synth["repo"], synth["env"]
++
++    # (1) origin unreachable — the check did NOT run; this is not a verdict
++    git(repo, env, "remote", "set-url", "origin", str(repo.parent / "does-not-exist"))
++    broken = guard(synth, "ancestry", "--repo", str(repo))
++    assert broken.returncode == tag_guard.E_FETCH, broken.stderr
++    assert "could not talk to origin" in broken.stderr
++    assert "--offline-ack" in broken.stderr
++
++    # (2) origin reachable, HEAD unpushed — a real governance stop
++    git(repo, env, "remote", "set-url", "origin", str(synth["origin"]))
++    (repo / "late.txt").write_text("landed after CI\n", encoding="utf-8")
++    git(repo, env, "add", "late.txt")
++    git(repo, env, "commit", "-q", "-m", "unpushed")
++    stop = guard(synth, "ancestry", "--repo", str(repo))
++    assert stop.returncode == tag_guard.E_NOT_ANCESTOR, stop.stderr
++    assert "not an ancestor" in stop.stderr
++    assert "could not talk to origin" not in stop.stderr
++
++    # the two failures do not share an exit code — the MODE is distinguishable
++    assert tag_guard.E_FETCH != tag_guard.E_NOT_ANCESTOR
++
++
++def test_ancestry_passes_when_head_is_pushed(synth):
++    proc = guard(synth, "ancestry", "--repo", str(synth["repo"]))
++    assert proc.returncode == 0, proc.stderr
++    assert "ancestor" in proc.stdout
++
++
++def test_offline_ack_is_named_and_announced(synth):
++    repo, env = synth["repo"], synth["env"]
++    git(repo, env, "remote", "set-url", "origin", str(repo.parent / "gone"))
++    proc = guard(synth, "ancestry", "--repo", str(repo), "--offline-ack")
++    assert proc.returncode == 0, proc.stderr
++    assert "STALE" in proc.stdout
++
++
++# ===========================================================================
++# tag guard — restricted delta
++# ===========================================================================
++def make_repass(repo: Path, slug: str, artifacts: Dict[str, str]) -> Dict[str, str]:
++    directory = repo / ".claude/plans/PLAN-166" / slug
++    directory.mkdir(parents=True, exist_ok=True)
++    lines: List[str] = []
++    for name, body in sorted(artifacts.items()):
++        (directory / name).write_text(body, encoding="utf-8")
++        lines.append("%s  %s" % (sha256_file(directory / name), name))
++    manifest = directory / "MANIFEST.sha256"
++    manifest.write_text("\n".join(lines) + "\n", encoding="utf-8")
++    rel = ".claude/plans/PLAN-166/%s" % slug
++    return {
++        "dir": rel,
++        "manifest_rel": "%s/MANIFEST.sha256" % rel,
++        "manifest_sha": sha256_file(manifest),
++        "artifact_rels": ["%s/%s" % (rel, n) for n in sorted(artifacts)],
++    }
++
++
++def write_verdict(
++    repo: Path,
++    tag: str,
++    parent: str,
++    allowlist: Sequence[str],
++    manifest_rel: str,
++    manifest_sha: str,
++) -> str:
++    rel = ".claude/governance/pair-rail-verdict-%s.md" % tag
++    path = repo / rel
++    path.parent.mkdir(parents=True, exist_ok=True)
++    entries = "\n".join("  - %s" % e for e in allowlist)
++    path.write_text(
++        "# Pair-Rail Verdict — %s\n\n```yaml\nverdict: GO\nrelease_tag: %s\n"
++        "parent_sha: %s\ndelta_allowlist:\n%s\ndelta_manifest: %s\n"
++        "delta_manifest_sha256: %s\n```\n" % (
++            tag, tag, parent, entries, manifest_rel, manifest_sha,
++        ),
++        encoding="utf-8",
++    )
++    return rel
++
++
++def arm_verdict(synth, tag: str, slug: str = "repass-r2", extra_allow=()):
++    """Commit a re-pass + verdict for `tag`, anchored at the pre-verdict HEAD."""
++    repo, env = synth["repo"], synth["env"]
++    parent = git(repo, env, "rev-parse", "HEAD")
++    ev = make_repass(
++        repo, slug, {"verdict-r1.txt": "GO\n", "transcript-r1.log": "rounds: 3\n"}
++    )
++    verdict_rel = ".claude/governance/pair-rail-verdict-%s.md" % tag
++    allow = [verdict_rel, ev["manifest_rel"]] + ev["artifact_rels"] + list(extra_allow)
++    write_verdict(repo, tag, parent, allow, ev["manifest_rel"], ev["manifest_sha"])
++    git(repo, env, "add", "-A")
++    git(repo, env, "commit", "-q", "-m", "governance: verdict %s" % tag)
++    git(repo, env, "push", "-q", "origin", "main")
++    git(repo, env, "fetch", "-q", "origin", "main")
++    return {"parent": parent, "verdict_rel": verdict_rel, "ev": ev}
++
++
++def test_delta_accepts_exactly_the_verdict_and_its_pinned_evidence(synth):
++    arm_verdict(synth, "v1.3.0-rc.2")
++    proc = guard(synth, "delta", "--repo", str(synth["repo"]), "--tag", "v1.3.0-rc.2")
++    assert proc.returncode == 0, proc.stdout + proc.stderr
++    assert "closed allowlist" in proc.stdout
++    assert "shasum" in proc.stdout
++
++
++@pytest.mark.parametrize("tag", ["v1.3.0-rc.2", "v1.3.0"])
++def test_delta_blocks_a_file_that_landed_after_the_review(synth, tag):
++    """Unconditional by design: scoping this to --stable would let an rc.N ship
++    a post-review commit and become the unreviewed baseline of the GA."""
++    repo, env = synth["repo"], synth["env"]
++    arm_verdict(synth, tag)
++    (repo / "sneaky.py").write_text("print('landed after the review')\n", encoding="utf-8")
++    git(repo, env, "add", "sneaky.py")
++    git(repo, env, "commit", "-q", "-m", "post-review change")
++    git(repo, env, "push", "-q", "origin", "main")
++
++    proc = guard(synth, "delta", "--repo", str(repo), "--tag", tag)
++    assert proc.returncode == tag_guard.E_DELTA, proc.stdout + proc.stderr
++    assert "sneaky.py" in proc.stderr
++
++
++def test_delta_blocks_a_fabricated_parent_outside_head_history(synth):
++    """W0 re-pass r2 P1: `cat-file -e` proves the anchor EXISTS, not that it
++    is in the history this tag signs. A fabricated commit over HEAD's own
++    tree (`git commit-tree`, parented off an older commit, on no branch)
++    makes diff(parent..HEAD) contain ONLY the verdict + evidence while an
++    unreviewed file sits on main — every downstream check (allowlist,
++    manifest pin, set equality, vacuity) then passes and the guard prints
++    "all inside the verdict's closed allowlist" over an unreviewed tree."""
++    repo, env = synth["repo"], synth["env"]
++    h0 = git(repo, env, "rev-parse", "HEAD")
++
++    # unreviewed work lands on main
++    (repo / "unreviewed.py").write_text("print('never reviewed')\n", encoding="utf-8")
++    git(repo, env, "add", "unreviewed.py")
++    git(repo, env, "commit", "-q", "-m", "unreviewed change")
++    m2_tree = git(repo, env, "rev-parse", "HEAD^{tree}")
++
++    # fabricated anchor: HEAD's exact tree, parented off h0, on NO branch —
++    # it exists in the object store but HEAD does not descend from it
++    orphan = git(repo, env, "commit-tree", m2_tree, "-p", h0, "-m", "fabricated anchor")
++    not_anc = run(["git", "merge-base", "--is-ancestor", orphan, "HEAD"], repo, env)
++    assert not_anc.returncode == 1, "fixture broke: orphan IS an ancestor"
++
++    ev = make_repass(repo, "repass-r2", {"verdict-r1.txt": "GO\n"})
++    verdict_rel = ".claude/governance/pair-rail-verdict-v1.3.0-rc.2.md"
++    write_verdict(
++        repo,
++        "v1.3.0-rc.2",
++        orphan,
++        [verdict_rel, ev["manifest_rel"]] + ev["artifact_rels"],
++        ev["manifest_rel"],
++        ev["manifest_sha"],
++    )
++    git(repo, env, "add", "-A")
++    git(repo, env, "commit", "-q", "-m", "verdict anchored on the fabricated commit")
++
++    proc = guard(synth, "delta", "--repo", str(repo), "--tag", "v1.3.0-rc.2")
++    assert proc.returncode == tag_guard.E_PARENT_NOT_ANCESTOR, (
++        proc.stdout + proc.stderr
++    )
++    assert "ancestor" in proc.stderr
++    # and it is a DISTINCT mode from both "bad verdict" and "delta outside"
++    assert tag_guard.E_PARENT_NOT_ANCESTOR != tag_guard.E_VERDICT
++    assert tag_guard.E_PARENT_NOT_ANCESTOR != tag_guard.E_DELTA
++
++
++def test_delta_rejects_a_wildcard_verdict_entry(synth):
++    repo, env = synth["repo"], synth["env"]
++    parent = git(repo, env, "rev-parse", "HEAD")
++    ev = make_repass(repo, "repass-r2", {"verdict-r1.txt": "GO\n"})
++    verdict_rel = ".claude/governance/pair-rail-verdict-v1.3.0-rc.2.md"
++    write_verdict(
++        repo,
++        "v1.3.0-rc.2",
++        parent,
++        [
++            verdict_rel,
++            ".claude/governance/pair-rail-verdict-*.md",  # the hole
++            ev["manifest_rel"],
++        ] + ev["artifact_rels"],
++        ev["manifest_rel"],
++        ev["manifest_sha"],
++    )
++    git(repo, env, "add", "-A")
++    git(repo, env, "commit", "-q", "-m", "wildcard allowlist")
++    proc = guard(synth, "delta", "--repo", str(repo), "--tag", "v1.3.0-rc.2")
++    assert proc.returncode == tag_guard.E_VERDICT, proc.stdout + proc.stderr
++    assert "glob metacharacter" in proc.stderr
++
++
++def test_delta_rejects_another_tags_verdict_in_the_allowlist(synth):
++    repo, env = synth["repo"], synth["env"]
++    parent = git(repo, env, "rev-parse", "HEAD")
++    ev = make_repass(repo, "repass-r2", {"verdict-r1.txt": "GO\n"})
++    verdict_rel = ".claude/governance/pair-rail-verdict-v1.3.0-rc.2.md"
++    write_verdict(
++        repo,
++        "v1.3.0-rc.2",
++        parent,
++        [
++            verdict_rel,
++            ".claude/governance/pair-rail-verdict-v1.2.0.md",  # historical
++            ev["manifest_rel"],
++        ] + ev["artifact_rels"],
++        ev["manifest_rel"],
++        ev["manifest_sha"],
++    )
++    git(repo, env, "add", "-A")
++    git(repo, env, "commit", "-q", "-m", "historical verdict in allowlist")
++    proc = guard(synth, "delta", "--repo", str(repo), "--tag", "v1.3.0-rc.2")
++    assert proc.returncode == tag_guard.E_VERDICT, proc.stdout + proc.stderr
++    assert "another tag" in proc.stderr
++
++
++def test_delta_refuses_a_verdict_written_for_a_different_tag(synth):
++    arm_verdict(synth, "v1.3.0-rc.2")
++    repo = synth["repo"]
++    shutil.copy2(
++        str(repo / ".claude/governance/pair-rail-verdict-v1.3.0-rc.2.md"),
++        str(repo / ".claude/governance/pair-rail-verdict-v1.3.0.md"),
++    )
++    proc = guard(synth, "delta", "--repo", str(repo), "--tag", "v1.3.0")
++    assert proc.returncode == tag_guard.E_VERDICT, proc.stdout + proc.stderr
++    assert "release_tag" in proc.stderr
++
++
++def test_delta_requires_a_verdict_at_all(synth):
++    proc = guard(synth, "delta", "--repo", str(synth["repo"]), "--tag", "v1.3.0-rc.9")
++    assert proc.returncode == tag_guard.E_VERDICT
++    assert "no signed verdict" in proc.stderr
++
++
++def test_delta_catches_a_tampered_artifact_and_a_tampered_manifest(synth):
++    repo, env = synth["repo"], synth["env"]
++    armed = arm_verdict(synth, "v1.3.0-rc.2")
++    artifact = repo / armed["ev"]["artifact_rels"][0]
++
++    # (1) content changed, manifest untouched -> shasum -c fails
++    artifact.write_text("GO (edited after the review)\n", encoding="utf-8")
++    git(repo, env, "add", "-A")
++    git(repo, env, "commit", "-q", "-m", "tamper artifact")
++    proc = guard(synth, "delta", "--repo", str(repo), "--tag", "v1.3.0-rc.2")
++    assert proc.returncode == tag_guard.E_MANIFEST_CONTENT, proc.stdout + proc.stderr
++
++    # (2) manifest re-generated to cover the tamper -> the sha PIN in the
++    #     signed verdict no longer matches
++    manifest = repo / armed["ev"]["manifest_rel"]
++    lines = []
++    for rel in armed["ev"]["artifact_rels"]:
++        full = repo / rel
++        lines.append("%s  %s" % (sha256_file(full), full.name))
++    manifest.write_text("\n".join(lines) + "\n", encoding="utf-8")
++    git(repo, env, "add", "-A")
++    git(repo, env, "commit", "-q", "-m", "tamper manifest")
++    proc = guard(synth, "delta", "--repo", str(repo), "--tag", "v1.3.0-rc.2")
++    assert proc.returncode == tag_guard.E_MANIFEST_PIN, proc.stdout + proc.stderr
++
++
++def test_delta_rejects_an_unlisted_file_smuggled_into_the_repass_dir(synth):
++    """`repass-<N>/**` as a wildcard was the r14 hole: the set closes by NAME
++    against the manifest, so an extra allowlisted path in that directory is a
++    set violation even before its content is considered."""
++    repo, env = synth["repo"], synth["env"]
++    parent = git(repo, env, "rev-parse", "HEAD")
++    ev = make_repass(repo, "repass-r2", {"verdict-r1.txt": "GO\n"})
++    (repo / ev["dir"] / "smuggled.sh").write_text("echo hi\n", encoding="utf-8")
++    verdict_rel = ".claude/governance/pair-rail-verdict-v1.3.0-rc.2.md"
++    write_verdict(
++        repo,
++        "v1.3.0-rc.2",
++        parent,
++        [verdict_rel, ev["manifest_rel"], "%s/smuggled.sh" % ev["dir"]]
++        + ev["artifact_rels"],
++        ev["manifest_rel"],
++        ev["manifest_sha"],
++    )
++    git(repo, env, "add", "-A")
++    git(repo, env, "commit", "-q", "-m", "smuggle")
++    proc = guard(synth, "delta", "--repo", str(repo), "--tag", "v1.3.0-rc.2")
++    assert proc.returncode == tag_guard.E_MANIFEST_SET, proc.stdout + proc.stderr
++    assert "smuggled.sh" in proc.stderr
++
++
++def test_delta_rejects_an_allowlist_entry_that_is_not_evidence(synth):
++    """Wildcard-free is not enough — the allowlist must also be EXHAUSTIVE.
++    A verdict that allowlists `VERSION` would wave through exactly the
++    post-review bump commit that F2 is about, and every check below it would
++    still report green. The refusal has to land on the allowlist itself."""
++    repo, env = synth["repo"], synth["env"]
++    parent = git(repo, env, "rev-parse", "HEAD")
++    ev = make_repass(repo, "repass-r2", {"verdict-r1.txt": "GO\n"})
++    verdict_rel = ".claude/governance/pair-rail-verdict-v1.3.0-rc.2.md"
++    write_verdict(
++        repo,
++        "v1.3.0-rc.2",
++        parent,
++        [verdict_rel, ev["manifest_rel"], "VERSION"] + ev["artifact_rels"],
++        ev["manifest_rel"],
++        ev["manifest_sha"],
++    )
++    git(repo, env, "add", "-A")
++    git(repo, env, "commit", "-q", "-m", "allowlist a version site")
++    proc = guard(synth, "delta", "--repo", str(repo), "--tag", "v1.3.0-rc.2")
++    assert proc.returncode == tag_guard.E_VERDICT, proc.stdout + proc.stderr
++    assert "EXHAUSTIVE" in proc.stderr
++    assert "'VERSION'" in proc.stderr
++
++
++@pytest.mark.parametrize(
++    "entry",
++    [
++        # the plan file itself — post-review edits would ride the tag
++        ".claude/plans/PLAN-166-release-hold-findings-closure.md",
++        # ANOTHER tag's verdict-fields — stale evidence smuggled by name
++        ".claude/plans/PLAN-166/verdict-fields-v1.2.0.md",
++        # immutable historical evidence outside the pinned manifest dir
++        ".claude/plans/PLAN-166/repass-r1/old-evidence.txt",
++        # W0 re-pass r2 P2: the RIGHT basename in the WRONG directory — a
++        # basename-only rule admits any number of look-alikes anywhere under
++        # .claude/plans/; the file must sit at its canonical path (the plan
++        # directory that CONTAINS the manifest dir)
++        ".claude/plans/archive/verdict-fields-v1.3.0-rc.2.md",
++        ".claude/plans/PLAN-166/repass-r1/verdict-fields-v1.3.0-rc.2.md",
++    ],
++)
++def test_delta_rejects_plan_paths_outside_the_manifest_dir(synth, entry):
++    """Re-pass P2: `.claude/plans/` entries OUTSIDE the manifest directory
++    used to close by NAME alone — no content pin, no manifest coverage, no
++    tag specificity — while the same guard rejected `VERSION` as
++    non-EXHAUSTIVE. Only `verdict-fields-<THIS TAG>.md` at its CANONICAL
++    path (directly inside the plan directory holding the manifest dir) may
++    live outside the content-pinned manifest directory; everything else —
++    including same-basename look-alikes elsewhere — must be IN it."""
++    arm_verdict(synth, "v1.3.0-rc.2", extra_allow=[entry])
++    proc = guard(synth, "delta", "--repo", str(synth["repo"]), "--tag", "v1.3.0-rc.2")
++    assert proc.returncode == tag_guard.E_VERDICT, proc.stdout + proc.stderr
++    assert "verdict-fields" in proc.stderr, proc.stderr
++
++
++def test_delta_accepts_this_tags_verdict_fields_outside_the_manifest_dir(synth):
++    """The one plan-side file the plan PROMISES outside the manifest dir: the
++    verdict-fields carrying the literal target tag in its name."""
++    repo = synth["repo"]
++    vf_rel = ".claude/plans/PLAN-166/verdict-fields-v1.3.0-rc.2.md"
++    vf = repo / vf_rel
++    vf.parent.mkdir(parents=True, exist_ok=True)
++    vf.write_text("inputs_hash fields for v1.3.0-rc.2\n", encoding="utf-8")
++    arm_verdict(synth, "v1.3.0-rc.2", extra_allow=[vf_rel])
++    proc = guard(synth, "delta", "--repo", str(repo), "--tag", "v1.3.0-rc.2")
++    assert proc.returncode == 0, proc.stdout + proc.stderr
++
++
++def test_guard_selects_the_yaml_block_like_the_step15_reader(synth):
++    """Re-pass P2 (reader parity): the step-15 validator selects the FIRST
++    ```yaml fence specifically (validate-pair-rail-verdict.py); the guard used
++    to enter the first fence of ANY language, so a verdict with a leading
++    non-yaml fence (a quoted transcript, say) parsed as EMPTY here while the
++    validator read it fine — two readers of the same signed file disagreeing,
++    fail-closed direction but still a disagreement."""
++    repo, env = synth["repo"], synth["env"]
++    armed = arm_verdict(synth, "v1.3.0-rc.2")
++    path = repo / armed["verdict_rel"]
++    text = path.read_text(encoding="utf-8")
++    assert text.count("```yaml") == 1
++    path.write_text(
++        text.replace(
++            "```yaml", "```text\ncodex transcript: GO\n```\n\n```yaml", 1
++        ),
++        encoding="utf-8",
++    )
++    git(repo, env, "add", "-A")
++    git(repo, env, "commit", "-q", "-m", "verdict prose gains a quoted fence")
++    git(repo, env, "push", "-q", "origin", "main")
++    proc = guard(synth, "delta", "--repo", str(repo), "--tag", "v1.3.0-rc.2")
++    assert proc.returncode == 0, proc.stdout + proc.stderr
++
++
++def test_delta_refuses_to_pass_vacuously_when_the_verdict_anchors_itself(synth):
++    """An anchor at (or after) the verdict makes every assert above trivially
++    true: the delta is empty, and "all changed files are allowlisted" is a
++    statement about nothing. That is the v1.16.0 self-reference bug wearing a
++    new hat, and it is the vacuous-gate class this repo keeps paying for.
++
++    The guard reads the verdict from the working tree, which is what makes the
++    fixture possible; the driver's own clean-tree check blocks this route
++    locally, but the server-side port in release.yml reads a tree it did not
++    produce, so the assert has to prove it actually saw the verdict move."""
++    repo, env = synth["repo"], synth["env"]
++    armed = arm_verdict(synth, "v1.3.0-rc.2")
++    head = git(repo, env, "rev-parse", "HEAD")
++    write_verdict(
++        repo,
++        "v1.3.0-rc.2",
++        head,  # the commit that ALREADY contains this verdict
++        [armed["verdict_rel"], armed["ev"]["manifest_rel"]]
++        + armed["ev"]["artifact_rels"],
++        armed["ev"]["manifest_rel"],
++        armed["ev"]["manifest_sha"],
++    )
++    proc = guard(synth, "delta", "--repo", str(repo), "--tag", "v1.3.0-rc.2")
++    assert proc.returncode == tag_guard.E_VACUOUS, proc.stdout + proc.stderr
++    assert "VACUOUSLY" in proc.stderr
++    # and it is a DISTINCT mode from "a file landed outside the allowlist"
++    assert tag_guard.E_VACUOUS != tag_guard.E_DELTA
++
++
++# ===========================================================================
++# the guards are wired into the DRIVER, for both invocations
++# ===========================================================================
++@pytest.mark.parametrize(
++    "tag,flags",
++    [("v1.3.0-rc.2", ["--rc", "2"]), ("v1.3.0", ["--stable"])],
++)
++def test_tag_phase_runs_both_guards_for_rc_and_stable(synth, tag, flags):
++    repo, env = synth["repo"], synth["env"]
++    arm_verdict(synth, tag)
++
++    happy = driver(synth, "tag", *(flags + ["--dry-run"]))
++    assert happy.returncode == 0, happy.stdout + happy.stderr
++    assert "ancestor" in happy.stdout
++    assert "closed allowlist" in happy.stdout
++    assert "dry-run: tag NOT created" in happy.stdout
++
++    (repo / "post-review.txt").write_text("nope\n", encoding="utf-8")
++    git(repo, env, "add", "-A")
++    git(repo, env, "commit", "-q", "-m", "post review")
++    git(repo, env, "push", "-q", "origin", "main")
++
++    blocked = driver(synth, "tag", *(flags + ["--dry-run"]))
++    assert blocked.returncode != 0, blocked.stdout
++    assert "restricted-delta guard refused the tag" in blocked.stderr
++    assert "post-review.txt" in blocked.stderr
++
++
++def test_tag_annotation_carries_the_whole_train_and_no_stale_release(synth):
++    arm_verdict(synth, "v1.3.0")
++    proc = driver(synth, "tag", "--stable", "--dry-run")
++    assert proc.returncode == 0, proc.stdout + proc.stderr
++    assert "PLAN-162 / PLAN-165 / PLAN-166 (ADRs 184 -> 189)" in proc.stdout
++    assert "v1.3.0 —" in proc.stdout
++
++
++# ===========================================================================
++# F6 — the name was the root of the class; the literals go with it
++# ===========================================================================
++SEMVER_RX = re.compile(r"\b\d+\.\d+\.\d+\b")
++# "<number> [word] site(s)" — a census in a comment has no oracle behind it.
++SITE_COUNT_RX = re.compile(
++    r"\b(?:one|two|three|four|five|six|seven|eight|nine|ten|\d+)\s+"
++    r"(?:\w+\s+)?sites?\b",
++    re.IGNORECASE,
++)
++# Assembled at RUNTIME, never as a literal: a control whose own file is a hit
++# has to exempt itself, and an exemption is how a control stops controlling.
++# (`"a" "b"` and `"a" + "b"` are both folded by the compiler and would land in
++# this module's .pyc verbatim; str.join is not folded.)
++OLD_DRIVER_STEM = "-".join(("release", "v1", "2", "0"))
++SCAN_ROOTS = (".github", "RELEASE.md", ".claude/scripts", "scripts")
++
++
++def scan_live_surfaces(needle: str):
++    """grep, in Python. The local `grep` is ugrep and disagrees with GNU grep
++    about binary files, so a subprocess control would not mean the same thing
++    here and in CI. Returns (files_scanned, hits)."""
++    hits: List[str] = []
++    scanned = 0
++    for root in SCAN_ROOTS:
++        base = REPO_ROOT / root
++        if not base.exists():
++            continue
++        paths = [base] if base.is_file() else sorted(base.rglob("*"))
++        for path in paths:
++            if not path.is_file() or "__pycache__" in path.parts:
++                continue
++            try:
++                body = path.read_text(encoding="utf-8")
++            except (UnicodeDecodeError, OSError):
++                continue  # binary artifact: not a live text surface
++            scanned += 1
++            for num, line in enumerate(body.splitlines(), 1):
++                if needle in line:
++                    hits.append(
++                        "%s:%d: %s"
++                        % (path.relative_to(REPO_ROOT), num, line.strip())
++                    )
++    return scanned, hits
++
++
++def test_driver_derives_every_version_string_from_target_base():
++    """Zero stale literals — and deliberately NO coupling to the repo's current
++    VERSION file. Pinning the driver to VERSION would go red in the one window
++    where the driver MUST be ahead of it: the moment TARGET_BASE is set for the
++    next release and `bump` has not run yet. A gate that blocks the documented
++    path is the failure mode this plan exists to close, not a new instance."""
++    text = DRIVER_SRC.read_text(encoding="utf-8")
++    m = re.search(r'(?m)^TARGET_BASE="(\d+\.\d+\.\d+)"$', text)
++    assert m, "TARGET_BASE is not a bare-semver assignment"
++    target = m.group(1)
++    offenders = []
++    for num, line in enumerate(text.splitlines(), 1):
++        if line.strip() == 'TARGET_BASE="%s"' % target:
++            continue
++        for hit in SEMVER_RX.findall(line):
++            # tolerated: a reference to a PAST incident. It is a historical
++            # fact and cannot be derived from TARGET_BASE.
++            if re.search(r"v%s-rc\.\d+" % re.escape(hit), line):
++                continue
++            offenders.append("%d: %s" % (num, line.strip()))
++    assert not offenders, "version literals not derived from TARGET_BASE:\n%s" % (
++        "\n".join(offenders)
++    )
++
++
++@pytest.mark.parametrize(
++    "src", [DRIVER_SRC, SITES_SRC], ids=["driver", "site-module"]
++)
++def test_release_surfaces_make_no_site_count_claim_in_comments(src):
++    """The rule is DELETE the count, never correct it: a corrected count is a
++    count that goes stale again the next time the table grows. W0 re-pass r2:
++    the control scanned only the DRIVER while the site MODULE — the file the
++    table actually lives in — had reintroduced counted comments."""
++    text = src.read_text(encoding="utf-8")
++    offenders = [
++        "%d: %s" % (num, line.strip())
++        for num, line in enumerate(text.splitlines(), 1)
++        if SITE_COUNT_RX.search(line)
++    ]
++    assert not offenders, "site-count claim in %s:\n%s" % (
++        src.name,
++        "\n".join(offenders),
++    )
++
++
++def test_driver_attributes_the_publish_to_the_publishing_workflow():
++    """Both occurrences. Positional, not a word count: for every "publishes to
++    npm" claim the LAST workflow named before it must be npm-publish.yml —
++    release.yml is the gate and publishes nothing."""
++    text = DRIVER_SRC.read_text(encoding="utf-8")
++    claims = list(re.finditer(r"publishes to npm", text))
++    assert len(claims) >= 2, (
++        "expected the publish claim at both sites, found %d" % len(claims)
++    )
++    for m in claims:
++        before = text[max(0, m.start() - 200):m.start()]
++        named = re.findall(r"(npm-publish\.yml|release\.yml)", before)
++        assert named, "publish claim names no workflow: ...%s" % before[-100:]
++        assert named[-1] == "npm-publish.yml", (
++            "publish attributed to %s: ...%s" % (named[-1], before[-140:])
++        )
++
++
++def test_old_driver_name_is_gone_from_live_surfaces():
++    """AC-6 control, widened to every live surface that could still point at
++    the old driver. Plan evidence (`.claude/plans/PLAN-166/repass-r1/**`,
++    `.../debate/**`) is IMMUTABLE and deliberately OUT of scope: a sed there
++    would break MANIFEST.sha256 and invalidate the re-pass."""
++    # positive control for the instrument itself, first: a needle that IS
++    # present must be found, or "no hits" means nothing.
++    control_scanned, control_hits = scan_live_surfaces("release.sh")
++    assert control_hits, (
++        "the scanner found 0 hits for a needle that is definitely present — "
++        "it scanned %d files under %s" % (control_scanned, SCAN_ROOTS)
++    )
++
++    scanned, hits = scan_live_surfaces(OLD_DRIVER_STEM)
++    print(
++        "AC-6 control: %d text files scanned under %s; positive control %d hits"
++        % (scanned, ", ".join(SCAN_ROOTS), len(control_hits))
++    )
++    assert not hits, "old driver name on a live surface:\n%s" % "\n".join(hits)
++    assert not (LOCAL / (OLD_DRIVER_STEM + ".sh")).exists()
++    assert DRIVER_SRC.exists() and os.access(str(DRIVER_SRC), os.X_OK)
++
++
++def test_checklist_documents_the_new_driver_and_the_await_gate_recovery():
++    text = (REPO_ROOT / ".github/release-checklist.md").read_text(encoding="utf-8")
++    for phase in ("preflight", "bump", "tag"):
++        assert "release.sh %s" % phase in text, phase
++    assert "await-release-gate" in text
++    # the recovery route is a re-run, explicitly NOT a delete + re-tag
++    assert "re-rodar o job" in text
++    assert "deletar/re-criar a tag" in text
++    # and the manual approval is the last human chance, not a second opinion
++    assert "última chance" in text
++
++
++def test_checklist_enumerates_the_verdict_fields_the_tag_guard_requires():
++    """The tag guard enforces FOUR verdict fields; the canonical template
++    (.claude/governance/pair-rail-verdict-template.md, W1 ceremony scope)
++    still documents only parent_sha. Until that patch lands, the checklist is
++    the authoring surface — a contract enforced by code but documented on no
++    authoring surface is how the first rc.2 verdict dies at E_VERDICT."""
++    text = (REPO_ROOT / ".github/release-checklist.md").read_text(encoding="utf-8")
++    for field in (
++        "parent_sha",
++        "delta_allowlist",
++        "delta_manifest",
++        "delta_manifest_sha256",
++    ):
++        assert field in text, "checklist does not name the %r field" % field
++
++
++def test_install_md_describes_the_current_pair_rail_migration():
++    text = (REPO_ROOT / "INSTALL.md").read_text(encoding="utf-8")
++    assert "150 → 210 s, ADR-110-AMEND-2" in text
++    assert "ADR-110-AMEND-1" not in text
+diff --git a/.claude/scripts/tests/test_release_workflow_asserts.py b/.claude/scripts/tests/test_release_workflow_asserts.py
+index bc68a9f..45a4de0 100644
+--- a/.claude/scripts/tests/test_release_workflow_asserts.py
++++ b/.claude/scripts/tests/test_release_workflow_asserts.py
+@@ -25,6 +25,33 @@ workflow-invariant convention (test_workflow_devops_p2.py) with:
+   and against the LIVE workflow once Wave B lands (detected via the
+   "PLAN-153 Wave B item 5" marker). They skip only in the pre-landing
+   CI window where neither context is available.
++
++PLAN-166 W1 items 1 + 4 (F1, P0) extend the same dual-context convention
++(staged mirror under .claude/plans/PLAN-166/staged/ pre-landing,
++"PLAN-166 W1 item 1" marker in the live file post-landing) with:
++
++- await-gate asserts: the publish OBSERVES release.yml's `release-gate`
++  job — `await-release-gate` job present, `needs:` on the publish job,
++  `GH_TOKEN: ${{ github.token }}` in the await job's env (permissions:
++  alone does NOT authenticate the gh CLI on a hosted runner; without the
++  token every poll dies on auth = fail-closed BLOCK breaking every
++  release), permissions/timeout pinned, and NO environment / NO RC
++  exclusion on the await job (RC tags are the live positive control).
++  Posture pins are STRENGTHENED, not relocated: NpmPublishRcPostureTest
++  keeps asserting the RC exclusion + environment on the live file.
++- trusted-publisher binding asserts: the npmjs OIDC registration triple
++  (repository / workflow FILENAME / environment) is cross-checked by
++  READING .claude/governance/npm-trusted-publisher.txt — embedding the
++  values in the test would create a 4th copy of the truth. Includes
++  positive controls: mutating `environment:` (or the repository slug) in
++  a COPY of the workflow text must go red.
++
++PLAN-166 W1-B (F2 server side; merged in by the ceremony assembler —
++one runnable asserts file) adds the W1B* classes at the bottom:
++structural asserts for release.yml's verdict delta + ancestry gate step
++(no continue-on-error, fail-closed on the transition var, delegation to
++_release_tag_guard.py, parent+GITHUB_SHA ancestry, pinned step order,
++`release-gate` job-name pin) plus the guard-module contract pins.
+ """
+ from __future__ import annotations
+ 
+@@ -35,7 +62,30 @@ import unittest
+ from pathlib import Path
+ from typing import Iterator, Optional, Tuple
+ 
+-_REPO = Path(__file__).resolve().parent.parent.parent.parent
++def _find_repo() -> Path:
++    """Repo root — robust to BOTH homes this file can run from.
++
++    At its landed path (.claude/scripts/tests/) four parents reach the
++    root; at its staged path (.claude/plans/PLAN-166/staged/...) they
++    reach the staged mirror instead. Walk up to the first ancestor that
++    actually looks like the repo (has the live workflow AND the hooks
++    tree) so pre-land verification runs from the staged location give
++    the same answers as post-land runs. (Merged in from the W1-B slice
++    by the PLAN-166 ceremony assembler.)
++    """
++    here = Path(__file__).resolve()
++    for candidate in here.parents:
++        if (
++            (candidate / ".github" / "workflows" / "release.yml").is_file()
++            and (candidate / ".claude" / "hooks" / "_lib").is_dir()
++        ):
++            return candidate
++    # Fall back to the landed-layout arithmetic; setUp guards will skip
++    # or fail loudly if this is wrong.
++    return here.parent.parent.parent.parent
++
++
++_REPO = _find_repo()
+ _WF = _REPO / ".github" / "workflows"
+ _STAGED_WF = (
+     _REPO / ".claude" / "plans" / "PLAN-153" / "staged" / "wave-B"
+@@ -57,6 +107,109 @@ _MARKER = "PLAN-153 Wave B item 5"
+ # The load-bearing RC exclusion (PLAN-013 anti-goals #3/#16).
+ _RC_EXCLUSION = "!contains(github.ref, '-rc.')"
+ 
++# --- PLAN-166 W1 items 1 + 4 (F1, P0) --------------------------------
++# Marker written into the PLAN-166 npm-publish.yml edit; its presence in
++# the LIVE file means the W1 ceremony landed and the live copy is
++# authoritative (same convention as _MARKER above).
++_MARKER_166 = "PLAN-166 W1 item 1"
++
++_STAGED_166 = _REPO / ".claude" / "plans" / "PLAN-166" / "staged"
++_STAGED_166_WF = _STAGED_166 / ".github" / "workflows"
++
++# Repo-side record of the npmjs trusted-publisher OIDC binding triple.
++_TRUSTED_PUBLISHER = (
++    _REPO / ".claude" / "governance" / "npm-trusted-publisher.txt"
++)
++_STAGED_166_TRUSTED_PUBLISHER = (
++    _STAGED_166 / ".claude" / "governance" / "npm-trusted-publisher.txt"
++)
++_TRUSTED_PUBLISHER_KEYS = frozenset({"repository", "workflow", "environment"})
++
++
++def _plan166_text(name: str) -> Optional[Tuple[str, str]]:
++    """Return (text, context) for a PLAN-166 workflow edit, or None pre-landing.
++
++    Priority: live copy carrying the PLAN-166 marker (post-landing,
++    authoritative) → staged copy under .claude/plans/PLAN-166/staged/
++    (pre-landing, local ceremony mirror; gitignored so absent in CI) →
++    None (pre-landing CI: skip). Unlike _wave_b_text this tolerates a
++    missing live file — the filename-binding test reports that as a
++    FAILURE, not a collection error.
++    """
++    live = _WF / name
++    if live.is_file():
++        text = live.read_text(encoding="utf-8")
++        if _MARKER_166 in text:
++            return text, "live"
++    staged = _STAGED_166_WF / name
++    if staged.is_file():
++        return staged.read_text(encoding="utf-8"), "staged"
++    return None
++
++
++def _trusted_publisher_values() -> Optional[Tuple[dict, str]]:
++    """Parse npm-trusted-publisher.txt (live → staged), or None pre-landing.
++
++    Format contract (documented in the file itself): `key=value` lines;
++    `#`-prefixed and blank lines are comments; keys are EXACTLY
++    repository/workflow/environment. Malformed content raises — a
++    binding record we cannot parse must never silently skip the binding
++    asserts (fail-closed, ADR-186 posture).
++    """
++    for path, context in (
++        (_TRUSTED_PUBLISHER, "live"),
++        (_STAGED_166_TRUSTED_PUBLISHER, "staged"),
++    ):
++        if not path.is_file():
++            continue
++        values = {}
++        for lineno, raw in enumerate(
++            path.read_text(encoding="utf-8").splitlines(), 1
++        ):
++            line = raw.strip()
++            if not line or line.startswith("#"):
++                continue
++            key, sep, value = line.partition("=")
++            key, value = key.strip(), value.strip()
++            if not sep or not key or not value:
++                raise AssertionError(
++                    "%s:%d: expected key=value, got %r" % (path, lineno, raw)
++                )
++            if key in values:
++                raise AssertionError(
++                    "%s:%d: duplicate key %r" % (path, lineno, key)
++                )
++            values[key] = value
++        if set(values) != set(_TRUSTED_PUBLISHER_KEYS):
++            raise AssertionError(
++                "%s must define exactly %s, got %s"
++                % (path, sorted(_TRUSTED_PUBLISHER_KEYS), sorted(values))
++            )
++        return values, context
++    return None
++
++
++def _binding_mismatches(values: dict, workflow_text: str) -> list:
++    """Which parts of the trusted-publisher triple the workflow does NOT honour.
++
++    Pure text→list (no filesystem) so the positive-control tests can run
++    it against a deliberately mutated COPY of the workflow text.
++    """
++    mismatches = []
++    if ("environment: " + values["environment"]) not in workflow_text:
++        mismatches.append(
++            "workflow does not gate through `environment: %s` — the npmjs "
++            "trusted-publisher registration names that environment"
++            % values["environment"]
++        )
++    if values["repository"] not in workflow_text:
++        mismatches.append(
++            "workflow no longer names the registered repository %r (the "
++            "OIDC registration comment is the in-file record)"
++            % values["repository"]
++        )
++    return mismatches
++
+ 
+ def _wave_b_text(name: str) -> Optional[Tuple[str, str]]:
+     """Return (text, context) for a Wave B workflow, or None pre-landing.
+@@ -219,7 +372,8 @@ class WorkflowHygieneTest(TestEnvContext):
+         except ImportError:  # pragma: no cover - CI installs pyyaml
+             self.skipTest("pyyaml not installed")
+         for name in ("release.yml", "npm-publish.yml"):
+-            for path in ((_WF / name), (_STAGED_WF / name)):
++            for path in ((_WF / name), (_STAGED_WF / name),
++                         (_STAGED_166_WF / name)):
+                 if not path.is_file():
+                     continue
+                 with self.subTest(path=str(path)):
+@@ -233,7 +387,8 @@ class WorkflowHygieneTest(TestEnvContext):
+         pattern = re.compile(r"^\s*(?:-\s+)?uses:\s*(\S+)", re.MULTILINE)
+         pinned = re.compile(r".+@[0-9a-f]{40}$")
+         for name in ("release.yml", "npm-publish.yml"):
+-            for path in ((_WF / name), (_STAGED_WF / name)):
++            for path in ((_WF / name), (_STAGED_WF / name),
++                         (_STAGED_166_WF / name)):
+                 if not path.is_file():
+                     continue
+                 text = path.read_text(encoding="utf-8")
+@@ -335,5 +490,696 @@ class WaveB5NpmPublishYmlTest(TestEnvContext):
+         self.assertIn("environment: production-npm", self.source)
+ 
+ 
++class Plan166AwaitGateTest(TestEnvContext):
++    """PLAN-166 W1 item 1 — the publish must OBSERVE release.yml's gate.
++
++    Dual-context (staged/live) like the Wave B classes above. These pins
++    STRENGTHEN the posture pins — NpmPublishRcPostureTest keeps running
++    against the live file in every context.
++    """
++
++    def setUp(self):
++        super().setUp()
++        resolved = _plan166_text("npm-publish.yml")
++        if resolved is None:
++            self.skipTest(
++                "PLAN-166 npm-publish.yml not landed and staged mirror "
++                "absent (pre-landing CI window)"
++            )
++        self.source, self.context = resolved
++
++    def _jobs(self) -> dict:
++        try:
++            import yaml  # type: ignore
++        except ImportError:  # pragma: no cover - CI installs pyyaml
++            self.skipTest("pyyaml not installed")
++        return yaml.safe_load(self.source)["jobs"]
++
++    def test_publish_needs_await_gate(self):
++        # String-level (runs even without pyyaml): the load-bearing edge.
++        self.assertIn(
++            "needs: await-release-gate", self.source,
++            "publish no longer waits for the await-release-gate job — "
++            "the npm publish would stop observing release.yml's "
++            "release-gate (PLAN-166 F1, P0)",
++        )
++
++    def test_publish_needs_await_gate_structurally(self):
++        jobs = self._jobs()
++        self.assertEqual(
++            jobs["publish"].get("needs"), "await-release-gate",
++            "the `needs:` must sit on the PUBLISH job itself",
++        )
++
++    def test_await_job_authenticates_gh_cli(self):
++        # `permissions:` alone does NOT authenticate the gh CLI on a
++        # hosted runner; without GH_TOKEN every poll dies on auth →
++        # fail-closed BLOCK breaking every release, RC and GA alike.
++        self.assertIn("GH_TOKEN: ${{ github.token }}", self.source)
++        jobs = self._jobs()
++        env = jobs["await-release-gate"].get("env") or {}
++        self.assertEqual(
++            env.get("GH_TOKEN"), "${{ github.token }}",
++            "await-release-gate must carry GH_TOKEN at the JOB level",
++        )
++
++    def test_await_job_permissions_and_timeout(self):
++        jobs = self._jobs()
++        gate = jobs["await-release-gate"]
++        self.assertEqual(
++            gate.get("permissions"),
++            {"contents": "read", "actions": "read"},
++            "await job needs exactly contents:read (checkout) + "
++            "actions:read (runs/jobs REST) — and nothing more (no "
++            "id-token: the gate job must not be able to publish)",
++        )
++        self.assertEqual(
++            gate.get("timeout-minutes"), 35,
++            "35 > the poller's 30-minute deadline so a timeout surfaces "
++            "as the decision function's fail-CLOSED BLOCK, not an opaque "
++            "runner kill",
++        )
++
++    def test_await_job_is_the_rc_positive_control(self):
++        # NO environment (no manual approval before evidence) and NO RC
++        # exclusion: the await job runs on rc tags, so every RC is a live
++        # positive control of the gate before GA depends on it.
++        jobs = self._jobs()
++        gate = jobs["await-release-gate"]
++        self.assertNotIn(
++            "environment", gate,
++            "await-release-gate must NOT gate through an environment — "
++            "manual approval belongs AFTER the machine evidence",
++        )
++        self.assertNotIn(
++            "if", gate,
++            "await-release-gate must NOT exclude RC tags — RC runs are "
++            "the live positive control",
++        )
++
++    def test_await_job_invokes_decision_function(self):
++        self.assertIn(".claude/scripts/await_release_gate.py", self.source)
++        # The deadline is what makes every non-GRANT state collapse to
++        # BLOCK (fail-closed) instead of polling forever.
++        self.assertIn("--deadline-epoch", self.source)
++
++    def test_publish_posture_verbatim(self):
++        jobs = self._jobs()
++        pub = jobs["publish"]
++        self.assertEqual(pub.get("environment"), "production-npm")
++        self.assertIn(_RC_EXCLUSION, pub.get("if", ""))
++
++    def test_already_published_guard_stays_in_publish_after_needs(self):
++        # Deliberate ordering (PLAN-166 OQ-1): gate first, manual
++        # approval second, last-resort idempotency guard INSIDE publish.
++        self.assertLess(
++            self.source.index("needs: await-release-gate"),
++            self.source.index("id: already_published"),
++            "already_published must remain in the publish job, after "
++            "the needs: edge — do not move it into the gate job",
++        )
++
++
++class TrustedPublisherBindingTest(TestEnvContext):
++    """PLAN-166 W1 item 4 — the npmjs OIDC trusted-publisher triple.
++
++    npm trusted publishing binds by repository + workflow FILENAME +
++    environment (oidc-failure-playbook.md:18). This class READS
++    .claude/governance/npm-trusted-publisher.txt and cross-checks the
++    workflow — it embeds NO values (a 4th copy of the truth).
++    """
++
++    def setUp(self):
++        super().setUp()
++        resolved = _trusted_publisher_values()
++        if resolved is None:
++            self.skipTest(
++                "npm-trusted-publisher.txt not landed and staged copy "
++                "absent (pre-landing CI window)"
++            )
++        self.values, self.txt_context = resolved
++        wf_name = self.values["workflow"]
++        wf = _plan166_text(wf_name)
++        if wf is not None:
++            self.workflow_text, self.wf_context = wf
++        else:
++            live = _WF / wf_name
++            if not live.is_file():
++                self.fail(
++                    "trusted publisher registers workflow %r but "
++                    ".github/workflows/%s does not exist — the OIDC "
++                    "binding is by FILENAME; publishing would die "
++                    "ENEEDAUTH at GA" % (wf_name, wf_name)
++                )
++            self.workflow_text = live.read_text(encoding="utf-8")
++            self.wf_context = "live-pre-plan166"
++
++    def test_registered_workflow_file_publishes(self):
++        self.assertIn(
++            "npm publish --provenance", self.workflow_text,
++            "the workflow the npmjs console points at must be the one "
++            "actually publishing",
++        )
++
++    def test_workflow_honours_registered_binding(self):
++        self.assertEqual(
++            _binding_mismatches(self.values, self.workflow_text), [],
++            "npm-publish.yml drifted from the npmjs trusted-publisher "
++            "registration recorded in npm-trusted-publisher.txt",
++        )
++
++    def test_positive_control_environment_mutation_goes_red(self):
++        # PLAN-166 W1 item 4 required control: flipping `environment:`
++        # in a COPY must be detected — otherwise this whole class is a
++        # vacuous gate (registered-vacuous class, S292).
++        needle = "environment: " + self.values["environment"]
++        self.assertIn(needle, self.workflow_text)
++        mutated = self.workflow_text.replace(
++            needle, "environment: NOT-THE-REGISTERED-ENV"
++        )
++        self.assertNotEqual(
++            _binding_mismatches(self.values, mutated), [],
++            "positive control failed: a mutated environment was not "
++            "flagged — the binding check is vacuous",
++        )
++
++    def test_positive_control_repository_mutation_goes_red(self):
++        self.assertIn(self.values["repository"], self.workflow_text)
++        mutated = self.workflow_text.replace(
++            self.values["repository"], "someone-else/some-fork"
++        )
++        self.assertNotEqual(
++            _binding_mismatches(self.values, mutated), [],
++            "positive control failed: a mutated repository slug was not "
++            "flagged — the binding check is vacuous",
++        )
++
++
++# ---------------------------------------------------------------------
++# PLAN-166 W1-B — structural asserts for the release.yml verdict delta +
++# ancestry gate (F2 server side; re-pass r15+r17+r18, debate r3 scoped
++# VETO). Merged verbatim from the W1-B slice file
++# (test_release_workflow_asserts_w1b.py) by the PLAN-166 ceremony
++# assembler — one runnable asserts file per the W1 pack discipline. Only
++# names that would collide with the W1-A section above were renamed
++# (_MARKER → _MARKER_W1B, _LIVE_WF/_STAGED_WF → _W1B_*).
++#
++# What is pinned here, and why each pin exists:
++# - The gate step exists, carries NO continue-on-error, and FAILS CLOSED
++#   on CEO_PAIR_RAIL_VERDICT_OPTIONAL=1 — the step-15 neighbourhood has
++#   two escape hatches keyed to that var (`continue-on-error:` and the
++#   empty `--parent-sha ""` bind, which the validator only binds when
++#   non-empty); the new gate must never inherit the switch.
++# - The delta decision is DELEGATED to
++#   .claude/scripts/local/_release_tag_guard.py (the reference
++#   implementation) — never re-implemented in bash.
++# - Ancestry covers BOTH the reviewed parent AND GITHUB_SHA (r18:
++#   parent-only lets the tag-without-push / orphan-verdict scenario pass).
++# - PINNED ORDER: Verify tag GPG signature → Validate pair-rail verdict →
++#   delta → ancestry.
++# - The job keeps the exact name `release-gate` — the W1-A
++#   await-release-gate poller resolves the job BY NAME via the Actions
++#   jobs endpoint; renaming the job silently breaks the npm-publish gate.
++# ---------------------------------------------------------------------
++
++# Marker written into the W1-B step's comment block; its presence in the
++# LIVE file means the ceremony landed and the live copy is authoritative.
++_MARKER_W1B = "PLAN-166 W1-B"
++
++_W1B_LIVE_WF = _WF / "release.yml"
++_W1B_STAGED_WF = _STAGED_166_WF / "release.yml"
++
++_W1B_STEP_NAME = "Verify verdict delta + ancestry (fail-closed)"
++_W1B_STEP15_NAME = "Validate pair-rail verdict"
++_W1B_GPG_STEP_NAME = "Verify tag GPG signature"
++_GUARD_MODULE = ".claude/scripts/local/_release_tag_guard.py"
++
++
++def _w1b_release_text() -> Optional[Tuple[str, str]]:
++    """Return (text, context) for release.yml, or None pre-landing.
++
++    Priority: live copy carrying the W1-B marker (post-landing,
++    authoritative) → staged ceremony copy (pre-landing local mirror;
++    gitignored so absent in CI) → None (pre-landing CI: skip).
++    """
++    if _W1B_LIVE_WF.is_file():
++        live = _W1B_LIVE_WF.read_text(encoding="utf-8")
++        if _MARKER_W1B in live:
++            return live, "live"
++    if _W1B_STAGED_WF.is_file():
++        return _W1B_STAGED_WF.read_text(encoding="utf-8"), "staged"
++    return None
++
++
++def _step_block(source: str, step_name: str) -> str:
++    """The text of one step: from its `- name:` to the next step/job."""
++    start = source.index("- name: %s" % step_name)
++    nxt = source.find("\n      - name:", start + 1)
++    job = source.find("\n  publish-release:", start + 1)
++    candidates = [i for i in (nxt, job) if i != -1]
++    end = min(candidates) if candidates else len(source)
++    return source[start:end]
++
++
++class W1BReleaseGateDeltaAncestryTest(TestEnvContext):
++    """The verdict delta + ancestry gate step (dual-context)."""
++
++    def setUp(self):
++        super().setUp()
++        resolved = _w1b_release_text()
++        if resolved is None:
++            self.skipTest(
++                "PLAN-166 W1-B release.yml not landed and staged mirror "
++                "absent (pre-landing CI window)"
++            )
++        self.source, self.context = resolved
++
++    # -- existence + independence from the step-15 escape hatches --------
++
++    def test_gate_step_present(self):
++        self.assertIn(
++            "- name: %s" % _W1B_STEP_NAME, self.source,
++            "the W1-B verdict delta + ancestry gate step is missing",
++        )
++
++    def test_gate_step_has_no_continue_on_error(self):
++        block = _step_block(self.source, _W1B_STEP_NAME)
++        self.assertNotIn(
++            "continue-on-error", block,
++            "the W1-B gate must NEVER carry continue-on-error — that is "
++            "exactly the step-15 escape hatch it exists to be independent "
++            "of (debate r3 scoped VETO)",
++        )
++
++    def test_file_carries_exactly_one_continue_on_error(self):
++        # The legacy step 15 keeps its documented transition hatch
++        # UNCHANGED (the plan adds a new step; it does not rewrite the
++        # neighbourhood). Exactly one KEY occurrence pins both
++        # directions at once: the hatch was not silently removed from
++        # step 15, and no step (new or old) gained a second one. Comment
++        # mentions of the phrase do not count — only the YAML key form.
++        key_form = re.findall(
++            r"^\s*continue-on-error:", self.source, re.MULTILINE
++        )
++        self.assertEqual(
++            len(key_form), 1,
++            "release.yml must carry exactly one continue-on-error KEY "
++            "(the legacy step-15 transition hatch); found %d"
++            % len(key_form),
++        )
++
++    def test_gate_fails_closed_on_transition_var(self):
++        block = _step_block(self.source, _W1B_STEP_NAME)
++        self.assertIn(
++            'if [ "${CEO_PAIR_RAIL_VERDICT_OPTIONAL}" = "1" ]', block,
++            "the W1-B gate must test the transition var explicitly",
++        )
++        guard = block.index(
++            'if [ "${CEO_PAIR_RAIL_VERDICT_OPTIONAL}" = "1" ]'
++        )
++        self.assertIn(
++            "exit 1", block[guard:guard + 400],
++            "the transition-var guard must FAIL CLOSED (exit 1), not skip",
++        )
++
++    def test_gate_never_builds_an_empty_parent_bind(self):
++        # The step-15 hatch shape: PARENT_SHA_ARG="" under the var. The
++        # W1-B block must not contain that shape in any form.
++        block = _step_block(self.source, _W1B_STEP_NAME)
++        self.assertNotIn('PARENT_SHA_ARG=""', block)
++        self.assertNotIn('--parent-sha ""', block)
++
++    def test_gate_binds_parent_sha_independently(self):
++        block = _step_block(self.source, _W1B_STEP_NAME)
++        self.assertIn(
++            'VERDICT_FILE_COMMIT="$(git log -n1 --format=%H -- "$VERDICT_FILE")"',
++            block,
++            "the gate must derive the verdict-file commit itself",
++        )
++        self.assertIn(
++            "_parse_verdict", block,
++            "the verdict's parent_sha must be read with the guard "
++            "module's parser — two readers of the same signed file must "
++            "not be able to disagree",
++        )
++
++    # -- delegation to the reference implementation ----------------------
++
++    def test_delta_delegates_to_guard_module(self):
++        block = _step_block(self.source, _W1B_STEP_NAME)
++        self.assertIn(
++            "%s delta" % _GUARD_MODULE, block,
++            "the delta decision must be delegated to the tag-guard "
++            "module (single source of the decision logic)",
++        )
++
++    def test_ancestry_delegates_to_guard_module(self):
++        block = _step_block(self.source, _W1B_STEP_NAME)
++        self.assertIn(
++            "%s ancestry" % _GUARD_MODULE, block,
++            "the HEAD-ancestry judgment (fail-closed fetch included) "
++            "must be delegated to the tag-guard module",
++        )
++
++    def test_delta_semantics_not_reimplemented_in_bash(self):
++        # The bash body must not carry the decision vocabulary of the
++        # module — reading the allowlist or hashing the manifest in
++        # shell would be a second implementation of the same closed-set
++        # semantics. Comment lines are excluded: the step's rationale
++        # comment legitimately NAMES what the module does; only CODE
++        # lines may not do it.
++        block = _step_block(self.source, _W1B_STEP_NAME)
++        code_lines = "\n".join(
++            line for line in block.splitlines()
++            if not line.lstrip().startswith("#")
++        )
++        for forbidden in ("delta_allowlist", "shasum -c", "shasum -a 256"):
++            self.assertNotIn(
++                forbidden, code_lines,
++                "the W1-B step re-implements delta semantics in bash "
++                "(%r found outside comments) — the module is the only "
++                "implementation" % forbidden,
++            )
++
++    # -- ancestry covers parent AND GITHUB_SHA (r18) ----------------------
++
++    def test_ancestry_covers_reviewed_parent(self):
++        block = _step_block(self.source, _W1B_STEP_NAME)
++        self.assertIn(
++            'git merge-base --is-ancestor "$PARENT_SHA" origin/main',
++            block,
++            "the reviewed parent must be judged against origin/main "
++            "(r17: the delta alone never proves the parent was on main)",
++        )
++
++    def test_ancestry_covers_github_sha_via_head_identity(self):
++        block = _step_block(self.source, _W1B_STEP_NAME)
++        self.assertIn(
++            'if [ "$HEAD_SHA" != "${GITHUB_SHA}" ]', block,
++            "HEAD == GITHUB_SHA must be asserted so the module's "
++            "HEAD-ancestry check covers the tagged commit itself (r18)",
++        )
++
++    # -- pinned order (WaveB5 order-assert pattern) -----------------------
++
++    def test_pinned_step_order(self):
++        i_gpg = self.source.index("- name: %s" % _W1B_GPG_STEP_NAME)
++        i_verdict = self.source.index("- name: %s" % _W1B_STEP15_NAME)
++        i_gate = self.source.index("- name: %s" % _W1B_STEP_NAME)
++        self.assertLess(
++            i_gpg, i_verdict,
++            "pinned order broken: GPG verify must precede the verdict "
++            "validation",
++        )
++        self.assertLess(
++            i_verdict, i_gate,
++            "pinned order broken: the verdict validation (step 15) must "
++            "precede the delta+ancestry gate",
++        )
++
++    def test_pinned_order_inside_gate_delta_before_ancestry(self):
++        block = _step_block(self.source, _W1B_STEP_NAME)
++        self.assertLess(
++            block.index("%s delta" % _GUARD_MODULE),
++            block.index("%s ancestry" % _GUARD_MODULE),
++            "pinned order broken inside the gate: delta before ancestry",
++        )
++        self.assertLess(
++            block.index("%s ancestry" % _GUARD_MODULE),
++            block.index('git merge-base --is-ancestor "$PARENT_SHA"'),
++            "pinned order broken inside the gate: module ancestry "
++            "(fetch + HEAD) before the parent merge-base judgment — the "
++            "parent must be judged against the freshly fetched ref",
++        )
++
++    def test_gate_lives_inside_release_gate_job(self):
++        # The step must run in the same job whose success the W1-A await
++        # poller grants on — a gate in another job would not gate the
++        # publish path.
++        i_job = self.source.index("\n  release-gate:")
++        i_next_job = self.source.index("\n  publish-release:")
++        i_gate = self.source.index("- name: %s" % _W1B_STEP_NAME)
++        self.assertTrue(
++            i_job < i_gate < i_next_job,
++            "the delta+ancestry gate must be a step of the release-gate "
++            "job",
++        )
++
++
++class W1BReleaseGateJobNameTest(TestEnvContext):
++    """The exact job name `release-gate` is load-bearing (W1-A await)."""
++
++    def setUp(self):
++        super().setUp()
++        resolved = _w1b_release_text()
++        if resolved is None:
++            self.skipTest(
++                "PLAN-166 W1-B release.yml not landed and staged mirror "
++                "absent (pre-landing CI window)"
++            )
++        self.source, self.context = resolved
++
++    def test_release_gate_job_name_exact(self):
++        self.assertRegex(
++            self.source, re.compile(r"^  release-gate:$", re.MULTILINE),
++            "the job MUST keep the exact name `release-gate` — the "
++            "W1-A await-release-gate poller resolves it BY NAME via the "
++            "Actions jobs endpoint",
++        )
++
++    def test_publish_release_still_needs_release_gate(self):
++        self.assertIn(
++            "needs: release-gate", self.source,
++            "publish-release must stay gated on release-gate",
++        )
++
++
++class W1BGuardModuleContractTest(TestEnvContext):
++    """The live module surface the workflow step depends on.
++
++    These asserts pin the CONTRACT the W1-B step consumes, so a module
++    refactor that renames a subcommand or the parser is caught by the
++    suite before it bricks a release run.
++    """
++
++    def setUp(self):
++        super().setUp()
++        self.module_path = _REPO / _GUARD_MODULE
++        if not self.module_path.is_file():
++            self.fail(
++                "%s missing — the W1-B release.yml step invokes it; "
++                "landing the workflow without the module bricks every "
++                "release run" % _GUARD_MODULE
++            )
++        import importlib.util
++
++        spec = importlib.util.spec_from_file_location(
++            "release_tag_guard_w1b_contract", str(self.module_path)
++        )
++        self.mod = importlib.util.module_from_spec(spec)
++        spec.loader.exec_module(self.mod)
++
++    def test_module_exposes_the_consumed_surface(self):
++        for attr in ("_parse_verdict", "delta", "ancestry", "main"):
++            self.assertTrue(
++                hasattr(self.mod, attr),
++                "module lost %r — the W1-B workflow step consumes it"
++                % attr,
++            )
++
++    def test_parse_verdict_reads_parent_sha(self):
++        fields = self.mod._parse_verdict(
++            "# t\n\n```yaml\nparent_sha: "
++            "4111a115190d375c39c90cc33ac1d9d5899c1cf2\n```\n"
++        )
++        self.assertEqual(
++            fields.get("parent_sha"),
++            "4111a115190d375c39c90cc33ac1d9d5899c1cf2",
++        )
++
++    def test_module_exit_codes_are_distinct_nonzero(self):
++        # The workflow relies on ANY non-zero exit failing the step
++        # (set -euo pipefail); pin that the module's failure codes are
++        # non-zero and mutually distinct so the failure MODE stays
++        # testable.
++        codes = [
++            self.mod.E_USAGE, self.mod.E_FETCH, self.mod.E_NOT_ANCESTOR,
++            self.mod.E_REMOTE_REF, self.mod.E_DELTA,
++            self.mod.E_MANIFEST_PIN, self.mod.E_MANIFEST_CONTENT,
++            self.mod.E_MANIFEST_SET, self.mod.E_VERDICT, self.mod.E_VACUOUS,
++        ]
++        self.assertNotIn(0, codes)
++        self.assertEqual(len(codes), len(set(codes)))
++
++
++# --- PLAN-168 W1 (AC-1/AC-2/AC-4) ------------------------------------
++# Marker written into the PLAN-168 smoke-install.yml + ownership-nightly.yml
++# edits; its presence in the LIVE file means the W1 ceremony landed and the
++# live copy is authoritative (same convention as _MARKER / _MARKER_166).
++_MARKER_168 = "PLAN-168 W1"
++_STAGED_168 = _REPO / ".claude" / "plans" / "PLAN-168" / "staged"
++_STAGED_168_WF = _STAGED_168 / ".github" / "workflows"
++
++# AC-1/AC-2: paths that MUST be present in BOTH smoke-install filter lists.
++# _hash_lib.sh is the r10-F4 regression pin (it was already wired; this
++# assert keeps it that way — AC-2 is an assertion, not work).
++_OWNERSHIP_FILTER_PATHS = frozenset({
++    "scripts/_hash_lib.sh",
++    "scripts/_framework_manifest_set.sh",
++    "scripts/tests/test-ownership-verdict-unit.sh",
++    "scripts/tests/test-ownership-table.sh",
++    "scripts/tests/ownership_table.tsv",
++    "docs/ownership-decision-table.md",
++    # rail r3 P1: the nightly gate + controls must be per-PR gated too.
++    "scripts/tests/ownership-nightly-gate.sh",
++    "scripts/tests/test-ownership-nightly-gate.sh",
++    "scripts/tests/ownership-expected-reds.txt",
++    "scripts/tests/test-protocol-pointer-render.sh",
++    "scripts/tests/test-protocol-pointer-inv4.sh",
++})
++
++
++def _plan168_text(name: str) -> Optional[Tuple[str, str]]:
++    """Return (text, context) for a PLAN-168 workflow edit, or None pre-landing."""
++    live = _WF / name
++    if live.is_file():
++        live_text = live.read_text(encoding="utf-8")
++        if _MARKER_168 in live_text:
++            return live_text, "live"
++    staged = _STAGED_168_WF / name
++    if staged.is_file():
++        return staged.read_text(encoding="utf-8"), "staged"
++    return None
++
++
++def _workflow_paths_lists(text: str) -> Tuple[list, list]:
++    """Extract (pull_request.paths, push.paths) entries from workflow text.
++
++    Text-based on purpose (this file's convention — no yaml dependency in
++    the stdlib-only posture). Collects quoted `- "..."` items under each
++    `paths:` key, skipping comments, stopping at the first line that
++    dedents to the `paths:` level or shallower.
++    """
++    results = []
++    for trigger in ("pull_request:", "push:"):
++        lines = text.splitlines()
++        try:
++            t_idx = next(
++                i for i, ln in enumerate(lines)
++                if ln.strip() == trigger
++                and (len(ln) - len(ln.lstrip())) == 2
++            )
++        except StopIteration:
++            results.append([])
++            continue
++        entries = []
++        paths_indent = None
++        for ln in lines[t_idx + 1:]:
++            stripped = ln.strip()
++            indent = len(ln) - len(ln.lstrip())
++            if stripped and indent <= 2:
++                break  # next trigger / top-level key
++            if paths_indent is None:
++                if stripped == "paths:":
++                    paths_indent = indent
++                continue
++            if not stripped or stripped.startswith("#"):
++                continue
++            if indent <= paths_indent:
++                break
++            m = re.match(r'-\s+"([^"]+)"', stripped)
++            if m:
++                entries.append(m.group(1))
++        results.append(entries)
++    return results[0], results[1]
++
++
++class Plan168OwnershipWiringTest(TestEnvContext):
++    """AC-1/AC-2: the ownership oracles are WIRED, and the two smoke-install
++    filter lists cannot drift apart again (the r10-F4 "red gate nobody
++    runs" class, closed as an assertion instead of a memory)."""
++
++    def _smoke(self) -> Tuple[str, str]:
++        ctx = _plan168_text("smoke-install.yml")
++        if ctx is None:
++            self.skipTest(
++                "PLAN-168 W1 not landed and no staged copy on disk "
++                "(pre-landing CI window)"
++            )
++        return ctx
++
++    def test_filter_lists_are_identical(self):
++        text, _ = self._smoke()
++        pr, push = _workflow_paths_lists(text)
++        self.assertTrue(pr, "pull_request paths filter not found/empty")
++        self.assertTrue(push, "push paths filter not found/empty")
++        # Name-by-name set equality, both directions, duplicates rejected —
++        # the file's own comment says KEEP IDENTICAL.
++        self.assertEqual(
++            len(pr), len(set(pr)), "duplicate entries in pull_request paths")
++        self.assertEqual(
++            len(push), len(set(push)), "duplicate entries in push paths")
++        self.assertEqual(
++            sorted(pr), sorted(push),
++            "smoke-install pull_request and push paths filters have drifted",
++        )
++
++    def test_ownership_paths_present_in_both_filters(self):
++        text, _ = self._smoke()
++        pr, push = _workflow_paths_lists(text)
++        for required in sorted(_OWNERSHIP_FILTER_PATHS):
++            self.assertIn(
++                required, pr, f"{required} missing from pull_request paths")
++            self.assertIn(
++                required, push, f"{required} missing from push paths")
++
++    def test_unit_oracle_step_wired(self):
++        text, _ = self._smoke()
++        steps = text.split("steps:", 1)[-1]
++        self.assertIn(
++            "scripts/tests/test-ownership-verdict-unit.sh", steps,
++            "unit oracle step missing from the smoke job",
++        )
++        self.assertIn(
++            "scripts/tests/test-ownership-nightly-gate.sh", steps,
++            "nightly-gate positive control step missing from the smoke job",
++        )
++        self.assertIn(
++            "scripts/tests/test-protocol-pointer-render.sh", steps,
++            "pointer render control step missing from the smoke job",
++        )
++
++    def test_nightly_workflow_contract(self):
++        ctx = _plan168_text("ownership-nightly.yml")
++        if ctx is None:
++            self.skipTest(
++                "PLAN-168 W1 not landed and no staged copy on disk "
++                "(pre-landing CI window)"
++            )
++        text, _ = ctx
++        self.assertIn("schedule:", text, "nightly trigger missing")
++        self.assertIn("cron:", text, "cron expression missing")
++        self.assertIn("workflow_dispatch:", text, "manual dispatch missing")
++        self.assertIn(
++            "scripts/tests/ownership-nightly-gate.sh", text,
++            "the gate script is not what the nightly runs",
++        )
++        self.assertIn(
++            "scripts/tests/test-ownership-nightly-gate.sh", text,
++            "gate positive control step missing",
++        )
++        self.assertIn(
++            "scripts/tests/test-protocol-pointer-inv4.sh", text,
++            "INV-4 4-leg e2e step missing from the nightly",
++        )
++        # --map is a reporting mode that exits 0 over failures — a dead gate
++        # by construction (harness NOTE, PLAN-168 debate r1 QA must-fix 2).
++        # Prose in comments may mention it; an INVOCATION is the harness
++        # name followed by --map on the same line.
++        for ln in text.splitlines():
++            if "test-ownership-table.sh" in ln and "--map" in ln:
++                self.fail(f"--map wired into the nightly gate: {ln.strip()}")
++
++
+ if __name__ == "__main__":
+     unittest.main()
+diff --git a/.claude/scripts/tests/test_verify_counts.py b/.claude/scripts/tests/test_verify_counts.py
+index b70bd66..74cf2dd 100644
+--- a/.claude/scripts/tests/test_verify_counts.py
++++ b/.claude/scripts/tests/test_verify_counts.py
+@@ -192,61 +192,135 @@ class TestVerifyCounts(unittest.TestCase):
+     # SUPPOSED to fail here — that forces the manifest to be re-ratified
+     # deliberately instead of coverage evaporating unnoticed. Regenerate
+     # with: verify-counts.sh --json --no-tests | jq .rule_matches_by_doc
++    # RE-RATIFIED at the PLAN-166 W0 reconciliation: the W0 doc pass added
++    # count claims to README.pt-BR.md, docs/CTO-GUIDE.md, docs/README.md,
++    # docs/WHAT-WE-ARE.md, docs/FAQ.md and npm/README.md, growing the census
++    # from 54 to 109 pairs. Regenerated from the gate itself (never typed from
++    # memory); the ratification asserted ZERO lost and ZERO shrunk pairs
++    # first, so coverage only widened.
+     _EXPECTED_SITES = {
+-        "adrs@README.md": 1,
++        "adrs@README.md": 2,
++        "adrs@README.pt-BR.md": 2,
+         "adrs@docs/ARCHITECTURE.md": 1,
+-        "adrs@npm/README.md": 1,
++        "adrs@docs/CTO-GUIDE.md": 3,
++        "adrs@docs/FAQ.md": 1,
++        # PLAN-169 W2.7: the "N ADRs document ..." GUIA phrase is now watched.
++        "adrs@docs/GUIA-COMPLETO.md": 1,
++        "adrs@docs/README.md": 1,
++        "adrs@npm/README.md": 2,
+         "commands@CLAUDE.md": 1,
+         "commands@README.md": 2,
++        "commands@README.pt-BR.md": 2,
+         "commands@docs/ARCHITECTURE.md": 2,
+         "commands@docs/FAQ.md": 1,
++        "commands@docs/README.md": 1,
+         "commands@npm/README.md": 2,
+         "core@CLAUDE.md": 2,
+         "core@INSTALL.md": 3,
+         "core@README.md": 1,
++        "core@README.pt-BR.md": 1,
++        "core@docs/CTO-GUIDE.md": 2,
+         "core@docs/FAQ.md": 2,
++        "core@docs/README.md": 2,
++        "core@docs/WHAT-WE-ARE.md": 1,
+         "core@npm/README.md": 1,
+         "domain@CLAUDE.md": 1,
+         "domain@INSTALL.md": 2,
+         "domain@README.md": 1,
++        "domain@README.pt-BR.md": 1,
+         "domain@docs/ARCHITECTURE.md": 1,
++        "domain@docs/CTO-GUIDE.md": 1,
+         "domain@docs/FAQ.md": 1,
++        "domain@docs/README.md": 1,
++        "domain@docs/WHAT-WE-ARE.md": 1,
+         "domain@npm/README.md": 1,
+         "frontend@CLAUDE.md": 1,
+         "frontend@INSTALL.md": 3,
+         "frontend@README.md": 1,
++        "frontend@README.pt-BR.md": 1,
+         "frontend@docs/ARCHITECTURE.md": 1,
++        "frontend@docs/CTO-GUIDE.md": 1,
+         "frontend@docs/FAQ.md": 1,
++        "frontend@docs/README.md": 1,
++        # PLAN-166 W0 re-pass: the §1.4 phrase wraps across a newline
++        # ("8 frontend (universal\nfrontend)") — the matcher is now \s+
++        # tolerant, so the site exists for the first time.
++        "frontend@docs/WHAT-WE-ARE.md": 1,
+         "frontend@npm/README.md": 1,
+         "hook_py@CLAUDE.md": 1,
+         "hook_py@INSTALL.md": 1,
+         "hook_py@README.md": 1,
++        "hook_py@README.pt-BR.md": 2,
+         "hook_py@docs/ARCHITECTURE.md": 2,
++        "hook_py@docs/CTO-GUIDE.md": 1,
++        # PLAN-166 W0 re-pass: 1 -> 2. The table row plus the prose site
++        # "the **57** hook\nscripts on disk" (bold-wrapped AND line-wrapped;
++        # the plain regex saw only the table row).
++        "hook_py@docs/README.md": 2,
+         "hook_py@npm/README.md": 2,
+         "lib@INSTALL.md": 2,
+         "lib@README.md": 1,
++        "lib@README.pt-BR.md": 1,
+         "lib@docs/ARCHITECTURE.md": 2,
++        "lib@docs/CTO-GUIDE.md": 1,
++        "lib@docs/README.md": 1,
+         "lib@npm/README.md": 1,
+         "lib_recursive@docs/ARCHITECTURE.md": 2,
++        "mutation_fixtures@docs/CTO-GUIDE.md": 2,
+         "registered@CLAUDE.md": 1,
+         "registered@README.md": 1,
++        "registered@README.pt-BR.md": 2,
+         "registered@docs/ARCHITECTURE.md": 2,
++        "registered@docs/CTO-GUIDE.md": 2,
+         "registered@docs/GUIA-COMPLETO.md": 1,
++        # PLAN-166 W0 re-pass: 1 -> 3. The bold-tolerant "distinct scripts"
++        # matcher now sees the "**46** distinct scripts" prose site AND the
++        # same phrase inside the "Hooks registered" table value cell (which
++        # the table rule also reads — both compare to the same live value).
++        "registered@docs/README.md": 3,
+         "registered@npm/README.md": 1,
+         "registrations@CLAUDE.md": 1,
+         "registrations@README.md": 1,
++        "registrations@README.pt-BR.md": 1,
+         "registrations@docs/ARCHITECTURE.md": 1,
++        "registrations@docs/CTO-GUIDE.md": 1,
++        "registrations@docs/README.md": 2,
+         "registrations@npm/README.md": 1,
+         "release_steps@RELEASE.md": 1,
+-        "schema_files@docs/ARCHITECTURE.md": 2,
++        "schema_files@README.md": 1,
++        "schema_files@README.pt-BR.md": 1,
++        "schema_files@docs/ARCHITECTURE.md": 3,
++        "schema_files@docs/CTO-GUIDE.md": 2,
++        "schema_files@npm/README.md": 1,
+         "skills@INSTALL.md": 1,
+         "skills@README.md": 3,
++        "skills@README.pt-BR.md": 3,
+         "skills@docs/ARCHITECTURE.md": 1,
++        "skills@docs/CTO-GUIDE.md": 1,
+         "skills@docs/FAQ.md": 1,
++        "skills@docs/README.md": 1,
++        "skills@docs/WHAT-WE-ARE.md": 1,
+         "skills@npm/README.md": 3,
++        "spec_v1@README.pt-BR.md": 1,
+         "spec_v1@docs/ARCHITECTURE.md": 1,
++        "spec_v1@docs/CTO-GUIDE.md": 1,
++        "test_files@CLAUDE.md": 1,
++        "test_files@docs/ARCHITECTURE.md": 2,
++        "test_files@docs/CTO-GUIDE.md": 1,
++        "test_files@docs/README.md": 1,
++        "tests@CLAUDE.md": 1,
+         "tests@INSTALL.md": 1,
++        "tests@README.md": 2,
++        "tests@README.pt-BR.md": 2,
++        "tests@docs/ARCHITECTURE.md": 3,
++        "tests@docs/CTO-GUIDE.md": 2,
++        "tests@docs/FAQ.md": 1,
+         "tests@docs/GUIA-COMPLETO.md": 1,
++        "tests@docs/README.md": 1,
++        "tests@docs/WHAT-WE-ARE.md": 2,
++        "tests@npm/README.md": 2,
++        "tla_specs@docs/CTO-GUIDE.md": 1,
++        "workflows@docs/CTO-GUIDE.md": 1,
+     }
+ 
+     def test_real_repo_per_document_liveness(self):
+@@ -338,5 +412,383 @@ class TestTableCellRules(unittest.TestCase):
+             self.assertEqual(r.returncode, 1, "bold table-cell ADR drift must fail")
+ 
+ 
++def _run_json(root: Path, no_tests: bool = True) -> subprocess.CompletedProcess:
++    env = os.environ.copy()
++    env["VERIFY_COUNTS_ROOT"] = str(root)
++    args = ["bash", str(SCRIPT), "--json"]
++    if no_tests:
++        args.append("--no-tests")
++    return subprocess.run(args, capture_output=True, text=True, timeout=60, env=env)
++
++
++def _pytest_scaffold(root: Path, cases: int = 100, broken: bool = False) -> None:
++    """Give the synthetic tree a REAL pytest-collect population so the gate's
++    full run (no --no-tests) derives a live `tests` value inside the tree."""
++    (root / "pytest.ini").write_text("[pytest]\ntestpaths = tests\n",
++                                     encoding="utf-8")
++    tdir = root / "tests"
++    tdir.mkdir(exist_ok=True)
++    (tdir / "test_ok.py").write_text(
++        "import pytest\n"
++        f"@pytest.mark.parametrize('i', range({cases}))\n"
++        "def test_p(i):\n    pass\n",
++        encoding="utf-8",
++    )
++    if broken:
++        (tdir / "test_broken.py").write_text(
++            "import module_that_does_not_exist_plan166_repass\n",
++            encoding="utf-8",
++        )
++
++
++class TestPlan166RepassFindings(unittest.TestCase):
++    """PLAN-166 W0 adversarial re-pass — each test here is the red/green
++    proof for one finding against the gate itself (findings 1-5, 7)."""
++
++    def test_unmatched_thousands_numeral_fails_gate(self):
++        """Finding 1: an unmatched thousands-shaped numeral in a watched doc
++        must FAIL the gate. As a warning it was invisible to every automated
++        caller (validate.yml --quiet, release preflight >/dev/null)."""
++        import tempfile
++        with tempfile.TemporaryDirectory() as td:
++            root = Path(td)
++            c = _scaffold(root)
++            _write_docs(root, **c)
++            with open(root / "CLAUDE.md", "a", encoding="utf-8") as f:
++                f.write("handles ~9k widgets in the steady state.\n")
++            r = _run_json(root)
++            self.assertEqual(r.returncode, 1,
++                             f"unmatched ~9k must fail the gate; {r.stdout}")
++            data = json.loads(r.stdout)
++            self.assertTrue(
++                any("unmatched-sweep" in v for v in data["violations"]),
++                f"expected an approx/unmatched-sweep VIOLATION; {data}")
++
++    def test_unmatched_decimal_k_numeral_fails_gate(self):
++        """W0 re-pass round 2: the sweep was blind to decimal-k thousands
++        forms — an unmatched '~1.4k' (EN decimal) or '~13,5k' (pt decimal)
++        in a watched doc shipped with EXIT=0 while '~9k' failed, even
++        though round-1 finding 7 taught approx_norm the very same shape
++        (red proof, pre-fix: '~1.4k widgets' planted in the live README.md
++        ran the gate to EXIT=0). Both decimal shapes must now be swept."""
++        import tempfile
++        with tempfile.TemporaryDirectory() as td:
++            root = Path(td)
++            c = _scaffold(root)
++            _write_docs(root, **c)
++            with open(root / "README.md", "a", encoding="utf-8") as f:
++                f.write("handles ~1.4k widgets in steady state.\n")
++            (root / "README.pt-BR.md").write_text(
++                "processa ~13,5k unidades por dia.\n", encoding="utf-8")
++            r = _run_json(root)
++            self.assertEqual(
++                r.returncode, 1,
++                f"unmatched decimal-k numerals must fail the gate; {r.stdout}")
++            vio = json.loads(r.stdout)["violations"]
++            self.assertTrue(
++                any("unmatched-sweep" in v and "~1.4k" in v for v in vio),
++                f"expected a swept ~1.4k violation; {vio}")
++            self.assertTrue(
++                any("unmatched-sweep" in v and "~13,5k" in v for v in vio),
++                f"expected a swept ~13,5k violation; {vio}")
++
++    def test_stale_pending_value_is_not_grandfathered(self):
++        """Finding 2: the consumed (CLAUDE.md, tests, 13000) APPROX_PENDING
++        entry is gone — a CLAUDE.md citing '~13,000 parametrized cases'
++        against a live collect far outside the band must fail the FULL run.
++        With the entry present this exact configuration exited 0 (PENDING),
++        because the pending lookup ran BEFORE the band check."""
++        import tempfile
++        with tempfile.TemporaryDirectory() as td:
++            root = Path(td)
++            c = _scaffold(root)
++            _write_docs(root, **c)
++            _pytest_scaffold(root, cases=200)
++            with open(root / "CLAUDE.md", "a", encoding="utf-8") as f:
++                f.write("collect reports ~13,000 parametrized cases.\n")
++            r = _run_json(root, no_tests=False)
++            self.assertEqual(
++                r.returncode, 1,
++                f"stale 13,000 vs live 200 must fail, never PEND; {r.stdout}")
++            data = json.loads(r.stdout)
++            self.assertEqual(data["pending"], [],
++                             "no site may be silently exempted")
++            self.assertTrue(
++                any("tests=~13000" in v and "band" in v
++                    for v in data["violations"]),
++                f"expected an approx band violation; {data['violations']}")
++
++    def test_bold_wrapped_prose_counts_are_watched(self):
++        """Finding 3: '**N** distinct scripts' and the line-wrapped
++        '**N** hook\\nscripts' prose sites were invisible to the plain-space
++        regexes (dead-regex class) — drift there must now fail."""
++        import tempfile
++        with tempfile.TemporaryDirectory() as td:
++            root = Path(td)
++            c = _scaffold(root)  # registered=3, hook_py=4
++            _write_docs(root, **c)
++            with open(root / "CLAUDE.md", "a", encoding="utf-8") as f:
++                f.write("wired as **999** distinct scripts today.\n")
++                f.write("the **888** hook\nscripts on disk are canonical.\n")
++            r = _run_json(root)
++            self.assertEqual(r.returncode, 1, f"bold drift must fail; {r.stdout}")
++            vio = "\n".join(json.loads(r.stdout)["violations"])
++            self.assertIn("registered=999", vio)
++            self.assertIn("hook_py=888", vio)
++
++    def test_line_wrapped_frontend_tier_is_watched(self):
++        """Finding 4: 'N frontend (universal\\nfrontend)' wraps across a
++        newline in docs/WHAT-WE-ARE.md §1.4; the literal-space regex matched
++        ZERO sites while core/domain in the same sentence were watched."""
++        import tempfile
++        with tempfile.TemporaryDirectory() as td:
++            root = Path(td)
++            c = _scaffold(root)  # frontend=2
++            _write_docs(root, **c)
++            with open(root / "CLAUDE.md", "a", encoding="utf-8") as f:
++                f.write("tiers: 9 frontend (universal\nfrontend) skills.\n")
++            r = _run_json(root)
++            self.assertEqual(
++                r.returncode, 1,
++                f"line-wrapped frontend drift must fail; {r.stdout}")
++            self.assertTrue(
++                any("frontend=9" in v
++                    for v in json.loads(r.stdout)["violations"]))
++
++    def test_collect_errors_fail_when_band_enforced(self):
++        """Finding 5: collection errors mean the band verdict is computed
++        over a PARTIAL population. When the band was enforced over >=1 site
++        this run, that must be a VIOLATION — the only automated full-run
++        caller (release preflight) discards all output, so a warning is
++        structurally invisible. Positive control: the identical tree with a
++        clean collect passes, so the failure is attributable to the error."""
++        import tempfile
++        with tempfile.TemporaryDirectory() as td:
++            root = Path(td)
++            c = _scaffold(root)
++            _write_docs(root, **c)
++            _pytest_scaffold(root, cases=100, broken=False)
++            with open(root / "CLAUDE.md", "a", encoding="utf-8") as f:
++                f.write("collect reports ~100 parametrized cases.\n")
++            r = _run_json(root, no_tests=False)
++            self.assertEqual(r.returncode, 0,
++                             f"clean-collect control must pass; {r.stdout}")
++            (root / "tests" / "test_broken.py").write_text(
++                "import module_that_does_not_exist_plan166_repass\n",
++                encoding="utf-8")
++            r = _run_json(root, no_tests=False)
++            self.assertEqual(
++                r.returncode, 1,
++                f"in-band cite over a partial collect must fail; {r.stdout}")
++            self.assertTrue(
++                any("collect-errors" in v
++                    for v in json.loads(r.stdout)["violations"]),
++                f"expected approx/collect-errors violation; {r.stdout}")
++
++    def test_decimal_k_normalizes_to_hundreds_not_tenfold(self):
++        """Finding 7: approx_norm parsed '~1.4k' as 14000 (separator-strip
++        after the k-multiplier) — a 10x error in the FALSE-PASS direction.
++        Cross-doc equality proves the parse: '~1400' and '~1.4k' are the
++        SAME claim and must normalize to the same integer (1400)."""
++        import tempfile
++        with tempfile.TemporaryDirectory() as td:
++            root = Path(td)
++            c = _scaffold(root)
++            _write_docs(root, **c)
++            with open(root / "CLAUDE.md", "a", encoding="utf-8") as f:
++                f.write("collect reports ~1400 tests.\n")
++            with open(root / "README.md", "a", encoding="utf-8") as f:
++                f.write("collect reports ~1.4k tests.\n")
++            r = _run_json(root)
++            self.assertEqual(
++                r.returncode, 0,
++                f"~1400 and ~1.4k are the same figure — must pass; {r.stdout}")
++            cited = sorted(set(
++                s["cited"] for s in json.loads(r.stdout)["approx"]["sites"]
++                if s["metric"] == "tests"))
++            self.assertEqual(cited, [1400],
++                             f"decimal-k must normalize to 1400; got {cited}")
++
++
++class TestPtBrLabelControls(unittest.TestCase):
++    """PLAN-166 W0 AC-5 positive controls, pt-BR leg (W0 re-pass round 2).
++
++    The _EXPECTED_SITES manifest proves the pt-BR matchers MATCH (liveness:
++    _note() fires before the enforce branch) — it does NOT prove a match
++    ENFORCES. A kind-binding bug could keep the manifest green while
++    enforcement silently died. These controls plant a WRONG number at every
++    watched pt-BR label/phrasing of README.pt-BR.md and demand one named
++    violation per plant, preceded by a clean-control run so each failure is
++    attributable to its plant, not to the phrasing.
++
++    The metric list is DERIVED from the manifest keys ending in
++    '@README.pt-BR.md' — never a recalled list (the numeral-espelho lesson:
++    recited enumerations failed 4x in this plan) — so ratifying a new pt
++    site into the manifest without adding its control phrasing fails here
++    first, in the coverage test below.
++    """
++
++    _PT_DOC = "README.pt-BR.md"
++
++    # metric -> snippet factory carrying that metric's watched pt-BR
++    # phrasing(s) with the given (planted) value. Phrasings mirror the live
++    # sites in README.pt-BR.md: the four pt table labels (Checklists de
++    # skills / Scripts de hook / Hooks ligados em / Módulos de biblioteca
++    # compartilhada) and the pt prose forms (arquivos de skill / em disco /
++    # ligados / registros de evento / core-frontend-de domínio split /
++    # SPEC-v1 arquivos / `*.schema.md` / '# N ADRs' / N slash commands).
++    _EXACT_PLANTS = {
++        "skills": lambda v: (
++            "| Checklists de skills | **%d** | x |\n"
++            "entrega **%d arquivos de skill** reutilizáveis.\n" % (v, v)),
++        "core": lambda v: "organizadas em %d core + outros tiers.\n" % v,
++        "frontend": lambda v: "mais %d frontend + o resto.\n" % v,
++        "domain": lambda v: "e + %d de domínio no total.\n" % v,
++        "adrs": lambda v: "ls .claude/adr  # %d ADRs\n" % v,
++        "commands": lambda v: (
++            "%d slash commands em `.claude/commands/`.\n" % v),
++        "hook_py": lambda v: (
++            "| Scripts de hook (em disco) | **%d** | x |\n"
++            "a diferença entre **%d em disco** e os ligados.\n" % (v, v)),
++        "registered": lambda v: (
++            "| Hooks ligados em `settings.json` | **%d** | x |\n"
++            "são **%d ligados** no total.\n" % (v, v)),
++        "registrations": lambda v: "com %d registros de evento.\n" % v,
++        "lib": lambda v: (
++            "| Módulos de biblioteca compartilhada | **%d** | x |\n" % v),
++        "spec_v1": lambda v: (
++            "contrato em `SPEC/v1/` (%d arquivos — fixado).\n" % v),
++        "schema_files": lambda v: (
++            "sendo %d `*.schema.md` de contrato.\n" % v),
++    }
++    # `tests` is approx-kind: a wrong EXACT integer is a different rule, so
++    # its control is the out-of-band ~Nk plant below.
++    _APPROX_CONTROLLED = {"tests"}
++
++    def test_pt_control_coverage_is_derived_from_manifest(self):
++        """Every metric the ratified manifest watches at README.pt-BR.md has
++        a planted control here — and no control exists for an unwatched
++        metric. Derived from _EXPECTED_SITES, never recited."""
++        derived = sorted(set(
++            k.split("@")[0] for k in TestVerifyCounts._EXPECTED_SITES
++            if k.endswith("@" + self._PT_DOC)))
++        covered = sorted(set(self._EXACT_PLANTS) | self._APPROX_CONTROLLED)
++        self.assertEqual(
++            covered, derived,
++            "pt-BR positive-control coverage drifted from the ratified "
++            "manifest: every metric watched at README.pt-BR.md needs a "
++            "planted control (and none may be invented).")
++
++    def test_wrong_number_at_each_pt_label_fails(self):
++        """AC-5 control (a): a wrong number planted at EACH watched pt-BR
++        label/phrasing must produce a named violation for that metric."""
++        import tempfile
++        with tempfile.TemporaryDirectory() as td:
++            root = Path(td)
++            c = _scaffold(root)
++            _write_docs(root, **c)
++            clean = {  # live values of the _scaffold tree, per metric
++                "skills": c["total"], "core": c["core"],
++                "frontend": c["frontend"], "domain": c["domain"],
++                "adrs": c["adrs"], "hook_py": c["hook_py"],
++                "registered": c["registered"],
++                # one command string per hook entry in the scaffold
++                # settings.json, so registrations == registered there
++                "registrations": c["registered"],
++                "lib": c["lib"],
++                "spec_v1": 2,       # _scaffold default: SPEC/v1/{s0,s1}.md
++                "schema_files": 0,  # the scaffold ships no *.schema.md
++                "commands": 0,      # the scaffold ships no .claude/commands/
++            }
++            self.assertEqual(sorted(clean), sorted(self._EXACT_PLANTS))
++            pt = root / self._PT_DOC
++            # Clean control: every phrasing planted with the CORRECT live
++            # value passes, so the wrong-plant failures below are
++            # attributable to the number, not the phrasing.
++            pt.write_text(
++                "".join(self._EXACT_PLANTS[m](clean[m])
++                        for m in sorted(self._EXACT_PLANTS)),
++                encoding="utf-8")
++            r = _run_json(root)
++            self.assertEqual(
++                r.returncode, 0,
++                f"clean pt-BR control must pass; {r.stdout}")
++            # Wrong plants: a distinct value per metric so every violation
++            # names its plant unambiguously.
++            planted = dict(
++                (m, 900 + i)
++                for i, m in enumerate(sorted(self._EXACT_PLANTS)))
++            pt.write_text(
++                "".join(self._EXACT_PLANTS[m](planted[m])
++                        for m in sorted(self._EXACT_PLANTS)),
++                encoding="utf-8")
++            r = _run_json(root)
++            self.assertEqual(
++                r.returncode, 1,
++                f"planted pt-BR drift must fail the gate; {r.stdout}")
++            vio = json.loads(r.stdout)["violations"]
++            pt_vio = [v for v in vio if v.startswith(self._PT_DOC)]
++            for m in sorted(planted):
++                self.assertTrue(
++                    any("%s=%d" % (m, planted[m]) in line
++                        for line in pt_vio),
++                    "planted %s=%d produced no %s violation; got: %s"
++                    % (m, planted[m], self._PT_DOC, vio))
++
++    def test_planted_out_of_band_nk_pt_site_fails_band(self):
++        """AC-5 control (b): a CONSUMED approx site in the ~Nk form planted
++        OUTSIDE the +/-5% band (~9k casos vs a real live collect of 200)
++        must fail the approx BAND rule — and must NOT appear in the
++        unmatched sweep, proving the plant exercised the consumed
++        band-check path rather than being caught as an orphan numeral."""
++        import tempfile
++        with tempfile.TemporaryDirectory() as td:
++            root = Path(td)
++            c = _scaffold(root)
++            _write_docs(root, **c)
++            _pytest_scaffold(root, cases=200)
++            (root / self._PT_DOC).write_text(
++                "a coleta reporta ~9k casos hoje.\n", encoding="utf-8")
++            r = _run_json(root, no_tests=False)
++            self.assertEqual(
++                r.returncode, 1,
++                f"out-of-band ~9k vs live 200 must fail; {r.stdout}")
++            data = json.loads(r.stdout)
++            self.assertTrue(
++                any("tests=~9000" in v and "OUTSIDE the +/-5% band" in v
++                    for v in data["violations"]),
++                f"expected an approx band violation; {data['violations']}")
++            self.assertFalse(
++                any("unmatched-sweep" in v for v in data["violations"]),
++                "the ~9k site must be CONSUMED by the approx rule, "
++                f"never swept; {data['violations']}")
++
++
++class TestDocFreshness(unittest.TestCase):
++    """PLAN-166 W0 re-pass finding 6: docs/CTO-GUIDE.md carried v0-era
++    roadmap claims ('HMAC chain queued (DYN-SEC3 / Sprint 16)', Sprint 15-16
++    gating, PLAN-017) under a fresh 'Last reviewed' stamp — the HMAC-chained
++    audit log is a SHIPPED flagship feature. Non-numeric, so the count gate
++    is blind by design; this tripwire stops the stale phrases from being
++    resurrected by a merge-conflict resolution."""
++
++    _STALE_MARKERS = (
++        "HMAC chain queued",
++        "DYN-SEC3",
++        "Sprint 15-16",
++        "Sprint 16",
++        "post-Sprint-16",
++        "PLAN-017",
++    )
++
++    def test_cto_guide_carries_no_v0_roadmap_markers(self):
++        text = (REPO_ROOT / "docs" / "CTO-GUIDE.md").read_text(encoding="utf-8")
++        found = [m for m in self._STALE_MARKERS if m in text]
++        self.assertEqual(
++            found, [],
++            "docs/CTO-GUIDE.md still carries v0-era roadmap claims that "
++            f"contradict shipped reality: {found}")
++
++
+ if __name__ == "__main__":
+     unittest.main()

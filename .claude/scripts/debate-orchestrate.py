@@ -858,7 +858,15 @@ def _handle_convergence(conv, args, plans_root) -> "Optional[int]":
         f"red_team_needed={conv['red_team_needed']} "
         f"outcome={conv.get('outcome', '')}"
     )
-    if conv.get("max_rounds_reached"):
+    # PLAN-169 W2.9(iii) consumer fix (repass-r2 part-d P1: the first
+    # fix-forward changed compute_convergence + CLI but this branch still
+    # tested the FLAG before the label, so a ceiling round that met the
+    # threshold was written up as unresolved). Ceiling semantics: terminal
+    # either way; converged-at-ceiling is CONVERGENCE (§12.4, and the TLA
+    # MaxRoundsExhausted action only fires with jaccard < threshold) — it
+    # falls through to the consensus path below. Only the
+    # below-threshold ceiling terminates as unresolved here.
+    if conv.get("max_rounds_reached") and not conv.get("converged"):
         _emit_max_rounds_event(args.plan, args.round_num, dry_run=args.dry_run)
         unresolved_path = write_unresolved_consensus(
             plans_root, args.plan, args.round_num, args.max_rounds,

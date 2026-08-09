@@ -562,11 +562,17 @@ class TestMaxRoundsEnforcement(_EnvIsolatedTest):
         self.assertEqual(term[0].get("round"), 5)
         self.assertEqual(term[0].get("agent"), "orchestrator")
 
-    def test_orchestrator_does_not_trigger_red_team_at_max_rounds(self):
-        # Identical risks -> Jaccard=1.0; MAX_ROUNDS still overrides red-team.
+    def test_ceiling_convergence_reaches_consensus_not_impasse(self):
+        # PLAN-169 W2.9(iii) consumer contract (repass-r2 part-d P1):
+        # identical risks at the MAX_ROUNDS ceiling = jaccard 1.0 >=
+        # threshold = CONVERGED (§12.4; the TLA MaxRoundsExhausted action
+        # only fires below threshold). The orchestrator must take the
+        # consensus path (rc=0), not write the unresolved impasse — and
+        # still never spawn a red team at round 5 (red_team_needed is
+        # round<=2 only, unchanged).
         self._seed(5, ["shared a", "shared b", "shared c"])
         rc, _err = self._cli()
-        self.assertEqual(rc, 3)  # NOT 2 (red-team) / NOT 0
+        self.assertEqual(rc, 0)  # NOT 3 (impasse) / NOT 2 (red-team)
         red_team = self._plans_root / "PLAN-999" / "debate" / "round-6" / "red-team.md"
         self.assertFalse(red_team.is_file())
 

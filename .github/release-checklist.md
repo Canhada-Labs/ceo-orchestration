@@ -176,10 +176,11 @@ mão pula o driver. O mesmo assert entra server-side no `release.yml`.
       (sem rc prévia = fail; rc deletada não conta)
 - [ ] **Novo** `pair-rail-verdict-vX.Y.Z.md` (o verdict é POR TAG — o
       step do release.yml roda no GA também; o da rc não vale).
-      Além dos campos do template, o guard de delta do `tag`
-      (`_release_tag_guard.py`) exige QUATRO campos no bloco yaml — o
-      template canônico ainda documenta só o primeiro (patch no W1);
-      até lá, esta lista é a superfície de autoria:
+      O guard de delta do `tag` (`_release_tag_guard.py`) exige QUATRO
+      campos no bloco yaml — o template canônico
+      (`.claude/governance/pair-rail-verdict-template.md`) já documenta
+      TODOS desde o patch do PLAN-166 W1 (nota stale curada em S299,
+      repass-r2 part-e P3); esta lista fica como espelho de autoria:
       - `parent_sha:` 40-hex — o commit que o re-pass revisou (o verdito
         landa DEPOIS dele; `parent_sha == HEAD` é rejeitado como vácuo)
       - `delta_allowlist:` lista LITERAL (`  - path`), sem glob: o

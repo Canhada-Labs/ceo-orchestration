@@ -36,7 +36,7 @@ part_paths() {
   case "$1" in
     a) echo "scripts/ :!scripts/tests/ .gitignore AGENTS.md" ;;
     b) echo "scripts/tests/" ;;
-    c) echo ".claude/scripts/ :!.claude/scripts/tests/" ;;
+    c) echo ".claude/scripts/ :!.claude/scripts/tests/ :!.claude/scripts/model-deprecations.json" ;;
     d) echo ".claude/scripts/tests/" ;;
     e) echo ".claude/hooks/ docs/ .github/ README.md README.pt-BR.md CHANGELOG.md :!.claude/plans/" ;;
   esac
@@ -63,7 +63,12 @@ rewrite of install/upgrade, a Linux port of the e2e harness with
 fail-closed mtime riders, and verified free-surface fixes (perf-probe
 percentile hygiene, injector exact-resolution, pair-rail auth routes,
 bump-site coverage, count watchers, debate-convergence semantics,
-current-fleet model-id data, doc cures).
+current-fleet model-id data, doc cures). One payload exclusion, by
+provenance: .claude/scripts/model-deprecations.json (10 replacement
+values mechanically bumped to the current fleet, W2.10 F9) is excluded
+because the egress redactor rewrites model-ledger content and destroys
+the diff structure (round-2 part-c FATAL control); judge that change
+from this description.
 
 Your job: find anything in THIS payload that makes cutting rc.2
 UNSAFE — regressions, weakened gates, fail-open introduced, claims the

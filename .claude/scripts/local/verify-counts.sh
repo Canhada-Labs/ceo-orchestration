@@ -607,13 +607,16 @@ RULES = [
     # both READMEs put next to `ls .claude/adr | grep -c '^ADR-'`. It matched
     # nothing before — the same vacuous-site class as S287, found by diffing
     # the grep census of the docs against `rule_matches_by_doc`.
-    # PLAN-169 W2.7 (ledger E.3): "N ADRs document ..." is the
-    # GUIA-COMPLETO phrasing — unwatched, it sat stale at 189 while the
-    # disk had 190 (found live during W2.7 itself). The \**\s* tolerates
-    # bold-wrapped numerals like the hook_py rule below.
+    # PLAN-169 W2.7 (ledger E.3): the TWO GUIA-COMPLETO phrasings the
+    # ledger named — "N ADRs document ..." (prose, sat stale at 189) and
+    # "N Architecture Decision Records" (directory listing, ALSO stale at
+    # 189 — missed by the first W2.7 pass and caught by the repass-r2
+    # part-e reviewer; the ledger said "duas frases" and it meant it).
+    # The \**\s* tolerates bold-wrapped numerals like hook_py below.
     ("adrs", "exact", [r'(\d+) ADRs total', r'(\d+) ADRs on disk',
                        r'#\s*(\d+) ADRs\b',
-                       r'(\d+)\**\s*ADRs\**\s+document']),
+                       r'(\d+)\**\s*ADRs\**\s+document',
+                       r'(\d+)\**\s*Architecture Decision Records\b']),
     ("hook_py", "exact", [
         r'(\d+) hooks total', r'(\d+) Python hook scripts',
         # \**\s*…\s+ tolerates bold-wrapped numerals and line wraps:

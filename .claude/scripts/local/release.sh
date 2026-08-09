@@ -73,7 +73,10 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 TARGET_BASE="1.3.0"
 RELEASE_TITLE="night-mode + release-mechanics hardening"
-RELEASE_SCOPE="PLAN-162 / PLAN-165 / PLAN-166 (ADRs 184 -> 189)"
+# repass-r2 part-d P1 (S299): the v1.3.0 train grew past the rc.1 text —
+# 167/168 (ownership decision table) and 169 W0-W2 (Linux port + verified
+# fixes) landed between rc.1 and rc.2. The tag stands for the WHOLE train.
+RELEASE_SCOPE="PLAN-162 / PLAN-165 / PLAN-166 / PLAN-167 / PLAN-168 / PLAN-169 W0-W2 (ADRs 184 -> 190)"
 RELEASE_HEADLINE="night-mode — the Owner arms per-machine autonomy for one upcoming
 session (gitignored overlay, next-session semantics), and arming it is a
 HUMAN action by construction: the writer script self-path-guards, the Bash

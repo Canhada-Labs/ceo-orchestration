@@ -78,7 +78,9 @@ _SITES: List[Tuple[str, str, str]] = [
     # PLAN-169 W2.6 (ledger E.1/F.7/A.0.4): the install-state marker is the
     # surface check-framework-updates.sh reads MARKER-FIRST — a bump that
     # skips it leaves every adopter's updater reporting behind-minor
-    # forever. 12th site; oracle mirror in verify-counts VERSION_SITES.
+    # forever. Joins _SITES with its oracle mirror in verify-counts
+    # VERSION_SITES (no census numeral here: the F6 guard forbids
+    # site-count claims in comments, ordinals included).
     (".claude/.framework-version", PLAIN, r"\A\s*" + SEMVER + r"\s*\Z"),
     ("npm/package.json", PLAIN, r'("version"\s*:\s*")' + SEMVER + r'(")'),
     ("pyproject.toml", PLAIN, r'(?m)^(version\s*=\s*")' + SEMVER + r'(")'),
