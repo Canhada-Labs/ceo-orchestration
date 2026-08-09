@@ -44,7 +44,7 @@ documentation bug.
 | ADRs shipped | 190 | `ls .claude/adr/ADR-*.md \| wc -l` |
 | SPEC/v1 files | 32 (28 `*.schema.md`) | `ls SPEC/v1/*.md \| wc -l` |
 | Workflows | 22 | `ls .github/workflows/*.yml \| wc -l` |
-| GitHub Actions SHA-pinned refs | every `uses:` pinned | `grep -rEc 'uses: [^#]+@(v[0-9]+\|main\|master\|latest)\s*$' .github/workflows/*` — must be 0 everywhere |
+| GitHub Actions SHA-pinned refs | every `uses:` pinned | `grep -rEc 'uses: [^#]+@(v[0-9]+\|main\|master\|latest)[[:space:]]*$' .github/workflows/*` — must be 0 everywhere |
 | Skills | 166 (42 core + 8 frontend + 116 domain) | `find .claude/skills -name SKILL.md \| wc -l` |
 | Hooks | 57 .py on disk; 46 wired into `settings.json` (48 event registrations) | `ls .claude/hooks/*.py \| wc -l` |
 | `_lib/` stdlib-only modules | 68 | `ls .claude/hooks/_lib/*.py \| grep -v __init__ \| wc -l` |
@@ -91,7 +91,7 @@ python3 -m pytest -q \
 
 ```bash
 # No floating action refs
-grep -rE 'uses: [^#]+@(v[0-9]+|main|master|latest)\s*$' .github/workflows/
+grep -rE 'uses: [^#]+@(v[0-9]+|main|master|latest)[[:space:]]*$' .github/workflows/
 # Must print nothing
 
 # Every remaining ref is SHA-pinned (compare with the empty result above)

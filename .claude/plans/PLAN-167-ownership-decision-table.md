@@ -720,3 +720,18 @@ existia porque só havia o caro — e ele nem cobria as células.
 
 Os callers (`install.sh`/`upgrade.sh`) ficam com: observar as 9 dimensões
 → chamar → executar. Os ramos de decisão antigos SAEM (AC-6).
+
+### Registro do land + convenção de ACs (PLAN-169 W0.8, 2026-08-08)
+
+O "⛔ PARADO AQUI" acima foi DESBLOQUEADO pelas ratificações do Owner e
+o pack **landou em `7c0828a`** (2026-08-07); a evidência do sentinel
+assinado da cerimônia (W4-approved.md + .asc) foi preservada em
+`ad9cc3a`. Os follow-ups fecharam no **PLAN-168** (`67a4c75`,
+fix-forward `8a178f5`), incluindo OWN-0074 verde pela 1ª vez no e2e
+62/3 de S297.
+
+**Convenção de ACs (ratificada pelo Owner, PLAN-169 W0.8/E.12):**
+**AC provado no registro de execução; checkbox não usado.** Os
+checkboxes `- [ ]` deste plano permanecem intocados por convenção e NÃO
+indicam trabalho aberto — a prova de cada AC vive neste §9, nos commits
+de land acima e no §W2 do PLAN-168.

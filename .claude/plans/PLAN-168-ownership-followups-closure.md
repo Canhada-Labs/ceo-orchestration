@@ -359,6 +359,12 @@ staged, o Owner assina uma vez.
 
 ## 4. Critérios de aceite
 
+> **Convenção de ACs (PLAN-169 W0.8/E.12, ratificada pelo Owner
+> 2026-08-08): AC provado no registro de execução; checkbox não
+> usado.** Os checkboxes abaixo permanecem `- [ ]` por convenção e NÃO
+> indicam trabalho aberto — a prova vive no §7 (registro de execução) e
+> nos commits de land `67a4c75` + fix-forward `8a178f5`.
+
 - [ ] **AC-1** PR tocando só `ownership_table.tsv` dispara `smoke-install`.
 - [ ] **AC-2** `scripts/_hash_lib.sh` está nos dois filtros — **JÁ ESTAVA** (`:15`, `:54`); o AC vira uma asserção de regressão, não trabalho.
 - [ ] **AC-3** O tag `v1.2.0` é buscado; as linhas `legacy_pristine*` rodam em CI (hoje dariam HARNESS-ERR).

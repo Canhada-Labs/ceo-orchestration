@@ -1,4 +1,7 @@
 #!/bin/bash
+# OBSOLETO — substituído por step1b; re-executar REVERTERIA o PLAN-167
+# (copia staged/ STALE por cima de destinos mais novos). Preservado como
+# evidência (PLAN-169 W0.2, ledger D.2). NÃO remover.
 # PLAN-166 W1 — LAND step 1 (Owner-run): applies NÃO-kernel + sweep de contagens.
 # Espelho exato dos comandos validados na simulação em clone limpo (land-sim.sh,
 # 2026-08-06: verify-counts EXIT=0, asserts 52/52, e2e 45/45, bateria 5010 pass,

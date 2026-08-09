@@ -158,6 +158,12 @@ faz `unset` — o oposto de resíduo). Par usado só em prefixo de processo.
 1. **Cobertura e2e ausente:** o S3 nasce como `--ceremony user`; a
    TRANSIÇÃO maintainer→user (por onde o round 7 (b) passou) não é
    exercitada por nenhum cenário. Adicionar S9.
+   > **FECHADO (PLAN-169 W0.7, 2026-08-08):** o ex-"S9" foi absorvido
+   > pelo PLAN-167 como célula da tabela — `OWN-0070`
+   > (`scripts/tests/ownership_table.tsv:60`, "maintainer install
+   > re-run as user: record must NOT be erased", origem r7-F2) — e roda
+   > no e2e nightly (GREEN no run Darwin de S297, 62/3). Verificado por
+   > grep na tabela-verdade, não por recitação.
 2. **Emits do caminho de GRANT do kernel** seguem silenciosos (P1 já
    registrado no Step 2 acima).
 3. Matcher de `verify-counts.sh` para as duas frases de contagem de ADR

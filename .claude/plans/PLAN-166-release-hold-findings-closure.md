@@ -700,3 +700,52 @@ dizer mais que isso seria claim falsa.
   (`CEO_SOTA_DISABLE`, `CEO_PAIR_RAIL_VERDICT_OPTIONAL`).
 - `check_tier_a_spec_version_drift` vacuoso (ceo-boot) — registrar em
   memória; classe vacuous-check.
+
+## §-final — Estado de fechamento e subsunção (PLAN-169 W0.5, 2026-08-08)
+
+> Escrituração exigida pelo ledger do PLAN-169 (A.5.1–A.5.5, F.8,
+> F.14). Este § registra POR QUE AC-3/AC-4 permanecem `[ ]` acima e
+> onde cada um foi de fato provado. Convenção: **AC provado no registro
+> de execução; checkbox não usado** (mesma convenção ratificada para
+> PLAN-167/168 no PLAN-169 W0.8).
+
+**O que já fechou.** W0 fechou na S295; W1 (patches canônicos +
+cerimônia GPG) **landou em `9d3f21d`** (2026-08-07, "ceremony(PLAN-166
+W1): findings-closure landada"). A única perna viva deste plano é o
+**W2 (re-pass → verdito rc.2 → tag → hold 24h → GA v1.3.0)**,
+sequenciado como **W6.1 do PLAN-169** (ordem pinada; main congelado do
+corte da rc.2 até o GA). O frontmatter `executing` está CORRETO — o
+watchdog que classifica este plano como *stranded* está lendo espera
+de fila, não abandono.
+
+**AC-3 [P0][F3] — provado por subsunção no PLAN-167/168.** Os 8
+cenários exigidos existem e rodam em CI (45/45 pós-168):
+`scripts/tests/test-upgrade-spec-ownership.sh:7-19,194-197,247-262,274-282,318-330`,
+wiring em `.github/workflows/smoke-install.yml:27,81,128`. O upgrade
+de SPEC/marker é decidido pelo `_ownership_verdict()` (PLAN-167, land
+`7c0828a`; registro em PLAN-167 §7) e os follow-ups fecharam no
+PLAN-168 (`67a4c75` + fix-forward `8a178f5`; registro em
+PLAN-168 §W2). O cenário de 2º upgrade (refresh forçado com backup)
+está coberto — o e2e INV-4 (`test-protocol-pointer-inv4.sh`) asserta
+os BYTES do backup real (PLAN-168 V2-P2).
+
+**AC-4 [P1][F4] — satisfeito COM exceção nomeada.** O e2e de paridade
+install≠upgrade + controle positivo rodam nos DOIS modos de cerimônia
+(`.github/workflows/smoke-install.yml:240-243,251-259,267-268`). A
+exceção: o **2º fator do controle aceita evidência não-causal**
+(`smoke-install.yml:206`, achado r6-P2 deste plano) — defeito herdado
+pelo **PLAN-169 W2** (cura conhecida: exigir
+`positive control: FIRED in every mode` + per-mode verdicts `:1`).
+Rota ratificada (PLAN-169 OQ-5): **GA v1.3.0 com exceção nomeada no
+release-checklist**; a cura não gateia o trem.
+
+**Ratificação `approx`/collect-errors (F.14) — AGENDADA para a rc.2.**
+O W0.3 prometeu ratificar a semântica `approx` (erros de coleta > 0 =
+VIOLATION, `rule: approx/collect-errors`) "no material de
+verdito/cerimônia do W1" — isso não aconteceu (0 hits no `approved.md`
+assinado e no `W1-ceremony-log.md`). Registro aqui + compromisso: a
+ratificação entra no **material assinado do verdito rc.2** (próxima
+superfície assinada do trem W6.1), não em superfície não-assinada.
+
+**AC-7** segue aberto por construção — é o próprio trem W6.1
+(rc.2 + hold + GA).

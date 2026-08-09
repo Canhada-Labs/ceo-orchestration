@@ -1,7 +1,7 @@
 ---
 id: PLAN-169
 title: Fechamento total + evolução cross-session — publica v1.3.0 e v1.4.0
-status: reviewed
+status: executing
 created: 2026-08-08
 reviewed_at: 2026-08-08
 reviewed_by: "Owner — ratificação explícita em chat (S298): 'ratifica tudo com as recomendações e commita o pack'. Cobre R-A (esta transição), R-B (gate de debate §12.4 aceito como design-coherent), R-C (deferral de higiene de registro), OQ-1..5 e W0.8 conforme as recomendações do checklist."
@@ -1059,6 +1059,43 @@ W0 correspondentes viram VERIFICAÇÃO, não re-execução.
   pela tabela.
 
 ## Progress log
+
+- 2026-08-08 (S299): **W0 EXECUTADO INTEIRO** (`reviewed→executing`
+  neste commit). Pack pushado a `origin/main` (`57119b3`, ff de
+  `plan169-pack`); CI do push VERDE — **Translations drift CURADO**
+  (vermelho desde 04/08 fechado; A.0.3) + Validate SUCCESS. Debate
+  reconfirmado no disco (5 rounds, terminal `round-5/consensus.md`
+  unresolved/max-rounds — estado exato que o Owner ratificou em R-B).
+  Itens: **W0.1** verificado (header ⛔ + `100644` no pack). **W0.2**
+  header OBSOLETO aplicado a `PLAN-166/OWNER-W1-LAND-step1.sh`
+  (substituído por step1b; re-executar reverteria o PLAN-167). **W0.3**
+  verificado (0 tarballs untracked; padrão em `.gitignore:25` com
+  causa). **W0.4** drift local = 0 e workflow verde no push. **W0.5**
+  §-final escrito no PLAN-166 (subsunção AC-3/AC-4 com evidência,
+  ratificação `approx`/collect-errors AGENDADA para o material assinado
+  da rc.2, cura da leitura "stranded"). **W0.6** 2 memórias escritas
+  (`feedback-check-tier-a-spec-version-drift-vacuous`,
+  `feedback-verify-counts-real-path-is-local`) + sweep `|| echo
+  advisory`: superfícies VIVAS limpas (único hit em PLAN-156 landado =
+  evidência imutável; `release.sh:375` já fail-closed com path
+  correto). **W0.7(i)** transição maintainer→user EXISTE na tabela —
+  `OWN-0070` (tsv:60) — follow-up fechado no `W1-ceremony-log.md`;
+  **W0.7(ii)** controle positivo do scanner FIFO (§5.7) RODADO: 2
+  FIFOs plantados (raiz + subdir), `check-model-deprecations.py
+  --check` terminou em 0.0s rc=0 E escaneou o arquivo regular
+  (total=1, não-vacuoso); evidência de código `:207-215` (lstat +
+  S_ISREG antes de abrir) — fechamento do §5.7 REGISTRADO. **W0.8**
+  convenção ratificada registrada no §9 do PLAN-167 (+ registro do
+  land `7c0828a` que faltava) e no §4 do PLAN-168. **W0.9** aceite do
+  Owner REGISTRADO (OQ-3): ADR break-glass entra no pack W3; até lá
+  `CEO_PAIR_RAIL_VERDICT_OPTIONAL` sem doutrina segue risco nomeado da
+  janela de release. **W0.10** sweep POSIX: 2 sites curados em
+  `docs/CTO-GUIDE.md` (`\s`→`[[:space:]]` em grep -E vivo); demais
+  hits = regex Python (válido) ou evidência imutável. **W0.0**: zero
+  dispatch de Workflow no W0 (gate read-only honrado; probes seguem
+  DEVIDOS antes de qualquer escrita via Workflow em waves futuras).
+  Nota operacional: overhead-guard P4 bloqueou Edit legítimo 2× no
+  W0 — evidência adicional para C.3.
 
 - 2026-08-08 (S298, closeout): **RATIFICAÇÃO DO OWNER em chat**
   ("ratifica tudo com as recomendações e commita o pack") — R-A
