@@ -1,4 +1,4 @@
-0a987480aa3430ce1ff8db5b8d64bb85505ba24a25744bd6ef28b1b0655258fd  .claude/adr/ADR-163-hook-latency-gate-percentile-stability.md
+031000ad7d341adfbde5a7b7c265d313069d1bd1d622b03da33c86832d69f3b4  .claude/adr/ADR-163-hook-latency-gate-percentile-stability.md
 e17fd49325771748fdb36eb21555c634371e2cc471595291a88b20c0f3e7906d  .claude/adr/ADR-186-hook-deadline-policy.md
 8e6d052528ce9db46b9a0ff66bdd26995cd6d4c0d0410073bfe2f1391eeaa2bf  .claude/adr/ADR-191-break-glass-repo-kill-switches.md
 e49e6196f4c7fae4c7f97201ea246b7ee173e6ab1f2dcaf95276fe03d378c69c  .claude/hooks/audit_log.py

@@ -272,13 +272,17 @@ Decision (implemented in the free test surfaces by PLAN-169 W2.2):
 2. The collapse precondition (`i95 != i99`) is ASSERTED inside each
    test before the timed loop — lowering N can never silently
    re-create a collapsed gate.
-3. On CI/loaded machines (`GITHUB_ACTIONS`/`CI`/`CEO_FINISH_CEREMONY`)
-   the gate moves from the MEDIAN to the REAL p95: with N=200, p95
-   ignores the top 10 samples, so scheduler spikes cannot flake it
-   while a real latency regression still moves it. The median hid an
-   entire degraded tail. Quiet local machines keep the strict p99.
-   Budgets unchanged.
+3. On CI/loaded machines the MEDIAN gate STAYS — re-evaluated and KEPT
+   with live evidence. The p95-on-CI attempt flaked on its FIRST real
+   run (validate run 31288404989: p95=6.31 ms vs median=3.83 ms
+   against the 5 ms budget): a loaded shared runner shifts the WHOLE
+   distribution (~6x the local median), so any real tail percentile
+   prices the runner, not the code. The median is stable under that
+   shift and still catches the ~8x regression the probe exists for.
+   Quiet local machines keep the strict p99. Budgets unchanged.
 
-Any new percentile probe is born with: an N satisfying the
-precondition, derived indices, and a real-percentile gate (never the
-median) when N >= 200.
+The PLAN-112-FOLLOWUP median switch therefore graduates from
+flake-intuition to a decision WITH evidence (the run above). Any new
+percentile probe is born with: an N satisfying the precondition,
+derived indices, the median in shared-load environments, and a real
+percentile only where the environment is controlled.

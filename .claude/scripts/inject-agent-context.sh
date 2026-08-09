@@ -158,7 +158,13 @@ fi
 # impossible by construction; downstream the name is only (a) compared
 # fixed-string/equality-wise and (b) used as a KEY into the fixed
 # name->slug table — never interpolated into a path or a regex.
-if ! printf '%s' "$AGENT_NAME" | grep -qE '^[A-Za-z][A-Za-z0-9 _/&-]{0,60}$'; then
+# Whole-string bash =~, NOT a grep pipe: grep matches PER LINE, so a name
+# carrying an embedded newline ("a\nb") was ACCEPTED — each line matched
+# the charset on its own (caught by the W2.3 mirror test on the first CI
+# run, Linux job; the class is per-line-vs-whole-string, cousin of the
+# substring-vs-exact family this very item cures).
+_AN_RX='^[A-Za-z][A-Za-z0-9 _/&-]{0,60}$'
+if [[ ! "$AGENT_NAME" =~ $_AN_RX ]]; then
   echo "ERROR: Invalid AgentName '$AGENT_NAME'" >&2
   echo "  Must start with a letter and contain only letters, digits, spaces, underscores, slashes, ampersands, and dashes (max 61 chars)." >&2
   exit 2

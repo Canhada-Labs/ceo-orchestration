@@ -181,14 +181,12 @@ file: .claude/hooks/tests/test_check_output_secrets.py
 
 file: .claude/hooks/tests/test_check_pair_rail.py
   - bare-testcase
-  - env-write
 
 file: .claude/hooks/tests/test_check_pair_rail_decide_canonical.py
   - bare-testcase
 
 file: .claude/hooks/tests/test_check_pair_rail_golden.py
   - bare-testcase
-  - env-write
 
 file: .claude/hooks/tests/test_check_pair_rail_hook_integration.py
   - bare-testcase
@@ -231,6 +229,9 @@ file: .claude/hooks/tests/test_claude_adapter_thinking.py
 file: .claude/hooks/tests/test_claude_batch_adapter.py
   - env-write
 
+file: .claude/hooks/tests/test_codex_advisory_teeth.py
+  - bare-testcase
+
 file: .claude/hooks/tests/test_codex_egress_proof_telemetry.py
   - bare-testcase
 
@@ -239,6 +240,10 @@ file: .claude/hooks/tests/test_codex_egress_redact_outgoing.py
 
 file: .claude/hooks/tests/test_codex_reply_multi_turn.py
   - bare-testcase
+
+file: .claude/hooks/tests/test_codex_stop_review.py
+  - bare-testcase
+  - env-write
 
 file: .claude/hooks/tests/test_codex_strict_json.py
   - bare-testcase
@@ -556,7 +561,6 @@ file: .claude/scripts/tests/test_audit_log_dispatch_hint.py
 
 file: .claude/scripts/tests/test_audit_log_retain.py
   - bare-testcase
-  - env-del
   - env-write
 
 file: .claude/scripts/tests/test_audit_query.py
@@ -758,6 +762,9 @@ file: .claude/scripts/tests/test_hook_profiler.py
   - env-write
 
 file: .claude/scripts/tests/test_import_skill_skip_rubric_auth.py
+  - bare-testcase
+
+file: .claude/scripts/tests/test_inject_agent_context_exact_resolution.py
   - bare-testcase
 
 file: .claude/scripts/tests/test_inject_agent_context_mitigated_dispatch.py
@@ -1029,18 +1036,6 @@ file: tests/integration/test_peers_yaml_migration.py
 file: tests/integration/test_threat_model_coverage.py
   - bare-testcase
 
-file: tests/unit/test_atlas_technique_id_tagging.py
-  - bare-testcase
-
-file: tests/unit/test_check_atlas_fpr.py
-  - bare-testcase
-
-file: tests/unit/test_codex_redact_fail_closed.py
-  - bare-testcase
-
-file: tests/unit/test_credential_rotation_emit.py
-  - env-write
-
 file: tests/test_federation/conftest.py
   - env-write
 
@@ -1086,6 +1081,18 @@ file: tests/test_federation/test_write_mode_wire.py
   - bare-testcase
   - env-write
 
+file: tests/unit/test_atlas_technique_id_tagging.py
+  - bare-testcase
+
+file: tests/unit/test_check_atlas_fpr.py
+  - bare-testcase
+
+file: tests/unit/test_codex_redact_fail_closed.py
+  - bare-testcase
+
+file: tests/unit/test_credential_rotation_emit.py
+  - env-write
+
 file: tests/unit/test_install_yaml_glob.py
   - bare-testcase
 
@@ -1097,10 +1104,3 @@ file: tests/unit/test_output_scan_llm03.py
 
 file: tests/unit/test_value_dashboard_emit.py
   - bare-testcase
-
-file: .claude/hooks/tests/test_codex_advisory_teeth.py
-  - bare-testcase
-
-file: .claude/hooks/tests/test_codex_stop_review.py
-  - bare-testcase
-  - env-write

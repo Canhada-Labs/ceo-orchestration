@@ -1060,6 +1060,29 @@ W0 correspondentes viram VERIFICAÇÃO, não re-execução.
 
 ## Progress log
 
+- 2026-08-09 (S299, fix-forward pós-CI): **O primeiro Validate COMPLETO
+  sobre o conteúdo W2 (run 31288404989) veio VERMELHO com 4 achados —
+  todos meus, todos reais, todos curados no mesmo ciclo:** (1) meu
+  PRÓPRIO teste novo do W2.3 pegou no Linux que a gramática via
+  `grep -qE` aceita nome com NEWLINE embutido (grep casa POR LINHA —
+  classe per-line-vs-whole-string, prima da substring-vs-exact) ⇒
+  validação vira bash `[[ =~ ]]` whole-string; (2) allowlist de
+  env-hygiene regenerada (`--init`) para incluir o teste novo (+
+  entradas drenadas saíram — aperto na direção certa); (3) **o gate
+  p95-on-CI do W2.2 flakou no PRIMEIRO run real (p95=6,31ms vs mediana
+  3,83ms)** — runner carregado desloca a distribuição INTEIRA, então
+  percentil de cauda precifica o runner, não o código ⇒ MEDIANA
+  reavaliada e MANTIDA (agora com evidência, não intuição); N=200 +
+  índices derivados + pré-condição FICAM; emenda ADR-163 (draft +
+  staged) reescrita nesse sentido; (4) o teste de conformância TLA
+  assertava o DEFEITO da implementação, não o spec —
+  `MaxRoundsExhausted` no .tla sempre exigiu `jaccard < THRESHOLD`
+  para "failed", então o W2.9(iii) trouxe o código À conformidade;
+  teste reescrito para o invariante real (S1 = bound de rounds,
+  preservado). Suítes locais 43+1+1 (incl. controle CI=1 simulado)
+  verdes. Re-pass r2 foi morto (candidato stale) e será relançado
+  sobre o HEAD pós-fix.
+
 - 2026-08-09 (S299, fechamento noturno): **Preparação completa da fila
   do Owner.** (1) **Pack W3 STAGED + VALIDADO** em
   `PLAN-169/staged-w3/` — 12 arquivos (11 alvos + ADR-191 novo), 19

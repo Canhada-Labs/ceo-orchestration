@@ -9,7 +9,7 @@ Covers:
   - _decide_with_matrix (Cases A, B, F; sentinel bypass; out-of-scope;
     kill-switch; emit side-effects via CEO_PAIR_RAIL_AUDIT_SINK)
   - _emit_pair_rail_case fail-OPEN (no audit_emit module)
-  - Performance: Case-A fixture path < 5 ms p99 over N=200 (p95 on CI)
+  - Performance: Case-A fixture path < 5 ms p99 over N=200 (median on CI)
 
 Path-setup note (staging position):
   <repo>/.claude/plans/PLAN-081/staging/phase-3/tests/<this>.py
@@ -1111,7 +1111,7 @@ class TestEmitPairRailCaseFailOpen(TestEnvContext):
 
 
 # ===========================================================================
-# 8. Performance: Case-A path < 5 ms p99 over N=200, p95 on CI (fixture only)
+# 8. Performance: Case-A path < 5 ms p99 over N=200, median on CI (fixture only)
 # ===========================================================================
 
 class TestDecideWithMatrixPerformance(TestEnvContext):
@@ -1150,7 +1150,7 @@ class TestDecideWithMatrixPerformance(TestEnvContext):
     _PERF_N = 200
 
     def test_case_a_p99_under_5ms(self):
-        """N=_PERF_N Case-A fixture invocations: p99 < 5 ms (p95 on CI)."""
+        """N=_PERF_N Case-A fixture invocations: p99 < 5 ms (median on CI)."""
         import tempfile
         n = self._PERF_N
         i50 = int((n - 1) * 0.50)
@@ -1239,23 +1239,25 @@ class TestDecideWithMatrixPerformance(TestEnvContext):
                     _sw.DRAIN_TRIGGER_MTIME_MS = _orig_mtime
             times_ms.sort()
             self.assertEqual(len(times_ms), n)
-            # PLAN-169 W2.2 (re-evaluating PLAN-112-FOLLOWUP's median switch):
-            # the median-on-CI gate existed because p99 of N=100 was one
-            # preemption spike away from failing. With N=200 a REAL percentile
-            # is affordable on a loaded machine: p95 ignores the top 10
-            # samples, so a handful of scheduler spikes cannot flake it while
-            # an actual latency regression still moves it. Gate p95 on
-            # CI/loaded runs (CEO_FINISH_CEREMONY runs the suite under heavy
-            # local load — same treatment) and keep the strict p99 on quiet
-            # local machines. Budget unchanged (5 ms). Decision text goes to
-            # the ADR-163 amendment in the PLAN-169 W3 pack.
+            # PLAN-169 W2.2 re-evaluated PLAN-112-FOLLOWUP's median switch and
+            # the MEDIAN STAYS — now with live evidence instead of intuition.
+            # The p95-on-CI attempt flaked on its FIRST real run (validate
+            # 31288404989: p95=6.31 ms vs median=3.83 ms against a 5 ms
+            # budget): a loaded shared runner shifts the WHOLE distribution
+            # (~6x the local median), so any real tail percentile prices the
+            # runner, not the code. The median is stable under that shift and
+            # still catches the ~8x regression this probe exists for; quiet
+            # local machines keep the strict p99. What W2.2 KEEPS: N=200,
+            # indices derived from the constant, and the ADR-163 collapse
+            # precondition asserted above. Amendment text (W3 pack) records
+            # the re-evaluation with this run as evidence.
             on_ci = bool(
                 os.environ.get("GITHUB_ACTIONS")
                 or os.environ.get("CI")
                 or os.environ.get("CEO_FINISH_CEREMONY")
             )
-            metric = times_ms[i95] if on_ci else times_ms[i99]
-            label = "p95 (loaded)" if on_ci else "p99"
+            metric = times_ms[i50] if on_ci else times_ms[i99]
+            label = "median (loaded)" if on_ci else "p99"
             self.assertLess(
                 metric, 5.0,
                 f"Case-A {label} = {metric:.2f} ms exceeds 5 ms budget. "

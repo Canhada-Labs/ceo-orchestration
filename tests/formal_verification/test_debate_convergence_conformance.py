@@ -157,8 +157,19 @@ class TestS1MaxRoundsRespected(TestEnvContext):
         """S1 conformance: compute_convergence triggers max_rounds_reached at MAX_ROUNDS."""
         self._core_assertion()
 
-    def test_s1_max_rounds_converged_overrides(self) -> None:
-        """S1: even if Jaccard converges, MAX_ROUNDS overrides to terminal."""
+    def test_s1_ceiling_convergence_terminal_and_converged(self) -> None:
+        """S1 at the ceiling WITH convergence: terminal, and labeled converged.
+
+        PLAN-169 W2.9(iii): the old implementation forced converged=False at
+        the ceiling even with jaccard >= threshold — a behavior the SPEC never
+        modeled: ``MaxRoundsExhausted`` in debate-convergence.tla carries the
+        conjunct ``jaccard_score < JACCARD_THRESHOLD``, so a converged ceiling
+        round reaches consensus, not "failed". S1 itself is the ROUND BOUND
+        (round_number <= MAX_ROUNDS) and is preserved: the run remains
+        terminal (max_rounds_reached stays True for orchestrators); only the
+        impasse mislabel is gone. This test previously asserted the
+        implementation defect, not the spec.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             plans_root = Path(tmpdir)
             plan_id = "PLAN-998"
@@ -170,7 +181,8 @@ class TestS1MaxRoundsRespected(TestEnvContext):
                 plans_root, plan_id, max_r, threshold=0.7
             )
             self.assertTrue(result["max_rounds_reached"])
-            self.assertFalse(result["converged"])
+            self.assertTrue(result["converged"])
+            self.assertEqual(result["outcome"], "converged")
 
     def test_s1_mutations_fail(self) -> None:
         """Every S1 mutation allows exceeding MAX_ROUNDS."""
