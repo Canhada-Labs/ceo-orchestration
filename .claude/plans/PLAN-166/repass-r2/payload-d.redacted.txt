@@ -25,7 +25,7 @@ one line: VERDICT: APPROVE or VERDICT: NEEDS-CHANGES, plus one
 justification paragraph.
 
 PAYLOAD d/5: script test suites .claude/scripts/tests
-=== DIFF v1.3.0-rc.1..fe6f484a91b59d988e25a4225b58a85cef6ecacc (parte d, 3679 linhas) ===
+=== DIFF v1.3.0-rc.1..d1b6f14ba492ba1d7c08abd4a03461faca902e62 (parte d, 3679 linhas) ===
 diff --git a/.claude/scripts/tests/test_await_release_gate.py b/.claude/scripts/tests/test_await_release_gate.py
 new file mode 100644
 index 0000000..c8df73d

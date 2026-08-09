@@ -25,7 +25,7 @@ one line: VERDICT: APPROVE or VERDICT: NEEDS-CHANGES, plus one
 justification paragraph.
 
 PAYLOAD c/5: governance scripts .claude/scripts (W2 fixes)
-=== DIFF v1.3.0-rc.1..fe6f484a91b59d988e25a4225b58a85cef6ecacc (parte c, 4193 linhas) ===
+=== DIFF v1.3.0-rc.1..d1b6f14ba492ba1d7c08abd4a03461faca902e62 (parte c, 4200 linhas) ===
 diff --git a/.claude/scripts/await_release_gate.py b/.claude/scripts/await_release_gate.py
 new file mode 100755
 index 0000000..1b5f956
@@ -1880,7 +1880,7 @@ index 0000000..cec97a3
 +if __name__ == "__main__":
 +    sys.exit(main())
 diff --git a/.claude/scripts/local/pair-rail-gate.sh b/.claude/scripts/local/pair-rail-gate.sh
-index 6b3798f..e3dece9 100755
+index 6b3798f..cdc024f 100755
 --- a/.claude/scripts/local/pair-rail-gate.sh
 +++ b/.claude/scripts/local/pair-rail-gate.sh
 @@ -5,8 +5,10 @@
@@ -1896,7 +1896,7 @@ index 6b3798f..e3dece9 100755
  #   3. Codex CLI binary present + `codex --version` returns cleanly
  #      (warm CLI startup pre-test for first-prompt latency).
  #   4. (Phase 6) Codex CLI version matches `.claude/governance/codex-cli-pin.txt`
-@@ -59,23 +61,51 @@ echo "============================================"
+@@ -59,23 +61,54 @@ echo "============================================"
  echo "pair-rail-gate.sh — Phase $PHASE_NUM pre-flight"
  echo "============================================"
  
@@ -1930,14 +1930,17 @@ index 6b3798f..e3dece9 100755
 +  AUTH_ROUTE="api-key"
 +  echo "  OK: OPENAI_API_KEY present (length=$KEY_LEN) — route=api-key"
 +else
-+  # `codex login status` (0.14x CLI) exits 0 when the CLI holds a valid
-+  # login session; older CLIs spell it `codex auth status`. Probe both,
-+  # quietly — status probes never exec the payload.
-+  if command -v codex >/dev/null 2>&1; then
-+    if codex login status >/dev/null 2>&1 || codex auth status >/dev/null 2>&1; then
-+      AUTH_ROUTE="login"
-+      echo "  OK: codex CLI authenticated by login — route=login"
-+    fi
++  # repass-r2 round-3 part-c P1: the first cut probed via `codex login
++  # status`, which EXECUTES the codex payload — before Gate 4's ADR-182
++  # pin verification, violating the M4 invariant (never exec an
++  # unverified payload) on Phase 6. The probe is now exec-FREE: the CLI
++  # persists its login session at ~/.codex/auth.json; a non-empty file
++  # is the auth evidence. Weaker than a live status call by design —
++  # the first real `codex exec` still fails loudly if the session is
++  # stale, and that call happens only after the pin check.
++  if command -v codex >/dev/null 2>&1 && [ -s "${HOME}/.codex/auth.json" ]; then
++    AUTH_ROUTE="login"
++    echo "  OK: codex CLI login session present (~/.codex/auth.json) — route=login (exec-free probe)"
 +  fi
 +  if [ -z "$AUTH_ROUTE" ]; then
 +    echo "  FAIL: no Codex auth route available (fail-closed)."
@@ -1961,7 +1964,7 @@ index 6b3798f..e3dece9 100755
  echo "Gate 2: OPENAI_API_KEY rotation cadence (90-day)"
  ROTATION_LOG="docs/rotation-log.md"
  if [ ! -f "$ROTATION_LOG" ]; then
-@@ -124,6 +154,7 @@ else
+@@ -124,6 +157,7 @@ else
      fi
    fi
  fi
@@ -1969,7 +1972,7 @@ index 6b3798f..e3dece9 100755
  
  # ---- Gate 3a: Codex CLI PRESENT (path resolution only — NO exec yet) ----
  # M4 (PLAN-163 fix-pass): `command -v` resolves the launcher path WITHOUT
-@@ -191,11 +222,19 @@ echo ""
+@@ -191,11 +225,19 @@ echo ""
  echo "Gate 3b: codex --version warm startup"
  # Run --version (5s timeout — Codex CLI cold start is typically <2s). On
  # Phase 6 this line is reached ONLY after Gate 4 verified the payload sha.
@@ -4171,7 +4174,7 @@ index 4b9d07a..9cfab4e 100644
 -  - bare-testcase
 -  - env-write
 diff --git a/.claude/scripts/tier_policy_cli/learn.py b/.claude/scripts/tier_policy_cli/learn.py
-index 85d9fec..3252908 100644
+index 85d9fec..40cfbb1 100644
 --- a/.claude/scripts/tier_policy_cli/learn.py
 +++ b/.claude/scripts/tier_policy_cli/learn.py
 @@ -537,11 +537,22 @@ def _tier_rank(model_id: str) -> int:
@@ -4194,16 +4197,16 @@ index 85d9fec..3252908 100644
 +        "claude-sonnet-5": 3,
 +        "claude-opus-4-8": 4,
 +        "claude-opus-5": 5,
-+        "claude-opus-5-fast": 5,  # fast mode: same model, faster output
++        "claude-opus-5-fast": 5,  # fast mode: same model, premium rate
 +        "claude-fable-5": 6,  # ADR-149 flagship (Mythos-class, above Opus)
      }
      return order.get(model_id, -1)
  
 diff --git a/.claude/scripts/value-dashboard.py b/.claude/scripts/value-dashboard.py
-index cf96ae5..46a1ea9 100755
+index cf96ae5..4c78e7f 100755
 --- a/.claude/scripts/value-dashboard.py
 +++ b/.claude/scripts/value-dashboard.py
-@@ -261,6 +261,15 @@ def _safe_plan_id(value: Any) -> Optional[str]:
+@@ -261,6 +261,19 @@ def _safe_plan_id(value: Any) -> Optional[str]:
  # $5/$25 per MTok; claude-opus-4-7 RETAINED HISTORICAL ($15/$75) for log
  # replay; Sonnet 4.6 = $3/$15; Haiku 4.5 = $1/$5 (was 4x underpriced).
  _DEFAULT_PRICING: Dict[str, Dict[str, float]] = {
@@ -4215,6 +4218,10 @@ index cf96ae5..46a1ea9 100755
 +    "claude-fable-5":              {"in": 0.010, "out": 0.050},
 +    "claude-opus-5":               {"in": 0.005, "out": 0.025},
 +    "claude-opus-5-fast":          {"in": 0.010, "out": 0.050},
++    # NOTE (repass-r2 part-c P2): this is the INTRO rate, valid until
++    # 2026-08-31 (sticker $3/$15). compute_cost_usd has no event-date
++    # selection, so after that date this row UNDERSTATES sonnet-5 cost
++    # until swept — same semantics as the ceo-cost.py mirror; sweep both.
 +    "claude-sonnet-5":             {"in": 0.002, "out": 0.010},
      "claude-opus-4-8":             {"in": 0.005, "out": 0.025},
      "claude-opus-4-7":            {"in": 0.015, "out": 0.075},

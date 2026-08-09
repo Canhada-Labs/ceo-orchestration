@@ -1,14 +1,11 @@
-P1: None.
+- P1 — `.claude/scripts/tests/test_inject_agent_context_exact_resolution.py:29` forwards the ambient environment, including real `HOME`, `CLAUDE_PROJECT_DIR`, and `CEO_*`, while line 42 uses bare `unittest.TestCase`. Direct execution via line 92 bypasses pytest’s suite isolation; the invoked script calls `lessons.py --emit-consumer`, potentially reading or writing the operator’s real lesson/audit state. This violates the mandatory environment-isolation rule.
 
-P2 findings:
+- P2 — `.claude/scripts/tests/test_release_workflow_asserts.py:129` treats absence of the live PLAN-166 marker as “pre-landing”; line 503 then skips the await-gate tests. The W1-B checks repeat this at lines 718–754. Removing a live gate together with its marker therefore produces skips rather than failures; a mutation probe confirmed one skip with zero failures.
 
-- `.claude/scripts/tests/test_debate_converge.py:404` covers a present-but-unparseable Risks section, but not the newly fail-closed missing-section path; `.claude/scripts/tests/test_debate_converge.py:124` only tests the low-level extractor.
-- `.claude/scripts/tests/test_pair_rail_inputs_manifest_bump_guard.py:192` compares raw path strings, so aliases such as `./VERSION` evade the bump-path exclusion guard.
+- P2 — `.claude/scripts/tests/test_inject_agent_context_exact_resolution.py:81` accepts every exit code except 2 for slash/ampersand names. An unrelated crash with exit 1 passed this test during review. Acceptable outcomes should be constrained to successful resolution or the documented resolution failure.
 
-P3:
+- P3 — `.claude/scripts/tests/test_release_workflow_asserts.py:1005` claims to check every failure code for uniqueness but omits `E_PARENT_NOT_ANCESTOR`.
 
-- `.claude/scripts/tests/test_release_workflow_asserts.py:1005` omits `E_PARENT_NOT_ANCESTOR` from the all-exit-codes uniqueness assertion, though its current value is distinct and separately exercised.
+Justification: The live workflow assertions and pure await-gate cases passed read-only structural execution, Python 3.9 parsing and stdlib checks were clean, and the described model-ledger replacement bump presents no additional concern. The full scoped pytest run could not create temporary fixtures in the read-only reviewer sandbox. The new real-environment test violates an explicit release-review rule and must be corrected before the cut.
 
-Justification: No current release-path regression remains in payload d. The round-2 blockers are cured, the ten described model replacements match the local ADR-149 fleet authority, and hygiene, audit isolation, stdlib, contamination, Python 3.9 parsing, YAML structure, and diff checks pass. The remaining gaps concern future regression detection and are fix-forward acceptable.
-
-VERDICT: APPROVE
+VERDICT: NEEDS-CHANGES

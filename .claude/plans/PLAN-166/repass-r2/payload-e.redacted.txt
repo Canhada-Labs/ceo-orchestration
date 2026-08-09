@@ -25,7 +25,7 @@ one line: VERDICT: APPROVE or VERDICT: NEEDS-CHANGES, plus one
 justification paragraph.
 
 PAYLOAD e/5: hooks tests + docs + workflows + root docs
-=== DIFF v1.3.0-rc.1..fe6f484a91b59d988e25a4225b58a85cef6ecacc (parte e, 2402 linhas) ===
+=== DIFF v1.3.0-rc.1..d1b6f14ba492ba1d7c08abd4a03461faca902e62 (parte e, 2464 linhas) ===
 diff --git a/.claude/hooks/tests/test_check_pair_rail_matrix.py b/.claude/hooks/tests/test_check_pair_rail_matrix.py
 index 2925f56..dc238a2 100644
 --- a/.claude/hooks/tests/test_check_pair_rail_matrix.py
@@ -1166,7 +1166,7 @@ index 75ed90c..6d8bec2 100644
  
  The repository also includes a TLA+ specification of the core state machine
 diff --git a/docs/CTO-GUIDE.md b/docs/CTO-GUIDE.md
-index e46aed2..77097a4 100644
+index e46aed2..d030487 100644
 --- a/docs/CTO-GUIDE.md
 +++ b/docs/CTO-GUIDE.md
 @@ -1,6 +1,6 @@
@@ -1280,16 +1280,23 @@ index e46aed2..77097a4 100644
  ```
  
  ### 3.5 Remediation transparency — 5 minutes
-@@ -145,7 +151,7 @@ bash /tmp/install.sh --profile core,frontend --stack node
+@@ -145,8 +151,13 @@ bash /tmp/install.sh --profile core,frontend --stack node
  **B. NPM tarball (OIDC + provenance):**
  
  ```bash
 -npm exec ceo-orchestration-install@1.5.0-rc.1 -- --profile core,frontend
-+npm exec "ceo-orchestration-install@$(cat VERSION)" -- --profile core,frontend
- # Verifies --provenance SLSA L3 attestation
+-# Verifies --provenance SLSA L3 attestation
++# Package name is `ceo-orchestration` (npm/package.json) — an earlier
++# revision of this guide named a nonexistent `ceo-orchestration-install`
++# lookalike (supply-chain-critical doc defect, repass-r2 part-e P1).
++# Pin the version you reviewed; <target-dir> is the repo being installed
++# into. Then VERIFY provenance yourself — running the command does not:
++npm exec "ceo-orchestration@<reviewed-version>" -- <target-dir> --profile core,frontend
++npm audit signatures   # SLSA provenance/signature verification step
  ```
  
-@@ -167,11 +173,11 @@ python3 -m pytest .claude/hooks/tests/ -q
+ Both routes copy `.claude/`, `PROTOCOL.md`, `templates/CLAUDE.md`, plus
+@@ -167,11 +178,11 @@ python3 -m pytest .claude/hooks/tests/ -q
  | Axis | Current state | Mitigation | Residual |
  |---|---|---|---|
  | Upstream velocity | Bus factor 1 | Fork-friendly; no server dependency | Patches stack locally if Owner unavailable |
@@ -1303,7 +1310,7 @@ index e46aed2..77097a4 100644
  
  Read [`HONEST-LIMITATIONS.md`](./HONEST-LIMITATIONS.md) for the full
  structural list.
-@@ -180,16 +186,18 @@ structural list.
+@@ -180,16 +191,18 @@ structural list.
  
  ## 6. What it does well (backed by numbers, not adjectives)
  
@@ -1330,7 +1337,7 @@ index e46aed2..77097a4 100644
  - **Zero runtime third-party deps.** Hooks run with just CPython.
    Install on an air-gapped workstation with Python 3.9+ and you're done.
  - **Published evaluation artifacts.** `benchmarks/public/` compares this
-@@ -206,16 +214,18 @@ structural list.
+@@ -206,16 +219,18 @@ structural list.
    still has to pass on `main`.
  - **It will not port your prompts.** Skill migration from other
    meta-prompting frameworks (e.g. karpathy-skills, GSD) is manual.
@@ -1639,10 +1646,50 @@ index 8085a6c..ee55579 100644
  > speedup (PLAN-122), and we publish that null result honestly. Skip us
  > for one-file edits — overhead beats velocity below.
 diff --git a/docs/cost-of-operation.md b/docs/cost-of-operation.md
-index e82d1cf..6edb097 100644
+index e82d1cf..94e4a42 100644
 --- a/docs/cost-of-operation.md
 +++ b/docs/cost-of-operation.md
-@@ -95,11 +95,16 @@ inheritance surprise.
+@@ -18,9 +18,12 @@ review + security check + tests:
+ | **+ Cache hit** (warm gate-1, ~30% multi-turn savings) | ~$0.75 | ~$37 | ~$148 |
+ | **Mitigated rail default-on** (ADR-082, actual default) | ~$1.23 | ~$62 | ~$246 |
+ 
+-Computed at **Opus 4.8 ($5/$25 per Mtok)** — the current default-CEO /
+-VETO model. Note the "Mitigated rail default-on" row lands at **≈ the
+-all-Opus baseline**: under ADR-082, 4 of the 5 canonical archetypes
++Computed at **Opus 4.8 ($5/$25 per Mtok)** — the default-CEO/VETO model
++AT THE TIME OF THIS COMPUTATION (2026-06; the current fleet runs the
++VETO holders on `claude-fable-5` — see the Gen-5 pricing table above;
++opus-5 shares the $5/$25 rate, so the arithmetic below holds for an
++opus-5 session). Note the "Mitigated rail default-on" row lands at
++**≈ the all-Opus baseline**: under ADR-082, 4 of the 5 canonical archetypes
+ inherit the Opus CEO model, so the genuine per-role split (~$1.06) is
+ only realised if you disable mitigation. Numbers are rough. Real usage
+ varies by skill mix, plan complexity,
+@@ -44,7 +47,9 @@ through `subagent_type=general-purpose` with the role's persona
+ injected via `## SKILL CONTENT`.
+ 
+ **Cost consequence:** the `general-purpose` sub-agent **inherits
+-the CEO model**, which is **Opus 4.8 by default** (not the
++the CEO model** — Opus 4.8 at the time of this computation; on the
++current fleet, whatever Gen-5 model the session runs (Fable 5/Opus 5,
++same $5-$25+/Mtok tier) — (not the
+ Sonnet/Haiku that ADR-052 maps these roles to). Every
+ `qa-architect / performance-engineer / security-engineer / devops`
+ spawn therefore bills at **Opus rates ($5/$25 per Mtok)**, not
+@@ -84,8 +89,10 @@ and ADR-082 for the empirical rationale.
+ 
+ ### What `code-reviewer` does
+ 
+-`code-reviewer` runs natively + at **Opus 4.8 by policy** (ADR-052
+-VETO floor), not by inheritance. The cost there is identical
++`code-reviewer` runs natively + at **the VETO-floor model by policy**
++(ADR-052; historically Opus 4.8, currently `claude-fable-5` — same
++floor mechanism, membership in `VETO_FLOOR_ALLOWED`), not by
++inheritance. The cost there is identical
+ under either rail. Only the other 4 canonicals see the Opus-by-
+ inheritance surprise.
+ 
+@@ -95,22 +102,27 @@ inheritance surprise.
  
  | Model | Input ($/M tokens) | Output ($/M tokens) | vs Opus 4-8 |
  |-------|--------------------|----------------------|-------------|
@@ -1662,6 +1709,21 @@ index e82d1cf..6edb097 100644
  Live-confirmed 2026-05-29 from https://www.anthropic.com/api (Opus 4.8 = $5/$25, Sonnet 4.6 = $3/$15, Haiku 4.5 = $1/$5). The prior Haiku row ($0.25/$1.25) propagated a stale rate from ADR-052 §Cost magnitude and underpriced Haiku 4x. Adopters with their own contractual
  pricing should override the table via `CEO_PRICING_PATH=<json>` —
  the `_lib/adapters/live/_cost.py` resolver picks it up.
+ 
+ ### Per-role distribution (ADR-052 default)
+ 
+-| Agent | Model | Why |
++| Agent | Model (at computation; current fleet in parens) | Why |
+ |-------|-------|-----|
+-| **CEO orchestrator** (you, the chat session) | Opus 4.8 | Long context, L3+ decisions, debate synthesis |
+-| **code-reviewer** | Opus 4.8 | Merge VETO — false negative ships a bug |
+-| **security-engineer** | Opus 4.8 | Auth/crypto VETO — missed attack surface = incident |
++| **CEO orchestrator** (you, the chat session) | Opus 4.8 (now the session model — Fable 5/Opus 5) | Long context, L3+ decisions, debate synthesis |
++| **code-reviewer** | Opus 4.8 (now `claude-fable-5`) | Merge VETO — false negative ships a bug |
++| **security-engineer** | Opus 4.8 (now `claude-fable-5`) | Auth/crypto VETO — missed attack surface = incident |
+ | **qa-architect** | Sonnet 4.6 | Edge-case enumeration; bounded work; cost 0.6× vs Opus 4.8 |
+ | **performance-engineer** | Sonnet 4.6 | Metric analysis; deterministic; cost 0.6× vs Opus 4.8 |
+ | **devops** | Haiku 4.5 | Config edits + boilerplate; high-freq + low-novelty; cost ~5× cheaper than Opus 4.8 |
 diff --git a/docs/ownership-decision-table.md b/docs/ownership-decision-table.md
 new file mode 100644
 index 0000000..db5a08f

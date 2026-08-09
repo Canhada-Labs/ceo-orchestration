@@ -27,7 +27,19 @@ SCRIPT = REPO_ROOT / ".claude" / "scripts" / "inject-agent-context.sh"
 
 
 def _run(*args, env_extra=None):
-    env = {**os.environ}
+    # repass-r2 round-4 part-d P1: forwarding the ambient environment let
+    # the script (which shells into lessons.py --emit-consumer) touch the
+    # operator's REAL $HOME/CEO_* state from a test. Sanitized env: fresh
+    # HOME in a tempdir, CEO_*/CLAUDE_* stripped, only the plumbing kept.
+    import tempfile
+    home = tempfile.mkdtemp(prefix="inject-test-home-")
+    env = {
+        k: v
+        for k, v in os.environ.items()
+        if not k.startswith(("CEO_", "CLAUDE_"))
+        and k not in ("HOME",)
+    }
+    env["HOME"] = home
     if env_extra:
         env.update(env_extra)
     return subprocess.run(
@@ -76,11 +88,16 @@ class ExactResolutionLadderTest(unittest.TestCase):
         # Roster-real names must pass INPUT validation (not exit 2). They
         # may still fail RESOLUTION (exit 3) in a backend-only checkout —
         # both outcomes are fine; the grammar rejection is not.
+        # repass-r2 round-4 part-d P2: "anything but 2" also accepted an
+        # unrelated crash (rc=1). Constrain to the documented outcomes:
+        # 0 = resolved, 3 = resolution failure (backend-only checkout).
         for name in ("UI/UX Lead", "Accessibility & i18n Engineer"):
             result = _run(name, "frontend work")
-            self.assertNotEqual(
-                result.returncode, 2,
-                f"grammar rejected roster-real name {name!r}: {result.stderr}",
+            self.assertIn(
+                result.returncode, (0, 3),
+                f"unexpected rc={result.returncode} for roster-real name "
+                f"{name!r} (0=resolved, 3=resolution-miss; 2=grammar reject "
+                f"is the defect, anything else is a crash): {result.stderr}",
             )
 
     def test_grammar_still_rejects_metacharacters(self):

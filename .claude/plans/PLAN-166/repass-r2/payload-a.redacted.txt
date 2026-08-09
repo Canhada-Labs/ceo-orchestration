@@ -25,7 +25,7 @@ one line: VERDICT: APPROVE or VERDICT: NEEDS-CHANGES, plus one
 justification paragraph.
 
 PAYLOAD a/5: framework scripts (install/upgrade/generator) + root hygiene
-=== DIFF v1.3.0-rc.1..fe6f484a91b59d988e25a4225b58a85cef6ecacc (parte a, 1947 linhas) ===
+=== DIFF v1.3.0-rc.1..d1b6f14ba492ba1d7c08abd4a03461faca902e62 (parte a, 1947 linhas) ===
 diff --git a/.gitignore b/.gitignore
 index 6ab57fa..8fea8d6 100644
 --- a/.gitignore
