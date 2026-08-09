@@ -5,8 +5,9 @@
     "source_original": "https://docs.anthropic.com/en/docs/about-claude/model-deprecations (301 -> platform.claude.com)",
     "fetched": "2026-06-12",
     "source_stale": false,
-    "provenance": "PLAN-135 W0/W1 unit w0r \u2014 consumed by .claude/scripts/check-model-deprecations.py; refresh by re-fetching the source page and bumping `fetched` (set source_stale=true if populated from fallback data instead of the live page)",
-    "notes": "Dates apply to Anthropic-operated platforms (Claude API / Claude Platform on AWS / Microsoft Foundry). Bedrock + Vertex set their own schedules. Aliases are short ids the official page or the S230 sweep treats as the same fuse."
+    "provenance": "PLAN-135 W0/W1 unit w0r — consumed by .claude/scripts/check-model-deprecations.py; refresh by re-fetching the source page and bumping `fetched` (set source_stale=true if populated from fallback data instead of the live page)",
+    "notes": "Dates apply to Anthropic-operated platforms (Claude API / Claude Platform on AWS / Microsoft Foundry). Bedrock + Vertex set their own schedules. Aliases are short ids the official page or the S230 sweep treats as the same fuse.",
+    "replacements_refreshed": "2026-08-09 PLAN-169 W2.10 F9: migration targets bumped to the current fleet (opus-5/sonnet-5) per the ADR-149 working-set authority; the deprecation dates themselves are unchanged from the fetched source."
   },
   "models": [
     {
@@ -16,7 +17,7 @@
       ],
       "deprecated": "2026-06-05",
       "retirement": "2026-08-05",
-      "replacement": "claude-opus-4-8"
+      "replacement": "claude-opus-5"
     },
     {
       "model_id": "claude-opus-4-20250514",
@@ -25,7 +26,7 @@
       ],
       "deprecated": "2026-04-14",
       "retirement": "2026-06-15",
-      "replacement": "claude-opus-4-8"
+      "replacement": "claude-opus-5"
     },
     {
       "model_id": "claude-sonnet-4-20250514",
@@ -34,7 +35,7 @@
       ],
       "deprecated": "2026-04-14",
       "retirement": "2026-06-15",
-      "replacement": "claude-sonnet-4-6"
+      "replacement": "claude-sonnet-5"
     },
     {
       "model_id": "claude-mythos-preview",
@@ -64,7 +65,7 @@
       ],
       "deprecated": "2025-10-28",
       "retirement": "2026-02-19",
-      "replacement": "claude-sonnet-4-6"
+      "replacement": "claude-sonnet-5"
     },
     {
       "model_id": "claude-3-5-haiku-20241022",
@@ -91,14 +92,14 @@
       ],
       "deprecated": "2025-08-13",
       "retirement": "2025-10-28",
-      "replacement": "claude-sonnet-4-6"
+      "replacement": "claude-sonnet-5"
     },
     {
       "model_id": "claude-3-5-sonnet-20240620",
       "aliases": [],
       "deprecated": "2025-08-13",
       "retirement": "2025-10-28",
-      "replacement": "claude-sonnet-4-6"
+      "replacement": "claude-sonnet-5"
     },
     {
       "model_id": "claude-3-opus-20240229",
@@ -107,7 +108,7 @@
       ],
       "deprecated": "2025-06-30",
       "retirement": "2026-01-05",
-      "replacement": "claude-opus-4-8"
+      "replacement": "claude-opus-5"
     },
     {
       "model_id": "claude-3-sonnet-20240229",
@@ -116,21 +117,21 @@
       ],
       "deprecated": "2025-01-21",
       "retirement": "2025-07-21",
-      "replacement": "claude-sonnet-4-6"
+      "replacement": "claude-sonnet-5"
     },
     {
       "model_id": "claude-2.0",
       "aliases": [],
       "deprecated": "2025-01-21",
       "retirement": "2025-07-21",
-      "replacement": "claude-opus-4-8"
+      "replacement": "claude-opus-5"
     },
     {
       "model_id": "claude-2.1",
       "aliases": [],
       "deprecated": "2025-01-21",
       "retirement": "2025-07-21",
-      "replacement": "claude-opus-4-8"
+      "replacement": "claude-opus-5"
     },
     {
       "model_id": "claude-instant-1.2",
@@ -190,37 +191,37 @@
     {
       "rule_id": "tier-policy-test-pins",
       "pattern": "(^|/)\\.claude/hooks/tests/test_tier_policy_[A-Za-z0-9_]+\\.py$",
-      "reason": "S230 INERT class C \u2014 framework-installed tier_policy fixture pins (claude-opus-4-1) on the 2026-08-05 fuse; owned by the framework upgrade path (S226 allowlist class), never sent to the API"
+      "reason": "S230 INERT class C — framework-installed tier_policy fixture pins (claude-opus-4-1) on the 2026-08-05 fuse; owned by the framework upgrade path (S226 allowlist class), never sent to the API"
     },
     {
       "rule_id": "tests-and-fixtures",
       "pattern": "(^|/)(tests|fixtures)/|(^|/)test_[^/]*\\.py$|_test\\.py$",
-      "reason": "test suites + fixtures keep old ids on purpose (negative cases, historical-log replay) \u2014 mirrors smoke-install-parity.sh EXEMPT_PATH_RE"
+      "reason": "test suites + fixtures keep old ids on purpose (negative cases, historical-log replay) — mirrors smoke-install-parity.sh EXEMPT_PATH_RE"
     },
     {
       "rule_id": "backups-shadows-logs",
       "pattern": "\\.bak(\\.|$)|\\.shadow\\.md$|\\.log$|(^|/)\\.git(/|$)",
-      "reason": "backups/shadow files/logs are not routing surfaces \u2014 mirrors smoke-install-parity.sh EXEMPT_PATH_RE"
+      "reason": "backups/shadow files/logs are not routing surfaces — mirrors smoke-install-parity.sh EXEMPT_PATH_RE"
     },
     {
       "rule_id": "historical-run-results",
       "pattern": "(^|/)benchmark[^/]*/results/[^/]*\\.json$",
-      "reason": "S230 INERT class A \u2014 recorded benchmark run outputs, never re-executed"
+      "reason": "S230 INERT class A — recorded benchmark run outputs, never re-executed"
     },
     {
       "rule_id": "prose-docs",
       "pattern": "\\.(md|markdown|rst|txt)$",
-      "reason": "S230 INERT classes B/D \u2014 prose/spec/doc text (incl. SKILL.md instructional mentions), no execution path"
+      "reason": "S230 INERT classes B/D — prose/spec/doc text (incl. SKILL.md instructional mentions), no execution path"
     },
     {
       "rule_id": "sql-data",
       "pattern": "\\.sql$",
-      "reason": "S230 INERT class E \u2014 DDL/seed data strings, not live call sites"
+      "reason": "S230 INERT class E — DDL/seed data strings, not live call sites"
     },
     {
       "rule_id": "by-design-id-carriers",
       "pattern": "\\.claude/scripts/(ceo-cost\\.py|cost-table\\.yaml|budget-summary\\.py|audit-telemetry\\.py|success-receipt\\.py|value-dashboard\\.py|generate-dispatch\\.py|spot-check-findings\\.py|detectors/(wasteful_thinking|overpowered)\\.py|optimizer/model_normalize\\.py)|\\.claude/hooks/_lib/adapters/live/claude\\.py|\\.claude/data/canonical_models\\.json|\\.claude/skills/core/(ai-llm-orchestration/SKILL\\.md|security-and-auth/(SKILL\\.md|benchmarks/owasp-llm-top-10\\.yaml))",
-      "reason": "historical pricing/replay tables (incl. ADR-148 canonical_models.json models.dev pricing catalog \u2014 retained historical rows for cost reconciliation, S227 rate-card class) + adaptive-thinking known-id table + instructional skill content \u2014 mirrors smoke-install-parity.sh ALLOWLIST_RE (every entry justified there)"
+      "reason": "historical pricing/replay tables (incl. ADR-148 canonical_models.json models.dev pricing catalog — retained historical rows for cost reconciliation, S227 rate-card class) + adaptive-thinking known-id table + instructional skill content — mirrors smoke-install-parity.sh ALLOWLIST_RE (every entry justified there)"
     },
     {
       "rule_id": "deprecation-instrument",
@@ -230,7 +231,7 @@
     {
       "rule_id": "plan-artifacts",
       "pattern": "(^|/)\\.claude/plans/",
-      "reason": "plan/research/staged-bundle records \u2014 historical evidence reviewed at ceremony, not live call sites"
+      "reason": "plan/research/staged-bundle records — historical evidence reviewed at ceremony, not live call sites"
     }
   ]
 }

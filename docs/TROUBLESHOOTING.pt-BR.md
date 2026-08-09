@@ -70,8 +70,18 @@ P1-P5 — ex.: escrever código em massa inline em vez de spawnar um
 especialista).
 
 **Fix:** delegue via `/spawn`. Se a ação está genuinamente correta e
-você aceita o overhead, defina `CEO_OVERHEAD_ACK=1` para aquela ação (o
-override em si é auditado).
+você aceita o overhead, o que o mecanismo entrega hoje é:
+
+- **Comandos Bash:** prefixe o comando único com
+  `CEO_OVERHEAD_ACK=1 ` (ex.: `CEO_OVERHEAD_ACK=1 grep …`) e ele
+  prossegue.
+- **Ferramentas Edit/Write:** NÃO há canal de override por-ação. Os
+  predicados avaliam uma **janela deslizante de 5 minutos** de ações
+  classificadas — pare a rajada de grep/read e tente o edit de novo
+  depois que a janela drenar.
+- **Sessão inteira:** exportar `CEO_OVERHEAD_ACK=1` no ambiente que
+  lança a sessão desativa o bloqueio para a sessão toda (o override é
+  auditado). Use com parcimônia.
 
 ### Edit em caminho de kernel hard-denied
 

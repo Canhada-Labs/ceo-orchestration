@@ -5,8 +5,10 @@
 # Rail dispatch (PLAN-081 Phase 2+) or running the Phase 4 promotion gate.
 # Phase 1 subset codifies the FOUR mandatory pre-conditions:
 #
-#   1. OPENAI_API_KEY env var presence (Codex MCP requires it).
-#   2. Last Codex API key rotation <90 days (R1 S-Sec-6).
+#   1. Codex auth route: OPENAI_API_KEY presence OR login-authenticated
+#      codex CLI (PLAN-169 W2.5); fail-closed when neither.
+#   2. Last Codex API key rotation <90 days (R1 S-Sec-6) — API-key route
+#      only; skipped explicitly on route=login.
 #   3. Codex CLI binary present + `codex --version` returns cleanly
 #      (warm CLI startup pre-test for first-prompt latency).
 #   4. (Phase 6) Codex CLI version matches `.claude/governance/codex-cli-pin.txt`
@@ -59,23 +61,51 @@ echo "============================================"
 echo "pair-rail-gate.sh — Phase $PHASE_NUM pre-flight"
 echo "============================================"
 
-# ---- Gate 1: OPENAI_API_KEY env var presence ----
+# ---- Gate 1: Codex auth route — API key OR login-authenticated CLI ----
+# PLAN-169 W2.5 (ledger C.2/F.5): the login-authenticated codex CLI is a
+# first-class auth route. Requiring OPENAI_API_KEY made
+# CEO_PAIR_RAIL_DISABLE the only way to run on a login-auth machine —
+# an auth gap turning into a bypass-everything incentive. Fail-closed
+# when NEITHER route is available. The chosen route is propagated so
+# Gate 2 (API-key rotation cadence) applies only where a key is in play.
 echo ""
-echo "Gate 1: OPENAI_API_KEY presence"
-if [ -z "${OPENAI_API_KEY:-}" ]; then
-  echo "  FAIL: OPENAI_API_KEY not set in environment"
-  echo "  Codex MCP requires this env var. Source your .envrc / .env file."
-  exit 1
+echo "Gate 1: Codex auth route (API key OR authenticated login)"
+AUTH_ROUTE=""
+if [ -n "${OPENAI_API_KEY:-}" ]; then
+  KEY_LEN="${#OPENAI_API_KEY}"
+  if [ "$KEY_LEN" -lt 16 ]; then
+    echo "  FAIL: OPENAI_API_KEY length $KEY_LEN suspiciously short"
+    exit 1
+  fi
+  AUTH_ROUTE="api-key"
+  echo "  OK: OPENAI_API_KEY present (length=$KEY_LEN) — route=api-key"
+else
+  # `codex login status` (0.14x CLI) exits 0 when the CLI holds a valid
+  # login session; older CLIs spell it `codex auth status`. Probe both,
+  # quietly — status probes never exec the payload.
+  if command -v codex >/dev/null 2>&1; then
+    if codex login status >/dev/null 2>&1 || codex auth status >/dev/null 2>&1; then
+      AUTH_ROUTE="login"
+      echo "  OK: codex CLI authenticated by login — route=login"
+    fi
+  fi
+  if [ -z "$AUTH_ROUTE" ]; then
+    echo "  FAIL: no Codex auth route available (fail-closed)."
+    echo "  Either export OPENAI_API_KEY or authenticate the CLI (codex login)."
+    echo "  CEO_PAIR_RAIL_DISABLE=1 is emergency-only, NOT an auth route."
+    exit 1
+  fi
 fi
-KEY_LEN="${#OPENAI_API_KEY}"
-if [ "$KEY_LEN" -lt 16 ]; then
-  echo "  FAIL: OPENAI_API_KEY length $KEY_LEN suspiciously short"
-  exit 1
-fi
-echo "  OK: OPENAI_API_KEY present (length=$KEY_LEN)"
 
-# ---- Gate 2: last rotation <90 days ----
+# ---- Gate 2: last rotation <90 days — API-KEY ROUTE ONLY ----
+# PLAN-169 W2.5 [codex r20-P2]: on route=login there is no API key in
+# play — applying the key-rotation cadence there would let a stale
+# rotation-log row (last OPENAI_API_KEY entry 2026-05-09) fail a valid
+# login session. The gate is skipped EXPLICITLY, with the route named.
 echo ""
+if [ "$AUTH_ROUTE" != "api-key" ]; then
+  echo "Gate 2: rotation cadence SKIPPED (route=login — no API key in play)"
+else
 echo "Gate 2: OPENAI_API_KEY rotation cadence (90-day)"
 ROTATION_LOG="docs/rotation-log.md"
 if [ ! -f "$ROTATION_LOG" ]; then
@@ -124,6 +154,7 @@ else
     fi
   fi
 fi
+fi  # end Gate 2 route wrapper (W2.5)
 
 # ---- Gate 3a: Codex CLI PRESENT (path resolution only — NO exec yet) ----
 # M4 (PLAN-163 fix-pass): `command -v` resolves the launcher path WITHOUT
@@ -191,11 +222,19 @@ echo ""
 echo "Gate 3b: codex --version warm startup"
 # Run --version (5s timeout — Codex CLI cold start is typically <2s). On
 # Phase 6 this line is reached ONLY after Gate 4 verified the payload sha.
-CODEX_VERSION=$(timeout 5 codex --version 2>&1 || echo "TIMEOUT")
-if [ "$CODEX_VERSION" = "TIMEOUT" ]; then
-  echo "  FAIL: codex --version timed out (>5s)"
-  exit 1
+# PLAN-169 W2.5 (ledger C.2): coreutils `timeout` does NOT exist on stock
+# macOS — the old invocation died with "command not found" garbage in the
+# captured string, so the gate never ran to completion on this machine.
+# perl alarm is the portable 5s bound (perl ships with macOS and Linux).
+if command -v timeout >/dev/null 2>&1; then
+  CODEX_VERSION=$(timeout 5 codex --version 2>&1 || echo "TIMEOUT")
+else
+  CODEX_VERSION=$(perl -e 'alarm 5; exec @ARGV' codex --version 2>&1 || echo "TIMEOUT")
 fi
+case "$CODEX_VERSION" in *TIMEOUT*)
+  echo "  FAIL: codex --version timed out (>5s) or failed to exec"
+  exit 1
+;; esac
 echo "  Codex CLI version: $CODEX_VERSION"
 
 echo ""

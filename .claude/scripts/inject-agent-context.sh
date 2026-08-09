@@ -150,13 +150,17 @@ if [ -z "$AGENT_NAME" ]; then
   exit 1
 fi
 
-# Whitelist validation: allow letters, digits, space, underscore, dash.
-# First character must be a letter. Max 61 chars.
-# This rejects shell metacharacters, regex metacharacters, newlines,
-# null bytes, and path traversal attempts.
-if ! printf '%s' "$AGENT_NAME" | grep -qE '^[A-Za-z][A-Za-z0-9 _-]{0,60}$'; then
+# Whitelist validation: letters, digits, space, underscore, dash, plus —
+# PLAN-169 W2.3 [codex r12-P2] — slash and ampersand, because the REAL
+# roster contains "UI/UX Lead" and "Accessibility & i18n Engineer" and the
+# old charset rejected both. First char must be a letter; max 61 chars.
+# Dot stays OUT of the charset, so path traversal via the name remains
+# impossible by construction; downstream the name is only (a) compared
+# fixed-string/equality-wise and (b) used as a KEY into the fixed
+# name->slug table — never interpolated into a path or a regex.
+if ! printf '%s' "$AGENT_NAME" | grep -qE '^[A-Za-z][A-Za-z0-9 _/&-]{0,60}$'; then
   echo "ERROR: Invalid AgentName '$AGENT_NAME'" >&2
-  echo "  Must start with a letter and contain only letters, digits, spaces, underscores, and dashes (max 61 chars)." >&2
+  echo "  Must start with a letter and contain only letters, digits, spaces, underscores, slashes, ampersands, and dashes (max 61 chars)." >&2
   exit 2
 fi
 
@@ -748,7 +752,9 @@ CALLER MUST PASS \`model:\` param on the Agent tool call:
 Recommendation: **${MODEL_HINT}** for skill \`${DETECTED_SKILL:-unknown}\`
 Reason: ${MODEL_HINT_REASON}
 
-If omitted: sub-agent INHERITS parent CEO model (Opus 4.8 by default).
+If omitted: sub-agent INHERITS the parent CEO session model (whatever
+generation the session runs — no specific id is implied here; PLAN-169
+W2.10 D3).
 Custom-agent frontmatter (\`.claude/agents/<archetype>.md\`) routing is
 DORMANT under mitigated rail (PLAN-061 / ADR-082 trade-off).
 
@@ -766,20 +772,33 @@ fi
 echo "## AGENT PROFILE"
 echo ""
 
+# PLAN-169 W2.3 (ledger C.1 + codex r6/r7-P1): EXACT resolution ladder,
+# fail-closed. The old substring matcher (`index()`) delivered
+# "Government Cybersecurity Engineer" for "Security Engineer" in live use
+# (the PLAN-169 debate itself). Rungs, in order, with a REAL target each:
+#   1. EXACT persona-heading match (component equality, never substring)
+#   2. explicit core-archetype -> .claude/agents/<slug>.md table
+#   3. SKILL MAP row only -> profile SYNTHESIZED from the row, labeled
+#   4. nothing -> hard error (exit 3), never a warning that spawns anyway
 FOUND_PROFILE=0
 for team_file in "${TEAM_FILES[@]}"; do
   [ -f "$team_file" ] || continue
-  # Find a persona section matching AgentName. Uses awk's `index()`
-  # (substring search, NOT regex) to eliminate regex metachar surface.
-  # The AGENT_NAME has already been whitelist-validated above.
+  # Equality semantics: heading minus "### "/numbering equals the name
+  # (case-insensitive), or one of its " — "/" - "-separated components
+  # does. Kills the substring family: "security engineer" is a substring
+  # of "cybersecurity engineer" but never a component of it.
   section=$(awk -v name="$AGENT_NAME" '
-    BEGIN { found=0 }
-    function matches(line,    l, n) {
-      l = tolower(line); n = tolower(name); return index(l, n) > 0
+    function norm(s) { gsub(/^[ \t]+|[ \t]+$/, "", s); return tolower(s) }
+    function exact(line,   h, i, parts) {
+      h = line; sub(/^###+ +/, "", h); sub(/^[0-9]+\. +/, "", h)
+      if (norm(h) == norm(name)) return 1
+      gsub(/ — /, SUBSEP, h); gsub(/ - /, SUBSEP, h)
+      split(h, parts, SUBSEP)
+      for (i in parts) if (norm(parts[i]) == norm(name)) return 1
+      return 0
     }
-    /^### [0-9]+\./ && matches($0) { found=1 }
-    /^### [A-Za-zÀ-Ý]/ && matches($0) && !/^### [0-9]/ { found=1 }
-    found && /^---$/ { found=0; print; next }
+    /^###/ { if (found) exit; if (exact($0)) found=1 }
+    found && /^---$/ { print; exit }
     found { print }
   ' "$team_file")
   if [ -n "$section" ]; then
@@ -790,8 +809,75 @@ for team_file in "${TEAM_FILES[@]}"; do
 done
 
 if [ "$FOUND_PROFILE" -eq 0 ]; then
-  echo "WARNING: No persona section found for '$AGENT_NAME' in any team file."
-  echo "Looked in: ${TEAM_FILES[*]}"
+  # Rung 2 — the slugs are NOT derivable from the names ("DevOps
+  # Engineer" -> devops.md; "VP Engineering" has NO agents/ file at
+  # all), so this is an explicit table, not a heuristic.
+  NATIVE_SLUG=""
+  _an_lc=$(printf '%s' "$AGENT_NAME" | tr '[:upper:]' '[:lower:]')
+  case "$_an_lc" in
+    "staff code reviewer"|"code reviewer")   NATIVE_SLUG="code-reviewer" ;;
+    "devops engineer")                       NATIVE_SLUG="devops" ;;
+    "security engineer")                     NATIVE_SLUG="security-engineer" ;;
+    "principal qa architect"|"qa architect") NATIVE_SLUG="qa-architect" ;;
+    "principal performance engineer"|"performance engineer")
+                                             NATIVE_SLUG="performance-engineer" ;;
+    "principal identity and trust architect"|"identity trust architect")
+                                             NATIVE_SLUG="identity-trust-architect" ;;
+    "principal incident commander"|"incident commander")
+                                             NATIVE_SLUG="incident-commander" ;;
+    "principal threat detection engineer"|"threat detection engineer")
+                                             NATIVE_SLUG="threat-detection-engineer" ;;
+    "llm finops architect")                  NATIVE_SLUG="llm-finops-architect" ;;
+  esac
+  if [ -n "$NATIVE_SLUG" ] && [ -f "$REPO_ROOT/.claude/agents/$NATIVE_SLUG.md" ]; then
+    echo "(native archetype file: .claude/agents/$NATIVE_SLUG.md — W2.3 rung 2)"
+    echo ""
+    # Emit the BODY only: the YAML frontmatter is harness config, and the
+    # body's own "## " headings collide with the spawn-protocol markers
+    # this script emits. Demoting to "### " is NOT enough — substring
+    # checks still see "## SKILL REFERENCE" inside "### SKILL REFERENCE"
+    # (the same substring-vs-exact class W2.3 exists to kill). Rewrite
+    # the prefix to a non-heading token instead.
+    awk 'NR==1 && /^---$/ {fm=1; next}
+         fm==1 && /^---$/ {fm=2; next}
+         fm==1 {next}
+         {sub(/^## /, "[h2] "); print}' \
+      "$REPO_ROOT/.claude/agents/$NATIVE_SLUG.md"
+    FOUND_PROFILE=1
+  fi
+fi
+
+if [ "$FOUND_PROFILE" -eq 0 ]; then
+  # Rung 3 — a role that exists ONLY as a SKILL MAP row (no persona, no
+  # agents/ file, e.g. "VP Engineering") gets a profile synthesized from
+  # the row itself — name + skill + authority — labeled as such. This is
+  # what the CEO assembled by hand in S298; now it is the mechanism.
+  ROW=""
+  for team_file in "${TEAM_FILES[@]}"; do
+    [ -f "$team_file" ] || continue
+    ROW=$(grep -iF "**$AGENT_NAME**" "$team_file" 2>/dev/null | head -1 || true)
+    [ -n "$ROW" ] && break
+  done
+  if [ -n "$ROW" ]; then
+    echo "(PROFILE SYNTHESIZED FROM THE SKILL MAP ROW — W2.3 rung 3: no"
+    echo " persona section and no native agents/ file exist for this role;"
+    echo " everything below derives from the table row itself.)"
+    echo ""
+    echo "**Role:** $AGENT_NAME"
+    echo "**Skill-map row:** $ROW"
+    if [ -n "$DETECTED_SKILL" ]; then
+      echo "**Primary skill:** \`$DETECTED_SKILL\`"
+    fi
+    FOUND_PROFILE=1
+  fi
+fi
+
+if [ "$FOUND_PROFILE" -eq 0 ]; then
+  echo "ERROR: '$AGENT_NAME' resolves to NOTHING — no exact persona heading," >&2
+  echo "  no core-archetype table entry, and no SKILL MAP row in: ${TEAM_FILES[*]}" >&2
+  echo "  Fuzzy fallback is DISABLED (PLAN-169 W2.3 — it delivered the wrong" >&2
+  echo "  persona in live use). Add the role to team.md or fix the name." >&2
+  exit 3
 fi
 echo ""
 

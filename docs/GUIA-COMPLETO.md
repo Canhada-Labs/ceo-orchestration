@@ -164,7 +164,7 @@ For those, use Claude Code directly. Spawn overhead > benefit.
   is deferred to v2+.
 - **Audited.** Every spawn, every decision, every veto becomes a JSONL
   event.
-- **Governed by ADR.** 189 ADRs document every architectural decision.
+- **Governed by ADR.** 190 ADRs document every architectural decision.
 
 ### It is NOT:
 - **A product.** No UI, no SaaS, no login.

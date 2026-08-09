@@ -71,6 +71,14 @@ _RAW_ALIASES = {
     # The ``[1m]`` context-window suffix the harness appends to the live model id
     # is a packaging tag, not a version — fold it (same major.minor).
     "claude-opus-4-8[1m]": "claude-opus-4-8",
+    # PLAN-169 W2.10 F10: gen-5 fleet aliases (bare-family forms were
+    # undefined -> normalization fell through to the raw string). No [1m]
+    # rows for gen 5: 1M context is the default there, the suffix does not
+    # exist in that generation.
+    "opus-5": "claude-opus-5",
+    "fable-5": "claude-fable-5",
+    "sonnet-5": "claude-sonnet-5",
+    "opus-5-fast": "claude-opus-5-fast",
 }
 
 # A purely-cosmetic vendor namespace prefix that some ids carry. Stripped ONLY when

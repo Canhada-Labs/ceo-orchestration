@@ -537,11 +537,22 @@ def _tier_rank(model_id: str) -> int:
 
     Unknown IDs rank -1 (never selected over a known ID).
     """
+    # PLAN-169 W2.10 F2: the gen-5 fleet was MISSING here, so every
+    # current-fleet id ranked -1 (unknown) and _direction(opus-5 ->
+    # sonnet-4-6) signed as "promote" — a two-step demote sailing past the
+    # demote gate. Ladder is tier-major (haiku < sonnet < opus < fable),
+    # generation-minor within a tier; dated and bare haiku ids are the
+    # same model. Class cure (single authority + parity oracle) is the
+    # W4.3 deliverable — this is the data fix that stops the inversion.
     order = {
         "claude-haiku-4-5-20251001": 1,
+        "claude-haiku-4-5": 1,
         "claude-sonnet-4-6": 2,
-        "claude-opus-4-8": 3,
-        "claude-fable-5": 4,  # ADR-149 flagship generation bump
+        "claude-sonnet-5": 3,
+        "claude-opus-4-8": 4,
+        "claude-opus-5": 5,
+        "claude-opus-5-fast": 5,  # fast mode: same model, faster output
+        "claude-fable-5": 6,  # ADR-149 flagship (Mythos-class, above Opus)
     }
     return order.get(model_id, -1)
 

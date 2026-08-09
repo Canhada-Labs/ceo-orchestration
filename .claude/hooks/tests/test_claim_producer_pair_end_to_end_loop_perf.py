@@ -54,7 +54,7 @@ class TestEndToEndPerf(TestEnvContext):
         ),
     )
     def test_emit_pair_end_to_end_loop_p95_within_budget(self):
-        """ADVISORY perf-budget probe — 20 trials × emit 200 pairs → p95 wall-clock.
+        """ADVISORY perf-budget probe — 40 trials × emit 200 pairs → p95 wall-clock.
 
         DECISION (PLAN-113 W8): converted PLAN-111-FOLLOWUP's ``run=False``
         deferral to a RUNNING advisory check (``run=True``, ``strict=False``).
@@ -64,7 +64,20 @@ class TestEndToEndPerf(TestEnvContext):
         ``[[feedback-xpass-strict-flake-trap]]``. Marked ``advisory``.
         """
         N_CLAIMS = 200
-        N_TRIALS = 20
+        # PLAN-169 W2.2 (ADR-163 pass): N_TRIALS=20 collapsed the percentile
+        # indices — int(19*.95) == int(19*.99) == 18, the exact class ADR-163
+        # names (a p95 that is the 2nd-from-max order statistic flakes on one
+        # spike). 40 trials keeps the advisory runtime bounded (~2x) while
+        # separating the indices; both are DERIVED from the constant below and
+        # the collapse precondition is asserted before the timed loop.
+        N_TRIALS = 40
+        i95 = int((N_TRIALS - 1) * 0.95)
+        i99 = int((N_TRIALS - 1) * 0.99)
+        self.assertNotEqual(
+            i95, i99,
+            f"ADR-163 percentile precondition violated: N_TRIALS={N_TRIALS} "
+            f"collapses the p95/p99 indices (both {i95}).",
+        )
         # PLAN-111 v1.39.2 Wave C.1 RELAX (per debate SA-K8 / Wave C.1
         # decision tree post-A+B measurement):
         # - Pre-PLAN-111 CI p95: 306-384ms (6 jobs failing) vs 200ms budget
@@ -105,8 +118,9 @@ class TestEndToEndPerf(TestEnvContext):
             durations_ms.append(elapsed_ms)
 
         durations_ms.sort()
-        # p95 of 20 = index 18 (0-indexed)
-        p95_ms = durations_ms[int(0.95 * (N_TRIALS - 1))]
+        # Index derived from N_TRIALS (nearest-rank truncation, the
+        # profile-opus-4-7.py::_pct_of_sorted semantics) — never hardcoded.
+        p95_ms = durations_ms[i95]
         self.assertLessEqual(
             p95_ms, BUDGET_MS,
             msg=(

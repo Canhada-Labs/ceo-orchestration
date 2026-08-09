@@ -9,7 +9,7 @@ Covers:
   - _decide_with_matrix (Cases A, B, F; sentinel bypass; out-of-scope;
     kill-switch; emit side-effects via CEO_PAIR_RAIL_AUDIT_SINK)
   - _emit_pair_rail_case fail-OPEN (no audit_emit module)
-  - Performance: Case-A fixture path < 5 ms p99 over N=100
+  - Performance: Case-A fixture path < 5 ms p99 over N=200 (p95 on CI)
 
 Path-setup note (staging position):
   <repo>/.claude/plans/PLAN-081/staging/phase-3/tests/<this>.py
@@ -1111,7 +1111,7 @@ class TestEmitPairRailCaseFailOpen(TestEnvContext):
 
 
 # ===========================================================================
-# 8. Performance: Case-A path < 5 ms p99 over N=100 (fixture only)
+# 8. Performance: Case-A path < 5 ms p99 over N=200, p95 on CI (fixture only)
 # ===========================================================================
 
 class TestDecideWithMatrixPerformance(TestEnvContext):
@@ -1137,9 +1137,30 @@ class TestDecideWithMatrixPerformance(TestEnvContext):
         _reset_catalogue_cache()
         super().tearDown()
 
+    # PLAN-169 W2.2 — sample size + derived indices (ADR-163 pass).
+    # N=100 put p99 at index 98 with only ONE sample above it; a single
+    # scheduler preemption flaked the gate (S297: 5.25 ms vs 5 ms). N=200
+    # follows the ADR-163 decision (its CI gate + test_hook_latency.py both
+    # sample 200). Indices are DERIVED from the constant via the same
+    # nearest-rank truncation as profile-opus-4-7.py::_pct_of_sorted —
+    # int((n-1)*p/100) — and the ADR-163 collapse precondition
+    # (p95 index != p99 index) is asserted before the timed loop so a
+    # future edit lowering N can never silently re-create the collapsed
+    # gate.
+    _PERF_N = 200
+
     def test_case_a_p99_under_5ms(self):
-        """N=100 Case-A fixture invocations: p99 < 5 ms."""
+        """N=_PERF_N Case-A fixture invocations: p99 < 5 ms (p95 on CI)."""
         import tempfile
+        n = self._PERF_N
+        i50 = int((n - 1) * 0.50)
+        i95 = int((n - 1) * 0.95)
+        i99 = int((n - 1) * 0.99)
+        self.assertNotEqual(
+            i95, i99,
+            f"ADR-163 percentile precondition violated: N={n} collapses the "
+            f"p95 and p99 indices (both {i95}) — raise N before gating.",
+        )
         # PLAN-122 WS3 — neutralize the ORTHOGONAL spool-drain trigger so this
         # probe measures the hook's TRUE decision latency, not the amortized
         # spool drain/fsync. WS-3's codex_review_invoked emit added a spooled
@@ -1193,7 +1214,7 @@ class TestDecideWithMatrixPerformance(TestEnvContext):
                         )
                     _reset_catalogue_cache()
                     # Timed run
-                    for _ in range(100):
+                    for _ in range(n):
                         _reset_catalogue_cache()
                         t0 = time.perf_counter()
                         _CPR._decide_with_matrix(
@@ -1217,27 +1238,29 @@ class TestDecideWithMatrixPerformance(TestEnvContext):
                     _sw.DRAIN_TRIGGER_SIZE = _orig_size
                     _sw.DRAIN_TRIGGER_MTIME_MS = _orig_mtime
             times_ms.sort()
-            # p99 = index 98 (0-based) of 100 sorted values.
-            # PLAN-112-FOLLOWUP (S157): on a shared CI runner the p99 of N=100
-            # is dominated by scheduling/GC noise — a single preemption spike
-            # (observed 133 ms against a 0.64 ms median) fails an otherwise-fast
-            # path. There, gate on the stable MEDIAN (still catches a real ~8x
-            # regression); keep the strict p99 budget on quiet local machines.
-            # CEO_FINISH_CEREMONY: finish-plan135.sh runs this suite under heavy
-            # load on a local machine (no CI env) — treat it like CI and gate on
-            # the stable median, else one scheduling spike flakes the strict p99.
+            self.assertEqual(len(times_ms), n)
+            # PLAN-169 W2.2 (re-evaluating PLAN-112-FOLLOWUP's median switch):
+            # the median-on-CI gate existed because p99 of N=100 was one
+            # preemption spike away from failing. With N=200 a REAL percentile
+            # is affordable on a loaded machine: p95 ignores the top 10
+            # samples, so a handful of scheduler spikes cannot flake it while
+            # an actual latency regression still moves it. Gate p95 on
+            # CI/loaded runs (CEO_FINISH_CEREMONY runs the suite under heavy
+            # local load — same treatment) and keep the strict p99 on quiet
+            # local machines. Budget unchanged (5 ms). Decision text goes to
+            # the ADR-163 amendment in the PLAN-169 W3 pack.
             on_ci = bool(
                 os.environ.get("GITHUB_ACTIONS")
                 or os.environ.get("CI")
                 or os.environ.get("CEO_FINISH_CEREMONY")
             )
-            metric = times_ms[49] if on_ci else times_ms[98]
-            label = "median (loaded)" if on_ci else "p99"
+            metric = times_ms[i95] if on_ci else times_ms[i99]
+            label = "p95 (loaded)" if on_ci else "p99"
             self.assertLess(
                 metric, 5.0,
                 f"Case-A {label} = {metric:.2f} ms exceeds 5 ms budget. "
-                f"Median={times_ms[49]:.2f} ms, p95={times_ms[94]:.2f} ms, "
-                f"p99={times_ms[98]:.2f} ms.",
+                f"N={n}, median={times_ms[i50]:.2f} ms, "
+                f"p95={times_ms[i95]:.2f} ms, p99={times_ms[i99]:.2f} ms.",
             )
 
 

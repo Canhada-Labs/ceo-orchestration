@@ -204,6 +204,8 @@ class TestVerifyCounts(unittest.TestCase):
         "adrs@docs/ARCHITECTURE.md": 1,
         "adrs@docs/CTO-GUIDE.md": 3,
         "adrs@docs/FAQ.md": 1,
+        # PLAN-169 W2.7: the "N ADRs document ..." GUIA phrase is now watched.
+        "adrs@docs/GUIA-COMPLETO.md": 1,
         "adrs@docs/README.md": 1,
         "adrs@npm/README.md": 2,
         "commands@CLAUDE.md": 1,

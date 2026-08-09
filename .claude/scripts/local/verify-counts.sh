@@ -607,8 +607,13 @@ RULES = [
     # both READMEs put next to `ls .claude/adr | grep -c '^ADR-'`. It matched
     # nothing before — the same vacuous-site class as S287, found by diffing
     # the grep census of the docs against `rule_matches_by_doc`.
+    # PLAN-169 W2.7 (ledger E.3): "N ADRs document ..." is the
+    # GUIA-COMPLETO phrasing — unwatched, it sat stale at 189 while the
+    # disk had 190 (found live during W2.7 itself). The \**\s* tolerates
+    # bold-wrapped numerals like the hook_py rule below.
     ("adrs", "exact", [r'(\d+) ADRs total', r'(\d+) ADRs on disk',
-                       r'#\s*(\d+) ADRs\b']),
+                       r'#\s*(\d+) ADRs\b',
+                       r'(\d+)\**\s*ADRs\**\s+document']),
     ("hook_py", "exact", [
         r'(\d+) hooks total', r'(\d+) Python hook scripts',
         # \**\s*…\s+ tolerates bold-wrapped numerals and line wraps:
@@ -1033,6 +1038,11 @@ if live_version:
         # que é o comportamento correto para uma transição que exige juízo).
         ("SECURITY.md", r'\*\*Previous MINOR\*\* \(`v(\d+\.\d+)\.x`\)', "prev_minor"),
         ("VERSIONING.md", r'Previous MINOR \(`v(\d+\.\d+)\.x`\)', "prev_minor"),
+        # PLAN-169 W2.6: the framework-version MARKER is a bump site (the
+        # updater reads it marker-first); desync marker != VERSION must be
+        # RED here, fail-closed, or check-framework-updates.sh loops
+        # behind-minor on every adopter after a GA that skipped it.
+        (".claude/.framework-version", r'\A(\d+\.\d+\.\d+)\s*\Z', "full"),
     ]
     _live_minor = ".".join(live_version.split(".")[:2])
     try:

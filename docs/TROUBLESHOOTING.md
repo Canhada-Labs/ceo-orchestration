@@ -69,8 +69,18 @@ itself that should be delegated (one of the P1-P5 predicates — e.g.
 writing bulk code inline instead of spawning a specialist).
 
 **Fix:** delegate via `/spawn`. If the action is genuinely correct and
-you accept the overhead, set `CEO_OVERHEAD_ACK=1` for that action (the
-override is itself audited).
+you accept the overhead, what the mechanism delivers today is:
+
+- **Bash commands:** prefix the single command with
+  `CEO_OVERHEAD_ACK=1 ` (e.g. `CEO_OVERHEAD_ACK=1 grep …`) and it
+  proceeds.
+- **Edit/Write tools:** there is NO per-action override channel.
+  The predicates evaluate a **5-minute sliding window** of classified
+  actions — stop the grep/read burst and retry the edit after the
+  window drains.
+- **Session-wide:** exporting `CEO_OVERHEAD_ACK=1` in the environment
+  that launches the session disables blocking for the whole session
+  (the override is audited). Use sparingly.
 
 ### Kernel-path edit hard-denied
 

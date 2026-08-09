@@ -343,6 +343,15 @@ class TestMaxRoundsHardStop(unittest.TestCase):
                     if risks is not None else f"- unique risk round {r}\n")
             (d / "a.md").write_text(f"## Risks\n\n{body}", encoding="utf-8")
 
+    def _seed_pair(self, round_num: int, prev_risks, cur_risks) -> None:
+        """Populate exactly round N-1 and N with the given risk sets."""
+        base = self.tmp / "PLAN-999" / "debate"
+        for r, risks in ((round_num - 1, prev_risks), (round_num, cur_risks)):
+            d = base / f"round-{r}"
+            d.mkdir(parents=True, exist_ok=True)
+            body = "\n".join(f"- {x}" for x in risks) + "\n"
+            (d / "a.md").write_text(f"## Risks\n\n{body}", encoding="utf-8")
+
     def test_module_exports_max_rounds_constant(self):
         self.assertTrue(hasattr(dc, "MAX_ROUNDS"))
         self.assertEqual(dc.MAX_ROUNDS, 5)
@@ -363,17 +372,47 @@ class TestMaxRoundsHardStop(unittest.TestCase):
         self.assertEqual(r["outcome"], "diverged")
         self.assertEqual(r["round_number"], 4)
 
-    def test_max_rounds_overrides_jaccard(self):
-        # Identical risks -> Jaccard=1.0 but terminal outcome wins.
+    def test_ceiling_convergence_is_convergence(self):
+        # PLAN-169 W2.9(iii), PROTOCOL §12.4: Jaccard >= threshold at the
+        # MAX_ROUNDS ceiling IS convergence — the old contract forced
+        # convergence_met=False here, masking a met threshold as impasse.
+        # The ceiling still terminates (max_rounds_reached stays True for
+        # orchestrators); only the mislabel is gone.
         self._seed(5, ["alpha", "beta", "gamma"])
         r = dc.compute_convergence(self.tmp, "PLAN-999", 5, threshold=0.7)
         self.assertEqual(r["jaccard_score"], 1.0)
         self.assertEqual(r["jaccard"], 1.0)
         self.assertTrue(r["max_rounds_reached"])
-        self.assertEqual(r["outcome"], "max_rounds_reached")
-        self.assertFalse(r["convergence_met"])
-        self.assertFalse(r["converged"])
+        self.assertEqual(r["outcome"], "converged")
+        self.assertTrue(r["convergence_met"])
+        self.assertTrue(r["converged"])
         self.assertFalse(r["red_team_needed"])
+        self.assertEqual(r["resolved_count"], 0)
+        self.assertEqual(r["novel_count"], 0)
+
+    def test_resolved_vs_novel_reported_separately(self):
+        # PLAN-169 W2.9(ii): a risk leaving the set (cured) and a risk
+        # entering it are reported apart from the Jaccard that conflates
+        # them, so the CEO verdict can see cure vs true divergence.
+        self._seed_pair(3, ["a", "b", "c"], ["b", "c", "d"])
+        r = dc.compute_convergence(self.tmp, "PLAN-999", 3, threshold=0.99)
+        self.assertEqual(r["resolved_count"], 1)
+        self.assertEqual(r["novel_count"], 1)
+        self.assertEqual(r["resolved_risks"], ["a"])
+        self.assertEqual(r["novel_risks"], ["d"])
+
+    def test_risks_heading_without_bullets_fails_loud(self):
+        # PLAN-169 W2.9(i): '## Risks' present + zero bullets = input-parse
+        # failure, fail-closed (exit 4 via CLI), never a silent zero.
+        self._seed(3, ["a"])
+        bad = self.tmp / "PLAN-999" / "debate" / "round-3" / "critic-a.md"
+        bad.write_text("## Risks\n\n**R-1** prose-style, no bullets.\n",
+                       encoding="utf-8")
+        with self.assertRaises(dc.RisksSectionEmptyError):
+            dc.compute_convergence(self.tmp, "PLAN-999", 3, threshold=0.7)
+        rc = dc.main(["--plan", "PLAN-999", "--round", "3",
+                      "--plans-root", str(self.tmp)])
+        self.assertEqual(rc, 4)
 
     def test_convergence_at_round_3_before_max(self):
         self._seed(3, ["r1", "r2", "r3"])

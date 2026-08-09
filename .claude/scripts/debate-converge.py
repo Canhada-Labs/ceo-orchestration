@@ -182,16 +182,50 @@ def iter_agent_critiques(round_dir: Path) -> Iterable[Path]:
         yield p
 
 
+class RisksSectionEmptyError(ValueError):
+    """A critique has a `## Risks` heading that parsed to ZERO bullets.
+
+    PLAN-169 W2.9(i): paragraph-style risks (`**R-X** ...` prose) are
+    invisible to the bullet parser, so the critique silently contributed
+    an EMPTY set to the round (registered-vacuous family — the round-1
+    Security critique of PLAN-169 contributed 0 risks and nobody knew).
+    A present-but-unparseable section is an INPUT-parse failure and is
+    fail-closed: loud per-critique error, never a silent zero.
+    """
+
+
+def _risks_heading_present(md_text: str) -> bool:
+    """True when a `## Risks`-family heading exists in the text."""
+    for raw in md_text.splitlines():
+        heading = _HEADING_RE.match(raw)
+        if heading:
+            title = heading.group(1).strip().lower()
+            if title == "risks" or title.startswith("risks "):
+                return True
+    return False
+
+
 def collect_risk_set(round_dir: Path) -> Set[str]:
-    """Union all agent critique risks in a round into a normalized set."""
+    """Union all agent critique risks in a round into a normalized set.
+
+    Raises :class:`RisksSectionEmptyError` (fail-closed, W2.9(i)) when a
+    critique carries a Risks heading but zero parseable bullets.
+    """
     out: Set[str] = set()
     for critique_path in iter_agent_critiques(round_dir):
         try:
             text = critique_path.read_text(encoding="utf-8")
         except OSError:
             continue
-        for risk in extract_risks(text):
-            out.add(risk)
+        items = extract_risks(text)
+        if not items and _risks_heading_present(text):
+            raise RisksSectionEmptyError(
+                f"{critique_path}: '## Risks' heading present but ZERO "
+                f"bullet items parsed — paragraph-style risks are invisible "
+                f"to the machine; rewrite them as '- ' bullets. Refusing to "
+                f"count this critique as silently empty."
+            )
+        out.update(items)
     return out
 
 
@@ -218,10 +252,22 @@ def compute_convergence(
     """Compute Jaccard across round N and N-1. Returns a dict shaped
     like :class:`ConvergenceResult` plus legacy keys (``jaccard``,
     ``converged``, ``red_team_needed``, ``round``, ``plan``, risk counts,
-    ``zero_coverage``). When ``round_num >= MAX_ROUNDS``, the outcome
-    is terminal: ``max_rounds_reached`` = True, ``convergence_met`` +
-    legacy ``converged`` forced False, ``outcome == "max_rounds_reached"``
-    regardless of Jaccard (closes PLAN-012 chaos CRITICAL-2)."""
+    ``zero_coverage``).
+
+    Ceiling semantics (PLAN-169 W2.9(iii), aligns with PROTOCOL §12.4):
+    a round at ``round_num >= MAX_ROUNDS`` is TERMINAL either way, but
+    convergence at the ceiling is CONVERGENCE — when jaccard >= threshold
+    the outcome is ``converged`` (met=True); only a below-threshold
+    ceiling round reports ``max_rounds_reached`` (met=False, escalate to
+    Owner). Termination is preserved (closes PLAN-012 chaos CRITICAL-2:
+    no round beyond the ceiling), the mislabel is not.
+
+    Resolved-vs-novel (W2.9(ii)): Jaccard PUNISHES cure — a risk that
+    left the set because it was RESOLVED between rounds shrinks the
+    intersection exactly like fresh divergence would. The score is kept
+    as-is (set-stability semantics, documented), and ``resolved_count``/
+    ``novel_count`` are reported separately so the CEO verdict never
+    rides on a number that penalizes fixing things."""
     prev_dir = _round_dir(plans_root, plan_id, round_num - 1)
     cur_dir = _round_dir(plans_root, plan_id, round_num)
     if not prev_dir.is_dir():
@@ -234,13 +280,14 @@ def compute_convergence(
     zero_coverage = not prev_set and not cur_set
     score = 0.0 if zero_coverage else jaccard(prev_set, cur_set)
     jaccard_converged = (not zero_coverage) and score >= threshold
-    # MAX_ROUNDS overrides: even on Jaccard-converged, a run at
-    # round >= MAX_ROUNDS is terminal; red-team + consensus gates skip.
-    convergence_met = jaccard_converged and not max_rounds_reached
-    if max_rounds_reached:
-        outcome = _OUTCOME_MAX_ROUNDS
-    elif jaccard_converged:
+    # W2.9(iii): convergence at the ceiling IS convergence (§12.4). The
+    # ceiling still terminates the debate — it only stops masking a
+    # jaccard >= threshold as an impasse.
+    convergence_met = jaccard_converged
+    if jaccard_converged:
         outcome = _OUTCOME_CONVERGED
+    elif max_rounds_reached:
+        outcome = _OUTCOME_MAX_ROUNDS
     else:
         outcome = _OUTCOME_DIVERGED
     return {
@@ -251,6 +298,10 @@ def compute_convergence(
         "plan": plan_id,
         "prev_risk_count": len(prev_set),
         "curr_risk_count": len(cur_set),
+        "resolved_count": len(prev_set - cur_set),
+        "novel_count": len(cur_set - prev_set),
+        "resolved_risks": sorted(prev_set - cur_set),
+        "novel_risks": sorted(cur_set - prev_set),
         "threshold": threshold,
         "zero_coverage": zero_coverage,
         "convergence_met": bool(convergence_met),
@@ -315,15 +366,26 @@ def main(argv: Optional[List[str]] = None) -> int:
     except FileNotFoundError as e:
         print(f"ERROR: {e}", file=sys.stderr)
         return 1
+    except RisksSectionEmptyError as e:
+        # W2.9(i) fail-closed: a critique with a Risks heading and zero
+        # parseable bullets is an input-parse failure, never a silent zero.
+        # Exit 4 is distinct so orchestrators can tell "fix the critique
+        # format" apart from convergence outcomes.
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 4
 
     if result.get("zero_coverage"):
         # Still print the JSON (machine-readable) and exit 2
         print(json.dumps(result, sort_keys=True))
         return 2
 
-    # Exit code 3 signals terminal max-rounds-reached to the orchestrator
-    # + CI scripts (distinct from exit 0 converged / 1 divergent-under-cap).
-    if result.get("max_rounds_reached"):
+    # Exit code 3 signals terminal max-rounds-BELOW-threshold to the
+    # orchestrator + CI scripts (distinct from exit 0 converged / exit 4
+    # unparseable-critique). W2.9(iii): a ceiling round whose jaccard met
+    # the threshold reports outcome=converged and exits 0 — convergence
+    # at the ceiling is convergence (§12.4), so the flag alone no longer
+    # forces the impasse path.
+    if result.get("outcome") == _OUTCOME_MAX_ROUNDS:
         print(json.dumps(result, sort_keys=True))
         return 3
 

@@ -261,6 +261,15 @@ def _safe_plan_id(value: Any) -> Optional[str]:
 # $5/$25 per MTok; claude-opus-4-7 RETAINED HISTORICAL ($15/$75) for log
 # replay; Sonnet 4.6 = $3/$15; Haiku 4.5 = $1/$5 (was 4x underpriced).
 _DEFAULT_PRICING: Dict[str, Dict[str, float]] = {
+    # PLAN-169 W2.10 F3: the ENTIRE gen-5 fleet was absent here, so
+    # compute_cost_usd returned None for every current-fleet model and the
+    # dashboard showed the running fleet as costless. Rows mirror
+    # ceo-cost.py (per-MTok) converted to per-1k. Sonnet 5 uses the intro
+    # rate ($2/$10 until 2026-08-31; sticker $3/$15) — same as the mirror.
+    "claude-fable-5":              {"in": 0.010, "out": 0.050},
+    "claude-opus-5":               {"in": 0.005, "out": 0.025},
+    "claude-opus-5-fast":          {"in": 0.010, "out": 0.050},
+    "claude-sonnet-5":             {"in": 0.002, "out": 0.010},
     "claude-opus-4-8":             {"in": 0.005, "out": 0.025},
     "claude-opus-4-7":            {"in": 0.015, "out": 0.075},
     "claude-opus-4":              {"in": 0.015, "out": 0.075},

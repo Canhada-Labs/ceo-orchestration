@@ -1060,6 +1060,66 @@ W0 correspondentes viram VERIFICAÇÃO, não re-execução.
 
 ## Progress log
 
+- 2026-08-09 (S299, madrugada): **W2 EXECUTADO INTEIRO (9/9 itens) em
+  superfícies confirmadas FREE pelo predicado (rodado em TODOS os alvos
+  antes de tocar — 4 correções de fronteira registradas abaixo).**
+  **W2.2**: Case-A N=100→200 + claim-producer N_TRIALS=20→40 (índices
+  p95/p99 COLAPSADOS — `int(19*.95)==int(19*.99)`, a classe exata do
+  ADR-163); índices derivados de n (truncação `_pct_of_sorted`),
+  pré-condição de colapso assertada, CI gateia p95 REAL (não mediana);
+  emenda ADR-163 DRAFTADA (`PLAN-169/W3-adr163-amendment-draft.md` →
+  pack W3); provas: pytest verde (case_a 0.38s; e2e 6.4s, 2+1 xpassed).
+  **W2.3**: ladder de resolução EXATA no injector — (1) heading por
+  IGUALDADE de componente (mata a classe substring: "security engineer"
+  ⊂ "cybersecurity engineer"), (2) tabela explícita nome→slug para
+  `.claude/agents/` (DevOps Engineer→devops.md), (3) papel só-de-tabela
+  ⇒ perfil sintetizado DA LINHA rotulado (VP Engineering), (4) nome
+  fora do mapa ⇒ exit 3 fail-closed; gramática aceita `/` e `&` (UI/UX
+  Lead, Accessibility & i18n Engineer) sem abrir traversal (sem `.`);
+  rung 2 emite corpo com `## `→`[h2] ` (a demoção `###` ainda continha
+  o marcador como SUBSTRING — a mesma classe, pega pelo teste); provas:
+  41 passed (6 casos novos + 2 suítes de regressão). **W2.4**: docs
+  overhead-ack (EN+pt-BR) agora prometem O QUE EXISTE: prefixo Bash
+  por-comando, janela deslizante 5 min, NENHUM canal por-ação para
+  Edit/Write, export de sessão auditado; canal novo → W3.3. **W2.5**:
+  Gate 1 aceita api-key OU login (fail-closed sem ambos); Gate 2 SÓ na
+  rota api-key (r20-P2: a última rotação 2026-05-09 = 91d reprovaria
+  login válido); + cura do C.2: `timeout` coreutils não existe no macOS
+  → perl alarm; provas DINÂMICAS nesta máquina: rota login PASS
+  end-to-end, rota api-key PASS c/ override, controle positivo FAIL
+  rc=1 sem override. **W2.6**: `.claude/.framework-version` = 12º site
+  (`_SITES` + `VERSION_SITES`, espelhos comentados); controle
+  transitório: dessinc 9.9.9 ⇒ rc=1 nomeando o site, restaurado ⇒ rc=0
+  (janela do nightly não cruzada; HEAD limpo); 52 bump-tests verdes;
+  controle ao vivo = bump 1.4.0 (W6.2). **W2.7**: padrão `N ADRs
+  document` vigiado; drift REAL achado vivo (GUIA 189 vs disco 190) e
+  curado; expectation-set +`adrs@GUIA`; controle por rótulo: planta 999
+  ⇒ `DRIFT: docs/GUIA-COMPLETO.md: cites adrs=999, live=190`,
+  desplanta ⇒ 0; 22 tests verdes. **W2.8**: censo mecânico achou **~50
+  scripts FREE decidindo gates** (os 2 nomeados eram 2 de 50); proposta
+  (b)-estreito: manifesto checksum p/ 6 release-críticos, resto livre —
+  `PLAN-169/W2.8-free-script-gate-family.md`; DECISÃO na fila do Owner.
+  **W2.9**: converge com 3 curas provadas — (i) Risks presente + zero
+  bullets ⇒ `RisksSectionEmptyError`/exit 4 barulhento por crítica,
+  (ii) `resolved_count`/`novel_count` reportados separados (Jaccard
+  punia cura — documentado), (iii) teto+threshold ⇒ CONVERGED (§12.4;
+  terminação preservada); regressão AO VIVO: round-5 real segue exit
+  3/unresolved (sem reescrita de história); controles sintéticos: teto
+  convergido rc=0, Risks-vazio rc=4; teste que CODIFICAVA o defeito
+  reescrito; 57 passed. **W2.10 (parte livre)**: F2 `_tier_rank` ganha
+  gen-5 (ladder tier-major; a inversão promote/demote morre), F3
+  pricing gen-5 no value-dashboard (frota corrente custava None), F9
+  10 replacements do ledger → opus-5/sonnet-5 (registro honesto em
+  `_meta`, `fetched` intocado), F10 aliases gen-5 no normalizador, D3
+  display do injector sem id de geração, D7 dirigido:
+  cost-of-operation ganha as 4 linhas gen-5 + "current flagship" do
+  4-8 vira "N-1, active" (provider-pricing/MODEL-ROUTING já eram
+  gen-5); 181 tests verdes. **Correções de fronteira (predicado >
+  lista da auditoria):** F4 (`check_codex_stop_review.py`), F8+D1
+  (`audit_log.py`), D2 (`check_agent_spawn.py`) são CANONICAL ⇒ pack
+  W3; D6 (`validate.yml`) é KERNEL ⇒ W4-C; F7 (tournament) é
+  model-CHOICE ⇒ W4.3 com F1/F5/F6. Traduções: drift=0 pós-W2.4.
+
 - 2026-08-08 (S299): **W1 EXECUTADO (fix + riders + sweep; validação D3
   disparada).** Causa-raiz confirmada PIOR que "BSD-first": no GNU,
   `stat -f '%m'` SUCEDE imprimindo o MOUNT POINT (stdout contaminante)
