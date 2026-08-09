@@ -357,6 +357,14 @@ _write_baseline_manifest() {
         *[$'\n\r\t']*) continue ;;
       esac
       printf 'LINK  %s  %s\n' "$_wbm_rel" "$_wbm_target" >> "$_wbm_tmp"
+    elif [ -L "$_wbm_abs" ]; then
+      # A live symlink that did NOT qualify as a LINK record (wrong mode, or
+      # rejected by _wbm_link_allowed) must never fall through to the hash
+      # branch: POSIX -f FOLLOWS the link, and the record would serialize the
+      # ADOPTER's target content as a framework HASH delivery — a new route
+      # around INV-2 (repass-r2 part-a V4). No record at all: not delivered.
+      echo "    NOTE: symlink $_wbm_rel not recorded (no LINK authorization; refusing to hash through it)" >&2
+      continue
     elif [ -f "$_wbm_abs" ]; then
       if [ "$_wbm_rel" = "PROTOCOL.md" ]; then
         # Generated pointer. Use the CANONICAL pointer hash (FMS_PROTOCOL_HASH,

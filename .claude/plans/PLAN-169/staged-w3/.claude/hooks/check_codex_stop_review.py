@@ -60,7 +60,8 @@ primitive:
 
 ## Reviewer pin (OQ3 — PROVISIONAL, pending Owner ratification)
 
-- model: ``claude-opus-4-8`` (override ``CEO_PAIR_RAIL_REVIEWER_MODEL``)
+- model: ``claude-opus-5`` (override ``CEO_PAIR_RAIL_REVIEWER_MODEL``;
+  fleet-currency F4, PLAN-169 W3 — was ``claude-opus-4-8``)
 - per-review token ceiling: ``100000`` (override
   ``CEO_PAIR_RAIL_REVIEWER_MAX_TOKENS``)
 - verdict vocabulary: ``VERDICT: APPROVE`` / ``VERDICT: REJECT`` with

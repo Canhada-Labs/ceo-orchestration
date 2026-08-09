@@ -1,79 +1,108 @@
-# Checklist de retorno do Owner — PLAN-169 (S298)
+# ✅ OWNER-RETURN — o que fazer quando você voltar (S300, 2026-08-09)
 
-> **STATUS: RATIFICADO E COMMITADO (2026-08-08).** O Owner ratificou
-> tudo com as recomendações em chat; o plano está `reviewed` e o pack
-> commitado (branch `plan169-pack`). Este arquivo permanece como
-> REGISTRO das decisões + a fila de assinaturas do §2, que continua
-> sendo o roteiro das ações físicas do Owner nos trens/cerimônias.
-> (Texto original do briefing preservado abaixo.)
+> **TL;DR: são 2 comandos hoje e 1 amanhã. Todo o resto já está pronto,
+> ensaiado em clone e validado. Você só digita a senha do GPG quando a
+> janelinha (pinentry) abrir.**
 
-## 1. Ratificações — ✅ TODAS RATIFICADAS (Owner, chat, 2026-08-08)
+## HOJE (ao voltar) — corte da rc.2
 
-> "ratifica tudo com as recomendações e commita o pack" — todas as
-> linhas abaixo valem com a coluna de recomendação como DECISÃO.
-> Consequências imediatas: plano `draft→reviewed`; waves liberadas na
-> ordem pinada; break-glass ADR entra no W3; rota (b) para B.a
-> (exceção nomeada no release-checklist da v1.3.0); pack commitado
-> em branch `plan169-pack` (§4).
+```
+cd ~/canhada-labs/ceo-orchestration
+bash .claude/plans/PLAN-166/OWNER-RC2-CUT.sh
+```
 
-| # | O que decidir | Recomendação do CEO (advisory) |
-|---|---|---|
-| R-A | **Transição `draft→reviewed` do PLAN-169 v2.5** — o plano está em `draft` (a instrução "autoexecute" autorizou o TRABALHO, mas a v2.5 evoluiu além dela; a marcação `reviewed` é SUA). Marcar `reviewed` libera as waves LIVRES (W0-W2). NOTA: as waves de RISCO (W3/W3-K/W4-C) já são gateadas pela sua assinatura GPG — não rodam sem você de qualquer forma | marcar reviewed (rail 24 rodadas; debate design-coherent) |
-| R-B | **Gate de debate ESCALADO (§12.4)**: o round-5 (triade completa sobre a v2.5) terminou `status: unresolved` por MAX-ROUNDS — jaccard 0.692 (a 0.008 do threshold 0.7), 2× ACCEPT + 1× ADJUST (MF-D aplicado), VETO de segurança satisfeito. O CEO NÃO declarou o gate met; VOCÊ decide: **(a)** ratificar o estado como design-coherent e liberar (recomendação do CEO — `round-5/consensus.md` tem a base) ou **(b)** pedir round 6 — nesse caso, o `MAX_ROUNDS=5` é CONSTANTE interna do `debate-converge.py` (não há flag CLI); um 6º round exige bumpar essa constante OU interpretar o jaccard do round-6 diretamente (é o defeito W2.9(iii): max-rounds mascara jaccard≥threshold) | ratificar (a) |
-| R-C | **Deferral da higiene de registro do debate** (§4 conformidade + §13.2 anonimização a posteriori) — decisão do CEO, ver `debate/README.md` §2 | ratificar a deferral (ou pedir regeneração) |
-| OQ-1 | Ordem de publicação | v1.3.0 GA → v1.4.0 imediata |
-| OQ-2 | Postura default do quota-resume (2 sub-decisões) | (i) ativação: só com night-mode OU opt-in `CEO_QUOTA_RESUME=1`; (ii) **um** threshold de arme — recomendação: **90%** (`CEO_QUOTA_RESUME_PCT` configurável) |
-| OQ-3 | Break-glass ADR | aceitar (entra no pack W3) |
-| OQ-4 | Família "script livre que decide gate" | W2.8 traz a proposta (guard canônico vs checksum) |
-| OQ-5 | B.a vs GA v1.3.0 | rota (b): GA com exceção nomeada; OU mini-cerimônia pré-rc.2 de B.a |
-| W0.8 | Convenção de ACs de 167/168 | "AC provado no §registro; checkbox não usado" |
+O que ele faz sozinho (você só confirma e digita a senha ~3x):
+1. Assina o pré-registro W5 (pinentry 1).
+2. Commita a evidência do re-pass + W5 + docs da sessão.
+3. Mostra o verdito que você vai assinar (GO-WITH-CONDITIONS com as
+   4 exceções nomeadas V1/V2/V4/V5 — decisão que você já ratificou);
+   você dá Enter e assina (pinentry 2).
+4. Monta o verdito final, roda o guard local, pusha e ESPERA o CI
+   (~15-40 min — pode deixar rodando; ele apita quando precisar de você).
+5. `preflight --rc 2` + assina a tag `v1.3.0-rc.2` (pinentry 3).
+6. Pergunta "SIM" antes de pushar a tag e criar o pre-release.
 
-## 2. Fila de assinaturas/ações físicas (na ORDEM de execução)
+Se QUALQUER passo falhar, ele para com mensagem clara — me chame no
+Claude e não re-rode a partir do push.
 
-Ordem pinada (codex r4/r16): `W0 → W1 → W2 → W6.1 (trem v1.3.0
-completo, main CONGELADO do corte da rc.2 até o GA) → W3 → W3-K → W4 →
-W4-C → W5 → W6.2`.
+**Depois do corte:** me chame no Claude e diga "roda o E0" — o W5
+estará assinado e eu executo o gate-zero (custo ~0) e o fechamento.
 
-1. **v1.3.0 GA** (PLAN-166 W2): re-pass r2 (worktree limpa no HEAD com
-   W0+W1+W2-livres, NUNCA `ad9cc3a`) → verdito rc.2 assinado → push →
-   CI verde → `preflight --rc 2` → **tag `v1.3.0-rc.2`** → pre-release
-   → **hold 24h** → re-pass final (worktree DA TAG) → assert
-   `origin/main == SHA rc.2` → verdito GA assinado+commitado → push →
-   **CI verde no commit do verdito** → `preflight --stable` → **tag
-   `v1.3.0`** → push da tag → aprovação `production-npm` APÓS
-   await-gate verde (sequência pinada do PLAN-166 W2 — nenhum gate
-   omitido).
-2. **Cerimônias GPG (sessões SEPARADAS):** pack W3 → pack W3-K (kernel)
-   → pack W4-C (**cerimônia de KERNEL** — toca settings.json/audit_emit/
-   validate.yml).
-3. **W5 (ANTES do E0, dentro do 169):** assinar o pré-registro da
-   bateria E7 → só então executar o E0 (AC-6 exige pré-registro
-   assinado ANTES do 1º run; codex r21-P1).
-4. **v1.4.0:** rc.1 → rail até limpo → hold 24h → GA (bump minor =
-   controle ao vivo do fix do marcador W2.6).
-5. **PLAN-170 (após v1.4.0-rc.1):** executar E1-E4 (o pré-registro já
-   foi assinado no W5; o 170 NÃO re-assina, só roda a bateria).
+⚠️ A partir do corte: **NADA em main até o GA** (nem docs).
 
-## 3. Estado dos vermelhos conhecidos
+## AMANHÃ (>= 24h após o corte) — GA v1.3.0
 
-- `ownership-nightly`: vermelho de CAUSA CONHECIDA (harness Darwin-only)
-  até o W1 landar. Aceite = 62 GREEN / 3 RED {0016,0024,0027}. NUNCA
-  silenciar pela tabela.
-- `Translations drift`: **CURADO nesta sessão** (seção night-mode
-  espelhada no pt-BR; drift=0 local) — verde no próximo push.
+```
+cd ~/canhada-labs/ceo-orchestration
+bash .claude/plans/PLAN-166/OWNER-GA-CUT.sh
+```
 
-## 4. O que a S298 entregou (não precisa refazer)
-- PLAN-169 completo (v2.5) + ledger de 65 pendências com evidência.
-- Debate **5 rounds** — terminal `round-5/consensus.md` (triade
-  completa sobre a v2.5; `status: unresolved`/max-rounds, §12.4
-  escalado a você; round-4 = intermediário).
-- Rail codex **26 rodadas** — todos os P1 de conteúdo executável
-  fechados; escopo do W4-C fecha por PRINCÍPIO (o gate `touched−scope`
-  é a autoridade de completude, ver W4-C).
-- Higiene: script obsoleto do 167 neutralizado; 2 tarballs + anexos de
-  pesquisa movidos ao archive privado; `.gitignore` endurecido;
-  TROUBLESHOOTING (EN+pt-BR) corrigido; research-MANIFEST com
-  integridade+fontes.
-- **Working tree tem o pack do 169 (uncommitted).** Para durar entre
-  terminais: `git switch -c plan169-pack && git add .claude/plans/PLAN-169* .claude/plans/PLAN-167/OWNER-PREPARE-TO-SIGN.sh docs/TROUBLESHOOTING*.md .gitignore && git commit`
-  (não commitei em main sem seu OK — disciplina de git).
+Ele valida o hold, roda o re-pass do codex sobre a tag (~15 min),
+você assina o verdito GA + a tag `v1.3.0` (2 pinentries), ele espera
+os workflows e te dá o link para aprovar o `production-npm` no browser
+(o clique final é seu). NO-GO do codex = ele para e você me chama.
+
+## DEPOIS DO GA (mesma sessão) — pack W3 (cura as 4 exceções)
+
+```
+cd ~/canhada-labs/ceo-orchestration/.claude/plans/PLAN-169
+cp W3-approved-draft.md W3-approved.md
+# edite W3-approved.md: Anchor-SHA = saída de `git rev-parse HEAD`
+# e Data = a data de hoje
+gpg --armor --detach-sign -u CFCFACF00335DC74 W3-approved.md
+bash OWNER-W3-LAND.sh --dry-run     # tudo verde? então:
+bash OWNER-W3-LAND.sh
+git push origin main
+```
+
+## O que EU deixei pronto nesta sessão (para seu registro)
+
+- Verdito rc.2 completo (templates + campos + evidência r2 com
+  manifesto reescrito e pins dos payloads raw) — **ensaiado de ponta a
+  ponta em clone com chave GPG descartável**: guard delta OK, validador
+  server-side OK, e os controles negativos FALHAM como devem.
+- **Pack W3 completo e revalidado** (28 arquivos staged): curas
+  V1/V2/V4/V5 (+ sonda `test-w3-vcures.sh`: 5 FAIL na árvore atual =
+  defeitos comprovados; 8/8 verde pós-pack), release.yml P2 (byte-exato),
+  W2.8 (b)-estreito ratificado por sua delegação (+ ADR-192 +
+  manifesto `gate-scripts-manifest.txt`), contagens 190→192 ADRs em 10 docs,
+  e a bateria plena: **6992/6992 pytest verde na simulação**.
+  A simulação pegou 2 quebras que teriam abortado o land real
+  (release_steps 31→32 no RELEASE.md; teste-espelho do reviewer F4).
+- Trem GA de amanhã pronto (runner do re-pass do hold + templates GA +
+  OWNER-GA-CUT.sh).
+- Ferramenta E0 escrita e auto-testada; **recusa rodar** antes do W5
+  assinado+commitado (AC-6) — como pré-registrado.
+- Payloads raw movidos p/ `~/.rc2-backup/repass-r2-raw/` (pins sha256
+  na PROVENANCE-r2.md).
+- **Pair-rail (codex review) rodou 20 RODADAS sobre TUDO isto antes de
+  você voltar: ~45 achados, todos triados (curados, ou refutados com
+  evidência reproduzida e registrados). Critério de parada explícito:
+  as superfícies do SEU corte de hoje ficaram sem nenhum achado nas 10
+  últimas rodadas; o que apareceu no fim era polimento do pack W3 e do
+  E0, que re-entram em revisão nas próprias cerimônias.** Destaques —
+  na rodada 2: manifesto W2.8 foi a 8 membros
+  (validador do verdito + await-gate do npm entram), o GA automático
+  passou a exigir `VERDICT: GO` exato (condição nova = triagem antes
+  de assinar), e o gate do E0 pina o signatário na SUA chave. Também:
+  commit 1 agora é allowlist fechada (não `git add -A`; intruso
+  plantado é acusado, controle testado nos 2 sentidos); re-pass GA
+  ganhou os helpers executados no escopo (`_release_bump_sites`,
+  `await_release_gate`, validador step-15) e virou 2 partes (o diff
+  estourava o cap de 250KB do redactor); o GA espera o npm-publish da
+  TAG concluir com sucesso (poll amarrado ao SHA + `npm view == 1.3.0`
+  assertivo) antes de DECLARAR sucesso — o Release em si é criado pelo
+  release.yml (ordem herdada, pré-existente); se o npm falhar, o script
+  te dá a mitigação (`gh release edit --draft`) na hora; E0 gateia a evidência no que o
+  substrato REALMENTE garante (fail-closed no null-checker + linhas
+  malformadas; o estado do `verify_chain` por arquivo é impresso como
+  RESSALVA no relatório — a cadeia não é oráculo same-UID, limitação
+  HMAC-483/S298 documentada no próprio código), decompõe as fronteiras
+  da janela e exige W5 com bytes == HEAD + assinatura verificada DA SUA
+  chave antes de rodar.
+
+## ⚠️ Continuam valendo
+
+- NÃO rodar `/set-quality-profile` até o W4.3.
+- Nightly saudável = 62 GREEN / 3 RED exatos; all-green = investigar.
+- W3-K e W4-C = cerimônias de kernel em sessões próprias (ordem pinada).

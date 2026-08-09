@@ -1,5 +1,9 @@
 # ☀️ OWNER-MORNING — fila da manhã (S299 → S300, 2026-08-09)
 
+> **SUPERSEDIDO na S300:** a fila executável agora é
+> `OWNER-RETURN-CHECKLIST.md` (2 comandos hoje + 1 amanhã). Este doc
+> fica como registro da triagem da madrugada.
+
 > **TL;DR da noite:** W0 + W1 + W2 EXECUTADOS, LANDADOS E VERDES.
 > O `ownership-nightly` rodou **verde no Linux pela primeira vez na
 > história** (62/3 exatos; OWN-0073 re-verificado). O pack canônico W3

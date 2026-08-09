@@ -255,7 +255,7 @@ explicitly disclaims a regression verdict. N=200 percentile semantics
 (Decision items 1, 2, 5) are untouched by this amendment.
 
 
-## Amendment (PLAN-169 W2.2, 2026-08-09) — test probes join the N-adequacy rule; p95-on-CI replaces median-on-CI
+## Amendment (PLAN-169 W2.2, 2026-08-09) — test probes join the N-adequacy rule; MEDIAN-on-CI re-evaluated and KEPT
 
 The original decision covered the CI profiler gate. The TEST probes of
 the same family sat outside it: `test_case_a_p99_under_5ms` gated the
