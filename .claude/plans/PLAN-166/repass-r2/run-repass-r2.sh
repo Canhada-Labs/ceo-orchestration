@@ -31,25 +31,32 @@ trap 'git worktree remove --force "$WT" >/dev/null 2>&1 || true' EXIT
 RAW="$OUT/payload.raw.txt"; RED="$OUT/payload.redacted.txt"
 DIFF="$OUT/delta-rc1-to-candidate.diff"
 
-git diff "$BASE_TAG".."$CAND_SHA" > "$DIFF"
+# Escopo = delta de SUPERFÍCIE VIVA. `.claude/plans/**` é evidência de
+# plano (debate, ledger, staged-NÃO-aplicado, runbooks) — 16k+ linhas que
+# estouram o redactor (341→22 hunks no 1º run, controle fail-closed pegou)
+# e que o reviewer não deve tratar como código ativo; o prompt as declara.
+# Mesmo princípio do paths.manifest.txt do r1.
+git diff "$BASE_TAG".."$CAND_SHA" --name-only | grep -v '^\.claude/plans/' > "$OUT/paths-r2.txt"
+[ -s "$OUT/paths-r2.txt" ] || { echo "FATAL: escopo vivo vazio"; exit 1; }
+git diff "$BASE_TAG".."$CAND_SHA" -- $(tr '\n' ' ' < "$OUT/paths-r2.txt") > "$DIFF"
 DIFF_LINES=$(wc -l < "$DIFF" | tr -d ' ')
 [ "$DIFF_LINES" -ge 50 ] || { echo "FATAL: diff só $DIFF_LINES linhas — escopo colapsou"; exit 1; }
 
 {
   cat <<'PROMPT'
 You are the cross-model release re-pass reviewer (round 2) for the
-v1.3.0-rc.2 cut of a governance framework. Below is the COMPLETE diff
-from the already-reviewed v1.3.0-rc.1 parent to the rc.2 candidate.
-The delta is closure work: plan bookkeeping (W0), a Linux port of an
-e2e test harness with fail-closed mtime riders (W1), and verified
-fixes on free surfaces — perf-probe N/percentile hygiene, an exact-
-resolution ladder for an agent-context injector, a pair-rail preflight
-auth-route fix, release bump-site coverage, doc-count watchers,
-debate-convergence semantics, and current-fleet model-id data fixes
-(W2). Staged-but-NOT-applied ceremony material under
-.claude/plans/PLAN-169/staged-w3/ ships as plan evidence only — it is
-NOT live code; review it only for "would landing this later be sane",
-not as active surface.
+v1.3.0-rc.2 cut of a governance framework. Below is the LIVE-SURFACE
+diff from the already-reviewed v1.3.0-rc.1 parent to the rc.2
+candidate — everything under .claude/plans/** (plan bookkeeping,
+debate records, staged-but-NOT-applied ceremony material, Owner
+runbooks) is EXCLUDED by scope, exactly like round 1 scoped its
+payload by path manifest; that material is plan evidence, not active
+code. The live delta is: a Linux port of an e2e test harness with
+fail-closed mtime riders (W1), and verified fixes on free surfaces —
+perf-probe N/percentile hygiene, an exact-resolution ladder for an
+agent-context injector, a pair-rail preflight auth-route fix, release
+bump-site coverage, doc-count watchers, debate-convergence semantics,
+current-fleet model-id data fixes, and doc/translation cures (W0/W2).
 
 Your job: find anything in this delta that makes cutting rc.2 UNSAFE —
 regressions, gates weakened, fail-open introduced, claims the diff
