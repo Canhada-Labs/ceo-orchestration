@@ -10,7 +10,12 @@ rewrite of install/upgrade, a Linux port of the e2e harness with
 fail-closed mtime riders, and verified free-surface fixes (perf-probe
 percentile hygiene, injector exact-resolution, pair-rail auth routes,
 bump-site coverage, count watchers, debate-convergence semantics,
-current-fleet model-id data, doc cures).
+current-fleet model-id data, doc cures). One payload exclusion, by
+provenance: .claude/scripts/model-deprecations.json (10 replacement
+values mechanically bumped to the current fleet, W2.10 F9) is excluded
+because the egress redactor rewrites model-ledger content and destroys
+the diff structure (round-2 part-c FATAL control); judge that change
+from this description.
 
 Your job: find anything in THIS payload that makes cutting rc.2
 UNSAFE — regressions, weakened gates, fail-open introduced, claims the
@@ -20,7 +25,7 @@ one line: VERDICT: APPROVE or VERDICT: NEEDS-CHANGES, plus one
 justification paragraph.
 
 PAYLOAD a/5: framework scripts (install/upgrade/generator) + root hygiene
-=== DIFF v1.3.0-rc.1..39fdd2756375cf3d72e7ee11b9e1bac972024601 (parte a, 1947 linhas) ===
+=== DIFF v1.3.0-rc.1..fe6f484a91b59d988e25a4225b58a85cef6ecacc (parte a, 1947 linhas) ===
 diff --git a/.gitignore b/.gitignore
 index 6ab57fa..8fea8d6 100644
 --- a/.gitignore

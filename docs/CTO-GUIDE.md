@@ -151,8 +151,13 @@ bash /tmp/install.sh --profile core,frontend --stack node
 **B. NPM tarball (OIDC + provenance):**
 
 ```bash
-npm exec "ceo-orchestration-install@$(cat VERSION)" -- --profile core,frontend
-# Verifies --provenance SLSA L3 attestation
+# Package name is `ceo-orchestration` (npm/package.json) — an earlier
+# revision of this guide named a nonexistent `ceo-orchestration-install`
+# lookalike (supply-chain-critical doc defect, repass-r2 part-e P1).
+# Pin the version you reviewed; <target-dir> is the repo being installed
+# into. Then VERIFY provenance yourself — running the command does not:
+npm exec "ceo-orchestration@<reviewed-version>" -- <target-dir> --profile core,frontend
+npm audit signatures   # SLSA provenance/signature verification step
 ```
 
 Both routes copy `.claude/`, `PROTOCOL.md`, `templates/CLAUDE.md`, plus

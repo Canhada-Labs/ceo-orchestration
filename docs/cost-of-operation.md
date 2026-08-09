@@ -18,9 +18,12 @@ review + security check + tests:
 | **+ Cache hit** (warm gate-1, ~30% multi-turn savings) | ~$0.75 | ~$37 | ~$148 |
 | **Mitigated rail default-on** (ADR-082, actual default) | ~$1.23 | ~$62 | ~$246 |
 
-Computed at **Opus 4.8 ($5/$25 per Mtok)** — the current default-CEO /
-VETO model. Note the "Mitigated rail default-on" row lands at **≈ the
-all-Opus baseline**: under ADR-082, 4 of the 5 canonical archetypes
+Computed at **Opus 4.8 ($5/$25 per Mtok)** — the default-CEO/VETO model
+AT THE TIME OF THIS COMPUTATION (2026-06; the current fleet runs the
+VETO holders on `claude-fable-5` — see the Gen-5 pricing table above;
+opus-5 shares the $5/$25 rate, so the arithmetic below holds for an
+opus-5 session). Note the "Mitigated rail default-on" row lands at
+**≈ the all-Opus baseline**: under ADR-082, 4 of the 5 canonical archetypes
 inherit the Opus CEO model, so the genuine per-role split (~$1.06) is
 only realised if you disable mitigation. Numbers are rough. Real usage
 varies by skill mix, plan complexity,
@@ -44,7 +47,9 @@ through `subagent_type=general-purpose` with the role's persona
 injected via `## SKILL CONTENT`.
 
 **Cost consequence:** the `general-purpose` sub-agent **inherits
-the CEO model**, which is **Opus 4.8 by default** (not the
+the CEO model** — Opus 4.8 at the time of this computation; on the
+current fleet, whatever Gen-5 model the session runs (Fable 5/Opus 5,
+same $5-$25+/Mtok tier) — (not the
 Sonnet/Haiku that ADR-052 maps these roles to). Every
 `qa-architect / performance-engineer / security-engineer / devops`
 spawn therefore bills at **Opus rates ($5/$25 per Mtok)**, not
@@ -84,8 +89,10 @@ and ADR-082 for the empirical rationale.
 
 ### What `code-reviewer` does
 
-`code-reviewer` runs natively + at **Opus 4.8 by policy** (ADR-052
-VETO floor), not by inheritance. The cost there is identical
+`code-reviewer` runs natively + at **the VETO-floor model by policy**
+(ADR-052; historically Opus 4.8, currently `claude-fable-5` — same
+floor mechanism, membership in `VETO_FLOOR_ALLOWED`), not by
+inheritance. The cost there is identical
 under either rail. Only the other 4 canonicals see the Opus-by-
 inheritance surprise.
 
@@ -111,11 +118,11 @@ the `_lib/adapters/live/_cost.py` resolver picks it up.
 
 ### Per-role distribution (ADR-052 default)
 
-| Agent | Model | Why |
+| Agent | Model (at computation; current fleet in parens) | Why |
 |-------|-------|-----|
-| **CEO orchestrator** (you, the chat session) | Opus 4.8 | Long context, L3+ decisions, debate synthesis |
-| **code-reviewer** | Opus 4.8 | Merge VETO — false negative ships a bug |
-| **security-engineer** | Opus 4.8 | Auth/crypto VETO — missed attack surface = incident |
+| **CEO orchestrator** (you, the chat session) | Opus 4.8 (now the session model — Fable 5/Opus 5) | Long context, L3+ decisions, debate synthesis |
+| **code-reviewer** | Opus 4.8 (now `claude-fable-5`) | Merge VETO — false negative ships a bug |
+| **security-engineer** | Opus 4.8 (now `claude-fable-5`) | Auth/crypto VETO — missed attack surface = incident |
 | **qa-architect** | Sonnet 4.6 | Edge-case enumeration; bounded work; cost 0.6× vs Opus 4.8 |
 | **performance-engineer** | Sonnet 4.6 | Metric analysis; deterministic; cost 0.6× vs Opus 4.8 |
 | **devops** | Haiku 4.5 | Config edits + boilerplate; high-freq + low-novelty; cost ~5× cheaper than Opus 4.8 |

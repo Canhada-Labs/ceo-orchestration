@@ -10,7 +10,12 @@ rewrite of install/upgrade, a Linux port of the e2e harness with
 fail-closed mtime riders, and verified free-surface fixes (perf-probe
 percentile hygiene, injector exact-resolution, pair-rail auth routes,
 bump-site coverage, count watchers, debate-convergence semantics,
-current-fleet model-id data, doc cures).
+current-fleet model-id data, doc cures). One payload exclusion, by
+provenance: .claude/scripts/model-deprecations.json (10 replacement
+values mechanically bumped to the current fleet, W2.10 F9) is excluded
+because the egress redactor rewrites model-ledger content and destroys
+the diff structure (round-2 part-c FATAL control); judge that change
+from this description.
 
 Your job: find anything in THIS payload that makes cutting rc.2
 UNSAFE — regressions, weakened gates, fail-open introduced, claims the
@@ -20,7 +25,7 @@ one line: VERDICT: APPROVE or VERDICT: NEEDS-CHANGES, plus one
 justification paragraph.
 
 PAYLOAD d/5: script test suites .claude/scripts/tests
-=== DIFF v1.3.0-rc.1..39fdd2756375cf3d72e7ee11b9e1bac972024601 (parte d, 3632 linhas) ===
+=== DIFF v1.3.0-rc.1..fe6f484a91b59d988e25a4225b58a85cef6ecacc (parte d, 3679 linhas) ===
 diff --git a/.claude/scripts/tests/test_await_release_gate.py b/.claude/scripts/tests/test_await_release_gate.py
 new file mode 100644
 index 0000000..c8df73d
@@ -464,6 +469,31 @@ index f43e107..624fe9d 100644
  
      def test_convergence_at_round_3_before_max(self):
          self._seed(3, ["r1", "r2", "r3"])
+diff --git a/.claude/scripts/tests/test_debate_orchestrate.py b/.claude/scripts/tests/test_debate_orchestrate.py
+index c8e87ec..321cd96 100644
+--- a/.claude/scripts/tests/test_debate_orchestrate.py
++++ b/.claude/scripts/tests/test_debate_orchestrate.py
+@@ -562,11 +562,17 @@ class TestMaxRoundsEnforcement(_EnvIsolatedTest):
+         self.assertEqual(term[0].get("round"), 5)
+         self.assertEqual(term[0].get("agent"), "orchestrator")
+ 
+-    def test_orchestrator_does_not_trigger_red_team_at_max_rounds(self):
+-        # Identical risks -> Jaccard=1.0; MAX_ROUNDS still overrides red-team.
++    def test_ceiling_convergence_reaches_consensus_not_impasse(self):
++        # PLAN-169 W2.9(iii) consumer contract (repass-r2 part-d P1):
++        # identical risks at the MAX_ROUNDS ceiling = jaccard 1.0 >=
++        # threshold = CONVERGED (§12.4; the TLA MaxRoundsExhausted action
++        # only fires below threshold). The orchestrator must take the
++        # consensus path (rc=0), not write the unresolved impasse — and
++        # still never spawn a red team at round 5 (red_team_needed is
++        # round<=2 only, unchanged).
+         self._seed(5, ["shared a", "shared b", "shared c"])
+         rc, _err = self._cli()
+-        self.assertEqual(rc, 3)  # NOT 2 (red-team) / NOT 0
++        self.assertEqual(rc, 0)  # NOT 3 (impasse) / NOT 2 (red-team)
+         red_team = self._plans_root / "PLAN-999" / "debate" / "round-6" / "red-team.md"
+         self.assertFalse(red_team.is_file())
+ 
 diff --git a/.claude/scripts/tests/test_inject_agent_context_exact_resolution.py b/.claude/scripts/tests/test_inject_agent_context_exact_resolution.py
 new file mode 100644
 index 0000000..5bc1c2f
@@ -939,10 +969,10 @@ index 0000000..fc2ea5f
 +    sys.exit(0 if unittest.main(exit=False).result.wasSuccessful() else 1)
 diff --git a/.claude/scripts/tests/test_release_bump_sites.py b/.claude/scripts/tests/test_release_bump_sites.py
 new file mode 100644
-index 0000000..d2aee18
+index 0000000..ae93be8
 --- /dev/null
 +++ b/.claude/scripts/tests/test_release_bump_sites.py
-@@ -0,0 +1,1286 @@
+@@ -0,0 +1,1306 @@
 +#!/usr/bin/env python3
 +"""PLAN-166 W0 / F2 + F6 — the release driver, its site table and its tag guards.
 +
@@ -1101,6 +1131,12 @@ index 0000000..d2aee18
 +  [ -f "$f" ] || continue
 +  if ! grep -q "$version" "$f"; then rc=1; fi
 +done
++# repass-r2 part-d P2: the marker is a bump site (W2.6) — a fixture oracle
++# that ignores it stays green over a writer that skipped it (fixture!=live).
++if [ -f .claude/.framework-version ]; then
++  marker="$(tr -d ' \\n' < .claude/.framework-version)"
++  [ "$marker" = "$version" ] || rc=1
++fi
 +for f in SECURITY.md VERSIONING.md; do
 +  [ -f "$f" ] || continue
 +  cur_line="$(grep 'Current MINOR' "$f" || true)"
@@ -1194,6 +1230,12 @@ index 0000000..d2aee18
 +        else ""
 +    )
 +    (repo / "VERSION").write_text(version + "\n", encoding="utf-8")
++    # repass-r2 part-d P2: the marker site (W2.6) exists in the fixture so
++    # the e2e bump exercises the writer AND the stub oracle checks it.
++    (repo / ".claude").mkdir(exist_ok=True)
++    (repo / ".claude" / ".framework-version").write_text(
++        version + "\n", encoding="utf-8"
++    )
 +    (repo / "npm" / "package.json").write_text(
 +        json.dumps({"name": "fixture", "version": version}, indent=2) + "\n",
 +        encoding="utf-8",
@@ -2061,7 +2103,12 @@ index 0000000..d2aee18
 +    arm_verdict(synth, "v1.3.0")
 +    proc = driver(synth, "tag", "--stable", "--dry-run")
 +    assert proc.returncode == 0, proc.stdout + proc.stderr
-+    assert "PLAN-162 / PLAN-165 / PLAN-166 (ADRs 184 -> 189)" in proc.stdout
++    # repass-r2 part-d P1: the expectation must track the LIVE train scope —
++    # pinning the rc.1-era string here blessed a stale signed-tag annotation.
++    assert (
++        "PLAN-162 / PLAN-165 / PLAN-166 / PLAN-167 / PLAN-168 / "
++        "PLAN-169 W0-W2 (ADRs 184 -> 190)" in proc.stdout
++    )
 +    assert "v1.3.0 —" in proc.stdout
 +
 +
@@ -2070,8 +2117,11 @@ index 0000000..d2aee18
 +# ===========================================================================
 +SEMVER_RX = re.compile(r"\b\d+\.\d+\.\d+\b")
 +# "<number> [word] site(s)" — a census in a comment has no oracle behind it.
++# repass-r2 part-d P2: ordinals count too — "12th site" is as much an
++# oracle-less census claim as "12 sites"; the guard missed the suffix.
 +SITE_COUNT_RX = re.compile(
-+    r"\b(?:one|two|three|four|five|six|seven|eight|nine|ten|\d+)\s+"
++    r"\b(?:one|two|three|four|five|six|seven|eight|nine|ten|"
++    r"\d+(?:st|nd|rd|th)?)\s+"
 +    r"(?:\w+\s+)?sites?\b",
 +    re.IGNORECASE,
 +)
@@ -3127,10 +3177,10 @@ index bc68a9f..45a4de0 100644
  if __name__ == "__main__":
      unittest.main()
 diff --git a/.claude/scripts/tests/test_verify_counts.py b/.claude/scripts/tests/test_verify_counts.py
-index b70bd66..74cf2dd 100644
+index b70bd66..714fb66 100644
 --- a/.claude/scripts/tests/test_verify_counts.py
 +++ b/.claude/scripts/tests/test_verify_counts.py
-@@ -192,61 +192,135 @@ class TestVerifyCounts(unittest.TestCase):
+@@ -192,61 +192,137 @@ class TestVerifyCounts(unittest.TestCase):
      # SUPPOSED to fail here — that forces the manifest to be re-ratified
      # deliberately instead of coverage evaporating unnoticed. Regenerate
      # with: verify-counts.sh --json --no-tests | jq .rule_matches_by_doc
@@ -3148,8 +3198,10 @@ index b70bd66..74cf2dd 100644
 -        "adrs@npm/README.md": 1,
 +        "adrs@docs/CTO-GUIDE.md": 3,
 +        "adrs@docs/FAQ.md": 1,
-+        # PLAN-169 W2.7: the "N ADRs document ..." GUIA phrase is now watched.
-+        "adrs@docs/GUIA-COMPLETO.md": 1,
++        # PLAN-169 W2.7: BOTH GUIA ADR-count phrases are watched — the
++        # prose "N ADRs document ..." and the listing "N Architecture
++        # Decision Records" (the 2nd was the repass-r2 part-e find).
++        "adrs@docs/GUIA-COMPLETO.md": 2,
 +        "adrs@docs/README.md": 1,
 +        "adrs@npm/README.md": 2,
          "commands@CLAUDE.md": 1,
@@ -3269,7 +3321,7 @@ index b70bd66..74cf2dd 100644
      }
  
      def test_real_repo_per_document_liveness(self):
-@@ -338,5 +412,383 @@ class TestTableCellRules(unittest.TestCase):
+@@ -338,5 +414,383 @@ class TestTableCellRules(unittest.TestCase):
              self.assertEqual(r.returncode, 1, "bold table-cell ADR drift must fail")
  
  

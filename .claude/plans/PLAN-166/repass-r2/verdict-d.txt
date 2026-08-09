@@ -1,19 +1,14 @@
-P1 findings:
-
-- The convergence contract is internally contradictory. `.claude/scripts/tests/test_debate_converge.py:375` now expects convergence at `MAX_ROUNDS`, but `.claude/scripts/tests/test_debate_orchestrate.py:565` still expects the orchestrator to exit as unresolved for identical risks at the ceiling. The live consumer branches on `max_rounds_reached` before `converged` at `.claude/scripts/debate-orchestrate.py:861`, so actual execution still misclassifies valid convergence.
-
-- The release test explicitly blesses a stale signed-tag annotation at `.claude/scripts/tests/test_release_bump_sites.py:1115`. It requires only `PLAN-162 / PLAN-165 / PLAN-166 (ADRs 184 -> 189)`, while this cut also contains PLAN-167/168/169 and ADR-190. The live driver itself labels stale scope a P0 false claim at `.claude/scripts/local/release.sh:67`, yet the test pins that false claim.
-
-- Malformed debate input remains fail-open. `.claude/scripts/tests/test_debate_converge.py:404` tests only a present-but-empty `## Risks` section; the existing test at `.claude/scripts/tests/test_debate_converge.py:124` continues to accept a completely missing required Risks section as an empty set. That can silently remove a critic’s risks and falsely report convergence, contrary to `SPEC/v1/debate.schema.md:16`.
+P1: None.
 
 P2 findings:
 
-- The “no site-count claims” guard at `.claude/scripts/tests/test_release_bump_sites.py:1127` does not match ordinal claims such as the live `12th site` at `.claude/scripts/local/_release_bump_sites.py:81`, so its asserted closed-set protection is incomplete.
+- `.claude/scripts/tests/test_debate_converge.py:404` covers a present-but-unparseable Risks section, but not the newly fail-closed missing-section path; `.claude/scripts/tests/test_debate_converge.py:124` only tests the low-level extractor.
+- `.claude/scripts/tests/test_pair_rail_inputs_manifest_bump_guard.py:192` compares raw path strings, so aliases such as `./VERSION` evade the bump-path exclusion guard.
 
-- The release fixture’s oracle at `.claude/scripts/tests/test_release_bump_sites.py:137` and fixture builder at `.claude/scripts/tests/test_release_bump_sites.py:236` omit `.claude/.framework-version`, although the live oracle watches it at `.claude/scripts/local/verify-counts.sh:1041`. A broken marker rewrite can therefore pass the end-to-end bump tests.
+P3:
 
-P3: None.
+- `.claude/scripts/tests/test_release_workflow_asserts.py:1005` omits `E_PARENT_NOT_ANCESTOR` from the all-exit-codes uniqueness assertion, though its current value is distinct and separately exercised.
 
-Justification: This payload cannot safely approve the cut because it both codifies stale signed release metadata and leaves the debate orchestrator’s terminal decision inconsistent with the newly asserted semantics. The missing-Risks path additionally permits malformed governance evidence to disappear silently. The P2 gaps further weaken the claimed regression coverage. Static hygiene checks passed; runtime pytest execution was unavailable only because the read-only sandbox exposed no usable temporary directory, but the blocking contradictions are directly established from source.
+Justification: No current release-path regression remains in payload d. The round-2 blockers are cured, the ten described model replacements match the local ADR-149 fleet authority, and hygiene, audit isolation, stdlib, contamination, Python 3.9 parsing, YAML structure, and diff checks pass. The remaining gaps concern future regression detection and are fix-forward acceptable.
 
-VERDICT: NEEDS-CHANGES
+VERDICT: APPROVE

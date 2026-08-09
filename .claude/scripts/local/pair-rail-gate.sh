@@ -80,14 +80,17 @@ if [ -n "${OPENAI_API_KEY:-}" ]; then
   AUTH_ROUTE="api-key"
   echo "  OK: OPENAI_API_KEY present (length=$KEY_LEN) — route=api-key"
 else
-  # `codex login status` (0.14x CLI) exits 0 when the CLI holds a valid
-  # login session; older CLIs spell it `codex auth status`. Probe both,
-  # quietly — status probes never exec the payload.
-  if command -v codex >/dev/null 2>&1; then
-    if codex login status >/dev/null 2>&1 || codex auth status >/dev/null 2>&1; then
-      AUTH_ROUTE="login"
-      echo "  OK: codex CLI authenticated by login — route=login"
-    fi
+  # repass-r2 round-3 part-c P1: the first cut probed via `codex login
+  # status`, which EXECUTES the codex payload — before Gate 4's ADR-182
+  # pin verification, violating the M4 invariant (never exec an
+  # unverified payload) on Phase 6. The probe is now exec-FREE: the CLI
+  # persists its login session at ~/.codex/auth.json; a non-empty file
+  # is the auth evidence. Weaker than a live status call by design —
+  # the first real `codex exec` still fails loudly if the session is
+  # stale, and that call happens only after the pin check.
+  if command -v codex >/dev/null 2>&1 && [ -s "${HOME}/.codex/auth.json" ]; then
+    AUTH_ROUTE="login"
+    echo "  OK: codex CLI login session present (~/.codex/auth.json) — route=login (exec-free probe)"
   fi
   if [ -z "$AUTH_ROUTE" ]; then
     echo "  FAIL: no Codex auth route available (fail-closed)."

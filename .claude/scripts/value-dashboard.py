@@ -269,6 +269,10 @@ _DEFAULT_PRICING: Dict[str, Dict[str, float]] = {
     "claude-fable-5":              {"in": 0.010, "out": 0.050},
     "claude-opus-5":               {"in": 0.005, "out": 0.025},
     "claude-opus-5-fast":          {"in": 0.010, "out": 0.050},
+    # NOTE (repass-r2 part-c P2): this is the INTRO rate, valid until
+    # 2026-08-31 (sticker $3/$15). compute_cost_usd has no event-date
+    # selection, so after that date this row UNDERSTATES sonnet-5 cost
+    # until swept — same semantics as the ceo-cost.py mirror; sweep both.
     "claude-sonnet-5":             {"in": 0.002, "out": 0.010},
     "claude-opus-4-8":             {"in": 0.005, "out": 0.025},
     "claude-opus-4-7":            {"in": 0.015, "out": 0.075},

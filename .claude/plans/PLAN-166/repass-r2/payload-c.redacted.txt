@@ -10,7 +10,12 @@ rewrite of install/upgrade, a Linux port of the e2e harness with
 fail-closed mtime riders, and verified free-surface fixes (perf-probe
 percentile hygiene, injector exact-resolution, pair-rail auth routes,
 bump-site coverage, count watchers, debate-convergence semantics,
-current-fleet model-id data, doc cures).
+current-fleet model-id data, doc cures). One payload exclusion, by
+provenance: .claude/scripts/model-deprecations.json (10 replacement
+values mechanically bumped to the current fleet, W2.10 F9) is excluded
+because the egress redactor rewrites model-ledger content and destroys
+the diff structure (round-2 part-c FATAL control); judge that change
+from this description.
 
 Your job: find anything in THIS payload that makes cutting rc.2
 UNSAFE — regressions, weakened gates, fail-open introduced, claims the
@@ -20,7 +25,7 @@ one line: VERDICT: APPROVE or VERDICT: NEEDS-CHANGES, plus one
 justification paragraph.
 
 PAYLOAD c/5: governance scripts .claude/scripts (W2 fixes)
-=== DIFF v1.3.0-rc.1..39fdd2756375cf3d72e7ee11b9e1bac972024601 (parte c, 4308 linhas) ===
+=== DIFF v1.3.0-rc.1..fe6f484a91b59d988e25a4225b58a85cef6ecacc (parte c, 4193 linhas) ===
 diff --git a/.claude/scripts/await_release_gate.py b/.claude/scripts/await_release_gate.py
 new file mode 100755
 index 0000000..1b5f956
@@ -633,10 +638,10 @@ index 7264c01..981014d 100644
                  with open(path, "rb") as fh:
                      raw = fh.read()
 diff --git a/.claude/scripts/debate-converge.py b/.claude/scripts/debate-converge.py
-index f8e18c2..190dd04 100755
+index f8e18c2..b1c7e1f 100755
 --- a/.claude/scripts/debate-converge.py
 +++ b/.claude/scripts/debate-converge.py
-@@ -182,16 +182,50 @@ def iter_agent_critiques(round_dir: Path) -> Iterable[Path]:
+@@ -182,16 +182,63 @@ def iter_agent_critiques(round_dir: Path) -> Iterable[Path]:
          yield p
  
  
@@ -679,18 +684,31 @@ index f8e18c2..190dd04 100755
 -        for risk in extract_risks(text):
 -            out.add(risk)
 +        items = extract_risks(text)
-+        if not items and _risks_heading_present(text):
++        if not items:
++            if _risks_heading_present(text):
++                raise RisksSectionEmptyError(
++                    f"{critique_path}: '## Risks' heading present but ZERO "
++                    f"bullet items parsed — paragraph-style risks are "
++                    f"invisible to the machine; rewrite them as '- ' "
++                    f"bullets. Refusing to count this critique as silently "
++                    f"empty."
++                )
++            # repass-r2 part-d P1: Risks is one of the 7 REQUIRED critique
++            # sections (SPEC/v1/debate.schema.md). A critique with NO Risks
++            # section at all is malformed input, not an empty set — counting
++            # it as zero silently removes a critic's risks and can fake
++            # convergence. Same fail-closed posture, named separately.
 +            raise RisksSectionEmptyError(
-+                f"{critique_path}: '## Risks' heading present but ZERO "
-+                f"bullet items parsed — paragraph-style risks are invisible "
-+                f"to the machine; rewrite them as '- ' bullets. Refusing to "
-+                f"count this critique as silently empty."
++                f"{critique_path}: required '## Risks' section is MISSING "
++                f"(SPEC/v1/debate.schema.md lists it among the 7 required "
++                f"critique sections). Refusing to count this critique as an "
++                f"empty risk set."
 +            )
 +        out.update(items)
      return out
  
  
-@@ -218,10 +252,22 @@ def compute_convergence(
+@@ -218,10 +265,22 @@ def compute_convergence(
      """Compute Jaccard across round N and N-1. Returns a dict shaped
      like :class:`ConvergenceResult` plus legacy keys (``jaccard``,
      ``converged``, ``red_team_needed``, ``round``, ``plan``, risk counts,
@@ -717,7 +735,7 @@ index f8e18c2..190dd04 100755
      prev_dir = _round_dir(plans_root, plan_id, round_num - 1)
      cur_dir = _round_dir(plans_root, plan_id, round_num)
      if not prev_dir.is_dir():
-@@ -234,13 +280,14 @@ def compute_convergence(
+@@ -234,13 +293,14 @@ def compute_convergence(
      zero_coverage = not prev_set and not cur_set
      score = 0.0 if zero_coverage else jaccard(prev_set, cur_set)
      jaccard_converged = (not zero_coverage) and score >= threshold
@@ -738,7 +756,7 @@ index f8e18c2..190dd04 100755
      else:
          outcome = _OUTCOME_DIVERGED
      return {
-@@ -251,6 +298,10 @@ def compute_convergence(
+@@ -251,6 +311,10 @@ def compute_convergence(
          "plan": plan_id,
          "prev_risk_count": len(prev_set),
          "curr_risk_count": len(cur_set),
@@ -749,7 +767,7 @@ index f8e18c2..190dd04 100755
          "threshold": threshold,
          "zero_coverage": zero_coverage,
          "convergence_met": bool(convergence_met),
-@@ -315,15 +366,26 @@ def main(argv: Optional[List[str]] = None) -> int:
+@@ -315,15 +379,26 @@ def main(argv: Optional[List[str]] = None) -> int:
      except FileNotFoundError as e:
          print(f"ERROR: {e}", file=sys.stderr)
          return 1
@@ -779,6 +797,27 @@ index f8e18c2..190dd04 100755
          print(json.dumps(result, sort_keys=True))
          return 3
  
+diff --git a/.claude/scripts/debate-orchestrate.py b/.claude/scripts/debate-orchestrate.py
+index 9b4dd89..846d1b6 100755
+--- a/.claude/scripts/debate-orchestrate.py
++++ b/.claude/scripts/debate-orchestrate.py
+@@ -858,7 +858,15 @@ def _handle_convergence(conv, args, plans_root) -> "Optional[int]":
+         f"red_team_needed={conv['red_team_needed']} "
+         f"outcome={conv.get('outcome', '')}"
+     )
+-    if conv.get("max_rounds_reached"):
++    # PLAN-169 W2.9(iii) consumer fix (repass-r2 part-d P1: the first
++    # fix-forward changed compute_convergence + CLI but this branch still
++    # tested the FLAG before the label, so a ceiling round that met the
++    # threshold was written up as unresolved). Ceiling semantics: terminal
++    # either way; converged-at-ceiling is CONVERGENCE (§12.4, and the TLA
++    # MaxRoundsExhausted action only fires with jaccard < threshold) — it
++    # falls through to the consensus path below. Only the
++    # below-threshold ceiling terminates as unresolved here.
++    if conv.get("max_rounds_reached") and not conv.get("converged"):
+         _emit_max_rounds_event(args.plan, args.round_num, dry_run=args.dry_run)
+         unresolved_path = write_unresolved_consensus(
+             plans_root, args.plan, args.round_num, args.max_rounds,
 diff --git a/.claude/scripts/inject-agent-context.sh b/.claude/scripts/inject-agent-context.sh
 index 5512cbc..36afe97 100755
 --- a/.claude/scripts/inject-agent-context.sh
@@ -947,10 +986,10 @@ index 5512cbc..36afe97 100755
  
 diff --git a/.claude/scripts/local/_release_bump_sites.py b/.claude/scripts/local/_release_bump_sites.py
 new file mode 100755
-index 0000000..21597e5
+index 0000000..4c7d0aa
 --- /dev/null
 +++ b/.claude/scripts/local/_release_bump_sites.py
-@@ -0,0 +1,297 @@
+@@ -0,0 +1,299 @@
 +#!/usr/bin/env python3
 +# ============================================================================
 +# _release_bump_sites.py — the ONE source of truth for the release version
@@ -1031,7 +1070,9 @@ index 0000000..21597e5
 +    # PLAN-169 W2.6 (ledger E.1/F.7/A.0.4): the install-state marker is the
 +    # surface check-framework-updates.sh reads MARKER-FIRST — a bump that
 +    # skips it leaves every adopter's updater reporting behind-minor
-+    # forever. 12th site; oracle mirror in verify-counts VERSION_SITES.
++    # forever. Joins _SITES with its oracle mirror in verify-counts
++    # VERSION_SITES (no census numeral here: the F6 guard forbids
++    # site-count claims in comments, ordinals included).
 +    (".claude/.framework-version", PLAIN, r"\A\s*" + SEMVER + r"\s*\Z"),
 +    ("npm/package.json", PLAIN, r'("version"\s*:\s*")' + SEMVER + r'(")'),
 +    ("pyproject.toml", PLAIN, r'(?m)^(version\s*=\s*")' + SEMVER + r'(")'),
@@ -2501,10 +2542,10 @@ index af20281..0000000
 -esac
 diff --git a/.claude/scripts/local/release.sh b/.claude/scripts/local/release.sh
 new file mode 100755
-index 0000000..7ea0350
+index 0000000..c1ddb95
 --- /dev/null
 +++ b/.claude/scripts/local/release.sh
-@@ -0,0 +1,687 @@
+@@ -0,0 +1,690 @@
 +#!/usr/bin/env bash
 +# ============================================================================
 +# release.sh — operator release driver. Version-neutral BY NAME.
@@ -2580,7 +2621,10 @@ index 0000000..7ea0350
 +# ---------------------------------------------------------------------------
 +TARGET_BASE="1.3.0"
 +RELEASE_TITLE="night-mode + release-mechanics hardening"
-+RELEASE_SCOPE="PLAN-162 / PLAN-165 / PLAN-166 (ADRs 184 -> 189)"
++# repass-r2 part-d P1 (S299): the v1.3.0 train grew past the rc.1 text —
++# 167/168 (ownership decision table) and 169 W0-W2 (Linux port + verified
++# fixes) landed between rc.1 and rc.2. The tag stands for the WHOLE train.
++RELEASE_SCOPE="PLAN-162 / PLAN-165 / PLAN-166 / PLAN-167 / PLAN-168 / PLAN-169 W0-W2 (ADRs 184 -> 190)"
 +RELEASE_HEADLINE="night-mode — the Owner arms per-machine autonomy for one upcoming
 +session (gitignored overlay, next-session semantics), and arming it is a
 +HUMAN action by construction: the writer script self-path-guards, the Bash
@@ -3193,7 +3237,7 @@ index 0000000..7ea0350
 +  *)         die "unreachable phase: $PHASE" ;;
 +esac
 diff --git a/.claude/scripts/local/verify-counts.sh b/.claude/scripts/local/verify-counts.sh
-index 654118f..a8e437b 100755
+index 654118f..3a3bd38 100755
 --- a/.claude/scripts/local/verify-counts.sh
 +++ b/.claude/scripts/local/verify-counts.sh
 @@ -15,11 +15,13 @@
@@ -3571,7 +3615,7 @@ index 654118f..a8e437b 100755
      "npm/README.md",
  ]
  # Additional docs scanned for the subset of rules that reference them.
-@@ -305,26 +573,54 @@ RULES = [
+@@ -305,26 +573,57 @@ RULES = [
          # PLAN-161 V1 — phrasings carried by the four newly-watched docs.
          # "# N skills across" is the DOMAIN tree comment, not the total.
          r'# (\d+) skills(?! across)', r'(\d+) skill files',
@@ -3610,13 +3654,16 @@ index 654118f..a8e437b 100755
 +    # both READMEs put next to `ls .claude/adr | grep -c '^ADR-'`. It matched
 +    # nothing before — the same vacuous-site class as S287, found by diffing
 +    # the grep census of the docs against `rule_matches_by_doc`.
-+    # PLAN-169 W2.7 (ledger E.3): "N ADRs document ..." is the
-+    # GUIA-COMPLETO phrasing — unwatched, it sat stale at 189 while the
-+    # disk had 190 (found live during W2.7 itself). The \**\s* tolerates
-+    # bold-wrapped numerals like the hook_py rule below.
++    # PLAN-169 W2.7 (ledger E.3): the TWO GUIA-COMPLETO phrasings the
++    # ledger named — "N ADRs document ..." (prose, sat stale at 189) and
++    # "N Architecture Decision Records" (directory listing, ALSO stale at
++    # 189 — missed by the first W2.7 pass and caught by the repass-r2
++    # part-e reviewer; the ledger said "duas frases" and it meant it).
++    # The \**\s* tolerates bold-wrapped numerals like hook_py below.
 +    ("adrs", "exact", [r'(\d+) ADRs total', r'(\d+) ADRs on disk',
 +                       r'#\s*(\d+) ADRs\b',
-+                       r'(\d+)\**\s*ADRs\**\s+document']),
++                       r'(\d+)\**\s*ADRs\**\s+document',
++                       r'(\d+)\**\s*Architecture Decision Records\b']),
      ("hook_py", "exact", [
 -        r'(\d+) hooks total', r'(\d+) Python hook scripts', r'(\d+) hook scripts',
 +        r'(\d+) hooks total', r'(\d+) Python hook scripts',
@@ -3628,7 +3675,7 @@ index 654118f..a8e437b 100755
      ]),
      # S287 vacuous-gate fix: no watched doc ever used the literal
      # "N registered hooks" — the real phrasings are "46 wired into
-@@ -340,17 +636,37 @@ RULES = [
+@@ -340,17 +639,37 @@ RULES = [
          # while the doc it misses drifts).
          r'(\d+) wired into',
          r'(\d+) hooks wired in\b',
@@ -3668,7 +3715,7 @@ index 654118f..a8e437b 100755
      ("tests", "floor", [r'(\d+)\+ tests', r'(\d+)\+ unit tests']),
      # New mechanics-derived counts (F-3.2/F-4 blind-spot closure — PLAN-113 RW-E)
      # S287 vacuous-gate fix: the two historical phrasings matched no doc
-@@ -363,9 +679,17 @@ RULES = [
+@@ -363,9 +682,17 @@ RULES = [
      ("commands", "exact", [
          r'(\d+) slash commands',
      ]),
@@ -3689,7 +3736,7 @@ index 654118f..a8e437b 100755
      # E9-F10 (i): recursive `_lib` count. Only CLAUDE.md states "N recursive";
      # README/INSTALL lack the literal, so scanning all DOCS is safe.
      ("lib_recursive", "exact", [
-@@ -381,13 +705,43 @@ RULES = [
+@@ -381,13 +708,43 @@ RULES = [
  TABLE_RULES = [
      ("adrs",      "exact", r'^(?:ADRs|Architecture decision records)\b'),
      ("hook_py",   "exact", r'^Hook scripts\b'),
@@ -3735,7 +3782,7 @@ index 654118f..a8e437b 100755
  ]
  
  def iter_table_rows(text):
-@@ -465,6 +819,190 @@ for metric, kind, regexes in RULES:
+@@ -465,6 +822,190 @@ for metric, kind, regexes in RULES:
                          f"{doc}: cites {metric}>={v}+ but live={lv} (regression; rule: floor)"
                      )
  
@@ -3926,7 +3973,7 @@ index 654118f..a8e437b 100755
  # ---- E9-F10 (iii): VERSION-string coherence ----
  # Anchored to the current-version DECLARATION sites ONLY (not historical
  # CHANGELOG prose). Each (doc, regex) yields the literal version string, which
-@@ -500,6 +1038,11 @@ if live_version:
+@@ -500,6 +1041,11 @@ if live_version:
          # que é o comportamento correto para uma transição que exige juízo).
          ("SECURITY.md", r'\*\*Previous MINOR\*\* \(`v(\d+\.\d+)\.x`\)', "prev_minor"),
          ("VERSIONING.md", r'Previous MINOR \(`v(\d+\.\d+)\.x`\)', "prev_minor"),
@@ -3938,7 +3985,7 @@ index 654118f..a8e437b 100755
      ]
      _live_minor = ".".join(live_version.split(".")[:2])
      try:
-@@ -628,6 +1171,10 @@ if as_json:
+@@ -628,6 +1174,10 @@ if as_json:
      out_live = dict(live)
      out_live["version"] = live_version
      print(json.dumps({"live": out_live, "violations": violations,
@@ -3949,7 +3996,7 @@ index 654118f..a8e437b 100755
                        "rule_matches": rule_matches,
                        "rule_matches_by_doc": rule_matches_by_doc}, indent=2))
      sys.exit(1 if violations else 0)
-@@ -638,13 +1185,44 @@ if not quiet:
+@@ -638,13 +1188,44 @@ if not quiet:
      for k in ("skills", "core", "frontend", "domain", "adrs", "hook_py",
                "registered", "registrations", "lib", "lib_recursive",
                "spec_v1", "schema_files",
@@ -3997,157 +4044,6 @@ index 654118f..a8e437b 100755
      if violations:
          print("Drift / regressions:")
          for vio in violations:
-diff --git a/.claude/scripts/model-deprecations.json b/.claude/scripts/model-deprecations.json
-index aa4ac31..eaf68ae 100644
---- a/.claude/scripts/model-deprecations.json
-+++ b/.claude/scripts/model-deprecations.json
-@@ -5,8 +5,9 @@
-     "source_original": "https://docs.anthropic.com/en/docs/about-claude/model-deprecations (301 -> platform.claude.com)",
-     "fetched": "2026-06-12",
-     "source_stale": false,
--    "provenance": "PLAN-135 W0/W1 unit w0r \u2014 consumed by .claude/scripts/check-model-deprecations.py; refresh by re-fetching the source page and bumping `fetched` (set source_stale=true if populated from fallback data instead of the live page)",
--    "notes": "Dates apply to Anthropic-operated platforms (Claude API / Claude Platform on AWS / Microsoft Foundry). Bedrock + Vertex set their own schedules. Aliases are short ids the official page or the S230 sweep treats as the same fuse."
-+    "provenance": "PLAN-135 W0/W1 unit w0r — consumed by .claude/scripts/check-model-deprecations.py; refresh by re-fetching the source page and bumping `fetched` (set source_stale=true if populated from fallback data instead of the live page)",
-+    "notes": "Dates apply to Anthropic-operated platforms (Claude API / Claude Platform on AWS / Microsoft Foundry). Bedrock + Vertex set their own schedules. Aliases are short ids the official page or the S230 sweep treats as the same fuse.",
-+    "replacements_refreshed": "2026-08-09 PLAN-169 W2.10 F9: migration targets bumped to the current fleet (opus-5/sonnet-5) per the ADR-149 working-set authority; the deprecation dates themselves are unchanged from the fetched source."
-   },
-   "models": [
-     {
-@@ -16,7 +17,7 @@
-       ],
-       "deprecated": "2026-06-05",
-       "retirement": "2026-08-05",
--      "replacement": "claude-opus-4-8"
-+      "replacement": "claude-opus-5"
-     },
-     {
-       "model_id": "claude-opus-4-2025[REDACTED:rg]@ -25,7 +26,7 @@
-       ],
-       "deprecated": "2026-04-14",
-       "retirement": "2026-06-15",
--      "replacement": "claude-opus-4-8"
-+      "replacement": "claude-opus-5"
-     },
-     {
-       "model_id": "claude-sonnet-4-2025[REDACTED:rg]@ -34,7 +35,7 @@
-       ],
-       "deprecated": "2026-04-14",
-       "retirement": "2026-06-15",
--      "replacement": "claude-sonnet-4-6"
-+      "replacement": "claude-sonnet-5"
-     },
-     {
-       "model_id": "claude-mythos-preview",
-@@ -64,7 +65,7 @@
-       ],
-       "deprecated": "2025-10-28",
-       "retirement": "2026-02-19",
--      "replacement": "claude-sonnet-4-6"
-+      "replacement": "claude-sonnet-5"
-     },
-     {
-       "model_id": "claude-3-5-haiku-2024[REDACTED:rg]@ -91,14 +92,14 @@
-       ],
-       "deprecated": "2025-08-13",
-       "retirement": "2025-10-28",
--      "replacement": "claude-sonnet-4-6"
-+      "replacement": "claude-sonnet-5"
-     },
-     {
-       "model_id": "claude-3-5-sonnet-2024[REDACTED:rg]      "aliases": [],
-       "deprecated": "2025-08-13",
-       "retirement": "2025-10-28",
--      "replacement": "claude-sonnet-4-6"
-+      "replacement": "claude-sonnet-5"
-     },
-     {
-       "model_id": "claude-3-opus-2024[REDACTED:rg]@ -107,7 +108,7 @@
-       ],
-       "deprecated": "2025-06-30",
-       "retirement": "2026-01-05",
--      "replacement": "claude-opus-4-8"
-+      "replacement": "claude-opus-5"
-     },
-     {
-       "model_id": "claude-3-sonnet-2024[REDACTED:rg]@ -116,21 +117,21 @@
-       ],
-       "deprecated": "2025-01-21",
-       "retirement": "2025-07-21",
--      "replacement": "claude-sonnet-4-6"
-+      "replacement": "claude-sonnet-5"
-     },
-     {
-       "model_id": "claude-2.0",
-       "aliases": [],
-       "deprecated": "2025-01-21",
-       "retirement": "2025-07-21",
--      "replacement": "claude-opus-4-8"
-+      "replacement": "claude-opus-5"
-     },
-     {
-       "model_id": "claude-2.1",
-       "aliases": [],
-       "deprecated": "2025-01-21",
-       "retirement": "2025-07-21",
--      "replacement": "claude-opus-4-8"
-+      "replacement": "claude-opus-5"
-     },
-     {
-       "model_id": "claude-instant-1.2",
-@@ -190,37 +191,37 @@
-     {
-       "rule_id": "tier-policy-test-pins",
-       "pattern": "(^|/)\\.claude/hooks/tests/test_tier_policy_[A-Za-z0-9_]+\\.py$",
--      "reason": "S230 INERT class C \u2014 framework-installed tier_policy fixture pins (claude-opus-4-1) on the 2026-08-05 fuse; owned by the framework upgrade path (S226 allowlist class), never sent to the API"
-+      "reason": "S230 INERT class C — framework-installed tier_policy fixture pins (claude-opus-4-1) on the 2026-08-05 fuse; owned by the framework upgrade path (S226 allowlist class), never sent to the API"
-     },
-     {
-       "rule_id": "tests-and-fixtures",
-       "pattern": "(^|/)(tests|fixtures)/|(^|/)test_[^/]*\\.py$|_test\\.py$",
--      "reason": "test suites + fixtures keep old ids on purpose (negative cases, historical-log replay) \u2014 mirrors smoke-install-parity.sh EXEMPT_PATH_RE"
-+      "reason": "test suites + fixtures keep old ids on purpose (negative cases, historical-log replay) — mirrors smoke-install-parity.sh EXEMPT_PATH_RE"
-     },
-     {
-       "rule_id": "backups-shadows-logs",
-       "pattern": "\\.bak(\\.|$)|\\.shadow\\.md$|\\.log$|(^|/)\\.git(/|$)",
--      "reason": "backups/shadow files/logs are not routing surfaces \u2014 mirrors smoke-install-parity.sh EXEMPT_PATH_RE"
-+      "reason": "backups/shadow files/logs are not routing surfaces — mirrors smoke-install-parity.sh EXEMPT_PATH_RE"
-     },
-     {
-       "rule_id": "historical-run-results",
-       "pattern": "(^|/)benchmark[^/]*/results/[^/]*\\.json$",
--      "reason": "S230 INERT class A \u2014 recorded benchmark run outputs, never re-executed"
-+      "reason": "S230 INERT class A — recorded benchmark run outputs, never re-executed"
-     },
-     {
-       "rule_id": "prose-docs",
-       "pattern": "\\.(md|markdown|rst|txt)$",
--      "reason": "S230 INERT classes B/D \u2014 prose/spec/doc text (incl. SKILL.md instructional mentions), no execution path"
-+      "reason": "S230 INERT classes B/D — prose/spec/doc text (incl. SKILL.md instructional mentions), no execution path"
-     },
-     {
-       "rule_id": "sql-data",
-       "pattern": "\\.sql$",
--      "reason": "S230 INERT class E \u2014 DDL/seed data strings, not live call sites"
-+      "reason": "S230 INERT class E — DDL/seed data strings, not live call sites"
-     },
-     {
-       "rule_id": "by-design-id-carriers",
-       "pattern": "\\.claude/scripts/(ceo-cost\\.py|cost-table\\.yaml|budget-summary\\.py|audit-telemetry\\.py|success-receipt\\.py|value-dashboard\\.py|generate-dispatch\\.py|spot-check-findings\\.py|detectors/(wasteful_thinking|overpowered)\\.py|optimizer/model_normalize\\.py)|\\.claude/hooks/_lib/adapters/live/claude\\.py|\\.claude/data/canonical_models\\.json|\\.claude/skills/core/(ai-llm-orchestration/SKILL\\.md|security-and-auth/(SKILL\\.md|benchmarks/owasp-llm-top-10\\.yaml))",
--      "reason": "historical pricing/replay tables (incl. ADR-148 canonical_models.json models.dev pricing catalog \u2014 retained historical rows for cost reconciliation, S227 rate-card class) + adaptive-thinking known-id table + instructional skill content \u2014 mirrors smoke-install-parity.sh ALLOWLIST_RE (every entry justified there)"
-+      "reason": "historical pricing/replay tables (incl. ADR-148 canonical_models.json models.dev pricing catalog — retained historical rows for cost reconciliation, S227 rate-card class) + adaptive-thinking known-id table + instructional skill content — mirrors smoke-install-parity.sh ALLOWLIST_RE (every entry justified there)"
-     },
-     {
-       "rule_id": "deprecation-instrument",
-@@ -230,7 +231,7 @@
-     {
-       "rule_id": "plan-artifacts",
-       "pattern": "(^|/)\\.claude/plans/",
--      "reason": "plan/research/staged-bundle records \u2014 historical evidence reviewed at ceremony, not live call sites"
-+      "reason": "plan/research/staged-bundle records — historical evidence reviewed at ceremony, not live call sites"
-     }
-   ]
- }
 diff --git a/.claude/scripts/optimizer/model_normalize.py b/.claude/scripts/optimizer/model_normalize.py
 index 2e226a0..7776bae 100644
 --- a/.claude/scripts/optimizer/model_normalize.py

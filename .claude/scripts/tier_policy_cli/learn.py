@@ -551,7 +551,7 @@ def _tier_rank(model_id: str) -> int:
         "claude-sonnet-5": 3,
         "claude-opus-4-8": 4,
         "claude-opus-5": 5,
-        "claude-opus-5-fast": 5,  # fast mode: same model, faster output
+        "claude-opus-5-fast": 5,  # fast mode: same model, premium rate
         "claude-fable-5": 6,  # ADR-149 flagship (Mythos-class, above Opus)
     }
     return order.get(model_id, -1)

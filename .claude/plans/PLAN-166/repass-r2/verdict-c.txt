@@ -1,0 +1,19 @@
+Findings:
+
+- P1 — The release barrier can authorize a stale run. The code explicitly admits that a delete/re-tag within the 120-second skew can reuse the previous successful run ([await_release_gate.py:62](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-r2.aWHxOR/wt/.claude/scripts/await_release_gate.py:62)); that run remains eligible ([await_release_gate.py:284](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-r2.aWHxOR/wt/.claude/scripts/await_release_gate.py:284)) and produces `GRANT` ([await_release_gate.py:351](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-r2.aWHxOR/wt/.claude/scripts/await_release_gate.py:351)). An adversarial local probe reproduced the stale-success `GRANT`, violating the “this push” contract.
+
+- P1 — Login authentication executes `codex` before Phase-6 payload verification ([pair-rail-gate.sh:87](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-r2.aWHxOR/wt/.claude/scripts/local/pair-rail-gate.sh:87)). This contradicts the invariant that an unverified payload is never executed ([pair-rail-gate.sh:159](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-r2.aWHxOR/wt/.claude/scripts/local/pair-rail-gate.sh:159)); the pin check only begins later at line 176.
+
+- P1 — The hygiene gate is weakened by adding `env-write` and `bare-testcase` exceptions ([test-env-hygiene-allowlist.yaml:244](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-r2.aWHxOR/wt/.claude/scripts/test-env-hygiene-allowlist.yaml:244)) for a test that directly mutates `os.environ` ([test_codex_stop_review.py:119](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-r2.aWHxOR/wt/.claude/hooks/tests/test_codex_stop_review.py:119)). This violates the mandatory `TestEnvContext` plus `mock.patch.dict` rule instead of curing the test.
+
+- P1 — The new “faster output” comment is a prohibited speedup claim ([learn.py:554](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-r2.aWHxOR/wt/.claude/scripts/tier_policy_cli/learn.py:554)); the reviewer contract requires rejecting such additions.
+
+- P2 — Malformed `jobs` content is treated as “not materialised” and waits ([await_release_gate.py:299](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-r2.aWHxOR/wt/.claude/scripts/await_release_gate.py:299), [await_release_gate.py:339](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-r2.aWHxOR/wt/.claude/scripts/await_release_gate.py:339)), rather than immediately blocking as malformed input. The deadline ultimately blocks, so this is not a grant bypass.
+
+- P2 — Sonnet 5’s explicitly temporary rate is stored permanently ([value-dashboard.py:267](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-r2.aWHxOR/wt/.claude/scripts/value-dashboard.py:267)); `compute_cost_usd` has no event-date selection ([value-dashboard.py:290](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-r2.aWHxOR/wt/.claude/scripts/value-dashboard.py:290)), so the dashboard will understate post-2026-08-31 costs.
+
+- P2 — `--today` validates only the textual shape ([\_release_bump_sites.py:176](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-r2.aWHxOR/wt/.claude/scripts/local/_release_bump_sites.py:176)); impossible dates such as `2026-99-99` can be written into signed review-stamp surfaces.
+
+Justification: Shell syntax, Python parsing, stdlib-only enforcement, AGENTS.md freshness, CLAUDE.md claims, and diff whitespace checks passed. Full pytest collection was unavailable because the read-only sandbox prevented a collector from creating its temporary directory. The excluded model-deprecations replacement bump raises no independent objection from the supplied provenance description, but the stale authorization and pre-pin execution paths are sufficient release-safety blockers.
+
+VERDICT: NEEDS-CHANGES
