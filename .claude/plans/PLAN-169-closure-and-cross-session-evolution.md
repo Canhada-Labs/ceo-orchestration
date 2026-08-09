@@ -1060,6 +1060,34 @@ W0 correspondentes viram VERIFICAÇÃO, não re-execução.
 
 ## Progress log
 
+- 2026-08-08 (S299): **W1 EXECUTADO (fix + riders + sweep; validação D3
+  disparada).** Causa-raiz confirmada PIOR que "BSD-first": no GNU,
+  `stat -f '%m'` SUCEDE imprimindo o MOUNT POINT (stdout contaminante)
+  — o fallback nunca rodava e o `continue` silencioso em `_obs_mtime`
+  descartava o lixo ⇒ sinal de mtime morto em TODAS as células no
+  Linux (REFRESH byte-idêntico invisível; sub-detecção 0017/0021).
+  Fix: `_stat_mtime` GNU-first (padrão canônico `install.sh`
+  detect_mtime) + validação de output (não-numérico ⇒ `MTIME-ERR`,
+  nunca descarte). Rider fail-closed: `MTIME-ERR` em BEFORE/AFTER ⇒
+  HARNESS-ERR da célula (stderr + ERR++). Rider FALSE-GREEN:
+  `_selfcheck_mtime` — controle positivo ANTES de qualquer célula
+  (rewrite byte-idêntico com timestamp bumpado tem de mudar a
+  assinatura, arquivo E diretório; falha ⇒ exit 2). PROVAS no Darwin:
+  smoke `--only 0001,0017,0021` = 3/3 GREEN ERR=0; shim GNU-simulado
+  (stat -c válido, -f devolve mount point) ⇒ selfcheck PASSA; shim
+  sinal-morto ⇒ recusa com exit 2 real. Sweep da classe
+  `A 2>/dev/null || B` no harness: ÚNICO contaminante era o par stat;
+  demais fallbacks (mktemp/git describe/_hash_file sentinelas) têm
+  A-sucesso estável entre plataformas; `_hash_*` vêm da lib de
+  produção já vetada. **Deferral registrada:** o comentário de
+  estimativa em `ownership-nightly.yml` (tempo observado do run
+  31246426017; número fora deste plano por AGENTS.md
+  no-throughput-claim) foi BLOQUEADO pelo guard canônico
+  (`.github/workflows/` exige sentinel, ADR-010) ⇒ entra no pack
+  canônico **W3** com o resto; `timeout-minutes: 90` intocado, não
+  gateia o aceite 62/3. Re-verificação de OWN-0073 + aceite 62/3:
+  aguardando o run disparado (D3, longe do cron).
+
 - 2026-08-08 (S299): **W0 EXECUTADO INTEIRO** (`reviewed→executing`
   neste commit). Pack pushado a `origin/main` (`57119b3`, ff de
   `plan169-pack`); CI do push VERDE — **Translations drift CURADO**

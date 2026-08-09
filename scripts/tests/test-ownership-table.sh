@@ -156,10 +156,17 @@ _obs_digest() {  # $1 = abs path
   printf 'special'
 }
 
-# Modification-time signature of a surface. BSD stat takes -f, GNU takes -c;
-# both are tried so the harness behaves the same on macOS and CI.
+# Modification-time signature of a surface. GNU stat takes -c, BSD takes -f.
+# GNU-FIRST is load-bearing (PLAN-169 W1): on GNU, `stat -f '%m'` SUCCEEDS
+# and prints the filesystem MOUNT POINT, so the BSD-first order contaminated
+# stdout on Linux and the fallback never ran — the mtime signal was dead on
+# every cell. BSD `stat -c` fails clean to stderr, so GNU-first is safe on
+# both. Output that is not pure digits is an instrument fault surfaced as
+# MTIME-ERR, never discarded (input-parse failure is fail-closed).
 _stat_mtime() {  # $1 = abs path
-  stat -f '%m' "$1" 2>/dev/null || stat -c '%Y' "$1" 2>/dev/null || printf '0'
+  local out
+  out="$( stat -c '%Y' "$1" 2>/dev/null || stat -f '%m' "$1" 2>/dev/null || printf '0' )"
+  if [[ "$out" =~ ^[0-9]+$ ]]; then printf '%s' "$out"; else printf 'MTIME-ERR'; fi
 }
 _obs_mtime() {  # $1 = abs path -> newest mtime under it (or its own)
   local p="$1" newest=0 m r
@@ -168,7 +175,11 @@ _obs_mtime() {  # $1 = abs path -> newest mtime under it (or its own)
     while IFS= read -r r; do
       [[ -n "$r" ]] || continue
       m="$( _stat_mtime "$p/$r" )"
-      [[ "$m" =~ ^[0-9]+$ ]] || continue
+      # A non-numeric signature is the instrument lying, not noise: propagate
+      # MTIME-ERR so the caller turns it into HARNESS-ERR. The silent
+      # `continue` here is what hid the dead signal (sub-detection of
+      # 0017/0021). A file that vanished mid-walk stats to '0' and is fine.
+      [[ "$m" =~ ^[0-9]+$ ]] || { printf 'MTIME-ERR'; return 0; }
       (( m > newest )) && newest="$m"
     done < <( cd "$p" && find . -type f -print 2>/dev/null )
     printf '%s' "$newest"; return 0
@@ -610,6 +621,10 @@ _run_row() {
   b_digest="$( _obs_digest "$T/$rel" )"
   b_rec="$( _obs_record "$T/$MANIFEST_REL" "$rel" )"
   _MTIME_BEFORE="$( _obs_mtime "$T/$rel" )"
+  if [[ ! "$_MTIME_BEFORE" =~ ^[0-9]+$ ]]; then
+    echo "HARNESS-ERR $id: unparseable mtime signature (before) for $rel: '$_MTIME_BEFORE'" >&2
+    ERR=$((ERR+1)); return
+  fi
   # Everything outside $T that a run could reach. Any change here is an escape.
   _ESCAPE_BEFORE="$( _obs_digest "$WORK/foreign/leaf" 2>/dev/null || printf 'absent' )"
 
@@ -652,6 +667,10 @@ _run_row() {
   a_digest="$( _obs_digest "$T/$rel" )"
   a_rec="$( _obs_record "$T/$MANIFEST_REL" "$rel" )"
   _MTIME_AFTER="$( _obs_mtime "$T/$rel" )"
+  if [[ ! "$_MTIME_AFTER" =~ ^[0-9]+$ ]]; then
+    echo "HARNESS-ERR $id: unparseable mtime signature (after) for $rel: '$_MTIME_AFTER'" >&2
+    ERR=$((ERR+1)); return
+  fi
   _ESCAPE_AFTER="$( _obs_digest "$WORK/foreign/leaf" 2>/dev/null || printf 'absent' )"
 
   if [[ "$timed_out" -eq 1 ]]; then
@@ -711,6 +730,32 @@ else
   echo "   timeout:${CELL_TIMEOUT}s/cell   timeout-bin:${_TIMEOUT_BIN:-<fallback>}"
 fi
 echo ""
+
+# Positive control of the mtime signal (PLAN-169 W1). The Linux port went
+# blind once without failing: BSD-first stat contaminated stdout on GNU, the
+# garbage was discarded silently, and byte-identical REFRESH became invisible
+# on every cell (the class that blinded OWN-0073). A dead signal must kill
+# the run before any cell executes, not tint the map: rewrite a probe
+# byte-identically with a bumped timestamp and REQUIRE the observed
+# signature to change, numerically, for both a file and a directory walk.
+_selfcheck_mtime() {
+  local pf="$WORK/mtime-probe" pd="$WORK/mtime-probe-dir" m1 m2 d1 d2
+  mkdir -p "$pd"
+  printf 'probe' > "$pf";      printf 'probe' > "$pd/f"
+  touch -t 202001010000 "$pf" "$pd/f" 2>/dev/null || true
+  m1="$( _obs_mtime "$pf" )";  d1="$( _obs_mtime "$pd" )"
+  printf 'probe' > "$pf";      printf 'probe' > "$pd/f"   # byte-identical
+  touch -t 202001010001 "$pf" "$pd/f" 2>/dev/null || true
+  m2="$( _obs_mtime "$pf" )";  d2="$( _obs_mtime "$pd" )"
+  if [[ ! "$m1" =~ ^[0-9]+$ || ! "$m2" =~ ^[0-9]+$ || "$m1" == "$m2" \
+     || ! "$d1" =~ ^[0-9]+$ || ! "$d2" =~ ^[0-9]+$ || "$d1" == "$d2" ]]; then
+    echo "HARNESS-ERR: mtime-signal self-check FAILED (file $m1->$m2, dir $d1->$d2)." >&2
+    echo "             byte-identical REFRESH would be undetectable — refusing to run." >&2
+    exit 2
+  fi
+  rm -f "$pf" "$pd/f"; rmdir "$pd" 2>/dev/null || true
+}
+_selfcheck_mtime
 
 # Prime the canonical pointer digest for $T from a real install. Structurally
 # fresh rows build no base, so without this the protocol candidate would be
