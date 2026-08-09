@@ -1060,6 +1060,33 @@ W0 correspondentes viram VERIFICAÇÃO, não re-execução.
 
 ## Progress log
 
+- 2026-08-09 (S299, fechamento noturno): **Preparação completa da fila
+  do Owner.** (1) **Pack W3 STAGED + VALIDADO** em
+  `PLAN-169/staged-w3/` — 12 arquivos (11 alvos + ADR-191 novo), 19
+  patches por âncora única, MANIFEST.sha256 + BASELINE.sha256
+  (pins anti-stale: a lição do step1); validação: bash -n 3/3,
+  py_compile 4/4, R9 contra o gerador STAGED nos 2 sentidos (newline ⇒
+  degraded sem abort; saudável ⇒ substitui). Bug real do builder pego
+  na validação: comentário python com apóstrofo+backticks dentro de
+  heredoc-em-$() quebra o parser do bash — bisectado e curado
+  (comentário ASCII-safe + nota no próprio arquivo). (2)
+  **OWNER-W3-LAND.sh** fail-closed em 7 gates (G0 janela, G1 baseline
+  anti-stale, G2 manifest, G3 GPG+anchor==HEAD, G4 simulação em clone,
+  G5 apply por tabela, G6 touched−scope=∅ + bateria, G7 commit) +
+  **W3-approved-draft.md** (sentinel pronto para assinar, escopo
+  fechado, "fora deste pack" explícito). (3) **W5-preregistration-draft.md**
+  — desenho E0-E4 imutável pronto para assinatura (execução E1-E4 =
+  PLAN-170). (4) **repass-r2/run-repass-r2.sh** — re-pass codex do
+  delta rc.1→candidato a partir de worktree detached limpo, pipeline
+  do r1 (redactor ADR-114 + controles de estrutura), LANÇADO nesta
+  madrugada contra o HEAD final da noite. (5) **OWNER-MORNING.md** —
+  fila consolidada: trem GA (1 verdito+2 tags+hold), 1 decisão (W2.8),
+  2 assinaturas (W5, W3). E.10 verificado FECHADO (zero hits de
+  guard ancestral no upgrade.sh — promessa do 167 §5.8 cumprida, sem
+  patch necessário). Fronteiras respeitadas: W3-K/W4/W4-C ficam para
+  sessões próprias (kernel + decisões); NADA de conteúdo 1.4 aplicado
+  em superfície viva — o HEAD segue candidato rc.2 limpo.
+
 - 2026-08-09 (S299, madrugada): **W2 EXECUTADO INTEIRO (9/9 itens) em
   superfícies confirmadas FREE pelo predicado (rodado em TODOS os alvos
   antes de tocar — 4 correções de fronteira registradas abaixo).**
@@ -1145,8 +1172,15 @@ W0 correspondentes viram VERIFICAÇÃO, não re-execução.
   no-throughput-claim) foi BLOQUEADO pelo guard canônico
   (`.github/workflows/` exige sentinel, ADR-010) ⇒ entra no pack
   canônico **W3** com o resto; `timeout-minutes: 90` intocado, não
-  gateia o aceite 62/3. Re-verificação de OWN-0073 + aceite 62/3:
-  aguardando o run disparado (D3, longe do cron).
+  gateia o aceite 62/3. **VALIDAÇÃO D3 CUMPRIDA (run 31286301110,
+  2026-08-09 00:30→01:11 UTC, workflow_dispatch sobre `af192dd`):
+  conclusion=SUCCESS — `GREEN=62 RED=3 AMBIG=0 HARNESS-ERR=0`, conjunto
+  RED exato {OWN-0016, OWN-0024, OWN-0027} (by-design), zero resíduo de
+  plataforma. OWN-0073 re-verificado especificamente: GREEN com
+  got=REFRESH/HASH_SOURCE — o sinal de mtime está VIVO no Linux (a
+  célula que o sinal morto cegava). Primeiro nightly verde da história
+  do workflow. Run saudável ~41 min (vs ~32 do run cego — os walks de
+  mtime reais custam; teto 90 mantém folga). W1 FECHADO.**
 
 - 2026-08-08 (S299): **W0 EXECUTADO INTEIRO** (`reviewed→executing`
   neste commit). Pack pushado a `origin/main` (`57119b3`, ff de
