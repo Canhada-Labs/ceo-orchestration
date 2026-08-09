@@ -60,8 +60,22 @@
      refutáveis, ex.: `.claude.bak` é artefato DE DESIGN do upgrade).
      Não bloqueiam o corte por si; viram item de wave própria — decida
      se entram como W1.8 ou plano novo.
-   - **Round 3 (relançado sobre o candidato corrigido):** verditos novos
-     substituem os do round 2 no mesmo dir quando terminar.
+   - **Round 3 (sobre `fe6f484`) TERMINOU: parte d = APPROVE** (as curas
+     do round 2 fecharam a área); a/b/c/e NEEDS-CHANGES, triados: as
+     curas BARATAS e reais landaram em `3138deb` (sonda login exec-free
+     — M4; CTO-GUIDE mandava instalar PACOTE NPM INEXISTENTE
+     `ceo-orchestration-install`, supply-chain-crítico pré-existente,
+     curado; prosa de frota do cost-of-operation; no-speed-claim).
+     **Residuais nomeados que NÃO curei (decisão/registro seu):**
+     (i) parte a = produto 167/168 (acima); (ii) parte b + c-P1 do
+     parity/harness = INSTRUMENTO → wave própria (verditos b/c têm a
+     lista; inclui skew 120s do await-gate — residual DOCUMENTADO no
+     código desde o 166, codex reproduziu; e o allowlist-débito do
+     test_codex_stop_review env-write); (iii) release.yml P2 (marker
+     equality ignora whitespace) = canônico → candidato ao pack W3;
+     (iv) `--today` shape-only; intro-rate sonnet-5 (nota datada no
+     código, sweep 2026-08-31). **Round 4 relançado sobre `3138deb`**
+     (candidato vigente) — verditos no mesmo dir ao acordar.
 2. Montar+assinar `pair-rail-verdict-v1.3.0-rc.2.md` (+ verdict-fields),
    **commitar em main → push → CI verde no commit do verdito** (o
    único delta legítimo pós-re-pass = artefatos do verdito + repass-r2/**).
