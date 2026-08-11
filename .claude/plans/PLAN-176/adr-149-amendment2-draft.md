@@ -68,9 +68,10 @@ a doutrina POR CONSTRUÇÃO.
 - (−) Resolver adiciona 1 indireção em caminhos quentes; mitigação:
   cache por-processo, perf-gate existente cobre.
 
-## Rota
+## Rota (r5 — alinhada ao W0 do PLAN-176)
 
-Implementação: PLAN-169 W4.3(iv) (registry+resolver+lint+oracles) +
-W2.10 (lote de literais vivos). Fase com rede: PLAN-176. Shape codex
-0.144.6 + `_VALID_MODELS`: checklist da próxima cerimônia de
-pin-bump.
+Implementação: **PLAN-176 W0** (registry split T/P + resolver + lint
++ oracles); PLAN-169 W2.10 (lote de literais vivos) e W4.3(iv)
+(manifesto/oracle de fleet-currency, escopo assinado inalterado).
+Fase com rede: PLAN-176 W1-W3. Shape codex 0.144.6 +
+`_VALID_MODELS`: checklist da próxima cerimônia de pin-bump.

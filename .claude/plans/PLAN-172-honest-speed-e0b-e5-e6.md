@@ -115,13 +115,14 @@ dossiê ranqueado entregue ao revisor.
   <50%** (senão o gating seria sobre sinal majoritariamente mudo).
   ≥30 rounds por braço (os rails já produzem 30+/sessão — custo
   marginal ~zero).
-- **Kill:** escapes sobem ⇒ mata; falso-bloqueio em C >15% ⇒ mata C,
-  mantém B; cascata >2min p95 ⇒ virou gate caro, mata; f≥30% de
-  rejeição precoce mas minutos-humano caem <5% ⇒ **NEGATIVO, não
-  promover** (resolve com dado a divergência entre lanes: academia
-  otimista × Codex cético × Grok "verifier theater"); achados-humanos
-  fora-do-dossiê caindo JUNTO com os minutos ⇒ review ficou
-  superficial ⇒ aborta imediato.
+- **Kill (r5): a kill-table do pré-registro
+  (`PLAN-172/preregistration-e0b-e6-draft.md`) é a ÚNICA autoridade —
+  5 kills quantificados lá (escapes ≥A+2/30 rounds; falso-bloqueio C
+  >15%; cascata p95 >2min; f≥30% com minutos-humano <5% = NEGATIVO;
+  fora-do-dossiê caindo >30% na mesma janela = aborta). Este corpo
+  não duplica números para não divergir.** O kill do NEGATIVO
+  resolve com dado a divergência entre lanes (academia otimista ×
+  Codex cético × Grok "verifier theater").
 
 ### E3 — INTOCADO (pré-registro W5 assinado é IMUTÁVEL; execução = PLAN-170)
 **Nenhum ajuste entra no E3** (Codex r1, P1: emendar pré-registro

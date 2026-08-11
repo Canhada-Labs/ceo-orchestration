@@ -8,7 +8,7 @@ depends_on: [PLAN-169]
 budget_tokens: 300-550k (re-firmado S302e r4 — W0 registry/resolver/lint 150-250k AGORA MORA AQUI; W1 rotina 100-150k; W2-W3 100-150k)
 budget_sessions: 4-5 (W0 2; W1 1; W2+W3 1-2; fase-2 auto-merge FORA — gated em ADR)
 context_risk: medium
-external_wait: "milestone: pós-GA v1.3.0 + registry/resolver landados (PLAN-169 W4.3 item iv). L3: rotina com REDE que escreve commits ⇒ debate próprio"
+external_wait: "milestone: pós-GA v1.3.0 + lote W2.10/169 (literais curados). Registry/resolver/lint = W0 DESTE plano (r5). L3: rotina com REDE que escreve commits ⇒ debate próprio"
 tags: [model-currency, egress, automation, seed]
 ---
 
@@ -68,7 +68,12 @@ tags: [model-currency, egress, automation, seed]
   hosts/paths HTTPS; redirects não seguidos fora do mesmo host;
   limite de tamanho/timeout por resposta; digest sha256 da resposta
   gravado como proveniência; feed malformado/ambíguo = FAIL-CLOSED
-  (relatório, nunca PR).
+  (relatório, nunca PR). **Garantia de egress (r5 — restaurada e
+  endurecida): requisições são GET-only, SEM body, SEM query params
+  além do path fixo da allowlist, SEM headers customizados — NADA do
+  repo (nem números de versão locais) sai em requisição alguma; a
+  comparação local↔upstream acontece inteiramente em disco. Revisão
+  ADR-114 no debate de abertura.**
 - **W2 — proposta AUDITADA tocando SÓ a camada P:** PR sobre
   `models-preference.json` (não-sentinel POR DESIGN do split W0 — a
   cerimônia não é contornada porque a superfície cerimonial é outra);
@@ -117,8 +122,9 @@ que este plano implementa a fase-com-rede): em
 `PLAN-176/adr-149-amendment2-draft.md`; formaliza via cerimônia de
 ADR no início da execução (nunca criado direto em `.claude/adr/`).
 
-**Runbook sessão 1:** `/debate start PLAN-176` (L3: egress + rotina
-que escreve commits) → cerimônia do ADR-149-A2 → W1.
+**Runbook sessão 1 (r5: começa pelo W0):** `/debate start PLAN-176`
+(L3: egress + rotina que escreve commits) → cerimônia do ADR-149-A2
+→ **W0** (split T/P + resolver + lint, sem rede) → só então W1.
 
 **Debate:** este plano NÃO passou pelo pair-rail de S302c (nasceu
 depois) — o round Codex r4 do conjunto cobre; o `/debate` L3 formal
