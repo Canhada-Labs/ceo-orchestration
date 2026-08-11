@@ -53,10 +53,21 @@ de espera: `{ci-wait, hold-24h, quota, lag-de-retomada, outro}`, com
 regra de precedência para sobreposições PRÉ-REGISTRADA e medição que
 imprime seus inputs (lição S285). Saídas: (a) fração de cada classe;
 (b) baseline do lag-de-retomada (evento terminou → trabalho retomou).
-**Decisão embutida: quota > 40% do morto ⇒ teto do E5 cai < 1,4× ⇒
-rebaixar/redesenhar o E5 ANTES de gastar 18 unidades.** Os holds de
-24h (ADR-103) são previsíveis: só "calendar packing" deles já é
-estimável retrospectivamente.
+**Tabela de decisão COMPLETA (Codex r1 — pré-registrada, nada fica
+para juízo post-hoc):**
+| Resultado E0b | Decisão |
+|---|---|
+| quota > 40% do morto | E5 REBAIXADO a piloto (metade do N) ou redesenhado; orçamento migra p/ wake-on-event |
+| quota 20-40% | E5 piloto (metade do N, mesmos kills) |
+| quota < 20% | E5 completo (3 braços, N pleno) |
+| lag-de-retomada > 30% do morto | wake-on-event ANTES de qualquer braço do E5 |
+| janela sem ≥10 unidades etiquetáveis | estende 2 semanas UMA vez; depois roda só retrospectivo |
+
+Os holds de 24h (ADR-103) são previsíveis: só "calendar packing"
+deles já é estimável retrospectivamente. Budget E5 (firmado no
+pré-registro, não TBD): ~18 unidades L2 ≈ 6-9 sessões, estimativa
+2-4M tokens; aborta na metade se σ(A) cobrir Δ (regra do bloco
+metodológico W5).
 
 ### Políticas observacionais (implantar sem braços; medição no log)
 1. **Wake-on-event + fila-preparada** — acordar no evento (Monitor/
@@ -97,9 +108,13 @@ diff-scoped em sandbox, advisory, $0) + verificadores estáticos +
 dossiê ranqueado entregue ao revisor.
 - **H1:** rounds-até-GO caem ≥30% e minutos-humano ≥20%, sem subir
   escapes.
-- **Braços:** A controle; B cascata ADVISORY; C cascata GATING
-  (limiar de kill-rate CONGELADO antes do experimento). ≥30 rounds
-  por braço (os rails já produzem 30+/sessão — custo marginal ~zero).
+- **Braços:** A controle; B cascata ADVISORY; C cascata GATING.
+  **Limiar do C (Codex r1 — especificado, não vago): derivado do p50
+  histórico da telemetria Via Canhada (passo 1) e CONGELADO no
+  pré-registro do E6; o braço C só nasce se a telemetria der censura
+  <50%** (senão o gating seria sobre sinal majoritariamente mudo).
+  ≥30 rounds por braço (os rails já produzem 30+/sessão — custo
+  marginal ~zero).
 - **Kill:** escapes sobem ⇒ mata; falso-bloqueio em C >15% ⇒ mata C,
   mantém B; cascata >2min p95 ⇒ virou gate caro, mata; f≥30% de
   rejeição precoce mas minutos-humano caem <5% ⇒ **NEGATIVO, não
@@ -108,11 +123,14 @@ dossiê ranqueado entregue ao revisor.
   fora-do-dossiê caindo JUNTO com os minutos ⇒ review ficou
   superficial ⇒ aborta imediato.
 
-### E3 (da bateria do PLAN-170) — só absorver 2 ajustes
-Manter como pré-registrado; absorver: revisores single-pass
-(multi-turn infla FP — fonte no archive S298) e heterogeneidade REAL
-de vendor/papel; métrica nova: horas-de-adjudicação por achado
-confirmado (kill se subir >50% vs rail serial).
+### E3 — INTOCADO (pré-registro W5 assinado é IMUTÁVEL; execução = PLAN-170)
+**Nenhum ajuste entra no E3** (Codex r1, P1: emendar pré-registro
+assinado é ilegal). Os refinamentos sugeridos pela pesquisa —
+single-pass (multi-turn infla FP; fonte no archive S298),
+heterogeneidade real de vendor/papel, métrica horas-de-adjudicação
+por achado confirmado — ficam registrados como **E3b: follow-on com
+pré-registro PRÓPRIO e assinatura própria**, financiado apenas se os
+resultados do E3 motivarem.
 
 ## 2. O que este plano NÃO re-litiga
 
@@ -143,12 +161,20 @@ arquivo:linha + 6 lanes externas) recalibrou o alvo: o custo da
 governança é o AGENDAMENTO (síncrono, exaustivo, no fim), não a
 garantia. Entram:
 
-- **W-DH — delta-hold (emenda ADR-103, a maior alavanca única):** o
-  hold só reinicia para a superfície que MUDOU; crédito do tempo
-  decorrido quando `inputs_hash` é idêntico (a rc.3 declarou hash
-  idêntico ao da rc.2 e reiniciou 24h do zero) — ou hold concorrente
-  com o re-pass. Toda a infraestrutura (inputs_hash, delta_manifest)
-  já é computada e assinada. Corta 24-48h por trem multi-rc.
+- **W-DH — delta-hold (a maior alavanca única).** Mecânica: o hold só
+  reinicia para a superfície que MUDOU; crédito do tempo decorrido
+  quando `inputs_hash` é idêntico (a rc.3 declarou hash idêntico ao da
+  rc.2 e reiniciou 24h do zero) — ou hold concorrente com o re-pass.
+  Infraestrutura (inputs_hash, delta_manifest) já computada e assinada.
+  **Formalização (Codex r1):** só é legal via (a) emenda ADR-103
+  ACEITA por cerimônia própria E (b) emenda do W6.2 do PLAN-169 (que
+  pina hold→re-pass) pelo processo de amendment. Invariantes: hold
+  NUNCA reduzido para superfície mudada; fronteira irreversível
+  intacta; delta derivado exclusivamente do delta_manifest ASSINADO.
+  **Fallback:** sem emenda aceita antes da v1.4.0-rc.1, o trem roda
+  sob ADR-103 vigente, sem exceção ad-hoc. **Hipótese H-DH (nunca
+  claim): redução de 24-48h por trem multi-rc — a validar no
+  primeiro trem sob a emenda.**
 - **E5 ganha substrato definido:** background-rail (rounds Codex
   detached via run_in_background/Monitor — padrão S285 virando skill;
   38 rounds seriais ~8h → ~3-4h com 2 lanes e wall-clock efetivo
@@ -161,8 +187,10 @@ garantia. Entram:
   (tag/publish/GPG/HMAC/settings), nunca classificado à mão; arestas
   desconhecidas colapsam para d=1 (conservador); d≤1 ⇒ cerimônia
   síncrona integral sempre. Validação barata: replay read-only dos 14
-  planos do E0 — kill pré-registrado: se P0/P1 históricos concentram
-  em d ALTO, o grafo é proxy errado e morre. Complemento: classificar
+  planos do E0 — **kill pré-registrado com corte numérico (Codex r1):
+  se >40% dos P0/P1 históricos caírem no tercil de MAIOR d, o
+  gradiente não separa risco ⇒ o grafo é proxy errado e M3 morre.**
+  Complemento: classificar
   retrospectivamente os ~38 verdicts da rc.3 em "mecânico vs
   semântico" (adjudica quanto o cascade pode capturar).
 - **Via Canhada (sequência §1-E6) recalibrada pela leitura do código:**
@@ -190,21 +218,24 @@ garantia. Entram:
 - **Progressive disclosure do boot** (ceo-orchestration/SKILL.md
   ~15,6k tok ≈ 40% do Gate-1/2).
 
-**Números honestos esperados (compostos, a PROVAR aqui):** reviewer
-externo ~12-17h/trem → ~4-6h; rounds −50-70%; hold −24-48h.
-Advertência da academia: fracionar ganha LATÊNCIA, não yield — a
-promessa é "mesmos achados, semanas antes, com ~1/3 do wall-clock",
-nunca "mais achados".
+**HIPÓTESES pré-registráveis (Codex r1: nunca claims; nenhuma
+superfície pública de doc herda estes números até evidência; o
+no-speed-claim do AGENTS.md segue incondicional):** H-REV: reviewer
+externo ~12-17h/trem → ~4-6h; H-RND: rounds −50-70%; H-DH: hold
+−24-48h. Advertência da academia: fracionar ganha LATÊNCIA, não
+yield — a hipótese certa é "mesmos achados, antes, com ~1/3 do
+wall-clock", nunca "mais achados".
 
-**Imediatos SEM plano (pós-GA, antes deste plano abrir):** shift-left
-do escopo de release no rail da rc (CHANGELOG/workflows/npm no rail
-da rc, re-pass vira delta-check); derivação de contagens (elevar
-itens #3/#4/#6 do ledger 169 de "consertar exatos" p/ "derivar a
-classe" — mata 4/8 achados do último NO-GO); stop-rule no template
-run-*-review.sh; varredura substrate-drift (matchers exact-match
-v2.1.195, exit-2+JSON v2.1.214); rota batch P2 + Merkle-manifest por
-lote; sweep de atualidade das skills (cita gemini-1.5-pro/gpt-4-turbo
-em skill core).
+**W-IM — imediatos COM DONO (primeira wave deste plano; Codex r1:
+mudanças de release-rail/gate/manifesto exigem Plan→Debate→Execute —
+nada de "sem plano"):** cada item entra como sub-item L2 (gate
+normal) ou L3 (debate) desta wave: shift-left do escopo de release no
+rail da rc (re-pass vira delta-check) [L3]; derivação de contagens
+(elevar itens #3/#4/#6 do ledger 169 p/ "derivar a classe") [L2];
+stop-rule no template run-*-review.sh [L2]; varredura substrate-drift
+(matchers exact-match v2.1.195, exit-2+JSON v2.1.214) [L2 read-only];
+rota batch P2 + Merkle-manifest por lote [L3]; sweep de atualidade
+das skills [L2 — executa aqui, regra de poda pertence ao PLAN-175].
 
 **M1 (loteria de aceitação com cascata de contaminação) NÃO entra
 aqui:** muda o CONTRATO de garantia (exaustivo → estatístico-com-

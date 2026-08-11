@@ -41,7 +41,10 @@ log (via `check-audit-hmac-null.py`), fleet view. Read-only por
 construção — o MCP server NUNCA é caminho de mutação (mutação
 continua exclusiva do rail governado). Runtime: avaliar se stdlib-only
 aguenta (servidor MCP stdio simples) ou se vira componente opcional
-fora do core. Entregável: spike + ADR de viabilidade.
+fora do core. **Time-box (Codex r1): spike ≤2 sessões; AC = servidor
+read-only respondendo 3 queries (plans, verditos, saúde HMAC) em demo
+local; kill = stdlib-only inviável em 2 sessões ⇒ componente opcional
+fora do core OU morre.** Entregável: spike + ADR de viabilidade.
 
 ### W2 — Fork AGPL: documentar como viável-mas-ADIADO
 Registrar a análise legal (AGPL/MIT dual, marca, repo separado) e o
@@ -98,10 +101,12 @@ gates locais sobre N variantes, W4 morre sem experimento.
     candidato com diversidade frontier real + CLI maduro + custo
     baixo; sob containment do /council (read-only, redactor ADR-114).
   - **Agente de código da Meta: watchlist, depois do previsto.** 3
-    gates de entrada: sair de beta; benchmark verificado independente;
-    taxa de alucinação aceitável em piloto advisory (review que
-    alucina achados é a pior propriedade possível — cada achado falso
-    custa rounds). Se pilotar: só tier que NÃO treina em prompts
-    (postura de egress ADR-114).
+    gates de entrada QUANTIFICADOS (Codex r1): sair de beta;
+    benchmark verificado independente dentro de 2 pontos do
+    publicado; alucinação <5% num piloto advisory de 30 achados
+    (review que alucina achados é a pior propriedade possível — cada
+    achado falso custa rounds). Se pilotar: só tier que NÃO treina em
+    prompts (postura de egress ADR-114). Gemini: fica no E3 apenas
+    com unique-finding-rate ≥15% por lane instrumentada.
   - Revisores BLOQUEANTES congelados em 2 (Claude autor + Codex):
     formalização no PLAN-171 W1b.

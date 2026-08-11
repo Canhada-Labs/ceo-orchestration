@@ -24,12 +24,17 @@ tags: [skills, telemetry, pruning, seed]
 
 ## 1. Ordem de ataque (a ordem IMPORTA)
 
-1. **Descoberta ANTES de poda:** spawn falha-alto (ou auto-sugere via
-   skill-retrieve tf-idf existente) quando o spawn não declara skill
-   do catálogo. Meta mensurável: unknown-ratio 0,43 → <0,10. Sem
-   isso, qualquer catálogo continua sendo ignorado — podar primeiro
-   só maquiaria a métrica.
-2. **Podar o core por telemetria:** 42 → ~25 (SKILL MAP + as usadas);
+1. **Descoberta ANTES de poda — em duas fases (Codex r1: decisão
+   tomada, não deixada em aberto):** Fase 1 = SUGESTÃO advisory
+   (auto-suggest top-3 via skill-retrieve tf-idf) por 30 dias; Fase 2
+   = fail-high APENAS para spawns que não declaram skill NENHUMA,
+   ativada só se a Fase 1 não derrubar o unknown-ratio ≥50%.
+   **Telemetria: janela = 90d de audit log, N mínimo = 100 spawns;
+   re-medição 30d após cada fase.** Meta: unknown-ratio 0,43 → <0,10.
+2. **Podar o core por telemetria — regra DETERMINÍSTICA:** arquivar
+   skill core com 0 invocações em ≥90d E ausente do SKILL MAP;
+   rollback = `archive/` restaurável + superfícies de contagem
+   derivadas (nunca editadas à mão). 42 → ~25 (SKILL MAP + as usadas);
    ARQUIVAR, não deletar; consolidar sobreposições (lgpd×4 → 1;
    accessibility duplicada; 2 pares de basename duplicado que quebram
    atribuição de telemetria).

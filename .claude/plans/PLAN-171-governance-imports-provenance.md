@@ -17,9 +17,10 @@ tags: [governance, audit, provenance, seed]
 > **SEMENTE (S302, 2026-08-11).** Registrada pelo CEO a pedido do Owner
 > após estudo de dois sistemas externos (cloudflare-os da Cloudflare,
 > Apache 2.0, aberto 2026-08-05; xirp do Spotify, proprietário, beta
-> 2026-08-10) via workflow de 5 agentes + análise de fit. Nada deste
-> plano executa antes do trem em voo (rc.3 → GA v1.3.0 → W3/W4 →
-> v1.4.0). Refinamento + debate L3 obrigatórios antes de `reviewed`.
+> 2026-08-10) via workflow de 5 agentes + análise de fit. **Gatilho por
+> MILESTONE (correção do debate Codex r1): W0 pode iniciar após GA
+> v1.3.0 + land de W3/W4 do PLAN-169 — este plano NÃO espera o trem
+> v1.4.0 inteiro.** Refinamento + debate L3 antes de `reviewed`.
 
 ## 0. Papel no roadmap
 
@@ -63,18 +64,21 @@ registrar digests/paths do que cada agente LEU, em **sidecar
 encadeado** (nunca inflar a cadeia principal — perf-gate p99 e o
 histórico float-em-HMAC proíbem). Anexar o manifesto aos artefatos
 decisórios (verditos de debate/council, packs). No `/council`, validar
-o prompt egresso contra o manifesto: o redactor ADR-114 evolui de
-blocklist-por-classe para **allowlist-por-proveniência**. Honestidade
+o prompt egresso contra o manifesto: a **allowlist-por-proveniência
+entra como CAMADA ADICIONAL sobre a blocklist-por-classe do ADR-114 —
+a blocklist nunca é removida** (Codex r1: layer, não replace). Honestidade
 de fronteira: leituras de lanes fora do harness (`codex exec`) são
 INVISÍVEIS — documentar como limite, não vender cobertura total.
 
 ### W3 — FILE ASSIGNMENT enforcado em write-time
 Hook PreToolUse(Edit/Write) que bloqueia escrita de agente nomeado fora
 do `## FILE ASSIGNMENT` declarado no spawn. Converte declaração
-advisory em invariante mecânica. Classificação §4 do CLAUDE.md:
-parse-failure do assignment = infra = allow com breadcrumb; arquivo
-fora do escopo = input = block. É defense-in-depth ("Bash escapa"),
-não fronteira — escrever a claim no tamanho do enforcement.
+advisory em invariante mecânica. **Classificação corrigida (Codex r1,
+P1): FILE ASSIGNMENT malformado é INPUT de segurança não-parseável =
+fail-CLOSED (block)** — doutrina §4 fail-closed-on-input; infra real
+(hook ausente, timeout) segue fail-open com breadcrumb. É
+defense-in-depth ("Bash escapa"), não fronteira — escrever a claim no
+tamanho do enforcement.
 
 ### W4 — Living documentation LOCAL-ONLY
 Gerador stdlib que materializa docs navegáveis ("o que aconteceu e por
@@ -141,3 +145,25 @@ PLAN-172. Sem isso, E5 não roda.
   primeiro provar vivo o que existe, depois adicionar.
 - W4 (living docs) e W5 (higiene worktree) mantidos; W5 continua
   pré-requisito do E5 (PLAN-172).
+
+## 6. Debate Codex r1 (S302) — curas incorporadas + ACs
+
+Verdito r1: NO-GO com 4 P1 — todos aceitos e curados nesta v2.1:
+1. **Milestone, não trem inteiro** (§seed corrigido).
+2. **W0 não re-clama os débitos do AC-9 do PLAN-169**: os 3 débitos
+   de enforcement PERTENCEM ao 169 (AC-9, parcialmente executado). O
+   W0 os AUDITA e herda apenas o que o fechamento do 169 declarar
+   não-feito — coordenação por registro de entrega, sem dupla posse.
+3. **W1c é contract-only**: define a fronteira de ownership dos
+   domain-packs; a MIGRAÇÃO é do PLAN-175 (passo 3).
+4. **W3 fail-CLOSED em input malformado** (corrigido acima).
+
+ACs mínimos (anti-churn de rail):
+- W0: censo em lotes de ~10 hooks/sessão; AC = 100% dos hooks com
+  {positive control OU registro "sem-controle-por-design" justificado};
+  kill = lote sem fechar em 2 sessões ⇒ re-escopo antes de continuar.
+- W2 (quando destravar): piloto em sidecar com kill numérico —
+  overhead p95 do PostToolUse acima do teto do perf-gate vigente ⇒
+  redesenho; medição imprime inputs.
+- Budget firmado no refinamento pré-`reviewed`; nada de TBD ao entrar
+  em execução.

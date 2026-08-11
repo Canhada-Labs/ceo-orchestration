@@ -5,10 +5,10 @@ status: draft
 created: 2026-08-11
 owner: CEO
 depends_on: [PLAN-169]
-budget_tokens: TBD no refinamento (estimativa grosseira 200-400k)
+budget_tokens: 200-400k (firmar no refinamento pré-reviewed)
 budget_sessions: 3-5
 context_risk: medium
-external_wait: "gatilho: pós-GA v1.3.0; idealmente antes do trem v1.4.0"
+external_wait: "milestone: pós-GA v1.3.0 + W3/W4 do 169 landados (NÃO o 169 inteiro). DEADLINE: slice W1-W3 verde até D-2 do corte v1.4.0-rc.1, senão ABORT-PATH: o corte usa a cerimônia manual e o piloto migra p/ o trem seguinte"
 tags: [release, ceremony, codegen, review-cost, seed]
 ---
 
@@ -49,6 +49,20 @@ de 42KB de bash novo por trem. Efeito esperado (a medir): a classe
 - **W4 — piloto no primeiro corte da v1.4.0**: rail revisa input
   declarativo + diff do gerador; contar rounds e comparar com a
   baseline v1.3.0 (12-17h de reviewer externo/trem).
+
+## 2b. Controles e rollback (Codex r1 — obrigatórios antes de W4)
+
+- **Positive control do lint (W2):** o gate só entra com controle que
+  FALHA quando o enforcement é removido (alinhado ao censo do
+  PLAN-171 W0); cada classe do W1 tem caso-vermelho no CI.
+- **Equivalência de invariantes (W3):** cerimônia GERADA passa suíte
+  de equivalência — sentinel/anchor-sha/scope/dois-rails-de-signer
+  PRESENTES e verificados; dry-run em clone compara as GARANTIAS
+  (não os bytes) contra a cerimônia manual baseline; qualquer
+  divergência de garantia = vermelho.
+- **Rollback:** a cerimônia manual existente permanece CANÔNICA até
+  DOIS trens gerados verdes; falha em qualquer ponto ⇒ fallback
+  manual sem cerimônia extra.
 
 ## 3. Guard-rails
 
