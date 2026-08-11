@@ -77,3 +77,24 @@ de 42KB de bash novo por trem. Efeito esperado (a medir): a classe
   anchor-sha, dois rails de signer, scope=∅ antes de commit).
 - Se o piloto W4 não reduzir rounds ≥40% vs baseline, reportar
   NEGATIVO e manter template+lint (W1/W2 valem sozinhos).
+
+## 4. Pronto-para-execução (S302e)
+
+**ACs por wave:** W1 = catálogo com ≥6 classes, cada uma com
+exemplo REAL citado (round/arquivo do PLAN-166) e caso-vermelho
+executável; AC: as 6 classes conhecidas cobertas + qualquer nova
+achada na extração. W2 = lint roda em pre-commit E CI com positive
+control (remover o lint ⇒ vermelho no censo do 171-W0); AC: zero
+falso-positivo sobre os scripts de cerimônia HISTÓRICOS já landados
+(baseline de sanidade). W3 = gerador re-emite os cortes rc.3 e GA
+v1.3.0 a partir de input declarativo reconstruído; AC: equivalência
+de GARANTIAS (§2b) contra os scripts reais que executaram — é o
+golden test. W4 = piloto shadow no trem v1.4.0 (§2b), contagem de
+rounds comparada à baseline 12-17h.
+
+**Runbook sessão 1:** extrair o catálogo W1 dos rounds reais
+(read-only sobre PLAN-166/repass-rc3-scripts/) + esqueleto do lint.
+
+**Debate:** Codex r1→r3 (GO no r2); `/debate start PLAN-174` no
+início da execução; o GERADOR em si passa por cerimônia
+canonical-edit + pair-rail quando for landar (§3).

@@ -5,8 +5,8 @@ status: draft
 created: 2026-08-11
 owner: CEO
 depends_on: [PLAN-171, PLAN-172]
-budget_tokens: TBD (fase de estudo é barata; qualquer build é L3+ com ADR próprio)
-budget_sessions: estudo 2-3; build TBD
+budget_tokens: 250-400k (estudo completo; spike W1 ≤200k dentro disso; firmado S302e). Build FORA deste plano (L3+ com ADR e budget próprios)
+budget_sessions: 3-4 (spike ≤2 por AC; W2-W4 1-2)
 context_risk: medium
 external_wait: "gated: resultados do PLAN-172 (E0b/E5/E6) + gate retrospectivo dos NO-GOs para best-of-N"
 tags: [cockpit, warp, mcp, vision, seed]
@@ -110,3 +110,24 @@ gates locais sobre N variantes, W4 morre sem experimento.
     com unique-finding-rate ≥15% por lane instrumentada.
   - Revisores BLOQUEANTES congelados em 2 (Claude autor + Codex):
     formalização no PLAN-171 W1b.
+
+## 5. Pronto-para-execução (S302e)
+
+**ACs por wave:** W1 = os do §1 (3 queries em demo local, ≤2
+sessões, kill explícito). W2 = documento de decisão fork-adiado com
+análise legal (AGPL/MIT/marca/repo-separado) versionado — AC: um
+leitor externo consegue reproduzir a decisão sem esta conversa. W3 =
+demo do cockpit lendo living-docs do PLAN-171 W4 (se W4 já landou;
+senão, lê memória por-projeto) — AC: zero armazenamento novo. W4 =
+verdito do pré-gate retrospectivo dos NO-GOs (corte <30% detectável
+por gates locais ⇒ W4 morre) ANTES de qualquer piloto.
+
+**Runbook sessão 1:** rodar o gate retrospectivo do W4 (barato,
+read-only, pode matar a wave inteira) + spike W1 (MCP stdio mínimo).
+
+**Gates de entrada (herdados, verificar antes de abrir):** E0b
+respondido (kill criterion do §4: quota-dominante ⇒ descarta sem
+build) + E5 substrato existente (cross-session).
+
+**Debate:** Codex r1→r3 GO desde o r2; `/debate start PLAN-173` no
+início da execução (Gate 3).

@@ -5,8 +5,8 @@ status: draft
 created: 2026-08-11
 owner: CEO
 depends_on: [PLAN-169, PLAN-171]
-budget_tokens: "E0b+E6+políticas: baixo (retrospectivo/observacional); E5: ALTO (~18 unidades L2) — só se E0b liberar"
-budget_sessions: E0b 1-2; E6 acompanha rails existentes; E5 TBD pós-gate
+budget_tokens: "firmado S302e — W-IM 150-300k; E0b 50-100k; replay M3 80-150k; W-DH (2 emendas + cerimônia) 150-250k; E6 30k telemetria + 100-200k experimento; E5 2-4M SÓ se E0b liberar. Total sem E5: ~0,6-1,1M"
+budget_sessions: "W-IM 2-3; E0b 1-2; M3 1; W-DH 2; E6 passivo + 1-2; E5 6-9 pós-gate"
 context_risk: high
 external_wait: "gatilho: pós-GA v1.3.0 + W3/W4; E5 adicionalmente pós-PLAN-171 W5 (log único de worktree)"
 tags: [experiments, speed, pipelining, review, seed, pre-registration]
@@ -244,3 +244,30 @@ aqui:** muda o CONTRATO de garantia (exaustivo → estatístico-com-
 bound) — plano próprio pós-172 com ADR + ratificação do Owner. M2
 (revisor residente com dívida de cobertura + mutantes-sentinela)
 entra como candidato do E5/E6 v2 APÓS o replay hunk-vs-composição.
+
+## 5. Pronto-para-execução (S302e)
+
+**Pré-registro:** o draft do pré-registro E0b+E6 (hipóteses, braços,
+kill tables, regras de precedência de etiquetas, inputs impressos)
+está em `PLAN-172/preregistration-e0b-e6-draft.md` — assinatura do
+Owner o congela ANTES do primeiro dado coletado. E5 ganha pré-registro
+próprio só se E0b liberar (célula da tabela §1).
+
+**Ordem interna executável:** (1) W-IM em lotes L2 primeiro (cada
+item com gate normal; os L3 esperam `/debate`); (2) E0b: assinar
+pré-registro → rodar etiquetagem retrospectiva (o script deriva de
+`e0-serial-fraction.py`, que já imprime inputs) → tabela §1 decide
+E5; (3) replay M3 (read-only, 1 sessão) — mata ou financia o
+estágio-1 do E6; (4) W-DH: rascunho das DUAS emendas (ADR-103 +
+PLAN-169 W6.2) → debate → cerimônia; (5) E6 conforme telemetria.
+
+**ACs de fechamento por item:** W-IM = cada sub-item com evidência de
+gate verde no commit que o landa; E0b = relatório com inputs + célula
+da tabela marcada; M3 = verdito kill/financia com o corte de 40%
+aplicado; W-DH = emendas aceitas OU fallback documentado ativado; E6
+= relatório com os 4 kills avaliados; E5 = só nasce com pré-registro
+assinado + PLAN-171 W5 verde.
+
+**Debate:** pair-rail Codex r1→r3 APPROVE (S302c) cobre o conjunto;
+`/debate start PLAN-172` no início da execução cobre o Gate 3; as
+emendas do W-DH têm debate PRÓPRIO (mudam ADR + plano assinado).

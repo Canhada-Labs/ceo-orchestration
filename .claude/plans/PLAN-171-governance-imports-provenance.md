@@ -5,8 +5,8 @@ status: draft
 created: 2026-08-11
 owner: CEO
 depends_on: [PLAN-169]
-budget_tokens: TBD no refinamento (estimativa grosseira 300-600k)
-budget_sessions: 4-7
+budget_tokens: 400-700k (W0 censo = ~6 lotes de ~10 hooks ≈ metade do custo; firmado S302e)
+budget_sessions: 5-8 (W0 3-4; W1/W1b-d 1-2; W4-W5 1-2)
 context_risk: medium
 external_wait: nenhum
 tags: [governance, audit, provenance, seed]
@@ -167,5 +167,39 @@ ACs mínimos (anti-churn de rail):
 - W2 (quando destravar): piloto em sidecar com kill numérico —
   overhead p95 do PostToolUse acima do teto do perf-gate vigente ⇒
   redesenho; medição imprime inputs.
-- Budget firmado no refinamento pré-`reviewed`; nada de TBD ao entrar
-  em execução.
+- Budget firmado (frontmatter); nada de TBD.
+
+## 7. Pronto-para-execução (S302e)
+
+**ACs por wave (além dos já definidos no §6):**
+- W1 (batch-approval): schema do approval-queue commitado + gate
+  anti-lote-parcial com positive control (recusa conjunto ≠ manifesto)
+  + 1 lote real landado pela cerimônia nova com verdito pin único
+  `delta_manifest`.
+- W1b (ADR economia de revisores): ADR curto ACEITO por cerimônia;
+  `grok.py` docstring e docs de rail passam a refletir o papel real
+  (Codex bloqueante; Grok gatilho). AC: nenhuma superfície de doc
+  claim "dois revisores externos de release".
+- W1c (fronteira ownership packs): contrato escrito (o que é
+  framework vs pack; quem assina pack; como CI trata pack ausente);
+  AC: PLAN-175 consegue executar migração SEM decisão nova.
+- W1d (doc-drift): spawn.md corrigido p/ reference-mode + G12 cap 8
+  propagado na skill; AC: grep zero de "inject SKILL.md inteiro" e
+  zero de "cap 6" em superfícies vivas.
+- W4 (living docs): gerador emite índice navegável de 1 plano
+  histórico como demo; AC: zero segredos (grep por CLASSES) e
+  advisory-only.
+- W5 (worktree): convenção log-único documentada + `worktree_id` no
+  evento; AC: 2 worktrees paralelos escrevem no MESMO log encadeado
+  sem quebra de verify_chain.
+
+**Runbook sessão 1:** rodar lote-1 do censo W0 (10 hooks mais
+críticos: canonical-edit, bash-safety, agent-spawn, pair-rail,
+overhead, adequacy, audit-emit, injector, sentinel-unlock,
+credential-leak) — para cada um: positive control existente? vivo?
+(rodar o controle) → tabela verde/vermelho/sem-controle + herança
+AC-9. Gate 3: `/debate start PLAN-171` antes do primeiro item L3.
+
+**Debate:** pair-rail Codex 3 rounds (r1 REJECT → r3 APPROVE,
+S302c) cumpre o review cross-model do conjunto; o `/debate` formal
+L3 roda no início da execução (Gate 3), como manda o protocolo.

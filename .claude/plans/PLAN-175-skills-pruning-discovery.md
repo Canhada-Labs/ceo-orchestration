@@ -5,8 +5,8 @@ status: draft
 created: 2026-08-11
 owner: CEO
 depends_on: [PLAN-171]
-budget_tokens: TBD no refinamento (estimativa grosseira 150-300k)
-budget_sessions: 2-4
+budget_tokens: 150-300k (firmado S302e; passo 3 migração é o grosso)
+budget_sessions: 2-4 (passo 1 = 1; passos 2-3 = 1-2; passo 5 = 1)
 context_risk: low
 external_wait: "gatilho: pós-GA v1.3.0; W1c do PLAN-171 (fronteira de ownership) primeiro"
 tags: [skills, telemetry, pruning, seed]
@@ -65,3 +65,26 @@ tags: [skills, telemetry, pruning, seed]
 - Telemetria continua ligada pós-poda: se unknown-ratio não cair com
   a descoberta (passo 1), o problema é o INJECTOR, não o catálogo —
   reavaliar antes do passo 2.
+
+## 3. Pronto-para-execução (S302e)
+
+**ACs por passo:** P1 = mecanismo de sugestão vivo com positive
+control (spawn sem skill ⇒ sugestão aparece no transcript) + baseline
+do unknown-ratio publicado com inputs (janela 90d, N≥100). P2 = lista
+de arquivamento DERIVADA pela regra determinística (nunca curada à
+mão) + `archive/` restaurável testado (1 skill arquivada e restaurada
+no mesmo PR de teste). P3 = 116 domain movidos p/ packs assinados
+(squad-install), 1-2 domínios de referência em-tree, CI verde sem os
+packs; AC-mestre: install/upgrade de adopter SEM packs funciona
+(smoke). P5 = superfícies de claim derivadas ("N core + M frontend +
+packs opt-in"); AC: `check-claude-md-claims` verde com tolerance=0
+após a mudança.
+
+**Dependências verificadas:** PLAN-171 W1c (contrato de fronteira)
+antes do P3; sweep de atualidade EXECUTA no W-IM/172 (dono único).
+
+**Runbook sessão 1:** ligar telemetria/sugestão (P1) + medir
+baseline. Nada de poda na sessão 1 — por design.
+
+**Debate:** Codex r1→r3 (GO no r3); `/debate start PLAN-175` no
+início da execução; a poda em si passa pelo processo SP-NNN/soak.

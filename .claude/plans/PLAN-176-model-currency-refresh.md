@@ -5,8 +5,8 @@ status: draft
 created: 2026-08-11
 owner: CEO
 depends_on: [PLAN-169]
-budget_tokens: 150-300k (firmar no refinamento)
-budget_sessions: 2-3
+budget_tokens: 150-300k (firmado S302e; W1 rotina 100-150k, W2-W3 100-150k)
+budget_sessions: 2-3 (W1 1; W2+W3 1-2; fase-2 auto-merge FORA — gated em ADR)
 context_risk: medium
 external_wait: "milestone: pós-GA v1.3.0 + registry/resolver landados (PLAN-169 W4.3 item iv). L3: rotina com REDE que escreve commits ⇒ debate próprio"
 tags: [model-currency, egress, automation, seed]
@@ -69,6 +69,34 @@ tags: [model-currency, egress, automation, seed]
 - PR da rotina tocando qualquer campo da camada T ⇒ vermelho
   fail-closed no CI (o lint distingue T de P por schema).
 - Fase 2 (auto-merge) só com ratificação explícita do Owner em ADR.
+
+## 3b. Pronto-para-execução (S302e)
+
+**ACs por wave:** W1 = rotina registrada (RemoteTrigger, irmã da
+substrate-watch trig_014Y…) com 1 run manual verde que compara feeds
+vs registry vs pins e emite relatório; AC: relatório lista os 3 CLIs
+com {instalado, pin, upstream}. W2 = 1 PR real gerado pela rotina
+(pode ser sobre lançamento simulado no fixture) tocando SÓ campos P;
+AC: o lint `check-model-literals` (do W4.3-iv/169) fica VERMELHO se o
+PR tocar campo T — positive control do próprio guard-rail. W3 =
+advisory tripla visível no `/ceo-boot` com os 3 CLIs; AC: nunca
+bloqueia (é advisory por construção — testar com upstream fake à
+frente do pin).
+
+**Dependência dura:** registry+resolver+lint landados (PLAN-169
+W4.3-iv). Sem eles, este plano não abre — não há o que refrescar.
+
+**Draft do ADR-149 Amendment 2** (Trust vs Preference — a doutrina
+que este plano implementa a fase-com-rede): em
+`PLAN-176/adr-149-amendment2-draft.md`; formaliza via cerimônia de
+ADR no início da execução (nunca criado direto em `.claude/adr/`).
+
+**Runbook sessão 1:** `/debate start PLAN-176` (L3: egress + rotina
+que escreve commits) → cerimônia do ADR-149-A2 → W1.
+
+**Debate:** este plano NÃO passou pelo pair-rail de S302c (nasceu
+depois) — o round Codex r4 do conjunto cobre; o `/debate` L3 formal
+é obrigatório na abertura por envolver egress.
 
 ## 4. Anexo — inventário S302d (para o lote W2.10/W4.3; NÃO re-descobrir)
 
