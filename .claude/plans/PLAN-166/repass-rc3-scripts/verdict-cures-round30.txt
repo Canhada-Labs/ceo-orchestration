@@ -1,0 +1,9 @@
+P1 — `.claude/plans/PLAN-166/OWNER-GA-CUT.sh:82` — The orphan-release probe runs only when both the remote and local GA tags are absent. After a partial attempt where the remote tag is deleted but the signed local tag and GitHub Release survive, rerun enters `SKIP_TO_PUSH`, re-pushes the tag, and reuses the stale Release; `release.yml` refreshes assets but not its title/notes. Minimal fix: whenever `_ga_rls` is empty, require the Release to be absent regardless of local-tag presence.
+
+P1 — `.claude/plans/PLAN-166/OWNER-GA-CUT.sh:580,601` — The “terminal” fast path is not read-only: it prints that npm and the public Release are complete but sets no terminal-mode flag. A resumed run after successful publication can later time out selecting the npm run, select a newer no-op attempt whose Publish step is skipped, or hit an API failure—and then draft the valid public GA. Minimal fix: persist a terminal/read-only mode; verify a successful publish attempt if available, but abort without mutating the Release when terminal evidence cannot be re-read.
+
+P1 — `.claude/plans/PLAN-166/OWNER-GA-CUT.sh:721` — The final safety re-draft suppresses failure with `|| true` and then claims the Release was re-drafted. If undraft succeeds but the final API read fails and the compensating edit also fails, the GA remains public while the operator is told it is safely draft. Minimal fix: require `gh release edit --draft` to succeed and verify `isDraft=true`; otherwise report the unresolved public state explicitly.
+
+The RC commit closure, manifest/allowlist equality, input hash, and pre-commit rerun path are coherent, but these three GA remote-state defects require repair and renewed ceremony review.
+
+VERDICT: NO-GO

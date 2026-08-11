@@ -1,0 +1,15 @@
+P1 — [.github/workflows/release.yml:965](/private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/cbec69fd-7f41-4426-81f6-544a454e392a/scratchpad/rc3-wt/.github/workflows/release.yml:965), [.claude/scripts/tests/test_release_workflow_asserts.py:1368](/private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/cbec69fd-7f41-4426-81f6-544a454e392a/scratchpad/rc3-wt/.claude/scripts/tests/test_release_workflow_asserts.py:1368)
+
+Concrete failure scenario: stable releases now start as drafts, but the claimed consumer never undrafts them. `OWNER-GA-CUT.sh` only checks `isPrerelease == false`; that is also true for a non-prerelease draft, so after npm succeeds it declares “GA PUBLICADO” while the GitHub Release remains private. A restart cannot recover because the script rejects an existing GA tag at line 43. The new test pins only draft creation, so it passes despite the broken end-to-end transition.
+
+Minimal fix: make the GA ceremony restart-safe and, only after npm version, publish-step receipt, and tag/main liveness checks pass, explicitly undraft as its final mutation; then verify both `isDraft == false` and `isPrerelease == false`. Add an assertion covering that consumer transition.
+
+P1 — [.github/workflows/release.yml:23](/private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/cbec69fd-7f41-4426-81f6-544a454e392a/scratchpad/rc3-wt/.github/workflows/release.yml:23), [.github/workflows/npm-publish.yml:116](/private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/cbec69fd-7f41-4426-81f6-544a454e392a/scratchpad/rc3-wt/.github/workflows/npm-publish.yml:116)
+
+Concrete failure scenario: the in-workflow observer was correctly widened to 45/50 minutes, but the tracked GA ceremony still gives the entire `release.yml` run only 40 minutes from tag push. A legitimate 6-minute queue plus 34-minute gate—and then the dependent `publish-release` job—makes the ceremony abort although the workflow can still finish green. Because the tag is already pushed and reruns reject an existing tag, promotion becomes non-idempotent and externally order-dependent.
+
+Minimal fix: widen every rc.3/GA outer observer beyond queue time, the 35-minute producer, and dependent-job completion, preferably polling terminal workflow state with a shared budget; allow safe resume when the existing remote tag peels to the expected commit.
+
+The count, CHANGELOG, checklist, timeout, and tag-liveness cures otherwise hold; the two ceremony integration defects must be closed before rc.3.
+
+VERDICT: NO-GO

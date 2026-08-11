@@ -1,0 +1,11 @@
+REJECT
+
+P1 — `.claude/plans/PLAN-166/OWNER-GA-CUT.sh:155`: G0 accepts dirty `$VF`, `$VF.asc`, and `$VD` without rejecting symlinks or other non-regular files. A pre-existing `$VD` symlink to `$VF` causes the verdict-template redirection at line 297 to overwrite the already-signed verdict-fields file. Both paths are then staged, while local and server-side readers follow the symlink; because the embedded signature is only checked for presence server-side, the invalid signature binding can pass and reach release. Minimal fix: reject symlinks/non-regular partial artifacts, generate VF/VD through same-directory temporary regular files plus atomic rename, assert both are regular immediately before staging, and re-run `gpg --verify "$VF.asc" "$VF"` after generating VD but before moving the signature.
+
+P1 — `.claude/plans/PLAN-166/OWNER-GA-CUT.sh:352`: `SKIP_TO_PUSH` resumes a local-only GA tag by verifying only its tag signature before the push at line 362. If the Owner aborts at the `SIM` prompt and resumes after the verdict’s 24-hour TTL—or sufficiently near expiry—the script pushes a tag that release.yml must reject. This also skips the fresh `origin/main == tagged commit`, clean-tree, delta-guard, and CI assertions. Minimal fix: add a tag-exists-aware pre-push preflight requiring tag commit = HEAD = origin/main, clean tree, successful Validate CI, fresh verdict with release-duration margin, delta guard, and tag signature; expired state must stop before remote push and enter a named verdict/tag regeneration recovery.
+
+P2 — `.claude/plans/PLAN-166/repass-ga/run-ga-repass.sh:143`: provenance records the runner start only to minute precision. Immediately after the exact 24-hour hold boundary, OWNER-GA-CUT accepts the hold in seconds, but the truncated evidence timestamp can appear up to 59 seconds too early and fail post-run validation; reruns within that minute repeat the failure. Minimal fix: record seconds with `%Y-%m-%dT%H:%M:%SZ`, or record the epoch directly.
+
+Commit 1’s literal staging and both manifest/allowlist sets otherwise appear closed, but the two P1 GA paths must be cured before the cut.
+
+VERDICT: NO-GO

@@ -1,0 +1,3564 @@
+You are the cross-vendor reviewer on the 24h release hold (ADR-103) for
+the GA promotion of v1.3.0-rc.2 to v1.3.0. Be adversarial and concrete.
+Your output is advisory evidence, not an authorization. The scope is
+SPLIT in 2 payloads (redactor cap); this is payload 2/2: executable release machinery (workflows, driver, tag guard, bump sites, npm await-gate, step-15 validator).
+Each part is judged independently; GA needs GO on both.
+
+CONTEXT
+- Repo: ceo-orchestration, a governance/auditability framework. Python
+  stdlib-only, >=3.9. No speed claims anywhere.
+- v1.3.0-rc.2 is CUT, signed, CI-green, published as a GitHub pre-release,
+  under a signed pair-rail verdict (GO-WITH-CONDITIONS).
+- Review history you must NOT re-litigate: 4 pre-rc.1 rounds (18
+  findings, 17 fixed 1 refuted) + 4 multi-part rounds rc.1->rc.2
+  (all real findings cured in fix-forwards; final candidate green).
+- FOUR NAMED PRODUCT EXCEPTIONS ride this GA by signed decision
+  (V1/V2/V4/V5 - upgrade.sh observer w/o baseline-invalid guard; false
+  --pin NOTE; rejected-symlink hash fallthrough; FMS_LINK_PATHS unset
+  allow-all on install). Cures are STAGED in a post-GA ceremony pack.
+  Do NOT report these as new; DO report if any is WORSE than described
+  or reachable on the mainline install/upgrade path (they were assessed
+  as non-mainline).
+- OWN-0016 is a known gated defect (ADR-190 s2.6, expected nightly RED).
+
+WHAT THIS HOLD RE-PASS IS FOR
+1. GA EXECUTABILITY: remaining path is bump --stable (expected no-op),
+   tag --stable, push (push triggers npm publish via OIDC). Anything
+   non-idempotent or order-dependent?
+2. IRREVERSIBILITY: what lands wrong on npm and cannot be undone?
+   Version-string disagreement across published surfaces is the
+   highest-value class.
+3. ADOPTER BLAST RADIUS: v1.2.0 adopter runs the documented upgrade
+   against v1.3.0 - broken/locked states?
+4. HONESTY OF CLAIMS: every count/guarantee in the changed docs must
+   match the code at the tag. A gate that cannot fail is a finding.
+5. What a reviewer would most plausibly have missed across 8 rounds.
+
+OUTPUT FORMAT
+Per finding: SEVERITY (P0 blocks GA / P1 fix before GA / P2 follow-up),
+FILE:LINE, concrete failure scenario, minimal fix. Cite the diff.
+End with exactly one line: "VERDICT: GO" or "VERDICT: NO-GO" or
+"VERDICT: GO-WITH-CONDITIONS", plus one sentence. A clean round is a
+legitimate result - do not manufacture findings.
+
+UNIFIED DIFF (v1.2.0..v1.3.0-rc.2, part 2/2) FOLLOWS.
+
+diff --git a/.claude/scripts/await_release_gate.py b/.claude/scripts/await_release_gate.py
+new file mode 100755
+index 0000000..1b5f956
+--- /dev/null
++++ b/.claude/scripts/await_release_gate.py
+@@ -0,0 +1,453 @@
++#!/usr/bin/env python3
++"""await_release_gate.py — PLAN-166 W0 item 6 (F1): decision function that
++tells ``npm-publish.yml`` whether the ``release.yml`` **release-gate** job
++actually passed for *this* tag, at *this* commit, in *this* push.
++
++## The bug this closes (F1, P0)
++
++``npm-publish.yml`` and ``release.yml`` both fire on ``push: tags: v*``.
++They are INDEPENDENT runs — nothing made the publish observe the gate. The
++only barrier was the ``production-npm`` environment approval, i.e. a human
++clicking "approve" with no machine evidence that the governance gate was
++even green. That is a live path to publishing an unreviewed tree.
++
++## Contract
++
++Pure, offline, stdlib-only. Input is the JSON the caller already fetched
++(``gh api .../actions/runs?head_sha=...`` merged with each run's
++``.../jobs``); output is exactly one of three decisions **per evaluation
++point** (the caller polls; each poll is one independent decision):
++
++* ``GRANT`` — only when ONE run satisfies EVERY condition simultaneously:
++  workflow file ``release.yml``, ``event == "push"``,
++  ``head_branch == <tag>``, ``head_sha == <GITHUB_SHA>``, it is FRESH
++  (see below), and its **job** ``release-gate`` has
++  ``conclusion == "success"``. Never the RUN conclusion: ``release.yml``
++  carries ``if: vars.CEO_SOTA_DISABLE != '1'`` on ``release-gate``, so a
++  disabled gate SKIPS the job while the run itself stays green. Reading the
++  run conclusion would grant on a gate that never executed.
++
++* ``WAIT`` — evidence is legitimately not in yet and the deadline has not
++  passed: (a) no candidate run yet — workflows from the same push start in
++  ARBITRARY order, absence is neither failure nor permission; (b) the
++  candidate run exists but the ``release-gate`` job has not materialised in
++  the jobs endpoint yet (eventual consistency — without this state a
++  "BLOCK on mismatch" rule produces an instant false block in the rc.2/GA
++  race); (c) the job exists with ``conclusion: null`` (queued/running).
++
++* ``BLOCK`` — fail-CLOSED: the candidate's gate job concluded anything
++  other than ``success`` (``failure``, ``skipped``, ``cancelled``, …),
++  malformed JSON, an API error payload, or **the deadline elapsed in ANY
++  non-GRANT state**. Per ADR-186 this is INPUT verification, not
++  infrastructure: content we cannot verify is blocked, not waved through.
++
++## Candidate semantics (load-bearing — do not "optimise" this away)
++
++The head-SHA run list contains UNRELATED runs, **including the npm-publish
++run doing the asking**. Non-candidate runs are IGNORED — never BLOCK.
++"Mismatch" is only ever evaluated against the exact candidate
++(workflow + tag + SHA + event). If any near-miss run could BLOCK, every
++release would lose the race against its own presence in the list.
++
++## Freshness (delete + re-tag of the SAME sha)
++
++Re-tagging the same commit leaves the OLD Release run in the list with the
++same ``head_sha``/``head_branch``. Polling before the NEW Release run is
++created would otherwise find the old ``success`` as "most recent" and grant
++— even if the new run later fails. So a candidate must have been created no
++earlier than the asking run's own creation, minus ``--freshness-skew-seconds``
++(default 120s) to absorb same-push jitter: both workflows are created by one
++push event, and their ``created_at`` ordering is arbitrary within seconds.
++Runs older than that window are not candidates at all (→ WAIT, then BLOCK at
++the deadline). KNOWN LIMIT, stated rather than hidden: a delete+re-tag
++completed FASTER than the skew window can still admit the previous run; the
++skew is a jitter allowance, not a proof, and it is printed with every
++decision so the value used is auditable.
++
++``--self-created-at`` is REQUIRED. It is the input that switches this whole
++leg on, so it gets no default: omitting it (or passing an empty/unparseable
++value) is a usage error (exit 2), never a run that silently grants stale
++successes. Same doctrine as ``_release_bump_sites.py --today``: a parameter
++that changes the verdict has no default. The doctrine holds at BOTH layers:
++``GateContext.self_created_at_epoch`` is likewise a required field with no
++default (and an explicit ``None`` raises), so an in-process caller of
++``decide()`` cannot construct a context with the freshness leg silently off.
++
++## Required fields per run object
++
++``path`` (or ``workflow_path``), ``event``, ``head_branch``, ``head_sha``,
++``created_at``, optional ``run_attempt``/``id`` (tie-break), and ``jobs``
++(a list, or the raw ``{"jobs": [...]}`` envelope). A run with no ``path``
++cannot be attributed to a workflow and is therefore not a candidate.
++
++## Usage
++
++    python3 .claude/scripts/await_release_gate.py \
++        --payload-file runs.json --tag v1.3.0 --head-sha "$GITHUB_SHA" \
++        --self-created-at "$SELF_CREATED_AT" --deadline-epoch "$DEADLINE"
++
++``--payload-file -`` reads stdin.
++
++Exit codes:
++    0 — GRANT   (publish may proceed)
++    1 — BLOCK   (fail-closed; caller must fail the job)
++    2 — usage error (bad arguments)
++    3 — WAIT    (caller sleeps and polls again)
++"""
++
++from __future__ import annotations
++
++import argparse
++import calendar
++import json
++import re
++import sys
++import time
++from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Tuple
++
++GRANT = "GRANT"
++WAIT = "WAIT"
++BLOCK = "BLOCK"
++
++EXIT_GRANT = 0
++EXIT_BLOCK = 1
++EXIT_USAGE = 2
++EXIT_WAIT = 3
++
++_EXIT_BY_DECISION = {GRANT: EXIT_GRANT, BLOCK: EXIT_BLOCK, WAIT: EXIT_WAIT}
++
++DEFAULT_WORKFLOW = "release.yml"
++DEFAULT_GATE_JOB = "release-gate"
++DEFAULT_EVENT = "push"
++DEFAULT_FRESHNESS_SKEW_SECONDS = 120
++
++
++class MalformedPayload(Exception):
++    """Input we cannot parse — fail-CLOSED (BLOCK), never ignore."""
++
++
++class GateContext(NamedTuple):
++    """Every input the decision depends on. Printed with every decision."""
++
++    tag: str
++    head_sha: str
++    now_epoch: int
++    # REQUIRED — no default, one layer below the CLI for the same reason the
++    # CLI has ``required=True``: this field arms the delete+re-tag freshness
++    # leg, and a verdict-changing parameter with a default is a fail-open
++    # waiting for the first in-process caller of ``decide()`` that forgets
++    # it. Enforcing the doctrine only at argparse left exactly that hole.
++    self_created_at_epoch: int
++    workflow: str = DEFAULT_WORKFLOW
++    gate_job: str = DEFAULT_GATE_JOB
++    event: str = DEFAULT_EVENT
++    deadline_epoch: Optional[int] = None
++    freshness_skew_seconds: int = DEFAULT_FRESHNESS_SKEW_SECONDS
++
++    @property
++    def deadline_passed(self) -> bool:
++        return self.deadline_epoch is not None and self.now_epoch > self.deadline_epoch
++
++    @property
++    def freshness_floor(self) -> int:
++        if self.self_created_at_epoch is None:
++            # A NamedTuple cannot stop an explicit None; refusing loudly here
++            # keeps "freshness leg silently off" unrepresentable at every
++            # layer instead of only at the CLI.
++            raise ValueError(
++                "freshness leg unarmed: self_created_at_epoch is None — the "
++                "delete+re-tag freshness leg cannot be silently disabled"
++            )
++        return self.self_created_at_epoch - self.freshness_skew_seconds
++
++
++class Decision(NamedTuple):
++    decision: str
++    reason: str
++    facts: Dict[str, Any]
++
++    @property
++    def exit_code(self) -> int:
++        return _EXIT_BY_DECISION[self.decision]
++
++
++_TS_RE = re.compile(
++    r"^(\d{4})-(\d{2})-(\d{2})[Tt ](\d{2}):(\d{2}):(\d{2})"
++    r"(?:\.\d+)?(Z|z|[+-]\d{2}:?\d{2})?$"
++)
++
++
++def parse_timestamp(raw: Any) -> Optional[int]:
++    """ISO-8601 (GitHub flavour) -> epoch seconds UTC. ``None`` if unparseable.
++
++    ``datetime.fromisoformat`` cannot read a trailing ``Z`` on Python 3.9, so
++    this parses explicitly instead of depending on interpreter version.
++    """
++    if not isinstance(raw, str):
++        return None
++    m = _TS_RE.match(raw.strip())
++    if m is None:
++        return None
++    parts = [int(m.group(i)) for i in range(1, 7)]
++    try:
++        epoch = calendar.timegm(
++            (parts[0], parts[1], parts[2], parts[3], parts[4], parts[5], 0, 1, -1)
++        )
++    except (ValueError, OverflowError):
++        return None
++    off = m.group(7)
++    if off and off not in ("Z", "z"):
++        sign = 1 if off[0] == "+" else -1
++        digits = off[1:].replace(":", "")
++        epoch -= sign * (int(digits[:2]) * 3600 + int(digits[2:4]) * 60)
++    return epoch
++
++
++def extract_runs(payload: Any) -> List[Dict[str, Any]]:
++    """Pull the run list out of the payload, or raise MalformedPayload.
++
++    Accepts the raw GitHub envelope (``workflow_runs``) or a plain ``runs``
++    list. An API error body (``{"message": "Bad credentials", ...}``) has
++    neither key and therefore raises — BLOCK, by design.
++    """
++    if not isinstance(payload, dict):
++        raise MalformedPayload("payload is %s, expected a JSON object" % type(payload).__name__)
++    for key in ("workflow_runs", "runs"):
++        if key in payload:
++            value = payload[key]
++            if not isinstance(value, list):
++                raise MalformedPayload("payload['%s'] is not a list" % key)
++            for item in value:
++                if not isinstance(item, dict):
++                    raise MalformedPayload("payload['%s'] holds a non-object entry" % key)
++            return value
++    raise MalformedPayload("payload has no 'workflow_runs' (or 'runs') key")
++
++
++def _workflow_file(run: Dict[str, Any]) -> Optional[str]:
++    for key in ("path", "workflow_path"):
++        value = run.get(key)
++        if isinstance(value, str) and value.strip():
++            return value.strip().rsplit("/", 1)[-1]
++    return None
++
++
++def _same_sha(left: Any, right: Any) -> bool:
++    if not isinstance(left, str) or not isinstance(right, str):
++        return False
++    return left.strip().lower() == right.strip().lower()
++
++
++def is_identity_match(run: Dict[str, Any], ctx: GateContext) -> bool:
++    """workflow + event + tag + head_sha, all four, no partial credit."""
++    return (
++        _workflow_file(run) == ctx.workflow
++        and run.get("event") == ctx.event
++        and run.get("head_branch") == ctx.tag
++        and _same_sha(run.get("head_sha"), ctx.head_sha)
++    )
++
++
++def _sort_key(run: Dict[str, Any], created_at: int) -> Tuple[int, int, int]:
++    attempt = run.get("run_attempt")
++    run_id = run.get("id")
++    return (
++        created_at,
++        attempt if isinstance(attempt, int) else 0,
++        run_id if isinstance(run_id, int) else 0,
++    )
++
++
++def select_candidate(
++    runs: Sequence[Dict[str, Any]], ctx: GateContext
++) -> Tuple[Optional[Dict[str, Any]], Dict[str, int]]:
++    """Most recent FRESH identity-matching run, plus a census of what was seen.
++
++    Raises MalformedPayload when an identity-matching run carries a
++    ``created_at`` we cannot parse: a candidate we cannot date cannot be
++    proven fresh, and unverifiable input is fail-CLOSED.
++    """
++    census = {"runs_total": len(runs), "identity_matches": 0, "stale_candidates": 0}
++    best: Optional[Dict[str, Any]] = None
++    best_key: Optional[Tuple[int, int, int]] = None
++    floor = ctx.freshness_floor
++    for run in runs:
++        if not is_identity_match(run, ctx):
++            continue
++        census["identity_matches"] += 1
++        created_at = parse_timestamp(run.get("created_at"))
++        if created_at is None:
++            raise MalformedPayload(
++                "candidate run id=%r has an unparseable created_at=%r"
++                % (run.get("id"), run.get("created_at"))
++            )
++        if created_at < floor:
++            census["stale_candidates"] += 1
++            continue
++        key = _sort_key(run, created_at)
++        if best_key is None or key > best_key:
++            best, best_key = run, key
++    census["fresh_candidates"] = census["identity_matches"] - census["stale_candidates"]
++    return best, census
++
++
++def find_gate_job(run: Dict[str, Any], gate_job: str) -> Optional[Dict[str, Any]]:
++    """The ``release-gate`` job inside a run, or None if not materialised yet."""
++    jobs = run.get("jobs")
++    if isinstance(jobs, dict):
++        jobs = jobs.get("jobs")
++    if not isinstance(jobs, list):
++        return None
++    for job in jobs:
++        if isinstance(job, dict) and job.get("name") == gate_job:
++            return job
++    return None
++
++
++def _wait_or_block(reason: str, ctx: GateContext, facts: Dict[str, Any]) -> Decision:
++    """Every non-GRANT state collapses to BLOCK once the deadline elapses."""
++    if ctx.deadline_passed:
++        return Decision(BLOCK, "deadline-exceeded:" + reason, facts)
++    return Decision(WAIT, reason, facts)
++
++
++def _candidate_facts(run: Dict[str, Any]) -> Dict[str, Any]:
++    return {
++        "candidate_run_id": run.get("id"),
++        "candidate_run_attempt": run.get("run_attempt"),
++        "candidate_created_at": run.get("created_at"),
++        "candidate_run_status": run.get("status"),
++        "candidate_run_conclusion": run.get("conclusion"),
++    }
++
++
++def decide(payload: Any, ctx: GateContext) -> Decision:
++    """The whole decision. Pure: no network, no clock, no filesystem."""
++    facts: Dict[str, Any] = {}
++    try:
++        runs = extract_runs(payload)
++        candidate, census = select_candidate(runs, ctx)
++    except MalformedPayload as exc:
++        facts["error"] = str(exc)
++        return Decision(BLOCK, "malformed-payload", facts)
++    facts.update(census)
++    if candidate is None:
++        reason = "stale-candidates-only" if census["stale_candidates"] else "candidate-not-yet-created"
++        return _wait_or_block(reason, ctx, facts)
++    facts.update(_candidate_facts(candidate))
++    job = find_gate_job(candidate, ctx.gate_job)
++    if job is None:
++        facts["gate_job_present"] = False
++        return _wait_or_block("gate-job-not-materialised", ctx, facts)
++    facts["gate_job_present"] = True
++    facts["gate_job_status"] = job.get("status")
++    conclusion = job.get("conclusion")
++    facts["gate_job_conclusion"] = conclusion
++    if conclusion is None:
++        return _wait_or_block("gate-job-not-concluded", ctx, facts)
++    if not isinstance(conclusion, str):
++        facts["error"] = "gate job conclusion is %s, expected string or null" % type(conclusion).__name__
++        return Decision(BLOCK, "malformed-payload", facts)
++    if conclusion == "success":
++        return Decision(GRANT, "gate-job-success", facts)
++    return Decision(BLOCK, "gate-job-" + conclusion, facts)
++
++
++def render(decision: Decision, ctx: GateContext) -> str:
++    """Human-readable record. A decision that hides its inputs is unauditable."""
++    remaining = "n/a"
++    if ctx.deadline_epoch is not None:
++        remaining = str(ctx.deadline_epoch - ctx.now_epoch)
++    lines = [
++        "decision=%s reason=%s" % (decision.decision, decision.reason),
++        "inputs: workflow=%s gate_job=%s event=%s tag=%s head_sha=%s"
++        % (ctx.workflow, ctx.gate_job, ctx.event, ctx.tag, ctx.head_sha),
++        "inputs: now_epoch=%s deadline_epoch=%s deadline_remaining_s=%s"
++        % (ctx.now_epoch, ctx.deadline_epoch, remaining),
++        "inputs: self_created_at_epoch=%s freshness_skew_s=%s freshness_floor_epoch=%s"
++        % (ctx.self_created_at_epoch, ctx.freshness_skew_seconds, ctx.freshness_floor),
++    ]
++    for key in sorted(decision.facts):
++        lines.append("fact: %s=%r" % (key, decision.facts[key]))
++    return "\n".join(lines)
++
++
++def _load_payload(path: str) -> Any:
++    raw = sys.stdin.read() if path == "-" else open(path, "r", encoding="utf-8").read()
++    return json.loads(raw)
++
++
++def build_parser() -> argparse.ArgumentParser:
++    parser = argparse.ArgumentParser(description="Decide whether release-gate authorises an npm publish.")
++    parser.add_argument("--payload-file", default="-", help="JSON of runs+jobs ('-' = stdin)")
++    parser.add_argument("--tag", required=True, help="tag name, i.e. head_branch of the release run")
++    parser.add_argument("--head-sha", required=True, help="GITHUB_SHA the publish is running against")
++    parser.add_argument("--workflow", default=DEFAULT_WORKFLOW)
++    parser.add_argument("--gate-job", default=DEFAULT_GATE_JOB)
++    parser.add_argument("--event", default=DEFAULT_EVENT)
++    parser.add_argument(
++        "--deadline-epoch",
++        type=int,
++        required=True,
++        help="epoch seconds after which any non-GRANT state becomes BLOCK (fail-closed)",
++    )
++    parser.add_argument("--now-epoch", type=int, default=None, help="override the clock (tests)")
++    parser.add_argument(
++        "--self-created-at",
++        required=True,
++        help=(
++            "created_at of the ASKING run; candidates older than this minus "
++            "the skew are stale. Required: this input arms the delete+re-tag "
++            "freshness leg, and a verdict-changing parameter has no default"
++        ),
++    )
++    parser.add_argument(
++        "--freshness-skew-seconds", type=int, default=DEFAULT_FRESHNESS_SKEW_SECONDS
++    )
++    parser.add_argument("--json", action="store_true", help="emit the decision record as JSON")
++    return parser
++
++
++def main(argv: Optional[Sequence[str]] = None) -> int:
++    args = build_parser().parse_args(argv)
++    # Unconditional parse: `required=True` rejects the OMITTED flag, and this
++    # rejects the empty/garbage value that a truthiness guard would have
++    # silently mapped to "freshness leg off".
++    self_created_at_epoch = parse_timestamp(args.self_created_at)
++    if self_created_at_epoch is None:
++        sys.stderr.write(
++            "error: --self-created-at %r is not an ISO-8601 timestamp "
++            "(the freshness leg cannot run without it)\n" % args.self_created_at
++        )
++        return EXIT_USAGE
++    ctx = GateContext(
++        tag=args.tag,
++        head_sha=args.head_sha,
++        now_epoch=args.now_epoch if args.now_epoch is not None else int(time.time()),
++        workflow=args.workflow,
++        gate_job=args.gate_job,
++        event=args.event,
++        deadline_epoch=args.deadline_epoch,
++        self_created_at_epoch=self_created_at_epoch,
++        freshness_skew_seconds=args.freshness_skew_seconds,
++    )
++    try:
++        payload = _load_payload(args.payload_file)
++    except (OSError, ValueError) as exc:
++        decision = Decision(BLOCK, "malformed-payload", {"error": str(exc)})
++    else:
++        decision = decide(payload, ctx)
++    if args.json:
++        print(json.dumps({
++            "decision": decision.decision,
++            "reason": decision.reason,
++            "facts": decision.facts,
++            "inputs": ctx._asdict(),
++        }, sort_keys=True, default=str))
++    else:
++        print(render(decision, ctx))
++    return decision.exit_code
++
++
++if __name__ == "__main__":
++    sys.exit(main())
+diff --git a/.claude/scripts/local/_release_bump_sites.py b/.claude/scripts/local/_release_bump_sites.py
+new file mode 100755
+index 0000000..4c7d0aa
+--- /dev/null
++++ b/.claude/scripts/local/_release_bump_sites.py
+@@ -0,0 +1,299 @@
++#!/usr/bin/env python3
++# ============================================================================
++# _release_bump_sites.py — the ONE source of truth for the release version
++# sites, and the only writer of them.
++#
++# Why a module and not a heredoc. Until PLAN-166/W0 this table lived inside
++# `release.sh` as a `python3 - <<'PY'` heredoc. That had two costs that both
++# showed up in the v1.3.0-rc.1 re-pass:
++#
++#   1. the site list existed TWICE — once in the heredoc (the writer) and once
++#      in the driver's `VERSION_FILES` array (the dry-run restore list). A list
++#      that must match another list by hand does not stay matched; a restore
++#      list shorter than the write list leaves debris (the S273 class).
++#   2. it was untestable. `--today` could not be pinned, so the D+1
++#      non-idempotence (F2) could not be exercised by a test.
++#
++# Both are closed here: the driver DERIVES its restore list from
++# `print-sites --include-generated`, and `--today` is a REQUIRED parameter with
++# NO DEFAULT (a parameter that changes the verdict never has a default —
++# frozen-evidence lesson).
++#
++# Idempotence contract (F2). A `last-reviewed:` stamp asserts "this document
++# was re-read FOR THIS RELEASE". Re-dating it without re-reading is a false
++# claim on a surface that a signed tag then covers. So the stamp sites
++# skip the ENTIRE line — neither date nor version — when the version already
++# on the stamp is the target. `--restamp` is the named, explicit route for a
++# real re-review.
++#
++# The two stamp oracles (do not collapse them). `npm/README.md` is watched by
++# verify-counts' VERSION_SITES; SBOM.md / SECURITY.md / VERSIONING.md are
++# watched ONLY by check-canonical-doc-freshness.py. Both oracles decide on the
++# VERSION in the stamp, never on the date — which is what makes freezing the
++# date safe.
++#
++# The support window (kinds "minor"/"prev_minor" — v1.3.0 re-pass, F-sites).
++# verify-counts' VERSION_SITES also watches "Current MINOR (vX.Y.x)" and
++# "Previous MINOR (vX.Y.x)" in SECURITY.md and VERSIONING.md (S293). Those
++# sites were OUTSIDE this table at birth, so the next MINOR bump would write
++# everything else, then DIE at the driver's own verify-counts call with a
++# half-written tree (outside --dry-run there is no restore trap). The rule the
++# oracle enforces is mechanical — Current = the target's minor, Previous = the
++# minor immediately before it — so this writer derives both from --target and
++# the "ONE source of truth" claim above stays true. The single non-derivable
++# case, an X.0.0 target, is SKIPPED loudly and never guessed: the oracle
++# cannot value-check it either (it derives prev="" at X.0), and a MAJOR
++# support-window transition is release-train judgment, not sed.
++# ============================================================================
++"""Release version-site table + writer (stdlib only, Python >= 3.9)."""
++
++from __future__ import annotations
++
++import argparse
++import os
++import re
++import sys
++from typing import Callable, List, Optional, Sequence, Tuple
++
++SEMVER = r"\d+\.\d+\.\d+"
++STAMP_RX = r"(last-reviewed: )(\d{4}-\d{2}-\d{2})( +v)(" + SEMVER + r")"
++DATE_RX = re.compile(r"\A\d{4}-\d{2}-\d{2}\Z")
++
++# Kinds:
++#   "plain"      — literal regex substitution, no stamp semantics.
++#   "stamp"      — "last-reviewed: <date> v<version>"; skipped wholesale when
++#                  the version already equals the target (unless --restamp).
++#   "minor"      — support-window site carrying the TARGET's minor (vX.Y.x).
++#   "prev_minor" — support-window site carrying the minor immediately BEFORE
++#                  the target; not derivable at X.0.0 (skipped loudly there).
++PLAIN = "plain"
++STAMP = "stamp"
++MINOR = "minor"
++PREV_MINOR = "prev_minor"
++
++# (path, kind, pattern) — patterns anchored exactly as their oracle checks
++# them, so historical version mentions elsewhere in the file are never touched.
++_SITES: List[Tuple[str, str, str]] = [
++    ("VERSION", PLAIN, r"\A\s*" + SEMVER + r"\s*\Z"),
++    # PLAN-169 W2.6 (ledger E.1/F.7/A.0.4): the install-state marker is the
++    # surface check-framework-updates.sh reads MARKER-FIRST — a bump that
++    # skips it leaves every adopter's updater reporting behind-minor
++    # forever. Joins _SITES with its oracle mirror in verify-counts
++    # VERSION_SITES (no census numeral here: the F6 guard forbids
++    # site-count claims in comments, ordinals included).
++    (".claude/.framework-version", PLAIN, r"\A\s*" + SEMVER + r"\s*\Z"),
++    ("npm/package.json", PLAIN, r'("version"\s*:\s*")' + SEMVER + r'(")'),
++    ("pyproject.toml", PLAIN, r'(?m)^(version\s*=\s*")' + SEMVER + r'(")'),
++    ("INSTALL.md", PLAIN, r"(--pin v)" + SEMVER),
++    (
++        "docs/ARCHITECTURE.md",
++        PLAIN,
++        r"(currently\s+v)" + SEMVER + r"(, aligned with the repo)",
++    ),
++    # README.md and CLAUDE.md are deliberately NOT rows here: neither is a
++    # version site. `VERSION=` never existed in either (verify-counts dropped
++    # its dead rules for both in S291 — `git log -S 'VERSION='` finds no
++    # commit that added one — and the release checklist states the same). A
++    # writer row for a site no oracle watches would be that dead rule
++    # reintroduced on the WRITE side: the day someone adds a `VERSION=` line
++    # to README.md, the bump would rewrite a file every other surface
++    # declares out of scope.
++    ("SBOM.md", PLAIN, r"(\*\*Version:\*\* `)" + SEMVER + r"(`)"),
++    # --- the support window (oracle: verify-counts VERSION_SITES modes
++    #     "minor"/"prev_minor", S293). Patterns anchored exactly as the
++    #     oracle's — SECURITY.md bolds the label, VERSIONING.md does not. ---
++    ("SECURITY.md", MINOR, r"(\*\*Current MINOR\*\* \(`v)\d+\.\d+(\.x`\))"),
++    ("VERSIONING.md", MINOR, r"(Current MINOR \(`v)\d+\.\d+(\.x`\))"),
++    ("SECURITY.md", PREV_MINOR, r"(\*\*Previous MINOR\*\* \(`v)\d+\.\d+(\.x`\))"),
++    ("VERSIONING.md", PREV_MINOR, r"(Previous MINOR \(`v)\d+\.\d+(\.x`\))"),
++    # --- the review stamps (idempotence-critical; the table IS the census,
++    #     a numeral here would be a mirror that drifts) ---
++    ("npm/README.md", STAMP, STAMP_RX),
++    ("SBOM.md", STAMP, STAMP_RX),
++    ("SECURITY.md", STAMP, STAMP_RX),
++    ("VERSIONING.md", STAMP, STAMP_RX),
++]
++
++# Written by the bump PHASE but not by this module: `build-plugin.py
++# --write-manifests` regenerates them from VERSION. They belong in any
++# derived restore/guard list, which is why they are exported here instead of
++# being re-typed by every caller (the duplicated-list failure this module
++# exists to kill).
++GENERATED_BY_BUMP: List[str] = [
++    ".claude-plugin/plugin.json",
++    ".claude-plugin/marketplace.json",
++]
++
++
++def site_paths(include_generated: bool = False) -> List[str]:
++    """Every path this module may write, de-duplicated, in table order."""
++    out: List[str] = []
++    for path, _kind, _rx in _SITES:
++        if path not in out:
++            out.append(path)
++    if include_generated:
++        for path in GENERATED_BY_BUMP:
++            if path not in out:
++                out.append(path)
++    return out
++
++
++def _plain_replacement(pattern: str, target: str) -> str:
++    """Replacement string for a PLAIN site, rebuilt from its group count."""
++    if pattern.startswith(r"\A"):  # the bare VERSION file
++        return target + "\n"
++    groups = re.compile(pattern).groups
++    if groups == 0:
++        return target
++    if groups == 1:
++        return r"\g<1>" + target
++    return r"\g<1>" + target + r"\g<2>"
++
++
++def _stamp_replacer(
++    target: str, today: str, restamp: bool
++) -> Callable[["re.Match"], str]:
++    def _repl(m: "re.Match") -> str:
++        if not restamp and m.group(4) == target:
++            # Defense in depth: the whole line is left byte-identical. Both
++            # stamp oracles read the VERSION, so freezing the date costs
++            # nothing and re-dating without re-reading would be a false claim.
++            return m.group(0)
++        return m.group(1) + today + m.group(3) + target
++
++    return _repl
++
++
++def bump(
++    target: str,
++    today: str,
++    *,
++    restamp: bool = False,
++    root: Optional[str] = None,
++    out=None,
++) -> int:
++    """Rewrite every version site to `target`. Returns files CHANGED."""
++    if not DATE_RX.match(today):
++        raise ValueError("--today must be YYYY-MM-DD, got %r" % (today,))
++    if not re.match(r"\A" + SEMVER + r"\Z", target):
++        raise ValueError("--target must be a bare semver, got %r" % (target,))
++    stream = out if out is not None else sys.stdout
++    base = root or os.getcwd()
++    # Support-window derivation, BEFORE any byte is written: whether every
++    # site is writable is decided up front, never discovered mid-loop with a
++    # half-bumped tree behind it.
++    _maj, _min = (int(x) for x in target.split(".")[:2])
++    minor_target = "%d.%d" % (_maj, _min)
++    prev_minor = "%d.%d" % (_maj, _min - 1) if _min > 0 else None
++    changed = 0
++    for path, kind, pattern in _SITES:
++        if kind == PREV_MINOR and prev_minor is None:
++            # X.0.0: Previous MINOR is not derivable from the target, and the
++            # oracle skips value-checking it there too (prev="" at X.0). Never
++            # guess a support-window promise — leave it and say so, loudly.
++            print(
++                "  !!   %s: Previous MINOR left untouched — not derivable "
++                "from %s (X.0.0); the support window needs release-train "
++                "judgment here" % (path, target),
++                file=stream,
++            )
++            continue
++        full = os.path.join(base, path)
++        try:
++            with open(full, encoding="utf-8") as fh:
++                src = fh.read()
++        except OSError:
++            print("  --   %s absent, skipped" % path, file=stream)
++            continue
++        written = target
++        if kind == STAMP:
++            new, n = re.subn(pattern, _stamp_replacer(target, today, restamp), src)
++            label = "review stamp"
++        elif kind == MINOR:
++            written = minor_target
++            new, n = re.subn(pattern, r"\g<1>" + written + r"\g<2>", src)
++            label = "support-window (Current MINOR) site"
++        elif kind == PREV_MINOR:
++            written = prev_minor
++            new, n = re.subn(pattern, r"\g<1>" + written + r"\g<2>", src)
++            label = "support-window (Previous MINOR) site"
++        else:
++            new, n = re.subn(pattern, _plain_replacement(pattern, target), src)
++            label = "version site"
++        if n == 0:
++            print(
++                "  --   %s: no %s found (ok if unwatched)" % (path, label),
++                file=stream,
++            )
++            continue
++        if new == src:
++            print(
++                "  --   %s: %s already at %s (line untouched)"
++                % (path, label, written),
++                file=stream,
++            )
++            continue
++        with open(full, "w", encoding="utf-8") as fh:
++            fh.write(new)
++        changed += 1
++        print(
++            "  ok   %s (%d %s%s -> %s)"
++            % (path, n, label, "" if n == 1 else "s", written),
++            file=stream,
++        )
++    return changed
++
++
++def main(argv: Optional[Sequence[str]] = None) -> int:
++    parser = argparse.ArgumentParser(
++        prog="_release_bump_sites.py",
++        description="Release version-site table + writer (single source).",
++    )
++    sub = parser.add_subparsers(dest="cmd")
++
++    p_list = sub.add_parser(
++        "print-sites",
++        help="print every path the bump may write, one per line",
++    )
++    p_list.add_argument(
++        "--include-generated",
++        action="store_true",
++        help="also print the plugin manifests regenerated by build-plugin.py",
++    )
++
++    p_bump = sub.add_parser("bump", help="rewrite the version sites")
++    # NO DEFAULT, BY CONTRACT. `--today` decides whether a signed
++    # "last-reviewed" claim moves; a parameter that changes the verdict is
++    # never defaulted (frozen-evidence lesson).
++    p_bump.add_argument("--today", required=True, help="YYYY-MM-DD (required)")
++    p_bump.add_argument("--target", required=True, help="bare semver, e.g. 1.3.0")
++    p_bump.add_argument(
++        "--restamp",
++        action="store_true",
++        help="force the review stamps to move even at the same version",
++    )
++    p_bump.add_argument("--root", default=None, help="repo root (default: cwd)")
++
++    args = parser.parse_args(argv)
++    if args.cmd == "print-sites":
++        for path in site_paths(include_generated=args.include_generated):
++            print(path)
++        return 0
++    if args.cmd == "bump":
++        try:
++            bump(
++                args.target,
++                args.today,
++                restamp=args.restamp,
++                root=args.root,
++            )
++        except ValueError as exc:
++            print("FAIL: %s" % exc, file=sys.stderr)
++            return 2
++        return 0
++    parser.print_usage(sys.stderr)
++    return 2
++
++
++if __name__ == "__main__":
++    sys.exit(main())
+diff --git a/.claude/scripts/local/_release_tag_guard.py b/.claude/scripts/local/_release_tag_guard.py
+new file mode 100755
+index 0000000..cec97a3
+--- /dev/null
++++ b/.claude/scripts/local/_release_tag_guard.py
+@@ -0,0 +1,584 @@
++#!/usr/bin/env python3
++# ============================================================================
++# _release_tag_guard.py — the two fail-closed asserts `tag()` runs before it
++# asks the Owner's key to sign anything.
++#
++# WHY THIS EXISTS (v1.3.0-rc.1 re-pass, F2 + the F1/F2 composite risk):
++#
++#   (a) ANCESTRY. Nothing verified that the commit being tagged is on main.
++#       `bump` could create a local commit AFTER the preflight proved CI green
++#       for a different SHA, and `tag()` would sign that never-tested tree.
++#       Two DISTINCT failures, never merged into one message: "could not talk
++#       to origin" (network/offline — has a named escape hatch) and "HEAD is
++#       not an ancestor of origin/main" (a real governance stop). The fetch and
++#       the merge-base are SEPARATE statements: a failed fetch followed by a
++#       merge-base against a stale ref is a FALSE APPROVAL.
++#
++#   (b) RESTRICTED DELTA. The invariant is "nothing landed after what the
++#       re-pass reviewed, other than the verdict itself". The anchor is the
++#       REVIEWED PARENT recorded in the signed verdict — one rule for RC and
++#       GA. Anchoring on "the last RC" is wrong in both directions: for the GA
++#       it coincides by accident, and for an rc.2 it would reject the very
++#       W0/W1 fixes the re-pass just reviewed.
++#
++#       The allowlist is TAG-SPECIFIC and CLOSED:
++#         * never the wildcard `pair-rail-verdict-*.md` — that would let a
++#           historical verdict or the template be touched and still pass;
++#         * never `repass-<N>/**` — any file dropped into that directory after
++#           the review would pass the guard, and the pair-rail step-15 replay
++#           does not cover plan artifacts;
++#         * so the set closes by NAME (exact paths, set equality against the
++#           re-pass MANIFEST) *and* by CONTENT (the verdict pins the sha256 of
++#           MANIFEST.sha256, and the manifest itself is verified with
++#           `shasum -a 256 -c`);
++#         * and a plan path OUTSIDE the manifest directory — where no sha256
++#           pins content — is admitted ONLY as `verdict-fields-<TAG>.md` with
++#           the literal target tag, at its ONE canonical path (directly in
++#           the plan directory containing the manifest dir): the plan file
++#           itself, immutable repass history, another tag's verdict-fields,
++#           and same-basename look-alikes in any other directory all close by
++#           name alone and would carry a post-review edit onto the tag;
++#         * the reviewed parent itself must be an ANCESTOR of HEAD —
++#           `cat-file -e` proves existence, not lineage, and a fabricated
++#           `commit-tree` anchor makes the whole delta trivially clean.
++#
++# THE LOCAL ASSERT IS NOT ENOUGH. A tag signed by hand skips this driver
++# entirely, and the pair-rail step 15 recomputes inputs_hash only over the
++# manifest — which deliberately EXCLUDES the bump surfaces. The same assert
++# therefore goes server-side into `.github/workflows/release.yml` in PLAN-166
++# W1 (release.yml is canonical; it is changed under the GPG ceremony, not
++# here). Keep the two implementations in sync: this file is the reference.
++#
++# Exit codes are distinct so the failure MODE is testable, not just the
++# failure:
++#   2 usage   3 fetch failed   4 not-ancestor   5 remote ref unusable
++#   6 delta outside allowlist  7 manifest sha pin mismatch
++#   8 manifest content mismatch (shasum -c)  9 manifest/allowlist set mismatch
++#  10 verdict unusable (missing file/field, wildcard, wrong tag, bad parent)
++#  11 the assert would be VACUOUS (the verdict is not inside the delta it
++#     anchors — e.g. parent_sha == HEAD, which makes the verdict review itself)
++#  12 parent_sha is not an ancestor of HEAD (a fabricated/orphan anchor:
++#     `cat-file -e` proves existence, not lineage — a `commit-tree` object
++#     carrying HEAD's own tree makes diff(parent..HEAD) contain only the
++#     verdict while unreviewed work sits on main)
++# ============================================================================
++"""Ancestry + restricted-delta asserts for the release tag phase."""
++
++from __future__ import annotations
++
++import argparse
++import hashlib
++import os
++import re
++import subprocess
++import sys
++from typing import Dict, List, Optional, Sequence, Set, Tuple
++
++E_USAGE = 2
++E_FETCH = 3
++E_NOT_ANCESTOR = 4
++E_REMOTE_REF = 5
++E_DELTA = 6
++E_MANIFEST_PIN = 7
++E_MANIFEST_CONTENT = 8
++E_MANIFEST_SET = 9
++E_VERDICT = 10
++E_VACUOUS = 11
++E_PARENT_NOT_ANCESTOR = 12
++
++HEX40 = re.compile(r"\A[0-9a-f]{40}\Z")
++HEX64 = re.compile(r"\A[0-9a-f]{64}\Z")
++GLOB_CHARS = "*?["
++VERDICT_PREFIX = ".claude/governance/pair-rail-verdict-"
++# The allowlist is EXHAUSTIVE, not merely closed: the verdict for this tag plus
++# plan-side evidence (the `verdict-fields-<TAG>` pair and the re-pass artifact
++# directory both live under `.claude/plans/`). Anything else — a version site, a
++# workflow, any code path — would re-open the very hole the delta assert exists
++# to close: a post-review bump commit riding in on the tag.
++EVIDENCE_PREFIX = ".claude/plans/"
++
++
++def _fail(code: int, msg: str) -> int:
++    # Flush the ok-lines first: an operator reading a release failure must see
++    # WHICH checks passed before the one that stopped it, in order.
++    sys.stdout.flush()
++    print("FAIL: %s" % msg, file=sys.stderr)
++    sys.stderr.flush()
++    return code
++
++
++def _git(repo: str, *args: str) -> Tuple[int, str, str]:
++    proc = subprocess.run(
++        ["git"] + list(args),
++        cwd=repo,
++        stdout=subprocess.PIPE,
++        stderr=subprocess.PIPE,
++        universal_newlines=True,
++    )
++    return proc.returncode, proc.stdout, proc.stderr
++
++
++# ---------------------------------------------------------------------------
++# (a) ancestry
++# ---------------------------------------------------------------------------
++def ancestry(repo: str, remote: str, branch: str, offline_ack: bool) -> int:
++    ref = "%s/%s" % (remote, branch)
++    if offline_ack:
++        print(
++            "  --   ancestry: --offline-ack given, NOT fetching; the "
++            "merge-base below is judged against a possibly STALE %s" % ref
++        )
++    else:
++        rc, _out, err = _git(repo, "fetch", "--quiet", remote, branch)
++        # NEVER `;` between the fetch and the merge-base: a failed fetch plus a
++        # stale ref reads as approval.
++        if rc != 0:
++            return _fail(
++                E_FETCH,
++                "could not talk to origin: `git fetch %s %s` exited %d.\n"
++                "      This is NOT a verdict on the commit — the check did not "
++                "run.\n"
++                "      Fix the network/remote and re-run, or, if you are "
++                "deliberately\n"
++                "      offline and accept judging against the last-known ref, "
++                "re-run\n"
++                "      with --offline-ack (it is recorded in the output).\n"
++                "      git said: %s" % (remote, branch, rc, err.strip()),
++            )
++        print("  ok   fetched %s" % ref)
++
++    rc, out, err = _git(repo, "rev-parse", "--verify", "--quiet", ref)
++    if rc != 0 or not out.strip():
++        return _fail(
++            E_REMOTE_REF,
++            "no usable ref %s in this repo — cannot judge ancestry "
++            "(git said: %s)" % (ref, err.strip()),
++        )
++    remote_sha = out.strip()
++
++    rc, _out, err = _git(repo, "merge-base", "--is-ancestor", "HEAD", ref)
++    if rc == 0:
++        print("  ok   HEAD is an ancestor of %s (%s)" % (ref, remote_sha[:12]))
++        return 0
++    if rc == 1:
++        return _fail(
++            E_NOT_ANCESTOR,
++            "HEAD is not an ancestor of %s — push main and re-run the "
++            "preflight.\n"
++            "      A tag on an unpushed commit points at a tree CI never "
++            "saw; the\n"
++            "      preflight's green verdict was about a different SHA."
++            % ref,
++        )
++    return _fail(
++        E_REMOTE_REF,
++        "`git merge-base --is-ancestor HEAD %s` exited %d (neither yes nor "
++        "no) — refusing to guess (git said: %s)" % (ref, rc, err.strip()),
++    )
++
++
++# ---------------------------------------------------------------------------
++# (b) restricted delta
++# ---------------------------------------------------------------------------
++def _parse_verdict(text: str) -> Dict[str, object]:
++    """Minimal, stdlib-only reader for the verdict's fenced YAML block.
++
++    Deliberately NOT a YAML parser: it accepts `key: value` and a single level
++    of `  - item` list entries, and ignores everything else. Anything it cannot
++    read is absent, and every consumer below treats absent as fail-closed.
++
++    Parity with the step-15 reader (`.github/scripts/
++    validate-pair-rail-verdict.py`, parse_verdict_file), stated at its REAL
++    scope: block selection (the regex below is the validator's own — the
++    first ```yaml fence, not the first fence of any language) and inline
++    comment stripping MATCH; list parsing (`- item`) exists ONLY here —
++    parse_verdict_file reads key:value and sub-dicts and would drop
++    `delta_allowlist` silently. The W1 server-side port must therefore extend
++    ONE shared reader (this file is the declared reference), never grow a
++    third parser of the same signed file.
++    """
++    fields: Dict[str, object] = {}
++    block = re.search(r"```yaml\s*\n(.*?)```", text, re.DOTALL)
++    if block is None:
++        # No yaml block -> no fields -> every consumer below fails closed.
++        return fields
++    cur_list: Optional[str] = None
++    for raw in block.group(1).splitlines():
++        line = raw.split("#", 1)[0].rstrip() if "#" in raw else raw.rstrip()
++        if not line.strip():
++            continue
++        if line.startswith(("  - ", "- ")) and cur_list:
++            item = line.split("-", 1)[1].strip()
++            if item:
++                fields[cur_list].append(item)  # type: ignore[union-attr]
++            continue
++        m = re.match(r"\A([A-Za-z0-9_]+):\s*(.*)\Z", line)
++        if not m:
++            continue
++        key, val = m.group(1), m.group(2).strip()
++        if val == "":
++            fields[key] = []
++            cur_list = key
++        else:
++            fields[key] = val
++            cur_list = None
++    return fields
++
++
++def _sha256(path: str) -> str:
++    h = hashlib.sha256()
++    with open(path, "rb") as fh:
++        for chunk in iter(lambda: fh.read(65536), b""):
++            h.update(chunk)
++    return h.hexdigest()
++
++
++def _read_manifest(path: str) -> List[Tuple[str, str]]:
++    """`shasum -a 256` format: '<sha>  <name>' — returns [(sha, name)]."""
++    entries: List[Tuple[str, str]] = []
++    with open(path, encoding="utf-8") as fh:
++        for line in fh:
++            line = line.rstrip("\n")
++            if not line.strip():
++                continue
++            m = re.match(r"\A([0-9a-f]{64}) [ *](.+)\Z", line)
++            if not m:
++                raise ValueError("unparsable manifest line: %r" % line)
++            entries.append((m.group(1), m.group(2)))
++    return entries
++
++
++def _verify_manifest_content(manifest: str) -> Tuple[bool, str]:
++    """Run `shasum -a 256 -c`; fall back to hashlib when shasum is absent."""
++    directory = os.path.dirname(manifest) or "."
++    name = os.path.basename(manifest)
++    try:
++        proc = subprocess.run(
++            ["shasum", "-a", "256", "-c", name],
++            cwd=directory,
++            stdout=subprocess.PIPE,
++            stderr=subprocess.STDOUT,
++            universal_newlines=True,
++        )
++        return proc.returncode == 0, proc.stdout.strip()
++    except (OSError, FileNotFoundError):
++        bad: List[str] = []
++        for want, rel in _read_manifest(manifest):
++            full = os.path.join(directory, rel)
++            if not os.path.isfile(full) or _sha256(full) != want:
++                bad.append(rel)
++        if bad:
++            return False, "hashlib fallback: mismatch/missing: %s" % ", ".join(bad)
++        return True, "hashlib fallback: all entries match"
++
++
++def delta(repo: str, tag: str, verdict_rel: Optional[str]) -> int:
++    verdict_rel = verdict_rel or (VERDICT_PREFIX + tag + ".md")
++    verdict_abs = os.path.join(repo, verdict_rel)
++    if not os.path.isfile(verdict_abs):
++        return _fail(
++            E_VERDICT,
++            "no signed verdict at %s — the re-pass verdict for THIS tag must "
++            "be committed before the tag is cut (release.yml validates it per "
++            "tag on the tagged tree)." % verdict_rel,
++        )
++    with open(verdict_abs, encoding="utf-8") as fh:
++        fields = _parse_verdict(fh.read())
++
++    release_tag = fields.get("release_tag")
++    if release_tag != tag:
++        return _fail(
++            E_VERDICT,
++            "verdict %s declares release_tag=%r, target tag is %r — refusing "
++            "to judge this tag against another tag's verdict."
++            % (verdict_rel, release_tag, tag),
++        )
++    parent = fields.get("parent_sha")
++    if not isinstance(parent, str) or not HEX40.match(parent):
++        return _fail(
++            E_VERDICT,
++            "verdict %s has no usable 40-hex `parent_sha:` — that field IS "
++            "the review anchor." % verdict_rel,
++        )
++    rc, _out, _err = _git(repo, "cat-file", "-e", parent + "^{commit}")
++    if rc != 0:
++        return _fail(
++            E_VERDICT,
++            "parent_sha %s from %s is not a commit in this repo."
++            % (parent, verdict_rel),
++        )
++    # Existence is not lineage. A fabricated anchor (`git commit-tree` over
++    # HEAD's own tree, parented anywhere, on no branch) passes `cat-file -e`
++    # and makes diff(parent..HEAD) contain ONLY the verdict + evidence while
++    # unreviewed work sits on main — every check below then passes and the
++    # guard prints approval over a tree the re-pass never saw. The anchor has
++    # to be a commit HEAD actually descends from. (The staged W1 server-side
++    # port asserts the same against origin/main — keep the two in sync.)
++    rc, _out, err = _git(repo, "merge-base", "--is-ancestor", parent, "HEAD")
++    if rc == 1:
++        return _fail(
++            E_PARENT_NOT_ANCESTOR,
++            "parent_sha %s from %s is not an ancestor of HEAD — the review "
++            "anchor is not in\n"
++            "      the history this tag would sign. `cat-file -e` proves the "
++            "object exists, not\n"
++            "      that main descends from it; a fabricated commit carrying "
++            "HEAD's own tree\n"
++            "      makes the delta below trivially clean while unreviewed "
++            "work rides the tag."
++            % (parent[:12], verdict_rel),
++        )
++    if rc != 0:
++        return _fail(
++            E_PARENT_NOT_ANCESTOR,
++            "`git merge-base --is-ancestor %s HEAD` exited %d (neither yes "
++            "nor no) — refusing to guess (git said: %s)"
++            % (parent[:12], rc, err.strip()),
++        )
++    print("  ok   parent_sha %s is an ancestor of HEAD" % parent[:12])
++
++    allow = fields.get("delta_allowlist")
++    if not isinstance(allow, list) or not allow:
++        return _fail(
++            E_VERDICT,
++            "verdict %s carries no `delta_allowlist:` entries — the closed "
++            "set is what makes the delta assert meaningful." % verdict_rel,
++        )
++    for entry in allow:
++        if any(ch in entry for ch in GLOB_CHARS):
++            return _fail(
++                E_VERDICT,
++                "delta_allowlist entry %r contains a glob metacharacter. The "
++                "set is CLOSED and literal: a pattern like "
++                "`pair-rail-verdict-*.md` would let a historical verdict or "
++                "the template be edited and still pass." % entry,
++            )
++        if entry.startswith("/") or ".." in entry.split("/"):
++            return _fail(
++                E_VERDICT,
++                "delta_allowlist entry %r must be a repo-relative path with "
++                "no `..` segment." % entry,
++            )
++        if entry.startswith(VERDICT_PREFIX) and entry != verdict_rel:
++            return _fail(
++                E_VERDICT,
++                "delta_allowlist entry %r is another tag's verdict (or the "
++                "template). Only %s may move for this tag."
++                % (entry, verdict_rel),
++            )
++        if entry != verdict_rel and not entry.startswith(EVIDENCE_PREFIX):
++            return _fail(
++                E_VERDICT,
++                "delta_allowlist entry %r is neither this tag's verdict nor "
++                "plan-side evidence under %s\n"
++                "      The allowlist is EXHAUSTIVE: the verdict, its "
++                "verdict-fields, and the\n"
++                "      re-pass artifacts — nothing else. Allowlisting a "
++                "version site, a\n"
++                "      workflow or any code path turns this assert into "
++                "permission to land\n"
++                "      unreviewed work on the tag, which is the hole it "
++                "exists to close."
++                % (entry, EVIDENCE_PREFIX),
++            )
++    allow_set: Set[str] = set(allow)
++    if verdict_rel not in allow_set:
++        return _fail(
++            E_VERDICT,
++            "the verdict itself (%s) is not in its own delta_allowlist — it "
++            "has to be committed, so it has to be allowed." % verdict_rel,
++        )
++
++    manifest_rel = fields.get("delta_manifest")
++    manifest_sha = fields.get("delta_manifest_sha256")
++    if not isinstance(manifest_rel, str) or not manifest_rel:
++        return _fail(
++            E_VERDICT,
++            "verdict %s carries no `delta_manifest:` — without it the "
++            "re-pass artifacts close by NAME only, and any file dropped into "
++            "the directory after the review would pass." % verdict_rel,
++        )
++    if not isinstance(manifest_sha, str) or not HEX64.match(manifest_sha):
++        return _fail(
++            E_VERDICT,
++            "verdict %s has no usable 64-hex `delta_manifest_sha256:`."
++            % verdict_rel,
++        )
++    if manifest_rel not in allow_set:
++        return _fail(
++            E_VERDICT,
++            "delta_manifest %s is not in delta_allowlist." % manifest_rel,
++        )
++
++    # --- content pin: the manifest itself, then everything it lists ---
++    manifest_abs = os.path.join(repo, manifest_rel)
++    if not os.path.isfile(manifest_abs):
++        return _fail(E_MANIFEST_PIN, "delta_manifest %s missing" % manifest_rel)
++    actual = _sha256(manifest_abs)
++    if actual != manifest_sha:
++        return _fail(
++            E_MANIFEST_PIN,
++            "delta_manifest sha256 mismatch for %s\n"
++            "      verdict pins %s\n"
++            "      on disk      %s" % (manifest_rel, manifest_sha, actual),
++        )
++    print("  ok   %s matches the sha256 pinned in the verdict" % manifest_rel)
++
++    try:
++        entries = _read_manifest(manifest_abs)
++    except (OSError, ValueError) as exc:
++        return _fail(E_MANIFEST_CONTENT, "cannot read %s: %s" % (manifest_rel, exc))
++    good, detail = _verify_manifest_content(manifest_abs)
++    if not good:
++        return _fail(
++            E_MANIFEST_CONTENT,
++            "re-pass artifacts do not match %s (shasum -c failed):\n      %s"
++            % (manifest_rel, detail),
++        )
++    print("  ok   shasum -a 256 -c %s (%d entries)" % (manifest_rel, len(entries)))
++
++    # --- plan-side entries OUTSIDE the manifest directory ---
++    # Everything inside the manifest directory is content-pinned (sha256 of
++    # the manifest in the signed verdict + shasum -c + name equality below).
++    # An EVIDENCE_PREFIX entry outside it closes by NAME ONLY — the plan file
++    # itself, immutable repass history, or ANOTHER tag's verdict-fields could
++    # be allowlisted and a post-review edit would ride the tag. The one such
++    # file the plan promises is the verdict-fields for THIS tag, at its ONE
++    # canonical path: directly inside the plan directory that CONTAINS the
++    # manifest dir. A basename-only rule would admit any number of
++    # look-alikes anywhere under EVIDENCE_PREFIX (plans/archive/, a sibling
++    # repass dir, ...), each an unpinned name-only pass-through. Mirror this
++    # rule in the W1 server-side port.
++    man_dir = os.path.dirname(manifest_rel)
++    plan_dir = os.path.dirname(man_dir)
++    vf_name = "verdict-fields-%s.md" % tag
++    vf_expected = "%s/%s" % (plan_dir, vf_name) if plan_dir else vf_name
++    for entry in sorted(allow_set):
++        if entry == verdict_rel or entry == manifest_rel:
++            continue
++        if entry.startswith(man_dir + "/"):
++            continue
++        if entry != vf_expected:
++            return _fail(
++                E_VERDICT,
++                "delta_allowlist entry %r is outside the manifest directory "
++                "(%s/) and is not this\n"
++                "      tag's verdict-fields at its canonical path (%s).\n"
++                "      Outside the manifest nothing pins content — a "
++                "post-review edit there\n"
++                "      would ride the tag by NAME alone, and a basename "
++                "match in any other\n"
++                "      directory is a look-alike, not the plan's file. Move "
++                "the file into the\n"
++                "      re-pass manifest, or it must be exactly %s."
++                % (entry, man_dir, vf_expected, vf_expected),
++            )
++
++    # --- set equality by NAME, both directions, inside the manifest dir ---
++    listed = set(
++        os.path.normpath(os.path.join(man_dir, name)).replace(os.sep, "/")
++        for _sha, name in entries
++    )
++    listed.add(manifest_rel)
++    allowed_in_dir = set(
++        e for e in allow_set if man_dir and (e == manifest_rel or e.startswith(man_dir + "/"))
++    )
++    if allowed_in_dir != listed:
++        extra = sorted(allowed_in_dir - listed)
++        missing = sorted(listed - allowed_in_dir)
++        return _fail(
++            E_MANIFEST_SET,
++            "re-pass artifact set is not closed under %s\n"
++            "      allowlisted but not in the manifest: %s\n"
++            "      in the manifest but not allowlisted: %s"
++            % (manifest_rel, extra or "-", missing or "-"),
++        )
++    print("  ok   re-pass artifact set closes (name equality with the manifest)")
++
++    # --- the delta itself ---
++    # --no-renames on purpose: with rename detection a file moved OUT of the
++    # allowlisted evidence directory is reported only under its destination
++    # name, and the disappearance of the reviewed original goes unmentioned.
++    # Literal paths on both sides or the set comparison is not a set comparison.
++    rc, out, err = _git(repo, "diff", "--no-renames", "%s..HEAD" % parent, "--name-only")
++    if rc != 0:
++        return _fail(
++            E_DELTA,
++            "`git diff --no-renames %s..HEAD --name-only` failed: %s"
++            % (parent, err.strip()),
++        )
++    changed = [line for line in out.splitlines() if line.strip()]
++    outside = sorted(p for p in changed if p not in allow_set)
++    if outside:
++        return _fail(
++            E_DELTA,
++            "files changed after the reviewed parent %s that the verdict does "
++            "NOT allow:\n%s\n"
++            "      The invariant is: NOTHING landed after what the re-pass "
++            "reviewed,\n"
++            "      other than the verdict and its pinned evidence. Either "
++            "re-run the\n"
++            "      re-pass against this tree, or drop these commits."
++            % (parent[:12], "\n".join("        - %s" % p for p in outside)),
++        )
++
++    # VACUITY. Everything above is satisfied trivially by an anchor that sits
++    # AT (or after) the verdict: the delta is then empty or verdict-free and
++    # "all files are inside the allowlist" proves nothing at all. The verdict
++    # has to have LANDED after the tree it certifies.
++    if verdict_rel not in changed:
++        return _fail(
++            E_VACUOUS,
++            "the verdict %s is not part of the delta %s..HEAD — this assert "
++            "would pass\n"
++            "      VACUOUSLY. parent_sha has to be the commit the re-pass "
++            "reviewed, with\n"
++            "      the verdict landing after it; parent_sha == HEAD (or any "
++            "anchor whose\n"
++            "      tree already carried the verdict) is the v1.16.0 "
++            "self-reference bug that\n"
++            "      the parent_sha field was introduced to kill."
++            % (verdict_rel, parent[:12]),
++        )
++
++    # State the inputs, not just the verdict: an operator reading a release log
++    # has to be able to tell what this assert actually examined.
++    print(
++        "  ok   delta %s..HEAD is %d file(s), all inside the verdict's closed "
++        "allowlist of %d (verdict present in the delta)"
++        % (parent[:12], len(changed), len(allow_set))
++    )
++    return 0
++
++
++def main(argv: Optional[Sequence[str]] = None) -> int:
++    parser = argparse.ArgumentParser(prog="_release_tag_guard.py")
++    sub = parser.add_subparsers(dest="cmd")
++
++    p_anc = sub.add_parser("ancestry", help="HEAD must be on origin/<branch>")
++    p_anc.add_argument("--repo", default=".")
++    p_anc.add_argument("--remote", default="origin")
++    p_anc.add_argument("--branch", default="main")
++    p_anc.add_argument(
++        "--offline-ack",
++        action="store_true",
++        help="named escape hatch: skip the fetch and judge against the "
++        "last-known remote ref (loudly announced)",
++    )
++
++    p_delta = sub.add_parser("delta", help="restricted delta vs the verdict")
++    p_delta.add_argument("--repo", default=".")
++    p_delta.add_argument("--tag", required=True)
++    p_delta.add_argument("--verdict", default=None)
++
++    args = parser.parse_args(argv)
++    if args.cmd == "ancestry":
++        return ancestry(args.repo, args.remote, args.branch, args.offline_ack)
++    if args.cmd == "delta":
++        return delta(args.repo, args.tag, args.verdict)
++    parser.print_usage(sys.stderr)
++    return E_USAGE
++
++
++if __name__ == "__main__":
++    sys.exit(main())
+diff --git a/.claude/scripts/local/release.sh b/.claude/scripts/local/release.sh
+new file mode 100755
+index 0000000..c1ddb95
+--- /dev/null
++++ b/.claude/scripts/local/release.sh
+@@ -0,0 +1,690 @@
++#!/usr/bin/env bash
++# ============================================================================
++# release.sh — operator release driver. Version-neutral BY NAME.
++#
++# The previous driver carried a release number in its own FILENAME, and was
++# still driving the release after that one — the root of a whole class: a
++# driver named for one release is a standing invitation for every other version
++# literal inside it to go stale too. Everything release-specific now lives in
++# the PER-RELEASE block below, and every message derives from it. The old path
++# is deliberately left unspelled on every live surface, so the AC-6 control
++# needs no "except this one" exemption; `git log --follow` is the archaeology.
++#
++# Implements the documented procedure in `.github/release-checklist.md`:
++# RC first (vX.Y.Z-rc.N), then the ADR-103 24 h hold, then promote stable.
++#
++# WHAT THE OWNER SIGNS. Nothing here is a canonical-edit ceremony: CHANGELOG.md,
++# VERSION and npm/package.json are NOT in `_CANONICAL_GUARDS`
++# (`.claude/hooks/check_canonical_edit.py`), so no sentinel `approved.md`
++# exists for a release. The Owner signature is the **annotated GPG tag**,
++# produced INLINE by the `tag` phase (family lesson: a ceremony script signs
++# inline and never demands a pre-existing `.asc`).
++#
++# WHAT THIS SCRIPT NEVER DOES. It never pushes, and it never publishes.
++# Pushing the tag is the irreversible, outward-facing step: it starts BOTH
++# `.github/workflows/release.yml` (the release gate) and
++# `.github/workflows/npm-publish.yml` — and npm-publish.yml is what actually
++# publishes to npm via OIDC. This driver prints the push command and stops.
++#
++# Phases (run in order):
++#   preflight  read-only gates, fail-closed          (default)
++#   bump       version sites + plugin manifests + commit
++#   tag        annotated GPG tag, signed inline, behind two fail-closed guards
++#
++# Usage:
++#   bash .claude/scripts/local/release.sh preflight
++#   bash .claude/scripts/local/release.sh bump --dry-run
++#   bash .claude/scripts/local/release.sh bump
++#   bash .claude/scripts/local/release.sh tag --dry-run
++#   bash .claude/scripts/local/release.sh tag
++#
++# Options:
++#   --dry-run        make no lasting change; restores BOTH working tree and
++#                    index on exit (trap), including on failure. The restore
++#                    list is DERIVED from _release_bump_sites.py, never typed.
++#   --stable         target the bare version instead of -rc.N (post-hold promote)
++#   --rc N           RC ordinal (default 1)
++#   --key KEYID      GPG key to sign with (default: the key of the last release)
++#   --today DATE     YYYY-MM-DD stamped into the `last-reviewed:` lines
++#                    (default: today). It exists so the D/D+1 idempotence
++#                    invariant is testable at the driver level; it changes only
++#                    the stamp date and skips no gate.
++#   --restamp        force the four `last-reviewed:` stamps to move even when
++#                    the version is unchanged — the named route for a REAL
++#                    re-review. Requires --npm-readme-reviewed and disables the
++#                    no-op fast path (otherwise it would be dead letter).
++#   --offline-ack    ancestry guard: skip the `git fetch` and judge HEAD
++#                    against the last-known origin/main (announced loudly)
++#   --npm-readme-reviewed
++#                    required by `bump` when it writes: acknowledges that
++#                    npm/README.md was actually re-read. Its `last-reviewed`
++#                    stamp is a release tripwire by design; re-stamping it
++#                    silently would defeat the gate.
++# ============================================================================
++set -euo pipefail
++
++# ---------------------------------------------------------------------------
++# PER-RELEASE — the only block that changes between releases. Rewrite all of it
++# together. RELEASE_SCOPE and RELEASE_HEADLINE end up inside the SIGNED tag
++# annotation, so stale text there is a false claim on a signed surface (the P0
++# class of this repo) — and no preflight can prove prose matches a diff.
++# The tag stands for the WHOLE release train in CHANGELOG.md, never just the
++# newest plan: list every plan of the train and the full ADR range.
++# ---------------------------------------------------------------------------
++TARGET_BASE="1.3.0"
++RELEASE_TITLE="night-mode + release-mechanics hardening"
++# repass-r2 part-d P1 (S299): the v1.3.0 train grew past the rc.1 text —
++# 167/168 (ownership decision table) and 169 W0-W2 (Linux port + verified
++# fixes) landed between rc.1 and rc.2. The tag stands for the WHOLE train.
++RELEASE_SCOPE="PLAN-162 / PLAN-165 / PLAN-166 / PLAN-167 / PLAN-168 / PLAN-169 W0-W2 (ADRs 184 -> 190)"
++RELEASE_HEADLINE="night-mode — the Owner arms per-machine autonomy for one upcoming
++session (gitignored overlay, next-session semantics), and arming it is a
++HUMAN action by construction: the writer script self-path-guards, the Bash
++rail matches invocation best-effort, and every on/off/refusal lands in the
++HMAC chain as night_mode_toggled (proven live, not by fixture).
++
++Also: a case-fold bypass that let .claude/settings.JSON slip past BOTH the
++canonical and kernel rails on case-insensitive filesystems (P0, fixed on
++both rails); ADR-186 settles the hook-deadline conflict — the canonical
++matcher wall deadline fails CLOSED as a named exception to the published
++fail-open-on-infrastructure contract, with a provenance-pinned unlock as the
++recovery route; sentinel unlock inside a git worktree now REQUIRES that
++provenance (ADR-119 Invariant 5); pair-rail 120/150 -> 180/210 with
++timeout_ms and a censoring-rate trigger, ratified only after a live probe
++proved the harness honors a 210 s registration; four scheduled workflows that
++had been red without ever surfacing in push CI; and the release mechanics
++themselves — an idempotent bump, plus an ancestry gate and a restricted-delta
++gate on the tag phase (PLAN-166)."
++
++RC_NUM="1"
++STABLE=0
++DRY_RUN=0
++NPM_README_REVIEWED=0
++RESTAMP=0
++OFFLINE_ACK=0
++TODAY=""
++PHASE=""
++
++BUMP_SITES=".claude/scripts/local/_release_bump_sites.py"
++TAG_GUARD=".claude/scripts/local/_release_tag_guard.py"
++
++# Continuity: the key that signed the previous release. Overridable, but never
++# guessed at signing time — the preflight proves it can actually produce a
++# signature.
++SIGN_KEY="CFCFACF00335DC74"
++
++die() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
++ok()  { printf '  ok   %s\n' "$*"; }
++note(){ printf '  --   %s\n' "$*"; }
++hdr() { printf '\n== %s ==\n' "$*"; }
++
++usage() {
++  cat <<USAGE
++release.sh — operator release driver (target base version: $TARGET_BASE)
++
++  bash $0 preflight [--rc N | --stable]
++  bash $0 bump      [--rc N | --stable] --npm-readme-reviewed [--dry-run]
++  bash $0 tag       [--rc N | --stable] [--dry-run]
++
++  --dry-run              no lasting change; tree AND index restored on exit
++  --stable               target $TARGET_BASE (post-hold promote)
++  --rc N                 target ${TARGET_BASE}-rc.N (default N=$RC_NUM)
++  --key KEYID            GPG key (default $SIGN_KEY)
++  --today YYYY-MM-DD     date stamped into the last-reviewed lines
++  --restamp              move the review stamps at an unchanged version
++                         (requires --npm-readme-reviewed)
++  --offline-ack          ancestry guard judges a possibly stale origin/main
++  --npm-readme-reviewed  assert npm/README.md was actually re-read
++
++The header of this file documents what the Owner signs, why this script never
++pushes, and why it never publishes.
++USAGE
++}
++
++while [ "$#" -gt 0 ]; do
++  case "$1" in
++    preflight|bump|tag) PHASE="$1"; shift ;;
++    --dry-run) DRY_RUN=1; shift ;;
++    --stable)  STABLE=1; shift ;;
++    --npm-readme-reviewed) NPM_README_REVIEWED=1; shift ;;
++    --restamp) RESTAMP=1; shift ;;
++    --offline-ack) OFFLINE_ACK=1; shift ;;
++    --today)   TODAY="${2:?--today needs YYYY-MM-DD}"; shift 2 ;;
++    --rc)      RC_NUM="${2:?--rc needs a number}"; shift 2 ;;
++    --key)     SIGN_KEY="${2:?--key needs a keyid}"; shift 2 ;;
++    -h|--help) usage; exit 0 ;;
++    *) die "unknown argument: $1" ;;
++  esac
++done
++[ -n "$PHASE" ] || die "no phase given (preflight|bump|tag); see --help"
++
++if [ -n "$TODAY" ]; then
++  case "$TODAY" in
++    [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) ;;
++    *) die "--today must be YYYY-MM-DD, got '$TODAY'" ;;
++  esac
++else
++  TODAY="$(date +%F)"
++fi
++
++if [ "$STABLE" -eq 1 ]; then
++  TARGET_VERSION="$TARGET_BASE"
++else
++  TARGET_VERSION="${TARGET_BASE}-rc.${RC_NUM}"
++fi
++TARGET_TAG="v${TARGET_VERSION}"
++
++REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || die "not a git repo"
++cd "$REPO_ROOT"
++
++# GPG in a non-interactive shell needs an explicit TTY or pinentry fails with
++# a misleading "No pinentry" (recurring footgun in this repo ceremonies).
++GPG_TTY="$(tty 2>/dev/null || true)"
++export GPG_TTY
++
++# Every file the bump phase may write — DERIVED, never typed. A hand-kept
++# restore list is how a dry-run left debris behind once already (S273): the
++# writer grew a site, the restore list did not. `--include-generated` adds the
++# two plugin manifests, which `build-plugin.py --write-manifests` rewrites
++# from VERSION during the bump.
++sites_out="$(python3 "$BUMP_SITES" print-sites --include-generated)" \
++  || die "cannot enumerate version sites from $BUMP_SITES"
++VERSION_FILES=()
++while IFS= read -r _site; do
++  [ -n "$_site" ] || continue
++  VERSION_FILES+=("$_site")
++done <<< "$sites_out"
++[ "${#VERSION_FILES[@]}" -gt 0 ] || die "$BUMP_SITES returned no version sites"
++
++printf 'release driver — target %s (tag %s), phase=%s, dry-run=%s, today=%s\n' \
++  "$TARGET_VERSION" "$TARGET_TAG" "$PHASE" "$DRY_RUN" "$TODAY"
++
++# ---------------------------------------------------------------------------
++# Dry-run safety net. Snapshot every file the `bump` phase writes plus the
++# index state, and restore both on ANY exit path.
++# ---------------------------------------------------------------------------
++SNAPSHOT_ARMED=0
++restore_snapshot() {
++  [ "$SNAPSHOT_ARMED" -eq 1 ] || return 0
++  # The bump phase refuses to run on a dirty tree (untracked included), so
++  # HEAD is exactly the pre-bump state: reset unstages, checkout restores
++  # content. Both halves are needed — an index-only restore leaves the files
++  # modified, and a content-only restore leaves them staged (the S273 trap).
++  #
++  # PER PATH, never one multi-path command: `git checkout -- a b c` is
++  # ATOMIC — a single path absent from HEAD (a file the bump CREATED, e.g. a
++  # plugin manifest on its first appearance) aborts the WHOLE command and
++  # restores nothing, and the old `|| true` swallowed that error while the
++  # message below still claimed success. A path HEAD carries is checked out;
++  # a path HEAD does not carry was created by the bump and is removed.
++  local _p _dirty
++  for _p in "${VERSION_FILES[@]}"; do
++    git reset --quiet HEAD -- "$_p" 2>/dev/null || true
++    if git cat-file -e "HEAD:$_p" 2>/dev/null; then
++      git checkout --quiet -- "$_p" 2>/dev/null || true
++    else
++      rm -f "$_p" 2>/dev/null || true
++      # a directory created for that file may remain; drop it only if empty
++      # (never recursive — this is a restore, not a cleanup)
++      rmdir "$(dirname "$_p")" 2>/dev/null || true
++    fi
++  done
++  # ASSERT the postcondition, not the attempt: worktree AND index must be
++  # clean across every derived path, or this dry-run left debris and the only
++  # honest exit is a loud non-zero — printing "restored" over a dirty tree is
++  # the S273 class silenced instead of closed.
++  # The verification itself is fail-CLOSED (codex W0-residuals round): if
++  # `git status` ERRORS (repo/permission/object failure), an `|| true` here
++  # would read as "empty = clean" and print "asserted clean" over a
++  # postcondition that was never checked — capture the exit status instead.
++  _dirty="$(git status --porcelain -- "${VERSION_FILES[@]}" 2>/dev/null)"
++  _status_rc=$?
++  if [ "$_status_rc" -ne 0 ]; then
++    printf 'FAIL: dry-run restore verification could not run (git status rc=%s) — tree state UNVERIFIED, refusing to report clean\n' "$_status_rc" >&2
++    exit 1
++  fi
++  if [ -n "$_dirty" ]; then
++    printf 'FAIL: dry-run restore left these paths dirty (worktree/index != HEAD):\n' >&2
++    printf '%s\n' "$_dirty" >&2
++    exit 1
++  fi
++  printf '  --   dry-run: working tree AND index restored to HEAD (asserted clean)\n'
++}
++
++take_snapshot() {
++  SNAPSHOT_ARMED=1
++  trap restore_snapshot EXIT INT TERM
++}
++
++hint_next_phase() {
++  # Test the VALUE: `${STABLE:+...}` expands for STABLE=0 (a non-empty string)
++  # and would tell the Owner to cut the STABLE tag during an RC run.
++  if [ "$STABLE" -eq 1 ]; then
++    note "proceed to: bash $0 tag --stable"
++  else
++    note "proceed to: bash $0 tag --rc $RC_NUM"
++  fi
++}
++
++# ---------------------------------------------------------------------------
++# Preflight — every gate fail-closed. Mirrors `.github/release-checklist.md`
++# and runs the SAME suites CI runs (a subset gate passes while CI is red; that
++# lesson is expensive and already paid).
++# ---------------------------------------------------------------------------
++preflight() {
++  hdr "git state"
++  [ -z "$(git status --porcelain)" ] || die "working tree dirty — commit or stash first"
++  ok "tree clean"
++
++  branch="$(git rev-parse --abbrev-ref HEAD)"
++  [ "$branch" = "main" ] || die "on branch '$branch' — releases are cut from main"
++  ok "on main"
++
++  git fetch --quiet origin main || die "git fetch origin main failed"
++  local_sha="$(git rev-parse HEAD)"
++  remote_sha="$(git rev-parse origin/main)"
++  [ "$local_sha" = "$remote_sha" ] \
++    || die "HEAD ($local_sha) != origin/main ($remote_sha) — push or pull first"
++  ok "HEAD == origin/main ($local_sha)"
++
++  git rev-parse -q --verify "refs/tags/$TARGET_TAG" >/dev/null 2>&1 \
++    && die "tag $TARGET_TAG already exists"
++  ok "tag $TARGET_TAG is free"
++
++  hdr "CI for HEAD"
++  if command -v gh >/dev/null 2>&1; then
++    runs="$(gh run list --limit 40 \
++      --json headSha,conclusion,status,workflowName 2>/dev/null || true)"
++    if [ -n "$runs" ]; then
++      verdict="$(mktemp)"
++      printf '%s' "$runs" | HEAD_SHA="$local_sha" python3 -c '
++import json, os, sys
++sha = os.environ["HEAD_SHA"]
++runs = [r for r in json.load(sys.stdin) if r.get("headSha") == sha]
++if not runs:
++    print("NO_RUNS"); sys.exit(0)
++bad = [r for r in runs if r.get("conclusion") not in ("success", "skipped", "")]
++pend = [r for r in runs if r.get("status") != "completed"]
++val = [r for r in runs if "Validate" in (r.get("workflowName") or "")]
++for r in bad:
++    print("BAD %s=%s" % (r["workflowName"], r["conclusion"]))
++for r in pend:
++    print("PENDING %s" % r["workflowName"])
++if not any(r.get("conclusion") == "success" for r in val):
++    print("NO_VALIDATE_SUCCESS")
++' > "$verdict" || die "CI verdict parse failed"
++      if grep -q '^BAD ' "$verdict"; then
++        cat "$verdict" >&2; rm -f "$verdict"
++        die "a workflow for HEAD is not green"
++      fi
++      if grep -q '^PENDING ' "$verdict"; then
++        cat "$verdict" >&2; rm -f "$verdict"
++        die "a workflow for HEAD is still running — wait for it"
++      fi
++      if grep -q 'NO_VALIDATE_SUCCESS' "$verdict"; then
++        rm -f "$verdict"
++        die "no successful Validate run for HEAD"
++      fi
++      if grep -q 'NO_RUNS' "$verdict"; then
++        rm -f "$verdict"
++        die "no CI runs found for HEAD — push it and let CI run"
++      fi
++      rm -f "$verdict"
++      ok "all workflows for HEAD green (Validate success)"
++    else
++      die "gh returned no run data — cannot confirm CI (fail-closed)"
++    fi
++  else
++    die "gh CLI not available — cannot confirm CI (fail-closed)"
++  fi
++
++  # These MUST be the invocations validate.yml uses, not `unittest discover`.
++  # The suite is pytest-only BY CONSTRUCTION: conftest.py carries the sys.path
++  # bootstrap and the _lib resolution guards as pytest collection hooks, and
++  # several modules isolate their environment with pytest `autouse` fixtures.
++  # `unittest discover` loads none of that, so those modules run with their
++  # declared isolation silently disabled — which leaks CLAUDE_PROJECT_DIR into
++  # later modules. test_flip_closures then resolves settings.json /
++  # red-team.yml under a dead tmp dir and reports that files which plainly
++  # exist "must exist". It passes 12/12 when run alone. Diagnosed 2026-08-02
++  # during a GA promote; the old invocation made this gate a FALSE RED that
++  # blocked a release whose CI was green.
++  hdr "test suites (the same ones CI runs)"
++  python3 -m pytest .claude/hooks/tests/ -n auto -m 'not serial' \
++    --strict-markers --tb=no -q >/dev/null 2>&1 \
++    || die "hooks test suite failed (not serial)"
++  python3 -m pytest .claude/hooks/tests/ -m 'serial' \
++    --strict-markers --tb=no -q >/dev/null 2>&1 \
++    || die "hooks test suite failed (serial)"
++  ok "hooks tests pass"
++  python3 -m pytest .claude/scripts/tests/ .claude/scripts/optimizer/tests/ \
++    -n auto -m 'not serial' --strict-markers --tb=no -q >/dev/null 2>&1 \
++    || die "scripts test suite failed (not serial)"
++  python3 -m pytest .claude/scripts/tests/ .claude/scripts/optimizer/tests/ \
++    -m 'serial' --strict-markers --tb=no -q >/dev/null 2>&1 \
++    || die "scripts test suite failed (serial)"
++  ok "scripts tests pass"
++
++  hdr "governance gates"
++  bash .claude/scripts/validate-governance.sh >/dev/null 2>&1 \
++    || die "validate-governance.sh nonzero"
++  ok "validate-governance"
++  bash .claude/scripts/check-contamination.sh >/dev/null 2>&1 \
++    || die "check-contamination.sh nonzero"
++  ok "check-contamination"
++  python3 .claude/scripts/check-claude-md-claims.py >/dev/null 2>&1 \
++    || die "check-claude-md-claims.py nonzero"
++  ok "CLAUDE.md claims"
++  bash .claude/scripts/local/verify-counts.sh --quiet >/dev/null 2>&1 \
++    || die "verify-counts.sh reports drift"
++  ok "derived counts (no drift)"
++
++  hdr "release artifacts"
++  grep -q "^## \[${TARGET_BASE}\]" CHANGELOG.md \
++    || die "CHANGELOG.md has no '## [${TARGET_BASE}]' entry"
++  ok "CHANGELOG has [${TARGET_BASE}]"
++
++  # Two gates that burned earlier RCs — release.yml enforces both and neither
++  # is covered by verify-counts, so the preflight mirrors them:
++  python3 scripts/build-plugin.py --check >/dev/null 2>&1 \
++    || die "plugin manifests out of sync (run: python3 scripts/build-plugin.py --write-manifests)"
++  ok "plugin manifests in sync with generator"
++  python3 .claude/scripts/check-canonical-doc-freshness.py >/dev/null 2>&1 \
++    || {
++      python3 .claude/scripts/check-canonical-doc-freshness.py 2>&1 | grep '!!' >&2 || true
++      die "canonical doc freshness gate red (stale last-reviewed stamps; review + re-stamp the docs listed above)"
++    }
++  ok "canonical doc freshness (review stamps current)"
++
++  cur_version="$(tr -d ' \n' < VERSION)"
++  if [ "$cur_version" = "$TARGET_BASE" ]; then
++    note "VERSION already $TARGET_BASE — bump phase is a no-op (expected on promote)"
++  else
++    note "VERSION is $cur_version, becomes $TARGET_BASE in the bump phase"
++  fi
++
++  hdr "signing key (proves it can actually sign — not just that it exists)"
++  gpg --list-secret-keys "$SIGN_KEY" >/dev/null 2>&1 \
++    || die "no secret key $SIGN_KEY in the keyring"
++  ok "secret key $SIGN_KEY present"
++  sig_probe="$(mktemp)"
++  if printf 'release-preflight-probe' \
++      | gpg --local-user "$SIGN_KEY" --armor --detach-sign --output "$sig_probe" \
++        >/dev/null 2>&1; then
++    ok "inline signature probe succeeded (pinentry works)"
++  else
++    rm -f "$sig_probe"
++    die "the key cannot sign right now — try: gpgconf --kill gpg-agent; export GPG_TTY=\$(tty)"
++  fi
++  rm -f "$sig_probe"
++
++  printf '\nPREFLIGHT GREEN for %s\n' "$TARGET_TAG"
++}
++
++# ---------------------------------------------------------------------------
++# Bump.
++#
++# The site table lives in `_release_bump_sites.py` and NOWHERE else: this
++# driver invokes it, and derives the dry-run restore list from it.
++#
++# The version written is always the BARE semver ($TARGET_BASE), never
++# X.Y.Z-rc.N. Two independent reasons: (a) precedent — every previous RC
++# carries the bare version in VERSION, the RC lives only in the tag name;
++# (b) every gate regex matches `\d+\.\d+\.\d+` only, so an -rc.N string would
++# match NOTHING and the gate would pass VACUOUSLY — silently stopping the
++# drift check exactly when it matters most.
++#
++# IDEMPOTENCE (F2, the v1.3.0-rc.1 re-pass). A bump on a tree that is already
++# at the target must write NOTHING — not one byte, not one index entry. It
++# used to re-date four `last-reviewed:` stamps with today date, which on D+1
++# of the ADR-103 hold produced a dirty tree, then a commit made AFTER the
++# preflight proved CI green, which `tag()` then signed. That commit was also
++# invisible to the pair-rail step 15 (none of the four files is in
++# `pair-rail-inputs-hash-manifest.txt`). Two independent defenses now:
++#   1. the same-tree predicate below (four oracles) short-circuits the phase;
++#   2. the writer skips each stamp line whose version is already the target.
++# ---------------------------------------------------------------------------
++_oracle() {
++  label="$1"; shift
++  if "$@" >/dev/null 2>&1; then
++    printf '  --   oracle %s: PASS  (%s)\n' "$label" "$*"
++    return 0
++  fi
++  printf '  --   oracle %s: RED   (%s)\n' "$label" "$*"
++  return 1
++}
++
++# All four are required. The fourth is not redundant: it is the ONLY watcher
++# of the SBOM/SECURITY/VERSIONING stamps, which are outside the VERSION_SITES
++# of verify-counts. Without it an external no-op would block the in-loop
++# self-heal from ever running over a stale stamp. Freezing the DATE is safe
++# because the freshness gate decides on the stamp VERSION, not its date.
++tree_already_at_target() {
++  cur_version="$(tr -d ' \n' < VERSION)"
++  printf '  --   oracle 1/4: VERSION=%s, target=%s\n' "$cur_version" "$TARGET_BASE"
++  [ "$cur_version" = "$TARGET_BASE" ] || return 1
++  _oracle "2/4" bash .claude/scripts/local/verify-counts.sh --quiet --no-tests || return 1
++  _oracle "3/4" python3 scripts/build-plugin.py --check || return 1
++  _oracle "4/4" python3 .claude/scripts/check-canonical-doc-freshness.py || return 1
++  return 0
++}
++
++bump() {
++  hdr "bump version sites to $TARGET_BASE"
++  [ -z "$(git status --porcelain)" ] || die "working tree dirty — refusing to bump"
++
++  if [ "$RESTAMP" -eq 1 ] && [ "$NPM_README_REVIEWED" -eq 0 ]; then
++    die "--restamp moves every last-reviewed stamp — it REQUIRES --npm-readme-reviewed, otherwise it is exactly the tripwire bypass the stamp exists to prevent"
++  fi
++
++  if [ "$RESTAMP" -eq 1 ]; then
++    hdr "restamp requested — no-op fast path DISABLED by design"
++    note "in the normal re-review case (same version, four clean oracles) the"
++    note "predicate would return BEFORE any substitution and --restamp would"
++    note "be dead letter. It is skipped so a real re-review can be recorded."
++  else
++    hdr "same-tree predicate — four oracles, ALL required"
++    if tree_already_at_target; then
++      ok "no-op: tree is already at $TARGET_BASE and all four oracles are clean"
++      note "NOTHING was written: not a file, not an index entry. The"
++      note "post-condition of this phase (tree at $TARGET_BASE, gates green) is"
++      note "already satisfied, so a no-op bump is SUCCESS, not failure."
++      note "For a genuine re-review of the docs: --restamp --npm-readme-reviewed"
++      hint_next_phase
++      return 0
++    fi
++    note "at least one oracle is unsatisfied — running the bump"
++  fi
++
++  # The npm/README.md stamp is a DELIBERATE release tripwire: its date+version
++  # line asserts the npm-facing copy was re-read for this release. Re-stamping
++  # it silently would defeat the whole purpose of the gate, so it takes an
++  # explicit acknowledgement. Checked AFTER the no-op predicate on purpose: a
++  # run that writes nothing asserts nothing, and demanding the flag there would
++  # be asking the Owner to certify a review that is not happening.
++  if [ "$NPM_README_REVIEWED" -eq 0 ]; then
++    cat >&2 <<'EOF'
++FAIL: npm/README.md carries a "last-reviewed: <date> v<version>" stamp, and
++      verify-counts treats it as a release tripwire — bumping it asserts that
++      the npm-facing README was actually re-read for this release.
++
++      Read npm/README.md, then re-run with --npm-readme-reviewed.
++EOF
++    exit 1
++  fi
++
++  [ "$DRY_RUN" -eq 1 ] && take_snapshot
++
++  if [ "$RESTAMP" -eq 1 ]; then
++    python3 "$BUMP_SITES" bump --target "$TARGET_BASE" --today "$TODAY" --restamp \
++      || die "version-site bump failed"
++  else
++    python3 "$BUMP_SITES" bump --target "$TARGET_BASE" --today "$TODAY" \
++      || die "version-site bump failed"
++  fi
++
++  # Plugin manifests (.claude-plugin/{plugin,marketplace}.json) are GENERATED
++  # from VERSION, never hand-patched. The release.yml gate "Assert plugin
++  # manifest versions match VERSION" enforces them — and verify-counts does
++  # NOT, which is exactly how the v1.2.0-rc.1 run went red: the manifests were
++  # version sites invisible to the local oracle.
++  python3 scripts/build-plugin.py --write-manifests >/dev/null 2>&1 \
++    || die "build-plugin.py --write-manifests failed"
++  python3 scripts/build-plugin.py --check >/dev/null 2>&1 \
++    || die "plugin manifests still out of sync with the generator"
++  ok "plugin manifests regenerated from VERSION (build-plugin.py)"
++
++  # verify-counts covers the doc/package sites; the release.yml gate family
++  # covers the plugin manifests; the freshness gate covers the review stamps
++  # outside both. NOT ONE of them is the full oracle — the union is. If a new
++  # site is added upstream, expect it to surface in one of the three, and
++  # mirror it into _release_bump_sites.py.
++  bash .claude/scripts/local/verify-counts.sh --quiet --no-tests >/dev/null 2>&1 \
++    || {
++      bash .claude/scripts/local/verify-counts.sh --json --no-tests 2>&1 \
++        | python3 -c 'import json,sys
++d = json.load(sys.stdin)
++for v in d.get("violations", []):
++    print("  !!   " + v, file=sys.stderr)' || true
++      die "verify-counts still reports version drift — a site is unpatched (see above)"
++    }
++  ok "verify-counts clean across the doc/package version sites"
++
++  if [ "$DRY_RUN" -eq 1 ]; then
++    git --no-pager diff --stat || true
++    note "dry-run: no commit made"
++    return 0
++  fi
++
++  git add -A
++  # IDEMPOTENCE, second rail. Even past the predicate, if nothing ended up
++  # staged an unconditional `git commit` would DIE and the documented
++  # three-phase path would be unusable exactly when the gates are green.
++  if git diff --cached --quiet; then
++    ok "nothing to commit — tree already at ${TARGET_BASE} (idempotent no-op)"
++    hint_next_phase
++    return 0
++  fi
++  git commit -q -m "release: v${TARGET_BASE}
++
++Version bump across every site the three oracles enforce (the doc/package
++sites of verify-counts, the plugin manifests regenerated by build-plugin.py,
++and the last-reviewed stamps watched by check-canonical-doc-freshness.py) for
++${TARGET_TAG}. The site table is .claude/scripts/local/_release_bump_sites.py.
++
++VERSION carries the BARE semver: the RC lives only in the tag name. An -rc.N
++string in VERSION would match none of the \\d+.\\d+.\\d+ patterns of the gate and
++the drift check would pass vacuously.
++
++CHANGELOG entry [${TARGET_BASE}] landed separately; its counts are
++reproducible via .claude/scripts/local/verify-counts.sh."
++  ok "commit $(git rev-parse --short HEAD)"
++
++  cat >&2 <<EOF
++
++  NOTE: this bump created a commit. The ancestry guard of the tag phase
++  requires HEAD to be an ancestor of origin/main, so PUSH main and let CI run
++  before tagging — a tag on an unpushed commit points at a tree CI never saw.
++EOF
++}
++
++# ---------------------------------------------------------------------------
++# Tag — annotated + GPG-signed INLINE. The tag message is the Owner-visible
++# artifact; pushing it starts release.yml AND npm-publish.yml.
++#
++# Two fail-closed guards run first, for RC and stable ALIKE. Scoping them to
++# `--stable` would let an rc.N ship a post-review commit and then become the
++# unreviewed baseline the GA is promoted from.
++#
++# THE LOCAL ASSERT IS NOT ENOUGH — say it out loud. A tag signed by hand skips
++# this driver entirely, and the pair-rail step 15 recomputes inputs_hash only
++# over `pair-rail-inputs-hash-manifest.txt`, which deliberately EXCLUDES the
++# bump surfaces (including them would make every legitimate bump change the
++# inputs_hash and break the verdict replay). The same restricted-delta assert
++# therefore goes SERVER-SIDE into `.github/workflows/release.yml` in PLAN-166
++# W1. release.yml is canonical: it changes under the GPG ceremony, not here.
++# `_release_tag_guard.py` is the reference implementation for both.
++# ---------------------------------------------------------------------------
++tag() {
++  hdr "sign tag $TARGET_TAG"
++  [ -z "$(git status --porcelain)" ] || die "working tree dirty — refusing to tag"
++
++  # VERSION carries the BARE semver even for an RC tag (see the bump header),
++  # so compare against $TARGET_BASE, never $TARGET_VERSION.
++  cur_version="$(tr -d ' \n' < VERSION)"
++  [ "$cur_version" = "$TARGET_BASE" ] \
++    || die "VERSION is '$cur_version', expected $TARGET_BASE for $TARGET_TAG — run the bump phase first"
++  ok "VERSION ($cur_version) matches the base version of the tag"
++
++  git rev-parse -q --verify "refs/tags/$TARGET_TAG" >/dev/null 2>&1 \
++    && die "tag $TARGET_TAG already exists"
++
++  hdr "tag guards (unconditional — RC and stable)"
++  if [ "$OFFLINE_ACK" -eq 1 ]; then
++    python3 "$TAG_GUARD" ancestry --repo "$REPO_ROOT" --remote origin --branch main --offline-ack \
++      || die "ancestry guard refused the tag (see above)"
++  else
++    python3 "$TAG_GUARD" ancestry --repo "$REPO_ROOT" --remote origin --branch main \
++      || die "ancestry guard refused the tag (see above)"
++  fi
++  python3 "$TAG_GUARD" delta --repo "$REPO_ROOT" --tag "$TARGET_TAG" \
++    || die "restricted-delta guard refused the tag (see above)"
++
++  anchor="$(git rev-parse HEAD)"
++  msg="$TARGET_TAG — $RELEASE_TITLE
++
++Anchor: $anchor
++Scope:  $RELEASE_SCOPE
++
++Headline: $RELEASE_HEADLINE
++
++No speed claim. See CHANGELOG.md [$TARGET_BASE]."
++
++  if [ "$DRY_RUN" -eq 1 ]; then
++    note "dry-run: tag NOT created. Message that would be signed:"
++    printf '%s\n' "$msg" | sed 's/^/      | /'
++    return 0
++  fi
++
++  git tag -s -u "$SIGN_KEY" -m "$msg" "$TARGET_TAG" \
++    || die "git tag -s failed (key $SIGN_KEY)"
++  ok "tag created"
++
++  git tag -v "$TARGET_TAG" >/dev/null 2>&1 \
++    || die "tag signature does not verify — delete it and investigate"
++  ok "tag signature verifies"
++
++  cat <<EOF
++
++TAG $TARGET_TAG IS SIGNED LOCALLY AND NOT PUSHED.
++
++Pushing starts release.yml (the gate) and npm-publish.yml (which is what
++publishes to npm, via OIDC). That is the irreversible, outward-facing step —
++it stays yours:
++
++    git push origin $TARGET_TAG
++
++Then, per .github/release-checklist.md:
++  - gh run watch                      (all release.yml steps green)
++EOF
++  if [ "$STABLE" -eq 1 ]; then
++    cat <<EOF
++  - GitHub Release from the tag, "pre-release" NOT checked (this is the GA)
++  - npm view <pkg> version            (OIDC publish landed the bare semver)
++  - close the release: CHANGELOG links, memory topic, archive the RC hold
++EOF
++  else
++    cat <<EOF
++  - GitHub Release from the tag, "pre-release" checked while this is an RC
++  - ADR-103 hold: >=24 h, Codex re-pass against the RC, adopter smoke test
++  - promote: bash $0 bump --stable --npm-readme-reviewed && bash $0 tag --stable
++EOF
++  fi
++}
++
++case "$PHASE" in
++  preflight) preflight ;;
++  bump)      bump ;;
++  tag)       tag ;;
++  *)         die "unreachable phase: $PHASE" ;;
++esac
+diff --git a/.claude/scripts/local/verify-counts.sh b/.claude/scripts/local/verify-counts.sh
+index 41f356b..3a3bd38 100755
+--- a/.claude/scripts/local/verify-counts.sh
++++ b/.claude/scripts/local/verify-counts.sh
+@@ -15,11 +15,13 @@
+ #
+ # =====================  COUNT CONTRACT (W1, S160/S161)  =====================
+ # Each metric below is derived from a single live source of truth and then
+-# checked against EVERY occurrence in the three docs (all-matches, NOT
+-# head -1). Two rule kinds:
+-#   - exact : the doc number MUST equal the live count.
+-#   - floor : the doc states "N+"; the live count MUST be >= N (so adding a
+-#             test never churns the docs — AC6).
++# checked against EVERY occurrence in the watched docs (all-matches, NOT
++# head -1). Three rule kinds:
++#   - exact  : the doc number MUST equal the live count.
++#   - floor  : the doc states "N+"; the live count MUST be >= N (so adding a
++#              test never churns the docs — AC6).
++#   - approx : the doc states a ROUNDED figure ("~14,000 collected cases",
++#              "~730 test files"). See the APPROX CONTRACT block below.
+ # The check is BIDIRECTIONAL (a doc number that disagrees with live fails)
+ # and CROSS-FILE (each doc is checked against the live value, so all docs are
+ # mutually consistent by transitivity — AC3/AC4).
+@@ -30,24 +32,127 @@
+ #   core skills       find .claude/skills/core -name SKILL.md       exact (42)
+ #   frontend skills   find .claude/skills/frontend -name SKILL.md   exact (8)
+ #   domain skills     find .claude/skills/domains -name SKILL.md    exact (116)
+-#   ADRs              ls .claude/adr/ADR-*.md                        exact (180)
+-#   hook .py files    ls .claude/hooks/*.py                          exact (55)
+-#   registered hooks  distinct *.py in settings.json "command" lines exact (45)
++#   ADRs              ls .claude/adr/ADR-*.md                        exact (188)
++#   hook .py files    ls .claude/hooks/*.py                          exact (57)
++#   registered hooks  distinct *.py in settings.json hooks{} tree   exact (46)
++#   registrations     total hook entries in settings.json hooks{}   exact (48)
+ #   _lib modules      ls .claude/hooks/_lib/*.py  (TOP-LEVEL glob)   exact (68)
+ #   SPEC v1 files     ls SPEC/v1/*.md                                exact (32)
+-#   tests             pytest --collect-only -q .claude/             floor (N+)
+-#   release_steps     grep -c '      - name:' release.yml           exact (21)
+-#   commands          find .claude/commands -name '*.md'             exact (26)
++#   tests             pytest --collect-only -q  (DOCUMENTED scope)  floor (N+) + approx (~N)
++#   test_files        git ls-files '*test_*.py' '*_test.py'         approx (~N)
++#   release_steps     grep -c '      - name:' release.yml           exact (29)
++#   commands          find .claude/commands -name '*.md'             exact (27)
+ #   workflows         find .github/workflows -name '*.yml'           exact (21)
++#   mutation_fixtures find tests/formal_verification/mutation_...    exact (85)
++#   tla_specs         ls docs/formal-verification/*.tla              exact (4)
++#
++# =====================  APPROX CONTRACT (PLAN-166 W0 F5)  ===================
++# WHY a third kind. Two doc claims are deliberately ROUNDED because the exact
++# figure churns on every commit: the collected-case count and the test-file
++# count. `exact` would make every new test rewrite six documents; `floor`
++# only catches OVERSELL ("docs say 12k, live is 11k") and is blind to
++# UNDERSELL — and undersell is precisely the drift observed in the rc.1
++# re-pass (npm/README.md, docs/FAQ.md and README.pt-BR.md all sat at
++# "~12,000" while the live collect had grown past 14,000; the `floor` rule
++# happily reported "no drift" the whole time because 14172 >= 12000).
++#
++# THE RULE, stated in full:
++#   1. BAND. The cited figure, normalized to an integer ("~14,000" / "~14.000"
++#      / "~14k" all -> 14000), must sit within +/- 5% of the live value.
++#      5% of the collected-case count is ~700 cases, which is why (2) exists.
++#   2. CROSS-DOC EQUALITY. Every watched doc must cite the SAME normalized
++#      figure for a given approx metric. A pure band check is not enough:
++#      "~720 test files" (docs/ARCHITECTURE.md) and "~730 test files"
++#      (CLAUDE.md) were BOTH inside a 5% band of the live 736 while
++#      contradicting each other in public — a live divergence between two
++#      watched docs that the gate could not see. Equality makes the release
++#      restate one number, not a range.
++#   3. INPUTS ARE PRINTED. A band without its inputs is a licence to drift:
++#      +/-700 cases can hide an entire test family. The gate prints, for every
++#      approx metric, the exact command used, the observed value, and — for
++#      the collect-driven metric — the COLLECTION-ERROR COUNT. errors > 0 is
++#      a VIOLATION whenever the band was actually enforced over >=1 doc site
++#      this run: the observed count is then measured over a PARTIAL population
++#      and a band verdict over the wrong number is untrustworthy — and the
++#      automated callers (validate.yml --quiet; the release preflight, which
++#      discards output) can only see the exit code, so a warning there is
++#      structurally invisible (PLAN-166 W0 re-pass). It stays a named WARNING
++#      only when the band is already suspended (--no-tests / observed 0).
++#
++# COLLECTION SCOPE (load-bearing — the two populations DIVERGE). This block
++# is the ONLY measurement snapshot in this file (W0 re-pass round 2: two
++# divergent pairs coexisted, one undated — the numeral-espelho class; a
++# reader could not tell which measurement backed the scope decision).
++# Measured 2026-08-06 on the PLAN-166 W0 tree AFTER the residual-fix round
++# (the previous snapshot went stale within its own patch — the residual
++# fixers added tests after it was pasted; codex W0-residuals round caught
++# it). Both figures are OUTPUTS of the two commands, pasted, not recalled:
++#   `python3 -m pytest --collect-only -q`            -> 14263 tests,  0 errors
++#   `python3 -m pytest --collect-only -q .claude/`   -> 14310 tests, 22 errors
++#   The first is the DOCUMENTED scope: pytest.ini `testpaths` is the single
++#   source of truth for collection and `make test-collect` runs exactly that
++#   invocation — which is also the command every watched doc tells the reader
++#   to run. The second (the pre-PLAN-166 derivation) walks `.claude/`
++#   directly, which drags in `.claude/sidecars/**` (hypothesis/lightrag
++#   probes that need third-party imports) and therefore reports 22 collection
++#   ERRORS plus 47 extra cases the reader can never reproduce. Deriving from
++#   the wrong population makes the gate reject a truthful doc or accept a
++#   stale one, so the derivation is pinned to the documented scope.
++#
++# NON-INVENTORY NUMERALS (registered omission, not silence): this gate governs
++# FRAMEWORK-INVENTORY COUNTS — things you can count in the tree. Latencies
++# ("~0.3-1.0s"), prices ("$30-50"), coverage thresholds ("Tier-1 >= 86%"),
++# per-profile skill caps and reading times are NOT inventory counts and are
++# deliberately outside the contract; they are governed by the artifacts that
++# set them (coverage.yml, the profile config), not by a doc-count gate.
++# Guard against that exemption becoming a hiding place: the UNMATCHED-APPROX
++# SWEEP below fails the gate (a VIOLATION, not a warning) on any
++# thousands-shaped approximation ("~N,NNN", "~N.NNN", "~Nk") in a watched doc
++# that NO approx rule consumed, naming the doc and the numeral. It MUST be a
++# violation: the automated callers (validate.yml runs --quiet, the release
++# preflight discards all output) can only observe the exit code, so an
++# advisory sweep is a census nobody reads — a new doc numeral with no matcher
++# would ship silently, which is exactly the F5 drift class this gate exists
++# to stop (PLAN-166 W0 re-pass).
++#
++# PENDING SITES (registered exemption, never silence). `APPROX_PENDING` below
++# can downgrade ONE (doc, metric, EXACT-frozen-value) triple from violation to
++# a printed PENDING line. The mechanism exists for mid-session freezes of
++# Gate-1 cache-stable files (CLAUDE.md §0), where a re-statement must land at
++# a closeout rather than mid-flight; a pending site is also excluded from the
++# cross-doc equality pool so the frozen value cannot drag other docs down.
++# The registry is EMPTY today: its one historical entry (CLAUDE.md
++# tests=13000, frozen during the PLAN-166 W0 session) was CONSUMED when
++# commit 65daff0 restated CLAUDE.md to "~14,000 parametrized cases" — and
++# keeping the entry past the restatement would have permanently grandfathered
++# the exact stale value (a revert to "~13,000" exited 0, because the pending
++# lookup runs BEFORE the band check; found by the W0 adversarial re-pass).
++# Rules for any future entry:
++#   - key on doc + metric + the EXACT frozen value; any OTHER out-of-band
++#     figure at the site stays a hard violation;
++#   - DELETE the entry in the same commit that lands the restatement — the
++#     exemption is not self-clearing against reverts of that restatement;
++#   - it prints on every single run, so it cannot rot unnoticed.
+ #
+ # NOTE on the two glob-ambiguous / underivable numbers (code-reviewer P2):
+ #   - "_lib modules" is pinned to the TOP-LEVEL `_lib/*.py` glob (68). The
+ #     recursive `_lib/**/*.py` count (incl. adapters/ + subdirs) is larger
+ #     (~140); docs must state the top-level number to match this gate.
+-#   - "registered hooks" (45) = distinct `*.py` script basenames appearing in
+-#     settings.json hooks{} "command" lines (matches the hook_live_smoke
+-#     check). This is distinct from "hook .py files on disk" (55) — some
+-#     on-disk hooks are not wired into settings.json.
++#   - "registered hooks" (46) = distinct `*.py` script basenames appearing in
++#     command strings of the settings.json hooks{} SUBTREE, parsed as JSON
++#     (matches the hook_live_smoke check). S287: the old whole-file grep with
++#     a hyphenless regex captured the statusLine `statusline-ceo.py` as a
++#     phantom `ceo.py` (47). This is distinct from "hook .py files on disk"
++#     (57) — some on-disk hooks are not wired into settings.json — and from
++#     "registrations" (48): total hook ENTRIES incl. non-.py commands (one
++#     script can fire on several events).
++#
++# RULE-LIVENESS CONTRACT (S287 vacuous-gate lesson): a metric whose regexes
++# match ZERO watched docs reports "no drift" with a number nobody checks —
++# a dead gate. The per-metric match count is exported as `rule_matches` in
++# --json, and the real-repo test suite asserts every doc-gated metric
++# matches >=1 site (test_verify_counts.py). Synthetic test trees are exempt
++# by construction (the assertion lives in the real-repo test, not here).
+ # The historical "6 core hooks" enumeration in CLAUDE.md is a labelled
+ # historical subset, NOT a live total — it is not gated here.
+ # ============================================================================
+@@ -68,7 +173,11 @@ for arg in "$@"; do
+     --json)     JSON=1 ;;
+     --no-tests) NO_TESTS=1 ;;
+     -h|--help)
+-      sed -n '2,75p' "$0"
++      # Usage + the full COUNT/APPROX contract. Keep this range in sync with
++      # the header: it ends at the line before "NOTE on the two
++      # glob-ambiguous" (S294 — the old '2,75p' truncated mid-sentence once
++      # the APPROX CONTRACT block landed).
++      sed -n "2,$(( $(grep -n '^# NOTE on the two glob-ambiguous' "$0" | head -1 | cut -d: -f1) - 1 ))p" "$0"
+       exit 0
+       ;;
+     *)
+@@ -104,20 +213,68 @@ DERIVED_SPEC_V1=$(ls "$REPO_ROOT"/SPEC/v1/*.md 2>/dev/null | wc -l | tr -d ' ')
+ # "schema files" = the *.schema.md subset (excludes README/compat/cli/shim docs).
+ # Use find (not ls glob) so a zero-match tree does not trip set -e/pipefail.
+ DERIVED_SCHEMA_FILES=$(find "$REPO_ROOT/SPEC/v1" -maxdepth 1 -name '*.schema.md' 2>/dev/null | wc -l | tr -d ' ')
+-# Registered hooks = distinct *.py basenames in settings.json "command" lines.
+-DERIVED_REGISTERED=$(
+-  grep '"command"' "$REPO_ROOT/.claude/settings.json" 2>/dev/null \
+-    | grep -oE '[A-Za-z_][A-Za-z0-9_]*\.py' | sort -u | wc -l | tr -d ' '
+-)
++# Registered hooks (46) + registrations (48) — parsed from the settings.json
++# hooks{} SUBTREE as JSON, never a whole-file grep (S287: the old grep +
++# hyphenless regex counted the statusLine `statusline-ceo.py` as a phantom
++# `ceo.py`). registered = distinct *.py basenames across hook command
++# strings (hyphens admitted); registrations = total hook entries (incl.
++# non-.py commands). Unparseable settings.json derives 0/0 (a synthetic
++# tree citing non-zero then fails loud — fail-closed on input).
++_reg_out=$(python3 - "$REPO_ROOT/.claude/settings.json" <<'PYREG' 2>/dev/null
++import json, os, re, sys
++try:
++    s = json.load(open(sys.argv[1], encoding="utf-8"))
++except Exception:
++    print("0 0"); raise SystemExit(0)
++hooks = s.get("hooks", {})
++distinct, total = set(), 0
++if isinstance(hooks, dict):
++    for _event, matchers in hooks.items():
++        if not isinstance(matchers, list):
++            continue
++        for m in matchers:
++            if not isinstance(m, dict):
++                continue
++            for h in m.get("hooks", []):
++                if not isinstance(h, dict):
++                    continue
++                total += 1
++                for tok in re.findall(r"[A-Za-z0-9_.-]+\.py", str(h.get("command", ""))):
++                    distinct.add(os.path.basename(tok))
++print("%d %d" % (len(distinct), total))
++PYREG
++) || _reg_out="0 0"
++DERIVED_REGISTERED=${_reg_out% *}
++DERIVED_REGISTRATIONS=${_reg_out#* }
+ 
+-# Test count: collect-only across .claude/. Collection errors in plan-specific
+-# fixture suites are tolerated (they don't represent code regressions). The
+-# collected integer is the load-bearing floor signal.
++# Test count: collect-only over the DOCUMENTED scope — no path argument, so
++# pytest.ini `testpaths` decides, which is byte-for-byte what `make
++# test-collect` runs and what every watched doc tells the reader to run.
++# The previous derivation passed `.claude/` explicitly; that walks
++# `.claude/sidecars/**` too and reports COLLECTION ERRORS plus phantom
++# cases the reader can never reproduce — a different population from the
++# one the docs cite. The single dated measurement of BOTH populations
++# lives in the COLLECTION SCOPE header block above; do not paste a second
++# pair here (W0 re-pass round 2: an undated pair in this comment drifted
++# from the dated header pair — one file, one snapshot).
++#
++# Both the collected count AND the collection-error count are derived: the
++# error count is an INPUT of the approx rule (a band applied to a partially
++# collected population is meaningless), so it is printed and exported, and
++# errors > 0 is a VIOLATION whenever the band was actually enforced over
++# >=1 doc site this run — it stays a named WARNING only when the band is
++# already suspended (--no-tests / observed 0). That is APPROX CONTRACT
++# clause 3 in the header, verbatim; the enforcement is the collect-errors
++# branch in the python block below. (W0 re-pass round 2: this comment used
++# to say "WARNING when non-zero" — the superseded pre-round-1 contract —
++# while header and code both said VIOLATION.)
+ DERIVED_TESTS=0
++DERIVED_TESTS_ERRORS=0
++DERIVED_TESTS_CMD='python3 -m pytest --collect-only -q   # pytest.ini testpaths == `make test-collect`'
+ if [ "$NO_TESTS" -eq 0 ]; then
++  _collect_out=$( { cd "$REPO_ROOT" && python3 -m pytest --collect-only -q 2>&1 | tail -5; } || true )
+   DERIVED_TESTS=$(
+-    cd "$REPO_ROOT" && \
+-    python3 -m pytest --collect-only -q .claude/ 2>&1 | \
++    printf '%s\n' "$_collect_out" | \
+     awk '/[0-9]+ tests? collected/ {
+       for (i = 1; i <= NF; i++) {
+         gsub(/\x1b\[[0-9;]*m/, "", $i)
+@@ -126,8 +283,30 @@ if [ "$NO_TESTS" -eq 0 ]; then
+     }' || true
+   )
+   DERIVED_TESTS=${DERIVED_TESTS:-0}
++  # "N errors" appears in the same -q summary line ("14219 tests collected,
++  # 22 errors in 3.98s"). No match => 0 (a clean collect prints no "errors").
++  DERIVED_TESTS_ERRORS=$(
++    printf '%s\n' "$_collect_out" | \
++    sed -e 's/\x1b\[[0-9;]*m//g' | \
++    awk 'match($0, /[0-9]+ error/) {
++      s = substr($0, RSTART, RLENGTH); sub(/ error/, "", s); print s; exit
++    }' || true
++  )
++  DERIVED_TESTS_ERRORS=${DERIVED_TESTS_ERRORS:-0}
+ fi
+ 
++# Test-FILE count (PLAN-166 W0 F5). Live source is the derivation the docs
++# already print in their own "how to verify" cell, verbatim. `git ls-files`
++# needs a git work tree; a synthetic fixture tree is not one, so a failure
++# derives 0 and the metric simply matches no doc there (fail-quiet on
++# INFRASTRUCTURE, per CLAUDE.md §4 — an absent git repo is not doc drift).
++DERIVED_TEST_FILES_CMD="git ls-files '*test_*.py' '*_test.py' | wc -l"
++DERIVED_TEST_FILES=$(
++  { cd "$REPO_ROOT" && git ls-files '*test_*.py' '*_test.py' 2>/dev/null || true; } \
++    | wc -l | tr -d ' '
++)
++DERIVED_TEST_FILES=${DERIVED_TEST_FILES:-0}
++
+ # Release steps = count of "      - name:" lines in release.yml (proper 6-space indent
+ # distinguishes job-level steps from nested lines). Use grep -c for portability.
+ DERIVED_RELEASE_STEPS=$(
+@@ -148,6 +327,25 @@ DERIVED_WORKFLOWS=$(
+     | wc -l | tr -d ' '
+ )
+ 
++# PLAN-166 W0 F5 — two counts docs/CTO-GUIDE.md cited with NO live metric
++# behind them ("45 fixtures", "1 component fully specified"). Both were wrong
++# (85 / 4) and invisible because the doc was outside DOCS. Given the choice
++# the plan offers — live metric + matcher, or delete the claim — these two are
++# cheap to derive and load-bearing for an evaluator, so they get metrics.
++# Mutation fixtures = every fixture module under the conformance fixture tree,
++# excluding package markers.
++DERIVED_MUTATION_FIXTURES=$(
++  { find "$REPO_ROOT/tests/formal_verification/mutation_fixtures" -name '*.py' \
++      ! -name '__init__.py' 2>/dev/null || true; } \
++    | wc -l | tr -d ' '
++)
++# Published TLA+ specifications (files, not model-checked components — CI does
++# not model-check any of them; see CLAUDE.md §5).
++DERIVED_TLA_SPECS=$(
++  { find "$REPO_ROOT/docs/formal-verification" -maxdepth 1 -name '*.tla' 2>/dev/null || true; } \
++    | wc -l | tr -d ' '
++)
++
+ # ADR existence-by-status gate (E9-F10 ii). bash-3.2 portable: no assoc arrays;
+ # the inventory is space-separated lists + glob-with-[-e]-guard (the canonical
+ # nullglob-free idiom). Each violation is appended as one newline-terminated
+@@ -198,10 +396,14 @@ export VC_REPO_ROOT="$REPO_ROOT"
+ export VC_SKILLS="$DERIVED_SKILLS" VC_CORE="$DERIVED_CORE" VC_FRONTEND="$DERIVED_FRONTEND"
+ export VC_DOMAIN="$DERIVED_DOMAIN" VC_ADRS="$DERIVED_ADRS" VC_HOOK_PY="$DERIVED_HOOK_PY"
+ export VC_LIB="$DERIVED_LIB" VC_SPEC="$DERIVED_SPEC_V1" VC_REGISTERED="$DERIVED_REGISTERED"
++export VC_REGISTRATIONS="$DERIVED_REGISTRATIONS"
+ export VC_SCHEMA="$DERIVED_SCHEMA_FILES"
+ export VC_TESTS="$DERIVED_TESTS" VC_QUIET="$QUIET" VC_JSON="$JSON" VC_NO_TESTS="$NO_TESTS"
++export VC_TESTS_ERRORS="$DERIVED_TESTS_ERRORS" VC_TESTS_CMD="$DERIVED_TESTS_CMD"
++export VC_TEST_FILES="$DERIVED_TEST_FILES" VC_TEST_FILES_CMD="$DERIVED_TEST_FILES_CMD"
+ export VC_RELEASE_STEPS="$DERIVED_RELEASE_STEPS" VC_COMMANDS="$DERIVED_COMMANDS"
+ export VC_WORKFLOWS="$DERIVED_WORKFLOWS"
++export VC_MUTATION_FIXTURES="$DERIVED_MUTATION_FIXTURES" VC_TLA_SPECS="$DERIVED_TLA_SPECS"
+ export VC_LIB_RECURSIVE="$DERIVED_LIB_RECURSIVE" VC_VERSION="$DERIVED_VERSION"
+ export VC_ADR_VIOLATIONS="$ADR_VIOLATIONS"
+ # Inventory echoed so the python3 block can assert CLAUDE.md's RESERVED list.
+@@ -216,13 +418,109 @@ live = {
+     "skills": iv("VC_SKILLS"), "core": iv("VC_CORE"), "frontend": iv("VC_FRONTEND"),
+     "domain": iv("VC_DOMAIN"), "adrs": iv("VC_ADRS"), "hook_py": iv("VC_HOOK_PY"),
+     "lib": iv("VC_LIB"), "spec_v1": iv("VC_SPEC"), "registered": iv("VC_REGISTERED"),
++    "registrations": iv("VC_REGISTRATIONS"),
+     "schema_files": iv("VC_SCHEMA"),
+     "tests": iv("VC_TESTS"),
++    "test_files": iv("VC_TEST_FILES"),
+     "release_steps": iv("VC_RELEASE_STEPS"),
+     "commands": iv("VC_COMMANDS"),
+     "workflows": iv("VC_WORKFLOWS"),
++    "mutation_fixtures": iv("VC_MUTATION_FIXTURES"),
++    "tla_specs": iv("VC_TLA_SPECS"),
+     "lib_recursive": iv("VC_LIB_RECURSIVE"),
+ }
++
++# ---- APPROX rule: band + inputs (PLAN-166 W0 F5) ----
++# The band is DECLARED here and reproduced in every violation message and in
++# the human/JSON report. See the APPROX CONTRACT block at the top of the file
++# for why +/-5% and why the inputs must be printed.
++APPROX_BAND = 0.05
++# Per-metric measurement provenance. `errors` is None for metrics whose
++# derivation cannot partially fail; for `tests` it is the pytest
++# collection-error count, which is the difference between "the number is
++# rounded" and "the number is measured over a population with holes in it".
++APPROX_INPUTS = {
++    "tests": {
++        "command": os.environ.get("VC_TESTS_CMD", ""),
++        "observed": iv("VC_TESTS"),
++        "collect_errors": iv("VC_TESTS_ERRORS"),
++        "skipped": os.environ.get("VC_NO_TESTS") == "1",
++    },
++    "test_files": {
++        "command": os.environ.get("VC_TEST_FILES_CMD", ""),
++        "observed": iv("VC_TEST_FILES"),
++        "collect_errors": None,
++        "skipped": False,
++    },
++}
++
++# The numeral shape an approx claim MUST be written in: a tilde, then digits
++# with optional thousands separators (`,` EN / `.` pt-BR) or a `k` suffix.
++# One capturing group, always.
++_APPROX_NUM = r'~\s*(\d[\d.,]*\s*[kKmM]?)'
++
++
++def approx_norm(raw):
++    """'14,000' / '14.000' / '14k' / '730' -> int. None when unparseable.
++
++    Separator-agnostic on purpose: README.md writes ~14,000 and
++    README.pt-BR.md writes ~14.000 and they are the SAME claim, so the
++    cross-doc equality check must see the same integer for both.
++    """
++    s = (raw or "").strip().lower().replace(" ", "").rstrip(".,")
++    mult = 1
++    if s.endswith("k"):
++        mult, s = 1000, s[:-1]
++        # Decimal-k (PLAN-166 W0 re-pass): a '.'/',' followed by 1-2 digits
++        # before the k is a DECIMAL, not a thousands separator — "~1.4k" is
++        # 1,400. The old separator-strip path normalized it to 14,000, a
++        # 10x error in the FALSE-PASS direction (a doc citing ~1.4k sailed
++        # through a band around a live ~14,000). Integer math, no float.
++        _dm = re.fullmatch(r'(\d+)[.,](\d{1,2})', s)
++        if _dm:
++            _whole, _frac = _dm.group(1), _dm.group(2)
++            return int(_whole) * 1000 + int(_frac) * (10 ** (3 - len(_frac)))
++    s = s.replace(",", "").replace(".", "")
++    if not s.isdigit():
++        return None
++    return int(s) * mult
++
++
++# Prose forms, per metric. Every regex embeds _APPROX_NUM exactly once.
++# Adding a phrasing here is cheap; inventing one that matches nothing is a
++# dead rule, so each entry below is pinned to a site that exists today (see
++# the APPROX SITES table printed by --json `approx_sites`).
++APPROX_RULES = [
++    ("tests", [
++        # "~14,000 cases" / "~14,000 collected cases" / "~14,000 parametrized
++        # cases" / "~14,000 test cases" / "~14.000 casos" / '"~14k tests."'
++        # The \** absorbs markdown bold that sits BETWEEN the numeral and its
++        # noun ("reports **~14,000** collected cases" in docs/README.md).
++        _APPROX_NUM + r'\**\s*(?:collected\s+|parametrized\s+|test\s+'
++                      r'|hand-written\s+)?(?:cases|casos|tests)\b',
++    ]),
++    ("test_files", [
++        _APPROX_NUM + r'\**\s*test files\b',
++    ]),
++]
++
++# Table-cell forms: the numeral is alone in the VALUE cell, so no noun follows
++# it and the prose regexes above cannot see it.
++APPROX_TABLE_RULES = [
++    ("tests", r'^Python tests collected\b'),
++    ("test_files", r'^Test files\b'),
++]
++
++# Registered exemptions. See "PENDING SITES" in the header.
++# (doc, metric, frozen_value, why) — EMPTY today. The one historical entry
++# (CLAUDE.md tests=13000, frozen mid-session under Gate-1 cache discipline)
++# was consumed when commit 65daff0 restated CLAUDE.md to ~14,000; left in
++# place it permanently grandfathered the exact stale value — a revert of
++# CLAUDE.md to "~13,000" exited 0 because this lookup runs BEFORE the band
++# check (PLAN-166 W0 re-pass). Delete any future entry in the same commit
++# that lands its restatement.
++APPROX_PENDING = []
++_pending_index = dict(((d, m), (v, w)) for d, m, v, w in APPROX_PENDING)
+ # VERSION is a dotted string, not an int — kept separate from the int `live` map.
+ live_version = os.environ.get("VC_VERSION", "") or ""
+ quiet = os.environ.get("VC_QUIET") == "1"
+@@ -235,9 +533,21 @@ no_tests = os.environ.get("VC_NO_TESTS") == "1"
+ # PLAN-161 V1 ([[feedback-adr-count-drift-unwatched-docs]], S275): the four
+ # previously-unwatched drift-prone docs are now first-class scan targets —
+ # they drifted silently twice (GA v1.1.0 and again by S278).
++# PLAN-166 W0 F5 (S294): four MORE unwatched drift-prone docs promoted to
++# first-class scan targets. README.pt-BR.md carried a v1.0.0-era table (55
++# hooks / 44 wired / ~12.000 casos) purely because no rule spoke Portuguese;
++# docs/README.md, docs/WHAT-WE-ARE.md and docs/CTO-GUIDE.md were the
++# outward-facing "verify every claim" set and had drifted a full MINOR line
++# behind (151 skills / 171 ADRs / 53 hooks / 22 commands).
++# NOTE for whoever adds the next doc here: joining DOCS activates EVERY
++# matcher, not just the one you came for — and it does NOT retro-activate
++# claims whose phrasing no matcher knows. Run the gate, read
++# `rule_matches_by_doc`, and add a matcher (or delete the claim) for every
++# number the new doc carries.
+ DOCS = [
+-    "CLAUDE.md", "README.md", "INSTALL.md",
++    "CLAUDE.md", "README.md", "README.pt-BR.md", "INSTALL.md",
+     "docs/ARCHITECTURE.md", "docs/GUIA-COMPLETO.md", "docs/FAQ.md",
++    "docs/README.md", "docs/WHAT-WE-ARE.md", "docs/CTO-GUIDE.md",
+     "npm/README.md",
+ ]
+ # Additional docs scanned for the subset of rules that reference them.
+@@ -263,46 +573,126 @@ RULES = [
+         # PLAN-161 V1 — phrasings carried by the four newly-watched docs.
+         # "# N skills across" is the DOMAIN tree comment, not the total.
+         r'# (\d+) skills(?! across)', r'(\d+) skill files',
++        # PLAN-166 W0 F5 — docs/WHAT-WE-ARE.md §1.4 calls them checklists.
++        r'(\d+) reusable checklists',
++        # PLAN-166 W0 F5 (pt) — README.pt-BR.md prose "166 arquivos de skill".
++        r'(\d+) arquivos de skill',
+     ]),
+     ("core", "exact", [
+         r'\((\d+) universal\)', r'\((\d+)\s+universais\)',
+         r'# (\d+) universal skills', r'\((\d+) core ',
+         r'CORE\*\* \(universal\) \| (\d+)',
+         r'(\d+) core \+',   # "42 core + 8 frontend + 116 domain" split cells
++        r'(\d+) core \(universal\)',   # WHAT-WE-ARE.md §1.4 three-tier prose
+     ]),
+     ("frontend", "exact", [
+         r'\((\d+) universal frontend\)', r'\((\d+) frontend skills',
+         r'# (\d+) universal frontend', r'# (\d+) frontend skills',
+         r'(\d+) frontend universais', r'(\d+) frontend \+',
++        # WHAT-WE-ARE.md §1.4 — \s+ because the doc wraps the phrase across a
++        # newline ("8 frontend (universal\nfrontend)"); a literal space
++        # matched ZERO sites while core/domain in the SAME sentence were
++        # watched (PLAN-166 W0 re-pass, dead-regex class).
++        r'(\d+) frontend \(universal\s+frontend\)',
+     ]),
+     ("domain", "exact", [
+         r'(\d+) domain across',
+         r'\+ (\d+) domain',      # "42 core + 8 frontend + 116 domain" split cells
+         r'# (\d+) skills across', # ARCHITECTURE.md domains/ tree comment
++        r'(\d+) domain \(fintech',  # WHAT-WE-ARE.md §1.4 three-tier prose
++        # pt split cell: "42 core + 8 frontend + 116 de domínio"
++        r'\+ (\d+) de domínio',
+     ]),
+-    ("adrs", "exact", [r'(\d+) ADRs total', r'(\d+) ADRs on disk']),
++    # PLAN-166 W0 F5: `# (\d+) ADRs` is the "verify it yourself" comment that
++    # both READMEs put next to `ls .claude/adr | grep -c '^ADR-'`. It matched
++    # nothing before — the same vacuous-site class as S287, found by diffing
++    # the grep census of the docs against `rule_matches_by_doc`.
++    # PLAN-169 W2.7 (ledger E.3): the TWO GUIA-COMPLETO phrasings the
++    # ledger named — "N ADRs document ..." (prose, sat stale at 189) and
++    # "N Architecture Decision Records" (directory listing, ALSO stale at
++    # 189 — missed by the first W2.7 pass and caught by the repass-r2
++    # part-e reviewer; the ledger said "duas frases" and it meant it).
++    # The \**\s* tolerates bold-wrapped numerals like hook_py below.
++    ("adrs", "exact", [r'(\d+) ADRs total', r'(\d+) ADRs on disk',
++                       r'#\s*(\d+) ADRs\b',
++                       r'(\d+)\**\s*ADRs\**\s+document',
++                       r'(\d+)\**\s*Architecture Decision Records\b']),
+     ("hook_py", "exact", [
+-        r'(\d+) hooks total', r'(\d+) Python hook scripts', r'(\d+) hook scripts',
++        r'(\d+) hooks total', r'(\d+) Python hook scripts',
++        # \**\s*…\s+ tolerates bold-wrapped numerals and line wraps:
++        # docs/README.md writes "the **57** hook\nscripts on disk" — the
++        # plain '(\d+) hook scripts' form saw NEITHER (PLAN-166 W0 re-pass).
++        r'(\d+)\**\s*hook\s+scripts',
++        r'(\d+) em disco',   # pt: "**57 em disco**" (README.pt-BR.md)
++    ]),
++    # S287 vacuous-gate fix: no watched doc ever used the literal
++    # "N registered hooks" — the real phrasings are "46 wired into
++    # `.claude/settings.json`" (CLAUDE.md §1, ARCHITECTURE prose + table)
++    # and the "Hooks wired in" table rows (README/npm, TABLE_RULES below).
++    ("registered", "exact", [
++        r'(\d+) registered hooks',
++        # BOTH prepositions: CLAUDE.md/ARCHITECTURE say "46 wired into
++        # `.claude/settings.json`", GUIA-COMPLETO says "46 hooks wired in
++        # `settings.json`". The pair-rail caught the missing `wired in`
++        # form against a doc that was stale at 44 — the vacuous-gate class
++        # one layer deeper (a rule that matches SOME docs looks alive
++        # while the doc it misses drifts).
++        r'(\d+) wired into',
++        r'(\d+) hooks wired in\b',
++        # PLAN-166 W0 F5 — docs/README.md states the same number twice, once
++        # in the "Hooks registered" table row and once in the prose that
++        # explains the 57-vs-46 gap. Both BOLD-WRAP the numeral
++        # ("**46** distinct scripts"), so the matcher absorbs the closing
++        # `**` — the plain-space form matched ZERO sites (PLAN-166 W0
++        # re-pass, dead-regex class; the approx rules already knew this
++        # via their own \** — the fix just reached the exact rules too).
++        r'(\d+)\**\s*distinct scripts',
++        r'(\d+) ligados\b',   # pt: "**46 ligados**" (README.pt-BR.md)
++    ]),
++    # Total hook ENTRIES in the hooks{} subtree (one script can fire on
++    # several events; includes non-.py commands). CLAUDE.md §1 +
++    # ARCHITECTURE prose + the README/npm table Notes cells.
++    ("registrations", "exact", [
++        r'(\d+) event registrations',
++        r'(\d+) registros de evento',   # pt (README.pt-BR.md table cell)
+     ]),
+-    ("registered", "exact", [r'(\d+) registered hooks']),
+     ("lib", "exact", [
+         r'(\d+) shared (?:Python )?modules',
+         r'(\d+) [`]?_lib[`/]* modules',   # catches "N `_lib/` modules" / "N _lib modules"
+         r'(\d+) stdlib-only shared modules',   # ARCHITECTURE.md tree comment
+     ]),
+-    ("schema_files", "exact", [r'(\d+) schema files']),
++    # PLAN-166 W0 F5: spec_v1 had TABLE_RULES coverage only; README.pt-BR.md
++    # states it in prose ("em `SPEC/v1/` (32 arquivos — ...").
++    ("spec_v1", "exact", [r'SPEC/v1/`\s*\((\d+) arquivos']),
++    ("schema_files", "exact", [
++        r'(\d+) schema files',
++        # "32 (28 `*.schema.md`)" in the ARCHITECTURE/CTO-GUIDE tables and
++        # the pt prose "32 arquivos — 28 `*.schema.md`".
++        r'(\d+) `\*\.schema\.md`',
++    ]),
+     ("tests", "floor", [r'(\d+)\+ tests', r'(\d+)\+ unit tests']),
+     # New mechanics-derived counts (F-3.2/F-4 blind-spot closure — PLAN-113 RW-E)
++    # S287 vacuous-gate fix: the two historical phrasings matched no doc
++    # (rule dead since the RELEASE.md rewrite); the live citation site is
++    # RELEASE.md's pointer block "`release.yml` — release-gate +
++    # publish-release (N steps, ...)".
+     ("release_steps", "exact", [
+-        r'release[.-]gate atual \((\d+) steps',   # RELEASE.md (PT)
+-        r'release\.yml.*?with (\d+) steps',        # CLAUDE.md §1
++        r'release\.yml[^()\n]*\((\d+) steps',
+     ]),
+     ("commands", "exact", [
+         r'(\d+) slash commands',
+     ]),
+-    ("workflows", "exact", [
+-        r'(\d+) workflows',
+-    ]),
++    # PLAN-166 W0 F5: "workflows" IS doc-gated now. It was exempt because no
++    # watched doc cited it — but docs/CTO-GUIDE.md §2 always did ("| Workflows
++    # | 20 |", live 21), and the doc simply was not in DOCS. The claim is
++    # carried in a table cell, so the live rule is the TABLE_RULE below and
++    # there is deliberately no prose regex here (a prose regex matching
++    # nothing is the dead-gate class this file exists to prevent).
++    # PLAN-166 W0 F5: two counts docs/CTO-GUIDE.md §2 asserted with nothing
++    # behind them. "45 fixtures" (live 85) and "1 component fully specified"
++    # (live 4 published .tla specs).
++    ("mutation_fixtures", "exact", [r'(\d+) mutation fixtures']),
++    ("tla_specs", "exact", [r'(\d+) TLA\+ specs published']),
+     # E9-F10 (i): recursive `_lib` count. Only CLAUDE.md states "N recursive";
+     # README/INSTALL lack the literal, so scanning all DOCS is safe.
+     ("lib_recursive", "exact", [
+@@ -318,11 +708,43 @@ RULES = [
+ TABLE_RULES = [
+     ("adrs",      "exact", r'^(?:ADRs|Architecture decision records)\b'),
+     ("hook_py",   "exact", r'^Hook scripts\b'),
+-    ("lib",       "exact", r'^(?:_lib modules|Shared library modules)\b'),
++    # PLAN-166 W0 F5: docs/CTO-GUIDE.md §2 labels the row just "Hooks" and
++    # puts BOTH numbers in the value cell ("57 .py on disk; 46 wired into
++    # `settings.json`"). The table extractor reads the FIRST integer, so this
++    # row feeds hook_py; the second number is picked up by the `(\d+) wired
++    # into` prose regex. The `$` anchor is load-bearing — an unanchored
++    # `^Hooks\b` would also swallow "Hooks registered" / "Hooks wired in"
++    # and assert the REGISTERED count against the on-disk metric.
++    ("hook_py",   "exact", r'^Hooks$'),
++    ("lib",       "exact",
++     r'^(?:_lib modules|_lib/ stdlib-only modules|Shared library modules)\b'),
+     ("commands",  "exact", r'^Slash commands\b'),
+     ("skills",    "exact", r'^(?:Skills|Skill checklists)\b'),
+     ("spec_v1",   "exact", r'^SPEC/v1 files\b'),
+     ("workflows", "exact", r'^Workflows\b'),
++    # ---- PLAN-166 W0 F5: README.pt-BR.md label rules (pt) ----
++    # The pt-BR README carried a v1.0.0-era table (55 hooks on disk / 44 wired)
++    # for one reason only: no rule spoke Portuguese. These label matchers are
++    # deliberately SEPARATE entries rather than alternations bolted onto the
++    # English ones, so a pt/EN LABEL COLLISION is impossible to introduce by
++    # accident — see the collision audit in the header of this block:
++    #   * "Architecture decision records" and "Slash commands" are identical in
++    #     both languages AND mean the same metric, so the existing English
++    #     rules already cover them correctly (true positives, not collisions).
++    #   * every other pt label is lexically disjoint from every English label
++    #     ("Scripts de hook" vs "Hook scripts", "Checklists de skills" vs
++    #     "Skills"/"Skill checklists", "Módulos de biblioteca compartilhada" vs
++    #     "Shared library modules", "Hooks ligados em" vs "Hooks wired in").
++    #     No English regex can match a pt label and vice versa.
++    ("hook_py",    "exact", r'^Scripts de hook\b'),
++    ("registered", "exact", r'^Hooks ligados em\b'),
++    ("lib",        "exact", r'^Módulos de biblioteca compartilhada\b'),
++    ("skills",     "exact", r'^Checklists de skills\b'),
++    # S287: README/npm "| Hooks wired in `settings.json` | **46** | ..." and
++    # ARCHITECTURE "| Hook registrations | 46 wired into `settings.json`|".
++    # PLAN-166 W0 F5 adds docs/README.md's "| Hooks registered | **46** ... |".
++    ("registered", "exact",
++     r'^(?:Hooks wired in|Hook registrations|Hooks registered)\b'),
+ ]
+ 
+ def iter_table_rows(text):
+@@ -335,6 +757,28 @@ def iter_table_rows(text):
+             yield cells
+ 
+ violations = []
++# S287 rule-liveness accounting: per-metric count of doc sites each rule
++# actually matched (prose + table cells). Exported in --json as
++# `rule_matches`; the real-repo test asserts every doc-gated metric >= 1
++# (a metric at 0 is a dead gate reporting "no drift" unchecked).
++rule_matches = {m: 0 for m, _, _ in RULES}
++for m, _, _ in TABLE_RULES:
++    rule_matches.setdefault(m, 0)
++# PER-DOCUMENT accounting (pair-rail R3, P2). Aggregate-per-metric
++# liveness is a FLOOR, not the proof: a rule matching 5 of 6 watched docs
++# looks alive while the 6th drifts — which is exactly how
++# `docs/GUIA-COMPLETO.md` sat stale at 44 hooks after the metric-level
++# rule was "fixed". `rule_matches_by_doc[(metric, doc)]` lets the
++# real-repo test assert an explicit expectation SET, so a document that
++# silently stops matching is a failure rather than an invisible hole.
++rule_matches_by_doc = {}
++
++
++def _note(metric, doc):
++    rule_matches[metric] = rule_matches.get(metric, 0) + 1
++    key = "%s@%s" % (metric, doc)
++    rule_matches_by_doc[key] = rule_matches_by_doc.get(key, 0) + 1
++
+ for metric, kind, label_rx in TABLE_RULES:
+     lv = live[metric]
+     for doc in DOCS:
+@@ -346,6 +790,7 @@ for metric, kind, label_rx in TABLE_RULES:
+             m = re.search(r'(\d+)', value_cell)
+             if m is None:
+                 continue
++            _note(metric, doc)
+             v = int(m.group(1))
+             if kind == "exact" and v != lv:
+                 violations.append(
+@@ -353,8 +798,9 @@ for metric, kind, label_rx in TABLE_RULES:
+                 )
+ 
+ for metric, kind, regexes in RULES:
+-    if metric == "tests" and no_tests:
+-        continue
++    # tests under --no-tests: still COUNT matches (liveness stays
++    # observable) but never enforce against the skipped live value.
++    enforce = not (metric == "tests" and no_tests)
+     lv = live[metric]
+     # release_steps scans both DOCS and RELEASE_DOCS; all others scan only DOCS.
+     scan_docs = (DOCS + list(_RELEASE_STEPS_EXTRA_DOCS)
+@@ -363,6 +809,9 @@ for metric, kind, regexes in RULES:
+         text = texts.get(doc, "")
+         for rx in regexes:
+             for m in re.finditer(rx, text):
++                _note(metric, doc)
++                if not enforce:
++                    continue
+                 v = int(m.group(1))
+                 if kind == "exact" and v != lv:
+                     violations.append(
+@@ -373,38 +822,305 @@ for metric, kind, regexes in RULES:
+                         f"{doc}: cites {metric}>={v}+ but live={lv} (regression; rule: floor)"
+                     )
+ 
++# ============================  APPROX EVALUATION  ===========================
++# Three failure modes (band, cross-doc equality, missing `~` marker), one
++# non-failure mode (registered PENDING site), and a printed input record for
++# every metric. See the APPROX CONTRACT block at the top of the file.
++warnings = []
++pending = []
++approx_sites = []        # [{metric, doc, cited, pending}]
++_approx_consumed = {}    # doc -> set of char offsets of `~` already consumed
++
++
++def _consume(doc, off):
++    _approx_consumed.setdefault(doc, set()).add(off)
++
++
++def _record_approx(metric, doc, raw, off):
++    _note(metric, doc)
++    _consume(doc, off)
++    cited = approx_norm(raw)
++    if cited is None:
++        violations.append(
++            "%s: %s approx claim '~%s' is not a parseable figure"
++            "  (rule: approx/shape)" % (doc, metric, raw)
++        )
++        return
++    approx_sites.append({"metric": metric, "doc": doc, "cited": cited})
++
++
++for _metric, _regexes in APPROX_RULES:
++    for _doc in DOCS:
++        _text = texts.get(_doc, "")
++        for _rx in _regexes:
++            for _m in re.finditer(_rx, _text):
++                _record_approx(_metric, _doc, _m.group(1), _m.start())
++
++# Table-cell sites: the numeral sits alone in the VALUE cell with no noun
++# after it, so the prose regexes above are structurally blind to it.
++for _doc in DOCS:
++    _off = 0
++    for _line in texts.get(_doc, "").splitlines(True):
++        _s = _line.strip()
++        if _s.startswith('|') and _s.endswith('|') and _s.count('|') >= 3:
++            _cells = [c.strip() for c in _s.strip('|').split('|')]
++            if len(_cells) >= 2:
++                _label = re.sub(r'[*`]', '', _cells[0]).strip()
++                for _metric, _label_rx in APPROX_TABLE_RULES:
++                    if not re.match(_label_rx, _label, re.IGNORECASE):
++                        continue
++                    _cm = re.search(_APPROX_NUM, _cells[1])
++                    if _cm is None:
++                        # An approx metric written as a bare exact integer
++                        # claims a precision this gate cannot honour, and the
++                        # row would otherwise go completely unchecked (that is
++                        # how docs/CTO-GUIDE.md sat at "| Test files | 676 |").
++                        if re.search(r'\d', _cells[1]):
++                            violations.append(
++                                "%s: table row '%s' cites %s WITHOUT the '~' "
++                                "marker (%r); approx metrics must be written "
++                                "'~N'  (rule: approx/table-cell)"
++                                % (_doc, _label, _metric, _cells[1])
++                            )
++                        continue
++                    _lm = re.search(_APPROX_NUM, _line)
++                    _record_approx(_metric, _doc, _cm.group(1),
++                                   _off + (_lm.start() if _lm else 0))
++        _off += len(_line)
++
++_by_metric = {}
++for _site in approx_sites:
++    _by_metric.setdefault(_site["metric"], []).append(_site)
++
++for _metric in sorted(_by_metric):
++    _sites = _by_metric[_metric]
++    _in = APPROX_INPUTS.get(_metric)
++    _lv = _in["observed"] if _in else live.get(_metric, 0)
++    # A live value of 0 means the derivation could not run in this tree (no
++    # git work tree, --no-tests). A +/-5% band around 0 rejects every possible
++    # doc figure, so enforcement is suspended and the fact is WARNED, never
++    # silently skipped.
++    _skip = bool(_in and _in["skipped"]) or _lv <= 0
++    _tol = _lv * APPROX_BAND
++    _pool = {}
++    for _site in _sites:
++        _frozen = _pending_index.get((_site["doc"], _metric))
++        if _frozen is not None and _site["cited"] == _frozen[0]:
++            _site["pending"] = True
++            pending.append(
++                "%s: %s=~%d is a REGISTERED PENDING site (live=%d, band "
++                "+/-%d%%). %s" % (_site["doc"], _metric, _site["cited"],
++                                  _lv, int(APPROX_BAND * 100), _frozen[1])
++            )
++            continue
++        _site["pending"] = False
++        _pool.setdefault(_site["cited"], []).append(_site["doc"])
++        if _skip:
++            continue
++        if abs(_site["cited"] - _lv) > _tol:
++            violations.append(
++                "%s: cites %s=~%d, live=%d — OUTSIDE the +/-%d%% band "
++                "[%d..%d]  (rule: approx; measured by `%s`)"
++                % (_site["doc"], _metric, _site["cited"], _lv,
++                   int(APPROX_BAND * 100), int(_lv - _tol), int(_lv + _tol),
++                   (_in or {}).get("command", "n/a"))
++            )
++    if len(_pool) > 1:
++        _detail = "; ".join(
++            "~%d in %s" % (v, ", ".join(sorted(set(ds))))
++            for v, ds in sorted(_pool.items())
++        )
++        violations.append(
++            "approx metric '%s' is cited with DIFFERENT figures across "
++            "watched docs: %s  (rule: approx/cross-doc-equality)"
++            % (_metric, _detail)
++        )
++
++# Inputs of the band, surfaced as named WARNINGs (contract clause 3).
++for _metric in sorted(APPROX_INPUTS):
++    _in = APPROX_INPUTS[_metric]
++    if _in["skipped"]:
++        warnings.append(
++            "approx metric '%s': live measurement SKIPPED (--no-tests) — the "
++            "band is NOT enforced this run" % _metric
++        )
++        continue
++    if _in["collect_errors"]:
++        _msg = (
++            "approx metric '%s': %d COLLECTION ERROR(S) in `%s` — the observed "
++            "value (%d) is measured over a PARTIAL population, so the +/-%d%% "
++            "band is being applied to the wrong number. Fix the collection "
++            "errors before trusting this rule."
++            % (_metric, _in["collect_errors"], _in["command"],
++               _in["observed"], int(APPROX_BAND * 100))
++        )
++        # Contract clause 3 (PLAN-166 W0 re-pass): when the band was actually
++        # ENFORCED over >=1 doc site this run, a partial population makes the
++        # verdict untrustworthy — and the automated callers (validate.yml
++        # --quiet, the release preflight piping to /dev/null) can only see
++        # the exit code, so this MUST fail the gate, not warn into a void.
++        # It stays a warning only when the band is already suspended
++        # (observed<=0) — there is no verdict to corrupt then.
++        _enforced_sites = [
++            s for s in approx_sites
++            if s["metric"] == _metric and not s.get("pending")
++        ]
++        if _enforced_sites and _in["observed"] > 0:
++            violations.append(_msg + "  (rule: approx/collect-errors)")
++        else:
++            warnings.append(_msg)
++    if _in["observed"] <= 0:
++        warnings.append(
++            "approx metric '%s': `%s` returned 0 — the rule is VACUOUS in this "
++            "tree (band suspended)" % (_metric, _in["command"])
++        )
++
++# ---- UNMATCHED-APPROX SWEEP ----
++# The "non-inventory numerals" exemption in the header must not become a
++# hiding place. Any thousands-shaped approximation in a watched doc that no
++# approx rule consumed is named here, with its line, as a VIOLATION — it
++# fails the gate. A warning here was a dead census (PLAN-166 W0 re-pass):
++# validate.yml runs --quiet and the release preflight discards output, so
++# no automated caller can see anything but the exit code, and an unmatched
++# "~9k" planted in a watched doc shipped through both in total silence.
++# Decimal-k belongs to the family (W0 re-pass round 2): approx_norm already
++# PARSES '~1.4k' / '~13,5k' as 1400/13500 (round-1 finding 7 declared the
++# form part of the ~Nk family), so a CONSUMED site in that shape is
++# band-checked — but this sweep did not recognize it, and an UNCONSUMED
++# '~1.4k widgets' in a watched doc shipped with EXIT=0: the exact F5
++# false-pass class the sweep was upgraded to VIOLATION to stop. The
++# `[.,]\d{1,2}` alternative admits both EN ('.') and pt (',') decimals;
++# 3-digit groups stay with the thousands alternative.
++_THOUSANDS_RX = re.compile(
++    r'~\s*(?:\d+[.,]\d{3}\b|\d+[.,]\d{1,2}\s*[kK]\b|\d+\s*[kK]\b)')
++for _doc in DOCS:
++    _text = texts.get(_doc, "")
++    _consumed = _approx_consumed.get(_doc, set())
++    for _m in _THOUSANDS_RX.finditer(_text):
++        if _m.start() in _consumed:
++            continue
++        violations.append(
++            "%s:%d: thousands-shaped approximation '%s' is consumed by NO "
++            "approx rule — give it a live metric + matcher, or delete the "
++            "numeral  (rule: approx/unmatched-sweep)"
++            % (_doc, _text.count("\n", 0, _m.start()) + 1, _m.group(0).strip())
++        )
++
+ # ---- E9-F10 (iii): VERSION-string coherence ----
+ # Anchored to the current-version DECLARATION sites ONLY (not historical
+ # CHANGELOG prose). Each (doc, regex) yields the literal version string, which
+ # must equal the live VERSION file. npm/package.json is read here (it is not in
+ # DOCS). A doc with zero matches contributes no violation.
+ if live_version:
++    # S291 (pair-rail R2, P2): `VERSION=` NEVER existed in CLAUDE.md or
++    # README.md — `git log -S 'VERSION='` finds no commit that added or
++    # removed it. Both rules were dead from birth (the `registered` class
++    # again), while the release checklist advertised them as checked.
++    # Removed rather than faked: neither doc declares a version literal by
++    # design (they point at the VERSION file). Every remaining site is
++    # liveness-accounted below — a site that matches nothing now FAILS.
+     VERSION_SITES = [
+-        ("CLAUDE.md", r'VERSION=(\d+\.\d+\.\d+)'),
+-        ("INSTALL.md", r'--pin v(\d+\.\d+\.\d+)'),
+-        ("README.md", r'VERSION=(\d+\.\d+\.\d+)'),
++        ("INSTALL.md", r'--pin v(\d+\.\d+\.\d+)', "full"),
+         # PLAN-161 V1 — current-version declaration sites in the newly-watched
+         # docs (the npm README review stamp is a deliberate release tripwire:
+         # a version bump forces a fresh review of the npm-facing copy).
+-        ("docs/ARCHITECTURE.md", r'currently\s+v(\d+\.\d+\.\d+), aligned with the repo'),
+-        ("npm/README.md", r'last-reviewed: \d{4}-\d{2}-\d{2} v(\d+\.\d+\.\d+)'),
++        ("docs/ARCHITECTURE.md", r'currently\s+v(\d+\.\d+\.\d+), aligned with the repo', "full"),
++        ("npm/README.md", r'last-reviewed: \d{4}-\d{2}-\d{2} v(\d+\.\d+\.\d+)', "full"),
++        # S293 (codex NO-GO no rc.1 do v1.3.0 — P0s 2-4): TRÊS declarações de
++        # versão corrente que estavam FORA desta lista e ficaram stale no
++        # bump (a classe unwatched-doc de S291, de novo). SBOM declara o
++        # triple completo; SECURITY/VERSIONING declaram a janela de suporte
++        # como vMAJOR.MINOR.x — comparadas ao major.minor do VERSION vivo.
++        ("SBOM.md", r'\*\*Version:\*\* `(\d+\.\d+\.\d+)`', "full"),
++        ("SECURITY.md", r'\*\*Current MINOR\*\* \(`v(\d+\.\d+)\.x`\)', "minor"),
++        ("VERSIONING.md", r'Current MINOR \(`v(\d+\.\d+)\.x`\)', "minor"),
++        # S293 r3 P1: vigiar SÓ o Current deixa o PREVIOUS envelhecer em
++        # silêncio — e a janela de suporte publicada é uma promessa a
++        # adopters, não decoração. Previous = minor imediatamente anterior
++        # ao vivo (rebase de MAJOR não é expressável aqui e falharia alto,
++        # que é o comportamento correto para uma transição que exige juízo).
++        ("SECURITY.md", r'\*\*Previous MINOR\*\* \(`v(\d+\.\d+)\.x`\)', "prev_minor"),
++        ("VERSIONING.md", r'Previous MINOR \(`v(\d+\.\d+)\.x`\)', "prev_minor"),
++        # PLAN-169 W2.6: the framework-version MARKER is a bump site (the
++        # updater reads it marker-first); desync marker != VERSION must be
++        # RED here, fail-closed, or check-framework-updates.sh loops
++        # behind-minor on every adopter after a GA that skipped it.
++        (".claude/.framework-version", r'\A(\d+\.\d+\.\d+)\s*\Z', "full"),
+     ]
+-    for doc, rx in VERSION_SITES:
+-        for m in re.finditer(rx, texts.get(doc, "")):
+-            if m.group(1) != live_version:
++    _live_minor = ".".join(live_version.split(".")[:2])
++    try:
++        _maj, _min = (int(x) for x in _live_minor.split("."))
++        _prev_minor = "%d.%d" % (_maj, _min - 1) if _min > 0 else ""
++    except ValueError:
++        _prev_minor = ""
++    for doc, rx, mode in VERSION_SITES:
++        _text = texts.get(doc, "")
++        # S293: SBOM/SECURITY/VERSIONING não estão em DOCS (as regras de
++        # contagem não se aplicam a eles) — carregue direto, senão o site
++        # nasce "morto" sobre texto nunca lido.
++        if not _text:
++            _p = os.path.join(root, doc)
++            if os.path.isfile(_p):
++                try:
++                    _text = open(_p, encoding="utf-8").read()
++                except OSError:
++                    _text = ""
++        _hits = 0
++        if mode == "full":
++            _expected = live_version
++        elif mode == "prev_minor":
++            _expected = _prev_minor
++        else:
++            _expected = _live_minor
++        if not _expected:
++            # Sem previous derivável (X.0): o site não é checável por valor;
++            # a liveness abaixo ainda exige que ele EXISTA.
++            _expected = None
++        for m in re.finditer(rx, _text):
++            _hits += 1
++            if _expected is not None and m.group(1) != _expected:
+                 violations.append(
+-                    f"{doc}: cites version={m.group(1)}, live VERSION={live_version}  (rule: exact)"
++                    f"{doc}: cites version={m.group(1)}, live VERSION={_expected}"
++                    f" ({mode})  (rule: exact)"
+                 )
++        rule_matches["version:" + doc + ":" + mode] = _hits
++        # Liveness for the version family (pair-rail R2 P2 / R3 P1). The
++        # discrimination that matters: a doc that EXISTS but no longer
++        # carries its version literal is a DEAD release gate reporting
++        # "clean" — fail loudly. A doc that does not exist at all is a
++        # site that does not apply to this tree (synthetic fixtures ship
++        # a subset of the docs by design) — skip, do not invent a
++        # violation. The first pass of this gate failed unconditionally
++        # and red-lit two existing fixture tests; the pair-rail caught
++        # it because I added the gate without re-running the suite that
++        # covers it.
++        # EXISTENCE, not truthiness (pair-rail R4 P2): an empty file has
++        # falsy text, so the truthiness form reported "clean" after any
++        # version site was truncated to zero bytes — the exact opposite
++        # of the stated exists-without-literal contract.
++        if _hits == 0 and os.path.isfile(os.path.join(root, doc)):
++            violations.append(
++                f"{doc}: version site declared but matched ZERO occurrences "
++                f"— dead release gate (rule: version-liveness)"
++            )
+     pkg_path = os.path.join(root, "npm", "package.json")
+     try:
+         pkg_text = open(pkg_path, encoding="utf-8").read()
+     except OSError:
+         pkg_text = ""
++    _pkg_hits = 0
+     for m in re.finditer(r'"version"\s*:\s*"(\d+\.\d+\.\d+)"', pkg_text):
++        _pkg_hits += 1
+         if m.group(1) != live_version:
+             violations.append(
+                 f"npm/package.json: cites version={m.group(1)}, live VERSION={live_version}  (rule: exact)"
+             )
++    rule_matches["version:npm/package.json"] = _pkg_hits
++    if _pkg_hits == 0 and os.path.isfile(pkg_path):
++        violations.append(
++            "npm/package.json: version field matched ZERO occurrences "
++            "— dead release gate (rule: version-liveness)"
++        )
+     # OSS-D1: pyproject.toml [project] version must equal live VERSION.
+     # Read independently (it is not in DOCS/texts), mirroring the
+     # npm/package.json site above -- closes the silent-drift gap that let
+@@ -414,11 +1130,19 @@ if live_version:
+         pyproject_text = open(pyproject_path, encoding="utf-8").read()
+     except OSError:
+         pyproject_text = ""
++    _pyp_hits = 0
+     for m in re.finditer(r'^version\s*=\s*"(\d+\.\d+\.\d+)"', pyproject_text, re.M):
++        _pyp_hits += 1
+         if m.group(1) != live_version:
+             violations.append(
+                 f"pyproject.toml: cites version={m.group(1)}, live VERSION={live_version}  (rule: exact)"
+             )
++    rule_matches["version:pyproject.toml"] = _pyp_hits
++    if _pyp_hits == 0 and os.path.isfile(pyproject_path):
++        violations.append(
++            "pyproject.toml: version field matched ZERO occurrences "
++            "— dead release gate (rule: version-liveness)"
++        )
+ 
+ # ---- E9-F10 (ii): CLAUDE.md §1 RESERVED-ADR list must be exactly {130,134} ----
+ # Parse the "ADR-<a>/<b> RESERVED (no file ..." enumeration (PLAN-120-FOLLOWUP
+@@ -449,21 +1173,59 @@ for _line in (os.environ.get("VC_ADR_VIOLATIONS", "") or "").splitlines():
+ if as_json:
+     out_live = dict(live)
+     out_live["version"] = live_version
+-    print(json.dumps({"live": out_live, "violations": violations}, indent=2))
++    print(json.dumps({"live": out_live, "violations": violations,
++                      "warnings": warnings, "pending": pending,
++                      "approx": {"band": APPROX_BAND,
++                                 "inputs": APPROX_INPUTS,
++                                 "sites": approx_sites},
++                      "rule_matches": rule_matches,
++                      "rule_matches_by_doc": rule_matches_by_doc}, indent=2))
+     sys.exit(1 if violations else 0)
+ 
+ if not quiet:
+     print("=== verify-counts.sh — bidirectional drift check ===")
+     print("Live-derived counts:")
+     for k in ("skills", "core", "frontend", "domain", "adrs", "hook_py",
+-              "registered", "lib", "lib_recursive", "spec_v1", "schema_files",
+-              "tests", "release_steps", "commands", "workflows"):
++              "registered", "registrations", "lib", "lib_recursive",
++              "spec_v1", "schema_files",
++              "tests", "test_files", "release_steps", "commands", "workflows",
++              "mutation_fixtures", "tla_specs"):
+         v = live[k]
+         if k == "tests" and no_tests:
+             v = "(skipped)"
+-        print(f"  {k:16s} = {v}")
+-    print(f"  {'version':16s} = {live_version}")
++        print(f"  {k:18s} = {v}")
++    print(f"  {'version':18s} = {live_version}")
++    print("")
++    # Contract clause 3: an approx band without its inputs is a licence to
++    # drift, so the inputs are printed on every run — command, observed
++    # value, collection-error count — next to the figure the docs cite.
++    print(f"Approx metrics (band +/-{int(APPROX_BAND * 100)}%):")
++    for _k in sorted(APPROX_INPUTS):
++        _i = APPROX_INPUTS[_k]
++        _cited = sorted(set(s["cited"] for s in approx_sites
++                            if s["metric"] == _k and not s.get("pending")))
++        _obs = "(skipped)" if _i["skipped"] else _i["observed"]
++        _lo = int(_i["observed"] * (1 - APPROX_BAND))
++        _hi = int(_i["observed"] * (1 + APPROX_BAND))
++        print(f"  {_k}")
++        print(f"    command        = {_i['command']}")
++        print(f"    observed       = {_obs}")
++        print(f"    collect errors = "
++              f"{'n/a' if _i['collect_errors'] is None else _i['collect_errors']}")
++        print(f"    accepted band  = [{_lo}..{_hi}]")
++        print(f"    cited in docs  = "
++              f"{', '.join('~%d' % c for c in _cited) if _cited else '(no site)'}")
+     print("")
++    if pending:
++        print("Pending (registered exemptions — NOT failures, but they expire):")
++        for pen in pending:
++            print(f"  PENDING: {pen}")
++        print("")
++    if warnings:
++        print("Warnings (advisory — do not affect the exit code):")
++        for war in warnings:
++            print(f"  WARN: {war}")
++        print("")
+     if violations:
+         print("Drift / regressions:")
+         for vio in violations:
+diff --git a/.github/workflows/npm-publish.yml b/.github/workflows/npm-publish.yml
+index 5b755b6..03071be 100644
+--- a/.github/workflows/npm-publish.yml
++++ b/.github/workflows/npm-publish.yml
+@@ -37,6 +37,47 @@ name: NPM Publish
+ #     Owner-in-the-loop gate covering the Sprint 17 public-launch
+ #     go/no-go decision (private-first strategy per
+ #     `project_closure_strategy.md`).
++#
++# ---------------------------------------------------------------------
++# PLAN-166 W1 item 1 (F1, P0) — the publish now OBSERVES the governance
++# gate. `release.yml` and this workflow both fire on `push: tags: v*` as
++# two INDEPENDENT runs; until PLAN-166 nothing made the publish observe
++# the gate, so the only barrier was a human approving `production-npm`
++# with no machine evidence that `release-gate` was green — a live path
++# to publishing an unreviewed tree. A first job (`await-release-gate` —
++# deliberately NO `environment:` and NO RC exclusion, so it runs on RC
++# tags as a live positive control) polls release.yml's `release-gate`
++# JOB (never the run conclusion: CEO_SOTA_DISABLE=1 skips the job while
++# the run stays green) for THIS tag at THIS commit and fail-CLOSED
++# blocks unless it concluded success. `publish` gains
++# `needs: await-release-gate`; its `environment: production-npm`
++# approval and the RC exclusion are VERBATIM unchanged. Deliberate
++# ordering: the Owner's manual-approval prompt only appears AFTER the
++# gate is green — approval can never race ahead of machine evidence —
++# and the `already_published` idempotency guard STAYS in the publish
++# job (last-resort idempotency), not in the gate job. Do not "optimise"
++# the order back.
++#
++# Alternatives REJECTED (do not resurrect without a new debate):
++#   - `workflow_run` trigger: GitHub executes the workflow file from
++#     the DEFAULT branch, not the tag's tree — that kills the rollback
++#     invariant documented above (tag runs pin this workflow to the
++#     tag's tree; a failed GA publish means rollback + delete/re-tag).
++#   - moving the publish into release.yml: npm trusted publishing binds
++#     OIDC by workflow FILENAME
++#     (.claude/plans/PLAN-158/oidc-failure-playbook.md:18) — renaming
++#     the publishing workflow breaks the npmjs registration, plus ~6
++#     test pins on the npm-publish.yml path.
++#   - a reusable `workflow_call` gate shared by both workflows:
++#     refactor candidate, post-GA only (PLAN-166 §Deferred) — not
++#     during an open release window.
++#
++# The trusted-publisher binding triple (repository / workflow filename /
++# environment) is recorded in
++# .claude/governance/npm-trusted-publisher.txt and cross-checked by
++# .claude/scripts/tests/test_release_workflow_asserts.py, which READS
++# that file (embedding the values in the test would be a 4th copy of
++# the truth).
+ 
+ on:
+   push:
+@@ -52,6 +93,109 @@ permissions:
+   id-token: write   # required for OIDC trusted publishing + provenance
+ 
+ jobs:
++  # ---------------------------------------------------------------------
++  # PLAN-166 W1 item 1 (F1, P0) — OBSERVE THE GOVERNANCE GATE.
++  # This job is the machine evidence that release.yml's `release-gate`
++  # job passed for this exact tag+SHA+push. It deliberately carries NO
++  # `environment:` and NO RC exclusion: it runs on rc tags too, which
++  # makes every RC a live positive control of the gate before GA ever
++  # depends on it.
++  # Decision function + battery: .claude/scripts/await_release_gate.py,
++  # .claude/scripts/tests/test_await_release_gate.py.
++  await-release-gate:
++    name: Await release-gate (release.yml)
++    runs-on: ubuntu-latest
++    # 35 > the poller's own 30-minute deadline, so a timeout surfaces as
++    # the decision function's fail-CLOSED BLOCK (with its inputs printed),
++    # not as an opaque runner kill.
++    timeout-minutes: 35
++    permissions:
++      contents: read   # checkout the tag to get the decision script
++      actions: read    # read release.yml's runs + jobs over the REST API
++    env:
++      # `permissions:` alone does NOT authenticate the `gh` CLI on a
++      # hosted runner. Without GH_TOKEN every poll dies on auth, which is
++      # BLOCK (fail-closed) — i.e. it would break EVERY release, RC and
++      # GA alike. This token is the job's only credential; the job has no
++      # id-token and no environment.
++      GH_TOKEN: ${{ github.token }}
++    steps:
++      - name: Checkout tag
++        # SHA-pinned (Sprint 7 Dependabot bump): actions/checkout@v6.0.2
++        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
++
++      - name: Poll release.yml until release-gate concludes
++        # No `${{ }}` interpolation inside this script by design — every
++        # value arrives through the environment, so no workflow expression
++        # is ever spliced into shell text.
++        run: |
++          set -euo pipefail
++          TAG="${GITHUB_REF_NAME}"
++          DEADLINE=$(( $(date +%s) + 1800 ))
++          SELF_CREATED_AT="$(gh api \
++            "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
++            --jq '.created_at' < /dev/null)"
++          echo "inputs: tag=${TAG} head_sha=${GITHUB_SHA} run_id=${GITHUB_RUN_ID}"
++          echo "inputs: self_created_at=${SELF_CREATED_AT} deadline_epoch=${DEADLINE}"
++
++          fetch_payload() {
++            # One document: every run for THIS head_sha, each carrying its
++            # jobs. A run whose jobs endpoint is unreadable keeps no `jobs`
++            # key — the decision function reads that as WAIT, never GRANT.
++            if ! gh api --paginate \
++                "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${GITHUB_SHA}&per_page=100" \
++                --jq '.workflow_runs[] | {id, run_attempt, path, event, head_branch, head_sha, created_at, status, conclusion}' \
++                > runs.ndjson < /dev/null; then
++              # An API error is BLOCK by design (ADR-186: input we cannot
++              # verify is blocked, not waved through).
++              echo '{"api_error": "runs listing failed"}' > payload.json
++              return 0
++            fi
++            : > runs_with_jobs.ndjson
++            while read -r run; do
++              [ -n "${run}" ] || continue
++              rid="$(printf '%s' "${run}" | jq -r '.id')"
++              if ! run_jobs="$(gh api \
++                  "repos/${GITHUB_REPOSITORY}/actions/runs/${rid}/jobs?per_page=100" \
++                  --jq '[.jobs[] | {name, status, conclusion}]' < /dev/null)"; then
++                printf '%s\n' "${run}" >> runs_with_jobs.ndjson
++                continue
++              fi
++              printf '%s' "${run}" \
++                | jq -c --argjson jobs "${run_jobs}" '. + {jobs: $jobs}' \
++                >> runs_with_jobs.ndjson
++            done < runs.ndjson
++            jq -c -s '{workflow_runs: .}' runs_with_jobs.ndjson > payload.json
++          }
++
++          attempt=0
++          while true; do
++            attempt=$(( attempt + 1 ))
++            fetch_payload
++            set +e
++            python3 .claude/scripts/await_release_gate.py \
++              --payload-file payload.json \
++              --tag "${TAG}" \
++              --head-sha "${GITHUB_SHA}" \
++              --self-created-at "${SELF_CREATED_AT}" \
++              --deadline-epoch "${DEADLINE}"
++            rc=$?
++            set -e
++            case "${rc}" in
++              0)
++                echo "::notice::release-gate green for ${TAG} at ${GITHUB_SHA} — publish authorised (poll ${attempt})"
++                exit 0
++                ;;
++              3)
++                sleep 20
++                ;;
++              *)
++                echo "::error::release-gate did not authorise this publish (decision exit ${rc}, poll ${attempt}) — the printed inputs above name the run and job that were evaluated"
++                exit 1
++                ;;
++            esac
++          done
++
+   publish:
+     # PLAN-013 Phase 0 item 0.2 — RC tag guard.
+     # RC tags contain `-rc.` (e.g. `v1.4.0-rc.1`). Skip them entirely.
+@@ -63,6 +207,13 @@ jobs:
+     # DROPPED by ratified debate. Pinned by
+     # .claude/scripts/tests/test_release_workflow_asserts.py.
+     if: "!contains(github.ref, '-rc.')"
++    # PLAN-166 W1 item 1: publish only starts after `await-release-gate`
++    # proved release.yml's release-gate job green for this exact tag+SHA
++    # (default `success()` semantics of `needs:` — an await failure skips
++    # this job while the run itself goes red). Deliberate ordering: the
++    # production-npm manual-approval prompt appears only AFTER the gate
++    # is green. The `already_published` guard stays below, in this job.
++    needs: await-release-gate
+     runs-on: ubuntu-latest
+     environment: production-npm
+     timeout-minutes: 8
+@@ -160,7 +311,11 @@ jobs:
+             --exclude='*.pyc'
+             --exclude='.pytest_cache/'
+           )
+-          for src in scripts templates .claude SPEC VERSION LICENSE README.md PROTOCOL.md; do
++          # GA-F3 (S288, fechado S293): README.md FORA da lista — rsync do README
++          # raiz sobrescrevia o npm/README.md REVISADO (stamp de review é gate de
++          # release em verify-counts VERSION_SITES). O npm publica o npm/README.md
++          # rastreado, que é a cópia npm-facing revisada a cada bump.
++          for src in scripts templates .claude SPEC VERSION LICENSE PROTOCOL.md; do
+             if [[ -e "$src" ]]; then
+               rsync -a --delete --delete-excluded "${RSYNC_EXCLUDES[@]}" "$src" "npm/"
+             fi
+diff --git a/.github/workflows/release.yml b/.github/workflows/release.yml
+index 69d7836..596197e 100644
+--- a/.github/workflows/release.yml
++++ b/.github/workflows/release.yml
+@@ -69,6 +69,33 @@ jobs:
+             echo "OK: VERSION=$FILE matches tag=$TAG"
+           fi
+ 
++      # -----------------------------------------------------------------
++      # PLAN-166 W1 item 2 (F3, ADR-155-AMEND-1 §5, Forma A (ii)) — the
++      # framework version marker `.claude/.framework-version` is a TRACKED
++      # one-line file, byte-identical to VERSION (the version bump writes
++      # it as a site; verify-counts.sh cross-checks it). This assert is
++      # deliberately UNCONDITIONAL and fail-closed: a missing marker in a
++      # release checkout means the ceremony that introduced it was
++      # reverted or the bump skipped a site — either way the tag must not
++      # ship. Kept NEXT TO the VERSION↔tag assert above so the whole
++      # version-consistency family lives in one place (same convention as
++      # the plugin-manifest step below).
++      # -----------------------------------------------------------------
++      - name: Assert framework-version marker matches VERSION
++        run: |
++          set -euo pipefail
++          FILE="$(tr -d '[:space:]' < VERSION)"
++          if [[ ! -f .claude/.framework-version ]]; then
++            echo "::error::.claude/.framework-version is missing — it is a tracked file (PLAN-166 F3 / ADR-155-AMEND-1); a release checkout without it must not ship"
++            exit 1
++          fi
++          MARKER="$(tr -d '[:space:]' < .claude/.framework-version)"
++          if [[ "$MARKER" != "$FILE" ]]; then
++            echo "::error::.claude/.framework-version ('$MARKER') does not match VERSION ('$FILE') — the marker is byte-identical to VERSION by contract (Forma A (ii), fail-closed)"
++            exit 1
++          fi
++          echo "OK: .claude/.framework-version=$MARKER matches VERSION"
++
+       # -----------------------------------------------------------------
+       # PLAN-153 Wave B item 5 (e) — version↔plugin-manifest sync, kept
+       # NEXT TO the VERSION↔tag assert above so the whole
+@@ -701,6 +728,143 @@ jobs:
+             --codex-pin-manifest-file .claude/governance/codex-cli-pin-manifest.json \
+             --inputs-hash-paths-file .claude/governance/pair-rail-inputs-hash-manifest.txt
+ 
++      # ==========================================================
++      # PLAN-166 W1-B — verdict delta + ancestry gate (F2 server side)
++      # ==========================================================
++      # Re-pass findings r15 + r17 + r18 (PLAN-166), debate r3 scoped VETO.
++      #
++      # WHY A SEPARATE STEP: the step-15 neighbourhood above carries two
++      # escape hatches keyed to CEO_PAIR_RAIL_VERDICT_OPTIONAL —
++      # `continue-on-error:` on the step itself, and an empty
++      # `--parent-sha ""` bind (the validator only binds the field when
++      # args.parent_sha is non-empty). Inheriting that neighbourhood would
++      # inherit the switch. This step therefore:
++      #   - carries NO continue-on-error;
++      #   - FAILS CLOSED when CEO_PAIR_RAIL_VERDICT_OPTIONAL=1: in that
++      #     mode step 15 skipped the parent_sha bind, so the anchor these
++      #     asserts hang off was never validated — there is no transition
++      #     mode here, by design;
++      #   - re-derives and re-binds parent_sha ITSELF (non-empty, 40-hex,
++      #     equal to the verdict's `parent_sha:` read with the SAME parser
++      #     the local tag guard uses) — independent of step 15's outcome,
++      #     which also closes the legacy commit_sha fallback (the
++      #     validator downgrades a missing parent_sha to an ADVISORY when
++      #     a legacy commit_sha is present; this step does not);
++      #   - reuses .claude/scripts/local/_release_tag_guard.py for the
++      #     delta decision — the module marks itself as the reference
++      #     implementation; the semantics are NEVER re-implemented in
++      #     bash (single source of the decision logic);
++      #   - asserts ancestry on origin/main of BOTH the reviewed parent
++      #     AND GITHUB_SHA itself (r18: parent-only lets the
++      #     tag-without-push scenario — verdict V over parent P, tag
++      #     pushed, V never reaches main — pass with P ancestral and V
++      #     orphaned).
++      #
++      # THE INVARIANT (one sentence): nothing landed after what the
++      # re-pass reviewed, other than the verdict for THIS tag and the
++      # evidence it pins by name AND content (sha256 of MANIFEST.sha256
++      # in the signed verdict + `shasum -c` over the evidence set).
++      #
++      # PINNED ORDER (asserted structurally by the W1B* classes of
++      # test_release_workflow_asserts.py, WaveB5 pattern):
++      #   Verify tag GPG signature → Validate pair-rail verdict →
++      #   delta → ancestry.
++      # Do not reorder, do not merge into step 15.
++      - name: Verify verdict delta + ancestry (fail-closed)
++        env:
++          CEO_PAIR_RAIL_VERDICT_OPTIONAL: ${{ vars.CEO_PAIR_RAIL_VERDICT_OPTIONAL || '0' }}
++        run: |
++          set -euo pipefail
++          # (0) No transition mode: with the var on, the parent_sha bind
++          # upstream was skipped — refuse to certify against an
++          # unvalidated anchor. Fail closed, loudly.
++          if [ "${CEO_PAIR_RAIL_VERDICT_OPTIONAL}" = "1" ]; then
++            echo "::error::CEO_PAIR_RAIL_VERDICT_OPTIONAL=1 is set, but the delta+ancestry gate has no transition mode — it fails closed by design (PLAN-166 debate r3). Unset the repo variable (gh variable delete CEO_PAIR_RAIL_VERDICT_OPTIONAL) and re-run."
++            exit 1
++          fi
++          TAG="${GITHUB_REF_NAME}"
++          VERDICT_FILE=".claude/governance/pair-rail-verdict-${TAG}.md"
++          if [ ! -f "$VERDICT_FILE" ]; then
++            echo "::error::no signed verdict at $VERDICT_FILE — the delta+ancestry gate has no optional mode; the re-pass verdict for THIS tag must be committed on the tagged tree."
++            exit 1
++          fi
++          # (1) Checkout sanity: every assert below anchors on HEAD, so
++          # HEAD must BE the tagged commit this run is about.
++          HEAD_SHA="$(git rev-parse HEAD)"
++          if [ "$HEAD_SHA" != "${GITHUB_SHA}" ]; then
++            echo "::error::checkout HEAD ($HEAD_SHA) != GITHUB_SHA (${GITHUB_SHA}) — refusing to assert against the wrong tree"
++            exit 1
++          fi
++          # (2) Independent parent_sha bind — non-empty by construction,
++          # controlled by no variable. Same derivation as step 15 (parent
++          # of the commit that introduced the verdict file); the verdict
++          # field is read with the SAME parser the local tag guard uses
++          # (_parse_verdict), so two readers of the same signed file
++          # cannot disagree about what it says.
++          VERDICT_FILE_COMMIT="$(git log -n1 --format=%H -- "$VERDICT_FILE")"
++          if [ -z "$VERDICT_FILE_COMMIT" ]; then
++            echo "::error::cannot resolve the commit that introduced $VERDICT_FILE — refusing an empty bind"
++            exit 1
++          fi
++          PARENT_SHA="$(git rev-parse "${VERDICT_FILE_COMMIT}^" 2>/dev/null || echo "")"
++          if [ -z "$PARENT_SHA" ]; then
++            echo "::error::cannot resolve parent of ${VERDICT_FILE_COMMIT} — refusing an empty bind"
++            exit 1
++          fi
++          python3 - "$VERDICT_FILE" "$PARENT_SHA" <<'PYBIND'
++          import importlib.util
++          import io
++          import re
++          import sys
++
++          verdict_path, expected = sys.argv[1], sys.argv[2]
++          if not re.match(r"\A[0-9a-f]{40}\Z", expected):
++              sys.exit("FAIL: derived parent %r is not a 40-hex SHA" % expected)
++          spec = importlib.util.spec_from_file_location(
++              "release_tag_guard", ".claude/scripts/local/_release_tag_guard.py"
++          )
++          mod = importlib.util.module_from_spec(spec)
++          spec.loader.exec_module(mod)
++          with io.open(verdict_path, encoding="utf-8") as fh:
++              fields = mod._parse_verdict(fh.read())
++          declared = fields.get("parent_sha")
++          if declared != expected:
++              sys.exit(
++                  "FAIL: verdict parent_sha %r != parent of the verdict-file "
++                  "commit (%s) — the anchor was not validated with a "
++                  "non-empty bind; a legacy commit_sha fallback does NOT "
++                  "count here." % (declared, expected)
++              )
++          print("  ok   parent_sha bind: %s (derived independently of step 15)" % expected)
++          PYBIND
++          # (3) DELTA (r15): git diff <reviewed parent>..<tag commit>
++          # must be contained in the CLOSED set pinned in the signed
++          # verdict — exact names per tag (never the pair-rail-verdict-*
++          # wildcard, never repass-<N>/**), set equality against the
++          # evidence MANIFEST.sha256, AND content equality (the verdict
++          # pins the manifest's sha256; the guard runs `shasum -c` over
++          # it). Any extra path = FAIL. Decision logic lives in the local
++          # tag guard module — reused, never re-implemented in bash.
++          python3 .claude/scripts/local/_release_tag_guard.py delta \
++            --repo . --tag "$TAG"
++          # (4) ANCESTRY (r17+r18): both the reviewed parent AND the
++          # tagged commit itself must be ancestors of origin/main. The
++          # module's ancestry subcommand judges HEAD (== GITHUB_SHA,
++          # asserted in (1)) after a FAIL-CLOSED fetch of origin/main —
++          # a failed fetch is a stop, never a stale-ref approval. The
++          # reviewed parent is then judged against the same freshly
++          # fetched ref.
++          python3 .claude/scripts/local/_release_tag_guard.py ancestry \
++            --repo . --remote origin --branch main
++          if git merge-base --is-ancestor "$PARENT_SHA" origin/main; then
++            echo "  ok   reviewed parent $PARENT_SHA is an ancestor of origin/main"
++          else
++            RC=$?
++            echo "::error::reviewed parent $PARENT_SHA is not on origin/main (merge-base exit $RC) — the verdict is anchored on a commit main never saw (tag-without-push / orphan-verdict scenario, r17+r18)"
++            exit 1
++          fi
++          echo "OK: verdict delta + ancestry asserts all green for $TAG"
++
+   publish-release:
+     name: Publish GitHub Release + assets
+     needs: release-gate

@@ -1,0 +1,7 @@
+P1 — `.claude/plans/PLAN-166/OWNER-GA-CUT.sh:546` — After `release.yml` has published the public GA and `npm-publish.yml` reports success, a transient registry error or unexpected `npm view` result aborts without drafting the GitHub Release. This leaves an unconfirmed partial GA public, unlike the timeout and non-success branches. Minimal fix: retry `npm view ceo-orchestration@1.3.0 version` for a bounded period, then invoke and verify the same automatic draft mitigation before aborting.
+
+P2 — `.claude/plans/PLAN-166/OWNER-GA-CUT.sh:10`, `.claude/plans/PLAN-166/repass-ga/run-ga-repass.sh:4` — Operational text still says the freeze/worktree is based on rc.2; the runner’s missing-tag diagnostic likewise tells the Owner to cut rc.2. During an rc.3 incident this gives the wrong recovery target. Minimal fix: replace operational rc.2 references with rc.3 or derive messages from `$RC_TAG`; retain rc.2 only in historical context.
+
+The allowlist closure, manifest/template sets, rc.3 provenance binding, and reused inputs hash are otherwise coherent, but the public partial-GA failure path must be fixed before the cut.
+
+VERDICT: NO-GO

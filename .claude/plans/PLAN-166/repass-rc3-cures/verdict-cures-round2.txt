@@ -1,0 +1,11 @@
+P1 — `CHANGELOG.md:147-148`
+
+Concrete failure scenario: the new adopter-facing text says fallback to root `VERSION` occurs “only when the marker is absent.” In reality, `check-framework-updates.sh` also falls back when the marker is present but unrecorded, malformed, or fails its delivery-record integrity check. An adopter with a pre-existing unrecorded marker therefore observes behavior contradicting the v1.3.0 release notes.
+
+Minimal fix: state that a well-formed marker is selected only when validated against its delivery record; otherwise root `VERSION` is used, retaining the documented sole-signal exception.
+
+No other blocking defects found. The count cures match disk, the CHANGELOG matcher is preamble-scoped with exact census entries, workflows parse, RC exclusion remains, and the liveness guard correctly handles signed annotated and lightweight tags from one snapshot. A different-tree obsolete run cannot pass when the tag is already deleted or moved; same-commit re-annotation passes intentionally because the published tree is unchanged. The remaining post-snapshot ref-move race is inherent to any client-side liveness check and is narrowed by structural adjacency.
+
+The inaccurate upgrade semantic is part of the P1-b cure itself and should be corrected before cutting rc.3.
+
+VERDICT: NO-GO

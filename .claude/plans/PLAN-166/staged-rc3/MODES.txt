@@ -1,0 +1,7 @@
+755 .claude/scripts/local/verify-counts.sh
+644 .claude/scripts/tests/test_release_workflow_asserts.py
+644 .claude/scripts/tests/test_verify_counts.py
+644 .github/release-checklist.md
+644 .github/workflows/npm-publish.yml
+644 .github/workflows/release.yml
+644 CHANGELOG.md

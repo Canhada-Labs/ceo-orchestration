@@ -1,0 +1,737 @@
+You are the cross-vendor reviewer on the v1.3.0 GA train of
+ceo-orchestration (governance/auditability framework, Python stdlib-only
+>=3.9, no speed claims). Be adversarial and concrete.
+
+CONTEXT
+- The 24h-hold re-pass over v1.3.0-rc.2 returned NO-GO on both parts
+  (2026-08-10). All 8 findings were triaged as REAL. The diff below is
+  the CURE SET, authored on a detached worktree of the rc.2 commit; it
+  will land as v1.3.0-rc.3 (new 24h ADR-103 hold, then GA).
+- The 8 findings being answered:
+  P1-a CHANGELOG header said 188 ADRs, disk has 190 (+ no matcher).
+  P1-b CHANGELOG v1.3.0 notes omitted adopter-visible upgrade semantics
+       (PLAN-166/167/168: ownership single decision, SPEC/v1 forced
+       route, .framework-version marker, PROTOCOL pointer generator).
+  P1-c npm-publish.yml: after a delete/re-tag recovery, the ORIGINAL
+       run could still be approved/re-run pinned to the OLD event SHA
+       and irreversibly publish the wrong tree (registry still empty,
+       version strings agree). Cure: fail-closed tag-liveness assert
+       immediately before npm publish.
+  P2-d release-checklist version-site list omitted
+       .claude/.framework-version.
+  P2-e release-checklist said "~29 steps", release.yml has 31.
+  P2-f verify-counts.sh --help header carried stale exacts (188/29/21).
+  + timeout bump release-gate 20->35 (S300 lesson: suite runs 19-20 min
+    on loaded 2-core runners; attempt-1 of the rc.2 cut hit the axe).
+- DEFERRED BY TRIAGE (not cured here, next train; challenge ONLY if you
+  believe one must block rc.3): P2 await_release_gate parse_timestamp
+  accepts out-of-range time components via calendar.timegm
+  normalization; P2 install-npm.sh local stager still copies root
+  README.md over npm/README.md (local tooling parity only — the
+  PUBLISHED artifact comes from npm-publish.yml, already cured).
+- Known-good invariants you must check the diff does NOT break:
+  verify-counts.sh census mirror test pins EXACT per-doc match counts;
+  CHANGELOG body legitimately carries HISTORICAL counts (184, 178, ...)
+  and must NOT join the generic DOCS scan; npm publish flow order is
+  await-gate -> environment approval -> registry idempotency check ->
+  publish; RC tags stay excluded from publish.
+
+THREAT MODEL (ratified, PLAN-169/S298): Owner-run local ceremony under
+a single UID; a concurrent same-UID adversary is OUT OF SCOPE (it could
+edit the ceremony scripts themselves). AUTHORIZATION NOTE: the round-4
+condition (fresh Owner authorization for the workflow edits) is
+SATISFIED by construction - an rc.3 sentinel (RC3-approved.md, anchored
+at the rc.2 commit, GPG-signed as pinentry 1 of OWNER-RC3-CUT.sh BEFORE
+the pack applies) covers exactly these 7 canonical paths; the ceremony
+scripts have their own review rail. Do not re-raise authorization as a
+finding; judge the PRODUCT diff. CONSUMER FACTS (reviewed in the
+ceremony rail, not in this payload - do NOT speculate about them):
+OWNER-GA-CUT.sh undrafts the draft-born stable release as its FINAL
+mutation, only after npm view + a pinned Publish-step receipt +
+tag-object/main rechecks, and re-drafts on a failed post-undraft
+verify; an existing pushed GA tag enters a read-only MONITOR resume
+mode (not a hard abort); the GA release.yml observer budget is 60 min
+and the rc observer 60 min, both with tag-coherent resume.
+
+WHAT TO REVIEW
+1. Does each cure actually cure its finding? A cosmetic cure that
+   leaves the failure scenario reachable is a P1.
+2. New defects introduced by the cures (shell quoting in workflow YAML,
+   regex correctness, test vacuity, census drift, GITHUB_SHA semantics
+   for annotated vs lightweight tags).
+3. The tag-liveness guard specifically: can an obsolete run still pass
+   it? Can a legitimate run be wrongly blocked (false positive)?
+4. Anything in the diff that makes the rc.3 cut or the subsequent GA
+   promotion NON-idempotent or order-dependent.
+
+OUTPUT FORMAT
+Per finding: SEVERITY (P0 blocks rc.3 / P1 fix before rc.3 / P2
+follow-up), FILE:LINE, concrete failure scenario, minimal fix. Cite the
+diff. End with exactly one line: "VERDICT: GO" or "VERDICT: NO-GO" or
+"VERDICT: GO-WITH-CONDITIONS", plus one sentence. A clean round is a
+legitimate result - do not manufacture findings.
+
+UNIFIED DIFF (rc.2 -> cure worktree) FOLLOWS.
+
+diff --git a/.claude/scripts/local/verify-counts.sh b/.claude/scripts/local/verify-counts.sh
+index 3a3bd38..3d08d9b 100755
+--- a/.claude/scripts/local/verify-counts.sh
++++ b/.claude/scripts/local/verify-counts.sh
+@@ -32,7 +32,7 @@
+ #   core skills       find .claude/skills/core -name SKILL.md       exact (42)
+ #   frontend skills   find .claude/skills/frontend -name SKILL.md   exact (8)
+ #   domain skills     find .claude/skills/domains -name SKILL.md    exact (116)
+-#   ADRs              ls .claude/adr/ADR-*.md                        exact (188)
++#   ADRs              ls .claude/adr/ADR-*.md                        exact (190)
+ #   hook .py files    ls .claude/hooks/*.py                          exact (57)
+ #   registered hooks  distinct *.py in settings.json hooks{} tree   exact (46)
+ #   registrations     total hook entries in settings.json hooks{}   exact (48)
+@@ -40,9 +40,9 @@
+ #   SPEC v1 files     ls SPEC/v1/*.md                                exact (32)
+ #   tests             pytest --collect-only -q  (DOCUMENTED scope)  floor (N+) + approx (~N)
+ #   test_files        git ls-files '*test_*.py' '*_test.py'         approx (~N)
+-#   release_steps     grep -c '      - name:' release.yml           exact (29)
++#   release_steps     grep -c '      - name:' release.yml           exact (31)
+ #   commands          find .claude/commands -name '*.md'             exact (27)
+-#   workflows         find .github/workflows -name '*.yml'           exact (21)
++#   workflows         find .github/workflows -name '*.yml'           exact (22)
+ #   mutation_fixtures find tests/formal_verification/mutation_...    exact (85)
+ #   tla_specs         ls docs/formal-verification/*.tla              exact (4)
+ #
+@@ -822,6 +822,67 @@ for metric, kind, regexes in RULES:
+                         f"{doc}: cites {metric}>={v}+ but live={lv} (regression; rule: floor)"
+                     )
+ 
++
++# =====================  CHANGELOG HEADER RULE (scoped)  =====================
++# PLAN-166 W2 rc.3 (GA re-pass part-1 P1): the CHANGELOG header carries a
++# four-count "as of vX.Y.Z: N skills, N slash commands, N ADRs, N `_lib`
++# modules" claim that no matcher watched — it sat at 188 ADRs while disk
++# had 190 and this gate stayed green. CHANGELOG.md deliberately does NOT
++# join DOCS: the log BODY legitimately carries historical counts (184,
++# 178, 171, ...) that every metric matcher would flag as drift. Only the
++# header claim is enforced, by this dedicated scoped rule. Fail modes:
++# stale count (exact mismatch) AND dead matcher (header rephrased so the
++# regex stops matching -> violation, never silence).
++CHANGELOG_DOC = "CHANGELOG.md"
++try:
++    _chlog_text = open(os.path.join(root, CHANGELOG_DOC), encoding="utf-8").read()
++except OSError:
++    _chlog_text = ""
++_CHLOG_HEADER_RX = re.compile(
++    r"v[\d.]+: (\d+) skills, (\d+) slash commands, (\d+) ADRs, "
++    r"(\d+) `_lib` modules\)"
++)
++# HEADER-scoped for real (rail rc.3 r1 P1-4): only the PREAMBLE — the text
++# before the first "## [" release heading — is searched. A body claim can
++# neither satisfy the matcher (masking a removed header) nor duplicate it.
++_chlog_hdr_end = re.search(r"(?m)^## \[", _chlog_text)
++_chlog_preamble = (
++    _chlog_text[:_chlog_hdr_end.start()] if _chlog_hdr_end else _chlog_text
++)
++_chlog_ms = list(_CHLOG_HEADER_RX.finditer(_chlog_preamble))
++if len(_chlog_ms) == 0:
++    # Dead-matcher violation ONLY when the file exists: synthetic test
++    # fixtures build trees without a CHANGELOG and must not fail here.
++    # Real-repo liveness is NOT lost to this scoping — the census mirror
++    # (test_verify_counts.py::_EXPECTED_SITES) asserts the four
++    # *@CHANGELOG.md pairs exist with exact counts in the real repo, so
++    # a deleted CHANGELOG or a rephrased header still fails loudly there.
++    if _chlog_text:
++        violations.append(
++            "%s: header count claim ('as of vX.Y.Z: N skills, N slash"
++            " commands, N ADRs, N `_lib` modules') not found in the"
++            " preamble — matcher dead or claim rephrased"
++            "  (rule: changelog/header)" % CHANGELOG_DOC
++        )
++elif len(_chlog_ms) > 1:
++    violations.append(
++        "%s: %d header count claims in the preamble — the site census"
++        " requires exactly one  (rule: changelog/header)"
++        % (CHANGELOG_DOC, len(_chlog_ms))
++    )
++else:
++    _chlog_m = _chlog_ms[0]
++    for _chm_metric, _chm_idx in (
++        ("skills", 1), ("commands", 2), ("adrs", 3), ("lib", 4),
++    ):
++        _note(_chm_metric, CHANGELOG_DOC)
++        _chm_v = int(_chlog_m.group(_chm_idx))
++        if _chm_v != live[_chm_metric]:
++            violations.append(
++                "%s: header cites %s=%d, live=%d  (rule: changelog/header)"
++                % (CHANGELOG_DOC, _chm_metric, _chm_v, live[_chm_metric])
++            )
++
+ # ============================  APPROX EVALUATION  ===========================
+ # Three failure modes (band, cross-doc equality, missing `~` marker), one
+ # non-failure mode (registered PENDING site), and a printed input record for
+diff --git a/.claude/scripts/tests/test_release_workflow_asserts.py b/.claude/scripts/tests/test_release_workflow_asserts.py
+index 45a4de0..20cb71f 100644
+--- a/.claude/scripts/tests/test_release_workflow_asserts.py
++++ b/.claude/scripts/tests/test_release_workflow_asserts.py
+@@ -554,10 +554,11 @@ class Plan166AwaitGateTest(TestEnvContext):
+             "id-token: the gate job must not be able to publish)",
+         )
+         self.assertEqual(
+-            gate.get("timeout-minutes"), 35,
+-            "35 > the poller's 30-minute deadline so a timeout surfaces "
+-            "as the decision function's fail-CLOSED BLOCK, not an opaque "
+-            "runner kill",
++            gate.get("timeout-minutes"), 50,
++            "50 > the poller's 45-minute deadline (which itself exceeds "
++            "the release-gate's 35-minute timeout — rail rc.3 r1 P1-3) "
++            "so a timeout surfaces as the decision function's "
++            "fail-CLOSED BLOCK, not an opaque runner kill",
+         )
+ 
+     def test_await_job_is_the_rc_positive_control(self):
+@@ -1180,6 +1181,219 @@ class Plan168OwnershipWiringTest(TestEnvContext):
+             if "test-ownership-table.sh" in ln and "--map" in ln:
+                 self.fail(f"--map wired into the nightly gate: {ln.strip()}")
+ 
++# --- PLAN-166 W2 rc.3 (GA re-pass part-2 P1) --------------------------
++# Marker written into the rc.3 npm-publish.yml edit; its presence in the
++# LIVE file means the rc.3 cut landed and the live copy is authoritative
++# (same convention as _MARKER_166 above).
++_MARKER_RC3 = "PLAN-166 W2 rc.3"
++
++def _plan166rc3_text(name: str) -> Optional[Tuple[str, str]]:
++    """Return (text, "live") for a PLAN-166 rc.3 workflow edit, or None.
++
++    LIVE ONLY, no staged fallback (rail rc.3 r1 P1-5): the cured workflow
++    and this test file land ATOMICALLY in the rc.3 cure commit, so from
++    the first commit that carries these tests the live file carries the
++    marker. A staged fallback would let a post-landing revert of the live
++    guard pass the pins against a stale mirror. Callers treat None as a
++    hard FAILURE, never a skip.
++    """
++    live_p = _WF / name
++    if live_p.exists():
++        text = live_p.read_text(encoding="utf-8")
++        if _MARKER_RC3 in text:
++            return (text, "live")
++    return None
++
++
++class NpmPublishTagLivenessTest(TestEnvContext):
++    """rc.3 cure (GA re-pass part-2 P1): obsolete-run publish guard.
++
++    A delete/re-tag recovery leaves the original run re-approvable with
++    checkout pinned to the old event SHA; nothing before `npm publish`
++    re-resolved the remote tag, so an obsolete run could irreversibly
++    publish the wrong tree. These pins keep the fail-closed liveness
++    assert present, correctly shaped, and ORDERED immediately before the
++    publish step.
++    """
++
++    _GUARD_NAME = "Assert remote tag still points at this run's SHA"
++    _PUBLISH_NAME = "Publish (Trusted Publishing — OIDC)"
++
++    def setUp(self):
++        super().setUp()
++        resolved = _plan166rc3_text("npm-publish.yml")
++        if resolved is None:
++            self.fail(
++                "npm-publish.yml does not carry the rc.3 tag-liveness "
++                "guard marker — the obsolete-run publish guard was "
++                "reverted or stripped (rail rc.3 r1 P1-5: this is a "
++                "hard failure, never a skip)"
++            )
++        self.source, self.context = resolved
++
++    def test_guard_step_present(self):
++        self.assertIn(
++            self._GUARD_NAME, self.source,
++            "npm-publish.yml lost the tag-liveness guard — an obsolete "
++            "run (delete/re-tag recovery) could publish the wrong tree "
++            "(GA re-pass part-2 P1)",
++        )
++
++    def test_guard_resolves_and_peels_remote_tag(self):
++        # Single snapshot (rail rc.3 r1 P1-1) — but BOTH rows must be
++        # parsed from it: the peeled ref (annotated tags) and the plain
++        # ref (lightweight fallback).
++        guard_body = self.source.split(self._GUARD_NAME, 1)[1].split(
++            "- name:", 1)[0]
++        for needle in (
++            'awk -v r="refs/tags/${TAG_REF}^{}"',
++            'awk -v r="refs/tags/${TAG_REF}"',
++            'LIVE="${PEELED:-$PLAIN}"',
++        ):
++            self.assertIn(
++                needle, guard_body,
++                "guard no longer parses both the peeled and the plain "
++                "ref out of the single ls-remote snapshot — annotated "
++                "and lightweight tags must both be covered",
++            )
++
++    def test_guard_compares_against_github_sha_fail_closed(self):
++        self.assertIn('[ "$LIVE" != "${GITHUB_SHA}" ]', self.source)
++        self.assertIn('[ -z "$LIVE" ]', self.source,
++                      "empty resolve (deleted tag) must abort, not pass")
++        guard_body = self.source.split(self._GUARD_NAME, 1)[1].split(
++            "- name:", 1)[0]
++        self.assertIn("set -euo pipefail", guard_body)
++        self.assertEqual(
++            guard_body.count("exit 1"), 2,
++            "guard must abort on BOTH failure branches (deleted tag, "
++            "moved tag)",
++        )
++
++    def test_guard_ordered_between_registry_check_and_publish(self):
++        i_already = self.source.index(
++            "Check registry for already-published version")
++        i_guard = self.source.index(self._GUARD_NAME)
++        i_publish = self.source.index(self._PUBLISH_NAME)
++        self.assertLess(
++            i_already, i_guard,
++            "guard drifted before the registry idempotency check")
++        self.assertLess(
++            i_guard, i_publish,
++            "guard must run BEFORE the publish step — after it, the "
++            "wrong tree is already on the registry",
++        )
++
++    def test_guard_is_immediately_before_publish_structurally(self):
++        try:
++            import yaml  # type: ignore
++        except ImportError:  # pragma: no cover - CI installs pyyaml
++            self.skipTest("pyyaml not installed")
++        jobs = yaml.safe_load(self.source)["jobs"]
++        publish_job = None
++        for job in jobs.values():
++            names = [s.get("name", "") for s in job.get("steps", [])]
++            if self._PUBLISH_NAME in names:
++                publish_job = names
++                break
++        self.assertIsNotNone(publish_job, "publish step not found")
++        self.assertEqual(
++            publish_job.index(self._GUARD_NAME) + 1,
++            publish_job.index(self._PUBLISH_NAME),
++            "a step slid between the tag-liveness guard and the publish "
++            "— the guard's evidence goes stale in the gap",
++        )
++
++    def test_guard_skips_when_already_published(self):
++        # rail rc.3 r1 P1-2: without this condition the guard turns the
++        # documented idempotent no-op re-run red on a moved/deleted tag
++        # even though npm publish is skipped.
++        guard_head = self.source.split(self._GUARD_NAME, 1)[1].split(
++            "run: |", 1)[0]
++        self.assertIn(
++            "if: steps.already_published.outputs.published != 'true'",
++            guard_head,
++            "tag-liveness guard lost the already_published skip-condition",
++        )
++
++    def test_guard_uses_single_remote_snapshot(self):
++        # rail rc.3 r1 P1-1: two ls-remote calls can straddle a re-tag.
++        guard_body = self.source.split(self._GUARD_NAME, 1)[1].split(
++            "- name:", 1)[0]
++        self.assertEqual(
++            guard_body.count("git ls-remote"), 1,
++            "guard must resolve plain+peeled refs from ONE ls-remote "
++            "snapshot",
++        )
++        self.assertIn(
++            'git ls-remote origin "refs/tags/${TAG_REF}" '
++            '"refs/tags/${TAG_REF}^{}"',
++            guard_body,
++        )
++
++
++class ObserverProducerDeadlineTest(TestEnvContext):
++    """rail rc.3 r1 P1-3: the await-release-gate observer must outlive
++    the release-gate producer, or a gate finishing inside the widened
++    timeout goes green while the waiter already gave up (order-dependent
++    rerun on the GA path)."""
++
++    def setUp(self):
++        super().setUp()
++        rel = (_WF / "release.yml").read_text(encoding="utf-8")
++        m = re.search(r"^    timeout-minutes: (\d+)$", rel, re.M)
++        assert m, "release.yml sem timeout-minutes de job"
++        self.gate_minutes = int(m.group(1))
++        # rail rc.3 r3 P2: NO pre-landing skip — the cured release.yml and
++        # this test land atomically, so from the first commit carrying this
++        # class the producer timeout is 35. A revert to 20 must FAIL here
++        # loudly (green-by-skip was the exact hole flagged).
++        self.assertEqual(
++            self.gate_minutes, 35,
++            "release-gate timeout-minutes drifted from the ratified 35 "
++            "(a revert of the rc.3 cure, or an unratified retune)",
++        )
++        self.npm = (_WF / "npm-publish.yml").read_text(encoding="utf-8")
++
++    def test_poller_deadline_exceeds_gate_timeout_with_margin(self):
++        m = re.search(r"DEADLINE=\$\(\( \$\(date \+%s\) \+ (\d+) \)\)", self.npm)
++        self.assertIsNotNone(m, "linha DEADLINE do poller nao encontrada")
++        deadline_s = int(m.group(1))
++        self.assertGreaterEqual(
++            deadline_s, self.gate_minutes * 60 + 600,
++            "poller deadline (%ds) must exceed release-gate timeout "
++            "(%d min) by >=10 min margin" % (deadline_s, self.gate_minutes),
++        )
++
++    def test_stable_release_created_as_draft(self):
++        # rail rc.3 r27 P1-3: o GA estavel nasce DRAFT no release.yml;
++        # o undraft e o passo final verificado do OWNER-GA-CUT.
++        rel = (_WF / "release.yml").read_text(encoding="utf-8")
++        i_else = rel.index("CREATE_ARGS+=(--prerelease)")
++        tail = rel[i_else:rel.index("gh release create", i_else)]
++        self.assertIn(
++            "CREATE_ARGS+=(--draft)", tail,
++            "stable release deixou de nascer draft - a janela de GA "
++            "publico sem npm confirmado reabre",
++        )
++
++    def test_await_job_timeout_exceeds_poller_deadline(self):
++        m = re.search(r"DEADLINE=\$\(\( \$\(date \+%s\) \+ (\d+) \)\)", self.npm)
++        self.assertIsNotNone(m)
++        deadline_s = int(m.group(1))
++        try:
++            import yaml  # type: ignore
++        except ImportError:  # pragma: no cover
++            self.skipTest("pyyaml not installed")
++        jobs = yaml.safe_load(self.npm)["jobs"]
++        job_minutes = jobs["await-release-gate"]["timeout-minutes"]
++        self.assertGreater(
++            job_minutes * 60, deadline_s,
++            "await job timeout must exceed its own poller deadline so a "
++            "timeout surfaces as the decision function's BLOCK, not an "
++            "opaque runner kill",
++        )
++
+ 
+ if __name__ == "__main__":
+     unittest.main()
+diff --git a/.claude/scripts/tests/test_verify_counts.py b/.claude/scripts/tests/test_verify_counts.py
+index 714fb66..907b555 100644
+--- a/.claude/scripts/tests/test_verify_counts.py
++++ b/.claude/scripts/tests/test_verify_counts.py
+@@ -199,6 +199,13 @@ class TestVerifyCounts(unittest.TestCase):
+     # memory); the ratification asserted ZERO lost and ZERO shrunk pairs
+     # first, so coverage only widened.
+     _EXPECTED_SITES = {
++        # PLAN-166 W2 rc.3: the scoped CHANGELOG header rule watches
++        # exactly four counts in the header claim — see the
++        # "CHANGELOG HEADER RULE (scoped)" block in verify-counts.sh.
++        "adrs@CHANGELOG.md": 1,
++        "commands@CHANGELOG.md": 1,
++        "lib@CHANGELOG.md": 1,
++        "skills@CHANGELOG.md": 1,
+         "adrs@README.md": 2,
+         "adrs@README.pt-BR.md": 2,
+         "adrs@docs/ARCHITECTURE.md": 1,
+@@ -792,5 +799,96 @@ class TestDocFreshness(unittest.TestCase):
+             f"contradict shipped reality: {found}")
+ 
+ 
++class TestChangelogHeaderRule(unittest.TestCase):
++    """Scoped CHANGELOG header rule (PLAN-166 W2 rc.3, rail r1 P1-4).
++
++    The rule enforces the four-count header claim in the PREAMBLE only
++    (before the first "## [" release heading): exactly one claim, exact
++    counts. Body claims are invisible BY CONSTRUCTION — the log's body
++    carries historical counts on purpose — so they can neither satisfy
++    a removed header nor duplicate the census site.
++    """
++
++    # Matches _scaffold defaults: skills total 9 (3+2+4), commands 0
++    # (no .claude/commands dir), adrs 5, lib 6.
++    _GOOD_CLAIM = (
++        "counts below (as of\n"
++        "v0.0.0: 9 skills, 0 slash commands, 5 ADRs, 6 `_lib` modules) are\n"
++    )
++    _STALE_CLAIM = (
++        "v0.0.0: 9 skills, 0 slash commands, 4 ADRs, 6 `_lib` modules) were\n"
++    )
++    _BODY = "\n## [0.0.1] - 2000-01-01\n\nhistorical notes.\n"
++
++    def _run_loud(self, tmp):
++        # Sem --quiet: os casos de falha asserta(m) a MENSAGEM da
++        # violation, que o modo quiet suprime.
++        env = os.environ.copy()
++        env["VERIFY_COUNTS_ROOT"] = str(tmp)
++        return subprocess.run(
++            ["bash", str(SCRIPT), "--no-tests"],
++            capture_output=True, text=True, timeout=60, env=env)
++
++    def _tree(self, tmp, chlog):
++        import pathlib
++        counts = _scaffold(pathlib.Path(tmp))
++        _write_docs(pathlib.Path(tmp), **counts)
++        if chlog is not None:
++            (pathlib.Path(tmp) / "CHANGELOG.md").write_text(
++                chlog, encoding="utf-8")
++
++    def test_absent_changelog_passes(self):
++        import tempfile
++        with tempfile.TemporaryDirectory() as tmp:
++            self._tree(tmp, None)
++            r = _run(root=Path(tmp))
++            self.assertEqual(r.returncode, 0, r.stdout)
++
++    def test_correct_header_passes(self):
++        import tempfile
++        with tempfile.TemporaryDirectory() as tmp:
++            self._tree(tmp, self._GOOD_CLAIM + self._BODY)
++            r = _run(root=Path(tmp))
++            self.assertEqual(r.returncode, 0, r.stdout)
++
++    def test_wrong_header_count_fails(self):
++        import tempfile
++        with tempfile.TemporaryDirectory() as tmp:
++            self._tree(tmp, self._STALE_CLAIM + self._BODY)
++            r = self._run_loud(tmp)
++            self.assertNotEqual(r.returncode, 0)
++            self.assertIn("changelog/header", r.stdout)
++
++    def test_body_only_claim_is_dead_matcher_violation(self):
++        # A removed header cannot be masked by an exact-shaped claim in
++        # the body (rail r1 P1-4's masking scenario).
++        import tempfile
++        with tempfile.TemporaryDirectory() as tmp:
++            self._tree(tmp, "no claim up here.\n" + self._BODY
++                       + self._GOOD_CLAIM)
++            r = self._run_loud(tmp)
++            self.assertNotEqual(r.returncode, 0)
++            self.assertIn("changelog/header", r.stdout)
++            self.assertIn("not found in the preamble", r.stdout)
++
++    def test_duplicate_preamble_claims_fail(self):
++        import tempfile
++        with tempfile.TemporaryDirectory() as tmp:
++            self._tree(tmp, self._GOOD_CLAIM + "\n" + self._GOOD_CLAIM
++                       + self._BODY)
++            r = self._run_loud(tmp)
++            self.assertNotEqual(r.returncode, 0)
++            self.assertIn("exactly one", r.stdout)
++
++    def test_stale_body_claim_ignored_by_construction(self):
++        # Historical counts in the body stay legitimate.
++        import tempfile
++        with tempfile.TemporaryDirectory() as tmp:
++            self._tree(tmp, self._GOOD_CLAIM + self._BODY
++                       + self._STALE_CLAIM)
++            r = _run(root=Path(tmp))
++            self.assertEqual(r.returncode, 0, r.stdout)
++
++
+ if __name__ == "__main__":
+     unittest.main()
+diff --git a/.github/release-checklist.md b/.github/release-checklist.md
+index e6d5a3e..80ef557 100644
+--- a/.github/release-checklist.md
++++ b/.github/release-checklist.md
+@@ -42,6 +42,9 @@
+       `npm/README.md` (`last-reviewed: <data> vX.Y.Z`) ·
+       `npm/package.json` (`"version"`) · `pyproject.toml` (`version =`) ·
+       `SBOM.md` (`**Version:** \`X.Y.Z\``) ·
++      `.claude/.framework-version` (marker que o updater dos adopters lê
++      MARKER-FIRST; reescrito pelo bump driver — site real em
++      `_release_bump_sites.py`) ·
+       `SECURITY.md` + `VERSIONING.md` (janela de suporte
+       `Current/Previous MINOR (vX.Y.x)` — **família minor**).
+       O **shift da janela de suporte** (`Previous` ← `Current`) é COBERTO
+@@ -146,7 +149,7 @@ mão pula o driver. O mesmo assert entra server-side no `release.yml`.
+ 
+ ### Release workflow (automático)
+ 
+-- [ ] `gh run watch` — todos os ~29 steps do `release.yml` green
++- [ ] `gh run watch` — todos os steps do `release.yml` green
+   (ver `.github/workflows/release.yml`). Inclui, entre outros:
+   version-match (VERSION == tag), freshness de docs canônicos, a
+   janela de re-pass do Codex de 24h (ADR-103, só em tags GA),
+diff --git a/.github/workflows/npm-publish.yml b/.github/workflows/npm-publish.yml
+index 03071be..0b51814 100644
+--- a/.github/workflows/npm-publish.yml
++++ b/.github/workflows/npm-publish.yml
+@@ -105,10 +105,13 @@ jobs:
+   await-release-gate:
+     name: Await release-gate (release.yml)
+     runs-on: ubuntu-latest
+-    # 35 > the poller's own 30-minute deadline, so a timeout surfaces as
++    # 50 > the poller's own 45-minute deadline, so a timeout surfaces as
+     # the decision function's fail-CLOSED BLOCK (with its inputs printed),
+-    # not as an opaque runner kill.
+-    timeout-minutes: 35
++    # not as an opaque runner kill. 45 min > the release-gate's own
++    # 35-minute timeout-minutes with margin (rail rc.3 r1 P1-3): the
++    # observer must always outlive the producer, or a gate finishing in
++    # minutes 31-35 goes green while the waiter already gave up.
++    timeout-minutes: 50
+     permissions:
+       contents: read   # checkout the tag to get the decision script
+       actions: read    # read release.yml's runs + jobs over the REST API
+@@ -131,7 +134,7 @@ jobs:
+         run: |
+           set -euo pipefail
+           TAG="${GITHUB_REF_NAME}"
+-          DEADLINE=$(( $(date +%s) + 1800 ))
++          DEADLINE=$(( $(date +%s) + 2700 ))
+           SELF_CREATED_AT="$(gh api \
+             "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+             --jq '.created_at' < /dev/null)"
+@@ -424,6 +427,44 @@ jobs:
+             echo "OK: ${PKG_NAME}@${PKG_VERSION} not in registry (rc=$RC) — proceeding to publish"
+           fi
+ 
++      # -----------------------------------------------------------------
++      # PLAN-166 W2 rc.3 (GA re-pass part-2 P1): a delete/re-tag recovery
++      # leaves the ORIGINAL run re-approvable (or its failed portion
++      # re-runnable) with checkout pinned to the OLD event SHA — every
++      # in-run version check still passes (both trees carry the same
++      # version string), the registry is still empty, and npm publish
++      # would irreversibly ship the WRONG tree while the live tag points
++      # elsewhere. Fail-closed liveness assert: the CURRENT remote tag
++      # must still peel to this run's GITHUB_SHA immediately before
++      # publish. A deleted tag (empty resolve) and a moved tag both
++      # abort. This step sits AFTER the production-npm environment
++      # approval by job order, so a stale approval cannot race past it.
++      # -----------------------------------------------------------------
++      - name: Assert remote tag still points at this run's SHA
++        # Same skip-condition as the publish step (rail rc.3 r1 P1-2): when
++        # the registry already carries the version, publish is a no-op and
++        # this guard must not turn the documented idempotent re-run red.
++        if: steps.already_published.outputs.published != 'true'
++        run: |
++          set -euo pipefail
++          TAG_REF="${GITHUB_REF_NAME}"
++          # ONE ls-remote invocation = ONE remote snapshot (rail rc.3 r1
++          # P1-1): separate calls could straddle a concurrent re-tag, keep
++          # the OLD peeled SHA and approve the obsolete run.
++          SNAP="$(git ls-remote origin "refs/tags/${TAG_REF}" "refs/tags/${TAG_REF}^{}")"
++          PEELED="$(printf '%s\n' "$SNAP" | awk -v r="refs/tags/${TAG_REF}^{}" '$2==r{print $1}')"
++          PLAIN="$(printf '%s\n' "$SNAP" | awk -v r="refs/tags/${TAG_REF}" '$2==r{print $1}')"
++          LIVE="${PEELED:-$PLAIN}"
++          if [ -z "$LIVE" ]; then
++            echo "::error::tag ${TAG_REF} no longer exists on origin — refusing to publish an orphaned tree (delete/re-tag recovery in flight?)"
++            exit 1
++          fi
++          if [ "$LIVE" != "${GITHUB_SHA}" ]; then
++            echo "::error::tag ${TAG_REF} now peels to ${LIVE} but this run was built from ${GITHUB_SHA} — obsolete run; approve/re-run only from the CURRENT tag's run"
++            exit 1
++          fi
++          echo "OK: refs/tags/${TAG_REF} still peels to ${GITHUB_SHA}"
++
+       - name: Publish (Trusted Publishing — OIDC)
+         if: steps.already_published.outputs.published != 'true'
+         working-directory: npm
+diff --git a/.github/workflows/release.yml b/.github/workflows/release.yml
+index 596197e..96f4fd5 100644
+--- a/.github/workflows/release.yml
++++ b/.github/workflows/release.yml
+@@ -14,7 +14,13 @@ jobs:
+     # PLAN-012 Phase 2 CEO_SOTA_DISABLE parity.
+     if: vars.CEO_SOTA_DISABLE != '1'
+     runs-on: ubuntu-latest
+-    timeout-minutes: 20
++    # 20 -> 35 (S300, corte da rc.2): o gate da rc.1 levou 18m37s
++    # (margem de 1m23s) e o attempt-1 da rc.2 ESTOUROU os 20 min com
++    # ~10 min de stalls das suites em runner 2-core carregado (classe
++    # ADR-163/perf-under-load) — o passo do verdito imprimiu all-green
++    # 13ms antes do machado. Mesma regra anti-flake dos budgets do
++    # smoke/nightly: folga primeiro, re-apertar com p95 real acumulado.
++    timeout-minutes: 35
+     permissions:
+       # `contents: read` for checkout; `actions: read` lets the
+       # weekly-workflow status gate (see below) call `gh run list`
+@@ -955,5 +961,11 @@ jobs:
+           CREATE_ARGS=(--verify-tag --title "$TAG" --notes-file release-notes.md)
+           if [[ "$TAG" == *-rc.* ]]; then
+             CREATE_ARGS+=(--prerelease)
++          else
++            # rail rc.3 r27 P1-3: GA estavel NASCE draft; o undraft e o
++            # passo FINAL verificado da cerimonia (npm view + recibo do
++            # step Publish + rechecks de tag/main). Elimina a janela de
++            # GA publico sem npm confirmado sob interrupcao local.
++            CREATE_ARGS+=(--draft)
+           fi
+           gh release create "$TAG" "${CREATE_ARGS[@]}" install.sh.sha256 sbom.cyclonedx.json
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 0d97ecc..2fb4273 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
+ > commands, schema/contract changes, and behavior an adopter would notice after
+ > installing or upgrading the framework. Internal refactors, test-only churn, and
+ > release-engineering bookkeeping are omitted. Counts cited below (as of
+-> v1.3.0: 166 skills, 27 slash commands, 188 ADRs, 68 `_lib` modules) are
++> v1.3.0: 166 skills, 27 slash commands, 190 ADRs, 68 `_lib` modules) are
+ > reproducible from the repository via
+ > `bash .claude/scripts/local/verify-counts.sh`.
+ 
+@@ -17,10 +17,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
+ 
+ ## [1.3.0] - 2026-08-04
+ 
+-Night-mode + doctrine release (PLAN-162/165, ceremony 2). One user-facing
+-feature, one cross-rail security P0 closed, and one published-contract
+-conflict settled by ADR instead of by silence. As always: governance and
+-auditability — no speed claim.
++Night-mode + doctrine + release-engineering train (PLAN-162/165
++ceremony 2; PLAN-166/167/168 release-hold closure and install/upgrade
++ownership). One user-facing feature, one cross-rail security P0 closed,
++one published-contract conflict settled by ADR instead of by silence,
++and the install/upgrade ownership decision collapsed into a single
++audited function. As always: governance and auditability — no speed
++claim.
+ 
+ ### Added — night-mode: Owner-invoked autonomy posture toggle (PLAN-165, ADR-185)
+ 
+@@ -117,10 +120,51 @@ auditability — no speed claim.
+   (a red scheduled lane whose newest completed run across ALL trigger
+   events is green reports `cured_pending_cron`, not red).
+ 
++### Changed — install/upgrade semantics (PLAN-166/167/168)
++
++Adopter-visible behavior of `scripts/install.sh` / `scripts/upgrade.sh`
++changed in this release — what a v1.2.0 adopter notices when upgrading:
++
++- **Ownership is ONE decision, not a cascade (ADR-190).** On upgrade,
++  whether the framework owns `PROTOCOL.md`, `SPEC/v1` or
++  `.claude/.framework-version` is answered by a single pure decision
++  function (`_ownership_verdict()` in
++  `scripts/_framework_manifest_set.sh`) over the observed ownership
++  dimensions — execution-state faults (e.g. a failed backup) stay
++  caller-side by design; `upgrade.sh` observes → calls → executes
++  instead of deciding locally. Fresh installs sit BEFORE the decision:
++  they record the registered delivery (the ADR-155 baseline manifest)
++  that upgrade's observations later read. Contract:
++  `docs/ownership-decision-table.md`.
++- **`SPEC/v1` is a forced route on upgrade.** A framework-owned
++  `SPEC/v1` is backed up to `.claude.bak/<timestamp>/SPEC/v1` and
++  replaced wholesale — a local edit is a fork of the published
++  compliance contract, not a customization. A pre-existing `SPEC/v1`
++  with no delivery record is byte-compared against the pristine SPECs
++  shipped at v1.2.0 and earlier: a match refreshes it, anything else is
++  preserved in place with a named WARNING (ADR-155-AMEND-1). Skipped on
++  `--ceremony user` installs.
++- **`.claude/.framework-version` is the version marker.** Written on
++  install and refreshed on framework-owned, unskipped upgrades;
++  `check-framework-updates.sh` and forensic triage read it MARKER-FIRST
++  — a well-formed marker validated against its delivery record is the
++  signal; an absent, unrecorded, malformed or integrity-failed marker
++  falls back to root `VERSION`. The adopter repo's root `VERSION` file
++  is deliberately never touched by upgrade — after a framework-owned
++  upgrade, the validated marker (not root `VERSION`) is what carries
++  the installed framework version.
++- **`PROTOCOL.md` pointer has ONE generator.** Install and upgrade
++  render the pointer through the same shared generator (byte-identical
++  output on both paths); a degraded pointer body is cured with a backup
++  and adopter edits are preserved. Skipped on `--ceremony user`
++  installs, which never create root files.
++
+ ### Governance
+ 
+-- ADRs 184 → **188** (ADR-185 night-mode; ADR-186 hook-deadline policy;
+-  ADR-110-AMEND-2; ADR-164-AMEND-1). Slash commands 26 → **27**
++- ADRs 184 → **190** (ADR-185 night-mode; ADR-186 hook-deadline policy;
++  ADR-110-AMEND-2; ADR-164-AMEND-1; ADR-155-AMEND-1 delivery-record
++  ownership; ADR-190 ownership-decision-table contract). Slash
++  commands 26 → **27**
+   (`/night-mode`). All four ceremony phases landed as separable
+   Owner-GPG-signed commits with per-phase sentinels and closed scopes.
+ 

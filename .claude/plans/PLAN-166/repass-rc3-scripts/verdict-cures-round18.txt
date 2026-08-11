@@ -1,0 +1,5 @@
+P1 — `.claude/plans/PLAN-166/OWNER-GA-CUT.sh:110` and `.claude/plans/PLAN-166/OWNER-RC3-CUT.sh:581` — `release.yml` can publish the rc.3 pre-release before the RC script checks the `await-release-gate` positive control. If that job fails or the monitor times out, RC3-CUT aborts but leaves the signed remote tag, public pre-release, and `publishedAt`. After 24 hours, GA-CUT accepts exactly that state without rechecking the failed control and can promote. Minimal fix: GA G0 must locate the `npm-publish.yml` run for the exact `RC_TAG` and `RC_SHA` and require its `Await release-gate` job to have concluded `success`; alternatively, RC3-CUT must draft the pre-release on control failure and GA must require a durable success receipt.
+
+The remaining allowlist, manifest-set equality, inputs hash, rc.3 retargeting, and pre-commit resume paths are coherent.
+
+VERDICT: NO-GO

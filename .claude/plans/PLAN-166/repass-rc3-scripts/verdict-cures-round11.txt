@@ -1,0 +1,13 @@
+REJECT
+
+P1 — `.claude/plans/PLAN-166/OWNER-RC3-CUT.sh:91`, `.claude/plans/PLAN-166/OWNER-GA-CUT.sh:249`, `.claude/plans/PLAN-166/repass-ga/run-ga-repass.sh:184` — Verdict parsing uses `grep ... | tail -1`. Evidence containing both `VERDICT: NO-GO` and a later `VERDICT: GO` is ambiguous but accepted, manifested, and signed. Minimal fix: require exactly one `^VERDICT:` line and then compare it to the exact permitted value.
+
+P1 — `.claude/plans/PLAN-166/OWNER-GA-CUT.sh:149`, `.claude/plans/PLAN-166/OWNER-GA-CUT.sh:296`, `.claude/plans/PLAN-166/OWNER-GA-CUT.sh:310` — Atomic generation introduces `$VF.tmp` and `$VD.tmp`, but G0 permits only `$VF`, `$VF.asc`, and `$VD`. Interruption between redirection and `mv` leaves a `.tmp`; rerunning then aborts at G0 before the cleanup at line 290. Minimal fix: safely remove these two exact temporary paths before the status check, rejecting non-regular/symlink forms, and include them in step-3 cleanup.
+
+P1 — `.claude/plans/PLAN-166/OWNER-RC3-CUT.sh:475`, `.claude/plans/PLAN-166/OWNER-GA-CUT.sh:370` — The strong tag pre-push checks run only in GA’s `SKIP_TO_PUSH` recovery. On the normal path, the Owner can leave the `SIM` prompt open until the verdict nears expiry or `origin/main` moves, then push without rechecking TTL, tag target, signature, clean tree, guard, or `tag == HEAD == origin/main`. An expired RC tag is pushed only to fail server-side and RC3’s G0 cannot resume; a newly advanced main still accepts the older tag because server ancestry is not equality. Minimal fix: run one shared tag-aware pre-push preflight after `SIM` and immediately before every tag push, including the normal RC3 and GA paths.
+
+P1 — `.claude/plans/PLAN-166/OWNER-GA-CUT.sh:467`, `.claude/plans/PLAN-166/OWNER-GA-CUT.sh:486` — The documented npm-failure recovery drafts the already-public GA release. After npm is retried successfully, `MONITOR_ONLY` can finish, and the final check accepts any release with `isPrerelease == false`; a draft stable release satisfies that and the script announces “GA PUBLICADO” and ends the freeze while GA remains unpublished. Minimal fix: query `isDraft` alongside `isPrerelease`, require both `isDraft == false` and `isPrerelease == false`, and explicitly republish a mitigated draft after npm succeeds. Apply the same non-draft assertion to the RC publication/hold checks.
+
+Commit-1 path closure, manifest/allowlist equality, canonical verdict-fields paths, and the reused inputs hash are otherwise coherent, but these P1 lifecycle holes must be fixed before the cut.
+
+VERDICT: NO-GO

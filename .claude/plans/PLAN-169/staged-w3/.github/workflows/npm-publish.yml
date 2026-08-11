@@ -439,6 +439,44 @@ jobs:
             echo "OK: ${PKG_NAME}@${PKG_VERSION} not in registry (rc=$RC) — proceeding to publish"
           fi
 
+      # -----------------------------------------------------------------
+      # PLAN-166 W2 rc.3 (GA re-pass part-2 P1): a delete/re-tag recovery
+      # leaves the ORIGINAL run re-approvable (or its failed portion
+      # re-runnable) with checkout pinned to the OLD event SHA — every
+      # in-run version check still passes (both trees carry the same
+      # version string), the registry is still empty, and npm publish
+      # would irreversibly ship the WRONG tree while the live tag points
+      # elsewhere. Fail-closed liveness assert: the CURRENT remote tag
+      # must still peel to this run's GITHUB_SHA immediately before
+      # publish. A deleted tag (empty resolve) and a moved tag both
+      # abort. This step sits AFTER the production-npm environment
+      # approval by job order, so a stale approval cannot race past it.
+      # -----------------------------------------------------------------
+      - name: Assert remote tag still points at this run's SHA
+        # Same skip-condition as the publish step (rail rc.3 r1 P1-2): when
+        # the registry already carries the version, publish is a no-op and
+        # this guard must not turn the documented idempotent re-run red.
+        if: steps.already_published.outputs.published != 'true'
+        run: |
+          set -euo pipefail
+          TAG_REF="${GITHUB_REF_NAME}"
+          # ONE ls-remote invocation = ONE remote snapshot (rail rc.3 r1
+          # P1-1): separate calls could straddle a concurrent re-tag, keep
+          # the OLD peeled SHA and approve the obsolete run.
+          SNAP="$(git ls-remote origin "refs/tags/${TAG_REF}" "refs/tags/${TAG_REF}^{}")"
+          PEELED="$(printf '%s\n' "$SNAP" | awk -v r="refs/tags/${TAG_REF}^{}" '$2==r{print $1}')"
+          PLAIN="$(printf '%s\n' "$SNAP" | awk -v r="refs/tags/${TAG_REF}" '$2==r{print $1}')"
+          LIVE="${PEELED:-$PLAIN}"
+          if [ -z "$LIVE" ]; then
+            echo "::error::tag ${TAG_REF} no longer exists on origin — refusing to publish an orphaned tree (delete/re-tag recovery in flight?)"
+            exit 1
+          fi
+          if [ "$LIVE" != "${GITHUB_SHA}" ]; then
+            echo "::error::tag ${TAG_REF} now peels to ${LIVE} but this run was built from ${GITHUB_SHA} — obsolete run; approve/re-run only from the CURRENT tag's run"
+            exit 1
+          fi
+          echo "OK: refs/tags/${TAG_REF} still peels to ${GITHUB_SHA}"
+
       - name: Publish (Trusted Publishing — OIDC)
         if: steps.already_published.outputs.published != 'true'
         working-directory: npm

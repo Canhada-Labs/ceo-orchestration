@@ -14,7 +14,13 @@ jobs:
     # PLAN-012 Phase 2 CEO_SOTA_DISABLE parity.
     if: vars.CEO_SOTA_DISABLE != '1'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # 20 -> 35 (S300, corte da rc.2): o gate da rc.1 levou 18m37s
+    # (margem de 1m23s) e o attempt-1 da rc.2 ESTOUROU os 20 min com
+    # ~10 min de stalls das suites em runner 2-core carregado (classe
+    # ADR-163/perf-under-load) — o passo do verdito imprimiu all-green
+    # 13ms antes do machado. Mesma regra anti-flake dos budgets do
+    # smoke/nightly: folga primeiro, re-apertar com p95 real acumulado.
+    timeout-minutes: 35
     permissions:
       # `contents: read` for checkout; `actions: read` lets the
       # weekly-workflow status gate (see below) call `gh run list`
@@ -983,5 +989,11 @@ jobs:
           CREATE_ARGS=(--verify-tag --title "$TAG" --notes-file release-notes.md)
           if [[ "$TAG" == *-rc.* ]]; then
             CREATE_ARGS+=(--prerelease)
+          else
+            # rail rc.3 r27 P1-3: GA estavel NASCE draft; o undraft e o
+            # passo FINAL verificado da cerimonia (npm view + recibo do
+            # step Publish + rechecks de tag/main). Elimina a janela de
+            # GA publico sem npm confirmado sob interrupcao local.
+            CREATE_ARGS+=(--draft)
           fi
           gh release create "$TAG" "${CREATE_ARGS[@]}" install.sh.sha256 sbom.cyclonedx.json

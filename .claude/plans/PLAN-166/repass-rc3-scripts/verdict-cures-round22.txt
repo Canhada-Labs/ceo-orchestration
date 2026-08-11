@@ -1,0 +1,7 @@
+P1 — `.claude/plans/PLAN-166/repass-ga/run-ga-repass.sh:284` — An interruption or failed `mv` after writing `MANIFEST-ga.sha256.tmp` leaves that untracked file in `repass-ga/`. On restart, `OWNER-GA-CUT.sh` rejects it because it is absent from `GA_OUT_OK`, aborting before the runner can clean it. Thus a pre-commit-1 step is not safely resumable. Minimal fix: safely remove this regular orphan before the Owner dirty-tree check and include it in the runner’s startup/trap cleanup, rejecting symlinks/non-regular entries.
+
+P1 — `.claude/plans/PLAN-166/repass-ga/run-ga-repass.sh:18` — `BASE_TAG=v1.2.0` is used without verifying its signature, remote object, peeled commit, or ancestry. A stale or accidentally moved local tag produces a valid, self-consistent but wrong `v1.2.0..rc.3` review payload that can receive GO. Minimal fix: bind the local base tag to one `ls-remote` snapshot, verify its signature and exact object/peel, require it to be an ancestor of RC3, and record both object IDs in provenance.
+
+These two reachable P1s break pre-commit resumability and review-input provenance, so they must be fixed and re-reviewed before the cut.
+
+VERDICT: NO-GO

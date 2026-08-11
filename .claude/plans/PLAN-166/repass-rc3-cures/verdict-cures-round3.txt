@@ -1,0 +1,17 @@
+REJECT
+
+1. **P1 — `CHANGELOG.md:128` / `CHANGELOG.md:134`**  
+   The new release note says both `install.sh` and `upgrade.sh` call `_ownership_verdict()`. They do not: all runtime call sites are in `scripts/upgrade.sh:1634`, `:1944`, and `:2107`. Install still decides locally through `INSTALL_ONE_WROTE` (`scripts/install.sh:1329`), marker delivery flags (`:1377`), and the pre-existing protocol early return (`:1883`). Thus P1-b is cured with a false architectural claim, and install can still diverge from the alleged single decision function.  
+   **Minimal fix:** either route install’s three conditional surfaces through `_ownership_verdict()`, or rewrite the CHANGELOG and canonical doctrine to describe the actual split truthfully.
+
+2. **P1 — `.claude/plans/PLAN-166/OWNER-GA-CUT.sh:22`**  
+   The rc.3 cure changes the release baseline, but the active GA automation remains pinned to `v1.3.0-rc.2`. After rc.3, its restricted-delta check at `OWNER-GA-CUT.sh:85` sees all cure files as unauthorized rc.2→HEAD changes and aborts. Worse, bypassing that script still leaves `.claude/plans/PLAN-166/repass-ga/run-ga-repass.sh:19` reviewing a detached rc.2 tree, while `.claude/plans/PLAN-166/pair-rail-verdict-v1.3.0.TEMPLATE.md:49` records rc.2 provenance. The new 24-hour rc.3 hold therefore cannot drive the prepared GA path.  
+   **Minimal fix:** before cutting rc.3, retarget the GA script, re-pass runner, and both GA verdict templates to rc.3; regenerate their provenance/freeze language and ensure the hold is measured from rc.3’s published event.
+
+3. **P2 — `.claude/scripts/tests/test_release_workflow_asserts.py:1347`**  
+   The deadline regression test explicitly skips when `release.yml` returns to the old 20-minute value. A post-landing revert of the 20→35 cure therefore makes the entire relational test class green-by-skip; no other test pins the producer timeout to 35.  
+   **Minimal fix:** remove the pre-landing skip and assert the live producer timeout is exactly 35, then retain the relational margin assertions.
+
+The tag-liveness implementation itself is sound for the stated scenario: deleted and moved tags fail closed, network failure aborts under `set -e`, annotated tags use the peeled commit, lightweight tags use the plain ref, the registry no-op remains idempotent, and RC publishing remains excluded. Counts reconcile to disk, and actionlint, shellcheck, YAML parsing, and Python 3.9 AST parsing passed.
+
+VERDICT: NO-GO — The false ownership claim and rc.2-pinned GA path must be fixed in the rc.3 commit.

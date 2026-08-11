@@ -1,0 +1,9 @@
+P1 — `.claude/plans/PLAN-166/repass-ga/run-ga-repass.sh:185` — The runner diffs through mutable `v1.2.0`; the supposedly immutable `BASE_TAG_OBJ` and `BASE_TAG_COMMIT` declared at lines 22–23 are never checked or used. An accidentally moved local base tag can omit train changes while producing self-consistent manifests, provenance, and GO verdicts that `OWNER-GA-CUT.sh` accepts. Minimal fix: verify both pinned hashes, diff against `BASE_TAG_COMMIT`, record both hashes in provenance, and validate them during evidence reuse.
+
+P1 — `.claude/plans/PLAN-166/OWNER-GA-CUT.sh:118` — The remote rc.3 object is checked only at G0. If the remote RC tag is deleted/recreated or force-moved during the runner/commit/CI interval, pre-push validates only the GA tag, main, verdict, and CI; it can promote the locally reviewed RC while the public RC receipt now names another object. Minimal fix: repeat the one-snapshot plain-object/peel comparison, plus public non-draft pre-release check, inside `prepush_preflight` and before the final announcement.
+
+P1 — `.claude/plans/PLAN-166/OWNER-RC3-CUT.sh:317` — `cp "$SENT_DRAFT" "$SENT"` follows a pre-existing destination symlink. An operator-created stale symlink at `RC3-approved.md` can overwrite another ceremony or repository file before the later staging-time regular-file check aborts, leaving the advertised pre-commit rerun path corrupted. Minimal fix: safely remove or reject any existing symlink/non-regular destination before copying, then assert the generated sentinel is regular.
+
+The template hashes and manifest allowlists otherwise cohere, but these three ceremony-state defects require repair before the cut.
+
+VERDICT: NO-GO

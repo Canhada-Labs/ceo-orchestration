@@ -12,6 +12,7 @@ delta_allowlist:
   - .claude/governance/pair-rail-verdict-v1.3.0.md
   - .claude/plans/PLAN-166/verdict-fields-v1.3.0.md
   - .claude/plans/PLAN-166/repass-ga/MANIFEST-ga.sha256
+  - .claude/plans/PLAN-166/repass-ga/PROVENANCE-ga.md
   - .claude/plans/PLAN-166/repass-ga/payload-ga-1.redacted.txt
   - .claude/plans/PLAN-166/repass-ga/payload-ga-2.redacted.txt
   - .claude/plans/PLAN-166/repass-ga/diff-ga-1.patch
@@ -46,8 +47,8 @@ Signer CFCFACF00335DC74.
 
 - Reviewer: codex-cli 0.144.6 (codex exec --sandbox read-only), prompt
   + diff atraves do redactor ADR-114 como UM pipeline; pin ADR-182
-  byte-exato; worktree detached da TAG v1.3.0-rc.2.
-- Escopo: release mechanics, diff v1.2.0..v1.3.0-rc.2 (o trem inteiro:
+  byte-exato; worktree detached da TAG v1.3.0-rc.3.
+- Escopo: release mechanics, diff v1.2.0..v1.3.0-rc.3 (o trem inteiro:
   driver, tag guard, workflows de release/publish, superficies de
   versao, docs de release). Runner:
   repass-ga/run-ga-repass.sh (2 partes; escopo expandido com os
@@ -56,11 +57,13 @@ Signer CFCFACF00335DC74.
   verditos em repass-ga/verdict-ga-{1,2}.txt.
 - Historia de review do trem (nao re-litigada, instruida no prompt):
   4 rodadas pre-rc.1 (18 achados, 17 curados, 1 refutado com citacao)
-  + 4 rodadas multi-part rc.1->rc.2 (todas as curas landadas;
-  candidato final c0295e1) + este re-pass do hold.
+  + 4 rodadas multi-part rc.1->rc.2 (todas as curas landadas) + 1o
+  re-pass do hold NO-GO sobre a rc.2 (8 achados reais, TODOS curados na
+  rc.3; rail das curas GO em repass-rc3-cures/) + este re-pass do hold
+  sobre a rc.3.
 - Condicoes: as 4 excecoes nomeadas V1/V2/V4/V5 (por extenso no
   verdict-fields assinado da rc.2) seguem abertas por rota (b);
   curas STAGED no pack W3, que landa imediatamente pos-GA.
-- Main CONGELADO do corte rc.2 ate este GA: o unico delta e o proprio
+- Main CONGELADO do corte da rc.3 ate este GA: o unico delta e o proprio
   verdito + evidencia do hold (fechado pelo delta_allowlist acima e
   verificado pelo guard local + server-side).

@@ -1,0 +1,11 @@
+No findings.
+
+- Counts match disk, and the CHANGELOG matcher is preamble-scoped with exact census coverage (`verify-counts.sh:826`, `test_verify_counts.py:201`, `CHANGELOG.md:12`).
+- Upgrade semantics are documented at `CHANGELOG.md:123`.
+- The tag guard uses one remote snapshot, handles annotated/lightweight tags, fails closed on deleted/moved refs, and preserves published-version no-op reruns (`npm-publish.yml:443`).
+- Checklist, help-header counts, and timeout relationships are corrected. Actionlint, syntax, stdlib-only, contamination, count-decision, and 21 focused workflow assertions passed.
+- Neither deferred P2 affects rc.3 safety.
+
+The cure set closes the stated failures without making rc.3 or GA publication non-idempotent or order-dependent.
+
+VERDICT: GO

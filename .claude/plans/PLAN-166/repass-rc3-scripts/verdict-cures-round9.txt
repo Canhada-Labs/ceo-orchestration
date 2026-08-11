@@ -1,0 +1,9 @@
+P1 — `.claude/plans/PLAN-166/OWNER-GA-CUT.sh:192` — `validate_ga_evidence` binds evidence to the rc.3 tag/SHA but not to the completed hold window. A complete GO re-pass run immediately after rc.3 publication—or even against the local tag before publication—will be reused after D+24, falsely treating a pre-hold review as the required post-hold re-pass. Minimal fix: record a strict runner start timestamp and require `started_at >= publishedAt + 86400`, also rejecting future timestamps.
+
+P1 — `.claude/plans/PLAN-166/OWNER-GA-CUT.sh:178` — `git status` is expanded directly inside the here-document without checking its exit status. If it fails, the loop receives empty input and reports a clean tree; an unrelated staged path can then survive the evidence pathspec commit, enter the unrestricted verdict commit, and be detected only after HEAD has been corrupted by the delta guard. Minimal fix: capture `_st_out="$(git status ...)" || die ...` before the loop, as `OWNER-RC3-CUT.sh` already does.
+
+P1 — `.claude/plans/PLAN-166/OWNER-RC3-CUT.sh:295` — the signed pack binding covers bytes but not Git executable modes, while `_px` makes the current pack mode authoritative and `cp -p` applies it. For example, removing execute permission from staged `verify-counts.sh` after review leaves every SHA and provenance check green; the gates invoke it through `bash`, so commit 1 can silently land the unreviewed mode change. Minimal fix: bind modes in the pack manifest, or derive and enforce each expected mode from `$EXPECTED_HEAD` before copying and before staging.
+
+The template basename sets and reused inputs hash are coherent, but these three P1 paths require correction before the ceremony.
+
+VERDICT: NO-GO

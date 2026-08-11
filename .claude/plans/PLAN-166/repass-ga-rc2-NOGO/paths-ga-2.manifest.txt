@@ -1,0 +1,8 @@
+.github/workflows/release.yml
+.github/workflows/npm-publish.yml
+.claude/scripts/local/verify-counts.sh
+.claude/scripts/local/release.sh
+.claude/scripts/local/_release_tag_guard.py
+.claude/scripts/local/_release_bump_sites.py
+.claude/scripts/await_release_gate.py
+.github/scripts/validate-pair-rail-verdict.py

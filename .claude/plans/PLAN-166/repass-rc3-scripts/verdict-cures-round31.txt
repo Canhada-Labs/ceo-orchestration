@@ -1,0 +1,3 @@
+APPROVE — No in-scope findings; commit-1 closure, manifest/template set equality, reused inputs hash, GA rc.3 targeting, syntax, and pre-commit resumability are coherent.
+
+VERDICT: GO

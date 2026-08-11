@@ -1,0 +1,12 @@
+1. P1 — `.claude/plans/PLAN-166/OWNER-GA-CUT.sh:64` and `:81`  
+   The remote-tag checks accept a matching peeled commit instead of requiring the exact signed tag object. Deleting and recreating RC3 or GA as a lightweight/different annotated tag at the same commit therefore passes. In `MONITOR_ONLY`, old workflow runs selected only by `headSha` can then be reused while signing and pre-push verification are skipped. Minimal fix: from one `ls-remote` snapshot, require the plain remote ref to equal the local signed tag object, the peeled ref to equal its commit, and verify `git tag -v` for both RC and GA tags.
+
+2. P1 — `.claude/plans/PLAN-166/OWNER-GA-CUT.sh:479` and `:496`  
+   Once `release.yml` succeeds, the GA GitHub Release is public. The npm monitor mitigates only the literal `failure` conclusion—and merely prints a manual command. `cancelled`, `timed_out`, `stale`, other terminal conclusions, or the 90-minute timeout leave a public GA without confirmed npm publication. Minimal fix: on every completed non-success and observer timeout, draft the release automatically, verify it became draft, then abort; retain the existing post-npm undraft path.
+
+3. P2 — `.claude/plans/PLAN-166/repass-ga/run-ga-repass.sh:38` and `.claude/plans/PLAN-166/OWNER-GA-CUT.sh:108`  
+   Raw-payload cleanup relies solely on an `EXIT` trap. A power loss or `SIGKILL` while `payload-ga-N.raw.txt` exists bypasses it; the next Owner run rejects that raw file before invoking the runner, so the pre-commit evidence phase is not self-resumable. Minimal fix: quarantine validated regular raw payloads before the Owner script’s initial status-closure check.
+
+The commit-1 closure and verdict-template/manifest sets are coherent, but the two P1 paths make the ceremony unsafe to cut as written.
+
+VERDICT: NO-GO

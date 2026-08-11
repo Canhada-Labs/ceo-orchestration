@@ -1,0 +1,7 @@
+P0 — `.claude/plans/PLAN-166/OWNER-RC3-CUT.sh:114`, `.claude/plans/PLAN-166/verdict-fields-v1.3.0-rc.3.TEMPLATE.md:81`, `.claude/plans/PLAN-166/pair-rail-verdict-v1.3.0-rc.3.TEMPLATE.md:80` — `MANIFEST-cures.sha256` is required to contain `CEREMONY-MANIFEST.sha256`, but both signed allowlists omit it. The local delta guard will fail set equality after commit 2, leaving the script past its non-rerunnable commit-1 boundary; server-side validation would reject it too. Minimal fix: add the canonical `CEREMONY-MANIFEST.sha256` path to both allowlists, then regenerate/re-pin and re-review the affected ceremony evidence.
+
+P1 — `.claude/plans/PLAN-166/repass-ga/run-ga-repass.sh:38` — `[ -z "$(git -C "$WT" status --porcelain)" ]` treats a failed `git status` with empty stdout as a clean worktree. Codex can therefore review against an unverified worktree and produce reusable GO evidence. Minimal fix: capture stdout in an assignment whose return code is checked before testing emptiness.
+
+The rc.3 cut is deterministically blocked, and the GA evidence runner still has a fail-open verification path.
+
+VERDICT: NO-GO

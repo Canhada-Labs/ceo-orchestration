@@ -1,0 +1,19 @@
+P0 — `.claude/plans/PLAN-166/OWNER-GA-CUT.sh:533-569`  
+Concrete failure: a mistaken or stale `ceo-orchestration@1.3.0` may already exist on npm from another tree. The npm workflow then succeeds through its `already_published` no-op, while the ceremony accepts only the workflow conclusion and `npm view ... version == 1.3.0`. It can therefore declare GA with an irreversible npm artifact not bound to this tag/SHA.  
+Minimal fix: require an exact tag/SHA publish receipt—successful Publish step or npm provenance/integrity bound to this workflow commit. In fresh mode, fail closed if the version already exists without such a receipt.
+
+P1 — `.claude/plans/PLAN-166/repass-ga/run-ga-repass.sh:277-287`; `.claude/plans/PLAN-166/OWNER-GA-CUT.sh:264-266`  
+Concrete failure: interruption while `shasum` writes directly to `MANIFEST-ga.sha256` can leave a valid partial manifest after `RUNNER-OVERALL: rc=0` was recorded. On rerun, `validate_ga_evidence` checks only the listed hashes; it does not require exactly the expected 11 basenames. It reuses and commits the partial evidence, and the delta guard rejects only after the verdict commit, leaving a non-rerunnable state.  
+Minimal fix: generate and verify the manifest through a temporary file followed by atomic rename, and require exact set equality/count in `validate_ga_evidence`.
+
+P1 — `.claude/plans/PLAN-166/OWNER-GA-CUT.sh:89`; `.claude/plans/PLAN-166/OWNER-GA-CUT.sh:301-350`  
+Concrete failure: `MONITOR_ONLY=1` does not prevent the evidence runner and commit-1 phase. After a post-tag monitoring timeout, an accidental local truncation of an evidence file makes validation rerun Codex and commit new evidence, moving HEAD beyond the already-pushed tag. The script then skips verdict/CI/tag creation, monitors the old tag, and declares GA with an untagged, unpushed local HEAD—the subsequent W3 instructions anchor the wrong commit.  
+Minimal fix: make monitor mode strictly read-only: require a clean tree, validate evidence from the tagged tree, skip all runner/commit phases, and reassert `HEAD == TAG^{commit}` before success.
+
+P1 — `.claude/plans/PLAN-166/OWNER-GA-CUT.sh:195-197`  
+Concrete failure: the freeze check accepts `origin/main == RC_SHA` even when the GA tag is already remote. If main is accidentally rolled back after the release gate succeeded, a monitoring rerun accepts that state and can finish npm/release verification despite the GA commit no longer being on main. There is also no final remote-main recheck to close a rollback after G0.  
+Minimal fix: in monitor mode require `origin/main == HEAD == TAG^{commit}`, and repeat the fail-closed fetch/equality check immediately before declaring GA.
+
+The normal-state commit-1 closure, template fields, inputs hash, manifest basenames, and guard allowlists otherwise cohere.
+
+VERDICT: NO-GO

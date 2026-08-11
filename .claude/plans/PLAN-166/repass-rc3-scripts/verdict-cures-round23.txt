@@ -1,0 +1,9 @@
+P1 — `.claude/plans/PLAN-166/repass-ga/run-ga-repass.sh:18`
+
+Concrete failure scenario: `BASE_TAG="v1.2.0"` is never bound to an immutable commit/tag object or checked against `origin`. A stale or mistakenly moved local tag makes the runner review the wrong diff while every hash, manifest, timestamp, and verdict remains internally consistent. `PROVENANCE-ga.md` records only the symbolic base name, and `validate_ga_evidence` validates only the RC SHA, so the wrong evidence can be reused and signed for GA.
+
+Minimal fix: pin the expected v1.2.0 tag object and peeled commit; fail closed on local signature and a single `ls-remote` plain/peeled comparison; record both SHAs in provenance and validate them on reuse.
+
+The unverified base reference permits false GA evidence, so the ceremony is not safe to cut as written.
+
+VERDICT: NO-GO

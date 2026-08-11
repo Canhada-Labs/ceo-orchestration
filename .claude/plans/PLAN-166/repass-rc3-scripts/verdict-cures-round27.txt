@@ -1,0 +1,23 @@
+SEVERITY: P1  
+FILE: `.claude/plans/PLAN-166/OWNER-RC3-CUT.sh:187`  
+Concrete failure scenario: the scripts rail pins `SCRIPTS-MANIFEST.sha256`, but nothing checked inside that evidence binds it to the current `CEREMONY-MANIFEST.sha256`. A self-consistent GO directory from an earlier script revision can therefore be paired with newly regenerated ceremony/product manifests and pass as current review evidence.  
+Minimal fix: include manifest-pinned scripts provenance containing the current ceremony-manifest SHA, verify that binding here, and enforce contiguous per-round payload/diff/transcript/verdict tuples.
+
+SEVERITY: P1  
+FILE: `.claude/plans/PLAN-166/OWNER-RC3-CUT.sh:69`; `.claude/plans/PLAN-166/OWNER-GA-CUT.sh:130`  
+Concrete failure scenario: an aborted earlier rc.3 attempt can leave a published GitHub pre-release after its tag is deleted. RC3 G0 checks only tag absence. On the new tag push, `release.yml` reuses the existing release and does not reset `publishedAt`; GA then accepts that stale timestamp and can bypass the new 24-hour hold.  
+Minimal fix: at RC3 G0, distinguish “release not found” from API failure and require no existing release; also assert the resulting `publishedAt` is newer than the current tag-push ceremony.
+
+SEVERITY: P1  
+FILE: `.claude/plans/PLAN-166/OWNER-GA-CUT.sh:564`  
+Concrete failure scenario: after the GA tag is pushed, `release.yml` creates a public, non-draft GA release. The script drafts it only after observing workflow success. If the shell is interrupted while waiting—or the draft API call fails—the remote workflow continues and leaves GA public indefinitely while npm is still unapproved or unconfirmed.  
+Minimal fix: make the server-side release workflow create stable releases as drafts initially; only the final verified ceremony step should publish them.
+
+SEVERITY: P1  
+FILE: `.claude/plans/PLAN-166/OWNER-RC3-CUT.sh:540`; `.claude/plans/PLAN-166/OWNER-GA-CUT.sh:446`  
+Concrete failure scenario: validate receipt selection filters only by `headSha`. A successful `pull_request` run for the same SHA can be selected while the required `push`/`main` run is delayed, absent, or later fails. The script can consequently push the release tag without a successful main-push validation receipt.  
+Minimal fix: request `event` and `headBranch`, require `event=="push"` and `headBranch=="main"`, pin that run’s `databaseId`, and use the same ID for all job-level assertions.
+
+The template hashes and delta-manifest allowlists are coherent, but these four P1 paths must be closed before the cut.
+
+VERDICT: NO-GO

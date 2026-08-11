@@ -1,0 +1,2220 @@
+You are the cross-vendor reviewer on the v1.3.0 GA train of
+ceo-orchestration. This round reviews the CEREMONY SCRIPTS for the
+v1.3.0-rc.3 cut, not the product cures (those passed their own rounds;
+do not re-litigate them). Be adversarial and concrete. S300 precedent:
+prior script-review rounds found real P1s (stale-provenance reuse,
+non-main HEAD, look-alike evidence paths, lowercase confirm aborting).
+
+
+THREAT MODEL (ratified, PLAN-169/S298 - do not relitigate): these are
+Owner-run LOCAL scripts under a single UID. A concurrent same-UID
+adversary is OUT OF SCOPE by ratified decision - such an adversary can
+edit the scripts themselves, so no local check can close that class
+(the same-UID oracle limitation). Report ONLY defects reachable via:
+operator mistakes, stale/partial state, interruptions and resumes,
+races with REMOTE systems (GitHub/npm/CI), command failure semantics,
+or wrong-selection of remote receipts. Findings whose only reachable
+path requires a live local adversary mutating files mid-ceremony will
+be triaged as out-of-scope.
+
+CONTEXT
+- The rc.2 hold re-pass returned NO-GO (8 real findings). Cures are
+  staged in .claude/plans/PLAN-166/staged-rc3/ under MANIFEST.sha256
+  (pack content) + BASELINE.sha256 (live pre-cure state). The Owner will
+  run OWNER-RC3-CUT.sh in the morning: sign sentinel (pinentry 1), apply
+  pack, local gates, commit 1 (closed allowlist), verdict-fields sign
+  (pinentry 2), verdict commit 2, local delta guard, push, CI wait
+  (job-level validate assert), preflight --rc 3, tag sign (pinentry 3),
+  push tag after literal SIM, release.yml wait, await-release-gate
+  positive control, pre-release verify. Then the ADR-103 24h hold
+  restarts and OWNER-GA-CUT.sh (already re-pointed to rc.3) promotes.
+- The delta guard (_release_tag_guard.py) enforces: parent_sha ancestry,
+  closed delta allowlist (verdict + verdict-fields at canonical paths +
+  manifest-dir files with set equality vs MANIFEST-cures.sha256, sha256
+  pinned in the signed verdict), no globs, vacuity check.
+- Known environment facts: macOS zsh Owner shell but scripts run under
+  bash; gpg pinentry needs GPG_TTY; gh CLI authenticated; origin/main ==
+  0cb09c3 (rc.2 commit) — the required EXPECTED_HEAD.
+
+WHAT TO REVIEW (the payload = full text of each ceremony file)
+1. FAIL-CLOSED completeness: any path where a failed check still
+   proceeds, or where rerun-after-partial-failure corrupts state
+   (commits, tags, worktree, staged pack, evidence dirs)?
+2. Allowlist closure of commit 1: does any file class escape or block?
+   The tree at run time contains exactly: applied cures (7 canonical
+   paths), staged-rc3/, repass-rc3-cures/, repass-ga-rc2-NOGO/,
+   edited OWNER-GA-CUT.sh + run-ga-repass.sh + templates + draft +
+   OWNER-MORNING-RC3.md + PLAN-169 staged-w3 mirror + W3 draft.
+3. Template/guard coherence: will the generated verdict-fields pass the
+   delta guard and the server-side step-15 validator (inputs_hash reused
+   from rc.2 — no trust-chain surface changed; delta_manifest basenames;
+   allowlist set equality)?
+4. GA path coherence: OWNER-GA-CUT.sh now points at rc.3; run-ga-repass
+   regenerates evidence into repass-ga/ (old NO-GO archived in
+   repass-ga-rc2-NOGO/). Any stale rc.2 residue that would abort or,
+   worse, falsely pass the GA?
+5. Idempotency/resume: G0 refuses reruns after commit 1 by design; is
+   every pre-commit-1 step safely re-runnable?
+
+OUTPUT FORMAT
+Per finding: SEVERITY (P0 blocks the cut / P1 fix before the cut / P2
+follow-up), FILE:LINE, concrete failure scenario, minimal fix. End with
+exactly one line: "VERDICT: GO" or "VERDICT: NO-GO" or
+"VERDICT: GO-WITH-CONDITIONS", plus one sentence. A clean round is a
+legitimate result - do not manufacture findings.
+
+CEREMONY FILES (each as a /dev/null diff) FOLLOW.
+
+diff --git a/.claude/plans/PLAN-166/OWNER-RC3-CUT.sh b/.claude/plans/PLAN-166/OWNER-RC3-CUT.sh
+new file mode 100755
+index 0000000..e0bef57
+--- /dev/null
++++ b/.claude/plans/PLAN-166/OWNER-RC3-CUT.sh
+@@ -0,0 +1,656 @@
++#!/bin/bash
++# OWNER-RC3-CUT.sh - corte da v1.3.0-rc.3 em UM comando (S301).
++#
++#   bash .claude/plans/PLAN-166/OWNER-RC3-CUT.sh
++#
++# POR QUE rc.3: o re-pass do hold da rc.2 (10/08) terminou NO-GO nas 2
++# partes - 8 achados triados como REAIS (3 P1 + 5 P2; triagem em
++# repass-ga-rc2-NOGO/TRIAGE-ga-repass.md). As curas foram autoradas em
++# worktree, revisadas pelo rail codex ate GO (repass-rc3-cures/) e estao
++# STAGED em staged-rc3/ sob MANIFEST+BASELINE sha256.
++#
++# O que faz, na ordem (fail-closed em tudo):
++#   1. assina o sentinel RC3-approved.md (pinentry 1)
++#   2. APLICA o pack staged-rc3 -> arvore viva (BASELINE conferida antes,
++#      MANIFEST conferido depois) + gates locais (verify-counts, pytest,
++#      yaml, bash -n)
++#   3. commit 1: curas + evidencia + pack + scripts (allowlist FECHADA)
++#   4. gera verdict-fields rc.3 (parent = commit 1) e voce assina (pinentry 2)
++#   5. monta o verdito, commit 2, guard local, push, espera CI
++#   6. preflight --rc 3 + tag assinada (pinentry 3)
++#   7. push da tag (confirmacao SIM MAIUSCULO) + release.yml +
++#      controle positivo await-release-gate + pre-release GitHub
++# Depois: HOLD ADR-103 reinicia (>= 24h do publishedAt da rc.3);
++# amanha: bash .claude/plans/PLAN-166/OWNER-GA-CUT.sh (ja aponta rc.3).
++#
++# Se falhar em QUALQUER passo, para com mensagem clara. Rodar de novo e
++# seguro ANTES do commit 1. DEPOIS do commit 1 o HEAD moveu e o G0
++# recusa de proposito - NAO re-rode nem resete: me chame no Claude.
++set -euo pipefail
++
++REPO="$(git rev-parse --show-toplevel)"; cd "$REPO"
++EXPECTED_HEAD="0cb09c3cc587abdeaed33e0ff13b1c8b3677061d"
++TAG="v1.3.0-rc.3"
++KEY="CFCFACF00335DC74"
++P166=".claude/plans/PLAN-166"
++P169=".claude/plans/PLAN-169"
++PACK="$P166/staged-rc3"
++CURES="$P166/repass-rc3-cures"
++SCRIPTSR="$P166/repass-rc3-scripts"
++NOGO="$P166/repass-ga-rc2-NOGO"
++SENT="$P166/RC3-approved.md"
++SENT_DRAFT="$P166/RC3-approved-draft.md"
++VF="$P166/verdict-fields-v1.3.0-rc.3.md"
++VD=".claude/governance/pair-rail-verdict-v1.3.0-rc.3.md"
++VF_TPL="$P166/verdict-fields-v1.3.0-rc.3.TEMPLATE.md"
++VD_TPL="$P166/pair-rail-verdict-v1.3.0-rc.3.TEMPLATE.md"
++
++say() { printf '\n== %s\n' "$*"; }
++die() { printf '\nFAIL: %s\n' "$*" >&2; exit 1; }
++bell() { printf '\a'; osascript -e "display notification \"$1\" with title \"rc.3\"" 2>/dev/null || true; }
++
++GPG_TTY="$(tty 2>/dev/null || true)"; export GPG_TTY
++gpgconf --kill gpg-agent 2>/dev/null || true
++
++say "G0 pre-condicoes"
++[ "$(git rev-parse --abbrev-ref HEAD)" = "main" ] \
++  || die "nao esta em main (branch/detached) - r6-P2 do rail"
++[ "$(git rev-parse HEAD)" = "$EXPECTED_HEAD" ] \
++  || die "HEAD nao e $EXPECTED_HEAD (o commit da rc.2). Se o script ja
++rodou ate o commit 1 e falhou depois, NAO resete: me chame no Claude
++que eu retomo do ponto exato. Se main andou por outro motivo, idem."
++git fetch --quiet origin main
++[ "$(git rev-parse origin/main)" = "$EXPECTED_HEAD" ] \
++  || die "origin/main moveu - investigar antes de cortar"
++git rev-parse -q --verify "refs/tags/$TAG" >/dev/null 2>&1 \
++  && die "tag $TAG ja existe (local)"
++# Tag REMOTA tambem (rail r12 P1-5): um rc.3 remoto que o fetch de main
++# nao traz deixaria o script commitar/pushar main e so falhar no push da
++# tag - com o G0 pos-commit recusando a retomada. Transporte falhando e
++# erro, nunca "ausente".
++_rls="$(git ls-remote origin "refs/tags/$TAG" "refs/tags/$TAG^{}")" \
++  || die "git ls-remote falhou (transporte) - nao vou assumir tag remota ausente"
++[ -z "$_rls" ] || die "tag $TAG ja existe no REMOTO:
++$_rls"
++command -v gh >/dev/null 2>&1 || die "gh CLI ausente"
++[ -f "$VF_TPL" ] && [ -f "$VD_TPL" ] || die "templates rc.3 ausentes (o Claude gera pos-rail)"
++[ -f "$SENT_DRAFT" ] || die "RC3-approved-draft.md ausente"
++grep -q "Anchor-SHA: $EXPECTED_HEAD" "$SENT_DRAFT" \
++  || die "Anchor-SHA do sentinel nao bate com o HEAD esperado"
++ls "$CURES"/payload-*.raw.txt >/dev/null 2>&1 \
++  && die "payload raw do rail ainda na arvore - o Claude devia ter movido"
++ls "$SCRIPTSR"/payload-*.raw.txt >/dev/null 2>&1 \
++  && die "payload raw do rail de SCRIPTS ainda na arvore"
++ls "$NOGO"/payload-*.raw.txt >/dev/null 2>&1 \
++  && die "payload raw do NO-GO ainda na arvore"
++
++check_rail_and_evidence() {
++say "G0b: rail de curas terminou GO (verificacao completa)"
++# O round FINAL e DERIVADO do proprio conjunto de rounds no disco (o
++# maior N com verdict presente) - nunca lido de um arquivo de status
++# mutavel (rail r5 P1-3: um RAIL-STATUS editado selecionaria um GO
++# anterior). RAIL-STATUS.txt existe so como registro informacional.
++FINAL_N=0
++for _vfp in "$CURES"/verdict-cures-round*.txt; do
++  [ -e "$_vfp" ] || die "nenhum verdict-cures-roundN.txt - rail nao rodou"
++  _n="${_vfp##*round}"; _n="${_n%.txt}"
++  case "$_n" in (*[!0-9]*|'') die "nome de verdito invalido: $_vfp" ;; esac
++  [ "$_n" -gt "$FINAL_N" ] && FINAL_N="$_n"
++done
++[ "$FINAL_N" -gt 0 ] || die "nenhum round de rail encontrado"
++FINAL_ROUND="round$FINAL_N"
++# Exatamente UMA linha VERDICT (rail r11 P1-1): um arquivo com NO-GO
++# seguido de GO e ambiguo, nao aprovacao.
++_fvn="$(grep -cE '^VERDICT:' "$CURES/verdict-cures-$FINAL_ROUND.txt" 2>/dev/null || true)"
++[ "$_fvn" = "1" ] \
++  || die "verdito final do rail ($FINAL_ROUND) tem $_fvn linhas VERDICT (exigido: exatamente 1) - ambiguo"
++FVL="$(grep -E '^VERDICT:' "$CURES/verdict-cures-$FINAL_ROUND.txt")"
++[ "$FVL" = "VERDICT: GO" ] \
++  || die "verdito final do rail ($FINAL_ROUND, derivado do disco): '$FVL' != GO exato - triagem comigo no Claude"
++( cd "$CURES" && shasum -a 256 -c MANIFEST-cures.sha256 --status ) \
++  || die "MANIFEST-cures nao confere - evidencia do rail adulterada/incompleta"
++# Set-equality BIDIRECIONAL: o manifesto lista exatamente as 4-tuplas
++# (payload.redacted/diff/verdict/transcript) de TODOS os rounds 1..N -
++# um round suprimido do manifesto ou um arquivo extra nele aborta.
++_ev_want="$( { _r=1; while [ "$_r" -le "$FINAL_N" ]; do
++    echo "diff-cures-round$_r.patch"
++    echo "payload-cures-round$_r.redacted.txt"
++    echo "transcript-cures-round$_r.log"
++    echo "verdict-cures-round$_r.txt"
++    _r=$((_r+1)); done; echo "PROVENANCE-cures.md"; \
++    echo "CEREMONY-MANIFEST.sha256"; } | sort )"
++_ev_have="$( awk '{print $2}' "$CURES/MANIFEST-cures.sha256" | sort )"
++[ "$_ev_want" = "$_ev_have" ] || die "MANIFEST-cures nao cobre exatamente os rounds 1..$FINAL_N:
++$(diff <(printf '%s\n' "$_ev_want") <(printf '%s\n' "$_ev_have") | sed 's/^/   /')"
++# Fechamento do DIRETORIO de evidencia por conjunto exato de filhos
++# DIRETOS (rail r5 P1-2: prefixo na allowlist admite look-alike
++# aninhado que o git add recursivo commitaria como parent revisado).
++_cd_odd="$( cd "$CURES" && find . ! -type f ! -type d | head -5 )"
++[ -z "$_cd_odd" ] || die "entrada NAO-regular em repass-rc3-cures: $_cd_odd"
++_cd_sub="$( cd "$CURES" && find . -mindepth 2 | head -5 )"
++[ -z "$_cd_sub" ] || die "subdiretorio/arquivo aninhado em repass-rc3-cures (look-alike?):
++$_cd_sub"
++_cd_disk="$( cd "$CURES" && find . -maxdepth 1 -type f | sed 's|^\./||' | sort )"
++_cd_want="$( { printf '%s\n' "$_ev_want"; \
++  echo "MANIFEST-cures.sha256"; \
++  echo "RAIL-STATUS.txt"; echo "run-rc3-cure-review.sh"; } | sort -u )"
++[ "$_cd_disk" = "$_cd_want" ] || die "conjunto de arquivos em repass-rc3-cures difere do esperado:
++$(diff <(printf '%s\n' "$_cd_want") <(printf '%s\n' "$_cd_disk") | sed 's/^/   /')"
++# BINDING evidencia<->pack<->anchor (rail r6 P1-1): a proveniencia —
++# que esta DENTRO do manifesto shasum-verificado acima — tem de nomear
++# o anchor exato e pinar os manifestos do pack staged-rc3 vigente. Um
++# dir de evidencia GO stale pareado com um pack diferente aborta aqui.
++_bind_anchor="$(awk '/^BINDING-ANCHOR:/{print $2}' "$CURES/PROVENANCE-cures.md" | tail -1)"
++[ "$_bind_anchor" = "$EXPECTED_HEAD" ] \
++  || die "BINDING-ANCHOR da evidencia ('$_bind_anchor') != EXPECTED_HEAD - evidencia de outro anchor"
++_bind_pm="$(awk '/^BINDING-PACK-MANIFEST-SHA256:/{print $2}' "$CURES/PROVENANCE-cures.md" | tail -1)"
++[ "$_bind_pm" = "$(shasum -a 256 "$PACK/MANIFEST.sha256" | awk '{print $1}')" ] \
++  || die "BINDING do MANIFEST do pack nao bate - o pack staged-rc3 NAO e o que o rail revisou"
++_bind_bl="$(awk '/^BINDING-PACK-BASELINE-SHA256:/{print $2}' "$CURES/PROVENANCE-cures.md" | tail -1)"
++[ "$_bind_bl" = "$(shasum -a 256 "$PACK/BASELINE.sha256" | awk '{print $1}')" ] \
++  || die "BINDING do BASELINE do pack nao bate"
++_bind_md="$(awk '/^BINDING-PACK-MODES-SHA256:/{print $2}' "$CURES/PROVENANCE-cures.md" | tail -1)"
++[ "$_bind_md" = "$(shasum -a 256 "$PACK/MODES.txt" | awk '{print $1}')" ] \
++  || die "BINDING do MODES.txt do pack nao bate (exec-bit fora do revisado?)"
++# Os PROPRIOS arquivos de cerimonia sao content-pinados (rail r16
++# P1-1): scripts, templates, sentinel draft e morning doc nao podem
++# mudar depois do review por mero same-path. O CEREMONY-MANIFEST esta
++# dentro do MANIFEST-cures (bytes) e seu sha no BINDING da proveniencia.
++( cd "$REPO" && shasum -a 256 -c "$CURES/CEREMONY-MANIFEST.sha256" --status ) \
++  || die "arquivo de CERIMONIA mudou depois do review (CEREMONY-MANIFEST nao confere) - regenerar/re-revisar; me chame no Claude"
++echo "   OK: rail de PRODUTO GO ($FINAL_ROUND de $FINAL_N rounds; evidencia fechada + BINDING confere)"
++# --- Trilho 2: reviews de CERIMONIA (rail r25 P0: namespace proprio,
++# FORA do delta-manifest dos templates - fecha o loop de clausura).
++SFINAL_N=0
++for _svp in "$SCRIPTSR"/verdict-cures-round*.txt; do
++  [ -e "$_svp" ] || die "nenhum verdito de scripts em repass-rc3-scripts"
++  _sn="${_svp##*round}"; _sn="${_sn%.txt}"
++  case "$_sn" in (*[!0-9]*|'') die "verdito de scripts invalido: $_svp" ;; esac
++  [ "$_sn" -gt "$SFINAL_N" ] && SFINAL_N="$_sn"
++done
++[ "$SFINAL_N" -gt 0 ] || die "rail de scripts sem rounds"
++_sfn="$(grep -cE '^VERDICT:' "$SCRIPTSR/verdict-cures-round$SFINAL_N.txt" 2>/dev/null || true)"
++[ "$_sfn" = "1" ] || die "verdito de scripts round$SFINAL_N com $_sfn linhas VERDICT - ambiguo"
++_sfl="$(grep -E '^VERDICT:' "$SCRIPTSR/verdict-cures-round$SFINAL_N.txt")"
++[ "$_sfl" = "VERDICT: GO" ] \
++  || die "verdito FINAL do rail de scripts (round$SFINAL_N): '$_sfl' != GO exato - triagem comigo no Claude"
++( cd "$SCRIPTSR" && shasum -a 256 -c SCRIPTS-MANIFEST.sha256 --status ) \
++  || die "SCRIPTS-MANIFEST nao confere"
++_sc_odd="$( cd "$SCRIPTSR" && find . ! -type f ! -type d | head -5 )"
++[ -z "$_sc_odd" ] || die "nao-regular em repass-rc3-scripts: $_sc_odd"
++_sc_sub="$( cd "$SCRIPTSR" && find . -mindepth 2 | head -5 )"
++[ -z "$_sc_sub" ] || die "aninhado em repass-rc3-scripts: $_sc_sub"
++_sc_disk="$( cd "$SCRIPTSR" && find . -maxdepth 1 -type f | sed 's|^\./||' | sort )"
++_sc_want="$( { awk '{print $2}' "$SCRIPTSR/SCRIPTS-MANIFEST.sha256"; \
++  echo "SCRIPTS-MANIFEST.sha256"; } | sort -u )"
++[ "$_sc_disk" = "$_sc_want" ] || die "conjunto em repass-rc3-scripts difere do SCRIPTS-MANIFEST:
++$(diff <(printf '%s\n' "$_sc_want") <(printf '%s\n' "$_sc_disk") | sed 's/^/   /')"
++_bind_sm="$(awk '/^BINDING-SCRIPTS-MANIFEST-SHA256:/{print $2}' "$CURES/PROVENANCE-cures.md" | tail -1)"
++[ "$_bind_sm" = "$(shasum -a 256 "$SCRIPTSR/SCRIPTS-MANIFEST.sha256" | awk '{print $1}')" ] \
++  || die "BINDING do SCRIPTS-MANIFEST nao bate"
++echo "   OK: rail de SCRIPTS GO (round$SFINAL_N; evidencia fechada + BINDING confere)"
++}
++check_rail_and_evidence
++
++check_pack() {
++say "G0c: pack staged-rc3 fechado por manifesto + baseline"
++( cd "$PACK" && shasum -a 256 -c MANIFEST.sha256 --status ) \
++  || die "staged-rc3 nao confere com o MANIFEST do pack"
++_st_odd="$( cd "$PACK" && find . ! -type f ! -type d | head -5 )"
++[ -z "$_st_odd" ] || die "entrada NAO-regular dentro de staged-rc3 (symlink/fifo?):
++$_st_odd"
++_st_disk="$( cd "$PACK" && find . -type f | sed 's|^\./||' | sort )"
++_st_want="$( { awk '{print $2}' "$PACK/MANIFEST.sha256"; \
++  echo "MANIFEST.sha256"; echo "BASELINE.sha256"; echo "MODES.txt"; } | sort )"
++[ "$_st_disk" = "$_st_want" ] || die "conjunto de arquivos em staged-rc3 difere do MANIFEST:
++$(diff <(printf '%s\n' "$_st_want") <(printf '%s\n' "$_st_disk") | sed 's/^/   /')"
++# TRI-ESTADO por arquivo (rail r5 P1-4: exigir BASELINE puro quebrava o
++# rerun anunciado — apos um apply parcial, arquivos ja curados falhavam
++# o baseline). Cada arquivo vivo tem de estar EM UM de dois estados:
++# pre-cura (== BASELINE) ou ja-curado (== MANIFEST do pack). Qualquer
++# TERCEIRO estado (cherry-pick perdido, edicao manual) aborta.
++_tri_bad=""
++while IFS= read -r _mline; do
++  [ -n "$_mline" ] || continue
++  _mf="${_mline#*  }"; _msha="${_mline%%  *}"
++  _bsha="$(awk -v f="$_mf" '$0 ~ ("  " f "$") {print $1}' "$PACK/BASELINE.sha256")"
++  [ -n "$_bsha" ] || die "arquivo do MANIFEST sem linha no BASELINE: $_mf"
++  # Symlink no alvo canonico e sempre TERCEIRO estado (rail r8 P1-3):
++  # shasum seguiria o link e "ja aplicado" commitaria o symlink.
++  if [ -L "$_mf" ]; then
++    _tri_bad="$_tri_bad
++   $_mf (SYMLINK no lugar do arquivo canonico)"
++    continue
++  fi
++  _lsha="$(shasum -a 256 "$_mf" | awk '{print $1}')"
++  if [ "$_lsha" != "$_bsha" ] && [ "$_lsha" != "$_msha" ]; then
++    _tri_bad="$_tri_bad
++   $_mf (vivo=$_lsha nem baseline nem pack)"
++  fi
++  # Estado "ja aplicado" exige tambem o MODO do MODES.txt assinado
++  # (rail r12 P1-6: chmod no vivo pos-apply passava o re-check de
++  # staging - sha igual, modo nao olhado).
++  if [ "$_lsha" = "$_msha" ]; then
++    _tri_wm="$(awk -v f="$_mf" '$2==f{print $1}' "$PACK/MODES.txt")"
++    _tri_lm="$(python3 -c 'import os,sys;print(oct(os.stat(sys.argv[1]).st_mode & 0o777)[2:])' "$_mf")"
++    [ "$_tri_lm" = "$_tri_wm" ] || _tri_bad="$_tri_bad
++   $_mf (modo vivo $_tri_lm != $_tri_wm do MODES.txt assinado)"
++  fi
++done < "$PACK/MANIFEST.sha256"
++[ -z "$_tri_bad" ] || die "arquivo(s) vivos em TERCEIRO estado (nem rc.2 nem pack) - me chame no Claude:$_tri_bad"
++# Exec-bit e parte do material revisado (rail r9 P1-3): sha256 nao
++# cobre modo; MODES.txt (pinado no BINDING) e a autoridade — o modo
++# ATUAL do pack nao decide nada.
++while IFS=' ' read -r _mmode _mpath; do
++  [ -n "$_mpath" ] || continue
++  _pm="$(python3 -c 'import os,sys;print(oct(os.stat(sys.argv[1]).st_mode & 0o777)[2:])' "$PACK/$_mpath")"
++  [ "$_pm" = "$_mmode" ] \
++    || die "modo do pack divergiu do MODES.txt revisado: $_mpath ($_pm != $_mmode)"
++done < "$PACK/MODES.txt"
++echo "   OK: pack fechado ($(grep -c . "$PACK/MANIFEST.sha256") arquivos) + vivos em estado pre-cura ou ja-curado + modes conferem"
++}
++check_pack
++
++check_nogo_w3() {
++say "G0c2: arquivo morto do NO-GO + espelho W3 fechados por manifesto"
++# repass-ga-rc2-NOGO: conjunto exato + conteudo pinado (rail r5 P1-2).
++( cd "$NOGO" && shasum -a 256 -c MANIFEST-NOGO.sha256 --status ) \
++  || die "arquivo do NO-GO nao confere com MANIFEST-NOGO"
++_ng_odd="$( cd "$NOGO" && find . ! -type f ! -type d | head -5 )"
++[ -z "$_ng_odd" ] || die "entrada NAO-regular em repass-ga-rc2-NOGO: $_ng_odd"
++_ng_sub="$( cd "$NOGO" && find . -mindepth 2 | head -5 )"
++[ -z "$_ng_sub" ] || die "aninhado em repass-ga-rc2-NOGO (look-alike?): $_ng_sub"
++_ng_disk="$( cd "$NOGO" && find . -maxdepth 1 -type f | sed 's|^\./||' | sort )"
++_ng_want="$( { awk '{print $2}' "$NOGO/MANIFEST-NOGO.sha256"; echo "MANIFEST-NOGO.sha256"; } | sort )"
++[ "$_ng_disk" = "$_ng_want" ] || die "conjunto em repass-ga-rc2-NOGO difere do MANIFEST-NOGO:
++$(diff <(printf '%s\n' "$_ng_want") <(printf '%s\n' "$_ng_disk") | sed 's/^/   /')"
++# staged-w3: mesma disciplina do G0b do RC2-CUT (conteudo + conjunto).
++( cd "$P169/staged-w3" && shasum -a 256 -c MANIFEST.sha256 --status ) \
++  || die "staged-w3 nao confere com o MANIFEST do pack W3"
++_sw_odd="$( cd "$P169/staged-w3" && find . ! -type f ! -type d | head -5 )"
++[ -z "$_sw_odd" ] || die "entrada NAO-regular em staged-w3: $_sw_odd"
++_sw_disk="$( cd "$P169/staged-w3" && find . -type f | sed 's|^\./||' | sort )"
++_sw_want="$( { awk '{print $2}' "$P169/staged-w3/MANIFEST.sha256"; \
++  echo "MANIFEST.sha256"; echo "BASELINE.sha256"; } | sort )"
++[ "$_sw_disk" = "$_sw_want" ] || die "conjunto em staged-w3 difere do MANIFEST:
++$(diff <(printf '%s\n' "$_sw_want") <(printf '%s\n' "$_sw_disk") | sed 's/^/   /')"
++echo "   OK: NO-GO ($(grep -c . "$NOGO/MANIFEST-NOGO.sha256") arquivos) + staged-w3 fechados"
++}
++check_nogo_w3
++
++say "G0d: pin do codex"
++PIN_JSON="$(python3 .claude/hooks/check_pair_rail.py --verify-codex-pin 2>/dev/null || true)"
++printf '%s' "$PIN_JSON" | grep -q '"status": "verified"' || die "pin do codex nao verifica"
++
++# Allowlist FECHADA do commit 1 (curas aplicadas + evidencia + pack +
++# scripts do corte + espelho W3). Entrada terminada em / cobre o dir.
++COMMIT1_ALLOW="CHANGELOG.md
++.claude/scripts/local/verify-counts.sh
++.github/release-checklist.md
++.github/workflows/npm-publish.yml
++.github/workflows/release.yml
++.claude/scripts/tests/test_release_workflow_asserts.py
++.claude/scripts/tests/test_verify_counts.py
++$P166/OWNER-GA-CUT.sh
++$P166/OWNER-RC3-CUT.sh
++$P166/RC3-approved-draft.md
++$P166/RC3-approved.md
++$P166/RC3-approved.md.asc
++$P166/OWNER-MORNING-RC3.md
++$P166/verdict-fields-v1.3.0-rc.3.TEMPLATE.md
++$P166/pair-rail-verdict-v1.3.0-rc.3.TEMPLATE.md
++$P166/verdict-fields-v1.3.0.TEMPLATE.md
++$P166/pair-rail-verdict-v1.3.0.TEMPLATE.md
++$P166/repass-ga/run-ga-repass.sh
++$P166/repass-ga-rc2-NOGO/
++$P166/repass-rc3-cures/
++$P166/repass-rc3-scripts/
++$P166/staged-rc3/
++$P169/W3-approved-draft.md
++$P169/staged-w3/"
++
++check_tree_is_exactly_the_prep() {
++  # git status CAPTURADO com rc checado (rail r8 P1-2: falha dentro de
++  # command substitution em heredoc virava "arvore limpa").
++  _st_out="$(git status --porcelain --untracked-files=all)" \
++    || die "git status falhou - nao vou tratar como arvore limpa"
++  _bad=""
++  while IFS= read -r _line; do
++    [ -n "$_line" ] || continue
++    _path="${_line#???}"
++    _hit=0
++    while IFS= read -r _allow; do
++      [ -n "$_allow" ] || continue
++      case "$_allow" in
++        */) case "$_path" in "$_allow"*|"${_allow%/}") _hit=1 ;; esac ;;
++        *)  [ "$_path" = "$_allow" ] && _hit=1 ;;
++      esac
++      [ "$_hit" -eq 1 ] && break
++    done <<ALLOW
++$COMMIT1_ALLOW
++ALLOW
++    [ "$_hit" -eq 1 ] || _bad="$_bad
++   $_path"
++  done <<STATUS
++$_st_out
++STATUS
++  [ -z "$_bad" ] || die "arquivo(s) FORA da allowlist do commit 1 (nao revisados pelo rail):$_bad
++Remova/stash antes de cortar, ou me chame no Claude."
++}
++# Limpa temporarios de um apply interrompido ANTES do fechamento de
++# arvore (rail r7 P1-2: um .rc3tmp.* orfao triparia a allowlist).
++while IFS= read -r _mline; do
++  [ -n "$_mline" ] || continue
++  _mf="${_mline#*  }"
++  rm -f "$(dirname "$_mf")/.rc3tmp.$(basename "$_mf")"
++done < "$PACK/MANIFEST.sha256"
++check_tree_is_exactly_the_prep
++say "mudancas que entram no commit 1 (todas dentro da allowlist):"
++git status --short
++printf '\nEnter para seguir (ctrl-C para abortar): '; read -r _
++
++say "1/7 assinar o sentinel RC3-approved.md (pinentry 1)"
++# Destino do sentinel nunca atraves de symlink pre-existente (rail
++# r24-3): remove qualquer resto antes do cp e assere regular depois.
++[ -L "$SENT" ] && rm -f "$SENT"
++rm -f "$SENT" "$SENT.asc"
++cp "$SENT_DRAFT" "$SENT"
++[ -f "$SENT" ] && [ ! -L "$SENT" ] || die "sentinel gerado nao e arquivo regular"
++gpg --armor --detach-sign -u "$KEY" "$SENT"
++gpg --verify "$SENT.asc" "$SENT" || die "assinatura do sentinel nao verifica"
++
++say "2/7 aplicar o pack staged-rc3 -> arvore viva + gates locais"
++# Idempotente (rail r5 P1-4) e ATOMICO (rail r7 P1-2): copia para um
++# temporario no MESMO diretorio, verifica o hash do pack e so entao
++# renomeia — uma interrupcao/IO-error nunca deixa o alvo truncado num
++# terceiro estado; o tmp remanescente e removido no rerun.
++while IFS= read -r _mline; do
++  [ -n "$_mline" ] || continue
++  _mf="${_mline#*  }"; _msha="${_mline%%  *}"
++  _tmp="$(dirname "$_mf")/.rc3tmp.$(basename "$_mf")"
++  rm -f "$_tmp"
++  _lsha="$(shasum -a 256 "$_mf" | awk '{print $1}')"
++  # Modo esperado vem do MODES.txt REVISADO, nunca do pack atual (r9
++  # P1-3: um chmod no pack pos-review passaria com sha igual).
++  _wmode="$(awk -v f="$_mf" '$2==f{print $1}' "$PACK/MODES.txt")"
++  [ -n "$_wmode" ] || die "arquivo sem entrada no MODES.txt: $_mf"
++  _lmode="$(python3 -c 'import os,sys;print(oct(os.stat(sys.argv[1]).st_mode & 0o777)[2:])' "$_mf")"
++  if [ "$_lsha" = "$_msha" ] && [ ! -L "$_mf" ] && [ -f "$_mf" ] \
++     && [ "$_lmode" = "$_wmode" ]; then
++    echo "   (ja aplicado) $_mf"
++  else
++    cp -p "$PACK/$_mf" "$_tmp" || die "cp para temporario falhou: $_mf"
++    [ "$(shasum -a 256 "$_tmp" | awk '{print $1}')" = "$_msha" ] \
++      || die "temporario nao bate com o pack (IO?): $_mf"
++    mv -f "$_tmp" "$_mf" || die "rename atomico falhou: $_mf"
++    chmod "$_wmode" "$_mf" || die "chmod para o modo revisado falhou: $_mf"
++  fi
++done < "$PACK/MANIFEST.sha256"
++# pos-apply: o vivo tem de bater byte a byte com o MANIFEST do pack
++( shasum -a 256 -c "$PACK/MANIFEST.sha256" --status ) \
++  || die "pos-apply: vivo != pack (cp parcial?)"
++echo "   pack aplicado; rodando gates locais..."
++bash -n .claude/scripts/local/verify-counts.sh || die "bash -n verify-counts falhou"
++python3 - <<'PYEOF' || die "yaml dos workflows nao parseia"
++import yaml
++for f in (".github/workflows/npm-publish.yml", ".github/workflows/release.yml"):
++    yaml.safe_load(open(f, encoding="utf-8"))
++PYEOF
++bash .claude/scripts/local/verify-counts.sh --no-tests >/dev/null \
++  || die "verify-counts com drift pos-cura (nao devia)"
++python3 -m pytest .claude/scripts/tests/test_release_workflow_asserts.py \
++  .claude/scripts/tests/test_verify_counts.py -q \
++  || die "suites-espelho vermelhas pos-apply"
++echo "   gates locais verdes"
++
++say "3/7 commit 1 (commit-POR-MANIFESTO: staging literal + re-verificacao)"
++# Re-verificacao COMPLETA no momento do staging (rail r8 P1-1: as
++# checagens de G0 rodavam antes do prompt/assinatura/apply; um arquivo
++# criado depois casaria o prefixo e seria commitado como revisado).
++check_rail_and_evidence
++check_pack
++check_nogo_w3
++check_tree_is_exactly_the_prep
++# Lista LITERAL de arquivos do commit 1, DERIVADA dos manifestos que
++# acabaram de verificar - nenhum `git add` de diretorio (rail r8 P1-1).
++_commit1_files() {
++  awk '{print $2}' "$PACK/MANIFEST.sha256"
++  awk -v p="$PACK/" '{print p $2}' "$PACK/MANIFEST.sha256"
++  echo "$PACK/MANIFEST.sha256"; echo "$PACK/BASELINE.sha256"; echo "$PACK/MODES.txt"
++  ( cd "$CURES" && find . -maxdepth 1 -type f | sed 's|^\./||' ) | sed "s|^|$CURES/|"
++  ( cd "$SCRIPTSR" && find . -maxdepth 1 -type f | sed 's|^\./||' ) | sed "s|^|$SCRIPTSR/|"
++  awk -v p="$NOGO/" '{print p $2}' "$NOGO/MANIFEST-NOGO.sha256"
++  echo "$NOGO/MANIFEST-NOGO.sha256"
++  awk -v p="$P169/staged-w3/" '{print p $2}' "$P169/staged-w3/MANIFEST.sha256"
++  echo "$P169/staged-w3/MANIFEST.sha256"; echo "$P169/staged-w3/BASELINE.sha256"
++  echo "$P166/OWNER-GA-CUT.sh"
++  echo "$P166/OWNER-RC3-CUT.sh"
++  echo "$P166/RC3-approved-draft.md"
++  echo "$P166/RC3-approved.md"
++  echo "$P166/RC3-approved.md.asc"
++  echo "$P166/OWNER-MORNING-RC3.md"
++  echo "$P166/verdict-fields-v1.3.0-rc.3.TEMPLATE.md"
++  echo "$P166/pair-rail-verdict-v1.3.0-rc.3.TEMPLATE.md"
++  echo "$P166/verdict-fields-v1.3.0.TEMPLATE.md"
++  echo "$P166/pair-rail-verdict-v1.3.0.TEMPLATE.md"
++  echo "$P166/repass-ga/run-ga-repass.sh"
++  echo "$P169/W3-approved-draft.md"
++}
++_c1_list="$(_commit1_files | sort -u)"
++while IFS= read -r _p; do
++  [ -n "$_p" ] || continue
++  [ -e "$_p" ] || die "arquivo da lista do commit 1 ausente: $_p"
++  [ -L "$_p" ] && die "symlink na lista do commit 1: $_p"
++  [ -f "$_p" ] || die "nao-regular na lista do commit 1: $_p"
++  git add -- "$_p"
++done <<C1
++$_c1_list
++C1
++# Asserts do INDEX (rail r8 P1-2): todo caminho staged tem de estar na
++# lista literal; nada tracked fora dela pode ter sobrado modificado; e
++# nenhum untracked pode restar (status CAPTURADO, rc checado).
++_cached="$(git diff --cached --name-only)" || die "git diff --cached falhou"
++while IFS= read -r _cp; do
++  [ -n "$_cp" ] || continue
++  printf '%s\n' "$_c1_list" | grep -qxF "$_cp" \
++    || die "caminho staged FORA da lista literal do commit 1: $_cp"
++done <<CACHED
++$_cached
++CACHED
++git diff --quiet \
++  || die "sobrou mudanca tracked NAO-staged apos o staging literal - investigar"
++_st_final="$(git status --porcelain --untracked-files=all)" \
++  || die "git status falhou no assert final"
++printf '%s\n' "$_st_final" | grep -q '^??' \
++  && die "sobrou arquivo untracked apos o staging literal - investigar"
++git commit -m "fix(PLAN-166 W2): curas do NO-GO do re-pass GA - corte da rc.3
++
++8 achados reais do hold ADR-103 (10/08): CHANGELOG 188->190 + secao de
++upgrade adopter-visivel; matcher escopado do header no verify-counts;
++checklist +.framework-version e sem contagem hardcoded de steps; guard
++fail-closed de tag-liveness antes do npm publish (delete/re-tag nao
++publica arvore obsoleta) + pins de regressao; timeout release-gate
++20->35 (licao S300). Espelho no staged-w3 (o W3 nao reverte as curas).
++Evidencia: repass-ga-rc2-NOGO/ (NO-GO) + repass-rc3-cures/ (rail GO).
++Sentinel: RC3-approved.md assinado (anchor $EXPECTED_HEAD)."
++PARENT="$(git rev-parse HEAD)"
++printf 'commit 1 = %s\n' "$PARENT"
++
++say "4/7 verdict-fields rc.3 (parent=$PARENT) - revisar e assinar (pinentry 2)"
++GEN="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
++DMS="$(shasum -a 256 "$CURES/MANIFEST-cures.sha256" | awk '{print $1}')"
++TSH="$(cat $(ls "$CURES"/transcript-cures-round*.log | sort -V) | shasum -a 256 | awk '{print $1}')"
++# Higiene de assinatura (rail r13 P1-1, espelha GA 3/8-4/8): comeca
++# limpo, gera via temporario regular + rename atomico.
++rm -f "$VF" "$VF.asc" "$VD" "$VF.tmp" "$VD.tmp"
++awk 'f{print} /-->/{f=1}' "$VF_TPL" \
++  | sed -e "s/@@PARENT_SHA@@/$PARENT/" -e "s/@@GENERATED_AT@@/$GEN/" \
++        -e "s/@@DELTA_MANIFEST_SHA@@/$DMS/" -e "s/@@TRANSCRIPT_SHA@@/$TSH/" > "$VF.tmp"
++mv -f "$VF.tmp" "$VF"
++[ -f "$VF" ] && [ ! -L "$VF" ] || die "verdict-fields gerado nao e arquivo regular"
++printf '\n----- CONTEUDO QUE VOCE VAI ASSINAR -----\n'
++cat "$VF"
++printf -- '----- FIM -----\n\nEnter para assinar (ctrl-C aborta): '; read -r _
++rm -f "$VF.asc"
++gpg --armor --detach-sign -u "$KEY" "$VF"
++gpg --verify "$VF.asc" "$VF" || die "assinatura do verdict-fields nao verifica"
++
++say "5/7 montar verdito + commit 2 + guard local"
++SIG="$(base64 < "$VF.asc" | tr -d '\n')"
++sed -e "s/@@PARENT_SHA@@/$PARENT/" -e "s/@@GENERATED_AT@@/$GEN/" \
++    -e "s/@@DELTA_MANIFEST_SHA@@/$DMS/" -e "s/@@TRANSCRIPT_SHA@@/$TSH/" \
++    -e "s|@@SIG_B64@@|$SIG|" "$VD_TPL" > "$VD.tmp"
++mv -f "$VD.tmp" "$VD"
++# Re-verifica ANTES de mover o .asc e de commitar (rail r13 P1-1): se
++# algo trocou o VF entre a assinatura e aqui, para agora.
++[ -f "$VD" ] && [ ! -L "$VD" ] || die "verdito gerado nao e arquivo regular"
++[ -f "$VF" ] && [ ! -L "$VF" ] || die "verdict-fields deixou de ser regular"
++gpg --verify "$VF.asc" "$VF" || die "assinatura NAO verifica pos-geracao do verdito - VF mudou?"
++mkdir -p "$HOME/.rc2-backup"
++mv "$VF.asc" "$HOME/.rc2-backup/verdict-fields-v1.3.0-rc.3.md.asc"
++git add "$VF" "$VD"
++git commit -m "governance(PLAN-166 W2): verdito pair-rail v1.3.0-rc.3 assinado
++
++GO-WITH-CONDITIONS: as 4 excecoes herdadas do trem (V1/V2/V4/V5, curas
++no pack W3 pos-GA) + curas dos 8 achados do NO-GO do re-pass GA.
++Evidencia do rail de curas em repass-rc3-cures/."
++python3 .claude/scripts/local/_release_tag_guard.py delta \
++  --repo "$REPO" --tag "$TAG" || die "guard delta recusou - NAO pushe"
++
++say "6/7 push + espera CI (15-40 min; deixe rodando)"
++git push origin main
++HEADSHA="$(git rev-parse HEAD)"
++i=0
++while :; do
++  i=$((i+1)); [ "$i" -le 90 ] || die "CI nao terminou em 90 min"
++  sleep 60
++  info="$(gh run list --limit 20 --json headSha,status,conclusion \
++    --jq "[.[]|select(.headSha==\"$HEADSHA\")] | \
++{n:length, p:[.[]|select(.status!=\"completed\")]|length, \
++b:[.[]|select(.status==\"completed\" and .conclusion!=\"success\" \
++and .conclusion!=\"skipped\")]|length}" 2>/dev/null || echo "")"
++  [ -n "$info" ] || { printf '  ... gh falhou, tentando de novo\n'; continue; }
++  n="$(printf '%s' "$info" | python3 -c 'import json,sys;print(json.load(sys.stdin)["n"])')"
++  p="$(printf '%s' "$info" | python3 -c 'import json,sys;print(json.load(sys.stdin)["p"])')"
++  b="$(printf '%s' "$info" | python3 -c 'import json,sys;print(json.load(sys.stdin)["b"])')"
++  printf '  ... runs=%s pendentes=%s vermelhos=%s\n' "$n" "$p" "$b"
++  [ "$b" -eq 0 ] || die "workflow vermelho - me chame no Claude"
++  if [ "$n" -gt 0 ] && [ "$p" -eq 0 ]; then break; fi
++done
++VID="$(gh run list --workflow validate.yml --limit 20 \
++  --json headSha,databaseId,status,conclusion \
++  --jq "[.[]|select(.headSha==\"$HEADSHA\" and .status==\"completed\" and .conclusion==\"success\")][0].databaseId" 2>/dev/null || echo "")"
++[ -n "$VID" ] && [ "$VID" != "null" ] || die "nenhum run COMPLETO e success do validate.yml para o HEAD (rail r19 P1-3)"
++VJ="$(gh run view "$VID" --json jobs \
++  --jq '{s:[.jobs[]|select(.conclusion=="success")]|length, f:[.jobs[]|select(.conclusion=="failure")]|length, p:[.jobs[]|select(.status!="completed")]|length, o:[.jobs[]|select(.status=="completed" and .conclusion!="success" and .conclusion!="skipped")]|length}' 2>/dev/null || echo "")"
++vs="$(printf '%s' "$VJ" | python3 -c 'import json,sys;print(json.load(sys.stdin)["s"])')"
++vf="$(printf '%s' "$VJ" | python3 -c 'import json,sys;print(json.load(sys.stdin)["f"])')"
++vp="$(printf '%s' "$VJ" | python3 -c 'import json,sys;print(json.load(sys.stdin)["p"])')"
++vo="$(printf '%s' "$VJ" | python3 -c 'import json,sys;print(json.load(sys.stdin)["o"])')"
++[ "$vf" -eq 0 ] || die "job vermelho dentro do validate.yml"
++[ "$vp" -eq 0 ] || die "validate.yml selecionado ainda tem job pendente (snapshot incoerente)"
++[ "$vo" -eq 0 ] || die "validate.yml tem job terminal nao-success (cancelled/timed_out?)"
++[ "$vs" -ge 1 ] || die "validate.yml sem NENHUM job executado (CEO_SOTA_DISABLE?) - me chame no Claude"
++echo "   validate.yml: $vs job(s) success, 0 failure (nivel de job)"
++bell "CI verde - assinar a tag rc.3"
++
++say "7/7 preflight + tag (pinentry 3) + push + pre-release"
++bash .claude/scripts/local/release.sh preflight --rc 3
++bash .claude/scripts/local/release.sh tag --rc 3
++printf 'push da tag %s e pre-release GitHub? digite SIM (MAIUSCULO): ' "$TAG"
++read -r ans
++[ "$ans" = "SIM" ] || die "abortado pelo Owner (tag assinada local, nao pushada)"
++# Preflight pre-push (rail r11 P1-3): o SIM pode ter ficado aberto -
++# recheca tag==HEAD==origin/main, assinatura, arvore limpa, guard e TTL
++# do verdito ANTES do push (mesma disciplina do GA-CUT).
++git tag -v "$TAG" >/dev/null 2>&1 \
++  || die "pre-push: assinatura da tag nao verifica"
++[ "$(git rev-parse "$TAG^{commit}")" = "$(git rev-parse HEAD)" ] \
++  || die "pre-push: tag nao aponta o HEAD"
++git fetch --quiet origin main
++[ "$(git rev-parse origin/main)" = "$(git rev-parse HEAD)" ] \
++  || die "pre-push: origin/main != HEAD - main andou; me chame no Claude"
++_pp_st="$(git status --porcelain --untracked-files=all)" \
++  || die "pre-push: git status falhou"
++[ -z "$_pp_st" ] || die "pre-push: arvore suja"
++python3 .claude/scripts/local/_release_tag_guard.py delta \
++  --repo "$REPO" --tag "$TAG" || die "pre-push: guard delta recusou - NAO pushe"
++_vf_gen="$(awk '/^generated_at:/{print $2}' "$VF" | tail -1)"
++_vf_ttl="$(awk '/^ttl_hours:/{print $2}' "$VF" | tail -1)"
++[ -n "$_vf_gen" ] && [ -n "$_vf_ttl" ] || die "pre-push: verdict-fields sem generated_at/ttl"
++_vf_epoch="$(python3 - "$_vf_gen" <<'PYVF'
++import sys, datetime
++try:
++    print(int(datetime.datetime.fromisoformat(sys.argv[1].replace("Z", "+00:00")).timestamp()))
++except Exception:
++    print("BAD")
++PYVF
++)"
++[ "$_vf_epoch" != "BAD" ] || die "pre-push: generated_at ilegivel"
++[ "$(date +%s)" -le $(( _vf_epoch + _vf_ttl * 3600 - 3600 )) ] \
++  || die "pre-push: verdito a menos de 1h do TTL (ou expirado) - NAO pushe; me chame no Claude"
++echo "   pre-push preflight: verde"
++git push origin "$TAG"
++printf 'esperando release.yml da tag...\n'
++TAGSHA="$(git rev-parse "$TAG^{commit}")"
++i=0
++while :; do
++  i=$((i+1)); [ "$i" -le 50 ] || die "release.yml nao terminou em 50 min"
++  sleep 60
++  c="$(gh run list --workflow release.yml --limit 10 \
++    --json headSha,status,conclusion,headBranch,event \
++    --jq "[.[]|select(.headSha==\"$TAGSHA\" and .headBranch==\"$TAG\" and .event==\"push\")][0].conclusion" 2>/dev/null || echo "")"
++  s="$(gh run list --workflow release.yml --limit 10 \
++    --json headSha,status,conclusion,headBranch,event \
++    --jq "[.[]|select(.headSha==\"$TAGSHA\" and .headBranch==\"$TAG\" and .event==\"push\")][0].status" 2>/dev/null || echo "")"
++  printf '  ... release.yml: %s/%s\n' "${s:-?}" "${c:-?}"
++  [ "$c" = "failure" ] && die "release.yml vermelho - me chame no Claude"
++  [ "$s" = "completed" ] && [ "$c" = "success" ] && break
++done
++printf 'esperando o job await-release-gate do npm-publish.yml (controle positivo)...\n'
++i=0
++while :; do
++  i=$((i+1)); [ "$i" -le 30 ] || die "await-release-gate nao concluiu em 30 min"
++  sleep 60
++  NID="$(gh run list --workflow npm-publish.yml --limit 10 \
++    --json headSha,databaseId,headBranch,event \
++    --jq "[.[]|select(.headSha==\"$TAGSHA\" and .headBranch==\"$TAG\" and .event==\"push\")][0].databaseId" 2>/dev/null || echo "")"
++  if [ -z "$NID" ] || [ "$NID" = "null" ]; then
++    printf '  ... run do npm-publish ainda nao apareceu\n'; continue
++  fi
++  AC="$(gh run view "$NID" --json jobs \
++    --jq '[.jobs[]|select(.name|startswith("Await release-gate"))][0].conclusion' 2>/dev/null || echo "")"
++  printf '  ... await-release-gate: %s\n' "${AC:-pendente}"
++  [ "$AC" = "failure" ] && die "await-release-gate FALHOU na rc - me chame no Claude"
++  [ "$AC" = "success" ] && break
++done
++echo "   controle positivo do npm-gate: verde"
++_prj="$(gh release view "$TAG" --json isPrerelease,isDraft 2>/dev/null || echo "")"
++_pr="$(printf '%s' "$_prj" | python3 -c 'import json,sys;print(json.load(sys.stdin).get("isPrerelease"))' 2>/dev/null || echo "")"
++_dr="$(printf '%s' "$_prj" | python3 -c 'import json,sys;print(json.load(sys.stdin).get("isDraft"))' 2>/dev/null || echo "")"
++{ [ "$_pr" = "True" ] && [ "$_dr" = "False" ]; } \
++  || die "GitHub Release da $TAG ausente, draft ou sem flag pre-release (pre='$_pr' draft='$_dr') - o hold ADR-103 conta de release PUBLICO (rail r11 P1-4); me chame no Claude"
++echo "   GitHub pre-release confirmado NAO-draft (criado pelo release.yml)"
++
++# Recheck do OBJETO da tag no remoto (rail r21 P1-3): a tag nao pode
++# ter sido deletada/movida durante as esperas.
++_ft_rls="$(git ls-remote origin "refs/tags/$TAG" "refs/tags/$TAG^{}")" \
++  || die "ls-remote final da tag falhou (transporte)"
++_ft_plain="$(printf '%s\n' "$_ft_rls" | awk -v r="refs/tags/$TAG" '$2==r{print $1}')"
++_ft_peel="$(printf '%s\n' "$_ft_rls" | awk -v r="refs/tags/$TAG^{}" '$2==r{print $1}')"
++[ "$_ft_plain" = "$(git rev-parse "$TAG")" ] \
++  || die "tag $TAG remota NAO e mais o objeto assinado local (deletada/movida durante as esperas?) - me chame no Claude"
++[ -z "$_ft_peel" ] || [ "$_ft_peel" = "$(git rev-parse "$TAG^{commit}")" ] \
++  || die "peel remoto final da tag diverge - me chame no Claude"
++bell "rc.3 cortada - hold reinicia"
++cat <<'DONE'
++
++============================================================
++ rc.3 CORTADA. MAIN CONGELADO ate o GA.
++ - Hold ADR-103: >= 24h a partir do publishedAt da rc.3.
++ - Depois do hold: bash .claude/plans/PLAN-166/OWNER-GA-CUT.sh
++   (ja aponta para a rc.3; o re-pass do hold roda de novo sobre
++   a arvore CURADA - os 8 achados do NO-GO estao curados nela).
++ - Me chame no Claude para o fechamento da sessao.
++============================================================
++DONE
+diff --git a/.claude/plans/PLAN-166/RC3-approved-draft.md b/.claude/plans/PLAN-166/RC3-approved-draft.md
+new file mode 100644
+index 0000000..3ab9987
+--- /dev/null
++++ b/.claude/plans/PLAN-166/RC3-approved-draft.md
+@@ -0,0 +1,104 @@
++# RC3-approved — sentinel do pack de curas rc.3 (PLAN-166 W2)
++
++> **Assinatura:** o próprio `OWNER-RC3-CUT.sh` copia este draft para
++> `RC3-approved.md` e chama o gpg (pinentry 1) — você não precisa fazer
++> nada à mão. O Anchor-SHA abaixo já está preenchido porque o corte
++> exige HEAD exatamente nesse commit (G0 aborta se main tiver andado).
++
++Plan: PLAN-166
++Wave: W2 (curas do NO-GO do re-pass GA — corte da v1.3.0-rc.3)
++Anchor-SHA: 0cb09c3cc587abdeaed33e0ff13b1c8b3677061d
++Data: 2026-08-11
++
++## Scope
++
++```
++CHANGELOG.md
++.claude/scripts/local/verify-counts.sh
++.github/release-checklist.md
++.github/workflows/npm-publish.yml
++.github/workflows/release.yml
++.claude/scripts/tests/test_release_workflow_asserts.py
++.claude/scripts/tests/test_verify_counts.py
++```
++
++Espelho fora do escopo canônico (mesmo commit, staged do W3 — evita que
++o land do W3 REVERTA curas): `.claude/plans/PLAN-169/staged-w3/.github/workflows/{npm-publish,release}.yml`,
++`.claude/plans/PLAN-169/staged-w3/MANIFEST.sha256`,
++`.claude/plans/PLAN-169/W3-approved-draft.md` (prosa do item 8).
++
++## O que este pack muda (curas dos 8 achados REAIS do NO-GO de 10/08)
++
++Triagem completa: `repass-ga-rc2-NOGO/TRIAGE-ga-repass.md`. Rail de
++curas (codex, worktree da rc.2): `repass-rc3-cures/` — verdito final GO.
++
++1. **P1-a** `CHANGELOG.md`: header "as of v1.3.0" 188→190 ADRs;
++   narrativa de governança 184→190 com os +2 nomeados (ADR-155-AMEND-1,
++   ADR-190).
++2. **P1-b** `CHANGELOG.md`: seção nova "Changed — install/upgrade
++   semantics (PLAN-166/167/168)" — decisão única de ownership (ADR-190),
++   rota forçada do SPEC/v1 com backup (ADR-155-AMEND-1), marker
++   `.claude/.framework-version` MARKER-FIRST (root VERSION nunca tocado
++   por upgrade), gerador único do pointer do PROTOCOL.md. Intro do
++   1.3.0 cobre o trem inteiro.
++3. **P1-a(gate)** `verify-counts.sh`: regra ESCOPADA do header do
++   CHANGELOG — só o PREÂMBULO (antes do primeiro "## [") é varrido, com
++   `finditer` e exigência de EXATAMENTE uma claim (rail r1 P1-4: claim
++   de corpo não mascara header removido nem duplica o censo). CHANGELOG
++   fica FORA de DOCS — o corpo carrega contagens históricas legítimas.
++   Fail-closed em três modos: contagem errada, matcher morto e claim
++   duplicada; 6 testes de fixture novos (`TestChangelogHeaderRule`).
++   Parentéticos do help 188/29/21 → 190/31/22. Censo-espelho ratificado:
++   +4 pares `*@CHANGELOG.md` em `test_verify_counts.py::_EXPECTED_SITES`.
++4. **P2-d/e** `release-checklist.md`: inventário de version-sites ganha
++   `.claude/.framework-version`; contagem hardcoded "~29 steps" REMOVIDA
++   (o número re-stalearia no W3, que adiciona um step).
++5. **P1-c** `npm-publish.yml`: passo fail-closed "Assert remote tag
++   still points at this run's SHA" imediatamente antes do publish —
++   UM snapshot `git ls-remote` (plain + peeled na mesma invocação;
++   rail r1 P1-1) comparado a `GITHUB_SHA`; tag deletada (resolve vazio)
++   e tag movida abortam; mesmo `if:` do publish (não avermelha o rerun
++   idempotente já-publicado; rail r1 P1-2). Fecha o cenário
++   delete/re-tag em que o run OBSOLETO ainda aprovável publicaria a
++   árvore errada irreversivelmente. Pins de regressão:
++   `NpmPublishTagLivenessTest` (presença, shape fail-closed,
++   single-snapshot, if-condition, ordem imediatamente-antes-do-publish;
++   resolver LIVE-ONLY com marker `PLAN-166 W2 rc.3` — ausência = FALHA
++   dura, nunca skip; rail r1 P1-5).
++6. **Lição S300** `release.yml`: timeout do release-gate 20→35 min
++   (suíte leva 19-20 min em runner carregado; attempt-1 da rc.2 estourou;
++   regra "margem <20% ⇒ bump pré-tag"). Cascata do observador (rail r1
++   P1-3): deadline do poller do await-release-gate 1800→2700 s e
++   timeout do job 35→50 min — o observador SEMPRE sobrevive ao
++   produtor (release-gate 35), com teste relacional
++   `ObserverProducerDeadlineTest` (deadline ≥ gate+10min; job > deadline).
++   Mesmo hunk no staged-w3 (patch pós-GA aplicado ANTES do corte +
++   re-pin do MANIFEST) — live e staged idênticos; o W3 apenas mantém.
++
++## Resíduo aceito (registro honesto)
++
++- (curado no rail r1 P1-5) O resolver dos pins rc.3 é LIVE-ONLY e
++  fail-hard: sem fallback staged; live sem o marker = FALHA do teste,
++  nunca skip. O land é atômico (workflow curado + testes no mesmo
++  commit), então não existe janela legítima de skip.
++- (rail r3 P1-1) O CLAUDE.md §4 ainda diz "install.sh e upgrade.sh
++  observam → chamam → executam" — impreciso: os call sites de
++  `_ownership_verdict()` são só do upgrade (1634/1944/2107); o install
++  fica ANTES da decisão (registra a entrega ADR-155 que o upgrade lê).
++  O CHANGELOG desta rc.3 descreve o split verdadeiro; a prosa do
++  CLAUDE.md é cache-stable e vai ao ledger do PLAN-169 (cura via
++  cerimônia futura, não neste corte).
++- P2 deferidos ao próximo trem (não mudam o artefato publicado):
++  `await_release_gate.parse_timestamp` normaliza componentes fora de
++  faixa (99:99:99) via `calendar.timegm`; `install-npm.sh` (stager
++  LOCAL) ainda copia root README.md sobre npm/README.md (paridade de
++  tooling local; produção já preserva). Ambos vão para o ledger do
++  PLAN-169.
++
++## Autorização
++
++A assinatura GPG deste arquivo autoriza o `OWNER-RC3-CUT.sh` a aplicar
++`staged-rc3/` (MANIFEST + BASELINE conferidos fail-closed) sobre os 7
++caminhos canônicos do Scope, commitar conforme a allowlist fechada do
++script, e cortar a tag v1.3.0-rc.3. O hold ADR-103 reinicia no
++publishedAt da rc.3.
+diff --git a/.claude/plans/PLAN-166/OWNER-GA-CUT.sh b/.claude/plans/PLAN-166/OWNER-GA-CUT.sh
+new file mode 100755
+index 0000000..1ea216b
+--- /dev/null
++++ b/.claude/plans/PLAN-166/OWNER-GA-CUT.sh
+@@ -0,0 +1,709 @@
++#!/bin/bash
++# OWNER-GA-CUT.sh - promocao v1.3.0-rc.3 -> GA v1.3.0 em UM comando.
++# (o freeze do main comeca no CORTE DA rc.3 - rail rc.3 r5 P2)
++#
++#   bash .claude/plans/PLAN-166/OWNER-GA-CUT.sh
++#
++# Pre-requisito: rc.3 cortada ha >= 24h (hold ADR-103). O script:
++# (rc.3 = rc.2 + curas dos 8 achados do re-pass NO-GO de 10/08; ver
++#  OWNER-RC3-CUT.sh e repass-ga-rc2-NOGO/TRIAGE-ga-repass.md)
++#   1. valida janela do hold + freeze (origin/main == commit da rc.3)
++#   2. roda o re-pass do hold (codex, ~10-15 min) se ainda nao rodou;
++#      exige VERDICT: GO ou GO-WITH-CONDITIONS (NO-GO => aborta)
++#   3. commit 1: evidencia do re-pass (repass-ga/**)
++#   4. gera verdict-fields GA e voce assina (pinentry 1)
++#   5. monta o verdito GA, commit 2, guard local, push, espera CI
++#   6. preflight --stable + bump --stable (no-op esperado) +
++#      tag v1.3.0 assinada (pinentry 2)
++#   7. push da tag (confirmacao SIM) + espera release.yml + npm:
++#      aprovacao production-npm e SUA no browser (o script te da o link)
++#   8. GitHub Release (SEM pre-release) + npm view
++# Depois do GA: assinar W3 e rodar OWNER-W3-LAND.sh (curas V1-V5).
++set -euo pipefail
++
++REPO="$(git rev-parse --show-toplevel)"; cd "$REPO"
++RC_TAG="v1.3.0-rc.3"
++TAG="v1.3.0"
++KEY="CFCFACF00335DC74"
++P166=".claude/plans/PLAN-166"
++GA_DIR="$P166/repass-ga"
++VF="$P166/verdict-fields-v1.3.0.md"
++VD=".claude/governance/pair-rail-verdict-v1.3.0.md"
++VF_TPL="$P166/verdict-fields-v1.3.0.TEMPLATE.md"
++VD_TPL="$P166/pair-rail-verdict-v1.3.0.TEMPLATE.md"
++
++say() { printf '\n== %s\n' "$*"; }
++die() { printf '\nFAIL: %s\n' "$*" >&2; exit 1; }
++bell() { printf '\a'; osascript -e "display notification \"$1\" with title \"GA v1.3.0\"" 2>/dev/null || true; }
++
++GPG_TTY="$(tty 2>/dev/null || true)"; export GPG_TTY
++gpgconf --kill gpg-agent 2>/dev/null || true
++
++say "G0 pre-condicoes"
++# Orfao do manifesto atomico do runner (rail r22 P1-1): removido antes
++# da checagem de arvore; symlink = erro.
++if [ -e "$GA_DIR/MANIFEST-ga.sha256.tmp" ] || [ -L "$GA_DIR/MANIFEST-ga.sha256.tmp" ]; then
++  [ -L "$GA_DIR/MANIFEST-ga.sha256.tmp" ] && die "MANIFEST-ga.sha256.tmp e SYMLINK"
++  [ -f "$GA_DIR/MANIFEST-ga.sha256.tmp" ] || die "MANIFEST-ga.sha256.tmp nao-regular"
++  rm -f "$GA_DIR/MANIFEST-ga.sha256.tmp"
++  echo "   (limpo) orfao MANIFEST-ga.sha256.tmp"
++fi
++# Quarentena de payloads raw ANTES de qualquer checagem de arvore (rail
++# r14 P2: SIGKILL/queda de energia pula o trap EXIT do runner; sem isso
++# a fase de evidencia nao e auto-retomavel). Symlink = erro, nao move.
++for _raw in "$GA_DIR"/payload-ga-*.raw.txt; do
++  [ -e "$_raw" ] || continue
++  [ -L "$_raw" ] && die "payload raw e SYMLINK: $_raw"
++  [ -f "$_raw" ] || die "payload raw nao-regular: $_raw"
++  mkdir -p "$HOME/.rc2-backup"
++  mv "$_raw" "$HOME/.rc2-backup/quarantine-$(date +%s)-$(basename "$_raw")" \
++    || die "quarentena do raw falhou: $_raw"
++  echo "   quarentena: $(basename "$_raw") -> ~/.rc2-backup/"
++done
++[ "$(git rev-parse --abbrev-ref HEAD)" = "main" ] \
++  || die "nao esta em main (branch/detached) - r6-P2 do rail"
++git rev-parse -q --verify "refs/tags/$RC_TAG" >/dev/null 2>&1 || die "tag $RC_TAG nao existe"
++# Tag GA ja existente NAO e mais morte automatica (rail rc.3 r6 P1-5):
++# um timeout do monitoramento DEPOIS do push da tag deixava rerun
++# impossivel. Se a tag local aponta o HEAD e o remoto bate, entramos em
++# modo MONITORAMENTO (pula direto para as esperas de release/npm).
++MONITOR_ONLY=0
++# Remoto consultado INCONDICIONALMENTE antes de qualquer mutacao (rail
++# r13 P1-2): uma tag GA remota sem ref local deixaria o script commitar
++# e pushar main para so entao falhar no push da tag.
++_ga_rls="$(git ls-remote origin "refs/tags/$TAG" "refs/tags/$TAG^{}")" \
++  || die "git ls-remote da tag GA falhou (transporte)"
++if [ -n "$_ga_rls" ] && ! git rev-parse -q --verify "refs/tags/$TAG" >/dev/null 2>&1; then
++  die "tag $TAG existe no REMOTO mas nao localmente - estado incoerente; me chame no Claude:
++$_ga_rls"
++fi
++if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null 2>&1; then
++  _tagc="$(git rev-parse "$TAG^{commit}")"
++  _tago="$(git rev-parse "$TAG")"
++  [ "$_tagc" = "$(git rev-parse HEAD)" ] \
++    || die "tag $TAG existe e NAO aponta o HEAD - me chame no Claude"
++  git tag -v "$TAG" >/dev/null 2>&1 \
++    || die "assinatura da tag $TAG local nao verifica - me chame no Claude"
++  # OBJETO exato, nao commit peelado (rail r14 P1-1): um delete/re-tag
++  # lightweight/re-anotado no MESMO commit passaria pelo peel.
++  _rt_plain="$(printf '%s\n' "$_ga_rls" | awk -v r="refs/tags/$TAG" '$2==r{print $1}')"
++  _rt_peel="$(printf '%s\n' "$_ga_rls" | awk -v r="refs/tags/$TAG^{}" '$2==r{print $1}')"
++  if [ -n "$_rt_plain" ]; then
++    [ "$_rt_plain" = "$_tago" ] \
++      || die "tag $TAG remota NAO e o mesmo OBJETO assinado local ($_rt_plain != $_tago) - delete/re-tag?; me chame no Claude"
++    [ -z "$_rt_peel" ] || [ "$_rt_peel" = "$_tagc" ] \
++      || die "peel remoto da tag $TAG diverge do commit local"
++    MONITOR_ONLY=1
++    # Monitor e read-only: exige arvore LIMPA e origin/main == HEAD ==
++    # commit da tag (rail r20 P1-3/P1-4) - um rollback de main ou lixo
++    # local nao pode ser monitorado como se fosse o GA.
++    _mo_st="$(git status --porcelain --untracked-files=all)" \
++      || die "monitor: git status falhou"
++    [ -z "$_mo_st" ] || die "monitor: arvore suja - o modo monitoramento e read-only; limpe antes"
++    git fetch --quiet origin main || die "monitor: fetch falhou"
++    [ "$(git rev-parse origin/main)" = "$(git rev-parse HEAD)" ] \
++      || die "monitor: origin/main != HEAD - main andou/rolou; me chame no Claude"
++    echo "   tag $TAG ja assinada e pushada (OBJETO coerente) - modo MONITORAMENTO (read-only)"
++  else
++    SKIP_TO_PUSH=1
++    echo "   tag $TAG assinada local e ainda nao pushada - retomada VIA prompt SIM (mesma cerimonia)"
++  fi
++fi
++RC_SHA="$(git rev-parse "$RC_TAG^{commit}")"
++# Hold medido do EVENTO PUBLICADO, nao do tag local (pair-rail S300 r8
++# P1-1): um corte que parou antes do push deixaria taggerdate local
++# valido sem NENHUMA rc publica. Exige: tag no remoto apontando o mesmo
++# SHA + pre-release publicado; hold conta de publishedAt.
++# UM snapshot; OBJETO plain == tag local assinada, peel == commit
++# (rail r14 P1-1) + assinatura verificada.
++git tag -v "$RC_TAG" >/dev/null 2>&1 \
++  || die "assinatura da tag $RC_TAG local nao verifica - me chame no Claude"
++_rc_rls="$(git ls-remote origin "refs/tags/$RC_TAG" "refs/tags/$RC_TAG^{}")" \
++  || die "git ls-remote da $RC_TAG falhou (transporte)"
++_rc_plain="$(printf '%s\n' "$_rc_rls" | awk -v r="refs/tags/$RC_TAG" '$2==r{print $1}')"
++_rc_peel="$(printf '%s\n' "$_rc_rls" | awk -v r="refs/tags/$RC_TAG^{}" '$2==r{print $1}')"
++[ "$_rc_plain" = "$(git rev-parse "$RC_TAG")" ] \
++  || die "tag $RC_TAG remota nao e o mesmo OBJETO assinado local - a rc publicada nao e a assinada; me chame no Claude"
++[ -z "$_rc_peel" ] || [ "$_rc_peel" = "$RC_SHA" ] \
++  || die "peel remoto da $RC_TAG diverge do commit local"
++RC_PREJ="$(gh release view "$RC_TAG" --json isPrerelease,isDraft 2>/dev/null || echo "")"
++RC_PRE="$(printf '%s' "$RC_PREJ" | python3 -c 'import json,sys;print(json.load(sys.stdin).get("isPrerelease"))' 2>/dev/null || echo "")"
++RC_DR="$(printf '%s' "$RC_PREJ" | python3 -c 'import json,sys;print(json.load(sys.stdin).get("isDraft"))' 2>/dev/null || echo "")"
++{ [ "$RC_PRE" = "True" ] && [ "$RC_DR" = "False" ]; } \
++  || die "pre-release da $RC_TAG ausente, draft ou nao-prerelease (pre='$RC_PRE' draft='$RC_DR') - o hold conta de release PUBLICO; me chame no Claude"
++PUBAT="$(gh release view "$RC_TAG" --json publishedAt --jq .publishedAt 2>/dev/null || echo "")"
++[ -n "$PUBAT" ] || die "sem publishedAt no release da $RC_TAG"
++PUB_EPOCH="$(python3 - "$PUBAT" <<'PYEOF'
++import sys, datetime
++ts = sys.argv[1].replace("Z", "+00:00")
++print(int(datetime.datetime.fromisoformat(ts).timestamp()))
++PYEOF
++)"
++NOW="$(date +%s)"
++HOLD=$(( NOW - PUB_EPOCH ))
++[ "$HOLD" -ge 86400 ] || die "hold ADR-103 incompleto: $((HOLD/3600))h < 24h desde o pre-release publicado - volte mais tarde"
++# Controle positivo da rc RE-verificado aqui (rail r18 P1): o corte da
++# rc pode ter abortado DEPOIS do pre-release publico com o job
++# await-release-gate vermelho/timeout - o GA nao pode promover sobre um
++# caminho de publish nunca validado.
++_pcn="$(gh run list --workflow npm-publish.yml --limit 30 \
++  --json headSha,databaseId,headBranch,event \
++  --jq "[.[]|select(.headSha==\"$RC_SHA\" and .headBranch==\"$RC_TAG\" and .event==\"push\")][0].databaseId" 2>/dev/null || echo "")"
++[ -n "$_pcn" ] && [ "$_pcn" != "null" ] \
++  || die "nenhum run do npm-publish.yml para a $RC_TAG ($RC_SHA) - controle positivo ausente; me chame no Claude"
++_pca="$(gh run view "$_pcn" --json jobs \
++  --jq '[.jobs[]|select(.name|startswith("Await release-gate"))][0].conclusion' 2>/dev/null || echo "")"
++[ "$_pca" = "success" ] \
++  || die "controle positivo await-release-gate da rc NAO e success ('$_pca') - o corte da rc terminou sem validar o caminho de publish; me chame no Claude"
++echo "   controle positivo da rc: await-release-gate success (recibo re-verificado)"
++git fetch --quiet origin main
++# Estados legitimos (pair-rail S300 r13 P2 — retomada real): HEAD ==
++# a rc do trem (fresh), ou HEAD descendente dela cujo delta contem SO
++# evidencia do hold + artefatos do verdito GA (interrompido apos o
++# commit 2/4). origin/main pode ser rc.2 (pre-push) ou o proprio HEAD
++# (interrompido apos o push). Qualquer outra coisa = freeze violado.
++# Conjunto FECHADO das saidas do runner do re-pass (definido ANTES da
++# checagem de retomada, que o consome — rail rc.3 r5).
++GA_OUT_OK="payload-ga-1.redacted.txt payload-ga-2.redacted.txt
++diff-ga-1.patch diff-ga-2.patch
++paths-ga-1.manifest.txt paths-ga-2.manifest.txt
++verdict-ga-1.txt verdict-ga-2.txt
++transcript-ga-1.log transcript-ga-2.log
++PROVENANCE-ga.md MANIFEST-ga.sha256"
++HEADNOW="$(git rev-parse HEAD)"
++if [ "$HEADNOW" != "$RC_SHA" ]; then
++  git merge-base --is-ancestor "$RC_SHA" "$HEADNOW" \
++    || die "HEAD nao descende do commit da rc - me chame no Claude"
++  # --no-renames + saida CAPTURADA com rc checado (rail rc.3 r5 P1-1:
++  # rename-aware podia reportar so o destino permitido de um rename
++  # produto->evidencia, e um git falhando dentro de heredoc virava
++  # delta vazio = aprovacao falsa). Conjunto FECHADO: so os filhos
++  # DIRETOS nomeados em GA_OUT_OK + VF + VD.
++  _delta_out="$(git diff --no-renames --name-only "$RC_SHA"..HEAD)" \
++    || die "git diff do delta de retomada falhou - nao vou tratar como vazio"
++  _bad_delta=""
++  while IFS= read -r _dp; do
++    [ -n "$_dp" ] || continue
++    if [ "$_dp" = "$VF" ] || [ "$_dp" = "$VD" ]; then continue; fi
++    case "$_dp" in
++      "$GA_DIR"/*)
++        _rel="${_dp#"$GA_DIR"/}"
++        _okp=0
++        case "$_rel" in
++          */) : ;;
++          */*) : ;;
++          *) for _b in $GA_OUT_OK; do
++               [ "$_rel" = "$_b" ] && { _okp=1; break; }
++             done ;;
++        esac
++        [ "$_okp" -eq 1 ] || _bad_delta="$_bad_delta
++   $_dp" ;;
++      *) _bad_delta="$_bad_delta
++   $_dp" ;;
++    esac
++  done <<GADELTA
++$_delta_out
++GADELTA
++  [ -z "$_bad_delta" ] \
++    || die "delta rc..HEAD contem caminho fora do conjunto FECHADO de evidencia/verdito GA (freeze violado):$_bad_delta"
++  echo "   modo RETOMADA: commits locais contem so evidencia/verdito GA (conjunto fechado, --no-renames)"
++fi
++OM="$(git rev-parse origin/main)"
++[ "$OM" = "$RC_SHA" ] || [ "$OM" = "$HEADNOW" ] \
++  || die "origin/main nao e a rc.2 nem o HEAD da retomada - freeze violado; me chame no Claude"
++# Arvore limpa EXCETO o conjunto FECHADO de saidas do runner do re-pass
++# (pair-rail S300 r11 P2: uma invocacao que rodou o re-pass e parou
++# antes do commit deixa esses untracked — o reuso precisa alcanca-los).
++# status CAPTURADO com rc checado (rail r9 P1-2: falha dentro de
++# heredoc-substitution virava "arvore limpa").
++_ga_st_out="$(git status --porcelain --untracked-files=all)" \
++  || die "git status falhou - nao vou tratar como arvore limpa"
++_dirty=""
++while IFS= read -r _line; do
++  [ -n "$_line" ] || continue
++  _pathp="${_line#???}"
++  case "$_pathp" in
++    "$VF.tmp"|"$VD.tmp")
++      # Orfaos de uma geracao atomica interrompida (rail r11 P1-2):
++      # removidos aqui mesmo (symlink rejeitado antes de remover).
++      [ -L "$_pathp" ] && die "temporario de assinatura e SYMLINK: $_pathp"
++      rm -f "$_pathp"
++      echo "   (limpo) temporario orfao: $_pathp"
++      : ;;
++    "$VF"|"$VF.asc"|"$VD")
++      # Estado parcial de assinatura de uma retomada (rail rc.3 r6
++      # P1-3): os tres artefatos sao integralmente REGENERADOS nos
++      # passos 3-4 (que comecam com rm -f), entao presenca suja aqui e
++      # retomavel. SYMLINK nao (rail r10 P1-1): um $VD -> $VF faria a
++      # geracao do verdito SOBRESCREVER o verdict-fields ja assinado.
++      [ -L "$_pathp" ] && die "artefato de assinatura e SYMLINK: $_pathp - remova antes"
++      : ;;
++    "$GA_DIR"/*)
++      # SO filhos DIRETOS do dir de evidencia contam (r14 P2: um
++      # look-alike aninhado tipo repass-ga/rehearsal/verdict-ga-1.txt
++      # cairia no git add do commit 1 e o guard de delta, ancorado no
++      # PARENT pos-commit, nunca o veria).
++      _rel="${_pathp#"$GA_DIR"/}"
++      case "$_rel" in
++        */*) _dirty="$_dirty
++   $_pathp" ;;
++        *)
++          _okp=0
++          for _b in $GA_OUT_OK; do
++            [ "$_rel" = "$_b" ] && { _okp=1; break; }
++          done
++          [ "$_okp" -eq 1 ] || _dirty="$_dirty
++   $_pathp"
++          ;;
++      esac
++      ;;
++    *) _dirty="$_dirty
++   $_pathp" ;;
++  esac
++done <<GASTATUS
++$_ga_st_out
++GASTATUS
++[ -z "$_dirty" ] || die "arvore suja fora do conjunto de saidas do re-pass:$_dirty"
++command -v gh >/dev/null 2>&1 || die "gh ausente"
++[ -f "$VF_TPL" ] && [ -f "$VD_TPL" ] || die "templates GA ausentes"
++PIN_JSON="$(python3 .claude/hooks/check_pair_rail.py --verify-codex-pin 2>/dev/null || true)"
++printf '%s' "$PIN_JSON" | grep -q '"status": "verified"' || die "pin do codex nao verifica"
++printf '%s' "$PIN_JSON" | grep -q '80a3933d11a9d13ef806aa24f7bb8afc9169cfe4e9b09d6da6a92922cbde9cff' \
++  || die "sha do payload codex mudou - re-gerar templates antes de assinar"
++
++validate_ga_evidence() {
++  [ -f "$GA_DIR/verdict-ga-1.txt" ] && [ -f "$GA_DIR/verdict-ga-2.txt" ] || return 1
++  ( cd "$GA_DIR" && shasum -a 256 -c MANIFEST-ga.sha256 --status ) 2>/dev/null || return 1
++  # Conjunto EXATO de 11 basenames (rail r20 P1-1): um manifesto
++  # parcial-mas-valido de uma escrita interrompida nao passa.
++  _vm_have="$(awk '{print $2}' "$GA_DIR/MANIFEST-ga.sha256" | sort)"
++  _vm_want="$(printf '%s\n' $GA_OUT_OK | grep -v '^MANIFEST-ga.sha256$' | sort)"
++  [ "$_vm_have" = "$_vm_want" ] || return 1
++  grep -q "$RC_SHA" "$GA_DIR/PROVENANCE-ga.md" 2>/dev/null || return 1
++  grep -q "Tag: $RC_TAG" "$GA_DIR/PROVENANCE-ga.md" 2>/dev/null || return 1
++  # Base pinada na evidencia (rail r23/r24): o reuso exige a linha Base
++  # com os objetos LITERAIS revisados da v1.2.0.
++  grep -q "abbb39eba5e5b83c7da6a817c4cf0ee033b5c266" "$GA_DIR/PROVENANCE-ga.md" 2>/dev/null || return 1
++  grep -q "31c5026a37451a577cde8f60ed95306ee0cd8894" "$GA_DIR/PROVENANCE-ga.md" 2>/dev/null || return 1
++  grep -q "^RUNNER-OVERALL: rc=0$" "$GA_DIR/PROVENANCE-ga.md" 2>/dev/null || return 1
++  # Exatamente 2 pins 64-hex de payload raw (rail r13 P1-3): um shasum
++  # falhando no runner nao pode virar proveniencia semanticamente vazia.
++  _npin="$(grep -cE "pin sha256: [0-9a-f]{64}$" "$GA_DIR/PROVENANCE-ga.md" 2>/dev/null || true)"
++  [ "$_npin" = "2" ] || return 1
++  # Binding TEMPORAL (rail r9 P1-1): a Data de inicio do runner tem de
++  # cair DEPOIS do hold completo (publishedAt + 24h) e nunca no futuro
++  # - um re-pass rodado antes do fim do hold nao vale como o re-pass
++  # do hold, por mais GO que seja.
++  _ev_ts="$(awk '/^- Data: /{print $3}' "$GA_DIR/PROVENANCE-ga.md" | tail -1)"
++  [ -n "$_ev_ts" ] || return 1
++  _ev_epoch="$(python3 - "$_ev_ts" <<'PYTS'
++import sys, datetime
++try:
++    ts = sys.argv[1].replace("Z", "+00:00")
++    print(int(datetime.datetime.fromisoformat(ts).timestamp()))
++except Exception:
++    print("BAD")
++PYTS
++)"
++  [ "$_ev_epoch" != "BAD" ] || return 1
++  [ "$_ev_epoch" -ge $(( PUB_EPOCH + 86400 )) ] || return 1
++  [ "$_ev_epoch" -le $(( $(date +%s) + 300 )) ] || return 1
++  _vo="$( cd "$GA_DIR" && find . ! -type f ! -type d | head -3 )"
++  [ -z "$_vo" ] || return 1
++  _vs="$( cd "$GA_DIR" && find . -mindepth 2 | head -3 )"
++  [ -z "$_vs" ] || return 1
++  _vd="$( cd "$GA_DIR" && find . -maxdepth 1 -type f | sed 's|^\./||' | sort )"
++  _vw="$( { printf '%s\n' $GA_OUT_OK; echo "run-ga-repass.sh"; } | sort )"
++  [ "$_vd" = "$_vw" ] || return 1
++  return 0
++}
++
++# Modo MONITORAMENTO e estritamente READ-ONLY (rail r20 P1-3): pula
++# runner e commits — evidencia ja esta commitada na arvore taggeada.
++if [ "$MONITOR_ONLY" -eq 0 ]; then
++
++say "1/8 re-pass do hold"
++# UMA funcao de validacao de evidencia, chamada tanto na decisao de
++# reuso quanto INCONDICIONALMENTE apos o runner (rail rc.3 r8 P1-4: um
++# runner stale/re-apontado podia revisar a rc errada e seguir para a
++# assinatura sem nenhum assert pos-execucao).
++if validate_ga_evidence; then
++  echo "   verditos existentes com proveniencia pinada da $RC_TAG ($RC_SHA) - reusando"
++else
++  bash "$GA_DIR/run-ga-repass.sh" \
++    || die "re-pass do hold nao terminou GO limpo (rc!=0) - triagem comigo no Claude"
++  validate_ga_evidence \
++    || die "evidencia POS-runner invalida (tag/SHA/manifesto/conjunto) - runner stale ou re-pass incompleto; me chame no Claude"
++fi
++# SO "VERDICT: GO" exato segue automatico (pair-rail S300 r2 P1-2):
++# um GO-WITH-CONDITIONS do rail carrega condicao NOVA que o envelope
++# pre-escrito (so as 4 excecoes herdadas) NAO contem — assinar sem
++# triagem omitiria a condicao da decisao assinada. Nesse caso: pare,
++# me chame no Claude, triamos e REGERAMOS o envelope antes de assinar.
++for _vp in 1 2; do
++  _vn="$(grep -cE '^VERDICT:' "$GA_DIR/verdict-ga-$_vp.txt" 2>/dev/null || true)"
++  [ "$_vn" = "1" ] \
++    || die "verdict-ga-$_vp tem $_vn linhas VERDICT (exigido: exatamente 1) - ambiguo (rail r11 P1-1)"
++  VLINE="$(grep -E '^VERDICT:' "$GA_DIR/verdict-ga-$_vp.txt")"
++  echo "   rail parte $_vp: ${VLINE:-sem verdito}"
++  case "$VLINE" in
++    "VERDICT: GO") : ;;
++    *) die "re-pass parte $_vp: '$VLINE' != GO exato - triagem comigo no Claude (envelope sera regerado se houver condicao nova)" ;;
++  esac
++done
++
++say "2/8 commit 1 (evidencia do hold)"
++ls "$GA_DIR"/payload-ga-*.raw.txt >/dev/null 2>&1 && die "payload raw ainda na arvore (a quarentena do G0 devia ter movido)"
++# Fechamento FISICO do dir de evidencia (rail rc.3 r6 P1-2): rejeita
++# nao-regular (symlink redirecionaria verdict/payload e -f/shasum/git
++# add seguem o link), rejeita aninhado, exige conjunto EXATO de filhos
++# diretos = GA_OUT_OK + o runner rastreado.
++_ga_odd="$( cd "$GA_DIR" && find . ! -type f ! -type d | head -5 )"
++[ -z "$_ga_odd" ] || die "entrada NAO-regular em repass-ga: $_ga_odd"
++_ga_sub="$( cd "$GA_DIR" && find . -mindepth 2 | head -5 )"
++[ -z "$_ga_sub" ] || die "aninhado em repass-ga (look-alike?): $_ga_sub"
++_ga_disk="$( cd "$GA_DIR" && find . -maxdepth 1 -type f | sed 's|^\./||' | sort )"
++_ga_want="$( { printf '%s\n' $GA_OUT_OK; echo "run-ga-repass.sh"; } | sort )"
++[ "$_ga_disk" = "$_ga_want" ] || die "conjunto em repass-ga difere do fechado:
++$(diff <(printf '%s\n' "$_ga_want") <(printf '%s\n' "$_ga_disk") | sed 's/^/   /')"
++# VF/VD de uma retomada nao podem ser varridos para o commit de
++# evidencia (r6 P1-3): tira do index e commita com PATHSPEC do dir.
++git reset -q -- "$VF" "$VD" 2>/dev/null || true
++for _b in $GA_OUT_OK; do
++  git add -- "$GA_DIR/$_b"
++done
++git add -- "$GA_DIR/run-ga-repass.sh"
++if git diff --cached --quiet -- "$GA_DIR"; then
++  echo "   evidencia ja commitada (rerun)"
++else
++  git commit -m "docs(PLAN-166 W2): evidencia do re-pass do hold ADR-103 (GA v1.3.0)" -- "$GA_DIR"
++fi
++PARENT="$(git rev-parse HEAD)"
++
++if [ "${SKIP_TO_PUSH:-0}" -eq 0 ]; then
++
++say "3/8 verdict-fields GA (parent=$PARENT) - revisar e assinar (pinentry 1)"
++# Comeca LIMPO (rail r10 P1-1): remove qualquer resto/symlink dos tres
++# artefatos - eles sao integralmente regenerados neste passo e no 4/8.
++rm -f "$VF" "$VF.asc" "$VD" "$VF.tmp" "$VD.tmp"
++GEN="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
++DMS="$(shasum -a 256 "$GA_DIR/MANIFEST-ga.sha256" | awk '{print $1}')"
++TSH="$(cat "$GA_DIR/transcript-ga-1.log" "$GA_DIR/transcript-ga-2.log" | shasum -a 256 | awk '{print $1}')"
++awk 'f{print} /-->/{f=1}' "$VF_TPL" \
++  | sed -e "s/@@PARENT_SHA@@/$PARENT/" -e "s/@@GENERATED_AT@@/$GEN/" \
++        -e "s/@@DELTA_MANIFEST_SHA@@/$DMS/" -e "s/@@TRANSCRIPT_SHA@@/$TSH/" > "$VF.tmp"
++mv -f "$VF.tmp" "$VF"
++[ -f "$VF" ] && [ ! -L "$VF" ] || die "verdict-fields gerado nao e arquivo regular"
++printf '\n----- CONTEUDO QUE VOCE VAI ASSINAR -----\n'
++cat "$VF"
++printf -- '----- FIM -----\n\nEnter para assinar (ctrl-C aborta): '; read -r _
++rm -f "$VF.asc"
++gpg --armor --detach-sign -u "$KEY" "$VF"
++gpg --verify "$VF.asc" "$VF" || die "assinatura nao verifica"
++
++say "4/8 verdito GA + commit 2 + guard local"
++SIG="$(base64 < "$VF.asc" | tr -d '\n')"
++sed -e "s/@@PARENT_SHA@@/$PARENT/" -e "s/@@GENERATED_AT@@/$GEN/" \
++    -e "s/@@DELTA_MANIFEST_SHA@@/$DMS/" -e "s/@@TRANSCRIPT_SHA@@/$TSH/" \
++    -e "s|@@SIG_B64@@|$SIG|" "$VD_TPL" > "$VD.tmp"
++mv -f "$VD.tmp" "$VD"
++# Pos-geracao do VD, RE-verifica a assinatura contra o VF em disco e a
++# regularidade dos dois (rail r10 P1-1): se algo tocou o VF entre a
++# assinatura e aqui, para ANTES de mover o .asc e de commitar.
++[ -f "$VD" ] && [ ! -L "$VD" ] || die "verdito gerado nao e arquivo regular"
++[ -f "$VF" ] && [ ! -L "$VF" ] || die "verdict-fields deixou de ser regular"
++gpg --verify "$VF.asc" "$VF" || die "assinatura NAO verifica pos-geracao do verdito - VF mudou?"
++mkdir -p "$HOME/.rc2-backup"
++mv "$VF.asc" "$HOME/.rc2-backup/verdict-fields-v1.3.0.md.asc"
++git add "$VF" "$VD"
++git commit -m "governance(PLAN-166 W2): verdito pair-rail GA v1.3.0 assinado
++
++GO-WITH-CONDITIONS: 4 excecoes nomeadas carregadas do trem rc.2->rc.3
++(curas no pack W3 pos-GA). Re-pass do hold ADR-103 em repass-ga/."
++python3 .claude/scripts/local/_release_tag_guard.py delta \
++  --repo "$REPO" --tag "$TAG" || die "guard delta recusou - NAO pushe"
++
++say "5/8 push + espera CI"
++git push origin main
++HEADSHA="$(git rev-parse HEAD)"
++i=0
++while :; do
++  i=$((i+1)); [ "$i" -le 90 ] || die "CI nao terminou em 90 min"
++  sleep 60
++  info="$(gh run list --limit 20 --json headSha,status,conclusion \
++    --jq "[.[]|select(.headSha==\"$HEADSHA\")] | \
++{n:length, p:[.[]|select(.status!=\"completed\")]|length, \
++b:[.[]|select(.status==\"completed\" and .conclusion!=\"success\" \
++and .conclusion!=\"skipped\")]|length}" 2>/dev/null || echo "")"
++  [ -n "$info" ] || { printf '  ... gh falhou, tentando de novo\n'; continue; }
++  n="$(printf '%s' "$info" | python3 -c 'import json,sys;print(json.load(sys.stdin)["n"])')"
++  p="$(printf '%s' "$info" | python3 -c 'import json,sys;print(json.load(sys.stdin)["p"])')"
++  b="$(printf '%s' "$info" | python3 -c 'import json,sys;print(json.load(sys.stdin)["b"])')"
++  printf '  ... runs=%s pendentes=%s vermelhos=%s\n' "$n" "$p" "$b"
++  [ "$b" -eq 0 ] || die "workflow vermelho - me chame no Claude"
++  if [ "$n" -gt 0 ] && [ "$p" -eq 0 ]; then break; fi
++done
++# Nivel de JOB no validate.yml (r10 P1-1 - envelope verde com jobs
++# pulados por CEO_SOTA_DISABLE nao autoriza tag).
++VID="$(gh run list --workflow validate.yml --limit 20 \
++  --json headSha,databaseId,status,conclusion \
++  --jq "[.[]|select(.headSha==\"$HEADSHA\" and .status==\"completed\" and .conclusion==\"success\")][0].databaseId" 2>/dev/null || echo "")"
++[ -n "$VID" ] && [ "$VID" != "null" ] || die "nenhum run COMPLETO e success do validate.yml para o HEAD (rail r19 P1-3)"
++VJ="$(gh run view "$VID" --json jobs \
++  --jq '{s:[.jobs[]|select(.conclusion=="success")]|length, f:[.jobs[]|select(.conclusion=="failure")]|length, p:[.jobs[]|select(.status!="completed")]|length, o:[.jobs[]|select(.status=="completed" and .conclusion!="success" and .conclusion!="skipped")]|length}' 2>/dev/null || echo "")"
++vs="$(printf '%s' "$VJ" | python3 -c 'import json,sys;print(json.load(sys.stdin)["s"])')"
++vf="$(printf '%s' "$VJ" | python3 -c 'import json,sys;print(json.load(sys.stdin)["f"])')"
++vp="$(printf '%s' "$VJ" | python3 -c 'import json,sys;print(json.load(sys.stdin)["p"])')"
++vo="$(printf '%s' "$VJ" | python3 -c 'import json,sys;print(json.load(sys.stdin)["o"])')"
++[ "$vf" -eq 0 ] || die "job vermelho dentro do validate.yml"
++[ "$vp" -eq 0 ] || die "validate.yml selecionado ainda tem job pendente (snapshot incoerente)"
++[ "$vo" -eq 0 ] || die "validate.yml tem job terminal nao-success (cancelled/timed_out?)"
++[ "$vs" -ge 1 ] || die "validate.yml sem NENHUM job executado (CEO_SOTA_DISABLE?) - me chame no Claude"
++echo "   validate.yml: $vs job(s) success, 0 failure (nivel de job)"
++bell "CI verde - assinar a tag GA"
++
++say "6/8 preflight + bump (no-op) + tag GA (pinentry 2)"
++bash .claude/scripts/local/release.sh preflight --stable
++bash .claude/scripts/local/release.sh bump --stable
++bash .claude/scripts/local/release.sh tag --stable
++
++fi
++
++fi
++
++if [ "$MONITOR_ONLY" -eq 0 ]; then
++say "7/8 push da tag + release.yml + npm"
++# Preflight pre-push UNICO (rail r10 P1-2 + r11 P1-3): roda DEPOIS do
++# SIM e imediatamente antes de TODO push de tag - caminho normal E
++# retomada. Um prompt SIM deixado aberto ate o TTL do verdito, ou um
++# main que andou, para AQUI, nao no server.
++prepush_preflight() {
++  git tag -v "$TAG" >/dev/null 2>&1 \
++    || die "pre-push: assinatura da tag nao verifica - me chame no Claude"
++  [ "$(git rev-parse "$TAG^{commit}")" = "$(git rev-parse HEAD)" ] \
++    || die "pre-push: tag nao aponta o HEAD"
++  git fetch --quiet origin main
++  [ "$(git rev-parse origin/main)" = "$(git rev-parse HEAD)" ] \
++    || die "pre-push: origin/main != HEAD - main andou; me chame no Claude"
++  _rp_st="$(git status --porcelain --untracked-files=all)" \
++    || die "pre-push: git status falhou"
++  [ -z "$_rp_st" ] || die "pre-push: arvore suja - limpe antes do push"
++  python3 .claude/scripts/local/_release_tag_guard.py delta \
++    --repo "$REPO" --tag "$TAG" || die "pre-push: guard delta recusou - NAO pushe"
++  _vf_gen="$(awk '/^generated_at:/{print $2}' "$VF" | tail -1)"
++  _vf_ttl="$(awk '/^ttl_hours:/{print $2}' "$VF" | tail -1)"
++  [ -n "$_vf_gen" ] && [ -n "$_vf_ttl" ] || die "pre-push: verdict-fields sem generated_at/ttl"
++  _vf_epoch="$(python3 - "$_vf_gen" <<'PYVF'
++import sys, datetime
++try:
++    print(int(datetime.datetime.fromisoformat(sys.argv[1].replace("Z", "+00:00")).timestamp()))
++except Exception:
++    print("BAD")
++PYVF
++)"
++  [ "$_vf_epoch" != "BAD" ] || die "pre-push: generated_at ilegivel"
++  # margem de 1h para a duracao do release: um verdito a minutos do TTL
++  # expiraria com o release.yml no meio do voo.
++  [ "$(date +%s)" -le $(( _vf_epoch + _vf_ttl * 3600 - 3600 )) ] \
++    || die "pre-push: verdito a menos de 1h do TTL (ou expirado) - NAO pushe; me chame no Claude (rota: regenerar verdito/tag)"
++  _rvid="$(gh run list --workflow validate.yml --limit 20 \
++    --json headSha,databaseId,status,conclusion \
++    --jq "[.[]|select(.headSha==\"$(git rev-parse HEAD)\" and .status==\"completed\" and .conclusion==\"success\")][0].databaseId" 2>/dev/null || echo "")"
++  [ -n "$_rvid" ] && [ "$_rvid" != "null" ] || die "pre-push: nenhum run do validate.yml para o HEAD"
++  _rvj="$(gh run view "$_rvid" --json jobs \
++    --jq '{s:[.jobs[]|select(.conclusion=="success")]|length, f:[.jobs[]|select(.conclusion=="failure")]|length}' 2>/dev/null || echo "")"
++  _rvs="$(printf '%s' "$_rvj" | python3 -c 'import json,sys;print(json.load(sys.stdin)["s"])')"
++  _rvf="$(printf '%s' "$_rvj" | python3 -c 'import json,sys;print(json.load(sys.stdin)["f"])')"
++  [ "$_rvf" -eq 0 ] && [ "$_rvs" -ge 1 ] \
++    || die "pre-push: validate.yml nao esta verde ao nivel de job para o HEAD"
++  # Re-snapshot da RC tag (rail r24-2): a rc publica nao pode ter sido
++  # deletada/movida entre o G0 e este ponto.
++  _rp_rls="$(git ls-remote origin "refs/tags/$RC_TAG" "refs/tags/$RC_TAG^{}")" \
++    || die "pre-push: ls-remote da $RC_TAG falhou"
++  [ "$(printf '%s\n' "$_rp_rls" | awk -v r="refs/tags/$RC_TAG" '$2==r{print $1}')" = "$(git rev-parse "$RC_TAG")" ] \
++    || die "pre-push: $RC_TAG remota nao e mais o objeto assinado - me chame no Claude"
++  echo "   pre-push preflight: verde"
++}
++if [ "${SKIP_TO_PUSH:-0}" -eq 1 ]; then
++  echo "   [RETOMADA] tag local existente - mesmo prompt SIM + mesmo preflight"
++fi
++printf 'push da tag %s (dispara publish npm via OIDC)? digite SIM: ' "$TAG"
++read -r ans
++[ "$ans" = "SIM" ] || die "abortado (tag assinada local, nao pushada)"
++prepush_preflight
++git push origin "$TAG"
++
++else
++  echo "   [MONITORAMENTO] assinaturas, commits, CI e push da tag ja feitos - indo direto as esperas"
++fi
++TAGSHA="$(git rev-parse "$TAG^{commit}")"
++echo "   aguardando release.yml da tag..."
++i=0
++while :; do
++  # 60 > release-gate 35 + publish-release + skew de runner (rail rc.3
++  # r6 P1-5: 40 min podia estourar com a tag JA pushada; alem do bump,
++  # o modo MONITORAMENTO do G0 torna o proprio timeout retomavel).
++  i=$((i+1)); [ "$i" -le 60 ] || die "release.yml nao terminou em 60 min - re-rode este script (modo MONITORAMENTO retoma as esperas)"
++  sleep 60
++  c="$(gh run list --workflow release.yml --limit 10 \
++    --json headSha,status,conclusion,headBranch,event \
++    --jq "[.[]|select(.headSha==\"$TAGSHA\" and .headBranch==\"$TAG\" and .event==\"push\")][0].conclusion" 2>/dev/null || echo "")"
++  s="$(gh run list --workflow release.yml --limit 10 \
++    --json headSha,status,conclusion,headBranch,event \
++    --jq "[.[]|select(.headSha==\"$TAGSHA\" and .headBranch==\"$TAG\" and .event==\"push\")][0].status" 2>/dev/null || echo "")"
++  printf '  ... release.yml: %s/%s\n' "${s:-?}" "${c:-?}"
++  [ "$c" = "failure" ] && die "release.yml vermelho - me chame no Claude"
++  [ "$s" = "completed" ] && [ "$c" = "success" ] && break
++done
++# Janela de GA publico sem npm confirmado reduzida a segundos (rail
++# r25 P1-3): drafta o release IMEDIATAMENTE; o undraft acontece so
++# depois do npm view + recibo do step de publish. Ctrl-C/queda durante
++# a espera do npm deixa o GA em DRAFT (invisivel), nao publico-parcial.
++_dr0="$(gh release view "$TAG" --json isDraft --jq .isDraft 2>/dev/null || echo "")"
++if [ "$_dr0" = "false" ]; then
++  gh release edit "$TAG" --draft \
++    || die "draft imediato do GA falhou - rode gh release edit $TAG --draft e re-rode"
++  echo "   GA draftado ate o npm confirmar (undraft automatico no final)"
++fi
++bell "release.yml verde - aprovar production-npm"
++echo "   aguardando npm-publish.yml da TAG (aprove production-npm quando o run pedir)"
++_url_shown=0
++NID=""
++i=0
++while :; do
++  i=$((i+1))
++  if [ "$i" -gt 90 ]; then
++    bell "timeout do npm - draftando o Release GA"
++    gh release edit "$TAG" --draft \
++      || die "timeout de 90 min E o draft automatico falhou - rode gh release edit $TAG --draft; me chame no Claude"
++    _mdr="$(gh release view "$TAG" --json isDraft --jq .isDraft 2>/dev/null || echo "")"
++    [ "$_mdr" = "true" ] || die "timeout e o release NAO virou draft - verifique; me chame no Claude"
++    die "npm-publish nao concluiu em 90 min - GA draftado automaticamente; re-rode este script (MONITORAMENTO retoma e undrafta apos npm confirmar)"
++  fi
++  sleep 60
++  # Run PINADO uma unica vez por tag/SHA/evento (rail r21 P0): todo o
++  # resto (status, conclusao, URL de aprovacao, recibo do step) le do
++  # MESMO databaseId.
++  if [ -z "$NID" ]; then
++    NID="$(gh run list --workflow npm-publish.yml --limit 10 \
++      --json headSha,databaseId,headBranch,event \
++      --jq "[.[]|select(.headSha==\"$TAGSHA\" and .headBranch==\"$TAG\" and .event==\"push\")][0].databaseId" 2>/dev/null || echo "")"
++    [ "$NID" = "null" ] && NID=""
++  fi
++  if [ -z "$NID" ]; then
++    printf '  ... run do npm-publish (tag %s) ainda nao apareceu\n' "$TAG"; continue
++  fi
++  _nrj="$(gh run view "$NID" --json status,conclusion 2>/dev/null || echo "")"
++  ns="$(printf '%s' "$_nrj" | python3 -c 'import json,sys;print(json.load(sys.stdin).get("status",""))' 2>/dev/null || echo "")"
++  nc="$(printf '%s' "$_nrj" | python3 -c 'import json,sys;print(json.load(sys.stdin).get("conclusion",""))' 2>/dev/null || echo "")"
++  printf '  ... npm-publish: %s/%s\n' "${ns:-?}" "${nc:-?}"
++  if [ "$ns" = "waiting" ] && [ "$_url_shown" -eq 0 ]; then
++    nu="$(gh run view "$NID" --json url --jq .url 2>/dev/null || echo "")"
++    bell "aprovar production-npm agora"
++    echo "   >>> APROVE production-npm neste run: ${nu:-abra a aba Actions}"
++    _url_shown=1
++  fi
++  if [ "$ns" = "completed" ] && [ "$nc" != "success" ] && [ "$nc" != "skipped" ]; then
++    # QUALQUER conclusao terminal nao-success (failure/cancelled/
++    # timed_out/stale/...) drafta AUTOMATICAMENTE o GA ja-publico e
++    # verifica que draftou (rail r14 P1-2) - nunca um comando manual.
++    bell "npm NAO publicou - draftando o Release GA"
++    gh release edit "$TAG" --draft \
++      || die "npm-publish '$nc' E o draft automatico FALHOU - rode gh release edit $TAG --draft e me chame no Claude"
++    _mdr="$(gh release view "$TAG" --json isDraft --jq .isDraft 2>/dev/null || echo "")"
++    [ "$_mdr" = "true" ] \
++      || die "npm-publish '$nc' e o release NAO virou draft (isDraft='$_mdr') - verifique manualmente; me chame no Claude"
++    die "npm-publish terminou '$nc' - GA draftado automaticamente (invisivel); me chame no Claude para triagem"
++  fi
++  [ "$ns" = "completed" ] && [ "$nc" = "success" ] && break
++done
++# npm view com RETRY limitado; falha persistente drafta o GA antes de
++# abortar (rail r15 P1: o run do npm deu success mas um erro transiente
++# de registry aqui deixava GA parcial PUBLICO sem mitigacao).
++NPMV=""
++_nv=0
++while [ "$_nv" -lt 5 ]; do
++  _nv=$((_nv+1))
++  NPMV="$(npm view ceo-orchestration@1.3.0 version 2>/dev/null || true)"
++  [ "$NPMV" = "1.3.0" ] && break
++  printf '  ... npm view tentativa %s/5 devolveu "%s"; aguardando 30s\n' "$_nv" "$NPMV"
++  sleep 30
++done
++if [ "$NPMV" != "1.3.0" ]; then
++  bell "npm view nao confirmou - draftando o GA"
++  gh release edit "$TAG" --draft \
++    || die "npm view nao confirmou E o draft automatico falhou - rode gh release edit $TAG --draft; me chame no Claude"
++  _mdr="$(gh release view "$TAG" --json isDraft --jq .isDraft 2>/dev/null || echo "")"
++  [ "$_mdr" = "true" ] || die "npm view nao confirmou e o release NAO virou draft - verifique; me chame no Claude"
++  die "npm view devolveu '$NPMV' apos 5 tentativas - GA draftado automaticamente; re-rode este script (MONITORAMENTO retoma e undrafta quando o registry confirmar)"
++fi
++echo "   npm view: ceo-orchestration@$NPMV presente no registry"
++# RECIBO do publish DESTA arvore (rail r20 P0): o run pode ter terminado
++# success pelo no-op already_published - a versao no registry seria de
++# OUTRA arvore. Exige o STEP "Publish (Trusted Publishing" com
++# conclusion=success (skipped = fail-closed com triagem).
++_pubc="$(gh run view "$NID" --json jobs \
++  --jq '[.jobs[].steps[]|select(.name|startswith("Publish (Trusted Publishing"))][0].conclusion' 2>/dev/null || echo "")"
++if [ "$_pubc" != "success" ]; then
++  bell "npm SEM recibo de publish desta arvore - draftando"
++  gh release edit "$TAG" --draft \
++    || die "publish step '$_pubc' (nao-success) E draft falhou - gh release edit $TAG --draft; me chame no Claude"
++  _mdr="$(gh release view "$TAG" --json isDraft --jq .isDraft 2>/dev/null || echo "")"
++  [ "$_mdr" = "true" ] || die "publish step '$_pubc' e release nao virou draft - verifique; me chame no Claude"
++  die "step de publish concluiu '$_pubc' (skipped = registry ja tinha 1.3.0 de OUTRA arvore) - GA draftado; TRIAGEM comigo no Claude antes de qualquer undraft"
++fi
++echo "   recibo de publish desta arvore: step Publish success"
++echo "   npm confirmado: ceo-orchestration@$NPMV"
++
++say "8/8 GitHub Release (GA) - verificacao"
++# release.yml cria o Release sozinho (idempotente; SEM --prerelease em
++# tag estavel) - aqui so verificamos (pair-rail S300 r6 P1-1).
++_prj="$(gh release view "$TAG" --json isPrerelease,isDraft 2>/dev/null || echo "")"
++_pr="$(printf '%s' "$_prj" | python3 -c 'import json,sys;print(json.load(sys.stdin).get("isPrerelease"))' 2>/dev/null || echo "")"
++_dr="$(printf '%s' "$_prj" | python3 -c 'import json,sys;print(json.load(sys.stdin).get("isDraft"))' 2>/dev/null || echo "")"
++if [ "$_pr" = "False" ] && [ "$_dr" = "True" ]; then
++  # Mitigacao de falha do npm deixou o GA em DRAFT e o npm ja publicou
++  # (chegamos aqui = npm view confirmado): republica (rail r11 P1-4).
++  echo "   release GA esta em DRAFT (mitigacao anterior) - republicando"
++  gh release edit "$TAG" --draft=false || die "undraft do GA falhou - gh release edit $TAG --draft=false manualmente"
++  _dr="False"
++fi
++{ [ "$_pr" = "False" ] && [ "$_dr" = "False" ]; } \
++  || die "GitHub Release do $TAG ausente, draft ou pre-release (isPrerelease='$_pr' isDraft='$_dr') - um DRAFT nao e GA publicado; me chame no Claude"
++echo "   GitHub Release GA confirmado NAO-draft (criado pelo release.yml)"
++
++# Recheck do OBJETO da RC tag tambem (rail r24-2).
++_fr_rls="$(git ls-remote origin "refs/tags/$RC_TAG" "refs/tags/$RC_TAG^{}")" \
++  || die "ls-remote final da $RC_TAG falhou"
++[ "$(printf '%s\n' "$_fr_rls" | awk -v r="refs/tags/$RC_TAG" '$2==r{print $1}')" = "$(git rev-parse "$RC_TAG")" ] \
++  || die "$RC_TAG remota mudou durante as esperas - me chame no Claude"
++# Recheck do OBJETO da tag no remoto (rail r21 P1-3): a tag nao pode
++# ter sido deletada/movida durante as esperas.
++_ft_rls="$(git ls-remote origin "refs/tags/$TAG" "refs/tags/$TAG^{}")" \
++  || die "ls-remote final da tag falhou (transporte)"
++_ft_plain="$(printf '%s\n' "$_ft_rls" | awk -v r="refs/tags/$TAG" '$2==r{print $1}')"
++_ft_peel="$(printf '%s\n' "$_ft_rls" | awk -v r="refs/tags/$TAG^{}" '$2==r{print $1}')"
++[ "$_ft_plain" = "$(git rev-parse "$TAG")" ] \
++  || die "tag $TAG remota NAO e mais o objeto assinado local (deletada/movida durante as esperas?) - me chame no Claude"
++[ -z "$_ft_peel" ] || [ "$_ft_peel" = "$(git rev-parse "$TAG^{commit}")" ] \
++  || die "peel remoto final da tag diverge - me chame no Claude"
++# Recheck FINAL fail-closed (rail r20 P1-4): main nao pode ter rolado
++# entre o G0 e aqui - o GA declarado tem de estar em origin/main.
++git fetch --quiet origin main || die "fetch final falhou"
++[ "$(git rev-parse origin/main)" = "$(git rev-parse "$TAG^{commit}")" ] \
++  || die "origin/main != commit da tag GA no recheck final - rollback? me chame no Claude ANTES de anunciar"
++bell "GA v1.3.0 publicado"
++cat <<'DONE'
++
++============================================================
++ GA v1.3.0 PUBLICADO. Freeze ENCERRADO.
++ Proximo (mesma sessao ou proxima):
++   1. assinar o pack W3 (cura as 4 excecoes do verdito):
++      cd .claude/plans/PLAN-169
++      cp W3-approved-draft.md W3-approved.md
++      (preencher Anchor-SHA = git rev-parse HEAD e a Data)
++      gpg --armor --detach-sign W3-approved.md
++      bash OWNER-W3-LAND.sh --dry-run   # e depois sem flag
++   2. me chamar no Claude para: E0 + fechamento + memoria.
++============================================================
++DONE
+diff --git a/.claude/plans/PLAN-166/repass-ga/run-ga-repass.sh b/.claude/plans/PLAN-166/repass-ga/run-ga-repass.sh
+new file mode 100755
+index 0000000..a676f89
+--- /dev/null
++++ b/.claude/plans/PLAN-166/repass-ga/run-ga-repass.sh
+@@ -0,0 +1,321 @@
++#!/bin/bash
++# Re-pass do hold ADR-103 para o GA v1.3.0 (PLAN-166 W2 / W6.1) - 2 PARTES.
++# Pipeline identico ao r1/r2: prompt + diff -> redactor ADR-114 ->
++# controles -> codex exec read-only de worktree detached DA TAG rc.2.
++# O diff v1.2.0..rc.2 do escopo release-mechanics tem ~282KB > cap de
++# 250KB do redactor => particao coerente em 2 payloads (medida S300):
++#   g1: superficies de versao/docs/config + upgrade.sh (blast radius
++#       do adotante) ~111KB
++#   g2: maquinaria executavel do release (workflows + driver + guard +
++#       bump-sites + await-gate + validador step-15) ~176KB
++# Saida por parte: payload-ga-N.redacted.txt, diff-ga-N.patch,
++# paths-ga-N.manifest.txt, verdict-ga-N.txt, transcript-ga-N.log;
++# agregado em PROVENANCE-ga.md + MANIFEST-ga.sha256 (BASENAMES).
++# O GA so segue com VERDICT: GO (ou GO-WITH-CONDITIONS) nas DUAS partes.
++set -uo pipefail
++REPO_ROOT="$(git rev-parse --show-toplevel)"; cd "$REPO_ROOT" || exit 2
++OUT="$REPO_ROOT/.claude/plans/PLAN-166/repass-ga"
++BASE_TAG="v1.2.0"
++# Pins LITERAIS do objeto/commit da base (rail r23 P1): a v1.2.0 e um
++# release publicado imutavel - o runner nao confia na tag local nem so
++# na igualdade local==remoto (um force-move acidental dos DOIS lados
++# passaria); os hashes esperados sao constantes revisadas.
++BASE_TAG_OBJ="abbb39eba5e5b83c7da6a817c4cf0ee033b5c266"
++BASE_TAG_COMMIT="31c5026a37451a577cde8f60ed95306ee0cd8894"
++RC_TAG="v1.3.0-rc.3"
++git rev-parse -q --verify "refs/tags/$RC_TAG" >/dev/null 2>&1 \
++  || { echo "FATAL: tag $RC_TAG nao existe - corte-a primeiro (OWNER-RC3-CUT.sh)"; exit 2; }
++# BASE_TAG amarrado (rail r22/r23/r24): assinatura + pins LITERAIS do
++# objeto e do commit + remoto == local + ancestral do RC. O diff mais
++# abaixo usa o COMMIT PINADO, nunca o nome simbolico.
++git tag -v "$BASE_TAG" >/dev/null 2>&1 \
++  || { echo "FATAL: assinatura da $BASE_TAG nao verifica"; exit 2; }
++[ "$(git rev-parse "$BASE_TAG")" = "$BASE_TAG_OBJ" ] \
++  || { echo "FATAL: objeto local da $BASE_TAG != pin revisado $BASE_TAG_OBJ"; exit 2; }
++[ "$(git rev-parse "$BASE_TAG^{commit}")" = "$BASE_TAG_COMMIT" ] \
++  || { echo "FATAL: commit da $BASE_TAG != pin revisado $BASE_TAG_COMMIT"; exit 2; }
++_bt_rls="$(git ls-remote origin "refs/tags/$BASE_TAG" "refs/tags/$BASE_TAG^{}")" \
++  || { echo "FATAL: ls-remote da $BASE_TAG falhou"; exit 2; }
++_bt_plain="$(printf '%s\n' "$_bt_rls" | awk -v r="refs/tags/$BASE_TAG" '$2==r{print $1}')"
++_bt_peel="$(printf '%s\n' "$_bt_rls" | awk -v r="refs/tags/$BASE_TAG^{}" '$2==r{print $1}')"
++[ "$_bt_plain" = "$BASE_TAG_OBJ" ] \
++  || { echo "FATAL: $BASE_TAG remota != pin revisado"; exit 2; }
++[ -z "$_bt_peel" ] || [ "$_bt_peel" = "$BASE_TAG_COMMIT" ] \
++  || { echo "FATAL: peel remoto da $BASE_TAG != pin"; exit 2; }
++git merge-base --is-ancestor "$BASE_TAG_COMMIT" "$(git rev-parse "$RC_TAG^{commit}")" \
++  || { echo "FATAL: base pinada nao e ancestral do $RC_TAG"; exit 2; }
++
++WT="$(mktemp -d "${TMPDIR:-/tmp}/repass-ga.XXXXXX")/wt"
++git worktree add --detach "$WT" "$RC_TAG" >/dev/null || exit 2
++# Trap unico: remove o worktree E poe em quarentena qualquer payload
++# raw que uma falha precoce (redactor/cap/codex) deixaria na arvore -
++# sem isso o proximo G0 do OWNER-GA-CUT recusa e a retomada trava
++# (rail rc.3 r5 P1-5).
++_ga_cleanup() {
++  git worktree remove --force "$WT" >/dev/null 2>&1 || true
++  mkdir -p "$HOME/.rc2-backup"
++  for _raw in "$OUT"/payload-ga-*.raw.txt; do
++    [ -e "$_raw" ] || continue
++    mv "$_raw" "$HOME/.rc2-backup/quarantine-$(date +%s)-$(basename "$_raw")" \
++      && echo "quarentena: $(basename "$_raw") -> ~/.rc2-backup/" >&2
++  done
++}
++trap _ga_cleanup EXIT
++_wt_st="$(git -C "$WT" status --porcelain)" \
++  || { echo "FATAL: git status do worktree falhou - nao vou assumir limpo"; exit 2; }
++[ -z "$_wt_st" ] || { echo "FATAL: worktree sujo"; exit 2; }
++
++part_paths() {
++  case "$1" in
++    1) cat <<'P1'
++VERSION
++npm/README.md
++npm/package.json
++pyproject.toml
++CHANGELOG.md
++INSTALL.md
++docs/ARCHITECTURE.md
++README.md
++README.pt-BR.md
++SECURITY.md
++VERSIONING.md
++SBOM.md
++.github/release-checklist.md
++.claude-plugin/marketplace.json
++.claude-plugin/plugin.json
++scripts/upgrade.sh
++scripts/install.sh
++scripts/_framework_manifest_set.sh
++.claude/.framework-version
++P1
++;;
++    2) cat <<'P2'
++.github/workflows/release.yml
++.github/workflows/npm-publish.yml
++.claude/scripts/local/verify-counts.sh
++.claude/scripts/local/release.sh
++.claude/scripts/local/_release_tag_guard.py
++.claude/scripts/local/_release_bump_sites.py
++.claude/scripts/await_release_gate.py
++.github/scripts/validate-pair-rail-verdict.py
++P2
++;;
++  esac
++}
++part_label() {
++  case "$1" in
++    1) echo "version/docs/config surfaces + adopter upgrade path" ;;
++    2) echo "executable release machinery (workflows, driver, tag guard, bump sites, npm await-gate, step-15 validator)" ;;
++  esac
++}
++
++prompt_header() {
++cat <<PROMPT
++You are the cross-vendor reviewer on the 24h release hold (ADR-103) for
++the GA promotion of $RC_TAG to v1.3.0. Be adversarial and concrete.
++Your output is advisory evidence, not an authorization. The scope is
++SPLIT in 2 payloads (redactor cap); this is payload $1/2: $2.
++Each part is judged independently; GA needs GO on both.
++
++CONTEXT
++- Repo: ceo-orchestration, a governance/auditability framework. Python
++  stdlib-only, >=3.9. No speed claims anywhere.
++- $RC_TAG is CUT, signed, CI-green, published as a GitHub pre-release,
++  under a signed pair-rail verdict (GO-WITH-CONDITIONS).
++- Review history you must NOT re-litigate: 4 pre-rc.1 rounds (18
++  findings, 17 fixed 1 refuted) + 4 multi-part rounds rc.1->rc.2
++  (all real findings cured in fix-forwards) + the FIRST hold re-pass
++  (over rc.2, 2026-08-10) which returned NO-GO with 8 real findings -
++  ALL cured in rc.3 (CHANGELOG counts+upgrade section, scoped header
++  matcher, checklist sites, npm-publish tag-liveness guard, release-gate
++  timeout 20->35) and the cure diff itself passed a codex rail to GO
++  (evidence: repass-rc3-cures/). Verify the cures HOLD at this tag;
++  do not re-report them as new findings unless one is WRONG or
++  incomplete.
++- FOUR NAMED PRODUCT EXCEPTIONS ride this GA by signed decision
++  (V1/V2/V4/V5 - upgrade.sh observer w/o baseline-invalid guard; false
++  --pin NOTE; rejected-symlink hash fallthrough; FMS_LINK_PATHS unset
++  allow-all on install). Cures are STAGED in a post-GA ceremony pack.
++  Do NOT report these as new; DO report if any is WORSE than described
++  or reachable on the mainline install/upgrade path (they were assessed
++  as non-mainline).
++- OWN-0016 is a known gated defect (ADR-190 s2.6, expected nightly RED).
++
++WHAT THIS HOLD RE-PASS IS FOR
++1. GA EXECUTABILITY: remaining path is bump --stable (expected no-op),
++   tag --stable, push (push triggers npm publish via OIDC). Anything
++   non-idempotent or order-dependent?
++2. IRREVERSIBILITY: what lands wrong on npm and cannot be undone?
++   Version-string disagreement across published surfaces is the
++   highest-value class.
++3. ADOPTER BLAST RADIUS: v1.2.0 adopter runs the documented upgrade
++   against v1.3.0 - broken/locked states?
++4. HONESTY OF CLAIMS: every count/guarantee in the changed docs must
++   match the code at the tag. A gate that cannot fail is a finding.
++5. What a reviewer would most plausibly have missed across 8 rounds.
++
++OUTPUT FORMAT
++Per finding: SEVERITY (P0 blocks GA / P1 fix before GA / P2 follow-up),
++FILE:LINE, concrete failure scenario, minimal fix. Cite the diff.
++End with exactly one line: "VERDICT: GO" or "VERDICT: NO-GO" or
++"VERDICT: GO-WITH-CONDITIONS", plus one sentence. A clean round is a
++legitimate result - do not manufacture findings.
++
++UNIFIED DIFF ($BASE_TAG..$RC_TAG, part $1/2) FOLLOWS.
++PROMPT
++}
++
++# Outputs fixos NUNCA atraves de symlink/non-regular pre-existente
++# (rail r16 P1-2: um PROVENANCE-ga.md symlink para CHANGELOG.md seria
++# TRUNCADO pelo redirect abaixo). So regulares esperados sao removidos.
++for _o in PROVENANCE-ga.md MANIFEST-ga.sha256 MANIFEST-ga.sha256.tmp \
++  payload-ga-1.redacted.txt payload-ga-2.redacted.txt \
++  payload-ga-1.raw.txt payload-ga-2.raw.txt \
++  diff-ga-1.patch diff-ga-2.patch \
++  paths-ga-1.manifest.txt paths-ga-2.manifest.txt \
++  verdict-ga-1.txt verdict-ga-2.txt \
++  transcript-ga-1.log transcript-ga-2.log; do
++  _op="$OUT/$_o"
++  [ -e "$_op" ] || [ -L "$_op" ] || continue
++  if [ -L "$_op" ] || [ ! -f "$_op" ]; then
++    echo "FATAL: output fixo pre-existente NAO-regular (symlink?): $_op"; exit 1
++  fi
++  rm -f "$_op" || { echo "FATAL: nao consegui limpar $_op"; exit 1; }
++done
++OVERALL=0
++{
++  echo "# Proveniencia do re-pass GA (hold ADR-103) - v1.3.0 - 2 partes"
++  echo "- Base: $BASE_TAG ($BASE_TAG_OBJ -> $BASE_TAG_COMMIT) .. Tag: $RC_TAG ($(git rev-parse "$RC_TAG") -> $(git rev-parse "$RC_TAG^{commit}"))"
++  echo "- Worktree detached da TAG: sim - Pipeline: prompt+diff -> codex_egress_redact --outgoing -> controles -> codex exec --sandbox read-only"
++  echo "- Data: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
++} > "$OUT/PROVENANCE-ga.md"
++
++for P in 1 2; do
++  LABEL="$(part_label "$P")"
++  MAN="$OUT/paths-ga-$P.manifest.txt"
++  # Todo comando que PRODUZ evidencia falha explicito (rail rc.3 r7
++  # P1-4: sob set -uo sem -e, um git diff morrendo no meio deixava
++  # payload truncado auto-consistente que os controles RAW/RED nao veem).
++  part_paths "$P" > "$MAN" || { echo "FATAL: escrita do manifesto de escopo falhou (parte $P)"; exit 1; }
++  while IFS= read -r p; do
++    [ -z "$p" ] && continue
++    git cat-file -e "$RC_TAG:$p" 2>/dev/null \
++      || { echo "FATAL: caminho do escopo ausente na tag: $p" >&2; exit 1; }
++  done < "$MAN"
++  DIFF="$OUT/diff-ga-$P.patch"
++  _ps="$(tr '\n' ' ' < "$MAN")" \
++    || { echo "FATAL: leitura do pathspec falhou (parte $P)"; exit 1; }
++  [ -n "$_ps" ] || { echo "FATAL: pathspec vazio (parte $P)"; exit 1; }
++  # shellcheck disable=SC2086
++  git diff "$BASE_TAG_COMMIT".."$RC_TAG" -- $_ps > "$DIFF" \
++    || { echo "FATAL: git diff da parte $P falhou (rc!=0) - payload seria truncado"; exit 1; }
++  DL=$(wc -l < "$DIFF" | tr -d ' ')
++  [ "$DL" -ge 50 ] || { echo "FATAL: parte $P com so $DL linhas de diff"; exit 1; }
++  RAW="$OUT/payload-ga-$P.raw.txt"; RED="$OUT/payload-ga-$P.redacted.txt"
++  { prompt_header "$P" "$LABEL" && echo && cat "$DIFF"; } > "$RAW" \
++    || { echo "FATAL: montagem do payload raw da parte $P falhou"; exit 1; }
++  RAWB=$(wc -c < "$RAW" | tr -d ' ')
++  [ "$RAWB" -lt 250000 ] || { echo "FATAL: parte $P ${RAWB}B >= 250KB"; exit 1; }
++  python3 .claude/hooks/_lib/codex_egress_redact.py --outgoing < "$RAW" > "$RED" \
++    || { echo "FATAL: redactor rc!=0 na parte $P"; exit 1; }
++  set +e
++  grep -q 'CODEX-OUTPUT-TRUNCATED' "$RED"; _trc=$?
++  set -uo pipefail
++  case "$_trc" in
++    0) echo "FATAL: parte $P truncada"; exit 1 ;;
++    1) : ;;
++    *) echo "FATAL: grep do marcador de truncamento falhou (rc=$_trc)"; exit 1 ;;
++  esac
++  RH=$(grep -c '^@@' "$RAW"); _rhrc=$?
++  [ "$_rhrc" -le 1 ] || { echo "FATAL: grep -c hunks RAW falhou (rc=$_rhrc)"; exit 1; }
++  DH=$(grep -c '^@@' "$RED"); _dhrc=$?
++  [ "$_dhrc" -le 1 ] || { echo "FATAL: grep -c hunks RED falhou (rc=$_dhrc)"; exit 1; }
++  [ "$RH" = "$DH" ] || { echo "FATAL: parte $P hunks $RH -> $DH"; exit 1; }
++  RAWL=$(wc -l < "$RAW" | tr -d ' '); REDL=$(wc -l < "$RED" | tr -d ' ')
++  [ "$RAWL" = "$REDL" ] || { echo "FATAL: parte $P linhas $RAWL -> $REDL"; exit 1; }
++  # Binding por-parte (rail r19 P1-2): hash dos insumos ANTES do codex,
++  # verificado apos a parte E de novo na agregacao — evidencia de uma
++  # parte nao fica mutavel enquanto a outra roda (contra auto-corrupcao
++  # acidental; adversario mesmo-UID esta FORA do threat model ratificado).
++  PRE_SHA_RED=$(shasum -a 256 "$RED" | awk '{print $1}') || { echo "FATAL: shasum RED"; exit 1; }
++  PRE_SHA_DIFF=$(shasum -a 256 "$DIFF" | awk '{print $1}') || { echo "FATAL: shasum DIFF"; exit 1; }
++  PRE_SHA_MAN=$(shasum -a 256 "$MAN" | awk '{print $1}') || { echo "FATAL: shasum MAN"; exit 1; }
++  eval "PIN_RED_$P=\$PRE_SHA_RED"; eval "PIN_DIFF_$P=\$PRE_SHA_DIFF"; eval "PIN_MAN_$P=\$PRE_SHA_MAN"
++  echo "parte $P OK (${RAWB}B, $RH hunks) - codex rodando (~10-15 min)..."
++  ( cd "$WT" && codex exec --sandbox read-only --color never \
++      --output-last-message "$OUT/verdict-ga-$P.txt" \
++      - < "$RED" > "$OUT/transcript-ga-$P.log" 2>&1 )
++  CRC=$?
++  VN=$(grep -cE '^VERDICT:' "$OUT/verdict-ga-$P.txt" 2>/dev/null || true)
++  if [ "$VN" = "1" ]; then
++    VLINE=$(grep -E '^VERDICT:' "$OUT/verdict-ga-$P.txt")
++  else
++    # 0 ou >1 linhas = ambiguo, nunca aprovacao (rail r11 P1-1)
++    VLINE="(VERDICT ambiguo: $VN linhas - inspecionar transcript; rc=$CRC)"
++  fi
++  RAW_SHA=$(shasum -a 256 "$RAW" | awk '{print $1}') \
++    || { echo "FATAL: shasum do payload raw falhou (parte $P)"; exit 1; }
++  case "$RAW_SHA" in
++    ????????????????????????????????????????????????????????????????) : ;;
++    *) echo "FATAL: pin do raw invalido (parte $P): '$RAW_SHA'"; exit 1 ;;
++  esac
++  {
++    echo "- parte $P ($LABEL): $VLINE [codex rc=$CRC]"
++    echo "  - payload-ga-$P.raw.txt NAO commitado; pin sha256: $RAW_SHA"
++  } >> "$OUT/PROVENANCE-ga.md" \
++    || { echo "FATAL: escrita da proveniencia falhou (parte $P)"; exit 1; }
++  mkdir -p "$HOME/.rc2-backup"; mv "$RAW" "$HOME/.rc2-backup/payload-ga-$P.raw.txt"
++  # pos-parte: insumos identicos aos que o codex consumiu
++  [ "$(shasum -a 256 "$RED" | awk '{print $1}')" = "$PRE_SHA_RED" ] \
++    || { echo "FATAL: payload da parte $P mudou DURANTE o run do codex"; exit 1; }
++  [ "$(shasum -a 256 "$DIFF" | awk '{print $1}')" = "$PRE_SHA_DIFF" ] \
++    || { echo "FATAL: diff da parte $P mudou durante o run"; exit 1; }
++  [ "$(shasum -a 256 "$MAN" | awk '{print $1}')" = "$PRE_SHA_MAN" ] \
++    || { echo "FATAL: manifesto de escopo da parte $P mudou durante o run"; exit 1; }
++  echo "parte $P: $VLINE [rc=$CRC]"
++  # Pair-rail S300 r3 P1-3: um VERDICT escrito seguido de crash/timeout
++  # do codex (rc!=0) e evidencia INCOMPLETA, nao autorizacao — o rc da
++  # execucao E a linha exata contam.
++  if [ "$CRC" -ne 0 ]; then
++    OVERALL=1
++  else
++    case "$VLINE" in
++      "VERDICT: GO"|"VERDICT: GO-WITH-CONDITIONS"*) : ;;
++      *) OVERALL=1 ;;
++    esac
++  fi
++done
++
++# RUNNER-OVERALL entra na proveniencia ANTES do manifesto, que agora a
++# INCLUI (rail rc.3 r5 P1-3: proveniencia fora do manifesto era
++# reescrevivel para casar evidencia stale no reuso do GA-CUT).
++echo "RUNNER-OVERALL: rc=$OVERALL" >> "$OUT/PROVENANCE-ga.md"
++# Geracao do manifesto GUARDADA (rail rc.3 r6 P1-4): sob `set -uo
++# pipefail` sem -e, um shasum falhando escrevia manifesto parcial e o
++# runner ainda saia 0 — o OWNER-GA-CUT assinava ate o guard recusar.
++for _pp in 1 2; do
++  eval "_prd=\$PIN_RED_$_pp"; eval "_pdf=\$PIN_DIFF_$_pp"; eval "_pmn=\$PIN_MAN_$_pp"
++  [ "$(shasum -a 256 "$OUT/payload-ga-$_pp.redacted.txt" | awk '{print $1}')" = "$_prd" ] \
++    || { echo "FATAL: payload da parte $_pp mudou antes da agregacao"; exit 1; }
++  [ "$(shasum -a 256 "$OUT/diff-ga-$_pp.patch" | awk '{print $1}')" = "$_pdf" ] \
++    || { echo "FATAL: diff da parte $_pp mudou antes da agregacao"; exit 1; }
++  [ "$(shasum -a 256 "$OUT/paths-ga-$_pp.manifest.txt" | awk '{print $1}')" = "$_pmn" ] \
++    || { echo "FATAL: manifesto da parte $_pp mudou antes da agregacao"; exit 1; }
++done
++( cd "$OUT" && shasum -a 256 \
++    payload-ga-1.redacted.txt payload-ga-2.redacted.txt \
++    diff-ga-1.patch diff-ga-2.patch \
++    paths-ga-1.manifest.txt paths-ga-2.manifest.txt \
++    verdict-ga-1.txt verdict-ga-2.txt \
++    transcript-ga-1.log transcript-ga-2.log \
++    PROVENANCE-ga.md \
++    > MANIFEST-ga.sha256.tmp ) \
++  || { echo "FATAL: geracao do MANIFEST-ga falhou"; exit 1; }
++mv -f "$OUT/MANIFEST-ga.sha256.tmp" "$OUT/MANIFEST-ga.sha256" \
++  || { echo "FATAL: rename atomico do MANIFEST-ga falhou"; exit 1; }
++MREAL=$(grep -c . "$OUT/MANIFEST-ga.sha256" || true)
++[ "$MREAL" = "11" ] || { echo "FATAL: MANIFEST-ga com $MREAL linhas (esperado 11)"; exit 1; }
++( cd "$OUT" && shasum -a 256 -c MANIFEST-ga.sha256 --status ) \
++  || { echo "FATAL: MANIFEST-ga recem-gerado nao verifica"; exit 1; }
++echo "OVERALL: $( [ "$OVERALL" -eq 0 ] && echo GO-nas-2-partes || echo 'PARTE SEM GO - triagem' )"
++exit "$OVERALL"
+diff --git a/.claude/plans/PLAN-166/verdict-fields-v1.3.0-rc.3.TEMPLATE.md b/.claude/plans/PLAN-166/verdict-fields-v1.3.0-rc.3.TEMPLATE.md
+new file mode 100644
+index 0000000..508d6f0
+--- /dev/null
++++ b/.claude/plans/PLAN-166/verdict-fields-v1.3.0-rc.3.TEMPLATE.md
+@@ -0,0 +1,76 @@
++<!-- TEMPLATE - OWNER-RC3-CUT.sh preenche @@PARENT_SHA@@, @@GENERATED_AT@@,
++     @@DELTA_MANIFEST_SHA@@ e @@TRANSCRIPT_SHA@@; arquivo final em
++     .claude/plans/PLAN-166/verdict-fields-v1.3.0-rc.3.md (caminho canonico do
++     guard). Owner assina o final; .asc embutido em base64 no verdito. -->
++verdict: GO-WITH-CONDITIONS
++generated_at: @@GENERATED_AT@@
++ttl_hours: 24
++parent_sha: @@PARENT_SHA@@
++release_tag: v1.3.0-rc.3
++inputs_hash: 1c1d8f4404521de942451b7f7c25cba721eedaeb51d6a4f01d3dde20335ed10f
++inputs_hash_paths_manifest_sha: b3ab0242a6ff4e12fdf2fd90c47cbc23649ab07226340c8b7aacbb0f9cc093e0
++delta_allowlist:
++  - .claude/governance/pair-rail-verdict-v1.3.0-rc.3.md
++  - .claude/plans/PLAN-166/verdict-fields-v1.3.0-rc.3.md
++  - .claude/plans/PLAN-166/repass-rc3-cures/MANIFEST-cures.sha256
++  - .claude/plans/PLAN-166/repass-rc3-cures/CEREMONY-MANIFEST.sha256
++  - .claude/plans/PLAN-166/repass-rc3-cures/PROVENANCE-cures.md
++  - .claude/plans/PLAN-166/repass-rc3-cures/diff-cures-round1.patch
++  - .claude/plans/PLAN-166/repass-rc3-cures/diff-cures-round2.patch
++  - .claude/plans/PLAN-166/repass-rc3-cures/diff-cures-round3.patch
++  - .claude/plans/PLAN-166/repass-rc3-cures/diff-cures-round4.patch
++  - .claude/plans/PLAN-166/repass-rc3-cures/payload-cures-round1.redacted.txt
++  - .claude/plans/PLAN-166/repass-rc3-cures/payload-cures-round2.redacted.txt
++  - .claude/plans/PLAN-166/repass-rc3-cures/payload-cures-round3.redacted.txt
++  - .claude/plans/PLAN-166/repass-rc3-cures/payload-cures-round4.redacted.txt
++  - .claude/plans/PLAN-166/repass-rc3-cures/transcript-cures-round1.log
++  - .claude/plans/PLAN-166/repass-rc3-cures/transcript-cures-round2.log
++  - .claude/plans/PLAN-166/repass-rc3-cures/transcript-cures-round3.log
++  - .claude/plans/PLAN-166/repass-rc3-cures/transcript-cures-round4.log
++  - .claude/plans/PLAN-166/repass-rc3-cures/verdict-cures-round1.txt
++  - .claude/plans/PLAN-166/repass-rc3-cures/verdict-cures-round2.txt
++  - .claude/plans/PLAN-166/repass-rc3-cures/verdict-cures-round3.txt
++  - .claude/plans/PLAN-166/repass-rc3-cures/verdict-cures-round4.txt
++delta_manifest: .claude/plans/PLAN-166/repass-rc3-cures/MANIFEST-cures.sha256
++delta_manifest_sha256: @@DELTA_MANIFEST_SHA@@
++tool_versions:
++  codex_cli: 0.144.6
++  codex_target_triple: aarch64-apple-darwin
++  codex_payload_sha256: 80a3933d11a9d13ef806aa24f7bb8afc9169cfe4e9b09d6da6a92922cbde9cff
++  claude_code: claude-fable-5
++  python: 3.9.6
++transcript_hash: @@TRANSCRIPT_SHA@@
++findings: [ga-repass-NOGO-8-achados-curados-rc3-sentinel-RC3-approved, rail-curas-round4-GO, V1-upgrade-observer-sem-baseline-guard-EXCEPTION-W3, V2-pin-version-note-falsa-EXCEPTION-W3, V4-symlink-rejeitado-vira-hash-record-EXCEPTION-W3, V5-fms-link-paths-unset-allow-all-EXCEPTION-W3]
++
++## Derivacoes (parte do material assinado)
++
++- transcript_hash = sha256 da concatenacao, em ordem de round
++  (round1 -> round2 -> round3 -> round4), dos transcript-cures-roundN.log em
++  .claude/plans/PLAN-166/repass-rc3-cures/.
++- inputs_hash identico ao da rc.2: nenhuma superficie do trust-chain
++  (pair-rail-inputs-hash-manifest.txt) mudou nas curas — as curas tocam
++  CHANGELOG, verify-counts, checklist, npm-publish/release.yml e testes,
++  nenhum deles no manifesto do inputs_hash. O validator recomputa
++  server-side no step 15.
++- delta_manifest_sha256 pina MANIFEST-cures.sha256 (basenames).
++- Payloads raw (pre-redacao) nao commitados (precedente r1/r2/ga); pins
++  sha256 em repass-rc3-cures/PROVENANCE-cures.md.
++
++## Condicoes (o "WITH-CONDITIONS") - as 4 excecoes do trem, INALTERADAS
++
++V1/V2/V4/V5 do verdito assinado da rc.2 (verdict-fields-v1.3.0-rc.2.md,
++secao "Condicoes") seguem abertas nesta rc.3 pela MESMA rota (b)
++ratificada: curas STAGED no pack W3 (PLAN-169), que landa por cerimonia
++GPG imediatamente apos o GA. Nenhuma excecao NOVA entra neste corte: os
++8 achados do re-pass NO-GO da rc.2 foram CURADOS (nao
++excepcionados) — curas aplicadas pelo sentinel RC3-approved.md e
++revisadas pelo rail de curas ate GO.
++
++## Ratificacao approx/collect-errors
++
++Ratificada no material assinado da rc.2 (F.14 / W0.3); segue valida.
++
++## Excecao herdada (registro)
++
++r6-P2 smoke-install.yml:206 (2o fator nao-causal) - excecao ja
++ratificada do trem; cura canonica no pack W3 (W3.2).
+diff --git a/.claude/plans/PLAN-166/pair-rail-verdict-v1.3.0-rc.3.TEMPLATE.md b/.claude/plans/PLAN-166/pair-rail-verdict-v1.3.0-rc.3.TEMPLATE.md
+new file mode 100644
+index 0000000..7fdd5b7
+--- /dev/null
++++ b/.claude/plans/PLAN-166/pair-rail-verdict-v1.3.0-rc.3.TEMPLATE.md
+@@ -0,0 +1,99 @@
++# Pair-Rail Verdict - v1.3.0-rc.3
++
++```yaml
++verdict: GO-WITH-CONDITIONS
++generated_at: @@GENERATED_AT@@
++ttl_hours: 24
++parent_sha: @@PARENT_SHA@@
++release_tag: v1.3.0-rc.3
++inputs_hash: 1c1d8f4404521de942451b7f7c25cba721eedaeb51d6a4f01d3dde20335ed10f
++inputs_hash_paths_manifest_sha: b3ab0242a6ff4e12fdf2fd90c47cbc23649ab07226340c8b7aacbb0f9cc093e0
++delta_allowlist:
++  - .claude/governance/pair-rail-verdict-v1.3.0-rc.3.md
++  - .claude/plans/PLAN-166/verdict-fields-v1.3.0-rc.3.md
++  - .claude/plans/PLAN-166/repass-rc3-cures/MANIFEST-cures.sha256
++  - .claude/plans/PLAN-166/repass-rc3-cures/CEREMONY-MANIFEST.sha256
++  - .claude/plans/PLAN-166/repass-rc3-cures/PROVENANCE-cures.md
++  - .claude/plans/PLAN-166/repass-rc3-cures/diff-cures-round1.patch
++  - .claude/plans/PLAN-166/repass-rc3-cures/diff-cures-round2.patch
++  - .claude/plans/PLAN-166/repass-rc3-cures/diff-cures-round3.patch
++  - .claude/plans/PLAN-166/repass-rc3-cures/diff-cures-round4.patch
++  - .claude/plans/PLAN-166/repass-rc3-cures/payload-cures-round1.redacted.txt
++  - .claude/plans/PLAN-166/repass-rc3-cures/payload-cures-round2.redacted.txt
++  - .claude/plans/PLAN-166/repass-rc3-cures/payload-cures-round3.redacted.txt
++  - .claude/plans/PLAN-166/repass-rc3-cures/payload-cures-round4.redacted.txt
++  - .claude/plans/PLAN-166/repass-rc3-cures/transcript-cures-round1.log
++  - .claude/plans/PLAN-166/repass-rc3-cures/transcript-cures-round2.log
++  - .claude/plans/PLAN-166/repass-rc3-cures/transcript-cures-round3.log
++  - .claude/plans/PLAN-166/repass-rc3-cures/transcript-cures-round4.log
++  - .claude/plans/PLAN-166/repass-rc3-cures/verdict-cures-round1.txt
++  - .claude/plans/PLAN-166/repass-rc3-cures/verdict-cures-round2.txt
++  - .claude/plans/PLAN-166/repass-rc3-cures/verdict-cures-round3.txt
++  - .claude/plans/PLAN-166/repass-rc3-cures/verdict-cures-round4.txt
++delta_manifest: .claude/plans/PLAN-166/repass-rc3-cures/MANIFEST-cures.sha256
++delta_manifest_sha256: @@DELTA_MANIFEST_SHA@@
++tool_versions:
++  codex_cli: 0.144.6
++  codex_target_triple: aarch64-apple-darwin
++  codex_payload_sha256: 80a3933d11a9d13ef806aa24f7bb8afc9169cfe4e9b09d6da6a92922cbde9cff
++  claude_code: claude-fable-5
++  python: 3.9.6
++transcript_hash: @@TRANSCRIPT_SHA@@
++findings: [ga-repass-NOGO-8-achados-curados-rc3-sentinel-RC3-approved, rail-curas-round4-GO, V1-upgrade-observer-sem-baseline-guard-EXCEPTION-W3, V2-pin-version-note-falsa-EXCEPTION-W3, V4-symlink-rejeitado-vira-hash-record-EXCEPTION-W3, V5-fms-link-paths-unset-allow-all-EXCEPTION-W3]
++gpg_signature: base64:@@SIG_B64@@
++```
++
++## Signature verification recipe
++
++base64 -d do valor apos "base64:" -> .asc destacado; verificar contra
++.claude/plans/PLAN-166/verdict-fields-v1.3.0-rc.3.md (commitado junto).
++Signer CFCFACF00335DC74.
++
++<!-- VERDICT: GO-WITH-CONDITIONS -->
++## Review record - rail das curas rc.3 (advisory input)
++
++- Contexto: o 1o re-pass do hold ADR-103 (sobre a rc.2, 10/08) terminou
++  NO-GO nas 2 partes com 8 achados reais (triagem em
++  repass-ga-rc2-NOGO/TRIAGE-ga-repass.md). As curas foram autoradas em
++  worktree detached da rc.2 e revisadas pelo rail: 4 round(s)
++  (round1 -> round2 -> round3 -> round4), verdito final GO. Evidencia sob
++  MANIFEST-cures.sha256 (pinado acima).
++- Reviewer: codex-cli 0.144.6 (codex exec --sandbox read-only), prompt
++  + diff atraves do redactor ADR-114 como UM pipeline; pin ADR-182.
++- Historia de review do trem: 4 rodadas pre-rc.1 + 4 rodadas multi-part
++  rc.1->rc.2 + re-pass NO-GO (8 achados curados AQUI) + rail das curas.
++- O hold ADR-103 REINICIA no publishedAt da rc.3; o re-pass do hold
++  roda de novo, sobre a arvore curada, antes do GA (OWNER-GA-CUT.sh).
++
++## Derivacoes (parte do material assinado)
++
++- transcript_hash = sha256 da concatenacao, em ordem de round
++  (round1 -> round2 -> round3 -> round4), dos transcript-cures-roundN.log em
++  .claude/plans/PLAN-166/repass-rc3-cures/.
++- inputs_hash identico ao da rc.2: nenhuma superficie do trust-chain
++  (pair-rail-inputs-hash-manifest.txt) mudou nas curas — as curas tocam
++  CHANGELOG, verify-counts, checklist, npm-publish/release.yml e testes,
++  nenhum deles no manifesto do inputs_hash. O validator recomputa
++  server-side no step 15.
++- delta_manifest_sha256 pina MANIFEST-cures.sha256 (basenames).
++- Payloads raw (pre-redacao) nao commitados (precedente r1/r2/ga); pins
++  sha256 em repass-rc3-cures/PROVENANCE-cures.md.
++
++## Condicoes (o "WITH-CONDITIONS") - as 4 excecoes do trem, INALTERADAS
++
++V1/V2/V4/V5 do verdito assinado da rc.2 (verdict-fields-v1.3.0-rc.2.md,
++secao "Condicoes") seguem abertas nesta rc.3 pela MESMA rota (b)
++ratificada: curas STAGED no pack W3 (PLAN-169), que landa por cerimonia
++GPG imediatamente apos o GA. Nenhuma excecao NOVA entra neste corte: os
++8 achados do re-pass NO-GO da rc.2 foram CURADOS (nao
++excepcionados) — curas aplicadas pelo sentinel RC3-approved.md e
++revisadas pelo rail de curas ate GO.
++
++## Ratificacao approx/collect-errors
++
++Ratificada no material assinado da rc.2 (F.14 / W0.3); segue valida.
++
++## Excecao herdada (registro)
++
++r6-P2 smoke-install.yml:206 (2o fator nao-causal) - excecao ja
++ratificada do trem; cura canonica no pack W3 (W3.2).
+diff --git a/.claude/plans/PLAN-166/verdict-fields-v1.3.0.TEMPLATE.md b/.claude/plans/PLAN-166/verdict-fields-v1.3.0.TEMPLATE.md
+new file mode 100644
+index 0000000..e100ce6
+--- /dev/null
++++ b/.claude/plans/PLAN-166/verdict-fields-v1.3.0.TEMPLATE.md
+@@ -0,0 +1,71 @@
++<!-- TEMPLATE - OWNER-GA-CUT.sh preenche @@PARENT_SHA@@, @@GENERATED_AT@@,
++     @@DELTA_MANIFEST_SHA@@ e @@TRANSCRIPT_SHA@@; arquivo final em
++     .claude/plans/PLAN-166/verdict-fields-v1.3.0.md (caminho canonico do
++     guard). Owner assina o final; .asc embutido em base64 no verdito. -->
++verdict: GO-WITH-CONDITIONS
++generated_at: @@GENERATED_AT@@
++ttl_hours: 24
++parent_sha: @@PARENT_SHA@@
++release_tag: v1.3.0
++inputs_hash: 1c1d8f4404521de942451b7f7c25cba721eedaeb51d6a4f01d3dde20335ed10f
++inputs_hash_paths_manifest_sha: b3ab0242a6ff4e12fdf2fd90c47cbc23649ab07226340c8b7aacbb0f9cc093e0
++delta_allowlist:
++  - .claude/governance/pair-rail-verdict-v1.3.0.md
++  - .claude/plans/PLAN-166/verdict-fields-v1.3.0.md
++  - .claude/plans/PLAN-166/repass-ga/MANIFEST-ga.sha256
++  - .claude/plans/PLAN-166/repass-ga/PROVENANCE-ga.md
++  - .claude/plans/PLAN-166/repass-ga/payload-ga-1.redacted.txt
++  - .claude/plans/PLAN-166/repass-ga/payload-ga-2.redacted.txt
++  - .claude/plans/PLAN-166/repass-ga/diff-ga-1.patch
++  - .claude/plans/PLAN-166/repass-ga/diff-ga-2.patch
++  - .claude/plans/PLAN-166/repass-ga/paths-ga-1.manifest.txt
++  - .claude/plans/PLAN-166/repass-ga/paths-ga-2.manifest.txt
++  - .claude/plans/PLAN-166/repass-ga/verdict-ga-1.txt
++  - .claude/plans/PLAN-166/repass-ga/verdict-ga-2.txt
++  - .claude/plans/PLAN-166/repass-ga/transcript-ga-1.log
++  - .claude/plans/PLAN-166/repass-ga/transcript-ga-2.log
++delta_manifest: .claude/plans/PLAN-166/repass-ga/MANIFEST-ga.sha256
++delta_manifest_sha256: @@DELTA_MANIFEST_SHA@@
++tool_versions:
++  codex_cli: 0.144.6
++  codex_target_triple: aarch64-apple-darwin
++  codex_payload_sha256: 80a3933d11a9d13ef806aa24f7bb8afc9169cfe4e9b09d6da6a92922cbde9cff
++  claude_code: claude-fable-5
++  python: 3.9.6
++transcript_hash: @@TRANSCRIPT_SHA@@
++findings: [hold-repass-ga-2-partes-verditos-em-verdict-ga-N-txt, V1-upgrade-observer-sem-baseline-guard-EXCEPTION-W3, V2-pin-version-note-falsa-EXCEPTION-W3, V4-symlink-rejeitado-vira-hash-record-EXCEPTION-W3, V5-fms-link-paths-unset-allow-all-EXCEPTION-W3]
++
++## Derivacoes (parte do material assinado)
++
++- transcript_hash = sha256 da concatenacao transcript-ga-1.log +
++  transcript-ga-2.log (hold ADR-103 em 2 partes, worktree da tag rc.3).
++- inputs_hash identico ao das rc.2/rc.3 por construcao: nenhuma
++  superficie do trust-chain mudou nas curas da rc.3, main CONGELOU do
++  corte ao GA (o parent_sha e o unico delta legitimo = artefatos deste
++  verdito), e o validator recomputa server-side.
++- delta_manifest_sha256 pina MANIFEST-ga.sha256 (basenames).
++- payload-ga.raw.txt nao commitado (precedente r1/r2); pin em
++  repass-ga/PROVENANCE-ga.md.
++
++## Condicoes (o "WITH-CONDITIONS") - carregadas do trem, INALTERADAS
++
++As 4 excecoes nomeadas de produto V1/V2/V4/V5 do verdito assinado da
++rc.2 (verdict-fields-v1.3.0-rc.2.md, secao "Condicoes"), re-registradas
++no verdito da rc.3, seguem abertas NO GA por decisao de rota (b): main
++congelado do corte ao GA, curas STAGED no pack W3 (PLAN-169), que landa
++por cerimonia GPG imediatamente apos este GA. Os 8 achados do PRIMEIRO
++re-pass do hold (NO-GO sobre a rc.2, 10/08) NAO sao excecoes: foram
++CURADOS na rc.3 (sentinel RC3-approved.md; rail das curas GO). O re-pass do hold foi instruido a reportar se qualquer
++uma fosse PIOR que o avaliado ou alcancavel no caminho mainline - o
++verditos do rail estao em repass-ga/verdict-ga-{1,2}.txt, sob o manifesto
++pinado acima.
++
++## Ratificacao approx/collect-errors
++
++Ratificada no material assinado da rc.2 (F.14 / W0.3); segue valida
++para o trem - nada mudou entre os dois verditos (main congelado).
++
++## Excecao herdada (registro)
++
++r6-P2 smoke-install.yml:206 (2o fator nao-causal) - excecao ja
++ratificada do trem; cura canonica no pack W3 (W3.2).
+diff --git a/.claude/plans/PLAN-166/pair-rail-verdict-v1.3.0.TEMPLATE.md b/.claude/plans/PLAN-166/pair-rail-verdict-v1.3.0.TEMPLATE.md
+new file mode 100644
+index 0000000..65d6c8d
+--- /dev/null
++++ b/.claude/plans/PLAN-166/pair-rail-verdict-v1.3.0.TEMPLATE.md
+@@ -0,0 +1,69 @@
++# Pair-Rail Verdict - v1.3.0 (GA)
++
++```yaml
++verdict: GO-WITH-CONDITIONS
++generated_at: @@GENERATED_AT@@
++ttl_hours: 24
++parent_sha: @@PARENT_SHA@@
++release_tag: v1.3.0
++inputs_hash: 1c1d8f4404521de942451b7f7c25cba721eedaeb51d6a4f01d3dde20335ed10f
++inputs_hash_paths_manifest_sha: b3ab0242a6ff4e12fdf2fd90c47cbc23649ab07226340c8b7aacbb0f9cc093e0
++delta_allowlist:
++  - .claude/governance/pair-rail-verdict-v1.3.0.md
++  - .claude/plans/PLAN-166/verdict-fields-v1.3.0.md
++  - .claude/plans/PLAN-166/repass-ga/MANIFEST-ga.sha256
++  - .claude/plans/PLAN-166/repass-ga/PROVENANCE-ga.md
++  - .claude/plans/PLAN-166/repass-ga/payload-ga-1.redacted.txt
++  - .claude/plans/PLAN-166/repass-ga/payload-ga-2.redacted.txt
++  - .claude/plans/PLAN-166/repass-ga/diff-ga-1.patch
++  - .claude/plans/PLAN-166/repass-ga/diff-ga-2.patch
++  - .claude/plans/PLAN-166/repass-ga/paths-ga-1.manifest.txt
++  - .claude/plans/PLAN-166/repass-ga/paths-ga-2.manifest.txt
++  - .claude/plans/PLAN-166/repass-ga/verdict-ga-1.txt
++  - .claude/plans/PLAN-166/repass-ga/verdict-ga-2.txt
++  - .claude/plans/PLAN-166/repass-ga/transcript-ga-1.log
++  - .claude/plans/PLAN-166/repass-ga/transcript-ga-2.log
++delta_manifest: .claude/plans/PLAN-166/repass-ga/MANIFEST-ga.sha256
++delta_manifest_sha256: @@DELTA_MANIFEST_SHA@@
++tool_versions:
++  codex_cli: 0.144.6
++  codex_target_triple: aarch64-apple-darwin
++  codex_payload_sha256: 80a3933d11a9d13ef806aa24f7bb8afc9169cfe4e9b09d6da6a92922cbde9cff
++  claude_code: claude-fable-5
++  python: 3.9.6
++transcript_hash: @@TRANSCRIPT_SHA@@
++findings: [hold-repass-ga-2-partes-verditos-em-verdict-ga-N-txt, V1-upgrade-observer-sem-baseline-guard-EXCEPTION-W3, V2-pin-version-note-falsa-EXCEPTION-W3, V4-symlink-rejeitado-vira-hash-record-EXCEPTION-W3, V5-fms-link-paths-unset-allow-all-EXCEPTION-W3]
++gpg_signature: base64:@@SIG_B64@@
++```
++
++## Signature verification recipe
++
++base64 -d do valor apos "base64:" -> .asc destacado; verificar contra
++.claude/plans/PLAN-166/verdict-fields-v1.3.0.md (commitado junto).
++Signer CFCFACF00335DC74.
++
++<!-- VERDICT: GO-WITH-CONDITIONS -->
++## Review record - re-pass do hold ADR-103 (advisory input)
++
++- Reviewer: codex-cli 0.144.6 (codex exec --sandbox read-only), prompt
++  + diff atraves do redactor ADR-114 como UM pipeline; pin ADR-182
++  byte-exato; worktree detached da TAG v1.3.0-rc.3.
++- Escopo: release mechanics, diff v1.2.0..v1.3.0-rc.3 (o trem inteiro:
++  driver, tag guard, workflows de release/publish, superficies de
++  versao, docs de release). Runner:
++  repass-ga/run-ga-repass.sh (2 partes; escopo expandido com os
++  helpers executados _release_bump_sites.py, await_release_gate.py e
++  validate-pair-rail-verdict.py — achado P1-2 do pair-rail S300);
++  verditos em repass-ga/verdict-ga-{1,2}.txt.
++- Historia de review do trem (nao re-litigada, instruida no prompt):
++  4 rodadas pre-rc.1 (18 achados, 17 curados, 1 refutado com citacao)
++  + 4 rodadas multi-part rc.1->rc.2 (todas as curas landadas) + 1o
++  re-pass do hold NO-GO sobre a rc.2 (8 achados reais, TODOS curados na
++  rc.3; rail das curas GO em repass-rc3-cures/) + este re-pass do hold
++  sobre a rc.3.
++- Condicoes: as 4 excecoes nomeadas V1/V2/V4/V5 (por extenso no
++  verdict-fields assinado da rc.2) seguem abertas por rota (b);
++  curas STAGED no pack W3, que landa imediatamente pos-GA.
++- Main CONGELADO do corte da rc.3 ate este GA: o unico delta e o proprio
++  verdito + evidencia do hold (fechado pelo delta_allowlist acima e
++  verificado pelo guard local + server-side).

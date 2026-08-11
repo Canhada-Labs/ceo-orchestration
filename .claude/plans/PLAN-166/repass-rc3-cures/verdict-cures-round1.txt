@@ -1,0 +1,33 @@
+REJECT
+
+1. **P1 — `.github/workflows/npm-publish.yml:444-446`**  
+   `PEELED` and `PLAIN` come from separate remote snapshots. If an annotated tag is moved between those calls, `PEELED` retains the old run’s SHA, `LIVE` prefers it, and the obsolete run passes while the live tag points elsewhere.  
+   **Minimal fix:** obtain plain and peeled refs with one `git ls-remote` invocation, parse both from that single response, then publish immediately.
+
+2. **P1 — `.github/workflows/npm-publish.yml:440,457-458`**  
+   The guard runs even when the registry check found the version already published. A moved/deleted tag or transient lookup failure therefore turns the documented idempotent no-op into a red job despite `npm publish` being skipped.  
+   **Minimal fix:** give the guard the same `if: steps.already_published.outputs.published != 'true'` condition as the publish step, and pin that condition in tests.
+
+3. **P1 — `.github/workflows/release.yml:23`; `.github/workflows/npm-publish.yml:108-111,134`**  
+   `release-gate` may now legitimately run for 35 minutes, while its observer blocks after 30 minutes. A gate completing at minute 31–35 goes green while npm’s waiter goes red, making GA promotion require an order-dependent rerun; runner-start skew widens the failure window.  
+   **Minimal fix:** raise the polling deadline and its job timeout above the producer’s 35-minute ceiling with explicit margin, and add a relational test asserting observer deadline > producer timeout.
+
+4. **P1 — `.claude/scripts/local/verify-counts.sh:841-845,860-864`**  
+   The claimed header-scoped matcher searches the entire CHANGELOG and records exactly one match because it uses `.search()`. Two preamble claims still produce census count one, and a removed/rephrased header can be masked by an exact-shaped claim later in the file. This breaks the zero-tolerance exact-site census invariant.  
+   **Minimal fix:** isolate the preamble before the first `## [version]` heading, enumerate matches with `finditer`, require exactly one, and add duplicate-header/body-only negative tests.
+
+5. **P1 — `.claude/scripts/tests/test_release_workflow_asserts.py:1205-1237`**  
+   Removing the complete guard block also removes `_MARKER_RC3`; because no staged-rc3 mirror is tracked, all five security tests then skip. If a staged mirror later exists, CI can test that stale copy instead of the broken live workflow.  
+   **Minimal fix:** after landing, always test the existing live workflow and fail if its marker or guard is absent; staged selection must be an explicit pre-landing mode, never an automatic fallback.
+
+6. **P1 — `CHANGELOG.md:132,144`**  
+   The adopter-facing cure is inaccurate. `_ownership_verdict()` consumes nine inputs; the tenth `fault` dimension is deliberately caller-side execution state. Also, the marker is not rewritten on every upgrade: skips, retargeted symlinks, unowned pre-existing markers, missing pinned-source markers, and failed backups preserve or omit it, with readers falling back to root `VERSION`.  
+   **Minimal fix:** describe the nine-input decision function plus caller-side fault axis, and qualify the marker as refreshed on successful framework-owned, unskipped upgrades and trusted marker-first only when delivery-recorded and integrity-valid.
+
+7. **P2 — `.claude/scripts/tests/test_release_workflow_asserts.py:1184-1186`**  
+   The new class is defined after `unittest.main()`. Direct execution of the test file exits before discovering any rc.3 tests, although pytest-based CI does collect them.  
+   **Minimal fix:** move the `if __name__ == "__main__": unittest.main()` block to EOF.
+
+The remaining cures are correctly shaped: live counts are 166/27/190/68 excluding `__init__.py`, release/workflow counts are 31/22, the checklist marker site is real, RC publication remains excluded, and stable deleted/moved tags fail closed outside the split-snapshot race. YAML parsing, Bash syntax, Python 3.9 AST parsing, and `git diff --check` passed; full suites could not create temporary files in the read-only review sandbox.
+
+VERDICT: NO-GO — Six P1 defects must be fixed before cutting rc.3.

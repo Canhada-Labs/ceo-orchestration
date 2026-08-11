@@ -1,0 +1,7 @@
+No findings.
+
+The cures are substantive: counts match disk, CHANGELOG scanning is preamble-scoped, upgrade semantics are documented, workflow/checklist drift is removed, and the tag guard correctly handles deleted, lightweight, and annotated tags while preserving published-version no-op reruns. Guard ordering is registry check → liveness assertion → publish, with RC exclusion unchanged. `actionlint`, stdlib-only, contamination, count-claim, AGENTS freshness, syntax, and diff checks passed. The read-only sandbox prevented temp-writing unit tests, but direct YAML parsing and the actual annotated rc.2 tag peel validated the critical paths. Deferred items remain non-blocking P2s and are not worsened.
+
+The cure set closes every in-scope rc.3 finding without introducing a release blocker.
+
+VERDICT: GO

@@ -1,0 +1,9 @@
+P1 — `.github/workflows/npm-publish.yml:108-114,431-486`; `.github/workflows/release.yml:17-23`; `.claude/plans/PLAN-166/architect/round-1/approved.md:33-39,105-116`; `.claude/plans/PLAN-169/W3-approved-draft.md:1-15`
+
+Concrete failure scenario: the detached-worktree changes land under the prior PLAN-166 sentinel, but that signed authorization pins the await timeout at 35 minutes and does not authorize the new tag-liveness guard or release-gate timeout change. The only later scope covering both workflows is explicitly an unsigned, post-GA draft. Landing now would bypass the framework’s auditability contract; `release.yml` additionally requires the per-ceremony kernel override.
+
+Minimal fix: before landing, create and Owner-sign an rc.3 sentinel anchored to the rc.2 commit and covering the exact workflow diff; apply `release.yml` using a one-shot `CEO_KERNEL_OVERRIDE` ceremony with its audit evidence.
+
+No technical cure defect found: the count census is exact, CHANGELOG body history remains excluded, all adopter-visible semantics are covered, actionlint/YAML parsing passes, RC exclusion and ordering remain intact, and the guard passes annotated/lightweight tags while blocking deleted/moved tags. The two deferred items do not block rc.3.
+
+VERDICT: GO-WITH-CONDITIONS — The cure set is technically sound, but the guarded workflow edits require fresh Owner authorization before landing.

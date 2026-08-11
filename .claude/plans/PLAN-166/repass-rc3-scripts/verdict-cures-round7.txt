@@ -1,0 +1,19 @@
+P0 — `.claude/plans/PLAN-166/OWNER-RC3-CUT.sh:117`  
+Failure: `_ev_want` already contains `PROVENANCE-cures.md`, but `_cd_want` adds it again. The expected list therefore has a duplicate that the physical directory cannot have, so every normal run aborts at G0b before signing.  
+Minimal fix: remove the second `echo "PROVENANCE-cures.md"` from `_cd_want`.
+
+P1 — `.claude/plans/PLAN-166/OWNER-RC3-CUT.sh:266`  
+Failure: `cp -p` overwrites each live cure target in place. Interruption or I/O failure can leave a truncated third state; the next run’s tri-state check then rejects it, contradicting the promised pre-commit-1 resumability.  
+Minimal fix: copy to a same-directory temporary file, verify its pack hash, atomically rename it, and recover or remove that known temporary on rerun.
+
+P1 — `.claude/plans/PLAN-166/repass-ga/run-ga-repass.sh:44,59`  
+Failure: part 1 omits changed release surfaces `.claude/.framework-version`, `scripts/install.sh`, and `scripts/_framework_manifest_set.sh`. The latter two contain the install path and V5 behavior the prompt explicitly tells the reviewer to assess. Codex can therefore return GO without seeing those changes, while the signed GA record claims coverage of version/adopter surfaces.  
+Minimal fix: add all three paths to the review manifest and regenerate the GA evidence.
+
+P1 — `.claude/plans/PLAN-166/repass-ga/run-ga-repass.sh:157`  
+Failure: the runner uses `set -uo pipefail`, but the scope manifest, `git diff`, and raw-payload generation are not checked for nonzero status. A failing `git diff` that emits at least 50 lines can proceed as a truncated yet internally self-consistent payload; the RAW/RED comparisons do not detect the omitted tail.  
+Minimal fix: fail explicitly on each evidence-producing command, or enable `-e` while locally disabling it only around the Codex invocation whose status is intentionally captured.
+
+The rc.3 cut is deterministically blocked, and the GA evidence path remains incomplete.
+
+VERDICT: NO-GO

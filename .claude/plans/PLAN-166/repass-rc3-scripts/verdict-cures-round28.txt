@@ -1,0 +1,5 @@
+P0 — `.claude/plans/PLAN-166/OWNER-RC3-CUT.sh:75` — On a normal fresh cut, `gh release view` returns nonzero because the RC3 release does not exist. Since the assignment runs under `set -e`, Bash exits immediately; `_grv_rc=$?` and the intended NOT-FOUND classification are unreachable. No sentinel, pack application, or commit occurs. Minimal fix: execute the probe inside an `if` condition or temporarily disable `errexit`, capture its status, then restore `set -e`.
+
+The remaining supplied allowlists, manifests, templates, GA rc.3 bindings, and pre-commit resume paths showed no independent cut-blocking mismatch.
+
+VERDICT: NO-GO

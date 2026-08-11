@@ -1,0 +1,16 @@
+VERSION
+npm/README.md
+npm/package.json
+pyproject.toml
+CHANGELOG.md
+INSTALL.md
+docs/ARCHITECTURE.md
+README.md
+README.pt-BR.md
+SECURITY.md
+VERSIONING.md
+SBOM.md
+.github/release-checklist.md
+.claude-plugin/marketplace.json
+.claude-plugin/plugin.json
+scripts/upgrade.sh

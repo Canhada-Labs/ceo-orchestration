@@ -1,0 +1,9 @@
+P1 — `.claude/plans/PLAN-166/OWNER-RC3-CUT.sh:174,202` — Script-review selection derives the final verdict from the highest round number, but binds the current ceremony manifest only to the last unnumbered `CEREMONY-MANIFEST-SHA256-AT-REVIEW` provenance line. A stale higher-numbered GO can therefore be combined with a newer lower-numbered NO-GO or interrupted review; all manifests, tuple checks, and the current-manifest comparison still pass. Minimal fix: record and verify the ceremony-manifest hash for `SFINAL_N` specifically, require `SFINAL_N >= 5`, and enforce exact manifest equality with the expected round tuples plus provenance.
+
+P1 — `.claude/plans/PLAN-166/OWNER-GA-CUT.sh:566` — `MONITOR_ONLY` is not read-only: rerunning the script after a successfully completed GA unconditionally converts the public release back to draft. An interruption or API failure afterward leaves an already-completed GA hidden. Minimal fix: add a receipt-validated terminal fast path for an already-public stable release and never transition that state back to draft.
+
+P1 — `.claude/plans/PLAN-166/OWNER-GA-CUT.sh:72` — G0 checks for an existing remote GA tag but not an existing GitHub Release. A release can survive deletion of its tag; the script then proceeds, and the idempotent release workflow reuses that stale release. After npm succeeds, the ceremony can undraft stale title/body metadata because its final check validates only draft/prerelease flags. Minimal fix: when the GA tag is absent, require `gh release view "$TAG"` to return a positively classified 404 before any commit or tag mutation.
+
+These stale-evidence and remote-state paths must be closed before the rc.3 cut.
+
+VERDICT: NO-GO

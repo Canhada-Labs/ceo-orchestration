@@ -1,0 +1,11 @@
+REJECT
+
+- P1 — `.claude/plans/PLAN-166/repass-ga/run-ga-repass.sh:171` — A complete NO-GO run produces a valid manifest with `RUNNER-OVERALL: rc=1`. On an accidental rerun, `validate_ga_evidence` rejects it, invokes this runner, and this cleanup loop deletes all negative evidence before another nondeterministic review. A later GO can therefore erase and supersede the NO-GO without cures or triage. Minimal fix: detect a complete, checksum-valid negative attempt before cleanup and abort persistently; require explicit archival/triage before another attempt.
+
+- P1 — `.claude/plans/PLAN-166/OWNER-GA-CUT.sh:562` — Failure of `gh release view` becomes an empty string, which skips the drafting branch exactly as though the release were already safe. Since `release.yml` has just published the GA release, a transient API failure followed by Ctrl-C, power loss, or a long npm wait leaves a public GA without confirmed npm publication. Minimal fix: unconditionally draft the release, verify `isDraft=true`, and install an EXIT/INT draft safeguard until final publication.
+
+- P1 — `.claude/plans/PLAN-166/OWNER-GA-CUT.sh:668` — The script undrafts the GA before checking that the RC tag, GA tag object, and `origin/main` remain coherent. If the GA tag moves after the npm liveness check, or main rolls back during the npm wait, the release becomes public and only then the later checks abort, leaving the inconsistent GA public. Minimal fix: perform all remote-ref/main checks before undrafting, verify the resulting public state, and automatically re-draft if any post-undraft recheck fails.
+
+The RC3 allowlist and template/guard path are coherent, but these three GA fail-closed defects must be cured before the rc.3 ceremony commits these scripts.
+
+VERDICT: NO-GO

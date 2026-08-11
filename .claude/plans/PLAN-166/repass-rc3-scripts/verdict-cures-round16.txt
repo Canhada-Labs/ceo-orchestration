@@ -1,0 +1,11 @@
+P1 — `.claude/plans/PLAN-166/OWNER-RC3-CUT.sh:140,245`  
+The reviewed provenance binds only the cure pack’s manifest, baseline, modes, and anchor. Ceremony scripts, templates, sentinel draft, and morning instructions are accepted solely by pathname. After this review, a same-path edit—such as reverting `OWNER-GA-CUT.sh` to rc.2 or altering a verdict template—passes both G0 checks and is committed as reviewed content.  
+Minimal fix: add a closed SHA-256 manifest for every reviewed ceremony file, pin that manifest in the manifest-verified provenance, and verify file hashes both at G0 and immediately before staging.
+
+P1 — `.claude/plans/PLAN-166/repass-ga/run-ga-repass.sh:145`  
+Invalid existing GA evidence triggers regeneration, but the runner redirects to fixed output paths before rejecting symlinks or other non-regular entries. An untracked `repass-ga/PROVENANCE-ga.md` symlink to `CHANGELOG.md`, for example, is pathname-allowlisted by GA G0; validation returns false, then this redirection truncates `CHANGELOG.md`. The run eventually stops, but the supposedly resumable pre-commit state is already corrupted.  
+Minimal fix: before any evidence write, enumerate every fixed GA output and abort on symlinks or non-regular existing entries; only regular expected outputs may be removed and regenerated.
+
+Both findings must be cured and re-reviewed before the rc.3 ceremony freezes these scripts onto main.
+
+VERDICT: NO-GO

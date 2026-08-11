@@ -1,0 +1,21 @@
+1. **P1 — `.claude/plans/PLAN-166/verdict-fields-v1.3.0-rc.3.TEMPLATE.md:19`**  
+   The template closes the evidence set at round 11, but this ceremony review is round 12 and writes into the same `repass-rc3-cures/roundN` family. Once round 12 enters `MANIFEST-cures.sha256`, the delta guard rejects the missing round-12 diff/payload/transcript/verdict; without updating the manifest, G0 rejects it first. The signed transcript derivation at line 75 is stale too. Minimal fix: regenerate both rc.3 templates after the final review round, including every final-round artifact and updated narrative/hash ordering.
+
+2. **P1 — `.claude/plans/PLAN-166/OWNER-GA-CUT.sh:299`**  
+   An interruption while writing `$VF.tmp`, or similarly `$VD.tmp` at line 313, leaves an orphan. On restart, G0’s allowlist at line 155 recognizes only `$VF`, `$VF.asc`, and `$VD`, so the advertised GA resume aborts permanently on its own temporary file. Minimal fix: recognize non-symlink `$VF.tmp`/`$VD.tmp` during G0 and remove them safely; also include them in the regeneration cleanup at line 293.
+
+3. **P1 — `.claude/plans/PLAN-166/OWNER-RC3-CUT.sh:486`; `.claude/plans/PLAN-166/OWNER-GA-CUT.sh:424`**  
+   Both normal paths push immediately after `SIM`. If the prompt remains open until the verdict expires, or `origin/main` moves meanwhile, the stale tag is still pushed. The server may block publication, but the remote tag already exists and the RC script cannot rerun. GA’s resume checks also occur before its prompt, leaving the same race. Minimal fix: after `SIM` and immediately before every tag push, rerun a shared pre-push check covering signature, tag/HEAD/origin equality, clean tree, delta guard, verdict TTL margin, and validate-job success.
+
+4. **P1 — `.claude/plans/PLAN-166/OWNER-GA-CUT.sh:489`**  
+   `isPrerelease=false` also holds for a draft stable release. The script itself instructs the Owner to draft the GA after npm failure; on a later monitoring run where npm succeeds, line 489 accepts that still-draft release and announces “GA PUBLICADO” while it remains invisible. The analogous RC checks at `OWNER-RC3-CUT.sh:521` and GA hold check at `OWNER-GA-CUT.sh:76` also ignore `isDraft`. Minimal fix: query both fields and require `isDraft=false`; after successful npm recovery, explicitly undraft or fail with a recovery instruction.
+
+5. **P1 — `.claude/plans/PLAN-166/OWNER-RC3-CUT.sh:64`**  
+   G0 tests only the local tag namespace. A remote `v1.3.0-rc.3` pointing to an object not fetched by `git fetch origin main` remains invisible, so the script commits and pushes main before the tag push is rejected. Recovery then conflicts with the deliberate post-commit G0 refusal. Minimal fix: fail closed at G0 on an exact `git ls-remote` check for both plain and peeled remote tag refs, distinguishing “absent” from transport failure.
+
+6. **P1 — `.claude/plans/PLAN-166/OWNER-RC3-CUT.sh:178`**  
+   The staging-time `check_pack` rechecks live content hashes but checks modes only on pack files at line 190. A `chmod` of a live canonical file after apply—particularly `verify-counts.sh` from 755 to 644—passes the “complete” re-verification and is recorded by `git add`, even though the mode differs from signed `MODES.txt`. Minimal fix: compare every live target’s full mode against its unique `MODES.txt` entry inside `check_pack`, including the staging-time invocation.
+
+These P1s break guard coherence, resumability, or the last fail-closed boundary before publication and must be cured before the ceremony.
+
+VERDICT: NO-GO

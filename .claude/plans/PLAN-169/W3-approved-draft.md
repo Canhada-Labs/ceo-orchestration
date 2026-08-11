@@ -95,7 +95,14 @@ RELEASE.md
    roda no G4 da simulação.
 8. **release.yml (alvo NOVO no pack):** P2 do repass-r2 parte e — o
    assert do marker vira BYTE-exato (`cmp`), como a própria mensagem de
-   erro sempre prometeu; + passo W2.8 (item 9).
+   erro sempre prometeu; + passo W2.8 (item 9); + **timeout do
+   release-gate 20→35 min** (S300: rc.1 passou com 1m23s de folga;
+   attempt-1 da rc.2 estourou com stalls de runner — o corte da rc.2
+   precisou de rerun; o bump LANDOU na rc.3 junto com as curas do
+   re-pass GA de 10/08, este pack apenas o MANTÉM — o staged espelha o
+   vivo, hunk a hunk). O npm-publish.yml staged também CARREGA o guard
+   de tag-liveness da rc.3 (cura P1 do re-pass GA parte 2) — sem delta
+   funcional do W3 sobre ele, apenas espelho para o land não reverter.
 9. **W2.8 ratificado — rota (b)-estreita (ADR-192 NOVO):** manifesto
    canônico `.claude/governance/gate-scripts-manifest.txt` (**9 membros**
    release-críticos — os 6 do censo §3 + `validate-pair-rail-verdict.py`

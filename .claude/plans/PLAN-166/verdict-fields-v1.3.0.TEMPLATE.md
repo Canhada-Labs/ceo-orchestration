@@ -13,6 +13,7 @@ delta_allowlist:
   - .claude/governance/pair-rail-verdict-v1.3.0.md
   - .claude/plans/PLAN-166/verdict-fields-v1.3.0.md
   - .claude/plans/PLAN-166/repass-ga/MANIFEST-ga.sha256
+  - .claude/plans/PLAN-166/repass-ga/PROVENANCE-ga.md
   - .claude/plans/PLAN-166/repass-ga/payload-ga-1.redacted.txt
   - .claude/plans/PLAN-166/repass-ga/payload-ga-2.redacted.txt
   - .claude/plans/PLAN-166/repass-ga/diff-ga-1.patch
@@ -37,21 +38,24 @@ findings: [hold-repass-ga-2-partes-verditos-em-verdict-ga-N-txt, V1-upgrade-obse
 ## Derivacoes (parte do material assinado)
 
 - transcript_hash = sha256 da concatenacao transcript-ga-1.log +
-  transcript-ga-2.log (hold ADR-103 em 2 partes, worktree da tag rc.2).
-- inputs_hash identico ao da rc.2 por construcao: main CONGELOU do
+  transcript-ga-2.log (hold ADR-103 em 2 partes, worktree da tag rc.3).
+- inputs_hash identico ao das rc.2/rc.3 por construcao: nenhuma
+  superficie do trust-chain mudou nas curas da rc.3, main CONGELOU do
   corte ao GA (o parent_sha e o unico delta legitimo = artefatos deste
   verdito), e o validator recomputa server-side.
 - delta_manifest_sha256 pina MANIFEST-ga.sha256 (basenames).
 - payload-ga.raw.txt nao commitado (precedente r1/r2); pin em
   repass-ga/PROVENANCE-ga.md.
 
-## Condicoes (o "WITH-CONDITIONS") - carregadas da rc.2, INALTERADAS
+## Condicoes (o "WITH-CONDITIONS") - carregadas do trem, INALTERADAS
 
 As 4 excecoes nomeadas de produto V1/V2/V4/V5 do verdito assinado da
-rc.2 (verdict-fields-v1.3.0-rc.2.md, secao "Condicoes") seguem abertas
-NO GA por decisao de rota (b): main congelado do corte ao GA, curas
-STAGED no pack W3 (PLAN-169), que landa por cerimonia GPG imediatamente
-apos este GA. O re-pass do hold foi instruido a reportar se qualquer
+rc.2 (verdict-fields-v1.3.0-rc.2.md, secao "Condicoes"), re-registradas
+no verdito da rc.3, seguem abertas NO GA por decisao de rota (b): main
+congelado do corte ao GA, curas STAGED no pack W3 (PLAN-169), que landa
+por cerimonia GPG imediatamente apos este GA. Os 8 achados do PRIMEIRO
+re-pass do hold (NO-GO sobre a rc.2, 10/08) NAO sao excecoes: foram
+CURADOS na rc.3 (sentinel RC3-approved.md; rail das curas GO). O re-pass do hold foi instruido a reportar se qualquer
 uma fosse PIOR que o avaliado ou alcancavel no caminho mainline - o
 verditos do rail estao em repass-ga/verdict-ga-{1,2}.txt, sob o manifesto
 pinado acima.

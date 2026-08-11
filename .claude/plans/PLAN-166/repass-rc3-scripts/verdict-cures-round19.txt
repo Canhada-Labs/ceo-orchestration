@@ -1,0 +1,21 @@
+REJECT
+
+1. **P1 — `.claude/plans/PLAN-166/repass-ga/run-ga-repass.sh:193`**  
+   The truncation and payload-shape controls are fail-open on command errors. `grep -q ... && abort` treats `grep` exit 2 like “marker absent,” while `grep -c ... || true` masks errors; with `set -uo pipefail` but no `-e`, a transient read/tool failure can proceed to Codex.  
+   **Minimal fix:** distinguish grep exit 1 from all other exits, check every `grep`/`wc` assignment explicitly, or enable `set -e` and narrowly disable it only while capturing `codex exec`’s expected nonzero status.
+
+2. **P1 — `.claude/plans/PLAN-166/repass-ga/run-ga-repass.sh:199`**  
+   Evidence is not bound to what Codex actually consumed. Part 1’s redacted payload, diff, scope manifest, and verdict remain mutable throughout the 10–15-minute part-2 run; the aggregate manifest is generated only at line 242. A changed part-1 payload can therefore receive a new, self-consistent manifest while retaining the earlier GO verdict.  
+   **Minimal fix:** hash each input before invoking Codex, verify those hashes immediately afterward and again before aggregation, and include per-part input manifests in `MANIFEST-ga.sha256`.
+
+3. **P1 — `.claude/plans/PLAN-166/OWNER-RC3-CUT.sh:506`; `.claude/plans/PLAN-166/OWNER-GA-CUT.sh:422,476`**  
+   The job-level CI assertion does not require the selected `validate.yml` run to be completed successfully or require zero pending jobs. If a newer rerun appears after the preceding `gh run list` snapshot, one successful job plus remaining pending/cancelled jobs yields `s>=1, f=0`, allowing the tag ceremony to proceed.  
+   **Minimal fix:** fetch `status`, `conclusion`, and jobs in one snapshot for the selected run; require `status=completed`, `conclusion=success`, zero pending jobs, zero non-success terminal jobs, and at least one successful job.
+
+4. **P1 — `.claude/plans/PLAN-166/OWNER-GA-CUT.sh:130`; `.claude/plans/PLAN-166/OWNER-RC3-CUT.sh:573`**  
+   The RC positive-control receipt is selected only by `headSha`. Another tag pointing at the same commit can supply a successful `Await release-gate` job while the actual rc.3 npm waiter is failed or absent, falsely satisfying the prerequisite used by the GA ceremony. The later release/npm monitors repeat the SHA-only selection.  
+   **Minimal fix:** bind every workflow receipt to the target tag/ref and push event, as well as workflow, commit, and job name; retain and reuse the selected run ID for subsequent polling.
+
+The inputs hashes, manifest basenames, and template allowlist sets are coherent, but these fail-open and provenance-binding paths must be fixed before the cut.
+
+VERDICT: NO-GO

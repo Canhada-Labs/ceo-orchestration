@@ -1,0 +1,22 @@
+- round26 (SCRIPTS da cerimonia): VERDICT: NO-GO [codex rc=0]
+  - payload raw NAO commitado; pin sha256: b0b6618012f997a090a1456292d0db18a0a211af22986f4e0f3cb5696d370d44
+  - alvo: OWNER-RC3-CUT/GA-CUT/run-ga-repass/templates/draft (full-file diffs vs /dev/null)
+- round27 (SCRIPTS da cerimonia): VERDICT: NO-GO [codex rc=0]
+  - payload raw NAO commitado; pin sha256: f29e29894ea109b7beac03aabe67d5a43c8d48f958dd17e44e4aeb325bb1d41c
+  - alvo: OWNER-RC3-CUT/GA-CUT/run-ga-repass/templates/draft (full-file diffs vs /dev/null)
+- round28 (SCRIPTS da cerimonia): VERDICT: NO-GO [codex rc=0]
+  - payload raw NAO commitado; pin sha256: c640c13ec4d06e7236a429a1dc0cd986df28b15f5ab9085c6facf251ce6624cc
+  - alvo: OWNER-RC3-CUT/GA-CUT/run-ga-repass/templates/draft (full-file diffs vs /dev/null)
+  - CEREMONY-MANIFEST-SHA256-AT-REVIEW: 58757170ded2741c2428b98c614f1df75f5d05284e33416d0cca594ee25e545c
+- round29 (SCRIPTS da cerimonia): VERDICT: NO-GO [codex rc=0]
+  - payload raw NAO commitado; pin sha256: ac751e8d1f7afc463300adcabbaed59fbe89cbe55081f5ef607f817f7c876c8a
+  - alvo: OWNER-RC3-CUT/GA-CUT/run-ga-repass/templates/draft (full-file diffs vs /dev/null)
+  - CEREMONY-MANIFEST-SHA256-AT-REVIEW: 86d0407eac929f8b6e75797ae6fe3fa1fef414e286541d4d997f692ab4be0d82
+- round30 (SCRIPTS da cerimonia): VERDICT: NO-GO [codex rc=0]
+  - payload raw NAO commitado; pin sha256: 3380fe32b27ba3664e9fc61b40bfbf150be7adbc4bc4d28d1819097712e348c4
+  - alvo: OWNER-RC3-CUT/GA-CUT/run-ga-repass/templates/draft (full-file diffs vs /dev/null)
+  - CEREMONY-MANIFEST-SHA256-AT-REVIEW round30: 3ace68e2fa1cf7b435eca19784028732e9051ba69af8bbc0362a6d48132fa019
+- round31 (SCRIPTS da cerimonia): VERDICT: GO [codex rc=0]
+  - payload raw NAO commitado; pin sha256: 21791c4fbee19f6656cc4ec30763cf70fcc2d976d210f59271bafbc27f312ec4
+  - alvo: OWNER-RC3-CUT/GA-CUT/run-ga-repass/templates/draft (full-file diffs vs /dev/null)
+  - CEREMONY-MANIFEST-SHA256-AT-REVIEW round31: 2bac61eb4b72dc433eba244c109053533ab38ff4dba24717ba62b47643dba20e

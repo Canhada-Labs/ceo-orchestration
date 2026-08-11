@@ -1,0 +1,96 @@
+# Proveniencia do rail de curas rc.3 (triagem NO-GO do re-pass GA)
+- Base: rc.2 (0cb09c3) -> worktree de curas
+- Pipeline: prompt+diff -> codex_egress_redact --outgoing -> controles -> codex exec --sandbox read-only
+- Data: 2026-08-11T00:18Z
+- round1: VERDICT: NO-GO — Six P1 defects must be fixed before cutting rc.3. [codex rc=0]
+  - payload raw NAO commitado; pin sha256: cfdca4cc97038471adb091e85b8a325e65cc8a21873bc2c3dd39af9b4fb3e84f
+  - base do diff: 0cb09c3cc587abdeaed33e0ff13b1c8b3677061d (rc.2); diff sha256: d831ac23d7e1569f37afbc80cbed06205c1ee1b154ca4ea59da297340a277af0
+- round2: VERDICT: NO-GO [codex rc=0]
+  - payload raw NAO commitado; pin sha256: dddae1b5506c3c6fd9bda65f7ad9298f5206bcfed2e1239a9984b7388153101f
+  - base do diff: 0cb09c3cc587abdeaed33e0ff13b1c8b3677061d (rc.2); diff sha256: 35c0426bdc4418440ff0210ffc2a868c51c01316eb48ba74cfd0f0f79401f836
+- round3: VERDICT: NO-GO — The false ownership claim and rc.2-pinned GA path must be fixed in the rc.3 commit. [codex rc=0]
+  - payload raw NAO commitado; pin sha256: f7a75c6bbf66dc811d979a6d18445e72c39f84ed41ff5dc499b33a71c4bacdd3
+  - base do diff: 0cb09c3cc587abdeaed33e0ff13b1c8b3677061d (rc.2); diff sha256: a386391f7469cd4360d05349f7bf174da71c6c4ac6472eff9bf1c03bbc046184
+- TRIAGEM round3: P1-1 CONFIRMADO (call sites de _ownership_verdict so em upgrade.sh:1634/1944/2107; install registra entrega) -> CHANGELOG re-escrito com o split verdadeiro. P2 CONFIRMADO -> pin exato 35 sem skip. P1-2 REFUTADO COM EVIDENCIA: o codex viu apenas o diff do worktree; no repo real OWNER-GA-CUT.sh ja esta com RC_TAG=v1.3.0-rc.3, run-ga-repass.sh idem, e os templates GA re-apontados (round de SCRIPTS revisa esses arquivos na integra).
+- round4: VERDICT: GO-WITH-CONDITIONS — The cure set is technically sound, but the guarded workflow edits require fresh Owner authorization before landing. [codex rc=0]
+  - payload raw NAO commitado; pin sha256: 715a5c8c1360646f850adb3c5e3b499edf9d801b0cffcea63ce1cece0f886037
+  - base do diff: 0cb09c3cc587abdeaed33e0ff13b1c8b3677061d (rc.2); diff sha256: 8035415b2b5d9fdf3093f9655f81dcbb86b5eb51e6db5a48721ebb28254b7478
+- round5 (SCRIPTS da cerimonia): VERDICT: NO-GO [codex rc=0]
+  - payload raw NAO commitado; pin sha256: d173c2452d5f18c6df11ecdc0481b82c98512ed1a06daf04ea2d1e653cff5a73
+  - alvo: OWNER-RC3-CUT/GA-CUT/run-ga-repass/templates/draft (full-file diffs vs /dev/null)
+- round6 (SCRIPTS da cerimonia): VERDICT: NO-GO [codex rc=0]
+  - payload raw NAO commitado; pin sha256: 0e4819f274ab84400c533a2f05a857bfa31a22dedbef6d2c47ae80afec89ed7b
+  - alvo: OWNER-RC3-CUT/GA-CUT/run-ga-repass/templates/draft (full-file diffs vs /dev/null)
+- NOTA pos-round7-launch: dedup do _cd_want (PROVENANCE 2x) corrigido APOS o payload do round7 ser gerado - se o round7 flagar, ja esta curado; mudanca mecanica (sort -u + remocao do echo duplicado).
+- round7 (SCRIPTS da cerimonia): VERDICT: NO-GO [codex rc=0]
+  - payload raw NAO commitado; pin sha256: adac16e204a33a96796d4946e0b1e98708a44758d78345197dcbbc756dbcdeb5
+  - alvo: OWNER-RC3-CUT/GA-CUT/run-ga-repass/templates/draft (full-file diffs vs /dev/null)
+- round8 (SCRIPTS da cerimonia): VERDICT: NO-GO [codex rc=0]
+  - payload raw NAO commitado; pin sha256: 21eb08aa2d29d395375be2ef374e6290c1db4cf7232dec9a2175134f56315282
+  - alvo: OWNER-RC3-CUT/GA-CUT/run-ga-repass/templates/draft (full-file diffs vs /dev/null)
+- round9 (SCRIPTS da cerimonia): VERDICT: NO-GO [codex rc=0]
+  - payload raw NAO commitado; pin sha256: aef89a04d98585aafc7258cc1d0de44a9e62b297908ec5d701a8882b25426e07
+  - alvo: OWNER-RC3-CUT/GA-CUT/run-ga-repass/templates/draft (full-file diffs vs /dev/null)
+- round10 (SCRIPTS da cerimonia): VERDICT: NO-GO [codex rc=0]
+  - payload raw NAO commitado; pin sha256: f4300e250fad4f33a8b0a51346e61b2ba4efbd7ce055f5134117822dc7252280
+  - alvo: OWNER-RC3-CUT/GA-CUT/run-ga-repass/templates/draft (full-file diffs vs /dev/null)
+- round11 (SCRIPTS da cerimonia): VERDICT: NO-GO [codex rc=0]
+  - payload raw NAO commitado; pin sha256: fd5d79750a717acedefbca1f19fd1525baf08896256e7bc88b40f26b4b9f863c
+  - alvo: OWNER-RC3-CUT/GA-CUT/run-ga-repass/templates/draft (full-file diffs vs /dev/null)
+- round12 (SCRIPTS da cerimonia): VERDICT: NO-GO [codex rc=0]
+  - payload raw NAO commitado; pin sha256: e68f09aa94c9a2ad4bdb9bbe2559eaab26042d20182f79d0245d0ae5f7d8f5c0
+  - alvo: OWNER-RC3-CUT/GA-CUT/run-ga-repass/templates/draft (full-file diffs vs /dev/null)
+- round13 (SCRIPTS da cerimonia): VERDICT: NO-GO — The rc.3 ceremony can commit mismatched signed material, and the GA path has both late remote-tag discovery and fail-open provenance generation. [codex rc=0]
+  - payload raw NAO commitado; pin sha256: f97fb9a6fef4a18fd58302230258bead6d978d33b85daa6ccf2bbddb0f642b0a
+  - alvo: OWNER-RC3-CUT/GA-CUT/run-ga-repass/templates/draft (full-file diffs vs /dev/null)
+- round14 (SCRIPTS da cerimonia): VERDICT: NO-GO [codex rc=0]
+  - payload raw NAO commitado; pin sha256: 7459aa1dbd607d5385dfbf45f756fe4f58021e10ce3ff478e97245e0f27c3536
+  - alvo: OWNER-RC3-CUT/GA-CUT/run-ga-repass/templates/draft (full-file diffs vs /dev/null)
+- round15 (SCRIPTS da cerimonia): VERDICT: NO-GO [codex rc=0]
+  - payload raw NAO commitado; pin sha256: 137d461bd69f2a6273183f4ff7fc0a8107ec0a57130c38f359e20fe9d17d6bfe
+  - alvo: OWNER-RC3-CUT/GA-CUT/run-ga-repass/templates/draft (full-file diffs vs /dev/null)
+- round16 (SCRIPTS da cerimonia): VERDICT: NO-GO [codex rc=0]
+  - payload raw NAO commitado; pin sha256: 6d8b768177b5fb1bd2cb4382aae5c0dcfe2cc0592069b368605e012c7f468a24
+  - alvo: OWNER-RC3-CUT/GA-CUT/run-ga-repass/templates/draft (full-file diffs vs /dev/null)
+- round17 (SCRIPTS da cerimonia): VERDICT: NO-GO [codex rc=0]
+  - payload raw NAO commitado; pin sha256: 6ba49a1f65c1bb3a974b40d54b9c27e581ba70d4e23b0acc3c5e75aebb6de70e
+  - alvo: OWNER-RC3-CUT/GA-CUT/run-ga-repass/templates/draft (full-file diffs vs /dev/null)
+- round18 (SCRIPTS da cerimonia): VERDICT: NO-GO [codex rc=0]
+  - payload raw NAO commitado; pin sha256: 5c3865f4c4d92de64e9fe0b37754c811d61968218df082ec47f457ed3a0497a6
+  - alvo: OWNER-RC3-CUT/GA-CUT/run-ga-repass/templates/draft (full-file diffs vs /dev/null)
+- round19 (SCRIPTS da cerimonia): VERDICT: NO-GO [codex rc=0]
+  - payload raw NAO commitado; pin sha256: bdb4e93ad2f47f9dee3ab8faefa0df45e3f1466521d7768a60bc62f00f943421
+  - alvo: OWNER-RC3-CUT/GA-CUT/run-ga-repass/templates/draft (full-file diffs vs /dev/null)
+- round20 (SCRIPTS da cerimonia): VERDICT: NO-GO [codex rc=0]
+  - payload raw NAO commitado; pin sha256: 9ee1cd2ba785e398f22c2077e2b1c5a032233554a819c2d8b2875021588408ef
+  - alvo: OWNER-RC3-CUT/GA-CUT/run-ga-repass/templates/draft (full-file diffs vs /dev/null)
+- round21 (SCRIPTS da cerimonia): VERDICT: NO-GO [codex rc=0]
+  - payload raw NAO commitado; pin sha256: c11b15616910e4c6c5425295a8402f0480b6827fbe8dc0350b10a48ba850bd0e
+  - alvo: OWNER-RC3-CUT/GA-CUT/run-ga-repass/templates/draft (full-file diffs vs /dev/null)
+- round22 (SCRIPTS da cerimonia): VERDICT: NO-GO [codex rc=0]
+  - payload raw NAO commitado; pin sha256: 45683e3095349f7e4bf05e6a1acdfb36fec3fa44fec06c5ca9672e4c192fa863
+  - alvo: OWNER-RC3-CUT/GA-CUT/run-ga-repass/templates/draft (full-file diffs vs /dev/null)
+- round23 (SCRIPTS da cerimonia): VERDICT: NO-GO [codex rc=0]
+  - payload raw NAO commitado; pin sha256: 8f0c267c4d3d09ad7757e0c50362d617f50629a51909b781abe0c3f7e24b5575
+  - alvo: OWNER-RC3-CUT/GA-CUT/run-ga-repass/templates/draft (full-file diffs vs /dev/null)
+- round24 (SCRIPTS da cerimonia): VERDICT: NO-GO [codex rc=0]
+  - payload raw NAO commitado; pin sha256: 1314ff9ef321dbf040522d122b7ebd6bf24d6603bae0de15ad420a2d15ecb380
+  - alvo: OWNER-RC3-CUT/GA-CUT/run-ga-repass/templates/draft (full-file diffs vs /dev/null)
+- round25 (SCRIPTS da cerimonia): VERDICT: NO-GO [codex rc=0]
+  - payload raw NAO commitado; pin sha256: 83ff87dd737c2e691b13509c11a0385ea7877316b9bb8b2613b08f72b78366e7
+  - alvo: OWNER-RC3-CUT/GA-CUT/run-ga-repass/templates/draft (full-file diffs vs /dev/null)
+- round5: VERDICT: GO [codex rc=0]
+  - payload raw NAO commitado; pin sha256: 26e043f9fd0bec84a35f454f8f6f5049790a3e8cbe288f6e75f72fbd6032c2b8
+  - base do diff: 0cb09c3cc587abdeaed33e0ff13b1c8b3677061d (rc.2); diff sha256: 8035415b2b5d9fdf3093f9655f81dcbb86b5eb51e6db5a48721ebb28254b7478
+- round6: VERDICT: NO-GO [codex rc=0]
+  - payload raw NAO commitado; pin sha256: 9550f05c04cd7a1cbd0376a0909a47aef3d6f4fa41f15196c56d564dd796463a
+  - base do diff: 0cb09c3cc587abdeaed33e0ff13b1c8b3677061d (rc.2); diff sha256: 95c2549ba5f0459c5dc10fed186b5e916b10ff67c76ca4748a099ae226f13c1c
+- TRIAGEM round6(produto): P1-1 REFUTADO com evidencia (payload de produto nao contem o consumidor; OWNER-GA-CUT undrafta como ultima mutacao pos-rechecks desde r26 e tem retomada MONITOR r14/r20); P1-2 parcialmente real -> wait do release da rc 50->60 (GA ja era 60). Prompt de produto ganhou CONSUMER FACTS para impedir especulacao sobre arquivos fora do payload.
+- round7: VERDICT: GO [codex rc=0]
+  - payload raw NAO commitado; pin sha256: 582ebfea91bee052e4ceace0934ceed09898bca8d684482c8ea94fd7c22b77f1
+  - base do diff: 0cb09c3cc587abdeaed33e0ff13b1c8b3677061d (rc.2); diff sha256: 95c2549ba5f0459c5dc10fed186b5e916b10ff67c76ca4748a099ae226f13c1c
+BINDING-ANCHOR: 0cb09c3cc587abdeaed33e0ff13b1c8b3677061d
+BINDING-PACK-MANIFEST-SHA256: 3168727146ddcedeb0387360847a8470e89f45be765fe7fad59df5b3ff1a7245
+BINDING-PACK-BASELINE-SHA256: 7d9ddd37fa3b6b50bd3d246bd5a294218544f17d6e14e182814f692cf2bc0ec4
+BINDING-PACK-MODES-SHA256: 5c528709d91c99d3c56d4fa8c41e684b8b209d5e24dd55cb36d00989820e723c
+BINDING-SCRIPTS-MANIFEST-SHA256: 9ff1418da9367df9f7c967e399ceeff5b7bb4eff66e14b793777a3128269c6c4

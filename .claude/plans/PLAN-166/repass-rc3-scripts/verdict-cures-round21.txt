@@ -1,0 +1,15 @@
+P0 — `.claude/plans/PLAN-166/OWNER-GA-CUT.sh:609`  
+Concrete failure: `NID` is never assigned. With `set -u`, the ceremony aborts after npm reports success but before verifying the Publish step or executing the automatic draft mitigation. A stale `1.3.0` from another tree can therefore remain paired with a public GA Release. If `NID` happens to be inherited from the environment, the script may instead accept an unrelated run’s receipt.  
+Minimal fix: select and store the exact tag/SHA/push-event `databaseId`, then use that single pinned run for status, conclusion, approval URL, and Publish-step verification.
+
+P1 — `.claude/plans/PLAN-166/OWNER-RC3-CUT.sh:157,236-244,383,386-399`  
+Concrete failure: commit 1 stages `W3-approved-draft.md`, the staged-W3 manifest/baseline, and ancillary cure-rail files without an external content pin. The ceremony manifest verified at line 157 covers only nine PLAN-166 ceremony files. An accidental edit to the W3 draft—or a stale, self-consistent W3 pack plus regenerated manifest—passes G0 and becomes part of `parent_sha`, beyond visibility of the later delta guard.  
+Minimal fix: content-pin every pathname-only commit-1 input, including the W3 draft, `staged-w3/MANIFEST.sha256`, `BASELINE.sha256`, and cure-rail ancillary files; verify those pins again immediately before staging.
+
+P1 — `.claude/plans/PLAN-166/OWNER-RC3-CUT.sh:555,590-595`; `.claude/plans/PLAN-166/OWNER-GA-CUT.sh:516,639-643`  
+Concrete failure: neither ceremony rechecks the remote tag object after the release workflows finish. If the remote tag is deleted or force-moved after the npm tag-liveness check succeeds, the old workflow receipts and GitHub Release remain selectable; GA’s final check covers only `origin/main`, so it can announce a release whose remote tag now points elsewhere.  
+Minimal fix: immediately before success, take one `git ls-remote` snapshot of the plain and peeled tag refs and require exact equality with the locally verified tag object and commit.
+
+The inputs hash, template allowlist equality, rc.3 targeting, and pre-commit pack-resume logic otherwise cohere.
+
+VERDICT: NO-GO
