@@ -135,3 +135,79 @@ Resultados (positivos OU negativos) entram como relatório no repo no
 mesmo regime do E0; claims externas de números da literatura ficam no
 archive (doutrina research-README do PLAN-169). O "no speed claim" do
 AGENTS.md só muda por decisão do Owner sobre evidência pré-registrada.
+
+## 4. Revisão v2 — auditoria total S302: este plano vira O TREM GRANDE
+
+A auditoria (14 agentes; 6 dimensões internas com evidência
+arquivo:linha + 6 lanes externas) recalibrou o alvo: o custo da
+governança é o AGENDAMENTO (síncrono, exaustivo, no fim), não a
+garantia. Entram:
+
+- **W-DH — delta-hold (emenda ADR-103, a maior alavanca única):** o
+  hold só reinicia para a superfície que MUDOU; crédito do tempo
+  decorrido quando `inputs_hash` é idêntico (a rc.3 declarou hash
+  idêntico ao da rc.2 e reiniciou 24h do zero) — ou hold concorrente
+  com o re-pass. Toda a infraestrutura (inputs_hash, delta_manifest)
+  já é computada e assinada. Corta 24-48h por trem multi-rc.
+- **E5 ganha substrato definido:** background-rail (rounds Codex
+  detached via run_in_background/Monitor — padrão S285 virando skill;
+  38 rounds seriais ~8h → ~3-4h com 2 lanes e wall-clock efetivo
+  ~zero porque o CEO segue autorando) + cross-session SendMessage
+  (v2.1.224) para WIP=2 entre sessões com worktree próprio; spike
+  curto de sandbox antes de fechar design.
+- **E6 nasce risk-tiered com M3 como estágio-1.** M3 = "Distância de
+  Irreversibilidade" (conceito novo, inventor S302): risco como
+  gradiente DERIVADO do grafo de alcance até sinks irreversíveis
+  (tag/publish/GPG/HMAC/settings), nunca classificado à mão; arestas
+  desconhecidas colapsam para d=1 (conservador); d≤1 ⇒ cerimônia
+  síncrona integral sempre. Validação barata: replay read-only dos 14
+  planos do E0 — kill pré-registrado: se P0/P1 históricos concentram
+  em d ALTO, o grafo é proxy errado e morre. Complemento: classificar
+  retrospectivamente os ~38 verdicts da rc.3 em "mecânico vs
+  semântico" (adjudica quanto o cascade pode capturar).
+- **Via Canhada (sequência §1-E6) recalibrada pela leitura do código:**
+  corte realista HOJE ~0-5% (não cobre shell/CI, onde os rounds
+  foram); passo 1 vira telemetria de TODOS os desfechos
+  (measured_ok/weak/bail:*) por 1-2 semanas — medir a taxa de censura
+  ANTES de financiar diff-scoping real (o gate diz "diff-scoped" mas
+  muta o arquivo INTEIRO — adequacy_gate.py:2 vs :253), amostragem
+  estratificada com filtro AST e veredito tri-estado. Sandbox v2 só
+  se bail >80%. Multi-linguagem descartado (padrão E1/E2).
+- **Tiering do rail + stop-rules (do relatório §5.2):** canônico =
+  open-ended com parada em 2 GOs consecutivos sobre artefato
+  congelado (1 GO não basta: GO no r5, 2 P1 reais no r6); scripts
+  operacionais = cap 5 rounds + checklist + escalada (espelha o
+  round-3 do DEBATE); docs = gate determinístico sem rail;
+  circuit-breaker universal ~8-10 rounds sem GO ⇒ mudar o ALVO
+  (lição-mãe S296 virando mecanismo).
+- **Separar DESCOBERTA de VERIFICAÇÃO-DE-CURA:** descoberta =
+  single-pass k revisores cegos sobre pack congelado (E3); verificação
+  = serial mas SÓ sobre o delta da cura, veredito amarrado a base
+  SHA + diff hash; passe final de integração permanece (os melhores
+  achados são cross-artefato).
+- **Webhook/cron de hold-vencido + CI-verde** (notificação, nunca
+  execução) — comprime o lag Owner-volta-ao-teclado dentro dos 59%.
+- **Progressive disclosure do boot** (ceo-orchestration/SKILL.md
+  ~15,6k tok ≈ 40% do Gate-1/2).
+
+**Números honestos esperados (compostos, a PROVAR aqui):** reviewer
+externo ~12-17h/trem → ~4-6h; rounds −50-70%; hold −24-48h.
+Advertência da academia: fracionar ganha LATÊNCIA, não yield — a
+promessa é "mesmos achados, semanas antes, com ~1/3 do wall-clock",
+nunca "mais achados".
+
+**Imediatos SEM plano (pós-GA, antes deste plano abrir):** shift-left
+do escopo de release no rail da rc (CHANGELOG/workflows/npm no rail
+da rc, re-pass vira delta-check); derivação de contagens (elevar
+itens #3/#4/#6 do ledger 169 de "consertar exatos" p/ "derivar a
+classe" — mata 4/8 achados do último NO-GO); stop-rule no template
+run-*-review.sh; varredura substrate-drift (matchers exact-match
+v2.1.195, exit-2+JSON v2.1.214); rota batch P2 + Merkle-manifest por
+lote; sweep de atualidade das skills (cita gemini-1.5-pro/gpt-4-turbo
+em skill core).
+
+**M1 (loteria de aceitação com cascata de contaminação) NÃO entra
+aqui:** muda o CONTRATO de garantia (exaustivo → estatístico-com-
+bound) — plano próprio pós-172 com ADR + ratificação do Owner. M2
+(revisor residente com dívida de cobertura + mutantes-sentinela)
+entra como candidato do E5/E6 v2 APÓS o replay hunk-vs-composição.

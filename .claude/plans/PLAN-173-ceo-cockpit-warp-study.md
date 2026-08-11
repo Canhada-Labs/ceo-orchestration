@@ -84,3 +84,24 @@ gates locais sobre N variantes, W4 morre sem experimento.
   escopo congelado por schema; qualquer método novo passa por debate.
 - Dependência visual do Warp (produto de terceiro que muda rápido) —
   a integração deve degradar para CLI pura sem perda de função.
+
+## 4. Revisão v2 — auditoria total S302
+
+- **Critério de kill adicionado:** se o E0b (PLAN-172) mostrar que o
+  tempo-morto dominante é quota/capacidade (não fricção de
+  superfície), este plano é DESCARTADO sem build.
+- **Reordenado:** ganha valor DEPOIS do E5 (sessões que já conversam
+  via cross-session SendMessage são o substrato natural do cockpit).
+- **Vendors novos (da lane meta-gemini + consenso 4 lanes):**
+  - **Gemini** entra SOMENTE quando o E3 (single-pass k revisores
+    cegos paralelos) existir — nunca no rail serial bloqueante. Único
+    candidato com diversidade frontier real + CLI maduro + custo
+    baixo; sob containment do /council (read-only, redactor ADR-114).
+  - **Agente de código da Meta: watchlist, depois do previsto.** 3
+    gates de entrada: sair de beta; benchmark verificado independente;
+    taxa de alucinação aceitável em piloto advisory (review que
+    alucina achados é a pior propriedade possível — cada achado falso
+    custa rounds). Se pilotar: só tier que NÃO treina em prompts
+    (postura de egress ADR-114).
+  - Revisores BLOQUEANTES congelados em 2 (Claude autor + Codex):
+    formalização no PLAN-171 W1b.

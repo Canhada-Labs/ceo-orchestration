@@ -106,3 +106,38 @@ PLAN-172. Sem isso, E5 não roda.
   exceção via assignment glob, nunca via desligar o hook.
 - Todos os itens tocam superfície de hooks → cerimônia canonical-edit
   + pair-rail por item; L3 com debate.
+
+## 5. Revisão v2 — auditoria total S302 (workflow framework-total-audit, 14 agentes, 12 lanes ok)
+
+**Re-escopo: este plano fica MENOR e ganha um W0 bloqueante.**
+
+- **W0 (NOVO, bloqueante, pré-tudo): censo de gates com positive
+  control.** Nenhum gate entra em settings.json/CI sem controle
+  positivo que FALHA quando o enforcement é removido + registro de
+  qual workflow o executa; aplicado retroativamente aos 57 hooks.
+  Quitar aqui as 3 dívidas de enforcement abertas desde S294
+  (pair-rail-gate.sh inexecutável, injector persona fuzzy,
+  overhead-ack não cobre Write). Racional: F4 do PLAN-166 é a 5ª
+  instância nomeada da classe "gate vermelho invisível" — não se
+  importa governança nova sobre camada de enforcement com dívida.
+- **W1 (mantido, ampliado):** batch-approval + formato de verdito com
+  pin único `delta_manifest` (em vez de allowlist enumerada — fecha o
+  loop evidência-de-evidência da S301).
+- **NOVO W1b:** ADR curto formalizando a economia de revisores:
+  **Codex = único revisor bloqueante do rail; Grok = gatilho**
+  (desacordo Claude↔Codex, L4/SPEC/release, auditorias periódicas).
+  A auditoria constatou que `grok.py` é host-adapter de papel único —
+  o claim "dois revisores externos" não corresponde ao enforcement.
+- **NOVO W1c:** fronteira de ownership dos domain-packs (116 domain
+  skills → squad-packs opt-in via squad-install; 1-2 domínios de
+  referência em-tree) — pré-trabalho do PLAN-175.
+- **NOVO W1d:** fixes de doc-drift baratos: spawn.md (manda injetar
+  SKILL.md inteiro; default é reference-mode desde ADR-090 — ~9-16k
+  tok/spawn desperdiçados se seguido literalmente) + propagação do
+  cap G12 (skill de parallelization manda 6; ratificado é 8
+  read-only).
+- **ADIADO:** W2 (proveniência de leituras/observation log) e W3
+  (FILE ASSIGNMENT write-time) só DEPOIS do W0 fechar — mesma lógica:
+  primeiro provar vivo o que existe, depois adicionar.
+- W4 (living docs) e W5 (higiene worktree) mantidos; W5 continua
+  pré-requisito do E5 (PLAN-172).
