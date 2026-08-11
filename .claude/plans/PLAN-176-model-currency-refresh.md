@@ -1,7 +1,9 @@
 ---
 id: PLAN-176
 title: Currency-by-construction — rotina de refresh do models-registry com rede (a ÚNICA parte que precisa de plano novo)
-status: draft
+status: reviewed
+reviewed_at: 2026-08-11
+reviewed_by: "Owner - ratificacao S302f via OWNER-RATIFY-S302.sh: ratifico os 6 planos na v2.6 (rail Codex 7 rounds, r7 APPROVE, commits ab45f56..0c90174)"
 created: 2026-08-11
 owner: CEO
 depends_on: [PLAN-169]

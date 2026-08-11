@@ -1,7 +1,9 @@
 ---
 id: PLAN-172
 title: Velocidade honesta — E0b (decomposição do tempo-morto) como gate, E5 (pipelining WIP=2), E6 (filter-cascade no review) + políticas observacionais
-status: draft
+status: reviewed
+reviewed_at: 2026-08-11
+reviewed_by: "Owner - ratificacao S302f via OWNER-RATIFY-S302.sh: ratifico os 6 planos na v2.6 (rail Codex 7 rounds, r7 APPROVE, commits ab45f56..0c90174)"
 created: 2026-08-11
 owner: CEO
 depends_on: [PLAN-169, PLAN-171]
