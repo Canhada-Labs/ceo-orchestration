@@ -106,8 +106,8 @@ substrate-watch trig_014Y…) com 1 run manual verde que compara feeds
 vs registry vs pins e emite relatório; AC: relatório lista os 3 CLIs
 com {instalado, pin, upstream}. W2 = 1 PR real gerado pela rotina
 (pode ser sobre lançamento simulado no fixture) tocando SÓ campos P;
-AC: o lint `check-model-literals` (do W4.3-iv/169) fica VERMELHO se o
-PR tocar campo T — positive control do próprio guard-rail. W3 =
+AC: o lint `check-model-literals` (do W0 DESTE plano) fica VERMELHO
+se o PR tocar campo T — positive control do próprio guard-rail. W3 =
 advisory tripla visível no `/ceo-boot` com os 3 CLIs; AC: nunca
 bloqueia (é advisory por construção — testar com upstream fake à
 frente do pin).
