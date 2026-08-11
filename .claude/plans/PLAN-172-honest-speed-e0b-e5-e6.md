@@ -57,7 +57,7 @@ imprime seus inputs (lição S285). Saídas: (a) fração de cada classe;
 para juízo post-hoc):**
 | Resultado E0b | Decisão |
 |---|---|
-| quota > 40% do morto | E5 REBAIXADO a piloto (metade do N) ou redesenhado; orçamento migra p/ wake-on-event |
+| quota > 40% do morto | E5 NÃO financiado como desenhado; orçamento migra p/ wake-on-event; qualquer redesenho exige NOVO pré-registro (r2: sem escolha post-hoc) |
 | quota 20-40% | E5 piloto (metade do N, mesmos kills) |
 | quota < 20% | E5 completo (3 braços, N pleno) |
 | lag-de-retomada > 30% do morto | wake-on-event ANTES de qualquer braço do E5 |
@@ -177,8 +177,9 @@ garantia. Entram:
   primeiro trem sob a emenda.**
 - **E5 ganha substrato definido:** background-rail (rounds Codex
   detached via run_in_background/Monitor — padrão S285 virando skill;
-  38 rounds seriais ~8h → ~3-4h com 2 lanes e wall-clock efetivo
-  ~zero porque o CEO segue autorando) + cross-session SendMessage
+  **hipótese H-BG, a validar:** 38 rounds seriais ~8h → ~3-4h com 2
+  lanes, com wall-clock efetivo tendendo a baixo porque o CEO segue
+  autorando) + cross-session SendMessage
   (v2.1.224) para WIP=2 entre sessões com worktree próprio; spike
   curto de sandbox antes de fechar design.
 - **E6 nasce risk-tiered com M3 como estágio-1.** M3 = "Distância de
@@ -208,8 +209,9 @@ garantia. Entram:
   round-3 do DEBATE); docs = gate determinístico sem rail;
   circuit-breaker universal ~8-10 rounds sem GO ⇒ mudar o ALVO
   (lição-mãe S296 virando mecanismo).
-- **Separar DESCOBERTA de VERIFICAÇÃO-DE-CURA:** descoberta =
-  single-pass k revisores cegos sobre pack congelado (E3); verificação
+- **Separar DESCOBERTA de VERIFICAÇÃO-DE-CURA:** descoberta = k
+  revisores cegos sobre pack congelado (desenho do E3 COMO
+  PRÉ-REGISTRADO; o refinamento single-pass pertence ao E3b); verificação
   = serial mas SÓ sobre o delta da cura, veredito amarrado a base
   SHA + diff hash; passe final de integração permanece (os melhores
   achados são cross-artefato).

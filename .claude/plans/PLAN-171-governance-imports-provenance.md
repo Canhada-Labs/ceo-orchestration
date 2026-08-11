@@ -119,9 +119,11 @@ PLAN-172. Sem isso, E5 não roda.
   control.** Nenhum gate entra em settings.json/CI sem controle
   positivo que FALHA quando o enforcement é removido + registro de
   qual workflow o executa; aplicado retroativamente aos 57 hooks.
-  Quitar aqui as 3 dívidas de enforcement abertas desde S294
-  (pair-rail-gate.sh inexecutável, injector persona fuzzy,
-  overhead-ack não cobre Write). Racional: F4 do PLAN-166 é a 5ª
+  As 3 dívidas de enforcement abertas desde S294 (pair-rail-gate.sh
+  inexecutável, injector persona fuzzy, overhead-ack não cobre Write)
+  PERTENCEM ao AC-9 do PLAN-169: o W0 as AUDITA e herda apenas o que
+  o fechamento do 169 declarar não-feito (r2: sem posse dupla — o
+  texto operativo e a cura dizem a MESMA coisa). Racional: F4 do PLAN-166 é a 5ª
   instância nomeada da classe "gate vermelho invisível" — não se
   importa governança nova sobre camada de enforcement com dívida.
 - **W1 (mantido, ampliado):** batch-approval + formato de verdito com

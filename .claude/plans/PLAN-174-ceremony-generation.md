@@ -60,9 +60,14 @@ de 42KB de bash novo por trem. Efeito esperado (a medir): a classe
   PRESENTES e verificados; dry-run em clone compara as GARANTIAS
   (não os bytes) contra a cerimônia manual baseline; qualquer
   divergência de garantia = vermelho.
-- **Rollback:** a cerimônia manual existente permanece CANÔNICA até
-  DOIS trens gerados verdes; falha em qualquer ponto ⇒ fallback
-  manual sem cerimônia extra.
+- **Rollback e modo do piloto (r2 P2 — desambiguado):** trem 1
+  (v1.4.0) = piloto SHADOW: a cerimônia gerada roda em dry-run em
+  clone, EM PARALELO à cerimônia manual que executa o corte real;
+  trem 2 = produção com a gerada, com último ponto seguro de fallback
+  ANTES de tag/publish (a fronteira irreversível nunca roda pela via
+  nova sem a manual disponível). A manual permanece CANÔNICA até os
+  dois trens verdes (1 shadow + 1 produção); falha em qualquer ponto
+  ⇒ fallback manual sem cerimônia extra.
 
 ## 3. Guard-rails
 

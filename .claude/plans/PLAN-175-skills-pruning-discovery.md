@@ -28,7 +28,9 @@ tags: [skills, telemetry, pruning, seed]
    tomada, não deixada em aberto):** Fase 1 = SUGESTÃO advisory
    (auto-suggest top-3 via skill-retrieve tf-idf) por 30 dias; Fase 2
    = fail-high APENAS para spawns que não declaram skill NENHUMA,
-   ativada só se a Fase 1 não derrubar o unknown-ratio ≥50%.
+   **ativada se após a re-medição da Fase 1 o unknown-ratio ainda
+   for ≥ 0,10 (critério pela META, não por queda relativa — r2:
+   queda de 50% pararia em ~0,21 e mascararia o alvo).**
    **Telemetria: janela = 90d de audit log, N mínimo = 100 spawns;
    re-medição 30d após cada fase.** Meta: unknown-ratio 0,43 → <0,10.
 2. **Podar o core por telemetria — regra DETERMINÍSTICA:** arquivar
@@ -43,7 +45,8 @@ tags: [skills, telemetry, pruning, seed]
    domínios de referência em-tree. O repo recupera identidade de
    framework de governança; CI/soak param de vigiar prosa de domínio.
    Depende da fronteira de ownership (PLAN-171 W1c).
-4. **Sweep de atualidade** (pode adiantar como imediato sem plano):
+4. **Sweep de atualidade — EXECUTA no W-IM do PLAN-172 (dono único;
+   r2 P1: sem rota dupla).** Este plano fica com a REGRA permanente:
    skills core citando modelos mortos (gemini-1.5-pro, gpt-4-turbo,
    claude-3-opus) e codebase fantasma; apontar
    check-model-deprecations do nightly para `.claude/skills/`.
