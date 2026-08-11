@@ -5,8 +5,8 @@ status: draft
 created: 2026-08-11
 owner: CEO
 depends_on: [PLAN-169]
-budget_tokens: 150-300k (firmado S302e; W1 rotina 100-150k, W2-W3 100-150k)
-budget_sessions: 2-3 (W1 1; W2+W3 1-2; fase-2 auto-merge FORA — gated em ADR)
+budget_tokens: 300-550k (re-firmado S302e r4 — W0 registry/resolver/lint 150-250k AGORA MORA AQUI; W1 rotina 100-150k; W2-W3 100-150k)
+budget_sessions: 4-5 (W0 2; W1 1; W2+W3 1-2; fase-2 auto-merge FORA — gated em ADR)
 context_risk: medium
 external_wait: "milestone: pós-GA v1.3.0 + registry/resolver landados (PLAN-169 W4.3 item iv). L3: rotina com REDE que escreve commits ⇒ debate próprio"
 tags: [model-currency, egress, automation, seed]
@@ -16,14 +16,14 @@ tags: [model-currency, egress, automation, seed]
 
 > **SEMENTE (S302d, 2026-08-11).** Do pente-fino hardcode-currency (4
 > scanners + arquiteto + mapa de cobertura, árvore intocada em
-> freeze). Contexto: a cura da classe "modelo desatualizado" NÃO
-> precisa de plano grande — registry + resolver + lint + oracles são
-> a forma concreta do PLAN-169 W4.3 (item iv, manifesto+oracle já
-> reservado lá); os hardcodes vivos achados entram no lote mecânico
-> do W2.10; a doutrina vira ADR-149 Amendment 2; a shape codex
+> freeze). Contexto: os hardcodes vivos achados entram no lote
+> mecânico do W2.10/169; o manifesto/oracle de fleet-currency segue
+> no W4.3(iv)/169; a doutrina vira ADR-149 Amendment 2; a shape codex
 > 0.144.6 + `_VALID_MODELS` entram no checklist da próxima cerimônia
-> de pin-bump. **Este plano cobre SÓ o que nada existente cobre: a
-> rotina COM REDE que detecta lançamentos e propõe o refresh.**
+> de pin-bump. **Correção r4 (Codex): o texto assinado do W4.3(iv)
+> NÃO promete registry/resolver/lint — então eles MORAM AQUI (W0),
+> sem dependência pendurada. Este plano = W0 (sem rede) + a rotina
+> COM REDE que detecta lançamentos e propõe o refresh (W1-W3).**
 
 ## 1. Arquitetura herdada (decidida no ADR-149 Amendment 2, não aqui)
 
@@ -34,40 +34,64 @@ tags: [model-currency, egress, automation, seed]
 - **Camada P (preference):** lanes advisory, defaults de live-adapter,
   probes, pricing, roteamento não-VETO — aliases (`claude-frontier`,
   `codex-latest` = omitir `--model`, doutrina D5 como dado) resolvidos
-  por `.claude/governance/models-registry.json` (sentinel-gated) via
-  `_lib/model_registry.py` (stdlib, no-network). Precedência: override
-  do caller > env do usuário > registry. TTL vencido = advisory.
+  pelo SPLIT do W0 (r4): schema+T em
+  `.claude/governance/models-registry.json` (sentinel-gated); VALORES
+  P em `.claude/data/models-preference.json` (PR auditado, sem
+  sentinel — validados contra o schema em toda leitura, fora-do-schema
+  = fail-closed p/ default) via `_lib/model_registry.py` (stdlib,
+  no-network). Precedência: caller > env > preference > default do
+  schema. TTL vencido = advisory.
 - **Fechamento da classe:** lint CI `check-model-literals.py` com
   grandfather-ledger e ratchet (literal novo fora de autoridade =
   vermelho); oracle `replacements ⊆ valid_override_ids`.
 - **Teste-mestre:** injetar `claude-opus-6` fake no registry ⇒ todas
   as superfícies P refletem com zero edit de código.
 
-## 2. Escopo DESTE plano (o que exige debate próprio por ter rede)
+## 2. Escopo DESTE plano
 
-- **W1 — rotina cloud semanal** (irmã da substrate-watch já ativa,
-  trig_014Y…): fetcha feeds/changelogs dos vendors (Anthropic, OpenAI
-  /codex, xAI/grok, Google) e o npm/brew dos CLIs; compara com o
-  registry e com os pins.
-- **W2 — proposta AUDITADA, nunca troca silenciosa:** ao detectar
-  lançamento, a rotina abre PR (ou commit em branch) tocando SÓ
-  campos da camada P + atualiza `last_seen` upstream dos CLIs. Owner
-  = merge de 1 clique. Fase 2 (opcional, gated em 4 semanas sem
-  falso-positivo): auto-merge com janela de veto.
+- **W0 — registry + resolver + lint (sem rede; r4: mora aqui, não no
+  169):** split de arquivos que preserva a cerimônia POR CONSTRUÇÃO —
+  `.claude/governance/models-registry.json` = camada T + SCHEMA
+  (sentinel-gated; muda SÓ por cerimônia canonical-edit) e
+  `.claude/data/models-preference.json` = camada P (aliases →
+  resolved-id; muda por PR auditado com review advisory, SEM
+  sentinel). Resolver `_lib/model_registry.py` (stdlib, no-network,
+  cache por-processo) + lint `check-model-literals.py`
+  (grandfather+ratchet) + oracle `replacements ⊆ valid_override_ids`.
+- **W1 — rotina cloud semanal (a única parte com rede):** cobre SÓ
+  feeds de MODELOS dos vendors (Anthropic/OpenAI/xAI/Google) — o que
+  o substrate-watch NÃO faz. **Sem double-booking (r4): drift de CLI
+  segue 100% do substrate-watch; este plano APENAS estende
+  `check-substrate-watch.py` com o probe upstream faltante (e o probe
+  grok do débito PLAN-163) e CONSOME seus ledgers — nenhum fetcher
+  paralelo de CLI.** Controles de ingress (r4): allowlist FIXA de
+  hosts/paths HTTPS; redirects não seguidos fora do mesmo host;
+  limite de tamanho/timeout por resposta; digest sha256 da resposta
+  gravado como proveniência; feed malformado/ambíguo = FAIL-CLOSED
+  (relatório, nunca PR).
+- **W2 — proposta AUDITADA tocando SÓ a camada P:** PR sobre
+  `models-preference.json` (não-sentinel POR DESIGN do split W0 — a
+  cerimônia não é contornada porque a superfície cerimonial é outra);
+  o PR carrega o relatório+digests como evidência; CI vermelho
+  fail-closed se tocar o arquivo T/schema. Fase 2 (auto-merge com
+  janela de veto): FORA — só com ADR próprio.
 - **W3 — advisory tripla no `/ceo-boot` e nightly:** para cada CLI
-  (codex/grok/claude): instalado vs pin vs upstream conhecido —
-  "codex instalado 0.144.6, pin 0.144.6, upstream 0.151 ⇒ agende
-  pin-bump". Informa, NUNCA bloqueia sessão.
-- **Egress:** a rotina só LÊ fontes públicas dos vendors; nada do
-  repo sai além de números de versão em query nenhuma (fetch é
-  GET público). Ainda assim: revisão ADR-114 no debate.
+  (codex/grok/claude): instalado vs pin vs upstream (via
+  substrate-watch estendido) — informa, NUNCA bloqueia.
 
-## 3. Kill criteria / guard-rails
+## 3. Kill criteria / guard-rails (ampliados no r4)
 
-- Rotina com >2 falsos-positivos/mês (PR de "lançamento" inexistente)
-  ⇒ desativa auto-abertura, vira relatório no nightly.
-- PR da rotina tocando qualquer campo da camada T ⇒ vermelho
-  fail-closed no CI (o lint distingue T de P por schema).
+- >2 falsos-positivos/mês (PR de lançamento inexistente) ⇒ desativa
+  auto-abertura, vira relatório no nightly.
+- PR tocando o arquivo T/schema ⇒ vermelho fail-closed no CI.
+- Feed stale/parcial (mais velho que 30d ou campos ausentes) ⇒
+  report-only, nunca PR.
+- Drift de parser (schema do feed mudou) ⇒ fail-closed + breadcrumb.
+- **Controle de falso-NEGATIVO mensal:** fixture de lançamento
+  conhecido injetado ⇒ a rotina TEM de detectá-lo (positive control
+  da detecção; se falhar, lane marcada morta no nightly).
+- 3 falhas consecutivas de um vendor ⇒ lane desabilitada + alerta
+  (nunca silêncio).
 - Fase 2 (auto-merge) só com ratificação explícita do Owner em ADR.
 
 ## 3b. Pronto-para-execução (S302e)
@@ -83,8 +107,10 @@ advisory tripla visível no `/ceo-boot` com os 3 CLIs; AC: nunca
 bloqueia (é advisory por construção — testar com upstream fake à
 frente do pin).
 
-**Dependência dura:** registry+resolver+lint landados (PLAN-169
-W4.3-iv). Sem eles, este plano não abre — não há o que refrescar.
+**Dependência dura (r4: corrigida — era pendurada):** W1-W3 só abrem
+com o W0 DESTE plano landado (registry/resolver/lint); do 169 este
+plano depende apenas do lote W2.10 (literais curados) e consome o
+deprecations-ledger e os ledgers do substrate-watch.
 
 **Draft do ADR-149 Amendment 2** (Trust vs Preference — a doutrina
 que este plano implementa a fase-com-rede): em

@@ -31,11 +31,19 @@ a doutrina POR CONSTRUÇÃO.
      ALIAS estável (`claude-frontier`, `codex-latest` ≡ omitir
      `--model` — doutrina D5/PLAN-142 codificada como dado,
      `grok-latest`, `gemini-latest`) resolvido em runtime.
-2. **Fonte única:** `.claude/governance/models-registry.json`
-   (sentinel-gated, camadas T e P distinguíveis por schema) +
-   resolver `_lib/model_registry.py` (stdlib, NO-network, cache
-   por-processo). Precedência: override do caller > env do usuário >
-   registry. TTL vencido = advisory no boot, nunca bloqueio.
+2. **Fonte única com SPLIT cerimonial (r4):** DOIS arquivos —
+   `.claude/governance/models-registry.json` = camada T + SCHEMA da
+   camada P (sentinel-gated; muda SÓ por cerimônia canonical-edit) e
+   `.claude/data/models-preference.json` = valores da camada P
+   (aliases → resolved-id; muda por PR auditado com evidência, SEM
+   sentinel — por design, para o refresh fluir SEM contornar
+   cerimônia: a superfície cerimonial é o schema/T, não os valores
+   P). Resolver `_lib/model_registry.py` (stdlib, NO-network, cache
+   por-processo) valida os valores P contra o schema T em toda
+   leitura — valor P fora do schema = fail-closed p/ o default do
+   schema. Precedência: override do caller > env do usuário >
+   preference > default do schema. TTL vencido = advisory, nunca
+   bloqueio.
 3. **Fechamento da classe:** lint CI `check-model-literals.py` —
    model-id literal NOVO fora do registry/autoridades declaradas =
    vermelho (fail-closed em input novo); legado entra em

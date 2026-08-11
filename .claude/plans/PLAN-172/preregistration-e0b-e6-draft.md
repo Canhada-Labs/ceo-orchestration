@@ -1,12 +1,15 @@
 # PRÉ-REGISTRO E0b + E6 — DRAFT para assinatura do Owner (PLAN-172)
 
-> **Status: DRAFT (S302e, 2026-08-11).** Vira pré-registro IMUTÁVEL
-> com a assinatura GPG do Owner (`gpg --clearsign`, mesmo rito do
-> W5-preregistration do PLAN-169). NENHUM dado é coletado antes da
-> assinatura; qualquer mudança pós-assinatura = novo pré-registro.
-> Herda o bloco metodológico comum do W5/PLAN-169 (p50/p95, ≥3 runs
-> onde aplicável, grading cego, negativo publica igual, medição
-> imprime seus inputs).
+> **Status: DRAFT (S302e, 2026-08-11).** Assinatura em DOIS estágios
+> (r4 Codex — resolve a tensão imutabilidade × limiar dependente de
+> dados): **Estágio A** congela E0b inteiro + o desenho da Fase 0 do
+> E6 + a REGRA DETERMINÍSTICA de derivação do limiar (nenhum branco,
+> nenhuma escolha futura); **Estágio B** (pós-Fase-0) congela apenas
+> o VALOR numérico computado pela regra do Estágio A — se o valor
+> assinado no B divergir da regra do A, o pré-registro é INVÁLIDO.
+> Nenhum dado de BRAÇO é coletado antes do B; a Fase 0 (telemetria
+> passiva) começa após o A. Herda o bloco metodológico do W5/PLAN-169
+> (p50/p95, grading cego, negativo publica, medição imprime inputs).
 
 ## E0b — Decomposição do tempo-morto (gate de financiamento do E5)
 
@@ -48,26 +51,28 @@ rounds-até-GO caem ≥30% e minutos-humano ≥20%, sem aumento de
 escapes (defeito achado ≤2 sessões após land que o rail deveria ter
 pego).
 
-**Fase 0 (pré-braços, obrigatória):** telemetria de TODOS os
-desfechos do adequacy_gate (`measured_ok / weak / bail:<causa>`) por
-2 semanas — taxa de censura publicada. Braço C (gating) SÓ nasce se
-censura <50%. Limiar de kill-rate do C = p50 da telemetria da fase
-0, CONGELADO neste pré-registro no ato da assinatura (valor
-preenchido: ____ — Owner preenche ao assinar, após a fase 0).
+**Fase 0 (pré-braços, obrigatória; entre Estágio A e B):** telemetria
+de TODOS os desfechos do adequacy_gate (`measured_ok / weak /
+bail:<causa>`) por 2 semanas — taxa de censura publicada. Braço C
+(gating) SÓ nasce se censura <50%. **Regra de derivação do limiar
+(congelada no Estágio A):** limiar := p50 dos kill-rates dos
+desfechos `measured_ok` da Fase 0, arredondado para baixo ao múltiplo
+de 0,05. O Estágio B assina o número resultante — zero
+discricionariedade.
 
 **Braços:** A = rounds atuais (controle); B = cascata ADVISORY
 (dossiê anexado, revisor livre); C = cascata GATING (kill-rate <
 limiar ⇒ round devolvido antes do revisor externo). ≥30 rounds por
 braço, atribuição por unidade de trabalho, ordem intercalada.
 
-**Kill table (imutável):**
+**Kill table (imutável; 5 kills, quantificados no r4):**
 | Sinal | Ação |
 |---|---|
-| escapes ↑ vs A | mata o braço |
+| escapes no braço ≥ escapes de A + 2 na janela de 30 rounds | mata o braço |
 | falso-bloqueio em C >15% | mata C, mantém B |
 | cascata p95 >2min | mata (virou gate caro) |
 | rejeição precoce f≥30% MAS minutos-humano caem <5% | NEGATIVO; não promover |
-| achados-humanos fora-do-dossiê caem JUNTO com minutos | review superficial ⇒ ABORTA imediato |
+| achados-humanos fora-do-dossiê caem >30% na MESMA janela em que minutos-humano caem | review superficial ⇒ ABORTA imediato |
 
 **O que este pré-registro NÃO cobre:** E5 (pré-registro próprio
 pós-E0b), E3/E3b (E3 = W5/PLAN-169 imutável; E3b = registro futuro),

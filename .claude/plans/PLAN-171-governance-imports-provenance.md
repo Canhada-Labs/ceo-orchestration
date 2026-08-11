@@ -186,6 +186,11 @@ ACs mínimos (anti-churn de rail):
 - W1d (doc-drift): spawn.md corrigido p/ reference-mode + G12 cap 8
   propagado na skill; AC: grep zero de "inject SKILL.md inteiro" e
   zero de "cap 6" em superfícies vivas.
+- W3 (FILE ASSIGNMENT write-time — r4: AC de segurança faltava):
+  positive controls nos TRÊS ramos — assignment malformado ⇒ BLOCK;
+  arquivo fora do escopo ⇒ BLOCK; infra simulada (hook
+  ausente/timeout) ⇒ allow com breadcrumb; AC adicional: replay dos
+  spawns históricos de 1 semana com ZERO falso-bloqueio.
 - W4 (living docs): gerador emite índice navegável de 1 plano
   histórico como demo; AC: zero segredos (grep por CLASSES) e
   advisory-only.

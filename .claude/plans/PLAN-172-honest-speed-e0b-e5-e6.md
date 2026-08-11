@@ -265,8 +265,9 @@ PLAN-169 W6.2) → debate → cerimônia; (5) E6 conforme telemetria.
 gate verde no commit que o landa; E0b = relatório com inputs + célula
 da tabela marcada; M3 = verdito kill/financia com o corte de 40%
 aplicado; W-DH = emendas aceitas OU fallback documentado ativado; E6
-= relatório com os 4 kills avaliados; E5 = só nasce com pré-registro
-assinado + PLAN-171 W5 verde.
+= relatório com TODOS os kills da kill-table do pré-registro
+avaliados (a tabela do anexo é a autoridade, não uma contagem aqui);
+E5 = só nasce com pré-registro assinado + PLAN-171 W5 verde.
 
 **Debate:** pair-rail Codex r1→r3 APPROVE (S302c) cobre o conjunto;
 `/debate start PLAN-172` no início da execução cobre o Gate 3; as

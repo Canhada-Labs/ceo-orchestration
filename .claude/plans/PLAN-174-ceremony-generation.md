@@ -5,7 +5,7 @@ status: draft
 created: 2026-08-11
 owner: CEO
 depends_on: [PLAN-169]
-budget_tokens: 200-400k (firmar no refinamento pré-reviewed)
+budget_tokens: 250-450k (FIRMADO S302e r4; W1-W2 100-150k, W3 100-200k, W4 50-100k)
 budget_sessions: 3-5
 context_risk: medium
 external_wait: "milestone: pós-GA v1.3.0 + W3/W4 do 169 landados (NÃO o 169 inteiro). DEADLINE: slice W1-W3 verde até D-2 do corte v1.4.0-rc.1, senão ABORT-PATH: o corte usa a cerimônia manual e o piloto migra p/ o trem seguinte"
@@ -89,8 +89,10 @@ falso-positivo sobre os scripts de cerimônia HISTÓRICOS já landados
 (baseline de sanidade). W3 = gerador re-emite os cortes rc.3 e GA
 v1.3.0 a partir de input declarativo reconstruído; AC: equivalência
 de GARANTIAS (§2b) contra os scripts reais que executaram — é o
-golden test. W4 = piloto shadow no trem v1.4.0 (§2b), contagem de
-rounds comparada à baseline 12-17h.
+golden test. W4 = piloto shadow no trem v1.4.0 (§2b); métrica
+primária em ROUNDS vs ROUNDS (r4: baseline = 38 rounds do trem
+v1.3.0, dos quais 31 em scripts; alvo do §3 = redução ≥40% na classe
+de scripts); horas de reviewer reportadas como métrica SECUNDÁRIA.
 
 **Runbook sessão 1:** extrair o catálogo W1 dos rounds reais
 (read-only sobre PLAN-166/repass-rc3-scripts/) + esqueleto do lint.

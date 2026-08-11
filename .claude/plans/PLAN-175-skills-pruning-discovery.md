@@ -70,7 +70,10 @@ tags: [skills, telemetry, pruning, seed]
 
 **ACs por passo:** P1 = mecanismo de sugestão vivo com positive
 control (spawn sem skill ⇒ sugestão aparece no transcript) + baseline
-do unknown-ratio publicado com inputs (janela 90d, N≥100). P2 = lista
+do unknown-ratio publicado com inputs (janela 90d, N≥100) **+ (r4) a
+re-medição obrigatória aos 30d publicada E a decisão de Fase 2
+APLICADA pela regra do §1 (ratio ≥0,10 ⇒ fail-high ativado; <0,10 ⇒
+registrado como atingido) — P1 não fecha no baseline.** P2 = lista
 de arquivamento DERIVADA pela regra determinística (nunca curada à
 mão) + `archive/` restaurável testado (1 skill arquivada e restaurada
 no mesmo PR de teste). P3 = 116 domain movidos p/ packs assinados
