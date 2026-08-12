@@ -181,6 +181,26 @@ paths-ga-1.manifest.txt paths-ga-2.manifest.txt
 verdict-ga-1.txt verdict-ga-2.txt
 transcript-ga-1.log transcript-ga-2.log
 PROVENANCE-ga.md MANIFEST-ga.sha256"
+# Docs de governanca pos-rc.3 admitidos SO no delta (S303, opcao A): o
+# freeze comeca no corte da rc.3, mas main andou 9 arquivos de PLANO/
+# ADR-draft (NAO-produto: nenhum hook, script, SPEC, workflow, CLAUDE.md
+# ou PROTOCOL.md) - e mais a EMENDA DESTE PROPRIO SCRIPT, sem a qual o
+# conserto se AUTO-BLOQUEARIA, porque commitar a emenda poe o script no
+# delta. Lista EXPLICITA de proposito: um curinga tipo .claude/plans/*
+# readmitiria evidencia/verdito de outras tags e qualquer arquivo novo
+# dropado depois da revisao - exatamente a classe que GA_OUT_OK fecha.
+# Isto NAO relaxa a checagem de arvore suja (bloco GASTATUS abaixo),
+# que segue aceitando apenas as saidas do runner.
+GA_DOCS_OK=".claude/plans/PLAN-166/OWNER-GA-CUT.sh
+.claude/plans/PLAN-171-governance-imports-provenance.md
+.claude/plans/PLAN-172-honest-speed-e0b-e5-e6.md
+.claude/plans/PLAN-172/preregistration-e0b-e6-draft.md
+.claude/plans/PLAN-172/preregistration-e0b-e6-stageA.asc
+.claude/plans/PLAN-173-ceo-cockpit-warp-study.md
+.claude/plans/PLAN-174-ceremony-generation.md
+.claude/plans/PLAN-175-skills-pruning-discovery.md
+.claude/plans/PLAN-176-model-currency-refresh.md
+.claude/plans/PLAN-176/adr-149-amendment2-draft.md"
 HEADNOW="$(git rev-parse HEAD)"
 if [ "$HEADNOW" != "$RC_SHA" ]; then
   git merge-base --is-ancestor "$RC_SHA" "$HEADNOW" \
@@ -196,6 +216,13 @@ if [ "$HEADNOW" != "$RC_SHA" ]; then
   while IFS= read -r _dp; do
     [ -n "$_dp" ] || continue
     if [ "$_dp" = "$VF" ] || [ "$_dp" = "$VD" ]; then continue; fi
+    # Docs de governanca pos-rc.3 (S303): fechado por NOME exato, mesma
+    # disciplina de GA_OUT_OK - sem curinga, sem prefixo de diretorio.
+    _dok=0
+    for _gd in $GA_DOCS_OK; do
+      [ "$_dp" = "$_gd" ] && { _dok=1; break; }
+    done
+    if [ "$_dok" -eq 1 ]; then continue; fi
     case "$_dp" in
       "$GA_DIR"/*)
         _rel="${_dp#"$GA_DIR"/}"
