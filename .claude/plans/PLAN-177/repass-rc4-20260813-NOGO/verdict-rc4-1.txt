@@ -1,0 +1,48 @@
+No P0 findings. Two P1 defects leave the cure set incomplete.
+
+### P1 — Local decision guard accepts a valid-YAML duplicate-key override
+
+**FILE:LINE:** [.claude/scripts/local/_release_tag_guard.py:228](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.V1tu8w/wt/.claude/scripts/local/_release_tag_guard.py:228), [.claude/scripts/local/_release_tag_guard.py:258](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.V1tu8w/wt/.claude/scripts/local/_release_tag_guard.py:258)
+
+Concrete failure scenario: this valid YAML is last-wins under standard parsers:
+
+```yaml
+verdict : NO-GO
+verdict: GO
+```
+
+The server validator trims the key and counts two declarations. The local guard’s regex requires the colon immediately after `verdict`, so it ignores the first declaration, counts one, parses `GO`, and does not return `E_DECISION`. Thus the supposedly unconditional `release.sh tag` rail can authorize the tag.
+
+The regression controls only construct exact `verdict:` duplicates, so they do not expose the grammar mismatch.
+
+Minimal fix: make the local parser and counter use the same trimmed-key grammar as the server validator, or fail closed on noncanonical top-level key syntax. Add space-before-colon and tab-before-colon duplicate cases to both rail suites.
+
+### P1 — Night-mode delivery still fails when user ceremony already owns `.claude/.gitignore`
+
+**FILE:LINE:** [scripts/_framework_manifest_set.sh:858](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.V1tu8w/wt/scripts/_framework_manifest_set.sh:858), [scripts/upgrade.sh:3155](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.V1tu8w/wt/scripts/upgrade.sh:3155), [scripts/tests/test-night-mode-ignore-effect.sh:291](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.V1tu8w/wt/scripts/tests/test-night-mode-ignore-effect.sh:291)
+
+Concrete failure scenario: a user-ceremony adopter has an existing `.claude/.gitignore`, perhaps containing `/cache/`, but lacking `/state/` and `/settings.local.json`. Upgrade intentionally skips the root `.gitignore`; `_apply_claude_dir_gitignore` sees the existing nested file and returns without adding either entry. Night-mode state remains visible and commit-eligible.
+
+The positive controls use clean targets where the nested file is absent. They prove create-if-missing delivery, but not adoption over an existing user-owned file. Install/upgrade parity will also remain green because both paths preserve the same incomplete file.
+
+Minimal fix: add the two exact entries idempotently to existing nested files while preserving adopter content. Test both fresh installation and upgrade with a preseeded custom `.claude/.gitignore`, asserting custom content survives and both generated artifacts are ignored.
+
+### P2 — The documented SHA-256 regeneration command produces a SHA-1 digest
+
+**FILE:LINE:** [npm/SHA256SUMS.txt:13](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.V1tu8w/wt/npm/SHA256SUMS.txt:13)
+
+Concrete failure scenario: the claimed regeneration command extracts `npm pack --json`’s `.shasum`, which is npm’s legacy SHA-1 digest. It also emits no filename, so it cannot regenerate the documented `<sha256>  <filename>` manifest format. An operator following the newly qualified local-only documentation creates invalid evidence.
+
+Minimal fix: document the real local writer, or materialize the tarball and run `sha256sum`/`shasum -a 256` while emitting the filename. Add a regression assertion rejecting `.shasum` as a SHA-256 recipe.
+
+### P2 — The ceo-boot harness-probe filter suppresses unrelated real spawns
+
+**FILE:LINE:** [.claude/scripts/ceo-boot.py:516](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.V1tu8w/wt/.claude/scripts/ceo-boot.py:516), [.claude/scripts/ceo-boot.py:537](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.V1tu8w/wt/.claude/scripts/ceo-boot.py:537), [.claude/hooks/_lib/payload.py:12](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.V1tu8w/wt/.claude/hooks/_lib/payload.py:12)
+
+Concrete failure scenario: the filter identifies probes solely by five missing metadata fields; it never checks the probe description or prompt. `subagent_type` is optional under the payload contract. Therefore an actual event such as “Review production authentication” with those optional/derived fields absent is discarded as a harness probe, hiding precisely the unclassified spawn the ratio is intended to expose.
+
+Minimal fix: require a positive harness fingerprint—an explicit discriminator, or a tightly closed description/prompt signature. Add a negative control using an arbitrary real description with all five metadata fields absent.
+
+The npm version-neutralization, enforced/deferred contract checks, common-path checksum-honesty rewrite, and tournament working-directory patch otherwise hold. Exact-decision and clean-target night-mode controls are genuine, but miss the two P1 shapes above. Focused pytest collection was prevented by the read-only sandbox’s lack of a writable temporary directory; the findings were reproduced through direct parser/call-path probes, while syntax and repository static gates passed.
+
+VERDICT: NO-GO — The local decision rail and user-ceremony ignore delivery remain incomplete at this SHA.

@@ -1,0 +1,28 @@
+1. **P1 — `.claude/.gitignore` delivery is incomplete.**  
+   **FILE:LINE:** [scripts/_framework_manifest_set.sh:858](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.V1tu8w/wt/scripts/_framework_manifest_set.sh:858)  
+   **Failure scenario:** If an adopter already has `.claude/.gitignore` without `/state/` and `/settings.local.json`, the helper returns without adding them. Under `--ceremony user`, the root `.gitignore` is deliberately untouched, so `/night-mode on` still leaves both artifacts visible to Git—the exact P1-1 defect. All efficacy scenarios start with no `.claude/.gitignore`, so their positive controls cannot catch this.  
+   **Minimal fix:** Preserve existing content but append each missing anchored rule idempotently. Add user install and upgrade tests seeded with an unrelated pre-existing `.claude/.gitignore`.
+
+2. **P1 — The npm honesty sweep leaves published Level-3 claims intact.**  
+   **FILE:LINE:** [npm/README.md:87](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.V1tu8w/wt/npm/README.md:87), [README.pt-BR.md:96](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.V1tu8w/wt/README.pt-BR.md:96), [INSTALL.md:19](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.V1tu8w/wt/INSTALL.md:19), [docs/QUICKSTART.md:86](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.V1tu8w/wt/docs/QUICKSTART.md:86)  
+   **Failure scenario:** npm consumers receive `npm/README.md`, which still promises “SLSA 3 provenance”; the quickstarts repeat Level 3, and INSTALL/Portuguese README also promise broader checksum coverage. The workflow and corrected English README provide Level 2 and an `install.sh`-only checksum. The new semantic test inspects only root `README.md`, so it passes while the package’s own README remains false.  
+   **Minimal fix:** Correct every live and shipped consumer document, including translations, and run the SLSA/checksum vocabulary gate over an explicit exhaustive surface list rather than only root README.
+
+3. **P1 — The replacement npm verification recipe does not verify the advertised global install.**  
+   **FILE:LINE:** [SUPPORT.md:155](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.V1tu8w/wt/SUPPORT.md:155), [npm/INTEGRITY.md:99](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.V1tu8w/wt/npm/INTEGRITY.md:99)  
+   **Failure scenario:** The supported channel is `npm install -g`, followed by advice to use `npm audit signatures`. npm does not support signature audits of global packages; without `--global`, it audits the current project instead, and the extra `ceo-orchestration` positional argument does not select that package. A user can therefore obtain either an error or a successful audit that never examined the installed shim.  
+   **Minimal fix:** Point global/npx users to the npm provenance panel, or provide a local project installation recipe followed by `npm audit signatures`. Add a regression assertion that the documented command’s install scope matches what npm audits.
+
+4. **P1 — The candidate’s canonical limitation text says the cured decision defect is still open.**  
+   **FILE:LINE:** [CLAUDE.md:94](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.V1tu8w/wt/CLAUDE.md:94)  
+   **Failure scenario:** It states that the validator contains zero `GO`/`NO-GO` occurrences and that a negative verdict still authorizes release. At this SHA, the validator rejects `NO-GO` with exit 3 and the fail-closed tag guard also checks the decision. Operators and future model sessions are therefore given the opposite of the implemented release contract.  
+   **Minimal fix:** Remove the obsolete open-P1 paragraph or replace it with an accurate statement of the two decision gates and their accepted set.
+
+5. **P1 — The S303 harness filter creates a false-green class.**  
+   **FILE:LINE:** [.claude/scripts/ceo-boot.py:537](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.V1tu8w/wt/.claude/scripts/ceo-boot.py:537), [.claude/scripts/tests/test_ceo_boot.py:668](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.V1tu8w/wt/.claude/scripts/tests/test_ceo_boot.py:668)  
+   **Failure scenario:** The predicate never checks the known probe description/hash. Any markerless real spawn—including one admitted because the PreToolUse hook failed open—is classified as a harness probe and removed from the denominator. A direct probe using an unrelated description and hash returned green with `harness_probes_skipped=1`. The negative control adds one governed marker, so it never tests the dangerous all-absent/non-probe shape.  
+   **Minimal fix:** Require a closed, observed harness signature, preferably the exact description hash plus the structural fields. Add a negative control with all five fields absent but a different description/hash and require the ratio to turn red.
+
+The decision gate and tournament workdir cure themselves behaved correctly in focused probes, but these remaining P1s make the payload incomplete and introduce false assurance.
+
+VERDICT: NO-GO
