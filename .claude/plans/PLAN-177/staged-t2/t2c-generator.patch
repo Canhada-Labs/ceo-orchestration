@@ -1,0 +1,56 @@
+diff --git a/scripts/_framework_manifest_set.sh b/scripts/_framework_manifest_set.sh
+index 92f680a..e6fcfc7 100644
+--- a/scripts/_framework_manifest_set.sh
++++ b/scripts/_framework_manifest_set.sh
+@@ -852,15 +852,45 @@ _claude_dir_gitignore_body() {
+ }
+ 
+ _apply_claude_dir_gitignore() {
+-  # $1 = the adopter .claude directory. Create-if-missing ONLY.
++  # $1 = the adopter .claude directory.
++  # Create when absent; when PRESENT, append only the entries that are
++  # missing, per line, preserving every adopter byte (re-pass rc.4 t1
++  # P1-b: an adopter with a pre-existing .claude/.gitignore -- e.g.
++  # /cache/ only -- never received /state/ nor /settings.local.json,
++  # so night-mode state stayed commit-eligible under --ceremony user;
++  # create-if-missing alone proved the clean-target case only). Same
++  # grep -Fxq per-entry predicate as the root blocks: the file stays
++  # adopter-owned, nothing is rewritten, a deliberate edit to OUR
++  # comment lines is never repaired.
+   _cdg_dir="$1"
+   _cdg_file="$_cdg_dir/.gitignore"
+-  if [ -e "$_cdg_file" ]; then
+-    echo "    EXISTS: .claude/.gitignore (adopter-owned, preserved)"
++  if [ ! -e "$_cdg_file" ]; then
++    [ -d "$_cdg_dir" ] || mkdir -p "$_cdg_dir"
++    _claude_dir_gitignore_body > "$_cdg_file"
++    echo "    CREATED: .claude/.gitignore"
+     return 0
+   fi
+-  [ -d "$_cdg_dir" ] || mkdir -p "$_cdg_dir"
+-  _claude_dir_gitignore_body > "$_cdg_file"
+-  echo "    CREATED: .claude/.gitignore"
++  if [ ! -f "$_cdg_file" ]; then
++    echo "    ERROR: .claude/.gitignore exists but is not a regular file" >&2
++    return 1
++  fi
++  _cdg_added=0
++  for _cdg_entry in "/state/" "/settings.local.json"; do
++    if grep -Fxq "$_cdg_entry" "$_cdg_file"; then
++      continue
++    fi
++    {
++      echo ""
++      echo "# Delivered by ceo-orchestration (PLAN-177 W1 / CF-9): per-machine"
++      echo "# posture/runtime state (never commit)."
++      printf '%s\n' "$_cdg_entry"
++    } >> "$_cdg_file"
++    _cdg_added=1
++  done
++  if [ "$_cdg_added" = "1" ]; then
++    echo "    APPENDED: missing posture entries into existing .claude/.gitignore"
++  else
++    echo "    EXISTS: .claude/.gitignore already carries both entries"
++  fi
+   return 0
+ }
