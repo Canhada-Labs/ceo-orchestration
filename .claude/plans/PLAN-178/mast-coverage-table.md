@@ -82,6 +82,26 @@
 7. **[P3] FM-2.2 (pedir esclarecimento) segue 100% doutrina** — sem
    sinal mecânico; aceitável, registrar como limitação conhecida.
 
+## Adendo S305-b — probe AC-2 (rail Workflow)
+
+**Live-fire executado** (run `wf_d7af49d9-6a3`): um `agent()` de
+Workflow com prompt deliberadamente NÃO-conforme (sem AGENT PROFILE /
+SKILL / FILE ASSIGNMENT) retornou `{"blocked":false,"returned":"ping"}`
+— o rail Workflow **não passa pelo `check_agent_spawn`**. Consequências:
+
+- **[P1→achado 8] Gap de governança no rail Workflow.** As 4 skills
+  Workflow existentes (audit-fanout, nightly-hygiene, council-audit,
+  eval-baseline) despacham agentes fora do gate de spawn. Mitigação
+  vigente: confinamento ADR-136-AMEND-1 é PROMPT-level (doutrina), não
+  hook. Coerente com o achado do rail `general-purpose` (Task) do AC-1.
+- **AC-2 acionado:** migração W1.1 (re-pass → Workflow) BLOQUEADA até
+  a cura. Opções para o debate: (a) estender o gate ao rail Workflow
+  (se o harness expuser hook nesse caminho); (b) validador PRÉ-despacho
+  no próprio script de workflow (função de conformidade chamada antes
+  de cada agent()); (c) documentar a fronteira como limitação aceita
+  (§5-style). Recomendação CEO: (b) é implementável hoje sem depender
+  do harness; (a) investigado no W1.4.
+
 ## Disposição
 
 - Gaps 1, 3, 5, 6 → candidatos de cura no próprio PLAN-178 (debate
