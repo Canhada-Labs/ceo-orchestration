@@ -641,3 +641,78 @@ class TestMainCLI(TestEnvContext):
 
 if __name__ == "__main__":
     unittest.main()
+# S303 regression tests — APPEND to .claude/scripts/tests/test_ceo_boot.py
+class TestHarnessProbeFilter(TestEnvContext):
+    """S303: harness tool-loading probes (ToolSearch materialization) carry a
+    description now, so the S86 ghost filter (which requires desc_preview=='')
+    misses them and a single probe pins skill_unknown_ratio to 1/1 = 100%.
+    """
+
+    REAL_EVENT = {
+        "action": "agent_spawn",
+        "subagent_type": "",
+        "desc_preview": "Load WebFetch via ToolSearch?",
+        "desc_hash":
+            "3aa1aca1be9b616da5fd32fd9db7b6de5037ed45182e1e350f31cc8dbd67c24f",
+        "skill": "unknown",
+        "has_profile": False,
+        "has_file_assignment": False,
+        "rail": None,
+        "archetype": None,
+    }
+
+    def test_real_s303_event_is_classified_as_probe(self):
+        self.assertFalse(_mod._is_ghost_spawn_event(self.REAL_EVENT))
+        self.assertTrue(_mod._is_harness_probe_event(self.REAL_EVENT))
+
+    def test_filter_is_not_a_governance_escape_hatch(self):
+        # NEGATIVE CONTROL: a real skill-less dispatch that carries ANY one of
+        # the five governed markers must still count in the denominator.
+        for over in (
+            {"subagent_type": "security-engineer"},
+            {"archetype": "security-engineer"},
+            {"rail": "claude"},
+            {"has_profile": True},
+            {"has_file_assignment": True},
+        ):
+            ev = dict(self.REAL_EVENT)
+            ev.update(over)
+            self.assertFalse(_mod._is_harness_probe_event(ev), repr(over))
+
+    def test_ratio_green_on_probe_only_window(self):
+        original = _mod._iter_audit_events_since
+
+        def fake_iter(_h):
+            yield dict(self.REAL_EVENT)
+
+        _mod._iter_audit_events_since = fake_iter
+        try:
+            status, summary, detail = _mod.check_skill_unknown_ratio()
+            self.assertEqual(status, "green")
+            self.assertEqual(detail["total"], 0)
+            self.assertEqual(detail["harness_probes_skipped"], 1)
+        finally:
+            _mod._iter_audit_events_since = original
+
+    def test_real_gap_still_red(self):
+        original = _mod._iter_audit_events_since
+
+        def fake_iter(_h):
+            yield dict(self.REAL_EVENT)          # probe — excluded
+            yield {                               # real gap — must go red
+                "action": "agent_spawn",
+                "subagent_type": "security-engineer",
+                "archetype": "security-engineer",
+                "desc_preview": "audit auth", "desc_hash": "abc",
+                "skill": "unknown", "has_profile": True,
+                "has_file_assignment": True, "rail": "claude",
+            }
+
+        _mod._iter_audit_events_since = fake_iter
+        try:
+            status, summary, detail = _mod.check_skill_unknown_ratio()
+            self.assertEqual(status, "red")
+            self.assertEqual((detail["unknown"], detail["total"]), (1, 1))
+            self.assertEqual(detail["harness_probes_skipped"], 1)
+        finally:
+            _mod._iter_audit_events_since = original

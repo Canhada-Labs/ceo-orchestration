@@ -513,6 +513,36 @@ def _is_ghost_spawn_event(ev: Dict[str, Any]) -> bool:
     )
 
 
+def _is_harness_probe_event(ev: Dict[str, Any]) -> bool:
+    """True iff the agent_spawn row is a harness-internal tool-loading probe.
+
+    S303: the ghost filter above was written for the ToolSearch probes of an
+    older harness, whose Agent-shaped PostToolUse rows carried NO description
+    (desc_preview == "" and desc_hash == SHA256(b"")). The current harness
+    supplies a human-readable description for the same class of call — e.g.
+    ``Load WebFetch via ToolSearch?`` with prompt ``noop`` and a fixed cheap
+    model — so all four ghost conditions no longer hold and a pure
+    tool-materialization probe lands in the denominator as a governance gap.
+
+    The discriminator is ``subagent_type``: the Agent/Task spawn contract makes
+    it REQUIRED for every governed dispatch (``check_agent_spawn.py`` derives
+    the authoritative archetype from it, and ``extract_skill`` Path D needs it),
+    so a row that carries none was never a CEO dispatch. All five conditions
+    must hold — no subagent_type, no archetype, no rail attribution, no
+    ``## AGENT PROFILE`` and no ``## FILE ASSIGNMENT`` — so a real named spawn
+    that merely lost one field still counts. Skipped rows stay OBSERVABLE via
+    the ``harness_probes_skipped`` counter: this suppresses a false alarm, it
+    does not hide the event.
+    """
+    return (
+        not ev.get("subagent_type")
+        and not ev.get("archetype")
+        and ev.get("rail") is None
+        and ev.get("has_profile") is False
+        and ev.get("has_file_assignment") is False
+    )
+
+
 def check_skill_unknown_ratio() -> Tuple[str, str, Any]:
     """Detect spawns that should have SKILL injection but didn't.
 
@@ -531,6 +561,7 @@ def check_skill_unknown_ratio() -> Tuple[str, str, Any]:
     total = 0
     unknown = 0
     ghosts_skipped = 0
+    harness_probes_skipped = 0
     skill_less_by_design = 0
     test_pollution_skipped = 0
     for ev in _iter_audit_events_since(24):
@@ -541,6 +572,9 @@ def check_skill_unknown_ratio() -> Tuple[str, str, Any]:
             continue
         if _is_ghost_spawn_event(ev):
             ghosts_skipped += 1
+            continue
+        if _is_harness_probe_event(ev):
+            harness_probes_skipped += 1
             continue
         # Skill-less by design: general-purpose archetype dispatches
         # (mitigated rail per ADR-082) AND built-in subagent types like
@@ -569,13 +603,16 @@ def check_skill_unknown_ratio() -> Tuple[str, str, Any]:
     if total == 0:
         msg = (
             "no custom-archetype spawns "
-            "({s} general-purpose, {g} ghosts, {t} test-pollution)".format(
-                s=skill_less_by_design, g=ghosts_skipped, t=test_pollution_skipped,
+            "({s} general-purpose, {g} ghosts, {p} harness-probes, "
+            "{t} test-pollution)".format(
+                s=skill_less_by_design, g=ghosts_skipped,
+                p=harness_probes_skipped, t=test_pollution_skipped,
             )
         )
         return "green", msg, {
             "unknown": 0, "total": 0,
             "ghosts_skipped": ghosts_skipped,
+            "harness_probes_skipped": harness_probes_skipped,
             "skill_less_by_design": skill_less_by_design,
             "test_pollution_skipped": test_pollution_skipped,
         }
@@ -584,6 +621,7 @@ def check_skill_unknown_ratio() -> Tuple[str, str, Any]:
     return status, f"{unknown}/{total} = {ratio:.0%}", {
         "unknown": unknown, "total": total,
         "ghosts_skipped": ghosts_skipped,
+        "harness_probes_skipped": harness_probes_skipped,
         "skill_less_by_design": skill_less_by_design,
         "test_pollution_skipped": test_pollution_skipped,
     }
