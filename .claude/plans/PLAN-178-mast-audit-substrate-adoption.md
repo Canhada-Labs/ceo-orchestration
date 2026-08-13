@@ -1,9 +1,10 @@
 ---
 id: PLAN-178
 title: Method currency — auditoria MAST-14 + injeção inter-agente, adoção de substrato 2026, e regras derivadas da pesquisa S305
-status: reviewed
+status: executing
 reviewed_at: 2026-08-13
 reviewed_by: "Owner — ratificação via AskUserQuestion (S305): 'Ratificar reviewed (Recomendado)'. W0 executa em seguida (read-only); W1+ exige /debate start PLAN-178."
+executing_since: 2026-08-13
 created: 2026-08-13
 owner: CEO
 depends_on: []
