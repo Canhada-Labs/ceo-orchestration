@@ -36,6 +36,7 @@ import re
 import shutil
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence
 
@@ -46,6 +47,8 @@ LOCAL = REPO_ROOT / ".claude" / "scripts" / "local"
 DRIVER_SRC = LOCAL / "release.sh"
 SITES_SRC = LOCAL / "_release_bump_sites.py"
 GUARD_SRC = LOCAL / "_release_tag_guard.py"
+VALIDATOR_SRC = REPO_ROOT / ".github" / "scripts" / "validate-pair-rail-verdict.py"
+GOVERNANCE = REPO_ROOT / ".claude" / "governance"
 
 D0 = "2026-08-04"
 D1 = "2026-08-05"  # D+1 — the ADR-103 hold guarantees this scenario
@@ -62,6 +65,9 @@ def _load(path: Path, name: str):
 
 bump_sites = _load(SITES_SRC, "_release_bump_sites_under_test")
 tag_guard = _load(GUARD_SRC, "_release_tag_guard_under_test")
+validator = _load(
+    VALIDATOR_SRC, "_validate_pair_rail_verdict_under_test"
+)
 
 
 # ---------------------------------------------------------------------------
@@ -753,23 +759,44 @@ def write_verdict(
     allowlist: Sequence[str],
     manifest_rel: str,
     manifest_sha: str,
+    verdict=("GO",),
 ) -> str:
+    """`verdict` accepts a str, None, or a SEQUENCE of decision lines.
+
+    The three shapes the PLAN-177 gate must separate: one line (normal),
+    zero lines (an author who never filled the template field in), two
+    lines (the last-wins override, where NO-GO followed by GO parses as
+    GO).
+    """
     rel = ".claude/governance/pair-rail-verdict-%s.md" % tag
     path = repo / rel
     path.parent.mkdir(parents=True, exist_ok=True)
     entries = "\n".join("  - %s" % e for e in allowlist)
+    if verdict is None:
+        decisions = []
+    elif isinstance(verdict, str):
+        decisions = [verdict]
+    else:
+        decisions = list(verdict)
+    decision = "".join("verdict: %s\n" % d for d in decisions)
     path.write_text(
-        "# Pair-Rail Verdict — %s\n\n```yaml\nverdict: GO\nrelease_tag: %s\n"
+        "# Pair-Rail Verdict \u2014 %s\n\n```yaml\n%srelease_tag: %s\n"
         "parent_sha: %s\ndelta_allowlist:\n%s\ndelta_manifest: %s\n"
         "delta_manifest_sha256: %s\n```\n" % (
-            tag, tag, parent, entries, manifest_rel, manifest_sha,
+            tag, decision, tag, parent, entries, manifest_rel, manifest_sha,
         ),
         encoding="utf-8",
     )
     return rel
 
 
-def arm_verdict(synth, tag: str, slug: str = "repass-r2", extra_allow=()):
+def arm_verdict(
+    synth,
+    tag: str,
+    slug: str = "repass-r2",
+    extra_allow=(),
+    verdict=("GO",),
+):
     """Commit a re-pass + verdict for `tag`, anchored at the pre-verdict HEAD."""
     repo, env = synth["repo"], synth["env"]
     parent = git(repo, env, "rev-parse", "HEAD")
@@ -778,7 +805,10 @@ def arm_verdict(synth, tag: str, slug: str = "repass-r2", extra_allow=()):
     )
     verdict_rel = ".claude/governance/pair-rail-verdict-%s.md" % tag
     allow = [verdict_rel, ev["manifest_rel"]] + ev["artifact_rels"] + list(extra_allow)
-    write_verdict(repo, tag, parent, allow, ev["manifest_rel"], ev["manifest_sha"])
+    write_verdict(
+        repo, tag, parent, allow, ev["manifest_rel"],
+        ev["manifest_sha"], verdict=verdict,
+    )
     git(repo, env, "add", "-A")
     git(repo, env, "commit", "-q", "-m", "governance: verdict %s" % tag)
     git(repo, env, "push", "-q", "origin", "main")
@@ -1304,3 +1334,283 @@ def test_install_md_describes_the_current_pair_rail_migration():
     text = (REPO_ROOT / "INSTALL.md").read_text(encoding="utf-8")
     assert "150 → 210 s, ADR-110-AMEND-2" in text
     assert "ADR-110-AMEND-1" not in text
+
+
+# ===========================================================================
+# PLAN-177 W0.1 (P1-4) -- the pair-rail DECISION gate
+# ===========================================================================
+# The re-pass of 2026-08-12 found that BOTH release rails read the verdict
+# envelope for pinning, TTL, anchor and delta, and NEITHER read the decision:
+# a cross-model NO-GO returned "OK: verdict ... valid" / exit 0 from the
+# server-side validator, release-gate went green, and only the Owner running
+# OWNER-GA-CUT.sh stood between a negative review and an irreversible publish.
+#
+# CF-3 asymmetry, restated here because it decides what each control PROVES:
+# step 15 carries continue-on-error under CEO_PAIR_RAIL_VERDICT_OPTIONAL=1, so
+# the validator control is a UNIT control over defence in depth; the control
+# that stands for enforcement in every mode is the tag-guard one below.
+_VALIDATOR_INPUTS_HASH_CACHE = {}
+
+# Anchors on the DIAGNOSTIC, not just the exit code: a gate that fires for the
+# wrong reason is a dead probe wearing a green badge (S-lesson: a control that
+# cannot fail proves nothing).
+_ACCEPTED_SET_TEXT = "{GO, GO-WITH-CONDITIONS}"
+_DECISION_REFUSED = "not in " + _ACCEPTED_SET_TEXT
+_CI_DUPLICATE_DIAGNOSTIC = "verdict decision declared more than once"
+_GUARD_DUPLICATE_DIAGNOSTIC = "declares the decision"
+
+# Value-shaped refusals. `GO | NO-GO | GO-WITH-CONDITIONS` is the LITERAL of
+# pair-rail-verdict-template.md:13 -- an envelope copied from the template
+# without filling the field in.
+_REFUSED_DECISIONS = [
+    ["NO-GO"],
+    [],
+    ["MAYBE"],
+    [""],
+    ["go"],
+    ["no-go"],
+    ["GO WITH CONDITIONS"],
+    ["GO | NO-GO | GO-WITH-CONDITIONS"],
+]
+_REFUSED_IDS = [
+    "no-go", "absent", "unknown", "empty", "lowercase", "lower-no-go",
+    "spaced", "template-literal",
+]
+
+
+@pytest.fixture()
+def ci_env(tmp_path):
+    """Subprocess env for the server-side validator runs.
+
+    Built fresh per test and never by mutating os.environ, so xdist workers
+    cannot leak steering vars into one another -- the same rule the rest of
+    this file follows through _env().
+    """
+    home = tmp_path / "vhome"
+    (home / "gnupg").mkdir(parents=True, exist_ok=True)
+    return _env(home)
+
+
+def _repo_head() -> str:
+    return subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=str(REPO_ROOT), stdout=subprocess.PIPE, universal_newlines=True,
+    ).stdout.strip()
+
+
+def _live_inputs_hash() -> str:
+    """Recompute inputs_hash in THIS checkout, with the validator own manifest.
+
+    Never copied from a real envelope (codex P2-2): the validator is itself
+    listed in pair-rail-inputs-hash-manifest.txt, so the P1-4 cure CHANGES the
+    expected hash. A hardcoded hex would make the green cases fail on
+    inputs_hash and the test would prove nothing about the decision.
+    """
+    key = "inputs_hash"
+    if key not in _VALIDATOR_INPUTS_HASH_CACHE:
+        _VALIDATOR_INPUTS_HASH_CACHE[key] = validator.compute_inputs_hash(
+            REPO_ROOT, GOVERNANCE / "pair-rail-inputs-hash-manifest.txt"
+        )
+    return _VALIDATOR_INPUTS_HASH_CACHE[key]
+
+
+def _live_tool_versions() -> Dict[str, str]:
+    """codex pins read from the LIVE governance files, not from memory.
+
+    Both pins drift by ceremony (the semver range has been widened four times);
+    deriving them keeps this control testing the decision instead of decaying
+    into a pin-drift alarm.
+    """
+    min_v, _max_v = validator.parse_pin_range(GOVERNANCE / "codex-cli-pin.txt")
+    assert min_v, "fixture broke: no semver range in codex-cli-pin.txt"
+    manifest = json.loads(
+        (GOVERNANCE / "codex-cli-pin-manifest.json").read_text(encoding="utf-8")
+    )
+    triple = sorted(manifest["payloads"])[0]
+    return {
+        "codex_cli": min_v,
+        "codex_target_triple": triple,
+        "codex_payload_sha256": manifest["payloads"][triple]["sha256"],
+    }
+
+
+def _write_live_shaped_verdict(
+    path: Path, tag: str, decisions: Sequence[str], parent: str
+) -> None:
+    """A verdict envelope the LIVE governance files accept end to end.
+
+    `decisions` is a SEQUENCE so the fixture can express the three shapes the
+    gate must separate: zero lines (absent), one line (normal), two lines (the
+    last-wins override). Values are written verbatim -- a malformed or unknown
+    token reaches the validator exactly as authored.
+    """
+    tv = _live_tool_versions()
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+    lines = ["# Pair-Rail Verdict -- fixture", "", "```yaml"]
+    lines += ["verdict: %s" % d for d in decisions]
+    lines += [
+        "generated_at: %sZ" % now,
+        "ttl_hours: 24",
+        "parent_sha: %s" % parent,
+        "release_tag: %s" % tag,
+        "inputs_hash: %s" % _live_inputs_hash(),
+        "tool_versions:",
+        "  codex_cli: %s" % tv["codex_cli"],
+        "  codex_target_triple: %s" % tv["codex_target_triple"],
+        "  codex_payload_sha256: %s" % tv["codex_payload_sha256"],
+        "gpg_signature: -----BEGIN PGP SIGNATURE----- fixture-not-a-signature",
+        "```",
+        "",
+    ]
+    path.write_text("\n".join(lines), encoding="utf-8")
+
+
+def _run_ci_validator(tmp_path, env, decisions: Sequence[str], bind_parent: bool):
+    """Run the server-side validator with the LITERAL step-15 argv.
+
+    Source of the argv: .github/workflows/release.yml, job release-gate.
+
+    bind_parent=False is the --parent-sha "" shape of
+    CEO_PAIR_RAIL_VERDICT_OPTIONAL=1. In THAT mode the step also carries
+    continue-on-error, so this variant is a UNIT test of the validator, not a
+    claim about the pipeline: what blocks a release in transition mode is
+    _release_tag_guard.py delta (see the tag-guard controls below).
+    """
+    tag = "v0.0.0-plan177-decision-gate"
+    parent = _repo_head()
+    verdict_file = tmp_path / "pair-rail-verdict-fixture.md"
+    _write_live_shaped_verdict(verdict_file, tag, decisions, parent)
+    argv = [
+        sys.executable, str(VALIDATOR_SRC),
+        "--verdict-file", str(verdict_file),
+        "--parent-sha", parent if bind_parent else "",
+        "--release-tag", tag,
+        "--max-age-hours", "24",
+        "--recompute-inputs-hash",
+        "--codex-cli-pin-file", ".claude/governance/codex-cli-pin.txt",
+        "--codex-cli-binary-sha256-file",
+        ".claude/governance/codex-cli-binary-sha256.txt",
+        "--codex-pin-manifest-file",
+        ".claude/governance/codex-cli-pin-manifest.json",
+        "--inputs-hash-paths-file",
+        ".claude/governance/pair-rail-inputs-hash-manifest.txt",
+    ]
+    return run(argv, REPO_ROOT, env)
+
+
+@pytest.mark.parametrize("bind_parent", [True, False], ids=["bound", "unbound"])
+@pytest.mark.parametrize("decisions", _REFUSED_DECISIONS, ids=_REFUSED_IDS)
+def test_ci_validator_stops_a_non_authorizing_decision(
+    tmp_path, ci_env, decisions, bind_parent
+):
+    proc = _run_ci_validator(tmp_path, ci_env, decisions, bind_parent)
+    assert proc.returncode == validator.EXIT_VERDICT_INVALID, (
+        "step-15 argv + decision=%r returned %d -- this is the P1: the "
+        "server-side validator authorised a release it never judged.\n%s%s"
+        % (decisions, proc.returncode, proc.stdout, proc.stderr)
+    )
+    assert _DECISION_REFUSED in proc.stderr, (
+        "red for the wrong reason -- the failure must name the DECISION and "
+        "the accepted set, not a downstream mismatch: %s" % proc.stderr
+    )
+    observed = decisions[0].strip() if decisions else "<absent>"
+    if decisions and not decisions[0].strip():
+        observed = "<non-string:dict>"
+    assert "'%s'" % observed in proc.stderr, (
+        "the diagnostic must quote the value it OBSERVED (%r): %s"
+        % (observed, proc.stderr)
+    )
+    assert "OK: verdict" not in proc.stdout
+
+
+@pytest.mark.parametrize("bind_parent", [True, False], ids=["bound", "unbound"])
+def test_ci_validator_stops_a_duplicated_decision_key(tmp_path, ci_env, bind_parent):
+    """Both readers are last-wins: NO-GO followed by GO parses as GO. An
+    envelope with two decision lines is not a verdict, it is an override."""
+    proc = _run_ci_validator(tmp_path, ci_env, ["NO-GO", "GO"], bind_parent)
+    assert proc.returncode == validator.EXIT_VERDICT_INVALID, (
+        "a duplicated verdict key was accepted -- last-wins parsing turned a "
+        "NO-GO into a GO.\n%s%s" % (proc.stdout, proc.stderr)
+    )
+    assert _CI_DUPLICATE_DIAGNOSTIC in proc.stderr, proc.stderr
+    assert "OK: verdict" not in proc.stdout
+
+
+@pytest.mark.parametrize("bind_parent", [True, False], ids=["bound", "unbound"])
+@pytest.mark.parametrize("decision", ["GO", "GO-WITH-CONDITIONS"])
+def test_ci_validator_admits_an_authorizing_decision(
+    tmp_path, ci_env, decision, bind_parent
+):
+    proc = _run_ci_validator(tmp_path, ci_env, [decision], bind_parent)
+    assert _DECISION_REFUSED not in proc.stderr, (
+        "an authorizing decision was stopped BY THE DECISION GATE -- the "
+        "closed set is wrong: %s" % proc.stderr
+    )
+    assert _CI_DUPLICATE_DIAGNOSTIC not in proc.stderr, proc.stderr
+    assert proc.returncode == validator.EXIT_OK, (
+        "decision %r passed the DECISION gate but the run failed a LATER "
+        "check -- that is fixture drift (pins, TTL, inputs_hash), not the "
+        "gate under test.\n%s%s" % (decision, proc.stdout, proc.stderr)
+    )
+
+
+def test_a_malformed_decision_is_invalid_never_infra(tmp_path, ci_env):
+    """CF-1: exit 3 (INVALID), never 1 (INFRA) and never a traceback.
+
+    The distinction is load-bearing: release.yml routes INFRA through
+    CEO_PAIR_RAIL_VERDICT_OPTIONAL, so a malformed decision leaving by the
+    infra door would be waivable by a repository variable.
+    """
+    for decisions in ([""], [], ["NO-GO", "GO"]):
+        proc = _run_ci_validator(tmp_path, ci_env, decisions, True)
+        assert proc.returncode == validator.EXIT_VERDICT_INVALID, (
+            "%r left by the wrong door (exit %d): %s"
+            % (decisions, proc.returncode, proc.stderr)
+        )
+        assert proc.returncode != validator.EXIT_INFRA_ERROR
+        assert "Traceback" not in proc.stderr, proc.stderr
+
+
+def test_the_two_rails_share_one_closed_set_of_decisions():
+    """The tuple is duplicated on purpose (separate processes, separate
+    machines, neither a dependency of the other); this is the gate that keeps
+    the two copies literally identical."""
+    assert validator.ACCEPTED_DECISIONS == ("GO", "GO-WITH-CONDITIONS")
+    assert tag_guard.ACCEPTED_DECISIONS == validator.ACCEPTED_DECISIONS
+    assert (
+        "{%s}" % ", ".join(validator.ACCEPTED_DECISIONS) == _ACCEPTED_SET_TEXT
+    )
+    for refused in ("NO-GO", "no-go", "go", "GO ", "", "MAYBE"):
+        assert refused not in validator.ACCEPTED_DECISIONS
+
+
+@pytest.mark.parametrize("decisions", _REFUSED_DECISIONS, ids=_REFUSED_IDS)
+@pytest.mark.parametrize("tag", ["v1.3.0-rc.2", "v1.3.0"])
+def test_delta_refuses_to_cut_a_tag_on_a_non_authorizing_verdict(synth, tag, decisions):
+    """The rail that enforces in EVERY mode (CF-3). Unconditional across rc and
+    stable, like the post-review-file assert: an rc cut on a NO-GO becomes the
+    unreviewed baseline of the GA."""
+    arm_verdict(synth, tag, verdict=decisions)
+    proc = guard(synth, "delta", "--repo", str(synth["repo"]), "--tag", tag)
+    assert proc.returncode == tag_guard.E_DECISION, proc.stdout + proc.stderr
+    assert _DECISION_REFUSED in proc.stderr, proc.stderr
+    assert tag_guard.E_DECISION not in (
+        0, tag_guard.E_VERDICT, tag_guard.E_DELTA, tag_guard.E_PARENT_NOT_ANCESTOR,
+    )
+
+
+@pytest.mark.parametrize("tag", ["v1.3.0-rc.2", "v1.3.0"])
+def test_delta_refuses_a_duplicated_decision_key(synth, tag):
+    arm_verdict(synth, tag, verdict=["NO-GO", "GO"])
+    proc = guard(synth, "delta", "--repo", str(synth["repo"]), "--tag", tag)
+    assert proc.returncode == tag_guard.E_DECISION, proc.stdout + proc.stderr
+    assert _GUARD_DUPLICATE_DIAGNOSTIC in proc.stderr, proc.stderr
+
+
+@pytest.mark.parametrize("decision", ["GO", "GO-WITH-CONDITIONS"])
+def test_delta_still_cuts_a_tag_on_an_authorizing_verdict(synth, decision):
+    arm_verdict(synth, "v1.3.0-rc.2", verdict=decision)
+    proc = guard(synth, "delta", "--repo", str(synth["repo"]), "--tag", "v1.3.0-rc.2")
+    assert _DECISION_REFUSED not in proc.stderr, proc.stderr
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "closed allowlist" in proc.stdout

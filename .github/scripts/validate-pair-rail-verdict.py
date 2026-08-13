@@ -61,9 +61,9 @@ verdicts use `parent_sha:`.
      decides based on CEO_PAIR_RAIL_VERDICT_OPTIONAL.
 - 2: VERDICT_EXPIRED — distinct from infra-error per R1 S-QA-Unseen-2.
      Release.yml can route this to a "verdict regen" branch.
-- 3: VERDICT_INVALID — release_tag mismatch / parent_sha mismatch /
-     inputs_hash mismatch / pin mismatch / signature missing. Release
-     MUST stop here.
+- 3: VERDICT_INVALID — decision not authorizing (PLAN-177 W0.1) /
+     release_tag mismatch / parent_sha mismatch / inputs_hash mismatch /
+     pin mismatch / signature missing. Release MUST stop here.
 
 stdlib only. Python ≥3.9.
 """
@@ -85,14 +85,47 @@ EXIT_INFRA_ERROR = 1
 EXIT_VERDICT_EXPIRED = 2
 EXIT_VERDICT_INVALID = 3
 
+# PLAN-177 W0.1 (P1-4). The decisions that AUTHORIZE a release. Every other
+# value — NO-GO, absent, empty, malformed, or simply unknown — is
+# non-authorizing and stops the release. Spelling is the template's
+# (.claude/governance/pair-rail-verdict-template.md:
+# `verdict: GO | NO-GO | GO-WITH-CONDITIONS`); membership is tested by EXACT
+# equality on purpose — case folding or a substring/prefix rule would read
+# NO-GO as authorizing because it CONTAINS GO.
+ACCEPTED_DECISIONS = ("GO", "GO-WITH-CONDITIONS")
 
-def parse_verdict_file(path: Path) -> Dict[str, Any]:
-    """Parse YAML frontmatter from a verdict file. Returns dict."""
-    if not path.exists():
-        raise FileNotFoundError(f"verdict file: {path}")
-    text = path.read_text(encoding="utf-8")
-    # Look for ```yaml ... ``` block
-    m = re.search(r"```yaml\s*\n(.*?)```", text, re.DOTALL)
+
+_YAML_BLOCK_RE = re.compile(r"```yaml\s*\n(.*?)```", re.DOTALL)
+
+
+def _strip_comment(raw: str) -> str:
+    """The comment/whitespace rule of the reader below, in ONE place."""
+    return raw.split("#", 1)[0].rstrip() if "#" in raw else raw.rstrip()
+
+
+def count_top_level_key(text: str, key: str) -> int:
+    """How many times `key:` is declared at the top level of the block.
+
+    Both readers of this signed file are LAST-WINS, so a second
+    `verdict:` silently overrides the first: NO-GO followed by GO parses
+    as GO. Callers require exactly one.
+    """
+    m = _YAML_BLOCK_RE.search(text)
+    if not m:
+        return 0
+    seen = 0
+    for raw in m.group(1).splitlines():
+        line = _strip_comment(raw)
+        if not line.strip() or line[0] in (" ", "\t"):
+            continue
+        if line.partition(":")[0].strip() == key:
+            seen += 1
+    return seen
+
+
+def parse_verdict_text(text: str) -> Dict[str, Any]:
+    """Parse YAML frontmatter from verdict TEXT. Returns dict."""
+    m = _YAML_BLOCK_RE.search(text)
     if not m:
         raise ValueError("verdict file missing yaml frontmatter block")
     yaml_body = m.group(1)
@@ -100,7 +133,7 @@ def parse_verdict_file(path: Path) -> Dict[str, Any]:
     out: Dict[str, Any] = {}
     current_key: Optional[str] = None
     for raw in yaml_body.splitlines():
-        line = raw.split("#", 1)[0].rstrip() if "#" in raw else raw.rstrip()
+        line = _strip_comment(raw)
         if not line.strip():
             continue
         if line[0] not in (" ", "\t"):
@@ -117,6 +150,13 @@ def parse_verdict_file(path: Path) -> Dict[str, Any]:
             if isinstance(out[current_key], dict):
                 out[current_key][sub_k.strip()] = sub_v.strip()
     return out
+
+
+def parse_verdict_file(path: Path) -> Dict[str, Any]:
+    """Path wrapper over parse_verdict_text (published entry point)."""
+    if not path.exists():
+        raise FileNotFoundError(f"verdict file: {path}")
+    return parse_verdict_text(path.read_text(encoding="utf-8"))
 
 
 def compute_inputs_hash(repo_root: Path, manifest_path: Path) -> str:
@@ -218,15 +258,64 @@ def main(argv: Optional[List[str]] = None) -> int:
     verdict_path = Path(args.verdict_file)
     repo_root = Path.cwd()
 
-    # Parse verdict
+    # Parse verdict. The TEXT is kept: the duplicate-key check below reads
+    # the same bytes the parse consumed (a second read could disagree).
     try:
-        verdict = parse_verdict_file(verdict_path)
+        verdict_text = verdict_path.read_text(encoding="utf-8")
+        verdict = parse_verdict_text(verdict_text)
     except FileNotFoundError as e:
         print(f"INFRA: verdict file not found: {e}", file=sys.stderr)
+        return EXIT_INFRA_ERROR
+    except OSError as e:
+        print(f"INFRA: verdict file unreadable: {e}", file=sys.stderr)
         return EXIT_INFRA_ERROR
     except ValueError as e:
         print(f"INFRA: verdict parse error: {e}", file=sys.stderr)
         return EXIT_INFRA_ERROR
+
+    # PLAN-177 W0.1 (P1-4): the DECISION gate. Until this block existed
+    # the validator read pinning, TTL and signature presence but never the
+    # verdict itself: a cross-model NO-GO returned OK / exit 0.
+    #
+    # CF-3 ASYMMETRY (stated in BOTH rails, where it can be acted on):
+    # this step carries `continue-on-error` when
+    # CEO_PAIR_RAIL_VERDICT_OPTIONAL=1 (release.yml:689), so the gate HERE
+    # is defence in depth; the rail that enforces in EVERY mode is
+    # `.claude/scripts/local/_release_tag_guard.py delta`, invoked by a
+    # step with no escape hatch. Neither may be dropped for the other.
+    #
+    # Fail-CLOSED on SHAPE as well as value (CF-1): the reader above
+    # returns a dict for an empty `verdict:` line, so the type check
+    # precedes the compare and a malformed decision exits 3 (INVALID),
+    # never 1 (INFRA) -- which the transition mode is allowed to wave
+    # through. Same precedent as the tool_versions dict check below.
+    decisions_declared = count_top_level_key(verdict_text, "verdict")
+    if decisions_declared > 1:
+        print(
+            f"INVALID: verdict decision declared more than once "
+            f"(x{decisions_declared}) -- the reader is last-wins, so a "
+            f"duplicated `verdict:` silently overrides the first; exactly "
+            f"one is required.",
+            file=sys.stderr,
+        )
+        return EXIT_VERDICT_INVALID
+    raw_decision = verdict.get("verdict")
+    if raw_decision is None:
+        shown = "<absent>"
+    elif not isinstance(raw_decision, str):
+        shown = "<non-string:%s>" % type(raw_decision).__name__
+    else:
+        shown = raw_decision.strip()
+    if shown not in ACCEPTED_DECISIONS:
+        accepted = "{%s}" % ", ".join(ACCEPTED_DECISIONS)
+        print(
+            f"INVALID: verdict decision '{shown}' not in {accepted} -- a "
+            f"release requires an explicit authorizing decision from the "
+            f"pair-rail. Exact match: no case folding, no substring rule "
+            f"(NO-GO contains GO).",
+            file=sys.stderr,
+        )
+        return EXIT_VERDICT_INVALID
 
     # R1 S-Sec-3: release_tag bind
     declared_tag = verdict.get("release_tag", "").strip()

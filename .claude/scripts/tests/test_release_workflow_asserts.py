@@ -881,6 +881,26 @@ class W1BReleaseGateDeltaAncestryTest(TestEnvContext):
             "HEAD-ancestry check covers the tagged commit itself (r18)",
         )
 
+    # -- CF-3: the rail that enforces in EVERY mode -----------------------
+
+    def test_gate_step_invokes_the_guard_delta_mode(self):
+        """PLAN-177 W0.1 / CF-3 -- the decision gate ships in two rails
+        and only ONE of them enforces in every mode. Step 15 carries
+        `continue-on-error` when CEO_PAIR_RAIL_VERDICT_OPTIONAL=1
+        (release.yml), so the decision check THERE is defence in depth;
+        this step has no escape hatch (pinned by
+        test_gate_step_has_no_continue_on_error), which makes the module
+        invocation below the enforcement path in all modes. Pinned so a
+        refactor cannot drop the call and leave the decision gated only by
+        the step that can be waived."""
+        block = _step_block(self.source, _W1B_STEP_NAME)
+        self.assertIn(
+            "%s delta" % _GUARD_MODULE, block,
+            "the fail-closed gate step no longer invokes the tag guard "
+            "in delta mode -- that call is where the verdict DECISION is "
+            "enforced when the step-15 escape hatch is open",
+        )
+
     # -- pinned order (WaveB5 order-assert pattern) -----------------------
 
     def test_pinned_step_order(self):
@@ -1000,17 +1020,36 @@ class W1BGuardModuleContractTest(TestEnvContext):
 
     def test_module_exit_codes_are_distinct_nonzero(self):
         # The workflow relies on ANY non-zero exit failing the step
-        # (set -euo pipefail); pin that the module's failure codes are
+        # (set -euo pipefail); pin that the module failure codes are
         # non-zero and mutually distinct so the failure MODE stays
         # testable.
-        codes = [
-            self.mod.E_USAGE, self.mod.E_FETCH, self.mod.E_NOT_ANCESTOR,
-            self.mod.E_REMOTE_REF, self.mod.E_DELTA,
-            self.mod.E_MANIFEST_PIN, self.mod.E_MANIFEST_CONTENT,
-            self.mod.E_MANIFEST_SET, self.mod.E_VERDICT, self.mod.E_VACUOUS,
-        ]
-        self.assertNotIn(0, codes)
-        self.assertEqual(len(codes), len(set(codes)))
+        #
+        # PLAN-177 W0.1 / CF-4: DERIVED from the module, not enumerated
+        # by hand. The hand-kept list rotted -- it omitted
+        # E_PARENT_NOT_ANCESTOR (12) from the day that mode was added, so
+        # the assert stopped covering the NEWEST failure mode, which is
+        # precisely when it is load-bearing. vars() cannot rot.
+        codes = {
+            name: value
+            for name, value in vars(self.mod).items()
+            if name.startswith("E_") and isinstance(value, int)
+        }
+        self.assertGreaterEqual(
+            len(codes), 12,
+            "the exit-code table shrank (%d modes) -- a removed mode is "
+            "a removed failure surface: %r" % (len(codes), codes),
+        )
+        self.assertNotIn(
+            0, list(codes.values()),
+            "a failure mode with exit 0 is a silent pass: %r" % codes,
+        )
+        self.assertEqual(
+            len(set(codes.values())), len(codes),
+            "two modes share an exit code -- the failure MODE stops "
+            "being testable: %r" % codes,
+        )
+        # the decision gate is a mode of its own (PLAN-177 W0.1)
+        self.assertIn("E_DECISION", codes)
 
 
 # --- PLAN-168 W1 (AC-1/AC-2/AC-4) ------------------------------------

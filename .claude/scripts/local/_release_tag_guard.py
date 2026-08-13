@@ -61,6 +61,10 @@
 #     `cat-file -e` proves existence, not lineage — a `commit-tree` object
 #     carrying HEAD's own tree makes diff(parent..HEAD) contain only the
 #     verdict while unreviewed work sits on main)
+#  13 the verdict DECISION does not authorize a release (NO-GO, absent,
+#     empty, or an unknown token). PLAN-177 W0.1 / P1-4: this guard read
+#     the tag, the anchor, the allowlist and the manifest of a verdict but
+#     never its DECISION, so a cross-model NO-GO still cut a tag.
 # ============================================================================
 """Ancestry + restricted-delta asserts for the release tag phase."""
 
@@ -85,6 +89,15 @@ E_MANIFEST_SET = 9
 E_VERDICT = 10
 E_VACUOUS = 11
 E_PARENT_NOT_ANCESTOR = 12
+E_DECISION = 13
+
+# PLAN-177 W0.1 (P1-4). Spelled out here rather than imported from
+# .github/scripts/validate-pair-rail-verdict.py: the two rails are separate
+# processes on separate machines and neither may become a dependency of the
+# other. The set itself comes from
+# .claude/governance/pair-rail-verdict-template.md. EXACT equality, no case
+# folding and no prefix/substring rule -- NO-GO contains GO.
+ACCEPTED_DECISIONS = ("GO", "GO-WITH-CONDITIONS")
 
 HEX40 = re.compile(r"\A[0-9a-f]{40}\Z")
 HEX64 = re.compile(r"\A[0-9a-f]{64}\Z")
@@ -225,6 +238,29 @@ def _parse_verdict(text: str) -> Dict[str, object]:
     return fields
 
 
+def _count_top_level_key(text: str, key: str) -> int:
+    """How many times `key:` is declared at the top level of the block.
+
+    PLAN-177 W0.1 / CF-2. _parse_verdict above is LAST-WINS, and so is the
+    step-15 reader: a second `verdict:` silently overrides the first, so
+    NO-GO followed by GO parses as GO. delta() requires exactly one. Same
+    block selection and same comment rule as the reader, or the count
+    would be about a different text than the parse.
+    """
+    block = re.search(r"```yaml\s*\n(.*?)```", text, re.DOTALL)
+    if block is None:
+        return 0
+    seen = 0
+    for raw in block.group(1).splitlines():
+        line = raw.split("#", 1)[0].rstrip() if "#" in raw else raw.rstrip()
+        if not line.strip() or line[0] in (" ", "\t"):
+            continue
+        m = re.match(r"\A([A-Za-z0-9_]+):", line)
+        if m and m.group(1) == key:
+            seen += 1
+    return seen
+
+
 def _sha256(path: str) -> str:
     h = hashlib.sha256()
     with open(path, "rb") as fh:
@@ -283,7 +319,8 @@ def delta(repo: str, tag: str, verdict_rel: Optional[str]) -> int:
             "tag on the tagged tree)." % verdict_rel,
         )
     with open(verdict_abs, encoding="utf-8") as fh:
-        fields = _parse_verdict(fh.read())
+        verdict_text = fh.read()
+    fields = _parse_verdict(verdict_text)
 
     release_tag = fields.get("release_tag")
     if release_tag != tag:
@@ -292,6 +329,47 @@ def delta(repo: str, tag: str, verdict_rel: Optional[str]) -> int:
             "verdict %s declares release_tag=%r, target tag is %r — refusing "
             "to judge this tag against another tag's verdict."
             % (verdict_rel, release_tag, tag),
+        )
+    # PLAN-177 W0.1 (P1-4) -- the DECISION gate.
+    #
+    # CF-3 ASYMMETRY (stated in BOTH rails, where it can be acted on): the
+    # server-side twin (.github/scripts/validate-pair-rail-verdict.py, step
+    # 15) carries `continue-on-error` when CEO_PAIR_RAIL_VERDICT_OPTIONAL=1
+    # (release.yml:689) -- there the decision check is defence in depth.
+    # THIS is the rail that enforces in every mode: release.sh calls it with
+    # `|| die`, and the release.yml step that calls it carries no escape
+    # hatch. Neither may be dropped for the other.
+    #
+    # Fail-CLOSED on SHAPE as well as value (CF-1): _parse_verdict returns a
+    # LIST for an empty `verdict:` line, so the type check precedes the
+    # compare -- a malformed decision is a named refusal, never a crash.
+    declared_decisions = _count_top_level_key(verdict_text, "verdict")
+    if declared_decisions > 1:
+        return _fail(
+            E_DECISION,
+            "verdict %s declares the decision %d times -- this reader "
+            "is last-wins, so a duplicated\n"
+            "      `verdict:` silently overrides the first; exactly one "
+            "is required."
+            % (verdict_rel, declared_decisions),
+        )
+    decision = fields.get("verdict")
+    if decision is None:
+        shown = "<absent>"
+    elif not isinstance(decision, str):
+        shown = "<non-string:%s>" % type(decision).__name__
+    else:
+        shown = decision.strip()
+    if shown not in ACCEPTED_DECISIONS:
+        return _fail(
+            E_DECISION,
+            "verdict %s: decision '%s' not in {%s} -- a tag may only be "
+            "cut on an authorizing decision.\n"
+            "      Everything the checks below assert (anchor, closed "
+            "allowlist, manifest content) is about WHICH TREE the\n"
+            "      re-pass saw; this one is about what the re-pass SAID "
+            "about it. A NO-GO over a perfect delta is still a NO-GO."
+            % (verdict_rel, shown, ", ".join(ACCEPTED_DECISIONS)),
         )
     parent = fields.get("parent_sha")
     if not isinstance(parent, str) or not HEX40.match(parent):
