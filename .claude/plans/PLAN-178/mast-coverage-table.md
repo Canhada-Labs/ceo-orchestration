@@ -101,6 +101,11 @@ SKILL / FILE ASSIGNMENT) retornou `{"blocked":false,"returned":"ping"}`
   de cada agent()); (c) documentar a fronteira como limitação aceita
   (§5-style). Recomendação CEO: (b) é implementável hoje sem depender
   do harness; (a) investigado no W1.4.
+- **RESOLVIDO (debate r1, consensus PROCEED):** opção (b) adotada; o
+  piloto mudou para a RE-AUDITORIA MAST (read-only) — o re-pass de
+  release está DESCARTADO como alvo de migração (nem usa Task tool);
+  fan-out que ESCREVE segue proibido no rail Workflow até existir
+  gate; dono da cura = Lote B do plano.
 
 ## Disposição
 

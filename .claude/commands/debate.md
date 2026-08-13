@@ -165,6 +165,13 @@ Report without modifying:
   start cold + cross-rail. Forking them from the CEO session would
   inherit the same blind spots the cascade exists to break
   (PROTOCOL.md §Honest limitation: same-LLM).
+- **Critic freshness on retries (PLAN-178 W2.1 — ADVISORY until Owner
+  ratification):** resuming an agent for round N+1 of the PLAN debate
+  is encouraged (continuity above); but re-judging a REVISED artifact
+  that the same critic rejected SHOULD go to a fresh cold spawn of the
+  archetype (no transcript of the prior rejection). See
+  DEBATE-SCHEMA.md §2 "Critic freshness on retries" for the rationale
+  and boundary; the rule becomes mandatory only on ratification.
 - Post-crash mid-debate: `claude --continue` restores the
   CONVERSATION; `/resume PLAN-NNN` restores the PLAN. The debate dir
   on disk is the ground truth for round state — `/debate status`

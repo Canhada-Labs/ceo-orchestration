@@ -65,6 +65,26 @@ cross-cutting concerns or security implications (PLAN-112, PLAN-113).
 Continue until all archetypes reach ACCEPT or ADJUST_PROCEED with no
 blocking findings.
 
+**Critic freshness on retries (PLAN-178 W2.1 — advisory until Owner
+ratification):** round-to-round continuity (same archetypes building on
+consensus) is NOT the same thing as re-judging one's own rejection.
+When a critic REJECTED a specific artifact and the artifact returns
+revised (a retry of the same unit, not a new round of the whole plan),
+the re-judgment goes to a FRESH critic — a cold spawn of the same
+archetype with no transcript of the prior rejection. Rationale:
+anchoring/commitment bias in same-context review is documented both in
+the external literature (see PLAN-178/research-S305.md line 10) and in
+this repo's own history (S296: 11 same-target rounds without
+convergence). The V2 Codex rail already satisfies this by construction
+(each round is a new process); this rule closes the Claude side.
+
+**Exemplar bar for prose surfaces (PLAN-178 W2.2 — advisory):** when
+the reviewed artifact is prose with a quality bar (README, announce
+kit, adopter docs), the critic names ONE real-world exemplar up front
+and compares side by side, instead of grading against an abstract
+rubric. Correctness gates are unaffected — this is for perceptual
+quality only.
+
 **Final artifact:** the last round produces `approved.md` (not
 `consensus.md`) under the `architect/` directory (see §3). If an impasse
 persists past round 3, escalate to the Owner — something is wrong with
