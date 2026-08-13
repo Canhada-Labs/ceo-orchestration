@@ -91,6 +91,8 @@ workflow — the value here is governance and auditability, not throughput.
 
 ## 5. Honest limitations
 
+- **The pair-rail verdict does not gate the generic release path (OPEN P1, found by the v1.3.0 GA re-pass, 2026-08-12).** The exact-`GO` check exists **only** in `.claude/plans/PLAN-166/OWNER-GA-CUT.sh`. `.github/scripts/validate-pair-rail-verdict.py` contains **zero** occurrences of `GO`/`NO-GO` — it validates pinning and TTL, never the decision — and `_release_tag_guard.py` / `release.sh tag --stable` accept a verdict whose decision is `NO-GO`, missing, or unknown. Reproduced with the workflow's exact step-15 arguments: flipping `verdict` to `NO-GO` returns `OK`, exit 0, after which `release-gate` succeeds and environment approval can irreversibly publish npm. This is a re-finding of the `repass-r2/verdict-c.txt` P1 whose earlier cure covered one path only. Until both validators require `verdict ∈ {GO, GO-WITH-CONDITIONS}` (with a regression test using those exact arguments), **a negative cross-model review does not mechanically block a release** — only the Owner running `OWNER-GA-CUT.sh` does.
+
 - **Bus factor.** Single primary maintainer; treat operational continuity accordingly.
 - **Same-vendor reviewer caveat.** The pair-rail reduces single-model blind spots but does not eliminate shared-vendor or shared-training-data failure modes.
 - **Formal model not in CI.** A TLA+ specification of the core state machine exists (`docs/formal-verification/`), but model-checking is not yet wired into CI — these are specifications, not a "formally verified" claim.

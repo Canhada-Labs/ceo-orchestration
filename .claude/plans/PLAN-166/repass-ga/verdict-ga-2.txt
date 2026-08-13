@@ -1,0 +1,11 @@
+P1 — Incomplete cure: a negative pair-rail verdict still authorizes the generic GA path.
+
+FILE:LINE: `.github/scripts/validate-pair-rail-verdict.py:221-231,497-504`; `.claude/scripts/local/_release_tag_guard.py:338-340`; `.claude/scripts/local/release.sh:622-649`; `.github/workflows/release.yml:680-735`; `.github/workflows/npm-publish.yml:213-219,468-486`.
+
+Concrete failure scenario: rc.3 added an exact-`GO` check only in `OWNER-GA-CUT.sh:349-363`. The documented generic `release.sh tag --stable` path still accepts a correctly pinned verdict whose decision is `NO-GO`, missing, or unknown. The server validator likewise never reads `verdict`; it proceeds from `release_tag` and finally prints `OK`. I reproduced this with the workflow’s full step-15 arguments: changing only `verdict` to `NO-GO` and refreshing the TTL timestamp returned `OK: verdict v1.3.0-rc.3 valid`, exit 0. Consequently `release-gate` can succeed, the new await job grants, and environment approval can irreversibly publish npm. This is the prior `repass-r2/verdict-c.txt:1` P1; its cure is incomplete.
+
+Minimal fix: in both validators, require `verdict` to be in the explicitly release-authorizing set—presumably `GO` or `GO-WITH-CONDITIONS`—before delta validation or tag signing. Reject missing, `NO-GO`, and unknown values. Add regression tests using the workflow’s exact arguments.
+
+The other rc.3 cures in scope hold at the tag, including version coherence, npm README staging, 35/45/50-minute timeout ordering, remote-tag liveness, closed delta evidence, and stable-release drafting; the four named exceptions are no worse and remain outside the mainline path.
+
+VERDICT: NO-GO

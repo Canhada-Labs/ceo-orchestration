@@ -1,0 +1,23 @@
+Advisory review: REJECT.
+
+1. **P1 — `scripts/install.sh:1830-1860`, `scripts/tests/_parity_classify.py:124-131`, `CHANGELOG.md:30-34`**
+
+   Concrete failure: a normal v1.2.0 adopter running `upgrade.sh` receives `/night-mode` but never receives the new `.gitignore` entries. Running `/night-mode on` therefore leaves `.claude/settings.local.json` and `.claude/state/night-mode.json` commit-eligible, contrary to the release claim. The parity gate explicitly calls this a “REAL install-only delivery gap” and then permanently allowlists it, so CI cannot fail on the defect. Fresh `--ceremony user` installs are affected too because line 1860 skips the ignore setup.
+
+   Minimal fix: deliver an idempotent `.claude/.gitignore` containing `/state/` and `/settings.local.json` from both install and upgrade paths, including user ceremony; remove the parity exception and add a v1.2.0-upgrade test that arms night mode and asserts clean `git status --porcelain`.
+
+2. **P1 — `.github/release-checklist.md:59-69`, `npm/INTEGRITY.md:4`, `.claude/scripts/local/_release_bump_sites.py:76-125`**
+
+   Concrete failure: the checklist says all mechanical version sites are covered, but the public npm integrity document still declares the package “currently 1.0.1.” It is absent from both the bump table and version oracle, so `bump --stable` can correctly return its advertised no-op while GA documentation disagrees with `npm/package.json` and `VERSION`, both 1.3.0.
+
+   Minimal fix: make this wording version-neutral or add `npm/INTEGRITY.md` to the writer/oracle census, then correct the checklist’s exhaustive-coverage claim.
+
+3. **P1 — `npm/INTEGRITY.md:7-28`, `npm/SHA256SUMS.txt:3-15`, `npm/package.json:9-19`, `.github/workflows/npm-publish.yml:368-390`**
+
+   Concrete failure: the integrity contract says every tag publish records a SHA-256 manifest and detached checksum, but the workflow only performs a dry-run packlist check before calling `npm publish`; it never builds or checksums the npm tarball. `SHA256SUMS.txt` contains only the v1.0.0 entry and is excluded from the package’s `files` list, so the documented consumer command cannot work for v1.3.0. This is a guarantee whose alleged gate cannot fail because it does not exist.
+
+   Minimal fix: either implement tarball checksum generation, verification, and artifact publication, or remove the “enforced today” guarantee and mark the control as deferred.
+
+The rc.3 mechanical cures otherwise hold: core/package/plugin versions agree at 1.3.0, counts are 166/27/190/68 with 14,306 collected cases, the stable bump has a genuine no-op fast path, the 35/50-minute gate ordering and pre-publish live-tag check are present, and rc.3 is now 28 hours old.
+
+VERDICT: NO-GO — Three P1 findings require cure and re-pass before the stable tag is pushed.
