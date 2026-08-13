@@ -1643,6 +1643,176 @@ def test_integrity_doc_makes_no_enforced_claim_for_the_tarball_checksum():
     )
 
 
+# ---------------------------------------------------------------------------
+# PLAN-177 W0.3 delta (codex P1-4 of the v4 round) — the generic sweep.
+#
+# The gates above are SUBJECT-BOUND: the table gate checks rows, and the
+# checksum gate anchors three named phantom referents. A NEW enforcement
+# promise, about some other subject, written into a section nobody watches,
+# passes all of them. The original defect is the proof that this is not
+# hypothetical: "(3) a per-tarball SHA-256 manifest ... recorded by
+# npm-publish.yml at tag cut" was written in the INTRODUCTION, not in a row.
+#
+# Rule: a claim that a mechanism runs may live in exactly two places — a
+# Contract table row (machine-checked by
+# test_integrity_contract_rows_name_a_live_step) or §Not yet automated (tied
+# to the table's un-enforced rows by
+# test_integrity_unenforced_rows_are_restated_where_the_reader_looks).
+# Anywhere else it is answerable to nothing, and is a red.
+#
+# PREDICATE CHOICE (the honest part). This is a closed VOCABULARY list with
+# NO negation exemption, and both halves were chosen from evidence, not taste:
+#
+#   * An earlier draft tolerated a phrase when a negation appeared within ~120
+#     chars. Probing the real file showed that exemption firing by ACCIDENT —
+#     "MUST satisfy" was excused by a "not" belonging to the next paragraph,
+#     and "fail-closes" by the "not" inside "does not verify". An exemption
+#     that triggers on unrelated words is not an exemption, it is a hole. So
+#     the prose was cured instead (PLAN-177 W0.3 delta: the intro now points
+#     at the table rather than enumerating mechanisms, and the tag-signing
+#     paragraph cites SECURITY.md as the authority instead of restating the
+#     gate), and the rule became absolute. Zero occurrences today: the sweep
+#     needs no exemption, so it has none.
+#   * The list is deliberately NARROW: phrases that assert a mechanism is in
+#     force. Bare "verify" is absent on purpose — the file legitimately tells
+#     a reader to `Verify locally with gpg --import ...`, an instruction, not
+#     a claim about the pipeline. "verifies"/"is verified" ARE listed: those
+#     are the file speaking about what the pipeline does.
+#     A broad list that has to be switched off is worth less than a narrow
+#     one that stays on.
+#
+# Matching is on word boundaries after normalization. Substring matching was
+# tried first and reported "asserted by" inside "asserted byte-for-byte" — the
+# substring-vs-exact class, for the fourth time in this plan.
+_ENFORCEMENT_VOCAB = (
+    "enforced today",
+    "is enforced",
+    "are enforced",
+    "enforced by",
+    "enforced at",
+    "every tag publish",
+    "recorded by",
+    "is verified",
+    "are verified",
+    "verifies",
+    "must satisfy",
+    "guarantees",
+    "is guaranteed",
+    "are guaranteed",
+    "asserted by",
+    "checked by",
+    "gated by",
+    "fails closed",
+    "fail closes",
+    "asserts",
+    "ensures",
+    "is signed",
+    "are signed",
+)
+
+
+def _normalize_prose(text: str) -> str:
+    """Lowercase; drop markdown emphasis and code ticks; hyphens to spaces;
+    collapse whitespace. `**Fails Closed**`, `fails-closed` and `fails closed`
+    normalize the same way, so a claim cannot hide behind formatting."""
+    text = text.lower()
+    for ch in ("*", "`", "_"):
+        text = text.replace(ch, "")
+    text = text.replace("-", " ")
+    return re.sub(r"\s+", " ", text)
+
+
+def _prose_outside_the_declared_zones(doc_text: str) -> str:
+    """Everything that is neither a Contract table row nor §Not yet
+    automated — the surfaces where a mechanism claim answers to nothing."""
+    body = re.sub(r"(?ms)^## Not yet automated\b.*?(?=^## |\Z)", "", doc_text)
+    return "\n".join(
+        line for line in body.splitlines() if not line.strip().startswith("|")
+    )
+
+
+def _enforcement_vocabulary_offenders(doc_text: str) -> List[str]:
+    norm = _normalize_prose(_prose_outside_the_declared_zones(doc_text))
+    offenders = []
+    for phrase in _ENFORCEMENT_VOCAB:
+        for m in re.finditer(r"\b%s\b" % re.escape(phrase), norm):
+            offenders.append(
+                "%r outside the declared zones: ...%s..."
+                % (phrase, norm[max(0, m.start() - 70) : m.end() + 70])
+            )
+    return offenders
+
+
+def test_integrity_prose_states_no_mechanism_outside_the_declared_zones():
+    """Generic negative sweep: no enforcement vocabulary anywhere in
+    npm/INTEGRITY.md except a Contract table row or §Not yet automated. Where
+    the earlier gates ask "is this row honest?", this one asks "is this claim
+    even standing somewhere that can be checked?" — the question the file
+    failed on the day it shipped."""
+    doc = INTEGRITY_DOC.read_text(encoding="utf-8")
+    assert _ENFORCEMENT_VOCAB, "the vocabulary is empty; the sweep checks nothing"
+
+    # The sweep must be looking at the right text: intro present, table absent.
+    swept = _prose_outside_the_declared_zones(doc)
+    assert "Integrity contract for the" in swept, (
+        "the introduction fell out of the swept zone — zone-stripping is eating "
+        "the prose it exists to watch"
+    )
+    assert "| enforced |" not in swept, "the Contract table was not stripped"
+    assert len(swept) > len(doc) // 3, (
+        "swept prose is %d chars of a %d-char file — the zones swallowed it"
+        % (len(swept), len(doc))
+    )
+
+    # (a) NEGATIVE control FIRST, deliberately: today's text passes on its own
+    # merits. The order matters and was learned the hard way — the controls
+    # below build their fixtures FROM the live file, so when the file itself
+    # carries a planted defect they fail first and the red names the fixture
+    # instead of the defect. Asserting cleanliness up front means a dirty file
+    # always reds on the assertion that describes what is actually wrong.
+    # Vacuity is not the risk here: (b) proves the instrument can still fail.
+    offenders = _enforcement_vocabulary_offenders(doc)
+    assert not offenders, (
+        "npm/INTEGRITY.md states a mechanism outside the Contract table and "
+        "§Not yet automated. Move the claim into a table row (with a step the "
+        "YAML really has) or into §Not yet automated:\n%s" % "\n".join(offenders)
+    )
+
+    # (b) positive control: the historical claim restored to the introduction.
+    # The fixture INSERTS a paragraph after the title rather than rewriting
+    # today's wording — an anchor on current prose stops matching the moment
+    # that prose is edited, and then the control fails for the wrong reason.
+    title, _, rest = doc.partition("\n")
+    claim = (
+        "The integrity controls enforced today are: (1) the `install.sh` "
+        "self-SHA trailer, and (2) a per-tarball SHA-256 manifest "
+        "(`npm/SHA256SUMS.txt`) recorded by `npm-publish.yml` at tag cut."
+    )
+    relapse = "%s\n\n%s\n%s" % (title, claim, rest)
+    assert relapse != doc, "relapse fixture did not patch the doc"
+    relapse_offenders = _enforcement_vocabulary_offenders(relapse)
+    assert any("enforced today" in o for o in relapse_offenders), (
+        "an enforcement claim in the introduction went unseen: %s"
+        % relapse_offenders
+    )
+    assert any("recorded by" in o for o in relapse_offenders), (
+        "the attribution half of the claim went unseen: %s" % relapse_offenders
+    )
+
+    # (c) scope control: the SAME sentence inside §Not yet automated is NOT an
+    # offender. This is the predicate as documented, not a global grep — that
+    # section is where honest prose about absence has to be able to use these
+    # words. Its own honesty is held by the restatement test above; a claim
+    # parked there is the residual gap, and it is a narrow, watched one.
+    marker = "## Not yet automated"
+    assert marker in doc
+    parked = doc.replace(marker, "%s\n\n%s" % (marker, claim), 1)
+    assert not _enforcement_vocabulary_offenders(parked), (
+        "the sweep is a global grep, not a zone rule — it flagged text inside "
+        "a declared zone"
+    )
+
+
 def test_readme_states_the_slsa_level_the_pipeline_actually_reaches():
     """Same class, most-read file: README advertised "SLSA 3 provenance" while
     `npm publish --provenance` is a Level-2 attestation and INTEGRITY.md says
