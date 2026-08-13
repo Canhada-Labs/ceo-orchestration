@@ -1794,26 +1794,18 @@ install_mcp_secrets_dir() {
   echo "          File perms MUST be 0600; auth.load_secret() fail-closes otherwise."
   echo "          DO NOT commit its contents to VCS."
 
-  # .gitignore entry — additive, idempotent.
-  local ignore_line="state/mcp_client_secrets/"
-  if [[ -f "$gitignore" ]]; then
-    if ! grep -Fxq "$ignore_line" "$gitignore" 2>/dev/null; then
-      {
-        echo ""
-        echo "# PLAN-019 P2-SEC-H: MCP shared-secret store (never commit)"
-        echo "$ignore_line"
-      } >> "$gitignore"
-      echo "    APPENDED to .gitignore: $ignore_line"
-    else
-      echo "    .gitignore already excludes $ignore_line"
-    fi
-  else
-    {
-      echo "# PLAN-019 P2-SEC-H: MCP shared-secret store (never commit)"
-      echo "$ignore_line"
-    } > "$gitignore"
-    echo "    CREATED .gitignore with: $ignore_line"
-  fi
+  # .gitignore entry — additive, idempotent. PLAN-177 W1 (CF-9): the text and
+  # the create-or-append logic live in the ONE generator in
+  # _framework_manifest_set.sh, because upgrade.sh now delivers the same block
+  # (an adopter older than v1.2.0 never received it from an upgrade). INV-4 /
+  # PLAN-168 W2: two copies of one emitted text is the class that produced the
+  # PROTOCOL.md pointer divergence, so a missing generator is a broken checkout
+  # and fails LOUD — same posture as install_protocol_pointer below.
+  command -v _apply_mcp_secrets_ignore >/dev/null 2>&1 || {
+    echo "    ERROR: _apply_mcp_secrets_ignore unavailable (scripts/_framework_manifest_set.sh not sourced) — cannot ensure the MCP-secrets .gitignore entry" >&2
+    return 1
+  }
+  _apply_mcp_secrets_ignore "$gitignore"
 }
 
 
@@ -1829,7 +1821,19 @@ install_mcp_secrets_dir() {
 # contract as install_mcp_secrets_dir above.
 install_posture_state_ignores() {
   local gitignore="$TARGET/.gitignore"
-  local entries=".claude/state/ .claude/settings.local.json"
+  local entries
+
+  # PLAN-177 W1 (CF-9): entry list AND append loop live in the ONE generator —
+  # see the rationale on install_mcp_secrets_dir above. Fail LOUD if absent.
+  command -v _posture_state_ignore_entries >/dev/null 2>&1 || {
+    echo "    ERROR: _posture_state_ignore_entries unavailable (scripts/_framework_manifest_set.sh not sourced) — cannot ensure posture-state .gitignore entries" >&2
+    return 1
+  }
+  command -v _apply_posture_state_ignores >/dev/null 2>&1 || {
+    echo "    ERROR: _apply_posture_state_ignores unavailable (scripts/_framework_manifest_set.sh not sourced) — cannot ensure posture-state .gitignore entries" >&2
+    return 1
+  }
+  entries="$( _posture_state_ignore_entries )"
 
   if [[ "$DRY_RUN" -eq 1 ]]; then
     echo ""
@@ -1841,23 +1845,49 @@ install_posture_state_ignores() {
   echo ""
   echo "==> Posture-state .gitignore entries (PLAN-165 CX-3)"
   _state_record_op "ensure_posture_state_ignores" "$entries"
-  local line
-  for line in $entries; do
-    if [[ -f "$gitignore" ]] && grep -Fxq "$line" "$gitignore" 2>/dev/null; then
-      echo "    .gitignore already excludes $line"
-      continue
+  _apply_posture_state_ignores "$gitignore"
+}
+
+# PLAN-177 W1 (CF-9): `.claude/.gitignore`, a NEW framework-delivered file.
+#
+# The two blocks above land in the adopter's ROOT .gitignore, which a
+# `--ceremony user` install never touches (WS4: a user install writes inside
+# .claude/ and nowhere else). So the exact population that /night-mode most
+# affects — user-ceremony adopters — had no protection at all, the damage the
+# GA re-pass names in verdict-ga-1.txt:5. This file lives INSIDE .claude/, so
+# it is delivered in EVERY ceremony without violating that invariant (the
+# smoke-install.yml user-ceremony assert allows .claude and .git at top level).
+#
+# Create-if-missing, NEVER rewrite: after creation it is adopter-owned. It is
+# deliberately absent from _framework_manifest_files, so the baseline manifest
+# never records it and no upgrade can classify it as framework-owned and
+# clobber it.
+install_claude_dir_gitignore() {
+  command -v _apply_claude_dir_gitignore >/dev/null 2>&1 || {
+    echo "    ERROR: _apply_claude_dir_gitignore unavailable (scripts/_framework_manifest_set.sh not sourced) — cannot ensure .claude/.gitignore" >&2
+    return 1
+  }
+
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    echo ""
+    echo "==> .claude/.gitignore (PLAN-177 W1 / CF-9)"
+    if [[ -e "$TARGET/.claude/.gitignore" ]]; then
+      echo "    (dry-run) EXISTS: .claude/.gitignore (would PRESERVE)"
+    else
+      echo "    (dry-run) would CREATE: .claude/.gitignore"
     fi
-    {
-      echo ""
-      echo "# PLAN-165 CX-3: per-machine posture/runtime state (never commit)"
-      echo "$line"
-    } >> "$gitignore"
-    echo "    APPENDED to .gitignore: $line"
-  done
+    return 0
+  fi
+
+  echo ""
+  echo "==> .claude/.gitignore (PLAN-177 W1 / CF-9)"
+  _state_record_op "ensure_claude_dir_gitignore" ".claude/.gitignore"
+  _apply_claude_dir_gitignore "$TARGET/.claude"
 }
 
 if [[ "$CEREMONY" != "user" ]]; then install_mcp_secrets_dir; fi  # WS4-guard-mcp
 if [[ "$CEREMONY" != "user" ]]; then install_posture_state_ignores; fi  # PLAN-165 CX-3
+install_claude_dir_gitignore  # PLAN-177 CF-9 — inside .claude/, so ALL ceremonies
 
 # ---- 7. Project-local templates (CLAUDE.md, MEMORY.md, .mcp.json — never overwrite) ----
 

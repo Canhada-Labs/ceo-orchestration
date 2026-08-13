@@ -121,16 +121,6 @@ ACCEPTED: List[Tuple[str, Optional[str], str]] = [
         "seed-once adopter doc — same upgrade.sh preserve contract",
     ),
     (
-        r"^\.gitignore$",
-        None,
-        "adopter-owned append-only surface. install.sh APPENDS marker-guarded "
-        "blocks (install_posture_state_ignores, PLAN-165 CX-3); upgrade.sh has "
-        "no append step, so an upgraded adopter never gets them. A REAL "
-        "install-only delivery gap — accepted here (never fatal) only because "
-        "the file is adopter-owned and must not be clobbered; reported every "
-        "run so it stays visible",
-    ),
-    (
         r"^PROTOCOL\.md$",
         "maintainer",
         "generated pointer. install.sh substitutes the resolved SOURCE_DIR; "
