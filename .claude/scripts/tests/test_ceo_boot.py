@@ -14,6 +14,7 @@ v1.13.0 + bundled with Phase 6 mutation harness):
 """
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import io
 import json
@@ -678,6 +679,91 @@ class TestHarnessProbeFilter(TestEnvContext):
             ev = dict(self.REAL_EVENT)
             ev.update(over)
             self.assertFalse(_mod._is_harness_probe_event(ev), repr(over))
+
+    # ------------------------------------------------------------------
+    # PLAN-177 t2 (re-pass rc.4 P1-f) — the filter needs a POSITIVE
+    # fingerprint, not five absences.
+    #
+    # The control above varies ONE governed marker at a time, so it never
+    # exercises the dangerous shape: all five absent AND an unrelated
+    # description. That row is a real markerless spawn (a hook that failed
+    # open admits exactly this), and the filter used to erase it from the
+    # denominator — hiding the very gap the ratio renders.
+    # ------------------------------------------------------------------
+    REAL_MARKERLESS_SPAWN = {
+        "action": "agent_spawn",
+        "subagent_type": "",
+        "desc_preview": "Review production authentication",
+        "desc_hash": hashlib.sha256(
+            b"Review production authentication"
+        ).hexdigest(),
+        "skill": "unknown",
+        "has_profile": False,
+        "has_file_assignment": False,
+        "rail": None,
+        "archetype": None,
+    }
+
+    def test_markerless_real_spawn_is_not_a_probe(self):
+        """NEGATIVE CONTROL: every governed marker absent, arbitrary
+        description. Absence alone must not buy an exemption."""
+        self.assertFalse(
+            _mod._is_harness_probe_event(self.REAL_MARKERLESS_SPAWN)
+        )
+
+    def test_markerless_real_spawn_turns_the_ratio_red(self):
+        """The end-to-end half: the event must reach the DENOMINATOR."""
+        original = _mod._iter_audit_events_since
+
+        def fake_iter(_h):
+            yield dict(self.REAL_MARKERLESS_SPAWN)
+
+        _mod._iter_audit_events_since = fake_iter
+        try:
+            status, _summary, detail = _mod.check_skill_unknown_ratio()
+            self.assertEqual(status, "red", detail)
+            self.assertEqual((detail["unknown"], detail["total"]), (1, 1))
+            self.assertEqual(detail["harness_probes_skipped"], 0)
+        finally:
+            _mod._iter_audit_events_since = original
+
+    def test_probe_shaped_description_needs_a_corroborating_hash(self):
+        """A preview that looks like a probe but whose desc_hash is over
+        DIFFERENT bytes was truncated, redacted or forged — either way it is
+        not the short, secret-free probe line, so it counts."""
+        ev = dict(self.REAL_EVENT)
+        ev["desc_hash"] = hashlib.sha256(b"something else entirely").hexdigest()
+        self.assertFalse(_mod._is_harness_probe_event(ev))
+        ev_no_hash = dict(self.REAL_EVENT)
+        ev_no_hash["desc_hash"] = ""
+        self.assertFalse(_mod._is_harness_probe_event(ev_no_hash))
+
+    def test_signature_is_closed_not_a_prefix_rule(self):
+        """`Load X via ToolSearch?` is anchored at BOTH ends: a real spawn
+        whose description merely opens or ends that way is not a probe."""
+        for desc in (
+            "Load WebFetch via ToolSearch? Then delete production",
+            "Please Load WebFetch via ToolSearch?",
+            "Load the auth module via ToolSearch?",
+            "Load WebFetch via ToolSearch",
+        ):
+            ev = dict(self.REAL_EVENT)
+            ev["desc_preview"] = desc
+            ev["desc_hash"] = hashlib.sha256(desc.encode("utf-8")).hexdigest()
+            self.assertFalse(_mod._is_harness_probe_event(ev), desc)
+
+    def test_real_probe_variants_still_pass(self):
+        """The other half of the closed signature: the observed shape, for the
+        tool names the harness actually materialises (MCP names carry `__`)."""
+        for desc in (
+            "Load WebFetch via ToolSearch?",
+            "Load mcp__claude-in-chrome__computer via ToolSearch?",
+            "Load Monitor, TaskCreate via ToolSearch?",
+        ):
+            ev = dict(self.REAL_EVENT)
+            ev["desc_preview"] = desc
+            ev["desc_hash"] = hashlib.sha256(desc.encode("utf-8")).hexdigest()
+            self.assertTrue(_mod._is_harness_probe_event(ev), desc)
 
     def test_ratio_green_on_probe_only_window(self):
         original = _mod._iter_audit_events_since

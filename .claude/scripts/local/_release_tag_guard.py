@@ -62,9 +62,13 @@
 #     carrying HEAD's own tree makes diff(parent..HEAD) contain only the
 #     verdict while unreviewed work sits on main)
 #  13 the verdict DECISION does not authorize a release (NO-GO, absent,
-#     empty, or an unknown token). PLAN-177 W0.1 / P1-4: this guard read
-#     the tag, the anchor, the allowlist and the manifest of a verdict but
-#     never its DECISION, so a cross-model NO-GO still cut a tag.
+#     empty, or an unknown token), OR the block spells a top-level key in a
+#     form this reader and the step-15 validator resolve differently.
+#     PLAN-177 W0.1 / P1-4: this guard read the tag, the anchor, the
+#     allowlist and the manifest of a verdict but never its DECISION, so a
+#     cross-model NO-GO still cut a tag. PLAN-177 t2 / P1-a: it then read
+#     the DECISION with a grammar the other rail did not share, so
+#     `verdict : NO-GO` + `verdict: GO` cut a tag on a NO-GO.
 # ============================================================================
 """Ancestry + restricted-delta asserts for the release tag phase."""
 
@@ -238,6 +242,55 @@ def _parse_verdict(text: str) -> Dict[str, object]:
     return fields
 
 
+# PLAN-177 t2 (re-pass rc.4 P1-a). The CANONICAL top-level declaration.
+# The two readers of this signed file disagreed about what a key IS: the
+# step-15 validator strips the key (`line.partition(":")[0].strip()`), so it
+# reads `verdict : NO-GO` as a declaration of `verdict`; the regexes in THIS
+# file demand the colon immediately after the name, so they skipped the line.
+# The valid-YAML pair
+#
+#     verdict : NO-GO
+#     verdict: GO
+#
+# was therefore two declarations there (refused) and ONE here, parsed as GO —
+# and this is the rail that enforces in every mode, so the tag was authorised.
+#
+# ONE semantics for both rails: NON-CANONICAL top-level syntax is REJECTED,
+# fail-closed. Trimming the key in both readers would also close the
+# divergence, but it widens the grammar of a SIGNED artifact to spellings no
+# author writes and no template emits; refusing the shape is the smaller
+# surface and is the only behaviour that cannot silently prefer a value.
+# A top-level line is canonical iff it is `name:` with no whitespace before
+# the colon, or a `- ` list item.
+_CANONICAL_TOP_LEVEL_KEY_RE = re.compile(r"\A[A-Za-z0-9_]+:")
+
+
+def _noncanonical_top_level_lines(text: str) -> List[str]:
+    """Top-level lines of the yaml block that are not canonical declarations.
+
+    Byte-for-byte twin of `noncanonical_top_level_lines` in
+    `.github/scripts/validate-pair-rail-verdict.py` (separate processes on
+    separate machines; neither may import the other — keep them identical).
+    Empty list == the block speaks the grammar both readers assume.
+    """
+    block = re.search(r"```yaml\s*\n(.*?)```", text, re.DOTALL)
+    if block is None:
+        return []
+    bad: List[str] = []
+    for raw in block.group(1).splitlines():
+        line = raw.split("#", 1)[0].rstrip() if "#" in raw else raw.rstrip()
+        if not line.strip():
+            continue
+        if line[0] in (" ", "\t"):  # sub-level: not a top-level declaration
+            continue
+        if _CANONICAL_TOP_LEVEL_KEY_RE.match(line):
+            continue
+        if line.startswith("- "):  # top-level list item
+            continue
+        bad.append(line)
+    return bad
+
+
 def _count_top_level_key(text: str, key: str) -> int:
     """How many times `key:` is declared at the top level of the block.
 
@@ -246,6 +299,11 @@ def _count_top_level_key(text: str, key: str) -> int:
     NO-GO followed by GO parses as GO. delta() requires exactly one. Same
     block selection and same comment rule as the reader, or the count
     would be about a different text than the parse.
+
+    Only meaningful once `_noncanonical_top_level_lines` is empty: this
+    counter does NOT strip the key and the step-15 twin does, so on a
+    non-canonical block the two counts differ. delta() checks the shape
+    first.
     """
     block = re.search(r"```yaml\s*\n(.*?)```", text, re.DOTALL)
     if block is None:
@@ -320,6 +378,26 @@ def delta(repo: str, tag: str, verdict_rel: Optional[str]) -> int:
         )
     with open(verdict_abs, encoding="utf-8") as fh:
         verdict_text = fh.read()
+    # PLAN-177 t2 (P1-a): SHAPE BEFORE ANY FIELD. Both rails read this file;
+    # they only agree on a canonical block. A non-canonical top-level line is
+    # refused here rather than handed to two different grammars — E_DECISION
+    # because the class this closes is the decision override (`verdict :
+    # NO-GO` + `verdict: GO`), and because a refusal that names the decision
+    # rail is the one an operator can act on.
+    noncanonical = _noncanonical_top_level_lines(verdict_text)
+    if noncanonical:
+        return _fail(
+            E_DECISION,
+            "verdict %s: non-canonical top-level key syntax %r -- a "
+            "top-level line must be\n"
+            "      `name:` with no whitespace before the colon (or a `- ` "
+            "list item). The two release rails read this\n"
+            "      file with different grammars, so `verdict : NO-GO` "
+            "followed by `verdict: GO` counts as two\n"
+            "      declarations server-side and one here; the shape is "
+            "refused instead of guessed."
+            % (verdict_rel, noncanonical),
+        )
     fields = _parse_verdict(verdict_text)
 
     release_tag = fields.get("release_tag")

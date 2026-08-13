@@ -38,6 +38,7 @@ import tempfile
 import textwrap
 import unittest
 from pathlib import Path
+from typing import Sequence
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = REPO_ROOT / ".github" / "scripts" / "validate-pair-rail-verdict.py"
@@ -50,6 +51,7 @@ EXIT_VERDICT_INVALID = 3
 
 def _make_verdict(
     *,
+    decision_lines: Sequence[str] = ("verdict: GO",),
     release_tag: str = "v1.99.0",
     parent_sha: str = "",
     commit_sha: str = "",
@@ -62,12 +64,18 @@ def _make_verdict(
     ),
     include_signature: bool = True,
 ) -> str:
-    """Build a verdict markdown file with the requested envelope."""
+    """Build a verdict markdown file with the requested envelope.
+
+    `decision_lines` are emitted VERBATIM (PLAN-177 t2 / P1-a): the grammar
+    divergence between this validator and the local tag guard can only be
+    expressed by writing the key spelling itself -- `verdict : NO-GO` is
+    valid YAML and was counted here but skipped there.
+    """
     lines = [
         "# Pair-Rail Verdict — test",
         "",
         "```yaml",
-        "verdict: GO",
+        *decision_lines,
         f"generated_at: {generated_at}",
         f"ttl_hours: {ttl_hours}",
         f"release_tag: {release_tag}",
@@ -157,6 +165,76 @@ class TestParentShaBind(unittest.TestCase):
         )
         self.assertEqual(r.returncode, EXIT_VERDICT_INVALID)
         self.assertIn("missing parent_sha field", r.stderr)
+
+
+class TestNonCanonicalTopLevelKeySyntax(unittest.TestCase):
+    """PLAN-177 t2 (re-pass rc.4 P1-a) — one grammar for both release rails.
+
+    `verdict : NO-GO` is valid YAML and last-wins under a real parser. THIS
+    validator strips the key, so it saw two declarations; the local tag guard
+    (`.claude/scripts/local/_release_tag_guard.py`, the rail with no escape
+    hatch) required the colon immediately after the name, saw ONE, and parsed
+    the following `verdict: GO`. Cured semantics, identical in both files:
+    non-canonical top-level syntax is REFUSED — exit 3, never 1, so the
+    transition mode cannot wave it through.
+    """
+
+    PARENT = "abcdef0123456789abcdef0123456789abcdef01"
+    DIAGNOSTIC = "non-canonical top-level key syntax"
+
+    def _run_decisions(self, decision_lines):
+        v = _make_verdict(
+            decision_lines=decision_lines,
+            parent_sha=self.PARENT,
+            release_tag="v1.99.0",
+        )
+        return _run(
+            ["--parent-sha", self.PARENT, "--release-tag", "v1.99.0"], v
+        )
+
+    def test_space_before_colon_duplicate_is_refused(self):
+        r = self._run_decisions(["verdict : NO-GO", "verdict: GO"])
+        self.assertEqual(r.returncode, EXIT_VERDICT_INVALID, msg=r.stderr)
+        self.assertIn(self.DIAGNOSTIC, r.stderr)
+        self.assertNotIn("Traceback", r.stderr)
+
+    def test_tab_before_colon_duplicate_is_refused(self):
+        r = self._run_decisions(["verdict\t: NO-GO", "verdict: GO"])
+        self.assertEqual(r.returncode, EXIT_VERDICT_INVALID, msg=r.stderr)
+        self.assertIn(self.DIAGNOSTIC, r.stderr)
+
+    def test_single_noncanonical_key_is_refused(self):
+        """Not only the duplicate shape: a lone `verdict : GO` is a spelling
+        the two readers disagree about, so it is refused rather than read."""
+        for line in ("verdict : GO", "verdict\t: GO"):
+            r = self._run_decisions([line])
+            self.assertEqual(r.returncode, EXIT_VERDICT_INVALID, msg=r.stderr)
+            self.assertIn(self.DIAGNOSTIC, r.stderr)
+            self.assertNotEqual(r.returncode, EXIT_INFRA_ERROR)
+
+    def test_canonical_envelope_is_untouched_by_the_shape_gate(self):
+        """The control that keeps the gate from being a blanket refusal."""
+        r = self._run_decisions(["verdict: GO"])
+        self.assertEqual(r.returncode, EXIT_OK, msg=r.stderr)
+        self.assertNotIn(self.DIAGNOSTIC, r.stderr)
+
+    def test_list_items_and_sub_keys_stay_canonical(self):
+        """delta_allowlist entries and `tool_versions:` children are the two
+        non-`name:` shapes a real envelope carries — neither may trip it."""
+        v = _make_verdict(
+            decision_lines=[
+                "verdict: GO",
+                "delta_allowlist:",
+                "  - .claude/governance/pair-rail-verdict-v1.99.0.md",
+            ],
+            parent_sha=self.PARENT,
+            release_tag="v1.99.0",
+        )
+        r = _run(
+            ["--parent-sha", self.PARENT, "--release-tag", "v1.99.0"], v
+        )
+        self.assertEqual(r.returncode, EXIT_OK, msg=r.stderr)
+        self.assertNotIn(self.DIAGNOSTIC, r.stderr)
 
 
 class TestLegacyCommitShaBind(unittest.TestCase):

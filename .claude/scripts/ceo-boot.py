@@ -513,6 +513,46 @@ def _is_ghost_spawn_event(ev: Dict[str, Any]) -> bool:
     )
 
 
+# PLAN-177 t2 (re-pass rc.4 P1-f). The POSITIVE half of the probe test.
+#
+# The S303 filter below identified a probe by ABSENCE alone — five governed
+# markers missing — and absence is the shape of the events the ratio exists to
+# find: a markerless real spawn (including one the PreToolUse hook admitted by
+# failing open) was classified as harness noise and removed from the
+# denominator. A probe-only window then reported green with
+# `harness_probes_skipped=1` while the governance gap it was built to surface
+# went unrendered.
+#
+# So the structural conditions are necessary, not sufficient: the row must ALSO
+# carry the observed harness signature. The signature is CLOSED — the literal
+# description the tool-materialization probe emits, anchored at both ends
+# (`Load <Tool> via ToolSearch?`, S303 observation, prompt `noop`) — plus
+# corroboration by `desc_hash`, which the emitter computes over the RAW
+# description: if the two disagree the preview was truncated or redacted, i.e.
+# not this short, secret-free probe line. Anything else counts. Every
+# uncertainty resolves toward VISIBLE.
+_HARNESS_PROBE_DESC_RE = re.compile(
+    r"\ALoad [A-Za-z0-9_.\-]+(?:,[ ]?[A-Za-z0-9_.\-]+)* via ToolSearch\?\Z"
+)
+
+
+def _has_harness_probe_fingerprint(ev: Dict[str, Any]) -> bool:
+    """True iff the row carries the CLOSED, observed harness-probe signature.
+
+    Positive identification, never inferred from missing fields. An absent or
+    non-matching `desc_hash` is NOT corroboration, so it returns False and the
+    row is counted — the safe direction for an advisory that exists to expose
+    unclassified spawns.
+    """
+    desc = ev.get("desc_preview")
+    if not isinstance(desc, str) or not _HARNESS_PROBE_DESC_RE.match(desc):
+        return False
+    digest = ev.get("desc_hash")
+    if not isinstance(digest, str) or not digest:
+        return False
+    return digest == hashlib.sha256(desc.encode("utf-8")).hexdigest()
+
+
 def _is_harness_probe_event(ev: Dict[str, Any]) -> bool:
     """True iff the agent_spawn row is a harness-internal tool-loading probe.
 
@@ -533,6 +573,14 @@ def _is_harness_probe_event(ev: Dict[str, Any]) -> bool:
     that merely lost one field still counts. Skipped rows stay OBSERVABLE via
     the ``harness_probes_skipped`` counter: this suppresses a false alarm, it
     does not hide the event.
+
+    PLAN-177 t2 (P1-f): those five are NECESSARY, NOT SUFFICIENT. Absence is
+    exactly the shape of the event this ratio exists to expose — a markerless
+    REAL spawn, including one admitted because the PreToolUse hook failed
+    open, matched all five and was deleted from the denominator. The row must
+    ALSO carry the closed harness signature
+    (``_has_harness_probe_fingerprint``); an unrecognised description counts,
+    however markerless the row is.
     """
     return (
         not ev.get("subagent_type")
@@ -540,6 +588,7 @@ def _is_harness_probe_event(ev: Dict[str, Any]) -> bool:
         and ev.get("rail") is None
         and ev.get("has_profile") is False
         and ev.get("has_file_assignment") is False
+        and _has_harness_probe_fingerprint(ev)
     )
 
 

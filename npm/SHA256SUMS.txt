@@ -10,9 +10,23 @@
 # the local build at that time) — previously accumulated 51 stale entries
 # across rebuilds, which confused adopter integrity checks.
 #
-# Regeneration command (manual, local verification):
+# Regeneration — run the writer that actually produces these lines:
 #
-#   cd npm && npm pack --dry-run --json | jq -r '.[0].shasum'
+#   bash scripts/install-npm.sh
+#
+# It builds the tarball, hashes it with `sha256sum` (or `shasum -a 256`, or
+# python hashlib as a last resort), and replaces the line for that filename
+# in place. Manual equivalent, when you want the digest without re-staging:
+#
+#   cd npm && TARBALL=$(npm pack --json | python3 -c \
+#     'import json,sys; print(json.load(sys.stdin)[0]["filename"])') && \
+#     shasum -a 256 "$TARBALL"      # GNU: sha256sum "$TARBALL"
+#
+# The previously documented `npm pack --dry-run --json | jq -r '.[0].shasum'`
+# CANNOT regenerate this file and is not a substitute: npm's `.shasum` is the
+# legacy SHA-1 of the tarball, and it carries no filename, so it produces
+# neither the algorithm nor the format of the lines below. `--dry-run` also
+# writes no tarball to hash.
 #
 # Each line below maps: <sha256>  <tarball-name>
 # Appended ONLY by a local `scripts/install-npm.sh` run.

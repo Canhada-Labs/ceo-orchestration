@@ -62,6 +62,8 @@ verdicts use `parent_sha:`.
 - 2: VERDICT_EXPIRED — distinct from infra-error per R1 S-QA-Unseen-2.
      Release.yml can route this to a "verdict regen" branch.
 - 3: VERDICT_INVALID — decision not authorizing (PLAN-177 W0.1) /
+     non-canonical top-level key syntax, i.e. a spelling this reader and
+     the local tag guard resolve differently (PLAN-177 t2) /
      release_tag mismatch / parent_sha mismatch / inputs_hash mismatch /
      pin mismatch / signature missing. Release MUST stop here.
 
@@ -103,12 +105,67 @@ def _strip_comment(raw: str) -> str:
     return raw.split("#", 1)[0].rstrip() if "#" in raw else raw.rstrip()
 
 
+# PLAN-177 t2 (re-pass rc.4 P1-a). The CANONICAL top-level declaration.
+# Two readers of the same signed file must not disagree about what a key
+# IS: this validator counted `verdict : NO-GO` as a declaration of
+# `verdict` (it strips the key), while the local tag guard's regex demanded
+# the colon immediately after the name and skipped the line entirely. The
+# valid-YAML pair
+#
+#     verdict : NO-GO
+#     verdict: GO
+#
+# is therefore two declarations here and ONE (=GO) there — a last-wins
+# override that the rail enforcing in every mode never saw.
+#
+# The semantics chosen for BOTH rails, and the reason: NON-CANONICAL
+# top-level syntax is REJECTED, fail-closed. Trimming the key in both
+# readers would also close the divergence, but it widens the grammar of a
+# SIGNED artifact to shapes no author writes and no template emits — every
+# new accepted spelling is another chance for the next reader to disagree.
+# Refusing the shape is a smaller surface and is the one behaviour that
+# cannot silently prefer a value. A top-level line is canonical iff it is
+# `name:` with no whitespace before the colon, or a `- ` list item.
+_CANONICAL_TOP_LEVEL_KEY_RE = re.compile(r"\A[A-Za-z0-9_]+:")
+
+
+def noncanonical_top_level_lines(text: str) -> List[str]:
+    """Top-level lines of the yaml block that are not canonical declarations.
+
+    Byte-for-byte twin of `_noncanonical_top_level_lines` in
+    `.claude/scripts/local/_release_tag_guard.py` (separate processes on
+    separate machines; neither may import the other — keep them identical).
+    Empty list == the block speaks the grammar both readers assume.
+    """
+    m = _YAML_BLOCK_RE.search(text)
+    if not m:
+        return []
+    bad: List[str] = []
+    for raw in m.group(1).splitlines():
+        line = _strip_comment(raw)
+        if not line.strip():
+            continue
+        if line[0] in (" ", "\t"):  # sub-level: not a top-level declaration
+            continue
+        if _CANONICAL_TOP_LEVEL_KEY_RE.match(line):
+            continue
+        if line.startswith("- "):  # top-level list item
+            continue
+        bad.append(line)
+    return bad
+
+
 def count_top_level_key(text: str, key: str) -> int:
     """How many times `key:` is declared at the top level of the block.
 
     Both readers of this signed file are LAST-WINS, so a second
     `verdict:` silently overrides the first: NO-GO followed by GO parses
     as GO. Callers require exactly one.
+
+    Only meaningful once `noncanonical_top_level_lines` is empty: this
+    counter strips the key, so it sees `verdict : X` as a declaration and
+    the twin counter in the tag guard does not. Callers run the shape
+    check FIRST.
     """
     m = _YAML_BLOCK_RE.search(text)
     if not m:
@@ -289,6 +346,25 @@ def main(argv: Optional[List[str]] = None) -> int:
     # precedes the compare and a malformed decision exits 3 (INVALID),
     # never 1 (INFRA) -- which the transition mode is allowed to wave
     # through. Same precedent as the tool_versions dict check below.
+    # PLAN-177 t2 (P1-a): SHAPE BEFORE VALUE. The counter below and the tag
+    # guard's counter only agree on a canonical block; a non-canonical
+    # top-level line is refused here rather than parsed by two grammars.
+    # INVALID (3), never INFRA (1): the transition mode may wave INFRA
+    # through, and this is a property of the SIGNED bytes, not of the runner.
+    noncanonical = noncanonical_top_level_lines(verdict_text)
+    if noncanonical:
+        print(
+            f"INVALID: non-canonical top-level key syntax in the verdict "
+            f"block: {noncanonical!r} -- a top-level line must be `name:` "
+            f"with no whitespace before the colon (or a `- ` list item). "
+            f"The two release rails read this file with different "
+            f"grammars, so `verdict : NO-GO` followed by `verdict: GO` "
+            f"counts as two declarations here and one there; the shape is "
+            f"refused instead of guessed.",
+            file=sys.stderr,
+        )
+        return EXIT_VERDICT_INVALID
+
     decisions_declared = count_top_level_key(verdict_text, "verdict")
     if decisions_declared > 1:
         print(
