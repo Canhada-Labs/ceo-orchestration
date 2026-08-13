@@ -1,0 +1,91 @@
+diff --git a/scripts/upgrade.sh b/scripts/upgrade.sh
+index cde1ff2..aeb1fa7 100755
+--- a/scripts/upgrade.sh
++++ b/scripts/upgrade.sh
+@@ -3127,6 +3127,86 @@ echo ""
+ echo "==> Refreshing framework version marker (.claude/.framework-version)"
+ _refresh_framework_marker
+ 
++# PLAN-177 W1 (P1-1 / CF-9) — the .gitignore surfaces install.sh has always
++# delivered and this script never did.
++#
++# Root .gitignore: two marker-guarded blocks (MCP shared-secret store, PLAN-019
++# P2-SEC-H; posture/runtime state, PLAN-165 CX-3). An adopter who installed at
++# v1.2.0 and only ever upgrades got /night-mode without the posture ignores, so
++# `on` leaves the permission overlay + state marker untracked (PLAN-165 AC-1
++# says `git status` stays empty); an adopter older than v1.2.0 never got the
++# secrets entry either. The parity gate named the gap and allowlisted it, so CI
++# could not fail on it. Both deliveries are ADDITIVE + idempotent and go
++# through the SAME generator install.sh calls (INV-4/PLAN-168 W2 — two copies
++# of one emitted text is the class that produced the pointer divergence). The
++# ORDER (secrets, then posture) mirrors install.sh's two call sites, because it
++# decides the order of the blocks in the resulting file.
++#
++# CEREMONY-GATED, mirroring the PROTOCOL.md skip above: install.sh guards both
++# of its calls with `[[ "$CEREMONY" != "user" ]]` (a user install writes no root
++# files at all, WS4), so skipping here is what keeps the two routes in
++# agreement. A line number would rot the moment either file moves.
++#
++# Missing generator = broken checkout, fails LOUD. That is install.sh's posture
++# for this library, not the preserve-the-surface posture of
++# _refresh_protocol_pointer: nothing here overwrites an adopter file, so there
++# is no surface a silent degrade would be protecting.
++echo ""
++echo "==> Refreshing root .gitignore framework blocks (PLAN-019 P2-SEC-H + PLAN-165 CX-3)"
++if [[ "$CEREMONY_EFFECTIVE" == "user" ]]; then
++  echo "    SKIP: root .gitignore blocks (recorded --ceremony user install — install.sh writes no root files either)"
++else
++  command -v _mcp_secrets_ignore_entry >/dev/null 2>&1 || {
++    echo "    ERROR: _mcp_secrets_ignore_entry unavailable (scripts/_framework_manifest_set.sh not sourced) — cannot ensure the MCP-secrets .gitignore entry" >&2
++    exit 1
++  }
++  command -v _apply_mcp_secrets_ignore >/dev/null 2>&1 || {
++    echo "    ERROR: _apply_mcp_secrets_ignore unavailable (scripts/_framework_manifest_set.sh not sourced) — cannot ensure the MCP-secrets .gitignore entry" >&2
++    exit 1
++  }
++  command -v _posture_state_ignore_entries >/dev/null 2>&1 || {
++    echo "    ERROR: _posture_state_ignore_entries unavailable (scripts/_framework_manifest_set.sh not sourced) — cannot ensure posture-state .gitignore entries" >&2
++    exit 1
++  }
++  command -v _apply_posture_state_ignores >/dev/null 2>&1 || {
++    echo "    ERROR: _apply_posture_state_ignores unavailable (scripts/_framework_manifest_set.sh not sourced) — cannot ensure posture-state .gitignore entries" >&2
++    exit 1
++  }
++  _UP_MCP_ENTRY="$( _mcp_secrets_ignore_entry )"
++  _UP_POSTURE_ENTRIES="$( _posture_state_ignore_entries )"
++  if [[ "$DRY_RUN" -eq 1 ]]; then
++    echo "    (dry-run) would ENSURE .gitignore excludes: $_UP_MCP_ENTRY"
++    echo "    (dry-run) would ENSURE .gitignore excludes: $_UP_POSTURE_ENTRIES"
++  else
++    _up_record_op "ensure_mcp_secrets_ignore" "$_UP_MCP_ENTRY"
++    _apply_mcp_secrets_ignore "$TARGET/.gitignore"
++    _up_record_op "ensure_posture_state_ignores" "$_UP_POSTURE_ENTRIES"
++    _apply_posture_state_ignores "$TARGET/.gitignore"
++  fi
++fi
++
++# `.claude/.gitignore` — delivered in EVERY ceremony, because it lives inside
++# .claude/ and therefore reaches the `--ceremony user` population the root
++# blocks structurally cannot (verdict-ga-1.txt:5). Create-if-missing, NEVER
++# rewritten: adopter-owned after creation, and absent from the baseline
++# manifest so no later upgrade can classify it as framework-owned.
++echo ""
++echo "==> Refreshing .claude/.gitignore (PLAN-177 W1 / CF-9)"
++command -v _apply_claude_dir_gitignore >/dev/null 2>&1 || {
++  echo "    ERROR: _apply_claude_dir_gitignore unavailable (scripts/_framework_manifest_set.sh not sourced) — cannot ensure .claude/.gitignore" >&2
++  exit 1
++}
++if [[ "$DRY_RUN" -eq 1 ]]; then
++  if [[ -e "$TARGET/.claude/.gitignore" ]]; then
++    echo "    (dry-run) EXISTS: .claude/.gitignore (would PRESERVE)"
++  else
++    echo "    (dry-run) would CREATE: .claude/.gitignore"
++  fi
++else
++  _up_record_op "ensure_claude_dir_gitignore" ".claude/.gitignore"
++  _apply_claude_dir_gitignore "$TARGET/.claude"
++fi
++
+ # PLAN-161 U3 — mis-install scan/purge. Runs in ALL modes (flag-absent and
+ # --dry-run runs emit the would-purge PREVIEW; deletion requires the explicit
+ # --purge-misinstalled flag AND a non-dry run). Runs BEFORE the baseline-

@@ -1,0 +1,66 @@
+diff --git a/.github/workflows/smoke-install.yml b/.github/workflows/smoke-install.yml
+index ddf2165..84538dd 100644
+--- a/.github/workflows/smoke-install.yml
++++ b/.github/workflows/smoke-install.yml
+@@ -46,6 +46,12 @@ on:
+       - "scripts/tests/ownership-expected-reds.txt"
+       - "scripts/tests/test-protocol-pointer-render.sh"
+       - "scripts/tests/test-protocol-pointer-inv4.sh"
++      # PLAN-177 W1 (CF-9): the night-mode ignore EFFICACY e2e. Same
++      # wiring rule as every scripts/tests/*.sh above — unwired = no test.
++      # It installs at the PIN, so it also depends on the parity e2e
++      # (--print-pin) and on the .gitignore generator in the manifest lib,
++      # both already in this list.
++      - "scripts/tests/test-night-mode-ignore-effect.sh"
+       - "templates/**"
+       # Widened from SPEC/v1/install-cli.md: SPEC/v1 is delivered by install.sh
+       # and (until F3) by nothing in upgrade.sh, so ANY SPEC/v1 change is a
+@@ -93,6 +99,12 @@ on:
+       - "scripts/tests/ownership-expected-reds.txt"
+       - "scripts/tests/test-protocol-pointer-render.sh"
+       - "scripts/tests/test-protocol-pointer-inv4.sh"
++      # PLAN-177 W1 (CF-9): the night-mode ignore EFFICACY e2e. Same
++      # wiring rule as every scripts/tests/*.sh above — unwired = no test.
++      # It installs at the PIN, so it also depends on the parity e2e
++      # (--print-pin) and on the .gitignore generator in the manifest lib,
++      # both already in this list.
++      - "scripts/tests/test-night-mode-ignore-effect.sh"
+       - "templates/**"
+       - "SPEC/v1/**"
+       - "scripts/doctor.sh"
+@@ -125,7 +137,13 @@ jobs:
+     # installs + 3 upgrades (S1-S8; ~3-4 min local per the W1-C measurement),
+     # i.e. up to ~8-10 more CI minutes at the same 2-3x factor. Same
+     # anti-flake sizing rule as the F4 bump above.
+-    timeout-minutes: 25
++    # PLAN-177 W1 (CF-9): 25 -> 32. The night-mode efficacy e2e adds 3 installs
++    # + 2 upgrades. MEASURED, not guessed: 2m06s wall on Darwin arm64 (16
++    # cores, 2026-08-13), reproduced across two runs. At the same 2-3x runner
++    # factor this workflow already sizes with, that is 4-7 CI minutes, so +7.
++    # A job-level timeout that clips a green run reports as `cancelled` on an
++    # innocent step (the S2xx lesson), so the margin stays deliberate.
++    timeout-minutes: 32
+     permissions:
+       contents: read
+     steps:
+@@ -284,6 +302,20 @@ jobs:
+           set -euo pipefail
+           bash scripts/tests/test-upgrade-spec-ownership.sh
+ 
++      # PLAN-177 W1 (CF-9) - EFFICACY of the posture-state ignores, which no
++      # parity check can see: an ignore that does not work is equally broken on
++      # both routes, so it is byte-identical and every parity gate stays green.
++      # Simulates the two files `/night-mode on` leaves behind (arming the real
++      # posture is a HUMAN action, PLAN-165 OQ1-redo) and asserts git reports
++      # neither, in the upgrade route AND in the fresh --ceremony user install
++      # the GA re-pass named as the damaged population. Each scenario carries an
++      # inline positive control that cannot be switched off. Needs the pin tag
++      # fetched above. NO continue-on-error, deliberately.
++      - name: night-mode ignore efficacy (upgrade route + user ceremony)
++        run: |
++          set -euo pipefail
++          bash scripts/tests/test-night-mode-ignore-effect.sh
++
+       - name: Assert npx/npm shim contract (if present)
+         # Phase 4 deliverable; skip if directory missing
+         run: |

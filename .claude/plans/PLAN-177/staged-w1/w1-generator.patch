@@ -1,0 +1,153 @@
+diff --git a/scripts/_framework_manifest_set.sh b/scripts/_framework_manifest_set.sh
+index b123b1c..92f680a 100644
+--- a/scripts/_framework_manifest_set.sh
++++ b/scripts/_framework_manifest_set.sh
+@@ -719,3 +719,148 @@ _protocol_pointer_is_degraded() {
+   rm -f "$_ppid_tmp" 2>/dev/null
+   return 1
+ }
++
++# =============================================================================
++# PLAN-177 W1 (P1-1 / CF-9) — the ONE owner of every .gitignore surface the
++# framework delivers.
++#
++# THE BUG. install.sh has appended two marker-guarded blocks to the adopter's
++# ROOT .gitignore for a long time — the MCP shared-secret store (PLAN-019
++# P2-SEC-H) and the posture/runtime state (PLAN-165 CX-3) — and upgrade.sh has
++# appended NOTHING, ever. An adopter who installed at v1.2.0 and only ever runs
++# upgrade.sh therefore receives /night-mode without the ignores, so
++# `/night-mode on` leaves .claude/settings.local.json and the state marker as
++# untracked files (falsifying PLAN-165 AC-1, "git status stays empty") and
++# risks committing a machine-specific permission posture. The parity gate NAMED
++# that gap and allowlisted it, so CI was structurally unable to fail on it.
++#
++# WHY BOTH BLOCKS. Owning only the posture block would leave the mcp-secrets
++# block as a second, unowned copy of the same kind of text on the same file —
++# a ceremony that grants ownership of half a surface. An adopter older than
++# v1.2.0 also never received the mcp-secrets entry from an upgrade.
++#
++# WHY ONE PLACE. This is INV-4 (PLAN-168 W2): install.sh and upgrade.sh each
++# carrying a private copy of the same emitted text is precisely the class that
++# produced the PROTOCOL.md pointer divergence. Both callers render through
++# these functions, so the routes cannot diverge again.
++#
++# BYTE-COMPATIBILITY (do not "tidy"): every emission below reproduces the
++# shipped install.sh output exactly, including two idiosyncrasies that a
++# reviewer will be tempted to clean up.
++#   1. The posture header comment is emitted INSIDE the loop, once per APPENDED
++#      entry. Hoisting it to a single header changes the bytes on every adopter
++#      .gitignore and breaks install/upgrade tree parity.
++#   2. The mcp-secrets CREATE branch (no .gitignore yet) writes the header with
++#      NO leading blank line, while the APPEND branch writes one. Same file,
++#      two shapes, by construction.
++# BYTE-PROOF.md plants both as mutations and requires the harness to go red.
++#
++# IDEMPOTENCE, and its deliberate limit. Re-running never duplicates a line:
++# every entry is `grep -Fxq` (fixed-string, whole-line) checked first. The
++# check is PER LINE, not per block, so an adopter who deliberately deletes one
++# entry gets it re-appended on the next install/upgrade — with a fresh header
++# comment above it. That is intentional, not an oversight: these entries exist
++# to keep secrets and per-machine permission posture out of VCS, so the
++# framework re-asserts them rather than honouring a deletion it cannot
++# distinguish from an accident. An adopter who truly wants the path tracked
++# should scope it in .git/info/exclude or a nested .gitignore instead.
++#
++# Functions:
++#   _mcp_secrets_ignore_entry              -> the mcp-secrets entry (one line)
++#   _apply_mcp_secrets_ignore GITIGNORE    -> ensure it, create-or-append
++#   _posture_state_ignore_entries          -> the posture entries (one line,
++#                                             space-separated; both callers
++#                                             word-split it AND print it
++#                                             verbatim, so the single-line
++#                                             shape is part of the contract)
++#   _apply_posture_state_ignores GITIGNORE -> ensure them, append-only
++#   _claude_dir_gitignore_body             -> the NEW .claude/.gitignore body
++#   _apply_claude_dir_gitignore CLAUDE_DIR -> create-if-missing, never rewrite
++# =============================================================================
++
++_mcp_secrets_ignore_entry() {
++  printf '%s\n' "state/mcp_client_secrets/"
++}
++
++_apply_mcp_secrets_ignore() {
++  # $1 = path to the adopter ROOT .gitignore (may not exist yet).
++  _msi_gitignore="$1"
++  _msi_line="$( _mcp_secrets_ignore_entry )"
++  if [ -f "$_msi_gitignore" ]; then
++    if ! grep -Fxq "$_msi_line" "$_msi_gitignore" 2>/dev/null; then
++      {
++        echo ""
++        echo "# PLAN-019 P2-SEC-H: MCP shared-secret store (never commit)"
++        echo "$_msi_line"
++      } >> "$_msi_gitignore"
++      echo "    APPENDED to .gitignore: $_msi_line"
++    else
++      echo "    .gitignore already excludes $_msi_line"
++    fi
++  else
++    {
++      echo "# PLAN-019 P2-SEC-H: MCP shared-secret store (never commit)"
++      echo "$_msi_line"
++    } > "$_msi_gitignore"
++    echo "    CREATED .gitignore with: $_msi_line"
++  fi
++  return 0
++}
++
++_posture_state_ignore_entries() {
++  printf '%s\n' ".claude/state/ .claude/settings.local.json"
++}
++
++_apply_posture_state_ignores() {
++  # $1 = path to the adopter ROOT .gitignore (append creates it if absent).
++  _psi_gitignore="$1"
++  for _psi_line in $( _posture_state_ignore_entries ); do
++    if [ -f "$_psi_gitignore" ] && grep -Fxq "$_psi_line" "$_psi_gitignore" 2>/dev/null; then
++      echo "    .gitignore already excludes $_psi_line"
++      continue
++    fi
++    {
++      echo ""
++      echo "# PLAN-165 CX-3: per-machine posture/runtime state (never commit)"
++      echo "$_psi_line"
++    } >> "$_psi_gitignore"
++    echo "    APPENDED to .gitignore: $_psi_line"
++  done
++  return 0
++}
++
++_claude_dir_gitignore_body() {
++  # Paths are anchored with a leading slash so they bind to .claude/ ONLY and
++  # cannot match a same-named path deeper in an adopter tree.
++  printf '%s\n' \
++    "# Delivered by ceo-orchestration (PLAN-177 W1 / CF-9)." \
++    "#" \
++    "# Per-machine posture + runtime state that must never reach VCS:" \
++    "#   state/             runtime state as a whole (PLAN-163 T3.1)" \
++    "#   settings.local.json  permission overlay deciding the NEXT session's" \
++    "#                        posture (PLAN-165)" \
++    "#" \
++    "# The root .gitignore carries the same exclusions for adopters who track" \
++    "# this tree from the repository root. This file additionally covers the" \
++    "# --ceremony user install, which never writes outside .claude/ and so" \
++    "# never received them." \
++    "#" \
++    "# Adopter-owned once created: install and upgrade create it only when it" \
++    "# is absent, and NEVER rewrite it." \
++    "/state/" \
++    "/settings.local.json"
++}
++
++_apply_claude_dir_gitignore() {
++  # $1 = the adopter .claude directory. Create-if-missing ONLY.
++  _cdg_dir="$1"
++  _cdg_file="$_cdg_dir/.gitignore"
++  if [ -e "$_cdg_file" ]; then
++    echo "    EXISTS: .claude/.gitignore (adopter-owned, preserved)"
++    return 0
++  fi
++  [ -d "$_cdg_dir" ] || mkdir -p "$_cdg_dir"
++  _claude_dir_gitignore_body > "$_cdg_file"
++  echo "    CREATED: .claude/.gitignore"
++  return 0
++}

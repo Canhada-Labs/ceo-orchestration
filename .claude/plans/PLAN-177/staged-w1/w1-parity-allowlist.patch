@@ -1,0 +1,21 @@
+diff --git a/scripts/tests/_parity_classify.py b/scripts/tests/_parity_classify.py
+index b1f86bd..02b2d00 100644
+--- a/scripts/tests/_parity_classify.py
++++ b/scripts/tests/_parity_classify.py
+@@ -120,16 +120,6 @@ ACCEPTED: List[Tuple[str, Optional[str], str]] = [
+         None,
+         "seed-once adopter doc — same upgrade.sh preserve contract",
+     ),
+-    (
+-        r"^\.gitignore$",
+-        None,
+-        "adopter-owned append-only surface. install.sh APPENDS marker-guarded "
+-        "blocks (install_posture_state_ignores, PLAN-165 CX-3); upgrade.sh has "
+-        "no append step, so an upgraded adopter never gets them. A REAL "
+-        "install-only delivery gap — accepted here (never fatal) only because "
+-        "the file is adopter-owned and must not be clobbered; reported every "
+-        "run so it stays visible",
+-    ),
+     (
+         r"^PROTOCOL\.md$",
+         "maintainer",

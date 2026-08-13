@@ -1,0 +1,60 @@
+diff --git a/scripts/install-npm.sh b/scripts/install-npm.sh
+index ae1181d..b8523f6 100755
+--- a/scripts/install-npm.sh
++++ b/scripts/install-npm.sh
+@@ -175,19 +175,44 @@ TARBALL_SIZE_KB=$(( $(wc -c < "$TARBALL_PATH") / 1024 ))
+ echo "OK: tarball built — $TARBALL ($TARBALL_SIZE_KB KB)"
+ 
+ # -------------------------------- sha256 emission ----------------------------
+-# PLAN-019 DevOps-P2-3 — supply-chain tarball integrity.
++# PLAN-019 DevOps-P2-3 — LOCAL build-integrity record.
+ #
+-# The shipped NPM tarball MUST carry a sha256 checksum so consumers + CI can
+-# verify the bytes against what was produced locally. Emit the checksum next
+-# to the tarball in NPM_DIR/SHA256SUMS.txt (cumulative file; one line per
+-# build). CI verification (npm-publish.yml) computes the checksum of the
+-# tarball it publishes and appends to the release notes.
++# Emit the sha256 of the tarball just built, next to it, in
++# NPM_DIR/SHA256SUMS.txt (one line per tarball NAME, replaced in place on a
++# rebuild) and in the per-tarball sidecar `<tarball>.sha256` written further
++# down. Both use the `<64-hex>  <filename>` form checksum tools consume.
+ #
+-# Format is `<64-hex>  <filename>` — compatible with `sha256sum -c` so a
+-# consumer can do:
+-#   curl -LO https://registry.npmjs.org/.../tarball
+-#   curl -LO https://.../SHA256SUMS.txt
+-#   sha256sum -c SHA256SUMS.txt
++# Which of the two a maintainer can actually CHECK differs, so say it here
++# rather than leave the reader to find out: the SIDECAR verifies (it names one
++# file, and that file was just built). The cumulative manifest does NOT verify
++# as a whole — it keeps lines for tarballs of OTHER versions, `npm/*.tgz` is
++# git-ignored so a fresh clone has none of them on disk, and a bulk check
++# therefore exits non-zero on "No such file or directory" for every line but
++# the current one. Measured, not assumed (PLAN-177 W1). Compare the single
++# line for the tarball you just built, or check the sidecar.
++#
++# SCOPE — what this is NOT (PLAN-177 P1-3). Two claims used to live here and
++# both were false; the honest model in SECURITY.md:79-81 is the one to follow.
++#
++#   1. "CI verification (npm-publish.yml) computes the checksum of the tarball
++#      it publishes and appends to the release notes." It does not. That
++#      workflow never materialises a .tgz (its `npm pack --dry-run` writes
++#      nothing) and appends nothing to any release notes. The one sha256 it
++#      does compute is over the install.sh BODY, for the
++#      `# CEO-INSTALL-SHA256:` trailer — a different artifact entirely.
++#
++#   2. A consumer recipe that fetched this manifest over the network:
++#        curl -LO https://registry.npmjs.org/.../tarball
++#        curl -LO https://.../SHA256SUMS.txt
++#      There is no such URL. SHA256SUMS.txt is not in package.json `files`, so
++#      it does not travel in the published tarball, and no workflow attaches it
++#      to a GitHub release. A consumer who wants to verify a published tarball
++#      should use npm's own integrity metadata (`npm view <pkg> dist.integrity`)
++#      until a per-tarball manifest is actually published.
++#
++# Publishing a real per-tarball manifest is a change to the publish path and is
++# deferred to the v1.4.0 train (PLAN-177 §Escopo — route (i), excluded from
++# rc.4 on purpose). Until then this file records LOCAL builds only.
+ #
+ # Stdlib-only: prefer `sha256sum` (Linux / Ubuntu runners) then fall back
+ # to `shasum -a 256` (macOS). python3 -m hashlib as last-resort fallback.

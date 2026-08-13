@@ -1,0 +1,267 @@
+diff --git a/.claude/scripts/tests/test_tournament_projection_workdir.py b/.claude/scripts/tests/test_tournament_projection_workdir.py
+new file mode 100644
+index 0000000..d61dee9
+--- /dev/null
++++ b/.claude/scripts/tests/test_tournament_projection_workdir.py
+@@ -0,0 +1,261 @@
++"""PLAN-177 W1 (T-1) — every tournament.yml step that touches ``projection.txt``
++must run where that file lives.
++
++WHY THIS EXISTS
++---------------
++``projection.txt`` is written by the "Cost projection" step, which declares
++``working-directory: .claude/scripts``. The "Emit step summary" step read it
++with a bare relative path from the repo root, so ``json.load`` always raised
++``FileNotFoundError`` — swallowed by ``2>/dev/null || echo "N/A"``. The summary
++reported ``Projection: N/A`` on fully green runs and nobody could tell that
++apart from a real absence. Adding ``working-directory`` to that step is the
++fix; this test is the control that keeps it, and that would have caught the
++original bug.
++
++The assertion is STRUCTURAL, not a substring count: a step "carries" the
++working-directory only if the key belongs to THAT step's own mapping. A
++``grep -c working-directory`` would pass with the key attached to the wrong
++step. Parsing is stdlib-only and deliberately does not ``import yaml`` — a
++gate that ``skipTest``s itself when an optional dependency is missing is a gate
++that can silently stop running (the "instrument green with a stale question"
++class this repo keeps re-finding).
++
++SCOPE: ``run`` steps only. ``working-directory`` is a property of a ``run``
++step; a ``uses:`` step does not accept it, and the artifact upload names the
++file through ``path: .claude/scripts/projection.txt`` precisely because it
++cannot. A gate over "every step that mentions projection.txt" would demand the
++key from a step that is already correct and cannot have it — a false red on
++correct code, which is how gates get disabled.
++
++The exemption is DERIVED, not asserted: a step qualifies only if it has a
++``run:`` key AND names the artifact by a relative path. A ``uses:`` step is out
++of scope structurally, and a ``run`` step that later drops the
++``.claude/scripts/`` prefix comes back into scope automatically.
++"""
++from __future__ import annotations
++
++import re
++import sys
++import unittest
++from pathlib import Path
++from typing import List, Optional, Tuple
++
++_REPO = Path(__file__).resolve().parent.parent.parent.parent
++_WORKFLOW = _REPO / ".github" / "workflows" / "tournament.yml"
++
++_HOOKS_DIR = _REPO / ".claude" / "hooks"
++if str(_HOOKS_DIR) not in sys.path:
++    sys.path.insert(0, str(_HOOKS_DIR))
++from _lib.testing import TestEnvContext  # noqa: E402
++
++_ARTIFACT = "projection.txt"
++_QUALIFIED = ".claude/scripts/" + _ARTIFACT
++_REQUIRED_WORKDIR = ".claude/scripts"
++
++_STEP_RE = re.compile(r"^(\s*)-\s+name:\s*(.*)$")
++_KEY_RE = re.compile(r"^(\s*)([A-Za-z][A-Za-z0-9_-]*):\s*(.*)$")
++
++
++def _indent(line: str) -> int:
++    return len(line) - len(line.lstrip(" "))
++
++
++def _split_steps(text: str) -> List[Tuple[str, List[str]]]:
++    """Return ``(step_name, body_lines)`` for every ``- name:`` step.
++
++    A step runs from its ``- name:`` line until the next ``- name:`` at the
++    same or shallower indent, or until the first non-blank line indented LESS
++    than the dash (which ends the enclosing ``steps:`` list).
++    """
++    lines = text.splitlines()
++    starts = [i for i, ln in enumerate(lines) if _STEP_RE.match(ln)]
++    steps: List[Tuple[str, List[str]]] = []
++    for pos, start in enumerate(starts):
++        m = _STEP_RE.match(lines[start])
++        assert m is not None
++        dash_indent = len(m.group(1))
++        end = len(lines)
++        for j in range(start + 1, len(lines)):
++            ln = lines[j]
++            if not ln.strip():
++                continue
++            nxt = _STEP_RE.match(ln)
++            if nxt is not None and len(nxt.group(1)) <= dash_indent:
++                end = j
++                break
++            if _indent(ln) < dash_indent:
++                end = j
++                break
++        steps.append((m.group(2).strip(), lines[start:end]))
++        del pos
++    return steps
++
++
++def _step_key(body: List[str], key: str) -> Optional[str]:
++    """Value of ``key`` in the step's OWN mapping, else None.
++
++    The step's own keys sit exactly two columns right of the dash. Keys nested
++    deeper belong to a sub-mapping (``with:``, ``env:``) and do not count.
++    """
++    m = _STEP_RE.match(body[0])
++    assert m is not None
++    own_indent = len(m.group(1)) + 2
++    for ln in body[1:]:
++        km = _KEY_RE.match(ln)
++        if km is None or len(km.group(1)) != own_indent:
++            continue
++        if km.group(2) == key:
++            return km.group(3).strip()
++    return None
++
++
++def _in_scope(body: List[str]) -> bool:
++    """True iff this step can and must declare ``working-directory``.
++
++    Two conditions, both derived from the step itself:
++
++    * it is a ``run`` step. ``working-directory`` is a property of ``run``;
++      a ``uses:`` step does not accept the key at all, so demanding it there
++      would be a false red on correct code (the artifact upload is exactly
++      that step, and it names the file by its full path for this reason).
++    * it names the artifact by a RELATIVE path — i.e. at least one mention is
++      not part of ``.claude/scripts/projection.txt``.
++    """
++    if _step_key(body, "run") is None:
++        return False
++    blob = "\n".join(body)
++    if _ARTIFACT not in blob:
++        return False
++    return blob.count(_ARTIFACT) != blob.count(_QUALIFIED)
++
++
++def steps_touching_artifact(text: str) -> List[str]:
++    """Names of the ``run`` steps that reference ``projection.txt`` relatively."""
++    return [name for name, body in _split_steps(text) if _in_scope(body)]
++
++
++def steps_missing_workdir(text: str) -> List[str]:
++    """The gate: in-scope steps whose own mapping lacks the workdir."""
++    return [
++        name for name, body in _split_steps(text)
++        if _in_scope(body)
++        and _step_key(body, "working-directory") != _REQUIRED_WORKDIR
++    ]
++
++
++def uses_steps_touching_artifact(text: str) -> List[str]:
++    """``uses:`` steps that mention the artifact — must never be in scope."""
++    return [
++        name for name, body in _split_steps(text)
++        if _step_key(body, "uses") is not None
++        and _ARTIFACT in "\n".join(body)
++    ]
++
++
++class TournamentProjectionWorkdirTest(TestEnvContext):
++    """T-1 — the summary step reads projection.txt where it is written."""
++
++    def setUp(self):
++        super().setUp()
++        self.source = _WORKFLOW.read_text(encoding="utf-8")
++
++    def test_parser_sees_the_workflow_steps(self):
++        # Non-vacuity floor for the parser itself: tournament.yml is a
++        # multi-step workflow, so a parse that finds ~nothing is broken.
++        self.assertGreaterEqual(len(_split_steps(self.source)), 10)
++
++    def test_at_least_two_steps_use_the_artifact(self):
++        # MANDATORY-FIRE: the producer ("Cost projection") and the consumer
++        # ("Emit step summary"). If this drops to <2, either the workflow was
++        # restructured or the matcher went blind — either way the gate below
++        # stops meaning anything and must be re-derived, not deleted.
++        touching = steps_touching_artifact(self.source)
++        self.assertGreaterEqual(
++            len(touching), 2,
++            "expected >=2 steps referencing projection.txt by relative path, "
++            "found: %r" % (touching,))
++
++    def test_every_relative_step_declares_working_directory(self):
++        missing = steps_missing_workdir(self.source)
++        self.assertEqual(
++            missing, [],
++            "tournament.yml steps reference %s relatively but do not declare "
++            "`working-directory: %s`, so the read resolves against the repo "
++            "root and silently yields N/A: %r"
++            % (_ARTIFACT, _REQUIRED_WORKDIR, missing))
++
++    def test_uses_steps_are_out_of_scope_structurally(self):
++        # The artifact upload is a `uses:` step. GitHub Actions does not accept
++        # `working-directory` on `uses:` steps at all, so it must be out of
++        # scope BY ITS SHAPE — not by a hardcoded step-name exemption. It must
++        # also actually exist, or this assertion is vacuous.
++        uses_steps = uses_steps_touching_artifact(self.source)
++        self.assertTrue(
++            uses_steps,
++            "no `uses:` step mentions the artifact — the exemption this test "
++            "guards no longer has a subject; re-derive it")
++        in_scope = steps_touching_artifact(self.source)
++        for name in uses_steps:
++            self.assertNotIn(
++                name, in_scope,
++                "`uses:` step %r was pulled into scope; a gate demanding "
++                "working-directory there would red-flag correct code" % (name,))
++        self.assertIn(_QUALIFIED, self.source)
++
++    def test_a_uses_step_with_a_relative_path_stays_out_of_scope(self):
++        # Even if a `uses:` step named the artifact relatively, it still cannot
++        # carry working-directory — so the `run:` condition, not the path
++        # shape, is what must keep it out.
++        mutated = self.source.replace(
++            "          path: " + _QUALIFIED,
++            "          path: " + _ARTIFACT)
++        self.assertNotEqual(mutated, self.source, "mutation changed nothing")
++        self.assertEqual(
++            uses_steps_touching_artifact(mutated),
++            [n for n in uses_steps_touching_artifact(mutated)
++             if n not in steps_touching_artifact(mutated)],
++            "a `uses:` step entered scope once its path went relative — the "
++            "gate is keying on the path, not on `run:`")
++
++
++class PositiveControlTest(TestEnvContext):
++    """The gate must go RED on the exact regression it exists to prevent."""
++
++    def setUp(self):
++        super().setUp()
++        self.source = _WORKFLOW.read_text(encoding="utf-8")
++
++    def test_removing_every_workdir_is_detected(self):
++        mutated = self.source.replace(
++            "        working-directory: .claude/scripts\n", "")
++        self.assertNotEqual(mutated, self.source, "mutation changed nothing")
++        self.assertGreaterEqual(
++            len(steps_missing_workdir(mutated)), 2,
++            "stripping the working-directory keys did not turn the gate red")
++
++    def test_removing_only_the_last_workdir_is_detected(self):
++        marker = "        working-directory: .claude/scripts\n"
++        cut = self.source.rfind(marker)
++        self.assertNotEqual(cut, -1, "marker not found — mutation vacuous")
++        mutated = self.source[:cut] + self.source[cut + len(marker):]
++        missing = steps_missing_workdir(mutated)
++        self.assertEqual(
++            len(missing), 1,
++            "removing ONE working-directory should flag exactly one step, "
++            "got: %r" % (missing,))
++
++    def test_key_nested_under_with_does_not_count(self):
++        # A working-directory placed inside a sub-mapping must not satisfy the
++        # gate — this is what separates a structural check from `grep -c`.
++        mutated = self.source.replace(
++            "        working-directory: .claude/scripts\n",
++            "        with:\n          working-directory: .claude/scripts\n")
++        self.assertNotEqual(mutated, self.source, "mutation changed nothing")
++        self.assertGreaterEqual(
++            len(steps_missing_workdir(mutated)), 2,
++            "a nested working-directory satisfied the gate — the check is "
++            "matching text, not structure")
++
++
++if __name__ == "__main__":  # pragma: no cover
++    unittest.main()

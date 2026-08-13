@@ -1,0 +1,17 @@
+diff --git a/.github/workflows/tournament.yml b/.github/workflows/tournament.yml
+index d72a583..d3cc8db 100644
+--- a/.github/workflows/tournament.yml
++++ b/.github/workflows/tournament.yml
+@@ -187,6 +187,12 @@ jobs:
+             echo ""
+             echo "See SPEC/v1/tournament-report.schema.md for report format."
+           } >> "$GITHUB_STEP_SUMMARY"
++        # projection.txt is produced by the "Cost projection" step, which
++        # runs in .claude/scripts. Without this, json.load() below always
++        # raises FileNotFoundError, is swallowed by `2>/dev/null || echo
++        # "N/A"`, and the summary silently reports "Projection: N/A" even
++        # on a fully green run.
++        working-directory: .claude/scripts
+ 
+       - name: Upload projection as artifact
+         if: always()
