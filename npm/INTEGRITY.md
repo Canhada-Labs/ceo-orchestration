@@ -7,20 +7,21 @@
 > be a literal no oracle watches, which is exactly how it went stale before.
 > Publishing stays gated — `npm-publish.yml` holds all `v*-rc.*` tags and
 > requires manual approval on GA tags via `environment: production-npm`.
-> The integrity controls enforced **today** are: (1) an `install.sh`
-> self-SHA tamper trailer (`# CEO-INSTALL-SHA256:`) that re-hashes the
-> installer at install time and **fails closed** on mismatch; and (2) build
-> provenance via `npm publish --provenance` (`publishConfig.provenance:
-> true`, a Sigstore / SLSA-Level-2 attestation). There is **no** per-tarball
-> SHA-256 manifest in the publish pipeline: no workflow materialises the
-> `.tgz` (the packlist gate runs `npm pack --dry-run`, which writes nothing),
-> so nothing hashes it. That control, the GPG detached signature and the
-> reproducible build are not automated — §Not yet automated lists them, and
-> the sections below detail each control that does run.
+> **Which controls run, and where, is stated in exactly one place: the
+> Contract table below.** This prose deliberately makes no mechanism claim of
+> its own — a claim written here would be answerable to nothing, which is how
+> this file came to advertise a tarball checksum that no workflow ever
+> produced. The table's `Status` column and its machine-checked
+> `Where enforced` cells are the answer; §Not yet automated names the gaps.
+> In summary, and stated as absences: there is **no** per-tarball SHA-256
+> manifest anywhere in the publish pipeline (no workflow materialises the
+> `.tgz` — the packlist gate runs `npm pack --dry-run`, which writes nothing
+> — so nothing hashes it), and neither the GPG detached signature nor the
+> reproducible build is automated.
 
 ## Contract
 
-Every release tarball MUST satisfy the rows below.
+The rows below are the contract for every release tarball.
 
 `Status` is a **closed set** — `enforced`, `deferred`, `operator`. Anything
 else is a test failure, so a row cannot acquire a comfortable new adjective.
@@ -73,9 +74,10 @@ What a consumer can actually verify is the provenance attestation — see
 ## Signing keys
 
 The Owner's public key is committed in-repo at `.claude/trust/owner.asc`.
-What it signs today is **release tags**: `release.yml` fail-closes when a tag
-signature does not verify against it (`SECURITY.md` §How to verify what you
-install). Verify locally with
+What it signs today is **release tags**. That gate lives outside this
+contract and is documented — with its exact scope — in `SECURITY.md`
+§How to verify what you install, which is its authority; this file does not
+restate it. Verify locally with
 `gpg --import .claude/trust/owner.asc && git tag --verify vX.Y.Z`.
 
 There is **no** separate npm signing key. Two distribution points were
@@ -102,7 +104,8 @@ npm audit signatures ceo-orchestration
 
 ## Reproducible-build spec
 
-**Status: specification only — nothing asserts it, in any workflow.** Inputs:
+**Status: specification only — no workflow implements any part of it.**
+Inputs:
 - `SOURCE_DATE_EPOCH = <VERSION tag creator-date, unix-epoch>`
 - Node 20.x (`npm-publish.yml` step "Setup Node 20")
 - No `npm install` for the bundle itself (zero runtime deps)
@@ -115,8 +118,8 @@ would go unnoticed.
 ## CI verification (what the packlist gate does, and does not, prove)
 
 Both `npm-publish.yml` and `validate.yml` run a packlist gate over
-`npm pack --dry-run --json`: it asserts the **file list** the tarball would
-contain (no tests, fixtures, eval corpora or plan material). `--dry-run`
+`npm pack --dry-run --json`, and its subject is the **file list** the tarball
+would contain (no tests, fixtures, eval corpora or plan material). `--dry-run`
 writes no archive, so the gate proves nothing about tarball **bytes** — no
 checksum, no signature, no reproducibility. Tarball hashing and signing are
 the un-automated controls above; provenance is the one byte-level attestation
@@ -140,13 +143,14 @@ that ships.
 
 - PLAN-013 Phase E.7 (this ADR source)
 - PLAN-013 Phase 0 item 0.2 — `npm-publish.yml` RC + manual-approval gates
-- PLAN-177 W0 item 3 — the "enforced today" claim corrected to the mechanism,
-  and the whole-file sweep that followed it
+- PLAN-177 W0 item 3 — the stale enforcement claim corrected to the
+  mechanism, and the whole-file sweep that followed it
 - ADR-040 §4 — credential lifecycle (90-day rotation applies to project keys)
 - `.github/workflows/npm-publish.yml` — publish pipeline (gated)
 - `.github/workflows/validate.yml` — packlist gate on `npm pack --dry-run`
 - `scripts/install-npm.sh` — local tarball build + `SHA256SUMS.txt` writer
-- `.claude/trust/owner.asc` — the Owner public key that verifies release tags
+- `.claude/trust/owner.asc` — the Owner public key used for release-tag
+  verification (scope documented in `SECURITY.md`, not here)
 - `SECURITY.md` §How to verify what you install — the honest-limits statement
   this file now mirrors
 - Sigstore + SLSA: <https://slsa.dev/spec/v1.0/levels>
