@@ -237,7 +237,7 @@ def _sanitize_for_recs(s: str) -> str:
     boot digest must never be blocked by unexpected input (fail-open on
     infrastructure). Callers that need fail-CLOSED rejection of a line break
     do it on the RAW text before calling here — see
-    `_lesson_render_safe`'s bounded-vocabulary gate (A5).
+    `_validate_boot_lesson`'s bounded-vocabulary gate (A5).
     """
     if not isinstance(s, str):
         s = str(s)
@@ -346,6 +346,7 @@ def check_plans_stranded_executing() -> Tuple[str, str, Any]:
     return ("red" if stranded else "green", f"{len(stranded)} stranded", stranded)
 
 
+# CEO-INFORMATIONAL-ONLY: contador de drafts sem limiar de acao (PLAN-178 C3)
 def check_plans_draft() -> Tuple[str, str, Any]:
     plans = _get_plan_paths()
     draft: List[str] = []
@@ -445,6 +446,7 @@ def _iter_audit_events_since(hours: float = 24.0):
             yield ev
 
 
+# CEO-INFORMATIONAL-ONLY: pulso de despachos/24h, sem limiar (PLAN-178 C3)
 def check_dispatch_count_24h() -> Tuple[str, str, Any]:
     n = sum(
         1 for ev in _iter_audit_events_since(24)
@@ -991,6 +993,7 @@ def check_tier_a_debate_transcripts() -> Tuple[str, str, Any]:
     return "green", f"{n} transcripts/24h", n
 
 
+# CEO-INFORMATIONAL-ONLY: velocidade de licoes, docstring ja diz informational
 def check_tier_a_lessons_30d() -> Tuple[str, str, Any]:
     """Count lessons added in memory dir over 30d (informational)."""
     # Derive the Claude Code project slug from the project dir (absolute path
@@ -1015,23 +1018,86 @@ def check_tier_a_lessons_30d() -> Tuple[str, str, Any]:
 
 
 def check_tier_a_spec_version_drift() -> Tuple[str, str, Any]:
-    """VERSION file vs latest SPEC/v*/VERSION agreement (informational)."""
-    version_file = REPO_ROOT / "VERSION"
-    if not version_file.exists():
-        return "yellow", "VERSION missing", None
+    """VERSION major vs latest SPEC/v* major agreement — red on drift.
+
+    Cured in PLAN-178 W-C Lote A (C3): the original body read both
+    inputs and never compared them — every reachable path returned
+    green (the S287-class "registered-vacuous" case documented in
+    memory feedback-check-tier-a-spec-version-drift-vacuous and in the
+    W0 coverage table). Invariant now enforced: the MAJOR of the
+    FRAMEWORK version must equal the highest SPEC/v<N> directory major.
+
+    Ownership-aware source (codex Lote-A P2-1): the root ``VERSION``
+    in an ADOPTER repo is the adopter app's version (ADR-155-AMEND-1
+    §2) — comparing it to the shipped SPEC would false-red. The
+    framework version is ``.claude/.framework-version`` (written by
+    install/upgrade; present in the dogfood checkout too). Without
+    that file no drift claim is possible — informational green, never
+    red on unattributable input.
+
+    Provenance (codex r2 P2-1, ADR-155-AMEND-1 §5): existence is not
+    authority. The marker only supports a RED verdict when its
+    delivery is verifiable: (a) the baseline manifest
+    ``.claude/.install-manifest.sha256`` carries a record for it
+    (adopter install/upgrade path), or (b) the marker is git-tracked
+    in this checkout (framework/dogfood path). Unverified marker +
+    mismatch => yellow (drift SUSPECTED), never red — and never a
+    silent green either.
+    """
+    fw_file = REPO_ROOT / ".claude" / ".framework-version"
+    if not fw_file.exists():
+        return "green", "no .framework-version (drift not attributable)", None
     try:
-        repo_v = version_file.read_text(encoding="utf-8", errors="replace").strip()
+        repo_v = fw_file.read_text(encoding="utf-8", errors="replace").strip()
     except OSError:
-        return "yellow", "VERSION unreadable", None
+        return "yellow", ".framework-version unreadable", None
+    provenance_ok = False
+    manifest = REPO_ROOT / ".claude" / ".install-manifest.sha256"
+    try:
+        if manifest.exists() and ".claude/.framework-version" in manifest.read_text(
+                encoding="utf-8", errors="replace"):
+            provenance_ok = True
+    except OSError:
+        pass
+    if not provenance_ok:
+        try:
+            provenance_ok = subprocess.run(
+                ["git", "-C", str(REPO_ROOT), "ls-files", "--error-unmatch",
+                 ".claude/.framework-version"],
+                capture_output=True, timeout=2,
+            ).returncode == 0
+        except (OSError, subprocess.SubprocessError):
+            provenance_ok = False
     spec_root = REPO_ROOT / "SPEC"
     if not spec_root.exists():
         return "green", f"repo {repo_v}, no SPEC dir", repo_v
-    spec_versions = sorted(p.name for p in spec_root.iterdir() if p.is_dir() and p.name.startswith("v"))
-    if not spec_versions:
+    spec_majors = []
+    for p in spec_root.iterdir():
+        if p.is_dir() and p.name.startswith("v"):
+            try:
+                spec_majors.append(int(p.name[1:]))
+            except ValueError:
+                return "yellow", f"unparseable SPEC dir {p.name}", None
+    if not spec_majors:
         return "green", f"repo {repo_v}, no SPEC versions", repo_v
-    return "green", f"repo {repo_v}, spec {','.join(spec_versions[-2:])}", {
-        "repo_version": repo_v, "spec_versions": spec_versions,
-    }
+    try:
+        repo_major = int(repo_v.split(".", 1)[0])
+    except ValueError:
+        return "yellow", f"unparseable .framework-version {repo_v}", None
+    latest_spec = max(spec_majors)
+    detail = {"repo_version": repo_v,
+              "spec_versions": ["v%d" % m for m in sorted(spec_majors)],
+              "provenance_verified": provenance_ok}
+    if repo_major != latest_spec:
+        if provenance_ok:
+            return "red", (
+                f"drift: framework major {repo_major} vs SPEC v{latest_spec}"
+            ), detail
+        return "yellow", (
+            f"drift suspected: marker {repo_major} vs SPEC v{latest_spec} "
+            "(provenance unverified — ADR-155-AMEND-1 §5)"
+        ), detail
+    return "green", f"framework {repo_v} ~ spec v{latest_spec}", detail
 
 
 def check_tier_a_npm_version_match() -> Tuple[str, str, Any]:
@@ -1064,6 +1130,7 @@ def check_tier_a_waivers_count() -> Tuple[str, str, Any]:
     return status, f"{n} waivers", n
 
 
+# CEO-INFORMATIONAL-ONLY: tracker de slots reservados, sem limiar (PLAN-178 C3)
 def check_tier_a_adrs_recent_status() -> Tuple[str, str, Any]:
     """ADR-098..104 status tracker (PLAN-065 reserved slots — drift detector)."""
     adr_dir = REPO_ROOT / ".claude" / "adr"
@@ -1084,6 +1151,7 @@ def check_tier_a_adrs_recent_status() -> Tuple[str, str, Any]:
     return "green", f"{accepted}/{len(statuses)} accepted", statuses
 
 
+# CEO-INFORMATIONAL-ONLY: auto-observacao de cache, sem limiar (PLAN-178 C3)
 def check_tier_a_cache_hit_rate_24h() -> Tuple[str, str, Any]:
     """ceo_boot_emitted cache_hit ratio over 24h (self-observation)."""
     total = 0
