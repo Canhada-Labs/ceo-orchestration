@@ -295,12 +295,15 @@ Higiene dos testes novos: tmp_path, env isolado por fixture autouse
   recomputado pelo step-15. Consequência natural: o envelope rc.4
   declara o hash novo; o da rc.3 deixa de bater (correto — a rc.3 foi
   superada). `_release_tag_guard.py` está fora do manifesto.
-- **R-2 re-pin consciente do W3/169:**
-  `PLAN-169/staged-w3/.claude/governance/gate-scripts-manifest.txt`
-  pina o sha256 dos DOIS arquivos (batem com o disco HOJE). Pós-cura,
-  o pack W3 exige re-pin CONSCIENTE — o LAND aplica com `cp` cego
-  (lição S303); re-pin cego regrediria a cura. Registrar no runbook do
-  W3 ANTES de assinar.
+- **R-2 re-pin consciente do W3/169 — RAIO AMPLIADO (achado coder-w1):**
+  além do `gate-scripts-manifest.txt` (sha256 dos 2 validadores),
+  `PLAN-169/staged-w3/scripts/` contém CÓPIAS WHOLE-FILE PRÉ-CURA de
+  `install.sh`, `upgrade.sh` E `_framework_manifest_set.sh` — o LAND
+  do W3 aplica com `cp` cego (lição S303), então landar o W3 sem
+  re-staging reverteria a cura P1-1 INTEIRA (3 arquivos), não só os
+  hashes. Re-stagear os 3 do disco pós-cura + re-pin do manifesto
+  ANTES de assinar o W3. Registrado como linha de checklist do runbook
+  W3, não memória de sessão.
 - **R-3 suíte morta (colateral, mesma classe do P1):**
   `.github/scripts/tests/` (15 testes, verdes à mão) não está em
   `pytest.ini testpaths` nem em nenhum step de CI — nunca executada.
