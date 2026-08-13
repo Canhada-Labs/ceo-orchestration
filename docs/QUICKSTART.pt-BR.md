@@ -83,11 +83,12 @@ bash /tmp/ceo-install.sh [--target /caminho/do/seu/projeto]
 
 ### npm install
 
-> **Instalação via npm.** O pacote bootstrap é publicado no npm com
-> SLSA 3 provenance; o caminho de clone acima também permanece suportado.
+> **Instalação via npm.** O pacote bootstrap é publicado no npm com SLSA
+> **Level 2** provenance; o caminho de clone acima também permanece suportado.
 
-O bootstrap instala pelo npm com verificação
-automática de integridade (registry npm + SLSA provenance L3):
+O bootstrap instala pelo npm, que verifica automaticamente o hash de
+integridade do tarball. A atestação SLSA **Level 2** de provenance *não*
+é checada pelo `npm install` — verifique você mesmo (veja abaixo):
 
 ```bash
 npm install -g ceo-orchestration
@@ -96,9 +97,22 @@ ceo-orchestration
 ```
 
 O pacote publicável é o nome não-escopado `ceo-orchestration` (o `bin` que ele
-instala é `ceo-orchestration`). É publicado com `--provenance` (SLSA 3) e o
-`npm` verifica o tarball SHA antes de extrair. Veja
+instala é `ceo-orchestration`). É publicado com `--provenance` (SLSA
+**Level 2**) e o `npm` verifica o tarball SHA antes de extrair. Veja
 `docs/install-verification.md` e `.github/workflows/npm-publish.yml`.
+
+Para verificar a provenance de uma instalação **global**, use o painel
+"Provenance" em <https://www.npmjs.com/package/ceo-orchestration> e confirme
+que ele aponta para `Canhada-Labs/ceo-orchestration`. O `npm audit
+signatures` não ajuda aqui — ele recusa pacotes globais (`EAUDITGLOBAL`) e
+não tem argumento que selecione um pacote. Para verificar localmente,
+instale num projeto descartável e audite esse projeto:
+
+```bash
+mkdir /tmp/verify-ceo && cd /tmp/verify-ceo && npm init -y
+npm install ceo-orchestration
+npm audit signatures   # audita a árvore DESTE projeto, que agora tem o pacote
+```
 
 O script instala (sem mexer em nada fora de `.claude/`, `docs/`, e
 `MEMORY.md`):

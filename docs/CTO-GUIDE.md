@@ -157,7 +157,22 @@ bash /tmp/install.sh --profile core,frontend --stack node
 # Pin the version you reviewed; <target-dir> is the repo being installed
 # into. Then VERIFY provenance yourself — running the command does not:
 npm exec "ceo-orchestration@<reviewed-version>" -- <target-dir> --profile core,frontend
-npm audit signatures   # SLSA provenance/signature verification step
+```
+
+`npm audit signatures` does NOT verify what the line above ran: it audits the
+dependency tree of the current project, takes no package-selecting argument,
+and refuses global packages (`EAUDITGLOBAL`). `npm exec` leaves no dependency
+behind to audit. Two routes that do work:
+
+```bash
+# A. Read the "Provenance" panel on the npm package page and confirm it
+#    points at Canhada-Labs/ceo-orchestration:
+#    https://www.npmjs.com/package/ceo-orchestration
+
+# B. Or make it a dependency of a throwaway project and audit that project:
+mkdir /tmp/verify-ceo && cd /tmp/verify-ceo && npm init -y
+npm install "ceo-orchestration@<reviewed-version>"
+npm audit signatures
 ```
 
 Both routes copy `.claude/`, `PROTOCOL.md`, `templates/CLAUDE.md`, plus

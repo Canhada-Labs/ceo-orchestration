@@ -96,10 +96,25 @@ nothing signs a tarball today.
 - Workflow file that built the tarball
 - Builder (GitHub Actions runner identity)
 
-Consumers inspect via:
+Consumers inspect via one of two routes. `npm audit signatures` reads the
+dependency tree of the CURRENT project and takes no package-selecting
+argument (a trailing package name is ignored), so it reaches this package
+only when this package is a dependency of the project you run it in. On a
+global install it exits with `EAUDITGLOBAL`, whose message states that
+global packages are not supported.
+
+Route A — global install (`npm install -g`) or `npx`: open the
+"Provenance" panel on <https://www.npmjs.com/package/ceo-orchestration>
+and confirm the source repository shown there is
+`Canhada-Labs/ceo-orchestration`.
+
+Route B — audit locally, by making the package a dependency of a
+throwaway project:
 
 ```bash
-npm audit signatures ceo-orchestration
+mkdir /tmp/verify-ceo && cd /tmp/verify-ceo && npm init -y
+npm install ceo-orchestration
+npm audit signatures   # audits THIS project's tree, which now holds it
 ```
 
 ## Reproducible-build spec

@@ -93,7 +93,7 @@ Referência completa de comandos e scripts: [`docs/CHEAT-SHEET.md`](docs/CHEAT-S
 
 ## Início rápido
 
-> **Somente fontes oficiais.** Os únicos pontos oficiais de distribuição são o repositório GitHub [`Canhada-Labs/ceo-orchestration`](https://github.com/Canhada-Labs/ceo-orchestration) e o pacote npm [`ceo-orchestration`](https://www.npmjs.com/package/ceo-orchestration) (`npx ceo-orchestration`). Qualquer outro espelho, fork, pacote republicado, listagem em marketplace ou nome parecido é não-oficial e não-confiável. Os releases no GitHub trazem checksums SHA-256 e o pacote npm é publicado com SLSA 3 provenance — verifique antes de instalar.
+> **Somente fontes oficiais.** Os únicos pontos oficiais de distribuição são o repositório GitHub [`Canhada-Labs/ceo-orchestration`](https://github.com/Canhada-Labs/ceo-orchestration) e o pacote npm [`ceo-orchestration`](https://www.npmjs.com/package/ceo-orchestration) (`npx ceo-orchestration`). Qualquer outro espelho, fork, pacote republicado, listagem em marketplace ou nome parecido é não-oficial e não-confiável. Os releases no GitHub trazem um checksum SHA-256 do `install.sh` (essa é toda a cobertura de checksum — veja `SECURITY.md` §How to verify what you install) e o pacote npm é publicado com SLSA **Level 2** provenance (`npm publish --provenance`; Level 3 está fora de escopo) — verifique antes de instalar.
 
 **Pré-requisitos:** Python ≥ 3.9, Git e Bash. No macOS, o Bash do sistema é o 3.2; instale um moderno com `brew install bash` antes de instalar.
 

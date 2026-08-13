@@ -16,8 +16,11 @@
 >
 > Anything else — mirrors, forks, re-published packages, marketplace
 > listings, lookalike names — is unofficial and untrusted. GitHub
-> releases ship SHA-256 checksums; the npm package is published with
-> SLSA 3 provenance. Verify before installing.
+> releases ship a SHA-256 checksum for `install.sh` (that is the whole
+> checksum coverage — see `SECURITY.md` §How to verify what you
+> install); the npm package is published with SLSA **Level 2**
+> provenance (`npm publish --provenance`; Level 3 is out of scope).
+> Verify before installing.
 
 > ## ⚠ Pre-install: read these first
 >

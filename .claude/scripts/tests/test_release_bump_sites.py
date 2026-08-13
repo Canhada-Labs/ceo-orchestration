@@ -1879,28 +1879,226 @@ def test_integrity_prose_states_no_mechanism_outside_the_declared_zones():
     )
 
 
-def test_readme_states_the_slsa_level_the_pipeline_actually_reaches():
-    """Same class, most-read file: README advertised "SLSA 3 provenance" while
-    `npm publish --provenance` is a Level-2 attestation and INTEGRITY.md says
-    Level 3 is out of scope. README has no reason to name Level 3 except to
-    disclaim it, so the claim is pinned here."""
-    text = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
-    # The tolerance is scoped to what FOLLOWS the mention, not to the line: the
-    # honest sentence names Level 2 and disclaims Level 3 in one breath, so a
-    # line-wide "out of scope" exemption would let the false claim ride along
-    # beside its own disclaimer. (It did — the first run of this control went
-    # red on the wrong assertion.)
-    offenders = [
-        text[max(0, m.start() - 60):m.end() + 40].strip().replace("\n", " ")
-        for m in re.finditer(r"SLSA[\s-]*(?:Level[\s-]*)?3\b", text)
-        if "out of scope" not in text[m.end():m.end() + 40]
-    ]
+# --------------------------------------------------------------------------
+# Supply-chain honesty: the two claims that survive being corrected in one file
+#
+# The previous revision of the SLSA gate read `README.md` and nothing else. It
+# was green while `npm/README.md` — the README an npm consumer actually
+# RECEIVES, it is in package.json `files` — still promised "SLSA 3 provenance",
+# and while README.pt-BR, INSTALL.md and both QUICKSTARTs repeated Level 3 and
+# a checksum coverage the release does not have (repass-rc4 part 2, P1 §2).
+# A single-file gate cannot see that class, so the surface list below is
+# EXPLICIT, and `_live_doc_surfaces()` re-derives the population from the repo
+# so a NEW document carrying either claim also lands in front of the gate.
+#
+# `.claude/**` is deliberately outside the population: plans, debates and
+# archived verdicts are historical records, and they have to be able to quote a
+# false claim verbatim without turning this gate red.
+# --------------------------------------------------------------------------
+
+SUPPLY_CHAIN_HONESTY_SURFACES = (
+    "README.md",
+    "README.pt-BR.md",
+    "npm/README.md",
+    "npm/INTEGRITY.md",
+    "INSTALL.md",
+    "SECURITY.md",
+    "SUPPORT.md",
+    "SBOM.md",
+    "docs/QUICKSTART.md",
+    "docs/QUICKSTART.pt-BR.md",
+    "docs/CTO-GUIDE.md",
+    "docs/threat-model.md",
+)
+
+# "SLSA 3", "SLSA-3", "SLSA Level 3", "SLSA L3", "SLSA provenance L3" and
+# "provenance (SLSA L3)" all normalise to the same false claim. The earlier
+# pattern only caught the first three, which is why `SBOM.md` ("SLSA L3") and
+# `docs/QUICKSTART.md` ("SLSA provenance L3") were invisible to it.
+_SLSA_LEVEL3_CLAIM = re.compile(
+    r"SLSA[\s\-]*(?:provenance[\s\-]*)?(?:Level[\s\-]*|L)?3\b"
+    r"|(?:provenance|attestation)[\s\-]*(?:Level[\s\-]*|L)3\b",
+    re.IGNORECASE,
+)
+
+# Plural = aggregate. Release checksum coverage is `install.sh` alone
+# (SECURITY.md §How to verify what you install); "ships SHA-256 checksums"
+# promises a SHA256SUMS that no workflow produces.
+_CHECKSUM_AGGREGATE_CLAIM = re.compile(
+    r"SHA-?256\s+checksums|checksums\s+SHA-?256", re.IGNORECASE
+)
+
+
+def _live_doc_surfaces() -> List[Path]:
+    """Root-level, `docs/` and `npm/` markdown — every document a reader or an
+    npm consumer meets. Deliberately NOT `.claude/**` (see the block comment)."""
+    found = sorted(REPO_ROOT.glob("*.md"))
+    for sub in ("docs", "npm"):
+        base = REPO_ROOT / sub
+        if base.exists():
+            found += sorted(base.rglob("*.md"))
+    return found
+
+
+def test_slsa_and_checksum_claims_are_true_on_every_shipped_surface():
+    """The npm consumer reads `npm/README.md`; the Portuguese reader reads
+    `README.pt-BR.md`. Correcting the root README alone left both promising a
+    Level the pipeline never reaches. The gate now runs over an explicit list
+    AND over every live doc, so neither a missed translation nor a new file can
+    carry the claim silently."""
+    surfaces = {p.relative_to(REPO_ROOT).as_posix(): p for p in _live_doc_surfaces()}
+
+    # (a) The explicit list is not allowed to name a file that stopped
+    # existing: a surface silently dropped from the repo is a gate that
+    # quietly narrows.
+    missing = [s for s in SUPPLY_CHAIN_HONESTY_SURFACES if s not in surfaces]
+    assert not missing, "declared honesty surfaces that no longer exist: %s" % missing
+
+    offenders: List[str] = []
+    for rel, path in surfaces.items():
+        text = path.read_text(encoding="utf-8")
+        for m in _SLSA_LEVEL3_CLAIM.finditer(text):
+            # Tolerance is scoped to what FOLLOWS the mention, never to the
+            # line: the honest sentence names Level 2 and disclaims Level 3 in
+            # one breath, so a line-wide exemption would let the false claim
+            # ride along beside its own disclaimer. The window is 120 chars
+            # because the live disclaimer parenthesises its reason
+            # ("(hermetic build + two-party review) is out of scope") — at the
+            # old width of 40 the only honest Level-3 sentence in the repo
+            # would have been the gate's first false positive.
+            tail = text[m.end():m.end() + 120]
+            if "out of scope" in tail or "fora de escopo" in tail:
+                continue
+            offenders.append(
+                "%s: ...%s..."
+                % (rel, text[max(0, m.start() - 60):m.end() + 40].strip().replace("\n", " "))
+            )
+        for m in _CHECKSUM_AGGREGATE_CLAIM.finditer(text):
+            offenders.append(
+                "%s: ...%s..."
+                % (rel, text[max(0, m.start() - 70):m.end() + 30].strip().replace("\n", " "))
+            )
+
     assert not offenders, (
-        "README claims SLSA Level 3; the shipped provenance is Level 2:\n%s"
-        % "\n".join(offenders)
+        "shipped docs claim SLSA Level 3 and/or aggregate release checksums; "
+        "the pipeline reaches Level 2 (`npm publish --provenance`) and the "
+        "release checksum covers `install.sh` only:\n%s" % "\n".join(offenders)
     )
-    assert "SLSA **Level 2**" in text or "SLSA Level 2" in text, (
-        "README no longer states the level the pipeline reaches"
+
+    # (b) Positive statement, on the two most-read surfaces: silence about the
+    # level is not honesty either. The npm README is named explicitly because
+    # it is the one that travels inside the tarball.
+    for rel in ("README.md", "npm/README.md"):
+        text = surfaces[rel].read_text(encoding="utf-8")
+        assert "SLSA **Level 2**" in text or "SLSA Level 2" in text, (
+            "%s no longer states the level the pipeline reaches" % rel
+        )
+
+
+# --------------------------------------------------------------------------
+# The npm signature recipe has to audit the thing the reader just installed
+#
+# `npm audit signatures` reads the CURRENT project's dependency tree. It takes
+# no package-selecting positional (a trailing package name is ignored), and it
+# refuses global installs outright with EAUDITGLOBAL. So the documented pairing
+# of `npm install -g` (or `npm exec` / `npx`, which leave no dependency behind)
+# with `npm audit signatures` verified nothing the reader had just installed —
+# it audited whatever directory they happened to be standing in, and could
+# return a confident green having examined a different tree entirely.
+# Both behaviours were observed directly against npm 11.16.0 (repass-rc4
+# part 2, P1 §3); the honest routes are the npm provenance panel, or a local
+# project install followed by a BARE `npm audit signatures`.
+# --------------------------------------------------------------------------
+
+_AUDIT_SIGNATURES = re.compile(r"npm\s+audit\s+signatures")
+# Installs that `npm audit signatures` cannot reach: global, or exec/npx
+# (ephemeral — nothing is left in a dependency tree to audit).
+_UNAUDITABLE_INSTALL = re.compile(
+    r"npm\s+(?:i|install)\b[^\n]*?(?:\s-g\b|\s--global\b)|npm\s+exec\b|\bnpx\b"
+)
+# A trailing token that is neither a comment nor a flag: npm ignores it, and
+# the reader believes it selected a package. `#` is excluded so the honest
+# recipes may explain themselves in a trailing comment; `-` is excluded so a
+# flag is diagnosed by the flag rule below and not mislabelled a positional.
+_AUDIT_POSITIONAL = re.compile(r"npm\s+audit\s+signatures\s+(?![#-])([^\s`|#\n]+)")
+_AUDIT_GLOBAL_FLAG = re.compile(
+    r"npm\s+audit\s+signatures[^\n]*(?:\s-g\b|\s--global\b)"
+)
+
+
+def _recipe_units(text: str) -> List[tuple]:
+    """(label, body) for each fenced code block, and for each line outside one.
+
+    A recipe is what a reader copies, and they copy a whole code block — so the
+    block, not the line, is the unit in which "install here, audit there" has
+    to be judged. Prose lines are units of their own so a one-line table row
+    (the shape `SUPPORT.md` used) is still examined."""
+    units: List[tuple] = []
+    block: Optional[List] = None
+    for num, line in enumerate(text.splitlines(), 1):
+        if line.strip().startswith("```"):
+            if block is None:
+                block = [num, []]
+            else:
+                units.append(("block@%d" % block[0], "\n".join(block[1])))
+                block = None
+            continue
+        if block is not None:
+            block[1].append(line)
+        else:
+            units.append(("line@%d" % num, line))
+    if block is not None:  # unterminated fence: judge what we collected
+        units.append(("block@%d" % block[0], "\n".join(block[1])))
+    return units
+
+
+def test_documented_npm_signature_recipe_matches_what_npm_audits():
+    """Every documented `npm audit signatures` has to be reachable by npm.
+
+    A recipe offends when its unit pairs the command with an install npm cannot
+    audit, passes a positional npm ignores, or passes `--global`, which npm
+    rejects. Naming `EAUDITGLOBAL` in the unit is the tolerance: a document is
+    free — and encouraged — to put the global install next to the command in
+    order to say that the command does NOT reach it."""
+    offenders: List[str] = []
+    units_examined = 0
+    for path in _live_doc_surfaces():
+        rel = path.relative_to(REPO_ROOT).as_posix()
+        text = path.read_text(encoding="utf-8")
+        if not _AUDIT_SIGNATURES.search(text):
+            continue
+        for label, unit in _recipe_units(text):
+            if not _AUDIT_SIGNATURES.search(unit):
+                continue
+            units_examined += 1
+            faults = []
+            if _UNAUDITABLE_INSTALL.search(unit) and "EAUDITGLOBAL" not in unit:
+                faults.append(
+                    "pairs the audit with an install npm cannot audit "
+                    "(global, or exec/npx leaving no dependency behind)"
+                )
+            positional = _AUDIT_POSITIONAL.search(unit)
+            if positional:
+                faults.append(
+                    "passes the positional %r, which npm ignores — the audit "
+                    "still reads the current project" % positional.group(1)
+                )
+            if _AUDIT_GLOBAL_FLAG.search(unit):
+                faults.append("passes --global, which npm rejects (EAUDITGLOBAL)")
+            if faults:
+                offenders.append(
+                    "%s %s: %s\n    %s"
+                    % (rel, label, "; ".join(faults), unit.strip()[:160])
+                )
+
+    # Vacuity guard: the sweep is worthless if it found no recipe to judge.
+    assert units_examined >= 5, (
+        "only %d recipe units examined — the sweep lost sight of the docs it "
+        "exists to watch" % units_examined
+    )
+    assert not offenders, (
+        "documented `npm audit signatures` recipes do not audit what the "
+        "reader installed:\n%s" % "\n\n".join(offenders)
     )
 
 

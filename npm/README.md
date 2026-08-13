@@ -84,7 +84,7 @@ cd /path/to/your-app
 bash .claude/scripts/validate-governance.sh   # prints an error count; 0 = healthy
 ```
 
-> **Install paths.** The clone-and-`install.sh` flow above is the supported path today. A one-step npm shim is also available — `npx ceo-orchestration /path/to/your-app` (published to npm with SLSA 3 provenance).
+> **Install paths.** The clone-and-`install.sh` flow above is the supported path today. A one-step npm shim is also available — `npx ceo-orchestration /path/to/your-app` (published to npm with SLSA **Level 2** provenance via `npm publish --provenance`; Level 3 is out of scope — see `npm/INTEGRITY.md`).
 
 By default the installer copies the core and frontend skill profiles and the governance hooks. Select profiles and stack hooks explicitly:
 

@@ -83,7 +83,7 @@ design. See full STRIDE E3/E4 below.
 compromises the NPM package before OIDC attestation.
 **Defense:** (a) install flow stages script to `/tmp/install.sh`
 before execution (README "Install" section); (b) NPM tarball uses OIDC
-with `--provenance` (SLSA L3); (c) 43/43 GitHub Actions SHA-pinned
+with `--provenance` (SLSA Level 2); (c) 43/43 GitHub Actions SHA-pinned
 (reference: `SBOM.md` §3).
 **Residual:** first-contact trust in the repo URL. Verify fingerprint
 via a second channel before first install. See STRIDE T2/T3 below.

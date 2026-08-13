@@ -199,7 +199,7 @@ No third-party actions (every `uses:` is a first-party `actions/*` action).
 | Artifact | Mechanism | Reference |
 |---|---|---|
 | Git tags | 24h Codex re-pass hold → GA via `release.yml` | ADR-103 (amends ADR-015 RC policy) |
-| NPM tarball | OIDC + `--provenance` (SLSA L3) | `npm-publish.yml` |
+| NPM tarball | OIDC + `--provenance` (SLSA Level 2) | `npm-publish.yml` |
 | Commit provenance | CODEOWNERS gate on `main` | `.github/CODEOWNERS` |
 | Skill patches | sentinel chain (SP-NNN) | ADR-031 |
 
