@@ -275,3 +275,23 @@ E5 = só nasce com pré-registro assinado + PLAN-171 W5 verde.
 **Debate:** pair-rail Codex r1→r3 APPROVE (S302c) cobre o conjunto;
 `/debate start PLAN-172` no início da execução cobre o Gate 3; as
 emendas do W-DH têm debate PRÓPRIO (mudam ADR + plano assinado).
+
+## 6. Anexo S305 — fundamentação externa (advisory; NÃO altera pré-registros)
+
+Pesquisa academia-vs-framework S305; fonte única das referências e
+números: `PLAN-178/research-S305.md` (números de literatura NÃO entram
+neste corpo — doutrina §3). O que ela muda AQUI: nada de escopo; só
+fundamentação e prioridade relativa.
+
+- **E6 (cascata de filtros):** a família cascade/routing é a mais bem
+  documentada da varredura (linha 5 da tabela S305) — reforça E6 como
+  o experimento de melhor razão evidência-externa/custo do trem. Kill
+  table intacta; o pré-registro segue a única autoridade.
+- **Circuit-breaker do tiering (§4):** a literatura de multi-agent
+  debate (linha 11) converge com a lição-mãe S296 — saturação em
+  poucas rodadas + afunilamento por amostragem dependente. O mecanismo
+  já landado aqui fica com validação externa registrada.
+- **Gate barato do §2 (best-of-N):** ganha motivação da linha 4
+  (escalar verificadores > escalar builders). Execução do gate
+  permanece DESTE plano; PLAN-178 apenas cruza a referência.
+- **E3: INTOCADO** — nada deste anexo emenda pré-registro assinado.

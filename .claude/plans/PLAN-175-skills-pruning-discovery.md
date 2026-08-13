@@ -93,3 +93,14 @@ baseline. Nada de poda na sessão 1 — por design.
 
 **Debate:** Codex r1→r3 (GO no r3); `/debate start PLAN-175` no
 início da execução; a poda em si passa pelo processo SP-NNN/soak.
+
+## 4. Anexo S305 — reframe context-engineering (advisory)
+
+A pesquisa S305 (linha 7 de `PLAN-178/research-S305.md`) reposiciona
+este plano: a poda não é só honestidade de catálogo — a literatura de
+context engineering documenta ganho de PERFORMANCE ao reduzir a
+superfície de contexto carregada por sessão (context rot; compaction).
+Nenhum passo muda. Leitura ADICIONAL (advisory) no AC do P5: medir com
+a skill `context-budget` o delta de tokens do catálogo pré/pós-poda e
+publicar junto das superfícies derivadas — transforma a poda em ganho
+medido, não só em contagem honesta.

@@ -132,6 +132,16 @@ ADR no início da execução (nunca criado direto em `.claude/adr/`).
 depois) — o round Codex r4 do conjunto cobre; o `/debate` L3 formal
 é obrigatório na abertura por envolver egress.
 
+## 3c. Anexo S305 — fundamentação externa do split T/P (advisory)
+
+A literatura de cascade/routing (linha 5 de
+`PLAN-178/research-S305.md`) fundamenta exatamente a arquitetura
+herdada do §1: roteamento cost-aware vive na camada P (preference,
+troca barata e auditada) enquanto decisões de confiança ficam
+Owner-signed na camada T. Nada muda no escopo; a referência entra no
+debate de abertura como evidência de que o split não é idiossincrasia
+nossa — é o desenho que a literatura de custo/qualidade recomenda.
+
 ## 4. Anexo — inventário S302d (para o lote W2.10/W4.3; NÃO re-descobrir)
 
 Bugs vivos: shape codex congelada em 0.139 vs binário 0.144.6

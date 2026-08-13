@@ -1057,6 +1057,13 @@ W0 correspondentes viram VERIFICAÇÃO, não re-execução.
   expected-reds encolhe NO MESMO pack.
 - E.16 nightly vermelho até W1 landar — causa nomeada, NUNCA silenciar
   pela tabela.
+- **Cross-ref S305 (sem mudança de escopo aqui):** os candidatos
+  derivados da pesquisa academia-vs-framework — critic fresco por
+  retry, barra-por-exemplar, estudo dreaming/curadoria de memória
+  (fronteira com PLAN-154), auditoria MAST-14 + injeção inter-agente,
+  adoção de substrato 2026 — têm dono ÚNICO no **PLAN-178**
+  (`PLAN-178/research-S305.md` = fonte das referências). Este plano
+  não os absorve para não emendar escopo assinado.
 
 ## Progress log
 
