@@ -1185,7 +1185,22 @@ SITE_COUNT_RX = re.compile(
 # (`"a" "b"` and `"a" + "b"` are both folded by the compiler and would land in
 # this module's .pyc verbatim; str.join is not folded.)
 OLD_DRIVER_STEM = "-".join(("release", "v1", "2", "0"))
-SCAN_ROOTS = (".github", "RELEASE.md", ".claude/scripts", "scripts")
+# PLAN-177 W0 item 2 (P1-2): the npm docs joined the roots because they were
+# the one published surface no scanner could see — `npm/INTEGRITY.md` carried
+# a hardcoded version through several releases and every gate stayed green.
+# They are listed as FILES, never as the `npm` directory: `npm/` receives a
+# mirrored copy of `.claude/**` + `scripts/**` (the publish staging rsync, and
+# any local `install-npm.sh` run), so a directory root would have the scanner
+# auditing clones of this repo — slow, and every hit a duplicate of a hit it
+# already reported. `RELEASE.md` is the precedent: this tuple takes files.
+SCAN_ROOTS = (
+    ".github",
+    "RELEASE.md",
+    ".claude/scripts",
+    "scripts",
+    "npm/INTEGRITY.md",
+    "npm/README.md",
+)
 
 
 def scan_live_surfaces(needle: str):
@@ -1300,6 +1315,372 @@ def test_old_driver_name_is_gone_from_live_surfaces():
     assert not hits, "old driver name on a live surface:\n%s" % "\n".join(hits)
     assert not (LOCAL / (OLD_DRIVER_STEM + ".sh")).exists()
     assert DRIVER_SRC.exists() and os.access(str(DRIVER_SRC), os.X_OK)
+
+
+# ===========================================================================
+# PLAN-177 W0 — the npm/ surfaces: a version nobody watched (P1-2) and an
+# "enforced today" guarantee with no step behind it (P1-3).
+# ===========================================================================
+
+# The npm docs are DERIVED from SCAN_ROOTS, not re-typed: adding a third npm
+# surface up there extends this rule too, and the two lists cannot drift.
+# What stays out, and why the predicate is narrow ON PURPOSE:
+#   * `npm/SHA256SUMS.txt` records tarball FILENAMES
+#     (`ceo-orchestration-<version>.tgz`) — historical data about a build that
+#     happened, not a claim about the current release. Flagging it would train
+#     whoever hits the red to add an exemption, and an exemption is how a
+#     control stops controlling.
+#   * `npm/.npmignore` cites past packaging incidents by the version they
+#     happened in — same category.
+#   * `npm/package.json` is a real bump site with a real oracle
+#     (`_release_bump_sites.py` + verify-counts); it is written, not stale.
+# Prose in a shipped `.md` is the only one that can go stale silently, which
+# is exactly what happened.
+NPM_DOC_SURFACES = tuple(
+    root for root in SCAN_ROOTS if root.startswith("npm/") and root.endswith(".md")
+)
+# The one legitimate version literal in an npm doc: the review stamp, itself a
+# bump site (`("npm/README.md", STAMP, STAMP_RX)`), so it has an oracle.
+_STAMP_LINE_RX = re.compile(r"last-reviewed:\s*\d{4}-\d{2}-\d{2}\s+v\d+\.\d+\.\d+")
+
+
+def _bare_version_offenders_in_npm_docs(repo_root: Path) -> List[str]:
+    """Bare `X.Y.Z` in a scanned npm doc, outside a review stamp. Takes the
+    root as an ARGUMENT so the positive control can plant the defect in a tmp
+    tree and never write into the repo under test."""
+    offenders: List[str] = []
+    for rel in NPM_DOC_SURFACES:
+        path = repo_root / rel
+        if not path.is_file():
+            continue
+        try:
+            body = path.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):
+            continue
+        for num, line in enumerate(body.splitlines(), 1):
+            if _STAMP_LINE_RX.search(line):
+                continue
+            for hit in SEMVER_RX.findall(line):
+                offenders.append("%s:%d: %s (%s)" % (rel, num, line.strip(), hit))
+    return offenders
+
+
+def test_npm_docs_carry_no_bare_version_literal(tmp_path):
+    """P1-2. `npm/INTEGRITY.md` declared its own version and drifted three
+    minors behind `VERSION` while `bump --stable` correctly reported a no-op:
+    the file is not a bump site and — until this commit — not a scanned
+    surface either. The cure is version-NEUTRAL prose, not a new writer row
+    (a writer with no oracle is the dead rule `_release_bump_sites.py`
+    already refuses to reintroduce)."""
+    assert NPM_DOC_SURFACES, "no npm doc is scanned — the P1-2 surface is unwatched"
+
+    # Positive control FIRST, in a throwaway tree, and planted in the SAME
+    # relative paths the real scan uses: this proves the SURFACE is covered,
+    # not merely that the regex can match a version somewhere. The stamped
+    # file rides along because an over-firing control gets exempted away
+    # within a release.
+    for rel in NPM_DOC_SURFACES:
+        target = tmp_path / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(
+            "> built and versioned (`VERSION` / `package.json`, "
+            "currently 1.0.1).\n"
+            "<!-- last-reviewed: 2026-08-05 v1.3.0 -->\n",
+            encoding="utf-8",
+        )
+    planted = _bare_version_offenders_in_npm_docs(tmp_path)
+    assert len(planted) == len(NPM_DOC_SURFACES), (
+        "positive control did not flag every scanned npm doc exactly once "
+        "(stamp line must stay exempt): %s" % planted
+    )
+    for rel in NPM_DOC_SURFACES:
+        assert any(o.startswith(rel + ":") for o in planted), (
+            "%s is in SCAN_ROOTS but the planted literal there was not "
+            "reported: %s" % (rel, planted)
+        )
+
+    offenders = _bare_version_offenders_in_npm_docs(REPO_ROOT)
+    assert not offenders, (
+        "bare version literal in an npm doc (VERSION is the only authority; "
+        "make the prose version-neutral):\n%s" % "\n".join(offenders)
+    )
+
+
+INTEGRITY_DOC = REPO_ROOT / "npm" / "INTEGRITY.md"
+# Closed set. A row whose Status is anything else is a red — fail-closed on
+# unknown vocabulary, because the way this table decayed the first time was a
+# cell that READ like enforcement ("(to-add)", "Release script (Sprint 17
+# scope)") without ever being it.
+_CONTRACT_STATUSES = ("enforced", "deferred", "operator")
+# `<workflow>.yml` in backticks, then the step name in straight quotes. Both
+# delimiters are load-bearing: they are what makes the claim parseable at all.
+_ENFORCED_RX = re.compile(r'`([^`]+\.yml)`\s+step\s+"([^"]+)"')
+# Without a floor, a parser that suddenly matches nothing reports zero
+# offenders and the gate passes having checked NOTHING. Two is the smallest
+# floor that also keeps a one-row table from satisfying it by accident.
+_MIN_ENFORCED_PAIRS = 2
+
+
+def _yaml_step_names(path: Path) -> List[str]:
+    """Every `- name:` in a workflow, unquoted. Compared by EQUALITY at the
+    call site: a substring match would accept "Verify VERSION" for a step
+    actually called "Verify VERSION matches tag", and substring-vs-exact has
+    already cost this repo three incidents in one session."""
+    text = path.read_text(encoding="utf-8")
+    names = []
+    for m in re.finditer(r"(?m)^\s*-\s+name:\s*(.+?)\s*$", text):
+        name = m.group(1)
+        if len(name) >= 2 and name[0] == name[-1] and name[0] in "\"'":
+            name = name[1:-1]
+        names.append(name)
+    return names
+
+
+def _contract_rows(doc_text: str) -> List[List[str]]:
+    """The `## Contract` table as [control, mechanism, status, where]."""
+    m = re.search(r"(?ms)^## Contract\b.*?(?=^## |\Z)", doc_text)
+    assert m, "npm/INTEGRITY.md has no `## Contract` section"
+    rows = []
+    for line in m.group(0).splitlines():
+        line = line.strip()
+        if not line.startswith("|"):
+            continue
+        cells = [c.strip() for c in line.strip("|").split("|")]
+        if len(cells) != 4:
+            continue
+        if cells[0] == "Control" or set(cells[0]) <= set("- :"):
+            continue
+        rows.append(cells)
+    return rows
+
+
+def _integrity_enforced_pairs(doc_text: str) -> List[List[str]]:
+    """[control, workflow, step] for every `enforced` row. Rows with any other
+    Status are not read — a row that claims no enforcement makes no claim to
+    check."""
+    out: List[List[str]] = []
+    for control, _mechanism, status, where in _contract_rows(doc_text):
+        if status != "enforced":
+            continue
+        for workflow, step in _ENFORCED_RX.findall(where):
+            out.append([control, workflow, step])
+    return out
+
+
+def _integrity_contract_offenders(doc_text: str, repo_root: Path) -> List[str]:
+    """Closed-set Status, plus: every `enforced` row names a workflow that
+    exists and a step that exists in it, by exact equality."""
+    offenders: List[str] = []
+    for control, _mechanism, status, where in _contract_rows(doc_text):
+        if status not in _CONTRACT_STATUSES:
+            offenders.append(
+                "%s: Status %r is outside the closed set %s"
+                % (control, status, list(_CONTRACT_STATUSES))
+            )
+            continue
+        if status != "enforced":
+            continue
+        pairs = _ENFORCED_RX.findall(where)
+        if not pairs:
+            offenders.append(
+                "%s: Status is enforced but `Where enforced` names no "
+                "workflow+step in the parseable form — %r" % (control, where)
+            )
+            continue
+        for workflow, step in pairs:
+            wf = repo_root / workflow
+            if not wf.is_file():
+                offenders.append(
+                    "%s: names workflow %s, which does not exist"
+                    % (control, workflow)
+                )
+                continue
+            if step not in _yaml_step_names(wf):
+                offenders.append(
+                    "%s: names step %r in %s, which has no such step"
+                    % (control, step, workflow)
+                )
+    return offenders
+
+
+def test_integrity_contract_rows_name_a_live_step():
+    """P1-3. The contract claimed a per-tarball SHA-256 manifest was
+    "enforced today" and pointed at `validate.yml (to-add)`: a guarantee whose
+    alleged gate could not fail because it did not exist. A row now declares a
+    Status from a closed set, and an `enforced` one must name a step that is
+    really in the YAML."""
+    doc = INTEGRITY_DOC.read_text(encoding="utf-8")
+    rows = _contract_rows(doc)
+    assert len(rows) >= 5, "Contract table parsed as %d rows" % len(rows)
+
+    pairs = _integrity_enforced_pairs(doc)
+    assert len(pairs) >= _MIN_ENFORCED_PAIRS, (
+        "only %d enforced (workflow, step) claims parsed — below the floor of "
+        "%d. Either the table stopped documenting enforcement, or its format "
+        "changed and this gate is now checking nothing."
+        % (len(pairs), _MIN_ENFORCED_PAIRS)
+    )
+
+    # (a) a renamed step must go red. The fixture is DERIVED from the parsed
+    # table, never a hand-typed row literal: an anchor typed here stops
+    # matching the day that row is edited, and the control dies quietly.
+    step = pairs[0][2]
+    renamed = doc.replace('step "%s"' % step, 'step "%s renamed"' % step, 1)
+    assert renamed != doc, "rename fixture did not patch the doc"
+    renamed_offenders = _integrity_contract_offenders(renamed, REPO_ROOT)
+    assert any("renamed" in o for o in renamed_offenders), (
+        "control did not flag a row naming a nonexistent step: %s"
+        % renamed_offenders
+    )
+
+    # (b) a table with NO parseable step claim must go red on the COUNT, not
+    # report zero offenders. That is the vacuity failure itself.
+    stripped = doc.replace('step "', "step ")
+    assert len(_integrity_enforced_pairs(stripped)) < _MIN_ENFORCED_PAIRS, (
+        "a table with no parseable step claim still met the floor — the count "
+        "check cannot detect vacuity"
+    )
+
+    # (c) unknown Status vocabulary must go red, not be waved through.
+    unknown = doc.replace("| enforced |", "| mostly enforced |", 1)
+    assert unknown != doc, "status fixture did not patch the doc"
+    assert any(
+        "outside the closed set" in o
+        for o in _integrity_contract_offenders(unknown, REPO_ROOT)
+    ), "an unknown Status was accepted"
+
+    offenders = _integrity_contract_offenders(doc, REPO_ROOT)
+    assert not offenders, "npm/INTEGRITY.md contract row without a live step:\n%s" % (
+        "\n".join(offenders)
+    )
+
+
+def test_integrity_unenforced_rows_are_restated_where_the_reader_looks():
+    """The escape hatch a closed set alone leaves open: mark everything
+    `deferred` and list it nowhere. Every non-enforced row must repeat its
+    control name, verbatim and bold, under §Not yet automated — the section a
+    reader actually reads."""
+    doc = INTEGRITY_DOC.read_text(encoding="utf-8")
+    section = re.search(r"(?ms)^## Not yet automated\b.*?(?=^## |\Z)", doc)
+    assert section, "npm/INTEGRITY.md has no §Not yet automated section"
+    body = section.group(0)
+    unenforced = [
+        control
+        for control, _m, status, _w in _contract_rows(doc)
+        if status in ("deferred", "operator")
+    ]
+    assert unenforced, (
+        "no un-enforced row parsed — the honest half of the table is missing, "
+        "or the Status column stopped parsing"
+    )
+    unlisted = [c for c in unenforced if ("**%s**" % c) not in body]
+    assert not unlisted, (
+        "control(s) marked un-enforced in the table but absent from "
+        "§Not yet automated: %s" % unlisted
+    )
+    # falsifiable: unbolding one bullet must break the match this test makes
+    victim = unenforced[0]
+    assert ("**%s**" % victim) not in body.replace("**%s**" % victim, victim, 1)
+
+
+def test_integrity_doc_makes_no_enforced_claim_for_the_tarball_checksum():
+    """The narrower half of P1-3, plus the whole-file sweep that followed it.
+    `SHA256SUMS.txt` is written by a LOCAL `scripts/install-npm.sh` run, is
+    excluded from the package `files:` array, and no workflow materialises a
+    `.tgz` to hash — so the consumer recipe this file used to publish was
+    impossible, and is REMOVED rather than caveated."""
+    doc = INTEGRITY_DOC.read_text(encoding="utf-8")
+    header = doc.split("## Contract", 1)[0]
+    assert "no** per-tarball" in header or "no per-tarball" in header, (
+        "header no longer states that the tarball checksum is absent"
+    )
+    assert "scripts/install-npm.sh" in doc, (
+        "the doc does not attribute SHA256SUMS.txt to its real, local writer"
+    )
+    assert "sha256sum -c SHA256SUMS.txt" not in doc, (
+        "the impossible consumer recipe is back — it cannot run, because "
+        "SHA256SUMS.txt is not inside the published package"
+    )
+
+    # --- sweep findings: three promises whose referent does not exist ---
+    assert not re.search(r"rotation-log\.md`?\s*§\s*NPM", doc), (
+        "the doc again points at a rotation-log section that does not exist"
+    )
+    assert ".well-known/gpg.asc" not in doc, (
+        "the doc again advertises a key distribution point this project does "
+        "not serve"
+    )
+    assert not (REPO_ROOT / ".well-known").exists(), (
+        "`.well-known/` now exists — re-open the signing-key section"
+    )
+    for name in ("docs/rotation-log.md", ".claude/trust/owner.asc"):
+        if name in doc:
+            assert (REPO_ROOT / name).exists(), "doc points at missing %s" % name
+    # the reproducible-build row is `deferred` because NO workflow sets the
+    # variable. If one ever does, this red is the reminder to re-read the row.
+    for workflow in (
+        ".github/workflows/validate.yml",
+        ".github/workflows/npm-publish.yml",
+    ):
+        body = (REPO_ROOT / workflow).read_text(encoding="utf-8")
+        assert "SOURCE_DATE_EPOCH" not in body, (
+            "%s now sets SOURCE_DATE_EPOCH — the reproducible-build row may "
+            "have become real" % workflow
+        )
+    assert "npm packlist gate" in doc, (
+        "the doc no longer names the packlist gate that actually runs"
+    )
+
+    # the sibling promise, on the manifest itself
+    sums = (REPO_ROOT / "npm" / "SHA256SUMS.txt").read_text(encoding="utf-8")
+    assert "NOT generated by CI" in sums
+    assert "Generated by `.github/workflows/npm-publish.yml`" not in sums
+    # `files:` really does exclude it — the claim above is checked, not trusted
+    pkg = json.loads((REPO_ROOT / "npm" / "package.json").read_text(encoding="utf-8"))
+    assert not any("SHA256SUMS" in entry for entry in pkg["files"]), (
+        "SHA256SUMS.txt now ships in the tarball — re-open the doc, the "
+        "un-automated control may have become real"
+    )
+
+
+def test_readme_states_the_slsa_level_the_pipeline_actually_reaches():
+    """Same class, most-read file: README advertised "SLSA 3 provenance" while
+    `npm publish --provenance` is a Level-2 attestation and INTEGRITY.md says
+    Level 3 is out of scope. README has no reason to name Level 3 except to
+    disclaim it, so the claim is pinned here."""
+    text = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+    # The tolerance is scoped to what FOLLOWS the mention, not to the line: the
+    # honest sentence names Level 2 and disclaims Level 3 in one breath, so a
+    # line-wide "out of scope" exemption would let the false claim ride along
+    # beside its own disclaimer. (It did — the first run of this control went
+    # red on the wrong assertion.)
+    offenders = [
+        text[max(0, m.start() - 60):m.end() + 40].strip().replace("\n", " ")
+        for m in re.finditer(r"SLSA[\s-]*(?:Level[\s-]*)?3\b", text)
+        if "out of scope" not in text[m.end():m.end() + 40]
+    ]
+    assert not offenders, (
+        "README claims SLSA Level 3; the shipped provenance is Level 2:\n%s"
+        % "\n".join(offenders)
+    )
+    assert "SLSA **Level 2**" in text or "SLSA Level 2" in text, (
+        "README no longer states the level the pipeline reaches"
+    )
+
+
+def test_checklist_attributes_repo_exhaustiveness_to_the_scanner():
+    """The checklist read as a census OF THE REPOSITORY while it was a census
+    of the driver's TABLE — which is why `npm/INTEGRITY.md` could hold a stale
+    version and the checklist still be, on its own terms, true. It now says
+    which instrument answers for the repo, and names the roots that
+    instrument scans; adding a root without documenting it goes red here."""
+    text = (REPO_ROOT / ".github/release-checklist.md").read_text(encoding="utf-8")
+    assert "SCAN_ROOTS" in text, "the checklist names no repo-wide instrument"
+    missing = [root for root in SCAN_ROOTS if root not in text]
+    assert not missing, "SCAN_ROOTS entries undocumented in the checklist: %s" % missing
+    # the assertion above can only mean something if it is falsifiable — a root
+    # that is NOT in the tuple must be absent from the prose.
+    assert "docs/formal-verification" not in text
 
 
 def test_checklist_documents_the_new_driver_and_the_await_gate_recovery():

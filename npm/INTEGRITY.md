@@ -1,57 +1,90 @@
 # NPM shim integrity manifest
 
-> **Integrity contract for the `ceo-orchestration` npm shim.** The package is
-> built and versioned (`VERSION` / `package.json`, currently 1.0.1).
+> **Integrity contract for the `ceo-orchestration` npm shim.** This file
+> states **no** version of its own: `VERSION` at the repo root is the single
+> authority, mirrored into `npm/package.json` by the release bump driver
+> (`.claude/scripts/local/_release_bump_sites.py`) — a second copy here would
+> be a literal no oracle watches, which is exactly how it went stale before.
 > Publishing stays gated — `npm-publish.yml` holds all `v*-rc.*` tags and
 > requires manual approval on GA tags via `environment: production-npm`.
 > The integrity controls enforced **today** are: (1) an `install.sh`
 > self-SHA tamper trailer (`# CEO-INSTALL-SHA256:`) that re-hashes the
-> installer at install time and **fails closed** on mismatch; (2) build
+> installer at install time and **fails closed** on mismatch; and (2) build
 > provenance via `npm publish --provenance` (`publishConfig.provenance:
-> true`, a Sigstore / SLSA-Level-2 attestation); and (3) a per-tarball
-> SHA-256 manifest (`npm/SHA256SUMS.txt` plus a detached `<tarball>.sha256`)
-> recorded by `npm-publish.yml` at tag cut. The sections below detail each
-> control and the items that remain release-operator steps (GPG detached
-> signature, reproducible build) rather than automated gates.
+> true`, a Sigstore / SLSA-Level-2 attestation). There is **no** per-tarball
+> SHA-256 manifest in the publish pipeline: no workflow materialises the
+> `.tgz` (the packlist gate runs `npm pack --dry-run`, which writes nothing),
+> so nothing hashes it. That control, the GPG detached signature and the
+> reproducible build are not automated — §Not yet automated lists them, and
+> the sections below detail each control that does run.
 
 ## Contract
 
-Every release tarball (`npm pack --dry-run` output) MUST satisfy:
+Every release tarball MUST satisfy the rows below.
 
-| Control | Value / mechanism | Where enforced |
-|---|---|---|
-| SHA-256 manifest per file | `sha256sum` over every file in `files:` array | `.github/workflows/validate.yml` (to-add) + manifest committed to `npm/SHA256SUMS.txt` during release prep |
-| GPG detached signature | RFC 4880 signature over tarball | Release operator signs locally with project key; signature attached to GitHub Release as `ceo-orchestration-<version>.tgz.asc` |
-| SLSA Level-2 provenance | `npm publish --provenance` (Sigstore-attested via OIDC) | `.github/workflows/npm-publish.yml` already passes `--provenance`; requires `id-token: write` permission (already set) |
-| Reproducible build | `SOURCE_DATE_EPOCH` set to VERSION tag commit date | Release script (Sprint 17 scope) sets env var before `npm pack` |
-| Zero runtime dependencies | `Object.keys(dependencies).length === 0` | `.github/workflows/npm-publish.yml` step "Verify zero runtime dependencies" (existing) |
-| VERSION parity | `VERSION` file == `npm/package.json.version` == tag `v<version>` | `.github/workflows/npm-publish.yml` step "Verify VERSION matches tag" (existing) |
+`Status` is a **closed set** — `enforced`, `deferred`, `operator`. Anything
+else is a test failure, so a row cannot acquire a comfortable new adjective.
+`Where enforced` is **machine-checked** for `enforced` rows
+(`test_integrity_contract_rows_name_a_live_step` in
+`.claude/scripts/tests/test_release_bump_sites.py`): the cell must name a
+workflow in backticks that exists, followed by `step "<name>"` matching a
+`- name:` in that YAML by **exact equality** — never substring. A row that
+claims enforcement without a live step is the failure mode this table
+shipped with, and it now goes red.
 
-## File-layer SHA-256 manifest (example)
+| Control | Value / mechanism | Status | Where enforced |
+|---|---|---|---|
+| Zero runtime dependencies | `Object.keys(dependencies).length === 0` | enforced | `.github/workflows/npm-publish.yml` step "Verify zero runtime dependencies" |
+| VERSION parity | `VERSION` == `npm/package.json.version` == tag `v<version>` | enforced | `.github/workflows/npm-publish.yml` step "Verify VERSION matches tag" + `.github/workflows/npm-publish.yml` step "Verify npm/package.json version matches VERSION" |
+| Packlist hygiene | no tests, fixtures, eval corpora or plan material inside the tarball | enforced | `.github/workflows/npm-publish.yml` step "Packlist gate (PLAN-152 tarball-02)" + `.github/workflows/validate.yml` step "npm packlist gate (no tests/fixtures/eval/red-team-corpus/PLAN-N)" |
+| `install.sh` self-SHA trailer | `# CEO-INSTALL-SHA256:` stamped over the staged installer; the installer re-hashes its own body at install time and fails closed on mismatch | enforced | `.github/workflows/npm-publish.yml` step "Populate install.sh self-SHA trailer (P0-15, PLAN-045)" |
+| Tag/SHA binding at publish | the remote tag must still point at the SHA this run built | enforced | `.github/workflows/npm-publish.yml` step "Assert remote tag still points at this run's SHA" |
+| SLSA Level-2 provenance | `npm publish --provenance` (Sigstore-attested via OIDC) | enforced | `.github/workflows/npm-publish.yml` step "Publish (Trusted Publishing — OIDC)" |
+| SHA-256 tarball manifest | `sha256sum` over the published `.tgz`, plus a detached `<tarball>.sha256` | deferred | nothing — see §Not yet automated |
+| Reproducible build | `SOURCE_DATE_EPOCH` pinned to the VERSION tag commit date | deferred | nothing — see §Not yet automated |
+| GPG detached signature | RFC 4880 signature over tarball | operator | a human, by hand, if at all — see §Not yet automated |
 
-Generated during release prep, committed to `npm/SHA256SUMS.txt` adjacent to
-`package.json`:
+## SHA-256 tarball manifest — what actually exists
 
-```
-<sha256>  bin/ceo-orch-init.js
-<sha256>  package.json
-<sha256>  scripts/install.sh
-<sha256>  templates/CLAUDE.md
-...
-```
+`npm/SHA256SUMS.txt` is in the tree, and it is easy to read it as a shipped
+guarantee. It is not one:
 
-Consumers verify with:
+- It is written by **`scripts/install-npm.sh`**, a local build helper a
+  maintainer runs on a workstation. No workflow invokes it, and no workflow
+  appends to the file on tag push.
+- It therefore records whatever tarball was last built locally, which lags
+  the published package.
+- It does **not** travel inside the package: `SHA256SUMS.txt` is absent from
+  the `files:` array in `npm/package.json`, so it is not in the tarball a
+  consumer installs.
 
-```bash
-cd $(npm root -g)/ceo-orchestration
-sha256sum -c SHA256SUMS.txt
-```
+Earlier revisions of this document published a consumer recipe that ran
+`sha256sum -c` over that manifest from inside the installed package. The
+recipe has been **removed, not annotated**: it could never run, for any
+version, because the file it reads is not in the package. A caveated
+impossible recipe is still an impossible recipe, and it is not reproduced
+here — a reader who finds a command in a doc will run it.
 
-## GPG key
+What a consumer can actually verify is the provenance attestation — see
+§SLSA Level-2 provenance below. For the bash install path, the
+`install.sh.sha256` release asset is the checksum that exists; `SECURITY.md`
+§How to verify what you install states its scope and its limits.
 
-Project signing key fingerprint published in `docs/rotation-log.md` §NPM.
-Rotation: same 90-day maximum as other project credentials (ADR-040 §4).
-Public key distributed via GitHub Release notes + `.well-known/gpg.asc`.
+## Signing keys
+
+The Owner's public key is committed in-repo at `.claude/trust/owner.asc`.
+What it signs today is **release tags**: `release.yml` fail-closes when a tag
+signature does not verify against it (`SECURITY.md` §How to verify what you
+install). Verify locally with
+`gpg --import .claude/trust/owner.asc && git tag --verify vX.Y.Z`.
+
+There is **no** separate npm signing key. Two distribution points were
+claimed here and neither exists: a fingerprint in `docs/rotation-log.md`
+(that log covers API-key rotation — its NPM entry records the retirement of
+`NPM_TOKEN` in favour of OIDC, and it publishes no key material), and a
+public key served under a `.well-known/` path (this project serves no such
+path at all). The detached-signature row above is `operator` for that reason:
+nothing signs a tarball today.
 
 ## SLSA Level-2 provenance
 
@@ -69,33 +102,35 @@ npm audit signatures ceo-orchestration
 
 ## Reproducible-build spec
 
-Inputs:
+**Status: specification only — nothing asserts it, in any workflow.** Inputs:
 - `SOURCE_DATE_EPOCH = <VERSION tag creator-date, unix-epoch>`
-- Node 20.x (SHA-pinned in `npm-publish.yml`)
+- Node 20.x (`npm-publish.yml` step "Setup Node 20")
 - No `npm install` for the bundle itself (zero runtime deps)
 
-Expected output: byte-identical tarball across any ubuntu-latest GitHub
-Actions runner with the same inputs. Deviation = rebuild failure.
+Intended output: byte-identical tarball across any ubuntu-latest GitHub
+Actions runner with the same inputs. No workflow performs the rebuild or the
+comparison, and no workflow sets `SOURCE_DATE_EPOCH` at all, so a deviation
+would go unnoticed.
 
-## CI verification (npm pack --dry-run assertion)
+## CI verification (what the packlist gate does, and does not, prove)
 
-A new step in `validate.yml` asserts:
-
-```yaml
-- name: Assert npm pack produces expected bundle
-  run: |
-    cd npm
-    SOURCE_DATE_EPOCH=$(git log -1 --format=%ct) npm pack --dry-run > /tmp/pack-out.txt
-    grep -q "^filename:" /tmp/pack-out.txt || { echo "::error::npm pack did not report filename"; exit 1; }
-```
-
-The `--dry-run` variant does not publish; it only asserts the pack step would
-succeed. Full tarball signing + provenance is the release-operator workflow.
+Both `npm-publish.yml` and `validate.yml` run a packlist gate over
+`npm pack --dry-run --json`: it asserts the **file list** the tarball would
+contain (no tests, fixtures, eval corpora or plan material). `--dry-run`
+writes no archive, so the gate proves nothing about tarball **bytes** — no
+checksum, no signature, no reproducibility. Tarball hashing and signing are
+the un-automated controls above; provenance is the one byte-level attestation
+that ships.
 
 ## Not yet automated (release-operator or out of scope)
 
-- **GPG detached signature** is a manual release-operator step (sign the
-  tarball locally; attach the `.asc` to the GitHub Release), not a CI gate.
+- **SHA-256 tarball manifest** — no workflow materialises the `.tgz`, so
+  none can hash it; `npm/SHA256SUMS.txt` is a local-build artefact and is not
+  shipped inside the package.
+- **GPG detached signature** would be a manual release-operator step (sign
+  the tarball locally; attach the `.asc` to the GitHub Release). It is not a
+  CI gate, there is no published npm signing key, and no release has shipped
+  one.
 - **Reproducible build** (`SOURCE_DATE_EPOCH`-pinned `npm pack`) is specified
   above but not yet asserted byte-for-byte in CI.
 - **SLSA Level-3** (hermetic build + two-party review) is out of scope; the
@@ -105,8 +140,14 @@ succeed. Full tarball signing + provenance is the release-operator workflow.
 
 - PLAN-013 Phase E.7 (this ADR source)
 - PLAN-013 Phase 0 item 0.2 — `npm-publish.yml` RC + manual-approval gates
-- ADR-040 §4 — credential lifecycle (90-day rotation applies to GPG key)
-- `.github/workflows/npm-publish.yml` — existing publish pipeline (gated)
-- `.github/workflows/validate.yml` — `npm pack --dry-run` assertion site
+- PLAN-177 W0 item 3 — the "enforced today" claim corrected to the mechanism,
+  and the whole-file sweep that followed it
+- ADR-040 §4 — credential lifecycle (90-day rotation applies to project keys)
+- `.github/workflows/npm-publish.yml` — publish pipeline (gated)
+- `.github/workflows/validate.yml` — packlist gate on `npm pack --dry-run`
+- `scripts/install-npm.sh` — local tarball build + `SHA256SUMS.txt` writer
+- `.claude/trust/owner.asc` — the Owner public key that verifies release tags
+- `SECURITY.md` §How to verify what you install — the honest-limits statement
+  this file now mirrors
 - Sigstore + SLSA: <https://slsa.dev/spec/v1.0/levels>
 - npm provenance: <https://docs.npmjs.com/generating-provenance-statements>

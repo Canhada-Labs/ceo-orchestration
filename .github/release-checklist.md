@@ -65,10 +65,24 @@
       hand-patch; o gate deles vive só no `release.yml`).
       O badge do README **não** é site de versão — é dinâmico e o driver
       não o toca; auditar por ele deixa passar drift real.
-      O driver cobre TODOS os sites mecânicos listados acima, janela de
-      suporte incluída — **exceto** a prosa da tag, manual por desenho
+      O driver cobre TODOS os sites mecânicos **enumerados acima**, janela
+      de suporte incluída — **exceto** a prosa da tag, manual por desenho
       (ver o aviso acima e §Promote stable), e o `Previous MINOR` num
-      target `X.0.0` (avisado alto, nunca adivinhado).
+      target `X.0.0` (avisado alto, nunca adivinhado). Leia isso como
+      cobertura sobre a **lista**, não sobre o repositório: um literal de
+      versão que exista fora da lista não é bump-eável e simplesmente não
+      deveria existir. Quem responde pela **exaustividade sobre o repo** é
+      o scanner de superfícies vivas
+      (`SCAN_ROOTS` em `.claude/scripts/tests/test_release_bump_sites.py`,
+      hoje `.github/`, `RELEASE.md`, `.claude/scripts/`, `scripts/`,
+      `npm/INTEGRITY.md` e `npm/README.md`) — foi a ausência dos docs de
+      `npm/` ali que deixou `npm/INTEGRITY.md` declarar uma versão obsoleta
+      sem que nenhum gate visse (PLAN-177 P1-2). Note que as duas entradas
+      de `npm/` são **arquivos**, não a pasta: `npm/` recebe, no staging do
+      publish e num build local, uma cópia espelhada de `.claude/**` +
+      `scripts/**`, e varrer a pasta faria o scanner auditar clones do
+      próprio repo. Superfície nova que possa carregar versão entra no
+      `SCAN_ROOTS` **antes** de entrar no release.
 
 ### Governança
 
