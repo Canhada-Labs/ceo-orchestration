@@ -339,6 +339,36 @@ done
 [ -n "$_extra" ] && fail "[C] --ceremony user wrote outside .claude/:$_extra"
 check_scenario "[C] fresh/user" "$TC"
 
+# --- D: SEEDED .claude/.gitignore (re-pass rc.4 t1 P1-b) --------------------
+# The adopter already owns a .claude/.gitignore (e.g. only /cache/) that
+# LACKS the two posture entries. Create-if-missing alone proved the clean
+# target; the P1 was exactly this shape: helper saw the file, returned, and
+# night-mode state stayed commit-eligible. Both routes must APPEND the two
+# entries per line while preserving every adopter byte.
+say ""
+say "--> [D] fresh user install over a SEEDED .claude/.gitignore"
+TD="$( new_target D-seeded-user )"
+mkdir -p "$TD/.claude"
+printf '%s\n' "# adopter file" "/cache/" > "$TD/.claude/.gitignore"
+do_install "$REPO_ROOT" "$TD" user
+for _need in "/cache/" "/state/" "/settings.local.json" "# adopter file"; do
+  grep -Fxq "$_need" "$TD/.claude/.gitignore" \
+    || fail "[D] seeded install: line missing or adopter byte lost: $_need"
+done
+check_scenario "[D] seeded/user-install" "$TD"
+
+say ""
+say "--> [D2] pinned user install -> SEED -> upgrade"
+TD2="$( new_target D2-seeded-upgrade )"
+do_install "$PIN_SRC" "$TD2" user
+printf '%s\n' "# adopter file" "/cache/" > "$TD2/.claude/.gitignore"
+do_upgrade "$TD2"
+for _need in "/cache/" "/state/" "/settings.local.json" "# adopter file"; do
+  grep -Fxq "$_need" "$TD2/.claude/.gitignore" \
+    || fail "[D2] seeded upgrade: line missing or adopter byte lost: $_need"
+done
+check_scenario "[D2] seeded/upgrade" "$TD2"
+
 say ""
 say "--------------------------------------------------------------"
 if [ "$FAILED" -eq 0 ]; then
