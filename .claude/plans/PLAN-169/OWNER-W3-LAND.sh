@@ -10,7 +10,7 @@
 #   G1  BASELINE anti-stale: cada alvo VIVO ainda é byte-idêntico ao que o
 #       pack viu no staging — se main andou por cima de um alvo, ABORTA
 #       (a lição do step1 do PLAN-166: staged stale reverte trabalho novo)
-#   G2  MANIFEST: shasum -c dos 12 staged (integridade do pack)
+#   G2  MANIFEST: shasum -c dos 29 staged (integridade do pack)
 #   G3  Sentinel GPG: W3-approved.md assinado + Scope cobre exatamente os
 #       alvos (touched − scope = ∅ é verificado APÓS o apply)
 #   G4  Simulação em clone: aplica o pack num git clone --local e roda a
