@@ -90,6 +90,11 @@ _PROBE_ARGV: Dict[str, List[str]] = {
     # schema surface, PLAN-155).
     "codex_cli": ["codex", "--version"],
     "codex_harness": ["codex", "--version"],
+    # PLAN-178 W1.2-5c (codex S306 r5 P2 cure): the native per-agent usage
+    # source is a shape OF the Claude Code harness — its installed version IS
+    # the harness version, so a harness bump marks this component drifted and
+    # triggers the promised native-shape re-fingerprint.
+    "cc_native_usage": ["claude", "--version"],
 }
 
 # Code-registered drift runbooks (PLAN-155 Wave 0, debate A12). Same posture

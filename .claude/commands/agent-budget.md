@@ -87,6 +87,40 @@ is the tamper-evident truth; analytics `estimated_cost` is Anthropic's
 estimate at user-day granularity. Never silently replace one with the
 other — show both, label the source.
 
+### Step 3c — cross-check com a fonte nativa
+
+The Claude Code harness also writes a **native on-disk usage source**
+per spawned agent: session transcripts under
+`~/.claude/projects/<cwd-slug>/<SESSION-UUID>/subagents/` carry
+per-turn `message.usage` token blocks (fingerprint + live-fire census:
+`.claude/plans/PLAN-178/w12-native-cost-probe.md`). Surface it as a
+second cross-check section, **snapshot-read only (never network)**:
+
+```bash
+python3 .claude/scripts/cc-native-usage-pull.py --compact 2>/dev/null
+```
+
+(The puller accepts only `--root` and `--compact`; output is always
+JSON on stdout.)
+
+- dormant (no session has `subagents/`, or the Owner set
+  `CEO_NATIVE_COST_DISABLE=1`) → print
+  **"Native cross-check: dormant"**. Never an error — the puller is
+  **fail-soft exit 0**, same doctrine as Step 3b.
+- fingerprint drift (any startup drift probe fires) → the puller
+  degrades to the audit-log source and SAYS so (reversibility per
+  PLAN-178 W1.2 AC-2c; the fingerprint it validates is the
+  `cc_native_usage` component in `.claude/scripts/substrate-watch.json`).
+- otherwise → print the native token totals per spawn and per category
+  (Task vs Workflow, categorized by **path shape**, never by
+  `taskKind`) **next to** the audit-log-derived rollup so a drift
+  between the two is visible.
+
+Treat the two numbers as cross-check, not authority-swap: the audit-log
+is the tamper-evident truth; the native source is the harness's own
+per-turn accounting at spawn granularity. Never silently replace one
+with the other — show both, label the source.
+
 ### Step 4 — Guidance
 
 After printing, if this was a plan-filtered rollup, remind the user:

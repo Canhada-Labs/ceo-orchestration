@@ -16,7 +16,7 @@ Derived deterministically (sorted, no timestamps) from three committed sources:
 
 | Command | Skills referenced | Backing scripts referenced |
 |---|---|---|
-| `/agent-budget` | — | `.claude/scripts/budget-summary.py`, `.claude/scripts/cc-analytics-pull.py` |
+| `/agent-budget` | — | `.claude/scripts/budget-summary.py`, `.claude/scripts/cc-analytics-pull.py`, `.claude/scripts/cc-native-usage-pull.py` |
 | `/architect` | `agent-architect` | `.claude/scripts/architect-bundle-validate.py`, `.claude/scripts/inject-agent-context.sh` |
 | `/audit-page` | — | — |
 | `/audit-tokens` | `terse-mode` | `.claude/scripts/audit-tokens.py` |

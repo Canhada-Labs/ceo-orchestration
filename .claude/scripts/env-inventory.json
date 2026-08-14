@@ -1,8 +1,7 @@
 {
-  "schema_version": "1.0",
   "_comment": "Canonical inventory of CLAUDE_*/ANTHROPIC_*/CEO_* names referenced by framework code (PLAN-135 W5 O8 — the S218 footgun class). Token-level superset of strictly-consumed vars; see env-inventory-check.py docstring. Regenerate with --generate after any REVIEWED env-surface change.",
-  "generated_by": "env-inventory-check.py --generate",
   "generated_at": "2026-07-10",
+  "generated_by": "env-inventory-check.py --generate",
   "scan_roots": [
     ".claude/hooks",
     ".claude/scripts",
@@ -12,6 +11,7 @@
     "scripts",
     "templates"
   ],
+  "schema_version": "1.0",
   "vars": {
     "ANTHROPIC_ADMIN_KEY": {
       "evidence": [
@@ -485,6 +485,12 @@
         ".claude/scripts/token-budget-guard.py"
       ],
       "sites": 2
+    },
+    "CEO_BUDGET_NATIVE": {
+      "evidence": [
+        ".claude/scripts/budget-summary.py"
+      ],
+      "sites": 1
     },
     "CEO_BUDGET_QUOTA_HINT": {
       "evidence": [
@@ -1633,6 +1639,14 @@
       ],
       "sites": 2
     },
+    "CEO_NATIVE_COST_DISABLE": {
+      "evidence": [
+        ".claude/scripts/budget-summary.py",
+        ".claude/scripts/cc-native-usage-pull.py",
+        ".claude/scripts/env-inventory.json"
+      ],
+      "sites": 4
+    },
     "CEO_NATIVE_SUBAGENTS": {
       "evidence": [
         ".claude/hooks/check_agent_spawn.py",
@@ -1640,6 +1654,12 @@
         "scripts/upgrade.sh"
       ],
       "sites": 3
+    },
+    "CEO_NATIVE_USAGE_DIR": {
+      "evidence": [
+        ".claude/scripts/budget-summary.py"
+      ],
+      "sites": 1
     },
     "CEO_NIGHT_MODE_TEST_SEAM": {
       "evidence": [

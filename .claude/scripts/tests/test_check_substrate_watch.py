@@ -102,8 +102,10 @@ class SubstrateWatchTest(unittest.TestCase):
         self.assertFalse(report["source_stale"])
         # PLAN-142 added the 4th component (codex_cli); PLAN-155 Wave 0
         # (debate A12) added the 5th (codex_harness — Codex-as-HOST surface);
-        # PLAN-156 added the 6th (grok_cli — Grok Build third host harness).
-        self.assertEqual(len(report["components"]), 6)
+        # PLAN-156 added the 6th (grok_cli — Grok Build third host harness);
+        # PLAN-178 W1.2-5c added the 7th (cc_native_usage — native per-agent
+        # cost source fingerprint, reversibility rail of the W1.2 puller).
+        self.assertEqual(len(report["components"]), 7)
         # An Owner refresh must never leave a component un-reconciled.
         for comp in report["components"]:
             self.assertNotEqual(comp["last_seen_version"], "unknown")

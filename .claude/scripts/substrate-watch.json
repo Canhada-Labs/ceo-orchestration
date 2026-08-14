@@ -77,6 +77,16 @@
       "cadence": "1-2 releases/DAY (proprietary 0.x) \u2014 WEEKLY staleness check, the tightest in this file",
       "watch_for": "PLAN-156: grok hook-surface drift on a DAILY-release proprietary 0.x. Re-run the S269 characterization probes (PLAN-156/artifacts/characterization-grok-codex-S269.md) on every pin bump: (a) the PreToolUse decision semantics \u2014 block still fail-opens even with exit 2? deny-via-stdout still blocks? (probes P2/P4/P5/P7); (b) DOUBLE-FIRE \u2014 do the compat kill switches ([compat.claude] hooks=false, GROK_CLAUDE_HOOKS_ENABLED=0) start working at runtime? if so the native .grok/hooks/ single-surface decision (OQ1) can be revisited (probe P8); (c) tool-name vocabulary on the wire (run_terminal_command vs run_terminal_cmd) + the alias table; (d) the --sandbox council profile still kernel-enforces (negative control: unknown profile name must refuse to start \u2014 on 0.2.93 it only WARNS and runs unsandboxed, so the council asserts a ProfileApplied+enforced line in ~/.grok/sandbox-events.jsonl). Pin files: grok-cli-pin.txt (EXACT version, not a range) + grok-cli-binary-sha256.txt (the real supply-chain gate). Binary at ~/.grok/bin/grok. NO CI can automate this \u2014 no grok binary/secret on any runner (the substrate-watch obligation the Owner ratified at Wave-0).",
       "source": "docs.x.ai/build + the grok release feed"
+    },
+    {
+      "key": "cc_native_usage",
+      "label": "Claude Code native per-agent usage (on-disk)",
+      "last_seen": {
+        "version": "2.1.232",
+        "date": "2026-08-14"
+      },
+      "watch_for": "PLAN-178 W1.2 native cost source (kill switch: CEO_NATIVE_COST_DISABLE=1; consumed by .claude/scripts/cc-native-usage-pull.py). Fingerprint measured by the live-fire probe (.claude/plans/PLAN-178/w12-native-cost-probe.md §2) against harness claude 2.1.232: root ~/.claude/projects/<cwd-slug>/<SESSION-UUID>/subagents/; globs task = subagents/agent-a*.meta.json (+ paired .jsonl), workflow = subagents/workflows/wf_*/agent-a*.meta.json (+ paired .jsonl), journal = subagents/workflows/wf_*/journal.jsonl (no meta — excluded from rollup); hard meta invariants [agentType, spawnDepth] (416/416 at probe time); usage_path message.usage per transcript turn (input_tokens/output_tokens/cache_creation_input_tokens/cache_read_input_tokens). Drift probes — ANY one trips the puller's fallback to the audit-log source (reversibility, W1.2 AC-2c): task+workflow globs return 0 in a session that provably spawned agents; a meta.json missing agentType or spawnDepth; message.usage without input_tokens/output_tokens; a NEW path level appearing between subagents/ and the meta.",
+      "source": ".claude/plans/PLAN-178/w12-native-cost-probe.md §2 — UNDOCUMENTED on-disk harness surface; no upstream changelog line will announce a shape change (re-run the probe on harness version bumps)"
     }
   ]
 }
