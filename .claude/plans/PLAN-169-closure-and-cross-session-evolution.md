@@ -944,6 +944,39 @@ o dado em mãos, não por simetria).
 
 ## Open questions
 
+> **OQ-6 (Owner, 2026-08-14, S306):** escopo do ciclo — pergunta
+> apresentada via AskUserQuestion ("Qual escopo entra neste ciclo,
+> antes do release?"); opções: (a) começados + 174 cedo [recomendada],
+> (b) só os começados, (c) tudo — os 10 planos.
+> **Decisão do Owner: "Tudo — os 10 planos."** Interpretação vinculante
+> (redação v2 — a v1 dizia "um único re-pass/tag/hold no fim", claim
+> insatisfazível pega pelo rail codex S306: OQ-1 ratificada fixa DOIS
+> trens, e o AC-8 deste plano só fecha com corte v1.4.0-rc.1 + hold +
+> GA v1.4.0): a decisão é de ESCOPO, não de sequência — os 10 planos
+> (166, 169, 171–178) concluem dentro do ciclo, honrando os dois trens
+> ratificados. Trem 1 (v1.3.0): emenda-1 do 177 + PLAN-178 (rota-
+> SEQUÊNCIA do seu §Freeze: arquivos, incl. Lote B, DENTRO da tag
+> rc.4) + re-pass rc.4 — nada além disso embarca nele. Trem 2
+> (v1.4.0): TODO o restante (waves restantes de 169, 171–176,
+> 173/175/174 nos gates que seus `external_wait` declaram) concentra-se
+> num ÚNICO corte v1.4.0 ao final — sem rcs intermediárias além das
+> que o protocolo do trem exigir.
+> **Cláusula de precedência (rail codex S306, P1×2 — fecha a classe,
+> não o ramo):** esta OQ decide ESCOPO; ela NÃO sobrescreve nenhum
+> `external_wait`, gate, freeze ou ramo de aborto ratificado nos
+> planos individuais — em conflito, o plano individual PREVALECE.
+> Consequências já identificadas (exemplos, não lista fechada):
+> (i) PLAN-178 pertence ao trem 1 — seu §Freeze rota-SEQUÊNCIA exige
+> os arquivos (incl. Lote B) DENTRO da tag rc.4; "nenhum trabalho novo
+> no trem 1" lê-se com esta exceção; invariante nada-entre-tag-e-GA
+> preservada. (ii) O ramo de aborto D-2 do PLAN-174 segue VÁLIDO: se
+> perder o gate, aplica-se o caminho ratificado (cerimônia manual v1.4;
+> W4 move para o trem seguinte) e o residual W4 é TRANSFERIDO para
+> `PLAN-174-FOLLOWUP-<slug>` (identidade de lineage exigida por
+> PLAN-SCHEMA.md, com os campos de lifecycle de follow-up) — o 174
+> fecha por transferência registrada, nunca com AC pendente silencioso;
+> o corte v1.4.0 não é atrasado por ele.
+
 > **✅ TODAS RATIFICADAS pelo Owner em 2026-08-08 (chat: "ratifica tudo
 > com as recomendações") — decisões, conforme as recomendações:**
 > OQ-1 = v1.3.0 GA primeiro, v1.4.0 na sequência imediata ·
