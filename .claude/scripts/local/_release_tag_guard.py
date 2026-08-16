@@ -127,7 +127,14 @@ _FORBIDDEN_CTRL_RE = re.compile(
 def _extract_single_yaml_block(text):
     if text.count("```yaml") != 1:
         return None
-    m = re.search(r"(?m)^```yaml[ \t]*\n(.*?)^```", text, re.DOTALL)
+    # t10 P1: the CLOSER must be canonical too — a bare ^``` matched
+    # ANY line starting with three backticks, so ```not-a-closer
+    # closed the body early and hid a later NO-GO.
+    m = re.search(
+        r"(?m)^```yaml[ \t]*\n(.*?)^```[ \t]*(?:\n|\Z)",
+        text,
+        re.DOTALL,
+    )
     if not m:
         return None
     body = m.group(1)
@@ -405,7 +412,8 @@ def _sha256(path: str) -> str:
 def _read_manifest(path: str) -> List[Tuple[str, str]]:
     """`shasum -a 256` format: '<sha>  <name>' — returns [(sha, name)]."""
     entries: List[Tuple[str, str]] = []
-    with open(path, encoding="utf-8") as fh:
+    # t10 P2: newline="" keeps CR bytes visible to the grammar.
+    with open(path, encoding="utf-8", newline="") as fh:
         for line in fh:
             line = line.rstrip("\n")
             if not line.strip():
@@ -451,7 +459,8 @@ def delta(repo: str, tag: str, verdict_rel: Optional[str]) -> int:
             "be committed before the tag is cut (release.yml validates it per "
             "tag on the tagged tree)." % verdict_rel,
         )
-    with open(verdict_abs, encoding="utf-8") as fh:
+    # t10 P2: newline="" keeps CR bytes visible to the grammar.
+    with open(verdict_abs, encoding="utf-8", newline="") as fh:
         verdict_text = fh.read()
     # PLAN-177 t2 (P1-a): SHAPE BEFORE ANY FIELD. Both rails read this file;
     # they only agree on a canonical block. A non-canonical top-level line is

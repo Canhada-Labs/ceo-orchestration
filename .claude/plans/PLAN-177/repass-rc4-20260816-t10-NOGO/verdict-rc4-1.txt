@@ -1,0 +1,22 @@
+REJECT
+
+1. SEVERITY: P1  
+   FILE:LINE: `.github/scripts/validate-pair-rail-verdict.py:125-134`; `.claude/scripts/local/_release_tag_guard.py:127-136`; `.claude/scripts/tests/test_release_bump_sites.py:2596-2636`  
+   Concrete failure scenario: the closing-fence regex accepts any line beginning with three backticks. In an otherwise valid envelope, ` ```not-a-closing-fence` prematurely closes the parsed body, so a subsequent `verdict: NO-GO` before the real closing fence is ignored. Direct probes returned canonical shape, one declaration, and the earlier authorizing decision from both readers. This repeats the fence-shadow bypass class.  
+   Minimal fix: require a complete canonical closer, e.g. `^```[ \t]*(?:\n|\Z)`, in both extractors. Add this false-closer fixture to the full validator and delta-guard controls, not only helper tests.
+
+2. SEVERITY: P2  
+   FILE:LINE: `.github/scripts/validate-pair-rail-verdict.py:258-265,399-410,423-446`; `.claude/scripts/tests/test_release_bump_sites.py:2618-2632`  
+   Concrete failure scenario: ambiguous/multiple fences raise `ValueError`, which `main()` reports as infrastructure exit 1 before reaching the promised input-invalid exit 3. The test catches that exception and calls it success, so it does not verify the CLI classification. The unconditional local guard still blocks release, limiting this to the server rail’s contract.  
+   Minimal fix: distinguish file I/O failures from signed-content parse failures and return `EXIT_VERDICT_INVALID` for the latter; assert the real CLI exit and diagnostic.
+
+3. SEVERITY: P2  
+   FILE:LINE: `.github/scripts/validate-pair-rail-verdict.py:117-128,400`; `.claude/scripts/local/_release_tag_guard.py:117-130,454-455`; `.claude/scripts/tests/test_release_bump_sites.py:2683-2690`  
+   Concrete failure scenario: the CR regression is decorative for production reads. `Path.read_text()` and `open()` use universal-newline translation, removing CR before `_FORBIDDEN_CTRL_RE` sees it; an on-disk CRLF verdict is therefore accepted even though the new grammar and test claim CR rejection.  
+   Minimal fix: read without newline translation or decode raw bytes, then add an on-disk/subprocess control. Alternatively, explicitly permit CRLF and correct the contract and test.
+
+The original decision controls are real: NO-GO, absent, empty, unknown, duplicate, and noncanonical-key cases exercise both actual CLIs, while both authorizing decisions remain green. Workflow reachability is intact, and payload 1 has maintainer release-ceremony blast radius only—no install/upgrade or pre-v1.2 adopter behavior changes. Stdlib-only, Python 3.9 parsing, contamination, AGENTS freshness, claims, diff whitespace, and twelve read-only controls passed; temp-backed suites could not start in the read-only sandbox.
+
+The remaining shared false-closer bypass still allows malformed signed content containing a later NO-GO to authorize both rails.
+
+VERDICT: NO-GO

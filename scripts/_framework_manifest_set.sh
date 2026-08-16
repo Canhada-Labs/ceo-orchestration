@@ -832,7 +832,7 @@ _apply_mcp_secrets_ignore() {
   # excludes". Same shared probe + re-assert as the posture entries.
   _msi_repo="$( dirname "$_msi_gitignore" )"
   _gitignore_reassert_effective "$_msi_repo" "$_msi_gitignore" \
-    "$_msi_line" "state/mcp_client_secrets/__ceo_ignore_probe__"
+    "$_msi_line" "state/mcp_client_secrets/__ceo_ignore_probe__" || return 1
   return 0
 }
 
@@ -870,7 +870,28 @@ _gitignore_reassert_effective() {
     echo "    NOTE: not a git work tree — cannot probe effective ignore for $_gre_line"
     return 0
   fi
-  if git -C "$_gre_repo" check-ignore -q -- "$_gre_probe" 2>/dev/null; then
+  # t10 P1 #2: ignore rules NEVER affect files already in the index — a
+  # pre-rc.4 adopter who committed the posture/secret path stays dirty no
+  # matter what this file says. Detect tracked content FIRST and require
+  # an explicit migration; this is fail-CLOSED because leaving it silent
+  # is exactly the leak this delivery exists to close.
+  case "$_gre_probe" in
+    */__ceo_ignore_probe__) _gre_scope="$( dirname "$_gre_probe" )" ;;
+    *)                      _gre_scope="$_gre_probe" ;;
+  esac
+  _gre_tracked="$( git -C "$_gre_repo" ls-files -- "$_gre_scope" 2>/dev/null | head -5 )"
+  if [ -n "$_gre_tracked" ]; then
+    echo "    ERROR: $_gre_scope is already TRACKED by git — an ignore rule cannot protect it." >&2
+    echo "      Migrate explicitly, then re-run:" >&2
+    printf '%s\n' "$_gre_tracked" | while IFS= read -r _gre_t; do
+      echo "        git rm --cached '$_gre_t'" >&2
+    done
+    return 1
+  fi
+  # t10 P1 #2: --no-index — plain check-ignore consults the index and
+  # reports a tracked path as unmatched, causing a re-assert loop; the
+  # question here is strictly "does the PATTERN SET cover this path?".
+  if git -C "$_gre_repo" check-ignore -q --no-index -- "$_gre_probe" 2>/dev/null; then
     return 0
   fi
   {
@@ -880,12 +901,16 @@ _gitignore_reassert_effective() {
     echo "# last-matching-rule-wins makes this trailing copy effective."
     printf '%s\n' "$_gre_line"
   } >> "$_gre_file"
-  if git -C "$_gre_repo" check-ignore -q -- "$_gre_probe" 2>/dev/null; then
+  if git -C "$_gre_repo" check-ignore -q --no-index -- "$_gre_probe" 2>/dev/null; then
     echo "    RE-ASSERTED (was textually present but negated): $_gre_line"
     return 0
   fi
-  echo "    WARNING: $_gre_line is present but NOT effective (a negation outside $_gre_file wins) — fix the adopter ignore rules manually" >&2
-  return 0
+  # t10 P1 #1: a still-visible SECURITY exclusion is a FAILURE, not a
+  # warning — returning 0 here let install/upgrade finish green while
+  # the secret store stayed commit-eligible (e.g. a deeper
+  # state/.gitignore re-including it, which outranks this file).
+  echo "    ERROR: $_gre_line is present but NOT effective (a rule outside $_gre_file wins — e.g. a deeper .gitignore re-including it). Fix the adopter ignore rules, then re-run." >&2
+  return 1
 }
 
 _apply_posture_state_ignores() {
@@ -907,9 +932,9 @@ _apply_posture_state_ignores() {
   # t8 P1: presence pass done — now assert EFFECTIVENESS per entry.
   _psi_repo="$( dirname "$_psi_gitignore" )"
   _gitignore_reassert_effective "$_psi_repo" "$_psi_gitignore" \
-    ".claude/state/" ".claude/state/__ceo_ignore_probe__"
+    ".claude/state/" ".claude/state/__ceo_ignore_probe__" || return 1
   _gitignore_reassert_effective "$_psi_repo" "$_psi_gitignore" \
-    ".claude/settings.local.json" ".claude/settings.local.json"
+    ".claude/settings.local.json" ".claude/settings.local.json" || return 1
   return 0
 }
 
@@ -984,9 +1009,9 @@ _apply_claude_dir_gitignore() {
   # (probes are repo-relative; the repo root is the parent of .claude/).
   _cdg_repo="$( dirname "$_cdg_dir" )"
   _gitignore_reassert_effective "$_cdg_repo" "$_cdg_file" \
-    "/state/" ".claude/state/__ceo_ignore_probe__"
+    "/state/" ".claude/state/__ceo_ignore_probe__" || return 1
   _gitignore_reassert_effective "$_cdg_repo" "$_cdg_file" \
-    "/settings.local.json" ".claude/settings.local.json"
+    "/settings.local.json" ".claude/settings.local.json" || return 1
   if [ "$_cdg_added" = "1" ]; then
     echo "    APPENDED: missing posture entries into existing .claude/.gitignore"
   else
@@ -1022,14 +1047,14 @@ _preview_claude_dir_gitignore() {
   _pcg_repo="$( dirname "$1" )"
   _pcg_reassert=""
   if git -C "$_pcg_repo" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    if ! git -C "$_pcg_repo" check-ignore -q -- \
+    if ! git -C "$_pcg_repo" check-ignore -q --no-index -- \
          ".claude/state/__ceo_ignore_probe__" 2>/dev/null; then
       case "$_pcg_missing" in
         *" /state/"*) : ;;  # already reported as would-APPEND
         *) _pcg_reassert="$_pcg_reassert /state/" ;;
       esac
     fi
-    if ! git -C "$_pcg_repo" check-ignore -q -- \
+    if ! git -C "$_pcg_repo" check-ignore -q --no-index -- \
          ".claude/settings.local.json" 2>/dev/null; then
       case "$_pcg_missing" in
         *" /settings.local.json"*) : ;;

@@ -171,5 +171,31 @@ else
   echo "FAIL: S10 negacao do mcp-secrets continua vencendo"; FAILS=$((FAILS + 1))
 fi
 
+# --- S11 (t10 P1): negacao em .gitignore MAIS PROFUNDO vence a raiz — a
+# re-assercao na raiz NAO resolve e o applier deve FALHAR (rc 1), nunca
+# warning+sucesso (secret store ficava commit-eligible com install verde).
+mkdir -p "$TMP/s11/state"
+( cd "$TMP/s11" && git init -q )
+printf 'state/mcp_client_secrets/\n' > "$TMP/s11/.gitignore"
+printf '!mcp_client_secrets/\n' > "$TMP/s11/state/.gitignore"
+_apply_mcp_secrets_ignore "$TMP/s11/.gitignore" >/dev/null 2>&1; rc=$?
+_t "S11 negacao profunda => applier FALHA" 1 "$rc"
+
+# --- S12 (t10 P1): path ja TRACKED — ignore nao protege; o helper exige
+# migracao explicita (git rm --cached) e falha.
+mkdir -p "$TMP/s12/.claude"
+( cd "$TMP/s12" && git init -q )
+printf '{}\n' > "$TMP/s12/.claude/settings.local.json"
+( cd "$TMP/s12" \
+  && git add -f .claude/settings.local.json \
+  && git -c user.email=t@t -c user.name=t commit -qm seed )
+printf '.claude/settings.local.json\n.claude/state/\n' > "$TMP/s12/.gitignore"
+_err="$(_apply_posture_state_ignores "$TMP/s12/.gitignore" 2>&1 >/dev/null)"; rc=$?
+_t "S12 tracked posture file => applier FALHA" 1 "$rc"
+case "$_err" in
+  *"git rm --cached"*) echo "PASS: S12 mensagem de migracao acionavel" ;;
+  *) echo "FAIL: S12 sem mensagem de migracao: $_err"; FAILS=$((FAILS + 1)) ;;
+esac
+
 echo
 if [ "$FAILS" -eq 0 ]; then echo "ALL GREEN"; exit 0; else echo "$FAILS FAIL(s)"; exit 1; fi

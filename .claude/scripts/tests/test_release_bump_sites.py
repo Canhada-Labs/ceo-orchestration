@@ -1565,6 +1565,35 @@ def _integrity_contract_offenders(doc_text: str, repo_root: Path) -> List[str]:
     return offenders
 
 
+def test_tarball_checksum_row_stays_deferred_until_a_real_mechanism_exists():
+    """t10 P2: the name-based gate above verifies that an `enforced` row
+    names a workflow STEP that exists — but any unrelated existing step
+    satisfies it. Until a semantic predicate proves non-dry-run tarball
+    creation + SHA-256 + publication, this row is PINNED to `deferred`:
+    flipping it to `enforced` (the historical false promise) must go RED
+    here first, forcing whoever flips it to also build the semantic gate."""
+    doc = INTEGRITY_DOC.read_text(encoding="utf-8")
+    rows = [r for r in _contract_rows(doc) if "SHA-256 tarball" in r[0]]
+    assert len(rows) == 1, (
+        "expected exactly one SHA-256-tarball Contract row, got %r" % rows
+    )
+    assert rows[0][2] == "deferred", (
+        "the SHA-256 tarball row flipped to %r — a name-check alone cannot "
+        "prove hashing/publication; add a semantic workflow predicate "
+        "(non-dry-run pack + sha256 + upload) and update THIS pin together"
+        % rows[0][2]
+    )
+    # mutation control: the dishonest flip is DETECTABLE by this pin.
+    mutated = doc.replace(
+        "| deferred | nothing — see §Not yet automated |",
+        "| enforced | released (`npm-publish.yml` step `Publish to npm`) |",
+        1,
+    )
+    assert mutated != doc, "fixture broke: the deferred row text moved"
+    mrows = [r for r in _contract_rows(mutated) if "SHA-256 tarball" in r[0]]
+    assert mrows and mrows[0][2] == "enforced", "mutation did not land"
+
+
 def test_integrity_contract_rows_name_a_live_step():
     """P1-3. The contract claimed a per-tarball SHA-256 manifest was
     "enforced today" and pointed at `validate.yml (to-add)`: a guarantee whose
@@ -2390,6 +2419,64 @@ def _run_ci_validator(tmp_path, env, decisions: Sequence[str], bind_parent: bool
     return run(argv, REPO_ROOT, env)
 
 
+_REJECTED_CONTENT_BODIES = {
+    # t10 P2: each of these is REJECTED SIGNED CONTENT — the step-15 CLI
+    # must classify it EXIT_VERDICT_INVALID (3), never INFRA (1): infra can
+    # be softened by CEO_PAIR_RAIL_VERDICT_OPTIONAL=1, a rejection cannot.
+    "two-fences": (
+        b"```yaml\nverdict: GO\n```\n\n```yaml\nverdict: NO-GO\n```\n"
+    ),
+    "false-closer-hides-nogo": (
+        b"```yaml\nverdict: GO\n"
+        b"```not-a-closing-fence\nverdict: NO-GO\n```\n"
+    ),
+    # written as BYTES: production reads are raw now, so the CR must
+    # survive to the grammar (t10 P2: read_text() used to eat it).
+    "crlf-on-disk": (
+        b"```yaml\nverdict: GO\r\nrelease_tag: v0.0.0\r\n```\n"
+    ),
+    "vt-glued-comment": (
+        b"```yaml\nverdict: GO\x0b#NO-GO\n```\n"
+    ),
+}
+
+
+@pytest.mark.parametrize(
+    "body", list(_REJECTED_CONTENT_BODIES.values()),
+    ids=list(_REJECTED_CONTENT_BODIES.keys()),
+)
+def test_ci_validator_classifies_rejected_content_as_invalid_not_infra(
+    tmp_path, ci_env, body
+):
+    """t10 P2 (+P1 fixtures end-to-end): the LITERAL step-15 argv against
+    on-disk rejected content — exit 3 with an INVALID diagnostic."""
+    verdict_file = tmp_path / "pair-rail-verdict-fixture.md"
+    verdict_file.write_bytes(body)
+    parent = _repo_head()
+    argv = [
+        sys.executable, str(VALIDATOR_SRC),
+        "--verdict-file", str(verdict_file),
+        "--parent-sha", parent,
+        "--release-tag", "v0.0.0-plan177-decision-gate",
+        "--max-age-hours", "24",
+        "--recompute-inputs-hash",
+        "--codex-cli-pin-file", ".claude/governance/codex-cli-pin.txt",
+        "--codex-cli-binary-sha256-file",
+        ".claude/governance/codex-cli-binary-sha256.txt",
+        "--codex-pin-manifest-file",
+        ".claude/governance/codex-cli-pin-manifest.json",
+        "--inputs-hash-paths-file",
+        ".claude/governance/pair-rail-inputs-hash-manifest.txt",
+    ]
+    proc = run(argv, REPO_ROOT, ci_env)
+    assert proc.returncode == validator.EXIT_VERDICT_INVALID, (
+        "rejected signed content returned %d (want 3/INVALID; 1/INFRA can "
+        "be softened by the optional flag):\n%s%s"
+        % (proc.returncode, proc.stdout, proc.stderr)
+    )
+    assert "INVALID" in proc.stderr, proc.stderr
+
+
 @pytest.mark.parametrize("bind_parent", [True, False], ids=["bound", "unbound"])
 @pytest.mark.parametrize("decisions", _REFUSED_DECISIONS, ids=_REFUSED_IDS)
 def test_ci_validator_stops_a_non_authorizing_decision(
@@ -2634,6 +2721,26 @@ def test_both_rails_reject_ambiguous_or_multiple_yaml_fences():
     indented_opener = " ```yaml\nverdict: GO\n```\n"
     assert validator.noncanonical_top_level_lines(indented_opener) != []
     assert tag_guard._noncanonical_top_level_lines(indented_opener) != []
+    # t10 P1: a FALSE CLOSER (```not-a-closing-fence) must not end the
+    # body early — the old bare ^``` closer hid a later NO-GO.
+    false_closer = (
+        "```yaml\n"
+        "verdict: GO\n"
+        "```not-a-closing-fence\n"
+        "verdict: NO-GO\n"
+        "```\n"
+    )
+    v_shape = validator.noncanonical_top_level_lines(false_closer)
+    g_shape = tag_guard._noncanonical_top_level_lines(false_closer)
+    assert v_shape != [] or validator.count_top_level_key(
+        false_closer, "verdict"
+    ) == 2, "validator: false closer hid the later NO-GO"
+    assert g_shape != [] or tag_guard._count_top_level_key(
+        false_closer, "verdict"
+    ) == 2, "tag guard: false closer hid the later NO-GO"
+    assert validator.parse_verdict_text(false_closer).get("verdict") != "GO" \
+        or validator.count_top_level_key(false_closer, "verdict") == 2
+    assert v_shape == g_shape, "the two rails disagree on the false closer"
 
 
 def test_both_rails_answer_identically_on_every_key_shape():

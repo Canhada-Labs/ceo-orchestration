@@ -125,7 +125,14 @@ _FORBIDDEN_CTRL_RE = re.compile(
 def _extract_single_yaml_block(text):
     if text.count("```yaml") != 1:
         return None
-    m = re.search(r"(?m)^```yaml[ \t]*\n(.*?)^```", text, re.DOTALL)
+    # t10 P1: the CLOSER must be canonical too — a bare ^``` matched
+    # ANY line starting with three backticks, so ```not-a-closer
+    # closed the body early and hid a later NO-GO.
+    m = re.search(
+        r"(?m)^```yaml[ \t]*\n(.*?)^```[ \t]*(?:\n|\Z)",
+        text,
+        re.DOTALL,
+    )
     if not m:
         return None
     body = m.group(1)
@@ -292,7 +299,9 @@ def parse_verdict_file(path: Path) -> Dict[str, Any]:
     """Path wrapper over parse_verdict_text (published entry point)."""
     if not path.exists():
         raise FileNotFoundError(f"verdict file: {path}")
-    return parse_verdict_text(path.read_text(encoding="utf-8"))
+    # t10 P2: raw bytes, NO universal-newline translation — read_text()
+    # silently ate the CR that the grammar promises to reject.
+    return parse_verdict_text(path.read_bytes().decode("utf-8"))
 
 
 def compute_inputs_hash(repo_root: Path, manifest_path: Path) -> str:
@@ -397,7 +406,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     # Parse verdict. The TEXT is kept: the duplicate-key check below reads
     # the same bytes the parse consumed (a second read could disagree).
     try:
-        verdict_text = verdict_path.read_text(encoding="utf-8")
+        verdict_text = verdict_path.read_bytes().decode("utf-8")  # t10 P2: raw, keep CR
         verdict = parse_verdict_text(verdict_text)
     except FileNotFoundError as e:
         print(f"INFRA: verdict file not found: {e}", file=sys.stderr)
@@ -405,9 +414,17 @@ def main(argv: Optional[List[str]] = None) -> int:
     except OSError as e:
         print(f"INFRA: verdict file unreadable: {e}", file=sys.stderr)
         return EXIT_INFRA_ERROR
+    except UnicodeDecodeError as e:
+        # t10 P2: non-UTF-8 SIGNED CONTENT is input-invalid, not infra.
+        print(f"INVALID: verdict is not UTF-8: {e}", file=sys.stderr)
+        return EXIT_VERDICT_INVALID
     except ValueError as e:
-        print(f"INFRA: verdict parse error: {e}", file=sys.stderr)
-        return EXIT_INFRA_ERROR
+        # t10 P2: a parse rejection of SIGNED CONTENT (absent/ambiguous
+        # fence, forbidden bytes) is the promised input-invalid exit 3 —
+        # routing it through INFRA let CEO_PAIR_RAIL_VERDICT_OPTIONAL=1
+        # soften a rejection the contract says must stop the release.
+        print(f"INVALID: verdict content rejected: {e}", file=sys.stderr)
+        return EXIT_VERDICT_INVALID
 
     # PLAN-177 W0.1 (P1-4): the DECISION gate. Until this block existed
     # the validator read pinning, TTL and signature presence but never the

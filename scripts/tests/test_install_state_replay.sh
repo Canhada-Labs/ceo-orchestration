@@ -542,6 +542,35 @@ else
 fi
 
 # ===========================================================================
+echo "== B2-c6: TRACKED posture artifact => upgrade FALHA com migracao (t10 P1) =="
+# ===========================================================================
+T_T="$( fresh_install s9 --profile core )" || exit 1
+printf '{}\n' > "$T_T/.claude/settings.local.json"
+( cd "$T_T" \
+  && git add -f .claude/settings.local.json \
+  && git -c user.email=t@t -c user.name=t commit -qm tracked-seed )
+if run_upgrade "$T_T"; then
+  bad "tracked posture artifact => upgrade FALHA (rc!=0)"
+else
+  ok "tracked posture artifact => upgrade FALHA (rc!=0)"
+fi
+if grep -q 'git rm --cached' "$T_T.upgrade.log"; then
+  ok "mensagem de migracao acionavel (git rm --cached)"
+else
+  bad "mensagem de migracao acionavel (git rm --cached)"; tail -8 "$T_T.upgrade.log" >&2
+fi
+# migracao explicita => upgrade volta a passar; 2 upgrades seguidos SEM
+# re-assercao em loop (idempotencia do probe --no-index)
+( cd "$T_T" && git rm -q --cached .claude/settings.local.json \
+  && git -c user.email=t@t -c user.name=t commit -qm migrate )
+if run_upgrade "$T_T"; then ok "pos-migracao upgrade rc=0"; else bad "pos-migracao upgrade rc=0"; tail -5 "$T_T.upgrade.log" >&2; fi
+if run_upgrade "$T_T" && ! grep -q 'RE-ASSERTED' "$T_T.upgrade.log"; then
+  ok "upgrade repetido idempotente (sem RE-ASSERT em loop)"
+else
+  bad "upgrade repetido idempotente (sem RE-ASSERT em loop)"
+fi
+
+# ===========================================================================
 echo "== B2-d: garbage state => NOTE + fallback + rewritten valid =="
 # ===========================================================================
 printf 'this is not json{{{' > "$T_F/$STATE_REL"

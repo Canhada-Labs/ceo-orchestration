@@ -164,3 +164,35 @@ autorizado. Nenhuma mudança executável pendente.
   SCAFFOLD FAILURE, nunca SKIP verde; frase "CI can download it
   separately" do sidecar removida (install-npm.sh); comentário do
   ceremony reader corrigido (fail-safe user, não maintainer).
+
+## Ciclo t10 → X5 (NO-GO nas 2 partes; TODOS os achados curados)
+
+- P1 (parte 1): FALSE CLOSER — `^```` casava qualquer linha iniciada
+  por 3 backticks, então ` ```not-a-closer ` fechava o corpo cedo e
+  escondia um NO-GO posterior. Closer canônico
+  `^```[ \t]*(?:\n|\Z)` nos 2 twins + fixture de texto cru + o caso
+  end-to-end no CLI.
+- P2s (parte 1): rejeição de CONTEÚDO assinado agora sai como exit 3
+  INVALID no CLI do step-15 (era INFRA 1, amortecível pelo flag
+  optional) com UnicodeDecodeError incluso; leituras de produção em
+  RAW/newline="" para o CR chegar VIVO à gramática (read_text comia o
+  CR que a gramática promete rejeitar) — 4 corpos on-disk
+  parametrizados no CLI (two-fences, false-closer, CRLF, VT).
+- P1 (parte 2 #1): re-asserção que NÃO resolve virou ERRO propagado
+  (rc 1 → install/upgrade abortam sob set -e) — negação em
+  `.gitignore` mais profundo não passa mais como warning+sucesso.
+  Control S11.
+- P1 (parte 2 #2): probes com `check-ignore --no-index` (o index não
+  mente mais) + detecção de paths sensíveis JÁ TRACKED via `ls-files`
+  com migração fail-closed acionável (`git rm --cached`, caminho a
+  caminho). Controls: S12 (unit) + B2-c6 no replay (upgrade FALHA com
+  artefato tracked; pós-migração passa; upgrade repetido idempotente,
+  sem RE-ASSERT em loop).
+- P2 (parte 2 #3): o emitter-drift control do night-mode efficacy
+  DERIVA os paths chamando `settings_local_path()`/`marker_path()` do
+  módulo real (import por spec), nunca substring — prosa histórica não
+  segura mais o teste verde.
+- P2 (parte 2 #4): o Contract row do SHA-256 tarball está PINADO a
+  `deferred` com mutation control — flipar para `enforced` sem o
+  predicado semântico (pack não-dry-run + sha256 + publicação) fica
+  RED antes de enganar alguém.

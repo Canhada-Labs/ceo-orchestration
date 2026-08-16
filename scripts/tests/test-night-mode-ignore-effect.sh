@@ -100,14 +100,31 @@ command -v git >/dev/null 2>&1 || scaffold "git not on PATH"
 git -C "$REPO_ROOT" rev-parse --verify "refs/tags/$PIN^{commit}" >/dev/null 2>&1 \
   || scaffold "pin tag $PIN not present in this checkout (CI must fetch it first)"
 
-# Assert night-mode.py still names the paths this test asserts on. A rename
-# there would leave this test green while testing nothing.
+# Assert night-mode.py still WRITES the paths this test asserts on — by
+# CALLING settings_local_path()/marker_path(), never by substring (t10 P2:
+# old filenames survive in the module's docstrings, so a grep stayed green
+# against an implementation that moved the real paths elsewhere).
 _NM="$REPO_ROOT/.claude/scripts/night-mode.py"
 if [ -f "$_NM" ]; then
-  grep -Fq 'night-mode.json' "$_NM" \
-    || scaffold "night-mode.py no longer mentions night-mode.json — re-derive MARKER_REL"
-  grep -Fq 'settings.local.json' "$_NM" \
-    || scaffold "night-mode.py no longer mentions settings.local.json — re-derive OVERLAY_REL"
+  _NM_PATHS="$( python3 - "$_NM" <<'PYNM'
+import importlib.util
+import pathlib
+import sys
+
+spec = importlib.util.spec_from_file_location("nm_under_test", sys.argv[1])
+nm = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(nm)
+root = pathlib.Path("/__ceo_probe_root__")
+print(nm.settings_local_path(root).relative_to(root))
+print(nm.marker_path(root).relative_to(root))
+PYNM
+)" || scaffold "could not derive emitter paths from night-mode.py (functions renamed?)"
+  _NM_OVERLAY="$( printf '%s\n' "$_NM_PATHS" | sed -n 1p )"
+  _NM_MARKER="$( printf '%s\n' "$_NM_PATHS" | sed -n 2p )"
+  [ "$_NM_OVERLAY" = "$OVERLAY_REL" ] \
+    || scaffold "night-mode.py settings_local_path() now returns '$_NM_OVERLAY' != '$OVERLAY_REL' — re-derive OVERLAY_REL"
+  [ "$_NM_MARKER" = "$MARKER_REL" ] \
+    || scaffold "night-mode.py marker_path() now returns '$_NM_MARKER' != '$MARKER_REL' — re-derive MARKER_REL"
 fi
 
 WORK="$( mktemp -d "${TMPDIR:-/tmp}/ceo-nightmode-ignore-XXXXXX" )" || scaffold "mktemp failed"

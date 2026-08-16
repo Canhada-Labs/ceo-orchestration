@@ -1,0 +1,37 @@
+REJECT. The decision gate, T-1/T-2 behavior, count checks, workflow wiring, and current npm wording passed the read-only controls. Four findings remain.
+
+1. **SEVERITY: P1 — ineffective secret exclusion still succeeds**
+
+   **FILE:LINE:** [scripts/_framework_manifest_set.sh:883](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.lO2oZx/wt/scripts/_framework_manifest_set.sh:883), [scripts/_framework_manifest_set.sh:888](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.lO2oZx/wt/scripts/_framework_manifest_set.sh:888)
+
+   **Failure scenario:** An adopter has `state/.gitignore` re-including `mcp_client_secrets/`. That deeper rule outranks the root exclusion. The helper re-appends the root rule, detects that the probe is still visible, prints a warning, then returns success. Install/upgrade therefore completes while the secret store remains commit-eligible.
+
+   **Minimal fix:** Return and propagate nonzero after the second failed probe. Add a positive control using a deeper `state/.gitignore` negation and require the install/upgrade path to report failure or an explicit incomplete-security state.
+
+2. **SEVERITY: P1 — previously tracked night-mode artifacts are not cured**
+
+   **FILE:LINE:** [scripts/_framework_manifest_set.sh:873](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.lO2oZx/wt/scripts/_framework_manifest_set.sh:873), [scripts/_framework_manifest_set.sh:883](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.lO2oZx/wt/scripts/_framework_manifest_set.sh:883), [scripts/tests/test-night-mode-ignore-effect.sh:226](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.lO2oZx/wt/scripts/tests/test-night-mode-ignore-effect.sh:226)
+
+   **Failure scenario:** A pre-rc.4 adopter already committed `.claude/settings.local.json` or `state/night-mode.json` while the ignores were missing. Ignore rules do not affect tracked files. Moreover, `git check-ignore` lacks `--no-index`: the tracked overlay appears unmatched, causing another reassertion and warning on every upgrade, while the synthetic state probe can pass even though the real tracked marker remains dirty. The efficacy test commits its baseline before creating the artifacts, so every tested artifact is untracked.
+
+   **Minimal fix:** Use `git check-ignore --no-index` strictly to validate pattern effectiveness, separately detect tracked sensitive paths with `git ls-files`, and emit a fail-closed, actionable migration requiring explicit index removal. Add a tracked-artifact upgrade test and a repeated-upgrade idempotence assertion.
+
+3. **SEVERITY: P2 — emitter-drift control is substring-based**
+
+   **FILE:LINE:** [scripts/tests/test-night-mode-ignore-effect.sh:84](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.lO2oZx/wt/scripts/tests/test-night-mode-ignore-effect.sh:84), [scripts/tests/test-night-mode-ignore-effect.sh:107](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.lO2oZx/wt/scripts/tests/test-night-mode-ignore-effect.sh:107)
+
+   **Failure scenario:** The test hardcodes both artifact paths and merely checks that their filenames occur somewhere in `night-mode.py`. Old filenames already occur in its documentation. Changing the actual `settings_local_path()` or `marker_path()` implementation while leaving historical prose intact keeps the test green against obsolete paths.
+
+   **Minimal fix:** Derive paths from those functions or their AST and add a mutation control that changes the returned path while retaining old prose.
+
+4. **SEVERITY: P2 — npm enforcement gate verifies names, not mechanisms**
+
+   **FILE:LINE:** [.claude/scripts/tests/test_release_bump_sites.py:1560](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.lO2oZx/wt/.claude/scripts/tests/test_release_bump_sites.py:1560), [npm/INTEGRITY.md:44](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.lO2oZx/wt/npm/INTEGRITY.md:44)
+
+   **Failure scenario:** The current checksum row is honestly `deferred`, but changing it to `enforced` and naming any unrelated existing workflow step satisfies the gate. No assertion requires that the cited step materialize, hash, and publish a tarball.
+
+   **Minimal fix:** Pin this row to `deferred` until a semantic workflow predicate proves non-dry-run tarball creation, SHA-256 computation, and publication; add that dishonest-status mutation as a positive control.
+
+The two P1 cases leave secrets or posture state commit-eligible for realistic adopter states, so the P1-1 cure is not complete at this SHA.
+
+VERDICT: NO-GO
