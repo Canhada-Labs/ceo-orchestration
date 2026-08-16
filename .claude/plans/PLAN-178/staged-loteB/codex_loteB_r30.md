@@ -1,0 +1,12 @@
+The patch leaves a bypass in the new FILE ASSIGNMENT parser and can downgrade a fired security-reopen trigger under partial log corruption. Its advisory-window definition also misclassifies normal read-only spawns as would-blocks.
+
+Full review comments:
+
+- [P1] Mask every valid indented Markdown fence — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/hooks/check_agent_spawn.py:1710-1712
+  In `check_agent_spawn.py:1710-1712`, the regex requires an exact matching closing fence and does not handle unclosed fences. CommonMark permits a longer closing fence and an unclosed fence extending to EOF, so a `## FILE ASSIGNMENT` example inside either form is classified as concrete; with `CEO_SPAWN_FILE_ASSIGNMENT_REQUIRED=1`, that example can satisfy the security gate and reserve paths despite not being a real assignment.
+
+- [P1] Preserve a fired trigger across partial log corruption — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/workflows/nightly-hygiene.js:243-243
+  In `nightly-hygiene.js:243`, the final rule says unparseable logs produce `skipped`, conflicting with the earlier monotonic-severity rule and the fallback-specific instruction. If a usable primary or spool already contains a triggering pair but another source is malformed, the dimension can return `skipped`, which the mechanical floor treats as yellow instead of preserving the required red; skip should apply only when no usable source can be evaluated.
+
+- [P2] Filter read-only markers out of would-block counts — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/adr/ADR-191-spawn-acceptance-contract-v2.md:54-55
+  In `ADR-191-spawn-acceptance-contract-v2.md:54-55`, the advisory window is defined as counting every `path_count=0` event as a would-block, but explicit `NONE-READ-ONLY` declarations are valid and also emit `path_count=0`; they are the generator's default when `--files` is omitted. Counting only this field therefore labels compliant read-only spawns as rejected inputs and makes the calibration unusable; the query must exclude the dedicated read-only `path_hashes` marker.

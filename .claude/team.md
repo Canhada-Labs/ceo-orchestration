@@ -684,8 +684,8 @@ SPEC FROM: .claude/plans/PLAN-NNN/spec.md sha256={hex}
  "what does the Owner want" conversation.}
 
 ## FILE ASSIGNMENT
-- MAY edit: {list of files}
-- MAY NOT edit: {list of files another agent is editing}
+- CAN edit: {comma-separated CONCRETE paths — no wildcards/placeholders; or exactly NONE-READ-ONLY for a read-only spawn (ADR-191 grammar: these are the ONLY machine-parsed forms)}
+- CANNOT edit: {list of files another agent is editing — prose, not parsed}
 - If you need to edit a forbidden file: STOP and report.
 
 ## TASK

@@ -208,11 +208,17 @@ class TestRedactOnIngest(TestMemorySharedBase):
 
 class TestQuery(TestMemorySharedBase):
     def test_20_query_returns_stored_pattern(self):
+        """PLAN-178 C6: content chega FENCED (dado, nunca instrução) —
+        corpo verbatim entre os marcadores; storage/hash inalterados."""
         self.ms.put_pattern("debate-round-patterns", "content X")
         results = self.ms.query("debate-round-patterns", k=5)
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["topic"], "debate-round-patterns")
-        self.assertEqual(results[0]["content"], "content X")
+        self.assertEqual(
+            results[0]["content"],
+            self.ms.fence_untrusted_content("content X"),
+        )
+        self.assertIn("content X", results[0]["content"])
 
     def test_21_query_token_overlap(self):
         self.ms.put_pattern("audit-registry-extension", "pattern 1")

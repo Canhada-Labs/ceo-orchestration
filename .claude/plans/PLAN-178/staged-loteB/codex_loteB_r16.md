@@ -1,0 +1,18 @@
+The new FILE ASSIGNMENT controls contain multiple bypasses and can also create phantom overlap reservations. The canonical generator and workflow validators do not consistently enforce the grammar defined by the hook and ADR.
+
+Full review comments:
+
+- [P1] Keep scanning after reaching the path cap — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/hooks/check_agent_spawn.py:1789-1790
+  If a declaration contains 64 valid paths plus any wildcard, placeholder, or control-character token, this early return classifies it as `concrete` before considering remaining tokens, even when `invalid_seen` is already true. With `CEO_SPAWN_FILE_ASSIGNMENT_REQUIRED=1`, a deliberately tainted assignment therefore bypasses the fail-closed grammar; cap stored paths without stopping validation.
+
+- [P1] Check tainted paths against the overlap rail — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/hooks/check_agent_spawn.py:1940-1941
+  During the intended advisory window where `CEO_SPAWN_OVERLAP_GUARD=1` but `CEO_SPAWN_FILE_ASSIGNMENT_REQUIRED` is unset, `CAN edit: owned.py, src/**` returns `unparseable` with `owned.py` in `mine`. This branch skips the recent-assignment intersection entirely, and the later grammar check is advisory, so the spawn bypasses the enforcing overlap guard despite claiming an already-owned file.
+
+- [P1] Reject invalid tokens across every workflow assignment — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/workflows/audit-fanout.js:98-101
+  The validator accepts a FILE ASSIGNMENT when any token is valid, rather than tainting the declaration when any token is invalid as ADR-191 and the hook require. For example, an operator-controlled multiline `scope` can add `CAN edit: safe.py, src/**`; the static read-only block or `safe.py` sets `faOk`, so the workflow's only pre-dispatch gate passes a prompt containing the wildcard grant. Aggregate all assignment blocks and reject on every invalid token; the same helper is duplicated in all four workflows.
+
+- [P2] Avoid recording assignments for blocked spawns — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/hooks/check_agent_spawn.py:1977-1978
+  When grammar enforcement rejects a mixed declaration such as `safe.py, src/**`, this emit records the `safe.py` hash before returning the block. A corrected retry within the 10-minute window then sees a reservation from a spawn that never ran and can be falsely rejected by `CEO_SPAWN_OVERLAP_GUARD=1`; record concrete hashes only for attempts that will actually dispatch.
+
+- [P2] Validate --files with the hook grammar — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/scripts/inject-agent-context.sh:1102-1105
+  A nonempty wildcard or placeholder is counted as a valid segment, so `--files='safe.py,src/**'` exits successfully and emits a prompt that the hook classifies as unparseable. This breaks the canonical generator's promised compliant path and will make standard generated prompts fail once enforcement is enabled; reject the same wildcard and placeholder tokens that the hook rejects.

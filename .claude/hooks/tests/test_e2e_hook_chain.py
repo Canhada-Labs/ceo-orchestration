@@ -145,12 +145,22 @@ class TestE2EHookChain(TestEnvContext):
         self.assertEqual(audit_result.stdout, "")
 
         # Verify the audit entries.
-        # PreToolUse (check_agent_spawn) emits spawn_confidence_advisory;
-        # PostToolUse (audit_log) emits the agent_spawn event — 2 lines total.
+        # PreToolUse (check_agent_spawn) emits spawn_confidence_advisory +
+        # spawn_file_assignment_recorded (PLAN-178 C1 / ADR-191: EVERY named
+        # spawn records its FILE ASSIGNMENT now — this prompt's block has no
+        # `CAN edit:` line, so it records path_count=0, the R-SEC1
+        # omission-visibility cure); PostToolUse (audit_log) emits the
+        # agent_spawn event — 3 lines total.
         log_text = self.read_audit_log()
         lines = [ln for ln in log_text.split("\n") if ln]
-        self.assertEqual(len(lines), 2)
+        self.assertEqual(len(lines), 3)
         entries = [json.loads(ln) for ln in lines]
+        fa_entries = [
+            e for e in entries
+            if e.get("action") == "spawn_file_assignment_recorded"
+        ]
+        self.assertEqual(len(fa_entries), 1)
+        self.assertEqual(fa_entries[0]["path_count"], 0)
         spawn_entries = [e for e in entries if e.get("action") == "agent_spawn"]
         self.assertEqual(len(spawn_entries), 1)
         entry = spawn_entries[0]

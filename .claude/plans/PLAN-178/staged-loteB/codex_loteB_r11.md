@@ -1,0 +1,9 @@
+The patch can miss security-trigger events under a supported custom audit-log path and can emit misleading plan-scoped budget telemetry from project-wide spend. Both affect the accuracy of newly added governance signals.
+
+Full review comments:
+
+- [P2] Derive archive glob from the resolved audit-log name — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/workflows/nightly-hygiene.js:220-220
+  When `CEO_AUDIT_LOG_PATH` points to a custom basename such as `/logs/custom.jsonl`, `audit_rotation.py` archives it as `custom-YYYY-MM.jsonl`, but this dimension scans only `audit-log-*.jsonl`. Recent `pattern_stored` pairs moved into such an archive are therefore omitted, allowing the reopen-trigger dimension to report green incorrectly; derive the sibling pattern from the resolved active file's stem.
+
+- [P2] Avoid plan-scoped events for project-wide spend — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/hooks/check_budget.py:963-963
+  With two or more active plans, the rollup intentionally charges unattributed project-wide history to the tie-break-selected plan, but `spend_basis` only changes warning text: `decide()` still emits `budget_exceeded` with that plan's ID and `scope: "plan"`. When aggregate project spend exceeds the selected plan's cap, this produces a false plan-level audit event and corrupts the telemetry used to calibrate future enforcement; suppress or separately represent the effect for project-wide rollups.

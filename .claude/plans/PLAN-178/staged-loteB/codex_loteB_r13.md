@@ -1,0 +1,15 @@
+The guarded changes lack the required sentinel authorization. The patch also introduces inaccurate multi-plan bypass accounting and false-green or unusable behavior in supported audit-fallback and private-corpus scenarios.
+
+Full review comments:
+
+- [P1] Include the Owner-signed sentinel for the guarded pack — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/adr/ADR-191-spawn-acceptance-contract-v2.md:4-4
+  This adds an accepted ADR while the same pack edits guarded `.claude/hooks/` and `.claude/workflows/` paths, but no PLAN-178 `approved.md` plus detached `.asc` exists in the staged, unstaged, or untracked changes, and no existing sentinel scopes either new ADR path. Consequently `check_canonical_edit` cannot authorize these bytes under AGENTS.md §4; include the matching Owner-signed sentinel before landing the pack.
+
+- [P2] Avoid plan-scoped bypass events in multi-plan mode — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/hooks/check_budget.py:1016-1016
+  When multiple plans are active and `CEO_BUDGET_BYPASS=1`, this passes `spend_basis="project-wide"`, but `decide()` short-circuits in the bypass branch without consulting it and emits `budget_bypass_used` for the arbitrary tie-break-selected `plan_id`. Because current spawn rows cannot identify the actual active plan, both the event and its per-plan 24-hour quota are misattributed; multi-plan bypasses need a project-wide/breadcrumb treatment rather than a plan-scoped emit.
+
+- [P2] Scan fallback audit events before reporting the trigger green — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/workflows/nightly-hygiene.js:220-220
+  When the primary log append fails but `audit_emit._write_fallback()` succeeds, `pattern_stored` events are written to `$CEO_AUDIT_LOG_FALLBACK_PATH` or `/tmp/ceo-audit-fallback-<user>.log`. This dimension scans only the primary file and its rotations, so a readable but unwritable primary can remain stale and produce green while a qualifying event pair exists in the fallback; include the fallback or degrade the result when it is in use.
+
+- [P2] Authorize the eval subprocess in prompt defense — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/workflows/eval-baseline-n20.js:147-147
+  For an overridden corpus containing non-public task material, the batch prompt later requires reading `task.json`/`shared_prefix.txt` and sending the constructed bytes through `claude -p`, while this defense forbids sending private file contents into prompts or any external destination without an eval-specific carve-out. A compliant batch agent must therefore refuse the workflow's core step and return instrument errors; scope this rule to authorize the intended subject-model transport, as the council workflow does.

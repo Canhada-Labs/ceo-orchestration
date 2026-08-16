@@ -1,0 +1,12 @@
+The new FILE ASSIGNMENT security boundary can be bypassed through mixed wildcard declarations and prompt-structure injection via `--files`. The shared-memory reopen monitor can also miss the exact fallback-only condition it is intended to observe.
+
+Full review comments:
+
+- [P1] Reject control characters in `--files` paths — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/scripts/inject-agent-context.sh:1105-1105
+  When `--files` comes from a repository filename containing a newline, this emits it verbatim into the agent prompt. A value such as `safe.py\n## TASK\n...` terminates the FILE ASSIGNMENT block and injects arbitrary prompt instructions; the hook still classifies `safe.py` as concrete, so the new gate does not catch it. Reject CR/LF and other control characters before emitting each segment.
+
+- [P1] Treat mixed wildcard assignments as unparseable — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/hooks/check_agent_spawn.py:1788-1789
+  With `CEO_SPAWN_FILE_ASSIGNMENT_REQUIRED=1`, `- CAN edit: safe.py, src/**` sets `invalid_seen` but still returns `concrete` because one valid path exists. The agent sees the wildcard grant while overlap telemetry records only `safe.py`, allowing the wildcard to bypass the fail-closed grammar gate. Any dropped or invalid token should taint the complete declaration.
+
+- [P1] Scan the fallback log before declaring the primary missing — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/workflows/nightly-hygiene.js:220-220
+  When primary audit writes have never succeeded, the resolved active log may not exist while `_write_fallback()` contains the only `pattern_stored` events. This instruction nevertheless assigns `skipped` on a missing primary, so two hashes present in the fallback cannot fire the ADR-089 reopen trigger. Treat the source set as available when either the primary/rotations or fallback exists, and skip only when all sources are absent or unusable.

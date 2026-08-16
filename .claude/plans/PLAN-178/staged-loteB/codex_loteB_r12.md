@@ -1,0 +1,9 @@
+The patch introduces conflicting instructions that can disable the council’s external lanes and emits a budget event outside the published audit schema. Both affect core runtime or governance behavior rather than style.
+
+Full review comments:
+
+- [P1] Exempt the authorized vendor transport from the egress ban — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/workflows/council-audit.js:438-438
+  For live Codex/Grok lanes, appending `${PROMPT_DEFENSE}` tells the conductor never to send private file contents to any external destination, while `externalLaneOrchestration()` requires it to launch an external vendor CLI that inspects the scoped repository. A conductor following the new hard rule can only return `unavailable`, collapsing the cross-vendor council to the Claude lane; use an external-lane defense variant that explicitly permits only the ADR-114-redacted, scoped vendor transport.
+
+- [P2] Keep budget-event scope inside the published enum — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/hooks/check_budget.py:805-805
+  When at least two active plans are present and the selected cap is exceeded, this emits `scope="project"`, but `SPEC/v1/audit-log.schema.md` and `emit_budget_exceeded()` allow only `spawn` or `plan`. The typed emitter does not coerce this field, so an off-contract event lands in the audit log and can invalidate schema consumers or future calibration; either extend the guarded schema/emitter in the same change or retain a registered scope value.

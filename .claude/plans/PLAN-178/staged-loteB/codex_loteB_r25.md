@@ -1,0 +1,9 @@
+Both new fail-closed FILE ASSIGNMENT implementations can be bypassed by mixing a valid declaration with an unrecognized positive write grant. This undermines the hook enforcement and workflow pre-dispatch controls.
+
+Full review comments:
+
+- [P2] Taint malformed permission lines in mixed blocks — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/hooks/check_agent_spawn.py:1801-1807
+  With `CEO_SPAWN_FILE_ASSIGNMENT_REQUIRED=1`, a block containing `- CAN edit: safe.py` followed by `- MAY edit: src/**` is classified as concrete: the first line sets `block_had_line`, while the unrecognized positive grant is ignored. The agent therefore receives wildcard write authority while the fail-closed grammar gate allows the spawn; permission-like malformed lines must taint the block even when another valid line exists.
+
+- [P2] Validate every workflow assignment block — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/workflows/audit-fanout.js:98-105
+  The workflow gate sets one global `faOk` and inspects only exact `- CAN edit:` lines, so a legitimate template block can launder another `## FILE ASSIGNMENT` containing `- MAY edit: src/**`. For example, raw `scope` input in audit-fanout or council-audit can inject that block; validation still passes although the agent sees the broader grant. Reject unrecognized positive edit grants in every assignment section; the same validator is duplicated in all four workflows.

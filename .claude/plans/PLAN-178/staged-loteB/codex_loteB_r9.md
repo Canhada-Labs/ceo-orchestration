@@ -1,0 +1,12 @@
+The new security reopen consumer misses the default audit log, while multi-plan budgeting loses plan attribution and the file-assignment classifier accepts an impossible NUL path. These issues undermine core behavior introduced by the patch.
+
+Full review comments:
+
+- [P1] Scan the canonical audit-log path for reopen events — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/workflows/nightly-hygiene.js:220-220
+  On default installations, `audit_emit` writes to `~/.claude/projects/ceo-orchestration/audit-log.jsonl`, but this glob searches only one level below `~/.claude`, and the stated `CLAUDE_PROJECT_DIR` state fallback is not where the log resides. The agent can therefore find no log and report green despite qualifying `pattern_stored` events, defeating the newly added reopen trigger; resolve `CEO_AUDIT_LOG_PATH`/`CEO_AUDIT_LOG_DIR` and then the canonical default path.
+
+- [P2] Preserve plan scoping before enabling multi-plan budgets — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/hooks/check_budget.py:311-312
+  When multiple plans are active, runtime `agent_spawn` rows from `audit_log.build_entry()` contain no `plan_id`, so `_plan_tokens_total()` takes its legacy fallback and sums every matching-project row. Selecting one plan here consequently charges it for other plans and prior audit history, producing false `budget_exceeded` warnings/events and incorrect bypass accounting; add runtime plan attribution or avoid treating project-wide legacy totals as spend for the selected plan.
+
+- [P2] Reject NUL-bearing file assignments before hashing — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/hooks/check_agent_spawn.py:1762-1764
+  A named prompt can contain a JSON-escaped NUL value such as `CAN edit: \x00fa-readonly-marker\x00`; because the Unicode hard-block defaults off, this classifier accepts it as a concrete path even though filesystem paths cannot contain NUL. It both bypasses `CEO_SPAWN_FILE_ASSIGNMENT_REQUIRED` and hashes to the exact read-only telemetry marker, potentially causing a false overlap block after any read-only spawn; reject NUL/control characters before adding a concrete path.

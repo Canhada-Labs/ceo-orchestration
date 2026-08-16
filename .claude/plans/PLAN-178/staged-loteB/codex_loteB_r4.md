@@ -1,0 +1,15 @@
+The patch leaves an untrusted-ingress bypass in nightly synthesis and introduces a broken `/architect` file assignment. It also makes the new workflow validator vulnerable to untrusted headings and changes a published API without versioning its contract.
+
+Full review comments:
+
+- [P1] Keep truncated dimension names inside the trust fence — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/workflows/nightly-hygiene.js:262-263
+  When a dimension result exceeds `INGEST_CAP`, its agent-controlled `dimension` string is copied verbatim into `truncatedDims`; `DIM_SCHEMA` neither constrains nor bounds that value. It is then interpolated outside the fence into the synthesizer prompt and logs, so a long value containing newlines or headings bypasses both the 24k cap and injection fence. Use the canonical dispatched dimension key or the same sanitized, bounded label.
+
+- [P2] List the actual Architect output files — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/commands/architect.md:64-66
+  Every `/architect` run now grants only a nonexistent `draft.md`, while the Architect skill requires `team.draft.md`, `pitfalls.draft.yaml`, `skill-selection.draft.md`, `personas.draft.md`, and `rationale.md` (plus the template). The explanatory parenthesis is also on the `CAN edit:` line, so the parser treats it as part of the path. A compliant agent cannot produce the required bundle and the validator will fail; emit one exact `CAN edit:` entry per output file.
+
+- [P2] Validate only trusted prompt sections — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/workflows/audit-fanout.js:81-82
+  Because this validator scans the fully interpolated prompt, a later untrusted value containing `\n## PROMPT DEFENSE` is treated as another section and overwrites `pdBullets`. For example, an audit `args.scope` or council lane `unavailable_reason` containing that heading after the valid six-bullet block can reset the count below six and abort the workflow before dispatch. Validate the trusted template before appending ingress, or mask fenced/untrusted regions during section parsing; the same copied block needs correction in all four workflows.
+
+- [P2] Version the changed shared-memory return contract — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/hooks/_lib/memory_shared.py:494-497
+  This silently changes public `query()` semantics from returning the stored body to returning a decorated value, so existing consumers parsing `content` or expecting `content_hash` to describe the returned bytes break. The normative `SPEC/v1/memory-shared.schema.md:331-341` remains at v1.0.0-rc.1 and promises additive compatibility plus a two-minor deprecation window for public API changes. Expose fenced content additively or version/update the published contract with an appropriate migration.

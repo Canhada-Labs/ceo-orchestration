@@ -1,0 +1,12 @@
+The patch introduces bypass and consistency gaps in the new workflow validation and truncation handling, plus a concrete mismatch between the generator and hook grammar for a reserved path token.
+
+Full review comments:
+
+- [P2] Mask ingress before checking the hard-rules marker — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/workflows/audit-fanout.js:114-114
+  If a prompt omits the real hard-rules block but fenced agent-returned data contains `RULES_MARKER`, this check still passes because it searches the original prompt rather than the already-masked `scan`. That lets untrusted ingress satisfy the pre-dispatch confinement validator; use the masked prompt for this check as well. The same defect is duplicated in all four modified workflows.
+
+- [P2] Fence effective statuses before synthesizing the board — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/workflows/nightly-hygiene.js:290-294
+  When a dimension exceeds `INGEST_CAP`, the synthesizer receives the original `d` object here, while only the returned `dimensions` array is later changed to `dimsEffective`. A truncated green dimension can therefore still appear as green in the report's status board; if another dimension already makes the overall result yellow, the mechanical floor adds no corrective notice. Fence the effective object so the report and structured result cannot disagree.
+
+- [P2] Reject `NONE-READ-ONLY` as an editable path — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/scripts/inject-agent-context.sh:1126-1130
+  With `--files=NONE-READ-ONLY`, this validation treats the reserved token as a valid concrete path and increments `_FA_VALID_COUNT`, but the generated prompt is classified by the hook as an explicit read-only assignment. A repository file with that exact root name is therefore silently omitted from overlap telemetry and the requested write grant while still passing enforcement. Reject the bare reserved token or require the concrete `./NONE-READ-ONLY` spelling.

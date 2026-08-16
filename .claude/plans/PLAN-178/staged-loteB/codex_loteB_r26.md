@@ -1,0 +1,9 @@
+The workflow validator can accept conflicting malformed assignment sections, weakening the new pre-dispatch contract. The shared-memory trigger can also miss rotated events under a supported custom audit-log path.
+
+Full review comments:
+
+- [P2] Reject malformed secondary assignment sections — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/workflows/audit-fanout.js:93-102
+  When a prompt contains the canonical valid block plus another `## FILE ASSIGNMENT` section without a parseable `- CAN edit:` line—for example, scope text containing `- CAN edit src/**`—`faOk` remains true from the valid block and this section never sets `faTainted`. The new validator therefore dispatches a prompt that the hook classifier considers unparseable while the agent still sees an unvalidated write grant; track whether every assignment section contains a parsed grant in all four duplicated validators.
+
+- [P2] Derive archive globs with Path.stem semantics — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/workflows/nightly-hygiene.js:233-233
+  When `CEO_AUDIT_LOG_PATH` has a non-`.jsonl` suffix such as `events.log`, the logger rotates it to `events-YYYY-MM.jsonl` because `audit_rotation.py` uses `Path.stem`, but this instruction describes scanning `events.log-*.jsonl`. A trigger pair present only in that archive is then omitted and the dimension can report green; derive the glob by removing the final suffix exactly as the rotation implementation does.

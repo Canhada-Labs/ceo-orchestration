@@ -1,0 +1,15 @@
+The new cross-agent fencing remains bypassable through unfenced return metadata in two workflows, and the documented shared-memory reopen trigger has no consumer. Truncation handling also discards useful structured output.
+
+Full review comments:
+
+- [P1] Validate map_key before using it outside the fence — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/workflows/audit-fanout.js:233-233
+  When a finder returns an attacker-controlled `map_key` (the schema allows any string), `dim` is interpolated raw into the refuter prompt's first line even though only `byDim[dim]` is fenced. A value containing newlines or Markdown headings therefore injects text outside the untrusted-data fence, defeating ADR-191's every-return fencing requirement; restrict it to the trusted `DIMENSIONS` keys or sanitize it everywhere outside the fence.
+
+- [P1] Fence unavailable-lane reasons in synthesis — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/workflows/council-audit.js:620-624
+  When a lane is unavailable, `unavailable_reason` is returned by the lane agent and may contain external CLI or error text. `councilSynthFences` omits this status metadata, while the synthesis template later interpolates each reason directly outside a fence, so newline-bearing directives can reach the synthesizer unframed; include capped lane statuses/reasons in a fence and keep only canonical vendor identifiers outside it.
+
+- [P2] Implement the nightly reopen-trigger consumer — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/adr/ADR-089-AMEND-1-shared-memory-reopen-trigger-and-query-fence.md:41-45
+  The accepted ADR says nightly will reopen the risk after detecting two distinct `pattern_stored` hashes for the same topic/session, but no nightly workflow or script consumes `pattern_stored` events—the repository only contains emitters and tests. Adding `session_id` makes the condition theoretically derivable but does not let it fire, leaving the formerly unobservable trigger inert; add the counter/alert consumer or explicitly defer it.
+
+- [P2] Preserve summaries when marking truncated dimensions — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/workflows/nightly-hygiene.js:288-290
+  When a dimension result exceeds `INGEST_CAP`, this replacement sets `summary` to only the truncation marker rather than prefixing `d.summary`. Because the workflow returns `dimsEffective` and not the original `dims`, downstream consumers permanently lose the dimension's high-level result even though its full findings remain available; retain the original summary while marking it incomplete.

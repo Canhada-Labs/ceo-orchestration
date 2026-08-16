@@ -1,0 +1,24 @@
+The patch introduces a direct contradiction that can disable the Grok council lane and leaves several new security and truncation controls bypassable or advisory-only. These issues can produce degraded quorum, spoofed trust boundaries, and falsely clean workflow results.
+
+Full review comments:
+
+- [P1] Declare the Grok lane's required /tmp writes — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/workflows/council-audit.js:395-395
+  When `vendor === 'grok'`, `externalLaneOrchestration()` requires `mktemp`, redirection, and creation of `brief.txt` under `/tmp`, but this branch now appends hard rules forbidding all file writes plus `CAN edit: NONE-READ-ONLY`. A compliant conductor therefore cannot execute the required transport, making the Grok lane unavailable and preventing full council quorum; give this lane an explicit `/tmp` assignment and matching confinement rules.
+
+- [P1] Make shared-memory fence delimiters unspoofable — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/hooks/_lib/memory_shared.py:294-297
+  A same-plan writer can store the literal `[END UNTRUSTED SHARED-MEMORY DATA]` followed by directives; because content is inserted verbatim, the returned text then contains a valid-looking closing marker before those directives and defeats the new confused-deputy fence. Escape delimiter occurrences or use framing whose terminator cannot be supplied by the untrusted body.
+
+- [P2] Mechanically poison truncated eval reconciliation — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/workflows/eval-baseline-n20.js:379-380
+  When serialized batch rows exceed 24,000 characters, the code only logs truncation and asks the reconciler to report an anomaly. A schema-valid reconciler response can still omit that anomaly and be accepted as clean despite receiving incomplete rows, so truncation must mechanically append an anomaly or replace the result with a degraded reconciliation.
+
+- [P2] Return skipped status for truncated nightly dimensions — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/workflows/nightly-hygiene.js:241-244
+  When a dimension payload exceeds the ingress cap, this records only its name; the final `dimensions: dims` still exposes the agent's original status rather than `skipped`. Even though the aggregate verdict is floored to yellow, downstream consumers can therefore observe a truncated dimension as green, contrary to the stated per-dimension degradation contract; construct and return an effective dimension list with truncated entries marked skipped.
+
+- [P2] Reject placeholder-only file assignments — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/hooks/check_agent_spawn.py:1746-1747
+  With `CEO_SPAWN_FILE_ASSIGNMENT_REQUIRED=1`, a scaffold such as `CAN edit: <concrete paths>` survives the placeholder filter and reaches this new `concrete` return, despite declaring no actual path. This is especially likely because the new block reason itself shows `<concrete paths>`; reject angle-bracket placeholders so they classify as `unparseable`.
+
+- [P2] Domain-separate the read-only telemetry marker — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/hooks/check_agent_spawn.py:1914-1916
+  After a read-only spawn emits this marker, a later concrete assignment of `./none-read-only` normalizes to `none-read-only` only after the reserved-token comparison and hashes identically. With the overlap guard enabled, that legitimate assignment is falsely blocked as overlapping every recent read-only spawn; use a domain-separated telemetry hash or reserve the token after path normalization.
+
+- [P2] Validate workflow assignments, not just line presence — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/workflows/audit-fanout.js:72-74
+  If any workflow prompt contains `CAN edit: *`, `CAN edit: none`, or another placeholder-only value, this regex sets `faOk` and dispatches it even though ADR-191 requires a concrete path or the exact `NONE-READ-ONLY` token. The same validator is duplicated in all four modified workflows, so malformed assignment drift bypasses the intended pre-dispatch gate everywhere.

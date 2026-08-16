@@ -1,0 +1,9 @@
+The new file-assignment acceptance contract can accept non-concrete wildcard grants and can derive authority from assignment-like text inside the task body. These undermine the intended fail-closed grammar and overlap telemetry.
+
+Full review comments:
+
+- [P1] Reject all wildcard syntax before accepting a grant — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/hooks/check_agent_spawn.py:1765-1767
+  When `CEO_SPAWN_FILE_ASSIGNMENT_REQUIRED=1`, grants such as `src/?.py`, `src/[ab].py`, or `src/{a,b}.py` pass as concrete because only `*` and leading `{`/`<` are rejected; brace expressions are additionally split into bogus comma-separated paths. The agent can interpret these as multi-file grants while overlap telemetry hashes only the literal tokens, bypassing both the concrete-path contract and collision detection. Reject all supported glob/expansion forms here and in the injector's mirrored validation.
+
+- [P1] Exclude task content from assignment discovery — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/hooks/check_agent_spawn.py:1734-1734
+  When an injector-generated read-only prompt contains a task that quotes or embeds its own `## FILE ASSIGNMENT` example, this all-header scan treats that task text as an authoritative grant. A concrete example silently overrides `NONE-READ-ONLY`, while a wildcard example makes an otherwise valid spawn unparseable once enforcement is enabled. Since `TASK_DESC` is emitted after the canonical block, restrict classification to trusted assignment sections or mask/fence task content before aggregation.

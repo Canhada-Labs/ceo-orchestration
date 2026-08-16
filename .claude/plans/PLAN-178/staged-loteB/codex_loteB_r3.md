@@ -1,0 +1,15 @@
+Canonical editing spawns are misclassified as read-only, and the new inter-agent fences can be escaped through untrusted labels. The assignment grammar also accepts empty normalized paths, while synthesis truncation can remain silent.
+
+Full review comments:
+
+- [P1] Pass concrete assignments from canonical spawn callers — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/scripts/inject-agent-context.sh:1092-1096
+  For editing spawns, the shipped `/spawn` and `/architect` procedures still invoke this script without `--files` and append free-form or `MAY edit` assignments, which `_CAN_EDIT_LINE_RE` does not recognize. The generated `NONE-READ-ONLY` declaration therefore becomes the only recognized assignment, so the hook records `path_count=0` and the overlap guard remains blind to files those agents actually edit; update canonical callers to pass `--files` or emit exact `CAN edit:` lines.
+
+- [P1] Sanitize fence labels before interpolation — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/workflows/audit-fanout.js:60-64
+  The body is sanitized, but `label` is inserted verbatim outside it in both markers. In audit-fanout the label incorporates the finder-returned `map_key`, and nightly-hygiene similarly uses the agent-returned `dimension`; either schema permits arbitrary strings, so a newline plus marker text can close the fence and place directives outside it. Derive labels from trusted dimension keys or sanitize control characters and fence markers before interpolation.
+
+- [P1] Reject assignments that normalize to empty paths — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/hooks/check_agent_spawn.py:1764-1765
+  When the required-assignment flag is enabled, declarations such as `CAN edit: ...` or `CAN edit: ./...` pass the placeholder filter, normalize to `""`, and are added to the set, causing the classifier to return `concrete` instead of failing closed as `unparseable`. Even during the advisory window this records `path_count=1` and hides a would-block input, so the normalized path must be checked before insertion.
+
+- [P2] Surface synthesis truncation mechanically — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/workflows/audit-fanout.js:312-315
+  When any synthesis payload exceeds the 24,000-character cap—which is plausible with up to 64 findings—these inline calls discard the returned `truncated` flag. The only notice is inside the model prompt, so a schema-valid report may silently omit the tail even though the helper contract says truncation must never vanish; capture the flags and mechanically mark the report incomplete while retaining the count-derived verdict.

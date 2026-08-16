@@ -1580,15 +1580,84 @@ _SUBAGENT_DEPTH_MARKER_RE = re.compile(
 )
 
 # --- Rail 3: FILE ASSIGNMENT overlap --------------------------------------
+# Case-insensitive + 0-3 space indent (codex r32 P1): `## File
+# Assignment` and ` ## FILE ASSIGNMENT` are the SAME heading to a
+# Markdown renderer/agent — recognizing them (instead of enumerating
+# taints) keeps the parser aligned with what the agent SEES.
 _FILE_ASSIGNMENT_HEADER_RE = re.compile(
-    r"^##[ \t]+FILE[ \t]+ASSIGNMENT[ \t]*$",
-    flags=re.MULTILINE,
-)
-# "- CAN edit: a/b.py, c/d.py" (rest of line after the colon, comma-split).
-_CAN_EDIT_LINE_RE = re.compile(
-    r"^[ \t]*[-*][ \t]*CAN[ \t]+edit:[ \t]*(.+)$",
+    r"^[ ]{0,3}##[ \t]+FILE[ \t]+ASSIGNMENT[ \t]*$",
     flags=re.MULTILINE | re.IGNORECASE,
 )
+# "- CAN edit: a/b.py, c/d.py" (rest of line after the colon, comma-split).
+# Leading indent 0-3 SPACES only (codex r33 P1): 4+ spaces (or a tab)
+# make the line a CommonMark CODE BLOCK — example text, never a grant.
+_CAN_EDIT_LINE_RE = re.compile(
+    r"^[ ]{0,3}[-*+][ \t]*CAN[ \t]+edit:[ \t]*(.+)$",
+    flags=re.MULTILINE | re.IGNORECASE,
+)
+# STRUCTURAL closure of the parser-differential class (codex r25→r32:
+# MAY/MUST edit, `+`/numbered markers, header variants — each enumerated
+# fix bred the next variant). ONE rule instead: inside a FILE ASSIGNMENT
+# block, every LIST line (any CommonMark marker: -, *, +, 1., 1)) must
+# match a CLOSED whitelist of recognized forms — anything else is a
+# visible grant/instruction the parser did not validate => taint.
+_FA_LIST_LINE_RE = re.compile(
+    r"^[ ]{0,3}(?:[-*+]|\d+[.)])[ \t]+\S[^\n]*$",
+    flags=re.MULTILINE,
+)
+_FA_ALLOWED_GRANT_LINE_RE = re.compile(
+    r"^[ ]{0,3}[-*+][ \t]*CAN[ \t]+edit:",
+    flags=re.IGNORECASE,
+)
+_FA_ALLOWED_PROSE_LINE_RE = re.compile(
+    r"^[ ]{0,3}[-*+][ \t]*(?:"
+    r"CANNOT[ \t]+edit"        # negative prose (not parsed, harmless)
+    r"|MAY[ \t]+read\b"        # architect read declaration
+    r"|FORBIDDEN\b"             # architect forbidden list
+    # canonical template escape-hatch prose — the FULL fixed phrase, so
+    # the prefix CONSUMES its own `edit` and the suffix rule below can
+    # ban any further edit-grant text (codex r34 P1)
+    r"|If[ \t]+you[ \t]+need[ \t]+to[ \t]+edit[ \t]+a[ \t]+forbidden[ \t]+file"
+    r")",
+    flags=re.IGNORECASE,
+)
+# Authority words banned in an allowed-prose SUFFIX (codex r34+r41+r42:
+# the axis moved from `edit` to synonyms — `MUST write hidden.py`).
+# WHOLE-TOKEN semantics, not substring (r42 FP: a denied path like
+# `src/write.py` carries "write" INSIDE a path token — filenames are not
+# authority). A token is a whitespace-delimited word stripped of edge
+# punctuation; tokens containing / or . are path-like and never match.
+_FA_AUTHORITY_WORDS = frozenset((
+    "edit", "write", "create", "modify", "delete", "append", "overwrite",
+    "rename", "move", "must", "should", "allowed",
+))
+
+
+def _fa_suffix_has_authority(suffix: str) -> bool:
+    """True when the prose suffix carries a bare authority word."""
+    for tok in suffix.split():
+        if "/" in tok or "." in tok:
+            continue  # path-like token — filename parts are not authority
+        if tok.strip(";:,()[]{}'\"!?-").lower() in _FA_AUTHORITY_WORDS:
+            return True
+    return False
+
+
+def _fa_list_line_allowed(line: str) -> bool:
+    """Closed whitelist for list lines inside a FILE ASSIGNMENT block.
+
+    Anchored semantics (codex r33+r34 P1): a PROSE form may not smuggle
+    ANY edit grant in its suffix — `- MAY read docs; MUST edit x` and
+    `- If you need permission: CAN edit: x` are tainted, not laundered.
+    Each prose prefix consumes its own `edit` (when it has one); any
+    FURTHER `edit` word after the matched prefix rejects the line.
+    """
+    if _FA_ALLOWED_GRANT_LINE_RE.match(line):
+        return True
+    m = _FA_ALLOWED_PROSE_LINE_RE.match(line)
+    if m:
+        return not _fa_suffix_has_authority(line[m.end():])
+    return False
 _OVERLAP_LOOKBACK_S = 600          # 10-minute concurrency window
 _OVERLAP_MAX_PATHS = 64            # bound the per-spawn path set
 _OVERLAP_TAIL_LINES = 256          # bounded audit-log tail (~512KB)
@@ -1684,42 +1753,209 @@ def _spawn_depth(prompt: str, env: Dict[str, str]) -> int:
     return depth
 
 
+# PLAN-178 C1 / ADR-191 — the ONLY valid explicit "this spawn writes
+# nothing" declaration. The bare token `none` stays a DROPPED placeholder
+# (indistinguishable from omission BY DESIGN — that ambiguity is the cell
+# ADR-191 cures): read-only intent must be spelled out with this token.
+_FA_READONLY_TOKEN = "none-read-only"
+
+# CommonMark fences indented 1-3 spaces (codex r29 P1): the shared
+# `_strip_fenced_and_comments` masks column-zero fences only — a fenced
+# FILE ASSIGNMENT example indented by 1-3 spaces (still a valid fence per
+# CommonMark) would leak into classification and could satisfy the gate
+# for a spawn with NO real assignment. Masked LOCALLY here (small blast
+# radius; the shared regex serves every other block parser unchanged).
+# CommonMark-correct fence masking for THIS classifier (codex r29+r30+
+# r35): indent 0-3 (column zero included — the SHARED masker is a naive
+# toggle that ignores opener type/length, so a 4-backtick opener "closed"
+# by 3 backticks, or ``` closed by ~~~, leaks fenced content); closing
+# fence must be the SAME char and >= opener length (\1 + absorb longer);
+# an unclosed fence masks to EOF (\Z). Applied BEFORE the shared masker.
+# Closer must be the SAME character, length >= opener (codex r37 P2:
+# the old [`~]* suffix accepted a mixed ```~~~ "close"). Group 2 captures
+# the fence char; closer = \1 (full opener string) + \2* (same char
+# only). A shorter/mismatched closer falls through to \Z — masking to
+# EOF, the fail-CLOSED direction.
+_FA_FENCE_RE = re.compile(
+    r"^[ ]{0,3}((`|~)\2{2,})[^\n]*\n.*?(?:^[ ]{0,3}\1\2*[ \t]*$|\Z)",
+    flags=re.MULTILINE | re.DOTALL,
+)
+
+# Telemetry marker hash for the explicit read-only declaration. DOMAIN-
+# SEPARATED from real path hashes (codex r1 P2, Lote B): hashing the bare
+# token collided with a legitimate concrete path `./none-read-only` (the
+# token check runs BEFORE ./-normalization, so that path survives as
+# concrete and would hash identically — under CEO_SPAWN_OVERLAP_GUARD=1 it
+# would false-block against every prior read-only spawn). NUL bytes cannot
+# appear in a real declared path, so this input is unreachable from
+# _path_hash(path) space.
+
+
+def _classify_file_assignment(prompt: str) -> Tuple[str, frozenset]:
+    """Classify the spawn's `## FILE ASSIGNMENT` declaration (PLAN-178 C1).
+
+    Returns ``(state, concrete_paths)`` with ``state`` in a closed enum:
+
+    - ``"absent"``      — no `## FILE ASSIGNMENT` header in the sanitized
+      prompt (fenced/comment content never counts — same masking rule as
+      every other block parser in this hook).
+    - ``"concrete"``    — >=1 concrete `CAN edit:` path AND zero dropped
+      tokens (codex r15 P1: `safe.py, src/**` must NOT classify concrete —
+      the agent still READS the wildcard grant while telemetry records
+      only the concrete path; any dropped token taints the whole
+      declaration to unparseable).
+    - ``"readonly"``    — explicit `CAN edit: NONE-READ-ONLY` and no
+      concrete path. Case-insensitive token match; conformant.
+    - ``"unparseable"`` — header(s) present but no concrete path and no
+      explicit read-only token (wildcard-only / placeholder-only / empty
+      block). Named rejection under enforce (ADR-191 §1, B nice-4).
+
+    ALL `## FILE ASSIGNMENT` blocks in the prompt are aggregated (codex
+    r2 P1, Lote B): the canonical generator emits an unconditional block
+    and documented caller flows (/spawn, /debate) APPEND their own
+    concrete block afterwards — reading only the first block would hide
+    the writer's paths from overlap telemetry AND enforcement. Union of
+    concrete paths wins over a read-only declaration in any block.
+
+    Pure. Never raises. Bounded to _OVERLAP_MAX_PATHS.
+    """
+    if not prompt:
+        return ("absent", frozenset())
+    # CommonMark-correct fence mask FIRST (raw prompt), THEN the shared
+    # comment/fence stripper — order matters: the shared toggle-masker
+    # mis-parses length/type-mismatched fences (codex r35 P1).
+    sanitized = _FA_FENCE_RE.sub("", prompt)
+    sanitized = _strip_fenced_and_comments(sanitized)
+    # Unclosed HTML comment extends to EOF (codex r39 P2): the shared
+    # stripper removes only CLOSED <!-- --> pairs — an unclosed opener
+    # would leave commented-out content visible to this classifier.
+    _oc = sanitized.find("<!--")
+    if _oc != -1 and "-->" not in sanitized[_oc:]:
+        sanitized = sanitized[:_oc]
+    headers = list(_FILE_ASSIGNMENT_HEADER_RE.finditer(sanitized))
+    # Block bound recognizes 0-3-space-indented H2 too (codex r33 P2) —
+    # otherwise an indented `## TASK` leaves task bullets INSIDE the
+    # assignment parser. Local to this classifier.
+    _fa_next_h2 = re.compile(r"^[ ]{0,3}##[ \t]", flags=re.MULTILINE)
+    if not headers:
+        return ("absent", frozenset())
+    paths = set()
+    readonly_declared = False
+    invalid_seen = False
+    for m in headers:
+        block_start = m.end()
+        nxt = _fa_next_h2.search(sanitized, block_start)
+        block = sanitized[
+            block_start: nxt.start() if nxt else len(sanitized)
+        ]
+        block_had_line = False
+        for list_line in _FA_LIST_LINE_RE.finditer(block):
+            if not _fa_list_line_allowed(list_line.group(0)):
+                # Structural rule (codex r25→r32): an unrecognized list
+                # line inside the block is authority/instruction the
+                # parser did not validate — taint, whatever its phrasing.
+                invalid_seen = True
+        for lm in _CAN_EDIT_LINE_RE.finditer(block):
+            block_had_line = True
+            for raw in lm.group(1).split(","):
+                p = raw.strip().strip("`").strip()
+                if not p:
+                    continue
+                if p.lower() == _FA_READONLY_TOKEN:
+                    # Explicit read-only form — never a concrete path,
+                    # never a hashable overlap participant (guaranteed by
+                    # this branch running BEFORE the concrete-path add).
+                    readonly_declared = True
+                    continue
+                # Drop placeholders + wildcards (cannot prove a clobber).
+                # Angle brackets included (codex r1 P2): a scaffold literal
+                # like `CAN edit: <concrete paths>` must classify
+                # unparseable, not concrete — especially since the hook's
+                # own block message shows that exact scaffold string.
+                # Every drop marks the declaration TAINTED (codex r14 P1):
+                # an earlier NONE-READ-ONLY must not hide a later wildcard
+                # grant the agent still READS in its prompt.
+                # ALL glob/expansion syntax rejected ANYWHERE in the
+                # token (codex r19 P1): `src/?.py`, `src/[ab].py` and
+                # `src/{a,b}.py` are multi-file grants the agent reads
+                # while telemetry hashes only literal tokens (brace forms
+                # additionally split into bogus comma paths upstream).
+                if any(ch in p for ch in "*?[]{}<>") or p.lower() in (
+                    "none", "n/a", "tbd",
+                ):
+                    invalid_seen = True
+                    continue
+                # Codex r9 P2: filesystem paths cannot carry NUL/control
+                # chars — a crafted value could otherwise classify as
+                # concrete AND hash into the domain-separated read-only
+                # telemetry marker (which is NUL-framed precisely so real
+                # paths can never reach it). Reject, do not sanitize.
+                # Broad prose ("all files", "any path") and shell-
+                # expansion forms ("$HOME/...") are NOT concrete paths
+                # (codex r31 P1): a concrete grant in this grammar has no
+                # spaces and no `$` — declared in ADR-191 §2.1.
+                if any(ch.isspace() for ch in p) or "$" in p:
+                    invalid_seen = True
+                    continue
+                # Unicode line/paragraph separators included (codex r28
+                # P1): U+0085 NEL, U+2028 LS, U+2029 PS present injected
+                # prompt STRUCTURE to the agent while hashing as one path
+                # — and CEO_UNICODE_HARDBLOCK may be unset.
+                if any(
+                    ord(ch) < 32
+                    or ch in ("\x7f", "\u0085", "\u2028", "\u2029")
+                    for ch in p
+                ):
+                    invalid_seen = True
+                    continue
+                # Normalize: strip a leading ./, collapse; POSIX paths are
+                # case-sensitive so keep case, normalize separators only.
+                p = p.lstrip("./").replace("\\", "/")
+                if not p:
+                    # Codex r3 P1: `...` / `./` normalize to "" — an empty
+                    # "path" must never make the declaration concrete (it
+                    # would record path_count=1 and hide a would-block
+                    # input from the advisory window).
+                    invalid_seen = True
+                    continue
+                # Cap STORED paths without stopping the scan (codex r16
+                # P1). Exceeding the cap TAINTS the declaration (codex r31
+                # P2): silently dropping path 65+ would hide granted
+                # authority from the overlap guard — an assignment that
+                # large is a partition smell anyway.
+                if len(paths) < _OVERLAP_MAX_PATHS:
+                    paths.add(p)
+                else:
+                    invalid_seen = True
+        if not block_had_line:
+            # Codex r23 P1: an appended block with ZERO parseable
+            # `CAN edit:` lines (`- MAY edit: ...`, misspellings, empty)
+            # is a write grant the agent READS but the parser never saw —
+            # it must taint the declaration, not vanish behind an earlier
+            # read-only block.
+            invalid_seen = True
+    if paths and not invalid_seen:
+        return ("concrete", frozenset(paths))
+    if readonly_declared and not paths and not invalid_seen:
+        return ("readonly", frozenset())
+    # ANY dropped token taints the WHOLE declaration (codex r14+r15 P1):
+    # a readonly token or a valid path must not launder a wildcard/
+    # placeholder/control-char grant past the enforce gate — the agent
+    # still READ that grant in its prompt. Mixed declarations classify
+    # unparseable; concrete paths are still returned for overlap
+    # telemetry (recording them costs nothing and keeps the collision
+    # detector informed even on a tainted spawn).
+    return ("unparseable", frozenset(paths))
+
+
 def _parse_file_assignment(prompt: str) -> frozenset:
     """Return the set of concrete `CAN edit:` paths declared in the spawn's
     `## FILE ASSIGNMENT` block. Empty set if none.
 
-    Pure. Never raises. Bounded to _OVERLAP_MAX_PATHS. Wildcard/placeholder
-    tokens ({file list}, *, dir/**) are DROPPED — only concrete paths
-    participate in overlap detection (a glob can't be proven to clobber).
+    Back-compat thin wrapper over :func:`_classify_file_assignment` (the
+    single scanner since PLAN-178 C1 — one grammar, two consumers).
     """
-    if not prompt:
-        return frozenset()
-    sanitized = _strip_fenced_and_comments(prompt)
-    m = _FILE_ASSIGNMENT_HEADER_RE.search(sanitized)
-    if m is None:
-        return frozenset()
-    block_start = m.end()
-    nxt = _NEXT_H2_RE.search(sanitized, block_start)
-    block = sanitized[block_start: nxt.start() if nxt else len(sanitized)]
-    paths = set()
-    for lm in _CAN_EDIT_LINE_RE.finditer(block):
-        for raw in lm.group(1).split(","):
-            p = raw.strip().strip("`").strip()
-            if not p:
-                continue
-            # Drop placeholders + wildcards (cannot prove a clobber).
-            if p.startswith("{") or "*" in p or p.lower() in (
-                "none", "n/a", "tbd",
-            ):
-                continue
-            # Normalize: strip a leading ./, collapse, lowercase-fold only the
-            # drive-irrelevant case (POSIX paths are case-sensitive, so keep
-            # case but normalize separators).
-            p = p.lstrip("./").replace("\\", "/")
-            paths.add(p)
-            if len(paths) >= _OVERLAP_MAX_PATHS:
-                return frozenset(paths)
-    return frozenset(paths)
+    return _classify_file_assignment(prompt)[1]
 
 
 def _path_hash(p: str) -> str:
@@ -1790,14 +2026,18 @@ def _enforce_spawn_rails(
     env: Dict[str, str],
     session_id: str,
 ) -> Optional[Tuple[str, str]]:
-    """PLAN-133 E3 — evaluate the three rails. Returns (reason_code, detail)
-    when a rail is in ENFORCING mode (its flag=1) AND fires; else None.
+    """PLAN-133 E3 rails + PLAN-178 C1 FILE ASSIGNMENT grammar. Returns
+    (reason_code, detail) when a rail is in ENFORCING mode (its flag=1)
+    AND fires; else None.
 
-    In ADVISORY mode (flag unset/0) the rail still EMITS its closed-enum
+    In ADVISORY mode (flag unset/0) each rail still EMITS its closed-enum
     event with enforced=0 (measure-first) and returns None (allow).
 
-    NEVER raises. Each rail independently flagged; CEO_SOTA_DISABLE=1 forces
-    advisory for all three.
+    NEVER raises. Each rail independently flagged (CEO_SPAWN_TOOL_SCOPE /
+    CEO_SPAWN_DEPTH_GUARD / CEO_SPAWN_OVERLAP_GUARD /
+    CEO_SPAWN_FILE_ASSIGNMENT_REQUIRED); CEO_SOTA_DISABLE=1 forces
+    advisory for ALL of them — that master kill is the named, tested
+    recovery route for the grammar gate (ADR-186 pattern).
     """
     try:
         master_off = (env.get("CEO_SOTA_DISABLE") or "").strip() == "1"
@@ -1832,11 +2072,27 @@ def _enforce_spawn_rails(
                         f"depth={depth}",
                     )
 
-            # --- Rail 3: FILE ASSIGNMENT overlap ---------------------------
-            mine = _parse_file_assignment(prompt)
-            if mine:
+            # --- Rail 3: FILE ASSIGNMENT (grammar + overlap) ---------------
+            # PLAN-178 C1 / ADR-191: the block is part of the spawn
+            # acceptance contract. EVERY named spawn records an event now —
+            # path_count=0 on absent/readonly/unparseable — so omission is
+            # visible to the advisory window AND the session's collision
+            # detector no longer goes blind on it (R-SEC1 cure; the old emit
+            # lived inside the concrete-paths branch only). Absent/
+            # unparseable block ONLY under CEO_SPAWN_FILE_ASSIGNMENT_REQUIRED
+            # =1 (measure-first flip, same doctrine as C5); CEO_SOTA_DISABLE
+            # =1 forces advisory — the TESTED recovery route (ADR-186
+            # pattern).
+            fa_state, mine = _classify_file_assignment(prompt)
+            # Overlap intersection runs for ANY declared concrete path —
+            # including a TAINTED declaration's paths (codex r16 P1: with
+            # only the overlap guard armed, `owned.py, src/**` must still
+            # trip the clash on owned.py; the grammar gate may be advisory
+            # in that window). BRANCH ON STATE for the grammar gate itself
+            # (codex r15 P1: never on `mine`).
+            my_hashes = {_path_hash(p) for p in mine} if mine else set()
+            if my_hashes:
                 others = _recent_file_assignments(env, session_id)
-                my_hashes = {_path_hash(p) for p in mine}
                 clobber = my_hashes & others
                 if clobber:
                     enforced = _flag("CEO_SPAWN_OVERLAP_GUARD")
@@ -1848,9 +2104,40 @@ def _enforce_spawn_rails(
                             "spawn_file_assignment_overlap",
                             f"overlap_count={len(clobber)}",
                         )
-                # Record THIS spawn's assignment so the NEXT concurrent spawn
-                # can detect a clash against it (advisory; always recorded).
+            if fa_state in ("absent", "unparseable"):
+                enforced = _flag("CEO_SPAWN_FILE_ASSIGNMENT_REQUIRED")
+                if enforced:
+                    # No reservation for a spawn that never dispatches
+                    # (codex r16 P2): recording hashes here would leave a
+                    # 10-minute phantom that falsely rejects the corrected
+                    # RETRY under the overlap guard. The block itself is
+                    # the audit trail (veto_triggered carries the code).
+                    return (
+                        (
+                            "spawn_file_assignment_missing"
+                            if fa_state == "absent"
+                            else "spawn_file_assignment_unparseable"
+                        ),
+                        "fa_state=%s" % fa_state,
+                    )
+            # Advisory record for every DISPATCHING named spawn.
+            # Telemetry discriminator (allowlist-safe — no new fields):
+            # concrete records its hashes with the real count; readonly
+            # records the NUL-framed constant marker; absent records an
+            # empty set; a tainted-but-advisory declaration records its
+            # concrete hashes. Everything except concrete records
+            # path_count=0 — the would-block signal the AC-2b advisory
+            # window counts.
+            if fa_state == "concrete":
                 _emit_file_assignment_recorded(my_hashes, session_id)
+            else:
+                marker = (
+                    {_path_hash("\x00fa-readonly-marker\x00")}
+                    if fa_state == "readonly" else my_hashes
+                )
+                _emit_file_assignment_recorded(
+                    marker, session_id, path_count=0,
+                )
         return None
     except Exception:  # pragma: no cover - fail-open invariant
         return None
@@ -1888,9 +2175,19 @@ def _emit_depth_or_overlap(*, rail: str, enforced: bool, count: int) -> None:
         return
 
 
-def _emit_file_assignment_recorded(path_hashes: set, session_id: str) -> None:
+def _emit_file_assignment_recorded(
+    path_hashes: set,
+    session_id: str,
+    path_count: Optional[int] = None,
+) -> None:
     """Advisory: record THIS spawn's CAN-edit path HASHES so a later
-    concurrent spawn can detect an overlap. Only 12-hex hashes persist."""
+    concurrent spawn can detect an overlap. Only 12-hex hashes persist.
+
+    ``path_count`` override (PLAN-178 C1): the readonly-declaration path
+    records the constant token hash for telemetry attribution but MUST
+    report path_count=0 — it declares zero writable paths. Default keeps
+    the historical len() semantics for concrete assignments.
+    """
     try:
         if not _AUDIT_EMIT_AVAILABLE:
             return
@@ -1899,7 +2196,10 @@ def _emit_file_assignment_recorded(path_hashes: set, session_id: str) -> None:
             "spawn_file_assignment_recorded",
             session_id=(session_id or "")[:64],
             path_hashes=joined,
-            path_count=min(len(path_hashes), 99),
+            path_count=(
+                min(len(path_hashes), 99)
+                if path_count is None else max(0, min(int(path_count), 99))
+            ),
         )
     except Exception:  # pragma: no cover - fail-open
         return
@@ -2300,8 +2600,19 @@ def decide(
             reason=(
                 f"GOVERNANCE: {_e3_code}: {_e3_detail}. "
                 "The spawn violates a PLAN-133 E3 rail (per-spawn tool "
-                "allow-list / depth-over-one fence / FILE ASSIGNMENT overlap). "
-                "See PLAN-133 §E E3."
+                "allow-list / depth-over-one fence / FILE ASSIGNMENT overlap) "
+                "or the ADR-191 FILE ASSIGNMENT grammar (PLAN-178 C1). "
+                "Fix for a grammar block: regenerate the prompt via "
+                ".claude/scripts/inject-agent-context.sh (it always emits "
+                "the block). If the block is UNPARSEABLE, REPLACE or "
+                "remove the malformed block (the classifier aggregates "
+                "ALL blocks — appending a valid one cannot clear an "
+                "invalid token's taint); appending `## FILE ASSIGNMENT` "
+                "with `- CAN edit: <concrete paths>` or the explicit "
+                "read-only form `- CAN edit: NONE-READ-ONLY` works only "
+                "for the ABSENT state. Recovery route: "
+                "CEO_SOTA_DISABLE=1 forces advisory. See PLAN-133 §E E3 + "
+                "ADR-191."
             ),
         )
 
@@ -2763,6 +3074,9 @@ _BLOCK_REASON_MARKERS = (
     ("GOVERNANCE: spawn_tool_out_of_scope", "spawn_tool_out_of_scope"),
     ("GOVERNANCE: spawn_depth_over_one", "spawn_depth_over_one"),
     ("GOVERNANCE: spawn_file_assignment_overlap", "spawn_file_assignment_overlap"),
+    # PLAN-178 C1 / ADR-191 - FILE ASSIGNMENT grammar (measure-first flip).
+    ("GOVERNANCE: spawn_file_assignment_missing", "spawn_file_assignment_missing"),
+    ("GOVERNANCE: spawn_file_assignment_unparseable", "spawn_file_assignment_unparseable"),
     # PLAN-153 Wave E item 7 (ADR-175) — Prompt Defense Baseline gate.
     ("GOVERNANCE: spawn_prompt_defense_missing", "spawn_prompt_defense_missing"),
     # NAMED-spawn-without-skill is the historical default — keep last.

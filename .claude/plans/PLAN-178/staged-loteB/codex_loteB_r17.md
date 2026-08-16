@@ -1,0 +1,9 @@
+The new truncation handling can permanently discard audit results despite claiming they remain available, and the canonical assignment generator accepts values that its corresponding hook rejects. These are functional edge-case regressions in the newly added contracts.
+
+Full review comments:
+
+- [P2] Preserve full refuted data when synthesis is truncated — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/workflows/audit-fanout.js:389-389
+  When the `refuted` or `unverifiable` synthesis fence exceeds 24,000 characters, the report loses the truncated tail, yet this notice says the full data remains in the structured return. The return only exposes `confirmed_findings` and aggregate counts, so the saved false-positive evidence and unverifiable claims are unrecoverable; return those arrays as well or avoid claiming they are preserved.
+
+- [P3] Align generator validation with hook normalization — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/scripts/inject-agent-context.sh:1110-1112
+  With `CEO_SPAWN_FILE_ASSIGNMENT_REQUIRED=1`, values such as `--files=...` or `--files=./` pass this validation and are emitted as concrete assignments, but `_classify_file_assignment()` strips their leading dots/slashes to an empty path and rejects the generated prompt as unparseable. The canonical generator should reject or normalize every value consistently with the hook so its successful output remains dispatchable.

@@ -28,9 +28,16 @@ below the existing ``check_agent_spawn.py`` entry)::
 ## Decision logic (Sprint 11 State 0 — advisory)
 
 1. Resolve the active plan_id by scanning ``.claude/plans/PLAN-*.md``
-   for exactly one file whose frontmatter ``status`` is one of the
-   "active" states (``executing``, ``reviewed``, ``draft``). If zero
-   or more than one match the plan_id is indeterminate → skip check.
+   for files whose frontmatter ``status`` is one of the "active"
+   states (``executing``, ``reviewed``, ``draft``). Zero matches →
+   skip check (normal maintenance mode). One match → that plan.
+   Two or more (PLAN-178 Lote B cure — the old "indeterminate → skip"
+   made the cap INERT for any multi-plan cycle, which is the NORMAL
+   state of an OQ-6-style scope): deterministic tie-break — highest
+   status tier (``executing`` > ``reviewed`` > ``draft``), then the
+   HIGHEST plan number within the tier (the most recently authored
+   plan is the one being burned against). The selection is surfaced
+   in a forensic breadcrumb, never hidden.
 2. Sum ``tokens_total`` across audit-log ``agent_spawn`` events whose
    ``project`` matches the current ``CLAUDE_PROJECT_DIR``. Null
    ``tokens_total`` values are treated as 0 (ADR-016 contract).
@@ -217,24 +224,58 @@ def _plans_dir(project_dir: Path) -> Path:
     return project_dir / ".claude" / "plans"
 
 
+# PLAN-178 Lote B — tie-break tiers for the multi-active-plan cure. Lower
+# rank wins. ``executing`` outranks ``reviewed`` outranks ``draft``: a plan
+# actually being executed is the one whose budget the session burns.
+_STATUS_TIER_RANK = {"executing": 0, "reviewed": 1, "draft": 2}
+
+
+def _plan_seq(path: Path) -> int:
+    """Numeric NNN from ``PLAN-NNN-<slug>.md``. 0 when unparseable (never
+    raises; unparseable names lose every tie-break, deterministically)."""
+    m = _PLAN_FILENAME_RE.match(path.name)
+    if not m:
+        return 0
+    digits = ""
+    for ch in path.name[len("PLAN-"):]:
+        if ch.isdigit():
+            digits += ch
+        else:
+            break
+    try:
+        return int(digits) if digits else 0
+    except ValueError:
+        return 0
+
+
 def _resolve_active_plan(project_dir: Path) -> Tuple[Optional[Path], int]:
-    """Return ``(single_active_plan_path_or_None, active_match_count)``.
+    """Return ``(selected_active_plan_path_or_None, active_match_count)``.
 
     Scans ``.claude/plans/PLAN-NNN-<slug>.md`` for files whose
-    frontmatter ``status`` is in ``_ACTIVE_PLAN_STATUSES``. A single
-    match returns ``(path, 1)``. Zero matches returns ``(None, 0)`` —
-    the *normal* maintenance-mode state (all plans terminal). Two or
-    more matches returns ``(None, N)`` — genuinely ambiguous.
+    frontmatter ``status`` is in ``_ACTIVE_PLAN_STATUSES``. Zero matches
+    returns ``(None, 0)`` — the *normal* maintenance-mode state (all
+    plans terminal). One match returns ``(path, 1)``.
 
-    The count lets callers distinguish the routine no-active-plan case
-    (which must stay silent) from an ambiguous one worth a forensic
-    breadcrumb. Missing dir / OSError → ``(None, 0)``.
+    Two or more matches (PLAN-178 Lote B cure): the OLD behavior
+    returned ``(None, N)`` — "genuinely ambiguous", skip the check.
+    That made the budget cap INERT in exactly the state where burn is
+    highest (a multi-plan cycle: the S307 census found 12 active plans
+    and therefore ZERO budget checks since the cycle opened). The cure
+    is a DETERMINISTIC tie-break, not a guess: highest status tier
+    (``executing`` > ``reviewed`` > ``draft``), then highest plan
+    number NNN within the tier (the most recently authored plan is the
+    one being burned against). Filename NNN — never mtime — so the
+    selection is stable across filesystems and reinstalls. The count
+    N is still returned so the caller surfaces the multi-plan state in
+    a forensic breadcrumb (selection is visible, never silent).
+
+    Missing dir / OSError → ``(None, 0)``.
     """
     pdir = _plans_dir(project_dir)
     if not pdir.is_dir():
         return None, 0
 
-    matches: List[Path] = []
+    matches: List[Tuple[int, int, Path]] = []
     try:
         for candidate in pdir.iterdir():
             if not candidate.is_file():
@@ -249,21 +290,34 @@ def _resolve_active_plan(project_dir: Path) -> Tuple[Optional[Path], int]:
             status = fm.get("status")
             if not isinstance(status, str):
                 continue
-            if status.strip().lower() not in _ACTIVE_PLAN_STATUSES:
+            status_norm = status.strip().lower()
+            if status_norm not in _ACTIVE_PLAN_STATUSES:
                 continue
             plan_id = fm.get("id")
             if isinstance(plan_id, str) and plan_id.startswith("PLAN-"):
-                matches.append(candidate)
+                matches.append((
+                    _STATUS_TIER_RANK.get(status_norm, 99),
+                    -_plan_seq(candidate),
+                    candidate.name,
+                    candidate,
+                ))
     except OSError:
         return None, 0
 
-    if len(matches) == 1:
-        return matches[0], 1
-    return None, len(matches)
+    if not matches:
+        return None, 0
+    # sort key: (tier rank ASC, -NNN ASC, filename ASC). The filename
+    # tertiary key (codex r24 P2) covers same-tier same-NNN pairs like
+    # PLAN-156 + PLAN-156-FOLLOWUP — without it the winner depended on
+    # filesystem iterdir() order and varied between checkouts.
+    matches.sort(key=lambda t: (t[0], t[1], t[2]))
+    return matches[0][3], len(matches)
 
 
 def _active_plan_path(project_dir: Path) -> Optional[Path]:
-    """Return the single active plan FILE PATH, or None if indeterminate.
+    """Return the selected active plan FILE PATH, or None when no plan
+    is active (multi-plan states now tie-break deterministically —
+    PLAN-178 Lote B — instead of collapsing to None).
 
     Mirrors ``_active_plan_id`` but returns the on-disk path so callers
     that need to read frontmatter (``max_tokens``) skip a second scan.
@@ -273,12 +327,11 @@ def _active_plan_path(project_dir: Path) -> Optional[Path]:
 
 
 def _active_plan_id(project_dir: Path) -> Optional[str]:
-    """Return the single active plan_id, or None if indeterminate.
-
-    Scans ``.claude/plans/PLAN-NNN-<slug>.md`` files and reads the
-    frontmatter ``id`` + ``status`` via the stdlib-only
-    ``plan_frontmatter`` parser. Returns None when zero or >=2 files
-    match — the hook then SKIPS the check (logs "indeterminate").
+    """Return the selected active plan_id, or None when no plan is
+    active. >=2 active plans tie-break deterministically (PLAN-178
+    Lote B) — the check RUNS against the selected plan instead of
+    silently skipping (the old "indeterminate" behavior that left the
+    cap inert across every multi-plan cycle).
     """
     path = _active_plan_path(project_dir)
     if path is None:
@@ -490,6 +543,7 @@ def _plan_tokens_total(
     plan_id: str,
     *,
     project_dir: str,
+    strict_attribution: bool = False,
 ) -> Tuple[int, int]:
     """Return ``(total_tokens, spawn_event_count)`` for the plan.
 
@@ -499,6 +553,14 @@ def _plan_tokens_total(
     not carry a plan_id field (pre-Sprint-11 shape) are included when
     ``project`` matches — a slight over-count in exchange for not
     silently skipping legacy data.
+
+    ``strict_attribution=True`` (PLAN-178 Lote B, codex r9 P2 — the
+    multi-plan companion of the tie-break cure): ONLY events carrying
+    an explicit matching ``plan_id`` count; the legacy project-wide
+    fallback is OFF. With >=2 active plans the fallback would charge
+    the SELECTED plan for every other plan's spend plus prior history —
+    a false budget_exceeded machine. Under-count is the honest
+    direction for an advisory warning.
 
     Fail-open: any exception returns (0, 0).
     """
@@ -519,6 +581,10 @@ def _plan_tokens_total(
                 if isinstance(ev_plan, str) and ev_plan:
                     if ev_plan != plan_id:
                         continue
+                elif strict_attribution:
+                    # Multi-plan mode: unattributed rows never charge the
+                    # selected plan (see docstring).
+                    continue
                 else:
                     ev_project = event.get("project") or ""
                     if project_dir and ev_project != project_dir:
@@ -649,6 +715,7 @@ def decide(
     session_id: str,
     project: str,
     cap_source: str = "default",
+    spend_basis: str = "plan",
 ) -> Tuple[_contract.Decision, Optional[Dict[str, Any]]]:
     """Pure decision function. Returns (decision, side-effect-spec).
 
@@ -674,6 +741,31 @@ def decide(
         return (_contract.allow(), None)
 
     # Bypass short-circuit — still obeys rate limit.
+    if bypass_requested and spend_basis != "plan":
+        # Codex r13 P2: with >=2 active plans the tie-break plan_id is an
+        # arbitrary attribution target — a plan-scoped budget_bypass_used
+        # event AND its per-plan 24h quota would both be misattributed
+        # (spawn rows carry no plan_id yet). Advisory State 0: allow with
+        # a declared-basis message + forensic breadcrumb; the per-plan
+        # quota is NOT consumed (it belongs to no provable plan).
+        return (
+            _contract.allow(
+                system_message=(
+                    f"BUDGET BYPASS (multi-plan state) noted for selected "
+                    f"plan {plan_id}. Spend basis: PROJECT-WIDE — no "
+                    "plan-scope bypass event emitted; per-plan quota not "
+                    "consumed (attribution pending the producer cure)."
+                )
+            ),
+            {
+                "emit": "breadcrumb_only",
+                "message": (
+                    f"multi-plan budget bypass: CEO_BUDGET_BYPASS=1 with "
+                    f">=2 active plans (tie-break selection {plan_id}); "
+                    "no plan-scope budget_bypass_used event emitted"
+                ),
+            },
+        )
     if bypass_requested:
         if recent_bypass_count >= bypass_max_per_day:
             # Rate-limit exhausted. State 0 still allows but writes a
@@ -714,11 +806,41 @@ def decide(
     # PLAN-135 W5 O4 — enrich (never gate) the warning with the LIVE rate-limit
     # buckets from the statusLine sidecar. Fail-soft: "" when unavailable.
     quota_hint = _statusline_quota_hint()
+    basis_note = (
+        " Spend basis: PROJECT-WIDE (multi-plan state; agent_spawn rows "
+        "carry no plan_id yet — per-plan attribution lands with the "
+        "producer cure, PLAN-178 record)." if spend_basis == "project-wide"
+        else ""
+    )
     warning = (
         f"BUDGET WARNING: plan {plan_id} at {tokens_used}/{max_plan_tokens} tokens "
-        f"({pct}%). Advisory-only (Sprint 11). Set CEO_BUDGET_BYPASS=1 to "
-        f"suppress this warning for urgent work. See ADR-033.{quota_hint}"
+        f"({pct}%).{basis_note} Advisory-only (Sprint 11). Set "
+        f"CEO_BUDGET_BYPASS=1 to suppress this warning for urgent work. "
+        f"See ADR-033.{quota_hint}"
     )
+    if spend_basis != "plan":
+        # Codex r11+r12 P2 (closed together): the multi-plan rollup is
+        # PROJECT-wide spend vs ONE plan's cap. Emitting budget_exceeded
+        # with scope="plan" would corrupt calibration telemetry, and
+        # scope="project" is OUTSIDE the published audit-log schema enum
+        # (spawn|plan; SPEC is deny-Edit here). So: the operator KEEPS the
+        # systemMessage warning (with the declared basis), and the audit
+        # trail gets a forensic BREADCRUMB instead of an off-contract
+        # event — calibration telemetry stays clean plan-scope only.
+        return (
+            _contract.allow(system_message=warning),
+            {
+                "emit": "breadcrumb_only",
+                "message": (
+                    f"multi-plan budget advisory: project-wide spend "
+                    f"{tokens_used} exceeds selected plan {plan_id} cap "
+                    f"{max_plan_tokens} (cap_source={cap_source}); no "
+                    "plan-scope budget_exceeded event emitted (schema enum "
+                    "spawn|plan; per-plan attribution pending the producer "
+                    "cure)"
+                ),
+            },
+        )
     return (
         _contract.allow(system_message=warning),
         {
@@ -745,6 +867,11 @@ def _apply_effect(effect: Optional[Dict[str, Any]]) -> None:
         return
     kind = effect.get("emit")
     if not kind:
+        return
+    if kind == "breadcrumb_only":
+        # Multi-plan advisory (codex r12 P2): forensic trail without an
+        # off-schema audit event.
+        _breadcrumb(str(effect.get("message") or "breadcrumb_only"))
         return
 
     try:
@@ -852,28 +979,43 @@ def main() -> int:
             _breadcrumb(f"plan_id read failed: {type(e).__name__}: {e}")
 
     if plan_id is None:
-        # Only a genuinely ambiguous resolution (>=2 active plans) earns a
-        # forensic breadcrumb. Zero active plans is the normal
-        # maintenance-mode state (all plans terminal); breadcrumbing it
-        # floods audit-log.errors on every plan-less tool call. Silencing
-        # the zero case is the noise-burndown sibling of the
-        # mcp_route_advised / tier_policy / output_scan_finding_suppressed
-        # cleanups. active_plan_count is a file count (no untrusted echo).
-        if active_plan_count >= 2:
-            _breadcrumb(
-                "indeterminate plan_id — "
-                f"{active_plan_count} active plans; skipping budget check"
-            )
+        # plan_id can only be None here with zero active plans (normal
+        # maintenance mode — stay silent; breadcrumbing it floods
+        # audit-log.errors on every plan-less tool call) or when the
+        # SELECTED plan file failed to yield a frontmatter id (already
+        # breadcrumbed above). The old ">=2 → indeterminate → skip"
+        # branch is gone (PLAN-178 Lote B): multi-plan states tie-break
+        # deterministically in _resolve_active_plan and the check RUNS.
         _claude_adapter.emit_decision(_contract.allow())
         return 0
 
+    if active_plan_count >= 2:
+        # Forensic visibility of the tie-break (never silent, never a
+        # skip): file counts + the selected id only — no untrusted echo.
+        _breadcrumb(
+            f"{active_plan_count} active plans; budget check runs against "
+            f"tie-break selection {plan_id} (tier executing>reviewed>draft, "
+            "then highest NNN)"
+        )
+
     try:
+        # Design decision (closes the codex r9<->r10 oscillation): the live
+        # agent_spawn producer (audit_log.py) emits NO plan_id, so strict
+        # per-plan attribution today matches ZERO rows and re-inerts the
+        # cap (r10 P1) — while the project-wide fallback over-counts the
+        # selected plan (r9 P2). For an ADVISORY warning (State 0, never
+        # blocks) over-counting with a DECLARED basis is the honest side:
+        # the warning below names spend_basis=project-wide in multi-plan
+        # states. strict_attribution stays available + tested as the
+        # contract for the producer cure (plan_id on agent_spawn rows —
+        # registered destination: v1.4.0 train, PLAN-178 record).
         tokens_used, _ = _plan_tokens_total(
             plan_id, project_dir=str(project_dir)
         )
     except Exception as e:
         _breadcrumb(f"token rollup failed: {type(e).__name__}: {e}")
         tokens_used = 0
+    spend_basis = "project-wide" if active_plan_count >= 2 else "plan"
 
     try:
         max_plan_tokens, cap_source = _resolve_cap(plan_path)
@@ -898,6 +1040,7 @@ def main() -> int:
         plan_id=plan_id,
         tokens_used=tokens_used,
         max_plan_tokens=max_plan_tokens,
+        spend_basis=spend_basis,
         bypass_requested=bypass_requested,
         recent_bypass_count=recent_bypasses,
         bypass_max_per_day=bypass_max_per_day,

@@ -1,0 +1,12 @@
+The patch leaves a prompt-structure parser bypass, can falsely report the shared-memory security trigger as green, and records rejected spawns as advisory would-blocks. These affect the security and calibration goals of the change.
+
+Full review comments:
+
+- [P1] Reject Unicode line separators in file assignments — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/hooks/check_agent_spawn.py:1797-1799
+  With `CEO_UNICODE_HARDBLOCK` unset, a `CAN edit:` value containing U+0085, U+2028, or U+2029 passes this ASCII-only control check and classifies as concrete. These characters are Unicode line boundaries, so a value such as `safe.py<U+2028>## TASK<U+2028>...` can present injected prompt structure to the agent while the hook hashes it as one path. Reject Unicode control/line/paragraph separators here and mirror that validation in `inject-agent-context.sh`.
+
+- [P1] Scan the spool paths that audit_emit actually uses — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/workflows/nightly-hygiene.js:240-240
+  When `CEO_AUDIT_LOG_PATH` is set without a matching `CEO_AUDIT_LOG_DIR`, `spool_writer` still stores spools under `_audit_dir()/state`, not beside the active log; during recovery it also renames them to `audit-spool.<pid>.draining.<epoch>`, which the prescribed `audit-spool.*.jsonl` glob excludes. If the trigger pair is pending in either location while a clean primary exists, this dimension can incorrectly report green. Resolve the state directory using `spool_writer` conventions and include active and draining spool forms.
+
+- [P2] Defer assignment telemetry until the spawn is accepted — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/hooks/check_agent_spawn.py:2024-2025
+  For a named prompt that omits FILE ASSIGNMENT and also fails a later prompt-defense or skill-content gate, this emits `path_count=0` before `decide()` rejects the spawn. No dispatch occurred, but the new advisory window treats these records as FILE ASSIGNMENT would-blocks and the event has no identifier allowing consumers to exclude the subsequent veto, inflating the calibration used for the future enforcement flip. Emit this record only on the final allow path.

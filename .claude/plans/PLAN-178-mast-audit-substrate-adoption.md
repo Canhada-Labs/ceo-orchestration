@@ -210,6 +210,36 @@ sobreposição, fronteira de confiança (memória é superfície de injeção
 PLAN-154 (CEO_LEARNING_BOOT_LESSONS=1) é melhor que adotar o nativo.
 Saída = memo com recomendação; qualquer ativação é decisão do Owner.
 
+### Registro de execução — Lote B autorado e landado (S307, 2026-08-14)
+
+> **Decisões ⚖️ ratificadas pelo Owner (S307, AskUserQuestion):**
+> (1) truncamento de ingest envenena CLEAN **por dimensão** (reusa o
+> padrão finder-degradado); (2) gramática **REDUZIDA** para agentes de
+> workflow (PROMPT DEFENSE ≥6 + FILE ASSIGNMENT explícito + marcador
+> de HARD RULES; AGENT PROFILE/SKILL dispensados); (3) fix do
+> `check_budget` (cap INERTE: allow-precoce com ≥2 planos ativos)
+> **entra neste pack** (tie-break determinístico executing>reviewed>
+> draft, depois maior NNN; breadcrumb nomeia a seleção).
+>
+> **Conteúdo do pack:** C1 (gramática `NONE-READ-ONLY` + advisory-first
+> `path_count=0` + rota de recuperação testada + gerador emite o bloco
+> SEMPRE com `--files=`), C2 (fenceUntrusted + cap 24000 em
+> audit-fanout/nightly-hygiene + recon do eval; council já conforme),
+> validador pré-despacho nos 4 workflows (bloco COMMON byte-idêntico,
+> provado por teste node), C6 (fence no `query()` + teste em
+> `_lib/tests/` canonical-guarded), ADR-191 + ADR-089-AMEND-1 ACCEPTED,
+> check_budget curado com 3 testes convertidos do skip antigo + 3
+> novos de tie-break. Derivadas: env-inventory regen (496 vars — cura
+> 28 drifts pré-existentes de commits anteriores + 1 novo), contagens
+> ADR 190→192 em 9 superfícies (verify-counts exit 0 verdadeiro).
+> **NENHUM flip C5 neste pack** (measure-first: janela advisory conta
+> `spawn_file_assignment_recorded` com `path_count=0`).
+>
+> **Pendências que este registro NÃO fecha:** positive controls
+> live-fire pós-land (AC-6/C1: spawn sem FA emite path_count=0 no
+> audit real; C2: fence visível num run real; C6: query() devolve
+> fenced) e a reescrita PRECISA de CLAUDE.md §4 no closeout.
+
 ## Acceptance criteria
 
 - [ ] AC-1 [P0] Tabela MAST+injeção completa com evidência
@@ -250,7 +280,7 @@ Saída = memo com recomendação; qualquer ativação é decisão do Owner.
       (armado, não-armado ou adiado — TODOS com razão registrada).
       Nenhum AC deste plano fecha "vacuamente": disposição sem
       evidência = plano aberto.
-- [ ] AC-7 [P1] (codex P2) C6/INJ-3: ADR-089-AMEND-1 rascunhado com
+- [x] AC-7 [P1] (codex P2) C6/INJ-3: ADR-089-AMEND-1 rascunhado com
       gatilho OBSERVÁVEL (derivável de emit_pattern_stored/queried) +
       fence no retorno do query() incluído no Lote B (memory_shared.py
       é _lib canônico). Se o Owner adiar, o adiamento é registrado com

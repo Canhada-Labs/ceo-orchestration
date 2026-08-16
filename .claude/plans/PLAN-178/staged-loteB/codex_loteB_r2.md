@@ -1,0 +1,9 @@
+The canonical prompt generator masks concrete writer assignments with an earlier read-only declaration, and the newly accepted security reopen trigger depends on event attributes that are not emitted. Both defects undermine central governance behavior introduced by this patch.
+
+Full review comments:
+
+- [P1] Do not prepend read-only assignment to existing writer flows — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/scripts/inject-agent-context.sh:1092-1094
+  When `/spawn`, `/architect`, or `/debate` uses the documented injector invocation without `--files` and then appends its concrete assignment, this branch emits an earlier `NONE-READ-ONLY` block. `_classify_file_assignment()` only examines the first `## FILE ASSIGNMENT`, so writer paths are ignored by overlap telemetry/enforcement, while the agent is explicitly told it cannot edit files. Update these callers to pass `--files` or otherwise avoid producing two contradictory blocks.
+
+- [P1] Instrument role identity before accepting the reopen trigger — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/adr/ADR-089-AMEND-1-shared-memory-reopen-trigger-and-query-fence.md:37-40
+  This trigger is not derivable from the existing events: `memory_shared._emit_stored()` calls `emit_pattern_stored()` without a session identifier, and the event schema contains no writer role at all. Consequently nightly processing cannot determine that two distinct roles wrote the same topic within one session, so the accepted SEC-P0-02 trigger remains structurally unable to fire unless role/session attribution is added or the trigger is redefined.

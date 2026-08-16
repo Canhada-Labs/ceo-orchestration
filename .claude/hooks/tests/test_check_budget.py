@@ -189,10 +189,23 @@ class TestActivePlanResolution(TestEnvContext):
         self._write_plan("PLAN-010-finished.md", "PLAN-010", "done")
         self.assertIsNone(hk._active_plan_id(self.project_dir))
 
-    def test_two_active_plans_indeterminate(self):
+    def test_two_active_plans_tiebreak_executing_wins(self):
+        """PLAN-178 Lote B: >=2 ativos NÃO é mais skip — tier executing
+        vence reviewed mesmo com NNN menor (o cap deixou de ser inerte)."""
         self._write_plan("PLAN-011-a.md", "PLAN-011", "executing")
         self._write_plan("PLAN-012-b.md", "PLAN-012", "reviewed")
-        self.assertIsNone(hk._active_plan_id(self.project_dir))
+        self.assertEqual(hk._active_plan_id(self.project_dir), "PLAN-011")
+
+    def test_two_executing_tiebreak_highest_nnn_wins(self):
+        """Mesmo tier: o NNN mais alto (plano mais recente) vence."""
+        self._write_plan("PLAN-011-a.md", "PLAN-011", "executing")
+        self._write_plan("PLAN-013-c.md", "PLAN-013", "executing")
+        self.assertEqual(hk._active_plan_id(self.project_dir), "PLAN-013")
+
+    def test_draft_loses_to_reviewed(self):
+        self._write_plan("PLAN-020-d.md", "PLAN-020", "draft")
+        self._write_plan("PLAN-011-a.md", "PLAN-011", "reviewed")
+        self.assertEqual(hk._active_plan_id(self.project_dir), "PLAN-011")
 
     def test_no_plans_dir(self):
         self.assertIsNone(hk._active_plan_id(self.project_dir))
@@ -224,11 +237,14 @@ class TestActivePlanResolution(TestEnvContext):
         self.assertIsNotNone(path)
         self.assertEqual(count, 1)
 
-    def test_resolve_two_active_returns_count_two(self):
+    def test_resolve_two_active_returns_selection_and_count_two(self):
+        """PLAN-178 Lote B: caminho SELECIONADO + count>=2 (visibilidade
+        forense do multi-plan; a seleção nunca é silenciosa nem None)."""
         self._write_plan("PLAN-011-a.md", "PLAN-011", "executing")
         self._write_plan("PLAN-012-b.md", "PLAN-012", "reviewed")
         path, count = hk._resolve_active_plan(self.project_dir)
-        self.assertIsNone(path)
+        self.assertIsNotNone(path)
+        self.assertEqual(path.name, "PLAN-011-a.md")
         self.assertEqual(count, 2)
 
     def test_resolve_no_plans_dir_returns_count_zero(self):
@@ -240,6 +256,35 @@ class TestActivePlanResolution(TestEnvContext):
 # ---------------------------------------------------------------------------
 # _plan_tokens_total — rollup from audit-log
 # ---------------------------------------------------------------------------
+
+
+class TestStrictAttribution(TestEnvContext):
+    """Codex r9 P2 (Lote B): multi-plan rollup never charges the selected
+    plan for unattributed (legacy project-wide) rows."""
+
+    def _seed(self, lines):
+        path = self.audit_dir / "audit-log.jsonl"
+        with path.open("a", encoding="utf-8") as f:
+            for obj in lines:
+                f.write(json.dumps(obj) + "\n")
+
+    def test_strict_mode_skips_unattributed_rows(self):
+        self._seed([
+            {"action": "agent_spawn", "plan_id": "PLAN-011",
+             "tokens_total": 100, "project": str(self.project_dir)},
+            {"action": "agent_spawn",  # legacy row: no plan_id
+             "tokens_total": 900, "project": str(self.project_dir)},
+        ])
+        total_strict, n_strict = hk._plan_tokens_total(
+            "PLAN-011", project_dir=str(self.project_dir),
+            strict_attribution=True,
+        )
+        self.assertEqual((total_strict, n_strict), (100, 1))
+        # Legacy (default) behavior unchanged: fallback counts both.
+        total_legacy, n_legacy = hk._plan_tokens_total(
+            "PLAN-011", project_dir=str(self.project_dir),
+        )
+        self.assertEqual((total_legacy, n_legacy), (1000, 2))
 
 
 class TestPlanTokensRollup(TestEnvContext):
@@ -469,8 +514,10 @@ class TestMainEndToEnd(TestEnvContext):
         audit_text = self.read_audit_log()
         self.assertIn("budget_exceeded", audit_text)
 
-    def test_indeterminate_plan_skips(self):
-        # Wipe the single plan; add two active plans.
+    def test_multi_plan_runs_check_with_tiebreak_breadcrumb(self):
+        """PLAN-178 Lote B: >=2 ativos RODA o check contra a seleção
+        determinística e deixa breadcrumb NOMEANDO a seleção — o skip
+        antigo deixava o cap inerte em todo ciclo multi-plano."""
         plan_file = self.project_dir / ".claude" / "plans" / "PLAN-011-x.md"
         plan_file.unlink()
         self.write_project_file(
@@ -487,10 +534,10 @@ class TestMainEndToEnd(TestEnvContext):
             "tool_input": {"subagent_type": "x", "description": "y", "prompt": "z"},
         })
         self.assertEqual(obj.get("decision", "allow"), "allow")
-        # Breadcrumb mentions indeterminate AND the ambiguous count.
         errors = self.read_audit_errors()
-        self.assertIn("indeterminate", errors)
         self.assertIn("2 active plans", errors)
+        self.assertIn("PLAN-011", errors)
+        self.assertNotIn("skipping budget check", errors)
 
     def test_no_active_plan_silent_skip(self):
         # Zero active plans is the normal maintenance-mode state (all

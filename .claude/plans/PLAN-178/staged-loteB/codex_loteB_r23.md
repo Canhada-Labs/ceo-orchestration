@@ -1,0 +1,9 @@
+The FILE ASSIGNMENT gate can accept malformed appended write grants as read-only, and council verification can remain clean after truncating its evidence input. Both undermine the governance guarantees introduced by the patch.
+
+Full review comments:
+
+- [P1] Reject malformed appended assignment blocks — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/hooks/check_agent_spawn.py:1740-1746
+  When the generator's valid read-only block is followed by an appended block such as `## FILE ASSIGNMENT\n- MAY edit: src/a.py` (or an empty/misspelled `CAN edit` line), this loop finds no match in that block, leaves `invalid_seen` false, and returns `readonly` because of the first block. With `CEO_SPAWN_FILE_ASSIGNMENT_REQUIRED=1`, the spawn therefore passes and records no writable paths even though the agent sees a write grant, defeating grammar enforcement and overlap telemetry; each discovered assignment block must be tainted if it contains no parseable `CAN edit:` line.
+
+- [P2] Degrade verification when the group fence truncates — /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/1916b9c8-0ae5-43db-b462-179c4c6cfd18/scratchpad/loteB-work/.claude/workflows/council-audit.js:579-579
+  When the serialized council groups exceed 24,000 characters, this interpolation discards the returned `truncated` flag, so the verifier receives only a prefix without any mechanical degradation. If truncation clips trailing fields or JSON delimiters after all group keys are visible, the refuter can still return a verdict for every key, leaving `verifyFailed` at zero and allowing a full-quorum `CLEAN` verdict over incomplete input; retain the fence object and force verification to degraded/failed whenever it is truncated.

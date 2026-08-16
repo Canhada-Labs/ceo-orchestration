@@ -94,11 +94,32 @@ the persona + skill + pitfalls scaffold. If the script exits non-zero:
 The injector does NOT know which files the task touches. **YOU (the CEO)**
 must determine this before calling the Agent tool. Possible modes:
 
-- **Read-only research task:** `FILE ASSIGNMENT: read-only — all files`
-- **Single-file edit:** `FILE ASSIGNMENT: may edit src/foo.ts; forbidden: everything else`
-- **Multi-file edit:** list each allowed file; list any file another
-  parallel agent is already editing as forbidden
-- **Worktree mode:** `FILE ASSIGNMENT: isolated worktree; merge after`
+> **Examples must be fenced:** if the TASK text QUOTES a FILE
+> ASSIGNMENT block as an example, wrap it in a code fence (```) — the
+> hook masks fenced content; an unfenced example would be aggregated
+> as a real grant (ADR-191 R-SEC5).
+>
+> **Grammar (ADR-191 / PLAN-178 C1 — the hook PARSES this block):** the
+> ONLY machine-recognized lines are `- CAN edit: <path>[, <path>...]`
+> (concrete paths — no wildcards/placeholders) and the explicit
+> read-only form `- CAN edit: NONE-READ-ONLY`. Free-form phrasing
+> ("may edit X", "read-only — all files") is INVISIBLE to overlap
+> telemetry and, after the enforce flip, gets the spawn REJECTED as
+> unparseable. Prefer passing `--files=src/foo.ts,src/bar.ts` to
+> `inject-agent-context.sh` (it emits the exact grammar for you).
+
+- **Read-only research task:** pass NO `--files` — the injector emits
+  `- CAN edit: NONE-READ-ONLY` unconditionally.
+- **Single-file edit:** `--files=src/foo.ts` → emits
+  `- CAN edit: src/foo.ts` (+ the CANNOT line).
+- **Multi-file edit:** `--files=a.ts,b.ts` — comma-separated concrete
+  paths; list any file another parallel agent is already editing with
+  `- CANNOT edit: <file>` lines below the CAN-edit lines (inside the
+  block, LIST lines must use the recognized forms — CAN edit / CANNOT
+  edit — because unrecognized list lines taint the declaration;
+  non-list prose is fine).
+- **Worktree mode:** still declare the concrete paths with `--files=`;
+  add `isolated worktree; merge after` as prose in the TASK section.
 
 Apply the anti-collision rule from `PROTOCOL.md`:
 - 0 files in common with any other running spawn → parallel OK
@@ -121,7 +142,10 @@ The final prompt structure is:
  ## SKILL CONTENT, ## RELEVANT PITFALLS, ## TASK placeholder>
 
 ## FILE ASSIGNMENT
-<your explicit assignment from Step 4>
+<your explicit assignment from Step 4 — MUST use the parseable grammar:
+`- CAN edit: <concrete paths>` or `- CAN edit: NONE-READ-ONLY`; the hook
+aggregates ALL FILE ASSIGNMENT blocks and concrete grants win over the
+injector's read-only default>
 
 ## TASK
 <the task description, expanded into the format you want>
@@ -185,7 +209,7 @@ CEO procedure:
 1. Parse: AgentName=`Principal Security Engineer`, task=`audit the audit-log hook for secret leakage`
 2. Verify in team.md → archetype present (`**Principal Security Engineer**` is in the ROUTING TABLE)
 3. `bash .claude/scripts/inject-agent-context.sh "Principal Security Engineer" "audit the audit-log hook for secret leakage"`
-4. FILE ASSIGNMENT: read-only — may read any file; may NOT edit anything
+4. FILE ASSIGNMENT: `- CAN edit: NONE-READ-ONLY` (may read any file)
 5. Acceptance: structured vuln list with severity, file:line citations, MUST-FIX / NICE-TO-HAVE, VERDICT
 6. Assemble + call Agent tool with description `"Security audit of audit-log hook"`
 
@@ -199,7 +223,7 @@ CEO procedure:
 1. Parse: AgentName=`Staff Backend Engineer`, task=`fix the timing oracle in src/auth.ts:94`
 2. Verify on roster
 3. `bash .claude/scripts/inject-agent-context.sh "Staff Backend Engineer" "..."`
-4. FILE ASSIGNMENT: may edit `src/auth.ts`; forbidden: everything else
+4. FILE ASSIGNMENT: `- CAN edit: src/auth.ts`; forbidden: everything else
 5. Acceptance: `timingSafeEqual` used, tests still pass, no new dependencies
 6. Call Agent tool with description `"Backend engineer auth.ts fix"`
 

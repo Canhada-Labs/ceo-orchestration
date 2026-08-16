@@ -61,7 +61,12 @@ Use the standard spawn protocol:
 2. Add the file assignment:
    ```
    ## FILE ASSIGNMENT
-   - MAY edit (write only): .claude/plans/PLAN-NNN/architect/round-1/*.md, *.yaml, *.template
+   - CAN edit: .claude/plans/PLAN-NNN/architect/round-1/team.draft.md
+   - CAN edit: .claude/plans/PLAN-NNN/architect/round-1/pitfalls.draft.yaml
+   - CAN edit: .claude/plans/PLAN-NNN/architect/round-1/skill-selection.draft.md
+   - CAN edit: .claude/plans/PLAN-NNN/architect/round-1/personas.draft.md
+   - CAN edit: .claude/plans/PLAN-NNN/architect/round-1/rationale.md
+   - CAN edit: .claude/plans/PLAN-NNN/architect/round-1/approved.md.template
    - MAY read: any path in the repo
    - FORBIDDEN: any canonical path (.claude/team.md, .claude/frontend-team.md,
                 .claude/pitfalls-catalog.yaml, .claude/skills/**/SKILL.md,
