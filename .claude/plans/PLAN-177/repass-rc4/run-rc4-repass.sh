@@ -19,7 +19,7 @@ OUT="$REPO_ROOT/.claude/plans/PLAN-177/repass-rc4"
 BASE_TAG="v1.3.0-rc.3"
 BASE_TAG_OBJ="ef90e9201790ed29a1b3f6f91ab7d357e65c5db0"
 BASE_TAG_COMMIT="7362cfca026c1fd6b6cd780ff56329405ac91a25"
-CANDIDATE_SHA="389cea94cdc55f4e55b603fb696068a6238f49ce"
+CANDIDATE_SHA="2fa18f8d3a9c64d8d9294ffb719cff6a79c51523"
 git tag -v "$BASE_TAG" >/dev/null 2>&1 \
   || { echo "FATAL: assinatura da $BASE_TAG nao verifica"; exit 2; }
 [ "$(git rev-parse "$BASE_TAG")" = "$BASE_TAG_OBJ" ] \

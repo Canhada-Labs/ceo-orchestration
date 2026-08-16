@@ -277,17 +277,30 @@ def _noncanonical_top_level_lines(text: str) -> List[str]:
     if block is None:
         return []
     bad: List[str] = []
+    prev_scalar_decl = False
     for raw in block.group(1).splitlines():
         line = raw.split("#", 1)[0].rstrip() if "#" in raw else raw.rstrip()
         if not line.strip():
             continue
-        if line[0] in (" ", "\t"):  # sub-level: not a top-level declaration
+        if line[0] in (" ", "\t"):
+            # Sub-level line. Legitimate ONLY under a parent declared as a
+            # bare `key:` (mapping/list). After a SCALAR `key: value`, an
+            # indented non-comment line is a YAML CONTINUATION that changes
+            # the scalar's value (`verdict: GO` + `  NO-GO` == "GO NO-GO")
+            # while this minimal reader still saw `GO` — reject fail-closed
+            # (re-pass rc.4 t2 P1).
+            if prev_scalar_decl:
+                bad.append(line)
             continue
         if _CANONICAL_TOP_LEVEL_KEY_RE.match(line):
+            _key, _, _val = line.partition(":")
+            prev_scalar_decl = bool(_val.strip())
             continue
         if line.startswith("- "):  # top-level list item
+            prev_scalar_decl = False
             continue
         bad.append(line)
+        prev_scalar_decl = False
     return bad
 
 

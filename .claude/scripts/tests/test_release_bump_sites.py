@@ -2370,10 +2370,16 @@ _NONCANONICAL_DECISIONS = [
     [("verdict\t", "NO-GO"), "GO"],
     [("verdict ", "GO")],
     [("verdict\t", "GO")],
+    # Re-pass rc.4 t2 P1: an INDENTED CONTINUATION line after the scalar —
+    # valid YAML resolving to the non-authorizing scalar "GO NO-GO", which
+    # both minimal readers previously read as `GO` (indented lines were
+    # unconditionally skipped). Written verbatim by _decision_line.
+    ["GO\n  NO-GO"],
 ]
 _NONCANONICAL_IDS = [
     "space-before-colon-duplicate", "tab-before-colon-duplicate",
     "space-before-colon-alone", "tab-before-colon-alone",
+    "indented-continuation",
 ]
 
 
@@ -2506,6 +2512,7 @@ def test_both_rails_answer_identically_on_every_key_shape():
         "# verdict: NO-GO\nverdict: GO\n",
     ]
     noncanonical_shapes = [
+        "verdict: GO\n  NO-GO\nrelease_tag: v1.2.3\n",
         "verdict : NO-GO\nverdict: GO\n",
         "verdict\t: NO-GO\nverdict: GO\n",
         "verdict : GO\n",

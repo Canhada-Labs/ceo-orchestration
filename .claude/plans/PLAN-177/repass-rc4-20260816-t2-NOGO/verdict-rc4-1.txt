@@ -1,0 +1,19 @@
+P1 — [.github/scripts/validate-pair-rail-verdict.py:148](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.rYItrR/wt/.github/scripts/validate-pair-rail-verdict.py:148), [.claude/scripts/local/_release_tag_guard.py:284](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.rYItrR/wt/.claude/scripts/local/_release_tag_guard.py:284), [.claude/scripts/tests/test_release_bump_sites.py:2489](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.rYItrR/wt/.claude/scripts/tests/test_release_bump_sites.py:2489)
+
+Concrete failure scenario: this is valid YAML:
+
+```yaml
+verdict: GO
+  NO-GO
+release_tag: v1.3.0-rc.4
+```
+
+Both PyYAML and Ruby YAML resolve `verdict` as the non-authorizing scalar `GO NO-GO`. Both new shape gates, however, unconditionally ignore indented lines; both minimal parsers therefore see exactly `GO`. With an otherwise-valid envelope/delta, direct full-path probes returned server `0` and local guard `0`.
+
+The regression suite compares the two readers to each other, so this both-wrong interpretation passes its parity control. This violates the advertised exact-token and fail-closed semantics.
+
+Minimal fix: in both readers, reject any non-comment indented continuation belonging to a scalar `verdict:` declaration. Add this exact fixture to the server workflow-argv and local delta suites, requiring exit 3/E_DECISION. Keep legitimate nested lines under mapping/list fields green.
+
+The ordinary controls are genuine: rc.3 returned `0/0` for canonical NO-GO, absent, unknown, duplicate, and whitespace-key bypasses; the candidate returns `3/13`, while GO and GO-WITH-CONDITIONS remain `0/0`. Python 3.9 compilation and the stdlib-only gate passed. Full pytest execution was unavailable because the read-only sandbox provides no writable temporary directory.
+
+VERDICT: NO-GO — Both decision rails still authorize a non-authorizing valid-YAML scalar shape, so P1-4 remains incomplete.
