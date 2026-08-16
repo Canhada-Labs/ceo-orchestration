@@ -1,0 +1,17 @@
+scripts/_framework_manifest_set.sh
+scripts/install.sh
+scripts/upgrade.sh
+scripts/install-npm.sh
+scripts/tests/_parity_classify.py
+scripts/tests/test-night-mode-ignore-effect.sh
+.github/workflows/tournament.yml
+.github/workflows/smoke-install.yml
+npm/INTEGRITY.md
+npm/SHA256SUMS.txt
+SUPPORT.md
+README.md
+.github/release-checklist.md
+.claude/scripts/ceo-boot.py
+.claude/scripts/tests/test_ceo_boot.py
+.claude/scripts/tests/test_tournament_projection_workdir.py
+CLAUDE.md

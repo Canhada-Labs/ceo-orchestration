@@ -1,0 +1,2417 @@
+diff --git a/.claude/scripts/ceo-boot.py b/.claude/scripts/ceo-boot.py
+index 9fd0a6e..8407b92 100644
+--- a/.claude/scripts/ceo-boot.py
++++ b/.claude/scripts/ceo-boot.py
+@@ -237,7 +237,7 @@ def _sanitize_for_recs(s: str) -> str:
+     boot digest must never be blocked by unexpected input (fail-open on
+     infrastructure). Callers that need fail-CLOSED rejection of a line break
+     do it on the RAW text before calling here — see
+-    `_lesson_render_safe`'s bounded-vocabulary gate (A5).
++    `_validate_boot_lesson`'s bounded-vocabulary gate (A5).
+     """
+     if not isinstance(s, str):
+         s = str(s)
+@@ -346,6 +346,7 @@ def check_plans_stranded_executing() -> Tuple[str, str, Any]:
+     return ("red" if stranded else "green", f"{len(stranded)} stranded", stranded)
+ 
+ 
++# CEO-INFORMATIONAL-ONLY: contador de drafts sem limiar de acao (PLAN-178 C3)
+ def check_plans_draft() -> Tuple[str, str, Any]:
+     plans = _get_plan_paths()
+     draft: List[str] = []
+@@ -445,6 +446,7 @@ def _iter_audit_events_since(hours: float = 24.0):
+             yield ev
+ 
+ 
++# CEO-INFORMATIONAL-ONLY: pulso de despachos/24h, sem limiar (PLAN-178 C3)
+ def check_dispatch_count_24h() -> Tuple[str, str, Any]:
+     n = sum(
+         1 for ev in _iter_audit_events_since(24)
+@@ -505,12 +507,98 @@ def _is_ghost_spawn_event(ev: Dict[str, Any]) -> bool:
+     legitimate near-empty dispatches: empty desc, no rail attribution, no
+     profile marker, and SHA-of-empty-string desc_hash.
+     """
+-    return (
+-        ev.get("desc_preview") == ""
+-        and ev.get("rail") is None
+-        and ev.get("has_profile") is False
+-        and ev.get("desc_hash") == _EMPTY_SHA256
+-    )
++    # Re-pass rc.4 t3 (P1): RETIRED with the same rationale as the S303
++    # harness-probe exemption — every condition here is ABSENCE, and
++    # desc_hash == SHA256("") corroborates nothing (it derives from the
++    # same empty caller-controlled description). A real markerless spawn
++    # with an empty description — e.g. one a fail-open PreToolUse hook
++    # admitted — matched all four and was deleted from the denominator.
++    # Ghost-shaped rows COUNT until the emitter can stamp provenance the
++    # caller cannot forge.
++    return False
++
++
++# PLAN-177 t2 (re-pass rc.4 P1-f). The POSITIVE half of the probe test.
++#
++# The S303 filter below identified a probe by ABSENCE alone — five governed
++# markers missing — and absence is the shape of the events the ratio exists to
++# find: a markerless real spawn (including one the PreToolUse hook admitted by
++# failing open) was classified as harness noise and removed from the
++# denominator. A probe-only window then reported green with
++# `harness_probes_skipped=1` while the governance gap it was built to surface
++# went unrendered.
++#
++# So the structural conditions are necessary, not sufficient: the row must ALSO
++# carry the observed harness signature. The signature is CLOSED — the literal
++# description the tool-materialization probe emits, anchored at both ends
++# (`Load <Tool> via ToolSearch?`, S303 observation, prompt `noop`) — plus
++# corroboration by `desc_hash`, which the emitter computes over the RAW
++# description: if the two disagree the preview was truncated or redacted, i.e.
++# not this short, secret-free probe line. Anything else counts. Every
++# uncertainty resolves toward VISIBLE.
++_HARNESS_PROBE_DESC_RE = re.compile(
++    r"\ALoad [A-Za-z0-9_.\-]+(?:,[ ]?[A-Za-z0-9_.\-]+)* via ToolSearch\?\Z"
++)
++
++
++def _has_harness_probe_fingerprint(ev: Dict[str, Any]) -> bool:
++    """True iff the row carries the CLOSED, observed harness-probe signature.
++
++    Positive identification, never inferred from missing fields. An absent or
++    non-matching `desc_hash` is NOT corroboration, so it returns False and the
++    row is counted — the safe direction for an advisory that exists to expose
++    unclassified spawns.
++    """
++    desc = ev.get("desc_preview")
++    if not isinstance(desc, str) or not _HARNESS_PROBE_DESC_RE.match(desc):
++        return False
++    digest = ev.get("desc_hash")
++    if not isinstance(digest, str) or not digest:
++        return False
++    return digest == hashlib.sha256(desc.encode("utf-8")).hexdigest()
++
++
++def _is_harness_probe_event(ev: Dict[str, Any]) -> bool:
++    """True iff the agent_spawn row is a harness-internal tool-loading probe.
++
++    S303: the ghost filter above was written for the ToolSearch probes of an
++    older harness, whose Agent-shaped PostToolUse rows carried NO description
++    (desc_preview == "" and desc_hash == SHA256(b"")). The current harness
++    supplies a human-readable description for the same class of call — e.g.
++    ``Load WebFetch via ToolSearch?`` with prompt ``noop`` and a fixed cheap
++    model — so all four ghost conditions no longer hold and a pure
++    tool-materialization probe lands in the denominator as a governance gap.
++
++    The discriminator is ``subagent_type``: the Agent/Task spawn contract makes
++    it REQUIRED for every governed dispatch (``check_agent_spawn.py`` derives
++    the authoritative archetype from it, and ``extract_skill`` Path D needs it),
++    so a row that carries none was never a CEO dispatch. All five conditions
++    must hold — no subagent_type, no archetype, no rail attribution, no
++    ``## AGENT PROFILE`` and no ``## FILE ASSIGNMENT`` — so a real named spawn
++    that merely lost one field still counts. Skipped rows stay OBSERVABLE via
++    the ``harness_probes_skipped`` counter: this suppresses a false alarm, it
++    does not hide the event.
++
++    PLAN-177 t2 (P1-f): those five are NECESSARY, NOT SUFFICIENT. Absence is
++    exactly the shape of the event this ratio exists to expose — a markerless
++    REAL spawn, including one admitted because the PreToolUse hook failed
++    open, matched all five and was deleted from the denominator. The row must
++    ALSO carry the closed harness signature
++    (``_has_harness_probe_fingerprint``); an unrecognised description counts,
++    however markerless the row is.
++    """
++    # Re-pass rc.4 t2 (P1): the S303 exemption is RETIRED until trusted
++    # provenance exists. `desc_preview` and `desc_hash` are both derived
++    # from the same CALLER-CONTROLLED description, so the hash corroborates
++    # nothing: a real markerless spawn described as
++    # `Load WebFetch via ToolSearch?` was silently deleted from the
++    # denominator — the exact event this ratio exists to expose. Until the
++    # EMITTER can stamp provenance the caller cannot forge, probe-shaped
++    # rows COUNT (the conservative direction for an advisory: a yellow the
++    # operator triages beats a green that hides a fail-open spawn).
++    # _has_harness_probe_fingerprint is kept (tested) as the shape
++    # DETECTOR for that future provenance-bearing emitter.
++    return False
+ 
+ 
+ def check_skill_unknown_ratio() -> Tuple[str, str, Any]:
+@@ -528,9 +616,14 @@ def check_skill_unknown_ratio() -> Tuple[str, str, Any]:
+     That is the original PLAN-020 ADR-051 governance gap the
+     detector was built for.
+     """
++    # T-2 STATUS (re-pass rc.4 t5 P2): DEFERRED, not cured. Both the S86
++    # ghost filter and the S303 probe filter are RETIRED (absence-based,
++    # caller-forgeable); every agent_spawn row counts until the EMITTER can
++    # stamp provenance the caller cannot forge. The skipped counters were
++    # removed with them — a permanently-zero counter reads as "filter
++    # active, nothing skipped", which is the wrong claim.
+     total = 0
+     unknown = 0
+-    ghosts_skipped = 0
+     skill_less_by_design = 0
+     test_pollution_skipped = 0
+     for ev in _iter_audit_events_since(24):
+@@ -539,9 +632,10 @@ def check_skill_unknown_ratio() -> Tuple[str, str, Any]:
+         if _is_test_pollution_event(ev):
+             test_pollution_skipped += 1
+             continue
+-        if _is_ghost_spawn_event(ev):
+-            ghosts_skipped += 1
+-            continue
++        # T-2 deferred (t5 P2): ghost/probe exemptions RETIRED — the shape
++        # detectors above stay tested for a future provenance-bearing
++        # emitter, but no row is skipped on caller-controlled absence.
++
+         # Skill-less by design: general-purpose archetype dispatches
+         # (mitigated rail per ADR-082) AND built-in subagent types like
+         # Explore/Plan/claude-code-guide that have no .claude/agents/<name>.md
+@@ -569,13 +663,12 @@ def check_skill_unknown_ratio() -> Tuple[str, str, Any]:
+     if total == 0:
+         msg = (
+             "no custom-archetype spawns "
+-            "({s} general-purpose, {g} ghosts, {t} test-pollution)".format(
+-                s=skill_less_by_design, g=ghosts_skipped, t=test_pollution_skipped,
++            "({s} general-purpose, {t} test-pollution)".format(
++                s=skill_less_by_design, t=test_pollution_skipped,
+             )
+         )
+         return "green", msg, {
+             "unknown": 0, "total": 0,
+-            "ghosts_skipped": ghosts_skipped,
+             "skill_less_by_design": skill_less_by_design,
+             "test_pollution_skipped": test_pollution_skipped,
+         }
+@@ -583,7 +676,6 @@ def check_skill_unknown_ratio() -> Tuple[str, str, Any]:
+     status = "red" if ratio > 0.10 else "yellow" if ratio > 0 else "green"
+     return status, f"{unknown}/{total} = {ratio:.0%}", {
+         "unknown": unknown, "total": total,
+-        "ghosts_skipped": ghosts_skipped,
+         "skill_less_by_design": skill_less_by_design,
+         "test_pollution_skipped": test_pollution_skipped,
+     }
+@@ -904,6 +996,7 @@ def check_tier_a_debate_transcripts() -> Tuple[str, str, Any]:
+     return "green", f"{n} transcripts/24h", n
+ 
+ 
++# CEO-INFORMATIONAL-ONLY: velocidade de licoes, docstring ja diz informational
+ def check_tier_a_lessons_30d() -> Tuple[str, str, Any]:
+     """Count lessons added in memory dir over 30d (informational)."""
+     # Derive the Claude Code project slug from the project dir (absolute path
+@@ -928,23 +1021,86 @@ def check_tier_a_lessons_30d() -> Tuple[str, str, Any]:
+ 
+ 
+ def check_tier_a_spec_version_drift() -> Tuple[str, str, Any]:
+-    """VERSION file vs latest SPEC/v*/VERSION agreement (informational)."""
+-    version_file = REPO_ROOT / "VERSION"
+-    if not version_file.exists():
+-        return "yellow", "VERSION missing", None
++    """VERSION major vs latest SPEC/v* major agreement — red on drift.
++
++    Cured in PLAN-178 W-C Lote A (C3): the original body read both
++    inputs and never compared them — every reachable path returned
++    green (the S287-class "registered-vacuous" case documented in
++    memory feedback-check-tier-a-spec-version-drift-vacuous and in the
++    W0 coverage table). Invariant now enforced: the MAJOR of the
++    FRAMEWORK version must equal the highest SPEC/v<N> directory major.
++
++    Ownership-aware source (codex Lote-A P2-1): the root ``VERSION``
++    in an ADOPTER repo is the adopter app's version (ADR-155-AMEND-1
++    §2) — comparing it to the shipped SPEC would false-red. The
++    framework version is ``.claude/.framework-version`` (written by
++    install/upgrade; present in the dogfood checkout too). Without
++    that file no drift claim is possible — informational green, never
++    red on unattributable input.
++
++    Provenance (codex r2 P2-1, ADR-155-AMEND-1 §5): existence is not
++    authority. The marker only supports a RED verdict when its
++    delivery is verifiable: (a) the baseline manifest
++    ``.claude/.install-manifest.sha256`` carries a record for it
++    (adopter install/upgrade path), or (b) the marker is git-tracked
++    in this checkout (framework/dogfood path). Unverified marker +
++    mismatch => yellow (drift SUSPECTED), never red — and never a
++    silent green either.
++    """
++    fw_file = REPO_ROOT / ".claude" / ".framework-version"
++    if not fw_file.exists():
++        return "green", "no .framework-version (drift not attributable)", None
+     try:
+-        repo_v = version_file.read_text(encoding="utf-8", errors="replace").strip()
++        repo_v = fw_file.read_text(encoding="utf-8", errors="replace").strip()
++    except OSError:
++        return "yellow", ".framework-version unreadable", None
++    provenance_ok = False
++    manifest = REPO_ROOT / ".claude" / ".install-manifest.sha256"
++    try:
++        if manifest.exists() and ".claude/.framework-version" in manifest.read_text(
++                encoding="utf-8", errors="replace"):
++            provenance_ok = True
+     except OSError:
+-        return "yellow", "VERSION unreadable", None
++        pass
++    if not provenance_ok:
++        try:
++            provenance_ok = subprocess.run(
++                ["git", "-C", str(REPO_ROOT), "ls-files", "--error-unmatch",
++                 ".claude/.framework-version"],
++                capture_output=True, timeout=2,
++            ).returncode == 0
++        except (OSError, subprocess.SubprocessError):
++            provenance_ok = False
+     spec_root = REPO_ROOT / "SPEC"
+     if not spec_root.exists():
+         return "green", f"repo {repo_v}, no SPEC dir", repo_v
+-    spec_versions = sorted(p.name for p in spec_root.iterdir() if p.is_dir() and p.name.startswith("v"))
+-    if not spec_versions:
++    spec_majors = []
++    for p in spec_root.iterdir():
++        if p.is_dir() and p.name.startswith("v"):
++            try:
++                spec_majors.append(int(p.name[1:]))
++            except ValueError:
++                return "yellow", f"unparseable SPEC dir {p.name}", None
++    if not spec_majors:
+         return "green", f"repo {repo_v}, no SPEC versions", repo_v
+-    return "green", f"repo {repo_v}, spec {','.join(spec_versions[-2:])}", {
+-        "repo_version": repo_v, "spec_versions": spec_versions,
+-    }
++    try:
++        repo_major = int(repo_v.split(".", 1)[0])
++    except ValueError:
++        return "yellow", f"unparseable .framework-version {repo_v}", None
++    latest_spec = max(spec_majors)
++    detail = {"repo_version": repo_v,
++              "spec_versions": ["v%d" % m for m in sorted(spec_majors)],
++              "provenance_verified": provenance_ok}
++    if repo_major != latest_spec:
++        if provenance_ok:
++            return "red", (
++                f"drift: framework major {repo_major} vs SPEC v{latest_spec}"
++            ), detail
++        return "yellow", (
++            f"drift suspected: marker {repo_major} vs SPEC v{latest_spec} "
++            "(provenance unverified — ADR-155-AMEND-1 §5)"
++        ), detail
++    return "green", f"framework {repo_v} ~ spec v{latest_spec}", detail
+ 
+ 
+ def check_tier_a_npm_version_match() -> Tuple[str, str, Any]:
+@@ -977,6 +1133,7 @@ def check_tier_a_waivers_count() -> Tuple[str, str, Any]:
+     return status, f"{n} waivers", n
+ 
+ 
++# CEO-INFORMATIONAL-ONLY: tracker de slots reservados, sem limiar (PLAN-178 C3)
+ def check_tier_a_adrs_recent_status() -> Tuple[str, str, Any]:
+     """ADR-098..104 status tracker (PLAN-065 reserved slots — drift detector)."""
+     adr_dir = REPO_ROOT / ".claude" / "adr"
+@@ -997,6 +1154,7 @@ def check_tier_a_adrs_recent_status() -> Tuple[str, str, Any]:
+     return "green", f"{accepted}/{len(statuses)} accepted", statuses
+ 
+ 
++# CEO-INFORMATIONAL-ONLY: auto-observacao de cache, sem limiar (PLAN-178 C3)
+ def check_tier_a_cache_hit_rate_24h() -> Tuple[str, str, Any]:
+     """ceo_boot_emitted cache_hit ratio over 24h (self-observation)."""
+     total = 0
+diff --git a/.claude/scripts/tests/test_ceo_boot.py b/.claude/scripts/tests/test_ceo_boot.py
+index 717760b..030b1e0 100644
+--- a/.claude/scripts/tests/test_ceo_boot.py
++++ b/.claude/scripts/tests/test_ceo_boot.py
+@@ -14,6 +14,7 @@ v1.13.0 + bundled with Phase 6 mutation harness):
+ """
+ from __future__ import annotations
+ 
++import hashlib
+ import importlib.util
+ import io
+ import json
+@@ -172,7 +173,10 @@ class TestSkillUnknownGhostFilter(TestEnvContext):
+ 
+     EMPTY_SHA = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+ 
+-    def test_is_ghost_all_four_match(self):
++    def test_is_ghost_retired_even_when_all_four_match(self):
++        """Re-pass rc.4 t3 P1: the ghost exemption is RETIRED — the four
++        conditions are all ABSENCE, and SHA256("") corroborates nothing.
++        A ghost-shaped row counts until unforgeable provenance exists."""
+         ev = {
+             "action": "agent_spawn",
+             "desc_preview": "",
+@@ -180,7 +184,7 @@ class TestSkillUnknownGhostFilter(TestEnvContext):
+             "has_profile": False,
+             "desc_hash": self.EMPTY_SHA,
+         }
+-        self.assertTrue(_mod._is_ghost_spawn_event(ev))
++        self.assertFalse(_mod._is_ghost_spawn_event(ev))
+ 
+     def test_is_ghost_legitimate_dispatch_not_filtered(self):
+         # Real near-empty dispatch must NOT match — even with empty desc, if
+@@ -197,7 +201,7 @@ class TestSkillUnknownGhostFilter(TestEnvContext):
+         ]:
+             self.assertFalse(_mod._is_ghost_spawn_event(variant), repr(variant))
+ 
+-    def test_skill_unknown_excludes_ghosts(self):
++    def test_skill_unknown_counts_ghosts_now(self):
+         # Inject events into iterator via monkey-patch.
+         original = _mod._iter_audit_events_since
+         def fake_iter(_h):
+@@ -219,10 +223,10 @@ class TestSkillUnknownGhostFilter(TestEnvContext):
+         _mod._iter_audit_events_since = fake_iter
+         try:
+             status, summary, detail = _mod.check_skill_unknown_ratio()
+-            self.assertEqual(detail["total"], 2)        # ghost excluded
+-            self.assertEqual(detail["unknown"], 1)
+-            self.assertEqual(detail["ghosts_skipped"], 1)
+-            self.assertIn("1/2", summary)
++            self.assertEqual(detail["total"], 3)        # ghost COUNTS (t3 P1)
++            self.assertEqual(detail["unknown"], 2)      # ghost is unknown too
++            self.assertNotIn("ghosts_skipped", detail)
++            self.assertIn("2/3", summary)
+         finally:
+             _mod._iter_audit_events_since = original
+ 
+@@ -641,3 +645,201 @@ class TestMainCLI(TestEnvContext):
+ 
+ if __name__ == "__main__":
+     unittest.main()
++# S303 regression tests — APPEND to .claude/scripts/tests/test_ceo_boot.py
++class TestHarnessProbeFilter(TestEnvContext):
++    """S303: harness tool-loading probes (ToolSearch materialization) carry a
++    description now, so the S86 ghost filter (which requires desc_preview=='')
++    misses them and a single probe pins skill_unknown_ratio to 1/1 = 100%.
++    """
++
++    REAL_EVENT = {
++        "action": "agent_spawn",
++        "subagent_type": "",
++        "desc_preview": "Load WebFetch via ToolSearch?",
++        "desc_hash":
++            "3aa1aca1be9b616da5fd32fd9db7b6de5037ed45182e1e350f31cc8dbd67c24f",
++        "skill": "unknown",
++        "has_profile": False,
++        "has_file_assignment": False,
++        "rail": None,
++        "archetype": None,
++    }
++
++    def test_probe_shaped_event_is_not_exempt(self):
++        """Re-pass rc.4 t2 (P1): the S303 exemption is RETIRED — desc_preview
++        and desc_hash derive from the SAME caller-controlled description, so
++        the hash corroborates nothing. Probe-shaped rows COUNT until the
++        emitter can stamp provenance the caller cannot forge. The shape
++        DETECTOR is kept for that future emitter."""
++        self.assertFalse(_mod._is_ghost_spawn_event(self.REAL_EVENT))
++        self.assertFalse(_mod._is_harness_probe_event(self.REAL_EVENT))
++        self.assertTrue(_mod._has_harness_probe_fingerprint(self.REAL_EVENT))
++
++    def test_filter_is_not_a_governance_escape_hatch(self):
++        # NEGATIVE CONTROL: a real skill-less dispatch that carries ANY one of
++        # the five governed markers must still count in the denominator.
++        for over in (
++            {"subagent_type": "security-engineer"},
++            {"archetype": "security-engineer"},
++            {"rail": "claude"},
++            {"has_profile": True},
++            {"has_file_assignment": True},
++        ):
++            ev = dict(self.REAL_EVENT)
++            ev.update(over)
++            self.assertFalse(_mod._is_harness_probe_event(ev), repr(over))
++
++    # ------------------------------------------------------------------
++    # PLAN-177 t2 (re-pass rc.4 P1-f) — the filter needs a POSITIVE
++    # fingerprint, not five absences.
++    #
++    # The control above varies ONE governed marker at a time, so it never
++    # exercises the dangerous shape: all five absent AND an unrelated
++    # description. That row is a real markerless spawn (a hook that failed
++    # open admits exactly this), and the filter used to erase it from the
++    # denominator — hiding the very gap the ratio renders.
++    # ------------------------------------------------------------------
++    REAL_MARKERLESS_SPAWN = {
++        "action": "agent_spawn",
++        "subagent_type": "",
++        "desc_preview": "Review production authentication",
++        "desc_hash": hashlib.sha256(
++            b"Review production authentication"
++        ).hexdigest(),
++        "skill": "unknown",
++        "has_profile": False,
++        "has_file_assignment": False,
++        "rail": None,
++        "archetype": None,
++    }
++
++    def test_markerless_real_spawn_is_not_a_probe(self):
++        """NEGATIVE CONTROL: every governed marker absent, arbitrary
++        description. Absence alone must not buy an exemption."""
++        self.assertFalse(
++            _mod._is_harness_probe_event(self.REAL_MARKERLESS_SPAWN)
++        )
++
++    def test_markerless_real_spawn_turns_the_ratio_red(self):
++        """The end-to-end half: the event must reach the DENOMINATOR."""
++        original = _mod._iter_audit_events_since
++
++        def fake_iter(_h):
++            yield dict(self.REAL_MARKERLESS_SPAWN)
++
++        _mod._iter_audit_events_since = fake_iter
++        try:
++            status, _summary, detail = _mod.check_skill_unknown_ratio()
++            self.assertEqual(status, "red", detail)
++            self.assertEqual((detail["unknown"], detail["total"]), (1, 1))
++            self.assertNotIn("harness_probes_skipped", detail)
++        finally:
++            _mod._iter_audit_events_since = original
++
++    def test_probe_shaped_description_needs_a_corroborating_hash(self):
++        """A preview that looks like a probe but whose desc_hash is over
++        DIFFERENT bytes was truncated, redacted or forged — either way it is
++        not the short, secret-free probe line, so it counts."""
++        ev = dict(self.REAL_EVENT)
++        ev["desc_hash"] = hashlib.sha256(b"something else entirely").hexdigest()
++        self.assertFalse(_mod._is_harness_probe_event(ev))
++        ev_no_hash = dict(self.REAL_EVENT)
++        ev_no_hash["desc_hash"] = ""
++        self.assertFalse(_mod._is_harness_probe_event(ev_no_hash))
++
++    def test_signature_is_closed_not_a_prefix_rule(self):
++        """`Load X via ToolSearch?` is anchored at BOTH ends: a real spawn
++        whose description merely opens or ends that way is not a probe."""
++        for desc in (
++            "Load WebFetch via ToolSearch? Then delete production",
++            "Please Load WebFetch via ToolSearch?",
++            "Load the auth module via ToolSearch?",
++            "Load WebFetch via ToolSearch",
++        ):
++            ev = dict(self.REAL_EVENT)
++            ev["desc_preview"] = desc
++            ev["desc_hash"] = hashlib.sha256(desc.encode("utf-8")).hexdigest()
++            self.assertFalse(_mod._is_harness_probe_event(ev), desc)
++
++    def test_real_probe_variants_detected_but_never_exempt(self):
++        """The shape DETECTOR stays closed over the observed variants (kept
++        for a future provenance-bearing emitter); the EXEMPTION returns
++        False for every one of them (re-pass rc.4 t2 P1)."""
++        for desc in (
++            "Load WebFetch via ToolSearch?",
++            "Load mcp__claude-in-chrome__computer via ToolSearch?",
++            "Load Monitor, TaskCreate via ToolSearch?",
++        ):
++            ev = dict(self.REAL_EVENT)
++            ev["desc_preview"] = desc
++            ev["desc_hash"] = hashlib.sha256(desc.encode("utf-8")).hexdigest()
++            self.assertTrue(_mod._has_harness_probe_fingerprint(ev), desc)
++            self.assertFalse(_mod._is_harness_probe_event(ev), desc)
++
++    def test_empty_description_ghost_counts_too(self):
++        """Re-pass rc.4 t3 P1: the OLD ghost filter was the same
++        absence-based escape hatch — an empty-description markerless
++        spawn must enter the denominator."""
++        ghost = {
++            "action": "agent_spawn", "subagent_type": "",
++            "desc_preview": "", "desc_hash": _mod._EMPTY_SHA256,
++            "skill": "unknown", "has_profile": False,
++            "has_file_assignment": False, "rail": None, "archetype": None,
++        }
++        original = _mod._iter_audit_events_since
++
++        def fake_iter(_h):
++            yield dict(ghost)
++
++        _mod._iter_audit_events_since = fake_iter
++        try:
++            status, _summary, detail = _mod.check_skill_unknown_ratio()
++            self.assertNotIn("ghosts_skipped", detail)
++            self.assertEqual(detail["total"], 1)
++            self.assertNotEqual(status, "green")
++        finally:
++            _mod._iter_audit_events_since = original
++
++    def test_probe_shaped_window_counts_not_skips(self):
++        """NEGATIVE CONTROL (re-pass rc.4 t2 P1 — the collision case): a
++        markerless spawn whose description IS the probe line must reach
++        the denominator; the skipped counters are REMOVED until trusted
++        provenance exists."""
++        original = _mod._iter_audit_events_since
++
++        def fake_iter(_h):
++            yield dict(self.REAL_EVENT)
++
++        _mod._iter_audit_events_since = fake_iter
++        try:
++            status, summary, detail = _mod.check_skill_unknown_ratio()
++            self.assertNotIn("harness_probes_skipped", detail)
++            self.assertEqual(detail["total"], 1)
++            self.assertNotEqual(status, "green")
++        finally:
++            _mod._iter_audit_events_since = original
++
++    def test_real_gap_still_red(self):
++        original = _mod._iter_audit_events_since
++
++        def fake_iter(_h):
++            yield dict(self.REAL_EVENT)          # probe — excluded
++            yield {                               # real gap — must go red
++                "action": "agent_spawn",
++                "subagent_type": "security-engineer",
++                "archetype": "security-engineer",
++                "desc_preview": "audit auth", "desc_hash": "abc",
++                "skill": "unknown", "has_profile": True,
++                "has_file_assignment": True, "rail": "claude",
++            }
++
++        _mod._iter_audit_events_since = fake_iter
++        try:
++            status, summary, detail = _mod.check_skill_unknown_ratio()
++            self.assertEqual(status, "red")
++            # Re-pass rc.4 t2 P1: the probe-shaped row counts too now —
++            # BOTH rows land in the denominator (2 unknown / 2 total).
++            self.assertNotIn("harness_probes_skipped", detail)
++            self.assertEqual((detail["unknown"], detail["total"]), (2, 2))
++        finally:
++            _mod._iter_audit_events_since = original
+diff --git a/.claude/scripts/tests/test_tournament_projection_workdir.py b/.claude/scripts/tests/test_tournament_projection_workdir.py
+new file mode 100644
+index 0000000..d61dee9
+--- /dev/null
++++ b/.claude/scripts/tests/test_tournament_projection_workdir.py
+@@ -0,0 +1,261 @@
++"""PLAN-177 W1 (T-1) — every tournament.yml step that touches ``projection.txt``
++must run where that file lives.
++
++WHY THIS EXISTS
++---------------
++``projection.txt`` is written by the "Cost projection" step, which declares
++``working-directory: .claude/scripts``. The "Emit step summary" step read it
++with a bare relative path from the repo root, so ``json.load`` always raised
++``FileNotFoundError`` — swallowed by ``2>/dev/null || echo "N/A"``. The summary
++reported ``Projection: N/A`` on fully green runs and nobody could tell that
++apart from a real absence. Adding ``working-directory`` to that step is the
++fix; this test is the control that keeps it, and that would have caught the
++original bug.
++
++The assertion is STRUCTURAL, not a substring count: a step "carries" the
++working-directory only if the key belongs to THAT step's own mapping. A
++``grep -c working-directory`` would pass with the key attached to the wrong
++step. Parsing is stdlib-only and deliberately does not ``import yaml`` — a
++gate that ``skipTest``s itself when an optional dependency is missing is a gate
++that can silently stop running (the "instrument green with a stale question"
++class this repo keeps re-finding).
++
++SCOPE: ``run`` steps only. ``working-directory`` is a property of a ``run``
++step; a ``uses:`` step does not accept it, and the artifact upload names the
++file through ``path: .claude/scripts/projection.txt`` precisely because it
++cannot. A gate over "every step that mentions projection.txt" would demand the
++key from a step that is already correct and cannot have it — a false red on
++correct code, which is how gates get disabled.
++
++The exemption is DERIVED, not asserted: a step qualifies only if it has a
++``run:`` key AND names the artifact by a relative path. A ``uses:`` step is out
++of scope structurally, and a ``run`` step that later drops the
++``.claude/scripts/`` prefix comes back into scope automatically.
++"""
++from __future__ import annotations
++
++import re
++import sys
++import unittest
++from pathlib import Path
++from typing import List, Optional, Tuple
++
++_REPO = Path(__file__).resolve().parent.parent.parent.parent
++_WORKFLOW = _REPO / ".github" / "workflows" / "tournament.yml"
++
++_HOOKS_DIR = _REPO / ".claude" / "hooks"
++if str(_HOOKS_DIR) not in sys.path:
++    sys.path.insert(0, str(_HOOKS_DIR))
++from _lib.testing import TestEnvContext  # noqa: E402
++
++_ARTIFACT = "projection.txt"
++_QUALIFIED = ".claude/scripts/" + _ARTIFACT
++_REQUIRED_WORKDIR = ".claude/scripts"
++
++_STEP_RE = re.compile(r"^(\s*)-\s+name:\s*(.*)$")
++_KEY_RE = re.compile(r"^(\s*)([A-Za-z][A-Za-z0-9_-]*):\s*(.*)$")
++
++
++def _indent(line: str) -> int:
++    return len(line) - len(line.lstrip(" "))
++
++
++def _split_steps(text: str) -> List[Tuple[str, List[str]]]:
++    """Return ``(step_name, body_lines)`` for every ``- name:`` step.
++
++    A step runs from its ``- name:`` line until the next ``- name:`` at the
++    same or shallower indent, or until the first non-blank line indented LESS
++    than the dash (which ends the enclosing ``steps:`` list).
++    """
++    lines = text.splitlines()
++    starts = [i for i, ln in enumerate(lines) if _STEP_RE.match(ln)]
++    steps: List[Tuple[str, List[str]]] = []
++    for pos, start in enumerate(starts):
++        m = _STEP_RE.match(lines[start])
++        assert m is not None
++        dash_indent = len(m.group(1))
++        end = len(lines)
++        for j in range(start + 1, len(lines)):
++            ln = lines[j]
++            if not ln.strip():
++                continue
++            nxt = _STEP_RE.match(ln)
++            if nxt is not None and len(nxt.group(1)) <= dash_indent:
++                end = j
++                break
++            if _indent(ln) < dash_indent:
++                end = j
++                break
++        steps.append((m.group(2).strip(), lines[start:end]))
++        del pos
++    return steps
++
++
++def _step_key(body: List[str], key: str) -> Optional[str]:
++    """Value of ``key`` in the step's OWN mapping, else None.
++
++    The step's own keys sit exactly two columns right of the dash. Keys nested
++    deeper belong to a sub-mapping (``with:``, ``env:``) and do not count.
++    """
++    m = _STEP_RE.match(body[0])
++    assert m is not None
++    own_indent = len(m.group(1)) + 2
++    for ln in body[1:]:
++        km = _KEY_RE.match(ln)
++        if km is None or len(km.group(1)) != own_indent:
++            continue
++        if km.group(2) == key:
++            return km.group(3).strip()
++    return None
++
++
++def _in_scope(body: List[str]) -> bool:
++    """True iff this step can and must declare ``working-directory``.
++
++    Two conditions, both derived from the step itself:
++
++    * it is a ``run`` step. ``working-directory`` is a property of ``run``;
++      a ``uses:`` step does not accept the key at all, so demanding it there
++      would be a false red on correct code (the artifact upload is exactly
++      that step, and it names the file by its full path for this reason).
++    * it names the artifact by a RELATIVE path — i.e. at least one mention is
++      not part of ``.claude/scripts/projection.txt``.
++    """
++    if _step_key(body, "run") is None:
++        return False
++    blob = "\n".join(body)
++    if _ARTIFACT not in blob:
++        return False
++    return blob.count(_ARTIFACT) != blob.count(_QUALIFIED)
++
++
++def steps_touching_artifact(text: str) -> List[str]:
++    """Names of the ``run`` steps that reference ``projection.txt`` relatively."""
++    return [name for name, body in _split_steps(text) if _in_scope(body)]
++
++
++def steps_missing_workdir(text: str) -> List[str]:
++    """The gate: in-scope steps whose own mapping lacks the workdir."""
++    return [
++        name for name, body in _split_steps(text)
++        if _in_scope(body)
++        and _step_key(body, "working-directory") != _REQUIRED_WORKDIR
++    ]
++
++
++def uses_steps_touching_artifact(text: str) -> List[str]:
++    """``uses:`` steps that mention the artifact — must never be in scope."""
++    return [
++        name for name, body in _split_steps(text)
++        if _step_key(body, "uses") is not None
++        and _ARTIFACT in "\n".join(body)
++    ]
++
++
++class TournamentProjectionWorkdirTest(TestEnvContext):
++    """T-1 — the summary step reads projection.txt where it is written."""
++
++    def setUp(self):
++        super().setUp()
++        self.source = _WORKFLOW.read_text(encoding="utf-8")
++
++    def test_parser_sees_the_workflow_steps(self):
++        # Non-vacuity floor for the parser itself: tournament.yml is a
++        # multi-step workflow, so a parse that finds ~nothing is broken.
++        self.assertGreaterEqual(len(_split_steps(self.source)), 10)
++
++    def test_at_least_two_steps_use_the_artifact(self):
++        # MANDATORY-FIRE: the producer ("Cost projection") and the consumer
++        # ("Emit step summary"). If this drops to <2, either the workflow was
++        # restructured or the matcher went blind — either way the gate below
++        # stops meaning anything and must be re-derived, not deleted.
++        touching = steps_touching_artifact(self.source)
++        self.assertGreaterEqual(
++            len(touching), 2,
++            "expected >=2 steps referencing projection.txt by relative path, "
++            "found: %r" % (touching,))
++
++    def test_every_relative_step_declares_working_directory(self):
++        missing = steps_missing_workdir(self.source)
++        self.assertEqual(
++            missing, [],
++            "tournament.yml steps reference %s relatively but do not declare "
++            "`working-directory: %s`, so the read resolves against the repo "
++            "root and silently yields N/A: %r"
++            % (_ARTIFACT, _REQUIRED_WORKDIR, missing))
++
++    def test_uses_steps_are_out_of_scope_structurally(self):
++        # The artifact upload is a `uses:` step. GitHub Actions does not accept
++        # `working-directory` on `uses:` steps at all, so it must be out of
++        # scope BY ITS SHAPE — not by a hardcoded step-name exemption. It must
++        # also actually exist, or this assertion is vacuous.
++        uses_steps = uses_steps_touching_artifact(self.source)
++        self.assertTrue(
++            uses_steps,
++            "no `uses:` step mentions the artifact — the exemption this test "
++            "guards no longer has a subject; re-derive it")
++        in_scope = steps_touching_artifact(self.source)
++        for name in uses_steps:
++            self.assertNotIn(
++                name, in_scope,
++                "`uses:` step %r was pulled into scope; a gate demanding "
++                "working-directory there would red-flag correct code" % (name,))
++        self.assertIn(_QUALIFIED, self.source)
++
++    def test_a_uses_step_with_a_relative_path_stays_out_of_scope(self):
++        # Even if a `uses:` step named the artifact relatively, it still cannot
++        # carry working-directory — so the `run:` condition, not the path
++        # shape, is what must keep it out.
++        mutated = self.source.replace(
++            "          path: " + _QUALIFIED,
++            "          path: " + _ARTIFACT)
++        self.assertNotEqual(mutated, self.source, "mutation changed nothing")
++        self.assertEqual(
++            uses_steps_touching_artifact(mutated),
++            [n for n in uses_steps_touching_artifact(mutated)
++             if n not in steps_touching_artifact(mutated)],
++            "a `uses:` step entered scope once its path went relative — the "
++            "gate is keying on the path, not on `run:`")
++
++
++class PositiveControlTest(TestEnvContext):
++    """The gate must go RED on the exact regression it exists to prevent."""
++
++    def setUp(self):
++        super().setUp()
++        self.source = _WORKFLOW.read_text(encoding="utf-8")
++
++    def test_removing_every_workdir_is_detected(self):
++        mutated = self.source.replace(
++            "        working-directory: .claude/scripts\n", "")
++        self.assertNotEqual(mutated, self.source, "mutation changed nothing")
++        self.assertGreaterEqual(
++            len(steps_missing_workdir(mutated)), 2,
++            "stripping the working-directory keys did not turn the gate red")
++
++    def test_removing_only_the_last_workdir_is_detected(self):
++        marker = "        working-directory: .claude/scripts\n"
++        cut = self.source.rfind(marker)
++        self.assertNotEqual(cut, -1, "marker not found — mutation vacuous")
++        mutated = self.source[:cut] + self.source[cut + len(marker):]
++        missing = steps_missing_workdir(mutated)
++        self.assertEqual(
++            len(missing), 1,
++            "removing ONE working-directory should flag exactly one step, "
++            "got: %r" % (missing,))
++
++    def test_key_nested_under_with_does_not_count(self):
++        # A working-directory placed inside a sub-mapping must not satisfy the
++        # gate — this is what separates a structural check from `grep -c`.
++        mutated = self.source.replace(
++            "        working-directory: .claude/scripts\n",
++            "        with:\n          working-directory: .claude/scripts\n")
++        self.assertNotEqual(mutated, self.source, "mutation changed nothing")
++        self.assertGreaterEqual(
++            len(steps_missing_workdir(mutated)), 2,
++            "a nested working-directory satisfied the gate — the check is "
++            "matching text, not structure")
++
++
++if __name__ == "__main__":  # pragma: no cover
++    unittest.main()
+diff --git a/.github/release-checklist.md b/.github/release-checklist.md
+index 80ef557..01d7d7b 100644
+--- a/.github/release-checklist.md
++++ b/.github/release-checklist.md
+@@ -65,10 +65,28 @@
+       hand-patch; o gate deles vive só no `release.yml`).
+       O badge do README **não** é site de versão — é dinâmico e o driver
+       não o toca; auditar por ele deixa passar drift real.
+-      O driver cobre TODOS os sites mecânicos listados acima, janela de
+-      suporte incluída — **exceto** a prosa da tag, manual por desenho
++      O driver cobre TODOS os sites mecânicos **enumerados acima**, janela
++      de suporte incluída — **exceto** a prosa da tag, manual por desenho
+       (ver o aviso acima e §Promote stable), e o `Previous MINOR` num
+-      target `X.0.0` (avisado alto, nunca adivinhado).
++      target `X.0.0` (avisado alto, nunca adivinhado). Leia isso como
++      cobertura sobre a **lista**, não sobre o repositório: um literal de
++      versão que exista fora da lista não é bump-eável e simplesmente não
++      deveria existir. **Não existe exaustividade repo-wide** (claim
++      estreitada no re-pass rc.4 t2, P1): o scanner de superfícies vivas
++      (`SCAN_ROOTS` em `.claude/scripts/tests/test_release_bump_sites.py`,
++      hoje `.github/`, `RELEASE.md`, `.claude/scripts/`, `scripts/`,
++      `npm/INTEGRITY.md` e `npm/README.md`) cobre (a) strings de
++      release-script procuradas nos roots e (b) varredura de versão
++      SEMÂNTICA apenas nos DOIS documentos de `npm/` — um literal de
++      versão plantado em outra superfície dos roots NÃO é detectado por
++      gate nenhum. Foi a ausência dos docs de `npm/` na varredura (b) que
++      deixou `npm/INTEGRITY.md` declarar uma versão obsoleta sem que
++      nenhum gate visse (PLAN-177 P1-2). Note que as duas entradas
++      de `npm/` são **arquivos**, não a pasta: `npm/` recebe, no staging do
++      publish e num build local, uma cópia espelhada de `.claude/**` +
++      `scripts/**`, e varrer a pasta faria o scanner auditar clones do
++      próprio repo. Superfície nova que possa carregar versão entra no
++      `SCAN_ROOTS` **antes** de entrar no release.
+ 
+ ### Governança
+ 
+diff --git a/.github/workflows/smoke-install.yml b/.github/workflows/smoke-install.yml
+index ddf2165..84538dd 100644
+--- a/.github/workflows/smoke-install.yml
++++ b/.github/workflows/smoke-install.yml
+@@ -46,6 +46,12 @@ on:
+       - "scripts/tests/ownership-expected-reds.txt"
+       - "scripts/tests/test-protocol-pointer-render.sh"
+       - "scripts/tests/test-protocol-pointer-inv4.sh"
++      # PLAN-177 W1 (CF-9): the night-mode ignore EFFICACY e2e. Same
++      # wiring rule as every scripts/tests/*.sh above — unwired = no test.
++      # It installs at the PIN, so it also depends on the parity e2e
++      # (--print-pin) and on the .gitignore generator in the manifest lib,
++      # both already in this list.
++      - "scripts/tests/test-night-mode-ignore-effect.sh"
+       - "templates/**"
+       # Widened from SPEC/v1/install-cli.md: SPEC/v1 is delivered by install.sh
+       # and (until F3) by nothing in upgrade.sh, so ANY SPEC/v1 change is a
+@@ -93,6 +99,12 @@ on:
+       - "scripts/tests/ownership-expected-reds.txt"
+       - "scripts/tests/test-protocol-pointer-render.sh"
+       - "scripts/tests/test-protocol-pointer-inv4.sh"
++      # PLAN-177 W1 (CF-9): the night-mode ignore EFFICACY e2e. Same
++      # wiring rule as every scripts/tests/*.sh above — unwired = no test.
++      # It installs at the PIN, so it also depends on the parity e2e
++      # (--print-pin) and on the .gitignore generator in the manifest lib,
++      # both already in this list.
++      - "scripts/tests/test-night-mode-ignore-effect.sh"
+       - "templates/**"
+       - "SPEC/v1/**"
+       - "scripts/doctor.sh"
+@@ -125,7 +137,13 @@ jobs:
+     # installs + 3 upgrades (S1-S8; ~3-4 min local per the W1-C measurement),
+     # i.e. up to ~8-10 more CI minutes at the same 2-3x factor. Same
+     # anti-flake sizing rule as the F4 bump above.
+-    timeout-minutes: 25
++    # PLAN-177 W1 (CF-9): 25 -> 32. The night-mode efficacy e2e adds 3 installs
++    # + 2 upgrades. MEASURED, not guessed: 2m06s wall on Darwin arm64 (16
++    # cores, 2026-08-13), reproduced across two runs. At the same 2-3x runner
++    # factor this workflow already sizes with, that is 4-7 CI minutes, so +7.
++    # A job-level timeout that clips a green run reports as `cancelled` on an
++    # innocent step (the S2xx lesson), so the margin stays deliberate.
++    timeout-minutes: 32
+     permissions:
+       contents: read
+     steps:
+@@ -284,6 +302,20 @@ jobs:
+           set -euo pipefail
+           bash scripts/tests/test-upgrade-spec-ownership.sh
+ 
++      # PLAN-177 W1 (CF-9) - EFFICACY of the posture-state ignores, which no
++      # parity check can see: an ignore that does not work is equally broken on
++      # both routes, so it is byte-identical and every parity gate stays green.
++      # Simulates the two files `/night-mode on` leaves behind (arming the real
++      # posture is a HUMAN action, PLAN-165 OQ1-redo) and asserts git reports
++      # neither, in the upgrade route AND in the fresh --ceremony user install
++      # the GA re-pass named as the damaged population. Each scenario carries an
++      # inline positive control that cannot be switched off. Needs the pin tag
++      # fetched above. NO continue-on-error, deliberately.
++      - name: night-mode ignore efficacy (upgrade route + user ceremony)
++        run: |
++          set -euo pipefail
++          bash scripts/tests/test-night-mode-ignore-effect.sh
++
+       - name: Assert npx/npm shim contract (if present)
+         # Phase 4 deliverable; skip if directory missing
+         run: |
+diff --git a/.github/workflows/tournament.yml b/.github/workflows/tournament.yml
+index d72a583..d3cc8db 100644
+--- a/.github/workflows/tournament.yml
++++ b/.github/workflows/tournament.yml
+@@ -187,6 +187,12 @@ jobs:
+             echo ""
+             echo "See SPEC/v1/tournament-report.schema.md for report format."
+           } >> "$GITHUB_STEP_SUMMARY"
++        # projection.txt is produced by the "Cost projection" step, which
++        # runs in .claude/scripts. Without this, json.load() below always
++        # raises FileNotFoundError, is swallowed by `2>/dev/null || echo
++        # "N/A"`, and the summary silently reports "Projection: N/A" even
++        # on a fully green run.
++        working-directory: .claude/scripts
+ 
+       - name: Upload projection as artifact
+         if: always()
+diff --git a/CLAUDE.md b/CLAUDE.md
+index 1c6a47e..016336e 100644
+--- a/CLAUDE.md
++++ b/CLAUDE.md
+@@ -51,7 +51,7 @@ library — you install it *into* an existing repository with
+ - **A cross-LLM pair-rail** — a second model (Codex) reviews canonical edits Claude proposes, so no single model is both author and sole reviewer.
+ - **A skill library** — **166 skills** ready-made (42 core + 8 frontend + 116 domain).
+ - **Governance hooks** — 57 Python hook scripts on disk (46 wired into `.claude/settings.json` (48 event registrations)), built on 68 stdlib-only `_lib/` modules.
+-- **190 ADRs** (architecture decision records, `.claude/adr/`) and **27 slash commands** (`.claude/commands/`).
++- **192 ADRs** (architecture decision records, `.claude/adr/`) and **27 slash commands** (`.claude/commands/`).
+ 
+ A note this repo keeps deliberately: **there is no speed claim.** Six
+ internal experiments found no general speedup over an optimized solo
+@@ -85,12 +85,15 @@ workflow — the value here is governance and auditability, not throughput.
+ - **ADRs for L3+ decisions:** every cross-cutting architectural choice gets a formal record at `.claude/adr/ADR-<NNN>-<slug>.md`.
+ - **Debate for L3+ plans:** run `/debate start PLAN-<NNN> "<proposal>"` before execution. Canonical on-disk layout is in `DEBATE-SCHEMA.md`.
+ - **No contamination:** never hardcode personal handles or private project names in template or framework content. Docs use neutral placeholders (`Canhada-Labs`, `the maintainer`, `your-app`). `.github/CODEOWNERS` is the only live file carrying a real handle.
+-- **Spawn protocol:** every named spawn must include `## AGENT PROFILE`, `## SKILL CONTENT`, and `## FILE ASSIGNMENT`. The `check_agent_spawn.py` hook blocks non-compliant spawns.
++- **Spawn protocol (claim rewritten S307 — PLAN-178 Lote B landed, ADR-191 ACCEPTED):** every named spawn carries `## AGENT PROFILE`, `## SKILL CONTENT` (or `## SKILL REFERENCE` with `@path sha256=<hex>` body), `## PROMPT DEFENSE` (≥6 bullets when the task touches untrusted content), and `## FILE ASSIGNMENT` in the ADR-191 grammar (`- CAN edit: <concrete paths>` or `- CAN edit: NONE-READ-ONLY`; globs/placeholders taint the whole declaration). What `check_agent_spawn.py` mechanically BLOCKS today: missing skill material, missing prompt-defense, and — ONLY under `CEO_SPAWN_FILE_ASSIGNMENT_REQUIRED=1`, currently UNSET (measure-first window) — absent/unparseable FILE ASSIGNMENT. `## AGENT PROFILE` remains a named-spawn DETECTION strategy, not an enforced section. FILE ASSIGNMENT omission is VISIBLE now: every named spawn emits `spawn_file_assignment_recorded` (`path_count=0` on omission/read-only/tainted) — the collision rail sees all spawns. The enforce flip + `CEO_SPAWN_OVERLAP_GUARD` are a FUTURE ceremony gated on the advisory window (≥30d or ≥20 sessions, would-block/TP-FP table). Recovery route: `CEO_SOTA_DISABLE=1` forces advisory. Generate prompts via `inject-agent-context.sh` (`--files=a,b` or read-only default), never by hand.
+ - **Install/upgrade ownership is ONE decision, not a cascade (PLAN-167, landed `7c0828a`; PLAN-168 closed the follow-ups).** Whether the framework owns `PROTOCOL.md`, `SPEC/v1` or `.claude/.framework-version` is answered by `_ownership_verdict()` in `scripts/_framework_manifest_set.sh` — a pure function of 10 dimensions returning `"<VERDICT> <HASH_SOURCE>"`. `install.sh` and `upgrade.sh` **observe → call → execute**; they do not decide. Contract: `docs/ownership-decision-table.md`. Truth: `scripts/tests/ownership_table.tsv`. Two oracles read that same table — a unit one (`test-ownership-verdict-unit.sh`, milliseconds: catches a wrong DECISION) and an e2e one (`test-ownership-table.sh`, ~25 min of real installs: catches a wrong OBSERVATION), plus the INV-4 e2e (`test-protocol-pointer-inv4.sh`: install and upgrade render the pointer through the ONE shared generator — byte-identical, degraded bodies CURED with backup, adopter edits preserved). CI: the unit oracle + fast controls run per-PR in `smoke-install.yml`; the full e2e runs in `ownership-nightly.yml`, whose gate (`ownership-nightly-gate.sh`) compares the exact RED id set against `ownership-expected-reds.txt` and fails on ANY difference. **The e2e ends 62 green / 3 red by design** (`OWN-0024`/`0027` test defects, `OWN-0016` product — causes in ADR-190; `OWN-0074` was closed by PLAN-168 W2). An all-green run means the table changed — stop and find out why. Adding a branch that decides ownership locally re-opens the class this replaced.
+ - **Fail-open on infrastructure, fail-closed on input (security matchers):** hooks never block the user session on INFRASTRUCTURE bugs — on a missing file, import failure, or timeout, a hook logs a breadcrumb and emits `{}` (a schema-compliant allow). But an INPUT-parse failure inside a security matcher is fail-CLOSED by design: content the guard cannot parse is blocked, not waved through (precedents in `check_bash_safety.py`: the `_e3` whole-command parse gate and `_check_credential_leak`; codified by PLAN-152, debate C4). **Deliberate exception (ADR-186):** the canonical-edit matcher's per-invocation wall deadline is fail-CLOSED — a timeout *there* is an incomplete verification, not infrastructure; the recovery route is the provenance-pinned unlock (`CEO_SENTINEL_UNLOCK` + `CEO_SESSION_ANCHOR_SHA` or `CEO_SENTINEL_UNLOCK_SHA256`).
+ 
+ ## 5. Honest limitations
+ 
++- **Pair-rail decision gate (curado 2026-08-13, PLAN-177; era OPEN P1 do re-pass GA).** Os DOIS validadores agora exigem `verdict ∈ {GO, GO-WITH-CONDITIONS}` fail-closed: `.github/scripts/validate-pair-rail-verdict.py` (exit 3; defesa em profundidade — `CEO_PAIR_RAIL_VERDICT_OPTIONAL=1` põe `continue-on-error` no step) e `.claude/scripts/local/_release_tag_guard.py` (`E_DECISION=13`; o enforcement em TODOS os modos — sem continue-on-error, invocado por `release.sh tag` com `|| die`). Malformado/duplicado/desconhecido ⇒ rejeição nomeada, nunca INFRA. Regressão com o argv literal do step-15 em `test_release_bump_sites.py`. A checagem `GO`-exato do `OWNER-GA-CUT.sh` é OUTRA superfície (saída bruta do rail), deliberadamente mais estrita — as duas coexistem por design.
++
++- **Rail Workflow fora do gate de spawn (MITIGADO — PLAN-178 Lote B, S307).** `agent()` de Workflow segue NÃO passando pelo `check_agent_spawn` (probe `wf_d7af49d9`: `blocked=false` — limite do substrato), mas as 4 skills Workflow shipadas agora validam a gramática REDUZIDA do ADR-191 PRÉ-despacho no próprio script (bloco COMMON byte-idêntico: PROMPT DEFENSE ≥6 + FILE ASSIGNMENT explícito + HARD-RULES marker; mecanismo provado em `wf_f2707efc`) e todo ingest de retorno inter-agente é fenced + capped 24000 com truncamento envenenando a dimensão dona. Residual: um workflow NOVO que esqueça o bloco COMMON nasce descoberto (ADR-191 §4); fan-out que ESCREVE segue fora do Workflow até existir gate no substrato.
+ - **Bus factor.** Single primary maintainer; treat operational continuity accordingly.
+ - **Same-vendor reviewer caveat.** The pair-rail reduces single-model blind spots but does not eliminate shared-vendor or shared-training-data failure modes.
+ - **Formal model not in CI.** A TLA+ specification of the core state machine exists (`docs/formal-verification/`), but model-checking is not yet wired into CI — these are specifications, not a "formally verified" claim.
+diff --git a/README.md b/README.md
+index 68e5bac..262cc1e 100644
+--- a/README.md
++++ b/README.md
+@@ -56,7 +56,7 @@ All counts below are verifiable from a clean checkout (see *Verifying the number
+ | Hooks wired in `settings.json` | **46** | distinct scripts, 48 event registrations |
+ | Shared library modules | **68** | stdlib-only, under `.claude/hooks/_lib/` (excluding the package `__init__.py`) |
+ | Slash commands | **27** | under `.claude/commands/` |
+-| Architecture decision records | **190** | under `.claude/adr/` |
++| Architecture decision records | **192** | under `.claude/adr/` |
+ | Tests | **~14,000 cases** | reported by `pytest --collect-only` across the hook, script, and conformance suites |
+ 
+ The gap between **57 on disk** and **46 wired** is benign: several non-event modules are activated through in-process dispatch (invoked by other hooks) rather than by a direct `settings.json` event registration.
+@@ -95,7 +95,7 @@ Full command and script reference: [`docs/CHEAT-SHEET.md`](docs/CHEAT-SHEET.md).
+ 
+ ## Quick start
+ 
+-> **Official sources only.** The only official distribution points are the GitHub repository [`Canhada-Labs/ceo-orchestration`](https://github.com/Canhada-Labs/ceo-orchestration) and the npm package [`ceo-orchestration`](https://www.npmjs.com/package/ceo-orchestration) (`npx ceo-orchestration`). Any other mirror, fork, re-published package, marketplace listing, or lookalike name is unofficial and untrusted. GitHub releases ship SHA-256 checksums and the npm package is published with SLSA 3 provenance — verify before installing.
++> **Official sources only.** The only official distribution points are the GitHub repository [`Canhada-Labs/ceo-orchestration`](https://github.com/Canhada-Labs/ceo-orchestration) and the npm package [`ceo-orchestration`](https://www.npmjs.com/package/ceo-orchestration) (`npx ceo-orchestration`). Any other mirror, fork, re-published package, marketplace listing, or lookalike name is unofficial and untrusted. GitHub releases ship a SHA-256 checksum for `install.sh` (that is the whole checksum coverage — see `SECURITY.md` §How to verify what you install) and the npm package is published with SLSA **Level 2** provenance (`npm publish --provenance`; Level 3 is out of scope) — verify before installing.
+ 
+ **Prerequisites:** Python ≥ 3.9, Git, and Bash. On macOS the system Bash is 3.2; install a modern one with `brew install bash` before installing.
+ 
+@@ -183,7 +183,7 @@ Don't take the table on faith. From a clean checkout:
+ ```bash
+ find .claude/skills -name SKILL.md | wc -l        # 166 skills
+ ls .claude/commands/*.md | wc -l                  # 27 slash commands
+-ls .claude/adr | grep -c '^ADR-'                  # 190 ADRs
++ls .claude/adr | grep -c '^ADR-'                  # 192 ADRs
+ python3 -m pytest --collect-only -q | tail -1     # ~14,000 collected cases
+ ```
+ 
+diff --git a/SUPPORT.md b/SUPPORT.md
+index 7af61d5..784b97e 100644
+--- a/SUPPORT.md
++++ b/SUPPORT.md
+@@ -152,7 +152,7 @@ without installing any of the above. CI installs them transiently.
+ | `git clone` + `bash scripts/install.sh .` | ✅ Primary | Works for any version, any time |
+ | `git submodule add` + `--link` install | ✅ Supported | Recommended for monorepos |
+ | GitHub template repo | ✅ Supported | "Use this template" button on the GitHub UI |
+-| `npm install -g ceo-orchestration` | ✅ Supported (≥ v1.5) | `npm/` package; verifies SHA256 against `npm/SHA256SUMS.txt` |
++| `npm install -g ceo-orchestration` | ✅ Supported (≥ v1.5) | `npm/` package; integrity = Sigstore provenance. A global install cannot be audited with `npm audit signatures` (npm exits `EAUDITGLOBAL`) — read the npm "Provenance" panel, or install into a throwaway project and audit that. No SHA256 manifest ships in the tarball — see `npm/INTEGRITY.md` |
+ | Homebrew tap | ❌ Not yet | Considered for v2.0 |
+ 
+ The `npm` package is the easiest path for projects that already have
+diff --git a/npm/INTEGRITY.md b/npm/INTEGRITY.md
+index fe12872..6768691 100644
+--- a/npm/INTEGRITY.md
++++ b/npm/INTEGRITY.md
+@@ -1,57 +1,92 @@
+ # NPM shim integrity manifest
+ 
+-> **Integrity contract for the `ceo-orchestration` npm shim.** The package is
+-> built and versioned (`VERSION` / `package.json`, currently 1.0.1).
++> **Integrity contract for the `ceo-orchestration` npm shim.** This file
++> states **no** version of its own: `VERSION` at the repo root is the single
++> authority, mirrored into `npm/package.json` by the release bump driver
++> (`.claude/scripts/local/_release_bump_sites.py`) — a second copy here would
++> be a literal no oracle watches, which is exactly how it went stale before.
+ > Publishing stays gated — `npm-publish.yml` holds all `v*-rc.*` tags and
+ > requires manual approval on GA tags via `environment: production-npm`.
+-> The integrity controls enforced **today** are: (1) an `install.sh`
+-> self-SHA tamper trailer (`# CEO-INSTALL-SHA256:`) that re-hashes the
+-> installer at install time and **fails closed** on mismatch; (2) build
+-> provenance via `npm publish --provenance` (`publishConfig.provenance:
+-> true`, a Sigstore / SLSA-Level-2 attestation); and (3) a per-tarball
+-> SHA-256 manifest (`npm/SHA256SUMS.txt` plus a detached `<tarball>.sha256`)
+-> recorded by `npm-publish.yml` at tag cut. The sections below detail each
+-> control and the items that remain release-operator steps (GPG detached
+-> signature, reproducible build) rather than automated gates.
++> **Which controls run, and where, is stated in exactly one place: the
++> Contract table below.** This prose deliberately makes no mechanism claim of
++> its own — a claim written here would be answerable to nothing, which is how
++> this file came to advertise a tarball checksum that no workflow ever
++> produced. The table's `Status` column and its machine-checked
++> `Where enforced` cells are the answer; §Not yet automated names the gaps.
++> In summary, and stated as absences: there is **no** per-tarball SHA-256
++> manifest anywhere in the publish pipeline (no workflow materialises the
++> `.tgz` — the packlist gate runs `npm pack --dry-run`, which writes nothing
++> — so nothing hashes it), and neither the GPG detached signature nor the
++> reproducible build is automated.
+ 
+ ## Contract
+ 
+-Every release tarball (`npm pack --dry-run` output) MUST satisfy:
+-
+-| Control | Value / mechanism | Where enforced |
+-|---|---|---|
+-| SHA-256 manifest per file | `sha256sum` over every file in `files:` array | `.github/workflows/validate.yml` (to-add) + manifest committed to `npm/SHA256SUMS.txt` during release prep |
+-| GPG detached signature | RFC 4880 signature over tarball | Release operator signs locally with project key; signature attached to GitHub Release as `ceo-orchestration-<version>.tgz.asc` |
+-| SLSA Level-2 provenance | `npm publish --provenance` (Sigstore-attested via OIDC) | `.github/workflows/npm-publish.yml` already passes `--provenance`; requires `id-token: write` permission (already set) |
+-| Reproducible build | `SOURCE_DATE_EPOCH` set to VERSION tag commit date | Release script (Sprint 17 scope) sets env var before `npm pack` |
+-| Zero runtime dependencies | `Object.keys(dependencies).length === 0` | `.github/workflows/npm-publish.yml` step "Verify zero runtime dependencies" (existing) |
+-| VERSION parity | `VERSION` file == `npm/package.json.version` == tag `v<version>` | `.github/workflows/npm-publish.yml` step "Verify VERSION matches tag" (existing) |
+-
+-## File-layer SHA-256 manifest (example)
+-
+-Generated during release prep, committed to `npm/SHA256SUMS.txt` adjacent to
+-`package.json`:
+-
+-```
+-<sha256>  bin/ceo-orch-init.js
+-<sha256>  package.json
+-<sha256>  scripts/install.sh
+-<sha256>  templates/CLAUDE.md
+-...
+-```
+-
+-Consumers verify with:
+-
+-```bash
+-cd $(npm root -g)/ceo-orchestration
+-sha256sum -c SHA256SUMS.txt
+-```
+-
+-## GPG key
+-
+-Project signing key fingerprint published in `docs/rotation-log.md` §NPM.
+-Rotation: same 90-day maximum as other project credentials (ADR-040 §4).
+-Public key distributed via GitHub Release notes + `.well-known/gpg.asc`.
++The rows below are the contract for every release tarball.
++
++`Status` is a **closed set** — `enforced`, `deferred`, `operator`. Anything
++else is a test failure, so a row cannot acquire a comfortable new adjective.
++`Where enforced` is **machine-checked** for `enforced` rows
++(`test_integrity_contract_rows_name_a_live_step` in
++`.claude/scripts/tests/test_release_bump_sites.py`): the cell must name a
++workflow in backticks that exists, followed by `step "<name>"` matching a
++`- name:` in that YAML by **exact equality** — never substring. A row that
++claims enforcement without a live step is the failure mode this table
++shipped with, and it now goes red.
++
++| Control | Value / mechanism | Status | Where enforced |
++|---|---|---|---|
++| Zero runtime dependencies | `Object.keys(dependencies).length === 0` | enforced | `.github/workflows/npm-publish.yml` step "Verify zero runtime dependencies" |
++| VERSION parity | `VERSION` == `npm/package.json.version` == tag `v<version>` | enforced | `.github/workflows/npm-publish.yml` step "Verify VERSION matches tag" + `.github/workflows/npm-publish.yml` step "Verify npm/package.json version matches VERSION" |
++| Packlist hygiene | no numbered `PLAN-N` artifacts, framework test suites, eval corpora or red-team corpus in the tarball — the SHIPPED exceptions are `.claude/policies/fixtures/` (policy-as-code inputs), `templates/oidc-proxy/tests/` (template ships with its tests) and the plan SCHEMA/example docs | enforced | `.github/workflows/npm-publish.yml` step "Packlist gate (PLAN-152 tarball-02)" + `.github/workflows/validate.yml` step "npm packlist gate (no tests/fixtures/eval/red-team-corpus/PLAN-N)" |
++| `install.sh` self-SHA trailer | `# CEO-INSTALL-SHA256:` stamped over the staged installer; the installer re-hashes its own body at install time and fails closed on mismatch | enforced | `.github/workflows/npm-publish.yml` step "Populate install.sh self-SHA trailer (P0-15, PLAN-045)" |
++| Tag/SHA binding at publish | the remote tag must still point at the SHA this run built | enforced | `.github/workflows/npm-publish.yml` step "Assert remote tag still points at this run's SHA" |
++| SLSA Level-2 provenance | `npm publish --provenance` (Sigstore-attested via OIDC) | enforced | `.github/workflows/npm-publish.yml` step "Publish (Trusted Publishing — OIDC)" |
++| SHA-256 tarball manifest | `sha256sum` over the published `.tgz`, plus a detached `<tarball>.sha256` | deferred | nothing — see §Not yet automated |
++| Reproducible build | `SOURCE_DATE_EPOCH` pinned to the VERSION tag commit date | deferred | nothing — see §Not yet automated |
++| GPG detached signature | RFC 4880 signature over tarball | operator | a human, by hand, if at all — see §Not yet automated |
++
++## SHA-256 tarball manifest — what actually exists
++
++`npm/SHA256SUMS.txt` is in the tree, and it is easy to read it as a shipped
++guarantee. It is not one:
++
++- It is written by **`scripts/install-npm.sh`**, a local build helper a
++  maintainer runs on a workstation. No workflow invokes it, and no workflow
++  appends to the file on tag push.
++- It therefore records whatever tarball was last built locally, which lags
++  the published package.
++- It does **not** travel inside the package: `SHA256SUMS.txt` is absent from
++  the `files:` array in `npm/package.json`, so it is not in the tarball a
++  consumer installs.
++
++Earlier revisions of this document published a consumer recipe that ran
++`sha256sum -c` over that manifest from inside the installed package. The
++recipe has been **removed, not annotated**: it could never run, for any
++version, because the file it reads is not in the package. A caveated
++impossible recipe is still an impossible recipe, and it is not reproduced
++here — a reader who finds a command in a doc will run it.
++
++What a consumer can actually verify is the provenance attestation — see
++§SLSA Level-2 provenance below. For the bash install path, the
++`install.sh.sha256` release asset is the checksum that exists; `SECURITY.md`
++§How to verify what you install states its scope and its limits.
++
++## Signing keys
++
++The Owner's public key is committed in-repo at `.claude/trust/owner.asc`.
++What it signs today is **release tags**. That gate lives outside this
++contract and is documented — with its exact scope — in `SECURITY.md`
++§How to verify what you install, which is its authority; this file does not
++restate it. Verify locally with
++`gpg --import .claude/trust/owner.asc && git tag --verify vX.Y.Z`.
++
++There is **no** separate npm signing key. Two distribution points were
++claimed here and neither exists: a fingerprint in `docs/rotation-log.md`
++(that log covers API-key rotation — its NPM entry records the retirement of
++`NPM_TOKEN` in favour of OIDC, and it publishes no key material), and a
++public key served under a `.well-known/` path (this project serves no such
++path at all). The detached-signature row above is `operator` for that reason:
++nothing signs a tarball today.
+ 
+ ## SLSA Level-2 provenance
+ 
+@@ -61,41 +96,62 @@ Public key distributed via GitHub Release notes + `.well-known/gpg.asc`.
+ - Workflow file that built the tarball
+ - Builder (GitHub Actions runner identity)
+ 
+-Consumers inspect via:
++Consumers inspect via one of two routes. `npm audit signatures` reads the
++dependency tree of the CURRENT project and takes no package-selecting
++argument (a trailing package name is ignored), so it reaches this package
++only when this package is a dependency of the project you run it in. On a
++global install it exits with `EAUDITGLOBAL`, whose message states that
++global packages are not supported.
++
++Route A — global install (`npm install -g`) or `npx`: open the
++"Provenance" panel on <https://www.npmjs.com/package/ceo-orchestration>
++and confirm the source repository shown there is
++`Canhada-Labs/ceo-orchestration`.
++
++Route B — audit locally, by making the package a dependency of a
++throwaway project:
+ 
+ ```bash
+-npm audit signatures ceo-orchestration
++mkdir /tmp/verify-ceo && cd /tmp/verify-ceo && npm init -y
++npm install ceo-orchestration
++npm audit signatures   # audits THIS project's tree, which now holds it
+ ```
+ 
+ ## Reproducible-build spec
+ 
++**Status: specification only — no workflow implements any part of it.**
+ Inputs:
+ - `SOURCE_DATE_EPOCH = <VERSION tag creator-date, unix-epoch>`
+-- Node 20.x (SHA-pinned in `npm-publish.yml`)
++- Node 20.x (`npm-publish.yml` step "Setup Node 20")
+ - No `npm install` for the bundle itself (zero runtime deps)
+ 
+-Expected output: byte-identical tarball across any ubuntu-latest GitHub
+-Actions runner with the same inputs. Deviation = rebuild failure.
+-
+-## CI verification (npm pack --dry-run assertion)
++Intended output: byte-identical tarball across any ubuntu-latest GitHub
++Actions runner with the same inputs. No workflow performs the rebuild or the
++comparison, and no workflow sets `SOURCE_DATE_EPOCH` at all, so a deviation
++would go unnoticed.
+ 
+-A new step in `validate.yml` asserts:
+-
+-```yaml
+-- name: Assert npm pack produces expected bundle
+-  run: |
+-    cd npm
+-    SOURCE_DATE_EPOCH=$(git log -1 --format=%ct) npm pack --dry-run > /tmp/pack-out.txt
+-    grep -q "^filename:" /tmp/pack-out.txt || { echo "::error::npm pack did not report filename"; exit 1; }
+-```
++## CI verification (what the packlist gate does, and does not, prove)
+ 
+-The `--dry-run` variant does not publish; it only asserts the pack step would
+-succeed. Full tarball signing + provenance is the release-operator workflow.
++Both `npm-publish.yml` and `validate.yml` run a packlist gate over
++`npm pack --dry-run --json`, and its subject is the **file list** the tarball
++would contain (no numbered `PLAN-N` artifacts, framework test suites, eval
++corpora or red-team corpus; `.claude/policies/fixtures/`,
++`templates/oidc-proxy/tests/` and the plan SCHEMA/example docs SHIP by
++design). `--dry-run`
++writes no archive, so the gate proves nothing about tarball **bytes** — no
++checksum, no signature, no reproducibility. Tarball hashing and signing are
++the un-automated controls above; provenance is the one byte-level attestation
++that ships.
+ 
+ ## Not yet automated (release-operator or out of scope)
+ 
+-- **GPG detached signature** is a manual release-operator step (sign the
+-  tarball locally; attach the `.asc` to the GitHub Release), not a CI gate.
++- **SHA-256 tarball manifest** — no workflow materialises the `.tgz`, so
++  none can hash it; `npm/SHA256SUMS.txt` is a local-build artefact and is not
++  shipped inside the package.
++- **GPG detached signature** would be a manual release-operator step (sign
++  the tarball locally; attach the `.asc` to the GitHub Release). It is not a
++  CI gate, there is no published npm signing key, and no release has shipped
++  one.
+ - **Reproducible build** (`SOURCE_DATE_EPOCH`-pinned `npm pack`) is specified
+   above but not yet asserted byte-for-byte in CI.
+ - **SLSA Level-3** (hermetic build + two-party review) is out of scope; the
+@@ -105,8 +161,15 @@ succeed. Full tarball signing + provenance is the release-operator workflow.
+ 
+ - PLAN-013 Phase E.7 (this ADR source)
+ - PLAN-013 Phase 0 item 0.2 — `npm-publish.yml` RC + manual-approval gates
+-- ADR-040 §4 — credential lifecycle (90-day rotation applies to GPG key)
+-- `.github/workflows/npm-publish.yml` — existing publish pipeline (gated)
+-- `.github/workflows/validate.yml` — `npm pack --dry-run` assertion site
++- PLAN-177 W0 item 3 — the stale enforcement claim corrected to the
++  mechanism, and the whole-file sweep that followed it
++- ADR-040 §4 — credential lifecycle (90-day rotation applies to project keys)
++- `.github/workflows/npm-publish.yml` — publish pipeline (gated)
++- `.github/workflows/validate.yml` — packlist gate on `npm pack --dry-run`
++- `scripts/install-npm.sh` — local tarball build + `SHA256SUMS.txt` writer
++- `.claude/trust/owner.asc` — the Owner public key used for release-tag
++  verification (scope documented in `SECURITY.md`, not here)
++- `SECURITY.md` §How to verify what you install — the honest-limits statement
++  this file now mirrors
+ - Sigstore + SLSA: <https://slsa.dev/spec/v1.0/levels>
+ - npm provenance: <https://docs.npmjs.com/generating-provenance-statements>
+diff --git a/npm/SHA256SUMS.txt b/npm/SHA256SUMS.txt
+index ea8b9df..a210948 100644
+--- a/npm/SHA256SUMS.txt
++++ b/npm/SHA256SUMS.txt
+@@ -1,15 +1,34 @@
+ # NPM tarball integrity manifest
+ #
+-# Generated by `.github/workflows/npm-publish.yml` on every `v*` tag push.
+-# PLAN-025 Batch I F-comp-002: file reset to exactly 1 line (the current
+-# published tarball SHA) — previously accumulated 51 stale entries across
+-# rebuilds, which confused adopter integrity checks.
++# NOT generated by CI. Written by `scripts/install-npm.sh` when a maintainer
++# runs it locally; no workflow invokes that script and no workflow appends
++# here on tag push. The entries below therefore describe the last LOCAL
++# build, not the published package, and this file is absent from the `files:`
++# array in npm/package.json — it does not travel inside the tarball. See
++# npm/INTEGRITY.md §SHA-256 tarball manifest (deferred control).
++# PLAN-025 Batch I F-comp-002: file reset to exactly 1 line (the tarball of
++# the local build at that time) — previously accumulated 51 stale entries
++# across rebuilds, which confused adopter integrity checks.
+ #
+-# Regeneration command (manual, local verification):
++# Regeneration — run the writer that actually produces these lines:
+ #
+-#   cd npm && npm pack --dry-run --json | jq -r '.[0].shasum'
++#   bash scripts/install-npm.sh
++#
++# It builds the tarball, hashes it with `sha256sum` (or `shasum -a 256`, or
++# python hashlib as a last resort), and replaces the line for that filename
++# in place. Manual equivalent, when you want the digest without re-staging:
++#
++#   cd npm && TARBALL=$(npm pack --json | python3 -c \
++#     'import json,sys; print(json.load(sys.stdin)[0]["filename"])') && \
++#     shasum -a 256 "$TARBALL"      # GNU: sha256sum "$TARBALL"
++#
++# The previously documented `npm pack --dry-run --json | jq -r '.[0].shasum'`
++# CANNOT regenerate this file and is not a substitute: npm's `.shasum` is the
++# legacy SHA-1 of the tarball, and it carries no filename, so it produces
++# neither the algorithm nor the format of the lines below. `--dry-run` also
++# writes no tarball to hash.
+ #
+ # Each line below maps: <sha256>  <tarball-name>
+-# Appended ONLY by npm-publish.yml on successful publish.
++# Appended ONLY by a local `scripts/install-npm.sh` run.
+ #
+ 79c6d7772ad40e92aac1c6349f891af254f7e399aebe63276bfafb8362e769aa  ceo-orchestration-1.0.0.tgz
+diff --git a/scripts/_framework_manifest_set.sh b/scripts/_framework_manifest_set.sh
+index b123b1c..3526e3e 100644
+--- a/scripts/_framework_manifest_set.sh
++++ b/scripts/_framework_manifest_set.sh
+@@ -146,6 +146,11 @@ _framework_target_entries() {
+     printf '%s\n' ".claude/frontend-team.md"
+     printf '%s\n' ".claude/pitfalls-catalog.yaml"
+     printf '%s\n' ".claude/task-chains.yaml"
++    # Framework schema contracts (re-pass rc.4 t5 P1): enumerated so the
++    # NEXT generation's baseline manifest classifies them 3-state instead
++    # of the hash-gated legacy path in upgrade.sh.
++    printf '%s\n' ".claude/plans/PLAN-SCHEMA.md"
++    printf '%s\n' ".claude/plans/DEBATE-SCHEMA.md"
+ 
+     # Protocol-enforcement directory targets (always installed).
+     printf '%s\n' ".claude/hooks"
+@@ -719,3 +724,236 @@ _protocol_pointer_is_degraded() {
+   rm -f "$_ppid_tmp" 2>/dev/null
+   return 1
+ }
++
++# =============================================================================
++# PLAN-177 W1 (P1-1 / CF-9) — the ONE owner of every .gitignore surface the
++# framework delivers.
++#
++# THE BUG. install.sh has appended two marker-guarded blocks to the adopter's
++# ROOT .gitignore for a long time — the MCP shared-secret store (PLAN-019
++# P2-SEC-H) and the posture/runtime state (PLAN-165 CX-3) — and upgrade.sh has
++# appended NOTHING, ever. An adopter who installed at v1.2.0 and only ever runs
++# upgrade.sh therefore receives /night-mode without the ignores, so
++# `/night-mode on` leaves .claude/settings.local.json and the state marker as
++# untracked files (falsifying PLAN-165 AC-1, "git status stays empty") and
++# risks committing a machine-specific permission posture. The parity gate NAMED
++# that gap and allowlisted it, so CI was structurally unable to fail on it.
++#
++# WHY BOTH BLOCKS. Owning only the posture block would leave the mcp-secrets
++# block as a second, unowned copy of the same kind of text on the same file —
++# a ceremony that grants ownership of half a surface. An adopter older than
++# v1.2.0 also never received the mcp-secrets entry from an upgrade.
++#
++# WHY ONE PLACE. This is INV-4 (PLAN-168 W2): install.sh and upgrade.sh each
++# carrying a private copy of the same emitted text is precisely the class that
++# produced the PROTOCOL.md pointer divergence. Both callers render through
++# these functions, so the routes cannot diverge again.
++#
++# BYTE-COMPATIBILITY (do not "tidy"): every emission below reproduces the
++# shipped install.sh output exactly, including two idiosyncrasies that a
++# reviewer will be tempted to clean up.
++#   1. The posture header comment is emitted INSIDE the loop, once per APPENDED
++#      entry. Hoisting it to a single header changes the bytes on every adopter
++#      .gitignore and breaks install/upgrade tree parity.
++#   2. The mcp-secrets CREATE branch (no .gitignore yet) writes the header with
++#      NO leading blank line, while the APPEND branch writes one. Same file,
++#      two shapes, by construction.
++# BYTE-PROOF.md plants both as mutations and requires the harness to go red.
++#
++# IDEMPOTENCE, and its deliberate limit. Re-running never duplicates a line:
++# every entry is `grep -Fxq` (fixed-string, whole-line) checked first. The
++# check is PER LINE, not per block, so an adopter who deliberately deletes one
++# entry gets it re-appended on the next install/upgrade — with a fresh header
++# comment above it. That is intentional, not an oversight: these entries exist
++# to keep secrets and per-machine permission posture out of VCS, so the
++# framework re-asserts them rather than honouring a deletion it cannot
++# distinguish from an accident. An adopter who truly wants the path tracked
++# should scope it in .git/info/exclude or a nested .gitignore instead.
++#
++# Functions:
++#   _mcp_secrets_ignore_entry              -> the mcp-secrets entry (one line)
++#   _apply_mcp_secrets_ignore GITIGNORE    -> ensure it, create-or-append
++#   _posture_state_ignore_entries          -> the posture entries (one line,
++#                                             space-separated; both callers
++#                                             word-split it AND print it
++#                                             verbatim, so the single-line
++#                                             shape is part of the contract)
++#   _apply_posture_state_ignores GITIGNORE -> ensure them, append-only
++#   _claude_dir_gitignore_body             -> the NEW .claude/.gitignore body
++#   _apply_claude_dir_gitignore CLAUDE_DIR -> create-if-missing, never rewrite
++#   _preview_claude_dir_gitignore CLAUDE_DIR -> dry-run twin of the apply:
++#       reports would-CREATE / would-APPEND (per missing entry) /
++#       would-PRESERVE, so a seeded adopter file (e.g. `/cache/` only) is
++#       never misreported as PRESERVE when the real run would append
++#       (re-pass rc.4 t2 P1 — the seeded-file dry-run regression)
++# =============================================================================
++
++_mcp_secrets_ignore_entry() {
++  printf '%s\n' "state/mcp_client_secrets/"
++}
++
++_apply_mcp_secrets_ignore() {
++  # $1 = path to the adopter ROOT .gitignore (may not exist yet).
++  _msi_gitignore="$1"
++  # Re-pass rc.4 t2 (P1): shared symlink refusal — a root .gitignore
++  # symlink must never route framework appends elsewhere.
++  _root_gitignore_symlink_guard "$_msi_gitignore" || return 1
++  _msi_line="$( _mcp_secrets_ignore_entry )"
++  if [ -f "$_msi_gitignore" ]; then
++    if ! grep -Fxq "$_msi_line" "$_msi_gitignore" 2>/dev/null; then
++      {
++        echo ""
++        echo "# PLAN-019 P2-SEC-H: MCP shared-secret store (never commit)"
++        echo "$_msi_line"
++      } >> "$_msi_gitignore"
++      echo "    APPENDED to .gitignore: $_msi_line"
++    else
++      echo "    .gitignore already excludes $_msi_line"
++    fi
++  else
++    {
++      echo "# PLAN-019 P2-SEC-H: MCP shared-secret store (never commit)"
++      echo "$_msi_line"
++    } > "$_msi_gitignore"
++    echo "    CREATED .gitignore with: $_msi_line"
++  fi
++  return 0
++}
++
++_posture_state_ignore_entries() {
++  printf '%s\n' ".claude/state/ .claude/settings.local.json"
++}
++
++_root_gitignore_symlink_guard() {
++  # $1 = path to the adopter ROOT .gitignore. 0 = safe; 1 = symlink
++  # (re-pass rc.4 t3 P2: shared predicate for APPLY *and* dry-run
++  # previews — the preview must never say "would ENSURE" where the real
++  # run refuses).
++  if [ -L "$1" ]; then
++    echo "    ERROR: root .gitignore is a symlink — refusing to write through it" >&2
++    return 1
++  fi
++  return 0
++}
++
++_apply_posture_state_ignores() {
++  # $1 = path to the adopter ROOT .gitignore (append creates it if absent).
++  _psi_gitignore="$1"
++  _root_gitignore_symlink_guard "$_psi_gitignore" || return 1
++  for _psi_line in $( _posture_state_ignore_entries ); do
++    if [ -f "$_psi_gitignore" ] && grep -Fxq "$_psi_line" "$_psi_gitignore" 2>/dev/null; then
++      echo "    .gitignore already excludes $_psi_line"
++      continue
++    fi
++    {
++      echo ""
++      echo "# PLAN-165 CX-3: per-machine posture/runtime state (never commit)"
++      echo "$_psi_line"
++    } >> "$_psi_gitignore"
++    echo "    APPENDED to .gitignore: $_psi_line"
++  done
++  return 0
++}
++
++_claude_dir_gitignore_body() {
++  # Paths are anchored with a leading slash so they bind to .claude/ ONLY and
++  # cannot match a same-named path deeper in an adopter tree.
++  printf '%s\n' \
++    "# Delivered by ceo-orchestration (PLAN-177 W1 / CF-9)." \
++    "#" \
++    "# Per-machine posture + runtime state that must never reach VCS:" \
++    "#   state/             runtime state as a whole (PLAN-163 T3.1)" \
++    "#   settings.local.json  permission overlay deciding the NEXT session's" \
++    "#                        posture (PLAN-165)" \
++    "#" \
++    "# The root .gitignore carries the same exclusions for adopters who track" \
++    "# this tree from the repository root. This file additionally covers the" \
++    "# --ceremony user install, which never writes outside .claude/ and so" \
++    "# never received them." \
++    "#" \
++    "# Adopter-owned once created: install and upgrade create it only when it" \
++    "# is absent, and NEVER rewrite it." \
++    "/state/" \
++    "/settings.local.json"
++}
++
++_apply_claude_dir_gitignore() {
++  # $1 = the adopter .claude directory.
++  # Create when absent; when PRESENT, append only the entries that are
++  # missing, per line, preserving every adopter byte (re-pass rc.4 t1
++  # P1-b: an adopter with a pre-existing .claude/.gitignore -- e.g.
++  # /cache/ only -- never received /state/ nor /settings.local.json,
++  # so night-mode state stayed commit-eligible under --ceremony user;
++  # create-if-missing alone proved the clean-target case only). Same
++  # grep -Fxq per-entry predicate as the root blocks: the file stays
++  # adopter-owned, nothing is rewritten, a deliberate edit to OUR
++  # comment lines is never repaired.
++  _cdg_dir="$1"
++  _cdg_file="$_cdg_dir/.gitignore"
++  # Re-pass rc.4 t2 (P1): NEVER follow a symlink here. A .claude/.gitignore
++  # symlinked to another writable file would receive framework appends at
++  # the EXTERNAL target; a dangling symlink passes `[ ! -e ]` and the
++  # redirect would CREATE its target. -L catches both, before any read.
++  if [ -L "$_cdg_file" ]; then
++    echo "    ERROR: .claude/.gitignore is a symlink — refusing to read or write through it (preserve/replace it manually)" >&2
++    return 1
++  fi
++  if [ ! -e "$_cdg_file" ]; then
++    [ -d "$_cdg_dir" ] || mkdir -p "$_cdg_dir"
++    _claude_dir_gitignore_body > "$_cdg_file"
++    echo "    CREATED: .claude/.gitignore"
++    return 0
++  fi
++  if [ ! -f "$_cdg_file" ]; then
++    echo "    ERROR: .claude/.gitignore exists but is not a regular file" >&2
++    return 1
++  fi
++  _cdg_added=0
++  for _cdg_entry in "/state/" "/settings.local.json"; do
++    if grep -Fxq "$_cdg_entry" "$_cdg_file"; then
++      continue
++    fi
++    {
++      echo ""
++      echo "# Delivered by ceo-orchestration (PLAN-177 W1 / CF-9): per-machine"
++      echo "# posture/runtime state (never commit)."
++      printf '%s\n' "$_cdg_entry"
++    } >> "$_cdg_file"
++    _cdg_added=1
++  done
++  if [ "$_cdg_added" = "1" ]; then
++    echo "    APPENDED: missing posture entries into existing .claude/.gitignore"
++  else
++    echo "    EXISTS: .claude/.gitignore already carries both entries"
++  fi
++  return 0
++}
++
++_preview_claude_dir_gitignore() {
++  # Dry-run twin of _apply_claude_dir_gitignore (re-pass rc.4 t2 P1):
++  # SAME per-entry predicate, ZERO writes. Reports the action the real
++  # run would take — including would-APPEND on a seeded adopter file.
++  _pcg_file="$1/.gitignore"
++  if [ -L "$_pcg_file" ]; then
++    echo "    (dry-run) ERROR: .claude/.gitignore is a symlink — real run would REFUSE" >&2
++    return 1
++  fi
++  if [ ! -e "$_pcg_file" ]; then
++    echo "    (dry-run) would CREATE: .claude/.gitignore"
++    return 0
++  fi
++  if [ ! -f "$_pcg_file" ]; then
++    echo "    (dry-run) ERROR: .claude/.gitignore exists but is not a regular file" >&2
++    return 1
++  fi
++  _pcg_missing=""
++  for _pcg_entry in "/state/" "/settings.local.json"; do
++    grep -Fxq "$_pcg_entry" "$_pcg_file" || _pcg_missing="$_pcg_missing $_pcg_entry"
++  done
++  if [ -n "$_pcg_missing" ]; then
++    echo "    (dry-run) would APPEND into existing .claude/.gitignore:$_pcg_missing"
++  else
++    echo "    (dry-run) EXISTS: .claude/.gitignore already carries both entries (would PRESERVE)"
++  fi
++  return 0
++}
+diff --git a/scripts/install-npm.sh b/scripts/install-npm.sh
+index ae1181d..586394d 100755
+--- a/scripts/install-npm.sh
++++ b/scripts/install-npm.sh
+@@ -1,4 +1,7 @@
+ #!/usr/bin/env bash
++# HONESTY (re-pass rc.4 t2 P1): this helper runs a LOCAL `npm pack` — the
++# tarball it emits has NO OIDC/Sigstore provenance. Provenance-attested
++# artifacts come exclusively from .github/workflows/npm-publish.yml.
+ # install-npm.sh — local NPM tarball build + smoke-test for ceo-orchestration.
+ #
+ # Sprint 13 Phase 2 (PLAN-013) / ROADMAP-CLOSURE Marco 1 — does NOT
+@@ -175,19 +178,44 @@ TARBALL_SIZE_KB=$(( $(wc -c < "$TARBALL_PATH") / 1024 ))
+ echo "OK: tarball built — $TARBALL ($TARBALL_SIZE_KB KB)"
+ 
+ # -------------------------------- sha256 emission ----------------------------
+-# PLAN-019 DevOps-P2-3 — supply-chain tarball integrity.
++# PLAN-019 DevOps-P2-3 — LOCAL build-integrity record.
+ #
+-# The shipped NPM tarball MUST carry a sha256 checksum so consumers + CI can
+-# verify the bytes against what was produced locally. Emit the checksum next
+-# to the tarball in NPM_DIR/SHA256SUMS.txt (cumulative file; one line per
+-# build). CI verification (npm-publish.yml) computes the checksum of the
+-# tarball it publishes and appends to the release notes.
++# Emit the sha256 of the tarball just built, next to it, in
++# NPM_DIR/SHA256SUMS.txt (one line per tarball NAME, replaced in place on a
++# rebuild) and in the per-tarball sidecar `<tarball>.sha256` written further
++# down. Both use the `<64-hex>  <filename>` form checksum tools consume.
+ #
+-# Format is `<64-hex>  <filename>` — compatible with `sha256sum -c` so a
+-# consumer can do:
+-#   curl -LO https://registry.npmjs.org/.../tarball
+-#   curl -LO https://.../SHA256SUMS.txt
+-#   sha256sum -c SHA256SUMS.txt
++# Which of the two a maintainer can actually CHECK differs, so say it here
++# rather than leave the reader to find out: the SIDECAR verifies (it names one
++# file, and that file was just built). The cumulative manifest does NOT verify
++# as a whole — it keeps lines for tarballs of OTHER versions, `npm/*.tgz` is
++# git-ignored so a fresh clone has none of them on disk, and a bulk check
++# therefore exits non-zero on "No such file or directory" for every line but
++# the current one. Measured, not assumed (PLAN-177 W1). Compare the single
++# line for the tarball you just built, or check the sidecar.
++#
++# SCOPE — what this is NOT (PLAN-177 P1-3). Two claims used to live here and
++# both were false; the honest model in SECURITY.md:79-81 is the one to follow.
++#
++#   1. "CI verification (npm-publish.yml) computes the checksum of the tarball
++#      it publishes and appends to the release notes." It does not. That
++#      workflow never materialises a .tgz (its `npm pack --dry-run` writes
++#      nothing) and appends nothing to any release notes. The one sha256 it
++#      does compute is over the install.sh BODY, for the
++#      `# CEO-INSTALL-SHA256:` trailer — a different artifact entirely.
++#
++#   2. A consumer recipe that fetched this manifest over the network:
++#        curl -LO https://registry.npmjs.org/.../tarball
++#        curl -LO https://.../SHA256SUMS.txt
++#      There is no such URL. SHA256SUMS.txt is not in package.json `files`, so
++#      it does not travel in the published tarball, and no workflow attaches it
++#      to a GitHub release. A consumer who wants to verify a published tarball
++#      should use npm's own integrity metadata (`npm view <pkg> dist.integrity`)
++#      until a per-tarball manifest is actually published.
++#
++# Publishing a real per-tarball manifest is a change to the publish path and is
++# deferred to the v1.4.0 train (PLAN-177 §Escopo — route (i), excluded from
++# rc.4 on purpose). Until then this file records LOCAL builds only.
+ #
+ # Stdlib-only: prefer `sha256sum` (Linux / Ubuntu runners) then fall back
+ # to `shasum -a 256` (macOS). python3 -m hashlib as last-resort fallback.
+diff --git a/scripts/install.sh b/scripts/install.sh
+index c0a0425..52f7ffa 100755
+--- a/scripts/install.sh
++++ b/scripts/install.sh
+@@ -1779,6 +1779,10 @@ install_mcp_secrets_dir() {
+     else
+       echo "    (dry-run) would CREATE: state/mcp_client_secrets (chmod 700)"
+     fi
++    if [[ -L "$TARGET/.gitignore" ]]; then
++      echo "    (dry-run) ERROR: root .gitignore is a symlink — real run would REFUSE" >&2
++      exit 1
++    fi
+     echo "    (dry-run) would ENSURE .gitignore excludes state/mcp_client_secrets/"
+     return 0
+   fi
+@@ -1794,26 +1798,18 @@ install_mcp_secrets_dir() {
+   echo "          File perms MUST be 0600; auth.load_secret() fail-closes otherwise."
+   echo "          DO NOT commit its contents to VCS."
+ 
+-  # .gitignore entry — additive, idempotent.
+-  local ignore_line="state/mcp_client_secrets/"
+-  if [[ -f "$gitignore" ]]; then
+-    if ! grep -Fxq "$ignore_line" "$gitignore" 2>/dev/null; then
+-      {
+-        echo ""
+-        echo "# PLAN-019 P2-SEC-H: MCP shared-secret store (never commit)"
+-        echo "$ignore_line"
+-      } >> "$gitignore"
+-      echo "    APPENDED to .gitignore: $ignore_line"
+-    else
+-      echo "    .gitignore already excludes $ignore_line"
+-    fi
+-  else
+-    {
+-      echo "# PLAN-019 P2-SEC-H: MCP shared-secret store (never commit)"
+-      echo "$ignore_line"
+-    } > "$gitignore"
+-    echo "    CREATED .gitignore with: $ignore_line"
+-  fi
++  # .gitignore entry — additive, idempotent. PLAN-177 W1 (CF-9): the text and
++  # the create-or-append logic live in the ONE generator in
++  # _framework_manifest_set.sh, because upgrade.sh now delivers the same block
++  # (an adopter older than v1.2.0 never received it from an upgrade). INV-4 /
++  # PLAN-168 W2: two copies of one emitted text is the class that produced the
++  # PROTOCOL.md pointer divergence, so a missing generator is a broken checkout
++  # and fails LOUD — same posture as install_protocol_pointer below.
++  command -v _apply_mcp_secrets_ignore >/dev/null 2>&1 || {
++    echo "    ERROR: _apply_mcp_secrets_ignore unavailable (scripts/_framework_manifest_set.sh not sourced) — cannot ensure the MCP-secrets .gitignore entry" >&2
++    return 1
++  }
++  _apply_mcp_secrets_ignore "$gitignore"
+ }
+ 
+ 
+@@ -1829,11 +1825,27 @@ install_mcp_secrets_dir() {
+ # contract as install_mcp_secrets_dir above.
+ install_posture_state_ignores() {
+   local gitignore="$TARGET/.gitignore"
+-  local entries=".claude/state/ .claude/settings.local.json"
++  local entries
++
++  # PLAN-177 W1 (CF-9): entry list AND append loop live in the ONE generator —
++  # see the rationale on install_mcp_secrets_dir above. Fail LOUD if absent.
++  command -v _posture_state_ignore_entries >/dev/null 2>&1 || {
++    echo "    ERROR: _posture_state_ignore_entries unavailable (scripts/_framework_manifest_set.sh not sourced) — cannot ensure posture-state .gitignore entries" >&2
++    return 1
++  }
++  command -v _apply_posture_state_ignores >/dev/null 2>&1 || {
++    echo "    ERROR: _apply_posture_state_ignores unavailable (scripts/_framework_manifest_set.sh not sourced) — cannot ensure posture-state .gitignore entries" >&2
++    return 1
++  }
++  entries="$( _posture_state_ignore_entries )"
+ 
+   if [[ "$DRY_RUN" -eq 1 ]]; then
+     echo ""
+     echo "==> Posture-state .gitignore entries (PLAN-165 CX-3)"
++    if [[ -L "$TARGET/.gitignore" ]]; then
++      echo "    (dry-run) ERROR: root .gitignore is a symlink — real run would REFUSE" >&2
++      exit 1
++    fi
+     echo "    (dry-run) would ENSURE .gitignore excludes: $entries"
+     return 0
+   fi
+@@ -1841,23 +1853,47 @@ install_posture_state_ignores() {
+   echo ""
+   echo "==> Posture-state .gitignore entries (PLAN-165 CX-3)"
+   _state_record_op "ensure_posture_state_ignores" "$entries"
+-  local line
+-  for line in $entries; do
+-    if [[ -f "$gitignore" ]] && grep -Fxq "$line" "$gitignore" 2>/dev/null; then
+-      echo "    .gitignore already excludes $line"
+-      continue
+-    fi
+-    {
+-      echo ""
+-      echo "# PLAN-165 CX-3: per-machine posture/runtime state (never commit)"
+-      echo "$line"
+-    } >> "$gitignore"
+-    echo "    APPENDED to .gitignore: $line"
+-  done
++  _apply_posture_state_ignores "$gitignore"
++}
++
++# PLAN-177 W1 (CF-9): `.claude/.gitignore`, a NEW framework-delivered file.
++#
++# The two blocks above land in the adopter's ROOT .gitignore, which a
++# `--ceremony user` install never touches (WS4: a user install writes inside
++# .claude/ and nowhere else). So the exact population that /night-mode most
++# affects — user-ceremony adopters — had no protection at all, the damage the
++# GA re-pass names in verdict-ga-1.txt:5. This file lives INSIDE .claude/, so
++# it is delivered in EVERY ceremony without violating that invariant (the
++# smoke-install.yml user-ceremony assert allows .claude and .git at top level).
++#
++# Create-if-missing, NEVER rewrite: after creation it is adopter-owned. It is
++# deliberately absent from _framework_manifest_files, so the baseline manifest
++# never records it and no upgrade can classify it as framework-owned and
++# clobber it.
++install_claude_dir_gitignore() {
++  command -v _apply_claude_dir_gitignore >/dev/null 2>&1 || {
++    echo "    ERROR: _apply_claude_dir_gitignore unavailable (scripts/_framework_manifest_set.sh not sourced) — cannot ensure .claude/.gitignore" >&2
++    return 1
++  }
++
++  if [[ "$DRY_RUN" -eq 1 ]]; then
++    echo ""
++    echo "==> .claude/.gitignore (PLAN-177 W1 / CF-9)"
++    # Shared per-entry preview (re-pass rc.4 t2 P1): a seeded adopter
++    # file must report would-APPEND, never a false would-PRESERVE.
++    _preview_claude_dir_gitignore "$TARGET/.claude" || return 1
++    return 0
++  fi
++
++  echo ""
++  echo "==> .claude/.gitignore (PLAN-177 W1 / CF-9)"
++  _state_record_op "ensure_claude_dir_gitignore" ".claude/.gitignore"
++  _apply_claude_dir_gitignore "$TARGET/.claude"
+ }
+ 
+ if [[ "$CEREMONY" != "user" ]]; then install_mcp_secrets_dir; fi  # WS4-guard-mcp
+ if [[ "$CEREMONY" != "user" ]]; then install_posture_state_ignores; fi  # PLAN-165 CX-3
++install_claude_dir_gitignore  # PLAN-177 CF-9 — inside .claude/, so ALL ceremonies
+ 
+ # ---- 7. Project-local templates (CLAUDE.md, MEMORY.md, .mcp.json — never overwrite) ----
+ 
+diff --git a/scripts/tests/_parity_classify.py b/scripts/tests/_parity_classify.py
+index b1f86bd..02b2d00 100644
+--- a/scripts/tests/_parity_classify.py
++++ b/scripts/tests/_parity_classify.py
+@@ -120,16 +120,6 @@ ACCEPTED: List[Tuple[str, Optional[str], str]] = [
+         None,
+         "seed-once adopter doc — same upgrade.sh preserve contract",
+     ),
+-    (
+-        r"^\.gitignore$",
+-        None,
+-        "adopter-owned append-only surface. install.sh APPENDS marker-guarded "
+-        "blocks (install_posture_state_ignores, PLAN-165 CX-3); upgrade.sh has "
+-        "no append step, so an upgraded adopter never gets them. A REAL "
+-        "install-only delivery gap — accepted here (never fatal) only because "
+-        "the file is adopter-owned and must not be clobbered; reported every "
+-        "run so it stays visible",
+-    ),
+     (
+         r"^PROTOCOL\.md$",
+         "maintainer",
+diff --git a/scripts/tests/test-night-mode-ignore-effect.sh b/scripts/tests/test-night-mode-ignore-effect.sh
+new file mode 100755
+index 0000000..29b8253
+--- /dev/null
++++ b/scripts/tests/test-night-mode-ignore-effect.sh
+@@ -0,0 +1,383 @@
++#!/usr/bin/env bash
++# scripts/tests/test-night-mode-ignore-effect.sh
++# PLAN-177 W1 (CF-9) — EFFICACY of the posture-state ignores, not parity.
++#
++# WHY THIS EXISTS
++# ---------------
++# The install/upgrade parity e2e proves the two routes converge on the same
++# BYTES, and BYTE-PROOF.md proves the generator reproduces install.sh's output
++# exactly. Neither can see whether the delivered bytes actually WORK: an
++# ineffective ignore — wrong anchor, wrong path, right file in the wrong
++# directory — is equally ineffective on both routes, so it is byte-identical
++# and every parity check stays green. That is the "instrument green with a
++# stale question" class. This test asks the question the P1 actually named:
++#
++#   after `/night-mode on`, does `git status` in the adopter stay clean?
++#
++# PLAN-165 AC-1 words it as "git status stays empty"; the GA re-pass
++# (verdict-ga-1.txt:5) names the `--ceremony user` population as the one that
++# never got any protection, because a user install writes nothing outside
++# .claude/ and the root .gitignore blocks are all there was.
++#
++# WHY THE ARTIFACTS ARE SIMULATED, NOT ARMED
++# ------------------------------------------
++# This test CREATES the two files `/night-mode on` leaves behind rather than
++# invoking the toggle. That is not a sandbox shortcut — arming the autonomy
++# posture is a HUMAN action (PLAN-165 OQ1-redo, Owner-ratified 2026-08-03) and
++# the model rail is blocked from running `.claude/scripts/night-mode.py` at
++# all. A CI job arming a real posture would be the same violation. What is
++# under test is whether git ignores those two paths, and for that the file
++# CONTENT is irrelevant — only their names and locations matter, and those are
++# read from night-mode.py's own docstring/`_marker_path` (`.claude/state/
++# night-mode.json`, `.claude/settings.local.json`).
++#
++# SCENARIOS
++#   A  install @ $PIN (maintainer) -> upgrade (working tree)   [the upgrade route]
++#   B  install @ $PIN (user)       -> upgrade (working tree)   [the damaged population]
++#   C  install (working tree, user)                            [fresh user install]
++#
++# EVERY scenario carries its own POSITIVE CONTROL, inline and unconditional:
++# after asserting the tree is clean, the delivered ignores are removed and the
++# SAME assertion must go dirty. A control that can be skipped is a control that
++# silently stops firing, so there is no flag to turn this off.
++#
++# EXIT CODES
++#   0  every scenario clean, every control fired
++#   1  FAIL — a night-mode artifact was visible to git, or a control did not fire
++#   9  SCAFFOLD-ERROR — the fixture broke (pin unresolvable, install/upgrade
++#      returned non-zero, git missing). NEVER a verdict on the bug.
++#
++# bash-3.2 safe. Network-free (the pin must already be fetched — CI does that
++# in the "Fetch the parity pin tag" step). Writes only under mktemp -d.
++set -uo pipefail
++
++# HERMETIC IGNORE SOURCES — measured, not assumed.
++#
++# git consults THREE ignore sources outside the repo: the system config, the
++# user's global config, and `core.excludesFile` (commonly
++# ~/.config/git/ignore). On this maintainer's machine that file contains
++# `**/.claude/settings.local.json`, which means the overlay is invisible to git
++# whether or not the framework delivers anything. Left alone, that produces a
++# test whose control is half-blind locally and full-sighted on a clean CI
++# runner — "it passes on my machine" with the sign flipped, and the exact class
++# the probe-needs-a-neutral-user-layer lesson names.
++#
++# Neutralising them makes every scenario measure ONLY what install/upgrade put
++# in the target. GIT_CONFIG_GLOBAL/SYSTEM need git >= 2.32; each target also
++# sets core.excludesFile to an empty file so older git is covered too.
++export GIT_CONFIG_GLOBAL=/dev/null
++export GIT_CONFIG_SYSTEM=/dev/null
++
++SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
++REPO_ROOT="$( cd "$SCRIPT_DIR/../.." && pwd )"
++
++# Single source of truth for the pin: ask the parity e2e rather than hardcoding
++# a second copy that drifts (the same rule smoke-install.yml follows).
++PIN="${CEO_PARITY_PIN:-}"
++if [ -z "$PIN" ]; then
++  PIN="$( bash "$SCRIPT_DIR/test-install-upgrade-parity-e2e.sh" --print-pin 2>/dev/null )"
++fi
++PROFILE="${CEO_PARITY_PROFILE:-core}"
++
++# The two paths `/night-mode on` writes. Derived from night-mode.py so a rename
++# there surfaces here as a scaffold error instead of a silently narrowed test.
++MARKER_REL=".claude/state/night-mode.json"
++OVERLAY_REL=".claude/settings.local.json"
++
++FAILED=0
++
++say()  { echo "$@"; }
++fail() { echo "  FAIL: $*" >&2; FAILED=1; }
++scaffold() {
++  echo "" >&2
++  echo "SCAFFOLD-ERROR: $*" >&2
++  echo "  (this is a broken fixture, NOT a verdict on the ignores)" >&2
++  exit 9
++}
++
++command -v git >/dev/null 2>&1 || scaffold "git not on PATH"
++[ -n "$PIN" ] || scaffold "could not resolve the historical pin (--print-pin returned empty)"
++git -C "$REPO_ROOT" rev-parse --verify "refs/tags/$PIN^{commit}" >/dev/null 2>&1 \
++  || scaffold "pin tag $PIN not present in this checkout (CI must fetch it first)"
++
++# Assert night-mode.py still names the paths this test asserts on. A rename
++# there would leave this test green while testing nothing.
++_NM="$REPO_ROOT/.claude/scripts/night-mode.py"
++if [ -f "$_NM" ]; then
++  grep -Fq 'night-mode.json' "$_NM" \
++    || scaffold "night-mode.py no longer mentions night-mode.json — re-derive MARKER_REL"
++  grep -Fq 'settings.local.json' "$_NM" \
++    || scaffold "night-mode.py no longer mentions settings.local.json — re-derive OVERLAY_REL"
++fi
++
++WORK="$( mktemp -d "${TMPDIR:-/tmp}/ceo-nightmode-ignore-XXXXXX" )" || scaffold "mktemp failed"
++cleanup() { [ -n "${WORK:-}" ] && rm -rf "$WORK"; }
++trap cleanup EXIT
++
++say "=============================================================="
++say " night-mode ignore EFFICACY  (PLAN-177 W1 / CF-9)"
++say "=============================================================="
++say "  repo            : $REPO_ROOT"
++say "  historical pin  : $PIN"
++say "  profile         : $PROFILE"
++say "  workdir         : $WORK"
++say "--------------------------------------------------------------"
++
++PIN_SRC="$WORK/src-$PIN"
++mkdir -p "$PIN_SRC"
++git -C "$REPO_ROOT" archive "$PIN" | tar -x -C "$PIN_SRC" \
++  || scaffold "git archive $PIN | tar -x failed"
++[ -f "$PIN_SRC/scripts/install.sh" ] || scaffold "$PIN archive has no scripts/install.sh"
++
++# --- helpers ---------------------------------------------------------------
++
++new_target() {  # $1 = name -> echoes the path
++  local t="$WORK/$1"
++  mkdir -p "$t"
++  : > "$WORK/empty-excludes"
++  ( cd "$t" \
++      && git init -q \
++      && git config user.email t@e \
++      && git config user.name t \
++      && git config core.excludesFile "$WORK/empty-excludes" ) \
++    || scaffold "git init failed in $t"
++  echo "$t"
++}
++
++# Fail loudly if any ignore source outside the target survives the
++# neutralisation above: a leftover rule would silently weaken every control.
++assert_no_external_ignores() {  # $1 = target
++  local src
++  for src in "$MARKER_REL" "$OVERLAY_REL"; do
++    local probe
++    probe="$( cd "$1" && git check-ignore -v --no-index "$src" 2>/dev/null )" || true
++    case "$probe" in
++      ""|.gitignore:*|.claude/.gitignore:*) : ;;
++      *) scaffold "an ignore source OUTSIDE the target still matches $src: $probe" ;;
++    esac
++  done
++}
++
++do_install() {  # $1 = source dir, $2 = target, $3 = ceremony
++  CEO_INSTALL_SKIP_SELF_SHA=1 CEO_RAG_INSTALL_PROMPT=0 \
++    bash "$1/scripts/install.sh" "$2" --ceremony "$3" --profile "$PROFILE" \
++    > "$2.install.log" 2>&1 \
++    || scaffold "install.sh ($3, source=$1) exited non-zero — see $2.install.log"
++}
++
++do_upgrade() {  # $1 = target
++  CEO_INSTALL_SKIP_SELF_SHA=1 CEO_RAG_INSTALL_PROMPT=0 \
++    bash "$REPO_ROOT/scripts/upgrade.sh" "$1" --profile "$PROFILE" \
++    > "$1.upgrade.log" 2>&1 \
++    || scaffold "upgrade.sh exited non-zero — see $1.upgrade.log"
++}
++
++arm_night_mode_artifacts() {  # $1 = target — simulate, never arm (see header)
++  mkdir -p "$1/.claude/state"
++  printf '%s\n' '{"armed": true, "plan": "PLAN-177 test fixture"}' > "$1/$MARKER_REL"
++  printf '%s\n' '{"permissions": {"defaultMode": "acceptEdits"}}' > "$1/$OVERLAY_REL"
++}
++
++# Lines git reports for the two artifacts.
++#
++# `-uall` is LOAD-BEARING, not a flourish. Plain `git status --porcelain` in a
++# repo where nothing is committed collapses the whole tree to a single
++# `?? .claude/` line, so a matcher looking for `.claude/state/...` finds
++# nothing and reports "clean" no matter what the ignores do. That vacuous shape
++# is exactly what this test's own positive control caught on its first run, and
++# it is why the scenarios commit a baseline first: a real adopter has the
++# framework committed before ever running `/night-mode on`.
++leaked() {  # $1 = target
++  ( cd "$1" && git status --porcelain -uall 2>/dev/null ) \
++    | grep -E "(\.claude/state/|\.claude/settings\.local\.json)" || true
++}
++
++# WHICH rule does the ignoring. `git status` alone cannot tell "ignored by the
++# file we delivered" from "ignored by something else the adopter already had",
++# and only the former is evidence for this cure. `git check-ignore -v` prints
++# `<source>:<line>:<pattern>\t<path>`, so the source file is checkable.
++ignoring_rule() {  # $1 = target, $2 = relpath
++  ( cd "$1" && git check-ignore -v "$2" 2>/dev/null ) || true
++}
++
++strip_delivered_ignores() {  # $1 = target — the positive control's mutation
++  rm -f "$1/.claude/.gitignore"
++  if [ -f "$1/.gitignore" ]; then
++    grep -v -x -e '.claude/state/' -e '.claude/settings.local.json' \
++      "$1/.gitignore" > "$1/.gitignore.stripped" 2>/dev/null || true
++    mv "$1/.gitignore.stripped" "$1/.gitignore"
++  fi
++}
++
++commit_baseline() {  # $1 = target — what a real adopter does after installing
++  ( cd "$1" && git add -A && git commit -q -m "install framework" ) \
++    || scaffold "baseline commit failed in $1"
++  # The install itself must not have staged posture state into that commit.
++  local tracked
++  tracked="$( cd "$1" && git ls-files | grep -E "(\.claude/state/|\.claude/settings\.local\.json)" || true )"
++  [ -z "$tracked" ] && return 0
++  fail "baseline commit TRACKS posture state (it should be ignored):"
++  echo "$tracked" | sed 's/^/        /' >&2
++}
++
++check_scenario() {  # $1 = label, $2 = target
++  local label="$1" t="$2" out n rule_m rule_o
++  assert_no_external_ignores "$t"
++  commit_baseline "$t"
++  arm_night_mode_artifacts "$t"
++
++  # Sanity: the artifacts really are on disk. Without this the "clean" verdict
++  # could just mean nothing was ever created.
++  [ -f "$t/$MARKER_REL" ]  || scaffold "$label: fixture did not create $MARKER_REL"
++  [ -f "$t/$OVERLAY_REL" ] || scaffold "$label: fixture did not create $OVERLAY_REL"
++
++  out="$( leaked "$t" )"
++  if [ -n "$out" ]; then
++    fail "$label: night-mode artifacts are VISIBLE to git:"
++    echo "$out" | sed 's/^/        /' >&2
++  else
++    say "  $label: clean — git -uall sees no night-mode artifacts"
++  fi
++
++  # Attribution: a framework-delivered .gitignore must be the rule doing it.
++  rule_m="$( ignoring_rule "$t" "$MARKER_REL" )"
++  rule_o="$( ignoring_rule "$t" "$OVERLAY_REL" )"
++  for _r in "$rule_m" "$rule_o"; do
++    case "$_r" in
++      .claude/.gitignore:*|.gitignore:*) : ;;
++      "") fail "$label: no ignore rule matches one of the artifacts: '$_r'" ;;
++      *)  fail "$label: ignored by an UNEXPECTED source (not a framework-delivered .gitignore): $_r" ;;
++    esac
++  done
++  [ -n "$rule_m" ] && say "  $label: rule -> ${rule_m%%	*}"
++
++  # --- inline positive control ---------------------------------------------
++  strip_delivered_ignores "$t"
++  out="$( leaked "$t" )"
++  n="$( printf '%s' "$out" | grep -c . || true )"
++  # BOTH artifacts must surface. "At least one" would pass while some other
++  # ignore source still hid the other one -- which is exactly what happened on
++  # the first run of this test, before the external sources were neutralised.
++  if [ "$n" -ne 2 ]; then
++    fail "$label: CONTROL FIRED PARTIALLY OR NOT AT ALL — after removing the"
++    fail "       delivered ignores git should report BOTH artifacts, got $n:"
++    [ -n "$out" ] && echo "$out" | sed 's/^/        /' >&2
++    fail "       (something ELSE is hiding a path, or the matcher is blind)"
++  else
++    say "  $label: control fired — without the ignores git reports both artifacts"
++  fi
++}
++
++# Count the posture entries in the ROOT .gitignore.
++#
++# WHY THIS EXISTS SEPARATELY from the git-status assertion: `.claude/.gitignore`
++# alone is enough to make every scenario below report "clean", so an upgrade
++# whose ROOT delivery silently did nothing would still pass. `git check-ignore`
++# reports only the WINNING rule, and that is the .claude one. So the root block
++# is measured directly, and BEFORE/AFTER — which also pins the fixture: the pin
++# must still reproduce the gap, or the whole scenario has stopped testing it.
++root_posture_count() {  # $1 = target -> number of the two posture entries present
++  # `grep -c` PRINTS 0 and EXITS 1 when nothing matches, so the obvious
++  # `grep -c ... || echo 0` emits TWO lines ("0\n0") and every arithmetic test
++  # downstream dies with "integer expression expected". Capture first, then
++  # default — verified by the run that produced exactly that scaffold error.
++  local n
++  [ -f "$1/.gitignore" ] || { echo 0; return 0; }
++  n="$( grep -c -x -e '.claude/state/' -e '.claude/settings.local.json' "$1/.gitignore" 2>/dev/null )" || n=0
++  [ -n "$n" ] || n=0
++  echo "$n"
++}
++
++# --- A: pinned install (maintainer) -> upgrade -------------------------------
++say ""
++say "--> [A] install @ $PIN (maintainer) -> upgrade (working tree)"
++TA="$( new_target A-pin-maintainer )"
++do_install "$PIN_SRC" "$TA" maintainer
++[ -f "$TA/.claude/.gitignore" ] && scaffold "[A] the $PIN install already ships .claude/.gitignore — the fixture no longer reproduces the gap"
++_A_BEFORE="$( root_posture_count "$TA" )"
++[ "$_A_BEFORE" -eq 0 ] || scaffold "[A] the $PIN install already writes $_A_BEFORE posture entr(y|ies) into the root .gitignore — the fixture no longer reproduces the P1-1 gap"
++do_upgrade "$TA"
++_A_AFTER="$( root_posture_count "$TA" )"
++if [ "$_A_AFTER" -eq 2 ]; then
++  say "  [A] root .gitignore: posture entries 0 -> 2 across the upgrade — the P1-1 delivery"
++else
++  fail "[A] the upgrade did NOT deliver the root posture block (entries: $_A_BEFORE -> $_A_AFTER, expected 2)"
++fi
++check_scenario "[A] upgrade/maintainer" "$TA"
++
++# --- B: pinned install (user) -> upgrade -------------------------------------
++say ""
++say "--> [B] install @ $PIN (user) -> upgrade (working tree)"
++TB="$( new_target B-pin-user )"
++do_install "$PIN_SRC" "$TB" user
++do_upgrade "$TB"
++# The mirror assertion: in `user` ceremony NEITHER route touches the root, so
++# the count must stay 0. A cure that delivered here would break the WS4
++# invariant install.sh has always honoured — and the parity gate would only
++# see it as a divergence, never as a rule violation.
++_B_ROOT="$( root_posture_count "$TB" )"
++if [ "$_B_ROOT" -eq 0 ]; then
++  say "  [B] root .gitignore: still 0 posture entries — user ceremony skipped on BOTH routes"
++else
++  fail "[B] the upgrade wrote $_B_ROOT posture entr(y|ies) into the root .gitignore under --ceremony user"
++fi
++check_scenario "[B] upgrade/user" "$TB"
++
++# --- C: fresh user install ---------------------------------------------------
++say ""
++say "--> [C] install (working tree) --ceremony user"
++TC="$( new_target C-fresh-user )"
++do_install "$REPO_ROOT" "$TC" user
++# WS4 belt-and-braces: a user install must still write nothing outside .claude/
++_extra=""
++for _e in "$TC"/* "$TC"/.[!.]* "$TC"/..?*; do
++  [ -e "$_e" ] || continue
++  _b="$( basename "$_e" )"
++  case "$_b" in .claude|.git) continue ;; esac
++  _extra="$_extra $_b"
++done
++[ -n "$_extra" ] && fail "[C] --ceremony user wrote outside .claude/:$_extra"
++check_scenario "[C] fresh/user" "$TC"
++
++# --- D: SEEDED .claude/.gitignore (re-pass rc.4 t1 P1-b) --------------------
++# The adopter already owns a .claude/.gitignore (e.g. only /cache/) that
++# LACKS the two posture entries. Create-if-missing alone proved the clean
++# target; the P1 was exactly this shape: helper saw the file, returned, and
++# night-mode state stayed commit-eligible. Both routes must APPEND the two
++# entries per line while preserving every adopter byte.
++say ""
++say "--> [D] fresh user install over a SEEDED .claude/.gitignore"
++TD="$( new_target D-seeded-user )"
++mkdir -p "$TD/.claude"
++printf '%s\n' "# adopter file" "/cache/" > "$TD/.claude/.gitignore"
++do_install "$REPO_ROOT" "$TD" user
++for _need in "/cache/" "/state/" "/settings.local.json" "# adopter file"; do
++  grep -Fxq "$_need" "$TD/.claude/.gitignore" \
++    || fail "[D] seeded install: line missing or adopter byte lost: $_need"
++done
++check_scenario "[D] seeded/user-install" "$TD"
++
++say ""
++say "--> [D2] pinned user install -> SEED -> upgrade"
++TD2="$( new_target D2-seeded-upgrade )"
++do_install "$PIN_SRC" "$TD2" user
++printf '%s\n' "# adopter file" "/cache/" > "$TD2/.claude/.gitignore"
++do_upgrade "$TD2"
++for _need in "/cache/" "/state/" "/settings.local.json" "# adopter file"; do
++  grep -Fxq "$_need" "$TD2/.claude/.gitignore" \
++    || fail "[D2] seeded upgrade: line missing or adopter byte lost: $_need"
++done
++check_scenario "[D2] seeded/upgrade" "$TD2"
++
++say ""
++say "--------------------------------------------------------------"
++if [ "$FAILED" -eq 0 ]; then
++  say "RESULT: PASS — after a simulated \`/night-mode on\`, git reports no"
++  say "        posture artifacts in any route or ceremony, and every"
++  say "        scenario's control fired."
++  say "=============================================================="
++  exit 0
++fi
++say "RESULT: FAIL (exit 1) — see the FAIL lines above."
++say "=============================================================="
++exit 1
+diff --git a/scripts/upgrade.sh b/scripts/upgrade.sh
+index cde1ff2..f2dfce3 100755
+--- a/scripts/upgrade.sh
++++ b/scripts/upgrade.sh
+@@ -254,6 +254,17 @@ while [[ $# -gt 0 ]]; do
+       DRY_RUN=1
+       shift
+       ;;
++    --ceremony)
++      # Re-pass rc.4 t3 (P1): explicit ceremony for PRE-STATE targets
++      # (no readable .install-state.json). A RECORDED ceremony always
++      # wins over this flag — the flag exists for the migration case.
++      CEREMONY_FLAG="${2:-}"
++      case "$CEREMONY_FLAG" in
++        maintainer|user) : ;;
++        *) echo "ERROR: --ceremony must be 'maintainer' or 'user' (got '$CEREMONY_FLAG')" >&2; exit 2 ;;
++      esac
++      shift 2
++      ;;
+     --purge-misinstalled)
+       # PLAN-161 U3 (OQ1 Owner-ratified): opt-in, hash-gated purge of
+       # mis-installed framework-internal excluded-tree files. NEVER default-on.
+@@ -763,12 +774,30 @@ sys.stdout.write(cer + "\n")
+ ' "$_INSTALL_STATE_FILE" 2>/dev/null
+ }
+ 
+-CEREMONY_EFFECTIVE="maintainer"
+-_CEREMONY_SOURCE="default (no readable install-state — pre-Wave-B fail-open)"
++# Re-pass rc.4 t2 (P2): with NO readable install-state the old default was
++# maintainer (fail-open) — a pre-v1.2 USER-ceremony install could receive
++# root .gitignore writes across the user boundary. The fail-SAFE default is
++# user (root surfaces skipped, loudly); a pre-state MAINTAINER install opts
++# back in explicitly via CEO_UPGRADE_CEREMONY=maintainer.
++CEREMONY_EFFECTIVE="user"
++_CEREMONY_SOURCE="default (no readable install-state — fail-safe user; pass --ceremony maintainer to opt back in)"
++# t5 P1: only RECORDED or EXPLICIT resolutions may persist into the state
++# file — persisting the fail-safe INFERENCE would make one missed migration
++# flag permanent (recorded state wins on the next run by design).
++_CEREMONY_PERSIST="0"
+ _cer_line=""
+ if _cer_line="$(_read_install_state_ceremony)" && [[ -n "$_cer_line" ]]; then
+   CEREMONY_EFFECTIVE="$_cer_line"
+   _CEREMONY_SOURCE="recorded install request (.claude/.install-state.json)"
++  _CEREMONY_PERSIST="1"
++elif [[ -n "${CEREMONY_FLAG:-}" ]]; then
++  CEREMONY_EFFECTIVE="$CEREMONY_FLAG"
++  _CEREMONY_SOURCE="explicit --ceremony flag (no install-state)"
++  _CEREMONY_PERSIST="1"
++elif [[ "${CEO_UPGRADE_CEREMONY:-}" == "maintainer" || "${CEO_UPGRADE_CEREMONY:-}" == "user" ]]; then
++  CEREMONY_EFFECTIVE="$CEO_UPGRADE_CEREMONY"
++  _CEREMONY_SOURCE="explicit CEO_UPGRADE_CEREMONY override (no install-state)"
++  _CEREMONY_PERSIST="1"
+ fi
+ 
+ TIMESTAMP="$( date +%Y%m%d-%H%M%S )"
+@@ -2984,6 +3013,53 @@ backup_and_replace ".claude/scripts"
+ backup_and_replace ".claude/commands"
+ backup_and_replace ".claude/pitfalls-catalog.yaml"
+ backup_and_replace ".claude/task-chains.yaml"
++# Re-pass rc.4 t3 (smoke STALE) + t5 P1 (ownership): the plans/ SCHEMA
++# docs are FRAMEWORK contract files that install.sh seeds but upgrade never
++# refreshed — the first framework edit (S305, DEBATE-SCHEMA) left every
++# upgraded adopter on the old generation (F3 STALE). But a blanket
++# backup_and_replace would CLOBBER an adopter-modified schema (t5 P1: the
++# schemas are not in the baseline ownership enumeration for pre-existing
++# installs, so classification falls back to legacy overwrite). Refresh is
++# therefore HASH-GATED: only a byte-pristine copy of a KNOWN prior
++# framework generation is replaced; anything else is PRESERVED loudly.
++_refresh_schema_doc() {
++  # $1 = rel path; $2.. = sha256 of KNOWN prior framework generations.
++  _rsd_rel="$1"; shift
++  _rsd_src="$SOURCE_DIR/$_rsd_rel"; _rsd_dst="$TARGET/$_rsd_rel"
++  [ -e "$_rsd_src" ] || { echo "    SKIP (source missing): $_rsd_rel"; return 0; }
++  if [ ! -e "$_rsd_dst" ]; then
++    mkdir -p "$(dirname "$_rsd_dst")"
++    cp "$_rsd_src" "$_rsd_dst"
++    echo "    INSTALLED: $_rsd_rel"
++    return 0
++  fi
++  _rsd_h_dst="$(shasum -a 256 "$_rsd_dst" | awk '{print $1}')"
++  _rsd_h_src="$(shasum -a 256 "$_rsd_src" | awk '{print $1}')"
++  if [ "$_rsd_h_dst" = "$_rsd_h_src" ]; then
++    echo "    IDENTICAL: $_rsd_rel"
++    return 0
++  fi
++  for _rsd_prior in "$@"; do
++    if [ "$_rsd_h_dst" = "$_rsd_prior" ]; then
++      mkdir -p "$BAK_DIR/$(dirname "$_rsd_rel")"
++      cp "$_rsd_dst" "$BAK_DIR/$_rsd_rel"
++      cp "$_rsd_src" "$_rsd_dst"
++      echo "    REFRESHED (pristine prior generation): $_rsd_rel"
++      return 0
++    fi
++  done
++  echo "    WARNING: PRESERVED adopter-modified $_rsd_rel (framework schema changed upstream — diff it manually; a pristine copy would have been refreshed)"
++  return 0
++}
++if [[ "$DRY_RUN" -eq 1 ]]; then
++  echo "    (dry-run) schema docs: hash-gated refresh (pristine prior generations only)"
++else
++  # sha256 of every shipped prior generation (git history of each file).
++  _refresh_schema_doc ".claude/plans/PLAN-SCHEMA.md" \
++    "8a2033d241b113544f1e18abbd13f4c60cc6257140f304d95b29216193035232"
++  _refresh_schema_doc ".claude/plans/DEBATE-SCHEMA.md" \
++    "574bd22e401308400622b1766a9d090e5afede1fb45938995316f38c554f1bf3"
++fi
+ # agent-metrics.md preserved (user data). settings.json is preserved here too —
+ # ONLY the PLAN-135 W2 H8 settings-merge (additive lifecycle-hook registration)
+ # and the PLAN-163 T5.4 baseline migration (3-state per leaf key; customized
+@@ -3127,6 +3203,88 @@ echo ""
+ echo "==> Refreshing framework version marker (.claude/.framework-version)"
+ _refresh_framework_marker
+ 
++# PLAN-177 W1 (P1-1 / CF-9) — the .gitignore surfaces install.sh has always
++# delivered and this script never did.
++#
++# Root .gitignore: two marker-guarded blocks (MCP shared-secret store, PLAN-019
++# P2-SEC-H; posture/runtime state, PLAN-165 CX-3). An adopter who installed at
++# v1.2.0 and only ever upgrades got /night-mode without the posture ignores, so
++# `on` leaves the permission overlay + state marker untracked (PLAN-165 AC-1
++# says `git status` stays empty); an adopter older than v1.2.0 never got the
++# secrets entry either. The parity gate named the gap and allowlisted it, so CI
++# could not fail on it. Both deliveries are ADDITIVE + idempotent and go
++# through the SAME generator install.sh calls (INV-4/PLAN-168 W2 — two copies
++# of one emitted text is the class that produced the pointer divergence). The
++# ORDER (secrets, then posture) mirrors install.sh's two call sites, because it
++# decides the order of the blocks in the resulting file.
++#
++# CEREMONY-GATED, mirroring the PROTOCOL.md skip above: install.sh guards both
++# of its calls with `[[ "$CEREMONY" != "user" ]]` (a user install writes no root
++# files at all, WS4), so skipping here is what keeps the two routes in
++# agreement. A line number would rot the moment either file moves.
++#
++# Missing generator = broken checkout, fails LOUD. That is install.sh's posture
++# for this library, not the preserve-the-surface posture of
++# _refresh_protocol_pointer: nothing here overwrites an adopter file, so there
++# is no surface a silent degrade would be protecting.
++echo ""
++echo "==> Refreshing root .gitignore framework blocks (PLAN-019 P2-SEC-H + PLAN-165 CX-3)"
++if [[ "$CEREMONY_EFFECTIVE" == "user" ]]; then
++  echo "    SKIP: root .gitignore blocks (recorded --ceremony user install — install.sh writes no root files either)"
++else
++  command -v _mcp_secrets_ignore_entry >/dev/null 2>&1 || {
++    echo "    ERROR: _mcp_secrets_ignore_entry unavailable (scripts/_framework_manifest_set.sh not sourced) — cannot ensure the MCP-secrets .gitignore entry" >&2
++    exit 1
++  }
++  command -v _apply_mcp_secrets_ignore >/dev/null 2>&1 || {
++    echo "    ERROR: _apply_mcp_secrets_ignore unavailable (scripts/_framework_manifest_set.sh not sourced) — cannot ensure the MCP-secrets .gitignore entry" >&2
++    exit 1
++  }
++  command -v _posture_state_ignore_entries >/dev/null 2>&1 || {
++    echo "    ERROR: _posture_state_ignore_entries unavailable (scripts/_framework_manifest_set.sh not sourced) — cannot ensure posture-state .gitignore entries" >&2
++    exit 1
++  }
++  command -v _apply_posture_state_ignores >/dev/null 2>&1 || {
++    echo "    ERROR: _apply_posture_state_ignores unavailable (scripts/_framework_manifest_set.sh not sourced) — cannot ensure posture-state .gitignore entries" >&2
++    exit 1
++  }
++  _UP_MCP_ENTRY="$( _mcp_secrets_ignore_entry )"
++  _UP_POSTURE_ENTRIES="$( _posture_state_ignore_entries )"
++  if [[ "$DRY_RUN" -eq 1 ]]; then
++    if [[ -L "$TARGET/.gitignore" ]]; then
++      echo "    (dry-run) ERROR: root .gitignore is a symlink — real run would REFUSE" >&2
++      exit 1
++    fi
++    echo "    (dry-run) would ENSURE .gitignore excludes: $_UP_MCP_ENTRY"
++    echo "    (dry-run) would ENSURE .gitignore excludes: $_UP_POSTURE_ENTRIES"
++  else
++    _up_record_op "ensure_mcp_secrets_ignore" "$_UP_MCP_ENTRY"
++    _apply_mcp_secrets_ignore "$TARGET/.gitignore"
++    _up_record_op "ensure_posture_state_ignores" "$_UP_POSTURE_ENTRIES"
++    _apply_posture_state_ignores "$TARGET/.gitignore"
++  fi
++fi
++
++# `.claude/.gitignore` — delivered in EVERY ceremony, because it lives inside
++# .claude/ and therefore reaches the `--ceremony user` population the root
++# blocks structurally cannot (verdict-ga-1.txt:5). Create-if-missing, NEVER
++# rewritten: adopter-owned after creation, and absent from the baseline
++# manifest so no later upgrade can classify it as framework-owned.
++echo ""
++echo "==> Refreshing .claude/.gitignore (PLAN-177 W1 / CF-9)"
++command -v _apply_claude_dir_gitignore >/dev/null 2>&1 || {
++  echo "    ERROR: _apply_claude_dir_gitignore unavailable (scripts/_framework_manifest_set.sh not sourced) — cannot ensure .claude/.gitignore" >&2
++  exit 1
++}
++if [[ "$DRY_RUN" -eq 1 ]]; then
++  # Shared per-entry preview (re-pass rc.4 t2 P1): a seeded adopter file
++  # must report would-APPEND, never a false would-PRESERVE.
++  _preview_claude_dir_gitignore "$TARGET/.claude" || exit 1
++else
++  _up_record_op "ensure_claude_dir_gitignore" ".claude/.gitignore"
++  _apply_claude_dir_gitignore "$TARGET/.claude"
++fi
++
+ # PLAN-161 U3 — mis-install scan/purge. Runs in ALL modes (flag-absent and
+ # --dry-run runs emit the would-purge PREVIEW; deletion requires the explicit
+ # --purge-misinstalled flag AND a non-dry run). Runs BEFORE the baseline-
+@@ -3239,6 +3397,7 @@ _write_upgrade_state() {
+     "harness" "$HARNESS"
+     "managed_hooks" "$CODEX_MANAGED_HOOKS"
+     "ceremony_effective" "$CEREMONY_EFFECTIVE"
++    "ceremony_persist" "$_CEREMONY_PERSIST"
+   )
+   echo ""
+   echo "==> (Re)writing install-state (.claude/.install-state.json — PLAN-153 Wave B)"
+@@ -3303,6 +3462,14 @@ if req is None:
+     }
+ req["profile"] = vals.get("profile", "")
+ req["stack"] = vals.get("stack", "")
++# Re-pass rc.4 t3+t5 (P1): persist the ceremony ONLY when it came from a
++# RECORD or an EXPLICIT flag/env — never persist the fail-safe inference
++# (one missed migration flag would otherwise become permanent, since the
++# recorded value wins on every later run). Never overwrite a recorded one.
++_cer = vals.get("ceremony_effective", "")
++if (vals.get("ceremony_persist", "0") == "1"
++        and "ceremony" not in req and _cer in ("maintainer", "user")):
++    req["ceremony"] = _cer
+ # PLAN-155 Wave 5: persist harness so it survives even a pre-Wave-B target
+ # whose request was synthesized above. Only overwrite when non-empty so a
+ # claude-only upgrade never clobbers a recorded codex harness with "".

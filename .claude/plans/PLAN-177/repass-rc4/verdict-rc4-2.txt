@@ -1,0 +1,25 @@
+No P0/P1 findings. The four rc.3 blockers, T-1, and T-2 are substantively cured.
+
+1. P2 — `scripts/_framework_manifest_set.sh:783,874-875,880-925`; `scripts/install.sh:1869`; `scripts/upgrade.sh:3270-3272`
+
+   Concrete failure scenario: the generated `.claude/.gitignore` tells adopters it is created only when absent and “NEVER” rewritten, but subsequent install/upgrade runs append missing security entries. An adopter relying on that ownership promise can deliberately remove an entry and be surprised when it returns.
+
+   Minimal fix: consistently state “never replaced or clobbered; missing mandatory posture entries may be appended.”
+
+2. P2 — `scripts/upgrade.sh:257-266,367-438`; `INSTALL.md:681`
+
+   Concrete failure scenario: a pre-state maintainer adopter consults `upgrade.sh --help`, which claims to list the options but omits the newly required `--ceremony maintainer` migration flag. The upgrade defaults to user ceremony and skips root `PROTOCOL.md`, `SPEC/v1`, and root `.gitignore` delivery.
+
+   Minimal fix: add `--ceremony <maintainer|user>` to the help text, including recorded-state precedence and its pre-state migration purpose.
+
+3. P2 — `scripts/tests/test-gitignore-symlink-and-dryrun-unit.sh:24-109`; `scripts/tests/test_install_state_replay.sh:291-350`; `.github/workflows/smoke-install.yml:49-54,314-317`; `.github/workflows/validate.yml:861-871`
+
+   Concrete failure scenario: the symlink/dry-run and pre-state ceremony controls are real and exercise the correct regressions, but remain local-only. CI could stay green if symlink refusal or explicit-ceremony persistence regresses; only the broader night-mode efficacy test is path-wired and executed.
+
+   Minimal fix: wire the fast gitignore unit script into both smoke path filters and a blocking step; likewise run or extract the pre-state ceremony cases into a CI-wired test.
+
+The decision rails now reject `NO-GO`, malformed, duplicate, and noncanonical decisions; npm documentation accurately marks tarball checksums as deferred; install/upgrade coverage reaches seeded, user-ceremony, and pre-v1.2 targets; and T-1/T-2 mutation controls fail on their historical defects. The four named product exceptions did not worsen. Static governance, count, contamination, stdlib, syntax, and workflow checks passed; full pytest execution was unavailable because this review sandbox provides no writable temporary directory.
+
+The payload may proceed provided the three P2 items are explicitly tracked as follow-ups.
+
+VERDICT: GO-WITH-CONDITIONS
