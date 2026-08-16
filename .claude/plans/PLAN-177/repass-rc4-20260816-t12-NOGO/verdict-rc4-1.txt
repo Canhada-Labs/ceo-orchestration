@@ -1,0 +1,9 @@
+P1 — `.github/scripts/validate-pair-rail-verdict.py:125`, `.claude/scripts/local/_release_tag_guard.py:127`, `.claude/scripts/tests/test_release_bump_sites.py:2689` — The “top-level” opener is only line-anchored; surrounding Markdown context is not checked. A single complete `GO` envelope quoted inside a four-backtick block, followed by the actual `VERDICT: NO-GO`, is classified canonical by both readers. The server CLI exits 0, and the local reader returns `GO` with one declaration. The regression uses a quoted block plus a second YAML block, so it passes only because `text.count("```yaml") == 2`. Minimal fix: bind the opener to the canonical document prefix—immediately after the verdict title—rather than searching anywhere, and add single-quoted-envelope end-to-end controls for both rails.
+
+P2 — `.claude/plans/PLAN-177/repass-rc4/run-rc4-repass.sh:61` — Payload 1 omits `.github/scripts/tests/test_validate_pair_rail_verdict.py`, although that regression suite changed in the candidate, including the t11 fixture repair at `.github/scripts/tests/test_validate_pair_rail_verdict.py:91`. Thus the advertised “regression suites” payload does not expose every changed validator suite to the cross-vendor review. Minimal fix: add the file to part 1’s path manifest and include it in the rerun.
+
+The ordinary controls are otherwise real: canonical `NO-GO` exits 3, canonical `GO` exits 0, the enumerated cross-reader matrices pass, and the administrative counts/scope text are consistent.
+
+The residual quoted-envelope path still permits a visible NO-GO to be authorized.
+
+VERDICT: NO-GO

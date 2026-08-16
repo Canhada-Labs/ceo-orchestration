@@ -240,5 +240,23 @@ case "$_err15" in
   *) echo "FAIL: S15 migracao ausente: $_err15"; FAILS=$((FAILS + 1)) ;;
 esac
 
+# --- S16 (t12 P1): preview no ramo ABSENT tambem checa tracked — nested
+# .gitignore AUSENTE + overlay JA TRACKED => rc 1, would-REFUSE, e o
+# dry-run NAO cria arquivo nenhum.
+mkdir -p "$TMP/s16/.claude"
+( cd "$TMP/s16" && git init -q )
+printf '{}\n' > "$TMP/s16/.claude/settings.local.json"
+( cd "$TMP/s16" \
+  && git add -f .claude/settings.local.json \
+  && git -c user.email=t@t -c user.name=t commit -qm seed )
+_pv16="$(_preview_claude_dir_gitignore "$TMP/s16/.claude" 2>&1 >/dev/null)"; rc=$?
+_t "S16 preview absent+tracked => rc=1" 1 "$rc"
+case "$_pv16" in
+  *"TRACKED"*"git rm --cached"*) echo "PASS: S16 preview nomeia TRACKED + migracao" ;;
+  *) echo "FAIL: S16 preview sem TRACKED: $_pv16"; FAILS=$((FAILS + 1)) ;;
+esac
+[ ! -e "$TMP/s16/.claude/.gitignore" ] && echo "PASS: S16 dry-run nao criou arquivo" \
+  || { echo "FAIL: S16 dry-run CRIOU .claude/.gitignore"; FAILS=$((FAILS + 1)); }
+
 echo
 if [ "$FAILS" -eq 0 ]; then echo "ALL GREEN"; exit 0; else echo "$FAILS FAIL(s)"; exit 1; fi

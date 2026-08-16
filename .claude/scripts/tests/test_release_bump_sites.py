@@ -1094,28 +1094,32 @@ def test_delta_accepts_this_tags_verdict_fields_outside_the_manifest_dir(synth):
 
 
 def test_guard_selects_the_yaml_block_like_the_step15_reader(synth):
-    """Re-pass P2 (reader parity): the step-15 validator selects the FIRST
-    ```yaml fence specifically (validate-pair-rail-verdict.py); the guard used
-    to enter the first fence of ANY language, so a verdict with a leading
-    non-yaml fence (a quoted transcript, say) parsed as EMPTY here while the
-    validator read it fine — two readers of the same signed file disagreeing,
-    fail-closed direction but still a disagreement."""
+    """Reader parity, re-pinned by re-pass rc.4 t12: the signed format's
+    FIRST fence must BE the canonical ```yaml opener. A leading non-yaml
+    fence (a quoted transcript, say) is now REJECTED by BOTH readers —
+    the t12 P1 showed a complete envelope quoted inside a four-backtick
+    block becoming authoritative when it was the document's only ```yaml,
+    and binding the opener to the first fence closes that whole space.
+    Parity holds: the two rails agree, in the fail-closed direction."""
     repo, env = synth["repo"], synth["env"]
     armed = arm_verdict(synth, "v1.3.0-rc.2")
     path = repo / armed["verdict_rel"]
     text = path.read_text(encoding="utf-8")
     assert text.count("```yaml") == 1
-    path.write_text(
-        text.replace(
-            "```yaml", "```text\ncodex transcript: GO\n```\n\n```yaml", 1
-        ),
-        encoding="utf-8",
+    mutated = text.replace(
+        "```yaml", "```text\ncodex transcript: GO\n```\n\n```yaml", 1
     )
+    path.write_text(mutated, encoding="utf-8")
     git(repo, env, "add", "-A")
     git(repo, env, "commit", "-q", "-m", "verdict prose gains a quoted fence")
     git(repo, env, "push", "-q", "origin", "main")
     proc = guard(synth, "delta", "--repo", str(repo), "--tag", "v1.3.0-rc.2")
-    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert proc.returncode == 13, proc.stdout + proc.stderr
+    assert "non-canonical" in proc.stderr, proc.stderr
+    # twin parity: the step-15 reader rejects the same bytes.
+    assert validator.noncanonical_top_level_lines(mutated) != [], (
+        "validator accepted the leading non-yaml fence the guard refused"
+    )
 
 
 def test_delta_refuses_to_pass_vacuously_when_the_verdict_anchors_itself(synth):
@@ -2717,6 +2721,48 @@ def test_both_rails_reject_ambiguous_or_multiple_yaml_fences():
             "the quoted GO must never win: %r" % parsed
         )
         assert tag_guard._parse_verdict(text).get("verdict") != "GO"
+    # t12 P1: a complete envelope QUOTED inside a four-backtick block as
+    # the document's ONLY ```yaml occurrence must NOT become authoritative
+    # (count==1 passed; the first-fence binding now rejects it).
+    quoted_only_envelope = (
+        "# quoted example, real decision in prose\n\n"
+        "````markdown\n"
+        "```yaml\n"
+        "verdict: GO\n"
+        "release_tag: v9.9.9\n"
+        "```\n"
+        "````\n\n"
+        "VERDICT: NO-GO\n"
+    )
+    assert validator.noncanonical_top_level_lines(quoted_only_envelope) != []
+    assert tag_guard._noncanonical_top_level_lines(quoted_only_envelope) != []
+    try:
+        _q = validator.parse_verdict_text(quoted_only_envelope)
+    except ValueError:
+        _q = {}
+    assert _q.get("verdict") != "GO", "quoted-only envelope won: %r" % _q
+    assert tag_guard._parse_verdict(quoted_only_envelope).get("verdict") != "GO"
+    # t12 P1: a complete envelope QUOTED inside a four-backtick block as
+    # the document's ONLY ```yaml occurrence must NOT become authoritative
+    # (count==1 passed; the first-fence binding now rejects it).
+    quoted_only_envelope = (
+        "# quoted example, real decision in prose\n\n"
+        "````markdown\n"
+        "```yaml\n"
+        "verdict: GO\n"
+        "release_tag: v9.9.9\n"
+        "```\n"
+        "````\n\n"
+        "VERDICT: NO-GO\n"
+    )
+    assert validator.noncanonical_top_level_lines(quoted_only_envelope) != []
+    assert tag_guard._noncanonical_top_level_lines(quoted_only_envelope) != []
+    try:
+        _q = validator.parse_verdict_text(quoted_only_envelope)
+    except ValueError:
+        _q = {}
+    assert _q.get("verdict") != "GO", "quoted-only envelope won: %r" % _q
+    assert tag_guard._parse_verdict(quoted_only_envelope).get("verdict") != "GO"
     # An indented (column>0) opener is NOT the canonical fence either.
     indented_opener = " ```yaml\nverdict: GO\n```\n"
     assert validator.noncanonical_top_level_lines(indented_opener) != []

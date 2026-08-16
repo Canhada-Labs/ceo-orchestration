@@ -1,0 +1,11 @@
+P1 — [scripts/_framework_manifest_set.sh:1057](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.LTbXxg/wt/scripts/_framework_manifest_set.sh:1057): the absent `.claude/.gitignore` dry-run branch returns success before checking tracked sensitive paths.
+
+Concrete failure scenario: a user-ceremony adopter has an already tracked `.claude/settings.local.json` but no `.claude/.gitignore`. Both fresh `install.sh --dry-run --ceremony user` and an upgrade resolving to user ceremony skip the root checks, reach this branch, print `would CREATE`, and exit 0. The real operation creates the file and then fails on the tracked-path check at lines 997–1001. I reproduced the unreachable classifier by substituting a classifier that reports the tracked overlay: the preview still returned 0 immediately.
+
+The claimed positive control misses this state: [test-gitignore-symlink-and-dryrun-unit.sh:209](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.LTbXxg/wt/scripts/tests/test-gitignore-symlink-and-dryrun-unit.sh:209) runs the real applier first, creating `.claude/.gitignore`; S14 then tests only the existing-file branch. Thus the t11 dry-run-honesty cure remains partial.
+
+Minimal fix: run `_gitignore_tracked_sensitive` before the absent-file return, and add a separate fixture with tracked posture data and an absent `.claude/.gitignore`; require rc 1, actionable migration output, and confirmation that dry-run created no file.
+
+The decision gates, npm honesty changes, T-1/T-2 behavior, counts, stdlib checks, workflow syntax, and administrative release scope otherwise checked cleanly. This remains advisory evidence, but the incomplete positive control is a release-blocking P1.
+
+VERDICT: NO-GO

@@ -222,3 +222,32 @@ autorizado. Nenhuma mudança executável pendente.
   documentada do repo) — `sed -n '1,5p'`; control S15 com 6 arquivos.
 - P2 (parte 2 #4): prosa do Governance no CHANGELOG desambiguada
   (range 184→191 é por NÚMERO; 192 é file-count com amendments).
+
+## Ciclo t12 → X7 (RODADA t13 DECLARADA FINAL)
+
+- P1 (parte 1): envelope COMPLETO quoted num bloco de 4 backticks como
+  a ÚNICA ocorrência de fence yaml do documento passava o gate
+  count==1 e virava autoritativo (decisão real em prosa). Cura
+  ESTRUTURAL: o PRIMEIRO fence do documento deve SER o opener yaml
+  canônico (`^\x60{3,}` antes do opener ⇒ rejeição) — fecha o espaço
+  de fences por construção: nada pode vir antes. O teste
+  `test_guard_selects_the_yaml_block_like_the_step15_reader` foi
+  RE-PINADO: leading non-yaml fence agora rejeita nos DOIS readers
+  (paridade mantida, direção fail-closed; a semântica antiga
+  "seleciona o primeiro yaml" foi abandonada pela regra da
+  ambiguidade em t9/t12).
+- P2 (parte 1): `test_validate_pair_rail_verdict.py` adicionado ao
+  pathspec da parte 1 do runner.
+- P1 (parte 2): o ramo ABSENT do preview nested devolvia would-CREATE
+  exit 0 sem checar tracked (o real cria e ENTÃO falha) — o mesmo
+  classifier read-only roda antes do return; control S16 prova rc 1 +
+  zero criação de arquivo.
+
+DECISÃO DE FECHAMENTO (registrada antes do t13): t13 é a RODADA FINAL
+deste re-pass. Os espaços dos achados das partes 1 e 2 estão fechados
+por construção (first-fence binding elimina "algo antes do opener";
+o preview cobriu seu último ramo). Um P1 NOVO no t13 não gera t14:
+vai à decisão Owner de GO-WITH-CONDITIONS com residual declarado —
+o mecanismo do protocolo para cauda de revisão (precedente V1/V2/V4/V5
+deste mesmo trem), alinhado à lição S296 (teto de rodadas + troca de
+alvo, nunca insistência infinita).

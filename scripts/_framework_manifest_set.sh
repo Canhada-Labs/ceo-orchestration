@@ -1055,6 +1055,18 @@ _preview_claude_dir_gitignore() {
     return 1
   fi
   if [ ! -e "$_pcg_file" ]; then
+    # t12 P1: the ABSENT branch must be as honest as the rest — the real
+    # run CREATES the file and then fails on the tracked check, so a
+    # would-CREATE + exit 0 preview over a tracked overlay lies. Same
+    # read-only classifier, still zero writes.
+    _pcg_repo="$( dirname "$1" )"
+    _pcg_tracked="$( _gitignore_tracked_sensitive "$_pcg_repo" \
+      ".claude/settings.local.json" ".claude/state" )"
+    if [ -n "$_pcg_tracked" ]; then
+      echo "    (dry-run) ERROR: sensitive path(s) already TRACKED — real run would CREATE .claude/.gitignore and then REFUSE, demanding git rm --cached:" >&2
+      printf '%s\n' "$_pcg_tracked" | sed 's/^/      /' >&2
+      return 1
+    fi
     echo "    (dry-run) would CREATE: .claude/.gitignore"
     return 0
   fi

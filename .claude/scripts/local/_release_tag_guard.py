@@ -127,6 +127,16 @@ _FORBIDDEN_CTRL_RE = re.compile(
 def _extract_single_yaml_block(text):
     if text.count("```yaml") != 1:
         return None
+    # t12 P1: the FIRST fence of the document must BE the canonical
+    # yaml opener — a complete envelope quoted inside a four-backtick
+    # block as the document's ONLY ```yaml occurrence passed the
+    # count==1 gate and became authoritative while the real decision
+    # sat in prose. Any fence-looking line BEFORE the opener rejects.
+    _first_fence = re.search(r"(?m)^`{3,}", text)
+    if _first_fence is not None and not text[
+        _first_fence.start():
+    ].startswith("```yaml"):
+        return None
     # t10 P1: the CLOSER must be canonical too — a bare ^``` matched
     # ANY line starting with three backticks, so ```not-a-closer
     # closed the body early and hid a later NO-GO.
