@@ -173,7 +173,10 @@ class TestSkillUnknownGhostFilter(TestEnvContext):
 
     EMPTY_SHA = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 
-    def test_is_ghost_all_four_match(self):
+    def test_is_ghost_retired_even_when_all_four_match(self):
+        """Re-pass rc.4 t3 P1: the ghost exemption is RETIRED — the four
+        conditions are all ABSENCE, and SHA256("") corroborates nothing.
+        A ghost-shaped row counts until unforgeable provenance exists."""
         ev = {
             "action": "agent_spawn",
             "desc_preview": "",
@@ -181,7 +184,7 @@ class TestSkillUnknownGhostFilter(TestEnvContext):
             "has_profile": False,
             "desc_hash": self.EMPTY_SHA,
         }
-        self.assertTrue(_mod._is_ghost_spawn_event(ev))
+        self.assertFalse(_mod._is_ghost_spawn_event(ev))
 
     def test_is_ghost_legitimate_dispatch_not_filtered(self):
         # Real near-empty dispatch must NOT match — even with empty desc, if
@@ -198,7 +201,7 @@ class TestSkillUnknownGhostFilter(TestEnvContext):
         ]:
             self.assertFalse(_mod._is_ghost_spawn_event(variant), repr(variant))
 
-    def test_skill_unknown_excludes_ghosts(self):
+    def test_skill_unknown_counts_ghosts_now(self):
         # Inject events into iterator via monkey-patch.
         original = _mod._iter_audit_events_since
         def fake_iter(_h):
@@ -220,10 +223,10 @@ class TestSkillUnknownGhostFilter(TestEnvContext):
         _mod._iter_audit_events_since = fake_iter
         try:
             status, summary, detail = _mod.check_skill_unknown_ratio()
-            self.assertEqual(detail["total"], 2)        # ghost excluded
-            self.assertEqual(detail["unknown"], 1)
-            self.assertEqual(detail["ghosts_skipped"], 1)
-            self.assertIn("1/2", summary)
+            self.assertEqual(detail["total"], 3)        # ghost COUNTS (t3 P1)
+            self.assertEqual(detail["unknown"], 2)      # ghost is unknown too
+            self.assertEqual(detail["ghosts_skipped"], 0)
+            self.assertIn("2/3", summary)
         finally:
             _mod._iter_audit_events_since = original
 
@@ -772,6 +775,30 @@ class TestHarnessProbeFilter(TestEnvContext):
             ev["desc_hash"] = hashlib.sha256(desc.encode("utf-8")).hexdigest()
             self.assertTrue(_mod._has_harness_probe_fingerprint(ev), desc)
             self.assertFalse(_mod._is_harness_probe_event(ev), desc)
+
+    def test_empty_description_ghost_counts_too(self):
+        """Re-pass rc.4 t3 P1: the OLD ghost filter was the same
+        absence-based escape hatch — an empty-description markerless
+        spawn must enter the denominator."""
+        ghost = {
+            "action": "agent_spawn", "subagent_type": "",
+            "desc_preview": "", "desc_hash": _mod._EMPTY_SHA256,
+            "skill": "unknown", "has_profile": False,
+            "has_file_assignment": False, "rail": None, "archetype": None,
+        }
+        original = _mod._iter_audit_events_since
+
+        def fake_iter(_h):
+            yield dict(ghost)
+
+        _mod._iter_audit_events_since = fake_iter
+        try:
+            status, _summary, detail = _mod.check_skill_unknown_ratio()
+            self.assertEqual(detail.get("ghosts_skipped", 0), 0)
+            self.assertEqual(detail["total"], 1)
+            self.assertNotEqual(status, "green")
+        finally:
+            _mod._iter_audit_events_since = original
 
     def test_probe_shaped_window_counts_not_skips(self):
         """NEGATIVE CONTROL (re-pass rc.4 t2 P1 — the collision case): a

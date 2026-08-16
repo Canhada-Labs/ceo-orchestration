@@ -288,6 +288,60 @@ else
 fi
 
 # ===========================================================================
+echo "== B2-c2: pre-state ceremony migration (re-pass rc.4 t3 P1) =="
+# ===========================================================================
+# Default = fail-SAFE user; --ceremony maintainer opts back in; the
+# EFFECTIVE ceremony persists into the synthesized state so upgrade #2
+# recovers it from the record instead of re-running the migration branch.
+T_C="$( fresh_install c2 --profile core )" || exit 1
+rm -f "$T_C/$STATE_REL"
+if run_upgrade "$T_C"; then ok "pre-state upgrade rc=0"; else bad "pre-state upgrade rc=0"; fi
+if grep -q 'Ceremony: user' "$T_C.upgrade.log"; then
+  ok "pre-state default resolved to USER (fail-safe)"
+else
+  bad "pre-state default resolved to USER (fail-safe)"; grep 'Ceremony:' "$T_C.upgrade.log" >&2 || true
+fi
+if PYTHONNOUSERSITE=1 python3 -I -c '
+import json, sys
+st = json.load(open(sys.argv[1]))
+sys.exit(0 if st.get("request", {}).get("ceremony") == "user" else 1)
+' "$T_C/$STATE_REL"; then
+  ok "effective ceremony PERSISTED (request.ceremony=user)"
+else
+  bad "effective ceremony PERSISTED (request.ceremony=user)"
+fi
+if run_upgrade "$T_C"; then ok "upgrade #2 rc=0"; else bad "upgrade #2 rc=0"; fi
+if grep -q 'recorded install request' "$T_C.upgrade.log"; then
+  ok "upgrade #2 read the RECORDED ceremony (no migration branch)"
+else
+  bad "upgrade #2 read the RECORDED ceremony (no migration branch)"; grep 'Ceremony:' "$T_C.upgrade.log" >&2 || true
+fi
+
+T_M="$( fresh_install m2 --profile core )" || exit 1
+rm -f "$T_M/$STATE_REL"
+if run_upgrade "$T_M" --ceremony maintainer; then ok "pre-state --ceremony maintainer rc=0"; else bad "pre-state --ceremony maintainer rc=0"; fi
+if grep -q 'Ceremony: maintainer' "$T_M.upgrade.log" && grep -q 'explicit --ceremony flag' "$T_M.upgrade.log"; then
+  ok "explicit maintainer honored + source named"
+else
+  bad "explicit maintainer honored + source named"; grep 'Ceremony:' "$T_M.upgrade.log" >&2 || true
+fi
+if PYTHONNOUSERSITE=1 python3 -I -c '
+import json, sys
+st = json.load(open(sys.argv[1]))
+sys.exit(0 if st.get("request", {}).get("ceremony") == "maintainer" else 1)
+' "$T_M/$STATE_REL"; then
+  ok "maintainer PERSISTED (request.ceremony=maintainer)"
+else
+  bad "maintainer PERSISTED (request.ceremony=maintainer)"
+fi
+if run_upgrade "$T_M"; then ok "maintainer upgrade #2 rc=0"; else bad "maintainer upgrade #2 rc=0"; fi
+if grep -q 'Ceremony: maintainer' "$T_M.upgrade.log" && grep -q 'recorded install request' "$T_M.upgrade.log"; then
+  ok "upgrade #2 recovered maintainer from the RECORD"
+else
+  bad "upgrade #2 recovered maintainer from the RECORD"; grep 'Ceremony:' "$T_M.upgrade.log" >&2 || true
+fi
+
+# ===========================================================================
 echo "== B2-d: garbage state => NOTE + fallback + rewritten valid =="
 # ===========================================================================
 printf 'this is not json{{{' > "$T_F/$STATE_REL"

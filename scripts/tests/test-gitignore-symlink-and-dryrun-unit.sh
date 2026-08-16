@@ -91,5 +91,22 @@ _after="$(cat "$TMP/s6/external-root.txt")"
 [ "$_after" = "external root" ] && echo "PASS: S6 root target intocado" \
   || { echo "FAIL: S6 root target modificado"; FAILS=$((FAILS + 1)); }
 
+# --- S7: posture writer (3o writer do root) recusa symlink ---
+mkdir -p "$TMP/s7"
+echo "external root 7" > "$TMP/s7/external-root.txt"
+ln -s "$TMP/s7/external-root.txt" "$TMP/s7/.gitignore"
+_apply_posture_state_ignores "$TMP/s7/.gitignore" >/dev/null 2>&1; rc=$?
+_t "S7 posture writer recusa symlink" 1 "$rc"
+_after="$(cat "$TMP/s7/external-root.txt")"
+[ "$_after" = "external root 7" ] && echo "PASS: S7 target intocado" \
+  || { echo "FAIL: S7 target modificado"; FAILS=$((FAILS + 1)); }
+
+# --- S8: predicado compartilhado de preview ---
+_root_gitignore_symlink_guard "$TMP/s7/.gitignore" >/dev/null 2>&1; rc=$?
+_t "S8 preview guard detecta symlink" 1 "$rc"
+mkdir -p "$TMP/s8"; printf 'x\n' > "$TMP/s8/.gitignore"
+_root_gitignore_symlink_guard "$TMP/s8/.gitignore" >/dev/null 2>&1; rc=$?
+_t "S8 preview guard passa arquivo regular" 0 "$rc"
+
 echo
 if [ "$FAILS" -eq 0 ]; then echo "ALL GREEN"; exit 0; else echo "$FAILS FAIL(s)"; exit 1; fi

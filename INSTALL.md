@@ -659,9 +659,15 @@ Ceremony on upgrade: `upgrade.sh` reads the recorded install ceremony
 from `.claude/.install-state.json` with a dedicated reader that runs
 even under `--no-replay`. **Installs without a readable
 `.install-state.json` (all pre-Wave-B installs) are treated as
-`maintainer` on upgrade** — that is the fail-open, pre-existing
-behavior; if your install was `--ceremony user` and predates the state
-file, re-run `install.sh --ceremony user` once so the ceremony is
+`user` on upgrade** — the fail-SAFE default since the rc.4 re-pass
+(root PROTOCOL/SPEC/.gitignore delivery is SKIPPED, loudly). A
+pre-state MAINTAINER install opts back in with
+`upgrade.sh <target> --ceremony maintainer` (or the
+`CEO_UPGRADE_CEREMONY=maintainer` env override); the effective
+ceremony is then PERSISTED into the synthesized state so later
+upgrades recover it. If your install was `--ceremony user` and
+predates the state file, the default already protects you; you may
+also re-run `install.sh --ceremony user` once so the ceremony is
 recorded before upgrading.
 
 `.claude/settings.json` is a special case since v1.2.0: `upgrade.sh` runs a

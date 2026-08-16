@@ -2,7 +2,7 @@
   "schema_version": "1.0",
   "_comment": "Canonical inventory of CLAUDE_*/ANTHROPIC_*/CEO_* names referenced by framework code (PLAN-135 W5 O8 — the S218 footgun class). Token-level superset of strictly-consumed vars; see env-inventory-check.py docstring. Regenerate with --generate after any REVIEWED env-surface change.",
   "generated_by": "env-inventory-check.py --generate",
-  "generated_at": "2026-08-14",
+  "generated_at": "2026-08-16",
   "scan_roots": [
     ".claude/hooks",
     ".claude/scripts",
@@ -225,7 +225,7 @@
         ".claude/hooks/_lib/audit_emit.py",
         ".claude/hooks/_lib/audit_hmac.py"
       ],
-      "sites": 47
+      "sites": 48
     },
     "CEO_AUDIT_LOG_ERR": {
       "evidence": [
@@ -241,7 +241,7 @@
         ".claude/hooks/_lib/test_isolation.py",
         ".claude/scripts/env-inventory.json"
       ],
-      "sites": 3
+      "sites": 4
     },
     "CEO_AUDIT_LOG_LOCK": {
       "evidence": [
@@ -257,7 +257,7 @@
         ".claude/hooks/_lib/audit_hmac.py",
         ".claude/hooks/_lib/federation/handlers/audit_event_push.py"
       ],
-      "sites": 38
+      "sites": 39
     },
     "CEO_AUDIT_LOG_ROTATE_BYTES": {
       "evidence": [
@@ -438,15 +438,17 @@
     },
     "CEO_BOOT_SCHED_RED": {
       "evidence": [
-        ".claude/scripts/ceo-boot.py"
+        ".claude/scripts/ceo-boot.py",
+        ".claude/scripts/env-inventory.json"
       ],
-      "sites": 1
+      "sites": 2
     },
     "CEO_BOOT_SCHED_RED_TIMEOUT_S": {
       "evidence": [
-        ".claude/scripts/ceo-boot.py"
+        ".claude/scripts/ceo-boot.py",
+        ".claude/scripts/env-inventory.json"
       ],
-      "sites": 1
+      "sites": 2
     },
     "CEO_BOOT_TASK_STATE_PATH": {
       "evidence": [
@@ -557,9 +559,10 @@
     },
     "CEO_CANONICAL_ORACLE": {
       "evidence": [
+        ".claude/scripts/env-inventory.json",
         "templates/grok/pre-push-review-gate.sh"
       ],
-      "sites": 1
+      "sites": 2
     },
     "CEO_CHAOS_ALLOWED": {
       "evidence": [
@@ -635,15 +638,17 @@
     },
     "CEO_CODEX_PUSH_GATE": {
       "evidence": [
+        ".claude/scripts/env-inventory.json",
         "templates/codex/pre-push-review-gate.sh"
       ],
-      "sites": 1
+      "sites": 2
     },
     "CEO_CODEX_PUSH_GATE_ADVISORY": {
       "evidence": [
+        ".claude/scripts/env-inventory.json",
         "templates/codex/pre-push-review-gate.sh"
       ],
-      "sites": 1
+      "sites": 2
     },
     "CEO_CODEX_REVIEW": {
       "evidence": [
@@ -663,22 +668,25 @@
     "CEO_CODEX_REVIEW_STATE_DIR": {
       "evidence": [
         ".claude/hooks/check_codex_stop_review.py",
+        ".claude/scripts/env-inventory.json",
         "templates/codex/pre-push-review-gate.sh"
       ],
-      "sites": 2
+      "sites": 3
     },
     "CEO_CODEX_STOP_REVIEW": {
       "evidence": [
-        ".claude/hooks/check_codex_stop_review.py"
+        ".claude/hooks/check_codex_stop_review.py",
+        ".claude/scripts/env-inventory.json"
       ],
-      "sites": 1
+      "sites": 2
     },
     "CEO_CODEX_TURN_SOURCE": {
       "evidence": [
         ".claude/hooks/audit_log.py",
+        ".claude/scripts/env-inventory.json",
         "scripts/codex-exec-wrapper.sh"
       ],
-      "sites": 2
+      "sites": 3
     },
     "CEO_CODEX_USER_REVIEW": {
       "evidence": [
@@ -921,10 +929,10 @@
     "CEO_DIRECTORY_ADDED_GUARD": {
       "evidence": [
         ".claude/hooks/check_directory_added.py",
-        ".claude/settings.json",
-        "scripts/upgrade.sh"
+        ".claude/scripts/env-inventory.json",
+        ".claude/settings.json"
       ],
-      "sites": 3
+      "sites": 4
     },
     "CEO_DISPATCHER_MODE": {
       "evidence": [
@@ -1212,27 +1220,31 @@
     },
     "CEO_GROK_PUSH_GATE": {
       "evidence": [
+        ".claude/scripts/env-inventory.json",
         "templates/grok/pre-push-review-gate.sh"
       ],
-      "sites": 1
+      "sites": 2
     },
     "CEO_GROK_PUSH_GATE_ADVISORY": {
       "evidence": [
+        ".claude/scripts/env-inventory.json",
         "templates/grok/pre-push-review-gate.sh"
       ],
-      "sites": 1
+      "sites": 2
     },
     "CEO_GROK_REVIEW_STATE_DIR": {
       "evidence": [
+        ".claude/scripts/env-inventory.json",
         "templates/grok/pre-push-review-gate.sh"
       ],
-      "sites": 1
+      "sites": 2
     },
     "CEO_GROK_TURN_SOURCE": {
       "evidence": [
-        ".claude/hooks/audit_log.py"
+        ".claude/hooks/audit_log.py",
+        ".claude/scripts/env-inventory.json"
       ],
-      "sites": 1
+      "sites": 2
     },
     "CEO_HARNESS_CONFIG_GATE": {
       "evidence": [
@@ -1299,9 +1311,10 @@
     },
     "CEO_HOOK_EXIT_MAP": {
       "evidence": [
-        ".claude/hooks/_python-hook.sh"
+        ".claude/hooks/_python-hook.sh",
+        ".claude/scripts/env-inventory.json"
       ],
-      "sites": 1
+      "sites": 2
     },
     "CEO_I18N_FRAMEWORK": {
       "evidence": [
@@ -1773,10 +1786,10 @@
     "CEO_NOTIFICATION_TELEMETRY": {
       "evidence": [
         ".claude/hooks/check_notification.py",
-        ".claude/settings.json",
-        "scripts/upgrade.sh"
+        ".claude/scripts/env-inventory.json",
+        ".claude/settings.json"
       ],
-      "sites": 3
+      "sites": 4
     },
     "CEO_N_BACKEND": {
       "evidence": [
@@ -2090,21 +2103,24 @@
     },
     "CEO_PAIR_RAIL_PIN_MANIFEST": {
       "evidence": [
-        ".claude/hooks/check_pair_rail.py"
+        ".claude/hooks/check_pair_rail.py",
+        ".claude/scripts/env-inventory.json"
       ],
-      "sites": 1
+      "sites": 2
     },
     "CEO_PAIR_RAIL_REVIEWER_MAX_TOKENS": {
       "evidence": [
-        ".claude/hooks/check_codex_stop_review.py"
+        ".claude/hooks/check_codex_stop_review.py",
+        ".claude/scripts/env-inventory.json"
       ],
-      "sites": 1
+      "sites": 2
     },
     "CEO_PAIR_RAIL_REVIEWER_MODEL": {
       "evidence": [
-        ".claude/hooks/check_codex_stop_review.py"
+        ".claude/hooks/check_codex_stop_review.py",
+        ".claude/scripts/env-inventory.json"
       ],
-      "sites": 1
+      "sites": 2
     },
     "CEO_PAIR_RAIL_STAGED_AUDIT_EMIT_DIR": {
       "evidence": [
@@ -2115,16 +2131,18 @@
     },
     "CEO_PAIR_RAIL_TARGET_TRIPLE": {
       "evidence": [
-        ".claude/hooks/check_pair_rail.py"
+        ".claude/hooks/check_pair_rail.py",
+        ".claude/scripts/env-inventory.json"
       ],
-      "sites": 1
+      "sites": 2
     },
     "CEO_PAIR_RAIL_TEST_MODE": {
       "evidence": [
         ".claude/hooks/check_pair_rail.py",
+        ".claude/scripts/env-inventory.json",
         ".claude/scripts/local/pair-rail-gate.sh"
       ],
-      "sites": 2
+      "sites": 3
     },
     "CEO_PAIR_RAIL_TIMEOUT_S": {
       "evidence": [
@@ -2136,9 +2154,10 @@
     },
     "CEO_PAIR_RAIL_VERDICT_OPTIONAL": {
       "evidence": [
+        ".claude/scripts/env-inventory.json",
         ".claude/scripts/local/_release_tag_guard.py"
       ],
-      "sites": 1
+      "sites": 2
     },
     "CEO_PARALLEL_WRITER": {
       "evidence": [
@@ -2530,10 +2549,11 @@
     },
     "CEO_REVIEWER_MODEL": {
       "evidence": [
+        ".claude/scripts/env-inventory.json",
         "scripts/_codex_harness.sh",
         "scripts/_grok_harness.sh"
       ],
-      "sites": 2
+      "sites": 3
     },
     "CEO_REVIEW_LOOP": {
       "evidence": [
@@ -2610,15 +2630,17 @@
     },
     "CEO_SENTINEL_UNLOCK_SHA256": {
       "evidence": [
-        ".claude/hooks/check_canonical_edit.py"
+        ".claude/hooks/check_canonical_edit.py",
+        ".claude/scripts/env-inventory.json"
       ],
-      "sites": 1
+      "sites": 2
     },
     "CEO_SESSION_ANCHOR_SHA": {
       "evidence": [
-        ".claude/hooks/check_canonical_edit.py"
+        ".claude/hooks/check_canonical_edit.py",
+        ".claude/scripts/env-inventory.json"
       ],
-      "sites": 1
+      "sites": 2
     },
     "CEO_SESSION_GRAPH_DIR": {
       "evidence": [
@@ -2637,9 +2659,10 @@
     },
     "CEO_SESSION_ROOTS_ALLOW": {
       "evidence": [
-        ".claude/hooks/check_canonical_edit.py"
+        ".claude/hooks/check_canonical_edit.py",
+        ".claude/scripts/env-inventory.json"
       ],
-      "sites": 1
+      "sites": 2
     },
     "CEO_SESSION_START_HEAD": {
       "evidence": [
@@ -2843,9 +2866,10 @@
     "CEO_SPAWN_FILE_ASSIGNMENT_REQUIRED": {
       "evidence": [
         ".claude/hooks/check_agent_spawn.py",
+        ".claude/scripts/env-inventory.json",
         ".claude/scripts/inject-agent-context.sh"
       ],
-      "sites": 2
+      "sites": 3
     },
     "CEO_SPAWN_OVERLAP_GUARD": {
       "evidence": [
@@ -3071,9 +3095,10 @@
     },
     "CEO_T34_NEW_EVENT_REGISTRATIONS": {
       "evidence": [
+        ".claude/scripts/env-inventory.json",
         "scripts/upgrade.sh"
       ],
-      "sites": 1
+      "sites": 2
     },
     "CEO_TERSE_MODE": {
       "evidence": [
@@ -3326,6 +3351,12 @@
       ],
       "sites": 4
     },
+    "CEO_UPGRADE_CEREMONY": {
+      "evidence": [
+        "scripts/upgrade.sh"
+      ],
+      "sites": 1
+    },
     "CEO_USER_ID": {
       "evidence": [
         ".claude/hooks/check_cost_envelope.py",
@@ -3482,9 +3513,10 @@
     },
     "CLAUDE_DIR": {
       "evidence": [
+        ".claude/scripts/env-inventory.json",
         "scripts/_framework_manifest_set.sh"
       ],
-      "sites": 1
+      "sites": 2
     },
     "CLAUDE_DIR_NAME": {
       "evidence": [
@@ -3511,9 +3543,10 @@
     },
     "CLAUDE_HOOK_EVENT": {
       "evidence": [
-        ".claude/hooks/_python-hook.sh"
+        ".claude/hooks/_python-hook.sh",
+        ".claude/scripts/env-inventory.json"
       ],
-      "sites": 1
+      "sites": 2
     },
     "CLAUDE_IMPORTS_BLOCK": {
       "evidence": [
@@ -3618,7 +3651,7 @@
         ".claude/hooks/SessionStart.py",
         ".claude/hooks/Stop.py"
       ],
-      "sites": 27
+      "sites": 28
     },
     "CLAUDE_SIZE": {
       "evidence": [

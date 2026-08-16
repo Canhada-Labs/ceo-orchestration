@@ -1779,6 +1779,10 @@ install_mcp_secrets_dir() {
     else
       echo "    (dry-run) would CREATE: state/mcp_client_secrets (chmod 700)"
     fi
+    if [[ -L "$TARGET/.gitignore" ]]; then
+      echo "    (dry-run) ERROR: root .gitignore is a symlink — real run would REFUSE" >&2
+      exit 1
+    fi
     echo "    (dry-run) would ENSURE .gitignore excludes state/mcp_client_secrets/"
     return 0
   fi
@@ -1838,6 +1842,10 @@ install_posture_state_ignores() {
   if [[ "$DRY_RUN" -eq 1 ]]; then
     echo ""
     echo "==> Posture-state .gitignore entries (PLAN-165 CX-3)"
+    if [[ -L "$TARGET/.gitignore" ]]; then
+      echo "    (dry-run) ERROR: root .gitignore is a symlink — real run would REFUSE" >&2
+      exit 1
+    fi
     echo "    (dry-run) would ENSURE .gitignore excludes: $entries"
     return 0
   fi

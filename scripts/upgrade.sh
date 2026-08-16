@@ -254,6 +254,17 @@ while [[ $# -gt 0 ]]; do
       DRY_RUN=1
       shift
       ;;
+    --ceremony)
+      # Re-pass rc.4 t3 (P1): explicit ceremony for PRE-STATE targets
+      # (no readable .install-state.json). A RECORDED ceremony always
+      # wins over this flag — the flag exists for the migration case.
+      CEREMONY_FLAG="${2:-}"
+      case "$CEREMONY_FLAG" in
+        maintainer|user) : ;;
+        *) echo "ERROR: --ceremony must be 'maintainer' or 'user' (got '$CEREMONY_FLAG')" >&2; exit 2 ;;
+      esac
+      shift 2
+      ;;
     --purge-misinstalled)
       # PLAN-161 U3 (OQ1 Owner-ratified): opt-in, hash-gated purge of
       # mis-installed framework-internal excluded-tree files. NEVER default-on.
@@ -769,11 +780,14 @@ sys.stdout.write(cer + "\n")
 # user (root surfaces skipped, loudly); a pre-state MAINTAINER install opts
 # back in explicitly via CEO_UPGRADE_CEREMONY=maintainer.
 CEREMONY_EFFECTIVE="user"
-_CEREMONY_SOURCE="default (no readable install-state — fail-safe user; set CEO_UPGRADE_CEREMONY=maintainer to override)"
+_CEREMONY_SOURCE="default (no readable install-state — fail-safe user; pass --ceremony maintainer to opt back in)"
 _cer_line=""
 if _cer_line="$(_read_install_state_ceremony)" && [[ -n "$_cer_line" ]]; then
   CEREMONY_EFFECTIVE="$_cer_line"
   _CEREMONY_SOURCE="recorded install request (.claude/.install-state.json)"
+elif [[ -n "${CEREMONY_FLAG:-}" ]]; then
+  CEREMONY_EFFECTIVE="$CEREMONY_FLAG"
+  _CEREMONY_SOURCE="explicit --ceremony flag (no install-state)"
 elif [[ "${CEO_UPGRADE_CEREMONY:-}" == "maintainer" || "${CEO_UPGRADE_CEREMONY:-}" == "user" ]]; then
   CEREMONY_EFFECTIVE="$CEO_UPGRADE_CEREMONY"
   _CEREMONY_SOURCE="explicit CEO_UPGRADE_CEREMONY override (no install-state)"
@@ -2992,6 +3006,15 @@ backup_and_replace ".claude/scripts"
 backup_and_replace ".claude/commands"
 backup_and_replace ".claude/pitfalls-catalog.yaml"
 backup_and_replace ".claude/task-chains.yaml"
+# Re-pass rc.4 t3 (smoke STALE): the plans/ SCHEMA docs are FRAMEWORK
+# contract files that install.sh seeds but upgrade never refreshed — the
+# first framework edit to either (S305 touched DEBATE-SCHEMA.md) left every
+# upgraded adopter on the previous generation, the exact F3 STALE signature
+# the parity e2e flags FATAL. The rest of .claude/plans/ stays untouched
+# (adopter-owned); only the two schema contracts refresh, with the same
+# warn-before-clobber + backup semantics as every framework file above.
+backup_and_replace ".claude/plans/PLAN-SCHEMA.md"
+backup_and_replace ".claude/plans/DEBATE-SCHEMA.md"
 # agent-metrics.md preserved (user data). settings.json is preserved here too —
 # ONLY the PLAN-135 W2 H8 settings-merge (additive lifecycle-hook registration)
 # and the PLAN-163 T5.4 baseline migration (3-state per leaf key; customized
@@ -3183,6 +3206,10 @@ else
   _UP_MCP_ENTRY="$( _mcp_secrets_ignore_entry )"
   _UP_POSTURE_ENTRIES="$( _posture_state_ignore_entries )"
   if [[ "$DRY_RUN" -eq 1 ]]; then
+    if [[ -L "$TARGET/.gitignore" ]]; then
+      echo "    (dry-run) ERROR: root .gitignore is a symlink — real run would REFUSE" >&2
+      exit 1
+    fi
     echo "    (dry-run) would ENSURE .gitignore excludes: $_UP_MCP_ENTRY"
     echo "    (dry-run) would ENSURE .gitignore excludes: $_UP_POSTURE_ENTRIES"
   else
@@ -3389,6 +3416,13 @@ if req is None:
     }
 req["profile"] = vals.get("profile", "")
 req["stack"] = vals.get("stack", "")
+# Re-pass rc.4 t3 (P1): persist the EFFECTIVE ceremony so the resolution
+# above survives into the next upgrade — a synthesized pre-Wave-B state
+# without request.ceremony forced the migration branch on EVERY upgrade.
+# Never overwrite a recorded value.
+_cer = vals.get("ceremony_effective", "")
+if "ceremony" not in req and _cer in ("maintainer", "user"):
+    req["ceremony"] = _cer
 # PLAN-155 Wave 5: persist harness so it survives even a pre-Wave-B target
 # whose request was synthesized above. Only overwrite when non-empty so a
 # claude-only upgrade never clobbers a recorded codex harness with "".

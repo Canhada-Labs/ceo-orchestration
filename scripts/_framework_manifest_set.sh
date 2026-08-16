@@ -790,12 +790,9 @@ _mcp_secrets_ignore_entry() {
 _apply_mcp_secrets_ignore() {
   # $1 = path to the adopter ROOT .gitignore (may not exist yet).
   _msi_gitignore="$1"
-  # Re-pass rc.4 t2 (P1): same symlink refusal as the nested helper — a
-  # root .gitignore symlink must never route framework appends elsewhere.
-  if [ -L "$_msi_gitignore" ]; then
-    echo "    ERROR: root .gitignore is a symlink — refusing to write through it" >&2
-    return 1
-  fi
+  # Re-pass rc.4 t2 (P1): shared symlink refusal — a root .gitignore
+  # symlink must never route framework appends elsewhere.
+  _root_gitignore_symlink_guard "$_msi_gitignore" || return 1
   _msi_line="$( _mcp_secrets_ignore_entry )"
   if [ -f "$_msi_gitignore" ]; then
     if ! grep -Fxq "$_msi_line" "$_msi_gitignore" 2>/dev/null; then
@@ -822,9 +819,22 @@ _posture_state_ignore_entries() {
   printf '%s\n' ".claude/state/ .claude/settings.local.json"
 }
 
+_root_gitignore_symlink_guard() {
+  # $1 = path to the adopter ROOT .gitignore. 0 = safe; 1 = symlink
+  # (re-pass rc.4 t3 P2: shared predicate for APPLY *and* dry-run
+  # previews — the preview must never say "would ENSURE" where the real
+  # run refuses).
+  if [ -L "$1" ]; then
+    echo "    ERROR: root .gitignore is a symlink — refusing to write through it" >&2
+    return 1
+  fi
+  return 0
+}
+
 _apply_posture_state_ignores() {
   # $1 = path to the adopter ROOT .gitignore (append creates it if absent).
   _psi_gitignore="$1"
+  _root_gitignore_symlink_guard "$_psi_gitignore" || return 1
   for _psi_line in $( _posture_state_ignore_entries ); do
     if [ -f "$_psi_gitignore" ] && grep -Fxq "$_psi_line" "$_psi_gitignore" 2>/dev/null; then
       echo "    .gitignore already excludes $_psi_line"

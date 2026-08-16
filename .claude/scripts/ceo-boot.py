@@ -507,12 +507,15 @@ def _is_ghost_spawn_event(ev: Dict[str, Any]) -> bool:
     legitimate near-empty dispatches: empty desc, no rail attribution, no
     profile marker, and SHA-of-empty-string desc_hash.
     """
-    return (
-        ev.get("desc_preview") == ""
-        and ev.get("rail") is None
-        and ev.get("has_profile") is False
-        and ev.get("desc_hash") == _EMPTY_SHA256
-    )
+    # Re-pass rc.4 t3 (P1): RETIRED with the same rationale as the S303
+    # harness-probe exemption — every condition here is ABSENCE, and
+    # desc_hash == SHA256("") corroborates nothing (it derives from the
+    # same empty caller-controlled description). A real markerless spawn
+    # with an empty description — e.g. one a fail-open PreToolUse hook
+    # admitted — matched all four and was deleted from the denominator.
+    # Ghost-shaped rows COUNT until the emitter can stamp provenance the
+    # caller cannot forge.
+    return False
 
 
 # PLAN-177 t2 (re-pass rc.4 P1-f). The POSITIVE half of the probe test.

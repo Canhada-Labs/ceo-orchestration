@@ -101,8 +101,22 @@ _YAML_BLOCK_RE = re.compile(r"```yaml\s*\n(.*?)```", re.DOTALL)
 
 
 def _strip_comment(raw: str) -> str:
-    """The comment/whitespace rule of the reader below, in ONE place."""
-    return raw.split("#", 1)[0].rstrip() if "#" in raw else raw.rstrip()
+    """YAML comment rule (re-pass rc.4 t3 P1): `#` starts a comment ONLY at
+    line start or when PRECEDED by whitespace — `verdict: GO#NO-GO` is the
+    single unknown VALUE `GO#NO-GO`, never `GO` plus a comment. Truncating
+    at every `#` authorized that value on both rails. Byte-for-byte twin of
+    `_strip_yaml_comment` in _release_tag_guard.py.
+    """
+    if raw.lstrip().startswith("#"):
+        return ""
+    i = 0
+    while True:
+        j = raw.find("#", i)
+        if j == -1:
+            return raw.rstrip()
+        if j > 0 and raw[j - 1] in (" ", "\t"):
+            return raw[:j].rstrip()
+        i = j + 1
 
 
 # PLAN-177 t2 (re-pass rc.4 P1-a). The CANONICAL top-level declaration.

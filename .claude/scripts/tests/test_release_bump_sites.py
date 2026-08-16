@@ -2186,10 +2186,15 @@ _REFUSED_DECISIONS = [
     ["no-go"],
     ["GO WITH CONDITIONS"],
     ["GO | NO-GO | GO-WITH-CONDITIONS"],
+    # Re-pass rc.4 t3 P1: `#` WITHOUT preceding whitespace is NOT a YAML
+    # comment — these are single unknown values, not GO + comment.
+    ["GO#NO-GO"],
+    ["GO-WITH-CONDITIONS#NO-GO"],
 ]
 _REFUSED_IDS = [
     "no-go", "absent", "unknown", "empty", "lowercase", "lower-no-go",
     "spaced", "template-literal",
+    "hash-glued-no-go", "hash-glued-gwc",
 ]
 
 
@@ -2509,6 +2514,7 @@ def test_both_rails_answer_identically_on_every_key_shape():
         "verdict: GO\ndelta_allowlist:\n  - a/b.md\n  - c/d.md\n",
         "verdict: GO\ntool_versions:\n  codex_cli: 0.144.6\n",
         "verdict: GO  # inline comment\n",
+        "verdict: GO#NO-GO\nrelease_tag: v1.2.3\n",
         "# verdict: NO-GO\nverdict: GO\n",
     ]
     noncanonical_shapes = [

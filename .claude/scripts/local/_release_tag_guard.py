@@ -221,7 +221,7 @@ def _parse_verdict(text: str) -> Dict[str, object]:
         return fields
     cur_list: Optional[str] = None
     for raw in block.group(1).splitlines():
-        line = raw.split("#", 1)[0].rstrip() if "#" in raw else raw.rstrip()
+        line = _strip_yaml_comment(raw)
         if not line.strip():
             continue
         if line.startswith(("  - ", "- ")) and cur_list:
@@ -262,6 +262,24 @@ def _parse_verdict(text: str) -> Dict[str, object]:
 # surface and is the only behaviour that cannot silently prefer a value.
 # A top-level line is canonical iff it is `name:` with no whitespace before
 # the colon, or a `- ` list item.
+def _strip_yaml_comment(raw):
+    """YAML comment rule (re-pass rc.4 t3 P1): `#` starts a comment ONLY at
+    line start or when PRECEDED by whitespace — `verdict: GO#NO-GO` is the
+    single unknown VALUE `GO#NO-GO`, never `GO` plus a comment. Byte-for-
+    byte twin of `_strip_comment` in validate-pair-rail-verdict.py.
+    """
+    if raw.lstrip().startswith("#"):
+        return ""
+    i = 0
+    while True:
+        j = raw.find("#", i)
+        if j == -1:
+            return raw.rstrip()
+        if j > 0 and raw[j - 1] in (" ", "\t"):
+            return raw[:j].rstrip()
+        i = j + 1
+
+
 _CANONICAL_TOP_LEVEL_KEY_RE = re.compile(r"\A[A-Za-z0-9_]+:")
 
 
@@ -279,7 +297,7 @@ def _noncanonical_top_level_lines(text: str) -> List[str]:
     bad: List[str] = []
     prev_scalar_decl = False
     for raw in block.group(1).splitlines():
-        line = raw.split("#", 1)[0].rstrip() if "#" in raw else raw.rstrip()
+        line = _strip_yaml_comment(raw)
         if not line.strip():
             continue
         if line[0] in (" ", "\t"):
@@ -323,7 +341,7 @@ def _count_top_level_key(text: str, key: str) -> int:
         return 0
     seen = 0
     for raw in block.group(1).splitlines():
-        line = raw.split("#", 1)[0].rstrip() if "#" in raw else raw.rstrip()
+        line = _strip_yaml_comment(raw)
         if not line.strip() or line[0] in (" ", "\t"):
             continue
         m = re.match(r"\A([A-Za-z0-9_]+):", line)
