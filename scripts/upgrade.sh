@@ -756,11 +756,14 @@ fi
 # skipped entirely, so if the ceremony rode the replay, the documented
 # `upgrade.sh <target> --no-replay` would treat a `--ceremony user` install
 # as maintainer and force SPEC/protocol into the adopter's root (r9). This
-# reader ALWAYS runs. Fail-open: state absent/unreadable/invalid (ALL
-# pre-Wave-B installs) => "maintainer" — the pre-existing behavior; the
-# consequence is named in INSTALL.md §Upgrade flow. Same trust class as the
-# replay reader: target-side, UNSIGNED, advisory; the value is validated
-# against the closed enum {maintainer,user} and never eval-ed.
+# reader ALWAYS runs. Fail-SAFE (re-pass rc.4 t3/t5, corrected t9 P2 —
+# this comment previously described the OLD maintainer default): state
+# absent/unreadable/invalid (ALL pre-Wave-B installs) => "user" — root
+# files untouched; a pre-state MAINTAINER opts back in explicitly with
+# `--ceremony maintainer` (or CEO_UPGRADE_CEREMONY), and only an explicit
+# or recorded value ever persists. Same trust class as the replay reader:
+# target-side, UNSIGNED, advisory; the value is validated against the
+# closed enum {maintainer,user} and never eval-ed.
 # ===========================================================================
 _read_install_state_ceremony() {
   command -v python3 >/dev/null 2>&1 || return 3

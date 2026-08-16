@@ -1830,12 +1830,23 @@ def _normalize_prose(text: str) -> str:
 
 
 def _prose_outside_the_declared_zones(doc_text: str) -> str:
-    """Everything that is neither a Contract table row nor §Not yet
-    automated — the surfaces where a mechanism claim answers to nothing."""
+    """Everything that is neither a `## Contract` table row nor §Not yet
+    automated — the surfaces where a mechanism claim answers to nothing.
+
+    Re-pass rc.4 t9 P2: strip table rows ONLY inside `## Contract` — the
+    blanket startswith("|") filter exempted EVERY table anywhere in the
+    doc, so a new table outside the Contract section could carry an
+    enforcement claim past this sweep unchecked.
+    """
     body = re.sub(r"(?ms)^## Not yet automated\b.*?(?=^## |\Z)", "", doc_text)
-    return "\n".join(
-        line for line in body.splitlines() if not line.strip().startswith("|")
-    )
+    m = re.search(r"(?ms)^## Contract\b.*?(?=^## |\Z)", body)
+    if m:
+        stripped_section = "\n".join(
+            line for line in m.group(0).splitlines()
+            if not line.strip().startswith("|")
+        )
+        body = body[: m.start()] + stripped_section + body[m.end():]
+    return body
 
 
 def _enforcement_vocabulary_offenders(doc_text: str) -> List[str]:
@@ -1869,6 +1880,20 @@ def test_integrity_prose_states_no_mechanism_outside_the_declared_zones():
     assert len(swept) > len(doc) // 3, (
         "swept prose is %d chars of a %d-char file — the zones swallowed it"
         % (len(swept), len(doc))
+    )
+
+    # t9 P2 positive control: a table OUTSIDE `## Contract` carrying an
+    # enforcement claim must NOT be exempted by the sweep — the old blanket
+    # `startswith("|")` filter stripped every table anywhere.
+    outside_table = (
+        doc
+        + "\n## Some new section\n\n"
+        + "| per-tarball SHA-256 manifest | enforced today; recorded by "
+        + "npm-publish.yml |\n"
+    )
+    assert _enforcement_vocabulary_offenders(outside_table), (
+        "an enforcement claim inside a table OUTSIDE ## Contract passed the "
+        "generic sweep — the exemption must be Contract-section-only"
     )
 
     # (a) NEGATIVE control FIRST, deliberately: today's text passes on its own
@@ -2568,6 +2593,49 @@ def test_integrity_md_names_the_real_packlist_exceptions():
     )
 
 
+def test_both_rails_reject_ambiguous_or_multiple_yaml_fences():
+    """Re-pass rc.4 t9 P1 #1: an unanchored block regex let a QUOTED
+    ```yaml fence inside a four-backtick block become the authoritative
+    verdict — a quoted GO envelope shadowed the real top-level NO-GO one
+    and both rails exited 0. The strict extractor rejects any artifact
+    whose literal ```yaml count differs from exactly one."""
+    quoted_go_shadowing_real_nogo = (
+        "# quoted example\n\n"
+        "````markdown\n"
+        "```yaml\n"
+        "verdict: GO\n"
+        "release_tag: v9.9.9\n"
+        "```\n"
+        "````\n\n"
+        "```yaml\n"
+        "verdict: NO-GO\n"
+        "release_tag: v9.9.9\n"
+        "```\n"
+    )
+    two_plain_blocks = (
+        "```yaml\nverdict: GO\n```\n\n```yaml\nverdict: NO-GO\n```\n"
+    )
+    for text in (quoted_go_shadowing_real_nogo, two_plain_blocks):
+        assert validator.noncanonical_top_level_lines(text) != [], (
+            "step-15 validator accepted an ambiguous multi-fence artifact"
+        )
+        assert tag_guard._noncanonical_top_level_lines(text) != [], (
+            "tag guard accepted an ambiguous multi-fence artifact"
+        )
+        try:
+            parsed = validator.parse_verdict_text(text)
+        except ValueError:
+            parsed = {}
+        assert parsed.get("verdict") != "GO", (
+            "the quoted GO must never win: %r" % parsed
+        )
+        assert tag_guard._parse_verdict(text).get("verdict") != "GO"
+    # An indented (column>0) opener is NOT the canonical fence either.
+    indented_opener = " ```yaml\nverdict: GO\n```\n"
+    assert validator.noncanonical_top_level_lines(indented_opener) != []
+    assert tag_guard._noncanonical_top_level_lines(indented_opener) != []
+
+
 def test_both_rails_answer_identically_on_every_key_shape():
     """The instrument that would have caught P1-a: ONE question, two readers.
 
@@ -2612,6 +2680,14 @@ def test_both_rails_answer_identically_on_every_key_shape():
         # orphan-indented line under it) and a lone-U+00A0 line as blank.
         "padding: \u00a0\n  verdict: NO-GO\nverdict: GO\n",
         "\u00a0\nverdict: GO\n",
+        # Re-pass rc.4 t9 P1 #2: str.splitlines() also splits on VT/FF/
+        # FS-RS/NEL/LS/PS \u2014 `GO<U+000B>#NO-GO` parsed as the exact token
+        # GO on both rails. The extractor now rejects every control byte
+        # except TAB and every separator except LF.
+        "verdict: GO\u000b#NO-GO\n",
+        "verdict: GO\u2028verdict: NO-GO\n",
+        "verdict: GO\u0085release_tag: v1.2.3\n",
+        "verdict: GO\r\nrelease_tag: v1.2.3\n",
     ]
     for body in canonical_shapes:
         text = block(body)

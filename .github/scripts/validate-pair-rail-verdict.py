@@ -101,7 +101,38 @@ ACCEPTED_DECISIONS = ("GO", "GO-WITH-CONDITIONS")
 # `\s*` after the fence opener SWALLOWED a leading U+00A0 line before
 # the shape classifier ever saw it. ASCII-only here, like every other
 # trim in this reader.
-_YAML_BLOCK_RE = re.compile(r"```yaml[ \t]*\n(.*?)```", re.DOTALL)
+_YAML_BLOCK_RE = re.compile(r"```yaml[ \t]*\n(.*?)```", re.DOTALL)  # legacy: superseded by _extract_single_yaml_block below
+
+# t9 P1 (both twins): ONE strict extractor for the signed yaml block.
+#   * the artifact must contain EXACTLY ONE occurrence of the literal
+#     ```yaml anywhere in the text — a second occurrence (even quoted
+#     inside a four-backtick block) makes the authoritative block
+#     ambiguous, so the artifact is rejected fail-closed;
+#   * the opener must sit at line start, column 0, exactly three
+#     backticks, closed by a line-start ``` — an unanchored search let a
+#     quoted GO envelope inside a ````-fence shadow the real NO-GO one;
+#   * the block must be free of every line separator except \n and of
+#     every control char except \t: str.splitlines() also splits on
+#     U+000B/000C/001C-001E/0085/2028/2029, so `GO<U+000B>#NO-GO`
+#     parsed as the exact token GO on both rails (t9 P1 #2). CR included:
+#     the generator only ever emits LF.
+# Returns the block body, or None when the artifact is rejected.
+_FORBIDDEN_CTRL_RE = re.compile(
+    "[\u0000-\u0008\u000b-\u001f\u007f\u0085\u2028\u2029]"
+)
+
+
+def _extract_single_yaml_block(text):
+    if text.count("```yaml") != 1:
+        return None
+    m = re.search(r"(?m)^```yaml[ \t]*\n(.*?)^```", text, re.DOTALL)
+    if not m:
+        return None
+    body = m.group(1)
+    if _FORBIDDEN_CTRL_RE.search(body):
+        return None
+    return body
+
 
 
 def _strip_comment(raw: str) -> str:
@@ -159,9 +190,13 @@ def noncanonical_top_level_lines(text: str) -> List[str]:
     separate machines; neither may import the other — keep them identical).
     Empty list == the block speaks the grammar both readers assume.
     """
-    m = _YAML_BLOCK_RE.search(text)
-    if not m:
-        return []
+    body = _extract_single_yaml_block(text)
+    if body is None:
+        # Ambiguous/absent/forbidden-bytes block: the artifact as a WHOLE
+        # is noncanonical — surface a synthetic offender so every caller
+        # that gates on "empty == canonical" fails closed.
+        return ["<yaml block rejected: ambiguous fence, bad opener, or "
+                "forbidden control/separator bytes>"]
     bad: List[str] = []
     # Parent state closes the line whitelist (re-pass rc.4 t7 P1): an
     # indented line is legitimate ONLY under an ACTIVE bare `key:` parent.
@@ -178,7 +213,7 @@ def noncanonical_top_level_lines(text: str) -> List[str]:
     # bare parent (`padding: <NBSP>` + orphan-indented `verdict:` line),
     # reopening the orphan-indentation class through the whitespace side.
     parent = None  # None | "scalar" | "bare"
-    for raw in m.group(1).splitlines():
+    for raw in body.split("\n"):
         line = _strip_comment(raw)
         if not line.strip(" \t"):
             continue
@@ -207,11 +242,11 @@ def count_top_level_key(text: str, key: str) -> int:
     the twin counter in the tag guard does not. Callers run the shape
     check FIRST.
     """
-    m = _YAML_BLOCK_RE.search(text)
-    if not m:
+    _body = _extract_single_yaml_block(text)
+    if _body is None:
         return 0
     seen = 0
-    for raw in m.group(1).splitlines():
+    for raw in _body.split("\n"):
         line = _strip_comment(raw)
         if not line.strip() or line[0] in (" ", "\t"):
             continue
@@ -222,14 +257,16 @@ def count_top_level_key(text: str, key: str) -> int:
 
 def parse_verdict_text(text: str) -> Dict[str, Any]:
     """Parse YAML frontmatter from verdict TEXT. Returns dict."""
-    m = _YAML_BLOCK_RE.search(text)
-    if not m:
-        raise ValueError("verdict file missing yaml frontmatter block")
-    yaml_body = m.group(1)
+    yaml_body = _extract_single_yaml_block(text)
+    if yaml_body is None:
+        raise ValueError(
+            "verdict yaml block rejected: absent, ambiguous fence, or "
+            "forbidden control/separator bytes"
+        )
     # Inline minimal YAML parse (stdlib only)
     out: Dict[str, Any] = {}
     current_key: Optional[str] = None
-    for raw in yaml_body.splitlines():
+    for raw in yaml_body.split("\n"):
         line = _strip_comment(raw)
         if not line.strip():
             continue

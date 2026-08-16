@@ -82,6 +82,20 @@ run_upgrade() {
   bash "$UPGRADE" "$t" --no-deprecation-warn "$@" >"$t.upgrade.log" 2>&1
 }
 
+# t9 P2: prior-generation schema bytes for the B2-c3/c4/hasher legs.
+# Commit 9777a8d may be absent on a depth-1 CI checkout, but the v1.2.0
+# tag ships the SAME generation (sha 574bd22e...) and ownership-nightly
+# fetches it — try both. Unavailable fixture provenance is a SCAFFOLD
+# FAILURE (bad), never a green SKIP: the leg would silently stop running.
+prior_schema_bytes() {
+  # $1 = destination file. rc 0 on success.
+  git -C "$SOURCE_DIR" show 9777a8d:.claude/plans/DEBATE-SCHEMA.md \
+    > "$1" 2>/dev/null && return 0
+  git -C "$SOURCE_DIR" show v1.2.0:.claude/plans/DEBATE-SCHEMA.md \
+    > "$1" 2>/dev/null && return 0
+  return 1
+}
+
 fresh_install() {
   # $1 = leg tag, rest = install args. Echoes the target path.
   local tag="$1"; shift
@@ -368,7 +382,7 @@ else
   bad "adopter bytes intact after upgrade"
 fi
 # pristine PRIOR generation → refreshed to current source bytes
-if git -C "$SOURCE_DIR" show 9777a8d:.claude/plans/DEBATE-SCHEMA.md > "$T_S/.claude/plans/DEBATE-SCHEMA.md" 2>/dev/null; then
+if prior_schema_bytes "$T_S/.claude/plans/DEBATE-SCHEMA.md"; then
   if run_upgrade "$T_S"; then ok "schema upgrade #2 rc=0"; else bad "schema upgrade #2 rc=0"; fi
   if grep -q 'REFRESHED (pristine prior generation): .claude/plans/DEBATE-SCHEMA.md' "$T_S.upgrade.log"; then
     ok "pristine prior generation REFRESHED"
@@ -381,7 +395,7 @@ if git -C "$SOURCE_DIR" show 9777a8d:.claude/plans/DEBATE-SCHEMA.md > "$T_S/.cla
     bad "schema now byte-identical to current source"
   fi
 else
-  ok "SKIP pristine-prior leg (git blob unavailable in this checkout)"
+  bad "SCAFFOLD: prior-generation schema bytes unavailable (neither 9777a8d nor v1.2.0)"
 fi
 
 # ===========================================================================
@@ -390,8 +404,7 @@ echo "== B2-c4: schema refresh — symlink refusal + --skip + hasher fallback (t
 # (1) symlinked LEAF: refresh must refuse and never write the REFERENT.
 T_Y="$( fresh_install s4 --profile core )" || exit 1
 REFERENT_DIR="$( mktemp -d "$WORKROOT/referent-XXXXXX" )"
-git -C "$SOURCE_DIR" show 9777a8d:.claude/plans/DEBATE-SCHEMA.md \
-  > "$REFERENT_DIR/old-gen.md" 2>/dev/null \
+prior_schema_bytes "$REFERENT_DIR/old-gen.md" \
   || cp "$SOURCE_DIR/.claude/plans/DEBATE-SCHEMA.md" "$REFERENT_DIR/old-gen.md"
 REF_SHA_BEFORE="$( shasum -a 256 "$REFERENT_DIR/old-gen.md" | awk '{print $1}' )"
 rm -f "$T_Y/.claude/plans/DEBATE-SCHEMA.md"
@@ -430,8 +443,7 @@ fi
 # (3) --skip excludes the schema from inspection AND write (byte-preservation
 # even for a pristine PRIOR generation that would otherwise refresh).
 T_K="$( fresh_install s6 --profile core )" || exit 1
-if git -C "$SOURCE_DIR" show 9777a8d:.claude/plans/DEBATE-SCHEMA.md \
-     > "$T_K/.claude/plans/DEBATE-SCHEMA.md" 2>/dev/null; then
+if prior_schema_bytes "$T_K/.claude/plans/DEBATE-SCHEMA.md"; then
   SKIP_SHA_BEFORE="$( shasum -a 256 "$T_K/.claude/plans/DEBATE-SCHEMA.md" | awk '{print $1}' )"
   if run_upgrade "$T_K" --skip='.claude/plans/DEBATE-SCHEMA.md'; then
     ok "--skip upgrade rc=0"
@@ -457,14 +469,13 @@ if git -C "$SOURCE_DIR" show 9777a8d:.claude/plans/DEBATE-SCHEMA.md \
     bad "dry-run reports the per-path --skip verdict"
   fi
 else
-  ok "SKIP --skip leg (git blob unavailable in this checkout)"
+  bad "SCAFFOLD: prior-generation schema bytes unavailable (--skip leg)"
 fi
 # (4) hasher portability: shasum ABSENT from PATH, sha256sum present — the
 # refresh must go through _hash_file's fallback instead of aborting the
 # whole upgrade under set -e (t7 P1: bare `shasum` on a Perl-less host).
 T_H="$( fresh_install s7 --profile core )" || exit 1
-if git -C "$SOURCE_DIR" show 9777a8d:.claude/plans/DEBATE-SCHEMA.md \
-     > "$T_H/.claude/plans/DEBATE-SCHEMA.md" 2>/dev/null; then
+if prior_schema_bytes "$T_H/.claude/plans/DEBATE-SCHEMA.md"; then
   HASH_BIN="$( mktemp -d "$WORKROOT/hashbin-XXXXXX" )"
   _real_shasum="$( command -v shasum )"
   for _b in bash sh git awk sed grep cut tr sort uniq head tail dirname \
@@ -488,7 +499,7 @@ if git -C "$SOURCE_DIR" show 9777a8d:.claude/plans/DEBATE-SCHEMA.md \
     bad "schema refreshed via the sha256sum fallback"; grep 'DEBATE-SCHEMA' "$T_H.upgrade.log" >&2 || true
   fi
 else
-  ok "SKIP hasher leg (git blob unavailable in this checkout)"
+  bad "SCAFFOLD: prior-generation schema bytes unavailable (hasher leg)"
 fi
 
 # ===========================================================================

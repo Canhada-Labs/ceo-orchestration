@@ -1,0 +1,36 @@
+1. SEVERITY: P1  
+   FILE:LINE: `scripts/_framework_manifest_set.sh:811`, `scripts/_framework_manifest_set.sh:820`, `scripts/tests/test-gitignore-symlink-and-dryrun-unit.sh:84`  
+   Concrete failure scenario: `_apply_mcp_secrets_ignore` still equates textual presence with effective exclusion. An adopter `.gitignore` containing `state/mcp_client_secrets/` followed by `!state/mcp_client_secrets/` is reported as already protected, while Git permits secret files to be committed. Unlike the posture entries, this security-sensitive path never calls `_gitignore_reassert_effective`; the unit test covers only symlink refusal. This affects fresh/recorded maintainer installs and pre-state maintainers opting into root delivery.  
+   Minimal fix: run the shared effectiveness probe for `state/mcp_client_secrets/__ceo_ignore_probe__`, reassert the rule when negated, and add a negation-based efficacy control.
+
+2. SEVERITY: P1  
+   FILE:LINE: `scripts/_framework_manifest_set.sh:976`, `scripts/_framework_manifest_set.sh:991`, `scripts/_framework_manifest_set.sh:1008`, `CHANGELOG.md:179`, `.claude/scripts/local/release.sh:103`  
+   Concrete failure scenario: the apply path now checks effective Git behavior, but its advertised dry-run twin checks only exact text. With:
+   ```gitignore
+   /settings.local.json
+   /state/
+   !*.json
+   ```
+   `_preview_claude_dir_gitignore` says `would PRESERVE`; the real install/upgrade appends a trailing `/settings.local.json` to reassert it. Thus dry-run and execution disagree, contradicting both the CHANGELOG and signed-tag headline’s “honest dry-run previews.” S9 tests only real apply, so the positive control misses this regression.  
+   Minimal fix: make preview perform the same read-only `git check-ignore` probes and report `would RE-ASSERT`; add an S9 preview control that also proves zero writes.
+
+3. SEVERITY: P2  
+   FILE:LINE: `.github/workflows/ownership-nightly.yml:45`, `.github/workflows/ownership-nightly.yml:57`, `scripts/tests/test_install_state_replay.sh:371`, `scripts/tests/test_install_state_replay.sh:433`, `scripts/tests/test_install_state_replay.sh:466`  
+   Concrete failure scenario: nightly fetches depth-1 HEAD and depth-1 `v1.2.0`, but three schema legs require ancestor commit `9777a8d`. On a fresh runner that object is unavailable, so pristine refresh, `--skip`, and sha256sum-fallback controls report green `SKIP` instead of executing, despite the workflow claiming to cover them.  
+   Minimal fix: read prior bytes from the already-fetched `v1.2.0` tag or fetch the required object; missing fixture provenance must be a scaffold failure, not a successful skip.
+
+4. SEVERITY: P2  
+   FILE:LINE: `scripts/install-npm.sh:216`, `scripts/install-npm.sh:279`  
+   Concrete failure scenario: the new honesty text correctly says the helper and sidecar are local-only, but the same file still says the sidecar exists so “CI can download it separately.” No workflow invokes the helper, uploads the sidecar, or provides a download location—the sibling false promise survives the whole-file cure.  
+   Minimal fix: describe the sidecar solely as a local single-tarball verification aid.
+
+5. SEVERITY: P2  
+   FILE:LINE: `scripts/upgrade.sh:759`  
+   Concrete failure scenario: the ceremony reader’s governing comment still says missing/invalid pre-Wave-B state defaults to `maintainer`, while the executable cure now defaults to fail-safe `user`. Maintainers auditing the migration path from source receive the opposite blast-radius description.  
+   Minimal fix: update the comment to state the fail-safe default and explicit `--ceremony maintainer` recovery route.
+
+T-1’s structural detector sees both producer and consumer and its mutation flags the original regression; T-2 conservatively counts every probe-shaped row. The npm contract currently parses nine rows, eight live workflow-step pairs, and no stale version literals. Counts, AGENTS freshness, shell syntax, AST parsing, and scoped diff whitespace checks passed; temp-writing suites could not execute in the read-only reviewer sandbox.
+
+The two P1 gitignore failures leave the rc.3 cure incomplete at `0272508d9e579f233fd453ee787c8c1012440b21`.
+
+VERDICT: NO-GO

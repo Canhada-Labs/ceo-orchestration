@@ -104,6 +104,37 @@ E_DECISION = 13
 ACCEPTED_DECISIONS = ("GO", "GO-WITH-CONDITIONS")
 
 HEX40 = re.compile(r"\A[0-9a-f]{40}\Z")
+
+# t9 P1 (byte-for-byte twin of the step-15 validator): ONE strict
+# extractor for the signed yaml block.
+#   * the artifact must contain EXACTLY ONE occurrence of the literal
+#     three-backtick yaml opener anywhere — a second occurrence (even
+#     quoted inside a four-backtick block) makes the authoritative block
+#     ambiguous, so the artifact is rejected fail-closed;
+#   * the opener must sit at line start, column 0, closed by a
+#     line-start fence — an unanchored search let a quoted GO envelope
+#     inside a four-backtick block shadow the real NO-GO one;
+#   * the body must be free of every line separator except LF and every
+#     control char except TAB: str.splitlines() also splits on
+#     U+000B/000C/001C-001E/0085/2028/2029, so a value glued to
+#     <U+000B>#NO-GO parsed as the exact token GO on both rails.
+# Returns the block body, or None when the artifact is rejected.
+_FORBIDDEN_CTRL_RE = re.compile(
+    "[\u0000-\u0008\u000b-\u001f\u007f\u0085\u2028\u2029]"
+)
+
+
+def _extract_single_yaml_block(text):
+    if text.count("```yaml") != 1:
+        return None
+    m = re.search(r"(?m)^```yaml[ \t]*\n(.*?)^```", text, re.DOTALL)
+    if not m:
+        return None
+    body = m.group(1)
+    if _FORBIDDEN_CTRL_RE.search(body):
+        return None
+    return body
+
 HEX64 = re.compile(r"\A[0-9a-f]{64}\Z")
 GLOB_CHARS = "*?["
 VERDICT_PREFIX = ".claude/governance/pair-rail-verdict-"
@@ -215,12 +246,13 @@ def _parse_verdict(text: str) -> Dict[str, object]:
     third parser of the same signed file.
     """
     fields: Dict[str, object] = {}
-    block = re.search(r"```yaml[ \t]*\n(.*?)```", text, re.DOTALL)  # t8 P1: ASCII-only, \s swallowed a leading NBSP line
-    if block is None:
-        # No yaml block -> no fields -> every consumer below fails closed.
+    _body = _extract_single_yaml_block(text)
+    if _body is None:
+        # No/ambiguous/forbidden-bytes block -> no fields -> every
+        # consumer below fails closed.
         return fields
     cur_list: Optional[str] = None
-    for raw in block.group(1).splitlines():
+    for raw in _body.split("\n"):
         line = _strip_yaml_comment(raw)
         if not line.strip():
             continue
@@ -297,9 +329,10 @@ def _noncanonical_top_level_lines(text: str) -> List[str]:
     separate machines; neither may import the other — keep them identical).
     Empty list == the block speaks the grammar both readers assume.
     """
-    block = re.search(r"```yaml[ \t]*\n(.*?)```", text, re.DOTALL)  # t8 P1: ASCII-only, \s swallowed a leading NBSP line
-    if block is None:
-        return []
+    body = _extract_single_yaml_block(text)
+    if body is None:
+        return ["<yaml block rejected: ambiguous fence, bad opener, or "
+                "forbidden control/separator bytes>"]
     bad: List[str] = []
     # Parent state closes the line whitelist (re-pass rc.4 t7 P1): an
     # indented line is legitimate ONLY under an ACTIVE bare `key:` parent.
@@ -316,7 +349,7 @@ def _noncanonical_top_level_lines(text: str) -> List[str]:
     # bare parent (`padding: <NBSP>` + orphan-indented `verdict:` line),
     # reopening the orphan-indentation class through the whitespace side.
     parent = None  # None | "scalar" | "bare"
-    for raw in block.group(1).splitlines():
+    for raw in body.split("\n"):
         line = _strip_yaml_comment(raw)
         if not line.strip(" \t"):
             continue
@@ -347,11 +380,11 @@ def _count_top_level_key(text: str, key: str) -> int:
     non-canonical block the two counts differ. delta() checks the shape
     first.
     """
-    block = re.search(r"```yaml[ \t]*\n(.*?)```", text, re.DOTALL)  # t8 P1: ASCII-only, \s swallowed a leading NBSP line
-    if block is None:
+    _body = _extract_single_yaml_block(text)
+    if _body is None:
         return 0
     seen = 0
-    for raw in block.group(1).splitlines():
+    for raw in _body.split("\n"):
         line = _strip_yaml_comment(raw)
         if not line.strip() or line[0] in (" ", "\t"):
             continue

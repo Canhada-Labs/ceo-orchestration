@@ -135,3 +135,32 @@ autorizado. Nenhuma mudança executável pendente.
 - P2s: dry-run sites chamam o guard COMPARTILHADO (3 sites); testes do
   detector assertam `_has_harness_probe_fingerprint` vivo;
   `night-mode.py` nos 2 path filters do smoke-install.
+
+## Ciclo t9 → X4 (NO-GO nas 2 partes; classes menores, ainda novas)
+
+- P1 (parte 1 #1): extrator de bloco NÃO-ancorado — um fence de 4
+  backticks com um envelope GO quoted virava o bloco autoritativo sobre
+  o NO-GO real. Cura ESTRUTURAL nos 2 twins:
+  `_extract_single_yaml_block` exige EXATAMENTE 1 ocorrência literal do
+  opener no artefato inteiro (2+ = ambíguo = rejeitado), opener em
+  line-start coluna 0, fechamento line-start. TODOS os sites (1+3)
+  consomem o mesmo extrator. Teste de texto cru para os 2 rails
+  (4-backtick shadow + 2 blocos + opener indentado).
+- P1 (parte 1 #2): `str.splitlines()` divide em VT/FF/FS-RS/NEL/LS/PS —
+  `GO<U+000B>#NO-GO` parseava como GO. O extrator agora REJEITA
+  qualquer control byte exceto TAB e qualquer separador exceto LF (CR
+  incluído), e todo parsing divide só em `\n`. 4 fixtures com escapes
+  explícitos na matriz cross-reader.
+- P2 (parte 1): sweep de prosa restrito às rows do `## Contract`
+  (tabela fora da seção não é mais isenta) + positive control.
+- P1 (parte 2 #1): `_apply_mcp_secrets_ignore` ganhou o MESMO probe de
+  efetividade + re-asserção (o store de SEGREDOS era o único applier
+  sem ele) — control S10 no unit.
+- P1 (parte 2 #2): `_preview_claude_dir_gitignore` proba read-only e
+  reporta "would RE-ASSERT (present but negated)" — nunca mais um
+  would-PRESERVE falso; control S10 prova zero writes no preview.
+- P2s: prior-bytes dos legs de schema com fallback `v1.2.0` (mesma
+  geração, sha 574bd22e; nightly a fetcha) e indisponibilidade vira
+  SCAFFOLD FAILURE, nunca SKIP verde; frase "CI can download it
+  separately" do sidecar removida (install-npm.sh); comentário do
+  ceremony reader corrigido (fail-safe user, não maintainer).

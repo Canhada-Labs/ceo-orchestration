@@ -276,8 +276,11 @@ for stale in "$NPM_DIR"/ceo-orchestration-*.tgz.sha256; do
   fi
 done
 
-# Also emit a single-purpose .sha256 sidecar alongside the tarball so CI
-# can download it separately without parsing the cumulative manifest.
+# Also emit a single-purpose .sha256 sidecar alongside the tarball — a
+# LOCAL single-tarball verification aid (`shasum -c <tarball>.sha256`)
+# without parsing the cumulative manifest. t9 P2: no workflow uploads or
+# serves this sidecar anywhere; describing a CI download path here was
+# the same false-promise class the rest of this file was cured of.
 echo "$HASH_HEX  $TARBALL" > "$TARBALL_PATH.sha256"
 echo "    sidecar written $TARBALL_PATH.sha256"
 

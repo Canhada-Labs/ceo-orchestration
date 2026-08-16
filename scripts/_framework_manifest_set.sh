@@ -826,6 +826,13 @@ _apply_mcp_secrets_ignore() {
     } > "$_msi_gitignore"
     echo "    CREATED .gitignore with: $_msi_line"
   fi
+  # t9 P1: the SECRET store is exactly where textual presence must not be
+  # mistaken for effective exclusion — a later `!` negation would leave
+  # secret files commit-eligible while this applier reports "already
+  # excludes". Same shared probe + re-assert as the posture entries.
+  _msi_repo="$( dirname "$_msi_gitignore" )"
+  _gitignore_reassert_effective "$_msi_repo" "$_msi_gitignore" \
+    "$_msi_line" "state/mcp_client_secrets/__ceo_ignore_probe__"
   return 0
 }
 
@@ -1009,9 +1016,34 @@ _preview_claude_dir_gitignore() {
   for _pcg_entry in "/state/" "/settings.local.json"; do
     grep -Fxq "$_pcg_entry" "$_pcg_file" || _pcg_missing="$_pcg_missing $_pcg_entry"
   done
+  # t9 P1: the real run now RE-ASSERTS a textually-present-but-negated
+  # entry, so a "would PRESERVE" preview over that state is a lie. Run the
+  # SAME read-only `git check-ignore` probes and report would-RE-ASSERT.
+  _pcg_repo="$( dirname "$1" )"
+  _pcg_reassert=""
+  if git -C "$_pcg_repo" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    if ! git -C "$_pcg_repo" check-ignore -q -- \
+         ".claude/state/__ceo_ignore_probe__" 2>/dev/null; then
+      case "$_pcg_missing" in
+        *" /state/"*) : ;;  # already reported as would-APPEND
+        *) _pcg_reassert="$_pcg_reassert /state/" ;;
+      esac
+    fi
+    if ! git -C "$_pcg_repo" check-ignore -q -- \
+         ".claude/settings.local.json" 2>/dev/null; then
+      case "$_pcg_missing" in
+        *" /settings.local.json"*) : ;;
+        *) _pcg_reassert="$_pcg_reassert /settings.local.json" ;;
+      esac
+    fi
+  fi
   if [ -n "$_pcg_missing" ]; then
     echo "    (dry-run) would APPEND into existing .claude/.gitignore:$_pcg_missing"
-  else
+  fi
+  if [ -n "$_pcg_reassert" ]; then
+    echo "    (dry-run) would RE-ASSERT (present but negated by a later rule):$_pcg_reassert"
+  fi
+  if [ -z "$_pcg_missing" ] && [ -z "$_pcg_reassert" ]; then
     echo "    (dry-run) EXISTS: .claude/.gitignore already carries both entries (would PRESERVE)"
   fi
   return 0

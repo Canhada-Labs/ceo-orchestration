@@ -1,0 +1,18 @@
+1. P1 — fix before rc.4  
+   FILE:LINE: `.github/scripts/validate-pair-rail-verdict.py:104,162,210,225`; `.claude/scripts/local/_release_tag_guard.py:218,300,350`  
+   Concrete failure scenario: the unanchored regex treats ` ```yaml` inside a four-backtick quoted block as the authoritative verdict. A quoted, otherwise-valid `GO` envelope followed by the actual top-level `NO-GO` envelope returned exit 0 from both the server validator and the all-modes delta guard. The duplicate counter only examines the wrongly selected block.  
+   Minimal fix: use a strict twin block extractor that understands Markdown fence boundaries—or reject every artifact not containing exactly one canonical YAML fence—and make shape, count, and parsing consume that single extracted body. Add end-to-end four-backtick/embedded-fence and multiple-block controls for both rails.
+
+2. P1 — fix before rc.4  
+   FILE:LINE: `.github/scripts/validate-pair-rail-verdict.py:181,214,232`; `.claude/scripts/local/_release_tag_guard.py:223,319,354`; `.claude/scripts/local/release.sh:99-102`  
+   Concrete failure scenario: `str.splitlines()` silently consumes non-LF separators. With `verdict: GO<U+000B>#NO-GO` in an otherwise-valid envelope, both shape checks report canonical input, both parsers produce exact `GO`, both counters report one declaration, and both release rails exit 0. U+000C, U+001C–U+001E, U+0085, U+2028, and U+2029 produce the same normalization. This contradicts the advertised exact-token/Unicode rejection and violates fail-closed-on-input.  
+   Minimal fix: reject disallowed controls and noncanonical line separators before parsing; split only on `\n`, with explicit CRLF handling if desired. Add these bytes to the full validator, delta-guard, and cross-reader controls.
+
+3. P2 — follow-up  
+   FILE:LINE: `.claude/scripts/tests/test_release_bump_sites.py:1832-1838,1853-1907`  
+   Concrete failure scenario: `_prose_outside_the_declared_zones()` removes every line beginning with `|`, not just rows in `## Contract`. A new table elsewhere containing `| per-tarball SHA-256 manifest | enforced today; recorded by npm-publish.yml |` produces zero vocabulary offenders, so the historical false promise can bypass the claimed generic gate.  
+   Minimal fix: remove only the Contract section’s table rows and preserve tables elsewhere. Add this exact outside-section table as a positive control.
+
+The named controls are otherwise real—rc.3/current exact `NO-GO` changed from server `0→3` and guard `0→13`, authorizing decisions still pass, all-mode wiring is intact, and payload 1 has no adopter install/upgrade blast radius—but either P1 still permits an ambiguous or malformed signed artifact to authorize release.
+
+VERDICT: NO-GO

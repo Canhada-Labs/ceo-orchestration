@@ -138,5 +138,38 @@ else
   echo "FAIL: S9 root negacao continua vencendo"; FAILS=$((FAILS + 1))
 fi
 
+# --- S10 (t9 P1): preview e apply CONCORDAM sobre presenca-negada — o
+# preview proba read-only (would RE-ASSERT, zero writes); o mcp-secrets
+# applier tambem re-asserta.
+mkdir -p "$TMP/s10/.claude"
+( cd "$TMP/s10" && git init -q )
+printf '/settings.local.json\n/state/\n!*.json\n' > "$TMP/s10/.claude/.gitignore"
+_before_sha="$(shasum -a 256 "$TMP/s10/.claude/.gitignore" | awk '{print $1}')"
+_pv="$(_preview_claude_dir_gitignore "$TMP/s10/.claude" 2>/dev/null)"
+case "$_pv" in
+  *"would RE-ASSERT"*"/settings.local.json"*)
+    echo "PASS: S10 preview reporta would RE-ASSERT" ;;
+  *) echo "FAIL: S10 preview nao reporta RE-ASSERT: $_pv"; FAILS=$((FAILS + 1)) ;;
+esac
+case "$_pv" in
+  *"would PRESERVE"*)
+    echo "FAIL: S10 preview mente would-PRESERVE sobre estado negado"; FAILS=$((FAILS + 1)) ;;
+  *) echo "PASS: S10 preview NAO diz would-PRESERVE" ;;
+esac
+_after_sha="$(shasum -a 256 "$TMP/s10/.claude/.gitignore" | awk '{print $1}')"
+[ "$_before_sha" = "$_after_sha" ] && echo "PASS: S10 preview zero writes" \
+  || { echo "FAIL: S10 preview ESCREVEU no arquivo"; FAILS=$((FAILS + 1)); }
+# mcp-secrets applier: presenca-negada re-assertada
+mkdir -p "$TMP/s10r"
+( cd "$TMP/s10r" && git init -q )
+printf 'state/mcp_client_secrets/\n!state/mcp_client_secrets/\n' > "$TMP/s10r/.gitignore"
+_apply_mcp_secrets_ignore "$TMP/s10r/.gitignore" >/dev/null 2>&1; rc=$?
+_t "S10 mcp applier rc=0" 0 "$rc"
+if ( cd "$TMP/s10r" && git check-ignore -q -- state/mcp_client_secrets/probe ); then
+  echo "PASS: S10 mcp-secrets EFETIVAMENTE ignorado apos re-assercao"
+else
+  echo "FAIL: S10 negacao do mcp-secrets continua vencendo"; FAILS=$((FAILS + 1))
+fi
+
 echo
 if [ "$FAILS" -eq 0 ]; then echo "ALL GREEN"; exit 0; else echo "$FAILS FAIL(s)"; exit 1; fi
