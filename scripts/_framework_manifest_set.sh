@@ -871,8 +871,9 @@ _claude_dir_gitignore_body() {
     "# --ceremony user install, which never writes outside .claude/ and so" \
     "# never received them." \
     "#" \
-    "# Adopter-owned once created: install and upgrade create it only when it" \
-    "# is absent, and NEVER rewrite it." \
+    "# Adopter-owned once created: install and upgrade never REPLACE this" \
+    "# file — adopter bytes are preserved; missing mandatory framework" \
+    "# security entries may be APPENDED (additively reasserted) on upgrade." \
     "/state/" \
     "/settings.local.json"
 }

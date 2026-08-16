@@ -1,0 +1,54 @@
+Candidate identity verified at `8261acae552a1fe767b7aa34b1b3fc298c21a2b8`; worktree clean.
+
+## Findings
+
+1. SEVERITY: P1  
+   FILE:LINE: [scripts/upgrade.sh:3028](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.9Lz3fL/wt/scripts/upgrade.sh:3028), [scripts/upgrade.sh:3046](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.9Lz3fL/wt/scripts/upgrade.sh:3046)  
+   Concrete failure: `_refresh_schema_doc` hashes and copies through destination symlinks without checking the leaf or parents. A supported `install.sh --link` installation creates schema-file symlinks ([scripts/install.sh:898](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.9Lz3fL/wt/scripts/install.sh:898)). Upgrading it from a newer checkout can recognize the old referent as a prior generation and `cp` new content through the symlink, modifying the old source checkout outside the adopter target. A symlinked `.claude/plans` ancestor gives the same escape.  
+   Minimal fix: reject symlinked ancestors and leafs before reading or writing. For provenance-authorized LINK records, replace the link itself atomically; never overwrite its referent. Add link-mode and hostile-ancestor positive controls.
+
+2. SEVERITY: P1  
+   FILE:LINE: [scripts/upgrade.sh:3025](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.9Lz3fL/wt/scripts/upgrade.sh:3025), [scripts/upgrade.sh:416](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.9Lz3fL/wt/scripts/upgrade.sh:416)  
+   Concrete failure: the new schema refresh never calls `_path_is_skipped`. `upgrade.sh target --skip='.claude/plans/DEBATE-SCHEMA.md'` still replaces a pristine prior-generation schema, violating the documented “exclude files from overwrite” contract.  
+   Minimal fix: check `_path_is_skipped "$_rsd_rel"` before any inspection or write, including an accurate dry-run message; add a byte-preservation regression test.
+
+3. SEVERITY: P1  
+   FILE:LINE: [scripts/upgrade.sh:3036](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.9Lz3fL/wt/scripts/upgrade.sh:3036), [scripts/_hash_lib.sh:46](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.9Lz3fL/wt/scripts/_hash_lib.sh:46)  
+   Concrete failure: schema refresh calls `shasum` directly despite the project’s shared macOS/Linux abstraction. On a supported Linux host with `sha256sum` but no Perl `shasum`, `set -euo pipefail` aborts the upgrade while inspecting an existing schema.  
+   Minimal fix: use `_hash_file`; if no hasher is available, preserve the schema with a visible warning because ownership cannot be proven. Add a PATH-controlled `sha256sum`-only test.
+
+4. SEVERITY: P2  
+   FILE:LINE: [.claude/scripts/ceo-boot.py:561](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.9Lz3fL/wt/.claude/scripts/ceo-boot.py:561), [.claude/scripts/ceo-boot.py:590](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.9Lz3fL/wt/.claude/scripts/ceo-boot.py:590)  
+   Concrete failure: T-2 is conservatively deferred, not cured: `_is_harness_probe_event` always returns false, so a probe-only window remains `1/1 red`. Its docstring nevertheless says positively identified probes are skipped and reported through `harness_probes_skipped`, a counter removed from the implementation.  
+   Minimal fix: immediately correct the docstring; enable exemption only after the emitter supplies non-caller-forgeable provenance.
+
+5. SEVERITY: P2  
+   FILE:LINE: [.github/workflows/validate.yml:869](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.9Lz3fL/wt/.github/workflows/validate.yml:869)  
+   Concrete failure: `test_install_state_replay.sh` is explicitly local-only, and `test-gitignore-symlink-and-dryrun-unit.sh` is absent from workflow execution. CI can therefore remain green after regressions in pre-state ceremony persistence or `.gitignore` symlink refusal. The newly wired efficacy test does not exercise those cases.  
+   Minimal fix: add both scripts to workflow path filters and blocking execution steps; add the three schema cases above.
+
+6. SEVERITY: P2  
+   FILE:LINE: [.claude/scripts/tests/test_release_bump_sites.py:1382](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.9Lz3fL/wt/.claude/scripts/tests/test_release_bump_sites.py:1382)  
+   Concrete failure: the npm version scanner skips the entire line when it sees a review stamp. A stale `currently 9.9.9 <!-- last-reviewed ... -->` literal on the same line passes.  
+   Minimal fix: remove only the stamp substring before scanning the remainder; add that exact mutation as a positive control.
+
+7. SEVERITY: P2  
+   FILE:LINE: [.claude/scripts/tests/test_release_bump_sites.py:1470](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.9Lz3fL/wt/.claude/scripts/tests/test_release_bump_sites.py:1470)  
+   Concrete failure: malformed integrity rows with anything other than four cells are silently discarded. An enforced row acquiring an extra `|` disappears from validation while the remaining rows satisfy non-vacuity floors.  
+   Minimal fix: return malformed table lines as failures and add a five-cell mutation control.
+
+8. SEVERITY: P2  
+   FILE:LINE: [scripts/_framework_manifest_set.sh:874](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.9Lz3fL/wt/scripts/_framework_manifest_set.sh:874)  
+   Concrete failure: the generated `.claude/.gitignore` says install/upgrade “NEVER rewrite it,” but both append missing posture entries. The append behavior is defensible; the delivered ownership statement is false.  
+   Minimal fix: say adopter bytes are preserved except that missing framework security entries are additively reasserted.
+
+9. SEVERITY: P2  
+   FILE:LINE: [scripts/upgrade.sh:257](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.9Lz3fL/wt/scripts/upgrade.sh:257), [scripts/upgrade.sh:416](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.9Lz3fL/wt/scripts/upgrade.sh:416)  
+   Concrete failure: the migration-critical `--ceremony` option is parsed but omitted from `--help` and the header usage. A pre-state maintainer relying on help will not discover the opt-in, defaults to user ceremony, and misses root `.gitignore` delivery.  
+   Minimal fix: document the option, allowed values, fail-safe default, and recorded-state precedence in both usage surfaces.
+
+The four original rc.3 defects are materially cured: both decision readers reject NO-GO/malformed decisions, shared `.gitignore` delivery and its efficacy control are real, npm’s stale-version and checksum promises are removed, and T-1’s structural control would catch the original working-directory regression. The administrative release-scope, CHANGELOG, repin, and evidence-quarantine delta is coherent. Static validation passed for diff whitespace, shell syntax, workflow syntax, counts, decision parsing, tournament structure, and current npm contract rows; temp-writing end-to-end suites could not run in this read-only reviewer sandbox.
+
+The three newly introduced schema-refresh failures must be fixed before rc.4 even though the four original cures are present.
+
+VERDICT: NO-GO

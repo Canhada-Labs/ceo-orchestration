@@ -36,6 +36,9 @@ on:
       - "scripts/tests/test-ownership-table.sh"
       - "scripts/tests/ownership_table.tsv"
       - "docs/ownership-decision-table.md"
+      # Re-pass rc.4 t7 P2: the per-PR gitignore unit must light this gate
+      # up when it (or the generator it exercises) changes.
+      - "scripts/tests/test-gitignore-symlink-and-dryrun-unit.sh"
       # PLAN-168 W1+W2 (rail r3 P1): the nightly gate + its positive control
       # get fast per-PR steps HERE too — without these entries a PR could
       # break the gate's rc/status handling while every PR check stays green.
@@ -89,6 +92,9 @@ on:
       - "scripts/tests/test-ownership-table.sh"
       - "scripts/tests/ownership_table.tsv"
       - "docs/ownership-decision-table.md"
+      # Re-pass rc.4 t7 P2: the per-PR gitignore unit must light this gate
+      # up when it (or the generator it exercises) changes.
+      - "scripts/tests/test-gitignore-symlink-and-dryrun-unit.sh"
       # PLAN-168 W1+W2 (rail r3 P1): the nightly gate + its positive control
       # get fast per-PR steps HERE too — without these entries a PR could
       # break the gate's rc/status handling while every PR check stays green.
@@ -190,6 +196,16 @@ jobs:
         run: |
           set -euo pipefail
           bash scripts/tests/test-ownership-verdict-unit.sh
+
+      # Re-pass rc.4 t7 P2 (t6 condition 5): the gitignore symlink-refusal +
+      # dry-run preview unit is seconds — run it per-PR. The full
+      # install-state replay (B2 pre-state ceremony persistence + B2-c3/c4
+      # schema-refresh, --skip and symlink-refusal legs) is many minutes of
+      # real installs and runs in ownership-nightly.yml instead.
+      - name: Gitignore symlink + dry-run preview unit (t7)
+        run: |
+          set -euo pipefail
+          bash scripts/tests/test-gitignore-symlink-and-dryrun-unit.sh
 
       # PLAN-168 W1 (rail r3 P1): the nightly gate's fake-harness control is
       # milliseconds — run it per-PR so a PR touching the gate cannot break

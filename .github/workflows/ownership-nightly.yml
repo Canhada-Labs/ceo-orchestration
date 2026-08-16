@@ -34,7 +34,7 @@ jobs:
     # ~25 min local (Darwin arm64, 16 cores, 2026-08-07); ubuntu-latest is the
     # usual 2-3x slower => 50-75 min expected. Same anti-flake sizing rule as
     # the smoke-install budget notes: leave headroom, re-tighten on a real p95.
-    timeout-minutes: 90
+    timeout-minutes: 110
     permissions:
       contents: read
     steps:
@@ -72,6 +72,18 @@ jobs:
         run: |
           set -euo pipefail
           bash scripts/tests/test-ownership-verdict-unit.sh
+
+      # Re-pass rc.4 t7 P2 (t6 condition 5): the install-state replay suite
+      # was local/landing-gate only — CI could stay green after regressions
+      # in pre-state ceremony persistence (B2-c2), hash-gated schema refresh
+      # (B2-c3) or its symlink-refusal / --skip / hasher-fallback legs
+      # (B2-c4). ~11 min local (Darwin arm64); budgeted ~2-3x here, inside
+      # this job's timeout headroom (bumped 90 -> 110, same measured
+      # anti-flake sizing rule as smoke-install's F4 bump).
+      - name: Install-state replay suite (B2 — ceremony, schema refresh, symlink refusal)
+        run: |
+          set -euo pipefail
+          bash scripts/tests/test_install_state_replay.sh
 
       # PLAN-168 W2 (AC-6/AC-6b): INV-4 as an executable assertion — install
       # and upgrade produce the SAME pointer (byte identity + content

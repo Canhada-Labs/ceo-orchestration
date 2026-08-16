@@ -575,9 +575,14 @@ def _is_harness_probe_event(ev: Dict[str, Any]) -> bool:
     so a row that carries none was never a CEO dispatch. All five conditions
     must hold — no subagent_type, no archetype, no rail attribution, no
     ``## AGENT PROFILE`` and no ``## FILE ASSIGNMENT`` — so a real named spawn
-    that merely lost one field still counts. Skipped rows stay OBSERVABLE via
-    the ``harness_probes_skipped`` counter: this suppresses a false alarm, it
-    does not hide the event.
+    that merely lost one field still counts.
+
+    T-2 STATUS (re-pass rc.4 t5/t7 P2): DEFERRED, not cured — this function
+    ALWAYS returns False today and probe-shaped rows COUNT in the
+    denominator (a probe-only window reads 1/1 red and the operator
+    triages it). The former ``harness_probes_skipped`` counter was removed
+    together with the exemption; no row is skipped, so nothing is
+    "reported through" anything.
 
     PLAN-177 t2 (P1-f): those five are NECESSARY, NOT SUFFICIENT. Absence is
     exactly the shape of the event this ratio exists to expose — a markerless

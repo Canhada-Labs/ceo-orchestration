@@ -6,6 +6,7 @@
 #                                    [--pin <tag>] [--dry-run]
 #                                    [--skip <glob>] [--no-diff-warn]
 #                                    [--no-deprecation-warn]
+#                                    [--ceremony <maintainer|user>]
 #
 # What it does:
 #   - Backs up the current .claude/team.md, .claude/frontend-team.md, .claude/skills/,
@@ -416,6 +417,15 @@ Options:
   --skip <glob>         Exclude files from the overwrite (repeat for multiple globs).
                         Example: --skip='.claude/scripts/local/*'
   --skip=<glob>         Alternate inline syntax for --skip.
+  --ceremony <maintainer|user>
+                        Re-pass rc.4 t3/t5: explicit ceremony for PRE-STATE
+                        targets (no readable .claude/.install-state.json).
+                        A RECORDED ceremony in the install state ALWAYS wins
+                        over this flag; with neither record nor flag the
+                        upgrade fails safe to 'user' (root files untouched)
+                        and that inference is never persisted. Only an
+                        explicit flag/env or a recorded value persists.
+                        Env override: CEO_UPGRADE_CEREMONY=<maintainer|user>.
   --purge-misinstalled  PLAN-161 U3 (opt-in — NEVER default): delete files found
                         inside the framework-internal excluded trees
                         (.claude/hooks/{tests,legacy}, .claude/scripts/tests,
@@ -470,7 +480,7 @@ HELP
 done
 
 if [[ -z "$TARGET" || ! -d "$TARGET" ]]; then
-  echo "Usage: $0 <target-repo-path> [--profile <list>] [--stack <name>] [--pin <tag>] [--dry-run]" >&2
+  echo "Usage: $0 <target-repo-path> [--profile <list>] [--stack <name>] [--pin <tag>] [--dry-run] [--ceremony <maintainer|user>]" >&2
   exit 1
 fi
 
@@ -3026,15 +3036,53 @@ _refresh_schema_doc() {
   # $1 = rel path; $2.. = sha256 of KNOWN prior framework generations.
   _rsd_rel="$1"; shift
   _rsd_src="$SOURCE_DIR/$_rsd_rel"; _rsd_dst="$TARGET/$_rsd_rel"
+  # Re-pass rc.4 t7 P1 (skip contract): --skip excludes this path from
+  # inspection AND write, like every other delivery in this script.
+  if _path_is_skipped "$_rsd_rel"; then
+    echo "    SKIPPED (--skip): $_rsd_rel"
+    return 0
+  fi
   [ -e "$_rsd_src" ] || { echo "    SKIP (source missing): $_rsd_rel"; return 0; }
+  # Re-pass rc.4 t7 P1 (symlink escape): refuse to read or write through a
+  # symlinked LEAF (checked before -e: a BROKEN link would otherwise fall
+  # into the install branch and cp would create the referent outside the
+  # target) or any symlinked ANCESTOR — a --link install's schema symlink,
+  # or a hostile .claude/plans link, would make cp modify the referent
+  # outside the adopter target. Preservation is the only safe verdict.
+  if [ -L "$_rsd_dst" ]; then
+    echo "    WARNING: PRESERVED $_rsd_rel (destination is a symlink — a refresh would write through it, outside the target; replace the link manually if that is intended)"
+    return 0
+  fi
+  _rsd_walk="$(dirname "$_rsd_rel")"
+  while [ -n "$_rsd_walk" ] && [ "$_rsd_walk" != "." ] && [ "$_rsd_walk" != "/" ]; do
+    if [ -L "$TARGET/$_rsd_walk" ]; then
+      echo "    WARNING: PRESERVED $_rsd_rel (ancestor $_rsd_walk is a symlink — refusing to write through it)"
+      return 0
+    fi
+    _rsd_walk="$(dirname "$_rsd_walk")"
+  done
   if [ ! -e "$_rsd_dst" ]; then
     mkdir -p "$(dirname "$_rsd_dst")"
     cp "$_rsd_src" "$_rsd_dst"
     echo "    INSTALLED: $_rsd_rel"
     return 0
   fi
-  _rsd_h_dst="$(shasum -a 256 "$_rsd_dst" | awk '{print $1}')"
-  _rsd_h_src="$(shasum -a 256 "$_rsd_src" | awk '{print $1}')"
+  # Re-pass rc.4 t7 P1 (hasher portability): the shared _hash_file
+  # abstraction, never a bare `shasum` — absent on Perl-less Linux hosts,
+  # where set -e would abort the whole upgrade mid-inspection. No usable
+  # hasher => ownership cannot be proven => preserve loudly.
+  if ! command -v _hash_file >/dev/null 2>&1; then
+    echo "    WARNING: PRESERVED $_rsd_rel (no sha256 hasher available — ownership unprovable, not refreshing)"
+    return 0
+  fi
+  if ! _rsd_h_dst="$(_hash_file "$_rsd_dst")" || [ -z "$_rsd_h_dst" ]; then
+    echo "    WARNING: PRESERVED $_rsd_rel (no sha256 hasher available — ownership unprovable, not refreshing)"
+    return 0
+  fi
+  if ! _rsd_h_src="$(_hash_file "$_rsd_src")" || [ -z "$_rsd_h_src" ]; then
+    echo "    WARNING: PRESERVED $_rsd_rel (no sha256 hasher available — ownership unprovable, not refreshing)"
+    return 0
+  fi
   if [ "$_rsd_h_dst" = "$_rsd_h_src" ]; then
     echo "    IDENTICAL: $_rsd_rel"
     return 0
@@ -3052,7 +3100,15 @@ _refresh_schema_doc() {
   return 0
 }
 if [[ "$DRY_RUN" -eq 1 ]]; then
-  echo "    (dry-run) schema docs: hash-gated refresh (pristine prior generations only)"
+  # t7 P1 (accurate dry-run): report the per-path --skip verdict instead of
+  # a blanket line that hides the exclusion.
+  for _rsd_dry in ".claude/plans/PLAN-SCHEMA.md" ".claude/plans/DEBATE-SCHEMA.md"; do
+    if _path_is_skipped "$_rsd_dry"; then
+      echo "    (dry-run) schema doc SKIPPED (--skip): $_rsd_dry"
+    else
+      echo "    (dry-run) schema doc hash-gated refresh (pristine prior generations only): $_rsd_dry"
+    fi
+  done
 else
   # sha256 of every shipped prior generation (git history of each file).
   _refresh_schema_doc ".claude/plans/PLAN-SCHEMA.md" \

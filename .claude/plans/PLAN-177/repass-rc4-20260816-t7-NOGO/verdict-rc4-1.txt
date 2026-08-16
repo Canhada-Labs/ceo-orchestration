@@ -1,0 +1,28 @@
+1. P1 — `.github/scripts/validate-pair-rail-verdict.py:165-180`, `.claude/scripts/local/_release_tag_guard.py:307-322`, `.claude/scripts/tests/test_release_bump_sites.py:2551-2558`
+
+   Concrete failure: both shape validators accept an orphan-indented declaration:
+
+   ```yaml
+     verdict: NO-GO
+   verdict: GO
+   ```
+
+   They return no noncanonical lines, count one decision, and resolve it as `GO`. Using the otherwise-live rc.4 envelope, the server validator printed `OK` and exited 0. A root-list line such as `- verdict: NO-GO` is likewise accepted. These are malformed YAML, so accepting them violates the fail-closed-on-input rule. The regression matrix omits both states.
+
+   Minimal fix: track whether an indented line has an active bare parent; reject orphan indentation and root-level list items. Add both shapes to the cross-reader matrix and full validator/tag-guard controls.
+
+2. P2 — `.claude/scripts/tests/test_release_bump_sites.py:1383-1384`, `.claude/scripts/tests/test_release_bump_sites.py:1407-1411`
+
+   Concrete failure: `currently 1.0.1 <!-- last-reviewed: 2026-08-05 v1.3.0 -->` is skipped wholesale because the line contains a valid stamp. The positive control places the stale literal and stamp on separate lines, so it misses this bypass.
+
+   Minimal fix: remove only the stamp substring before scanning the remainder, and add a same-line relapse fixture.
+
+3. P2 — `.claude/scripts/tests/test_release_bump_sites.py:1470-1472`, `.claude/scripts/tests/test_release_bump_sites.py:1795-1798`
+
+   Concrete failure: a Contract row with an extra `|` is silently discarded as non-four-column, while the generic prose sweep removes every table line. A false enforcement claim in that malformed row reaches neither gate.
+
+   Minimal fix: fail on every malformed non-header Contract row, strip only validated table rows, and add a five-cell positive control.
+
+The direct `NO-GO` and duplicate controls are real: they returned exit 3 with decision-specific diagnostics, while canonical `GO-WITH-CONDITIONS` returned 0. Python 3.9 syntax, stdlib-only, contamination, AGENTS freshness, and the live 166/27/192/68 counts checked cleanly. Payload 1 affects release maintainers and both RC/stable tag ceremonies; it has no installed-adopter or pre-v1.2 runtime blast radius. Full pytest execution was unavailable because this read-only environment has no usable pytest/temp setup.
+
+VERDICT: NO-GO — The explicit decision gate exists, but its new shape check still authorizes malformed signed input and requires a P1 fix before rc.4.

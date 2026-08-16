@@ -385,6 +385,113 @@ else
 fi
 
 # ===========================================================================
+echo "== B2-c4: schema refresh — symlink refusal + --skip + hasher fallback (t7 P1) =="
+# ===========================================================================
+# (1) symlinked LEAF: refresh must refuse and never write the REFERENT.
+T_Y="$( fresh_install s4 --profile core )" || exit 1
+REFERENT_DIR="$( mktemp -d "$WORKROOT/referent-XXXXXX" )"
+git -C "$SOURCE_DIR" show 9777a8d:.claude/plans/DEBATE-SCHEMA.md \
+  > "$REFERENT_DIR/old-gen.md" 2>/dev/null \
+  || cp "$SOURCE_DIR/.claude/plans/DEBATE-SCHEMA.md" "$REFERENT_DIR/old-gen.md"
+REF_SHA_BEFORE="$( shasum -a 256 "$REFERENT_DIR/old-gen.md" | awk '{print $1}' )"
+rm -f "$T_Y/.claude/plans/DEBATE-SCHEMA.md"
+ln -s "$REFERENT_DIR/old-gen.md" "$T_Y/.claude/plans/DEBATE-SCHEMA.md"
+if run_upgrade "$T_Y"; then ok "symlink-leaf upgrade rc=0"; else bad "symlink-leaf upgrade rc=0"; fi
+if grep -q 'PRESERVED .claude/plans/DEBATE-SCHEMA.md (destination is a symlink' "$T_Y.upgrade.log"; then
+  ok "symlinked leaf REFUSED with named warning"
+else
+  bad "symlinked leaf REFUSED with named warning"
+fi
+REF_SHA_AFTER="$( shasum -a 256 "$REFERENT_DIR/old-gen.md" | awk '{print $1}' )"
+if [ "$REF_SHA_BEFORE" = "$REF_SHA_AFTER" ] && [ -L "$T_Y/.claude/plans/DEBATE-SCHEMA.md" ]; then
+  ok "referent untouched, link intact (no write-through)"
+else
+  bad "referent untouched, link intact (no write-through)"
+fi
+# (2) symlinked ANCESTOR (hostile .claude/plans link): same refusal.
+T_A="$( fresh_install s5 --profile core )" || exit 1
+PLANS_REAL="$( mktemp -d "$WORKROOT/plans-real-XXXXXX" )"
+cp -R "$T_A/.claude/plans/." "$PLANS_REAL/"
+rm -rf "$T_A/.claude/plans"
+ln -s "$PLANS_REAL" "$T_A/.claude/plans"
+ANC_SHA_BEFORE="$( shasum -a 256 "$PLANS_REAL/DEBATE-SCHEMA.md" | awk '{print $1}' )"
+if run_upgrade "$T_A"; then ok "symlink-ancestor upgrade rc=0"; else bad "symlink-ancestor upgrade rc=0"; fi
+if grep -q 'PRESERVED .claude/plans/DEBATE-SCHEMA.md (ancestor .claude/plans is a symlink' "$T_A.upgrade.log"; then
+  ok "symlinked ancestor REFUSED with named warning"
+else
+  bad "symlinked ancestor REFUSED with named warning"
+fi
+ANC_SHA_AFTER="$( shasum -a 256 "$PLANS_REAL/DEBATE-SCHEMA.md" | awk '{print $1}' )"
+if [ "$ANC_SHA_BEFORE" = "$ANC_SHA_AFTER" ]; then
+  ok "ancestor referent untouched"
+else
+  bad "ancestor referent untouched"
+fi
+# (3) --skip excludes the schema from inspection AND write (byte-preservation
+# even for a pristine PRIOR generation that would otherwise refresh).
+T_K="$( fresh_install s6 --profile core )" || exit 1
+if git -C "$SOURCE_DIR" show 9777a8d:.claude/plans/DEBATE-SCHEMA.md \
+     > "$T_K/.claude/plans/DEBATE-SCHEMA.md" 2>/dev/null; then
+  SKIP_SHA_BEFORE="$( shasum -a 256 "$T_K/.claude/plans/DEBATE-SCHEMA.md" | awk '{print $1}' )"
+  if run_upgrade "$T_K" --skip='.claude/plans/DEBATE-SCHEMA.md'; then
+    ok "--skip upgrade rc=0"
+  else
+    bad "--skip upgrade rc=0"
+  fi
+  if grep -q 'SKIPPED (--skip): .claude/plans/DEBATE-SCHEMA.md' "$T_K.upgrade.log"; then
+    ok "--skip verdict named in the log"
+  else
+    bad "--skip verdict named in the log"
+  fi
+  SKIP_SHA_AFTER="$( shasum -a 256 "$T_K/.claude/plans/DEBATE-SCHEMA.md" | awk '{print $1}' )"
+  if [ "$SKIP_SHA_BEFORE" = "$SKIP_SHA_AFTER" ]; then
+    ok "--skip byte-preservation (prior generation NOT refreshed)"
+  else
+    bad "--skip byte-preservation (prior generation NOT refreshed)"
+  fi
+  # accurate dry-run message for the same skip
+  if run_upgrade "$T_K" --dry-run --skip='.claude/plans/DEBATE-SCHEMA.md' \
+     && grep -q '(dry-run) schema doc SKIPPED (--skip): .claude/plans/DEBATE-SCHEMA.md' "$T_K.upgrade.log"; then
+    ok "dry-run reports the per-path --skip verdict"
+  else
+    bad "dry-run reports the per-path --skip verdict"
+  fi
+else
+  ok "SKIP --skip leg (git blob unavailable in this checkout)"
+fi
+# (4) hasher portability: shasum ABSENT from PATH, sha256sum present — the
+# refresh must go through _hash_file's fallback instead of aborting the
+# whole upgrade under set -e (t7 P1: bare `shasum` on a Perl-less host).
+T_H="$( fresh_install s7 --profile core )" || exit 1
+if git -C "$SOURCE_DIR" show 9777a8d:.claude/plans/DEBATE-SCHEMA.md \
+     > "$T_H/.claude/plans/DEBATE-SCHEMA.md" 2>/dev/null; then
+  HASH_BIN="$( mktemp -d "$WORKROOT/hashbin-XXXXXX" )"
+  _real_shasum="$( command -v shasum )"
+  for _b in bash sh git awk sed grep cut tr sort uniq head tail dirname \
+            basename mktemp cp mv rm mkdir rmdir ln chmod cat date wc find \
+            diff cmp printf env python3 uname readlink stat touch tee od \
+            xargs ls sleep true false expr comm join fold paste; do
+    _p="$( command -v "$_b" 2>/dev/null )" || continue
+    ln -s "$_p" "$HASH_BIN/$_b" 2>/dev/null || true
+  done
+  printf '#!/bin/sh\nexec %s -a 256 "$@"\n' "$_real_shasum" > "$HASH_BIN/sha256sum"
+  chmod +x "$HASH_BIN/sha256sum"
+  if PATH="$HASH_BIN" bash "$UPGRADE" "$T_H" --no-deprecation-warn \
+       >"$T_H.upgrade.log" 2>&1; then
+    ok "sha256sum-only upgrade rc=0 (no set -e abort)"
+  else
+    bad "sha256sum-only upgrade rc=0 (no set -e abort)"; tail -5 "$T_H.upgrade.log" >&2 || true
+  fi
+  if grep -q 'REFRESHED (pristine prior generation): .claude/plans/DEBATE-SCHEMA.md' "$T_H.upgrade.log"; then
+    ok "schema refreshed via the sha256sum fallback"
+  else
+    bad "schema refreshed via the sha256sum fallback"; grep 'DEBATE-SCHEMA' "$T_H.upgrade.log" >&2 || true
+  fi
+else
+  ok "SKIP hasher leg (git blob unavailable in this checkout)"
+fi
+
+# ===========================================================================
 echo "== B2-d: garbage state => NOTE + fallback + rewritten valid =="
 # ===========================================================================
 printf 'this is not json{{{' > "$T_F/$STATE_REL"

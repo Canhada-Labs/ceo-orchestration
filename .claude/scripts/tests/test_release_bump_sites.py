@@ -1380,9 +1380,12 @@ def _bare_version_offenders_in_npm_docs(repo_root: Path) -> List[str]:
         except (UnicodeDecodeError, OSError):
             continue
         for num, line in enumerate(body.splitlines(), 1):
-            if _STAMP_LINE_RX.search(line):
-                continue
-            for hit in SEMVER_RX.findall(line):
+            # Re-pass rc.4 t6-cond-1 / t7 P2: remove ONLY the stamp
+            # substring and scan the remainder — skipping the whole line
+            # let `currently 9.9.9 <!-- last-reviewed ... -->` ride a
+            # valid stamp on the same line.
+            scannable = _STAMP_LINE_RX.sub("", line)
+            for hit in SEMVER_RX.findall(scannable):
                 offenders.append("%s:%d: %s (%s)" % (rel, num, line.strip(), hit))
     return offenders
 
@@ -1407,13 +1410,18 @@ def test_npm_docs_carry_no_bare_version_literal(tmp_path):
         target.write_text(
             "> built and versioned (`VERSION` / `package.json`, "
             "currently 1.0.1).\n"
-            "<!-- last-reviewed: 2026-08-05 v1.3.0 -->\n",
+            "<!-- last-reviewed: 2026-08-05 v1.3.0 -->\n"
+            # t7 P2 relapse control: a stale literal SHARING the line with
+            # a valid stamp must still be flagged (the old scanner skipped
+            # the whole line on any stamp hit).
+            "currently 9.9.9 <!-- last-reviewed: 2026-08-05 v1.3.0 -->\n",
             encoding="utf-8",
         )
     planted = _bare_version_offenders_in_npm_docs(tmp_path)
-    assert len(planted) == len(NPM_DOC_SURFACES), (
-        "positive control did not flag every scanned npm doc exactly once "
-        "(stamp line must stay exempt): %s" % planted
+    assert len(planted) == 2 * len(NPM_DOC_SURFACES), (
+        "positive control did not flag every scanned npm doc exactly twice "
+        "(bare literal + same-line-as-stamp literal; stamp itself exempt): "
+        "%s" % planted
     )
     for rel in NPM_DOC_SURFACES:
         assert any(o.startswith(rel + ":") for o in planted), (
@@ -1459,21 +1467,53 @@ def _yaml_step_names(path: Path) -> List[str]:
 
 
 def _contract_rows(doc_text: str) -> List[List[str]]:
-    """The `## Contract` table as [control, mechanism, status, where]."""
+    """The `## Contract` table as [control, mechanism, status, where].
+
+    Re-pass rc.4 t6-cond-2 / t7 P2: a malformed non-header row (any cell
+    count other than 4) FAILS instead of being silently discarded — an
+    enforcement claim that grows an extra `|` must not vanish from the
+    oracle while the remaining rows keep the non-vacuity floors green.
+    """
     m = re.search(r"(?ms)^## Contract\b.*?(?=^## |\Z)", doc_text)
     assert m, "npm/INTEGRITY.md has no `## Contract` section"
     rows = []
+    malformed = []
     for line in m.group(0).splitlines():
         line = line.strip()
         if not line.startswith("|"):
             continue
         cells = [c.strip() for c in line.strip("|").split("|")]
-        if len(cells) != 4:
+        if cells and (cells[0] == "Control" or set(cells[0]) <= set("- :")):
             continue
-        if cells[0] == "Control" or set(cells[0]) <= set("- :"):
+        if len(cells) != 4:
+            malformed.append(line)
             continue
         rows.append(cells)
+    assert not malformed, (
+        "malformed `## Contract` row(s) (cell count != 4) would be silently "
+        "dropped from the enforcement oracle: %s" % malformed
+    )
     return rows
+
+
+def test_contract_rows_reject_malformed_row_instead_of_dropping_it():
+    """t7 P2 positive control: a Contract row with an extra `|` (5 cells)
+    must FAIL the parser, not disappear from validation."""
+    doc = (
+        "## Contract\n\n"
+        "| Control | Mechanism | Status | Where |\n"
+        "| --- | --- | --- | --- |\n"
+        "| good row | m | enforced | w (`a.yml` step `b`) |\n"
+        "| bad | row | with | extra | cell |\n"
+    )
+    try:
+        _contract_rows(doc)
+    except AssertionError as exc:
+        assert "bad" in str(exc)
+    else:
+        raise AssertionError(
+            "5-cell Contract row was silently accepted/dropped"
+        )
 
 
 def _integrity_enforced_pairs(doc_text: str) -> List[List[str]]:
@@ -2556,6 +2596,17 @@ def test_both_rails_answer_identically_on_every_key_shape():
         "verdict : GO\n",
         '"verdict": GO\n',
         "verdict :GO\n",
+        # Re-pass rc.4 t7 P1: an ORPHAN-indented first line (no active bare
+        # parent) previously slipped the prev_scalar_decl=False initial
+        # state — `  verdict: NO-GO` + `verdict: GO` resolved as GO.
+        "  verdict: NO-GO\nverdict: GO\n",
+        # Same class after a scalar has RESET the state to non-bare.
+        "release_tag: v1.2.3\n  verdict: NO-GO\nverdict: GO\n",
+        # Root-level list item: this signed format's only lists are
+        # INDENTED under a bare key; a root `- item` is malformed and was
+        # accepted outright.
+        "- verdict: NO-GO\nverdict: GO\n",
+        "verdict: GO\n- trailing root list item\n",
     ]
     for body in canonical_shapes:
         text = block(body)

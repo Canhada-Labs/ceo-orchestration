@@ -157,30 +157,31 @@ def noncanonical_top_level_lines(text: str) -> List[str]:
     if not m:
         return []
     bad: List[str] = []
-    prev_scalar_decl = False
+    # Parent state closes the line whitelist (re-pass rc.4 t7 P1): an
+    # indented line is legitimate ONLY under an ACTIVE bare `key:` parent.
+    # Both None (before any key) and "scalar" reject — an orphan-indented
+    # FIRST line (`  verdict: NO-GO` then `verdict: GO`) previously slipped
+    # through the prev_scalar_decl=False initial state and resolved as GO,
+    # and a root-level `- item` is malformed for this signed format (its
+    # only lists are INDENTED under a bare key) yet was accepted outright.
+    # After a SCALAR `key: value`, an indented non-comment line is a YAML
+    # CONTINUATION that changes the scalar's value (`verdict: GO` +
+    # `  NO-GO` == "GO NO-GO") — reject fail-closed (re-pass rc.4 t2 P1).
+    parent = None  # None | "scalar" | "bare"
     for raw in m.group(1).splitlines():
         line = _strip_comment(raw)
         if not line.strip():
             continue
         if line[0] in (" ", "\t"):
-            # Sub-level line. Legitimate ONLY under a parent declared as a
-            # bare `key:` (mapping/list). After a SCALAR `key: value`, an
-            # indented non-comment line is a YAML CONTINUATION that changes
-            # the scalar's value (`verdict: GO` + `  NO-GO` == "GO NO-GO")
-            # while this minimal reader still saw `GO` — reject fail-closed
-            # (re-pass rc.4 t2 P1).
-            if prev_scalar_decl:
+            if parent != "bare":
                 bad.append(line)
             continue
         if _CANONICAL_TOP_LEVEL_KEY_RE.match(line):
             _key, _, _val = line.partition(":")
-            prev_scalar_decl = bool(_val.strip())
-            continue
-        if line.startswith("- "):  # top-level list item
-            prev_scalar_decl = False
+            parent = "scalar" if _val.strip() else "bare"
             continue
         bad.append(line)
-        prev_scalar_decl = False
+        parent = None
     return bad
 
 

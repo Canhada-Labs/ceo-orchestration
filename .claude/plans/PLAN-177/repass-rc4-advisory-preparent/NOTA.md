@@ -78,3 +78,33 @@ segurança. Janela aceita; Y a fecha.
 A revisão de PRODUTO do candidato é o re-pass t7 (2 partes) sobre X;
 este rail advisory documenta apenas a composição do delta
 administrativo 5af2cd7..X.
+
+## Ciclo t7 → X2 (NO-GO nas 2 partes; curas no commit X2)
+
+O t7 sobre X devolveu NO-GO×2 com 4 P1 + P2s. TODAS as curas estão no
+commit X2 (o t8 roda sobre ele):
+
+- P1 (parte 1): whitelist de linhas com estado de parent 3-valores nos
+  DOIS readers do verdito — indentação ÓRFÃ (antes da primeira chave ou
+  após escalar) e `- item` na RAIZ agora são NONCANONICAL fail-closed;
+  4 shapes novos na matriz cross-reader.
+- P1 (parte 2, ×3): `_refresh_schema_doc` agora (a) recusa symlink no
+  LEAF (checado antes de `-e` — link quebrado não vira install-through)
+  e em QUALQUER ancestral; (b) respeita `--skip` na inspeção E na
+  escrita, com dry-run por-path; (c) usa `_hash_file` (fallback
+  sha256sum) — sem hasher utilizável, preserva com warning. Positive
+  controls: caso B2-c4 no replay (12 asserts, 64/64 PASS local).
+- P2s: docstring do T-2 corrigida (counter removido não é mais
+  citado); stamp same-line + Contract-row 5-cell curados no scanner
+  com relapse controls; prosa do `.claude/.gitignore` gerado agora diz
+  a verdade (preserva bytes; entries de postura faltantes podem ser
+  ANEXADAS); `--ceremony` documentado nas 3 superfícies de usage;
+  wiring CI: unit do gitignore per-PR no smoke-install.yml (sentinel
+  raiz do 177) + replay suite no ownership-nightly.yml com
+  timeout 90→110 (sentinel round-2 deste plano, Owner-assinado).
+
+DEFERIDO com registro: o comentário stale em `validate.yml:~869`
+("replay é local-only") é ARBITRATION-KERNEL — sem rota de sentinel por
+design (exige CEO_KERNEL_OVERRIDE humano na sessão). A cura real (o
+wiring) está feita; o comentário segue o próximo kernel-touch
+autorizado. Nenhuma mudança executável pendente.
