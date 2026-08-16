@@ -1183,7 +1183,8 @@ def test_tag_annotation_carries_the_whole_train_and_no_stale_release(synth):
     # pinning the rc.1-era string here blessed a stale signed-tag annotation.
     assert (
         "PLAN-162 / PLAN-165 / PLAN-166 / PLAN-167 / PLAN-168 / "
-        "PLAN-169 W0-W2 (ADRs 184 -> 190)" in proc.stdout
+        "PLAN-169 W0-W2 / PLAN-177 / PLAN-178 "
+        "(ADRs 184 -> 191 + ADR-089-AMEND-1)" in proc.stdout
     )
     assert "v1.3.0 —" in proc.stdout
 

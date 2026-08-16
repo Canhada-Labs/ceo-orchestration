@@ -19,11 +19,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Night-mode + doctrine + release-engineering train (PLAN-162/165
 ceremony 2; PLAN-166/167/168 release-hold closure and install/upgrade
-ownership). One user-facing feature, one cross-rail security P0 closed,
-one published-contract conflict settled by ADR instead of by silence,
-and the install/upgrade ownership decision collapsed into a single
-audited function. As always: governance and auditability — no speed
-claim.
+ownership; PLAN-177 GA re-pass cures; PLAN-178 spawn acceptance
+contract v2, native cost cross-check and vacuity lint). The headline
+feature is night-mode; one cross-rail security P0
+closed, one published-contract conflict settled by ADR instead of by
+silence, and the install/upgrade ownership decision collapsed into a
+single audited function. As always: governance and auditability — no
+speed claim.
 
 ### Added — night-mode: Owner-invoked autonomy posture toggle (PLAN-165, ADR-185)
 
@@ -159,14 +161,91 @@ changed in this release — what a v1.2.0 adopter notices when upgrading:
   and adopter edits are preserved. Skipped on `--ceremony user`
   installs, which never create root files.
 
+### Fixed — release-verdict readers share ONE fail-closed grammar (PLAN-177)
+
+The GA re-pass over rc.3 ended NO-GO; the cures landed inside this
+train (rc.4) instead of being deferred:
+
+- **Both release decision gates** — the server-side
+  `validate-pair-rail-verdict.py` (step 15) and the local
+  `_release_tag_guard.py` (all-modes enforcement) — now parse the
+  signed verdict with the same strict ASCII/YAML grammar: indented
+  continuations of a scalar, comments glued to the value, Unicode
+  whitespace stuck to the token (`GO<U+00A0>` is NOT `GO`) and
+  separator-less keys (`verdict:GO`) are each a NAMED rejection, never
+  a silent normalization into the authorizing token. Proven by
+  cross-reader probe fixtures that run the two rails on every key
+  shape and require identical answers.
+- **Gitignore delivery is symlink-safe**: the three writers refuse to
+  follow a symlinked `.gitignore`/`.claude/.gitignore`, dry-run
+  previews print what WOULD be appended (never "asserted clean" over
+  debris), and the root-gitignore symlink guard is part of the
+  baseline enumeration.
+- **plans/ schema docs refresh is hash-gated on upgrade**: only a
+  byte-pristine copy of a KNOWN prior framework generation of
+  `PLAN-SCHEMA.md`/`DEBATE-SCHEMA.md` is replaced (with backup);
+  an adopter-modified schema is PRESERVED loudly. Closes the F3 STALE
+  signature the parity e2e flagged.
+- **Pre-state ceremony migration fails safe to `user`** and only an
+  EXPLICIT `--ceremony` flag / env / recorded state persists into the
+  synthesized install-state — the fail-safe inference itself is never
+  persisted.
+- **npm honesty**: `npm/INTEGRITY.md` names the packlist exceptions
+  that actually ship; `SBOM.md`, `install-npm.sh` and `INSTALL.md`
+  claims re-verified against behavior.
+
+### Added — spawn acceptance contract v2 (PLAN-178 Lote B, ADR-191)
+
+- **FILE ASSIGNMENT grammar with taint semantics** in
+  `check_agent_spawn.py`: every named spawn declares `- CAN edit:
+  <concrete paths>` or `- CAN edit: NONE-READ-ONLY`; globs, Unicode
+  whitespace, control characters or non-whitelisted list lines taint
+  the whole declaration. Advisory-first: omission is VISIBLE
+  (`spawn_file_assignment_recorded`, `path_count=0`) and the enforce
+  flip stays a future ceremony gated on the measure-first window.
+- **Fenced + capped inter-agent ingest** in the four shipped Workflow
+  skills (byte-identical COMMON block): PROMPT DEFENSE ≥6, explicit
+  FILE ASSIGNMENT, anti-spoof fencing with a 24000-char cap whose
+  truncation poisons the owning dimension — plus a pre-dispatch
+  validator of the reduced ADR-191 grammar in the workflow scripts
+  themselves (the Workflow rail does not pass through the spawn hook;
+  honest limitation recorded in ADR-191 §4).
+- **Shared-memory `query()` returns are fenced**
+  (`_lib/memory_shared.py`, ADR-089-AMEND-1) with a derivable
+  SEC-P0-02 reopen trigger.
+- **Multi-plan budget cap cure** (`check_budget.py`): the previously
+  INERT cap (early-allow with ≥2 active plans) now resolves the
+  active plan by an explicit tie-break and emits a breadcrumb instead
+  of silently allowing.
+- **Native cost cross-check in `/agent-budget`** (PLAN-178 W1.2):
+  a read-only, fail-soft, zero-network puller reads Claude Code's own
+  per-subagent usage records and `budget-summary.py` joins them
+  against the audit-log estimate (exact match on session + description
+  hash, ordinal fallback; unmatched residue VISIBLE on both sides;
+  cache-billable split priced correctly). Opt-in via `--native` /
+  `CEO_BUDGET_NATIVE=1` — the default output stays byte-identical —
+  with a `CEO_NATIVE_COST_DISABLE` kill-switch. Doctrine recorded in
+  the command doc: a cross-check, never an authority swap.
+- **Vacuous-check lint + a live cure** (PLAN-178 Lote A):
+  `check-vacuous-checks.py` fails any boot check whose reachable local
+  returns can never go red (structured head-only waiver:
+  `# CEO-INFORMATIONAL-ONLY: <reason>`), with positive controls on the
+  lint itself. The known-vacuous `check_tier_a_spec_version_drift` is
+  CURED for real: framework-vs-SPEC major comparison with a reachable
+  red, ownership-aware source and ADR-155-AMEND-1 §5 provenance
+  (no provenance ⇒ yellow "suspected", never red).
+
 ### Governance
 
-- ADRs 184 → **190** (ADR-185 night-mode; ADR-186 hook-deadline policy;
+- ADRs 184 → **191** (ADR-185 night-mode; ADR-186 hook-deadline policy;
   ADR-110-AMEND-2; ADR-164-AMEND-1; ADR-155-AMEND-1 delivery-record
-  ownership; ADR-190 ownership-decision-table contract). Slash
+  ownership; ADR-190 ownership-decision-table contract; ADR-191 spawn
+  acceptance contract v2; ADR-089-AMEND-1 shared-memory fence). Slash
   commands 26 → **27**
-  (`/night-mode`). All four ceremony phases landed as separable
-  Owner-GPG-signed commits with per-phase sentinels and closed scopes.
+  (`/night-mode`). All ceremony phases landed as separable
+  Owner-GPG-signed commits with per-phase sentinels and closed scopes —
+  PLAN-178 Lote B under its own sentinel (SENT-PLAN178-LOTEB) and a
+  44-round cross-model rail.
 
 ## [1.2.0] - 2026-07-30
 

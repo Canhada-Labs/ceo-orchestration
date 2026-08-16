@@ -1,0 +1,15 @@
+One P1 finding; no P0s.
+
+**P1 — Unicode whitespace bypasses exact decision matching in both rails**
+
+**FILE:LINE:** [validate-pair-rail-verdict.py:116](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.fBy6Y2/wt/.github/scripts/validate-pair-rail-verdict.py:116), [validate-pair-rail-verdict.py:411](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.fBy6Y2/wt/.github/scripts/validate-pair-rail-verdict.py:411), [_release_tag_guard.py:276](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.fBy6Y2/wt/.claude/scripts/local/_release_tag_guard.py:276), [_release_tag_guard.py:471](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.fBy6Y2/wt/.claude/scripts/local/_release_tag_guard.py:471), [test_release_bump_sites.py:2180](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.fBy6Y2/wt/.claude/scripts/tests/test_release_bump_sites.py:2180).
+
+Concrete failure scenario: `verdict: GO<U+00A0>` is valid YAML whose scalar is `GO\u00a0`, not the exact authorizing token `GO`. Both new comment helpers use Unicode-aware `rstrip()`, and the decision paths normalize again with `strip()`, silently converting it to `GO`. The literal step-15 argv—including live hashes and pins—returned `OK: verdict v9.9.9 valid` with exit 0. The local `delta()` probe likewise passed `E_DECISION` and failed only at the deliberately omitted downstream parent field. `GO-WITH-CONDITIONS<U+00A0>` has the same bypass.
+
+The controls are genuine for the original NO-GO, duplicate-key, comment, and continuation defects, but their shared parser-parity test cannot detect both rails making this same mistake, and the refusal table contains no Unicode-whitespace cases. The same permissive boundary also accepts `verdict:GO` with exit 0 even though standard YAML does not parse it as a mapping declaration.
+
+Minimal fix: define the decision declaration using an ASCII/YAML-separation grammar, reject non-ASCII whitespace instead of applying unrestricted `strip()`/`rstrip()`, and require whitespace or end-of-line after the colon. Add leading/trailing NBSP and no-separation cases to the full step-15 and local-delta suites for both authorizing tokens.
+
+Existing canonical verdict files pass the new shape screen, and payload 1 has no install/upgrade blast radius. Python 3.9 compilation, stdlib-only, freshness, contamination, pure rail-parity, and workflow structural checks passed; temporary-repository pytest execution was unavailable in the read-only sandbox.
+
+VERDICT: NO-GO — Both release rails still normalize non-authorizing input into an authorizing decision, so P1-4 remains incomplete.

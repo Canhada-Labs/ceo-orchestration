@@ -76,7 +76,7 @@ RELEASE_TITLE="night-mode + release-mechanics hardening"
 # repass-r2 part-d P1 (S299): the v1.3.0 train grew past the rc.1 text —
 # 167/168 (ownership decision table) and 169 W0-W2 (Linux port + verified
 # fixes) landed between rc.1 and rc.2. The tag stands for the WHOLE train.
-RELEASE_SCOPE="PLAN-162 / PLAN-165 / PLAN-166 / PLAN-167 / PLAN-168 / PLAN-169 W0-W2 (ADRs 184 -> 190)"
+RELEASE_SCOPE="PLAN-162 / PLAN-165 / PLAN-166 / PLAN-167 / PLAN-168 / PLAN-169 W0-W2 / PLAN-177 / PLAN-178 (ADRs 184 -> 191 + ADR-089-AMEND-1)"
 RELEASE_HEADLINE="night-mode — the Owner arms per-machine autonomy for one upcoming
 session (gitignored overlay, next-session semantics), and arming it is a
 HUMAN action by construction: the writer script self-path-guards, the Bash
@@ -94,7 +94,22 @@ timeout_ms and a censoring-rate trigger, ratified only after a live probe
 proved the harness honors a 210 s registration; four scheduled workflows that
 had been red without ever surfacing in push CI; and the release mechanics
 themselves — an idempotent bump, plus an ancestry gate and a restricted-delta
-gate on the tag phase (PLAN-166)."
+gate on the tag phase (PLAN-166).
+
+rc.4 additions: the GA re-pass NO-GO cures (PLAN-177 — the two release
+verdict readers now share ONE fail-closed ASCII/YAML grammar: indented
+continuations, glued comments, Unicode whitespace and separator-less
+keys are all named rejections, proven by cross-reader probes; gitignore
+delivery is symlink-safe with honest dry-run previews; plans/ schema
+docs refresh hash-gated, never clobbering adopter edits; pre-state
+ceremony migration fails safe to user with explicit recoverable
+opt-in) and PLAN-178 Lote B, the spawn acceptance contract v2 (ADR-191:
+FILE ASSIGNMENT grammar with taint semantics + advisory telemetry,
+fenced+capped inter-agent ingest with per-dimension truncation
+poisoning, pre-dispatch validator in all four Workflow skills, shared
+memory query() fenced with a fireable SEC-P0-02 reopen trigger, and the
+multi-plan budget-cap cure), authored under its own GPG sentinel and a
+44-round cross-model rail."
 
 RC_NUM="1"
 STABLE=0
