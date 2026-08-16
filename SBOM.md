@@ -208,8 +208,12 @@ No third-party actions (every `uses:` is a first-party `actions/*` action).
 ## 5. Install-time dependencies
 
 `scripts/install.sh` requires: `bash ≥ 3.2`, `python3 ≥ 3.9`, `git`, `grep`,
-`sed`, `find`. No `curl | bash`. Tarball mode (`scripts/install-npm.sh`) uses
-npm's integrity check against the OIDC-provenanced artifact. Sidecars (§B) are
+`sed`, `find`. No `curl | bash`. Tarball mode (`scripts/install-npm.sh`)
+runs a LOCAL `npm pack` — it produces only a local tarball plus a SHA-256
+sidecar and carries NO OIDC/Sigstore provenance; provenance attestations
+exist exclusively on artifacts published through `npm-publish.yml`
+(re-pass rc.4 t2 P1: the former wording claimed an absent supply-chain
+property for the local route). npm's integrity check still applies. Sidecars (§B) are
 NOT installed by default and require explicit opt-in (ADR-126).
 
 ---

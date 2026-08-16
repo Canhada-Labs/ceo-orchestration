@@ -662,9 +662,15 @@ class TestHarnessProbeFilter(TestEnvContext):
         "archetype": None,
     }
 
-    def test_real_s303_event_is_classified_as_probe(self):
+    def test_probe_shaped_event_is_not_exempt(self):
+        """Re-pass rc.4 t2 (P1): the S303 exemption is RETIRED — desc_preview
+        and desc_hash derive from the SAME caller-controlled description, so
+        the hash corroborates nothing. Probe-shaped rows COUNT until the
+        emitter can stamp provenance the caller cannot forge. The shape
+        DETECTOR is kept for that future emitter."""
         self.assertFalse(_mod._is_ghost_spawn_event(self.REAL_EVENT))
-        self.assertTrue(_mod._is_harness_probe_event(self.REAL_EVENT))
+        self.assertFalse(_mod._is_harness_probe_event(self.REAL_EVENT))
+        self.assertTrue(_mod._has_harness_probe_fingerprint(self.REAL_EVENT))
 
     def test_filter_is_not_a_governance_escape_hatch(self):
         # NEGATIVE CONTROL: a real skill-less dispatch that carries ANY one of
@@ -752,9 +758,10 @@ class TestHarnessProbeFilter(TestEnvContext):
             ev["desc_hash"] = hashlib.sha256(desc.encode("utf-8")).hexdigest()
             self.assertFalse(_mod._is_harness_probe_event(ev), desc)
 
-    def test_real_probe_variants_still_pass(self):
-        """The other half of the closed signature: the observed shape, for the
-        tool names the harness actually materialises (MCP names carry `__`)."""
+    def test_real_probe_variants_detected_but_never_exempt(self):
+        """The shape DETECTOR stays closed over the observed variants (kept
+        for a future provenance-bearing emitter); the EXEMPTION returns
+        False for every one of them (re-pass rc.4 t2 P1)."""
         for desc in (
             "Load WebFetch via ToolSearch?",
             "Load mcp__claude-in-chrome__computer via ToolSearch?",
@@ -763,9 +770,14 @@ class TestHarnessProbeFilter(TestEnvContext):
             ev = dict(self.REAL_EVENT)
             ev["desc_preview"] = desc
             ev["desc_hash"] = hashlib.sha256(desc.encode("utf-8")).hexdigest()
-            self.assertTrue(_mod._is_harness_probe_event(ev), desc)
+            self.assertTrue(_mod._has_harness_probe_fingerprint(ev), desc)
+            self.assertFalse(_mod._is_harness_probe_event(ev), desc)
 
-    def test_ratio_green_on_probe_only_window(self):
+    def test_probe_shaped_window_counts_not_skips(self):
+        """NEGATIVE CONTROL (re-pass rc.4 t2 P1 — the collision case): a
+        markerless spawn whose description IS the probe line must reach
+        the denominator; harness_probes_skipped stays 0 until trusted
+        provenance exists."""
         original = _mod._iter_audit_events_since
 
         def fake_iter(_h):
@@ -774,9 +786,9 @@ class TestHarnessProbeFilter(TestEnvContext):
         _mod._iter_audit_events_since = fake_iter
         try:
             status, summary, detail = _mod.check_skill_unknown_ratio()
-            self.assertEqual(status, "green")
-            self.assertEqual(detail["total"], 0)
-            self.assertEqual(detail["harness_probes_skipped"], 1)
+            self.assertEqual(detail["harness_probes_skipped"], 0)
+            self.assertEqual(detail["total"], 1)
+            self.assertNotEqual(status, "green")
         finally:
             _mod._iter_audit_events_since = original
 
@@ -798,7 +810,9 @@ class TestHarnessProbeFilter(TestEnvContext):
         try:
             status, summary, detail = _mod.check_skill_unknown_ratio()
             self.assertEqual(status, "red")
-            self.assertEqual((detail["unknown"], detail["total"]), (1, 1))
-            self.assertEqual(detail["harness_probes_skipped"], 1)
+            # Re-pass rc.4 t2 P1: the probe-shaped row counts too now —
+            # BOTH rows land in the denominator (2 unknown / 2 total).
+            self.assertEqual(detail["harness_probes_skipped"], 0)
+            self.assertEqual((detail["unknown"], detail["total"]), (2, 2))
         finally:
             _mod._iter_audit_events_since = original

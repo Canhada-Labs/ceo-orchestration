@@ -776,6 +776,11 @@ _protocol_pointer_is_degraded() {
 #   _apply_posture_state_ignores GITIGNORE -> ensure them, append-only
 #   _claude_dir_gitignore_body             -> the NEW .claude/.gitignore body
 #   _apply_claude_dir_gitignore CLAUDE_DIR -> create-if-missing, never rewrite
+#   _preview_claude_dir_gitignore CLAUDE_DIR -> dry-run twin of the apply:
+#       reports would-CREATE / would-APPEND (per missing entry) /
+#       would-PRESERVE, so a seeded adopter file (e.g. `/cache/` only) is
+#       never misreported as PRESERVE when the real run would append
+#       (re-pass rc.4 t2 P1 — the seeded-file dry-run regression)
 # =============================================================================
 
 _mcp_secrets_ignore_entry() {
@@ -785,6 +790,12 @@ _mcp_secrets_ignore_entry() {
 _apply_mcp_secrets_ignore() {
   # $1 = path to the adopter ROOT .gitignore (may not exist yet).
   _msi_gitignore="$1"
+  # Re-pass rc.4 t2 (P1): same symlink refusal as the nested helper — a
+  # root .gitignore symlink must never route framework appends elsewhere.
+  if [ -L "$_msi_gitignore" ]; then
+    echo "    ERROR: root .gitignore is a symlink — refusing to write through it" >&2
+    return 1
+  fi
   _msi_line="$( _mcp_secrets_ignore_entry )"
   if [ -f "$_msi_gitignore" ]; then
     if ! grep -Fxq "$_msi_line" "$_msi_gitignore" 2>/dev/null; then
@@ -864,6 +875,14 @@ _apply_claude_dir_gitignore() {
   # comment lines is never repaired.
   _cdg_dir="$1"
   _cdg_file="$_cdg_dir/.gitignore"
+  # Re-pass rc.4 t2 (P1): NEVER follow a symlink here. A .claude/.gitignore
+  # symlinked to another writable file would receive framework appends at
+  # the EXTERNAL target; a dangling symlink passes `[ ! -e ]` and the
+  # redirect would CREATE its target. -L catches both, before any read.
+  if [ -L "$_cdg_file" ]; then
+    echo "    ERROR: .claude/.gitignore is a symlink — refusing to read or write through it (preserve/replace it manually)" >&2
+    return 1
+  fi
   if [ ! -e "$_cdg_file" ]; then
     [ -d "$_cdg_dir" ] || mkdir -p "$_cdg_dir"
     _claude_dir_gitignore_body > "$_cdg_file"
@@ -891,6 +910,35 @@ _apply_claude_dir_gitignore() {
     echo "    APPENDED: missing posture entries into existing .claude/.gitignore"
   else
     echo "    EXISTS: .claude/.gitignore already carries both entries"
+  fi
+  return 0
+}
+
+_preview_claude_dir_gitignore() {
+  # Dry-run twin of _apply_claude_dir_gitignore (re-pass rc.4 t2 P1):
+  # SAME per-entry predicate, ZERO writes. Reports the action the real
+  # run would take — including would-APPEND on a seeded adopter file.
+  _pcg_file="$1/.gitignore"
+  if [ -L "$_pcg_file" ]; then
+    echo "    (dry-run) ERROR: .claude/.gitignore is a symlink — real run would REFUSE" >&2
+    return 1
+  fi
+  if [ ! -e "$_pcg_file" ]; then
+    echo "    (dry-run) would CREATE: .claude/.gitignore"
+    return 0
+  fi
+  if [ ! -f "$_pcg_file" ]; then
+    echo "    (dry-run) ERROR: .claude/.gitignore exists but is not a regular file" >&2
+    return 1
+  fi
+  _pcg_missing=""
+  for _pcg_entry in "/state/" "/settings.local.json"; do
+    grep -Fxq "$_pcg_entry" "$_pcg_file" || _pcg_missing="$_pcg_missing $_pcg_entry"
+  done
+  if [ -n "$_pcg_missing" ]; then
+    echo "    (dry-run) would APPEND into existing .claude/.gitignore:$_pcg_missing"
+  else
+    echo "    (dry-run) EXISTS: .claude/.gitignore already carries both entries (would PRESERVE)"
   fi
   return 0
 }

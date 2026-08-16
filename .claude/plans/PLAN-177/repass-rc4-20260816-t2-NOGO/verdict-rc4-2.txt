@@ -1,0 +1,57 @@
+## Findings
+
+1. **P1 — arbitrary symlink target can be modified**
+
+   **FILE:LINE:** [scripts/_framework_manifest_set.sh:867](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.rYItrR/wt/scripts/_framework_manifest_set.sh:867), [scripts/_framework_manifest_set.sh:882](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.rYItrR/wt/scripts/_framework_manifest_set.sh:882)
+
+   **Failure scenario:** `_apply_claude_dir_gitignore` follows symlinks. If `.claude/.gitignore` points to another writable file, install/upgrade appends framework text to that external target. A dangling symlink is treated as absent by `[ ! -e ]`, and the redirect can create its target. The root `.gitignore` helpers similarly follow symlinks, now including the newly added upgrade path.
+
+   **Minimal fix:** Reject or preserve any `-L` target before reading or redirecting, for both root and nested gitignore helpers. Add existing-target and dangling-symlink controls for install, upgrade, and dry-run.
+
+2. **P1 — S303 exemption remains forgeable and can hide a real gap**
+
+   **FILE:LINE:** [.claude/scripts/ceo-boot.py:549](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.rYItrR/wt/.claude/scripts/ceo-boot.py:549), [.claude/hooks/audit_log.py:569](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.rYItrR/wt/.claude/hooks/audit_log.py:569), [.claude/scripts/tests/test_ceo_boot.py:693](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.rYItrR/wt/.claude/scripts/tests/test_ceo_boot.py:693)
+
+   **Failure scenario:** Both `desc_preview` and `desc_hash` are derived from the same caller-controlled description, so the hash is not independent corroboration. A real markerless spawn described as `Load WebFetch via ToolSearch?` automatically receives the matching hash and is skipped. The implementation does not verify the documented `prompt == noop`, fixed model, or trusted harness provenance. I reproduced the result: `check_skill_unknown_ratio()` returned green with `total=0` and `harness_probes_skipped=1`.
+
+   The negative control uses an unrelated description, so it does not exercise this collision.
+
+   **Minimal fix:** Do not exempt markerless events using caller-controlled description data alone. Require a trusted emitter-supplied probe marker, or count these events until such provenance exists. Add a negative control using the exact probe-shaped description but non-probe provenance.
+
+3. **P1 — dry-run misreports the seeded `.claude/.gitignore` cure**
+
+   **FILE:LINE:** [scripts/_framework_manifest_set.sh:878](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.rYItrR/wt/scripts/_framework_manifest_set.sh:878), [scripts/install.sh:1871](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.rYItrR/wt/scripts/install.sh:1871), [scripts/upgrade.sh:3199](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.rYItrR/wt/scripts/upgrade.sh:3199)
+
+   **Failure scenario:** With an adopter-owned `.claude/.gitignore` containing only `/cache/`, dry-run says it “would PRESERVE.” The real operation appends `/state/`, `/settings.local.json`, and comments. This is the exact seeded-file regression addressed by scenarios D/D2, but those controls cover only real execution.
+
+   **Minimal fix:** Use a shared preview function that checks each required entry and reports `would APPEND` when missing. Add seeded-file dry-run controls for both install and upgrade.
+
+4. **P1 — the claimed repository-wide stale-version gate is not repository-wide**
+
+   **FILE:LINE:** [.github/release-checklist.md:72](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.rYItrR/wt/.github/release-checklist.md:72), [.claude/scripts/tests/test_release_bump_sites.py:1227](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.rYItrR/wt/.claude/scripts/tests/test_release_bump_sites.py:1227), [.claude/scripts/tests/test_release_bump_sites.py:1360](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.rYItrR/wt/.claude/scripts/tests/test_release_bump_sites.py:1360), [.claude/scripts/tests/test_release_bump_sites.py:2105](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.rYItrR/wt/.claude/scripts/tests/test_release_bump_sites.py:2105)
+
+   **Failure scenario:** The checklist says `SCAN_ROOTS` provides exhaustiveness over `.github/`, `RELEASE.md`, scripts, and npm docs. In practice, the generic scanner is invoked only for specific release-script strings, while the semantic-version scan is restricted to the two npm Markdown files. Adding `currently 9.9.9` under most claimed roots leaves the tests green. The checklist test merely verifies that the prose names the configured roots.
+
+   **Minimal fix:** Either narrow the checklist claim to the two npm documents or implement a true managed-version scan across every claimed surface, with mutation controls planted in each surface class.
+
+5. **P1 — npm honesty sweep leaves a false provenance claim**
+
+   **FILE:LINE:** [SBOM.md:210](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.rYItrR/wt/SBOM.md:210), [scripts/install-npm.sh:2](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.rYItrR/wt/scripts/install-npm.sh:2), [scripts/install-npm.sh:165](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.rYItrR/wt/scripts/install-npm.sh:165)
+
+   **Failure scenario:** `SBOM.md` describes the tarball produced by `scripts/install-npm.sh` as an “OIDC-provenanced artifact.” That script performs a local `npm pack`; it neither publishes through OIDC nor produces a provenance attestation. A maintainer following the local tarball route is therefore told that an absent supply-chain property exists.
+
+   **Minimal fix:** State that the local helper produces only a local tarball and SHA sidecar. Attribute OIDC/Sigstore provenance exclusively to artifacts published by `npm-publish.yml`.
+
+6. **P2 — pre-v1.2 user-ceremony upgrades remain ambiguous**
+
+   **FILE:LINE:** [scripts/upgrade.sh:766](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.rYItrR/wt/scripts/upgrade.sh:766), [scripts/upgrade.sh:3156](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.rYItrR/wt/scripts/upgrade.sh:3156)
+
+   **Failure scenario:** When historical install-state is absent, upgrade defaults the effective ceremony to maintainer and writes root `.gitignore` blocks. A pre-state user-only installation can therefore receive root writes despite the user-ceremony boundary. The efficacy test begins at the v1.2.0 pin and does not cover this population.
+
+   **Minimal fix:** Add an explicit ceremony override or require positive maintainer evidence before root delivery, then cover a pre-install-state user fixture.
+
+The pair-rail decision checks, tournament working-directory fix, core checksum deferral, and clean/seeded gitignore delivery paths are otherwise substantively implemented. Static checks passed (`actionlint`, `shellcheck`, `bash -n`, count claims, AGENTS freshness); temp-dependent suites could not execute because the reviewer sandbox exposes no writable temporary directory.
+
+Five P1 findings leave the cure set incomplete and introduce a new external-write hazard.
+
+VERDICT: NO-GO

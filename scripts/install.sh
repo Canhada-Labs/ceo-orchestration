@@ -1871,11 +1871,9 @@ install_claude_dir_gitignore() {
   if [[ "$DRY_RUN" -eq 1 ]]; then
     echo ""
     echo "==> .claude/.gitignore (PLAN-177 W1 / CF-9)"
-    if [[ -e "$TARGET/.claude/.gitignore" ]]; then
-      echo "    (dry-run) EXISTS: .claude/.gitignore (would PRESERVE)"
-    else
-      echo "    (dry-run) would CREATE: .claude/.gitignore"
-    fi
+    # Shared per-entry preview (re-pass rc.4 t2 P1): a seeded adopter
+    # file must report would-APPEND, never a false would-PRESERVE.
+    _preview_claude_dir_gitignore "$TARGET/.claude" || return 1
     return 0
   fi
 

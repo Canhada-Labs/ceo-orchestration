@@ -584,14 +584,18 @@ def _is_harness_probe_event(ev: Dict[str, Any]) -> bool:
     (``_has_harness_probe_fingerprint``); an unrecognised description counts,
     however markerless the row is.
     """
-    return (
-        not ev.get("subagent_type")
-        and not ev.get("archetype")
-        and ev.get("rail") is None
-        and ev.get("has_profile") is False
-        and ev.get("has_file_assignment") is False
-        and _has_harness_probe_fingerprint(ev)
-    )
+    # Re-pass rc.4 t2 (P1): the S303 exemption is RETIRED until trusted
+    # provenance exists. `desc_preview` and `desc_hash` are both derived
+    # from the same CALLER-CONTROLLED description, so the hash corroborates
+    # nothing: a real markerless spawn described as
+    # `Load WebFetch via ToolSearch?` was silently deleted from the
+    # denominator — the exact event this ratio exists to expose. Until the
+    # EMITTER can stamp provenance the caller cannot forge, probe-shaped
+    # rows COUNT (the conservative direction for an advisory: a yellow the
+    # operator triages beats a green that hides a fail-open spawn).
+    # _has_harness_probe_fingerprint is kept (tested) as the shape
+    # DETECTOR for that future provenance-bearing emitter.
+    return False
 
 
 def check_skill_unknown_ratio() -> Tuple[str, str, Any]:

@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# HONESTY (re-pass rc.4 t2 P1): this helper runs a LOCAL `npm pack` — the
+# tarball it emits has NO OIDC/Sigstore provenance. Provenance-attested
+# artifacts come exclusively from .github/workflows/npm-publish.yml.
 # install-npm.sh — local NPM tarball build + smoke-test for ceo-orchestration.
 #
 # Sprint 13 Phase 2 (PLAN-013) / ROADMAP-CLOSURE Marco 1 — does NOT

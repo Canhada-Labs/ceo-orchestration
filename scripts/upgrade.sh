@@ -763,12 +763,20 @@ sys.stdout.write(cer + "\n")
 ' "$_INSTALL_STATE_FILE" 2>/dev/null
 }
 
-CEREMONY_EFFECTIVE="maintainer"
-_CEREMONY_SOURCE="default (no readable install-state — pre-Wave-B fail-open)"
+# Re-pass rc.4 t2 (P2): with NO readable install-state the old default was
+# maintainer (fail-open) — a pre-v1.2 USER-ceremony install could receive
+# root .gitignore writes across the user boundary. The fail-SAFE default is
+# user (root surfaces skipped, loudly); a pre-state MAINTAINER install opts
+# back in explicitly via CEO_UPGRADE_CEREMONY=maintainer.
+CEREMONY_EFFECTIVE="user"
+_CEREMONY_SOURCE="default (no readable install-state — fail-safe user; set CEO_UPGRADE_CEREMONY=maintainer to override)"
 _cer_line=""
 if _cer_line="$(_read_install_state_ceremony)" && [[ -n "$_cer_line" ]]; then
   CEREMONY_EFFECTIVE="$_cer_line"
   _CEREMONY_SOURCE="recorded install request (.claude/.install-state.json)"
+elif [[ "${CEO_UPGRADE_CEREMONY:-}" == "maintainer" || "${CEO_UPGRADE_CEREMONY:-}" == "user" ]]; then
+  CEREMONY_EFFECTIVE="$CEO_UPGRADE_CEREMONY"
+  _CEREMONY_SOURCE="explicit CEO_UPGRADE_CEREMONY override (no install-state)"
 fi
 
 TIMESTAMP="$( date +%Y%m%d-%H%M%S )"
@@ -3197,11 +3205,9 @@ command -v _apply_claude_dir_gitignore >/dev/null 2>&1 || {
   exit 1
 }
 if [[ "$DRY_RUN" -eq 1 ]]; then
-  if [[ -e "$TARGET/.claude/.gitignore" ]]; then
-    echo "    (dry-run) EXISTS: .claude/.gitignore (would PRESERVE)"
-  else
-    echo "    (dry-run) would CREATE: .claude/.gitignore"
-  fi
+  # Shared per-entry preview (re-pass rc.4 t2 P1): a seeded adopter file
+  # must report would-APPEND, never a false would-PRESERVE.
+  _preview_claude_dir_gitignore "$TARGET/.claude" || exit 1
 else
   _up_record_op "ensure_claude_dir_gitignore" ".claude/.gitignore"
   _apply_claude_dir_gitignore "$TARGET/.claude"

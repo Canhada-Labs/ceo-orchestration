@@ -71,13 +71,17 @@
       target `X.0.0` (avisado alto, nunca adivinhado). Leia isso como
       cobertura sobre a **lista**, não sobre o repositório: um literal de
       versão que exista fora da lista não é bump-eável e simplesmente não
-      deveria existir. Quem responde pela **exaustividade sobre o repo** é
-      o scanner de superfícies vivas
+      deveria existir. **Não existe exaustividade repo-wide** (claim
+      estreitada no re-pass rc.4 t2, P1): o scanner de superfícies vivas
       (`SCAN_ROOTS` em `.claude/scripts/tests/test_release_bump_sites.py`,
       hoje `.github/`, `RELEASE.md`, `.claude/scripts/`, `scripts/`,
-      `npm/INTEGRITY.md` e `npm/README.md`) — foi a ausência dos docs de
-      `npm/` ali que deixou `npm/INTEGRITY.md` declarar uma versão obsoleta
-      sem que nenhum gate visse (PLAN-177 P1-2). Note que as duas entradas
+      `npm/INTEGRITY.md` e `npm/README.md`) cobre (a) strings de
+      release-script procuradas nos roots e (b) varredura de versão
+      SEMÂNTICA apenas nos DOIS documentos de `npm/` — um literal de
+      versão plantado em outra superfície dos roots NÃO é detectado por
+      gate nenhum. Foi a ausência dos docs de `npm/` na varredura (b) que
+      deixou `npm/INTEGRITY.md` declarar uma versão obsoleta sem que
+      nenhum gate visse (PLAN-177 P1-2). Note que as duas entradas
       de `npm/` são **arquivos**, não a pasta: `npm/` recebe, no staging do
       publish e num build local, uma cópia espelhada de `.claude/**` +
       `scripts/**`, e varrer a pasta faria o scanner auditar clones do
