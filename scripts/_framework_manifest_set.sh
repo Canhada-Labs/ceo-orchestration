@@ -146,11 +146,20 @@ _framework_target_entries() {
     printf '%s\n' ".claude/frontend-team.md"
     printf '%s\n' ".claude/pitfalls-catalog.yaml"
     printf '%s\n' ".claude/task-chains.yaml"
-    # Framework schema contracts (re-pass rc.4 t5 P1): enumerated so the
-    # NEXT generation's baseline manifest classifies them 3-state instead
-    # of the hash-gated legacy path in upgrade.sh.
-    printf '%s\n' ".claude/plans/PLAN-SCHEMA.md"
-    printf '%s\n' ".claude/plans/DEBATE-SCHEMA.md"
+    # Framework schema contracts (re-pass rc.4 t5 P1, t8 P1): enumerated so
+    # the NEXT generation's baseline manifest classifies them 3-state — but
+    # ONLY when this run actually DELIVERED them (install_one wrote, or the
+    # upgrade's hash-gated refresh installed/refreshed/found-identical
+    # bytes). Same delivery-record condition as PROTOCOL.md/SPEC above:
+    # never file presence. An EXISTS-skipped adopter-customized schema in
+    # the manifest would record the ADOPTER's bytes as framework-owned, and
+    # a later uninstall would see the matching hash and DELETE it (t8 P1).
+    if [ "${FMS_DELIVERED_PLAN_SCHEMA:-0}" = "1" ]; then
+      printf '%s\n' ".claude/plans/PLAN-SCHEMA.md"
+    fi
+    if [ "${FMS_DELIVERED_DEBATE_SCHEMA:-0}" = "1" ]; then
+      printf '%s\n' ".claude/plans/DEBATE-SCHEMA.md"
+    fi
 
     # Protocol-enforcement directory targets (always installed).
     printf '%s\n' ".claude/hooks"
@@ -836,6 +845,42 @@ _root_gitignore_symlink_guard() {
   return 0
 }
 
+# t8 P1: textual PRESENCE of an exact ignore line is not EFFECTIVENESS —
+# a later `!*.json` negation in the same (or a deeper) file wins in git,
+# so `grep -Fxq` alone let night-mode artifacts stay commit-eligible.
+# _gitignore_reassert_effective probes git's EFFECTIVE answer for each
+# mandatory exclusion; when a probe is visible it APPENDS the exclusion
+# again (after the winning negation — last matching rule wins) and
+# re-probes; a still-visible probe fails loudly (the negation lives in a
+# file this applier does not own, e.g. a deeper .gitignore).
+#   $1 = repo root to run git in; $2 = gitignore file to re-assert into;
+#   $3 = the raw exclusion line; $4 = repo-relative probe path.
+# Outside a git work tree the probe cannot run — NOTE and return 0
+# (fail-open on infra; the textual pass above already ran).
+_gitignore_reassert_effective() {
+  _gre_repo="$1"; _gre_file="$2"; _gre_line="$3"; _gre_probe="$4"
+  if ! git -C "$_gre_repo" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    echo "    NOTE: not a git work tree — cannot probe effective ignore for $_gre_line"
+    return 0
+  fi
+  if git -C "$_gre_repo" check-ignore -q -- "$_gre_probe" 2>/dev/null; then
+    return 0
+  fi
+  {
+    echo ""
+    echo "# Re-asserted by ceo-orchestration (re-pass rc.4 t8 P1): a later"
+    echo "# rule in this file negated the mandatory exclusion below; git's"
+    echo "# last-matching-rule-wins makes this trailing copy effective."
+    printf '%s\n' "$_gre_line"
+  } >> "$_gre_file"
+  if git -C "$_gre_repo" check-ignore -q -- "$_gre_probe" 2>/dev/null; then
+    echo "    RE-ASSERTED (was textually present but negated): $_gre_line"
+    return 0
+  fi
+  echo "    WARNING: $_gre_line is present but NOT effective (a negation outside $_gre_file wins) — fix the adopter ignore rules manually" >&2
+  return 0
+}
+
 _apply_posture_state_ignores() {
   # $1 = path to the adopter ROOT .gitignore (append creates it if absent).
   _psi_gitignore="$1"
@@ -852,6 +897,12 @@ _apply_posture_state_ignores() {
     } >> "$_psi_gitignore"
     echo "    APPENDED to .gitignore: $_psi_line"
   done
+  # t8 P1: presence pass done — now assert EFFECTIVENESS per entry.
+  _psi_repo="$( dirname "$_psi_gitignore" )"
+  _gitignore_reassert_effective "$_psi_repo" "$_psi_gitignore" \
+    ".claude/state/" ".claude/state/__ceo_ignore_probe__"
+  _gitignore_reassert_effective "$_psi_repo" "$_psi_gitignore" \
+    ".claude/settings.local.json" ".claude/settings.local.json"
   return 0
 }
 
@@ -922,6 +973,13 @@ _apply_claude_dir_gitignore() {
     } >> "$_cdg_file"
     _cdg_added=1
   done
+  # t8 P1: presence pass done — now assert EFFECTIVENESS per entry
+  # (probes are repo-relative; the repo root is the parent of .claude/).
+  _cdg_repo="$( dirname "$_cdg_dir" )"
+  _gitignore_reassert_effective "$_cdg_repo" "$_cdg_file" \
+    "/state/" ".claude/state/__ceo_ignore_probe__"
+  _gitignore_reassert_effective "$_cdg_repo" "$_cdg_file" \
+    "/settings.local.json" ".claude/settings.local.json"
   if [ "$_cdg_added" = "1" ]; then
     echo "    APPENDED: missing posture entries into existing .claude/.gitignore"
   else

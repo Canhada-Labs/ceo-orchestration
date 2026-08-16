@@ -215,7 +215,7 @@ def _parse_verdict(text: str) -> Dict[str, object]:
     third parser of the same signed file.
     """
     fields: Dict[str, object] = {}
-    block = re.search(r"```yaml\s*\n(.*?)```", text, re.DOTALL)
+    block = re.search(r"```yaml[ \t]*\n(.*?)```", text, re.DOTALL)  # t8 P1: ASCII-only, \s swallowed a leading NBSP line
     if block is None:
         # No yaml block -> no fields -> every consumer below fails closed.
         return fields
@@ -263,7 +263,9 @@ def _parse_verdict(text: str) -> Dict[str, object]:
 # author writes and no template emits; refusing the shape is the smaller
 # surface and is the only behaviour that cannot silently prefer a value.
 # A top-level line is canonical iff it is `name:` with no whitespace before
-# the colon, or a `- ` list item.
+# the colon; list items are legal ONLY indented under an active bare
+# key (t8 P2: a root `- item` is rejected — the old comment said
+# otherwise and misled operators).
 def _strip_yaml_comment(raw):
     """YAML comment rule (re-pass rc.4 t3 P1): `#` starts a comment ONLY at
     line start or when PRECEDED by whitespace — `verdict: GO#NO-GO` is the
@@ -295,7 +297,7 @@ def _noncanonical_top_level_lines(text: str) -> List[str]:
     separate machines; neither may import the other — keep them identical).
     Empty list == the block speaks the grammar both readers assume.
     """
-    block = re.search(r"```yaml\s*\n(.*?)```", text, re.DOTALL)
+    block = re.search(r"```yaml[ \t]*\n(.*?)```", text, re.DOTALL)  # t8 P1: ASCII-only, \s swallowed a leading NBSP line
     if block is None:
         return []
     bad: List[str] = []
@@ -309,10 +311,14 @@ def _noncanonical_top_level_lines(text: str) -> List[str]:
     # After a SCALAR `key: value`, an indented non-comment line is a YAML
     # CONTINUATION that changes the scalar's value (`verdict: GO` +
     # `  NO-GO` == "GO NO-GO") — reject fail-closed (re-pass rc.4 t2 P1).
+    # t8 P1: ASCII-only trims in the SHAPE classifier too — a Unicode-aware
+    # strip() treats a lone U+00A0 as a blank line and a U+00A0 VALUE as a
+    # bare parent (`padding: <NBSP>` + orphan-indented `verdict:` line),
+    # reopening the orphan-indentation class through the whitespace side.
     parent = None  # None | "scalar" | "bare"
     for raw in block.group(1).splitlines():
         line = _strip_yaml_comment(raw)
-        if not line.strip():
+        if not line.strip(" \t"):
             continue
         if line[0] in (" ", "\t"):
             if parent != "bare":
@@ -320,7 +326,7 @@ def _noncanonical_top_level_lines(text: str) -> List[str]:
             continue
         if _CANONICAL_TOP_LEVEL_KEY_RE.match(line):
             _key, _, _val = line.partition(":")
-            parent = "scalar" if _val.strip() else "bare"
+            parent = "scalar" if _val.strip(" \t") else "bare"
             continue
         bad.append(line)
         parent = None
@@ -341,7 +347,7 @@ def _count_top_level_key(text: str, key: str) -> int:
     non-canonical block the two counts differ. delta() checks the shape
     first.
     """
-    block = re.search(r"```yaml\s*\n(.*?)```", text, re.DOTALL)
+    block = re.search(r"```yaml[ \t]*\n(.*?)```", text, re.DOTALL)  # t8 P1: ASCII-only, \s swallowed a leading NBSP line
     if block is None:
         return 0
     seen = 0
@@ -427,7 +433,8 @@ def delta(repo: str, tag: str, verdict_rel: Optional[str]) -> int:
             "verdict %s: non-canonical top-level key syntax %r -- a "
             "top-level line must be\n"
             "      `name:` with no whitespace before the colon (or a `- ` "
-            "list item). The two release rails read this\n"
+            "list item only when INDENTED under a bare key, never at the "
+            "root). The two release rails read this\n"
             "      file with different grammars, so `verdict : NO-GO` "
             "followed by `verdict: GO` counts as two\n"
             "      declarations server-side and one here; the shape is "

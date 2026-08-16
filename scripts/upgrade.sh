@@ -3032,6 +3032,18 @@ backup_and_replace ".claude/task-chains.yaml"
 # installs, so classification falls back to legacy overwrite). Refresh is
 # therefore HASH-GATED: only a byte-pristine copy of a KNOWN prior
 # framework generation is replaced; anything else is PRESERVED loudly.
+# t8 P1: delivery flags for the baseline manifest — the schemas enter the
+# enumeration ONLY when this upgrade left FRAMEWORK bytes at the path
+# (INSTALLED / REFRESHED / IDENTICAL). PRESERVED and SKIPPED stay out, so
+# an adopter-customized schema is never recorded as framework-owned.
+_SCHEMA_DELIVERED_PLAN=0
+_SCHEMA_DELIVERED_DEBATE=0
+_rsd_mark_delivered() {
+  case "$1" in
+    .claude/plans/PLAN-SCHEMA.md)   _SCHEMA_DELIVERED_PLAN=1 ;;
+    .claude/plans/DEBATE-SCHEMA.md) _SCHEMA_DELIVERED_DEBATE=1 ;;
+  esac
+}
 _refresh_schema_doc() {
   # $1 = rel path; $2.. = sha256 of KNOWN prior framework generations.
   _rsd_rel="$1"; shift
@@ -3065,6 +3077,7 @@ _refresh_schema_doc() {
     mkdir -p "$(dirname "$_rsd_dst")"
     cp "$_rsd_src" "$_rsd_dst"
     echo "    INSTALLED: $_rsd_rel"
+    _rsd_mark_delivered "$_rsd_rel"
     return 0
   fi
   # Re-pass rc.4 t7 P1 (hasher portability): the shared _hash_file
@@ -3085,6 +3098,7 @@ _refresh_schema_doc() {
   fi
   if [ "$_rsd_h_dst" = "$_rsd_h_src" ]; then
     echo "    IDENTICAL: $_rsd_rel"
+    _rsd_mark_delivered "$_rsd_rel"
     return 0
   fi
   for _rsd_prior in "$@"; do
@@ -3093,6 +3107,7 @@ _refresh_schema_doc() {
       cp "$_rsd_dst" "$BAK_DIR/$_rsd_rel"
       cp "$_rsd_src" "$_rsd_dst"
       echo "    REFRESHED (pristine prior generation): $_rsd_rel"
+      _rsd_mark_delivered "$_rsd_rel"
       return 0
     fi
   done
@@ -3307,7 +3322,9 @@ else
   _UP_MCP_ENTRY="$( _mcp_secrets_ignore_entry )"
   _UP_POSTURE_ENTRIES="$( _posture_state_ignore_entries )"
   if [[ "$DRY_RUN" -eq 1 ]]; then
-    if [[ -L "$TARGET/.gitignore" ]]; then
+    # t8 P2: the SHARED predicate, not a duplicated -L — the preview must
+    # refuse exactly where the real run refuses, by the same code path.
+    if ! _root_gitignore_symlink_guard "$TARGET/.gitignore" >/dev/null 2>&1; then
       echo "    (dry-run) ERROR: root .gitignore is a symlink — real run would REFUSE" >&2
       exit 1
     fi
@@ -3416,6 +3433,9 @@ if [[ "$DRY_RUN" -eq 0 ]] && command -v _write_baseline_manifest >/dev/null 2>&1
   export FMS_HASH_SOURCE_PROTOCOL="${_PROTOCOL_HASH_SOURCE:-}"
   export FMS_DELIVERED_SPEC="${_SPEC_DELIVERED:-0}"
   export FMS_DELIVERED_PROTOCOL="${_PROTOCOL_DELIVERED:-0}"
+  # t8 P1: same delivery-record condition for the plans/ schema contracts.
+  export FMS_DELIVERED_PLAN_SCHEMA="${_SCHEMA_DELIVERED_PLAN:-0}"
+  export FMS_DELIVERED_DEBATE_SCHEMA="${_SCHEMA_DELIVERED_DEBATE:-0}"
   export FMS_DELIVERED_MARKER="${_MARKER_DELIVERED:-0}"
   _write_baseline_manifest "$TARGET/.claude/.install-manifest.sha256"
   unset FMS_ROOT FMS_HASH_ROOT FMS_PROFILE_PARTS FMS_MODE FMS_PROTOCOL_HASH FMS_LINK_PATHS

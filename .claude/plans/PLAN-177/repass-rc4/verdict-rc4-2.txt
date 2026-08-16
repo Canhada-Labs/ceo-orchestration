@@ -1,0 +1,37 @@
+### Findings
+
+1. **P1 — fix before rc.4**  
+   **FILE:LINE:** `scripts/_framework_manifest_set.sh:152-153`, `scripts/install.sh:1300-1302`, `scripts/_framework_manifest_set.sh:413-421`, `scripts/uninstall.sh:217-232`  
+   **Failure scenario:** The diff unconditionally adds `PLAN-SCHEMA.md` and `DEBATE-SCHEMA.md` to baseline enumeration. On a re-install over an adopter-customized schema, `install_one` preserves the existing file, but manifest generation hashes that preserved adopter content as framework-owned. A later normal uninstall sees the matching hash and deletes the adopter’s schema. This contradicts the candidate’s “never clobbering adopter edits” claim.  
+   **Minimal fix:** Make schema ownership conditional on actual delivery or valid prior ownership continuity. An `EXISTS`-skipped schema must not enter a fresh install manifest. Add a positive control that seeds a custom schema, runs install, verifies the manifest omits it, and verifies uninstall preserves it.
+
+2. **P1 — fix before rc.4**  
+   **FILE:LINE:** `scripts/_framework_manifest_set.sh:844-847`, `scripts/_framework_manifest_set.sh:913-915`, `scripts/tests/test-night-mode-ignore-effect.sh:342-370`  
+   **Failure scenario:** Both helpers equate presence of an exact ignore line with effective exclusion. For example, an adopter-owned `.claude/.gitignore` containing:
+   ```gitignore
+   /settings.local.json
+   !*.json
+   ```
+   passes `grep -Fxq`, so install/upgrade appends nothing; Git’s later negation wins and `.claude/settings.local.json` remains visible. Under user ceremony, this nested file is the only protection, so the original night-mode leakage recurs. The seeded controls exercise only `/cache/`, not an overridden-but-present mandatory rule.  
+   **Minimal fix:** Check effective Git ignore behavior, not textual presence. If a later rule negates a mandatory exclusion, append the exclusion after the winning negation or fail loudly. Add install and upgrade controls seeded with an exact exclusion followed by `!*.json`, asserting both night-mode artifacts remain ignored.
+
+3. **P2 — follow-up**  
+   **FILE:LINE:** `scripts/_framework_manifest_set.sh:827-836`, `scripts/install.sh:1782-1785`, `scripts/install.sh:1845-1848`, `scripts/upgrade.sh:3309-3313`, `scripts/tests/test-gitignore-symlink-and-dryrun-unit.sh:104-109`  
+   **Failure scenario:** The shared symlink predicate claims to serve apply and dry-run, but all three dry-run call sites duplicate `-L` instead. S8 only calls the helper directly, so it remains green if a caller loses or diverges from the predicate. Current behavior agrees, but the claimed shared-control regression test is decorative at the wiring boundary.  
+   **Minimal fix:** Call `_root_gitignore_symlink_guard` from every dry-run path and test install/upgrade dry-runs against real and dangling root symlinks.
+
+4. **P2 — follow-up**  
+   **FILE:LINE:** `.claude/scripts/ceo-boot.py:544-559`, `.claude/scripts/ceo-boot.py:561-606`, `.claude/scripts/tests/test_ceo_boot.py:739-762`  
+   **Failure scenario:** The hash-mismatch and anchored-signature tests invoke `_is_harness_probe_event`, which currently always returns `False`. They therefore pass even if `_has_harness_probe_fingerprint` starts accepting mismatched hashes or prefix/suffix collisions. The end-to-end “every event counts” controls are real, but these advertised detector controls are not.  
+   **Minimal fix:** Assert the negative cases directly against `_has_harness_probe_fingerprint`; retain separate assertions that the exemption wrapper remains disabled.
+
+5. **P2 — follow-up**  
+   **FILE:LINE:** `.github/workflows/smoke-install.yml:57`, `.github/workflows/smoke-install.yml:113`, `scripts/tests/test-night-mode-ignore-effect.sh:82-110`  
+   **Failure scenario:** The efficacy test hardcodes and verifies the paths emitted by `night-mode.py`, but `.claude/scripts/night-mode.py` is absent from both smoke workflow path filters. A PR that changes only those emitted paths does not run the shell efficacy test, so its non-vacuity check never fires.  
+   **Minimal fix:** Add `.claude/scripts/night-mode.py` to both pull-request and push path lists.
+
+The four rc.3 defects are otherwise directly cured: both verdict readers reject `NO-GO`, normal gitignore delivery is shared across install/upgrade, npm’s stale version and checksum claims are removed, T-1 is wired correctly, and T-2 conservatively counts every probe-shaped row. Static Python/YAML/shell validation, `actionlint`, `shellcheck`, stdlib, claims-count, and AGENTS freshness checks passed; stateful suites could not execute in the read-only review sandbox.
+
+The schema ownership deletion path and ineffective-but-textually-present ignore rules make payload 2 incomplete at this SHA.
+
+VERDICT: NO-GO

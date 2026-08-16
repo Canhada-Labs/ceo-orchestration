@@ -740,11 +740,16 @@ class TestHarnessProbeFilter(TestEnvContext):
         """A preview that looks like a probe but whose desc_hash is over
         DIFFERENT bytes was truncated, redacted or forged — either way it is
         not the short, secret-free probe line, so it counts."""
+        # t8 P2: assert the LIVE detector, not the always-False exemption
+        # wrapper — through the wrapper these negatives pass vacuously even
+        # if the fingerprint starts accepting mismatched hashes.
         ev = dict(self.REAL_EVENT)
         ev["desc_hash"] = hashlib.sha256(b"something else entirely").hexdigest()
+        self.assertFalse(_mod._has_harness_probe_fingerprint(ev))
         self.assertFalse(_mod._is_harness_probe_event(ev))
         ev_no_hash = dict(self.REAL_EVENT)
         ev_no_hash["desc_hash"] = ""
+        self.assertFalse(_mod._has_harness_probe_fingerprint(ev_no_hash))
         self.assertFalse(_mod._is_harness_probe_event(ev_no_hash))
 
     def test_signature_is_closed_not_a_prefix_rule(self):
@@ -759,6 +764,9 @@ class TestHarnessProbeFilter(TestEnvContext):
             ev = dict(self.REAL_EVENT)
             ev["desc_preview"] = desc
             ev["desc_hash"] = hashlib.sha256(desc.encode("utf-8")).hexdigest()
+            # t8 P2: the DETECTOR itself must reject the shape (prefix/
+            # suffix collisions), independent of the disabled exemption.
+            self.assertFalse(_mod._has_harness_probe_fingerprint(ev), desc)
             self.assertFalse(_mod._is_harness_probe_event(ev), desc)
 
     def test_real_probe_variants_detected_but_never_exempt(self):

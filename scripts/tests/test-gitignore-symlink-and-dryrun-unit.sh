@@ -108,5 +108,35 @@ mkdir -p "$TMP/s8"; printf 'x\n' > "$TMP/s8/.gitignore"
 _root_gitignore_symlink_guard "$TMP/s8/.gitignore" >/dev/null 2>&1; rc=$?
 _t "S8 preview guard passa arquivo regular" 0 "$rc"
 
+# --- S9 (t8 P1): presenca textual != exclusao EFETIVA — negacao `!*.json`
+# apos a linha exata vence no git; o applier deve RE-ASSERTAR (append apos a
+# negacao) ate o probe ficar ignorado, no NESTED e no ROOT.
+mkdir -p "$TMP/s9/.claude"
+( cd "$TMP/s9" && git init -q )
+printf '/settings.local.json\n/state/\n!*.json\n' > "$TMP/s9/.claude/.gitignore"
+_apply_claude_dir_gitignore "$TMP/s9/.claude" >/dev/null 2>&1; rc=$?
+_t "S9 nested apply rc=0" 0 "$rc"
+if ( cd "$TMP/s9" && git check-ignore -q -- .claude/settings.local.json ); then
+  echo "PASS: S9 settings.local.json EFETIVAMENTE ignorado apos re-assercao"
+else
+  echo "FAIL: S9 negacao !*.json continua vencendo"; FAILS=$((FAILS + 1))
+fi
+if ( cd "$TMP/s9" && git check-ignore -q -- .claude/state/probe ); then
+  echo "PASS: S9 state/ segue efetivo"
+else
+  echo "FAIL: S9 state/ nao efetivo"; FAILS=$((FAILS + 1))
+fi
+# ROOT: mesma classe no .gitignore da raiz
+mkdir -p "$TMP/s9r"
+( cd "$TMP/s9r" && git init -q )
+printf '.claude/settings.local.json\n!*.json\n' > "$TMP/s9r/.gitignore"
+_apply_posture_state_ignores "$TMP/s9r/.gitignore" >/dev/null 2>&1; rc=$?
+_t "S9 root apply rc=0" 0 "$rc"
+if ( cd "$TMP/s9r" && git check-ignore -q -- .claude/settings.local.json ); then
+  echo "PASS: S9 root settings.local.json efetivo apos re-assercao"
+else
+  echo "FAIL: S9 root negacao continua vencendo"; FAILS=$((FAILS + 1))
+fi
+
 echo
 if [ "$FAILS" -eq 0 ]; then echo "ALL GREEN"; exit 0; else echo "$FAILS FAIL(s)"; exit 1; fi

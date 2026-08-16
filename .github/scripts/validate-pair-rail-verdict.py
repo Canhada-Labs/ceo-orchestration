@@ -97,7 +97,11 @@ EXIT_VERDICT_INVALID = 3
 ACCEPTED_DECISIONS = ("GO", "GO-WITH-CONDITIONS")
 
 
-_YAML_BLOCK_RE = re.compile(r"```yaml\s*\n(.*?)```", re.DOTALL)
+# t8 P1 (root cause below the finding): Python \s is Unicode-aware, so
+# `\s*` after the fence opener SWALLOWED a leading U+00A0 line before
+# the shape classifier ever saw it. ASCII-only here, like every other
+# trim in this reader.
+_YAML_BLOCK_RE = re.compile(r"```yaml[ \t]*\n(.*?)```", re.DOTALL)
 
 
 def _strip_comment(raw: str) -> str:
@@ -141,7 +145,9 @@ def _strip_comment(raw: str) -> str:
 # new accepted spelling is another chance for the next reader to disagree.
 # Refusing the shape is a smaller surface and is the one behaviour that
 # cannot silently prefer a value. A top-level line is canonical iff it is
-# `name:` with no whitespace before the colon, or a `- ` list item.
+# `name:` with no whitespace before the colon; list items are legal
+# ONLY indented under an active bare key (t8 P2: a root `- item` is
+# rejected — the old comment said otherwise and misled operators).
 _CANONICAL_TOP_LEVEL_KEY_RE = re.compile(r"\A[A-Za-z0-9_]+:(?:[ \t]|\Z)")  # t5 P1: separator required — `verdict:GO` is NOT a YAML mapping
 
 
@@ -167,10 +173,14 @@ def noncanonical_top_level_lines(text: str) -> List[str]:
     # After a SCALAR `key: value`, an indented non-comment line is a YAML
     # CONTINUATION that changes the scalar's value (`verdict: GO` +
     # `  NO-GO` == "GO NO-GO") — reject fail-closed (re-pass rc.4 t2 P1).
+    # t8 P1: ASCII-only trims in the SHAPE classifier too — a Unicode-aware
+    # strip() treats a lone U+00A0 as a blank line and a U+00A0 VALUE as a
+    # bare parent (`padding: <NBSP>` + orphan-indented `verdict:` line),
+    # reopening the orphan-indentation class through the whitespace side.
     parent = None  # None | "scalar" | "bare"
     for raw in m.group(1).splitlines():
         line = _strip_comment(raw)
-        if not line.strip():
+        if not line.strip(" \t"):
             continue
         if line[0] in (" ", "\t"):
             if parent != "bare":
@@ -178,7 +188,7 @@ def noncanonical_top_level_lines(text: str) -> List[str]:
             continue
         if _CANONICAL_TOP_LEVEL_KEY_RE.match(line):
             _key, _, _val = line.partition(":")
-            parent = "scalar" if _val.strip() else "bare"
+            parent = "scalar" if _val.strip(" \t") else "bare"
             continue
         bad.append(line)
         parent = None
@@ -388,7 +398,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         print(
             f"INVALID: non-canonical top-level key syntax in the verdict "
             f"block: {noncanonical!r} -- a top-level line must be `name:` "
-            f"with no whitespace before the colon (or a `- ` list item). "
+            f"with no whitespace before the colon; list items only INDENTED "
+            f"under a bare key, never at the root. "
             f"The two release rails read this file with different "
             f"grammars, so `verdict : NO-GO` followed by `verdict: GO` "
             f"counts as two declarations here and one there; the shape is "

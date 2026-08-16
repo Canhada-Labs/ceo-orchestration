@@ -1297,9 +1297,25 @@ install_plan_schemas() {
   echo "==> Installing plan schemas + debate fixture"
   _state_record_op "install_plan_schemas" ""
   install_one ".claude/plans/README.md"
+  # t8 P1: record schema DELIVERY for the baseline manifest — an
+  # EXISTS-skipped adopter-customized schema must NOT be recorded as
+  # framework-owned (a later uninstall would hash-match and DELETE it).
+  # Delivered == this call wrote it, OR the pre-existing copy is
+  # byte-identical to the framework source (ADR-155-AMEND-1 byte-compare
+  # posture: recording an identical copy loses no adopter content).
   install_one ".claude/plans/PLAN-SCHEMA.md"
+  if [[ "$INSTALL_ONE_WROTE" = "1" ]] \
+     || cmp -s "$SOURCE_DIR/.claude/plans/PLAN-SCHEMA.md" \
+               "$TARGET/.claude/plans/PLAN-SCHEMA.md" 2>/dev/null; then
+    _DELIVERED_PLAN_SCHEMA=1
+  fi
   install_one ".claude/plans/AUDIT-LOG-SCHEMA.md"
   install_one ".claude/plans/DEBATE-SCHEMA.md"
+  if [[ "$INSTALL_ONE_WROTE" = "1" ]] \
+     || cmp -s "$SOURCE_DIR/.claude/plans/DEBATE-SCHEMA.md" \
+               "$TARGET/.claude/plans/DEBATE-SCHEMA.md" 2>/dev/null; then
+    _DELIVERED_DEBATE_SCHEMA=1
+  fi
   install_one ".claude/plans/examples/debate-round-1"
 }
 
@@ -1779,7 +1795,9 @@ install_mcp_secrets_dir() {
     else
       echo "    (dry-run) would CREATE: state/mcp_client_secrets (chmod 700)"
     fi
-    if [[ -L "$TARGET/.gitignore" ]]; then
+    # t8 P2: the SHARED predicate, not a duplicated -L — the preview must
+    # refuse exactly where the real run refuses, by the same code path.
+    if ! _root_gitignore_symlink_guard "$TARGET/.gitignore" >/dev/null 2>&1; then
       echo "    (dry-run) ERROR: root .gitignore is a symlink — real run would REFUSE" >&2
       exit 1
     fi
@@ -1842,7 +1860,9 @@ install_posture_state_ignores() {
   if [[ "$DRY_RUN" -eq 1 ]]; then
     echo ""
     echo "==> Posture-state .gitignore entries (PLAN-165 CX-3)"
-    if [[ -L "$TARGET/.gitignore" ]]; then
+    # t8 P2: the SHARED predicate, not a duplicated -L — the preview must
+    # refuse exactly where the real run refuses, by the same code path.
+    if ! _root_gitignore_symlink_guard "$TARGET/.gitignore" >/dev/null 2>&1; then
       echo "    (dry-run) ERROR: root .gitignore is a symlink — real run would REFUSE" >&2
       exit 1
     fi
@@ -2468,6 +2488,9 @@ PROTOCOL.md"
   export FMS_DELIVERED_SPEC="${_DELIVERED_SPEC:-0}"
   export FMS_DELIVERED_PROTOCOL="${_DELIVERED_PROTOCOL:-0}"
   export FMS_DELIVERED_MARKER="${_DELIVERED_MARKER:-0}"
+  # t8 P1: same delivery-record condition for the plans/ schema contracts.
+  export FMS_DELIVERED_PLAN_SCHEMA="${_DELIVERED_PLAN_SCHEMA:-0}"
+  export FMS_DELIVERED_DEBATE_SCHEMA="${_DELIVERED_DEBATE_SCHEMA:-0}"
   # Empty on a fresh install (target IS the freshly written pointer, hashing it
   # is correct); set only by the continuity path above.
   export FMS_PROTOCOL_HASH="${_PRIOR_PROTOCOL_HASH:-}"

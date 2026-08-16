@@ -108,3 +108,30 @@ DEFERIDO com registro: o comentário stale em `validate.yml:~869`
 design (exige CEO_KERNEL_OVERRIDE humano na sessão). A cura real (o
 wiring) está feita; o comentário segue o próximo kernel-touch
 autorizado. Nenhuma mudança executável pendente.
+
+## Ciclo t8 → X3 (NO-GO nas 2 partes; achados NOVOS, loop convergindo)
+
+- P1 (parte 1): `strip()` Unicode no CLASSIFICADOR de shape — valor
+  U+00A0 virava parent bare e linha-NBSP virava blank; e a causa-raiz
+  mais funda, o próprio `_YAML_BLOCK_RE` com `\s*` Unicode ENGOLINDO a
+  linha NBSP antes do classificador. Curado nos DOIS twins (strip
+  ASCII + `[ \t]*` no extrator, 1+3 sites) + 2 fixtures NBSP com
+  escapes explícitos na matriz.
+- P2 (parte 1): comentários/diagnósticos atualizados — root `- item`
+  NÃO é permitido (só indentado sob bare key).
+- P1 (parte 2 #1): schemas na enumeração baseline agora seguem o padrão
+  delivery-record dos irmãos (FMS_DELIVERED_PLAN_SCHEMA /
+  FMS_DELIVERED_DEBATE_SCHEMA): install seta via INSTALL_ONE_WROTE ou
+  byte-compare com o source; upgrade seta pelos verdicts
+  INSTALLED/REFRESHED/IDENTICAL do `_refresh_schema_doc`. Um schema
+  EXISTS-skipped fica FORA do manifest ⇒ uninstall nunca o
+  hash-matcheia. Positive control B2-c5 no replay (seed pré-install →
+  manifest omite → uninstall preserva bytes).
+- P1 (parte 2 #2): presença textual ≠ exclusão efetiva —
+  `_gitignore_reassert_effective` proba `git check-ignore` por entry
+  nos DOIS appliers e RE-ASSERTA a exclusão após a negação vencedora
+  (last-match-wins); ainda-visível ⇒ WARNING alto. Controle S9 no unit
+  (nested + root, seed `!*.json`).
+- P2s: dry-run sites chamam o guard COMPARTILHADO (3 sites); testes do
+  detector assertam `_has_harness_probe_fingerprint` vivo;
+  `night-mode.py` nos 2 path filters do smoke-install.

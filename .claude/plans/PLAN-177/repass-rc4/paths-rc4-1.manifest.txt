@@ -1,0 +1,6 @@
+.github/scripts/validate-pair-rail-verdict.py
+.claude/scripts/local/_release_tag_guard.py
+.claude/scripts/local/release.sh
+.claude/scripts/tests/test_release_bump_sites.py
+.claude/scripts/tests/test_release_workflow_asserts.py
+CHANGELOG.md

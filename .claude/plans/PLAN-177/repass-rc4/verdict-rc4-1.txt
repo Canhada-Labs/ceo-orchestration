@@ -1,0 +1,21 @@
+## Findings
+
+- **P1 — FILE:LINE:** `.github/scripts/validate-pair-rail-verdict.py:173,181`; `.claude/scripts/local/_release_tag_guard.py:315,323`  
+  **Failure scenario:** the new shape checks still use Unicode-aware `strip()`. A standalone U+00A0 is silently treated as blank; a value consisting of U+00A0 is treated as a bare parent, allowing an otherwise-orphaned indented line:
+  ```yaml
+  padding: <U+00A0>
+    verdict: NO-GO
+  verdict: GO
+  ```
+  This is malformed YAML, yet the exact step-15 argv printed `OK` and exited 0. The local delta guard likewise reached exit 0 with an otherwise-valid mocked delta. This violates fail-closed-on-input and repeats the orphan-indentation bypass class.  
+  **Minimal fix:** use ASCII-only `strip(" \t")` for blank-line and parent-state classification in both twins. Add standalone-Unicode-whitespace and Unicode-only-parent fixtures to both full validator/guard controls and the cross-reader matrix.
+
+- **P2 — FILE:LINE:** `.github/scripts/validate-pair-rail-verdict.py:143-144,391`; `.claude/scripts/local/_release_tag_guard.py:265-266,429-430`  
+  **Failure scenario:** both implementations correctly reject root-level `- item`, but their comments and runtime diagnostics say it is permitted. An operator following the error’s remediation receives the same rejection.  
+  **Minimal fix:** state that root lines must be canonical `name:` declarations and that list items are allowed only when indented under an active bare key.
+
+The direct controls are otherwise real: rc.3 accepted `NO-GO` with exit 0, while this candidate returns exit 3 for `NO-GO` and duplicates and exit 0 for exact `GO`/`GO-WITH-CONDITIONS`. Release wiring, PLAN-177/178 metadata, 192-ADR count, stdlib-only checks, and the payload-1 maintainer-only blast radius checked cleanly. Full temp-backed pytest could not run in the read-only sandbox; eleven read-only assertions and generated cross-reader probes were executed directly.
+
+The explicit decision cure is real, but the shared Unicode shape hole remains a release-blocking P1.
+
+VERDICT: NO-GO

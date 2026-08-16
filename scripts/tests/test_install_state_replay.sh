@@ -492,6 +492,45 @@ else
 fi
 
 # ===========================================================================
+echo "== B2-c5: schema ownership follows DELIVERY, not presence (t8 P1) =="
+# ===========================================================================
+# A fresh install over an adopter-customized schema must NOT record the
+# adopter bytes as framework-owned — otherwise uninstall hash-matches the
+# manifest entry and DELETES the adopter file.
+T_O="$( mktemp -d "$WORKROOT/tgt-s8-XXXXXX" )"
+_git_init_retry "$T_O"
+mkdir -p "$T_O/.claude/plans"
+printf 'ADOPTER PRE-INSTALL SCHEMA\n' > "$T_O/.claude/plans/DEBATE-SCHEMA.md"
+if run_install "$T_O" --profile core; then ok "seeded install rc=0"; else bad "seeded install rc=0"; fi
+MANIFEST_O="$T_O/.claude/.install-manifest.sha256"
+if [ -f "$MANIFEST_O" ]; then
+  if grep -q 'DEBATE-SCHEMA.md' "$MANIFEST_O"; then
+    bad "EXISTS-skipped schema stays OUT of the baseline manifest"
+  else
+    ok "EXISTS-skipped schema stays OUT of the baseline manifest"
+  fi
+  # contrast: the schema the install DID deliver is recorded
+  if grep -q 'plans/PLAN-SCHEMA.md' "$MANIFEST_O"; then
+    ok "delivered schema IS recorded (contrast leg)"
+  else
+    bad "delivered schema IS recorded (contrast leg)"
+  fi
+else
+  bad "manifest exists after install"
+fi
+if bash "$SOURCE_DIR/scripts/uninstall.sh" "$T_O" >"$T_O.uninstall.log" 2>&1; then
+  ok "uninstall rc=0"
+else
+  # rc=5 (mismatches without --force) is also a PRESERVING outcome
+  ok "uninstall exited non-zero WITHOUT deleting (preserving posture)"
+fi
+if grep -q 'ADOPTER PRE-INSTALL SCHEMA' "$T_O/.claude/plans/DEBATE-SCHEMA.md" 2>/dev/null; then
+  ok "adopter schema SURVIVED uninstall (bytes intact)"
+else
+  bad "adopter schema SURVIVED uninstall (bytes intact)"
+fi
+
+# ===========================================================================
 echo "== B2-d: garbage state => NOTE + fallback + rewritten valid =="
 # ===========================================================================
 printf 'this is not json{{{' > "$T_F/$STATE_REL"

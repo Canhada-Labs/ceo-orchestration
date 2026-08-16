@@ -55,6 +55,9 @@ on:
       # (--print-pin) and on the .gitignore generator in the manifest lib,
       # both already in this list.
       - "scripts/tests/test-night-mode-ignore-effect.sh"
+      # t8 P2: the efficacy test hardcodes the paths night-mode.py emits —
+      # a PR changing only the emitter must light this gate up too.
+      - ".claude/scripts/night-mode.py"
       - "templates/**"
       # Widened from SPEC/v1/install-cli.md: SPEC/v1 is delivered by install.sh
       # and (until F3) by nothing in upgrade.sh, so ANY SPEC/v1 change is a
@@ -111,6 +114,9 @@ on:
       # (--print-pin) and on the .gitignore generator in the manifest lib,
       # both already in this list.
       - "scripts/tests/test-night-mode-ignore-effect.sh"
+      # t8 P2: the efficacy test hardcodes the paths night-mode.py emits —
+      # a PR changing only the emitter must light this gate up too.
+      - ".claude/scripts/night-mode.py"
       - "templates/**"
       - "SPEC/v1/**"
       - "scripts/doctor.sh"

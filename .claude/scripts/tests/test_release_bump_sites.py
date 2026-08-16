@@ -2607,6 +2607,11 @@ def test_both_rails_answer_identically_on_every_key_shape():
         # accepted outright.
         "- verdict: NO-GO\nverdict: GO\n",
         "verdict: GO\n- trailing root list item\n",
+        # Re-pass rc.4 t8 P1: Unicode-aware strip() in the SHAPE classifier
+        # treated a U+00A0 VALUE as a bare parent (legitimizing an
+        # orphan-indented line under it) and a lone-U+00A0 line as blank.
+        "padding: \u00a0\n  verdict: NO-GO\nverdict: GO\n",
+        "\u00a0\nverdict: GO\n",
     ]
     for body in canonical_shapes:
         text = block(body)
