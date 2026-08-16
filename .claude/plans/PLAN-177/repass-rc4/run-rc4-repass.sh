@@ -19,7 +19,7 @@ OUT="$REPO_ROOT/.claude/plans/PLAN-177/repass-rc4"
 BASE_TAG="v1.3.0-rc.3"
 BASE_TAG_OBJ="ef90e9201790ed29a1b3f6f91ab7d357e65c5db0"
 BASE_TAG_COMMIT="7362cfca026c1fd6b6cd780ff56329405ac91a25"
-CANDIDATE_SHA="a604e6b572a8b058bc0426780ccc372d66e65351"
+CANDIDATE_SHA="ff27e54397d997f2e5c9fa07a52078952a2b821e"
 git tag -v "$BASE_TAG" >/dev/null 2>&1 \
   || { echo "FATAL: assinatura da $BASE_TAG nao verifica"; exit 2; }
 [ "$(git rev-parse "$BASE_TAG")" = "$BASE_TAG_OBJ" ] \
@@ -61,8 +61,11 @@ part_paths() {
     1) cat <<'P1'
 .github/scripts/validate-pair-rail-verdict.py
 .claude/scripts/local/_release_tag_guard.py
+.claude/scripts/local/release.sh
 .claude/scripts/tests/test_release_bump_sites.py
 .claude/scripts/tests/test_release_workflow_asserts.py
+.github/scripts/tests/test_validate_pair_rail_verdict.py
+CHANGELOG.md
 P1
 ;;
     2) cat <<'P2'
@@ -72,8 +75,11 @@ scripts/upgrade.sh
 scripts/install-npm.sh
 scripts/tests/_parity_classify.py
 scripts/tests/test-night-mode-ignore-effect.sh
+scripts/tests/test_install_state_replay.sh
+scripts/tests/test-gitignore-symlink-and-dryrun-unit.sh
 .github/workflows/tournament.yml
 .github/workflows/smoke-install.yml
+.github/workflows/ownership-nightly.yml
 npm/INTEGRITY.md
 npm/SHA256SUMS.txt
 SUPPORT.md
@@ -123,6 +129,20 @@ CONTEXT
   adjustments), 2 codex plan reviews (findings applied), and each cure
   carries a positive control (a test proven to FAIL on the exact
   defect scenario). Node/python: stdlib-only, >=3.9.
+- CYCLE MECHANICS (do not re-flag): the COMMITTED copy of this runner
+  intentionally lags one pin behind — the repin to the CURRENT candidate
+  is applied in the working tree before each run and lands in the final
+  envelope commit together with the regenerated evidence (see
+  repass-rc4-advisory-preparent/NOTA.md). Likewise, repass-rc4/ holding
+  no MANIFEST at this SHA is the documented inter-attempt window: the
+  tag guard exiting 7 there is the DESIRED fail-closed behavior until
+  the new envelope lands. Judge the runner's LOGIC, not its pin value.
+- This candidate ALSO carries the administrative pre-tag delta your
+  own advisory rounds demanded (repass-rc4-advisory-preparent/): the
+  signed tag annotation metadata in release.sh (RELEASE_SCOPE names
+  the whole train incl. PLAN-177/178), the CHANGELOG [1.3.0] coverage
+  of PLAN-177/178, the exact-scope regression test repin, and the
+  NO-GO evidence quarantines. Judge these on their merits too.
 
 WHAT TO VERIFY
 1. Are the 4 cures CORRECT and COMPLETE at this SHA? A partial cure
@@ -275,12 +295,17 @@ done
     verdict-rc4-1.txt verdict-rc4-2.txt \
     transcript-rc4-1.log transcript-rc4-2.log \
     PROVENANCE-rc4.md \
+    run-rc4-repass.sh \
     > MANIFEST-rc4.sha256.tmp ) \
   || { echo "FATAL: geracao do MANIFEST-rc4 falhou"; exit 1; }
 mv -f "$OUT/MANIFEST-rc4.sha256.tmp" "$OUT/MANIFEST-rc4.sha256" \
   || { echo "FATAL: rename do MANIFEST-rc4 falhou"; exit 1; }
+# t7: o runner ENTRA no MANIFEST — ele precisa ser commitado junto do
+# envelope (a tag exige arvore limpa) e a delta_allowlist so o aceita
+# fechado sob o MANIFEST (o exit 9 da tentativa t6 foi exatamente um
+# runner allowlisted fora do MANIFEST).
 MREAL=$(grep -c . "$OUT/MANIFEST-rc4.sha256" || true)
-[ "$MREAL" = "11" ] || { echo "FATAL: MANIFEST-rc4 com $MREAL linhas"; exit 1; }
+[ "$MREAL" = "12" ] || { echo "FATAL: MANIFEST-rc4 com $MREAL linhas"; exit 1; }
 ( cd "$OUT" && shasum -a 256 -c MANIFEST-rc4.sha256 --status ) \
   || { echo "FATAL: MANIFEST-rc4 nao verifica"; exit 1; }
 echo "OVERALL: $( [ "$OVERALL" -eq 0 ] && echo GO-nas-2-partes || echo 'PARTE SEM GO - triagem' )"

@@ -1,0 +1,21 @@
+P1 — `.github/scripts/validate-pair-rail-verdict.py:125`, `.claude/scripts/local/_release_tag_guard.py:127`, `.claude/scripts/tests/test_release_bump_sites.py:2724` — Both extractors accept the sole YAML fence even when it is hidden inside raw HTML:
+
+```text
+<!--
+```yaml
+verdict: GO
+...
+```
+-->
+VERDICT: NO-GO
+```
+
+Both shape checks return clean, both parsers read `GO`, and the validator CLI returned exit 0 with matching tag/signature fields. Wrapping the live rc.4 block this way produced field dictionaries identical to the unwrapped envelope, so the guard would evaluate the same anchor, allowlist, and manifest. This is the same authority-shadowing class as the four-backtick cure. The regression also duplicates its quoted-envelope case instead of covering another container. Minimal fix: enforce a fixed top-level envelope—canonical title, blank line, then the YAML opener—with no raw HTML context before/around it, identically in both extractors; add end-to-end HTML-comment and collapsed-`<details>` controls.
+
+P2 — `.github/scripts/validate-pair-rail-verdict.py:237`, `.claude/governance/pair-rail-verdict-template.md:36` — The strict grammar intentionally rejects YAML block scalars, including a conventional multiline `gpg_signature: |`, while the shipped template still asks for an “armored GPG signature” without specifying the required single-line `base64:` encoding. A release maintainer following the template can produce an envelope both rails reject at tag time. Minimal fix: document the exact `gpg_signature: base64:<single-line value>` form and add a template-to-parser regression.
+
+The advertised controls for `NO-GO`, duplicates, noncanonical keys, glued comments, Unicode whitespace, npm honesty, and checksum-honesty passed direct execution. Stdlib, contamination, claim-count, and AGENTS freshness checks passed; disk counts match 166 skills, 27 commands, 192 ADR files, and 68 `_lib` modules. Full pytest execution was unavailable because pytest is not installed in the review sandbox.
+
+Because the P1 still lets a visibly negative signed review artifact authorize both rails, payload 1 is not release-ready.
+
+VERDICT: NO-GO

@@ -1,0 +1,11 @@
+No P0/P1 findings. The four rc.3 blockers are correctly cured.
+
+P2 — `scripts/upgrade.sh:3327`, `scripts/_framework_manifest_set.sh:867`, `scripts/tests/test-gitignore-symlink-and-dryrun-unit.sh:174`  
+Concrete failure: with `state/.gitignore` re-including `mcp_client_secrets/`, `upgrade.sh --dry-run` reports “would ENSURE” and exits successfully, while the real helper detects the deeper winning rule and fails. S11 tests only the real apply path, so preview/apply parity is unguarded. This is fail-closed in execution, hence P2.  
+Minimal fix: add a shared read-only root-ignore preview that detects unresolved deeper negations and a control requiring dry-run to fail on the S11 fixture.
+
+Verified: shared install/upgrade delivery, ceremony and pre-v1.2 migration behavior, parity-exception removal, npm honesty gates, T-1 structural mutation control, conservative T-2 denominator behavior, workflow syntax/wiring, counts, contamination, stdlib-only, and Python compatibility. The mutating install/upgrade suites could not be rerun in the read-only sandbox; their positive controls were inspected directly.
+
+The condition is to track the root dry-run parity defect as an explicit follow-up; it does not reopen any rc.3 blocker.
+
+VERDICT: GO-WITH-CONDITIONS
