@@ -229,10 +229,12 @@ def _parse_verdict(text: str) -> Dict[str, object]:
             if item:
                 fields[cur_list].append(item)  # type: ignore[union-attr]
             continue
-        m = re.match(r"\A([A-Za-z0-9_]+):\s*(.*)\Z", line)
+        # [ \t]* not \s* (t5 P1): Python \s is Unicode-aware and would
+        # swallow a NBSP that must stay attached to the VALUE.
+        m = re.match(r"\A([A-Za-z0-9_]+):(?:[ \t]+(.*))?\Z", line)
         if not m:
             continue
-        key, val = m.group(1), m.group(2).strip()
+        key, val = m.group(1), (m.group(2) or "").strip(" \t")
         if val == "":
             fields[key] = []
             cur_list = key
@@ -268,19 +270,21 @@ def _strip_yaml_comment(raw):
     single unknown VALUE `GO#NO-GO`, never `GO` plus a comment. Byte-for-
     byte twin of `_strip_comment` in validate-pair-rail-verdict.py.
     """
-    if raw.lstrip().startswith("#"):
+    # ASCII-only trims (re-pass rc.4 t5 P1): Unicode-aware strip()/rstrip()
+    # silently converted `GO<U+00A0>` into the authorizing token `GO`.
+    if raw.lstrip(" \t").startswith("#"):
         return ""
     i = 0
     while True:
         j = raw.find("#", i)
         if j == -1:
-            return raw.rstrip()
+            return raw.rstrip(" \t")
         if j > 0 and raw[j - 1] in (" ", "\t"):
-            return raw[:j].rstrip()
+            return raw[:j].rstrip(" \t")
         i = j + 1
 
 
-_CANONICAL_TOP_LEVEL_KEY_RE = re.compile(r"\A[A-Za-z0-9_]+:")
+_CANONICAL_TOP_LEVEL_KEY_RE = re.compile(r"\A[A-Za-z0-9_]+:(?:[ \t]|\Z)")  # t5 P1: separator required — `verdict:GO` is NOT a YAML mapping
 
 
 def _noncanonical_top_level_lines(text: str) -> List[str]:
@@ -468,7 +472,8 @@ def delta(repo: str, tag: str, verdict_rel: Optional[str]) -> int:
     elif not isinstance(decision, str):
         shown = "<non-string:%s>" % type(decision).__name__
     else:
-        shown = decision.strip()
+        # ASCII-only trim (t5 P1) — twin of the server validator.
+        shown = decision.strip(" \t")
     if shown not in ACCEPTED_DECISIONS:
         return _fail(
             E_DECISION,

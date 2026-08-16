@@ -663,9 +663,10 @@ even under `--no-replay`. **Installs without a readable
 (root PROTOCOL/SPEC/.gitignore delivery is SKIPPED, loudly). A
 pre-state MAINTAINER install opts back in with
 `upgrade.sh <target> --ceremony maintainer` (or the
-`CEO_UPGRADE_CEREMONY=maintainer` env override); the effective
-ceremony is then PERSISTED into the synthesized state so later
-upgrades recover it. If your install was `--ceremony user` and
+`CEO_UPGRADE_CEREMONY=maintainer` env override); an EXPLICIT choice is
+PERSISTED into the synthesized state so later upgrades recover it,
+while the fail-safe inference itself is never persisted — a missed
+flag on one run stays recoverable on the next. If your install was `--ceremony user` and
 predates the state file, the default already protects you; you may
 also re-run `install.sh --ceremony user` once so the ceremony is
 recorded before upgrading.

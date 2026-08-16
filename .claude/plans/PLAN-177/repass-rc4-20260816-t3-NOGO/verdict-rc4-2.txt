@@ -1,0 +1,27 @@
+1. P1 — The T-2 cure leaves the older ghost filter as the same absence-based escape hatch.
+
+   FILE:LINE: [.claude/scripts/ceo-boot.py:503](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.geTxon/wt/.claude/scripts/ceo-boot.py:503), [.claude/scripts/ceo-boot.py:628](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.geTxon/wt/.claude/scripts/ceo-boot.py:628), [.claude/scripts/tests/test_ceo_boot.py:699](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.geTxon/wt/.claude/scripts/tests/test_ceo_boot.py:699)
+
+   Concrete failure scenario: a real markerless `agent_spawn` with an empty/missing description, no rail/profile, and `SHA256("")` is skipped by `_is_ghost_spawn_event` before the retired harness filter is reached. A direct probe returned green with `total=0` and `ghosts_skipped=1`. Every new negative control uses a non-empty description, so none exercises this collision.
+
+   Minimal fix: retire the ghost exemption too until trusted provenance exists, or require an unforgeable emitter marker. Add an end-to-end empty-description markerless event that must enter the denominator.
+
+2. P1 — The pre-Wave-B ceremony migration contradicts public documentation and does not persist its resolution.
+
+   FILE:LINE: [scripts/upgrade.sh:766](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.geTxon/wt/scripts/upgrade.sh:766), [scripts/upgrade.sh:3164](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.geTxon/wt/scripts/upgrade.sh:3164), [scripts/upgrade.sh:3383](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.geTxon/wt/scripts/upgrade.sh:3383), [INSTALL.md:658](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.geTxon/wt/INSTALL.md:658), [scripts/tests/test_install_state_replay.sh:260](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.geTxon/wt/scripts/tests/test_install_state_replay.sh:260)
+
+   Concrete failure scenario: a pre-v1.2 maintainer adopter follows `INSTALL.md`, which says missing state is treated as maintainer, but the candidate treats it as user. Root PROTOCOL/SPEC and `.gitignore` delivery are skipped, including the MCP-secret exclusion. The synthesized state omits `request.ceremony`, so subsequent upgrades cannot recover the chosen ceremony; the only override is an undocumented, uninventoried `CEO_UPGRADE_CEREMONY`. The back-compat test checks only exit status/profile expansion, so it remains green.
+
+   Minimal fix: document and inventory the safe-default migration, preferably expose a `--ceremony` upgrade option, persist the effective ceremony in synthesized state, and test default-user plus explicit-maintainer behavior across two upgrades.
+
+3. P2 — Root `.gitignore` dry-run behavior disagrees with the real symlink refusal, and its control is unwired.
+
+   FILE:LINE: [scripts/install.sh:1774](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.geTxon/wt/scripts/install.sh:1774), [scripts/upgrade.sh:3185](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.geTxon/wt/scripts/upgrade.sh:3185), [scripts/tests/test-gitignore-symlink-and-dryrun-unit.sh:84](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.geTxon/wt/scripts/tests/test-gitignore-symlink-and-dryrun-unit.sh:84), [.github/workflows/smoke-install.yml:49](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.geTxon/wt/.github/workflows/smoke-install.yml:49)
+
+   Concrete failure scenario: with root `.gitignore` as a symlink, install/upgrade dry-run reports “would ENSURE” and exits successfully, while the real run refuses. The new shell control tests only the apply helper and is neither executed nor path-wired in `smoke-install.yml`.
+
+   Minimal fix: add a shared root-preview helper with the same symlink predicate and wire the shell control into both workflow filters and a blocking step.
+
+The decision gates, npm honesty cures, count claims, tournament workdir control, and ordinary clean/seeded ignore routes otherwise checked out, but the two P1 gaps keep this payload from passing.
+
+VERDICT: NO-GO

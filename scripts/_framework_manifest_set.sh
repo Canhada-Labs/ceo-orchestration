@@ -146,6 +146,11 @@ _framework_target_entries() {
     printf '%s\n' ".claude/frontend-team.md"
     printf '%s\n' ".claude/pitfalls-catalog.yaml"
     printf '%s\n' ".claude/task-chains.yaml"
+    # Framework schema contracts (re-pass rc.4 t5 P1): enumerated so the
+    # NEXT generation's baseline manifest classifies them 3-state instead
+    # of the hash-gated legacy path in upgrade.sh.
+    printf '%s\n' ".claude/plans/PLAN-SCHEMA.md"
+    printf '%s\n' ".claude/plans/DEBATE-SCHEMA.md"
 
     # Protocol-enforcement directory targets (always installed).
     printf '%s\n' ".claude/hooks"

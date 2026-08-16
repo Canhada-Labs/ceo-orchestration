@@ -3353,9 +3353,10 @@
     },
     "CEO_UPGRADE_CEREMONY": {
       "evidence": [
+        ".claude/scripts/env-inventory.json",
         "scripts/upgrade.sh"
       ],
-      "sites": 1
+      "sites": 2
     },
     "CEO_USER_ID": {
       "evidence": [

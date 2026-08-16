@@ -37,7 +37,7 @@ shipped with, and it now goes red.
 |---|---|---|---|
 | Zero runtime dependencies | `Object.keys(dependencies).length === 0` | enforced | `.github/workflows/npm-publish.yml` step "Verify zero runtime dependencies" |
 | VERSION parity | `VERSION` == `npm/package.json.version` == tag `v<version>` | enforced | `.github/workflows/npm-publish.yml` step "Verify VERSION matches tag" + `.github/workflows/npm-publish.yml` step "Verify npm/package.json version matches VERSION" |
-| Packlist hygiene | no tests, fixtures, eval corpora or plan material inside the tarball | enforced | `.github/workflows/npm-publish.yml` step "Packlist gate (PLAN-152 tarball-02)" + `.github/workflows/validate.yml` step "npm packlist gate (no tests/fixtures/eval/red-team-corpus/PLAN-N)" |
+| Packlist hygiene | no numbered `PLAN-N` artifacts, framework test suites, eval corpora or red-team corpus in the tarball — the SHIPPED exceptions are `.claude/policies/fixtures/` (policy-as-code inputs), `templates/oidc-proxy/tests/` (template ships with its tests) and the plan SCHEMA/example docs | enforced | `.github/workflows/npm-publish.yml` step "Packlist gate (PLAN-152 tarball-02)" + `.github/workflows/validate.yml` step "npm packlist gate (no tests/fixtures/eval/red-team-corpus/PLAN-N)" |
 | `install.sh` self-SHA trailer | `# CEO-INSTALL-SHA256:` stamped over the staged installer; the installer re-hashes its own body at install time and fails closed on mismatch | enforced | `.github/workflows/npm-publish.yml` step "Populate install.sh self-SHA trailer (P0-15, PLAN-045)" |
 | Tag/SHA binding at publish | the remote tag must still point at the SHA this run built | enforced | `.github/workflows/npm-publish.yml` step "Assert remote tag still points at this run's SHA" |
 | SLSA Level-2 provenance | `npm publish --provenance` (Sigstore-attested via OIDC) | enforced | `.github/workflows/npm-publish.yml` step "Publish (Trusted Publishing — OIDC)" |
@@ -134,7 +134,10 @@ would go unnoticed.
 
 Both `npm-publish.yml` and `validate.yml` run a packlist gate over
 `npm pack --dry-run --json`, and its subject is the **file list** the tarball
-would contain (no tests, fixtures, eval corpora or plan material). `--dry-run`
+would contain (no numbered `PLAN-N` artifacts, framework test suites, eval
+corpora or red-team corpus; `.claude/policies/fixtures/`,
+`templates/oidc-proxy/tests/` and the plan SCHEMA/example docs SHIP by
+design). `--dry-run`
 writes no archive, so the gate proves nothing about tarball **bytes** — no
 checksum, no signature, no reproducibility. Tarball hashing and signing are
 the un-automated controls above; provenance is the one byte-level attestation

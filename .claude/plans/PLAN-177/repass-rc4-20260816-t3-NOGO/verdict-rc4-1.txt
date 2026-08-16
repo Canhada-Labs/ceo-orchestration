@@ -1,0 +1,9 @@
+P1 — [.github/scripts/validate-pair-rail-verdict.py:103](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.geTxon/wt/.github/scripts/validate-pair-rail-verdict.py:103>), [.claude/scripts/local/_release_tag_guard.py:224](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.geTxon/wt/.claude/scripts/local/_release_tag_guard.py:224>), [.claude/scripts/local/_release_tag_guard.py:447](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.geTxon/wt/.claude/scripts/local/_release_tag_guard.py:447>)
+
+Concrete failure: `verdict: GO#NO-GO` is valid YAML with the unknown value `GO#NO-GO`; `#` is not a comment without preceding whitespace. Both readers nevertheless truncate at every `#`, obtain `GO`, and authorize it. I confirmed the server validator returns `OK: verdict v1.99.0 valid` with exit 0. Thus the claimed exact closed set still has a bypass in both rails. The positive controls are real for plain NO-GO, absence, duplicates, whitespace-before-colon, and continuations, but their corpus at [test_release_bump_sites.py:2180](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc4.geTxon/wt/.claude/scripts/tests/test_release_bump_sites.py:2180>) omits this boundary.
+
+Minimal fix: only recognize `#` as a comment marker at line start or when preceded by whitespace, identically in both readers. Add full-path negative controls for `GO#NO-GO` and `GO-WITH-CONDITIONS#NO-GO` on the server validator and local tag guard.
+
+The P1-4 cure remains bypassable by a valid-YAML decision outside the authorization set, so payload 1 cannot ship as rc.4.
+
+VERDICT: NO-GO

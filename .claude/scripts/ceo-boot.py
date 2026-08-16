@@ -616,10 +616,14 @@ def check_skill_unknown_ratio() -> Tuple[str, str, Any]:
     That is the original PLAN-020 ADR-051 governance gap the
     detector was built for.
     """
+    # T-2 STATUS (re-pass rc.4 t5 P2): DEFERRED, not cured. Both the S86
+    # ghost filter and the S303 probe filter are RETIRED (absence-based,
+    # caller-forgeable); every agent_spawn row counts until the EMITTER can
+    # stamp provenance the caller cannot forge. The skipped counters were
+    # removed with them — a permanently-zero counter reads as "filter
+    # active, nothing skipped", which is the wrong claim.
     total = 0
     unknown = 0
-    ghosts_skipped = 0
-    harness_probes_skipped = 0
     skill_less_by_design = 0
     test_pollution_skipped = 0
     for ev in _iter_audit_events_since(24):
@@ -628,12 +632,10 @@ def check_skill_unknown_ratio() -> Tuple[str, str, Any]:
         if _is_test_pollution_event(ev):
             test_pollution_skipped += 1
             continue
-        if _is_ghost_spawn_event(ev):
-            ghosts_skipped += 1
-            continue
-        if _is_harness_probe_event(ev):
-            harness_probes_skipped += 1
-            continue
+        # T-2 deferred (t5 P2): ghost/probe exemptions RETIRED — the shape
+        # detectors above stay tested for a future provenance-bearing
+        # emitter, but no row is skipped on caller-controlled absence.
+
         # Skill-less by design: general-purpose archetype dispatches
         # (mitigated rail per ADR-082) AND built-in subagent types like
         # Explore/Plan/claude-code-guide that have no .claude/agents/<name>.md
@@ -661,16 +663,12 @@ def check_skill_unknown_ratio() -> Tuple[str, str, Any]:
     if total == 0:
         msg = (
             "no custom-archetype spawns "
-            "({s} general-purpose, {g} ghosts, {p} harness-probes, "
-            "{t} test-pollution)".format(
-                s=skill_less_by_design, g=ghosts_skipped,
-                p=harness_probes_skipped, t=test_pollution_skipped,
+            "({s} general-purpose, {t} test-pollution)".format(
+                s=skill_less_by_design, t=test_pollution_skipped,
             )
         )
         return "green", msg, {
             "unknown": 0, "total": 0,
-            "ghosts_skipped": ghosts_skipped,
-            "harness_probes_skipped": harness_probes_skipped,
             "skill_less_by_design": skill_less_by_design,
             "test_pollution_skipped": test_pollution_skipped,
         }
@@ -678,8 +676,6 @@ def check_skill_unknown_ratio() -> Tuple[str, str, Any]:
     status = "red" if ratio > 0.10 else "yellow" if ratio > 0 else "green"
     return status, f"{unknown}/{total} = {ratio:.0%}", {
         "unknown": unknown, "total": total,
-        "ghosts_skipped": ghosts_skipped,
-        "harness_probes_skipped": harness_probes_skipped,
         "skill_less_by_design": skill_less_by_design,
         "test_pollution_skipped": test_pollution_skipped,
     }

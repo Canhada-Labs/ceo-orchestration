@@ -304,17 +304,25 @@ fi
 if PYTHONNOUSERSITE=1 python3 -I -c '
 import json, sys
 st = json.load(open(sys.argv[1]))
-sys.exit(0 if st.get("request", {}).get("ceremony") == "user" else 1)
+sys.exit(0 if "ceremony" not in st.get("request", {}) else 1)
 ' "$T_C/$STATE_REL"; then
-  ok "effective ceremony PERSISTED (request.ceremony=user)"
+  ok "fail-safe INFERENCE not persisted (request.ceremony absent — t5 P1)"
 else
-  bad "effective ceremony PERSISTED (request.ceremony=user)"
+  bad "fail-safe INFERENCE not persisted (request.ceremony absent — t5 P1)"
 fi
 if run_upgrade "$T_C"; then ok "upgrade #2 rc=0"; else bad "upgrade #2 rc=0"; fi
-if grep -q 'recorded install request' "$T_C.upgrade.log"; then
-  ok "upgrade #2 read the RECORDED ceremony (no migration branch)"
+if grep -q 'Ceremony: user' "$T_C.upgrade.log"; then
+  ok "upgrade #2 still fail-safe user (inference stays recoverable)"
 else
-  bad "upgrade #2 read the RECORDED ceremony (no migration branch)"; grep 'Ceremony:' "$T_C.upgrade.log" >&2 || true
+  bad "upgrade #2 still fail-safe user (inference stays recoverable)"; grep 'Ceremony:' "$T_C.upgrade.log" >&2 || true
+fi
+# RECOVERY after a mistaken inference (t5 P1): the explicit flag must win
+# on run #3 (nothing was persisted) and root delivery must resume.
+if run_upgrade "$T_C" --ceremony maintainer; then ok "recovery upgrade rc=0"; else bad "recovery upgrade rc=0"; fi
+if grep -q 'Ceremony: maintainer' "$T_C.upgrade.log"; then
+  ok "recovery: explicit maintainer WINS after prior inference"
+else
+  bad "recovery: explicit maintainer WINS after prior inference"; grep 'Ceremony:' "$T_C.upgrade.log" >&2 || true
 fi
 
 T_M="$( fresh_install m2 --profile core )" || exit 1
@@ -339,6 +347,41 @@ if grep -q 'Ceremony: maintainer' "$T_M.upgrade.log" && grep -q 'recorded instal
   ok "upgrade #2 recovered maintainer from the RECORD"
 else
   bad "upgrade #2 recovered maintainer from the RECORD"; grep 'Ceremony:' "$T_M.upgrade.log" >&2 || true
+fi
+
+# ===========================================================================
+echo "== B2-c3: schema docs — hash-gated refresh (t5 P1) =="
+# ===========================================================================
+# adopter-MODIFIED schema is PRESERVED; a byte-pristine PRIOR generation is
+# REFRESHED to the current source.
+T_S="$( fresh_install s3 --profile core )" || exit 1
+printf 'ADOPTER CUSTOM SCHEMA\n' > "$T_S/.claude/plans/DEBATE-SCHEMA.md"
+if run_upgrade "$T_S"; then ok "schema upgrade rc=0"; else bad "schema upgrade rc=0"; fi
+if grep -q 'PRESERVED adopter-modified .claude/plans/DEBATE-SCHEMA.md' "$T_S.upgrade.log"; then
+  ok "adopter-modified schema PRESERVED (loud warning)"
+else
+  bad "adopter-modified schema PRESERVED (loud warning)"
+fi
+if grep -q 'ADOPTER CUSTOM SCHEMA' "$T_S/.claude/plans/DEBATE-SCHEMA.md"; then
+  ok "adopter bytes intact after upgrade"
+else
+  bad "adopter bytes intact after upgrade"
+fi
+# pristine PRIOR generation → refreshed to current source bytes
+if git -C "$SOURCE_DIR" show 9777a8d:.claude/plans/DEBATE-SCHEMA.md > "$T_S/.claude/plans/DEBATE-SCHEMA.md" 2>/dev/null; then
+  if run_upgrade "$T_S"; then ok "schema upgrade #2 rc=0"; else bad "schema upgrade #2 rc=0"; fi
+  if grep -q 'REFRESHED (pristine prior generation): .claude/plans/DEBATE-SCHEMA.md' "$T_S.upgrade.log"; then
+    ok "pristine prior generation REFRESHED"
+  else
+    bad "pristine prior generation REFRESHED"
+  fi
+  if cmp -s "$T_S/.claude/plans/DEBATE-SCHEMA.md" "$SOURCE_DIR/.claude/plans/DEBATE-SCHEMA.md"; then
+    ok "schema now byte-identical to current source"
+  else
+    bad "schema now byte-identical to current source"
+  fi
+else
+  ok "SKIP pristine-prior leg (git blob unavailable in this checkout)"
 fi
 
 # ===========================================================================

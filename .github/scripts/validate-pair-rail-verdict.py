@@ -107,15 +107,17 @@ def _strip_comment(raw: str) -> str:
     at every `#` authorized that value on both rails. Byte-for-byte twin of
     `_strip_yaml_comment` in _release_tag_guard.py.
     """
-    if raw.lstrip().startswith("#"):
+    # ASCII-only trims (re-pass rc.4 t5 P1): Unicode-aware strip()/rstrip()
+    # silently converted `GO<U+00A0>` into the authorizing token `GO`.
+    if raw.lstrip(" \t").startswith("#"):
         return ""
     i = 0
     while True:
         j = raw.find("#", i)
         if j == -1:
-            return raw.rstrip()
+            return raw.rstrip(" \t")
         if j > 0 and raw[j - 1] in (" ", "\t"):
-            return raw[:j].rstrip()
+            return raw[:j].rstrip(" \t")
         i = j + 1
 
 
@@ -140,7 +142,7 @@ def _strip_comment(raw: str) -> str:
 # Refusing the shape is a smaller surface and is the one behaviour that
 # cannot silently prefer a value. A top-level line is canonical iff it is
 # `name:` with no whitespace before the colon, or a `- ` list item.
-_CANONICAL_TOP_LEVEL_KEY_RE = re.compile(r"\A[A-Za-z0-9_]+:")
+_CANONICAL_TOP_LEVEL_KEY_RE = re.compile(r"\A[A-Za-z0-9_]+:(?:[ \t]|\Z)")  # t5 P1: separator required — `verdict:GO` is NOT a YAML mapping
 
 
 def noncanonical_top_level_lines(text: str) -> List[str]:
@@ -223,16 +225,18 @@ def parse_verdict_text(text: str) -> Dict[str, Any]:
         if line[0] not in (" ", "\t"):
             if ":" in line:
                 k, _, v = line.partition(":")
-                v = v.strip()
+                # ASCII-only value trim (t5 P1): a Unicode strip() would
+                # normalize `GO<U+00A0>` into the exact authorizing token.
+                v = v.strip(" \t")
                 if v:
-                    out[k.strip()] = v
+                    out[k.strip(" \t")] = v
                 else:
-                    out[k.strip()] = {}
-                    current_key = k.strip()
+                    out[k.strip(" \t")] = {}
+                    current_key = k.strip(" \t")
         elif current_key and ":" in line:
             sub_k, _, sub_v = line.partition(":")
             if isinstance(out[current_key], dict):
-                out[current_key][sub_k.strip()] = sub_v.strip()
+                out[current_key][sub_k.strip(" \t")] = sub_v.strip(" \t")
     return out
 
 
@@ -408,7 +412,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     elif not isinstance(raw_decision, str):
         shown = "<non-string:%s>" % type(raw_decision).__name__
     else:
-        shown = raw_decision.strip()
+        # ASCII-only trim (t5 P1): `GO<U+00A0>` must FAIL the exact-token
+        # membership below, never be normalized into `GO`.
+        shown = raw_decision.strip(" \t")
     if shown not in ACCEPTED_DECISIONS:
         accepted = "{%s}" % ", ".join(ACCEPTED_DECISIONS)
         print(

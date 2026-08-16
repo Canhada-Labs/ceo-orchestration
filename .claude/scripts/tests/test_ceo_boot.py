@@ -225,7 +225,7 @@ class TestSkillUnknownGhostFilter(TestEnvContext):
             status, summary, detail = _mod.check_skill_unknown_ratio()
             self.assertEqual(detail["total"], 3)        # ghost COUNTS (t3 P1)
             self.assertEqual(detail["unknown"], 2)      # ghost is unknown too
-            self.assertEqual(detail["ghosts_skipped"], 0)
+            self.assertNotIn("ghosts_skipped", detail)
             self.assertIn("2/3", summary)
         finally:
             _mod._iter_audit_events_since = original
@@ -732,7 +732,7 @@ class TestHarnessProbeFilter(TestEnvContext):
             status, _summary, detail = _mod.check_skill_unknown_ratio()
             self.assertEqual(status, "red", detail)
             self.assertEqual((detail["unknown"], detail["total"]), (1, 1))
-            self.assertEqual(detail["harness_probes_skipped"], 0)
+            self.assertNotIn("harness_probes_skipped", detail)
         finally:
             _mod._iter_audit_events_since = original
 
@@ -794,7 +794,7 @@ class TestHarnessProbeFilter(TestEnvContext):
         _mod._iter_audit_events_since = fake_iter
         try:
             status, _summary, detail = _mod.check_skill_unknown_ratio()
-            self.assertEqual(detail.get("ghosts_skipped", 0), 0)
+            self.assertNotIn("ghosts_skipped", detail)
             self.assertEqual(detail["total"], 1)
             self.assertNotEqual(status, "green")
         finally:
@@ -803,7 +803,7 @@ class TestHarnessProbeFilter(TestEnvContext):
     def test_probe_shaped_window_counts_not_skips(self):
         """NEGATIVE CONTROL (re-pass rc.4 t2 P1 — the collision case): a
         markerless spawn whose description IS the probe line must reach
-        the denominator; harness_probes_skipped stays 0 until trusted
+        the denominator; the skipped counters are REMOVED until trusted
         provenance exists."""
         original = _mod._iter_audit_events_since
 
@@ -813,7 +813,7 @@ class TestHarnessProbeFilter(TestEnvContext):
         _mod._iter_audit_events_since = fake_iter
         try:
             status, summary, detail = _mod.check_skill_unknown_ratio()
-            self.assertEqual(detail["harness_probes_skipped"], 0)
+            self.assertNotIn("harness_probes_skipped", detail)
             self.assertEqual(detail["total"], 1)
             self.assertNotEqual(status, "green")
         finally:
@@ -839,7 +839,7 @@ class TestHarnessProbeFilter(TestEnvContext):
             self.assertEqual(status, "red")
             # Re-pass rc.4 t2 P1: the probe-shaped row counts too now —
             # BOTH rows land in the denominator (2 unknown / 2 total).
-            self.assertEqual(detail["harness_probes_skipped"], 0)
+            self.assertNotIn("harness_probes_skipped", detail)
             self.assertEqual((detail["unknown"], detail["total"]), (2, 2))
         finally:
             _mod._iter_audit_events_since = original

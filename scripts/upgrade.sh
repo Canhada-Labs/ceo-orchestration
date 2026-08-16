@@ -781,16 +781,23 @@ sys.stdout.write(cer + "\n")
 # back in explicitly via CEO_UPGRADE_CEREMONY=maintainer.
 CEREMONY_EFFECTIVE="user"
 _CEREMONY_SOURCE="default (no readable install-state — fail-safe user; pass --ceremony maintainer to opt back in)"
+# t5 P1: only RECORDED or EXPLICIT resolutions may persist into the state
+# file — persisting the fail-safe INFERENCE would make one missed migration
+# flag permanent (recorded state wins on the next run by design).
+_CEREMONY_PERSIST="0"
 _cer_line=""
 if _cer_line="$(_read_install_state_ceremony)" && [[ -n "$_cer_line" ]]; then
   CEREMONY_EFFECTIVE="$_cer_line"
   _CEREMONY_SOURCE="recorded install request (.claude/.install-state.json)"
+  _CEREMONY_PERSIST="1"
 elif [[ -n "${CEREMONY_FLAG:-}" ]]; then
   CEREMONY_EFFECTIVE="$CEREMONY_FLAG"
   _CEREMONY_SOURCE="explicit --ceremony flag (no install-state)"
+  _CEREMONY_PERSIST="1"
 elif [[ "${CEO_UPGRADE_CEREMONY:-}" == "maintainer" || "${CEO_UPGRADE_CEREMONY:-}" == "user" ]]; then
   CEREMONY_EFFECTIVE="$CEO_UPGRADE_CEREMONY"
   _CEREMONY_SOURCE="explicit CEO_UPGRADE_CEREMONY override (no install-state)"
+  _CEREMONY_PERSIST="1"
 fi
 
 TIMESTAMP="$( date +%Y%m%d-%H%M%S )"
@@ -3006,15 +3013,53 @@ backup_and_replace ".claude/scripts"
 backup_and_replace ".claude/commands"
 backup_and_replace ".claude/pitfalls-catalog.yaml"
 backup_and_replace ".claude/task-chains.yaml"
-# Re-pass rc.4 t3 (smoke STALE): the plans/ SCHEMA docs are FRAMEWORK
-# contract files that install.sh seeds but upgrade never refreshed — the
-# first framework edit to either (S305 touched DEBATE-SCHEMA.md) left every
-# upgraded adopter on the previous generation, the exact F3 STALE signature
-# the parity e2e flags FATAL. The rest of .claude/plans/ stays untouched
-# (adopter-owned); only the two schema contracts refresh, with the same
-# warn-before-clobber + backup semantics as every framework file above.
-backup_and_replace ".claude/plans/PLAN-SCHEMA.md"
-backup_and_replace ".claude/plans/DEBATE-SCHEMA.md"
+# Re-pass rc.4 t3 (smoke STALE) + t5 P1 (ownership): the plans/ SCHEMA
+# docs are FRAMEWORK contract files that install.sh seeds but upgrade never
+# refreshed — the first framework edit (S305, DEBATE-SCHEMA) left every
+# upgraded adopter on the old generation (F3 STALE). But a blanket
+# backup_and_replace would CLOBBER an adopter-modified schema (t5 P1: the
+# schemas are not in the baseline ownership enumeration for pre-existing
+# installs, so classification falls back to legacy overwrite). Refresh is
+# therefore HASH-GATED: only a byte-pristine copy of a KNOWN prior
+# framework generation is replaced; anything else is PRESERVED loudly.
+_refresh_schema_doc() {
+  # $1 = rel path; $2.. = sha256 of KNOWN prior framework generations.
+  _rsd_rel="$1"; shift
+  _rsd_src="$SOURCE_DIR/$_rsd_rel"; _rsd_dst="$TARGET/$_rsd_rel"
+  [ -e "$_rsd_src" ] || { echo "    SKIP (source missing): $_rsd_rel"; return 0; }
+  if [ ! -e "$_rsd_dst" ]; then
+    mkdir -p "$(dirname "$_rsd_dst")"
+    cp "$_rsd_src" "$_rsd_dst"
+    echo "    INSTALLED: $_rsd_rel"
+    return 0
+  fi
+  _rsd_h_dst="$(shasum -a 256 "$_rsd_dst" | awk '{print $1}')"
+  _rsd_h_src="$(shasum -a 256 "$_rsd_src" | awk '{print $1}')"
+  if [ "$_rsd_h_dst" = "$_rsd_h_src" ]; then
+    echo "    IDENTICAL: $_rsd_rel"
+    return 0
+  fi
+  for _rsd_prior in "$@"; do
+    if [ "$_rsd_h_dst" = "$_rsd_prior" ]; then
+      mkdir -p "$BAK_DIR/$(dirname "$_rsd_rel")"
+      cp "$_rsd_dst" "$BAK_DIR/$_rsd_rel"
+      cp "$_rsd_src" "$_rsd_dst"
+      echo "    REFRESHED (pristine prior generation): $_rsd_rel"
+      return 0
+    fi
+  done
+  echo "    WARNING: PRESERVED adopter-modified $_rsd_rel (framework schema changed upstream — diff it manually; a pristine copy would have been refreshed)"
+  return 0
+}
+if [[ "$DRY_RUN" -eq 1 ]]; then
+  echo "    (dry-run) schema docs: hash-gated refresh (pristine prior generations only)"
+else
+  # sha256 of every shipped prior generation (git history of each file).
+  _refresh_schema_doc ".claude/plans/PLAN-SCHEMA.md" \
+    "8a2033d241b113544f1e18abbd13f4c60cc6257140f304d95b29216193035232"
+  _refresh_schema_doc ".claude/plans/DEBATE-SCHEMA.md" \
+    "574bd22e401308400622b1766a9d090e5afede1fb45938995316f38c554f1bf3"
+fi
 # agent-metrics.md preserved (user data). settings.json is preserved here too —
 # ONLY the PLAN-135 W2 H8 settings-merge (additive lifecycle-hook registration)
 # and the PLAN-163 T5.4 baseline migration (3-state per leaf key; customized
@@ -3352,6 +3397,7 @@ _write_upgrade_state() {
     "harness" "$HARNESS"
     "managed_hooks" "$CODEX_MANAGED_HOOKS"
     "ceremony_effective" "$CEREMONY_EFFECTIVE"
+    "ceremony_persist" "$_CEREMONY_PERSIST"
   )
   echo ""
   echo "==> (Re)writing install-state (.claude/.install-state.json — PLAN-153 Wave B)"
@@ -3416,12 +3462,13 @@ if req is None:
     }
 req["profile"] = vals.get("profile", "")
 req["stack"] = vals.get("stack", "")
-# Re-pass rc.4 t3 (P1): persist the EFFECTIVE ceremony so the resolution
-# above survives into the next upgrade — a synthesized pre-Wave-B state
-# without request.ceremony forced the migration branch on EVERY upgrade.
-# Never overwrite a recorded value.
+# Re-pass rc.4 t3+t5 (P1): persist the ceremony ONLY when it came from a
+# RECORD or an EXPLICIT flag/env — never persist the fail-safe inference
+# (one missed migration flag would otherwise become permanent, since the
+# recorded value wins on every later run). Never overwrite a recorded one.
 _cer = vals.get("ceremony_effective", "")
-if "ceremony" not in req and _cer in ("maintainer", "user"):
+if (vals.get("ceremony_persist", "0") == "1"
+        and "ceremony" not in req and _cer in ("maintainer", "user")):
     req["ceremony"] = _cer
 # PLAN-155 Wave 5: persist harness so it survives even a pre-Wave-B target
 # whose request was synthesized above. Only overwrite when non-empty so a

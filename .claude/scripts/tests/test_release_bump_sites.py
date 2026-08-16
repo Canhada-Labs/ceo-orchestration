@@ -2190,11 +2190,17 @@ _REFUSED_DECISIONS = [
     # comment — these are single unknown values, not GO + comment.
     ["GO#NO-GO"],
     ["GO-WITH-CONDITIONS#NO-GO"],
+    # Re-pass rc.4 t5 P1: Unicode whitespace must stay attached to the
+    # VALUE — `GO<U+00A0>` is not the exact authorizing token.
+    ["GO\u00a0"],
+    ["\u00a0GO"],
+    ["GO-WITH-CONDITIONS\u00a0"],
 ]
 _REFUSED_IDS = [
     "no-go", "absent", "unknown", "empty", "lowercase", "lower-no-go",
     "spaced", "template-literal",
     "hash-glued-no-go", "hash-glued-gwc",
+    "trailing-nbsp", "leading-nbsp", "gwc-trailing-nbsp",
 ]
 
 
@@ -2333,7 +2339,9 @@ def test_ci_validator_stops_a_non_authorizing_decision(
         "red for the wrong reason -- the failure must name the DECISION and "
         "the accepted set, not a downstream mismatch: %s" % proc.stderr
     )
-    observed = decisions[0].strip() if decisions else "<absent>"
+    # ASCII-only trim, mirroring the reader (t5 P1): a Unicode strip() here
+    # would normalize the NBSP the diagnostic is REQUIRED to quote.
+    observed = decisions[0].strip(" \t") if decisions else "<absent>"
     if decisions and not decisions[0].strip():
         observed = "<non-string:dict>"
     assert "'%s'" % observed in proc.stderr, (
@@ -2497,6 +2505,28 @@ def test_delta_refuses_a_noncanonical_decision_key(synth, tag, decisions):
     assert "closed allowlist" not in proc.stdout
 
 
+def test_integrity_md_names_the_real_packlist_exceptions():
+    """Re-pass rc.4 t5 P1 (npm honesty): INTEGRITY.md's packlist claim must
+    name the SHIPPED exceptions that npm-publish.yml actually ships — a
+    blanket "no tests, fixtures or plan material" line was false."""
+    integrity = (REPO_ROOT / "npm" / "INTEGRITY.md").read_text(encoding="utf-8")
+    publish = (REPO_ROOT / ".github" / "workflows" / "npm-publish.yml").read_text(
+        encoding="utf-8"
+    )
+    for exc in (".claude/policies/fixtures/", "templates/oidc-proxy/tests/"):
+        assert exc in publish, (
+            "fixture drifted: %r no longer shipped by npm-publish.yml -- "
+            "update INTEGRITY.md AND this test together" % exc
+        )
+        assert exc in integrity, (
+            "INTEGRITY.md packlist claim omits the SHIPPED exception %r" % exc
+        )
+    assert "PLAN-N" in integrity, (
+        "INTEGRITY.md must state the real predicate (numbered PLAN-N "
+        "artifacts excluded), not a blanket no-plan-material claim"
+    )
+
+
 def test_both_rails_answer_identically_on_every_key_shape():
     """The instrument that would have caught P1-a: ONE question, two readers.
 
@@ -2518,6 +2548,7 @@ def test_both_rails_answer_identically_on_every_key_shape():
         "# verdict: NO-GO\nverdict: GO\n",
     ]
     noncanonical_shapes = [
+        "verdict:GO\n",
         "verdict: GO\n  NO-GO\nrelease_tag: v1.2.3\n",
         "verdict : NO-GO\nverdict: GO\n",
         "verdict\t: NO-GO\nverdict: GO\n",
