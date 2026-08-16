@@ -1801,6 +1801,15 @@ install_mcp_secrets_dir() {
       echo "    (dry-run) ERROR: root .gitignore is a symlink — real run would REFUSE" >&2
       exit 1
     fi
+    # t11 P1 #2: honest dry-run for TRACKED sensitive paths too — the
+    # real run refuses and demands git rm --cached.
+    _dry_tracked="$( _gitignore_tracked_sensitive "$TARGET" \
+      ".claude/settings.local.json" ".claude/state" "state/mcp_client_secrets" )"
+    if [ -n "$_dry_tracked" ]; then
+      echo "    (dry-run) ERROR: sensitive path(s) already TRACKED — real run would REFUSE and demand git rm --cached:" >&2
+      printf '%s\n' "$_dry_tracked" | sed 's/^/      /' >&2
+      exit 1
+    fi
     echo "    (dry-run) would ENSURE .gitignore excludes state/mcp_client_secrets/"
     return 0
   fi
@@ -1864,6 +1873,15 @@ install_posture_state_ignores() {
     # refuse exactly where the real run refuses, by the same code path.
     if ! _root_gitignore_symlink_guard "$TARGET/.gitignore" >/dev/null 2>&1; then
       echo "    (dry-run) ERROR: root .gitignore is a symlink — real run would REFUSE" >&2
+      exit 1
+    fi
+    # t11 P1 #2: honest dry-run for TRACKED sensitive paths too — the
+    # real run refuses and demands git rm --cached.
+    _dry_tracked="$( _gitignore_tracked_sensitive "$TARGET" \
+      ".claude/settings.local.json" ".claude/state" "state/mcp_client_secrets" )"
+    if [ -n "$_dry_tracked" ]; then
+      echo "    (dry-run) ERROR: sensitive path(s) already TRACKED — real run would REFUSE and demand git rm --cached:" >&2
+      printf '%s\n' "$_dry_tracked" | sed 's/^/      /' >&2
       exit 1
     fi
     echo "    (dry-run) would ENSURE .gitignore excludes: $entries"

@@ -3331,6 +3331,15 @@ else
       echo "    (dry-run) ERROR: root .gitignore is a symlink — real run would REFUSE" >&2
       exit 1
     fi
+    # t11 P1 #2: honest dry-run for TRACKED sensitive paths too — the
+    # real run refuses and demands git rm --cached.
+    _dry_tracked="$( _gitignore_tracked_sensitive "$TARGET" \
+      ".claude/settings.local.json" ".claude/state" "state/mcp_client_secrets" )"
+    if [ -n "$_dry_tracked" ]; then
+      echo "    (dry-run) ERROR: sensitive path(s) already TRACKED — real run would REFUSE and demand git rm --cached:" >&2
+      printf '%s\n' "$_dry_tracked" | sed 's/^/      /' >&2
+      exit 1
+    fi
     echo "    (dry-run) would ENSURE .gitignore excludes: $_UP_MCP_ENTRY"
     echo "    (dry-run) would ENSURE .gitignore excludes: $_UP_POSTURE_ENTRIES"
   else

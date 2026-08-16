@@ -197,5 +197,48 @@ case "$_err" in
   *) echo "FAIL: S12 sem mensagem de migracao: $_err"; FAILS=$((FAILS + 1)) ;;
 esac
 
+# --- S13 (t11 P1): ramo CREATED tambem checa tracked — overlay ja
+# commitado + nested .gitignore AUSENTE => applier cria o arquivo mas
+# FALHA exigindo migracao (user ceremony nao tem outro guardiao).
+mkdir -p "$TMP/s13/.claude"
+( cd "$TMP/s13" && git init -q )
+printf '{}\n' > "$TMP/s13/.claude/settings.local.json"
+( cd "$TMP/s13" \
+  && git add -f .claude/settings.local.json \
+  && git -c user.email=t@t -c user.name=t commit -qm seed )
+_apply_claude_dir_gitignore "$TMP/s13/.claude" >/dev/null 2>&1; rc=$?
+_t "S13 CREATED + tracked overlay => applier FALHA" 1 "$rc"
+[ -f "$TMP/s13/.claude/.gitignore" ] && echo "PASS: S13 arquivo criado mesmo assim (entrega + refusa)" \
+  || { echo "FAIL: S13 arquivo nao foi criado"; FAILS=$((FAILS + 1)); }
+
+# --- S14 (t11 P1): preview HONESTO sobre tracked — would-REFUSE, rc 1,
+# zero writes.
+_before_sha="$(shasum -a 256 "$TMP/s13/.claude/.gitignore" | awk '{print $1}')"
+_pv14="$(_preview_claude_dir_gitignore "$TMP/s13/.claude" 2>&1 >/dev/null)"; rc=$?
+_t "S14 preview rc=1 com overlay tracked" 1 "$rc"
+case "$_pv14" in
+  *"TRACKED"*"git rm --cached"*) echo "PASS: S14 preview nomeia TRACKED + migracao" ;;
+  *) echo "FAIL: S14 preview sem TRACKED/migracao: $_pv14"; FAILS=$((FAILS + 1)) ;;
+esac
+_after_sha="$(shasum -a 256 "$TMP/s13/.claude/.gitignore" | awk '{print $1}')"
+[ "$_before_sha" = "$_after_sha" ] && echo "PASS: S14 preview zero writes" \
+  || { echo "FAIL: S14 preview escreveu"; FAILS=$((FAILS + 1)); }
+
+# --- S15 (t11 P2): 6 arquivos tracked — a mensagem de migracao imprime
+# sem SIGPIPE (sed, nao head) mesmo sob pipefail do caller.
+mkdir -p "$TMP/s15/.claude/state"
+( cd "$TMP/s15" && git init -q )
+for i in 1 2 3 4 5 6; do printf 'x\n' > "$TMP/s15/.claude/state/f$i.json"; done
+( cd "$TMP/s15" \
+  && git add -f .claude/state \
+  && git -c user.email=t@t -c user.name=t commit -qm seed6 )
+printf '.claude/state/\n' > "$TMP/s15/.gitignore"
+_err15="$( set -o pipefail; _apply_posture_state_ignores "$TMP/s15/.gitignore" 2>&1 >/dev/null )"; rc=$?
+_t "S15 seis arquivos tracked => FALHA limpa (sem abort 141)" 1 "$rc"
+case "$_err15" in
+  *"git rm --cached"*) echo "PASS: S15 migracao impressa com >5 arquivos" ;;
+  *) echo "FAIL: S15 migracao ausente: $_err15"; FAILS=$((FAILS + 1)) ;;
+esac
+
 echo
 if [ "$FAILS" -eq 0 ]; then echo "ALL GREEN"; exit 0; else echo "$FAILS FAIL(s)"; exit 1; fi

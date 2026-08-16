@@ -196,3 +196,29 @@ autorizado. Nenhuma mudança executável pendente.
   `deferred` com mutation control — flipar para `enforced` sem o
   predicado semântico (pack não-dry-run + sha256 + publicação) fica
   RED antes de enganar alguém.
+
+## Ciclo t11 → X6
+
+- P1 (parte 1) TRIADO COMO FALSO-POSITIVO MECÂNICO: o codex flagou o
+  pin desatualizado do runner COMMITADO e o MANIFEST ausente em
+  `repass-rc4/` — ambos são a mecânica documentada do ciclo (o re-pin
+  é working-tree e entra no commit do envelope; a janela sem MANIFEST
+  é fail-closed desejado). O prompt do runner ganhou a seção "CYCLE
+  MECHANICS (do not re-flag)" para não re-litigar.
+- P2 (parte 1): a suíte legada `test_validate_pair_rail_verdict.py`
+  (não-CI-wired) usava fixture block-scalar `gpg_signature: |` que a
+  gramática nova rejeita — fixture trocada pela forma canônica
+  single-line `base64:`; 17 failed → 20 passed.
+- P1 (parte 2 #1): o ramo CREATED do nested applier retornava ANTES
+  dos checks — user-ceremony com overlay JÁ TRACKED instalava verde.
+  Agora cria E roda efetividade+tracked (falha exigindo migração).
+  Control S13.
+- P1 (parte 2 #2): dry-run HONESTO sobre tracked — classifier
+  read-only compartilhado (`_gitignore_tracked_sensitive`) no preview
+  nested (rc 1, "would REFUSE", zero writes — S14) e nos 3 dry-run
+  sites do root (install ×2 + upgrade).
+- P2 (parte 2 #3): `ls-files | head -5` sob pipefail = SIGPIPE 141
+  abortando o upgrade antes da mensagem de migração (a classe
+  documentada do repo) — `sed -n '1,5p'`; control S15 com 6 arquivos.
+- P2 (parte 2 #4): prosa do Governance no CHANGELOG desambiguada
+  (range 184→191 é por NÚMERO; 192 é file-count com amendments).

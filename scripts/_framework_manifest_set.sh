@@ -879,7 +879,10 @@ _gitignore_reassert_effective() {
     */__ceo_ignore_probe__) _gre_scope="$( dirname "$_gre_probe" )" ;;
     *)                      _gre_scope="$_gre_probe" ;;
   esac
-  _gre_tracked="$( git -C "$_gre_repo" ls-files -- "$_gre_scope" 2>/dev/null | head -5 )"
+  # sed, never `head` (t11 P2): under the callers' pipefail, head closing
+  # the pipe early makes ls-files exit 141 and aborts the WHOLE upgrade
+  # before the migration message prints (the repo's known SIGPIPE class).
+  _gre_tracked="$( git -C "$_gre_repo" ls-files -- "$_gre_scope" 2>/dev/null | sed -n '1,5p' )"
   if [ -n "$_gre_tracked" ]; then
     echo "    ERROR: $_gre_scope is already TRACKED by git — an ignore rule cannot protect it." >&2
     echo "      Migrate explicitly, then re-run:" >&2
@@ -986,6 +989,16 @@ _apply_claude_dir_gitignore() {
     [ -d "$_cdg_dir" ] || mkdir -p "$_cdg_dir"
     _claude_dir_gitignore_body > "$_cdg_file"
     echo "    CREATED: .claude/.gitignore"
+    # t11 P1: DO NOT return here — the effectiveness + tracked checks
+    # below must run on the freshly created file too. A user-ceremony
+    # adopter with an already-TRACKED .claude/settings.local.json got a
+    # green install while the overlay stayed commit-eligible (user
+    # ceremony never runs the root helper that would have caught it).
+    _cdg_repo="$( dirname "$_cdg_dir" )"
+    _gitignore_reassert_effective "$_cdg_repo" "$_cdg_file" \
+      "/state/" ".claude/state/__ceo_ignore_probe__" || return 1
+    _gitignore_reassert_effective "$_cdg_repo" "$_cdg_file" \
+      "/settings.local.json" ".claude/settings.local.json" || return 1
     return 0
   fi
   if [ ! -f "$_cdg_file" ]; then
@@ -1017,6 +1030,18 @@ _apply_claude_dir_gitignore() {
   else
     echo "    EXISTS: .claude/.gitignore already carries both entries"
   fi
+  return 0
+}
+
+# t11 P1 #2: read-only tracked-path classifier SHARED by apply previews —
+# prints the tracked sensitive paths (max 5) under $2.. scopes of repo $1;
+# empty output == nothing tracked. Never writes, never fails the caller.
+_gitignore_tracked_sensitive() {
+  _gts_repo="$1"; shift
+  git -C "$_gts_repo" rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 0
+  for _gts_scope in "$@"; do
+    git -C "$_gts_repo" ls-files -- "$_gts_scope" 2>/dev/null
+  done | sed -n '1,5p'
   return 0
 }
 
@@ -1067,6 +1092,16 @@ _preview_claude_dir_gitignore() {
   fi
   if [ -n "$_pcg_reassert" ]; then
     echo "    (dry-run) would RE-ASSERT (present but negated by a later rule):$_pcg_reassert"
+  fi
+  # t11 P1 #2: the REAL run refuses on tracked sensitive paths — a
+  # would-PRESERVE preview over that state is dishonest. Same read-only
+  # classifier, no writes.
+  _pcg_tracked="$( _gitignore_tracked_sensitive "$_pcg_repo" \
+    ".claude/settings.local.json" ".claude/state" )"
+  if [ -n "$_pcg_tracked" ]; then
+    echo "    (dry-run) ERROR: sensitive path(s) already TRACKED — real run would REFUSE and demand git rm --cached:" >&2
+    printf '%s\n' "$_pcg_tracked" | sed 's/^/      /' >&2
+    return 1
   fi
   if [ -z "$_pcg_missing" ] && [ -z "$_pcg_reassert" ]; then
     echo "    (dry-run) EXISTS: .claude/.gitignore already carries both entries (would PRESERVE)"

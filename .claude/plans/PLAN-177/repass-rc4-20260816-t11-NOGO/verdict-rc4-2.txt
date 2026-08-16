@@ -1,0 +1,23 @@
+1. SEVERITY: P1 — fix before rc.4  
+   FILE:LINE: `scripts/_framework_manifest_set.sh:985-989`, `scripts/install.sh:1914-1916`, `scripts/upgrade.sh:3305-3307,3355-3361`, `scripts/tests/test-night-mode-ignore-effect.sh:229-244`  
+   Concrete failure scenario: when `.claude/.gitignore` is absent, `_apply_claude_dir_gitignore` creates it and returns before the effective-ignore and tracked-file checks. A user-ceremony adopter who already committed `.claude/settings.local.json` therefore gets a successful install/upgrade while that posture file remains tracked and commit-eligible. User ceremony skips the root helper that would otherwise detect it. The efficacy test always commits the baseline before creating the artifacts, so it only tests untracked files.  
+   Minimal fix: continue through both `_gitignore_reassert_effective` calls after creation. Add fresh-user install and pre-state-user upgrade controls with an absent nested ignore and an already-tracked overlay.
+
+2. SEVERITY: P1 — fix before rc.4  
+   FILE:LINE: `scripts/_framework_manifest_set.sh:1032-1073`, `scripts/install.sh:1790-1805,1860-1870,1899-1905`, `scripts/upgrade.sh:3327-3335,3355-3358`, `.claude/scripts/local/release.sh:103`  
+   Concrete failure scenario: dry-run never checks tracked sensitive paths. With complete, effective ignore rules but a tracked overlay, nested dry-run reports `would PRESERVE`; root dry-run reports `would ENSURE`. Real execution fails and demands `git rm --cached`. This contradicts the signed-tag headline’s “honest dry-run previews.”  
+   Minimal fix: share a read-only tracked-path classifier between apply and preview for root and nested surfaces, reporting that the real run would refuse. Add tracked-path dry-run controls.
+
+3. SEVERITY: P2 — follow-up  
+   FILE:LINE: `scripts/_framework_manifest_set.sh:882`, `scripts/tests/test-gitignore-symlink-and-dryrun-unit.sh:184-198`  
+   Concrete failure scenario: under install/upgrade’s `set -euo pipefail`, `git ls-files | head -5` returns 141 when more than five tracked sensitive files exist. The script aborts before printing the intended migration commands. Existing controls track only one file.  
+   Minimal fix: truncate without closing the pipe early, such as `sed -n '1,5p'`, while preserving Git’s error status. Add a six-file tracked-state control.
+
+4. SEVERITY: P2 — follow-up  
+   FILE:LINE: `CHANGELOG.md:12`, `CHANGELOG.md:240-243`  
+   Concrete failure scenario: the changelog correctly states 192 ADR files at line 12 but later claims the release moved from 184 to 191 while listing eight added ADR/amendment records. Disk contains 192, so the administrative release delta remains internally inconsistent.  
+   Minimal fix: change the governance transition to 184 → 192.
+
+The npm-honesty, tournament workdir control, conservative T-2 behavior, counts gates, and workflow syntax otherwise check out, but the user-ceremony tracked-artifact bypass leaves P1-1 incomplete.
+
+VERDICT: NO-GO

@@ -88,10 +88,11 @@ def _make_verdict(
     lines.append("tool_versions:")
     lines.append(tool_versions_block)
     if include_signature:
-        lines.append("gpg_signature: |")
-        lines.append("  -----BEGIN PGP SIGNATURE-----")
-        lines.append("  fake-sig-for-test")
-        lines.append("  -----END PGP SIGNATURE-----")
+        # t11 P2: the CANONICAL single-line form the live envelopes use —
+        # the strict grammar (t7-t10 cures) rejects a block-scalar `|`
+        # continuation by design, so the old multiline fixture made every
+        # test in this suite fail before its intended assertion.
+        lines.append("gpg_signature: base64:ZmFrZS1zaWctZm9yLXRlc3Q=")
     lines.append("```")
     return "\n".join(lines) + "\n"
 

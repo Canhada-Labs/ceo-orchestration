@@ -237,7 +237,9 @@ train (rc.4) instead of being deferred:
 
 ### Governance
 
-- ADRs 184 → **191** (ADR-185 night-mode; ADR-186 hook-deadline policy;
+- ADRs 184 → **191** by NUMBER; 192 ADR files on disk — amendments
+  (e.g. ADR-089-AMEND-1) are separate files counted by
+  verify-counts.sh (ADR-185 night-mode; ADR-186 hook-deadline policy;
   ADR-110-AMEND-2; ADR-164-AMEND-1; ADR-155-AMEND-1 delivery-record
   ownership; ADR-190 ownership-decision-table contract; ADR-191 spawn
   acceptance contract v2; ADR-089-AMEND-1 shared-memory fence). Slash
