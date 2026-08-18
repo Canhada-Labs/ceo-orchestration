@@ -4,7 +4,33 @@
 > na morte da sessão. Só identificadores verbatim (paths, SHAs, ids) —
 > nunca corpo de transcript. Teto ≤2k tokens; seções antigas arquivadas.
 
-## Unidade corrente
+## Unidade corrente (atualizado 15:25)
+
+**U5 — dois packs em construção + 1 cerimônia de kernel.**
+- `staged-w01` (W0+W1+W1-b): 4 implementadores voltaram; integração em voo
+  (`wf_337e72f2-2ce`) curando os defeitos que o paralelismo criou.
+- `staged-w24` (W2+W4): 4 implementadores em voo (`wf_579e41a3-d3c`).
+- `staged-w3k` (169 W3-K): fix + teste positivo em voo (`wf_d0896846-177`).
+- W3 do 179 (superfície livre): em voo (`wf_9fc81c68-035`).
+- Landado e pushado: ledger final do 169 (62 itens), E0 verificado, PLAN-170
+  autorado, land script + draft do sentinel (`1e3ffaa`, `4f0ceb5`).
+
+### Defeitos de processo achados (valem mais que o código)
+1. **Paralelismo sem barreira gera integração falsa-verde.** Os 4 agentes do
+   W0/W1 rodaram concorrentes e nenhum viu os arquivos dos outros: cada um
+   sondou o símbolo do irmão com `getattr`, não achou, e **degradou com
+   breadcrumb**. Compilava, testava, e a cura não existia. Caso concreto:
+   `check_precompact_continuity` procura `audit_emit.edge_trigger_should_emit`,
+   mas o símbolo shipado chama-se `should_emit_context_pressure` ⇒ progress
+   guard **nunca dispararia**. Regra: fan-out que compartilha API precisa de
+   PIPELINE (stage 2 lê o stage 1), ou de um passe de integração obrigatório.
+2. **`Edit(SPEC/**)` casa até no path do PACK.** O agente do audit bateu no
+   deny e **recusou contornar** — julgamento correto. Cura sem evasão: o
+   artefato do pack ganha nome plano (`spec-v1-audit-log.schema.md`) + um
+   `PACKMAP.txt` que o land script honra; o SPEC vivo continua escrito só pela
+   cerimônia assinada.
+
+## Unidade anterior
 
 **U1 — censo read-only de PLAN-169 (W3-K/W4/W4-C/W5/W6) e PLAN-179 (W0-W4).**
 Workflow `wf_584a3a45-36c` (4 agentes, effort high, read-only).
