@@ -4,6 +4,19 @@
 > na morte da sessão. Só identificadores verbatim (paths, SHAs, ids) —
 > nunca corpo de transcript. Teto ≤2k tokens; seções antigas arquivadas.
 
+## Fechamento (18:27) — CI VERDE, dois packs assináveis
+
+HEAD `f622900`, árvore limpa, **Validate verde**, Smoke Install verde, red-team
+verde, chaos/perf verdes. Dois vermelhos apareceram e foram curados na fonte:
+1. `test_threat_model_coverage` — rodar o `check-threat-model-freshness.py`
+   MUTA o doc (`accepted`→`stale`); CI vermelho por efeito colateral de
+   diagnóstico. Status restaurado e a dívida (193 ADRs desde 2026-06-12,
+   limiar 2) escrita no cabeçalho com dono e as duas saídas.
+2. `test_codex_stop_review` — 4 ERROS de `shutil.Error`: `copytree` copiava
+   `__pycache__` e corria com os `.pyc.<pid>` temporários sob os workers
+   paralelos do CI. Cura: `ignore_patterns`. Zero ocorrências nas 4 corridas
+   anteriores — defeito latente que finalmente bateu.
+
 ## Estado final da sessão autônoma (16:13)
 
 **PRONTO PARA O OWNER — duas cerimônias, nesta ordem:**
