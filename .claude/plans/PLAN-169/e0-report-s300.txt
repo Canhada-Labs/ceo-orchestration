@@ -1,0 +1,87 @@
+- snapshot imutavel: /var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/e0-snap.1rt_62z3 (11 arquivo(s) copiados de /Users/joaocanhada/.claude/projects/ceo-orchestration)
+- hmac-null-check OK: audit-log-2026-07-3.jsonl
+- hmac-null-check OK: audit-log-2026-07-4.jsonl
+- hmac-null-check OK: audit-log-2026-07-5.jsonl
+- hmac-null-check OK: audit-log-2026-08-1.jsonl
+- hmac-null-check OK: audit-log-2026-08-2.jsonl
+- hmac-null-check OK: audit-log-2026-08-3.jsonl
+- hmac-null-check OK: audit-log-2026-08-4.jsonl
+- hmac-null-check OK: audit-log-2026-08-5.jsonl
+- hmac-null-check OK: audit-log-2026-08-6.jsonl
+- hmac-null-check OK: audit-log-2026-08.jsonl
+- hmac-null-check OK: audit-log.jsonl
+- verify_chain por arquivo (DISCLOSURE, nao-gate — HMAC-483 + trust-model S298):
+    audit-log-2026-07-3.jsonl: status=tamper verified=0
+    audit-log-2026-07-4.jsonl: status=tamper verified=0
+    audit-log-2026-07-5.jsonl: status=tamper verified=1110
+    audit-log-2026-08-1.jsonl: status=tamper verified=583
+    audit-log-2026-08-2.jsonl: status=tamper verified=648
+    audit-log-2026-08-3.jsonl: status=tamper verified=101
+    audit-log-2026-08-4.jsonl: status=tamper verified=0
+    audit-log-2026-08-5.jsonl: status=tamper verified=1030
+    audit-log-2026-08-6.jsonl: status=tamper verified=13657
+    audit-log-2026-08.jsonl: status=tamper verified=230
+    audit-log.jsonl: status=tamper verified=6472
+## E0 — fracao serial (amostra pinada M=155..168)
+### INPUTS (a medicao lista seus inputs)
+- audit_dir: /var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/e0-snap.1rt_62z3
+  - audit-log-2026-07-3.jsonl: 17655 eventos
+    sha256 fd2c8647c97aece214f5f6843884d8e75cd93f65f9f5047ea5955d5ec9cae2c5
+  - audit-log-2026-07-4.jsonl: 17480 eventos
+    sha256 f3d5714949ce160da22947ba01f1dd2f84b1b8a2c84671ffd777be811f5229b0
+  - audit-log-2026-07-5.jsonl: 16114 eventos
+    sha256 e64b55d5683e55b561c264d5c8671f618631b6406da4aeef58be18d131384087
+  - audit-log-2026-08-1.jsonl: 17692 eventos
+    sha256 702f0e092901b2dac8a427a085dbeea840cd0cc31c5820018792edd7fbf0d8ae
+  - audit-log-2026-08-2.jsonl: 18093 eventos
+    sha256 ec5476c01d0e4e2e1b089db20a11fcb40f7fc3cf8806247b2337fa704ffc5f55
+  - audit-log-2026-08-3.jsonl: 17763 eventos
+    sha256 7c1e8414a4c2b5c01e4f9efea04c93dbfc09bcf4dd509620fef2936519d59df7
+  - audit-log-2026-08-4.jsonl: 17613 eventos
+    sha256 1dece52f597132bf5378e3f760ec7e4d3ea945e3eca2785416da4e19c0fd2534
+  - audit-log-2026-08-5.jsonl: 16931 eventos
+    sha256 5fc95bbf3309e6d745c408c0612e2400684c982d92d0d76fcedb95aa81affa67
+  - audit-log-2026-08-6.jsonl: 16268 eventos
+    sha256 fd136d31863f96e1677086ee647acf599d87fcbb27eb4586e730db9cc4eaeac7
+  - audit-log-2026-08.jsonl: 15030 eventos
+    sha256 2ef5b692fa410cb341b9268d29b74ba282095f06c68d1c67ae923e27e86aa337
+  - audit-log.jsonl: 9291 eventos
+    sha256 91c91e2bff7c746ccc5daa3134767c5ab82227282cc34409a958c7ede71065a0
+- GAP_MACHINE_S=120 GAP_HUMAN_MAX_S=3600
+- janelas por plano: git log --format='%ct %s' (subject com PLAN-N)
+- corte conservador: maquina 100%% serial em TODOS os planos
+  (grafo de dependencia irrecuperavel do log v2) — vies p/ CIMA de S
+
+| plano | janela h | maquina h | humano h | morto h | eventos | S_plano |
+|---|---|---|---|---|---|---|
+| PLAN-155 | 89.2 | 12.4 | 5.6 | 71.2 | 34418 | 1.00 |
+| PLAN-156 | 349.1 | 47.4 | 51.1 | 250.7 | 17535 | 1.00 |
+| PLAN-157 | 65.6 | 16.9 | 21.2 | 27.5 | 6755 | 1.00 |
+| PLAN-158 | 75.5 | 21.9 | 26.0 | 27.5 | 7732 | 1.00 |
+| PLAN-159 | 31.4 | 14.2 | 17.2 | 0.0 | 1988 | 1.00 |
+| PLAN-160 | 6.7 | 2.8 | 1.6 | 2.3 | 1558 | 1.00 |
+| PLAN-161 | 150.4 | 7.9 | 5.7 | 136.8 | 3250 | 1.00 |
+| PLAN-162 | 186.2 | 50.4 | 43.1 | 92.7 | 97923 | 1.00 |
+| PLAN-163 | 67.3 | 20.1 | 19.4 | 27.8 | 8673 | 1.00 |
+| PLAN-164 | 21.8 | 8.0 | 8.7 | 5.1 | 2970 | 1.00 |
+| PLAN-165 | 50.6 | 20.5 | 13.2 | 16.9 | 86859 | 1.00 |
+| PLAN-166 | 98.5 | 45.2 | 38.2 | 15.1 | 21320 | 1.00 |
+| PLAN-167 | 22.9 | 10.5 | 11.1 | 1.4 | 2779 | 1.00 |
+| PLAN-168 | 4.1 | 2.6 | 1.5 | 0.0 | 1559 | 1.00 |
+
+(linhas por plano sao DESCRITIVAS; janelas podem se sobrepor —
+ o agregado abaixo usa a UNIAO das janelas, sem dupla contagem:
+ pair-rail S300 r3 P1-4)
+
+### Agregado (14/14 planos; uniao de 3 intervalo(s) disjunto(s))
+- maquina=155.4h humano=137.9h morto=429.6h total=723.0h
+- **S (conservador, maquina 100% serial) = 1.000**
+- **REGRA PRE-REGISTRADA (a UNICA que decide): S >= 0.40 => E1/E2 NAO financiados**
+
+Estatistica DESCRITIVA (nao decide nada — o pre-registro nao
+define regra sobre ela; registrada apenas para leitura humana):
+- fracao nao-maquina do wall-clock = 0.785
+- (pair-rail S300 r3 P1-5: uma regra de decisao sobre este piso
+  seria pos-hoc e nao-assinada — removida; emenda so via novo
+  pre-registro versionado.)
+- snapshot removido (digests completos acima autenticam os originais)

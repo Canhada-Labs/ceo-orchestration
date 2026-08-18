@@ -958,9 +958,17 @@ o dado em mãos, não por simetria).
 
 ## Acceptance criteria
 
-- [ ] AC-1 [P0] Ledger 100% endereçado: cada item A-F fecha numa wave,
+- [x] AC-1 [P0] Ledger 100% endereçado: cada item A-F fecha numa wave,
       defere com gatilho nomeado (E.13-E.17 mantidos), ou registra
       recusa do Owner (W0.8/W0.9). Auditável por tabela no §-final.
+      **Fechado em 2026-08-18 (S313): tabela em `## Ledger final —
+      endereçamento dos itens A-F`, 62 linhas com evidência
+      path:line/sha cada.** Leitura honesta do "endereçado": 57 CLOSED,
+      3 DEFERRED com gatilho inalterado (E.13/E.14/E.15), 2 **OPEN com
+      wave nomeada** (E.2 → W3-K, E.7 → W4-C) e ZERO recusas do Owner
+      (as duas decisões pedidas — W0.8 e W0.9 — foram aceites). O AC
+      mede endereço, não fechamento: os 2 OPEN não fecham este AC como
+      "tudo pronto", eles ficam visíveis com o defeito ainda no disco.
 - [ ] AC-2 [P0] Nightly Linux = 62 GREEN / 3 RED exatos
       {OWN-0016,0024,0027} sem tocar tabela/expected-reds; riders
       (FALSE-GREEN 0073 + HARNESS-ERR fail-closed) com controle
@@ -1153,7 +1161,128 @@ W0 correspondentes viram VERIFICAÇÃO, não re-execução.
   (`PLAN-178/research-S305.md` = fonte das referências). Este plano
   não os absorve para não emendar escopo assinado.
 
+## Ledger final — endereçamento dos itens A-F
+
+> **O que esta tabela é (AC-1).** Uma linha por item do ledger
+> `PLAN-169/ledger-S298.md` (A.0.1–A.5.5, B.a–B.d, C.1–C.4, D.1–D.8,
+> E.1–E.17, F.1–F.15 = **62 itens**), com o veredito e a EVIDÊNCIA que
+> o sustenta — sha de commit, `path:line` do disco de hoje, ou o
+> registro de execução deste plano. Nada aqui é recordado de memória:
+> um item que eu não consegui verificar recebe `OPEN` com o motivo,
+> nunca um `CLOSED` presumido.
+>
+> **Não duplica os registros existentes.** Os dois `### Registro de
+> execução` deste plano (W3 landada `e5ce982`; W2.8 + W0.9 landados
+> `874117c`) e o §Progress log continuam sendo a narrativa; esta tabela
+> só aponta para eles.
+>
+> **Placar:** 57 CLOSED · 3 DEFERRED-with-trigger · 2 OPEN · 0
+> REFUSED-by-Owner.
+>
+> **Fora do ledger (não entram na contagem):** W2.9 (`debate-converge`)
+> e W2.10 (fleet-currency) nasceram de auditorias da própria S298, não
+> das 6 varreduras — estão executados e registrados no §Progress log
+> (S299), mas não são itens A-F.
+
+| item | verdict | wave | evidence | note |
+|---|---|---|---|---|
+| A.0.1 árvore limpa antes da tag | CLOSED | W0.3 | `.gitignore:25`; `ls .claude/plans/PLAN-166/archive/*.tar.gz` → no matches; tag `v1.3.0` | Os 3 untracked de hoje (`PLAN-169/e0-report-s300.txt`, `PLAN-179/LEDGER.md`, `PLAN-179/staged-w01/`) são artefatos PÓS-GA, não os do ledger |
+| A.0.2 decidir o nightly vermelho antes do corte | CLOSED | W1 | run `31286301110` (62/3); nightly `32111138908` success (2026-08-18) | Rota barata escolhida: portar o harness ANTES da rc.2 — foi o que ocorreu |
+| A.0.3 `Translations drift` vermelho desde 04/08 | CLOSED | W0.4 | §Progress log 2026-08-08 (S299): drift local 0 + workflow verde no push `57119b3` | Curado, não silenciado |
+| A.0.4 `bump` mantém `marcador == VERSION` | CLOSED | W2.6 | `.claude/scripts/local/_release_bump_sites.py:84`; `.github/workflows/release.yml:84-97` | Deixou de passar por coincidência: o marcador virou site de bump. Assert verde nos 4 cortes (rc.2/rc.3/rc.4/GA). Controle AO VIVO do minor = AC-7 (W6.2), ainda aberto |
+| A.0.5 ADR de break-glass antes do GA | CLOSED | W0.9 → W2.8 | `.claude/adr/ADR-193-break-glass-repo-kill-switches.md` (`status: ACCEPTED`), commit `874117c` | O GA saiu ANTES do ADR (17/08 vs 18/08): a decisão foi tomada, o risco atravessou a janela nomeado no §OQ |
+| A.1 re-pass codex round 2 | CLOSED | W6.1 | `.claude/plans/PLAN-166/repass-r2/VERDICTS-SUMMARY.txt` + `PROVENANCE-r2.md` + `MANIFEST-r2.sha256` | O r2 rodou; a rota que efetivamente chegou ao GA foi a rc.4 do PLAN-177 |
+| A.2 corte da rc.2 | CLOSED | W6.1 | tag `v1.3.0-rc.2`; `.claude/governance/pair-rail-verdict-v1.3.0-rc.2.md` | |
+| A.3 hold 24h + re-pass final + guard de ancestralidade | CLOSED | W6.1 | tags `v1.3.0-rc.3` e `v1.3.0-rc.4` (`4273d6c`); verdito `d789721` | A regra r18 FUNCIONOU no sentido caro: `main` avançou ⇒ não houve GA sobre a rc.2, cortou-se rc.3 e depois rc.4 |
+| A.4 GA v1.3.0 | CLOSED | W6.1 | tag `v1.3.0`; `.claude/governance/pair-rail-verdict-v1.3.0.md` | GA cortado 2026-08-17 |
+| A.5.1 AC-3 substantivamente satisfeito, checkbox `[ ]` | CLOSED | W0.5 | `.claude/plans/PLAN-166-…md:728-734` (§-final: subsunção por PLAN-167/168 com evidência) | |
+| A.5.2 AC-4 com exceção nomeada | CLOSED | W0.5 + W3.2 | PLAN-166 §-final; `.github/workflows/smoke-install.yml:360` (`grep -qF 'positive control: FIRED in every mode'`, `e5ce982`) | A exceção nomeada fechou quando o 2º fator virou causal |
+| A.5.3 subsunção ausente no corpo do 166 | CLOSED | W0.5 | `.claude/plans/PLAN-166-…md:711` `## §-final — Estado de fechamento e subsunção (PLAN-169 W0.5, 2026-08-08)` | |
+| A.5.4 ratificação `approx`/collect-errors | CLOSED | W0.5 → W6.1 | `.claude/governance/pair-rail-verdict-v1.3.0-rc.2.md:44,83` | Cumprida onde foi prometida: no material ASSINADO da rc.2, não em prosa de plano |
+| A.5.5 frontmatter do 166 / *stranded* | CLOSED | W6.1 + higiene S313 | `PLAN-166` frontmatter `status: done`, `completed_at: 2026-08-17`; commit `a71229e` | `executing→done` só depois do GA, como o item exigia |
+| B.a `PROTOCOL_SOURCE` malformado aborta o upgrade | CLOSED | W3.1 | `scripts/upgrade.sh` (allowlist POSITIVA de charset + WARNING nomeando a chave rejeitada) e `scripts/_framework_manifest_set.sh` + caso novo em `scripts/tests/test-protocol-pointer-render.sh`, todos em `e5ce982` | Rota OQ-5(b) honrada: GA saiu com exceção nomeada, fix landou na linha 1.4.0 |
+| B.b 2º fator do parity aceita evidência não-causal | CLOSED | W3.2 | `.github/workflows/smoke-install.yml:360` (`e5ce982`) | Fix de 1 linha, como o ledger previu |
+| B.c `test_case_a_p99_under_5ms` fora do ADR-163 | CLOSED | W2.2 + W3.5 | §Progress log S299 (N 100→200, índices derivados de n, pré-condição de colapso; mesmo passe no claim-producer); emenda ao `.claude/adr/ADR-163-…md` (+33 linhas, `e5ce982`) | A decisão CI-mediana foi REAVALIADA com o flake real do run 31288404989 e mantida COM evidência |
+| B.d nightly Linux — causa-raiz única | CLOSED | W1 | §Progress log 2026-08-08 (S299); run `31286301110` = `GREEN=62 RED=3` exatos {0016,0024,0027} | `ownership_table.tsv` / `ownership-expected-reds.txt` NUNCA tocados |
+| C.1 injector resolve persona por match FUZZY | CLOSED | W2.3 | `.claude/scripts/inject-agent-context.sh:798-805` (ladder EXATA, 4 degraus) e `:903` (`exit 3` fail-closed) | |
+| C.2 `pair-rail-gate.sh` inexecutável nesta máquina | CLOSED | W2.5 | `.claude/scripts/local/pair-rail-gate.sh:64-83` (Gate 1 = API key OU login; Gate 2 pulado na rota login) | Lacuna (i) do ledger fechada com evidência DINÂMICA: ambas as rotas PASS nesta máquina (§Progress log S299) |
+| C.3 `CEO_OVERHEAD_ACK` — defeito é a ENTREGA | CLOSED | W2.4 (docs) + W3.3 (canal) | `docs/TROUBLESHOOTING.md` / `.pt-BR.md` (W2.4); `.claude/hooks/check_anti_ceo_overhead.py` em `e5ce982` (P4 degrada a advisory no apply-step, com re-avaliação `skip_p4` para não sombrear um P5 bloqueante) | Limite honesto declarado NO PRÓPRIO código: o hit advisory NÃO é auditado (exige cerimônia de whitelist de `audit_emit`) — follow-up nomeado na família de auditoria do W4 |
+| C.4 P0 case-insensitive (APFS) | CLOSED | W3.5 (via E.17) | Código fechado em `6b5dd10`; resíduo de DOC curado em `.claude/adr/ADR-186-hook-deadline-policy.md` (nota histórica, `e5ce982`) | |
+| D.1 `PLAN-167/OWNER-PREPARE-TO-SIGN.sh` untracked | CLOSED | W0.1 | `git ls-files -s` → `100644 a69eeff …/PLAN-167/OWNER-PREPARE-TO-SIGN.sh` | Rastreado NEUTRALIZADO (⛔ + `exit 1`) e SEM exec bit — evidência, não reprodutor perigoso |
+| D.2 `step1` obsoleto rastreado | CLOSED | W0.2 | `.claude/plans/PLAN-166/OWNER-W1-LAND-step1.sh:2` (header `OBSOLETO — substituído por step1b; re-executar REVERTERIA o PLAN-167`) | |
+| D.3 2 tarballs untracked | CLOSED | W0.3 | `ls .claude/plans/PLAN-166/archive/*.tar.gz` → no matches | |
+| D.4 padrão de gitignore para os tarballs | CLOSED | W0.3 | `.gitignore:25` `.claude/plans/*/archive/*.tar.gz` | `archive/` inteiro NÃO foi ignorado (19 arquivos de evidência preservados) |
+| D.5 status/frontmatter conformes | CLOSED (no-action) | W0 | frontmatter dos planos; higiene autorizada em `a71229e` | O veredito do ledger era "nenhuma ação"; o `executing→done` do 166 veio pelo caminho legal (pós-GA) |
+| D.6 zero planos órfãos ou drafts | CLOSED (no-action) | W0 | `ls .claude/plans/` | Verdadeiro à época; os planos criados depois (171-181) nasceram conformes ao PLAN-SCHEMA |
+| D.7 contagens derivadas sem drift | CLOSED (no-action) | W0 | G4 do land `874117c` (verify-counts verde nas 10 superfícies vigiadas) | Contagem viva hoje: `ls .claude/adr \| grep -c '^ADR-[0-9]'` = 194 (o 195º arquivo é `README.md`) |
+| D.8 path `.claude/scripts/verify-counts.sh` inexistente + gate vacuoso | CLOSED | W0.6 + W2.8 | memória `feedback-verify-counts-real-path-is-local.md`; `.claude/governance/gate-scripts-manifest.txt` (9 membros) + ADR-192, `874117c` | Sweep de runbooks VIVOS por `\|\| echo advisory` feito na S299; a família inteira ganhou pin de checksum na W2.8 |
+| E.1 marcador como 12º site de bump | CLOSED | W2.6 | `_release_bump_sites.py:84`; `verify-counts.sh:1105-1109` | Controle transitório (dessinc ⇒ vermelho) provado e desplantado no MESMO commit; controle AO VIVO = bump 1.4.0 (AC-7 / W6.2), ainda aberto |
+| E.2 emits de GRANT do kernel silenciosos | **OPEN** | W3-K | `.claude/hooks/check_arbitration_kernel.py:453` → `ceremony_sha=_rel_path[:64]` | **Defeito INTACTO no disco**: o campo do sha continua recebendo um PATH truncado, exatamente a suspeita do ledger. A cerimônia de kernel exige sessão SEPARADA (U-3: `CEO_KERNEL_OVERRIDE` + `_ACK` além do sentinel) e não foi executada |
+| E.3 matcher das 2 frases de ADR no GUIA-COMPLETO | CLOSED | W2.7 | `.claude/scripts/local/verify-counts.sh:610` | Drift REAL (GUIA 189 vs disco 190) achado vivo e curado na mesma passagem |
+| E.4 família "script livre que decide gate" | CLOSED | W2.8 | ADR-192 + `.claude/governance/gate-scripts-manifest.txt` + step fail-loud em 4 workflows (`874117c`) | Rota **(b)-narrow** ratificada VERBATIM pelo Owner (§OQ). Censo achou ~50 scripts FREE; o pin cobre os 9 release-críticos, o resto segue livre por decisão |
+| E.5 ADR de break-glass para kill-switches | CLOSED | W0.9 → W2.8 | `.claude/adr/ADR-193-break-glass-repo-kill-switches.md` `status: ACCEPTED` (`874117c`) | Renumerado 191→193 (191 tomado pelo spawn-contract do PLAN-178 Lote B) |
+| E.6 `check_tier_a_spec_version_drift` vacuoso — registrar | CLOSED | W0.6 | memórias `feedback-check-tier-a-spec-version-drift-vacuous.md` e `feedback-verify-counts-real-path-is-local.md` | A promessa era registrar; foi registrado. O check segue vacuoso POR DESIGN documentado, não por esquecimento |
+| E.7 shellcheck de CI só cobre `.claude/{scripts,hooks}` | **OPEN** | W4-C | `.github/workflows/validate.yml:296-315` → `find .claude/scripts .claude/hooks -name '*.sh'` | `scripts/tests/**` e `scripts/*.sh` seguem FORA do gate — o diretório onde morava a causa-raiz do W1 continua sem lint. O wiring é KERNEL PATH (`validate.yml`) ⇒ cerimônia W4-C, não executada |
+| E.8 fechamento do scanner FIFO (§5.7) | CLOSED | W0.7(ii) | `.claude/scripts/check-model-deprecations.py:207-215` (`os.lstat` + `stat.S_ISREG` antes de abrir); controle positivo com 2 FIFOs plantados registrado no §Progress log S299 | Claim não-verificada do ledger virou claim verificada |
+| E.9 célula maintainer→user | CLOSED | W0.7(i) | `scripts/tests/ownership_table.tsv:60` (`OWN-0070`, "maintainer install re-run as user: record must NOT be erased"); `PLAN-166/W1-ceremony-log.md:159-163` | A célula EXISTIA — o follow-up foi fechado no log, sem adicionar célula nova |
+| E.10 linha morta no guard ancestral-symlink | CLOSED | W0 (verificação) | §Progress log S299 (fechamento noturno): zero hits de guard ancestral em `scripts/upgrade.sh` | A promessa do 167 §5.8 já estava cumprida — sem patch necessário. Verificação, não re-execução |
+| E.11 `\s` em `grep -E`/`sed` nos runbooks | CLOSED | W0.10 | `docs/CTO-GUIDE.md:47,94` (`[[:space:]]`) | Planos landados ficaram fora por serem evidência imutável |
+| E.12 higiene de ACs de 167/168 | CLOSED | W0.8 | `.claude/plans/PLAN-167-…md:728,738-739`; `.claude/plans/PLAN-168-…md:368` | Decisão do Owner registrada VERBATIM: "AC provado no registro de execução; checkbox não usado" |
+| E.13 refactor `workflow_call` | DEFERRED-with-trigger | — | ledger `PLAN-169/ledger-S298.md:144`; `.github/workflows/npm-publish.yml:71,105-111` | Gatilho INALTERADO: "quando `release.yml` for refatorado por outro motivo". Não puxar agora |
+| E.14 `OWN-0016` (defeito de PRODUTO) | DEFERRED-with-trigger | — | `.claude/adr/ADR-190-…md:107-111`; `scripts/tests/ownership-expected-reds.txt` | Gatilho: plano próprio; **fechar a célula e encolher expected-reds NO MESMO pack**. Segue RED por design dentro do nightly verde |
+| E.15 `OWN-0024` / `OWN-0027` (defeito do TESTE) | DEFERRED-with-trigger | — | `.claude/adr/ADR-190-…md:112-114`; `scripts/tests/ownership-expected-reds.txt` | Mesmo gatilho e mesma ordem obrigatória do E.14 |
+| E.16 nightly vermelho com causa nomeada até o port landar | CLOSED | W1 | nightly `32111138908` (2026-08-18) `success`; antes dele `32006620081`, `31933480267` | O gatilho declarado ("fecha quando B.d landar, aceite 62/3") foi CUMPRIDO; verde recorrente, sem editar a tabela |
+| E.17 higiene de leitura do ADR-186 §5 | CLOSED | W3.5 | `.claude/adr/ADR-186-hook-deadline-policy.md` — nota histórica "resolvido e commitado em `6b5dd10`" (`e5ce982`) | |
+| F.1 "sweep de portabilidade amplo" vs 1 linha | CLOSED | W1 | ver B.d — run `31286301110` | As 4 suspeitas seguem refutadas; o escopo reduzido foi o correto |
+| F.2 "triagem inicial" vs contabilidade 65/65 | CLOSED | W1 | ver B.d | Virou causa-raiz com aceite falsificável, e o aceite foi atingido |
+| F.3 `OWN-0073` era FALSE GREEN | CLOSED | W1 | §Progress log S299: rider `_selfcheck_mtime` (controle positivo antes de qualquer célula) + 0073 re-verificado GREEN com `got=REFRESH/HASH_SOURCE` no run `31286301110` | O sinal de mtime está VIVO no Linux — era exatamente o que o falso-verde escondia |
+| F.4 `CEO_OVERHEAD_ACK` "não destrava Write" | CLOSED | W2.4 + W3.3 | ver C.3 | A memória estava errada; o fix foi no canal e na doc, NÃO na classificação de tool |
+| F.5 `pair-rail-gate.sh` "inexecutável" | CLOSED | W2.5 | ver C.2 | Cura foi rota de auth, não `chmod` |
+| F.6 "P0 FS case-insensitive ABERTO" | CLOSED | W3.5 | ver C.4 / E.17 | O que sustentava a leitura era texto histórico do ADR-186 §5 |
+| F.7 marcador "é 12º site" (não era) | CLOSED | W2.6 | ver E.1 | O achado de maior valor técnico do lote |
+| F.8 AC-3/AC-4 "abertos" = trabalho pendente | CLOSED | W0.5 | ver A.5.1-A.5.3 | Era bookkeeping, não implementação |
+| F.9 `5.25 ms` era "flake de cauda p99" | CLOSED | W2.2 | ver B.c | Em CI o teste gateava a MEDIANA; a decisão foi mantida, agora com evidência do run 31288404989 |
+| F.10 2º fator do parity não-causal | CLOSED | W3.2 | ver B.b | O harness já tinha a checagem forte; o workflow a desperdiçava |
+| F.11 `.claude/scripts/verify-counts.sh` (path inexistente) | CLOSED | W0.6 | ver D.8 | Path correto registrado em memória; sweep do padrão `\|\| echo advisory` feito nas superfícies vivas |
+| F.12 `ad9cc3a` "preserva o sentinel" (fechou pela metade) | CLOSED | W0.1 | ver D.1 | |
+| F.13 promessa de "registrar em memória" não cumprida | CLOSED | W0.6 | ver E.6 | |
+| F.14 ratificação `approx` prometida e ausente | CLOSED | W0.5 → W6.1 | ver A.5.4 — `pair-rail-verdict-v1.3.0-rc.2.md:44,83` | Claim de governança fechada em superfície ASSINADA |
+| F.15 temor de estouro do timeout em Linux | CLOSED | W1 + W3 | `.github/workflows/ownership-nightly.yml` — prosa corrigida para 65 células / 3 reds (`e5ce982`); `timeout-minutes: 90` intocado | Runs reais 41-48 min sob teto 90 |
+
+**Os 2 OPEN, ditos sem eufemismo.** E.2 e E.7 não têm patch no disco.
+Ambos moram em superfície de KERNEL (`check_arbitration_kernel.py`,
+`validate.yml`) e ambos exigem cerimônia com postura de override
+própria — E.2 na W3-K (sessão separada por U-3), E.7 no pack W4-C.
+Nenhum dos dois foi tocado nas cerimônias W3 (`e5ce982`) ou W2.8
+(`874117c`), por escopo fechado declarado nos respectivos sentinels.
+Enquanto não fecharem: um `grant` de kernel continua sem evento
+auditável, e `scripts/tests/**` continua sem lint em CI.
+
 ## Progress log
+
+- 2026-08-18 (S312-S313): **três landings fecham a parte cerimonial
+  deste plano e o §Ledger final fecha o AC-1.** (1) **W3 LANDADA**
+  (`e5ce982`) — pack canônico re-staged por item semântico pós-GA,
+  14 targets + 1 novo, G1-G7 verdes; detalhe no `### Registro de
+  execução — W3 LANDADA` acima, não repetido aqui. (2) **W2.8 + W0.9
+  LANDADOS** (`874117c`) — ADR-192 (gate-scripts, rota (b)-narrow) +
+  ADR-193 (break-glass renumerado) + manifesto de 9 membros; dois
+  abortos de gate ANTES do land, ambos curados por item; detalhe no
+  `### Registro de execução — W2.8 + W0.9 LANDADOS` acima. (3) **W6.1
+  CUMPRIDA fora deste plano:** o GA v1.3.0 saiu em 2026-08-17 pela
+  rota rc.4 do PLAN-177 (tag `v1.3.0`, verdito
+  `.claude/governance/pair-rail-verdict-v1.3.0.md`), e o PLAN-166
+  fechou `done` na higiene autorizada `a71229e` — o título "via rc.2"
+  ficou histórico, o objetivo não. (4) **E0 (W5) executado na S300** e
+  registrado onde ele decide financiamento: `PLAN-172:28-36` — S
+  conservador = 1,000, tempo-morto 59% de 723h sobre 14 planos, E1/E2
+  DESFINANCIADOS pela regra pré-registrada. O pré-registro assinado
+  (`PLAN-169/W5-preregistration.md.asc`) foi honrado: o resultado
+  negativo publica igual. **PLAN-170 ainda NÃO existe** — seu gatilho
+  (pós-corte v1.4.0-rc.1) não venceu, então o AC-6 segue parcial.
+  **Aberto ao fim desta entrada:** W3-K (E.2, sessão separada), W4 +
+  W4-C (inclui E.7), W5 restante e W6.2 (bump 1.4.0 = controle vivo do
+  AC-7). O plano permanece `executing`.
 
 - 2026-08-09 (S299, fix-forward pós-CI): **O primeiro Validate COMPLETO
   sobre o conteúdo W2 (run 31288404989) veio VERMELHO com 4 achados —
