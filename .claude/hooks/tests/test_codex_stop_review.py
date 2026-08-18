@@ -355,7 +355,18 @@ def _build_overlay() -> Path:
     """
     import tempfile
     dst = Path(tempfile.mkdtemp(prefix="w6-overlay-")) / "hooks"
-    shutil.copytree(HOOKS_LIVE, dst)
+    # S313: skip bytecode. Python writes a `.pyc` by creating
+    # `<name>.pyc.<pid>` and renaming it, so under the CI's parallel workers a
+    # sibling import can make that temp file vanish between copytree's
+    # directory listing and its copy — `shutil.Error: [Errno 2] No such file`,
+    # four ERRORs and a red job for a race that has nothing to do with the
+    # test's subject. The overlay only needs SOURCE; stale bytecode in it would
+    # be actively harmful (macOS even resolves it outside `__pycache__` via
+    # `sys.pycache_prefix`, so a copied `.pyc` can shadow an edited source).
+    shutil.copytree(
+        HOOKS_LIVE, dst,
+        ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyc.*"),
+    )
     return dst
 
 
