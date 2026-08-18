@@ -30,8 +30,14 @@ Data: <AAAA-MM-DD>
 .claude/hooks/check_postcompact_reinject.py
 .claude/hooks/check_precompact_continuity.py
 .claude/hooks/tests/test_audit_emit_api_contract.py
+.claude/hooks/tests/test_audit_emit_plan163_lifecycle_actions.py
 .claude/hooks/tests/test_check_compaction_continuity.py
+.claude/hooks/tests/test_codex_egress_proof_telemetry.py
+.claude/hooks/tests/test_git_bypass_guard.py
 .claude/hooks/tests/test_plan179_integration.py
+.claude/hooks/tests/test_postcompact_reinject_no_exec_payload.py
+.claude/hooks/tests/test_template_dogfood_parity.py
+.claude/hooks/tests/test_w5_scrub_enforcement.py
 .claude/scripts/probes/probe_postcompact_channel.py
 .claude/scripts/tests/test_probe_postcompact_channel.py
 .claude/settings.json
@@ -46,6 +52,7 @@ docs/CTO-GUIDE.md
 docs/GUIA-COMPLETO.md
 docs/README.md
 npm/README.md
+templates/settings/settings.base.json
 ```
 
 ## O problema que este pack fecha
