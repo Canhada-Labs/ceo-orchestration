@@ -1,0 +1,847 @@
+#!/usr/bin/env python3
+"""PreToolUse hook: HARD-DENY edits to the arbitration kernel.
+
+PLAN-019 P1-SEC-A (Phase 2 Wave 2A). Defense-in-depth on top of
+`check_canonical_edit.py`. The canonical-edit sentinel is the first
+line — it allows Owner-signed `approved.md` to unlock any canonical
+governance path. But the arbiter of that sentinel (the hook source
+itself, plus the _lib modules it imports, plus the policies YAML it
+consumes) must NOT be sentinel-unlockable: an agent that can edit the
+arbitration hook can remove itself from the guard list and then edit
+anything.
+
+## What's in the kernel (HARD-DENY list)
+
+1. **The four governance hooks** — check_agent_spawn.py,
+   check_canonical_edit.py, check_plan_edit.py, check_arbitration_kernel.py.
+2. **Hook shared library primitives** — _lib/policy.py, _lib/redact.py,
+   _lib/audit_emit.py, _lib/contract.py (neutral Event/Decision), the
+   Claude adapter, and the PII pattern bank.
+3. **Policy-as-code files** — .claude/policies/*.yaml + corresponding
+   .jsonl fixtures (these drive policy_dispatch.py decisions).
+
+Each is matched via a dedicated glob in `_KERNEL_PATHS` below.
+
+## Escape hatch (Owner-only)
+
+If the Owner must edit a kernel path (e.g. an ADR-approved refactor of
+the policy engine), they set BOTH of these env vars in the same shell
+session:
+
+    export CEO_KERNEL_OVERRIDE="<reason-slug>"   # e.g. ADR-045-refactor
+    export CEO_KERNEL_OVERRIDE_ACK="I-ACCEPT"
+
+The hook then allows the edit and emits a `veto_triggered` audit event
+with `reason_code=kernel_override_used` so the override is traceable.
+Absent BOTH env vars, the edit is blocked regardless of any sentinel.
+
+PLAN-169 W3-K (ledger item E.2) made that sentence TRUE. It was not:
+`main()` decided whether to audit the grant by reading a `decision` key
+out of its own egress JSON, and `_emit_allow()` never writes one (a
+top-level "allow" is invalid on the PreToolUse wire — see its comment).
+`decision == "allow"` was therefore False on every invocation and the
+grant audit was dead code from birth. Both the grant emits now key off
+`_is_override_grant()`, the single source of truth for the grant fact.
+
+This is stricter than sentinel gating on purpose: a spawned sub-agent
+cannot set env vars in the parent Claude process, so the ACK token
+cannot be forged by an agent spawn.
+
+## Fail-closed contract
+
+UNLIKE the sentinel hook, this hook is **fail-closed** on any
+observable internal error path (parse_error, unparseable payload):
+if the hook cannot determine whether the path is a kernel file, it
+treats it as potentially-kernel and blocks with a synthetic reason.
+The only exception is a catastrophic Python exception (e.g. ImportError
+on the adapter itself) — that still emits allow, because the sandbox
+cannot function at all if the adapter is broken (you cannot recover
+from a broken hook runtime via a blocking hook that depends on it).
+
+Tests verify the fail-closed posture (block on missing file_path when
+the tool is Edit|Write|MultiEdit).
+"""
+
+from __future__ import annotations
+
+import fnmatch
+import hashlib
+import json
+import os
+import re
+import sys
+from pathlib import Path
+from typing import List, Optional
+
+_HOOKS_DIR = Path(__file__).resolve().parent
+if str(_HOOKS_DIR) not in sys.path:
+    sys.path.insert(0, str(_HOOKS_DIR))
+
+
+# Arbitration kernel — full governance-enforcement surface.
+# Each pattern uses the same segment-glob rules as _CANONICAL_GUARDS in
+# check_canonical_edit.py: `*` matches a single segment, `**` matches
+# zero or more segments. See _fnmatch_segments below.
+_KERNEL_PATHS: List[str] = [
+    # The four governance hooks (edit-gating surface).
+    ".claude/hooks/check_agent_spawn.py",
+    ".claude/hooks/check_canonical_edit.py",
+    ".claude/hooks/check_plan_edit.py",
+    ".claude/hooks/check_arbitration_kernel.py",
+    # Skill-patch sentinel — same tier of power as the canonical guard.
+    ".claude/hooks/check_skill_patch_sentinel.py",
+    # Hook library primitives that back the above hooks.
+    ".claude/hooks/_lib/contract.py",
+    ".claude/hooks/_lib/policy.py",
+    ".claude/hooks/_lib/policy_preprocessors.py",
+    ".claude/hooks/_lib/redact.py",
+    ".claude/hooks/_lib/pii_patterns.py",
+    ".claude/hooks/_lib/audit_emit.py",
+    ".claude/hooks/_lib/adapters/claude.py",
+    # The policy-as-code declarative surface — drives policy_dispatch.py.
+    ".claude/policies/*.yaml",
+    ".claude/policies/*.yml",
+    ".claude/policies/fixtures/*.jsonl",
+    # The policy_dispatch dispatcher itself.
+    ".claude/hooks/policy_dispatch.py",
+    # PLAN-045 Wave 1 P0-03 — native-subagent frontmatter under kernel.
+    # ``.claude/agents/*.md`` carries the ``model:`` field read by
+    # Claude Code's native subagent dispatcher. F-01-03 documented the
+    # demotion-via-frontmatter attack: an agent that edits
+    # ``security-engineer.md`` can silently route the VETO role to
+    # Haiku. Adding this glob to the kernel HARD-DENY list means
+    # frontmatter mutations require ``CEO_KERNEL_OVERRIDE + ACK``
+    # (which a sub-agent cannot forge).
+    ".claude/agents/*.md",
+    # PLAN-085 Wave E.2 — ADR-116 13-entry kernel-extension (S111).
+    # Closes F-C2-008 single-edit catastrophic chain. Each entry maps to
+    # >=1 of the 4 attack vectors per ADR-116 §2. PLAN-089 will revisit
+    # the 22 deferred R-026 paths via a separate ADR.
+    #
+    # Attack-vector coverage per entry:
+    # (1) settings.json     -> hook configuration disable (vector 1 + 2)
+    # (2) _python-hook.sh   -> hook runtime swap (vector 1)
+    # (3) gpg_verify.py     -> sentinel signature bypass (vector 2)
+    # (4) audit_hmac.py     -> chain-integrity bypass (vector 3)
+    # (5) secret_patterns   -> secret-scan bypass (vector 1)
+    # (6) injection_patterns-> injection-scan bypass (vector 1)
+    # (7) output_scan       -> egress-scan bypass (vector 4)
+    # (8) codex_egress_redact-> Codex egress redactor (vector 4)
+    # (9) dispatcher/**     -> Pair-Rail VETO matrix (vector 4)
+    # (10-11) release.yml + validate.yml -> CI gate bypass (vector 2)
+    # (12) sentinel-signers.txt -> allowlist injection (vector 2)
+    # (13) trusted_env.py   -> ADR-040-AMEND-2 Layer 1 trust-root (vector 1)
+    ".claude/settings.json",
+    ".claude/hooks/_python-hook.sh",
+    ".claude/hooks/_lib/gpg_verify.py",
+    ".claude/hooks/_lib/audit_hmac.py",
+    ".claude/hooks/_lib/secret_patterns.py",
+    ".claude/hooks/_lib/injection_patterns.py",
+    ".claude/hooks/_lib/output_scan.py",
+    ".claude/hooks/_lib/codex_egress_redact.py",
+    ".claude/dispatcher/**/*",
+    ".github/workflows/release.yml",
+    ".github/workflows/validate.yml",
+    ".claude/sentinel-signers.txt",
+    # M8 — sentinel_signers.py is the ADR-121 YAML signer-registry
+    # loader consumed by check_canonical_edit.py's dual-rail signer check
+    # (is_valid_signer / load_registry). It is identity-trust + KERNEL-HARD-DENY-
+    # enforcer tier (same as sentinel-signers.txt and gpg_verify.py): an agent
+    # that can edit it can forge the signer-validity decision and grant itself
+    # canonical-edit authority. The canonical-edit sentinel guard already covers
+    # it via `.claude/hooks/_lib/*.py`, but that rail is sentinel-UNLOCKABLE;
+    # the kernel rail (no sentinel escape) must guard it too. Fail-CLOSED-only
+    # gap closure.
+    ".claude/hooks/_lib/sentinel_signers.py",
+    ".claude/hooks/_lib/trusted_env.py",
+    # PLAN-089 Wave A.4 — ADR-116-AMEND-1 kernel-extension-v2 START
+    # ADR-116-AMEND-1 (PLAN-089) — extends ADR-116 §4 enumeration; each
+    # entry scored against ADR-116 §4 criteria (>=2 of: tier-0-governance,
+    # audit-integrity, identity-trust, kernel-overrider-self-reference,
+    # KERNEL HARD-DENY enforcer). Rationale: PLAN-089/kernel-extension-
+    # v2-enumeration.md. Honest deferrals (15%) documented in the same file.
+    ".claude/hooks/_lib/mcp/canonical_guard.py",
+    ".claude/hooks/_lib/mcp/bearer_replay.py",
+    ".claude/hooks/_lib/credentials.py",
+    ".claude/hooks/_lib/canonical_json.py",
+    ".claude/hooks/_lib/audit_rotation.py",
+    ".claude/hooks/_lib/replay_redact.py",
+    ".claude/hooks/_lib/injection_salt.py",
+    ".claude/hooks/_lib/mcp_injection_scan.py",
+    ".claude/hooks/_lib/spec_context_sanitizer.py",
+    ".claude/hooks/_lib/state_store.py",
+    ".claude/hooks/_lib/filelock.py",
+    ".claude/hooks/_lib/adapters/codex.py",
+    # PLAN-156 Wave 2 (SENT-GK-A): the grok host adapter is enrolled in
+    # the SAME kernel-guarded wave that registers it. _KERNEL_PATHS
+    # enumerates adapter modules INDIVIDUALLY (not by glob), so without
+    # this row a later edit to the new enforcement adapter would be only
+    # sentinel-gated — an asymmetry vs claude.py/codex.py that a future
+    # edit could exploit (pair-rail R4/R5). grok.py owns the block→deny
+    # egress normalization that IS enforcement on that host.
+    ".claude/hooks/_lib/adapters/grok.py",
+    ".claude/hooks/_lib/adapters/_constants.py",
+    ".claude/hooks/_lib/__init__.py",
+    ".claude/hooks/_lib/adapters/__init__.py",
+    ".claude/hooks/_lib/mcp/__init__.py",
+    ".claude/hooks/_lib/tier_policy/loader.py",
+    ".claude/hooks/_lib/tier_policy/__init__.py",
+    ".claude/hooks/_lib/tier_policy/_constants.py",
+    ".claude/hooks/_lib/tier_policy/_agent_frontmatter.py",
+    ".claude/hooks/_lib/tier_policy/_types.py",
+    ".claude/hooks/_lib/agent_frontmatter.py",
+    ".claude/hooks/_lib/model_routing.py",
+    ".claude/hooks/_lib/mcp_routing.py",
+    ".claude/hooks/_lib/pair_rail_decide.py",
+    ".claude/hooks/_lib/escalation_signals.py",
+    ".claude/hooks/check_pair_rail.py",
+    ".claude/hooks/check_bash_safety.py",
+    ".claude/hooks/check_bash_canonical_forensic.py",
+    ".claude/hooks/check_codex_filewrite.py",
+    ".claude/hooks/check_codex_response.py",
+    ".claude/hooks/check_skill_bootstrap_post.py",
+    ".claude/hooks/check_skill_reference_read.py",
+    ".claude/hooks/check_read_injection.py",
+    ".claude/hooks/check_webfetch_injection.py",
+    ".claude/hooks/check_output_secrets.py",
+    ".claude/hooks/check_output_safety.py",
+    ".claude/hooks/check_mcp_response.py",
+    ".claude/hooks/check_tier_policy.py",
+    ".claude/hooks/check_tier_policy_misrouting_24h.py",
+    ".claude/hooks/check_subagent_fabrication.py",
+    ".claude/hooks/check_confidence_gate.py",
+    ".claude/hooks/check_anti_ceo_overhead.py",
+    ".claude/hooks/check_scratchpad_access.py",
+    ".claude/hooks/check_budget.py",
+    ".claude/hooks/check_fluency_nudge.py",
+    ".claude/hooks/audit_log.py",
+    ".claude/hooks/SessionStart.py",
+    ".claude/hooks/SessionEnd.py",
+    ".claude/hooks/Stop.py",
+    ".claude/hooks/UserPromptSubmit.py",
+    ".claude/hooks/emit_architect_outcome.py",
+    ".claude/tier-policy.json",
+    ".claude/tier-policy.json.sigchain",
+    ".claude/governance/governance-waivers.yaml",
+    ".claude/governance/codex-cli-pin.txt",
+    ".claude/governance/codex-cli-binary-sha256.txt",
+    # PLAN-163 T5.2 (ADR-182): the payload-pin manifest replaces the
+    # launcher-hash pin above (now a comment-only tombstone, kept
+    # guarded). The manifest is the runtime verify-then-invoke trust
+    # root for check_pair_rail.py AND the release.yml step-15 payload
+    # gate — enrolled in the SAME wave that creates it, so the new pin
+    # meets an already-guarded path, not a surprise (PLAN-156 SENT-GK-0
+    # precedent).
+    ".claude/governance/codex-cli-pin-manifest.json",
+    # PLAN-156 W0b (SENT-GK-0): the grok pin pair, enrolled in the same
+    # guarded step that creates it (debate C12) so the Wave-4 registry
+    # edit meets an already-guarded pin, not a surprise. The binary-SHA
+    # file is the real supply-chain gate for a proprietary rolling 0.x.
+    ".claude/governance/grok-cli-pin.txt",
+    ".claude/governance/grok-cli-binary-sha256.txt",
+    ".claude/governance/pair-rail-inputs-hash-manifest.txt",
+    ".claude/governance/pair-rail-verdict-template.md",
+    ".claude/governance/function-length-grandfather.yaml",
+    ".claude/governance/audit_tokens_allowlist.json",
+    ".github/CODEOWNERS",
+    ".github/workflows/mutation-gate.yml",
+    ".github/workflows/coverage.yml",
+    ".github/workflows/actionlint.yml",
+    # PLAN-089 Wave A.4 — ADR-116-AMEND-1 kernel-extension-v2 END
+    # PLAN-099 Wave E.1 — ADR-129 / ADR-135 federation paths (6 entries).
+    # Federation enable + LAN sentinel pairs + peer registry must be
+    # kernel-guarded so a sub-agent cannot forge an enable / bypass
+    # the LAN gate by overwriting peers.yaml. The trailing glob covers
+    # the dir-root semantic (plan §3 Wave E.1 entry #1) — any future
+    # file added under .claude/data/federation/ inherits kernel-guard.
+    ".claude/data/federation/peers.yaml",
+    ".claude/data/federation/enabled.md",
+    ".claude/data/federation/enabled.md.asc",
+    ".claude/data/federation/lan-enabled.md",
+    ".claude/data/federation/lan-enabled.md.asc",
+    ".claude/data/federation/**/*",
+    # PLAN-165 p1-corrected (NM-01/CX-1): machine-local posture STATE.
+    # The overlay decides the NEXT session's permission mode and the
+    # marker's prev_value is restored into it by night-mode off —
+    # posture-write by proxy. No ceremony ever tool-edits these
+    # (night-mode.py writes them as a process), so they sit at kernel
+    # tier: no sentinel can grant a tool write. The WRITER script is
+    # deliberately canonical-tier only (future ceremonies must be able
+    # to evolve it under sentinel).
+    ".claude/settings.local.json",
+    ".claude/state/night-mode.json",
+    # PLAN162_FIX_3 (PLAN-162 findings #3 + #8, consensus C10) — the two
+    # files the guards themselves TRUST, previously guarded by NEITHER
+    # rail (verified on HEAD: canonical=False, kernel=False for both):
+    #
+    #   1. the ADR-121 sentinel signer REGISTRY — the identity root
+    #      `check_canonical_edit._sentinel_grants_path` consults on the
+    #      dual signer rail. Unguarded, an ordinary Edit silently disarms
+    #      half the signer check, asymmetric with the legacy
+    #      `.claude/sentinel-signers.txt` which HAS been kernel-guarded
+    #      since ADR-116.
+    #   2. the policy hash-pin drift MANIFEST — it pins the policy files
+    #      that are themselves guarded; leaving the pinner rewritable
+    #      makes the pin decorative ("pin the pinner").
+    #
+    # Both are KERNEL tier (no sentinel escape) precisely because a
+    # sentinel that grants an edit to the signer registry could authorize
+    # its own future signer. Deliberately NOT paired with an
+    # "absence ⇒ fail-closed" inversion (C10): that would need a
+    # definition of "expected" which is itself editable, and would make
+    # DELETING a file the way to choose the posture.
+    ".claude/security/sentinel-signers-registry.yaml",
+    ".claude/policies/.drift-manifest.json",
+]
+
+
+def _emit_allow(system_message: Optional[str] = None) -> str:
+    # Claude Code hook schema: top-level "allow" is NOT valid.
+    # Emit empty {} or {"systemMessage": ...}.
+    out: dict = {}
+    if system_message:
+        out["systemMessage"] = system_message
+    return json.dumps(out, ensure_ascii=False)
+
+
+def _emit_block(reason: str) -> str:
+    return json.dumps(
+        {"decision": "block", "reason": reason}, ensure_ascii=False
+    )
+
+
+def _fnmatch_segments(path: str, pattern: str) -> bool:
+    """Segment-wise glob (copy of check_canonical_edit helper).
+
+    - `*` matches exactly one segment.
+    - `**` matches zero or more segments.
+    """
+    p_parts = path.split("/")
+    pat_parts = pattern.split("/")
+    return _match_segments(p_parts, pat_parts)
+
+
+def _match_segments(p_parts: List[str], pat_parts: List[str]) -> bool:
+    if not pat_parts:
+        return not p_parts
+    head, rest = pat_parts[0], pat_parts[1:]
+    if head == "**":
+        for i in range(len(p_parts) + 1):
+            if _match_segments(p_parts[i:], rest):
+                return True
+        return False
+    if not p_parts:
+        return False
+    if head == "*" or fnmatch.fnmatchcase(p_parts[0], head):
+        return _match_segments(p_parts[1:], rest)
+    return False
+
+
+# PLAN162_FIX_CASEFOLD (PLAN-162 consensus S1, P0 — BOTH rails).
+#
+# ``_match_segments`` matches with ``fnmatch.fnmatchcase``, i.e. exact
+# case. On a case-INSENSITIVE filesystem — APFS, the default on this
+# repo's platform — ``.claude/settings.JSON`` IS ``.claude/settings.json``:
+# a write through the case variant OVERWRITES the guarded file, yet the
+# variant classified non-kernel and sailed past the HARD-DENY the whole
+# threat model assumes unreachable. Measured on HEAD:
+#
+#     .claude/settings.JSON             canonical=False  kernel=False
+#     .claude/hooks/_lib/audit_emit.PY  canonical=False  kernel=False
+#     .claude/sentinel-signers.TXT      canonical=False  kernel=False
+#
+# The fix normalizes BOTH the candidate rel and the guard patterns to
+# lower case before matching. Over-classifying is the SAFE direction
+# here (a false kernel-classification costs an override ceremony; a
+# false non-classification is a silent bypass of the strictest rail).
+#
+# ``str.lower`` — not ``str.casefold`` — deliberately: casefold expands
+# 'ß'→'ss', changing segment LENGTH and therefore what a glob matches.
+# The exploited class is ASCII case variance, which ``lower()`` covers
+# exactly, and identical inputs always fold identically, so the
+# normalization can only ever ADD matches, never remove one.
+#
+# Precomputed at import so the hot path pays one ``str.lower()`` per
+# classification rather than one per (segment x pattern).
+_KERNEL_PATHS_FOLDED: List[str] = [pat.lower() for pat in _KERNEL_PATHS]
+
+
+def _is_kernel_path(path_str: str, repo_root: Path) -> bool:
+    """True if path_str resolves inside the kernel HARD-DENY list."""
+    if not path_str:
+        return False
+    p = Path(path_str)
+    try:
+        rel = str(p.resolve().relative_to(repo_root.resolve())).replace(
+            os.sep, "/"
+        )
+    except (ValueError, OSError):
+        # Path outside repo root → cannot be a kernel path by definition.
+        return False
+    # PLAN162_FIX_CASEFOLD — see the module note above.
+    rel_folded = rel.lower()
+    for pattern in _KERNEL_PATHS_FOLDED:
+        if _fnmatch_segments(rel_folded, pattern):
+            return True
+    return False
+
+
+_ACK_TOKEN = "I-ACCEPT"
+_REASON_RE = re.compile(r"^[A-Za-z0-9._\-]{1,120}$")
+
+
+def _override_granted(env: dict) -> bool:
+    """True only when BOTH env vars are set correctly.
+
+    `CEO_KERNEL_OVERRIDE` must be a non-empty reason slug matching
+    `[A-Za-z0-9._-]{1,120}`. `CEO_KERNEL_OVERRIDE_ACK` must equal the
+    literal ACK token `I-ACCEPT`. Both must be present — the ACK alone
+    (or a reason alone) does not grant override. This prevents
+    accidental pastes from elsewhere from enabling the bypass.
+    """
+    reason = (env.get("CEO_KERNEL_OVERRIDE") or "").strip()
+    ack = (env.get("CEO_KERNEL_OVERRIDE_ACK") or "").strip()
+    if not reason or not ack:
+        return False
+    if ack != _ACK_TOKEN:
+        return False
+    if not _REASON_RE.match(reason):
+        return False
+    return True
+
+
+# --- PLAN-169 W3-K (ledger E.2) — honest grant-path audit ----------------
+#
+# The pre-W3-K callsite passed the free-text override REASON as ``plan_id``
+# and a repo-relative PATH (silently truncated at 64 chars) as
+# ``ceremony_sha`` — a field SPEC/v1/audit-log.schema.md:415 names a
+# ceremony sha. Neither value was ever rejected: ``kernel_extension_landed``
+# rides ``_EMIT_GENERIC_PASSTHROUGH`` (audit_emit.py:1751), so the kwargs
+# survive the deny-by-default scrub verbatim. The event LANDED — with a
+# path in a digest field and a reason slug in a plan field.
+
+_EDIT_TOOLS = frozenset({"Edit", "Write", "MultiEdit"})
+_PLAN_ID_RE = re.compile(r"^PLAN-[0-9]{3,}$")
+_PLAN_ID_UNKNOWN = "unknown"
+
+
+def _resolve_plan_id_or_unknown() -> str:
+    """PLAN-NNN scoped to this session, or the literal ``unknown``.
+
+    Uses the framework's ONE plan-id derivation —
+    ``_lib.scratchpad_lib.resolve_plan_id`` (most recent
+    ``plan_transition`` for this session; consensus M2 forbids deriving
+    it from an env var, which an agent can forge). That function RAISES
+    when the session has no transition, which is the common case; we
+    translate the raise into ``unknown`` rather than invent a plan id.
+    """
+    try:
+        from _lib.scratchpad_lib import resolve_plan_id  # noqa: PLC0415
+        pid = (resolve_plan_id() or "").strip()
+    except Exception:
+        return _PLAN_ID_UNKNOWN
+    return pid if _PLAN_ID_RE.match(pid) else _PLAN_ID_UNKNOWN
+
+
+def _file_sha256(path_str: str) -> str:
+    """sha256 hexdigest of the target's CURRENT bytes, or ``""``.
+
+    This fires PreToolUse, so "current" is the pre-edit content of the
+    file the override is about to unlock — the only digest this callsite
+    honestly has. A SENTINEL digest is NOT obtainable here: the kernel
+    rail has no sentinel escape by construction (module docstring
+    §Escape hatch), so there is no approved.md to hash. When the target
+    does not exist yet (Write of a new file) or is unreadable we return
+    the EMPTY string — an empty digest field, never a filesystem path.
+    """
+    try:
+        with open(path_str, "rb") as fh:
+            return hashlib.sha256(fh.read()).hexdigest()
+    except Exception:
+        return ""
+
+
+def _is_override_grant(
+    *,
+    tool_name: str,
+    file_path: str,
+    repo_root: Path,
+    env: dict,
+) -> bool:
+    """True when THIS invocation is a kernel edit unlocked by the override.
+
+    Single source of truth for the grant fact, consumed by BOTH
+    ``decide()`` (which branch to take) and ``main()`` (whether to
+    audit). ``main()`` must not re-derive it from the egress JSON — see
+    the module docstring for why that test was structurally dead.
+    """
+    if tool_name not in _EDIT_TOOLS:
+        return False
+    if not file_path:
+        return False
+    if not _override_granted(env):
+        return False
+    try:
+        return _is_kernel_path(file_path, repo_root)
+    except Exception:
+        # Classification failed → do not claim a grant happened.
+        return False
+
+
+def decide(
+    *,
+    tool_name: str,
+    file_path: str,
+    repo_root: Path,
+    env: Optional[dict] = None,
+) -> str:
+    """Pure decision function. Returns JSON payload string."""
+    # Out of scope: only act on edit-class tools.
+    if tool_name not in _EDIT_TOOLS:
+        return _emit_allow()
+
+    src_env = env if env is not None else os.environ
+
+    if not file_path:
+        # Fail-closed: if the tool is edit-class but we have no file_path,
+        # we cannot prove the target is non-kernel. Block.
+        return _emit_block(
+            reason=(
+                "ARBITRATION-KERNEL-BLOCKED: edit-class tool invocation "
+                "without a file_path — cannot verify target is non-kernel. "
+                "Re-issue with a concrete file_path."
+            )
+        )
+
+    if not _is_kernel_path(file_path, repo_root):
+        return _emit_allow()
+
+    if _is_override_grant(
+        tool_name=tool_name,
+        file_path=file_path,
+        repo_root=repo_root,
+        env=src_env,
+    ):
+        reason = src_env.get("CEO_KERNEL_OVERRIDE", "").strip()
+        # PLAN-113 WIRE-AUDIT: emit kernel_extension_landed on override grant.
+        # This is the canonical callsite — every kernel-guarded edit that
+        # proceeds via CEO_KERNEL_OVERRIDE fires this event once per tool call.
+        # PLAN-169 W3-K: the field values are now what the SPEC names them.
+        # The override REASON is NOT laundered through plan_id — it travels
+        # on the veto_triggered event main() emits (reason_preview).
+        try:
+            from _lib import audit_emit as _audit_emit_ke
+            if hasattr(_audit_emit_ke, "emit_kernel_extension_landed"):
+                _audit_emit_ke.emit_kernel_extension_landed(
+                    plan_id=_resolve_plan_id_or_unknown(),
+                    wave="kernel-override",
+                    entries_added=0,
+                    cardinality_after=0,
+                    ceremony_sha=_file_sha256(file_path),
+                )
+        except Exception as _emit_exc:
+            # Fail-OPEN (a broken audit rail must never block the session)
+            # but NOT silent: a bare `except: pass` here is exactly why the
+            # grant path went years unexamined (PLAN-169 E.2).
+            print(
+                "[check_arbitration_kernel] audit emit FAILED "
+                "(fail-open): kernel_extension_landed: "
+                f"{type(_emit_exc).__name__}: {_emit_exc}",
+                file=sys.stderr,
+            )
+        return _emit_allow(
+            system_message=(
+                f"ARBITRATION-KERNEL: override granted — reason='{reason}'. "
+                "Edit audited; see event stream veto_triggered "
+                "reason_code=kernel_override_used."
+            )
+        )
+
+    try:
+        rel = str(Path(file_path).resolve().relative_to(repo_root.resolve())).replace(
+            os.sep, "/"
+        )
+    except Exception:
+        rel = file_path
+
+    return _emit_block(
+        reason=(
+            f"ARBITRATION-KERNEL-BLOCKED: '{rel}' is an arbitration-kernel "
+            "file (the hooks and libraries that enforce governance). "
+            "These paths have NO sentinel escape — they are only editable "
+            "when both CEO_KERNEL_OVERRIDE=<reason-slug> and "
+            f"CEO_KERNEL_OVERRIDE_ACK={_ACK_TOKEN} are set in the session "
+            "shell. This is stricter than the canonical-edit sentinel by "
+            "design: a sub-agent cannot forge these env vars. "
+            "See PLAN-019 P1-SEC-A."
+        )
+    )
+
+
+def _audit_block(rel: str, override_used: bool, reason: str = "") -> None:
+    """Best-effort emit of veto_triggered event. Never raises.
+
+    Schema v2.14 (PLAN-044 audit-v2 P1 #6): resolves caller identity
+    from CLAUDE_AGENT_NAME / CLAUDE_PARENT_AGENT / "ceo" and passes
+    session_id from CLAUDE_SESSION_ID for forensic traceability.
+
+    PLAN-169 W3-K: ``reason`` is the CEO_KERNEL_OVERRIDE slug on the
+    grant path (empty elsewhere). It is appended to ``reason_preview``
+    so the override's stated justification stays forensically visible
+    now that it no longer squats in ``kernel_extension_landed.plan_id``.
+    Failure stays fail-open but is no longer SILENT.
+    """
+    try:
+        from _lib import audit_emit
+        # Caller resolution (P1 #6 / schema v2.14):
+        # 1. CLAUDE_AGENT_NAME — set on sub-agent process tree
+        # 2. CLAUDE_PARENT_AGENT — set on nested spawns
+        # 3. "ceo" — top-of-session default (no spawner)
+        caller = (
+            os.environ.get("CLAUDE_AGENT_NAME")
+            or os.environ.get("CLAUDE_PARENT_AGENT")
+            or "ceo"
+        ).strip()
+        session_id = (os.environ.get("CLAUDE_SESSION_ID") or "").strip()
+        audit_emit.emit_veto_triggered(
+            hook="check_arbitration_kernel",
+            reason_code=(
+                "kernel_override_used" if override_used
+                else "kernel_edit_blocked"
+            ),
+            reason_preview=(
+                (
+                    f"kernel override used on {rel}"
+                    + (f" reason={reason[:120]}" if reason else "")
+                )
+                if override_used
+                else f"blocked kernel edit on {rel}"
+            ),
+            blocked_tool="Edit|Write|MultiEdit",
+            project=os.environ.get("CLAUDE_PROJECT_DIR") or "",
+            session_id=session_id,
+            caller=caller,
+        )
+    except Exception as _exc:
+        # Fail-OPEN on the audit rail, but leave a breadcrumb: a bare
+        # `except: return` here is indistinguishable from "the event was
+        # written" for anyone reading the log (PLAN-169 E.2).
+        print(
+            "[check_arbitration_kernel] audit emit FAILED (fail-open): "
+            f"veto_triggered: {type(_exc).__name__}: {_exc}",
+            file=sys.stderr,
+        )
+        return
+
+
+def _emit_legacy_decision_json(out: str, adapter, event=None) -> None:
+    """Emit a pre-built legacy (Claude-shaped) decision JSON string through
+    the resolved host adapter (PLAN-155 Wave 1 dispatch seam, debate A1).
+
+    ``decide()`` returns pre-built JSON strings for the legacy contract.
+    Under the default/claude adapter the string is written RAW + newline —
+    byte-identical to the pre-seam hook. Under any other host adapter the
+    string is parsed back into a neutral ``Decision`` and re-emitted via
+    the adapter's ``emit_decision`` WITH the parsed NormalizedEvent
+    (host egress shape is EXPLICIT-only — the codex adapter emits
+    ``hookSpecificOutput.permissionDecision`` only for host-wire-stamped
+    events), so a deny reaches the host in the shape its wire enforces
+    (a raw Claude-shaped line is foreign JSON on the codex wire →
+    silent fail-open → the S254 dead-gate class).
+    """
+    adapter_basename = (getattr(adapter, "__name__", "") or "").rsplit(".", 1)[-1]
+    if adapter_basename == "claude":
+        sys.stdout.write(out + "\n")
+        return
+    from _lib import contract as _contract  # noqa: PLC0415
+    parsed = json.loads(out)
+    adapter.emit_decision(
+        _contract.Decision(
+            allow=(parsed.get("decision") != "block"),
+            reason=parsed.get("reason"),
+            system_message=parsed.get("systemMessage"),
+            message=parsed.get("message"),
+        ),
+        event=event,
+    )
+
+
+def _adapter_emit(adapter, decision, event=None) -> None:
+    """Emit a neutral ``Decision`` through the resolved host adapter.
+
+    Claude path: the historical two-arg call — byte-identical output
+    (``claude.py:emit_decision`` does not take ``event=``). Any other
+    resolved adapter (codex host mode, ``_FailClosedAdapter``) receives
+    the parsed NormalizedEvent so the egress shape follows the wire that
+    produced it and the debate-A2 coherence override can fire.
+    """
+    adapter_basename = (getattr(adapter, "__name__", "") or "").rsplit(".", 1)[-1]
+    if adapter_basename == "claude":
+        adapter.emit_decision(decision)
+        return
+    adapter.emit_decision(decision, event=event)
+
+
+def main() -> int:
+    """Hook entry point.
+
+    Uses the Adapter Layer. On catastrophic (import/adapter) failure,
+    fail-open so the runtime isn't bricked. On payload-parse failure,
+    fail-closed for edit-class tools (blocks).
+
+    PLAN-155 Wave 1 (debate A1, ratified seam option b): the adapter is
+    resolved ONCE per invocation via the shared seam
+    ``_lib.adapters.resolve()``. The resolve call sits INSIDE the
+    infrastructure fail-open try (an ImportError-class failure keeps the
+    pre-seam "cannot even load the adapter → allow" contract), but the
+    debate-A2 coherence gate inside ``resolve()``
+    (explicitly-set-but-unresolvable ``CEO_HOOK_ADAPTER`` → INPUT class
+    per PLAN-152 C4) fails CLOSED by returning a ``_FailClosedAdapter``
+    whose egress ALWAYS denies in BOTH harness vocabularies (top-level
+    ``decision: block`` + ``hookSpecificOutput.permissionDecision:
+    deny``) with a stderr + audit breadcrumb — never a silent fallback
+    to the claude adapter. Under ``CEO_HOOK_ADAPTER`` unset/"claude"
+    downstream behavior is byte-identical.
+    """
+    try:
+        from _lib import adapters as _adapters  # noqa: E402
+        from _lib import contract as _contract  # noqa: E402
+
+        _adapter = _adapters.resolve()
+    except Exception:
+        # Cannot even load the adapter — don't brick the session.
+        sys.stdout.write(_emit_allow() + "\n")
+        return 0
+
+    try:
+        event = _adapter.read_event(phase="PreToolUse")
+    except Exception:
+        _adapter.emit_decision(_contract.allow())
+        return 0
+
+    tool_name = (event.tool_name or "").strip() or "Edit"
+
+    if event.parse_error:
+        # Fail-closed: if we cannot parse the stdin payload, we cannot
+        # trust the routing. If the matcher fired, the tool was edit-class;
+        # block to be safe.
+        if tool_name in _EDIT_TOOLS:
+            _emit_legacy_decision_json(
+                _emit_block(
+                    reason=(
+                        "ARBITRATION-KERNEL-BLOCKED: PreToolUse payload "
+                        "parse error on an edit-class invocation. Cannot "
+                        "verify target path; fail-closed."
+                    )
+                ),
+                _adapter,
+                event,
+            )
+            return 0
+        _adapter_emit(_adapter, _contract.allow(), event)
+        return 0
+
+    repo_root = Path(os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd())
+    file_path = event.file_path or ""
+
+    # PLAN-155 Wave 1 (S265 pair-rail P1#3): a codex apply_patch can touch
+    # MULTIPLE files; the host adapter surfaces every path as
+    # tool_input['apply_patch_paths']. If ANY of them is a kernel path,
+    # gate on THAT path — a benign first op must not smuggle a later op
+    # into the kernel. Key absent under Claude Code (byte-identical).
+    if isinstance(event.tool_input, dict):
+        _extra_paths = event.tool_input.get("apply_patch_paths") or []
+        if isinstance(_extra_paths, list) and len(_extra_paths) > 1:
+            for _pp in _extra_paths:
+                if not (isinstance(_pp, str) and _pp):
+                    continue
+                try:
+                    if _is_kernel_path(_pp, repo_root):
+                        file_path = _pp
+                        break
+                except Exception:
+                    continue
+
+    try:
+        out = decide(
+            tool_name=tool_name,
+            file_path=file_path,
+            repo_root=repo_root,
+        )
+    except Exception as e:
+        # PLAN-024 F-chaos-002 P0 fix: kernel guard MUST fail-CLOSED on
+        # edit-class tool names when decide() raises — matches the
+        # parse-error branch above (lines ~290-302) and chaos-and-
+        # resilience skill rule "safety mechanisms MUST NOT be disabled
+        # without a replacement". Non-edit tools (Bash, Read, etc.) keep
+        # the fail-open contract since they aren't guarded by this hook.
+        print(
+            f"[check_arbitration_kernel] FATAL: {type(e).__name__}: {e}",
+            file=sys.stderr,
+        )
+        if tool_name in _EDIT_TOOLS:
+            _emit_legacy_decision_json(
+                _emit_block(
+                    reason=(
+                        "ARBITRATION-KERNEL-BLOCKED: decide() raised "
+                        f"{type(e).__name__}; fail-closed on edit-class "
+                        "invocation per PLAN-024 F-chaos-002."
+                    )
+                ),
+                _adapter,
+                event,
+            )
+            return 0
+        _adapter_emit(_adapter, _contract.allow(), event)
+        return 0
+
+    parsed = json.loads(out)
+    decision = parsed.get("decision")
+    if decision == "block":
+        try:
+            rel = str(
+                Path(file_path).resolve().relative_to(repo_root.resolve())
+            ).replace(os.sep, "/")
+        except Exception:
+            rel = file_path
+        _audit_block(rel, override_used=False)
+    elif _is_override_grant(
+        tool_name=tool_name,
+        file_path=file_path,
+        repo_root=repo_root,
+        env=os.environ,
+    ):
+        # Allow path WITH override — still audit.
+        #
+        # PLAN-169 W3-K: this used to read `decision == "allow"` from the
+        # hook's OWN egress JSON. `_emit_allow()` emits `{}` or
+        # `{"systemMessage": ...}` and NEVER a `decision` key (top-level
+        # "allow" is invalid on the PreToolUse wire), so the test was
+        # False on every invocation: the branch was unreachable from the
+        # day it was written (`git log -S` finds no regression), and the
+        # `veto_triggered reason_code=kernel_override_used` promised by
+        # this module's docstring AND by the systemMessage the operator
+        # reads was never written. The grant fact now comes from the same
+        # predicate `decide()` branches on, not from parsing egress.
+        try:
+            rel = str(
+                Path(file_path).resolve().relative_to(repo_root.resolve())
+            ).replace(os.sep, "/")
+        except Exception:
+            rel = file_path
+        _audit_block(
+            rel,
+            override_used=True,
+            reason=(os.environ.get("CEO_KERNEL_OVERRIDE") or "").strip(),
+        )
+
+    # `decide()` returns pre-built JSON strings for the legacy contract;
+    # under the default/claude adapter the seam helper writes it directly
+    # + newline (byte identity preserved); other host adapters re-shape it
+    # on the parsed event's wire.
+    _emit_legacy_decision_json(out, _adapter, event)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

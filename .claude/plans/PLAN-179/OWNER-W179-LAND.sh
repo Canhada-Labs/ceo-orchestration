@@ -26,7 +26,10 @@ say() { printf '\n== %s\n' "$1"; }
 [ -f "$ST/BASELINE.sha256" ] || { echo "ABORT: BASELINE ausente"; exit 1; }
 
 # Caminhos DENTRO do pack, derivados do manifesto — nunca lista escrita à mão.
-PACKPATHS="$(awk '{ $1=""; sub(/^  /,""); print }' "$ST/MANIFEST.sha256")"
+# Formato: "<sha256>  <path>". Extrair por posição — `awk '{$1=""}'` reconstrói
+# o registro com OFS e deixa UM espaço à esquerda (bug pego pelo G2b do W3-K
+# antes de qualquer assinatura).
+PACKPATHS="$(sed 's/^[0-9a-f]\{64\}  //' "$ST/MANIFEST.sha256")"
 
 # PACKMAP: um pack path pode ter um DESTINO diferente no repo. Existe por um
 # motivo só, e ele é explícito: `.claude/settings.json` nega `Edit(SPEC/**)`,

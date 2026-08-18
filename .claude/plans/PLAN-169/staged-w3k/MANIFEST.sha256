@@ -1,0 +1,2 @@
+d680c9b49d45bc9df94795b0dadf77ef560dbef3af3cd63aa9b1940df04ef664  .claude/hooks/check_arbitration_kernel.py
+80630d0d2854283c5a375421f30a04c707e7f766dcdc53b7a1fb4e0318c29460  .claude/hooks/tests/test_arbitration_kernel_grant_emit.py
