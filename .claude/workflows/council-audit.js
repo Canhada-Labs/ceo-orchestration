@@ -288,6 +288,7 @@ Audit the scope across these dimensions and return evidence-backed findings:
 ${DIMENSIONS.map((d) => `- ${d.key}: ${d.brief}`).join('\n')}
 
 At most ${MAX_FINDINGS_PER_LANE} findings total, each independently checkable. Zero findings is a valid result.
+Effort estimates in tokens + sessions (ADR-081); a human calendar span ONLY for external_wait; convert any "weeks of work" in your analysis before reporting.
 8-FIELD CONTRACT (ADR-141): finding_id="${vendor}-NN", map_key=<dimension>, disposition (fix/accept/defer/moot),
 evidence_kind, evidence_pointer (path:line or exact grep — NOT prose), confidence as INTEGER basis points 0-10000,
 risk_tags, author="council/${vendor}", file, claim (<=200 chars), vendor="${vendor}".

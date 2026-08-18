@@ -39,6 +39,13 @@ on:
       # Re-pass rc.4 t7 P2: the per-PR gitignore unit must light this gate
       # up when it (or the generator it exercises) changes.
       - "scripts/tests/test-gitignore-symlink-and-dryrun-unit.sh"
+      # S313: the schema-generation pin guard + the two schema docs it
+      # protects. A commit that changes PLAN-SCHEMA/DEBATE-SCHEMA without
+      # appending the replaced generation's hash to upgrade.sh must light
+      # THIS gate up — otherwise the guard is a red gate nobody runs.
+      - "scripts/tests/test-schema-generation-pins-unit.sh"
+      - ".claude/plans/PLAN-SCHEMA.md"
+      - ".claude/plans/DEBATE-SCHEMA.md"
       # PLAN-168 W1+W2 (rail r3 P1): the nightly gate + its positive control
       # get fast per-PR steps HERE too — without these entries a PR could
       # break the gate's rc/status handling while every PR check stays green.
@@ -98,6 +105,13 @@ on:
       # Re-pass rc.4 t7 P2: the per-PR gitignore unit must light this gate
       # up when it (or the generator it exercises) changes.
       - "scripts/tests/test-gitignore-symlink-and-dryrun-unit.sh"
+      # S313: the schema-generation pin guard + the two schema docs it
+      # protects. A commit that changes PLAN-SCHEMA/DEBATE-SCHEMA without
+      # appending the replaced generation's hash to upgrade.sh must light
+      # THIS gate up — otherwise the guard is a red gate nobody runs.
+      - "scripts/tests/test-schema-generation-pins-unit.sh"
+      - ".claude/plans/PLAN-SCHEMA.md"
+      - ".claude/plans/DEBATE-SCHEMA.md"
       # PLAN-168 W1+W2 (rail r3 P1): the nightly gate + its positive control
       # get fast per-PR steps HERE too — without these entries a PR could
       # break the gate's rc/status handling while every PR check stays green.
@@ -195,6 +209,11 @@ jobs:
           echo "parity historical pin: $PIN"
           git fetch --no-tags --depth 1 origin "+refs/tags/$PIN:refs/tags/$PIN"
           git rev-parse --verify "refs/tags/$PIN^{commit}"
+          # S313: the schema-generation pin guard derives the set of prior
+          # schema generations from EVERY release tag (the set an adopter
+          # could have installed). Depth-1 per tag — a handful of trees.
+          git fetch --no-tags --depth 1 origin "+refs/tags/v*:refs/tags/v*"
+          echo "release tags fetched: $(git tag -l 'v[0-9]*' | wc -l)"
 
       - name: Setup Python 3.11
         # SHA-pinned (Sprint 7 Dependabot bump): actions/setup-python@v6.2.0
@@ -229,6 +248,18 @@ jobs:
         run: |
           set -euo pipefail
           bash scripts/tests/test-gitignore-symlink-and-dryrun-unit.sh
+
+      # S313: upgrade.sh refreshes the plans/ schema docs HASH-GATED against
+      # a hand-written list of prior generations. A schema edit that forgets
+      # to append the replaced generation's hash leaves every adopter on it
+      # STALE (the parity e2e went red on 996d72b for exactly this). The
+      # guard derives the generation set from the release tags fetched
+      # above (+ history when available) — zero enumerable generations is a
+      # scaffold FAILURE (exit 2), never a green skip.
+      - name: Schema-doc prior-generation pins are complete (S313 guard)
+        run: |
+          set -euo pipefail
+          bash scripts/tests/test-schema-generation-pins-unit.sh
 
       # PLAN-168 W1 (rail r3 P1): the nightly gate's fake-harness control is
       # milliseconds — run it per-PR so a PR touching the gate cannot break

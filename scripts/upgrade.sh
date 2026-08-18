@@ -3174,8 +3174,16 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
   done
 else
   # sha256 of every shipped prior generation (git history of each file).
+  # CONTRACT: any commit that changes one of these schema docs MUST append
+  # the hash of the generation it replaces to that doc's list, in the SAME
+  # commit — otherwise every adopter on the previous generation is left
+  # STALE (the S313 smoke-install red: 996d72b changed PLAN-SCHEMA and the
+  # v1.2.0/v1.3.0 generation 8ca4f866 was never listed). Enforced by
+  # scripts/tests/test-schema-generation-pins-unit.sh, which derives the
+  # generation set from git (release tags + history) instead of memory.
   _refresh_schema_doc ".claude/plans/PLAN-SCHEMA.md" \
-    "8a2033d241b113544f1e18abbd13f4c60cc6257140f304d95b29216193035232"
+    "8a2033d241b113544f1e18abbd13f4c60cc6257140f304d95b29216193035232" \
+    "8ca4f866797b7b02ba5161e3ab0e1cf43fe2ce59f6b5257baadb1e848fa6abf2"
   _refresh_schema_doc ".claude/plans/DEBATE-SCHEMA.md" \
     "574bd22e401308400622b1766a9d090e5afede1fb45938995316f38c554f1bf3"
 fi

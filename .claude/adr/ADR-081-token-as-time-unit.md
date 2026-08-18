@@ -14,7 +14,7 @@ supersedes: none
 superseded_by: none
 closes_finding: Owner correction Session 62 cont — "para de dar prazo humano a coisas que o claude resolve em minutos"
 staged_at: fa6d688
-enforcement_commit: pending (set in next commit)
+enforcement_commit: 996d72b811c04fed73be6f3ddbf820834d96d87d
 ---
 
 # ADR-081 — Canonical time/budget unit: Claude tokens, not human dev-time
