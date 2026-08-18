@@ -1,0 +1,4 @@
+199d5e8a130940889404ecc0c2166e34ad1b62b4be2619fde0ddbcb19e2e56df  scripts/upgrade.sh
+879dbfffc5948cb6dc77a70fece06af4af3374bb8c335581b44e8fca5183931e  .github/workflows/smoke-install.yml
+1ca74feb41860d9a37981ea1d7a4f354da659cbdec9d161a552fa27828791875  .claude/adr/ADR-081-token-as-time-unit.md
+037579f85a5c145d5114fb8d785f59c118c8c8c0748f071286bd4c5f1802d6b7  .claude/workflows/council-audit.js

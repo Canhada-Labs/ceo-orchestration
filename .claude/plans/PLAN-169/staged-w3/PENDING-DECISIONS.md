@@ -20,7 +20,11 @@ rota (bump 190→192 ADRs, SLSA→Level 2, timeout 35→50, assert de tag
 remota npm-publish:443). Aplicar whole-file REGREDIRIA o vivo.
 Mantidos como evidência do staging original.
 
-## pending-w28/ — DECIDIDO (S312, 2026-08-18) ✅
+## pending-w28/ — DECIDIDO (S312) e LANDADO (S313, `874117c`) ✅
+
+> Landado por cerimônia GPG na S313 (2026-08-18): ADR-192 + ADR-193 +
+> manifesto gate-scripts + 4 workflows fail-loud + RELEASE.md 31→32.
+> Este diretório é HISTÓRICO — nada aqui está pendente.
 
 > As duas decisões foram tomadas pelo Owner (registro verbatim no
 > PLAN-169 §OQ): W2.8 = **RATIFICADA (b)-narrow**; break-glass =

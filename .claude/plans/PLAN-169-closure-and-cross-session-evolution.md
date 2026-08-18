@@ -339,6 +339,25 @@ completa 7.049 passed. Curas V1/V2/V4/V5 do verdito rc.2 CURADAS.
   na mesma cerimônia futura da W2.8 ou noutra — 1 pinentry cobre."
   Execução: ADR renumerado 191→193 no mesmo trem staged-w28.
 
+### Registro de execução — W2.8 + W0.9 LANDADOS (S313, 2026-08-18, commit `874117c`)
+
+Cerimônia GPG (`W28-approved.md` + `.asc`, anchor `aa6462b`): 15 targets
++ 2 ADRs novos (192 gate-scripts, 193 break-glass) + manifesto
+`.claude/governance/gate-scripts-manifest.txt` (9 membros, REGENERADO do
+vivo no G5). 4 workflows ganharam o step fail-loud; RELEASE.md 31→32;
+contagem 192→194 nas 10 superfícies do verify-counts. G1-G7 verdes.
+Dois abortos ANTES do land, ambos pegos por gate e curados por item:
+- G1 (anti-stale) — o pack foi montado ANTES do closeout `c745f02`, que
+  editou o CLAUDE.md vivo. Cura: item CLAUDE.md re-staged sobre o vivo
+  (delta = só o bump), BASELINE/MANIFEST re-pinados (`fc587ff`).
+- G4 (rc agregado — a cura do follow-up do W3 acima, FUNCIONOU) —
+  verify-counts vermelho: o bump cobria 7 superfícies, o gate vigia 10
+  (faltavam ARCHITECTURE, docs/README, header do CHANGELOG). Cura: 3
+  targets + TARGETS/Scope estendidos (`aa6462b`). Classe: conjunto
+  fechado escrito de memória — derivar do gate, não recordar.
+- Itens 5-6 desta wave saem de PARCIAIS para DONE. `staged-w3/pending-w28/`
+  é histórico (o RELEASE.md landou por este trem).
+
 ### W3-K — Cerimônia de kernel (E.2) (L3+, escopo próprio)
 
 - Emits do caminho GRANT do `check_arbitration_kernel.py` são

@@ -1,0 +1,5 @@
+5aa93ee8a89a826244290ba7ea91c9db837c9bf2a3427edc7f49a92dd8280cde  scripts/upgrade.sh
+18e40e2af2e0a90936bd517f63e12dc173e66aade7b7cb420c39e7ba7df5233e  .github/workflows/smoke-install.yml
+97b0aaff8c49b68eb046ca0602a05b31be8c02af4e9c7abdf75614e1483f4357  .claude/adr/ADR-081-token-as-time-unit.md
+6ee910c971c7db9da0cc36c0732445420f2096ed05456eb4b069f678d82eb5e5  .claude/workflows/council-audit.js
+f9a90097beab77d4993f1c2c4d7b53a2ab1c25847fcfdde8c2f74162a6e56cb9  scripts/tests/test-schema-generation-pins-unit.sh

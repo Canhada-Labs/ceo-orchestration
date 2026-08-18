@@ -1,0 +1,411 @@
+name: Smoke Install
+
+on:
+  pull_request:
+    paths:
+      - "scripts/install.sh"
+      - "scripts/upgrade.sh"
+      # PLAN-161 (CI wiring): upgrade oracles + the manifest lib they
+      # exercise — keep BOTH filter lists (pull_request + push) in sync.
+      - "scripts/_framework_manifest_set.sh"
+      # The ownership + parity e2e call _hash_file/_hash_stdin from here, and
+      # this workflow is their ONLY CI execution — without the helper in the
+      # filter, a PR touching only it skips the gate entirely (codex W1
+      # round 10, P2: the "red gate nobody runs" class, one level deeper).
+      - "scripts/_hash_lib.sh"
+      - "scripts/tests/test-upgrade-dryrun-identity.sh"
+      - "scripts/tests/test-upgrade-exclusions.sh"
+      - "scripts/tests/smoke-install.sh"
+      # PLAN-166 F4 (OQ-4): the install/upgrade parity e2e and its classifier.
+      # The finding this closes is "a red gate nobody runs" (5th instance) --
+      # an unwired test is the same as no test.
+      - "scripts/tests/test-install-upgrade-parity-e2e.sh"
+      - "scripts/tests/_parity_classify.py"
+      # PLAN-166 F3 (ADR-155-AMEND-1): delivery-record ownership e2e —
+      # scripts/tests/*.sh runs ONLY in this workflow (same r11/r20 wiring
+      # rule as the parity e2e above).
+      - "scripts/tests/test-upgrade-spec-ownership.sh"
+      # PLAN-168 W1 (AC-1): the PLAN-167 ownership oracles + their truth
+      # table + contract doc. The unit oracle runs per-PR in THIS workflow;
+      # the ~25-min e2e runs in ownership-nightly.yml (schedule: ignores
+      # paths:, so it cannot live behind this filter) — but a PR touching
+      # the table/harness/contract must still light up the fast gate here.
+      # Without these entries, a PR changing only the table skips the gate
+      # entirely: the r10-F4 "red gate nobody runs" class, again.
+      - "scripts/tests/test-ownership-verdict-unit.sh"
+      - "scripts/tests/test-ownership-table.sh"
+      - "scripts/tests/ownership_table.tsv"
+      - "docs/ownership-decision-table.md"
+      # Re-pass rc.4 t7 P2: the per-PR gitignore unit must light this gate
+      # up when it (or the generator it exercises) changes.
+      - "scripts/tests/test-gitignore-symlink-and-dryrun-unit.sh"
+      # S313: the schema-generation pin guard + the two schema docs it
+      # protects. A commit that changes PLAN-SCHEMA/DEBATE-SCHEMA without
+      # appending the replaced generation's hash to upgrade.sh must light
+      # THIS gate up — otherwise the guard is a red gate nobody runs.
+      - "scripts/tests/test-schema-generation-pins-unit.sh"
+      - ".claude/plans/PLAN-SCHEMA.md"
+      - ".claude/plans/DEBATE-SCHEMA.md"
+      # PLAN-168 W1+W2 (rail r3 P1): the nightly gate + its positive control
+      # get fast per-PR steps HERE too — without these entries a PR could
+      # break the gate's rc/status handling while every PR check stays green.
+      # The pointer-generator render control is the per-PR half of INV-4
+      # (the full 4-leg e2e runs in ownership-nightly.yml).
+      - "scripts/tests/ownership-nightly-gate.sh"
+      - "scripts/tests/test-ownership-nightly-gate.sh"
+      - "scripts/tests/ownership-expected-reds.txt"
+      - "scripts/tests/test-protocol-pointer-render.sh"
+      - "scripts/tests/test-protocol-pointer-inv4.sh"
+      # PLAN-177 W1 (CF-9): the night-mode ignore EFFICACY e2e. Same
+      # wiring rule as every scripts/tests/*.sh above — unwired = no test.
+      # It installs at the PIN, so it also depends on the parity e2e
+      # (--print-pin) and on the .gitignore generator in the manifest lib,
+      # both already in this list.
+      - "scripts/tests/test-night-mode-ignore-effect.sh"
+      # t8 P2: the efficacy test hardcodes the paths night-mode.py emits —
+      # a PR changing only the emitter must light this gate up too.
+      - ".claude/scripts/night-mode.py"
+      - "templates/**"
+      # Widened from SPEC/v1/install-cli.md: SPEC/v1 is delivered by install.sh
+      # and (until F3) by nothing in upgrade.sh, so ANY SPEC/v1 change is a
+      # parity event, not just the CLI contract doc.
+      - "SPEC/v1/**"
+      # PLAN-166 F4 wiring (r11/r20): scripts/tests/*.sh runs ONLY here, so a
+      # PR touching just one of these would otherwise skip the regression.
+      - "scripts/doctor.sh"
+      - ".claude/.framework-version"
+      - ".claude/scripts/check-framework-updates.sh"
+      - ".github/workflows/smoke-install.yml"
+      # PLAN-006 Phase 1 (Sprint 6): Adapter Layer migration changes
+      # install-time expectations (hook import paths, contract). Scope
+      # broadened for the sprint; narrow back post-Sprint-7 closeout.
+      - ".claude/hooks/**"
+  push:
+    branches:
+      - main
+    paths:
+      # KEEP IDENTICAL to the pull_request list above. The two had already
+      # drifted (push was missing SPEC/v1 and this workflow file); PLAN-166 F4
+      # re-syncs them, because a filter that fires on the PR and not on the
+      # merge is a gate with a hole in it.
+      - "scripts/install.sh"
+      - "scripts/upgrade.sh"
+      - "scripts/_framework_manifest_set.sh"
+      - "scripts/_hash_lib.sh"
+      - "scripts/tests/test-upgrade-dryrun-identity.sh"
+      - "scripts/tests/test-upgrade-exclusions.sh"
+      - "scripts/tests/smoke-install.sh"
+      - "scripts/tests/test-install-upgrade-parity-e2e.sh"
+      - "scripts/tests/_parity_classify.py"
+      - "scripts/tests/test-upgrade-spec-ownership.sh"
+      - "scripts/tests/test-ownership-verdict-unit.sh"
+      - "scripts/tests/test-ownership-table.sh"
+      - "scripts/tests/ownership_table.tsv"
+      - "docs/ownership-decision-table.md"
+      # Re-pass rc.4 t7 P2: the per-PR gitignore unit must light this gate
+      # up when it (or the generator it exercises) changes.
+      - "scripts/tests/test-gitignore-symlink-and-dryrun-unit.sh"
+      # S313: the schema-generation pin guard + the two schema docs it
+      # protects. A commit that changes PLAN-SCHEMA/DEBATE-SCHEMA without
+      # appending the replaced generation's hash to upgrade.sh must light
+      # THIS gate up — otherwise the guard is a red gate nobody runs.
+      - "scripts/tests/test-schema-generation-pins-unit.sh"
+      - ".claude/plans/PLAN-SCHEMA.md"
+      - ".claude/plans/DEBATE-SCHEMA.md"
+      # PLAN-168 W1+W2 (rail r3 P1): the nightly gate + its positive control
+      # get fast per-PR steps HERE too — without these entries a PR could
+      # break the gate's rc/status handling while every PR check stays green.
+      # The pointer-generator render control is the per-PR half of INV-4
+      # (the full 4-leg e2e runs in ownership-nightly.yml).
+      - "scripts/tests/ownership-nightly-gate.sh"
+      - "scripts/tests/test-ownership-nightly-gate.sh"
+      - "scripts/tests/ownership-expected-reds.txt"
+      - "scripts/tests/test-protocol-pointer-render.sh"
+      - "scripts/tests/test-protocol-pointer-inv4.sh"
+      # PLAN-177 W1 (CF-9): the night-mode ignore EFFICACY e2e. Same
+      # wiring rule as every scripts/tests/*.sh above — unwired = no test.
+      # It installs at the PIN, so it also depends on the parity e2e
+      # (--print-pin) and on the .gitignore generator in the manifest lib,
+      # both already in this list.
+      - "scripts/tests/test-night-mode-ignore-effect.sh"
+      # t8 P2: the efficacy test hardcodes the paths night-mode.py emits —
+      # a PR changing only the emitter must light this gate up too.
+      - ".claude/scripts/night-mode.py"
+      - "templates/**"
+      - "SPEC/v1/**"
+      - "scripts/doctor.sh"
+      - ".claude/.framework-version"
+      - ".claude/scripts/check-framework-updates.sh"
+      - ".github/workflows/smoke-install.yml"
+      - ".claude/hooks/**"
+
+concurrency:
+  group: smoke-install-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    # PLAN-012 Phase 2 CEO_SOTA_DISABLE parity.
+    if: vars.CEO_SOTA_DISABLE != '1'
+    runs-on: ubuntu-latest
+    # PLAN-161: 5 -> 8 — headroom for the two upgrade oracles (each runs
+    # full install + upgrade legs against fixture adopter repos).
+    # PLAN-166 F4: 8 -> 20. MEASURED, not guessed. The parity e2e runs 2 full
+    # install legs + 1 upgrade leg PER ceremony mode, and the positive control
+    # runs the same again with a planted divergence: 12 install/upgrade
+    # operations added to this job. Local wall time (Darwin arm64, 16 cores,
+    # 2026-08-05): gate 122s + control 118s = 240s. A 2-core ubuntu-latest
+    # runner is the usual 2-3x slower, i.e. 8-12 min of NEW work on top of the
+    # ~5 min this job already spent. 15 would sit inside the noise band, and
+    # the perf-gate N=20 flake (PLAN-159) was exactly that mistake. Re-tighten
+    # once real CI runs give a p95.
+    # PLAN-166 F3 (assembler): 20 -> 25. The spec-ownership e2e adds 4 more
+    # installs + 3 upgrades (S1-S8; ~3-4 min local per the W1-C measurement),
+    # i.e. up to ~8-10 more CI minutes at the same 2-3x factor. Same
+    # anti-flake sizing rule as the F4 bump above.
+    # PLAN-177 W1 (CF-9): 25 -> 32. The night-mode efficacy e2e adds 3 installs
+    # + 2 upgrades. MEASURED, not guessed: 2m06s wall on Darwin arm64 (16
+    # cores, 2026-08-13), reproduced across two runs. At the same 2-3x runner
+    # factor this workflow already sizes with, that is 4-7 CI minutes, so +7.
+    # A job-level timeout that clips a green run reports as `cancelled` on an
+    # innocent step (the S2xx lesson), so the margin stays deliberate.
+    timeout-minutes: 32
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        # SHA-pinned (Sprint 7 Dependabot bump): actions/checkout@v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 1
+
+      # PLAN-169 W2.8 (ADR-192, route (b)-narrow) — gate-scripts integrity.
+      # Same canonical manifest as release.yml: the free scripts whose
+      # verdict this gate consumes (validate-governance.sh here) must match
+      # .claude/governance/gate-scripts-manifest.txt or the run fails loudly
+      # BEFORE any member is invoked. Residual (documented in ADR-192):
+      # the parity step later runs the INSTALLED copy of
+      # validate-governance.sh inside the target — that copy is delivered
+      # from this verified repo copy by install.sh in this same run.
+      - name: Gate-scripts integrity (W2.8 checksum manifest)
+        run: |
+          set -euo pipefail
+          M=.claude/governance/gate-scripts-manifest.txt
+          [[ -f "$M" ]] || { echo "::error::$M missing (W2.8 canonical manifest)"; exit 1; }
+          shasum -a 256 -c "$M" \
+            || { echo "::error::gate-script drift vs $M (ADR-192) — member edits go through the canonical-edit ceremony"; exit 1; }
+          echo "OK: all gate scripts match $M"
+
+      # PLAN-166 F4: the parity e2e's historical leg installs from a PINNED
+      # TAG. `fetch-depth: 1` produces a checkout with NO tags, so the pin
+      # would not resolve and the gate would die before comparing a single
+      # tree - "it passes on my clone" is precisely the hole this test exists
+      # to close. The pin is READ FROM THE TEST (--print-pin) so the workflow
+      # never becomes a second copy of that truth.
+      - name: Fetch the parity pin tag
+        run: |
+          set -euo pipefail
+          PIN="$(bash scripts/tests/test-install-upgrade-parity-e2e.sh --print-pin)"
+          echo "parity historical pin: $PIN"
+          git fetch --no-tags --depth 1 origin "+refs/tags/$PIN:refs/tags/$PIN"
+          git rev-parse --verify "refs/tags/$PIN^{commit}"
+          # S313: the schema-generation pin guard derives the set of prior
+          # schema generations from EVERY release tag (the set an adopter
+          # could have installed). Depth-1 per tag — a handful of trees.
+          git fetch --no-tags --depth 1 origin "+refs/tags/v*:refs/tags/v*"
+          echo "release tags fetched: $(git tag -l 'v[0-9]*' | wc -l)"
+
+      - name: Setup Python 3.11
+        # SHA-pinned (Sprint 7 Dependabot bump): actions/setup-python@v6.2.0
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.11"
+
+      - name: Install jq (for settings.json merge)
+        run: |
+          set -euo pipefail
+          if ! command -v jq >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq jq
+          fi
+          jq --version
+
+      # PLAN-168 W1 (AC-4, per-PR half): the DECISION oracle —
+      # _ownership_verdict() against every truth-table cell, in milliseconds.
+      # The OBSERVATION half (the ~25-min e2e) runs in ownership-nightly.yml;
+      # this fast half is what makes table/harness PRs cheap to gate.
+      - name: Ownership verdict unit oracle (milliseconds)
+        run: |
+          set -euo pipefail
+          bash scripts/tests/test-ownership-verdict-unit.sh
+
+      # Re-pass rc.4 t7 P2 (t6 condition 5): the gitignore symlink-refusal +
+      # dry-run preview unit is seconds — run it per-PR. The full
+      # install-state replay (B2 pre-state ceremony persistence + B2-c3/c4
+      # schema-refresh, --skip and symlink-refusal legs) is many minutes of
+      # real installs and runs in ownership-nightly.yml instead.
+      - name: Gitignore symlink + dry-run preview unit (t7)
+        run: |
+          set -euo pipefail
+          bash scripts/tests/test-gitignore-symlink-and-dryrun-unit.sh
+
+      # S313: upgrade.sh refreshes the plans/ schema docs HASH-GATED against
+      # a hand-written list of prior generations. A schema edit that forgets
+      # to append the replaced generation's hash leaves every adopter on it
+      # STALE (the parity e2e went red on 996d72b for exactly this). The
+      # guard derives the generation set from the release tags fetched
+      # above (+ history when available) — zero enumerable generations is a
+      # scaffold FAILURE (exit 2), never a green skip.
+      - name: Schema-doc prior-generation pins are complete (S313 guard)
+        run: |
+          set -euo pipefail
+          bash scripts/tests/test-schema-generation-pins-unit.sh
+
+      # PLAN-168 W1 (rail r3 P1): the nightly gate's fake-harness control is
+      # milliseconds — run it per-PR so a PR touching the gate cannot break
+      # its rc/status handling while PR checks stay green.
+      - name: Ownership nightly-gate positive control (fake harness)
+        run: |
+          set -euo pipefail
+          bash scripts/tests/test-ownership-nightly-gate.sh
+
+      # PLAN-168 W2 (AC-6, per-PR half of INV-4): the shared pointer
+      # generator's 8-scenario control — includes ONE real install (~1-2 min
+      # on CI iron). The full install->upgrade->cure e2e (4 legs, ~5 min CI)
+      # is nightly-only; MEASURED per the smoke budget notes above.
+      - name: Protocol pointer render control (generator parity)
+        run: |
+          set -euo pipefail
+          bash scripts/tests/test-protocol-pointer-render.sh
+
+      - name: Run smoke install
+        run: |
+          set -euo pipefail
+          bash scripts/tests/smoke-install.sh
+
+      # PLAN-161 upgrade oracles (green only once the U1/U2/U3 upgrade.sh
+      # fixes are in-tree — land atomically with them).
+      - name: Upgrade oracle — --dry-run identity (U1)
+        run: |
+          set -euo pipefail
+          bash scripts/tests/test-upgrade-dryrun-identity.sh
+
+      - name: Upgrade oracle — exclusion parity + opt-in purge (U2/U3)
+        run: |
+          set -euo pipefail
+          bash scripts/tests/test-upgrade-exclusions.sh
+
+      # WS4-user-ceremony-leg
+      - name: Install with --ceremony user (governance rc=0 + no out-of-.claude writes)
+        run: |
+          set -euo pipefail
+          U="$(mktemp -d)"
+          ( cd "$U" && git init -q )
+          CEO_INSTALL_SKIP_SELF_SHA=1 CEO_RAG_INSTALL_PROMPT=0 \
+            bash scripts/install.sh "$U" --ceremony user
+          echo '--- validate-governance.sh (user) ---'
+          ( cd "$U" && bash .claude/scripts/validate-governance.sh )
+          echo '--- assert only .claude/ at top level ---'  # WS4-sc2010-glob
+          extra=""
+          for _e in "$U"/* "$U"/.[!.]* "$U"/..?*; do
+            [ -e "$_e" ] || continue
+            _b="$(basename "$_e")"
+            case "$_b" in .claude|.git) continue ;; esac
+            extra="$extra $_b"
+          done
+          if [ -n "$extra" ]; then
+            echo "::error::--ceremony user wrote outside .claude/:$extra"
+            exit 1
+          fi
+          echo 'user-ceremony leg: PASS'
+
+      # PLAN-166 F4 (OQ-4) - install/upgrade parity on the RESULTING TREES,
+      # per ceremony mode. NO continue-on-error, deliberately: the assertion
+      # this replaces was dead twice over (tautological AND wired into no
+      # workflow), and an escape hatch here would reinstate exactly that.
+      # Exit 2 (KNOWN-OPEN) is a FAILURE too - it NAMES the outstanding
+      # PLAN-166 W1 prerequisites instead of skipping them silently.
+      - name: Install/upgrade parity e2e (maintainer + user ceremony)
+        run: |
+          set -euo pipefail
+          bash scripts/tests/test-install-upgrade-parity-e2e.sh
+
+      # Control of the control (AC-4). With ONE backup_and_replace line deleted
+      # from a COPY of upgrade.sh, the gate above must come back RED in EVERY
+      # ceremony mode. rc must be exactly 1: rc 0/2 means the gate went blind,
+      # rc 9 means the plant stopped biting (vacuous control). Both fail here.
+      # This step MUST stay AFTER the plain gate: if the un-planted run were
+      # already fatal, rc=1 here would prove nothing about the plant.
+      - name: Install/upgrade parity - positive control (planted divergence)
+        run: |
+          set -uo pipefail
+          rc=0
+          bash scripts/tests/test-install-upgrade-parity-e2e.sh \
+            --positive-control > /tmp/parity-control.log 2>&1 || rc=$?
+          if [ "$rc" -ne 1 ]; then
+            cat /tmp/parity-control.log
+            echo "::error::parity positive control returned rc=$rc, expected 1 - the planted install/upgrade divergence did NOT turn the gate red, so the gate above proves nothing"
+            exit 1
+          fi
+          # Second factor, LOAD-BEARING (re-pass closure): under `set -uo
+          # pipefail` (no -e) a non-matching grep would NOT fail the step, so
+          # an rc=1 from a failure UNRELATED to the plant (log with none of
+          # the plant markers) would pass — the registered-vacuous class
+          # (S292) this step exists to close. Demand plant evidence or fail.
+          # PLAN-169 W3.2 (fecha a exceção nomeada do AC-4 do PLAN-166,
+          # achado r6-P2): o fator antigo aceitava evidência NÃO-causal —
+          # qualquer um dos 3 marcadores, mesmo sem o controle ter
+          # DISPARADO. Exigir a linha que só existe quando o plante
+          # disparou em TODOS os modos, e nenhum veredito por modo :0/:2.
+          { grep -qF 'positive control: FIRED in every mode' /tmp/parity-control.log \
+            && ! grep -E 'per-mode verdicts.*:(0|2)' /tmp/parity-control.log >/dev/null; } || {
+            cat /tmp/parity-control.log
+            echo "::error::rc=1 but the log carries no PLANTED/per-mode-verdict evidence - the control went red for an unrelated reason, which proves nothing about the plant (vacuous control)"
+            exit 1
+          }
+          echo "positive control OK: planted divergence -> exit 1 in every ceremony mode"
+
+      # PLAN-166 F3 (ADR-155-AMEND-1, AC-3) — delivery-record ownership of
+      # the three conditional framework surfaces (SPEC/v1, root PROTOCOL.md,
+      # .claude/.framework-version) across install -> upgrade -> doctor ->
+      # updater. Scenarios S1-S8 incl. the forced-refresh route (S2), the
+      # legacy ADOPTER-FORK preserve (S4) and the marker-first updater
+      # regression (S6). Same wiring rationale as the parity e2e above:
+      # scripts/tests/*.sh runs ONLY here — unwired = no test. NO
+      # continue-on-error, deliberately.
+      - name: Upgrade SPEC/marker delivery-record ownership (S1-S8)
+        run: |
+          set -euo pipefail
+          bash scripts/tests/test-upgrade-spec-ownership.sh
+
+      # PLAN-177 W1 (CF-9) - EFFICACY of the posture-state ignores, which no
+      # parity check can see: an ignore that does not work is equally broken on
+      # both routes, so it is byte-identical and every parity gate stays green.
+      # Simulates the two files `/night-mode on` leaves behind (arming the real
+      # posture is a HUMAN action, PLAN-165 OQ1-redo) and asserts git reports
+      # neither, in the upgrade route AND in the fresh --ceremony user install
+      # the GA re-pass named as the damaged population. Each scenario carries an
+      # inline positive control that cannot be switched off. Needs the pin tag
+      # fetched above. NO continue-on-error, deliberately.
+      - name: night-mode ignore efficacy (upgrade route + user ceremony)
+        run: |
+          set -euo pipefail
+          bash scripts/tests/test-night-mode-ignore-effect.sh
+
+      - name: Assert npx/npm shim contract (if present)
+        # Phase 4 deliverable; skip if directory missing
+        run: |
+          set -euo pipefail
+          if [[ -d "npm" ]]; then
+            # Check no runtime deps
+            if [[ -f npm/package.json ]]; then
+              deps=$(jq '.dependencies // {} | length' npm/package.json)
+              if [[ "$deps" -ne 0 ]]; then
+                echo "::error::ceo-orchestration must ship with 0 runtime deps (got $deps)"
+                exit 1
+              fi
+              echo "OK: npm shim has zero runtime dependencies"
+            fi
+          else
+            echo "npm/ shim not yet present — skipping"
+          fi
