@@ -146,6 +146,20 @@ _framework_target_entries() {
     printf '%s\n' ".claude/frontend-team.md"
     printf '%s\n' ".claude/pitfalls-catalog.yaml"
     printf '%s\n' ".claude/task-chains.yaml"
+    # Framework schema contracts (re-pass rc.4 t5 P1, t8 P1): enumerated so
+    # the NEXT generation's baseline manifest classifies them 3-state — but
+    # ONLY when this run actually DELIVERED them (install_one wrote, or the
+    # upgrade's hash-gated refresh installed/refreshed/found-identical
+    # bytes). Same delivery-record condition as PROTOCOL.md/SPEC above:
+    # never file presence. An EXISTS-skipped adopter-customized schema in
+    # the manifest would record the ADOPTER's bytes as framework-owned, and
+    # a later uninstall would see the matching hash and DELETE it (t8 P1).
+    if [ "${FMS_DELIVERED_PLAN_SCHEMA:-0}" = "1" ]; then
+      printf '%s\n' ".claude/plans/PLAN-SCHEMA.md"
+    fi
+    if [ "${FMS_DELIVERED_DEBATE_SCHEMA:-0}" = "1" ]; then
+      printf '%s\n' ".claude/plans/DEBATE-SCHEMA.md"
+    fi
 
     # Protocol-enforcement directory targets (always installed).
     printf '%s\n' ".claude/hooks"
@@ -744,4 +758,391 @@ _protocol_pointer_is_degraded() {
   fi
   rm -f "$_ppid_tmp" 2>/dev/null
   return 1
+}
+
+# =============================================================================
+# PLAN-177 W1 (P1-1 / CF-9) — the ONE owner of every .gitignore surface the
+# framework delivers.
+#
+# THE BUG. install.sh has appended two marker-guarded blocks to the adopter's
+# ROOT .gitignore for a long time — the MCP shared-secret store (PLAN-019
+# P2-SEC-H) and the posture/runtime state (PLAN-165 CX-3) — and upgrade.sh has
+# appended NOTHING, ever. An adopter who installed at v1.2.0 and only ever runs
+# upgrade.sh therefore receives /night-mode without the ignores, so
+# `/night-mode on` leaves .claude/settings.local.json and the state marker as
+# untracked files (falsifying PLAN-165 AC-1, "git status stays empty") and
+# risks committing a machine-specific permission posture. The parity gate NAMED
+# that gap and allowlisted it, so CI was structurally unable to fail on it.
+#
+# WHY BOTH BLOCKS. Owning only the posture block would leave the mcp-secrets
+# block as a second, unowned copy of the same kind of text on the same file —
+# a ceremony that grants ownership of half a surface. An adopter older than
+# v1.2.0 also never received the mcp-secrets entry from an upgrade.
+#
+# WHY ONE PLACE. This is INV-4 (PLAN-168 W2): install.sh and upgrade.sh each
+# carrying a private copy of the same emitted text is precisely the class that
+# produced the PROTOCOL.md pointer divergence. Both callers render through
+# these functions, so the routes cannot diverge again.
+#
+# BYTE-COMPATIBILITY (do not "tidy"): every emission below reproduces the
+# shipped install.sh output exactly, including two idiosyncrasies that a
+# reviewer will be tempted to clean up.
+#   1. The posture header comment is emitted INSIDE the loop, once per APPENDED
+#      entry. Hoisting it to a single header changes the bytes on every adopter
+#      .gitignore and breaks install/upgrade tree parity.
+#   2. The mcp-secrets CREATE branch (no .gitignore yet) writes the header with
+#      NO leading blank line, while the APPEND branch writes one. Same file,
+#      two shapes, by construction.
+# BYTE-PROOF.md plants both as mutations and requires the harness to go red.
+#
+# IDEMPOTENCE, and its deliberate limit. Re-running never duplicates a line:
+# every entry is `grep -Fxq` (fixed-string, whole-line) checked first. The
+# check is PER LINE, not per block, so an adopter who deliberately deletes one
+# entry gets it re-appended on the next install/upgrade — with a fresh header
+# comment above it. That is intentional, not an oversight: these entries exist
+# to keep secrets and per-machine permission posture out of VCS, so the
+# framework re-asserts them rather than honouring a deletion it cannot
+# distinguish from an accident. An adopter who truly wants the path tracked
+# should scope it in .git/info/exclude or a nested .gitignore instead.
+#
+# Functions:
+#   _mcp_secrets_ignore_entry              -> the mcp-secrets entry (one line)
+#   _apply_mcp_secrets_ignore GITIGNORE    -> ensure it, create-or-append
+#   _posture_state_ignore_entries          -> the posture entries (one line,
+#                                             space-separated; both callers
+#                                             word-split it AND print it
+#                                             verbatim, so the single-line
+#                                             shape is part of the contract)
+#   _apply_posture_state_ignores GITIGNORE -> ensure them, append-only
+#   _claude_dir_gitignore_body             -> the NEW .claude/.gitignore body
+#   _apply_claude_dir_gitignore CLAUDE_DIR -> create-if-missing, never rewrite
+#   _preview_claude_dir_gitignore CLAUDE_DIR -> dry-run twin of the apply:
+#       reports would-CREATE / would-APPEND (per missing entry) /
+#       would-PRESERVE, so a seeded adopter file (e.g. `/cache/` only) is
+#       never misreported as PRESERVE when the real run would append
+#       (re-pass rc.4 t2 P1 — the seeded-file dry-run regression)
+# =============================================================================
+
+_mcp_secrets_ignore_entry() {
+  printf '%s\n' "state/mcp_client_secrets/"
+}
+
+_apply_mcp_secrets_ignore() {
+  # $1 = path to the adopter ROOT .gitignore (may not exist yet).
+  _msi_gitignore="$1"
+  # Re-pass rc.4 t2 (P1): shared symlink refusal — a root .gitignore
+  # symlink must never route framework appends elsewhere.
+  _root_gitignore_symlink_guard "$_msi_gitignore" || return 1
+  _msi_line="$( _mcp_secrets_ignore_entry )"
+  if [ -f "$_msi_gitignore" ]; then
+    if ! grep -Fxq "$_msi_line" "$_msi_gitignore" 2>/dev/null; then
+      {
+        echo ""
+        echo "# PLAN-019 P2-SEC-H: MCP shared-secret store (never commit)"
+        echo "$_msi_line"
+      } >> "$_msi_gitignore"
+      echo "    APPENDED to .gitignore: $_msi_line"
+    else
+      echo "    .gitignore already excludes $_msi_line"
+    fi
+  else
+    {
+      echo "# PLAN-019 P2-SEC-H: MCP shared-secret store (never commit)"
+      echo "$_msi_line"
+    } > "$_msi_gitignore"
+    echo "    CREATED .gitignore with: $_msi_line"
+  fi
+  # t9 P1: the SECRET store is exactly where textual presence must not be
+  # mistaken for effective exclusion — a later `!` negation would leave
+  # secret files commit-eligible while this applier reports "already
+  # excludes". Same shared probe + re-assert as the posture entries.
+  _msi_repo="$( dirname "$_msi_gitignore" )"
+  _gitignore_reassert_effective "$_msi_repo" "$_msi_gitignore" \
+    "$_msi_line" "state/mcp_client_secrets/__ceo_ignore_probe__" || return 1
+  return 0
+}
+
+_posture_state_ignore_entries() {
+  printf '%s\n' ".claude/state/ .claude/settings.local.json"
+}
+
+_root_gitignore_symlink_guard() {
+  # $1 = path to the adopter ROOT .gitignore. 0 = safe; 1 = symlink
+  # (re-pass rc.4 t3 P2: shared predicate for APPLY *and* dry-run
+  # previews — the preview must never say "would ENSURE" where the real
+  # run refuses).
+  if [ -L "$1" ]; then
+    echo "    ERROR: root .gitignore is a symlink — refusing to write through it" >&2
+    return 1
+  fi
+  return 0
+}
+
+# t8 P1: textual PRESENCE of an exact ignore line is not EFFECTIVENESS —
+# a later `!*.json` negation in the same (or a deeper) file wins in git,
+# so `grep -Fxq` alone let night-mode artifacts stay commit-eligible.
+# _gitignore_reassert_effective probes git's EFFECTIVE answer for each
+# mandatory exclusion; when a probe is visible it APPENDS the exclusion
+# again (after the winning negation — last matching rule wins) and
+# re-probes; a still-visible probe fails loudly (the negation lives in a
+# file this applier does not own, e.g. a deeper .gitignore).
+#   $1 = repo root to run git in; $2 = gitignore file to re-assert into;
+#   $3 = the raw exclusion line; $4 = repo-relative probe path.
+# Outside a git work tree the probe cannot run — NOTE and return 0
+# (fail-open on infra; the textual pass above already ran).
+_gitignore_reassert_effective() {
+  _gre_repo="$1"; _gre_file="$2"; _gre_line="$3"; _gre_probe="$4"
+  if ! git -C "$_gre_repo" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    echo "    NOTE: not a git work tree — cannot probe effective ignore for $_gre_line"
+    return 0
+  fi
+  # t10 P1 #2: ignore rules NEVER affect files already in the index — a
+  # pre-rc.4 adopter who committed the posture/secret path stays dirty no
+  # matter what this file says. Detect tracked content FIRST and require
+  # an explicit migration; this is fail-CLOSED because leaving it silent
+  # is exactly the leak this delivery exists to close.
+  case "$_gre_probe" in
+    */__ceo_ignore_probe__) _gre_scope="$( dirname "$_gre_probe" )" ;;
+    *)                      _gre_scope="$_gre_probe" ;;
+  esac
+  # sed, never `head` (t11 P2): under the callers' pipefail, head closing
+  # the pipe early makes ls-files exit 141 and aborts the WHOLE upgrade
+  # before the migration message prints (the repo's known SIGPIPE class).
+  _gre_tracked="$( git -C "$_gre_repo" ls-files -- "$_gre_scope" 2>/dev/null | sed -n '1,5p' )"
+  if [ -n "$_gre_tracked" ]; then
+    echo "    ERROR: $_gre_scope is already TRACKED by git — an ignore rule cannot protect it." >&2
+    echo "      Migrate explicitly, then re-run:" >&2
+    printf '%s\n' "$_gre_tracked" | while IFS= read -r _gre_t; do
+      echo "        git rm --cached '$_gre_t'" >&2
+    done
+    return 1
+  fi
+  # t10 P1 #2: --no-index — plain check-ignore consults the index and
+  # reports a tracked path as unmatched, causing a re-assert loop; the
+  # question here is strictly "does the PATTERN SET cover this path?".
+  if git -C "$_gre_repo" check-ignore -q --no-index -- "$_gre_probe" 2>/dev/null; then
+    return 0
+  fi
+  {
+    echo ""
+    echo "# Re-asserted by ceo-orchestration (re-pass rc.4 t8 P1): a later"
+    echo "# rule in this file negated the mandatory exclusion below; git's"
+    echo "# last-matching-rule-wins makes this trailing copy effective."
+    printf '%s\n' "$_gre_line"
+  } >> "$_gre_file"
+  if git -C "$_gre_repo" check-ignore -q --no-index -- "$_gre_probe" 2>/dev/null; then
+    echo "    RE-ASSERTED (was textually present but negated): $_gre_line"
+    return 0
+  fi
+  # t10 P1 #1: a still-visible SECURITY exclusion is a FAILURE, not a
+  # warning — returning 0 here let install/upgrade finish green while
+  # the secret store stayed commit-eligible (e.g. a deeper
+  # state/.gitignore re-including it, which outranks this file).
+  echo "    ERROR: $_gre_line is present but NOT effective (a rule outside $_gre_file wins — e.g. a deeper .gitignore re-including it). Fix the adopter ignore rules, then re-run." >&2
+  return 1
+}
+
+_apply_posture_state_ignores() {
+  # $1 = path to the adopter ROOT .gitignore (append creates it if absent).
+  _psi_gitignore="$1"
+  _root_gitignore_symlink_guard "$_psi_gitignore" || return 1
+  for _psi_line in $( _posture_state_ignore_entries ); do
+    if [ -f "$_psi_gitignore" ] && grep -Fxq "$_psi_line" "$_psi_gitignore" 2>/dev/null; then
+      echo "    .gitignore already excludes $_psi_line"
+      continue
+    fi
+    {
+      echo ""
+      echo "# PLAN-165 CX-3: per-machine posture/runtime state (never commit)"
+      echo "$_psi_line"
+    } >> "$_psi_gitignore"
+    echo "    APPENDED to .gitignore: $_psi_line"
+  done
+  # t8 P1: presence pass done — now assert EFFECTIVENESS per entry.
+  _psi_repo="$( dirname "$_psi_gitignore" )"
+  _gitignore_reassert_effective "$_psi_repo" "$_psi_gitignore" \
+    ".claude/state/" ".claude/state/__ceo_ignore_probe__" || return 1
+  _gitignore_reassert_effective "$_psi_repo" "$_psi_gitignore" \
+    ".claude/settings.local.json" ".claude/settings.local.json" || return 1
+  return 0
+}
+
+_claude_dir_gitignore_body() {
+  # Paths are anchored with a leading slash so they bind to .claude/ ONLY and
+  # cannot match a same-named path deeper in an adopter tree.
+  printf '%s\n' \
+    "# Delivered by ceo-orchestration (PLAN-177 W1 / CF-9)." \
+    "#" \
+    "# Per-machine posture + runtime state that must never reach VCS:" \
+    "#   state/             runtime state as a whole (PLAN-163 T3.1)" \
+    "#   settings.local.json  permission overlay deciding the NEXT session's" \
+    "#                        posture (PLAN-165)" \
+    "#" \
+    "# The root .gitignore carries the same exclusions for adopters who track" \
+    "# this tree from the repository root. This file additionally covers the" \
+    "# --ceremony user install, which never writes outside .claude/ and so" \
+    "# never received them." \
+    "#" \
+    "# Adopter-owned once created: install and upgrade never REPLACE this" \
+    "# file — adopter bytes are preserved; missing mandatory framework" \
+    "# security entries may be APPENDED (additively reasserted) on upgrade." \
+    "/state/" \
+    "/settings.local.json"
+}
+
+_apply_claude_dir_gitignore() {
+  # $1 = the adopter .claude directory.
+  # Create when absent; when PRESENT, append only the entries that are
+  # missing, per line, preserving every adopter byte (re-pass rc.4 t1
+  # P1-b: an adopter with a pre-existing .claude/.gitignore -- e.g.
+  # /cache/ only -- never received /state/ nor /settings.local.json,
+  # so night-mode state stayed commit-eligible under --ceremony user;
+  # create-if-missing alone proved the clean-target case only). Same
+  # grep -Fxq per-entry predicate as the root blocks: the file stays
+  # adopter-owned, nothing is rewritten, a deliberate edit to OUR
+  # comment lines is never repaired.
+  _cdg_dir="$1"
+  _cdg_file="$_cdg_dir/.gitignore"
+  # Re-pass rc.4 t2 (P1): NEVER follow a symlink here. A .claude/.gitignore
+  # symlinked to another writable file would receive framework appends at
+  # the EXTERNAL target; a dangling symlink passes `[ ! -e ]` and the
+  # redirect would CREATE its target. -L catches both, before any read.
+  if [ -L "$_cdg_file" ]; then
+    echo "    ERROR: .claude/.gitignore is a symlink — refusing to read or write through it (preserve/replace it manually)" >&2
+    return 1
+  fi
+  if [ ! -e "$_cdg_file" ]; then
+    [ -d "$_cdg_dir" ] || mkdir -p "$_cdg_dir"
+    _claude_dir_gitignore_body > "$_cdg_file"
+    echo "    CREATED: .claude/.gitignore"
+    # t11 P1: DO NOT return here — the effectiveness + tracked checks
+    # below must run on the freshly created file too. A user-ceremony
+    # adopter with an already-TRACKED .claude/settings.local.json got a
+    # green install while the overlay stayed commit-eligible (user
+    # ceremony never runs the root helper that would have caught it).
+    _cdg_repo="$( dirname "$_cdg_dir" )"
+    _gitignore_reassert_effective "$_cdg_repo" "$_cdg_file" \
+      "/state/" ".claude/state/__ceo_ignore_probe__" || return 1
+    _gitignore_reassert_effective "$_cdg_repo" "$_cdg_file" \
+      "/settings.local.json" ".claude/settings.local.json" || return 1
+    return 0
+  fi
+  if [ ! -f "$_cdg_file" ]; then
+    echo "    ERROR: .claude/.gitignore exists but is not a regular file" >&2
+    return 1
+  fi
+  _cdg_added=0
+  for _cdg_entry in "/state/" "/settings.local.json"; do
+    if grep -Fxq "$_cdg_entry" "$_cdg_file"; then
+      continue
+    fi
+    {
+      echo ""
+      echo "# Delivered by ceo-orchestration (PLAN-177 W1 / CF-9): per-machine"
+      echo "# posture/runtime state (never commit)."
+      printf '%s\n' "$_cdg_entry"
+    } >> "$_cdg_file"
+    _cdg_added=1
+  done
+  # t8 P1: presence pass done — now assert EFFECTIVENESS per entry
+  # (probes are repo-relative; the repo root is the parent of .claude/).
+  _cdg_repo="$( dirname "$_cdg_dir" )"
+  _gitignore_reassert_effective "$_cdg_repo" "$_cdg_file" \
+    "/state/" ".claude/state/__ceo_ignore_probe__" || return 1
+  _gitignore_reassert_effective "$_cdg_repo" "$_cdg_file" \
+    "/settings.local.json" ".claude/settings.local.json" || return 1
+  if [ "$_cdg_added" = "1" ]; then
+    echo "    APPENDED: missing posture entries into existing .claude/.gitignore"
+  else
+    echo "    EXISTS: .claude/.gitignore already carries both entries"
+  fi
+  return 0
+}
+
+# t11 P1 #2: read-only tracked-path classifier SHARED by apply previews —
+# prints the tracked sensitive paths (max 5) under $2.. scopes of repo $1;
+# empty output == nothing tracked. Never writes, never fails the caller.
+_gitignore_tracked_sensitive() {
+  _gts_repo="$1"; shift
+  git -C "$_gts_repo" rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 0
+  for _gts_scope in "$@"; do
+    git -C "$_gts_repo" ls-files -- "$_gts_scope" 2>/dev/null
+  done | sed -n '1,5p'
+  return 0
+}
+
+_preview_claude_dir_gitignore() {
+  # Dry-run twin of _apply_claude_dir_gitignore (re-pass rc.4 t2 P1):
+  # SAME per-entry predicate, ZERO writes. Reports the action the real
+  # run would take — including would-APPEND on a seeded adopter file.
+  _pcg_file="$1/.gitignore"
+  if [ -L "$_pcg_file" ]; then
+    echo "    (dry-run) ERROR: .claude/.gitignore is a symlink — real run would REFUSE" >&2
+    return 1
+  fi
+  if [ ! -e "$_pcg_file" ]; then
+    # t12 P1: the ABSENT branch must be as honest as the rest — the real
+    # run CREATES the file and then fails on the tracked check, so a
+    # would-CREATE + exit 0 preview over a tracked overlay lies. Same
+    # read-only classifier, still zero writes.
+    _pcg_repo="$( dirname "$1" )"
+    _pcg_tracked="$( _gitignore_tracked_sensitive "$_pcg_repo" \
+      ".claude/settings.local.json" ".claude/state" )"
+    if [ -n "$_pcg_tracked" ]; then
+      echo "    (dry-run) ERROR: sensitive path(s) already TRACKED — real run would CREATE .claude/.gitignore and then REFUSE, demanding git rm --cached:" >&2
+      printf '%s\n' "$_pcg_tracked" | sed 's/^/      /' >&2
+      return 1
+    fi
+    echo "    (dry-run) would CREATE: .claude/.gitignore"
+    return 0
+  fi
+  if [ ! -f "$_pcg_file" ]; then
+    echo "    (dry-run) ERROR: .claude/.gitignore exists but is not a regular file" >&2
+    return 1
+  fi
+  _pcg_missing=""
+  for _pcg_entry in "/state/" "/settings.local.json"; do
+    grep -Fxq "$_pcg_entry" "$_pcg_file" || _pcg_missing="$_pcg_missing $_pcg_entry"
+  done
+  # t9 P1: the real run now RE-ASSERTS a textually-present-but-negated
+  # entry, so a "would PRESERVE" preview over that state is a lie. Run the
+  # SAME read-only `git check-ignore` probes and report would-RE-ASSERT.
+  _pcg_repo="$( dirname "$1" )"
+  _pcg_reassert=""
+  if git -C "$_pcg_repo" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    if ! git -C "$_pcg_repo" check-ignore -q --no-index -- \
+         ".claude/state/__ceo_ignore_probe__" 2>/dev/null; then
+      case "$_pcg_missing" in
+        *" /state/"*) : ;;  # already reported as would-APPEND
+        *) _pcg_reassert="$_pcg_reassert /state/" ;;
+      esac
+    fi
+    if ! git -C "$_pcg_repo" check-ignore -q --no-index -- \
+         ".claude/settings.local.json" 2>/dev/null; then
+      case "$_pcg_missing" in
+        *" /settings.local.json"*) : ;;
+        *) _pcg_reassert="$_pcg_reassert /settings.local.json" ;;
+      esac
+    fi
+  fi
+  if [ -n "$_pcg_missing" ]; then
+    echo "    (dry-run) would APPEND into existing .claude/.gitignore:$_pcg_missing"
+  fi
+  if [ -n "$_pcg_reassert" ]; then
+    echo "    (dry-run) would RE-ASSERT (present but negated by a later rule):$_pcg_reassert"
+  fi
+  # t11 P1 #2: the REAL run refuses on tracked sensitive paths — a
+  # would-PRESERVE preview over that state is dishonest. Same read-only
+  # classifier, no writes.
+  _pcg_tracked="$( _gitignore_tracked_sensitive "$_pcg_repo" \
+    ".claude/settings.local.json" ".claude/state" )"
+  if [ -n "$_pcg_tracked" ]; then
+    echo "    (dry-run) ERROR: sensitive path(s) already TRACKED — real run would REFUSE and demand git rm --cached:" >&2
+    printf '%s\n' "$_pcg_tracked" | sed 's/^/      /' >&2
+    return 1
+  fi
+  if [ -z "$_pcg_missing" ] && [ -z "$_pcg_reassert" ]; then
+    echo "    (dry-run) EXISTS: .claude/.gitignore already carries both entries (would PRESERVE)"
+  fi
+  return 0
 }

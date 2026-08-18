@@ -6,6 +6,7 @@
 #                                    [--pin <tag>] [--dry-run]
 #                                    [--skip <glob>] [--no-diff-warn]
 #                                    [--no-deprecation-warn]
+#                                    [--ceremony <maintainer|user>]
 #
 # What it does:
 #   - Backs up the current .claude/team.md, .claude/frontend-team.md, .claude/skills/,
@@ -254,6 +255,17 @@ while [[ $# -gt 0 ]]; do
       DRY_RUN=1
       shift
       ;;
+    --ceremony)
+      # Re-pass rc.4 t3 (P1): explicit ceremony for PRE-STATE targets
+      # (no readable .install-state.json). A RECORDED ceremony always
+      # wins over this flag — the flag exists for the migration case.
+      CEREMONY_FLAG="${2:-}"
+      case "$CEREMONY_FLAG" in
+        maintainer|user) : ;;
+        *) echo "ERROR: --ceremony must be 'maintainer' or 'user' (got '$CEREMONY_FLAG')" >&2; exit 2 ;;
+      esac
+      shift 2
+      ;;
     --purge-misinstalled)
       # PLAN-161 U3 (OQ1 Owner-ratified): opt-in, hash-gated purge of
       # mis-installed framework-internal excluded-tree files. NEVER default-on.
@@ -405,6 +417,15 @@ Options:
   --skip <glob>         Exclude files from the overwrite (repeat for multiple globs).
                         Example: --skip='.claude/scripts/local/*'
   --skip=<glob>         Alternate inline syntax for --skip.
+  --ceremony <maintainer|user>
+                        Re-pass rc.4 t3/t5: explicit ceremony for PRE-STATE
+                        targets (no readable .claude/.install-state.json).
+                        A RECORDED ceremony in the install state ALWAYS wins
+                        over this flag; with neither record nor flag the
+                        upgrade fails safe to 'user' (root files untouched)
+                        and that inference is never persisted. Only an
+                        explicit flag/env or a recorded value persists.
+                        Env override: CEO_UPGRADE_CEREMONY=<maintainer|user>.
   --purge-misinstalled  PLAN-161 U3 (opt-in — NEVER default): delete files found
                         inside the framework-internal excluded trees
                         (.claude/hooks/{tests,legacy}, .claude/scripts/tests,
@@ -459,7 +480,7 @@ HELP
 done
 
 if [[ -z "$TARGET" || ! -d "$TARGET" ]]; then
-  echo "Usage: $0 <target-repo-path> [--profile <list>] [--stack <name>] [--pin <tag>] [--dry-run]" >&2
+  echo "Usage: $0 <target-repo-path> [--profile <list>] [--stack <name>] [--pin <tag>] [--dry-run] [--ceremony <maintainer|user>]" >&2
   exit 1
 fi
 
@@ -735,11 +756,14 @@ fi
 # skipped entirely, so if the ceremony rode the replay, the documented
 # `upgrade.sh <target> --no-replay` would treat a `--ceremony user` install
 # as maintainer and force SPEC/protocol into the adopter's root (r9). This
-# reader ALWAYS runs. Fail-open: state absent/unreadable/invalid (ALL
-# pre-Wave-B installs) => "maintainer" — the pre-existing behavior; the
-# consequence is named in INSTALL.md §Upgrade flow. Same trust class as the
-# replay reader: target-side, UNSIGNED, advisory; the value is validated
-# against the closed enum {maintainer,user} and never eval-ed.
+# reader ALWAYS runs. Fail-SAFE (re-pass rc.4 t3/t5, corrected t9 P2 —
+# this comment previously described the OLD maintainer default): state
+# absent/unreadable/invalid (ALL pre-Wave-B installs) => "user" — root
+# files untouched; a pre-state MAINTAINER opts back in explicitly with
+# `--ceremony maintainer` (or CEO_UPGRADE_CEREMONY), and only an explicit
+# or recorded value ever persists. Same trust class as the replay reader:
+# target-side, UNSIGNED, advisory; the value is validated against the
+# closed enum {maintainer,user} and never eval-ed.
 # ===========================================================================
 _read_install_state_ceremony() {
   command -v python3 >/dev/null 2>&1 || return 3
@@ -763,12 +787,30 @@ sys.stdout.write(cer + "\n")
 ' "$_INSTALL_STATE_FILE" 2>/dev/null
 }
 
-CEREMONY_EFFECTIVE="maintainer"
-_CEREMONY_SOURCE="default (no readable install-state — pre-Wave-B fail-open)"
+# Re-pass rc.4 t2 (P2): with NO readable install-state the old default was
+# maintainer (fail-open) — a pre-v1.2 USER-ceremony install could receive
+# root .gitignore writes across the user boundary. The fail-SAFE default is
+# user (root surfaces skipped, loudly); a pre-state MAINTAINER install opts
+# back in explicitly via CEO_UPGRADE_CEREMONY=maintainer.
+CEREMONY_EFFECTIVE="user"
+_CEREMONY_SOURCE="default (no readable install-state — fail-safe user; pass --ceremony maintainer to opt back in)"
+# t5 P1: only RECORDED or EXPLICIT resolutions may persist into the state
+# file — persisting the fail-safe INFERENCE would make one missed migration
+# flag permanent (recorded state wins on the next run by design).
+_CEREMONY_PERSIST="0"
 _cer_line=""
 if _cer_line="$(_read_install_state_ceremony)" && [[ -n "$_cer_line" ]]; then
   CEREMONY_EFFECTIVE="$_cer_line"
   _CEREMONY_SOURCE="recorded install request (.claude/.install-state.json)"
+  _CEREMONY_PERSIST="1"
+elif [[ -n "${CEREMONY_FLAG:-}" ]]; then
+  CEREMONY_EFFECTIVE="$CEREMONY_FLAG"
+  _CEREMONY_SOURCE="explicit --ceremony flag (no install-state)"
+  _CEREMONY_PERSIST="1"
+elif [[ "${CEO_UPGRADE_CEREMONY:-}" == "maintainer" || "${CEO_UPGRADE_CEREMONY:-}" == "user" ]]; then
+  CEREMONY_EFFECTIVE="$CEO_UPGRADE_CEREMONY"
+  _CEREMONY_SOURCE="explicit CEO_UPGRADE_CEREMONY override (no install-state)"
+  _CEREMONY_PERSIST="1"
 fi
 
 TIMESTAMP="$( date +%Y%m%d-%H%M%S )"
@@ -3029,6 +3071,114 @@ backup_and_replace ".claude/scripts"
 backup_and_replace ".claude/commands"
 backup_and_replace ".claude/pitfalls-catalog.yaml"
 backup_and_replace ".claude/task-chains.yaml"
+# Re-pass rc.4 t3 (smoke STALE) + t5 P1 (ownership): the plans/ SCHEMA
+# docs are FRAMEWORK contract files that install.sh seeds but upgrade never
+# refreshed — the first framework edit (S305, DEBATE-SCHEMA) left every
+# upgraded adopter on the old generation (F3 STALE). But a blanket
+# backup_and_replace would CLOBBER an adopter-modified schema (t5 P1: the
+# schemas are not in the baseline ownership enumeration for pre-existing
+# installs, so classification falls back to legacy overwrite). Refresh is
+# therefore HASH-GATED: only a byte-pristine copy of a KNOWN prior
+# framework generation is replaced; anything else is PRESERVED loudly.
+# t8 P1: delivery flags for the baseline manifest — the schemas enter the
+# enumeration ONLY when this upgrade left FRAMEWORK bytes at the path
+# (INSTALLED / REFRESHED / IDENTICAL). PRESERVED and SKIPPED stay out, so
+# an adopter-customized schema is never recorded as framework-owned.
+_SCHEMA_DELIVERED_PLAN=0
+_SCHEMA_DELIVERED_DEBATE=0
+_rsd_mark_delivered() {
+  case "$1" in
+    .claude/plans/PLAN-SCHEMA.md)   _SCHEMA_DELIVERED_PLAN=1 ;;
+    .claude/plans/DEBATE-SCHEMA.md) _SCHEMA_DELIVERED_DEBATE=1 ;;
+  esac
+}
+_refresh_schema_doc() {
+  # $1 = rel path; $2.. = sha256 of KNOWN prior framework generations.
+  _rsd_rel="$1"; shift
+  _rsd_src="$SOURCE_DIR/$_rsd_rel"; _rsd_dst="$TARGET/$_rsd_rel"
+  # Re-pass rc.4 t7 P1 (skip contract): --skip excludes this path from
+  # inspection AND write, like every other delivery in this script.
+  if _path_is_skipped "$_rsd_rel"; then
+    echo "    SKIPPED (--skip): $_rsd_rel"
+    return 0
+  fi
+  [ -e "$_rsd_src" ] || { echo "    SKIP (source missing): $_rsd_rel"; return 0; }
+  # Re-pass rc.4 t7 P1 (symlink escape): refuse to read or write through a
+  # symlinked LEAF (checked before -e: a BROKEN link would otherwise fall
+  # into the install branch and cp would create the referent outside the
+  # target) or any symlinked ANCESTOR — a --link install's schema symlink,
+  # or a hostile .claude/plans link, would make cp modify the referent
+  # outside the adopter target. Preservation is the only safe verdict.
+  if [ -L "$_rsd_dst" ]; then
+    echo "    WARNING: PRESERVED $_rsd_rel (destination is a symlink — a refresh would write through it, outside the target; replace the link manually if that is intended)"
+    return 0
+  fi
+  _rsd_walk="$(dirname "$_rsd_rel")"
+  while [ -n "$_rsd_walk" ] && [ "$_rsd_walk" != "." ] && [ "$_rsd_walk" != "/" ]; do
+    if [ -L "$TARGET/$_rsd_walk" ]; then
+      echo "    WARNING: PRESERVED $_rsd_rel (ancestor $_rsd_walk is a symlink — refusing to write through it)"
+      return 0
+    fi
+    _rsd_walk="$(dirname "$_rsd_walk")"
+  done
+  if [ ! -e "$_rsd_dst" ]; then
+    mkdir -p "$(dirname "$_rsd_dst")"
+    cp "$_rsd_src" "$_rsd_dst"
+    echo "    INSTALLED: $_rsd_rel"
+    _rsd_mark_delivered "$_rsd_rel"
+    return 0
+  fi
+  # Re-pass rc.4 t7 P1 (hasher portability): the shared _hash_file
+  # abstraction, never a bare `shasum` — absent on Perl-less Linux hosts,
+  # where set -e would abort the whole upgrade mid-inspection. No usable
+  # hasher => ownership cannot be proven => preserve loudly.
+  if ! command -v _hash_file >/dev/null 2>&1; then
+    echo "    WARNING: PRESERVED $_rsd_rel (no sha256 hasher available — ownership unprovable, not refreshing)"
+    return 0
+  fi
+  if ! _rsd_h_dst="$(_hash_file "$_rsd_dst")" || [ -z "$_rsd_h_dst" ]; then
+    echo "    WARNING: PRESERVED $_rsd_rel (no sha256 hasher available — ownership unprovable, not refreshing)"
+    return 0
+  fi
+  if ! _rsd_h_src="$(_hash_file "$_rsd_src")" || [ -z "$_rsd_h_src" ]; then
+    echo "    WARNING: PRESERVED $_rsd_rel (no sha256 hasher available — ownership unprovable, not refreshing)"
+    return 0
+  fi
+  if [ "$_rsd_h_dst" = "$_rsd_h_src" ]; then
+    echo "    IDENTICAL: $_rsd_rel"
+    _rsd_mark_delivered "$_rsd_rel"
+    return 0
+  fi
+  for _rsd_prior in "$@"; do
+    if [ "$_rsd_h_dst" = "$_rsd_prior" ]; then
+      mkdir -p "$BAK_DIR/$(dirname "$_rsd_rel")"
+      cp "$_rsd_dst" "$BAK_DIR/$_rsd_rel"
+      cp "$_rsd_src" "$_rsd_dst"
+      echo "    REFRESHED (pristine prior generation): $_rsd_rel"
+      _rsd_mark_delivered "$_rsd_rel"
+      return 0
+    fi
+  done
+  echo "    WARNING: PRESERVED adopter-modified $_rsd_rel (framework schema changed upstream — diff it manually; a pristine copy would have been refreshed)"
+  return 0
+}
+if [[ "$DRY_RUN" -eq 1 ]]; then
+  # t7 P1 (accurate dry-run): report the per-path --skip verdict instead of
+  # a blanket line that hides the exclusion.
+  for _rsd_dry in ".claude/plans/PLAN-SCHEMA.md" ".claude/plans/DEBATE-SCHEMA.md"; do
+    if _path_is_skipped "$_rsd_dry"; then
+      echo "    (dry-run) schema doc SKIPPED (--skip): $_rsd_dry"
+    else
+      echo "    (dry-run) schema doc hash-gated refresh (pristine prior generations only): $_rsd_dry"
+    fi
+  done
+else
+  # sha256 of every shipped prior generation (git history of each file).
+  _refresh_schema_doc ".claude/plans/PLAN-SCHEMA.md" \
+    "8a2033d241b113544f1e18abbd13f4c60cc6257140f304d95b29216193035232"
+  _refresh_schema_doc ".claude/plans/DEBATE-SCHEMA.md" \
+    "574bd22e401308400622b1766a9d090e5afede1fb45938995316f38c554f1bf3"
+fi
 # agent-metrics.md preserved (user data). settings.json is preserved here too —
 # ONLY the PLAN-135 W2 H8 settings-merge (additive lifecycle-hook registration)
 # and the PLAN-163 T5.4 baseline migration (3-state per leaf key; customized
@@ -3172,6 +3322,99 @@ echo ""
 echo "==> Refreshing framework version marker (.claude/.framework-version)"
 _refresh_framework_marker
 
+# PLAN-177 W1 (P1-1 / CF-9) — the .gitignore surfaces install.sh has always
+# delivered and this script never did.
+#
+# Root .gitignore: two marker-guarded blocks (MCP shared-secret store, PLAN-019
+# P2-SEC-H; posture/runtime state, PLAN-165 CX-3). An adopter who installed at
+# v1.2.0 and only ever upgrades got /night-mode without the posture ignores, so
+# `on` leaves the permission overlay + state marker untracked (PLAN-165 AC-1
+# says `git status` stays empty); an adopter older than v1.2.0 never got the
+# secrets entry either. The parity gate named the gap and allowlisted it, so CI
+# could not fail on it. Both deliveries are ADDITIVE + idempotent and go
+# through the SAME generator install.sh calls (INV-4/PLAN-168 W2 — two copies
+# of one emitted text is the class that produced the pointer divergence). The
+# ORDER (secrets, then posture) mirrors install.sh's two call sites, because it
+# decides the order of the blocks in the resulting file.
+#
+# CEREMONY-GATED, mirroring the PROTOCOL.md skip above: install.sh guards both
+# of its calls with `[[ "$CEREMONY" != "user" ]]` (a user install writes no root
+# files at all, WS4), so skipping here is what keeps the two routes in
+# agreement. A line number would rot the moment either file moves.
+#
+# Missing generator = broken checkout, fails LOUD. That is install.sh's posture
+# for this library, not the preserve-the-surface posture of
+# _refresh_protocol_pointer: nothing here overwrites an adopter file, so there
+# is no surface a silent degrade would be protecting.
+echo ""
+echo "==> Refreshing root .gitignore framework blocks (PLAN-019 P2-SEC-H + PLAN-165 CX-3)"
+if [[ "$CEREMONY_EFFECTIVE" == "user" ]]; then
+  echo "    SKIP: root .gitignore blocks (recorded --ceremony user install — install.sh writes no root files either)"
+else
+  command -v _mcp_secrets_ignore_entry >/dev/null 2>&1 || {
+    echo "    ERROR: _mcp_secrets_ignore_entry unavailable (scripts/_framework_manifest_set.sh not sourced) — cannot ensure the MCP-secrets .gitignore entry" >&2
+    exit 1
+  }
+  command -v _apply_mcp_secrets_ignore >/dev/null 2>&1 || {
+    echo "    ERROR: _apply_mcp_secrets_ignore unavailable (scripts/_framework_manifest_set.sh not sourced) — cannot ensure the MCP-secrets .gitignore entry" >&2
+    exit 1
+  }
+  command -v _posture_state_ignore_entries >/dev/null 2>&1 || {
+    echo "    ERROR: _posture_state_ignore_entries unavailable (scripts/_framework_manifest_set.sh not sourced) — cannot ensure posture-state .gitignore entries" >&2
+    exit 1
+  }
+  command -v _apply_posture_state_ignores >/dev/null 2>&1 || {
+    echo "    ERROR: _apply_posture_state_ignores unavailable (scripts/_framework_manifest_set.sh not sourced) — cannot ensure posture-state .gitignore entries" >&2
+    exit 1
+  }
+  _UP_MCP_ENTRY="$( _mcp_secrets_ignore_entry )"
+  _UP_POSTURE_ENTRIES="$( _posture_state_ignore_entries )"
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    # t8 P2: the SHARED predicate, not a duplicated -L — the preview must
+    # refuse exactly where the real run refuses, by the same code path.
+    if ! _root_gitignore_symlink_guard "$TARGET/.gitignore" >/dev/null 2>&1; then
+      echo "    (dry-run) ERROR: root .gitignore is a symlink — real run would REFUSE" >&2
+      exit 1
+    fi
+    # t11 P1 #2: honest dry-run for TRACKED sensitive paths too — the
+    # real run refuses and demands git rm --cached.
+    _dry_tracked="$( _gitignore_tracked_sensitive "$TARGET" \
+      ".claude/settings.local.json" ".claude/state" "state/mcp_client_secrets" )"
+    if [ -n "$_dry_tracked" ]; then
+      echo "    (dry-run) ERROR: sensitive path(s) already TRACKED — real run would REFUSE and demand git rm --cached:" >&2
+      printf '%s\n' "$_dry_tracked" | sed 's/^/      /' >&2
+      exit 1
+    fi
+    echo "    (dry-run) would ENSURE .gitignore excludes: $_UP_MCP_ENTRY"
+    echo "    (dry-run) would ENSURE .gitignore excludes: $_UP_POSTURE_ENTRIES"
+  else
+    _up_record_op "ensure_mcp_secrets_ignore" "$_UP_MCP_ENTRY"
+    _apply_mcp_secrets_ignore "$TARGET/.gitignore"
+    _up_record_op "ensure_posture_state_ignores" "$_UP_POSTURE_ENTRIES"
+    _apply_posture_state_ignores "$TARGET/.gitignore"
+  fi
+fi
+
+# `.claude/.gitignore` — delivered in EVERY ceremony, because it lives inside
+# .claude/ and therefore reaches the `--ceremony user` population the root
+# blocks structurally cannot (verdict-ga-1.txt:5). Create-if-missing, NEVER
+# rewritten: adopter-owned after creation, and absent from the baseline
+# manifest so no later upgrade can classify it as framework-owned.
+echo ""
+echo "==> Refreshing .claude/.gitignore (PLAN-177 W1 / CF-9)"
+command -v _apply_claude_dir_gitignore >/dev/null 2>&1 || {
+  echo "    ERROR: _apply_claude_dir_gitignore unavailable (scripts/_framework_manifest_set.sh not sourced) — cannot ensure .claude/.gitignore" >&2
+  exit 1
+}
+if [[ "$DRY_RUN" -eq 1 ]]; then
+  # Shared per-entry preview (re-pass rc.4 t2 P1): a seeded adopter file
+  # must report would-APPEND, never a false would-PRESERVE.
+  _preview_claude_dir_gitignore "$TARGET/.claude" || exit 1
+else
+  _up_record_op "ensure_claude_dir_gitignore" ".claude/.gitignore"
+  _apply_claude_dir_gitignore "$TARGET/.claude"
+fi
+
 # PLAN-161 U3 — mis-install scan/purge. Runs in ALL modes (flag-absent and
 # --dry-run runs emit the would-purge PREVIEW; deletion requires the explicit
 # --purge-misinstalled flag AND a non-dry run). Runs BEFORE the baseline-
@@ -3247,6 +3490,9 @@ if [[ "$DRY_RUN" -eq 0 ]] && command -v _write_baseline_manifest >/dev/null 2>&1
   export FMS_HASH_SOURCE_PROTOCOL="${_PROTOCOL_HASH_SOURCE:-}"
   export FMS_DELIVERED_SPEC="${_SPEC_DELIVERED:-0}"
   export FMS_DELIVERED_PROTOCOL="${_PROTOCOL_DELIVERED:-0}"
+  # t8 P1: same delivery-record condition for the plans/ schema contracts.
+  export FMS_DELIVERED_PLAN_SCHEMA="${_SCHEMA_DELIVERED_PLAN:-0}"
+  export FMS_DELIVERED_DEBATE_SCHEMA="${_SCHEMA_DELIVERED_DEBATE:-0}"
   export FMS_DELIVERED_MARKER="${_MARKER_DELIVERED:-0}"
   _write_baseline_manifest "$TARGET/.claude/.install-manifest.sha256"
   unset FMS_ROOT FMS_HASH_ROOT FMS_PROFILE_PARTS FMS_MODE FMS_PROTOCOL_HASH FMS_LINK_PATHS
@@ -3284,6 +3530,7 @@ _write_upgrade_state() {
     "harness" "$HARNESS"
     "managed_hooks" "$CODEX_MANAGED_HOOKS"
     "ceremony_effective" "$CEREMONY_EFFECTIVE"
+    "ceremony_persist" "$_CEREMONY_PERSIST"
   )
   echo ""
   echo "==> (Re)writing install-state (.claude/.install-state.json — PLAN-153 Wave B)"
@@ -3348,6 +3595,14 @@ if req is None:
     }
 req["profile"] = vals.get("profile", "")
 req["stack"] = vals.get("stack", "")
+# Re-pass rc.4 t3+t5 (P1): persist the ceremony ONLY when it came from a
+# RECORD or an EXPLICIT flag/env — never persist the fail-safe inference
+# (one missed migration flag would otherwise become permanent, since the
+# recorded value wins on every later run). Never overwrite a recorded one.
+_cer = vals.get("ceremony_effective", "")
+if (vals.get("ceremony_persist", "0") == "1"
+        and "ceremony" not in req and _cer in ("maintainer", "user")):
+    req["ceremony"] = _cer
 # PLAN-155 Wave 5: persist harness so it survives even a pre-Wave-B target
 # whose request was synthesized above. Only overwrite when non-empty so a
 # claude-only upgrade never clobbers a recorded codex harness with "".

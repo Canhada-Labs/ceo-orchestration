@@ -36,6 +36,9 @@ on:
       - "scripts/tests/test-ownership-table.sh"
       - "scripts/tests/ownership_table.tsv"
       - "docs/ownership-decision-table.md"
+      # Re-pass rc.4 t7 P2: the per-PR gitignore unit must light this gate
+      # up when it (or the generator it exercises) changes.
+      - "scripts/tests/test-gitignore-symlink-and-dryrun-unit.sh"
       # PLAN-168 W1+W2 (rail r3 P1): the nightly gate + its positive control
       # get fast per-PR steps HERE too — without these entries a PR could
       # break the gate's rc/status handling while every PR check stays green.
@@ -46,6 +49,15 @@ on:
       - "scripts/tests/ownership-expected-reds.txt"
       - "scripts/tests/test-protocol-pointer-render.sh"
       - "scripts/tests/test-protocol-pointer-inv4.sh"
+      # PLAN-177 W1 (CF-9): the night-mode ignore EFFICACY e2e. Same
+      # wiring rule as every scripts/tests/*.sh above — unwired = no test.
+      # It installs at the PIN, so it also depends on the parity e2e
+      # (--print-pin) and on the .gitignore generator in the manifest lib,
+      # both already in this list.
+      - "scripts/tests/test-night-mode-ignore-effect.sh"
+      # t8 P2: the efficacy test hardcodes the paths night-mode.py emits —
+      # a PR changing only the emitter must light this gate up too.
+      - ".claude/scripts/night-mode.py"
       - "templates/**"
       # Widened from SPEC/v1/install-cli.md: SPEC/v1 is delivered by install.sh
       # and (until F3) by nothing in upgrade.sh, so ANY SPEC/v1 change is a
@@ -83,6 +95,9 @@ on:
       - "scripts/tests/test-ownership-table.sh"
       - "scripts/tests/ownership_table.tsv"
       - "docs/ownership-decision-table.md"
+      # Re-pass rc.4 t7 P2: the per-PR gitignore unit must light this gate
+      # up when it (or the generator it exercises) changes.
+      - "scripts/tests/test-gitignore-symlink-and-dryrun-unit.sh"
       # PLAN-168 W1+W2 (rail r3 P1): the nightly gate + its positive control
       # get fast per-PR steps HERE too — without these entries a PR could
       # break the gate's rc/status handling while every PR check stays green.
@@ -93,6 +108,15 @@ on:
       - "scripts/tests/ownership-expected-reds.txt"
       - "scripts/tests/test-protocol-pointer-render.sh"
       - "scripts/tests/test-protocol-pointer-inv4.sh"
+      # PLAN-177 W1 (CF-9): the night-mode ignore EFFICACY e2e. Same
+      # wiring rule as every scripts/tests/*.sh above — unwired = no test.
+      # It installs at the PIN, so it also depends on the parity e2e
+      # (--print-pin) and on the .gitignore generator in the manifest lib,
+      # both already in this list.
+      - "scripts/tests/test-night-mode-ignore-effect.sh"
+      # t8 P2: the efficacy test hardcodes the paths night-mode.py emits —
+      # a PR changing only the emitter must light this gate up too.
+      - ".claude/scripts/night-mode.py"
       - "templates/**"
       - "SPEC/v1/**"
       - "scripts/doctor.sh"
@@ -125,7 +149,13 @@ jobs:
     # installs + 3 upgrades (S1-S8; ~3-4 min local per the W1-C measurement),
     # i.e. up to ~8-10 more CI minutes at the same 2-3x factor. Same
     # anti-flake sizing rule as the F4 bump above.
-    timeout-minutes: 25
+    # PLAN-177 W1 (CF-9): 25 -> 32. The night-mode efficacy e2e adds 3 installs
+    # + 2 upgrades. MEASURED, not guessed: 2m06s wall on Darwin arm64 (16
+    # cores, 2026-08-13), reproduced across two runs. At the same 2-3x runner
+    # factor this workflow already sizes with, that is 4-7 CI minutes, so +7.
+    # A job-level timeout that clips a green run reports as `cancelled` on an
+    # innocent step (the S2xx lesson), so the margin stays deliberate.
+    timeout-minutes: 32
     permissions:
       contents: read
     steps:
@@ -134,23 +164,6 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           fetch-depth: 1
-
-      # PLAN-169 W2.8 (ADR-192, route (b)-narrow) — gate-scripts integrity.
-      # Same canonical manifest as release.yml: the free scripts whose
-      # verdict this gate consumes (validate-governance.sh here) must match
-      # .claude/governance/gate-scripts-manifest.txt or the run fails loudly
-      # BEFORE any member is invoked. Residual (documented in ADR-192):
-      # the parity step later runs the INSTALLED copy of
-      # validate-governance.sh inside the target — that copy is delivered
-      # from this verified repo copy by install.sh in this same run.
-      - name: Gate-scripts integrity (W2.8 checksum manifest)
-        run: |
-          set -euo pipefail
-          M=.claude/governance/gate-scripts-manifest.txt
-          [[ -f "$M" ]] || { echo "::error::$M missing (W2.8 canonical manifest)"; exit 1; }
-          shasum -a 256 -c "$M" \
-            || { echo "::error::gate-script drift vs $M (ADR-192) — member edits go through the canonical-edit ceremony"; exit 1; }
-          echo "OK: all gate scripts match $M"
 
       # PLAN-166 F4: the parity e2e's historical leg installs from a PINNED
       # TAG. `fetch-depth: 1` produces a checkout with NO tags, so the pin
@@ -189,6 +202,16 @@ jobs:
         run: |
           set -euo pipefail
           bash scripts/tests/test-ownership-verdict-unit.sh
+
+      # Re-pass rc.4 t7 P2 (t6 condition 5): the gitignore symlink-refusal +
+      # dry-run preview unit is seconds — run it per-PR. The full
+      # install-state replay (B2 pre-state ceremony persistence + B2-c3/c4
+      # schema-refresh, --skip and symlink-refusal legs) is many minutes of
+      # real installs and runs in ownership-nightly.yml instead.
+      - name: Gitignore symlink + dry-run preview unit (t7)
+        run: |
+          set -euo pipefail
+          bash scripts/tests/test-gitignore-symlink-and-dryrun-unit.sh
 
       # PLAN-168 W1 (rail r3 P1): the nightly gate's fake-harness control is
       # milliseconds — run it per-PR so a PR touching the gate cannot break
@@ -306,6 +329,20 @@ jobs:
         run: |
           set -euo pipefail
           bash scripts/tests/test-upgrade-spec-ownership.sh
+
+      # PLAN-177 W1 (CF-9) - EFFICACY of the posture-state ignores, which no
+      # parity check can see: an ignore that does not work is equally broken on
+      # both routes, so it is byte-identical and every parity gate stays green.
+      # Simulates the two files `/night-mode on` leaves behind (arming the real
+      # posture is a HUMAN action, PLAN-165 OQ1-redo) and asserts git reports
+      # neither, in the upgrade route AND in the fresh --ceremony user install
+      # the GA re-pass named as the damaged population. Each scenario carries an
+      # inline positive control that cannot be switched off. Needs the pin tag
+      # fetched above. NO continue-on-error, deliberately.
+      - name: night-mode ignore efficacy (upgrade route + user ceremony)
+        run: |
+          set -euo pipefail
+          bash scripts/tests/test-night-mode-ignore-effect.sh
 
       - name: Assert npx/npm shim contract (if present)
         # Phase 4 deliverable; skip if directory missing

@@ -32,13 +32,10 @@ jobs:
     # PLAN-012 Phase 2 CEO_SOTA_DISABLE parity (same switch as smoke-install).
     if: vars.CEO_SOTA_DISABLE != '1'
     runs-on: ubuntu-latest
-    # ~25 min local (Darwin arm64, 16 cores, 2026-08-07). OBSERVED on
-    # ubuntu-latest: ~41 min wall on the first HEALTHY run (2026-08-09,
-    # post-W1 port — real mtime walks; the blind pre-port run did ~32).
-    # The old "2-3x slower => 50-75 min" guess was wrong in the safe
-    # direction. Same anti-flake sizing rule as the smoke-install budget
-    # notes: keep headroom, re-tighten on a real p95 once runs accumulate.
-    timeout-minutes: 90
+    # ~25 min local (Darwin arm64, 16 cores, 2026-08-07); ubuntu-latest is the
+    # usual 2-3x slower => 50-75 min expected. Same anti-flake sizing rule as
+    # the smoke-install budget notes: leave headroom, re-tighten on a real p95.
+    timeout-minutes: 110
     permissions:
       contents: read
     steps:
@@ -47,20 +44,6 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           fetch-depth: 1
-
-      # PLAN-169 W2.8 (ADR-192, route (b)-narrow) — gate-scripts integrity.
-      # ownership-nightly-gate.sh decides this workflow's verdict (the
-      # exact expected-RED set); it is a free script, so its bytes are
-      # pinned by the canonical manifest. Drift = loud fail BEFORE the
-      # e2e spends ~40 min of runner time on a gate that would lie.
-      - name: Gate-scripts integrity (W2.8 checksum manifest)
-        run: |
-          set -euo pipefail
-          M=.claude/governance/gate-scripts-manifest.txt
-          [[ -f "$M" ]] || { echo "::error::$M missing (W2.8 canonical manifest)"; exit 1; }
-          shasum -a 256 -c "$M" \
-            || { echo "::error::gate-script drift vs $M (ADR-192) — member edits go through the canonical-edit ceremony"; exit 1; }
-          echo "OK: all gate scripts match $M"
 
       # `fetch-depth: 1` produces a checkout with NO tags, and the
       # legacy_pristine* fixtures build from a REAL shipped tree. The tag is
@@ -90,6 +73,18 @@ jobs:
         run: |
           set -euo pipefail
           bash scripts/tests/test-ownership-verdict-unit.sh
+
+      # Re-pass rc.4 t7 P2 (t6 condition 5): the install-state replay suite
+      # was local/landing-gate only — CI could stay green after regressions
+      # in pre-state ceremony persistence (B2-c2), hash-gated schema refresh
+      # (B2-c3) or its symlink-refusal / --skip / hasher-fallback legs
+      # (B2-c4). ~11 min local (Darwin arm64); budgeted ~2-3x here, inside
+      # this job's timeout headroom (bumped 90 -> 110, same measured
+      # anti-flake sizing rule as smoke-install's F4 bump).
+      - name: Install-state replay suite (B2 — ceremony, schema refresh, symlink refusal)
+        run: |
+          set -euo pipefail
+          bash scripts/tests/test_install_state_replay.sh
 
       # PLAN-168 W2 (AC-6/AC-6b): INV-4 as an executable assertion — install
       # and upgrade produce the SAME pointer (byte identity + content

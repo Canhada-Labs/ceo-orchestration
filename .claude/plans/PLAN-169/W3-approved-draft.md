@@ -25,7 +25,6 @@ scripts/tests/test-w3-vcures.sh
 .github/workflows/smoke-install.yml
 .github/workflows/ownership-nightly.yml
 .github/workflows/release.yml
-.github/workflows/npm-publish.yml
 .claude/hooks/check_anti_ceo_overhead.py
 .claude/hooks/check_codex_stop_review.py
 .claude/hooks/audit_log.py
@@ -33,20 +32,27 @@ scripts/tests/test-w3-vcures.sh
 .claude/hooks/tests/test_codex_stop_review.py
 .claude/adr/ADR-163-hook-latency-gate-percentile-stability.md
 .claude/adr/ADR-186-hook-deadline-policy.md
-.claude/adr/ADR-191-break-glass-repo-kill-switches.md
-.claude/adr/ADR-192-gate-scripts-checksum-manifest.md
-.claude/governance/gate-scripts-manifest.txt
-CLAUDE.md
-README.md
-README.pt-BR.md
-docs/CTO-GUIDE.md
-docs/FAQ.md
-docs/GUIA-COMPLETO.md
-docs/ARCHITECTURE.md
-docs/README.md
-npm/README.md
-RELEASE.md
 ```
+
+## Re-staging S312 (pós-GA v1.3.0 — LER ANTES DE ASSINAR)
+
+O Scope acima é o conjunto RE-STAGED da S312 (17 receitas semânticas,
+Workflow `wf_69229d1b`; BASELINE re-pinado no vivo pós-GA). Diferenças
+vs o staging original de S299:
+- **FORA (consumidos):** CLAUDE.md, README.md, README.pt-BR.md,
+  npm/README.md, docs/{ARCHITECTURE,CTO-GUIDE,FAQ,GUIA-COMPLETO,README}.md
+  e npm-publish.yml — todos os itens já chegaram ao vivo por outra rota;
+  whole-file regrediria curas (SLSA Level-2, timeout 50, assert :443).
+  Evidência em `staged-w3/consumed/`.
+- **FORA (decisão ⚖️ pendente):** família W2.8 (ADR gate-scripts +
+  manifesto + 4 steps) e ADR break-glass (W0.9) — em
+  `staged-w3/pending-w28/` + `staged-w3/PENDING-DECISIONS.md`.
+  Assinar este pack NÃO decide nenhum dos dois.
+- **FORA (família-dependente):** RELEASE.md — único delta era "31→32
+  steps" contando o step W2.8; sem a família, o vivo permanece 31.
+  Em `staged-w3/pending-w28/`.
+- O item 3 (W3.3/P4 advisory) e o item 4 (F4 codex default) permanecem
+  como descritos abaixo — os arquivos estavam FRESH (main não moveu).
 
 ## O que este pack muda (resumo por item; staged em `staged-w3/`, MANIFEST.sha256 rastreado)
 

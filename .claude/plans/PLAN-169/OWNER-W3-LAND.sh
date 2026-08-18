@@ -10,7 +10,7 @@
 #   G1  BASELINE anti-stale: cada alvo VIVO ainda é byte-idêntico ao que o
 #       pack viu no staging — se main andou por cima de um alvo, ABORTA
 #       (a lição do step1 do PLAN-166: staged stale reverte trabalho novo)
-#   G2  MANIFEST: shasum -c dos 29 staged (integridade do pack)
+#   G2  MANIFEST: shasum -c do pack inteiro (staged + consumed/ + pending-w28/)
 #   G3  Sentinel GPG: W3-approved.md assinado + Scope cobre exatamente os
 #       alvos (touched − scope = ∅ é verificado APÓS o apply)
 #   G4  Simulação em clone: aplica o pack num git clone --local e roda a
@@ -40,28 +40,21 @@ scripts/tests/test-protocol-pointer-render.sh
 .github/workflows/smoke-install.yml
 .github/workflows/ownership-nightly.yml
 .github/workflows/release.yml
-.github/workflows/npm-publish.yml
 .claude/hooks/check_anti_ceo_overhead.py
 .claude/hooks/check_codex_stop_review.py
 .claude/hooks/audit_log.py
 .claude/hooks/check_agent_spawn.py
 .claude/hooks/tests/test_codex_stop_review.py
 .claude/adr/ADR-163-hook-latency-gate-percentile-stability.md
-.claude/adr/ADR-186-hook-deadline-policy.md
-CLAUDE.md
-README.md
-README.pt-BR.md
-docs/CTO-GUIDE.md
-docs/FAQ.md
-docs/GUIA-COMPLETO.md
-docs/ARCHITECTURE.md
-docs/README.md
-npm/README.md
-RELEASE.md"
-NEW_FILES=".claude/adr/ADR-191-break-glass-repo-kill-switches.md
-.claude/adr/ADR-192-gate-scripts-checksum-manifest.md
-.claude/governance/gate-scripts-manifest.txt
-scripts/tests/test-w3-vcures.sh"
+.claude/adr/ADR-186-hook-deadline-policy.md"
+# Re-staging S312 (pos-GA v1.3.0): 9 docs + npm-publish.yml CONSUMIDOS
+# (staged-w3/consumed/ — as curas chegaram por outra rota; whole-file
+# regrediria o vivo). Familia W2.8 (ADR gate-scripts + manifesto) e o
+# ADR break-glass movidos para staged-w3/pending-w28/ — DECISOES DO
+# OWNER pendentes (W0.9 e W2.8); ver staged-w3/PENDING-DECISIONS.md.
+# O manifesto de gate-scripts, se ratificado, e REGERADO no land (os
+# hashes staged de S299 estao stale por construcao).
+NEW_FILES="scripts/tests/test-w3-vcures.sh"
 
 say "G0: confirmação de janela"
 echo "   Este pack é conteúdo v1.4.0. O GA da v1.3.0 JÁ saiu e o hold acabou? (yes/NO)"
@@ -136,8 +129,6 @@ done
   bash scripts/tests/test-protocol-pointer-render.sh
   bash scripts/tests/test-protocol-pointer-inv4.sh
   bash scripts/tests/test-w3-vcures.sh .
-  shasum -a 256 -c .claude/governance/gate-scripts-manifest.txt --status \
-    && echo "   gate-scripts: $(grep -c . .claude/governance/gate-scripts-manifest.txt)/$(grep -c . .claude/governance/gate-scripts-manifest.txt) conferem no clone"
   bash .claude/scripts/local/verify-counts.sh --quiet --no-tests \
     && echo "   verify-counts: claims coerentes com 192 ADRs no clone"
   python3 .claude/scripts/check-claude-md-claims.py \
@@ -191,9 +182,12 @@ printf '%s\n' "$GPG_OUT7" | grep '^\[GNUPG:\] VALIDSIG ' \
 [ "$(sed -n 's/^Anchor-SHA: //p' "$APPROVED" | head -1)" = "$(git rev-parse HEAD)" ] \
   || { echo "ABORT: anchor do sentinel != HEAD no momento do commit"; exit 1; }
 git add $TARGETS $NEW_FILES "$APPROVED" "$APPROVED.asc"
-git commit -m "ceremony(PLAN-169 W3): pack canonico landado — B.a allowlist+D3 loud, parity 2o fator causal, P4 advisory no apply-step, fleet F4/F8/D1/D2, curas V1/V2/V4/V5 do verdito rc.2, release.yml P2 byte-exato, W2.8 gate-scripts manifest (ADR-192), ADR-163 amend + ADR-186 nota + ADR-191 break-glass
+git commit -m "ceremony(PLAN-169 W3): pack canonico landado (re-staged S312 pos-GA) — B.a allowlist+D3 loud, guard de ambiguidade, --pin honesto, links V5, parity 2o fator causal, release.yml byte-exato, prosa 65/3 do nightly, spawn-hook sem model-id literal, ADR-163 amend + ADR-186 nota, curas V1/V2/V4/V5 do verdito
 
 Sentinel: PLAN-169/W3-approved.md (GPG). Escopo: $(printf '%s\n' "$TARGETS" | grep -c .) alvos + $(printf '%s\n' "$NEW_FILES" | grep -c .) novos.
+Re-staging por ITEM semantico (S312, 17 receitas Workflow wf_69229d1b):
+9 docs + npm-publish CONSUMIDOS; familia W2.8 + break-glass PENDENTES
+de decisao do Owner (staged-w3/PENDING-DECISIONS.md).
 Excecoes nomeadas do verdito v1.3.0-rc.2 CURADAS aqui (V1/V2/V4/V5;
 probes: scripts/tests/test-w3-vcures.sh).
 
