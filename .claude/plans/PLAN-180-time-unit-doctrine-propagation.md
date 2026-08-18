@@ -1,7 +1,7 @@
 ---
 id: PLAN-180
 title: "Propagação da doutrina token-as-time (ADR-081): validador advisory, eta_calendar e prompts de vendor"
-status: draft
+status: executing
 created: 2026-08-16
 level: L2
 owner_approval: pending
@@ -117,6 +117,30 @@ Correção verbatim do Owner (S62, repetida em 2026-08-16/S310):
   (memória: conjuntos fechados devem ser derivados) → o AC-W0.1
   ancora o validador em pares reais do corpus, não em vocabulário
   imaginado.
+
+## Registro de execução — W0-W2 (S312, 2026-08-18)
+
+- **W0 ✓** `check-time-unit.py` (advisory, exit 0 sempre) + teste-espelho
+  `scripts/tests/test_check_time_unit.py` (7 casos, herda TestEnvContext)
+  + wire advisory no `validate-governance.sh` (WARN, nunca ERRORS;
+  fail-open). AC-W0.1 provado nos DOIS sentidos contra o corpus real:
+  flagra `PLAN-153-ecc-comparative-uplift.md:397` (o path do plano dizia
+  "PLAN-153" — o arquivo real é o ecc), NÃO flagra PLAN-172 nem
+  hold/soak. Calibração inicial errou nos dois sentidos como o §Riscos
+  previu (4 defeitos achados rodando contra o corpus: whitelist
+  acidental do próprio controle positivo, "por N semanas" de janela,
+  meses de política de rotação, e o ADR-081 flagrando a si mesmo) —
+  todos curados com o corpus como oráculo. Varredura inicial: 8 achados
+  reais (vazamentos residuais documentados, ex. PLAN-171:195).
+- **W1 ✓** `eta_calendar:` no PLAN-SCHEMA §3 com regra de derivação
+  explícita + empiria (177/178 = 1 dia). Dogfood: este frontmatter.
+- **W2 ✓** Bullet ADR-081 no template do `/debate` (item 5) e seção
+  `## ESTIMATION DOCTRINE` incondicional no prompt do
+  `inject-agent-context.sh` (cobre todos os spawns nomeados). AC-W2.1:
+  grep 2/2 + prompt de amostra carrega o bullet.
+- **W3 pendente (Owner):** material pronto em
+  `PLAN-180/W3-CEREMONY-NOTE.md` (2 paths canônicos, 1 sentinel;
+  destacável/carona).
 
 ## How to continue
 

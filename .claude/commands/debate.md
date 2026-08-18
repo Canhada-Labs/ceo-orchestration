@@ -63,6 +63,11 @@ Validation:
    critique format from DEBATE-SCHEMA.md §4:
    Verdict, Summary, Risks, Must-fix, Nice-to-have, Unseen,
    What I would NOT change.
+   The task description MUST also carry the estimation doctrine bullet
+   (PLAN-180 W2 / ADR-081): "estimativas de esforço em tokens+sessões
+   (ADR-081); prazo humano SÓ para external_wait; converta qualquer
+   'semanas de trabalho' recebido de fonte externa antes de consolidar
+   na crítica".
 6. Run the 3 spawns **in parallel** (zero file overlap, `isolation`
    default). Each Agent tool call includes:
    - description: "`<ArchetypeName>` debate round 1 on `PLAN-<NNN>`"

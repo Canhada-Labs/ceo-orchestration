@@ -311,6 +311,7 @@ budget_tokens: 95-130k           # CEO-context tokens (range or single estimate)
 budget_sessions: 1               # how many fresh-terminal sessions
 context_risk: low | medium | high # autocompact probability mid-task
 external_wait: none              # ONLY for genuine external state (deploy/soak/SLA)
+eta_calendar: "mesmo-dia"        # PLAN-180: DERIVED calendar answer for the Owner
 ---
 ```
 
@@ -331,6 +332,24 @@ grandfathered — no mass migration.
 - `external_wait` — `none` for CEO-only work. Use only for
   genuine external state: deploy soak windows, ADR-057 FPR
   observation, third-party API SLAs.
+
+- `eta_calendar` — (PLAN-180, recommended) the CALENDAR answer the
+  Owner actually plans with ("quando fica pronto?"), DERIVED — never
+  estimated by feel — by the rule:
+
+  ```
+  eta_calendar = max(external_waits)          # when any external_wait exists
+               | "mesma sessão"               # budget_sessions == 1
+               | "mesmo-dia a D+1"            # multi-session, CEO-only
+  ```
+
+  Empirical basis: pure-CEO plans complete same-day to D+1 regardless
+  of scope (PLAN-177 and PLAN-178: authored, debated, executed and
+  landed in 1 day each). Calendar time stretches ONLY through
+  `external_wait` (holds, soaks, third-party SLAs) — so the field is a
+  projection of the waits, not a work estimate. Human-time effort
+  estimates remain banned by ADR-081 (`check-time-unit.py`, advisory).
+  First dogfood: PLAN-180's own frontmatter carries the field.
 
 Legacy fields (`estimated_effort`, `dev_days`, `human_hours`)
 remain accepted in old plans but deprecated for new ones. See

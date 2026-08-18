@@ -1254,6 +1254,30 @@ PY
 fi
 # ---- end PLAN-138 Wave A advisory ----
 
+# ---- PLAN-180 W0: ADR-081 time-unit doctrine advisory ----
+# WARNING-ONLY (never touches ERRORS). check-time-unit.py flags human-time
+# vocabulary used as EFFORT in post-ADR-081 plans/ADRs (effort = tokens +
+# sessions; calendar time only for external waits / eta_calendar). Advisory
+# by ADR-081 Step 3 design ("not blocking"); fully fail-open: a missing or
+# crashing checker degrades to zero findings and never fails the validator.
+if [ -f "$REPO_ROOT/.claude/scripts/check-time-unit.py" ]; then
+  echo "--- PLAN-180 ADR-081 time-unit advisory ---"
+  set +e
+  p180_out=$(python3 "$REPO_ROOT/.claude/scripts/check-time-unit.py" 2>/dev/null)
+  set -e
+  p180_n=$(printf '%s' "$p180_out" | sed -n 's/.*advisory): \([0-9][0-9]*\) finding.*/\1/p')
+  p180_n=$(printf '%s' "${p180_n:-0}" | tr -cd '0-9')
+  p180_n=${p180_n:-0}
+  if [ "$p180_n" -gt 0 ]; then
+    echo "  WARN: $p180_n human-time-as-effort finding(s) (ADR-081) — run python3 .claude/scripts/check-time-unit.py for path:line detail"
+    WARNINGS=$((WARNINGS + 1))
+  else
+    echo "  OK: no human-time-as-effort vocabulary in the post-ADR-081 corpus"
+  fi
+  echo ""
+fi
+# ---- end PLAN-180 W0 advisory ----
+
 # ---- 6-quater. PLAN-163 T2.1 — hook stdout/exit-code contract oracle ----
 # The shim .claude/hooks/_python-hook.sh is a pure exec on the Claude path:
 # a wired hook's exit code reaches the harness unaltered, and under Claude
