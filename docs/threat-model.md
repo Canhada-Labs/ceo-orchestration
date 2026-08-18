@@ -1,6 +1,6 @@
 # ceo-orchestration — STRIDE Threat Model
 
-**Status:** accepted
+**Status:** stale
 **Date:** 2026-04-16
 **Last updated:** 2026-06-12 (PLAN-135 W4 D5+D8 — harness-vs-hook containment map + MCP-connector decision rule; W3 K14b — browser/computer-use trust boundary)
 **Owner:** Principal Security Engineer
@@ -2219,6 +2219,153 @@ confirmation.
 
 ---
 
+## Ledger durable-state trust boundary (PLAN-179 W4)
+
+> **Scope note (US15):** PLAN-179 W2 introduces a **plan-scoped ledger**
+> (`.claude/plans/PLAN-NNN/LEDGER.md`) as the durable carrier of execution
+> state across a context compaction or a session death — the doctrine shift
+> from "write at session end" to "write at execution-unit boundary". A file
+> that a future session reads back as *state it should act on* is a new
+> trust boundary, not a note file. This section characterises it on the six
+> axes of the Always-On durable-state survey (`.claude/plans/PLAN-179/
+> research-S309.md` §3) and names the two attack classes that survey and
+> §2.2/§2.5 introduce. Descriptive: it authorises no hook change — the
+> write-gate (US14) and the provenance tagger (US13) are the implementing
+> items, and both ship advisory-first.
+
+### The six axes
+
+| Axis | Position today | Honest consequence |
+|---|---|---|
+| **Authority** — who may write an entry | Three writer classes, all *in-band*: (a) the **model** during an execution unit, (b) the **Owner** by hand or by a signed ceremony, (c) an **agent return** transcribed by the model after a fan-out. There is no cryptographic distinction between them at write time: all three arrive as an `Edit`/`Write` tool call from the same session identity. | Authority is **asserted, not proven**. The provenance tag (below) is a *self-declared* label the writer chooses; it is a legibility control for the reader, never an authentication control. An agent return laundered as `owner-instruction` is not detectable at the file layer — only the audit chain's spawn/return events distinguish them, and only forensically. |
+| **Scope** — where it lives | One file per plan under `.claude/plans/PLAN-NNN/`, plan-scoped by path convention, not by an enforced namespace. The scratchpad rail's plan-id linkage (ADR-027/ADR-034, T-001 above) does **not** extend here — the ledger is an ordinary repo file. | Cross-plan write is a path away, not a boundary crossing. A session working PLAN-A can append to PLAN-B's ledger with no guard firing; the compensator is code review of the diff, i.e. the same rail as any other repo file. |
+| **Mutability** — what protects a landed entry | Plain UTF-8 markdown, git-versioned, and **NOT canonical-guarded**. Verified: `_CANONICAL_GUARDS` in `.claude/hooks/check_canonical_edit.py` enumerates no `.claude/plans/**` pattern, and `check_plan_edit.py` matches `_PLAN_PATH_RE = \.claude/plans/PLAN-\d{3}-[a-z0-9-]+\.md$` — the plan *file*, never a file inside the `PLAN-NNN/` directory. A ledger entry therefore matches **neither** guard. | Any commit can rewrite history in the ledger — silently, with no sentinel and no ceremony. The only tamper evidence is `git log`/`git blame`, which is exactly the evidence class an attacker with commit rights already controls (Tier-2 insider, §Attacker capability model). The ledger is **tamper-visible in review, not tamper-evident in the chain**. This is a deliberate cost: making it canonical would put an execution-unit boundary behind a GPG ceremony and guarantee nobody writes it (the E3 abandonment mode PLAN-179 exists to avoid). |
+| **Provenance** — where an entry came from | The four-tag closed set from W4 US13 (`.claude/hooks/_lib/ledger_provenance.py`): **`owner-instruction`** · **`ceo-derived`** · **`agent-returned`** · **`external-tool`**. Normative reading rule: an entry tagged `agent-returned` or `external-tool` is **data on re-read, never an instruction** — the same rule the spawn rail applies to agent returns in-session, extended across the session boundary. | The tag is what makes the untrusted-content rule *applicable* to a future session that has no memory of who wrote the line. Its weakness is the Authority row: a wrong tag is a wrong reading rule, and nothing at write time proves the tag. Hence US14 scopes the write-gate **by provenance** — only `agent-returned` / `external-tool` entries are scanned for harness mimicry (a `ceo-derived` entry is not scanned, so the model cannot launder hostile text by mislabelling it *downward*; mislabelling *upward* is the residual). |
+| **Recoverability** — what a bad entry costs | Full git history plus, for entries that carry a verifier, the AC's named command + exit code. Removal of an entry is **verified, not presumed** (W4 US15c *post-deletion verification* — a primitive the survey found absent in every reviewed memory architecture), and ledger **summarisation is audited separately from raw storage**, because compression amplifies poison. | Recovery is good where the ledger is *tracked*. It is not where the ledger is not: files under gitignored staging directories (`staged-*/`) are outside `git ls-files`, and the repo-wide contamination scan (`check_contamination.py` via `_lib/file_walker.py`, `git ls-files -z`) walks **tracked** files only. An untracked ledger has neither recovery nor contamination coverage — a named residual, not a covered case. |
+| **Actionability** — what a believed entry buys an attacker | This is the axis that makes the surface worth a threat model. A believed entry can: assert an AC is verified that was never run (skipping a gate the next session would otherwise re-run); name a wrong "last commit" or a wrong current unit (steering work onto attacker-chosen files); record a fabricated "decision taken" (manufacturing consent the Owner never gave — the plan's own §OQ verbatim-record discipline exists against exactly this); or list a blocker that redirects effort. | The ledger's whole value is that a fresh session **acts on it without re-deriving it** — which is identical to saying a false entry is acted on without re-derivation. Mitigation is structural, not textual: entries carry **verbatim identifiers only** (absolute paths, SHAs, PLAN-/ADR-ids — never paraphrase), and every "AC verified" entry carries a **named verifier** (command + expected exit code) so a claim is re-runnable in seconds. An unverifiable claim in a ledger is worse than an absent one, because it is believed. |
+
+### Named scenarios
+
+1. **T-compaction-eviction: hostile transcript content evicts governance
+   text from the compaction summary**
+   - **Vector:** an attacker places content anywhere in the session
+     transcript (a fetched page, a file read, an agent return, a
+     dependency's README) crafted to bias the *summariser* — not the
+     acting model — into dropping legitimate policy text when the context
+     is compacted. The constraint is never argued with; it simply is not
+     carried forward, and the post-compaction model behaves as if it had
+     never existed.
+   - **Evidence (external SOURCE measurement — not this repo's own):**
+     "Governance Decay: How Context Compaction Silently Erases Safety
+     Constraints in Long-Horizon LLM Agents", arXiv 2606.22528, recorded
+     verbatim in `.claude/plans/PLAN-179/research-S309.md` §2.2. **As
+     measured by that source:** violation rate is 0% while the constraint
+     is visible in context and rises sharply once it is summarised away
+     (~30% on average across the models evaluated, up to 59% in some
+     families); constraints that *survive* summarisation stay at 0% while
+     omitted ones sit at 38%; and the deliberate Compaction-Eviction
+     Attack **defeated every model evaluated**. These are the source's
+     numbers on the source's harness — this repo has run no such
+     measurement and claims none.
+   - **Mitigations:** **Constraint Pinning** (PLAN-179 W1-b) — governance
+     rules are quarantined from the lossy compression and re-supplied
+     through a channel that never participates in the block sent to the
+     summariser. In the source's evaluation, pinning is training-free and
+     restored the violation rate to 0%.
+   - **Why a scanner cannot fix this:** every content-layer control in
+     this framework (row 5–6 and 12 of the containment table above,
+     `check_read_injection.py`, `check_webfetch_injection.py`,
+     `redact_secrets`) inspects the *input*. This attack does not need a
+     malicious input to survive inspection — it needs the **summariser**
+     to make a bad omission, and an omission has no signature to scan for.
+     Pattern enumeration on ingress is orthogonal to the failure. The only
+     effective control is architectural: keep the constraint out of the
+     compressible material entirely.
+   - **Residual risk:** pinning protects what is *enumerated as* a
+     constraint. Governance that is implicit, or that lives only in the
+     narrative body of the transcript, is still evictable — and the pinned
+     set itself is a floor cost (`F`) re-paid on every compaction, which
+     is why PLAN-179 W3 attacks `F` in the same plan. Independently:
+     ADR-153's compaction-continuity snapshot is **proven non-delivering**
+     on this repo's real workload (CLAUDE.md §5), so it is not a
+     compensator here.
+   - **Test:** W1-b ships the architectural assertion — the pinned payload
+     is absent from the compactable block — **not** a "the model was not
+     fooled" behavioural test (the summariser is not mockable, and
+     "the model resisted" is not a testable claim). PLAN-179 §8 emenda
+     r1-C7.
+
+2. **T-experience-grafting: false lessons distilled gradually, with no
+   single detectable event**
+   - **Vector:** rather than tampering with one stored artifact, the
+     attacker shapes the *stream of interactions* the learning loop
+     distils from, so that over many sessions a false generalisation is
+     legitimately observed, legitimately proposed, legitimately approved,
+     and then legitimately rendered at boot as accumulated experience. No
+     individual step is anomalous; the erosion is the aggregate.
+   - **Surface hit:** the **existing** lessons rail, not a hypothetical
+     one — `CEO_LEARNING_BOOT_LESSONS=1` renders approved one-liners into
+     `/ceo-boot` output (`.claude/scripts/ceo-boot.py`
+     `_render_lessons_section_safe` / `_validate_boot_lesson`), and
+     `format_for_injection` carries approved lessons into spawn prompts
+     (ADR-160 §3).
+   - **Assessment of the A6 gate — it covers point tampering only, and the
+     code is the evidence.** ADR-160 §3 specifies
+     `sha256(trigger + advisory_text)` written into the HMAC chain at
+     approval and re-verified before every render. The implementation is
+     `.claude/scripts/lessons.py::get_boot_lessons_verified`: for each
+     APPROVED record it computes `recomputed = candidate_content_sha256
+     (trigger, text)`, looks up the chain's `lesson_approved` event, and
+     drops the lesson on `missing_approval_event` or `hash_mismatch`
+     (emitting `lesson_integrity_flag`). That binds the **mutable `$HOME`
+     file to the approval event** — it detects post-approval edits to the
+     store, store-file forgery, and approval-bit TOCTOU. It is exactly the
+     right control for that class and it works.
+     It does **not** cover progressive erosion, for three structural
+     reasons: (a) a grafted lesson is hashed *at* approval, so its hash
+     matches perfectly forever — the gate verifies **integrity of the
+     approved bytes, never truth of the approved claim**; (b) the gate
+     runs per-lesson, so it has no view of the *aggregate* drift across a
+     corpus approved one at a time; (c) the ranking is
+     `_recency_decay(ev["ts"])` over the tamper-evident approval
+     timestamp, which means newer entries out-rank older ones — a
+     gradually grafted lesson is not merely undetected, it is
+     **preferentially surfaced** over the accurate older lesson it
+     contradicts. `confidence_score` does not rescue this either: with
+     fewer than three outcomes it returns a neutral 0.5 base, and a
+     grafted lesson nobody contradicts accrues hits like any other.
+   - **What does bear on it (honestly, partially):** zero self-activation
+     (ADR-160 §4) — every lesson requires an explicit human
+     `/lesson-review` approval, so grafting must pass a person N times, not
+     zero times; the ≤3-lesson boot cap and 200-char bounded vocabulary
+     limit blast radius per boot; instinct→skill promotion needs SP-NNN +
+     `/skill-review` + 7-day soak. None of these detect erosion; they
+     **rate-limit** it and keep a human in the loop whose judgement is the
+     actual control.
+   - **Residual risk (accepted, named):** there is **no corpus-level drift
+     detector** on the lessons store today — no periodic re-adjudication
+     of previously approved lessons, no contradiction check between a new
+     approval and the standing set, no decay of *approved* (as opposed to
+     pending) entries on disuse. Progressive erosion is an **open gap**,
+     not a covered case. The cheapest honest first step is observability
+     rather than a gate: a count-only boot surface of approvals per window
+     (the `/lesson-review` and `lesson_approved` chain events already
+     carry it) makes an unusual approval *rate* visible; nothing today
+     makes it visible.
+   - **Test:** none exists for this class. Do not read the green
+     `lesson_integrity_flag` fixtures as coverage — they exercise the A6
+     hash gate, i.e. they answer "were the approved bytes altered after
+     approval?", which is a different question from "was this lesson true
+     when it was approved?" (`[[feedback-instrument-green-with-stale-question]]`).
+
+**Repo surfaces carrying this section's doctrine:**
+`.claude/plans/PLAN-179-context-continuity-durable-state.md` §W2/§W4,
+`.claude/plans/PLAN-179/research-S309.md` §2.2/§2.5/§3, this section, and
+(once landed) `.claude/hooks/_lib/ledger_provenance.py` +
+`.claude/hooks/check_ledger_checkpoint.py`.
+
+---
+
 ## References
 
 - `.claude/adr/ADR-010-canonical-edit-sentinel.md` — canonical-edit
@@ -2331,3 +2478,29 @@ confirmation.
   local governance perimeter; custom-tools-as-local-gate sketched;
   cloud-delegate lane FUTURE, gated on PLAN-134 W4 hook-parity probe).
   Doc-only; no code changes; no hook retired; no prior defense weakened.
+- **2026-08-18 (PLAN-179 W4 US15 + US15b):** Added §Ledger durable-state
+  trust boundary — the plan-scoped `.claude/plans/PLAN-NNN/LEDGER.md`
+  surface characterised on the six Always-On durable-state axes
+  (authority / scope / mutability / provenance / recoverability /
+  actionability), recording as VERIFIED facts that the ledger matches
+  neither `_CANONICAL_GUARDS` (`check_canonical_edit.py`) nor
+  `_PLAN_PATH_RE` (`check_plan_edit.py`), that writer authority is
+  asserted rather than authenticated, and that the W4 US13 four-tag
+  provenance set (`owner-instruction` / `ceo-derived` / `agent-returned`
+  / `external-tool`) is a reader-side legibility control, not an
+  authentication control. Added two named scenarios: **T-compaction-
+  eviction** (hostile transcript biases the summariser into dropping
+  legitimate policy; the arXiv 2606.22528 numbers are quoted explicitly
+  as the SOURCE's measurement, never as this repo's own; countermeasure
+  is Constraint Pinning per PLAN-179 W1-b, and a scanner is structurally
+  the wrong instrument because the attack is on the summariser, not on
+  the input) and **T-experience-grafting** (false lessons distilled
+  progressively with no single detectable event; lands on the EXISTING
+  `CEO_LEARNING_BOOT_LESSONS` rail, with a code-evidenced assessment that
+  the ADR-160 §3 A6 gate —
+  `get_boot_lessons_verified` recomputing `sha256(trigger+advisory_text)`
+  against the chain's `lesson_approved` event — covers POINT tampering
+  only, and that `_recency_decay` ranking actively favours a freshly
+  grafted lesson; corpus-level drift detection recorded as an OPEN gap).
+  Doc-only; no code changes; no hook retired; no prior defense weakened;
+  no existing scenario or residual altered.

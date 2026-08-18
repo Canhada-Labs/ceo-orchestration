@@ -57,6 +57,7 @@ tokenizer. Every report labels it as such.
     python3 .claude/scripts/context-budget.py --middle-out-decision \
         --message-sizes '[50000,800,50000,500]' \
         --budget-tokens 60000                          # D5 middle-out ladder probe
+    python3 .claude/scripts/context-budget.py --probe-status  # D1/D2/D5 debt state
 
 Exit code: always 0 (advisory) — never blocks a session, never writes outside
 stdout. Use ``--strict`` to exit 1 when any heavy-file / over-subscription
@@ -87,6 +88,37 @@ fronts this CLI. Wave C additions on top of the PLAN-124 inventory:
     MEASURED (length), never displayed.
   * ``--scheduled`` — any scheduled wrapper must pass it so
     ``CEO_SOTA_DISABLE`` is honored.
+
+## PLAN-179 W3 item US11 — probe status (the D1/D2/D5 orphan verdict)
+
+This file also carries three **decision probes** harvested from PLAN-133
+Wave D: D1 (proactive auto-compaction), D2 (summarize oldest verbose
+subagent outputs), D5 (middle-out degradation ladder). Every one of them is
+a pure decision function plus a ``--*-decision`` CLI mode. **None of them has
+a caller.** An orphan probe that stays silent looks like coverage, so the
+state is now DECLARED rather than implied, machine-readably, in
+``probe_status()`` — surfaced in ``--json``, in the human report, and via
+``--probe-status``.
+
+Summary of the verdict (full reasoning + measurements:
+``.claude/plans/PLAN-179/orphan-probe-decision.md``):
+
+  * **D1 — KEEP as an exported policy, not as coverage.** Its canonical audit
+    twin (``context_auto_compacted`` / ``context_auto_compact_suppressed``)
+    IS landed in ``.claude/hooks/_lib/audit_emit.py``, ``SPEC/v1/
+    audit-log.schema.md`` and ``.claude/data/audit-registry.golden.txt``.
+    Deleting the decision half would orphan a canonical half that only an
+    Owner-GPG ceremony may touch. The consumer that does not exist is a HOST
+    LOOP that owns its own context-management step; Claude Code owns
+    compaction itself, so this repo cannot be that consumer.
+  * **D5 — KEEP, same shape as D1** (``context_middle_out_degraded`` /
+    ``context_middle_out_degrade_failed`` are likewise landed canonical).
+  * **D2 — REMOVE (pending).** D2 has NO canonical twin: its emit actions
+    appear nowhere but this file. Removal must delete the probe AND
+    ``TestSummarizationPolicy`` in ``.claude/scripts/tests/
+    test_context_budget.py`` in one change; that test file was outside the
+    authoring agent's file assignment, so the deletion is scoped and recorded,
+    not half-applied. Deleting the probe alone would turn 144 green tests red.
 
 ## Stdlib-only
 
@@ -684,7 +716,10 @@ def build_inventory(repo: Path, top: int = 10) -> Dict[str, Any]:
         # PLAN-153 Wave C item 5 (additive to v1): top-3 progressive-
         # disclosure savings + the honesty block. See module docstring.
         "savings_top3": compute_savings(files_by_cat),
-        "notes": list(HONESTY_NOTES),
+        # PLAN-179 W3 US11 (additive to v1): declared orphan-probe status for
+        # the D1/D2/D5 decision probes. Descriptive; gates nothing.
+        "probe_status": probe_status(),
+        "notes": list(HONESTY_NOTES) + [PROBE_STATUS_NOTE],
         "scanner_available": _injection_patterns is not None,
         "flags": flags,
         "flag_count": len(flags),
@@ -698,9 +733,16 @@ def build_inventory(repo: Path, top: int = 10) -> Dict[str, Any]:
 #
 # Default-OFF behavioral change. The *decision* (this module) is non-canonical
 # and lives here in `scripts/`; the actual `context_auto_compacted` /
-# `context_auto_compact_suppressed` closed-enum audit emit is CANONICAL
-# (`.claude/hooks/_lib/audit_emit.py`) and is staged for Owner-GPG under
-# `.claude/plans/PLAN-133/staged/D1.proposal.md` — this file never edits it.
+# `context_auto_compact_suppressed` closed-enum audit emit is CANONICAL and has
+# since LANDED in `.claude/hooks/_lib/audit_emit.py` (+ `SPEC/v1/
+# audit-log.schema.md` + `.claude/data/audit-registry.golden.txt`) — this file
+# never edits it. (The former pointer to `.claude/plans/PLAN-133/staged/
+# D1.proposal.md` is stale: that path no longer exists.)
+#
+# PLAN-179 W3 US11 status: KEEP, as an exported policy — NOT as coverage. The
+# emit exists; the EMITTER does not. Zero callers repo-wide and zero observed
+# events. See `probe_status()` at the end of the D5 block, and
+# `.claude/plans/PLAN-179/orphan-probe-decision.md`.
 #
 # Doctrine compliance:
 #   * Default-OFF: the feature is INACTIVE unless `CEO_AUTO_COMPACT_THRESHOLD`
@@ -983,10 +1025,24 @@ def decide_compaction(
 # ---------------------------------------------------------------------------
 #
 # Default-OFF behavioral change. The *decision* (this module) is non-canonical
-# and lives here in `scripts/`; the actual `subagent_output_summarized` /
-# `subagent_output_summarize_skipped` closed-enum audit emit is CANONICAL
-# (`.claude/hooks/_lib/audit_emit.py`) and is staged for Owner-GPG under
-# `.claude/plans/PLAN-133/staged/D2.proposal.md` — this file never edits it.
+# and lives here in `scripts/`.
+#
+# STALE CLAIM CORRECTED (PLAN-179 W3 US11). This block used to state that
+# the `subagent_output_summarized` / `subagent_output_summarize_skipped`
+# closed-enum audit emit "is CANONICAL (`.claude/hooks/_lib/audit_emit.py`) and
+# is staged for Owner-GPG under `.claude/plans/PLAN-133/staged/D2.proposal.md`".
+# BOTH halves are false as measured on 2026-08-18: neither action name occurs
+# anywhere in `.claude/hooks/_lib/audit_emit.py` or `SPEC/v1/audit-log.schema.md`
+# (they occur ONLY in this file), and neither `.claude/plans/PLAN-133/staged/`
+# nor `.claude/plans/PLAN-133/` exists. D2 is an orphan at BOTH ends.
+#
+# PLAN-179 W3 US11 verdict: **REMOVE — pending co-deletion of its test.** The
+# removal must take out this block, the `--summarize-decision` /
+# `--output-sizes` / `--output-sizes-file` CLI surface, and
+# `TestSummarizationPolicy` in `.claude/scripts/tests/test_context_budget.py`
+# in ONE change. Removing the probe alone turns a green suite red, which is
+# strictly worse than the debt. Until then the state is DECLARED in
+# `probe_status()` so nobody mistakes it for coverage.
 #
 # The IDEA (re-implemented from scratch, stdlib-only, NOT vendored): when the
 # context window fills, the OLDEST + most-VERBOSE subagent tool-outputs are the
@@ -1271,9 +1327,15 @@ def decide_summarization(
 # Default-OFF behavioral change. The *decision + transform* (this module) is
 # non-canonical and lives here in `scripts/`; the actual
 # `context_middle_out_degraded` / `context_middle_out_degrade_failed`
-# closed-enum audit emit is CANONICAL (`.claude/hooks/_lib/audit_emit.py`) and is
-# staged for Owner-GPG under `.claude/plans/PLAN-133/staged/D5.proposal.md` —
-# this file never edits it.
+# closed-enum audit emit is CANONICAL and has since LANDED in
+# `.claude/hooks/_lib/audit_emit.py` (+ `SPEC/v1/audit-log.schema.md` +
+# `.claude/data/audit-registry.golden.txt`) — this file never edits it. (The
+# former pointer to `.claude/plans/PLAN-133/staged/D5.proposal.md` is stale:
+# that path no longer exists.)
+#
+# PLAN-179 W3 US11 status: KEEP, as an exported policy — NOT as coverage. Same
+# shape as D1: the emit exists, the EMITTER does not. See `probe_status()`
+# below and `.claude/plans/PLAN-179/orphan-probe-decision.md`.
 #
 # The IDEA (re-implemented from scratch, stdlib-only, NOT vendored): when the
 # assembled context would OVERFLOW the model window, do NOT hard-fail. Instead,
@@ -1804,6 +1866,150 @@ def apply_middle_out_degradation(
 
 
 # ---------------------------------------------------------------------------
+# PLAN-179 W3 item US11 — declared probe status (orphan-probe debt ledger)
+# ---------------------------------------------------------------------------
+#
+# "An orphan probe that stays is debt that LOOKS like coverage." The three
+# PLAN-133 Wave D decision probes above (D1/D2/D5) are complete, tested, and
+# CALLED BY NOBODY. Silence is the failure mode: a reader sees a `--*-decision`
+# flag plus a test class and concludes the behaviour is wired.
+#
+# This block makes the state EXPLICIT and machine-readable. It is descriptive
+# only — it changes no behaviour, gates nothing, and is rendered in `--json`,
+# in the human report, and standalone via `--probe-status`.
+#
+# Every "measured" field below was established by grep/count on 2026-08-18 and
+# is reproducible; the commands are recorded in
+# `.claude/plans/PLAN-179/orphan-probe-decision.md`. `observed_emits` counted
+# 0 of each action across 7972 parsed audit-log events.
+
+# Closed verdict enum, so a reader (or a future gate) can branch on it.
+PROBE_VERDICT_KEEP = "keep_exported_policy"   # no in-repo consumer is possible
+PROBE_VERDICT_REMOVE_PENDING = "remove_pending_test_codeletion"
+
+PROBE_STATUS = (
+    {
+        "probe": "D1",
+        "subject": "proactive auto-compaction policy (hysteresis)",
+        "entrypoints": ("decide_compaction", "--compact-decision"),
+        "env_flag": ENV_AUTO_COMPACT_THRESHOLD,
+        "audit_actions": (
+            "context_auto_compacted",
+            "context_auto_compact_suppressed",
+        ),
+        "canonical_emit_landed": True,
+        "emitters_in_repo": 0,
+        "observed_emits": 0,
+        "verdict": PROBE_VERDICT_KEEP,
+        "consumer": (
+            "a HOST LOOP that owns its own context-management step (an adopter "
+            "API/SDK harness). It does not exist here and cannot: Claude Code "
+            "owns compaction, and the pinned hook schema gives PreCompact NO "
+            "hookSpecificOutput arm, so a hook may observe or block a "
+            "compaction but never drive one."
+        ),
+        "why_not_removed": (
+            "the canonical half IS landed (audit_emit + SPEC v1 + the golden "
+            "audit registry). Deleting the decision half here would orphan a "
+            "canonical surface that only an Owner-GPG ceremony may touch."
+        ),
+        "removal_scope": (
+            "Owner-GPG ceremony: .claude/hooks/_lib/audit_emit.py, "
+            "SPEC/v1/audit-log.schema.md, .claude/data/audit-registry.golden.txt, "
+            "this block, and the matching tests."
+        ),
+    },
+    {
+        "probe": "D2",
+        "subject": "summarize oldest verbose subagent outputs (protect last N)",
+        "entrypoints": ("decide_summarization", "--summarize-decision"),
+        "env_flag": ENV_SUMMARIZE_OLDEST,
+        "audit_actions": (
+            "subagent_output_summarized",
+            "subagent_output_summarize_skipped",
+        ),
+        "canonical_emit_landed": False,
+        "emitters_in_repo": 0,
+        "observed_emits": 0,
+        "verdict": PROBE_VERDICT_REMOVE_PENDING,
+        "consumer": (
+            "none, and none is buildable here: D2 requires a cheap-tier MODEL "
+            "call to produce the digest, and this framework's in-path code is "
+            "stdlib-only and no-network by construction."
+        ),
+        "why_not_removed": (
+            "the deletion must remove the probe AND its test in the SAME "
+            "change; the test file was outside the authoring agent's file "
+            "assignment. Removing the probe alone would turn a green suite red "
+            "— strictly worse than the declared debt."
+        ),
+        "removal_scope": (
+            "non-canonical, no ceremony: the D2 block in this file, the "
+            "--summarize-decision / --output-sizes / --output-sizes-file CLI "
+            "surface, and class TestSummarizationPolicy in "
+            ".claude/scripts/tests/test_context_budget.py."
+        ),
+    },
+    {
+        "probe": "D5",
+        "subject": "middle-out degradation ladder on context overflow",
+        "entrypoints": (
+            "decide_middle_out_degradation",
+            "apply_middle_out_degradation",
+            "--middle-out-decision",
+        ),
+        "env_flag": ENV_MIDDLE_OUT_DEGRADE,
+        "audit_actions": (
+            "context_middle_out_degraded",
+            "context_middle_out_degrade_failed",
+        ),
+        "canonical_emit_landed": True,
+        "emitters_in_repo": 0,
+        "observed_emits": 0,
+        "verdict": PROBE_VERDICT_KEEP,
+        "consumer": (
+            "the same absent HOST LOOP as D1 — the component that assembles "
+            "the context and discovers the overflow. Claude Code assembles its "
+            "own context; this framework never sees the message list."
+        ),
+        "why_not_removed": (
+            "identical to D1: the canonical emit half is landed, so removal is "
+            "a ceremony, not a script edit."
+        ),
+        "removal_scope": (
+            "Owner-GPG ceremony: .claude/hooks/_lib/audit_emit.py, "
+            "SPEC/v1/audit-log.schema.md, .claude/data/audit-registry.golden.txt, "
+            "this block, and the matching tests."
+        ),
+    },
+)
+
+# One line per probe, rendered in the human report so the debt is visible to a
+# reader who never opens the JSON.
+PROBE_STATUS_NOTE = (
+    "Decision probes D1/D2/D5 in this CLI have ZERO callers and have never "
+    "fired — they are reference policy, NOT coverage. Verdicts, consumers and "
+    "removal scope: probe_status() / --probe-status (PLAN-179 W3 US11)."
+)
+
+
+def probe_status() -> List[Dict[str, Any]]:
+    """Return the declared D1/D2/D5 probe-status records (fresh, mutable).
+
+    Descriptive only. Tuples are converted to lists so the result is
+    JSON-serialisable and a caller mutating it cannot corrupt the module
+    constant.
+    """
+    out: List[Dict[str, Any]] = []
+    for rec in PROBE_STATUS:
+        item: Dict[str, Any] = {}
+        for key, value in rec.items():
+            item[key] = list(value) if isinstance(value, tuple) else value
+        out.append(item)
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Optional P3 fold-in: tool-loop scan (ECC ecc-context-monitor idea)
 # ---------------------------------------------------------------------------
 
@@ -1934,6 +2140,23 @@ def _render_human(report: Dict[str, Any], top: int) -> str:
             lines.append("      {}".format(f["message"]))
     lines.append("")
 
+    # PLAN-179 W3 US11 — declared probe status (debt, not coverage).
+    probes = report.get("probe_status", [])
+    if probes:
+        lines.append("## decision-probe status (D1/D2/D5 — reference policy, "
+                     "NOT wired)")
+        for p in probes:
+            lines.append("  [{}] {} — verdict={}".format(
+                p.get("probe"), p.get("subject"), p.get("verdict")))
+            lines.append("      emitters in repo: {} | observed emits: {} | "
+                         "canonical emit landed: {}".format(
+                             p.get("emitters_in_repo"),
+                             p.get("observed_emits"),
+                             p.get("canonical_emit_landed"),
+                         ))
+            lines.append("      missing consumer: {}".format(p.get("consumer")))
+        lines.append("")
+
     lines.append("## honesty notes")
     for note in report.get("notes", []):
         lines.append("  - {}".format(note))
@@ -2047,6 +2270,12 @@ def _cli(argv: List[str]) -> int:
     parser.add_argument(
         "--budget-tokens", type=int, default=None,
         help="(D5) the token budget the assembled context must fit within")
+    # PLAN-179 W3 US11 — print the declared D1/D2/D5 probe status and exit.
+    parser.add_argument(
+        "--probe-status", action="store_true",
+        help="(US11) print the declared orphan-probe status for the D1/D2/D5 "
+             "decision probes (verdict, missing consumer, removal scope), "
+             "then exit. Descriptive only.")
     args = parser.parse_args(argv)
 
     # CEO_SOTA_DISABLE contract: any *scheduled* machinery must honor it.
@@ -2060,6 +2289,12 @@ def _cli(argv: List[str]) -> int:
     # nonsensical "top -N" header. 0 cleanly means "rank nothing".
     if args.top is not None and args.top < 0:
         args.top = 0
+
+    # US11 fold-in mode — independent of the inventory. Pure description of the
+    # probe debt; reads nothing, writes nothing, always exit 0.
+    if args.probe_status:
+        print(json.dumps(probe_status(), indent=2))
+        return 0
 
     # D1 fold-in mode — independent of the inventory. Advisory + read-only:
     # prints the decision dict, never compacts, never emits, always exit 0.
