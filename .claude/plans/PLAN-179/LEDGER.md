@@ -4,6 +4,32 @@
 > na morte da sessão. Só identificadores verbatim (paths, SHAs, ids) —
 > nunca corpo de transcript. Teto ≤2k tokens; seções antigas arquivadas.
 
+## Estado final da sessão autônoma (16:13)
+
+**PRONTO PARA O OWNER — duas cerimônias, nesta ordem:**
+1. `! bash ~/canhada-labs/OWNER-W3K-SIGN.sh` — PLAN-169 W3-K (kernel).
+   **SESSÃO DEDICADA** (U-3): o script recusa rodar se o override já estiver no
+   ambiente, arma no menor escopo, desarma e tem trap EXIT.
+2. `! bash ~/canhada-labs/OWNER-W179-SIGN.sh` — PLAN-179 W0+W1+W1-b.
+   24 paths; simulação de land em clone **8/8 verde, rc agregado 0**.
+3. (depois) `staged-w24` (W2+W4) — montar o BASELINE só DEPOIS que o w01 landar,
+   porque toca `audit_emit.py`/`settings.json` que o w01 move.
+
+**Landado hoje (superfície livre, sem cerimônia):** higiene de lifecycle (5
+planos → done, 2 → reviewed), ledger final do 169 (62 itens), evidência E0
+verificada contra o hash pinado, PLAN-170 autorado, W3 do 179 inteira
+(floor-reduction com F MEDIDO, veredito de eviction, template de compactação,
+sondas órfãs, guia do adopter), threat model do estado durável, correção da
+premissa falsificada do W3-K no corpo do plano.
+
+**NÃO fecha hoje, com razão mecânica (não é falta de tempo):**
+- GA v1.4.0: hold de 24h ENFORÇADO em `release.yml:292-352`.
+- Corte rc.1: o conteúdo da 1.4.0 É a W4+W4-C (~900k, abertas) — cortar hoje
+  shipparia uma 1.4.0 sem features; e o retarget de `release.sh` virou
+  checksum-pinado pelo ADR-192 que landou hoje de manhã.
+- W4/W4-C do 169: bloqueadas em 3 conjuntos de probes não rodados, 2 dos quais
+  podem invalidar o próprio item.
+
 ## Unidade corrente (atualizado 15:25)
 
 **U5 — dois packs em construção + 1 cerimônia de kernel.**
