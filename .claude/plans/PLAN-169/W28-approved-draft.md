@@ -30,6 +30,9 @@ npm/README.md
 docs/CTO-GUIDE.md
 docs/FAQ.md
 docs/GUIA-COMPLETO.md
+docs/ARCHITECTURE.md
+docs/README.md
+CHANGELOG.md
 .claude/adr/ADR-192-gate-scripts-checksum-manifest.md
 .claude/adr/ADR-193-break-glass-repo-kill-switches.md
 .claude/governance/gate-scripts-manifest.txt
@@ -48,9 +51,12 @@ docs/GUIA-COMPLETO.md
 3. **ADR-192** (gate-scripts, ACCEPTED) + **ADR-193** (break-glass,
    ACCEPTED, renumerado de 191).
 4. **RELEASE.md**: 31→32 steps (o novo step do release.yml).
-5. **Contagem de ADRs 192→194** nas 7 superfícies derivadas (CLAUDE.md,
-   READMEs, CTO-GUIDE, FAQ, GUIA) — tolerance=0 dos gates exige o bump
-   no MESMO trem que adiciona os 2 ADRs.
+5. **Contagem de ADRs 192→194** nas 10 superfícies vigiadas pelo
+   `verify-counts.sh` (CLAUDE.md, READMEs, CTO-GUIDE, FAQ, GUIA,
+   ARCHITECTURE, docs/README, header do CHANGELOG) — tolerance=0 dos
+   gates exige o bump no MESMO trem que adiciona os 2 ADRs. (As 3
+   últimas entraram após o G4 do dry-run pegar o pack de 7 vermelho —
+   a lista foi derivada do gate, não de memória.)
 6. Contrato novo daqui em diante: edit legítimo num membro exige re-pin
    do manifesto NO MESMO commit (rota: cerimônia canonical-edit).
 

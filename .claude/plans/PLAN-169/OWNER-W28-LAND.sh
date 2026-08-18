@@ -34,7 +34,10 @@ README.pt-BR.md
 npm/README.md
 docs/CTO-GUIDE.md
 docs/FAQ.md
-docs/GUIA-COMPLETO.md"
+docs/GUIA-COMPLETO.md
+docs/ARCHITECTURE.md
+docs/README.md
+CHANGELOG.md"
 NEW_ADRS=".claude/adr/ADR-192-gate-scripts-checksum-manifest.md
 .claude/adr/ADR-193-break-glass-repo-kill-switches.md"
 MEMBERS=".claude/scripts/local/verify-counts.sh
