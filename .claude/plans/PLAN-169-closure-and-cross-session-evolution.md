@@ -303,6 +303,27 @@ canônico ANTES da validação; casos de teste com `/` e `&`.** Testes: persona 
 7. Protocolo: staged/ + manifesto sha256 RASTREADO + `shasum -c`
    fail-closed + sentinel GPG inline + touched−scope=∅ + land.
 
+### Registro de execução — W3 LANDADA (S312, 2026-08-18, commit `e5ce982`)
+
+Pack RE-STAGED por item semântico (S312; 17 receitas Workflow
+`wf_69229d1b`, merge 3-way live×baseline×staged) e landado por cerimônia
+GPG (`W3-approved.md` + `.asc`, anchor `996d72b`): 14 targets + 1 novo
+(`test-w3-vcures.sh`). G1-G7 verdes; bateria viva: render 9/9, suíte
+completa 7.049 passed. Curas V1/V2/V4/V5 do verdito rc.2 CURADAS.
+- 10 staged CONSUMIDOS (`staged-w3/consumed/` — itens já no vivo por
+  outra rota; whole-file regrediria curas).
+- PENDENTES ⚖️ do Owner (`staged-w3/pending-w28/` + PENDING-DECISIONS.md):
+  família W2.8 (item 6 desta wave) e ADR break-glass (W0.9) + RELEASE.md
+  (delta família-dependente). Itens 5-6 do plano desta wave ficam
+  PARCIAIS até essas decisões.
+- Follow-up de gate registrado: o G4 do `OWNER-W3-LAND.sh` roda a
+  bateria num subshell `( ... ) || ABORT` — o `set -e` interno é
+  desabilitado pela semântica do bash e só o rc do ÚLTIMO comando
+  decide o abort (o FAIL R1 ambiental do macOS TMPDIR passou sem
+  abortar; inócuo aqui porque o G6 vivo re-roda e deu 9/9, mas é a
+  classe "gate que não fala"). Cura: agregar rc por comando; e rodar a
+  sim fora do $TMPDIR symlinked.
+
 ### W3-K — Cerimônia de kernel (E.2) (L3+, escopo próprio)
 
 - Emits do caminho GRANT do `check_arbitration_kernel.py` são
