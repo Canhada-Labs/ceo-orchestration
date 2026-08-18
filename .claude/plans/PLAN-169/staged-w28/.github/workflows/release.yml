@@ -1,0 +1,999 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release-gate:
+    # PLAN-012 Phase 2 CEO_SOTA_DISABLE parity.
+    if: vars.CEO_SOTA_DISABLE != '1'
+    runs-on: ubuntu-latest
+    # 20 -> 35 (S300, corte da rc.2): o gate da rc.1 levou 18m37s
+    # (margem de 1m23s) e o attempt-1 da rc.2 ESTOUROU os 20 min com
+    # ~10 min de stalls das suites em runner 2-core carregado (classe
+    # ADR-163/perf-under-load) — o passo do verdito imprimiu all-green
+    # 13ms antes do machado. Mesma regra anti-flake dos budgets do
+    # smoke/nightly: folga primeiro, re-apertar com p95 real acumulado.
+    timeout-minutes: 35
+    permissions:
+      # `contents: read` for checkout; `actions: read` lets the
+      # weekly-workflow status gate (see below) call `gh run list`
+      # against the public Actions REST API.
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout tag
+        # SHA-pinned (Sprint 7 Dependabot bump): actions/checkout@v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python 3.11
+        # SHA-pinned (Sprint 7 Dependabot bump): actions/setup-python@v6.2.0
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.11"
+
+      # -----------------------------------------------------------------
+      # PLAN-169 W2.8 (ADR-192, route (b)-narrow) — gate-scripts integrity.
+      # The surfaces that DECIDE this release are canonical, but the body
+      # of the decision lives in free scripts they invoke. This step pins
+      # the release-critical subset by content: any drift between the
+      # canonical manifest (.claude/governance/gate-scripts-manifest.txt —
+      # updating it requires the GPG ceremony) and the tagged tree fails
+      # the run LOUDLY before any member script is invoked. Runs FIRST so
+      # a drifted member never gets to vote on its own integrity.
+      # release.sh has no CI surface that runs it; its entry here is the
+      # post-hoc check (the tagged tree's driver matched the manifest).
+      # -----------------------------------------------------------------
+      - name: Gate-scripts integrity (W2.8 checksum manifest)
+        run: |
+          set -euo pipefail
+          M=.claude/governance/gate-scripts-manifest.txt
+          if [[ ! -f "$M" ]]; then
+            echo "::error::$M missing — the W2.8 gate-scripts manifest is a canonical tracked file"
+            exit 1
+          fi
+          if ! shasum -a 256 -c "$M"; then
+            echo "::error::gate-script drift: a release-critical script does not match $M (ADR-192). Legitimate edits to a member go through the canonical-edit ceremony that updates the manifest."
+            exit 1
+          fi
+          echo "OK: all gate scripts match $M"
+
+      # -----------------------------------------------------------------
+      # PLAN-153 Wave B item 5 (c) — RC-aware VERSION↔tag comparison.
+      # Closes PLAN-152 §Deferred `release-gate-rc-version-mismatch`
+      # (red run 28663453202 precedent).
+      #
+      # THE RC FLOW (documented so this never regresses): an RC tag
+      # `v<X.Y.Z>-rc.N` is cut from a tree whose VERSION file ALREADY
+      # reads the GA value `X.Y.Z` — the `-rc.N` pre-release suffix
+      # exists only in the tag name, never in the VERSION file. (The
+      # 24h RC-hold gate below encodes the same convention: it derives
+      # the RC tag family `v${VERSION}-rc.*` from the GA VERSION.)
+      # The old comparison (`FILE != TAG#v`) therefore hard-failed
+      # every RC tag's own release run: `v1.0.1-rc.1` vs
+      # `VERSION=1.0.1`. Fix: strip a trailing `-rc.<digits>` from the
+      # tag before comparing. GA tags are unaffected (nothing to
+      # strip); a wrong-version RC (`v1.0.2-rc.1` on `VERSION=1.0.1`)
+      # still hard-fails.
+      # -----------------------------------------------------------------
+      - name: Assert VERSION matches tag
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          FILE="$(tr -d '[:space:]' < VERSION)"
+          EXPECTED="${TAG#v}"
+          BASE="${EXPECTED%-rc.[0-9]*}"
+          if [[ "$FILE" != "$BASE" ]]; then
+            echo "::error::VERSION file ('$FILE') does not match tag ('$TAG' → expected '$BASE')"
+            exit 1
+          fi
+          if [[ "$EXPECTED" != "$BASE" ]]; then
+            echo "OK: VERSION=$FILE matches RC tag=$TAG (compared against base '$BASE' after stripping the -rc.N pre-release suffix)"
+          else
+            echo "OK: VERSION=$FILE matches tag=$TAG"
+          fi
+
+      # -----------------------------------------------------------------
+      # PLAN-166 W1 item 2 (F3, ADR-155-AMEND-1 §5, Forma A (ii)) — the
+      # framework version marker `.claude/.framework-version` is a TRACKED
+      # one-line file, byte-identical to VERSION (the version bump writes
+      # it as a site; verify-counts.sh cross-checks it). This assert is
+      # deliberately UNCONDITIONAL and fail-closed: a missing marker in a
+      # release checkout means the ceremony that introduced it was
+      # reverted or the bump skipped a site — either way the tag must not
+      # ship. Kept NEXT TO the VERSION↔tag assert above so the whole
+      # version-consistency family lives in one place (same convention as
+      # the plugin-manifest step below).
+      # -----------------------------------------------------------------
+      - name: Assert framework-version marker matches VERSION
+        run: |
+          set -euo pipefail
+          if [[ ! -f .claude/.framework-version ]]; then
+            echo "::error::.claude/.framework-version is missing — it is a tracked file (PLAN-166 F3 / ADR-155-AMEND-1); a release checkout without it must not ship"
+            exit 1
+          fi
+          # BYTE-identical, as the contract says — cmp, not tr-stripped
+          # equality. The old tr -d '[:space:]' compare accepted '1 . 3 . 0'
+          # or '1.3.0\n\n' while the error message promised byte identity
+          # (repass-r2 part-e P2: assert weaker than its own claim).
+          if ! cmp -s VERSION .claude/.framework-version; then
+            echo "::error::.claude/.framework-version is not byte-identical to VERSION — the version bump writes it as a site (Forma A (ii), fail-closed). xxd both files to see the drift."
+            exit 1
+          fi
+          echo "OK: .claude/.framework-version is byte-identical to VERSION ($(tr -d '[:space:]' < VERSION))"
+
+      # -----------------------------------------------------------------
+      # PLAN-153 Wave B item 5 (e) — version↔plugin-manifest sync, kept
+      # NEXT TO the VERSION↔tag assert above so the whole
+      # version-consistency family lives in one place.
+      #
+      # `.claude-plugin/{plugin.json,marketplace.json}` are generated by
+      # `build-plugin.py` (Wave B item 6). Until item 6 lands, the
+      # manifests do not exist and this step passes with a ::notice
+      # (self-arming: the equality checks become enforcing the moment
+      # the manifests appear in the tree — no workflow re-edit needed).
+      # `marketplace.json`'s schema is owned by build-plugin.py, so we
+      # assert on EVERY nested `version` field found rather than
+      # hardcoding one JSON path.
+      # -----------------------------------------------------------------
+      - name: Assert plugin manifest versions match VERSION
+        run: |
+          set -euo pipefail
+          FILE="$(tr -d '[:space:]' < VERSION)"
+          if [[ ! -f .claude-plugin/plugin.json ]]; then
+            echo "::notice::.claude-plugin/plugin.json not present yet (PLAN-153 Wave B item 6) — sync check self-arms once it lands"
+            exit 0
+          fi
+          PLUGIN_V=$(jq -r '.version // empty' .claude-plugin/plugin.json)
+          if [[ "$PLUGIN_V" != "$FILE" ]]; then
+            echo "::error::.claude-plugin/plugin.json version ('$PLUGIN_V') does not match VERSION ('$FILE')"
+            exit 1
+          fi
+          echo "OK: plugin.json version=$PLUGIN_V matches VERSION"
+          if [[ -f .claude-plugin/marketplace.json ]]; then
+            BAD=0
+            while IFS= read -r v; do
+              [[ -z "$v" ]] && continue
+              if [[ "$v" != "$FILE" ]]; then
+                echo "::error::.claude-plugin/marketplace.json carries version '$v' != VERSION ('$FILE')"
+                BAD=1
+              fi
+            done < <(jq -r '.. | objects | .version? // empty' .claude-plugin/marketplace.json)
+            if [[ "$BAD" -ne 0 ]]; then
+              exit 1
+            fi
+            echo "OK: every marketplace.json version field matches VERSION"
+          else
+            echo "::notice::.claude-plugin/marketplace.json not present — skipping"
+          fi
+
+      # -----------------------------------------------------------------
+      # F5 — RC-hold / staleness waiver SUNSET assertion.
+      #
+      # The pre-GA waivers in .claude/governance/governance-waivers.yaml
+      # are honest ONLY while the project is pre-GA (adopter_count=0).
+      # Every existing rc_hold/workflow_staleness entry is a 1.x version
+      # carrying "Pre-GA ... adopter_count=0". To stop that 100%-waiver
+      # escape from silently following the project into GA, this step
+      # FAILS the release the moment any waiver `version` parses >= the
+      # configured FIRST_GA floor. The floor is the first version at which
+      # the framework intends to claim GA / publish to adopters; per
+      # ADR-073 the next major (v2.0.0) is the documented GA/breaking
+      # boundary, so 2.0.0 is the mechanical sunset. After the first real
+      # adopter ships, lower FIRST_GA (or empty the waiver lists) so the
+      # ADR-007 RC-hold + 14-day staleness gates resume real enforcement.
+      #
+      # Today (max waiver 1.0.0 < 2.0.0) this passes; it is a tripwire,
+      # not a behavior change for the current pre-GA train.
+      #
+      # `-rc.N` pre-release suffixes are stripped before comparison: RC
+      # tags forensically short-circuit the hold gate (see below), so an
+      # rc.* waiver is never an enforcement bypass on its own.
+      # -----------------------------------------------------------------
+      - name: Assert no waiver has reached the GA sunset floor
+        env:
+          # First version at which pre-GA waivers are no longer honest.
+          # Bump DOWN (or empty the waiver lists) once an adopter ships.
+          FIRST_GA: "2.0.0"
+        run: |
+          set -euo pipefail
+          WAIVER_FILE=".claude/governance/governance-waivers.yaml"
+          if [[ ! -f "$WAIVER_FILE" ]]; then
+            echo "OK: no waiver file present — nothing to sunset"
+            exit 0
+          fi
+
+          # Extract every `version:` value from BOTH waiver sections using
+          # the same flag-based section parser the file documents (a range
+          # pattern collapses because the start/end regex overlap), strip
+          # any -rc.* suffix, then sort -V -u. Iterated via a while-read
+          # loop (portable: no mapfile / bash-4 dependency).
+          FAILED=0
+          COUNT=0
+          while IFS= read -r v; do
+            [[ -z "$v" ]] && continue
+            COUNT=$((COUNT + 1))
+            # v >= FIRST_GA  <=>  the smaller of {v, FIRST_GA} under
+            # version-sort is FIRST_GA. (Equal floor counts as reached.)
+            LOWER="$(printf '%s\n%s\n' "$v" "$FIRST_GA" | sort -V | head -1)"
+            if [[ "$v" == "$FIRST_GA" || "$LOWER" == "$FIRST_GA" ]]; then
+              echo "::error::Waiver version $v has reached the GA sunset floor (FIRST_GA=$FIRST_GA)"
+              echo "::error::Pre-GA RC-hold/staleness waivers are dishonest at or past GA."
+              echo "::error::Remove the $v waiver entry (and resume ADR-007 enforcement) or lower FIRST_GA only with a real adopter."
+              FAILED=1
+            fi
+          done < <(
+            {
+              awk '/^rc_hold:/{f=1; next} f && /^[a-z_]+:/{f=0} f' "$WAIVER_FILE"
+              awk '/^workflow_staleness:/{f=1; next} f && /^[a-z_]+:/{f=0} f' "$WAIVER_FILE"
+            } \
+              | grep -oE '^[[:space:]]*-[[:space:]]*version:[[:space:]]*[0-9][0-9A-Za-z.+-]*' \
+              | grep -oE '[0-9][0-9A-Za-z.+-]*$' \
+              | sed -E 's/-rc\.[0-9.]+$//' \
+              | sort -V -u
+          )
+
+          if [[ "$COUNT" -eq 0 ]]; then
+            echo "OK: waiver file has no version entries to sunset"
+            exit 0
+          fi
+          if [[ "$FAILED" -ne 0 ]]; then
+            exit 1
+          fi
+          echo "OK: all $COUNT waiver versions are pre-GA (< FIRST_GA=$FIRST_GA)"
+
+      # -----------------------------------------------------------------
+      # PLAN-112-FOLLOWUP-canonical-doc-refresh-gate — canonical doc freshness.
+      #
+      # Fails the release when an in-scope canonical doc's machine-readable
+      # `<!-- last-reviewed: DATE vX.Y.Z -->` stamp is more MINOR releases
+      # behind VERSION than its tier allows (security docs N=1; general N=3).
+      # Missing/malformed stamp fails-CLOSED. Closes F-D4.
+      #
+      # Emergency bypass: the checker self-reads an Owner-signed
+      # `doc_freshness:` entry (matching this release version) in
+      # `.claude/governance/governance-waivers.yaml` and, when present,
+      # passes WITH a surfaced ::warning (never a silent skip).
+      # -----------------------------------------------------------------
+      - name: Canonical doc freshness gate
+        run: |
+          set -euo pipefail
+          python3 .claude/scripts/check-canonical-doc-freshness.py
+
+      # -----------------------------------------------------------------
+      # PLAN-013 Phase 0 item 0.3 — mandatory RC-to-GA hold enforcement.
+      # AMENDED 2026-05-03 per ADR-103: 7-day calendar gate REDUCED to
+      # 24h Codex re-pass mechanical window per ADR-095 §gate-#6.
+      #
+      # Debate Round 1 consensus §S3 HIGH (DevOps): "7-day RC hold is
+      # policy not mechanism. Policy without mechanism is hope."
+      #
+      # Rule: a GA tag `v1.x.y` MAY only ship after its corresponding
+      # RC tag `v1.x.y-rc.N` has existed for ≥24 hours. The 24h window
+      # is mechanical: bounds the maximum Codex external re-pass
+      # turnaround (anti same-LLM bias per ADR-095 §gate-#6). NOT a
+      # "settle period" — vibecoder-only thesis (ADR-096) means no
+      # external adopter pressure for calendar buffers.
+      #
+      # Mechanism:
+      #   1. If tag contains `-rc.` → skip check (RC tags always pass)
+      #   2. Else find most recent `v<VERSION>-rc.*` tag (by creator date)
+      #   3. If none exists → fail (mandatory RC before GA)
+      #   4. Else compute delta; reject if < 24h (86400 seconds)
+      # -----------------------------------------------------------------
+      - name: Assert 24h Codex re-pass window (GA tags only, waiver-aware)
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
+
+          # RC tags short-circuit — they are always permitted.
+          if [[ "$TAG" == *-rc.* ]]; then
+            echo "::notice::$TAG is an RC tag — skipping 24h hold check"
+            exit 0
+          fi
+
+          # Pre-GA waiver check (PLAN-051 round-19, ADR-007 amendment).
+          # During initial framework development with adopter_count=0,
+          # the RC-hold window can be waived per Owner authorization
+          # recorded in .claude/governance/rc-hold-waivers.yaml. The
+          # waiver is additive: post-first-adopter, the file is expected
+          # to be empty and ADR-007 default resumes. Each waiver entry
+          # cites Owner directive + round-NN sentinel commit.
+          WAIVER_FILE=".claude/governance/governance-waivers.yaml"
+          if [[ -f "$WAIVER_FILE" ]]; then
+            if awk '/^rc_hold:/{f=1; next} f && /^[a-z_]+:/{f=0} f' "$WAIVER_FILE" | grep -qE "^[[:space:]]*-[[:space:]]*version:[[:space:]]*${VERSION}[[:space:]]*$"; then
+              echo "::notice::$TAG has a pre-GA RC-hold waiver in $WAIVER_FILE — skipping hold check"
+              exit 0
+            fi
+          fi
+
+          # Find the most-recent RC tag for this version, by creator date.
+          # `git tag -l --sort=-creatordate` handles both lightweight and
+          # annotated tags uniformly via the dereferenced date.
+          LAST_RC=$(git tag -l --sort=-creatordate "v${VERSION}-rc.*" | head -1)
+
+          if [[ -z "$LAST_RC" ]]; then
+            echo "::error::GA tag $TAG has no prior v${VERSION}-rc.* tag"
+            echo "::error::Mandatory RC-hold requires a prior RC tag"
+            echo "::error::Cut v${VERSION}-rc.1 first; wait 24h (Codex re-pass turnaround); then cut $TAG"
+            exit 1
+          fi
+
+          # Creator-date gives a unix-epoch timestamp for both
+          # annotated (tagger date) and lightweight (committer date) tags.
+          RC_TS=$(git tag -l --format='%(creatordate:unix)' "$LAST_RC")
+          GA_TS=$(git tag -l --format='%(creatordate:unix)' "$TAG")
+
+          if [[ -z "$RC_TS" || -z "$GA_TS" ]]; then
+            echo "::error::Could not read creator-date for $LAST_RC or $TAG"
+            exit 1
+          fi
+
+          DELTA=$((GA_TS - RC_TS))
+          ONE_DAY=$((1 * 86400))
+          HOURS=$((DELTA / 3600))
+
+          if [[ "$DELTA" -lt "$ONE_DAY" ]]; then
+            echo "::error::GA tag $TAG is only $HOURS hours after $LAST_RC"
+            echo "::error::Mandatory 24h Codex re-pass window not met (delta=${DELTA}s < 86400s)"
+            echo "::error::Wait $((24 - HOURS)) more hours OR run Codex re-pass synchronously and add waiver"
+            exit 1
+          fi
+
+          echo "OK: $TAG is $HOURS hours after $LAST_RC (≥24h Codex re-pass window per ADR-103)"
+
+      - name: Assert CHANGELOG entry exists
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
+          # PLAN-153 Wave B item 5 (c) — same RC normalization as the
+          # "Assert VERSION matches tag" step above: RC tags never get
+          # their own CHANGELOG section; an RC for X.Y.Z validates
+          # against the GA `## [X.Y.Z]` section (which exists at RC-cut
+          # time because the VERSION bump + CHANGELOG entry land before
+          # the RC is tagged). Without this strip the fixed VERSION gate
+          # would just move the RC red run one step later.
+          VERSION="${VERSION%-rc.[0-9]*}"
+          if ! grep -qE "^## \[${VERSION}\]" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no '## [${VERSION}]' section"
+            exit 1
+          fi
+          echo "OK: CHANGELOG has entry for [$VERSION]"
+
+      - name: Registry validation (must be clean)
+        run: python3 .claude/scripts/registry.py --validate
+
+      - name: Governance structural validation
+        run: bash .claude/scripts/validate-governance.sh
+
+      - name: Install test deps (CI-only, not shipped)
+        # Post-tag-v1.6.0-rc.1 hardening (Session 33 CI batch): Hook +
+        # Script test suites need pytest (4 script tests + several hook
+        # tests use pytest.fixture / tmp_path / capsys / pytest.raises)
+        # and pyyaml (benchmark loader). These are dev-only deps — never
+        # shipped in install.sh / upgrade.sh tarballs. Mirrors coverage.yml
+        # install step.
+        run: python3 -m pip install --quiet --no-cache-dir "pyyaml" "pytest==8.*"
+
+      - name: Hook test suite (all 168+ tests)
+        # pytest discovers both unittest.TestCase and pure-pytest tests.
+        run: python3 -m pytest .claude/hooks/tests -q --tb=short
+
+      - name: Script test suite (all 132+ tests)
+        run: python3 -m pytest .claude/scripts/tests -q --tb=short
+
+      - name: Replay test suite (PLAN-069 Phase 1 / ADR-101)
+        # 89+ tests covering replay-as-fixture mode, PII redaction, HMAC
+        # salt rebind, post-load defense-in-depth. Already wired via
+        # pytest.ini testpaths but invoked explicitly here for the tag
+        # release gate (Codex Session 81 P2#4 close).
+        run: python3 -m pytest .claude/scripts/replay/tests -q --tb=short
+
+      - name: Smoke install on scratch directory
+        run: |
+          set -euo pipefail
+          SCRATCH="$(mktemp -d -t ceo-smoke-XXXXXX)"
+          mkdir -p "$SCRATCH/target"
+          cd "$SCRATCH/target" && git init -q && cd - >/dev/null
+          bash scripts/install.sh "$SCRATCH/target" --profile core,frontend
+          # Essential files present?
+          test -f "$SCRATCH/target/.claude/team.md" || { echo "::error::team.md missing"; exit 1; }
+          test -f "$SCRATCH/target/.claude/settings.json" || { echo "::error::settings.json missing"; exit 1; }
+          test -d "$SCRATCH/target/.claude/skills/core" || { echo "::error::core skills missing"; exit 1; }
+          # Placeholders leaked?
+          if grep -rq "{{OWNER_NAME}}\|{{PROJECT_NAME}}" "$SCRATCH/target/.claude/hooks/" 2>/dev/null; then
+            echo "::error::unrendered placeholders leaked into hooks"
+            exit 1
+          fi
+          python3 -c "import json; json.load(open('$SCRATCH/target/.claude/settings.json'))"
+          echo "OK: smoke install complete"
+          rm -rf "$SCRATCH"
+
+      - name: Validate install.sh self-SHA mechanism (P0-15, PLAN-045)
+        # PLAN-045 F-15R2-01 / Session 41: end-to-end validation that
+        # the install.sh self-SHA verification works. We (a) confirm the
+        # placeholder is still present (source checkout state), (b) compute
+        # the expected sha, (c) substitute it into a temp copy, (d) run the
+        # temp copy — self-verify passes → rc=1 (usage exit, not rc=5).
+        run: |
+          set -euo pipefail
+          FILE="scripts/install.sh"
+          # (a) Placeholder must be present in source tree.
+          TRAILER_LINE="$(tail -n 1 "$FILE")"
+          if [ "$TRAILER_LINE" != "# CEO-INSTALL-SHA256: PLACEHOLDER_RELEASE_FILL" ]; then
+            echo "::error::Source install.sh trailer has drifted from placeholder."
+            echo "got: $TRAILER_LINE"
+            exit 1
+          fi
+          # (b) + (c) stage a populated copy in a scratch dir.
+          SCRATCH="$(mktemp -d -t ceo-selfsha-XXXXXX)"
+          cp "$FILE" "$SCRATCH/install.sh"
+          HASH=$(awk 'NR==FNR{n++; next} FNR < n' "$SCRATCH/install.sh" "$SCRATCH/install.sh" | sha256sum | awk '{print $1}')
+          awk -v hash="$HASH" '
+            NR == FNR { total = NR; next }
+            FNR == total { print "# CEO-INSTALL-SHA256: " hash; next }
+            { print }
+          ' "$SCRATCH/install.sh" "$SCRATCH/install.sh" > "$SCRATCH/install.sh.new"
+          mv "$SCRATCH/install.sh.new" "$SCRATCH/install.sh"
+          chmod +x "$SCRATCH/install.sh"
+          # (d) Run the populated copy with no args; must exit rc=1
+          #     (usage), NOT rc=5 (self-SHA mismatch).
+          set +e
+          bash "$SCRATCH/install.sh" > /dev/null 2>"$SCRATCH/err"
+          RC=$?
+          set -e
+          if [ "$RC" -eq 5 ]; then
+            echo "::error::populated install.sh still rc=5 — self-SHA mechanism broken"
+            cat "$SCRATCH/err"
+            exit 1
+          fi
+          if [ "$RC" -ne 1 ]; then
+            echo "::error::populated install.sh rc=$RC (expected 1 for usage exit)"
+            cat "$SCRATCH/err"
+            exit 1
+          fi
+          # (e) Tamper test: mutate body, verify rc=5.
+          # Prepend malicious line before the trailer
+          head -n -1 "$SCRATCH/install.sh" > "$SCRATCH/install.sh.tmp1"
+          echo 'echo "MALICIOUS_INJECT" >&2' >> "$SCRATCH/install.sh.tmp1"
+          tail -n 1 "$SCRATCH/install.sh" >> "$SCRATCH/install.sh.tmp1"
+          chmod +x "$SCRATCH/install.sh.tmp1"
+          set +e
+          bash "$SCRATCH/install.sh.tmp1" > /dev/null 2>"$SCRATCH/err2"
+          RC2=$?
+          set -e
+          if [ "$RC2" -ne 5 ]; then
+            echo "::error::tampered install.sh did NOT rc=5 (got $RC2) — self-SHA gate broken"
+            cat "$SCRATCH/err2"
+            exit 1
+          fi
+          echo "OK: install.sh self-SHA mechanism end-to-end validated"
+          rm -rf "$SCRATCH"
+
+      - name: Audit-log schema additivity check
+        run: |
+          set -euo pipefail
+          # Guard: the v1 agent_spawn required fields MUST still exist in schema doc
+          REQUIRED='ts|action|session_id|project|tool|subagent_type|desc_preview|desc_hash|skill|has_profile|has_file_assignment|prompt_len_bucket|response_kind|hook_duration_ms'
+          for f in $(echo "$REQUIRED" | tr '|' ' '); do
+            if ! grep -q "\"$f\":" .claude/plans/AUDIT-LOG-SCHEMA.md && ! grep -q "\`$f\`" .claude/plans/AUDIT-LOG-SCHEMA.md; then
+              echo "::error::v1 agent_spawn field '$f' missing from AUDIT-LOG-SCHEMA.md"
+              exit 1
+            fi
+          done
+          echo "OK: v1 agent_spawn schema additivity preserved"
+
+      # -----------------------------------------------------------------
+      # PLAN-012 Phase 2 §R11 — weekly-workflow status gate.
+      # PLAN-019 P2 DevOps-P2-1 — 14-day staleness check added.
+      #
+      # Before a tag ships, assert that recent runs of the six advisory
+      # workflows (chaos, otel-smoke, perf-profile, adapter-live,
+      # red-team, formal-verify) have NOT been failing AND are fresh
+      # (most-recent run within 14 days). A red chaos.yml in the past 3
+      # runs means we have live regressions that a tag should not paper
+      # over. A stale workflow (no runs in 14 days) means the advisory
+      # check is silently disabled — kill switch, cron disabled, or
+      # workflow deleted.
+      #
+      # Staleness defense (P2 DevOps-P2-1): absence of runs is NOT
+      # neutral. Prior logic treated "no runs" as pass — a 1-year-old
+      # repo with 0 runs silently passed, turning the gate into a
+      # honeypot. Now: most-recent run must have started within 14 days
+      # OR the gate fails with `Workflow X stale — last run N days ago`.
+      #
+      # Uses `gh run list` against the REST API via $GITHUB_TOKEN; read
+      # permission on `actions` is granted at job level.
+      # -----------------------------------------------------------------
+      - name: Weekly workflow status gate (advisory health check + 14-day staleness, waiver-aware)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
+
+          # Pre-GA waiver check (PLAN-051 round-19, ADR-007 amendment
+          # extension). Same waiver registry as the RC-hold gate:
+          # pre-GA phase with adopter_count=0 waives advisory-workflow
+          # staleness per Owner authorization. Post-first-adopter, the
+          # waiver file is expected to be empty and the gate resumes
+          # default enforcement.
+          WAIVER_FILE=".claude/governance/governance-waivers.yaml"
+          if [[ -f "$WAIVER_FILE" ]]; then
+            if awk '/^workflow_staleness:/{f=1; next} f && /^[a-z_]+:/{f=0} f' "$WAIVER_FILE" | grep -qE "^[[:space:]]*-[[:space:]]*version:[[:space:]]*${VERSION}[[:space:]]*$"; then
+              echo "::notice::$TAG has a pre-GA waiver in $WAIVER_FILE — skipping weekly workflow staleness gate"
+              exit 0
+            fi
+          fi
+
+          # PLAN-025 Batch G F-wf-002: fail-fast if gh is unavailable (rare
+          # on ubuntu-latest but not impossible on custom runners). Clearer
+          # error than "gh: command not found" in an obscure subshell.
+          command -v gh >/dev/null 2>&1 || {
+            echo "::error::gh CLI not found on runner; install via \"sudo apt-get install gh\" or use actions/setup-gh"
+            exit 1
+          }
+          # Tolerance: each workflow is checked across the last 3 runs.
+          # If ANY run in that window is `failure` → fail the release.
+          # `skipped` runs are fine (kill-switch or paths-filter).
+          WORKFLOWS=(chaos.yml otel-smoke.yml perf-profile.yml adapter-live.yml red-team.yml formal-verify.yml)
+          STALENESS_DAYS=14
+          STALENESS_SECS=$((STALENESS_DAYS * 86400))
+          NOW_SECS=$(date -u +%s)
+          FAILED=0
+          for wf in "${WORKFLOWS[@]}"; do
+            # Fetch up to 3 runs with both conclusion AND startedAt timestamp.
+            runs_json=$(gh run list --workflow "$wf" --limit 3 \
+              --json conclusion,startedAt 2>/dev/null || echo "[]")
+            if [ -z "$runs_json" ] || [ "$runs_json" = "[]" ]; then
+              # Absence of runs is NOT neutral post-DevOps-P2-1: it means
+              # the advisory workflow has never triggered in this repo.
+              # For a mature release (v1.x.y), that's a bug — kill switch
+              # set, cron disabled, or workflow deleted.
+              echo "::error::$wf — zero runs recorded; staleness gate fails"
+              FAILED=1
+              continue
+            fi
+            # Extract conclusions for the failure-scan logic.
+            # Session 33 refinement: the previous rule "any failure in
+            # last 3 → block" did not distinguish "past bug, now fixed"
+            # from "still broken / intermittent flake". Both classes
+            # block release, but only the second is a real tag risk.
+            # New rule: block iff BOTH of these hold simultaneously:
+            #   (a) at least one failure in last 3 runs
+            #   (b) the MOST RECENT run also failed
+            # Rationale: (a) alone is false-positive after a root-cause
+            # fix; (b) alone would let a "one green after 10 reds"
+            # flake slip through. Both together = persistent failure
+            # that a tag should not paper over.
+            conclusions=$(echo "$runs_json" | jq -r '.[].conclusion')
+            latest_conclusion=$(echo "$runs_json" | jq -r '.[0].conclusion')
+            if echo "$conclusions" | grep -q '^failure$' \
+               && [ "$latest_conclusion" = "failure" ]; then
+              echo "::error::$wf — failure in last 3 AND latest run failed; block release"
+              FAILED=1
+            elif echo "$conclusions" | grep -q '^failure$'; then
+              echo "::notice::$wf — past failure in last 3 but latest run green; accepting as fixed"
+            fi
+            # Staleness check: most-recent run's startedAt must be within
+            # STALENESS_DAYS of now. startedAt is ISO-8601 UTC
+            # (e.g. "2026-04-10T12:34:56Z"). GitHub runners are Linux →
+            # GNU `date -d` is always available.
+            latest_started=$(echo "$runs_json" | jq -r '.[0].startedAt')
+            if [ -z "$latest_started" ] || [ "$latest_started" = "null" ]; then
+              echo "::error::$wf — cannot parse startedAt for most-recent run"
+              FAILED=1
+              continue
+            fi
+            started_secs=$(date -u -d "$latest_started" +%s 2>/dev/null || echo 0)
+            if [ "$started_secs" -eq 0 ]; then
+              echo "::error::$wf — failed to parse startedAt: $latest_started"
+              FAILED=1
+              continue
+            fi
+            delta=$((NOW_SECS - started_secs))
+            days=$((delta / 86400))
+            if [ "$delta" -gt "$STALENESS_SECS" ]; then
+              echo "::error::$wf stale — last run $days days ago (> $STALENESS_DAYS day limit)"
+              FAILED=1
+            else
+              echo "::notice::$wf — recent runs OK; last run $days days ago"
+            fi
+          done
+          if [ "$FAILED" -eq 1 ]; then
+            echo "::error::release gate: one or more advisory workflows red or stale"
+            exit 1
+          fi
+          echo "OK: all 6 advisory workflows clean in last 3 runs + fresh within $STALENESS_DAYS days"
+
+      # ==========================================================
+      # PLAN-045 F-14 STAGED STEPS (guarded if: false until activation)
+      # ==========================================================
+      # 3 steps below implement SBOM + sigstore envelope + GPG tag verify
+      # on release. DORMANT (if: false) until prereqs land:
+      #   1. sigstore-python action SHA is pinned + allowlisted
+      #   2. generate-sbom.py ships at .claude/scripts/generate-sbom.py
+      #   3. public-key for tag verify committed at .claude/trust/
+      # Activation: remove `if: false` (1-line change). Scaffolding here
+      # validates YAML well-formed + step composition reviewable.
+
+      - name: Generate CycloneDX SBOM
+        # PLAN-044 audit-v2 C2-P0-02 — activated Wave A 2026-04-27 (PLAN-063 round-4: removed `if: true` per actionlint if-cond)
+        run: |
+          python3 .claude/scripts/generate-sbom.py \
+            --output sbom.cyclonedx.json
+          echo "SBOM entries: $(jq '.components | length' sbom.cyclonedx.json)"
+
+      - name: Sign release tarball with sigstore
+        # STAGED — activate by setting repo var SIGSTORE_ACTIVATED=true (PLAN-063 round-4: replaces `if: false` per actionlint if-cond; default unset → expression false → step skipped)
+        if: ${{ vars.SIGSTORE_ACTIVATED == 'true' }}
+        env:
+          SIGSTORE_KEY: ${{ secrets.SIGSTORE_PRIVATE_KEY }}
+        run: |
+          python3 -m sigstore sign \
+            --key "$SIGSTORE_KEY" \
+            --output-signature ceo-orchestration-${{ github.ref_name }}.sig \
+            ceo-orchestration-${{ github.ref_name }}.tar.gz
+
+      - name: Verify owner.asc populated
+        # Session 75 Codex Finding 1 closure: prior workflow imported
+        # `.claude/trust/owner.asc` without validating it carries a real
+        # PGP block. Empty file silently no-ops `gpg --import` and the
+        # subsequent `git tag --verify` could fall through. Fail-closed
+        # gate ensures the trust anchor is populated before the import.
+        run: |
+          set -euo pipefail
+          if [ ! -s .claude/trust/owner.asc ]; then
+            echo "::error::.claude/trust/owner.asc is empty — release gate cannot verify tag signature"
+            exit 1
+          fi
+          if ! gpg --show-keys .claude/trust/owner.asc >/dev/null 2>&1; then
+            echo "::error::.claude/trust/owner.asc is not a valid PGP public-key block"
+            exit 1
+          fi
+          echo "OK: owner.asc is populated and parseable"
+
+      - name: Verify tag GPG signature
+        # PLAN-044 audit-v2 C2-P0-02 — activated Wave A 2026-04-27 (Owner pubkey at .claude/trust/owner.asc; PLAN-063 round-4: removed `if: true` per actionlint if-cond)
+        run: |
+          gpg --import .claude/trust/owner.asc
+          git tag --verify ${{ github.ref_name }}
+
+      # ==========================================================
+      # PLAN-081 Phase 6-bis — Pair-Rail verdict gate (step 15)
+      # ==========================================================
+      # R1 S-Sec-3 (replay defense) + R1 S-Sec-4 (deterministic inputs_hash)
+      # + R1 C5 (Codex CLI pin enforcement) + R1 S-QA-Unseen-2 (distinct
+      # VERDICT_EXPIRED exit code) + R1 S-CR-Unseen-6 (explicit "step 15 runs
+      # after steps 1-14" ordering).
+      #
+      # S104 redesign: verdict.commit_sha → verdict.parent_sha.
+      # The legacy commit_sha bind was an unsolvable self-reference
+      # (verdict file cannot declare its own commit SHA — the SHA is only
+      # known AFTER the verdict commit lands). v1.16.0 GA bridged via
+      # CEO_PAIR_RAIL_VERDICT_OPTIONAL=1 transition mode. The replacement
+      # binds to parent_sha — the commit the verdict was generated
+      # against (parent of the verdict-file commit). That value is
+      # observable + immutable when the verdict is authored.
+      #
+      # Step 15 asserts:
+      #   - verdict.parent_sha == git log -n1 --format=%H -- <verdict-file>^
+      #   - verdict.release_tag == ${GITHUB_REF_NAME}  (replay defense)
+      #   - verdict.tool_versions.codex_cli in codex-cli-pin.txt range
+      #   - verdict.tool_versions.codex_payload_sha256 (+ codex_target_triple)
+      #     == codex-cli-pin-manifest.json payloads[<triple>].sha256
+      #     (ADR-182 payload pin — the sha of the NATIVE codex payload,
+      #     not the npm JS launcher; PLAN-163 T5.2. The legacy
+      #     codex_cli_binary_sha256 launcher pin is retained only for
+      #     pre-ADR-182 tags; its pin file is a comment-only tombstone,
+      #     which the validator treats as "no launcher pin".)
+      #   - verdict generated_at within 24h (TTL per ADR-103)
+      #   - inputs_hash deterministically recomputed via inputs-hash-manifest.txt
+      #   - GPG signature present + verifies against owner.asc
+      #
+      # continue-on-error: ONLY when CEO_PAIR_RAIL_VERDICT_OPTIONAL=1 env
+      # explicitly set (e.g. legacy rc tags pre-verdict-rollout). Default is
+      # hard-block on any validator failure.
+      - name: Validate pair-rail verdict (PLAN-081 Phase 6-bis step 15)
+        env:
+          # Codex iter-8 P1 fix: source the env var from a repository
+          # variable so the `continue-on-error` expression has something
+          # to evaluate against. Owner sets via `gh variable set
+          # CEO_PAIR_RAIL_VERDICT_OPTIONAL --body 1` for transition mode
+          # (e.g. legacy v1.16.0-era verdicts shipping only commit_sha:);
+          # unset / 0 = hard-block (default).
+          CEO_PAIR_RAIL_VERDICT_OPTIONAL: ${{ vars.CEO_PAIR_RAIL_VERDICT_OPTIONAL || '0' }}
+        continue-on-error: ${{ vars.CEO_PAIR_RAIL_VERDICT_OPTIONAL == '1' }}
+        run: |
+          set -euo pipefail
+          VERDICT_FILE=".claude/governance/pair-rail-verdict-${GITHUB_REF_NAME}.md"
+          if [ ! -f "$VERDICT_FILE" ]; then
+            if [ "${CEO_PAIR_RAIL_VERDICT_OPTIONAL:-0}" = "1" ]; then
+              echo "::notice::no verdict file at $VERDICT_FILE; CEO_PAIR_RAIL_VERDICT_OPTIONAL=1 → skipping"
+              exit 0
+            fi
+            echo "::error::verdict file missing at $VERDICT_FILE — step 15 blocks release"
+            exit 1
+          fi
+          # S104 redesign: resolve PARENT_SHA = parent of the verdict-file
+          # commit. The tag commit (${GITHUB_SHA}) is what we're releasing,
+          # and the verdict file at $VERDICT_FILE either:
+          #   (a) was committed in the tag commit itself → parent = ${GITHUB_SHA}^
+          #   (b) was committed earlier (multi-commit prep) → parent = git log of file
+          # We use (b)'s general form: find the commit that introduced the
+          # current verdict file, then take its parent. This handles both
+          # single-commit-with-verdict and multi-commit-prep flows.
+          VERDICT_FILE_COMMIT=$(git log -n1 --format=%H -- "$VERDICT_FILE")
+          if [ -z "$VERDICT_FILE_COMMIT" ]; then
+            echo "::error::cannot resolve commit for $VERDICT_FILE — step 15 fails"
+            exit 1
+          fi
+          PARENT_SHA=$(git rev-parse "${VERDICT_FILE_COMMIT}^" 2>/dev/null || echo "")
+          if [ -z "$PARENT_SHA" ]; then
+            echo "::error::cannot resolve parent of $VERDICT_FILE_COMMIT — step 15 fails"
+            exit 1
+          fi
+          echo "::notice::S104 bind: VERDICT_FILE_COMMIT=$VERDICT_FILE_COMMIT, PARENT_SHA=$PARENT_SHA"
+          # When transition mode is on, allow parent_sha mismatch (skip bind)
+          # by passing empty string. Default is hard-bind on PARENT_SHA.
+          PARENT_SHA_ARG="$PARENT_SHA"
+          if [ "${CEO_PAIR_RAIL_VERDICT_OPTIONAL:-0}" = "1" ]; then
+            PARENT_SHA_ARG=""
+          fi
+          python3 .github/scripts/validate-pair-rail-verdict.py \
+            --verdict-file "$VERDICT_FILE" \
+            --parent-sha "$PARENT_SHA_ARG" \
+            --release-tag "${GITHUB_REF_NAME}" \
+            --max-age-hours 24 \
+            --recompute-inputs-hash \
+            --codex-cli-pin-file .claude/governance/codex-cli-pin.txt \
+            --codex-cli-binary-sha256-file .claude/governance/codex-cli-binary-sha256.txt \
+            --codex-pin-manifest-file .claude/governance/codex-cli-pin-manifest.json \
+            --inputs-hash-paths-file .claude/governance/pair-rail-inputs-hash-manifest.txt
+
+      # ==========================================================
+      # PLAN-166 W1-B — verdict delta + ancestry gate (F2 server side)
+      # ==========================================================
+      # Re-pass findings r15 + r17 + r18 (PLAN-166), debate r3 scoped VETO.
+      #
+      # WHY A SEPARATE STEP: the step-15 neighbourhood above carries two
+      # escape hatches keyed to CEO_PAIR_RAIL_VERDICT_OPTIONAL —
+      # `continue-on-error:` on the step itself, and an empty
+      # `--parent-sha ""` bind (the validator only binds the field when
+      # args.parent_sha is non-empty). Inheriting that neighbourhood would
+      # inherit the switch. This step therefore:
+      #   - carries NO continue-on-error;
+      #   - FAILS CLOSED when CEO_PAIR_RAIL_VERDICT_OPTIONAL=1: in that
+      #     mode step 15 skipped the parent_sha bind, so the anchor these
+      #     asserts hang off was never validated — there is no transition
+      #     mode here, by design;
+      #   - re-derives and re-binds parent_sha ITSELF (non-empty, 40-hex,
+      #     equal to the verdict's `parent_sha:` read with the SAME parser
+      #     the local tag guard uses) — independent of step 15's outcome,
+      #     which also closes the legacy commit_sha fallback (the
+      #     validator downgrades a missing parent_sha to an ADVISORY when
+      #     a legacy commit_sha is present; this step does not);
+      #   - reuses .claude/scripts/local/_release_tag_guard.py for the
+      #     delta decision — the module marks itself as the reference
+      #     implementation; the semantics are NEVER re-implemented in
+      #     bash (single source of the decision logic);
+      #   - asserts ancestry on origin/main of BOTH the reviewed parent
+      #     AND GITHUB_SHA itself (r18: parent-only lets the
+      #     tag-without-push scenario — verdict V over parent P, tag
+      #     pushed, V never reaches main — pass with P ancestral and V
+      #     orphaned).
+      #
+      # THE INVARIANT (one sentence): nothing landed after what the
+      # re-pass reviewed, other than the verdict for THIS tag and the
+      # evidence it pins by name AND content (sha256 of MANIFEST.sha256
+      # in the signed verdict + `shasum -c` over the evidence set).
+      #
+      # PINNED ORDER (asserted structurally by the W1B* classes of
+      # test_release_workflow_asserts.py, WaveB5 pattern):
+      #   Verify tag GPG signature → Validate pair-rail verdict →
+      #   delta → ancestry.
+      # Do not reorder, do not merge into step 15.
+      - name: Verify verdict delta + ancestry (fail-closed)
+        env:
+          CEO_PAIR_RAIL_VERDICT_OPTIONAL: ${{ vars.CEO_PAIR_RAIL_VERDICT_OPTIONAL || '0' }}
+        run: |
+          set -euo pipefail
+          # (0) No transition mode: with the var on, the parent_sha bind
+          # upstream was skipped — refuse to certify against an
+          # unvalidated anchor. Fail closed, loudly.
+          if [ "${CEO_PAIR_RAIL_VERDICT_OPTIONAL}" = "1" ]; then
+            echo "::error::CEO_PAIR_RAIL_VERDICT_OPTIONAL=1 is set, but the delta+ancestry gate has no transition mode — it fails closed by design (PLAN-166 debate r3). Unset the repo variable (gh variable delete CEO_PAIR_RAIL_VERDICT_OPTIONAL) and re-run."
+            exit 1
+          fi
+          TAG="${GITHUB_REF_NAME}"
+          VERDICT_FILE=".claude/governance/pair-rail-verdict-${TAG}.md"
+          if [ ! -f "$VERDICT_FILE" ]; then
+            echo "::error::no signed verdict at $VERDICT_FILE — the delta+ancestry gate has no optional mode; the re-pass verdict for THIS tag must be committed on the tagged tree."
+            exit 1
+          fi
+          # (1) Checkout sanity: every assert below anchors on HEAD, so
+          # HEAD must BE the tagged commit this run is about.
+          HEAD_SHA="$(git rev-parse HEAD)"
+          if [ "$HEAD_SHA" != "${GITHUB_SHA}" ]; then
+            echo "::error::checkout HEAD ($HEAD_SHA) != GITHUB_SHA (${GITHUB_SHA}) — refusing to assert against the wrong tree"
+            exit 1
+          fi
+          # (2) Independent parent_sha bind — non-empty by construction,
+          # controlled by no variable. Same derivation as step 15 (parent
+          # of the commit that introduced the verdict file); the verdict
+          # field is read with the SAME parser the local tag guard uses
+          # (_parse_verdict), so two readers of the same signed file
+          # cannot disagree about what it says.
+          VERDICT_FILE_COMMIT="$(git log -n1 --format=%H -- "$VERDICT_FILE")"
+          if [ -z "$VERDICT_FILE_COMMIT" ]; then
+            echo "::error::cannot resolve the commit that introduced $VERDICT_FILE — refusing an empty bind"
+            exit 1
+          fi
+          PARENT_SHA="$(git rev-parse "${VERDICT_FILE_COMMIT}^" 2>/dev/null || echo "")"
+          if [ -z "$PARENT_SHA" ]; then
+            echo "::error::cannot resolve parent of ${VERDICT_FILE_COMMIT} — refusing an empty bind"
+            exit 1
+          fi
+          python3 - "$VERDICT_FILE" "$PARENT_SHA" <<'PYBIND'
+          import importlib.util
+          import io
+          import re
+          import sys
+
+          verdict_path, expected = sys.argv[1], sys.argv[2]
+          if not re.match(r"\A[0-9a-f]{40}\Z", expected):
+              sys.exit("FAIL: derived parent %r is not a 40-hex SHA" % expected)
+          spec = importlib.util.spec_from_file_location(
+              "release_tag_guard", ".claude/scripts/local/_release_tag_guard.py"
+          )
+          mod = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(mod)
+          with io.open(verdict_path, encoding="utf-8") as fh:
+              fields = mod._parse_verdict(fh.read())
+          declared = fields.get("parent_sha")
+          if declared != expected:
+              sys.exit(
+                  "FAIL: verdict parent_sha %r != parent of the verdict-file "
+                  "commit (%s) — the anchor was not validated with a "
+                  "non-empty bind; a legacy commit_sha fallback does NOT "
+                  "count here." % (declared, expected)
+              )
+          print("  ok   parent_sha bind: %s (derived independently of step 15)" % expected)
+          PYBIND
+          # (3) DELTA (r15): git diff <reviewed parent>..<tag commit>
+          # must be contained in the CLOSED set pinned in the signed
+          # verdict — exact names per tag (never the pair-rail-verdict-*
+          # wildcard, never repass-<N>/**), set equality against the
+          # evidence MANIFEST.sha256, AND content equality (the verdict
+          # pins the manifest's sha256; the guard runs `shasum -c` over
+          # it). Any extra path = FAIL. Decision logic lives in the local
+          # tag guard module — reused, never re-implemented in bash.
+          python3 .claude/scripts/local/_release_tag_guard.py delta \
+            --repo . --tag "$TAG"
+          # (4) ANCESTRY (r17+r18): both the reviewed parent AND the
+          # tagged commit itself must be ancestors of origin/main. The
+          # module's ancestry subcommand judges HEAD (== GITHUB_SHA,
+          # asserted in (1)) after a FAIL-CLOSED fetch of origin/main —
+          # a failed fetch is a stop, never a stale-ref approval. The
+          # reviewed parent is then judged against the same freshly
+          # fetched ref.
+          python3 .claude/scripts/local/_release_tag_guard.py ancestry \
+            --repo . --remote origin --branch main
+          if git merge-base --is-ancestor "$PARENT_SHA" origin/main; then
+            echo "  ok   reviewed parent $PARENT_SHA is an ancestor of origin/main"
+          else
+            RC=$?
+            echo "::error::reviewed parent $PARENT_SHA is not on origin/main (merge-base exit $RC) — the verdict is anchored on a commit main never saw (tag-without-push / orphan-verdict scenario, r17+r18)"
+            exit 1
+          fi
+          echo "OK: verdict delta + ancestry asserts all green for $TAG"
+
+  publish-release:
+    name: Publish GitHub Release + assets
+    needs: release-gate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout tag
+        # SHA-pinned: actions/checkout@v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 0
+      - name: Setup Python 3.11
+        # SHA-pinned: actions/setup-python@v6.2.0
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.11"
+      - name: Compute install.sh.sha256 (body excluding self-SHA trailer)
+        run: |
+          set -euo pipefail
+          FILE="scripts/install.sh"
+          HASH=$(awk 'NR==FNR{n++; next} FNR < n' "$FILE" "$FILE" | sha256sum | awk '{print $1}')
+          printf '%s  install.sh\n' "$HASH" > install.sh.sha256
+          echo "install.sh.sha256 = $HASH"
+      - name: Generate CycloneDX SBOM
+        run: |
+          set -euo pipefail
+          python3 .claude/scripts/generate-sbom.py --output sbom.cyclonedx.json
+      # -----------------------------------------------------------------
+      # PLAN-153 Wave B item 5 (d) — templatized release notes.
+      # Closes PLAN-152 §Deferred `release-notes-hardcoded-first-release`:
+      # the notes string used to hardcode a v1.0.0-only launch sentence,
+      # stale for every later tag. Notes are now rendered from
+      # `.github/release-notes-template.md` with {{TAG}} / {{VERSION}} /
+      # {{BASE_VERSION}} interpolation (BASE_VERSION = VERSION with any
+      # -rc.N suffix stripped, so RC notes point at the GA CHANGELOG
+      # section). Fail-closed on a missing template or an unrendered
+      # placeholder.
+      # -----------------------------------------------------------------
+      - name: Render release notes from template
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
+          BASE_VERSION="${VERSION%-rc.[0-9]*}"
+          TEMPLATE=".github/release-notes-template.md"
+          if [[ ! -f "$TEMPLATE" ]]; then
+            echo "::error::release-notes template missing at $TEMPLATE"
+            exit 1
+          fi
+          sed -e "s/{{TAG}}/${TAG}/g" \
+              -e "s/{{VERSION}}/${VERSION}/g" \
+              -e "s/{{BASE_VERSION}}/${BASE_VERSION}/g" \
+              "$TEMPLATE" > release-notes.md
+          if grep -q '{{' release-notes.md; then
+            echo "::error::unrendered placeholders remain in release-notes.md"
+            exit 1
+          fi
+          echo "Rendered release notes:"
+          cat release-notes.md
+
+      # -----------------------------------------------------------------
+      # PLAN-153 Wave B item 5 (b) — idempotent release creation
+      # (`gh release view || gh release create`). A re-run of this job
+      # (workflow re-run, transient asset-upload failure) must not fail
+      # on an existing release: if the release already exists we
+      # re-sync the assets with `--clobber` and succeed-as-noop —
+      # covering the partial-failure case where `gh release create`
+      # made the release but died mid-asset-upload.
+      # RC tags (which reach this job since the RC-aware VERSION gate
+      # fix) are marked --prerelease so they never show as "Latest".
+      # NOTE: bash arrays are fine here — this runs on ubuntu-latest
+      # (bash 5); the bash-3.2 house rule applies to adopter-machine
+      # scripts (install.sh), and release.yml already uses arrays in
+      # the weekly-workflow gate (WORKFLOWS=(...)).
+      # -----------------------------------------------------------------
+      - name: Create GitHub Release with assets (idempotent)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "::notice::release $TAG already exists — idempotent re-run; re-syncing assets with --clobber instead of create"
+            gh release upload "$TAG" --clobber install.sh.sha256 sbom.cyclonedx.json
+            exit 0
+          fi
+          CREATE_ARGS=(--verify-tag --title "$TAG" --notes-file release-notes.md)
+          if [[ "$TAG" == *-rc.* ]]; then
+            CREATE_ARGS+=(--prerelease)
+          else
+            # rail rc.3 r27 P1-3: GA estavel NASCE draft; o undraft e o
+            # passo FINAL verificado da cerimonia (npm view + recibo do
+            # step Publish + rechecks de tag/main). Elimina a janela de
+            # GA publico sem npm confirmado sob interrupcao local.
+            CREATE_ARGS+=(--draft)
+          fi
+          gh release create "$TAG" "${CREATE_ARGS[@]}" install.sh.sha256 sbom.cyclonedx.json

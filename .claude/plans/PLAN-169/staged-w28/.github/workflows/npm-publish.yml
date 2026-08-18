@@ -1,0 +1,506 @@
+name: NPM Publish
+
+# Sprint 5 Phase 4; registry auth migrated to npm **Trusted Publishing**
+# (OIDC) by PLAN-158 Wave 1 (PLAN-152 §Deferred backlog-oidc successor).
+# Publishes ceo-orchestration on tag push (`v*`): the npm CLI (>=11.5.1,
+# upgraded in-job — Node 20 bundles npm 10.x, which cannot do the
+# exchange) detects the GitHub Actions OIDC context (`id-token: write`)
+# and exchanges the per-run JWT for a short-lived publish credential
+# scoped to this repo + workflow + `production-npm` environment as
+# registered in the npmjs.com trusted-publisher config (Owner console).
+# The same JWT keeps feeding the Sigstore `--provenance` attestation.
+# The long-lived NPM_TOKEN is NOT read by this workflow anymore and is
+# REVOKED once the first OIDC GA publish succeeds (until then it exists
+# solely as the rollback path:
+# .claude/plans/PLAN-158/staged/wave1/rollback-oidc-to-token.patch +
+# .claude/plans/PLAN-158/oidc-failure-playbook.md — tag runs pin the
+# workflow to the tag's tree, so a failed GA publish means rollback +
+# delete/re-tag; there is no workflow_dispatch here by design).
+# Manual `npm publish` is not used. The workflow:
+#   1. Verifies VERSION + npm/package.json version + tag are consistent
+#   2. Asserts package.json has zero runtime dependencies
+#   3. Checks the registry for the exact version (PLAN-153 Wave B item 5
+#      `already_published` idempotency guard) — if already present, the
+#      run succeeds as a no-op instead of failing on EPUBLISHCONFLICT
+#   4. Publishes with --provenance (Sigstore-attested)
+#
+# PLAN-013 Phase 0 item 0.2 hardening (debate Round 1 consensus §C5
+# CRITICAL, 2/5 agents — DevOps + Staff Backend):
+#   - Skip RC tags entirely (`if: !contains(github.ref, '-rc.')`) —
+#     pushing `v1.4.0-rc.1` MUST NOT trigger a public npm publish;
+#     that would violate PLAN-013 anti-goal #3 ("NO NPM publish during
+#     Sprint 13") and anti-goal #16 ("NO auto-publish from tag without
+#     manual approval").
+#   - GA tags (`v1.4.0`) gate through `environment: production-npm`,
+#     which requires a manual approval step in GitHub's Environments
+#     settings before the job runs. The manual approval is the
+#     Owner-in-the-loop gate covering the Sprint 17 public-launch
+#     go/no-go decision (private-first strategy per
+#     `project_closure_strategy.md`).
+#
+# ---------------------------------------------------------------------
+# PLAN-166 W1 item 1 (F1, P0) — the publish now OBSERVES the governance
+# gate. `release.yml` and this workflow both fire on `push: tags: v*` as
+# two INDEPENDENT runs; until PLAN-166 nothing made the publish observe
+# the gate, so the only barrier was a human approving `production-npm`
+# with no machine evidence that `release-gate` was green — a live path
+# to publishing an unreviewed tree. A first job (`await-release-gate` —
+# deliberately NO `environment:` and NO RC exclusion, so it runs on RC
+# tags as a live positive control) polls release.yml's `release-gate`
+# JOB (never the run conclusion: CEO_SOTA_DISABLE=1 skips the job while
+# the run stays green) for THIS tag at THIS commit and fail-CLOSED
+# blocks unless it concluded success. `publish` gains
+# `needs: await-release-gate`; its `environment: production-npm`
+# approval and the RC exclusion are VERBATIM unchanged. Deliberate
+# ordering: the Owner's manual-approval prompt only appears AFTER the
+# gate is green — approval can never race ahead of machine evidence —
+# and the `already_published` idempotency guard STAYS in the publish
+# job (last-resort idempotency), not in the gate job. Do not "optimise"
+# the order back.
+#
+# Alternatives REJECTED (do not resurrect without a new debate):
+#   - `workflow_run` trigger: GitHub executes the workflow file from
+#     the DEFAULT branch, not the tag's tree — that kills the rollback
+#     invariant documented above (tag runs pin this workflow to the
+#     tag's tree; a failed GA publish means rollback + delete/re-tag).
+#   - moving the publish into release.yml: npm trusted publishing binds
+#     OIDC by workflow FILENAME
+#     (.claude/plans/PLAN-158/oidc-failure-playbook.md:18) — renaming
+#     the publishing workflow breaks the npmjs registration, plus ~6
+#     test pins on the npm-publish.yml path.
+#   - a reusable `workflow_call` gate shared by both workflows:
+#     refactor candidate, post-GA only (PLAN-166 §Deferred) — not
+#     during an open release window.
+#
+# The trusted-publisher binding triple (repository / workflow filename /
+# environment) is recorded in
+# .claude/governance/npm-trusted-publisher.txt and cross-checked by
+# .claude/scripts/tests/test_release_workflow_asserts.py, which READS
+# that file (embedding the values in the test would be a 4th copy of
+# the truth).
+
+on:
+  push:
+    tags:
+      - "v*"
+
+concurrency:
+  group: npm-publish-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write   # required for OIDC trusted publishing + provenance
+
+jobs:
+  # ---------------------------------------------------------------------
+  # PLAN-166 W1 item 1 (F1, P0) — OBSERVE THE GOVERNANCE GATE.
+  # This job is the machine evidence that release.yml's `release-gate`
+  # job passed for this exact tag+SHA+push. It deliberately carries NO
+  # `environment:` and NO RC exclusion: it runs on rc tags too, which
+  # makes every RC a live positive control of the gate before GA ever
+  # depends on it.
+  # Decision function + battery: .claude/scripts/await_release_gate.py,
+  # .claude/scripts/tests/test_await_release_gate.py.
+  await-release-gate:
+    name: Await release-gate (release.yml)
+    runs-on: ubuntu-latest
+    # 50 > the poller's own 45-minute deadline, so a timeout surfaces as
+    # the decision function's fail-CLOSED BLOCK (with its inputs printed),
+    # not as an opaque runner kill. 45 min > the release-gate's own
+    # 35-minute timeout-minutes with margin (rail rc.3 r1 P1-3): the
+    # observer must always outlive the producer, or a gate finishing in
+    # minutes 31-35 goes green while the waiter already gave up.
+    timeout-minutes: 50
+    permissions:
+      contents: read   # checkout the tag to get the decision script
+      actions: read    # read release.yml's runs + jobs over the REST API
+    env:
+      # `permissions:` alone does NOT authenticate the `gh` CLI on a
+      # hosted runner. Without GH_TOKEN every poll dies on auth, which is
+      # BLOCK (fail-closed) — i.e. it would break EVERY release, RC and
+      # GA alike. This token is the job's only credential; the job has no
+      # id-token and no environment.
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout tag
+        # SHA-pinned (Sprint 7 Dependabot bump): actions/checkout@v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      # PLAN-169 W2.8 (ADR-192; pair-rail S300 r3 P1-1) — the program
+      # this job uses to WAIT for the release gate is itself a free
+      # script. Verifying the manifest only in release.yml is not
+      # enough: a drifted await_release_gate.py that fake-GRANTs would
+      # reach the production-npm approval while release.yml fails in
+      # parallel. Fail-closed BEFORE the script runs.
+      - name: Gate-scripts integrity (W2.8 checksum manifest)
+        run: |
+          set -euo pipefail
+          M=.claude/governance/gate-scripts-manifest.txt
+          [[ -f "$M" ]] || { echo "::error::$M missing (W2.8 canonical manifest)"; exit 1; }
+          shasum -a 256 -c "$M" \
+            || { echo "::error::gate-script drift vs $M (ADR-192) — member edits go through the canonical-edit ceremony"; exit 1; }
+          echo "OK: all gate scripts match $M"
+
+      - name: Poll release.yml until release-gate concludes
+        # No `${{ }}` interpolation inside this script by design — every
+        # value arrives through the environment, so no workflow expression
+        # is ever spliced into shell text.
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          DEADLINE=$(( $(date +%s) + 2700 ))
+          SELF_CREATED_AT="$(gh api \
+            "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            --jq '.created_at' < /dev/null)"
+          echo "inputs: tag=${TAG} head_sha=${GITHUB_SHA} run_id=${GITHUB_RUN_ID}"
+          echo "inputs: self_created_at=${SELF_CREATED_AT} deadline_epoch=${DEADLINE}"
+
+          fetch_payload() {
+            # One document: every run for THIS head_sha, each carrying its
+            # jobs. A run whose jobs endpoint is unreadable keeps no `jobs`
+            # key — the decision function reads that as WAIT, never GRANT.
+            if ! gh api --paginate \
+                "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${GITHUB_SHA}&per_page=100" \
+                --jq '.workflow_runs[] | {id, run_attempt, path, event, head_branch, head_sha, created_at, status, conclusion}' \
+                > runs.ndjson < /dev/null; then
+              # An API error is BLOCK by design (ADR-186: input we cannot
+              # verify is blocked, not waved through).
+              echo '{"api_error": "runs listing failed"}' > payload.json
+              return 0
+            fi
+            : > runs_with_jobs.ndjson
+            while read -r run; do
+              [ -n "${run}" ] || continue
+              rid="$(printf '%s' "${run}" | jq -r '.id')"
+              if ! run_jobs="$(gh api \
+                  "repos/${GITHUB_REPOSITORY}/actions/runs/${rid}/jobs?per_page=100" \
+                  --jq '[.jobs[] | {name, status, conclusion}]' < /dev/null)"; then
+                printf '%s\n' "${run}" >> runs_with_jobs.ndjson
+                continue
+              fi
+              printf '%s' "${run}" \
+                | jq -c --argjson jobs "${run_jobs}" '. + {jobs: $jobs}' \
+                >> runs_with_jobs.ndjson
+            done < runs.ndjson
+            jq -c -s '{workflow_runs: .}' runs_with_jobs.ndjson > payload.json
+          }
+
+          attempt=0
+          while true; do
+            attempt=$(( attempt + 1 ))
+            fetch_payload
+            set +e
+            python3 .claude/scripts/await_release_gate.py \
+              --payload-file payload.json \
+              --tag "${TAG}" \
+              --head-sha "${GITHUB_SHA}" \
+              --self-created-at "${SELF_CREATED_AT}" \
+              --deadline-epoch "${DEADLINE}"
+            rc=$?
+            set -e
+            case "${rc}" in
+              0)
+                echo "::notice::release-gate green for ${TAG} at ${GITHUB_SHA} — publish authorised (poll ${attempt})"
+                exit 0
+                ;;
+              3)
+                sleep 20
+                ;;
+              *)
+                echo "::error::release-gate did not authorise this publish (decision exit ${rc}, poll ${attempt}) — the printed inputs above name the run and job that were evaluated"
+                exit 1
+                ;;
+            esac
+          done
+
+  publish:
+    # PLAN-013 Phase 0 item 0.2 — RC tag guard.
+    # RC tags contain `-rc.` (e.g. `v1.4.0-rc.1`). Skip them entirely.
+    # Only GA tags (`v1.4.0`) proceed, and those gate through the
+    # `production-npm` environment (manual approval).
+    # PLAN-153 Wave B item 5 (f): RC posture UNCHANGED — this exclusion
+    # is load-bearing (PLAN-013 anti-goals #3/#16) and MUST survive any
+    # future edit to this file; the draft `next` dist-tag idea was
+    # DROPPED by ratified debate. Pinned by
+    # .claude/scripts/tests/test_release_workflow_asserts.py.
+    if: "!contains(github.ref, '-rc.')"
+    # PLAN-166 W1 item 1: publish only starts after `await-release-gate`
+    # proved release.yml's release-gate job green for this exact tag+SHA
+    # (default `success()` semantics of `needs:` — an await failure skips
+    # this job while the run itself goes red). Deliberate ordering: the
+    # production-npm manual-approval prompt appears only AFTER the gate
+    # is green. The `already_published` guard stays below, in this job.
+    needs: await-release-gate
+    runs-on: ubuntu-latest
+    environment: production-npm
+    timeout-minutes: 8
+    steps:
+      - name: Checkout tag
+        # SHA-pinned (Sprint 7 Dependabot bump): actions/checkout@v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node 20
+        # SHA-pinned: actions/setup-node@v4.1.0
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Upgrade npm CLI for Trusted Publishing (OIDC)
+        # PLAN-158 W1 (debate, all 3 critics): Node 20 bundles npm 10.x,
+        # which does NOT implement the trusted-publishing token exchange —
+        # without this step the OIDC publish dies ENEEDAUTH at GA, and
+        # there is no earlier proof point (RC tags skip this workflow
+        # entirely). npm >=11.5.1 is the first trusted-publishing-GA CLI.
+        run: |
+          set -euo pipefail
+          npm install -g npm@^11.5.1
+          NPM_V="$(npm --version)"
+          case "$NPM_V" in
+            10.*|11.0.*|11.1.*|11.2.*|11.3.*|11.4.*|11.5.0)
+              echo "::error::npm $NPM_V < 11.5.1 — trusted publishing unsupported"
+              exit 1
+              ;;
+          esac
+          echo "OK: npm $NPM_V (>=11.5.1, trusted-publishing capable)"
+
+      - name: Verify VERSION matches tag
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          VERSION_FILE="$(tr -d '[:space:]' < VERSION)"
+          EXPECTED="${TAG#v}"
+          if [[ "$VERSION_FILE" != "$EXPECTED" ]]; then
+            echo "::error::VERSION ($VERSION_FILE) does not match tag ($TAG → $EXPECTED)"
+            exit 1
+          fi
+          echo "OK: VERSION=$VERSION_FILE matches tag=$TAG"
+
+      - name: Verify npm/package.json version matches VERSION
+        run: |
+          set -euo pipefail
+          PKG_VERSION=$(node -p "require('./npm/package.json').version")
+          VERSION_FILE="$(tr -d '[:space:]' < VERSION)"
+          if [[ "$PKG_VERSION" != "$VERSION_FILE" ]]; then
+            echo "::error::npm/package.json version ($PKG_VERSION) does not match VERSION ($VERSION_FILE)"
+            exit 1
+          fi
+          echo "OK: npm/package.json version=$PKG_VERSION matches VERSION"
+
+      - name: Verify zero runtime dependencies
+        run: |
+          set -euo pipefail
+          DEP_COUNT=$(node -p "Object.keys(require('./npm/package.json').dependencies || {}).length")
+          if [[ "$DEP_COUNT" -ne 0 ]]; then
+            echo "::error::ceo-orchestration must ship with 0 runtime dependencies (got $DEP_COUNT)"
+            exit 1
+          fi
+          echo "OK: ceo-orchestration has zero runtime dependencies"
+
+      - name: Stage bundle into npm/
+        # The npm package needs the framework source tree relative to npm/.
+        # Copy (don't symlink — npm pack walks symlinks unpredictably across hosts).
+        # PLAN-152 tarball-01: SELECTIVE staging. The root .npmignore is INERT
+        # (package.json "files" whitelist takes precedence in npm-packlist), so
+        # exclusion must happen at stage time. Framework-internal artifacts
+        # (test harness, fixture corpora, eval/, red-team corpus, numbered plan
+        # trees, _lib/testing.py + _lib/test_isolation.py per the PLAN-120
+        # contract install.sh already honors) must NOT ship. Kept deliberately:
+        # .claude/plans/ schemas + README + examples/ (install.sh provisions
+        # them) and .claude/policies/fixtures/ (install.sh PLAN-014 A.8 ships
+        # the policy bundle including fixtures).
+        run: |
+          set -euo pipefail
+          RSYNC_EXCLUDES=(
+            --include='.claude/policies/fixtures/'
+            --include='templates/oidc-proxy/tests/'
+            --include='templates/oidc-proxy/tests/**'
+            --exclude='**/tests/'
+            --exclude='**/fixtures/'
+            --exclude='.claude/scripts/red-team-corpus/'
+            --exclude='.claude/eval/'
+            --exclude='.claude/plans/PLAN-[0-9]*'
+            --exclude='.claude/hooks/_lib/testing.py'
+            --exclude='.claude/hooks/_lib/test_isolation.py'
+            --exclude='__pycache__/'
+            --exclude='*.pyc'
+            --exclude='.pytest_cache/'
+          )
+          # GA-F3 (S288, fechado S293): README.md FORA da lista — rsync do README
+          # raiz sobrescrevia o npm/README.md REVISADO (stamp de review é gate de
+          # release em verify-counts VERSION_SITES). O npm publica o npm/README.md
+          # rastreado, que é a cópia npm-facing revisada a cada bump.
+          for src in scripts templates .claude SPEC VERSION LICENSE PROTOCOL.md; do
+            if [[ -e "$src" ]]; then
+              rsync -a --delete --delete-excluded "${RSYNC_EXCLUDES[@]}" "$src" "npm/"
+            fi
+          done
+          ls -la npm/
+
+      - name: Syntax-check the shim
+        run: node --check npm/bin/ceo-orch-init.js
+
+      - name: Verify scripts/install.sh is present in staged bundle
+        run: test -f npm/scripts/install.sh
+
+      - name: Populate install.sh self-SHA trailer (P0-15, PLAN-045)
+        # PLAN-045 F-15R2-01 / Session 41: install.sh ships with a
+        # `# CEO-INSTALL-SHA256: PLACEHOLDER_RELEASE_FILL` trailer as its
+        # last line. At publish time, compute sha256 of the script body
+        # (all lines EXCEPT the last) and substitute the placeholder with
+        # the real hex. The script's own self-verify logic reads the same
+        # last-line pattern, so downstream adopters running
+        # `bash install.sh ...` trigger a rc=5 fail-CLOSED if the script
+        # is modified in transit.
+        working-directory: npm
+        run: |
+          set -euo pipefail
+          FILE="scripts/install.sh"
+          TRAILER_LINE="$(tail -n 1 "$FILE")"
+          if [ "$TRAILER_LINE" != "# CEO-INSTALL-SHA256: PLACEHOLDER_RELEASE_FILL" ]; then
+            echo "::error::$FILE trailer not at expected placeholder state"
+            echo "got: $TRAILER_LINE"
+            exit 1
+          fi
+          # Compute sha of everything EXCEPT the last line.
+          HASH=$(awk 'NR==FNR{n++; next} FNR < n' "$FILE" "$FILE" | sha256sum | awk '{print $1}')
+          # In-place substitute ONLY the last line.
+          awk -v hash="$HASH" '
+            NR == FNR { total = NR; next }
+            FNR == total { print "# CEO-INSTALL-SHA256: " hash; next }
+            { print }
+          ' "$FILE" "$FILE" > "$FILE.new"
+          mv "$FILE.new" "$FILE"
+          chmod +x "$FILE"
+          # Smoke-verify: execute the self-verify branch by running
+          # the script without args (hits _verify_self_sha, then usage).
+          bash "$FILE" 2>&1 | head -3 || true
+          echo "OK: install.sh trailer populated with sha256 $HASH"
+
+      - name: Packlist gate (PLAN-152 tarball-02)
+        # Last-line assert before publish: the would-be tarball must carry no
+        # tests/ or fixtures/ dirs (except .claude/policies/fixtures/, shipped
+        # by install.sh contract), no .claude/eval/, no red-team-corpus/, no
+        # .claude/plans/PLAN-<N>* artifacts, no _lib/testing.py or
+        # _lib/test_isolation.py. Fail-closed: a pack or JSON parse failure
+        # fails the job (set -euo pipefail).
+        working-directory: npm
+        run: |
+          set -euo pipefail
+          npm pack --dry-run --json 2>/dev/null | python3 -c '
+          import json, re, sys
+          d = json.load(sys.stdin)
+          o = d[0] if isinstance(d, list) else d
+          paths = [f["path"] for f in o["files"]]
+          pat = re.compile(r"(^|/)(tests|fixtures)(/|$)|(^|/)eval/|(^|/)red-team-corpus/|(^|/)plans/PLAN-[0-9]|(^|/)_lib/(testing|test_isolation)\.py$")
+          allow = (".claude/policies/fixtures/", "templates/oidc-proxy/tests/")
+          bad = [p for p in paths if pat.search(p) and not p.startswith(allow)]
+          if bad:
+              print("::error::tarball would ship %d framework-internal artifact(s):" % len(bad))
+              print("\n".join(bad[:40]))
+              sys.exit(1)
+          print("OK: packlist clean — %d files" % len(paths))
+          '
+
+      # -----------------------------------------------------------------
+      # PLAN-153 Wave B item 5 (a) — `already_published` idempotency
+      # guard. Before publishing, ask the registry whether this exact
+      # name@version already exists. If it does (a re-run of a
+      # previously successful publish, or a re-run after a post-publish
+      # step failed), the Publish step is skipped and the job succeeds
+      # as a documented no-op instead of going red on EPUBLISHCONFLICT.
+      #
+      # Detection is deliberately conservative: "published" ONLY when
+      # `npm view <name>@<version> version` exits 0 AND prints exactly
+      # the version (npm has historically flip-flopped between
+      # rc!=0/E404 and rc=0/empty-stdout for a missing version of an
+      # existing package — both shapes are treated as not-published).
+      # Any registry/network error therefore falls through to the
+      # publish attempt, which preserves today's behavior (npm itself
+      # fails closed on a true conflict). No auth needed: the package
+      # is public and `npm view` is an unauthenticated read.
+      # -----------------------------------------------------------------
+      - name: Check registry for already-published version
+        id: already_published
+        working-directory: npm
+        run: |
+          set -euo pipefail
+          PKG_NAME=$(node -p "require('./package.json').name")
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          set +e
+          SEEN=$(npm view "${PKG_NAME}@${PKG_VERSION}" version 2>/dev/null)
+          RC=$?
+          set -e
+          if [[ "$RC" -eq 0 && "$SEEN" == "$PKG_VERSION" ]]; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::${PKG_NAME}@${PKG_VERSION} already exists in the registry — publish will be skipped (idempotent re-run, succeed-as-noop)"
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+            echo "OK: ${PKG_NAME}@${PKG_VERSION} not in registry (rc=$RC) — proceeding to publish"
+          fi
+
+      # -----------------------------------------------------------------
+      # PLAN-166 W2 rc.3 (GA re-pass part-2 P1): a delete/re-tag recovery
+      # leaves the ORIGINAL run re-approvable (or its failed portion
+      # re-runnable) with checkout pinned to the OLD event SHA — every
+      # in-run version check still passes (both trees carry the same
+      # version string), the registry is still empty, and npm publish
+      # would irreversibly ship the WRONG tree while the live tag points
+      # elsewhere. Fail-closed liveness assert: the CURRENT remote tag
+      # must still peel to this run's GITHUB_SHA immediately before
+      # publish. A deleted tag (empty resolve) and a moved tag both
+      # abort. This step sits AFTER the production-npm environment
+      # approval by job order, so a stale approval cannot race past it.
+      # -----------------------------------------------------------------
+      - name: Assert remote tag still points at this run's SHA
+        # Same skip-condition as the publish step (rail rc.3 r1 P1-2): when
+        # the registry already carries the version, publish is a no-op and
+        # this guard must not turn the documented idempotent re-run red.
+        if: steps.already_published.outputs.published != 'true'
+        run: |
+          set -euo pipefail
+          TAG_REF="${GITHUB_REF_NAME}"
+          # ONE ls-remote invocation = ONE remote snapshot (rail rc.3 r1
+          # P1-1): separate calls could straddle a concurrent re-tag, keep
+          # the OLD peeled SHA and approve the obsolete run.
+          SNAP="$(git ls-remote origin "refs/tags/${TAG_REF}" "refs/tags/${TAG_REF}^{}")"
+          PEELED="$(printf '%s\n' "$SNAP" | awk -v r="refs/tags/${TAG_REF}^{}" '$2==r{print $1}')"
+          PLAIN="$(printf '%s\n' "$SNAP" | awk -v r="refs/tags/${TAG_REF}" '$2==r{print $1}')"
+          LIVE="${PEELED:-$PLAIN}"
+          if [ -z "$LIVE" ]; then
+            echo "::error::tag ${TAG_REF} no longer exists on origin — refusing to publish an orphaned tree (delete/re-tag recovery in flight?)"
+            exit 1
+          fi
+          if [ "$LIVE" != "${GITHUB_SHA}" ]; then
+            echo "::error::tag ${TAG_REF} now peels to ${LIVE} but this run was built from ${GITHUB_SHA} — obsolete run; approve/re-run only from the CURRENT tag's run"
+            exit 1
+          fi
+          echo "OK: refs/tags/${TAG_REF} still peels to ${GITHUB_SHA}"
+
+      - name: Publish (Trusted Publishing — OIDC)
+        if: steps.already_published.outputs.published != 'true'
+        working-directory: npm
+        # PLAN-158 W1: NO long-lived token — npm >=11.5.1 detects the
+        # GitHub Actions OIDC context and mints a short-lived credential
+        # against the npmjs trusted-publisher registration (repo
+        # Canhada-Labs/ceo-orchestration, workflow npm-publish.yml,
+        # environment production-npm). --provenance keeps working (same
+        # OIDC JWT feeds Sigstore).
+        #
+        # ROLLBACK (token fallback) — kept dormant BY DESIGN, do not
+        # inline-enable: apply
+        # .claude/plans/PLAN-158/staged/wave1/rollback-oidc-to-token.patch
+        # (restores the `env: NODE_AUTH_TOKEN` block below), regenerate a
+        # granular NPM_TOKEN in the Owner console, then delete + re-tag
+        # (tag runs pin the workflow to the tag's tree — a re-run of the
+        # failed run would re-execute the OIDC tree). Full sequence:
+        # .claude/plans/PLAN-158/oidc-failure-playbook.md
+        run: npm publish --provenance --access public
+
+      - name: Publish skipped — version already in registry (no-op success)
+        if: steps.already_published.outputs.published == 'true'
+        run: |
+          echo "::notice::publish skipped — exact version already in the registry; this re-run is an idempotent no-op (PLAN-153 Wave B item 5)"

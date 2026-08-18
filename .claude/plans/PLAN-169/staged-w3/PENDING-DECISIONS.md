@@ -20,7 +20,16 @@ rota (bump 190→192 ADRs, SLSA→Level 2, timeout 35→50, assert de tag
 remota npm-publish:443). Aplicar whole-file REGREDIRIA o vivo.
 Mantidos como evidência do staging original.
 
-## pending-w28/ — DUAS decisões do Owner (⚖️)
+## pending-w28/ — DECIDIDO (S312, 2026-08-18) ✅
+
+> As duas decisões foram tomadas pelo Owner (registro verbatim no
+> PLAN-169 §OQ): W2.8 = **RATIFICADA (b)-narrow**; break-glass =
+> **ACEITO, renumerado 191→193**. O trem executável está em
+> `../staged-w28/` (land: `OWNER-W28-LAND.sh`; assinatura:
+> `~/canhada-labs/OWNER-W28-SIGN.sh`). Este diretório pending-w28/
+> permanece como evidência do material original.
+
+## (histórico) pending-w28/ — DUAS decisões do Owner (⚖️)
 
 > `RELEASE.md` staged também vive aqui: seu único delta ("31→32 steps")
 > conta o step W2.8 no release.yml — só faz sentido SE a família landar.
