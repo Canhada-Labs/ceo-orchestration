@@ -134,6 +134,31 @@ conserto do matcher exige editar `verify-counts.sh`, que desde o `874117c` é
 checksum-pinado pelo manifesto de gate-scripts (ADR-192) e arrastaria re-pin
 — fica como item próprio, não embutido aqui.
 
+## Prova pré-assinatura
+
+**Simulação de land em clone limpo** (`git clone --local`, pack aplicado pelo
+MANIFESTO honrando o PACKMAP, `chmod +x` nos hooks): py_compile, JSON do
+settings, testes do pack, `validate-governance.sh`, manifesto de gate-scripts,
+`verify-counts.sh` e `check-claude-md-claims.py` — **8/8 verde, rc agregado 0**.
+
+**Finish gate — suíte COMPLETA de hooks**, com matriz de 4 braços para separar
+regressão de flake (exit code lido de arquivo, nunca de `pytest | tail`; e com
+bytecode desabilitado, porque no macOS o `.pyc` vive em `sys.pycache_prefix` e
+apagar `__pycache__` local é no-op):
+
+| braço | resultado |
+|---|---|
+| teste suspeito isolado, SEM pack | rc=0 |
+| teste suspeito isolado, COM pack | rc=0 |
+| suíte inteira **SEM** pack (baseline) | **rc=1 — 1 falha** (`test_case_a_p99_under_5ms`, perf) |
+| suíte inteira **COM** pack | **rc=0 — 7088 passed, 0 failed** |
+
+Leitura honesta: o pack sai **verde**; quem carrega ~1 falha por corrida
+dependente de ordem/carga é o baseline, e ela cai em testes DIFERENTES a cada
+execução. A primeira corrida com o pack acusara `test_live_audit_isolation` —
+que passa isolado nos dois braços e não reapareceu. Partida: 12 falhas antes
+das curas, 0 depois.
+
 ## Fora deste pack
 
 W2 (ledger de fronteira de trabalho) e W4 (governança do estado durável)
