@@ -165,6 +165,23 @@ jobs:
         with:
           fetch-depth: 1
 
+      # PLAN-169 W2.8 (ADR-192, route (b)-narrow) — gate-scripts integrity.
+      # Same canonical manifest as release.yml: the free scripts whose
+      # verdict this gate consumes (validate-governance.sh here) must match
+      # .claude/governance/gate-scripts-manifest.txt or the run fails loudly
+      # BEFORE any member is invoked. Residual (documented in ADR-192):
+      # the parity step later runs the INSTALLED copy of
+      # validate-governance.sh inside the target — that copy is delivered
+      # from this verified repo copy by install.sh in this same run.
+      - name: Gate-scripts integrity (W2.8 checksum manifest)
+        run: |
+          set -euo pipefail
+          M=.claude/governance/gate-scripts-manifest.txt
+          [[ -f "$M" ]] || { echo "::error::$M missing (W2.8 canonical manifest)"; exit 1; }
+          shasum -a 256 -c "$M" \
+            || { echo "::error::gate-script drift vs $M (ADR-192) — member edits go through the canonical-edit ceremony"; exit 1; }
+          echo "OK: all gate scripts match $M"
+
       # PLAN-166 F4: the parity e2e's historical leg installs from a PINNED
       # TAG. `fetch-depth: 1` produces a checkout with NO tags, so the pin
       # would not resolve and the gate would die before comparing a single

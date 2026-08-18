@@ -45,6 +45,20 @@ jobs:
         with:
           fetch-depth: 1
 
+      # PLAN-169 W2.8 (ADR-192, route (b)-narrow) — gate-scripts integrity.
+      # ownership-nightly-gate.sh decides this workflow's verdict (the
+      # exact expected-RED set); it is a free script, so its bytes are
+      # pinned by the canonical manifest. Drift = loud fail BEFORE the
+      # e2e spends ~40 min of runner time on a gate that would lie.
+      - name: Gate-scripts integrity (W2.8 checksum manifest)
+        run: |
+          set -euo pipefail
+          M=.claude/governance/gate-scripts-manifest.txt
+          [[ -f "$M" ]] || { echo "::error::$M missing (W2.8 canonical manifest)"; exit 1; }
+          shasum -a 256 -c "$M" \
+            || { echo "::error::gate-script drift vs $M (ADR-192) — member edits go through the canonical-edit ceremony"; exit 1; }
+          echo "OK: all gate scripts match $M"
+
       # `fetch-depth: 1` produces a checkout with NO tags, and the
       # legacy_pristine* fixtures build from a REAL shipped tree. The tag is
       # READ FROM THE HARNESS (--print-legacy-tag) so this workflow never

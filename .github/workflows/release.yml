@@ -41,6 +41,32 @@ jobs:
           python-version: "3.11"
 
       # -----------------------------------------------------------------
+      # PLAN-169 W2.8 (ADR-192, route (b)-narrow) — gate-scripts integrity.
+      # The surfaces that DECIDE this release are canonical, but the body
+      # of the decision lives in free scripts they invoke. This step pins
+      # the release-critical subset by content: any drift between the
+      # canonical manifest (.claude/governance/gate-scripts-manifest.txt —
+      # updating it requires the GPG ceremony) and the tagged tree fails
+      # the run LOUDLY before any member script is invoked. Runs FIRST so
+      # a drifted member never gets to vote on its own integrity.
+      # release.sh has no CI surface that runs it; its entry here is the
+      # post-hoc check (the tagged tree's driver matched the manifest).
+      # -----------------------------------------------------------------
+      - name: Gate-scripts integrity (W2.8 checksum manifest)
+        run: |
+          set -euo pipefail
+          M=.claude/governance/gate-scripts-manifest.txt
+          if [[ ! -f "$M" ]]; then
+            echo "::error::$M missing — the W2.8 gate-scripts manifest is a canonical tracked file"
+            exit 1
+          fi
+          if ! shasum -a 256 -c "$M"; then
+            echo "::error::gate-script drift: a release-critical script does not match $M (ADR-192). Legitimate edits to a member go through the canonical-edit ceremony that updates the manifest."
+            exit 1
+          fi
+          echo "OK: all gate scripts match $M"
+
+      # -----------------------------------------------------------------
       # PLAN-153 Wave B item 5 (c) — RC-aware VERSION↔tag comparison.
       # Closes PLAN-152 §Deferred `release-gate-rc-version-mismatch`
       # (red run 28663453202 precedent).

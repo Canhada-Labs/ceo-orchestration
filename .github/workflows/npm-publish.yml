@@ -127,6 +127,21 @@ jobs:
         # SHA-pinned (Sprint 7 Dependabot bump): actions/checkout@v6.0.2
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
+      # PLAN-169 W2.8 (ADR-192; pair-rail S300 r3 P1-1) — the program
+      # this job uses to WAIT for the release gate is itself a free
+      # script. Verifying the manifest only in release.yml is not
+      # enough: a drifted await_release_gate.py that fake-GRANTs would
+      # reach the production-npm approval while release.yml fails in
+      # parallel. Fail-closed BEFORE the script runs.
+      - name: Gate-scripts integrity (W2.8 checksum manifest)
+        run: |
+          set -euo pipefail
+          M=.claude/governance/gate-scripts-manifest.txt
+          [[ -f "$M" ]] || { echo "::error::$M missing (W2.8 canonical manifest)"; exit 1; }
+          shasum -a 256 -c "$M" \
+            || { echo "::error::gate-script drift vs $M (ADR-192) — member edits go through the canonical-edit ceremony"; exit 1; }
+          echo "OK: all gate scripts match $M"
+
       - name: Poll release.yml until release-gate concludes
         # No `${{ }}` interpolation inside this script by design — every
         # value arrives through the environment, so no workflow expression
