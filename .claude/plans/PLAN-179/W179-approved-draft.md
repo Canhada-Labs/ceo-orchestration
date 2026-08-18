@@ -22,7 +22,20 @@ Data: <AAAA-MM-DD>
 
 <!-- SCOPE-BLOCK — gerado do MANIFEST.sha256 do pack; não editar à mão -->
 ```
-<SCOPE-DERIVADO-DO-MANIFESTO>
+.claude/adr/ADR-153-compaction-continuity.md
+.claude/hooks/_lib/audit_emit.py
+.claude/hooks/_lib/pinned_constraints.py
+.claude/hooks/_lib/scratchpad_lib.py
+.claude/hooks/check_compact_pinning.py
+.claude/hooks/check_postcompact_reinject.py
+.claude/hooks/check_precompact_continuity.py
+.claude/hooks/tests/test_audit_emit_api_contract.py
+.claude/hooks/tests/test_check_compaction_continuity.py
+.claude/hooks/tests/test_plan179_integration.py
+.claude/scripts/probes/probe_postcompact_channel.py
+.claude/scripts/tests/test_probe_postcompact_channel.py
+.claude/settings.json
+SPEC/v1/audit-log.schema.md
 ```
 
 ## O problema que este pack fecha
