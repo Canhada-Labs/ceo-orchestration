@@ -35,7 +35,17 @@ Data: <AAAA-MM-DD>
 .claude/scripts/probes/probe_postcompact_channel.py
 .claude/scripts/tests/test_probe_postcompact_channel.py
 .claude/settings.json
+CHANGELOG.md
+CLAUDE.md
+INSTALL.md
+README.md
+README.pt-BR.md
 SPEC/v1/audit-log.schema.md
+docs/ARCHITECTURE.md
+docs/CTO-GUIDE.md
+docs/GUIA-COMPLETO.md
+docs/README.md
+npm/README.md
 ```
 
 ## O problema que este pack fecha
@@ -93,6 +103,29 @@ no ADR-153 era o caminho **dominante**.
   decidiu compactar quando o dispara. Entregue honestamente como
   **observe+notify**, com o piso numérico desabilitado por padrão até `F` ser
   medido — um piso inventado seria pior que nenhum.
+
+## Contagens derivadas e um gap de REGRA achado no caminho
+
+Os dois arquivos novos movem quatro contagens (hooks em disco 57→58, ligados
+46→47, registros de evento 48→49, módulos `_lib` 68→69). As superfícies foram
+derivadas do PRÓPRIO gate (`verify-counts.sh --no-tests` num clone com o pack
+aplicado), nunca de memória — a lista veio com 45 linhas de drift em 10
+arquivos, e a mesma classe abortou a cerimônia W2.8 hoje de manhã com uma
+lista humana de 7 onde o gate queria 10.
+
+**Achado no caminho (follow-up NOMEADO, não silencioso):** cinco sites de
+PROSA citam as mesmas contagens e **nenhuma regra os vigia** —
+`README.md:62`, `npm/README.md:62`, `docs/ARCHITECTURE.md:76-77` e
+`CLAUDE.md:53`. As causas são mecânicas: `(\d+)\**\s*hook\s+scripts` não casa
+`hook *scripts*` (o asterisco quebra o `\s+`); não existe regra para `"46
+wired"` nem `"57 on disk"` em inglês, embora as equivalentes em português
+(`46 ligados`, `57 em disco`) existam desde o PLAN-166 W0 F5; e
+`(\d+) [\`]?_lib` não casa `68 stdlib-only \`_lib/\` modules` porque
+"stdlib-only" fica entre o número e o `_lib`. Os cinco foram corrigidos NESTE
+pack para o doc não se auto-contradizer, mas a **regra** continua cega: o
+conserto do matcher exige editar `verify-counts.sh`, que desde o `874117c` é
+checksum-pinado pelo manifesto de gate-scripts (ADR-192) e arrastaria re-pin
+— fica como item próprio, não embutido aqui.
 
 ## Fora deste pack
 
