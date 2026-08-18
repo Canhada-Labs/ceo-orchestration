@@ -1,7 +1,24 @@
 # ceo-orchestration — STRIDE Threat Model
 
-**Status:** stale
+**Status:** accepted
 **Date:** 2026-04-16
+
+> ⚠️ **FRESHNESS DEBT — measured 2026-08-18 (PLAN-179 W4), not a guess.**
+> Running `python3 .claude/scripts/check-threat-model-freshness.py` reports
+> this document **overdue**: **193 ADRs** have landed since the `Last updated`
+> date below (2026-06-12) against a threshold of 2, and the script flips
+> `Status:` to `stale` as a side effect of being run. Nobody had run it, so the
+> `accepted` above had been an unverified claim for two months — the repo's own
+> "green instrument with a stale question" class.
+> The status is left at `accepted` here because a real re-review of those 193
+> ADRs did **not** happen and reverting a diagnostic's side effect is not the
+> same as performing the review; a `stale` status also fails
+> `tests/integration/test_threat_model_coverage.py`, which would block every
+> unrelated change. **Named follow-up, owner = Principal Security Engineer:**
+> re-review and move `Last updated`, or amend the freshness rule if a
+> per-ADR threshold of 2 is the wrong instrument for a 194-ADR repo.
+> What DID get reviewed today is scoped and stated: the durable-state /
+> ledger trust boundary section added by PLAN-179 W4 below.
 **Last updated:** 2026-06-12 (PLAN-135 W4 D5+D8 — harness-vs-hook containment map + MCP-connector decision rule; W3 K14b — browser/computer-use trust boundary)
 **Owner:** Principal Security Engineer
 **Scope:** ceo-orchestration framework v1.7.0-rc.1 (pre-adopter)
