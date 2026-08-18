@@ -268,6 +268,14 @@ explicitamente confirmada.
       `PlanIdDerivationError`. A escrita de continuidade NUNCA é pulada:
       sem plano resolvido, escreve sob escopo de sessão. Mantida a
       proibição M2 de derivar plano de env var (agent-spoofable).
+      **[Emenda r1-C1]** O escopo de sessão usa `store_name` PRÓPRIO +
+      `scope_kind` no blob (nunca sobrecarrega o campo `plan_id` — o
+      invariante plan-isolation do store fica intacto); forma validada
+      `session-<uuid>`; `session_id` vem SOMENTE do hook input — se o
+      derivador cair no env (`CLAUDE_SESSION_ID`), o fallback é RECUSADO.
+      **[Emenda r1-C2]** `set` com `ttl_seconds` explícito + item de GC de
+      ARQUIVO (`.sqlite`/`.lock` órfãos) com teto, dimensionado pelo N de
+      compactações/semana medido em W0.
 - [ ] `[P1][US3][.claude/hooks/check_precompact_continuity.py]`
       `snapshot_outcome` ganha o valor `written_session_scope`. O enum
       permanece fechado; `scratchpad_unavailable` passa a significar
@@ -279,9 +287,14 @@ explicitamente confirmada.
       foi satisfeito e o resultado foi NEGATIVO; (b) o residual #3 era o
       caminho dominante; (c) a cura por escopo de sessão. **Path
       canônico — exige cerimônia GPG.**
-- [ ] `[P1][US5][.claude/hooks/tests/test_precompact_continuity.py]`
+- [ ] `[P1][US5][.claude/hooks/tests/test_check_compaction_continuity.py]`
       Controle positivo replicando E1: sessão sem `plan_transition` ⇒
       snapshot ESCRITO. O teste deve falhar contra o código de hoje.
+      **[Emenda r1-C7]** Path corrigido para o arquivo REAL da família; e
+      `test_no_plan_transition_degrades_to_unavailable` (:273-281) — o teste
+      que hoje AFIRMA o bug — é EDITADO nesta AC para assertar o novo
+      comportamento (nunca apagado: é a prova regressiva de que o bug
+      existiu).
 
 #### W1-b — Constraint Pinning (§2.2 — prioridade igual à cura do snapshot)
 
@@ -291,19 +304,35 @@ quarentenar as regras da compressão com perda.
 - [ ] `[P1][US5b][.claude/hooks/check_postcompact_reinject.py]`
       Separar **PONTEIRO** (onde olhar — estado de trabalho) de
       **RESTRIÇÃO FIXADA** (a regra em si — o conjunto mínimo de invariantes
-      de governança). Ponteiros seguem bounded/sanitizados; restrições
-      fixadas são um conjunto FECHADO e versionado, definido no repo, não
-      derivado de disco em tempo de execução — o que as torna imunes ao
-      Compaction-Eviction Attack por construção.
+      de governança). Ponteiros seguem bounded/sanitizados.
+      **[Emenda r1-C5]** As restrições fixadas são **CONSTANTE DE CÓDIGO em
+      `.claude/hooks/_lib/`** (superfície já canonical-guarded) — NUNCA
+      lidas de um `.md` em runtime; é isso que torna a frase "não derivado
+      de disco" verdadeira e a imunidade ao Compaction-Eviction real por
+      construção. Mudança do conjunto = cerimônia GPG.
+      **[Emenda r1-C3]** Canal PRIMÁRIO do pinning =
+      `SessionStart(matcher=compact)` (precedente positivo local:
+      `turbo_sessionstart.py` + wiring `"matcher": ""`); o PostCompact é
+      REFORÇO — W1-b deixa de ser refém do veredito de W0-1. Payload
+      estruturado (nunca texto livre); orçamentos SEPARADOS para restrição
+      e ponteiro, restrições emitidas PRIMEIRO (o cap de 9 nunca trunca
+      governança); mudança de semântica do `pointer_count` ⇒ bump de SPEC.
 - [ ] `[P1][US5c][.claude/plans/PLAN-179/pinned-constraints.md]`
-      Definir o conjunto mínimo fixado. Candidatos: vetos ADR-052; disciplina
+      Documentação DERIVADA da constante de código (teste asserta
+      `set(md) == set(código)`). Conjunto mínimo: vetos ADR-052; disciplina
       de sentinel canônico ADR-031; "não commitar sem autorização do Owner";
       fail-closed em input / fail-open em infra. **Fechado e pequeno** — um
-      conjunto grande re-cria o problema de piso (§2.1).
-- [ ] `[P1][US5d][.claude/hooks/tests/test_postcompact_reinject.py]`
-      Controle adversarial: transcript contendo texto que instrui o
-      sumarizador a omitir políticas ⇒ as restrições fixadas ainda aparecem
-      pós-compactação. Sem esse controle, o pinning é alegação.
+      conjunto grande re-cria o problema de piso (§2.1). Critério de corte
+      (OQ-2 respondida): só invariantes cuja violação é irreversível.
+- [ ] `[P1][US5d][.claude/hooks/tests/test_check_compaction_continuity.py]`
+      **[Emenda r1-C7]** Controle adversarial reescrito como propriedade
+      ARQUITETURAL testável: as restrições fixadas chegam por canal que
+      **NUNCA participa do bloco enviado ao sumarizador** (assert: o payload
+      pinned não está no material compactável), independente de transcript
+      hostil no resto do contexto — o sumarizador não é mockável, e "o
+      modelo não se deixa enganar" não é claim testável. Estende o arquivo
+      REAL da família (dual-loader `_pick()` + `_AuditEmitSlotGuard`), não
+      cria arquivo novo sem decisão nomeada.
 
 **AC de saída W1:** (a) um autocompact numa sessão sem `plan_transition`
 produz `snapshot_found=true` e `pointer_count>1`; (b) o conjunto fixado
@@ -322,11 +351,26 @@ execução**. Forma adotada do padrão multissessão da Anthropic
       Uma seção por unidade; identificadores verbatim (paths absolutos,
       SHAs, PLAN-/ADR-ids) — nunca paráfrase.
 - [ ] `[P1][US6][.claude/hooks/check_ledger_checkpoint.py]`
-      Hook novo: em fronteira de unidade (commit tocando um path do plano
-      ativo), verifica que o ledger foi atualizado no mesmo commit.
-      **ADVISORY primeiro** — janela measure-first, como o
-      `CEO_SPAWN_FILE_ASSIGNMENT_REQUIRED` (ADR-191). Enforce é cerimônia
-      futura com tabela would-block/TP-FP.
+      Hook novo: em fronteira de unidade, verifica que o ledger foi
+      atualizado no mesmo commit. **ADVISORY primeiro** — janela
+      measure-first, como o `CEO_SPAWN_FILE_ASSIGNMENT_REQUIRED` (ADR-191).
+      Enforce é cerimônia futura com tabela would-block/TP-FP.
+      **[Emenda r1-C6]** O gatilho deriva o escopo dos **PATHS do commit**
+      (`.claude/plans/PLAN-NNN/**` ou path listado em AC `[P?][USn][path]`)
+      — NUNCA de `resolve_plan_id` (senão W2 re-herda a causa-raiz E2).
+      Commit fora de escopo ⇒ evento `ledger_checkpoint_skipped` com razão
+      em enum fechado (omissão visível, cobre hotfix/exploratória — OQ-3).
+      A tabela TP/FP da janela reporta também a taxa de commits NÃO
+      observados (Owner commita com `!` fora do hook — universo censurado
+      declarado). **[Emendas r1-A1/A3/B6]** Critério de MORTE: taxa de
+      checkpoint omitido > X% ao fim da janela ⇒ o ledger é REMOVIDO, não
+      mantido como dívida. Teto de tamanho do LEDGER.md (≤2k tokens,
+      seções antigas arquivadas — senão W2 adiciona ao piso F o que W3
+      remove). Conteúdo = SÓ identificadores verbatim (paths, SHAs, ids) —
+      nunca corpo/excerto de transcript (repo público; check-contamination
+      cobre o path novo). "ACs com estado verificado" ganha VERIFICADOR
+      nomeado por entrada (comando + exit code), porque entrada errada é
+      pior que ausente (o modelo escreve o checkpoint já degradado).
 - [ ] `[P1][US7][.claude/hooks/check_precompact_continuity.py]`
       PreCompact passa a apontar para o ledger; o snapshot vira o
       **índice** do ledger, não a cópia do estado.
@@ -465,3 +509,60 @@ memória (`research-S309.md §3`): *write-gate validation* e
 - **Contagens derivadas:** hooks novos movem os gates de contagem do
   `CLAUDE.md` — regenerar superfícies e rodar
   `.claude/scripts/local/verify-counts.sh` no closeout, tolerance=0.
+
+---
+
+## 8. Emendas do debate round-1 (S312, 2026-08-17 — consensus PROCEED)
+
+> Fonte: `.claude/plans/PLAN-179/debate/round-1/consensus.md` (3× ADJUST,
+> 9 consensos C1-C9 + achados single-critic mantidos). As emendas C1-C3 e
+> C5-C7 já estão INLINE nas waves acima (marcadores `[Emenda r1-*]`).
+> As demais são VINCULANTES para a execução:
+
+- **8.1 (C4) `context_pressure_observed`:** int com unidade no nome (nunca
+  float sob HMAC), **edge-triggered** (emite só na transição de bucket —
+  histerese, não sampling; responde OQ-4 sem destruir a série), branch
+  `_scrub_` dedicada + allowlist própria + par de testes
+  not-in-passthrough/registered + bump de SPEC. Sem essas ACs o "enum
+  fechado" é alegação.
+- **8.2 (C8) Escopo real da cerimônia (§7 corrigido):** o sentinel cobre
+  TODOS os paths tocados — `scratchpad_lib.py`,
+  `check_precompact_continuity.py`, `check_postcompact_reinject.py`,
+  `check_ledger_checkpoint.py` (novo + registro em `settings.json`),
+  `ledger_provenance.py`, `audit_emit.py`, bump de `SPEC/**` — não só os
+  2 ADRs. Números de ADR alocados NO MOMENTO da escrita (191/192 já
+  tomados; nada de reservar 193 no draft). **DOIS ADRs, UMA cerimônia**;
+  ordem obrigatória: ADR-153-AMEND-1 primeiro (fecha o registro
+  falsificado), o ADR de doutrina depois.
+- **8.3 (C9) Claim "secrets-redacted" é hoje FALSA no caminho usado:** o
+  snapshot grava bytes e `redact_secrets` só cobre str. Corrigir a redação
+  (redigir antes do encode OU gravar str) + `SPEC/v1/audit-log.schema.md`
+  §snapshot + docstrings do hook NA MESMA cerimônia de W1.
+- **8.4 (B) Write-gate W4 fail-CLOSED:** distinguir "escaneado limpo" de
+  "não consegui escanear" — o segundo é HIT (CLAUDE.md §4). Descarte
+  VISÍVEL (evento + marcador "entrada rejeitada, família=X" no ledger) e
+  ESCOPADO por proveniência: só `agent-returned`/`external-tool` passam
+  pelo scanner; `owner-instruction`/`ceo-derived` nunca. FPR do catálogo
+  medida em janela advisory antes de enforcement (o catálogo atual
+  sobre-dispara em texto legítimo do próprio repo).
+- **8.5 (A-U2) ADR de doutrina nasce com matriz de 2+ opções** (exigência
+  da skill): ledger-superfície-nova VS ledger como PROJEÇÃO do scratchpad
+  VS ledger DERIVADO do audit-log (este último elimina a escrita
+  discricionária — a causa do E3). A escolha é da matriz, não do hábito.
+  Reversibilidade declarada por wave (W2 é *Embedded* — exige exit
+  strategy escrita).
+- **8.6 (C-R5/R6, A-M6) W0 endurecida:** a sonda de canal é
+  **operator/local-only** (nunca CI), idempotente (execuções contadas para
+  não contaminar a medição de US2), e carrega **DOIS canários numa única
+  compactação paga** (PostCompact + SessionStart-compact — um experimento,
+  três desfechos). A metade de `F` que `context-budget.py` não mede
+  (system prompt + tool defs) tem fonte NOMEADA (usage da API em chamada
+  real); sem fonte, a AC degrada explicitamente para "estimativa
+  declarada".
+- **8.7 (B-P2-8) US15/US15b retargetadas para `docs/threat-model.md`**
+  (o WORKSHEET citado não existe no disco) + AC de closeout re-rodando
+  `check-threat-model-freshness.py` (2 ADRs novos ⇒ flip para stale é
+  CERTO sem revisão).
+- **8.8 (B-Nice, decisão adiada REGISTRADA):** desacoplar ou não o pinning
+  do kill-switch `CEO_COMPACTION_CONTINUITY=0` — decidir em W1-b; se
+  permanecer acoplado, o desarme emite evento.

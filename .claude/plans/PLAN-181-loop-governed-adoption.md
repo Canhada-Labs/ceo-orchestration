@@ -31,15 +31,28 @@ cru**. Sustentação acadêmica no relatório (Reflexion 2303.11366; Huang
 
 ## Waves
 
-### W0 — Piloto ASSISTIDO: vigia do hold 24h (ADR-103) — 20-40k
+### W0 — Piloto em ENSAIO: recorrência do /loop em clone — 20-40k
+### [REESCRITA pelo debate r1 — C3: W0 JAMAIS roda num hold real]
 
-- No próximo trem RC→GA, com o Owner PRESENTE (não é autonomia
-  prolongada ⇒ não exige o opt-in Tier-C ainda): `/loop 1h` com prompt
-  read-only — horas desde a tag + CI verde + preflight → quando a
-  janela abrir, `PushNotification` ao Owner com o comando GA-CUT
-  pronto → `stop: true`.
-- LINHA DURA: o loop JAMAIS corta tag, executa GA-CUT ou landa
-  qualquer coisa (freeze proíbe land entre tag e GA).
+- **[Emenda r1-C3]** O piloto roda em **CLONE com tag falsa** (doutrina
+  S293/S301), nunca no repo vivo nem acoplado a um release. Objetivo
+  reescopado: exercitar o que SÓ o /loop tem (recorrência /
+  ScheduleWakeup / cron do harness) — o caso "vigia de hold" pertence ao
+  `Monitor` por doutrina (AUTONOMOUS-LOOP-GUIDE:24) e foi provado
+  superior na S311/S312 (processo externo, sem modelo, sem escrita).
+- **[Emenda r1-C1]** A dispensa "Owner presente" NÃO existe no ADR-125
+  (grep zero). Ou o piloto é estritamente $0 de modelo (script + exit
+  codes), ou exige o opt-in Tier-C completo. Nenhuma wave roda antes da
+  seção §Cost deste plano existir.
+- **[Emenda r1-C8]** PRIMEIRO AC do plano inteiro: controle positivo do
+  kill-switch `CLAUDE_CODE_DISABLE_CRON` (loop de brinquedo em sessão
+  descartável; provar que o tick seguinte NÃO dispara; medir latência
+  até a parada). Kill-switch reprovado ⇒ veredito do plano vira NÃO
+  ADOTAR. Adicionar kill-file em disco (env não atravessa sessões).
+- LINHA DURA (mantida, agora com mecanismo): o ensaio nunca toca repo
+  vivo; se algum dia um loop rodar perto de um freeze, a linha dura
+  exige matcher PreToolUse fail-closed (git tag/push/gh release) com
+  controle positivo da RECUSA — prosa não é mecanismo (lição S303).
 - AC-W0.1: transcript do piloto arquivado em `PLAN-181/pilot/` com
   contagem de ticks, tokens/tick e o timestamp da notificação.
 - AC-W0.2: cada tick começa com check DETERMINÍSTICO (exit code de
@@ -56,7 +69,30 @@ cru**. Sustentação acadêmica no relatório (Reflexion 2303.11366; Huang
 - AC-W1.1: evento visível em `SPEC/v1/audit-log.schema.md` (bump de
   versão do schema) + teste-espelho do hook com `TestEnvContext`.
 
-### W2 — Skill `/loop-governed` — 60-100k
+### W2 — `/loop-governed` como COMPOSIÇÃO (comando + script canonical + hook) — 60-100k (orçamento a rever: hook novo = ADR + cerimônia)
+### [REESCRITA pelo debate r1 — C4/C5: skill não entrega enforcement]
+
+> **[Emenda r1-C4]** MECHANISM-SELECTION.md:63 marca recurring-scheduled
+> como Skill ❌; o próprio molde night-mode é comando+script+guard+deny,
+> zero skill. W2 entrega: `.claude/commands/loop-governed.md`
+> (superfície) + `.claude/scripts/loop_governed.py` (lógica, adicionada
+> ao `_CANONICAL_GUARDS`) + **hook novo** para budget/teto/proibição de
+> governança (enforcement; cerimônia GPG + ADR próprio). Skill, se
+> existir, carrega SÓ doutrina. Guard de `.claude/commands/**` por
+> CLASSE, não por instância.
+> **[Emenda r1-C5]** Os trilhos atuais são CEGOS ao tick
+> (`check_cost_envelope` = matcher Bash + assinatura de coordinator;
+> `check_budget` = matcher Agent; `is_disabled()` passthrough sem
+> `CEO_SWARM=1`). Cada gap da tabela DECLARA seu ponto de interceptação
+> (evento de hook + comportamento na recusa + controle positivo da
+> recusa). W2.2 nomeia `CEO_SWARM`/`class_tier`/janela `per_plan` por
+> `loop_id`. **[Emenda r1-C6]** A medição "quais eventos de hook um tick
+> dispara" (AC de W1) é BLOQUEANTE de W2.
+> **[Emenda r1-C10]** Tier do tick nomeado: `model: sonnet` (Haiku
+> proibido sem torneio; herança de Opus é o trap A3). Números no corpo:
+> W0 ≈ $4,6-5,5/piloto (cache sempre frio — 60min > TTL); nightly ≈
+> $0,19-0,23/dia com dono nomeado (OQ-5: FinOps no fechamento de trem;
+> nightly reporta no morning_ledger).
 
 Wrapper que fecha os 7 gaps da tabela do estudo (cada linha = 1 AC):
 
@@ -69,7 +105,24 @@ Wrapper que fecha os 7 gaps da tabela do estudo (cada linha = 1 AC):
 | W2.5 | Pausa Owner-absent | >12h sem Read do Owner ⇒ auto-PAUSE (molde `swarm_paused_owner_absent`) |
 | W2.6 | Proibição de governança | tick jamais edita Gate-1 files, hooks/, ADRs, SPEC, cerimônia |
 | W2.7 | Contexto fresco | estado durável em disco entre ciclos, nunca transcript acumulado; re-ancoragem de objetivo por ciclo (converge com PLAN-179 Constraint Pinning) |
+| **W2.8 [Emenda r1-C2]** | **Composição com posture de permissão** | tick-0 lê a posture EFETIVA e RECUSA fail-closed se `acceptEdits`/`bypassPermissions`/`dontAsk`/`auto` (enum derivado da autoridade, nunca de memória); controle positivo da recusa; simetricamente `night-mode on` recusa com cron/loop vivo |
+| **W2.9 [Emenda r1-B]** | **Fronteira de identidade** | o tick roda com credenciais do Owner (git/gh/GPG-agent) — declarar exclusão explícita: tick JAMAIS assina (gpg), JAMAIS pusha; matriz de composição loop×night-mode×swarm×Workflow com combinações proibidas |
 
+- **[Emenda r1-C9]** Estado inter-tick: allowlist de campos estruturados
+  (nunca prosa livre), releitura tratada como UNTRUSTED (fenced + capped,
+  mesma postura do retorno inter-agente), `CEO_UNICODE_HARDBLOCK=1`
+  durante o loop. W2.6 implementada em HOOK (prosa de skill decai 30-59%
+  sob compactação — PLAN-179) e ordenada APÓS o Constraint Pinning do
+  179. W2.5 só é entregável com sinal de atribuição HUMANA real (o proxy
+  `session_start` é auto-fabricável) — senão declarar NÃO-ENTREGUE.
+  W2.3 exige CHAVE DE CLASSE mecânica para "mesma classe de achado".
+  Eventos novos landam COM consumidor na mesma wave; W1 sonda o SHAPE de
+  `CronSummary` antes do bump de SPEC e loga só derivados (contagem,
+  intervalo, sha256 do prompt — nunca o corpo). Máx 1 loop governado por
+  projeto (envelope compartilhado sem atribuição) até existir
+  atribuição por `loop_id`. Modo degradado (INFRA no meio de loop
+  não-atendido): decidir explicitamente fail-open padrão vs exceção
+  ADR-186. Checar `CEO_SOTA_DISABLE` no tick-0 e recusar.
 - HONESTIDADE: não reivindicar tamper-evidence de execution-context
   entre iterações (HMAC RESERVED, zero produtores até no swarm —
   ADR-133:166-182). Documentar a interação delay×TTL de cache
@@ -84,6 +137,27 @@ Wrapper que fecha os 7 gaps da tabela do estudo (cada linha = 1 AC):
   recorrente). §Cost do ADR-125 é condição de ship.
 - SKILL.md nova é superfície canônica ⇒ sentinel GPG (1 pinentry);
   rota SP-NNN se emendar skill existente.
+
+## Cost (ADR-125:230-236 — condição de QUALQUER wave; emenda r1-C1)
+
+- **(a) Tokens por invocação/tick:** W0-ensaio (clone): alvo $0 de modelo
+  (script + exit codes); se um tick de modelo existir: ~F frio 45-55k
+  in + ~1-2k out por tick (cache sempre frio quando delay > TTL).
+  Nightly (W2, 1 tick/dia): mesmo perfil frio, `model: sonnet`.
+- **(b) Cap diário de burn:** piloto ≤ $6/dia (24 ticks × ~$0,22);
+  nightly ≤ $0,50/dia. Estouro = single-strike: loop PARA e notifica.
+- **(c) Mecanismo de enforcement:** hook novo (W2) chamando
+  `cost_envelope.check_and_record(cents, plan_id=<loop_id>)` na janela
+  `per_plan`, com decisão EXPLÍCITA de `CEO_SWARM`/`class_tier`
+  registrada no ADR do W2 (`is_disabled()` faz passthrough sem
+  `CEO_SWARM=1` — sem essa decisão o cap nunca avalia: teatro t10).
+- Frontmatter a completar no flip p/ reviewed: `budget_usd_estimate`
+  (~$8-15 total), `tier_mix_estimate` (sonnet ~90% / opus ~10% nos
+  debates), `tier_mix_rationale` (tick mecânico = sonnet; Haiku proibido
+  sem torneio).
+- Dono do custo recorrente (OQ-5): LLM FinOps Architect revisa
+  tokens/tick no fechamento de cada trem; nightly reporta no
+  `morning_ledger.py`.
 
 ## Riscos
 
