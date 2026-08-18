@@ -25,8 +25,37 @@ say() { printf '\n== %s\n' "$1"; }
 [ -f "$ST/MANIFEST.sha256" ] || { echo "ABORT: MANIFEST ausente"; exit 1; }
 [ -f "$ST/BASELINE.sha256" ] || { echo "ABORT: BASELINE ausente"; exit 1; }
 
-# Alvos DERIVADOS do manifesto — nunca uma lista escrita à mão.
-TARGETS="$(awk '{ $1=""; sub(/^  /,""); print }' "$ST/MANIFEST.sha256")"
+# Caminhos DENTRO do pack, derivados do manifesto — nunca lista escrita à mão.
+PACKPATHS="$(awk '{ $1=""; sub(/^  /,""); print }' "$ST/MANIFEST.sha256")"
+
+# PACKMAP: um pack path pode ter um DESTINO diferente no repo. Existe por um
+# motivo só, e ele é explícito: `.claude/settings.json` nega `Edit(SPEC/**)`,
+# e esse glob casa com qualquer path que contenha um segmento `SPEC/` —
+# inclusive uma cópia dentro do pack. O deny está CERTO (o SPEC só é escrito
+# pela cerimônia assinada), então o artefato do pack tem nome plano e o
+# DESTINO real aparece aqui. Formato: `<pack-path> -> <repo-path>`.
+_map_dest() {  # $1 = pack path -> ecoa o destino no repo
+  local line dest
+  if [ -f "$ST/PACKMAP.txt" ]; then
+    line=$(grep -F -- "$1 -> " "$ST/PACKMAP.txt" | head -1 || true)
+    if [ -n "$line" ]; then
+      dest=${line#* -> }
+      printf '%s\n' "$dest"
+      return 0
+    fi
+  fi
+  printf '%s\n' "$1"
+}
+TARGETS=""
+while IFS= read -r _p; do
+  [ -n "$_p" ] || continue
+  case "$_p" in PACKMAP.txt) continue ;; esac
+  TARGETS="$TARGETS$(_map_dest "$_p")
+"
+done <<PEOF
+$PACKPATHS
+PEOF
+TARGETS="$(printf '%s' "$TARGETS" | sed '/^[[:space:]]*$/d')"
 
 say "G0: confirmação de janela"
 echo "   PLAN-179 W0+W1+W1-b (continuidade de contexto). Prosseguir? (yes/NO)"
@@ -95,10 +124,12 @@ SIM=$(mktemp -d "$SIMROOT/sim.XXXXXX")
 git clone --local --quiet . "$SIM/repo"
 while IFS= read -r p; do
   [ -n "$p" ] || continue
-  mkdir -p "$SIM/repo/$(dirname "$p")"
-  cp "$ST/$p" "$SIM/repo/$p"
+  case "$p" in PACKMAP.txt) continue ;; esac
+  d="$(_map_dest "$p")"
+  mkdir -p "$SIM/repo/$(dirname "$d")"
+  cp "$ST/$p" "$SIM/repo/$d"
 done <<AEOF
-$TARGETS
+$PACKPATHS
 AEOF
 G4RC=0
 run_g4() {
@@ -123,11 +154,13 @@ echo "   OK: simulação verde (todos os comandos, não só o último)"
 say "G5: apply"
 while IFS= read -r p; do
   [ -n "$p" ] || continue
-  mkdir -p "$(dirname "$p")"
-  cp "$ST/$p" "$p"
-  echo "   applied $p"
+  case "$p" in PACKMAP.txt) continue ;; esac
+  d="$(_map_dest "$p")"
+  mkdir -p "$(dirname "$d")"
+  cp "$ST/$p" "$d"
+  if [ "$d" = "$p" ]; then echo "   applied $d"; else echo "   applied $d  (do pack: $p)"; fi
 done <<BEOF
-$TARGETS
+$PACKPATHS
 BEOF
 # hooks precisam do bit de execução (cp não o garante entre árvores)
 while IFS= read -r p; do
