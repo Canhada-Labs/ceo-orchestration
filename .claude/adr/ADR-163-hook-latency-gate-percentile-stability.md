@@ -253,3 +253,36 @@ still-contended verdict means sustained multi-window load, rare by
 construction); its remedy is a re-run when quiet, and its label
 explicitly disclaims a regression verdict. N=200 percentile semantics
 (Decision items 1, 2, 5) are untouched by this amendment.
+
+
+## Amendment (PLAN-169 W2.2, 2026-08-09) — test probes join the N-adequacy rule; MEDIAN-on-CI re-evaluated and KEPT
+
+The original decision covered the CI profiler gate. The TEST probes of
+the same family sat outside it: `test_case_a_p99_under_5ms` gated the
+MEDIAN on CI (a p99 of N=100 was one preemption spike from failing —
+S297: 5.25 ms vs 5 ms) and `test_emit_pair_end_to_end_loop_p95_within_budget`
+had COLLAPSED indices (`int(19*.95) == int(19*.99) == 18`) — the exact
+class this ADR names.
+
+Decision (implemented in the free test surfaces by PLAN-169 W2.2):
+
+1. N=200 (Case-A) / N_TRIALS=40 (end-to-end loop); indices ALWAYS
+   derived from the constant via the `_pct_of_sorted` nearest-rank
+   truncation (`int((n-1)*p/100)`) — never hardcoded.
+2. The collapse precondition (`i95 != i99`) is ASSERTED inside each
+   test before the timed loop — lowering N can never silently
+   re-create a collapsed gate.
+3. On CI/loaded machines the MEDIAN gate STAYS — re-evaluated and KEPT
+   with live evidence. The p95-on-CI attempt flaked on its FIRST real
+   run (validate run 31288404989: p95=6.31 ms vs median=3.83 ms
+   against the 5 ms budget): a loaded shared runner shifts the WHOLE
+   distribution (~6x the local median), so any real tail percentile
+   prices the runner, not the code. The median is stable under that
+   shift and still catches the ~8x regression the probe exists for.
+   Quiet local machines keep the strict p99. Budgets unchanged.
+
+The PLAN-112-FOLLOWUP median switch therefore graduates from
+flake-intuition to a decision WITH evidence (the run above). Any new
+percentile probe is born with: an N satisfying the precondition,
+derived indices, the median in shared-load environments, and a real
+percentile only where the environment is controlled.

@@ -1611,12 +1611,28 @@ try:
     with open(sys.argv[1], "r", encoding="utf-8") as f:
         doc = json.load(f)
     v = (doc.get("request") or {}).get("placeholders", {}).get("PROTOCOL_SOURCE", "")
-    if isinstance(v, str) and v and "{{" not in v:
+    # PLAN-169 W3.1 - B.a, R-SEC8: POSITIVE charset allowlist. A value
+    # carrying newline or control chars previously flowed into a sed
+    # replacement under set -e and ABORTED the upgrade mid-flight.
+    # Reject means empty means route D3 fallback. The caller emits the
+    # WARNING naming the rejected key - asserted by the land battery.
+    # NOTE: keep this comment free of apostrophes, backticks and parens;
+    # the bash command-substitution scanner mis-parses them in heredocs.
+    import re as _re
+    if (isinstance(v, str) and v and "{{" not in v
+            and _re.match(r"\A[A-Za-z0-9._/ ~-]{1,512}\Z", v)):
         sys.stdout.write(v)
 except Exception:
     pass
 PYEOF
 )"
+    # W3.1: a present-but-rejected key must be LOUD — silence here would be
+    # a silent change of pointer ownership (the filter empties the value and
+    # the D3 fallback quietly takes over). Plain grep on a file: no pipe, no
+    # SIGPIPE class.
+    if [ -z "$_ptr_psource" ] && grep -q '"PROTOCOL_SOURCE"' "$_INSTALL_STATE_FILE" 2>/dev/null; then
+      echo "    WARNING: install-state key PROTOCOL_SOURCE present but REJECTED by the charset allowlist (control chars / newline?) — falling back to route D3 (this checkout's family)." >&2
+    fi
   fi
   if [ -z "$_ptr_psource" ] && [ -f "$pointer" ]; then
     # D3 route 2: trust a SOUND pointer. Extract the source it names and
@@ -1868,6 +1884,29 @@ _ov_obs_live_type() {
 _ov_obs_prior_record() {
   _opr_rel="$1"
   [ -n "${_BASELINE_MANIFEST_FILE:-}" ] && [ -f "$_BASELINE_MANIFEST_FILE" ] || { printf 'none'; return 0; }
+  # Refuse a relpath flagged as duplicate/ambiguous during load — same guard
+  # as _baseline_lookup (Codex R1 P0#2). Without this, the raw greps below
+  # would answer 'hash'/'link_match' from a duplicated manifest line and the
+  # verdict would authorize a forced replace on ambiguous evidence
+  # (repass-r2 part-a V1; the S294 compose-wrong class).
+  case "${_BASELINE_INVALID:-}" in
+    *"
+$_opr_rel
+"*) printf 'none'; return 0 ;;
+  esac
+  # Superficie AGREGADA (SPEC/v1): o grep de hash abaixo casa por
+  # PREFIXO (rel(/|$)), entao um DESCENDENTE duplicado/ambiguo
+  # (ex.: SPEC/v1/foo.md 2x) tambem contamina a evidencia do agregado
+  # — a linha retida responderia 'hash' e autorizaria refresh forcado
+  # (pair-rail S300 r18; extensao da mesma classe V1).
+  while IFS= read -r _opr_inv; do
+    [ -n "$_opr_inv" ] || continue
+    case "$_opr_inv" in
+      "$_opr_rel"/*) printf 'none'; return 0 ;;
+    esac
+  done <<OPRINV
+${_BASELINE_INVALID:-}
+OPRINV
   _opr_link="$( grep -E "^LINK  ${_opr_rel}  " "$_BASELINE_MANIFEST_FILE" 2>/dev/null | head -1 || true )"
   if [ -n "$_opr_link" ]; then
     # Fixed double-space delimiter, never whitespace field-splitting: a
@@ -2172,11 +2211,17 @@ _refresh_framework_marker() {
       if [ "$_sh" = no ]; then
         # The documented --pin downgrade: this source predates the marker, so a
         # retained record would keep advertising a newer version over older
-        # content. Readers fall back to VERSION, which the pin DID update.
+        # content. Readers fall back to VERSION — which upgrade NEVER touches
+        # (install-time snapshot, ADR-155-AMEND-1), so after this downgrade
+        # VERSION OVER-REPORTS until the next full install. Say so honestly
+        # instead of claiming the pin updated it (repass-r2 part-a V2: the
+        # false claim recurred in all three rail rounds).
         echo "    SKIP: .claude/.framework-version absent in source (pre-v1.3.0 checkout)"
         if [ "$_pr" != "none" ]; then
           echo "    NOTE: the prior delivery record is NOT carried forward — version" >&2
-          echo "          readers fall back to VERSION (which reflects the pinned source)" >&2
+          echo "          readers fall back to VERSION, an install-time snapshot that" >&2
+          echo "          does NOT reflect the pinned source: expect VERSION to" >&2
+          echo "          over-report until the next full install (ADR-155-AMEND-1)" >&2
         fi
       elif [ "$_lt" = "symlink" ]; then
         echo "    WARNING: .claude/.framework-version is a symlink that does NOT match the" >&2

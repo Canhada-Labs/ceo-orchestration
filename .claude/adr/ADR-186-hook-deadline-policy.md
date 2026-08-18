@@ -131,3 +131,9 @@ separáveis — o resto da leva anda sem ela). O P0 de case-fold do
 aberto o bypass por filesystem case-insensitive verificado em S291.
 **Essa é a única pressão real de tempo** — e ela é argumento para decidir
 rápido, não para decidir de qualquer jeito.
+
+> **Nota histórica (PLAN-169 W0/E.17, 2026-08-09):** o P0 de case-fold
+> citado acima foi **RESOLVIDO e commitado em `6b5dd10`** — ambos os
+> rails dobram caso (`check_canonical_edit.py` e
+> `check_arbitration_kernel.py`). O parágrafo permanece como registro do
+> custo avaliado à época; não é dívida aberta.

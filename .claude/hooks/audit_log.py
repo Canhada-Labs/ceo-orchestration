@@ -37,9 +37,11 @@ All three fields are ADDITIVE — older consumers ignore them safely.
 PLAN-021 ADR-052 (audit-log v2.8 schema bump — ADDITIVE):
 
 - `model` (string|null) — Claude model ID used for the spawn. Values
-  are canonical Anthropic IDs: `"claude-opus-4-8"`,
-  `"claude-sonnet-4-6"`, `"claude-haiku-4-5-20251001"`, or null if
-  unknown. Captured from `tool_response.model` when Anthropic API
+  are canonical Anthropic IDs of the CURRENT fleet (e.g.
+  `"claude-fable-5"`, `"claude-opus-5"`, `"claude-sonnet-5"`,
+  `"claude-haiku-4-5"`; N-1 ids like `"claude-opus-4-8"` remain valid
+  in replay), or null if unknown. Captured from `tool_response.model`
+  when Anthropic API
   emits it, else null. Enables forensic correlation: if a
   Sonnet-routed review misses a bug, the audit log proves which
   model made the decision.
@@ -832,16 +834,17 @@ def _extract_model(
 ) -> Optional[str]:
     """PLAN-021 ADR-052: extract Claude model ID from tool_response.
 
-    Anthropic API responses include a `model` field (e.g. "claude-opus-4-8",
-    "claude-sonnet-4-6", "claude-haiku-4-5-20251001"). Some adapters nest
+    Anthropic API responses include a `model` field (e.g. "claude-fable-5",
+    "claude-opus-5", "claude-haiku-4-5"; older gens appear in replay). Some adapters nest
     it under `response.model` or `content.model`. Returns the string if
     found, else falls back to ADR-052 role-to-model policy table when
     `subagent_type` is supplied; otherwise None.
 
-    Canonical IDs (PLAN-021 ADR-052 §Role-to-model distribution):
-      - claude-opus-4-8        → orchestrator + critical VETOs
-      - claude-sonnet-4-6      → mid-complexity workers
-      - claude-haiku-4-5-20251001 → high-frequency fan-out
+    Canonical IDs (PLAN-169 W2.10 D1 — current fleet; the table below is
+    the authority, this prose only illustrates):
+      - claude-fable-5 / claude-opus-5 → orchestrator + critical VETOs
+      - claude-sonnet-5                → mid-complexity workers
+      - claude-haiku-4-5               → high-frequency fan-out
 
     PLAN-044 audit-v2 C3-P0-01 fix (Wave B): the Task tool response
     shape from Claude Code's hook payload omits the `model` field on
@@ -898,7 +901,9 @@ _ADR_052_ROLE_TO_MODEL: Dict[str, str] = {
     "security-engineer": "claude-opus-5",
     "qa-architect": "claude-sonnet-5",
     "performance-engineer": "claude-sonnet-5",
-    "devops": "claude-haiku-4-5-20251001",  # E5-F7: align to ADR-052 + devops.md
+    # PLAN-169 W2.10 F8: bare id — the dated pin is not in availableModels
+    # and interacts badly with enforceAvailableModels.
+    "devops": "claude-haiku-4-5",
     # Mitigated rail — general-purpose dispatch inherits CEO model.
     # Default-CEO is Opus-tier unless CEO_MODEL_DOWNSHIFT is honored.
     "general-purpose": "claude-opus-5",

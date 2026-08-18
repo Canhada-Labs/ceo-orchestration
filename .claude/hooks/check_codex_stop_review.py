@@ -60,7 +60,8 @@ primitive:
 
 ## Reviewer pin (OQ3 — PROVISIONAL, pending Owner ratification)
 
-- model: ``claude-opus-4-8`` (override ``CEO_PAIR_RAIL_REVIEWER_MODEL``)
+- model: ``claude-opus-5`` (override ``CEO_PAIR_RAIL_REVIEWER_MODEL``;
+  fleet-currency F4, PLAN-169 W3 — was ``claude-opus-4-8``)
 - per-review token ceiling: ``100000`` (override
   ``CEO_PAIR_RAIL_REVIEWER_MAX_TOKENS``)
 - verdict vocabulary: ``VERDICT: APPROVE`` / ``VERDICT: REJECT`` with
@@ -114,7 +115,9 @@ _HOOK_VERSION = "1.0.0"
 _REVIEW_LOG_FILENAME = "codex-review-log.jsonl"
 _REVIEW_LOG_MAX_LINES = 2000  # bounded; oldest dropped on append
 
-_DEFAULT_REVIEWER_MODEL = "claude-opus-4-8"  # OQ3 PROVISIONAL
+# PLAN-169 W2.10 F4: the cross-model post-land reviewer is VETO-adjacent —
+# it must not run two generations below the fleet ceiling by default.
+_DEFAULT_REVIEWER_MODEL = "claude-opus-5"
 _DEFAULT_REVIEWER_MAX_TOKENS = 100000  # OQ3 PROVISIONAL
 
 # Verdict vocabulary (mirror of the Codex-side pair-rail labels).

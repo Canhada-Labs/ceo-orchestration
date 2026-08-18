@@ -15,6 +15,8 @@
 #       (the codex r1 P1 substring-destruction case)
 #   R7  recognizer: unparseable upgrade line (space in target) => rc=1
 #   R8  inside-target checkout => relative render (no token, no source path)
+#   R9  psource carrying a NEWLINE => degraded render (token literal), the
+#       generator never aborts and never leaks the value (PLAN-169 W3.1)
 #
 # Exit: 0 all pass · 1 failure · 2 harness error.
 # =============================================================================
@@ -121,10 +123,24 @@ else
   fail "R8 inside-target render wrong"; sed -n '1,8p' "$WORK/rel.txt"
 fi
 
+# --- R9: psource with NEWLINE => degraded render, never corrupt/abort ---------
+NL_SRC="/tmp/evil
+payload"
+OUT9="$WORK/nl.md"
+if _render_protocol_pointer "/tmp/somewhere" "$WORK/t9" core generic "$NL_SRC" > "$OUT9" 2>/dev/null; then
+  if grep -q '{{PROTOCOL_SOURCE}}' "$OUT9" && ! grep -q 'payload' "$OUT9"; then
+    say "PASS  R9 newline psource => degraded body (token literal), no leak"
+  else
+    fail "R9 newline psource leaked into the render or corrupted the body"
+  fi
+else
+  fail "R9 generator ABORTED on newline psource (the set -e mid-upgrade class)"
+fi
+
 echo ""
 if [[ "$FAILURES" -gt 0 ]]; then
   echo "protocol-pointer render control: $FAILURES FAILED"
   exit 1
 fi
-echo "protocol-pointer render control: 8/8 pass"
+echo "protocol-pointer render control: 9/9 pass"
 exit 0

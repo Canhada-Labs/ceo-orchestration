@@ -1,7 +1,8 @@
 name: Ownership Nightly
 
 # PLAN-168 W1 (AC-4/AC-5, Owner decision D4): the ownership e2e runs the FULL
-# truth table — 62 real install/upgrade cells, ~25 min locally, 2-3x that on a
+# truth table — 65 real install/upgrade cells (62 GREEN + 3 expected RED;
+# prose was stale at 62/4 — repass-r2 part-e P2), ~25 min locally, 2-3x that on a
 # 2-core runner — so it cannot live inside smoke-install's 25-min job (that
 # budget was already raised 4x: 5→8→20→25). And `schedule:` events IGNORE
 # `paths:` filters, so the nightly split is a separate WORKFLOW, not a filter
@@ -10,7 +11,7 @@ name: Ownership Nightly
 #
 # The gate compares the observed non-GREEN set against
 # scripts/tests/ownership-expected-reds.txt and fails on ANY difference —
-# including shrinkage. 4 deliberate reds are part of the contract
+# including shrinkage. 3 deliberate reds are part of the contract
 # (CLAUDE.md §4): an all-green run means the table changed — STOP and find
 # out why, never celebrate. NEVER run the harness with --map here: --map is a
 # reporting mode that exits 0 over failures (a dead gate by construction).

@@ -304,7 +304,13 @@ jobs:
           # an rc=1 from a failure UNRELATED to the plant (log with none of
           # the plant markers) would pass — the registered-vacuous class
           # (S292) this step exists to close. Demand plant evidence or fail.
-          grep -E "PLANTED|per-mode verdicts|positive control:" /tmp/parity-control.log || {
+          # PLAN-169 W3.2 (fecha a exceção nomeada do AC-4 do PLAN-166,
+          # achado r6-P2): o fator antigo aceitava evidência NÃO-causal —
+          # qualquer um dos 3 marcadores, mesmo sem o controle ter
+          # DISPARADO. Exigir a linha que só existe quando o plante
+          # disparou em TODOS os modos, e nenhum veredito por modo :0/:2.
+          { grep -qF 'positive control: FIRED in every mode' /tmp/parity-control.log \
+            && ! grep -E 'per-mode verdicts.*:(0|2)' /tmp/parity-control.log >/dev/null; } || {
             cat /tmp/parity-control.log
             echo "::error::rc=1 but the log carries no PLANTED/per-mode-verdict evidence - the control went red for an unrelated reason, which proves nothing about the plant (vacuous control)"
             exit 1

@@ -372,6 +372,11 @@ GITHUB_OWNER=""
 WITH_REFERENCE_PERSONAS=0
 DRY_RUN=0
 STRICT_PLACEHOLDERS=0
+# V5: acumulador dos links criados NESTA run — inicializado VAZIO aqui
+# (pair-rail S300 r16: um _CREATED_LINK_RELPATHS herdado do ambiente
+# autorizaria symlinks do adotante como entrega LINK — a classe de
+# vazamento de env da S218).
+_CREATED_LINK_RELPATHS=""
 # Session 75 Codex Finding 5 closure: post-install integrity check.
 CEREMONY="maintainer"  # WS4-ceremony-var
 _WS4_PRESNAP=""        # WS4-ceremony-var (set under -u; populated in non-dry-run)
@@ -898,6 +903,12 @@ install_one() {
   if [[ "$MODE" == "link" ]]; then
     ln -s "$src" "$dst"
     INSTALL_ONE_WROTE=1
+    # V5 (repass-r2 part-a): remember every link THIS run created. The
+    # manifest writer exports the exact set as FMS_LINK_PATHS, so the
+    # generator never allow-all serializes a pre-existing adopter symlink
+    # (EXISTS-skipped above, hence NOT in this list) as a LINK delivery.
+    _CREATED_LINK_RELPATHS="${_CREATED_LINK_RELPATHS:-}
+$rel_path"
     echo "    LINKED: $rel_path"
   else
     if [[ -d "$src" ]]; then
@@ -2126,6 +2137,26 @@ apply_placeholder_substitutions() {
 
   local f
   for f in "${explicit_files[@]}"; do
+    # NUNCA substituir atraves de um symlink que o instalador NAO criou
+    # (pair-rail S300 r11 P1-1 + refinamento r20): [[ -f ]] segue o
+    # link e o sed-inplace o MATERIALIZA como arquivo regular — um
+    # symlink do ADOTANTE (EXISTS-skipped pelo install_one) teria o
+    # conteudo reescrito E viraria hash record de framework (classe
+    # V4/V5 por rota nova). Links criados NESTA run
+    # (_CREATED_LINK_RELPATHS) mantem a semantica shipped do link-mode:
+    # a substituicao acontece como sempre aconteceu.
+    if [[ -L "$f" ]]; then
+      _aps_rel="${f#$TARGET/}"
+      _aps_created=0
+      while IFS= read -r _aps_c; do
+        [[ -n "$_aps_c" ]] || continue
+        [[ "$_aps_c" == "$_aps_rel" ]] && { _aps_created=1; break; }
+      done <<< "${_CREATED_LINK_RELPATHS:-}"
+      if [[ "$_aps_created" -ne 1 ]]; then
+        echo "    SKIP (pre-existing symlink — not substituting through it): $_aps_rel"
+        continue
+      fi
+    fi
     [[ -f "$f" ]] || continue
     if [[ "$DRY_RUN" -eq 1 ]]; then
       echo "    (dry-run) would SUBSTITUTE placeholders in: ${f#$TARGET/}"
@@ -2512,6 +2543,55 @@ PROTOCOL.md"
   # Empty on a fresh install (target IS the freshly written pointer, hashing it
   # is correct); set only by the continuity path above.
   export FMS_PROTOCOL_HASH="${_PRIOR_PROTOCOL_HASH:-}"
+  # V5 (repass-r2 part-a): the generator's unset-FMS_LINK_PATHS default is
+  # allow-all — correct only when every live symlink is installer-created,
+  # which EXISTS-skip breaks: a pre-existing adopter symlink at a framework
+  # relpath would serialize as a framework LINK delivery (the upgrade caller
+  # was cured earlier; this cures the install caller). Authorized set =
+  # links created THIS run + prior-manifest LINK records that still match
+  # the live readlink (same continuity rule as above). An EMPTY set in link
+  # mode is encoded as a single newline: non-empty for the generator's
+  # [ -n ] probe, zero entries after IFS split — deny-all, never allow-all.
+  if [[ "$MODE" == "link" ]]; then
+    _v5_prior=""
+    if [[ -f "$manifest" ]]; then
+      # Um relpath com MAIS de um registro no manifesto previo — DOIS
+      # LINKs, ou um LINK + um HASH (proveniencia MISTA) — e evidencia
+      # AMBIGUA: _prior_link_target_matches leria so a primeira linha e
+      # a reescrita normalizaria conteudo do adotante como LINK
+      # confiavel (pair-rail S300 r3 P1-6 + r6 P1-2; mesma classe do
+      # V1: evidencia ambigua nunca autoriza). Autorizavel = relpath
+      # com registro LINK cuja contagem GLOBAL (todos os tipos) e 1.
+      while IFS= read -r _v5_rel || [[ -n "$_v5_rel" ]]; do
+        [[ -n "$_v5_rel" ]] || continue
+        if _prior_link_target_matches "$manifest" "$_v5_rel"; then
+          _v5_prior="$_v5_prior
+$_v5_rel"
+        fi
+      done < <( awk '
+        {
+          idx = index($0, "  ");
+          if (idx == 0) next;
+          kind = substr($0, 1, idx - 1);
+          rest = substr($0, idx + 2);
+          j = index(rest, "  ");
+          rel = (j == 0 ? rest : substr(rest, 1, j - 1));
+          count[rel]++;
+          if (kind == "LINK") islink[rel] = 1;
+        }
+        END {
+          for (r in count)
+            if (count[r] == 1 && islink[r] == 1) print r;
+        }' "$manifest" 2>/dev/null | sort || true )
+    fi
+    FMS_LINK_PATHS="$( printf '%s\n' "${_CREATED_LINK_RELPATHS:-}" "$_v5_prior" \
+      | awk 'NF' | sort -u )"
+    if [[ -z "$FMS_LINK_PATHS" ]]; then
+      FMS_LINK_PATHS=$'\n'
+    fi
+    export FMS_LINK_PATHS
+    echo "    link authorization: $( printf '%s\n' "$FMS_LINK_PATHS" | grep -c . || true ) path(s) authorized for LINK records (created this run + still-valid prior records)"
+  fi
   _write_baseline_manifest "$manifest"
   unset FMS_ROOT FMS_PROFILE_PARTS FMS_MODE FMS_HASH_ROOT FMS_PROTOCOL_HASH \
         FMS_PRIOR_MANIFEST FMS_HASH_SOURCE_SPEC FMS_HASH_SOURCE_PROTOCOL \

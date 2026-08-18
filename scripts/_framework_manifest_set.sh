@@ -371,6 +371,14 @@ _write_baseline_manifest() {
         *[$'\n\r\t']*) continue ;;
       esac
       printf 'LINK  %s  %s\n' "$_wbm_rel" "$_wbm_target" >> "$_wbm_tmp"
+    elif [ -L "$_wbm_abs" ]; then
+      # A live symlink that did NOT qualify as a LINK record (wrong mode, or
+      # rejected by _wbm_link_allowed) must never fall through to the hash
+      # branch: POSIX -f FOLLOWS the link, and the record would serialize the
+      # ADOPTER's target content as a framework HASH delivery — a new route
+      # around INV-2 (repass-r2 part-a V4). No record at all: not delivered.
+      echo "    NOTE: symlink $_wbm_rel not recorded (no LINK authorization; refusing to hash through it)" >&2
+      continue
     elif [ -f "$_wbm_abs" ]; then
       if [ "$_wbm_rel" = "PROTOCOL.md" ]; then
         # Generated pointer. Use the CANONICAL pointer hash (FMS_PROTOCOL_HASH,
@@ -657,6 +665,11 @@ _ownership_verdict() {
 #       whole-body hashes cannot match invocation-specific bodies).
 # =============================================================================
 
+# PLAN-169 W3.1: literal newline for the case-guard below (command
+# substitution would strip it).
+_RPP_NL='
+'
+
 _render_protocol_pointer() {
   # $1=SOURCE_DIR $2=TARGET $3=PROFILE $4=STACK $5=PROTOCOL_SOURCE(resolved)
   _rpp_src="$1"; _rpp_target="$2"; _rpp_profile="$3"; _rpp_stack="$4"; _rpp_psource="$5"
@@ -677,8 +690,21 @@ _render_protocol_pointer() {
       # The healthy outside-target form: the degraded template with the token
       # substituted EVERYWHERE — exactly what install.sh's placeholder pass
       # has always produced, so existing healthy pointers keep their digest.
-      _render_protocol_pointer_degraded "$_rpp_target" "$_rpp_profile" "$_rpp_stack" \
-        | sed "s|{{PROTOCOL_SOURCE}}|$( printf '%s' "$_rpp_psource" | sed 's/[|&\\]/\\&/g' )|g"
+      # PLAN-169 W3.1: `sed s|…|VALUE|` cannot carry a NEWLINE in VALUE
+      # (unterminated s-command aborts under set -e — mid-upgrade). The
+      # upgrade path rejects such values upstream (charset allowlist);
+      # this guard covers every other caller: a value the substitution
+      # cannot represent leaves the token LITERAL (degraded body — the
+      # recognized cure target), never a corrupt render, never an abort.
+      case "$_rpp_psource" in
+        *"$_RPP_NL"*)
+          _render_protocol_pointer_degraded "$_rpp_target" "$_rpp_profile" "$_rpp_stack"
+          ;;
+        *)
+          _render_protocol_pointer_degraded "$_rpp_target" "$_rpp_profile" "$_rpp_stack" \
+            | sed "s|{{PROTOCOL_SOURCE}}|$( printf '%s' "$_rpp_psource" | sed 's/[|&\\]/\\&/g' )|g"
+          ;;
+      esac
       ;;
   esac
 }

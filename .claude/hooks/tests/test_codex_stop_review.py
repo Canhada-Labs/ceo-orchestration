@@ -324,7 +324,7 @@ class InstructionTests(unittest.TestCase):
         txt = MOD.build_review_instruction(
             session_id="sess", paths=[".claude/hooks/x.py"], repo_root=Path("/repo")
         )
-        self.assertIn("claude-opus-4-8", txt)
+        self.assertIn("claude-opus-5", txt)
         self.assertIn("CEO_PAIR_RAIL_REVIEWER_MODEL", txt)
         self.assertIn("OpenAI Codex", txt)
         self.assertIn("Anthropic Claude", txt)

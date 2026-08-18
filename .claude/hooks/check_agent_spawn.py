@@ -2447,8 +2447,10 @@ def decide(
                     reason=(
                         f"GOVERNANCE: veto_floor_demoted: role={_role} "
                         f"reason={reason}. The VETO floor requires "
-                        "security-engineer and code-reviewer to bind to "
-                        "claude-opus-4-8. See ADR-052 + PLAN-045 Wave 1 P0-03."
+                        "security-engineer and code-reviewer to bind to a "
+                        "member of VETO_FLOOR_ALLOWED (agent_frontmatter.py) "
+                        "- the enforcement is set membership, not one id. "
+                        "See ADR-052 + PLAN-045 Wave 1 P0-03; PLAN-169 W2.10 D2."
                     ),
                 )
 

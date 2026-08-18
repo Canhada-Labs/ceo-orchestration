@@ -481,12 +481,18 @@ def _jaccard(a: List[str], b: List[str]) -> float:
 # Predicate evaluation
 # -----------------------------------------------------------------------------
 
-def _eval_predicates(events: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+def _eval_predicates(
+    events: List[Dict[str, Any]], skip_p4: bool = False
+) -> Optional[Dict[str, Any]]:
     """Evaluate bounded predicates against the windowed events.
 
     Returns the first predicate that fires (priority P1>P2>P3>P4>P5)
     as a dict ``{anti_pattern_id, count_in_window, override_recommended_subagent_type}``,
     or None if no anti-pattern detected.
+
+    ``skip_p4`` suppresses P4 so the apply-step advisory path can ask
+    "would anything ELSE have fired?" without the stale P4 hit
+    shadowing lower-priority blockers (pair-rail S300 r17).
     """
     if not events:
         return None
@@ -539,7 +545,7 @@ def _eval_predicates(events: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
                     break
             if not attached:
                 distinct_groups.append(toks)
-        if len(distinct_groups) >= P4_GREP_FIND_THRESHOLD:
+        if len(distinct_groups) >= P4_GREP_FIND_THRESHOLD and not skip_p4:
             return {
                 "anti_pattern_id": "P4_independent_grep_find_spam",
                 "count_in_window": len(distinct_groups),
@@ -663,6 +669,38 @@ def decide(
         # Degrade gracefully: emit advisory but DO NOT block, DO NOT
         # emit audit (caller respects this).
         return {"systemMessage": msg + " [emit budget exhausted]"}, state, None
+
+    # PLAN-169 W3.3 (ledger C.3; R-SEC6 — primary path is the PREDICATE
+    # cure, no persisted sentinel). Live evidence, 4 independent hits
+    # (S298 debate fan-out x2, S299 W0 x2): P4's block lands on the
+    # APPLY step (Edit/Write) of a legitimate investigate-then-apply
+    # flow. The spam being rate-limited is the grep burst itself — Bash
+    # keeps the block; on the apply tools P4 degrades to the advisory
+    # systemMessage. HONEST LIMIT (pair-rail S300 r7 P2): main() emits
+    # audit events only for blocks/overrides, so this advisory hit is
+    # VISIBLE in the systemMessage but NOT audited — auditing it needs
+    # a new registered action (audit_emit whitelist ceremony), named
+    # follow-up in the W4 audit family. Every other predicate keeps its
+    # block semantics unchanged.
+    if hit["anti_pattern_id"] == "P4_independent_grep_find_spam" \
+            and tool_name in ("Edit", "Write", "MultiEdit", "NotebookEdit"):
+        # Pair-rail S300 r17: a stale P4 hit outranks P5 in
+        # _eval_predicates (priority P1>..>P5), so returning the
+        # advisory here would SHADOW a blocking P5 for the whole
+        # window. Re-evaluate with P4 suppressed; any other predicate
+        # that fires keeps its block.
+        other = _eval_predicates(state["events"], skip_p4=True)
+        if other is not None:
+            reason = (
+                "GOVERNANCE: anti-CEO-overhead "
+                f"{other['anti_pattern_id']} fired "
+                f"(count_in_window={other['count_in_window']}; evaluated "
+                "past the P4 apply-step advisory). Consider dispatching a "
+                f"'{other['override_recommended_subagent_type']}' sub-agent. "
+                "Set CEO_OVERHEAD_ACK=1 to ack + proceed."
+            )
+            return {"decision": "block", "reason": reason}, state, other
+        return {"systemMessage": msg + " [P4 advisory on apply-step]"}, state, hit
 
     reason = f"GOVERNANCE: anti-CEO-overhead {hit['anti_pattern_id']} fired. {msg}"
     return {"decision": "block", "reason": reason}, state, hit

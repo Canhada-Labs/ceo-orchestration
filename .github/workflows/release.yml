@@ -90,17 +90,19 @@ jobs:
       - name: Assert framework-version marker matches VERSION
         run: |
           set -euo pipefail
-          FILE="$(tr -d '[:space:]' < VERSION)"
           if [[ ! -f .claude/.framework-version ]]; then
             echo "::error::.claude/.framework-version is missing — it is a tracked file (PLAN-166 F3 / ADR-155-AMEND-1); a release checkout without it must not ship"
             exit 1
           fi
-          MARKER="$(tr -d '[:space:]' < .claude/.framework-version)"
-          if [[ "$MARKER" != "$FILE" ]]; then
-            echo "::error::.claude/.framework-version ('$MARKER') does not match VERSION ('$FILE') — the marker is byte-identical to VERSION by contract (Forma A (ii), fail-closed)"
+          # BYTE-identical, as the contract says — cmp, not tr-stripped
+          # equality. The old tr -d '[:space:]' compare accepted '1 . 3 . 0'
+          # or '1.3.0\n\n' while the error message promised byte identity
+          # (repass-r2 part-e P2: assert weaker than its own claim).
+          if ! cmp -s VERSION .claude/.framework-version; then
+            echo "::error::.claude/.framework-version is not byte-identical to VERSION — the version bump writes it as a site (Forma A (ii), fail-closed). xxd both files to see the drift."
             exit 1
           fi
-          echo "OK: .claude/.framework-version=$MARKER matches VERSION"
+          echo "OK: .claude/.framework-version is byte-identical to VERSION ($(tr -d '[:space:]' < VERSION))"
 
       # -----------------------------------------------------------------
       # PLAN-153 Wave B item 5 (e) — version↔plugin-manifest sync, kept
