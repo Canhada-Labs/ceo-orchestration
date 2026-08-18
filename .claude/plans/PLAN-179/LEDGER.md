@@ -85,6 +85,30 @@ Achados que MUDAM o plano (verbatim do censo, evidência citada):
 - **U-3 confirmado:** W3-K e W4-C têm posturas de override de kernel
   DIFERENTES ⇒ nunca na mesma sessão (um `export` sobrevive).
 
+## U4 — W3-K (169): DIAGNÓSTICO EMPÍRICO DERRUBOU A PREMISSA DO PLANO
+
+Reproduzido em harness hermético (`reproduced=true`, `event_emitted=true`):
+- `kernel_extension_landed` **NÃO é engolido**: está em `_EMIT_GENERIC_PASSTHROUGH`
+  (`audit_emit.py:1751`), `emit_kernel_extension_landed` só faz `ceremony_sha[:64]`
+  sem validar formato. O evento LANDA com o path dentro de `ceremony_sha`
+  (`hmac_error: null`, `audit-log.errors` vazio). O `except Exception: pass`
+  nunca dispara.
+- **O bug REAL é outro evento e outro mecanismo:** `veto_triggered
+  reason_code=kernel_override_used` nunca é emitido porque o branch em
+  `check_arbitration_kernel.py:696` testa `decision == "allow"`, e `decision`
+  vem de `json.loads` da saída do próprio `_emit_allow()`, que **nunca escreve
+  a chave `decision`** (o comentário dele diz que "allow" no topo é inválido).
+  `git log -S'"decision": "allow"'` volta VAZIO ⇒ **branch nasceu morto**, não
+  regrediu. O systemMessage do hook (:459-462) e o docstring do módulo (:34-36)
+  mandam o operador procurar exatamente o evento que nunca é escrito.
+- Consequência de governança: **uso de override de kernel não é auditado pelo
+  canal que a documentação promete**.
+- Cura: reviver o branch por AUSÊNCIA de block (`decision is None` + override +
+  kernel path), ou melhor, `decide()` devolver o fato do grant a `main()` para o
+  audit não depender de parsear a própria saída. NÃO mexer nos kwargs — estão OK.
+- Lição: a premissa "emit engolido / ceremony_sha inválido" era plausível e
+  ERRADA. Só a reprodução hermética separou as duas.
+
 ## Decisões tomadas
 
 - **D1** — Trabalho canônico vai para pack staged (`staged-*/`) + UMA cerimônia
