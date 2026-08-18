@@ -360,9 +360,22 @@ Dois abortos ANTES do land, ambos pegos por gate e curados por item:
 
 ### W3-K — Cerimônia de kernel (E.2) (L3+, escopo próprio)
 
-- Emits do caminho GRANT do `check_arbitration_kernel.py` são
+> **CORREÇÃO (S313, 2026-08-18) — a hipótese abaixo foi FALSIFICADA por
+> reprodução hermética.** `kernel_extension_landed` **não** é engolido: a ação
+> está em `_EMIT_GENERIC_PASSTHROUGH` (`audit_emit.py:1751`) e o evento LANDA
+> intacto (`hmac_error: null`). O `except Exception: pass` nunca dispara.
+> O defeito REAL é outro evento e outro mecanismo: `veto_triggered
+> reason_code=kernel_override_used` nunca foi escrito porque `main()` decide o
+> caso do grant com `decision == "allow"`, lendo `decision` do JSON que o
+> PRÓPRIO `_emit_allow()` produziu — chave que ele nunca escreve. `git log -S`
+> mostra que a condição **nasceu morta**. O teste que parecia cobrir isso
+> chama `_audit_block` direto, contornando `main()`. Pack: `staged-w3k/`;
+> sentinel: `W3K-approved-draft.md`. Mantido o texto original abaixo como
+> registro do que se acreditava.
+
+- ~~Emits do caminho GRANT do `check_arbitration_kernel.py` são
   silenciosos (engolidos por `except Exception: pass`; suspeita:
-  `ceremony_sha` recebe PATH, não sha 64-hex). Fix do schema dos
+  `ceremony_sha` recebe PATH, não sha 64-hex).~~ Fix do schema dos
   kwargs + **teste POSITIVO do emit de grant** (hoje só o block é
   provado). Sentinel/escopo separados do W3 — e **SESSÃO SEPARADA do
   W3 (U-3):** editar kernel exige `CEO_KERNEL_OVERRIDE` +
