@@ -138,9 +138,29 @@ Correção verbatim do Owner (S62, repetida em 2026-08-16/S310):
   `## ESTIMATION DOCTRINE` incondicional no prompt do
   `inject-agent-context.sh` (cobre todos os spawns nomeados). AC-W2.1:
   grep 2/2 + prompt de amostra carrega o bullet.
-- **W3 pendente (Owner):** material pronto em
-  `PLAN-180/W3-CEREMONY-NOTE.md` (2 paths canônicos, 1 sentinel;
-  destacável/carona).
+- **W3 ✓ (S313, 2026-08-18, commit `4b7efee`, sentinel
+  `PLAN-180/S313-approved.md`)** — carona no trem S313. Edit 1: ADR-081
+  `enforcement_commit: 996d72b…`. Edit 2: bullet ADR-081 no `laneBrief`
+  das lanes externas do **`.claude/workflows/council-audit.js`** — a nota
+  W3 apontava `council.md`, mas o `.md` só delega ao workflow; o template
+  do prompt externo vive no `.js`. Superfície corrigida; os 6 testes que
+  tocam o arquivo verdes na simulação e no G4 do land.
+
+## Registro de execução — follow-up do land W0-W2 (S313, mesmo commit `4b7efee`)
+
+O land `996d72b` (W1: `eta_calendar` no PLAN-SCHEMA) mudou o
+`PLAN-SCHEMA.md` sem apendar o hash da geração substituída à lista
+hash-gated de `_refresh_schema_doc` em `scripts/upgrade.sh` — o refresh
+PRESERVA a cópia antiga do adopter (v1.2.0/v1.3.0) e o parity e2e do
+Smoke Install ficou vermelho (`FATAL [STALE]`, 2 modos) do `e5ce982` ao
+`874117c`. Cura no mesmo trem S313: +1 hash (instância) + guard de classe
+`scripts/tests/test-schema-generation-pins-unit.sh` (gerações derivadas de
+git: release tags `v*` + histórico; zero gerações = exit 2) + wire no
+`smoke-install.yml` (fetch de todas as tags v*, step, `paths:` com os 2
+schema docs). Prova: parity e2e REAL PASS/STALE=0 no clone com o pack.
+Lição: um contrato "apende o hash quando mudar o schema" que só vive em
+comentário é a classe conjunto-fechado-de-memória — agora derivado do
+git e vigiado por-PR.
 
 ## How to continue
 

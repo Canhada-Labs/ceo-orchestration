@@ -1,5 +1,11 @@
 # PLAN-180 W3 — material pronto para a cerimônia (Owner GPG, 1 sentinel)
 
+> **LANDADO na S313 (2026-08-18, `4b7efee`, sentinel `S313-approved.md`)
+> como carona do trem S313.** Correção à nota abaixo: o Edit 2 foi
+> aplicado em `.claude/workflows/council-audit.js` (`laneBrief`), NÃO em
+> `council.md` — o `.md` só delega ao workflow; o template do prompt das
+> lanes externas vive no `.js`. Este arquivo é histórico.
+
 > W3 é DESTACÁVEL (o plano entrega o valor principal com W0-W2, já
 > landados). Pode pegar carona em qualquer cerimônia futura — p.ex. a
 > mesma sessão do pack W3 do PLAN-169 (sentinels SEPARADOS, mesma
