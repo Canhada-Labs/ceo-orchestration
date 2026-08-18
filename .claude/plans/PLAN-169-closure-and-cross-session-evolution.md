@@ -324,6 +324,21 @@ completa 7.049 passed. Curas V1/V2/V4/V5 do verdito rc.2 CURADAS.
   classe "gate que não fala"). Cura: agregar rc por comando; e rodar a
   sim fora do $TMPDIR symlinked.
 
+### OQ — decisões estruturadas do Owner (S312, 2026-08-18, AskUserQuestion)
+
+- **W2.8 (família gate-scripts):** opção selecionada VERBATIM:
+  **"Ratificar (b)-narrow (Recomendado)"** — "Fecha a classe 'script
+  livre que decide release sem pin'. O trem rc.3→rc.4 mexeu nesses
+  scripts 10+ vezes — o custo do re-pin é real mas o fail-loud pega
+  exatamente o drift que hoje passa calado. Cerimônia separada, sem
+  pressa." Execução: trem `staged-w28/` + `OWNER-W28-LAND.sh` +
+  `~/canhada-labs/OWNER-W28-SIGN.sh`.
+- **W0.9 (ADR break-glass):** opção selecionada VERBATIM:
+  **"Aceitar, renumerado (Recomendado)"** — "O trem rc.4 provou a
+  necessidade (triagem GO-WITH-CONDITIONS em janela de release). Entra
+  na mesma cerimônia futura da W2.8 ou noutra — 1 pinentry cobre."
+  Execução: ADR renumerado 191→193 no mesmo trem staged-w28.
+
 ### W3-K — Cerimônia de kernel (E.2) (L3+, escopo próprio)
 
 - Emits do caminho GRANT do `check_arbitration_kernel.py` são
