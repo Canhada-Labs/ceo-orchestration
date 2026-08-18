@@ -1,9 +1,13 @@
 ---
 id: PLAN-167
 title: Tabela de decisão de propriedade — sair do loop de patch-por-ramo no F3
-status: reviewed
+status: done
 created: 2026-08-06
 reviewed_at: 2026-08-06
+completed_at: 2026-08-07
+related_commits: [7c0828a, 36eb667, 08feef1, e07ccf5, ddab46c, 0d2e49c, 11cd4f6, ad9cc3a]
+# Higiene de status S313 (2026-08-18, autorizada pelo Owner): landado na S297
+# (`7c0828a`, cerimônia W4-approved.md); frontmatter ficou em `reviewed`.
 owner: CEO
 depends_on: [PLAN-166]
 budget_tokens: 180-260k

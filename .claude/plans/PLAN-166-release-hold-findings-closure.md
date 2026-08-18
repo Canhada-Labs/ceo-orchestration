@@ -1,9 +1,16 @@
 ---
 id: PLAN-166
 title: Release-hold findings closure — v1.3.0 GA via rc.2
-status: executing
+status: done
 created: 2026-08-05
 reviewed_at: 2026-08-05
+completed_at: 2026-08-17
+related_commits: [9d3d3e1, 516e64e, 9d3f21d, fcadc97, 484d955, 0cb09c3, 2833f92, 7362cfc, c88f94e, 85b4b39, d789721]
+# Higiene de status S313 (2026-08-18, autorizada pelo Owner): W0 provado, W1
+# landado por cerimônia (9d3f21d), W2 percorreu rc.2 → rc.3 (verditos assinados)
+# e o GA v1.3.0 saiu 17/08 pela rota rc.4 do PLAN-177 (que absorveu os 4 P1 do
+# re-pass 12/08 — 85b4b39). O título "via rc.2" ficou histórico; o objetivo
+# (release-hold findings fechados + GA) está cumprido.
 owner: CEO
 depends_on: [PLAN-162, PLAN-165]
 budget_tokens: 90-140k

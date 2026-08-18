@@ -1,7 +1,9 @@
 ---
 id: PLAN-179
 title: Continuidade de contexto — estado durável escrito em fronteira de trabalho, não na morte da sessão
-status: draft
+status: reviewed
+reviewed_at: 2026-08-18
+reviewed_by: "Owner — flip draft→reviewed autorizado na S313 (2026-08-18) após debate L3 round-1 (S312, consensus PROCEED, 3× ADJUST/0 VETO; 9 emendas C1-C9 aplicadas ao §8). GA v1.3.0 saiu 2026-08-17 — o bloqueio do external_wait caiu. Execução W0→W4 em sessão(ões) próprias."
 created: 2026-08-16
 owner: CEO
 depends_on: []

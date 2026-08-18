@@ -1,9 +1,13 @@
 ---
 id: PLAN-168
 title: Fechamento dos follow-ups do PLAN-167 — CI que não roda, ponteiro que degrada, contrato sem ADR
-status: reviewed
+status: done
 created: 2026-08-07
 reviewed_at: 2026-08-07
+completed_at: 2026-08-07
+related_commits: [67a4c75, 05e4845, 33f0d7d, 8ab0557, ec4bdcf, b0ec35f]
+# Higiene de status S313 (2026-08-18, autorizada pelo Owner): landado na S297
+# (`67a4c75` — CI wiring + INV-4 + ADR-190); frontmatter ficou em `reviewed`.
 owner: CEO
 depends_on: [PLAN-167]
 budget_tokens: 120-180k

@@ -1,10 +1,12 @@
 ---
 id: PLAN-180
 title: "Propagação da doutrina token-as-time (ADR-081): validador advisory, eta_calendar e prompts de vendor"
-status: executing
+status: done
 created: 2026-08-16
+completed_at: 2026-08-18
+related_commits: [4476acf, 996d72b, a2bd20e, 4b7efee, f182b01]
 level: L2
-owner_approval: pending
+owner_approval: "granted — S312 autorização de execução (W0-W2 landados 996d72b); W3 landado por cerimônia GPG S313 (4b7efee, sentinel PLAN-180/S313-approved.md); flip para done autorizado pelo Owner S313 2026-08-18"
 related_adrs: [ADR-081 (token-as-time-unit — este plano EXECUTA o Step 3 deferred), ADR-020 (cache discipline), ADR-058 (debate budget)]
 related_plans: [PLAN-060 (origem do ADR-081), PLAN-179 (precedente de draft sob freeze)]
 budget_tokens: 60-105k (W0 30-50k; W1 10-20k; W2 10-20k; W3 10-15k)

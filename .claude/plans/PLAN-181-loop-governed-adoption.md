@@ -1,10 +1,12 @@
 ---
 id: PLAN-181
 title: "Adoção governada do /loop do harness: piloto assistido + wrapper /loop-governed (Tier-C compliant)"
-status: draft
+status: reviewed
+reviewed_at: 2026-08-18
+reviewed_by: "Owner — flip draft→reviewed autorizado na S313 (2026-08-18) após debate L3 round-1 (S312, round_verdict PROCEED, 3× ADJUST/0 VETO; emendas r1-C1..C3 e demais aplicadas inline no corpo). O consensus.md condicionava o flip à revisão do Owner — cumprida. GA v1.3.0 saiu 2026-08-17; W0 (piloto) só roda em CLONE com tag falsa (emenda C3), nunca num hold real."
 created: 2026-08-16
 level: L3
-owner_approval: pending
+owner_approval: "reviewed-gate granted S313 (2026-08-18); execução W0-W3 ainda exige a autorização de execução do Owner por sessão (W3 = /debate + 1 GPG)"
 related_adrs: [ADR-133 (autonomous-loop opt-in doctrine — molde das salvaguardas), ADR-125 (Tier-C: §Cost obrigatório), ADR-103 (hold 24h — alvo do piloto), ADR-081 (unidade tokens)]
 related_plans: [PLAN-135 (W4 D3 inventário session_crons), PLAN-165 (night-mode — molde de opt-in auditado), PLAN-179 (Constraint Pinning — re-ancoragem por ciclo)]
 budget_tokens: 120-220k (W0 piloto 20-40k; W1 inventário 20-40k; W2 wrapper 60-100k; W3 debate+cerimônia 20-40k)

@@ -1,8 +1,13 @@
 ---
 id: PLAN-177
 title: rc.4 — curas dos 4 P1 do re-pass GA + 2 patches de triagem S303, com controle positivo em cada gate
-status: reviewed
+status: done
 reviewed_at: 2026-08-13
+completed_at: 2026-08-17
+related_commits: [fa3bc22, 5af2cd7, 8261aca, 4e7afc7, ad13c92, cd98b14, 94a4f58, cd1cec1, ff27e54, 4273d6c, e262796, d789721]
+# Higiene de status S313 (2026-08-18, autorizada pelo Owner): W0-W2 executados
+# (rc.4 tagueada 4273d6c em 16/08; GA v1.3.0 re-selado d789721 e cortado 17/08);
+# frontmatter ficou em `reviewed`.
 reviewed_by: "Owner — ratificação via AskUserQuestion (S304): 'Ratificar reviewed (Recomendado)' — Frontmatter vira status: reviewed com reviewed_at hoje. W0 executa em seguida (superfícies livres); o pack W1 continua exigindo assinatura GPG do Owner e a tag rc.4 continua sendo do Owner."
 created: 2026-08-13
 owner: CEO
