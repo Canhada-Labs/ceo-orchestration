@@ -1,0 +1,14 @@
+
+Full review comments:
+
+- [P1] Record injections before verifying the probe — /Users/joaocanhada/.w179-rail7/repo/.claude/scripts/probes/probe_postcompact_channel.py:559-560
+  When `--self-test` reaches this call, `arm()` has recorded only `kind=arm`, and the earlier `hook_payload()` call never calls `_record_injection`. Because `cmd_verify()` now requires both channel records, it returns `EXIT_INCONCLUSIVE` (4), causing `cmd_self_test()` to fail; `.claude/scripts/tests/test_probe_postcompact_channel.py:98-104` has the same omission, so its expected 0/1/3 verdict tests also fail. Record both test injections before verification.
+
+- [P1] Lock and collect each SQLite store atomically — /Users/joaocanhada/.w179-rail7/repo/.claude/hooks/_lib/scratchpad_lib.py:637-640
+  When a session store is active or recently used but one sidecar is older than the cutoff, this loop checks age per file and unlinks it without acquiring the store lock; the DB, lock, WAL, and SHM names also hash to different shards, so they can be removed on different sweeps. The lock file's mtime is not refreshed by acquisitions, and WAL activity can leave the main DB stale (`.claude/hooks/_lib/state_store.py:208-230`), allowing concurrent processes to lock different inodes or lose an active component. Group files by scope, acquire its lock, and determine expiry for the store as a unit.
+
+- [P2] Reuse the writer's statusline override resolver — /Users/joaocanhada/.w179-rail7/repo/.claude/hooks/check_precompact_continuity.py:670-672
+  When the progress floor is armed and `CEO_STATUSLINE_SIDECAR` uses `~/...`, the writer expands it but this reader treats `~` literally, so telemetry silently disappears. For a symlink or traversal override, `.claude/scripts/statusline-ceo.py:165-176` rejects the path and writes to the default, while this code may read the rejected path and accept crafted data with matching identity. Resolve and validate the override identically to the writer.
+
+- [P2] Preserve the referenced pair-rail evidence — /Users/joaocanhada/.w179-rail7/repo/.claude/plans/PLAN-179/rail-round-1/README.md:1-1
+  Deleting the round-1 and round-3 evidence leaves live references in `.claude/plans/PLAN-179/HANDOFF-MANHA.md:51`, `:105`, and `:130` pointing to missing directories, while also removing the verdicts and controls those sections cite. Preserve these artifacts, or relocate them and update every reference in the same change.
