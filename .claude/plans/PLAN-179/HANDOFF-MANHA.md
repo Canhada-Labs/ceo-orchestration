@@ -73,8 +73,41 @@ compactação (o oposto do que ship); a linha v2.56 do SPEC declarando ausente u
 campo que este mesmo patch adicionou; e uma implicação de *throughput* num
 comentário, que este repo não faz em lugar nenhum.
 
-**Estado:** as 9 curas estão sendo aplicadas ao pack, com re-verificação
-completa depois. Um **round 2** do rail roda em seguida. Se o round 2 voltar
-limpo, o `BOM-DIA.sh` landa o pack curado; se voltar com achados novos, eu
-curo e o handoff é atualizado — **você não assina nada que o rail não tenha
-aprovado.**
+### Round 2: **4 achados, todos novos** (9 → 4, convergindo)
+
+Nenhum repetido: o rail parou de achar o que já foi curado e passou a achar
+camadas mais fundas. Todos curados também.
+
+1. **[P1] `audit-registry.golden.txt` estava stale** — o gate
+   `check-audit-registry-coverage --check` ficaria VERMELHO no land, e eu
+   **nunca tinha rodado esse gate**. Regenerado (324→325) e agora faz parte da
+   minha bateria de verificação.
+2. **[P2] `project` ausente no evento novo** — o SPEC exige e nem
+   `emit_generic` nem `_write_event` sintetizam. Passei a suprir. Já
+   `session_id` ficou documentado como **condicional**, com a razão escrita: só
+   viaja se vier do input do hook, porque preencher de `CLAUDE_SESSION_ID`
+   atribuiria a linha a quem um agente escolher — linha não-atribuída é
+   honesta, mal-atribuída não.
+3. **[P2] os dois GCs não eram realmente limitados** — `sorted(iterdir())`
+   materializa o diretório inteiro antes do cap agir, então o "cleanup
+   limitado" era justamente o que podia estourar o budget do hook. Agora o cap
+   limita o SCAN.
+4. **[P2] um `os.environ[...] =` novo num arquivo ALLOWLISTED** — o achado mais
+   sutil da noite: o gate de higiene **não veria** esse site, porque a
+   allowlist silencia o arquivo inteiro, inclusive o futuro dele.
+
+### Verificação final (feita por mim, num clone com o pack de 33 paths)
+
+`py_compile` · `settings.json` · `bash -n` + `shellcheck` do `upgrade.sh` ·
+**`check-test-env-hygiene`** · manifesto de gate-scripts ·
+`validate-governance` · `verify-counts` · `check-claude-md-claims` ·
+**`audit-registry --check`** — **10/10 verdes.** Suíte completa de hooks: ver
+`rail-round-1/CURAS.md` (a única falha observada é ambiental, provada isolando
+o teste: ele exige que o audit log VIVO não mude, e minha própria sessão
+escreve nele a cada tool call).
+
+### Bônus: um vermelho no vivo que ninguém tinha visto
+
+A mesma verificação pegou que o land do W3-K deixou um `bare-testcase`
+reprovado pelo gate de higiene. Passou porque o `Validate` daquele commit foi
+**cancelado** por um push superseder — o gate nunca falou. Curado em `9179ef2`.
