@@ -46,8 +46,35 @@ anchor certo antes de pedir a assinatura. Custo: 1 pinentry, o previsto.
   o que a cerimônia ainda deve.
 - Flip do `PLAN-179` `executing→done` quando as waves fecharem (é seu).
 
-## Veredito do pair-rail
+## Veredito do pair-rail — round 1: **REJECT, 9 achados**
 
-<!-- RAIL-VERDICT: preenchido antes de eu encerrar a sessão -->
-_(em execução ao escrever isto — a seção abaixo é preenchida com o resultado
-real, incluindo se ele achou defeitos e o que foi curado)_
+Valeu a pena. Evidência completa em `PLAN-179/rail-round-1/`.
+
+O pack tinha passado em **tudo** que eu sei medir sozinho — simulação de land
+8/8, suíte completa 7088 passed / 0 failed, teste de integração que nasceu
+vermelho e foi curado no código de produção. Os 9 achados sobreviveram a isso.
+Três são a classe dominante deste repo, *instrumento que parece ligado e não
+pode disparar*:
+
+1. **[P1] `upgrade.sh` nunca registra o hook novo.** Instalação NOVA recebe (o
+   template já fora curado pela suíte); **upgrade não**. É o mesmo buraco de
+   adopter, uma camada mais funda — quem já tem o framework instalado
+   receberia o arquivo e o canal de pinning nasceria morto.
+2. **[P2] `gc_orphan_session_stores()` não tem chamador de produção** — e o
+   ADR já afirmava que o GC shipava. Arquivos `.sqlite`/WAL/SHM acumulariam
+   sem limite.
+3. **[P2] `event_source` não-hashável levanta `TypeError`** antes do fail-open,
+   quebrando o contrato "emit_generic nunca levanta".
+
+Mais: histerese de pressão global em vez de por sessão; 12 violações do
+`check-test-env-hygiene.py` no teste novo (o gate do próprio repo); o guia do
+adopter dizendo "staged, não instalado" e descrevendo um guard que HALTA a
+compactação (o oposto do que ship); a linha v2.56 do SPEC declarando ausente um
+campo que este mesmo patch adicionou; e uma implicação de *throughput* num
+comentário, que este repo não faz em lugar nenhum.
+
+**Estado:** as 9 curas estão sendo aplicadas ao pack, com re-verificação
+completa depois. Um **round 2** do rail roda em seguida. Se o round 2 voltar
+limpo, o `BOM-DIA.sh` landa o pack curado; se voltar com achados novos, eu
+curo e o handoff é atualizado — **você não assina nada que o rail não tenha
+aprovado.**
