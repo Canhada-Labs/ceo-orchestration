@@ -135,6 +135,30 @@ cursor, e um arquivo expirado atrás de um prefixo de arquivos frescos nunca
 seria recuperado. Corrigido o mecanismo (offset rotativo) **e** a afirmação
 (cobertura probabilística, não garantida).
 
+### Round 4: **3 achados P2, nenhum P1** — e o primeiro é grave
+
+**[P2] O guard de pressão NÃO PODIA disparar em produção.** O PreCompact
+documentado entrega apenas `trigger` e `custom_instructions`; o guard lia
+contagem de tokens **do evento**, que nunca vem. Com o piso armado, toda
+invocação real caía no caminho "sem medição". **E o teste passava** — porque
+injetava uma forma que produção nunca envia. O teste alimentava o próprio
+sujeito com algo irreal.
+
+Cura: existe fonte real. O `statusline-ceo.py` grava `context_pct` no sidecar
+(estava em `84.0` no arquivo vivo enquanto eu investigava). O guard passa a
+lê-la. Controle com a **forma de produção**: sem sidecar → 0 eventos e
+breadcrumb honesto; com sidecar → 1 evento, `used_bucket=80`, com `project` e
+`session_id`.
+
+**[P2] Os dois GCs, terceira tentativa e a primeira certa.** O offset rotativo
+que eu tinha posto no round 3 era `% _scan_cap`, então nada além de ~2× o cap
+era alcançável — starvation com passos extras. Agora: varredura completa e
+preguiçosa (`os.scandir`, sem sort), limitada por **deadline**. Custo limitado
+por tempo, correção por cobertura.
+
+**[P2] `env-inventory.json` estava desatualizado** — três variáveis novas
+deixavam esse gate vermelho.
+
 ### Bônus: um vermelho no vivo que ninguém tinha visto
 
 A mesma verificação pegou que o land do W3-K deixou um `bare-testcase`
