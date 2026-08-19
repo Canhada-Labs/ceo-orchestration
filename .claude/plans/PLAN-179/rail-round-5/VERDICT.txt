@@ -1,0 +1,8 @@
+
+Full review comments:
+
+- [P2] Verify the sidecar belongs to the compacting session — /Users/joaocanhada/.w179-rail5/repo/.claude/hooks/check_precompact_continuity.py:668-671
+  When multiple sessions or projects are active, this accepts `context_pct` without checking the sidecar's `session_id` or `project_dir` against the current hook event. PreCompact can therefore attribute another session's bucket to the current session and re-arm its hysteresis marker, potentially suppressing the next genuine transition. The repository already records that this sidecar is shared and rewritten by other projects (`.claude/plans/PLAN-179/w0-measurement.md:307-311`); reject identity mismatches before using the value.
+
+- [P2] Persist GC progress beyond each timed scan prefix — /Users/joaocanhada/.w179-rail5/repo/.claude/hooks/_lib/scratchpad_lib.py:545-548
+  If this directory is large enough that scanning its initial entries consumes the 0.25-second budget, every invocation restarts `os.scandir()` from the same beginning and breaks at essentially the same prefix, so expired files in the tail are never reclaimed. The identical deadline break exists in `audit_emit.py:8512-8513`; both sweeps need a rotating/persisted start position or another bounded strategy that guarantees eventual coverage.

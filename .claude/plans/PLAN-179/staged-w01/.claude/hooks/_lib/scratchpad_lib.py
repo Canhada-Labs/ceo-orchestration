@@ -97,6 +97,7 @@ import os
 import re
 import sys
 import time
+import zlib
 from collections.abc import Mapping as _ABCMapping
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Union
@@ -474,6 +475,30 @@ def set_session_value(
     store.set(key, value, ttl_seconds=int(ttl_seconds))
 
 
+# PLAN-179 rail round-5 [P2] — cobertura GARANTIDA sem cursor persistido.
+# As quatro tentativas anteriores definiam a fatia do turno por POSICAO na
+# iteracao (prefixo, offset, deadline), e toda fatia por posicao deixa uma
+# cauda inalcancavel. Esta define por IDENTIDADE: o shard sai do nome do
+# arquivo. Em K turnos cada arquivo cai na sua fatia exatamente uma vez, e o
+# trabalho caro (stat) por turno e ~n/K. Ler nomes com scandir e barato.
+_GC_SHARDS = 8
+
+
+def _gc_shard_of_name(name):
+    """Shard estavel derivado do NOME (nunca da ordem de leitura)."""
+    try:
+        return zlib.crc32(name.encode("utf-8", "replace")) % _GC_SHARDS
+    except Exception:
+        return 0
+
+
+def _gc_shard_of_turn():
+    """Fatia deste turno. Avanca a cada 60s, entao K turnos cobrem tudo."""
+    try:
+        return int(time.time() // 60) % _GC_SHARDS
+    except Exception:
+        return 0
+
 def gc_orphan_session_stores(
     *,
     ttl_seconds: int = SESSION_SCOPE_TTL_SECONDS,
@@ -535,6 +560,7 @@ def gc_orphan_session_stores(
         # a wall-clock DEADLINE so a pathological directory can never eat the
         # hook budget. Cost is bounded by TIME, correctness by coverage.
         _deadline = time.time() + _GC_WALL_BUDGET_S
+        _shard = _gc_shard_of_turn()
         _scanned = 0
         _it = os.scandir(str(store_dir))
         try:
@@ -548,6 +574,10 @@ def gc_orphan_session_stores(
                     break
                 entry = Path(_de.path)
                 name = entry.name
+                # Fatia do turno (round-5 [P2]): o shard vem do NOME, nunca da
+                # posicao — e por isso que a cauda deixa de ser inalcancavel.
+                if _gc_shard_of_name(name) != _shard:
+                    continue
                 stem = None
                 for suffix in _SESSION_STORE_SUFFIXES:
                     if name.endswith(suffix):

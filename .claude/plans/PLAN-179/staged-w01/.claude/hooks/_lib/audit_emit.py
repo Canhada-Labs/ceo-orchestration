@@ -44,7 +44,8 @@ import os
 import re  # PLAN-154 — bounded-token field coercion (learning-loop actions)
 import sys
 import threading  # PLAN-088 W1.4 / M-12 rate-cap state lock
-import time  # PLAN-088 W1.4 / M-12 rate-cap sliding window
+import time
+import zlib  # PLAN-088 W1.4 / M-12 rate-cap sliding window
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
@@ -8466,6 +8467,30 @@ def _context_pressure_bucket_ok(value: Any) -> bool:
     return value in _CONTEXT_PRESSURE_USED_BUCKETS_PCT
 
 
+# PLAN-179 rail round-5 [P2] — cobertura GARANTIDA sem cursor persistido.
+# As quatro tentativas anteriores definiam a fatia do turno por POSICAO na
+# iteracao (prefixo, offset, deadline), e toda fatia por posicao deixa uma
+# cauda inalcancavel. Esta define por IDENTIDADE: o shard sai do nome do
+# arquivo. Em K turnos cada arquivo cai na sua fatia exatamente uma vez, e o
+# trabalho caro (stat) por turno e ~n/K. Ler nomes com scandir e barato.
+_GC_SHARDS = 8
+
+
+def _gc_shard_of_name(name):
+    """Shard estavel derivado do NOME (nunca da ordem de leitura)."""
+    try:
+        return zlib.crc32(name.encode("utf-8", "replace")) % _GC_SHARDS
+    except Exception:
+        return 0
+
+
+def _gc_shard_of_turn():
+    """Fatia deste turno. Avanca a cada 60s, entao K turnos cobrem tudo."""
+    try:
+        return int(time.time() // 60) % _GC_SHARDS
+    except Exception:
+        return 0
+
 def _gc_context_pressure_markers(
     state_dir: Any,
     ttl_seconds: int = _CONTEXT_PRESSURE_MARKER_TTL_S,
@@ -8502,6 +8527,7 @@ def _gc_context_pressure_markers(
         # deletions, and bound the sweep with a wall-clock DEADLINE. Bounded by
         # TIME, correct by coverage.
         _deadline = time.time() + _GC_MARKER_WALL_BUDGET_S
+        _shard = _gc_shard_of_turn()
         _scanned = 0
         _it = os.scandir(str(directory))
         try:
@@ -8513,6 +8539,8 @@ def _gc_context_pressure_markers(
                     break
                 entry = Path(_de.path)
                 name = entry.name
+                if _gc_shard_of_name(name) != _shard:
+                    continue
                 # Both the live marker `<prefix><sid>` and a crash-orphaned
                 # atomic-write temp `.<prefix><sid>.<pid>.<rand>.tmp`.
                 if name.startswith("."):

@@ -626,8 +626,21 @@ def _used_tokens_from_event(event: Dict[str, Any]) -> Optional[int]:
     return None
 
 
-def _context_pct_from_sidecar() -> Optional[int]:
+def _context_pct_from_sidecar(
+    session_id: Optional[str] = None, cwd: Optional[str] = None
+) -> Optional[int]:
     """Context-usage percent read from the statusline sidecar, or None.
+
+    PLAN-179 rail round-5 [P2] — IDENTITY IS CHECKED BEFORE THE VALUE IS USED.
+    This repo's own W0 measurement recorded the finding
+    (`PLAN-179/w0-measurement.md`): the sidecar is SHARED and gets rewritten
+    with another repository's `project_dir` while a session runs. Reading
+    `context_pct` blind would therefore let one session's pressure be reported
+    as another's AND re-arm the wrong hysteresis marker, suppressing the next
+    genuine transition — a wrong measurement that looks like a right one,
+    which is worse than none. So the sidecar's `session_id` and `project_dir`
+    must match this invocation, and a mismatch (or a missing identity field)
+    returns None: the guard degrades to silence rather than to fiction.
 
     PLAN-179 rail round-4 [P2] — THE fix for a dead instrument. The documented
     PreCompact input carries ONLY ``trigger`` and ``custom_instructions``
@@ -665,6 +678,32 @@ def _context_pct_from_sidecar() -> Optional[int]:
             data = json.load(fh)
         if not isinstance(data, dict):
             return None
+        # --- identity gate (round-5 [P2]) -------------------------------
+        # Both sides must be present AND equal. An absent identity field is a
+        # MISMATCH, not a pass: a sidecar that cannot say whose it is cannot
+        # be attributed, and attributing it anyway is the defect.
+        snap_sid = data.get("session_id")
+        if session_id:
+            if not isinstance(snap_sid, str) or snap_sid != session_id:
+                return None
+        elif snap_sid:
+            # No trusted id on this side: refuse rather than accept a value
+            # that demonstrably belongs to SOME session we cannot match.
+            return None
+        snap_proj = data.get("project_dir")
+        if cwd:
+            try:
+                same = (
+                    isinstance(snap_proj, str)
+                    and Path(snap_proj).resolve() == Path(cwd).resolve()
+                )
+            except Exception:
+                same = False
+            if not same:
+                return None
+        elif snap_proj:
+            return None
+        # ----------------------------------------------------------------
         pct = data.get("context_pct")
         if isinstance(pct, bool) or not isinstance(pct, (int, float)):
             return None
@@ -949,7 +988,10 @@ def gate(event: Dict[str, Any], cwd: Optional[str] = None) -> Dict[str, Any]:
         # sidecar is what makes the guard work TODAY.
         pct = _context_used_pct(event)
         if pct is None:
-            pct = _context_pct_from_sidecar()
+            # Identity of THIS invocation is passed in: the sidecar is shared
+            # across projects (round-5 [P2]) and a value that belongs to
+            # someone else must be refused, not consumed.
+            pct = _context_pct_from_sidecar(session_id, cwd)
         if used_tokens is None and pct is None:
             _breadcrumb(
                 "%s is set but neither the hook input nor the statusline "
