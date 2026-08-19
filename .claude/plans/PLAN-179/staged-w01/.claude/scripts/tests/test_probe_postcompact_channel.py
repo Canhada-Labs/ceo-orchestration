@@ -91,6 +91,11 @@ class ProbeChannelTestBase(TestEnvContext):
         super().setUp()
         with _operator_env():
             self.state_path, self.run = probe.arm(self.project_dir)
+            # Rail round-7 [P1]: cmd_verify refuses a channel verdict for a
+            # channel with no injection record. Record both, as the wired
+            # hooks would, so the 0/1/3 tests exercise the CHANNEL path.
+            probe._record_injection(probe.CHANNEL_POST, str(self.state_path))
+            probe._record_injection(probe.CHANNEL_SS, str(self.state_path))
         self.canary_post = self.run["canary_post"]
         self.canary_ss = self.run["canary_ss"]
         self.obs = self.project_dir / "observation.txt"
@@ -255,6 +260,56 @@ class TestSelfObservationGuard(ProbeChannelTestBase):
             probe.main(["--verify", str(self.state_path), "--state",
                         str(self.state_path)])
         self.assertEqual(ctx.exception.code, probe.EXIT_REFUSED)
+
+
+class TestInconclusiveWithoutInjection(TestEnvContext):
+    """Rail round-7 [P1]: an absent canary is only evidence about the
+    CHANNEL if the canary was actually injected — an unwired probe must
+    say INCONCLUSIVE (4), never a confident `neither`."""
+
+    def _arm(self):
+        with _operator_env():
+            return probe.arm(self.project_dir)
+
+    def _verify(self, state_path, text):
+        obs = self.project_dir / "obs-inconclusive.txt"
+        obs.write_text(text, encoding="utf-8")
+        with _operator_env(), self.assertRaises(SystemExit) as ctx:
+            probe.main(["--verify", str(obs), "--state", str(state_path)])
+        code = ctx.exception.code
+        return 0 if code is None else int(code)
+
+    def test_verify_without_any_injection_is_exit_4(self):
+        state_path, run = self._arm()
+        self.assertEqual(self._verify(state_path, "no canaries at all"),
+                         probe.EXIT_INCONCLUSIVE)
+        rec = probe.load_run(state_path)["records"][-1]
+        self.assertEqual(rec["verdict"], probe.VERDICT_INCONCLUSIVE)
+        self.assertEqual(
+            rec["uninjected_channels"],
+            sorted([probe.CHANNEL_POST, probe.CHANNEL_SS]),
+        )
+
+    def test_single_injection_is_still_inconclusive(self):
+        state_path, run = self._arm()
+        probe._record_injection(probe.CHANNEL_POST, str(state_path))
+        # Even with the delivered canary VISIBLE, one silent channel means
+        # the probe cannot answer for the pair.
+        self.assertEqual(
+            self._verify(state_path, "model echoed: %s" % run["canary_post"]),
+            probe.EXIT_INCONCLUSIVE,
+        )
+        rec = probe.load_run(state_path)["records"][-1]
+        self.assertEqual(rec["uninjected_channels"], [probe.CHANNEL_SS])
+
+    def test_both_injections_unlock_the_verdict_path(self):
+        state_path, run = self._arm()
+        probe._record_injection(probe.CHANNEL_POST, str(state_path))
+        probe._record_injection(probe.CHANNEL_SS, str(state_path))
+        self.assertEqual(
+            self._verify(state_path, "saw %s only" % run["canary_post"]),
+            probe.EXIT_PARTIAL,
+        )
 
 
 class TestSelfTestMode(TestEnvContext):

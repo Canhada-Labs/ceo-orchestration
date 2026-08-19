@@ -81,6 +81,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -140,6 +141,59 @@ def _session_id(event: Dict[str, Any]) -> Optional[str]:
         _breadcrumb("session id derivation failed (%s)" % str(exc)[:80])
         return None
     return sid if isinstance(sid, str) and sid.strip() else None
+
+
+# Byte-espelha check_precompact_continuity.py — leitor e escritor do marker
+# de pressão têm de resolver o MESMO diretório de estado.
+_PRESSURE_STATE_SUBPATH = (".claude", "state")
+
+
+def _git(args: List[str], cwd: str) -> str:
+    """stdout on success, '' on any failure (fail-open). Byte-mirrors
+    check_precompact_continuity.py:_git."""
+    try:
+        p = subprocess.run(
+            ["git"] + args, cwd=cwd, capture_output=True, text=True, timeout=2
+        )
+        return p.stdout.strip() if p.returncode == 0 else ""
+    except (subprocess.TimeoutExpired, OSError):
+        return ""
+
+
+def _resolve_project_root(cwd: str) -> str:
+    """Byte-mirrors check_precompact_continuity.py:_resolve_project_root
+    (rail rounds 9/10 [P2]/[P1]) — o marker de pressão que o PreCompact
+    escreve sob o ROOT tem de ser encontrado AQUI para o re-arme."""
+    top = _git(["rev-parse", "--show-toplevel"], cwd)
+    if top and os.path.isdir(top):
+        return os.path.realpath(top)
+    probe = os.path.realpath(cwd)
+    while True:
+        if os.path.isdir(os.path.join(probe, ".claude")):
+            return probe
+        parent = os.path.dirname(probe)
+        if parent == probe:
+            return os.path.realpath(cwd)
+        probe = parent
+
+
+def _clear_pressure_marker(event: Dict[str, Any]) -> None:
+    """Rail round-10 [P1]: fecha a GERAÇÃO de compactação — re-arma a
+    histerese para o próximo ciclo (o produtor é PreCompact-only e nunca
+    observaria a queda pós-compactação; sem isto, duas compactações no
+    mesmo degrau suprimem a segunda travessia). Fail-open integral."""
+    try:
+        from _lib import audit_emit  # noqa: E402 — lazy, como o emit path
+        clear = getattr(audit_emit, "clear_context_pressure_marker", None)
+        if clear is None:
+            return  # build pré-round-10 — degrada para o comportamento antigo
+        root = _resolve_project_root(
+            os.path.realpath(str(event.get("cwd") or os.getcwd()))
+        )
+        state_dir = os.path.join(root, *_PRESSURE_STATE_SUBPATH)
+        clear(state_dir, _session_id(event))
+    except Exception as exc:
+        _breadcrumb("pressure marker clear failed (%s)" % str(exc)[:60])
 
 
 def _resolve_plan_id(event: Dict[str, Any]) -> str:
@@ -449,6 +503,9 @@ def gate(event: Dict[str, Any]) -> Dict[str, Any]:
     ``_build_pointers`` and never sees the constraint lines."""
     if os.environ.get("CEO_COMPACTION_CONTINUITY", "1") == "0":
         return {}
+    # Rail round-10 [P1]: uma compactação ACONTECEU — feche a geração de
+    # pressão antes de qualquer outra coisa (independe de haver snapshot).
+    _clear_pressure_marker(event)
     plan_id = _resolve_plan_id(event)
     # PLAN-179 W1 US3 [r1-C1]: session id from the HOOK INPUT only, for the
     # session-scope fallback read (never CLAUDE_SESSION_ID).
@@ -456,8 +513,14 @@ def gate(event: Dict[str, Any]) -> Dict[str, Any]:
     age_s = _snapshot_age_s(snapshot)
     constraints = _render_constraints()
     pointers = _build_pointers(plan_id, snapshot, age_s)
+    # Rail round-8 [P2]: o contador reporta o que foi RENDERIZADO. Quando o
+    # render degrada para [] (fail-open em import/raise), reportar o tamanho
+    # do SET afirmaria constraints emitidas com additionalContext só de
+    # pointers — escondendo exatamente a degradação que o campo existe para
+    # expor. Zero a menos que o bloco tenha saído.
+    constraint_count = _constraint_count() if constraints else 0
     _emit_reinject_event(
-        plan_id, snapshot is not None, age_s, len(pointers), _constraint_count()
+        plan_id, snapshot is not None, age_s, len(pointers), constraint_count
     )
     lines = constraints + pointers
     if not lines:

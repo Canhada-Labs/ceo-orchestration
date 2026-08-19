@@ -8711,6 +8711,25 @@ def should_emit_context_pressure(
     return True
 
 
+def clear_context_pressure_marker(state_dir: Any, session_id: Any = None) -> None:
+    """Re-arma a histerese de pressão após uma compactação (rail round-10 [P1]).
+
+    O produtor é PreCompact-only: nada observa a QUEDA de contexto pós-
+    compactação, então uma sessão que compacta duas vezes no mesmo degrau
+    mantém previous==current e a segunda travessia genuína é suprimida.
+    O PostCompact chama isto para fechar a GERAÇÃO de compactação:
+    remover o marker re-arma o debounce para o próximo ciclo.
+
+    FAIL-OPEN (regra da casa): qualquer erro de I/O é engolido — um unlink
+    de bookkeeping nunca pode quebrar um hook. Marker ausente é o caso
+    normal (sessão que nunca cruzou um degrau)."""
+    try:
+        marker = Path(str(state_dir)) / _context_pressure_marker_name(session_id)
+        marker.unlink()
+    except (OSError, TypeError, ValueError):
+        pass
+
+
 # PLAN-135 W2 H5 (ADR-154) — Sec field allowlist for the bash-input-rewrite
 # breadcrumb (bash_input_rewritten, producer .claude/hooks/check_bash_safety.py).
 # Deny-by-default. Same no-value-echo contract as settings_tamper_detected

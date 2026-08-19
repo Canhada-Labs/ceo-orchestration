@@ -756,12 +756,13 @@ class TestBudgetSeparation(_IntegrationBase):
 class TestSnapshotRedaction(_IntegrationBase):
     """(5) Amendment 8.3 (debate C9) — the redaction claim is TRUE on the path.
 
-    The hook has always DOCUMENTED the snapshot as "secrets-redacted by
-    state_store.set". That claim was false on the only path the hook took:
-    `state_store.set` redacts `isinstance(value, str)` ONLY, and the hook handed
-    it `payload.encode("utf-8")` — bytes, which the store trusts verbatim. The
-    test plants a secret where the snapshot ingests DISK content (the plan's
-    checkbox label) and reads the stored blob back out."""
+    The layer that fulfils the claim moved twice: bytes-verbatim (claim
+    false), then str-so-the-store-redacts (claim true, but rail round-8 [P1]
+    showed the store's JSON-blind kv pattern corrupts the serialized
+    snapshot), now FIELD-level redaction in the hook + bytes to the store
+    (its documented "caller owns the content" route). The test plants a
+    secret where the snapshot ingests DISK content (the plan's checkbox
+    label) and reads the stored blob back out."""
 
     SECRET = "sk-ant-api03-AAAAAAAAAAAAAAAAAAAA"
 
@@ -777,8 +778,8 @@ class TestSnapshotRedaction(_IntegrationBase):
                          "the planted token survived into the store")
         self.assertIn(
             "[API_KEY]", stored,
-            "no redaction marker in the stored blob — the value went in as "
-            "bytes again and state_store's redactor never ran",
+            "no redaction marker in the stored blob — field-level redaction "
+            "never ran on the ingest path",
         )
         # Positive control on the INGEST: the label really is the field that
         # carries disk content into the blob, so the assertion above is not

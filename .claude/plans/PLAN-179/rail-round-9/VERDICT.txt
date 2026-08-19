@@ -1,0 +1,12 @@
+The new registered hook fails the mandatory executable-bit validation. The patch also introduces incorrect project scoping for pressure state and a lock-file deletion race that can lose session snapshots.
+
+Full review comments:
+
+- [P1] Mark the registered compaction hook executable — /Users/joaocanhada/.w179-rail9/repo/.claude/hooks/check_compact_pinning.py:1-1
+  This newly registered entrypoint currently has mode 0644. The CI gate checks every hook referenced by both settings files with `os.access(..., X_OK)` ([check-active-hooks-executable.py:93](.claude/scripts/check-active-hooks-executable.py#L93)), so validation fails unconditionally for this patch. Record the file as mode 0755 before adding it.
+
+- [P2] Anchor pressure markers at the project root — /Users/joaocanhada/.w179-rail9/repo/.claude/hooks/check_precompact_continuity.py:971-971
+  When `PreCompact` runs after `CwdChanged` into a project subdirectory, the hook-input `cwd` points at that subdirectory, so this creates the marker under `<subdir>/.claude/state` rather than the project state directory. Moving between directories gives one session multiple markers and allows duplicate same-bucket events, defeating the hysteresis contract. Derive this path from the canonical project root instead.
+
+- [P2] Keep the flock inode alive during store collection — /Users/joaocanhada/.w179-rail9/repo/.claude/hooks/_lib/scratchpad_lib.py:715-718
+  Under concurrent session activity, another writer may already have opened this lock file and be waiting on its flock. Unlinking the pathname while holding the lock lets a later process create and lock a different inode, after which both writers can enter their critical sections; because the state store opens SQLite before acquiring this lock, the GC can also remove a database already opened by the waiter, losing or failing its snapshot write. Keep a stable lock inode or coordinate deletion through a separate persistent lock.

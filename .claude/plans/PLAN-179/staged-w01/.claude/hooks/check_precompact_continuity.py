@@ -186,6 +186,29 @@ def _git(args: List[str], cwd: str) -> str:
         return ""
 
 
+def _resolve_project_root(cwd: str) -> str:
+    """Project ROOT for every path this hook derives (rail round-9 [P2]).
+
+    O ``cwd`` do hook-input segue o CwdChanged da sessão para
+    subdiretórios; derivar `.claude/...` dele fragmenta o estado — o
+    lookup de plano erra, e o marker de pressão ganha uma cópia por
+    subdiretório, derrotando o contrato de histerese. A autoridade é o
+    toplevel do git (lição feedback-guard-must-resolve-repo-by-git-toplevel);
+    o fallback sobe até o ancestral mais próximo com `.claude/`, e falha
+    de resolução mantém o cwd (degradado, nunca quebrado)."""
+    top = _git(["rev-parse", "--show-toplevel"], cwd)
+    if top and os.path.isdir(top):
+        return os.path.realpath(top)
+    probe = os.path.realpath(cwd)
+    while True:
+        if os.path.isdir(os.path.join(probe, ".claude")):
+            return probe
+        parent = os.path.dirname(probe)
+        if parent == probe:
+            return os.path.realpath(cwd)
+        probe = parent
+
+
 def _trigger_class(event: Dict[str, Any]) -> str:
     """Map the harness PreCompact trigger to the closed enum.
 
@@ -475,18 +498,52 @@ def _write_snapshot(
             % str(exc)[:60]
         )
         body["scope_kind"] = "plan" if plan_scoped else "session"
+    # Rail round-8 [P1]: redaction is a FIELD-level duty here, not a
+    # store-level one. `state_store.set` runs `redact_secrets` over str
+    # values, and its kv pattern (`token=\S{1,2048}`) is JSON-blind: on a
+    # serialized snapshot whose field ends in assignment-shaped text
+    # (`deploy token=abc`) it consumes the closing quote/comma and stores
+    # MALFORMED JSON — PostCompact parses nothing and the continuity cure
+    # dies silently for exactly the secrets it must survive. So every str
+    # field is redacted BEFORE serialization (max_chars=0, no truncation)
+    # and the store receives BYTES — its documented "caller owns the
+    # content" route (amendment 8.3's redaction CLAIM stays true; only the
+    # layer that fulfils it moved). If the redactor is unavailable, fall
+    # back to the old str path: the store's pass still guarantees nothing
+    # unredacted lands on disk (the residual cost is the corruption this
+    # cure removes — never a secret).
+    try:
+        from _lib.redact import redact_secrets as _redact_fn
+    except Exception:
+        _redact_fn = None
+    if _redact_fn is not None:
+        def _redact_tree(node):
+            if isinstance(node, str):
+                return _redact_fn(node, max_chars=0)
+            if isinstance(node, dict):
+                return {k: _redact_tree(v) for k, v in node.items()}
+            if isinstance(node, list):
+                return [_redact_tree(v) for v in node]
+            return node
+        try:
+            body = _redact_tree(body)
+        except Exception as exc:
+            _breadcrumb("snapshot field redaction failed (%s)" % str(exc)[:60])
+            _redact_fn = None
+
     try:
         payload = json.dumps(body, ensure_ascii=False, sort_keys=True)
     except (TypeError, ValueError) as exc:
         _breadcrumb("snapshot serialize failed (%s)" % str(exc)[:60])
         return "error"
+    store_value = (
+        payload.encode("utf-8") if _redact_fn is not None else payload
+    )
 
     try:
         if plan_scoped:
             with scratchpad_lib.open_scratchpad(plan_id=plan_id) as store:
-                # str (NOT bytes) — amendment 8.3: this is what makes the
-                # store's redaction pass run at all.
-                store.set(SCRATCHPAD_KEY, payload)
+                store.set(SCRATCHPAD_KEY, store_value)
             return "written"
         with scratchpad_lib.open_session_scratchpad(session_id) as store:
             # Explicit ttl (emenda r1-C2): session scopes are per-session and
@@ -500,7 +557,8 @@ def _write_snapshot(
             # amendment named. Calling store.set directly bypassed the guard the
             # library exists to provide.
             scratchpad_lib.set_session_value(
-                store, SCRATCHPAD_KEY, payload, ttl_seconds=SESSION_SNAPSHOT_TTL_S
+                store, SCRATCHPAD_KEY, store_value,
+                ttl_seconds=SESSION_SNAPSHOT_TTL_S,
             )
         return "written_session_scope"
     except Exception as exc:
@@ -626,6 +684,27 @@ def _used_tokens_from_event(event: Dict[str, Any]) -> Optional[int]:
     return None
 
 
+def _sidecar_override_safe(raw: str, target: Path) -> bool:
+    """True iff the CEO_STATUSLINE_SIDECAR override is NOT a symlink target,
+    has no symlinked immediate parent, and no '..' traversal segment.
+
+    Rail round-7 [P2]: byte-mirrors ``statusline-ceo.py:_sidecar_override_safe``
+    — reader and WRITER must accept and reject the SAME overrides, or the
+    reader can consume a path the writer refused (crafted data with matching
+    identity) while real telemetry lands on the default path unread."""
+    try:
+        if ".." in raw.replace("\\", os.sep).split(os.sep):
+            return False
+        if os.path.islink(str(target)):
+            return False
+        parent = target.parent
+        if parent.exists() and os.path.islink(str(parent)):
+            return False
+    except OSError:
+        return False
+    return True
+
+
 def _context_pct_from_sidecar(
     session_id: Optional[str] = None, cwd: Optional[str] = None
 ) -> Optional[int]:
@@ -668,9 +747,16 @@ def _context_pct_from_sidecar(
     # meant that any adopter using the override got silence instead of
     # telemetry — a reader and a writer disagreeing about where the file is.
     _override = os.environ.get("CEO_STATUSLINE_SIDECAR", "").strip()
+    snap = None
     if _override:
-        snap = Path(_override)
-    else:
+        # Rail round-7 [P2]: resolve AND validate exactly like the writer
+        # (`statusline-ceo.py:_sidecar_path`): expanduser first, then the
+        # symlink/traversal rejection. A rejected override falls through to
+        # the default — that is where the writer actually wrote.
+        _target = Path(os.path.expanduser(_override))
+        if _sidecar_override_safe(_override, _target):
+            snap = _target
+    if snap is None:
         try:
             # Reuse the ONE resolver the audit rail already uses, so the
             # fallback path is looked up where the writer put it — including
@@ -702,9 +788,19 @@ def _context_pct_from_sidecar(
         snap_proj = data.get("project_dir")
         if cwd:
             try:
-                same = (
-                    isinstance(snap_proj, str)
-                    and Path(snap_proj).resolve() == Path(cwd).resolve()
+                # Rail round-8 [P2]: o escritor grava workspace.project_dir
+                # (o ROOT do projeto); o cwd do hook pode ser um SUBDIRETÓRIO
+                # dele (CwdChanged). Igualdade estrita rejeitava sidecar
+                # válido e o evento de pressão ficava mudo em produção.
+                # Aceita se cwd É o root ou vive DENTRO dele — outro repo
+                # continua sendo mismatch.
+                _cwd_r = Path(cwd).resolve()
+                _proj_r = (
+                    Path(snap_proj).resolve()
+                    if isinstance(snap_proj, str) and snap_proj else None
+                )
+                same = _proj_r is not None and (
+                    _cwd_r == _proj_r or _proj_r in _cwd_r.parents
                 )
             except Exception:
                 same = False
@@ -959,7 +1055,11 @@ def gate(event: Dict[str, Any], cwd: Optional[str] = None) -> Dict[str, Any]:
     if os.environ.get("CEO_COMPACTION_CONTINUITY", "1") == "0":
         return {}
     deadline = time.monotonic() + TIME_BUDGET_S
-    cwd = os.path.realpath(cwd or os.getcwd())
+    # Rail round-9 [P2]: TODO path derivado daqui usa o ROOT do projeto,
+    # não o cwd literal do hook-input (que segue CwdChanged) — um único
+    # ponto de resolução cura a família inteira (plan lookup, ceremony
+    # flags, marker de pressão, identidade do sidecar).
+    cwd = _resolve_project_root(os.path.realpath(cwd or os.getcwd()))
     trigger = _trigger_class(event)
     plan_id = _resolve_plan_id(event)
     # PLAN-179 W1 US3 — resolved BEFORE the write so an unresolved plan falls

@@ -466,7 +466,9 @@ def cmd_verify(observation_arg: str, state_arg: Optional[str],
     # if the canary was actually injected.
     injected = set()
     for rec in (run.get("records") or []):
-        if isinstance(rec, dict) and rec.get("kind") == "injection":
+        # "inject" is the kind `_record_injection` writes (and `cmd_status`
+        # reads) — the record vocabulary has exactly one spelling.
+        if isinstance(rec, dict) and rec.get("kind") == "inject":
             ch = rec.get("channel")
             if isinstance(ch, str):
                 injected.add(ch)
@@ -556,6 +558,13 @@ def _self_test_cases(tmp: Path) -> List[Tuple[str, bool]]:
                   and verdict_for(False, False) == (VERDICT_NEITHER, EXIT_NEITHER)))
     obs = tmp / "obs.txt"
     obs.write_text("model said: " + run["canary_ss"], encoding="utf-8")
+    # Rail round-7 [P1]: `cmd_verify` refuses a channel verdict until BOTH
+    # injections are on record. Exercise the refusal first, then record the
+    # injections the wired hooks would have written, then the 0/1/3 path.
+    cases.append(("verify without injection records is inconclusive (4)",
+                  cmd_verify(str(obs), str(path), tmp) == EXIT_INCONCLUSIVE))
+    _record_injection(CHANNEL_POST, str(path))
+    _record_injection(CHANNEL_SS, str(path))
     cases.append(("verify partial exits 3",
                   cmd_verify(str(obs), str(path), tmp) == EXIT_PARTIAL))
     cases.append(("verify refuses self-observation",

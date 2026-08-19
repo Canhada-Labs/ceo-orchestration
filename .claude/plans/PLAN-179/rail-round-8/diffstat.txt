@@ -1,0 +1,36 @@
+ M .claude/adr/ADR-153-compaction-continuity.md
+ M .claude/data/audit-registry.golden.txt
+ M .claude/hooks/_lib/audit_emit.py
+ M .claude/hooks/_lib/scratchpad_lib.py
+ M .claude/hooks/check_postcompact_reinject.py
+ M .claude/hooks/check_precompact_continuity.py
+ M .claude/hooks/tests/test_audit_emit_api_contract.py
+ M .claude/hooks/tests/test_audit_emit_plan163_lifecycle_actions.py
+ M .claude/hooks/tests/test_check_compaction_continuity.py
+ M .claude/hooks/tests/test_codex_egress_proof_telemetry.py
+ M .claude/hooks/tests/test_git_bypass_guard.py
+ M .claude/hooks/tests/test_postcompact_reinject_no_exec_payload.py
+ M .claude/hooks/tests/test_template_dogfood_parity.py
+ M .claude/hooks/tests/test_w5_scrub_enforcement.py
+ M .claude/scripts/env-inventory.json
+ M .claude/settings.json
+ M CHANGELOG.md
+ M CLAUDE.md
+ M INSTALL.md
+ M README.md
+ M README.pt-BR.md
+ M SPEC/v1/audit-log.schema.md
+ M docs/ARCHITECTURE.md
+ M docs/CTO-GUIDE.md
+ M docs/GUIA-COMPLETO.md
+ M docs/README.md
+ M npm/README.md
+ M scripts/upgrade.sh
+ M templates/settings/settings.base.json
+?? .claude/hooks/_lib/pinned_constraints.py
+?? .claude/hooks/check_compact_pinning.py
+?? .claude/hooks/tests/test_plan179_integration.py
+?? .claude/hooks/tests/test_precompact_sidecar_reader_parity.py
+?? .claude/hooks/tests/test_scratchpad_gc_store_unit.py
+?? .claude/scripts/probes/
+?? .claude/scripts/tests/test_probe_postcompact_channel.py

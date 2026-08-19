@@ -97,7 +97,6 @@ import os
 import re
 import sys
 import time
-import zlib
 from collections.abc import Mapping as _ABCMapping
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Union
@@ -120,6 +119,7 @@ from _lib.state_store import (  # noqa: E402
 # drift the day CEO_STATE_ROOT semantics change. Held as a module
 # reference (not a `from ... import`) so the lookup stays late-bound.
 from _lib import state_store as _state_store  # noqa: E402
+from _lib.filelock import FileLock, FileLockTimeout  # noqa: E402
 
 
 # Scratchpad is a single logical store on the shared backend.
@@ -176,6 +176,21 @@ _SESSION_STORE_SUFFIXES = (
     ".sqlite-wal",
     ".sqlite-shm",
 )
+
+# Rail round-7 [P1]: a expiracao e decidida pelo STORE como unidade, e a
+# idade do store e o mtime MAIS NOVO dos componentes de DADOS. O `.lock`
+# fica fora do calculo nos dois sentidos: aquisicoes nao atualizam o mtime
+# dele (idade falsa para "ativo") e o proprio FileLock o recria sob demanda
+# (frescor falso para "expirado").
+_SESSION_STORE_LOCK_SUFFIX = ".sqlite.lock"
+_SESSION_STORE_DATA_SUFFIXES = tuple(
+    s for s in _SESSION_STORE_SUFFIXES if s != _SESSION_STORE_LOCK_SUFFIX
+)
+
+# Lock ocupado significa store ATIVO — o GC nunca disputa com um writer,
+# entao o timeout e minimo (uma tentativa, sem espera util) e o
+# FileLockTimeout vira "pula este store nesta varredura".
+_GC_LOCK_TIMEOUT_S = 0.05
 
 
 class PlanIdDerivationError(RuntimeError):
@@ -475,78 +490,60 @@ def set_session_value(
     store.set(key, value, ttl_seconds=int(ttl_seconds))
 
 
-# PLAN-179 rail round-5 [P2] — cobertura GARANTIDA sem cursor persistido.
-# As quatro tentativas anteriores definiam a fatia do turno por POSICAO na
-# iteracao (prefixo, offset, deadline), e toda fatia por posicao deixa uma
-# cauda inalcancavel. Esta define por IDENTIDADE: o shard sai do nome do
-# arquivo. Em K turnos cada arquivo cai na sua fatia exatamente uma vez, e o
-# trabalho caro (stat) por turno e ~n/K. Ler nomes com scandir e barato.
-_GC_SHARDS = 8
+# PLAN-179 rail round-10 [P2] — cobertura GARANTIDA por cursor de RETOMADA.
+# Historia inteira, porque cada tentativa ensinou algo: r2 (sort+lista
+# materializada) estourava o budget; r3/r4 (janela por posicao) starvavam a
+# cauda; r5/r6 (fatia por identidade + contador de sweep) garantiam a fatia
+# mas nao a RETOMADA — com a ordem do scandir estavel, um break por deadline
+# caia sempre no mesmo prefixo e a cauda nunca era alcancada. O que garante
+# cobertura e retomar DE ONDE PAROU: os escopos sao ordenados
+# lexicograficamente, o processamento comeca no primeiro escopo DEPOIS do
+# cursor persistido e da a volta (wrap); o cursor grava o ultimo escopo
+# DECIDIDO. Em N varreduras, todo escopo e visitado.
+_GC_CURSOR_NAME = ".gc-scan-cursor"
 
-# Contador de VARREDURA (rail round-6 [P2]): o shard avanca por SWEEP, nunca
-# pelo relogio — varreduras que caem sempre no mesmo minuto modulo K (uma
-# rotina diaria, por exemplo) escolheriam sempre a mesma fatia e starvariam as
-# outras K-1. Arquivo minusculo, no mesmo state dir dos alvos.
-_GC_SHARD_COUNTER_NAME = ".gc-shard-cursor"
+# Teto duro de entradas lidas no scandir (anti-DoS num diretorio patologico;
+# ler nomes e barato, mas nada aqui pode ser ilimitado dentro de um hook).
+_GC_SCAN_HARD_CAP = 20000
 
 
-def _gc_shard_of_name(name):
-    """Shard estavel derivado do NOME (nunca da ordem de leitura)."""
+def _gc_read_cursor(state_dir):
+    """Ultimo escopo DECIDIDO pela varredura anterior, ou '' (comeco)."""
     try:
-        return zlib.crc32(name.encode("utf-8", "replace")) % _GC_SHARDS
+        raw = (Path(str(state_dir)) / _GC_CURSOR_NAME).read_text(
+            encoding="utf-8"
+        ).strip()
     except Exception:
-        return 0
+        return ""
+    return raw if _SESSION_SCOPE_ID_RE.match(raw) else ""
 
 
-def _gc_next_shard(state_dir):
-    """Fatia desta VARREDURA, avancando uma por sweep (round-robin estrito).
+def _gc_write_cursor(state_dir, stem):
+    """Persiste o cursor com o idioma atomico O_EXCL+O_NOFOLLOW do marker.
 
-    PLAN-179 rail round-6 [P2]: derivar a fatia do RELOGIO
-    (``(time // 60) % K``) parece rotativo mas starva — se as varreduras caem
-    sempre no mesmo minuto modulo K (uma rotina diaria, por exemplo), a mesma
-    fatia sai toda vez e as outras K-1 nunca sao inspecionadas. O que precisa
-    avancar e o SWEEP, entao o contador vive em disco: um inteiro num arquivo
-    de poucos bytes, no mesmo state dir, escrito com o mesmo idioma atomico e
-    O_NOFOLLOW do marker (nao seguir symlink vale aqui pelo mesmo motivo).
-
-    Falha de leitura ou de escrita NAO cai para uma fatia fixa — isso seria a
-    starvation de volta pela porta dos fundos. Cai para uma fatia ALEATORIA,
-    que degrada de "cobertura garantida em K sweeps" para "cobertura
-    probabilistica", e nunca para "cobertura nenhuma"."""
-    counter_path = Path(str(state_dir)) / _GC_SHARD_COUNTER_NAME
-    current = None
+    Falha de escrita e housekeeping (fail-open): custa recomecar do mesmo
+    ponto na proxima varredura, nunca correcao."""
+    cursor_path = Path(str(state_dir)) / _GC_CURSOR_NAME
     try:
-        raw = counter_path.read_text(encoding="utf-8").strip()
-        current = int(raw)
-    except Exception:
-        current = None
-    if current is None:
-        try:
-            current = int.from_bytes(os.urandom(2), "big")
-        except Exception:
-            current = 0
-    nxt = (current + 1) % (_GC_SHARDS * 1024)  # espaco folgado, sem overflow
-    try:
-        counter_path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = counter_path.parent / (
-            "." + counter_path.name + "." + str(os.getpid()) + "."
+        cursor_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = cursor_path.parent / (
+            "." + cursor_path.name + "." + str(os.getpid()) + "."
             + os.urandom(4).hex() + ".tmp"
         )
         flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, "O_NOFOLLOW", 0)
         fd = os.open(str(tmp), flags, 0o600)
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as fh:
-                fh.write(str(nxt))
+                fh.write(str(stem))
         except Exception:
             try:
                 os.unlink(str(tmp))
             except OSError:
                 pass
             raise
-        os.replace(str(tmp), str(counter_path))
+        os.replace(str(tmp), str(cursor_path))
     except Exception:
-        pass  # housekeeping: nao persistir custa cobertura, nunca correcao
-    return nxt % _GC_SHARDS
+        pass
 
 def gc_orphan_session_stores(
     *,
@@ -561,9 +558,16 @@ def gc_orphan_session_stores(
     ``session-<uuid>.sqlite`` per session forever. This collects the
     files themselves.
 
-    A file is collectable when its mtime is older than ``ttl_seconds``:
-    since every session write carries the same TTL, an untouched store
-    past that age holds nothing but expired rows.
+    A STORE (db + WAL + SHM, one scope) is collectable when the newest
+    mtime among its DATA components is older than ``ttl_seconds``: since
+    every session write carries the same TTL, an untouched store past
+    that age holds nothing but expired rows. The decision and the unlinks
+    happen under the store's own ``FileLock`` — a busy lock means an
+    active writer and skips the store (rail round-7 [P1]). The
+    ``.sqlite.lock`` itself is NEVER unlinked (rail round-9 [P2]:
+    deleting a lock inode under a blocked waiter creates dual critical
+    sections); empty lock files are the declared residual until the
+    substrate cure (state_store opening sqlite UNDER the lock) lands.
 
     Safety: only the session store directory is scanned, and only names
     whose stem matches :data:`_SESSION_SCOPE_ID_RE` with a known suffix
@@ -609,24 +613,19 @@ def gc_orphan_session_stores(
         # a wall-clock DEADLINE so a pathological directory can never eat the
         # hook budget. Cost is bounded by TIME, correctness by coverage.
         _deadline = time.time() + _GC_WALL_BUDGET_S
-        _shard = _gc_next_shard(store_dir)
         _scanned = 0
+        # Passo 1 — agrupar por ESCOPO. Rail round-7 [P1]: os componentes de
+        # um store expiravam um a um; a expiracao agora e decidida por store,
+        # sob o lock DELE. Ler nomes com scandir e barato (o stat vem do
+        # readdir); o teto duro limita o pior caso patologico.
+        _scopes: Dict[str, Dict[str, float]] = {}
         _it = os.scandir(str(store_dir))
         try:
             for _de in _it:
                 _scanned += 1
-                if removed >= int(max_files):
+                if _scanned > _GC_SCAN_HARD_CAP:
                     break
-                # Check the clock every 64 entries — cheap, and enough to keep
-                # the worst case near the budget rather than at a multiple.
-                if (_scanned & 63) == 0 and time.time() >= _deadline:
-                    break
-                entry = Path(_de.path)
-                name = entry.name
-                # Fatia do turno (round-5 [P2]): o shard vem do NOME, nunca da
-                # posicao — e por isso que a cauda deixa de ser inalcancavel.
-                if _gc_shard_of_name(name) != _shard:
-                    continue
+                name = _de.name
                 stem = None
                 for suffix in _SESSION_STORE_SUFFIXES:
                     if name.endswith(suffix):
@@ -635,19 +634,81 @@ def gc_orphan_session_stores(
                 if stem is None or not _SESSION_SCOPE_ID_RE.match(stem):
                     continue
                 try:
-                    if entry.stat().st_mtime >= cutoff:
-                        continue
-                    entry.unlink()
-                    removed += 1
+                    _scopes.setdefault(stem, {})[name] = _de.stat().st_mtime
                 except OSError:
-                    # Per-entry fail-open: a racing unlink or a permission
-                    # problem on ONE file must not abort the whole sweep.
                     continue
         finally:
             try:
                 _it.close()
             except Exception:
                 pass
+        # Rotacao por cursor (round-10 [P2]): comeca no primeiro escopo
+        # DEPOIS do ultimo decidido na varredura anterior e da a volta —
+        # um break por deadline nunca starva a mesma cauda duas vezes.
+        _cursor = _gc_read_cursor(store_dir)
+        _sorted = sorted(_scopes)
+        _order = (
+            [s for s in _sorted if s > _cursor]
+            + [s for s in _sorted if s <= _cursor]
+        )
+        _last_decided = None
+        # Passo 2 — por escopo, decidir e coletar SOB o lock do store.
+        #
+        # Rail round-9 [P2]: o `.sqlite.lock` NUNCA e removido. Deletar um
+        # lock file enquanto um waiter bloqueia no flock dele deixa o waiter
+        # adquirir um inode MORTO enquanto outro processo cria e tranca um
+        # arquivo novo — duas secoes criticas simultaneas, e o GC podia
+        # remover um db que o waiter ja tinha aberto (state_store abre o
+        # sqlite ANTES de adquirir o flock). Residual DECLARADO: um lock
+        # file vazio por sessao expirada fica para tras (bytes ~0, contagem
+        # sem teto); a cura definitiva e de substrato — state_store passar a
+        # abrir o sqlite SOB o lock — nomeada para o pack W2/W4
+        # (staged-w24), quando o GC podera coletar locks com seguranca.
+        for stem in _order:
+            if removed >= int(max_files) or time.time() >= _deadline:
+                break
+            _seen = _scopes[stem]
+            _last_decided = stem
+            _lock_name = stem + _SESSION_STORE_LOCK_SUFFIX
+            _pre_data = [m for n, m in _seen.items() if n != _lock_name]
+            if not _pre_data:
+                continue  # escopo so com `.lock` — nada colecionavel
+            if max(_pre_data) >= cutoff:
+                continue  # store com dado fresco — nem disputa o lock
+            _lock_path = store_dir / _lock_name
+            try:
+                with FileLock(str(_lock_path), timeout=_GC_LOCK_TIMEOUT_S):
+                    # Re-checa SOB o lock: um writer pode ter tocado o store
+                    # entre o scandir e a aquisicao.
+                    _present = []
+                    _fresh = False
+                    for _suffix in _SESSION_STORE_DATA_SUFFIXES:
+                        _p = store_dir / (stem + _suffix)
+                        try:
+                            if _p.stat().st_mtime >= cutoff:
+                                _fresh = True
+                                break
+                        except OSError:
+                            continue
+                        _present.append(_p)
+                    if _fresh:
+                        continue
+                    for _p in _present:
+                        if removed >= int(max_files):
+                            break
+                        try:
+                            _p.unlink()
+                            removed += 1
+                        except OSError:
+                            # Per-entry fail-open: um problema em UM arquivo
+                            # nao aborta a varredura.
+                            continue
+            except FileLockTimeout:
+                continue  # lock ocupado = store ATIVO — nunca disputa
+            except OSError:
+                continue
+        if _last_decided is not None:
+            _gc_write_cursor(store_dir, _last_decided)
     except OSError:
         # Sweep-level fail-open (unreadable dir, vanished state root).
         return removed

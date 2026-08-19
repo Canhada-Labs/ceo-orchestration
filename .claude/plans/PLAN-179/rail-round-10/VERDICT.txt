@@ -1,0 +1,12 @@
+The new continuity GC can race active SQLite users, and the pressure telemetry loses repeated compaction cycles. Its deadline-based cleanup can also permanently starve directory entries.
+
+Full review comments:
+
+- [P1] Do not unlink stores while SQLite handles can be open — /Users/joaocanhada/.w179-rail10/repo/.claude/hooks/_lib/scratchpad_lib.py:711-716
+  When another process begins opening an aged session store, it opens the SQLite database before acquiring the external `FileLock`; this GC can acquire that lock first and unlink the database, WAL, and SHM underneath the already-open connection. The writer can then fail or commit into an unlinked database, losing the continuity snapshot, so deletion must be coordinated with database opening rather than only the later read/write lock.
+
+- [P1] Re-arm pressure hysteresis after each compaction — /Users/joaocanhada/.w179-rail10/repo/.claude/hooks/_lib/audit_emit.py:8658-8662
+  When a session compacts twice at the same pressure rung, the shipped PreCompact-only producer never observes the post-compaction drop, so the persisted previous bucket still equals the current bucket and the second genuine crossing is suppressed. Clear or re-arm this marker after compaction, or scope it to a compaction generation, so repeated cycles remain observable.
+
+- [P2] Make the deadline sweep resume beyond its prefix — /Users/joaocanhada/.w179-rail10/repo/.claude/hooks/_lib/scratchpad_lib.py:647-652
+  Once scanning this directory exceeds the 0.25-second deadline, every invocation starts from the beginning and breaks after the same prefix; identity sharding only filters entries already reached, so expired stores in the unseen tail may never be collected. This becomes increasingly likely because lock files are intentionally retained, so the sweep needs a persisted cursor or another partitioning scheme that eventually visits the entire directory.

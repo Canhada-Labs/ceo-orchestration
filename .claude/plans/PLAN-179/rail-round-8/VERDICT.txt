@@ -1,0 +1,15 @@
+The snapshot redaction change can corrupt stored JSON and defeat the continuity cure for assignment-shaped secrets. The pressure sidecar and constraint telemetry also have correctness gaps, and the authoritative plan status is misstated.
+
+Full review comments:
+
+- [P1] Preserve JSON syntax while redacting the snapshot — /Users/joaocanhada/.w179-rail8/repo/.claude/hooks/check_precompact_continuity.py:489-489
+  When a captured field ends with assignment-shaped text such as `token=abc`, passing the serialized JSON string to `state_store.set` invokes `redact_secrets`, whose key/value pattern consumes non-whitespace through the closing JSON quote/comma. A label like `deploy token=abc` is therefore stored as malformed JSON, so PostCompact cannot parse it and reports no snapshot; the session-scoped path has the same issue. Redact individual values before serialization or use JSON-aware redaction.
+
+- [P2] Match sidecar identity against the project root — /Users/joaocanhada/.w179-rail8/repo/.claude/hooks/check_precompact_continuity.py:733-735
+  When hook `cwd` differs from the workspace root, such as after `CwdChanged` into a subdirectory, this rejects a valid sidecar because `statusline-ceo.py` stores `workspace.project_dir`, not the hook's current directory. Since production PreCompact inputs lack inline context accounting, the fallback then returns `None` and the pressure event remains silent. Compare the sidecar identity with the actual project root instead.
+
+- [P2] Report only constraints actually rendered — /Users/joaocanhada/.w179-rail8/repo/.claude/hooks/check_postcompact_reinject.py:459-460
+  If `render_pinned_block()` raises, `_render_constraints()` explicitly degrades to an empty list, but this independent `_constraint_count()` call can still report the tuple's nonzero size. The audit event then claims constraints were emitted even though `additionalContext` contains only pointers, hiding the exact fail-open degradation the counter should expose. Emit zero unless rendering succeeded.
+
+- [P2] Keep PLAN-179's published status accurate — /Users/joaocanhada/.w179-rail8/repo/CLAUDE.md:96-96
+  This now describes PLAN-179 as `draft` and awaiting Owner review, while `.claude/plans/PLAN-179-context-continuity-durable-state.md:4` already says `status: reviewed` and this same patch installs the implementation. After merge, every Claude session will start from this inaccurate lifecycle state because [AGENTS.md:6-7](AGENTS.md#L6-L7) designates `CLAUDE.md` as its entry point.

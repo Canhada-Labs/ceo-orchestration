@@ -485,12 +485,13 @@ class TestPreCompactSnapshot(_H1Base):
     def test_snapshot_value_is_redacted(self):
         """PLAN-179 amendment 8.3 (debate C9) — the redaction claim is TRUE.
 
-        The hook's docstring has always claimed the snapshot is
-        "secrets-redacted by state_store.set". That claim was FALSE on the only
-        path this hook took: `state_store.set` redacts `isinstance(value, str)`
-        ONLY, and the hook handed it `payload.encode("utf-8")` — bytes, which
-        the store trusts verbatim. A secret-shaped token planted where the
-        snapshot ingests disk content (the plan's checkbox label) must come
+        History of the layer that fulfils it: the hook once wrote bytes the
+        store trusted verbatim (claim FALSE — nothing redacted); then str so
+        `state_store.set` redacted (claim true, but rail round-8 [P1] showed
+        the store's JSON-blind kv pattern corrupts the serialized snapshot);
+        NOW the hook redacts every string FIELD before serialization and
+        writes bytes deliberately. A secret planted where the snapshot
+        ingests disk content (the plan's checkbox label) must still come
         back out of the store REDACTED."""
         secret = "ghp_0123456789abcdefghij"
         plans = self.project_dir / ".claude" / "plans"
@@ -507,9 +508,30 @@ class TestPreCompactSnapshot(_H1Base):
         self.assertNotIn(secret, stored, "the planted token survived into the store")
         self.assertIn(
             "[GITHUB_PAT]", stored,
-            "no redaction marker in the stored blob — the value was written "
-            "as bytes again and state_store's redactor never ran",
+            "no redaction marker in the stored blob — field-level redaction "
+            "never ran on the ingest path",
         )
+
+    def test_assignment_shaped_secret_keeps_snapshot_parseable(self):
+        """Rail round-8 [P1] regression: a label ending in `token=<x>` used to
+        be corrupted by the store's kv redaction over the SERIALIZED JSON
+        (the pattern consumed the closing quote/comma). The stored blob must
+        stay parseable AND carry the redaction marker."""
+        plans = self.project_dir / ".claude" / "plans"
+        (plans / (self.PLAN_ID + "-test.md")).write_text(
+            "# t\n\n- [ ] rotate deploy token=abc123\n",
+            encoding="utf-8",
+        )
+        self._run_gate(_pre_hook, {
+            "cwd": self.cwd, "session_id": self.SESSION_ID, "trigger": "manual",
+        })
+        raw = self._read_scratchpad(plan_id=self.PLAN_ID)
+        self.assertIsNotNone(raw, "snapshot was not persisted")
+        stored = raw.decode("utf-8") if isinstance(raw, bytes) else raw
+        blob = json.loads(stored)  # malformed JSON here IS the round-8 defect
+        self.assertNotIn("abc123", stored, "the assignment value survived")
+        self.assertIn("[REDACTED]", stored)
+        self.assertIsInstance(blob, dict)
 
     def test_killswitch_skips_everything(self):
         os.environ["CEO_COMPACTION_CONTINUITY"] = "0"
@@ -622,6 +644,36 @@ class TestPostCompactReinject(_H1Base):
         self.assertIn("Gate-1", ctx)
         ev = self._audit_events("compaction_context_reinjected")[0]
         self.assertFalse(ev["snapshot_found"])
+
+    def test_degraded_constraint_render_reports_zero(self):
+        """Rail round-8 [P2]: com o render de constraints degradado para []
+        (fail-open), o evento NÃO pode afirmar constraints emitidas — o
+        contador reporta o que foi renderizado, nunca o tamanho do set."""
+        with mock.patch.object(_post_hook, "_render_constraints",
+                               return_value=[]):
+            self._run_gate(_post_hook, {
+                "cwd": self.cwd, "session_id": self.SESSION_ID,
+            })
+        ev = self._audit_events("compaction_context_reinjected")[0]
+        self.assertEqual(ev["constraint_count"], 0)
+
+    def test_postcompact_rearms_pressure_hysteresis(self):
+        """Rail round-10 [P1]: o PostCompact fecha a GERAÇÃO de compactação
+        removendo o marker per-session — sem isso, duas compactações no
+        mesmo degrau suprimem a segunda travessia (produtor PreCompact-only
+        nunca observa a queda pós-compactação)."""
+        ae = _load_staged_audit_emit()
+        marker_dir = Path(self.cwd) / ".claude" / "state"
+        marker_dir.mkdir(parents=True, exist_ok=True)
+        marker = marker_dir / ae._context_pressure_marker_name(self.SESSION_ID)
+        marker.write_text("2\n", encoding="utf-8")
+        self._run_gate(_post_hook, {
+            "cwd": self.cwd, "session_id": self.SESSION_ID,
+        })
+        self.assertFalse(
+            marker.exists(),
+            "pressure marker survived PostCompact — hysteresis never re-arms",
+        )
 
     def test_killswitch_emits_nothing(self):
         self._seed_snapshot()
