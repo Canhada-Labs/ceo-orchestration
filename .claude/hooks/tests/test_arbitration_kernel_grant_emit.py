@@ -439,8 +439,16 @@ class FieldHelperTests(TestEnvContext):
         self.assertEqual(MOD._resolve_plan_id_or_unknown(), "unknown")
 
 
-class AssertionsHaveTeeth(unittest.TestCase):
-    """Mutation control: the field regexes must REJECT the old values."""
+class AssertionsHaveTeeth(TestEnvContext):
+    """Mutation control: the field regexes must REJECT the old values.
+
+    Inherits TestEnvContext even though these cases are pure regex checks:
+    `check-test-env-hygiene.py` flags a bare `unittest.TestCase` in this tree
+    as a `bare-testcase` violation regardless of what the body does, and the
+    rule is right — a class that needs no isolation today acquires a case that
+    does, and nothing re-checks. (Caught post-land: the W3-K ceremony's CI run
+    had its Validate job cancelled by a superseding push, so the gate never
+    spoke.)"""
 
     def test_sha_regex_rejects_a_path(self) -> None:
         self.assertIsNone(_SHA_RE.match(_KERNEL_REL))
