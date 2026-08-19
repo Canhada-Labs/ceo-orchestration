@@ -57,7 +57,19 @@ review --uncommitted`, removendo `rail-round-*` do clone).
   `-6/` — inclusive a prova de que o código anterior **truncava um arquivo
   vítima de 44 para 3 bytes** por symlink.
 - Verificação: 10 gates verdes (incl. `audit-registry`, `env-hygiene`) e suíte
-  completa **7113 passed / 0 failed** na última rodada limpa.
+  completa **7113 passed / 0 failed**.
+
+> ⚠️ **Precisão sobre esse 7113/0:** ele é do pack **pós-round-5**. As curas do
+> **round 6** (sonda com `inconclusive`, override do sidecar, GC v5 com
+> contador persistido) entraram DEPOIS e **ainda não passaram por uma suíte
+> completa** — só por `py_compile`, pelos 10 gates rápidos e pelos controles
+> dedicados de cada cura. A primeira coisa a rodar no terminal novo, junto com
+> as curas do round 7, é a suíte inteira num clone com o pack aplicado
+> (`PYTHONDONTWRITEBYTECODE=1`, exit code lido de arquivo, nunca `pytest |
+> tail`). O round 7 aliás já aponta que o `--self-test` da sonda e
+> `.claude/scripts/tests/test_probe_postcompact_channel.py` estão QUEBRADOS
+> pela cura do round 6 — então essa suíte vai vir vermelha até o achado 1 ser
+> curado. Isso é esperado, não é surpresa nova.
 
 ## Ordem depois que o rail voltar limpo
 
