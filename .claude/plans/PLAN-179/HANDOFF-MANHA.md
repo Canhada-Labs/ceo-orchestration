@@ -159,6 +159,33 @@ por tempo, correção por cobertura.
 **[P2] `env-inventory.json` estava desatualizado** — três variáveis novas
 deixavam esse gate vermelho.
 
+### Round 5: **2 achados P2** — e um deles cita a minha própria medição
+
+**[P2] O sidecar do statusline é compartilhado entre projetos.** Eu tinha
+acabado de ligar o guard nele — e o rail apontou que o `w0-measurement.md`
+**deste plano, escrito por mim ontem**, já registrava que o arquivo é reescrito
+com o `project_dir` de outro repositório durante a sessão. Ler `context_pct`
+sem conferir identidade atribuiria a pressão de outra sessão a esta e
+re-armaria o marker errado. Agora `session_id` e `project_dir` são conferidos,
+e campo de identidade **ausente** conta como divergência: o guard degrada para
+silêncio, nunca para ficção.
+
+**[P2] O GC, quarta tentativa — e a primeira com cobertura garantida.** As
+quatro versões anteriores definiam a fatia do turno por **posição** na
+iteração (prefixo, offset, deadline). Toda fatia por posição deixa uma cauda
+inalcançável — foi o mesmo defeito apontado três rodadas seguidas. Agora a
+fatia vem da **identidade**: `shard = crc32(nome) % 8`. Em 8 turnos todo
+arquivo cai na sua fatia exatamente uma vez. Controle: 600 stores, 12
+expirados espalhados inclusive na cauda → **12/12 recuperados**, 588 frescos
+preservados.
+
+### Um problema de MÉTODO que eu criei e corrigi
+
+Commitar os vereditos do rail no repo fez o revisor **lê-los e ecoá-los** como
+se fossem dele — no round 3 isso quase me fez reportar o veredito errado. A
+evidência continua no repo (é trilha auditável), mas agora sai do clone de
+revisão.
+
 ### Bônus: um vermelho no vivo que ninguém tinha visto
 
 A mesma verificação pegou que o land do W3-K deixou um `bare-testcase`
