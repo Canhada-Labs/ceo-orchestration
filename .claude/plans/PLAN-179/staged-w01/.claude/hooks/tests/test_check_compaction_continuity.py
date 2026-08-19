@@ -43,6 +43,7 @@ import sys
 import unittest
 from pathlib import Path
 from unittest import mock
+from unittest import mock
 
 # --- Locate repo root + the staged/live module paths, CANONICAL-FIRST. ---
 _THIS = Path(__file__).resolve()
@@ -456,10 +457,19 @@ class TestPreCompactSnapshot(_H1Base):
         `export CLAUDE_SESSION_ID=<victim>` and steer the continuity write into
         a scope it chose. The correct outcome is REFUSAL — and refusal must
         report `scratchpad_unavailable`, not a fake success."""
-        os.environ["CLAUDE_SESSION_ID"] = self.SESSION_SCOPE_ID
-        out = self._run_gate(_pre_hook, {
-            "cwd": self.cwd, "trigger": "manual",
-        })
+        # PLAN-179 rail round-2 [P2]: `mock.patch.dict`, never a direct
+        # `os.environ[...] =`. This file is ALLOWLISTED for its older
+        # env-writes, so the hygiene checker would NOT have flagged a new one
+        # here — an allowlist that silences a file silences its future sites
+        # too. The variable still gets set (that IS the test: an env-sourced
+        # session id must be refused); only the mechanism changes, and the
+        # patch now unwinds even if an assertion below raises.
+        with mock.patch.dict(
+            os.environ, {"CLAUDE_SESSION_ID": self.SESSION_SCOPE_ID}
+        ):
+            out = self._run_gate(_pre_hook, {
+                "cwd": self.cwd, "trigger": "manual",
+            })
         self.assertEqual(out, {})
         ev = self._audit_events("compaction_continuity_snapshot")[0]
         self.assertEqual(ev["plan_id"], "unknown")

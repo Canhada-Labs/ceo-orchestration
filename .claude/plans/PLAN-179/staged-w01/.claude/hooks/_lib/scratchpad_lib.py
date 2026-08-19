@@ -509,9 +509,23 @@ def gc_orphan_session_stores(
         if not store_dir.is_dir():
             return 0
         cutoff = (time.time() if now is None else float(now)) - float(ttl_seconds)
-        # sorted() gives a deterministic order, so a capped run makes
-        # progress through the backlog instead of re-picking at random.
-        for entry in sorted(store_dir.iterdir()):
+        # PLAN-179 rail round-2 [P2]: the cap must bound the SCAN, not just the
+        # deletions. `sorted(iterdir())` materialises and sorts the WHOLE
+        # directory before the loop can break — with a large backlog that alone
+        # can burn the hook's remaining budget and trip the timeout, which is
+        # the cost this cap exists to prevent. Take a bounded slice from the
+        # lazy iterator FIRST, then sort that slice: order stays deterministic
+        # within the window, and the work is O(scan_cap) instead of O(dir).
+        # A capped run still makes progress — the next run picks up where the
+        # filesystem's iteration order left off, and expired entries do not
+        # re-appear once unlinked.
+        _scan_cap = max(int(max_files) * 8, 64)
+        _window = []
+        for _e in store_dir.iterdir():
+            _window.append(_e)
+            if len(_window) >= _scan_cap:
+                break
+        for entry in sorted(_window):
             if removed >= int(max_files):
                 break
             name = entry.name

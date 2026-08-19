@@ -23,6 +23,7 @@ Data: <AAAA-MM-DD>
 <!-- SCOPE-BLOCK — gerado do MANIFEST.sha256 do pack; não editar à mão -->
 ```
 .claude/adr/ADR-153-compaction-continuity.md
+.claude/data/audit-registry.golden.txt
 .claude/hooks/_lib/audit_emit.py
 .claude/hooks/_lib/pinned_constraints.py
 .claude/hooks/_lib/scratchpad_lib.py

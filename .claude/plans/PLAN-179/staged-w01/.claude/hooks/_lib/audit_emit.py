@@ -8485,7 +8485,19 @@ def _gc_context_pressure_markers(
     try:
         cutoff = time.time() - float(ttl_seconds)
         directory = Path(str(state_dir))
-        for entry in sorted(directory.iterdir()):
+        # PLAN-179 rail round-2 [P2] — same bounding as the sibling GC in
+        # `scratchpad_lib.gc_orphan_session_stores`: the cap has to bound the
+        # SCAN, not just the unlinks. `sorted(iterdir())` walks and sorts the
+        # entire directory before the loop can break, so on a large backlog the
+        # "bounded" cleanup is the thing that blows the hook budget. Slice from
+        # the lazy iterator first, then sort the slice.
+        _scan_cap = max(int(max_files) * 8, 64)
+        _window = []
+        for _e in directory.iterdir():
+            _window.append(_e)
+            if len(_window) >= _scan_cap:
+                break
+        for entry in sorted(_window):
             if removed >= int(max_files):
                 break
             name = entry.name

@@ -1,4 +1,5 @@
 cee3e5d5f1feca3e19cf8ea57ef4ce9d3d989b46fe8481a3b94d6c1deefd0d2c  .claude/adr/ADR-153-compaction-continuity.md
+3e32ce52c7674e015edd4e059a3d98569c7d760859e1dc5fa4f82e223420f022  .claude/data/audit-registry.golden.txt
 fd05a5e0695a94fd40730ad26e7e3c80176686b8885fb7006b7036faa4258a17  .claude/hooks/_lib/audit_emit.py
 f3b272d24d143a064e0458a8e8f24697598415df3fa56e26da614b5003babf46  .claude/hooks/_lib/scratchpad_lib.py
 9443673fdcccabf1ff0dd0a129d30ca630fc1f9af7c660aa8aef6502f763204e  .claude/hooks/check_postcompact_reinject.py

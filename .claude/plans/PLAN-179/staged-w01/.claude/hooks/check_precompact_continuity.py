@@ -812,10 +812,16 @@ def _progress_guard(
     # PLAN-179 rail finding A — session_id is an ALLOWLISTED wire field, but
     # only a trusted one may travel. Absent ⇒ the key is omitted entirely: the
     # row is honestly unattributed instead of carrying an env-sourced id.
+    # PLAN-179 rail round-2 [P2]: `project` is an allowlisted field the SPEC
+    # declares required, and `emit_generic`/`_write_event` do NOT synthesize it
+    # — a row without it cannot be correlated per-project by a consumer reading
+    # a shared log. Resolved by the same precedence every other hook uses
+    # (`check_agent_spawn.py:301`), and bounded like the sibling call sites.
     fields: Dict[str, Any] = {
         "event_source": _PRESSURE_EVENT_SOURCE,
         "used_bucket": bucket,
         "plan_id": plan_id,
+        "project": str(os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd())[:256],
     }
     if trusted_sid:
         fields["session_id"] = trusted_sid
