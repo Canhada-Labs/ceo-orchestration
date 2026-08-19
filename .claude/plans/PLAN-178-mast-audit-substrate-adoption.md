@@ -240,18 +240,66 @@ Saída = memo com recomendação; qualquer ativação é decisão do Owner.
 > audit real; C2: fence visível num run real; C6: query() devolve
 > fenced) e a reescrita PRECISA de CLAUDE.md §4 no closeout.
 
+### Registro de execução — fechamento parcial (S314, 2026-08-19)
+
+O plano estava `executing` com o corpo parado desde `2fa18f8` (08-16)
+enquanto o trabalho já tinha landado. Este registro fecha o que tem
+evidência no disco e nomeia dono+gatilho do que segue aberto:
+
+**Fechados nesta entrada (evidência path:line/sha):**
+- **AC-1** — tabela em `PLAN-178/mast-coverage-table.md` (6 coberto /
+  10 parcial / 4 gap) com controle positivo E gap-conhecido presentes;
+  adendo S305-b. Não é tudo-verde ⇒ instrumento crível.
+- **AC-2** — probe `wf_d7af49d9` ⇒ `blocked=false` registrado (gap
+  vivo, adendo S305-b); ramo vermelho em vigor (fan-out que ESCREVE
+  não migrou); validador pré-despacho nos 4 workflows shipados
+  (bloco COMMON, provado em `wf_f2707efc`).
+- **AC-2b** — par ordenado respeitado: C1-spawn landou em `2fa18f8` e
+  `CEO_SPAWN_OVERLAP_GUARD` segue NÃO armado (nenhuma referência viva
+  em settings; janela advisory correndo via
+  `spawn_file_assignment_recorded`, wired em `check_agent_spawn.py`).
+- **AC-4** — W2 inteiro nos docs de protocolo: crítico fresco em
+  `DEBATE-SCHEMA.md:73` (W2.1) e barra-por-exemplar marcada ADVISORY
+  em `DEBATE-SCHEMA.md:81-83` (W2.2). Diff mínimo, aguarda
+  ratificação do Owner como o AC pede.
+- **AC-5** — memos entregues com go/no-go explícito:
+  `PLAN-178/w14-nested-teams-memo.md` (W1.4) e
+  `PLAN-178/w3-dreaming-memo.md` (W3); `w12-native-cost-probe.md`
+  cobre o W1.2.
+
+**Abertos com dono e gatilho (nada é dropado em silêncio):**
+- **AC-6 [P0]** — os 3 positive controls live-fire pós-land (C1
+  path_count=0 no audit REAL; C2 fence visível num run real; C6
+  query() fenced) + tabela C5 would-block por detector. Dono: sessão
+  (são runs, não assinaturas). Gatilho: próxima sessão com janela de
+  spawns reais. Enquanto aberto, `executing → done` está bloqueado.
+- **AC-3 [P1]** — agent-budget com as DUAS fontes por spawn/categoria;
+  exige janela N≥50 cobrindo os dois caminhos. Dono: sessão; gatilho:
+  acúmulo da janela (não dias corridos).
+- **AC-2c [P1]** — fingerprint+fallback+substrate-watch por item W1
+  adotado: pendente até prova (template = W1.2).
+- **W1.3 (scoped permissions, L3)** — **correção de fronteira:** o
+  guard-rail mandava decidir absorção vs pack próprio NA ABERTURA do
+  Lote B; o Lote B abriu (`4940fc7`) e landou (`2fa18f8`) sem essa
+  decisão registrada, e o escopo do W4-C/169 não lista scoped
+  permissions. Registrado AGORA como pendência com destino nomeado:
+  a decisão (absorver no W4-C/169 ou pack próprio) entra na abertura
+  do W4-C — quem abrir o W4-C herda este item explicitamente. Toca
+  `settings.json` ⇒ cerimônia GPG do Owner no ato.
+
 ## Acceptance criteria
 
-- [ ] AC-1 [P0] Tabela MAST+injeção completa com evidência
+- [x] AC-1 [P0] (fechado S314 — ver Registro de fechamento parcial)
+      Tabela MAST+injeção completa com evidência
       arquivo:linha por célula E os 2 positive controls executados
       (1 coberto live-fire, 1 gap esperado). Tudo-verde-sem-gap ⇒
       FALHA do AC (instrumento suspeito).
-- [ ] AC-2 [P0] (emendado r1) Positive control do rail Workflow
+- [x] AC-2 [P0] (emendado r1; fechado S314) Positive control do rail Workflow
       EXECUTADO: `wf_d7af49d9` ⇒ `blocked=false` (gap vivo, adendo
       S305-b). Ramo vermelho em vigor: fan-out que ESCREVE não migra;
       piloto read-only (re-auditoria MAST) só com validador
       pré-despacho no script; gap com dono no Lote B.
-- [ ] AC-2b [P0] Aresta de dependência: `CEO_SPAWN_OVERLAP_GUARD` NÃO
+- [x] AC-2b [P0] (fechado S314) Aresta de dependência: `CEO_SPAWN_OVERLAP_GUARD` NÃO
       é armado antes do C1-spawn landado (par ordenado, não lista).
 - [ ] AC-2c [P1] Cada item W1 adotado carrega fingerprint do probe +
       fallback + entrada substrate-watch (template = W1.2).
@@ -262,9 +310,9 @@ Saída = memo com recomendação; qualquer ativação é decisão do Owner.
       só com divergência MÁXIMA por categoria ≤10% — agregado não
       basta (erros compensatórios passam no agregado; opts.model é
       INERTE no Workflow, as economics diferem por caminho).
-- [ ] AC-4 [P1] Regras W2 landadas nos docs de protocolo com diff
+- [x] AC-4 [P1] (fechado S314) Regras W2 landadas nos docs de protocolo com diff
       mínimo e marcadas ADVISORY até ratificação do Owner.
-- [ ] AC-5 [P2] Memos W1.4 e W3 entregues com recomendação explícita
+- [x] AC-5 [P2] (fechado S314) Memos W1.4 e W3 entregues com recomendação explícita
       go/no-go + condições.
 - [ ] AC-6 [P0] (codex r1-pós-debate, P1) **Ledger de curas W-C — cada
       disposição FECHA com evidência própria:** C1 = hook bloqueia

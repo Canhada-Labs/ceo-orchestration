@@ -358,6 +358,27 @@ Dois abortos ANTES do land, ambos pegos por gate e curados por item:
 - Itens 5-6 desta wave saem de PARCIAIS para DONE. `staged-w3/pending-w28/`
   é histórico (o RELEASE.md landou por este trem).
 
+### Registro de execução — W3-K LANDADA (S313→S314, 2026-08-19, commit `c34e8e3`)
+
+Cerimônia de kernel executada em sessão própria (U-3), sentinel
+`PLAN-169/W3K-approved.md.asc` assinado 2026-08-19 00:25. O que landou:
+
+- `check_arbitration_kernel.py:540` — `ceremony_sha=_file_sha256(file_path)`
+  (o campo recebe o sha256 REAL do arquivo, nunca mais um path truncado);
+- `veto_triggered reason_code=kernel_override_used` wired de verdade
+  (`:556`, `:609`, `:822`) — a condição que `git log -S` mostrou ter
+  nascido morta agora dispara pelo `main()`;
+- teste positivo do emit de GRANT em
+  `.claude/hooks/tests/test_arbitration_kernel_grant_emit.py`.
+
+Follow-ups do trem: a classe bare-testcase introduzida pelo próprio teste
+novo (`AssertionsHaveTeeth` sem `TestEnvContext`) foi pega pelo agendado
+`coverage.yml` de 2026-08-19 e curada em `9179ef2` — registro honesto: o
+`validate.yml` do push `c34e8e3` foi **cancelled** por `cancel-in-progress`
+(trem de pushes), não success; o primeiro gate a executar até o fim foi o
+cron do coverage. Ledger E.2 vira CLOSED nesta entrada; E.7 segue como o
+único OPEN (W4-C).
+
 ### W3-K — Cerimônia de kernel (E.2) (L3+, escopo próprio)
 
 > **CORREÇÃO (S313, 2026-08-18) — a hipótese abaixo foi FALSIFICADA por
@@ -976,12 +997,13 @@ o dado em mãos, não por simetria).
       recusa do Owner (W0.8/W0.9). Auditável por tabela no §-final.
       **Fechado em 2026-08-18 (S313): tabela em `## Ledger final —
       endereçamento dos itens A-F`, 62 linhas com evidência
-      path:line/sha cada.** Leitura honesta do "endereçado": 57 CLOSED,
-      3 DEFERRED com gatilho inalterado (E.13/E.14/E.15), 2 **OPEN com
-      wave nomeada** (E.2 → W3-K, E.7 → W4-C) e ZERO recusas do Owner
-      (as duas decisões pedidas — W0.8 e W0.9 — foram aceites). O AC
-      mede endereço, não fechamento: os 2 OPEN não fecham este AC como
-      "tudo pronto", eles ficam visíveis com o defeito ainda no disco.
+      path:line/sha cada.** Leitura honesta do "endereçado" (atualizada
+      S314, 2026-08-19 — W3-K landou `c34e8e3` e fechou E.2): 58 CLOSED,
+      3 DEFERRED com gatilho inalterado (E.13/E.14/E.15), 1 **OPEN com
+      wave nomeada** (E.7 → W4-C) e ZERO recusas do Owner (as duas
+      decisões pedidas — W0.8 e W0.9 — foram aceites). O AC mede
+      endereço, não fechamento: o OPEN não fecha este AC como "tudo
+      pronto", ele fica visível com o defeito ainda no disco.
 - [ ] AC-2 [P0] Nightly Linux = 62 GREEN / 3 RED exatos
       {OWN-0016,0024,0027} sem tocar tabela/expected-reds; riders
       (FALSE-GREEN 0073 + HARNESS-ERR fail-closed) com controle
@@ -1186,10 +1208,10 @@ W0 correspondentes viram VERIFICAÇÃO, não re-execução.
 >
 > **Não duplica os registros existentes.** Os dois `### Registro de
 > execução` deste plano (W3 landada `e5ce982`; W2.8 + W0.9 landados
-> `874117c`) e o §Progress log continuam sendo a narrativa; esta tabela
-> só aponta para eles.
+> `874117c`; W3-K landada `c34e8e3`) e o §Progress log continuam sendo
+> a narrativa; esta tabela só aponta para eles.
 >
-> **Placar:** 57 CLOSED · 3 DEFERRED-with-trigger · 2 OPEN · 0
+> **Placar:** 58 CLOSED · 3 DEFERRED-with-trigger · 1 OPEN · 0
 > REFUSED-by-Owner.
 >
 > **Fora do ledger (não entram na contagem):** W2.9 (`debate-converge`)
@@ -1230,7 +1252,7 @@ W0 correspondentes viram VERIFICAÇÃO, não re-execução.
 | D.7 contagens derivadas sem drift | CLOSED (no-action) | W0 | G4 do land `874117c` (verify-counts verde nas 10 superfícies vigiadas) | Contagem viva hoje: `ls .claude/adr \| grep -c '^ADR-[0-9]'` = 194 (o 195º arquivo é `README.md`) |
 | D.8 path `.claude/scripts/verify-counts.sh` inexistente + gate vacuoso | CLOSED | W0.6 + W2.8 | memória `feedback-verify-counts-real-path-is-local.md`; `.claude/governance/gate-scripts-manifest.txt` (9 membros) + ADR-192, `874117c` | Sweep de runbooks VIVOS por `\|\| echo advisory` feito na S299; a família inteira ganhou pin de checksum na W2.8 |
 | E.1 marcador como 12º site de bump | CLOSED | W2.6 | `_release_bump_sites.py:84`; `verify-counts.sh:1105-1109` | Controle transitório (dessinc ⇒ vermelho) provado e desplantado no MESMO commit; controle AO VIVO = bump 1.4.0 (AC-7 / W6.2), ainda aberto |
-| E.2 emits de GRANT do kernel silenciosos | **OPEN** | W3-K | `.claude/hooks/check_arbitration_kernel.py:453` → `ceremony_sha=_rel_path[:64]` | **Defeito INTACTO no disco**: o campo do sha continua recebendo um PATH truncado, exatamente a suspeita do ledger. A cerimônia de kernel exige sessão SEPARADA (U-3: `CEO_KERNEL_OVERRIDE` + `_ACK` além do sentinel) e não foi executada |
+| E.2 emits de GRANT do kernel silenciosos | CLOSED | W3-K | `.claude/hooks/check_arbitration_kernel.py:540` → `ceremony_sha=_file_sha256(file_path)`; `kernel_override_used` wired (`:556`/`:609`/`:822`); cerimônia `c34e8e3` + sentinel `W3K-approved.md.asc` | Cerimônia de kernel executada em sessão separada (U-3) em 2026-08-19; teste positivo do emit de GRANT em `test_arbitration_kernel_grant_emit.py`. Ver `### Registro de execução — W3-K LANDADA` |
 | E.3 matcher das 2 frases de ADR no GUIA-COMPLETO | CLOSED | W2.7 | `.claude/scripts/local/verify-counts.sh:610` | Drift REAL (GUIA 189 vs disco 190) achado vivo e curado na mesma passagem |
 | E.4 família "script livre que decide gate" | CLOSED | W2.8 | ADR-192 + `.claude/governance/gate-scripts-manifest.txt` + step fail-loud em 4 workflows (`874117c`) | Rota **(b)-narrow** ratificada VERBATIM pelo Owner (§OQ). Censo achou ~50 scripts FREE; o pin cobre os 9 release-críticos, o resto segue livre por decisão |
 | E.5 ADR de break-glass para kill-switches | CLOSED | W0.9 → W2.8 | `.claude/adr/ADR-193-break-glass-repo-kill-switches.md` `status: ACCEPTED` (`874117c`) | Renumerado 191→193 (191 tomado pelo spawn-contract do PLAN-178 Lote B) |
@@ -1273,6 +1295,21 @@ auditável, e `scripts/tests/**` continua sem lint em CI.
 
 ## Progress log
 
+- 2026-08-19 (S314): **W3-K LANDADA (`c34e8e3`) — E.2 CLOSED; ledger
+  vira 58/3/1.** Cerimônia de kernel em sessão própria (sentinel
+  `W3K-approved.md.asc`, 00:25): `ceremony_sha` recebe sha256 real
+  (`check_arbitration_kernel.py:540`), `kernel_override_used` dispara
+  pelo `main()`, teste positivo de GRANT no lugar. Duas correções de
+  escrituração nesta entrada: (a) a linha E.2 do ledger ainda dizia
+  OPEN/"defeito intacto" — a correção nunca tinha descido até a linha;
+  (b) a frase "PLAN-170 ainda NÃO existe" era falsa desde o próprio
+  commit que a escreveu. Registro honesto de CI: o validate de
+  `c34e8e3` foi **cancelled** (`cancel-in-progress` em trem de pushes);
+  quem executou o gate até o fim foi o cron do `coverage.yml`, que
+  pegou a classe bare-testcase do teste novo — curada em `9179ef2`,
+  validate **success** em HEAD. Abertos inalterados: W4, W4-C (E.7),
+  W5 restante, W6.2.
+
 - 2026-08-18 (S312-S313): **três landings fecham a parte cerimonial
   deste plano e o §Ledger final fecha o AC-1.** (1) **W3 LANDADA**
   (`e5ce982`) — pack canônico re-staged por item semântico pós-GA,
@@ -1291,8 +1328,11 @@ auditável, e `scripts/tests/**` continua sem lint em CI.
   conservador = 1,000, tempo-morto 59% de 723h sobre 14 planos, E1/E2
   DESFINANCIADOS pela regra pré-registrada. O pré-registro assinado
   (`PLAN-169/W5-preregistration.md.asc`) foi honrado: o resultado
-  negativo publica igual. **PLAN-170 ainda NÃO existe** — seu gatilho
-  (pós-corte v1.4.0-rc.1) não venceu, então o AC-6 segue parcial.
+  negativo publica igual. **PLAN-170 existe como `draft`**
+  (`PLAN-170-e7-battery-execution.md`, criado pelo MESMO commit
+  `1e3ffaa` desta entrada — a frase original "ainda NÃO existe" estava
+  errada; corrigida S314). O que não venceu é o GATILHO de execução
+  (pós-corte v1.4.0-rc.1), então o AC-6 segue parcial.
   **Aberto ao fim desta entrada:** W3-K (E.2, sessão separada), W4 +
   W4-C (inclui E.7), W5 restante e W6.2 (bump 1.4.0 = controle vivo do
   AC-7). O plano permanece `executing`.
