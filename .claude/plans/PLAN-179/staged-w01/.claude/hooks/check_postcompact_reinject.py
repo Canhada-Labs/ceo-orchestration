@@ -81,7 +81,6 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 import sys
 import time
 from pathlib import Path
@@ -143,30 +142,21 @@ def _session_id(event: Dict[str, Any]) -> Optional[str]:
     return sid if isinstance(sid, str) and sid.strip() else None
 
 
-# Byte-espelha check_precompact_continuity.py — leitor e escritor do marker
+# Espelha check_precompact_continuity.py — leitor e escritor do marker
 # de pressão têm de resolver o MESMO diretório de estado.
 _PRESSURE_STATE_SUBPATH = (".claude", "state")
 
 
-def _git(args: List[str], cwd: str) -> str:
-    """stdout on success, '' on any failure (fail-open). Byte-mirrors
-    check_precompact_continuity.py:_git."""
-    try:
-        p = subprocess.run(
-            ["git"] + args, cwd=cwd, capture_output=True, text=True, timeout=2
-        )
-        return p.stdout.strip() if p.returncode == 0 else ""
-    except (subprocess.TimeoutExpired, OSError):
-        return ""
-
-
 def _resolve_project_root(cwd: str) -> str:
-    """Byte-mirrors check_precompact_continuity.py:_resolve_project_root
-    (rail rounds 9/10 [P2]/[P1]) — o marker de pressão que o PreCompact
-    escreve sob o ROOT tem de ser encontrado AQUI para o re-arme."""
-    top = _git(["rev-parse", "--show-toplevel"], cwd)
-    if top and os.path.isdir(top):
-        return os.path.realpath(top)
+    """O MESMO walk-up decisivo de
+    ``check_precompact_continuity.py:_resolve_project_root`` (rounds 9/10):
+    ancestral mais próximo com ``.claude/``. O fallback por git-toplevel do
+    PreCompact é DELIBERADAMENTE ausente aqui — este hook processa snapshot
+    ENVENENADO e seu contrato proíbe primitivas de execução e processos
+    externos, vigiado por ``test_postcompact_reinject_no_exec_payload``. Sem
+    perda: se os hooks estão registrados, ``.claude/`` existe no root e o
+    walk-up decide; o fallback do PreCompact só age onde marker nenhum
+    existe para re-armar."""
     probe = os.path.realpath(cwd)
     while True:
         if os.path.isdir(os.path.join(probe, ".claude")):

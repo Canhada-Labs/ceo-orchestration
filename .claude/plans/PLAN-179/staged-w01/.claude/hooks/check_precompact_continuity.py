@@ -196,17 +196,23 @@ def _resolve_project_root(cwd: str) -> str:
     toplevel do git (lição feedback-guard-must-resolve-repo-by-git-toplevel);
     o fallback sobe até o ancestral mais próximo com `.claude/`, e falha
     de resolução mantém o cwd (degradado, nunca quebrado)."""
-    top = _git(["rev-parse", "--show-toplevel"], cwd)
-    if top and os.path.isdir(top):
-        return os.path.realpath(top)
+    # Walk-up PRIMEIRO (não git-first): o leitor do marker no PostCompact
+    # tem contrato no-exec e só pode usar o walk-up — para escritor e
+    # leitor concordarem em TODO caso decisivo, a regra primária dos dois
+    # é idêntica. O git-toplevel fica como fallback para o caso sem
+    # `.claude/` em ancestral algum (onde não há marker a re-armar).
     probe = os.path.realpath(cwd)
     while True:
         if os.path.isdir(os.path.join(probe, ".claude")):
             return probe
         parent = os.path.dirname(probe)
         if parent == probe:
-            return os.path.realpath(cwd)
+            break
         probe = parent
+    top = _git(["rev-parse", "--show-toplevel"], cwd)
+    if top and os.path.isdir(top):
+        return os.path.realpath(top)
+    return os.path.realpath(cwd)
 
 
 def _trigger_class(event: Dict[str, Any]) -> str:
