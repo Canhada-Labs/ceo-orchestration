@@ -63,7 +63,14 @@ TARGETS="$(printf '%s' "$TARGETS" | sed '/^[[:space:]]*$/d')"
 say "G0: confirmação de janela"
 echo "   PLAN-179 W0+W1+W1-b (continuidade de contexto). Prosseguir? (yes/NO)"
 read -r _ok
-[ "$_ok" = "yes" ] || { echo "ABORT."; exit 1; }
+# Aceita yes/YES/Yes/y. O gate existe para exigir uma confirmação DELIBERADA,
+# não para exigir a tecla shift: exigir minúscula exata custou uma cerimônia
+# inteira (S313 — o Owner digitou YES depois de um dry-run verde e o land
+# abortou). Qualquer coisa que não seja um "sim" explícito continua abortando.
+case "$(printf '%s' "$_ok" | tr '[:upper:]' '[:lower:]')" in
+  yes|y) ;;
+  *) echo "ABORT."; exit 1 ;;
+esac
 
 say "G1: baseline anti-stale"
 FAILED=0; N=0

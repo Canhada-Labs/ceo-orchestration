@@ -40,7 +40,12 @@ say "G0: confirmação de janela"
 echo "   PLAN-169 W3-K — CERIMÔNIA DE KERNEL (override necessário)."
 echo "   Esta é uma sessão DEDICADA: não encadeie com outra cerimônia. Prosseguir? (yes/NO)"
 read -r _ok
-[ "$_ok" = "yes" ] || { echo "ABORT."; exit 1; }
+# Aceita yes/YES/Yes/y — o gate exige confirmação DELIBERADA, não a tecla
+# shift (S313: um YES maiúsculo abortou um land depois de dry-run verde).
+case "$(printf '%s' "$_ok" | tr '[:upper:]' '[:lower:]')" in
+  yes|y) ;;
+  *) echo "ABORT."; exit 1 ;;
+esac
 
 say "G0b: higiene de override"
 # Se o override JÁ estiver no ambiente, ele veio de outra cerimônia — é
