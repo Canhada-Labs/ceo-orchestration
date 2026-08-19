@@ -1,7 +1,7 @@
 # W179-approved — sentinel do pack de continuidade de contexto (DRAFT — assinar como W179-approved.md)
 
-> Assinatura em um passo: `! bash ~/canhada-labs/OWNER-W179-SIGN.sh`
-> (gera este arquivo com Anchor-SHA real, assina, dry-run, land).
+> Assinatura em um passo: `! bash ~/canhada-labs/BOM-DIA.sh`
+> (detecta o estado, assina se preciso, dry-run, land, push e vigia o CI).
 
 Plan: PLAN-179
 Wave: W0 (sonda + medição) + W1 (cura do snapshot vazio) + W1-b (Constraint Pinning)
