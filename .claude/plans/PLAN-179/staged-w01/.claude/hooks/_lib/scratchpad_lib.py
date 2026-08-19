@@ -509,22 +509,41 @@ def gc_orphan_session_stores(
         if not store_dir.is_dir():
             return 0
         cutoff = (time.time() if now is None else float(now)) - float(ttl_seconds)
-        # PLAN-179 rail round-2 [P2]: the cap must bound the SCAN, not just the
-        # deletions. `sorted(iterdir())` materialises and sorts the WHOLE
-        # directory before the loop can break — with a large backlog that alone
-        # can burn the hook's remaining budget and trip the timeout, which is
-        # the cost this cap exists to prevent. Take a bounded slice from the
-        # lazy iterator FIRST, then sort that slice: order stays deterministic
-        # within the window, and the work is O(scan_cap) instead of O(dir).
-        # A capped run still makes progress — the next run picks up where the
-        # filesystem's iteration order left off, and expired entries do not
-        # re-appear once unlinked.
+        # PLAN-179 rail round-2 [P2] + round-3 [P2]: the cap must bound the
+        # SCAN (`sorted(iterdir())` materialises and sorts the WHOLE directory
+        # before the loop can break — with a large backlog that alone can burn
+        # the hook's remaining budget) WITHOUT starving the tail (a FIXED
+        # prefix window re-scans the same first entries every run, so an
+        # expired store sitting behind a fresh prefix is never reclaimed).
+        #
+        # The round-2 comment here claimed the next run "picks up where the
+        # filesystem's iteration order left off". That was FALSE — no cursor
+        # was persisted. The window now starts at a rotating time-derived
+        # offset, so successive runs cover different slices. Coverage is
+        # PROBABILISTIC, not guaranteed; that is the honest word for it.
+        # Identical treatment in `audit_emit._gc_context_pressure_markers`.
         _scan_cap = max(int(max_files) * 8, 64)
+        _skip = 0
+        try:
+            _skip = int(time.time()) % max(_scan_cap, 1)
+        except Exception:
+            _skip = 0
         _window = []
+        _seen = 0
         for _e in store_dir.iterdir():
+            _seen += 1
+            if _seen <= _skip:
+                continue
             _window.append(_e)
             if len(_window) >= _scan_cap:
                 break
+        if not _window and _skip:
+            # Offset overshot a directory smaller than _skip — fall back to the
+            # head so a small directory is never skipped entirely.
+            for _e in store_dir.iterdir():
+                _window.append(_e)
+                if len(_window) >= _scan_cap:
+                    break
         for entry in sorted(_window):
             if removed >= int(max_files):
                 break

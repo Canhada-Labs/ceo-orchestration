@@ -1,0 +1,14 @@
+- [P1] Create marker temp files without following symlinks — /Users/joaocanhada/.w179-rail3/repo/.claude/hooks/_lib/audit_emit.py:8582-8582
+  When an agent can write the gitignored `.claude/state` directory, it can pre-create the predictable `.<marker>.<session>.<pid>.tmp` path as a symlink. This `open(..., "w")` and the following `chmod` both follow that symlink before `os.replace`, allowing the hook to truncate or chmod a canonical or external file and bypass normal write guards; use a symlink-safe exclusive tempfile such as the `mkstemp` pattern in `check_directory_added.py`.
+
+- [P2] Advance the bounded GC window between runs — /Users/joaocanhada/.w179-rail3/repo/.claude/hooks/_lib/audit_emit.py:8496-8499
+  When the directory has at least `_scan_cap` entries and an expired marker lies after that prefix—for example, the first 256 entries are unrelated or fresh—every invocation starts `iterdir()` from the same beginning and stops at the same point, so the expired files are never reclaimed. The claim that the next run resumes where iteration stopped is false because no cursor is retained; the identical bounded-prefix logic in `scratchpad_lib.gc_orphan_session_stores` has the same starvation problem.
+The new marker writer introduces a symlink-following arbitrary-write primitive, and both bounded GC implementations can permanently starve entries beyond their initial scan window. These issues should be fixed before landing.
+
+Full review comments:
+
+- [P1] Create marker temp files without following symlinks — /Users/joaocanhada/.w179-rail3/repo/.claude/hooks/_lib/audit_emit.py:8582-8582
+  When an agent can write the gitignored `.claude/state` directory, it can pre-create the predictable `.<marker>.<session>.<pid>.tmp` path as a symlink. This `open(..., "w")` and the following `chmod` both follow that symlink before `os.replace`, allowing the hook to truncate or chmod a canonical or external file and bypass normal write guards; use a symlink-safe exclusive tempfile such as the `mkstemp` pattern in `check_directory_added.py`.
+
+- [P2] Advance the bounded GC window between runs — /Users/joaocanhada/.w179-rail3/repo/.claude/hooks/_lib/audit_emit.py:8496-8499
+  When the directory has at least `_scan_cap` entries and an expired marker lies after that prefix—for example, the first 256 entries are unrelated or fresh—every invocation starts `iterdir()` from the same beginning and stops at the same point, so the expired files are never reclaimed. The claim that the next run resumes where iteration stopped is false because no cursor is retained; the identical bounded-prefix logic in `scratchpad_lib.gc_orphan_session_stores` has the same starvation problem.

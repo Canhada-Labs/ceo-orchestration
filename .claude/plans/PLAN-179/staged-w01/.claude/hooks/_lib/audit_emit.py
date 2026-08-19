@@ -8485,19 +8485,48 @@ def _gc_context_pressure_markers(
     try:
         cutoff = time.time() - float(ttl_seconds)
         directory = Path(str(state_dir))
-        # PLAN-179 rail round-2 [P2] — same bounding as the sibling GC in
-        # `scratchpad_lib.gc_orphan_session_stores`: the cap has to bound the
-        # SCAN, not just the unlinks. `sorted(iterdir())` walks and sorts the
-        # entire directory before the loop can break, so on a large backlog the
-        # "bounded" cleanup is the thing that blows the hook budget. Slice from
-        # the lazy iterator first, then sort the slice.
+        # PLAN-179 rail round-2 [P2] + round-3 [P2] — the cap must bound the
+        # SCAN (round 2: `sorted(iterdir())` materialises and sorts the whole
+        # directory before the loop can break, so the "bounded" cleanup is what
+        # blows the hook budget) WITHOUT starving the tail (round 3: a fixed
+        # prefix window re-scans the same first entries every run, so an
+        # expired file sitting behind a fresh prefix is never reclaimed).
+        #
+        # My round-2 comment claimed "the next run picks up where iteration
+        # left off". That was FALSE — nothing persisted a cursor. The rail
+        # caught the claim, not just the code. What is true now:
+        #
+        # The window STARTS at a rotating offset derived from wall-clock time,
+        # so successive runs cover different slices and no entry is
+        # permanently starved. Coverage is PROBABILISTIC, not a guarantee, and
+        # calling it that is the honest description; a real cursor would need
+        # its own persisted state, which this housekeeping path does not earn.
         _scan_cap = max(int(max_files) * 8, 64)
-        _window = []
+        _names = []
+        _skip = 0
+        try:
+            # Rotate the entry point. int(time.time()) advances every second,
+            # so two runs in the same second share an offset and any two runs
+            # further apart do not.
+            _skip = int(time.time()) % max(_scan_cap, 1)
+        except Exception:
+            _skip = 0
+        _seen = 0
         for _e in directory.iterdir():
-            _window.append(_e)
-            if len(_window) >= _scan_cap:
+            _seen += 1
+            if _seen <= _skip:
+                continue
+            _names.append(_e)
+            if len(_names) >= _scan_cap:
                 break
-        for entry in sorted(_window):
+        if not _names and _skip:
+            # The offset overshot a directory smaller than _skip — fall back to
+            # the head so a small directory is never skipped entirely.
+            for _e in directory.iterdir():
+                _names.append(_e)
+                if len(_names) >= _scan_cap:
+                    break
+        for entry in sorted(_names):
             if removed >= int(max_files):
                 break
             name = entry.name
@@ -8576,12 +8605,35 @@ def should_emit_context_pressure(
         # PLAN-179 rail finding A: the tmp name is derived from the SAME
         # per-session marker name. Reusing the bare basename here would give
         # two sessions re-arming at the same moment one shared tmp path.
+        # PLAN-179 rail round-3 [P1] — SYMLINK-SAFE, and the name is not
+        # guessable. `.claude/state/` is gitignored and world-writable to
+        # anything running as this user, so a PREDICTABLE tmp path could be
+        # pre-created as a symlink; a plain `open(..., "w")` follows it and the
+        # hook then truncates whatever it points at — an arbitrary-write
+        # primitive that routes around every canonical-edit guard, reached
+        # through an advisory audit helper. Three things close it together:
+        # O_EXCL (refuses an existing path), O_NOFOLLOW (refuses a symlink even
+        # if it appears between the check and the open), and a random suffix so
+        # pre-creation is not feasible in the first place. The mode is set AT
+        # CREATION, which also removes the window the old separate `chmod` left.
+        _rand = os.urandom(6).hex()
         tmp = marker.parent / (
-            "." + marker.name + "." + str(os.getpid()) + ".tmp"
+            "." + marker.name + "." + str(os.getpid()) + "." + _rand + ".tmp"
         )
-        with open(str(tmp), "w", encoding="utf-8") as fh:
-            fh.write(current + "\n")
-        os.chmod(str(tmp), 0o600)
+        _flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY
+        _flags |= getattr(os, "O_NOFOLLOW", 0)  # POSIX; 0 is a safe no-op
+        _fd = os.open(str(tmp), _flags, 0o600)
+        try:
+            with os.fdopen(_fd, "w", encoding="utf-8") as fh:
+                fh.write(current + "\n")
+        except Exception:
+            # Never leave the temp behind on a failed write — the GC below
+            # only sweeps by AGE, so an orphan would linger for a full TTL.
+            try:
+                os.unlink(str(tmp))
+            except OSError:
+                pass
+            raise
         os.replace(str(tmp), str(marker))
     except (OSError, ValueError):
         _breadcrumb(
