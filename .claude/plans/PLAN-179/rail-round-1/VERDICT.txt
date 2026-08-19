@@ -1,0 +1,60 @@
+REJECT: Existing upgrades leave the primary hook unwired, pressure hysteresis is cross-session, and session-store files are never garbage-collected. The patch also fails repository test-hygiene checks and leaves published contracts materially stale.
+
+Full review comments:
+
+- [P1] Register compact pinning during upgrades — /Users/joaocanhada/.w179-rail/repo/templates/settings/settings.base.json:424-428
+  For existing installations, `scripts/upgrade.sh` preserves `.claude/settings.json` and `_merge_lifecycle_hooks_into_settings` only merges the five older PLAN-135 hooks; it never adds `check_compact_pinning.py`. Consequently upgraded adopters receive the script but the primary `SessionStart(compact)` pinning channel remains unwired. Add this registration to the upgrade merge and dry-run paths, not only the fresh-install template.
+
+- [P2] Scope pressure hysteresis by session — /Users/joaocanhada/.w179-rail/repo/.claude/hooks/_lib/audit_emit.py:8410-8410
+  The marker is a single project-wide file, while `_progress_guard` supplies neither a session key to this helper nor the hook-input `session_id` to the emitted event. With two sessions in the same repository, one session at bucket 80 suppresses the other's first 80 event, while sessions at different buckets continually re-arm each other; the resulting wire records cannot be attributed to recover the true transitions. Key the state by the trusted hook session ID and include that ID in the event.
+
+- [P2] Invoke the session-store file GC — /Users/joaocanhada/.w179-rail/repo/.claude/hooks/check_precompact_continuity.py:483-483
+  Every unresolved-plan session creates a distinct SQLite store here, but `gc_orphan_session_stores()` has no production caller anywhere in the tree. Row TTL expiry does not remove the `.sqlite`, `.lock`, WAL, or SHM files, so the new fallback still accumulates per-session files without bound despite ADR-153 claiming that file-level GC ships with the fallback.
+
+- [P2] Guard unhashable pressure event sources — /Users/joaocanhada/.w179-rail/repo/.claude/hooks/_lib/audit_emit.py:6890-6891
+  A direct or future caller passing a list or dict as `event_source` raises `TypeError` during frozenset membership, before `_write_event` can apply its fail-open behavior. This violates `emit_generic`'s documented never-raises contract; type-check the value before testing membership, as the newer audit branches already do.
+
+- [P2] Replace direct environment mutations in the new tests — /Users/joaocanhada/.w179-rail/repo/.claude/hooks/tests/test_plan179_integration.py:304-305
+  These assignments and the later ones in this file produce 11 new `env-write` violations from `check-test-env-hygiene.py`. Repository tests must combine `TestEnvContext` with `mock.patch.dict`, never direct `os.environ[...] =` writes (`AGENTS.md:24`), so the new suite currently fails the hygiene gate.
+
+- [P2] Inherit TestEnvContext in the slot-guard test — /Users/joaocanhada/.w179-rail/repo/.claude/hooks/tests/test_plan179_integration.py:257-257
+  This direct `unittest.TestCase` subclass is reported as a new `bare-testcase` violation by `check-test-env-hygiene.py`. Use `TestEnvContext` so module and environment state receive the repository-mandated isolation and teardown (`AGENTS.md:24`).
+
+- [P2] Update the continuity guide when landing the feature — /Users/joaocanhada/.w179-rail/repo/.claude/settings.json:548-552
+  This registration and the new canonical files make the PLAN-179 fallback and pinning live, but `docs/CONTEXT-CONTINUITY-GUIDE.md:203-221` still says they are staged, uninstalled, unregistered, and not running. It also describes a future guard that halts compaction, whereas the landed implementation explicitly only observes and notifies, so operators are now given the opposite of the shipped behavior.
+
+- [P2] Remove the stale code-still-owed schema status — /Users/joaocanhada/.w179-rail/repo/SPEC/v1/audit-log.schema.md:574-574
+  The v2.56 history still says `constraint_count` is absent, the producer calls nonexistent `edge_trigger_should_emit`, and it emits token-count fields, but this same patch closes all three gaps. The action row at line 518 and the PostCompact hook docstring repeat the stale pre-landing status, incorrectly telling consumers to expect an absent field and a permanently red conformance test.
+
+- [P3] Remove the new throughput implication — /Users/joaocanhada/.w179-rail/repo/.claude/hooks/check_compact_pinning.py:45-46
+  Describing the continuity kill-switch as an operator's “throughput decision” implies that disabling the snapshot provides a throughput benefit. The repository contract explicitly rejects documentation changes adding throughput or speedup claims (`AGENTS.md:9-11`); use neutral operational wording instead.
+REJECT: Existing upgrades leave the primary hook unwired, pressure hysteresis is cross-session, and session-store files are never garbage-collected. The patch also fails repository test-hygiene checks and leaves published contracts materially stale.
+
+Full review comments:
+
+- [P1] Register compact pinning during upgrades — /Users/joaocanhada/.w179-rail/repo/templates/settings/settings.base.json:424-428
+  For existing installations, `scripts/upgrade.sh` preserves `.claude/settings.json` and `_merge_lifecycle_hooks_into_settings` only merges the five older PLAN-135 hooks; it never adds `check_compact_pinning.py`. Consequently upgraded adopters receive the script but the primary `SessionStart(compact)` pinning channel remains unwired. Add this registration to the upgrade merge and dry-run paths, not only the fresh-install template.
+
+- [P2] Scope pressure hysteresis by session — /Users/joaocanhada/.w179-rail/repo/.claude/hooks/_lib/audit_emit.py:8410-8410
+  The marker is a single project-wide file, while `_progress_guard` supplies neither a session key to this helper nor the hook-input `session_id` to the emitted event. With two sessions in the same repository, one session at bucket 80 suppresses the other's first 80 event, while sessions at different buckets continually re-arm each other; the resulting wire records cannot be attributed to recover the true transitions. Key the state by the trusted hook session ID and include that ID in the event.
+
+- [P2] Invoke the session-store file GC — /Users/joaocanhada/.w179-rail/repo/.claude/hooks/check_precompact_continuity.py:483-483
+  Every unresolved-plan session creates a distinct SQLite store here, but `gc_orphan_session_stores()` has no production caller anywhere in the tree. Row TTL expiry does not remove the `.sqlite`, `.lock`, WAL, or SHM files, so the new fallback still accumulates per-session files without bound despite ADR-153 claiming that file-level GC ships with the fallback.
+
+- [P2] Guard unhashable pressure event sources — /Users/joaocanhada/.w179-rail/repo/.claude/hooks/_lib/audit_emit.py:6890-6891
+  A direct or future caller passing a list or dict as `event_source` raises `TypeError` during frozenset membership, before `_write_event` can apply its fail-open behavior. This violates `emit_generic`'s documented never-raises contract; type-check the value before testing membership, as the newer audit branches already do.
+
+- [P2] Replace direct environment mutations in the new tests — /Users/joaocanhada/.w179-rail/repo/.claude/hooks/tests/test_plan179_integration.py:304-305
+  These assignments and the later ones in this file produce 11 new `env-write` violations from `check-test-env-hygiene.py`. Repository tests must combine `TestEnvContext` with `mock.patch.dict`, never direct `os.environ[...] =` writes (`AGENTS.md:24`), so the new suite currently fails the hygiene gate.
+
+- [P2] Inherit TestEnvContext in the slot-guard test — /Users/joaocanhada/.w179-rail/repo/.claude/hooks/tests/test_plan179_integration.py:257-257
+  This direct `unittest.TestCase` subclass is reported as a new `bare-testcase` violation by `check-test-env-hygiene.py`. Use `TestEnvContext` so module and environment state receive the repository-mandated isolation and teardown (`AGENTS.md:24`).
+
+- [P2] Update the continuity guide when landing the feature — /Users/joaocanhada/.w179-rail/repo/.claude/settings.json:548-552
+  This registration and the new canonical files make the PLAN-179 fallback and pinning live, but `docs/CONTEXT-CONTINUITY-GUIDE.md:203-221` still says they are staged, uninstalled, unregistered, and not running. It also describes a future guard that halts compaction, whereas the landed implementation explicitly only observes and notifies, so operators are now given the opposite of the shipped behavior.
+
+- [P2] Remove the stale code-still-owed schema status — /Users/joaocanhada/.w179-rail/repo/SPEC/v1/audit-log.schema.md:574-574
+  The v2.56 history still says `constraint_count` is absent, the producer calls nonexistent `edge_trigger_should_emit`, and it emits token-count fields, but this same patch closes all three gaps. The action row at line 518 and the PostCompact hook docstring repeat the stale pre-landing status, incorrectly telling consumers to expect an absent field and a permanently red conformance test.
+
+- [P3] Remove the new throughput implication — /Users/joaocanhada/.w179-rail/repo/.claude/hooks/check_compact_pinning.py:45-46
+  Describing the continuity kill-switch as an operator's “throughput decision” implies that disabling the snapshot provides a throughput benefit. The repository contract explicitly rejects documentation changes adding throughput or speedup claims (`AGENTS.md:9-11`); use neutral operational wording instead.
