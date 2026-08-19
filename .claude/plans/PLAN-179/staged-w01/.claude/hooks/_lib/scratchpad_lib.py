@@ -157,6 +157,12 @@ SESSION_SCOPE_TTL_SECONDS = 259200  # 72h
 # the leftovers are collected by the next run.
 MAX_GC_FILES_PER_RUN = 64
 
+# PLAN-179 rail round-4 [P2]: the sweep is bounded by TIME, not by a slice of
+# the directory — a slice starves whatever sits behind it. 0.25s is a small
+# fraction of the hook's 5s registration timeout, and the sweep is fail-open,
+# so exceeding it costs nothing but a later reclaim.
+_GC_WALL_BUDGET_S = 0.25
+
 # Suffixes state_store creates per scope. The db and its filelock sibling
 # are the obvious two; ``-wal`` / ``-shm`` are created by sqlite because
 # _ensure_open sets ``PRAGMA journal_mode=WAL`` (state_store.py), and were
@@ -509,61 +515,60 @@ def gc_orphan_session_stores(
         if not store_dir.is_dir():
             return 0
         cutoff = (time.time() if now is None else float(now)) - float(ttl_seconds)
-        # PLAN-179 rail round-2 [P2] + round-3 [P2]: the cap must bound the
-        # SCAN (`sorted(iterdir())` materialises and sorts the WHOLE directory
-        # before the loop can break — with a large backlog that alone can burn
-        # the hook's remaining budget) WITHOUT starving the tail (a FIXED
-        # prefix window re-scans the same first entries every run, so an
-        # expired store sitting behind a fresh prefix is never reclaimed).
+        # PLAN-179 rail rounds 2/3/4 [P2] — three attempts, and only this one
+        # is right. The history is the point:
+        #   r2: `sorted(iterdir())` materialised and SORTED the whole directory
+        #       before the cap could break — the "bounded" cleanup was the part
+        #       that could blow the hook's budget.
+        #   r3: a fixed prefix window fixed the cost but STARVED the tail: an
+        #       expired store behind a fresh prefix was never reached. (The
+        #       comment I wrote then also claimed a cursor that did not exist.)
+        #   r4: the rotating offset was still `% _scan_cap`, so nothing beyond
+        #       ~2x _scan_cap was reachable — starvation with extra steps.
         #
-        # The round-2 comment here claimed the next run "picks up where the
-        # filesystem's iteration order left off". That was FALSE — no cursor
-        # was persisted. The window now starts at a rotating time-derived
-        # offset, so successive runs cover different slices. Coverage is
-        # PROBABILISTIC, not guaranteed; that is the honest word for it.
-        # Identical treatment in `audit_emit._gc_context_pressure_markers`.
-        _scan_cap = max(int(max_files) * 8, 64)
-        _skip = 0
+        # What is actually true: the expensive parts were the SORT and the
+        # materialised list, not the walk. `os.scandir()` is lazy and its
+        # DirEntry carries the stat the readdir already paid for, so a full
+        # pass is cheap. So: walk EVERYTHING (no starvation, no cursor to get
+        # wrong), skip the sort entirely (order does not matter for a TTL
+        # sweep), stop at `max_files` deletions, and bound the whole thing with
+        # a wall-clock DEADLINE so a pathological directory can never eat the
+        # hook budget. Cost is bounded by TIME, correctness by coverage.
+        _deadline = time.time() + _GC_WALL_BUDGET_S
+        _scanned = 0
+        _it = os.scandir(str(store_dir))
         try:
-            _skip = int(time.time()) % max(_scan_cap, 1)
-        except Exception:
-            _skip = 0
-        _window = []
-        _seen = 0
-        for _e in store_dir.iterdir():
-            _seen += 1
-            if _seen <= _skip:
-                continue
-            _window.append(_e)
-            if len(_window) >= _scan_cap:
-                break
-        if not _window and _skip:
-            # Offset overshot a directory smaller than _skip — fall back to the
-            # head so a small directory is never skipped entirely.
-            for _e in store_dir.iterdir():
-                _window.append(_e)
-                if len(_window) >= _scan_cap:
+            for _de in _it:
+                _scanned += 1
+                if removed >= int(max_files):
                     break
-        for entry in sorted(_window):
-            if removed >= int(max_files):
-                break
-            name = entry.name
-            stem = None
-            for suffix in _SESSION_STORE_SUFFIXES:
-                if name.endswith(suffix):
-                    stem = name[: -len(suffix)]
+                # Check the clock every 64 entries — cheap, and enough to keep
+                # the worst case near the budget rather than at a multiple.
+                if (_scanned & 63) == 0 and time.time() >= _deadline:
                     break
-            if stem is None or not _SESSION_SCOPE_ID_RE.match(stem):
-                continue
-            try:
-                if entry.stat().st_mtime >= cutoff:
+                entry = Path(_de.path)
+                name = entry.name
+                stem = None
+                for suffix in _SESSION_STORE_SUFFIXES:
+                    if name.endswith(suffix):
+                        stem = name[: -len(suffix)]
+                        break
+                if stem is None or not _SESSION_SCOPE_ID_RE.match(stem):
                     continue
-                entry.unlink()
-                removed += 1
-            except OSError:
-                # Per-entry fail-open: a racing unlink or a permission
-                # problem on ONE file must not abort the whole sweep.
-                continue
+                try:
+                    if entry.stat().st_mtime >= cutoff:
+                        continue
+                    entry.unlink()
+                    removed += 1
+                except OSError:
+                    # Per-entry fail-open: a racing unlink or a permission
+                    # problem on ONE file must not abort the whole sweep.
+                    continue
+        finally:
+            try:
+                _it.close()
+            except Exception:
+                pass
     except OSError:
         # Sweep-level fail-open (unreadable dir, vanished state root).
         return removed

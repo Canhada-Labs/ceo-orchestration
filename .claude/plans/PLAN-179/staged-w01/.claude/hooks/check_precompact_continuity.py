@@ -626,6 +626,53 @@ def _used_tokens_from_event(event: Dict[str, Any]) -> Optional[int]:
     return None
 
 
+def _context_pct_from_sidecar() -> Optional[int]:
+    """Context-usage percent read from the statusline sidecar, or None.
+
+    PLAN-179 rail round-4 [P2] — THE fix for a dead instrument. The documented
+    PreCompact input carries ONLY ``trigger`` and ``custom_instructions``
+    (`.claude/data/hook-schema-2.1.220.json`), so reading token accounting from
+    the event can never succeed in production: with the floor armed, every real
+    PreCompact took the "no measurement" skip path and the sole producer of
+    ``context_pressure_observed`` could not emit. The integration test passed
+    only because it injected a statusline-shaped payload the hook never
+    receives — a test feeding its subject something production does not send.
+
+    There IS a real source: ``statusline-ceo.py`` writes
+    ``<audit-dir>/state/statusline-snapshot.json`` with a ``context_pct``
+    field, refreshed as the session runs. This reads THAT, read-only and
+    fail-soft: unreadable, absent, malformed or non-numeric all yield None and
+    the guard stays a no-op. Nothing is estimated from the transcript.
+
+    Freshness is deliberately NOT checked here: a stale percent is still a
+    measurement someone took, and the alternative (inventing one) is the thing
+    W0 exists to prevent. The row it produces is a bucket transition, not a
+    precise reading."""
+    try:
+        # Reuse the ONE resolver the audit rail already uses, so the sidecar is
+        # looked up in the same place the writer put it — including under test
+        # isolation, which redirects it. Deriving a second path here is how the
+        # two surfaces drift apart.
+        from _lib import audit_emit as _ae  # noqa: E402
+        base = _ae._audit_dir()
+    except Exception:
+        return None
+    try:
+        snap = Path(base) / "state" / "statusline-snapshot.json"
+        if not snap.is_file():
+            return None
+        with snap.open("r", encoding="utf-8") as fh:
+            data = json.load(fh)
+        if not isinstance(data, dict):
+            return None
+        pct = data.get("context_pct")
+        if isinstance(pct, bool) or not isinstance(pct, (int, float)):
+            return None
+        return max(0, min(100, int(pct)))
+    except Exception:
+        return None
+
+
 def _context_used_pct(event: Dict[str, Any]) -> Optional[int]:
     """Share of the context window already consumed, as an INTEGER percent.
 
@@ -679,7 +726,7 @@ def _pressure_bucket(used_pct: Optional[int], rungs: Any) -> int:
 
 
 def _progress_guard(
-    used_tokens: int,
+    used_tokens: Optional[int],
     floor_tokens: int,
     used_pct: Optional[int],
     plan_id: str,
@@ -745,7 +792,14 @@ def _progress_guard(
     most once per compaction anyway. ``floor_tokens`` stays in the breadcrumb —
     it is operator context, and the wire deliberately refuses raw token
     counts."""
-    if used_tokens < floor_tokens:
+    # PLAN-179 rail round-4 [P2]: `used_tokens` is None whenever the only
+    # available measurement is the statusline sidecar's PERCENT — which, given
+    # the documented PreCompact input, is the normal production case. The floor
+    # comparison needs an absolute count, so it is SKIPPED then; the pressure
+    # OBSERVATION still happens, because that observation is the entire
+    # deliverable of W0 US2b and dropping it to protect a comparison would
+    # discard the measurement to preserve a threshold nobody can evaluate.
+    if used_tokens is not None and used_tokens < floor_tokens:
         return
     try:
         from _lib import audit_emit  # noqa: E402
@@ -765,9 +819,17 @@ def _progress_guard(
         return
     bucket = _pressure_bucket(used_pct, rungs)
     _breadcrumb(
-        "context pressure at/above floor: used_bucket_pct=%d floor_tokens=%d "
-        "used_tokens=%d (observe+notify only — this hook cannot halt a "
-        "compaction)" % (bucket, floor_tokens, used_tokens)
+        "context pressure observed: used_bucket_pct=%d floor_tokens=%d "
+        "used_tokens=%s (observe+notify only — this hook cannot halt a "
+        "compaction)"
+        % (
+            bucket,
+            floor_tokens,
+            # "none (percent-only source)" rather than a fabricated 0: the
+            # operator must be able to tell "no absolute count was available"
+            # from "the count was zero".
+            used_tokens if used_tokens is not None else "none (percent-only source)",
+        )
     )
     if bucket == _PRESSURE_BUCKET_UNKNOWN:
         _breadcrumb(
@@ -877,11 +939,22 @@ def gate(event: Dict[str, Any], cwd: Optional[str] = None) -> Dict[str, Any]:
     floor_tokens = _progress_floor_tokens()
     if floor_tokens is not None:
         used_tokens = _used_tokens_from_event(event)
-        if used_tokens is None:
+        # PLAN-179 rail round-4 [P2]: the PreCompact input documented by the
+        # harness carries NO token accounting, so `used_tokens` is None on
+        # every real invocation and the guard was dead by construction — the
+        # test only passed because it fed a shape production never sends. The
+        # statusline sidecar DOES carry a measured `context_pct`, so fall back
+        # to it. Order matters: the event stays PREFERRED (if a future harness
+        # version ships accounting inline, that is the fresher number); the
+        # sidecar is what makes the guard work TODAY.
+        pct = _context_used_pct(event)
+        if pct is None:
+            pct = _context_pct_from_sidecar()
+        if used_tokens is None and pct is None:
             _breadcrumb(
-                "%s is set but the hook input carries no used_tokens — "
-                "progress guard skipped (no measurement is invented)"
-                % PROGRESS_FLOOR_ENV
+                "%s is set but neither the hook input nor the statusline "
+                "sidecar carries context accounting — progress guard skipped "
+                "(no measurement is invented)" % PROGRESS_FLOOR_ENV
             )
         else:
             # PLAN-179 W0/W1 cross-file pass: the guard now needs the repo root
@@ -891,10 +964,15 @@ def gate(event: Dict[str, Any], cwd: Optional[str] = None) -> Dict[str, Any]:
             # PLAN-179 rail finding A: also the TRUSTED session id (hook input
             # only — `_session_scope_id` refuses the env-sourced one), which
             # keys the hysteresis marker and attributes the wire row.
+            # `pct` above, NOT a second `_context_used_pct(event)` call: the
+            # sidecar fallback lives in that variable, and recomputing here
+            # would silently drop back to the event-only value that production
+            # never carries — re-introducing the dead instrument this round
+            # exists to fix.
             _progress_guard(
                 used_tokens,
                 floor_tokens,
-                _context_used_pct(event),
+                pct,
                 plan_id,
                 cwd,
                 session_id,

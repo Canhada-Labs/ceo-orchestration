@@ -8396,6 +8396,11 @@ _CONTEXT_PRESSURE_EVENT_SOURCES = frozenset({
 # measurement PLAN-179 exists to make.
 _CONTEXT_PRESSURE_STATE_BASENAME = "context-pressure-last-bucket"
 
+# PLAN-179 rail round-4 [P2]: sweep bounded by TIME, never by a slice of the
+# directory — a slice starves whatever sits behind it. Small fraction of the
+# hook timeout; the sweep is fail-open, so overrunning costs only a later reclaim.
+_GC_MARKER_WALL_BUDGET_S = 0.25
+
 # PLAN-179 rail finding A — the session id reaches the FILESYSTEM as a name
 # component, so it is sanitized here rather than trusted. Only these ASCII
 # characters pass through verbatim (str.isalnum() is deliberately NOT used: it
@@ -8485,65 +8490,48 @@ def _gc_context_pressure_markers(
     try:
         cutoff = time.time() - float(ttl_seconds)
         directory = Path(str(state_dir))
-        # PLAN-179 rail round-2 [P2] + round-3 [P2] — the cap must bound the
-        # SCAN (round 2: `sorted(iterdir())` materialises and sorts the whole
-        # directory before the loop can break, so the "bounded" cleanup is what
-        # blows the hook budget) WITHOUT starving the tail (round 3: a fixed
-        # prefix window re-scans the same first entries every run, so an
-        # expired file sitting behind a fresh prefix is never reclaimed).
-        #
-        # My round-2 comment claimed "the next run picks up where iteration
-        # left off". That was FALSE — nothing persisted a cursor. The rail
-        # caught the claim, not just the code. What is true now:
-        #
-        # The window STARTS at a rotating offset derived from wall-clock time,
-        # so successive runs cover different slices and no entry is
-        # permanently starved. Coverage is PROBABILISTIC, not a guarantee, and
-        # calling it that is the honest description; a real cursor would need
-        # its own persisted state, which this housekeeping path does not earn.
-        _scan_cap = max(int(max_files) * 8, 64)
-        _names = []
-        _skip = 0
+        # PLAN-179 rail rounds 2/3/4 [P2] — same story as the twin sweep in
+        # `scratchpad_lib.gc_orphan_session_stores`, and the same conclusion.
+        # r2 removed the sort+materialise; r3 replaced it with a fixed prefix
+        # window that STARVED the tail; r4 showed the rotating offset was still
+        # `% _scan_cap`, so nothing past ~2x that was ever reachable.
+        # What was expensive was the SORT and the list, not the walk:
+        # `os.scandir()` is lazy and its DirEntry reuses the readdir stat. So
+        # walk EVERYTHING (no starvation, no cursor to get wrong), drop the
+        # sort (order is irrelevant to a TTL sweep), stop at `max_files`
+        # deletions, and bound the sweep with a wall-clock DEADLINE. Bounded by
+        # TIME, correct by coverage.
+        _deadline = time.time() + _GC_MARKER_WALL_BUDGET_S
+        _scanned = 0
+        _it = os.scandir(str(directory))
         try:
-            # Rotate the entry point. int(time.time()) advances every second,
-            # so two runs in the same second share an offset and any two runs
-            # further apart do not.
-            _skip = int(time.time()) % max(_scan_cap, 1)
-        except Exception:
-            _skip = 0
-        _seen = 0
-        for _e in directory.iterdir():
-            _seen += 1
-            if _seen <= _skip:
-                continue
-            _names.append(_e)
-            if len(_names) >= _scan_cap:
-                break
-        if not _names and _skip:
-            # The offset overshot a directory smaller than _skip — fall back to
-            # the head so a small directory is never skipped entirely.
-            for _e in directory.iterdir():
-                _names.append(_e)
-                if len(_names) >= _scan_cap:
+            for _de in _it:
+                _scanned += 1
+                if removed >= int(max_files):
                     break
-        for entry in sorted(_names):
-            if removed >= int(max_files):
-                break
-            name = entry.name
-            # Both the live marker `<prefix><sid>` and a crash-orphaned
-            # atomic-write temp `.<prefix><sid>.<pid>.tmp`.
-            if name.startswith("."):
-                name = name[1:]
-            if not name.startswith(prefix) or len(name) <= len(prefix):
-                continue
-            try:
-                if entry.stat().st_mtime >= cutoff:
+                if (_scanned & 63) == 0 and time.time() >= _deadline:
+                    break
+                entry = Path(_de.path)
+                name = entry.name
+                # Both the live marker `<prefix><sid>` and a crash-orphaned
+                # atomic-write temp `.<prefix><sid>.<pid>.<rand>.tmp`.
+                if name.startswith("."):
+                    name = name[1:]
+                if not name.startswith(prefix) or len(name) <= len(prefix):
                     continue
-                entry.unlink()
-                removed += 1
-            except OSError:
-                # Per-entry fail-open: a racing unlink must not abort the sweep.
-                continue
+                try:
+                    if entry.stat().st_mtime >= cutoff:
+                        continue
+                    entry.unlink()
+                    removed += 1
+                except OSError:
+                    # Per-entry fail-open: a racing unlink must not abort it.
+                    continue
+        finally:
+            try:
+                _it.close()
+            except Exception:
+                pass
     except (OSError, TypeError, ValueError):
         return removed
     return removed

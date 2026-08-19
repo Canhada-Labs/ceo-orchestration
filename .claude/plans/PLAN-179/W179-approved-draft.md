@@ -39,6 +39,7 @@ Data: <AAAA-MM-DD>
 .claude/hooks/tests/test_postcompact_reinject_no_exec_payload.py
 .claude/hooks/tests/test_template_dogfood_parity.py
 .claude/hooks/tests/test_w5_scrub_enforcement.py
+.claude/scripts/env-inventory.json
 .claude/scripts/probes/probe_postcompact_channel.py
 .claude/scripts/tests/test_probe_postcompact_channel.py
 .claude/settings.json

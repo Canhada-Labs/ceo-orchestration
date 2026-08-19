@@ -1,0 +1,12 @@
+The pressure telemetry cannot fire with the documented production input, both GC implementations permanently miss sufficiently deep directory entries, and the canonical environment inventory is stale. These are functional and governance defects that should be corrected before landing.
+
+Full review comments:
+
+- [P2] Feed the pressure guard from an accounting-capable input — /Users/joaocanhada/.w179-rail4/repo/.claude/hooks/check_precompact_continuity.py:879-884
+  Under the supported hook contract, PreCompact receives only the common fields plus `trigger` and `custom_instructions` (`.claude/data/hook-schema-2.1.220.json:66-74,92`), none of which `_used_tokens_from_event` accepts. Consequently, even with `CEO_CONTEXT_PROGRESS_FLOOR_TOKENS` armed, real PreCompact calls always take this skip path and the sole shipped `context_pressure_observed` producer cannot emit; the integration test only succeeds by injecting the statusline-specific `context_window` shape.
+
+- [P2] Rotate GC windows across the entire directory — /Users/joaocanhada/.w179-rail4/repo/.claude/hooks/_lib/scratchpad_lib.py:525-528
+  Because `_skip` is modulo `_scan_cap` and the following window contains at most `_scan_cap` entries, no invocation can inspect entries beyond roughly `2 * _scan_cap`; with defaults, session-store files after the first 1023 directory entries are permanently unreachable. The identical algorithm in `audit_emit._gc_context_pressure_markers` has the same defect, so both newly added cleanup paths can still accumulate unbounded tails rather than eventually reclaiming them.
+
+- [P2] Regenerate the environment-variable inventory — /Users/joaocanhada/.w179-rail4/repo/.claude/hooks/check_compact_pinning.py:87-87
+  This change introduces `CEO_CONSTRAINT_PINNING`, `CEO_CONTEXT_PROGRESS_FLOOR_TOKENS`, and `CEO_COMPACTION_PROBE_CANARY`, but none is present in `.claude/scripts/env-inventory.json`. Running `python3 .claude/scripts/env-inventory-check.py --check` reports all three as NEW and exits 1, leaving the repository's reviewed environment surface out of sync; regenerate the inventory in this change.
