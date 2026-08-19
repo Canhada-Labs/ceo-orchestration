@@ -328,10 +328,16 @@ def check_plans_reviewed_pending() -> Tuple[str, str, Any]:
 
 
 def check_plans_stranded_executing() -> Tuple[str, str, Any]:
-    # Subprocess: git log --since=24h --name-only
+    # Subprocess: git log --since=24h --name-only + subjects.
+    # S314: o stem completo era um proxy que perdia atividade real —
+    # commits que tocam so `.claude/plans/PLAN-NNN/...` (o diretorio de
+    # artefatos) ou que carregam o id no subject nao continham o stem, e
+    # um plano ativissimo (cerimonia GPG 20h antes) saia como stranded.
+    # O casamento agora aceita tambem o prefixo `PLAN-NNN` contra paths
+    # E contra subjects de commit (`--pretty=format:%s`).
     try:
         proc = subprocess.run(
-            ["git", "-C", str(REPO_ROOT), "log", "--since=24 hours ago", "--name-only", "--pretty=format:"],
+            ["git", "-C", str(REPO_ROOT), "log", "--since=24 hours ago", "--name-only", "--pretty=format:%s"],
             capture_output=True, text=True, timeout=2.0,
         )
         touched = {line.strip() for line in proc.stdout.splitlines() if line.strip()}
@@ -339,10 +345,13 @@ def check_plans_stranded_executing() -> Tuple[str, str, Any]:
         return "yellow", "git unavailable", None
     # Cross-ref against executing plans
     executing_status, _, executing_list = check_plans_executing()
-    stranded = [
-        plan for plan in executing_list
-        if not any(plan in t for t in touched)
-    ]
+
+    def _saw_activity(plan: str) -> bool:
+        m = re.match(r"^(PLAN-\d{3})(?!\d)", plan)
+        prefix = m.group(1) if m else plan
+        return any(plan in t or prefix in t for t in touched)
+
+    stranded = [plan for plan in executing_list if not _saw_activity(plan)]
     return ("red" if stranded else "green", f"{len(stranded)} stranded", stranded)
 
 
