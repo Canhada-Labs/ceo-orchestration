@@ -106,6 +106,35 @@ camadas mais fundas. Todos curados também.
 o teste: ele exige que o audit log VIVO não mude, e minha própria sessão
 escreve nele a cada tool call).
 
+### Round 3: **2 achados, ambos NOVOS** — e um deles é sério
+
+Convergência **9 → 4 → 2**, sem repetição.
+
+**[P1] Eu tinha introduzido um primitivo de ESCRITA ARBITRÁRIA.** A cura que eu
+mesmo escrevi no round 2 criava um arquivo temporário com nome **previsível** em
+`.claude/state/` e o abria com `open(..., "w")` — que **segue symlink**. Um
+agente capaz de escrever nesse diretório podia pré-criar o path como link para
+qualquer arquivo e fazer o hook truncá-lo.
+
+Não é teórico. Controle negativo contra o código anterior:
+
+```
+VICTIM_SIZE_BEFORE=44 AFTER=3      <-- truncada
+CONTEUDO FINAL DA VITIMA: '60\n'   <-- o valor do bucket, escrito dentro dela
+```
+
+Curado com `O_EXCL` + `O_NOFOLLOW` + sufixo aleatório + modo na criação. E o
+controle positivo é o duro: com o gerador de aleatoriedade fixado — isto é, com
+o atacante **sabendo** o nome — o symlink é plantado no path exato e a escrita
+**recusa** (vítima 44→44, link intacto). Evidência e ambos os controles em
+`PLAN-179/rail-round-3/`.
+
+**[P2] O rail pegou uma afirmação FALSA que eu escrevi.** Eu havia comentado que
+o GC "continua de onde a iteração parou" — não continuava, nada persistia
+cursor, e um arquivo expirado atrás de um prefixo de arquivos frescos nunca
+seria recuperado. Corrigido o mecanismo (offset rotativo) **e** a afirmação
+(cobertura probabilística, não garantida).
+
 ### Bônus: um vermelho no vivo que ninguém tinha visto
 
 A mesma verificação pegou que o land do W3-K deixou um `bare-testcase`
