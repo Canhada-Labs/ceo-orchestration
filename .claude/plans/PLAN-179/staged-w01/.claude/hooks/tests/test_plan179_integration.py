@@ -254,7 +254,7 @@ def _bind_pack_lib():
                 setattr(_lib, attr, saved_attr)
 
 
-class _AuditEmitSlotGuard(unittest.TestCase):
+class _AuditEmitSlotGuard(TestEnvContext):
     """PLAN-119-FOLLOWUP WS-2 restore gate.
 
     `_load_staged_audit_emit()` runs at module import and contains the
@@ -262,7 +262,14 @@ class _AuditEmitSlotGuard(unittest.TestCase):
     gate tracks. The gate requires the INSTALLING CLASS to call the helper and
     restore canonical in its own teardown; this class does exactly that
     (idempotent — the loader never leaves the slot occupied in the first
-    place)."""
+    place).
+
+    PLAN-179 (Codex pair-rail finding B, `bare-testcase`): the base is
+    `TestEnvContext`, not `unittest.TestCase`. `check-test-env-hygiene.py`
+    flags a lone `unittest.TestCase` base because such a class runs with the
+    operator's real `$HOME`, `CLAUDE_PROJECT_DIR` and `CEO_*` — and this class
+    execs a module under a canonical `_lib.*` slot, so it is precisely the kind
+    that must not leak. The assertion below is unchanged."""
 
     @classmethod
     def setUpClass(cls):
@@ -301,8 +308,23 @@ class _IntegrationBase(TestEnvContext):
         # the sqlite scratchpads cannot reach the operator's real state dir
         # even if that derivation ever changes.
         self._state_root = self._tmp_root / "state-root"
-        os.environ["CEO_STATE_ROOT"] = str(self._state_root)
-        os.environ["CLAUDE_SESSION_ID"] = self.SESSION_WITH_PLAN
+        # PLAN-179 (Codex pair-rail finding A, `env-write`): the sanctioned
+        # form is `mock.patch.dict`, never `os.environ[K] = V`
+        # (check-test-env-hygiene.py). The patcher is started here and stopped
+        # in `tearDown` BEFORE `TestEnvContext.tearDown` restores the operator's
+        # env — deliberately NOT via `addCleanup`, whose callbacks run AFTER
+        # tearDown, and whose `patch.dict` unpatch does a wholesale
+        # `os.environ.clear()` + restore of the IN-TEST snapshot; running it
+        # last would re-pollute the just-restored real environment with a HOME
+        # pointing at a deleted tmpdir.
+        self._env_patcher = mock.patch.dict(
+            os.environ,
+            {
+                "CEO_STATE_ROOT": str(self._state_root),
+                "CLAUDE_SESSION_ID": self.SESSION_WITH_PLAN,
+            },
+        )
+        self._env_patcher.start()
         os.environ.pop("CEO_COMPACTION_CONTINUITY", None)
         os.environ.pop("CEO_CONSTRAINT_PINNING", None)
         os.environ.pop("CEO_CONTEXT_PROGRESS_FLOOR_TOKENS", None)
@@ -318,6 +340,9 @@ class _IntegrationBase(TestEnvContext):
         # TestEnvContext tears the isolated HOME/audit tree down. Idempotent —
         # `_bind_pack_lib` already restored it in its own finally.
         importlib.import_module("_lib.audit_emit")
+        # PLAN-179 finding A: unpatch BEFORE super() restores the real env —
+        # see the ordering note in setUp.
+        self._env_patcher.stop()
         super().tearDown()
 
     # ---- fixture helpers -------------------------------------------------
@@ -552,22 +577,28 @@ class TestSessionIdRefusal(_IntegrationBase):
     `scratchpad_unavailable`, never a fabricated success."""
 
     def test_env_sourced_session_id_is_refused(self):
-        os.environ["CLAUDE_SESSION_ID"] = self.SESSION_NO_PLAN
-        out = self.run_pre({"cwd": self.cwd, "trigger": "manual"})
-        self.assertEqual(out, {})
+        # PLAN-179 (Codex pair-rail finding A): `mock.patch.dict` replaces the
+        # direct `os.environ[...] =` write. The variable is STILL set, and to
+        # the SAME well-formed value — the refusal is only meaningful while a
+        # spoofable, syntactically-valid id is sitting in the environment.
+        with mock.patch.dict(
+            os.environ, {"CLAUDE_SESSION_ID": self.SESSION_NO_PLAN}
+        ):
+            out = self.run_pre({"cwd": self.cwd, "trigger": "manual"})
+            self.assertEqual(out, {})
 
-        ev = self.one_event("compaction_continuity_snapshot")
-        self.assertEqual(ev["plan_id"], "unknown")
-        self.assertEqual(
-            ev["snapshot_outcome"], "scratchpad_unavailable",
-            "an env-sourced session id was accepted as a write scope (r1-C1)",
-        )
-        # Positive control: without it this test would pass just as happily if
-        # the write had failed for some unrelated reason.
-        self.assertIsNone(
-            self.read_blob(session_id=self.SESSION_NO_PLAN),
-            "something WAS written under the env-named scope",
-        )
+            ev = self.one_event("compaction_continuity_snapshot")
+            self.assertEqual(ev["plan_id"], "unknown")
+            self.assertEqual(
+                ev["snapshot_outcome"], "scratchpad_unavailable",
+                "an env-sourced session id was accepted as a write scope (r1-C1)",
+            )
+            # Positive control: without it this test would pass just as happily
+            # if the write had failed for some unrelated reason.
+            self.assertIsNone(
+                self.read_blob(session_id=self.SESSION_NO_PLAN),
+                "something WAS written under the env-named scope",
+            )
 
     def test_hook_input_session_id_is_still_accepted(self):
         """The negative control for the refusal above.
@@ -576,12 +607,15 @@ class TestSessionIdRefusal(_IntegrationBase):
         hook input. If this were red the refusal test would be vacuous (it
         would pass because nothing ever writes, not because provenance is
         enforced)."""
-        os.environ["CLAUDE_SESSION_ID"] = self.SESSION_NO_PLAN
-        self.run_pre({"cwd": self.cwd, "session_id": self.SESSION_NO_PLAN,
-                      "trigger": "manual"})
-        ev = self.one_event("compaction_continuity_snapshot")
-        self.assertEqual(ev["snapshot_outcome"], "written_session_scope")
-        self.assertIsNotNone(self.read_blob(session_id=self.SESSION_NO_PLAN))
+        # PLAN-179 finding A: same env var, same value, sanctioned form.
+        with mock.patch.dict(
+            os.environ, {"CLAUDE_SESSION_ID": self.SESSION_NO_PLAN}
+        ):
+            self.run_pre({"cwd": self.cwd, "session_id": self.SESSION_NO_PLAN,
+                          "trigger": "manual"})
+            ev = self.one_event("compaction_continuity_snapshot")
+            self.assertEqual(ev["snapshot_outcome"], "written_session_scope")
+            self.assertIsNotNone(self.read_blob(session_id=self.SESSION_NO_PLAN))
 
 
 class TestPinningPrimaryChannel(_IntegrationBase):
@@ -638,14 +672,19 @@ class TestPinningPrimaryChannel(_IntegrationBase):
     def test_dedicated_killswitch(self):
         # PLAN-179 §8.8: pinning has its OWN switch. An operator disarming the
         # continuity SNAPSHOT must not silently disarm the governance floor.
-        os.environ["CEO_COMPACTION_CONTINUITY"] = "0"
-        self.assertNotEqual(
-            self.run_pin({"source": "compact", "cwd": self.cwd}), {},
-            "the snapshot kill-switch also disarmed pinning — the two switches "
-            "are coupled again (PLAN-179 §8.8)",
-        )
-        os.environ["CEO_CONSTRAINT_PINNING"] = "0"
-        self.assertEqual(self.run_pin({"source": "compact", "cwd": self.cwd}), {})
+        # PLAN-179 finding A: the NESTING reproduces the original sequence
+        # exactly — the first assertion runs with only the continuity switch
+        # off, the second with BOTH off.
+        with mock.patch.dict(os.environ, {"CEO_COMPACTION_CONTINUITY": "0"}):
+            self.assertNotEqual(
+                self.run_pin({"source": "compact", "cwd": self.cwd}), {},
+                "the snapshot kill-switch also disarmed pinning — the two "
+                "switches are coupled again (PLAN-179 §8.8)",
+            )
+            with mock.patch.dict(os.environ, {"CEO_CONSTRAINT_PINNING": "0"}):
+                self.assertEqual(
+                    self.run_pin({"source": "compact", "cwd": self.cwd}), {}
+                )
 
 
 class TestBudgetSeparation(_IntegrationBase):
@@ -813,10 +852,14 @@ class TestReinjectCounters(_IntegrationBase):
         self.assertEqual(ev["constraint_count"], expected_count)
 
     def test_constraint_count_is_zero_when_pinning_is_disarmed(self):
-        os.environ["CEO_CONSTRAINT_PINNING"] = "0"
-        self.run_pre({"cwd": self.cwd, "session_id": self.SESSION_WITH_PLAN,
-                      "trigger": "manual"})
-        out = self.run_post({"cwd": self.cwd, "session_id": self.SESSION_WITH_PLAN})
+        # PLAN-179 finding A: sanctioned form; the switch is still "0" for the
+        # whole pipeline run below.
+        with mock.patch.dict(os.environ, {"CEO_CONSTRAINT_PINNING": "0"}):
+            self.run_pre({"cwd": self.cwd, "session_id": self.SESSION_WITH_PLAN,
+                          "trigger": "manual"})
+            out = self.run_post(
+                {"cwd": self.cwd, "session_id": self.SESSION_WITH_PLAN}
+            )
         lines = out["hookSpecificOutput"]["additionalContext"].split("\n")
         for line in lines:
             self.assertNotIn("PINNED CONSTRAINT", line)
@@ -850,9 +893,15 @@ class TestContextPressureInstrumentFires(_IntegrationBase):
             "context_window": {"used_tokens": used, "context_window_size": size},
         }
 
+    # PLAN-179 finding A: the measured floor is armed through `mock.patch.dict`
+    # in each test below instead of a direct `os.environ[...] =` write. The
+    # value ("1000") and the scope (the whole run_pre call) are unchanged, so
+    # `test_guard_is_a_no_op_without_a_measured_floor` stays the real control.
+    _FLOOR_ARMED = {"CEO_CONTEXT_PROGRESS_FLOOR_TOKENS": "1000"}
+
     def test_percent_rung_reaches_the_wire(self):
-        os.environ["CEO_CONTEXT_PROGRESS_FLOOR_TOKENS"] = "1000"
-        self.run_pre(self._pressure_event(82000, 100000))
+        with mock.patch.dict(os.environ, self._FLOOR_ARMED):
+            self.run_pre(self._pressure_event(82000, 100000))
         ev = self.one_event("context_pressure_observed")
         with _bind_pack_lib():
             rungs = _pack_ae._CONTEXT_PRESSURE_USED_BUCKETS_PCT
@@ -873,11 +922,11 @@ class TestContextPressureInstrumentFires(_IntegrationBase):
     def test_edge_triggered_not_per_call(self):
         # Hysteresis (OQ-4): a session sitting in one rung must not flood the
         # HMAC chain with one row per compaction.
-        os.environ["CEO_CONTEXT_PROGRESS_FLOOR_TOKENS"] = "1000"
-        self.run_pre(self._pressure_event(82000, 100000))
-        self.run_pre(self._pressure_event(83000, 100000))  # same 80 rung
-        self.assertEqual(len(self.events("context_pressure_observed")), 1)
-        self.run_pre(self._pressure_event(96000, 100000))  # crosses to 95
+        with mock.patch.dict(os.environ, self._FLOOR_ARMED):
+            self.run_pre(self._pressure_event(82000, 100000))
+            self.run_pre(self._pressure_event(83000, 100000))  # same 80 rung
+            self.assertEqual(len(self.events("context_pressure_observed")), 1)
+            self.run_pre(self._pressure_event(96000, 100000))  # crosses to 95
         buckets = [e["used_bucket"] for e in self.events("context_pressure_observed")]
         self.assertEqual(buckets, [80, 95], "the rung TRANSITION did not emit")
 
@@ -893,9 +942,9 @@ class TestContextPressureInstrumentFires(_IntegrationBase):
         # Residual named by the pack: PreCompact is not DOCUMENTED to carry
         # context-window accounting. When it does not, the hook must emit
         # audit_emit's 0 sentinel rather than invent a denominator.
-        os.environ["CEO_CONTEXT_PROGRESS_FLOOR_TOKENS"] = "1000"
-        self.run_pre({"cwd": self.cwd, "session_id": self.SESSION_WITH_PLAN,
-                      "trigger": "auto", "used_tokens": 82000})
+        with mock.patch.dict(os.environ, self._FLOOR_ARMED):
+            self.run_pre({"cwd": self.cwd, "session_id": self.SESSION_WITH_PLAN,
+                          "trigger": "auto", "used_tokens": 82000})
         ev = self.one_event("context_pressure_observed")
         self.assertEqual(ev["used_bucket"], 0)
         self.assertEqual(ev["event_source"], "precompact")
@@ -905,12 +954,16 @@ class TestKillSwitchAndFailOpen(_IntegrationBase):
     """The pipeline must never wedge a session — ADVISORY, fail-open."""
 
     def test_continuity_killswitch_silences_both_halves(self):
-        os.environ["CEO_COMPACTION_CONTINUITY"] = "0"
-        self.assertEqual(
-            self.run_pre({"cwd": self.cwd, "session_id": self.SESSION_WITH_PLAN,
-                          "trigger": "manual"}), {})
-        self.assertEqual(
-            self.run_post({"cwd": self.cwd, "session_id": self.SESSION_WITH_PLAN}), {})
+        # PLAN-179 finding A: sanctioned form; the switch stays "0" across BOTH
+        # halves of the pipeline, which is the whole claim of this test.
+        with mock.patch.dict(os.environ, {"CEO_COMPACTION_CONTINUITY": "0"}):
+            self.assertEqual(
+                self.run_pre({"cwd": self.cwd, "session_id": self.SESSION_WITH_PLAN,
+                              "trigger": "manual"}), {})
+            self.assertEqual(
+                self.run_post(
+                    {"cwd": self.cwd, "session_id": self.SESSION_WITH_PLAN}
+                ), {})
         self.assertEqual(self.events("compaction_continuity_snapshot"), [])
         self.assertEqual(self.events("compaction_context_reinjected"), [])
 

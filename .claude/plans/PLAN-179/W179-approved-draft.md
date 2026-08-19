@@ -52,6 +52,7 @@ docs/CTO-GUIDE.md
 docs/GUIA-COMPLETO.md
 docs/README.md
 npm/README.md
+scripts/upgrade.sh
 templates/settings/settings.base.json
 ```
 

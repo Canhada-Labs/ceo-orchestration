@@ -52,20 +52,19 @@ input — never from ``CLAUDE_SESSION_ID`` (env is agent-spoofable, consensus M2
   enums + counters: ``plan_id`` (PLAN-NNN or ``unknown``), ``snapshot_found``
   (bool), ``snapshot_age_s`` (clamped int), ``pointer_count`` (0..9) and —
   PLAN-179 W1-b — ``constraint_count``. The pointer TEXT is never on the
-  audit wire. NOTE FOR THE AUDIT/SPEC OWNER — VERIFIED against the staged
-  library on the PLAN-179 W0/W1 cross-file pass, not assumed:
-  ``constraint_count`` is NOT in ``_COMPACTION_CONTEXT_REINJECTED_ALLOWLIST``
-  (``_lib/audit_emit.py``, which allows exactly ``plan_id`` /
-  ``snapshot_found`` / ``snapshot_age_s`` / ``pointer_count`` plus envelope),
-  and the ``compaction_context_reinjected`` SPEC row does not list it either.
-  The deny-by-default scrub therefore DROPS it today — the breadcrumb
-  ``emit_generic compaction_context_reinjected dropped forbidden field(s)``
-  is the visible symptom. This hook sends a real, clamped ``int`` so the field
-  lands the moment the allowlist + SPEC row + a dispatch-branch clamp are added
-  by that owner's ceremony. Same ceremony still owes the
-  ``written_session_scope`` value on the ``compaction_continuity_snapshot``
-  SPEC row (it IS in the library enum already) and a whole SPEC row for
-  ``context_pressure_observed``.
+  audit wire. AUDIT/SPEC STATUS — VERIFIED against the library this pack
+  ships, not assumed (PLAN-179 — rail finding A: this note previously
+  described the PRE-cure state and told consumers to expect an absent field):
+  ``constraint_count`` IS a member of
+  ``_COMPACTION_CONTEXT_REINJECTED_ALLOWLIST`` (``_lib/audit_emit.py``) and the
+  ``compaction_context_reinjected`` dispatch branch clamps it
+  ``max(0, min(99, int(...)))`` with the sibling counters'
+  ``except (TypeError, ValueError) -> 0`` fallback, so the deny-by-default
+  scrub keeps it. The SPEC row lists it, the ``written_session_scope`` value is
+  on the ``compaction_continuity_snapshot`` row, and ``context_pressure_observed``
+  has a row of its own — all at SPEC v2.56. A consumer reading an ABSENT
+  ``constraint_count`` should treat it as a producer that predates pinning,
+  NEVER as "zero constraints pinned".
 - Kill-switches: ``CEO_COMPACTION_CONTINUITY=0`` (shared with the PreCompact
   half — disarms this whole hook, unchanged) and, PLAN-179 §8.8, the dedicated
   ``CEO_CONSTRAINT_PINNING=0`` which suppresses ONLY the constraint block. The

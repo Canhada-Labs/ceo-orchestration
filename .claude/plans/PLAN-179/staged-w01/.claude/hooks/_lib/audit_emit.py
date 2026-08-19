@@ -6885,9 +6885,27 @@ def emit_generic(action: str, **kwargs: Any) -> None:
         if not _context_pressure_bucket_ok(event.get("used_bucket")):
             # 0 = "unrecognized / absent bucket", deliberately OUTSIDE the
             # {40,60,80,90,95} percent enum so a consumer can always tell a
-            # real rung from a coerced one.
+            # real rung from a coerced one. Already TYPE-safe: the helper
+            # isinstance-checks before any membership test (see below).
             event["used_bucket"] = 0
-        if event.get("event_source") not in _CONTEXT_PRESSURE_EVENT_SOURCES:
+        # PLAN-179 rail finding B (round-1 REJECT) — isinstance-guard FIRST.
+        # `x in frozenset` raises TypeError when x is UNHASHABLE (a list or a
+        # dict from a direct/future emit_generic caller), and that exception
+        # escapes HERE — before _write_event's fail-open wrapper can absorb it
+        # — which breaks emit_generic's documented never-raises contract. Same
+        # H4 class the PLAN-163 fix-pass closed in `directory_added_recorded`,
+        # `notification_lifecycle` and `night_mode_toggled`; this branch is
+        # written in that same shape. A non-str value is off-enum by
+        # definition → the closed default "other" (S172: never echoed).
+        #
+        # The two SIBLING coercions in this branch were audited for the same
+        # hazard and are already safe: `_context_pressure_bucket_ok` rejects
+        # non-int (and bool) BEFORE `value in _CONTEXT_PRESSURE_USED_BUCKETS_PCT`,
+        # and `_compaction_plan_id_ok` isinstance-checks str before len()/
+        # startswith(). Only `event_source` tested membership on a raw value.
+        _cp_src = event.get("event_source")
+        if (not isinstance(_cp_src, str)
+                or _cp_src not in _CONTEXT_PRESSURE_EVENT_SOURCES):
             event["event_source"] = "other"
         if not _compaction_plan_id_ok(event.get("plan_id")):
             event["plan_id"] = "unknown"
@@ -8365,7 +8383,67 @@ _CONTEXT_PRESSURE_EVENT_SOURCES = frozenset({
 # PLAN-179 W0 US2 (amendment 8.1) — basename of the edge-trigger marker.
 # Lives under `.claude/state/`, which .gitignore declares NON-COMMIT as a
 # whole (runtime state, never framework source).
+#
+# PLAN-179 rail finding A (round-1 REJECT): this basename is now the
+# PROJECT-WIDE marker — the honest DEGRADED mode, used only when the caller
+# has no trusted session id. A call that carries one keys its own marker
+# `<basename>.<session-id>` (see _context_pressure_marker_name), because a
+# single project-wide file makes two concurrent sessions in the same repo
+# corrupt each other's hysteresis: one session sitting at rung 80 SUPPRESSES
+# the other's first 80 event, and sessions at different rungs re-arm each
+# other on every call. The resulting wire rows cannot be attributed back to a
+# session, so the true transitions are unrecoverable — which would defeat the
+# measurement PLAN-179 exists to make.
 _CONTEXT_PRESSURE_STATE_BASENAME = "context-pressure-last-bucket"
+
+# PLAN-179 rail finding A — the session id reaches the FILESYSTEM as a name
+# component, so it is sanitized here rather than trusted. Only these ASCII
+# characters pass through verbatim (str.isalnum() is deliberately NOT used: it
+# is True for unicode letters/digits, which have no business in a marker
+# name). Anything else — a separator, a dot, a control char, an over-long id
+# — falls back to a sha256 prefix of the RAW id: still one distinct marker per
+# distinct session (no collisions, so no cross-session suppression), just not
+# a human-readable one.
+_CONTEXT_PRESSURE_SID_SAFE_CHARS = frozenset(
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_"
+)
+_CONTEXT_PRESSURE_SID_MAX_LEN = 64
+
+# PLAN-179 rail finding A — reclaim for the per-session markers (see
+# _gc_context_pressure_markers). Hygiene values, not decision-bearing: a
+# marker untouched for 7 days belongs to a session that is long gone, and the
+# sweep unlinks at most 32 files per run so a large backlog drains over
+# several runs instead of stalling one hook invocation.
+_CONTEXT_PRESSURE_MARKER_TTL_S = 7 * 24 * 3600
+_CONTEXT_PRESSURE_MARKER_GC_MAX = 32
+
+
+def _context_pressure_marker_name(session_id: Any) -> str:
+    """Marker basename for ``session_id`` (PLAN-179 rail finding A).
+
+    Returns the bare project-wide basename when ``session_id`` is absent /
+    blank / not a string — the documented degraded mode, in which two
+    concurrent sessions in one repo can interfere with each other's
+    hysteresis. Otherwise returns ``<basename>.<sanitized-id>``.
+
+    Never raises: this runs inside a fail-open bookkeeping helper.
+    """
+    if not isinstance(session_id, str):
+        return _CONTEXT_PRESSURE_STATE_BASENAME
+    raw = session_id.strip()
+    if not raw:
+        return _CONTEXT_PRESSURE_STATE_BASENAME
+    if (len(raw) <= _CONTEXT_PRESSURE_SID_MAX_LEN
+            and all(ch in _CONTEXT_PRESSURE_SID_SAFE_CHARS for ch in raw)):
+        suffix = raw
+    else:
+        # Local import: this module keeps hashlib out of its top-level import
+        # surface and imports it at the point of use (see _short_hash et al).
+        import hashlib
+        suffix = hashlib.sha256(
+            raw.encode("utf-8", errors="replace")
+        ).hexdigest()[:32]
+    return _CONTEXT_PRESSURE_STATE_BASENAME + "." + suffix
 
 
 def _context_pressure_bucket_ok(value: Any) -> bool:
@@ -8383,7 +8461,56 @@ def _context_pressure_bucket_ok(value: Any) -> bool:
     return value in _CONTEXT_PRESSURE_USED_BUCKETS_PCT
 
 
-def should_emit_context_pressure(used_bucket: Any, state_dir: Any) -> bool:
+def _gc_context_pressure_markers(
+    state_dir: Any,
+    ttl_seconds: int = _CONTEXT_PRESSURE_MARKER_TTL_S,
+    max_files: int = _CONTEXT_PRESSURE_MARKER_GC_MAX,
+) -> int:
+    """Unlink aged-out per-session markers. Bounded, fail-open (finding A).
+
+    Per-session keying trades one shared file for one file per session, so
+    it must come with its own reclaim or it re-opens the unbounded-growth
+    class the rail rejected in the session STORES (finding C). Markers are
+    ~4 bytes and are only created on a rung TRANSITION with the progress
+    floor armed, so the rate is low — this sweep exists so "low" never
+    becomes "forever".
+
+    Only names carrying the marker prefix AND a suffix are considered; the
+    project-wide marker itself is never collected (it has no suffix), and an
+    unrelated file in ``.claude/state/`` is left alone. Returns the number
+    of files unlinked; every OSError is swallowed (housekeeping).
+    """
+    removed = 0
+    prefix = _CONTEXT_PRESSURE_STATE_BASENAME + "."
+    try:
+        cutoff = time.time() - float(ttl_seconds)
+        directory = Path(str(state_dir))
+        for entry in sorted(directory.iterdir()):
+            if removed >= int(max_files):
+                break
+            name = entry.name
+            # Both the live marker `<prefix><sid>` and a crash-orphaned
+            # atomic-write temp `.<prefix><sid>.<pid>.tmp`.
+            if name.startswith("."):
+                name = name[1:]
+            if not name.startswith(prefix) or len(name) <= len(prefix):
+                continue
+            try:
+                if entry.stat().st_mtime >= cutoff:
+                    continue
+                entry.unlink()
+                removed += 1
+            except OSError:
+                # Per-entry fail-open: a racing unlink must not abort the sweep.
+                continue
+    except (OSError, TypeError, ValueError):
+        return removed
+    return removed
+
+
+def should_emit_context_pressure(
+    used_bucket: Any, state_dir: Any, session_id: Any = None
+) -> bool:
     """Return True only on a bucket TRANSITION (PLAN-179 W0 US2 / 8.1).
 
     ``state_dir`` is the directory holding the marker — callers pass
@@ -8393,6 +8520,17 @@ def should_emit_context_pressure(used_bucket: Any, state_dir: Any) -> bool:
     hysteresis, not sampling: without it the rail emits one row per prompt
     while the session sits in a single rung, which is exactly the flood the
     HMAC chain must not carry.
+
+    ``session_id`` (PLAN-179 rail finding A, round-1 REJECT) KEYS that
+    marker. It must be the TRUSTED id — the one the harness put in the hook
+    input (``scratchpad_lib.session_id_from_event``), never
+    ``CLAUDE_SESSION_ID`` from the environment, which any agent with a
+    subshell can set (consensus M2). Passing None is legal and means the
+    DEGRADED project-wide marker: hysteresis then behaves as it did before
+    this fix, i.e. two concurrent sessions in the same repo suppress and
+    re-arm each other and the wire rows cannot be attributed. Callers that
+    have a trusted id must pass it; callers that do not should say so on the
+    wire by omitting ``session_id`` from the event rather than inventing one.
 
     FAIL-OPEN on infrastructure (house rule): any state I/O error — absent
     directory, unwritable path, corrupt or truncated marker — means
@@ -8407,7 +8545,7 @@ def should_emit_context_pressure(used_bucket: Any, state_dir: Any) -> bool:
         # branch coerces the field itself, so there is nothing to debounce.
         return True
     try:
-        marker = Path(str(state_dir)) / _CONTEXT_PRESSURE_STATE_BASENAME
+        marker = Path(str(state_dir)) / _context_pressure_marker_name(session_id)
     except (TypeError, ValueError):  # pragma: no cover - defensive
         return True
     current = str(int(used_bucket))
@@ -8423,9 +8561,11 @@ def should_emit_context_pressure(used_bucket: Any, state_dir: Any) -> bool:
     # no new import.
     try:
         marker.parent.mkdir(parents=True, exist_ok=True)
+        # PLAN-179 rail finding A: the tmp name is derived from the SAME
+        # per-session marker name. Reusing the bare basename here would give
+        # two sessions re-arming at the same moment one shared tmp path.
         tmp = marker.parent / (
-            "." + _CONTEXT_PRESSURE_STATE_BASENAME
-            + "." + str(os.getpid()) + ".tmp"
+            "." + marker.name + "." + str(os.getpid()) + ".tmp"
         )
         with open(str(tmp), "w", encoding="utf-8") as fh:
             fh.write(current + "\n")
@@ -8436,6 +8576,11 @@ def should_emit_context_pressure(used_bucket: Any, state_dir: Any) -> bool:
             "should_emit_context_pressure: marker re-arm failed — "
             "fail-open (the same bucket may emit twice)"
         )
+    # PLAN-179 rail finding A: reclaim runs ONLY on the re-arm path, i.e. on a
+    # rung TRANSITION, which is rare by construction (that is the whole point
+    # of the hysteresis above). It is bounded and fail-open by its own
+    # contract, and its result cannot change what this function returns.
+    _gc_context_pressure_markers(marker.parent)
     return True
 
 

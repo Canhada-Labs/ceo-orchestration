@@ -62,7 +62,15 @@ plan-isolation invariant stays intact).
   the store trusts verbatim. The snapshot is now passed as a ``str`` so the
   store's own redactor runs. Same rule for the session-scoped write.
 - Kill-switch: ``CEO_COMPACTION_CONTINUITY=0`` (shared with the PostCompact
-  reinjection half).
+  reinjection half). It also disables the session-store GC below — the switch
+  turns the whole feature off, housekeeping included.
+- PLAN-179 rail finding C: this hook is the PRODUCTION CALLER of
+  ``scratchpad_lib.gc_orphan_session_stores`` (see ``_gc_session_stores``).
+  The session-scope fallback creates one sqlite store per unresolved-plan
+  session and row-TTL expiry cannot unlink a FILE, so without a caller the
+  fallback accumulated files without bound. The sweep runs last, is bounded by
+  the library's own per-run cap, respects the remaining time budget and is
+  fail-open: no snapshot outcome depends on it.
 - PLAN-179 W0 US2b progress guard: OBSERVE + NOTIFY only (see
   ``_progress_guard``); it emits ``context_pressure_observed`` and a stderr
   breadcrumb, and is DISABLED unless ``CEO_CONTEXT_PROGRESS_FLOOR_TOKENS`` is
@@ -500,6 +508,61 @@ def _write_snapshot(
         return "error"
 
 
+def _gc_session_stores(deadline: float) -> None:
+    """Reclaim aged-out session-store FILES. Never affects the snapshot.
+
+    PLAN-179 rail finding C (round-1 REJECT): ``gc_orphan_session_stores`` had
+    no production caller anywhere in the tree, so the W1 US3 session-scope
+    fallback accumulated one ``session-<uuid>.sqlite`` (+ ``.lock`` / WAL /
+    SHM) per unresolved-plan session with nothing to reclaim it — row TTL
+    expiry cannot unlink a file. This is that caller.
+
+    Three properties, in the order they matter:
+
+    1. **Fail-OPEN, always.** Import failure, a missing symbol on a
+       pre-PLAN-179 adopter, any exception out of the sweep: breadcrumb and
+       return. The snapshot above it has already been written and its outcome
+       is already on the wire — housekeeping may not retro-actively change it.
+    2. **Cheap and bounded.** PreCompact fires at most once per compaction, so
+       no extra throttle is invented here (a timestamp file would be a second
+       piece of state to get wrong). The work is one directory listing plus at
+       most ``MAX_GC_FILES_PER_RUN`` unlinks — the cap is the LIBRARY's, not
+       a number recalled here
+       ([[feedback-closed-sets-must-be-derived-not-recalled]]). The remaining
+       budget is honoured: a run that already blew ``TIME_BUDGET_S`` skips the
+       sweep rather than adding to the overrun.
+    3. **TTL matched to what this hook WRITES.** ``ttl_seconds`` is passed
+       explicitly as :data:`SESSION_SNAPSHOT_TTL_S` (7 days) because the
+       library default is 72h, and a 72h mtime cutoff would unlink a store
+       whose rows this hook wrote with a 7-day TTL — deleting a snapshot that
+       is still live. The GC threshold must never be shorter than the write
+       TTL it collects behind."""
+    if time.monotonic() > deadline:
+        _breadcrumb("time budget spent — session-store GC skipped this run")
+        return
+    try:
+        from _lib import scratchpad_lib  # noqa: E402
+    except Exception as exc:
+        _breadcrumb("scratchpad_lib import failed at GC (%s)" % str(exc)[:60])
+        return
+    gc = getattr(scratchpad_lib, "gc_orphan_session_stores", None)
+    if gc is None:
+        _breadcrumb(
+            "scratchpad_lib.gc_orphan_session_stores missing — this build "
+            "predates PLAN-179 W1 US3; session-store GC skipped"
+        )
+        return
+    try:
+        removed = gc(ttl_seconds=SESSION_SNAPSHOT_TTL_S)
+    except Exception as exc:
+        # The helper documents itself as fail-open, so an exception here is a
+        # genuine surprise — still swallowed: this runs AFTER the snapshot.
+        _breadcrumb("session-store GC failed (%s) — ignored" % str(exc)[:80])
+        return
+    if removed:
+        _breadcrumb("session-store GC unlinked %d aged-out file(s)" % removed)
+
+
 def _progress_floor_tokens() -> Optional[int]:
     """The progress-guard floor in tokens, or None when the guard is OFF.
 
@@ -621,6 +684,7 @@ def _progress_guard(
     used_pct: Optional[int],
     plan_id: str,
     cwd: str,
+    session_id: Optional[str] = None,
 ) -> None:
     """OBSERVE + NOTIFY the context-pressure crossing (PLAN-179 W0 US2b).
 
@@ -634,6 +698,25 @@ def _progress_guard(
 
     Emits ``context_pressure_observed`` with ``event_source="precompact"``, the
     strict ``plan_id`` and the crossed integer PERCENT rung in ``used_bucket``.
+
+    ``session_id`` (PLAN-179 rail finding A, round-1 REJECT) is the TRUSTED
+    hook-input id — the same value ``_session_scope_id`` derives through
+    ``scratchpad_lib.session_id_from_event``, which REFUSES the env-sourced
+    ``CLAUDE_SESSION_ID`` (agent-spoofable, consensus M2). It does two things:
+    it KEYS the hysteresis marker, so two sessions compacting in the same repo
+    no longer suppress and re-arm each other's rung transitions; and it rides
+    the event (an allowlisted field), so the wire rows can be attributed back
+    to a session and the true transitions recovered.
+
+    When there is no trusted id the guard DEGRADES rather than inventing one:
+    the marker falls back to the project-wide file (cross-session interference
+    possible, exactly the pre-fix behaviour) and ``session_id`` is OMITTED from
+    the event. Omitting is the honest option — an event whose session_id came
+    from the environment would be an attributable-looking row that an agent
+    chose, which is worse than a row that admits it is unattributed. Skipping
+    the emit outright was rejected: this pressure rail is the measurement W0
+    exists to make, and dropping the observation to protect a bookkeeping
+    field would lose the signal to save the label.
 
     PLAN-179 W0/W1 cross-file pass — three integration defects closed here,
     all of the same class (an instrument that runs but cannot fire):
@@ -703,18 +786,48 @@ def _progress_guard(
         )
         return
     state_dir = os.path.join(cwd, *_PRESSURE_STATE_SUBPATH)
+    trusted_sid = session_id.strip() if isinstance(session_id, str) else ""
     try:
-        if not should_emit(bucket, state_dir):
+        # PLAN-179 rail finding A — pass the trusted session id so the marker
+        # is keyed per session. TypeError is handled SEPARATELY from the
+        # general failure below: it is the signature of an adopter whose
+        # `_lib/audit_emit.py` predates this fix (2-parameter helper). That is
+        # a cross-version DEGRADATION (project-wide marker), not a reason to
+        # suppress the observation, so we say so and retry the old shape.
+        try:
+            _emit_allowed = should_emit(bucket, state_dir, trusted_sid or None)
+        except TypeError:
+            _breadcrumb(
+                "audit_emit.should_emit_context_pressure does not accept a "
+                "session id — this build predates PLAN-179 finding A; falling "
+                "back to the PROJECT-WIDE marker (concurrent sessions in this "
+                "repo can suppress each other's transitions)"
+            )
+            _emit_allowed = should_emit(bucket, state_dir)
+        if not _emit_allowed:
             return
     except Exception as exc:
         _breadcrumb("edge trigger failed (%s) — emit suppressed" % str(exc)[:60])
         return
+    # PLAN-179 rail finding A — session_id is an ALLOWLISTED wire field, but
+    # only a trusted one may travel. Absent ⇒ the key is omitted entirely: the
+    # row is honestly unattributed instead of carrying an env-sourced id.
+    fields: Dict[str, Any] = {
+        "event_source": _PRESSURE_EVENT_SOURCE,
+        "used_bucket": bucket,
+        "plan_id": plan_id,
+    }
+    if trusted_sid:
+        fields["session_id"] = trusted_sid
+    else:
+        _breadcrumb(
+            "no hook-input session id — pressure row emitted UNATTRIBUTED and "
+            "the hysteresis marker is project-wide for this run"
+        )
     try:
         audit_emit.emit_generic(
             action="context_pressure_observed",
-            event_source=_PRESSURE_EVENT_SOURCE,
-            used_bucket=bucket,
-            plan_id=plan_id,
+            **fields
         )
     except Exception as exc:  # pragma: no cover — belt-and-suspenders
         _breadcrumb("pressure emit failed (%s)" % str(exc)[:80])
@@ -769,13 +882,28 @@ def gate(event: Dict[str, Any], cwd: Optional[str] = None) -> Dict[str, Any]:
             # (for should_emit_context_pressure's `<project>/.claude/state`
             # marker), the resolved plan_id (an allowlisted wire field) and the
             # context PERCENT (the wire's actual unit).
+            # PLAN-179 rail finding A: also the TRUSTED session id (hook input
+            # only — `_session_scope_id` refuses the env-sourced one), which
+            # keys the hysteresis marker and attributes the wire row.
             _progress_guard(
                 used_tokens,
                 floor_tokens,
                 _context_used_pct(event),
                 plan_id,
                 cwd,
+                session_id,
             )
+    # PLAN-179 rail finding C (round-1 REJECT) — the PRODUCTION CALLER for the
+    # session-store file GC. `set_session_value`'s TTL expires ROWS; nothing
+    # removed the `session-<uuid>.sqlite` / `.lock` / `-wal` / `-shm` files, so
+    # the W1 US3 fallback still grew one store per unresolved-plan session
+    # forever while ADR-153 claimed file-level GC shipped with it.
+    #
+    # This hook is the natural site because it is what CREATES those stores.
+    # Placed LAST, after the snapshot, the audit emit and the progress guard,
+    # and fail-open inside `_gc_session_stores`: no snapshot outcome may depend
+    # on housekeeping succeeding.
+    _gc_session_stores(deadline)
     return {}
 
 

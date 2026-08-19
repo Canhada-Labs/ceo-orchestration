@@ -90,6 +90,12 @@ status — which are the **short** ones. The mechanism is anti-correlated with
 its own use case. ADR-153 filed this as "residual risk #3, fail-open by
 design"; the measurement shows it is the *default* path, not an edge.
 
+> **PLAN-179 changed the failure mode here, not the measurement.** The
+> measurement above is what a pre-PLAN-179 build did and is kept verbatim as
+> history. A session-scoped fallback now ships, so an unresolved plan id no
+> longer costs you the snapshot — see §7 for exactly what changed and what
+> remains unproven.
+
 **Also does not survive:** memory files. `.claude/hooks/SessionEnd.py` only
 *checks* that the memory directory is writable — it writes nothing. Durable
 memory is entirely the model's discretion at a closeout that a
@@ -148,6 +154,15 @@ Trimming what Gate-1 loads is the highest-leverage change available to you.
   snapshot and the reinjected pointer block, including the unconditional
   Gate-1 reminder. Given §2, what you are giving up today is mostly that one
   reminder — but it is the only automatic re-anchor you have.
+- **`CEO_CONSTRAINT_PINNING=0`** — disarms constraint pinning (§7) on both its
+  channels, and nothing else. It is deliberately **separate** from
+  `CEO_COMPACTION_CONTINUITY=0`: that switch is documented as turning off the
+  continuity *snapshot*, and letting it also silently drop the governance
+  floor would make one operational decision quietly into another.
+- **`CEO_CONTEXT_PROGRESS_FLOOR_TOKENS`** — not an off switch but an arming
+  one, and **unset by default**: the progress observer (§7) is a no-op until
+  you give it a floor. There is no built-in default, because a floor that was
+  never measured against your install is a magic number.
 - **`CEO_SOTA_DISABLE=1`** — the framework-wide master switch that forces
   advisory behaviour and disables the SOTA-side machinery (advisory dampening,
   OTel export, the learning loop, and the blocking guards' enforcement).
@@ -156,8 +171,8 @@ Trimming what Gate-1 loads is the highest-leverage change available to you.
   it, because both are already advisory and fail-open. Do not set it expecting
   compaction hooks to stop; set `CEO_COMPACTION_CONTINUITY=0` for that.
 
-Neither switch can block a compaction, and neither is a recovery route for a
-lost session — they only reduce what the framework does around the event.
+None of these switches can block a compaction, and none is a recovery route
+for a lost session — they only reduce what the framework does around the event.
 
 ## 5. What to do operationally, today
 
@@ -178,21 +193,30 @@ Given §2, do not rely on the machinery. Rely on habits:
 6. **Check the two audit actions** (`compaction_continuity_snapshot`,
    `compaction_context_reinjected`) against your own install. Seeing
    `snapshot_found=false` with `pointer_count=1` means you are on the measured
-   default path above.
+   default path above. Post-PLAN-179 (§7) two more fields are worth reading:
+   `snapshot_outcome=written_session_scope` says the fallback caught an
+   unresolved plan id, and `constraint_count` counts pinned constraints —
+   read an **absent** `constraint_count` as a producer that predates pinning,
+   never as "zero constraints pinned".
 
 ## 6. Known limitations (the honest list)
 
 - **The design's own fires-proof came back negative.** ADR-153 shipped with the
   live proof marked PENDING; the proof now exists and shows the events firing
   while delivering nothing (§2).
-- **Plan-id resolution is anti-correlated with long sessions**, and the
-  snapshot write depends on it.
+- **Plan-id resolution is still anti-correlated with long sessions.** The
+  snapshot write no longer depends on it (§7's session-scoped fallback), but
+  plan-*scoped* continuity does: an unresolved id gets you a snapshot, not a
+  plan-scoped one.
 - **Nothing writes memory automatically.** `SessionEnd.py` verifies
   writability only.
-- **A pointer is not a preserved constraint.** The reinjected block is a
-  reminder, not the rules.
-- **No guard against compaction thrashing ships today.** If a compaction fails
-  to free useful headroom, nothing halts the next one.
+- **A pointer is not a preserved constraint.** The *pointer* block is a
+  reminder, not the rules. Constraint pinning (§7) now re-states a small set
+  of rules themselves, but only that set — everything outside it is still a
+  pointer at best.
+- **Nothing halts compaction thrashing.** A progress *observer* ships (§7) and
+  will tell you a compaction failed to free headroom; it cannot stop the next
+  one. No hook on this path has a deny channel.
 - **The `η` table is a chars/4 estimate** with an interpolated floor.
 - **Governance-decay percentages come from external published measurement**,
   not from this framework.
@@ -200,25 +224,50 @@ Given §2, do not rely on the machinery. Rely on habits:
   disables hooks disarms these too, and any file written outside the harness
   fires no event at all (ADR-153 §H2).
 
-## 7. Staged, not shipped — do not plan around it
+## 7. What PLAN-179 W0/W1 changed — and what it deliberately did not
 
-A cure for §2 exists as **staged work awaiting an Owner-signed ceremony**
-(`.claude/plans/PLAN-179/staged-w01/`) — **not installed, not registered in
-`.claude/settings.json`, not running.** None of the following is in your tree
-today:
+The W0/W1 cure for §2 **landed** through an Owner-signed ceremony. It is
+installed, registered in `.claude/settings.json`, and running. Three things
+changed:
 
-- a **session-scoped fallback** so a snapshot would be written even when no
-  plan id resolves, adding a `written_session_scope` outcome and reserving
-  `scratchpad_unavailable` for real I/O failure;
+- a **session-scoped fallback** — the snapshot is written even when no plan id
+  resolves, reported as the new `snapshot_outcome=written_session_scope` and
+  leaving `scratchpad_unavailable` to mean a real I/O failure. This is the
+  direct answer to the §2 measurement, where an unresolved plan id cost the
+  snapshot entirely;
 - **constraint pinning** — a small, closed set of invariants held as a *code
-  constant* (never read from a document at runtime) and re-stated after a
-  compaction, with `SessionStart(source="compact")` as the primary channel and
-  the PostCompact block as reinforcement, under its own proposed
-  `CEO_CONSTRAINT_PINNING=0` switch;
-- a **progress guard** that would halt repeated compactions that fail to free
-  a named token floor.
+  constant* (`.claude/hooks/_lib/pinned_constraints.py`, never read from a
+  document at runtime, so a summarizer cannot evict it) and re-stated after a
+  compaction. The **primary** channel is `check_compact_pinning.py` on
+  `SessionStart(source="compact")`, newly registered; the PostCompact block
+  re-emits the same set as **reinforcement**. Count on the wire:
+  `constraint_count`. Switch: `CEO_CONSTRAINT_PINNING=0` (§4);
+- a **progress observer** on the PreCompact path, arming on
+  `CEO_CONTEXT_PROGRESS_FLOOR_TOKENS` and emitting the new edge-triggered
+  `context_pressure_observed` audit action.
 
-Until an Owner ceremony lands those files, treat sections 2 through 6 as the
-complete description of behaviour. Track the work in
-`.claude/plans/PLAN-179-context-continuity-durable-state.md` (waves W0–W4) and
-the amendment it will make to `.claude/adr/ADR-153-compaction-continuity.md`.
+### Read this before you rely on any of it
+
+**The progress observer observes and notifies. It cannot halt a compaction.**
+Two independent reasons, and neither is an implementation gap to be fixed
+later on this surface: a `PreCompact` hook **has no deny channel** — there is
+no value it can return that stops the event — and by the time it fires **the
+harness has already decided to compact**. What you get is a stderr breadcrumb
+for the operator plus one closed-enum audit event. If you set a floor
+expecting back-pressure, you will not get it. An actual valve would have to
+live on a surface that owns a decision, and no such surface ships today.
+
+**The PostCompact channel verdict is still unproven.** Whether
+`PostCompact`'s `additionalContext` is genuinely *consumed* by the model
+remains open — the W0-1 probe has not returned a verdict. The S309 fires-proof
+established only that the hook fires and delivers nothing useful, which is not
+the same question: proving a hook ran does not prove its output was read. This
+is exactly why pinning treats `SessionStart` as primary (that channel has a
+positive local precedent) and PostCompact as reinforcement. Do not read the
+pinning block's existence as evidence that the PostCompact channel works.
+
+Sections 2 through 6 still describe the surrounding behaviour; §2's
+measurement is retained as pre-PLAN-179 history, not as current output. Track
+the remaining waves in
+`.claude/plans/PLAN-179-context-continuity-durable-state.md` (W2–W4) and the
+amendment to `.claude/adr/ADR-153-compaction-continuity.md`.

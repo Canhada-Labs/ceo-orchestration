@@ -42,9 +42,12 @@ CHANNEL WITH EVIDENCE and stops being hostage to the W0 verdict;
 The deferred question was whether pinning shares ``CEO_COMPACTION_CONTINUITY=0``
 with the snapshot machinery. DECISION: it does NOT. That switch is documented
 as "turn off the continuity SNAPSHOT"; letting it also silently disarm the
-governance floor would make an operator's throughput decision into a
-governance decision. Pinning gets its own ``CEO_CONSTRAINT_PINNING=0``.
-Owner ratification of this decision is requested at land time.
+governance floor would widen one narrowly-scoped operational decision into a
+governance decision the operator never made. Pinning gets its own
+``CEO_CONSTRAINT_PINNING=0``. Owner ratification is requested at land time.
+(PLAN-179 — rail finding C: the previous wording called the snapshot switch an
+operator's "throughput decision", which implies disabling it buys throughput.
+This repo makes no speed claim anywhere; the wording is now neutral.)
 
 ## additionalContext shape
 
