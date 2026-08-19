@@ -35,6 +35,14 @@ The hook then allows the edit and emits a `veto_triggered` audit event
 with `reason_code=kernel_override_used` so the override is traceable.
 Absent BOTH env vars, the edit is blocked regardless of any sentinel.
 
+PLAN-169 W3-K (ledger item E.2) made that sentence TRUE. It was not:
+`main()` decided whether to audit the grant by reading a `decision` key
+out of its own egress JSON, and `_emit_allow()` never writes one (a
+top-level "allow" is invalid on the PreToolUse wire — see its comment).
+`decision == "allow"` was therefore False on every invocation and the
+grant audit was dead code from birth. Both the grant emits now key off
+`_is_override_grant()`, the single source of truth for the grant fact.
+
 This is stricter than sentinel gating on purpose: a spawned sub-agent
 cannot set env vars in the parent Claude process, so the ACK token
 cannot be forged by an agent spawn.
@@ -57,6 +65,7 @@ the tool is Edit|Write|MultiEdit).
 from __future__ import annotations
 
 import fnmatch
+import hashlib
 import json
 import os
 import re
@@ -401,6 +410,84 @@ def _override_granted(env: dict) -> bool:
     return True
 
 
+# --- PLAN-169 W3-K (ledger E.2) — honest grant-path audit ----------------
+#
+# The pre-W3-K callsite passed the free-text override REASON as ``plan_id``
+# and a repo-relative PATH (silently truncated at 64 chars) as
+# ``ceremony_sha`` — a field SPEC/v1/audit-log.schema.md:415 names a
+# ceremony sha. Neither value was ever rejected: ``kernel_extension_landed``
+# rides ``_EMIT_GENERIC_PASSTHROUGH`` (audit_emit.py:1751), so the kwargs
+# survive the deny-by-default scrub verbatim. The event LANDED — with a
+# path in a digest field and a reason slug in a plan field.
+
+_EDIT_TOOLS = frozenset({"Edit", "Write", "MultiEdit"})
+_PLAN_ID_RE = re.compile(r"^PLAN-[0-9]{3,}$")
+_PLAN_ID_UNKNOWN = "unknown"
+
+
+def _resolve_plan_id_or_unknown() -> str:
+    """PLAN-NNN scoped to this session, or the literal ``unknown``.
+
+    Uses the framework's ONE plan-id derivation —
+    ``_lib.scratchpad_lib.resolve_plan_id`` (most recent
+    ``plan_transition`` for this session; consensus M2 forbids deriving
+    it from an env var, which an agent can forge). That function RAISES
+    when the session has no transition, which is the common case; we
+    translate the raise into ``unknown`` rather than invent a plan id.
+    """
+    try:
+        from _lib.scratchpad_lib import resolve_plan_id  # noqa: PLC0415
+        pid = (resolve_plan_id() or "").strip()
+    except Exception:
+        return _PLAN_ID_UNKNOWN
+    return pid if _PLAN_ID_RE.match(pid) else _PLAN_ID_UNKNOWN
+
+
+def _file_sha256(path_str: str) -> str:
+    """sha256 hexdigest of the target's CURRENT bytes, or ``""``.
+
+    This fires PreToolUse, so "current" is the pre-edit content of the
+    file the override is about to unlock — the only digest this callsite
+    honestly has. A SENTINEL digest is NOT obtainable here: the kernel
+    rail has no sentinel escape by construction (module docstring
+    §Escape hatch), so there is no approved.md to hash. When the target
+    does not exist yet (Write of a new file) or is unreadable we return
+    the EMPTY string — an empty digest field, never a filesystem path.
+    """
+    try:
+        with open(path_str, "rb") as fh:
+            return hashlib.sha256(fh.read()).hexdigest()
+    except Exception:
+        return ""
+
+
+def _is_override_grant(
+    *,
+    tool_name: str,
+    file_path: str,
+    repo_root: Path,
+    env: dict,
+) -> bool:
+    """True when THIS invocation is a kernel edit unlocked by the override.
+
+    Single source of truth for the grant fact, consumed by BOTH
+    ``decide()`` (which branch to take) and ``main()`` (whether to
+    audit). ``main()`` must not re-derive it from the egress JSON — see
+    the module docstring for why that test was structurally dead.
+    """
+    if tool_name not in _EDIT_TOOLS:
+        return False
+    if not file_path:
+        return False
+    if not _override_granted(env):
+        return False
+    try:
+        return _is_kernel_path(file_path, repo_root)
+    except Exception:
+        # Classification failed → do not claim a grant happened.
+        return False
+
+
 def decide(
     *,
     tool_name: str,
@@ -410,7 +497,7 @@ def decide(
 ) -> str:
     """Pure decision function. Returns JSON payload string."""
     # Out of scope: only act on edit-class tools.
-    if tool_name not in {"Edit", "Write", "MultiEdit"}:
+    if tool_name not in _EDIT_TOOLS:
         return _emit_allow()
 
     src_env = env if env is not None else os.environ
@@ -429,31 +516,39 @@ def decide(
     if not _is_kernel_path(file_path, repo_root):
         return _emit_allow()
 
-    if _override_granted(src_env):
+    if _is_override_grant(
+        tool_name=tool_name,
+        file_path=file_path,
+        repo_root=repo_root,
+        env=src_env,
+    ):
         reason = src_env.get("CEO_KERNEL_OVERRIDE", "").strip()
         # PLAN-113 WIRE-AUDIT: emit kernel_extension_landed on override grant.
         # This is the canonical callsite — every kernel-guarded edit that
         # proceeds via CEO_KERNEL_OVERRIDE fires this event once per tool call.
+        # PLAN-169 W3-K: the field values are now what the SPEC names them.
+        # The override REASON is NOT laundered through plan_id — it travels
+        # on the veto_triggered event main() emits (reason_preview).
         try:
             from _lib import audit_emit as _audit_emit_ke
             if hasattr(_audit_emit_ke, "emit_kernel_extension_landed"):
-                _rel_path = ""
-                try:
-                    _rel_path = str(
-                        Path(file_path).resolve()
-                        .relative_to(repo_root.resolve())
-                    ).replace(os.sep, "/")
-                except Exception:
-                    _rel_path = file_path[:128]
                 _audit_emit_ke.emit_kernel_extension_landed(
-                    plan_id=reason[:32],
+                    plan_id=_resolve_plan_id_or_unknown(),
                     wave="kernel-override",
                     entries_added=0,
                     cardinality_after=0,
-                    ceremony_sha=_rel_path[:64],
+                    ceremony_sha=_file_sha256(file_path),
                 )
-        except Exception:  # pragma: no cover — fail-open
-            pass
+        except Exception as _emit_exc:
+            # Fail-OPEN (a broken audit rail must never block the session)
+            # but NOT silent: a bare `except: pass` here is exactly why the
+            # grant path went years unexamined (PLAN-169 E.2).
+            print(
+                "[check_arbitration_kernel] audit emit FAILED "
+                "(fail-open): kernel_extension_landed: "
+                f"{type(_emit_exc).__name__}: {_emit_exc}",
+                file=sys.stderr,
+            )
         return _emit_allow(
             system_message=(
                 f"ARBITRATION-KERNEL: override granted — reason='{reason}'. "
@@ -483,12 +578,18 @@ def decide(
     )
 
 
-def _audit_block(rel: str, override_used: bool) -> None:
+def _audit_block(rel: str, override_used: bool, reason: str = "") -> None:
     """Best-effort emit of veto_triggered event. Never raises.
 
     Schema v2.14 (PLAN-044 audit-v2 P1 #6): resolves caller identity
     from CLAUDE_AGENT_NAME / CLAUDE_PARENT_AGENT / "ceo" and passes
     session_id from CLAUDE_SESSION_ID for forensic traceability.
+
+    PLAN-169 W3-K: ``reason`` is the CEO_KERNEL_OVERRIDE slug on the
+    grant path (empty elsewhere). It is appended to ``reason_preview``
+    so the override's stated justification stays forensically visible
+    now that it no longer squats in ``kernel_extension_landed.plan_id``.
+    Failure stays fail-open but is no longer SILENT.
     """
     try:
         from _lib import audit_emit
@@ -509,7 +610,10 @@ def _audit_block(rel: str, override_used: bool) -> None:
                 else "kernel_edit_blocked"
             ),
             reason_preview=(
-                f"kernel override used on {rel}"
+                (
+                    f"kernel override used on {rel}"
+                    + (f" reason={reason[:120]}" if reason else "")
+                )
                 if override_used
                 else f"blocked kernel edit on {rel}"
             ),
@@ -518,7 +622,15 @@ def _audit_block(rel: str, override_used: bool) -> None:
             session_id=session_id,
             caller=caller,
         )
-    except Exception:
+    except Exception as _exc:
+        # Fail-OPEN on the audit rail, but leave a breadcrumb: a bare
+        # `except: return` here is indistinguishable from "the event was
+        # written" for anyone reading the log (PLAN-169 E.2).
+        print(
+            "[check_arbitration_kernel] audit emit FAILED (fail-open): "
+            f"veto_triggered: {type(_exc).__name__}: {_exc}",
+            file=sys.stderr,
+        )
         return
 
 
@@ -613,7 +725,7 @@ def main() -> int:
         # Fail-closed: if we cannot parse the stdin payload, we cannot
         # trust the routing. If the matcher fired, the tool was edit-class;
         # block to be safe.
-        if tool_name in {"Edit", "Write", "MultiEdit"}:
+        if tool_name in _EDIT_TOOLS:
             _emit_legacy_decision_json(
                 _emit_block(
                     reason=(
@@ -667,7 +779,7 @@ def main() -> int:
             f"[check_arbitration_kernel] FATAL: {type(e).__name__}: {e}",
             file=sys.stderr,
         )
-        if tool_name in {"Edit", "Write", "MultiEdit"}:
+        if tool_name in _EDIT_TOOLS:
             _emit_legacy_decision_json(
                 _emit_block(
                     reason=(
@@ -693,17 +805,35 @@ def main() -> int:
         except Exception:
             rel = file_path
         _audit_block(rel, override_used=False)
-    elif decision == "allow" and _override_granted(os.environ) and _is_kernel_path(
-        file_path, repo_root
+    elif _is_override_grant(
+        tool_name=tool_name,
+        file_path=file_path,
+        repo_root=repo_root,
+        env=os.environ,
     ):
         # Allow path WITH override — still audit.
+        #
+        # PLAN-169 W3-K: this used to read `decision == "allow"` from the
+        # hook's OWN egress JSON. `_emit_allow()` emits `{}` or
+        # `{"systemMessage": ...}` and NEVER a `decision` key (top-level
+        # "allow" is invalid on the PreToolUse wire), so the test was
+        # False on every invocation: the branch was unreachable from the
+        # day it was written (`git log -S` finds no regression), and the
+        # `veto_triggered reason_code=kernel_override_used` promised by
+        # this module's docstring AND by the systemMessage the operator
+        # reads was never written. The grant fact now comes from the same
+        # predicate `decide()` branches on, not from parsing egress.
         try:
             rel = str(
                 Path(file_path).resolve().relative_to(repo_root.resolve())
             ).replace(os.sep, "/")
         except Exception:
             rel = file_path
-        _audit_block(rel, override_used=True)
+        _audit_block(
+            rel,
+            override_used=True,
+            reason=(os.environ.get("CEO_KERNEL_OVERRIDE") or "").strip(),
+        )
 
     # `decide()` returns pre-built JSON strings for the legacy contract;
     # under the default/claude adapter the seam helper writes it directly
