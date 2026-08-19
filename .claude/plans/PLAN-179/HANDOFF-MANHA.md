@@ -179,6 +179,24 @@ arquivo cai na sua fatia exatamente uma vez. Controle: 600 stores, 12
 expirados espalhados inclusive na cauda → **12/12 recuperados**, 588 frescos
 preservados.
 
+### Round 6: **3 achados** — a sonda podia rejeitar um canal que funciona
+
+**[P1]** O `cmd_verify` da sonda nunca consultava os registros de injeção. Uma
+sonda **não-ligada** produzia um `neither` confiante — ou seja, teria
+**rejeitado um canal que funciona**. Ausência de canário só é evidência sobre o
+canal se o canário foi de fato injetado. Agora exige os dois registros, senão
+devolve `inconclusive` com código de saída próprio (dobrar isso no código de
+"neither" faria o operador ler rejeição onde não houve medição).
+
+**[P2]** O leitor do sidecar ignorava `CEO_STATUSLINE_SIDECAR`, que o
+**escritor** honra: adopter com override configurado teria silêncio em vez de
+telemetria.
+
+**[P2] GC, quinta versão.** O shard por relógio starva se as varreduras caem
+sempre no mesmo minuto — o caso da rotina diária. Agora avança **por
+varredura**, com contador persistido. Controle no pior caso descrito pelo rail:
+8 varreduras **todas no mesmo minuto** → 12/12 expirados recuperados.
+
 ### Um problema de MÉTODO que eu criei e corrigi
 
 Commitar os vereditos do rail no repo fez o revisor **lê-los e ecoá-los** como
