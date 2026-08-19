@@ -101,7 +101,13 @@ EXIT_OK = 0
 EXIT_NEITHER = 1
 EXIT_REFUSED = 2  # shared with argparse usage errors — both mean "did not run"
 EXIT_PARTIAL = 3
+# PLAN-179 rail round-6 [P1]: a DISTINCT code for "the probe could not answer",
+# never folded into EXIT_NEITHER. Reusing 1 would make an unwired probe
+# indistinguishable from a channel that genuinely dropped the canary — the
+# operator would read a rejection where there was no measurement.
+EXIT_INCONCLUSIVE = 4
 
+VERDICT_INCONCLUSIVE = "inconclusive"
 VERDICT_BOTH = "both"
 VERDICT_NEITHER = "neither"
 VERDICT_POST_ONLY = "postcompact-only"
@@ -450,6 +456,38 @@ def cmd_verify(observation_arg: str, state_arg: Optional[str],
         return EXIT_REFUSED
     text = observation.read_text(encoding="utf-8", errors="replace")
     found_post, found_ss = detect(text, run)
+
+    # PLAN-179 rail round-6 [P1] — a probe may not report a conclusion it
+    # cannot support. `_record_injection` exists precisely to separate "the
+    # hook never ran" from "the hook ran and its output was dropped", and
+    # until now `cmd_verify` never consulted those records: an UNWIRED probe
+    # produced a confident `neither`, i.e. it would have REJECTED a channel
+    # that works. The absence of a canary is only evidence about the channel
+    # if the canary was actually injected.
+    injected = set()
+    for rec in (run.get("records") or []):
+        if isinstance(rec, dict) and rec.get("kind") == "injection":
+            ch = rec.get("channel")
+            if isinstance(ch, str):
+                injected.add(ch)
+    missing = [c for c in (CHANNEL_POST, CHANNEL_SS) if c not in injected]
+    if missing:
+        append_record(run_path, {
+            "kind": "verdict", "channel": None, "verdict": VERDICT_INCONCLUSIVE,
+            "found_postcompact": found_post, "found_sessionstart_compact": found_ss,
+            "uninjected_channels": sorted(missing),
+            "observation_bytes": len(text.encode("utf-8")),
+        })
+        sys.stderr.write(
+            "INCONCLUSIVE: no injection record for %s — the hook(s) did not "
+            "run, so an absent canary says nothing about the CHANNEL. Re-arm "
+            "and make sure the probe hooks are registered before verifying.\n"
+            % ", ".join(sorted(missing))
+        )
+        print("verdict: %s" % VERDICT_INCONCLUSIVE)
+        print("recorded in: %s" % run_path)
+        return EXIT_INCONCLUSIVE
+
     verdict, code = verdict_for(found_post, found_ss)
     append_record(run_path, {
         "kind": "verdict", "channel": None, "verdict": verdict,

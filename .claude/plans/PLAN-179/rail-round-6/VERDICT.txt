@@ -1,0 +1,10 @@
+Full review comments:
+
+- [P1] Refuse verdicts unless both probe hooks fired — /Users/joaocanhada/.w179-rail6/repo/.claude/scripts/probes/probe_postcompact_channel.py:451-454
+  When either temporary hook registration is missing or a hook fails to execute, this code still maps the absent canary to `neither` or a partial result and persists it as a channel-delivery verdict. `_record_injection()` exists to distinguish “hook did not run” from “output was dropped”, but `cmd_verify()` never checks those injection records, so an unwired probe can falsely reject a working channel; require both expected records or report the result as inconclusive.
+
+- [P2] Honor the configured statusline sidecar path — /Users/joaocanhada/.w179-rail6/repo/.claude/hooks/check_precompact_continuity.py:669-674
+  When `CEO_STATUSLINE_SIDECAR` points the statusline writer at a custom file, the normal PreCompact payload has no inline context accounting and this fallback still reads `<audit-dir>/state/statusline-snapshot.json`. `statusline-ceo.py:_sidecar_path()` writes to the override instead, so this function returns `None` and silently skips pressure telemetry; it should resolve the same override and fallback path as the writer.
+
+- [P2] Advance GC shards independently of wall-clock residue — /Users/joaocanhada/.w179-rail6/repo/.claude/hooks/_lib/scratchpad_lib.py:562-563
+  When compactions repeatedly occur at the same minute modulo eight, such as a daily scheduled run, `_gc_shard_of_turn()` always chooses the same shard. Files assigned to the other seven shards are therefore never inspected or removed, so session-store files can still accumulate without bound; the pressure-marker GC in `audit_emit.py` has the same starvation issue. The shard needs to progress per sweep rather than depend solely on wall-clock residue.

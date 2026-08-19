@@ -483,6 +483,12 @@ def set_session_value(
 # trabalho caro (stat) por turno e ~n/K. Ler nomes com scandir e barato.
 _GC_SHARDS = 8
 
+# Contador de VARREDURA (rail round-6 [P2]): o shard avanca por SWEEP, nunca
+# pelo relogio — varreduras que caem sempre no mesmo minuto modulo K (uma
+# rotina diaria, por exemplo) escolheriam sempre a mesma fatia e starvariam as
+# outras K-1. Arquivo minusculo, no mesmo state dir dos alvos.
+_GC_SHARD_COUNTER_NAME = ".gc-shard-cursor"
+
 
 def _gc_shard_of_name(name):
     """Shard estavel derivado do NOME (nunca da ordem de leitura)."""
@@ -492,12 +498,55 @@ def _gc_shard_of_name(name):
         return 0
 
 
-def _gc_shard_of_turn():
-    """Fatia deste turno. Avanca a cada 60s, entao K turnos cobrem tudo."""
+def _gc_next_shard(state_dir):
+    """Fatia desta VARREDURA, avancando uma por sweep (round-robin estrito).
+
+    PLAN-179 rail round-6 [P2]: derivar a fatia do RELOGIO
+    (``(time // 60) % K``) parece rotativo mas starva — se as varreduras caem
+    sempre no mesmo minuto modulo K (uma rotina diaria, por exemplo), a mesma
+    fatia sai toda vez e as outras K-1 nunca sao inspecionadas. O que precisa
+    avancar e o SWEEP, entao o contador vive em disco: um inteiro num arquivo
+    de poucos bytes, no mesmo state dir, escrito com o mesmo idioma atomico e
+    O_NOFOLLOW do marker (nao seguir symlink vale aqui pelo mesmo motivo).
+
+    Falha de leitura ou de escrita NAO cai para uma fatia fixa — isso seria a
+    starvation de volta pela porta dos fundos. Cai para uma fatia ALEATORIA,
+    que degrada de "cobertura garantida em K sweeps" para "cobertura
+    probabilistica", e nunca para "cobertura nenhuma"."""
+    counter_path = Path(str(state_dir)) / _GC_SHARD_COUNTER_NAME
+    current = None
     try:
-        return int(time.time() // 60) % _GC_SHARDS
+        raw = counter_path.read_text(encoding="utf-8").strip()
+        current = int(raw)
     except Exception:
-        return 0
+        current = None
+    if current is None:
+        try:
+            current = int.from_bytes(os.urandom(2), "big")
+        except Exception:
+            current = 0
+    nxt = (current + 1) % (_GC_SHARDS * 1024)  # espaco folgado, sem overflow
+    try:
+        counter_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = counter_path.parent / (
+            "." + counter_path.name + "." + str(os.getpid()) + "."
+            + os.urandom(4).hex() + ".tmp"
+        )
+        flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, "O_NOFOLLOW", 0)
+        fd = os.open(str(tmp), flags, 0o600)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                fh.write(str(nxt))
+        except Exception:
+            try:
+                os.unlink(str(tmp))
+            except OSError:
+                pass
+            raise
+        os.replace(str(tmp), str(counter_path))
+    except Exception:
+        pass  # housekeeping: nao persistir custa cobertura, nunca correcao
+    return nxt % _GC_SHARDS
 
 def gc_orphan_session_stores(
     *,
@@ -560,7 +609,7 @@ def gc_orphan_session_stores(
         # a wall-clock DEADLINE so a pathological directory can never eat the
         # hook budget. Cost is bounded by TIME, correctness by coverage.
         _deadline = time.time() + _GC_WALL_BUDGET_S
-        _shard = _gc_shard_of_turn()
+        _shard = _gc_next_shard(store_dir)
         _scanned = 0
         _it = os.scandir(str(store_dir))
         try:

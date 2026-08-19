@@ -661,17 +661,26 @@ def _context_pct_from_sidecar(
     measurement someone took, and the alternative (inventing one) is the thing
     W0 exists to prevent. The row it produces is a bucket transition, not a
     precise reading."""
-    try:
-        # Reuse the ONE resolver the audit rail already uses, so the sidecar is
-        # looked up in the same place the writer put it — including under test
-        # isolation, which redirects it. Deriving a second path here is how the
-        # two surfaces drift apart.
-        from _lib import audit_emit as _ae  # noqa: E402
-        base = _ae._audit_dir()
-    except Exception:
-        return None
-    try:
+    # PLAN-179 rail round-6 [P2]: resolve the sidecar the SAME way the writer
+    # does, override included. `statusline-ceo.py` honours a full-path override
+    # in CEO_STATUSLINE_SIDECAR and only falls back to
+    # `<audit-dir>/state/statusline-snapshot.json`. Reading just the fallback
+    # meant that any adopter using the override got silence instead of
+    # telemetry — a reader and a writer disagreeing about where the file is.
+    _override = os.environ.get("CEO_STATUSLINE_SIDECAR", "").strip()
+    if _override:
+        snap = Path(_override)
+    else:
+        try:
+            # Reuse the ONE resolver the audit rail already uses, so the
+            # fallback path is looked up where the writer put it — including
+            # under test isolation, which redirects it.
+            from _lib import audit_emit as _ae  # noqa: E402
+            base = _ae._audit_dir()
+        except Exception:
+            return None
         snap = Path(base) / "state" / "statusline-snapshot.json"
+    try:
         if not snap.is_file():
             return None
         with snap.open("r", encoding="utf-8") as fh:
