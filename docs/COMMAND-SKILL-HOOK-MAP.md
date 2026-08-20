@@ -105,6 +105,7 @@ Events sorted alphabetically; within an event, rows keep registration order (= r
 | SessionEnd | `(all)` | `SessionEnd.py` | 5 |
 | SessionStart | `(all)` | `SessionStart.py` | 5 |
 | SessionStart | `(all)` | `turbo_sessionstart.py` | 5 |
+| SessionStart | `compact` | `check_compact_pinning.py` | 5 |
 | Setup | `init` | `check_setup_verification.py` | 15 |
 | Stop | `(all)` | `Stop.py` | 5 |
 | Stop | `(all)` | `codex_review_user_code.py` | 130 |
@@ -128,4 +129,4 @@ Derivation rule: a registered hook guards a surface iff its source file under `.
 - Commands: 27
 - Skills (SKILL.md-bearing dirs): 166 — core 42, frontend 8, domain 116 (across 32 domains)
 - Skills with >=1 `activation_triggers` entry: 62
-- Hook registrations: 48 across 15 events (47 unique hook labels)
+- Hook registrations: 49 across 15 events (48 unique hook labels)

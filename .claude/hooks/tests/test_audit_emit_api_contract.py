@@ -63,6 +63,38 @@ if _IS_STAGING:
 
 from _lib import audit_emit  # noqa: E402
 
+# PLAN-179 W1/W1-b [amendment 8.1] — PACK-POSITION LOADER.
+#
+# This contract test is promotion-canonical (see the Codex iter-2 note above):
+# it lives in the PLAN-179 staged pack until the Owner ceremony copies it to
+# ``.claude/hooks/tests/``. From the pack position the ``from _lib import
+# audit_emit`` above resolves to the LIVE module, which does NOT yet carry
+# ``context_pressure_observed`` — so the pinned SHA/count below would fail for
+# the RIGHT reason but the two new registration tests would fail for the WRONG
+# one (they would be asserting against a module the pack never edited).
+#
+# So: when — and ONLY when — this file sits inside the pack next to a staged
+# ``_lib/audit_emit.py``, rebind the local name to the STAGED module, loaded
+# under a NON-canonical module name. ``sys.modules["_lib.audit_emit"]`` is
+# NEVER touched (PLAN-118 AC-B7 / the tests/conftest.py collection-finish
+# guard asserts the HMAC trio still resolves to canonical paths), and the
+# staged module's own ``from _lib import ...`` lines resolve against the LIVE
+# package exactly as the sibling compaction test's loader does. Post-ceremony
+# the staged sibling is gone, the branch is dead, and the file asserts against
+# canonical — which is the whole point of a promotion-canonical test.
+_PACK_STAGED_AE = _THIS_FILE.parents[1] / "_lib" / "audit_emit.py"
+if _PACK_STAGED_AE.is_file() and _PACK_STAGED_AE != (
+    Path(getattr(audit_emit, "__file__", "")) if getattr(audit_emit, "__file__", None) else None
+):
+    import importlib.util  # noqa: E402
+
+    _spec = importlib.util.spec_from_file_location(
+        "_plan179_staged_audit_emit", str(_PACK_STAGED_AE)
+    )
+    _staged_mod = importlib.util.module_from_spec(_spec)
+    _spec.loader.exec_module(_staged_mod)
+    audit_emit = _staged_mod  # noqa: F811 — pack position only
+
 
 # -- Public API surface (alphabetical) --------------------------------------
 # Pinned 2026-04-22. Every emit_* / iter_* function callable via
@@ -720,7 +752,19 @@ _EXPECTED_KNOWN_ACTIONS_SHA256 = (
     # sha256(json.dumps(sorted(_KNOWN_ACTIONS))). Count: 321 -> 323 -> 324
     # (PLAN-165 P2 ceremony: +1 night_mode_toggled — the /night-mode
     # posture-toggle audit action, branched + deny-by-default scrub).
-    "35696184ea595e36de5fbfba555264183fb593cfc73eb5f6b35d4c37187c60ba"
+    #
+    # PLAN-179 W0 US2 [amendment 8.1] — Count: 324 -> 325 (+1
+    # context_pressure_observed, the EDGE-TRIGGERED context-pressure
+    # breadcrumb produced by the PreCompact observer, the
+    # SessionStart(matcher=compact) primary channel and the UserPromptSubmit
+    # sampler). It routes through its OWN `_scrub_ceo_boot_event` branch
+    # against `_CONTEXT_PRESSURE_OBSERVED_ALLOWLIST` and is NEVER in
+    # `_EMIT_GENERIC_PASSTHROUGH` (asserted below). SHA re-derived from the
+    # STAGED audit_emit.py under
+    # `.claude/plans/PLAN-179/staged-w01/.claude/hooks/_lib/` via
+    # sha256(json.dumps(sorted(_KNOWN_ACTIONS))) — the same derivation the
+    # byte-identity test below performs.
+    "8a58f2bb7772cf73860ef887961e1900cb0f435f962296b758c513b8a813227a"
 )
 
 
@@ -762,7 +806,7 @@ class AuditEmitPublicSurfaceTests(unittest.TestCase):
         self.assertEqual(
             actual, _EXPECTED_KNOWN_ACTIONS_SHA256,
             f"_KNOWN_ACTIONS drift detected. "
-            f"Count={len(actions)} (expected 324). "
+            f"Count={len(actions)} (expected 325). "
             f"Rebaseline this test + add audit-registry entry if the change is intentional.",
         )
 
@@ -773,8 +817,10 @@ class AuditEmitPublicSurfaceTests(unittest.TestCase):
         # notification_lifecycle — CC 2.1.220 lifecycle events, ADR-183).
         # 324 = 323 + 1 PLAN-165 P2 (night_mode_toggled — /night-mode
         # posture toggle, ADR-185; ceremony [SENT-PLAN165]).
+        # 325 = 324 + 1 PLAN-179 W0 US2 (context_pressure_observed — the
+        # edge-triggered context-pressure breadcrumb, amendment 8.1).
         self.assertEqual(
-            len(audit_emit._KNOWN_ACTIONS), 324,
+            len(audit_emit._KNOWN_ACTIONS), 325,
             "_KNOWN_ACTIONS count drifted from 163 baseline (PLAN-088 S114 Wave 1 +11 actions: "
             "cache_discipline_alerted + first_run_wizard_dispatched + "
             "estimate_calibrator_pipeline_run + subagent_findings_partial_drop + "
@@ -815,6 +861,49 @@ class AuditEmitPublicSurfaceTests(unittest.TestCase):
         """`_write_event` stays an internal contract — emitters depend on it."""
         self.assertTrue(hasattr(audit_emit, "_write_event"))
         self.assertTrue(callable(audit_emit._write_event))
+
+
+class ContextPressureRegistrationTests(unittest.TestCase):
+    """PLAN-179 W0 US2 [amendment 8.1] — the context-pressure breadcrumb is
+    REGISTERED and SCRUBBED, mirroring the sibling compaction-pair assertions
+    in ``test_check_compaction_continuity.TestEmitGenericScrubDenyByDefault``.
+
+    Two separate claims, deliberately not merged: an action that is missing
+    from ``_KNOWN_ACTIONS`` is silently DROPPED (house rule), while an action
+    that is present but sitting in ``_EMIT_GENERIC_PASSTHROUGH`` reaches the
+    wire with WHATEVER fields a direct ``emit_generic`` caller passed. Only
+    the pair "registered AND not passthrough" means the deny-by-default
+    allowlist actually governs this action."""
+
+    def test_context_pressure_registered(self) -> None:
+        self.assertIn("context_pressure_observed", audit_emit._KNOWN_ACTIONS)
+
+    def test_context_pressure_not_in_passthrough(self) -> None:
+        passthrough = getattr(audit_emit, "_EMIT_GENERIC_PASSTHROUGH", frozenset())
+        self.assertNotIn("context_pressure_observed", passthrough)
+        # The dedicated allowlist is the mechanism that makes the line above
+        # meaningful — a non-passthrough action with no allowlist branch would
+        # simply be dropped, not governed.
+        allowlist = getattr(
+            audit_emit, "_CONTEXT_PRESSURE_OBSERVED_ALLOWLIST", None
+        )
+        self.assertIsNotNone(
+            allowlist,
+            "context_pressure_observed is registered but has no dedicated "
+            "field allowlist — the scrub branch cannot deny by default.",
+        )
+        # Amendment 8.1: the wire carries a closed INTEGER percent bucket and
+        # a closed-enum source. The raw token count and the transcript text
+        # are NOT allowed fields, and must never be added here.
+        self.assertIn("used_bucket", allowlist)
+        self.assertIn("event_source", allowlist)
+        for forbidden in ("used_tokens", "transcript", "transcript_path",
+                          "plan_path", "additionalContext"):
+            self.assertNotIn(
+                forbidden, allowlist,
+                "%r must never be an allowed context_pressure_observed field "
+                "(raw size / free text on the audit wire)" % forbidden,
+            )
 
 
 if __name__ == "__main__":

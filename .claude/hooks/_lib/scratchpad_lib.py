@@ -17,6 +17,17 @@ PLAN-011 Phase 7. Consumes Phase 0's :class:`SqliteStateStore`
    ``plan_transition`` events ships in Sprint 11+ (this library exposes
    the primitive).
 
+3. **Session-scope fallback (PLAN-179 W1 US3, amendments r1-C1/r1-C2)** —
+   when :func:`resolve_plan_id` refuses (the DOMINANT path measured in
+   S309: 2 ``plan_transition`` events in 12.515 audit lines), the
+   continuity write is no longer SKIPPED. It lands in a SEPARATE store
+   (:data:`SESSION_SCRATCHPAD_STORE_NAME`) under a scope id of the form
+   ``session-<uuid>``. Three things this deliberately does NOT do:
+   it does not overload the ``plan_id`` field with a session value, it
+   does not widen :func:`resolve_plan_id` (its refusal-to-guess is
+   untouched), and it does not read ``CLAUDE_SESSION_ID`` — see
+   :func:`session_id_from_event`.
+
 ## Public API
 
     from _lib.scratchpad_lib import (
@@ -24,6 +35,14 @@ PLAN-011 Phase 7. Consumes Phase 0's :class:`SqliteStateStore`
         open_scratchpad,
         clear_on_rollback,
         PlanIdDerivationError,
+        # PLAN-179 W1 US3
+        session_id_from_event,
+        open_session_scratchpad,
+        set_session_value,
+        gc_orphan_session_stores,
+        SESSION_SCOPE_TTL_SECONDS,
+        SCOPE_KIND_PLAN,
+        SCOPE_KIND_SESSION,
     )
 
     plan_id = resolve_plan_id()                      # raises if unresolvable
@@ -34,10 +53,20 @@ PLAN-011 Phase 7. Consumes Phase 0's :class:`SqliteStateStore`
     # plan rollback path
     cleared = clear_on_rollback("PLAN-011", "executing", "draft")
 
+    # PLAN-179 session-scope fallback (only after resolve_plan_id raised)
+    sid = session_id_from_event(hook_event)          # None => REFUSE fallback
+    if sid is not None:
+        with open_session_scratchpad(sid) as pad:
+            set_session_value(pad, "snapshot", blob_json)   # TTL is mandatory
+
 ## Invariants (carried over from state_store)
 
 - **Plan isolation** — a scratchpad for ``PLAN-011`` cannot see or
-  touch ``PLAN-010`` keys (filesystem boundary).
+  touch ``PLAN-010`` keys (filesystem boundary). The session-scope
+  fallback preserves this by construction: it is a DIFFERENT
+  ``store_name``, i.e. a different directory, so a ``session-*`` scope
+  is not merely an unusual plan_id inside the plan store — it never
+  enters the plan store at all.
 - **64 KiB per-key cap** — inherited default from state_store
   (``DEFAULT_VALUE_MAX_BYTES``). Over-cap writes raise
   ``StateStoreValueTooLarge``.
@@ -52,6 +81,12 @@ Plan-id derivation either succeeds or raises. The library never falls
 back silently. Callers (CLI, hooks) translate the exception into a
 human-readable message + non-zero exit.
 
+The session-scope fallback is EXPLICIT, never implicit: a caller has to
+ask for it after catching :class:`PlanIdDerivationError`, and has to
+have a session id that came from the hook input dict. The one helper
+that IS fail-open is :func:`gc_orphan_session_stores` — housekeeping,
+not correctness (ADR-005 shape).
+
 Audit emission *inside* the underlying state_store is fail-open per
 ADR-005. This library does not add new fail-open paths.
 """
@@ -59,9 +94,12 @@ ADR-005. This library does not add new fail-open paths.
 from __future__ import annotations
 
 import os
+import re
 import sys
+import time
+from collections.abc import Mapping as _ABCMapping
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, Mapping, Optional, Union
 
 _HOOKS_DIR = Path(__file__).resolve().parent.parent
 if str(_HOOKS_DIR) not in sys.path:
@@ -71,12 +109,88 @@ from _lib import audit_emit as _audit_emit  # noqa: E402
 from _lib.state_store import (  # noqa: E402
     DEFAULT_VALUE_MAX_BYTES,
     SqliteStateStore,
+    StateStoreInvalidName,
     open_store,
 )
+
+# PLAN-179 W1 US3 (r1-C2): the GC helper needs the SAME state root the
+# stores are created under. Borrowing state_store's own accessor keeps ONE
+# source of truth for the path convention — re-deriving it here would
+# drift the day CEO_STATE_ROOT semantics change. Held as a module
+# reference (not a `from ... import`) so the lookup stays late-bound.
+from _lib import state_store as _state_store  # noqa: E402
+from _lib.filelock import FileLock, FileLockTimeout  # noqa: E402
 
 
 # Scratchpad is a single logical store on the shared backend.
 SCRATCHPAD_STORE_NAME = "scratchpad"
+
+# PLAN-179 W1 US3 (amendment r1-C1): the session fallback lives in its
+# OWN store, not in a funny-looking plan_id inside the plan store. The
+# separate store_name IS the isolation mechanism — state_store maps
+# store_name to a directory, so plan data and session data cannot see
+# each other even in principle. Name must satisfy state_store's
+# _validate_store_name: [A-Za-z0-9_-], <= 32 chars (this is 18).
+SESSION_SCRATCHPAD_STORE_NAME = "scratchpad-session"
+
+# Closed enum stamped into the stored blob so a reader can tell which
+# scope produced a snapshot without inspecting the file path.
+SCOPE_KIND_PLAN = "plan"
+SCOPE_KIND_SESSION = "session"
+_SCOPE_KINDS = (SCOPE_KIND_PLAN, SCOPE_KIND_SESSION)
+
+# PLAN-179 W1 US3 (r1-C1): the ONLY accepted shape for a session scope
+# id. Explicit, anchored, and deliberately narrow — hex + dashes only.
+# Consequences that matter: "PLAN-179" cannot match (no `session-`
+# prefix), "../escape" cannot match (no `.` or `/` in the class), and
+# nothing that reaches the filesystem can contain a path separator.
+_SESSION_SCOPE_ID_RE = re.compile(r"^session-[0-9a-fA-F-]{8,60}$")
+
+# PLAN-179 W1 US3 (amendment r1-C2): session-scope writes are ALWAYS
+# TTL'd. 72h = long enough to survive a weekend of compactions in one
+# session lineage, short enough that an abandoned session's snapshot is
+# not still on disk next sprint. Plan-scope writes keep their existing
+# caller-chosen TTL semantics; this constant is session-scope only.
+SESSION_SCOPE_TTL_SECONDS = 259200  # 72h
+
+# Ceiling on unlinks per GC invocation (r1-C2). A hook runs GC inline,
+# so the work has to be bounded regardless of how much junk accumulated;
+# the leftovers are collected by the next run.
+MAX_GC_FILES_PER_RUN = 64
+
+# PLAN-179 rail round-4 [P2]: the sweep is bounded by TIME, not by a slice of
+# the directory — a slice starves whatever sits behind it. 0.25s is a small
+# fraction of the hook's 5s registration timeout, and the sweep is fail-open,
+# so exceeding it costs nothing but a later reclaim.
+_GC_WALL_BUDGET_S = 0.25
+
+# Suffixes state_store creates per scope. The db and its filelock sibling
+# are the obvious two; ``-wal`` / ``-shm`` are created by sqlite because
+# _ensure_open sets ``PRAGMA journal_mode=WAL`` (state_store.py), and were
+# OBSERVED on disk while verifying this change. Omitting them would leave
+# two orphan files per session behind — the exact unbounded accumulation
+# r1-C2 exists to stop.
+_SESSION_STORE_SUFFIXES = (
+    ".sqlite",
+    ".sqlite.lock",
+    ".sqlite-wal",
+    ".sqlite-shm",
+)
+
+# Rail round-7 [P1]: a expiracao e decidida pelo STORE como unidade, e a
+# idade do store e o mtime MAIS NOVO dos componentes de DADOS. O `.lock`
+# fica fora do calculo nos dois sentidos: aquisicoes nao atualizam o mtime
+# dele (idade falsa para "ativo") e o proprio FileLock o recria sob demanda
+# (frescor falso para "expirado").
+_SESSION_STORE_LOCK_SUFFIX = ".sqlite.lock"
+_SESSION_STORE_DATA_SUFFIXES = tuple(
+    s for s in _SESSION_STORE_SUFFIXES if s != _SESSION_STORE_LOCK_SUFFIX
+)
+
+# Lock ocupado significa store ATIVO — o GC nunca disputa com um writer,
+# entao o timeout e minimo (uma tentativa, sem espera util) e o
+# FileLockTimeout vira "pula este store nesta varredura".
+_GC_LOCK_TIMEOUT_S = 0.05
 
 
 class PlanIdDerivationError(RuntimeError):
@@ -130,6 +244,11 @@ def resolve_plan_id(session_id: Optional[str] = None) -> str:
         - A completed-plan session (``to_status=done``) still resolves
           to that plan; scratchpad clear is an explicit call, not an
           implicit consequence of a terminal transition.
+        - **PLAN-179 W1 US3 leaves this function unchanged.** The
+          session-scope fallback is a NEW path taken by the CALLER after
+          this raises — it is not a loosening of the refusal here. This
+          function still never guesses a plan id and still never accepts
+          one from the environment.
     """
     sid = _resolve_session_id(session_id)
     if not sid:
@@ -194,6 +313,408 @@ def open_scratchpad(
     )
 
 
+# --- session-scope fallback (PLAN-179 W1 US3, r1-C1 + r1-C2) -------------
+
+
+def session_id_from_event(event: Optional[Mapping[str, Any]]) -> Optional[str]:
+    """Return the session id carried by a hook INPUT dict, or None.
+
+    PLAN-179 amendment r1-C1 — the refusal. This reads the hook event and
+    NOTHING else. In particular it never consults
+    ``os.environ['CLAUDE_SESSION_ID']``, and it is deliberately NOT
+    routed through :func:`_resolve_session_id` (which does read the env
+    as a convenience for the plan path).
+
+    Why: an env var is agent-spoofable. Any agent that can run a subshell
+    can ``export CLAUDE_SESSION_ID=<other-session>`` before a hook fires
+    and steer the continuity write into a scope it chose — the same
+    threat consensus M2 cited when it banned ``CEO_CURRENT_PLAN``. The
+    hook input dict is supplied by the harness on stdin and is not
+    writable from inside the agent's shell, so it is the only acceptable
+    source here.
+
+    The contract for callers is therefore: **None means REFUSE the
+    fallback**, not "go look somewhere else". A caller that reacts to
+    None by reading the env has reintroduced the spoof.
+
+    Args:
+        event: parsed hook input. Accepts both the snake_case
+            (``session_id``) and camelCase (``sessionId``) spellings the
+            harness has used, matching the continuity hooks.
+
+    Returns:
+        The stripped session id, or None when absent / blank / not a
+        string / not a mapping.
+    """
+    # isinstance against collections.abc (typing.Mapping is annotation-only
+    # in the idiom this repo targets: py>=3.9, stdlib-only).
+    if not isinstance(event, _ABCMapping):
+        return None
+    for field in ("session_id", "sessionId"):
+        raw = event.get(field)
+        if isinstance(raw, str):
+            val = raw.strip()
+            if val:
+                return val
+    return None
+
+
+def session_scope_id(session_id: str) -> str:
+    """Build and validate the ``session-<uuid>`` scope id (r1-C1).
+
+    This is the ONLY place a session id becomes a filesystem-facing
+    identifier. Validation is explicit rather than inherited from
+    state_store's ``_validate_plan_id``: that validator allows ``.`` and
+    would happily accept ``PLAN-179`` — neither is acceptable for a
+    scope that must be unmistakably session-shaped.
+
+    Args:
+        session_id: raw session id (already sourced from the hook input
+            via :func:`session_id_from_event`).
+
+    Returns:
+        The scope id, e.g. ``session-9f1c0f6e-...``.
+
+    Raises:
+        StateStoreInvalidName: when the resulting id does not match
+            :data:`_SESSION_SCOPE_ID_RE`.
+    """
+    raw = str(session_id or "").strip()
+    scope = raw if raw.startswith("session-") else "session-" + raw
+    if not _SESSION_SCOPE_ID_RE.match(scope):
+        raise StateStoreInvalidName(
+            "session scope id %r is not of the form session-<uuid> "
+            "(allowed after the prefix: [0-9a-fA-F-]{8,60})" % scope
+        )
+    return scope
+
+
+def open_session_scratchpad(
+    session_id: str,
+    *,
+    value_max_bytes: int = DEFAULT_VALUE_MAX_BYTES,
+) -> SqliteStateStore:
+    """Open the SESSION-scoped scratchpad store (r1-C1).
+
+    Returns the same handle type :func:`open_store` returns, so callers
+    use it exactly like :func:`open_scratchpad` (``with`` block, then
+    ``set`` / ``get``). The difference is invisible at the call site and
+    total on disk: a different ``store_name`` means a different
+    directory, so this write can never collide with, shadow, or leak
+    into any plan's scratchpad.
+
+    The ``session-<uuid>`` value is passed as the store's SCOPE id, which
+    state_store happens to call ``plan_id`` in its own signature. That is
+    a positional-argument name inside another module, not a claim that
+    this is a plan: no plan store is ever opened with a ``session-*``
+    value, and no ``plan_id`` field in the blob or in any audit event is
+    overloaded with it (see :func:`stamp_scope_kind`).
+
+    Args:
+        session_id: session id sourced from the hook input dict.
+        value_max_bytes: per-key cap (default 64 KiB, as for plan scope).
+
+    Returns:
+        An unopened :class:`SqliteStateStore` handle.
+
+    Raises:
+        StateStoreInvalidName: when ``session_id`` does not produce a
+            valid ``session-<uuid>`` scope id.
+    """
+    scope = session_scope_id(session_id)
+    return open_store(
+        SESSION_SCRATCHPAD_STORE_NAME,
+        scope,
+        value_max_bytes=value_max_bytes,
+    )
+
+
+def stamp_scope_kind(blob: Dict[str, Any], scope_kind: str) -> Dict[str, Any]:
+    """Stamp ``scope_kind`` into a snapshot blob before it is stored (r1-C1).
+
+    The stored blob carries which scope produced it so the PostCompact
+    reader can report honestly ("this came from the session fallback,
+    there was no resolved plan") instead of inferring it from where the
+    file happened to be.
+
+    Args:
+        blob: the snapshot dict, mutated in place and returned.
+        scope_kind: one of :data:`SCOPE_KIND_PLAN` /
+            :data:`SCOPE_KIND_SESSION` — a closed enum, like every other
+            governance-visible field in this family.
+
+    Returns:
+        The same dict, with ``scope_kind`` set.
+
+    Raises:
+        ValueError: when ``scope_kind`` is outside the enum.
+    """
+    if scope_kind not in _SCOPE_KINDS:
+        raise ValueError(
+            "scope_kind must be one of %r, got %r" % (list(_SCOPE_KINDS), scope_kind)
+        )
+    blob["scope_kind"] = scope_kind
+    return blob
+
+
+def set_session_value(
+    store: SqliteStateStore,
+    key: str,
+    value: Union[str, bytes],
+    ttl_seconds: int = SESSION_SCOPE_TTL_SECONDS,
+) -> None:
+    """Write into a session-scoped store with a MANDATORY positive TTL (r1-C2).
+
+    ``SqliteStateStore.set`` defaults ``ttl_seconds`` to None (no
+    expiry), which for the plan scope is correct — a plan's scratchpad
+    outlives a session on purpose. For the session scope it is the bug
+    r1-C2 named: unbounded accumulation of one store per session, in
+    ``$HOME``, outside the repo, that nothing ever reclaims. Routing
+    session writes through this helper makes the TTL mechanical rather
+    than a thing every caller must remember.
+
+    Args:
+        store: an open handle from :func:`open_session_scratchpad`.
+        key: scratchpad key.
+        value: str (redacted by state_store) or bytes (trusted).
+        ttl_seconds: positive seconds-from-now; defaults to 72h.
+
+    Raises:
+        ValueError: when ``ttl_seconds`` is None or non-positive.
+    """
+    if ttl_seconds is None or int(ttl_seconds) <= 0:
+        raise ValueError(
+            "session-scope writes require an explicit positive ttl_seconds "
+            "(PLAN-179 r1-C2), got %r" % (ttl_seconds,)
+        )
+    store.set(key, value, ttl_seconds=int(ttl_seconds))
+
+
+# PLAN-179 rail round-10 [P2] — cobertura GARANTIDA por cursor de RETOMADA.
+# Historia inteira, porque cada tentativa ensinou algo: r2 (sort+lista
+# materializada) estourava o budget; r3/r4 (janela por posicao) starvavam a
+# cauda; r5/r6 (fatia por identidade + contador de sweep) garantiam a fatia
+# mas nao a RETOMADA — com a ordem do scandir estavel, um break por deadline
+# caia sempre no mesmo prefixo e a cauda nunca era alcancada. O que garante
+# cobertura e retomar DE ONDE PAROU: os escopos sao ordenados
+# lexicograficamente, o processamento comeca no primeiro escopo DEPOIS do
+# cursor persistido e da a volta (wrap); o cursor grava o ultimo escopo
+# DECIDIDO. Em N varreduras, todo escopo e visitado.
+_GC_CURSOR_NAME = ".gc-scan-cursor"
+
+# Teto duro de entradas lidas no scandir (anti-DoS num diretorio patologico;
+# ler nomes e barato, mas nada aqui pode ser ilimitado dentro de um hook).
+_GC_SCAN_HARD_CAP = 20000
+
+
+def _gc_read_cursor(state_dir):
+    """Ultimo escopo DECIDIDO pela varredura anterior, ou '' (comeco)."""
+    try:
+        raw = (Path(str(state_dir)) / _GC_CURSOR_NAME).read_text(
+            encoding="utf-8"
+        ).strip()
+    except Exception:
+        return ""
+    return raw if _SESSION_SCOPE_ID_RE.match(raw) else ""
+
+
+def _gc_write_cursor(state_dir, stem):
+    """Persiste o cursor com o idioma atomico O_EXCL+O_NOFOLLOW do marker.
+
+    Falha de escrita e housekeeping (fail-open): custa recomecar do mesmo
+    ponto na proxima varredura, nunca correcao."""
+    cursor_path = Path(str(state_dir)) / _GC_CURSOR_NAME
+    try:
+        cursor_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = cursor_path.parent / (
+            "." + cursor_path.name + "." + str(os.getpid()) + "."
+            + os.urandom(4).hex() + ".tmp"
+        )
+        flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, "O_NOFOLLOW", 0)
+        fd = os.open(str(tmp), flags, 0o600)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                fh.write(str(stem))
+        except Exception:
+            try:
+                os.unlink(str(tmp))
+            except OSError:
+                pass
+            raise
+        os.replace(str(tmp), str(cursor_path))
+    except Exception:
+        pass
+
+def gc_orphan_session_stores(
+    *,
+    ttl_seconds: int = SESSION_SCOPE_TTL_SECONDS,
+    max_files: int = MAX_GC_FILES_PER_RUN,
+    now: Optional[float] = None,
+) -> int:
+    """Unlink aged-out session store FILES. Bounded, fail-open (r1-C2).
+
+    ``prune_expired`` deletes expired ROWS; it cannot delete the file
+    that holds them, so a TTL alone still leaves one empty
+    ``session-<uuid>.sqlite`` per session forever. This collects the
+    files themselves.
+
+    A STORE (db + WAL + SHM, one scope) is collectable when the newest
+    mtime among its DATA components is older than ``ttl_seconds``: since
+    every session write carries the same TTL, an untouched store past
+    that age holds nothing but expired rows. The decision and the unlinks
+    happen under the store's own ``FileLock`` — a busy lock means an
+    active writer and skips the store (rail round-7 [P1]). The
+    ``.sqlite.lock`` itself is NEVER unlinked (rail round-9 [P2]:
+    deleting a lock inode under a blocked waiter creates dual critical
+    sections); empty lock files are the declared residual until the
+    substrate cure (state_store opening sqlite UNDER the lock) lands.
+
+    Safety: only the session store directory is scanned, and only names
+    whose stem matches :data:`_SESSION_SCOPE_ID_RE` with a known suffix
+    are unlinked — an unrelated file dropped in that directory is left
+    alone rather than deleted by a loose glob.
+
+    Fail mode: fail-OPEN. This is housekeeping, not correctness (ADR-005
+    shape). Any :class:`OSError` — missing dir, unreadable entry, racing
+    unlink, read-only filesystem — ends or skips the sweep and returns
+    the count achieved so far; it never propagates into the hook.
+
+    Args:
+        ttl_seconds: age threshold in seconds (default 72h).
+        max_files: hard ceiling on unlinks this run.
+        now: epoch seconds override for tests; defaults to wall clock.
+
+    Returns:
+        Number of files unlinked (0 when the directory does not exist).
+    """
+    removed = 0
+    try:
+        store_dir = _state_store._state_root() / SESSION_SCRATCHPAD_STORE_NAME
+        if not store_dir.is_dir():
+            return 0
+        cutoff = (time.time() if now is None else float(now)) - float(ttl_seconds)
+        # PLAN-179 rail rounds 2/3/4 [P2] — three attempts, and only this one
+        # is right. The history is the point:
+        #   r2: `sorted(iterdir())` materialised and SORTED the whole directory
+        #       before the cap could break — the "bounded" cleanup was the part
+        #       that could blow the hook's budget.
+        #   r3: a fixed prefix window fixed the cost but STARVED the tail: an
+        #       expired store behind a fresh prefix was never reached. (The
+        #       comment I wrote then also claimed a cursor that did not exist.)
+        #   r4: the rotating offset was still `% _scan_cap`, so nothing beyond
+        #       ~2x _scan_cap was reachable — starvation with extra steps.
+        #
+        # What is actually true: the expensive parts were the SORT and the
+        # materialised list, not the walk. `os.scandir()` is lazy and its
+        # DirEntry carries the stat the readdir already paid for, so a full
+        # pass is cheap. So: walk EVERYTHING (no starvation, no cursor to get
+        # wrong), skip the sort entirely (order does not matter for a TTL
+        # sweep), stop at `max_files` deletions, and bound the whole thing with
+        # a wall-clock DEADLINE so a pathological directory can never eat the
+        # hook budget. Cost is bounded by TIME, correctness by coverage.
+        _deadline = time.time() + _GC_WALL_BUDGET_S
+        _scanned = 0
+        # Passo 1 — agrupar por ESCOPO. Rail round-7 [P1]: os componentes de
+        # um store expiravam um a um; a expiracao agora e decidida por store,
+        # sob o lock DELE. Ler nomes com scandir e barato (o stat vem do
+        # readdir); o teto duro limita o pior caso patologico.
+        _scopes: Dict[str, Dict[str, float]] = {}
+        _it = os.scandir(str(store_dir))
+        try:
+            for _de in _it:
+                _scanned += 1
+                if _scanned > _GC_SCAN_HARD_CAP:
+                    break
+                name = _de.name
+                stem = None
+                for suffix in _SESSION_STORE_SUFFIXES:
+                    if name.endswith(suffix):
+                        stem = name[: -len(suffix)]
+                        break
+                if stem is None or not _SESSION_SCOPE_ID_RE.match(stem):
+                    continue
+                try:
+                    _scopes.setdefault(stem, {})[name] = _de.stat().st_mtime
+                except OSError:
+                    continue
+        finally:
+            try:
+                _it.close()
+            except Exception:
+                pass
+        # Rotacao por cursor (round-10 [P2]): comeca no primeiro escopo
+        # DEPOIS do ultimo decidido na varredura anterior e da a volta —
+        # um break por deadline nunca starva a mesma cauda duas vezes.
+        _cursor = _gc_read_cursor(store_dir)
+        _sorted = sorted(_scopes)
+        _order = (
+            [s for s in _sorted if s > _cursor]
+            + [s for s in _sorted if s <= _cursor]
+        )
+        _last_decided = None
+        # Passo 2 — por escopo, decidir e coletar SOB o lock do store.
+        #
+        # Rail round-9 [P2]: o `.sqlite.lock` NUNCA e removido. Deletar um
+        # lock file enquanto um waiter bloqueia no flock dele deixa o waiter
+        # adquirir um inode MORTO enquanto outro processo cria e tranca um
+        # arquivo novo — duas secoes criticas simultaneas, e o GC podia
+        # remover um db que o waiter ja tinha aberto (state_store abre o
+        # sqlite ANTES de adquirir o flock). Residual DECLARADO: um lock
+        # file vazio por sessao expirada fica para tras (bytes ~0, contagem
+        # sem teto); a cura definitiva e de substrato — state_store passar a
+        # abrir o sqlite SOB o lock — nomeada para o pack W2/W4
+        # (staged-w24), quando o GC podera coletar locks com seguranca.
+        for stem in _order:
+            if removed >= int(max_files) or time.time() >= _deadline:
+                break
+            _seen = _scopes[stem]
+            _last_decided = stem
+            _lock_name = stem + _SESSION_STORE_LOCK_SUFFIX
+            _pre_data = [m for n, m in _seen.items() if n != _lock_name]
+            if not _pre_data:
+                continue  # escopo so com `.lock` — nada colecionavel
+            if max(_pre_data) >= cutoff:
+                continue  # store com dado fresco — nem disputa o lock
+            _lock_path = store_dir / _lock_name
+            try:
+                with FileLock(str(_lock_path), timeout=_GC_LOCK_TIMEOUT_S):
+                    # Re-checa SOB o lock: um writer pode ter tocado o store
+                    # entre o scandir e a aquisicao.
+                    _present = []
+                    _fresh = False
+                    for _suffix in _SESSION_STORE_DATA_SUFFIXES:
+                        _p = store_dir / (stem + _suffix)
+                        try:
+                            if _p.stat().st_mtime >= cutoff:
+                                _fresh = True
+                                break
+                        except OSError:
+                            continue
+                        _present.append(_p)
+                    if _fresh:
+                        continue
+                    for _p in _present:
+                        if removed >= int(max_files):
+                            break
+                        try:
+                            _p.unlink()
+                            removed += 1
+                        except OSError:
+                            # Per-entry fail-open: um problema em UM arquivo
+                            # nao aborta a varredura.
+                            continue
+            except FileLockTimeout:
+                continue  # lock ocupado = store ATIVO — nunca disputa
+            except OSError:
+                continue
+        if _last_decided is not None:
+            _gc_write_cursor(store_dir, _last_decided)
+    except OSError:
+        # Sweep-level fail-open (unreadable dir, vanished state root).
+        return removed
+    return removed
+
+
 def clear_on_rollback(plan_id: str, from_status: str, to_status: str) -> int:
     """Clear scratchpad keys when a plan rolls back ``executing → draft``.
 
@@ -222,4 +743,16 @@ __all__ = [
     "clear_on_rollback",
     "open_scratchpad",
     "resolve_plan_id",
+    # PLAN-179 W1 US3 (r1-C1 + r1-C2) — session-scope fallback
+    "MAX_GC_FILES_PER_RUN",
+    "SCOPE_KIND_PLAN",
+    "SCOPE_KIND_SESSION",
+    "SESSION_SCOPE_TTL_SECONDS",
+    "SESSION_SCRATCHPAD_STORE_NAME",
+    "gc_orphan_session_stores",
+    "open_session_scratchpad",
+    "session_id_from_event",
+    "session_scope_id",
+    "set_session_value",
+    "stamp_scope_kind",
 ]

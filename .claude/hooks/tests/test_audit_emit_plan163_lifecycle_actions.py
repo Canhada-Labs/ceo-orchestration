@@ -164,7 +164,8 @@ class TestRegistration(_Plan163Base):
         self.assertIn("notification_lifecycle", self.ae._KNOWN_ACTIONS)
         # 321 (PLAN-161) + 2 PLAN-163 T3.1/T3.2 = 323;
         # + 1 PLAN-165 P2 (night_mode_toggled) = 324.
-        self.assertEqual(len(self.ae._KNOWN_ACTIONS), 324)
+        # + 1 PLAN-179 W0 US2 (context_pressure_observed) = 325.
+        self.assertEqual(len(self.ae._KNOWN_ACTIONS), 325)
 
     def test_never_passthrough(self) -> None:
         for action in ("directory_added_recorded", "notification_lifecycle"):

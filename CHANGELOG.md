@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > commands, schema/contract changes, and behavior an adopter would notice after
 > installing or upgrading the framework. Internal refactors, test-only churn, and
 > release-engineering bookkeeping are omitted. Counts cited below (as of
-> v1.3.0: 166 skills, 27 slash commands, 194 ADRs, 68 `_lib` modules) are
+> v1.3.0: 166 skills, 27 slash commands, 194 ADRs, 69 `_lib` modules) are
 > reproducible from the repository via
 > `bash .claude/scripts/local/verify-counts.sh`.
 

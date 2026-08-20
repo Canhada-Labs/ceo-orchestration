@@ -114,7 +114,9 @@ class TestAllowlistAndContract(unittest.TestCase):
         # +notification_lifecycle — CC 2.1.220 lifecycle events, ADR-183).
         # PLAN-165 P2: 323 -> 324 (+night_mode_toggled — /night-mode
         # posture toggle, ADR-185; ceremony 610d9ec [SENT-S291]).
-        self.assertEqual(len(audit_emit._KNOWN_ACTIONS), 324)
+        # PLAN-179 W0 US2: 324 -> 325 (+context_pressure_observed — the
+        # edge-triggered context-pressure breadcrumb, amendment 8.1).
+        self.assertEqual(len(audit_emit._KNOWN_ACTIONS), 325)
         self.assertIn("pair_rail_outgoing_redaction_applied", audit_emit._KNOWN_ACTIONS)
 
     def test_dispatch_scrub_accepts_empty_findings(self):

@@ -2,7 +2,7 @@
   "schema_version": "1.0",
   "_comment": "Canonical inventory of CLAUDE_*/ANTHROPIC_*/CEO_* names referenced by framework code (PLAN-135 W5 O8 — the S218 footgun class). Token-level superset of strictly-consumed vars; see env-inventory-check.py docstring. Regenerate with --generate after any REVIEWED env-surface change.",
   "generated_by": "env-inventory-check.py --generate",
-  "generated_at": "2026-08-16",
+  "generated_at": "2026-08-19",
   "scan_roots": [
     ".claude/hooks",
     ".claude/scripts",
@@ -713,11 +713,17 @@
     },
     "CEO_COMPACTION_CONTINUITY": {
       "evidence": [
+        ".claude/hooks/check_compact_pinning.py",
         ".claude/hooks/check_postcompact_reinject.py",
-        ".claude/hooks/check_precompact_continuity.py",
-        ".claude/scripts/env-inventory.json"
+        ".claude/hooks/check_precompact_continuity.py"
       ],
-      "sites": 6
+      "sites": 7
+    },
+    "CEO_COMPACTION_PROBE_CANARY": {
+      "evidence": [
+        ".claude/scripts/probes/probe_postcompact_channel.py"
+      ],
+      "sites": 1
     },
     "CEO_COMPONENT_COUNT": {
       "evidence": [
@@ -809,6 +815,20 @@
         ".claude/scripts/env-inventory.json"
       ],
       "sites": 2
+    },
+    "CEO_CONSTRAINT_PINNING": {
+      "evidence": [
+        ".claude/hooks/check_compact_pinning.py",
+        ".claude/hooks/check_postcompact_reinject.py",
+        ".claude/settings.json"
+      ],
+      "sites": 5
+    },
+    "CEO_CONTEXT_PROGRESS_FLOOR_TOKENS": {
+      "evidence": [
+        ".claude/hooks/check_precompact_continuity.py"
+      ],
+      "sites": 1
     },
     "CEO_COOKBOOK_ADVISOR_ENABLED": {
       "evidence": [
@@ -2931,10 +2951,11 @@
     },
     "CEO_STATE_ROOT": {
       "evidence": [
+        ".claude/hooks/_lib/scratchpad_lib.py",
         ".claude/hooks/_lib/state_store.py",
         ".claude/scripts/env-inventory.json"
       ],
-      "sites": 2
+      "sites": 3
     },
     "CEO_STATUSLINE_DEBUG": {
       "evidence": [
@@ -3617,7 +3638,7 @@
         ".claude/hooks/SessionStart.py",
         ".claude/hooks/Stop.py"
       ],
-      "sites": 127
+      "sites": 129
     },
     "CLAUDE_PY": {
       "evidence": [
@@ -3652,7 +3673,7 @@
         ".claude/hooks/SessionStart.py",
         ".claude/hooks/Stop.py"
       ],
-      "sites": 28
+      "sites": 31
     },
     "CLAUDE_SIZE": {
       "evidence": [

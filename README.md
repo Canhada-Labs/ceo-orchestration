@@ -52,14 +52,14 @@ All counts below are verifiable from a clean checkout (see *Verifying the number
 | Component | Count | Notes |
 |---|---|---|
 | Skill checklists | **166** | 42 core + 8 frontend + 116 domain |
-| Hook scripts (on disk) | **57** | Python entrypoints under `.claude/hooks/` |
-| Hooks wired in `settings.json` | **46** | distinct scripts, 48 event registrations |
-| Shared library modules | **68** | stdlib-only, under `.claude/hooks/_lib/` (excluding the package `__init__.py`) |
+| Hook scripts (on disk) | **58** | Python entrypoints under `.claude/hooks/` |
+| Hooks wired in `settings.json` | **47** | distinct scripts, 49 event registrations |
+| Shared library modules | **69** | stdlib-only, under `.claude/hooks/_lib/` (excluding the package `__init__.py`) |
 | Slash commands | **27** | under `.claude/commands/` |
 | Architecture decision records | **194** | under `.claude/adr/` |
 | Tests | **~14,000 cases** | reported by `pytest --collect-only` across the hook, script, and conformance suites |
 
-The gap between **57 on disk** and **46 wired** is benign: several non-event modules are activated through in-process dispatch (invoked by other hooks) rather than by a direct `settings.json` event registration.
+The gap between **58 on disk** and **47 wired** is benign: several non-event modules are activated through in-process dispatch (invoked by other hooks) rather than by a direct `settings.json` event registration.
 
 **Runtime dependencies: none.** Hooks and scripts are Python ≥ 3.9, **standard library only** — zero third-party runtime packages. See [`SBOM.md`](SBOM.md). (Development and CI use third-party test tooling such as pytest; the installed runtime does not.)
 

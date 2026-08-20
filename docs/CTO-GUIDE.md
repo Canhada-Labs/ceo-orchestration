@@ -46,8 +46,8 @@ documentation bug.
 | Workflows | 22 | `ls .github/workflows/*.yml \| wc -l` |
 | GitHub Actions SHA-pinned refs | every `uses:` pinned | `grep -rEc 'uses: [^#]+@(v[0-9]+\|main\|master\|latest)[[:space:]]*$' .github/workflows/*` — must be 0 everywhere |
 | Skills | 166 (42 core + 8 frontend + 116 domain) | `find .claude/skills -name SKILL.md \| wc -l` |
-| Hooks | 57 .py on disk; 46 wired into `settings.json` (48 event registrations) | `ls .claude/hooks/*.py \| wc -l` |
-| `_lib/` stdlib-only modules | 68 | `ls .claude/hooks/_lib/*.py \| grep -v __init__ \| wc -l` |
+| Hooks | 58 .py on disk; 47 wired into `settings.json` (49 event registrations) | `ls .claude/hooks/*.py \| wc -l` |
+| `_lib/` stdlib-only modules | 69 | `ls .claude/hooks/_lib/*.py \| grep -v __init__ \| wc -l` |
 | Runtime 3rd-party deps | 0 | see `SBOM.md` §1 |
 
 Secondary (not strictly reproducible via one-liner, but derivable):
@@ -206,7 +206,7 @@ structural list.
 
 ## 6. What it does well (backed by numbers, not adjectives)
 
-- **Deterministic governance in-band with tool use.** 46 wired into
+- **Deterministic governance in-band with tool use.** 47 wired into
   `.claude/settings.json` gate PreToolUse + PostToolUse. Denials are
   structured JSON, not English.
 - **Audit trail that survives restart.** Every governance decision

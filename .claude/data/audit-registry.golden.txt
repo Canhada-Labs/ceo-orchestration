@@ -1,7 +1,7 @@
 # audit-action registry golden (generated — do not hand-edit)
 # format: v1  source: .claude/hooks/_lib/audit_emit.py::_KNOWN_ACTIONS
 # regenerate: python3 .claude/scripts/check-audit-registry-coverage.py --write-golden
-# count: 324
+# count: 325
 action_required_held
 action_required_rejected
 action_required_resumed
@@ -64,6 +64,7 @@ context_auto_compact_suppressed
 context_auto_compacted
 context_middle_out_degrade_failed
 context_middle_out_degraded
+context_pressure_observed
 contextual_recommendation_emitted
 cookbook_pattern_advised
 cost_envelope_capped

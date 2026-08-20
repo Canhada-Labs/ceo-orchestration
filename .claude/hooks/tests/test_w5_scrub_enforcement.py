@@ -86,7 +86,9 @@ class TestW5OffPassthrough(TestEnvContext):
         # — CC 2.1.220 lifecycle events, ADR-183) -> 323.
         # PLAN-165 P2 (+night_mode_toggled — /night-mode posture toggle,
         # ADR-185; ceremony 610d9ec [SENT-S291]) -> 324.
-        self.assertEqual(len(audit_emit._KNOWN_ACTIONS), 324)
+        # PLAN-179 W0 US2 (+context_pressure_observed — edge-triggered
+        # context-pressure breadcrumb, amendment 8.1) -> 325.
+        self.assertEqual(len(audit_emit._KNOWN_ACTIONS), 325)
 
 
 class TestAdminKeyScrub(_W5Base):

@@ -88,8 +88,19 @@ DOGFOOD_ONLY_HOOKS: Set[Tuple[str, str, str]] = frozenset({
 # per CEO decision S284 / ADR-183 residual e). These pins are the closeout
 # contract; the RELATIONSHIP between the two files is asserted separately
 # in fully-derived form (template + dogfood-only + gated == dogfood).
-T64_DOGFOOD_REGISTRATIONS = 48
-T64_TEMPLATE_REGISTRATIONS = 45
+#
+# PLAN-179 W1-b REBASELINE (48->49 / 45->46): the Constraint Pinning hook
+# `check_compact_pinning.py` adds ONE SessionStart block (matcher "compact")
+# to BOTH mirrors in the same change. Both literals move by +1 because the
+# registration is adopter-facing, NOT dogfood-only: an adopter who inherits
+# the hook FILE without the registration gets a dead Constraint Pinning
+# floor while this repo stays green — exactly the Codex Finding 2 class this
+# suite exists to catch. It is NOT a T3.4-gated registration either (no
+# version-floor probe: SessionStart + matcher are long-standing substrate),
+# so it must NOT enter DOGFOOD_ONLY_HOOKS nor the gated set. The derived
+# relationship below is the real oracle and is unchanged: 49 == 46 + 1 + 2.
+T64_DOGFOOD_REGISTRATIONS = 49
+T64_TEMPLATE_REGISTRATIONS = 46
 
 _BASELINES_CACHE: Optional[Dict] = None
 

@@ -542,6 +542,18 @@
             "statusMessage": "Turbo status..."
           }
         ]
+      },
+      {
+        "_comment": "PLAN-179 W1-b [amendment r1-C3]: Constraint Pinning PRIMARY channel. On a post-compaction session start (matcher 'compact' — the hook ALSO re-checks source == 'compact' in-process, never trusting the matcher alone), re-states the pinned governance constraints from the CODE constant _lib/pinned_constraints.PINNED_CONSTRAINTS (r1-C5 — never read from a .md at runtime, so it cannot be evicted by the summarizer) via additionalContext. RULES, not pointers: the PostCompact reinject hook is the REINFORCEMENT channel, this is the primary one, so pinning does not depend on the still-open W0-1 PostCompact channel verdict. ADVISORY, fail-OPEN, never blocks; emits NO audit event (the action is not yet in _KNOWN_ACTIONS — registration is a follow-up ceremony). Kill-switch: CEO_CONSTRAINT_PINNING=0 (deliberately NOT the shared CEO_COMPACTION_CONTINUITY — PLAN-179 §8.8: turning off the continuity snapshot must not silently disarm the governance floor).",
+        "matcher": "compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_compact_pinning.py",
+            "timeout": 5,
+            "statusMessage": "Pinning governance constraints after compaction..."
+          }
+        ]
       }
     ],
     "SessionEnd": [

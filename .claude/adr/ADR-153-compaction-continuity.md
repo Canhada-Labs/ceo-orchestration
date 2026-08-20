@@ -4,7 +4,7 @@ status: ACCEPTED
 
 # ADR-153 — Compaction-continuity: PreCompact snapshot + PostCompact governance reinjection (H1)
 
-- **Status:** ACCEPTED (S242, 2026-06-17 — both hooks registered in `.claude/settings.json` (`PreCompact`/`PostCompact`) with the two audit actions wired; Codex pair-rail satisfied at the PLAN-135 W2 merge `019ec0a1` + FOLLOWUP `019ec445`, re-confirmed Codex R-sweep thread `019ed788`)
+- **Status:** ACCEPTED (S242, 2026-06-17 — both hooks registered in `.claude/settings.json` (`PreCompact`/`PostCompact`) with the two audit actions wired; Codex pair-rail satisfied at the PLAN-135 W2 merge `019ec0a1` + FOLLOWUP `019ec445`, re-confirmed Codex R-sweep thread `019ed788`) — **AMENDED by AMEND-1 (PLAN-179 W1, S312/S313): the PENDING-LIVE fires-proof below is now SATISFIED and its result is NEGATIVE. The Decision text is UNCHANGED; §AMEND-1 records what the live event measured and what is added to make it deliver.**
 - **Date:** 2026-06-13 (proposed) / 2026-06-17 (accepted, S242)
 - **Enforcement commit:** `ab5114ab` (PLAN-135 W2 — `check_precompact_continuity.py` + `check_postcompact_reinject.py` + the `compaction_continuity_snapshot` / `compaction_context_reinjected` audit actions; hardened `26651bac`). Residual: live fires-proof (a real paid compaction emitting the events) remains PENDING-LIVE — an honest boundary, not a blocker.
 - **Decision drivers:**
@@ -139,3 +139,153 @@ Recorded in `THREAT-MODEL-WORKSHEET.md` §2 and `HONEST-LIMITATIONS`.
 ## Blast radius
 
 L3+ — introduces two NEW harness lifecycle events (`PreCompact`, `PostCompact`) to the governance rail, two NEW closed-enum audit actions, and a NEW prompt-injection-bearing output channel (`additionalContext` reinjection, bounded by the pointers-only doctrine). Codex pair-rail review is mandatory for this unit (PLAN-135 plan line 622: "V2 Codex pair-rail (mandatory for W2 hooks)").
+
+## AMEND-1 (PLAN-179 W1)
+
+**Amendment, not supersession.** Nothing in §Decision above is rewritten or
+retracted: the pointers-only doctrine (§Decision-2) stands, the closed-enum
+audit contract (§Decision-3) stands, and fail-open §5 stands. This section
+records (a) that the residual risk this ADR declared PENDING-LIVE has now
+been measured, (b) that the measurement came back NEGATIVE, (c) that the
+cause was a risk this ADR already named but mis-ranked as an edge, and
+(d) what PLAN-179 W1 adds so the mechanism delivers what §Decision promises.
+No new ADR number is consumed: the decision is unchanged, its evidence and
+its scope are extended.
+
+### A1.1 — The fires-proof is SATISFIED, and it is NEGATIVE
+
+§Residual-risks-1 declared: *"Fires-proof is PENDING-LIVE. Auto-compaction is
+hard to force offline and a real `claude -p` compaction cycle is a paid
+action."* That boundary is now closed by an unforced, real auto-compaction on
+**2026-08-16T09:34Z**. Both hooks fired. Both recorded failure. Verbatim, the
+two caller-field sets as they landed on the audit wire (PLAN-179 §1 E1):
+
+```
+action=compaction_continuity_snapshot  trigger=auto  plan_id=unknown
+    chain_length=11179  snapshot_outcome=scratchpad_unavailable
+action=compaction_context_reinjected   plan_id=unknown
+    snapshot_found=false  snapshot_age_s=0  pointer_count=1
+```
+
+Re-verified independently at PLAN-179 W0 by a read-only census over the active
+audit log **plus all 14 rotated archives** (230,634 lines scanned — the active
+log rotated 2026-08-18T13:45Z, so a single-file scan undercounts). The census
+returns exactly these two events and no others, byte-consistent with the
+above:
+
+```
+[audit-log-2026-08-8.jsonl] {"action": "compaction_continuity_snapshot", "chain_length": 11179,
+    "plan_id": "unknown", "snapshot_outcome": "scratchpad_unavailable",
+    "trigger": "auto", "ts": "2026-08-16T09:34:22Z"}
+[audit-log-2026-08-8.jsonl] {"action": "compaction_context_reinjected", "plan_id": "unknown",
+    "pointer_count": 1, "snapshot_age_s": 0, "snapshot_found": false,
+    "ts": "2026-08-16T09:36:29Z"}
+```
+
+**Reading.** The snapshot was never written; `snapshot_found=false` is the
+PostCompact half honestly reporting that it had nothing to read back. The
+`pointer_count=1` is the durable Gate-1 reminder alone — the one pointer this
+ADR guarantees unconditionally — and **zero** governance state: no `plan_id`,
+no execution-unit position, no ceremony flag, no HMAC anchor. The MECHANICS
+this ADR proved at S242 (events registered, hooks dispatched, closed-enum
+actions emitted, fail-open respected) all held. The VALUE did not arrive. The
+$0 probe proved the harness; only the paid event could prove the payload, and
+it says the payload was empty.
+
+### A1.2 — The named residual risk was the DOMINANT path, not an edge
+
+§Residual-risks-3 reads: *"Plan-id derivation can fail. If the session has no
+`plan_transition` event yet, `plan_id` resolves to `unknown`, the scratchpad
+write is skipped (no plan scope to write into) ... Fail-open by design."* That
+is precisely the path that executed. What this ADR got wrong is not the
+mechanism but its **frequency ranking**: it is listed third among residuals,
+after staleness, in the register of things that occasionally go wrong.
+
+The census that re-ranks it (PLAN-179 §1 E2): **2 `plan_transition` events in
+12,515 audit lines**, both dated 2026-08-13 and both from a different
+`session_id`, therefore discarded by `resolve_plan_id`'s session filter
+(`.claude/hooks/_lib/scratchpad_lib.py:103`). A `plan_transition` is emitted
+only when a plan CHANGES STATUS; a session that works inside an already
+`executing` plan never emits one. Continuity therefore resolves a plan id only
+in sessions that happen to flip a plan's status — which are the SHORT ones —
+so the mechanism is **anti-correlated with its own use case**: the longer the
+session, the likelier it compacts and the likelier its `plan_id` is `unknown`.
+
+> **Provenance discipline.** The "2 in 12,515" figure is the single-file,
+> point-in-time census recorded at PLAN-179 §1 E2 (S309) and is quoted here as
+> it was made. It is NOT reproducible today — that log has since rotated. The
+> W0 re-census at repo scale (all 15 log files, 230,638 lines) counts **49**
+> `plan_transition` events, i.e. **0.021%** of lines. The DIRECTION is
+> confirmed and the conclusion is unchanged — the event is vanishingly rare and
+> was absent from the compacting session, which is why `plan_id=unknown` — but
+> the specific ratio in §Residual-risks-3's successor text must be cited with
+> its scope, not as a repo-wide constant.
+
+### A1.3 — The cure (PLAN-179 W1 / W1-b), and what it does NOT change
+
+Three additions. None of them touches §Decision-2.
+
+1. **Session-scope fallback so the write is never SKIPPED.** When
+   `resolve_plan_id` raises `PlanIdDerivationError`, PreCompact no longer
+   abandons the snapshot: it falls back to a session-scoped store in its own
+   namespace (`scratchpad-session`, `scope_kind="session"`, id shaped
+   `session-<uuid>`), with the `session_id` taken **only** from the hook input
+   — never from `CLAUDE_SESSION_ID` or any env var, preserving the M2
+   prohibition and the store's plan-isolation invariant (PLAN-179 debate r1
+   C1). The fallback carries an explicit TTL plus file-level GC and a per-run
+   ceiling, because a store written without `ttl_seconds` accumulates orphans
+   without bound in `$HOME`, outside the repo (r1 C2).
+2. **A fifth `snapshot_outcome`: `written_session_scope`.** The enum in
+   §Decision-3 grows from four values to five, so the audit wire distinguishes
+   "written under a resolved plan" from "written under the session fallback"
+   from the genuine `scratchpad_unavailable`. Without the new value the
+   fallback would be invisible — or worse, coerce to `other` and be read as an
+   error. This is an ENUM EXTENSION of the existing contract, not a new
+   channel: the allowlist, the deny-by-default `_scrub_` branch and the
+   no-body rule are untouched.
+3. **Constraint Pinning as a SEPARATE channel (W1-b).** §Decision-2's pointer
+   is a place to look; it is not a rule. The measurement in PLAN-179 §2.2
+   (arXiv 2606.22528) is that a governance constraint VISIBLE in context is
+   violated 0% of the time, the same constraint AFTER compaction 30% on
+   average and up to 59%, and — the decisive split — 0% when the constraint
+   SURVIVES the summary against 38% when it is OMITTED. A `pointer_count=1`
+   reminder to re-read Gate-1 is on the omitted side of that split. W1-b
+   therefore restates a small, closed set of invariants VERBATIM from a **code
+   constant** (`.claude/hooks/_lib/pinned_constraints.py`), never loaded from
+   disk and never part of the block handed to the summarizer, so the set is
+   immune to Compaction-Eviction by construction. **This does not widen the
+   pointers-only doctrine**: the pinned set is framework-authored governance
+   text living in canonical, sentinel-guarded code — it is categorically not
+   the "file CONTENTS" (plan body, CLAUDE.md text, a ceremony script's body)
+   that Option A was rejected for injecting, and no disk-sourced string joins
+   it. Its budget is separate from the ≤9 pointer budget precisely so the
+   pointer cap can never evict a governance rule. Changing the set is a
+   canonical edit under ADR-031 — the friction is the point.
+
+### A1.4 — Consequences of the amendment
+
+- **(+)** The failure this ADR could not observe at $0 is now observed, dated
+  and reproducible from the archives. The instrument that was green with a
+  stale question ([[feedback-instrument-green-with-stale-question]]) has been
+  re-asked the right one.
+- **(+)** After W1 the snapshot write has no path that silently skips: every
+  compaction produces either a plan-scoped or a session-scoped snapshot, and
+  the outcome enum says which.
+- **(−)** One more durable state surface (the session-scope store) with its own
+  lifetime, and therefore its own GC — a surface that did not exist when this
+  ADR was accepted, and whose orphan-accumulation risk is real enough that the
+  amendment ships a TTL, a file GC and a per-run cap rather than a promise.
+- **(~)** `snapshot_outcome` is now a five-value enum. Any consumer that
+  pattern-matched the four original values needs the fifth; the SPEC row moves
+  in the same ceremony.
+- **(~)** **Still not retired by this amendment:** whether
+  `hookSpecificOutput.additionalContext` is actually CONSUMED on `PostCompact`.
+  The 2026-08-16 event proves the hook RAN and emitted; it does not prove the
+  model received the string. Sonda de evento ≠ sonda de canal
+  ([[feedback-event-probe-is-not-channel-probe]]). PLAN-179 W0-1 carries the
+  live channel probe with a mandatory positive control, and its NEGATIVE
+  outcome redirects the pinning channel to `SessionStart(matcher=compact)` —
+  for which this repo already has a working local precedent
+  (`turbo_sessionstart.py`). Until that probe reports, the delivery half of
+  §Decision-2 remains an assumption, and this amendment says so rather than
+  inheriting the assumption silently.

@@ -379,9 +379,12 @@ Options:
   --no-deprecation-warn Silence the PLAN-135 advisory model-deprecation scan
                         (the scan never blocks the upgrade either way).
   --no-settings-merge   Skip the PLAN-135 W2 idempotent settings-merge step
-                        that registers new lifecycle hooks (e.g. the Setup
-                        post-install self-verification hook) into the adopter's
-                        existing .claude/settings.json. The merge is idempotent
+                        that registers new lifecycle hooks (the Setup
+                        post-install self-verification hook, and the PLAN-179
+                        W1-b SessionStart/compact constraint-pinning hook)
+                        into the adopter's existing .claude/settings.json.
+                        Skipping leaves those channels UNWIRED on an already
+                        installed repo. The merge is idempotent
                         + fail-open (never blocks the upgrade); pass this to opt
                         out entirely and manage settings.json by hand.
   --no-settings-migrate PLAN-163 T5.4: skip the baseline-aware settings
@@ -2339,6 +2342,18 @@ _emit_deprecation_warnings
 # re-appends the single canonical block) so re-running the upgrade is a no-op.
 # It is ADDITIVE — existing settings keys + hooks are preserved untouched.
 #
+# PLAN-179 W1-b (pair-rail finding P1 — "upgraded adopters never get the new
+# hook"): the SIXTH registration, SessionStart(matcher "compact") ->
+# check_compact_pinning.py, rides the SAME merge. It is the PRIMARY Constraint
+# Pinning channel; baking it only into templates/settings/settings.base.json
+# would leave every already-installed repo with the script on disk and the
+# channel unwired — exactly the S217 class this function exists to close.
+# SessionStart is a LONG-EXISTING event key (turbo_sessionstart.py et al are
+# already registered there), so it needs NO T3.4 version-floor gate: that gate
+# guards UNKNOWN event keys (DirectoryAdded/Notification), and none of the five
+# W2 registrations above is gated either. Adding a gate here would invent a
+# pattern this function does not use.
+#
 # Fail-open per CLAUDE.md §5: no jq, malformed settings, or a merge error =>
 # stderr NOTE + the upgrade proceeds. A backup of the pre-merge settings.json
 # is written under $BAK_DIR first so the Owner can always roll back.
@@ -2363,9 +2378,15 @@ _merge_lifecycle_hooks_into_settings() {
   # Idempotent jq program — mirrors staged merges/{60,62,64,70}-*.jq. Registers
   # ALL FIVE new W2 lifecycle hooks (Codex V2 P2: registering only Setup left
   # PreCompact/PostCompact/ConfigChange/SubagentStart dead for upgraded
-  # adopters). The `_reg` helper filters any pre-existing entry that registers
-  # the hook filename, then re-appends the single canonical block — so each
-  # event is idempotent and every other settings key/hook is preserved.
+  # adopters) PLUS the PLAN-179 W1-b SessionStart(compact) pinning hook (rail
+  # finding P1 — same class, one wave later). The `_reg` helper filters any
+  # pre-existing entry that registers the hook filename, then re-appends the
+  # single canonical block — so each event is idempotent and every other
+  # settings key/hook is preserved. NOTE the deliberate consequence, unchanged
+  # from the five: an adopter who EDITED one of these six registrations gets it
+  # re-canonicalized (the backup under $BAK_DIR is the rollback route); every
+  # OTHER entry under the same event — SessionStart already carries several —
+  # is preserved in place, and the canonical block is appended last.
   local jq_prog
   jq_prog='
 def _reg($event; $name; $entry):
@@ -2399,18 +2420,26 @@ def _reg($event; $name; $entry):
     "_comment": "PLAN-135 W2 H8: Setup-event post-install self-verification (init matcher) — validate-governance --fast + verify-counts + hook exec-bits (the S228 exec-bit class) + CLAUDE_ENV_FILE allowlist persistence (explicit CEO_* include-list; every override/escape-hatch/kill-switch EXCLUDED, S185/S197 stale-override class). ADVISORY + fail-open; NEVER blocks. Kill-switch: CEO_SETUP_VERIFICATION=0.",
     "matcher": "init",
     "hooks": [ { "type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_setup_verification.py", "timeout": 15, "statusMessage": "Post-install self-verification..." } ]
+  })
+| _reg("SessionStart"; "check_compact_pinning\\.py"; {
+    "_comment": "PLAN-179 W1-b [amendment r1-C3]: Constraint Pinning PRIMARY channel. On a post-compaction session start (matcher compact — the hook ALSO re-checks source == compact in-process, never trusting the matcher alone), re-states the pinned governance constraints from the CODE constant _lib/pinned_constraints.PINNED_CONSTRAINTS (r1-C5 — never read from a .md at runtime, so it cannot be evicted by the summarizer) via additionalContext. RULES, not pointers: the PostCompact reinject hook is the REINFORCEMENT channel, this is the primary one. ADVISORY, fail-OPEN, never blocks. Kill-switch: CEO_CONSTRAINT_PINNING=0 (deliberately NOT the shared CEO_COMPACTION_CONTINUITY — PLAN-179 §8.8).",
+    "matcher": "compact",
+    "hooks": [ { "type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_compact_pinning.py", "timeout": 5, "statusMessage": "Pinning governance constraints after compaction..." } ]
   })'
 
   if [[ "$DRY_RUN" -eq 1 ]]; then
     local _missing=0 _ev _name
-    for pair in "PreCompact:check_precompact_continuity" "PostCompact:check_postcompact_reinject" "ConfigChange:check_config_change" "SubagentStart:check_subagent_start" "Setup:check_setup_verification"; do
+    # PLAN-179 W1-b (rail P1): the pinning registration MUST be announced in
+    # dry-run too — a migration that is silent in --dry-run is a migration the
+    # adopter cannot review before it runs for real.
+    for pair in "PreCompact:check_precompact_continuity" "PostCompact:check_postcompact_reinject" "ConfigChange:check_config_change" "SubagentStart:check_subagent_start" "Setup:check_setup_verification" "SessionStart:check_compact_pinning"; do
       _ev="${pair%%:*}"; _name="${pair##*:}"
       if ! jq -e --arg ev "$_ev" --arg n "$_name" '(.hooks[$ev] // []) | map(.hooks[]?.command // "" | test($n + "\\.py")) | any' "$settings" >/dev/null 2>&1; then
         echo "    (dry-run) would REGISTER $_ev $_name.py"
         _missing=$((_missing+1))
       fi
     done
-    [[ "$_missing" -eq 0 ]] && echo "    (dry-run) all 5 W2 lifecycle hooks ALREADY registered — would be a no-op"
+    [[ "$_missing" -eq 0 ]] && echo "    (dry-run) all 6 lifecycle hooks (5 x PLAN-135 W2 + PLAN-179 W1-b SessionStart/compact) ALREADY registered — would be a no-op"
     return 0
   fi
 
@@ -2425,7 +2454,7 @@ def _reg($event; $name; $entry):
   }
   if jq "$jq_prog" "$settings" > "$tmp" 2>/dev/null && [[ -s "$tmp" ]]; then
     if mv "$tmp" "$settings"; then
-      echo "    REGISTERED: 5 W2 lifecycle hooks — PreCompact, PostCompact, ConfigChange, SubagentStart, Setup/init (idempotent — re-runs are no-ops)"
+      echo "    REGISTERED: 6 lifecycle hooks — PreCompact, PostCompact, ConfigChange, SubagentStart, Setup/init, SessionStart/compact (idempotent — re-runs are no-ops)"
     else
       rm -f "$tmp"
       echo "    NOTE: settings-merge atomic mv failed — settings.json unchanged; advisory only" >&2
@@ -3266,6 +3295,7 @@ upgrade_agents_canonical_only
 
 # PLAN-135 W2 H8: register new lifecycle hooks (Setup/init self-verification)
 # into the adopter's existing settings.json (install.sh would EXISTS-SKIP it).
+# PLAN-179 W1-b (rail P1): the SessionStart(compact) pinning hook rides here too.
 _merge_lifecycle_hooks_into_settings
 
 # PLAN-163 T5.4: baseline-aware settings migration — fleet/permission leaf

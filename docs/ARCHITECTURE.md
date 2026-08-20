@@ -44,8 +44,8 @@ ceo-orchestration/
     ├── settings.json               # hook registrations for this repo (dogfood)
     ├── hooks/
     │   ├── _python-hook.sh         # resolves newest Python ≥ 3.9, fails with guidance
-    │   ├── _lib/                   # 68 stdlib-only shared modules (141 recursive)
-    │   ├── *.py                    # 57 hook scripts on disk
+    │   ├── _lib/                   # 69 stdlib-only shared modules (142 recursive)
+    │   ├── *.py                    # 58 hook scripts on disk
     │   └── tests/                  # hook unit tests
     ├── scripts/                    # protocol toolkit (validate, inject, audit-query, …)
     ├── commands/                   # 27 slash commands (*.md)
@@ -64,18 +64,18 @@ faith — run the commands:
 |--------------------|------------------------------|-----------------------------------------------------------|
 | Skills             | 166                          | `find .claude/skills -name SKILL.md \| wc -l`             |
 | └ core / frontend / domain | 42 / 8 / 116         | `find .claude/skills/core -name SKILL.md \| wc -l` (etc.) |
-| Hook scripts       | 57 on disk                   | `ls .claude/hooks/*.py \| wc -l`                          |
-| Hook registrations | 46 wired into `settings.json`| (parse the `hooks` block of `.claude/settings.json`)      |
-| `_lib` modules     | 68 top-level (141 recursive) | `ls .claude/hooks/_lib/*.py \| grep -v __init__ \| wc -l` |
+| Hook scripts       | 58 on disk                   | `ls .claude/hooks/*.py \| wc -l`                          |
+| Hook registrations | 47 wired into `settings.json`| (parse the `hooks` block of `.claude/settings.json`)      |
+| `_lib` modules     | 69 top-level (142 recursive) | `ls .claude/hooks/_lib/*.py \| grep -v __init__ \| wc -l` |
 | Slash commands     | 27                           | `ls .claude/commands/*.md \| wc -l`                       |
 | ADRs               | 194                          | `ls .claude/adr/ADR-*.md \| wc -l`                        |
 | SPEC/v1 files      | 32 (28 `*.schema.md`)        | `ls SPEC/v1/*.md \| wc -l`                                |
 | Test files         | ~730                         | `git ls-files '*test_*.py' '*_test.py' \| wc -l`          |
 | Collected cases    | ~14k parametrized cases      | `make test-collect` (pytest `--collect-only`)             |
 
-> **On the "57 vs 46" hook gap.** 57 is the number of hook *scripts* present in
-> `.claude/hooks/`. 46 is the number of those scripts *wired into* this repo's
-> `.claude/settings.json` (across 48 event registrations — one script can fire on
+> **On the "58 vs 47" hook gap.** 58 is the number of hook *scripts* present in
+> `.claude/hooks/`. 47 is the number of those scripts *wired into* this repo's
+> `.claude/settings.json` (across 49 event registrations — one script can fire on
 > more than one event). The difference is real and intentional: some scripts are
 > opt-in, stack-specific, superseded, or invoked indirectly by other hooks. Both
 > numbers are reported here rather than conflated into one impressive figure.
