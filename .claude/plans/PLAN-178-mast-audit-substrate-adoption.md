@@ -1,8 +1,13 @@
 ---
 id: PLAN-178
 title: Method currency — auditoria MAST-14 + injeção inter-agente, adoção de substrato 2026, e regras derivadas da pesquisa S305
-status: executing
+status: done
 reviewed_at: 2026-08-13
+completed_at: 2026-08-20
+related_commits: [2fa18f8, 451b659, b674449, 4a39e07, 153ed7a, 908707e]
+# Flip executing→done S318 (2026-08-20): Owner ratificou via AskUserQuestion
+# ("Sim, flipar agora") com todos os ACs [x] (verificação por grep = 0 abertos,
+# AC-6 fechado por live-fire em 4a39e07) e CI verde no HEAD dd6c782.
 reviewed_by: "Owner — ratificação via AskUserQuestion (S305): 'Ratificar reviewed (Recomendado)'. W0 executa em seguida (read-only); W1+ exige /debate start PLAN-178."
 executing_since: 2026-08-13
 created: 2026-08-13

@@ -1,0 +1,56 @@
+# Codex CLI version pin — PLAN-081 Phase 6 / R1 C5 BLOCKING per TDE MF-6
+#
+# Format: semver range. release.yml step 15 + scripts/local/pair-rail-gate.sh
+# pre-flight assert that `codex --version` resolves to a version in this range.
+# Pin update ceremony: requires Phase 4-bis re-run + GPG sign + ADR amendment
+# IF catch_rate shifts >5pp on the locked corpus.
+#
+# Initial range chosen to cover the Phase 0A SPIKE-VERDICT.md baseline.
+#
+# v1.16.0 update (Phase 6-bis 2026-05-11 S101-cont): widened upper bound
+# to <0.131.0 so Owner's actual binary at codex-cli 0.130.0 is in-range.
+# Per ADR-111 §pin-update-protocol, this widening does NOT trigger Phase
+# 4-bis re-run because no new locked-corpus measurement has been taken
+# yet (initial corpus run is itself part of v1.16.0 GA scope). If post-GA
+# the promotion-gate run shows catch_rate shift >5pp on 0.130.x vs
+# 0.128.x baseline, ADR-111 amendment + corpus re-run triggers.
+#
+# PLAN-142 update (S246 2026-06-19): widened upper bound to <0.140.0 so the
+# Owner's installed codex-cli 0.139.0 is in-range — the migration that restored
+# the pair-rail on the 0.139 CLI surface. The binary-SHA pin
+# (codex-cli-binary-sha256.txt -> d3be844c...) remains the real supply-chain
+# gate; this semver range is the pair-rail-gate.sh pre-flight message. Per
+# ADR-111 the 0.128->0.139 jump runs the locked-corpus catch_rate check
+# (Owner elected to RUN it this ceremony, not defer) — see PLAN-142 §4.
+#
+# PLAN-156 update (S269 2026-07-12, SENT-CX-PIN): widened upper bound to
+# <0.145.0 so the Owner's installed codex-cli 0.144.1 is in-range — the
+# bump that restores frontier-model access (GPT-5.6 Sol/Terra/Luna are
+# first-class from 0.143.0; 0.139 cannot run them). LOWER BOUND UNCHANGED
+# at >=0.128.0 (debate C10 / pair-rail R2: raising it would drop an
+# in-flight RC verdict out of range in release.yml step-15 and red-lock a
+# GA cut — widen-upper-only is the ONLY safe shape during any release
+# window; this bump was executed OUTSIDE an open release window).
+# Empirical base: PLAN-156/artifacts/characterization-grok-codex-S269.md
+# (0.144.1 flag surface verified — the 0.139 verified-compose
+# `exec --color never --sandbox <mode> -o <file> --output-schema --json -m`
+# is UNCHANGED; sandbox enum still read-only|workspace-write|
+# danger-full-access; reasoning-effort accepts max/xhigh client-side;
+# 0.144.0 open bugs #31873/#31860/#31826 triaged non-blocking, #31869
+# CLOSED upstream 2026-07-10). Locked-corpus catch_rate check: Owner
+# elects run-vs-defer at SENT-CX-PIN signing (S246 precedent: run it).
+#
+# PLAN-174 update (S318 2026-08-20, pack SENT-S318): widened upper bound to
+# <0.148.0 so the Owner's installed codex-cli 0.147.0 is in-range — the bump
+# that unblocks the PLAN-174 W2 wire (the pair-rail rounds since S317 already
+# ran on the 0.147.0 binary, advisory). LOWER BOUND UNCHANGED at >=0.128.0
+# (same widen-upper-only shape as S269: executed OUTSIDE any open release
+# window — GA v1.3.0 was cut 2026-08-17 and no rc is in flight). The ADR-182
+# payload manifest (codex-cli-pin-manifest.json, re-pinned in this same pack:
+# payload sha256 19c4f144... for 0.147.0/aarch64-apple-darwin, npm_integrity
+# recorded from the platform artifact) remains the real supply-chain gate;
+# this semver range stays the pair-rail-gate.sh pre-flight message.
+# Locked-corpus catch_rate check (ADR-111 §2): Owner elects run-vs-defer at
+# pack signing, recorded in the SENT-S318 sentinel Scope.
+
+>=0.128.0,<0.148.0
