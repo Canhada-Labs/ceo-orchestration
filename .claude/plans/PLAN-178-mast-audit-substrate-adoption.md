@@ -335,9 +335,42 @@ Caveat de instrumento: os emissores das rails de spawn existem desde
 2026-08-13 (Lote B) — para eles a janela efetiva é ~7d; "zero disparos
 ⇒ NÃO armar" aplica na mesma direção.
 
-**AC-6 FECHA nesta entrada.** Abertos restantes: AC-3 [P1] (janela N≥50
-nos dois caminhos) e AC-2c [P1]; o flip `executing → done` segue com o
-Owner após a disposição deles.
+**AC-6 FECHA nesta entrada.**
+
+### Registro de execução — AC-3 e AC-2c fechados (S316, 2026-08-20, mesma sessão)
+
+**AC-3 — janela fechada e veredito de fonte:**
+`budget-summary.py summary --native` (W1.2, default-OFF) imprime as
+DUAS fontes lado a lado com breakdown POR SPAWN e por categoria.
+Janela medida nesta rodada: native spawns **task=90 / workflow=454**
+(N≥50 COBRINDO os dois caminhos — condição da janela satisfeita);
+matched pairs=87, **token-comparáveis=3**; **max divergence
+task=82,19%, workflow=não-mensurável**. Veredito pelo critério do
+próprio AC (switch só com divergência máxima por categoria ≤10%):
+**SWITCH DE FONTE NEGADO** — o audit-log permanece a autoridade e a
+fonte nativa permanece cross-check (exatamente a doutrina "cross-check,
+not authority-swap" do W1.2). O resíduo unmatched é impresso por
+inteiro pelo instrumento — silenciá-lo fingiria divergência baixa.
+
+**AC-2c — reversibilidade por item W1 adotado:**
+- **W1.2 (cost-attribution nativa):** fingerprint =
+  `PLAN-178/w12-native-cost-probe.md` §2; fallback = rota audit-log
+  (nunca substituição silenciosa); entrada substrate-watch =
+  `cc_native_usage` — VIVA: disparou drift 2.1.232→2.1.237 hoje na
+  varredura do W-IM#4/172 e na dim. vii do nightly.
+- **W1.1 (Workflow piloto read-only + validador pré-despacho):**
+  fingerprint = probe `wf_d7af49d9` (blocked=false) + prova de
+  mecanismo `wf_f2707efc`; fallback = ramo vermelho (fan-out que
+  ESCREVE proibido) + `CEO_SOTA_DISABLE=1` advisory; entrada
+  substrate-watch = **`cc_workflow_rail` ADICIONADA nesta sessão**
+  (`substrate-watch.json`, parse validado — 8 componentes), com
+  sondas de drift que exigem re-rodar o probe e re-decidir o ramo
+  vermelho.
+- W1.3 NÃO foi adotado (decisão herdada pela abertura do W4-C) e
+  W1.4 foi estudo-apenas — AC-2c não se aplica a eles.
+
+**Com AC-3 e AC-2c fechados, TODOS os ACs deste plano estão [x].** O
+flip `executing → done` é decisão do Owner (assinatura de fechamento).
 
 ## Acceptance criteria
 
@@ -353,9 +386,10 @@ Owner após a disposição deles.
       pré-despacho no script; gap com dono no Lote B.
 - [x] AC-2b [P0] (fechado S314) Aresta de dependência: `CEO_SPAWN_OVERLAP_GUARD` NÃO
       é armado antes do C1-spawn landado (par ordenado, não lista).
-- [ ] AC-2c [P1] Cada item W1 adotado carrega fingerprint do probe +
+- [x] AC-2c [P1] (fechado S316 — ver Registro AC-3/AC-2c) Cada item W1
+      adotado carrega fingerprint do probe +
       fallback + entrada substrate-watch (template = W1.2).
-- [ ] AC-3 [P1] (emendado pós-codex) agent-budget imprime as DUAS
+- [x] AC-3 [P1] (fechado S316 — janela task=90/workflow=454, divergência 82,19%/n-m ⇒ SWITCH NEGADO, audit-log segue autoridade) (emendado pós-codex) agent-budget imprime as DUAS
       fontes (nativa + audit-log) com breakdown POR SPAWN e por
       categoria (Task vs Workflow); janela fecha com N≥50 eventos
       COBRINDO os dois caminhos (não dias corridos); switch de fonte

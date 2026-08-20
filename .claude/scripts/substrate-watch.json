@@ -1,92 +1,102 @@
 {
-  "_meta": {
-    "schema": 1,
-    "provenance": "PLAN-135 W5 unit o8o11o12 (O12 substrate watch) \u2014 the heroic S214/S230 manual changelog sweep + THIS plan's 8-dimension research sweep made a permanent nightly instrument. Consumed by .claude/scripts/check-substrate-watch.py; surfaced as nightly-hygiene dimension vii.",
-    "sources": {
-      "claude_code": "https://raw.githubusercontent.com/anthropics/claude-code/main/CHANGELOG.md",
-      "agent_sdk_ts": "https://github.com/anthropics/claude-agent-sdk-typescript/blob/main/CHANGELOG.md",
-      "agent_sdk_py": "https://github.com/anthropics/claude-agent-sdk-python/blob/main/CHANGELOG.md",
-      "codex_cli": "https://github.com/openai/codex/releases",
-      "codex_harness": [
-        "https://github.com/openai/codex/releases",
-        "https://developers.openai.com/codex/hooks",
-        "https://developers.openai.com/codex/config-reference",
-        "https://developers.openai.com/codex/rules"
-      ]
-    },
-    "_sources_note": "claude_code URL swapped 2026-07-01: docs.claude.com/en/release-notes/claude-code now 301s to platform.claude.com which 307s to the GitHub CHANGELOG; fetch the raw GitHub head directly. PLAN-155 Wave 0 (debate A12): codex_cli + codex_harness source URLs added; a LIST value means the Owner --refresh fetches EACH URL for that key (the codex_harness entry watches the release feed AND the three host-harness doc pages \u2014 hook-schema drift can land in docs without a release-feed line).",
-    "fetched": "2026-07-01",
-    "source_stale": false,
-    "_source_stale_reason": "Seeded last_seen from the values knowable at build time WITHOUT a network fetch (no-paid-spend rule; the changelog pages are not in-repo). The first Owner-run --refresh sets these to the live page heads and flips source_stale=false. Until then dimension vii reports a single advisory finding rather than a false 'up to date'.",
-    "refresh_recipe": "Owner-run: WebFetch each source URL, read the topmost version + date, update the matching last_seen.{version,date} + set _meta.fetched + _meta.source_stale=false. Costs no model tokens (doc fetch only). Record nothing billable. This is the ONE network step O12 needs and it is PENDING-OWNER by design (agents stay no-network under ADR-136-AMEND-1).",
-    "notes": "last_seen is the substrate version this framework was last RECONCILED against (its hooks/instruments/docs assume that surface). A newer upstream head is not a defect \u2014 it is a prompt to re-run the harvest/verify-the-knob-routes pass before trusting an old assumption (the S217/S228 silent-knob class). Detection only; never a BREAK."
+ "_meta": {
+  "schema": 1,
+  "provenance": "PLAN-135 W5 unit o8o11o12 (O12 substrate watch) — the heroic S214/S230 manual changelog sweep + THIS plan's 8-dimension research sweep made a permanent nightly instrument. Consumed by .claude/scripts/check-substrate-watch.py; surfaced as nightly-hygiene dimension vii.",
+  "sources": {
+   "claude_code": "https://raw.githubusercontent.com/anthropics/claude-code/main/CHANGELOG.md",
+   "agent_sdk_ts": "https://github.com/anthropics/claude-agent-sdk-typescript/blob/main/CHANGELOG.md",
+   "agent_sdk_py": "https://github.com/anthropics/claude-agent-sdk-python/blob/main/CHANGELOG.md",
+   "codex_cli": "https://github.com/openai/codex/releases",
+   "codex_harness": [
+    "https://github.com/openai/codex/releases",
+    "https://developers.openai.com/codex/hooks",
+    "https://developers.openai.com/codex/config-reference",
+    "https://developers.openai.com/codex/rules"
+   ]
   },
-  "components": [
-    {
-      "key": "claude_code",
-      "label": "Claude Code CLI",
-      "last_seen": {
-        "version": "2.1.198",
-        "date": "2026-07-01"
-      },
-      "watch_for": "settings.json schema changes (statusLine.refreshInterval \u2014 unverified per W5 context pack \u00a73), new hook events, output-token env honoring (CLAUDE_CODE_MAX_OUTPUT_TOKENS S229), settingSources/--bare/strictMcpConfig flag drift (the O5 hermeticity surface)."
-    },
-    {
-      "key": "agent_sdk_ts",
-      "label": "Claude Agent SDK (TypeScript)",
-      "last_seen": {
-        "version": "0.3.198",
-        "date": "2026-07-01"
-      },
-      "watch_for": "agent-loop / tool-permission API changes that the framework's spawn + workflow primitives mirror."
-    },
-    {
-      "key": "agent_sdk_py",
-      "label": "Claude Agent SDK (Python)",
-      "last_seen": {
-        "version": "0.2.110",
-        "date": "2026-07-01"
-      },
-      "watch_for": "headless `claude -p` credit-bucket accounting (the 2026-06-15 Agent-SDK bucket axis), output-format / stream-json contract used by eval-baseline-n20 + w0b."
-    },
-    {
-      "key": "codex_cli",
-      "label": "Codex CLI (pair-rail reviewer)",
-      "last_seen": {
-        "version": "0.144.1",
-        "date": "2026-07-12"
-      },
-      "watch_for": "codex `exec` flag-surface drift (the PLAN-142 / S214-S230 class): --color, -s/--sandbox enum (read-only|workspace-write|danger-full-access), -o/--output-last-message, --output-schema, --json (JSONL event stream), -m/--model; AND the removals that broke the rail on 0.139 \u2014 the old read-only/no-color/strict-json flags, and resume becoming an `exec resume` subcommand. All CLI shape lives in .claude/hooks/_lib/codex_cli_shape.py so a new removal/rename there is a NON-kernel edit. Also watch the binary-SHA pin (codex-cli-binary-sha256.txt) + the semver pin (codex-cli-pin.txt) when the binary upgrades. PLAN-156 Wave 1: bumped pin to <0.145.0 for GPT-5.6 (Sol/Terra/Luna first-class @0.143; 0.143 renamed the sandbox permission-profile flag \u2014 re-audit call sites on every bump). Also watch the silent-model-fallback class (a CLI whose bundled model catalog predates a server-side model launch answers 'requires a newer version' \u2014 the S266/gpt-5.6 class)."
-    },
-    {
-      "key": "codex_harness",
-      "label": "Codex CLI (host harness: hooks/config/rules)",
-      "last_seen": {
-        "version": "0.139.0",
-        "date": "2026-07-07"
-      },
-      "watch_for": "PLAN-155 Codex-as-HOST schema surface (debate A12), verified against codex-cli 0.139.0 (S261/S262 research): lifecycle-hook envelope vocabulary (hookEventName / permissionDecision / permissionDecisionReason / hookSpecificOutput / additionalContext), PreToolUse interception coverage (official caveat: intercepts only 'the simple' shell calls today), apply_patch|Edit|Write matcher aliases, /hooks trust-hash keying semantics, .codex/hooks.json + [hooks]-in-config.toml registration shape, execpolicy prefix_rule syntax, requirements.toml MANAGED-hook semantics, project_doc_max_bytes (AGENTS.md 32 KiB cap), SubagentStart continue:false enforcement (parsed-but-NOT-enforced on 0.139 \u2014 a future release enforcing it promotes the spawn rail ADVISORY->ENFORCED), Stop decision:block semantics, ConfigChange lifecycle event appearance (ABSENT on 0.139). On drift the checker attaches the code-registered fixture re-record runbook (_DRIFT_RUNBOOKS in check-substrate-watch.py): bump the pin via the ADR-111 ceremony FIRST, then re-record the Wave-1 host-adapter fixtures."
-    },
-    {
-      "key": "grok_cli",
-      "label": "Grok Build CLI (third host harness)",
-      "last_seen": {
-        "version": "0.2.93",
-        "date": "2026-07-12"
-      },
-      "cadence": "1-2 releases/DAY (proprietary 0.x) \u2014 WEEKLY staleness check, the tightest in this file",
-      "watch_for": "PLAN-156: grok hook-surface drift on a DAILY-release proprietary 0.x. Re-run the S269 characterization probes (PLAN-156/artifacts/characterization-grok-codex-S269.md) on every pin bump: (a) the PreToolUse decision semantics \u2014 block still fail-opens even with exit 2? deny-via-stdout still blocks? (probes P2/P4/P5/P7); (b) DOUBLE-FIRE \u2014 do the compat kill switches ([compat.claude] hooks=false, GROK_CLAUDE_HOOKS_ENABLED=0) start working at runtime? if so the native .grok/hooks/ single-surface decision (OQ1) can be revisited (probe P8); (c) tool-name vocabulary on the wire (run_terminal_command vs run_terminal_cmd) + the alias table; (d) the --sandbox council profile still kernel-enforces (negative control: unknown profile name must refuse to start \u2014 on 0.2.93 it only WARNS and runs unsandboxed, so the council asserts a ProfileApplied+enforced line in ~/.grok/sandbox-events.jsonl). Pin files: grok-cli-pin.txt (EXACT version, not a range) + grok-cli-binary-sha256.txt (the real supply-chain gate). Binary at ~/.grok/bin/grok. NO CI can automate this \u2014 no grok binary/secret on any runner (the substrate-watch obligation the Owner ratified at Wave-0).",
-      "source": "docs.x.ai/build + the grok release feed"
-    },
-    {
-      "key": "cc_native_usage",
-      "label": "Claude Code native per-agent usage (on-disk)",
-      "last_seen": {
-        "version": "2.1.232",
-        "date": "2026-08-14"
-      },
-      "watch_for": "PLAN-178 W1.2 native cost source (kill switch: CEO_NATIVE_COST_DISABLE=1; consumed by .claude/scripts/cc-native-usage-pull.py). Fingerprint measured by the live-fire probe (.claude/plans/PLAN-178/w12-native-cost-probe.md §2) against harness claude 2.1.232: root ~/.claude/projects/<cwd-slug>/<SESSION-UUID>/subagents/; globs task = subagents/agent-a*.meta.json (+ paired .jsonl), workflow = subagents/workflows/wf_*/agent-a*.meta.json (+ paired .jsonl), journal = subagents/workflows/wf_*/journal.jsonl (no meta — excluded from rollup); hard meta invariants [agentType, spawnDepth] (416/416 at probe time); usage_path message.usage per transcript turn (input_tokens/output_tokens/cache_creation_input_tokens/cache_read_input_tokens). Drift probes — ANY one trips the puller's fallback to the audit-log source (reversibility, W1.2 AC-2c): task+workflow globs return 0 in a session that provably spawned agents; a meta.json missing agentType or spawnDepth; message.usage without input_tokens/output_tokens; a NEW path level appearing between subagents/ and the meta.",
-      "source": ".claude/plans/PLAN-178/w12-native-cost-probe.md §2 — UNDOCUMENTED on-disk harness surface; no upstream changelog line will announce a shape change (re-run the probe on harness version bumps)"
-    }
-  ]
+  "_sources_note": "claude_code URL swapped 2026-07-01: docs.claude.com/en/release-notes/claude-code now 301s to platform.claude.com which 307s to the GitHub CHANGELOG; fetch the raw GitHub head directly. PLAN-155 Wave 0 (debate A12): codex_cli + codex_harness source URLs added; a LIST value means the Owner --refresh fetches EACH URL for that key (the codex_harness entry watches the release feed AND the three host-harness doc pages — hook-schema drift can land in docs without a release-feed line).",
+  "fetched": "2026-07-01",
+  "source_stale": false,
+  "_source_stale_reason": "Seeded last_seen from the values knowable at build time WITHOUT a network fetch (no-paid-spend rule; the changelog pages are not in-repo). The first Owner-run --refresh sets these to the live page heads and flips source_stale=false. Until then dimension vii reports a single advisory finding rather than a false 'up to date'.",
+  "refresh_recipe": "Owner-run: WebFetch each source URL, read the topmost version + date, update the matching last_seen.{version,date} + set _meta.fetched + _meta.source_stale=false. Costs no model tokens (doc fetch only). Record nothing billable. This is the ONE network step O12 needs and it is PENDING-OWNER by design (agents stay no-network under ADR-136-AMEND-1).",
+  "notes": "last_seen is the substrate version this framework was last RECONCILED against (its hooks/instruments/docs assume that surface). A newer upstream head is not a defect — it is a prompt to re-run the harvest/verify-the-knob-routes pass before trusting an old assumption (the S217/S228 silent-knob class). Detection only; never a BREAK."
+ },
+ "components": [
+  {
+   "key": "claude_code",
+   "label": "Claude Code CLI",
+   "last_seen": {
+    "version": "2.1.198",
+    "date": "2026-07-01"
+   },
+   "watch_for": "settings.json schema changes (statusLine.refreshInterval — unverified per W5 context pack §3), new hook events, output-token env honoring (CLAUDE_CODE_MAX_OUTPUT_TOKENS S229), settingSources/--bare/strictMcpConfig flag drift (the O5 hermeticity surface)."
+  },
+  {
+   "key": "agent_sdk_ts",
+   "label": "Claude Agent SDK (TypeScript)",
+   "last_seen": {
+    "version": "0.3.198",
+    "date": "2026-07-01"
+   },
+   "watch_for": "agent-loop / tool-permission API changes that the framework's spawn + workflow primitives mirror."
+  },
+  {
+   "key": "agent_sdk_py",
+   "label": "Claude Agent SDK (Python)",
+   "last_seen": {
+    "version": "0.2.110",
+    "date": "2026-07-01"
+   },
+   "watch_for": "headless `claude -p` credit-bucket accounting (the 2026-06-15 Agent-SDK bucket axis), output-format / stream-json contract used by eval-baseline-n20 + w0b."
+  },
+  {
+   "key": "codex_cli",
+   "label": "Codex CLI (pair-rail reviewer)",
+   "last_seen": {
+    "version": "0.144.1",
+    "date": "2026-07-12"
+   },
+   "watch_for": "codex `exec` flag-surface drift (the PLAN-142 / S214-S230 class): --color, -s/--sandbox enum (read-only|workspace-write|danger-full-access), -o/--output-last-message, --output-schema, --json (JSONL event stream), -m/--model; AND the removals that broke the rail on 0.139 — the old read-only/no-color/strict-json flags, and resume becoming an `exec resume` subcommand. All CLI shape lives in .claude/hooks/_lib/codex_cli_shape.py so a new removal/rename there is a NON-kernel edit. Also watch the binary-SHA pin (codex-cli-binary-sha256.txt) + the semver pin (codex-cli-pin.txt) when the binary upgrades. PLAN-156 Wave 1: bumped pin to <0.145.0 for GPT-5.6 (Sol/Terra/Luna first-class @0.143; 0.143 renamed the sandbox permission-profile flag — re-audit call sites on every bump). Also watch the silent-model-fallback class (a CLI whose bundled model catalog predates a server-side model launch answers 'requires a newer version' — the S266/gpt-5.6 class)."
+  },
+  {
+   "key": "codex_harness",
+   "label": "Codex CLI (host harness: hooks/config/rules)",
+   "last_seen": {
+    "version": "0.139.0",
+    "date": "2026-07-07"
+   },
+   "watch_for": "PLAN-155 Codex-as-HOST schema surface (debate A12), verified against codex-cli 0.139.0 (S261/S262 research): lifecycle-hook envelope vocabulary (hookEventName / permissionDecision / permissionDecisionReason / hookSpecificOutput / additionalContext), PreToolUse interception coverage (official caveat: intercepts only 'the simple' shell calls today), apply_patch|Edit|Write matcher aliases, /hooks trust-hash keying semantics, .codex/hooks.json + [hooks]-in-config.toml registration shape, execpolicy prefix_rule syntax, requirements.toml MANAGED-hook semantics, project_doc_max_bytes (AGENTS.md 32 KiB cap), SubagentStart continue:false enforcement (parsed-but-NOT-enforced on 0.139 — a future release enforcing it promotes the spawn rail ADVISORY->ENFORCED), Stop decision:block semantics, ConfigChange lifecycle event appearance (ABSENT on 0.139). On drift the checker attaches the code-registered fixture re-record runbook (_DRIFT_RUNBOOKS in check-substrate-watch.py): bump the pin via the ADR-111 ceremony FIRST, then re-record the Wave-1 host-adapter fixtures."
+  },
+  {
+   "key": "grok_cli",
+   "label": "Grok Build CLI (third host harness)",
+   "last_seen": {
+    "version": "0.2.93",
+    "date": "2026-07-12"
+   },
+   "cadence": "1-2 releases/DAY (proprietary 0.x) — WEEKLY staleness check, the tightest in this file",
+   "watch_for": "PLAN-156: grok hook-surface drift on a DAILY-release proprietary 0.x. Re-run the S269 characterization probes (PLAN-156/artifacts/characterization-grok-codex-S269.md) on every pin bump: (a) the PreToolUse decision semantics — block still fail-opens even with exit 2? deny-via-stdout still blocks? (probes P2/P4/P5/P7); (b) DOUBLE-FIRE — do the compat kill switches ([compat.claude] hooks=false, GROK_CLAUDE_HOOKS_ENABLED=0) start working at runtime? if so the native .grok/hooks/ single-surface decision (OQ1) can be revisited (probe P8); (c) tool-name vocabulary on the wire (run_terminal_command vs run_terminal_cmd) + the alias table; (d) the --sandbox council profile still kernel-enforces (negative control: unknown profile name must refuse to start — on 0.2.93 it only WARNS and runs unsandboxed, so the council asserts a ProfileApplied+enforced line in ~/.grok/sandbox-events.jsonl). Pin files: grok-cli-pin.txt (EXACT version, not a range) + grok-cli-binary-sha256.txt (the real supply-chain gate). Binary at ~/.grok/bin/grok. NO CI can automate this — no grok binary/secret on any runner (the substrate-watch obligation the Owner ratified at Wave-0).",
+   "source": "docs.x.ai/build + the grok release feed"
+  },
+  {
+   "key": "cc_native_usage",
+   "label": "Claude Code native per-agent usage (on-disk)",
+   "last_seen": {
+    "version": "2.1.232",
+    "date": "2026-08-14"
+   },
+   "watch_for": "PLAN-178 W1.2 native cost source (kill switch: CEO_NATIVE_COST_DISABLE=1; consumed by .claude/scripts/cc-native-usage-pull.py). Fingerprint measured by the live-fire probe (.claude/plans/PLAN-178/w12-native-cost-probe.md §2) against harness claude 2.1.232: root ~/.claude/projects/<cwd-slug>/<SESSION-UUID>/subagents/; globs task = subagents/agent-a*.meta.json (+ paired .jsonl), workflow = subagents/workflows/wf_*/agent-a*.meta.json (+ paired .jsonl), journal = subagents/workflows/wf_*/journal.jsonl (no meta — excluded from rollup); hard meta invariants [agentType, spawnDepth] (416/416 at probe time); usage_path message.usage per transcript turn (input_tokens/output_tokens/cache_creation_input_tokens/cache_read_input_tokens). Drift probes — ANY one trips the puller's fallback to the audit-log source (reversibility, W1.2 AC-2c): task+workflow globs return 0 in a session that provably spawned agents; a meta.json missing agentType or spawnDepth; message.usage without input_tokens/output_tokens; a NEW path level appearing between subagents/ and the meta.",
+   "source": ".claude/plans/PLAN-178/w12-native-cost-probe.md §2 — UNDOCUMENTED on-disk harness surface; no upstream changelog line will announce a shape change (re-run the probe on harness version bumps)"
+  },
+  {
+   "key": "cc_workflow_rail",
+   "label": "Claude Code Workflow rail vs spawn-gate boundary",
+   "last_seen": {
+    "version": "2.1.237",
+    "date": "2026-08-20"
+   },
+   "watch_for": "PLAN-178 W1.1 adopted item (AC-2c reversibility entry, added S316). The Workflow tool's agent() does NOT route through PreToolUse check_agent_spawn.py — measured by live-fire probe wf_d7af49d9 (blocked=false, PLAN-178 W0 adendo S305-b) on harness claude 2.1.220, re-confirmed by behavioral hook-enum probe at 2.1.237 (PLAN-169 W4, S315: 31 events, identical order). Mitigation shipped: pre-dispatch COMMON-block validator inside the 4 shipped workflow skills (mechanism proof wf_f2707efc); red branch = fan-out that WRITES stays forbidden until the substrate gates the rail. Drift probes — ANY one requires re-running the wf-probe and re-deciding the red branch (ADR-191 §4): a changelog line adding hook/gate coverage for Workflow or Task-batch agents; a NEW PreToolUse event firing on workflow agent dispatch; check_agent_spawn.py receiving events with workflow provenance; the hook-event enum changing (today 31 events — recurring control from PLAN-169 W4).",
+   "source": "probe wf_d7af49d9 registered in .claude/plans/PLAN-178-mast-audit-substrate-adoption.md (W1.1 + adendo S305-b) — UNDOCUMENTED boundary; upstream changelog MAY announce it (watch Claude Code release notes for 'workflow'/'subagent hook' lines); fallback route: CEO_SOTA_DISABLE=1 forces advisory on the in-script validator"
+  }
+ ]
 }
