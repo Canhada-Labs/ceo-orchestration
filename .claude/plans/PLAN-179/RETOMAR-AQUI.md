@@ -1,12 +1,35 @@
-# RETOMAR AQUI — PLAN-179 · atualizado S314, 2026-08-19 (noite)
+# RETOMAR AQUI — PLAN-179 · atualizado S314, 2026-08-20 (madrugada)
 
 ## Situação em uma frase
 
+**W0+W1+W1-b LANDADO E VERDE**: o Owner assinou (opção (a) do memo —
+residual do cap de 20k declarado), a cerimônia landou em `c042f9e`, dois
+fix-forwards fecharam os efeitos colaterais do corte (`6f7f20e` modes
+parciais + banda ~730→~770; `45c75e3` sweep completo da família `_lib`)
+e o CI de `45c75e3` terminou **5/5 success** — com o profiler curado por
+RERUN (boundary-flake provado: verde no próprio sha do land, hook
+`check_output_secrets` não tocado pelo pack, delta A/B local 2-4ms).
+
+## Lições do pós-land (para o próximo corte)
+
+- O land copia MODOS do pack: `_lib/*.py` chegou 755 e o smoke-install
+  compara modo na paridade install/upgrade. Cura em dois passos porque o
+  primeiro log veio truncado — varrer a FAMÍLIA inteira de uma vez.
+- Os 3 test files novos do pack tiraram o "~730" da banda ±5% POR 2
+  arquivos — contagem approx nos docs também é superfície de corte.
+- `check_output_secrets` vive rente ao teto de 120ms p95 do profiler em
+  hosted runner — INDEPENDENTE do pack (pré-land = HEAD na medição
+  A/B). Se voltar a flakar, o item é recalibrar o teto ou otimizar o
+  hook em wave própria, nunca reverter o land.
+
+---
+
+## (histórico da preparação — mantido)
+
 O rail rodou até o **round 11**, o critério de parada publicado DISPAROU
 (achado marginal de GC), **as rodadas autônomas encerraram** e o pack
-`staged-w01` (39 paths) está pronto com **UM residual aberto por decisão**
-— a escolha da forma final é do Owner na assinatura (memo em
-`rail-round-11/README.md`).
+`staged-w01` (39 paths) foi assinado com **UM residual declarado**
+(memo em `rail-round-11/README.md`).
 
 ## O que aconteceu na S314 (rounds 8→11, todos com evidência)
 
