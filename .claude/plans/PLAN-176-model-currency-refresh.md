@@ -10,7 +10,7 @@ depends_on: [PLAN-169]
 budget_tokens: 300-550k (re-firmado S302e r4 — W0 registry/resolver/lint 150-250k AGORA MORA AQUI; W1 rotina 100-150k; W2-W3 100-150k)
 budget_sessions: 4-5 (W0 2; W1 1; W2+W3 1-2; fase-2 auto-merge FORA — gated em ADR)
 context_risk: medium
-external_wait: "milestone: pós-GA v1.3.0 + lote W2.10/169 (literais curados). Registry/resolver/lint = W0 DESTE plano (r5). L3: rotina com REDE que escreve commits ⇒ debate próprio"
+external_wait: "SATISFEITO (emenda S316): GA v1.3.0 saiu 2026-08-17 e o lote W2.10/169 landou (`46676fd`) — o plano está DESBLOQUEADO e aguarda apenas sequenciamento. Registry/resolver/lint = W0 DESTE plano (r5). L3: rotina com REDE que escreve commits ⇒ debate próprio"
 tags: [model-currency, egress, automation, seed]
 ---
 

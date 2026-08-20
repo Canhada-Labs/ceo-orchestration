@@ -8,7 +8,7 @@ depends_on: [PLAN-169]
 budget_tokens: "CEO-context 700k-1.2M (ADR-081: EXCLUI contexto de sub-agente) — W0 60-120k; W1 200-350k; W2 150-250k; W3 200-350k; W4 100-200k. FLEET (sub-agentes; orçamento SEPARADO, não é contexto do CEO): piloto 4.5-9M; N pleno 11-22M; TETO DURO 14M — acima disso o plano PARA e volta ao Owner. Re-derivado nesta autoria: a estimativa 6-20M do PLAN-169 cobria E1-E4 e está STALE (§2.3)."
 budget_sessions: 8-12
 context_risk: high
-external_wait: "corte da v1.4.0-rc.1 — gatilho nomeado pelo PLAN-169 W5 (`PLAN-169:809`): este plano abre IMEDIATAMENTE após o corte. O corte depende de PLAN-169 W4 + W4-C + W6.2, todos abertos."
+external_wait: "corte da v1.4.0-rc.1 — gatilho nomeado pelo PLAN-169 W5 (`PLAN-169:809`). ESTADO REAL (emenda S316, decisão do Owner): a tag `v1.4.0-rc.1` NÃO existe (git tag --list vazio) e não há data; o corte depende de PLAN-169 W4 + W4-C + W6.2, todos abertos. Plano CONGELADO em draft por decisão S315/S316 — abre quando `git tag --list v1.4.0-rc.1` deixar de ser vazio, nunca antes."
 eta_calendar: "governado pelo external_wait (regra ADR-081/PLAN-180: eta = max(external_waits)) — abre em D+0 do corte da v1.4.0-rc.1; depois, multi-sessão CEO-only ⇒ mesmo-dia a D+1 por wave, exceto o que a QUOTA impuser (§5.4)"
 tags: [experiments, pre-registration, handoff, review, fleet, no-speed-claim]
 ---

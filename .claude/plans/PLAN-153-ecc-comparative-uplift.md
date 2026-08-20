@@ -394,7 +394,8 @@ posture honored.
    (`skill-patch-apply.py:664`) is wall-clock; Waves C/D/G touch 151+ skills.
    Options: (a) Owner pre-authorizes `skip_soak` per batch under the launch
    override; (b) start all shadows in parallel early and let the calendar run
-   (adds ~1-2 weeks wall-clock, zero token cost); (c) hybrid — skip for new
+   (adds an external soak wait of ~1-2 weeks wall-clock — ADR-081
+   external-wait, zero token cost); (c) hybrid — skip for new
    files (Wave D; nothing to regress), parallel-shadow for merges (Wave G).
    CEO recommends **(c)**.
 4. **OQ4 (S264 — AFTER-C soak window, ratified 2026-07-09):** AskUserQuestion

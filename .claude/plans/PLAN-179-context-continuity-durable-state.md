@@ -1,7 +1,8 @@
 ---
 id: PLAN-179
 title: Continuidade de contexto — estado durável escrito em fronteira de trabalho, não na morte da sessão
-status: reviewed
+status: executing
+executing_since: 2026-08-20
 reviewed_at: 2026-08-18
 reviewed_by: "Owner — flip draft→reviewed autorizado na S313 (2026-08-18) após debate L3 round-1 (S312, consensus PROCEED, 3× ADJUST/0 VETO; 9 emendas C1-C9 aplicadas ao §8). GA v1.3.0 saiu 2026-08-17 — o bloqueio do external_wait caiu. Execução W0→W4 em sessão(ões) próprias."
 created: 2026-08-16
@@ -232,11 +233,14 @@ wave posterior desenha em cima de premissa não medida
       token aparece no contexto pós-compactação. Resultado positivo OU
       negativo é entregável — negativo redireciona W1 para o canal
       `SessionStart(matcher=compact)` com stdout puro.
-- [ ] `[P1][US1][.claude/scripts/probes/probe_postcompact_channel.py]`
+- [x] `[P1][US1][.claude/scripts/probes/probe_postcompact_channel.py]`
+      (landado `c042f9e` — `test_probe_postcompact_channel.py`, 326
+      linhas, inclui o controle que falha sem canário)
       Controle positivo obrigatório: a sonda deve FALHAR quando o canário
       não é emitido. Sonda que não falha é sonda morta
       ([[feedback-probe-needs-neutral-user-layer]]).
-- [ ] `[P2][US2][.claude/hooks/_lib/audit_emit.py]`
+- [x] `[P2][US2][.claude/hooks/_lib/audit_emit.py]`
+      (landado `c042f9e` — `audit-registry.golden.txt:67`)
       Ação nova `context_pressure_observed` (enum fechado + inteiros:
       `used_bucket`, `event_source`, `plan_id`). Sem texto, sem path.
       Mede frequência real de compactação e a pressão em que ocorre.
@@ -265,7 +269,7 @@ explicitamente confirmada.
 
 ### W1 — Curar o snapshot vazio (o bug real)
 
-- [ ] `[P1][US3][.claude/hooks/_lib/scratchpad_lib.py]`
+- [x] `[P1][US3][.claude/hooks/_lib/scratchpad_lib.py]` (landado `c042f9e`)
       Escopo de fallback por **sessão** quando `resolve_plan_id` levanta
       `PlanIdDerivationError`. A escrita de continuidade NUNCA é pulada:
       sem plano resolvido, escreve sob escopo de sessão. Mantida a
@@ -278,18 +282,18 @@ explicitamente confirmada.
       **[Emenda r1-C2]** `set` com `ttl_seconds` explícito + item de GC de
       ARQUIVO (`.sqlite`/`.lock` órfãos) com teto, dimensionado pelo N de
       compactações/semana medido em W0.
-- [ ] `[P1][US3][.claude/hooks/check_precompact_continuity.py]`
+- [x] `[P1][US3][.claude/hooks/check_precompact_continuity.py]` (landado `c042f9e`)
       `snapshot_outcome` ganha o valor `written_session_scope`. O enum
       permanece fechado; `scratchpad_unavailable` passa a significar
       falha real de I/O, não ausência de plano.
-- [ ] `[P1][US3][.claude/hooks/check_postcompact_reinject.py]`
+- [x] `[P1][US3][.claude/hooks/check_postcompact_reinject.py]` (landado `c042f9e`)
       Leitura do escopo de sessão quando não há escopo de plano.
-- [ ] `[P1][US4][.claude/adr/ADR-153-compaction-continuity.md]`
+- [x] `[P1][US4][.claude/adr/ADR-153-compaction-continuity.md]` (landado `c042f9e`, sentinel W179-approved.md.asc)
       Emenda ADR-153-AMEND-1 registrando: (a) o fires-proof PENDING-LIVE
       foi satisfeito e o resultado foi NEGATIVO; (b) o residual #3 era o
       caminho dominante; (c) a cura por escopo de sessão. **Path
       canônico — exige cerimônia GPG.**
-- [ ] `[P1][US5][.claude/hooks/tests/test_check_compaction_continuity.py]`
+- [x] `[P1][US5][.claude/hooks/tests/test_check_compaction_continuity.py]` (landado `c042f9e`, +565 linhas)
       Controle positivo replicando E1: sessão sem `plan_transition` ⇒
       snapshot ESCRITO. O teste deve falhar contra o código de hoje.
       **[Emenda r1-C7]** Path corrigido para o arquivo REAL da família; e
@@ -303,7 +307,7 @@ explicitamente confirmada.
 Ponteiro não é restrição. A mitigação medida contra Governance Decay é
 quarentenar as regras da compressão com perda.
 
-- [ ] `[P1][US5b][.claude/hooks/check_postcompact_reinject.py]`
+- [x] `[P1][US5b][.claude/hooks/check_postcompact_reinject.py]` (landado `c042f9e` — inclui check_compact_pinning.py + wiring settings)
       Separar **PONTEIRO** (onde olhar — estado de trabalho) de
       **RESTRIÇÃO FIXADA** (a regra em si — o conjunto mínimo de invariantes
       de governança). Ponteiros seguem bounded/sanitizados.
@@ -319,14 +323,14 @@ quarentenar as regras da compressão com perda.
       estruturado (nunca texto livre); orçamentos SEPARADOS para restrição
       e ponteiro, restrições emitidas PRIMEIRO (o cap de 9 nunca trunca
       governança); mudança de semântica do `pointer_count` ⇒ bump de SPEC.
-- [ ] `[P1][US5c][.claude/plans/PLAN-179/pinned-constraints.md]`
+- [x] `[P1][US5c][.claude/plans/PLAN-179/pinned-constraints.md]` (landado `c042f9e` — `_lib/pinned_constraints.py` + doc derivada)
       Documentação DERIVADA da constante de código (teste asserta
       `set(md) == set(código)`). Conjunto mínimo: vetos ADR-052; disciplina
       de sentinel canônico ADR-031; "não commitar sem autorização do Owner";
       fail-closed em input / fail-open em infra. **Fechado e pequeno** — um
       conjunto grande re-cria o problema de piso (§2.1). Critério de corte
       (OQ-2 respondida): só invariantes cuja violação é irreversível.
-- [ ] `[P1][US5d][.claude/hooks/tests/test_check_compaction_continuity.py]`
+- [x] `[P1][US5d][.claude/hooks/tests/test_check_compaction_continuity.py]` (landado `c042f9e`)
       **[Emenda r1-C7]** Controle adversarial reescrito como propriedade
       ARQUITETURAL testável: as restrições fixadas chegam por canal que
       **NUNCA participa do bloco enviado ao sumarizador** (assert: o payload
@@ -339,6 +343,19 @@ quarentenar as regras da compressão com perda.
 **AC de saída W1:** (a) um autocompact numa sessão sem `plan_transition`
 produz `snapshot_found=true` e `pointer_count>1`; (b) o conjunto fixado
 sobrevive a uma compactação adversarial no controle de US5d.
+
+### Registro de execução — flip para executing e reconciliação de checkboxes (S316, 2026-08-20)
+
+Flip `reviewed → executing` autorizado pelo Owner em chat (S316). Os
+checkboxes de W1 (5) e W1-b (3) + dois de W0 (controle da sonda; ação
+`context_pressure_observed`) foram marcados com evidência do pack
+`c042f9e` + fix-forwards `6f7f20e`/`45c75e3` (CI 5/5 verde em
+`45c75e3`). **Seguem ABERTOS no W0, deliberadamente:** o veredito VIVO
+do canal (US1 #1 — a sonda está shipada, mas exige uma compaction paga,
+operador/local), `F`/`T` empíricos e o relatório (US2 — 
+`w0-measurement.md` não existe), e o progress guard (US2b — depende do
+`F` medido). O AC de saída W0 permanece aberto até esses itens. W2/W4
+seguem em `PLAN-179/staged-w24/`.
 
 ### W2 — Ledger de trabalho contínuo (a mudança de doutrina)
 

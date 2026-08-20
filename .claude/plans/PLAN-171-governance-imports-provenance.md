@@ -19,10 +19,13 @@ tags: [governance, audit, provenance, seed]
 > **SEMENTE (S302, 2026-08-11).** Registrada pelo CEO a pedido do Owner
 > após estudo de dois sistemas externos (cloudflare-os da Cloudflare,
 > Apache 2.0, aberto 2026-08-05; xirp do Spotify, proprietário, beta
-> 2026-08-10) via workflow de 5 agentes + análise de fit. **Gatilho por
-> MILESTONE (correção do debate Codex r1): W0 pode iniciar após GA
-> v1.3.0 + land de W3/W4 do PLAN-169 — este plano NÃO espera o trem
-> v1.4.0 inteiro.** Refinamento + debate L3 antes de `reviewed`.
+> 2026-08-10) via workflow de 5 agentes + análise de fit. **Gatilho
+> ATUALIZADO (decisão do Owner, S316 2026-08-20): W0 pode iniciar JÁ —
+> GA v1.3.0 saiu 2026-08-17 e o antigo acoplamento "land de W3/W4 do
+> 169" era milestone sem consumo de artefato (o censo retroativo dos 57
+> hooks não consome nada da W4). O único insumo real é o registro de
+> entrega do AC-9 no FECHAMENTO do 169, que a W0 consome QUANDO
+> existir.** Refinamento + debate L3 antes de `reviewed`.
 
 ## 0. Papel no roadmap
 
@@ -192,7 +195,9 @@ ACs mínimos (anti-churn de rail):
   positive controls nos TRÊS ramos — assignment malformado ⇒ BLOCK;
   arquivo fora do escopo ⇒ BLOCK; infra simulada (hook
   ausente/timeout) ⇒ allow com breadcrumb; AC adicional: replay dos
-  spawns históricos de 1 semana com ZERO falso-bloqueio.
+  spawns históricos de uma janela de observação retrospectiva de 7
+  dias-calendário (janela de DADOS, não estimativa de esforço —
+  ADR-081) com ZERO falso-bloqueio.
 - W4 (living docs): gerador emite índice navegável de 1 plano
   histórico como demo; AC: zero segredos (grep por CLASSES) e
   advisory-only.

@@ -322,6 +322,19 @@ r11 confirmou 3/4 e apontou sobra textual na nota histórica (N1);
       Incluir decisão sobre o **salt** e emitir marcador de migração na
       cadeia.
       Check: none (decisao do Owner — o gate e a decisao REGISTRADA com justificativa; ausencia mantem o AC aberto)
+      **DECISÃO DO OWNER REGISTRADA (S316, 2026-08-20, chat):**
+      **ARQUIVAR E RECOMEÇAR A CADEIA.** O log/chave/salt atuais viram
+      cópia forense read-only no dia do land da W1; cada projeto inicia
+      cadeia NOVA com marcador de migração. Justificativa: a cadeia
+      histórica nunca terá semântica por-projeto (68% não-atribuível +
+      2 tenants estrangeiros sob a mesma chave), e "declarar a janela"
+      preservaria continuidade de uma cadeia sem significado por
+      tenant. Consistente com a política de salt POR PROJETO da W1
+      (nenhum projeto é "herdeiro" da cadeia arquivada — todos cunham
+      salt novo com rotação REGISTRADA; a cláusula de herdeiro do salt
+      fica vazia por esta decisão). A unidade de emissores remanescentes
+      (abaixo) permanece obrigatória. O checkbox fecha quando o arquivo
+      + marcador forem EXECUTADOS na W1 reemitida.
 - [ ] `[P1]` **Emissores remanescentes (cura do r10 sobre o r9 #3):**
       derivar COMPORTAMENTALMENTE quais emissores ainda produzem
       eventos não-atribuíveis (os +149 do §1) e dispor CADA um — curar a

@@ -171,3 +171,22 @@ Sessão nova: Gate 1-2, ler este plano, confirmar autorização do Owner
 W3 quando houver pinentry disponível. Commit por wave com hint
 `feat(PLAN-180 W<n>): ...`. Ao final: `status: done`, backfill
 `related_commits`, atualizar memória `project-time-unit-adr081-gaps.md`.
+
+## Disposição pós-done dos achados remanescentes (S316, 2026-08-20 — decisão do Owner)
+
+O validador advisory (`check-time-unit.py`) ainda apontava 3 defeitos
+vivos sem herdeiro após o fechamento deste plano. Disposição ratificada
+pelo Owner em chat:
+
+- **PLAN-153:397** — CURADO em S316: a opção (b) do OQ3 agora nomeia o
+  ~1-2 weeks como espera externa de soak (ADR-081 external-wait), que é
+  o que ele sempre foi.
+- **PLAN-171:195** — CURADO em S316: a janela de replay agora é nomeada
+  como janela de OBSERVAÇÃO retrospectiva de dados (7 dias-calendário),
+  não estimativa de esforço.
+- **ADR-080:168** — **WONTFIX registrado**: a linha é citação histórica
+  de uma estimativa humana JÁ SUPERADA pelo próprio texto ("superseding
+  the original ~3-5 dev-dias human-time"). Editar um ADR ACCEPTED para
+  reescrever uma citação que documenta exatamente a transição de
+  doutrina destruiria o registro da transição. O validador é advisory;
+  este parágrafo é o registro do aceite.
