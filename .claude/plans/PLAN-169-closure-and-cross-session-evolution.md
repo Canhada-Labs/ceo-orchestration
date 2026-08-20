@@ -548,10 +548,16 @@ cron do coverage. Ledger E.2 vira CLOSED nesta entrada; E.7 segue como o
 > Fatos do substrato (research §2.1, doc oficial): mensagens = SÓ
 > texto plano (nunca history/files); entrega Delivered/Held/Refused;
 > guardrails anti-laundering existem mas são modelo+classifier
-> (probabilísticos); **o caminho de RECEBIMENTO não tem NENHUM evento
-> de hook** — inbound pode iniciar turno sem gate e sem registro HMAC
-> (buraco de PROVENIÊNCIA, não de autorização — a parede PreToolUse
-> continua valendo para o que a mensagem induzir).
+> (probabilísticos); **o caminho de RECEBIMENTO não tem evento
+> DEDICADO de hook — e o caminho GENÉRICO segue NÃO VERIFICADO
+> [rebaixado S315 pelo pair-rail r2: a redação anterior dizia "NENHUM
+> evento de hook", forte demais; se a mensagem de peer superficiar via
+> `UserPromptSubmit`, esta premissa e toda a caracterização de
+> proveniência abaixo mudam]** — SE nenhum hook cobrir o caminho,
+> inbound pode iniciar turno sem gate e sem registro HMAC (buraco de
+> PROVENIÊNCIA, não de autorização — a parede PreToolUse continua
+> valendo para o que a mensagem induzir). **Resolvido só pelo probe
+> (a), ainda não rodado.**
 - **W4.2.0 — Probes empíricos ANTES de qualquer desenho (perguntas de
   maior alavancagem da pesquisa, ~minutos cada):** (a)
   `UserPromptSubmit` dispara para mensagem de peer? (decide se
@@ -684,6 +690,205 @@ RE-ESCOPADO PELO DISCO — MF-6; de "wave indefinida" para horas).**
   estratégico para um framework instalado via `.claude/settings.json`);
   `isolation: "remote"` não modelado no gate de spawn.
 
+### Registro de execução — W4 ABERTA: bloco de probes de disco (S315, 2026-08-20)
+
+**Decisão do Owner (AskUserQuestion, S315), verbatim:** "PLAN-169 W4
+(Recomendado) — Abre a wave de substrato: W4.1 quota-resume (probes
+live-fire primeiro), W4.2 guard SendMessage/ListAgents, W4.3 decisão
+fleet-currency. É o gargalo de 170, 174, 176 e 181. L2/L3 — o
+enforcement vai para o W4-C com cerimônia GPG sua. Herda explicitamente
+o W1.3 (scoped permissions) do 178."
+
+Executado o que o próprio W4 manda executar primeiro (W4.1.0, W4.2.0,
+probe-first do W4.3): a fatia verificável em DISCO, read-only, $0.
+**Ressalva do W4.3 [pair-rail r3]:** o probe que o W4.3 EXIGE — se
+`agent(...,{model})` do Workflow deixou de ser INERTE na versão
+corrente — **NÃO foi rodado nesta fatia** e segue **ABERTO**. Sem ele,
+nada de tier routing em Workflow pode ser reivindicado; a limitação do
+ADR-144 §S220 permanece valendo como está.
+Probes que exigem duas sessões vivas ou estouro real de quota ficam
+nomeados abaixo como operador-dependentes — não foram simulados nem
+inferidos.
+
+**W4.1.0 — sidecar (probe ii): EVIDÊNCIA DE PRÉ-VOO, não GO.**
+**[reclassificado pelo pair-rail r2]** O probe (ii), como definido,
+pergunta se o sidecar está fresco **no instante de uma falha real de
+quota de 5h**. A medição abaixo foi feita em operação NORMAL, com
+`used_pct: 4.0` — prova que o escritor e o schema existem e que o
+formato é o esperado, **não** que o snapshot continua atual quando as
+requisições começam a falhar. O (ii) só fecha no live-fire de exaustão,
+junto com (i) e (iii).
+`~/.claude/projects/ceo-orchestration/state/statusline-snapshot.json`,
+idade 0,0 min no momento da medição, `rate_limits.five_hour =
+{resets_at: "1787238000", used_pct: 4.0}`. O dado que o W4.1 precisa
+existe e está fresco.
+
+- **Armadilha de contrato NOMEADA (achado do probe).** O corpo desta
+  wave cita `rate_limits.five_hour.{used_percentage, resets_at}`. Isso
+  descreve a **ENTRADA** do statusline. A **SAÍDA** do sidecar — que é
+  o que o consumidor novo do W4.1 lê — normaliza para **`used_pct`**
+  (`statusline-ceo.py:221`), e `resets_at` sai como **str**, não int.
+  Um consumidor escrito contra `used_percentage` lê `None`, nunca
+  cruza o threshold e **arma nunca**, silenciosamente. O ADR do W4.1
+  registra: entrada != saída; derivar do contrato do ESCRITOR, nunca
+  do nome citado em prosa. Classe conhecida (conjunto fechado escrito
+  de memória).
+- Probes (i) `StopFailure(rate_limit)` dispara no estouro real? e
+  (iii) o que sobrevive ao fechar o terminal? — **operador-dependentes**
+  (exigem estourar a quota de 5h e matar o terminal). Não executados.
+
+**W4.2.0 — substrato e wiring.**
+- Enum de eventos (`.claude/data/hook-schema-2.1.220.json`): 31
+  eventos. `StopFailure` EXISTE, contrato de entrada `{error: enum,
+  error_details?, last_assistant_message?}`. `PostToolBatch` e
+  `TaskCompleted` também existem.
+- Não há evento **DEDICADO** de recebimento de mensagem cross-session
+  no enum. **[REBAIXADO pelo pair-rail codex r1 — INCONCLUSIVO, não
+  confirmação]** A primeira redação dizia que isso "confirma por
+  construção" o buraco de proveniência do inbound. Não confirma:
+  ausência de evento DEDICADO não prova ausência de TODO hook — o
+  runtime pode superficiar a mensagem pelo `UserPromptSubmit` genérico,
+  que é precisamente o **probe (a) ainda não rodado**. Registrado como
+  INCONCLUSIVO até o probe vivo. É a lição já registrada em memória
+  ("sonda de EVENTO não é sonda de CANAL") aplicada contra o meu
+  próprio resultado.
+- Wiring vivo em `.claude/settings.json` — **15 eventos, 49
+  registrações, 47 scripts distintos** [contagem corrigida pelo
+  pair-rail r4: a redação anterior dizia "47 hooks", colando o número de
+  SCRIPTS no lugar do de REGISTRAÇÕES; 49 é o que bate com
+  `docs/COMMAND-SKILL-HOOK-MAP.md:132`]:
+  `StopFailure` **AUSENTE**, `PostToolBatch` **AUSENTE**,
+  `TaskCompleted` **AUSENTE**, `ConfigChange` **PRESENTE** — confirma a
+  instrução do W4.4 ("PROMOVER, não adicionar").
+- `crossSessionInbound`, `isolatePeerMachines`, `disableWorkflows`:
+  **nenhum definido** hoje. A postura default do W4.2 é trabalho novo,
+  não ajuste.
+- Probe (b) — censo do log vivo (12.085 linhas): `agent_spawn` = 0 e
+  `spawn_file_assignment_recorded` = 0. **INCONCLUSIVO POR VACUIDADE**:
+  não houve named spawn na janela (ceo-boot mediu 0 dispatches/24h),
+  então zero-eventos não distingue "o hook não intercepta" de "não
+  houve o que interceptar". A evidência S298 do gap segue valendo; este
+  censo NÃO a reforça.
+- Probes (a) `UserPromptSubmit` para mensagem de peer, (c) cross-machine
+  send, (d) `refuse` recusa own-child?, (f) PreToolUse para SendMessage
+  de subagent — **operador-dependentes** (exigem duas sessões vivas).
+
+**W4.4 P0 — os números do plano reconferidos no disco.**
+- Matchers hifenizados = **2**, confirmado: `settings.json:291` e
+  `:472`, ambos `mcp__codex__codex|mcp__codex__codex-reply`. Número do
+  plano bate.
+- `grep -rl 'sys.exit(2)' .claude/hooks/*.py` = **0** — medição do VP r2
+  reconfirmada.
+- **Drift de schema a fechar antes de desenhar:** o enum foi extraído da
+  **2.1.220**; o substrato vivo é **2.1.237** (17 patch releases). O W4
+  não deve desenhar contra o enum capturado sem re-captura.
+
+**W4.4 — RE-CAPTURA DO ENUM NA 2.1.237: EXECUTADA (S315).** Extraída
+do bundle vivo (`~/.local/share/claude/versions/2.1.237`, Mach-O arm64
+317 MB, mesmo método do PLAN-163 T2.2: carve do segmento JS, símbolo
+`V6`). **Resultado: o enum é IDÊNTICO ao capturado na 2.1.220 — 31
+eventos, MESMA ORDEM, zero adições, zero remoções.** Os 17 patch
+releases não tocaram o conjunto de eventos. Consequência prática: o
+desenho do W4 PODE usar o enum capturado; o drift que o plano temia
+não se materializou nesta dimensão. **Isto NÃO se auto-preserva** — a
+lição Sec-Unseen3 (a semântica de matcher mudou 3× em 6 semanas) vale
+aqui igual: a checagem vira controle RECORRENTE em CI junto com o dos
+2 matchers hifenizados, nunca auditoria one-shot.
+
+**W4.1 — TRÊS FATOS DE DESENHO extraídos do bundle vivo (estáticos, sem
+precisar estourar a quota).** O disparador do `StopFailure` no binário
+2.1.237 é:
+
+```js
+let i = e.error ?? "unknown";
+let s = {...., hook_event_name:"StopFailure", error:i,
+         error_details:e.errorDetails, last_assistant_message:o};
+await wU({..., hookInput:s, timeoutMs:r, matchQuery:i})
+```
+
+1. **O `matcher` do hook `StopFailure` casa contra o VALOR DE `error`,
+   não contra nome de tool** (`matchQuery: i`, onde `i` é o `error`).
+   **Crédito onde é devido (autocorreção):** isto NÃO é descoberta
+   nova — o snapshot do próprio repo já registrava
+   `"StopFailure": "error"` em
+   `matcher_semantics.matcher_query_field_by_event_verified`. A
+   extração do bundle 2.1.237 é uma **confirmação independente** (dois
+   métodos, duas versões, mesmo resultado); o que faltou foi o fato
+   VIAJAR do snapshot para o corpo da wave. A registração do W4-C item 1 tem de usar
+   `"matcher": "rate_limit"` — um matcher de tool ali nunca dispararia,
+   e o modo de falha seria silêncio total.
+2. **O valor é `rate_limit`**, confirmado no mapeador de erros
+   (`zNv`): `e instanceof Ms && e.status===429` ⇒
+   `qd({content:..., error:"rate_limit", quotaLimits: osf(e)})`.
+3. **`quotaLimits` NÃO chega ao hook.** O `hookInput` do StopFailure
+   copia SOMENTE `error`, `error_details` e `last_assistant_message` —
+   o objeto que carrega `quotaLimits` é a MENSAGEM, não o payload do
+   hook. Ou seja: **o hook não recebe `resets_at`**. Isso CONFIRMA o
+   desenho do plano (o horário vem do sidecar; o payload do
+   StopFailure é autoritativo apenas como EVIDÊNCIA DE EXAUSTÃO,
+   R-SEC2) — mas por uma razão que o plano não tinha: não é escolha,
+   é a única opção.
+
+**FALSO-POSITIVO DE DESENHO descoberto na mesma leitura (cura
+obrigatória antes do W4-C item 1).** `error:"rate_limit"` **não é
+exclusivo de estouro de quota**: o mesmo valor é emitido quando um
+modelo está indisponível — `Pt instanceof Ire && Pt.reason ===
+"model_blocked"` ⇒ `qd({content: "<modelo> is currently unavailable.",
+error:"rate_limit"})`. Como é o hook `StopFailure` que grava o
+breadcrumb de exaustão, um `model_blocked` faria o hook gravar
+evidência de exaustão que NUNCA houve — e o turno de retomada acordaria
+sobre premissa falsa, exatamente o que o no-op guard existe para
+impedir (mas não impede, porque a evidência estaria lá, válida e
+fresca). **Cura exigida [endurecida pelo pair-rail codex r1 — a
+primeira redação era furada]:** a primeira versão dizia "cruzando com o
+sidecar (`used_pct` alto) **e/ou** classificando `error_details`" — o
+"e/ou" AUTORIZA o ramo sidecar-só, e é exatamente aí que o falso-positivo
+sobrevive: **quando `used_pct` JÁ está acima do threshold, um
+`model_blocked` satisfaz o ramo do sidecar**, o hook grava exaustão
+falsa e o job armado passa pelo no-op guard. O discriminador tem de ser **INDEPENDENTE do nível
+de uso** E **ESPECÍFICO da janela de 5h** [endurecido de novo pelo r2]:
+"evidência de 429" NÃO basta — no MESMO bloco `zNv` do 2.1.237, 429
+genérico/transitório e falhas de crédito de uso também mapeiam para
+`error:"rate_limit"`. Exige-se **identificação POSITIVA de exaustão da
+janela de 5h**, com fixture negativa para CADA outro ramo que produz
+`rate_limit` (model_blocked, 429 genérico, crédito) — nunca "ou". **E o controle negativo tem de usar snapshot de uso ALTO** —
+uma fixture de `model_blocked` com quota baixa passa por acidente e não
+prova nada. Sem isso, o W4.1 embarca um gerador de turnos autônomos
+espúrios.
+
+**Achado P0 de governança, FORA do escopo do W4 — destino: decisão do Owner.**
+O audit dir cai, sem env, num **literal hardcoded**
+`$HOME/.claude/projects/ceo-orchestration/` (`_lib/audit_hmac.py:182` e
+`_lib/audit_emit.py:2298`). **A precedência de env NÃO é compartilhada**
+[corrigido pelo pair-rail r6 — a redação anterior afirmava a cadeia
+`LOG_DIR → LOG_PATH → STATE` como se valesse para todos]: só
+`audit_hmac._audit_dir_from_env` segue as três; `audit_emit` usa
+`LOG_PATH` apenas para o arquivo de log e `LOG_DIR`/`HOME` para dir,
+lock e errors — sob `STATE`-only ou `PATH`-only a cadeia única é FALSA e
+faria o operador crer que a família inteira está isolada. A matriz por
+artefato vive no `PLAN-182` W0-US2. Consequência MEDIDA, não
+hipotética: **1.534 eventos de um SEGUNDO projeto do mesmo operador
+(identificador redigido)** — que tem o framework instalado — estão
+gravados no audit-log DESTE repo, janela
+`2026-08-19T21:17Z` -> `2026-08-20T11:58Z` (**ativo agora**). O número
+de eventos locais que esta entrada citava (**310**) foi medido de novo e
+**não reproduz** — a soma verificada na janela é **302**, e o histograma
+completo (cinco rótulos distintos, DOIS tenants estrangeiros, este repo
+sob dois rótulos) está no `PLAN-182` §1. Correção do pair-rail r7:
+deixar os dois números na história canônica de planejamento tornaria a
+evidência forense contraditória consigo mesma.
+Inclui eventos de segurança: `env_var_hijack_blocked` (28),
+`veto_triggered` (3), `git_hook_bypass_blocked` (1),
+`output_scan_finding_suppressed` (841). Duas consequências distintas:
+(1) **dogfood** — as métricas de governança deste repo (ceo-boot,
+audit-tokens, skill-health) medem uma MISTURA de projetos, e a cadeia
+HMAC encadeia eventos de projetos diferentes; (2) **adopters** — dois
+adopters no mesmo `$HOME` sem env explícita compartilham o mesmo log E
+a mesma chave HMAC. Não tocado nesta sessão: resolução de audit dir é
+superfície de governança e a cura precisa de destino declarado (wave
+própria aqui, ou plano próprio).
+
+
 ### W4-C — Cerimônia de substrato (L3+, pack GPG próprio, escopo FECHADO — MF-2)
 
 > Todo o ENFORCEMENT do W4 mora em superfície canônica. Este é o slot
@@ -692,6 +897,15 @@ RE-ESCOPADO PELO DISCO — MF-6; de "wave indefinida" para horas).**
 > recomendação alternativa do VP (W4 inteiro → PLAN-170) foi
 > registrada e recusada no consensus §2: o mandato do Owner é um plano
 > que fecha e publica.
+>
+> **[AMENDADO S315 — decisão do Owner, registrada]** O escopo foi
+> ampliado UMA vez, por UM item: **9** (W1.3 scoped permissions,
+> herdado do PLAN-178). Uma segunda ampliação foi PROPOSTA e RETIRADA
+> na mesma sessão — isolamento do audit dir — quando a varredura
+> comportamental mostrou 63 módulos em vez dos 2 que a proposta
+> alegava; virou `PLAN-182`. Registro honesto do porquê: a decisão de
+> absorver foi tomada sobre um número errado, e o número certo a
+> inverteu. "FECHADO" continua valendo para todo o resto.
 
 Escopo exaustivo:
 1. Hook novo `check_quota_resume.py` (W4.1) + registração no
@@ -755,6 +969,20 @@ Escopo exaustivo:
    ADR. Sem isso, executar o plano ao pé da letra deixaria agents de
    Workflow (acceptEdits, edits auto-aprovados) fora da defesa de
    spawn nos adopters.
+9. **Herdado do PLAN-178 — W1.3 scoped permissions (decisão, não
+    implementação).** O PLAN-178 (`### Registro de execução —
+    fechamento parcial`, S314) nomeou a **abertura do W4-C** como o
+    momento de decidir "absorver aqui vs pack próprio". A decisão NÃO
+    foi tomada na S315 — o que abriu foi a **W4**, não o W4-C. Fica
+    como o PRIMEIRO item a resolver na montagem deste pack, com as duas
+    rotas explicitadas e a escolhida registrada. Toca `settings.json`
+    ⇒ cerimônia do Owner no ato, qualquer que seja a rota.
+
+**FORA deste pack [S315]:** isolamento do audit dir por projeto — o
+fallback literal `ceo-orchestration` alcança **63 módulos** (24 em
+`.claude/hooks/`, 39 em `.claude/scripts/`), tamanho incompatível com um
+pack de cerimônia de escopo fechado ⇒ **`PLAN-182`**.
+
 **Escopo em ARQUIVOS (VP r2-MF-A — o gate `touched−scope=∅` mede
 caminhos, não decisões; lista derivada do predicado, a fechar
 byte-exata na montagem do pack):** canônicos — `.claude/settings.json`,
@@ -1294,6 +1522,48 @@ Enquanto não fecharem: um `grant` de kernel continua sem evento
 auditável, e `scripts/tests/**` continua sem lint em CI.
 
 ## Progress log
+
+- 2026-08-20 (S315): **W4 ABERTA pelo bloco de probes de disco** —
+  Owner escolheu a W4 como próxima unidade (AskUserQuestion, decisão
+  verbatim no `### Registro de execução — W4 ABERTA`). Executada a
+  fatia que o próprio W4 manda primeiro (W4.1.0/W4.2.0/probe-first do
+  W4.3 — ver ressalva do W4.3 abaixo), read-only e $0. Resultados:
+  sidecar presente e fresco em operação normal (`used_pct` 4,0) —
+  **evidência de PRÉ-VOO, NÃO um GO**: o probe (ii) pergunta pela
+  frescura no INSTANTE da exaustão, e isso só o live-fire responde; `StopFailure`/`PostToolBatch`/`TaskCompleted` existem no
+  substrato mas NÃO estão wired; `ConfigChange` já existe (confirma
+  "promover, não adicionar"); posturas cross-session inexistentes
+  hoje; matchers hifenizados = 2 e `sys.exit(2)` = 0 reconfirmados.
+  Três coisas que o probe mudou no desenho: (a) o corpo do W4.1 cita
+  `used_percentage`, mas o sidecar entrega `used_pct` — consumidor
+  escrito contra o nome citado **arma nunca**, silenciosamente; (b) o enum
+  foi **RE-CAPTURADO** do bundle vivo 2.1.237 e é **idêntico** ao da
+  2.1.220 (31 eventos, mesma ordem) — o drift temido não existe NESTA
+  dimensão, e a checagem vira controle recorrente em CI; (c) o censo de
+  `agent_spawn`=0 é **vacuidade** (zero named spawns na janela), não
+  prova de gap. **Do bundle vivo saíram ainda 3 fatos de desenho do
+  W4.1 que o plano não tinha** — o matcher do `StopFailure` casa contra
+  o VALOR de `error` (não contra tool), o valor é `rate_limit`, e
+  `quotaLimits` NÃO chega ao hook — **mais um falso-positivo real:
+  `error:"rate_limit"` também é emitido em `model_blocked`, o que faria
+  o hook gravar evidência de exaustão inexistente.** Detalhe e cura
+  exigida no registro da W4. **Achado P0 — RETIRADO do W4-C e promovido a plano próprio
+  `PLAN-182` (o item 9 do W4-C é, e segue sendo, APENAS o W1.3 scoped
+  permissions herdado do PLAN-178; o W4-C guarda só um ponteiro de uma
+  linha para o achado). Corrigido pelo pair-rail r4, que pegou este
+  parágrafo ainda chamando o achado de "item 9 mandatório" depois de a
+  decisão já ter sido revertida):** o fallback do audit
+  dir é o literal `ceo-orchestration`,
+  repetido em **63 módulos** (24 em `.claude/hooks/`, 39 em
+  `.claude/scripts/`) — a proposta original dizia **2**, e as três
+  rodadas de rail mais a varredura comportamental levaram o número a
+  4 → 20 → ≥22 → **63**. Há **1.534 eventos de outro projeto gravados
+  no log deste repo**, ativos. **Consequência de processo:** o Owner
+  havia aprovado absorver isto no W4-C sobre a premissa de 2 arquivos
+  em `_lib`; com o número real a decisão foi REVERTIDA na mesma sessão
+  e o item virou **`PLAN-182`** (levantamento primeiro, especificação
+  depois). O W4-C guarda só um ponteiro de uma linha. Abertos inalterados: W4 (desenho+implementação),
+  W4-C, W5 restante, W6.2.
 
 - 2026-08-19 (S314): **W3-K LANDADA (`c34e8e3`) — E.2 CLOSED; ledger
   vira 58/3/1.** Cerimônia de kernel em sessão própria (sentinel

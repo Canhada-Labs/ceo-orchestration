@@ -1,0 +1,356 @@
+---
+id: PLAN-182
+title: Isolamento de runtime state por projeto — implementar o ADR-001 como escrito, quatro meses depois
+status: reviewed
+reviewed_at: 2026-08-20
+reviewed_by: "Owner — autorizacao explicita em chat (S315, 2026-08-20): 'se ja esta pronto deixa como revisado e apto pra fazer'. Debate L3 round 1 fechado com veredito PROCEED (13 consensos) e ajustes do consenso incorporados ao corpo; validate_governance_fast = 0 findings; pair-rail codex 6 rodadas fechadas, 32 achados, todos curados."
+created: 2026-08-20
+owner: CEO
+depends_on: []
+blocked_on_adr: "emenda ao ADR-001 (obrigatoria, AC-7) e decisao sobre ADR-079 (semantica de per-installation, OQ-4) — nenhuma execucao de W1 abre antes"
+budget_tokens: 300-450k (W0 levantamento 110-170k; W1 resolvedor+cerimonia 110-160k; W2 decisao do log historico 40-70k; W3 installer+adopters 40-60k) — re-orcado no round 1 do debate, onde dois criticos convergiram independentemente em 250-500k contra os 120-260k da primeira redacao
+budget_sessions: 4-6
+context_risk: high
+external_wait: "nenhum"
+tags: [runtime-state, audit, hmac, salt, confidentiality, isolation, adopter, adr-001]
+---
+
+## 1. O que este plano realmente é
+
+Achado na S315 durante os probes da W4 do PLAN-169: o fallback de
+resolução do diretório de runtime state é o literal
+`$HOME/.claude/projects/ceo-orchestration`, de modo que **todo projeto
+com o framework instalado e sem env explícita compartilha o mesmo
+diretório** — log, chave HMAC, salt, locks e state.
+
+**O debate round 1 achou o enquadramento correto, e ele muda a natureza
+do plano** (consenso F5): isto **não é uma decisão em aberto**. O
+`ADR-001-runtime-state-directory.md` está **ACCEPTED desde 2026-04-11**,
+com decision drivers literais *"prevent secret leakage via git, align
+with Claude Code native memory, single canonical location"*, e define o
+caminho como:
+
+```
+${CLAUDE_PROJECT_DIR_NATIVE:-$HOME/.claude/projects/<project-slug>}/
+```
+
+**`<project-slug>` — não um literal.** E `CLAUDE_PROJECT_DIR_NATIVE` é
+consumido por **zero** arquivos `.py`/`.sh` do repositório: aparece
+apenas no próprio ADR (`:73`, `:79`). O próprio ADR já previu este
+plano, na consequência `(-)`: *"the `<project-slug>` derivation is
+implicit … Both work; Sprint 3 may align them"*.
+
+Portanto: **o literal é um defeito contra decisão ACCEPTED, adiado desde
+abril**, e este plano é o alinhamento que o ADR-001 nomeou e nunca
+recebeu. Isso tem duas consequências normativas: o blast radius
+declarado no ADR (L2) está desatualizado perante os números medidos
+(L3+), e **a emenda ao ADR-001 é entregável obrigatório antes da W1**
+(AC-7), não documentação posterior.
+
+### Evidência medida (histograma completo, substituindo o número errado da 1ª redação)
+
+Log vivo, **15.355 linhas**. Distribuição do campo `project`:
+
+| rótulo | eventos |
+|---|---|
+| `""` (vazio) | **10.254** |
+| `/Users/…/<tenant-a>` | **2.136** |
+| `/Users/…/<tenant-b>` | **1.706** |
+| `/Users/…/ceo-orchestration` | **1.053** |
+| `ceo-orchestration` | **7** |
+
+Correções à primeira redação, todas apontadas pelo debate: são **dois**
+tenants estrangeiros, não um; **este repositório emite sob dois rótulos
+distintos**; e o número **310** que a primeira redação citava **não
+reproduz sob nenhum predicado** (a soma na janela é 302). Eventos de
+segurança de tenant estrangeiro confirmados exatos: `env_var_hijack_blocked`
+28, `veto_triggered` 3, `git_hook_bypass_blocked` 1,
+`output_scan_finding_suppressed` 841.
+
+**Nota de redação (K9), registrada porque é contraintuitiva:** o log
+**não** redige o que esta prosa redige — `project` é gravado como
+caminho absoluto em claro, no mesmo registro em que `repo_path_hash` é
+hasheado.
+
+### O que é atribuível, e por que isso decide a W2
+
+**68% do log (10.453 de 15.355) não é atribuível a projeto nenhum** —
+10.254 com `project` vazio mais 199 sem o campo. A causa é código, não
+env faltando: `project` é parâmetro do chamador com default `""`,
+propagado por ~40 assinaturas em `audit_emit.py`.
+
+**Nuance que o debate mediu e que muda a W2:** entre duas medições
+sucessivas o total cresceu **+2.519** enquanto os não-atribuíveis
+cresceram apenas **+149** (~6% dos novos). **A massa não-atribuível é
+legado quase-estático, não taxa de produção corrente.** É uma janela
+histórica fechada — não um vazamento que segue no mesmo ritmo. Isso
+torna a opção "segregar" da W2 **indisponível para a maior parte do
+log**, e desloca a decisão para "declarar a janela" contra "arquivar e
+recomeçar a cadeia".
+
+## 2. O salt é o item mais grave, e a primeira redação não o mencionou
+
+Dois mecanismos distintos, ambos verificados (consenso F2):
+
+1. **Compartilhamento HOJE.** O `.salt` é único por `$HOME`
+   (`injection_salt.py:63-70`), logo `prompt_sha256` correlaciona
+   **entre projetos** — exatamente o oráculo que o ADR-079 existe para
+   fechar. **A garantia do ADR-079 já é falsa** na fronteira de tenancy.
+2. **Rotação silenciosa NA CURA.** `get_instance_salt()` (`:124-148`)
+   **cunha e persiste na primeira chamada** quando o arquivo não existe,
+   devolvendo `b""` apenas em falha de I/O. Mudar o diretório rotaciona
+   o salt **sem erro, sem log, sem sinal** — contra o `## No rotation`
+   do próprio módulo, cuja razão declarada é que a rotação invalida a
+   correlação de `prompt_sha256` de todo o histórico.
+
+A W1 precisa de carry-over explícito **ou** de emenda ao ADR-079. A
+primeira redação discutia re-chavear o log e não citava o salt uma vez.
+
+## 3. Por que curar pela metade é pior que não curar
+
+Migrar um subconjunto **parte a cadeia**: se o estado HMAC se move
+enquanto escritores permanecem no literal, `verify_chain()` passa a
+acusar quebra onde não houve adulteração.
+
+**Correção de tempo verbal (K12):** a primeira redação dizia "os
+leitores seguem medindo o log contaminado". Isso é **falso** para
+`token-estimator.py` e `ceo-cost.py`, que **já leem um log inexistente**
+sempre que `CLAUDE_PROJECT_DIR` está setado — o predicado
+`scoped.exists() or scoped.parent.is_dir()` passa pelo segundo disjunto
+porque o diretório de transcripts existe, e o fallback legado é
+inalcançável. Ou seja: **a migração parcial já está em curso**, sem
+ninguém ter decidido. O plano trata disso como triagem, não como risco
+futuro.
+
+**O lock é o artefato mais perigoso da migração** (F12) e a primeira
+redação não o listava: dois processos com resolvedores divergentes
+seguram locks diferentes sobre o mesmo log. A ordem de migração do lock
+é decidida na W0-US5, não improvisada na W1.
+
+**Correção de fato (F8):** a primeira redação dizia "39 em
+`.claude/scripts/` (tier NÃO-canônico)". **Não existe tier.**
+`check_canonical_edit.py` casa por glob `.claude/hooks/*.py` (`:30`),
+`_lib/*.py` (`:33`), `_lib/**/*.py` (`:35`) — **100% dos hooks e do
+`_lib` são canônicos** — e enumera exatamente **5** arquivos de
+`.claude/scripts/`. A justificativa correta para plano separado nunca
+foi "escapa da cerimônia": é que **adiciona ~50 arquivos não-cerimoniais
+a um pack de escopo fechado**.
+
+## 4. Modelo de adversário e a propriedade de segurança em jogo
+
+Escrito porque o debate mostrou que sem isto a W1 não sabe o que está
+comprando (K7/K8).
+
+- **Fronteira de confiança:** processos do mesmo UID. Entre eles não há
+  origem inforjável — quem executa Bash já controla a sessão.
+- **A propriedade que se perde hoje NÃO é "tamper-evidence degradada":
+  é tamper-evidence AUSENTE na fronteira de tenancy.** Uma chave HMAC
+  compartilhada significa que o projeto A pode forjar cadeia válida para
+  eventos atribuídos ao projeto B. Chave-por-projeto e dir-por-projeto
+  são decisões **separadas**, e a W0 tem de dizer qual compra o quê.
+- **O QUE A MIGRAÇÃO NÃO COMPRA — corrigido pelo pair-rail r7, e é um
+  erro de raciocínio da redação anterior, não de redação.** Sob o
+  modelo de adversário declarado acima (mesmo UID), **chaves distintas
+  por projeto NÃO restauram tamper-evidence entre tenants**: um processo
+  comprometido do projeto A **lê** o diretório `0700` e a chave `0600` do
+  projeto B, porque ambos pertencem ao mesmo UID. Modo de arquivo não é
+  fronteira contra quem já está do lado de dentro dela. O que a migração
+  compra, e é o que a W1 pode declarar: **fim da mistura ACIDENTAL** —
+  cadeias que não se entrelaçam, atribuição correta, e `verify_chain()`
+  com significado por projeto. Tamper-evidence de verdade entre tenants
+  exigiria fronteira mais forte (UID separado, ou chave fora do alcance
+  do processo), o que **não** está no escopo deste plano e é registrado
+  aqui como limite declarado.
+- **Consequência de honestidade:** a claim de tamper-evidence do
+  `CLAUDE.md` §1 **não vale entre projetos do mesmo `$HOME` — nem antes
+  nem depois desta migração**. A W1 atualiza esse texto no mesmo lote,
+  e o texto novo declara a limitação como PERMANENTE sob mesmo UID, não
+  como pendência que a migração resolve.
+
+## RESIDUAL DECLARADO — pair-rail r9 veio REJECT (curar ANTES de executar)
+
+A 9a rodada do pair-rail devolveu **REJECT** com 3 achados P1 contra ESTE
+plano. Eles nao foram curados nesta sessao e sao a **primeira tarefa da
+abertura da W0** — nenhuma unidade executa antes.
+
+1. **[P1] `derive-audit-family.py` NAO EXISTE.** A W0 e declarada
+   read-only e a AC-1 exige que esse comando torne o censo reproduzivel.
+   Um executor teria de criar ferramenta rastreada (violando o contrato
+   da wave) ou usar script temporario (que nao satisfaz a AC-1).
+   **Cura:** permitir explicitamente que a W0 crie a instrumentacao, ou
+   adicionar passo de setup de ferramenta antes dela.
+2. **[P1] O carry-over do salt PRESERVA o defeito.** Dois projetos que
+   hoje compartilham o `.salt` legado, ao receberem esse mesmo valor nos
+   dois diretorios novos, ficam com salts **byte-identicos** — mantendo
+   exatamente a correlacao cross-project que o §2 denuncia. O check
+   atual so exige chaves HMAC distintas, entao **passaria violando o
+   ADR-079** (`ADR-079:186-202`, distincao cross-installation).
+   **Cura:** politica explicita de salt POR PROJETO + teste de
+   distincao de hash entre dois projetos — ou emenda ao ADR-079
+   abandonando a propriedade.
+3. **[P2] "Janela historica fechada" e classificacao errada.** Foram
+   **149 eventos nao-atribuiveis novos** entre dois snapshots: taxa
+   reduzida, nao fluxo encerrado. Tratar como arquivo faz a W2 ignorar
+   emissores que ainda omitem atribuicao. **Cura:** condicionar a
+   classificacao a observar ZERO novos, ou descrever como vazamento de
+   taxa reduzida.
+
+## Waves
+
+> **W1-W3 abaixo são ESBOÇO NÃO-NORMATIVO.** Foram escritas antes da W0
+> para registrar direção, não para executar como estão. Cada uma é
+> REEMITIDA a partir da tabela da W0, e a reemissão substitui
+> integralmente o texto atual (AC-6). Dado o tamanho do delta produzido
+> pelo round 1, **a reemissão da W1 passa por sua própria rodada de
+> crítica**.
+
+### W0 — Levantamento (read-only; nenhuma outra wave EXECUTA antes desta fechar — AC-6)
+
+- [ ] `[P0][US1]` Derivar a família COMPORTAMENTALMENTE com predicado
+      executável e regra de allowlist explícita. A família inclui
+      escritores, leitores, **templates, installer, CI, SPEC e testes** —
+      não apenas módulos de runtime.
+      Check: derive-audit-family.py --json lista modulo/artefato/papel; grep pelo literal NAO e oraculo, porque SPEC, docs e testes legados o mantem legitimamente
+- [ ] `[P0][US2]` Matriz de precedência de env **por artefato**, sobre a
+      lista fechada na US5 (11+ artefatos com anchors, não os 5 da
+      primeira redação). Incluir bounding rule por classes de
+      equivalência sobre as 33 vars de `env-inventory.json`, e registrar
+      que sob `PATH`-only o lock e o errors **não** acompanham o log.
+      Check: pytest da matriz artefato x env; cada celula asserta o caminho resolvido de cada modulo
+- [ ] `[P0][US3]` Medir o estado do log histórico com **os dois**
+      instrumentos — `audit-verify-chain.py` para a pergunta de cadeia e
+      `check-audit-hmac-null.py` — porque **o delta entre eles é a
+      resposta**. Anexar a saída bruta.
+      Check: as duas saidas brutas anexadas ao plano, com o delta explicado por escrito
+- [ ] `[P0][US5]` Inventário do **diretório** por artefato: dono,
+      semântica de compartilhamento e **modo de arquivo**. Hoje há 45
+      entradas de topo, `state/` com 129.661 arquivos, e modos 0644/0600
+      misturados.
+      Check: tabela artefato/dono/compartilhamento/modo cobrindo as 45 entradas de topo
+- [ ] `[P0][US6]` Atribuibilidade: histograma de `project`, presença de
+      `session_id`, e **veredito explícito sobre existir chave de
+      junção** — hoje medida como inexistente.
+      Check: veredito escrito "existe chave de juncao: sim/nao", com o comando que o produz
+- [ ] `[P0][US7]` Reconciliar os resolvedores **já shipados**: as quatro
+      implementações divergentes mais a convenção repo-local
+      (`<repo>/.claude/state/audit-log.jsonl`, escrita por
+      `_lib/federation/handlers/audit_event_push.py:234` e lida como
+      primeiro candidato por `check_skill_bootstrap_post.py:129-131`).
+      Dizer qual vence e o que cada uma já possui.
+      Check: tabela dos 4+1 resolvedores com veredito de qual vence; sem isso a W1 entrega uma TERCEIRA convencao
+- [ ] `[P1][US4]` Inventariar superfícies de entrega: adopters
+      instalados, `templates/`, `install.sh`, `upgrade.sh`,
+      `settings.base.json`, `dist/ceo-plugin/hooks/`.
+      Check: none (levantamento — a saida e a lista de superficies)
+
+### W1 — Resolvedor único (esboço; reemitir após a W0)
+
+- [ ] `[P0]` Resolvedor derivado do projeto real, **conforme o ADR-001
+      como escrito** (`<project-slug>`), importado por toda a família.
+      Check: pytest — mesma entrada produz o mesmo caminho em todos os modulos da familia derivada na W0
+- [ ] `[P0]` **Carry-over do `.salt` antes do primeiro
+      `get_instance_salt()`**, com teste que falha se o valor diferir do
+      diretório antigo — ou emenda ao ADR-079 declarando a rotação.
+      Check: teste roda get_instance_salt no dir novo e falha se o valor diferir do antigo
+- [ ] `[P0]` Chave de cache do `spool_writer` passa a cobrir o novo
+      input, e `_state_dir()` ganha override; senão o vazamento
+      cross-projeto **sobrevive à cura**.
+      Check: teste com processo que troca de projeto no meio; o dir retornado acompanha, sem servir cache do anterior
+- [ ] `[P0]` Teste de paridade com fixture de **dois**
+      `CLAUDE_PROJECT_DIR`, produzindo dois diretórios e **duas chaves
+      HMAC distintas**, com controle negativo.
+      Check: remover o resolvedor deixa o teste VERMELHO; grep pelo literal nao e aceito como oraculo
+- [ ] `[P0]` Modos: dir `0700`, chave `0600`, sidecars `0600`.
+      Check: verify_chain pos-migracao como gate, com controle positivo — chave 0644 produz perm_error
+- [ ] `[P0]` Atualizar o `CLAUDE.md` §5 **no mesmo lote**, declarando a
+      limitação como **PERMANENTE sob mesmo UID** — antes E depois da
+      migração (§4). A redação anterior dizia "enquanto a família não
+      migrar", o que tornaria a ressalva falsa ou vazia no dia seguinte
+      ao land (pair-rail r8).
+      Check: o texto da claim declara a limitacao como permanente sob mesmo UID, sem condicionar a migracao; verificado por leitura no mesmo commit
+- [ ] `[P1]` Escritores e leitores migram no MESMO lote (ver §3).
+      Check: derive-audit-family.py --assert-migrated sai 0
+
+### W2 — O log histórico (decisão, não implementação)
+
+> **ORDEM CORRIGIDA pelo pair-rail r8:** esta decisão é **pré-requisito
+> da W1 reemitida**, não sucessora dela. Redirecionar escritores na W1
+> já obriga a escolher entre copiar o log/chave/salt misturados ou
+> inicializar estado novo — que é exatamente a escolha "declarar a
+> janela" contra "arquivar e recomeçar". Executar a W1 antes **tomaria a
+> decisão P0 do Owner por omissão**, e poderia rotacionar o salt ou
+> reiniciar a cadeia prematuramente.
+
+- [ ] `[P0]` Decidir e REGISTRAR. **"Segregar" está indisponível para
+      ~68% do log** (não atribuível, §1), então a escolha real é
+      "declarar a janela" contra "arquivar e recomeçar a cadeia".
+      Incluir decisão sobre o **salt** e emitir marcador de migração na
+      cadeia.
+      Check: none (decisao do Owner — o gate e a decisao REGISTRADA com justificativa; ausencia mantem o AC aberto)
+- [ ] `[P1]` Reavaliar `ceo-boot`, `audit-tokens` e `skill-health` como
+      **eficácia de controle**, não como medição — e prever a rajada de
+      advisories pós-migração.
+      Check: vereditos antes e depois diffados; toda mudanca de cor explicada por escrito
+
+### W3 — Instalação e adopters (esboço)
+
+- [ ] `[P0]` Rota do installer: chave em `settings.base.json` e merge
+      aditivo no `upgrade.sh`, usando o backup que já existe; curar
+      `templates/{codex,grok}/pre-push-review-gate.sh`.
+      Check: e2e de upgrade sobre instalacao existente — migra ou declara aceite; falha se nenhum dos dois
+- [ ] `[P1]` `ceo-backup.sh` / `ceo-restore.sh` e `dist/ceo-plugin/hooks/`.
+      Check: os dois scripts operam sobre o dir resolvido, nao sobre o literal
+- [ ] `[P1]` Dois adopters no mesmo `$HOME` sem env resolvem para
+      caminhos e chaves distintos.
+      Check: e2e com dois projetos; logs e chaves distintos
+
+## Acceptance criteria
+
+- [ ] AC-1 [P0] A família é derivada comportamentalmente e a derivação é
+      REPRODUZÍVEL por comando — não por prosa nem por grep.
+- [ ] AC-2 [P0] Teste de paridade com controle negativo demonstrado no
+      mesmo commit, usando fixture de dois projetos.
+- [ ] AC-3 [P0] Matriz de precedência por artefato, sobre a lista
+      **fechada na US5** — não sobre os 5 artefatos da primeira redação.
+- [ ] AC-4 [P0] Decisão sobre o log histórico registrada com
+      justificativa — "não decidido" mantém o plano aberto.
+- [ ] AC-5 [P1] Rota de adopter fechada ou explicitamente aceita.
+- [ ] AC-6 [P0] W1-W3 são esboço não-normativo e nenhuma EXECUTA antes
+      de ser reemitida a partir da W0. Dado o tamanho do delta do round
+      1, a reemissão da W1 passa por sua própria rodada de crítica.
+- [ ] AC-7 [P0] **Emenda ao ADR-001 registrada ANTES de qualquer
+      execução da W1** (com a decisão SPEC v1 contra v2), porque o
+      literal é violação de decisão ACCEPTED e o blast radius declarado
+      lá (L2) não bate com o medido (L3+).
+
+## Open questions
+
+1. **W2** — declarar a janela ou arquivar e recomeçar a cadeia?
+   ("segregar" está marcado indisponível para ~68% do log). Decisão do
+   Owner; muda a semântica retroativa de `verify_chain()`.
+2. **Namespace, não slug.** A pergunta não é `CLAUDE_PROJECT_DIR` contra
+   `git rev-parse`: é **em que namespace o framework tem direito de
+   escrever**, dado que `~/.claude/projects/` é do harness, tem 120
+   entradas, e o slug "óbvio" aterrissa exatamente onde vive o
+   `memory/` que o `CLAUDE.md` §0.3 manda carregar. Inclui normalização
+   contra traversal e colisão.
+3. **Esquemas de nome** — `CEO_PROJECT_NAME`, path-slug,
+   basename-lowercase e a convenção repo-local: quais ficam, quais viram
+   alias, quais saem.
+4. **ADR-079** — "per-installation" significa `$HOME` ou projeto? As
+   duas leituras exigem ações **opostas** sobre o salt.
+5. **Ordem de execução** — installer-first, por-artefato, ou
+   writers-atômico com leitores por candidate-list. Decidir **depois** da
+   W0, não agora.
+
+## Reference links
+
+- `.claude/adr/ADR-001-runtime-state-directory.md` — a decisão ACCEPTED
+  que este plano implementa; ver a consequência `(-)` sobre
+  `<project-slug>` implícito.
+- `.claude/adr/ADR-079` — salt por instalação; ver OQ-4.
+- `.claude/plans/PLAN-182/debate/round-1/consensus.md` — round 1,
+  veredito PROCEED, 13 consensos.
+- `.claude/plans/PLAN-169-closure-and-cross-session-evolution.md` —
+  `### Registro de execução — W4 ABERTA`: a evidência original.
+- `SPEC/v1/audit-log.schema.md`, `SPEC/v1/state-stores.schema.md`.
