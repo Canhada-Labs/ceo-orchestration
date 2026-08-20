@@ -276,6 +276,38 @@ E5 = só nasce com pré-registro assinado + PLAN-171 W5 verde.
 `/debate start PLAN-172` no início da execução cobre o Gate 3; as
 emendas do W-DH têm debate PRÓPRIO (mudam ADR + plano assinado).
 
+### Registro de execução — W-IM#4 varredura substrate-drift (S316, 2026-08-20)
+
+Sub-item `[L2 read-only]` executado com o instrumento permanente da
+classe (`check-substrate-watch.py`, PLAN-135 O12 / nightly-hygiene
+dim. vii). Resultado, com exit VERDADEIRO capturado sem pipe (lição
+`pytest|tail`):
+
+- `--json`: `status=current` contra o ledger, `fail_open=false`,
+  `source_stale=false`.
+- `--probe-installed --check`: **exit 1 — DRIFT em 4 componentes**:
+  claude_code 2.1.198→2.1.237, codex_cli 0.144.1→0.147.0,
+  codex_harness 0.139.0→0.147.0, cc_native_usage 2.1.232→2.1.237.
+  Os dois codex carregam o runbook ADR-182 (pin-first + fixture
+  re-record); claude_code/cc_native carregam "re-run
+  verify-the-knob-routes".
+- **Os dois alvos nomeados do item:** matchers exact-match **v2.1.195
+  ≤ last_seen 2.1.198** ⇒ já reconciliado no ledger quando o item foi
+  escrito; exit-2+JSON **v2.1.214 > last_seen 2.1.198** ⇒ pendente de
+  reconciliação no LEDGER, mas com evidência comportamental na
+  2.1.237: o probe da W4/169 (S315) re-capturou o enum de hooks e o
+  achou IDÊNTICO ao da 2.1.220 (31 eventos, mesma ordem).
+- Corroboração independente no mesmo dia: nightly-hygiene
+  `wf_a740c4c1-458` dim. vii reportou o mesmo drift (yellow).
+
+**Estado do item: varredura EXECUTADA e publicada; gate `--check`
+vermelho por construção até o refresh do ledger** — que é PENDING-OWNER
+por design (a receita `--refresh` exige WebFetch das fontes e cada
+drift tem runbook próprio; bump cego de `last_seen` sem executar os
+runbooks recriaria a classe "instrumento verde com pergunta
+envelhecida"). O item FECHA quando o Owner rodar a receita + dispuser
+os 4 runbooks (ou registrar waiver por componente).
+
 ## 6. Anexo S305 — fundamentação externa (advisory; NÃO altera pré-registros)
 
 Pesquisa academia-vs-framework S305; fonte única das referências e
