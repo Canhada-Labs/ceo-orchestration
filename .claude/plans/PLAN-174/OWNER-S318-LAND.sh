@@ -1,4 +1,9 @@
 #!/bin/bash
+# CEREMONY-LINT: handwritten-exception: o gerador de cerimonias para packs
+# (PLAN-174 W3, extensao do generate-ceremony.sh) ainda nao existe e o wire
+# da W2 e destravado por ESTE proprio pack (re-pin 0.147.0); molde manual =
+# OWNER-S313-LAND.sh (provado 3x na S313) + curas do rail S318 (RAIL-R1.md).
+# Re-gerar por instrumento quando a W3 landar.
 # Pack SENT-S318 — LAND (Owner-run): emenda ADR-163 (p95 180 hard + p99
 # advisory), re-pin codex 0.147.0 (ADR-182 §5) + range <0.148.0, registro
 # e reposicao do ceremony_lint_unlock_used (_KNOWN_ACTIONS 326 + SPEC
