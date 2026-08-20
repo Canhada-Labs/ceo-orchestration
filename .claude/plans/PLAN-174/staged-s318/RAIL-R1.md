@@ -21,7 +21,7 @@ instruída a LER e DIFAR apenas, veredito em `--output-last-message`.
 |---|------|-----|--------|-----------|
 | 1 | E | **P0** | O Scope ASSINADO nunca era comparado ao MAP executável do LAND — um MAP alterado aplicaria destinos fora do texto assinado sob sentinel válido | **CURADO**: G3 ganha set-equality NOME-a-nome Scope↔MAP (lição S272); divergência = ABORT com diff |
 | 2 | E | P1 | Artefatos de cerimônia untracked garantiam abort do G6 PÓS-apply (touched-scope sujo) | **CURADO** por processo: LAND/draft/PACKMAP/BASELINE/MANIFESTs/RAIL-R1 são COMMITADOS antes da assinatura (commit 2 do prep) — o touched pós-apply volta a ser só MAP-dests + approved{,.asc} |
-| 3 | E | P1 | Apply de 14 `cp` sem rollback — falha no meio deixava pack meio-aplicado | **CURADO**: `rollback_apply()` (git checkout dos tracked + rm dos novos) chamado em TODO abort pós-G5 (G6 escopo, G6 checks, G7 ×3) |
+| 3 | E | P1 | Apply de 14 `cp` sem rollback — falha no meio deixava pack meio-aplicado | **CURADO em duas camadas**: `rollback_apply()` (git checkout **HEAD** dos tracked — cobre pós-`git add` — + rm dos novos) chamado em TODO abort explícito pós-G5 (G6 escopo, G6 checks, G7 ×3); e — cura da rodada r2 abaixo — `trap ERR` (+`set -E`) para falha NUA dentro do próprio loop de apply, desarmado após o commit |
 | 4 | E | P1 | Symlink no destino passava o G1 (hash segue link) e o `cp` escreveria fora do repo | **CURADO**: G1 exige arquivo regular não-symlink; G5 re-checa o destino antes de cada cp (defesa em profundidade) |
 | 5 | A | P1 | `observe_rail_present` inferido por string: remover o rail DESLIGA o próprio positive control (auto-pass) | **HERDADO — NÃO CURADO AQUI**: comportamento pré-existente e deliberado (compat com adopter sem o rail, PLAN-154); o pack S318 não tocou essa lógica. Pauta nomeada para o dono (família PLAN-154/169): exigir controle de presença derivado (ex.: sentinela no repo) em vez de string-match |
 | 6 | A | P1 | Negative control aceita store malformado (parse error ⇒ `rows=[]` ⇒ passa) | **HERDADO — NÃO CURADO AQUI**: mesma origem e mesmo dono do #5; registrado como pauta nomeada (parse error deve ser FAIL do controle, não vazio) |
@@ -38,3 +38,25 @@ instruída a LER e DIFAR apenas, veredito em `--output-last-message`.
 Scope↔MAP verificada contra o draft; `proof-retry-matrix.sh` re-rodada
 11/11 contra o run-block re-editado do `validate.yml`; suítes-alvo
 re-verdes no clone-sim (registro na §Prova do sentinel).
+
+## Rodada r2 (verificação do sentinel, pós-primeira-assinatura)
+
+O primeiro dry-run do Owner abortou no G3 por um defeito MEU de
+autoria, não do codex: o sentinel é prosa pt-BR ("eleição") e o parser
+do LAND procurava o rótulo em ASCII ("eleicao") — cura: casar por
+prefixo estável + `[^:]*: `, com controle positivo contra o
+`S318-approved.md` REAL (extrai RUN; VALIDSIG OK; Scope==MAP 14/14
+avaliado como o shell avalia). A pré-condição do SIGN passou a ignorar
+o `S318-approved.md{,.asc}` órfãos de rodada abortada.
+
+A rodada r2 do codex (verificação claims-vs-estado do sentinel) achou
+**1 P1 real**: `RAIL-R1` #3 prometia "nunca meio-aplicado", mas uma
+falha NUA dentro do loop de `cp` do G5 morria via `set -e` SEM
+rollback (as chamadas explícitas cobriam só os aborts de G6/G7).
+**CURADO**: `set -Eeuo` + `trap ERR` armado imediatamente antes do
+apply e desarmado após o commit; `rollback_apply()` desarma o próprio
+trap (sem recursão) e restaura com `git checkout HEAD --` (cobre o
+abort pós-`git add`). Mecanismo provado nos DOIS sentidos em sandbox:
+falha nua no meio do loop ⇒ rollback roda e o script morre com exit 1;
+falhas CHECADAS (`|| G6RC=1`, `|| true`) ⇒ trap NÃO dispara e o fluxo
+termina limpo.

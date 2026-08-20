@@ -14,7 +14,9 @@
 # do ADR-182 §5); G7 commit com sentinel re-verificado.
 #
 # Uso: bash .claude/plans/PLAN-174/OWNER-S318-LAND.sh [--dry-run]
-set -euo pipefail
+# -E (errtrace): o trap ERR do G5 tem de herdar em funcoes e substituicoes
+# — sem ele, uma falha nua dentro de funcao sai sem rollback (rail S318 r2).
+set -Eeuo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
 ST174=.claude/plans/PLAN-174/staged-s318
@@ -166,10 +168,14 @@ say "G5: apply (kernel path com CEO_KERNEL_OVERRIDE=1, audited)"
 # abort pos-apply restaura os tracked (git checkout) e remove os novos,
 # em vez de deixar um pack meio-aplicado na arvore viva.
 rollback_apply() {
+  trap - ERR  # sem recursao se o proprio rollback falhar
   echo "   ROLLBACK: restaurando alvos aplicados"
   _tracked=$(printf '%s\n' "$MAP" | awk -F'|' '{print $2}' | grep -vxF "$NEW_FILES" || true)
+  # `checkout HEAD --` restaura INDEX+worktree do HEAD — cobre tambem o
+  # abort pos-`git add` do G7 (checkout sem HEAD restauraria do index ja
+  # populado com o conteudo novo, um rollback inocuo).
   # shellcheck disable=SC2086
-  [ -z "$_tracked" ] || git checkout --quiet -- $_tracked || true
+  [ -z "$_tracked" ] || git checkout --quiet HEAD -- $_tracked || true
   while IFS= read -r p; do
     [ -n "$p" ] || continue
     rm -f "$p"
@@ -177,6 +183,11 @@ rollback_apply() {
 $NEW_FILES
 RNEOF
 }
+# Rail S318 r2 (sentinel check, P1): falha NUA no meio do apply (cp/mkdir
+# com disco cheio, permissao, git add/commit) morria via set -e SEM
+# rollback — o trap ERR fecha esse residuo; os aborts explicitos (exit 1)
+# de G5/G6/G7 nao disparam ERR e por isso mantem as chamadas diretas.
+trap 'echo "   FALHA nua pos-apply — executando rollback"; rollback_apply; exit 1' ERR
 while IFS='|' read -r src dst; do
   [ -n "$src" ] || continue
   mkdir -p "$(dirname "$dst")"
@@ -239,5 +250,6 @@ do lint_unlock encerra a parcagem de 908707e no mesmo pack assinado
 Sentinel: PLAN-174/S318-approved.md (GPG).
 
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
+trap - ERR  # commit feito — rollback deixa de ser o comportamento certo
 echo
 echo "PRONTO. Revise 'git show --stat HEAD' e rode: git push origin main"
