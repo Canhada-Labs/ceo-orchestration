@@ -179,7 +179,8 @@ as emendas apontadas item a item. A rodada r10 confirmou 182-1 e 182-2
 CLOSED e devolveu REJECT parcial: 182-3 sem unidade executável na W2, e
 dois achados novos (carve-out da W0 contradizendo o US3; "confirmação
 por r10" registrada antes do veredito) — todos curados na mesma sessão.
-Confirmação final pela rodada r11. O registro permanece como histórico.
+r11 confirmou 3/4 e apontou sobra textual na nota histórica (N1);
+**r12 = GO (2026-08-20)** — cadeia r9→r12 fechada. Registro histórico.
 
 1. **[P1] `derive-audit-family.py` NAO EXISTE.** A W0 e declarada
    read-only e a AC-1 exige que esse comando torne o censo reproduzivel.

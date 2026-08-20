@@ -206,8 +206,8 @@ as emendas apontadas item a item. A rodada r10 confirmou 183-1 e 183-3
 CLOSED e devolveu REJECT parcial no 183-2: a enumeração "4 core + 2
 fintech" era conjunto fechado escrito de memória e omitia
 `accessibility-and-wcag` (`frontend-team.md:164`) — curado trocando
-enumeração por DERIVAÇÃO do organograma. Confirmação final pela rodada
-r11. O registro permanece como histórico.
+enumeração por DERIVAÇÃO do organograma. r11 confirmou este item CLOSED;
+**r12 = GO (2026-08-20)** — cadeia r9→r12 fechada. Registro histórico.
 
 1. **[P1] O teste de relocacao que a W1 exige e IMPOSSIVEL como escrito.**
    Quando `SOURCE_DIR` esta fora de `TARGET` — o caso normal de adopter —

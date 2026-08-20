@@ -287,6 +287,58 @@ evidência no disco e nomeia dono+gatilho do que segue aberto:
   do W4-C — quem abrir o W4-C herda este item explicitamente. Toca
   `settings.json` ⇒ cerimônia GPG do Owner no ato.
 
+### Registro de execução — AC-6 fechado por live-fire (S316, 2026-08-20)
+
+Os 3 positive controls live-fire + a tabela C5 executados nesta sessão,
+com evidência primária no audit-log HMAC e em transcripts de run:
+
+- **C1 (live-fire real):** spawn nomeado `probe-c1-qa` via rota
+  `## SKILL REFERENCE` estrita, SEM `## FILE ASSIGNMENT` ⇒ ALLOW
+  advisory + `spawn_file_assignment_recorded` com `path_count=0` no log
+  vivo (`ts=2026-08-20T16:42:42Z`,
+  `record_id=ea4b4e05ce4e4133a9232f62c5996a37`, pid 50018). Bônus de
+  superfície: dois spawns anteriores com material de skill inválido
+  foram BLOQUEADOS pelo hook (`missing_skill_content`) — a claim do
+  CLAUDE.md §4 verificada CONTRA O HOOK, não contra a intenção: skill
+  material bloqueia; FILE ASSIGNMENT só registra (enforce UNSET). Rota
+  de recuperação `CEO_SOTA_DISABLE=1`: testada nos testes do Lote B.
+- **C2 (fence num run real):** run do consumidor `nightly-hygiene`
+  (`wf_a740c4c1-458`, 10 agentes, 2026-08-20): fence `<<<UNTRUSTED-DATA`
+  no script executado (fenceUntrusted com anti-spoof
+  `[ESCAPED-FENCE-MARKER]`) e visível no material ingerido do agente de
+  síntese (`agent-a386eded74d32e102.jsonl`). Truncamento⇒DEGRADED
+  coberto pelos testes do Lote B.
+- **C6 (query() fenced, chamada real):**
+  `memory_shared.query('pc3-live-topic')` sobre o store VIVO devolveu
+  `content` entre `[UNTRUSTED SHARED-MEMORY DATA …]` e
+  `[END UNTRUSTED SHARED-MEMORY DATA]`, sem campo raw (chaves: content,
+  content_hash, score, size_bytes, topic, updated).
+- **C3/C4 (evidência citada, landada nos Lotes A/B):** C3 lint com
+  fixture-reprovada + caso vivo `spec_version_drift`; C4 grep do
+  símbolo morto limpo — a única referência viva é o teste-regressão
+  `test_check_vacuous_checks.py:301` que ASSERTA a ausência.
+- **C5 (tabela would-block, janela 2026-07-21 → 2026-08-20, 20 arquivos
+  de log, live + rotacionados):**
+
+| Detector | would-block | Disposição | Razão |
+|---|---|---|---|
+| CEO_SPAWN_OVERLAP_GUARD | 0 (rail overlap) | NÃO armar | zero disparos ⇒ NÃO armar; par ordenado AC-2b mantém o gate no enforce do C1 |
+| CEO_UNICODE_HARDBLOCK | 0 | NÃO armar agora | zero disparos; re-medir quando o emissor tiver janela cheia |
+| CEO_VERIFY_AFTER_EDIT_BLOCK | 65 (`verify_after_edit_finding`) | ADIADO | triagem TP/FP por disparo pendente antes do flip (65 disparos) |
+| CEO_SPAWN_TOOL_SCOPE | 0 | NÃO armar | zero disparos; não conta como controle (r1) |
+| CEO_CONFIDENCE_ENFORCE | 114 (`spawn_confidence_advisory`) + 87 (`confidence_gate`) | NÃO armar | alto volume sem triagem; flip é Owner-only (ADR-019) |
+| CEO_SUBAGENT_FABRICATION_BLOCK | 0 | NÃO armar | não bloqueia (escala p/ systemMessage) — não conta como cura |
+| CEO_SPAWN_DEPTH_GUARD | 0 (rail depth) | NÃO armar | zero disparos; pré-condição do estudo W1.4 mantida |
+| (CEO_SPAWN_FILE_ASSIGNMENT_REQUIRED) | 10× `path_count=0` vs 20 concretos | ADIADO por construção | janela advisory iniciada no land do Lote B (2026-08-13); ≥30d/≥20 sessões não decorridos (CLAUDE.md §4) |
+
+Caveat de instrumento: os emissores das rails de spawn existem desde
+2026-08-13 (Lote B) — para eles a janela efetiva é ~7d; "zero disparos
+⇒ NÃO armar" aplica na mesma direção.
+
+**AC-6 FECHA nesta entrada.** Abertos restantes: AC-3 [P1] (janela N≥50
+nos dois caminhos) e AC-2c [P1]; o flip `executing → done` segue com o
+Owner após a disposição deles.
+
 ## Acceptance criteria
 
 - [x] AC-1 [P0] (fechado S314 — ver Registro de fechamento parcial)
@@ -314,7 +366,7 @@ evidência no disco e nomeia dono+gatilho do que segue aberto:
       mínimo e marcadas ADVISORY até ratificação do Owner.
 - [x] AC-5 [P2] (fechado S314) Memos W1.4 e W3 entregues com recomendação explícita
       go/no-go + condições.
-- [ ] AC-6 [P0] (codex r1-pós-debate, P1) **Ledger de curas W-C — cada
+- [x] AC-6 [P0] (fechado S316 — ver Registro AC-6 por live-fire) (codex r1-pós-debate, P1) **Ledger de curas W-C — cada
       disposição FECHA com evidência própria:** C1 = hook bloqueia
       spawn sem FILE ASSIGNMENT (positive control live-fire) + rota de
       recuperação testada no mesmo commit + reescrita PRECISA de
