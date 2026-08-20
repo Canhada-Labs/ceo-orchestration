@@ -383,13 +383,15 @@ class TestCureDetection(TestEnvContext):
 
     The scheduled lane can only turn green at its next cron firing (a
     monthly workflow would keep the boot red for a month after the fix
-    landed and was dispatch-validated). Cure semantics: ONE batched fetch
-    across ALL events, launched CONCURRENTLY with the scheduled fetch
-    (the first design — N sequential per-red calls — blew the 5s aggregate
-    budget on its first live run); consumed only when reds exist. Green
-    newest-completed there means the red was surfaced AND fixed — the
-    opposite of the invisible-red class. Fail-visible: a dead probe keeps
-    the path red.
+    landed and was dispatch-validated). Cure semantics (S317, second
+    generation): ONE `actions/workflows/<name>/runs` fetch PER RED PATH,
+    issued LAZILY — a boot with zero reds pays nothing. The S293 design
+    asked one repo-wide 100-run window CONCURRENTLY and looked the red path
+    up in it; measured here that window spans ~2 days while the lanes it
+    guards fire monthly, so cures older than it were unreachable (see
+    TestCureProbePerWorkflow). Green newest-completed means the red was
+    surfaced AND fixed — the opposite of the invisible-red class.
+    Fail-visible: a dead probe keeps the path red.
     """
 
     FILES = {
@@ -471,9 +473,9 @@ class TestCureDetection(TestEnvContext):
         self.assertEqual(status, "red")
 
     def test_steady_state_green_reports_no_cure(self):
-        # Zero reds -> the parallel cure fetch is never CONSUMED: no
-        # "cured" note, no cured entries (the fetch itself still fires —
-        # that is the wall-clock trade recorded in the class docstring).
+        # Zero reds -> the cure probe never FIRES (S317: it is lazy, not
+        # merely unconsumed). No "cured" note, no cured entries, and — the
+        # assertion that keeps this comment honest — exactly ONE gh call.
         _SchedRepo(self, dict(self.FILES))
         green = [
             {"path": ".github/workflows/tournament.yml",
@@ -484,11 +486,185 @@ class TestCureDetection(TestEnvContext):
         with mock.patch.object(
             _mod.subprocess, "run",
             side_effect=_two_call_router(green, green),
-        ):
+        ) as m:
             status, summary, detail = _mod.check_scheduled_workflows_red()
         self.assertEqual(status, "green")
         self.assertNotIn("cured", summary)
         self.assertEqual(detail["cured_pending_cron"], {})
+        self.assertEqual(m.call_count, 1)
+        self.assertEqual(detail["cure_probe"]["probed"], [])
+
+
+def _lane_router(sched_rows, per_workflow, window=None):
+    """side_effect roteando por URL: agendadas / por-workflow / repo-wide.
+
+    ``per_workflow`` mapeia basename -> rows (ou uma excecao, para sonda
+    morta). ``window`` e a resposta da chamada repo-wide do design S293 —
+    default vazia, que e exatamente o cenario que o S317 cura: a cura EXISTE
+    mas esta fora da janela.
+    """
+    def _run(args, **kwargs):
+        joined = " ".join(str(a) for a in args)
+        if "event=schedule" in joined:
+            return _completed(0, _runs_payload(sched_rows))
+        for name, rows in per_workflow.items():
+            if "/actions/workflows/{0}/runs".format(name) in joined:
+                if isinstance(rows, BaseException):
+                    raise rows
+                return _completed(0, _runs_payload(rows))
+        return _completed(0, _runs_payload(window or []))
+    return _run
+
+
+class TestCureProbePerWorkflow(TestEnvContext):
+    """S317 — a sonda de cura por-workflow apaga a janela repo-wide.
+
+    Defeito curado: `_sched_red_fetch_mixed_rows` perguntava uma janela
+    repo-wide de 100 runs em TODOS os eventos e procurava o path vermelho
+    ali dentro. Medido neste repo, essa janela cobre ~2 dias (um push abre
+    ~8 workflows), enquanto as lanes que ela guarda disparam ate MENSALMENTE
+    — logo, toda cura mais velha que a janela era INALCANCAVEL e o vermelho
+    nao podia ser aposentado. Caso vivo: tournament.yml vermelho no cron de
+    2026-08-01, corrigido em 2aceb05 e validado verde por dispatch em
+    2026-08-04, ainda reportado vermelho em 2026-08-20 (16 dias fora).
+    """
+
+    FILES = {
+        "tournament.yml": SCHEDULED_YML,
+        "coverage.yml": SCHEDULED_YML,
+    }
+    RED_SCHED = [
+        {"path": ".github/workflows/tournament.yml",
+         "status": "completed", "conclusion": "failure"},
+        {"path": ".github/workflows/coverage.yml",
+         "status": "completed", "conclusion": "success"},
+    ]
+
+    def test_cure_outside_any_repo_wide_window_is_reachable(self):
+        # REGRESSAO: com o design S293 este caso da RED (a janela repo-wide
+        # nao contem tournament); com a sonda por-workflow, da GREEN.
+        _SchedRepo(self, dict(self.FILES))
+        per_wf = {"tournament.yml": [
+            {"path": ".github/workflows/tournament.yml",
+             "status": "completed", "conclusion": "success"},
+        ]}
+        window = [
+            {"path": ".github/workflows/validate.yml",
+             "status": "completed", "conclusion": "success"},
+        ]
+        with mock.patch.object(
+            _mod.subprocess, "run",
+            side_effect=_lane_router(self.RED_SCHED, per_wf, window),
+        ) as m:
+            status, summary, detail = _mod.check_scheduled_workflows_red()
+        self.assertEqual(status, "green")
+        self.assertEqual(
+            detail["cured_pending_cron"],
+            {".github/workflows/tournament.yml": "success"},
+        )
+        self.assertIn("cured", summary)
+        self.assertEqual(detail["cure_probe"]["probed"], ["tournament.yml"])
+        # A pergunta feita foi a por-workflow, nao a janela repo-wide.
+        urls = " ".join(
+            " ".join(str(a) for a in c.args[0])
+            for c in m.mock_calls if c.args
+        )
+        self.assertIn("/actions/workflows/tournament.yml/runs", urls)
+
+    def test_probe_answer_for_another_lane_does_not_cure(self):
+        # Resposta mal-escopada nao pode curar a lane errada.
+        _SchedRepo(self, dict(self.FILES))
+        per_wf = {"tournament.yml": [
+            {"path": ".github/workflows/coverage.yml",
+             "status": "completed", "conclusion": "success"},
+        ]}
+        with mock.patch.object(
+            _mod.subprocess, "run",
+            side_effect=_lane_router(self.RED_SCHED, per_wf),
+        ):
+            status, _, detail = _mod.check_scheduled_workflows_red()
+        self.assertEqual(status, "red")
+        self.assertEqual(detail["cured_pending_cron"], {})
+
+    def test_dead_probe_keeps_red_fail_visible(self):
+        _SchedRepo(self, dict(self.FILES))
+        per_wf = {"tournament.yml": subprocess.TimeoutExpired(
+            cmd="gh", timeout=3.5)}
+        with mock.patch.object(
+            _mod.subprocess, "run",
+            side_effect=_lane_router(self.RED_SCHED, per_wf),
+        ):
+            status, _, detail = _mod.check_scheduled_workflows_red()
+        self.assertEqual(status, "red")
+        self.assertEqual(detail["cured_pending_cron"], {})
+
+    def test_unvouchable_basename_never_reaches_the_url(self):
+        # Fail-closed no INPUT: um basename que o guard nao avaliza nao vira
+        # URL — e o path continua vermelho (nunca "curado por omissao").
+        _SchedRepo(self, {
+            "tour nament.yml": SCHEDULED_YML,
+            "coverage.yml": SCHEDULED_YML,
+        })
+        sched = [
+            {"path": ".github/workflows/tour nament.yml",
+             "status": "completed", "conclusion": "failure"},
+            {"path": ".github/workflows/coverage.yml",
+             "status": "completed", "conclusion": "success"},
+        ]
+        with mock.patch.object(
+            _mod.subprocess, "run",
+            side_effect=_lane_router(sched, {}),
+        ) as m:
+            status, _, detail = _mod.check_scheduled_workflows_red()
+        self.assertEqual(status, "red")
+        self.assertEqual(detail["cured_pending_cron"], {})
+        urls = " ".join(
+            " ".join(str(a) for a in c.args[0])
+            for c in m.mock_calls if c.args
+        )
+        self.assertNotIn("/actions/workflows/", urls)
+
+    def test_probe_cap_is_visible_never_silent(self):
+        # Mais vermelhos que o teto -> os excedentes ficam vermelhos E o
+        # numero aparece no detail (doutrina "no silent caps").
+        names = ["w{0}.yml".format(i) for i in range(6)]
+        _SchedRepo(self, {n: SCHEDULED_YML for n in names})
+        sched = [
+            {"path": ".github/workflows/{0}".format(n),
+             "status": "completed", "conclusion": "failure"} for n in names
+        ]
+        per_wf = {
+            n: [{"path": ".github/workflows/{0}".format(n),
+                 "status": "completed", "conclusion": "success"}]
+            for n in names
+        }
+        with mock.patch.object(
+            _mod.subprocess, "run",
+            side_effect=_lane_router(sched, per_wf),
+        ):
+            status, _, detail = _mod.check_scheduled_workflows_red()
+        self.assertEqual(status, "red")
+        self.assertEqual(len(detail["cured_pending_cron"]),
+                         _mod._SCHED_RED_CURE_PROBE_MAX)
+        self.assertEqual(detail["cure_probe"]["capped"],
+                         len(names) - _mod._SCHED_RED_CURE_PROBE_MAX)
+
+    def test_no_budget_left_skips_probe_visibly(self):
+        # Sem orcamento a sonda nao roda — e isso e DITO, nao inferido.
+        _SchedRepo(self, dict(self.FILES))
+        per_wf = {"tournament.yml": [
+            {"path": ".github/workflows/tournament.yml",
+             "status": "completed", "conclusion": "success"},
+        ]}
+        with mock.patch.object(_mod, "_SCHED_RED_CHECK_DEADLINE_S", 0.0), \
+                mock.patch.object(
+                    _mod.subprocess, "run",
+                    side_effect=_lane_router(self.RED_SCHED, per_wf),
+                ):
+            status, _, detail = _mod.check_scheduled_workflows_red()
+        self.assertEqual(status, "red")
+        self.assertTrue(detail["cure_probe"]["skipped_no_budget"])
+        self.assertEqual(detail["cure_probe"]["probed"], [])
 
 
 if __name__ == "__main__":

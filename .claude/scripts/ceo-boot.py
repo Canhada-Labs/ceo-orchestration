@@ -41,7 +41,6 @@ from concurrent.futures import (
     TimeoutError as FuturesTimeout,
     as_completed,
 )
-import threading
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -2464,24 +2463,47 @@ def _scheduled_workflow_paths() -> List[str]:
     return out
 
 
-def _sched_red_fetch_mixed_rows(timeout_s: float) -> Optional[List[Any]]:
-    """One batched fetch of the newest runs across ALL trigger events.
+_SCHED_RED_CURE_PROBE_MAX = 4
+_SCHED_RED_CHECK_DEADLINE_S = 3.8
+_SCHED_RED_WF_NAME_RE = re.compile(r"[A-Za-z0-9._-]{1,128}\Z")
 
-    S293 cure-detection. A red SCHEDULED lane stays red until its next cron
-    fires even after the fix landed and a `workflow_dispatch` validation came
-    back green — but a red that was surfaced AND fixed is the opposite of the
-    "invisible red" this check exists to catch. This runs CONCURRENTLY with
-    the scheduled-lane fetch (one extra REST call per boot, wall-clock cost
-    ~zero — the first cure-probe design was N sequential per-red calls and
-    blew the 5s aggregate budget on its first live run).
-    Fail-visible: any error returns None and the caller KEEPS reds red —
+
+def _sched_red_fetch_workflow_rows(
+    basename: str, timeout_s: float
+) -> Optional[List[Any]]:
+    """Newest COMPLETED runs of ONE workflow, across ALL trigger events.
+
+    S317 cure-detection, second generation. The S293 design asked ONE
+    repo-wide ``actions/runs?per_page=100`` question and looked each red
+    path up in the answer. Measured on this repo that window spans ~2 days
+    (one push fans out to ~8 workflows), while the lanes it guards fire as
+    rarely as MONTHLY -- so any cure older than the window was structurally
+    unreachable and the red could never be retired by the probe. Live miss:
+    ``tournament.yml`` red at the 2026-08-01 cron, fixed in 2aceb05 and
+    dispatch-validated green on 2026-08-04, still reported red on
+    2026-08-20 -- 16 days outside the window.
+
+    Asking PER WORKFLOW deletes the window (the cure's age stops mattering)
+    and is also cheaper: measured 733 ms against 2760 ms for the repo-wide
+    call. It is issued LAZILY -- only when a red exists -- so a steady-state
+    green boot now spends ZERO extra calls where the S293 design always paid
+    for the concurrent prefetch.
+
+    Fail-visible: any error returns None and the caller KEEPS the path red --
     a dead probe can only under-cure, never under-report.
     """
+    if not _SCHED_RED_WF_NAME_RE.match(basename or ""):
+        # Fail-closed on input: a basename this guard cannot vouch for never
+        # reaches the URL. The name comes off local disk today; the check
+        # costs one regex and removes the class outright.
+        return None
     try:
         proc = subprocess.run(
             [
                 "gh", "api",
-                "repos/{owner}/{repo}/actions/runs?per_page=100",
+                "repos/{owner}/{repo}/actions/workflows/"
+                + basename
+                + "/runs?status=completed&per_page=5",
                 "--jq",
                 "[.workflow_runs[] | {path: .path, status: .status, "
                 "conclusion: .conclusion}]",
@@ -2503,6 +2525,24 @@ def _sched_red_fetch_mixed_rows(timeout_s: float) -> Optional[List[Any]]:
     return rows if isinstance(rows, list) else None
 
 
+def _sched_red_probe_conclusion(path: str, timeout_s: float) -> Optional[str]:
+    """Newest completed conclusion for ``path``, or None if unknowable."""
+    rows = _sched_red_fetch_workflow_rows(path.rsplit("/", 1)[-1], timeout_s)
+    if not isinstance(rows, list):
+        return None
+    for r in rows:  # newest-first
+        if not isinstance(r, dict):
+            continue
+        # The endpoint is already scoped to one workflow; re-checking the
+        # path keeps a mis-scoped answer from curing the wrong lane.
+        if str(r.get("path") or "") != path:
+            continue
+        if r.get("status") != "completed":
+            continue
+        return str(r.get("conclusion") or "")
+    return None
+
+
 def check_scheduled_workflows_red() -> Tuple[str, str, Any]:
     """S292 — 24th Tier-S check: latest scheduled-run conclusion per workflow.
 
@@ -2510,7 +2550,8 @@ def check_scheduled_workflows_red() -> Tuple[str, str, Any]:
              concluded failure/timed_out/startup_failure AND whose newest
              completed run across ALL events is not green (S293
              cure-detection: a newer green `workflow_dispatch` validation
-             counts as cured-pending-cron, not red);
+             counts as cured-pending-cron, not red -- S317 made that probe
+             per-workflow, so a cure of ANY age is reachable);
     yellow — data unavailable (gh missing/timeout/error/unparseable) or
              zero scheduled-run coverage — never green on missing data;
     green  — every covered workflow green at its latest scheduled run
@@ -2529,16 +2570,11 @@ def check_scheduled_workflows_red() -> Tuple[str, str, Any]:
         return "green", "no scheduled workflows", {"scheduled": []}
     scheduled_set = set(scheduled)
     timeout_s = _sched_red_gh_timeout_s()
-    # S293: dispara a busca de cura EM PARALELO com a principal (custo de
-    # wall ~zero; ver docstring de _sched_red_fetch_mixed_rows).
-    _cure_box: Dict[str, Any] = {}
-    _cure_thread = threading.Thread(
-        target=lambda: _cure_box.__setitem__(
-            "rows", _sched_red_fetch_mixed_rows(timeout_s)
-        ),
-        daemon=True,
-    )
-    _cure_thread.start()
+    # S317: a sonda de cura e LAZY (so dispara se houver red) e POR
+    # WORKFLOW -- ver docstring de _sched_red_fetch_workflow_rows. O relogio
+    # existe para nao estourar o orcamento do check ao encadear as duas
+    # chamadas: medido, 2760 ms (agendadas) + 733 ms (sonda) < 4.0 s.
+    t_start = time.monotonic()
     try:
         proc = subprocess.run(
             [
@@ -2609,26 +2645,38 @@ def check_scheduled_workflows_red() -> Tuple[str, str, Any]:
             continue
         latest[path] = str(r.get("conclusion") or "")
     red = sorted(p for p, c in latest.items() if c in _SCHED_RED_BAD_CONCLUSIONS)
-    # S293 cure-detection: consome a busca paralela SÓ se houver red.
+    # S317 cure-detection: uma sonda POR WORKFLOW vermelho, concorrentes,
+    # disparadas SO se houver red (um boot verde nao paga nada).
     cured: Dict[str, str] = {}
+    probe: Dict[str, Any] = {
+        "mode": "per_workflow",
+        "probed": [],
+        "capped": 0,
+        "skipped_no_budget": False,
+    }
     if red:
-        _cure_thread.join(timeout=timeout_s)
-        rows2 = _cure_box.get("rows")
-        if isinstance(rows2, list):
-            newest_any: Dict[str, str] = {}
-            for r in rows2:  # newest-first; 1º COMPLETED por path vence
-                if not isinstance(r, dict):
-                    continue
-                rp = str(r.get("path") or "")
-                if rp not in scheduled_set or rp in newest_any:
-                    continue
-                if r.get("status") != "completed":
-                    continue
-                newest_any[rp] = str(r.get("conclusion") or "")
-            for p in red:
-                c = newest_any.get(p)
-                if c is not None and c not in _SCHED_RED_BAD_CONCLUSIONS:
-                    cured[p] = c
+        remaining = _SCHED_RED_CHECK_DEADLINE_S - (time.monotonic() - t_start)
+        probe_timeout = min(timeout_s, remaining)
+        if probe_timeout < 0.4:
+            # Sem orcamento para a sonda: mantem tudo vermelho e DIZ isso.
+            # Um teto silencioso aqui leria como "nao havia cura".
+            probe["skipped_no_budget"] = True
+        else:
+            todo = red[:_SCHED_RED_CURE_PROBE_MAX]
+            probe["capped"] = len(red) - len(todo)
+            probe["probed"] = [p.rsplit("/", 1)[-1] for p in todo]
+            with ThreadPoolExecutor(max_workers=len(todo)) as ex:
+                futs = {
+                    ex.submit(_sched_red_probe_conclusion, p, probe_timeout): p
+                    for p in todo
+                }
+                for fut, p in futs.items():
+                    try:
+                        c = fut.result(timeout=probe_timeout + 0.5)
+                    except Exception:
+                        c = None
+                    if c is not None and c not in _SCHED_RED_BAD_CONCLUSIONS:
+                        cured[p] = c
         red = [p for p in red if p not in cured]
     uncovered = sorted(scheduled_set - set(latest))
     detail = {
@@ -2637,6 +2685,7 @@ def check_scheduled_workflows_red() -> Tuple[str, str, Any]:
         "latest": latest,
         "red": red,
         "cured_pending_cron": cured,
+        "cure_probe": probe,
         "no_recent_scheduled_run": uncovered,
     }
     cured_note = (
