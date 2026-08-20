@@ -130,6 +130,30 @@ class TestWriteSurvivesGcDeletion(GcCoordinationBase):
         finally:
             store.close()
 
+    def test_second_handle_detects_inode_replacement(self):
+        """Rail round-11 [P2]: after a GC unlink, the FIRST handle's reopen
+        RECREATES the path — the second handle then sees the path existing
+        while its connection targets the dead inode. Identity is (dev, ino),
+        so the second handle must ALSO reopen and its write must land."""
+        a = _ss.SqliteStateStore(self.STORE, self.SCOPE)
+        b = _ss.SqliteStateStore(self.STORE, self.SCOPE)
+        a.set("seed-a", "1")
+        b.set("seed-b", "1")            # both connections now open
+        self._unlink_store_files()      # the GC
+        a.set("post-gc-a", "va")        # recreates the path (new inode)
+        b.set("post-gc-b", "vb")        # would hit the DEAD inode without
+        a.close()                       # the (dev, ino) comparison
+        b.close()
+        fresh = _ss.SqliteStateStore(self.STORE, self.SCOPE)
+        try:
+            self.assertEqual(fresh.get("post-gc-a"), b"va")
+            self.assertEqual(
+                fresh.get("post-gc-b"), b"vb",
+                "the second handle committed into the replaced inode",
+            )
+        finally:
+            fresh.close()
+
     def test_untouched_store_roundtrips_normally(self):
         """Negative control: with no GC interference the guard must be
         invisible — same store object, same values."""

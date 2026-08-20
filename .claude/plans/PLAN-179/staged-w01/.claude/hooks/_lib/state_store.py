@@ -210,6 +210,7 @@ class SqliteStateStore:
 
         self._conn: Optional[sqlite3.Connection] = None
         self._opened = False
+        self._db_ident = None  # (st_dev, st_ino) of the open db — round-11 [P2]
 
     def _ensure_open(self) -> None:
         if self._opened:
@@ -241,6 +242,14 @@ class SqliteStateStore:
             """
         )
         self._conn.execute("CREATE INDEX IF NOT EXISTS idx_kv_expires ON kv(expires_at)")
+        # Identity of the inode this connection targets (rail round-11 [P2]):
+        # `_reopen_if_vanished` compares against it UNDER the lock to detect
+        # both absence and REPLACEMENT of the db file by another handle.
+        try:
+            _st = os.stat(self._db_path)
+            self._db_ident = (_st.st_dev, _st.st_ino)
+        except OSError:
+            self._db_ident = None
         self._opened = True
 
     # --- context manager --------------------------------------------------
@@ -253,17 +262,32 @@ class SqliteStateStore:
         lock acquisition — so a connection opened earlier (or cached across
         operations) can point at an UNLINKED inode; committing there loses
         the write invisibly. Under the lock the check is race-free: if the
-        db path exists now, the GC cannot remove it until we release; if it
-        vanished, reopening recreates it and the write lands on disk."""
-        if self._opened and not self._db_path.exists():
-            try:
-                if self._conn is not None:
-                    self._conn.close()
-            except Exception:
-                pass
-            self._conn = None
-            self._opened = False
-            self._ensure_open()
+        db identity is unchanged now, the GC cannot remove it until we
+        release; otherwise reopening lands the write on disk.
+
+        Rail round-11 [P2]: absence alone is NOT the whole signal. With two
+        handles opened before a GC unlink, the first reopen RECREATES the
+        path, so the second handle would see it existing while its own
+        connection still targets the dead inode. The identity compared is
+        therefore ``(st_dev, st_ino)`` captured at open time, which detects
+        REPLACEMENT as well as absence."""
+        if not self._opened:
+            return
+        try:
+            st = os.stat(self._db_path)
+            current = (st.st_dev, st.st_ino)
+        except OSError:
+            current = None
+        if current is not None and current == self._db_ident:
+            return
+        try:
+            if self._conn is not None:
+                self._conn.close()
+        except Exception:
+            pass
+        self._conn = None
+        self._opened = False
+        self._ensure_open()
 
     def __enter__(self) -> "SqliteStateStore":
         self._ensure_open()

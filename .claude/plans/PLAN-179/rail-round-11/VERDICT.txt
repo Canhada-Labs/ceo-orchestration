@@ -1,0 +1,15 @@
+The landing artifacts are inconsistent with the reviewed changes and sentinel scope, causing either stale code to be installed or the guarded landing process to abort. The new database-recovery and GC logic also contains races and starvation cases that can lose state or prevent cleanup.
+
+Full review comments:
+
+- [P1] Stage the final no-exec reinjection implementation — /Users/joaocanhada/.w179-rail11/repo/.claude/hooks/check_postcompact_reinject.py:150-159
+  When the Owner landing script runs, G5 copies the staged artifact rather than this reviewed file. The staged `check_postcompact_reinject.py` still imports and invokes `subprocess`, while these lines deliberately remove that fallback; the staged precompact hook is similarly stale, so landing would overwrite both final implementations with older code. Regenerate the staged copies and manifest before signing (`.claude/plans/PLAN-179/OWNER-W179-LAND.sh:164-174`; guarded-hook requirement: `AGENTS.md:84-103`).
+
+- [P1] Regenerate the sentinel scope for the expanded pack — /Users/joaocanhada/.w179-rail11/repo/.claude/hooks/_lib/state_store.py:248-257
+  Under the PLAN-179 Owner landing path, this added canonical file cannot be landed because the staged manifest includes it, three new tests, and `docs/COMMAND-SKILL-HOOK-MAP.md`, but the sentinel draft omits all five paths. G2b requires an exact scope-to-manifest match and will abort before validation, so update and re-sign the scope (`.claude/plans/PLAN-179/OWNER-W179-LAND.sh:105-118`; guarded-hook requirement: `AGENTS.md:84-103`).
+
+- [P2] Reopen connections when the database inode was replaced — /Users/joaocanhada/.w179-rail11/repo/.claude/hooks/_lib/state_store.py:258-263
+  If two store handles were opened before GC, GC can unlink the database and the first handle can recreate the path before the second obtains `FileLock`. The second handle then sees that the path exists and skips reopening, although its connection still targets the unlinked inode, so subsequent commits silently disappear. Detect path replacement as well as absence, or establish the connection while holding the lock.
+
+- [P2] Rotate the bounded scan across the entire directory — /Users/joaocanhada/.w179-rail11/repo/.claude/hooks/_lib/scratchpad_lib.py:624-627
+  Once the session-store directory exceeds 20,000 entries, every invocation stops after the same `os.scandir` prefix, and the cursor is constructed only from scopes found inside that prefix. Because retained `.sqlite.lock` files accumulate, stale stores beyond the cap can become permanently unreachable and the directory resumes unbounded growth despite repeated GC runs.

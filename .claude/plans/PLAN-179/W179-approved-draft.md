@@ -27,6 +27,7 @@ Data: <AAAA-MM-DD>
 .claude/hooks/_lib/audit_emit.py
 .claude/hooks/_lib/pinned_constraints.py
 .claude/hooks/_lib/scratchpad_lib.py
+.claude/hooks/_lib/state_store.py
 .claude/hooks/check_compact_pinning.py
 .claude/hooks/check_postcompact_reinject.py
 .claude/hooks/check_precompact_continuity.py
@@ -37,6 +38,9 @@ Data: <AAAA-MM-DD>
 .claude/hooks/tests/test_git_bypass_guard.py
 .claude/hooks/tests/test_plan179_integration.py
 .claude/hooks/tests/test_postcompact_reinject_no_exec_payload.py
+.claude/hooks/tests/test_precompact_sidecar_reader_parity.py
+.claude/hooks/tests/test_scratchpad_gc_store_unit.py
+.claude/hooks/tests/test_state_store_gc_coordination.py
 .claude/hooks/tests/test_template_dogfood_parity.py
 .claude/hooks/tests/test_w5_scrub_enforcement.py
 .claude/scripts/env-inventory.json
@@ -50,6 +54,7 @@ README.md
 README.pt-BR.md
 SPEC/v1/audit-log.schema.md
 docs/ARCHITECTURE.md
+docs/COMMAND-SKILL-HOOK-MAP.md
 docs/CTO-GUIDE.md
 docs/GUIA-COMPLETO.md
 docs/README.md

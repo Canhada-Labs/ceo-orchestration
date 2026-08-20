@@ -1,91 +1,85 @@
-# RETOMAR AQUI — PLAN-179, terminal novo · 2026-08-19 08:15
+# RETOMAR AQUI — PLAN-179 · atualizado S314, 2026-08-19 (noite)
 
 ## Situação em uma frase
 
-O pack está **bom mas NÃO assinável ainda**: o pair-rail está no **round 7** e
-acabou de devolver **4 achados novos (2×P1)**, sendo dois deles causados pelas
-curas do round 6. **Não assine nada até o rail voltar limpo.**
+O rail rodou até o **round 11**, o critério de parada publicado DISPAROU
+(achado marginal de GC), **as rodadas autônomas encerraram** e o pack
+`staged-w01` (39 paths) está pronto com **UM residual aberto por decisão**
+— a escolha da forma final é do Owner na assinatura (memo em
+`rail-round-11/README.md`).
 
-## O que fazer ao abrir o próximo terminal
+## O que aconteceu na S314 (rounds 8→11, todos com evidência)
 
-```
-# 1. ver os achados abertos
-cat .claude/plans/PLAN-179/rail-round-7/VERDICT.txt
+Sequência completa do rail: 9 → 4 → 2 → 3 → 2 → 3 → 4 → **4 → 3 → 3 → 4**.
 
-# 2. curar os 4 (detalhe abaixo), regenerar o pack e rodar o round 8
-python3 .claude/plans/PLAN-179/assemble_pack.py .claude/plans/PLAN-179/staged-w01
-bash /tmp/.../scratchpad/rail_round8.sh     # copiar de rail_round7.sh trocando 7→8
-```
+- **Round 8 (4 curados):** redação por CAMPO + bytes ao store — o JSON do
+  snapshot não corrompe mais com `token=...` (era P1: a continuidade
+  morria para exatamente os segredos que deve sobreviver); identidade do
+  sidecar aceita cwd DENTRO do root; `constraint_count` reporta o
+  RENDERIZADO; CLAUDE.md do pack na verdade pós-land.
+- **Round 9 (3 curados):** exec bit 755 no hook novo (confirmado
+  independentemente pela suíte no clone — lição "cp perde exec bit");
+  `_resolve_project_root` (walk-up-first) cura a família cwd→root
+  inteira; GC nunca mais unlinka lock file (inode estável).
+- **Round 10 (3 curados, prescrição do rail seguida):**
+  `state_store.py` ENTROU no pack com `_reopen_if_vanished()` sob TODO
+  FileLock — a cura de raiz da corrida GC×conexão que os rounds 7/9/10
+  circulavam; PostCompact re-arma a histerese de pressão
+  (`clear_context_pressure_marker`); GC com cursor de RETOMADA
+  persistido (starvation de prefixo morta).
+- **Interlúdio (a suíte pegou a MINHA cura):** o `_git` do re-arme violava
+  o contrato no-exec do PostCompact (tripwire de
+  `test_postcompact_reinject_no_exec_payload`) — resolver do PostCompact
+  virou walk-up-only, e o do PreCompact walk-up-FIRST para os dois
+  concordarem. Registro honesto: o tripwire funcionou como desenhado.
+- **Round 11 (2 curados, 1 skew, 1 ABERTO por decisão):** escopo do
+  sentinel regenerado para 39 paths (G2b simulado OK); `(st_dev, st_ino)`
+  detecta inode SUBSTITUÍDO além de ausente (cenário de dois handles,
+  com teste); o "staged com subprocess" era skew clone×working-tree
+  (higiene adotada: clonar só depois de commitar); **o cap de 20k
+  entradas do scan fica ABERTO — ver o memo**.
 
-Os scripts de rail/verificação vivem no scratchpad da sessão anterior e são
-descartáveis — o essencial deles está descrito abaixo, dá para recriar em 5
-linhas (clone local + aplicar o MANIFEST honrando o PACKMAP + `codex exec
-review --uncommitted`, removendo `rail-round-*` do clone).
+## O ÚNICO aberto do pack: memo de decisão (Owner)
 
-## Os 4 achados ABERTOS do round 7
+`rail-round-11/README.md` — em resumo: **(a) assinar com residual
+declarado (recomendado)**, (b) reduzir escopo (quebra o consenso r1-C2),
+(c) round 12 (contra o critério; margens decrescentes).
 
-1. **[P1] `--self-test` da sonda quebrado pela cura do round 6.** Agora
-   `cmd_verify` exige registros de injeção nos dois canais, mas o `--self-test`
-   e `.claude/scripts/tests/test_probe_postcompact_channel.py:98-104` nunca
-   chamam `_record_injection`, então devolvem `EXIT_INCONCLUSIVE(4)` e falham.
-   **Cura:** registrar as duas injeções antes de verificar, no self-test e nos
-   testes.
-2. **[P1] GC pode quebrar o locking do SQLite.** Os quatro arquivos de um store
-   (`.sqlite`, `.lock`, `-wal`, `-shm`) hasheiam para **shards diferentes**,
-   então podem ser removidos em varreduras distintas; e o mtime do `.lock` não
-   é atualizado por aquisições, então um store ATIVO pode ter um sidecar
-   removido. **Cura:** agrupar por escopo, adquirir o lock do store e decidir a
-   expiração **do store como unidade** — não por arquivo.
-3. **[P2] Override do sidecar: leitor ≠ escritor.** O escritor expande `~` e
-   **rejeita** symlink/traversal caindo no default; meu leitor trata `~`
-   literalmente e pode ler um path que o escritor recusou. **Cura:** resolver e
-   validar igual ao `statusline-ceo.py:165-176`.
-4. **[P2] Referências quebradas.** O script do rail apaga `rail-round-*` no
-   CLONE, mas o `HANDOFF-MANHA.md:51,105,130` aponta para esses diretórios — no
-   clone eles somem e as referências ficam órfãs. **Cura:** manter a exclusão
-   só no clone e verificar que o repo real conserva tudo (ele conserva), ou
-   parar de apagar e aceitar a contaminação com o veredito lido com atenção ao
-   `workdir`.
+## Verificação (estado ao escrever)
 
-## O que JÁ está pronto e provado (não refazer)
+- 39 paths, `MANIFEST.sha256` verificado; G2b (escopo==manifesto)
+  simulado OK com o awk/sort exato do `OWNER-W179-LAND.sh`.
+- Dirigidos: 63 (GC+state_store+compaction) + 66 (no-exec+integração no
+  clone) + parity + sonda — todos verdes, exit real lido de arquivo.
+- Suíte completa em clone com o pack aplicado: verde exceto 2 fails
+  PRÉ-EXISTENTES fora do pack, ambos documentados: (i)
+  `test_skill_patch_propose::test_diff_size_cap...` — timeout 30s
+  também no HEAD vivo, CI Linux verde (classe perf local/macOS); (ii)
+  `test_check_test_audit_isolation::test_gate_green_on_head` — flake
+  conhecido quando OUTRA sessão escreve o audit log vivo (lição
+  [[feedback-live-audit-isolation-flakes-under-concurrent-session]]).
+- (A última suíte, com o inode-fix, estava rodando ao fechar — resultado
+  em `~/.w179-suite8/RESULT.txt`; mudanças desde a anterior: só
+  state_store inode + testes, dirigidos verdes.)
 
-- **W3-K do PLAN-169: LANDADO e pushado** (`c34e8e3`), CI verde.
-- Pack `staged-w01` com **34 paths**, manifesto e escopo do sentinel em dia.
-- 6 rounds de rail curados: 9 → 4 → 2 → 3 → 2 → 3 achados, **todos novos a
-  cada rodada** (o rail nunca repetiu um achado já curado).
-- Evidência com controles positivo E negativo em `rail-round-3/`, `-4/`, `-5/`,
-  `-6/` — inclusive a prova de que o código anterior **truncava um arquivo
-  vítima de 44 para 3 bytes** por symlink.
-- Verificação: 10 gates verdes (incl. `audit-registry`, `env-hygiene`) e suíte
-  completa **7113 passed / 0 failed**.
+## Ordem quando o Owner decidir
 
-> ⚠️ **Precisão sobre esse 7113/0:** ele é do pack **pós-round-5**. As curas do
-> **round 6** (sonda com `inconclusive`, override do sidecar, GC v5 com
-> contador persistido) entraram DEPOIS e **ainda não passaram por uma suíte
-> completa** — só por `py_compile`, pelos 10 gates rápidos e pelos controles
-> dedicados de cada cura. A primeira coisa a rodar no terminal novo, junto com
-> as curas do round 7, é a suíte inteira num clone com o pack aplicado
-> (`PYTHONDONTWRITEBYTECODE=1`, exit code lido de arquivo, nunca `pytest |
-> tail`). O round 7 aliás já aponta que o `--self-test` da sonda e
-> `.claude/scripts/tests/test_probe_postcompact_channel.py` estão QUEBRADOS
-> pela cura do round 6 — então essa suíte vai vir vermelha até o achado 1 ser
-> curado. Isso é esperado, não é surpresa nova.
-
-## Ordem depois que o rail voltar limpo
-
-1. `! bash ~/canhada-labs/BOM-DIA.sh` — detecta estado, assina (1 pinentry),
-   dry-run, land, push, vigia o CI.
-2. Montar `staged-w24` (W2+W4) — só depois que o w01 landar
-   (`staged-w24/README-COMO-MONTAR.md` diz o que falta).
+1. Se (a): `! bash ~/canhada-labs/BOM-DIA.sh` — assina (1 pinentry),
+   dry-run, land, push, vigia o CI. O BOM-DIA foi ENDURECIDO na S314:
+   verde = TODAS as runs do sha com `conclusion=success` (`cancelled`
+   não passa mais — classe do falso-verde do `c34e8e3`).
+2. Montar `staged-w24` (W2+W4) — itens novos NOMEADOS para ele nesta
+   sessão: state_store lock-then-open pleno (aí o GC pode coletar locks
+   com segurança) e a decisão do cap de scan se o Owner escolher (b).
 3. Flip do PLAN-179 `executing→done` — decisão do Owner.
 
-## Aviso honesto
+## Fora do PLAN-179, também fechado na S314
 
-Sete rodadas é muito. O rail continua achando defeitos **reais e novos**, e
-três deles nasceram das minhas próprias curas — o padrão é "cura introduz
-defeito adjacente", não "o rail está sendo pedante". Se o round 8 trouxer mais
-uma leva do mesmo tipo, a decisão certa provavelmente não é a rodada 9: é
-**reduzir o escopo do pack** (landar W1/W1-b sem o guard de pressão e sem o GC,
-que é de onde vieram 5 dos últimos 8 achados) e tratar o resto como wave
-própria. Essa é a lição S296 registrada na memória: mudar o alvo, não insistir
-na rodada.
+- Escrituração: PLAN-169 (E.2 CLOSED via W3-K `c34e8e3`, ledger 58/3/1,
+  frase falsa do PLAN-170 corrigida) e PLAN-178 (fechamento parcial:
+  AC-1/2/2b/4/5 com evidência; W1.3 com destino nomeado no W4-C).
+- `ceo-boot.py`: stranded-proxy casa `PLAN-NNN` em paths E subjects
+  (falso-vermelho do 169 morto; live-fire feito).
+- Triagem CI: `coverage.yml` e `tournament.yml` eram reds OBSOLETOS (já
+  curados em `9179ef2` e `2aceb05`); o achado sistêmico é o
+  `cancel-in-progress` do validate — instrumentado no BOM-DIA.
