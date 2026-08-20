@@ -198,15 +198,43 @@ def lint_file(path: str, rel: str, git_mode: Optional[str]) -> List[dict]:
 
 
 def _emit_unlock_audit(sha: str, reason: str) -> None:
-    """Advisory, fail-open: tenta o emissor canônico; senão, breadcrumb."""
+    """Advisory, fail-open: breadcrumb em stderr.
+
+    PARKED (S317, decisão do Owner). Esta função emitia a ação de auditoria
+    do unlock via ``audit_emit.emit_generic``, mas essa ação nunca foi
+    registrada nas DUAS fontes que o registro exige — ``_KNOWN_ACTIONS`` em
+    ``.claude/hooks/_lib/audit_emit.py`` e a tabela por-ação de
+    ``SPEC/v1/audit-log.schema.md`` — e as duas são canonical-guarded. O gate
+    ``check-audit-registry-coverage.py`` pegou o órfão: o PLAN-174 W1
+    (7d467a8) embarcou o emissor sem a metade dele que é canônica, e o CI
+    ficou vermelho em 6 jobs.
+
+    A regra que essa decisão fixa: **um emissor não embarca antes do registro
+    dele.** Enquanto isso, o breadcrumb abaixo é o registro — a mesma rota de
+    fallback que a versão anterior já usava quando o emissor canônico não
+    resolvia, então nenhum caminho de execução perdeu comportamento.
+
+    O artefato DURÁVEL, porém, não foi parcado junto — seria trocar uma
+    violação por outra. O PLAN-174 §W2 (87-90) põe o unlock no audit trail
+    como AC, e o caminho antigo, mesmo REJEITADO pela ação desconhecida,
+    ainda gravava um breadcrumb em ``audit-log.errors`` (``emit_generic``:
+    ação fora de ``_KNOWN_ACTIONS`` ⇒ ``_breadcrumb`` + retorno silencioso).
+    Escrevemos no MESMO destino, direto, sem emitir ação não registrada — o
+    gate de registro só enxerga chamadas que resolvem para ``emit_<name>``.
+
+    Para restaurar: no MESMO pack assinado que registrar a ação (precedente
+    v2.51 / SENT-GK-F, que precisou de ``CEO_KERNEL_OVERRIDE``), reponha aqui
+    a chamada a ``audit_emit.emit_generic`` com o nome de ação declarado no
+    PLAN-174 W1 e remova o breadcrumb direto abaixo.
+    """
+    line = (f"ceremony-lint UNLOCK usado sha={sha[:16]} "
+            f"reason_len={len(reason)}")
     try:
         sys.path.insert(0, os.path.join(REPO_ROOT, ".claude", "hooks"))
         from _lib import audit_emit  # type: ignore
-        fn = getattr(audit_emit, "emit_generic", None)
-        if callable(fn):
-            fn(action="ceremony_lint_unlock_used",
-               fields={"file_sha256": sha[:16], "reason_len": len(reason)})
-            return
+        crumb = getattr(audit_emit, "_breadcrumb", None)
+        if callable(crumb):
+            crumb(line)
     except Exception:
         pass
     print(f"ceremony-lint: UNLOCK usado sha={sha[:16]} motivo={reason!r}",

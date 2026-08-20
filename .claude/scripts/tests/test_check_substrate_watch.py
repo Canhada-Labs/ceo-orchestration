@@ -104,8 +104,11 @@ class SubstrateWatchTest(unittest.TestCase):
         # (debate A12) added the 5th (codex_harness — Codex-as-HOST surface);
         # PLAN-156 added the 6th (grok_cli — Grok Build third host harness);
         # PLAN-178 W1.2-5c added the 7th (cc_native_usage — native per-agent
-        # cost source fingerprint, reversibility rail of the W1.2 puller).
-        self.assertEqual(len(report["components"]), 7)
+        # cost source fingerprint, reversibility rail of the W1.2 puller);
+        # PLAN-178 AC-2c (153ed7a) added the 8th (cc_workflow_rail — the
+        # Workflow-rail vs spawn-gate boundary, whose probes demand re-running
+        # wf_d7af49d9 and re-deciding the red branch).
+        self.assertEqual(len(report["components"]), 8)
         # An Owner refresh must never leave a component un-reconciled.
         for comp in report["components"]:
             self.assertNotEqual(comp["last_seen_version"], "unknown")
