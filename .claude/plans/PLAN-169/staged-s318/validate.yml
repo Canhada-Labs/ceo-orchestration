@@ -1281,9 +1281,18 @@ jobs:
           except Exception:
               note(f"hook-latency attempt {att}: NO parseable report (a 420s cap-killed attempt leaves none)")
               sys.exit(0)
-          rows = [f"| attempt {att}: {name} | {h.get('p50_ms')} | {h.get('p95_ms')} | {h.get('p99_ms')} | {h.get('max_ms')} |"
+          # ADR-163 S318: the summary carries the p99 advisory verdict per
+          # entry — a green job with a breached (advisory) p99 must be
+          # visible here, not only in the CLI WARN line.
+          def p99cell(h):
+              if "p99_within" not in h:
+                  return str(h.get("p99_ms"))
+              return f"{h.get('p99_ms')} ({'ok' if h.get('p99_within') else 'BREACH-advisory'})"
+          rows = [f"| attempt {att}: {name} | {h.get('p50_ms')} | {h.get('p95_ms')} | {p99cell(h)} | {h.get('max_ms')} |"
                   for name, h in d.get("hooks", {}).items() if isinstance(h, dict) and "p95_ms" in h]
           if rows:
+              mode = "advisory" if d.get("p99_advisory") else "hard"
+              note(f"hook-latency attempt {att}: p95 ceiling {d.get('p95_ceiling_ms')}ms hard / p99 {d.get('p99_ceiling_ms')}ms {mode}")
               note("| hook-latency entry | p50 | p95 | p99 | max (ms) |")
               note("|---|---|---|---|---|")
               note("\n".join(rows))
@@ -1330,7 +1339,7 @@ jobs:
           }
           if run_gate 1; then
             publish 1
-            echo "✓ hook latency p95/p99 within budget (attempt 1)"
+            echo "✓ hook latency p95 within budget (p99 advisory — see summary; attempt 1)"
           else
             rc=$?
             publish 1
@@ -1338,7 +1347,7 @@ jobs:
             sleep "$BACKOFF_S"
             if run_gate 2; then
               publish 2
-              echo "✓ hook latency p95/p99 within budget (attempt 2 — attempt 1 was a load-flake; see ::warning)"
+              echo "✓ hook latency p95 within budget (p99 advisory — see summary; attempt 2 — attempt 1 was a load-flake; see ::warning)"
             else
               rc2=$?
               publish 2
@@ -1347,7 +1356,7 @@ jobs:
                 echo "::warning::hook-latency gate failed twice (rc1=$rc rc2=$rc2) but the contention probe reads UNCONTENDED — granting the probe-gated 3rd attempt (ADR-163 §Amendment, PLAN-161 C4; its verdict is final)"
                 if run_gate 3; then
                   publish 3
-                  echo "✓ hook latency p95/p99 within budget (attempt 3 — probe-gated; attempts 1+2 were load-flakes on a since-quiet runner)"
+                  echo "✓ hook latency p95 within budget (p99 advisory — see summary; attempt 3 — probe-gated; attempts 1+2 were load-flakes on a since-quiet runner)"
                 else
                   rc3=$?
                   publish 3

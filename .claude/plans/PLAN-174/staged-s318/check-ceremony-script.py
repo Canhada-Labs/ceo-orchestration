@@ -244,8 +244,14 @@ def _emit_unlock_audit(sha: str, reason: str) -> None:
                 crumb(line)
         except Exception:
             pass
-    print(f"ceremony-lint: UNLOCK usado sha={sha[:16]} motivo={reason!r}",
-          file=sys.stderr)
+    try:
+        # Rail S318 (P2): o stderr do operador também fica dentro da
+        # fronteira fail-open — um BrokenPipeError/encoding error aqui não
+        # pode abortar o lint depois de um unlock válido.
+        print(f"ceremony-lint: UNLOCK usado sha={sha[:16]} motivo={reason!r}",
+              file=sys.stderr)
+    except Exception:
+        pass
 
 
 def main(argv: Optional[List[str]] = None) -> int:

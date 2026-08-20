@@ -1,0 +1,13 @@
+21e250429471ec8f43e95e5dc40629bb3e5e705e9f385fc5c2ea5cb49272ebc9  .github/workflows/validate.yml
+af6ba24648ca0d30421ae31cfce285be547169ec50de5033870dd3938ca58181  .claude/scripts/profile-opus-4-7.py
+141d7c14d9a314e3e484eeffc1a83969b2cc4e0a05367c2fcb4104dbcc53b1c5  .claude/scripts/tests/test_profile_opus47_latency_gate.py
+ed911bd176da2c6468033f5f2b69865f2f4963dc527071871766cb3f3a6fc3bb  .claude/plans/PLAN-159/wave2-regression-proof.sh
+ebf53fc064f1a9df5b7d6e4d428f7d7f075fdd88cae6abc71ccad76a01f14ed0  .claude/adr/ADR-163-hook-latency-gate-percentile-stability.md
+c79b02d9aa685b390cddf1b05f3e7bdf3031277350e7c0ae7760049b43e31a77  .claude/hooks/_lib/audit_emit.py
+afb75afa6b0eb8bea02923bcb52ae43e7572e1864de0e50a7d2f5daa25d78e6c  SPEC/v1/audit-log.schema.md
+b73e5478d9bbbc630941957920a930d24cdd782fe6944c7ecd3710cc011d02d8  .claude/scripts/check-ceremony-script.py
+30ecec18d4a3e1628efcc2d2acfbc2dce00fab8b795190c03a5d3576671071e8  .claude/hooks/tests/test_w5_scrub_enforcement.py
+6729c2b2b5a1c647c497c140e8c8104619763ba7625d99fe0afe8e78b57c54ba  .claude/governance/codex-cli-pin-manifest.json
+ec3ddd6f31da4d3473dc64cfe6de9920b4aaa2c39b0142827aaf32730486d7f4  .claude/governance/codex-cli-pin.txt
+cc3107af71125f697d54249da54ad21c872e16c73d57f7455d08b7ca6916473d  .claude/adr/ADR-001-runtime-state-directory.md
+c4c5ebfaa5a5b2b0515a2b3a99b9ae6fc7cef0a16b27b1a44f15ea1cf29a9a56  .claude/adr/ADR-079-prompt-sha-salt-hmac-impact.md

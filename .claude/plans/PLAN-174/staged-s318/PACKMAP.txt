@@ -1,0 +1,31 @@
+# PACKMAP — pack SENT-S318 (multi-plano: PLAN-169 + PLAN-174 + PLAN-182)
+#
+# Uma linha por arquivo do pack:  <staged-dir>/<pack-file> -> <destino-no-repo>
+# A fonte executável deste mapa é a lista MAP embutida em
+# .claude/plans/PLAN-174/OWNER-S318-LAND.sh (G5); este arquivo é o espelho
+# legível. O SPEC viaja ACHATADO (spec-v1-audit-log.schema.md) porque o
+# deny Edit(SPEC/**) casa o path em qualquer profundidade — precedente
+# PLAN-179/staged-w01/PACKMAP.txt; o deny está CERTO e não é contornado:
+# quem materializa o destino é o LAND rodado pelo Owner, sob sentinel GPG.
+#
+# Componente 1 — emenda ADR-163 (p95 180 hard + p99 advisory):
+.claude/plans/PLAN-169/staged-s318/validate.yml -> .github/workflows/validate.yml
+.claude/plans/PLAN-169/staged-s318/profile-opus-4-7.py -> .claude/scripts/profile-opus-4-7.py
+.claude/plans/PLAN-169/staged-s318/test_profile_opus47_latency_gate.py -> .claude/scripts/tests/test_profile_opus47_latency_gate.py
+.claude/plans/PLAN-169/staged-s318/wave2-regression-proof.sh -> .claude/plans/PLAN-159/wave2-regression-proof.sh
+.claude/plans/PLAN-169/staged-s318/ADR-163-hook-latency-gate-percentile-stability.md -> .claude/adr/ADR-163-hook-latency-gate-percentile-stability.md
+#
+# Componente 2 — re-pin codex 0.147.0 (ADR-182 §5):
+.claude/plans/PLAN-174/staged-s318/codex-cli-pin-manifest.json -> .claude/governance/codex-cli-pin-manifest.json
+.claude/plans/PLAN-174/staged-s318/codex-cli-pin.txt -> .claude/governance/codex-cli-pin.txt
+#
+# Componente 3 — registro + reposição ceremony_lint_unlock_used:
+.claude/plans/PLAN-174/staged-s318/audit_emit.py -> .claude/hooks/_lib/audit_emit.py
+.claude/plans/PLAN-174/staged-s318/spec-v1-audit-log.schema.md -> SPEC/v1/audit-log.schema.md
+.claude/plans/PLAN-174/staged-s318/check-ceremony-script.py -> .claude/scripts/check-ceremony-script.py
+.claude/plans/PLAN-174/staged-s318/test_audit_emit_ceremony_lint_unlock.py -> .claude/hooks/tests/test_audit_emit_ceremony_lint_unlock.py
+.claude/plans/PLAN-174/staged-s318/test_w5_scrub_enforcement.py -> .claude/hooks/tests/test_w5_scrub_enforcement.py
+#
+# Componente 4 — emendas que destravam PLAN-182 W1:
+.claude/plans/PLAN-182/staged-s318/ADR-001-runtime-state-directory.md -> .claude/adr/ADR-001-runtime-state-directory.md
+.claude/plans/PLAN-182/staged-s318/ADR-079-prompt-sha-salt-hmac-impact.md -> .claude/adr/ADR-079-prompt-sha-salt-hmac-impact.md
