@@ -85,7 +85,10 @@ printf '%s\n' "$GPG_OUT" | grep '^\[GNUPG:\] VALIDSIG ' \
   || { echo "ABORT: assinatura nao e do Owner"; exit 1; }
 [ "$(sed -n 's/^Anchor-SHA: //p' "$APPROVED" | head -1)" = "$(git rev-parse HEAD)" ] \
   || { echo "ABORT: anchor != HEAD — re-assine"; exit 1; }
-_elect="$(sed -n 's/^Locked-corpus catch_rate (ADR-111 §2, eleicao do Owner): //p' "$APPROVED" | head -1)"
+# O miolo do rotulo tem acentos (o sentinel e prosa pt-BR); o parser casa
+# pelo PREFIXO ASCII estavel + "[^:]*: " para nao depender de acentuacao —
+# a divergencia eleicao/eleição abortou o primeiro dry-run (S318).
+_elect="$(sed -n 's/^Locked-corpus catch_rate[^:]*: //p' "$APPROVED" | head -1)"
 case "$_elect" in RUN|DEFER) : ;; *) echo "ABORT: eleicao locked-corpus nao preenchida (RUN/DEFER); re-assine via SIGN"; exit 1 ;; esac
 # Rail S318 P0: o Scope ASSINADO tem de autorizar exatamente o MAP
 # executavel — set-equality NOME-a-nome (licao S272). Sem isto, um MAP
