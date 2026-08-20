@@ -244,28 +244,79 @@ wave posterior desenha em cima de premissa não medida
       Ação nova `context_pressure_observed` (enum fechado + inteiros:
       `used_bucket`, `event_source`, `plan_id`). Sem texto, sem path.
       Mede frequência real de compactação e a pressão em que ocorre.
-- [ ] `[P1][US2][PLAN-179/w0-measurement.md]`
-      **Fixar `F` e `T` empiricamente** — a tabela de η em §2.1 usa
-      `F=50k` estimado por heurística chars/4. Medir o piso REAL
-      (system prompt + defs de ferramenta + Gate 1+2 + índice de memória)
-      e o limiar REAL de auto-compact do harness. Sem esses dois números
-      a curva η é ilustrativa, não decisória
+- [x] `[P1][US2][PLAN-179/w0-measurement.md]` (landado `08e25f4`, 515L)
+      **Fixar `F` e `T` empiricamente** — FEITO no AGREGADO, DEGRADADO na
+      DECOMPOSIÇÃO; o `[x]` vale só para o agregado e diz isto à letra.
+      Medidos (§C do relatório): `F` = **97.097 / 98.636** (n=2,
+      2026-08-14 e 2026-08-18), `T` = **998.043** (n=1),
+      `F+S` = **112.638** (n=1), `S ≈ 14.600` por SUBTRAÇÃO — não é
+      medição —, η no ponto de operação real = **88,7 %**.
+      O `F=50k` da tabela de §2.1 está REFUTADO por ≈2,0×; essa tabela
+      NÃO foi reescrita in loco e fica superseded por §C/§E do relatório.
+      **DEGRADAÇÃO nomeada aqui, não só lá:** a decomposição que este
+      checkbox pede — system prompt vs defs de ferramenta vs Gate 1+2 vs
+      índice de memória — permanece `estimativa declarada, fonte
+      ausente` (§B): o harness não expõe as parcelas. O agregado não
+      degrada e lista os seus INPUTS, como a lição exige
       ([[feedback-measurement-must-list-its-inputs]]).
-- [ ] `[P2][US2][PLAN-179/w0-measurement.md]`
+- [ ] `[P2][US2][PLAN-179/w0-measurement.md]` — **2 de 3 sub-itens**
       Relatório: N de compactações/semana, distribuição de `plan_id`
       resolvido vs `unknown`, custo de gate-boot re-pago por compactação
       (baseline documentado: ~44.786 tokens).
-- [ ] `[P1][US2b][.claude/hooks/check_precompact_continuity.py]`
-      **Progress guard** (`research-S309.md §2.3`): se uma compactação
-      não liberar headroom suficiente — `η` abaixo de um piso nomeado —
-      HALTAR a tentativa automática e notificar o operador em vez de
-      compactar de novo. É a válvula contra o loop que o Owner apontou.
-      Requer o `F` medido acima; até lá o piso não tem valor honesto.
+      **FECHADOS** (`08e25f4`): distribuição de `plan_id` = `{'unknown':
+      2}` — 100 % das compactações observadas, categórico e não
+      estatístico (§D); N = **1** compactação, com a NÃO-DERIVABILIDADE
+      da taxa/semana declarada POR ESCRITO no relatório (não há
+      denominador de semanas-de-exposição fiável, §D).
+      **AUSENTE — por isso o `[ ]`:** o custo de gate-boot re-pago.
+      `grep -c '44\.786\|44786'` sobre o relatório = **0**; controle
+      positivo do mesmo grep sobre ESTE plano = **2** (L257, L497), logo
+      o padrão pega quando o número existe. Marcar `[x]` com o sub-item
+      fora do arquivo embarcaria claim falsa.
+- [x] `[P1][US2b][.claude/hooks/check_precompact_continuity.py]`
+      (landado `c042f9e` — `_progress_guard`, `PROGRESS_FLOOR_ENV` =
+      `CEO_CONTEXT_PROGRESS_FLOOR_TOKENS`, wire em `gate()`, ação
+      `context_pressure_observed` no SPEC v2.56, 4 testes verdes)
+      **OBSERVADOR de pressão** (`research-S309.md §2.3`) — texto
+      reescrito para o que REALMENTE shipou: ao cruzar um piso de tokens
+      opt-in, EMITE `context_pressure_observed` (enum fechado) e NOTIFICA
+      o operador por breadcrumb em stderr. Escopo dito à letra: o hook
+      **não calcula η** (`grep -c 'η\|headroom\|112638'` no arquivo =
+      **0**) e **não pode HALTAR** — PreCompact não tem canal de deny e
+      `gate()` retorna `{}` por contrato (docstring: "no value of the
+      return that could stop the compaction"). A redação original dizia
+      "HALTAR"; marcar `[x]` com aquele texto embarcaria claim falsa numa
+      superfície de governança — daí a reescrita, e daí o item separado
+      abaixo para a válvula que ainda não existe.
+- [ ] `[P1][US2b-valve][.claude/hooks/check_precompact_continuity.py]`
+      **VÁLVULA — o delta que falta** (item novo, S316). O que separa o
+      observador acima da válvula que o Owner pediu, nomeado:
+      (i) **canal capaz de NEGAR** — PreCompact não tem; exige outra
+      superfície (um gate que decide ANTES da fronteira) ou um
+      kill-switch de operador. Nenhum valor de retorno de `gate()` para
+      a compactação;
+      (ii) **η calculado, não um limiar de tokens** — `η = (T − F − S)/T`
+      com `F+S = 112.638` e `T = 998.043` MEDIDOS (§C/§E do relatório);
+      hoje nenhum dos três entra no hook;
+      (iii) a precondição "requer o `F` medido" está **SATISFEITA**
+      (§C): o que falta é (i) e (ii), não mais medição.
 
-**AC de saída W0:** (a) o veredito do canal está escrito e é falsificável;
-(b) a taxa de `plan_id=unknown` está medida, não estimada; (c) `F` e `T`
-têm valores medidos e a tabela η de §2.1 é reescrita com eles ou
-explicitamente confirmada.
+**AC de saída W0 (reconciliado S316):**
+(a) o veredito do canal está escrito e é falsificável — **ABERTO**: a
+sonda está shipada (`c042f9e`), mas o veredito exige uma compaction
+paga, operador/local;
+(b) a taxa de `plan_id=unknown` está medida, não estimada — **MEDIDA E
+VAZIA**: `{'unknown': 2}`, N = 1, sem taxa derivável, e a
+não-derivabilidade está declarada por escrito (§D do relatório);
+(c) `F` e `T` têm valores medidos e a tabela η de §2.1 é reescrita com
+eles ou explicitamente confirmada — **FEITO, com degradação nomeada**:
+reescrita em `w0-measurement.md` §E (`F` = 97.097/98.636,
+`T` = 998.043, `F+S` = 112.638, η = 88,7 %); a tabela de §2.1 DESTE
+plano NÃO foi reescrita in loco e fica marcada como estimativa
+REFUTADA (`F=50k`, ≈2,0× abaixo do medido), superseded por §C/§E; a
+DECOMPOSIÇÃO de `F` segue `estimativa declarada, fonte ausente` (§B).
+O AC de saída permanece **ABERTO** por (a) e pelo sub-item ausente do
+relatório (custo de gate-boot re-pago).
 
 ### W1 — Curar o snapshot vazio (o bug real)
 
@@ -350,11 +401,19 @@ Flip `reviewed → executing` autorizado pelo Owner em chat (S316). Os
 checkboxes de W1 (5) e W1-b (3) + dois de W0 (controle da sonda; ação
 `context_pressure_observed`) foram marcados com evidência do pack
 `c042f9e` + fix-forwards `6f7f20e`/`45c75e3` (CI 5/5 verde em
-`45c75e3`). **Seguem ABERTOS no W0, deliberadamente:** o veredito VIVO
-do canal (US1 #1 — a sonda está shipada, mas exige uma compaction paga,
-operador/local), `F`/`T` empíricos e o relatório (US2 — 
-`w0-measurement.md` não existe), e o progress guard (US2b — depende do
-`F` medido). O AC de saída W0 permanece aberto até esses itens. W2/W4
+`45c75e3`). **Correção S316 — claim falsa MORTA.** A redação anterior desta nota
+afirmava que `PLAN-179/w0-measurement.md` "não existe". É FALSO e era
+falso quando foi escrito: o arquivo é RASTREADO (`git ls-files` = hit),
+tem **515 linhas** (`wc -l`) e landou em `08e25f4` (2026-08-18
+15:44:52 -0300) — **DOIS DIAS ANTES** de a nota entrar em `18de98e`
+(2026-08-20 14:38:42 -0300). `F` e `T` estão MEDIDOS lá, não pendentes.
+
+**Seguem ABERTOS no W0, deliberadamente:** (i) o veredito VIVO do canal
+(US1 #1 — a sonda está shipada, mas exige uma compaction paga,
+operador/local); (ii) UM sub-item do relatório (custo de gate-boot
+re-pago — ausente do arquivo, ver checkbox); (iii) a VÁLVULA do US2b —
+o OBSERVADOR de pressão shipou em `c042f9e`, mas HALTAR não tem canal
+em PreCompact. O AC de saída W0 permanece aberto por (i) e (ii). W2/W4
 seguem em `PLAN-179/staged-w24/`.
 
 ### W2 — Ledger de trabalho contínuo (a mudança de doutrina)

@@ -51,7 +51,7 @@ Toda vez que este plano disser "premissa de auto-instalação que vazou",
 | A2 | Steps do template de CI que só rodam no repo do framework | **SIM, mas o censo precisa ser RE-DERIVADO** (ver W2) | `templates/.github/workflows/validate.yml.template` |
 | A3 | `benchmarks.yml.template` chama script que o install não entrega | **SIM, defeito vivo** | template `:129`; `install.sh` não copia `.github/scripts/` |
 | A4 | Skills de VETO em `name-only` | **SIM — e é defeito VIVO NESTE REPO, não só no adopter** | `.claude/settings.json:872-873` |
-| A5 | 71 timeouts de hook em 10 dias | **NÃO REPRODUZIDO** — vira hipótese aritmética (§4) | — |
+| A5 | 71 timeouts de hook em 10 dias | **REPRODUZIDO (S317, W0-US1)** — 71 exatos e todos breach do teto de 5 s; mas **70 são deste repositório e ZERO do adopter** — o defeito é nosso, não de campo (§4, W4) | transcripts de todos os projetos do `$HOME`, janela 2026-08-06..08-16 |
 | A6 | CODEOWNERS com handle da org | **NÃO é defeito** — `{{OWNER_HANDLE}}` substituído corretamente | `templates/.github/CODEOWNERS.template` |
 | **A7** | **O guard de contaminação é ele próprio vetor de contaminação** | **SIM, defeito vivo — achado NOVO do debate** | `.claude/scripts/check_contamination.py:70-73,100` |
 
@@ -153,13 +153,50 @@ timeout, 38 deles com valor 5**; os únicos tetos longos são **210**
 - 175 s aproxima 180 menos startup, e 231 s excede 210: é a **assinatura
   do caminho `Write`** (pair-rail), com o harness matando o processo.
 
+**→ CURADO (S317, 2026-08-20 — W0-US1 executada): as DUAS conclusões
+acima estão ERRADAS. Ficam registradas por honestidade.**
+
+- **(a) É FALSO que "o `/doctor` não está contando breach de teto
+  por-hook" — ele ESTÁ.** Os 71 eventos são `hook_cancelled` com
+  `timeoutMs=5000` e `timedOut=true`: breaches do teto de 5 s, sem
+  exceção. A premissa que quebrou é outra — **`durationMs` não
+  acompanha `timeoutMs`**: o `Stop` cancelado de 2026-08-06T13:43:19Z
+  registra `durationMs=229987` contra `timeoutMs=5000` (**46× o teto**).
+  Logo tempo grande NÃO implica teto grande, e a inferência
+  "231 s ⇒ teto de 210 ⇒ pair-rail" não tem lastro.
+- **(b) Os 231 s não são hook do framework, nem timeout.** São o
+  `on-stop.sh` do plugin **Warp** no evento `Stop`, emitido como
+  `hook_success` com exit 0 e `durationMs=230673` — nada foi estourado
+  e nada foi morto.
+- **(c) Os 175 s SÃO o pair-rail — mas não no caminho `Write` e não
+  mortos pelo harness:** `PreToolUse:Edit`, `hook_success`,
+  `durationMs=175470`, **abaixo** do teto de 210 s. O hook **completou**.
+
 **Correção do r9 #3: a conta declarada não fecha** — 35 + 25 + 7 =
 **67**, não 71. Os **4 eventos não contabilizados** podem pertencer a
 outro matcher e mudar qual caminho explica o relatório; a W0-US1
 identifica a categoria dos 4 ANTES de usar o breakdown como evidência.
 
+**→ CURADO (S317): a conta FECHA EXATO em 71 e os 4 estão nomeados.**
+`PreToolUse:Bash` 35 + `PreToolUse:Write` 25 + `Stop` 7 +
+**`PreToolUse:Read` 2** ("Scanning read content for injection
+patterns", 5621 ms e 5624 ms, ambos 2026-08-06) +
+**`UserPromptSubmit` 2** ("Prompt smell-test", 5392 ms em 2026-08-06 e
+6506 ms em 2026-08-14) = **71**. Os 71 são `hook_cancelled` com
+`timeoutMs=5000` e `timedOut=true`. A janela **2026-08-06..08-16 por
+dia-calendário** é a ÚNICA que devolve 71 — o "10 dias" do relatório é
+literal. Nenhum dos 4 pertence a matcher de teto longo: **todo** o
+breakdown é teto de 5 s.
+
 **A aritmética vem primeiro. A arqueologia da fonte do `/doctor` só abre
 se ela não explicar.**
+
+**→ RESOLVIDO (S317): a arqueologia NÃO abre — a fonte saiu de graça.**
+O `/doctor` executa o prompt embutido no binário 2.1.237, seção *"Check
+5 - slow hooks"*, que agrega `durationMs` por `hookName` e trata
+`hook_cancelled` com `timedOut:true` como evidência. É comando dirigido
+por **MODELO**, não contador determinístico — o que explica o breakdown
+parcial (67 dos 71) sem escavação nenhuma.
 
 **Sobre a instrumentação — a claim anterior estava errada duas vezes.**
 A primeira redação disse "o audit-log não registra timeout"; a segunda
@@ -253,11 +290,23 @@ enumeração por DERIVAÇÃO do organograma. r11 confirmou este item CLOSED;
 > inteira como read-only, e um executor teria de violar o contrato da
 > wave ou deixar um P0 aberto (pair-rail r7).
 
-- [ ] `[P0][US1]` Testar a **hipótese aritmética** do §4 ANTES de
+- [x] `[P0][US1]` Testar a **hipótese aritmética** do §4 ANTES de
       qualquer arqueologia: confrontar os tetos declarados
       (`settings.base.json`) com os tempos do relatório e concluir qual
       caminho pode tê-los produzido. Só abrir a busca pela fonte do
       `/doctor` se a aritmética não explicar.
+      **FECHADO (S317, 2026-08-20) — VEREDITO: `explicado pela
+      aritmética`. A arqueologia NÃO abre.** Conta fechada
+      nominalmente: 35 `Bash` + 25 `Write` + 7 `Stop` + 2
+      `PreToolUse:Read` + 2 `UserPromptSubmit` = **71** (§4), todos
+      `hook_cancelled` com `timeoutMs=5000` e `timedOut=true`, na janela
+      2026-08-06..08-16 — a única que devolve 71. **Três claims do §4
+      CAÍRAM e estão curadas lá:** o `/doctor` **está** contando breach
+      de teto por-hook; os 231 s são o `on-stop.sh` do plugin Warp
+      (`hook_success`, exit 0); os 175 s são o pair-rail em
+      `PreToolUse:Edit`, `hook_success`, abaixo do teto de 210 s.
+      **Achado que reescreve a W4:** 70 dos 71 vêm do repo do PRÓPRIO
+      framework, 1 de `foxbit-bot-arbitrage`, **ZERO do adopter**.
       Check: a conclusão é registrada com os números dos dois lados E a conta 35+25+7=67≠71 fechada nominalmente — os 4 casos restantes recebem categoria (cura do r9 #3); veredito entre {explicado pela aritmética, exige arqueologia} — "não medido" não fecha
 - [ ] `[P0][US2]` Medir a **taxa de censura à direita**: invocações
       esperadas contra linhas de evento emitidas, por hook. Estender a
@@ -404,6 +453,21 @@ enumeração por DERIVAÇÃO do organograma. r11 confirmou este item CLOSED;
       serial contra paralelo, per-hook contra per-event, é decidido
       ANTES de desenhar qualquer cura. Orçamento ganha piso nomeado ao
       fechar a W0.
+      **→ ESCOPO REESCRITO pela W0-US1 (S317): o A5 NÃO é defeito de
+      campo do adopter — é NOSSO.** Dos 71 breaches, **70 vêm do
+      repositório do PRÓPRIO framework** e **1** de
+      `foxbit-bot-arbitrage`; **ZERO** vêm do repo do adopter. Mecanismo:
+      o `/doctor` agrega os transcripts de **todos** os projetos do
+      `$HOME`, então o relatório de campo mostrou ao adopter os timeouts
+      DESTA máquina. Controle positivo: na mesma janela, o repo do
+      adopter tem **5.391** `hook_success` e **0** `hook_cancelled`.
+      Consequências para esta wave: (i) o alvo da cura é o teto de 5 s
+      dos hooks **deste** repo, não portabilidade de adopter; (ii)
+      qualquer critério que só se feche "no adopter" é infechável por
+      construção — não há evento lá; (iii) a W4 não depende mais de
+      arqueologia do `/doctor` (fonte já identificada, §4), só da
+      W0-US2; (iv) a resposta ao campo (AC-7) tem de dizer ao adopter
+      que os 71 não são dele.
       Check: none (a unidade nao abre antes da W0 fechar)
 
 ## Acceptance criteria
@@ -415,8 +479,13 @@ enumeração por DERIVAÇÃO do organograma. r11 confirmou este item CLOSED;
       **descartável nosso**, com o passo de ativação nomeado.
 - [ ] AC-3 [P0] Skill de VETO em `name-only` é impossível **por teste do
       gerador** — não por correção no `settings.json`.
-- [ ] AC-4 [P0] W0-US1 conclui com veredito nomeado, e a aritmética é
-      tentada ANTES da arqueologia.
+- [x] AC-4 [P0] W0-US1 conclui com veredito nomeado, e a aritmética é
+      tentada ANTES da arqueologia. **FECHADO (S317, 2026-08-20):**
+      veredito = `explicado pela aritmética`; conta exata
+      35+25+7+2+2 = **71**, todos `hook_cancelled` com `timeoutMs=5000`
+      e `timedOut=true`; a arqueologia não precisou abrir — a fonte do
+      `/doctor` saiu de graça (prompt embutido no binário 2.1.237,
+      *"Check 5 - slow hooks"*, dirigido por MODELO).
 - [ ] AC-5 [P0] `smoke-install` passa a cobrir `.github/` e a EXECUTAR o
       CI entregue — hoje o grep pelos templates devolve zero.
 - [ ] AC-6 [P1] O A7 é curado: instalação limpa não planta a identidade

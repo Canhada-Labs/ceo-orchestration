@@ -92,3 +92,103 @@ class TestEnvMatrixUS2:
         # projeto em namespaces distintos
         assert "outro-projeto" in ss["CEO_PROJECT_NAME"]
         assert "outro-projeto" not in ae["CEO_PROJECT_NAME"]
+
+
+class TestArtifactEnvMatrixUS2Extended:
+    """US2 estendida — matriz ARTEFATO x env, uma assercao por celula.
+
+    A US2 pedia "as 11+ celulas da lista fechada na US5 + bounding rule
+    sobre as 33 vars". Duas correcoes de numero, ambas medidas:
+
+    - **anchors**: sao 19, cobrindo a lista da US5 colapsada por DONO (as 19
+      rotacoes de `audit-log-*.jsonl` tem um unico dono, entao um anchor
+      responde por todas — a matriz prova QUEM decide o caminho, nao quantos
+      arquivos o padrao gerou). `filelock` e `scratchpad_lib` ficam de FORA
+      por declaracao (`ANCHORLESS_MODULES`): o primeiro recebe o path pronto,
+      o segundo resolve por sessao. Anchor inventado para eles seria celula
+      verde sem sujeito.
+    - **vars**: nem 33 nem as 500 do `env-inventory.json`. O dominio real e
+      derivado do CODIGO por `--env-domain` — as vars que os 8 modulos da
+      familia LEEM — e da **21**, das quais `HOME`, `USER` e
+      `PYTEST_CURRENT_TEST` nem constam do inventario. Essa e a bounding
+      rule: o que esta fora do dominio nao pode mover caminho nenhum.
+    """
+
+    def test_every_cell_resolves_a_real_path(self):
+        # "cada celula asserta o caminho resolvido de cada modulo" (Check da
+        # US2). Uma celula degradada (ERRO/API-DRIFT/vazio) e falha: seria
+        # matriz verde sem medicao por tras.
+        p = run_tool("--matrix")
+        assert p.returncode == 0, p.stderr
+        m = json.loads(p.stdout)
+        assert len(m) >= 11, "a US2 exige 11+ anchors; achei %d" % len(m)
+        degraded = [
+            (anchor, col, val)
+            for anchor, row in m.items()
+            for col, val in row.items()
+            if str(val).startswith("ERRO")
+            or val in ("API-DRIFT", "(vazio)", "")
+        ]
+        assert not degraded, "celulas degradadas: %r" % (degraded[:5],)
+        for anchor, row in m.items():
+            for col, val in row.items():
+                assert val.startswith("/"), (anchor, col, val)
+
+    def test_log_dir_moves_the_whole_family_together(self):
+        # CEO_AUDIT_LOG_DIR e o botao COERENTE: log, lock, errors e a chave
+        # HMAC vao juntos para o dir novo.
+        p = run_tool("--matrix")
+        m = json.loads(p.stdout)
+        col = "CEO_AUDIT_LOG_DIR"
+        for anchor in ("audit_emit._log_path", "audit_emit._lock_path",
+                       "audit_emit._errors_path", "audit_hmac.key_path"):
+            assert m[anchor][col].startswith("/tmp/fake-audit/"), (
+                anchor, m[anchor][col])
+
+    def test_log_path_splits_lock_errors_and_key_from_the_log(self):
+        # O ACHADO da US2, e a correcao do enunciado: o plano dizia que o
+        # lock e o errors nao acompanham o log "sob PATH-only". Medido: sob
+        # PATH-only tudo fica co-locado; quem PARTE a familia e
+        # CEO_AUDIT_LOG_PATH — move o log e deixa para tras o lock, o errors
+        # E a audit-key. Dois projetos podem escrever logs distintos
+        # compartilhando a MESMA chave HMAC, que e a garantia do ADR-079.
+        p = run_tool("--matrix")
+        m = json.loads(p.stdout)
+        col = "CEO_AUDIT_LOG_PATH"
+        assert m["audit_emit._log_path"][col].startswith("/tmp/fake-audit/")
+        for left_behind in ("audit_emit._lock_path", "audit_emit._errors_path",
+                            "audit_hmac.key_path"):
+            assert not m[left_behind][col].startswith("/tmp/fake-audit/"), (
+                "%s acompanhou o log — a divergencia sumiu, atualize o plano"
+                % left_behind)
+        # controle negativo do mesmo fato: sob PATH-only (sem-env) os tres
+        # compartilham o dir, entao a divergencia NAO e do caminho default.
+        base = "sem-env"
+        log_dir = m["audit_emit._log_path"][base].rsplit("/", 1)[0]
+        for anchor in ("audit_emit._lock_path", "audit_emit._errors_path"):
+            assert m[anchor][base].rsplit("/", 1)[0] == log_dir
+
+    def test_env_domain_is_derived_not_recalled(self):
+        # Bounding rule: o dominio vem do codigo, e o teste falha se alguem
+        # trocar por um numero de memoria.
+        p = run_tool("--env-domain")
+        assert p.returncode == 0, p.stderr
+        d = json.loads(p.stdout)
+        assert d["domain_size"] == len(d["domain"])
+        assert d["domain_size"] >= 15, d["domain_size"]
+        # toda coluna path-relevante da matriz TEM de estar no dominio —
+        # senao a matriz estaria testando env que modulo nenhum le.
+        for col in d["path_relevant_columns"]:
+            if col == "sem-env":
+                continue
+            assert col in d["domain"], "coluna fora do dominio: %s" % col
+        # o inventario NAO cobre o dominio inteiro — achado registrado.
+        assert "HOME" in d["domain_absent_from_inventory"]
+        assert d["inventory_total"] > d["domain_size"]
+
+    def test_anchorless_modules_are_declared_not_forgotten(self):
+        p = run_tool("--env-domain")
+        d = json.loads(p.stdout)
+        assert set(d["anchorless_modules"]) == {"filelock", "scratchpad_lib"}
+        for mod, reason in d["anchorless_modules"].items():
+            assert reason.strip(), mod

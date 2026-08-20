@@ -241,19 +241,46 @@ r11 confirmou 3/4 e apontou sobra textual na nota histórica (N1);
       escritores, leitores, **templates, installer, CI, SPEC e testes** —
       não apenas módulos de runtime.
       Check: derive-audit-family.py --json lista modulo/artefato/papel; grep pelo literal NAO e oraculo, porque SPEC, docs e testes legados o mantem legitimamente
-- [ ] `[P0][US2]` **(PARCIAL S316 — núcleo entregue, extensão pendente):**
-      `derive-audit-family.py --matrix` roda os 3 resolvedores CENTRAIS
-      (audit_emit/state_store/salt) em subprocess com HOME isolado e o
-      pytest asserta as células (divergência PROVADA: sob
-      `CEO_PROJECT_NAME`, state_store acompanha e audit_emit NÃO; salt
-      sem override NENHUM). Pendente para fechar: estender às 11+
-      células da lista fechada na US5 + bounding rule sobre as 33 vars.
-      Matriz de precedência de env **por artefato**, sobre a
-      lista fechada na US5 (11+ artefatos com anchors, não os 5 da
-      primeira redação). Incluir bounding rule por classes de
-      equivalência sobre as 33 vars de `env-inventory.json`, e registrar
-      que sob `PATH`-only o lock e o errors **não** acompanham o log.
+- [x] `[P0][US2]` **(FECHADO S317 — extensão entregue e assertada):**
+      `derive-audit-family.py --matrix` passou de 3 resolvedores × 5
+      colunas para **19 anchors de artefato × 14 colunas de env = 266
+      células, zero degradadas**, numa única subprocess por coluna com
+      HOME isolado (a forma ingênua custaria 19× mais processos; medido:
+      2,7 s para a matriz inteira). O `--env-domain` novo publica a
+      bounding rule.
       Check: pytest da matriz artefato x env; cada celula asserta o caminho resolvido de cada modulo
+      **Dois números do enunciado não sobreviveram à medição, e ambos
+      ficam corrigidos aqui:**
+      - **"11+ células" → 19 anchors.** A lista da US5 é colapsada por
+        DONO: as 19 rotações de `audit-log-*.jsonl` têm um único dono, e
+        a matriz prova QUEM decide o caminho, não quantos arquivos o
+        padrão gerou. `filelock` e `scratchpad_lib` ficam de fora **por
+        declaração** (`ANCHORLESS_MODULES`) — o primeiro recebe o path
+        pronto do chamador, o segundo resolve por sessão; anchor
+        inventado para eles seria célula verde sem sujeito.
+      - **"as 33 vars de `env-inventory.json`" → 21, derivadas do
+        CÓDIGO.** Nem 33 nem as **500** que o inventário de fato lista:
+        o domínio é o conjunto que os 8 módulos da família LEEM,
+        derivado por `--env-domain` (que falha o pytest se alguém o
+        trocar por um número de memória). **Achado colateral: `HOME`,
+        `USER` e `PYTEST_CURRENT_TEST` estão no domínio e AUSENTES do
+        `env-inventory.json`** — o inventário não cobre a própria
+        família. Das 21, seis são flags de COMPORTAMENTO
+        (`BEHAVIOR_ONLY_ENVS`) e ficam fora da matriz de caminho por
+        classificação auditável, não por omissão.
+      **E a claim a registrar estava com o dedo na coluna errada.** O
+      enunciado mandava registrar que "sob `PATH`-only o lock e o errors
+      não acompanham o log". Medido: sob `PATH`-only (coluna `sem-env`)
+      os três são **co-locados** — não há divergência ali. Quem PARTE a
+      família é **`CEO_AUDIT_LOG_PATH`**: move o log e deixa para trás o
+      `audit-log.lock`, o `audit-log.errors` **e a `audit-key`**. Ou
+      seja, dois projetos podem escrever logs distintos compartilhando a
+      MESMA chave HMAC — a garantia do ADR-079 — e o mesmo lock. O botão
+      COERENTE é `CEO_AUDIT_LOG_DIR`, que move os 12 juntos. Assertado
+      nos dois sentidos (`test_log_path_splits_lock_errors_and_key_from_the_log`
+      carrega o controle negativo do `sem-env` co-locado), e ambas as
+      asserções passaram por **controle positivo**: plant de anchor
+      quebrado e plant que apaga a divergência deixam o pytest vermelho.
 - [x] `[P0][US3]` (medido S316 — anexo `PLAN-182/w0-medicao-S316.md`) Medir o estado do log histórico com **os dois**
       instrumentos — `audit-verify-chain.py` para a pergunta de cadeia e
       `check-audit-hmac-null.py` — porque **o delta entre eles é a
@@ -325,11 +352,14 @@ Unidades US3/US5/US6/US7 executadas por fan-out read-only
 comportamental: **família = 587 arquivos** (562 na cura; 102 módulos
 runtime constroem o literal — o número "63" do achado original media só
 hooks+scripts com literal; a família REAL inclui dist/ com 92 membros).
-US2 PARCIAL (matriz dos 3 resolvedores centrais com células assertadas
-por pytest; extensão às 11+ células/33 vars pendente). **O que resta
-para fechar o W0:** completar a US2 estendida. Nenhuma outra wave
-executa antes (AC-6); a reemissão da W1 consome o censo + a matriz +
-os vereditos do anexo 1.
+US2 **FECHADA (S317)**: matriz de 19 anchors × 14 colunas (266 células,
+zero degradadas) + bounding rule derivada do código (domínio = 21 vars,
+não 33 nem 500). O achado que a extensão produziu:
+`CEO_AUDIT_LOG_PATH` separa o log do lock, do errors e da `audit-key` —
+tenancy partida na chave que sustenta o ADR-079. **A W0 está completa.**
+A reemissão da W1 consome o censo + a matriz + os vereditos do anexo 1;
+a W1 segue bloqueada pela emenda ao ADR-001 (AC-7) e pela OQ-4 do
+ADR-079, que são decisão do Owner.
 
 ### W1 — Resolvedor único (esboço; reemitir após a W0)
 

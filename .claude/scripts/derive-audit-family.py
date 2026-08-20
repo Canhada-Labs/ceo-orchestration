@@ -46,7 +46,7 @@ import re
 import subprocess
 import sys
 import tempfile
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
@@ -149,50 +149,231 @@ def scan() -> List[dict]:
     return fam
 
 
-# US2 — matriz artefato × env. Cada célula roda o resolvedor REAL em
-# subprocess com HOME isolado (nunca toca o estado do operador).
-RESOLVERS = {
-    "audit_emit._audit_dir": (
-        "import sys; sys.path.insert(0, {hooks!r}); "
-        "from _lib import audit_emit; print(audit_emit._audit_dir())"),
-    "state_store._state_root": (
-        "import sys; sys.path.insert(0, {hooks!r}); "
-        "from _lib import state_store; print(state_store._state_root())"),
+# US2 — matriz ARTEFATO × env. Cada coluna roda UMA subprocess com HOME
+# isolado (nunca toca o estado do operador) que resolve TODOS os anchors de
+# uma vez; a forma ingênua (uma subprocess por célula) custaria 18× mais
+# processos para a mesma resposta.
+#
+# Os anchors cobrem a lista fechada da US5 (`PLAN-182/w0-medicao-S316.md`),
+# colapsando as 19 rotações de log num único anchor de log: o que a matriz
+# precisa provar é QUAL MÓDULO decide cada caminho, não quantos arquivos o
+# padrão gerou.
+#
+# Duas ausências DECLARADAS, não silenciadas: `filelock` não resolve caminho
+# (recebe o path pronto — é o chamador que decide) e `scratchpad_lib` resolve
+# por sessão, não por env de projeto. Fingir um anchor para eles produziria
+# célula verde sem sujeito.
+ARTIFACT_ANCHORS = {
+    # artefato .salt / dir do slug
     "injection_salt(dir do salt)": (
-        "import sys; sys.path.insert(0, {hooks!r}); "
         "from _lib import injection_salt as s; "
-        "print(getattr(s, '_salt_path', getattr(s, 'SALT_PATH', lambda: 'API-DRIFT'))() "
-        "if callable(getattr(s, '_salt_path', None)) else 'API-DRIFT')"),
+        "_r(getattr(s, '_salt_path', None))"),
+    "injection_salt._slug_dir": (
+        "from _lib import injection_salt as s; _r(getattr(s, '_slug_dir', None))"),
+    # artefatos audit-log.*
+    "audit_emit._audit_dir": (
+        "from _lib import audit_emit as m; _r(getattr(m, '_audit_dir', None))"),
+    "audit_emit._log_path": (
+        "from _lib import audit_emit as m; _r(getattr(m, '_log_path', None))"),
+    "audit_emit._lock_path": (
+        "from _lib import audit_emit as m; _r(getattr(m, '_lock_path', None))"),
+    "audit_emit._errors_path": (
+        "from _lib import audit_emit as m; _r(getattr(m, '_errors_path', None))"),
+    "audit_emit._fallback_log_path": (
+        "from _lib import audit_emit as m; "
+        "_r(getattr(m, '_fallback_log_path', None))"),
+    # artefatos audit-key / last-hmac / chain-length
+    "audit_hmac._audit_dir_from_env": (
+        "from _lib import audit_hmac as m; "
+        "_r(getattr(m, '_audit_dir_from_env', None))"),
+    "audit_hmac.key_path": (
+        "from _lib import audit_hmac as m; _r(getattr(m, 'key_path', None))"),
+    "audit_hmac.last_hmac_path": (
+        "from _lib import audit_hmac as m; "
+        "_r(getattr(m, 'last_hmac_path', None))"),
+    "audit_hmac.chain_length_path": (
+        "from _lib import audit_hmac as m; "
+        "_r(getattr(m, 'chain_length_path', None))"),
+    # artefato state/
+    "state_store._state_root": (
+        "from _lib import state_store as m; _r(getattr(m, '_state_root', None))"),
+    # artefato memory-shared/
+    "memory_shared._storage_root": (
+        "from _lib import memory_shared as m; "
+        "_r(getattr(m, '_storage_root', None))"),
+    "memory_shared._index_path": (
+        "from _lib import memory_shared as m; _r(getattr(m, '_index_path', None))"),
+    "memory_shared._lock_path": (
+        "from _lib import memory_shared as m; _r(getattr(m, '_lock_path', None))"),
+    # spool (o caminho paralelo que tambem escreve log/errors)
+    "spool_writer._project_dir_from_env": (
+        "from _lib import spool_writer as m; "
+        "_r(getattr(m, '_project_dir_from_env', None))"),
+    "spool_writer._state_dir": (
+        "from _lib import spool_writer as m; _r(getattr(m, '_state_dir', None))"),
+    "spool_writer._canonical_log_path": (
+        "from _lib import spool_writer as m; "
+        "_r(getattr(m, '_canonical_log_path', None))"),
+    "spool_writer._errors_path": (
+        "from _lib import spool_writer as m; _r(getattr(m, '_errors_path', None))"),
 }
+
+# Compatibilidade: o nome antigo segue apontando para os 3 resolvedores
+# centrais, porque o pytest da S316 asserta por chave literal.
+RESOLVERS = {k: ARTIFACT_ANCHORS[k] for k in (
+    "audit_emit._audit_dir", "state_store._state_root",
+    "injection_salt(dir do salt)")}
+
+# BOUNDING RULE (US2). O plano fala em "as 33 vars de env-inventory.json".
+# Nem 33 nem 500 (o total do inventario) e o dominio: o dominio sao as vars
+# que os 8 modulos da familia REALMENTE leem — derivado por `--env-domain`,
+# 21 hoje, das quais HOME/USER/PYTEST_CURRENT_TEST nem constam do inventario.
+# Destas 21, as colunas abaixo sao as PATH-RELEVANTES; as demais
+# (CEO_AUDIT_HMAC_DISABLE, CEO_AUDIT_LOG_ROTATE_BYTES, CEO_AUDIT_SYNC_MODE,
+# CEO_TEST_HARNESS, PYTEST_CURRENT_TEST, CLAUDE_SESSION_ID) sao flags de
+# COMPORTAMENTO: nao entram na matriz de caminho, e `--env-domain` as
+# classifica para que a exclusao seja auditavel em vez de tacita.
+_FAKE = "/tmp/fake"
 ENV_COMBOS = {
+    # "sem-env" e o caso PATH-only: so HOME/PATH/PYTHONDONTWRITEBYTECODE.
     "sem-env": {},
-    "CLAUDE_PROJECT_DIR": {"CLAUDE_PROJECT_DIR": "/tmp/fake-proj"},
-    "CEO_STATE_ROOT": {"CEO_STATE_ROOT": "/tmp/fake-state-root"},
+    "CLAUDE_PROJECT_DIR": {"CLAUDE_PROJECT_DIR": _FAKE + "-proj"},
+    "CEO_STATE_ROOT": {"CEO_STATE_ROOT": _FAKE + "-state-root"},
     "CEO_PROJECT_NAME": {"CEO_PROJECT_NAME": "outro-projeto"},
-    "CEO_AUDIT_LOG_DIR": {"CEO_AUDIT_LOG_DIR": "/tmp/fake-audit"},
+    "CEO_AUDIT_LOG_DIR": {"CEO_AUDIT_LOG_DIR": _FAKE + "-audit"},
+    "CEO_AUDIT_LOG_PATH": {"CEO_AUDIT_LOG_PATH": _FAKE + "-audit/log.jsonl"},
+    "CEO_AUDIT_LOG_LOCK": {"CEO_AUDIT_LOG_LOCK": _FAKE + "-audit/log.lock"},
+    "CEO_AUDIT_LOG_ERR": {"CEO_AUDIT_LOG_ERR": _FAKE + "-audit/log.errors"},
+    "CEO_AUDIT_LOG_FALLBACK_PATH": {
+        "CEO_AUDIT_LOG_FALLBACK_PATH": _FAKE + "-fallback/log.jsonl"},
+    "CEO_AUDIT_KEY_PATH": {"CEO_AUDIT_KEY_PATH": _FAKE + "-keys/audit-key"},
+    "CEO_AUDIT_LAST_HMAC_PATH": {
+        "CEO_AUDIT_LAST_HMAC_PATH": _FAKE + "-keys/last-hmac"},
+    "CEO_AUDIT_CHAIN_LENGTH_PATH": {
+        "CEO_AUDIT_CHAIN_LENGTH_PATH": _FAKE + "-keys/chain-length"},
+    "CEO_PROJECT_STATE_DIR": {"CEO_PROJECT_STATE_DIR": _FAKE + "-pstate"},
+    "CEO_MEMORY_SHARED_PATH": {"CEO_MEMORY_SHARED_PATH": _FAKE + "-mem"},
 }
+
+# Modulos da familia que NAO resolvem caminho — declarados para que a
+# ausencia deles na matriz seja uma decisao lida, nao um esquecimento.
+ANCHORLESS_MODULES = {
+    "filelock": "recebe o path pronto do chamador; nao decide caminho",
+    "scratchpad_lib": "resolve por sessao (CLAUDE_SESSION_ID), nao por env de projeto",
+}
+
+# Vars do dominio que sao flags de COMPORTAMENTO, nao de caminho.
+BEHAVIOR_ONLY_ENVS = (
+    "CEO_AUDIT_HMAC_DISABLE", "CEO_AUDIT_LOG_ROTATE_BYTES",
+    "CEO_AUDIT_SYNC_MODE", "CEO_TEST_HARNESS", "PYTEST_CURRENT_TEST",
+    "CLAUDE_SESSION_ID",
+)
+
+_PROBE_PREAMBLE = (
+    "import sys, json\n"
+    "sys.path.insert(0, {hooks!r})\n"
+    "_out = {{}}\n"
+    "def _r(fn):\n"
+    "    _out[_k] = 'API-DRIFT' if not callable(fn) else str(fn())\n"
+)
+
+
+def _probe_source(hooks: str) -> str:
+    """Fonte do probe: resolve TODOS os anchors numa unica subprocess.
+
+    Cada anchor roda dentro de try/except proprio — um modulo que falhe ao
+    importar degrada SUA celula para ``ERRO: ...`` em vez de derrubar a
+    coluna inteira (o modo de falha que a forma uma-subprocess-por-coluna
+    introduziria se o corpo fosse monolitico).
+    """
+    lines = [
+        "import sys, json",
+        "sys.path.insert(0, {0!r})".format(hooks),
+        "_out = {}",
+        "_k = None",
+        "def _r(fn):",
+        "    _out[_k] = 'API-DRIFT' if not callable(fn) else str(fn())",
+    ]
+    for key, body in ARTIFACT_ANCHORS.items():
+        lines.append("_k = {0!r}".format(key))
+        lines.append("try:")
+        for stmt in body.split("; "):
+            lines.append("    " + stmt)
+        lines.append("except Exception as _e:")
+        lines.append("    _out[_k] = 'ERRO: %s' % _e")
+    lines.append("print(json.dumps(_out))")
+    return "\n".join(lines)
 
 
 def matrix() -> Dict[str, Dict[str, str]]:
+    """Matriz ARTEFATO x env: linha = anchor, coluna = combinacao de env."""
     hooks = os.path.join(REPO_ROOT, ".claude", "hooks")
-    out: Dict[str, Dict[str, str]] = {}
+    code = _probe_source(hooks)
+    out: Dict[str, Dict[str, str]] = {k: {} for k in ARTIFACT_ANCHORS}
     with tempfile.TemporaryDirectory() as fake_home:
-        for rname, code in RESOLVERS.items():
-            row: Dict[str, str] = {}
-            for cname, extra in ENV_COMBOS.items():
-                env = {"HOME": fake_home, "PATH": os.environ.get("PATH", ""),
-                       "PYTHONDONTWRITEBYTECODE": "1"}
-                env.update(extra)
-                try:
-                    r = subprocess.run(
-                        [sys.executable, "-c", code.format(hooks=hooks)],
-                        capture_output=True, text=True, timeout=20, env=env)
-                    val = (r.stdout.strip() or r.stderr.strip().splitlines()[-1:] or ["(vazio)"])
-                    row[cname] = val if isinstance(val, str) else val[0]
-                except Exception as exc:
-                    row[cname] = f"ERRO: {exc}"
-            out[rname] = row
+        for cname, extra in ENV_COMBOS.items():
+            env = {"HOME": fake_home, "PATH": os.environ.get("PATH", ""),
+                   "PYTHONDONTWRITEBYTECODE": "1"}
+            env.update(extra)
+            try:
+                r = subprocess.run(
+                    [sys.executable, "-c", code],
+                    capture_output=True, text=True, timeout=60, env=env)
+                col = json.loads(r.stdout) if r.stdout.strip() else {}
+            except Exception as exc:
+                col = {}
+                for k in ARTIFACT_ANCHORS:
+                    col[k] = "ERRO: {0}".format(exc)
+            for k in ARTIFACT_ANCHORS:
+                out[k][cname] = col.get(k, "(vazio)")
     return out
+
+
+def env_domain() -> Dict[str, Any]:
+    """Bounding rule da US2: o dominio de env, derivado do CODIGO.
+
+    O plano fala em "as 33 vars de env-inventory.json". Nem 33 nem 500 (o
+    total do inventario) e o dominio da familia: o dominio e o conjunto que
+    os 8 modulos de ``M2_MODULES`` efetivamente LEEM. Tudo fora dele nao
+    pode mover caminho — e essa e a regra que limita a matriz.
+    """
+    lib = os.path.join(REPO_ROOT, ".claude", "hooks", "_lib")
+    upper = "[A-Z][A-Z0-9_]*"
+    pat = re.compile(
+        r"os\.environ(?:\.get)?\(\s*[\"']({u})[\"']"
+        r"|getenv\(\s*[\"']({u})[\"']"
+        r"|os\.environ\[\s*[\"']({u})[\"']".format(u=upper))
+    domain: Dict[str, List[str]] = {}
+    for mod in M2_MODULES:
+        path = os.path.join(lib, mod + ".py")
+        if not os.path.isfile(path):
+            continue
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read()
+        for match in pat.finditer(text):
+            for grp in match.groups():
+                if grp:
+                    domain.setdefault(grp, [])
+                    if mod not in domain[grp]:
+                        domain[grp].append(mod)
+    inv_path = os.path.join(REPO_ROOT, ".claude", "scripts",
+                            "env-inventory.json")
+    inventory: List[str] = []
+    try:
+        with open(inv_path, encoding="utf-8") as fh:
+            inventory = list(json.load(fh).get("vars", {}))
+    except Exception:
+        inventory = []
+    return {
+        "domain_size": len(domain),
+        "domain": {k: sorted(v) for k, v in sorted(domain.items())},
+        "path_relevant_columns": sorted(ENV_COMBOS),
+        "behavior_only": sorted(BEHAVIOR_ONLY_ENVS),
+        "anchorless_modules": ANCHORLESS_MODULES,
+        "inventory_total": len(inventory),
+        "domain_absent_from_inventory": sorted(
+            k for k in domain if k not in inventory),
+    }
 
 
 def surfaces() -> List[str]:
@@ -210,10 +391,14 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap = argparse.ArgumentParser(prog="derive-audit-family")
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--matrix", action="store_true")
+    ap.add_argument("--env-domain", action="store_true")
     ap.add_argument("--surfaces", action="store_true")
     ap.add_argument("--assert-migrated", action="store_true")
     args = ap.parse_args(argv)
 
+    if args.env_domain:
+        print(json.dumps(env_domain(), indent=1, ensure_ascii=False))
+        return 0
     if args.matrix:
         m = matrix()
         print(json.dumps(m, indent=1, ensure_ascii=False))
