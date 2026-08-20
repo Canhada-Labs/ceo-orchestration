@@ -236,12 +236,19 @@ r11 confirmou 3/4 e apontou sobra textual na nota histórica (N1);
 > outra superfície seguem intocados. Sem o carve-out (a), a AC-1 seria
 > insatisfazível por construção; sem o (b), o US3 contradiria a wave.
 
-- [ ] `[P0][US1]` Derivar a família COMPORTAMENTALMENTE com predicado
+- [x] `[P0][US1]` (fechado S316 — `derive-audit-family.py` + anexo `PLAN-182/w0-censo-familia-S316.md`: família = 587, na cura = 562, 102 runtime constroem o literal; `--assert-migrated` VERMELHO por design) Derivar a família COMPORTAMENTALMENTE com predicado
       executável e regra de allowlist explícita. A família inclui
       escritores, leitores, **templates, installer, CI, SPEC e testes** —
       não apenas módulos de runtime.
       Check: derive-audit-family.py --json lista modulo/artefato/papel; grep pelo literal NAO e oraculo, porque SPEC, docs e testes legados o mantem legitimamente
-- [ ] `[P0][US2]` Matriz de precedência de env **por artefato**, sobre a
+- [ ] `[P0][US2]` **(PARCIAL S316 — núcleo entregue, extensão pendente):**
+      `derive-audit-family.py --matrix` roda os 3 resolvedores CENTRAIS
+      (audit_emit/state_store/salt) em subprocess com HOME isolado e o
+      pytest asserta as células (divergência PROVADA: sob
+      `CEO_PROJECT_NAME`, state_store acompanha e audit_emit NÃO; salt
+      sem override NENHUM). Pendente para fechar: estender às 11+
+      células da lista fechada na US5 + bounding rule sobre as 33 vars.
+      Matriz de precedência de env **por artefato**, sobre a
       lista fechada na US5 (11+ artefatos com anchors, não os 5 da
       primeira redação). Incluir bounding rule por classes de
       equivalência sobre as 33 vars de `env-inventory.json`, e registrar
@@ -268,7 +275,7 @@ r11 confirmou 3/4 e apontou sobra textual na nota histórica (N1);
       primeiro candidato por `check_skill_bootstrap_post.py:129-131`).
       Dizer qual vence e o que cada uma já possui.
       Check: tabela dos 4+1 resolvedores com veredito de qual vence; sem isso a W1 entrega uma TERCEIRA convencao
-- [ ] `[P1][US4]` Inventariar superfícies de entrega: adopters
+- [x] `[P1][US4]` (fechado S316 — `--surfaces` no anexo 2: templates 34, settings.base.json, dist/ceo-plugin/hooks 167 — e o censo achou 92 membros da família em dist/) Inventariar superfícies de entrega: adopters
       instalados, `templates/`, `install.sh`, `upgrade.sh`,
       `settings.base.json`, `dist/ceo-plugin/hooks/`.
       Check: none (levantamento — a saida e a lista de superficies)
@@ -313,9 +320,16 @@ Unidades US3/US5/US6/US7 executadas por fan-out read-only
   duplo-traço (`--Users-…`) — terceira grafia da família slug; entra na
   família derivada da US1 e na cura da W1.
 
-**Seguem abertos no W0:** US1 (derive-audit-family.py — a ferramenta
-âncora), US2 (matriz de precedência por artefato) e US4 (superfícies de
-entrega). Nenhuma outra wave executa antes de W0 fechar (AC-6).
+**Atualização S316 (mesma sessão):** US1 e US4 FECHADOS —
+`derive-audit-family.py` landada (+ 6 testes verdes) com censo
+comportamental: **família = 587 arquivos** (562 na cura; 102 módulos
+runtime constroem o literal — o número "63" do achado original media só
+hooks+scripts com literal; a família REAL inclui dist/ com 92 membros).
+US2 PARCIAL (matriz dos 3 resolvedores centrais com células assertadas
+por pytest; extensão às 11+ células/33 vars pendente). **O que resta
+para fechar o W0:** completar a US2 estendida. Nenhuma outra wave
+executa antes (AC-6); a reemissão da W1 consome o censo + a matriz +
+os vereditos do anexo 1.
 
 ### W1 — Resolvedor único (esboço; reemitir após a W0)
 
