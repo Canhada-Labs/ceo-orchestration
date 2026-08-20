@@ -153,6 +153,11 @@ timeout, 38 deles com valor 5**; os únicos tetos longos são **210**
 - 175 s aproxima 180 menos startup, e 231 s excede 210: é a **assinatura
   do caminho `Write`** (pair-rail), com o harness matando o processo.
 
+**Correção do r9 #3: a conta declarada não fecha** — 35 + 25 + 7 =
+**67**, não 71. Os **4 eventos não contabilizados** podem pertencer a
+outro matcher e mudar qual caminho explica o relatório; a W0-US1
+identifica a categoria dos 4 ANTES de usar o breakdown como evidência.
+
 **A aritmética vem primeiro. A arqueologia da fonte do `/doctor` só abre
 se ela não explicar.**
 
@@ -193,11 +198,12 @@ existe.
   com asserção nos testes dele — nunca corrigindo entradas no
   `settings.json` a posteriori.
 
-## RESIDUAL DECLARADO — pair-rail r9 veio REJECT (curar ANTES de executar)
+## RESIDUAL DO r9 — CURADO em S316 (registro histórico)
 
 A 9a rodada do pair-rail devolveu **REJECT** com achados contra ESTE
-plano. Nao foram curados nesta sessao e sao a **primeira tarefa da
-abertura**.
+plano. **Curados em S316 (2026-08-20), ANTES de qualquer execução**, com
+as emendas apontadas item a item; confirmação por rail r10. O registro
+permanece como histórico do achado.
 
 1. **[P1] O teste de relocacao que a W1 exige e IMPOSSIVEL como escrito.**
    Quando `SOURCE_DIR` esta fora de `TARGET` — o caso normal de adopter —
@@ -207,6 +213,10 @@ abertura**.
    introduzido no r8 para curar um teste fraco, e criou um impossivel.)
    **Cura:** ou vendorizar uma copia do protocolo DENTRO do target, ou
    trocar o requisito para mover source e target JUNTOS.
+   **→ CURADO (S316):** W1 redefiniu portabilidade — e2e move
+   source+target JUNTOS; mover o target sozinho vira erro NOMEADO com
+   reparo apontado; vendorização considerada e rejeitada (doutrina
+   167/168).
 2. **[P2] Nao existe marcador de VETO machine-readable.** Nenhuma das
    duas skills financeiras tem campo `veto` no frontmatter — so
    `risk_class` — e o status de VETO vive em prosa de roteamento e no
@@ -215,11 +225,17 @@ abertura**.
    PROXIMA skill de VETO ser demovida. **Cura:** definir campo ou
    mapeamento autoritativo e machine-readable, e inclui-lo no inventario
    que o gerador consome.
+   **→ CURADO (S316):** W3 ganhou unidade P0 pré-requisito: mapeamento
+   VETO autoritativo no inventário do gerador (não no frontmatter, que é
+   gateado por SP-NNN + soak), com lint inventário↔organograma e as 6
+   entradas iniciais.
 3. **[P2] A aritmetica do A5 nao fecha:** 35 + 25 + 7 = **67**, nao 71.
    Como o diagnostico da W0 depende de aritmetica por evento, os 4 casos
    nao contabilizados podem mudar qual matcher explica o relatorio.
    **Cura:** identificar a categoria dos 4 antes de usar o breakdown
    como evidencia.
+   **→ CURADO (S316):** §4 registra a conta 67≠71 e o check da W0-US1
+   agora exige categoria nomeada para os 4 casos antes do veredito.
 
 ## Waves
 
@@ -236,7 +252,7 @@ abertura**.
       (`settings.base.json`) com os tempos do relatório e concluir qual
       caminho pode tê-los produzido. Só abrir a busca pela fonte do
       `/doctor` se a aritmética não explicar.
-      Check: a conclusão é registrada com os números dos dois lados; veredito entre {explicado pela aritmética, exige arqueologia} — "não medido" não fecha
+      Check: a conclusão é registrada com os números dos dois lados E a conta 35+25+7=67≠71 fechada nominalmente — os 4 casos restantes recebem categoria (cura do r9 #3); veredito entre {explicado pela aritmética, exige arqueologia} — "não medido" não fecha
 - [ ] `[P0][US2]` Medir a **taxa de censura à direita**: invocações
       esperadas contra linhas de evento emitidas, por hook. Estender a
       forma que JÁ existe (`check_name` e `timeout_ms`), nunca criar
@@ -256,8 +272,18 @@ abertura**.
 
 - [ ] `[P0]` Relativização decidida **DENTRO** de
       `_render_protocol_pointer` (a função já recebe `$2=TARGET`), não
-      no call-site.
-      Check: e2e MOVE ou COPIA o alvo para outro caminho, sem o layout original do source, e o ponteiro ainda RESOLVE — asserir so relatividade in-place nao prova portabilidade e deixaria o A1 vivo (pair-rail r8)
+      no call-site. **Portabilidade redefinida pela cura do r9 #1** — o
+      e2e exigido pelo r8 era IMPOSSÍVEL quando `SOURCE_DIR` está fora
+      de `TARGET` (mover o target sozinho quebra qualquer codificação da
+      relação entre os dois): o que o ponteiro relativo compra é
+      sobreviver a mover **source e target JUNTOS**, preservando a
+      relação entre eles (outro `$HOME`, outro username — a classe real
+      de quebra do A1); mover o target SOZINHO tem como resposta correta
+      um erro NOMEADO que conduz ao reparo, nunca resolução mágica.
+      Vendorizar o protocolo dentro do target foi considerado e
+      REJEITADO: duplica a verdade e contradiz a doutrina 167/168 (um
+      gerador, uma verdade).
+      Check: e2e move source+target JUNTOS (prefixo comum renomeado, simulando outro home) e o ponteiro RESOLVE; segundo e2e move o target SOZINHO e o corpo do ponteiro conduz ao reparo nomeando --protocol-source; asserir so relatividade in-place segue insuficiente (pair-rail r8+r9)
 - [ ] `[P0]` **Remediação retroativa:** reconhecedor de "absoluto
       legado" no molde de `_protocol_pointer_is_degraded`
       (`_framework_manifest_set.sh:736-742`), com re-render byte-a-byte,
@@ -318,11 +344,23 @@ abertura**.
 
 ### W3 — Catálogo e a regra de VETO (A4)
 
+- [ ] `[P0]` **Marcador de VETO machine-readable (cura do r9 #2 —
+      pré-requisito do invariante abaixo):** hoje NENHUMA fonte
+      machine-readable diz quais skills são VETO — as duas financeiras
+      só têm `risk_class`, e o status vive em prosa de roteamento e no
+      organograma. Definir o mapeamento AUTORITATIVO no inventário que o
+      gerador consome — **não** no frontmatter de cada `SKILL.md`, cuja
+      edição é gateada por SP-NNN + soak de 7d e faria a cura esperar
+      uma semana — derivando as entradas iniciais do organograma
+      (4 core + 2 fintech), com lint de consistência
+      inventário↔organograma para que a PRÓXIMA skill de VETO não nasça
+      demovível.
+      Check: o gerador decide se uma skill arbitraria e VETO sem hardcodar nomes; lint falha se o organograma nomear VETO ausente do inventario; as 6 entradas iniciais listadas no diff
 - [ ] `[P0]` **O invariante mora no GERADOR:** conjunto de exclusão por
       VETO em `skill-budget-generator.py:352-362` mais asserção nos
       testes dele. Hoje o único eixo é `tier`, e o conceito de VETO
       aparece **0 vez** no arquivo.
-      Check: teste do gerador falha se uma skill marcada VETO for demovida, independente do tier
+      Check: teste do gerador falha se uma skill marcada VETO (pelo marcador acima) for demovida, independente do tier
 - [ ] `[P0]` **Corrigir a direção do fail-soft:** log de auditoria
       ausente hoje demove **tudo** — e adopter novo não tem histórico
       por construção. Falha de infra não pode ter consequência de

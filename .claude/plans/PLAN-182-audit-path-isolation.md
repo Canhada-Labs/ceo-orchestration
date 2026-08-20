@@ -81,12 +81,16 @@ propagado por ~40 assinaturas em `audit_emit.py`.
 
 **Nuance que o debate mediu e que muda a W2:** entre duas medições
 sucessivas o total cresceu **+2.519** enquanto os não-atribuíveis
-cresceram apenas **+149** (~6% dos novos). **A massa não-atribuível é
-legado quase-estático, não taxa de produção corrente.** É uma janela
-histórica fechada — não um vazamento que segue no mesmo ritmo. Isso
-torna a opção "segregar" da W2 **indisponível para a maior parte do
-log**, e desloca a decisão para "declarar a janela" contra "arquivar e
-recomeçar a cadeia".
+cresceram apenas **+149** (~6% dos novos). **Classificação corrigida
+pelo pair-rail r9: isto é vazamento de TAXA REDUZIDA, não janela
+fechada** — 149 eventos novos provam que ainda existem emissores
+omitindo atribuição. "Janela histórica fechada" só pode ser declarada
+depois de observar **ZERO** não-atribuíveis novos entre dois snapshots;
+até lá a W2 trata a massa como legado quase-estático **e inclui a
+identificação dos emissores que ainda omitem**. Isso mantém a opção
+"segregar" da W2 **indisponível para a maior parte do log**, e desloca a
+decisão para "declarar a janela (condicionada a zerar o fluxo)" contra
+"arquivar e recomeçar a cadeia".
 
 ## 2. O salt é o item mais grave, e a primeira redação não o mencionou
 
@@ -167,11 +171,12 @@ comprando (K7/K8).
   e o texto novo declara a limitação como PERMANENTE sob mesmo UID, não
   como pendência que a migração resolve.
 
-## RESIDUAL DECLARADO — pair-rail r9 veio REJECT (curar ANTES de executar)
+## RESIDUAL DO r9 — CURADO em S316 (registro histórico)
 
-A 9a rodada do pair-rail devolveu **REJECT** com 3 achados P1 contra ESTE
-plano. Eles nao foram curados nesta sessao e sao a **primeira tarefa da
-abertura da W0** — nenhuma unidade executa antes.
+A 9a rodada do pair-rail devolveu **REJECT** com 3 achados contra ESTE
+plano. **Curados em S316 (2026-08-20), ANTES de qualquer execução**, com
+as emendas apontadas item a item; confirmação por rail r10. O registro
+permanece como histórico do achado.
 
 1. **[P1] `derive-audit-family.py` NAO EXISTE.** A W0 e declarada
    read-only e a AC-1 exige que esse comando torne o censo reproduzivel.
@@ -179,6 +184,9 @@ abertura da W0** — nenhuma unidade executa antes.
    da wave) ou usar script temporario (que nao satisfaz a AC-1).
    **Cura:** permitir explicitamente que a W0 crie a instrumentacao, ou
    adicionar passo de setup de ferramenta antes dela.
+   **→ CURADO (S316):** o cabeçalho da W0 ganhou carve-out explícito de
+   instrumentação — a W0 PODE criar `derive-audit-family.py` + testes
+   como passo de setup; é a única escrita permitida na wave.
 2. **[P1] O carry-over do salt PRESERVA o defeito.** Dois projetos que
    hoje compartilham o `.salt` legado, ao receberem esse mesmo valor nos
    dois diretorios novos, ficam com salts **byte-identicos** — mantendo
@@ -188,12 +196,21 @@ abertura da W0** — nenhuma unidade executa antes.
    **Cura:** politica explicita de salt POR PROJETO + teste de
    distincao de hash entre dois projetos — ou emenda ao ADR-079
    abandonando a propriedade.
+   **→ CURADO (S316):** o item de salt da W1 agora fixa política POR
+   PROJETO com teste de DISTINÇÃO entre dois projetos (controle
+   negativo: salts byte-idênticos = vermelho); o projeto que herda a
+   cadeia histórica (decisão W2) herda o salt legado, os demais cunham
+   salt novo com rotação REGISTRADA — condicionado à emenda do ADR-079
+   (OQ-4) que o frontmatter já bloqueia antes da W1.
 3. **[P2] "Janela historica fechada" e classificacao errada.** Foram
    **149 eventos nao-atribuiveis novos** entre dois snapshots: taxa
    reduzida, nao fluxo encerrado. Tratar como arquivo faz a W2 ignorar
    emissores que ainda omitem atribuicao. **Cura:** condicionar a
    classificacao a observar ZERO novos, ou descrever como vazamento de
    taxa reduzida.
+   **→ CURADO (S316):** §1 reclassificado como vazamento de taxa
+   reduzida; "janela fechada" agora exige ZERO novos entre snapshots, e
+   a W2 inclui identificar os emissores remanescentes.
 
 ## Waves
 
@@ -204,7 +221,14 @@ abertura da W0** — nenhuma unidade executa antes.
 > pelo round 1, **a reemissão da W1 passa por sua própria rodada de
 > crítica**.
 
-### W0 — Levantamento (read-only; nenhuma outra wave EXECUTA antes desta fechar — AC-6)
+### W0 — Levantamento (read-only quanto ao runtime state e à família; nenhuma outra wave EXECUTA antes desta fechar — AC-6)
+
+> **Carve-out de instrumentação (cura do r9 #1):** a W0 PODE criar a
+> ferramenta rastreada `derive-audit-family.py` (+ seus testes) como
+> passo de setup — é a ÚNICA escrita permitida na wave. Ela não toca
+> runtime state nem módulos da família; sem este carve-out a AC-1 seria
+> insatisfazível por construção (a wave exigiria um comando que a
+> própria wave estaria proibida de criar).
 
 - [ ] `[P0][US1]` Derivar a família COMPORTAMENTALMENTE com predicado
       executável e regra de allowlist explícita. A família inclui
@@ -248,10 +272,15 @@ abertura da W0** — nenhuma unidade executa antes.
 - [ ] `[P0]` Resolvedor derivado do projeto real, **conforme o ADR-001
       como escrito** (`<project-slug>`), importado por toda a família.
       Check: pytest — mesma entrada produz o mesmo caminho em todos os modulos da familia derivada na W0
-- [ ] `[P0]` **Carry-over do `.salt` antes do primeiro
-      `get_instance_salt()`**, com teste que falha se o valor diferir do
-      diretório antigo — ou emenda ao ADR-079 declarando a rotação.
-      Check: teste roda get_instance_salt no dir novo e falha se o valor diferir do antigo
+- [ ] `[P0]` **Política de salt POR PROJETO (cura do r9 #2 — carry-over
+      universal manteria salts byte-idênticos nos dois diretórios novos,
+      preservando exatamente a correlação cross-project que o §2
+      denuncia):** o projeto que herda a cadeia histórica (decisão da
+      W2) herda o `.salt` legado byte-a-byte; todo OUTRO projeto cunha
+      salt NOVO, com marcador de migração na cadeia e rotação
+      REGISTRADA — nunca silenciosa (§2.2). Condicionado à emenda do
+      ADR-079 (OQ-4), que o frontmatter já bloqueia antes da W1.
+      Check: teste de distincao com fixture de dois projetos — salts distintos e prompt_sha256 nao correlacionavel entre eles; controle negativo: salts byte-identicos = vermelho; o projeto herdeiro preserva o valor legado byte-a-byte
 - [ ] `[P0]` Chave de cache do `spool_writer` passa a cobrir o novo
       input, e `_state_dir()` ganha override; senão o vazamento
       cross-projeto **sobrevive à cura**.
