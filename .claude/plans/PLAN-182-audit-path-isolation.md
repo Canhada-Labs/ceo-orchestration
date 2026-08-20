@@ -188,8 +188,9 @@ Confirmação final pela rodada r11. O registro permanece como histórico.
    **Cura:** permitir explicitamente que a W0 crie a instrumentacao, ou
    adicionar passo de setup de ferramenta antes dela.
    **→ CURADO (S316):** o cabeçalho da W0 ganhou carve-out explícito de
-   instrumentação — a W0 PODE criar `derive-audit-family.py` + testes
-   como passo de setup; é a única escrita permitida na wave.
+   escrita — a W0 PODE criar `derive-audit-family.py` + testes como
+   passo de setup E anexar registros/saídas brutas ao próprio plano
+   (exigência do US3); nada além dessas duas classes.
 2. **[P1] O carry-over do salt PRESERVA o defeito.** Dois projetos que
    hoje compartilham o `.salt` legado, ao receberem esse mesmo valor nos
    dois diretorios novos, ficam com salts **byte-identicos** — mantendo
