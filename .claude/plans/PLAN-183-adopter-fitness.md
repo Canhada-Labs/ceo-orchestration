@@ -202,8 +202,12 @@ existe.
 
 A 9a rodada do pair-rail devolveu **REJECT** com achados contra ESTE
 plano. **Curados em S316 (2026-08-20), ANTES de qualquer execução**, com
-as emendas apontadas item a item; confirmação por rail r10. O registro
-permanece como histórico do achado.
+as emendas apontadas item a item. A rodada r10 confirmou 183-1 e 183-3
+CLOSED e devolveu REJECT parcial no 183-2: a enumeração "4 core + 2
+fintech" era conjunto fechado escrito de memória e omitia
+`accessibility-and-wcag` (`frontend-team.md:164`) — curado trocando
+enumeração por DERIVAÇÃO do organograma. Confirmação final pela rodada
+r11. O registro permanece como histórico.
 
 1. **[P1] O teste de relocacao que a W1 exige e IMPOSSIVEL como escrito.**
    Quando `SOURCE_DIR` esta fora de `TARGET` — o caso normal de adopter —
@@ -227,8 +231,10 @@ permanece como histórico do achado.
    que o gerador consome.
    **→ CURADO (S316):** W3 ganhou unidade P0 pré-requisito: mapeamento
    VETO autoritativo no inventário do gerador (não no frontmatter, que é
-   gateado por SP-NNN + soak), com lint inventário↔organograma e as 6
-   entradas iniciais.
+   gateado por SP-NNN + soak), com entradas DERIVADAS do organograma —
+   nunca enumeradas — e lint bidirecional. O r10 pegou a enumeração
+   errada desta própria cura (faltava accessibility-and-wcag), provando
+   a regra.
 3. **[P2] A aritmetica do A5 nao fecha:** 35 + 25 + 7 = **67**, nao 71.
    Como o diagnostico da W0 depende de aritmetica por evento, os 4 casos
    nao contabilizados podem mudar qual matcher explica o relatorio.
@@ -351,11 +357,14 @@ permanece como histórico do achado.
       organograma. Definir o mapeamento AUTORITATIVO no inventário que o
       gerador consome — **não** no frontmatter de cada `SKILL.md`, cuja
       edição é gateada por SP-NNN + soak de 7d e faria a cura esperar
-      uma semana — derivando as entradas iniciais do organograma
-      (4 core + 2 fintech), com lint de consistência
-      inventário↔organograma para que a PRÓXIMA skill de VETO não nasça
-      demovível.
-      Check: o gerador decide se uma skill arbitraria e VETO sem hardcodar nomes; lint falha se o organograma nomear VETO ausente do inventario; as 6 entradas iniciais listadas no diff
+      uma semana — com as entradas DERIVADAS do organograma completo
+      (`team.md` E `frontend-team.md`) por comando, nunca enumeradas de
+      memória. O r10 provou o porquê: a enumeração "4 core + 2 fintech"
+      desta própria unidade já nasceu errada — faltava
+      `accessibility-and-wcag` (`frontend-team.md:164`). Lint de
+      consistência inventário↔organograma nos DOIS sentidos, para que a
+      PRÓXIMA skill de VETO não nasça demovível.
+      Check: as entradas do inventario sao GERADAS por derivacao do organograma; o lint falha nos dois sentidos (VETO no organograma ausente do inventario; entrada sem lastro no organograma); nenhum numero fixo de entradas aparece no check — o conjunto e o que a derivacao produzir, e no estado atual ele inclui accessibility-and-wcag
 - [ ] `[P0]` **O invariante mora no GERADOR:** conjunto de exclusão por
       VETO em `skill-budget-generator.py:352-362` mais asserção nos
       testes dele. Hoje o único eixo é `tier`, e o conceito de VETO

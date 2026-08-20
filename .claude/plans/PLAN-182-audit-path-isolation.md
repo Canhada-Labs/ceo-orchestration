@@ -175,8 +175,11 @@ comprando (K7/K8).
 
 A 9a rodada do pair-rail devolveu **REJECT** com 3 achados contra ESTE
 plano. **Curados em S316 (2026-08-20), ANTES de qualquer execução**, com
-as emendas apontadas item a item; confirmação por rail r10. O registro
-permanece como histórico do achado.
+as emendas apontadas item a item. A rodada r10 confirmou 182-1 e 182-2
+CLOSED e devolveu REJECT parcial: 182-3 sem unidade executável na W2, e
+dois achados novos (carve-out da W0 contradizendo o US3; "confirmação
+por r10" registrada antes do veredito) — todos curados na mesma sessão.
+Confirmação final pela rodada r11. O registro permanece como histórico.
 
 1. **[P1] `derive-audit-family.py` NAO EXISTE.** A W0 e declarada
    read-only e a AC-1 exige que esse comando torne o censo reproduzivel.
@@ -223,12 +226,13 @@ permanece como histórico do achado.
 
 ### W0 — Levantamento (read-only quanto ao runtime state e à família; nenhuma outra wave EXECUTA antes desta fechar — AC-6)
 
-> **Carve-out de instrumentação (cura do r9 #1):** a W0 PODE criar a
-> ferramenta rastreada `derive-audit-family.py` (+ seus testes) como
-> passo de setup — é a ÚNICA escrita permitida na wave. Ela não toca
-> runtime state nem módulos da família; sem este carve-out a AC-1 seria
-> insatisfazível por construção (a wave exigiria um comando que a
-> própria wave estaria proibida de criar).
+> **Carve-out de escrita da W0 (cura do r9 #1, redação do r10):** a W0
+> PODE escrever exatamente duas coisas: (a) a ferramenta rastreada
+> `derive-audit-family.py` (+ seus testes) como passo de setup, e
+> (b) os registros de execução e anexos de saída bruta NO PRÓPRIO
+> plano — que o US3 exige. Runtime state, módulos da família e qualquer
+> outra superfície seguem intocados. Sem o carve-out (a), a AC-1 seria
+> insatisfazível por construção; sem o (b), o US3 contradiria a wave.
 
 - [ ] `[P0][US1]` Derivar a família COMPORTAMENTALMENTE com predicado
       executável e regra de allowlist explícita. A família inclui
@@ -316,6 +320,12 @@ permanece como histórico do achado.
       Incluir decisão sobre o **salt** e emitir marcador de migração na
       cadeia.
       Check: none (decisao do Owner — o gate e a decisao REGISTRADA com justificativa; ausencia mantem o AC aberto)
+- [ ] `[P1]` **Emissores remanescentes (cura do r10 sobre o r9 #3):**
+      derivar COMPORTAMENTALMENTE quais emissores ainda produzem
+      eventos não-atribuíveis (os +149 do §1) e dispor CADA um — curar a
+      atribuição ou registrar aceite por escrito. "Janela fechada" só
+      pode ser declarada depois desta unidade.
+      Check: dois snapshots consecutivos com ZERO nao-atribuiveis novos, OU tabela emissor→disposicao cobrindo 100% dos novos do intervalo medido; a decisao P0 da W2 cita esta evidencia
 - [ ] `[P1]` Reavaliar `ceo-boot`, `audit-tokens` e `skill-health` como
       **eficácia de controle**, não como medição — e prever a rajada de
       advisories pós-migração.
