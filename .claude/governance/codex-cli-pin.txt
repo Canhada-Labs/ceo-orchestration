@@ -39,5 +39,18 @@
 # 0.144.0 open bugs #31873/#31860/#31826 triaged non-blocking, #31869
 # CLOSED upstream 2026-07-10). Locked-corpus catch_rate check: Owner
 # elects run-vs-defer at SENT-CX-PIN signing (S246 precedent: run it).
+#
+# PLAN-174 update (S318 2026-08-20, pack SENT-S318): widened upper bound to
+# <0.148.0 so the Owner's installed codex-cli 0.147.0 is in-range — the bump
+# that unblocks the PLAN-174 W2 wire (the pair-rail rounds since S317 already
+# ran on the 0.147.0 binary, advisory). LOWER BOUND UNCHANGED at >=0.128.0
+# (same widen-upper-only shape as S269: executed OUTSIDE any open release
+# window — GA v1.3.0 was cut 2026-08-17 and no rc is in flight). The ADR-182
+# payload manifest (codex-cli-pin-manifest.json, re-pinned in this same pack:
+# payload sha256 19c4f144... for 0.147.0/aarch64-apple-darwin, npm_integrity
+# recorded from the platform artifact) remains the real supply-chain gate;
+# this semver range stays the pair-rail-gate.sh pre-flight message.
+# Locked-corpus catch_rate check (ADR-111 §2): Owner elects run-vs-defer at
+# pack signing, recorded in the SENT-S318 sentinel Scope.
 
->=0.128.0,<0.145.0
+>=0.128.0,<0.148.0

@@ -198,47 +198,60 @@ def lint_file(path: str, rel: str, git_mode: Optional[str]) -> List[dict]:
 
 
 def _emit_unlock_audit(sha: str, reason: str) -> None:
-    """Advisory, fail-open: breadcrumb em stderr.
+    """Advisory, fail-open: emissor canônico; senão, breadcrumb durável.
 
-    PARKED (S317, decisão do Owner). Esta função emitia a ação de auditoria
-    do unlock via ``audit_emit.emit_generic``, mas essa ação nunca foi
-    registrada nas DUAS fontes que o registro exige — ``_KNOWN_ACTIONS`` em
+    RESTAURADO (S318, pack SENT-S318 — o mesmo pack que registrou a ação
+    ``ceremony_lint_unlock_used`` nas DUAS fontes canônicas que o gate
+    ``check-audit-registry-coverage.py`` exige: ``_KNOWN_ACTIONS`` em
     ``.claude/hooks/_lib/audit_emit.py`` e a tabela por-ação de
-    ``SPEC/v1/audit-log.schema.md`` — e as duas são canonical-guarded. O gate
-    ``check-audit-registry-coverage.py`` pegou o órfão: o PLAN-174 W1
-    (7d467a8) embarcou o emissor sem a metade dele que é canônica, e o CI
-    ficou vermelho em 6 jobs.
+    ``SPEC/v1/audit-log.schema.md``). Histórico: o PLAN-174 W1 (7d467a8)
+    embarcou este emissor SEM a metade canônica do registro, o gate pegou o
+    órfão (6 jobs vermelhos), e a S317 (908707e) parcou o emit fixando a
+    regra "um emissor não embarca antes do registro dele" — precedente
+    v2.51 / SENT-GK-F.
 
-    A regra que essa decisão fixa: **um emissor não embarca antes do registro
-    dele.** Enquanto isso, o breadcrumb abaixo é o registro — a mesma rota de
-    fallback que a versão anterior já usava quando o emissor canônico não
-    resolvia, então nenhum caminho de execução perdeu comportamento.
+    Wire metadata-only (LLM06): ``file_sha256`` = prefixo 16-hex do sha256
+    do script destravado; ``reason_len`` = comprimento do
+    ``CEO_CEREMONY_LINT_UNLOCK_REASON``. O TEXTO do motivo nunca vai ao
+    log — fica só no stderr do operador (abaixo).
 
-    O artefato DURÁVEL, porém, não foi parcado junto — seria trocar uma
-    violação por outra. O PLAN-174 §W2 (87-90) põe o unlock no audit trail
-    como AC, e o caminho antigo, mesmo REJEITADO pela ação desconhecida,
-    ainda gravava um breadcrumb em ``audit-log.errors`` (``emit_generic``:
-    ação fora de ``_KNOWN_ACTIONS`` ⇒ ``_breadcrumb`` + retorno silencioso).
-    Escrevemos no MESMO destino, direto, sem emitir ação não registrada — o
-    gate de registro só enxerga chamadas que resolvem para ``emit_<name>``.
-
-    Para restaurar: no MESMO pack assinado que registrar a ação (precedente
-    v2.51 / SENT-GK-F, que precisou de ``CEO_KERNEL_OVERRIDE``), reponha aqui
-    a chamada a ``audit_emit.emit_generic`` com o nome de ação declarado no
-    PLAN-174 W1 e remova o breadcrumb direto abaixo.
+    Fail-open em TODA rota (um unlock advisory nunca pode quebrar o lint):
+    emissor indisponível ⇒ breadcrumb durável em ``audit-log.errors`` — o
+    mesmo destino que a versão parcada usava — e o stderr sempre imprime.
     """
     line = (f"ceremony-lint UNLOCK usado sha={sha[:16]} "
             f"reason_len={len(reason)}")
     try:
         sys.path.insert(0, os.path.join(REPO_ROOT, ".claude", "hooks"))
         from _lib import audit_emit  # type: ignore
-        crumb = getattr(audit_emit, "_breadcrumb", None)
-        if callable(crumb):
-            crumb(line)
+        fn = getattr(audit_emit, "emit_generic", None)
+        if callable(fn):
+            # emit_generic takes **kwargs as TOP-LEVEL event fields — the
+            # 7d467a8 shape (`fields={...}`) nested the payload under a
+            # single "fields" key the scrub correctly drops (caught by the
+            # S318 clone-sim; the parked emitter had never run live).
+            fn(action="ceremony_lint_unlock_used",
+               file_sha256=sha[:16], reason_len=len(reason))
+        else:
+            crumb = getattr(audit_emit, "_breadcrumb", None)
+            if callable(crumb):
+                crumb(line)
+    except Exception:
+        try:
+            from _lib import audit_emit as _ae  # type: ignore
+            crumb = getattr(_ae, "_breadcrumb", None)
+            if callable(crumb):
+                crumb(line)
+        except Exception:
+            pass
+    try:
+        # Rail S318 (P2): o stderr do operador também fica dentro da
+        # fronteira fail-open — um BrokenPipeError/encoding error aqui não
+        # pode abortar o lint depois de um unlock válido.
+        print(f"ceremony-lint: UNLOCK usado sha={sha[:16]} motivo={reason!r}",
+              file=sys.stderr)
     except Exception:
         pass
-    print(f"ceremony-lint: UNLOCK usado sha={sha[:16]} motivo={reason!r}",
-          file=sys.stderr)
 
 
 def main(argv: Optional[List[str]] = None) -> int:

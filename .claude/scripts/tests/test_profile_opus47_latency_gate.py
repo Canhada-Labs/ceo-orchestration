@@ -116,6 +116,71 @@ class TestPercentilePrecondition(TestEnvContext):
         self.assertEqual(sig.parameters["iterations"].default, 200)
 
 
+class TestP99Advisory(TestEnvContext):
+    """ADR-163 S318 amendment — p99 demoted to advisory (opt-in flag).
+
+    Mechanism-level positive control: a synthetic p99 breach is created
+    with an impossible ceiling (``p99_ceiling_ms=-1`` — any measured p99,
+    including the ~0ms of a mocked subprocess, breaches it) so the test
+    exercises the exact gate predicate, not wall-clock luck. The fake
+    repo_root carries the three corpus hooks as stub files and NO
+    tool_lifecycle.py, so ``observe_rail_present`` is False and both
+    observe controls are structurally green — the verdict under test is
+    the latency predicate alone.
+    """
+
+    @staticmethod
+    def _fake_repo(td: str) -> Path:
+        hooks = Path(td) / ".claude" / "hooks"
+        hooks.mkdir(parents=True)
+        for name in (
+            "check_agent_spawn.py",
+            "check_anti_ceo_overhead.py",
+            "check_output_secrets.py",
+        ):
+            (hooks / name).write_text("# stub corpus hook (test)\n")
+        return Path(td)
+
+    def _run(self, p99_advisory: bool):
+        import tempfile
+
+        ok = mock.Mock(returncode=0, stdout=b"", stderr=b"")
+        with tempfile.TemporaryDirectory() as td:
+            root = self._fake_repo(td)
+            with mock.patch.object(MOD.subprocess, "run", return_value=ok):
+                return MOD.run_hook_latency(
+                    root,
+                    iterations=22,
+                    p95_ceiling_ms=1e9,
+                    p99_ceiling_ms=-1.0,
+                    p99_advisory=p99_advisory,
+                )
+
+    def test_p99_breach_fails_hard_by_default(self):
+        report = self._run(p99_advisory=False)
+        self.assertFalse(report["passed"])
+        for name, entry in report["hooks"].items():
+            self.assertFalse(entry["p99_within"], name)
+            self.assertFalse(entry["passed"], name)
+
+    def test_p99_breach_passes_under_advisory_and_stays_reported(self):
+        report = self._run(p99_advisory=True)
+        self.assertTrue(report["passed"])
+        self.assertTrue(report["p99_advisory"])
+        for name, entry in report["hooks"].items():
+            # The breach never gates — but it is NEVER silent either:
+            self.assertFalse(entry["p99_within"], name)
+            self.assertTrue(entry["passed"], name)
+
+    def test_default_ceilings_are_the_s318_recalibration(self):
+        import inspect
+
+        sig = inspect.signature(MOD.run_hook_latency)
+        self.assertEqual(sig.parameters["p95_ceiling_ms"].default, 180.0)
+        self.assertEqual(sig.parameters["p99_ceiling_ms"].default, 160.0)
+        self.assertFalse(sig.parameters["p99_advisory"].default)
+
+
 class TestTimeoutExpiredFold(TestEnvContext):
     def test_stall_reads_as_hook_failed_not_traceback(self):
         def _stall(*a, **k):

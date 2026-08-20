@@ -1107,6 +1107,13 @@ _KNOWN_ACTIONS = {
     # wire: the raw token/byte counts, the transcript text, the plan path
     # text, the prompt body.
     "context_pressure_observed",
+    # PLAN-174 W1 (registered by the SENT-S318 pack; _KNOWN_ACTIONS
+    # 325 -> 326) — ceremony-lint ADR-186 escape-hatch breadcrumb:
+    # CEO_CEREMONY_LINT_UNLOCK=<sha256> + _REASON consumed by
+    # check-ceremony-script.py. Metadata-only wire (`file_sha256` 16-hex
+    # prefix + `reason_len` int); the reason TEXT never reaches the log.
+    # Emitter parked in 908707e until this registration existed.
+    "ceremony_lint_unlock_used",
 }
 
 
@@ -6760,6 +6767,41 @@ def emit_generic(action: str, **kwargs: Any) -> None:
                 f"emit_generic settings_tamper_detected dropped "
                 f"forbidden field(s): {sorted(dropped)[:10]}"
             )
+    # PLAN-174 W1 (registered by the SENT-S318 pack) — ceremony-lint ADR-186
+    # unlock breadcrumb. The emitter shipped in 7d467a8 WITHOUT this registry
+    # half and was parked in 908707e ("um emissor nao embarca antes do
+    # registro dele"); this branch is the registration that un-parks it.
+    # Dedicated scrub branch (NEVER _EMIT_GENERIC_PASSTHROUGH). The
+    # field-name scrub DROPS non-allowlisted keys (so a smuggled unlock
+    # REASON text / file path / script body never reaches the wire); the
+    # shape checks close the direct emit_generic-caller path (S172 doctrine
+    # — rejected values are replaced with the safe sentinel, never echoed).
+    elif action == "ceremony_lint_unlock_used":
+        event, dropped = _scrub_ceo_boot_event(
+            event, _CEREMONY_LINT_UNLOCK_USED_ALLOWLIST
+        )
+        fs = event.get("file_sha256")
+        if not (
+            isinstance(fs, str)
+            and len(fs) == 16
+            and all(c in "0123456789abcdef" for c in fs)
+        ):
+            # 16-hex sha256 PREFIX of the unlocked ceremony script — a
+            # malformed value is coerced to the sentinel, never echoed.
+            event["file_sha256"] = "invalid"
+        rl = event.get("reason_len", 0)
+        if isinstance(rl, bool) or not isinstance(rl, int):
+            # TYPE-strict like _context_pressure_bucket_ok: bool is an int
+            # subclass and a float would make canonical_json drop the WHOLE
+            # event to an audit-log.errors breadcrumb (S181 class).
+            event["reason_len"] = 0
+        else:
+            event["reason_len"] = max(0, min(9999, rl))
+        if dropped:
+            _breadcrumb(
+                f"emit_generic ceremony_lint_unlock_used dropped "
+                f"forbidden field(s): {sorted(dropped)[:10]}"
+            )
     # PLAN-135 W2 H2 — ConfigChange-guard observed breadcrumb. Dedicated
     # scrub branch (NEVER _EMIT_GENERIC_PASSTHROUGH). The field-name scrub
     # DROPS non-allowlisted keys (so a smuggled file path / settings body /
@@ -8199,6 +8241,20 @@ _HINT_PROVENANCE_REASONS = frozenset(
 _SETTINGS_TAMPER_DETECTED_ALLOWLIST = frozenset({
     "action", "session_id", "project",
     "tamper_class", "layer", "finding_count",
+    # _write_event envelope (pre-allowed so scrub doesn't strip on round-trip):
+    "ts", "event_schema",
+    "tokens_in", "tokens_out", "tokens_total",
+    "hmac", "hmac_error",
+})
+
+# PLAN-174 W1 (SENT-S318 pack) — ceremony-lint ADR-186 unlock breadcrumb.
+# Metadata-only: `file_sha256` is a 16-hex sha256 PREFIX of the unlocked
+# ceremony script, `reason_len` the LENGTH of the operator's mandatory
+# CEO_CEREMONY_LINT_UNLOCK_REASON. DENIED on the wire by construction:
+# the reason TEXT, the script path, the script body.
+_CEREMONY_LINT_UNLOCK_USED_ALLOWLIST = frozenset({
+    "action", "session_id", "project",
+    "file_sha256", "reason_len",
     # _write_event envelope (pre-allowed so scrub doesn't strip on round-trip):
     "ts", "event_schema",
     "tokens_in", "tokens_out", "tokens_total",

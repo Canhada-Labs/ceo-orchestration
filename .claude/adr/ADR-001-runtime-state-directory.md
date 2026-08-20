@@ -159,6 +159,72 @@ the live log enables (a) cheap rollback of a corrupt write,
   the defaults for tests and multi-project setups. No new env vars
   are introduced — we stay at the set defined in the original ADR.
 
+## Amendment (2026-08-20, S318 — PLAN-182 AC-7) — the slug becomes normative; the family moves together
+
+**Trigger (measured, not hypothetical — PLAN-182 W0, S315..S317):** this
+ADR was ACCEPTED on 2026-04-11 specifying `<project-slug>`, and for four
+months the runtime resolved, absent env overrides, to the LITERAL
+`$HOME/.claude/projects/ceo-orchestration` instead. The behaviorally
+derived family is **587 files** (562 in cure scope; 102 runtime modules
+BUILD the literal rather than loading it — `derive-audit-family.py`,
+PLAN-182 W0-US1). The env var this ADR's Decision names,
+`CLAUDE_PROJECT_DIR_NATIVE`, is consumed by **zero** files. Measured
+consequence: this repo's audit log carries events from **two** foreign
+projects (2,136 + 1,706 rows) under **one** shared HMAC key, and the
+single per-`$HOME` `.salt` makes `prompt_sha256` correlate across
+projects — the ADR-079 guarantee is already false at the tenancy
+boundary. The W0 artifact×env matrix (19 anchors × 14 columns, 266
+cells; env domain = 21 code-derived vars) additionally measured that
+`CEO_AUDIT_LOG_PATH` moves the log AND the `audit-key` but leaves the
+**lock** and **errors** behind — two projects with distinct logs still
+serialize on one lock.
+
+**Decision (amends the Decision section; implemented by PLAN-182 W1):**
+
+1. **`<project-slug>` derivation becomes NORMATIVE and native-aligned:**
+   the slug is the Claude Code path-based slug of the project's absolute
+   path (`/` replaced by `-`, e.g. `-Users-<user>-<path>-<repo>`) — the
+   SAME derivation Claude Code uses for `~/.claude/projects/<slug>/`
+   memory. The original "(~) derivation is implicit … Sprint 3 may align
+   them" note is hereby resolved in favor of the native slug: the bare
+   project name (the literal the code grew) COLLIDES for two checkouts
+   sharing a basename and is what produced the measured cross-tenant
+   mixing; the path-based slug cannot collide without the paths
+   colliding.
+2. **One resolver, imported by the whole family.** A single module owns
+   the derivation; no file in the family may re-derive the directory
+   locally (the ownership-verdict lesson: a locally-deciding branch
+   re-opens the class this closes). `CLAUDE_PROJECT_DIR_NATIVE` stays
+   the documented whole-directory override and MUST be consumed by that
+   resolver — an override with zero consumers is a spec fiction, which
+   is what this amendment repairs.
+3. **Family-atomicity invariant:** `audit-log.jsonl`, `audit-key`,
+   `audit-log.lock`, `audit-log.errors`, `.salt`, rotation siblings,
+   `backups/` and every sidecar resolve from the SAME base directory in
+   every configuration. Per-file env overrides (`CEO_AUDIT_LOG_PATH`,
+   `_ERR`, `_LOCK`) keep working for tests, but no supported
+   configuration may split the lock or errors from the log they guard
+   (the measured `CEO_AUDIT_LOG_PATH` split above is a DEFECT, cured in
+   W1, not a feature).
+4. **Blast radius reclassified L2 → L3.** The migration of live state
+   (historical log, HMAC key, salt) is a ceremony of its own (PLAN-182
+   W1/W2, Owner-signed), with the historical-log custody decision made
+   BEFORE writers move (W2 precedes the W1 re-emission).
+
+**Honest limit (unchanged by this amendment):** per-project directories
+and keys end ACCIDENTAL mixing — chains that do not interleave, correct
+attribution, `verify_chain()` meaningful per project. They do NOT
+restore tamper-evidence between tenants of the same UID: a process on
+the same UID reads the other project's `0700` dir and `0600` key. That
+boundary would require a separate UID or keys outside process reach —
+out of scope, declared PERMANENT under same-UID in `CLAUDE.md` §5.
+
+**Authorization:** direction ratified by the Owner via AskUserQuestion
+(S318, 2026-08-20): "Ratificar direção (Recomendado) — ADR-001:
+derivação por slug como escrito". This amendment UNBLOCKS PLAN-182 W1
+(frontmatter `blocked_on_adr`); the implementation lands under the W1
+ceremony, not under this text.
+
 ## Enforcement commit
 
 `b7aef7ede65d` (retrofit — PLAN-050 Phase 2 / PLAN-045 F-06-03; this anchors the file's introduction commit, not a runtime-behavior commit. For ADRs whose decision was wired into hooks/scripts in a later commit, amend this line manually.)

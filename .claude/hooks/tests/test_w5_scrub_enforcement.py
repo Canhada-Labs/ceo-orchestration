@@ -88,7 +88,10 @@ class TestW5OffPassthrough(TestEnvContext):
         # ADR-185; ceremony 610d9ec [SENT-S291]) -> 324.
         # PLAN-179 W0 US2 (+context_pressure_observed — edge-triggered
         # context-pressure breadcrumb, amendment 8.1) -> 325.
-        self.assertEqual(len(audit_emit._KNOWN_ACTIONS), 325)
+        # PLAN-174 W1 registration completion (+ceremony_lint_unlock_used —
+        # ceremony-lint ADR-186 escape-hatch breadcrumb, parked in 908707e,
+        # registered + restored by the SENT-S318 pack) -> 326.
+        self.assertEqual(len(audit_emit._KNOWN_ACTIONS), 326)
 
 
 class TestAdminKeyScrub(_W5Base):

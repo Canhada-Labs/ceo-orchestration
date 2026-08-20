@@ -286,3 +286,71 @@ flake-intuition to a decision WITH evidence (the run above). Any new
 percentile probe is born with: an N satisfying the precondition,
 derived indices, the median in shared-load environments, and a real
 percentile only where the environment is controlled.
+
+
+## Amendment (PLAN-169 S318, 2026-08-20) — p99 demoted to advisory; p95 recalibrated 120 → 180 with evidence
+
+**Trigger:** validate run 32408847458 (commit `908707e`, 2026-08-20)
+failed all three attempts and was stamped a "real regression" verdict
+that was FALSE — the local N=200 baseline held at 70.6 ms. The attempt
+series is the whole diagnosis:
+
+- attempt 1 (19:54Z): `check_output_secrets[observe=1]` p95=110.6 ms
+  (**within** the 120 ms ceiling, an 8% margin) / p99=177.0 ms — the
+  attempt failed **on p99 alone**;
+- attempt 2 (19:56Z): whole distribution shifted (p95 302–320 ms) — a
+  contention burst no reasonable ceiling survives;
+- the contention probe ran AFTER the 60 s backoff, the burst had
+  passed, it read UNCONTENDED and granted the 3rd attempt on a
+  still-warm runner: p95=162.1 / p99=198.0 → final "regression"
+  verdict on unregressed code.
+
+**Longitudinal evidence** (perf-profile N=1000 artifacts,
+ubuntu-latest, runs 32185964567 / 32234091647 / 32322055888,
+2026-08-18..20): the same hook measured warm p50 120 → 118 → 79 ms
+and p95 126 → 123 → **178 ms** across three days — the runner's whole
+distribution moves 1.5–2.3× between scheduler windows. A tail
+percentile on a shared runner prices the runner, not the code — the
+same finding the W2.2 amendment above already accepted for the test
+probes (run 31288404989). The "Demote p99 to advisory" option this
+ADR deferred in 2026-07 ("revisit with Wave-2 data") now has its
+data. "Loosen ceilings" was rejected then as "(no evidence)"; the
+evidence condition is now met for the heaviest entry.
+
+**Decision (amends Decision item 5):**
+
+1. **p95 ceiling 120 → 180 ms, HARD** (CI argv + profiler default).
+   Sized from the 2026-08 runner reality: heaviest-entry p95 ≈110 ms
+   on an unloaded runner × the ~1.6× detection factor this ADR's
+   §Detection contract already names. The gate still catches the
+   gross-regression class it exists for (PLAN-120 WS-J, 2.27×:
+   110 → 250 ms ≫ 180) and today's attempt-3 (162 ms, warm runner)
+   passes instead of minting a false verdict.
+2. **p99 demoted to ADVISORY in the CI gate** (`--p99-advisory`, new
+   profiler flag): each entry reports `p99_within`, breaches are
+   echoed as a `WARN:` stderr line and land in the step summary, but
+   the exit code never keys on p99. The flag is opt-in — without it
+   the profiler keeps the hard-p99 contract (back-compat for local
+   runs and adopters).
+3. **N=200, the retry wrapper, the contention probe and both
+   controls are UNTOUCHED.** The `FAIL: hook latency gate —` marker
+   and the `FAILED on BOTH attempts (rc1=` back-compat literal
+   survive unchanged.
+4. **Proof updates:** `wave2-regression-proof.sh` breach literals
+   120.0 → 180.0 (the injected ~215 ms regression stays over-ceiling,
+   so the proof's detection claim is preserved);
+   `proof-retry-matrix.sh` is unaffected (it mocks `run_gate` and
+   extracts the run-block from the live `validate.yml`).
+
+**Honest scope:** the fixed-ceiling non-uniformity this ADR already
+declared gets wider — on the fastest entry the factor grows to
+≈2.3–3.3×, so a clean 2× regression there stays invisible (it already
+was at 120). Per-entry relative ceilings remain the named successor
+if that ever bites; this amendment deliberately keeps the shared
+single-ceiling shape.
+
+**Authorization:** Owner ratified the route via AskUserQuestion
+(S318, 2026-08-20): "Emenda ADR-163 (Recomendado) — p99 hard→advisory
++ p95 120→180 com a evidência de hoje". Landed by the SENT-S318 pack
+ceremony (this file + `validate.yml` + `profile-opus-4-7.py` +
+`wave2-regression-proof.sh` + profiler tests, one signed commit).

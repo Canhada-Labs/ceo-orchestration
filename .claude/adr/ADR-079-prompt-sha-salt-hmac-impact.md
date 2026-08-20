@@ -219,3 +219,56 @@ preserved.
 - ADR-056 (UserPromptSubmit lifecycle hook design)
 - `_lib/injection_salt.py` (salt module)
 - `UserPromptSubmit.py:182-205` (patched call-site)
+
+## Amendment (2026-08-20, S318 — PLAN-182 OQ-4) — "installation" means PROJECT; one registered migration rotation
+
+**Trigger (measured — PLAN-182 W0 §2, S315..S317):** this ADR's
+Consequences promise that "same prompt issued in two different
+installations produces two different `prompt_sha256` values" and that
+cross-installation correlation is impossible without comparing `.salt`
+files. In the shipped code the salt is unique per **`$HOME`**
+(`injection_salt.py:63-70` — one `.salt` under the literal runtime dir
+the ADR-001 S318 amendment documents), so every PROJECT of one user
+shares it and `prompt_sha256` correlates ACROSS projects — the exact
+oracle this ADR exists to close, alive at the tenancy boundary. The
+word "installation" was never defined; the code materialized the
+weakest reading.
+
+**Decision (amends Decision items 1 and 3; implemented by PLAN-182 W1):**
+
+1. **The salt unit is the PROJECT.** `get_instance_salt()` resolves
+   `.salt` inside the per-project runtime directory of the ADR-001 S318
+   amendment (native path-based slug). The Consequences section's
+   guarantee is re-scoped accordingly: two projects of the same user
+   get non-correlatable `prompt_sha256`, same as two machines always
+   did. Everywhere this ADR says "per-installation", read
+   "per-project" going forward.
+2. **"No salt rotation" survives with exactly ONE sanctioned,
+   REGISTERED exception — the PLAN-182 migration:** the project that
+   inherits the historical chain (the W2 custody decision) inherits the
+   legacy `.salt` byte-for-byte, so historical forensic correlation is
+   preserved precisely where the history lives; every OTHER project
+   mints a fresh salt, and that minting is REGISTERED in the chain via
+   a migration marker — never silent. This also repairs the defect the
+   W0 measured in the module itself: `get_instance_salt()`
+   mints-and-persists on first call with no error, no log, no signal
+   (`:124-148`) — silent rotation against the module's own "No
+   rotation" rationale. The W1 cure makes any minting OBSERVABLE.
+3. **Distinctness is proven, not assumed:** the W1 acceptance carries a
+   two-project fixture test — distinct salts, `prompt_sha256`
+   non-correlatable between them, the inheriting project preserving the
+   legacy bytes — with a NEGATIVE control (byte-identical salts = red).
+   A universal salt carry-over would preserve the exact cross-project
+   correlation this amendment closes, and is therefore forbidden.
+
+**Honest limit:** a per-project salt ends accidental cross-project
+correlation in published logs. It is NOT a boundary against a same-UID
+adversary, who can read any project's `0600` salt file directly — same
+limit, same wording as the ADR-001 S318 amendment.
+
+**Authorization:** direction ratified by the Owner via AskUserQuestion
+(S318, 2026-08-20): "Ratificar direção (Recomendado) — ADR-079/OQ-4:
+salt POR PROJETO — herdeiro da cadeia herda o legado, demais cunham com
+rotação registrada". This amendment resolves PLAN-182 OQ-4 and, with
+the ADR-001 S318 amendment, unblocks W1; implementation lands under the
+W1 ceremony.

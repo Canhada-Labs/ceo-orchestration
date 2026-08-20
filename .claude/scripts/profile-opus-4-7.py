@@ -358,8 +358,9 @@ def _latency_post_payload(tool_use_id: str) -> bytes:
 def run_hook_latency(
     repo_root: Path,
     iterations: int = 200,
-    p95_ceiling_ms: float = 120.0,
+    p95_ceiling_ms: float = 180.0,
     p99_ceiling_ms: float = 160.0,
+    p99_advisory: bool = False,
 ) -> Dict[str, Any]:
     """Subprocess-profile the hook-latency corpus and gate p95/p99.
 
@@ -396,10 +397,16 @@ def run_hook_latency(
     CEO_TOOL_LIFECYCLE / CEO_ANTI_OVERHEAD / CLAUDE_SESSION_ID are scrubbed
     from the inherited env so the measured state is deterministic.
 
-    Budget: p95 < 120ms / p99 < 160ms per corpus entry — the CI-confirmed
-    fallback budget from PLAN-063 DIM-15 (ubuntu-latest baseline 57-64ms +
-    headroom). More conservative than the test_hook_latency.py xfail budget
-    (p95 100ms / p99 150ms) to absorb profile-script measurement variance.
+    Budget: p95 < 180ms hard per corpus entry (ADR-163 S318 amendment —
+    recalibrated from the 2026-07 value of 120ms with the 2026-08-20
+    evidence: an unloaded ubuntu-latest runner measured the heaviest entry
+    at p95 110.6ms, an 8% margin, while the local baseline stayed at
+    70.6ms — the runner shifted, not the hooks). p99 < 160ms is HARD by
+    default for back-compat; under ``p99_advisory=True`` (the CI gate's
+    mode) a p99 breach is REPORTED per entry (``p99_within``) and echoed
+    as a WARN by the CLI but never fails the gate — on a shared runner the
+    extreme tail prices the runner, not the code (same evidence class as
+    the ADR-163 PLAN-169 W2.2 amendment's median-on-CI decision).
 
     Returns a dict with per-hook p50/p95/p99 (``hooks``), the two observe
     controls (``controls``), the legacy top-level ``check_agent_spawn``
@@ -590,9 +597,10 @@ def run_hook_latency(
             p50 = _pct_of_sorted(warm_sorted, 50)
             p95 = _pct_of_sorted(warm_sorted, 95)
             p99 = _pct_of_sorted(warm_sorted, 99)
+            p99_within = p99 <= p99_ceiling_ms
             entry_passed = (
                 p95 <= p95_ceiling_ms
-                and p99 <= p99_ceiling_ms
+                and (p99_advisory or p99_within)
                 and not entry_hook_failed
             )
             all_within_budget = all_within_budget and entry_passed
@@ -603,6 +611,7 @@ def run_hook_latency(
                 "p99_ms": round(p99, 1),
                 "max_ms": round(max(warm_sorted), 1),
                 "hook_failed": entry_hook_failed,
+                "p99_within": p99_within,
                 "passed": entry_passed,
             }
 
@@ -681,6 +690,7 @@ def run_hook_latency(
         "iterations": iterations,
         "p95_ceiling_ms": p95_ceiling_ms,
         "p99_ceiling_ms": p99_ceiling_ms,
+        "p99_advisory": p99_advisory,
         "observe_rail_present": observe_rail_present,
         "hooks": hooks_out,
         # Back-compat: legacy consumers read this top-level block.
@@ -692,10 +702,16 @@ def run_hook_latency(
         "passed": passed,
         "note": (
             "Advisory emitters disabled (CEO_MODEL_ROUTING=0 etc.); "
-            "measures governance hot-path only. Budget PLAN-063 DIM-15 "
-            "CI fallback: p95<120ms / p99<160ms per corpus entry. "
+            "measures governance hot-path only. Budget ADR-163 S318 "
+            "amendment: p95<%.0fms hard per corpus entry; p99<%.0fms %s. "
             "PLAN-154 constraint 8: observe-rail extended write path "
             "profiled in both states with anti-vacuity controls."
+            % (
+                p95_ceiling_ms,
+                p99_ceiling_ms,
+                "ADVISORY (reported, never gates)" if p99_advisory
+                else "hard (back-compat default)",
+            )
         ),
     }
 
@@ -745,15 +761,29 @@ def main() -> int:
         "--p95-ceiling-ms",
         dest="p95_ceiling_ms",
         type=float,
-        default=120.0,
-        help="p95 failure ceiling in ms for --hook-latency (default 120ms).",
+        default=180.0,
+        help=(
+            "p95 failure ceiling in ms for --hook-latency (default 180ms; "
+            "ADR-163 S318 recalibration — was 120ms)."
+        ),
     )
     parser.add_argument(
         "--p99-ceiling-ms",
         dest="p99_ceiling_ms",
         type=float,
         default=160.0,
-        help="p99 failure ceiling in ms for --hook-latency (default 160ms).",
+        help="p99 ceiling in ms for --hook-latency (default 160ms).",
+    )
+    parser.add_argument(
+        "--p99-advisory",
+        dest="p99_advisory",
+        action="store_true",
+        help=(
+            "Report p99 breaches per entry (p99_within=false + WARN on "
+            "stderr) WITHOUT failing the gate (ADR-163 S318 amendment: on "
+            "a shared runner the extreme tail prices the runner, not the "
+            "code). Default off — p99 stays a hard ceiling for back-compat."
+        ),
     )
     parser.add_argument(
         "--budget-seconds",
@@ -820,9 +850,28 @@ def main() -> int:
                 iterations=args.latency_iterations,
                 p95_ceiling_ms=args.p95_ceiling_ms,
                 p99_ceiling_ms=args.p99_ceiling_ms,
+                p99_advisory=args.p99_advisory,
             )
             json.dump(result, sys.stdout, indent=2)
             print()
+            if args.p99_advisory:
+                # ADR-163 S318: advisory p99 — breaches are ECHOED so the
+                # drift stays visible in the CI log / step summary, but the
+                # exit code never keys on them.
+                p99_breaches = [
+                    f"{name} p99={stats['p99_ms']:.1f}ms"
+                    for name, stats in sorted(result.get("hooks", {}).items())
+                    if isinstance(stats, dict)
+                    and stats.get("p99_within") is False
+                ]
+                if p99_breaches:
+                    print(
+                        "WARN: hook latency p99 advisory breach — "
+                        + "; ".join(p99_breaches)
+                        + f" (advisory ceiling p99<"
+                        f"{result.get('p99_ceiling_ms')}ms; exit unchanged)",
+                        file=sys.stderr,
+                    )
             if not result["passed"]:
                 failures: List[str] = []
                 for hook_name, stats in sorted(
@@ -838,11 +887,16 @@ def main() -> int:
                 ):
                     if isinstance(ctrl, dict) and not ctrl.get("passed", True):
                         failures.append(f"control:{ctrl_name}")
+                p99_label = (
+                    "p99 advisory"
+                    if result.get("p99_advisory")
+                    else f"p99<{result.get('p99_ceiling_ms')}ms"
+                )
                 print(
                     "FAIL: hook latency gate — "
                     + ("; ".join(failures) or result.get("error", "unknown"))
                     + f" (ceilings p95<{result.get('p95_ceiling_ms')}ms / "
-                    f"p99<{result.get('p99_ceiling_ms')}ms)",
+                    f"{p99_label})",
                     file=sys.stderr,
                 )
                 return 1

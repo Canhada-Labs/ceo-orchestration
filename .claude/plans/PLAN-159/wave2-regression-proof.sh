@@ -9,8 +9,10 @@
 #
 # Mechanism: in a THROWAWAY git worktree at HEAD (main tree untouched):
 #   1. inject a 150ms sleep into check_output_secrets.py's entrypoint
-#      (pushes that entry's p95 from ~65ms to ~215ms — over the 120ms
-#      ceiling; criterion per consensus C4 is "over-ceiling", not "2x")
+#      (pushes that entry's p95 from ~65ms to ~215ms — over the 180ms
+#      ceiling of the ADR-163 S318 amendment, which recalibrated the
+#      2026-07 value of 120ms; criterion per consensus C4 is
+#      "over-ceiling", not "2x")
 #   2. extract the REAL step run-block from the worktree's validate.yml
 #      (the exact shell the CI job executes — wrapper included)
 #   3. execute it; REQUIRE non-zero exit AND the both-attempts marker.
@@ -114,8 +116,9 @@ set -e
 tail -5 "$WT/gate-output.log"
 
 # Anti-vacuity: the RED must come from the MEASUREMENT (injected entry
-# over the 120ms ceiling in the attempt report), never from environment
-# breakage (127 command-not-found, missing profiler, etc.).
+# over the 180ms ceiling — ADR-163 S318 amendment — in the attempt
+# report), never from environment breakage (127 command-not-found,
+# missing profiler, etc.).
 say "Anti-vacuity check: the breach is real and measured"
 python3 - <<'PY' || die "PROOF VACUOUS: gate went red WITHOUT a measured over-ceiling breach on the injected entry — fix the environment, do not count this as detection proof"
 import json, sys
@@ -125,7 +128,7 @@ except Exception as e:
     sys.exit(f"attempt-1 report unreadable: {e}")
 hooks = d.get("hooks", {})
 breached = [n for n, h in hooks.items()
-            if isinstance(h, dict) and "output_secrets" in n and h.get("p95_ms", 0) > 120.0]
+            if isinstance(h, dict) and "output_secrets" in n and h.get("p95_ms", 0) > 180.0]
 if not breached:
     sys.exit(f"no injected entry breached: { {n: h.get('p95_ms') for n, h in hooks.items() if isinstance(h, dict)} }")
 print(f"  measured breach confirmed on: {breached}")
