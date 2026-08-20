@@ -662,10 +662,15 @@ class TestPostCompactReinject(_H1Base):
         removendo o marker per-session — sem isso, duas compactações no
         mesmo degrau suprimem a segunda travessia (produtor PreCompact-only
         nunca observa a queda pós-compactação)."""
-        ae = _load_staged_audit_emit()
+        # `_staged_ae` (módulo já carregado no import do arquivo) — NÃO chamar
+        # `_load_staged_audit_emit()` aqui: o gate de audit-isolation
+        # (PLAN-119 WS-C) atribui o install à classe chamadora e exigiria o
+        # restore no corpo LEXICAL desta classe (herança não conta).
         marker_dir = Path(self.cwd) / ".claude" / "state"
         marker_dir.mkdir(parents=True, exist_ok=True)
-        marker = marker_dir / ae._context_pressure_marker_name(self.SESSION_ID)
+        marker = marker_dir / _staged_ae._context_pressure_marker_name(
+            self.SESSION_ID
+        )
         marker.write_text("2\n", encoding="utf-8")
         self._run_gate(_post_hook, {
             "cwd": self.cwd, "session_id": self.SESSION_ID,
