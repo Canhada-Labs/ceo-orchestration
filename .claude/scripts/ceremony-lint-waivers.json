@@ -1,0 +1,248 @@
+[
+ {
+  "sha256": "df2ad39b6e3bbc6e4f908a4992332db8b41435a39b5d68aaf7f26d13b6337459",
+  "path_hint": ".claude/plans/PLAN-156-FOLLOWUP/land-followup.sh",
+  "reason": "historico landado PRE-enforcement (censo S316, PLAN-174 W2); waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-08-20"
+ },
+ {
+  "sha256": "a0336a415e012c02903738ae1acfcecc43946b749f73621f4122e3083fba2ea4",
+  "path_hint": ".claude/plans/PLAN-156/land-plan156.sh",
+  "reason": "historico landado PRE-enforcement (censo S316, PLAN-174 W2); waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-08-20"
+ },
+ {
+  "sha256": "89bbf5f3a8fbc384b4fe38f94975c707f4ca679fd92f782d3ab2431ebc37a1a2",
+  "path_hint": ".claude/plans/PLAN-157/land-plan157-graduation.sh",
+  "reason": "historico landado PRE-enforcement (censo S316, PLAN-174 W2); waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-08-20"
+ },
+ {
+  "sha256": "851088b2fd58603c0f2566ce5ef1cd02f9e743e1944f3dc8809363192e61f73e",
+  "path_hint": ".claude/plans/PLAN-157/land-plan157-w1.sh",
+  "reason": "historico landado PRE-enforcement (censo S316, PLAN-174 W2); waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-08-20"
+ },
+ {
+  "sha256": "daf078dfea9e42f8541082d1bb56856da814912221e0b23e8fd6676460e0dca2",
+  "path_hint": ".claude/plans/PLAN-158/land-plan158.sh",
+  "reason": "historico landado PRE-enforcement (censo S316, PLAN-174 W2); waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-08-20"
+ },
+ {
+  "sha256": "519bdeca7d07d1693f777151896fd109b00a96ece527f157e051027c4df97723",
+  "path_hint": ".claude/plans/PLAN-158/owner-ga-ceremony.sh",
+  "reason": "historico landado PRE-enforcement (censo S316, PLAN-174 W2); waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-08-20"
+ },
+ {
+  "sha256": "1a5948a6827fc43540b8327a329a676ddb18b49161b980633459622bf6dfa6a3",
+  "path_hint": ".claude/plans/PLAN-158/owner-rc-ceremony.sh",
+  "reason": "historico landado PRE-enforcement (censo S316, PLAN-174 W2); waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-08-20"
+ },
+ {
+  "sha256": "6d781ed2d3f74dcffd55486eb41183d48991326fd7793e46b91fd90e3bf6b160",
+  "path_hint": ".claude/plans/PLAN-159/land-plan159.sh",
+  "reason": "historico landado PRE-enforcement (censo S316, PLAN-174 W2); waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-08-20"
+ },
+ {
+  "sha256": "6e9aa11763bb93f5e01db31923e3426f7fe909f490297e740917026d56abd9f0",
+  "path_hint": ".claude/plans/PLAN-160/land-plan160.sh",
+  "reason": "historico landado PRE-enforcement (censo S316, PLAN-174 W2); waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-08-20"
+ },
+ {
+  "sha256": "11a98e2c2780b6a56f2df54aa1a47d61785065975c76b618bcfa6285f536793e",
+  "path_hint": ".claude/plans/PLAN-161/land-plan161.sh",
+  "reason": "historico landado PRE-enforcement (censo S316, PLAN-174 W2); waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-08-20"
+ },
+ {
+  "sha256": "cf48eb88c52835f1ae67aca57862c6753fb7740508f252507b951a5884ff251e",
+  "path_hint": ".claude/plans/PLAN-162/ceremony-2-staged/ceremony-s291.sh",
+  "reason": "historico landado PRE-enforcement (censo S316, PLAN-174 W2); waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-08-20"
+ },
+ {
+  "sha256": "5b5593e145ca33c18ad1bb40c57ea844d76358a9bf161c458dd3b0f4d7f6fae1",
+  "path_hint": ".claude/plans/PLAN-163/land-plan163-pack.sh",
+  "reason": "historico landado PRE-enforcement (censo S316, PLAN-174 W2); waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-08-20"
+ },
+ {
+  "sha256": "1781d3b87b744dd523cf6d10e71fa0fe9905100413f435467032312dec1a4c1e",
+  "path_hint": ".claude/plans/PLAN-163/land-plan163-pin.sh",
+  "reason": "historico landado PRE-enforcement (censo S316, PLAN-174 W2); waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-08-20"
+ },
+ {
+  "sha256": "caaa0217b710115facb4317d9c7347fbdacc03152a63e9cca17a4b37a1940def",
+  "path_hint": ".claude/plans/PLAN-164/land-plan164-rail.sh",
+  "reason": "historico landado PRE-enforcement (censo S316, PLAN-174 W2); waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-08-20"
+ },
+ {
+  "sha256": "34fdbea58875e65efc9993012eb1debc00b61365baa8982ae38c728fb3dc2517",
+  "path_hint": ".claude/plans/PLAN-166/OWNER-GA-CUT.sh",
+  "reason": "historico landado PRE-enforcement (censo S316, PLAN-174 W2); waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-08-20"
+ },
+ {
+  "sha256": "29ca323281f35437c77d9f06131f000c35bd4295aa4c60b5c2419706265c1291",
+  "path_hint": ".claude/plans/PLAN-166/OWNER-RC2-CUT.sh",
+  "reason": "historico landado PRE-enforcement (censo S316, PLAN-174 W2); waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-08-20"
+ },
+ {
+  "sha256": "70307ef997cbd8398a967a68895b4cc9e3c3dffda2654046b41a0b79acae2ca3",
+  "path_hint": ".claude/plans/PLAN-166/OWNER-RC3-CUT.sh",
+  "reason": "historico landado PRE-enforcement (censo S316, PLAN-174 W2); waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-08-20"
+ },
+ {
+  "sha256": "3b6671f1045be0535906aeedc3c3c7d373cc521d9ab63c3951e8ad70ded46be9",
+  "path_hint": ".claude/plans/PLAN-166/OWNER-W1-LAND-step1.sh",
+  "reason": "historico landado PRE-enforcement (censo S316, PLAN-174 W2); waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-08-20"
+ },
+ {
+  "sha256": "653a202bf614fcdf5f9e23774d12654329360772c23c206cbf95f79a8053c0dd",
+  "path_hint": ".claude/plans/PLAN-166/OWNER-W1-LAND-step1b.sh",
+  "reason": "historico landado PRE-enforcement (censo S316, PLAN-174 W2); waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-08-20"
+ },
+ {
+  "sha256": "3df6fc7c86138f3b8c38c8336c67556980635e3069ebb0081d26149669e0cc10",
+  "path_hint": ".claude/plans/PLAN-166/repass-ga/run-ga-repass.sh",
+  "reason": "historico landado PRE-enforcement (censo S316, PLAN-174 W2); waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-08-20"
+ },
+ {
+  "sha256": "a3daeea115746bd7aabc7ba2877de91cb1de53c95c1c84d4852efaadbd159840",
+  "path_hint": ".claude/plans/PLAN-166/repass-r1/build-repass-payload.sh",
+  "reason": "historico landado PRE-enforcement (censo S316, PLAN-174 W2); waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-08-20"
+ },
+ {
+  "sha256": "eeaa0f97cf3fa5ed345fe4fb3cf468a980ac56affd75fdfb40c69e34e12845f6",
+  "path_hint": ".claude/plans/PLAN-166/repass-r2/run-repass-r2.sh",
+  "reason": "historico landado PRE-enforcement (censo S316, PLAN-174 W2); waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-08-20"
+ },
+ {
+  "sha256": "9ae90d0ffade60f531a17e8ece39eafb684d21f2ce508daca35f142b8d41623f",
+  "path_hint": ".claude/plans/PLAN-166/repass-rc3-cures/run-rc3-cure-review.sh",
+  "reason": "historico landado PRE-enforcement (censo S316, PLAN-174 W2); waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-08-20"
+ },
+ {
+  "sha256": "e8f3290d7ca7dd753a4fa3d8981436524ed6bfe53cfc821fb59d177cb76b66aa",
+  "path_hint": ".claude/plans/PLAN-166/repass-rc3-scripts/run-rc3-scripts-review.sh",
+  "reason": "historico landado PRE-enforcement (censo S316, PLAN-174 W2); waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-08-20"
+ },
+ {
+  "sha256": "07c22d20949b8ac57d90e5b570c614f21c6c608fa79fc6b82f591903ba88c82f",
+  "path_hint": ".claude/plans/PLAN-167/OWNER-PREPARE-TO-SIGN.sh",
+  "reason": "historico landado PRE-enforcement (censo S316, PLAN-174 W2); waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-08-20"
+ },
+ {
+  "sha256": "f7e27cc2bedda1312ab940696c3a4f5dc53e4bb81e8e954083eecaf668fbb06a",
+  "path_hint": ".claude/plans/PLAN-167/OWNER-W4-LAND.sh",
+  "reason": "historico landado PRE-enforcement (censo S316, PLAN-174 W2); waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-08-20"
+ },
+ {
+  "sha256": "f35a358261cd1b0dd3f9eefc915050a823ea067e4e4a16509b0b0b02111bdcc2",
+  "path_hint": ".claude/plans/PLAN-167/evidence/probe-INV4-pointer-substitution.sh",
+  "reason": "historico landado PRE-enforcement (censo S316, PLAN-174 W2); waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-08-20"
+ },
+ {
+  "sha256": "f42a0e52b3203ab0719622a09bd6a2c88624fa3b72b6dbf8396f026c3098a768",
+  "path_hint": ".claude/plans/PLAN-168/OWNER-LAND.sh",
+  "reason": "historico landado PRE-enforcement (censo S316, PLAN-174 W2); waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-08-20"
+ },
+ {
+  "sha256": "c1b494a6eac6c6d6c77aa6a91a3924d67c418b6d2da041c657c52487b36a92fc",
+  "path_hint": ".claude/plans/PLAN-168/OWNER-PREPARE-TO-SIGN.sh",
+  "reason": "historico landado PRE-enforcement (censo S316, PLAN-174 W2); waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-08-20"
+ },
+ {
+  "sha256": "cff588bfa0a7e7ffb723d5a825756d10973da64d02a2da4061a709b1716edfd5",
+  "path_hint": ".claude/plans/PLAN-169/OWNER-W28-LAND.sh",
+  "reason": "historico landado PRE-enforcement (censo S316, PLAN-174 W2); waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-08-20"
+ },
+ {
+  "sha256": "795500c4166cdb3f270537a47194c1cb9df2c9bcc2dc072419291532328a922a",
+  "path_hint": ".claude/plans/PLAN-169/OWNER-W3-LAND.sh",
+  "reason": "historico landado PRE-enforcement (censo S316, PLAN-174 W2); waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-08-20"
+ },
+ {
+  "sha256": "79145162c2f5201f22194265e71c6d5f96fc5ccfe1dbd1ee829a622c9d98563d",
+  "path_hint": ".claude/plans/PLAN-169/OWNER-W3K-LAND.sh",
+  "reason": "historico landado PRE-enforcement (censo S316, PLAN-174 W2); waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-08-20"
+ },
+ {
+  "sha256": "d5c59b045c2a3b6f39f7d88ea1dcb822e02c5d88991a27ca5842ebece4a9679a",
+  "path_hint": ".claude/plans/PLAN-169/staged-w3/scripts/install.sh",
+  "reason": "historico landado PRE-enforcement (censo S316, PLAN-174 W2); waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-08-20"
+ },
+ {
+  "sha256": "199d5e8a130940889404ecc0c2166e34ad1b62b4be2619fde0ddbcb19e2e56df",
+  "path_hint": ".claude/plans/PLAN-169/staged-w3/scripts/upgrade.sh",
+  "reason": "historico landado PRE-enforcement (censo S316, PLAN-174 W2); waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-08-20"
+ },
+ {
+  "sha256": "8a7c48a1895e5495f8d69e04b72c72893db696147e032eafab4959ccbfd7fb20",
+  "path_hint": ".claude/plans/PLAN-177/repass-rc4-20260813-NOGO/run-rc4-repass.sh",
+  "reason": "historico landado PRE-enforcement (censo S316, PLAN-174 W2); waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-08-20"
+ },
+ {
+  "sha256": "ed970cd52d89006f04095571ba6909be073010078c5aef15d96c7250358826d0",
+  "path_hint": ".claude/plans/PLAN-177/repass-rc4/run-rc4-repass.sh",
+  "reason": "historico landado PRE-enforcement (censo S316, PLAN-174 W2); waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-08-20"
+ },
+ {
+  "sha256": "8188cee6510ce233e8996c67e114b2248c847e2b8b0779d796c745fc9bc51602",
+  "path_hint": ".claude/plans/PLAN-179/OWNER-W179-LAND.sh",
+  "reason": "historico landado PRE-enforcement (censo S316, PLAN-174 W2); waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-08-20"
+ },
+ {
+  "sha256": "768ebb98a18c79b26bcc8dbe92b28fb5a6aba33555b22ae2dd01b617b6f45ae5",
+  "path_hint": ".claude/plans/PLAN-179/staged-w01/scripts/upgrade.sh",
+  "reason": "historico landado PRE-enforcement (censo S316, PLAN-174 W2); waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-08-20"
+ },
+ {
+  "sha256": "6f4bfb141b8cacb3c81547b08367759325637f1b3f163c89c5f6c275632d9d23",
+  "path_hint": ".claude/plans/PLAN-180/OWNER-S313-LAND.sh",
+  "reason": "historico landado PRE-enforcement (censo S316, PLAN-174 W2); waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-08-20"
+ },
+ {
+  "sha256": "5aa93ee8a89a826244290ba7ea91c9db837c9bf2a3427edc7f49a92dd8280cde",
+  "path_hint": ".claude/plans/PLAN-180/staged-s313/scripts/upgrade.sh",
+  "reason": "historico landado PRE-enforcement (censo S316, PLAN-174 W2); waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-08-20"
+ },
+ {
+  "sha256": "ef90991bbd02e05de1f71c523235c0c78c82425d88eddc08ea1f8924f38e931c",
+  "path_hint": ".claude/scripts/local/generate-ceremony.sh",
+  "reason": "defeitos REAIS do gerador (R4 git-add-dir:39, R2 ||true-irreversivel:304) — a cura pertence ao W3/PLAN-174 (extensao do gerador); waiver EXPIRA na abertura do W3",
+  "date": "2026-08-20"
+ }
+]

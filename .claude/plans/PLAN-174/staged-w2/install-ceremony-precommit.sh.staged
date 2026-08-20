@@ -1,0 +1,43 @@
+# STAGED (S316) — destino: .claude/scripts/local/install-ceremony-precommit.sh
+# Escrita direta bloqueada pelo mesmo guard ADR-182 (pin do codex
+# 0.144.x ≠ instalado 0.147.0; pair-rail de escrita L3+ fail-closed).
+# Land junto com ceremony-lint.yml.staged após a cerimônia de re-pin.
+# Conteúdo abaixo é o arquivo final, byte-a-byte (remover este cabeçalho
+# de 8 linhas ao mover).
+#!/bin/bash
+# install-ceremony-precommit.sh — instala a perna LOCAL (advisory) do
+# ceremony-lint como git hook clássico de pre-commit (PLAN-174 W2).
+#
+# DOUTRINA (consenso do debate r1, F5): CI é O GATE. Este hook é
+# conveniência de operador — bypassável por `git commit --no-verify`
+# por construção — e NUNCA conta como camada de enforcement. Instalação
+# é OPT-IN: rode este script uma vez por clone.
+#
+# Uso: bash .claude/scripts/local/install-ceremony-precommit.sh
+set -u -o pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel)" || exit 2
+HOOK="$REPO_ROOT/.git/hooks/pre-commit"
+
+if [ -f "$HOOK" ] && ! grep -q "ceremony-lint" "$HOOK"; then
+  echo "AVISO: $HOOK já existe e não é o ceremony-lint — não vou sobrescrever." >&2
+  echo "Integre manualmente: python3 .claude/scripts/check-ceremony-script.py" >&2
+  exit 1
+fi
+
+cat > "$HOOK" <<'EOF'
+#!/bin/bash
+# ceremony-lint pre-commit (advisory local — CI é o gate; PLAN-174 W2)
+if git diff --cached --name-only | grep -qE '\.sh$'; then
+  python3 "$(git rev-parse --show-toplevel)/.claude/scripts/check-ceremony-script.py"
+  rc=$?
+  if [ "$rc" -ne 0 ]; then
+    echo "ceremony-lint: blocking/piso violado (rc=$rc)." >&2
+    echo "Bypass consciente: git commit --no-verify (o CI ainda e o gate)." >&2
+    exit "$rc"
+  fi
+fi
+exit 0
+EOF
+chmod +x "$HOOK"
+echo "instalado: $HOOK (advisory; bypass = --no-verify; CI e o gate)"

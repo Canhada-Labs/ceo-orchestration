@@ -1,0 +1,123 @@
+# STAGED (S316) — destino: .github/workflows/ceremony-lint.yml
+#
+# A escrita direta em .github/workflows/ foi BLOQUEADA pelo guard
+# ADR-182 (pin do codex: instalado 0.147.0 ≠ pin 0.144.x; o pair-rail
+# de escrita L3+ fail-closed recusa binário não verificado) — o MESMO
+# drift que o W-IM#4/PLAN-172 mediu nesta sessão, com runbook pin-first.
+# Rota de land: (1) Owner executa a cerimônia de re-pin ADR-182
+# (codex-cli-pin.txt + codex-cli-pin-manifest.json) + runbook PLAN-155
+# A12; (2) mover este arquivo para .github/workflows/ceremony-lint.yml
+# byte-idêntico (sem o cabeçalho STAGED até esta linha). Nunca landar
+# com unlock sem cerimônia.
+#
+# PLAN-174 W2 — gate de scripts de cerimônia (job PRÓPRIO, arquivo NOVO).
+#
+# Por que um arquivo novo e não um step no validate.yml: decisão do CEO
+# registrada no consenso do debate r1 (PLAN-174/debate/round-1/
+# consensus.md F5) — o PLAN-183 W2 ainda não fixou o ramo do drift-gate
+# template-vs-vivo, e tocar o validate.yml antes disso fabricaria o
+# drift que o 183 existe para gradear. A extensão do `find` do
+# shellcheck do validate.yml é o passo de MIGRAÇÃO pós-183-W2.
+#
+# NÃO-TEMPLATIZADO por decisão registrada: cerimônia com pinentry, dois
+# rails de signer e delta guard é superfície DESTE repositório; este
+# workflow nunca é entregue a adopters (o PLAN-183 não o herda).
+#
+# CI é O GATE (a perna local de pre-commit é advisory, instalável via
+# .claude/scripts/local/install-ceremony-precommit.sh, bypassável por
+# construção e nunca contada como camada de enforcement).
+#
+# Autolimitação (debate r1 F6): este gate cobre as classes SINTÁTICAS
+# da seção A do catálogo (PLAN-174/catalog.md); NÃO cobre retomada,
+# idempotência, fronteira irreversível remota nem binding de evidência
+# por conteúdo (seção B) — pauta permanente do rail humano/cross-model.
+
+name: Ceremony script lint
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".claude/plans/**/*.sh"
+      - ".claude/scripts/local/generate-ceremony.sh"
+      - ".claude/scripts/check-ceremony-script.py"
+      - ".claude/scripts/ceremony-lint-waivers.json"
+      - ".github/workflows/ceremony-lint.yml"
+  pull_request:
+    paths:
+      - ".claude/plans/**/*.sh"
+      - ".claude/scripts/local/generate-ceremony.sh"
+      - ".claude/scripts/check-ceremony-script.py"
+      - ".claude/scripts/ceremony-lint-waivers.json"
+      - ".github/workflows/ceremony-lint.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ceremony-lint-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ceremony-lint:
+    name: ceremony-lint (descoberta por conteúdo + classes do catálogo)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # SHA-pinned: actions/checkout (mesmo pin do restante do repo)
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Run ceremony lint (fail-closed; imprime conjunto descoberto + piso)
+        run: |
+          set -uo pipefail
+          python3 .claude/scripts/check-ceremony-script.py
+          rc=$?
+          echo "ceremony-lint exit: $rc"
+          exit "$rc"
+
+      - name: Publish discovered set + waiver count to step summary
+        if: always()
+        run: |
+          set -uo pipefail
+          {
+            echo "## ceremony-lint — conjunto descoberto"
+            echo '```'
+            python3 .claude/scripts/check-ceremony-script.py --list
+            echo '```'
+            echo ""
+            echo "Waivers ativos (sha256-pinados, re-armam em edição):"
+            python3 - <<'PY'
+          import json
+          ws = json.load(open(".claude/scripts/ceremony-lint-waivers.json"))
+          print(f"{len(ws)} waiver(s)")
+          PY
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  shellcheck-ceremony:
+    name: shellcheck cirúrgico sobre o conjunto descoberto
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      # Flags CIRÚRGICAS do debate r1 (F2): check-extra-masked-returns
+      # (SC2312 — a classe A1 que custou o round 17). NUNCA --enable=all
+      # (422 SC2250 + 91 SC2292 de ruído medidos nos 3 scripts do round
+      # 5). ADVISORY nesta fase: o gate BLOCKING é o job ceremony-lint;
+      # promoção a gate = decisão registrada na W2, nunca silenciosa.
+      - name: shellcheck (advisory, flags cirúrgicas)
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          mapfile -t FILES < <(python3 .claude/scripts/check-ceremony-script.py --list)
+          printf 'conjunto: %s arquivo(s)\n' "${#FILES[@]}"
+          shellcheck --version | head -2
+          shellcheck -S warning --enable=check-extra-masked-returns "${FILES[@]}" \
+            > shellcheck-ceremony.txt 2>&1 || true
+          wc -l shellcheck-ceremony.txt
+          {
+            echo "## shellcheck-ceremony (advisory)"
+            echo '```'
+            head -100 shellcheck-ceremony.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
