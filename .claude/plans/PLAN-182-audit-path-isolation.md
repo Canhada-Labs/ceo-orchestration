@@ -273,14 +273,23 @@ r11 confirmou 3/4 e apontou sobra textual na nota histórica (N1);
       não acompanham o log". Medido: sob `PATH`-only (coluna `sem-env`)
       os três são **co-locados** — não há divergência ali. Quem PARTE a
       família é **`CEO_AUDIT_LOG_PATH`**: move o log e deixa para trás o
-      `audit-log.lock`, o `audit-log.errors` **e a `audit-key`**. Ou
-      seja, dois projetos podem escrever logs distintos compartilhando a
-      MESMA chave HMAC — a garantia do ADR-079 — e o mesmo lock. O botão
-      COERENTE é `CEO_AUDIT_LOG_DIR`, que move os 12 juntos. Assertado
-      nos dois sentidos (`test_log_path_splits_lock_errors_and_key_from_the_log`
-      carrega o controle negativo do `sem-env` co-locado), e ambas as
-      asserções passaram por **controle positivo**: plant de anchor
-      quebrado e plant que apaga a divergência deixam o pytest vermelho.
+      `audit-log.lock` e o `audit-log.errors`. Consequência de tenancy:
+      dois projetos com logs distintos ainda **serializam no mesmo lock**
+      e despejam breadcrumb no **mesmo arquivo de errors**. O botão
+      COERENTE é `CEO_AUDIT_LOG_DIR`, que move os 12 juntos.
+      **Correção de uma afirmação que esta seção chegou a carregar (S317,
+      pega pelo CI):** a `audit-key` **acompanha** o log — ela NÃO fica
+      para trás. A redação anterior dizia o contrário e concluía que dois
+      projetos poderiam escrever sob a MESMA chave HMAC; era artefato do
+      symlink `/tmp` → `/private/tmp` do macOS lido por comparação de
+      **prefixo de string**, e o Linux do CI reprovou. As asserções agora
+      normalizam com `realpath` dos dois lados — sem isso o teste media o
+      formato do caminho, não o destino. Assertado nos dois sentidos
+      (`test_log_path_leaves_lock_and_errors_behind` carrega o controle
+      negativo do `sem-env` co-locado e a asserção positiva de que a chave
+      acompanha), e ambas passaram por **controle positivo**: plant de
+      anchor quebrado e plant que apaga a divergência deixam o pytest
+      vermelho.
 - [x] `[P0][US3]` (medido S316 — anexo `PLAN-182/w0-medicao-S316.md`) Medir o estado do log histórico com **os dois**
       instrumentos — `audit-verify-chain.py` para a pergunta de cadeia e
       `check-audit-hmac-null.py` — porque **o delta entre eles é a

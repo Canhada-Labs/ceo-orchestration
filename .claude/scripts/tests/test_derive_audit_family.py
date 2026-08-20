@@ -136,37 +136,58 @@ class TestArtifactEnvMatrixUS2Extended:
 
     def test_log_dir_moves_the_whole_family_together(self):
         # CEO_AUDIT_LOG_DIR e o botao COERENTE: log, lock, errors e a chave
-        # HMAC vao juntos para o dir novo.
+        # HMAC vao juntos para o dir novo. realpath pelo mesmo motivo do
+        # teste acima — no macOS /tmp e symlink e a comparacao por prefixo
+        # mede formato em vez de destino.
         p = run_tool("--matrix")
         m = json.loads(p.stdout)
         col = "CEO_AUDIT_LOG_DIR"
+        moved_dir = os.path.realpath("/tmp/fake-audit")
         for anchor in ("audit_emit._log_path", "audit_emit._lock_path",
                        "audit_emit._errors_path", "audit_hmac.key_path"):
-            assert m[anchor][col].startswith("/tmp/fake-audit/"), (
-                anchor, m[anchor][col])
+            got = os.path.realpath(m[anchor][col])
+            assert got.startswith(moved_dir + os.sep), (anchor, got)
 
-    def test_log_path_splits_lock_errors_and_key_from_the_log(self):
+    def test_log_path_leaves_lock_and_errors_behind(self):
         # O ACHADO da US2, e a correcao do enunciado: o plano dizia que o
         # lock e o errors nao acompanham o log "sob PATH-only". Medido: sob
         # PATH-only tudo fica co-locado; quem PARTE a familia e
-        # CEO_AUDIT_LOG_PATH — move o log e deixa para tras o lock, o errors
-        # E a audit-key. Dois projetos podem escrever logs distintos
-        # compartilhando a MESMA chave HMAC, que e a garantia do ADR-079.
+        # CEO_AUDIT_LOG_PATH — move o log e deixa para tras o LOCK e o
+        # ERRORS. Consequencia de tenancy: dois projetos com logs distintos
+        # ainda serializam no MESMO lock e despejam breadcrumb no MESMO
+        # arquivo de errors.
+        #
+        # A `audit-key` NAO entra nesta lista — ela ACOMPANHA o log. A
+        # primeira redacao deste teste dizia que ela ficava para tras: era
+        # artefato do symlink /tmp -> /private/tmp do macOS lido por
+        # comparacao de prefixo de string. O CI (Linux) reprovou, e com
+        # razao. Dai o realpath abaixo: sem ele a assercao mede o formato do
+        # caminho, nao o destino dele.
         p = run_tool("--matrix")
         m = json.loads(p.stdout)
         col = "CEO_AUDIT_LOG_PATH"
-        assert m["audit_emit._log_path"][col].startswith("/tmp/fake-audit/")
-        for left_behind in ("audit_emit._lock_path", "audit_emit._errors_path",
-                            "audit_hmac.key_path"):
-            assert not m[left_behind][col].startswith("/tmp/fake-audit/"), (
+        moved_dir = os.path.realpath("/tmp/fake-audit")
+
+        def _under_moved(value):
+            return os.path.realpath(value).startswith(moved_dir + os.sep)
+
+        assert _under_moved(m["audit_emit._log_path"][col])
+        # a chave HMAC acompanha o log (mede o DESTINO, nao o prefixo)
+        assert _under_moved(m["audit_hmac.key_path"][col]), (
+            "a audit-key parou de acompanhar o log — isso muda a conclusao "
+            "de tenancy do plano, atualize os dois")
+        # o lock e o errors NAO acompanham: e essa a divergencia
+        for left_behind in ("audit_emit._lock_path", "audit_emit._errors_path"):
+            assert not _under_moved(m[left_behind][col]), (
                 "%s acompanhou o log — a divergencia sumiu, atualize o plano"
                 % left_behind)
         # controle negativo do mesmo fato: sob PATH-only (sem-env) os tres
         # compartilham o dir, entao a divergencia NAO e do caminho default.
         base = "sem-env"
-        log_dir = m["audit_emit._log_path"][base].rsplit("/", 1)[0]
+        log_dir = os.path.realpath(m["audit_emit._log_path"][base]).rsplit("/", 1)[0]
         for anchor in ("audit_emit._lock_path", "audit_emit._errors_path"):
-            assert m[anchor][base].rsplit("/", 1)[0] == log_dir
+            got = os.path.realpath(m[anchor][base]).rsplit("/", 1)[0]
+            assert got == log_dir, (anchor, got, log_dir)
 
     def test_env_domain_is_derived_not_recalled(self):
         # Bounding rule: o dominio vem do codigo, e o teste falha se alguem
