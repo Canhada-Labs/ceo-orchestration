@@ -247,21 +247,21 @@ r11 confirmou 3/4 e apontou sobra textual na nota histórica (N1);
       equivalência sobre as 33 vars de `env-inventory.json`, e registrar
       que sob `PATH`-only o lock e o errors **não** acompanham o log.
       Check: pytest da matriz artefato x env; cada celula asserta o caminho resolvido de cada modulo
-- [ ] `[P0][US3]` Medir o estado do log histórico com **os dois**
+- [x] `[P0][US3]` (medido S316 — anexo `PLAN-182/w0-medicao-S316.md`) Medir o estado do log histórico com **os dois**
       instrumentos — `audit-verify-chain.py` para a pergunta de cadeia e
       `check-audit-hmac-null.py` — porque **o delta entre eles é a
       resposta**. Anexar a saída bruta.
       Check: as duas saidas brutas anexadas ao plano, com o delta explicado por escrito
-- [ ] `[P0][US5]` Inventário do **diretório** por artefato: dono,
+- [x] `[P0][US5]` (medido S316 — anexo `PLAN-182/w0-medicao-S316.md`; 46 entradas de topo) Inventário do **diretório** por artefato: dono,
       semântica de compartilhamento e **modo de arquivo**. Hoje há 45
       entradas de topo, `state/` com 129.661 arquivos, e modos 0644/0600
       misturados.
       Check: tabela artefato/dono/compartilhamento/modo cobrindo as 45 entradas de topo
-- [ ] `[P0][US6]` Atribuibilidade: histograma de `project`, presença de
+- [x] `[P0][US6]` (medido S316 — anexo; veredito de junção: PARCIAL, 46,6% sem rota) Atribuibilidade: histograma de `project`, presença de
       `session_id`, e **veredito explícito sobre existir chave de
       junção** — hoje medida como inexistente.
       Check: veredito escrito "existe chave de juncao: sim/nao", com o comando que o produz
-- [ ] `[P0][US7]` Reconciliar os resolvedores **já shipados**: as quatro
+- [x] `[P0][US7]` (medido S316 — anexo; veredito por família registrado) Reconciliar os resolvedores **já shipados**: as quatro
       implementações divergentes mais a convenção repo-local
       (`<repo>/.claude/state/audit-log.jsonl`, escrita por
       `_lib/federation/handlers/audit_event_push.py:234` e lida como
@@ -272,6 +272,50 @@ r11 confirmou 3/4 e apontou sobra textual na nota histórica (N1);
       instalados, `templates/`, `install.sh`, `upgrade.sh`,
       `settings.base.json`, `dist/ceo-plugin/hooks/`.
       Check: none (levantamento — a saida e a lista de superficies)
+
+### Registro de execução — W0 medição por fan-out (S316, 2026-08-20)
+
+Unidades US3/US5/US6/US7 executadas por fan-out read-only
+(`wf_87d4181b-bba`, 4 agentes; saída bruta anexada em
+`PLAN-182/w0-medicao-S316.md`). Manchetes que reemitem a W1:
+
+- **US3 (o delta entre os dois instrumentos É a resposta):** hmac-null
+  = verde nos 20 arquivos (0 defeitos-de-nascença em 293.720 linhas);
+  verify-chain = 17/19 rotacionados REPROVAM. Censo completo (mesma
+  `_lib`): **45.783 elos quebrados (15,6%)**, 99,8% em eventos
+  spool-drenados `policy_*` com `project:""`. Sondas de re-link TODAS
+  negativas ⇒ assinatura de **FORK por escritores concorrentes
+  multi-tenant**, não de adulteração pós-hoc (que produziria 1 quebra
+  isolada com sucessor íntegro). Só 2 arquivos (dias mono-escritor) e o
+  log vivo pós-rotação verificam ponta a ponta. **A cadeia histórica é
+  irrecuperável por-tenant — a decisão da W2 (arquivar e recomeçar)
+  fica corroborada pela medição.**
+- **US6:** junção = **PARCIAL** — 53,4% juntam a projeto; **46,6%
+  (136.877 eventos) sem NENHUMA rota**. Janela S315 reconstruída EXATA
+  (prefixo [0:15355] de `audit-log-2026-08-17.jsonl`). Delta pós-S315:
+  +1.530 eventos, **226 não-atribuíveis (~14,8% do fluxo novo)** — a
+  taxa do vazamento é MAIOR que os ~6% estimados no §1; a unidade de
+  emissores remanescentes da W2 é obrigatória, não opcional.
+- **US5:** 46 entradas de topo mapeadas a dono lógico; TODAS as
+  famílias caem no literal (semântica real = por-`$HOME`); modos
+  INCONSISTENTES (5 logs rotacionados 0644; `cache/` e
+  `tool-lifecycle/` 0755); `speculative-ledger.json` ÓRFÃO (zero
+  escritores vivos); **DOIS locks de convenções distintas coexistem**
+  (`audit-log.lock` via audit_emit vs `audit-log.jsonl.lock` via
+  filelock) — o F12 confirmado; `state/` = 133.124 arquivos.
+- **US7:** 4 famílias + repo-local, com veredito por consumidor:
+  auditoria ⇒ literal vence e readers DELEGAM ao resolvedor do writer
+  (precedente PLAN-105); memória/transcripts ⇒ slug nativo do harness;
+  CLIs ⇒ colapsar as 6 cópias da cadeia 4-step em delegação.
+  `state_store._state_root()` é o único resolvedor parametrizado — o
+  candidato natural da W1. **BUG VIVO novo achado:**
+  `check_anti_ceo_overhead.py:213` escreve HOJE num dir slug de
+  duplo-traço (`--Users-…`) — terceira grafia da família slug; entra na
+  família derivada da US1 e na cura da W1.
+
+**Seguem abertos no W0:** US1 (derive-audit-family.py — a ferramenta
+âncora), US2 (matriz de precedência por artefato) e US4 (superfícies de
+entrega). Nenhuma outra wave executa antes de W0 fechar (AC-6).
 
 ### W1 — Resolvedor único (esboço; reemitir após a W0)
 
