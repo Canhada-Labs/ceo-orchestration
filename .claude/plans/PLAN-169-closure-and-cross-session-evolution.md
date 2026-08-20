@@ -701,11 +701,18 @@ o W1.3 (scoped permissions) do 178."
 
 Executado o que o próprio W4 manda executar primeiro (W4.1.0, W4.2.0,
 probe-first do W4.3): a fatia verificável em DISCO, read-only, $0.
-**Ressalva do W4.3 [pair-rail r3]:** o probe que o W4.3 EXIGE — se
-`agent(...,{model})` do Workflow deixou de ser INERTE na versão
-corrente — **NÃO foi rodado nesta fatia** e segue **ABERTO**. Sem ele,
-nada de tier routing em Workflow pode ser reivindicado; a limitação do
-ADR-144 §S220 permanece valendo como está.
+**Ressalva do W4.3 [pair-rail r3] — FECHADA em S316 (2026-08-20):** o
+probe exigido FOI rodado no harness 2.1.237 (`wf_9ddadaab-12f`, 2
+agentes): com `opts.model='haiku'` o modelo SERVIDO nos turnos do
+transcript foi `claude-haiku-4-5-20251001`; o controle sem override
+herdou `claude-fable-5` (evidência: `agent-a3fbe640....jsonl` /
+`agent-a8dea319....jsonl` + `.meta.json`, campo model do envelope de
+resposta — servido, não pedido). **Veredito: `agent(...,{model}) NÃO é
+mais inerte — o rail Workflow ROTEIA modelo na versão corrente.** A
+limitação do ADR-144 §S220 envelheceu e precisa de emenda quando o
+W4.3 executar (a claim "opts.model é INERTE" citada no AC-3/178 e na
+skill eval-baseline-n20 herda esta atualização). Tier routing em
+Workflow passa a ser reivindicável APÓS a emenda do ADR-144.
 Probes que exigem duas sessões vivas ou estouro real de quota ficam
 nomeados abaixo como operador-dependentes — não foram simulados nem
 inferidos.
