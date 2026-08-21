@@ -290,6 +290,29 @@ class TestFamilyFollowsLog(TestEnvContext):
                          "errors must follow the moved log")
         self.assertEqual(key.parent.resolve(), resolved,
                          "audit-key already followed (audit_hmac cascade)")
+        # rail r1 P1-2: EVERY writer of the moved log locks the SAME
+        # parent — a second writer on the default-dir lock would allow
+        # interleaved appends on one HMAC log.
+        env2 = _env_for(self.home, PROJ_A)
+        env2["CEO_AUDIT_LOG_PATH"] = str(log_dir / "audit-log.jsonl")
+        with mock.patch.dict(os.environ, env2, clear=True):
+            spool_writer._reset_caches_for_test()
+            self.assertEqual(
+                spool_writer._canonical_log_lock().parent.resolve(), resolved,
+                "spool_writer lock must follow the moved log (P1-2a)")
+            import importlib.util as _u
+            spec = _u.spec_from_file_location(
+                "audit_log_probe",
+                Path(__file__).resolve().parent.parent / "audit_log.py")
+            al = _u.module_from_spec(spec)
+            spec.loader.exec_module(al)
+            paths = al.audit_paths()
+            self.assertEqual(
+                paths["lock"].parent.resolve(), resolved,
+                "audit_log lock must follow the moved log (P1-2b)")
+            self.assertEqual(
+                paths["err"].parent.resolve(), resolved,
+                "audit_log errors must follow the moved log (P1-2b)")
 
     def test_default_family_is_one_dir(self) -> None:
         from _lib import audit_emit

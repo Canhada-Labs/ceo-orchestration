@@ -57,7 +57,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple
 import sys as _sys_rp
 from pathlib import Path as _P_rp
-_h_rp = _P_rp(__file__).resolve().parents[2] / "hooks"
+_h_rp = _P_rp(__file__).resolve().parents[1] / "hooks"  # .claude/scripts -> .claude/hooks (rail r1 P1-1)
 if str(_h_rp) not in _sys_rp.path:
     _sys_rp.path.insert(0, str(_h_rp))
 from _lib import runtime_paths as _rp  # noqa: E402  # PLAN-182 W1 single resolver

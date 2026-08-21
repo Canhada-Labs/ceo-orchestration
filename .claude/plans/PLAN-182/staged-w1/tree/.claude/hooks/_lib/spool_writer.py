@@ -365,12 +365,26 @@ def _canonical_log_path() -> Path:
     return _project_dir_from_env() / "audit-log.jsonl"
 
 
+def _log_family_dir() -> Path:
+    """Dir the lock/errors sidecars must share with the LOG.
+
+    PLAN-182 W1 rail r1 P1-2: mirrors audit_emit._log_family_dir()
+    byte-for-byte — when CEO_AUDIT_LOG_PATH moves the log, EVERY writer
+    of that log locks the moved parent (two writers on one HMAC log
+    under different locks = interleaved appends).
+    """
+    env = os.environ.get("CEO_AUDIT_LOG_PATH")
+    if env:
+        return Path(env).resolve().parent
+    return _project_dir_from_env()
+
+
 def _canonical_log_lock() -> Path:
     """Mirror audit_emit._lock_path() — sibling .lock file."""
     env = os.environ.get("CEO_AUDIT_LOG_LOCK")
     if env:
         return Path(env)
-    return _project_dir_from_env() / "audit-log.lock"
+    return _log_family_dir() / "audit-log.lock"
 
 
 def _errors_path() -> Path:
@@ -378,7 +392,7 @@ def _errors_path() -> Path:
     env = os.environ.get("CEO_AUDIT_LOG_ERR")
     if env:
         return Path(env)
-    return _project_dir_from_env() / "audit-log.errors"
+    return _log_family_dir() / "audit-log.errors"
 
 
 def _spool_path(pid: int) -> Path:

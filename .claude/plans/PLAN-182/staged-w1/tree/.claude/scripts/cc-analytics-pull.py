@@ -47,6 +47,13 @@ import urllib.request
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Tuple
 
+# PLAN-182 W1 single resolver (rail r1 P2-5) — .claude/scripts -> .claude/hooks
+from pathlib import Path as _P_rp
+_h_rp = _P_rp(__file__).resolve().parents[1] / "hooks"
+if str(_h_rp) not in sys.path:
+    sys.path.insert(0, str(_h_rp))
+from _lib import runtime_paths as _rp  # noqa: E402
+
 _API_BASE = "https://api.anthropic.com"
 _ALLOWED_NETLOC = urllib.parse.urlsplit(_API_BASE).netloc   # the ONLY host the admin key may reach
 _ENDPOINT = "/v1/organizations/usage_report/claude_code"
@@ -54,7 +61,7 @@ _ANTHROPIC_VERSION = "2023-06-01"
 _USER_AGENT = "ceo-orchestration/cc-analytics-pull (PLAN-135 W5 O3)"
 _ENV_KEY = "CEO_ANALYTICS_ADMIN_KEY"          # the ONLY key source — see module docstring
 _ENV_SNAPSHOT = "CEO_ANALYTICS_SNAPSHOT"
-_DEFAULT_SNAPSHOT = "~/.claude/projects/<native-slug>/cc-analytics-snapshot.json"
+_DEFAULT_SNAPSHOT = None  # resolvido em default_snapshot_path() via _rp (rail r1 P2-5)
 _SNAPSHOT_SCHEMA = "cc-analytics-snapshot/v1"
 _TIMEOUT_S = 30
 _MAX_PAGES_PER_DAY = 50                       # runaway-cursor guard (50 × limit=1000 users/day is plenty)
@@ -76,7 +83,12 @@ DORMANT_MSG = (
 
 
 def default_snapshot_path() -> str:
-    return os.path.expanduser(os.environ.get(_ENV_SNAPSHOT) or _DEFAULT_SNAPSHOT)
+    env = os.environ.get(_ENV_SNAPSHOT)
+    if env:
+        return os.path.expanduser(env)
+    # PLAN-182 W1 (rail r1 P2-5): derivado do resolvedor unico — nunca um
+    # placeholder literal em path de escrita.
+    return str(_rp.runtime_state_dir() / "cc-analytics-snapshot.json")
 
 
 def _redact(text: str, key: Optional[str]) -> str:

@@ -133,6 +133,23 @@ CLAUDE.md §5 + frontmatter do plano curados no MESMO lote.
    atualizados no pack.
 5. **dist/** não é rastreado (build local) — regenera das fontes curadas.
 
+## Rail codex r1 (S319 madrugada) — 6 achados, 5 curados, 1 pushback fundamentado
+
+| # | Achado | Disposição |
+|---|---|---|
+| P1-1 | ceo-cost `parents[2]` → CLI standalone quebrado | **CURADO** (`parents[1]`; prova de vida standalone) |
+| P1-2 | locks divergentes: audit_emit seguia o log movido, spool_writer/audit_log não | **CURADO** — family-follows-log nos 3 escritores (mesma derivação `resolve().parent`) + asserts de paridade dos 3 no teste P0 |
+| P1-3 | "archive/custódia antes do writer switch ausente do patch" | **PUSHBACK fundamentado**: por DESIGN o pack é staged e NÃO executa migração — a custódia é decisão do Owner (W2) e a migração roda NO SCRIPT DE LAND da cerimônia, na ordem (1) archive/custódia → (2) aplicar tree/ → (3) `verify_chain()` gate. O plano (§W2) e este draft já o exigem; ordem agora EXPLÍCITA abaixo |
+| P1-4 | import top-level de runtime_paths viola fail-open do hook em partial upgrade | **CURADO** — guard + `_rp_state_dir()` com fallback legado marcado `rp-allow: partial-upgrade-fallback` + stderr, nos 11 hooks entrypoint (1ª aplicação criou recursão no corpo do guard — pega pela suite, des-recursada, 154/154) |
+| P2-5 | `<native-slug>` LITERAL em string de código (cc-analytics) | **CURADO** — derivação real via resolvedor + prova de vida; varredura confirmou caso único (demais hits são docstrings) |
+| P2-6 | SPEC v1 normativa ainda com o literal | **CURADO** — audit-log.schema.md §Summary + state-stores.schema.md defaults → `<native-slug>` com nota v2.58 |
+
+**Ordem OBRIGATÓRIA do script de land (P1-3):**
+1. Custódia (braço A: mover legado p/ `…pre-W1-archive/` 0500; braço B: copiar chain+key+salt p/ o dir slug);
+2. Aplicar `tree/` nos paths canônicos (sob sentinel);
+3. `verify_chain()` no destino + controle positivo de permissão;
+4. Só então o commit de land.
+
 ## Fila para o Owner (manhã)
 
 1. **Custódia W2: braço A ou B** (A recomendado pela medição US3).

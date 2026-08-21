@@ -8,8 +8,15 @@
 Append-only JSONL event stream at (out-of-repo):
 
 ```
-${CEO_AUDIT_LOG_PATH:-$HOME/.claude/projects/ceo-orchestration/audit-log.jsonl}
+${CEO_AUDIT_LOG_PATH:-$HOME/.claude/projects/<native-slug>/audit-log.jsonl}
 ```
+
+> **v2.58 (PLAN-182 W1 / ADR-001 S318):** `<native-slug>` is the Claude Code
+> path-based slug of the project's absolute path (`/` → `-`), resolved by the
+> single family resolver `_lib/runtime_paths.py`. The former literal default
+> (`ceo-orchestration`) is the pre-W1 legacy location; migration/custody of the
+> historical chain is governed by the PLAN-182 W2 decision recorded in the W1
+> land sentinel.
 
 ### Schema versions
 

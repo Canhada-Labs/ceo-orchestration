@@ -214,9 +214,14 @@ def _project_state_dir() -> Path:
     modes item); pre-existing legacy ``--`` trees are left untouched
     (ephemeral 5-min windows age out on their own).
     """
-    from _lib import runtime_paths as _runtime_paths
-
-    base = _runtime_paths.runtime_state_dir() / "state"
+    try:
+        from _lib import runtime_paths as _runtime_paths
+        base = _runtime_paths.runtime_state_dir() / "state"
+    except Exception:  # pragma: no cover — partial upgrade: FAIL-OPEN (rail r1 P1-4)
+        import sys as _s
+        _s.stderr.write("# hook: _lib/runtime_paths ausente — fallback legado\n")
+        _h = os.environ.get("HOME") or str(Path.home())
+        base = Path(_h) / ".claude" / "projects" / "ceo-orchestration" / "state"  # rp-allow: partial-upgrade-fallback
     try:
         base.mkdir(parents=True, exist_ok=True, mode=0o700)
     except OSError:

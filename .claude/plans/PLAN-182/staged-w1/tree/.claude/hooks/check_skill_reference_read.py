@@ -62,7 +62,26 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 _HOOKS_DIR = Path(__file__).resolve().parent
 if str(_HOOKS_DIR) not in sys.path:
     sys.path.insert(0, str(_HOOKS_DIR))
-from _lib import runtime_paths as _rp  # noqa: E402  # PLAN-182 W1 single resolver
+try:
+    from _lib import runtime_paths as _rp  # noqa: E402  # PLAN-182 W1 single resolver
+except Exception:  # pragma: no cover — partial upgrade: hook stays FAIL-OPEN (rail r1 P1-4)
+    _rp = None  # type: ignore[assignment]
+
+
+def _rp_state_dir():
+    """Resolver com fallback de partial-upgrade (arquivo novo ausente).
+
+    Fail-open: o hook NUNCA crasha por falta do resolvedor; degrada ao
+    comportamento legado com aviso em stderr.
+    """
+    if _rp is not None:
+        return _rp.runtime_state_dir()
+    import sys as _s
+    _s.stderr.write("# hook: _lib/runtime_paths ausente — fallback legado (partial upgrade)\n")
+    from pathlib import Path as _P
+    import os as _o
+    _h = _o.environ.get("HOME") or str(_P.home())
+    return _P(_h) / ".claude" / "projects" / "ceo-orchestration"  # rp-allow: partial-upgrade-fallback
 
 
 # ---------------------------------------------------------------------------
@@ -118,7 +137,7 @@ def _emit_audit_breadcrumb(message: str) -> None:
         if not err_path:
             home = os.environ.get("HOME") or str(Path.home())
             err_path = str(
-                _rp.runtime_state_dir()
+                _rp_state_dir()
                 / "audit-log.errors"
             )
         Path(err_path).parent.mkdir(parents=True, exist_ok=True)
@@ -159,7 +178,7 @@ def _audit_log_path() -> Path:
         return Path(env)
     home = os.environ.get("HOME") or str(Path.home())
     return (
-        _rp.runtime_state_dir() / "audit-log.jsonl"
+        _rp_state_dir() / "audit-log.jsonl"
     )
 
 
@@ -171,7 +190,7 @@ def _session_state_path(session_id: str) -> Path:
     else:
         home = os.environ.get("HOME") or str(Path.home())
         base = (
-            _rp.runtime_state_dir() / "state" / "skill-read-sessions"
+            _rp_state_dir() / "state" / "skill-read-sessions"
         )
     # Sanitize session_id to filesystem-safe chars.
     safe = "".join(
