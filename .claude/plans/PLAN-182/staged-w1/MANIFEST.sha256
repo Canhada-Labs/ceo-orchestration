@@ -35,6 +35,7 @@ a016fd97a128b255da57a6bf322486628c468bd12880f04b4bf04efd59f19f07  ./.claude/hook
 a9de5da672189b20f105c136c77d49fcc5b58c45c6e940625e607b82111675c5  ./.claude/hooks/tests/test_injection_salt.py
 9f0495428979c5e611b9e6399c1b910508d5c298d946b85c298d5a50cdd392bd  ./.claude/hooks/tests/test_runtime_paths.py
 a4c01d783e623c86d1ae2e1545dfe73647a7260d4d42d9f8dd9d023e2ed8a4eb  ./.claude/hooks/tests/test_w5_scrub_enforcement.py
+a3a71e902c4de9020bcf0c4daf78126e0194f71481455e97ec81429f37c3bc9a  ./.claude/plans/PLAN-182-audit-path-isolation.md
 69101254257ab0190f865aac3d16e5c8670452a470774ee02a0578b08a4d5abe  ./.claude/scripts/audit-dashboard.py
 4fb2200373599c9421370b501a3def6e3407d8b1fda68b2b930a14d9e8cbfa44  ./.claude/scripts/audit-log-retain.py
 996eb7e9b8cf6f3d9b9d12c7787bfbed6cedaf0d238a33e8f10b448724eed83f  ./.claude/scripts/audit-query.py
@@ -90,7 +91,7 @@ ce4fab73647ee8f6ceb3cc33f128b8ce51df21c27760a80ebc3ede2d16877177  ./.claude/scri
 01d6b9bfb4cbdd7cf72a035265cf2a837fb7e2264336312c4df935d407509a34  ./.github/workflows/mcp-smoke.yml
 5092c18facd09dd8a4594877ddb96205e26baae12f0c78b503ea0915c37847e1  ./.github/workflows/supply-chain-watch.yml
 01af21169f6741e457be002d6c838dea0a34d7e9f53fe4ba273c950ef8315fba  ./CHANGELOG.md
-c677cfde6d46ae451b9478f41d6578a1a70852be0fcb81b6269896553b0b0789  ./CLAUDE.md
+d212421d830eb5b22c38d2cc0de9e7e3b52a700f4aec00cc5f102212928f2ccb  ./CLAUDE.md
 ed44c07e722d95c03f01ea3035e42b103e6d26aa20109a06556a3293178dcf6f  ./INSTALL.md
 56f14f43b2ee72c3fe31557cde0e707c25044bff25edba235d30852f51a13f7e  ./README.md
 1ac52e5bdac17956da692b8e27a702406613eebe1b889961f650b2684deabc4c  ./README.pt-BR.md
