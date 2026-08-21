@@ -1,14 +1,16 @@
 # STAGED (S316) — destino: .github/workflows/ceremony-lint.yml
 #
-# A escrita direta em .github/workflows/ foi BLOQUEADA pelo guard
-# ADR-182 (pin do codex: instalado 0.147.0 ≠ pin 0.144.x; o pair-rail
-# de escrita L3+ fail-closed recusa binário não verificado) — o MESMO
-# drift que o W-IM#4/PLAN-172 mediu nesta sessão, com runbook pin-first.
-# Rota de land: (1) Owner executa a cerimônia de re-pin ADR-182
-# (codex-cli-pin.txt + codex-cli-pin-manifest.json) + runbook PLAN-155
-# A12; (2) mover este arquivo para .github/workflows/ceremony-lint.yml
-# byte-idêntico (sem o cabeçalho STAGED até esta linha). Nunca landar
-# com unlock sem cerimônia.
+# REFRESH S319 (madrugada 2026-08-21): o bloqueio original (pin codex
+# 0.144.x ≠ instalado) foi CURADO pelo re-pin 0.147.0 do pack SENT-S318
+# (`32e29b1`; `--verify-codex-pin` = verified no G6). PRÉ-CONDIÇÕES DO
+# LAND HOJE: nenhuma além da cerimônia normal. Rota de land: mover este
+# arquivo para .github/workflows/ceremony-lint.yml byte-idêntico (sem o
+# cabeçalho STAGED até esta linha), sob sentinel GPG (path canônico).
+# Verificado nesta madrugada, no repo vivo: lint exit 0 (blocking 0,
+# 56 descobertos ≥ piso 41, autolimitação impressa), controle positivo
+# R3 acha `grep|tail` nos 4 run-*.sh de PLAN-166/repass-*, pin do
+# checkout `de0fac2e…` idêntico ao validate.yml, waivers.json presente,
+# bash -n verde na perna local.
 #
 # PLAN-174 W2 — gate de scripts de cerimônia (job PRÓPRIO, arquivo NOVO).
 #

@@ -1,7 +1,7 @@
-# STAGED (S316) — destino: .claude/scripts/local/install-ceremony-precommit.sh
-# Escrita direta bloqueada pelo mesmo guard ADR-182 (pin do codex
-# 0.144.x ≠ instalado 0.147.0; pair-rail de escrita L3+ fail-closed).
-# Land junto com ceremony-lint.yml.staged após a cerimônia de re-pin.
+# STAGED (S316; REFRESH S319) — destino: .claude/scripts/local/install-ceremony-precommit.sh
+# Bloqueio original (pin codex) CURADO pelo re-pin 0.147.0 (32e29b1).
+# Land junto com ceremony-lint.yml.staged na cerimônia W2 (sem
+# pré-condições além do sentinel).
 # Conteúdo abaixo é o arquivo final, byte-a-byte (remover este cabeçalho
 # de 8 linhas ao mover).
 #!/bin/bash
