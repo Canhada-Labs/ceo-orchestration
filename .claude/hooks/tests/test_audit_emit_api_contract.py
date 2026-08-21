@@ -764,7 +764,18 @@ _EXPECTED_KNOWN_ACTIONS_SHA256 = (
     # `.claude/plans/PLAN-179/staged-w01/.claude/hooks/_lib/` via
     # sha256(json.dumps(sorted(_KNOWN_ACTIONS))) — the same derivation the
     # byte-identity test below performs.
-    "8a58f2bb7772cf73860ef887961e1900cb0f435f962296b758c513b8a813227a"
+    #
+    # SENT-S318 pack (2026-08-20) — Count: 325 -> 326 (+1
+    # ceremony_lint_unlock_used, the ceremony-lint ADR-186 escape-hatch
+    # breadcrumb parked in 908707e and registered+restored by the signed
+    # pack; PLAN-174 W1 registration completion). Routes through its OWN
+    # `_scrub_ceo_boot_event` branch against
+    # `_CEREMONY_LINT_UNLOCK_USED_ALLOWLIST`, NEVER passthrough. SHA
+    # re-derived from the LANDED audit_emit.py (32e29b1) via the same
+    # sha256(json.dumps(sorted(_KNOWN_ACTIONS))) derivation; the value
+    # matched independently on local darwin and the ubuntu CI matrix
+    # (S318 fix-forward).
+    "486d7a99bacb7d0838e7b1dfc3475e0d07dcfd72c101325a66a2fea28edc3ef4"
 )
 
 
@@ -806,7 +817,7 @@ class AuditEmitPublicSurfaceTests(unittest.TestCase):
         self.assertEqual(
             actual, _EXPECTED_KNOWN_ACTIONS_SHA256,
             f"_KNOWN_ACTIONS drift detected. "
-            f"Count={len(actions)} (expected 325). "
+            f"Count={len(actions)} (expected 326). "
             f"Rebaseline this test + add audit-registry entry if the change is intentional.",
         )
 
@@ -819,8 +830,11 @@ class AuditEmitPublicSurfaceTests(unittest.TestCase):
         # posture toggle, ADR-185; ceremony [SENT-PLAN165]).
         # 325 = 324 + 1 PLAN-179 W0 US2 (context_pressure_observed — the
         # edge-triggered context-pressure breadcrumb, amendment 8.1).
+        # 326 = 325 + 1 PLAN-174 W1 registration completion (SENT-S318 pack,
+        # 2026-08-20: ceremony_lint_unlock_used — ceremony-lint ADR-186
+        # escape-hatch breadcrumb parked in 908707e, registered + restored).
         self.assertEqual(
-            len(audit_emit._KNOWN_ACTIONS), 325,
+            len(audit_emit._KNOWN_ACTIONS), 326,
             "_KNOWN_ACTIONS count drifted from 163 baseline (PLAN-088 S114 Wave 1 +11 actions: "
             "cache_discipline_alerted + first_run_wizard_dispatched + "
             "estimate_calibrator_pipeline_run + subagent_findings_partial_drop + "

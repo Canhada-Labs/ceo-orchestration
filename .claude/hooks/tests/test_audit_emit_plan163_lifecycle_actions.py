@@ -165,7 +165,9 @@ class TestRegistration(_Plan163Base):
         # 321 (PLAN-161) + 2 PLAN-163 T3.1/T3.2 = 323;
         # + 1 PLAN-165 P2 (night_mode_toggled) = 324.
         # + 1 PLAN-179 W0 US2 (context_pressure_observed) = 325.
-        self.assertEqual(len(self.ae._KNOWN_ACTIONS), 325)
+        # + 1 PLAN-174 W1 registration completion, SENT-S318 pack
+        #   (ceremony_lint_unlock_used) = 326.
+        self.assertEqual(len(self.ae._KNOWN_ACTIONS), 326)
 
     def test_never_passthrough(self) -> None:
         for action in ("directory_added_recorded", "notification_lifecycle"):

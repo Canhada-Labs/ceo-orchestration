@@ -1,7 +1,7 @@
 # audit-action registry golden (generated — do not hand-edit)
 # format: v1  source: .claude/hooks/_lib/audit_emit.py::_KNOWN_ACTIONS
 # regenerate: python3 .claude/scripts/check-audit-registry-coverage.py --write-golden
-# count: 325
+# count: 326
 action_required_held
 action_required_rejected
 action_required_resumed
@@ -41,6 +41,7 @@ ceo_boot_check_skipped
 ceo_boot_emitted
 ceo_boot_persona_coverage_score
 ceo_boot_task_candidate_emitted
+ceremony_lint_unlock_used
 chain_reset_marker
 claim_emitted
 codex-reply
