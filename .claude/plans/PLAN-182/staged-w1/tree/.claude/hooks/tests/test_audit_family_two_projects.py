@@ -81,7 +81,9 @@ class TestTwoProjectParity(TestEnvContext):
             with mock.patch.dict(os.environ, _env_for(self.home, proj), clear=True):
                 d = runtime_paths.runtime_state_dir()
                 dirs.append(d)
-                audit_hmac._reset_key_cache_for_test()
+                # rail r2 B1: SEM reset manual — o cache keyed-por-path
+                # re-resolve na troca de projeto (o reset esconderia a
+                # regressao de chave vazada entre projetos).
                 key = audit_hmac.get_or_create_key()
                 keys.append(key)
         self.assertNotEqual(dirs[0], dirs[1], "dirs must differ per project")
@@ -90,7 +92,6 @@ class TestTwoProjectParity(TestEnvContext):
         # same key bytes (so the assertion above is meaningful, not noise)
         with mock.patch.dict(os.environ, _env_for(self.home, PROJ_A), clear=True):
             self.assertEqual(runtime_paths.runtime_state_dir(), dirs[0])
-            audit_hmac._reset_key_cache_for_test()
             self.assertEqual(audit_hmac.get_or_create_key(), keys[0])
 
     def test_negative_control_resolver_removed_goes_red(self) -> None:
@@ -146,7 +147,8 @@ class TestSaltDistinctness(TestEnvContext):
         super().tearDown()
 
     def _salt_for(self, proj: str) -> bytes:
-        injection_salt.reset_cache_for_test()
+        # rail r2 B2: SEM reset manual — o cache keyed-por-path garante o
+        # salt certo na troca de projeto (o reset esconderia o vazamento).
         with mock.patch.dict(os.environ, _env_for(self.home, proj), clear=True):
             return injection_salt.get_instance_salt()
 
@@ -313,6 +315,27 @@ class TestFamilyFollowsLog(TestEnvContext):
             self.assertEqual(
                 paths["err"].parent.resolve(), resolved,
                 "audit_log errors must follow the moved log (P1-2b)")
+
+    def test_both_overrides_family_still_one_dir(self) -> None:
+        """rail r2 D: com CEO_AUDIT_LOG_DIR E CEO_AUDIT_LOG_PATH setados,
+        a familia INTEIRA (log, lock, errors, key) fica no parent do PATH
+        — a precedencia dividida corrompia a cadeia entre escritores."""
+        from _lib import audit_emit
+
+        log_dir = Path(self.home) / "path-wins"
+        log_dir.mkdir(parents=True)
+        env = _env_for(self.home, PROJ_A)
+        env["CEO_AUDIT_LOG_DIR"] = str(Path(self.home) / "dir-loses")
+        env["CEO_AUDIT_LOG_PATH"] = str(log_dir / "audit-log.jsonl")
+        with mock.patch.dict(os.environ, env, clear=True):
+            parents = {
+                audit_emit._log_path().parent.resolve(),
+                audit_emit._lock_path().parent.resolve(),
+                audit_emit._errors_path().parent.resolve(),
+                audit_hmac.key_path().parent.resolve(),
+            }
+        self.assertEqual(parents, {log_dir.resolve()},
+                         f"familia partida entre overrides: {parents}")
 
     def test_default_family_is_one_dir(self) -> None:
         from _lib import audit_emit

@@ -130,17 +130,46 @@ def default_log_path() -> Path:
     if project_dir:
         # Mirror Claude Code's slug derivation: leading dash + path with
         # `/` replaced by `-` (e.g. `/Users/x/foo` → `-Users-x-foo`).
+        pass  # o braco por-projeto abaixo cobre com e sem project_dir
+    # PLAN-182 W1 + rail r3 P1: o log ESCOPADO (resolvedor unico; cobre
+    # CLAUDE_PROJECT_DIR e o fallback por cwd) vence sempre que E ARQUIVO;
+    # o legado so entra quando o escopado ainda nao existe E o legado
+    # existe (leitura de historico pre-migracao), com WARNING nomeando a
+    # fonte; senao devolve o escopado (inexistente => relatorio vazio
+    # honesto do PROJETO, nunca dado alheio).
+    try:
+        scoped = _rp.runtime_state_dir() / "audit-log.jsonl"
+    except OSError:
+        return _rp.legacy_state_dir() / "audit-log.jsonl"
+    if scoped.is_file():
+        return scoped
+    # rail r4: logs ROTACIONADOS do projeto tambem vencem o legado — um
+    # projeto pos-rotacao (so audit-log-YYYY-MM.jsonl) tem historia
+    # propria; cair no legado misturaria dado alheio no --include-rotated.
+    try:
+        if any(scoped.parent.glob("audit-log*.jsonl")):
+            return scoped
+    except OSError:
+        pass
+    legacy = _rp.legacy_state_dir() / "audit-log.jsonl"
+    # rail r7: simetrico ao r4 — o legado tambem conta quando so tem
+    # ROTACIONADOS (audit-log-YYYY-MM.jsonl). Devolver o primary legado
+    # deixa discover_logs achar os irmaos no --include-rotated; devolver
+    # o scoped vazio esconderia a historia pre-migracao inteira.
+    legacy_has_history = legacy.exists()
+    if not legacy_has_history:
         try:
-            # PLAN-182 W1: delegacao ao resolvedor unico (US7 — esta era
-            # uma das copias locais da cadeia, com .resolve() divergente).
-            scoped = _rp.runtime_state_dir() / "audit-log.jsonl"
-            if scoped.exists() or scoped.parent.is_dir():
-                return scoped
+            legacy_has_history = any(
+                legacy.parent.glob("audit-log*.jsonl"))
         except OSError:
-            pass
-    # READER fallback sancionado: dado historico pre-migracao vive no
-    # dir legado ate a decisao de custodia da W2 (leitura, nunca escrita).
-    return _rp.legacy_state_dir() / "audit-log.jsonl"
+            legacy_has_history = False
+    if legacy_has_history:
+        sys.stderr.write(
+            "# ceo-cost: lendo o log LEGADO pre-migracao (%s) — o log do "
+            "projeto ainda nao existe; apos a migracao W1/W2 esta rota "
+            "desaparece\n" % legacy)
+        return legacy
+    return scoped
 
 
 def discover_logs(primary: Path, include_rotated: bool) -> List[Path]:

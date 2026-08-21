@@ -150,6 +150,98 @@ CLAUDE.md §5 + frontmatter do plano curados no MESMO lote.
 3. `verify_chain()` no destino + controle positivo de permissão;
 4. Só então o commit de land.
 
+## Rail codex r2 (S319) — 12 achados (9P1+3P2), 11 curados, 1 residual declarado
+
+| # | Achado | Disposição |
+|---|---|---|
+| A (3×P1+1×P2) | `_rp` sem import em 4 CLIs (braço default que NENHUM teste exercitava) | **CURADO** — bootstrap com âncora segura + PROVA DE VIDA do braço default nos 4; varredura mecânica `(?<![\w])_rp\.` sem binding = 0 restantes |
+| B (2×P1) | caches module-level de KEY e SALT não re-resolvem na troca de projeto (chave/salt do A assinam o B; os testes escondiam com reset manual) | **CURADO** — ambos keyed pelo path resolvido; os resets manuais SAÍRAM dos testes (viraram controles da cura) |
+| C (P1) | slug não-injetivo (`/srv/a-b/c` ≡ `/srv/a/b-c`) | **RESIDUAL DECLARADO** — é a derivação NATIVA do harness (mesma colisão nos dirs de memória); divergir quebraria a co-locação ratificada no ADR-001 S318. Documentado no módulo; alternativa (sufixo hash) fica como opção do Owner |
+| D (P1) | precedência DIR×PATH divergente entre audit_hmac (DIR-first) e o resto (PATH-first) partia a família com AMBOS setados | **CURADO** — regra única: a família segue o LOG EFETIVO (PATH-first) nos 4; controle novo `test_both_overrides_family_still_one_dir` |
+| E (P1) | ceo-cost caía no legado incondicionalmente | **CURADO** — fallback READER só quando o log do projeto não existe E o legado existe, com WARNING nomeando a fonte |
+| F (P1) | dir slug pré-existente 0755 (harness) nunca era apertado | **CURADO** — `runtime_paths.ensure_state_dir()` central (mkdir+chmod self-heal, precedente spool) usado pelos criadores (key, salt) |
+| G (P2) | audit-query lia errors do default com log movido | **CURADO** — family-follows-log na leitura |
+| H (P2) | claim de velocidade "(~µs)" em doc | **CURADO** — removido (contrato no-speed-claims do repo) |
+
+Prova pós-r2: 207/207 nas famílias focadas; suíte completa re-rodada (números no estado da madrugada).
+
+## Rail r3–r10 (S319 madrugada→manhã) — convergência e cura de CLASSE
+
+Trajetória de achados por rodada: **6 → 12 → 2 → 1 → 3 → 3 → 2 → 1 → 2 → 4**.
+Cada rodada atacou bordas mais estreitas; nenhuma classe de PRODUTO
+reapareceu. Curados por rodada:
+
+- **r3 (2):** `ceo-cost` passa a preferir o log ESCOPADO quando é arquivo
+  (o fallback legado não era condicional de fato); `audit-query` ganha o
+  degrau `CEO_AUDIT_LOG_DIR` na cascata do `errors`.
+- **r4 (1):** logs ROTACIONADOS do projeto também vencem o legado
+  (`--include-rotated` não pode misturar história alheia).
+- **r5 (3):** `ensure_state_dir` deixa de apertar dirs escolhidos por
+  override (0750 de compliance/vault é deliberado — `docs/GOVERNANCE.md`);
+  guarda de symlink antes do chmod (path-based chmod SEGUIRIA o link);
+  cenários do fixture passam a usar `patch.dict` escopado.
+- **r6 (3):** `CLAUDE_PROJECT_DIR_NATIVE` entra na lista de overrides que
+  inibem o tighten; identidade dos caches de key e salt vira ABSOLUTA
+  (override relativo + `chdir` entre projetos serviria o cache do A).
+- **r7 (2):** fixture ancora os sidecars herdados (contaminação do audit
+  REAL era possível); fallback legado passa a valer também quando o
+  legado só tem rotacionados (simétrico ao r4).
+- **r8 (1):** `CEO_AUDIT_HMAC_DISABLE` no conjunto apply/drop do worker —
+  forkserver já iniciado não herda limpeza do parent (verde VACUO).
+- **r9 (2):** **preservação de cadeia legada** — numa instalação com
+  `LOG_DIR`/`LOG_PATH` divergentes os sidecars vivem sob `LOG_DIR`;
+  trocar a precedência cunharia chave nova e NENHUMA verificaria a cadeia
+  inteira, então a família CONTINUA no legado (migração = cerimônia).
+  Fixture: cura de CLASSE por domínio derivado + vigia com controle
+  positivo.
+- **r10 (4):** preservação passa a detectar QUALQUER sidecar legado (não
+  só a key de nome default) e o breadcrumb é desacoplado da decisão
+  (stderr fechado não pode quebrar a cadeia). **Fixture: ARQUITETURA
+  INVERTIDA** — 5 rodadas achando a mesma falha com variáveis diferentes
+  é fix-of-fix (PROTOCOL anti-pattern #6); em vez de enumerar o que
+  REMOVER (lista sempre incompleta — o próprio vigia por regex perdia
+  acessos por CONSTANTE), o fixture passou a rodar com env MÍNIMO
+  EXPLÍCITO (`patch.dict(clear=True)` + allowlist neutro). Imune a
+  variável nova POR CONSTRUÇÃO; o vigia saiu por desnecessário. Os
+  workers recebem o env mínimo COMPLETO (não um delta sobre o herdado).
+
+Prova pós-r9: suíte CI-equivalente **P1=0 / P2=0 / P3=0** (zero falhas,
+zero flakes na rodada). Pós-r10: caminhos sync E spool concorrente verdes
+(11/11 no arquivo).
+
+## Rail r11–r12 — o achado mais importante e a RODADA LIMPA
+
+- **r11 (1×P1, REAL):** a inversão de arquitetura do r10 valia só no
+  PARENT — o worker de multiprocessing ainda fazia `update()` sobre o
+  ambiente herdado, então um forkserver já iniciado mantinha o
+  `CEO_AUDIT_SYNC_MODE=1` do pai e **o teste de spool concorrente
+  exercitava, na verdade, o caminho SYNC** (verde vacuoso num teste de
+  regressão de concorrência). Curado com `patch.dict(clear=True)` no
+  filho + **controle do modo efetivo** (cada worker registra o
+  `CEO_AUDIT_SYNC_MODE` que recebeu; o parent assere). Provado nos DOIS
+  sentidos: com o plant do mecanismo (`clear=False`) + veneno `SYNC=1`
+  no pai o controle fica VERMELHO nomeando "env vazou do parent: ['1']";
+  restaurado, 11/11.
+  *Nota de método:* a primeira tentativa de discriminador (medir o que o
+  parent drena) estava ERRADA — o worker drena o próprio spool no
+  `atexit` (`spool_writer:2618`), então `appended` no parent é 0 nos
+  DOIS caminhos. Medir o env que CHEGA no filho é o que discrimina.
+- **r12 — RODADA LIMPA (critério de parada atingido):** *"The
+  path-resolution, per-project cache, audit-family, and test-isolation
+  changes are internally consistent. Focused tests for the affected
+  audit, runtime-path, cost, query, session-graph, and skill-retrieval
+  areas passed."* Zero achados.
+
+**Critério de parada declarado e cumprido:** rodar até APPROVE (não até
+"já achei o suficiente"). 12 rodadas; **35 achados curados**; 1 residual
+declarado (slug não-injetivo = derivação nativa do harness, decisão do
+Owner); 1 pushback fundamentado (migração pertence ao script de land).
+
+Suíte CI-equivalente no estado final: **P1=0 / P2=0 / P3=0** nas rodadas
+pós-r9 e pós-r10; na pós-r11, o único vermelho foi o perf
+`test_100k_search_streams_under_budget` sob `-n auto` concorrente com o
+rail — 3× verde isolado, flake de carga.
+
 ## Fila para o Owner (manhã)
 
 1. **Custódia W2: braço A ou B** (A recomendado pela medição US3).

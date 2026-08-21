@@ -72,11 +72,21 @@ def default_log_path() -> Path:
 
 
 def default_errors_path() -> Path:
-    home = Path(os.environ.get("HOME") or str(Path.home()))
-    default_dir = _rp.runtime_state_dir()
-    return Path(
-        os.environ.get("CEO_AUDIT_LOG_ERR") or str(default_dir / "audit-log.errors")
-    )
+    env = os.environ.get("CEO_AUDIT_LOG_ERR")
+    if env:
+        return Path(env)
+    # rail r2 G: family-follows-log — o errors mora ao lado do LOG efetivo
+    # (com CEO_AUDIT_LOG_PATH setado, os escritores poem o breadcrumb no
+    # parent do PATH; ler do default perderia exatamente esses erros).
+    env_log = os.environ.get("CEO_AUDIT_LOG_PATH")
+    if env_log:
+        return Path(env_log).resolve().parent / "audit-log.errors"
+    # rail r3 P2: espelha a cascata dos ESCRITORES — DIR-only poe o
+    # breadcrumb sob CEO_AUDIT_LOG_DIR.
+    env_dir = os.environ.get("CEO_AUDIT_LOG_DIR")
+    if env_dir:
+        return Path(env_dir) / "audit-log.errors"
+    return _rp.runtime_state_dir() / "audit-log.errors"
 
 
 def discover_logs(primary: Path, include_rotated: bool) -> List[Path]:

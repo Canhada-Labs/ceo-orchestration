@@ -59,6 +59,18 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
+# PLAN-182 W1 single resolver (rail r2 grupo A) — .claude/scripts/* -> .claude/hooks
+import sys as _sys_rp
+from pathlib import Path as _P_rp
+_h_rp = _P_rp(__file__).resolve()
+for _anc_rp in _h_rp.parents:
+    if (_anc_rp / ".claude" / "hooks" / "_lib").is_dir():
+        if str(_anc_rp / ".claude" / "hooks") not in _sys_rp.path:
+            _sys_rp.path.insert(0, str(_anc_rp / ".claude" / "hooks"))
+        break
+from _lib import runtime_paths as _rp  # noqa: E402
+
+
 
 # Resolve _lib/audit_emit + _lib/plan_frontmatter
 _SCRIPTS_DIR = Path(__file__).resolve().parent

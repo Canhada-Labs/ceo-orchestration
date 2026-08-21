@@ -97,7 +97,10 @@ def _salt_path() -> Path:
     return _slug_dir() / _SALT_FILENAME
 
 
-_CACHED_SALT: Optional[bytes] = None
+# PLAN-182 W1 rail r2 B2: keyed pelo _salt_path() resolvido — a troca de
+# projeto mid-process re-resolve; o salt do A nunca vaza para o B (a
+# garantia por-projeto do ADR-079 S318 vale SEM reset manual de teste).
+_CACHED_SALT = None  # type: Optional[tuple]  # (path_str, salt_bytes)
 
 
 def _read_existing(path: Path) -> Optional[bytes]:
@@ -125,8 +128,12 @@ def _generate_and_persist(path: Path) -> bytes:
     file mode ``0o600`` and parent dir mode ``0o700`` (best-effort).
     """
     try:
-        path.parent.mkdir(parents=True, exist_ok=True, mode=_DIR_MODE)
-    except OSError:
+        # rail r2 F + r5: cria e aperta SO no caminho default — um dir
+        # inteiro escolhido via CLAUDE_PROJECT_DIR_NATIVE preserva o modo
+        # que o operador definiu.
+        _native = bool(os.environ.get("CLAUDE_PROJECT_DIR_NATIVE"))
+        _runtime_paths.ensure_state_dir(path.parent, tighten=not _native)
+    except Exception:
         return b""
     try:
         salt = os.urandom(_SALT_BYTES)
@@ -156,18 +163,22 @@ def get_instance_salt() -> bytes:
     such that an empty salt degrades to the unsalted hash.
     """
     global _CACHED_SALT
-    if _CACHED_SALT is not None:
-        return _CACHED_SALT
-
     path = _salt_path()
+    # rail r6: identidade ABSOLUTA (override relativo + chdir nao pode
+    # servir o salt do projeto anterior).
+    path_id = os.path.abspath(str(path))
+    cached = _CACHED_SALT
+    if cached is not None and cached[0] == path_id:
+        return cached[1]
+
     existing = _read_existing(path)
     if existing is not None:
-        _CACHED_SALT = existing
+        _CACHED_SALT = (path_id, existing)
         return existing
 
     salt = _generate_and_persist(path)
     if salt:
-        _CACHED_SALT = salt
+        _CACHED_SALT = (path_id, salt)
         _register_mint(path)
     return salt
 

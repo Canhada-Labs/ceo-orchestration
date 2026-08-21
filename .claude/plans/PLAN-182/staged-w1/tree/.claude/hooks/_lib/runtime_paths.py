@@ -60,6 +60,7 @@ any hook, mirrors ``injection_salt``'s constraint). Python ≥ 3.9.
 from __future__ import annotations
 
 import os
+import stat as stat_mod
 from pathlib import Path
 from typing import Optional, Union
 
@@ -96,9 +97,14 @@ def project_slug(path: Optional[Union["os.PathLike[str]", str]] = None) -> str:
 
     ``/Users/u/my-repo`` → ``-Users-u-my-repo``. Dots, underscores and
     pre-existing dashes are preserved (the ADR-001 amendment normalizes
-    ONLY the separator; the current harness does the same). Cannot
-    collide for two distinct absolute paths — collisions of the bare
-    basename (the cured defect) are structurally impossible.
+    ONLY the separator; the current harness does the same). This kills
+    the cured defect class (two checkouts sharing a BASENAME never
+    collide) but is NOT fully injective: paths differing only in
+    dash-vs-slash positions (``/srv/a-b/c`` vs ``/srv/a/b-c``) share a
+    slug — the SAME residual the native harness derivation has for its
+    memory/transcript dirs (rail r2 C, declared; diverging from the
+    native derivation would break co-location, an ADR-001 S318 Owner
+    decision).
     """
     p = Path(os.path.abspath(os.fspath(path))) if path is not None else project_dir()
     return str(p).replace(os.sep, "-")
@@ -117,8 +123,8 @@ def runtime_state_dir() -> Path:
     mode ``0o700`` (creation stays at the call sites that already own
     mkdir + permission-validation semantics, e.g. ``spool_writer``).
 
-    Deliberately uncached: two ``os.environ.get`` + one optional
-    ``getcwd`` + one ``str.replace`` (~µs). Callers that cache MUST key
+    Deliberately uncached — the work is two ``os.environ.get``, an
+    optional ``getcwd`` and one ``str.replace``. Callers that cache MUST key
     on every input that can change the result
     (``CLAUDE_PROJECT_DIR_NATIVE``, ``CLAUDE_PROJECT_DIR``, ``HOME``,
     and cwd when ``CLAUDE_PROJECT_DIR`` is unset) — the PLAN-182 W1
@@ -128,6 +134,40 @@ def runtime_state_dir() -> Path:
     if native:
         return Path(native)
     return _home() / ".claude" / "projects" / project_slug()
+
+
+def ensure_state_dir(path: Optional[Path] = None,
+                     tighten: bool = True) -> Path:
+    """Create (if needed) and best-effort TIGHTEN the state dir to 0700.
+
+    rail r2 F: the native slug dir often pre-exists 0755 (the harness
+    creates it for memory/transcripts); ``mkdir(mode=0o700,
+    exist_ok=True)`` does NOT change an existing dir mode, so the W1
+    modes invariant needs an explicit, central self-heal (the
+    ``spool_writer._state_dir`` precedent). Never raises: creators stay
+    fail-open; on any error the caller proceeds with the path as-is.
+
+    rail r5 hardening:
+    - ``tighten=False`` (callers pass it when ANY env override selected
+      the directory): only mkdir, NEVER chmod — a deliberately-0750
+      compliance/vault dir chosen by the operator keeps its mode.
+    - symlink guard: a user-owned symlinked state dir is left untouched
+      (path-based chmod would FOLLOW the link and change the target);
+      mirrors the spool_writer O_NOFOLLOW discipline at the cheap end.
+    """
+    d = path if path is not None else runtime_state_dir()
+    try:
+        d.mkdir(parents=True, exist_ok=True, mode=0o700)
+        if not tighten:
+            return d
+        st = os.lstat(str(d))
+        if stat_mod.S_ISLNK(st.st_mode):
+            return d
+        if (st.st_mode & 0o777) != 0o700 and st.st_uid == os.getuid():
+            os.chmod(str(d), 0o700)
+    except OSError:
+        pass
+    return d
 
 
 def legacy_state_dir() -> Path:
