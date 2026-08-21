@@ -188,7 +188,14 @@ def _project_dir_cache_key() -> Tuple[Optional[str], ...]:
     env_native = os.environ.get("CLAUDE_PROJECT_DIR_NATIVE")
     env_proj = os.environ.get("CLAUDE_PROJECT_DIR")
     cwd: Optional[str] = None
-    if not env_dir and not env_native and not env_proj:
+    # rail r15 P2-3: o cwd entra na chave quando NENHUM override absoluto
+    # decide o dir — inclui o caso de um override RELATIVO, que
+    # `project_dir()` resolve CONTRA o cwd. Sem isso, um processo longo
+    # que muda de cwd com CLAUDE_PROJECT_DIR relativo continuaria servindo
+    # o dir do projeto anterior (e pularia a invalidacao dos caches).
+    def _abs(v):
+        return bool(v) and os.path.isabs(v)
+    if not (_abs(env_dir) or _abs(env_native) or _abs(env_proj)):
         cwd = os.getcwd()
     return (env_dir, env_home, env_native, env_proj, cwd)
 
@@ -221,6 +228,37 @@ def _project_dir_from_env() -> Path:
         p = _runtime_paths.runtime_state_dir()
     _PROJECT_DIR_CACHE = (env_key, p)
     return p
+
+
+def _invalidate_per_pid_caches_on_project_switch(old_dir: Path) -> None:
+    """Drop per-PID spool state when the resolved project changes.
+
+    rail r13 P1-1 (cura) + rail r14 (cura da cura): o flush do buffer
+    pendente e feito contra ``old_dir`` — o dir do projeto ANTERIOR, que
+    o chamador ja tem em cache. A primeira versao chamava
+    ``_flush_journal_buffer()``, que resolve o caminho por
+    ``_state_dir()``: como o cache ainda nao tinha sido trocado, aquilo
+    RE-ENTRAVA neste mesmo branch ate ``RecursionError`` e, pior,
+    reescrevia o payload antigo sob o dir do projeto NOVO — a
+    contaminacao cruzada que a invalidacao existe para impedir.
+
+    Fail-open: qualquer erro no flush apenas descarta os caches.
+    """
+    pid = os.getpid()
+    buf = _JOURNAL_BUFFER.get(pid)
+    if buf:
+        try:
+            target = old_dir / "{0}.{1}.journal".format(_JOURNAL_PREFIX, pid)
+            with target.open("ab") as fh:
+                for line in buf:
+                    fh.write(line)
+                fh.flush()
+                os.fsync(fh.fileno())
+        except Exception:  # pragma: no cover — nunca bloqueia a troca
+            pass
+    _SPOOL_HEADER_CACHE.pop(pid, None)
+    _ORDINAL_COUNTER.pop(pid, None)
+    _JOURNAL_BUFFER.pop(pid, None)
 
 
 def _state_dir() -> Path:
@@ -260,6 +298,14 @@ def _state_dir() -> Path:
     cached = _STATE_DIR_CACHE
     if cached is not None and cached[0] == env_key:
         return cached[1]
+    # rail r13 P1-1: os caches POR PID (header/ordinal/journal) nao sao
+    # cobertos pela chave acima. Num processo longo A -> B -> A, o header
+    # de B seria reusado em A (UUID errado no corpo => o drain estrito
+    # QUARENTENA o spool de A) e o journal bufferizado poderia ir para o
+    # projeto errado. Uma transicao de projeto invalida os tres.
+    if cached is not None and cached[0] != env_key:
+        # passa o dir ANTIGO (cached[1]) — nunca re-resolve aqui.
+        _invalidate_per_pid_caches_on_project_switch(cached[1])
     d = _project_dir_from_env() / "state"
     mkdir_ok = False
     try:

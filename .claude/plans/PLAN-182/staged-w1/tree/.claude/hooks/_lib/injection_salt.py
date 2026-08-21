@@ -89,7 +89,23 @@ def _slug_dir() -> Path:
     per project, no longer per ``$HOME``. Still avoids importing
     ``audit_emit`` at module load to stay loadable from any hook
     (including hooks that emit no audit events).
+
+    rail r13 P1-5 — FAMILY-ATOMICITY: quando os overrides movem a
+    familia (`CEO_AUDIT_LOG_PATH` / `CEO_AUDIT_LOG_DIR`), o `.salt`
+    acompanha. Deixa-lo em `runtime_state_dir()` enquanto log, key, lock
+    e errors se mudam contradiz o invariante do ADR-001 S318 item 3 (e a
+    claim do CLAUDE.md §5), e faria custodia/backup do dir efetivo
+    PERDEREM o salt. Mesma cascata de `audit_hmac._audit_dir_from_env`.
     """
+    env_path = os.environ.get("CEO_AUDIT_LOG_PATH")
+    if env_path:
+        try:
+            return Path(env_path).resolve().parent
+        except OSError:
+            pass
+    env_dir = os.environ.get("CEO_AUDIT_LOG_DIR")
+    if env_dir:
+        return Path(env_dir)
     return _runtime_paths.runtime_state_dir()
 
 
@@ -131,8 +147,16 @@ def _generate_and_persist(path: Path) -> bytes:
         # rail r2 F + r5: cria e aperta SO no caminho default — um dir
         # inteiro escolhido via CLAUDE_PROJECT_DIR_NATIVE preserva o modo
         # que o operador definiu.
-        _native = bool(os.environ.get("CLAUDE_PROJECT_DIR_NATIVE"))
-        _runtime_paths.ensure_state_dir(path.parent, tighten=not _native)
+        # rail r14: TODO override capaz de escolher `_slug_dir()` desliga
+        # o tighten — inclusive os de familia que a cura P1-5 passou a
+        # honrar. Apertar um dir 0750 escolhido pelo operador revogaria
+        # acesso de auditor, contra a promessa assinada do sentinel.
+        _overridden = any(os.environ.get(_k) for _k in (
+            "CLAUDE_PROJECT_DIR_NATIVE",
+            "CEO_AUDIT_LOG_PATH",
+            "CEO_AUDIT_LOG_DIR",
+        ))
+        _runtime_paths.ensure_state_dir(path.parent, tighten=not _overridden)
     except Exception:
         return b""
     try:
@@ -176,14 +200,24 @@ def get_instance_salt() -> bytes:
         _CACHED_SALT = (path_id, existing)
         return existing
 
+    # rail r15 P2-4: distinguir CRIACAO de RECUPERACAO. Um `.salt`
+    # existente porem malformado (tamanho errado) faz `_read_existing`
+    # devolver None e cair aqui — registrar isso como `first_mint`
+    # esconderia uma ROTACAO real (que invalida a correlacao de
+    # prompt_sha256) e sobrescreveria o marcador anterior.
+    _preexisting = False
+    try:
+        _preexisting = path.exists()
+    except OSError:
+        pass
     salt = _generate_and_persist(path)
     if salt:
         _CACHED_SALT = (path_id, salt)
-        _register_mint(path)
+        _register_mint(path, reason="other" if _preexisting else "first_mint")
     return salt
 
 
-def _register_mint(salt_path: Path) -> None:
+def _register_mint(salt_path: Path, reason: str = "first_mint") -> None:
     """Make the mint OBSERVABLE (ADR-079 S318 amendment §2). Fail-open.
 
     (a) Marker sidecar next to the salt — forensic ground truth that
@@ -204,7 +238,7 @@ def _register_mint(salt_path: Path) -> None:
     try:
         marker = {
             "minted_at_epoch": int(time.time()),
-            "reason": "first_mint",
+            "reason": reason,
             "salt_scope": "project",
             "slug_sha256": slug_sha16,
             "pid": os.getpid(),
@@ -226,9 +260,19 @@ def _register_mint(salt_path: Path) -> None:
             from . import audit_emit as _audit_emit  # type: ignore
         except ImportError:
             import audit_emit as _audit_emit  # type: ignore
+        # rail r13 P1-4: `session_id` e `project` sao campos REQUERIDOS
+        # da linha registrada no SPEC v2.58 e `_write_event` nao os
+        # sintetiza — sem eles o evento de migracao nasce sem atribuicao.
+        _sid = os.environ.get("CLAUDE_SESSION_ID") or ""
+        try:
+            _proj = str(_runtime_paths.project_dir())
+        except Exception:
+            _proj = ""
         _audit_emit.emit_generic(
             "salt_rotation_registered",
-            reason="first_mint",
+            session_id=_sid,
+            project=_proj,
+            reason=reason,
             salt_scope="project",
             slug_sha256=slug_sha16 or "invalid",
         )

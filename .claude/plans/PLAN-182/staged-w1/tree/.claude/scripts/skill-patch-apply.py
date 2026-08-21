@@ -83,6 +83,20 @@ except Exception:  # pragma: no cover
         pass
 
 
+def _errors_dir_for_family():
+    """Dir do breadcrumb: parent do LOG_PATH -> LOG_DIR -> default."""
+    _lp = os.environ.get("CEO_AUDIT_LOG_PATH")
+    if _lp:
+        try:
+            return Path(_lp).resolve().parent
+        except OSError:
+            pass
+    _ld = os.environ.get("CEO_AUDIT_LOG_DIR")
+    if _ld:
+        return Path(_ld)
+    return _rp.runtime_state_dir()
+
+
 def _emit_concurrent_blocked(*, skill_slug: str, shadow_path: Path, reason: str) -> None:
     """Best-effort breadcrumb for concurrent-apply blocking.
 
@@ -95,8 +109,9 @@ def _emit_concurrent_blocked(*, skill_slug: str, shadow_path: Path, reason: str)
     try:
         err_path = Path(
             os.environ.get("CEO_AUDIT_LOG_ERR") or (
-                # PLAN-182 W1: single family resolver.
-                _rp.runtime_state_dir() / "audit-log.errors"
+                # PLAN-182 W1 + rail r14: resolvedor unico com a cascata
+                # da familia (o breadcrumb mora com o LOG efetivo).
+                _errors_dir_for_family() / "audit-log.errors"
             )
         )
         err_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)

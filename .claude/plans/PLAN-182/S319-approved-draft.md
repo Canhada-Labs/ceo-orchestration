@@ -5,7 +5,9 @@
 > assina, dry-run, land).
 
 Plans: PLAN-182 (W1 — resolvedor único de runtime state)
-Wave: W1 (staged em `71ef682`; pack `PLAN-182/staged-w1/`, MANIFEST 106)
+Wave: W1 (staged em `71ef682`; pack `PLAN-182/staged-w1/`)
+MANIFEST-entradas: <MANIFEST-N>
+MANIFEST-sha256: <MANIFEST-SHA>
 Anchor-SHA: <HEAD-NO-MOMENTO-DA-ASSINATURA>
 Data: <AAAA-MM-DD>
 Custódia da cadeia histórica (W2, decisão do Owner): <ARCHIVE-OU-INHERIT>
@@ -53,9 +55,11 @@ scripts/local/historical/plan-093-kernel-override-restart.sh
 ```
 
 > O Scope é a lista de DIRETÓRIOS/arquivos alvo; o conjunto EXATO,
-> byte-a-byte, é o `MANIFEST.sha256` do pack (106 entradas), verificado
-> pelo script de land com `shasum -c` fail-closed antes de qualquer
-> escrita. `touched − scope = ∅` é gate do land.
+> byte-a-byte, é o `MANIFEST.sha256` do pack, cujo NÚMERO DE ENTRADAS e
+> DIGEST estão fixados no cabeçalho acima e são verificados pelo land
+> ANTES de qualquer escrita (rail r15 P1-1: sem amarrar o digest, a
+> assinatura aceitaria um pack re-hasheado). `shasum -c` fail-closed +
+> `touched − scope = ∅` completam o gate.
 
 ## O que este pack muda
 
@@ -90,9 +94,11 @@ era falsa na fronteira de tenancy).
 - `derive-audit-family.py --assert-migrated` = **0**
 - Suíte CI-equivalente: **P1=0 / P2=0 / P3=0**
 - Aceitação P0: `test_audit_family_two_projects.py` + `test_runtime_paths.py`
-- Pair-rail codex 0.147.0: **12 rodadas até RODADA LIMPA**, 35 achados
-  curados, 1 residual declarado, 1 pushback fundamentado
-- `ceremony-lint` exit 0; `shasum -c` 106/106 OK
+- Pair-rail codex 0.147.0: **15 rodadas** (r12 limpa; r13-r15 sobre o
+  material assinado acharam mais 13 defeitos, todos curados), 1 residual
+  declarado, 1 pushback fundamentado
+- `ceremony-lint` exit 0; `shasum -c` integro (contagem e digest
+  fixados no cabecalho)
 
 ## Residual declarado (assinado com o pack)
 

@@ -462,6 +462,16 @@ def _write_quarantine_breadcrumb(plan: dict, errors_log: Optional[Path]) -> None
 
 def _default_errors_log() -> Path:
     override = os.environ.get("CEO_AUDIT_LOG_ERR")
+    # rail r14: sem o degrau do LOG_PATH o breadcrumb fica no
+    # dir default enquanto o log se muda (family-atomicity).
+    if not override:
+        _lp = os.environ.get("CEO_AUDIT_LOG_PATH")
+        if _lp:
+            try:
+                override = str(
+                    Path(_lp).resolve().parent / "audit-log.errors")
+            except OSError:
+                pass
     if override:
         return Path(override)
     home = Path(os.environ.get("HOME") or str(Path.home()))

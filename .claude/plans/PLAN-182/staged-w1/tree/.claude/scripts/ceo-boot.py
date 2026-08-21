@@ -402,7 +402,17 @@ def check_audit_log_freshness() -> Tuple[str, str, Any]:
     if errors_path_raw:
         errors_path = Path(errors_path_raw)
     else:
-        errors_path = AUDIT_LOG_DEFAULT.parent / "audit-log.errors"
+        # rail r14: cascata da familia — com CEO_AUDIT_LOG_PATH setado os
+        # escritores poem o breadcrumb ao lado do log MOVIDO; ler do
+        # default perderia exatamente esses erros.
+        _lp = os.environ.get("CEO_AUDIT_LOG_PATH")
+        if _lp:
+            try:
+                errors_path = Path(_lp).resolve().parent / "audit-log.errors"
+            except OSError:
+                errors_path = AUDIT_LOG_DEFAULT.parent / "audit-log.errors"
+        else:
+            errors_path = AUDIT_LOG_DEFAULT.parent / "audit-log.errors"
 
     errors_present = False
     errors_line_count = 0

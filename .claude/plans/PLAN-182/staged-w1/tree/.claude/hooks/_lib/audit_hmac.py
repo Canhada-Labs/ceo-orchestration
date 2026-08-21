@@ -213,8 +213,13 @@ def _audit_dir_from_env() -> Path:
                         legacy_dir / LAST_HMAC_FILENAME,
                         legacy_dir / CHAIN_LENGTH_FILENAME,
                     )
+                    # rail r13 P1-3: uma `audit-key` no destino NAO
+                    # prova que a cadeia migrou — com CEO_AUDIT_KEY_PATH
+                    # explicito apontando para la, o last-hmac e o
+                    # chain-length continuam sob LOG_DIR e o append
+                    # seguinte leria genesis/zero. Só os SIDECARS DE
+                    # CADEIA contam como evidencia de migracao.
                     dest_marks = (
-                        path_parent / KEY_FILENAME,
                         path_parent / LAST_HMAC_FILENAME,
                         path_parent / CHAIN_LENGTH_FILENAME,
                     )

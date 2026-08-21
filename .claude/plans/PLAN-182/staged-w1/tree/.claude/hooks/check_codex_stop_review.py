@@ -162,6 +162,16 @@ def _audit_err_path() -> Path:
         home = os.environ.get("HOME") or "/tmp"
         base = _rp_state_dir()
     override = os.environ.get("CEO_AUDIT_LOG_ERR")
+    # rail r14: sem o degrau do LOG_PATH o breadcrumb fica no
+    # dir default enquanto o log se muda (family-atomicity).
+    if not override:
+        _lp = os.environ.get("CEO_AUDIT_LOG_PATH")
+        if _lp:
+            try:
+                override = str(
+                    Path(_lp).resolve().parent / "audit-log.errors")
+            except OSError:
+                pass
     return Path(override) if override else base / "audit-log.errors"
 
 

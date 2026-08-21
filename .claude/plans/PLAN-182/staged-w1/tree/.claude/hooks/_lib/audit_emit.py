@@ -6843,7 +6843,11 @@ def emit_generic(action: str, **kwargs: Any) -> None:
         event, dropped = _scrub_ceo_boot_event(
             event, _SALT_ROTATION_REGISTERED_ALLOWLIST
         )
-        if event.get("reason") not in _SALT_ROTATION_REASONS:
+        # rail r13 P2-6: type-check ANTES do teste de pertinencia — um
+        # list/dict de chamador direto levantaria TypeError no frozenset
+        # e quebraria o contrato never-raises do emit_generic.
+        _reason = event.get("reason")
+        if not isinstance(_reason, str) or _reason not in _SALT_ROTATION_REASONS:
             event["reason"] = "other"
         # salt_scope is a fixed vocabulary of one today ("project", the
         # ADR-079 S318 unit); anything else is coerced, never echoed.
