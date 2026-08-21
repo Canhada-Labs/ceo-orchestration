@@ -244,5 +244,23 @@
   "path_hint": ".claude/scripts/local/generate-ceremony.sh",
   "reason": "defeitos REAIS do gerador (R4 git-add-dir:39, R2 ||true-irreversivel:304) — a cura pertence ao W3/PLAN-174 (extensao do gerador); waiver EXPIRA na abertura do W3",
   "date": "2026-08-20"
+ },
+ {
+  "sha256": "468c7d9f329d37e2d4d86bac0e824d87f513e93a5ae0ffdb89bb6a44ae7ff1ab",
+  "path_hint": ".claude/plans/PLAN-182/staged-w1/tree/.claude/scripts/verify-sprint3-invariants.sh",
+  "reason": "copia de PACK staged (PLAN-182 W1, SENT-S319): o original vive FORA de plans/ (nao e script de cerimonia); o land aplica no path canonico e a copia sai daqui — waiver pinado re-arma sozinho em qualquer edicao",
+  "date": "2026-08-21"
+ },
+ {
+  "sha256": "431379e0a40273e5f0d78c483279dd1c816a5d7259bb8be737af4c8615aae3cd",
+  "path_hint": ".claude/plans/PLAN-182/staged-w1/tree/scripts/install-accelerators.sh",
+  "reason": "copia de PACK staged (PLAN-182 W1, SENT-S319): o original vive FORA de plans/ (nao e script de cerimonia); o land aplica no path canonico e a copia sai daqui — waiver pinado re-arma sozinho em qualquer edicao",
+  "date": "2026-08-21"
+ },
+ {
+  "sha256": "6efe6448d588945745b561c5e11aa6773e8ceb43c51738eca70aa156d1c90a88",
+  "path_hint": ".claude/plans/PLAN-182/staged-w1/tree/scripts/local/historical/plan-093-kernel-override-restart.sh",
+  "reason": "copia de PACK staged (PLAN-182 W1, SENT-S319): o original vive FORA de plans/ (nao e script de cerimonia); o land aplica no path canonico e a copia sai daqui — waiver pinado re-arma sozinho em qualquer edicao",
+  "date": "2026-08-21"
  }
 ]
