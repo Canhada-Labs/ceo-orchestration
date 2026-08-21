@@ -13,7 +13,7 @@ any future surface that needs persistent state tied to a `PLAN-NNN`.
 ### Envelope
 
 ```
-${CEO_STATE_ROOT:-$HOME/.claude/projects/ceo-orchestration/state}/
+${CEO_STATE_ROOT:-$HOME/.claude/projects/<native-slug>/state}/
     <store_name>/
         <plan_id>.sqlite         # kv storage
         <plan_id>.sqlite.lock    # sibling filelock (fcntl, ADR-002)

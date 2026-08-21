@@ -75,6 +75,15 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
+import sys as _sys_rp
+from pathlib import Path as _Path_rp
+_HOOKS_RP = _Path_rp(__file__).resolve()
+for _anc in _HOOKS_RP.parents:
+    if (_anc / ".claude" / "hooks" / "_lib").is_dir():
+        if str(_anc / ".claude" / "hooks") not in _sys_rp.path:
+            _sys_rp.path.insert(0, str(_anc / ".claude" / "hooks"))
+        break
+from _lib import runtime_paths as _rp  # noqa: E402  # PLAN-182 W1 single resolver
 
 # ----------------------------------------------------------------------------
 # Constants
@@ -120,7 +129,7 @@ def _audit_log_path() -> Path:
     if env_dir:
         return Path(env_dir) / "audit-log.jsonl"
     home = os.environ.get("HOME") or str(Path.home())
-    return Path(home) / ".claude" / "projects" / "ceo-orchestration" / "audit-log.jsonl"
+    return _rp.runtime_state_dir() / "audit-log.jsonl"
 
 
 def _state_dir() -> Path:
@@ -129,7 +138,7 @@ def _state_dir() -> Path:
     if env_dir:
         return Path(env_dir)
     home = os.environ.get("HOME") or str(Path.home())
-    return Path(home) / ".claude" / "projects" / "ceo-orchestration" / "state" / "token-budget-guard"
+    return _rp.runtime_state_dir() / "state" / "token-budget-guard"
 
 
 def _estimate_paths(plan_id: str) -> List[Path]:

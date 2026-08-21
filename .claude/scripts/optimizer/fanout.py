@@ -214,18 +214,17 @@ def _audit_log_path() -> Optional[Path]:
         env_dir = os.environ.get("CEO_AUDIT_LOG_DIR")
         if env_dir:
             return Path(env_dir) / "audit-log.jsonl"
-        # Adopter-correct: derive the project slug from CLAUDE_PROJECT_DIR rather
-        # than hardcoding "ceo-orchestration" (which makes the 429-backoff
-        # silently inoperative in any other repo — multi-lens review).
-        proj = os.environ.get("CLAUDE_PROJECT_DIR")
-        home = os.environ.get("HOME")
-        if proj:
-            slug = Path(proj).name
-            if home:
-                return Path(home) / ".claude" / "projects" / slug / "audit-log.jsonl"
-        if not home:
-            return None
-        return Path(home) / ".claude" / "projects" / "ceo-orchestration" / "audit-log.jsonl"
+        # PLAN-182 W1: delegate to the single family resolver (the pre-W1
+        # basename leaf here was a FIFTH slug spelling). Lazy import with
+        # local bootstrap: the optimizer package does not carry hooks/ on
+        # sys.path, and this helper stays fail-soft (any failure below is
+        # caught by the enclosing except and returns None, same as before).
+        import sys as _sys
+        _hooks = Path(__file__).resolve().parents[2] / "hooks"
+        if str(_hooks) not in _sys.path:
+            _sys.path.insert(0, str(_hooks))
+        from _lib import runtime_paths as _rp  # noqa: E402
+        return _rp.runtime_state_dir() / "audit-log.jsonl"
     except Exception:
         return None
 

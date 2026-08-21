@@ -34,6 +34,15 @@ import sys
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+import sys as _sys_rp
+from pathlib import Path as _Path_rp
+_HOOKS_RP = _Path_rp(__file__).resolve()
+for _anc in _HOOKS_RP.parents:
+    if (_anc / ".claude" / "hooks" / "_lib").is_dir():
+        if str(_anc / ".claude" / "hooks") not in _sys_rp.path:
+            _sys_rp.path.insert(0, str(_anc / ".claude" / "hooks"))
+        break
+from _lib import runtime_paths as _rp  # noqa: E402  # PLAN-182 W1 single resolver
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
@@ -115,7 +124,7 @@ def _resolve_audit_log_path() -> Optional[Path]:
       1. ``$CEO_AUDIT_LOG_PATH`` (explicit override)
       2. ``$CEO_AUDIT_LOG_DIR/audit-log.jsonl``
       3. ``$CLAUDE_PROJECT_DIR``-derived slug
-      4. Legacy hardcoded ~/.claude/projects/ceo-orchestration/
+      4. Legacy hardcoded ~/.claude/projects/<native-slug>/
 
     Returns None when no candidate exists (caller emits honest
     "audit-log not found" status instead of false-failing on a
@@ -144,7 +153,7 @@ def _resolve_audit_log_path() -> Optional[Path]:
         except OSError:
             pass
     legacy = (
-        Path.home() / ".claude" / "projects" / "ceo-orchestration" / "audit-log.jsonl"
+        _rp.runtime_state_dir() / "audit-log.jsonl"
     )
     if legacy.is_file():
         return legacy
@@ -168,7 +177,7 @@ def probe_audit_log() -> Tuple[str, str, Dict[str, Any]]:
       3. CLAUDE_PROJECT_DIR-derived slug
       4. repo-root-derived slug (works under sandbox isolation when the
          cwd is inside the project tree even without env vars)
-      5. Legacy ~/.claude/projects/ceo-orchestration/audit-log.jsonl
+      5. Legacy ~/.claude/projects/<native-slug>/audit-log.jsonl
     """
     log_path = _resolve_audit_log_path()
     if log_path is None:

@@ -71,29 +71,33 @@ K_MIN = 1
 K_MAX = 10
 LOCK_TIMEOUT = 2.5  # seconds
 
+# PLAN-182 W1 single resolver (absolute first — works from hooks/ on
+# sys.path and from subpackages; relative and bare are fallbacks)
+try:
+    from _lib import runtime_paths as _rp
+except ImportError:  # pragma: no cover
+    try:
+        from . import runtime_paths as _rp  # type: ignore[no-redef]
+    except ImportError:
+        import runtime_paths as _rp  # type: ignore[no-redef]
+
 
 # -----------------------------------------------------------------------------
 # Storage path resolution
 # -----------------------------------------------------------------------------
 
 
-def _project_slug() -> str:
-    """Derive project slug from $CLAUDE_PROJECT_DIR or fallback."""
-    env = os.environ.get("CLAUDE_PROJECT_DIR", "")
-    if env:
-        # Take basename of project dir; normalize dashes
-        name = Path(env).name or "ceo-orchestration"
-        return name.replace("_", "-").lower() or "ceo-orchestration"
-    return "ceo-orchestration"
-
-
 def _storage_root() -> Path:
-    """Return storage root (env-overridable)."""
+    """Return storage root (env-overridable).
+
+    PLAN-182 W1: delegates to the single family resolver (the pre-W1
+    local derivation here — basename lowered, underscores to dashes —
+    was a FOURTH slug spelling, colliding for same-basename checkouts).
+    """
     override = os.environ.get("CEO_MEMORY_SHARED_PATH")
     if override:
         return Path(override)
-    home = os.environ.get("HOME") or str(Path.home())
-    return Path(home) / ".claude" / "projects" / _project_slug() / "memory-shared"
+    return _rp.runtime_state_dir() / "memory-shared"
 
 
 def _patterns_dir() -> Path:

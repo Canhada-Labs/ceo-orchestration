@@ -55,6 +55,13 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple
+import sys as _sys_rp
+from pathlib import Path as _P_rp
+_h_rp = _P_rp(__file__).resolve().parents[1] / "hooks"  # .claude/scripts -> .claude/hooks (rail r1 P1-1)
+if str(_h_rp) not in _sys_rp.path:
+    _sys_rp.path.insert(0, str(_h_rp))
+from _lib import runtime_paths as _rp  # noqa: E402  # PLAN-182 W1 single resolver
+
 
 # ADR-052 §Cost magnitude — Anthropic public pricing $/M tokens.
 # PLAN-044 audit-v2 C3-P0-06 fix (Wave B): Haiku rate corrected from
@@ -103,14 +110,14 @@ def default_log_path() -> Path:
     multiple framework instances get isolated cost reports), fall
     back to ~/.claude/projects/<slug>/ for the dogfood / single-
     project case. Pre-Wave-B the script always read the developer
-    machine's hardcoded ~/.claude/projects/ceo-orchestration/ —
+    machine's per-project native-slug dir (PLAN-182 W1) —
     leaking forensics across adopter projects.
 
     Resolution order:
       1. ``$CEO_AUDIT_LOG_PATH`` (explicit override) — wins all.
       2. ``$CEO_AUDIT_LOG_DIR/audit-log.jsonl`` — dir-level override.
       3. ``$CLAUDE_PROJECT_DIR``-derived slug → ~/.claude/projects/<slug>/audit-log.jsonl
-      4. Legacy hardcoded ~/.claude/projects/ceo-orchestration/audit-log.jsonl
+      4. Legacy pre-migration ~/.claude/projects/<legacy-literal>/audit-log.jsonl (sanctioned READER fallback)
     """
     explicit = os.environ.get("CEO_AUDIT_LOG_PATH")
     if explicit:
@@ -123,17 +130,46 @@ def default_log_path() -> Path:
     if project_dir:
         # Mirror Claude Code's slug derivation: leading dash + path with
         # `/` replaced by `-` (e.g. `/Users/x/foo` → `-Users-x-foo`).
+        pass  # o braco por-projeto abaixo cobre com e sem project_dir
+    # PLAN-182 W1 + rail r3 P1: o log ESCOPADO (resolvedor unico; cobre
+    # CLAUDE_PROJECT_DIR e o fallback por cwd) vence sempre que E ARQUIVO;
+    # o legado so entra quando o escopado ainda nao existe E o legado
+    # existe (leitura de historico pre-migracao), com WARNING nomeando a
+    # fonte; senao devolve o escopado (inexistente => relatorio vazio
+    # honesto do PROJETO, nunca dado alheio).
+    try:
+        scoped = _rp.runtime_state_dir() / "audit-log.jsonl"
+    except OSError:
+        return _rp.legacy_state_dir() / "audit-log.jsonl"
+    if scoped.is_file():
+        return scoped
+    # rail r4: logs ROTACIONADOS do projeto tambem vencem o legado — um
+    # projeto pos-rotacao (so audit-log-YYYY-MM.jsonl) tem historia
+    # propria; cair no legado misturaria dado alheio no --include-rotated.
+    try:
+        if any(scoped.parent.glob("audit-log*.jsonl")):
+            return scoped
+    except OSError:
+        pass
+    legacy = _rp.legacy_state_dir() / "audit-log.jsonl"
+    # rail r7: simetrico ao r4 — o legado tambem conta quando so tem
+    # ROTACIONADOS (audit-log-YYYY-MM.jsonl). Devolver o primary legado
+    # deixa discover_logs achar os irmaos no --include-rotated; devolver
+    # o scoped vazio esconderia a historia pre-migracao inteira.
+    legacy_has_history = legacy.exists()
+    if not legacy_has_history:
         try:
-            abs_path = Path(project_dir).resolve()
-            slug = "-" + str(abs_path).lstrip("/").replace("/", "-")
-            scoped = home / ".claude" / "projects" / slug / "audit-log.jsonl"
-            if scoped.exists() or scoped.parent.is_dir():
-                return scoped
+            legacy_has_history = any(
+                legacy.parent.glob("audit-log*.jsonl"))
         except OSError:
-            pass
-    # Legacy fallback (single-project dogfood / pre-PLAN-044).
-    default_dir = home / ".claude" / "projects" / "ceo-orchestration"
-    return default_dir / "audit-log.jsonl"
+            legacy_has_history = False
+    if legacy_has_history:
+        sys.stderr.write(
+            "# ceo-cost: lendo o log LEGADO pre-migracao (%s) — o log do "
+            "projeto ainda nao existe; apos a migracao W1/W2 esta rota "
+            "desaparece\n" % legacy)
+        return legacy
+    return scoped
 
 
 def discover_logs(primary: Path, include_rotated: bool) -> List[Path]:
@@ -611,7 +647,7 @@ def _otlp_metric_payload(event: Dict[str, Any]) -> Dict[str, Any]:
             {
                 "resource": {
                     "attributes": [
-                        {"key": "service.name", "value": {"stringValue": "ceo-orchestration"}},
+                        {"key": "service.name", "value": {"stringValue": "ceo-orchestration"}},  # rp-allow: product-label
                         {"key": "service.component", "value": {"stringValue": "ceo-cost"}},
                     ]
                 },

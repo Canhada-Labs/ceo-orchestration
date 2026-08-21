@@ -29,6 +29,15 @@ import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+import sys as _sys_rp
+from pathlib import Path as _Path_rp
+_HOOKS_RP = _Path_rp(__file__).resolve()
+for _anc in _HOOKS_RP.parents:
+    if (_anc / ".claude" / "hooks" / "_lib").is_dir():
+        if str(_anc / ".claude" / "hooks") not in _sys_rp.path:
+            _sys_rp.path.insert(0, str(_anc / ".claude" / "hooks"))
+        break
+from _lib import runtime_paths as _rp  # noqa: E402  # PLAN-182 W1 single resolver
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
@@ -70,7 +79,7 @@ def resolve_log_path() -> Optional[Path]:
       1. ``$CEO_AUDIT_LOG_PATH`` (explicit override)
       2. ``$CEO_AUDIT_LOG_DIR/audit-log.jsonl`` — dir-level override
       3. ``$CLAUDE_PROJECT_DIR``-derived slug → ~/.claude/projects/<slug>/
-      4. Legacy hardcoded ~/.claude/projects/ceo-orchestration/audit-log.jsonl
+      4. Legacy hardcoded ~/.claude/projects/<native-slug>/audit-log.jsonl
 
     Returns None when no candidate exists. Pre-Wave-B always returned
     the developer machine's hardcoded ceo-orchestration slug — leaking
@@ -99,7 +108,7 @@ def resolve_log_path() -> Optional[Path]:
         except OSError:
             pass
     legacy = (
-        Path.home() / ".claude" / "projects" / "ceo-orchestration" / "audit-log.jsonl"
+        _rp.runtime_state_dir() / "audit-log.jsonl"
     )
     if legacy.is_file():
         return legacy

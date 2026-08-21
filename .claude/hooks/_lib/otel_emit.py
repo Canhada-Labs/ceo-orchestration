@@ -349,7 +349,7 @@ def _now_ns() -> int:
 def batch_to_otlp(
     events: Iterable[Mapping[str, Any]],
     *,
-    service_name: str = "ceo-orchestration",
+    service_name: str = "ceo-orchestration",  # rp-allow: product-label
 ) -> Tuple[Dict[str, Any], int]:
     """Build an OTLP/HTTP JSON ``ExportTraceServiceRequest`` from events.
 

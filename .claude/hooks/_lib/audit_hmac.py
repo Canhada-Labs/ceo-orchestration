@@ -56,6 +56,7 @@ import hashlib
 import hmac as _hmac
 import json
 import os
+import sys
 import secrets
 import stat
 from dataclasses import dataclass, field
@@ -66,6 +67,13 @@ try:
     from . import canonical_json
 except ImportError:  # pragma: no cover
     import canonical_json  # type: ignore[no-redef]
+
+# PLAN-182 W1 single resolver (ADR-001 S318) — same dual-mode import
+# style as canonical_json above.
+try:
+    from . import runtime_paths as _runtime_paths
+except ImportError:  # pragma: no cover
+    import runtime_paths as _runtime_paths  # type: ignore[no-redef]
 
 
 # Size constants
@@ -143,7 +151,10 @@ _CANONICAL_LIB_DIR = Path(__file__).resolve().parent
 
 # Process-level cache (single subprocess invocation lifetime).
 # The audit-key does not rotate mid-invocation so caching is safe.
-_KEY_CACHE: Optional[bytes] = None
+# PLAN-182 W1 rail r2 B1: keyed pelo key_path() resolvido — um processo
+# que troca de projeto (CLAUDE_PROJECT_DIR/cwd) NUNCA assina o projeto B
+# com a chave do A. Tupla (path_str, key_bytes); miss em path novo.
+_KEY_CACHE: Optional[Tuple[str, bytes]] = None
 
 
 def is_disabled() -> bool:
@@ -159,9 +170,10 @@ def _audit_dir_from_env() -> Path:
     FileLock under the coherent-env contract (processes writing one log
     share the same CEO_AUDIT_LOG_DIR, or all run pure-$HOME):
 
-      ``CEO_AUDIT_LOG_DIR`` (primary — matches audit_emit._audit_dir) ->
-      ``CEO_AUDIT_LOG_PATH`` parent -> ``CEO_PROJECT_STATE_DIR`` ->
-      ``$HOME/.claude/projects/ceo-orchestration/``.
+      ``CEO_AUDIT_LOG_PATH`` parent (the EFFECTIVE log — most specific,
+      rail r2 D) -> ``CEO_AUDIT_LOG_DIR`` -> ``CEO_PROJECT_STATE_DIR`` ->
+      the single family resolver (``_lib/runtime_paths``, PLAN-182 W1:
+      ``$HOME/.claude/projects/<native-slug>/``).
 
     Honoring CEO_AUDIT_LOG_DIR closes a latent split (S168): a LOG_DIR-only
     process resolved its FileLock under LOG_DIR but its chain-length counter
@@ -169,17 +181,75 @@ def _audit_dir_from_env() -> Path:
     shared one counter while holding different locks — a lost counter
     increment that weakens tail-truncation detection.
     """
+    # PLAN-182 W1 rail r2 D: a familia segue o LOG EFETIVO — PATH (mais
+    # especifico) vence DIR, igual a audit_emit._log_path/_log_family_dir,
+    # spool_writer e audit_log. Com AMBOS setados, log+lock+key+sidecars
+    # ficam TODOS no parent do PATH; a ordem antiga (DIR primeiro) partia
+    # a familia em dois diretorios.
+    p = os.environ.get("CEO_AUDIT_LOG_PATH")
     log_dir = os.environ.get("CEO_AUDIT_LOG_DIR")
+    if p:
+        path_parent = Path(p).resolve().parent
+        # rail r9 P1 — PRESERVACAO DE CADEIA EXISTENTE: numa instalacao
+        # que JA rodava com DIR e PATH divergentes, a chave/sidecars
+        # vivem sob DIR (a precedencia antiga). Trocar a precedencia sem
+        # olhar cunharia uma chave NOVA ao lado do log e NENHUMA das duas
+        # verificaria a cadeia inteira. Regra: se a chave legada existe
+        # sob DIR e ainda NAO existe no destino, a familia CONTINUA no
+        # DIR (breadcrumb nomeando a config); a migracao dos sidecars e
+        # decisao de cerimonia, nunca um efeito colateral de import.
+        if log_dir:
+            legacy_dir = Path(log_dir)
+            preserve = False
+            try:
+                if legacy_dir.resolve() != path_parent:
+                    # rail r10 P1a: QUALQUER sidecar legado conta, nao so a
+                    # audit-key com nome default — uma instalacao com
+                    # CEO_AUDIT_KEY_PATH explicito ainda tem last-hmac e
+                    # chain-length sob LOG_DIR, e ignora-los reiniciaria a
+                    # cadeia (genesis + contador zerado).
+                    legacy_marks = (
+                        legacy_dir / KEY_FILENAME,
+                        legacy_dir / LAST_HMAC_FILENAME,
+                        legacy_dir / CHAIN_LENGTH_FILENAME,
+                    )
+                    # rail r13 P1-3: uma `audit-key` no destino NAO
+                    # prova que a cadeia migrou — com CEO_AUDIT_KEY_PATH
+                    # explicito apontando para la, o last-hmac e o
+                    # chain-length continuam sob LOG_DIR e o append
+                    # seguinte leria genesis/zero. Só os SIDECARS DE
+                    # CADEIA contam como evidencia de migracao.
+                    dest_marks = (
+                        path_parent / LAST_HMAC_FILENAME,
+                        path_parent / CHAIN_LENGTH_FILENAME,
+                    )
+                    preserve = (any(m.exists() for m in legacy_marks)
+                                and not any(m.exists() for m in dest_marks))
+            except OSError:
+                preserve = False
+            if preserve:
+                # rail r10 P1b: a DECISAO ja esta tomada; o breadcrumb e
+                # best-effort e NUNCA pode derruba-la (stderr fechado /
+                # nao-gravavel / encoding hostil quebraria a preservacao
+                # da cadeia por causa de um diagnostico).
+                try:
+                    sys.stderr.write(
+                        "# audit_hmac: CEO_AUDIT_LOG_DIR e "
+                        "CEO_AUDIT_LOG_PATH divergem e sidecars legados "
+                        "vivem em %s — PRESERVADOS ali (migracao = "
+                        "cerimonia, PLAN-182 W1/W2)\n" % legacy_dir)
+                except Exception:
+                    pass
+                return legacy_dir
+        return path_parent
     if log_dir:
         return Path(log_dir)
-    p = os.environ.get("CEO_AUDIT_LOG_PATH")
-    if p:
-        return Path(p).resolve().parent
     state = os.environ.get("CEO_PROJECT_STATE_DIR")
     if state:
         return Path(state)
-    home = os.environ.get("HOME") or str(Path.home())
-    return Path(home) / ".claude" / "projects" / "ceo-orchestration"
+    # PLAN-182 W1 (ADR-001 S318 amendment): default delegates to the
+    # single family resolver — per-project native slug, no literal.
+    return _runtime_paths.runtime_state_dir()
 
 
 def key_path() -> Path:
@@ -314,11 +384,24 @@ def get_or_create_key() -> bytes:
     :raises AuditHmacError: on filesystem error or perm violation.
     """
     global _KEY_CACHE
-    if _KEY_CACHE is not None:
-        return _KEY_CACHE
-
     p = key_path()
-    p.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    # rail r6: identidade ABSOLUTA — um override relativo + chdir entre
+    # projetos manteria str(p) igual apontando para OUTRO arquivo.
+    p_id = os.path.abspath(str(p))
+    cached = _KEY_CACHE
+    if cached is not None and cached[0] == p_id:
+        return cached[1]
+
+    # rail r2 F + r5: cria e — SO no caminho DEFAULT (nenhum override de
+    # env escolheu o dir) — aperta para 0700. Um dir apontado por
+    # CEO_AUDIT_KEY_PATH / CEO_AUDIT_LOG_PATH / CEO_AUDIT_LOG_DIR /
+    # CEO_PROJECT_STATE_DIR pode ser 0750 DELIBERADO (compliance/vault);
+    # o primeiro load da chave nao pode revogar acesso de auditor.
+    _overridden = any(os.environ.get(_k) for _k in (
+        "CEO_AUDIT_KEY_PATH", "CEO_AUDIT_LOG_PATH",
+        "CEO_AUDIT_LOG_DIR", "CEO_PROJECT_STATE_DIR",
+        "CLAUDE_PROJECT_DIR_NATIVE"))  # rail r6: whole-dir override idem
+    _runtime_paths.ensure_state_dir(p.parent, tighten=not _overridden)
 
     if not p.exists():
         # Atomic create: write to tempfile with O_EXCL → rename.
@@ -377,7 +460,7 @@ def get_or_create_key() -> bytes:
             )
         )
 
-    _KEY_CACHE = data
+    _KEY_CACHE = (p_id, data)
     return data
 
 

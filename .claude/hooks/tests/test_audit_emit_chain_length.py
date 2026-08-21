@@ -42,13 +42,43 @@ def _emit_one(plan_id: str = "PLAN-TEST", phase: str = "start") -> None:
 class CanaryWiringTests(TestEnvContext):
     """Cover every branch in the new canary block + e2e proof."""
 
+    # rail r10 — ARQUITETURA INVERTIDA (a cura de classe que fecha
+    # r5/r7/r8/r9/r10): enumerar o que REMOVER e sempre incompleto (uma
+    # var nova, ou um acesso por CONSTANTE que nenhum regex ve, reabre a
+    # falha). Este fixture enumera o que MANTER: roda com um env MINIMO
+    # explicito (patch.dict clear=True). Toda `CEO_*` que o runner
+    # exportar fica de fora POR CONSTRUCAO — inclusive as que ainda nao
+    # existem.
+    _KEEP_FROM_PARENT = ("PATH", "LANG", "LC_ALL", "TMPDIR", "PYTHONPATH",
+                         "PYTHONDONTWRITEBYTECODE", "PYTEST_CURRENT_TEST",
+                         "VIRTUAL_ENV", "USER", "SHELL")
+
     def setUp(self) -> None:
         super().setUp()
+        # rail r7 P1 (gap HERDADO, curado aqui): TestEnvContext PRESERVA
+        # CEO_AUDIT_CHAIN_LENGTH_PATH / _KEY_PATH / _LAST_HMAC_PATH /
+        # CEO_AUDIT_HMAC_DISABLE se o ambiente pai os trouxer — os
+        # helpers de HMAC apontariam para arquivos REAIS (o caso feliz
+        # incrementaria o contador vivo; o de rotacao apagaria sidecars)
+        # e o disable tornaria as asserções dependentes do ambiente.
+        # Ancorados no tmp isolado ANTES do reload.
+        # rail r9 — cura de CLASSE (r5/r7/r8/r9 acharam a MESMA falha com
+        # variaveis diferentes): em vez de neutralizar uma var por rodada,
+        # o fixture ancora/limpa o DOMINIO INTEIRO de env que a familia de
+        # auditoria LE. A lista e derivavel do codigo
+        # (scratchpad/derive-audit-env.py: os.environ.get("CEO_AUDIT_*")
+        # em audit_emit/audit_hmac/spool_writer/audit_rotation) e o teste
+        # de dominio abaixo falha se a familia ganhar uma var nova.
+        self._scoped_env = self._minimal_env()
+        self._sidecar_patch = mock.patch.dict(
+            os.environ, self._scoped_env, clear=True)
+        self._sidecar_patch.start()
         # Reload audit_emit so module-level path helpers pick up the
         # isolated CEO_AUDIT_LOG_* env set by TestEnvContext.setUp().
         importlib.reload(audit_emit)
 
     def tearDown(self) -> None:
+        self._sidecar_patch.stop()
         super().tearDown()
 
     # --- Test 1 ---------------------------------------------------------
@@ -145,17 +175,33 @@ class CanaryWiringTests(TestEnvContext):
     # DRAIN time in spool mode) was read by the parent before all workers'
     # atexit drains completed -> intermittent undercount (CI "13 != 15").
     # Fix: pin the FULL env (mode + lock + paths) explicitly in the worker.
-    _WORKER_ENV_KEYS = (
-        "HOME",
-        "CLAUDE_PROJECT_DIR",
-        "CEO_AUDIT_LOG_DIR",
-        "CEO_AUDIT_LOG_PATH",
-        "CEO_AUDIT_LOG_ERR",
-        "CEO_AUDIT_LOG_LOCK",
-        "CEO_AUDIT_LAST_HMAC_PATH",
-        "CEO_AUDIT_CHAIN_LENGTH_PATH",
-        "CEO_AUDIT_KEY_PATH",
-    )
+
+    def _minimal_env(self, **extra):
+        """Env MINIMO do teste: nada do pai alem do allowlist neutro.
+
+        Os anchors de auditoria apontam para o tmp isolado que
+        TestEnvContext montou; qualquer `CEO_*` do ambiente pai fica de
+        fora por construcao (rail r10).
+        """
+        env = {k: os.environ[k] for k in self._KEEP_FROM_PARENT
+               if k in os.environ}
+        env["HOME"] = str(self.home_dir)
+        env["CLAUDE_PROJECT_DIR"] = str(self.project_dir)
+        env["CEO_AUDIT_LOG_DIR"] = str(self.audit_dir)
+        env["CEO_AUDIT_LOG_PATH"] = str(self.audit_dir / "audit-log.jsonl")
+        env["CEO_AUDIT_LOG_ERR"] = str(self.audit_dir / "audit-log.errors")
+        env["CEO_AUDIT_LOG_LOCK"] = str(self.audit_dir / "audit-log.lock")
+        env["CEO_AUDIT_KEY_PATH"] = str(self.audit_dir / "audit-key")
+        env["CEO_AUDIT_LAST_HMAC_PATH"] = str(
+            self.audit_dir / "audit-log.last-hmac")
+        env["CEO_AUDIT_CHAIN_LENGTH_PATH"] = str(
+            self.audit_dir / "audit-log.chain-length")
+        # O default do TestEnvContext (SYNC_MODE_DEFAULT): sem ele os
+        # emits vao para o spool assincrono e o teste le estado velho.
+        # Explicito aqui porque o env minimo nao herda nada do pai.
+        env["CEO_AUDIT_SYNC_MODE"] = "1"
+        env.update(extra)
+        return env
 
     def _worker_env(self, *, sync: bool):
         """Build (env_apply, env_drop) so the worker fully pins its mode.
@@ -164,19 +210,33 @@ class CanaryWiringTests(TestEnvContext):
         sync-mode knob on/off so the worker's path (sync per-emit vs
         spool+drain) is deterministic regardless of start method.
         """
-        env_apply = {}
-        env_drop = []
-        for k in self._WORKER_ENV_KEYS:
-            v = os.environ.get(k)
-            if v is not None:
-                env_apply[k] = v
-            else:
-                env_drop.append(k)
+        # rail r10: o worker recebe o env MINIMO COMPLETO (nao um delta
+        # sobre o herdado) — um forkserver ja iniciado carrega o ambiente
+        # do pai, e qualquer var deixada de fora produzia verde VACUO.
+        env_apply = self._minimal_env()
         if sync:
             env_apply["CEO_AUDIT_SYNC_MODE"] = "1"
         else:
-            env_drop.append("CEO_AUDIT_SYNC_MODE")
-        return env_apply, env_drop
+            # o env minimo liga sync por default (SYNC_MODE_DEFAULT); o
+            # caso spool+drain precisa DESLIGAR explicitamente.
+            env_apply.pop("CEO_AUDIT_SYNC_MODE", None)
+        return env_apply, []
+
+    def _assert_worker_modes(self, *, expected: str, workers: int) -> None:
+        """Prova que o env do PARENT nao vazou: cada worker registrou o
+        CEO_AUDIT_SYNC_MODE que efetivamente recebeu (rail r11)."""
+        marks = sorted(self.audit_dir.glob("worker-mode-*.txt"))
+        self.assertEqual(
+            len(marks), workers,
+            "esperava %d marcador(es) de modo, achei %d" % (
+                workers, len(marks)))
+        got = {m.read_text(encoding="utf-8").strip() for m in marks}
+        self.assertEqual(
+            got, {expected},
+            "modo efetivo do worker divergiu (env vazou do parent?): %s"
+            % sorted(got))
+        for m in marks:
+            m.unlink()
 
     def _spawn_workers(self, env_apply, env_drop, workers, per_worker):
         procs = []
@@ -221,6 +281,12 @@ class CanaryWiringTests(TestEnvContext):
             st = spool_writer.drain_now(force=True)
             if not getattr(st, "appended", 0):
                 break
+        # rail r11 — CONTROLE do modo efetivo do worker. Medir o que o
+        # PARENT drena nao discrimina: o proprio worker drena seu spool no
+        # atexit (spool_writer:2618), entao `appended` no parent e 0 nos
+        # DOIS caminhos. O que discrimina e o env que CHEGOU no filho —
+        # exatamente o que o vazamento (update sobre o herdado) quebrava.
+        self._assert_worker_modes(expected="unset", workers=workers)
         counter = audit_hmac.read_chain_length()
         log = audit_emit._log_path()
         lines = (
@@ -258,39 +324,52 @@ class CanaryWiringTests(TestEnvContext):
         def _assert_coherent() -> None:
             spool_writer._reset_caches_for_test()
             ae_dir = audit_emit._audit_dir()
-            # Lock domain: sync path == drain path.
+            # Lock domain: sync path == drain path. Realpath dos DOIS
+            # lados ([[feedback-path-assertions-must-compare-realpath]]):
+            # com PATH setado a familia resolve simbolicos (/var ->
+            # /private/var no macOS) e a igualdade e FISICA, nao de
+            # formato (PLAN-182 W1 rail r2 D).
             self.assertEqual(
-                audit_emit._lock_path(),
-                spool_writer._canonical_log_lock(),
+                audit_emit._lock_path().resolve(),
+                spool_writer._canonical_log_lock().resolve(),
             )
-            self.assertEqual(ae_dir, spool_writer._project_dir_from_env())
-            # Counter / key / last-hmac sidecars co-locate with the lock dir.
-            self.assertEqual(audit_hmac._audit_dir_from_env(), ae_dir)
             self.assertEqual(
-                audit_hmac.chain_length_path().parent,
-                audit_emit._lock_path().parent,
+                ae_dir.resolve(),
+                spool_writer._project_dir_from_env().resolve(),
+            )
+            # Counter / key / last-hmac sidecars co-locate with the lock dir.
+            self.assertEqual(
+                audit_hmac._audit_dir_from_env().resolve(), ae_dir.resolve()
+            )
+            self.assertEqual(
+                audit_hmac.chain_length_path().parent.resolve(),
+                audit_emit._lock_path().parent.resolve(),
             )
 
-        # Clean the override set so each config below is unambiguous.
-        for k in (
+        # rail r5 P2: cada configuracao vive num patch.dict ESCOPADO
+        # (AGENTS.md env-isolation) — nada de pop/update no ambiente
+        # global do processo.
+        base_env = {k: v for k, v in os.environ.items() if k not in (
             "CEO_AUDIT_LOG_LOCK", "CEO_AUDIT_LOG_DIR", "CEO_AUDIT_LOG_PATH",
             "CEO_AUDIT_CHAIN_LENGTH_PATH", "CEO_AUDIT_KEY_PATH",
             "CEO_AUDIT_LAST_HMAC_PATH", "CEO_PROJECT_STATE_DIR",
-        ):
-            os.environ.pop(k, None)
+        )}
 
         # (A) pure-$HOME: every resolver derives from $HOME.
-        _assert_coherent()
+        with mock.patch.dict(os.environ, base_env, clear=True):
+            _assert_coherent()
         # (B) LOG_DIR-only (the prior split): lock under LOG_DIR, counter
         #     must now co-locate there too (the audit_hmac alignment fix).
-        os.environ.update({"CEO_AUDIT_LOG_DIR": str(self.audit_dir)})
-        _assert_coherent()
+        env_b = dict(base_env)
+        env_b["CEO_AUDIT_LOG_DIR"] = str(self.audit_dir)
+        with mock.patch.dict(os.environ, env_b, clear=True):
+            _assert_coherent()
         # (C) LOG_DIR + LOG_PATH + LOG_LOCK all in one dir (TestEnvContext).
-        os.environ.update({
-            "CEO_AUDIT_LOG_PATH": str(self.audit_dir / "audit-log.jsonl"),
-            "CEO_AUDIT_LOG_LOCK": str(self.audit_dir / "audit-log.lock"),
-        })
-        _assert_coherent()
+        env_c = dict(env_b)
+        env_c["CEO_AUDIT_LOG_PATH"] = str(self.audit_dir / "audit-log.jsonl")
+        env_c["CEO_AUDIT_LOG_LOCK"] = str(self.audit_dir / "audit-log.lock")
+        with mock.patch.dict(os.environ, env_c, clear=True):
+            _assert_coherent()
 
     # --- Test 9 (CRITICAL — audit-v2 P0 closure proof) ------------------
     def test_canary_e2e_verify_chain_detects_truncation(self) -> None:
@@ -336,21 +415,33 @@ def _concurrent_worker(env_apply: dict, env_drop: list, count: int) -> None:
     inheritance, reloads audit_emit so module-level path helpers + the
     spool/sync branch see the override env, and emits ``count`` events.
     """
-    # Use update() / pop() helpers (not subscript writes) so the
-    # test-env hygiene scanner does not flag this as `os.environ[k] = ...`.
-    os.environ.update(env_apply)
-    for k in env_drop:
-        os.environ.pop(k, None)
-    # Worker process: import + reload to pick up the isolated audit dir.
-    from _lib import audit_emit as worker_emit  # noqa: WPS433
-    importlib.reload(worker_emit)
-    for i in range(count):
-        worker_emit.emit_debate_event(
-            plan_id="PLAN-TEST",
-            round_num=1,
-            phase="w-{pid}-{i}".format(pid=os.getpid(), i=i),
-            agent="test-archetype",
-        )
+    # rail r11: a inversao do parent (env MINIMO explicito) so vale se o
+    # FILHO tambem descartar o herdado. Com update() sobre o ambiente do
+    # processo, um forkserver ja iniciado mantinha CEO_AUDIT_SYNC_MODE=1
+    # do parent — e o teste de SPOOL concorrente exercitava, na verdade,
+    # o caminho SYNC (verde VACUO), alem de poder tocar sidecars reais.
+    # patch.dict(clear=True) escopado: o filho roda EXATAMENTE com
+    # env_apply, nada mais.
+    with mock.patch.dict(os.environ, env_apply, clear=True):
+        # rail r11 (controle): registra o modo EFETIVO que chegou neste
+        # filho, para o parent provar que o env nao vazou do processo pai.
+        try:
+            mode = os.environ.get("CEO_AUDIT_SYNC_MODE", "unset")
+            marker = Path(env_apply["CEO_AUDIT_LOG_DIR"]) / (
+                "worker-mode-%d.txt" % os.getpid())
+            marker.write_text(mode, encoding="utf-8")
+        except Exception:
+            pass
+        # Worker process: import + reload to pick up the isolated audit dir.
+        from _lib import audit_emit as worker_emit  # noqa: WPS433
+        importlib.reload(worker_emit)
+        for i in range(count):
+            worker_emit.emit_debate_event(
+                plan_id="PLAN-TEST",
+                round_num=1,
+                phase="w-{pid}-{i}".format(pid=os.getpid(), i=i),
+                agent="test-archetype",
+            )
 
 
 if __name__ == "__main__":

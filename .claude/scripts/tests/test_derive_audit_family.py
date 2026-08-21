@@ -60,36 +60,47 @@ class TestCensusBehavioral:
 
 
 class TestAssertMigratedGate:
-    def test_gate_is_red_today_by_design(self):
+    def test_gate_is_green_post_w1(self):
+        # W1 LANDADA (SENT-S319): o gate flipa para verde e VIRA regressao —
+        # qualquer modulo runtime que volte a construir o literal reabre a
+        # classe e este teste fica vermelho.
         p = run_tool("--assert-migrated")
-        assert p.returncode == 1, (
-            "o gate de migração passou ANTES da W1 executar — ou a W1 "
-            "landou (atualize este teste junto), ou o censo ficou cego")
-        assert "constroem o caminho literal" in p.stdout
+        assert p.returncode == 0, (
+            "modulo(s) runtime voltaram a construir o literal — regressao "
+            "da classe PLAN-182 W1:\n" + p.stdout)
+        assert "0 módulo(s)" in p.stdout or "0 modulo(s)" in p.stdout
 
 
 class TestEnvMatrixUS2:
-    def test_matrix_reproduces_measured_divergences(self):
+    def test_matrix_reflects_w1_cure(self):
         p = run_tool("--matrix")
         assert p.returncode == 0, p.stderr
         m = json.loads(p.stdout)
         ae = m["audit_emit._audit_dir"]
         ss = m["state_store._state_root"]
         salt = m["injection_salt(dir do salt)"]
-        # audit_emit: só CEO_AUDIT_LOG_DIR muda o caminho
+        # POS-W1 (SENT-S319): CLAUDE_PROJECT_DIR move TODOS os anchors da
+        # familia para o dir do slug nativo (-tmp-fake-proj) — a cura.
         assert ae["CEO_AUDIT_LOG_DIR"] == "/tmp/fake-audit"
-        assert ae["CEO_PROJECT_NAME"].endswith("/projects/ceo-orchestration")
-        assert ae["CLAUDE_PROJECT_DIR"].endswith("/projects/ceo-orchestration")
-        # state_store: honra CEO_STATE_ROOT e CEO_PROJECT_NAME
+        assert ae["CLAUDE_PROJECT_DIR"].endswith("/projects/-tmp-fake-proj")
+        assert ss["CLAUDE_PROJECT_DIR"].endswith(
+            "/projects/-tmp-fake-proj/state")
+        assert salt["CLAUDE_PROJECT_DIR"].endswith(
+            "/projects/-tmp-fake-proj/.salt")
+        # sem-env: TODOS caem no MESMO slug (derivado do cwd) — familia
+        # atomica; nenhum cai mais no literal.
+        assert not ae["sem-env"].endswith("/projects/ceo-orchestration")
+        # state_store: CEO_STATE_ROOT segue absoluto; CEO_PROJECT_NAME segue
+        # como ESCAPE explicito do operador (state_store apenas — decisao
+        # W1: honra a escolha, nunca participa do default).
         assert ss["CEO_STATE_ROOT"] == "/tmp/fake-state-root"
         assert ss["CEO_PROJECT_NAME"].endswith("/projects/outro-projeto/state")
-        # salt: NENHUM override — mesma célula em todas as colunas
-        assert len({v for v in salt.values()}) == 1, (
-            "o salt ganhou override de env — se isso é a cura da W1, "
-            "atualize a matriz esperada JUNTO com o plano")
-        # a divergência em si (a razão do PLAN-182): sob CEO_PROJECT_NAME,
-        # state_store acompanha e audit_emit NÃO — dois artefatos do mesmo
-        # projeto em namespaces distintos
+        # salt: agora acompanha o projeto (CLAUDE_PROJECT_DIR move a celula;
+        # ADR-079 S318 — salt POR PROJETO). O conjunto de valores nao e mais
+        # unitario por DESIGN.
+        assert len({v for v in salt.values()}) > 1
+        # a divergencia residual e INTENCIONAL e documentada: o escape
+        # CEO_PROJECT_NAME e do state_store; audit_emit nunca o consumiu.
         assert "outro-projeto" in ss["CEO_PROJECT_NAME"]
         assert "outro-projeto" not in ae["CEO_PROJECT_NAME"]
 
@@ -148,7 +159,7 @@ class TestArtifactEnvMatrixUS2Extended:
             got = os.path.realpath(m[anchor][col])
             assert got.startswith(moved_dir + os.sep), (anchor, got)
 
-    def test_log_path_leaves_lock_and_errors_behind(self):
+    def test_log_path_moves_lock_and_errors_with_it(self):
         # O ACHADO da US2, e a correcao do enunciado: o plano dizia que o
         # lock e o errors nao acompanham o log "sob PATH-only". Medido: sob
         # PATH-only tudo fica co-locado; quem PARTE a familia e
@@ -176,11 +187,12 @@ class TestArtifactEnvMatrixUS2Extended:
         assert _under_moved(m["audit_hmac.key_path"][col]), (
             "a audit-key parou de acompanhar o log — isso muda a conclusao "
             "de tenancy do plano, atualize os dois")
-        # o lock e o errors NAO acompanham: e essa a divergencia
-        for left_behind in ("audit_emit._lock_path", "audit_emit._errors_path"):
-            assert not _under_moved(m[left_behind][col]), (
-                "%s acompanhou o log — a divergencia sumiu, atualize o plano"
-                % left_behind)
+        # POS-W1: o lock e o errors ACOMPANHAM o log (family-follows-log,
+        # ADR-001 S318 item 3 — o split medido na W0 era DEFEITO, curado).
+        for follower in ("audit_emit._lock_path", "audit_emit._errors_path"):
+            assert _under_moved(m[follower][col]), (
+                "%s deixou de acompanhar o log — regressao do "
+                "family-follows-log da W1" % follower)
         # controle negativo do mesmo fato: sob PATH-only (sem-env) os tres
         # compartilham o dir, entao a divergencia NAO e do caminho default.
         base = "sem-env"

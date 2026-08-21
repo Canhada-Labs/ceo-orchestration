@@ -2742,7 +2742,7 @@ def _audit_log_path() -> Optional[Path]:
     byte-identical write/read paths.
 
     PLAN-105 R2 P0 #2 fold: previously derived a slug from CLAUDE_PROJECT_DIR,
-    which diverged from audit_emit's `~/.claude/projects/ceo-orchestration`
+    which diverged from audit_emit's `~/.claude/projects/<native-slug>`
     default. Now imports the real resolver so reader path == writer path.
     """
     try:

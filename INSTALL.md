@@ -173,7 +173,7 @@ Always (regardless of profile):
 - `.claude/hooks/check_agent_spawn.py` — the mechanical spawn enforcement (Python)
 - `.claude/hooks/audit_log.py` — silent PostToolUse audit observer
 - `.claude/hooks/_python-hook.sh` — Python 3.9+ version resolver shim
-- `.claude/hooks/_lib/` — 69 shared modules, excluding the package `__init__.py` (payload, redact, filelock, team, testing, test_isolation, audit_emit, audit_hmac, policy, tool_lifecycle, advisory_dampen, codex_cli_shape, …)
+- `.claude/hooks/_lib/` — 70 shared modules, excluding the package `__init__.py` (payload, redact, filelock, team, testing, test_isolation, audit_emit, audit_hmac, policy, tool_lifecycle, advisory_dampen, codex_cli_shape, …)
 - `.claude/scripts/` — validate-governance, inject-agent-context,
   check-skill-health, check-pitfall-regression (universal)
 - `.claude/commands/audit-page.md` — generic page audit
@@ -481,7 +481,7 @@ your-project/
 │   │       ├── commands/                # domain slash commands
 │   │       └── scripts/                 # domain check scripts
 │   ├── hooks/
-│   │   ├── _lib/                        # 69 shared Python modules, excl. __init__.py (audit_emit, audit_hmac, policy, redact, tool_lifecycle, …)
+│   │   ├── _lib/                        # 70 shared Python modules, excl. __init__.py (audit_emit, audit_hmac, policy, redact, tool_lifecycle, …)
 │   │   ├── _python-hook.sh              # Python version resolver + invoker
 │   │   ├── check_agent_spawn.py         # mechanical enforcement of spawn protocol
 │   │   ├── audit_log.py                 # silent PostToolUse audit observer

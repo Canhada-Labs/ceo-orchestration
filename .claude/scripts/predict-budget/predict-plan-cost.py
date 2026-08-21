@@ -49,6 +49,7 @@ _SCRIPT_DIR = Path(__file__).resolve().parent
 _HOOKS_DIR = _SCRIPT_DIR.parent.parent / "hooks"
 if str(_HOOKS_DIR) not in sys.path:
     sys.path.insert(0, str(_HOOKS_DIR))
+from _lib import runtime_paths as _rp  # noqa: E402  # PLAN-182 W1 single resolver
 
 try:
     from _lib import audit_emit as _audit_emit  # type: ignore
@@ -133,7 +134,7 @@ def _default_audit_log() -> Path:
     if env:
         return Path(env)
     home = os.environ.get("HOME") or str(Path.home())
-    return Path(home) / ".claude" / "projects" / "ceo-orchestration" / "audit-log.jsonl"
+    return _rp.runtime_state_dir() / "audit-log.jsonl"
 
 
 class _AuditParseError(Exception):
@@ -341,7 +342,7 @@ def _cache_dir() -> Path:
     project = os.environ.get("CLAUDE_PROJECT_DIR", "")
     if not project:
         home = os.environ.get("HOME") or str(Path.home())
-        return Path(home) / ".claude" / "projects" / "ceo-orchestration" / "predict-cache"
+        return _rp.runtime_state_dir() / "predict-cache"
     return Path(project) / "state" / "predict-cache"
 
 

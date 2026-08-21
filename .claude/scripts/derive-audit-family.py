@@ -57,6 +57,46 @@ SCAN_TOP_FILES = ["install.sh", "upgrade.sh"]
 M1_RE = re.compile(r"\.claude(?:['\"]?\s*[,/+]\s*['\"]?|/)projects[^\n]{0,80}ceo-orchestration"
                    r"|projects/ceo-orchestration"
                    r"|['\"]ceo-orchestration['\"]")
+
+# PLAN-182 W1 — refinamentos do predicado M1 (a licao dos "5/5 numeros
+# errados": o censo e comportamental, e o comportamento tem 3 excecoes
+# LEGITIMAS que a primeira redacao contava como divida):
+#   (a) linhas com o marcador explicito `rp-allow:` sao rotulos de
+#       produto (service-name OTel, vendor de SBOM), nao caminhos;
+#   (b) `skills/core/ceo-orchestration` e o NOME DA SKILL, nao o dir de
+#       runtime state;
+#   (c) DONOS SANCIONADOS do literal: runtime_paths.py (unico modulo
+#       autorizado a construi-lo — legacy_state_dir p/ tooling de
+#       migracao W2) e este proprio censo (o regex acima).
+M1_ALLOW_MARK = "rp-allow:"
+M1_SKILL_CTX = (
+    "skills/core/ceo-orchestration",
+    'skills" / "core" / "ceo-orchestration"',
+    "skills' / 'core' / 'ceo-orchestration'",
+)
+M1_SANCTIONED = (
+    ".claude/hooks/_lib/runtime_paths.py",
+    ".claude/scripts/derive-audit-family.py",
+    "dist/ceo-plugin/hooks/_lib/runtime_paths.py",
+)
+
+
+def _m1_hit(rel, body):
+    """M1 comportamental com as 3 excecoes documentadas acima."""
+    if rel in M1_SANCTIONED:
+        return False
+    kept = []
+    for ln in body.splitlines():
+        if M1_ALLOW_MARK in ln:
+            continue
+        if any(c in ln for c in M1_SKILL_CTX):
+            continue
+        # Fixture-data shape: valores de campo `project` em eventos
+        # sinteticos de smoke/fixtures sao DADO, nao construcao de path.
+        if '"project"' in ln and "ceo-orchestration" in ln:
+            continue
+        kept.append(ln)
+    return bool(M1_RE.search("\n".join(kept)))
 M2_MODULES = ("audit_emit", "state_store", "spool_writer", "scratchpad_lib",
               "injection_salt", "memory_shared", "audit_hmac", "filelock")
 _M2_ALT = "|".join(M2_MODULES)
@@ -117,7 +157,7 @@ def scan() -> List[dict]:
         except OSError:
             continue
         markers: List[str] = []
-        if M1_RE.search(body):
+        if _m1_hit(rel, body):
             markers.append("M1-constroi-caminho")
         if p.endswith(".py") and M2_RE.search(body):
             markers.append("M2-importa-resolvedor")

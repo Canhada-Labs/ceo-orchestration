@@ -42,6 +42,18 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+# PLAN-182 W1 single resolver (rail r2 grupo A) — .claude/scripts/* -> .claude/hooks
+import sys as _sys_rp
+from pathlib import Path as _P_rp
+_h_rp = _P_rp(__file__).resolve()
+for _anc_rp in _h_rp.parents:
+    if (_anc_rp / ".claude" / "hooks" / "_lib").is_dir():
+        if str(_anc_rp / ".claude" / "hooks") not in _sys_rp.path:
+            _sys_rp.path.insert(0, str(_anc_rp / ".claude" / "hooks"))
+        break
+from _lib import runtime_paths as _rp  # noqa: E402
+
+
 
 _REPO_ROOT = Path(os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()).resolve()
 _PROPOSALS_DIR = _REPO_ROOT / ".claude" / "proposals"
@@ -71,6 +83,20 @@ except Exception:  # pragma: no cover
         pass
 
 
+def _errors_dir_for_family():
+    """Dir do breadcrumb: parent do LOG_PATH -> LOG_DIR -> default."""
+    _lp = os.environ.get("CEO_AUDIT_LOG_PATH")
+    if _lp:
+        try:
+            return Path(_lp).resolve().parent
+        except OSError:
+            pass
+    _ld = os.environ.get("CEO_AUDIT_LOG_DIR")
+    if _ld:
+        return Path(_ld)
+    return _rp.runtime_state_dir()
+
+
 def _emit_concurrent_blocked(*, skill_slug: str, shadow_path: Path, reason: str) -> None:
     """Best-effort breadcrumb for concurrent-apply blocking.
 
@@ -83,9 +109,9 @@ def _emit_concurrent_blocked(*, skill_slug: str, shadow_path: Path, reason: str)
     try:
         err_path = Path(
             os.environ.get("CEO_AUDIT_LOG_ERR") or (
-                Path(os.environ.get("HOME") or str(Path.home()))
-                / ".claude" / "projects" / "ceo-orchestration"
-                / "audit-log.errors"
+                # PLAN-182 W1 + rail r14: resolvedor unico com a cascata
+                # da familia (o breadcrumb mora com o LOG efetivo).
+                _errors_dir_for_family() / "audit-log.errors"
             )
         )
         err_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)

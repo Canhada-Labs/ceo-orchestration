@@ -11,7 +11,7 @@ terminal, writes final state file gracefully.
 
 Usage:
   python3 .claude/scripts/local/wave-readonly-monitor.py \
-    --audit-log ~/.claude/projects/ceo-orchestration/audit-log.jsonl \
+    --audit-log ~/.claude/projects/<native-slug>/audit-log.jsonl \
     --plan-dir .claude/plans/PLAN-084 \
     --staging-policy .claude/plans/PLAN-084/staging-write-policy.yaml \
     --start-iso 2026-05-12T04:15:24Z \

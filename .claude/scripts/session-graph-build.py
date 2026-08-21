@@ -59,6 +59,18 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
+# PLAN-182 W1 single resolver (rail r2 grupo A) — .claude/scripts/* -> .claude/hooks
+import sys as _sys_rp
+from pathlib import Path as _P_rp
+_h_rp = _P_rp(__file__).resolve()
+for _anc_rp in _h_rp.parents:
+    if (_anc_rp / ".claude" / "hooks" / "_lib").is_dir():
+        if str(_anc_rp / ".claude" / "hooks") not in _sys_rp.path:
+            _sys_rp.path.insert(0, str(_anc_rp / ".claude" / "hooks"))
+        break
+from _lib import runtime_paths as _rp  # noqa: E402
+
+
 
 # Resolve _lib/audit_emit + _lib/plan_frontmatter
 _SCRIPTS_DIR = Path(__file__).resolve().parent
@@ -101,9 +113,12 @@ def _default_graph_dir() -> Path:
     override = os.environ.get("CEO_SESSION_GRAPH_DIR")
     if override:
         return Path(override)
-    home = Path(os.environ.get("HOME") or str(Path.home()))
-    project = os.environ.get("CEO_PROJECT_NAME") or "ceo-orchestration"
-    return home / ".claude" / "projects" / project / "session-graphs"
+    project = os.environ.get("CEO_PROJECT_NAME")
+    if project:
+        home = Path(os.environ.get("HOME") or str(Path.home()))
+        return home / ".claude" / "projects" / project / "session-graphs"
+    # PLAN-182 W1: default via the single family resolver.
+    return _rp.runtime_state_dir() / "session-graphs"
 
 
 def _utc_now() -> datetime:

@@ -70,6 +70,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 _HOOKS_DIR = REPO_ROOT / ".claude" / "hooks"
 if str(_HOOKS_DIR) not in sys.path:
     sys.path.insert(0, str(_HOOKS_DIR))
+from _lib import runtime_paths as _rp  # noqa: E402  # PLAN-182 W1 single resolver
 
 # Fail-soft imports (ADR-010 fail-open on INFRASTRUCTURE): a missing
 # module degrades a feature with an explicit marker, never crashes.
@@ -197,7 +198,7 @@ def fence_token(s: Any, *, max_len: int = 80) -> str:
 def default_log_path() -> Path:
     """Conventional audit log path (audit-query.py:56)."""
     home = Path(os.environ.get("HOME") or str(Path.home()))
-    default_dir = home / ".claude" / "projects" / "ceo-orchestration"
+    default_dir = _rp.runtime_state_dir()
     return Path(
         os.environ.get("CEO_AUDIT_LOG_PATH") or str(default_dir / "audit-log.jsonl")
     )

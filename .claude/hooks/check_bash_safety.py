@@ -208,6 +208,26 @@ from _lib import adapters as _adapters  # noqa: E402
 # (test_check_bash_safety_h5_rewrite.py); no dispatch path uses it.
 # Remove when that test migrates to the seam-era surface.
 from _lib.adapters import claude as _claude_adapter  # noqa: E402,F401
+try:
+    from _lib import runtime_paths as _rp  # noqa: E402  # PLAN-182 W1 single resolver
+except Exception:  # pragma: no cover — partial upgrade: hook stays FAIL-OPEN (rail r1 P1-4)
+    _rp = None  # type: ignore[assignment]
+
+
+def _rp_state_dir():
+    """Resolver com fallback de partial-upgrade (arquivo novo ausente).
+
+    Fail-open: o hook NUNCA crasha por falta do resolvedor; degrada ao
+    comportamento legado com aviso em stderr.
+    """
+    if _rp is not None:
+        return _rp.runtime_state_dir()
+    import sys as _s
+    _s.stderr.write("# hook: _lib/runtime_paths ausente — fallback legado (partial upgrade)\n")
+    from pathlib import Path as _P
+    import os as _o
+    _h = _o.environ.get("HOME") or str(_P.home())
+    return _P(_h) / ".claude" / "projects" / "ceo-orchestration"  # rp-allow: partial-upgrade-fallback
 
 try:  # noqa: E402
     from _lib import audit_emit as _audit_emit  # noqa: E402
@@ -1478,13 +1498,13 @@ def _fact_gate_normalize(command: str) -> "Optional[str]":
 def _fact_gate_state_dir() -> "Path":
     """Per-process state base dir (tool_lifecycle `_audit_dir` pattern):
     ``CEO_AUDIT_LOG_DIR`` (live env — swarm children inherit a per-slot
-    value) else ``$HOME/.claude/projects/ceo-orchestration``."""
+    value) else ``$HOME/.claude/projects/<native-slug>``."""
     import os as _os
     env_dir = _os.environ.get("CEO_AUDIT_LOG_DIR")
     if env_dir:
         return Path(env_dir)
     home = _os.environ.get("HOME") or str(Path.home())
-    return Path(home) / ".claude" / "projects" / "ceo-orchestration"
+    return _rp_state_dir()
 
 
 def _fact_gate_safe_session(session_id: str) -> str:

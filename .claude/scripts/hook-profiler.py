@@ -3,7 +3,7 @@
 
 PLAN-010 Phase 2. Measures cold-start + warm-steady latency for all six
 active hooks under an isolated tempdir (so we never mutate the real
-audit log at ~/.claude/projects/ceo-orchestration/).
+audit log at ~/.claude/projects/<native-slug>/).
 
 Reports p50 / p95 / p99 / IQR in either JSON or Markdown table format.
 Measure-only: no thresholds embedded; ADR-024 governs when-to-gate.

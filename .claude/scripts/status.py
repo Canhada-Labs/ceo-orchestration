@@ -21,6 +21,15 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+import sys as _sys_rp
+from pathlib import Path as _Path_rp
+_HOOKS_RP = _Path_rp(__file__).resolve()
+for _anc in _HOOKS_RP.parents:
+    if (_anc / ".claude" / "hooks" / "_lib").is_dir():
+        if str(_anc / ".claude" / "hooks") not in _sys_rp.path:
+            _sys_rp.path.insert(0, str(_anc / ".claude" / "hooks"))
+        break
+from _lib import runtime_paths as _rp  # noqa: E402  # PLAN-182 W1 single resolver
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS_DIR = REPO_ROOT / ".claude" / "scripts"
@@ -29,12 +38,12 @@ PLANS_DIR = REPO_ROOT / ".claude" / "plans"
 
 def _audit_log_path() -> Path:
     home = Path(os.environ.get("HOME") or str(Path.home()))
-    return home / ".claude" / "projects" / "ceo-orchestration" / "audit-log.jsonl"
+    return _rp.runtime_state_dir() / "audit-log.jsonl"
 
 
 def _audit_errors_path() -> Path:
     home = Path(os.environ.get("HOME") or str(Path.home()))
-    return home / ".claude" / "projects" / "ceo-orchestration" / "audit-log.errors"
+    return _rp.runtime_state_dir() / "audit-log.errors"
 
 
 def _load_recent_events(hours: int = 24) -> List[Dict[str, Any]]:

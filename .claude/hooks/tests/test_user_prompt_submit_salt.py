@@ -70,9 +70,11 @@ class _IsolatedHomeMixin(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self._fake_home = Path(self._tmp.name)
-        self._home_patch = mock.patch.dict(
-            os.environ, {"HOME": str(self._fake_home)}, clear=False
-        )
+        _env_a = {k: v for k, v in os.environ.items()
+                  if k not in ("CEO_AUDIT_LOG_DIR", "CEO_AUDIT_LOG_PATH",
+                               "CLAUDE_PROJECT_DIR_NATIVE")}
+        _env_a["HOME"] = str(self._fake_home)
+        self._home_patch = mock.patch.dict(os.environ, _env_a, clear=True)
         self._home_patch.start()
         self.ups = _import_user_prompt_submit()
 
@@ -107,9 +109,16 @@ class TestSaltedHashCorrectness(_IsolatedHomeMixin):
         # Tear down + bring up a fresh isolated HOME (new salt)
         self._home_patch.stop()
         with tempfile.TemporaryDirectory() as tmp_b:
-            with mock.patch.dict(
-                os.environ, {"HOME": str(tmp_b)}, clear=False
-            ):
+            # rail r13: desde a cura de family-atomicity o `.salt` segue
+            # CEO_AUDIT_LOG_DIR/PATH — e o conftest da suite SEMPRE os
+            # seta para isolar o audit. Sem remove-los, as duas
+            # "instalacoes" resolviam para o MESMO dir e o salt (logo o
+            # hash) era identico: o teste media o override, nao o HOME.
+            _env_b = {k: v for k, v in os.environ.items()
+                      if k not in ("CEO_AUDIT_LOG_DIR", "CEO_AUDIT_LOG_PATH",
+                                   "CLAUDE_PROJECT_DIR_NATIVE")}
+            _env_b["HOME"] = str(tmp_b)
+            with mock.patch.dict(os.environ, _env_b, clear=True):
                 ups_b = _import_user_prompt_submit()
                 captured_b: dict = {}
 
@@ -126,9 +135,11 @@ class TestSaltedHashCorrectness(_IsolatedHomeMixin):
                 sha_b = captured_b["prompt_sha"]
 
         # Restore the original HOME patch for tearDown
-        self._home_patch = mock.patch.dict(
-            os.environ, {"HOME": str(self._fake_home)}, clear=False
-        )
+        _env_a = {k: v for k, v in os.environ.items()
+                  if k not in ("CEO_AUDIT_LOG_DIR", "CEO_AUDIT_LOG_PATH",
+                               "CLAUDE_PROJECT_DIR_NATIVE")}
+        _env_a["HOME"] = str(self._fake_home)
+        self._home_patch = mock.patch.dict(os.environ, _env_a, clear=True)
         self._home_patch.start()
 
         self.assertNotEqual(

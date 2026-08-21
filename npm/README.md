@@ -54,7 +54,7 @@ All counts below are verifiable from a clean checkout (see *Verifying the number
 | Skill checklists | **166** | 42 core + 8 frontend + 116 domain |
 | Hook scripts (on disk) | **58** | Python entrypoints under `.claude/hooks/` |
 | Hooks wired in `settings.json` | **47** | distinct scripts, 49 event registrations |
-| Shared library modules | **69** | stdlib-only, under `.claude/hooks/_lib/` (excluding the package `__init__.py`) |
+| Shared library modules | **70** | stdlib-only, under `.claude/hooks/_lib/` (excluding the package `__init__.py`) |
 | Slash commands | **27** | under `.claude/commands/` |
 | Architecture decision records | **194** | under `.claude/adr/` |
 | Tests | **~14,000 cases** | reported by `pytest --collect-only` across the hook, script, and conformance suites |

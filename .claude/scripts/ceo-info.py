@@ -55,6 +55,15 @@ import sys
 import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
+import sys as _sys_rp
+from pathlib import Path as _Path_rp
+_HOOKS_RP = _Path_rp(__file__).resolve()
+for _anc in _HOOKS_RP.parents:
+    if (_anc / ".claude" / "hooks" / "_lib").is_dir():
+        if str(_anc / ".claude" / "hooks") not in _sys_rp.path:
+            _sys_rp.path.insert(0, str(_anc / ".claude" / "hooks"))
+        break
+from _lib import runtime_paths as _rp  # noqa: E402  # PLAN-182 W1 single resolver
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -99,7 +108,7 @@ def _audit_log_path() -> Optional[Path]:
       1. ``$CEO_AUDIT_LOG_PATH``           (explicit file override)
       2. ``$CEO_AUDIT_LOG_DIR/audit-log.jsonl``
       3. ``$CLAUDE_PROJECT_DIR``-derived slug under ~/.claude/projects/
-      4. legacy ~/.claude/projects/ceo-orchestration/audit-log.jsonl
+      4. legacy ~/.claude/projects/<native-slug>/audit-log.jsonl
 
     Returns the FIRST candidate path (whether or not it exists) so the
     writability probe can report on the directory the framework *would* write
@@ -119,7 +128,7 @@ def _audit_log_path() -> Optional[Path]:
             return Path.home() / ".claude" / "projects" / slug / "audit-log.jsonl"
         except OSError:
             pass
-    return Path.home() / ".claude" / "projects" / "ceo-orchestration" / "audit-log.jsonl"
+    return _rp.runtime_state_dir() / "audit-log.jsonl"
 
 
 def _memory_dir() -> Path:
@@ -137,7 +146,7 @@ def _memory_dir() -> Path:
         slug = "-" + str(abs_path).lstrip("/").replace("/", "-")
         return Path.home() / ".claude" / "projects" / slug / "memory"
     except OSError:
-        return Path.home() / ".claude" / "projects" / "ceo-orchestration" / "memory"
+        return _rp.runtime_state_dir() / "memory"
 
 
 def _plans_dir() -> Path:
@@ -680,7 +689,7 @@ def _transcripts_dir() -> Path:
         slug = "-" + str(abs_path).lstrip("/").replace("/", "-")
         return Path.home() / ".claude" / "projects" / slug
     except OSError:
-        return Path.home() / ".claude" / "projects" / "ceo-orchestration"
+        return _rp.runtime_state_dir()
 
 
 def _iter_usage_entries(text: str) -> List[Dict[str, Any]]:

@@ -36,6 +36,15 @@ import re
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+import sys as _sys_rp
+from pathlib import Path as _Path_rp
+_HOOKS_RP = _Path_rp(__file__).resolve()
+for _anc in _HOOKS_RP.parents:
+    if (_anc / ".claude" / "hooks" / "_lib").is_dir():
+        if str(_anc / ".claude" / "hooks") not in _sys_rp.path:
+            _sys_rp.path.insert(0, str(_anc / ".claude" / "hooks"))
+        break
+from _lib import runtime_paths as _rp  # noqa: E402  # PLAN-182 W1 single resolver
 
 _DEFAULT_FIXTURE = "tests/fixtures/persona-scenario-suite.yaml"
 _DEFAULT_THRESHOLDS = ".claude/scripts/fixtures/persona-coverage-expected-thresholds.yaml"
@@ -47,7 +56,7 @@ _DEFAULT_THRESHOLDS = ".claude/scripts/fixtures/persona-coverage-expected-thresh
 #   AUTO   if at least one matched demand exists for the cell
 #   SEMI   if a demand was opened but never matched
 #   MANUAL otherwise (no live signal)
-_DEFAULT_AUDIT_LOG = "~/.claude/projects/ceo-orchestration/audit-log.jsonl"
+_DEFAULT_AUDIT_LOG = str(_rp.runtime_state_dir() / "audit-log.jsonl")
 _LIVE_PERSONA_ACTIONS = ("persona_demand_opened", "persona_demand_matched")
 
 

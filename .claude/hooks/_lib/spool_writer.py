@@ -31,6 +31,7 @@ if str(_HOOKS_DIR) not in sys.path:
     sys.path.insert(0, str(_HOOKS_DIR))
 
 from _lib.filelock import FileLock, FileLockTimeout  # noqa: E402
+from _lib import runtime_paths as _runtime_paths  # noqa: E402  # PLAN-182 W1 single resolver (ADR-001 S318)
 
 try:
     from _lib import audit_hmac as _audit_hmac  # noqa: E402
@@ -171,33 +172,93 @@ def _reset_caches_for_test() -> None:
     _STATE_DIR_CACHE = None
 
 
+def _project_dir_cache_key() -> Tuple[Optional[str], ...]:
+    """Cache key covering EVERY input that can move the resolved dir.
+
+    PLAN-182 W1 cure: the Wave-A key was (CEO_AUDIT_LOG_DIR, HOME) — a
+    process that switched project mid-run (CLAUDE_PROJECT_DIR / cwd /
+    CLAUDE_PROJECT_DIR_NATIVE changed) kept being served the PREVIOUS
+    project's dir from cache, so the cross-project leak survived any
+    resolver cure. cwd participates ONLY when it is an actual input
+    (no CEO_AUDIT_LOG_DIR, no native override, no CLAUDE_PROJECT_DIR),
+    keeping the hot path at three getenv calls.
+    """
+    env_dir = os.environ.get("CEO_AUDIT_LOG_DIR")
+    env_home = os.environ.get("HOME")
+    env_native = os.environ.get("CLAUDE_PROJECT_DIR_NATIVE")
+    env_proj = os.environ.get("CLAUDE_PROJECT_DIR")
+    cwd: Optional[str] = None
+    # rail r15 P2-3: o cwd entra na chave quando NENHUM override absoluto
+    # decide o dir — inclui o caso de um override RELATIVO, que
+    # `project_dir()` resolve CONTRA o cwd. Sem isso, um processo longo
+    # que muda de cwd com CLAUDE_PROJECT_DIR relativo continuaria servindo
+    # o dir do projeto anterior (e pularia a invalidacao dos caches).
+    def _abs(v):
+        return bool(v) and os.path.isabs(v)
+    if not (_abs(env_dir) or _abs(env_native) or _abs(env_proj)):
+        cwd = os.getcwd()
+    return (env_dir, env_home, env_native, env_proj, cwd)
+
+
 def _project_dir_from_env() -> Path:
     """Return the audit project dir (BYTE-IDENTICAL to audit_emit._audit_dir).
 
-    P1-5: must mirror audit_emit._audit_dir() exactly — only CEO_AUDIT_LOG_DIR
-    + HOME. CEO_AUDIT_LOG_PATH is the FILE path, not the dir path, so we do
-    NOT derive the dir from it (audit_emit doesn't either).
+    P1-5: must mirror audit_emit._audit_dir() exactly — CEO_AUDIT_LOG_DIR
+    precedence, then the SAME single resolver (_lib/runtime_paths,
+    PLAN-182 W1) audit_emit delegates to. CEO_AUDIT_LOG_PATH is the FILE
+    path, not the dir path, so we do NOT derive the dir from it
+    (audit_emit doesn't either).
 
-    PLAN-111 Wave A: single-slot cache keyed on (CEO_AUDIT_LOG_DIR, HOME).
-    Cache HIT skips re-construction of Path object (saves ~7us/call x
-    5.7x/emit cumulative). Cache MISS replaces the slot atomically.
+    PLAN-111 Wave A cache, PLAN-182 W1 key: single-slot, keyed on
+    _project_dir_cache_key() (all resolver inputs). Cache HIT skips
+    re-construction of Path object. Cache MISS replaces the slot
+    atomically.
 
     Single-threaded contract: concurrent os.environ mutation = UB.
     """
     global _PROJECT_DIR_CACHE
-    env_dir = os.environ.get("CEO_AUDIT_LOG_DIR")
-    env_home = os.environ.get("HOME")
-    env_key = (env_dir, env_home)
+    env_key = _project_dir_cache_key()
     cached = _PROJECT_DIR_CACHE
     if cached is not None and cached[0] == env_key:
         return cached[1]
+    env_dir = env_key[0]
     if env_dir:
         p = Path(env_dir)
     else:
-        home = env_home or str(Path.home())
-        p = Path(home) / ".claude" / "projects" / "ceo-orchestration"
+        p = _runtime_paths.runtime_state_dir()
     _PROJECT_DIR_CACHE = (env_key, p)
     return p
+
+
+def _invalidate_per_pid_caches_on_project_switch(old_dir: Path) -> None:
+    """Drop per-PID spool state when the resolved project changes.
+
+    rail r13 P1-1 (cura) + rail r14 (cura da cura): o flush do buffer
+    pendente e feito contra ``old_dir`` — o dir do projeto ANTERIOR, que
+    o chamador ja tem em cache. A primeira versao chamava
+    ``_flush_journal_buffer()``, que resolve o caminho por
+    ``_state_dir()``: como o cache ainda nao tinha sido trocado, aquilo
+    RE-ENTRAVA neste mesmo branch ate ``RecursionError`` e, pior,
+    reescrevia o payload antigo sob o dir do projeto NOVO — a
+    contaminacao cruzada que a invalidacao existe para impedir.
+
+    Fail-open: qualquer erro no flush apenas descarta os caches.
+    """
+    pid = os.getpid()
+    buf = _JOURNAL_BUFFER.get(pid)
+    if buf:
+        try:
+            target = old_dir / "{0}.{1}.journal".format(_JOURNAL_PREFIX, pid)
+            with target.open("ab") as fh:
+                for line in buf:
+                    fh.write(line)
+                fh.flush()
+                os.fsync(fh.fileno())
+        except Exception:  # pragma: no cover — nunca bloqueia a troca
+            pass
+    _SPOOL_HEADER_CACHE.pop(pid, None)
+    _ORDINAL_COUNTER.pop(pid, None)
+    _JOURNAL_BUFFER.pop(pid, None)
 
 
 def _state_dir() -> Path:
@@ -230,12 +291,21 @@ def _state_dir() -> Path:
     Single-threaded contract: concurrent os.environ mutation = UB.
     """
     global _STATE_DIR_CACHE
-    env_dir = os.environ.get("CEO_AUDIT_LOG_DIR")
-    env_home = os.environ.get("HOME")
-    env_key = (env_dir, env_home)
+    # PLAN-182 W1: key covers ALL resolver inputs (see
+    # _project_dir_cache_key) — a mid-process project switch must not be
+    # served the previous project's state dir.
+    env_key = _project_dir_cache_key()
     cached = _STATE_DIR_CACHE
     if cached is not None and cached[0] == env_key:
         return cached[1]
+    # rail r13 P1-1: os caches POR PID (header/ordinal/journal) nao sao
+    # cobertos pela chave acima. Num processo longo A -> B -> A, o header
+    # de B seria reusado em A (UUID errado no corpo => o drain estrito
+    # QUARENTENA o spool de A) e o journal bufferizado poderia ir para o
+    # projeto errado. Uma transicao de projeto invalida os tres.
+    if cached is not None and cached[0] != env_key:
+        # passa o dir ANTIGO (cached[1]) — nunca re-resolve aqui.
+        _invalidate_per_pid_caches_on_project_switch(cached[1])
     d = _project_dir_from_env() / "state"
     mkdir_ok = False
     try:
@@ -341,12 +411,26 @@ def _canonical_log_path() -> Path:
     return _project_dir_from_env() / "audit-log.jsonl"
 
 
+def _log_family_dir() -> Path:
+    """Dir the lock/errors sidecars must share with the LOG.
+
+    PLAN-182 W1 rail r1 P1-2: mirrors audit_emit._log_family_dir()
+    byte-for-byte — when CEO_AUDIT_LOG_PATH moves the log, EVERY writer
+    of that log locks the moved parent (two writers on one HMAC log
+    under different locks = interleaved appends).
+    """
+    env = os.environ.get("CEO_AUDIT_LOG_PATH")
+    if env:
+        return Path(env).resolve().parent
+    return _project_dir_from_env()
+
+
 def _canonical_log_lock() -> Path:
     """Mirror audit_emit._lock_path() — sibling .lock file."""
     env = os.environ.get("CEO_AUDIT_LOG_LOCK")
     if env:
         return Path(env)
-    return _project_dir_from_env() / "audit-log.lock"
+    return _log_family_dir() / "audit-log.lock"
 
 
 def _errors_path() -> Path:
@@ -354,7 +438,7 @@ def _errors_path() -> Path:
     env = os.environ.get("CEO_AUDIT_LOG_ERR")
     if env:
         return Path(env)
-    return _project_dir_from_env() / "audit-log.errors"
+    return _log_family_dir() / "audit-log.errors"
 
 
 def _spool_path(pid: int) -> Path:

@@ -32,6 +32,16 @@ import time
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 
+# PLAN-182 W1 single resolver (absolute first — works from hooks/ on
+# sys.path and from subpackages; relative and bare are fallbacks)
+try:
+    from _lib import runtime_paths as _rp
+except ImportError:  # pragma: no cover
+    try:
+        from . import runtime_paths as _rp  # type: ignore[no-redef]
+    except ImportError:
+        import runtime_paths as _rp  # type: ignore[no-redef]
+
 # ---------------------------------------------------------------------
 # 13 canonical primitives + 4 personas (PLAN-088 W5 fixture topology).
 # ---------------------------------------------------------------------
@@ -183,12 +193,9 @@ def _state_dir() -> Path:
     audit_dir = os.environ.get("CEO_AUDIT_LOG_DIR")
     if audit_dir:
         return Path(audit_dir) / "state"
-    home = Path(os.environ.get("HOME") or Path.home())
-    project = os.environ.get("CLAUDE_PROJECT_DIR", "ceo-orchestration")
-    # Use the basename of the project as the directory leaf so we don't
-    # collide across multiple installs on the same user.
-    leaf = Path(project).name or "ceo-orchestration"
-    return home / ".claude" / "projects" / leaf / "state"
+    # PLAN-182 W1: single family resolver — the pre-W1 basename leaf
+    # collided for same-basename checkouts (the exact cured class).
+    return _rp.runtime_state_dir() / "state"
 
 
 def maybe_emit_phase_c_flipped() -> bool:

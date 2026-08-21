@@ -79,6 +79,15 @@ import threading
 import time
 from pathlib import Path
 from typing import Deque, Dict, List, Optional, Tuple
+# PLAN-182 W1 single resolver (absolute first — works from hooks/ on
+# sys.path and from subpackages; relative and bare are fallbacks)
+try:
+    from _lib import runtime_paths as _rp
+except ImportError:  # pragma: no cover
+    try:
+        from . import runtime_paths as _rp  # type: ignore[no-redef]
+    except ImportError:
+        import runtime_paths as _rp  # type: ignore[no-redef]
 
 # Allowlist sanitizer for `mcp_server` field — prevents log-injection
 # (the value is a server name, not free-form text).
@@ -406,7 +415,7 @@ def _audit_log_path() -> Path:
         return Path(env)
     home = Path(os.environ.get("HOME") or Path.home())
     return (
-        home / ".claude" / "projects" / "ceo-orchestration" / "audit-log.jsonl"
+        _rp.runtime_state_dir() / "audit-log.jsonl"
     )
 
 

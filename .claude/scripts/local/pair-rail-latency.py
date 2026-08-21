@@ -37,6 +37,15 @@ import statistics
 import sys
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
+import sys as _sys_rp
+from pathlib import Path as _Path_rp
+_HOOKS_RP = _Path_rp(__file__).resolve()
+for _anc in _HOOKS_RP.parents:
+    if (_anc / ".claude" / "hooks" / "_lib").is_dir():
+        if str(_anc / ".claude" / "hooks") not in _sys_rp.path:
+            _sys_rp.path.insert(0, str(_anc / ".claude" / "hooks"))
+        break
+from _lib import runtime_paths as _rp  # noqa: E402  # PLAN-182 W1 single resolver
 
 _HEALTHY_CASES = ("A", "B", "C", "D", "E")
 
@@ -50,7 +59,7 @@ def _audit_dir() -> str:
     override = os.environ.get("CEO_AUDIT_LOG_PATH")
     if override:
         return os.path.dirname(override)
-    return os.path.expanduser("~/.claude/projects/ceo-orchestration")
+    return os.path.expanduser(str(_rp.runtime_state_dir()))
 
 
 # The rotated-archive name shape, mirroring the retention authority

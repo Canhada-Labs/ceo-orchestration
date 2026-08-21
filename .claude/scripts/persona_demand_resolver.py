@@ -30,11 +30,20 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, NamedTuple, Optional, Set, Tuple
+import sys as _sys_rp
+from pathlib import Path as _Path_rp
+_HOOKS_RP = _Path_rp(__file__).resolve()
+for _anc in _HOOKS_RP.parents:
+    if (_anc / ".claude" / "hooks" / "_lib").is_dir():
+        if str(_anc / ".claude" / "hooks") not in _sys_rp.path:
+            _sys_rp.path.insert(0, str(_anc / ".claude" / "hooks"))
+        break
+from _lib import runtime_paths as _rp  # noqa: E402  # PLAN-182 W1 single resolver
 
 DEFAULT_AUDIT_LOG = Path(
     os.environ.get(
         "CEO_AUDIT_LOG_DIR",
-        str(Path.home() / ".claude" / "projects" / "ceo-orchestration"),
+        str(_rp.runtime_state_dir()),
     )
 ) / "audit-log.jsonl"
 
@@ -303,7 +312,7 @@ def emit_resolutions(summary: Dict[str, Any], session_id: str = "") -> Tuple[int
                     latency_ms=latency_ms,
                     match_modality=modality,
                     session_id=session_id,
-                    project="ceo-orchestration",
+                    project=str(_rp.project_dir()),
                 )
                 matched_n += 1
             except Exception:
@@ -322,7 +331,7 @@ def emit_resolutions(summary: Dict[str, Any], session_id: str = "") -> Tuple[int
                     target_ref_hash=rec.target_ref_hash,
                     window_expired_at=window_expired_at,
                     session_id=session_id,
-                    project="ceo-orchestration",
+                    project=str(_rp.project_dir()),
                 )
                 unmet_n += 1
             except Exception:
@@ -595,7 +604,7 @@ def emit_waives_for_scanned(
                                 expected_persona=waive.persona,
                                 waive_reason=waive.reason,
                                 session_id=session_id,
-                                project="ceo-orchestration",
+                                project=str(_rp.project_dir()),
                             )
                             n += 1
                         except Exception:

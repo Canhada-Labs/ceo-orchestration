@@ -35,6 +35,15 @@ except Exception:  # pragma: no cover — defensive
     _audit_emit = None  # type: ignore[assignment]
 
 from _lib.estimation import bayesian
+# PLAN-182 W1 single resolver (absolute first — works from hooks/ on
+# sys.path and from subpackages; relative and bare are fallbacks)
+try:
+    from _lib import runtime_paths as _rp
+except ImportError:  # pragma: no cover
+    try:
+        from . import runtime_paths as _rp  # type: ignore[no-redef]
+    except ImportError:
+        import runtime_paths as _rp  # type: ignore[no-redef]
 
 
 def _read_audit_log_iter(audit_log_path: Path):
@@ -150,7 +159,7 @@ def run(
 
     Args:
         audit_log_path: defaults to
-            ~/.claude/projects/ceo-orchestration/audit-log.jsonl
+            ~/.claude/projects/<native-slug>/audit-log.jsonl
         baseline_yaml_path: defaults to
             .claude/plans/PLAN-084/canonical/calibration-baseline.yaml
         trigger_source: nightly_cron OR plan_close_hook
@@ -159,7 +168,7 @@ def run(
     """
     if audit_log_path is None:
         home = Path(os.path.expanduser("~"))
-        audit_log_path = home / ".claude" / "projects" / "ceo-orchestration" / "audit-log.jsonl"
+        audit_log_path = _rp.runtime_state_dir() / "audit-log.jsonl"
     if baseline_yaml_path is None:
         repo_root = Path.cwd()
         baseline_yaml_path = (

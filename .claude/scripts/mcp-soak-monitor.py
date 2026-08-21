@@ -34,6 +34,15 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+import sys as _sys_rp
+from pathlib import Path as _Path_rp
+_HOOKS_RP = _Path_rp(__file__).resolve()
+for _anc in _HOOKS_RP.parents:
+    if (_anc / ".claude" / "hooks" / "_lib").is_dir():
+        if str(_anc / ".claude" / "hooks") not in _sys_rp.path:
+            _sys_rp.path.insert(0, str(_anc / ".claude" / "hooks"))
+        break
+from _lib import runtime_paths as _rp  # noqa: E402  # PLAN-182 W1 single resolver
 
 
 DEFAULT_FPR_THRESHOLD = 0.01  # 1%
@@ -47,7 +56,7 @@ def _audit_log_path() -> Path:
     if env_path:
         return Path(env_path)
     home = Path.home()
-    return home / ".claude" / "projects" / "ceo-orchestration" / "audit-log.jsonl"
+    return _rp.runtime_state_dir() / "audit-log.jsonl"
 
 
 def _read_events(log_path: Path, cutoff: datetime) -> List[Dict[str, Any]]:
@@ -135,7 +144,7 @@ def _emit_breach(
             threshold=threshold,
             top_deny_reason=top_deny_reason,
             session_id=os.environ.get("CEO_SESSION_ID", ""),
-            project="ceo-orchestration",
+            project=str(_rp.project_dir()),
         )
     except Exception as e:
         return False, f"emit_failed:{type(e).__name__}"

@@ -59,7 +59,9 @@ echo ""
 # ---- Invariant 2: audit-log.errors empty ----
 echo "## Invariant 2: audit-log.errors empty"
 echo ""
-ERR_PATH="$HOME/.claude/projects/ceo-orchestration/audit-log.errors"
+# PLAN-182 W1: runtime state dir vem do resolvedor unico (nunca literal).
+STATE_DIR="$(python3 -c 'import sys; sys.path.insert(0, ".claude/hooks"); from _lib import runtime_paths; print(runtime_paths.runtime_state_dir())')"
+ERR_PATH="$STATE_DIR/audit-log.errors"
 if [ ! -f "$ERR_PATH" ]; then
   echo "   ✓ audit-log.errors does not exist — zero infra errors captured"
 else
@@ -78,7 +80,7 @@ echo ""
 # ---- Invariant 3: 50+ real Python-hooked spawns ----
 echo "## Invariant 3: 50+ real Python-hooked spawns in audit log"
 echo ""
-AUDIT_PATH="$HOME/.claude/projects/ceo-orchestration/audit-log.jsonl"
+AUDIT_PATH="$STATE_DIR/audit-log.jsonl"
 if [ ! -f "$AUDIT_PATH" ]; then
   echo "   ⚠ audit-log.jsonl not found at $AUDIT_PATH"
   echo "   Either nothing has been spawned yet, or XDG path differs."

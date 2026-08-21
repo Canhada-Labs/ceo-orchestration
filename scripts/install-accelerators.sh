@@ -22,7 +22,7 @@
 #     `model:` frontmatter governs — NEVER a global override, which is documented to
 #     beat the adopter's explicit model: declarations — S218/PLAN-128-FOLLOWUP)
 #   - env CEO_AUDIT_LOG_DIR=<audit-dir>     (CRITICAL: emit lands in the APP's log,
-#         not the framework's fixed ~/.claude/projects/ceo-orchestration default)
+#         not the framework's per-project ~/.claude/projects/<native-slug> default)
 #
 # $0, reversible (settings.json is backed up; copied files are inert until the
 # settings entries are present). Run it from the framework checkout.

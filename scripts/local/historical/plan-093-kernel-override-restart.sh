@@ -100,7 +100,7 @@ echo "  Claude.app running."
 
 echo ""
 echo "[5/5] State persisted on disk:"
-echo "  - Memory:    ~/.claude/projects/-Users-devuser-ceo-orchestration/memory/project_session_123_plan_093_handoff.md"
+echo "  - Memory:    ~/.claude/projects/<native-slug>/memory/project_session_123_plan_093_handoff.md"
 echo "  - Resume:    .claude/plans/PLAN-093/wave-a-c-resume.md"
 echo "  - Sentinel:  .claude/plans/PLAN-093/architect/round-2/approved.md(.asc)"
 echo "  - MEMORY.md  updated with S123 in-flight entry"

@@ -60,6 +60,7 @@ except Exception:  # noqa: BLE001
 # Wave D promoted the helper to canonical .claude/hooks/_lib/replay_redact.py.
 # `from _lib import ...` is on sys.path via the audit_emit import dance above.
 from _lib import replay_redact as _redact_lib  # noqa: E402
+from _lib import runtime_paths as _rp  # noqa: E402  # PLAN-182 W1 single resolver
 
 
 def _redact_spawn_for_artifact(spawn: Dict[str, Any]) -> Dict[str, Any]:
@@ -226,7 +227,7 @@ def _default_audit_log() -> Path:
     if env:
         return Path(env)
     home = os.environ.get("HOME") or str(Path.home())
-    return Path(home) / ".claude" / "projects" / "ceo-orchestration" / "audit-log.jsonl"
+    return _rp.runtime_state_dir() / "audit-log.jsonl"
 
 
 def _read_events(

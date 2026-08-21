@@ -32,6 +32,15 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 import datetime as _dt
 import json as _json
 from pathlib import Path as _Path
+# PLAN-182 W1 single resolver (absolute first — works from hooks/ on
+# sys.path and from subpackages; relative and bare are fallbacks)
+try:
+    from _lib import runtime_paths as _rp
+except ImportError:  # pragma: no cover
+    try:
+        from . import runtime_paths as _rp  # type: ignore[no-redef]
+    except ImportError:
+        import runtime_paths as _rp  # type: ignore[no-redef]
 
 from .. import claude as _fixture_claude  # type: ignore  # noqa: F401 - parity import
 from ._breaker import CircuitBreaker
@@ -367,7 +376,7 @@ class ClaudeLiveAdapter:
         """Compare credential creation date to policy thresholds.
 
         ADR-040 §4 + ADR-040-AMEND-2. Reads
-        ``$HOME/.claude/projects/ceo-orchestration/credential-rotation.json``;
+        ``$HOME/.claude/projects/<native-slug>/credential-rotation.json``;
         emits ``credential_rotation_due`` (advisory) or
         ``credential_blocked_due_to_age`` (blocking) per thresholds.
         Emergency override via ``CEO_CREDENTIAL_BLOCK_EMERGENCY_OVERRIDE=<ticket-id>``
@@ -380,7 +389,7 @@ class ClaudeLiveAdapter:
         from _lib.exceptions import CredentialExpired
         home = _Path(os.environ.get("HOME") or _Path.home())
         rotation_log = (
-            home / ".claude" / "projects" / "ceo-orchestration"
+            _rp.runtime_state_dir()
             / "credential-rotation.json"
         )
         try:

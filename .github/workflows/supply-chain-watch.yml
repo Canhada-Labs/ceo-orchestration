@@ -107,7 +107,7 @@ jobs:
           #     exactly one package — there is no dependency tree whose
           #     signatures add coverage.
           RC=0
-          PKG="ceo-orchestration"
+          PKG="ceo-orchestration"  # rp-allow: product-label (npm package name)
 
           # (1) Latest published version straight from the registry.
           LATEST=$(curl -fsS --max-time 30 "https://registry.npmjs.org/${PKG}" \

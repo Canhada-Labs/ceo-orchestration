@@ -21,14 +21,23 @@ empty salt with their input — the resulting hash degrades to the
 pre-fix unsalted form. Confidentiality is best-effort; availability
 is invariant.
 
-## No rotation
+## No rotation — with exactly ONE sanctioned, REGISTERED exception
 
-Salt is generated once per installation and never rotated. Rotating
-the salt would invalidate ``prompt_sha256`` correlations across all
-historical audit events (the chief use of the field). Per-instance
-salt provides the desired property — cross-instance correlation is
-impossible for an external observer — without sacrificing single-
-instance forensic correlation across time.
+Salt is generated once per PROJECT (ADR-079 S318 amendment: the salt
+unit is the project, resolved via ``_lib/runtime_paths`` — the
+per-``$HOME`` reading made ``prompt_sha256`` correlate ACROSS projects,
+the exact oracle this module exists to close) and never rotated.
+Rotating the salt would invalidate ``prompt_sha256`` correlations
+across all historical audit events (the chief use of the field).
+
+The one exception is the PLAN-182 migration itself: the project that
+inherits the historical chain (W2 custody decision) inherits the
+legacy ``.salt`` byte-for-byte; every OTHER project mints fresh — and
+that minting is OBSERVABLE, never silent (the pre-S318 code minted
+with no error, no log, no signal — silent rotation against this very
+section). Every mint now (a) writes a ``salt-minted.json`` marker
+sidecar next to the salt (forensic ground truth) and (b) best-effort
+emits the registered ``salt_rotation_registered`` chain event.
 
 ## Thread safety
 
@@ -43,13 +52,24 @@ bytes either way.
 
 ## Stdlib-only
 
-Per hook discipline (ADR-002): ``os`` + ``pathlib`` only.
+Per hook discipline (ADR-002): stdlib only. The only intra-``_lib``
+import is ``runtime_paths`` (itself a stdlib-only leaf), so the module
+stays loadable from any hook; ``audit_emit`` is imported LAZILY inside
+the mint branch only (mint happens at most once per project lifetime).
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import os
+import time
 from pathlib import Path
 from typing import Optional
+
+try:  # loaded as package member (_lib.injection_salt)
+    from . import runtime_paths as _runtime_paths
+except ImportError:  # loaded bare (sys.path -> _lib/)
+    import runtime_paths as _runtime_paths  # type: ignore[no-redef]
 
 
 _SALT_FILENAME = ".salt"
@@ -58,23 +78,45 @@ _SALT_MODE = 0o600
 _DIR_MODE = 0o700
 
 
-def _slug_dir() -> Path:
-    """Return the per-installation state directory.
+_MINT_MARKER_FILENAME = "salt-minted.json"
 
-    Mirrors ``audit_emit._audit_dir`` so the salt sits next to the
-    audit log it protects. Avoids importing ``audit_emit`` to keep
-    this module loadable from any hook (including hooks that emit
-    no audit events).
+
+def _slug_dir() -> Path:
+    """Return the per-PROJECT state directory (ADR-079 S318 amendment).
+
+    Delegates to the single family resolver (``runtime_paths``,
+    ADR-001 S318) so the salt sits next to the audit log it protects —
+    per project, no longer per ``$HOME``. Still avoids importing
+    ``audit_emit`` at module load to stay loadable from any hook
+    (including hooks that emit no audit events).
+
+    rail r13 P1-5 — FAMILY-ATOMICITY: quando os overrides movem a
+    familia (`CEO_AUDIT_LOG_PATH` / `CEO_AUDIT_LOG_DIR`), o `.salt`
+    acompanha. Deixa-lo em `runtime_state_dir()` enquanto log, key, lock
+    e errors se mudam contradiz o invariante do ADR-001 S318 item 3 (e a
+    claim do CLAUDE.md §5), e faria custodia/backup do dir efetivo
+    PERDEREM o salt. Mesma cascata de `audit_hmac._audit_dir_from_env`.
     """
-    home = os.environ.get("HOME") or str(Path.home())
-    return Path(home) / ".claude" / "projects" / "ceo-orchestration"
+    env_path = os.environ.get("CEO_AUDIT_LOG_PATH")
+    if env_path:
+        try:
+            return Path(env_path).resolve().parent
+        except OSError:
+            pass
+    env_dir = os.environ.get("CEO_AUDIT_LOG_DIR")
+    if env_dir:
+        return Path(env_dir)
+    return _runtime_paths.runtime_state_dir()
 
 
 def _salt_path() -> Path:
     return _slug_dir() / _SALT_FILENAME
 
 
-_CACHED_SALT: Optional[bytes] = None
+# PLAN-182 W1 rail r2 B2: keyed pelo _salt_path() resolvido — a troca de
+# projeto mid-process re-resolve; o salt do A nunca vaza para o B (a
+# garantia por-projeto do ADR-079 S318 vale SEM reset manual de teste).
+_CACHED_SALT = None  # type: Optional[tuple]  # (path_str, salt_bytes)
 
 
 def _read_existing(path: Path) -> Optional[bytes]:
@@ -102,8 +144,20 @@ def _generate_and_persist(path: Path) -> bytes:
     file mode ``0o600`` and parent dir mode ``0o700`` (best-effort).
     """
     try:
-        path.parent.mkdir(parents=True, exist_ok=True, mode=_DIR_MODE)
-    except OSError:
+        # rail r2 F + r5: cria e aperta SO no caminho default — um dir
+        # inteiro escolhido via CLAUDE_PROJECT_DIR_NATIVE preserva o modo
+        # que o operador definiu.
+        # rail r14: TODO override capaz de escolher `_slug_dir()` desliga
+        # o tighten — inclusive os de familia que a cura P1-5 passou a
+        # honrar. Apertar um dir 0750 escolhido pelo operador revogaria
+        # acesso de auditor, contra a promessa assinada do sentinel.
+        _overridden = any(os.environ.get(_k) for _k in (
+            "CLAUDE_PROJECT_DIR_NATIVE",
+            "CEO_AUDIT_LOG_PATH",
+            "CEO_AUDIT_LOG_DIR",
+        ))
+        _runtime_paths.ensure_state_dir(path.parent, tighten=not _overridden)
+    except Exception:
         return b""
     try:
         salt = os.urandom(_SALT_BYTES)
@@ -133,19 +187,97 @@ def get_instance_salt() -> bytes:
     such that an empty salt degrades to the unsalted hash.
     """
     global _CACHED_SALT
-    if _CACHED_SALT is not None:
-        return _CACHED_SALT
-
     path = _salt_path()
+    # rail r6: identidade ABSOLUTA (override relativo + chdir nao pode
+    # servir o salt do projeto anterior).
+    path_id = os.path.abspath(str(path))
+    cached = _CACHED_SALT
+    if cached is not None and cached[0] == path_id:
+        return cached[1]
+
     existing = _read_existing(path)
     if existing is not None:
-        _CACHED_SALT = existing
+        _CACHED_SALT = (path_id, existing)
         return existing
 
+    # rail r15 P2-4: distinguir CRIACAO de RECUPERACAO. Um `.salt`
+    # existente porem malformado (tamanho errado) faz `_read_existing`
+    # devolver None e cair aqui — registrar isso como `first_mint`
+    # esconderia uma ROTACAO real (que invalida a correlacao de
+    # prompt_sha256) e sobrescreveria o marcador anterior.
+    _preexisting = False
+    try:
+        _preexisting = path.exists()
+    except OSError:
+        pass
     salt = _generate_and_persist(path)
     if salt:
-        _CACHED_SALT = salt
+        _CACHED_SALT = (path_id, salt)
+        _register_mint(path, reason="other" if _preexisting else "first_mint")
     return salt
+
+
+def _register_mint(salt_path: Path, reason: str = "first_mint") -> None:
+    """Make the mint OBSERVABLE (ADR-079 S318 amendment §2). Fail-open.
+
+    (a) Marker sidecar next to the salt — forensic ground truth that
+        survives even when no emitter ever runs in this project.
+    (b) Best-effort lazy chain event ``salt_rotation_registered``
+        (kwargs top-level; the slug travels only as a 16-hex sha256
+        prefix — the path text never reaches the wire).
+    Neither arm may raise: salt availability is invariant (ADR-005).
+    """
+    slug = ""
+    try:
+        slug = _runtime_paths.project_slug()
+    except Exception:
+        pass
+    slug_sha16 = (
+        hashlib.sha256(slug.encode("utf-8")).hexdigest()[:16] if slug else ""
+    )
+    try:
+        marker = {
+            "minted_at_epoch": int(time.time()),
+            "reason": reason,
+            "salt_scope": "project",
+            "slug_sha256": slug_sha16,
+            "pid": os.getpid(),
+        }
+        marker_path = salt_path.parent / _MINT_MARKER_FILENAME
+        marker_path.write_text(
+            json.dumps(marker, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        try:
+            os.chmod(marker_path, _SALT_MODE)
+        except OSError:
+            pass
+    except Exception:
+        pass
+    try:
+        # Lazy, one-shot, mint-time only: no module-load coupling on the
+        # emit stack for the 99.999% of calls that never mint.
+        try:  # package member first, bare fallback (mirrors header import)
+            from . import audit_emit as _audit_emit  # type: ignore
+        except ImportError:
+            import audit_emit as _audit_emit  # type: ignore
+        # rail r13 P1-4: `session_id` e `project` sao campos REQUERIDOS
+        # da linha registrada no SPEC v2.58 e `_write_event` nao os
+        # sintetiza — sem eles o evento de migracao nasce sem atribuicao.
+        _sid = os.environ.get("CLAUDE_SESSION_ID") or ""
+        try:
+            _proj = str(_runtime_paths.project_dir())
+        except Exception:
+            _proj = ""
+        _audit_emit.emit_generic(
+            "salt_rotation_registered",
+            session_id=_sid,
+            project=_proj,
+            reason=reason,
+            salt_scope="project",
+            slug_sha256=slug_sha16 or "invalid",
+        )
+    except Exception:
+        pass
 
 
 def reset_cache_for_test() -> None:

@@ -203,13 +203,13 @@ def generate_sbom(
         "metadata": {
             "timestamp": ts.strftime("%Y-%m-%dT%H:%M:%SZ"),
             "tools": [{
-                "vendor": "ceo-orchestration",
+                "vendor": "ceo-orchestration",  # rp-allow: product-label
                 "name": "generate-sbom.py",
                 "version": _read_version(),
             }],
             "component": {
                 "type": "application",
-                "name": "ceo-orchestration",
+                "name": "ceo-orchestration",  # rp-allow: product-label
                 "version": _read_version(),
                 "description": "Portable framework for operating Claude Code as a governed team of specialist agents.",
                 "licenses": [{"license": {"id": "MIT"}}],

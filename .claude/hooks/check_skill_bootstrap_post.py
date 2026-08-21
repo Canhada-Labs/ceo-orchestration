@@ -65,6 +65,26 @@ from typing import Dict, Optional
 _HOOKS_DIR = Path(__file__).resolve().parent
 if str(_HOOKS_DIR) not in sys.path:
     sys.path.insert(0, str(_HOOKS_DIR))
+try:
+    from _lib import runtime_paths as _rp  # noqa: E402  # PLAN-182 W1 single resolver
+except Exception:  # pragma: no cover — partial upgrade: hook stays FAIL-OPEN (rail r1 P1-4)
+    _rp = None  # type: ignore[assignment]
+
+
+def _rp_state_dir():
+    """Resolver com fallback de partial-upgrade (arquivo novo ausente).
+
+    Fail-open: o hook NUNCA crasha por falta do resolvedor; degrada ao
+    comportamento legado com aviso em stderr.
+    """
+    if _rp is not None:
+        return _rp.runtime_state_dir()
+    import sys as _s
+    _s.stderr.write("# hook: _lib/runtime_paths ausente — fallback legado (partial upgrade)\n")
+    from pathlib import Path as _P
+    import os as _o
+    _h = _o.environ.get("HOME") or str(_P.home())
+    return _P(_h) / ".claude" / "projects" / "ceo-orchestration"  # rp-allow: partial-upgrade-fallback
 
 _HOOK_VERSION = "1.0.0"
 _KILL_SWITCH_ENV = "CEO_SKILL_BOOTSTRAP_POST"
@@ -127,8 +147,7 @@ def _recent_bootstrap_event(
     try:
         log_candidates = [
             repo_root / ".claude" / "state" / "audit-log.jsonl",
-            Path.home()
-            / ".claude" / "projects" / "ceo-orchestration" / "audit-log.jsonl",
+            _rp_state_dir() / "audit-log.jsonl",
         ]
         now = time.time()
         for log_path in log_candidates:

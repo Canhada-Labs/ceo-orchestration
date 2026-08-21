@@ -55,6 +55,7 @@ if str(_HOOKS_DIR) not in sys.path:
     sys.path.insert(0, str(_HOOKS_DIR))
 
 from _lib import redact as _redact  # noqa: E402
+from _lib import runtime_paths as _runtime_paths  # noqa: E402  # PLAN-182 W1 single resolver (ADR-001 S318)
 from _lib.filelock import FileLock, FileLockTimeout  # noqa: E402
 
 import getpass  # noqa: E402
@@ -1114,6 +1115,14 @@ _KNOWN_ACTIONS = {
     # prefix + `reason_len` int); the reason TEXT never reaches the log.
     # Emitter parked in 908707e until this registration existed.
     "ceremony_lint_unlock_used",
+    # PLAN-182 W1 (ADR-079 S318 amendment §2; _KNOWN_ACTIONS 326 -> 327)
+    # — the ONE sanctioned salt-rotation register: minting a per-project
+    # .salt is OBSERVABLE in the chain, never silent. Metadata-only wire
+    # (`reason` closed enum + `salt_scope` fixed + `slug_sha256` 16-hex
+    # prefix); the slug/path text never reaches the log. Emitted lazily
+    # by _lib/injection_salt.py at mint time (marker sidecar is the
+    # forensic ground truth when the emit path is unavailable).
+    "salt_rotation_registered",
 }
 
 
@@ -2297,12 +2306,17 @@ _SMART_LOADING_RESOLVED_ALLOWLIST = frozenset({
 
 
 def _audit_dir() -> Path:
-    """Return the audit log directory (env-overridable; matches audit_log.py)."""
+    """Return the audit log directory (env-overridable; matches audit_log.py).
+
+    PLAN-182 W1 (ADR-001 S318 amendment): the default delegates to the
+    single family resolver — per-project native slug — instead of the
+    four-month literal. ``CEO_AUDIT_LOG_DIR`` keeps its whole-dir
+    precedence for tests/multi-log setups.
+    """
     env_dir = os.environ.get("CEO_AUDIT_LOG_DIR")
     if env_dir:
         return Path(env_dir)
-    home = os.environ.get("HOME") or str(Path.home())
-    return Path(home) / ".claude" / "projects" / "ceo-orchestration"
+    return _runtime_paths.runtime_state_dir()
 
 
 def _log_path() -> Path:
@@ -2312,18 +2326,35 @@ def _log_path() -> Path:
     return _audit_dir() / "audit-log.jsonl"
 
 
+def _log_family_dir() -> Path:
+    """Return the dir the lock/errors sidecars must share with the LOG.
+
+    PLAN-182 W1 family-atomicity cure (ADR-001 S318 amendment item 3):
+    when ``CEO_AUDIT_LOG_PATH`` moves the log, the lock and errors
+    FOLLOW its parent instead of staying on the default dir — the W0
+    matrix measured that split leaving two projects with distinct logs
+    serializing on one lock. ``.resolve().parent`` matches
+    ``audit_hmac._audit_dir_from_env`` byte-for-byte so key, lock and
+    errors co-locate under the same derivation.
+    """
+    env = os.environ.get("CEO_AUDIT_LOG_PATH")
+    if env:
+        return Path(env).resolve().parent
+    return _audit_dir()
+
+
 def _lock_path() -> Path:
     env = os.environ.get("CEO_AUDIT_LOG_LOCK")
     if env:
         return Path(env)
-    return _audit_dir() / "audit-log.lock"
+    return _log_family_dir() / "audit-log.lock"
 
 
 def _errors_path() -> Path:
     env = os.environ.get("CEO_AUDIT_LOG_ERR")
     if env:
         return Path(env)
-    return _audit_dir() / "audit-log.errors"
+    return _log_family_dir() / "audit-log.errors"
 
 
 def _utc_now_iso() -> str:
@@ -6802,6 +6833,40 @@ def emit_generic(action: str, **kwargs: Any) -> None:
                 f"emit_generic ceremony_lint_unlock_used dropped "
                 f"forbidden field(s): {sorted(dropped)[:10]}"
             )
+    # PLAN-182 W1 (ADR-079 S318 amendment §2) — salt mint register.
+    # Dedicated scrub branch (NEVER _EMIT_GENERIC_PASSTHROUGH). The
+    # field-name scrub DROPS non-allowlisted keys (a smuggled slug/path/
+    # salt value never reaches the wire); closed-enum + shape coercion
+    # closes the direct emit_generic-caller path (S172 doctrine —
+    # rejected values are replaced with the safe sentinel, never echoed).
+    elif action == "salt_rotation_registered":
+        event, dropped = _scrub_ceo_boot_event(
+            event, _SALT_ROTATION_REGISTERED_ALLOWLIST
+        )
+        # rail r13 P2-6: type-check ANTES do teste de pertinencia — um
+        # list/dict de chamador direto levantaria TypeError no frozenset
+        # e quebraria o contrato never-raises do emit_generic.
+        _reason = event.get("reason")
+        if not isinstance(_reason, str) or _reason not in _SALT_ROTATION_REASONS:
+            event["reason"] = "other"
+        # salt_scope is a fixed vocabulary of one today ("project", the
+        # ADR-079 S318 unit); anything else is coerced, never echoed.
+        if event.get("salt_scope") != "project":
+            event["salt_scope"] = "project"
+        ss = event.get("slug_sha256")
+        if not (
+            isinstance(ss, str)
+            and len(ss) == 16
+            and all(c in "0123456789abcdef" for c in ss)
+        ):
+            # 16-hex sha256 PREFIX of the native slug — a malformed
+            # value is coerced to the sentinel, never echoed.
+            event["slug_sha256"] = "invalid"
+        if dropped:
+            _breadcrumb(
+                f"emit_generic salt_rotation_registered dropped "
+                f"forbidden field(s): {sorted(dropped)[:10]}"
+            )
     # PLAN-135 W2 H2 — ConfigChange-guard observed breadcrumb. Dedicated
     # scrub branch (NEVER _EMIT_GENERIC_PASSTHROUGH). The field-name scrub
     # DROPS non-allowlisted keys (so a smuggled file path / settings body /
@@ -8260,6 +8325,22 @@ _CEREMONY_LINT_UNLOCK_USED_ALLOWLIST = frozenset({
     "tokens_in", "tokens_out", "tokens_total",
     "hmac", "hmac_error",
 })
+
+# PLAN-182 W1 (ADR-079 S318 amendment §2) — Sec MF-3 field allowlist for
+# salt_rotation_registered. Deny-by-default; the slug/path TEXT never
+# reaches the wire (16-hex sha256 prefix only, mirroring file_sha256).
+_SALT_ROTATION_REGISTERED_ALLOWLIST = frozenset({
+    "action", "session_id", "project",
+    "reason", "salt_scope", "slug_sha256",
+    # _write_event envelope (pre-allowed so scrub doesn't strip on round-trip):
+    "ts", "event_schema",
+    "tokens_in", "tokens_out", "tokens_total",
+    "hmac", "hmac_error",
+})
+
+# Closed enum for salt_rotation_registered.reason (S172 doctrine: values
+# outside the set are COERCED to "other", never echoed).
+_SALT_ROTATION_REASONS = frozenset({"first_mint", "migration_mint", "other"})
 
 # PLAN-135 W1 S3 — closed enums. MUST mirror
 # _lib/effective_config.TAMPER_CLASSES and the layer names

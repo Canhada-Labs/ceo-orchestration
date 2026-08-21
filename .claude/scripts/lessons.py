@@ -92,6 +92,7 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 _HOOKS_DIR = Path(__file__).resolve().parent.parent / "hooks"
 if str(_HOOKS_DIR) not in sys.path:
     sys.path.insert(0, str(_HOOKS_DIR))
+from _lib import runtime_paths as _rp  # noqa: E402  # PLAN-182 W1 single resolver
 
 try:
     from _lib.redact import redact_secrets
@@ -329,7 +330,7 @@ def _lesson_breadcrumb(message: str) -> None:
                 base = Path(env_dir)
             else:
                 home = os.environ.get("HOME") or str(Path.home())
-                base = Path(home) / ".claude" / "projects" / "ceo-orchestration"
+                base = _rp.runtime_state_dir()
             err = base / "audit-log.errors"
         err.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -356,7 +357,7 @@ def _audit_log_paths() -> List[Path]:
             base = Path(env_dir)
         else:
             home = os.environ.get("HOME") or str(Path.home())
-            base = Path(home) / ".claude" / "projects" / "ceo-orchestration"
+            base = _rp.runtime_state_dir()
         current = base / "audit-log.jsonl"
 
     paths: List[Path] = []

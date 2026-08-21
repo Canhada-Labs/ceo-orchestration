@@ -76,6 +76,15 @@ from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
+import sys as _sys_rp
+from pathlib import Path as _Path_rp
+_HOOKS_RP = _Path_rp(__file__).resolve()
+for _anc in _HOOKS_RP.parents:
+    if (_anc / ".claude" / "hooks" / "_lib").is_dir():
+        if str(_anc / ".claude" / "hooks") not in _sys_rp.path:
+            _sys_rp.path.insert(0, str(_anc / ".claude" / "hooks"))
+        break
+from _lib import runtime_paths as _rp  # noqa: E402  # PLAN-182 W1 single resolver
 
 _SCHEMA_VERSION = "plan-048-experiment-metrics.v1"
 
@@ -121,7 +130,7 @@ def _log_breadcrumb(msg: str) -> None:
 def default_audit_log_path() -> Path:
     """Resolve the per-project audit-log path."""
     home = Path.home()
-    return home / ".claude" / "projects" / "ceo-orchestration" / "audit-log.jsonl"
+    return _rp.runtime_state_dir() / "audit-log.jsonl"
 
 
 def default_plans_dir() -> Path:

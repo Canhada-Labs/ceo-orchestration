@@ -80,6 +80,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 _HOOKS_DIR = Path(__file__).resolve().parent.parent
 if str(_HOOKS_DIR) not in sys.path:
     sys.path.insert(0, str(_HOOKS_DIR))
+from _lib import runtime_paths as _rp  # noqa: E402  # PLAN-182 W1 single resolver
 
 try:
     from _lib.filelock import FileLock, FileLockTimeout  # noqa: E402
@@ -306,7 +307,7 @@ def _audit_dir() -> Path:
     if env_dir:
         return Path(env_dir)
     home = os.environ.get("HOME") or str(Path.home())
-    return Path(home) / ".claude" / "projects" / "ceo-orchestration"
+    return _rp.runtime_state_dir()
 
 
 def _safe_session_component(session_id: str) -> str:

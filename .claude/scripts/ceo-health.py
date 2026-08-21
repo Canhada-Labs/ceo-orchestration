@@ -40,6 +40,15 @@ from collections import OrderedDict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+import sys as _sys_rp
+from pathlib import Path as _Path_rp
+_HOOKS_RP = _Path_rp(__file__).resolve()
+for _anc in _HOOKS_RP.parents:
+    if (_anc / ".claude" / "hooks" / "_lib").is_dir():
+        if str(_anc / ".claude" / "hooks") not in _sys_rp.path:
+            _sys_rp.path.insert(0, str(_anc / ".claude" / "hooks"))
+        break
+from _lib import runtime_paths as _rp  # noqa: E402  # PLAN-182 W1 single resolver
 
 
 # ---------------------------------------------------------------------------
@@ -59,7 +68,7 @@ def repo_root() -> Path:
 def audit_log_path() -> Path:
     """Resolve the audit log path, honoring `CEO_AUDIT_LOG_PATH` override."""
     home = Path(os.environ.get("HOME") or str(Path.home()))
-    default_dir = home / ".claude" / "projects" / "ceo-orchestration"
+    default_dir = _rp.runtime_state_dir()
     return Path(
         os.environ.get("CEO_AUDIT_LOG_PATH") or str(default_dir / "audit-log.jsonl")
     )
@@ -216,7 +225,7 @@ def check_audit_log(path: Path) -> Result:
 def check_memory_dir() -> Result:
     """Verify the per-project auto-memory directory exists and is readable."""
     home = Path(os.environ.get("HOME") or str(Path.home()))
-    mem = home / ".claude" / "projects" / "ceo-orchestration" / "memory"
+    mem = _rp.runtime_state_dir() / "memory"
     if not mem.is_dir():
         return Result(
             "memory-dir",

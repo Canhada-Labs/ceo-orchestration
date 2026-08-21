@@ -43,6 +43,15 @@ from concurrent.futures import (
 )
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
+import sys as _sys_rp
+from pathlib import Path as _Path_rp
+_HOOKS_RP = _Path_rp(__file__).resolve()
+for _anc in _HOOKS_RP.parents:
+    if (_anc / ".claude" / "hooks" / "_lib").is_dir():
+        if str(_anc / ".claude" / "hooks") not in _sys_rp.path:
+            _sys_rp.path.insert(0, str(_anc / ".claude" / "hooks"))
+        break
+from _lib import runtime_paths as _rp  # noqa: E402  # PLAN-182 W1 single resolver
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -70,18 +79,18 @@ def _reset_plan_glob_cache() -> None:
     global _PLAN_GLOB_CACHE
     _PLAN_GLOB_CACHE = None
 AUDIT_LOG_DEFAULT = (
-    Path.home() / ".claude" / "projects" / "ceo-orchestration" / "audit-log.jsonl"
+    _rp.runtime_state_dir() / "audit-log.jsonl"
 )
 # Legacy single-file cache (kept for backward compat with S82 MVP).
 CACHE_FILE_DEFAULT = (
-    Path.home() / ".claude" / "projects" / "ceo-orchestration" / "cache" / "ceo-boot-digest.json"
+    _rp.runtime_state_dir() / "cache" / "ceo-boot-digest.json"
 )
 # PLAN-065 §4.3.2 real cache directory — keyed by (HEAD + audit-log mtime + size).
 # Default lives under project state dir so it is excluded from git via
 # ~/.claude/projects layout (parity with audit-log.jsonl). Override via env
 # CEO_BOOT_CACHE_DIR for tests.
 CACHE_DIR_DEFAULT = (
-    Path.home() / ".claude" / "projects" / "ceo-orchestration" / "state" / "ceo-boot-cache"
+    _rp.runtime_state_dir() / "state" / "ceo-boot-cache"
 )
 CACHE_TTL_S = 3600.0          # 1 hour
 CACHE_FILE_SIZE_CAP_BYTES = 100 * 1024     # 100 KB per cache file
@@ -393,7 +402,17 @@ def check_audit_log_freshness() -> Tuple[str, str, Any]:
     if errors_path_raw:
         errors_path = Path(errors_path_raw)
     else:
-        errors_path = AUDIT_LOG_DEFAULT.parent / "audit-log.errors"
+        # rail r14: cascata da familia — com CEO_AUDIT_LOG_PATH setado os
+        # escritores poem o breadcrumb ao lado do log MOVIDO; ler do
+        # default perderia exatamente esses erros.
+        _lp = os.environ.get("CEO_AUDIT_LOG_PATH")
+        if _lp:
+            try:
+                errors_path = Path(_lp).resolve().parent / "audit-log.errors"
+            except OSError:
+                errors_path = AUDIT_LOG_DEFAULT.parent / "audit-log.errors"
+        else:
+            errors_path = AUDIT_LOG_DEFAULT.parent / "audit-log.errors"
 
     errors_present = False
     errors_line_count = 0
@@ -3808,9 +3827,7 @@ def _emit_ceo_boot_check_skipped_safe(
 # tests. Format: {"entries": [{"subject_hash": "...", "ts": <epoch>}, ...]}
 # bounded to 256 entries (LRU evict on overflow).
 TASK_EMIT_STATE_PATH_DEFAULT = (
-    Path.home()
-    / ".claude" / "projects" / "ceo-orchestration"
-    / "state" / "ceo-boot-tasks-emitted.json"
+    _rp.runtime_state_dir() / "state" / "ceo-boot-tasks-emitted.json"
 )
 TASK_EMIT_TTL_S = 24 * 60 * 60          # 24h dedup window
 TASK_EMIT_TOP_N = 3                     # emit at most 3 markers per boot

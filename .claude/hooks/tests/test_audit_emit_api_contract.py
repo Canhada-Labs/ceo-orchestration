@@ -771,11 +771,11 @@ _EXPECTED_KNOWN_ACTIONS_SHA256 = (
     # pack; PLAN-174 W1 registration completion). Routes through its OWN
     # `_scrub_ceo_boot_event` branch against
     # `_CEREMONY_LINT_UNLOCK_USED_ALLOWLIST`, NEVER passthrough. SHA
-    # re-derived from the LANDED audit_emit.py (32e29b1) via the same
+    # re-derived from the staged-w1 audit_emit.py (SENT-S319 pack; was 32e29b1) via the same
     # sha256(json.dumps(sorted(_KNOWN_ACTIONS))) derivation; the value
     # matched independently on local darwin and the ubuntu CI matrix
     # (S318 fix-forward).
-    "486d7a99bacb7d0838e7b1dfc3475e0d07dcfd72c101325a66a2fea28edc3ef4"
+    "c5e1f44b75d920a54cd04bb43a02f07e5afc1deda5e90c49d2a7778f6e69fc9c"
 )
 
 
@@ -817,7 +817,7 @@ class AuditEmitPublicSurfaceTests(unittest.TestCase):
         self.assertEqual(
             actual, _EXPECTED_KNOWN_ACTIONS_SHA256,
             f"_KNOWN_ACTIONS drift detected. "
-            f"Count={len(actions)} (expected 326). "
+            f"Count={len(actions)} (expected 327). "
             f"Rebaseline this test + add audit-registry entry if the change is intentional.",
         )
 
@@ -830,11 +830,13 @@ class AuditEmitPublicSurfaceTests(unittest.TestCase):
         # posture toggle, ADR-185; ceremony [SENT-PLAN165]).
         # 325 = 324 + 1 PLAN-179 W0 US2 (context_pressure_observed — the
         # edge-triggered context-pressure breadcrumb, amendment 8.1).
-        # 326 = 325 + 1 PLAN-174 W1 registration completion (SENT-S318 pack,
+        # 327 = 326 + 1 PLAN-182 W1 (salt_rotation_registered, SENT-S319 pack;
+        # per-project salt mint register, ADR-079 S318 §2). Was: 326 = 325
+        # + 1 PLAN-174 W1 registration completion (SENT-S318 pack,
         # 2026-08-20: ceremony_lint_unlock_used — ceremony-lint ADR-186
         # escape-hatch breadcrumb parked in 908707e, registered + restored).
         self.assertEqual(
-            len(audit_emit._KNOWN_ACTIONS), 326,
+            len(audit_emit._KNOWN_ACTIONS), 327,
             "_KNOWN_ACTIONS count drifted from 163 baseline (PLAN-088 S114 Wave 1 +11 actions: "
             "cache_discipline_alerted + first_run_wizard_dispatched + "
             "estimate_calibrator_pipeline_run + subagent_findings_partial_drop + "

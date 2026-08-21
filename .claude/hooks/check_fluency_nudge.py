@@ -76,6 +76,26 @@ from typing import Any, Dict, List, Optional, Tuple
 _HOOKS_DIR = Path(__file__).resolve().parent
 if str(_HOOKS_DIR) not in sys.path:
     sys.path.insert(0, str(_HOOKS_DIR))
+try:
+    from _lib import runtime_paths as _rp  # noqa: E402  # PLAN-182 W1 single resolver
+except Exception:  # pragma: no cover — partial upgrade: hook stays FAIL-OPEN (rail r1 P1-4)
+    _rp = None  # type: ignore[assignment]
+
+
+def _rp_state_dir():
+    """Resolver com fallback de partial-upgrade (arquivo novo ausente).
+
+    Fail-open: o hook NUNCA crasha por falta do resolvedor; degrada ao
+    comportamento legado com aviso em stderr.
+    """
+    if _rp is not None:
+        return _rp.runtime_state_dir()
+    import sys as _s
+    _s.stderr.write("# hook: _lib/runtime_paths ausente — fallback legado (partial upgrade)\n")
+    from pathlib import Path as _P
+    import os as _o
+    _h = _o.environ.get("HOME") or str(_P.home())
+    return _P(_h) / ".claude" / "projects" / "ceo-orchestration"  # rp-allow: partial-upgrade-fallback
 
 # PLAN-050 Phase 3 C8 — redact-before-emit defense-in-depth.
 # Import guarded: if _lib.redact is unavailable during partial rollout
@@ -116,7 +136,7 @@ def _state_dir() -> Path:
     if audit_dir:
         return Path(audit_dir)
     home = os.environ.get("HOME") or "/tmp"
-    return Path(home) / ".claude" / "projects" / "ceo-orchestration" / "state"
+    return _rp_state_dir() / "state"
 
 
 def _sidecar_path() -> Path:

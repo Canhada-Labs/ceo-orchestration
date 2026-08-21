@@ -14,7 +14,7 @@ Defaults:
     --window 30
     --format markdown
     --output (stdout)
-    --log ~/.claude/projects/ceo-orchestration/audit-log.jsonl
+    --log ~/.claude/projects/<native-slug>/audit-log.jsonl
     --top-per-detector 20
 
 Exit codes:
@@ -40,7 +40,14 @@ _DETECTORS_PKG_PARENT = _SCRIPTS_DIR
 if str(_DETECTORS_PKG_PARENT) not in sys.path:
     sys.path.insert(0, str(_DETECTORS_PKG_PARENT))
 
+# PLAN-182 W1 single resolver (hooks/ no path; scripts/ ja esta acima)
+_HOOKS_DIR_RP = _SCRIPTS_DIR.parent / "hooks"
+if str(_HOOKS_DIR_RP) not in sys.path:
+    sys.path.insert(0, str(_HOOKS_DIR_RP))
+from _lib import runtime_paths as _rp  # noqa: E402
+
 from detectors import (  # noqa: E402  (sys.path extended above)
+
     looping,
     overpowered,
     retry_churn,
@@ -52,11 +59,8 @@ from detectors import (  # noqa: E402  (sys.path extended above)
 
 
 _DEFAULT_LOG = (
-    Path(os.environ.get("HOME") or str(Path.home()))
-    / ".claude"
-    / "projects"
-    / "ceo-orchestration"
-    / "audit-log.jsonl"
+    # PLAN-182 W1: single family resolver.
+    _rp.runtime_state_dir() / "audit-log.jsonl"
 )
 
 _ALL_DETECTORS = [

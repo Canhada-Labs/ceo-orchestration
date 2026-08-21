@@ -34,6 +34,15 @@ _VALID_DIRECTIONS = {DIRECTION_MINIMIZE, DIRECTION_MAXIMIZE}
 # ---------------------------------------------------------------------------
 
 import re as _re_plan102fu
+import sys as _sys_rp
+from pathlib import Path as _Path_rp
+_HOOKS_RP = _Path_rp(__file__).resolve()
+for _anc in _HOOKS_RP.parents:
+    if (_anc / ".claude" / "hooks" / "_lib").is_dir():
+        if str(_anc / ".claude" / "hooks") not in _sys_rp.path:
+            _sys_rp.path.insert(0, str(_anc / ".claude" / "hooks"))
+        break
+from _lib import runtime_paths as _rp  # noqa: E402  # PLAN-182 W1 single resolver
 
 # 6 internal gate reasons collapse to 4 emit reasons (security H1 fold
 # from S144 R1 debate; full detail kept ONLY in IterationResult.error,
@@ -128,9 +137,8 @@ def _resolve_breaker_audit_log_path() -> "_Path":
     env_dir = _os_top.environ.get("CEO_AUDIT_LOG_DIR")
     if env_dir:
         return _Path(env_dir) / "audit-log.jsonl"
-    # Default: matches audit_emit._audit_dir() → ~/.claude/projects/ceo-orchestration/
-    home = _os_top.environ.get("HOME") or str(_Path.home())
-    return _Path(home) / ".claude" / "projects" / "ceo-orchestration" / "audit-log.jsonl"
+    # Default: matches audit_emit._audit_dir() → ~/.claude/projects/<native-slug>/
+    return _rp.runtime_state_dir() / "audit-log.jsonl"
 
 
 def _emit_swarm_runaway_suspected(

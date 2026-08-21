@@ -20,7 +20,13 @@ REPO="$HOME/canhada-labs/ceo-orchestration"
 PACK_REL=".claude/plans/PLAN-182/staged-w1"
 SENTINEL_REL=".claude/plans/PLAN-182/S319-approved.md"
 DRY=0
-[ "${1:-}" = "--dry-run" ] && DRY=1
+RESUME=0
+case "${1:-}" in
+  --dry-run) DRY=1 ;;
+  --resume-post-custody) RESUME=1 ;;
+  "") : ;;
+  *) printf 'uso: %s [--dry-run|--resume-post-custody]\n' "$0" >&2; exit 2 ;;
+esac
 
 say() { printf '\n== %s\n' "$*"; }
 die() { printf '\nFAIL: %s\n' "$*" >&2; exit 1; }
@@ -36,7 +42,20 @@ gpg --verify "$SENTINEL_REL.asc" "$SENTINEL_REL" 2>/dev/null \
 ( cd "$PACK_REL/tree" && shasum -a 256 -c ../MANIFEST.sha256 --status ) \
   || die "pack corrompido (shasum -c)"
 PACK_N="$(wc -l < "$PACK_REL/MANIFEST.sha256" | tr -d ' ')"
-echo "   sentinel assinado OK; pack integro ($PACK_N arquivos)"
+# rail r15 P1-1: o sentinel ASSINADO fixa a contagem E o digest do
+# manifesto. Sem este binding, a assinatura cobriria qualquer pack
+# re-hasheado depois dela — que foi exatamente o que aconteceu quando as
+# curas r13-r15 mudaram o conteudo apos a assinatura das 09:13.
+SIGNED_N="$(grep -m1 '^MANIFEST-entradas:' "$SENTINEL_REL" | sed 's/^[^:]*: *//' | tr -d '[:space:]')"
+SIGNED_SHA="$(grep -m1 '^MANIFEST-sha256:' "$SENTINEL_REL" | sed 's/^[^:]*: *//' | tr -d '[:space:]')"
+[ -n "$SIGNED_N" ] && [ -n "$SIGNED_SHA" ] \
+  || die "sentinel sem binding do manifesto (MANIFEST-entradas/MANIFEST-sha256)"
+[ "$PACK_N" = "$SIGNED_N" ] \
+  || die "manifesto tem $PACK_N entradas; o sentinel assinou $SIGNED_N — re-assine"
+LIVE_SHA="$(shasum -a 256 "$PACK_REL/MANIFEST.sha256" | cut -d' ' -f1)"
+[ "$LIVE_SHA" = "$SIGNED_SHA" ] \
+  || die "digest do manifesto ($LIVE_SHA) != assinado ($SIGNED_SHA) — o pack mudou apos a assinatura; re-assine"
+echo "   sentinel assinado OK; pack integro ($PACK_N arquivos, digest casa o assinado)"
 
 # Anchor-SHA do sentinel tem de casar o HEAD (assinatura fresca).
 ANCHOR="$(grep -m1 '^Anchor-SHA:' "$SENTINEL_REL" | sed 's/^[^:]*: *//')"
@@ -75,6 +94,15 @@ if [ "$DRY" -eq 1 ]; then
   WORK="$(mktemp -d)/clone"
   say "DRY-RUN: clone descartavel em $WORK"
   git clone --local --quiet "$REPO" "$WORK"
+  # `git clone --local` NAO leva untracked, e `dist/` (artefato de build,
+  # 92 membros da familia de auditoria) nao e rastreado: sem este espelho
+  # o dry-run fica CEGO para o que o gate G4 mede no repo real — foi
+  # exatamente assim que o land de 2026-08-21 passou no dry e reprovou no
+  # real (licao: guard verde sobre UNTRACKED que ele nao ve).
+  if [ -d "$REPO/dist" ]; then
+    cp -R "$REPO/dist" "$WORK/dist"
+    echo "   dist/ espelhado no clone (untracked; o gate G4 o enxerga)"
+  fi
   FAKE_HOME="$(mktemp -d)"
   mkdir -p "$FAKE_HOME/.claude/projects/ceo-orchestration"
   # semente de cadeia legada para exercitar a custodia de verdade
@@ -90,10 +118,19 @@ if [ "$DRY" -eq 1 ]; then
 else
   WORK="$REPO"
   TARGET_HOME="$HOME"
-  st="$(git status --porcelain --untracked-files=all \
-        | grep -v 'S319-approved' || true)"
-  [ -z "$st" ] || die "arvore suja — o land exige arvore limpa:
+  if [ "$RESUME" -eq 1 ]; then
+    # No RESUME a arvore ESTA suja por construcao: o pack ja foi
+    # aplicado pela tentativa anterior — exigir limpeza aqui tornaria a
+    # retomada impossivel. A protecao equivalente e o stage por LISTA
+    # EXPLICITA do manifesto no G6 (nenhum arquivo fora do escopo
+    # assinado entra no commit, por mais sujo que o working tree esteja).
+    echo "   (resume) arvore aplicada — stage explicito protege o commit"
+  else
+    st="$(git status --porcelain --untracked-files=all \
+          | grep -v 'S319-approved' || true)"
+    [ -z "$st" ] || die "arvore suja — o land exige arvore limpa:
 $st"
+  fi
 fi
 
 # rollback do apply em qualquer falha (a licao do residuo meio-aplicado)
@@ -103,6 +140,63 @@ if [ "$DRY" -eq 0 ]; then
 fi
 
 # --------------------------------------------------- 1. CUSTODIA (PRIMEIRO)
+if [ "$RESUME" -eq 1 ]; then
+  say "G2. custodia — PULADA (--resume-post-custody)"
+  ARCH_CHK="$HOME/.claude/projects/ceo-orchestration.pre-W1-archive"
+  NEW_CHK="$HOME/.claude/projects/-$(printf '%s' "$REPO" | sed 's|^/||; s|/|-|g')"
+  # Retomar exige EVIDENCIA ESPECIFICA DO BRACO — nunca a palavra do
+  # operador. rail r13 P1-2: a versao anterior aceitava "$NEW_CHK existe",
+  # que e VACUO — o harness ja mantem transcripts/memoria nesse dir, entao
+  # o guard passaria mesmo se a custodia NUNCA tivesse rodado, e o land
+  # redirecionaria os escritores com a cadeia historica ainda gravavel.
+  case "$CUSTODY" in
+    ARCHIVE)
+      # so o mv cria o archive — ele e a prova de que a custodia rodou.
+      [ -d "$ARCH_CHK" ] \
+        || die "--resume-post-custody com ARCHIVE mas sem $ARCH_CHK — a custodia nao rodou"
+      echo "   evidencia OK: archive presente ($ARCH_CHK)"
+      # rail r15: o dir legado pode ter sido RECRIADO entre a custodia e
+      # a retomada. Se os eventos novos forem de OUTROS projetos (que nao
+      # migraram), o literal e legitimamente deles e seguir e correto. Se
+      # houver evento DESTE projeto, ele ficaria ORFAO quando os
+      # escritores migrarem — entao MEDIMOS, nunca presumimos.
+      _legacy_log="$HOME/.claude/projects/ceo-orchestration/audit-log.jsonl"
+      if [ -f "$_legacy_log" ]; then
+        _mine="$(REPO="$REPO" python3 - "$_legacy_log" <<'PY'
+import json, os, sys
+repo = os.environ["REPO"]
+n = 0
+try:
+    with open(sys.argv[1], encoding="utf-8", errors="replace") as fh:
+        for ln in fh:
+            try:
+                if (json.loads(ln).get("project") or "") == repo:
+                    n += 1
+            except Exception:
+                pass
+except OSError:
+    pass
+print(n)
+PY
+)"
+        if [ "${_mine:-0}" -gt 0 ]; then
+          die "o dir legado foi recriado e contem $_mine evento(s) DESTE projeto:
+  $_legacy_log
+Eles ficariam orfaos quando os escritores migrarem. Decida antes de
+retomar: arquivar de novo (mv para outro sufixo) ou aceitar a perda —
+NAO ha rota automatica, a cadeia HMAC nao admite merge."
+        fi
+        echo "   legado recriado nao tem evento deste projeto (seguro)"
+      fi
+      ;;
+    INHERIT)
+      # a heranca copia a chave para o dir novo — ela e a prova.
+      [ -f "$NEW_CHK/audit-key" ] \
+        || die "--resume-post-custody com INHERIT mas sem audit-key herdada em $NEW_CHK"
+      echo "   evidencia OK: audit-key herdada presente"
+      ;;
+  esac
+else
 say "G2. custodia da cadeia historica ($CUSTODY)"
 LEGACY_DIR="$TARGET_HOME/.claude/projects/ceo-orchestration"
 NEW_SLUG="-$(printf '%s' "$REPO" | sed 's|^/||; s|/|-|g')"
@@ -137,6 +231,8 @@ else
   echo "   nao ha dir legado — nada a custodiar"
 fi
 
+fi  # fim do bloco de custodia (RESUME pula tudo acima)
+
 # ------------------------------------------------------------ 2. APLICAR
 say "G3. aplicar o pack ($PACK_N arquivos)"
 N=0
@@ -150,6 +246,16 @@ echo "   $N arquivo(s) aplicados"
 # bit de execucao (a licao do cp que perde exec bit)
 find "$WORK/.claude/hooks" -maxdepth 1 -name '*.py' -exec chmod +x {} \; \
   2>/dev/null || true
+
+# -------------------------------- 2b. REGENERAR ARTEFATOS DERIVADOS
+# dist/ e uma COPIA buildada de .claude/ (scripts/build-plugin.py, "re-run
+# after changing .claude/ to refresh"). O pack cura as FONTES; sem este
+# passo o dist/ fica stale e o G4 reprova por 22 modulos que sao apenas
+# a copia velha.
+say "G3b. regenerar dist/ das fontes curadas"
+( cd "$WORK" && python3 scripts/build-plugin.py >/dev/null 2>&1 ) \
+  || die "build-plugin falhou apos o apply"
+echo "   dist/ reconstruido"
 
 # ------------------------------------------------- 3. VERIFICACAO (GATE)
 say "G4. verificacao pos-migracao"
@@ -184,7 +290,18 @@ if [ "$DRY" -eq 1 ]; then
 fi
 
 say "G6. commit"
-git add -A
+# ceremony-lint R4: o modo "adicionar tudo" varre ALEM do escopo
+# assinado (a licao do bump que commitou o que estava por perto). Aqui o
+# stage e a LISTA EXPLICITA do MANIFEST + o par do sentinel — nada mais
+# entra. (O anti-padrao nao aparece citado literalmente porque o proprio
+# detector R4 casa o texto, inclusive em comentario.)
+while read -r _sha _f; do
+  git add -- "${_f#./}"
+done < "$PACK_REL/MANIFEST.sha256"
+git add -- "$SENTINEL_REL" "$SENTINEL_REL.asc"
+# dist/ e untracked por design (build local) e NAO entra no commit.
+_extra="$(git diff --cached --name-only | wc -l | tr -d ' ')"
+echo "   staged: $_extra arquivo(s) (MANIFEST + sentinel)"
 git commit -q -m "ceremony(SENT-S319): PLAN-182 W1 — runtime state POR PROJETO (resolvedor unico; assert-migrated 102->0)
 
 Custodia da cadeia historica: $CUSTODY (decisao do Owner no sentinel).

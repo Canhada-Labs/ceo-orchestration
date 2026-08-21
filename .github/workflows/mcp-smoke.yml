@@ -317,7 +317,8 @@ jobs:
         # assert HMAC chain is intact.
         run: |
           set -euo pipefail
-          AUDIT_LOG="$HOME/.claude/projects/ceo-orchestration/audit-log.jsonl"
+          # PLAN-182 W1: o log vive no dir por-projeto do resolvedor unico.
+          AUDIT_LOG="$(python3 -c 'import sys; sys.path.insert(0, ".claude/hooks"); from _lib import runtime_paths; print(runtime_paths.runtime_state_dir() / "audit-log.jsonl")')"
           if [ -f "$AUDIT_LOG" ]; then
             python3 -c "
           import json, sys

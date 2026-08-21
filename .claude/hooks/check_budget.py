@@ -81,7 +81,7 @@ The resolved source is recorded in the ``budget_exceeded`` event's
 | ``CEO_BUDGET_BYPASS_MAX_PER_DAY``| 10        | Rate limit: at most N ``budget_bypass_used`` emits per plan / 24h. |
 | ``CEO_BUDGET_ENFORCE``           | ``0``     | Sprint 11 default. Flip criterion in ADR-033. |
 | ``CEO_BUDGET_QUOTA_HINT``        | ``1``     | PLAN-135 W5 O4: ``0`` disables reading the statusLine sidecar to append a live rate-limit line to the over-cap warning. Advisory text only — never gates the decision. |
-| ``CEO_STATUSLINE_SIDECAR``       | unset     | PLAN-135 W5 O4: full-path override of the statusLine sidecar read for the quota hint (else ``<CEO_AUDIT_LOG_DIR or ~/.claude/projects/ceo-orchestration>/state/statusline-snapshot.json``). |
+| ``CEO_STATUSLINE_SIDECAR``       | unset     | PLAN-135 W5 O4: full-path override of the statusLine sidecar read for the quota hint (else ``<CEO_AUDIT_LOG_DIR or ~/.claude/projects/<native-slug>>/state/statusline-snapshot.json``). |
 
 ## Fail-open contract (ADR-005, CLAUDE.md §Critical Rules)
 
@@ -111,6 +111,26 @@ if str(_HOOKS_DIR) not in sys.path:
 from _lib import contract as _contract  # noqa: E402
 from _lib.adapters import claude as _claude_adapter  # noqa: E402
 from _lib import plan_frontmatter as _plan_frontmatter  # noqa: E402
+try:
+    from _lib import runtime_paths as _rp  # noqa: E402  # PLAN-182 W1 single resolver
+except Exception:  # pragma: no cover — partial upgrade: hook stays FAIL-OPEN (rail r1 P1-4)
+    _rp = None  # type: ignore[assignment]
+
+
+def _rp_state_dir():
+    """Resolver com fallback de partial-upgrade (arquivo novo ausente).
+
+    Fail-open: o hook NUNCA crasha por falta do resolvedor; degrada ao
+    comportamento legado com aviso em stderr.
+    """
+    if _rp is not None:
+        return _rp.runtime_state_dir()
+    import sys as _s
+    _s.stderr.write("# hook: _lib/runtime_paths ausente — fallback legado (partial upgrade)\n")
+    from pathlib import Path as _P
+    import os as _o
+    _h = _o.environ.get("HOME") or str(_P.home())
+    return _P(_h) / ".claude" / "projects" / "ceo-orchestration"  # rp-allow: partial-upgrade-fallback
 
 
 # ---------------------------------------------------------------------------
@@ -178,7 +198,7 @@ def _statusline_sidecar_path() -> Path:
     if base:
         return Path(base) / "state" / "statusline-snapshot.json"
     home = os.environ.get("HOME") or str(Path.home())
-    return Path(home) / ".claude" / "projects" / "ceo-orchestration" / "state" / "statusline-snapshot.json"
+    return _rp_state_dir() / "state" / "statusline-snapshot.json"
 
 
 def _statusline_quota_hint() -> str:

@@ -1,7 +1,7 @@
 # audit-action registry golden (generated — do not hand-edit)
 # format: v1  source: .claude/hooks/_lib/audit_emit.py::_KNOWN_ACTIONS
 # regenerate: python3 .claude/scripts/check-audit-registry-coverage.py --write-golden
-# count: 326
+# count: 327
 action_required_held
 action_required_rejected
 action_required_resumed
@@ -243,6 +243,7 @@ replay_completed
 replay_diff_produced
 replay_started
 repo_profile_confirmed
+salt_rotation_registered
 secret_leak_detected
 sentinel_created
 sentinel_signer_expiry_warned

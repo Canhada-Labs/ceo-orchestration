@@ -177,6 +177,26 @@ from _lib import redact as _redact  # noqa: E402
 from _lib import tokens as _tokens  # noqa: E402  (PLAN-006 Phase 5b / ADR-016)
 from _lib.adapters import claude as _claude_adapter  # noqa: E402
 from _lib.filelock import FileLock, FileLockTimeout  # noqa: E402
+try:
+    from _lib import runtime_paths as _rp  # noqa: E402  # PLAN-182 W1 single resolver
+except Exception:  # pragma: no cover — partial upgrade: hook stays FAIL-OPEN (rail r1 P1-4)
+    _rp = None  # type: ignore[assignment]
+
+
+def _rp_state_dir():
+    """Resolver com fallback de partial-upgrade (arquivo novo ausente).
+
+    Fail-open: o hook NUNCA crasha por falta do resolvedor; degrada ao
+    comportamento legado com aviso em stderr.
+    """
+    if _rp is not None:
+        return _rp.runtime_state_dir()
+    import sys as _s
+    _s.stderr.write("# hook: _lib/runtime_paths ausente — fallback legado (partial upgrade)\n")
+    from pathlib import Path as _P
+    import os as _o
+    _h = _o.environ.get("HOME") or str(_P.home())
+    return _P(_h) / ".claude" / "projects" / "ceo-orchestration"  # rp-allow: partial-upgrade-fallback
 
 
 # -----------------------------------------------------------------------------
@@ -284,18 +304,22 @@ _FILE_ASSIGNMENT_RE = re.compile(r"^## FILE ASSIGNMENT", re.MULTILINE)
 def audit_paths() -> Dict[str, Path]:
     """Resolve the audit log paths from env vars with sensible defaults."""
     home = Path(os.environ.get("HOME") or str(Path.home()))
-    default_dir = home / ".claude" / "projects" / "ceo-orchestration"
+    default_dir = _rp_state_dir()
 
     audit_dir = Path(os.environ.get("CEO_AUDIT_LOG_DIR") or str(default_dir))
-    audit_log = Path(
-        os.environ.get("CEO_AUDIT_LOG_PATH") or str(audit_dir / "audit-log.jsonl")
-    )
+    env_log = os.environ.get("CEO_AUDIT_LOG_PATH")
+    audit_log = Path(env_log) if env_log else audit_dir / "audit-log.jsonl"
+    # PLAN-182 W1 rail r1 P1-2: family-follows-log — when the LOG moved via
+    # CEO_AUDIT_LOG_PATH, lock + errors follow its resolved parent (same
+    # derivation as audit_emit._log_family_dir / audit_hmac), never the
+    # default dir. One log, one lock, for every writer.
+    family_dir = Path(env_log).resolve().parent if env_log else audit_dir
     audit_err = Path(
-        os.environ.get("CEO_AUDIT_LOG_ERR") or str(audit_dir / "audit-log.errors")
+        os.environ.get("CEO_AUDIT_LOG_ERR") or str(family_dir / "audit-log.errors")
     )
     audit_lock = Path(
         os.environ.get("CEO_AUDIT_LOG_LOCK")
-        or str(audit_dir / "audit-log.lock")
+        or str(family_dir / "audit-log.lock")
     )
     return {
         "dir": audit_dir,

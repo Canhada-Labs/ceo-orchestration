@@ -32,7 +32,7 @@ forensic ``modelUsage`` reconstruction becomes a live hook emit.
 
 1. ``$CEO_SUBAGENT_LIFECYCLE_STATE_DIR`` (test override)
 2. ``$CEO_AUDIT_LOG_DIR`` (test isolation via TestEnvContext)
-3. ``$HOME/.claude/projects/ceo-orchestration/state/``
+3. ``$HOME/.claude/projects/<native-slug>/state/``
 
 PARITY NOTE: ``_state_dir`` / ``_sidecar_path`` / ``_agent_key`` /
 ``_load_sidecar`` / ``_save_sidecar`` / ``_prune_entries`` are duplicated
@@ -51,6 +51,34 @@ import sys
 import time
 from pathlib import Path
 from typing import Any, Dict, Optional
+import sys as _sys_rp
+from pathlib import Path as _Path_rp
+_HOOKS_RP = _Path_rp(__file__).resolve()
+for _anc in _HOOKS_RP.parents:
+    if (_anc / ".claude" / "hooks" / "_lib").is_dir():
+        if str(_anc / ".claude" / "hooks") not in _sys_rp.path:
+            _sys_rp.path.insert(0, str(_anc / ".claude" / "hooks"))
+        break
+try:
+    from _lib import runtime_paths as _rp  # noqa: E402  # PLAN-182 W1 single resolver
+except Exception:  # pragma: no cover — partial upgrade: hook stays FAIL-OPEN (rail r1 P1-4)
+    _rp = None  # type: ignore[assignment]
+
+
+def _rp_state_dir():
+    """Resolver com fallback de partial-upgrade (arquivo novo ausente).
+
+    Fail-open: o hook NUNCA crasha por falta do resolvedor; degrada ao
+    comportamento legado com aviso em stderr.
+    """
+    if _rp is not None:
+        return _rp.runtime_state_dir()
+    import sys as _s
+    _s.stderr.write("# hook: _lib/runtime_paths ausente — fallback legado (partial upgrade)\n")
+    from pathlib import Path as _P
+    import os as _o
+    _h = _o.environ.get("HOME") or str(_P.home())
+    return _P(_h) / ".claude" / "projects" / "ceo-orchestration"  # rp-allow: partial-upgrade-fallback
 
 # Make the local `_lib` importable (matches the pattern of existing hooks).
 _HOOKS_DIR = Path(__file__).resolve().parent
@@ -87,7 +115,7 @@ def _state_dir() -> Path:
     if audit_dir:
         return Path(audit_dir)
     home = os.environ.get("HOME") or "/tmp"
-    return Path(home) / ".claude" / "projects" / "ceo-orchestration" / "state"
+    return _rp_state_dir() / "state"
 
 
 def _sidecar_path() -> Path:

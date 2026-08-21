@@ -50,6 +50,18 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+# PLAN-182 W1 single resolver (rail r2 grupo A) — .claude/scripts/* -> .claude/hooks
+import sys as _sys_rp
+from pathlib import Path as _P_rp
+_h_rp = _P_rp(__file__).resolve()
+for _anc_rp in _h_rp.parents:
+    if (_anc_rp / ".claude" / "hooks" / "_lib").is_dir():
+        if str(_anc_rp / ".claude" / "hooks") not in _sys_rp.path:
+            _sys_rp.path.insert(0, str(_anc_rp / ".claude" / "hooks"))
+        break
+from _lib import runtime_paths as _rp  # noqa: E402
+
+
 _REPO_ROOT_GUESS = Path(__file__).resolve().parent.parent.parent
 _HOOKS_LIB = _REPO_ROOT_GUESS / ".claude" / "hooks"
 if str(_HOOKS_LIB) not in sys.path:
@@ -136,9 +148,12 @@ def resolve_index_path() -> Path:
     env = os.environ.get("CEO_SKILL_INDEX_PATH")
     if env:
         return Path(env)
-    home = os.environ.get("HOME") or str(Path.home())
-    project = os.environ.get("CEO_PROJECT_NAME", "ceo-orchestration")
-    return Path(home) / ".claude" / "projects" / project / "skill-index.sqlite"
+    project = os.environ.get("CEO_PROJECT_NAME")
+    if project:
+        home = os.environ.get("HOME") or str(Path.home())
+        return Path(home) / ".claude" / "projects" / project / "skill-index.sqlite"
+    # PLAN-182 W1: default via the single family resolver.
+    return _rp.runtime_state_dir() / "skill-index.sqlite"
 
 
 class IndexView:

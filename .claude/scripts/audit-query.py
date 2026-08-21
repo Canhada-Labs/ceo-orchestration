@@ -17,7 +17,7 @@ answers common operator questions:
                               [--check-reopen]
 
 Default input path:
-    ${CEO_AUDIT_LOG_PATH:-$HOME/.claude/projects/ceo-orchestration/audit-log.jsonl}
+    ${CEO_AUDIT_LOG_PATH:-$HOME/.claude/projects/<native-slug>/audit-log.jsonl}
 
 Pass `--log <path>` to override or `--include-rotated` to aggregate
 across all `audit-log*.jsonl` in the audit directory.
@@ -46,6 +46,15 @@ from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple
+import sys as _sys_rp
+from pathlib import Path as _Path_rp
+_HOOKS_RP = _Path_rp(__file__).resolve()
+for _anc in _HOOKS_RP.parents:
+    if (_anc / ".claude" / "hooks" / "_lib").is_dir():
+        if str(_anc / ".claude" / "hooks") not in _sys_rp.path:
+            _sys_rp.path.insert(0, str(_anc / ".claude" / "hooks"))
+        break
+from _lib import runtime_paths as _rp  # noqa: E402  # PLAN-182 W1 single resolver
 
 
 # ---------------------------------------------------------------------------
@@ -56,18 +65,28 @@ from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple
 def default_log_path() -> Path:
     """Return the conventional audit log path from env vars / defaults."""
     home = Path(os.environ.get("HOME") or str(Path.home()))
-    default_dir = home / ".claude" / "projects" / "ceo-orchestration"
+    default_dir = _rp.runtime_state_dir()
     return Path(
         os.environ.get("CEO_AUDIT_LOG_PATH") or str(default_dir / "audit-log.jsonl")
     )
 
 
 def default_errors_path() -> Path:
-    home = Path(os.environ.get("HOME") or str(Path.home()))
-    default_dir = home / ".claude" / "projects" / "ceo-orchestration"
-    return Path(
-        os.environ.get("CEO_AUDIT_LOG_ERR") or str(default_dir / "audit-log.errors")
-    )
+    env = os.environ.get("CEO_AUDIT_LOG_ERR")
+    if env:
+        return Path(env)
+    # rail r2 G: family-follows-log — o errors mora ao lado do LOG efetivo
+    # (com CEO_AUDIT_LOG_PATH setado, os escritores poem o breadcrumb no
+    # parent do PATH; ler do default perderia exatamente esses erros).
+    env_log = os.environ.get("CEO_AUDIT_LOG_PATH")
+    if env_log:
+        return Path(env_log).resolve().parent / "audit-log.errors"
+    # rail r3 P2: espelha a cascata dos ESCRITORES — DIR-only poe o
+    # breadcrumb sob CEO_AUDIT_LOG_DIR.
+    env_dir = os.environ.get("CEO_AUDIT_LOG_DIR")
+    if env_dir:
+        return Path(env_dir) / "audit-log.errors"
+    return _rp.runtime_state_dir() / "audit-log.errors"
 
 
 def discover_logs(primary: Path, include_rotated: bool) -> List[Path]:

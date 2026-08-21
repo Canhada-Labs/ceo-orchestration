@@ -13,7 +13,7 @@ Usage:
   python3 .claude/scripts/local/verify-staging-manifest.py \
     --manifests .claude/plans/PLAN-084/manifests/ \
     --staging .claude/plans/PLAN-084/ \
-    --audit-log ~/.claude/projects/ceo-orchestration/audit-log.jsonl \
+    --audit-log ~/.claude/projects/<native-slug>/audit-log.jsonl \
     --owner-fingerprint 0000000000000000000000000000000000000000
 """
 
@@ -27,6 +27,15 @@ import subprocess
 import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
+import sys as _sys_rp
+from pathlib import Path as _Path_rp
+_HOOKS_RP = _Path_rp(__file__).resolve()
+for _anc in _HOOKS_RP.parents:
+    if (_anc / ".claude" / "hooks" / "_lib").is_dir():
+        if str(_anc / ".claude" / "hooks") not in _sys_rp.path:
+            _sys_rp.path.insert(0, str(_anc / ".claude" / "hooks"))
+        break
+from _lib import runtime_paths as _rp  # noqa: E402  # PLAN-182 W1 single resolver
 
 
 def sha256_file(path: Path) -> str:
@@ -124,7 +133,7 @@ def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--manifests", type=Path, default=Path(".claude/plans/PLAN-084/manifests/"))
     p.add_argument("--staging", type=Path, default=Path(".claude/plans/PLAN-084/"))
-    p.add_argument("--audit-log", type=Path, default=Path("~/.claude/projects/ceo-orchestration/audit-log.jsonl").expanduser())
+    p.add_argument("--audit-log", type=Path, default=Path(str(_rp.runtime_state_dir() / "audit-log.jsonl")).expanduser())
     p.add_argument("--owner-fingerprint", default="0000000000000000000000000000000000000000")
     p.add_argument("--require-gpg", action="store_true", help="Require .asc per manifest (post-Owner-ceremony)")
     p.add_argument("--require-audit-event", action="store_true", help="Require wave_artifact_written audit cross-reference (post-Wave-0.5)")

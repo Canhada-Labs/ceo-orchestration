@@ -27,7 +27,7 @@ keeps invariants consistent across surfaces:
 ## Path convention
 
 ```
-${CEO_STATE_ROOT:-$HOME/.claude/projects/ceo-orchestration/state}/
+${CEO_STATE_ROOT:-$HOME/.claude/projects/<native-slug>/state}/
     <store_name>/
         <plan_id>.sqlite        # the key/value db
         <plan_id>.sqlite.lock   # the filelock sibling
@@ -83,6 +83,7 @@ if str(_HOOKS_DIR) not in sys.path:
     sys.path.insert(0, str(_HOOKS_DIR))
 
 from _lib import redact as _redact  # noqa: E402
+from _lib import runtime_paths as _runtime_paths  # noqa: E402  # PLAN-182 W1 single resolver (ADR-001 S318)
 from _lib.filelock import FileLock, FileLockTimeout  # noqa: E402
 
 
@@ -114,16 +115,22 @@ class StateStoreInvalidName(StateStoreError):
 def _state_root() -> Path:
     """Return the base dir for all plan-scoped state stores.
 
-    Env-overridable via ``CEO_STATE_ROOT``. Default mirrors the audit
-    log convention (ADR-001): ``$HOME/.claude/projects/<project>/state``.
+    Env-overridable via ``CEO_STATE_ROOT`` (whole state root) and
+    ``CEO_PROJECT_NAME`` (legacy name-based slug, kept as an EXPLICIT
+    operator escape hatch — it re-creates the basename-collision
+    hazard, so it never participates in the default). Default follows
+    ADR-001 (S318 amendment) via the single family resolver: the
+    per-project native slug dir + ``/state`` — matching audit-log
+    siblings (PLAN-182 W1).
     """
     env = os.environ.get("CEO_STATE_ROOT")
     if env:
         return Path(env)
-    home = os.environ.get("HOME") or str(Path.home())
-    # Project name follows ADR-001: match audit-log siblings
-    project = os.environ.get("CEO_PROJECT_NAME", "ceo-orchestration")
-    return Path(home) / ".claude" / "projects" / project / "state"
+    project = os.environ.get("CEO_PROJECT_NAME")
+    if project:
+        home = os.environ.get("HOME") or str(Path.home())
+        return Path(home) / ".claude" / "projects" / project / "state"
+    return _runtime_paths.runtime_state_dir() / "state"
 
 
 def _validate_store_name(store_name: str) -> None:

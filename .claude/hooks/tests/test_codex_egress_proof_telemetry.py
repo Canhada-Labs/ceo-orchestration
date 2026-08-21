@@ -119,7 +119,8 @@ class TestAllowlistAndContract(unittest.TestCase):
         # PLAN-174 W1 (SENT-S318): 325 -> 326 (+ceremony_lint_unlock_used —
         # ceremony-lint ADR-186 escape-hatch breadcrumb, parked in 908707e,
         # registered + restored by the signed pack).
-        self.assertEqual(len(audit_emit._KNOWN_ACTIONS), 326)
+        # PLAN-182 W1 (SENT-S319): 326 -> 327 (+salt_rotation_registered).
+        self.assertEqual(len(audit_emit._KNOWN_ACTIONS), 327)
         self.assertIn("pair_rail_outgoing_redaction_applied", audit_emit._KNOWN_ACTIONS)
 
     def test_dispatch_scrub_accepts_empty_findings(self):

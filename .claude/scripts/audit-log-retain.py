@@ -58,7 +58,7 @@ of how aggressive the policy flags are.
 ``CEO_AUDIT_LOG_PATH`` — path to audit-log.jsonl; directory derived from it
 ``CLAUDE_PROJECT_DIR`` — Claude Code project directory; slug-derived path used
 
-Falls back to ``~/.claude/projects/ceo-orchestration/`` (legacy hardcode).
+Falls back to ``~/.claude/projects/<native-slug>/`` (legacy hardcode).
 
 ## Stdlib only (ADR-002). Python >= 3.9.
 
@@ -79,6 +79,15 @@ import sys
 import time
 from pathlib import Path
 from typing import List, Optional, Set, Tuple
+import sys as _sys_rp
+from pathlib import Path as _Path_rp
+_HOOKS_RP = _Path_rp(__file__).resolve()
+for _anc in _HOOKS_RP.parents:
+    if (_anc / ".claude" / "hooks" / "_lib").is_dir():
+        if str(_anc / ".claude" / "hooks") not in _sys_rp.path:
+            _sys_rp.path.insert(0, str(_anc / ".claude" / "hooks"))
+        break
+from _lib import runtime_paths as _rp  # noqa: E402  # PLAN-182 W1 single resolver
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -110,7 +119,7 @@ def _resolve_audit_dir() -> Optional[Path]:
       1. CEO_AUDIT_LOG_DIR env var (direct directory override)
       2. CEO_AUDIT_LOG_PATH env var (full file path; directory derived)
       3. CLAUDE_PROJECT_DIR env var (slug-derived)
-      4. Legacy hardcoded ~/.claude/projects/ceo-orchestration/
+      4. Legacy hardcoded ~/.claude/projects/<native-slug>/
 
     Returns None if no candidate directory exists.
     """
@@ -137,7 +146,7 @@ def _resolve_audit_dir() -> Optional[Path]:
         except OSError:
             pass
 
-    legacy = Path.home() / ".claude" / "projects" / "ceo-orchestration"
+    legacy = _rp.runtime_state_dir()
     if legacy.is_dir():
         return legacy
 

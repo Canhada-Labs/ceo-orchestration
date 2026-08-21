@@ -78,6 +78,15 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
+# PLAN-182 W1 single resolver (absolute first — works from hooks/ on
+# sys.path and from subpackages; relative and bare are fallbacks)
+try:
+    from _lib import runtime_paths as _rp
+except ImportError:  # pragma: no cover
+    try:
+        from . import runtime_paths as _rp  # type: ignore[no-redef]
+    except ImportError:
+        import runtime_paths as _rp  # type: ignore[no-redef]
 
 # ---------------------------------------------------------------------------
 # Closed enums / bounds
@@ -157,13 +166,13 @@ def _dampen_enabled() -> bool:
 
 def _state_base_dir() -> Path:
     """``CEO_AUDIT_LOG_DIR`` (live env — swarm children inherit a per-slot
-    value) else ``$HOME/.claude/projects/ceo-orchestration``. This is state
+    value) else ``$HOME/.claude/projects/<native-slug>``. This is state
     ADJACENT to the audit dir, never the audit chain itself."""
     env_dir = os.environ.get("CEO_AUDIT_LOG_DIR")
     if env_dir:
         return Path(env_dir)
     home = os.environ.get("HOME") or str(Path.home())
-    return Path(home) / ".claude" / "projects" / "ceo-orchestration"
+    return _rp.runtime_state_dir()
 
 
 def _safe_component(raw: str, empty: str) -> str:

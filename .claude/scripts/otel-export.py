@@ -58,7 +58,7 @@ from _lib import audit_emit as _audit  # noqa: E402
 from _lib import otel_emit  # noqa: E402
 
 
-DEFAULT_SERVICE_NAME = "ceo-orchestration"
+DEFAULT_SERVICE_NAME = "ceo-orchestration"  # rp-allow: product-label
 
 
 # -----------------------------------------------------------------------------

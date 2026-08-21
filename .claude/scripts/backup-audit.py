@@ -37,9 +37,10 @@ if str(HOOKS_DIR) not in sys.path:
     sys.path.insert(0, str(HOOKS_DIR))
 
 from _lib.filelock import FileLock, FileLockTimeout  # noqa: E402
+from _lib import runtime_paths as _rp  # noqa: E402  # PLAN-182 W1 single resolver
 
 
-DEFAULT_AUDIT_DIR = Path.home() / ".claude" / "projects" / "ceo-orchestration"
+DEFAULT_AUDIT_DIR = _rp.runtime_state_dir()
 DEFAULT_MAX_BYTES = 500_000_000  # 500 MB (debate C9)
 DEFAULT_KEEP_DAYS = 30
 

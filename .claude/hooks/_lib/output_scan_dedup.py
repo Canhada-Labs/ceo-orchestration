@@ -42,7 +42,7 @@ of ADR-057.
 
 State persists at `<state_root>/output-scan-dedup.json` where
 `state_root` is derived from `$CLAUDE_PROJECT_DIR` or, if unset,
-`$HOME/.claude/projects/ceo-orchestration/state/`. Schema:
+`$HOME/.claude/projects/<native-slug>/state/`. Schema:
 
     {
         "entries": {
@@ -69,6 +69,15 @@ import sys
 import time
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
+# PLAN-182 W1 single resolver (absolute first — works from hooks/ on
+# sys.path and from subpackages; relative and bare are fallbacks)
+try:
+    from _lib import runtime_paths as _rp
+except ImportError:  # pragma: no cover
+    try:
+        from . import runtime_paths as _rp  # type: ignore[no-redef]
+    except ImportError:
+        import runtime_paths as _rp  # type: ignore[no-redef]
 
 _HOOKS_DIR = Path(__file__).resolve().parent.parent
 if str(_HOOKS_DIR) not in sys.path:
@@ -149,7 +158,7 @@ def _resolve_state_dir() -> Path:
     Priority:
         1. $CEO_OUTPUT_SCAN_DEDUP_STATE_DIR (test override)
         2. $CEO_AUDIT_LOG_DIR (test isolation via TestEnvContext)
-        3. $HOME/.claude/projects/ceo-orchestration/state/
+        3. $HOME/.claude/projects/<native-slug>/state/
     """
     override = os.environ.get("CEO_OUTPUT_SCAN_DEDUP_STATE_DIR")
     if override:
@@ -158,7 +167,7 @@ def _resolve_state_dir() -> Path:
     if audit_dir:
         return Path(audit_dir)
     home = os.environ.get("HOME") or "/tmp"
-    return Path(home) / ".claude" / "projects" / "ceo-orchestration" / "state"
+    return _rp.runtime_state_dir() / "state"
 
 
 def _state_file_path() -> Path:

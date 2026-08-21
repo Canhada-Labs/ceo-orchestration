@@ -79,6 +79,7 @@ _THIS_DIR = Path(__file__).resolve().parent           # .claude/scripts
 _HOOKS_DIR = _THIS_DIR.parent / "hooks"               # .claude/hooks
 if str(_HOOKS_DIR) not in sys.path:
     sys.path.insert(0, str(_HOOKS_DIR))
+from _lib import runtime_paths as _rp  # noqa: E402  # PLAN-182 W1 single resolver
 
 
 # ---- Result type ------------------------------------------------------------
@@ -461,10 +462,20 @@ def _write_quarantine_breadcrumb(plan: dict, errors_log: Optional[Path]) -> None
 
 def _default_errors_log() -> Path:
     override = os.environ.get("CEO_AUDIT_LOG_ERR")
+    # rail r14: sem o degrau do LOG_PATH o breadcrumb fica no
+    # dir default enquanto o log se muda (family-atomicity).
+    if not override:
+        _lp = os.environ.get("CEO_AUDIT_LOG_PATH")
+        if _lp:
+            try:
+                override = str(
+                    Path(_lp).resolve().parent / "audit-log.errors")
+            except OSError:
+                pass
     if override:
         return Path(override)
     home = Path(os.environ.get("HOME") or str(Path.home()))
-    return home / ".claude" / "projects" / "ceo-orchestration" / "audit-log.errors"
+    return _rp.runtime_state_dir() / "audit-log.errors"
 
 
 # ---- CLI --------------------------------------------------------------------

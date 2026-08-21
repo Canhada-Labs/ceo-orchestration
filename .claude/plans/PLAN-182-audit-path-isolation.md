@@ -7,7 +7,7 @@ reviewed_by: "Owner — autorizacao explicita em chat (S315, 2026-08-20): 'se ja
 created: 2026-08-20
 owner: CEO
 depends_on: []
-blocked_on_adr: "emenda ao ADR-001 (obrigatoria, AC-7) e decisao sobre ADR-079 (semantica de per-installation, OQ-4) — nenhuma execucao de W1 abre antes"
+blocked_on_adr: "RESOLVIDO (S318): emenda ao ADR-001 (AC-7) e emenda ao ADR-079 (OQ-4) LANDADAS em 32e29b1 — a W1 executou na S319 sob o sentinel SENT-S319"
 budget_tokens: 300-450k (W0 levantamento 110-170k; W1 resolvedor+cerimonia 110-160k; W2 decisao do log historico 40-70k; W3 installer+adopters 40-60k) — re-orcado no round 1 do debate, onde dois criticos convergiram independentemente em 250-500k contra os 120-260k da primeira redacao
 budget_sessions: 4-6
 context_risk: high
@@ -402,6 +402,53 @@ ADR-079, que são decisão do Owner.
       Check: o texto da claim declara a limitacao como permanente sob mesmo UID, sem condicionar a migracao; verificado por leitura no mesmo commit
 - [ ] `[P1]` Escritores e leitores migram no MESMO lote (ver §3).
       Check: derive-audit-family.py --assert-migrated sai 0
+
+### Registro de execução — W1 EXECUTADA (S319, 2026-08-21, sentinel SENT-S319)
+
+Reemitida e executada após a W0 fechar, com as duas emendas landadas em
+`32e29b1`. Entregue no pack `PLAN-182/staged-w1/` (105 arquivos,
+`MANIFEST.sha256`; commits de prep `796f809` → `71ef682`):
+
+- **Resolvedor único** `_lib/runtime_paths.py` — slug nativo path-based
+  (`/`→`-`, grafia ATUAL do harness), `CLAUDE_PROJECT_DIR_NATIVE` com seu
+  primeiro consumidor, `legacy_state_dir()` como único handle sancionado
+  do literal, `ensure_state_dir()` central (mkdir + tighten 0700 que NÃO
+  aperta dir escolhido por override e não segue symlink).
+- **Família migrada:** 6 âncoras à mão + sweep mecânico + batch manual;
+  **5 grafias divergentes colapsadas** (literal, basename-lowered de
+  `memory_shared`, basename de `optimizer/fanout`, `lstrip+resolve` de
+  `ceo-cost`, duplo-traço de `check_anti_ceo_overhead`).
+  **`--assert-migrated`: 102 → 0.**
+- **Family-atomicity:** lock/errors/key seguem o LOG EFETIVO (PATH-first
+  unificado nos 4 resolvedores) — o split medido na W0-US2 está curado,
+  com preservação da cadeia legada quando `LOG_DIR`/`LOG_PATH` divergem
+  numa instalação existente (migração = cerimônia, nunca efeito de
+  import).
+- **Salt POR PROJETO** com mint OBSERVÁVEL: ação nova
+  `salt_rotation_registered` registrada na família completa
+  (`_KNOWN_ACTIONS` 326→327 + allowlist + branch de scrub + SPEC v2.58 +
+  golden + 6 pins) e sidecar `salt-minted.json` como ground truth.
+- **Caches keyed por path ABSOLUTO** (key e salt): a troca de projeto
+  mid-process deixa de servir o cache do projeto anterior — inclusive com
+  overrides relativos + `chdir`.
+- **Aceitação:** `test_audit_family_two_projects.py` (paridade dois
+  projetos com DUAS chaves HMAC + controle negativo comportamental; salts
+  distintos + `prompt_sha256` não-correlacionável + herdeiro preserva
+  bytes; spool switch mid-process; family-follows-log; ambos-overrides;
+  mint observável) + `test_runtime_paths.py`. Suíte CI-equivalente
+  **P1=0 / P2=0 / P3=0**.
+- **Rail codex: 12 rodadas até RODADA LIMPA** (6→12→2→1→3→3→2→1→2→4→1→0),
+  35 achados curados. Residual declarado: slug não-injetivo para paths
+  que diferem só em traço-vs-barra — é a derivação NATIVA do harness
+  (mesma colisão nos dirs de memória); divergir quebraria a co-locação
+  ratificada no ADR-001 S318.
+- **CLAUDE.md §5 curado no mesmo lote** (AC [P0]) e este frontmatter
+  destravado.
+
+**Fora do lote, com dono:** templates (`templates/scripts/statusline-ceo.py`,
+`templates/{codex,grok}/pre-push-review-gate.sh`) → W3; unificação dos
+DOIS locks (F12) e semântica do campo `project` (US6) → W2; `dist/` não é
+rastreado (regenera das fontes).
 
 ### W2 — O log histórico (decisão, não implementação)
 

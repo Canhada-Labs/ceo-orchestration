@@ -190,10 +190,16 @@ class TestResolveBreakerAuditLogPath(TestEnvContext):
             self.assertTrue(str(p).startswith("/tmp/mydir"))
 
     def test_default_path_under_home(self):
-        os.environ.pop("CEO_AUDIT_LOG_PATH", None)
-        os.environ.pop("CEO_AUDIT_LOG_DIR", None)
-        p = _resolve_breaker_audit_log_path()
-        self.assertIn("ceo-orchestration", str(p))
+        # POS-W1 (PLAN-182, SENT-S319): o default segue o resolvedor unico —
+        # dir do slug nativo do projeto, nunca o literal.
+        env = {k: v for k, v in os.environ.items()
+               if k not in ("CEO_AUDIT_LOG_PATH", "CEO_AUDIT_LOG_DIR",
+                            "CLAUDE_PROJECT_DIR_NATIVE")}
+        env["CLAUDE_PROJECT_DIR"] = "/srv/breaker-proj"
+        with mock.patch.dict(os.environ, env, clear=True):
+            p = _resolve_breaker_audit_log_path()
+        self.assertIn("/projects/-srv-breaker-proj/", str(p))
+        self.assertNotIn("/projects/ceo-orchestration/", str(p))
         self.assertTrue(str(p).endswith("audit-log.jsonl"))
 
 

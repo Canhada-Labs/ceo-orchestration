@@ -42,14 +42,37 @@ def _import_module():
 
 
 class _IsolatedHomeMixin(unittest.TestCase):
-    """Provides a temp HOME to isolate `~/.claude/projects/...` writes."""
+    """Temp HOME + pinned CLAUDE_PROJECT_DIR (PLAN-182 W1 contract).
+
+    The salt unit is the PROJECT (ADR-079 S318 amendment): the file
+    lives under the per-project native-slug dir resolved by
+    ``_lib/runtime_paths``, no longer under the bare literal. Pinning
+    ``CLAUDE_PROJECT_DIR`` keeps the resolved dir independent of the
+    test runner's cwd; clearing ``CLAUDE_PROJECT_DIR_NATIVE`` keeps the
+    default arm under test.
+    """
+
+    _PROJECT_DIR = "/srv/salt-fixture-project"
 
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self._fake_home = Path(self._tmp.name)
-        self._home_patch = mock.patch.dict(
-            os.environ, {"HOME": str(self._fake_home)}, clear=False
+        # rail r13: estes testes exercitam o BRACO DEFAULT do resolvedor.
+        # Desde a cura de family-atomicity (P1-5) o `.salt` acompanha os
+        # overrides de familia — e o conftest da suite SEMPRE seta
+        # CEO_AUDIT_LOG_DIR para isolar o audit, o que mandaria o salt
+        # para la. Remove-los aqui e o que mantem este arquivo medindo o
+        # default; a cobertura do braco COM override esta em
+        # test_salt_follows_audit_family_override.
+        _FAMILY_OVERRIDES = (
+            "CLAUDE_PROJECT_DIR_NATIVE", "CEO_AUDIT_LOG_DIR",
+            "CEO_AUDIT_LOG_PATH",
         )
+        env = {k: v for k, v in os.environ.items()
+               if k not in _FAMILY_OVERRIDES}
+        env["HOME"] = str(self._fake_home)
+        env["CLAUDE_PROJECT_DIR"] = self._PROJECT_DIR
+        self._home_patch = mock.patch.dict(os.environ, env, clear=True)
         self._home_patch.start()
         self.salt_mod = _import_module()
         self.salt_mod.reset_cache_for_test()
@@ -60,11 +83,12 @@ class _IsolatedHomeMixin(unittest.TestCase):
         self._tmp.cleanup()
 
     def _expected_salt_path(self) -> Path:
+        slug = self._PROJECT_DIR.replace("/", "-")
         return (
             self._fake_home
             / ".claude"
             / "projects"
-            / "ceo-orchestration"
+            / slug
             / ".salt"
         )
 
@@ -95,25 +119,55 @@ class TestSaltGeneration(_IsolatedHomeMixin):
         # First installation
         salt_a = self.salt_mod.get_instance_salt()
 
-        # Tear down + bring up a second isolated HOME
+        # rail r13 P2-7: a segunda "instalacao" era montada com
+        # clear=False DEPOIS de parar o patch do setUp — qualquer
+        # CLAUDE_PROJECT_DIR_NATIVE ambiente voltava a valer e vencia o
+        # resolvedor, deixando o teste criar .salt/marker no dir de
+        # estado REAL. Agora o ambiente da 2a instalacao e construido a
+        # partir do MESMO env minimo do setUp (clear=True), sem depender
+        # de parar o patch.
         self.salt_mod.reset_cache_for_test()
-        self._home_patch.stop()
         with tempfile.TemporaryDirectory() as tmp_b:
-            with mock.patch.dict(
-                os.environ, {"HOME": str(tmp_b)}, clear=False
-            ):
+            env_b = {k: v for k, v in os.environ.items()
+                     if k not in ("CLAUDE_PROJECT_DIR_NATIVE",
+                                  "CEO_AUDIT_LOG_DIR", "CEO_AUDIT_LOG_PATH")}
+            env_b["HOME"] = str(tmp_b)
+            env_b["CLAUDE_PROJECT_DIR"] = self._PROJECT_DIR
+            with mock.patch.dict(os.environ, env_b, clear=True):
                 self.salt_mod.reset_cache_for_test()
                 salt_b = self.salt_mod.get_instance_salt()
-        # restore the original HOME patch for tearDown
-        self._home_patch = mock.patch.dict(
-            os.environ, {"HOME": str(self._fake_home)}, clear=False
-        )
-        self._home_patch.start()
 
         self.assertNotEqual(
             salt_a, salt_b,
             "two fresh installations must produce different salts"
         )
+
+
+class TestSaltFollowsAuditFamily(_IsolatedHomeMixin):
+    """rail r13 P1-5 — family-atomicity: o `.salt` mora com o LOG.
+
+    Deixa-lo no dir do slug enquanto log/key/lock/errors se mudam por
+    override contradiz o ADR-001 S318 item 3 e faria custodia/backup do
+    dir efetivo PERDEREM o salt.
+    """
+
+    def test_salt_follows_audit_family_override(self) -> None:
+        moved = self._fake_home / "moved-family"
+        moved.mkdir(parents=True, exist_ok=True)
+        env = dict(os.environ)
+        env["CEO_AUDIT_LOG_DIR"] = str(moved)
+        with mock.patch.dict(os.environ, env, clear=True):
+            self.salt_mod.reset_cache_for_test()
+            salt = self.salt_mod.get_instance_salt()
+            self.assertEqual(len(salt), 32)
+            self.assertEqual(
+                self.salt_mod._salt_path().parent.resolve(),
+                moved.resolve(),
+                "o .salt tem de acompanhar o dir da familia")
+        # controle: sem override, volta para o dir do projeto
+        self.salt_mod.reset_cache_for_test()
+        self.assertEqual(
+            self.salt_mod._salt_path(), self._expected_salt_path())
 
 
 class TestSaltCaching(_IsolatedHomeMixin):

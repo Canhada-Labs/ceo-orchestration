@@ -36,6 +36,15 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+import sys as _sys_rp
+from pathlib import Path as _Path_rp
+_HOOKS_RP = _Path_rp(__file__).resolve()
+for _anc in _HOOKS_RP.parents:
+    if (_anc / ".claude" / "hooks" / "_lib").is_dir():
+        if str(_anc / ".claude" / "hooks") not in _sys_rp.path:
+            _sys_rp.path.insert(0, str(_anc / ".claude" / "hooks"))
+        break
+from _lib import runtime_paths as _rp  # noqa: E402  # PLAN-182 W1 single resolver
 
 try:
     from ._constants import _compute_canonical_sha256
@@ -273,9 +282,7 @@ def _project_monthly_cost_delta(
         else:
             home = os.environ.get("HOME") or str(Path.home())
             audit_log_path = (
-                Path(home)
-                / ".claude" / "projects" / "ceo-orchestration"
-                / "audit-log.jsonl"
+                _rp.runtime_state_dir() / "audit-log.jsonl"
             )
     if not audit_log_path.exists():
         return None

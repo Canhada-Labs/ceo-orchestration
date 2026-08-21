@@ -203,17 +203,27 @@ _GREP_FIND_RX = re.compile(r"^\s*(?:grep|find|rg|ag)\b")
 # -----------------------------------------------------------------------------
 
 def _project_state_dir() -> Path:
-    """Return ~/.claude/projects/<proj>/state/, creating if missing.
+    """Return the per-project state/ dir, creating if missing.
 
-    Project key derived from CLAUDE_PROJECT_DIR (slug-encoded path).
-    Falls back to CWD-derived key if env not set.
+    PLAN-182 W1: delegates to the single family resolver
+    (``_lib/runtime_paths``). The pre-W1 local derivation here prefixed
+    an EXTRA dash (``'-' + path.replace('/', '-')``) — the legacy
+    harness spelling — producing a third slug spelling
+    (``--Users-...``) divergent from both the current harness and the
+    audit family (the W0-US7 live bug). mkdir gains mode 0700 (W1
+    modes item); pre-existing legacy ``--`` trees are left untouched
+    (ephemeral 5-min windows age out on their own).
     """
-    proj_dir = os.environ.get("CLAUDE_PROJECT_DIR") or str(Path.cwd())
-    # Mimic Claude Code's project slug: leading '-' + path with '/' -> '-'
-    slug = "-" + proj_dir.replace("/", "-")
-    base = Path.home() / ".claude" / "projects" / slug / "state"
     try:
-        base.mkdir(parents=True, exist_ok=True)
+        from _lib import runtime_paths as _runtime_paths
+        base = _runtime_paths.runtime_state_dir() / "state"
+    except Exception:  # pragma: no cover — partial upgrade: FAIL-OPEN (rail r1 P1-4)
+        import sys as _s
+        _s.stderr.write("# hook: _lib/runtime_paths ausente — fallback legado\n")
+        _h = os.environ.get("HOME") or str(Path.home())
+        base = Path(_h) / ".claude" / "projects" / "ceo-orchestration" / "state"  # rp-allow: partial-upgrade-fallback
+    try:
+        base.mkdir(parents=True, exist_ok=True, mode=0o700)
     except OSError:
         pass
     return base

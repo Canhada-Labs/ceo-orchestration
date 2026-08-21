@@ -25,7 +25,7 @@ Inputs:
     domains/<d>/skills/<name>/SKILL.md → domain (demotable)
     domains/<d>/<name>/SKILL.md        → domain (legacy layout, demotable)
 - Dispatch counts: the audit JSONL, resolved the way audit-query.py does
-  (`CEO_AUDIT_LOG_PATH` env or `$HOME/.claude/projects/ceo-orchestration/
+  (`CEO_AUDIT_LOG_PATH` env or `$HOME/.claude/projects/<native-slug>/
   audit-log.jsonl`, + rotated `audit-log*.jsonl` siblings). A dispatch =
   any entry whose `skill` field (audit-query `by-skill` semantics; set by
   audit_log.py extract_skill on agent_spawn) or `skill_slug` field
@@ -54,6 +54,15 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple
+import sys as _sys_rp
+from pathlib import Path as _Path_rp
+_HOOKS_RP = _Path_rp(__file__).resolve()
+for _anc in _HOOKS_RP.parents:
+    if (_anc / ".claude" / "hooks" / "_lib").is_dir():
+        if str(_anc / ".claude" / "hooks") not in _sys_rp.path:
+            _sys_rp.path.insert(0, str(_anc / ".claude" / "hooks"))
+        break
+from _lib import runtime_paths as _rp  # noqa: E402  # PLAN-182 W1 single resolver
 
 # ---------------------------------------------------------------------------
 # Constants probed from the Claude Code CLI binary (2.1.176, S231 probe).
@@ -85,7 +94,7 @@ PROVENANCE = "PLAN-135 W1 S7 — .claude/scripts/skill-budget-generator.py"
 def default_log_path() -> Path:
     """Audit log path: CEO_AUDIT_LOG_PATH env or the conventional default."""
     home = Path(os.environ.get("HOME") or str(Path.home()))
-    default_dir = home / ".claude" / "projects" / "ceo-orchestration"
+    default_dir = _rp.runtime_state_dir()
     return Path(
         os.environ.get("CEO_AUDIT_LOG_PATH") or str(default_dir / "audit-log.jsonl")
     )
