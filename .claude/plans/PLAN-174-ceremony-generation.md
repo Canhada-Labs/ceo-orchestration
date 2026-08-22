@@ -203,13 +203,28 @@ erro (formaliza no closeout — cache discipline do CLAUDE.md).
   (`tests/test_check_ceremony_script.py`) — caso-vermelho por classe
   BLOCKING, re-arme de waiver por edição, unlock-sem-motivo mantém
   bloqueio, piso, untracked-não-gateia.
-- **Wire BLOQUEADO pelo guard ADR-182** (pin codex 0.144.x ≠ instalado
-  0.147.0; pair-rail de escrita L3+ fail-closed recusa binário não
-  verificado — exatamente o drift que o W-IM#4/172 mediu HOJE).
-  `ceremony-lint.yml` + installer de pre-commit estão em
-  `PLAN-174/staged-w2/` (rastreados); land = após a cerimônia de
-  re-pin ADR-182 do Owner + runbook PLAN-155 A12. **W2 só FECHA com o
-  wire landado e o job verde no CI** — o AC não fecha vacuamente.
+- **~~Wire BLOQUEADO pelo guard ADR-182~~ — O BLOQUEIO NÃO EXISTE MAIS
+  (verificado S321).** A redação abaixo descrevia um pin em 0.144.x
+  divergindo do instalado 0.147.0. **A cerimônia de re-pin já
+  aconteceu**, no `32e29b1` (SENT-S318, "re-pin codex 0.147.0
+  ADR-182 §5") — o texto deste plano e a memória do projeto é que não
+  foram atualizados, e o bloqueio sobreviveu como claim envelhecida por
+  duas sessões.
+
+  Verificado COMPORTAMENTALMENTE, não por leitura do commit:
+
+  | | |
+  |---|---|
+  | `codex-cli-pin-manifest.json` pina | **0.147.0** |
+  | `codex --version` | **0.147.0** |
+  | sha256 do payload real | `19c4f144c5226a9f…` |
+  | sha256 pinado no manifesto | `19c4f144c5226a9f…` |
+  | veredito | **payload casa o pin, byte a byte** |
+
+  **A W2 está DESTRAVADA.** O que falta é só o land do wire:
+  `ceremony-lint.yml` + installer de pre-commit, ambos rastreados em
+  `PLAN-174/staged-w2/`. **W2 só FECHA com o wire landado e o job verde
+  no CI** — o AC não fecha vacuamente, e essa parte continua valendo.
 
 **Debate:** Codex r1→r3 (GO no r2); `/debate start PLAN-174` no
 início da execução; o GERADOR em si passa por cerimônia

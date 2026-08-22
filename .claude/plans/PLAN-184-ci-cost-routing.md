@@ -1253,7 +1253,34 @@ a rede de segurança que torna a A1 aceitável.
 > As duas questões que o Owner precisa responder **antes** de qualquer
 > execução são as novas, no fim da lista.
 
-### ⭐ OQ-11 — A ORDEM: A0 antes de A1? *(a escalação do round 2)*
+### ✅ OQ-11 — RESPONDIDA pelo Owner (2026-08-22, S321): **A0 PRIMEIRO**
+
+> **Decisão registrada:** executar a **A0** (reduzir a matriz de Python de
+> 4 para 2 versões no gatilho `push`, mantendo as 4 no `pull_request` e no
+> nightly) e **reavaliar a A1 depois**, com o prêmio residual medido em vez
+> de projetado.
+>
+> **Consequência para este plano, escrita para não ser re-litigada:** a W1
+> e a W2 **não abrem** enquanto a A0 não tiver rodado e o novo teto da A1
+> não for derivado da fatura. O item `[P0][US0]` da W0 (o pré-registro do
+> resultado que mata) passa a ter um insumo concreto: o **N** que o Owner
+> fixar deve ser comparado ao prêmio **residual** pós-A0, não ao teto de
+> US$ 4,04/dia medido antes dela. Se o residual ficar abaixo de N, este
+> plano fecha como resíduo registrado — e isso é um desfecho previsto,
+> não um fracasso.
+>
+> **Escopo da A0, para quem executar:** `validate.yml:1445-1477`
+> (`hook-tests-python-matrix`). Pernas medidas: 7,8 / 9,2 / 9,3 / 7,7 min.
+> Manter **3.9** (piso de compatibilidade declarado no CLAUDE.md) e
+> **3.12** (topo); economia derivada
+> `ceil(7,7) + ceil(9,2) = 18 min/run × 167 runs × US$ 0,022 ≈ US$ 66/21d`.
+> `validate.yml` é canonical-guarded — a A0 é UMA linha de YAML, mas ainda
+> exige sentinel.
+
+<details>
+<summary>Texto original da OQ-11, preservado como registro da decisão</summary>
+
+### OQ-11 — A ORDEM: A0 antes de A1? *(a escalação do round 2)*
 
 Com a base de custo refutada, o teto REAL da A1 é ~US$ 4,04/dia e a
 **A0** (§6-A, reduzir a matriz de Python de 4 para 2 versões no `push`)
@@ -1268,6 +1295,8 @@ resposta. Três opções: **(a)** A0 primeiro, e reavaliar a A1 depois;
 A0 primeiro por ser mais barata de reverter.
 **Recomendação do CEO: (a).** Decisão do Owner — é o que faz o round 2
 terminar em `ESCALATE-TO-OWNER`.
+
+</details>
 
 ### ⭐ OQ-12 — A quem o billing atribui este custo?
 

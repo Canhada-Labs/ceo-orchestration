@@ -764,10 +764,20 @@ checkout de adopter, onde o fallback degradava em silêncio para
       elo de custódia `new-chain ↔ archive` **não** — item próprio,
       reaberto na W2.
 - [ ] AC-5 [P1] Rota de adopter fechada ou explicitamente aceita.
-      **Aberta, e com fato novo (S321):** existe um adopter real
-      (`arbitrage-monitor`) rodando cópia PRÉ-W1 e escrevendo no literal
-      HOJE. A rota não fecha por edição de template — depende de upgrade
-      do adopter ou de aceite escrito. Decisão do Owner.
+      **DECISÃO DO OWNER REGISTRADA (S321, 2026-08-22, chat): ATUALIZAR O
+      ADOPTER** — não aceite escrito. A rota fecha pelo upgrade real do
+      `arbitrage-monitor` para uma versão com `runtime_paths`, não por
+      uma linha declarando o literal como estado legítimo.
+      **DIFERIDO por decisão do Owner na mesma conversa:** o repositório
+      estava executando trabalho no momento, e mexer nos arquivos dele
+      ali complicaria. **Gatilho nomeado: a próxima sessão em que o
+      `arbitrage-monitor` estiver ocioso.**
+      Estado medido que torna isto urgente-mas-não-emergência: o dir
+      literal recebe escrita ATIVA (2.967 dos 3.010 eventos de lá são do
+      adopter), então a mistura sob o mesmo `$HOME` continua até o
+      upgrade — mas ela não contamina a cadeia DESTE repositório, que
+      resolve por projeto desde a W1.
+      Check: `ls <adopter>/.claude/hooks/_lib/runtime_paths.py` existe E o dir literal para de receber escrita nova em dois snapshots consecutivos
 - [x] AC-6 [P0] W1-W3 são esboço não-normativo e nenhuma EXECUTA antes
       de ser reemitida a partir da W0; a reemissão da W1 passa por sua
       própria rodada de crítica.
