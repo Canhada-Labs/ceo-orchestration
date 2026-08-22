@@ -787,9 +787,15 @@ checkout de adopter, onde o fallback degradava em silêncio para
       comportamental. A ambiguidade "o pair-rail conta como crítica?"
       está resolvida no texto da W1: **não conta** (rail revisa texto,
       debate revisa modelo).
-- [ ] AC-7 [P0] Emenda ao ADR-001 registrada ANTES de qualquer execução
+- [x] AC-7 [P0] Emenda ao ADR-001 registrada ANTES de qualquer execução
       da W1 (com a decisão SPEC v1 contra v2).
-      **3/4 (S321).** A emenda existe (`ADR-001` §Amendment 2026-08-20,
+      **FECHADO no land de `965fb13`:** o quarto quarto que faltava é o
+      `## Amendment 2 (2026-08-22, S321)` do ADR-001 — "amend `SPEC/v1`
+      IN PLACE; do NOT cut a `SPEC/v2`", com a razão (a localização já
+      era um parâmetro; mudou o default, não o parâmetro) e a linha
+      testável do que TERIA exigido um v2. Registro do estado anterior
+      preservado abaixo.
+      **3/4 (S321, antes do land).** A emenda existe (`ADR-001` §Amendment 2026-08-20,
       landada em `32e29b1`, ANTES da W1 em `832891e`) e cobre slug
       normativo, resolvedor único, family-atomicity e blast radius
       L2→L3. **Falta a peça que o próprio AC nomeia:** a decisão SPEC v1
