@@ -35,6 +35,10 @@ from pathlib import Path
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _HOOKS = _REPO_ROOT / ".claude" / "hooks"
 
+if str(_HOOKS) not in sys.path:
+    sys.path.insert(0, str(_HOOKS))
+from _lib.testing import TestEnvContext  # noqa: E402
+
 # Donos de artefato da lista fechada da US5
 # (`.claude/plans/PLAN-182/w0-medicao-S316.md`), na forma
 # <rótulo>: <expressão que devolve um caminho>.
@@ -149,13 +153,23 @@ def _run_probes():
     return json.loads(proc.stdout.strip().splitlines()[-1])
 
 
-class TestUS5FamilyCoverage(unittest.TestCase):
-    """AC-3: todo dono da US5 resolve sob a MESMA raiz por projeto."""
+class TestUS5FamilyCoverage(TestEnvContext):
+    """AC-3: todo dono da US5 resolve sob a MESMA raiz por projeto.
 
-    @classmethod
-    def setUpClass(cls):
-        cls.res = _run_probes()
-        cls.family = cls.res["__family__"]
+    Herda `TestEnvContext` (e não `unittest.TestCase`) por exigência do
+    `check-test-env-hygiene.py`, e a exigência está certa: este caso
+    manipula env de caminho, que é exatamente a classe que o guard
+    protege. O probe já roda em subprocess com `HOME`/`CLAUDE_PROJECT_DIR`
+    sintéticos — o `TestEnvContext` acrescenta a garantia de que o
+    processo-pai também não toca o estado do operador.
+    """
+
+    def setUp(self):
+        super().setUp()
+        if not hasattr(self.__class__, "_probe_cache"):
+            self.__class__._probe_cache = _run_probes()
+        self.res = self.__class__._probe_cache
+        self.family = self.res["__family__"]
 
     def test_family_root_is_the_project_slug(self):
         """Sanidade do fixture: sem ela, o teste abaixo é vacuamente verde."""

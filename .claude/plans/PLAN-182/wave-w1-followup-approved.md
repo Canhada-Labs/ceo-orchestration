@@ -13,7 +13,7 @@ Plans: PLAN-182
 Wave: W1-followup (cura estrutural do carrier + atribuição de projeto + fecho da classe M4)
 Patch: .claude/plans/PLAN-182/w1-followup-ceremony/S321-CEREMONY.patch
 Patch-sha256: 31938bed1bb3eea2893260328d6fb7433ecf4387aad05467974a3d5770d60d83
-Anchor-SHA: c66a87a1b4dc5bf4f6c178bf279e1388bdd6145a
+Anchor-SHA: <PREENCHER-NA-ASSINATURA — `git rev-parse HEAD`>
 Data: <PREENCHER-NA-ASSINATURA>
 
 > **Sem linhas `MANIFEST-*`, deliberadamente.** O land é por PATCH, não por
@@ -22,9 +22,12 @@ Data: <PREENCHER-NA-ASSINATURA>
 > ausente. O binding aqui é o `Patch-sha256`, verificável com
 > `shasum -a 256 -c`.
 >
-> **Se qualquer commit entrar antes da assinatura, o `Anchor-SHA` acima fica
-> velho.** Re-gere com `git rev-parse HEAD` ANTES de assinar; reescrever um
-> byte deste arquivo depois de assinar invalida o `.asc`
+> **O `Anchor-SHA` fica em branco DE PROPOSITO.** Ele foi escrito com um
+> valor concreto e ficou obsoleto no commit seguinte, o que e a prova de
+> que este campo nao pode ser preenchido em preparacao: preencha-o com
+> `git rev-parse HEAD` no momento da assinatura. O `OWNER-S321-LAND.sh`
+> aborta no G3 se ele nao casar o HEAD. Reescrever um byte deste arquivo
+> depois de assinar invalida o `.asc`
 > ([[feedback-clean-rail-round-is-not-the-end]]).
 
 <!-- BEGIN SIGNED SCOPE -->
