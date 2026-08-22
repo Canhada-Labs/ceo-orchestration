@@ -124,7 +124,7 @@ def _audit_log_path() -> Optional[Path]:
     if project_dir:
         try:
             abs_path = Path(project_dir).resolve()
-            slug = "-" + str(abs_path).lstrip("/").replace("/", "-")
+            slug = _rp.project_slug(str(abs_path))  # PLAN-182 W3 (S321): slug via resolvedor unico, nunca re-derivado
             return Path.home() / ".claude" / "projects" / slug / "audit-log.jsonl"
         except OSError:
             pass
@@ -143,7 +143,7 @@ def _memory_dir() -> Path:
     project_dir = os.environ.get("CLAUDE_PROJECT_DIR", "") or str(REPO_ROOT)
     try:
         abs_path = Path(project_dir).resolve()
-        slug = "-" + str(abs_path).lstrip("/").replace("/", "-")
+        slug = _rp.project_slug(str(abs_path))  # PLAN-182 W3 (S321): slug via resolvedor unico, nunca re-derivado
         return Path.home() / ".claude" / "projects" / slug / "memory"
     except OSError:
         return _rp.runtime_state_dir() / "memory"
@@ -686,7 +686,7 @@ def _transcripts_dir() -> Path:
     project_dir = os.environ.get("CLAUDE_PROJECT_DIR", "") or str(REPO_ROOT)
     try:
         abs_path = Path(project_dir).resolve()
-        slug = "-" + str(abs_path).lstrip("/").replace("/", "-")
+        slug = _rp.project_slug(str(abs_path))  # PLAN-182 W3 (S321): slug via resolvedor unico, nunca re-derivado
         return Path.home() / ".claude" / "projects" / slug
     except OSError:
         return _rp.runtime_state_dir()

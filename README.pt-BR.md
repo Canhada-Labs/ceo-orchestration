@@ -55,7 +55,7 @@ Todas as contagens abaixo são verificáveis a partir de um checkout limpo (veja
 | Módulos de biblioteca compartilhada | **70** | apenas stdlib, em `.claude/hooks/_lib/` (excluindo o `__init__.py` do pacote) |
 | Slash commands | **27** | em `.claude/commands/` |
 | Architecture decision records | **194** | em `.claude/adr/` |
-| Testes | **~14.000 casos** | reportados por `pytest --collect-only` nas suítes de hook, script e conformidade |
+| Testes | **~14.700 casos** | reportados por `pytest --collect-only` nas suítes de hook, script e conformidade |
 
 A diferença entre **58 em disco** e **47 ligados** é benigna: vários módulos que não respondem a eventos são ativados via dispatch in-process (invocados por outros hooks), e não por um registro de evento direto em `settings.json`.
 
@@ -164,7 +164,7 @@ Não acredite na tabela por fé. A partir de um checkout limpo:
 find .claude/skills -name SKILL.md | wc -l        # 166 skills
 ls .claude/commands/*.md | wc -l                  # 27 slash commands
 ls .claude/adr | grep -c '^ADR-'                  # 194 ADRs
-python3 -m pytest --collect-only -q | tail -1     # ~14.000 casos coletados
+python3 -m pytest --collect-only -q | tail -1     # ~14.700 casos coletados
 ```
 
 ---

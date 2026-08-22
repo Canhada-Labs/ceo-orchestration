@@ -1037,7 +1037,7 @@ def check_tier_a_lessons_30d() -> Tuple[str, str, Any]:
     # absolute home path, which broke for every other install and tripped the
     # contamination guard.)
     project_dir = os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
-    slug = str(Path(project_dir).resolve()).replace("/", "-")
+    slug = _rp.project_slug(project_dir)  # PLAN-182 W3 (S321): slug via resolvedor unico, nunca re-derivado
     mem_dir = Path.home() / ".claude" / "projects" / slug / "memory"
     if not mem_dir.exists():
         return "green", "memory dir absent", 0

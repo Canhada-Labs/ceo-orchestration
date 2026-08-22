@@ -69,6 +69,18 @@ import math
 import os
 import re
 import statistics
+
+# PLAN-182 W3 (S321) — single resolver (ADR-001 item 2: no file re-derives
+# the project slug locally). Anchor on the framework layout, not on cwd.
+import sys as _sys_rp
+from pathlib import Path as _Path_rp
+_HOOKS_RP = _Path_rp(__file__).resolve()
+for _anc in _HOOKS_RP.parents:
+    if (_anc / ".claude" / "hooks" / "_lib").is_dir():
+        if str(_anc / ".claude" / "hooks") not in _sys_rp.path:
+            _sys_rp.path.insert(0, str(_anc / ".claude" / "hooks"))
+        break
+from _lib import runtime_paths as _rp  # noqa: E402
 import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -87,7 +99,7 @@ def _resolve_default_memory_dir() -> Path:
     """
     project = os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
     project_abs = os.path.abspath(project)
-    slug = project_abs.replace("/", "-")
+    slug = _rp.project_slug(project_abs)  # PLAN-182 W3 (S321): slug via resolvedor unico
     return Path.home() / ".claude" / "projects" / slug / "memory"
 
 

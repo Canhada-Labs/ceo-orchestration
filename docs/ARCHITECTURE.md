@@ -71,7 +71,7 @@ faith — run the commands:
 | ADRs               | 194                          | `ls .claude/adr/ADR-*.md \| wc -l`                        |
 | SPEC/v1 files      | 32 (28 `*.schema.md`)        | `ls SPEC/v1/*.md \| wc -l`                                |
 | Test files         | ~770                         | `git ls-files '*test_*.py' '*_test.py' \| wc -l`          |
-| Collected cases    | ~14k parametrized cases      | `make test-collect` (pytest `--collect-only`)             |
+| Collected cases    | ~14.7k parametrized cases      | `make test-collect` (pytest `--collect-only`)             |
 
 > **On the "58 vs 47" hook gap.** 58 is the number of hook *scripts* present in
 > `.claude/hooks/`. 47 is the number of those scripts *wired into* this repo's
@@ -80,9 +80,9 @@ faith — run the commands:
 > opt-in, stack-specific, superseded, or invoked indirectly by other hooks. Both
 > numbers are reported here rather than conflated into one impressive figure.
 
-> **On "~14k tests."** That is the count of *collected, parametrized* cases
+> **On "~14.7k tests."** That is the count of *collected, parametrized* cases
 > reported by `pytest --collect-only`, spread across ~770 test files. It is
-> not ~14,000 hand-written cases — many are the
+> not ~14,700 hand-written cases — many are the
 > same logic exercised over a table of inputs. We report the collector's number
 > with that caveat rather than dress it up.
 

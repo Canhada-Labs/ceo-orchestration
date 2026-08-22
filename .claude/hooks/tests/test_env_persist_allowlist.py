@@ -47,9 +47,17 @@ def _find_repo_root(start: Path) -> Path:
             return p
         p = p.parent
     # Staged fallback: .../PLAN-135/staged/w2/files/.claude/hooks/tests/<file>
-    parts = start.parts
-    if "ceo-orchestration" in parts:
-        return Path(*parts[: parts.index("ceo-orchestration") + 1])
+    #
+    # PLAN-182 W3 (S321): this used to key off the literal repo NAME
+    # (`if "ceo-orchestration" in parts`), which is false in every adopter
+    # checkout — the framework ships this test, and the fallback silently
+    # degraded to `parents[5]` there. Anchor on the framework's own layout
+    # instead of on what the directory happens to be called.
+    p = start
+    for _ in range(12):
+        if (p / ".claude" / "hooks" / "_lib").is_dir():
+            return p
+        p = p.parent
     return start.parents[5]
 
 

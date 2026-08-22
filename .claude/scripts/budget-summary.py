@@ -928,7 +928,7 @@ def default_native_root() -> Path:
     if env_dir:
         return Path(env_dir)
     project_dir = os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
-    slug = str(Path(project_dir).resolve()).replace("/", "-")
+    slug = _rp.project_slug(project_dir)  # PLAN-182 W3 (S321): slug via resolvedor unico, nunca re-derivado
     home = os.environ.get("HOME") or str(Path.home())
     return Path(home) / ".claude" / "projects" / slug
 

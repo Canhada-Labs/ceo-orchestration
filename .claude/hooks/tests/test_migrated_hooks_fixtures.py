@@ -23,6 +23,7 @@ from pathlib import Path
 _HOOKS_DIR = Path(__file__).resolve().parent.parent
 
 from _lib.policy import load  # noqa: E402
+from _lib.testing import TestEnvContext  # noqa: E402
 
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -40,12 +41,23 @@ def _load_fixtures(slug: str):
             yield i, json.loads(line)
 
 
-class TestBashSafetyFixtures(unittest.TestCase):
-    """Each fixture is a separate assertion — mismatch fails the test."""
+class TestBashSafetyFixtures(TestEnvContext):
+    """Each fixture is a separate assertion — mismatch fails the test.
 
-    @classmethod
-    def setUpClass(cls):
-        cls.policy = load(_POLICIES_DIR / "bash-safety.policy.yaml")
+    PLAN-182 W2 (S321): `policy.decide()` emits `policy_evaluated` /
+    `policy_denied` per fixture, so an unisolated run writes signed links
+    into the LIVE HMAC chain — measured at 156 processes x 124 events
+    (82 fixtures + 42 expected-block) = 19,344 non-attributable events,
+    99.5% of the post-W1 non-attributable flow. The policy load moved from
+    `setUpClass` to `setUp` on purpose: TestEnvContext isolates per
+    INSTANCE, so anything left in `setUpClass` runs before the sandbox
+    exists. Positive control: with HOME redirected, a pre-cure run creates
+    `audit-log.lock` + `state/audit-pending.<pid>.journal` under it.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.policy = load(_POLICIES_DIR / "bash-safety.policy.yaml")
 
     def test_all_fixtures_match_expected(self):
         count = 0
@@ -69,11 +81,11 @@ class TestBashSafetyFixtures(unittest.TestCase):
                          "\n".join(failures))
 
 
-class TestPlanEditFixtures(unittest.TestCase):
+class TestPlanEditFixtures(TestEnvContext):
 
-    @classmethod
-    def setUpClass(cls):
-        cls.policy = load(_POLICIES_DIR / "plan-edit.policy.yaml")
+    def setUp(self):
+        super().setUp()
+        self.policy = load(_POLICIES_DIR / "plan-edit.policy.yaml")
 
     def test_all_fixtures_match_expected(self):
         count = 0
@@ -97,7 +109,7 @@ class TestPlanEditFixtures(unittest.TestCase):
                          "\n".join(failures))
 
 
-class TestDriftManifestMatchesComputedHashes(unittest.TestCase):
+class TestDriftManifestMatchesComputedHashes(TestEnvContext):
     """The pinned canonical hashes in .drift-manifest.json must match the
     live engine output — otherwise the manifest is stale."""
 

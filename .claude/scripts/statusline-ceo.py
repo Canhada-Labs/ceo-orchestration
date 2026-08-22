@@ -565,6 +565,13 @@ def maybe_emit(sidecar: Path, snapshot: Dict[str, Any]) -> None:
                 max(pcts) if pcts else None, cap_bps=99900
             ),
             session_id=snapshot.get("session_id") or "",
+            # PLAN-182 W2 (S321): `emit_generic` never injects `project`
+            # (audit_emit.py: `event = {"action": action}; event.update(kwargs)`),
+            # and the emitter default is the empty string — so omitting it here
+            # is what made this action non-attributable in the chain. The scrub
+            # is innocent: `project` is in _FEDERATION_ENVELOPE, hence in this
+            # action's allowlist. Pass it explicitly.
+            project=str(_rp.project_dir()),
             digest=digest[:12],
         )
     except Exception:

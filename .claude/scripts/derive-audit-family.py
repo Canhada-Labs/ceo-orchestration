@@ -51,7 +51,13 @@ from typing import Any, Dict, List, Optional
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
 SCAN_ROOTS = [".claude/hooks", ".claude/scripts", "scripts", "templates",
-              ".github/workflows", "SPEC", "docs", "dist"]
+              ".github/workflows", "SPEC", "docs", "dist",
+              # PLAN-182 W3 (S321): `tests/` was outside the census, so the
+              # root-level suite was invisible to every count this tool
+              # publishes. Adding it changes the SET that is reported; it
+              # does NOT change the --assert-migrated verdict, because
+              # artefato == "test" stays out of that offender set.
+              "tests"]
 SCAN_TOP_FILES = ["install.sh", "upgrade.sh"]
 
 M1_RE = re.compile(r"\.claude(?:['\"]?\s*[,/+]\s*['\"]?|/)projects[^\n]{0,80}ceo-orchestration"
@@ -97,6 +103,56 @@ def _m1_hit(rel, body):
             continue
         kept.append(ln)
     return bool(M1_RE.search("\n".join(kept)))
+# ---------------------------------------------------------------------------
+# M4 — RE-DERIVAÇÃO LOCAL DO SLUG (PLAN-182 W3, S321)
+#
+# Por que este marcador existe. O gate `--assert-migrated` pergunta uma
+# coisa só: "algum módulo runtime ainda constrói o LITERAL
+# `~/.claude/projects/ceo-orchestration`?" — e a resposta é 0 desde a W1.
+# Mas o contrato que `runtime_paths` declara (item 2: nenhum arquivo
+# re-deriva o caminho localmente) tem uma SEGUNDA metade que nenhum
+# instrumento media: módulos que não usam o literal e mesmo assim
+# constroem o slug por conta própria.
+#
+# Medido na S321: ~18 call sites vivos em 4 grafias distintas
+# (`.lstrip('-')`, `.strip('-')`, `'-' + x.lstrip('/')`, `.resolve()`
+# antes do slug) que produzem TRÊS diretórios diferentes para o MESMO
+# projeto — ex. com CLAUDE_PROJECT_DIR=/tmp/adopter-one:
+# `-tmp-adopter-one` vs `-private-tmp-adopter-one` vs `tmp-adopter-one`.
+# Um gate verde ao lado de três diretórios divergentes é a classe
+# "instrumento verde cuja pergunta envelheceu".
+#
+# ESCOPO DELIBERADO: M4 é VISÍVEL (aparece nos marcadores, tem modo
+# próprio `--assert-no-local-slug`) mas NÃO entra no offender-set do
+# `--assert-migrated`. Os dois medem perguntas diferentes e a resposta de
+# um não deve mascarar a do outro; flipar o gate é decisão do Owner sobre
+# uma janela advisory, no molde de CEO_SPAWN_FILE_ASSIGNMENT_REQUIRED.
+M4_RE = re.compile(
+    r"""replace\(\s*['"]/['"]\s*,\s*['"]-['"]\s*\)"""      # slug: '/' -> '-'
+    r"""|lstrip\(\s*['"]-['"]\s*\)"""                       # normalização do slug
+    r"""|strip\(\s*['"]-['"]\s*\)"""
+)
+# Só conta quando a linha está NO CONTEXTO de resolução de estado — senão
+# um `.replace('/', '-')` de slugify de nome de arquivo entraria como dívida.
+M4_CTX = ("projects", "audit", "state_dir", "statedir", "slug", "runtime_state")
+
+
+def _m4_hits(rel, body):
+    """Linhas que re-derivam o slug localmente, com contexto de estado."""
+    if rel in M1_SANCTIONED:
+        return []
+    hits = []
+    for i, ln in enumerate(body.splitlines(), start=1):
+        if M1_ALLOW_MARK in ln:
+            continue
+        if not M4_RE.search(ln):
+            continue
+        low = ln.lower()
+        if any(c in low for c in M4_CTX):
+            hits.append(i)
+    return hits
+
+
 M2_MODULES = ("audit_emit", "state_store", "spool_writer", "scratchpad_lib",
               "injection_salt", "memory_shared", "audit_hmac", "filelock")
 _M2_ALT = "|".join(M2_MODULES)
@@ -163,6 +219,9 @@ def scan() -> List[dict]:
             markers.append("M2-importa-resolvedor")
         if any(e in body for e in M3_ENVS):
             markers.append("M3-consome-env")
+        m4 = _m4_hits(rel, body) if p.endswith((".py", ".sh")) else []
+        if m4:
+            markers.append("M4-rederiva-slug-local")
         if not markers:
             continue
         art = _artefato(rel)
@@ -184,6 +243,7 @@ def scan() -> List[dict]:
             papel.append("referencia-legitima")
         fam.append({"modulo": rel, "artefato": art, "papel": papel,
                     "marcadores": markers,
+                    "m4_linhas": m4,
                     "na_cura_w1": art in ("hook", "script", "installer",
                                           "dist", "ci", "template", "test")})
     return fam
@@ -434,6 +494,11 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--env-domain", action="store_true")
     ap.add_argument("--surfaces", action="store_true")
     ap.add_argument("--assert-migrated", action="store_true")
+    ap.add_argument(
+        "--assert-no-local-slug", action="store_true",
+        help="PLAN-182 W3: falha se algum módulo runtime re-derivar o slug "
+             "localmente (M4). ADVISORY hoje — só falha sob "
+             "CEO_AUDIT_FAMILY_M4_REQUIRED=1; ver o comentário do M4.")
     args = ap.parse_args(argv)
 
     if args.env_domain:
@@ -456,7 +521,28 @@ def main(argv: Optional[List[str]] = None) -> int:
                      and "M1-constroi-caminho" in f["marcadores"]]
         print(f"assert-migrated: {len(offenders)} módulo(s) runtime ainda "
               "constroem o caminho literal")
+        # Escopo declarado no PRÓPRIO instrumento (S321): este gate mede o
+        # LITERAL e nada mais. Quem responde pela segunda metade do
+        # contrato é --assert-no-local-slug.
+        m4n = sum(1 for f in fam
+                  if f["artefato"] in ("hook", "script", "installer", "dist")
+                  and "M4-rederiva-slug-local" in f["marcadores"])
+        print(f"  (escopo: literal apenas — {m4n} módulo(s) runtime "
+              "re-derivam o slug localmente; ver --assert-no-local-slug)")
         return 1 if offenders else 0
+
+    if args.assert_no_local_slug:
+        offenders = [f for f in fam
+                     if f["artefato"] in ("hook", "script", "installer", "dist")
+                     and "M4-rederiva-slug-local" in f["marcadores"]]
+        for f in sorted(offenders, key=lambda x: x["modulo"]):
+            print("{}: linhas {}".format(
+                f["modulo"], ",".join(str(n) for n in f["m4_linhas"])))
+        required = os.environ.get("CEO_AUDIT_FAMILY_M4_REQUIRED") == "1"
+        print(f"assert-no-local-slug: {len(offenders)} módulo(s) runtime "
+              "re-derivam o slug localmente "
+              f"({'ENFORCED' if required else 'ADVISORY'})")
+        return 1 if (offenders and required) else 0
 
     if args.json:
         print(json.dumps({"total_familia": len(fam),

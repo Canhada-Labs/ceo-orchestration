@@ -21,6 +21,24 @@ from pathlib import Path
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 _SCRIPT = _REPO_ROOT / ".claude" / "scripts" / "hook-profiler.py"
 
+
+def _live_project_slug() -> str:
+    """Slug of the LIVE runtime-state dir for this repo.
+
+    PLAN-182 W2 (S321): the two isolation controls below used to point at
+    the pre-W1 LITERAL (``~/.claude/projects/ceo-orchestration/``). Post-W1
+    nothing in this repo writes there, so "the real audit log did not grow"
+    was true no matter what leaked — the vacuous-guard class. Resolving the
+    slug through the single resolver makes the control see its actual
+    target again.
+    """
+    _hooks = str(_REPO_ROOT / ".claude" / "hooks")
+    if _hooks not in sys.path:
+        sys.path.insert(0, _hooks)
+    from _lib import runtime_paths
+
+    return runtime_paths.project_slug(str(_REPO_ROOT))
+
 _spec = importlib.util.spec_from_file_location("hook_profiler", _SCRIPT)
 hp = importlib.util.module_from_spec(_spec)
 assert _spec.loader is not None
@@ -181,7 +199,13 @@ class TestIsolation(unittest.TestCase):
     def test_default_tempdir_is_created_and_cleaned_up(self):
         # Running with no --home should not leave residue in real HOME.
         real_home = Path(os.path.expanduser("~"))
-        real_audit = real_home / ".claude" / "projects" / "ceo-orchestration" / "audit-log.jsonl"
+        real_audit = (
+            real_home
+            / ".claude"
+            / "projects"
+            / _live_project_slug()
+            / "audit-log.jsonl"
+        )
         pre_exists = real_audit.exists()
         pre_size = real_audit.stat().st_size if pre_exists else 0
 
@@ -390,7 +414,13 @@ class TestPerToolCallMode(unittest.TestCase):
         """
         tmp = Path(tempfile.mkdtemp(prefix="hp-ptc-iso-"))
         real_home = Path(os.path.expanduser("~"))
-        real_audit = real_home / ".claude" / "projects" / "ceo-orchestration" / "audit-log.jsonl"
+        real_audit = (
+            real_home
+            / ".claude"
+            / "projects"
+            / _live_project_slug()
+            / "audit-log.jsonl"
+        )
         pre_size = real_audit.stat().st_size if real_audit.exists() else 0
         try:
             rc, _out, _err = _run_cli([

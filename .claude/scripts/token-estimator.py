@@ -591,7 +591,7 @@ def default_audit_log_path() -> Path:
     if project_dir:
         try:
             abs_path = Path(project_dir).resolve()
-            slug = "-" + str(abs_path).lstrip("/").replace("/", "-")
+            slug = _rp.project_slug(str(abs_path))  # PLAN-182 W3 (S321): slug via resolvedor unico, nunca re-derivado
             scoped = home / ".claude" / "projects" / slug / "audit-log.jsonl"
             if scoped.exists() or scoped.parent.is_dir():
                 return scoped

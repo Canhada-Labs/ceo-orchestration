@@ -41,6 +41,18 @@ import json
 import os
 import re
 import subprocess
+
+# PLAN-182 W3 (S321) — single resolver (ADR-001 item 2: no file re-derives
+# the project slug locally). Anchor on the framework layout, not on cwd.
+import sys as _sys_rp
+from pathlib import Path as _Path_rp
+_HOOKS_RP = _Path_rp(__file__).resolve()
+for _anc in _HOOKS_RP.parents:
+    if (_anc / ".claude" / "hooks" / "_lib").is_dir():
+        if str(_anc / ".claude" / "hooks") not in _sys_rp.path:
+            _sys_rp.path.insert(0, str(_anc / ".claude" / "hooks"))
+        break
+from _lib import runtime_paths as _rp  # noqa: E402
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
@@ -85,7 +97,10 @@ def _lessons_dir(base_dir: Optional[str] = None) -> Path:
             "calling lesson_evolve.py."
         )
     project_dir = os.environ.get("CLAUDE_PROJECT_DIR", "")
-    slug = project_dir.replace("/", "-").lstrip("-") if project_dir else "default"
+    # PLAN-182 W3 (S321): the local spelling dropped the leading dash,
+    # landing lessons in a SIBLING of the family root. Same resolver as
+    # everything else now; the old dir does not exist here (measured).
+    slug = _rp.project_slug(project_dir) if project_dir else "default"
     return Path(home_env) / ".claude" / "projects" / slug / "lessons"
 
 

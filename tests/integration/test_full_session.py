@@ -20,6 +20,9 @@ import pytest
 
 from .conftest import REPO_ROOT, parse_decision, run_hook
 
+# `.claude/hooks/` is on sys.path via tests/integration/conftest.py:24.
+from _lib import runtime_paths  # noqa: E402
+
 
 # --------------------------------------------------------------------------
 # Isolation invariant (explicit per acceptance criterion)
@@ -39,8 +42,21 @@ def test_ceo_env_points_at_tmp_dirs_not_real_home(ceo_env):
         f"CEO_AUDIT_LOG_PATH leaks outside tmpdir: {audit_path}"
     )
     # Definitely not the real framework audit log path.
+    #
+    # PLAN-182 W2 (S321): this used to compare against the pre-W1 LITERAL
+    # (`~/.claude/projects/ceo-orchestration/`). Post-W1 nothing in this
+    # repo writes there, so the assertion could never fail — a vacuous
+    # negative control, the "guard green because it cannot see its target"
+    # class. The live path is whatever `runtime_paths` resolves under the
+    # REAL home, which is why it is read from the fixture's saved value
+    # rather than from `Path.home()` (already redirected at this point).
+    real_home = Path(ceo_env._env_snapshot["HOME"])
     real_audit = (
-        Path.home() / ".claude" / "projects" / "ceo-orchestration" / "audit-log.jsonl"
+        real_home
+        / ".claude"
+        / "projects"
+        / runtime_paths.project_slug(str(REPO_ROOT))
+        / "audit-log.jsonl"
     )
     assert audit_path.resolve() != real_audit.resolve()
 
