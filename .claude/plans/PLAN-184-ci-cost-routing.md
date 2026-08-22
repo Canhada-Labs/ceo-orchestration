@@ -16,6 +16,49 @@ tags: [ci, custo, github-actions, runner, paths-filter, governanca]
 
 # PLAN-184 — Corte de custo de CI
 
+> ## ⛔ ROUND 2 DO DEBATE (S321) — OS NÚMEROS DESTA SEÇÃO ESTÃO REFUTADOS
+>
+> Três críticos independentes (29 achados, `debate/round-2/consensus.md`)
+> e a verificação do CEO contra a API de billing derrubaram a base de
+> custo. **Nada abaixo desta caixa foi apagado** — fica como registro do
+> que o plano afirmava — mas nenhum número da §1 ou da §2 pode autorizar
+> execução até a W0 reconstruí-los.
+>
+> **O que o billing vivo diz** (`gh api /organizations/Canhada-Labs/settings/billing/usage`, agosto/2026):
+>
+> | linha | qty | gross |
+> |---|---|---|
+> | `Actions Linux 8-core` | **9.254,909 min** | **US$ 203,61** |
+> | `Actions Linux` | 4.025 min | US$ 24,15 |
+>
+> O plano declara **14.291 min / US$ 314,40** — superestimativa de ~54%.
+>
+> **E o problema que quebra o AC-6:** esses minutos de 8-core são
+> faturados sob `repositoryName: ceo-orchestration-**private**`, não sob
+> o repositório público que este plano quer otimizar. Não é rótulo:
+> medi o volume de agosto nos dois — **privado 73 runs, público 400+
+> (167 só de `validate.yml`)**. O privado não gera 9.255 min sozinho,
+> logo a atribuição está errada. **O único instrumento de billing que
+> existe não atribui por workflow NEM por repositório** (o endpoint
+> clássico responde HTTP 410). Ver OQ-12.
+>
+> **Três correções aritméticas independentes, todas medidas:**
+> 1. **85 de 167 pushes** são puláveis com denylist compatível com a §4
+>    — não 106. A unidade é o PUSH (o filtro avalia a união do diff do
+>    push), e 20 dos 167 pushes carregam mais de um commit.
+> 2. **~48 min pesados por run**, não os 80,4 de média que a §2 usa.
+> 3. A projeção combinada da §2 (**US$ 10,67/dia**) é MAIOR que o gasto
+>    total medido do `validate.yml` no runner pago (**US$ 8,91/dia**) —
+>    aritmeticamente impossível. O teto REAL da A1 é **~US$ 4,04/dia**.
+>
+> **Consequência de escopo, não só de texto:** com a A1 valendo
+> ~US$ 4,04/dia de teto, a alternativa **A0** (§6) — reduzir a matriz de
+> Python de 4 para 2 versões no `push` — rende **~US$ 3,15/dia** sem
+> filtro, sem workflow novo, sem cerimônia e sem classe nova de
+> falso-verde. **A ordem A0-vs-A1 é decisão do Owner (OQ-11)**, e é a
+> razão de o round 2 terminar em `ESCALATE-TO-OWNER` em vez de
+> `ADJUST_PROCEED`.
+
 ## 1. De onde isto veio, e o que exatamente foi medido
 
 O CI da org bateu no teto de billing durante a janela **2026-08-01 a
@@ -553,6 +596,39 @@ argumento mais forte a favor da Rota C, e ele veio do próprio repositório
 — não de doutrina.
 
 
+## 6-A. A0 — a alternativa que nenhuma redação anterior enumerou
+
+> Achado do round 2. Ela não estava aqui porque o plano nasceu perguntando
+> "como filtrar?", nunca "o que é caro?".
+
+`hook-tests-python-matrix` roda 4 versões de Python (`validate.yml:1445-1477`)
+e consome **~34 min wall dos ~48 min pesados por run** — **75% do custo
+que a A1 ataca**. As pernas medidas: 7,8 / 9,2 / 9,3 / 7,7 min.
+
+Rodar só as versões de **fronteira** (3.9 e 3.12) no gatilho `push`, e
+manter as 4 no `pull_request` e no nightly, economiza
+`ceil(7,7) + ceil(9,2) = 18 min/run × 167 runs × US$ 0,022` =
+**US$ 66 na janela de 21 dias ≈ US$ 3,15/dia**.
+
+Compare com o teto REAL da A1 (**~US$ 4,04/dia**, caixa da §1). Mesma
+ordem de grandeza, e a A0 chega lá:
+
+- sem filtro de path (nenhuma classe de "guard verde porque não vê o alvo");
+- sem workflow novo (nenhuma das 4 superfícies derivadas muda);
+- sem cerimônia canônica (a matriz vive dentro do `validate.yml`, que já
+  é editado sob sentinel de qualquer forma — mas é UM path guardado, não
+  quatro);
+- sem gramática de denylist para manter viva ao longo do tempo.
+
+O risco que ela carrega é declarado e menor: um defeito específico de
+3.10 ou 3.11 deixa de ser pego no `push` e passa a ser pego no PR ou no
+nightly — atraso de detecção, não perda de cobertura. **A A1 troca
+cobertura por dinheiro; a A0 troca latência de detecção por dinheiro.**
+
+**OQ-11: a ordem.** Se a A0 entrar primeiro, o prêmio residual da A1
+encolhe e "vale gastar cerimônia + workflow novo por ~US$ 1-2/dia?"
+passa a ter outra resposta. Decisão do Owner.
+
 ## 6. As duas rotas para a A1, com o custo verificado de cada uma
 
 O GitHub **não tem `paths:` por job**. Ou o filtro sobe para o nível do
@@ -724,6 +800,24 @@ mecânico". A decisão é dele; o plano não a antecipa.
 
 ### W0 — Medir e derivar antes de filtrar (read-only)
 
+- [ ] `[P0][US0]` **PRÉ-REGISTRO — o resultado que MATA o plano.**
+      (Achado do round 2: nenhum dos cinco Checks da W0 interrompia o
+      plano; as duas bases da US5 eram aceitáveis por construção, e a
+      US1 não tinha fração mínima. Um pré-registro que não nomeia o
+      resultado que o mata não é pré-registro.)
+      O Owner fixa **N** (US$/dia) e **M** (%) ANTES de a US1 rodar:
+      se o teto derivado da A1 ficar abaixo de N, ou a fração de custo
+      só-docs abaixo de M, **a W1 não abre** e o plano fecha como
+      residual registrado. Valores medidos hoje para calibrar a escolha,
+      não para substituí-la: teto da A1 ≈ US$ 4,04/dia, fração ≈ 58,8%.
+      Check: N e M estao escritos aqui com a data e a assinatura da decisao ANTES do primeiro numero da US1; um resultado abaixo do piso fecha o plano em vez de reabrir a discussao
+- [ ] `[P0][US0b]` **A unidade é o PUSH, não o commit.** `paths-ignore`
+      no gatilho `push` avalia o diff `before...after` — a UNIÃO de
+      todos os commits do push. Medido: 20 dos 167 pushes da janela
+      carregam mais de um commit (um deles 21). Toda contagem da §1 e
+      todo controle positivo passam a ser por push.
+      Check: a §1 nao contem a palavra "commit" como unidade de contagem; a derivacao da US1 usa `git diff --name-only head[i-1] head[i]` sobre os 167 heads reais
+
 > **Read-only sobre `main`** (corrigido no debate r1 — a redação anterior
 > dizia "read-only sobre `.github/`" e tornava a US3 insatisfazível: não
 > existe caminho para rodar um job em `ubuntu-latest` sem alterar
@@ -833,6 +927,43 @@ mecânico". A decisão é dele; o plano não a antecipa.
 
 ### W1 — A1: os 4 jobs pesados atrás de filtro fail-closed
 
+- [ ] `[P0]` **CERIMÔNIA CANÔNICA — abre a wave, antes de qualquer
+      edição.** (Achado do round 2, e o plano não mencionava a palavra
+      uma única vez: `grep -ci "cerim\|sentinel\|canonical\|gpg"` = 0.)
+      `check_canonical_edit.py:184-185` guarda `.github/workflows/*.yml`
+      e `:178` guarda `.claude/adr/ADR-*.md`. O commit de split toca no
+      MÍNIMO quatro paths guardados: `validate.yml`, o workflow novo,
+      `ADR-021` e `ADR-050`. Sem sentinel assinado cujo `Scope:` enumere
+      os quatro, o primeiro Edit é BLOQUEADO — e a rota de medição da
+      W0-US3 (workflow efêmero) cai no mesmo guard.
+      Check: existe approved.md Owner-signed cujo bloco Scope enumera TODOS os paths guardados do commit de split, e `touched − scope = ∅` antes do land
+- [ ] `[P0]` **Gramática da entrada da denylist** (round 2): toda entrada
+      é `<prefixo-aprovado>/**/*.md`. Entrada sem âncora de extensão
+      (prefixo cru) é REJEITADA por construção — `.claude/plans/**` como
+      prefixo cru pré-aprovaria os 272 `.py`, 102 `.sh` e 31 `.yml` que
+      já vivem lá hoje, incluindo `PLAN-179/staged-w24/` e
+      `OWNER-W179-LAND.sh`, que são código encenado para land.
+      Check: nenhuma entrada da denylist final termina em `/**` ou `**`; toda entrada casa `\*\.md$`; um `.py` novo sob qualquer prefixo da denylist NAO casa (provado por glob-match real, nao por leitura)
+- [ ] `[P0]` **Guard de fork** (round 2): seis workflows irmãos
+      condicionam jobs alcançáveis por fork com
+      `github.event.pull_request.head.repo.full_name == github.repository`;
+      `validate.yml` não tem nenhum, e esta wave ACENDE `pull_request`
+      pela primeira vez na janela medida (167/167 vieram de `push`).
+      Check: o arquivo novo declara a postura de fork copiando um dos dois precedentes in-repo, com a razao no comentario; o AC-9 registra que o PR de teste e intra-repo
+- [ ] `[P0]` **Backstop `schedule:`** (round 2): o `coverage.yml`, que
+      este plano cita como precedente do filtro, tem `cron: 0 7 * * *` —
+      e `ownership-nightly.yml:6-8` registra que `schedule` IGNORA
+      filtros de path. O plano copiou o filtro e deixou a rede. Sem cron,
+      uma entrada de denylist que envelheça produz silêncio permanente.
+      Check: o workflow novo tem `schedule:`, e UM run agendado verde e pre-requisito de fechar a wave
+- [ ] `[P0]` **Teste do próprio filtro, no job NÃO filtrado** (round 2):
+      o `Check` "o arquivo novo dispara sobre si mesmo" é uma propriedade
+      do conteúdo no momento em que ele é escrito, não um invariante — um
+      PR de uma linha pode acrescentar um padrão que case o próprio
+      arquivo, e `actionlint` aprova `paths-ignore` sintaticamente válido
+      sem opinar sobre o que ele cobre.
+      Check: teste em .claude/scripts/tests/ (roda no job de governanca, nunca filtrado) que parseia o bloco `on:` do workflow novo e assere: toda entrada obedece a gramatica acima, e NENHUMA casa `.github/**` — por glob-match real contra o proprio caminho do arquivo
+
 - [ ] `[P0]` **Registrar a rota escolhida na abertura** (Rota B ou Rota
       C da §6), com a razão. Recomendação do CEO é a C; a escolha é da
       execução e fica escrita antes de qualquer edição.
@@ -937,6 +1068,21 @@ mecânico". A decisão é dele; o plano não a antecipa.
 ### W2 — A2: os 2 jobs seriais saem do runner pago
 
 > Gateada pela W0-US3. Não flipar `runs-on` antes de ter a medição.
+>
+> **⛔ Round 2 — a premissa desta wave caiu.** Medido no run
+> `32431818032` (steps com `started_at`/`completed_at` por job):
+> `Formal verification mutation harness` = **15 segundos** (teto 10 min);
+> `E2E integration tests` = **1 m 43 s** (teto 8 min). A W0-US3 previa
+> que "com fator 2-3× os dois estouram" — eles não estouram nem perto:
+> as razões medido/teto são **0,025 e 0,24**, contra o gate de 0,80.
+> E a premissa que sustentava o AC-5 — "`Ceo` é self-hosted, inventário
+> de binários desconhecido" — é **falsa**:
+> `gh api .../actions/runners` devolve `total_count: 0`, e os jobs
+> reportam `runner_name: ceo-1000004236` (larger runner **hospedado**,
+> mesma família de imagem). A A2 vale **~US$ 0,2/dia** medidos, não
+> US$ 0,52. Esta wave vira item barato SEM medição própria — ou é
+> cortada e registrada como resíduo. O AC-5 sobrevive pelo motivo
+> CERTO (variação de tool-cache/pip entre imagens), não pelo falso.
 
 - [ ] `[P0]` **Bump de `timeout-minutes` no MESMO commit do flip de
       `runs-on`** (ou antes dele), com o valor derivado da medição da
@@ -1040,16 +1186,38 @@ a rede de segurança que torna a A1 aceitável.
       outro. *(Debate r1, P0 — `.github/**` é exclusão dura porque
       passaria na prova de conteúdo e o filtro precisa poder testar a
       própria mudança.)*
+- [ ] **AC-2c [P0]** Controle positivo **da UNIDADE**: um único
+      **PUSH** com dois commits — um só-docs e um tocando
+      `.claude/hooks/**` — executa os 4 pesados
+      (`gh run view --json jobs`). `paths-ignore` avalia a UNIÃO do diff
+      do push, e 20 dos 167 pushes da janela carregam mais de um commit;
+      sem este AC, um detector que só olhe o último commit passa em
+      AC-1/AC-2/AC-2b. *(Round 2, P0.)*
 - [ ] **AC-5 [P0]** Nenhum dos 2 jobs movidos para `ubuntu-latest` roda
       com margem de timeout < 20% em 3 runs consecutivos, **e** o delta
-      de `skipped` e de `passed` contra o último run em `Ceo` é **zero**
-      nos dois jobs. Verde com skips novos não conta como verde.
-      *(Debate r1, P1.)*
+      contra o último run em `Ceo` é **assinado**:
+      `skipped(ubuntu-latest) <= skipped(Ceo)` **E**
+      `passed(ubuntu-latest) >= passed(Ceo)`. Teste que passa a ser
+      PULADO bloqueia; teste que passa a RODAR não bloqueia.
+      *(Round 2: o critério simétrico `delta = 0` bloqueava o flip
+      quando a cobertura MELHORASSE.)* A comparação é pinada no MESMO
+      SHA — os dois jobs rodam no commit de flip, um deles por dispatch
+      no runner antigo.
 - [ ] **AC-6 [P1]** A projeção de economia é confirmada contra billing
-      real após a janela de observação, **com os dois lados em
-      US$/dia-calendário**; divergência > 20% **reabre** o plano em vez de
-      fechá-lo. A comparação só é legítima depois da W0-US5.
-      *(Debate r1, P0 — antes, o gate disparava pelas unidades.)*
+      real após a janela de observação; divergência > 20% **reabre** o
+      plano em vez de fechá-lo. A comparação só é legítima depois da
+      W0-US5.
+      **⛔ Reescrito no round 2, porque como estava era INEXEQUÍVEL.**
+      A base não pode ser US$/dia-calendário: o endpoint clássico de
+      billing responde **HTTP 410**, e o que existe
+      (`/organizations/{org}/settings/billing/usage`) devolve **9 itens
+      agregados por MÊS**, sem eixo de workflow — e atribui os minutos de
+      8-core ao repositório **errado** (`-private`; medido: privado 73
+      runs em agosto, público 400+). A base passa a ser **US$ por PUSH**
+      (ou por run de `validate.yml`), derivável do mesmo dado e imune à
+      granularidade mensal: comparar o custo médio de um push só-docs
+      ANTES contra DEPOIS. Enquanto a OQ-12 não fechar, nenhum número de
+      billing atribui custo a este repositório.
 - [ ] **AC-7 [P1]** `templates/.github/workflows/*.template` permanece
       byte-idêntico — a mudança não viaja para adopter (F3).
 - [ ] **AC-8 [P1]** `python3 .claude/scripts/validate_governance_fast.py`
@@ -1071,6 +1239,54 @@ a rede de segurança que torna a A1 aceitável.
       driftariam em silêncio.)*
 
 ## Open questions
+
+> **Round 2 — nota de higiene desta lista.** A sequência impressa abaixo
+> é `1, 2, 3, 4, 3b, 5` e depois `6..10` após uma régua: o item `3b`
+> aparece DEPOIS do `4`, e há **duas entradas concorrentes para o mesmo
+> resíduo** (a OQ-3 diz "~US$ 35/mês", a OQ-3b reexpressa em US$/dia).
+> Como o flip para `reviewed` depende explicitamente destas questões,
+> a lista é load-bearing e a numeração quebrada é defeito, não estética.
+> **A OQ-3 fica MORTA em favor da OQ-3b**, e o número dela também estava
+> errado: o resíduo medido da governança sobre pushes só-docs na janela
+> limpa é **US$ 1,20/dia**, não US$ 1,67/dia.
+>
+> As duas questões que o Owner precisa responder **antes** de qualquer
+> execução são as novas, no fim da lista.
+
+### ⭐ OQ-11 — A ORDEM: A0 antes de A1? *(a escalação do round 2)*
+
+Com a base de custo refutada, o teto REAL da A1 é ~US$ 4,04/dia e a
+**A0** (§6-A, reduzir a matriz de Python de 4 para 2 versões no `push`)
+rende ~US$ 3,15/dia — mesma ordem de grandeza, **sem** filtro de path,
+**sem** workflow novo, **sem** cerimônia canônica sobre 4 paths
+guardados, **sem** gramática de denylist para manter viva.
+
+Se a A0 entrar primeiro, o prêmio residual da A1 encolhe e a pergunta
+"vale gastar cerimônia + workflow novo por ~US$ 1-2/dia?" muda de
+resposta. Três opções: **(a)** A0 primeiro, e reavaliar a A1 depois;
+**(b)** A1 como planejado, tratando a A0 como resíduo; **(c)** as duas,
+A0 primeiro por ser mais barata de reverter.
+**Recomendação do CEO: (a).** Decisão do Owner — é o que faz o round 2
+terminar em `ESCALATE-TO-OWNER`.
+
+### ⭐ OQ-12 — A quem o billing atribui este custo?
+
+Os minutos de `Actions Linux 8-core` de agosto (**9.254,909 min /
+US$ 203,61**) aparecem sob `repositoryName: ceo-orchestration-private`,
+mas o volume vem do público (privado: 73 runs em agosto; público: 400+,
+sendo 167 de `validate.yml`). Enquanto isso não for resolvido, **nenhum
+número de billing atribui custo a este repositório**, e o AC-6 não tem
+como fechar.
+
+Três leituras: **(a)** peculiaridade de como o GitHub fatura larger
+runners de um grupo da org (o repo privado seria o "billing owner");
+**(b)** o repo privado consome mais do que o volume de runs sugere;
+**(c)** bug de agregação. **(a)** é a mais provável e a mais fácil de
+confirmar — se for, a base de custo do plano nunca poderá ser derivada
+por repositório, e o AC-6 tem de medir por PUSH, como já reescrito.
+
+---
+
 
 1. **W1** — Rota B (detector + `if:`) ou Rota C (workflow separado)? A
    recomendação do CEO é a C (§6); a escolha e sua razão são registradas
@@ -1138,6 +1354,34 @@ a rede de segurança que torna a A1 aceitável.
     é decisão do Owner.
 
 ## Debate
+
+**Round 2 — 2026-08-22. Veredito: ESCALATE-TO-OWNER.** Artefatos em
+`.claude/plans/PLAN-184/debate/round-2/` (`consensus.md`, três críticas,
+`anonymization-map.md`). **29 achados de 3 críticos, ingest COMPLETO** —
+a condição que faltou no round 1.
+
+Três críticos com eixos disjuntos e declarados (pipeline / governança /
+medição), read-only sob ADR-136-AMEND-1, cada um instruído a NÃO cobrir
+os eixos dos outros. Cinco consensos (2+ críticos), nove achados de um
+crítico só mantidos, dois rejeitados com o comando que sustenta o
+pushback, e um achado do próprio CEO na verificação (a atribuição de
+repositório no billing, OQ-12).
+
+**A doutrina do plano sobrevive inteira** — os três disseram
+independentemente que manter o job de governança fora do filtro preserva
+os validadores de markdown normativo, e que denylist-sobre-allowlist é a
+direção de falha certa. O que caiu foi a **aritmética** e, com ela, a
+**prioridade**: ver a caixa no topo da §1 e a OQ-11.
+
+**Nota de método, registrada porque é a lição do round 1.** A síntese
+automática deste round também recebeu payload truncado (11 de 29) e
+**recusou-se a emitir veredito**, marcando `RUN-ANOTHER-ROUND` — o
+instrumento corrigido (JSON compacto + truncamento que envenena o
+veredito da dimensão dona) fez exatamente o que deveria. A síntese
+canônica é a do CEO, sobre os três retornos íntegros lidos do journal do
+run `wf_f2943bd9-c0a`.
+
+---
 
 **Round 1 — 2026-08-21. Veredito: ADJUST_PROCEED.** Síntese completa em
 `.claude/plans/PLAN-184/debate/round-1/synthesis.md`, anonimizados por
@@ -1221,11 +1465,24 @@ execução.
 
 Sessão nova: Gate 1-2, ler este plano inteiro (a §4 e a §5 carregam os
 contraexemplos que impedem a versão ingênua do filtro; a §"Debate" diz o
-que mudou e por quê) e confirmar a autorização do Owner. **O debate L3 já
-rodou** — round 1, 2026-08-21, veredito ADJUST_PROCEED, síntese em
-`.claude/plans/PLAN-184/debate/round-1/synthesis.md`. O plano continua em
-`status: draft`: o flip para `reviewed` é do Owner e depende das
-**OQ-6..OQ-10**.
+que mudou e por quê) e confirmar a autorização do Owner. **O debate L3
+rodou duas vezes** — round 1 (2026-08-21, ADJUST_PROCEED sobre ingest
+truncado) e round 2 (2026-08-22, **ESCALATE-TO-OWNER**, 29 achados,
+ingest completo), artefatos em `debate/round-2/`.
+
+**A primeira coisa a ler é a caixa no topo da §1**, não a §1: os números
+que autorizavam o plano estão REFUTADOS por medição contra a API de
+billing, e a §1 fica como registro do que se afirmava.
+
+O plano continua em `status: draft`. O flip para `reviewed` é do Owner e
+agora depende de **duas** decisões, não de dez: **OQ-11** (a ordem
+A0-vs-A1) e **OQ-12** (a quem o billing atribui o custo). As OQ-6..OQ-10
+continuam abertas mas deixaram de ser bloqueantes — a W0 reescrita
+absorve o que elas perguntavam.
+
+**Se o Owner responder "A1 assim mesmo" na OQ-11, o plano está pronto
+para executar**: nada mais precisa ser escrito, é marcar `reviewed` e
+abrir a W0 pelo item US0 (o pré-registro do resultado que mata).
 
 Ordem: **W0 inteira antes de qualquer edição de `.github/` em `main`** —
 sem a denylist derivada (US1/US2), sem a medição do 2-core (US3) e sem a
