@@ -744,14 +744,25 @@ mecânico". A decisão é dele; o plano não a antecipa.
       `.claude/scripts/tests/`, `.claude/scripts/optimizer/tests/`,
       `tests/integration/`, `tests/formal_verification/`,
       `tier_policy_cli/tests/`, `tournament/tests/`); (b)
-      **comportamental** — mutar um arquivo sob o caminho num clone
-      descartável e rodar as quatro suítes; verde ⇒ inerte. Uma versão de
-      Python basta para (b): a pergunta é acoplamento de LEITURA de
+      **comportamental** — num clone descartável, aplicar ao caminho as
+      **TRÊS** operações e rodar as quatro suítes: **MUTAR conteúdo,
+      RENOMEAR e APAGAR**. Verde nas três ⇒ inerte.
+      **Corrigido no debate r1 (P0):** a redação anterior pedia só
+      mutação de conteúdo, e o mecanismo do contraexemplo da §4 é
+      **EXISTÊNCIA** (`validate_file_ref:199-215` nunca lê conteúdo) —
+      logo mutar um ADR deixa a suíte verde e `.claude/adr/**` entraria
+      na denylist pela própria regra deste plano, apagando o vermelho que
+      a §4 existe para preservar. Restrição na escolha do alvo: o
+      fallback de prefixo (`startswith`) faz `ADR-045-x.md` →
+      `ADR-045-x-v2.md` continuar verde para referências `bare`, então o
+      alvo tem de ser um cujo sumiço seja de fato observável.
+      Uma versão de Python basta: a pergunta é acoplamento de LEITURA de
       arquivo, que não varia por versão — e a razão fica escrita.
-      **Contraexemplo já verificado (§4): `docs/**` NÃO é inerte** e
-      `.claude/adr/**` é suspeito pela mesma porta (referência morta em
-      `docs/threat-model.md`). Entrada sem as duas provas não entra.
-      Check: cada entrada da denylist final tem as duas provas registradas; docs/** aparece explicitamente REJEITADO ou com excecao nomeada; qualquer entrada cuja prova (b) fique vermelha e removida da lista
+      **Contraexemplos já verificados (§4): `docs/**` NÃO é inerte**;
+      `.claude/adr/**` é suspeito pela mesma porta; e `.github/**`
+      **passaria** na prova de conteúdo e por isso é exclusão dura, não
+      candidato. Entrada sem as duas provas não entra.
+      Check: cada entrada da denylist final tem as duas provas registradas, e a prova (b) inclui as tres operacoes (mutar/renomear/apagar) com a saida colada; para .claude/adr/** o registro exige o VERMELHO em rename ou delete, nao o verde — um verde nas tres so e aceito com o comando que mostra que NENHUM teste le aquele caminho; docs/** e .github/** aparecem explicitamente REJEITADOS ou com excecao nomeada; qualquer entrada cuja prova (b) fique vermelha e removida da lista
 - [ ] `[P0][US3]` **Medir os 2 jobs seriais em `ubuntu-latest` ANTES de
       flipar.** Hoje: E2E 3,4 min contra `timeout-minutes: 8`
       (`validate.yml:1079`) e formal 4,7 min contra `10` (`:1142`). Num
@@ -760,28 +771,111 @@ mecânico". A decisão é dele; o plano não a antecipa.
       bateria de ~25 min local roda "2-3x isso num runner 2-core"). Com
       fator 2-3x, E2E vai a 6,8-10,2 min contra teto **8** e formal a
       9,4-14,1 contra teto **10** — **os dois estouram**. A lição do repo
-      é explícita: **margem < ~20% exige bump**, e estouro de
-      `timeout-minutes` aparece como `cancelled` matando o passo
-      *inocente* que estiver rodando na hora. Medir de verdade, não
-      aplicar o fator 2-3x como se fosse medição.
-      Check: duracao real de cada um dos dois jobs em ubuntu-latest, de pelo menos 2 execucoes, publicada no plano; o timeout proposto satisfaz medido/timeout <= 0,80; o fator 2-3x aparece so como expectativa previa, nunca como o numero que fecha o AC
-- [ ] `[P1][US4]` Congelar o **baseline de confirmação**: o método exato
-      (comando/endpoint de billing) com que a W3 vai comparar custo
-      medido contra projeção, decidido **antes** do corte para que o
-      número de depois seja comparável ao de antes.
-      Check: none (levantamento — a saida e o comando de billing e a data de corte do baseline, registrados no plano)
+      é explícita: estouro de `timeout-minutes` aparece como `cancelled`
+      matando o passo *inocente* que estiver rodando na hora. Medir de
+      verdade, não aplicar o fator 2-3x como se fosse medição.
+      **MECANISMO, nomeado no debate r1 (o gate era circular sem ele).**
+      Rota primária, **custo US$ 0**: `validate.yml:5-6` é
+      `push: branches: [main]`, logo um **push em branch, sem PR aberto,
+      não dispara `validate.yml`**. Um workflow de medição efêmero com
+      `on: push:` nesse branch, replicando os steps dos dois jobs em
+      `runs-on: ubuntu-latest`, entrega as duas durações sem tocar
+      `validate.yml` e sem queimar um minuto pago (`ubuntu-latest` é
+      grátis em repo público). Rota alternativa, **paga**: um PR que
+      flipe os dois `runs-on` — `validate.yml:4` tem `pull_request:` sem
+      filtro de branch, então o PR produz a medição, mas também dispara o
+      job de governança + `hook-tests-dual-rail` + `hook-tests-python-matrix`
+      no runner `Ceo`: `15,0 + 15,5 + 41,8 = 72,3 min ≈ US$ 1,59` por run
+      de medição. Efeito colateral a registrar em qualquer das duas: a
+      rota de PR seria a **primeira** execução do gatilho `pull_request`
+      na janela (F2 mede 167/167 vindos de `push`, zero de PR) — a rota
+      de medição é ela própria não-exercitada. **Ver OQ-8.**
+      **DIMENSIONAMENTO (corrigido no debate r1):** a regra
+      `medido/timeout <= 0,80` com N=2 é mais fraca que o método que este
+      repo já pratica no job análogo. `smoke-install.yml:150-172` registra
+      5→8→20→25→32, todos "MEASURED, not guessed", todos com o fator
+      2-3x, e o comentário `:159-161` diz textualmente que 15 "would sit
+      inside the noise band, and the perf-gate N=20 flake (PLAN-159) was
+      exactly that mistake". O outro precedente in-repo
+      (`validate.yml:1181-1186`, `opus-4-7-profiler-smoke`) dimensiona por
+      **pior caso aritmético**. Portanto: dimensionar por **composição de
+      pior caso** — para o E2E, checkout + `setup-python` + `pip install`
+      + as **TRÊS** invocações de pytest do job (`tests/integration/`,
+      `.claude/scripts/tier_policy_cli/tests/`,
+      `.claude/scripts/tournament/tests/`) — e conferir contra o envelope
+      2-3x, não contra 20% de margem sobre o máximo de N=3. N=3 não
+      produz p95; se o dimensionamento ficar estatístico, a base (p95) e o
+      N necessário ficam declarados.
+      Check: o mecanismo de medicao escolhido (branch efemero ou PR) esta nomeado com seu custo em dolares ao lado; duracao real de cada um dos dois jobs em ubuntu-latest, de pelo menos 2 execucoes, publicada no plano; o timeout proposto vem de composicao de pior caso com as parcelas somadas por escrito, e satisfaz TAMBEM medido/timeout <= 0,80; o fator 2-3x aparece so como expectativa previa, nunca como o numero que fecha o AC
+- [ ] `[P0][US4]` Congelar o **baseline de confirmação** — e não é uma
+      coisa, são **TRÊS** (corrigido no debate r1, P0): (a) o
+      comando/endpoint de billing; (b) a **base de tempo canônica**, que
+      é **US$/dia-calendário** — a única que sobrevive a uma janela
+      medida de 21 dias e a uma janela de confirmação de 7; (c) a
+      **fórmula de conversão** explícita (`US$/dia × dias-da-janela`).
+      Sem (b) e (c), o gate ">20% reabre" do AC-6 dispara pelas UNIDADES
+      antes de qualquer efeito real do corte (contas na §2). Decidido
+      **antes** do corte, para que o número de depois seja comparável ao
+      de antes. **Ver OQ-7.**
+      Check: as tres coisas estao registradas no plano — comando, base US$/dia-calendario e formula de conversao; e a §2 inteira aparece reexpressa nessa base, sem nenhum numero de custo que feche AC em rotulo "/mes"
+- [ ] `[P0][US5]` **Reconciliar as duas bases de custo por-run ANTES de
+      qualquer número da §2 ser usado** (achado P0 do debate r1). Derivar
+      minutos **por JOB por run** (`gh run view <id> --json jobs` sobre os
+      167 runs da janela) em vez de minutos por workflow, e fechar o
+      delta de `+1.884,6` min no bucket só-docs contra `-1.910,4` no de
+      código. Hipótese barata a testar primeiro, porque os deltas são
+      quase simétricos e opostos: **erro de classificação** de ~23-24 dos
+      106 runs "só-docs" que seriam de código. Se for isso, a A1 cai
+      ~US$ 34 na janela (≈ US$ 1,62/dia). Enquanto não reconciliar, os
+      números US$ 194 / US$ 224 permanecem marcados **NÃO-DERIVADOS** no
+      corpo do plano.
+      Check: a saida do gh run view por job esta agregada por bucket e publicada; o delta residual contra a tabela por-job da §1 esta abaixo de 5% OU a causa esta nomeada; a §2 registra qual das duas bases sobreviveu e reexpressa A1/A2/sobreposicao nela
 
 ### W1 — A1: os 4 jobs pesados atrás de filtro fail-closed
 
 - [ ] `[P0]` **Registrar a rota escolhida na abertura** (Rota B ou Rota
       C da §6), com a razão. Recomendação do CEO é a C; a escolha é da
       execução e fica escrita antes de qualquer edição.
-      Check: a wave abre com uma linha nomeando o ramo escolhido. Ramo C — existe workflow novo com paths-ignore, concurrency.group DISTINTO de validate-${{ github.ref }}, kill-switch CEO_SOTA_DISABLE replicado, e docs/CTO-GUIDE.md:46 atualizado no MESMO commit. Ramo B — existe job detector rodando em ubuntu-latest cujo diff cobre push (github.event.before...github.sha) E pull_request, com before zerado ou diff indisponivel caindo em "roda tudo"
+      Check: a wave abre com uma linha nomeando o ramo escolhido. Ramo C — existe workflow novo com paths-ignore, concurrency com group DISTINTO de validate-${{ github.ref }} E cancel-in-progress: true, permissions no nivel do workflow, kill-switch CEO_SOTA_DISABLE replicado, o proprio arquivo incluido no gatilho, e as QUATRO superficies derivadas atualizadas no MESMO commit. Ramo B — existe job detector rodando em ubuntu-latest cujo diff cobre push (github.event.before...github.sha) E pull_request, com before zerado ou diff indisponivel caindo em "roda tudo", semantica all() e nao any(), e os 4 pesados fora do grupo de concorrencia que um push filtrado cancela
 - [ ] `[P0]` **Denylist, não allowlist** (§3), com o conteúdo saído da
-      W0-US1/US2 e nada além. O gatilho **`push`** é obrigatório: um
-      filtro só de `pull_request` é morto aqui (F2, 167/167 dos runs vêm
-      de `push` em `main`).
-      Check: a configuracao usa paths-ignore (ou, no ramo B, um default "roda" para caminho desconhecido); o gatilho push esta presente; nenhuma entrada da denylist esta fora da lista provada na W0-US2
+      W0-US1/US2 e nada além. **Paridade de gatilho é DERIVADA, não
+      lembrada** (corrigido no debate r1): `validate.yml:3-6` cobre
+      `pull_request:` **sem filtro de branch** *e* `push: branches:
+      [main]`. Exigir só o `push` — como a redação anterior fazia —
+      deixaria o `pull_request` sumir no split sem que nenhum AC pegasse,
+      invisível justamente porque o F2 mede zero runs de PR. E
+      `.github/workflows/**` **não pode** casar a denylist: o filtro
+      precisa ser capaz de testar a própria mudança (molde:
+      `coverage.yml:11-14` inclui o próprio arquivo).
+      Check: o bloco `on:` do arquivo novo cobre o MESMO conjunto de eventos que validate.yml:3-6 cobria para esses jobs — pull_request (sem filtro de branch) E push: branches:[main] — provado por diff dos dois blocos on:, nao por leitura; a configuracao usa paths-ignore (ou, no ramo B, um default "roda" para caminho desconhecido); nenhuma entrada da denylist esta fora da lista provada na W0-US2; nenhuma entrada casa .github/workflows/**; e o arquivo novo dispara sobre si mesmo
+- [ ] `[P0]` **Concorrência amarrada, no ramo que for** (achado P0/P1 do
+      debate r1). O `cancel-in-progress` é `false` por default: no ramo C,
+      um arquivo que declare só `group:` faz todo run pesado superado
+      rodar até o fim e os minutos **sobem**. No ramo B, o inverso —
+      todo push só-docs entra no grupo `validate-${{ github.ref }}` e
+      **cancela** o run pesado em voo do push de código anterior, e nada
+      fica vermelho. Os dois casos invalidam a comparação do AC-6, cuja
+      baseline já reflete 47% de cancelamento (F6).
+      Check: ramo C — o arquivo novo declara concurrency com group de prefixo distinto E cancel-in-progress: true (molde coverage.yml:21-23). Ramo B — ou cancel-in-progress: false no workflow, ou os 4 pesados carregam concurrency de JOB com grupo proprio; e a evidencia e um par de pushes (codigo, depois so-docs, em sequencia rapida) mostrando no gh run view que o run pesado do primeiro NAO foi cancelado pelo segundo
+- [ ] `[P0]` **`permissions:` explícito, e a herança curada antes do
+      split** (F7). `integration-tests` é o único dos 4 sem bloco próprio
+      — num arquivo novo sem `permissions:` ele passaria a rodar com o
+      escopo DEFAULT do repositório para o `GITHUB_TOKEN`. Nem
+      `actionlint` nem `check-action-sha-drift.py` verificam presença de
+      `permissions`, então isto não tem rede embaixo.
+      Check: integration-tests ganha permissions: contents: read PROPRIO antes ou no mesmo commit do split; o arquivo novo declara permissions no nivel do workflow; e o efetivo de cada um dos 4 jobs e identico ao de hoje, mostrado lado a lado no registro da wave
+- [ ] `[P0]` **As QUATRO superfícies derivadas, no MESMO commit do
+      split** (F10 — a frase "o único custo novo é uma linha" era falsa).
+      (a) `docs/CTO-GUIDE.md:46` 22→23 (esta é vigiada, build vermelho);
+      (b) `README.md:8` — segundo badge apontando para o workflow novo,
+      ou badge agregado: hoje o badge fica **verde com o workflow pesado
+      vermelho**, que é a classe que este plano diz combater;
+      (c) `.claude/adr/ADR-021-e2e-harness-contract.md:132` (arquivo **e**
+      o timeout, que a W2 muda) e
+      `.claude/adr/ADR-050-native-subagents-dual-rail.md:73-74` (arquivo);
+      (d) `.github/workflows/GOVERNANCE-MAP.md` — linha nova. Só (a) é
+      mecanicamente vigiada; (b), (c) e (d) driftariam em silêncio.
+      Check: as quatro edicoes estao no diff do commit de split; `bash .claude/scripts/local/verify-counts.sh --no-tests --quiet` verde; `python3 .claude/scripts/check-staleness.py` rodado e a saida registrada; e um grep por "workflows/validate.yml" em README.md + .claude/adr/ nao devolve nenhuma afirmacao que a mudanca tornou falsa
 - [ ] `[P0]` **Controle positivo direção A — tem de DISPARAR.** Commit
       tocando `.claude/hooks/**` faz os 4 pesados **executarem**. A forma
       forte, e é a exigida: um **plant** que só um job pesado pega — o
@@ -797,14 +891,43 @@ mecânico". A decisão é dele; o plano não a antecipa.
       pesados executa, verificado no JSON do run (ausentes no ramo C,
       `skipped` no ramo B) — nunca por leitura do YAML.
       Check: gh run view --json jobs do commit so-plans nao lista nenhum dos 4 jobs pesados como executado; a evidencia e a saida do comando, colada no registro da wave
+- [ ] `[P0]` **Controle positivo direção C — a FRONTEIRA MISTA tem de
+      DISPARAR** (achado P0 do debate r1). Um **único** commit tocando
+      `.claude/plans/**` **e** um arquivo sob `.claude/hooks/**` faz os 4
+      pesados executarem. Sem este controle, um detector com semântica
+      `any()` em vez de `all()` passa em AC-1 e AC-2 e pula os 4 pesados
+      em **28% dos commits** (67/239 na janela medida, §1) — o falso-verde
+      exato que este plano existe para impedir. No ramo C a semântica
+      `all()` vem do substrato; no ramo B é código nosso, e por isso o
+      Check é o mesmo nos dois: prova comportamental, não leitura.
+      Check: gh run view --json jobs do commit MISTO mostra os 4 pesados EXECUTADOS; e, no ramo B, a expressao do detector e citada no registro da wave com a demonstracao de que ela pula somente se TODOS os paths alterados casarem
+- [ ] `[P0]` **Controle positivo direção D — o gatilho `pull_request`
+      existe e roteia** (achado P1 do debate r1). Um PR de teste tocando
+      `.claude/hooks/**` mostra os 4 pesados executados no run de
+      `pull_request` do workflow novo. É a única prova de que a paridade
+      de gatilho sobreviveu ao split — e o F2 garante que ninguém
+      descobriria isso por acidente, já que a janela inteira tem zero
+      runs de PR.
+      Check: gh run view --json jobs,event do run de pull_request mostra event=pull_request e os 4 pesados executados
 - [ ] `[P0]` **O job de governança roda em TODO commit**, inclusive no
       commit só-plans do controle B. É ele que valida os `.md`.
       Check: o mesmo gh run view --json jobs do controle B mostra "Governance, health, contamination, shellcheck" com conclusion success
-- [ ] `[P1]` **Rota de recuperação nomeada**: como forçar os 4 pesados
-      num commit que o filtro pulou (`workflow_dispatch` — filtros de
-      path não se aplicam a ele — ou re-run), escrito no cabeçalho do
-      arquivo alterado, não só no plano.
-      Check: o comentario no proprio YAML nomeia a rota de recuperacao e ela e exercitada uma vez com sucesso
+- [ ] `[P1]` **Rota de recuperação nomeada — POR RAMO** (a redação
+      anterior não funcionava em nenhum dos dois; achado convergente do
+      debate r1). No **ramo C**, "re-run" é vacuo: um push filtrado não
+      produz run algum, logo não há o que re-rodar — a rota é
+      `workflow_dispatch: {}` no arquivo novo (molde in-repo pronto:
+      `coverage.yml:18`), e `validate.yml` hoje **não tem**
+      `workflow_dispatch` (`grep` = zero). No **ramo B**, "re-run all
+      jobs" **reavalia** o `if:` e pula de novo: a expressão tem de
+      conter `github.event_name == 'workflow_dispatch' ||` como primeiro
+      termo, senão o dispatch também pula. E nos dois: `workflow_dispatch`
+      despacha em um **`ref`** (branch/tag), **não num SHA** — ele roda a
+      ponta do branch, não o commit que o filtro pulou, e uma vez que
+      `main` avance esse commit fica inalcançável por dispatch. Essa
+      limitação vai **escrita no comentário do YAML**, senão a rota
+      promete o que não entrega.
+      Check: o comentario no proprio YAML nomeia a rota do ramo escolhido E registra a limitacao ref-nao-SHA; no ramo B, grep na expressao do if: encontra github.event_name == 'workflow_dispatch'; e a rota e exercitada uma vez com sucesso, com a saida do gh run view colada
 - [ ] `[P1]` **A ressalva durável de required-checks** (F1) fica escrita
       **no YAML**, ao lado do filtro: hoje é seguro porque `main` não tem
       protection nem rulesets; ligar required checks sobre os 4 pesados
@@ -817,10 +940,15 @@ mecânico". A decisão é dele; o plano não a antecipa.
 
 - [ ] `[P0]` **Bump de `timeout-minutes` no MESMO commit do flip de
       `runs-on`** (ou antes dele), com o valor derivado da medição da
-      W0-US3 pela regra `medido / timeout <= 0,80`. Flipar primeiro e
-      ajustar depois produz `cancelled` — que este repo já aprendeu a
-      diagnosticar errado, porque o machado cai no passo inocente.
-      Check: no diff, nenhum job muda runs-on sem que timeout-minutes esteja no valor derivado da W0-US3; a conta medido/timeout aparece no comentario do YAML
+      W0-US3 por **composição de pior caso**, e conferido *também* contra
+      `medido / timeout <= 0,80`. Flipar primeiro e ajustar depois produz
+      `cancelled` — que este repo já aprendeu a diagnosticar errado,
+      porque o machado cai no passo inocente. A regra de margem sozinha é
+      mais fraca que os dois precedentes in-repo (`smoke-install.yml:150-172`
+      com o fator 2-3x e a nota anti-noise-band; `validate.yml:1181-1186`
+      com soma de pior caso), e o E2E tem **três** invocações de pytest,
+      não uma.
+      Check: no diff, nenhum job muda runs-on sem que timeout-minutes esteja no valor derivado da W0-US3; o comentario do YAML mostra as PARCELAS somadas (checkout + setup-python + pip + cada invocacao de pytest) alem da conta medido/timeout, no molde de validate.yml:1181-1186
 - [ ] `[P0]` `E2E integration tests` (`validate.yml:1078`) e
       `Formal verification mutation harness` (`:1139`) passam a
       `runs-on: ubuntu-latest`. Nenhum outro job muda de runner.
@@ -829,6 +957,18 @@ mecânico". A decisão é dele; o plano não a antecipa.
       ≥20% em todos, antes de considerar a wave fechada. Um run verde é
       amostra, não margem.
       Check: as 3 duracoes de cada job estao registradas e a pior delas satisfaz medido/timeout <= 0,80
+- [ ] `[P0]` **"Verde" não é prova quando o runner muda: delta de SKIP =
+      0** (achado P1 do debate r1). O `Ceo` é self-hosted (inventário de
+      binários desconhecido) e `ubuntu-latest` é outra imagem. A suíte
+      E2E tem gates de ambiente reais — `tests/integration/test_install_sh_rollback.py:78-80`
+      (`shutil.which` → `pytest.skip`),
+      `test_peers_yaml_migration.py:228,424,490,816`
+      (`shutil.which("openssl")`), `test_live_adapter_smoke.py:64,66`. Um
+      run verde com N skips **novos** é indistinguível de um run verde sem
+      nenhum: é a classe dominante deste repo (*guard verde porque não vê
+      o alvo*) chegando na única wave onde a doutrina da §3 não tinha
+      sido aplicada.
+      Check: a linha-resumo do pytest (X passed, Y skipped, Z deselected) do ULTIMO run em Ceo e do PRIMEIRO run em ubuntu-latest esta colada lado a lado para os DOIS jobs; delta de skipped = 0 e delta de passed = 0; delta nao-zero BLOQUEIA o flip de runs-on
 - [ ] `[P1]` **Sem `-n auto`** (§7). Se a medição mostrar que o teto
       aperta, a resposta é subir o teto, não paralelizar suíte de
       integração dentro de um plano de custo.
@@ -840,12 +980,17 @@ mecânico". A decisão é dele; o plano não a antecipa.
       dias-calendário de dados de billing** (janela de DADOS acumulando,
       no molde ratificado no PLAN-180 — não estimativa de esforço),
       comparar custo medido contra a projeção da §2 pelo método
-      congelado na W0-US4.
-      Check: o custo medido pos-corte e publicado no plano ao lado da projecao, com o comando de billing citado
+      congelado na W0-US4 — **em US$/dia-calendário nos dois lados**.
+      Comparar uma janela de 7 dias contra um rótulo "/mês" produz 4,29x
+      de "divergência" só pelas unidades (§2).
+      Check: o custo medido pos-corte e publicado no plano em US$/dia ao lado da projecao em US$/dia, com o comando de billing citado e a formula de conversao aplicada por escrito
 - [ ] `[P0]` **Resolver a ressalva de composição da §2**: a economia
-      combinada real ficou perto de US$ 224/mês ou perto de US$ 205/mês
-      (sobreposição A1∩A2)? O número que vale é o da fatura.
-      Check: o plano registra qual das duas leituras a fatura confirmou, com o delta em dolares; divergencia acima de 20% contra a projecao reabre o plano em vez de fecha-lo
+      combinada real ficou perto de **US$ 10,67/dia** (projeção cheia,
+      `224/21`) ou perto de **US$ 9,76/dia** (`205/21`, com a sobreposição
+      A1∩A2)? O número que vale é o da fatura. E a comparação só é
+      legítima se a W0-US5 já reconciliou as bases — senão a projeção
+      contra a qual se mede é ela própria NÃO-DERIVADA.
+      Check: o plano registra qual das duas leituras a fatura confirmou, com o delta em US$/dia; divergencia acima de 20% contra a projecao — medida na MESMA base de tempo — reabre o plano em vez de fecha-lo; e o registro cita o resultado da W0-US5 como pre-condicao da comparacao
 - [ ] `[P1]` Registrar o resíduo com número (§9) para quem for decidir
       um eventual A3.
       Check: none (registro — a saida e o custo residual medido por job)
@@ -856,9 +1001,10 @@ Depois da A1+A2, o que continua rodando em **todo** commit é o job de
 governança: **15 min e US$ 0,33 por run**, e ele **não** é só validação
 de `.md` — executa `.claude/hooks/tests/`, `.claude/scripts/tests/`,
 `.claude/scripts/optimizer/tests/` e mais dez raízes de teste (§4). Sobre
-106 runs só-docs, isso é da ordem de `15 × 106 × 0,022 ≈ US$ 35/mês` —
+106 runs só-docs, isso é da ordem de `15 × 106 × 0,022 ≈ US$ 34,98` na
+janela de 21 dias = **US$ 1,67/dia** (leitura de 30 dias: US$ 50) —
 número **derivado dos componentes da medição**, a confirmar na W3, não
-medido de forma independente.
+medido de forma independente, e na base congelada da W0-US4.
 
 Está aqui por honestidade de escopo: o corte que este plano entrega **não
 zera** o custo de um commit só-docs, e quem ler "71%" precisa saber o que
@@ -876,33 +1022,63 @@ a rede de segurança que torna a A1 aceitável.
 - [ ] **AC-2 [P0]** Controle positivo **direção B**: commit tocando só
       `.claude/plans/**` não executa nenhum dos 4 pesados, provado pela
       saída de `gh run view --json jobs`, não por leitura de YAML.
+- [ ] **AC-2b [P0]** Controle positivo **da FRONTEIRA**: um **único**
+      commit tocando `.claude/plans/**` **e** um arquivo sob
+      `.claude/hooks/**` faz os 4 pesados **executarem**
+      (`gh run view --json jobs`). Sem este AC, um detector com semântica
+      `any()` passa em AC-1 e AC-2 e pula os pesados em 28% dos commits
+      (67/239 na janela, §1). *(Debate r1, P0.)*
 - [ ] **AC-3 [P0]** O job `Governance, health, contamination,
       shellcheck` executa em **100%** dos commits da janela de validação,
       incluindo o commit só-docs do AC-2.
 - [ ] **AC-4 [P0]** Toda entrada da denylist tem prova de inércia
-      (estática **e** comportamental, W0-US2). `docs/**` está fora da
-      denylist ou tem exceção nomeada — o contraexemplo do
+      (estática **e** comportamental, W0-US2), e a comportamental cobre
+      **mutar, renomear e apagar** — não só mutar, porque o detector do
+      contraexemplo é de EXISTÊNCIA (§4). `docs/**` **e `.github/**`**
+      estão fora da denylist ou têm exceção nomeada; o contraexemplo do
       `test_threat_model_coverage.py` está fechado de um jeito ou de
-      outro.
+      outro. *(Debate r1, P0 — `.github/**` é exclusão dura porque
+      passaria na prova de conteúdo e o filtro precisa poder testar a
+      própria mudança.)*
 - [ ] **AC-5 [P0]** Nenhum dos 2 jobs movidos para `ubuntu-latest` roda
-      com margem de timeout < 20% em 3 runs consecutivos.
+      com margem de timeout < 20% em 3 runs consecutivos, **e** o delta
+      de `skipped` e de `passed` contra o último run em `Ceo` é **zero**
+      nos dois jobs. Verde com skips novos não conta como verde.
+      *(Debate r1, P1.)*
 - [ ] **AC-6 [P1]** A projeção de economia é confirmada contra billing
-      real após a janela de observação; divergência > 20% **reabre** o
-      plano em vez de fechá-lo.
+      real após a janela de observação, **com os dois lados em
+      US$/dia-calendário**; divergência > 20% **reabre** o plano em vez de
+      fechá-lo. A comparação só é legítima depois da W0-US5.
+      *(Debate r1, P0 — antes, o gate disparava pelas unidades.)*
 - [ ] **AC-7 [P1]** `templates/.github/workflows/*.template` permanece
       byte-idêntico — a mudança não viaja para adopter (F3).
 - [ ] **AC-8 [P1]** `python3 .claude/scripts/validate_governance_fast.py`
       e o job de governança seguem verdes no commit de corte, incluindo a
       contagem de workflows (F4).
+- [ ] **AC-9 [P1]** Um PR de teste tocando `.claude/hooks/**` mostra os 4
+      pesados executados no run de **`pull_request`** do workflow novo —
+      a paridade de gatilho sobreviveu ao split. *(Debate r1, P1: nenhum
+      AC exercia `pull_request`, e o F2 garante que ninguém descobriria
+      por acidente.)*
+- [ ] **AC-10 [P1]** As superfícies derivadas **não vigiadas** estão
+      atualizadas no mesmo commit do split: `README.md:8` (badge),
+      `.claude/adr/ADR-021:132` + `.claude/adr/ADR-050:73-74`, e
+      `.github/workflows/GOVERNANCE-MAP.md`. Prova: `check-staleness.py`
+      rodado com a saída registrada, e nenhum grep por
+      `workflows/validate.yml` em `README.md`/`.claude/adr/` devolvendo
+      afirmação que a mudança tornou falsa. *(Debate r1, P1 — só a
+      contagem do CTO-GUIDE é mecanicamente vigiada; as outras três
+      driftariam em silêncio.)*
 
 ## Open questions
 
 1. **W1** — Rota B (detector + `if:`) ou Rota C (workflow separado)? A
    recomendação do CEO é a C (§6); a escolha e sua razão são registradas
    na abertura da wave.
-2. **W3** — a economia combinada real é a projetada (US$ 224/mês) ou a
-   composta com a sobreposição A1∩A2 (~US$ 205/mês)? Só a fatura decide,
-   e a §2 marca isto como derivação, não medição.
+2. **W3** — a economia combinada real é a projetada (US$ 10,67/dia,
+   `224/21`) ou a composta com a sobreposição A1∩A2 (US$ 9,76/dia,
+   `205/21`)? Só a fatura decide, e a §2 marca isto como derivação, não
+   medição.
 3. **§9** — o resíduo do job de governança (~US$ 35/mês sobre commits
    só-docs) vira um A3, ou fica declarado como custo aceito de
    governança?
@@ -910,37 +1086,188 @@ a rede de segurança que torna a A1 aceitável.
    queimados antes do cancelamento são cobrados. Vale desagregar as
    causas (concorrência × timeout × corte de billing), ou é ruído?
    Fora do escopo deste plano.
+3b. **§9** — o resíduo do job de governança, reexpresso na base canônica:
+   `15 × 106 × 0,022 = US$ 34,98` na janela de 21 dias = **US$ 1,67/dia**
+   (leitura de 30 dias: US$ 50).
 5. **F1** — vale ligar branch protection em `main` depois deste corte?
    Se sim, a Rota C precisa virar Rota B antes, porque job ausente e job
    `skipped` se comportam de forma oposta diante de required checks.
+   **Debate r1 acrescentou o preço:** essa migração também tem de
+   resolver `paths` × `concurrency` (um push só-docs sob Rota B cancela o
+   run pesado em voo do push de código anterior) — não é só trocar o
+   mecanismo do filtro.
+
+---
+
+> As **OQ-6..OQ-10** saíram do debate round-1
+> (`.claude/plans/PLAN-184/debate/round-1/synthesis.md`). Nenhuma virou
+> suposição no corpo do plano.
+
+6. **§2 / W0-US5 — a manchete é NÃO-DERIVADA. A W1 abre ou espera?** A
+   economia US$ 194/US$ 224 não é reproduzível a partir da tabela por-job
+   deste plano: sobram ~1.884 min entre os buckets, e A1 vale US$ 194 na
+   base MEDIDA contra US$ 153 na base TABELA (21% a menos). A **direção**
+   sobrevive às duas bases (A1 é o termo dominante em qualquer leitura),
+   a **magnitude** não. Duas opções: **(a)** a W1 abre com a direção e a
+   W0-US5 roda em paralelo, com os números marcados NÃO-DERIVADOS até
+   fechar; **(b)** a W1 fica gateada pela W0-US5. A recomendação do CEO é
+   **(a)** — a US5 depende de `gh` sobre 167 runs e não muda a decisão de
+   filtrar, só o tamanho do prêmio. **A decisão é do Owner.**
+7. **W0-US4 — ratificar `US$/dia-calendário` como base de tempo canônica
+   deste plano.** É a única que sobrevive a uma janela medida de 21 dias
+   e a uma de confirmação de 7. A alternativa seria alongar a janela do
+   AC-6 para 30 dias e manter "/mês" — mais simples de ler, mas atrasa a
+   confirmação em três semanas.
+8. **W0-US3 — qual rota de medição?** **(a)** branch efêmero com workflow
+   de medição próprio: **US$ 0**, porque `validate.yml` só dispara em
+   `push` para `main` e em eventos de PR; **(b)** PR que flipa os dois
+   `runs-on`: **≈ US$ 1,59 por run** (governança + dual-rail +
+   python-matrix continuam no `Ceo`), mas exercita de quebra o gatilho
+   `pull_request`, que hoje tem zero runs na janela. Recomendação do CEO:
+   **(a)**, com **(b)** como plano B.
+9. **§3 — as 13 allowlists vivas deste repo são risco aceito ou
+   follow-up?** A doutrina da §3 diz que allowlist "falha na direção
+   perigosa", e 13 workflows deste repositório — incluindo `red-team.yml`
+   e `coverage.yml` — são allowlists. Ou isso é risco aceito e fica
+   escrito, ou é plano próprio. O PLAN-184 **não** o absorve.
+10. **F10 — o `GOVERNANCE-MAP.md` já está stale por dois
+    (`ownership-nightly.yml`, `supply-chain-watch.yml`) e nada o vigia.**
+    A cura entra no commit de split do PLAN-184 (barato, o arquivo já é
+    tocado), ou vira item separado junto com um gate que o mantenha
+    honesto? O PLAN-184 assume só a **sua** linha; o stale pré-existente
+    é decisão do Owner.
+
+## Debate
+
+**Round 1 — 2026-08-21. Veredito: ADJUST_PROCEED.** Síntese completa em
+`.claude/plans/PLAN-184/debate/round-1/synthesis.md` (dois críticos,
+anonimizados por `Critic-A`/`Critic-B` conforme DEBATE-SCHEMA §13.2).
+Toda claim foi reverificada contra o disco antes de entrar no plano.
+
+**Seis achados P0**, todos com cura óbvia e todos já incorporados acima —
+por isso o veredito não é BLOCK:
+
+1. **Três bases de tempo sem regra de conversão** (21d medido / "/mês"
+   projetado / 7d confirmado). O gate ">20% reabre" do AC-6 disparava
+   pelas unidades. → §2 e AC-6 em **US$/dia-calendário**; W0-US4 congela
+   base e fórmula, não só o comando.
+2. **A manchete US$ 194 não é derivável da tabela por-job deste plano**
+   (deltas de ±1.884 min entre buckets; duas bases de custo
+   inconsistentes). → nota de reconciliação na §1, marcação
+   **NÃO-DERIVADA** na §2, nova **W0-US5**.
+3. **W0-US3 era um gate circular** (read-only sobre `.github/` × medição
+   que exige alterar `runs-on`). → wave é read-only sobre **`main`**, e a
+   US3 nomeia o mecanismo, com rota de **US$ 0** (branch efêmero).
+4. **A prova de inércia não detectava o modo de falha da §4**: o detector
+   é de **existência**, mutação de conteúdo deixa verde. → W0-US2(b)
+   passa a exigir **mutar + renomear + apagar**, e o `Check:` exige o
+   **vermelho**.
+5. **A classe MISTA (28% dos commits) não era exercida por nenhum AC** —
+   um detector `any()` passava em AC-1 e AC-2. → **AC-2b** e Check
+   explícito de semântica `all()`.
+6. **`paths` × `concurrency`**: na Rota B um push só-docs cancela o run
+   pesado em voo do push de código anterior e nada fica vermelho. → item
+   `[P0]` próprio na W1, e a interação entrou nos contras das duas rotas.
+
+**P1 incorporados:** paridade de gatilho derivada (o `pull_request` podia
+sumir no split — **AC-9**); `permissions:` e a herança do
+`integration-tests` (**F7**); as quatro superfícies derivadas, três não
+vigiadas (**F10**, **AC-10**); `cancel-in-progress` na Rota C;
+dimensionamento de timeout por pior caso; delta de `skipped` = 0 na W2;
+`paths-ignore` sem precedente in-repo vs 13 allowlists vivas (**§3**,
+OQ-9); auto-disparo do workflow novo; inventário de sete jobs (**F8**).
+
+**Três pushbacks registrados — a crítica estava errada e o plano não a
+absorveu como escrita:**
+
+- **"`if:` estruturalmente morto" (F11)** — exagerado. O primeiro termo
+  de `validate.yml:736` é `github.event_name == 'push'`, então o step
+  roda em todo push; ele é morto **apenas na perna `pull_request`**. As
+  sub-claims (o `contains()` nunca casa; o job "espelhado" não existe
+  mais) estão corretas e entraram como F11 com o enquadramento corrigido.
+- **"GOVERNANCE-MAP tem 22 linhas, uma por workflow"** — número errado:
+  são **20** linhas para 22 workflows, e o mapa **já está stale por
+  dois**. O achado ficou mais forte que a crítica; virou OQ-10.
+- **"O plano modela commit como binário e nunca nomeia a classe mista"** —
+  enquadramento errado: o bucket "83 tocando código" da §1 **já contém** a
+  classe mista, logo a economia não muda. O que estava errado é o
+  **instrumento de aceite**, e esse achado foi mantido em P0 (AC-2b).
+
+**O que o debate NÃO mudou, e defendo:** a doutrina denylist-sobre-allowlist
+da §3; a recomendação pela **Rota C**, que saiu mais forte (o F11 é
+evidência in-repo, no arquivo-alvo, de que detecção de path escrita por
+nós apodrece calada, e a Rota B acumulou o achado de cancelamento
+cruzado); a recusa de `-n auto` (§7); e a honestidade da §9.
+
+**Sem round 2.** Os dois críticos convergiram sem se contradizer, e o
+próximo instrumento útil não é outro round do mesmo vendor — é o
+pair-rail cross-vendor sobre o plano ajustado (*debate revisa o MODELO,
+rail revisa o TEXTO*; o modelo já foi revisado).
+
+**O plano permanece `status: draft`.** O flip para `reviewed` é do Owner,
+e depende das **OQ-6..OQ-10** — das quais só a **OQ-6** muda a ordem de
+execução.
 
 ## How to continue
 
 Sessão nova: Gate 1-2, ler este plano inteiro (a §4 e a §5 carregam os
-contraexemplos que impedem a versão ingênua do filtro) e confirmar a
-autorização do Owner — o plano está em `status: draft` e é **L3**, então
-o `/debate start PLAN-184 "<proposta>"` vem antes da execução, a menos
-que o Owner rebaixe para L2 com critério explícito (§8).
+contraexemplos que impedem a versão ingênua do filtro; a §"Debate" diz o
+que mudou e por quê) e confirmar a autorização do Owner. **O debate L3 já
+rodou** — round 1, 2026-08-21, veredito ADJUST_PROCEED, síntese em
+`.claude/plans/PLAN-184/debate/round-1/synthesis.md`. O plano continua em
+`status: draft`: o flip para `reviewed` é do Owner e depende das
+**OQ-6..OQ-10**.
 
-Ordem: **W0 inteira antes de qualquer edição de `.github/`** — sem a
-denylist derivada (US1/US2) e sem a medição do 2-core (US3), a W1 e a W2
-não têm insumo. Depois W1 (A1) e W2 (A2), commits por wave com hint
+Ordem: **W0 inteira antes de qualquer edição de `.github/` em `main`** —
+sem a denylist derivada (US1/US2), sem a medição do 2-core (US3) e sem a
+base de tempo congelada (US4), a W1, a W2 e o AC-6 não têm insumo. A
+**US5** (reconciliação) roda em paralelo, salvo decisão contrária do
+Owner na OQ-6. Depois W1 (A1) e W2 (A2), commits por wave com hint
 `feat(PLAN-184 W<n>): ...`. A W3 fecha em D+7, quando houver dados de
-billing acumulados.
+billing acumulados — e compara em **US$/dia**, nos dois lados.
 
 Antes do commit de corte: `python3
-.claude/scripts/validate_governance_fast.py` e
+.claude/scripts/validate_governance_fast.py`,
 `bash .claude/scripts/local/verify-counts.sh --no-tests --quiet` — o
-segundo é quem pega a contagem de workflows do F4.
+segundo é quem pega a contagem de workflows do F4 — e
+`python3 .claude/scripts/check-staleness.py`, que é o mais próximo que
+existe de uma rede para as superfícies **não vigiadas** do F10 (badge do
+README, ADR-021/ADR-050, GOVERNANCE-MAP). Nenhum dos três cobre o badge:
+esse é conferido à mão, pelo AC-10.
 
 ## Reference links
 
-- `.github/workflows/validate.yml` — os 5 jobs; `runs-on` em `:27`,
-  `:1078`, `:1139`, `:1412`, `:1447`; `timeout-minutes` em `:34`,
-  `:1079`, `:1142`, `:1413`, `:1448`.
-- `.github/workflows/coverage.yml:10-18` — o precedente de filtro de
-  paths in-repo, **e** a armadilha: só `pull_request`, que aqui seria
-  morto (F2).
+- `.github/workflows/validate.yml` — **SETE** jobs (F8), não cinco:
+  `:20`, `:1071`, `:1121`, `:1178`, `:1410`, `:1445`, `:1505`. Os cinco
+  em `runs-on: Ceo` estão em `:27`, `:1078`, `:1139`, `:1412`, `:1447`,
+  com `timeout-minutes` em `:34`, `:1079`, `:1142`, `:1413`, `:1448`. Os
+  dois em `ubuntu-latest` — `opus-4-7-profiler-smoke` (`:1180`) e
+  `hook-stdout-schema-oracle` (`:1509`) — **ficam onde estão**: o split
+  move quatro e deixa três.
+- `.github/workflows/validate.yml:3-6` — o bloco `on:` que o split tem de
+  reproduzir: `pull_request:` **sem filtro de branch** *e*
+  `push: branches: [main]`.
+- `.github/workflows/validate.yml:736-739` — o `if:` de detecção de path
+  que já falha em silêncio na perna `pull_request`, com um comentário que
+  cita um job inexistente (F11). É o argumento in-repo pela Rota C.
+- `.github/workflows/coverage.yml` — o molde in-repo para **três** coisas
+  da Rota C: `:11-14` auto-inclusão do próprio arquivo no `paths:`;
+  `:18` `workflow_dispatch:` (rota de recuperação); `:21-23`
+  `concurrency` com `cancel-in-progress: true`. **E** a armadilha: o
+  gatilho dele é só `pull_request`, que aqui seria morto (F2).
+- Os **11** workflows que combinam `push:` + `paths:` corretamente
+  (`actionlint`, `adapter-live`, `benchmarks`, `chaos`, `formal-verify`,
+  `mcp-smoke`, `otel-smoke`, `perf-profile`, `red-team`, `smoke-install`,
+  `translations-drift`) — o conjunto real de precedentes de filtro deste
+  repo (F9). `paths-ignore` não tem nenhum.
+- `.github/workflows/smoke-install.yml:150-172` — o método de
+  dimensionamento de timeout que este repo pratica (5→8→20→25→32, fator
+  2-3x, nota anti-noise-band); `.github/workflows/validate.yml:1181-1186`
+  — o dimensionamento por soma de pior caso.
+- `README.md:8`, `.claude/adr/ADR-021-e2e-harness-contract.md:132`,
+  `.claude/adr/ADR-050-native-subagents-dual-rail.md:73-74`,
+  `.github/workflows/GOVERNANCE-MAP.md` — as três superfícies derivadas
+  **não vigiadas** que a Rota C move (F10).
 - `.github/workflows/ownership-nightly.yml:4-9` — o precedente de "split
   vira WORKFLOW separado, não entrada de filtro", e a declaração de que
   um runner 2-core roda 2-3x mais devagar.
@@ -948,7 +1275,9 @@ segundo é quem pega a contagem de workflows do F4.
   `git diff` que a Rota B copiaria, **e** o motivo de não copiá-lo cru:
   é PR-only.
 - `tests/integration/test_threat_model_coverage.py:25-36,309-380` — o
-  contraexemplo que mata `docs/**` na denylist.
+  contraexemplo que mata `docs/**` na denylist; e `:199-215`
+  (`validate_file_ref`) — a razão de a prova de inércia ter de rodar
+  **rename/delete**, não mutação de conteúdo (§4).
 - `.claude/scripts/local/verify-counts.sh:324-326,724` +
   `docs/CTO-GUIDE.md:46` — a contagem exata de workflows (F4).
 - `templates/.github/workflows/validate.yml.template:22-23` — o adopter
