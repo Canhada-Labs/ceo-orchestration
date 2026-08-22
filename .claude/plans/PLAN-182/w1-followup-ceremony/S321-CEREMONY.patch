@@ -376,6 +376,26 @@ index 62a1270..433d818 100755
          home = os.environ.get("HOME") or str(Path.home())
          base_dir = str(
              Path(home) / ".claude" / "projects" / slug / "lessons"
+diff --git a/.claude/scripts/tests/test_lessons_verified_render.py b/.claude/scripts/tests/test_lessons_verified_render.py
+index 7c3a12d..f99b986 100644
+--- a/.claude/scripts/tests/test_lessons_verified_render.py
++++ b/.claude/scripts/tests/test_lessons_verified_render.py
+@@ -232,7 +232,14 @@ class TestGetBootLessonsVerified(_VerifiedRenderBase):
+         from unittest import mock
+ 
+         project_dir = "/some/dogfood/project"
+-        slug = "some-dogfood-project"
++        # PLAN-182 W3 (S321): o slug e DERIVADO do resolvedor unico, nunca
++        # escrito a mao. A grafia hardcoded aqui era a antiga (sem o traco
++        # inicial) e cegava exatamente a mudanca que a cura faz — a mesma
++        # classe do red da S320 (fixture com literal vs adapter no
++        # resolvedor novo).
++        from _lib import runtime_paths as _rp
++
++        slug = _rp.project_slug(project_dir)
+         resolved = (
+             Path(os.environ["HOME"]) / ".claude" / "projects" / slug / "lessons"
+         )
 diff --git a/conftest.py b/conftest.py
 index cd15dc9..e3136a9 100644
 --- a/conftest.py

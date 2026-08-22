@@ -12,7 +12,7 @@
 Plans: PLAN-182
 Wave: W1-followup (cura estrutural do carrier + atribuição de projeto + fecho da classe M4)
 Patch: .claude/plans/PLAN-182/w1-followup-ceremony/S321-CEREMONY.patch
-Patch-sha256: 31938bed1bb3eea2893260328d6fb7433ecf4387aad05467974a3d5770d60d83
+Patch-sha256: e641c09da385d94b23e263f5e207ec57977f6e5028fcf8398fd5bb3ee932b813
 Anchor-SHA: <PREENCHER-NA-ASSINATURA — `git rev-parse HEAD`>
 Data: <PREENCHER-NA-ASSINATURA>
 
@@ -43,6 +43,7 @@ Scope:
   - .claude/hooks/check_notification.py
   - .claude/hooks/check_tier_policy_misrouting_24h.py
   - .claude/scripts/lessons.py
+  - .claude/scripts/tests/test_lessons_verified_render.py
   - conftest.py
   - tests/unit/test_runtime_state_sandbox_confinement.py
 <!-- END SIGNED SCOPE -->
@@ -53,7 +54,7 @@ signer (`.claude/sentinel-signers.txt` + o registry YAML do ADR-121). Nenhum
 path acima é kernel (`check_arbitration_kernel._KERNEL_PATHS`): este sentinel
 sozinho basta, sem `CEO_KERNEL_OVERRIDE`.
 
-## O que este pacote faz (11 arquivos, 4 mudanças de comportamento)
+## O que este pacote faz (12 arquivos, 4 mudanças de comportamento)
 
 ### 1. Fecha a janela do carrier — estruturalmente, não no perímetro
 
