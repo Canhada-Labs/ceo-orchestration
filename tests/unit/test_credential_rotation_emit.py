@@ -29,8 +29,10 @@ typing.Optional/Union, TestEnvContext for env isolation.
 
 from __future__ import annotations
 
+import atexit
 import datetime as dt
 import json
+import os
 import sys
 import unittest
 from pathlib import Path
@@ -48,6 +50,36 @@ from _lib.testing import TestEnvContext  # noqa: E402
 # import-time trust-root snapshot (_lib.trusted_env.ORIGINAL_CEO_ENV). Tests
 # drive that snapshot via ``self._set_snapshot(...)`` — NOT live os.environ.
 _OVERRIDE_VAR = "CEO_CREDENTIAL_BLOCK_EMERGENCY_OVERRIDE"
+
+# PLAN-182 W1 follow-up — neutralise the ADR-001 whole-directory carrier at
+# IMPORT time, restore it only on process exit.
+#
+# `_lib.runtime_paths.runtime_state_dir()` honours CLAUDE_PROJECT_DIR_NATIVE
+# above the isolated HOME, and `TestEnvContext` does not clear it. Under pytest
+# the repo-root conftest already handles this; `python -m unittest` never loads
+# a conftest, and under that runner an ambient carrier sent this module's
+# fixture writes — and the audit lock/state the teardown flushes — into live
+# state.
+#
+# Restoring it any earlier than process exit does NOT work, and each variant was
+# measured against an external canary directory:
+#
+#   pytest_sessionfinish                      -> canary ['audit-log.lock', 'state']
+#   patch.dict stopped before base tearDown   -> canary 2 entries
+#   single-key restore after base tearDown    -> canary 2 entries
+#   pop at import + atexit (this)             -> canary EMPTY
+#
+# Every early variant loses for the same reason: writes still happen after the
+# chosen point (session-fixture teardown, spool flush, lock release, shutdown
+# hooks). `atexit` is the one place with no writes left behind it. This mirrors
+# the identical treatment in the repo-root `conftest.py`.
+_SAVED_NATIVE_CARRIER = os.environ.pop("CLAUDE_PROJECT_DIR_NATIVE", None)
+if _SAVED_NATIVE_CARRIER is not None:
+    atexit.register(
+        os.environ.__setitem__,
+        "CLAUDE_PROJECT_DIR_NATIVE",
+        _SAVED_NATIVE_CARRIER,
+    )
 
 
 def _iso_n_days_ago(days: int) -> str:
@@ -85,10 +117,23 @@ class _EmitCapture:
 class TestCredentialRotationEmit(TestEnvContext):
     def setUp(self) -> None:
         super().setUp()
+        # PLAN-182 W1: CLAUDE_PROJECT_DIR_NATIVE (the ADR-001 whole-directory
+        # override) outranks the isolated HOME inside runtime_state_dir(), and
+        # TestEnvContext does not clear it. The repo-root conftest strips it at
+        # import time, but `python -m unittest tests.unit....` never loads a
+        # conftest — under that runner an ambient carrier would point the
+        # fixture below at LIVE state and _write_rotation would overwrite a real
+        # credential-rotation.json. Neutralise it here too; patch.dict restores
+        # the ambient value on cleanup.
         # Set up a fake credential-rotation.json in the isolated HOME.
+        # PLAN-182 W1: resolve through the SAME single resolver the adapter
+        # uses (_lib.runtime_paths). A literal path here decouples the fixture
+        # from the code under test — the adapter reads <native-slug>/ while the
+        # fixture writes ceo-orchestration/, so no rotation record is ever
+        # found and every emit assertion sees an empty capture list.
+        from _lib import runtime_paths
         self.rotation_log = (
-            self.home_dir / ".claude" / "projects"
-            / "ceo-orchestration" / "credential-rotation.json"
+            runtime_paths.runtime_state_dir() / "credential-rotation.json"
         )
         self.rotation_log.parent.mkdir(parents=True, exist_ok=True)
         # Activate live adapter + credential env var so _activation_check

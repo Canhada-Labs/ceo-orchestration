@@ -26,15 +26,28 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import sys as _sys
 import tarfile
 import tempfile
 from pathlib import Path
+from typing import Dict, Set
 
 import pytest
 
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SCRIPT = _REPO_ROOT / "scripts" / "install-npm.sh"
+
+# `npm/` is a single tree shared by every worker. The fixture below is autouse,
+# so under `pytest -n auto` a help/arg test could restore or delete files while
+# a build/smoke worker is still staging into the same directory. Serialise both
+# the script run and the restore through one cross-process lock. (The CI job
+# runs `pytest tests/integration/ -v --tb=short` with no `-n`, so this guards
+# the local parallel invocation.)
+_sys.path.insert(0, str(_REPO_ROOT / ".claude" / "hooks"))
+from _lib.filelock import FileLock  # noqa: E402
+
+_NPM_TREE_LOCK = Path(tempfile.gettempdir()) / "ceo-npm-tree.lock"
 
 
 def _have(cmd: str) -> bool:
@@ -50,33 +63,103 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def clean_npm_dir():
-    """Snapshot + restore npm/ dir because install-npm.sh stages source
-    files *into* npm/ and leaves them behind after a successful run.
+    """Restore ``npm/`` to its EXACT pre-test bytes.
 
-    We don't want subsequent tests (or subsequent pytest invocations) to
-    pick up stale staged content — so we capture the pre-test tarball
-    list and clean anything added by the test.
+    ``install-npm.sh`` stages source files *into* ``npm/``. It also
+    OVERWRITES tracked files that were already there — ``npm/README.md``
+    receives the stale staging copy and ``npm/SHA256SUMS.txt`` gets a line
+    appended.
+
+    The previous implementation snapshotted only entry NAMES and skipped
+    everything already present (``if entry.name in before: continue``), so
+    it was blind to MODIFICATION of existing files. A run therefore
+    reverted the reviewed ``npm/README.md`` to an older version while the
+    test still reported green, and left ``verify-counts.sh`` exiting 1 with
+    a version-drift error — the S288 GA-F3 regression, re-entering through
+    the test suite instead of through the release script.
+
+    The contract is now stated positively (``npm/`` ends byte-identical to
+    how it started) rather than as a denylist of names to delete, and the
+    fixture is ``autouse`` so a test added later cannot silently opt out of
+    it. Bounded by construction: ``npm/`` is ~48 KB of tracked files.
     """
     npm_dir = _REPO_ROOT / "npm"
-    before = set()
+    # Acquire BEFORE the snapshot and hold through the test and the restore.
+    # Taking it only around the restore (the first version of this fixture) did
+    # not serialise anything that mattered: the snapshot and every
+    # `_run_script()` call still ran unlocked, so a worker could stage into
+    # `npm/` while another was snapshotting or restoring it. The whole
+    # snapshot -> run -> restore cycle is the critical section.
+    _lock = FileLock(str(_NPM_TREE_LOCK), timeout=600.0)
+    _lock.acquire()
+    try:
+        yield from _npm_tree_guarded(npm_dir)
+    finally:
+        _lock.release()
+
+
+def _npm_tree_guarded(npm_dir):
+    """Snapshot, hand the tree to the test, then restore it byte-for-byte."""
+    # `paths_before` records EXISTENCE, `files_before` records recoverable
+    # CONTENT. They are separate on purpose: a pre-existing file we cannot read
+    # (mode 000, for instance) has no bytes to restore, but it must still be
+    # recognised as pre-existing — folding the two together would let teardown
+    # classify it as "appeared during the test" and delete a developer's file.
+    paths_before: Set[Path] = set()
+    files_before: Dict[Path, bytes] = {}
+    dirs_before: Set[Path] = set()
     if npm_dir.exists():
-        before = {p.name for p in npm_dir.iterdir()}
+        for root, _dirnames, filenames in os.walk(npm_dir):
+            rootp = Path(root)
+            dirs_before.add(rootp)
+            for fn in filenames:
+                fp = rootp / fn
+                paths_before.add(fp)
+                try:
+                    files_before[fp] = fp.read_bytes()
+                except OSError:
+                    # Unreadable pre-existing file: recorded in paths_before,
+                    # so it is never deleted; simply not restorable.
+                    pass
     yield npm_dir
-    if npm_dir.exists():
-        # Remove any *.tgz created and any staged dirs that weren't present
-        # before the test ran (scripts/, templates/, .claude/, SPEC/, etc.).
-        _STAGED_NAMES = {"scripts", "templates", ".claude", "SPEC",
-                         "VERSION", "LICENSE", "README.md", "PROTOCOL.md"}
-        for entry in npm_dir.iterdir():
-            if entry.name in before:
-                continue
-            if entry.suffix == ".tgz" or entry.name in _STAGED_NAMES:
-                if entry.is_dir():
-                    shutil.rmtree(entry, ignore_errors=True)
-                else:
-                    entry.unlink(missing_ok=True)
+    if not npm_dir.exists():
+        return
+    _restore_npm_tree(npm_dir, paths_before, files_before, dirs_before)
+
+
+def _restore_npm_tree(npm_dir, paths_before, files_before, dirs_before):
+    """Bring ``npm/`` back to the snapshot taken before the test ran."""
+
+    # 1. Delete every file that appeared during the test (staged sources,
+    #    *.tgz, *.tgz.sha256 — the last one the old denylist never matched).
+    appeared_dirs = []
+    for root, _dirnames, filenames in os.walk(npm_dir):
+        rootp = Path(root)
+        if rootp not in dirs_before:
+            appeared_dirs.append(rootp)
+        for fn in filenames:
+            fp = rootp / fn
+            if fp not in paths_before:
+                try:
+                    fp.unlink()
+                except OSError:
+                    pass
+
+    # 2. Remove directories that did not exist before (deepest first).
+    for d in sorted(appeared_dirs, key=lambda x: len(x.parts), reverse=True):
+        shutil.rmtree(d, ignore_errors=True)
+
+    # 3. Restore any pre-existing file whose bytes the test changed. This
+    #    is the half the name-based fixture was missing.
+    for fp, data in files_before.items():
+        try:
+            if not fp.exists() or fp.read_bytes() != data:
+                fp.parent.mkdir(parents=True, exist_ok=True)
+                fp.write_bytes(data)
+        except OSError:
+            pass
 
 
 def _run_script(*args: str, timeout: float = 120.0, env_extra=None):
