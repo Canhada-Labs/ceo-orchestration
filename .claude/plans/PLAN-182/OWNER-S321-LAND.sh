@@ -67,12 +67,47 @@ $(printf '  %s\n' $COLLIDE)
   O patch aterrissaria sobre conteudo diferente do assinado.
   Commite ou reverta esses arquivos antes do land."
 fi
-if [[ -n "$(cat "$DIRTY_FILE")" ]]; then
-  printf '  \033[33mNOTA\033[0m arvore tem mudancas fora do patch (esperado: o\n'
-  printf '        sentinel preenchido + o .asc). Nenhuma colide com o patch:\n'
-  sed 's/^/          /' "$DIRTY_FILE"
+# Nao basta "nao colide com o patch". Achado P1 do pair-rail (S321), e ele
+# se MATERIALIZOU no land real: um path GUARDADO sujo e fora do Scope
+# assinado passava com um mero aviso, e o script reportava LAND OK com uma
+# edicao canonica nao-assinada misturada na mesma arvore. A tolerancia agora
+# e uma ALLOWLIST fechada — os artefatos da propria cerimonia — e qualquer
+# outro path guardado sujo ABORTA.
+CEREMONY_OK=(
+  "$SENTINEL"
+  "$SENTINEL.asc"
+  "$PATCH"
+)
+GUARDED_DIRTY=""
+OTHER_DIRTY=""
+while IFS= read -r f; do
+  [[ -z "$f" ]] && continue
+  skip=0
+  for allowed in "${CEREMONY_OK[@]}"; do
+    [[ "$f" == "$allowed" ]] && skip=1 && break
+  done
+  [[ "$skip" == "1" ]] && continue
+  # Espelha a guard list do check_canonical_edit.py para os prefixos que
+  # importam aqui. Conservador de proposito: na duvida, ABORTA.
+  case "$f" in
+    .claude/hooks/*|.claude/scripts/lessons.py|.claude/scripts/prune-lessons.py     |.claude/scripts/lesson-restore.py|.claude/scripts/lesson_ranker.py     |.claude/adr/ADR-*.md|SPEC/*|.github/workflows/*|.claude/settings.json     |.claude/agents/*.md|.claude/policies/*|.claude/dispatcher/*     |PROTOCOL.md|scripts/install.sh|scripts/upgrade.sh|.claude/**/conftest.py)
+      GUARDED_DIRTY+="  $f"$'\n' ;;
+    *)
+      OTHER_DIRTY+="  $f"$'\n' ;;
+  esac
+done < "$DIRTY_FILE"
+
+if [[ -n "$GUARDED_DIRTY" ]]; then
+  die "path(s) CANONICOS sujos fora do Scope assinado:
+$GUARDED_DIRTY  Um land com edicao guardada nao-assinada na arvore mistura o que foi
+  autorizado com o que nao foi. Commite-os SEPARADAMENTE antes, ou
+  inclua-os no Scope e re-assine."
 fi
-ok "nenhum arquivo do patch esta sujo"
+if [[ -n "$OTHER_DIRTY" ]]; then
+  printf '  \033[33mNOTA\033[0m mudancas nao-guardadas fora do patch (toleradas):\n'
+  printf '%s' "$OTHER_DIRTY"
+fi
+ok "nenhum arquivo do patch sujo; nenhum path canonico sujo fora do Scope"
 
 # ---------------------------------------------------------------------------
 step "G1 — assinatura GPG do sentinel"
