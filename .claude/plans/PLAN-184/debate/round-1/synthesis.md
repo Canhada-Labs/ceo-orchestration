@@ -16,6 +16,23 @@ plan_status_after: draft (o flip para `reviewed` e do Owner)
 > reverificada contra o disco antes de entrar aqui; onde a critica errou,
 > o pushback esta registrado com o comando que o sustenta. Nenhum numero
 > nesta sintese veio de memoria.
+>
+> **⚠️ Limitacao declarada do INPUT desta sintese (nao e achado do
+> debate — e um fato sobre o material que chegou ao sintetizador).**
+> O payload de criticas recebido carregava **dois** rotulos, `Critic-A`
+> (8 itens) e `Critic-B` (8 itens), e **terminou TRUNCADO no meio do
+> ultimo item do `Critic-B`** — a frase corta em *"E \"re-run\" e"* e o
+> array JSON nunca fecha. Consequencias, declaradas em vez de
+> silenciadas: (i) o item P2 final do `Critic-B` foi sintetizado **so
+> ate onde era legivel**, e a parte faltante foi **reconstruida por
+> verificacao independente contra o disco** (`grep workflow_dispatch`,
+> `coverage.yml:18`), nao por adivinhacao do texto cortado — ele
+> convergiu com o P2 do `Critic-A`, e e o achado **C1**; (ii) **se
+> houve um terceiro critico a montante, ele NAO chegou aqui.** Uma
+> sintese que reivindicasse cobertura completa sobre input truncado
+> seria exatamente a classe que este repo caca (*instrumento verde cuja
+> pergunta envelheceu*), entao o escopo real fica escrito: **esta
+> sintese cobre 16 itens de 2 rotulos, um deles parcial.**
 
 ## Veredito
 

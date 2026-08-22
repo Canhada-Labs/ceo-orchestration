@@ -1140,9 +1140,18 @@ a rede de segurança que torna a A1 aceitável.
 ## Debate
 
 **Round 1 — 2026-08-21. Veredito: ADJUST_PROCEED.** Síntese completa em
-`.claude/plans/PLAN-184/debate/round-1/synthesis.md` (dois críticos,
-anonimizados por `Critic-A`/`Critic-B` conforme DEBATE-SCHEMA §13.2).
-Toda claim foi reverificada contra o disco antes de entrar no plano.
+`.claude/plans/PLAN-184/debate/round-1/synthesis.md`, anonimizados por
+`Critic-A`/`Critic-B` conforme DEBATE-SCHEMA §13.2. Toda claim foi
+reverificada contra o disco antes de entrar no plano.
+
+**Limitação declarada do input da síntese:** o material que chegou ao
+sintetizador carregava **dois** rótulos (8 itens cada) e **terminou
+truncado no meio do último item do `Critic-B`**. Esse item foi
+reconstruído por verificação independente contra o disco — convergiu com
+o P2 do `Critic-A` e virou o achado C1 — e a síntese declara seu escopo
+real (**16 itens, 2 rótulos, um parcial**) em vez de reivindicar
+cobertura completa. Se houve um terceiro crítico a montante, ele não
+chegou à síntese.
 
 **Seis achados P0**, todos com cura óbvia e todos já incorporados acima —
 por isso o veredito não é BLOCK:
