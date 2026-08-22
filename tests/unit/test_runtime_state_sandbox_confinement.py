@@ -38,14 +38,17 @@ the child's audit surface at the parent's tmpdir and the canary would come back
 empty whether or not the cure exists — a vacuous pass. The child must start as a
 developer's shell would, carrying only the carrier under test.
 
-``test_debt_marker_carrier_absent_from_isolation_enumeration`` is deliberate: the
-cure currently lives in the repo-root ``conftest.py`` (import time), because the
-structural fix belongs in ``_lib/test_isolation.AUDIT_DIR_CARRIERS`` — a
+``test_debt_marker_isolation_layer_does_not_yet_neutralise_carrier`` is
+deliberate: the cure currently lives in the repo-root ``conftest.py`` (import
+time), because the structural fix belongs in ``_lib/test_isolation`` — a
 canonical-guarded path that lands through the Owner's signed-edit ceremony. It
-asserts on the enumeration itself, so it goes red the day that fix lands, which
-is the signal to delete it along with the conftest line. An earlier draft shelled
-out to a bare ``python -c`` instead; that bypasses pytest isolation entirely and
-would have stayed green forever, promising a signal it could never send.
+asserts BEHAVIOUR (does importing the isolation layer neutralise an ambient
+carrier?) rather than any particular name, because two earlier drafts each
+promised a signal they could not send: one shelled out to a bare ``python -c``
+that bypasses pytest isolation; the other asserted absence from
+``AUDIT_DIR_CARRIERS``, while the prepared cure deliberately uses a SEPARATE
+tuple kept out of ``ALL_AUDIT_CARRIERS`` (membership there means
+snapshot+restore, not neutralisation).
 
 Discipline: stdlib-only, Python >= 3.9, ``from __future__ import annotations``,
 ``TestEnvContext`` for env isolation (the repo's hard-fail hygiene gate rejects a
@@ -194,29 +197,52 @@ class TestRuntimeStateSandboxConfinement(TestEnvContext):
             "vacuous (entries: %s)" % (self._canary_entries(),),
         )
 
-    def test_debt_marker_carrier_absent_from_isolation_enumeration(self) -> None:
+    def test_debt_marker_isolation_layer_does_not_yet_neutralise_carrier(self) -> None:
         """Records that the cure is perimetral, and fails when it stops being.
 
         Confinement currently depends on the repo-root ``conftest.py`` popping
-        the carrier at import time. The structural fix is to add it to
-        ``_lib.test_isolation.AUDIT_DIR_CARRIERS`` so the isolation layer points
-        it at the session tmpdir like every other carrier — a canonical-guarded
-        edit that lands through the Owner's signed-edit ceremony.
+        the carrier at import time. The structural fix belongs in
+        ``_lib/test_isolation`` — a canonical-guarded path that lands through
+        the Owner's signed-edit ceremony.
 
-        Asserting on the enumeration itself is what makes this marker honest: an
-        earlier version shelled out to a bare ``python -c``, which bypasses
-        pytest isolation entirely and would have kept resolving to the external
-        directory forever — green after the fix landed, never signalling
-        anything. When this case goes red, delete it together with the conftest
-        cure.
+        This marker asserts BEHAVIOUR, not a name, and that distinction is the
+        whole point. Two earlier drafts both promised a signal they could never
+        send:
+
+        * the first shelled out to a bare ``python -c``, which bypasses pytest
+          isolation entirely and would resolve to the external dir forever;
+        * the second asserted ``CLAUDE_PROJECT_DIR_NATIVE not in
+          AUDIT_DIR_CARRIERS`` — but the prepared cure
+          (``PLAN-182/w1-followup-ceremony/PROPOSED-PATCH.md``) deliberately
+          introduces a SEPARATE tuple kept OUT of ``ALL_AUDIT_CARRIERS``,
+          because membership there means snapshot+restore, not neutralisation.
+          That assertion would stay green after the fix landed.
+
+        So the question asked here is the only one that survives a change of
+        implementation: *does importing the isolation layer neutralise an
+        ambient carrier?* Today it does not. When it does — by whatever
+        mechanism — this goes red, and that is the signal to delete it together
+        with the conftest pop.
         """
-        from _lib import test_isolation
-
-        self.assertNotIn(
-            _NATIVE_VAR, test_isolation.AUDIT_DIR_CARRIERS,
-            "%s is now in AUDIT_DIR_CARRIERS — the structural fix landed. "
-            "Remove the import-time pop in conftest.py and delete this case."
-            % _NATIVE_VAR,
+        script = (
+            "import os, sys;"
+            "sys.path.insert(0, %r);"
+            "os.environ['CLAUDE_PROJECT_DIR_NATIVE'] = %r;"
+            "import _lib.test_isolation;"
+            "print(os.environ.get('CLAUDE_PROJECT_DIR_NATIVE'))"
+            % (str(_HOOKS), str(self._outside))
+        )
+        proc = subprocess.run(
+            [sys.executable, "-c", script],
+            capture_output=True, text=True, timeout=60, cwd=str(REPO_ROOT),
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr[-1000:])
+        self.assertEqual(
+            proc.stdout.strip(), str(self._outside),
+            "importing _lib.test_isolation now neutralises the carrier — the "
+            "structural fix has landed. Remove the import-time pop in "
+            "conftest.py, the one in test_credential_rotation_emit.py, and "
+            "delete this case.",
         )
 
 
