@@ -60,10 +60,17 @@ in-repo do que a W1 vai fazer** — e também a fonte de uma armadilha que a
 
 Ressalva registrada na própria medição: **os 61 de código estão
 SUBESTIMADOS** — parte deles morreu em `queued` durante a janela de corte
-de billing e contabilizou 0 min.
+de billing e contabilizou 0 min. **Debate r1 falsificou essa ressalva
+como explicação suficiente — ver a nota de reconciliação abaixo.**
 
 E o denominador bate com o comportamento do repositório: **236 commits em
-`main` no período, 153 só-docs (64,8%) e 83 tocando código.**
+`main` no período, 153 só-docs (64,8%) e 83 tocando código.** Este
+bucket "tocando código" **contém a classe MISTA** (docs *e* código no
+mesmo commit) — censo independente rodado no debate r1, janela
+`08-01..08-22`, `--first-parent main`, classificado por prefixo de path:
+**239 commits = 152 só-docs + 67 MISTOS (28%) + 20 só-código**. A classe
+mista não muda a economia, mas **é a fronteira que o instrumento de
+aceite tem de exercer** (AC-2b).
 
 **Leitura honesta: 77,7% do custo de um runner de 8 núcleos é gasto
 rodando 4 suítes de teste pesadas contra commits que não mudaram uma
@@ -90,7 +97,71 @@ tests/formal_verification/ -v --tb=short` (`validate.yml:1163`), também
 sem `-n`. Os dois instalam **só** `pytest==8.*`, sem `pytest-xdist`.
 **São 8 núcleos alugados para rodar um processo.**
 
+### Nota de reconciliação (debate r1, P0) — esta tabela NÃO decide bucket
+
+Contas rodadas no debate, todos os insumos vindos deste plano:
+
+```
+tabela por-job acima:  41,8 + 15,5 + 15,0 + 4,7 + 3,4 = 80,4 min/run
+167 x 80,4 = 13.426,8  vs 13.428 medido   -> bate no AGREGADO
+106 x 80,4 =  8.522,4  vs 10.407 medido   -> delta +1.884,6  (= 23,4 runs)
+ 61 x 80,4 =  4.904,4  vs  2.994 medido   -> delta -1.910,4  (= 23,8 runs)
+```
+
+Duas consequências, as duas ruins:
+
+1. **A tabela por-job é a média por run, não uma medição independente:**
+   `13.428 / 167 = 80,4`. Ela portanto **não carrega informação alguma**
+   sobre em qual bucket (só-docs × código) os minutos caíram.
+2. **A ressalva de `queued` acima não explica os deltas.** Se runs de
+   código tivessem perdido minutos morrendo em `queued`, o agregado
+   ficaria **abaixo** de 13.426,8. Ele não fica. Os deltas são quase
+   simétricos e opostos — isso é **redistribuição**, e a hipótese barata
+   a testar primeiro é **erro de classificação** de ~23-24 runs, não dois
+   efeitos independentes.
+
+É a **W0-US5**, e ela gateia os números da §2.
+
 ## 2. O escopo, tal como o Owner decidiu
+
+> ### ⚠️ Base de tempo canônica: **US$/dia-calendário** (debate r1, P0)
+>
+> A medição cobre **21 dias**; as projeções abaixo vinham rotuladas
+> "/mês"; a confirmação da W3 é uma janela de **7 dias**. Três bases, e
+> nenhuma regra de conversão — o gate ">20% de divergência reabre o
+> plano" (AC-6) dispararia **pelas unidades**, antes de qualquer efeito
+> real do corte. Contas que mostram o tamanho do erro:
+>
+> ```
+> custo só-docs  228,95 (21d)  ->  327,07 por 30 dias
+> A1             193,97 (21d)  ->  277,10 por 30 dias
+> janela W3 de 7d contra "/mês": razão 4,29x
+> fatura esperada em 7 dias se o corte for 224/mês com residual 90/mês:
+>   90/30*7 = US$ 21,00   (contra "US$ 224/mês" — 91% de "divergência")
+> ```
+>
+> **Regra congelada (W0-US4):** todo número de custo deste plano é
+> expresso em **US$/dia-calendário**; a conversão para qualquer janela é
+> `US$/dia × dias-da-janela`. Rótulos "/mês" abaixo ficam entre
+> parênteses como *leitura de 30 dias*, nunca como o número que fecha um
+> AC.
+>
+> ### ⚠️ As magnitudes abaixo são **NÃO-DERIVADAS** até a W0-US5
+>
+> Elas repousam em **duas bases de custo por-run mutuamente
+> inconsistentes** (nota de reconciliação da §1):
+>
+> ```
+> A1 base MEDIDA  (228,95 - governança 15*106*0,022) = 193,97  <- "US$ 194"
+> A1 base TABELA  (heavy 65,4 * 106 * 0,022)         = 152,51  <- 21% a menos
+> A2 base TABELA  (8,1 * 167 * 0,022)                =  29,76  <- "US$ 30"
+> sobreposição    (8,1 * 106 * 0,022)                =  18,89  <- "US$ 19"
+> ```
+>
+> **O que sobrevive às duas bases, e é o que autoriza o plano:** a
+> *direção*. A A1 é o termo dominante em qualquer leitura (US$ 194 ou
+> US$ 153), e 77,7% do custo cai em commits que não tocam código.
+> **O que não sobrevive:** a precisão da manchete. Ver **OQ-6**.
 
 **A1 — filtro de paths nos 4 jobs pesados.**
 `hook-tests-python-matrix`, `hook-tests-dual-rail`, `E2E integration
@@ -98,15 +169,28 @@ tests` e `Formal verification mutation harness` passam a rodar **somente
 quando o código muda**. O job `Governance, health, contamination,
 shellcheck` **continua rodando em TODO commit** — é ele que valida os
 `.md` (`check-claude-md-claims.py`, `verify-counts.sh`, staleness,
-contamination). Economia estimada: **US$ 194/mês**.
+contamination). Economia estimada: **US$ 9,24/dia** (`193,97 / 21`;
+leitura de 30 dias: US$ 277) na base MEDIDA, ou **US$ 7,26/dia**
+(`152,51 / 21`; 30 dias: US$ 218) na base TABELA. **NÃO-DERIVADA** até a
+W0-US5.
 
 **A2 — os 2 jobs que não paralelizam saem do runner pago.**
 `E2E integration tests` e `Formal verification mutation harness` trocam
 `runs-on: Ceo` por `runs-on: ubuntu-latest`. Economia estimada:
-**US$ 30/mês**.
+**US$ 1,42/dia** (`29,76 / 21`; leitura de 30 dias: US$ 43) — base
+TABELA, **NÃO-DERIVADA**.
 
-**Projeção declarada na medição: US$ 224/mês de corte (71%), custo
-residual ~US$ 90/mês.**
+**Projeção declarada na medição: US$ 224 na janela de 21 dias =
+US$ 10,67/dia de corte (71%); custo residual US$ 90/21d =
+US$ 4,29/dia.** *(Os rótulos "/mês" do texto original eram totais de 21
+dias mal-rotulados; a conversão correta para 30 dias é 224/21×30 =
+US$ 320 e 90/21×30 = US$ 129.)*
+
+**Pressuposto que a projeção carrega e que o AC-6 tem de preservar:** a
+baseline de 13.428 min **já reflete** 47% de runs cancelados
+(`concurrency.cancel-in-progress: true`, F6). Se a rota escolhida perder
+o cancelamento, a baseline deixa de ser comparável e o AC-6 mede outra
+coisa — é Check da W1 nos dois ramos.
 
 ### Ressalva de composição: A1 e A2 se sobrepõem (DERIVADA, a confirmar)
 
@@ -121,9 +205,10 @@ nos ~61 runs de código, e a economia marginal da A2 cai para
 Isto é **derivação a partir dos componentes da medição, não uma medição
 nova** — está aqui como claim a confirmar na W3, não como fato. A
 consequência prática é de **ordem e expectativa**, não de escopo: a A1
-entrega a quase totalidade do valor; a A2 vale ~US$ 11/mês marginais e
-**compra um risco de timeout** (§5). O AC-6 fecha isso com a fatura real,
-que é o único número que o Owner vai conferir.
+entrega a quase totalidade do valor; a A2 vale **US$ 0,52/dia**
+(`11 / 21`; leitura de 30 dias: US$ 16) marginais e **compra um risco de
+timeout** (§5). O AC-6 fecha isso com a fatura real, que é o único número
+que o Owner vai conferir — **na base US$/dia**.
 
 ## 3. O risco central: filtro que não vê o alvo
 
@@ -147,10 +232,35 @@ default decide se o teste roda. Daí a decisão de arquitetura desta wave:
 >   estiverem na lista". Um diretório novo não está na lista de ignorados,
 >   logo **roda**. O default para o desconhecido é *testar*.
 
-Isso não substitui a prova. O AC-1/AC-2 exigem **controle positivo nas
-DUAS direções**, e o AC-4 exige prova de inércia **por entrada** da
-denylist — porque a lista curta que "parece óbvia" já está errada, como a
-§4 mostra.
+Isso não substitui a prova. O AC-1/AC-2/AC-2b exigem **controle positivo
+em TRÊS pontos** — só-código, só-docs e a fronteira MISTA —, e o AC-4
+exige prova de inércia **por entrada** da denylist, porque a lista curta
+que "parece óbvia" já está errada, como a §4 mostra.
+
+### O que esta doutrina diz sobre o próprio repositório (debate r1)
+
+A doutrina acima **indicta o estado atual do repo**, e isso fica escrito
+em vez de silencioso. Medido:
+
+```
+$ grep -rn "paths-ignore" .github/ templates/     ->  zero ocorrências
+workflows com `paths:` (allowlist): 13
+  actionlint, adapter-live, benchmarks, chaos, coverage, formal-verify,
+  mcp-smoke, otel-smoke, perf-profile, red-team, shadow-ci,
+  smoke-install, translations-drift
+desses, combinando `push:` + `paths:` corretamente: 11
+  (todos acima menos coverage.yml e shadow-ci.yml, que são PR-only)
+```
+
+Duas leituras, as duas honestas:
+
+1. **`paths-ignore` não tem UM precedente in-repo.** O mecanismo que esta
+   wave escolhe é o único que nenhum gate deste repositório exercita
+   hoje. Isso não o torna errado — torna a W1 a primeira execução dele
+   aqui, e é razão para o controle positivo ser mecânico, não visual.
+2. **13 gates vivos são allowlists**, incluindo `red-team.yml` e
+   `coverage.yml`. Ou eles são risco aceito, ou são follow-up. **Não é
+   suposição deste plano: é a OQ-9.**
 
 ## 4. Contraexemplo verificado: `docs/**` NÃO é inerte
 
@@ -183,6 +293,38 @@ Consequências, as duas ruins:
 **Portanto o conjunto da denylist é DERIVADO, nunca lembrado** (a
 doutrina de conjunto-fechado deste repo: derive comportamentalmente,
 não por padrão de texto). É a W0-US2.
+
+### O mecanismo é EXISTÊNCIA, não conteúdo — e isso quebra a prova ingênua (debate r1, P0)
+
+O detector é `validate_file_ref` (`test_threat_model_coverage.py:199-215`):
+`target.is_file() or target.is_dir()`, mais um fallback de **prefixo**
+(`for child in parent.iterdir(): if child.name.startswith(name)`).
+**Nenhuma leitura de conteúdo.** Probe rodado no debate, contra o código
+real, num diretório descartável:
+
+```
+baseline      full: True   bare: True
+após MUTAÇÃO  full: True   bare: True    <- conteúdo destruído, VERDE
+após RENAME   full: False  bare: True    <- o fallback startswith salva o `bare`
+após DELETE   full: False  bare: False
+```
+
+(`full` = `.claude/adr/ADR-045-policy-as-code-engine.md`; `bare` =
+`.claude/adr/ADR-045`. O `docs/threat-model.md` cita **36** caminhos de
+ADR, nas duas formas.)
+
+**Consequência direta sobre a W0-US2:** a prova (b) escrita como "mutar
+um arquivo sob o caminho e rodar as suítes; verde ⇒ inerte"
+**declararia `.claude/adr/** ` INERTE** — e a regressão que esta §4 foi
+escrita para impedir passaria a ser invisível. A prova (b) tem de rodar
+**DELETE e RENAME**, e o `Check:` tem de exigir o **VERMELHO**, não o
+verde. A armadilha do prefixo é restrição na escolha do alvo: renomear
+`ADR-045-x.md` → `ADR-045-x-v2.md` mantém a referência `bare` verde, logo
+o alvo do teste tem de ser um cujo sumiço seja de fato observável.
+
+**Mesmo mecanismo, outra vítima:** `.github/**` também **passaria** na
+prova (b) — mutar um YAML deixa as quatro suítes verdes. Por isso
+`.github/**` é exclusão dura da denylist (AC-4), e não candidato.
 
 ### O que a governança continua cobrindo (e por que isso encolhe o risco)
 
@@ -297,6 +439,120 @@ um cancelamento **são cobrados**. Não desagreguei as causas e **não estou
 afirmando** que isso seja desperdício — está registrado como OQ-4, fora
 do escopo deste plano.
 
+---
+
+> Os fatos **F7..F11** entraram no debate round-1. Mesma regra: cada um
+> foi conferido com comando, e o comando está citado.
+
+**F7 — `integration-tests` é o único dos 4 pesados SEM bloco
+`permissions:` próprio: ele herda do nível do workflow.**
+
+```
+$ grep -n "permissions:" .github/workflows/validate.yml
+16:permissions:          <- nível do workflow (:16-17 = contents: read)
+1143:    permissions:     <- formal-verification
+1187:    permissions:     <- opus-4-7-profiler-smoke
+1414:    permissions:     <- hook-tests-dual-rail
+1449:    permissions:     <- hook-tests-python-matrix
+1514:    permissions:     <- hook-stdout-schema-oracle
+```
+
+`integration-tests` começa em `:1071` e vai de `timeout-minutes: 8`
+(`:1079`) **direto para `steps:`**. Num arquivo novo sem `permissions:`
+no nível do workflow, esse job passaria a rodar com o escopo **DEFAULT**
+do repositório para o `GITHUB_TOKEN` — um alargamento silencioso de
+privilégio, no meio de um plano de custo. E **nada vigia isso**:
+`grep -n permissions .claude/scripts/check-action-sha-drift.py` não
+devolve nada, e `actionlint` não exige presença de `permissions`.
+
+**Cura adotada (custo zero, e independe da rota):** dar ao
+`integration-tests` um bloco `permissions: contents: read` **próprio,
+ANTES do split**, para que ele não dependa de herança ao mudar de
+arquivo. Mais `permissions:` no nível do workflow novo, com Check.
+
+**F8 — `validate.yml` tem SETE jobs, não cinco.**
+
+```
+$ grep -n "^  [a-z0-9-]*:" .github/workflows/validate.yml
+20: validate | 1071: integration-tests | 1121: formal-verification-mutation-harness
+1178: opus-4-7-profiler-smoke | 1410: hook-tests-dual-rail
+1445: hook-tests-python-matrix | 1505: hook-stdout-schema-oracle
+```
+
+Os dois não citados até aqui — `opus-4-7-profiler-smoke` (`:1180`
+`runs-on: ubuntu-latest`, `timeout-minutes: 28`) e
+`hook-stdout-schema-oracle` (`:1509` `ubuntu-latest`, `timeout: 10`) —
+já rodam de graça e **FICAM onde estão**. O split move quatro jobs e
+deixa três. Está escrito porque um inventário errado é como um job some
+sem ninguém notar.
+
+**F9 — o precedente de filtro deste repo é `push:` + `paths:`, e
+`paths-ignore` não tem nenhum.** Números na §3. O molde a copiar para o
+gatilho é qualquer um dos 11 (`smoke-install.yml` e `red-team.yml` são os
+mais próximos em forma); o molde a copiar para **concorrência** é
+`coverage.yml:21-23` (`group: coverage-${{ github.ref }}` +
+`cancel-in-progress: true`); o molde para **recuperação** é
+`coverage.yml:18` (`workflow_dispatch:`); o molde para **auto-disparo** é
+`coverage.yml:11-14`, que inclui **o próprio arquivo** no `paths:`.
+
+**F10 — as superfícies derivadas que a Rota C move são QUATRO, e três
+delas não são vigiadas.** A afirmação anterior deste plano — "o único
+custo novo (F4) é uma linha, e é mecanicamente vigiado" — era falsa.
+
+| Superfície | O que quebra | Vigiado? |
+|---|---|---|
+| `docs/CTO-GUIDE.md:46` (`Workflows 22`) | contagem 22→23 | **SIM** — `verify-counts.sh:324-326,724`, tolerância 0 ⇒ build vermelho |
+| `README.md:8` (badge de CI → `validate.yml`) | o badge deixa de representar os 4 pesados: **fica verde com o pesado vermelho** | **NÃO** |
+| `.claude/adr/ADR-021:132` ("`validate.yml` with an 8-minute timeout") + `ADR-050:73-74` ("`validate.yml` adds `hook-tests-dual-rail`") | arquivo e (na W2) o próprio timeout mudam | **NÃO** |
+| `.github/workflows/GOVERNANCE-MAP.md` | precisa de linha nova | **NÃO** |
+
+E o GOVERNANCE-MAP **já está stale antes desta mudança**:
+
+```
+yml files: 22 | linhas de inventário no MAP: 20
+faltando no MAP: ['ownership-nightly.yml', 'supply-chain-watch.yml']
+```
+
+O badge é o item que dói: é exatamente a classe que este plano diz
+combater — *instrumento verde cuja pergunta envelheceu*. Cura na W1 (item
+`[P0]`, mesmo commit) e AC-10; o stale pré-existente do MAP é a **OQ-10**.
+
+**F11 — este repositório JÁ tem um `if:` de detecção de path que falha em
+silêncio, dentro do próprio arquivo que a W1 editaria.**
+`validate.yml:736-739`, no step `D1 pricing TBD guard`:
+
+```yaml
+        if: |
+          github.event_name == 'push' ||
+          (github.event_name == 'pull_request' &&
+           (contains(github.event.pull_request.changed_files, 'docs/provider-pricing.md') ||
+            contains(github.event.pull_request.changed_files, '.github/workflows/validate.yml')))
+```
+
+Leitura precisa (o debate corrigiu um exagero aqui): o primeiro termo é
+`github.event_name == 'push'`, então o step **roda em todo push** — ele
+não é um `if:` morto, é um `if:` morto **apenas na perna
+`pull_request`**. Nessa perna, `github.event.pull_request.changed_files`
+é a **contagem** de arquivos (um inteiro), não uma lista de caminhos, e o
+`contains()` nunca casa. *(Essa última parte é semântica do payload do
+GitHub e está NÃO-VERIFICADA por comando aqui — sem rede.)* Verificado
+por comando, e é o que fecha o argumento:
+
+```
+$ grep -rn "changed_files" .github/workflows/   -> só :738 e :739
+$ grep -rn "adapter-matrix" .github/workflows/  -> só a própria linha de comentário :730
+```
+
+O comentário `:729-731` diz "Mirrors adapter-matrix job's inline
+`contains()` approach" — **o job espelhado não existe mais**. Era
+invisível porque o F2 mede **zero** runs de `pull_request`.
+
+**Por que isto decide a §6:** é evidência in-repo, no arquivo-alvo, de
+que lógica de detecção de path escrita por nós apodrece em silêncio. É o
+argumento mais forte a favor da Rota C, e ele veio do próprio repositório
+— não de doutrina.
+
+
 ## 6. As duas rotas para a A1, com o custo verificado de cada uma
 
 O GitHub **não tem `paths:` por job**. Ou o filtro sobe para o nível do
@@ -321,6 +577,22 @@ também o job de governança, que o escopo manda preservar.
   emenda produz exatamente o falso-verde que o AC-2 existe para pegar.
 - O detector tem de rodar em `ubuntu-latest` (grátis); rodá-lo no `Ceo`
   reintroduz custo por run.
+- **Contra, e é o achado P0 do debate r1 — `paths` × `concurrency`.** Sob
+  a Rota B, todo push (inclusive só-docs) **ainda cria** um run de
+  `validate.yml`, entra no **mesmo** grupo (`validate-${{ github.ref }}`,
+  `:11-13`, e 167/167 dos runs vêm de `push` em `main`, F2) e **cancela o
+  run em voo** do push de código anterior — e então pula os 4 pesados.
+  Resultado: os jobs pesados do commit de código **nunca terminam e nada
+  fica vermelho**. Não é hipotético: 47% dos runs da janela terminaram
+  `cancelled` (F6). **Cura obrigatória no ramo B:** ou
+  `cancel-in-progress: false`, ou os 4 pesados ganham
+  `concurrency:` de **job**, com grupo próprio, para que um push filtrado
+  não possa cancelar um run pesado em voo. É Check da W1.
+- **Contra — a semântica tem de ser `all()`, não `any()`.** A classe
+  MISTA é 28% dos commits da janela (§1). Um detector que pule quando
+  *algum* path casa a denylist salta os 4 pesados em mais de um quarto
+  dos commits e passa em AC-1 e AC-2, que só exercem os polos puros. É
+  Check da W1 e o AC-2b.
 
 **Rota C — mover os 4 pesados para um workflow novo com
 `on: {push, pull_request}` + `paths-ignore:` nativo.**
@@ -332,19 +604,51 @@ também o job de governança, que o escopo manda preservar.
 - Contra, e agora quantificado: **+1 arquivo ⇒ `docs/CTO-GUIDE.md:46`
   22→23 no mesmo commit** (F4); boilerplate duplicado (checkout
   SHA-pinado, `setup-python` pinado, pin do pytest, kill-switch
-  `if: vars.CEO_SOTA_DISABLE != '1'`); e **o `concurrency.group` tem de
+  `if: vars.CEO_SOTA_DISABLE != '1'`, **e `permissions:` no nível do
+  workflow** — F7, o item que faltava nesta lista e que o `integration-tests`
+  hoje só tem por herança); e **o `concurrency.group` tem de
   ser DISTINTO** de `validate-${{ github.ref }}` — grupos de concorrência
   são globais entre workflows, e reusar o nome faria os dois workflows
   cancelarem um ao outro.
-- O boilerplate duplicado **é vigiado**: o step
+- **Contra — `cancel-in-progress` não vem de graça (debate r1).** O
+  default é `false`. Um arquivo novo que declare só `group:` faz **todo
+  run pesado superado rodar até o fim**: os minutos **sobem** exatamente
+  nos pushes de código, que são os que o filtro preserva, e a baseline de
+  13.428 min (que já reflete 47% de cancelamento, F6) deixa de ser
+  comparável com o pós-corte do AC-6. Molde in-repo pronto:
+  `coverage.yml:21-23`.
+- **Contra — o arquivo novo tem de disparar sobre SI MESMO.** Uma
+  mudança que estreite o próprio filtro, ou quebre a invocação de pytest,
+  entraria em `main` sem que o workflow pesado jamais rodasse. Molde
+  in-repo: `coverage.yml:11-14` já inclui
+  `".github/workflows/coverage.yml"` no seu próprio `paths:`.
+- **Contra — as superfícies derivadas são QUATRO, não uma** (F10):
+  `CTO-GUIDE:46` (vigiada), mais `README.md:8` (badge), `ADR-021:132` +
+  `ADR-050:73-74`, e `GOVERNANCE-MAP.md` — **as três últimas não são
+  vigiadas por nada**, logo o drift ali é silencioso.
+- O boilerplate duplicado **é parcialmente vigiado**: o step
   `Action SHA-pin compliance` roda `check-action-sha-drift.py --offline`
   (`validate.yml:413`) e o step `actionlint` cobrem `.github/workflows/`
-  inteiro, logo o arquivo novo nasce sob os mesmos gates.
+  inteiro, logo o arquivo novo nasce sob esses gates. **Mas nenhum dos
+  dois verifica presença de `permissions:`** (F7) — conferido por grep.
 
-**Recomendação do CEO: Rota C.** O filtro *é* a superfície de risco, e a
-implementação do substrato bate a nossa; o único custo novo (F4) é uma
-linha, e é mecanicamente vigiado. A Rota B fica como rota nomeada para o
-dia em que alguém ligar required checks (F1).
+**Recomendação do CEO: Rota C — mantida, e o debate a reforçou.** O
+filtro *é* a superfície de risco, e a implementação do substrato bate a
+nossa. A evidência decisiva veio do próprio arquivo-alvo: o **F11** mostra
+um `if:` de detecção de path escrito por nós que já falha em silêncio na
+perna `pull_request`, dentro do `validate.yml`, com um comentário que cita
+um job que não existe mais. E a Rota B acumulou no debate o achado de
+cancelamento cruzado (`paths` × `concurrency`), que a Rota C não tem.
+
+O que mudou na contabilidade da recomendação: **o custo novo não é "uma
+linha mecanicamente vigiada"** — são quatro superfícies, três delas não
+vigiadas (F10). A recomendação sobrevive porque esse custo é de
+*documentação*, pago uma vez e no mesmo commit, contra um risco de
+*correção* que se paga a cada push.
+
+A Rota B fica como rota nomeada para o dia em que alguém ligar required
+checks (F1) — **e agora com o preço na etiqueta**: migrar C→B exige
+resolver `paths` × `concurrency` antes (OQ-5).
 
 **A W1 escolhe UM ramo na abertura e registra qual.** Os `Check:` das
 unidades estão escritos de modo que os **dois** ramos sejam executáveis —
@@ -363,11 +667,27 @@ lidas de conhecimento e não confirmadas neste repositório:
    repositório — daí a exigência de nome distinto na Rota C (a
    recomendação é segura em qualquer caso: nome distinto não custa nada);
 3. filtros de path **não se aplicam** a `workflow_dispatch` — a base da
-   rota de recuperação da W1.
+   rota de recuperação da W1. **Corrigida no debate r1:** isto vale
+   **só no ramo C**, onde o gate é um filtro do substrato. **No ramo B a
+   claim é irrelevante**, porque lá o gate é o *nosso* `if:`, e um re-run
+   ou um dispatch reavaliam essa expressão e pulam de novo, a menos que
+   ela nomeie `github.event_name == 'workflow_dispatch'`;
+4. **`workflow_dispatch` despacha em um `ref` (branch/tag), não num SHA
+   arbitrário** — logo ele roda a PONTA do branch, não o commit que o
+   filtro pulou. Uma vez que `main` avance, o commit pulado fica
+   inalcançável por dispatch. Consequência de projeto: a rota de
+   recuperação é "re-executar os pesados sobre um estado", não "re-testar
+   aquele commit". Isso **tem de estar escrito no comentário do YAML**,
+   senão a rota promete o que não entrega;
+5. um push filtrado por `paths-ignore` **não cria run algum** — daí ele
+   não poder cancelar nada (é o que separa a Rota C da Rota B no achado
+   de concorrência).
 
-A W1 confirma as três **na execução**, não por leitura de documentação: a
-(1) e a (2) caem de graça ao montar a rota escolhida, e a (3) é
-exercitada uma vez pelo próprio `Check:` da unidade de recuperação. Se
+A W1 confirma **(1), (2) e (5)** na execução — elas caem de graça ao
+montar a rota escolhida — e exercita **(3)** uma vez pelo próprio
+`Check:` da unidade de recuperação. A **(4)** é a única que a W1 não
+consegue falsificar barato: ela fica registrada como limitação declarada
+no comentário do YAML, e o `Check:` exige que o texto esteja lá. Se
 alguma delas for falsa, a rota muda — por isso estão listadas aqui e não
 enterradas no meio do texto.
 
@@ -404,8 +724,12 @@ mecânico". A decisão é dele; o plano não a antecipa.
 
 ### W0 — Medir e derivar antes de filtrar (read-only)
 
-> Wave inteiramente **read-only** sobre `.github/`: nada aqui edita
-> workflow. A saída são números e uma lista derivada.
+> **Read-only sobre `main`** (corrigido no debate r1 — a redação anterior
+> dizia "read-only sobre `.github/`" e tornava a US3 insatisfazível: não
+> existe caminho para rodar um job em `ubuntu-latest` sem alterar
+> `runs-on:`, e a W2 estava gateada por essa medição — gate circular).
+> Nada aqui edita workflow **em `main`**; a US3 nomeia seu mecanismo. A
+> saída são números e uma lista derivada.
 
 - [ ] `[P0][US1]` **Derivar** a denylist candidata a partir da atribuição
       real dos **106** runs só-docs por prefixo de path — nunca de
