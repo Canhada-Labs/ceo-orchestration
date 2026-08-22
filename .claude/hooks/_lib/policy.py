@@ -1226,6 +1226,26 @@ class Policy:
 
     # --- audit helpers (fail-open) -------------------------------------
 
+    # PLAN-182 W2 (S321) — atribuicao de projeto nos emissores de policy.
+    #
+    # Medido: `policy_evaluated` + `policy_denied` respondiam por 15.128 dos
+    # 15.208 eventos NAO-ATRIBUIVEIS pos-W1. A causa nao era o scrub
+    # (`project` esta em `_FEDERATION_ENVELOPE`, logo nas allowlists) nem o
+    # env: era o CHAMADOR omitindo o kwarg, com o default do emissor em "".
+    # A W1 curou ONDE o evento e gravado; isto cura O QUE ele carrega.
+    #
+    # Fail-open por construcao: qualquer falha na resolucao devolve "" e o
+    # evento sai como saia antes — atribuicao e observabilidade, nunca um
+    # motivo para derrubar uma decisao de policy.
+    @staticmethod
+    def _project_label() -> str:
+        try:
+            from _lib import runtime_paths as _rp
+
+            return str(_rp.project_dir())
+        except Exception:  # pragma: no cover - fail-open
+            return ""
+
     def _emit_evaluated(self, rule_id: str, decision: str, duration_ms: int) -> None:
         if _audit_emit is None:
             return
@@ -1235,6 +1255,7 @@ class Policy:
                 rule_id=rule_id,
                 decision=decision,
                 duration_ms=duration_ms,
+                project=self._project_label(),
             )
         except Exception:  # pragma: no cover
             pass
@@ -1247,6 +1268,7 @@ class Policy:
                 policy_id=self.policy_id,
                 rule_id=rule_id,
                 reason=reason,
+                project=self._project_label(),
             )
         except Exception:  # pragma: no cover
             pass

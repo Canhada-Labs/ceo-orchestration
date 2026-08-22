@@ -232,7 +232,14 @@ class TestGetBootLessonsVerified(_VerifiedRenderBase):
         from unittest import mock
 
         project_dir = "/some/dogfood/project"
-        slug = "some-dogfood-project"
+        # PLAN-182 W3 (S321): o slug e DERIVADO do resolvedor unico, nunca
+        # escrito a mao. A grafia hardcoded aqui era a antiga (sem o traco
+        # inicial) e cegava exatamente a mudanca que a cura faz — a mesma
+        # classe do red da S320 (fixture com literal vs adapter no
+        # resolvedor novo).
+        from _lib import runtime_paths as _rp
+
+        slug = _rp.project_slug(project_dir)
         resolved = (
             Path(os.environ["HOME"]) / ".claude" / "projects" / slug / "lessons"
         )

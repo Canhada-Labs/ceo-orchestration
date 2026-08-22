@@ -112,11 +112,20 @@ def _emit(event: Dict[str, Any]) -> None:
     from _lib import audit_emit  # lazy: resolved at emit time
 
     title = event.get("title")
+    # PLAN-182 W2 (S321): sem `project=` o evento nasce nao-atribuivel — o
+    # default do emissor e "". Fail-open: falha na resolucao vira "".
+    try:
+        from _lib import runtime_paths as _rp
+
+        _project = str(_rp.project_dir())
+    except Exception:  # pragma: no cover - fail-open
+        _project = ""
     audit_emit.emit_notification_lifecycle(
         notification_type=_normalize_type(event.get("notification_type")),
         has_title=bool(isinstance(title, str) and title),
         message_sha256_prefix=_message_prefix(event.get("message")),
         session_id=_session_id(event),
+        project=_project,
     )
 
 

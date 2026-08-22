@@ -857,6 +857,58 @@ def check_audit_v3_backlog() -> Tuple[str, str, Any]:
     return ("yellow" if backlog else "green", f"{len(backlog)} open", backlog)
 
 
+# ---- Padrões de sentinel: DERIVADOS da autoridade (S321) -------------------
+# Este check varria UM único padrão (`PLAN-*/architect/round-*/approved.md`)
+# enquanto `check_canonical_edit.py` reconhece DEZ. Consequência medida: uma
+# cerimônia preparada como `PLAN-182/wave-w1-followup-approved.md` — formato
+# válido e aceito pelo guard — nunca aparecia no digest de boot, e o check
+# reportava "0 pending" com um sentinel esperando assinatura. Guard verde que
+# não vê o alvo.
+#
+# A cura NÃO é copiar a lista para cá: uma segunda cópia envelhece em
+# silêncio, que é a classe que este repo caça. Os padrões são EXTRAÍDOS por
+# AST do arquivo que os define. `_PATTERNS` é local a uma função lá, então
+# não dá para importar — o AST é o mecanismo, não a aparência.
+#
+# Fail-open com VOZ: se a extração falhar, cai num conjunto mínimo E o
+# summary declara que está em fallback. Um degradê silencioso reproduziria o
+# defeito que esta função existe para curar.
+_SENTINEL_PATTERNS_FALLBACK = (
+    "PLAN-*/architect/round-*/approved.md",
+    "PLAN-*/approved.md",
+    "PLAN-*/wave-*-approved.md",
+    "PLAN-*/approved-amendment-*.md",
+)
+
+
+def _sentinel_patterns() -> Tuple[Tuple[str, ...], bool]:
+    """(padrões, derived) — `derived=False` sinaliza fallback."""
+    import ast
+
+    src_path = REPO_ROOT / ".claude" / "hooks" / "check_canonical_edit.py"
+    try:
+        tree = ast.parse(src_path.read_text(encoding="utf-8"))
+    except Exception:
+        return _SENTINEL_PATTERNS_FALLBACK, False
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Assign):
+            continue
+        names = [t.id for t in node.targets if isinstance(t, ast.Name)]
+        if "_PATTERNS" not in names:
+            continue
+        try:
+            value = ast.literal_eval(node.value)
+        except Exception:
+            continue
+        pats = tuple(
+            p for p in value
+            if isinstance(p, str) and p.startswith("PLAN-")
+        )
+        if pats:
+            return pats, True
+    return _SENTINEL_PATTERNS_FALLBACK, False
+
+
 def check_sentinels_pending_gpg() -> Tuple[str, str, Any]:
     """Count GPG-pending sentinels post-cutoff.
 
@@ -867,16 +919,30 @@ def check_sentinels_pending_gpg() -> Tuple[str, str, Any]:
     """
     pending: List[str] = []
     plans_dir = REPO_ROOT / ".claude" / "plans"
-    for approved in sorted(plans_dir.glob("PLAN-*/architect/round-*/approved.md")):
-        try:
-            mtime = approved.stat().st_mtime
-        except OSError:
-            continue
-        if mtime < SENTINEL_CUTOFF_EPOCH:
-            continue  # pre-enforcement legacy
-        if not (approved.parent / "approved.md.asc").exists():
-            pending.append(str(approved.relative_to(REPO_ROOT)))
-    return ("yellow" if pending else "green", f"{len(pending)} pending", pending)
+    patterns, derived = _sentinel_patterns()
+    for pat in patterns:
+        for approved in sorted(plans_dir.glob(pat)):
+            try:
+                mtime = approved.stat().st_mtime
+            except OSError:
+                continue
+            if mtime < SENTINEL_CUTOFF_EPOCH:
+                continue  # pre-enforcement legacy
+            # S321: o `.asc` acompanha o ARQUIVO, não um `approved.md` fixo
+            # no diretório. A forma antiga (`parent / "approved.md.asc"`)
+            # só funcionava para o padrão `.../approved.md` e teria dado
+            # falso-pendente para `wave-*-approved.md`.
+            if not approved.with_name(approved.name + ".asc").exists():
+                rel = str(approved.relative_to(REPO_ROOT))
+                if rel not in pending:
+                    pending.append(rel)
+    pending.sort()  # CR-N7 ordenação estável
+    note = "" if derived else " [padrões em FALLBACK — a autoridade não foi lida]"
+    return (
+        "yellow" if pending else "green",
+        f"{len(pending)} pending{note}",
+        pending,
+    )
 
 
 def check_rc_hold_aged() -> Tuple[str, str, Any]:

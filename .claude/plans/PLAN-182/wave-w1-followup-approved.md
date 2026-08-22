@@ -13,8 +13,8 @@ Plans: PLAN-182
 Wave: W1-followup (cura estrutural do carrier + atribuição de projeto + fecho da classe M4)
 Patch: .claude/plans/PLAN-182/w1-followup-ceremony/S321-CEREMONY.patch
 Patch-sha256: e641c09da385d94b23e263f5e207ec57977f6e5028fcf8398fd5bb3ee932b813
-Anchor-SHA: <PREENCHER-NA-ASSINATURA — `git rev-parse HEAD`>
-Data: <PREENCHER-NA-ASSINATURA>
+Anchor-SHA: 9e36964f948d29eda3b6368ec315a296fc5760f7
+Data: 2026-08-22
 
 > **Sem linhas `MANIFEST-*`, deliberadamente.** O land é por PATCH, não por
 > pack `tree/` — e a própria nota do draft anterior avisa que um campo
@@ -31,7 +31,7 @@ Data: <PREENCHER-NA-ASSINATURA>
 > ([[feedback-clean-rail-round-is-not-the-end]]).
 
 <!-- BEGIN SIGNED SCOPE -->
-Approved-By: @Canhada-Labs <PREENCHER-NA-ASSINATURA>
+Approved-By: @Canhada-Labs AE9B236FDAF0462874060C6BCFCFACF00335DC74
 Plans: PLAN-182
 Scope:
   - .claude/adr/ADR-001-runtime-state-directory.md

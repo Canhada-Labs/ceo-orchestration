@@ -197,39 +197,38 @@ class TestRuntimeStateSandboxConfinement(TestEnvContext):
             "vacuous (entries: %s)" % (self._canary_entries(),),
         )
 
-    def test_debt_marker_isolation_layer_does_not_yet_neutralise_carrier(self) -> None:
-        """Records that the cure is perimetral, and fails when it stops being.
+    def test_isolation_layer_neutralises_ambient_carrier(self) -> None:
+        """The structural cure, asserted as a permanent invariant.
 
-        Confinement currently depends on the repo-root ``conftest.py`` popping
-        the carrier at import time. The structural fix belongs in
-        ``_lib/test_isolation`` — a canonical-guarded path that lands through
-        the Owner's signed-edit ceremony.
+        History, because it is the point. This case shipped as a DEBT MARKER:
+        it recorded that confinement depended on the repo-root ``conftest.py``
+        popping the carrier at import time, and it was written to go RED on the
+        day the structural fix landed — at which point the instruction was to
+        delete it along with the conftest pop.
 
-        This marker asserts BEHAVIOUR, not a name, and that distinction is the
-        whole point. Two earlier drafts both promised a signal they could never
-        send:
+        The fix landed (PLAN-182 W1-followup, S321):
+        ``_lib/test_isolation`` gained ``WHOLE_DIR_OVERRIDE_CARRIERS`` and
+        neutralises the carrier AT IMPORT, and the perimeter block was removed
+        from ``conftest.py``. Rather than delete the case, it is INVERTED: the
+        same behavioural question, opposite expected answer. Deleting it would
+        have traded a marker for nothing; inverting it converts the marker into
+        the regression guard the cure deserves.
 
-        * the first shelled out to a bare ``python -c``, which bypasses pytest
-          isolation entirely and would resolve to the external dir forever;
-        * the second asserted ``CLAUDE_PROJECT_DIR_NATIVE not in
-          AUDIT_DIR_CARRIERS`` — but the prepared cure
-          (``PLAN-182/w1-followup-ceremony/PROPOSED-PATCH.md``) deliberately
-          introduces a SEPARATE tuple kept OUT of ``ALL_AUDIT_CARRIERS``,
-          because membership there means snapshot+restore, not neutralisation.
-          That assertion would stay green after the fix landed.
-
-        So the question asked here is the only one that survives a change of
+        Two earlier drafts of the marker promised a signal they could not send
+        — one shelled out to a bare ``python -c`` (bypassing pytest isolation
+        entirely), the other asserted membership in ``AUDIT_DIR_CARRIERS``, a
+        tuple the cure deliberately does NOT join (membership there means
+        snapshot+restore, which is the variant MEASURED as re-opening the
+        leak). This asks the only question that survives a change of
         implementation: *does importing the isolation layer neutralise an
-        ambient carrier?* Today it does not. When it does — by whatever
-        mechanism — this goes red, and that is the signal to delete it together
-        with the conftest pop.
+        ambient carrier?* It must, by whatever mechanism.
         """
         script = (
             "import os, sys;"
             "sys.path.insert(0, %r);"
             "os.environ['CLAUDE_PROJECT_DIR_NATIVE'] = %r;"
             "import _lib.test_isolation;"
-            "print(os.environ.get('CLAUDE_PROJECT_DIR_NATIVE'))"
+            "print(repr(os.environ.get('CLAUDE_PROJECT_DIR_NATIVE')))"
             % (str(_HOOKS), str(self._outside))
         )
         proc = subprocess.run(
@@ -238,11 +237,12 @@ class TestRuntimeStateSandboxConfinement(TestEnvContext):
         )
         self.assertEqual(proc.returncode, 0, proc.stderr[-1000:])
         self.assertEqual(
-            proc.stdout.strip(), str(self._outside),
-            "importing _lib.test_isolation now neutralises the carrier — the "
-            "structural fix has landed. Remove the import-time pop in "
-            "conftest.py, the one in test_credential_rotation_emit.py, and "
-            "delete this case.",
+            proc.stdout.strip(), "None",
+            "importing _lib.test_isolation NO LONGER neutralises the ambient "
+            "carrier — the structural cure regressed. The carrier is the "
+            "HIGHEST-precedence input of runtime_state_dir(), so a test "
+            "process that keeps it writes live state OUTSIDE the sandbox "
+            "while reporting green (measured: audit-log.lock + state/).",
         )
 
 

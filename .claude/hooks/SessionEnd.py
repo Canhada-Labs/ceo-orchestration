@@ -106,8 +106,10 @@ def _memory_dir_state(repo_root: Path) -> Dict[str, object]:
         "slug": "",
     }
     try:
-        slug = str(repo_root).replace("/", "-").lstrip("-")
-        memory_dir = Path.home() / ".claude" / "projects" / f"-{slug}" / "memory"
+        from _lib import runtime_paths as _rp
+
+        slug = _rp.project_slug(str(repo_root))  # PLAN-182 W3 (S321): slug via resolvedor unico
+        memory_dir = Path.home() / ".claude" / "projects" / slug / "memory"
         state["slug"] = slug
         if memory_dir.is_dir():
             state["writable"] = os.access(memory_dir, os.W_OK)

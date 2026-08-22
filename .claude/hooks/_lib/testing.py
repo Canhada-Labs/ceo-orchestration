@@ -122,6 +122,14 @@ class TestEnvContext(unittest.TestCase):
                 or key == "CEO_OVERHEAD_ACK"
                 or key == "CEO_SKIP_REAL_REGISTRY_SMOKE"
                 or key == "CEO_SOTA_DISABLE"
+                # PLAN-182 W1 follow-up: the ADR-001 whole-directory override
+                # outranks the HOME this class redirects three lines below, so
+                # an ambient value would send every runtime-state write of this
+                # test outside the sandbox. Under pytest the session layer has
+                # already popped it; under `python -m unittest` this class is
+                # the ONLY isolation there is. Restored by tearDown from the
+                # CLAUDE_* snapshot taken above, like every other steering var.
+                or key == "CLAUDE_PROJECT_DIR_NATIVE"
             ):
                 del os.environ[key]
 
@@ -302,7 +310,14 @@ class TestEnvContext(unittest.TestCase):
         # like ``subprocess_env(CEO_AUDIT_LOG_DIR="", HOME="<real>")`` cannot
         # re-open the fallback-to-live path (Codex pair-rail P1).
         tmp_root = str(Path(self._tmp_root).resolve())
-        path_carriers = ("HOME", "CEO_AUDIT_LOG_DIR", "CEO_PROJECT_STATE_DIR") + tuple(
+        # CLAUDE_PROJECT_DIR_NATIVE joins the validated set: it selects the
+        # WHOLE runtime-state dir at the top of the resolver precedence, so a
+        # child carrying one that points outside this test's tree is the same
+        # partial-override vector C3 exists to reject. Zero callers pass it
+        # today (24 subprocess_env call sites, none naming it), so this is a
+        # no-op that states the invariant instead of leaving a hole in it.
+        path_carriers = ("HOME", "CEO_AUDIT_LOG_DIR", "CEO_PROJECT_STATE_DIR",
+                         "CLAUDE_PROJECT_DIR_NATIVE") + tuple(
             c for c in test_isolation.AUDIT_CLEAR_CARRIERS if c.endswith("_PATH")
             or c.endswith("_DIR") or c.endswith("_ERR") or c.endswith("_LOCK")
         )

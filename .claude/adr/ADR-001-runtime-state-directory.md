@@ -225,6 +225,51 @@ derivação por slug como escrito". This amendment UNBLOCKS PLAN-182 W1
 (frontmatter `blocked_on_adr`); the implementation lands under the W1
 ceremony, not under this text.
 
+## Amendment 2 (2026-08-22, S321 — PLAN-182 AC-7, a peça que faltava)
+
+**Decision: amend `SPEC/v1` IN PLACE; do NOT cut a `SPEC/v2`.**
+
+The AC-7 of PLAN-182 named this decision explicitly ("with the SPEC v1
+vs v2 decision"), and Amendment 1 covered the other three quarters —
+normative slug, single resolver, family-atomicity, blast radius L2→L3 —
+but never recorded this one. Meanwhile the decision had already been
+*taken in practice*: `SPEC/v1/audit-log.schema.md` and
+`SPEC/v1/state-stores.schema.md` were edited in place under the W1
+ceremony (`v2.58`), and `SPEC/` still holds a single `v1/` directory.
+An unrecorded decision is one a future maintainer re-litigates from
+scratch, which is what an ADR exists to prevent.
+
+**Why in-place is not a v1 contract break.** The published contract is
+about the *shape and integrity* of the audit record — event schema,
+HMAC chaining, field allowlists — not about which filesystem path the
+implementation writes to. `SPEC/v1` already expressed the location as a
+**parameterized** expression
+(`${CEO_AUDIT_LOG_PATH:-$HOME/.claude/projects/<slug>/audit-log.jsonl}`),
+and the W1 change replaced the *default value* of that parameter, not
+the parameter. No consumer field changed name, type, or meaning; no
+event was added or removed by the move itself; `verify_chain()` keeps
+the same semantics and becomes MORE meaningful, not less, because the
+chain it verifies is now single-tenant.
+
+**What WOULD have required a v2**, recorded so the line is testable and
+not a matter of taste: renaming or retyping a consumer-visible field;
+changing the HMAC construction or the chain-link rule; removing an
+action from the closed set; or altering the meaning of an existing
+field. The one field whose *meaning* is adjacent to this change,
+`project`, was already specified as the absolute project path — and the
+S321 work fixed emitters that were leaving it EMPTY, which moves the
+implementation toward the spec rather than away from it.
+
+**Consequence for adopters.** An adopter upgrading across this change
+sees runtime state resolve to a new per-project directory. That is a
+migration concern (PLAN-182 W3), not a contract-version concern: the
+schema an adopter validates against is unchanged, so their conformance
+tooling keeps passing. Custody of the pre-W1 chain is the W2 decision
+(ARCHIVE), recorded in the W1 sentinel.
+
+**Scope of this amendment:** it records a decision already executed. It
+authorizes nothing new and changes no file.
+
 ## Enforcement commit
 
 `b7aef7ede65d` (retrofit — PLAN-050 Phase 2 / PLAN-045 F-06-03; this anchors the file's introduction commit, not a runtime-behavior commit. For ADRs whose decision was wired into hooks/scripts in a later commit, amend this line manually.)

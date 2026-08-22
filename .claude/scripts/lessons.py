@@ -229,8 +229,13 @@ def _lessons_dir(base_dir: Optional[str] = None) -> Path:
         )
     home = Path(home_env)
     project_dir = os.environ.get("CLAUDE_PROJECT_DIR", "")
+    # PLAN-182 W3 (S321): este modulo JA importava runtime_paths (:95) e
+    # mesmo assim re-derivava o slug aqui, sem o traco inicial — as lessons
+    # do adopter caiam num diretorio IRMAO da raiz da familia. Migracao
+    # meio-feita que passava em todos os gates. O dir da grafia antiga nao
+    # existe neste repositorio (medido), entao nao ha dado a migrar.
     if project_dir:
-        slug = project_dir.replace("/", "-").lstrip("-")
+        slug = _rp.project_slug(project_dir)
     else:
         slug = "default"
     return home / ".claude" / "projects" / slug / "lessons"
@@ -1455,7 +1460,8 @@ def count_pending_expiring(
     renderer.
     """
     if base_dir is None and not os.environ.get("CEO_LESSONS_DIR"):
-        slug = str(project_dir or "").replace("/", "-").lstrip("-") or "default"
+        slug = (_rp.project_slug(str(project_dir)) if project_dir
+                else "default")  # PLAN-182 W3 (S321): slug via resolvedor unico
         home = os.environ.get("HOME") or str(Path.home())
         base_dir = str(
             Path(home) / ".claude" / "projects" / slug / "lessons"
@@ -1517,7 +1523,8 @@ def get_boot_lessons_verified(
     Read-only: no state transitions happen here.
     """
     if base_dir is None and not os.environ.get("CEO_LESSONS_DIR"):
-        slug = str(project_dir or "").replace("/", "-").lstrip("-") or "default"
+        slug = (_rp.project_slug(str(project_dir)) if project_dir
+                else "default")  # PLAN-182 W3 (S321): slug via resolvedor unico
         home = os.environ.get("HOME") or str(Path.home())
         base_dir = str(
             Path(home) / ".claude" / "projects" / slug / "lessons"

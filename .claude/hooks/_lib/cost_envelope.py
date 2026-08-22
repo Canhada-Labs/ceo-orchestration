@@ -141,7 +141,18 @@ def _composite_key(project_path: str, user_id: str, date_iso: str) -> str:
 
 def _state_dir(project_path: str) -> Path:
     home = Path(os.environ.get("HOME") or "/tmp")
-    project_slug = project_path.replace("/", "-").strip("-") or "default"
+    # PLAN-182 W3 (S321): a grafia local com `.strip("-")` derrubava o traco
+    # INICIAL, aterrissando num diretorio IRMAO da raiz da familia.
+    try:
+        from _lib import runtime_paths as _rp
+
+        project_slug = _rp.project_slug(project_path) or "default"
+    except Exception:  # pragma: no cover - fail-open
+        # rp-allow: fallback de ULTIMO recurso quando o resolvedor nao
+        # importa. Nao e re-derivacao sancionada — e degradacao explicita
+        # para o comportamento anterior, preferivel a derrubar o envelope
+        # de custo. O marcador tira a linha do censo M4 de proposito.
+        project_slug = project_path.replace("/", "-").strip("-") or "default"  # rp-allow: degradacao explicita, nao re-derivacao sancionada
     return home / ".claude" / "projects" / project_slug / "state"
 
 

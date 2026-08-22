@@ -54,6 +54,37 @@ list to drift.
 rare test that genuinely exercises the real resolver; the function-scope assert
 skips for it. Zero uses at ship; a ``validate-governance.sh`` grep gate keeps it
 at zero and CODEOWNERS requires security-engineer review to add one.
+
+## Axis 2 — whole-directory overrides (PLAN-182 W1 follow-up)
+
+PLAN-182 W1 gave the family a single resolver
+(``_lib/runtime_paths.runtime_state_dir()``) whose HIGHEST-precedence input is
+``CLAUDE_PROJECT_DIR_NATIVE`` — above the ``HOME`` Axis 1 redirects. An ambient
+value therefore steers runtime state OUT of the isolated tree no matter what
+Axis 1 does. Measured before this cure: a child ``pytest`` run whose only test
+body is ``assert True`` left ``audit-log.lock`` (0 bytes, 0600) and ``state/``
+(0700) in the operator's directory.
+
+Two properties of that escape decide the shape of the cure, and both were
+measured rather than assumed:
+
+1. **The write happens at interpreter shutdown**, not at import and not in the
+   test body. Probe: with the carrier set, ``from _lib import audit_emit``
+   listed the directory as empty BEFORE the import, empty AFTER the import, and
+   holding both entries after the process exited.
+2. **Any restore inside the process re-opens it.** A/B on a standalone child
+   run — clear-then-restore in a session-fixture finalizer left both entries in
+   the canary; clear-and-never-restore left it empty.
+
+So the carrier is CLEARED (never redirected) at MODULE IMPORT time and is
+DELIBERATELY absent from the restore snapshot. Clearing rather than redirecting
+also keeps the DEFAULT arm of ``runtime_state_dir()`` (``HOME`` + slug, which
+Axis 1 already isolates) reachable for the whole suite; pinning the top of the
+precedence chain to a session path would make that arm unreachable and would
+force a matching edit into ``audit_carrier_overrides`` and
+``TestEnvContext.subprocess_env``. Production code keeps the override in full:
+nothing here touches ``_lib/runtime_paths``, and a test that exercises the
+override sets it for its own duration with ``mock.patch.dict``.
 """
 
 from __future__ import annotations
@@ -132,6 +163,18 @@ AUDIT_CLEAR_CARRIERS = (
     "CEO_AUDIT_LOG_ROTATE_BYTES",
     "CEO_AUDIT_HMAC_DISABLE",
 )
+# Whole-directory overrides: carriers that select the ENTIRE runtime-state dir
+# at the TOP of the resolver precedence (``_lib/runtime_paths``, PLAN-182 W1).
+# They are NEUTRALISED at import time and NEVER restored inside the process —
+# see the module docstring, Axis 2, for the two measurements that force both
+# halves of that sentence.
+#
+# Deliberately NOT part of ``ALL_AUDIT_CARRIERS``: membership there means
+# "snapshot me and restore me at session end", and restoring this carrier
+# before interpreter shutdown is exactly the measured re-opening of the escape.
+WHOLE_DIR_OVERRIDE_CARRIERS = (
+    "CLAUDE_PROJECT_DIR_NATIVE",
+)
 # The full carrier surface — used by the WS-C partial-override rejection and by
 # the WS-E grep gate (every carrier must be enumerated in ONE place).
 ALL_AUDIT_CARRIERS = AUDIT_DIR_CARRIERS + AUDIT_CLEAR_CARRIERS
@@ -144,6 +187,36 @@ SYNC_MODE_VAR = "CEO_AUDIT_SYNC_MODE"
 # from env) reads this to decide whether a `_origin:"test"` spool is heading for
 # the live chain. Absent/unreadable ⇒ WS-D1 fails SAFE to no-quarantine.
 LIVE_LOG_SNAPSHOT_VAR = "CEO_AUDIT_LIVE_LOG_PATH_SNAPSHOT"
+
+
+def _neutralize_whole_dir_overrides() -> Dict[str, Optional[str]]:
+    """Pop every whole-directory override and return what was popped.
+
+    Import-time by design. All three conftests import this module while pytest
+    is loading conftests — BEFORE any test module is imported and long before
+    the session fixture body runs (verified: conftest import -> test-module
+    import -> session-fixture body -> test body). A fixture-time pop would sit
+    two steps later than the collection window.
+
+    The returned mapping is diagnostic only. Nothing restores it: the escape's
+    write happens at interpreter shutdown, so a restore anywhere inside the
+    process hands the carrier back before that write. The cost is process-local
+    and cosmetic — a runner that calls ``pytest.main()`` repeatedly sees the
+    carrier stay popped until it exits — and it is the deliberate trade.
+    """
+    popped: Dict[str, Optional[str]] = {}
+    for key in WHOLE_DIR_OVERRIDE_CARRIERS:
+        popped[key] = os.environ.pop(key, None)
+    return popped
+
+
+# Import-time side effect (the ONE in this module) — see the function docstring
+# for why it cannot wait for the session fixture. This module is pytest-only
+# (it imports pytest at the top) and is excluded from adopter installs by
+# scripts/install.sh, so no production hook can reach this line.
+NEUTRALIZED_WHOLE_DIR_OVERRIDES: Dict[str, Optional[str]] = (
+    _neutralize_whole_dir_overrides()
+)
 
 
 def audit_carrier_overrides(root: Path, *, sync_mode: bool = False) -> Dict[str, str]:
@@ -230,6 +303,9 @@ def _activate_redirect() -> Optional[Dict[str, object]]:
 
     # 3) Snapshot every carrier + the sticky signals + the snapshot var + the
     #    tooling vars for exact restore at session end.
+    #    WHOLE_DIR_OVERRIDE_CARRIERS is ABSENT from this tuple on purpose: it
+    #    is the one carrier set that must NOT come back before the interpreter
+    #    exits (module docstring, Axis 2, measurement 2).
     snapshot_keys = (
         ALL_AUDIT_CARRIERS
         + (TEST_HARNESS_VAR, SYNC_MODE_VAR, LIVE_LOG_SNAPSHOT_VAR)
@@ -250,6 +326,11 @@ def _activate_redirect() -> Optional[Dict[str, object]]:
     os.environ.update(overrides)
     # CLEAR carriers so a stale-inherited value can never point at the live tree.
     for key in AUDIT_CLEAR_CARRIERS:
+        os.environ.pop(key, None)
+    # Re-assert the import-time neutralisation: a plugin, a conftest or an
+    # earlier test may have set a whole-dir override between this module's
+    # import and the first test. Not snapshotted above, so never restored.
+    for key in WHOLE_DIR_OVERRIDE_CARRIERS:
         os.environ.pop(key, None)
     # Re-export the real PyYAML user-site AFTER the HOME redirect (setdefault so a
     # test that manages its own PYTHONUSERBASE keeps control).

@@ -78,67 +78,6 @@ for _rel in (".claude/hooks", ".claude/scripts", "."):
     if _candidate not in sys.path:
         sys.path.insert(0, _candidate)
 
-# PLAN-182 W1 follow-up — neutralise the ADR-001 whole-directory carrier
-# BEFORE the session-scoped isolation fixture below is imported/registered.
-#
-# `_lib/runtime_paths.runtime_state_dir()` honours CLAUDE_PROJECT_DIR_NATIVE at
-# the HIGHEST precedence — above the HOME that the isolation layer redirects.
-# Two enumerations should have covered it and neither was updated when W1
-# landed: `_lib/test_isolation.AUDIT_DIR_CARRIERS` (documented there as "every
-# env var that can steer WHERE an emit / HMAC sidecar / spool / lock / fallback
-# resolves … the enumeration lives HERE, exactly once") and the CEO_* delete
-# list in `_lib/testing.TestEnvContext`.
-#
-# Measured consequence: a pytest run containing a SINGLE `assert True`, with the
-# carrier present in the environment, created `audit-log.lock` and `state/` in
-# that external directory. The session fixture materialises the dirs before any
-# test executes, so a function-scoped fixture cannot reach it — the cure has to
-# happen at import time, here. Four modules were writing live runtime state
-# while reporting green; `tests/unit/test_runtime_state_sandbox_confinement.py`
-# is the behavioural guard.
-#
-# This is the OUTER cure. The structural fix belongs in
-# `_lib/test_isolation.AUDIT_DIR_CARRIERS`, a canonical-guarded path that lands
-# through the Owner's signed-edit ceremony; this keeps the suite confined until
-# then. A test that exercises the override still sets it for its own duration
-# via `mock.patch.dict`, which lands after this.
-import atexit as _atexit_boot  # noqa: E402
-import os as _os_boot  # noqa: E402
-
-_NATIVE_CARRIER_SAVED = _os_boot.environ.pop("CLAUDE_PROJECT_DIR_NATIVE", None)
-
-
-def _restore_native_carrier() -> None:
-    """Put an ambient carrier back when the PROCESS ends.
-
-    The pop above happens at import time, outside every fixture, so nothing
-    else would restore it. `atexit` is the only safe hook for this, and the
-    restriction is load-bearing rather than incidental.
-
-    A `pytest_sessionfinish` hook was tried and REVERTED: restoring the carrier
-    there re-opens the escape window, because session-fixture teardown and any
-    late write (spool flush, lock release, sidecar) run AFTER `sessionfinish`
-    and resolve the path again. Bisected with a trivial one-assert child run and
-    the carrier in the environment:
-
-        atexit + sessionfinish -> canary = ['audit-log.lock', 'state']   LEAKS
-        atexit only            -> canary = empty
-        no restore at all      -> canary = empty
-
-    Known limitation, accepted deliberately: in a reusable runner that calls
-    `pytest.main()` repeatedly in one process, `atexit` does not fire between
-    runs, so the carrier stays popped until that process exits. That is a
-    cosmetic loss inside a test process; restoring it earlier is a correctness
-    loss that writes into live state. If the reusable-runner case ever needs to
-    be closed properly, the fix is the structural one — teaching
-    `_lib/test_isolation.AUDIT_DIR_CARRIERS` to REDIRECT this carrier at the
-    session tmpdir instead of popping it here — not an earlier restore.
-    """
-    if _NATIVE_CARRIER_SAVED is not None:
-        _os_boot.environ["CLAUDE_PROJECT_DIR_NATIVE"] = _NATIVE_CARRIER_SAVED
-
-
-_atexit_boot.register(_restore_native_carrier)
 
 # PLAN-119 WS-A — suite-wide audit-dir isolation REDIRECT (keystone).
 # Importing these two fixtures by name registers them as autouse for the whole

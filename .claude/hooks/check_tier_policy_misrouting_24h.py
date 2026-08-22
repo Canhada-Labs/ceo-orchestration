@@ -90,7 +90,9 @@ def _audit_log_path() -> Optional[Path]:
     if home_path_basename.exists():
         return home_path_basename
     # Fallback to legacy harness slug-style.
-    slug = "-" + str(repo_root).replace("/", "-").lstrip("-")
+    from _lib import runtime_paths as _rp
+
+    slug = _rp.project_slug(str(repo_root))  # PLAN-182 W3 (S321): slug via resolvedor unico
     home_path_slug = (
         Path.home() / ".claude" / "projects" / slug / "audit-log.jsonl"
     )

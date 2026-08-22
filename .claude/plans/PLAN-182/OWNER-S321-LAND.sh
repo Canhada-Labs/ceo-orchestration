@@ -46,11 +46,33 @@ step "G0 — insumos presentes"
     gpg --armor --detach-sign --yes $SENTINEL"
 ok "sentinel, patch e .asc presentes"
 
-# Working tree limpo: um land por cima de mudanças não-commitadas mistura
-# o que foi assinado com o que não foi.
-[[ -z "$(git status --porcelain)" ]] || die "working tree SUJO — commite ou stash antes do land:
-$(git status --short)"
-ok "working tree limpo"
+# A garantia que este gate PRECISA dar não é "árvore limpa" — é que nenhum
+# arquivo QUE O PATCH TOCA esteja modificado, senão `git apply` aterrissaria
+# sobre conteúdo diferente do que foi assinado.
+#
+# S321, defeito corrigido em campo: a versão anterior exigia
+# `git status --porcelain` VAZIO, o que é impossível de satisfazer — o
+# próprio ato de assinar preenche os campos do sentinel e cria o `.asc`,
+# sujando a árvore. E commitar para limpar mudaria o HEAD, invalidando o
+# Anchor-SHA que acabara de ser assinado (G3 abortaria). Deadlock por
+# construção. A checagem certa é a interseção.
+DIRTY_FILE="$(mktemp)"; PATCHED_FILE="$(mktemp)"
+trap 'rm -f "$DIRTY_FILE" "$PATCHED_FILE"' EXIT
+git status --porcelain | sed 's/^...//' | sort -u > "$DIRTY_FILE"
+git apply --numstat "$PATCH" | awk '{print $3}' | sort -u > "$PATCHED_FILE"
+COLLIDE="$(comm -12 "$DIRTY_FILE" "$PATCHED_FILE")"
+if [[ -n "$COLLIDE" ]]; then
+  die "arquivo(s) do patch estao MODIFICADOS na arvore:
+$(printf '  %s\n' $COLLIDE)
+  O patch aterrissaria sobre conteudo diferente do assinado.
+  Commite ou reverta esses arquivos antes do land."
+fi
+if [[ -n "$(cat "$DIRTY_FILE")" ]]; then
+  printf '  \033[33mNOTA\033[0m arvore tem mudancas fora do patch (esperado: o\n'
+  printf '        sentinel preenchido + o .asc). Nenhuma colide com o patch:\n'
+  sed 's/^/          /' "$DIRTY_FILE"
+fi
+ok "nenhum arquivo do patch esta sujo"
 
 # ---------------------------------------------------------------------------
 step "G1 — assinatura GPG do sentinel"
