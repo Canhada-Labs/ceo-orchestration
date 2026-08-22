@@ -80,6 +80,7 @@ workflow — the value here is governance and auditability, not throughput.
 ## 4. Critical rules (dogfood mode)
 
 - **Python:** stdlib only, Python ≥ 3.9 compatible. Use `from __future__ import annotations` and `typing.Optional`/`typing.Union` (no runtime PEP 604 `|`, no `match`).
+- **Corpus gates run AFTER the last edit, never before.** `check-test-env-hygiene.py`, `check-ceremony-script.py`, `verify-counts.sh` and `check-staleness.py` ask a question about the SET of files, not about the one you just ran. A green suite taken before you created the newest file is true for the previous tree, not the one you are committing — and `git add -A` then carries that file in without any gate having seen it. Order, every time: `git add -A` → corpus gates over the staged tree → `git commit`. (Violated twice in S321: a new test shipped red on the env-hygiene guard, and the ceremony-lint caught two blockings in the land script written minutes earlier.) Corollary: `git update-index --chmod=-x` alone does not stick — a later `git add -A` re-adds the filesystem mode, so drop the bit from BOTH.
 - **Hook test isolation:** use `TestEnvContext` from `_lib/testing.py` for env isolation — never touch the real `$HOME` or `$CLAUDE_PROJECT_DIR`.
 - **Plan naming:** `PLAN-<NNN>-<slug>.md`, `NNN` zero-padded three digits, monotonic. Plan subdirectories must be `PLAN-<NNN>/`, `examples/`, or `archive/`. Enforced in `PLAN-SCHEMA.md`.
 - **ADRs for L3+ decisions:** every cross-cutting architectural choice gets a formal record at `.claude/adr/ADR-<NNN>-<slug>.md`.
