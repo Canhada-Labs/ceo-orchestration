@@ -1,3 +1,31 @@
+> # ⛔ SUPERSEDED (S321, 2026-08-22) — NÃO ASSINE A PARTIR DESTE ARQUIVO
+>
+> O material canônico desta cerimônia é agora:
+>
+> - **sentinel:** `.claude/plans/PLAN-182/wave-w1-followup-approved.md`
+>   (o caminho mudou porque `PLAN-182/w1-followup-ceremony/approved.md`
+>   **não casa** nenhum padrão da união FECHADA de
+>   `check_canonical_edit.py:1004-1014` — seria tratado como ÓRFÃO e
+>   não-confiável)
+> - **patch:** `S321-CEREMONY.patch` (11 arquivos), com `Patch-sha256`
+>   amarrado no sentinel
+>
+> **Por que este arquivo ficou stale em menos de 24 h:** ele foi
+> preparado em `8531562`, e o commit `26a39c5` — que veio DEPOIS —
+> renomeou e reescreveu o marcador de dívida para asserir COMPORTAMENTO.
+> Tudo o que este arquivo diz sobre "o marcador não dispara" e sobre
+> removê-lo passou a ser falso: ele **fica vermelho no land** (medido), e
+> o pacote novo o **inverte** em guard permanente em vez de deletá-lo.
+>
+> O escopo também cresceu: de 2 arquivos para 11 — o pacote absorveu a
+> atribuição de projeto nos emissores (W2), o fecho da classe M4 (W3) e a
+> emenda do ADR-001 que fecha o AC-7. Assinar um lote é mais barato que
+> assinar quatro.
+>
+> Preservado como registro do que se propunha, e porque as PROVAS de
+> ordenação (import → coleta → fixture → corpo) que ele documenta
+> continuam válidas.
+
 # W1-followup-approved — sentinel do follow-up da W1 (DRAFT — assinar como `approved.md`)
 
 > **DRAFT preparado, NÃO assinado.** O `.asc` é gerado na sessão de execução:

@@ -1,0 +1,537 @@
+diff --git a/.claude/adr/ADR-001-runtime-state-directory.md b/.claude/adr/ADR-001-runtime-state-directory.md
+index 229a3cf..a4fa708 100644
+--- a/.claude/adr/ADR-001-runtime-state-directory.md
++++ b/.claude/adr/ADR-001-runtime-state-directory.md
+@@ -225,6 +225,51 @@ derivação por slug como escrito". This amendment UNBLOCKS PLAN-182 W1
+ (frontmatter `blocked_on_adr`); the implementation lands under the W1
+ ceremony, not under this text.
+ 
++## Amendment 2 (2026-08-22, S321 — PLAN-182 AC-7, a peça que faltava)
++
++**Decision: amend `SPEC/v1` IN PLACE; do NOT cut a `SPEC/v2`.**
++
++The AC-7 of PLAN-182 named this decision explicitly ("with the SPEC v1
++vs v2 decision"), and Amendment 1 covered the other three quarters —
++normative slug, single resolver, family-atomicity, blast radius L2→L3 —
++but never recorded this one. Meanwhile the decision had already been
++*taken in practice*: `SPEC/v1/audit-log.schema.md` and
++`SPEC/v1/state-stores.schema.md` were edited in place under the W1
++ceremony (`v2.58`), and `SPEC/` still holds a single `v1/` directory.
++An unrecorded decision is one a future maintainer re-litigates from
++scratch, which is what an ADR exists to prevent.
++
++**Why in-place is not a v1 contract break.** The published contract is
++about the *shape and integrity* of the audit record — event schema,
++HMAC chaining, field allowlists — not about which filesystem path the
++implementation writes to. `SPEC/v1` already expressed the location as a
++**parameterized** expression
++(`${CEO_AUDIT_LOG_PATH:-$HOME/.claude/projects/<slug>/audit-log.jsonl}`),
++and the W1 change replaced the *default value* of that parameter, not
++the parameter. No consumer field changed name, type, or meaning; no
++event was added or removed by the move itself; `verify_chain()` keeps
++the same semantics and becomes MORE meaningful, not less, because the
++chain it verifies is now single-tenant.
++
++**What WOULD have required a v2**, recorded so the line is testable and
++not a matter of taste: renaming or retyping a consumer-visible field;
++changing the HMAC construction or the chain-link rule; removing an
++action from the closed set; or altering the meaning of an existing
++field. The one field whose *meaning* is adjacent to this change,
++`project`, was already specified as the absolute project path — and the
++S321 work fixed emitters that were leaving it EMPTY, which moves the
++implementation toward the spec rather than away from it.
++
++**Consequence for adopters.** An adopter upgrading across this change
++sees runtime state resolve to a new per-project directory. That is a
++migration concern (PLAN-182 W3), not a contract-version concern: the
++schema an adopter validates against is unchanged, so their conformance
++tooling keeps passing. Custody of the pre-W1 chain is the W2 decision
++(ARCHIVE), recorded in the W1 sentinel.
++
++**Scope of this amendment:** it records a decision already executed. It
++authorizes nothing new and changes no file.
++
+ ## Enforcement commit
+ 
+ `b7aef7ede65d` (retrofit — PLAN-050 Phase 2 / PLAN-045 F-06-03; this anchors the file's introduction commit, not a runtime-behavior commit. For ADRs whose decision was wired into hooks/scripts in a later commit, amend this line manually.)
+diff --git a/.claude/hooks/SessionEnd.py b/.claude/hooks/SessionEnd.py
+index 4fdd18d..0faffc3 100755
+--- a/.claude/hooks/SessionEnd.py
++++ b/.claude/hooks/SessionEnd.py
+@@ -106,8 +106,10 @@ def _memory_dir_state(repo_root: Path) -> Dict[str, object]:
+         "slug": "",
+     }
+     try:
+-        slug = str(repo_root).replace("/", "-").lstrip("-")
+-        memory_dir = Path.home() / ".claude" / "projects" / f"-{slug}" / "memory"
++        from _lib import runtime_paths as _rp
++
++        slug = _rp.project_slug(str(repo_root))  # PLAN-182 W3 (S321): slug via resolvedor unico
++        memory_dir = Path.home() / ".claude" / "projects" / slug / "memory"
+         state["slug"] = slug
+         if memory_dir.is_dir():
+             state["writable"] = os.access(memory_dir, os.W_OK)
+diff --git a/.claude/hooks/_lib/cost_envelope.py b/.claude/hooks/_lib/cost_envelope.py
+index 55e61c1..49c927d 100644
+--- a/.claude/hooks/_lib/cost_envelope.py
++++ b/.claude/hooks/_lib/cost_envelope.py
+@@ -141,7 +141,18 @@ def _composite_key(project_path: str, user_id: str, date_iso: str) -> str:
+ 
+ def _state_dir(project_path: str) -> Path:
+     home = Path(os.environ.get("HOME") or "/tmp")
+-    project_slug = project_path.replace("/", "-").strip("-") or "default"
++    # PLAN-182 W3 (S321): a grafia local com `.strip("-")` derrubava o traco
++    # INICIAL, aterrissando num diretorio IRMAO da raiz da familia.
++    try:
++        from _lib import runtime_paths as _rp
++
++        project_slug = _rp.project_slug(project_path) or "default"
++    except Exception:  # pragma: no cover - fail-open
++        # rp-allow: fallback de ULTIMO recurso quando o resolvedor nao
++        # importa. Nao e re-derivacao sancionada — e degradacao explicita
++        # para o comportamento anterior, preferivel a derrubar o envelope
++        # de custo. O marcador tira a linha do censo M4 de proposito.
++        project_slug = project_path.replace("/", "-").strip("-") or "default"  # rp-allow: degradacao explicita, nao re-derivacao sancionada
+     return home / ".claude" / "projects" / project_slug / "state"
+ 
+ 
+diff --git a/.claude/hooks/_lib/policy.py b/.claude/hooks/_lib/policy.py
+index 6d8fdcc..b7c2887 100644
+--- a/.claude/hooks/_lib/policy.py
++++ b/.claude/hooks/_lib/policy.py
+@@ -1226,6 +1226,26 @@ class Policy:
+ 
+     # --- audit helpers (fail-open) -------------------------------------
+ 
++    # PLAN-182 W2 (S321) — atribuicao de projeto nos emissores de policy.
++    #
++    # Medido: `policy_evaluated` + `policy_denied` respondiam por 15.128 dos
++    # 15.208 eventos NAO-ATRIBUIVEIS pos-W1. A causa nao era o scrub
++    # (`project` esta em `_FEDERATION_ENVELOPE`, logo nas allowlists) nem o
++    # env: era o CHAMADOR omitindo o kwarg, com o default do emissor em "".
++    # A W1 curou ONDE o evento e gravado; isto cura O QUE ele carrega.
++    #
++    # Fail-open por construcao: qualquer falha na resolucao devolve "" e o
++    # evento sai como saia antes — atribuicao e observabilidade, nunca um
++    # motivo para derrubar uma decisao de policy.
++    @staticmethod
++    def _project_label() -> str:
++        try:
++            from _lib import runtime_paths as _rp
++
++            return str(_rp.project_dir())
++        except Exception:  # pragma: no cover - fail-open
++            return ""
++
+     def _emit_evaluated(self, rule_id: str, decision: str, duration_ms: int) -> None:
+         if _audit_emit is None:
+             return
+@@ -1235,6 +1255,7 @@ class Policy:
+                 rule_id=rule_id,
+                 decision=decision,
+                 duration_ms=duration_ms,
++                project=self._project_label(),
+             )
+         except Exception:  # pragma: no cover
+             pass
+@@ -1247,6 +1268,7 @@ class Policy:
+                 policy_id=self.policy_id,
+                 rule_id=rule_id,
+                 reason=reason,
++                project=self._project_label(),
+             )
+         except Exception:  # pragma: no cover
+             pass
+diff --git a/.claude/hooks/_lib/test_isolation.py b/.claude/hooks/_lib/test_isolation.py
+index 36ed1c5..c52abc8 100644
+--- a/.claude/hooks/_lib/test_isolation.py
++++ b/.claude/hooks/_lib/test_isolation.py
+@@ -54,6 +54,37 @@ list to drift.
+ rare test that genuinely exercises the real resolver; the function-scope assert
+ skips for it. Zero uses at ship; a ``validate-governance.sh`` grep gate keeps it
+ at zero and CODEOWNERS requires security-engineer review to add one.
++
++## Axis 2 — whole-directory overrides (PLAN-182 W1 follow-up)
++
++PLAN-182 W1 gave the family a single resolver
++(``_lib/runtime_paths.runtime_state_dir()``) whose HIGHEST-precedence input is
++``CLAUDE_PROJECT_DIR_NATIVE`` — above the ``HOME`` Axis 1 redirects. An ambient
++value therefore steers runtime state OUT of the isolated tree no matter what
++Axis 1 does. Measured before this cure: a child ``pytest`` run whose only test
++body is ``assert True`` left ``audit-log.lock`` (0 bytes, 0600) and ``state/``
++(0700) in the operator's directory.
++
++Two properties of that escape decide the shape of the cure, and both were
++measured rather than assumed:
++
++1. **The write happens at interpreter shutdown**, not at import and not in the
++   test body. Probe: with the carrier set, ``from _lib import audit_emit``
++   listed the directory as empty BEFORE the import, empty AFTER the import, and
++   holding both entries after the process exited.
++2. **Any restore inside the process re-opens it.** A/B on a standalone child
++   run — clear-then-restore in a session-fixture finalizer left both entries in
++   the canary; clear-and-never-restore left it empty.
++
++So the carrier is CLEARED (never redirected) at MODULE IMPORT time and is
++DELIBERATELY absent from the restore snapshot. Clearing rather than redirecting
++also keeps the DEFAULT arm of ``runtime_state_dir()`` (``HOME`` + slug, which
++Axis 1 already isolates) reachable for the whole suite; pinning the top of the
++precedence chain to a session path would make that arm unreachable and would
++force a matching edit into ``audit_carrier_overrides`` and
++``TestEnvContext.subprocess_env``. Production code keeps the override in full:
++nothing here touches ``_lib/runtime_paths``, and a test that exercises the
++override sets it for its own duration with ``mock.patch.dict``.
+ """
+ 
+ from __future__ import annotations
+@@ -132,6 +163,18 @@ AUDIT_CLEAR_CARRIERS = (
+     "CEO_AUDIT_LOG_ROTATE_BYTES",
+     "CEO_AUDIT_HMAC_DISABLE",
+ )
++# Whole-directory overrides: carriers that select the ENTIRE runtime-state dir
++# at the TOP of the resolver precedence (``_lib/runtime_paths``, PLAN-182 W1).
++# They are NEUTRALISED at import time and NEVER restored inside the process —
++# see the module docstring, Axis 2, for the two measurements that force both
++# halves of that sentence.
++#
++# Deliberately NOT part of ``ALL_AUDIT_CARRIERS``: membership there means
++# "snapshot me and restore me at session end", and restoring this carrier
++# before interpreter shutdown is exactly the measured re-opening of the escape.
++WHOLE_DIR_OVERRIDE_CARRIERS = (
++    "CLAUDE_PROJECT_DIR_NATIVE",
++)
+ # The full carrier surface — used by the WS-C partial-override rejection and by
+ # the WS-E grep gate (every carrier must be enumerated in ONE place).
+ ALL_AUDIT_CARRIERS = AUDIT_DIR_CARRIERS + AUDIT_CLEAR_CARRIERS
+@@ -146,6 +189,36 @@ SYNC_MODE_VAR = "CEO_AUDIT_SYNC_MODE"
+ LIVE_LOG_SNAPSHOT_VAR = "CEO_AUDIT_LIVE_LOG_PATH_SNAPSHOT"
+ 
+ 
++def _neutralize_whole_dir_overrides() -> Dict[str, Optional[str]]:
++    """Pop every whole-directory override and return what was popped.
++
++    Import-time by design. All three conftests import this module while pytest
++    is loading conftests — BEFORE any test module is imported and long before
++    the session fixture body runs (verified: conftest import -> test-module
++    import -> session-fixture body -> test body). A fixture-time pop would sit
++    two steps later than the collection window.
++
++    The returned mapping is diagnostic only. Nothing restores it: the escape's
++    write happens at interpreter shutdown, so a restore anywhere inside the
++    process hands the carrier back before that write. The cost is process-local
++    and cosmetic — a runner that calls ``pytest.main()`` repeatedly sees the
++    carrier stay popped until it exits — and it is the deliberate trade.
++    """
++    popped: Dict[str, Optional[str]] = {}
++    for key in WHOLE_DIR_OVERRIDE_CARRIERS:
++        popped[key] = os.environ.pop(key, None)
++    return popped
++
++
++# Import-time side effect (the ONE in this module) — see the function docstring
++# for why it cannot wait for the session fixture. This module is pytest-only
++# (it imports pytest at the top) and is excluded from adopter installs by
++# scripts/install.sh, so no production hook can reach this line.
++NEUTRALIZED_WHOLE_DIR_OVERRIDES: Dict[str, Optional[str]] = (
++    _neutralize_whole_dir_overrides()
++)
++
++
+ def audit_carrier_overrides(root: Path, *, sync_mode: bool = False) -> Dict[str, str]:
+     """Return the carrier env vars to SET so the FULL audit/HMAC surface resolves
+     under ``root`` (an isolated tmp tree), plus the sticky test signals.
+@@ -230,6 +303,9 @@ def _activate_redirect() -> Optional[Dict[str, object]]:
+ 
+     # 3) Snapshot every carrier + the sticky signals + the snapshot var + the
+     #    tooling vars for exact restore at session end.
++    #    WHOLE_DIR_OVERRIDE_CARRIERS is ABSENT from this tuple on purpose: it
++    #    is the one carrier set that must NOT come back before the interpreter
++    #    exits (module docstring, Axis 2, measurement 2).
+     snapshot_keys = (
+         ALL_AUDIT_CARRIERS
+         + (TEST_HARNESS_VAR, SYNC_MODE_VAR, LIVE_LOG_SNAPSHOT_VAR)
+@@ -251,6 +327,11 @@ def _activate_redirect() -> Optional[Dict[str, object]]:
+     # CLEAR carriers so a stale-inherited value can never point at the live tree.
+     for key in AUDIT_CLEAR_CARRIERS:
+         os.environ.pop(key, None)
++    # Re-assert the import-time neutralisation: a plugin, a conftest or an
++    # earlier test may have set a whole-dir override between this module's
++    # import and the first test. Not snapshotted above, so never restored.
++    for key in WHOLE_DIR_OVERRIDE_CARRIERS:
++        os.environ.pop(key, None)
+     # Re-export the real PyYAML user-site AFTER the HOME redirect (setdefault so a
+     # test that manages its own PYTHONUSERBASE keeps control).
+     for key, value in tooling_overrides.items():
+diff --git a/.claude/hooks/_lib/testing.py b/.claude/hooks/_lib/testing.py
+index 66d8802..ff26b5e 100644
+--- a/.claude/hooks/_lib/testing.py
++++ b/.claude/hooks/_lib/testing.py
+@@ -122,6 +122,14 @@ class TestEnvContext(unittest.TestCase):
+                 or key == "CEO_OVERHEAD_ACK"
+                 or key == "CEO_SKIP_REAL_REGISTRY_SMOKE"
+                 or key == "CEO_SOTA_DISABLE"
++                # PLAN-182 W1 follow-up: the ADR-001 whole-directory override
++                # outranks the HOME this class redirects three lines below, so
++                # an ambient value would send every runtime-state write of this
++                # test outside the sandbox. Under pytest the session layer has
++                # already popped it; under `python -m unittest` this class is
++                # the ONLY isolation there is. Restored by tearDown from the
++                # CLAUDE_* snapshot taken above, like every other steering var.
++                or key == "CLAUDE_PROJECT_DIR_NATIVE"
+             ):
+                 del os.environ[key]
+ 
+@@ -302,7 +310,14 @@ class TestEnvContext(unittest.TestCase):
+         # like ``subprocess_env(CEO_AUDIT_LOG_DIR="", HOME="<real>")`` cannot
+         # re-open the fallback-to-live path (Codex pair-rail P1).
+         tmp_root = str(Path(self._tmp_root).resolve())
+-        path_carriers = ("HOME", "CEO_AUDIT_LOG_DIR", "CEO_PROJECT_STATE_DIR") + tuple(
++        # CLAUDE_PROJECT_DIR_NATIVE joins the validated set: it selects the
++        # WHOLE runtime-state dir at the top of the resolver precedence, so a
++        # child carrying one that points outside this test's tree is the same
++        # partial-override vector C3 exists to reject. Zero callers pass it
++        # today (24 subprocess_env call sites, none naming it), so this is a
++        # no-op that states the invariant instead of leaving a hole in it.
++        path_carriers = ("HOME", "CEO_AUDIT_LOG_DIR", "CEO_PROJECT_STATE_DIR",
++                         "CLAUDE_PROJECT_DIR_NATIVE") + tuple(
+             c for c in test_isolation.AUDIT_CLEAR_CARRIERS if c.endswith("_PATH")
+             or c.endswith("_DIR") or c.endswith("_ERR") or c.endswith("_LOCK")
+         )
+diff --git a/.claude/hooks/check_notification.py b/.claude/hooks/check_notification.py
+index 139fe3e..a7aa8ad 100755
+--- a/.claude/hooks/check_notification.py
++++ b/.claude/hooks/check_notification.py
+@@ -112,11 +112,20 @@ def _emit(event: Dict[str, Any]) -> None:
+     from _lib import audit_emit  # lazy: resolved at emit time
+ 
+     title = event.get("title")
++    # PLAN-182 W2 (S321): sem `project=` o evento nasce nao-atribuivel — o
++    # default do emissor e "". Fail-open: falha na resolucao vira "".
++    try:
++        from _lib import runtime_paths as _rp
++
++        _project = str(_rp.project_dir())
++    except Exception:  # pragma: no cover - fail-open
++        _project = ""
+     audit_emit.emit_notification_lifecycle(
+         notification_type=_normalize_type(event.get("notification_type")),
+         has_title=bool(isinstance(title, str) and title),
+         message_sha256_prefix=_message_prefix(event.get("message")),
+         session_id=_session_id(event),
++        project=_project,
+     )
+ 
+ 
+diff --git a/.claude/hooks/check_tier_policy_misrouting_24h.py b/.claude/hooks/check_tier_policy_misrouting_24h.py
+index 743c339..34ae35a 100755
+--- a/.claude/hooks/check_tier_policy_misrouting_24h.py
++++ b/.claude/hooks/check_tier_policy_misrouting_24h.py
+@@ -90,7 +90,9 @@ def _audit_log_path() -> Optional[Path]:
+     if home_path_basename.exists():
+         return home_path_basename
+     # Fallback to legacy harness slug-style.
+-    slug = "-" + str(repo_root).replace("/", "-").lstrip("-")
++    from _lib import runtime_paths as _rp
++
++    slug = _rp.project_slug(str(repo_root))  # PLAN-182 W3 (S321): slug via resolvedor unico
+     home_path_slug = (
+         Path.home() / ".claude" / "projects" / slug / "audit-log.jsonl"
+     )
+diff --git a/.claude/scripts/lessons.py b/.claude/scripts/lessons.py
+index 62a1270..433d818 100755
+--- a/.claude/scripts/lessons.py
++++ b/.claude/scripts/lessons.py
+@@ -229,8 +229,13 @@ def _lessons_dir(base_dir: Optional[str] = None) -> Path:
+         )
+     home = Path(home_env)
+     project_dir = os.environ.get("CLAUDE_PROJECT_DIR", "")
++    # PLAN-182 W3 (S321): este modulo JA importava runtime_paths (:95) e
++    # mesmo assim re-derivava o slug aqui, sem o traco inicial — as lessons
++    # do adopter caiam num diretorio IRMAO da raiz da familia. Migracao
++    # meio-feita que passava em todos os gates. O dir da grafia antiga nao
++    # existe neste repositorio (medido), entao nao ha dado a migrar.
+     if project_dir:
+-        slug = project_dir.replace("/", "-").lstrip("-")
++        slug = _rp.project_slug(project_dir)
+     else:
+         slug = "default"
+     return home / ".claude" / "projects" / slug / "lessons"
+@@ -1455,7 +1460,8 @@ def count_pending_expiring(
+     renderer.
+     """
+     if base_dir is None and not os.environ.get("CEO_LESSONS_DIR"):
+-        slug = str(project_dir or "").replace("/", "-").lstrip("-") or "default"
++        slug = (_rp.project_slug(str(project_dir)) if project_dir
++                else "default")  # PLAN-182 W3 (S321): slug via resolvedor unico
+         home = os.environ.get("HOME") or str(Path.home())
+         base_dir = str(
+             Path(home) / ".claude" / "projects" / slug / "lessons"
+@@ -1517,7 +1523,8 @@ def get_boot_lessons_verified(
+     Read-only: no state transitions happen here.
+     """
+     if base_dir is None and not os.environ.get("CEO_LESSONS_DIR"):
+-        slug = str(project_dir or "").replace("/", "-").lstrip("-") or "default"
++        slug = (_rp.project_slug(str(project_dir)) if project_dir
++                else "default")  # PLAN-182 W3 (S321): slug via resolvedor unico
+         home = os.environ.get("HOME") or str(Path.home())
+         base_dir = str(
+             Path(home) / ".claude" / "projects" / slug / "lessons"
+diff --git a/conftest.py b/conftest.py
+index cd15dc9..e3136a9 100644
+--- a/conftest.py
++++ b/conftest.py
+@@ -78,67 +78,6 @@ for _rel in (".claude/hooks", ".claude/scripts", "."):
+     if _candidate not in sys.path:
+         sys.path.insert(0, _candidate)
+ 
+-# PLAN-182 W1 follow-up — neutralise the ADR-001 whole-directory carrier
+-# BEFORE the session-scoped isolation fixture below is imported/registered.
+-#
+-# `_lib/runtime_paths.runtime_state_dir()` honours CLAUDE_PROJECT_DIR_NATIVE at
+-# the HIGHEST precedence — above the HOME that the isolation layer redirects.
+-# Two enumerations should have covered it and neither was updated when W1
+-# landed: `_lib/test_isolation.AUDIT_DIR_CARRIERS` (documented there as "every
+-# env var that can steer WHERE an emit / HMAC sidecar / spool / lock / fallback
+-# resolves … the enumeration lives HERE, exactly once") and the CEO_* delete
+-# list in `_lib/testing.TestEnvContext`.
+-#
+-# Measured consequence: a pytest run containing a SINGLE `assert True`, with the
+-# carrier present in the environment, created `audit-log.lock` and `state/` in
+-# that external directory. The session fixture materialises the dirs before any
+-# test executes, so a function-scoped fixture cannot reach it — the cure has to
+-# happen at import time, here. Four modules were writing live runtime state
+-# while reporting green; `tests/unit/test_runtime_state_sandbox_confinement.py`
+-# is the behavioural guard.
+-#
+-# This is the OUTER cure. The structural fix belongs in
+-# `_lib/test_isolation.AUDIT_DIR_CARRIERS`, a canonical-guarded path that lands
+-# through the Owner's signed-edit ceremony; this keeps the suite confined until
+-# then. A test that exercises the override still sets it for its own duration
+-# via `mock.patch.dict`, which lands after this.
+-import atexit as _atexit_boot  # noqa: E402
+-import os as _os_boot  # noqa: E402
+-
+-_NATIVE_CARRIER_SAVED = _os_boot.environ.pop("CLAUDE_PROJECT_DIR_NATIVE", None)
+-
+-
+-def _restore_native_carrier() -> None:
+-    """Put an ambient carrier back when the PROCESS ends.
+-
+-    The pop above happens at import time, outside every fixture, so nothing
+-    else would restore it. `atexit` is the only safe hook for this, and the
+-    restriction is load-bearing rather than incidental.
+-
+-    A `pytest_sessionfinish` hook was tried and REVERTED: restoring the carrier
+-    there re-opens the escape window, because session-fixture teardown and any
+-    late write (spool flush, lock release, sidecar) run AFTER `sessionfinish`
+-    and resolve the path again. Bisected with a trivial one-assert child run and
+-    the carrier in the environment:
+-
+-        atexit + sessionfinish -> canary = ['audit-log.lock', 'state']   LEAKS
+-        atexit only            -> canary = empty
+-        no restore at all      -> canary = empty
+-
+-    Known limitation, accepted deliberately: in a reusable runner that calls
+-    `pytest.main()` repeatedly in one process, `atexit` does not fire between
+-    runs, so the carrier stays popped until that process exits. That is a
+-    cosmetic loss inside a test process; restoring it earlier is a correctness
+-    loss that writes into live state. If the reusable-runner case ever needs to
+-    be closed properly, the fix is the structural one — teaching
+-    `_lib/test_isolation.AUDIT_DIR_CARRIERS` to REDIRECT this carrier at the
+-    session tmpdir instead of popping it here — not an earlier restore.
+-    """
+-    if _NATIVE_CARRIER_SAVED is not None:
+-        _os_boot.environ["CLAUDE_PROJECT_DIR_NATIVE"] = _NATIVE_CARRIER_SAVED
+-
+-
+-_atexit_boot.register(_restore_native_carrier)
+ 
+ # PLAN-119 WS-A — suite-wide audit-dir isolation REDIRECT (keystone).
+ # Importing these two fixtures by name registers them as autouse for the whole
+diff --git a/tests/unit/test_runtime_state_sandbox_confinement.py b/tests/unit/test_runtime_state_sandbox_confinement.py
+index ed45542..1f4936f 100644
+--- a/tests/unit/test_runtime_state_sandbox_confinement.py
++++ b/tests/unit/test_runtime_state_sandbox_confinement.py
+@@ -197,39 +197,38 @@ class TestRuntimeStateSandboxConfinement(TestEnvContext):
+             "vacuous (entries: %s)" % (self._canary_entries(),),
+         )
+ 
+-    def test_debt_marker_isolation_layer_does_not_yet_neutralise_carrier(self) -> None:
+-        """Records that the cure is perimetral, and fails when it stops being.
+-
+-        Confinement currently depends on the repo-root ``conftest.py`` popping
+-        the carrier at import time. The structural fix belongs in
+-        ``_lib/test_isolation`` — a canonical-guarded path that lands through
+-        the Owner's signed-edit ceremony.
+-
+-        This marker asserts BEHAVIOUR, not a name, and that distinction is the
+-        whole point. Two earlier drafts both promised a signal they could never
+-        send:
+-
+-        * the first shelled out to a bare ``python -c``, which bypasses pytest
+-          isolation entirely and would resolve to the external dir forever;
+-        * the second asserted ``CLAUDE_PROJECT_DIR_NATIVE not in
+-          AUDIT_DIR_CARRIERS`` — but the prepared cure
+-          (``PLAN-182/w1-followup-ceremony/PROPOSED-PATCH.md``) deliberately
+-          introduces a SEPARATE tuple kept OUT of ``ALL_AUDIT_CARRIERS``,
+-          because membership there means snapshot+restore, not neutralisation.
+-          That assertion would stay green after the fix landed.
+-
+-        So the question asked here is the only one that survives a change of
++    def test_isolation_layer_neutralises_ambient_carrier(self) -> None:
++        """The structural cure, asserted as a permanent invariant.
++
++        History, because it is the point. This case shipped as a DEBT MARKER:
++        it recorded that confinement depended on the repo-root ``conftest.py``
++        popping the carrier at import time, and it was written to go RED on the
++        day the structural fix landed — at which point the instruction was to
++        delete it along with the conftest pop.
++
++        The fix landed (PLAN-182 W1-followup, S321):
++        ``_lib/test_isolation`` gained ``WHOLE_DIR_OVERRIDE_CARRIERS`` and
++        neutralises the carrier AT IMPORT, and the perimeter block was removed
++        from ``conftest.py``. Rather than delete the case, it is INVERTED: the
++        same behavioural question, opposite expected answer. Deleting it would
++        have traded a marker for nothing; inverting it converts the marker into
++        the regression guard the cure deserves.
++
++        Two earlier drafts of the marker promised a signal they could not send
++        — one shelled out to a bare ``python -c`` (bypassing pytest isolation
++        entirely), the other asserted membership in ``AUDIT_DIR_CARRIERS``, a
++        tuple the cure deliberately does NOT join (membership there means
++        snapshot+restore, which is the variant MEASURED as re-opening the
++        leak). This asks the only question that survives a change of
+         implementation: *does importing the isolation layer neutralise an
+-        ambient carrier?* Today it does not. When it does — by whatever
+-        mechanism — this goes red, and that is the signal to delete it together
+-        with the conftest pop.
++        ambient carrier?* It must, by whatever mechanism.
+         """
+         script = (
+             "import os, sys;"
+             "sys.path.insert(0, %r);"
+             "os.environ['CLAUDE_PROJECT_DIR_NATIVE'] = %r;"
+             "import _lib.test_isolation;"
+-            "print(os.environ.get('CLAUDE_PROJECT_DIR_NATIVE'))"
++            "print(repr(os.environ.get('CLAUDE_PROJECT_DIR_NATIVE')))"
+             % (str(_HOOKS), str(self._outside))
+         )
+         proc = subprocess.run(
+@@ -238,11 +237,12 @@ class TestRuntimeStateSandboxConfinement(TestEnvContext):
+         )
+         self.assertEqual(proc.returncode, 0, proc.stderr[-1000:])
+         self.assertEqual(
+-            proc.stdout.strip(), str(self._outside),
+-            "importing _lib.test_isolation now neutralises the carrier — the "
+-            "structural fix has landed. Remove the import-time pop in "
+-            "conftest.py, the one in test_credential_rotation_emit.py, and "
+-            "delete this case.",
++            proc.stdout.strip(), "None",
++            "importing _lib.test_isolation NO LONGER neutralises the ambient "
++            "carrier — the structural cure regressed. The carrier is the "
++            "HIGHEST-precedence input of runtime_state_dir(), so a test "
++            "process that keeps it writes live state OUTSIDE the sandbox "
++            "while reporting green (measured: audit-log.lock + state/).",
+         )
+ 
+ 
