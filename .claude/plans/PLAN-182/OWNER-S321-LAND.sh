@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 # OWNER-S321-LAND.sh — land do pacote de cerimônia W1-followup (PLAN-182).
+# CEREMONY-LINT: handwritten-exception: script de cerimonia autorado a mao
+# (o gerador da W3 do PLAN-174 ainda nao emite cortes de wave — e este
+# script implementa um gate que nenhum gerador conhece ainda, o
+# `touched - scope`); revisado com controle positivo na S321.
 #
 # Roda a partir da RAIZ do repositório. Nenhum passo é destrutivo antes de
 # todos os gates passarem; `--dry-run` para inspecionar sem aplicar.
