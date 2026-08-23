@@ -174,6 +174,33 @@
       manifesto.
       Check: install_docs_template devolve/grava sinal por DESTINO com a mesma semantica de install_one; teste com os quatro casos (escreveu / EXISTS-skip / fonte ausente / dry-run) assertando 1,0,0,0; e nenhuma entrada FMS_DELIVERED_* e declarada antes deste item estar verde
 
+- [ ] `[P0]` **Fixture pré-Wave-B COM owner, e o default é PRESERVAR
+      (achado P1 do pair-rail r5 sobre o commit do desenho).** A §8.5.3
+      descreve a lacuna em PROSA e nenhuma checkbox a executava — é
+      exatamente a classe que este rail nomeou: *"identifies constraints
+      but omits them from the executable checklist"*. Para um alvo
+      pré-Wave-B instalado **com** `--github-owner`, o `upgrade.sh`
+      sintetiza `placeholders: {}` (`:3629-3633`, medido), então
+      `github_owner` **não existe** e o `.github/CODEOWNERS` renderizado
+      **não pode ser regenerado**. Todas as fixtures de owner do desenho
+      partem de instalação ATUAL com estado gravado, logo uma
+      implementação poderia sobrescrever ou reivindicar esse arquivo
+      adopter-owned passando em todos os Checks listados.
+      **Comportamento obrigatório: PRESERVAR** — sem estado, o arquivo é
+      do adopter (regra de under-claim do `ADR-155-AMEND-1:87-125`).
+      Check: fixture que instala com --github-owner e depois REMOVE o install-state (simulando pre-Wave-B); o upgrade deixa o CODEOWNERS renderizado byte-identico, NAO o registra no manifesto, e emite aviso nomeado; o teste fica VERMELHO se o arquivo for tocado ou reivindicado
+
+- [ ] `[P0]` **Coexistência dos DOIS destinos de CODEOWNERS (achado P1 do
+      pair-rail r5).** A §9.3 atribui este caso à W5-b em PROSA e nenhuma
+      checkbox o exercitava. Instalar primeiro **sem** `--github-owner` e
+      depois **com** deixa `.github/CODEOWNERS.template` **e**
+      `.github/CODEOWNERS` no disco — os ramos gravam em paths diferentes
+      e nenhum limpa o outro (`install.sh:1497` vs `:1514`, medido). O
+      desenho só testa fixtures default e owner SEPARADAS, então um
+      resolvedor ou manifesto que reivindique **os dois** passa em todos
+      os Checks.
+      Check: fixture de install SEQUENCIAL (sem flag, depois com flag) assere o conjunto EXATO de paths owned — e falha se o manifesto listar os dois
+
 - [ ] `[P0]` **A tabela de ROTAS vira dado COMPARTILHADO (dívida criada
       pela W5-a, §8.5.2).** A W5-a define `_TEMPLATE_DELIVERED` /
       `_RENDERED_DELIVERED` **dentro** de `_parity_classify.py` porque é
@@ -503,7 +530,21 @@
       realizada" e era insatisfazível — `IDENTICAL` não copia. Ver o item
       correspondente na W5-b.)
 - [ ] AC-10 [P0] O baseline pós-upgrade é VÁLIDO para as duas árvores
-      novas: cada path registra o digest da fonte que o adopter
-      realmente recebeu (`templates/…`), nenhum path some por
-      `continue`, e um SEGUNDO upgrade consecutivo não reclassifica
-      nada. Fecha D3 (§8.3) e D4 (§8.4).
+      novas: cada path registra o digest **dos bytes que o adopter
+      realmente ficou com**, nenhum path some por `continue`, e um
+      SEGUNDO upgrade consecutivo não reclassifica nada. Fecha D3 (§8.3)
+      e D4 (§8.4).
+      **CORRIGIDO na S324 (achado P2 do pair-rail r5): a redação anterior
+      dizia "o digest da fonte … (`templates/…`)" e CONTRADIZIA a §9.7.**
+      As duas rotas de `docs/` são de DOIS ESTÁGIOS — `cp` cru **mais**
+      reescrita in-place por `apply_placeholder_substitutions` — e o ramo
+      de early-return dela é MORTO (§9.5), então o estágio 2 **sempre**
+      roda. Registrar o digest do template CRU só passa hoje porque os
+      dois templates têm **zero** marcadores `{{...}}`; no dia em que
+      qualquer um ganhar um placeholder, o arquivo entregue divergiria do
+      próprio baseline **no ato**. O mesmo vale, por outro mecanismo, para
+      o `.github/CODEOWNERS` renderizado.
+      ⇒ O registro é dos **bytes PÓS-substituição** (o arquivo no target),
+      não da fonte crua — e o teste **planta** um placeholder num dos
+      templates de `docs/` para que o Check não seja vacuoso.
+      Check: e2e planta um marcador {{...}} em templates/docs/rotation-log.md e assere que o digest registrado bate com o arquivo POS-substituicao no target e NAO com o template cru; com a rota revertida para o template cru o teste fica VERMELHO

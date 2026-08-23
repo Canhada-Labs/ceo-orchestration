@@ -27,8 +27,15 @@ What is asserted here, and why each assertion exists:
   correct (no regression);
 * the RENDERED destination `.github/CODEOWNERS` resolves to None rather than
   silently to this repository's own live CODEOWNERS;
-* the route-map census: any NEW `templates/` homonym lights up, so the next
-  one is a red test instead of a silent wrong comparison.
+* TWO censuses, because one is provably blind. The same-name census catches a
+  new `templates/` homonym; it is BLIND whenever source and destination names
+  differ or content is rendered (`CODEOWNERS.template` -> `CODEOWNERS` is the
+  live proof). So the authoritative census parses install.sh's own copy calls
+  and requires every DELIVERY ROUTE to be classified -- a renamed or
+  transformed route fails there instead of resolving silently.
+* non-vacuity guards on every map-looping test. Measured: deleting one map
+  entry left the per-entry tests green (empty loop = free pass) and only the
+  census went red; with the guards the same sabotage turns three tests red.
 
 Hermetic: every mechanism assertion builds its own source trees in a tempdir.
 Live-repo assertions are read-only and documented as such.
@@ -37,6 +44,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
+import re
 import shutil
 import sys
 import tempfile
@@ -84,6 +92,10 @@ class TestDeliveryRouteResolution(_Tree):
     """The MECHANISM, on synthetic trees — full control of both sides."""
 
     def test_mapped_route_resolves_from_templates_not_root_homonym(self) -> None:
+        # Non-vacuity guard: a loop over an EMPTY map passes for free. The
+        # negative control proved this class -- deleting a map entry left the
+        # per-entry tests green and only the route census went red.
+        self.assertTrue(pc._TEMPLATE_DELIVERED, "_TEMPLATE_DELIVERED is empty")
         # Positive control that reproduces the MECHANISM, not the appearance:
         # the destination exists at BOTH places with DIVERGENT content, and the
         # route map must pick templates/.
@@ -106,6 +118,7 @@ class TestDeliveryRouteResolution(_Tree):
                 )
 
     def test_mapped_route_resolves_with_no_homonym_planted(self) -> None:
+        self.assertTrue(pc._TEMPLATE_DELIVERED, "_TEMPLATE_DELIVERED is empty")
         # Negative control: absent the homonym, the same path still resolves
         # from templates/. Proves the map is consulted, not the collision.
         for dest, src in sorted(pc._TEMPLATE_DELIVERED.items()):
@@ -134,6 +147,7 @@ class TestDeliveryRouteResolution(_Tree):
         )
 
     def test_rendered_destination_is_unresolvable_not_wrong(self) -> None:
+        self.assertTrue(pc._RENDERED_DELIVERED, "_RENDERED_DELIVERED is empty")
         # install.sh renders {{OWNER_HANDLE}} at install time, so the delivered
         # bytes exist nowhere in the checkout. Falling through to identity here
         # would compare against this repo's own live CODEOWNERS.
@@ -153,6 +167,7 @@ class TestLiveRepoRoutes(_Tree):
     """Read-only assertions against the real checkout (documents today's truth)."""
 
     def test_docs_routes_diverge_from_their_root_homonyms(self) -> None:
+        self.assertTrue(pc._TEMPLATE_DELIVERED, "_TEMPLATE_DELIVERED is empty")
         # If these ever stop diverging the defect becomes unobservable and the
         # mechanism tests above are the only guard left — assert it explicitly.
         for dest, src in sorted(pc._TEMPLATE_DELIVERED.items()):
@@ -171,6 +186,8 @@ class TestLiveRepoRoutes(_Tree):
                 self.assertEqual(pc._src_digest(str(REPO), dest, []), tpl_d)
 
     def test_every_declared_source_exists_at_head(self) -> None:
+        self.assertTrue(pc._TEMPLATE_DELIVERED and pc._RENDERED_DELIVERED,
+                        "a route map is empty -- the loop below would be vacuous")
         # `_digest` returns None for BOTH "absent" and "unreadable", so a typo
         # in a route map would resolve to None at runtime and degrade silently
         # into UNCLASSIFIED. Runtime cannot raise (an old pin legitimately may
@@ -199,6 +216,43 @@ class TestLiveRepoRoutes(_Tree):
                     pc._src_digest(str(REPO), rel, []),
                     pc._digest(str(REPO / "templates" / rel), []),
                 )
+
+    def test_census_is_derived_from_DELIVERY_ROUTES_not_same_name_files(self) -> None:
+        # The same-name census below is BLIND whenever source and destination
+        # names differ or the content is rendered -- `CODEOWNERS.template` ->
+        # `CODEOWNERS` is the live proof (PLAN-183 §8.2). So the authoritative
+        # census derives from the installer's own copy calls: every route
+        # install.sh delivers under docs/ or .github/ must be CLASSIFIED, and a
+        # new or renamed route fails here instead of resolving silently against
+        # the wrong file.
+        installer = (REPO / "scripts" / "install.sh").read_text()
+        joined = re.sub(r"\\\n\s*", " ", installer)  # join line continuations
+        routes = set(
+            re.findall(r'install_docs_template\s+"([^"]+)"\s+"([^"]+)"', joined)
+        )
+        # the rendered branch does not go through the helper (own inline sed)
+        for dest in re.findall(r'local dst="\$TARGET/(\.github/CODEOWNERS)"', installer):
+            routes.add(("templates/.github/CODEOWNERS.template", dest))
+
+        self.assertTrue(routes, "no delivery routes parsed from install.sh")
+
+        unclassified = []
+        for src, dest in sorted(routes):
+            if dest in pc._TEMPLATE_DELIVERED or dest in pc._RENDERED_DELIVERED:
+                continue  # explicitly mapped
+            if src == "templates/%s" % dest:
+                continue  # identity-mapped: the existing fallback is correct
+            unclassified.append("%s -> %s" % (src, dest))
+
+        self.assertEqual(
+            unclassified,
+            [],
+            "delivery route(s) whose SOURCE relpath differs from the "
+            "destination and which are absent from both route maps: %s. Each "
+            "needs an entry (or an explicit identity justification) or "
+            "_src_digest will silently compare against the wrong file."
+            % unclassified,
+        )
 
     def test_route_map_census_is_closed(self) -> None:
         # The census that closes the class: every templates/ path whose
