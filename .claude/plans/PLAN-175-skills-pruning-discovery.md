@@ -94,6 +94,56 @@ baseline. Nada de poda na sessão 1 — por design.
 **Debate:** Codex r1→r3 (GO no r3); `/debate start PLAN-175` no
 início da execução; a poda em si passa pelo processo SP-NNN/soak.
 
+### 3.1 Medição S322 — o P1 se apoiava num mecanismo MORTO, e vivo ele é dependente de IDIOMA
+
+Sonda reproduzível: `.claude/plans/PLAN-175/p1/probe-retrieval-language-gap.py`
+(N=8 pares EN/PT, alvo esperado derivado à mão da ROUTING TABLE).
+
+**Achado 1 — o índice nunca existiu.** `skill-retrieve.py` respondia
+`mode=static-fallback` com `base_cosine=0.0` em TODOS os resultados,
+porque `~/.claude/projects/<slug>/skill-index.sqlite` **não existia**.
+`skill-index-build.py` cura em um comando (`OK: indexed 166 skills,
+7472 idf terms`), mas **não há bootstrap automático**: o censo
+`grep -rln skill-index-build` sobre `.claude/hooks/`, `.github/workflows/`
+e `scripts/` devolve apenas o próprio build, o retrieve e os testes —
+**nenhum hook, nenhum step de CI, nenhuma rota de install**. O índice
+mora FORA do repo, então não é commitável: ele nasce morto em toda
+máquina nova e em todo adopter. O AC do P1 ("mecanismo de sugestão
+vivo com positive control") era insatisfazível sem isso, e o
+`positive control` teria passado a medir o fallback.
+
+**Achado 2 — vivo, o recall depende do IDIOMA da consulta.**
+Controle validado (índice inválido ⇒ `mode=static-fallback`, medido):
+
+| modo | recall@5 (N=8) |
+|---|---|
+| tf-idf, consulta em **inglês** | **6/8** |
+| static-fallback (índice morto) | 4/8 |
+| tf-idf, consulta em **português** | **2/8** |
+
+O corpus de `SKILL.md` é em inglês; consultas em português colapsam
+num atrator de idioma — `dpo-reporting` é top-1 em **4 das 8** queries
+PT (é uma das poucas skills com massa de vocabulário PT/LGPD). Não é
+efeito de comprimento: `dpo-reporting` tem 8.311 bytes contra 20.980
+do `devops-ci-cd`, e o ranker usa cosine normalizado
+(`skill-retrieve.py:271`).
+
+**Consequência para este plano:** o `CLAUDE.md` deste projeto manda
+operar em português, então **o caminho REAL de uso é exatamente o ramo
+degradado** — o único em que ligar o índice PIORA o resultado
+(2/8 contra os 4/8 de não ligar). O P1 não pode fechar declarando
+"mecanismo vivo": ele precisa (a) uma rota de bootstrap do índice que
+sobreviva a máquina nova e a adopter, e (b) uma decisão explícita
+sobre o gap de idioma — indexar PT, normalizar a query, ou declarar a
+limitação e manter o fallback como caminho primário. Enquanto (b) não
+existir, ligar a sugestão por tf-idf em sessão PT é uma regressão
+medida, não uma melhoria.
+
+**Honestidade da amostra:** N=8, ground truth manual, uma única
+tentativa por consulta. Basta para mostrar a DIREÇÃO e o atrator
+(4/8 no mesmo slug não é ruído), não para fixar a magnitude. O P1
+deve re-medir com N≥30 antes de decidir (b).
+
 ## 4. Anexo S305 — reframe context-engineering (advisory)
 
 A pesquisa S305 (linha 7 de `PLAN-178/research-S305.md`) reposiciona
