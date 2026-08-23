@@ -7,7 +7,7 @@ reviewed_by: "Owner — autorizacao explicita em chat (S315, 2026-08-20): 'se ja
 created: 2026-08-20
 owner: CEO
 depends_on: [PLAN-167, PLAN-168]
-budget_tokens: 170-360k (W0 60-110k; W1 50-110k incl. re-baseline de ownership; W2 40-90k; W3 20-40k; W4 piso nomeado ao fechar a W0)
+budget_tokens: 210-400k (W0 60-110k; W1 90-150k — re-orcado pela W0-US4 §7, cujo piso de re-baseline de ownership e 40-70k em 2-4 iteracoes; W2 40-90k; W3 20-40k; W4 piso nomeado ao fechar a W0)
 budget_sessions: 3-5
 context_risk: medium
 external_wait: "nenhum — DECISAO do CEO registrada (§6, ajuste r1-25): o AC-2 aceita prova em repositorio DESCARTAVEL NOSSO, nao um PR em repo de terceiro. Manter dependencia de PR externo tornaria o plano refem de CI que nao e deste projeto; a evidencia que o AC precisa (template ativado sai verde) e integralmente reproduzivel localmente."
@@ -214,7 +214,12 @@ existe.
 
 - **W1 ligado a PLAN-167 / PLAN-168** — INV-4 e a bateria de ownership.
   A cura do ponteiro toca o gerador compartilhado; o ciclo de
-  re-baseline (~25 min por iteração) é orçado dentro da W1.
+  re-baseline (~25 min por iteração, 62 installs reais) é orçado dentro
+  da W1 com piso NOMEADO pela W0-US4: **40-70k tokens em 2-4
+  iterações**, 1 sessão se o e2e rodar LOCAL e 2-4 se o veredito vier do
+  nightly (`.github/workflows/ownership-nightly.yml:38`,
+  `timeout-minutes: 110`). A W1 toca SETE artefatos, não cinco — tabela
+  e aritmética em §7.
 - **W3 ligado a PLAN-175** — colisão na seleção de skills em tempo de
   install. O 175 muda o conjunto instalado; este plano muda a regra de
   demoção. Quem executar primeiro avisa o outro.
@@ -280,6 +285,74 @@ enumeração por DERIVAÇÃO do organograma. r11 confirmou este item CLOSED;
    **→ CURADO (S316):** §4 registra a conta 67≠71 e o check da W0-US1
    agora exige categoria nomeada para os 4 casos antes do veredito.
 
+## 7. W0-US4 — inventário de ownership e orçamento do re-baseline (S322)
+
+> Levantamento READ-ONLY (a wave declara US1/US2/US4 read-only, §W0).
+> Sem checkbox aqui por construção: `PLAN-SCHEMA.md` §13 exige `Check:`
+> por checkbox, e esta seção é evidência, não unidade de execução.
+
+**Veredito: a W1 toca 4 dos 5 artefatos nomeados, e a lista de CINCO
+(`PLAN-183/debate/round-1/devops-dx.md:50`, consolidada em
+`consensus.md:143` como K9) está INCOMPLETA — o conjunto real é SETE.**
+
+### 7.1 Os artefatos
+
+| # | Artefato | W1 toca? | Mecanismo, com evidência |
+|---|---|---|---|
+| 1 | `scripts/tests/test-protocol-pointer-render.sh` | **SIM — obrigatório** | R2 (`:65-72`) assere `degraded + sed == healthy` (invariante de UM template). Hoje isso é verdade porque o ramo fora-do-target de `_render_protocol_pointer` **é** literalmente `degraded \| sed` (`scripts/_framework_manifest_set.sh:702-707`) — a relativização fora-do-target quebra a identidade por construção. R8 (`:114-124`) é a ÚNICA asserção de forma relativa e está presa ao caso dentro-do-target. O requisito "corpo contém `--protocol-source`" não tem cenário. **Roda POR-PR** (`.github/workflows/smoke-install.yml:279`) — vermelho aqui pinta o main, não o nightly. |
+| 2 | `scripts/tests/test-protocol-pointer-inv4.sh` | **SIM — obrigatório, e contradiz o Check da W1** | `assert_sound()` (`:50-61`) exige `grep -F -q "$REPO_ROOT/PROTOCOL.md"` — o caminho ABSOLUTO PRESENTE — e é chamada em `:70`, `:75` e `:103`. Depois da relativização o arquivo NÃO PODE ficar verde sem editar `assert_sound`: o Check da W1 ("`test-protocol-pointer-inv4.sh` verde") é insatisfazível como escrito. Nightly-only (`.github/workflows/ownership-nightly.yml:110`) — o vermelho chega um dia atrasado. |
+| 3 | `scripts/tests/ownership_table.tsv` | **SIM — tríade nova de linhas** | Enum de `live_content` hoje: `pristine \| legacy_pristine \| degraded \| edited` (`docs/ownership-decision-table.md:126-134`). A remediação retroativa ("absoluto legado") é classe NOVA e precisa da tríade paralela a `degraded`, que hoje ocupa OWN-0092/0093/0094. **Não-impacto medido:** OWN-0011/0014/0071/0072 NÃO viram, porque o harness define `pristine` de `protocol` como "a própria saída do install base" e deixa o arquivo intocado (`scripts/tests/test-ownership-table.sh:374-380`). **A mudança de BYTES não invalida o TSV:** `grep -E "[0-9a-f]{64}"` nos cinco devolve ZERO — valores simbólicos, nenhum digest fixado. |
+| 4 | `scripts/tests/ownership-baseline-map.txt` | **SIM — RE-GRAVADO, nunca editado à mão** | Saída do harness em modo `--stable-header` (`test-ownership-table.sh:55,717-724`). Estado medido: 65 linhas `OWN-`, trailer `GREEN=62  RED=3  AMBIG=0  HARNESS-ERR=0`. **Não é gate:** a única referência em `scripts/` + `.github/` é um COMENTÁRIO (`test-ownership-table.sh:720`); nenhum script o lê — ele deriva em SILÊNCIO se não for re-gravado. Custo = a corrida de ~25 min, não tokens. |
+| 5 | `scripts/tests/ownership-expected-reds.txt` | **CONDICIONAL — re-verificar toda iteração** | Hoje exatamente `OWN-0016`, `OWN-0024`, `OWN-0027` (`:13-15`); `ownership-nightly-gate.sh` falha em QUALQUER diferença, encolhimento incluído. Linha nova verde ⇒ nenhuma edição. Mas linha nova vermelha, ou o reconhecedor novo fechando por acidente a `OWN-0016`, obriga edição no MESMO commit — e por `CLAUDE.md` §4 uma corrida toda-verde é sinal de PARAR. |
+| **6** | `docs/ownership-decision-table.md` | **SIM — AUSENTE da lista de cinco** | O TSV declara "values live ONLY here" e manda o raciocínio para o doc (`ownership_table.tsv:1-2`). A classe nova exige entrada no enum §2.4 e uma regra de legalidade irmã da **R-04b** (`:297`). Sem a regra, a linha nova é ILEGAL pela própria §4. 42.367 bytes. |
+| **7** | `scripts/tests/test-ownership-table.sh` | **SIM — AUSENTE da lista de cinco** | O harness instancia cada `live_content` por ramo de `case` (`:382-391` para `degraded`). Sem ramo para a classe nova, cada linha nova vira `HARNESS-ERR`, não veredito. 37.690 bytes. |
+
+### 7.2 O orçamento
+
+Superfície de LEITURA, medida por `wc -c`, convertida a ~4 bytes/token:
+
+| Artefato | bytes | ≈tokens |
+|---|---|---|
+| `ownership_table.tsv` | 11.671 | 2,9k |
+| `ownership-baseline-map.txt` | 8.184 | 2,0k |
+| `ownership-expected-reds.txt` | 795 | 0,2k |
+| `test-protocol-pointer-inv4.sh` | 6.091 | 1,5k |
+| `test-protocol-pointer-render.sh` | 6.502 | 1,6k |
+| **subtotal dos CINCO** | **33.243** | **8,3k** |
+| `docs/ownership-decision-table.md` | 42.367 | 10,6k |
+| `test-ownership-table.sh` | 37.690 | 9,4k |
+| **superfície completa (SETE)** | **113.300** | **28,3k** |
+
+- **1 iteração ≈ 12-18k tokens** — leituras direcionadas
+  (`_framework_manifest_set.sh:640-775`, `upgrade.sh:1593-1760`) mais a
+  revisão do diff de 65 linhas do mapa — **+ ~25 min de espera
+  bloqueante** (62 installs reais; `CELL_TIMEOUT` default 60s, o CI usa
+  180 em `ownership-nightly.yml:131`, e o job cabe em
+  `timeout-minutes: 110` em `:38`).
+- **Iterações esperadas: 2-4.** Prior empírico DESTE código: 11 rodadas
+  cross-model, 35 defeitos, metade das últimas sendo regressões da
+  correção anterior (`docs/ownership-decision-table.md:46-52`); e o
+  PLAN-167 precisou de mapa-baseline **v3**
+  (`PLAN-167-ownership-decision-table.md:490`).
+- **Piso do re-baseline: 40-70k tokens** — o re-baseline SOZINHO
+  consumia 80%–64% do envelope de 50-110k que a W1 declarava. Daí a
+  re-declaração no frontmatter (agora 90-150k para a W1).
+- **Sessões: 1 pela rota LOCAL, 2-4 pela rota nightly.** O e2e é
+  nightly-only por desenho (`smoke-install.yml:29-31,235`), então cada
+  iteração que espera o nightly custa uma SESSÃO inteira.
+  `budget_sessions: 3-5` só se sustenta se o e2e rodar LOCAL — é
+  pré-condição, não preferência.
+
+### 7.3 Onde mora a cerimônia GPG
+
+Dos SETE artefatos, **ZERO** é canônico: `scripts/tests/*` e `docs/*`
+não aparecem em `_CANONICAL_GUARDS`
+(`.claude/hooks/check_canonical_edit.py:115-215`). O corpo deste plano
+também não é — só `.claude/plans/PLAN-*/spec.md` é (`:210`). A cerimônia
+da W1 recai inteira sobre o CÓDIGO:
+`scripts/_framework_manifest_set.sh` (`:199`), `scripts/upgrade.sh`
+(`:191`) e `.github/workflows/*.yml` (`:184`) se algum step mudar.
+
 ## Waves
 
 ### W0 — Reproduzir e medir antes de curar
@@ -319,8 +392,25 @@ enumeração por DERIVAÇÃO do organograma. r11 confirmou este item CLOSED;
       `.github/` e para ATIVAR e EXECUTAR o CI entregue. Nunca uma
       bateria paralela.
       Check: smoke-install passa a referenciar validate.yml.template; hoje o grep devolve ZERO — o teste é essa referência existir e o step rodar
-- [ ] `[P1][US4]` Inventariar quais dos cinco artefatos de ownership a
+- [x] `[P1][US4]` Inventariar quais dos cinco artefatos de ownership a
       W1 vai tocar, e orçar o ciclo de re-baseline em tokens e sessões.
+      **FECHADO (S322) — VEREDITO: a W1 toca 4 dos 5 nomeados, e a lista
+      de CINCO está INCOMPLETA: o conjunto real é SETE.**
+      `test-protocol-pointer-render.sh` e `test-protocol-pointer-inv4.sh`
+      são edição OBRIGATÓRIA — e o segundo **contradiz o próprio Check
+      da W1** (`assert_sound()` exige o caminho ABSOLUTO presente, então
+      "inv4 verde" é insatisfazível depois de relativizar).
+      `ownership_table.tsv` ganha a tríade da classe nova de
+      `live_content`; `ownership-baseline-map.txt` é RE-GRAVADO pelo
+      harness, nunca editado à mão; `ownership-expected-reds.txt` só
+      muda se o conjunto RED mudar, mas re-verifica a cada iteração.
+      Faltam na lista de cinco: `docs/ownership-decision-table.md`
+      (enum §2.4 + regra de legalidade) e
+      `scripts/tests/test-ownership-table.sh` (o ramo de `case` que
+      instancia o `live_content` novo — sem ele, cada linha nova vira
+      `HARNESS-ERR`, não veredito). Piso do re-baseline: **40-70k tokens
+      em 2-4 iterações**, 1 sessão pela rota LOCAL e 2-4 pela nightly.
+      Tabela, evidência e aritmética em §7.
       Check: none (levantamento — a saída é a lista de artefatos e o orçamento)
 
 ### W1 — Ponteiro portátil e retroativo (A1)
