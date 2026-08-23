@@ -2,11 +2,16 @@
 
 > ## Autorização do Owner — 2026-08-23 (S324)
 >
-> **W5-a: AUTORIZADA a executar.** O Owner escolheu, em
-> `AskUserQuestion`, "Commitar + corrigir + executar W5-a". A superfície
-> foi MEDIDA como não-canônica pelo oráculo suportado
+> **W5-a: EXECUTADA E LANDADA** em `b6de7cf` (pushado, `origin/main` =
+> `2578624`). O Owner autorizou em `AskUserQuestion` ("Commitar +
+> corrigir + executar W5-a"); a superfície foi MEDIDA como não-canônica
+> pelo oráculo suportado
 > (`check_canonical_edit.py --is-canonical scripts/tests/_parity_classify.py`
-> → `0`), logo dispensa sentinel e cerimônia. É L2.
+> → `0`), então dispensou sentinel e cerimônia — L2, como previsto.
+> As 4 checkboxes da W5-a e a **AC-8** estão fechadas com evidência
+> inline. Prova de integração: e2e de paridade em árvore-sombra passou de
+> `STALE 2 + UNCLASSIFIED 1` para `STALE 3 + UNCLASSIFIED 0` — três
+> fatais de UMA causa (D1) em vez de duas.
 >
 > **W5-b: SEGUE FECHADA.** A OQ-5 foi respondida (rota (ii) — registro
 > verbatim na §Open questions do plano), mas restam a **OQ-4**
@@ -100,7 +105,7 @@
 >   modo de cerimônia), o que explica por que `.github/CODEOWNERS` nunca
 >   acendeu.
 
-- [ ] `[P0]` `_src_digest` deixa de resolver por identity-first quando o
+- [x] `[P0]` `_src_digest` deixa de resolver por identity-first quando o
       path é entregue a partir de `templates/`. A ordem correta é
       **derivada da rota de entrega**, nunca da existência do arquivo: se
       o `install.sh` escreve `X` a partir de `templates/X`, a fonte de
@@ -119,20 +124,37 @@
       §8.5.1: nome de fonte diferente **mais** substituição, logo
       `_src_digest` tem de comparar contra os bytes RENDERIZADOS.
       Check: assere que _src_digest resolve docs/BRANCH-PROTECTION.md e docs/rotation-log.md para o digest de templates/, que .github/CODEOWNERS resolve para os bytes RENDERIZADOS de CODEOWNERS.template (nao para o arquivo da raiz e nao para o template cru), e que os 2 workflows .template seguem resolvendo para templates/ (nenhuma regressao)
-- [ ] `[P0]` Controle POSITIVO que reproduz o MECANISMO, não a aparência:
+      **FECHADO (S324, `b6de7cf`).** Mapa explicito destino->fonte em
+      `_TEMPLATE_DELIVERED` / `_RENDERED_DELIVERED`; identity-first
+      preservada como DEFAULT. Escopo saiu de 2 para 3 paths — o
+      terceiro, `.github/CODEOWNERS`, e a rota RENDERIZADA e devolve
+      None (fail-loud), nao o arquivo vivo da raiz.
+- [x] `[P0]` Controle POSITIVO que reproduz o MECANISMO, não a aparência:
       um path novo entregue de `templates/` com homônimo plantado na raiz
       e digest divergente sai **STALE**, e o teste falha se sair
       UNCLASSIFIED. Controle NEGATIVO: sem o homônimo plantado, o mesmo
       path segue STALE.
       Check: o teste novo passa; com a cura revertida por git stash ele fica VERMELHO e a mensagem NOMEIA o path plantado
-- [ ] `[P0]` `docs/rotation-log.md` — o falso-verde latente — ganha
+      **FECHADO (S324).** Controle CIRURGICO: mantendo os mapas
+      definidos e removendo APENAS a consulta a eles, 3 testes ficam
+      vermelhos com **zero `AttributeError`** e a mensagem nomeia
+      `defect D2` — a falha e SEMANTICA, entao o teste detecta o
+      defeito e nao a ausencia de uma constante.
+- [x] `[P0]` `docs/rotation-log.md` — o falso-verde latente — ganha
       cobertura explícita, para não voltar a depender de "ninguém editou
       os dois lados".
       Check: grep por rotation-log no teste novo devolve pelo menos uma assercao
-- [ ] `[P1]` Censo `templates/` contra raiz vira **teste**, não medição de
+      **FECHADO (S324).** `docs/rotation-log.md` esta no mapa e nos
+      testes; e medido que ele e IDENTICO entre o pin `v1.2.0` e HEAD,
+      o que explica por que o falso-verde era latente.
+- [x] `[P1]` Censo `templates/` contra raiz vira **teste**, não medição de
       sessão: qualquer homônimo NOVO acende, com veredito nomeado
       (entregue / não-entregue / absorvido pelo ACCEPTED).
       Check: o teste enumera os 4 homonimos atuais e falha se o conjunto mudar sem atualizacao declarada
+      **FECHADO (S324).** `test_route_map_census_is_closed` enumera os
+      homonimos `templates/` vs raiz e falha se aparecer um novo fora
+      do mapa e fora da lista declarada (`README.md` nao-entregue,
+      `CLAUDE.md` absorvido pelo ACCEPTED).
 
 #### W5-b — D1: a entrega no upgrade (L3+ canônico, cerimônia obrigatória)
 
@@ -458,11 +480,19 @@
 
 ## Acceptance criteria (W5)
 
-- [ ] AC-8 [P0] O classificador de paridade compara contra a fonte que o
+- [x] AC-8 [P0] O classificador de paridade compara contra a fonte que o
       adopter REALMENTE recebeu. Prova: `docs/BRANCH-PROTECTION.md` sai
       **STALE** (não UNCLASSIFIED) enquanto D1 estiver aberto, e o
       controle positivo do homônimo plantado fica vermelho com a cura
       revertida.
+      **FECHADO (S324, `b6de7cf`) — provado end-to-end, nao por unidade.**
+      E2e de paridade `--mode maintainer` numa arvore-sombra
+      (`git clone --local` + a cura): passou de `STALE 2 +
+      UNCLASSIFIED 1` para **`STALE 3 + UNCLASSIFIED 0`** — tres
+      fatais de UMA causa (D1) em vez de duas. Mais 9 testes verdes,
+      controle negativo cirurgico vermelho, rodada LIMPA de pair-rail
+      sobre o codigo, e bateria `.claude/scripts/tests/` com
+      5315 passed / 23 skipped / 1 xfailed.
 - [ ] AC-9 [P0] `upgrade.sh` entrega `.github/` e `docs/` sob o contrato
       DELIVERY-RECORD-CONDITIONAL do ADR-155-AMEND-1, **com registro por
       PATH DE DESTINO** (não por árvore) derivado do **RESULTADO da
