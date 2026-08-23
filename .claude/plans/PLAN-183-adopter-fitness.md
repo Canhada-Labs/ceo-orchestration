@@ -381,11 +381,55 @@ da W1 recai inteira sobre o CÓDIGO:
       **Achado que reescreve a W4:** 70 dos 71 vêm do repo do PRÓPRIO
       framework, 1 de `foxbit-bot-arbitrage`, **ZERO do adopter**.
       Check: a conclusão é registrada com os números dos dois lados E a conta 35+25+7=67≠71 fechada nominalmente — os 4 casos restantes recebem categoria (cura do r9 #3); veredito entre {explicado pela aritmética, exige arqueologia} — "não medido" não fecha
-- [ ] `[P0][US2]` Medir a **taxa de censura à direita**: invocações
+- [x] `[P0][US2]` Medir a **taxa de censura à direita**: invocações
       esperadas contra linhas de evento emitidas, por hook. Estender a
       forma que JÁ existe (`check_name` e `timeout_ms`), nunca criar
       paralela. Pré-condição: verificar se o drain do spool varre PID
       morto.
+      **FECHADO (S322) — e o resultado é que a taxa é INCOMPUTÁVEL para
+      47 dos 49 hooks, por razão ESTRUTURAL do schema, não por falta de
+      esforço.** Instrumento rastreado:
+      `.claude/plans/PLAN-183/w0-us2/measure-right-censoring.py`
+      (read-only; resolve o state dir só via
+      `_lib.runtime_paths.runtime_state_dir()`, nunca re-deriva o slug).
+      **A causa raiz:** o audit-log **não carrega identidade do hook
+      emissor** — não existe ação `hook_invoked`/`hook_entered`, então
+      não há como ligar uma invocação (que vive no transcript, como
+      `attachment.type ∈ {hook_success, hook_cancelled}`) à linha de
+      evento que ela produziu, exceto onde existe um par 1:1 com produtor
+      ÚNICO verificado. Só **2 de 49** registros têm esse par.
+      **O único número que é taxa de verdade:** `Stop.py`
+      ("Session interrupt cleanup…") → `session_stop` =
+      `1 − 36/36` = **0,0% de censura** (36 invocações, 36 linhas,
+      `hook_cancelled` na janela = 0; produtor único em
+      `audit_emit.py`).
+      **O que parece taxa e NÃO é:** `check_output_secrets.py` →
+      `tool_call_lifecycle_recorded` = 517 inv / 2.473 linhas = **razão
+      4,78**, rotulada explicitamente como MULTIPLICIDADE (três
+      produtores emitem a mesma ação). Publicar isso como "censura
+      negativa" seria um número falso.
+      **Dois hooks com o denominador ele mesmo censurado:**
+      `SessionEnd.py` e `UserPromptSubmit.py` — esses eventos **nunca**
+      registram `hook_success` no transcript (só `hook_cancelled`, e só
+      quando cancelam), então nem o denominador existe.
+      Contexto medido na mesma passada (janela
+      `2026-08-21T21:40:18Z .. 2026-08-23T05:31:28Z`, 11.252 linhas):
+      **71,0% dos eventos são não-atribuíveis** (7.986/11.252;
+      `policy_evaluated` + `policy_denied` no topo — a mesma assinatura
+      da S321). `hook_cancelled` all-time = **132**, com reconciliação
+      fechando por duas decomposições independentes (por evento:
+      PreToolUse 99 + PostToolUse 22 + Stop 8 + UserPromptSubmit 3; por
+      dia: 2+1+45+83+1). Denominador all-time = 126.798 registros.
+      **Consequência para a W4:** a pré-condição do drain foi respondida
+      por construção — a medição é sobre o log JÁ drenado, e a
+      reconciliação aritmética (total direto == soma por (event,command)
+      == soma por dia) fecha, o que exclui perda no drain como
+      explicação. O que a W4 precisa decidir é outra coisa: se quer a
+      taxa por hook, o schema precisa de uma ação `hook_invoked`
+      (mudança em `SPEC/v1/audit-log.schema.md`, canônica).
+      Republicar o número, nunca ajustar o script — a cadeia cresce a
+      cada sessão (esta medição já andou 635 linhas em relação à do
+      recon, 3 h antes).
       Check: a taxa de censura é um número publicado no plano, por hook, com o método ao lado
 - [ ] `[P0][US3]` **Estender** `smoke-install.sh` e
       `smoke-install.yml` (o step `:276` já existe) para cobrir
