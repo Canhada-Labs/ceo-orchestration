@@ -56,10 +56,18 @@ def main() -> int:
             packmap[src.strip()] = dst.strip()
 
     # 2. enumerate payload files (everything except the manifests themselves)
+    # Pack-only DOCS never land: they describe how to assemble the pack and
+    # have no repo destination. Without this skip they are classified NEW at
+    # the REPO ROOT and G5 of the land script cp's them there, inside the
+    # SIGNED sentinel Scope. staged-w01 never exposed the class because its
+    # five root files (CHANGELOG/CLAUDE/INSTALL/README/README.pt-BR) are
+    # legitimate root destinations; staged-w24's two are not.
     skip = {"BASELINE.sha256", "MANIFEST.sha256", "PACKMAP.txt"}
+    _PACK_DOC_SUFFIXES = ("-COMO-MONTAR.md", "-NOTE.md")
     files = sorted(
         p for p in pack.rglob("*")
         if p.is_file() and p.name not in skip
+        and not p.name.endswith(_PACK_DOC_SUFFIXES)
     )
     if not files:
         print("pack is empty", file=sys.stderr)

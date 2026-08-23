@@ -149,6 +149,11 @@ que se regista aqui, com uma precisão que a emenda não podia antecipar:
   ferramenta* de *CLAUDE.md* de *índice de memória*. Para essa separação —
   que é o que a AC pede à letra — a medição é **`estimativa declarada, fonte
   ausente`**.
+- **Fechou-se UMA fronteira, não a decomposição pedida (§F.3).** A separação
+  `cache_read` (68.980, prefixo que sobrevive) vs `cache_creation` (43.656)
+  está MEDIDA e fecha ao token. Ela não separa *system prompt* de *tool
+  defs*: os 68.980 permanecem um bloco opaco, e a AC desta secção continua
+  `estimativa declarada, fonte ausente`.
 
 ### A estimativa declarada (e o que ela vale)
 
@@ -284,7 +289,7 @@ O denominador é **1.000.000**, confirmado por concordância exacta em
 | `T` (limiar auto-compact) | **998.043** (≈ 99,8 % de 1M) | `usage`, último turno pré-fronteira | 1 |
 | `F` (piso a frio, sessão nova) | **97.097** / **98.636** | `usage`, primeiro turno de 2 sessões (2026-08-14, 2026-08-18) | 2 |
 | `F + S` (piso pós-compactação) | **112.638** | `usage`, primeiro turno pós-fronteira | 1 |
-| `S` (sumário), por diferença | **≈ 14.600** | `112.638 − 98.000` | — |
+| `S` (sumário) | **15.346** | `compactMetadata.postTokens` (§F.1) | 1 |
 
 Decomposição de cache no primeiro turno pós-compactação:
 `cache_read=68.980` + `cache_creation=43.656` + `input=2`. O prefixo que
@@ -485,14 +490,251 @@ desenho:
 
 ### O que continua estimado nesta tabela
 
-- **`S ≈ 14.600` é uma diferença, não uma medição** (`F+S` medido menos `F`
-  medido em sessão diferente). Um segundo auto-compact fixá-lo-ia.
+- **`S` já NÃO é uma diferença: é `15.346`, medido** por
+  `compactMetadata.postTokens` (§F.1). O `≈ 14.600` desta tabela era uma
+  subtracção entre sessões diferentes e errava por −746 (−4,9 %).
 - **Toda a linha de `T` abaixo de 998.043 é contrafactual.** Nenhuma foi
   observada; são a fórmula avaliada no `F+S` medido. A forma da curva é
   robusta (é aritmética); os pontos não são observações.
 - **`T` tem n = 1** (§C.5).
 - **A decomposição de `F`** permanece `estimativa declarada, fonte ausente`
   (§B).
+
+---
+
+## Secção F — custo de gate-boot RE-PAGO por compactação (MEDIDO)
+
+### Veredito: **MEDIDO** — e o número documentado no repo (`~44.786`) está REFUTADO nos DOIS sentidos
+
+Este é o sub-item que faltava ao checkbox `[P2][US2]`. A fonte é NOVA e este
+relatório não a havia aberto: o próprio harness grava um bloco
+`compactMetadata` no transcript, na linha do marcador de fronteira.
+Instrumento rastreado em `PLAN-179/w0/gateboot_repay.py` — read-only, sem
+rede, nunca escreve na cadeia HMAC nem em qualquer log.
+
+### F.1 — A fonte que faltava: `compactMetadata`
+
+```
+python3 .claude/plans/PLAN-179/w0/gateboot_repay.py
+```
+
+Bloco lido (transcript `1916b9c8-…`, **linha 8329**), verbatim:
+
+```
+subtype=compact_boundary  trigger=auto
+  preTokens=999089  postTokens=15346
+  cumulativeDroppedTokens=983743  durationMs=126877
+```
+
+Duas consequências para §C/§E:
+
+- **`S` deixa de ser uma subtracção.** `postTokens = 15.346` é MEDIDO pelo
+  harness. O `S ≈ 14.600` de §C.4 fica **superseded**; erro do método antigo:
+  −746 (−4,9 %).
+- **`T` ganha uma segunda leitura independente:** `preTokens = 999.089` contra
+  os `998.043` do último `usage` pré-fronteira (§C.2). Delta **+1.046
+  (0,10 %)** — é a diferença de contabilidade harness↔`usage`, e é a barra de
+  erro honesta de qualquer identidade construída com as duas fontes.
+
+### F.2 — O piso re-pago na fronteira: **97.292 tokens**
+
+`floor = TOTAL_IN(1.º turno pós-fronteira) − postTokens = 112.638 − 15.346`
+= **97.292**.
+
+Controlo: o `F` medido a frio no primeiro turno **desta mesma sessão** é
+**97.097** (§C.4). Duas rotas independentes para a mesma grandeza,
+divergência **+195 tokens = 0,20 %**. É essa concordância que autoriza a
+identidade de F.3 — não é raciocínio, é o resíduo medido.
+
+### F.3 — A decomposição por CLASSE DE TARIFA (o que "re-pago" custa)
+
+| Parcela | Tokens | Classe |
+|---|---:|---|
+| prefixo que SOBREVIVEU à fronteira | **68.980** | `cache_read` |
+| piso RE-CRIADO (não-sumário) | **28.310** | `cache_creation` |
+| sumário da compactação (`postTokens`) | **15.346** | `cache_creation` |
+| `input_tokens` | **2** | base |
+| **total do 1.º turno pós-fronteira** | **112.638** | — |
+
+`68.980 + 43.656 + 2 = 112.638` fecha ao token; `43.656 − 15.346 = 28.310`
+isola o piso do sumário.
+
+Os `68.980` não são um número solto: é o valor de `cache_read` **mais
+frequente de toda a sessão (20 ocorrências)**, de 2026-08-14T17:40 até
+**depois** da fronteira. O prefixo do framework atravessou a compactação sem
+reescrita.
+
+**Resposta ao sub-item, em uma linha:** por compactação o piso re-pago é de
+**97.292 tokens de OCUPAÇÃO de contexto**, dos quais **28.310 à tarifa de
+`cache_creation`** e **68.980 à tarifa de `cache_read`**.
+
+### F.4 — Os dois sentidos em que `~44.786` está refutado
+
+| Grandeza | Medido | vs `~44.786` |
+|---|---:|---|
+| piso re-pago (ocupação de contexto) | **97.292** | folclore **2,17× PEQUENO** |
+| piso re-criado (tarifa cheia) | **28.310** | folclore **1,58× GRANDE** |
+
+**Armadilha nomeada.** O `cache_creation` da fronteira é **43.656** — a 2,5 %
+do número folclórico (`(44.786−43.656)/44.786`). Quem "confirmar" o
+`~44.786` contra esse campo confirma a grandeza ERRADA: `43.656` inclui os
+15.346 tokens do sumário, que não são gate-boot nenhum. A coincidência é
+numérica, não semântica.
+
+### F.5 — Censo comportamental: o Gate 1+2 NÃO foi re-executado
+
+Se o custo fosse "o modelo relê o Gate 1+2 depois de compactar", apareceria
+como chamadas de ferramenta. Censo de TODO o transcript (15.446 linhas; 992
+turnos pré-fronteira, 804 pós):
+
+```
+Read de PROTOCOL.md / .claude/team.md / .claude/frontend-team.md /
+        ceo-orchestration/SKILL.md ......... 0 ocorrências (PRÉ e PÓS)
+ferramenta Skill ........................... 0 ocorrências em toda a sessão
+PÓS-fronteira, único gate re-lido .......... Read MEMORY.md, 3.584 chars (~896 est tok)
+PÓS-fronteira, Bash citando gate paths ..... 5.572 chars (~1.393 est tok; quase todo um git diff)
+                                             TETO SUPERIOR ~2.289 est tok
+```
+
+Leitura: dos ~47,7k que o folclore chama de "gate-boot" (§F.6), a metade
+CONDICIONAL (`PROTOCOL.md` + `team.md` + `frontend-team.md` + core `SKILL.md`
+≈ **37.169** est tok — `6.703+14.698+15.768`) foi re-paga **zero** vezes. O
+que é re-pago sem condição é só a parte auto-injectada — `CLAUDE.md` +
+índice de memória.
+
+### F.6 — O folclore re-derivado com o instrumento DELE, hoje
+
+```
+python3 .claude/scripts/context-budget.py --json     # exit 0
+wc -c ~/.claude/projects/<slug-deste-projecto>/memory/MEMORY.md
+```
+
+| Categoria | est. tokens (medido agora) | §A (2026-08-18) |
+|---|---:|---:|
+| `claude_md` | **5.176** | 3.478 |
+| `protocol` | 6.703 | 6.703 |
+| `team` (2 ficheiros) | 14.698 | 14.698 |
+| `core_skill` | 15.768 | 15.768 |
+| **Gate 1+2 em disco** | **42.345** | 40.647 |
+| `MEMORY.md` (índice, 21.596 chars) | **5.399** | 4.413 |
+| **total "gate-boot" folclórico** | **47.744** | 45.060 |
+
+Os `44.786` documentados ⇒ drift de **+6,6 %** contra o mesmo instrumento
+hoje. O `CLAUDE.md` sozinho cresceu **+48,8 %** (3.478 → 5.176) em cinco dias.
+
+**Aviso de instabilidade, medido nesta própria madrugada.** Este `MEMORY.md`
+foi lido duas vezes por esta unidade com **~21 minutos** de intervalo (várias
+unidades autónomas em fan-out simultâneo, cada uma podendo tocar memória no
+fecho): primeira leitura 21.205 chars (5.301 est tok), segunda 21.596 chars
+(5.399 est tok) — **+391 chars (+1,8 %) sem nenhuma acção desta unidade**. O
+"índice de memória" não é constante para efeitos desta tabela: é ele próprio
+um alvo em movimento na mesma janela em que se mede o resto. Por isso a
+tabela regista o instante, não finge um valor fixo.
+
+### F.7 — `F` não é constante — e a série completa é maior e mais dispersa do que a citação anterior desta secção usava
+
+§C.4 fixa `F` com `n = 2` (97.097 / 98.636). Uma citação anterior desta
+mesma unidade usava `n = 13` sem instrumento rastreado. O censo COMPLETO,
+agora rastreado em `gateboot_repay.py`, varre os 55 ficheiros `*.jsonl` do
+projecto e devolve uma população bem maior:
+
+```
+python3 .claude/plans/PLAN-179/w0/gateboot_repay.py | grep -E 'censoring|cold F series'
+```
+```
+cold-F censoring : excluded_no_turns=2 excluded_warm_start=7 excluded_short(<20 turns)=5 included=41
+cold F series: n=41 min=84101 max=138552 mean=105392 median=98636 pstdev=16148 spread=54451 (51.7% of mean)
+```
+
+**Isto não é "mais ruído" — é uma mudança de regime datável.** Ordenando as
+41 sessões por `mtime` do ficheiro há uma fronteira nítida entre
+2026-08-14T14:18 e 2026-08-16T10:37 (nenhuma sessão observada no meio):
+
+| População | n | min | max | média | mediana | σ (populacional) | spread |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| completa (as 41) | 41 | 84.101 | 138.552 | 105.392 | 98.636 | 16.148 | 54.451 (51,7 %) |
+| antes de 2026-08-16 | 27 | 84.101 | 138.552 | 111.204 | 116.404 | 17.101 | 54.451 (49,0 %) |
+| a partir de 2026-08-16, excl. F.8 | 13 | 88.379 | 98.636 | 93.321 | 93.206 | **3.129** | 10.257 (11,0 %) |
+
+A linha `n=13` **reproduz exactamente** o `n=13`/`σ≈3.129` já citado nesta
+secção antes desta revisão — a diferença é que agora se sabe QUE população é
+essa (sessões com `mtime ≥ 2026-08-16`, excluindo esta própria sessão de
+análise pela razão em F.8) e que ela é um subconjunto de **13 entre 41**, não
+"todas as sessões principais do projecto".
+
+Reprodução do corte por data (filtro ad hoc sobre a mesma leitura de
+`gateboot_repay.py`; lista ficheiros e `mtime`, não abre conteúdo de sessão):
+```
+python3 -c "
+import glob, os, json, statistics, datetime
+PROJ = os.path.expanduser('~/.claude/projects/<slug-deste-projecto>')
+CUTOFF = datetime.datetime(2026, 8, 16).timestamp()
+vals_pre, vals_post = [], []
+for path in glob.glob(os.path.join(PROJ, '*.jsonl')):
+    turns = []
+    with open(path, encoding='utf-8', errors='replace') as fh:
+        for line in fh:
+            try:
+                ev = json.loads(line)
+            except ValueError:
+                continue
+            if ev.get('isSidechain'):
+                continue
+            m = ev.get('message')
+            if isinstance(m, dict) and isinstance(m.get('usage'), dict):
+                turns.append(m['usage'])
+    if not turns or int(turns[0].get('cache_read_input_tokens') or 0) or len(turns) < 20:
+        continue
+    total = sum(int(turns[0].get(k) or 0) for k in
+                ('input_tokens', 'cache_read_input_tokens', 'cache_creation_input_tokens'))
+    (vals_pre if os.path.getmtime(path) < CUTOFF else vals_post).append(total)
+print('pre', len(vals_pre), statistics.pstdev(vals_pre))
+print('post(incl. esta sessão)', len(vals_post), statistics.pstdev(vals_post))
+"
+```
+
+**Interpretação, sem inventar causa.** A população anterior a 2026-08-16
+(n=27) tem média ~19 % mais alta e ~5,5× o desvio-padrão da população recente
+(n=13). A mudança é abrupta (zero sessões observadas no intervalo) e afecta
+nível E variância ao mesmo tempo — assinatura de uma mudança discreta de
+configuração, não de deriva gradual. **Este instrumento não identifica QUAL
+mudança**; fica nomeado como pergunta aberta em F.8, não respondido aqui.
+
+**Consequência prática para a leitura "`F` não sobe com o `CLAUDE.md`"**
+(F.6): a comparação correcta é DENTRO do regime recente (n=13,
+2026-08-16→08-22) — sessões de 2026-08-20 a 2026-08-22 medem 89.359…93.921,
+isto é, `F` não subiu quando o `CLAUDE.md` cresceu 48,8 %. Usar a série
+completa (n=41) para essa mesma pergunta seria **errado**: misturaria a
+mudança de regime de meados de agosto com o crescimento do `CLAUDE.md`, e
+atribuiria a UMA causa uma variação que tem pelo menos DUAS.
+
+### F.8 — Fronteiras honestas desta secção
+
+- **`n = 1` para tudo o que é POR-COMPACTAÇÃO.** Um único marcador
+  `compact_boundary` nos 55 transcripts deste projecto (5 marcadores no
+  `$HOME` inteiro por contagem `grep -c`, sem abrir conteúdo de outros
+  repositórios — 4 pertencem a OUTRAS árvores de projecto, medem um piso
+  DIFERENTE — outro `CLAUDE.md`, outra superfície de gate — e não podem
+  elevar o `n` deste repo).
+- **`28.310` herda a barra de erro de F.1** (±~1.046 de contabilidade
+  harness↔`usage`; o resíduo efectivamente observado foi 195).
+- **A causa da mudança de regime de F.7 não foi identificada, só datada** —
+  hipótese não verificada: o mecanismo de carregamento diferido de
+  ferramentas (o mesmo que serve os `ToolSearch` desta sessão) começando a
+  aplicar-se por volta de 2026-08-15/16 explicaria tanto a queda de nível
+  como a de variância, mas isso NÃO foi confirmado por este instrumento.
+- **A DECOMPOSIÇÃO de §B continua ABERTA.** F.3 mede a fronteira
+  `cache_read`/`cache_creation`, não `system prompt` vs `tool defs` vs
+  `CLAUDE.md`. Os 68.980 são um bloco opaco.
+- **A rota (1) de §B (`/context`) segue NÃO verificada** — varri todos os
+  transcripts deste projecto por uma saída de `/context` capturada: **0**.
+- **`est_tokens` de F.6 é chars/4**, nunca o tokenizer. Só F.1–F.3 e F.7 vêm
+  de `usage`/`compactMetadata`.
+- **Esta própria sessão de análise (subagente) foi excluída de TODAS as
+  séries `F`** por medir uma população diferente: 105.398 tokens no primeiro
+  turno — system prompt de subagente + catálogo de ferramentas diferido +
+  listagem de skills, não o arranque de uma sessão principal. Registado para
+  que ninguém a some à série depois.
 
 ---
 
@@ -503,13 +745,28 @@ desenho:
 | (a) veredito do canal escrito e falsificável | **ABERTO** — W0-1, sonda paga, fora deste relatório |
 | (b) taxa de `plan_id=unknown` medida, não estimada | **MEDIDA mas VAZIA** — 2/2 eventos `unknown`; N = 1, sem taxa (§D) |
 | (c) `F` e `T` com valores medidos e tabela η reescrita | **FEITO** (§C, §E), com a decomposição de `F` degradada (§B) |
+| (extra) custo de gate-boot re-pago por compactação | **MEDIDO** (§F) — 97.292 de ocupação; 28.310 a `cache_creation` + 68.980 a `cache_read`; folclore `~44.786` refutado nos dois sentidos |
 
 ---
 
 ## Anexo — reprodutibilidade
 
 Todos os comandos desta página são read-only e não tocam `$HOME` de teste,
-audit log vivo ou rede. Os dois scripts auxiliares (`census_w0.py`,
-`usage_probe.py`) vivem no scratchpad da sessão de medição e devem ser
-copiados para `PLAN-179/w0/` no land desta wave — um relatório cujo
-instrumento desaparece não é reproduzível.
+audit log vivo ou rede.
+
+**Estado real da reprodutibilidade, medido em 2026-08-22/23:**
+
+- **§F é reproduzível.** O instrumento está RASTREADO em
+  `PLAN-179/w0/gateboot_repay.py` e a fonte (o transcript
+  `1916b9c8-….jsonl`, 18 MB) continua em disco.
+- **§C.1 e §D já NÃO são reproduzíveis como escritos.** Os 15 ficheiros
+  `audit-log*.jsonl` que o censo de §D varreu não estão mais em disco — nem
+  no slug antigo (`~/.claude/projects/ceo-orchestration/`, que hoje retém
+  apenas `audit-log.jsonl`) nem no slug nativo pós-migração W1/PLAN-182
+  (`~/.claude/projects/-Users-…-ceo-orchestration/`, 2 ficheiros). O `N = 1`
+  e o `{'unknown': 2}` sobrevivem só como citação verbatim nesta página.
+  Qualquer re-execução de um censo de audit-log tem de declarar QUAL
+  diretório lê.
+- `census_w0.py` e `usage_probe.py` nunca foram copiados para
+  `PLAN-179/w0/` e não estão rastreados. Um relatório cujo instrumento
+  desaparece não é reproduzível — e este relatório já perdeu dois.
