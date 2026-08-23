@@ -196,7 +196,31 @@ class TestFailSoft(_FixtureBase):
         self.assertFalse(report["audit_log"]["found"])
         self.assertTrue(report["audit_log"]["fail_soft"])
         self.assertIn("FAIL-SOFT", err)
-        # zero counts everywhere → every domain skill demoted
+        # PLAN-183 W3 P0 — this assertion used to read `== 3`: absent
+        # telemetry demoted every domain-tier skill in the fixture, and
+        # 119 of them in the live tree. An infra failure must not carry a
+        # security consequence, so the fail-soft path now demotes NOTHING.
+        self.assertEqual(
+            report["recommendation"]["demoted_domain_skills"], 0,
+            "missing audit log demoted skills — infra failure with a "
+            "security consequence (PLAN-183 W3 P0)",
+        )
+        self.assertEqual(report["recommendation"]["skillOverrides"], {})
+        self.assertTrue(
+            report["recommendation"]["fail_soft_no_demotion"])
+        self.assertIn("FAIL-SOFT demotes NOTHING",
+                      report["recommendation"]["rationale"])
+
+    def test_present_but_empty_log_still_demotes(self):
+        """The control that keeps the fail-soft cure from being a blanket
+        off-switch: an audit log that EXISTS and is empty is real telemetry
+        saying "nothing fired", and it must still demote. Only an ABSENT
+        log takes the fail-soft path."""
+        self._write_log([])
+        report = self._run_json()
+        self.assertFalse(report["audit_log"]["fail_soft"])
+        self.assertFalse(
+            report["recommendation"]["fail_soft_no_demotion"])
         self.assertEqual(
             report["recommendation"]["demoted_domain_skills"], 3)
 
@@ -308,6 +332,115 @@ class TestOutputShapes(_FixtureBase):
         self.assertEqual(once["hooks"], {"Stop": []})  # untouched
         self.assertLessEqual(
             once["skillListingBudgetFraction"], _mod.CLI_DEFAULT_FRACTION)
+
+
+class TestVetoProtection(_FixtureBase):
+    """PLAN-183 W3 P0 — the VETO invariant lives in the GENERATOR.
+
+    Independent of `tier`: a skill the organogram marks as VETO-bearing is
+    not demotable even in tier `domain` and even at ZERO dispatches. Before
+    this axis existed the only protection was tier, so the VETO surfaces
+    that happened to be core/frontend were protected INCIDENTALLY and the
+    domain-tier ones (`financial-correctness-and-math`, `financial-display`,
+    `trading-execution`) were demoted.
+    """
+
+    def _write_organogram(self, body: str) -> None:
+        team = self.repo / ".claude" / "team.md"
+        team.parent.mkdir(parents=True, exist_ok=True)
+        team.write_text(body, encoding="utf-8")
+
+    def _mark_veto_directly(self, slug: str) -> None:
+        """R1-direct: the slug sits in a backticked cell ON the VETO row."""
+        self._write_organogram(
+            "| Role | Reports to | Authority | Skill |\n"
+            "|------|-----------|-----------|-------|\n"
+            "| **Staff Domain Expert** | CEO | VETO on any merge | "
+            "`{0}` |\n".format(slug)
+        )
+
+    def test_veto_domain_skill_not_demoted_at_zero_dispatch(self):
+        self._mark_veto_directly("dom-cold")
+        self._write_log([])  # zero dispatches for EVERYONE
+        report = self._run_json()
+        rec = report["recommendation"]
+        self.assertNotIn(
+            "dom-cold", rec["skillOverrides"],
+            "VETO-marked domain skill was demoted — the generator is back "
+            "to a single `tier` axis (PLAN-183 W3 P0)",
+        )
+        self.assertIn("dom-cold", rec["veto_protected"])
+        # The other zero-dispatch domain skills are STILL demoted: the axis
+        # is the marker, not a blanket off-switch.
+        self.assertIn("dom-hot", rec["skillOverrides"])
+        self.assertIn("dom-flat", rec["skillOverrides"])
+
+    def test_without_the_marker_the_same_skill_is_demoted(self):
+        """Negative control. The protection must come from the organogram
+        marker, not from the skill's name or its tier."""
+        self._write_organogram("| Role | Skill |\n|---|---|\n")
+        self._write_log([])
+        rec = self._run_json()["recommendation"]
+        self.assertIn("dom-cold", rec["skillOverrides"])
+        self.assertEqual(rec["veto_protected"], [])
+
+    def test_veto_line_that_denies_veto_grants_no_protection(self):
+        """`NO VETO` on the row is a denial, not an assertion — the
+        LLM FinOps Architect row in the shipped `.claude/team.md`."""
+        self._write_organogram(
+            "| Role | Skill |\n|---|---|\n"
+            "| **LLM FinOps Architect** (Advisory, NO VETO per ADR-052 "
+            "amendment) | `dom-cold` |\n"
+        )
+        self._write_log([])
+        rec = self._run_json()["recommendation"]
+        self.assertIn("dom-cold", rec["skillOverrides"])
+        self.assertEqual(rec["veto_protected"], [])
+
+    def test_persona_join_protects_when_the_veto_line_has_no_slug(self):
+        """R1-join. The mechanism the shipped fintech frontend organogram
+        needs: the VETO fact and the persona->skill binding are on
+        DIFFERENT lines, and the governance line names no skill at all."""
+        self._write_organogram(
+            "| Persona | Primary | Secondary |\n"
+            "|---------|---------|-----------|\n"
+            "| **Mei** | `dom-cold` | — |\n"
+            "\n"
+            "## Governance\n"
+            "4. **Mei tem VETO** em qualquer codigo que exiba precos.\n"
+        )
+        self._write_log([])
+        rec = self._run_json()["recommendation"]
+        self.assertNotIn("dom-cold", rec["skillOverrides"])
+        self.assertIn("dom-cold", rec["veto_protected"])
+
+    def test_backticked_prose_tokens_are_not_skills(self):
+        """Over-derivation control. `.claude/team.md:832` is a PROSE line
+        carrying both the word VETO and the backticked toolchain names
+        `tsc` / `mypy` / `go vet`. Prose contributes only through the
+        persona join, never through direct slug extraction, so a token that
+        merely looks like a slug cannot become a protected skill."""
+        self._write_organogram(
+            "5. Define stack tooling in the Code Reviewer VETO "
+            "(`tsc` for TypeScript, `mypy` for Python, `dom-cold` too).\n"
+        )
+        self._write_log([])
+        rec = self._run_json()["recommendation"]
+        self.assertIn("dom-cold", rec["skillOverrides"])
+        self.assertEqual(rec["veto_protected"], [])
+
+    def test_veto_protection_survives_the_fail_soft_path(self):
+        """Both P0 items at once: no audit log AND a VETO marker. Nothing
+        is demoted, and the VETO surface is still named in the report."""
+        self._mark_veto_directly("dom-cold")
+        rc, out, err = self._run(
+            "--json", "--repo-root", str(self.repo),
+            "--audit-log", str(self.audit_log))
+        self.assertEqual(rc, 0, err)
+        rec = json.loads(out)["recommendation"]
+        self.assertEqual(rec["skillOverrides"], {})
+        self.assertTrue(rec["fail_soft_no_demotion"])
+        self.assertIn("dom-cold", rec["veto_protected"])
 
 
 class TestEmptyInventory(TestEnvContext):

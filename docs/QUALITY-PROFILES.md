@@ -3,20 +3,24 @@
 > PLAN-025 Batch L (NEW FEATURE) — ships a 3-profile adopter-configurable
 > quality tier for the canonical-5 native subagents. Profiles change
 > which model each non-VETO agent dispatches to; the 2 VETO holders
-> (code-reviewer + security-engineer) ALWAYS stay Opus 4.8 as a quality
-> floor.
+> (code-reviewer + security-engineer) ALWAYS carry the VETO-floor model
+> DERIVED from `tier_policy_cli._constants.VETO_HARDCODE` — currently
+> `claude-fable-5`, never a literal in the profile script (PLAN-169 W4.3
+> F1 / PLAN-183 W3).
 >
 > **See also:** [`docs/ADAPTIVE-EXECUTION-KERNEL.md`](ADAPTIVE-EXECUTION-KERNEL.md) — per-task ceremony classifier (S/M/L/XL) that complements session-level quality profiles. Quality profiles set the model tier for the session; AEK classifies the ceremony for each individual task.
 
-Last updated: 2026-04-18 (Session 33 Phase D / PLAN-025 Batch L).
+Last updated: 2026-08-22 — VETO floor derived from the authority instead
+of duplicated as a literal (PLAN-169 W4.3 F1 / PLAN-183 W3). Originally
+2026-04-18 (Session 33 Phase D / PLAN-025 Batch L).
 
 ## TL;DR
 
 ```bash
 # Pick a profile
-bash .claude/scripts/set-quality-profile.sh max-quality    # all 5 on Opus 4.8
-bash .claude/scripts/set-quality-profile.sh balanced       # default: 2 Opus + 2 Sonnet + 1 Haiku
-bash .claude/scripts/set-quality-profile.sh max-speed      # 2 Opus + 3 Haiku
+bash .claude/scripts/set-quality-profile.sh max-quality    # 2 VETO-floor + 3 Opus 4.8
+bash .claude/scripts/set-quality-profile.sh balanced       # default: 2 VETO-floor + 3 Sonnet 4.6
+bash .claude/scripts/set-quality-profile.sh max-speed      # 2 VETO-floor + 3 Haiku 4.5
 
 # Query current profile
 bash .claude/scripts/set-quality-profile.sh --show
@@ -32,9 +36,14 @@ Default is `balanced`. Change via `set-quality-profile.sh` or pass
 
 | Profile | code-reviewer | security-engineer | qa-architect | performance-engineer | devops | Velocity | Cost vs all-Opus |
 |---------|---------------|-------------------|--------------|----------------------|--------|----------|------------------|
-| `max-quality` | Opus 4.8 | Opus 4.8 | Opus 4.8 | Opus 4.8 | Opus 4.8 | 1× (baseline) | 100% |
-| `balanced` (default) | Opus 4.8 | Opus 4.8 | Sonnet 4.6 | Sonnet 4.6 | Haiku 4.5 | 3.5× | ~56% |
-| `max-speed` | Opus 4.8 | Opus 4.8 | Haiku 4.5 | Haiku 4.5 | Haiku 4.5 | 5-6× | ~22% |
+| `max-quality` | VETO floor (derived) | VETO floor (derived) | Opus 4.8 | Opus 4.8 | Opus 4.8 | 1× (baseline) | 100% |
+| `balanced` (default) | VETO floor (derived) | VETO floor (derived) | Sonnet 4.6 | Sonnet 4.6 | Sonnet 4.6 | 3.5× | ~56% |
+| `max-speed` | VETO floor (derived) | VETO floor (derived) | Haiku 4.5 | Haiku 4.5 | Haiku 4.5 | 5-6× | ~22% |
+
+> The `balanced` row read `Sonnet 4.6 | Sonnet 4.6 | Haiku 4.5` until
+> PLAN-183 W3. The script has always written three Sonnet — the doc and
+> the script's own header both described a distribution the code never
+> produced.
 
 Velocity + cost figures derived from PLAN-024 12-agent parallel audit
 measurement (3.53× speedup validated at `balanced`; extrapolated for
@@ -46,16 +55,27 @@ to measure YOUR numbers.
 
 Regardless of profile:
 
-- **`code-reviewer`** stays on **Opus 4.8**. Merge VETO — a missed bug
+- **`code-reviewer`** stays on the **derived VETO floor**
+  (`tier_policy_cli._constants.VETO_HARDCODE`). Merge VETO — a missed bug
   ships to production. The strongest model's reasoning reduces false
   negatives on the quality gate.
 
-- **`security-engineer`** stays on **Opus 4.8**. Auth/crypto VETO — a
-  missed attack surface = security incident. Same rationale.
+- **`security-engineer`** stays on the **derived VETO floor**. Auth/crypto
+  VETO — a missed attack surface = security incident. Same rationale.
 
-`validate-governance.sh` lints the `model:` field of canonical-5
-agents; a PR that changes either VETO holder to a non-Opus model is
-flagged at CI time.
+`validate-governance.sh` lints the `model:` field of canonical-5 agents,
+but role-AGNOSTICALLY: it asks whether the id is in the ADR-149 working
+set, never whether it is the VETO floor. That is why the F1-P1 downgrade
+was legal at CI time for months — all three profiles wrote the literal
+`claude-opus-4-8`, a member of `VETO_FLOOR_ALLOWED` two generations below
+the ceiling, while the agent files shipped `claude-fable-5`. The floor is
+now resolved from the authority at run time and the script FAILS CLOSED
+(rc=3, nothing written) if that authority is unreadable or its frozen
+SHA256 anchor does not match. The permanent guard is
+`TestVetoFloorInvariantIsDerived` in
+`.claude/scripts/tests/test_quality_profile.py`, which extracts the
+profile list from the script itself so a fourth profile is covered on
+arrival.
 
 ## When to pick which profile
 
@@ -115,7 +135,7 @@ On profile change, `set-quality-profile.sh`:
 `ceo-health.py` surfaces the active profile as a check line:
 
 ```
-  ✓ quality_profile              balanced (code-reviewer=opus-4-8, security-engineer=opus-4-8, qa-architect=sonnet-4-6, ...)
+  ✓ quality_profile              balanced (code-reviewer=fable-5, security-engineer=fable-5, qa-architect=sonnet-4-6, ...)
 ```
 
 ## Orthogonal flag: `CEO_OPUS_SPOT_CHECK_P1=1`

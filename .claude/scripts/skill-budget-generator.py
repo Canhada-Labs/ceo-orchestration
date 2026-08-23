@@ -53,7 +53,7 @@ import re
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Set, Tuple
 import sys as _sys_rp
 from pathlib import Path as _Path_rp
 _HOOKS_RP = _Path_rp(__file__).resolve()
@@ -337,6 +337,8 @@ def recommend(
     max_desc_chars: int,
     context_window_tokens: int,
     chars_per_token: int,
+    veto_skills: Optional[Set[str]] = None,
+    fail_soft: bool = False,
 ) -> Dict[str, Any]:
     """Build the recommendation: overrides map + budget fraction.
 
@@ -348,6 +350,24 @@ def recommend(
     suppressed so a demotion key can never reach a protected-tier skill
     (e.g. fintech `frontend-patterns/` dir vs the frontend-tier skill
     named `frontend-patterns`).
+
+    TWO protection axes, not one (PLAN-183 W3 P0). `tier` protects
+    core/frontend; `veto_skills` protects VETO-bearing skills in ANY tier.
+    Before the second axis existed the only protection was tier, and the
+    generator demoted `financial-correctness-and-math`, `financial-display`
+    and `trading-execution` — all three named as VETO surfaces in the
+    organograms (measured: 119 override keys, the three present). The
+    protection core/frontend VETO skills enjoyed was INCIDENTAL to their
+    tier, not a consequence of holding a VETO.
+
+    `fail_soft` inverts the direction of an infrastructure failure. A
+    missing audit log yields zero dispatch counts, which used to make
+    EVERY domain-tier skill look rare: `--audit-log /nonexistent` demoted
+    119 keys, the whole domain catalog, VETO surfaces included. A fresh
+    adopter has no dispatch history by construction, so the fail-soft path
+    was the DEFAULT path for exactly the installs least able to notice.
+    An infra failure must not carry a security consequence: demote nothing
+    and say so in the report.
     """
     protected: set = set()
     for skill in inventory:
@@ -355,14 +375,21 @@ def recommend(
             protected.add(skill["name"])
             protected.add(skill["dir_name"])
 
+    veto: Set[str] = set(veto_skills or ())
     overrides: Dict[str, str] = {}
     demoted = 0
     collisions_skipped: List[str] = []
+    veto_protected: List[str] = []
     for skill in inventory:
         if skill["tier"] != "domain":
             continue  # NEVER demote core/frontend
+        if skill["name"] in veto or skill["dir_name"] in veto:
+            veto_protected.append(skill["name"])
+            continue  # NEVER demote a VETO-bearing skill, any tier
         if dispatches_for(skill, counts) >= min_dispatches:
             continue
+        if fail_soft:
+            continue  # absent telemetry demotes nothing
         demoted += 1
         for key in {skill["name"], skill["dir_name"]}:
             if key in protected:
@@ -398,12 +425,21 @@ def recommend(
             f"decide WHO keeps theirs)"
         )
 
+    if fail_soft:
+        rationale = (
+            "audit log absent — FAIL-SOFT demotes NOTHING (zero dispatch "
+            "counts make every domain-tier skill look rare, and a fresh "
+            "adopter has no history by construction). " + rationale
+        )
+
     return {
         "skillListingBudgetFraction": fraction,
         "skillOverrides": dict(sorted(overrides.items())),
         "demoted_domain_skills": demoted,
         "override_keys": len(overrides),
         "protected_collisions_skipped": sorted(set(collisions_skipped)),
+        "veto_protected": sorted(set(veto_protected)),
+        "fail_soft_no_demotion": bool(fail_soft),
         "fits_at_recommended": fits,
         "rationale": rationale,
         "estimates": {
@@ -507,6 +543,37 @@ def emit_jq_fragment(rec: Dict[str, Any]) -> str:
 # ---------------------------------------------------------------------------
 
 
+def derive_veto_skills_for(
+    repo_root: Path, inventory: List[Dict[str, Any]]
+) -> Set[str]:
+    """VETO-bearing skill set derived from the organograms (PLAN-183 W3).
+
+    Fail-LOUD, not fail-silent: a broken derivation still lets the report
+    out (this tool is advisory and never blocks a session), but it says on
+    stderr that VETO protection was NOT applied, so an empty set is never
+    mistaken for "no VETO skills exist". The lint
+    (`.claude/scripts/tests/test_veto_skill_map.py`) is what closes the
+    door; this function only reports.
+    """
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    try:
+        from veto_skill_map import bind_to_inventory, derive_veto_skills
+    except Exception as exc:  # noqa: BLE001 — infrastructure, not input
+        sys.stderr.write(
+            "[skill-budget-generator] WARN: veto_skill_map unavailable "
+            "({0}) — VETO protection NOT applied.\n".format(exc)
+        )
+        return set()
+    derived, _anchors = derive_veto_skills(repo_root)
+    bound, orphans = bind_to_inventory(derived, inventory)
+    if orphans:
+        sys.stderr.write(
+            "[skill-budget-generator] WARN: organograms name VETO skills "
+            "with no inventory match: {0}\n".format(sorted(orphans))
+        )
+    return bound
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(
         prog="skill-budget-generator.py",
@@ -593,6 +660,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         max_desc_chars=args.max_desc_chars,
         context_window_tokens=args.context_window_tokens,
         chars_per_token=args.chars_per_token,
+        veto_skills=derive_veto_skills_for(repo_root, inventory),
+        fail_soft=bool(audit_meta.get("fail_soft")),
     )
 
     if args.jq_fragment:

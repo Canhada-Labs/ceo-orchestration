@@ -2,7 +2,12 @@
 
 Covers:
 - set-quality-profile.sh apply for each of 3 profiles (end-to-end)
-- Invariant: code-reviewer + security-engineer stay on Opus in ALL profiles
+- Invariant: code-reviewer + security-engineer stay on the DERIVED VETO
+  floor in ALL profiles (PLAN-169 W4.3 F1 — this file used to assert the
+  literal `claude-opus-4-8` for those two slots while the agent files
+  shipped `claude-fable-5`, so the suite was green because it encoded the
+  downgrade; the expectation now comes from the same authority the script
+  reads, and a literal for a VETO role is itself a failure)
 - spot-check-findings.py parses the expected schema
 - ceo-health.py surfaces quality_profile line
 - --show returns the current profile
@@ -14,6 +19,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -33,6 +39,25 @@ def _read_agent_model(agent_file: Path) -> str:
         if line.startswith("model:"):
             return line.split(":", 1)[1].strip()
     return ""
+
+
+def _veto_floor_expected(role: str) -> str:
+    """The expected VETO floor, read from the authority the SCRIPT reads.
+
+    Hardcoding the value here was exactly the defect: this file asserted
+    `claude-opus-4-8` for code-reviewer / security-engineer while the agent
+    files lived on `claude-fable-5`, so every profile invocation moved the
+    floor two generations down and the suite stayed green by agreeing with
+    the downgrade. `claude-opus-4-8` is a member of `VETO_FLOOR_ALLOWED`
+    (the ADR-149 N-1 tolerance window), so no hook fired either.
+    """
+    sys.path.insert(0, str(_REPO_ROOT / ".claude" / "scripts"))
+    from tier_policy_cli._constants import VETO_HARDCODE
+    return VETO_HARDCODE[role]
+
+
+_VETO_ROLES = ("code-reviewer", "security-engineer")
+_ADVISORY_ROLES = ("qa-architect", "performance-engineer", "devops")
 
 
 class TestSetQualityProfileScript(unittest.TestCase):
@@ -61,6 +86,19 @@ class TestSetQualityProfileScript(unittest.TestCase):
         gen = _REPO_ROOT / ".claude" / "scripts" / "generate-dispatch.py"
         if gen.is_file():
             shutil.copy2(gen, tmp_scripts / gen.name)
+        # PLAN-169 W4.3 F1: the script now DERIVES the VETO floor from
+        # tier_policy_cli. Without the package in the sandbox its
+        # fail-CLOSED path fires and the whole class dies with rc=3
+        # instead of measuring the cure.
+        # (The `optimizer` package stays DELIBERATELY out —
+        # test_b2_normalize_flag_folds_date_stamp_but_keeps_version
+        # exercises the fail-OPEN of that import. Do not "fix" it.)
+        src_tpc = _REPO_ROOT / ".claude" / "scripts" / "tier_policy_cli"
+        if src_tpc.is_dir():
+            shutil.copytree(
+                src_tpc, tmp_scripts / "tier_policy_cli",
+                ignore=shutil.ignore_patterns("__pycache__", "tests"),
+            )
         shutil.copytree(src_agents, cls._tmp_root / ".claude" / "agents")
         src_settings = _REPO_ROOT / ".claude" / "settings.json"
         if src_settings.is_file():
@@ -93,14 +131,18 @@ class TestSetQualityProfileScript(unittest.TestCase):
             env=self._tmp_env(),
         )
 
-    def test_max_quality_sets_all_to_opus(self):
+    def test_max_quality_veto_floor_derived_advisories_opus(self):
         proc = self._apply("max-quality")
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        for slug in ("code-reviewer", "security-engineer", "qa-architect",
-                     "performance-engineer", "devops"):
-            af = self.agents_dir / f"{slug}.md"
+        for slug in _VETO_ROLES:
             self.assertEqual(
-                _read_agent_model(af),
+                _read_agent_model(self.agents_dir / f"{slug}.md"),
+                _veto_floor_expected(slug),
+                f"{slug} must carry the derived VETO floor on max-quality",
+            )
+        for slug in _ADVISORY_ROLES:
+            self.assertEqual(
+                _read_agent_model(self.agents_dir / f"{slug}.md"),
                 "claude-opus-4-8",
                 f"{slug} should be claude-opus-4-8 on max-quality profile",
             )
@@ -123,14 +165,14 @@ class TestSetQualityProfileScript(unittest.TestCase):
     def test_balanced_sets_expected_distribution(self):
         proc = self._apply("balanced")
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        # VETO floor
+        # VETO floor — derived, never a literal
         self.assertEqual(
             _read_agent_model(self.agents_dir / "code-reviewer.md"),
-            "claude-opus-4-8",
+            _veto_floor_expected("code-reviewer"),
         )
         self.assertEqual(
             _read_agent_model(self.agents_dir / "security-engineer.md"),
-            "claude-opus-4-8",
+            _veto_floor_expected("security-engineer"),
         )
         # Non-VETO distributed
         self.assertEqual(
@@ -149,16 +191,18 @@ class TestSetQualityProfileScript(unittest.TestCase):
     def test_max_speed_keeps_veto_floor(self):
         proc = self._apply("max-speed")
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        # VETO floor still Opus
+        # VETO floor still on the DERIVED floor
         self.assertEqual(
             _read_agent_model(self.agents_dir / "code-reviewer.md"),
-            "claude-opus-4-8",
-            "VETO floor: code-reviewer MUST stay Opus on max-speed",
+            _veto_floor_expected("code-reviewer"),
+            "VETO floor: code-reviewer MUST stay on the derived floor "
+            "on max-speed",
         )
         self.assertEqual(
             _read_agent_model(self.agents_dir / "security-engineer.md"),
-            "claude-opus-4-8",
-            "VETO floor: security-engineer MUST stay Opus on max-speed",
+            _veto_floor_expected("security-engineer"),
+            "VETO floor: security-engineer MUST stay on the derived floor "
+            "on max-speed",
         )
         # 3 non-VETO on Haiku
         for slug in ("qa-architect", "performance-engineer", "devops"):
@@ -209,6 +253,10 @@ class TestSetQualityProfileScript(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertEqual(
             _read_agent_model(self.agents_dir / "code-reviewer.md"),
+            _veto_floor_expected("code-reviewer"),
+        )
+        self.assertEqual(
+            _read_agent_model(self.agents_dir / "qa-architect.md"),
             "claude-opus-4-8",
         )
 
@@ -223,8 +271,14 @@ class TestSetQualityProfileScript(unittest.TestCase):
         # stay opus-4-8 and never become any other opus version.
         proc = self._apply_env("max-quality", {"CEO_MODEL_NORMALIZE": "1"})
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        for slug in ("code-reviewer", "security-engineer", "qa-architect",
-                     "performance-engineer", "devops"):
+        for slug in _VETO_ROLES:
+            expected = _veto_floor_expected(slug)
+            self.assertEqual(
+                _read_agent_model(self.agents_dir / f"{slug}.md"),
+                expected,
+                f"{slug} must remain exactly {expected} under normalize ON",
+            )
+        for slug in _ADVISORY_ROLES:
             self.assertEqual(
                 _read_agent_model(self.agents_dir / f"{slug}.md"),
                 "claude-opus-4-8",
@@ -241,10 +295,11 @@ class TestSetQualityProfileScript(unittest.TestCase):
         # safe (the raw date-stamped slug is written unchanged, never empty).
         proc = self._apply_env("max-speed", {"CEO_MODEL_NORMALIZE": "1"})
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        # VETO floor unconditionally Opus regardless of normalize.
+        # VETO floor unconditionally on the derived floor regardless of
+        # normalize.
         self.assertEqual(
             _read_agent_model(self.agents_dir / "code-reviewer.md"),
-            "claude-opus-4-8",
+            _veto_floor_expected("code-reviewer"),
         )
         # The non-VETO haiku slot is either the dateless canonical (if the
         # optimizer pkg resolved) or the raw date-stamped id (fail-open). Either
@@ -252,6 +307,159 @@ class TestSetQualityProfileScript(unittest.TestCase):
         qa_model = _read_agent_model(self.agents_dir / "qa-architect.md")
         self.assertIn("haiku-4-5", qa_model)
         self.assertNotEqual(qa_model, "")
+
+
+class TestVetoFloorInvariantIsDerived(TestSetQualityProfileScript):
+    """PLAN-169 W4.3 F1 / PLAN-183 W3 — the permanent guard for the class.
+
+    The VETO floor cannot be held up by a literal duplicated across N `case`
+    branches. Before this cure the guard enumerated 3 profiles by hand and
+    asserted `claude-opus-4-8` — the OLD value — while `.claude/agents/*.md`
+    lived on `claude-fable-5`. The instrument defended the defect, and the
+    downgrade slipped through `VETO_FLOOR_ALLOWED` (a 3-member allowlist
+    that keeps the previous flagship valid during migration), so no hook
+    fired.
+
+    The profiles below are EXTRACTED from the script, not listed here: a
+    4th profile is covered the moment it is added.
+    """
+
+    def _declared_profiles(self):
+        """Profile labels the script's `_profile_models` accepts."""
+        text = _SCRIPT.read_text(encoding="utf-8")
+        body = text.split("_profile_models() {", 1)[1]
+        body = body.split("\n}", 1)[0]
+        labels = set()
+        for match in re.finditer(r"^\s*([a-z0-9|-]+)\)", body, re.M):
+            for label in match.group(1).split("|"):
+                label = label.strip()
+                if label and label != "*":
+                    labels.add(label)
+        return sorted(labels)
+
+    def _emitting_profiles(self):
+        """Labels of the branch that actually EMITS a map."""
+        text = _SCRIPT.read_text(encoding="utf-8")
+        body = text.split("_profile_models() {", 1)[1].split("\n}", 1)[0]
+        labels = set()
+        for match in re.finditer(
+            r"^\s*([a-z0-9|-]+)\)\s*\n\s*echo \"code-reviewer:", body, re.M
+        ):
+            for label in match.group(1).split("|"):
+                if label.strip():
+                    labels.add(label.strip())
+        return sorted(labels)
+
+    def test_profile_set_is_non_empty(self):
+        """Vacuity guard — a broken parser would make the rest of this
+        class green by having nothing to iterate over."""
+        profiles = self._declared_profiles()
+        self.assertGreaterEqual(len(profiles), 3, profiles)
+        self.assertIn("max-quality", profiles)
+
+    def test_accepted_and_emitting_profile_sets_are_identical(self):
+        """A label the validator accepts but the emitter has no branch for
+        would produce an EMPTY map: rc=0, nothing written, silently. The
+        two `case` blocks must stay in lockstep."""
+        self.assertEqual(self._declared_profiles(), self._emitting_profiles())
+
+    def test_no_profile_ever_downgrades_the_veto_floor(self):
+        """Every profile the script accepts, both VETO holders, compared
+        against the authority. Before the cure this failed on all three
+        with 'claude-opus-4-8' != 'claude-fable-5'."""
+        for profile in self._declared_profiles():
+            proc = self._apply(profile)
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            for role in _VETO_ROLES:
+                self.assertEqual(
+                    _read_agent_model(self.agents_dir / f"{role}.md"),
+                    _veto_floor_expected(role),
+                    f"{profile} moved the VETO floor for {role}",
+                )
+
+    def test_script_carries_no_bare_model_literal_for_veto_roles(self):
+        """Positive control of the MECHANISM: planting the old literal back
+        into any `case` branch has to light this up by name."""
+        text = _SCRIPT.read_text(encoding="utf-8")
+        for role in _VETO_ROLES:
+            hits = re.findall(rf"{re.escape(role)}:claude-[a-z0-9-]+", text)
+            self.assertEqual(
+                hits, [],
+                f"{role} is pinned to a literal model id again ({hits}) — "
+                f"the F1-P1 class (PLAN-169/fleet-currency-audit-S298) "
+                f"is back",
+            )
+
+    def test_managed_veto_roles_match_the_authority_exactly(self):
+        """Coverage, declared rather than assumed. Of the 5
+        `VETO_FLOOR_ROLES` the script manages 2; the other 3
+        (incident-commander, identity-trust-architect,
+        threat-detection-engineer) appear in NO profile. That is a
+        decision, and pinning it here means a new VETO role can neither
+        arrive managed-and-downgraded nor drop out of scope in silence."""
+        sys.path.insert(0, str(_REPO_ROOT / ".claude" / "hooks"))
+        sys.path.insert(0, str(_REPO_ROOT / ".claude" / "scripts"))
+        from _lib.agent_frontmatter import VETO_FLOOR_ROLES
+        from tier_policy_cli._constants import VETO_HARDCODE
+
+        text = _SCRIPT.read_text(encoding="utf-8")
+        managed = {
+            role for role in VETO_FLOOR_ROLES
+            if re.search(rf"\b{re.escape(role)}:", text)
+        }
+        self.assertEqual(
+            managed, set(VETO_HARDCODE),
+            "the script's managed VETO set drifted from VETO_HARDCODE — "
+            "update BOTH or neither",
+        )
+        self.assertTrue(
+            set(VETO_HARDCODE) <= set(VETO_FLOOR_ROLES),
+            "VETO_HARDCODE names a role that is not a VETO_FLOOR_ROLE",
+        )
+
+    def test_veto_floor_is_the_ceiling_not_merely_an_allowlist_member(self):
+        """The allowlist is NOT the floor. `claude-opus-4-8` is a member of
+        `VETO_FLOOR_ALLOWED` and is two generations below the ceiling, so
+        membership-only checks (`test_veto_floor_bijection.py`) stay green
+        through the downgrade. The floor is the authority's value."""
+        sys.path.insert(0, str(_REPO_ROOT / ".claude" / "hooks"))
+        from _lib.agent_frontmatter import VETO_FLOOR_ALLOWED
+
+        for role in _VETO_ROLES:
+            expected = _veto_floor_expected(role)
+            self.assertIn(expected, VETO_FLOOR_ALLOWED)
+            self.assertGreater(
+                len(VETO_FLOOR_ALLOWED), 1,
+                "a single-member allowlist would make this test vacuous",
+            )
+
+    def test_fail_closed_when_the_authority_is_unreadable(self):
+        """The fail-CLOSED path is behaviour, not a comment. With the
+        authority gone the script must refuse (rc=3) and leave every agent
+        file untouched — falling back to a literal is what created this
+        class."""
+        moved = self._tmp_root / "authority-moved-aside"
+        src = self._tmp_root / ".claude" / "scripts" / "tier_policy_cli"
+        self.assertTrue(src.is_dir(), "sandbox has no authority to remove")
+        self._apply("max-speed")
+        before = {
+            role: _read_agent_model(self.agents_dir / f"{role}.md")
+            for role in _VETO_ROLES + _ADVISORY_ROLES
+        }
+        shutil.move(str(src), str(moved))
+        try:
+            proc = self._apply("max-quality")
+            self.assertEqual(proc.returncode, 3, proc.stderr)
+            self.assertIn("fail-CLOSED", proc.stderr)
+            for role, model in before.items():
+                self.assertEqual(
+                    _read_agent_model(self.agents_dir / f"{role}.md"), model,
+                    f"{role} was rewritten despite the fail-CLOSED refusal",
+                )
+        finally:
+            shutil.move(str(moved), str(src))
+        # Control: with the authority restored the same profile succeeds.
+        self.assertEqual(self._apply("max-quality").returncode, 0)
 
 
 class TestSpotCheckFindings(unittest.TestCase):
