@@ -43,7 +43,7 @@ documentation bug.
 | Test files | ~770 | `git ls-files '*test_*.py' '*_test.py' \| wc -l` |
 | ADRs shipped | 194 | `ls .claude/adr/ADR-*.md \| wc -l` |
 | SPEC/v1 files | 32 (28 `*.schema.md`) | `ls SPEC/v1/*.md \| wc -l` |
-| Workflows | 22 | `ls .github/workflows/*.yml \| wc -l` |
+| Workflows | 23 | `ls .github/workflows/*.yml \| wc -l` |
 | GitHub Actions SHA-pinned refs | every `uses:` pinned | `grep -rEc 'uses: [^#]+@(v[0-9]+\|main\|master\|latest)[[:space:]]*$' .github/workflows/*` — must be 0 everywhere |
 | Skills | 166 (42 core + 8 frontend + 116 domain) | `find .claude/skills -name SKILL.md \| wc -l` |
 | Hooks | 58 .py on disk; 47 wired into `settings.json` (49 event registrations) | `ls .claude/hooks/*.py \| wc -l` |
