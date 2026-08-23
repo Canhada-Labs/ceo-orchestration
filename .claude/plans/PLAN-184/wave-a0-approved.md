@@ -13,8 +13,8 @@ Plans: PLAN-184, PLAN-174
 Wave: A0 (matriz de Python no push + backstop nightly) + W2 (wire do ceremony-lint)
 Patch: .claude/plans/PLAN-184/s322-ceremony/S322-CEREMONY.patch
 Patch-sha256: 644d6d21870cf9db32b264a1961c73a44ce9847cabaf02b3bb190d74ac7c00f5
-Anchor-SHA: ANCHOR-PLACEHOLDER
-Data: DATA-PLACEHOLDER
+Anchor-SHA: d8ee055c90aab6d859a1d00209368189bc316ef0
+Data: 2026-08-23
 
 > **O `Anchor-SHA` fica em branco DE PROPÓSITO.** Ele é o HEAD no instante da
 > assinatura; preenchê-lo em preparação garante que estará obsoleto. O
@@ -22,7 +22,7 @@ Data: DATA-PLACEHOLDER
 > byte deste arquivo depois de assinar invalida o `.asc`.
 
 <!-- BEGIN SIGNED SCOPE -->
-Approved-By: @Canhada-Labs FINGERPRINT-PLACEHOLDER
+Approved-By: @Canhada-Labs AE9B236FDAF0462874060C6BCFCFACF00335DC74
 Plans: PLAN-184, PLAN-174
 Scope:
   - .claude/scripts/local/install-ceremony-precommit.sh

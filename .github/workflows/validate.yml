@@ -4,6 +4,15 @@ on:
   pull_request:
   push:
     branches: [main]
+  # PLAN-184 A0 — BACKSTOP do corte da matriz de Python no `push`.
+  # Medido ANTES de cortar: 100% dos runs deste workflow na janela
+  # vieram de `push` (por evento: {'push': 167}) e NAO existia
+  # `schedule:` nenhum. Sem este cron, remover 3.10/3.11 do `push`
+  # seria PERDA de cobertura, nao atraso de deteccao: as duas versoes
+  # deixariam de ser exercitadas em QUALQUER gatilho.
+  # O minuto e off-mark de proposito (nao :00/:30).
+  schedule:
+    - cron: "37 7 * * *"
 
 # Cancel in-progress runs when a newer commit lands on the same ref.
 # Prevents duplicate compute on rapid-fire PR updates and matches the
@@ -1451,7 +1460,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12"]
+        # PLAN-184 A0 — no `push`, so as versoes de FRONTEIRA (3.9 e
+        # 3.12); no `pull_request` e no `schedule` acima, as QUATRO.
+        # Troca latencia de deteccao por dinheiro (~US$3,15/dia de um
+        # teto de ~US$4,04) sem abrir janela de falso-verde, porque o
+        # nightly cobre 3.10/3.11 todos os dias.
+        python-version: >-
+          ${{ fromJSON(github.event_name == 'push'
+              && '["3.9","3.12"]'
+              || '["3.9","3.10","3.11","3.12"]') }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
