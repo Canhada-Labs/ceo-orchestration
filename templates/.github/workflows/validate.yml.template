@@ -20,11 +20,15 @@ jobs:
   validate:
     name: Governance, health, contamination, shellcheck
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # Kill-switch parity with the framework's own validate job: set the repo
+    # variable CEO_SOTA_DISABLE=1 to disable this job without editing CI.
+    if: vars.CEO_SOTA_DISABLE != '1'
+    timeout-minutes: 15
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        # SHA-pinned (a floating major tag is mutable). Bump via Dependabot.
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
 
       # -----------------------------------------------------------------
       # Step: Governance structure validation
@@ -86,7 +90,7 @@ jobs:
             printf '%s\n' "$UNKNOWN"
             echo ""
             echo "Either fill the placeholder, replace with archetype text, or add it"
-            echo "to the ALLOWED list in .github/workflows/validate.yml (only if it is"
+            echo "to the ALLOWED list in THIS workflow file (only if it is"
             echo "genuinely a shared template variable)."
             exit 1
           fi
@@ -100,13 +104,17 @@ jobs:
           set -euo pipefail
           jq empty .claude/settings.json
           echo "✓ .claude/settings.json is valid JSON"
-          for t in templates/settings/*.json; do
-            [ -f "$t" ] || continue
-            jq empty "$t"
-            echo "✓ $t is valid JSON"
+          # PyYAML is a THIRD-PARTY module and the framework runtime is
+          # stdlib-only (CLAUDE.md §3). Validate the YAML catalogs only when
+          # a yaml module actually exists, so a slim runner never false-reds.
+          for y in .claude/pitfalls-catalog.yaml .claude/task-chains.yaml; do
+            [ -f "$y" ] || continue
+            if python3 -c 'import yaml' 2>/dev/null; then
+              python3 -c "import yaml,sys; yaml.safe_load(open(sys.argv[1])); print('✓ '+sys.argv[1]+' is valid YAML')" "$y"
+            else
+              echo "NOTE: PyYAML absent — skipped YAML syntax check for $y"
+            fi
           done
-          python3 -c 'import yaml; yaml.safe_load(open(".claude/pitfalls-catalog.yaml")); print("✓ pitfalls-catalog.yaml is valid YAML")'
-          python3 -c 'import yaml; yaml.safe_load(open(".claude/task-chains.yaml")); print("✓ task-chains.yaml is valid YAML")'
 
       # -----------------------------------------------------------------
       # Step: Shellcheck on all active hooks and scripts
@@ -136,26 +144,17 @@ jobs:
           echo "✓ Shellcheck clean on all active hooks/scripts"
 
       # -----------------------------------------------------------------
-      # Step: Python hook unit tests (Sprint 2 A.4)
-      # Runs every test under .claude/hooks/tests/. Uses Python 3.12
-      # from ubuntu-24.04 runner default (3.10 is also acceptable).
+      # NOTE (PLAN-183 W2/A2): the framework's own hook + script unit
+      # suites are deliberately ABSENT here. `.claude/hooks/tests/` and
+      # `.claude/scripts/tests/` are framework-internal: install.sh never
+      # copies them (install_scripts_selective / install_hooks_selective
+      # ship top-level files only) and _framework_path_excluded() in
+      # scripts/_framework_manifest_set.sh classifies both as never-shipped
+      # — upgrade.sh actively PURGES them as mis-installed. Running
+      # `unittest discover` against them here fails with
+      # `ImportError: Start directory is not importable`. Put YOUR OWN
+      # test command in this slot.
       # -----------------------------------------------------------------
-      - name: Run Python hook unit tests
-        run: |
-          set -euo pipefail
-          echo "Python version: $(python3 --version)"
-          cd "$GITHUB_WORKSPACE"
-          python3 -m unittest discover -s .claude/hooks/tests -p 'test_*.py' -v
-
-      # -----------------------------------------------------------------
-      # Step: Python script unit tests (audit-query, run-skill-benchmark,
-      # check-tier-boundaries)
-      # -----------------------------------------------------------------
-      - name: Run Python script unit tests
-        run: |
-          set -euo pipefail
-          cd "$GITHUB_WORKSPACE"
-          python3 -m unittest discover -s .claude/scripts/tests -p 'test_*.py' -v
 
       # -----------------------------------------------------------------
       # Step: core/frontend → domains tier boundary check
@@ -173,28 +172,32 @@ jobs:
         run: |
           set -euo pipefail
           cd "$RUNNER_TEMP"
-          bash <(curl -sSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
-          ./actionlint -color "$GITHUB_WORKSPACE/.github/workflows/"*.yml
+          # Pinned release asset — never `main` (unpinned remote script = a
+          # supply-chain hole that grades YOUR workflows).
+          VERSION="1.7.7"
+          ASSET="actionlint_${VERSION}_linux_amd64.tar.gz"
+          curl -sSLO "https://github.com/rhysd/actionlint/releases/download/v${VERSION}/${ASSET}"
+          tar -xzf "$ASSET" actionlint
+          chmod +x actionlint
+          # nullglob so an adopter with no activated *.yml does not hand
+          # actionlint an unexpanded literal glob.
+          shopt -s nullglob
+          WF=( "$GITHUB_WORKSPACE/.github/workflows/"*.yml "$GITHUB_WORKSPACE/.github/workflows/"*.yaml )
+          if [ ${#WF[@]} -eq 0 ]; then
+            echo "NOTE: no activated workflow files (*.yml) — nothing to lint"
+          else
+            ./actionlint -color "${WF[@]}"
+          fi
 
       # -----------------------------------------------------------------
-      # Step: Skill inventory idempotency — generator output must match
-      # the committed block in ceo-orchestration/SKILL.md.
+      # NOTE (PLAN-183 W2/A2): the skill-inventory idempotency gate is
+      # framework-only and CANNOT hold at an adopter site. install.sh ships
+      # ceo-orchestration/SKILL.md with the framework's FULL inventory
+      # baked in, while domain squads install SELECTIVELY — so
+      # generate-skill-inventory.sh and the committed block diverge by
+      # construction for any adopter that did not install all domains
+      # (measured: 82 generated lines vs 341 committed, diff rc=1).
       # -----------------------------------------------------------------
-      - name: Skill inventory idempotency
-        run: |
-          set -euo pipefail
-          GEN=$(bash .claude/scripts/generate-skill-inventory.sh)
-          # Extract the BEGIN/END block from the committed SKILL.md
-          COMMITTED=$(awk '/<!-- BEGIN AUTO-GENERATED SKILL INVENTORY -->/,/<!-- END AUTO-GENERATED SKILL INVENTORY -->/' \
-            .claude/skills/core/ceo-orchestration/SKILL.md)
-          if [ "$GEN" != "$COMMITTED" ]; then
-            echo "❌ Skill inventory in ceo-orchestration/SKILL.md is stale."
-            echo "Run: bash .claude/scripts/generate-skill-inventory.sh"
-            echo "Then re-embed the BEGIN/END block."
-            diff <(printf '%s\n' "$GEN") <(printf '%s\n' "$COMMITTED") || true
-            exit 1
-          fi
-          echo "✓ Skill inventory is up-to-date"
 
       # -----------------------------------------------------------------
       # Step: Hook executable bits (.sh + active Python hooks)

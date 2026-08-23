@@ -170,8 +170,10 @@ The framework ships with two distinct floor gates on benchmark scores:
 Both gates share exit code 1 by design (debate round 1 consensus
 R-DEV1): having separate exit codes for "CRITICAL" vs "absolute floor"
 fragments CI error handling without buying clarity. Distinguish via
-the `$GITHUB_STEP_SUMMARY` table rendered by
-`.github/scripts/summarize-benchmarks.py`.
+the `$GITHUB_STEP_SUMMARY` table, which `benchmarks.yml` assembles from the
+per-benchmark Markdown that `.claude/scripts/run-skill-benchmark.py` emits
+with `--markdown`. (The framework's own `.github/scripts/` is not part of an
+install — see the header of `.github/workflows/benchmarks.yml.template`.)
 
 ### Escalation path
 

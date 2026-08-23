@@ -1,0 +1,26 @@
+# scripts/contamination-terms.txt — PRIVATE identity terms consumed by
+# .claude/scripts/check_contamination.py at scan time.
+#
+# NOT DELIVERED TO ADOPTERS. `scripts/` contributes ZERO files to the
+# install/upgrade manifest (scripts/_framework_manifest_set.sh ::
+# _framework_manifest_files), and `scripts` is not one of the
+# _framework_target_entries. So this file stays in the framework repo.
+#
+# DO NOT move this under .claude/scripts/ — that tree IS delivered
+# wholesale by upgrade.sh (`backup_and_replace ".claude/scripts"`), for
+# ANY extension. The only filter there is _framework_path_excluded, which
+# never looks at the extension: four .txt files under .claude/scripts/ are
+# already in the delivered manifest. The deciding axis is the PATH, not
+# the suffix.
+#
+# An adopter may create this same file in their own repo to guard THEIR
+# handle / private project names. When it is absent the pattern degrades
+# to the shipped placeholder terms — that is the expected adopter state,
+# not a failure.
+#
+# FORMAT: one Python regex alternative per line. Blank lines and lines
+# starting with `#` are ignored. Write each term in bracket-alternation
+# form so this file does not match the pattern it feeds.
+[Jj]oao[\s._\-]*[Cc]anhada
+Jo[aã]o
+

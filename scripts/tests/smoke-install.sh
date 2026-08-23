@@ -133,6 +133,27 @@ assert_not_contains "{{OWNER_NAME}}" ".claude/hooks"
 assert_not_contains "{{PROJECT_NAME}}" ".claude/hooks"
 assert_not_contains "{{OWNER_NAME}}" ".claude/scripts"
 
+# PLAN-183 W2 (finding A3): the delivered tree must not name a script the
+# installer does not deliver. `.github/` reaches the adopter ONLY through
+# install_github_templates() (install.sh) — CODEOWNERS + the two workflow
+# .template files — and `_framework_target_entries` carries no `.github`
+# entry at all, so `.github/scripts/` is never installed. Any surviving
+# reference is a call that dies AFTER the adopter has paid for the API run.
+#
+# A blind substring grep for ".github/scripts/" self-defeats: the A3 cure
+# itself explains the absence in-line (e.g. "is NOT installed", "is not
+# part of an install"), and that explanatory text also contains the
+# substring (measured: a real clean install hits 3 lines that are ALL
+# disclaimer prose, zero of which are dangling calls). So a match only
+# counts as dangling when the SAME line carries no such disclaimer.
+gh_scripts_hits="$(grep -rn '\.github/scripts/' "$TARGET/.github" "$TARGET/docs" 2>/dev/null || true)"
+dangling_gh_scripts="$(printf '%s' "$gh_scripts_hits" | grep -viE 'not installed|not part of' || true)"
+if [[ -n "$dangling_gh_scripts" ]]; then
+  echo "::error::delivered tree references .github/scripts/, which install.sh does not deliver"
+  echo "$dangling_gh_scripts" | head -5 >&2
+  fail=1
+fi
+
 # Hook scripts are executable
 for h in check_agent_spawn.py audit_log.py check_bash_safety.py check_plan_edit.py; do
   if [[ ! -x "$TARGET/.claude/hooks/$h" ]]; then

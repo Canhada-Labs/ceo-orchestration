@@ -8,18 +8,20 @@ Sprint 4+ can retire the wrapper cleanly.
 
 ## What it detects
 
-NFKC-normalized regex match against a hardcoded pattern:
+NFKC-normalized regex match against a pattern built in TWO parts:
 
-    acme\\s*[Ll]edger | example[\\s._\\-]*owner | Example\\s+Owner
-      | [Jj]oao[\\s._\\-]*[Cc]anhada | Jo[aã]o
+    (a) generic placeholder terms, hardcoded below in
+        `_PLACEHOLDER_TERMS` — these ship to adopters as a working
+        template; replace or extend them when forking.
+    (b) PRIVATE terms, read at scan time from the SCANNED repo's
+        `scripts/contamination-terms.txt` (see `_load_private_terms`).
+        That file is deliberately OUTSIDE the install/upgrade manifest,
+        so no maintainer identity is ever written into an adopter's
+        checkout. An adopter may create the same file to guard THEIR
+        own handle / private project names.
 
-The first three alternatives are EXAMPLE placeholders for an adopter's
-own project name / handle (replace them when forking — see `_PATTERN`).
-The last two defend the framework's own published core against leaking
-the maintainer's real identity ("João" / "joao canhada") into shipped
-surfaces (e.g. `.claude/skills/core/`). Without them the guard is a
-false-green: it exits 0 even when the real name is provably present in
-non-allowlisted, shipped files.
+When the private file is absent the pattern is placeholder-only. That is
+the EXPECTED adopter state, not a failure.
 
 Files matching the pattern outside the allowlist fail the check.
 
@@ -50,27 +52,61 @@ if str(_HOOKS_DIR) not in sys.path:
 from _lib.file_walker import FileWalker  # noqa: E402
 
 
-# Identity tokens that must not leak into the distributed framework core.
+# Contamination tokens, in TWO parts — see the module docstring.
 #
-# Two groups of alternatives:
-#   1. EXAMPLE placeholders (acme ledger / example owner) — a maintainer
-#      publishing their own fork should replace these with their personal
-#      handle / private project names so this lint guards their identity
-#      instead of the example ones.
-#   2. The maintainer's REAL identity ([Jj]oao[\s._\-]*[Cc]anhada and the
-#      bare first name Jo[aã]o) — these defend THIS framework's published
-#      core (e.g. .claude/skills/core/) against shipping the real name.
-#      They were dropped from the live pattern at some point while the
-#      docstring still advertised them, turning the guard false-green
-#      (it exited 0 while "João" was provably present in non-allowlisted
-#      shipped files). Restored here so the guard actually fails-closed.
-#      The bare Jo[aã]o alternative is intentionally case-sensitive
-#      (capital J + a/ã + o) so it catches the proper noun ("João",
-#      "Joao") without over-matching common lowercase substrings.
-_PATTERN = re.compile(
-    r"acme\s*[Ll]edger|example[\s._\-]*owner|Example\s+Owner"
-    r"|[Jj]oao[\s._\-]*[Cc]anhada|Jo[aã]o"
+#   1. _PLACEHOLDER_TERMS (in code) — generic placeholders, shipped to
+#      adopters as a working template.
+#   2. Private terms loaded from _PRIVATE_TERMS_RELPATH inside the
+#      SCANNED repo. They live outside the delivered tree because this
+#      guard used to be its own contamination vector: it was the only
+#      file in the install/upgrade manifest carrying the maintainer's
+#      real name, and it survived CI by allowlisting
+#      ITSELF. PLAN-183 W2 A7 removed both halves of that defect — the
+#      identity moved out of the delivered file, and the self-exemption
+#      was dropped from _ALLOWLIST_EXACT so this module is now scanned
+#      by its own pattern.
+#      Do NOT relocate the terms file under .claude/scripts/ — that tree
+#      is delivered wholesale by upgrade.sh regardless of extension.
+#
+# Absent file => placeholder-only pattern, silently (the expected adopter
+# state is not an infrastructure failure). A file that EXISTS but cannot
+# be read is an INPUT failure and is surfaced as fatal by main().
+_PLACEHOLDER_TERMS = (
+    r"acme\s*[Ll]edger",
+    r"example[\s._\-]*owner",
+    r"Example\s+Owner",
 )
+
+_PRIVATE_TERMS_RELPATH = "scripts/contamination-terms.txt"
+
+
+def _load_private_terms(repo_root: Path) -> List[str]:
+    """Extra regex alternatives declared by the repo being scanned.
+
+    Returns [] when the file is absent (normal in an adopter checkout).
+    Propagates OSError when the file exists but cannot be read.
+    """
+    path = repo_root / _PRIVATE_TERMS_RELPATH
+    if not path.is_file():
+        return []
+    terms: List[str] = []
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        terms.append(line)
+    return terms
+
+
+def build_pattern(repo_root: Path) -> "re.Pattern":
+    """Placeholder terms plus any private terms declared by this repo.
+
+    There is deliberately NO module-level constant holding the full
+    pattern: a name that silently omits the private half is the exact
+    false-green shape this indirection exists to remove.
+    """
+    alts = list(_PLACEHOLDER_TERMS) + _load_private_terms(repo_root)
+    return re.compile("|".join(alts))
 
 # Allowlist — mirrors the case block in check-contamination.sh
 #
@@ -93,11 +129,16 @@ _ALLOWLIST_EXACT = {
     # ---- S214: audit report + plugin builder reference identity tokens by-design ----
     "MORNING-REPORT-S214.md",   # CTO audit report that AUDITS the Owner-identity leak (must name the tokens)
     "REPORT-S225-fable-audit.md",  # S225 Fable audit: documents identity-leak findings (E5-F10, E7) — same rationale as MORNING-REPORT-S214
-    "scripts/build-plugin.py",  # plugin builder: sanitize_paths()/identity_report() match these tokens to strip/report them (same rationale as check_contamination.py itself)
+    "scripts/build-plugin.py",  # plugin builder: sanitize_paths()/identity_report() match these tokens to strip/report them
+    "scripts/contamination-terms.txt",  # the private terms list itself — identity lives here BY DESIGN; never delivered (scripts/ contributes zero manifest files)
     ".github/workflows/validate.yml",
     ".github/CODEOWNERS",
     ".claude/scripts/check-contamination.sh",
-    ".claude/scripts/check_contamination.py",
+    # NOTE: .claude/scripts/check_contamination.py is deliberately NOT
+    # allowlisted. Self-exemption is what let the maintainer identity sit
+    # inside this very file while CI reported green (PLAN-183 W2 A7). The
+    # module is now scanned by its own pattern; if identity re-enters it,
+    # the guard fails on itself.
     ".claude/scripts/tests/test_check_contamination.py",
     ".claude/hooks/tests/test_check_canonical_edit.py",
     "CLAUDE.md",
@@ -272,6 +313,8 @@ def scan(repo_root: Path) -> List[Path]:
         path_allowlist_globs=_ALLOWLIST_GLOBS,
     )
 
+    pattern = build_pattern(repo_root)
+
     violations: List[Path] = []
     for path in walker.iter_files():
         # Skip binaries by suffix
@@ -288,7 +331,7 @@ def scan(repo_root: Path) -> List[Path]:
         except UnicodeDecodeError:
             continue
         normalized = unicodedata.normalize("NFKC", text)
-        if _PATTERN.search(normalized):
+        if pattern.search(normalized):
             violations.append(path)
     return violations
 
@@ -301,7 +344,18 @@ def main() -> int:
         print("FATAL: not inside a git repo", file=sys.stderr)
         return 2
 
-    violations = scan(repo_root)
+    try:
+        violations = scan(repo_root)
+    except OSError as exc:
+        # Fail-CLOSED on an INPUT failure: a terms file that exists but
+        # cannot be read means the pattern is incomplete, and an
+        # incomplete pattern is an unverified scan, not a clean one.
+        print(
+            "FATAL: cannot read %s: %s" % (_PRIVATE_TERMS_RELPATH, exc),
+            file=sys.stderr,
+        )
+        return 2
+
     if not violations:
         print("✓ No contamination outside allowed zones")
         return 0
@@ -320,7 +374,7 @@ def main() -> int:
     print("  - .github/workflows/validate.yml")
     print("  - .github/CODEOWNERS (live config — Owner handle expected)")
     print("  - .claude/scripts/check-contamination.sh")
-    print("  - .claude/scripts/check_contamination.py")
+    print("  - scripts/contamination-terms.txt (private terms list — not delivered)")
     print("  - .claude/scripts/tests/test_check_contamination.py (uses pattern as fixture)")
     print("  - CLAUDE.md (framework master context — Owner path expected)")
     print("  - RELEASE.md (release procedure — Owner path + canonical repo URL)")

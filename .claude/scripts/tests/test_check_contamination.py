@@ -159,3 +159,102 @@ class TestScan(ContaminationTestBase):
         self._write_and_commit("src/foo.md", "ａｃｍｅｌｅｄｇｅｒ attempt")
         violations = cc.scan(self.root)
         self.assertEqual(len(violations), 1)
+
+
+class TestPrivateTermsSeparation(ContaminationTestBase):
+    """PLAN-183 W2 A7: the guard must not BE the contamination vector.
+
+    This directory is not delivered (0 manifest files under
+    .claude/scripts/tests/), so these assertions may state framework-only
+    facts without breaking in an adopter checkout.
+    """
+
+    def _framework_root(self) -> Path:
+        return Path(cc.__file__).resolve().parent.parent.parent
+
+    def test_framework_declares_private_terms(self):
+        """Losing the terms file silently would re-create the false-green."""
+        root = self._framework_root()
+        self.assertTrue(
+            (root / cc._PRIVATE_TERMS_RELPATH).is_file(),
+            "missing %s" % cc._PRIVATE_TERMS_RELPATH,
+        )
+        self.assertTrue(
+            cc._load_private_terms(root),
+            "private terms empty -> identity half of the guard is dead",
+        )
+
+    def test_delivered_module_is_not_itself_contaminated(self):
+        """The shipped .py must not match the full pattern it builds."""
+        import unicodedata
+
+        root = self._framework_root()
+        text = unicodedata.normalize(
+            "NFKC", Path(cc.__file__).read_text(encoding="utf-8")
+        )
+        self.assertIsNone(
+            cc.build_pattern(root).search(text),
+            "check_contamination.py matches its own pattern -> "
+            "the guard is a contamination vector (PLAN-183 W2 A7)",
+        )
+
+    def test_module_is_not_self_allowlisted(self):
+        """Self-exemption is the mechanism that hid the leak from CI.
+
+        Asserted BEHAVIOURALLY against the real walker, not against the
+        _ALLOWLIST_EXACT literal: a glob in _ALLOWLIST_GLOBS could
+        re-exempt the module without ever touching the exact set.
+        """
+        from _lib.file_walker import FileWalker
+
+        root = self._framework_root()
+        walker = FileWalker(
+            repo_root=root,
+            mode="git",
+            path_allowlist_exact=cc._ALLOWLIST_EXACT,
+            path_allowlist_globs=cc._ALLOWLIST_GLOBS,
+        )
+        self.assertFalse(
+            walker.is_allowlisted(Path(cc.__file__).resolve()),
+            "self-exemption restored -> the guard can no longer fail on "
+            "its own contamination (PLAN-183 W2 A7)",
+        )
+
+    def test_absent_terms_file_keeps_placeholders_and_drops_identity(self):
+        """Adopter state: no terms file => placeholders still guarded."""
+        pattern = cc.build_pattern(self.root)  # temp repo, no scripts/ file
+        self.assertEqual(cc._load_private_terms(self.root), [])
+        self.assertIsNotNone(pattern.search("hi @example-owner"))
+        self.assertIsNotNone(pattern.search("our acmeLedger dashboard"))
+
+    def test_unreadable_terms_file_propagates_oserror(self):
+        """Fail-CLOSED on input: an unreadable terms file is not 'clean'."""
+        terms = self.root / cc._PRIVATE_TERMS_RELPATH
+        terms.parent.mkdir(parents=True, exist_ok=True)
+        terms.write_text("[Xx]yzzy\n", encoding="utf-8")
+        terms.chmod(0o000)
+        # NOTE: no addCleanup — unittest runs cleanups AFTER tearDown, and
+        # tearDown rmtree's self.root, so a deferred chmod would raise
+        # FileNotFoundError. Restore inline instead.
+        try:
+            try:
+                terms.read_text(encoding="utf-8")
+            except OSError:
+                pass
+            else:
+                self.skipTest("this user can read mode-000 files (root?)")
+            with self.assertRaises(OSError):
+                cc._load_private_terms(self.root)
+        finally:
+            terms.chmod(0o600)
+
+    def test_comments_and_blank_lines_are_ignored(self):
+        """Terms file grammar: only non-comment, non-blank lines count."""
+        terms = self.root / cc._PRIVATE_TERMS_RELPATH
+        terms.parent.mkdir(parents=True, exist_ok=True)
+        terms.write_text(
+            "# a comment\n\n  [Xx]yzzy  \n   # indented comment\n",
+            encoding="utf-8",
+        )
+        self.assertEqual(cc._load_private_terms(self.root), ["[Xx]yzzy"])
+        self.assertIsNotNone(cc.build_pattern(self.root).search("Xyzzy"))

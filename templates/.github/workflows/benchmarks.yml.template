@@ -1,5 +1,25 @@
 name: Skill benchmarks (advisory)
 
+# INERT AS SHIPPED. install.sh copies this file to
+# `.github/workflows/benchmarks.yml.template` — the `.template` suffix means
+# GitHub Actions never reads it. Activation is an EXPLICIT adopter step:
+#   git mv .github/workflows/benchmarks.yml.template \
+#          .github/workflows/benchmarks.yml
+#
+# ONCE ACTIVATED THIS COSTS REAL MONEY ON YOUR OWN ACCOUNT. It requires the
+# repository secret ANTHROPIC_API_KEY (Settings -> Secrets and variables ->
+# Actions). Each run bills YOUR Anthropic account: one API call per benchmark
+# scenario per repetition, for every benchmark YAML under
+# `.claude/skills/**/benchmarks/`. There is no framework-side spend cap — the
+# only throttle is the paths filter below. With no secret configured the job
+# skips visibly and bills nothing.
+#
+# SELF-CONTAINED BY CONTRACT (PLAN-183 W2 / finding A3): every script this
+# workflow calls must be one the installer actually delivers.
+# `.claude/scripts/run-skill-benchmark.py` ships via
+# install.sh::install_scripts_selective(). The framework's own
+# `.github/scripts/` is NOT installed, so nothing here may reference it.
+#
 # Only runs on changes to skill benchmarks, the runner, or this workflow
 # itself. Per PLAN-002 §11-bis Q2: paths filter keeps docs/plans/hooks PRs
 # from paying API cost.
@@ -89,13 +109,14 @@ jobs:
             base=$(basename "$bench" .yaml)
             echo "::group::Running $bench"
             out="benchmark-results/${base}.json"
+            md="benchmark-results/${base}.md"
             if ! python3 .claude/scripts/run-skill-benchmark.py \
                  "$bench" \
                  --output-json "$out" \
                  --markdown \
                  --floor 0.6 \
                  --write-lessons \
-                 --skip-if-no-key; then
+                 --skip-if-no-key > "$md"; then
               rc=$?
               if [ "$rc" -eq 1 ]; then
                 echo "::error::$bench below floor (CRITICAL or <0.6)"
@@ -105,6 +126,7 @@ jobs:
                 FAILED=1
               fi
             fi
+            if [ -s "$md" ]; then cat "$md"; fi
             echo "::endgroup::"
           done
 
@@ -126,8 +148,16 @@ jobs:
             printf '## Benchmarks: no results produced\n' >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          python3 .github/scripts/summarize-benchmarks.py benchmark-results/*.json \
-            >> "$GITHUB_STEP_SUMMARY"
+          # PLAN-183 W2 / A3: the summary is built from the per-benchmark
+          # Markdown that .claude/scripts/run-skill-benchmark.py emits with
+          # --markdown (captured per bench in the step above). The framework's
+          # .github/scripts/ is NOT installed, so it must not be called here.
+          if ls benchmark-results/*.md >/dev/null 2>&1; then
+            cat benchmark-results/*.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            printf '## Benchmarks: results produced but no Markdown captured\n' \
+              >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Upload benchmark JSON results
         if: always()
