@@ -1278,13 +1278,23 @@ com a revisão refrescada, ou vira plano próprio.
       > cerimônia. É a classe "gerador curado, artefato obsoleto": o teste
       > do gerador não vigia o arquivo entregue.
       >
-      > **Observação a verificar (não confirmada):** duas das 18 entradas
-      > de `veto_protected` são `'Kill Switches'` e `'Latency Budgets'` —
-      > parecem TÍTULOS DE PROSA derivados dos organogramas, não skills.
-      > Existe teste para essa classe
-      > (`test_toolchain_names_in_prose_are_not_derived`), então ou são
-      > vazamento novo, ou `veto_protected` é populado antes do bind ao
-      > inventário. Precisa de uma medição própria antes de virar achado.
+      > **Observação MEDIDA E REFUTADA (S324).** Eu suspeitei que duas das
+      > 18 entradas de `veto_protected` — `'Kill Switches'` e
+      > `'Latency Budgets'` — fossem títulos de prosa vazados. **Não são.**
+      > `derive_veto_skills` devolve **27 slugs, zero** com espaço ou
+      > maiúscula inicial (medido importando o módulo e chamando a
+      > função). As duas são o `name:` de frontmatter de skills REAIS —
+      > `domains/trading-hft/skills/kill-switches/` e
+      > `latency-budgets/` — cujos DIRETÓRIOS são slugs corretos, e é o
+      > `dir_name` que a derivação casa. O gerador então anexa
+      > `skill["name"]` (o título humano), não o slug.
+      >
+      > O que sobra é **legibilidade, não defeito**: `veto_protected`
+      > reporta nomes de EXIBIÇÃO enquanto `derive_veto_skills` devolve
+      > SLUGS, então as duas listas não são diretamente comparáveis — foi
+      > exatamente isso que me fez suspeitar. 14 SKILL.md usam `name:` em
+      > prosa, logo é convenção do repositório e não anomalia. Registrado
+      > para ninguém re-investigar.
 - [x] AC-4 [P0] W0-US1 conclui com veredito nomeado, e a aritmética é
       tentada ANTES da arqueologia. **FECHADO (S317, 2026-08-20):**
       veredito = `explicado pela aritmética`; conta exata
@@ -1309,7 +1319,7 @@ com a revisão refrescada, ou vira plano próprio.
       (`32639637945`) — o vermelho daquele run é o step de paridade, outro
       step, outro defeito (D1). Comentário no código não seria prova; o
       step verde é.
-- [ ] AC-7 [P2, NÃO-BLOQUEANTE] Os achados do relatório de campo são
+- [x] AC-7 [P2, NÃO-BLOQUEANTE] Os achados do relatório de campo são
       respondidos ao adopter, inclusive os recusados (A6), com a razão.
       **Canal e dono:** o CEO escreve a resposta como um documento em
       `.claude/plans/PLAN-183/resposta-ao-campo.md`; a ENTREGA ao adopter
@@ -1319,6 +1329,23 @@ com a revisão refrescada, ou vira plano próprio.
       o plano infechável se o adopter não responder. Se o mecanismo do
       A6 não for explicado, o documento diz "não explicado" e nomeia o
       arquivo que faltaria.
+      **FECHADO (S324, 2026-08-23).** Documento escrito em
+      `.claude/plans/PLAN-183/resposta-ao-campo.md`. Responde os **sete**
+      achados um a um com veredito e estado, **inclusive o A6 recusado —
+      e o mecanismo FOI explicado**, não declarado inexplicado: os dois
+      ramos de `install.sh:1493-1515`, com a medição que prova que a fonte
+      de entrega é `templates/.github/CODEOWNERS.template` (`1955b01a…`,
+      1.442 b) e não o `.github/CODEOWNERS` vivo deste repo (`ba6667d9…`,
+      10.259 b) — artefatos distintos. Acrescenta três coisas que o
+      relatório não tinha: (a) o **oitavo** item, o mais consequente para
+      quem já instalou — o upgrade nunca entrega `.github/` nem `docs/`,
+      então as curas de A2/A3 **não chegam por upgrade**, com contorno
+      dado; (b) o achado adjacente ao A6 — no ramo sem `--github-owner` os
+      11 `{{OWNER_HANDLE}}` ficam crus e `.github/` está fora dos dois
+      scanners de placeholder, com dois `grep` de ação para o adopter;
+      (c) os dois defeitos GRAVES do installer reproduzidos nesta
+      investigação, com a cautela para a próxima reinstalação. A ENTREGA
+      segue sendo do Owner, como o AC define.
 
 ## Open questions
 
