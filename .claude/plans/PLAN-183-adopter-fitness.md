@@ -235,6 +235,16 @@ existe.
   preservável atrás de guarda — `conftest` é pytest-only, logo produz
   falso-vermelho (lição já registrada neste repo). Rotas honestas:
   remover, ou reescrever para a invocação real do CI.
+- **Rota do main vermelho — DECISÃO DO OWNER (S323, 2026-08-23),
+  registrada verbatim:** *"Rota C — planejar sem tocar"*. Opções
+  apresentadas: (A) reverter os 3 arquivos da S322 e ficar verde em
+  minutos; (B) curar `upgrade.sh` já, cerimônia canônica L3+; (C) deixar
+  o main vermelho e usar a sessão para desenhar a cura. O Owner escolheu
+  **C**. Consequência aceita: `Smoke Install` segue vermelho em `main` e
+  a branch protection pode barrar PRs enquanto durar. Esta decisão NÃO
+  autoriza land nenhum — o entregável dela é a §8 deste arquivo mais a
+  W5 em `.claude/plans/PLAN-183/w5-draft-s323.md` (draft; ver §8.10).
+
 - **OQ-3 respondida (ajuste r1-21):** a demoção é escrita por
   `skill-budget-generator.py:352-362`. O invariante mora **no gerador**,
   com asserção nos testes dele — nunca corrigindo entradas no
@@ -352,6 +362,629 @@ também não é — só `.claude/plans/PLAN-*/spec.md` é (`:210`). A cerimônia
 da W1 recai inteira sobre o CÓDIGO:
 `scripts/_framework_manifest_set.sh` (`:199`), `scripts/upgrade.sh`
 (`:191`) e `.github/workflows/*.yml` (`:184`) se algum step mudar.
+
+## 8. O vermelho da S322 são QUATRO defeitos sobrepostos, não um (S323)
+
+> Medido nesta sessão, com os comandos citados. A S322 registrou UM
+> defeito (`upgrade.sh` não entrega `.github/`). A medição encontrou
+> **mais três**, e eles mudam a ordem de execução: D2 no instrumento de
+> teste, D3 no gerador de manifesto, D4 no `doctor.sh`. Os três últimos
+> são a MESMA classe — ninguém sabe responder "qual é a fonte deste
+> path?" da mesma forma. A §8.5 nomeia essa forma; ela é o achado que
+> mais muda o desenho.
+
+### 8.1 D1 — PRODUTO: o upgrade nunca entregou `.github/` nem `docs/`
+
+Medição **re-executada na S323** (o pair-rail pegou um número errado que
+esta seção herdou da S322 sem re-rodar — a lição
+`feedback-grep-counts-are-wrong-derive-behaviorally` aplicada a mim mesmo):
+
+```
+grep -c 'github' scripts/upgrade.sh   ->  0     [confere]
+grep -c 'docs'   scripts/upgrade.sh   ->  3     [a S322 publicou 0 — ERRADO]
+```
+
+As três ocorrências de `docs` são **comentários**, nenhuma é sítio
+executável: `:1623` (sobre heredocs, nem trata de `docs/`), `:3104` e
+`:3206`. **Zero sítios executáveis** — a conclusão se mantém, a evidência
+citada é que estava mal formulada.
+
+E `:3104` é evidência MELHOR do que a que esta seção citava. O próprio
+`upgrade.sh` documenta a classe, em prosa:
+
+> *"the plans/ SCHEMA docs are FRAMEWORK contract files that install.sh
+> seeds but upgrade never refreshed — the first framework edit (S305,
+> DEBATE-SCHEMA) left every upgraded adopter on the old generation
+> (F3 STALE)."*
+
+Mesma frase, mesma assinatura F3, outra árvore. O defeito já foi
+diagnosticado e curado uma vez neste arquivo — para `PLAN-SCHEMA.md` e
+`DEBATE-SCHEMA.md`. Ver §8.6.
+
+Mecanismo exato, agora localizado: o `install.sh` entrega as duas
+árvores por funções dedicadas — `install_docs_templates` (`:1478-1482`,
+chamada em `:1484`) e `install_github_templates` (`:1488-1523`, chamada
+em `:1525`) — **as duas atrás da guarda `if [[ "$CEREMONY" != "user" ]]`**.
+O `upgrade.sh` não possui equivalente. Daí a assinatura observada
+`maintainer:1 user:0`: em modo `user` nenhuma das duas rotas escreve
+esses paths, então a paridade é trivialmente verdadeira; em `maintainer`
+a rota A tem a geração HEAD e a rota B fica com a do pin **para sempre**.
+
+O defeito é PRÉ-EXISTENTE e estrutural. A S322 não o criou — tornou-o
+FATAL, ao editar três arquivos dessas árvores. Enquanto eles não
+mudavam, `ha == hb` e o classificador nem alcançava a decisão.
+
+**O molde da cura já existe neste repo.** `_framework_manifest_set.sh`
+resolve exatamente esta classe para `PROTOCOL.md`, `SPEC/v1` e
+`.claude/.framework-version` com as entradas
+**DELIVERY-RECORD-CONDITIONAL** (`:36-50`, PLAN-166 F3 / ADR-155-AMEND-1):
+o path só entra no conjunto quando o caller exporta a flag
+`FMS_DELIVERED_*`, e a flag deriva do **registro de entrega** — nunca da
+cerimônia sozinha e nunca da presença do arquivo, porque um alvo que já
+tinha o path (skip-if-exists) é adopter-owned e o upgrade não pode
+TOMÁ-lo. As flags são exportadas em `install.sh:2537-2542` e
+`upgrade.sh:3529-3534`.
+
+**A pré-condição do molde NÃO está satisfeita — e a primeira redação
+desta seção afirmou que estava. Correção do pair-rail r4, verificada.**
+Existem dois `_state_record_op` (`install.sh:1479` e `:1491`), mas ambos
+executam ANTES de qualquer teste de existência por arquivo: uma árvore
+parcial ou inteiramente pré-existente produz **a mesma entrada de
+journal** que uma cópia bem-sucedida. São **breadcrumbs de TENTATIVA**,
+não registro de entrega, e o `ADR-155-AMEND-1:87-125` é explícito ao
+proibir derivar posse assim: *"Delivered means REGISTERED ACTUAL
+DELIVERY, not ceremony … and not file presence"*. O consumidor não é a
+única peça que falta: **a fonte também precisa ser construída**, no ramo
+que de fato copiou — `INSTALL_ONE_WROTE` é o precedente.
+
+**E `install_docs_template` é skip-if-exists com `cp` puro, sem
+substituição** (`install.sh:1446-1474`): a semântica é idêntica à do
+`install_one` que motivou o AMEND-1. Um adopter que já tinha
+`docs/BRANCH-PROTECTION.md` nunca recebeu a versão do framework — logo
+esse arquivo NÃO pode ser sobrescrito por upgrade nenhum. Qualquer cura
+que use `cp -R` cego reabre a classe S238 ("verified worst case").
+
+### 8.2 D2 — INSTRUMENTO (teste): `_src_digest` resolve a fonte ERRADA
+
+`_parity_classify.py:221-227` documenta a própria ordem: *"identity map
+first, then the templates/ map"*. Para um path entregue a partir de
+`templates/` que TAMBÉM existe como homônimo na raiz do repo, a identity
+map casa primeiro e a comparação passa a ser feita contra um arquivo que
+o adopter nunca recebeu.
+
+Medição direta (chamando `_src_digest` do próprio módulo, `subs=[]`):
+
+| rel | raiz sha[:16] | templates/ sha[:16] | `_src_digest` resolveu de |
+|---|---|---|---|
+| `docs/BRANCH-PROTECTION.md` | `01eab4f2197291e8` | `966e057147fbc3dc` | **IDENTITY (raiz)** |
+| `docs/rotation-log.md` | `0249879f85888d12` | `0ab61d1615aad651` | **IDENTITY (raiz)** |
+| `.github/workflows/validate.yml.template` | ausente | `7d0ee14b9871d0e7` | `templates/` (correto) |
+| `.github/workflows/benchmarks.yml.template` | ausente | `e59a27bd2757843f` | `templates/` (correto) |
+| `.github/CODEOWNERS.template` | ausente | `1955b01a16069f6d` | `templates/` (correto) |
+| `.github/CODEOWNERS` (modo `--github-owner`) | **`ba6667d9e53bee9b`** | `1955b01a16069f6d` (via `.template`) | **IDENTITY (raiz)** ⇒ DEFEITO |
+
+Consequência exata: para `docs/BRANCH-PROTECTION.md`, `h_head` e `h_pin`
+são digests do arquivo da RAIZ (21.513 bytes, o doc do PRÓPRIO
+framework), que nunca casam com `hb` (8.468 bytes, o template do pin).
+O ramo `hb == h_pin` nunca é alcançado e o veredito cai em
+**UNCLASSIFIED**, quando a verdade é **STALE**. **A classe reportada
+está errada** — o instrumento acusa "diverge e não casa nenhuma das duas
+gerações" para um caso que casa perfeitamente a geração do pin.
+
+**Escopo de D2 — a S324 REFUTOU o "exatamente 2 paths" da S323, e a
+causa é a FORMA do censo, não um path esquecido.** O censo da S323
+enumerou pares `templates/X` contra `X` (mesmo relpath): quatro
+homônimos, os quatro DIFEREM — `README.md`, `CLAUDE.md`,
+`docs/rotation-log.md`, `docs/BRANCH-PROTECTION.md`. Dos quatro,
+`templates/README.md` **não é entregue** (nenhum `install_template` o
+cita, então nunca entra em `a_files`) e `CLAUDE.md` é absorvido pelo
+`ACCEPTED` (`^(CLAUDE|MEMORY)\.md$`, `_parity_classify.py:118-121`).
+Sobravam os dois de `docs/` — e a S323 concluiu, em prosa, que *"os 3
+paths de `.github/` resolvem CORRETO (não há homônimo na raiz)"*.
+
+**Isso está ERRADO, medido na S324 pelo próprio `_src_digest`:**
+
+```
+dest = .github/CODEOWNERS
+  _src_digest  -> ba6667d9e53bee9b   = .github/CODEOWNERS VIVO da raiz (10.259 b)
+  fonte real   -> templates/.github/CODEOWNERS.template (1.442 b, 1955b01a16069f6d)
+```
+
+`.github/CODEOWNERS` **tem** arquivo na raiz — é justamente o que o
+`CLAUDE.md` §4 nomeia como *"the only live file carrying a real handle"*.
+Ele não apareceu no censo porque **não é par de mesmo relpath**: a fonte
+é `templates/.github/CODEOWNERS.template` e o destino é
+`.github/CODEOWNERS` (sufixo cai + substituição de `{{OWNER_HANDLE}}`).
+Um censo que procura homônimos de mesmo nome é estruturalmente cego a
+essa rota.
+
+⇒ **Exposição real de D2 = 3 paths**, não 2: os dois de `docs/` mais
+`.github/CODEOWNERS`, este último alcançável só em modo
+`--github-owner` (no modo default o destino é
+`.github/CODEOWNERS.template`, sem homônimo, e resolve correto). É
+exatamente por isso que o e2e nunca o acendeu:
+`test-install-upgrade-parity-e2e.sh` não passa a flag.
+
+⇒ **E a unidade de censo da W5-a muda de FORMA:** enumerar
+*rotas de entrega* (pares fonte→destino extraídos das funções de cópia
+do `install.sh`), nunca homônimos de mesmo nome. Um censo com a forma
+antiga sai verde sobre um `.github/CODEOWNERS` quebrado — a classe
+*instrumento verde cuja PERGUNTA envelheceu*, aplicada ao próprio
+instrumento de censo.
+
+**`docs/rotation-log.md` é um falso-verde vivo.** Ele tem o mesmo
+defeito e não apareceu no vermelho de hoje por um único motivo: nem ele
+nem seu template mudaram na S322, então `ha == hb` e a classificação não
+foi alcançada. É a classe já catalogada neste repo —
+*instrumento verde cuja PERGUNTA envelheceu*. A próxima edição em
+`templates/docs/rotation-log.md` o acende, com a classe errada.
+
+### 8.3 D3 — PRODUÇÃO: a mesma classe no gerador de manifesto
+
+**Achado do pair-rail (codex, S323), verificado no código.** A resolução
+source-sem-`templates/` não vive só no teste: o gerador do baseline tem a
+mesma doença, e ali ela decide **ownership real**, não veredito de suíte.
+
+O upgrade exporta `FMS_HASH_ROOT="$SOURCE_DIR"` (`upgrade.sh:3474-3476`)
+para gravar o hash do FRAMEWORK e não o do arquivo preservado no target.
+O gerador então resolve `"$_wbm_hash_root/$_wbm_rel"`
+(`_framework_manifest_set.sh:430-436`) — **sem nenhum fallback para
+`templates/`** — e, se o path não existe ali, faz `continue`: nenhum
+registro de baseline. E `_wbm_hash_root_applies` (`:260-277`) retorna 0
+quando `FMS_HASH_ROOT_PATHS` está unset; medido: **essa variável não é
+setada em lugar nenhum** (`grep` em `install.sh` + `upgrade.sh` = zero),
+logo o hash-root aplica a TODOS os paths.
+
+Consequência, se `.github/` e `docs/` entrarem no conjunto sem mapeamento
+template-aware:
+
+| path enumerado | `SOURCE_DIR/<rel>` | resultado |
+|---|---|---|
+| `docs/BRANCH-PROTECTION.md` | existe (21.513 b, doc do framework) | grava o hash do **arquivo errado** |
+| `docs/rotation-log.md` | existe | idem |
+| `.github/workflows/*.template` | ausente | `continue` — **omitido do baseline, em silêncio** |
+
+A primeira rodada de paridade pode passar mesmo assim; o dano aparece no
+**upgrade SEGUINTE**, que classifica contra registro errado ou ausente —
+exatamente o eixo FRAMEWORK-CHANGED vs ADOPTER-CUSTOMIZED que os
+PLAN-167/168 fecharam.
+
+**Diferença entre D2 e D3, e por que os dois precisam de nome próprio:**
+o `_parity_classify.py` **tem** o fallback `templates/`, só na ordem
+errada (`identity` antes); o `_framework_manifest_set.sh` **não tem
+fallback nenhum**. São curas diferentes, em regimes de governança
+diferentes — D2 é `scripts/tests/*` (não-canônico, L2); D3 é
+`_framework_manifest_set.sh` (**canônico**, `check_canonical_edit.py:199`,
+L3+ com cerimônia). D3 pertence à W5-b, não à W5-a.
+
+### 8.4 D4 — `doctor.sh`: a terceira reimplementação, e a que REPARA
+
+**Achado P1 do pair-rail r5, verificado.** O `doctor.sh` também consome o
+mapeamento de fonte, e sem fallback nenhum:
+
+- `:507` — entrada AUSENTE: `_hash_file "$SOURCE_DIR/$rel"`
+- `:553` — entrada com DRIFT: idem
+- `:401` — o REPARO: `cp -p "$SOURCE_DIR/$_rf_rel" "$TARGET/$_rf_rel"`
+
+O `rel` aí vem do MANIFESTO — é relpath de destino. Para `docs/*` isso
+seleciona o homônimo errado da raiz; para `.github/*.template` não acha
+fonte nenhuma e o registro válido vira *"not repairable"*. E `:401` não
+apenas classifica: **copia**. Um doctor que "conserta" com o arquivo
+errado é pior do que um que não conserta.
+
+### 8.5 A FORMA do problema: não existe UM resolvedor de fonte
+
+Quatro rodadas de pair-rail acharam três consumidores do mesmo conceito —
+*"qual é a fonte do path que o adopter recebeu?"* — e **cada um o
+reimplementa, errando de um jeito diferente**:
+
+| consumidor | tem fallback `templates/`? | erro |
+|---|---|---|
+| `_parity_classify.py:221-227` | **sim** | ordem errada (identity antes) |
+| `_framework_manifest_set.sh:430-436` | **não** | hash do arquivo errado, ou `continue` silencioso |
+| `scripts/doctor.sh:401,507,553` | **não** | classifica errado E repara com a fonte errada |
+
+Censo bruto (S323): `SOURCE_DIR/$rel`-e-parentes aparece em **8 arquivos**
+sob `scripts/`, com ~23 sítios — número que a S323 marcou como "não
+adivinhar, é trabalho da wave".
+
+**CENSO EXECUTADO (S324) — e o número CONTINUA em aberto, agora com a
+razão medida.** Dois censos independentes rodaram na S324 e **discordam**,
+porque usam padrões de busca diferentes:
+
+| censo | arquivos | sítios | padrão |
+|---|---|---|---|
+| S323 (herdado) | 8 | ~23 | não registrado |
+| S324 — censo largo | 11 | 34 | inclui `_hash_file`/`_digest`/`src_root` e `scripts/tests/` |
+| S324 — censo estreito | 10 | 29 | `grep -rn '\$SOURCE_DIR/\$\|\$FMS_HASH_ROOT/\$\|\$_wbm_hash_root/\$\|\$src_root/\$' scripts/ --include='*.sh'` (28 shell) + 1 resolvedor Python |
+
+⇒ **Não fixar nenhum dos três.** A S323 acertou ao dizer que o número é
+trabalho da wave; o que a S324 acrescenta é *por que* ele é escorregadio —
+a resposta depende de onde se traça a fronteira do padrão, e essa
+fronteira é uma decisão de desenho, não uma medição. A **primeira unidade
+da W5** é fixar o padrão do censo (e ele passa a ser um TESTE, não uma
+medição de sessão), e só então contar.
+
+**O que os dois censos CONCORDAM, e isso basta para decidir:** a maioria
+esmagadora dos sítios tem a **forma** do defeito (relpath de DESTINO
+resolvido por identidade) mas **não erra hoje**, porque o domínio de
+entrada atual contém apenas paths identity-mapped. O censo largo mediu
+essa razão: **1 sítio LIVE contra 25 LATENT**.
+
+⇒ E é essa razão que dá a justificativa mais forte do desenho:
+**a W5-b, ao estender o domínio de entrada para as duas árvores novas,
+converte defeitos latentes em defeitos vivos em massa.** Curar a FORMA
+antes de estender o domínio não é elegância — é a diferença entre um
+defeito e vinte e cinco. Essa consequência não existia no desenho da
+S323.
+
+**Este repo já curou esta forma duas vezes**, e as duas estão no
+`CLAUDE.md` §4:
+
+- **PLAN-182** — 16 módulos re-derivavam o slug de projeto localmente, em
+  4 grafias, produzindo 7 diretórios onde deviam existir 3. Cura:
+  resolvedor único (`_lib/runtime_paths.py`) **mais** um marcador de
+  censo (M4) que prova que ninguém re-deriva localmente. 16 → 0.
+- **PLAN-167/168** — ownership decidida localmente. Cura:
+  `_ownership_verdict()` como função pura única, com tabela-verdade. O
+  `CLAUDE.md` fecha com o aviso literal: *"Adding a branch that decides
+  ownership locally re-opens the class this replaced."*
+
+**Consequência para o desenho:** curar D2, D3 e D4 como três remendos
+independentes reabre a classe no próximo consumidor. A cura com forma
+certa é **um resolvedor único de fonte** — a função que responde "dado um
+relpath de destino, qual arquivo do checkout o adopter realmente
+recebeu?" — mais o censo que prova que ninguém mais responde essa
+pergunta sozinho. É literalmente o instrumento do PLAN-182, aplicado a
+outro eixo.
+
+#### 8.5.1 A entrega tem TRÊS formas, não uma (S324, achado do pair-rail)
+
+**Correção arquitetural.** O desenho até a S323 tratava entrega como uma
+única forma — *copiar `templates/<rel>` para `<rel>`* — e por isso
+modelava o resolvedor como `destino → fonte`. Medido no `install.sh`, há
+**três** rotas, e a terceira quebra essa assinatura:
+
+| | Rota | Exemplo | Destino |
+|---|---|---|---|
+| 1 | cópia crua, sufixo cai | `templates/docs/BRANCH-PROTECTION.md` → `docs/BRANCH-PROTECTION.md` | mesmo relpath |
+| 2 | cópia crua, destino MANTÉM `.template` | `templates/.github/workflows/validate.yml.template` → idem | mesmo relpath |
+| 3 | **RENDERIZADA, destino depende de FLAG** | `templates/.github/CODEOWNERS.template` → `.github/CODEOWNERS` (com `--github-owner`) ou `.github/CODEOWNERS.template` (sem) | **muda com a flag** |
+
+A rota 3 está em `install.sh:1493-1515`, verificada: com `GITHUB_OWNER`
+setado o destino é `.github/CODEOWNERS` e o conteúdo sai de
+`sed "s/{{OWNER_HANDLE}}/$GITHUB_OWNER/g"` — **bytes que não existem em
+lugar nenhum do checkout**. Sem a flag, cai em `install_docs_template` e
+o destino guarda o sufixo.
+
+⇒ **O resolvedor único não pode devolver só um path.** Ele devolve
+`(fonte, transformação)`, e a transformação é parte da resposta —
+`identity` para as rotas 1 e 2, `substitute({{OWNER_HANDLE}} → handle)`
+para a 3. Um resolvedor `destino → path` é incapaz de produzir os bytes
+que o adopter recebeu na rota 3, e todo consumidor a jusante herda a
+incapacidade: o classificador compara contra a fonte errada, o gerador de
+manifesto grava digest de bytes que o adopter nunca viu, e o `doctor.sh`
+**repara escrevendo o template cru com `{{OWNER_HANDLE}}` literal** sobre
+o arquivo renderizado do adopter.
+
+⇒ **E o destino depender de flag significa que a chave do resolvedor não
+é o relpath sozinho** — é `(relpath, estado de install relevante)`. O
+`github_owner` já está gravado no install-state (`install.sh:2654`), então
+a informação existe; o que não existe é o consumidor. Medido:
+`grep` por `github_owner|GITHUB_OWNER|CODEOWNERS` em `scripts/upgrade.sh`
+devolve **zero**.
+
+⇒ **E há uma QUARTA rota, genérica, que já é live (S324, P1 do pair-rail,
+verificado).** `apply_placeholder_substitutions` (`install.sh:2092+`)
+renderiza `{{PROJECT_NAME}}`, `{{OWNER_NAME}}`, `{{DOMAIN}}` e mais numa
+árvore inteira — `.claude/team.md`, as skills, os templates sob
+`--project`/`--owner`. Não é um path: é uma classe de arquivos.
+
+#### 8.5.2 O RESOLVEDOR JÁ EXISTE — e é `_ownership_verdict()` (pivô S324)
+
+**Este é o achado que mais muda o desenho, e ele vem do próprio
+`install.sh`.** As linhas `2489-2497` documentam que a classe da §8.5 já
+foi encontrada e CURADA neste repositório:
+
+> *"SCOPED, not global (codex W1 round 8, P1): install RENDERS templates
+> (`.claude/team.md`, skills, `{{X}}` placeholders under --project et al),
+> so a global `FMS_HASH_ROOT` rewrote every rendered file's baseline to the
+> UNRENDERED source — **doctor.sh then reports repo-wide adopter drift**
+> and later upgrades classify those files as customized and stop
+> refreshing them. **PLAN-167 W2.3 replaced that confinement with an
+> EXPLICIT per-surface `hash_source`: the decision says which paths take
+> the framework's bytes**, so no global override is set here at all."*
+
+> **⚠️ CORREÇÃO (rodada final do pair-rail, S324, VERIFICADA).** A
+> primeira redação desta seção afirmava que `HASH_SOURCE` **é** o
+> resolvedor de fonte e que bastaria estendê-lo. **Isso está errado**, e a
+> medição é direta: `HASH_SOURCE` é um valor de um enum de **ORIGEM** —
+> `HASH_SOURCE` / `HASH_PRIOR_RECORD` / `HASH_CANONICAL_POINTER` /
+> `HASH_TARGET` (`_framework_manifest_set.sh:398-410`) — e o ramo
+> `HASH_SOURCE` faz `_hash_file "$FMS_SOURCE_ROOT/$_wbm_rel"`, isto é,
+> **relpath de DESTINO sob a raiz de fonte**: ele já assume identidade.
+> Além disso `_wbm_declared_hash_source` (`:311-315`) despacha num `case`
+> com três relpaths *hardcoded*, e o manifesto persiste apenas
+> **digest + relpath de destino** — logo o `doctor.sh` não tem de onde
+> RECUPERAR a fonte.
+>
+> ⇒ `CODEOWNERS.template → CODEOWNERS` **mais** renderização é
+> inexprimível nessa abstração. Acrescentar linhas na tabela de ownership,
+> sozinho, **não** resolve D2/D3/D4.
+>
+> **A cura correta tem DUAS peças, não uma:**
+>
+> | | peça | estado |
+> |---|---|---|
+> | (a) | a decisão de **ORIGEM** — `_ownership_verdict()` + `ownership_table.tsv` | **já existe**; precisa das linhas novas (OQ-4) |
+> | (b) | metadado de **ROTA DE ENTREGA**: `destino → (relpath de fonte, transformação)` | **NÃO existe em lugar nenhum** — é o que falta construir |
+>
+> A peça (b) tem de ser **COMPARTILHADA** pelos três consumidores, e dois
+> deles são bash (`_framework_manifest_set.sh`, `doctor.sh`) e um é Python
+> (`_parity_classify.py`). Compartilhar entre linguagens significa
+> **arquivo de dados** lido pelos dois lados — exatamente a forma de
+> `ownership_table.tsv`, não uma constante em cada módulo.
+>
+> **Consequência de escopo para a W5-a (declarada, não escondida):** a
+> W5-a define a tabela de rotas **localmente** dentro de
+> `_parity_classify.py`, porque a W5-a é L2 e só toca teste. Isso é
+> aceitável **apenas** como primeiro consumidor, e **cria dívida
+> nomeada**: a W5-b tem de PROMOVER essa tabela a arquivo de dados
+> compartilhado, senão a segunda cópia (no bash) é literalmente o "ramo
+> local" que o `CLAUDE.md` §4 proíbe. Item obrigatório da W5-b.
+
+Três consequências, e elas invertem o plano de ação da §8.5:
+
+1. **A decisão de ORIGEM já tem um dono único, e não deve ganhar um
+   segundo.** É o segundo campo do retorno de `_ownership_verdict()` —
+   `"<VERDICT> <HASH_SOURCE>"` (`CLAUDE.md` §4). O que falta a ela é
+   apenas cobertura das duas árvores novas (OQ-4). O **mapeamento de
+   path** é outra peça, nova, descrita no aviso acima.
+2. **Construir um resolvedor NOVO ao lado dele seria o anti-padrão que o
+   contrato proíbe.** O `CLAUDE.md` §4 fecha com *"Adding a branch that
+   decides ownership locally re-opens the class this replaced."* Um
+   segundo resolvedor de fonte, mesmo único e bem-feito, é exatamente
+   esse ramo local. A §8.5 pedia "um resolvedor único" — a forma certa é
+   **um só resolvedor, o que já existe**.
+3. **Isso reclassifica a OQ-4 de tarefa lateral para PRÉ-REQUISITO — mas
+   não para "a cura".** As linhas novas no `ownership_table.tsv` não são
+   burocracia de cobertura: sem elas as duas árvores não têm **origem**
+   declarada, e é por isso que `_framework_manifest_set.sh:430-436` cai no
+   `continue`. Mas, pela correção acima, linhas sozinhas **não bastam** —
+   elas resolvem a origem, não o mapeamento de path.
+
+⇒ **A cura de D2/D3/D4 é, nesta ordem:** (a) construir o metadado de rota
+de entrega `destino → (fonte, transformação)` como **dado
+compartilhado**; (b) declarar as duas árvores na decisão de ownership
+(OQ-4) para que tenham origem; (c) fazer os três consumidores lerem
+(a) e (b) em vez de reconstruir o path localmente. O `doctor.sh` é o caso
+mais agudo porque `:401` **copia** — e o comentário do `install.sh:2489`
+prova que a falha "doctor reporta drift repo-wide" já foi vivida uma vez
+neste repositório.
+
+#### 8.5.3 Lacuna nomeada: pre-Wave-B não tem o estado que a rota 3 exige
+
+**P1 do pair-rail S324, verificado em `upgrade.sh:3629-3633`.** Para um
+alvo sem registro de install pré-Wave-B, o upgrade **sintetiza**:
+
+```
+req = { "argv": [], "target": …, "placeholders": {},
+        "note": "synthesized by upgrade.sh - no pre-Wave-B install.sh record existed" }
+```
+
+Ou seja: um adopter instalado por uma v1.0.x **com** `--github-owner` tem
+`.github/CODEOWNERS` renderizado no disco e **nenhum** `github_owner`
+gravado. A chave `(relpath, estado)` da rota 3 não é computável para ele —
+nem para reconhecer o destino, nem para regenerar os bytes, nem para
+reparar. A fixture do pin `v1.2.0` **não** cobre esse caso e passaria
+verde.
+
+⇒ Item obrigatório da W5-b: definir comportamento explícito
+(**preservar**, não adivinhar) e adicionar fixture **pré-install-state com
+owner**. Preservar é a única opção compatível com a regra de under-claim:
+sem estado, o arquivo é do adopter.
+
+**E é por isso que esta análise para aqui.** A próxima descoberta útil
+não vem de outra rodada de rail: vem de um CENSO MECÂNICO que enumere os
+consumidores **e as rotas de entrega**. Rail é bom em achar a classe;
+censo é o que a fecha. A S324 é a evidência: a rodada final de rail achou
+a rota 3, e foi a MEDIÇÃO subsequente — não a rodada — que mostrou que o
+censo da S323 tinha a forma errada e que D2 expõe 3 paths, não 2.
+
+### 8.6 A cura PARCIAL já existe neste mesmo arquivo, para outra árvore
+
+`upgrade.sh:3103-3115` resolve exatamente esta classe para os schema
+docs, e o comentário nomeia as duas armadilhas que o desenho da S323
+tinha deixado em aberto:
+
+1. **Refresh HASH-GATED, não `backup_and_replace` cego.** *"a blanket
+   backup_and_replace would CLOBBER an adopter-modified schema … Refresh
+   is therefore HASH-GATED: only a byte-pristine copy of a KNOWN prior
+   framework generation is replaced; anything else is PRESERVED loudly."*
+   É o molde de `_protocol_pointer_is_degraded` que a W1 também usa.
+2. **A flag de baseline deriva do RESULTADO da operação, não de um
+   registro do install.** *"the schemas enter the enumeration ONLY when
+   this upgrade left FRAMEWORK bytes at the path (INSTALLED / REFRESHED /
+   IDENTICAL). PRESERVED and SKIPPED stay out."*
+
+**Isso responde o P1 de migração do pair-rail r2** — como o upgrade
+distingue "cópia do installer antigo" de "arquivo pré-existente pulado"
+num adopter cujo install-state só tem registro grosso de tentativa, e
+cujo baseline não contém nenhuma das duas árvores. A resposta não é
+proveniência nova: é **hash contra o conjunto de gerações conhecidas do
+framework**. Não-pristine ⇒ PRESERVED, ruidosamente.
+
+E resolve o P1 de granularidade de forma mais limpa do que mover
+`_state_record_op` para dentro dos ramos de cópia: a decisão passa a ser
+**por path e por resultado**, derivada da operação que de fato ocorreu —
+`_state_record_op` fica como o breadcrumb que já é, sem virar fonte de
+verdade de ownership.
+
+**Como o conjunto de gerações é enumerado — e por que NÃO é por tags.**
+A primeira redação desta seção disse "pergunta finita, respondida por
+enumeração de tags". Errado, e o pair-rail r4 mostrou onde: o install por
+clone (`README.md:104-121`) instala **qualquer commit de `main`**, não só
+release tags — uma geração que existiu apenas num commit sem tag ficaria
+de fora, e um adopter pristine seria PRESERVED como se tivesse
+modificado o arquivo, deixando D1 stale justamente em quem a cura
+deveria alcançar. O precedente resolve melhor (`upgrade.sh:3204-3212`):
+as gerações vêm do **histórico git de cada arquivo**, sob contrato
+explícito — *"any commit that changes one of these schema docs MUST
+append the hash of the generation it replaces to that doc's list, in the
+SAME commit"* — com teste que deriva o conjunto do git *"instead of
+memory"* (`test-schema-generation-pins-unit.sh`). E há incidente real
+citado ali: `996d72b` mudou o PLAN-SCHEMA sem listar a geração
+`8ca4f866`, e o resultado foi o smoke-install vermelho da S313.
+
+**Consequência para a W5-b:** ela ESTENDE o padrão dos schema docs a mais
+duas árvores — não inventa mecanismo. **Mas o hash-gate NÃO fecha a
+migração sozinho** (§8.7).
+
+### 8.7 O que o hash-gate NÃO resolve — e por que isso é decisão do Owner
+
+**Achado P1 do pair-rail r4, verificado contra o ADR.** O refresh
+hash-gated distingue "pristine de uma geração conhecida" de "modificado".
+Ele **não** distingue *entregue pelo installer* de *já estava lá e por
+acaso é byte-idêntico a um template antigo*. Nesse caso o
+`install_docs_template` fez EXISTS-skip — o arquivo é do adopter — e o
+gate marcaria REFRESHED, **tomando posse de arquivo adopter-owned**.
+
+Isso contradiz frontalmente a regra de under-claim do
+`ADR-155-AMEND-1:87-125`, que existe por causa de um caso idêntico já
+vivido (r17: *"on a `maintainer` install where the destination ALREADY
+had its own `SPEC/v1`, `install_one` EXISTS-skips — the file on disk is
+the adopter's"*). O dano não é teórico: `uninstall.sh` remove arquivos
+registrados no manifesto que casem por hash.
+
+**Não há algoritmo que feche isto.** Para um adopter histórico o registro
+de entrega não existe, e nenhuma inspeção de conteúdo recupera a
+intenção. As saídas são três, e a escolha é do Owner, não do CEO:
+
+| | Rota | O que custa |
+|---|---|---|
+| i | **Não migrar** — só instalações futuras ganham posse dessas árvores | adopters históricos ficam STALE nessas duas árvores para sempre; a rota B do e2e (instala no pin, faz upgrade) cai exatamente nesse caso, então o main pode NÃO ficar verde |
+| ii | **Migrar com hash-gate**, aceitando a colisão como risco declarado | fecha o main; assume o risco de tomar arquivo adopter-owned byte-idêntico a um template antigo |
+| iii | **Exigir ato explícito do adopter** (flag tipo `--adopt-github-docs`) | sem risco de tomada; exige ação humana em cada adopter e não fecha o main sozinho |
+
+Registrado como **OQ-5, bloqueante**. A W5-b não abre antes da resposta.
+
+### 8.8 Por que a ordem é D2/D3/D4 ANTES de D1
+
+Enquanto D2 não estiver curado, o veredito do e2e sobre `docs/` sai na
+classe errada — e não se valida a cura de D1 com um instrumento que
+reporta a classe errada. Curar D1 primeiro produziria, no melhor caso,
+um verde que ninguém consegue atribuir: não daria para distinguir
+"o upgrade passou a entregar" de "o classificador parou de comparar
+contra o arquivo errado".
+
+Ordem, e o custo de cada:
+
+| | Defeito | Superfície | Canônico? | Nível | Cerimônia |
+|---|---|---|---|---|---|
+| 1º | **D2** | `scripts/tests/_parity_classify.py` | **NÃO** (`scripts/tests/*` fora de `_CANONICAL_GUARDS`) | L2 | não exige |
+| 2º | **D1 + D3** | `install.sh` + `upgrade.sh` + `_framework_manifest_set.sh` | **SIM** (`check_canonical_edit.py:189,191,199`) | **L3+** | **exige** + debate + ADR |
+| 2º | **D4** | `scripts/doctor.sh` | **NÃO** — ver correção abaixo | L3+ (anda com D1/D3) | não exige sentinel, mas ENTRA no Scope |
+
+**Correção medida na S324 (a versão anterior desta tabela estava
+ERRADA).** O oráculo suportado — `python3 .claude/hooks/check_canonical_edit.py
+--is-canonical <path>` — devolve, com controle positivo passando:
+
+```
+scripts/tests/_parity_classify.py     0
+scripts/doctor.sh                     0     <-- NÃO é canônico
+scripts/install.sh                    1
+scripts/upgrade.sh                    1
+scripts/_framework_manifest_set.sh    1
+```
+
+As três linhas citadas (`:189`, `:191`, `:199`) cobrem exatamente
+`install.sh`, `upgrade.sh` e `_framework_manifest_set.sh`. **`doctor.sh`
+não está na guard list** — a linha anterior agrupava os quatro sob "SIM"
+e o rótulo era largo demais. A citação sempre foi honesta; o rótulo não.
+
+**Consequência que MUDA o material de cerimônia, não só a prosa.** O gate
+G4 (`PLAN-182/OWNER-S321-LAND.sh:174`) faz
+`comm -23 touched scope` sobre **todos** os paths de
+`git apply --numstat`, **sem filtro de canonicidade**. Um Scope que
+liste só os 3 canônicos + o ADR, num patch que também toca `doctor.sh`,
+aborta o land em
+`die "o patch toca path(s) FORA do Scope assinado"`. O Scope tem de
+enumerar **todo path tocado**, canônico ou não — que é o padrão que o
+sentinel do PLAN-177 já usa ("Livre, MESMO commit").
+
+D3 e D4 andam junto de D1 por construção: só se manifestam quando as duas
+árvores passarem a ser enumeradas. D1 e D3 são a mesma edição canônica;
+D4 é edição livre no MESMO commit. Se a §8.5 estiver certa, os três não
+são remendos separados — são um resolvedor único mais o censo que o
+protege.
+
+D2 sozinho **não** deixa o main verde: os dois templates de workflow
+seguem STALE legítimo, porque D1 é real. D2 muda `BRANCH-PROTECTION.md`
+de UNCLASSIFIED para STALE — isto é, converte três fatais em três fatais
+da MESMA classe, todos atribuíveis a D1. Esse é o ponto: depois de D2 há
+UMA causa, não duas.
+
+**MEDIDO na S324 — a afirmação acima deixa de ser raciocínio.** A classe
+resultante depende de o template ter divergido entre o pin do e2e
+(`v1.2.0`, `test-install-upgrade-parity-e2e.sh:110`) e HEAD, porque é isso
+que separa `hb == h_pin ≠ h_head` (⇒ STALE) de `h_pin == h_head`
+(⇒ outra classe). Diferença de digest, `git show v1.2.0:<path>` contra o
+disco:
+
+| `templates/…` | pin `v1.2.0` | HEAD | veredito |
+|---|---|---|---|
+| `docs/BRANCH-PROTECTION.md` | `61025a164c718e8b` | `966e057147fbc3dc` | **DIVERGIU** |
+| `docs/rotation-log.md` | `0ab61d1615aad651` | `0ab61d1615aad651` | idêntico |
+| `.github/workflows/validate.yml.template` | `11298f5bc28fa7b8` | `7d0ee14b9871d0e7` | **DIVERGIU** |
+| `.github/workflows/benchmarks.yml.template` | `87106ceb7d4fec23` | `e59a27bd2757843f` | **DIVERGIU** |
+| `.github/CODEOWNERS.template` | `1955b01a16069f6d` | `1955b01a16069f6d` | idêntico |
+
+Três consequências, todas medidas e não inferidas:
+
+1. **`docs/BRANCH-PROTECTION.md` sai `STALE` depois da cura de D2** — a
+   fatalidade permanece, e a lista de classes FATAIS
+   (`_parity_classify.py:430-433`) inclui `STALE`. **D1 é load-bearing
+   para o verde; D2 não é.** O ganho de D2 é diagnóstico: três fatais de
+   UMA causa em vez de duas.
+2. **`docs/rotation-log.md` é idêntico pin↔HEAD** — confirma por medição
+   por que ele é falso-verde LATENTE e não acendeu na S322: o defeito de
+   resolução existe, mas `ha == hb` impede a classificação de ser
+   alcançada.
+3. **`CODEOWNERS.template` é idêntico pin↔HEAD** — confirma que qualquer
+   teste de CODEOWNERS com o pin default é **VACUOSO**. O caso
+   `--github-owner` da W5-b tem de PLANTAR divergência para ter poder de
+   detecção.
+
+### 8.9 Atalhos já descartados (não repetir o trabalho)
+
+1. **`KNOWN_OPEN` não serve.** O ledger existe e está vazio
+   (`_parity_classify.py:149-151`, "PLAN-166 W1 landed"), mas o driver
+   imprime `RESULT: KNOWN-OPEN (exit 2) - This is a FAILURE, not a skip`
+   e faz `exit "$OVERALL"`; sob `set -e` o exit 2 derruba o step igual.
+2. **`ACCEPTED` seria mascarar.** O próprio classificador avisa: *"do not
+   widen a pattern to make it disappear"*. Estes paths não são generated
+   nem adopter-owned — são conteúdo de framework que o upgrade deveria
+   entregar.
+3. **Reverter os 3 arquivos** (rota A da S323) foi apresentado ao Owner e
+   **recusado** em favor da rota C (§6).
+
+### 8.10 Onde vive a wave que isto propõe
+
+**A W5 NÃO está neste arquivo, e é de propósito.** O `status: reviewed`
+do frontmatter é de 2026-08-20 e cobre W0–W4; o Owner autorizou apenas
+*planejar* em 2026-08-23 (§6). Por `PLAN-SCHEMA.md` §status, `reviewed`
+significa "o humano leu e aceitou; a execução pode começar" — colocar
+checkboxes novas sob esse status faria qualquer dispatcher ou sessão
+futura tratá-las como executáveis. Uma nota em prosa não muda esse
+estado **machine-visible**, e o pair-rail r3 marcou isso duas rodadas
+seguidas.
+
+A wave vive em **`.claude/plans/PLAN-183/w5-draft-s323.md`**, em `draft`,
+com orçamento próprio. Esta seção §8 fica aqui porque é EVIDÊNCIA e não
+tem checkbox — o mesmo critério que a §7 declara para si.
+
+Promoção: quando o Owner aceitar, o conteúdo do draft entra neste plano
+com a revisão refrescada, ou vira plano próprio.
 
 ## Waves
 
@@ -604,6 +1237,7 @@ da W1 recai inteira sobre o CÓDIGO:
       que os 71 não são dele.
       Check: none (a unidade nao abre antes da W0 fechar)
 
+
 ## Acceptance criteria
 
 - [ ] AC-1 [P0] **Nenhum caminho de home ou de usuário no ponteiro
@@ -645,6 +1279,51 @@ da W1 recai inteira sobre o CÓDIGO:
 3. **W2** — o gate de drift template contra vivo é diff estrutural de
    steps ou declaração congelada com teste? A primeira é mais forte e
    mais cara.
+4. **W5-b** (em `PLAN-183/w5-draft-s323.md`) — quantas linhas novas o
+   `ownership_table.tsv` recebe, e qual a regra de legalidade irmã da
+   R-04b em `docs/ownership-decision-table.md`? **A rota "ficam FORA da
+   tabela" foi RETIRADA da pergunta** (P1 do pair-rail r5): o
+   `CLAUDE.md` §4 exige que ownership seja UMA decisão em
+   `_ownership_verdict()` com o TSV como verdade, e avisa que *"adding a
+   branch that decides ownership locally re-opens the class this
+   replaced"* — omitir as duas árvores da tabela seria exatamente esse
+   ramo local. Cobertura na tabela é **obrigatória**; o que resta em
+   aberto é o dimensionamento. A resposta muda o orçamento da W5-b de ~1
+   sessão para 2-4 (§7.2) **e** obriga a re-derivar o total
+   `GREEN=62 RED=3` — por isso precisa vir ANTES da unidade de
+   ownership, não durante.
+
+5. **W5-b, BLOQUEANTE (§8.7)** — adopters históricos não têm registro de
+   entrega e nenhum hash o recupera. Rota (i) não migrar, (ii) migrar com
+   hash-gate assumindo o risco de colisão, ou (iii) exigir ato explícito
+   do adopter? **Decisão do Owner.** A W5-b não abre antes disso, e a
+   resposta determina se a cura de D1 é suficiente para deixar o main
+   verde pela rota B do e2e.
+
+   **RESPONDIDA — 2026-08-23 (S324), Owner. Opção selecionada:
+   `(ii) Migrar com hash-gate`.** Texto da opção, verbatim:
+
+   > Refresh gated contra as gerações conhecidas derivadas do histórico
+   > git. É a ÚNICA rota que fecha o main. Risco declarado: um adopter
+   > cujo arquivo seja byte-idêntico a uma geração antiga sem tê-la
+   > recebido teria o arquivo tomado, e o `uninstall.sh` remove por hash.
+   > Meu raciocínio: para `.github/**/*.template` a colisão é
+   > praticamente impossível — são artefatos só-framework sem análogo de
+   > adopter, então bytes idênticos são prova de origem; derivar as
+   > gerações do git limita o conjunto de colisão aos bytes passados do
+   > próprio framework.
+
+   Consequências vinculantes para a W5-b:
+   - O item `[P0]` de adopters históricos **desbloqueia** — a rota é (ii).
+   - O item `[P0]` de paridade `maintainer` deixa de ser condicional:
+     sob a rota (ii) a expectativa é **exit 0**, não "divergência
+     esperada".
+   - O e2e cobre os TRÊS casos do Check original (pristine de geração
+     conhecida, modificado, e a COLISÃO) — a colisão passa a ser
+     **risco declarado e testado**, não impedimento.
+   - O ADR da W5-b registra a rota (ii) e o risco de tomada como
+     decisão consciente, com o argumento de prova-de-origem para
+     `.github/**/*.template` explicitado.
 
 ## Reference links
 
@@ -656,3 +1335,95 @@ da W1 recai inteira sobre o CÓDIGO:
 - `.claude/plans/PLAN-167-ownership-decision-table.md` e
   `PLAN-168-ownership-followups-closure.md` — INV-4 e a bateria que a W1
   não pode regredir.
+
+## 9. Achados REPRODUZIDOS fora do escopo da W5 (censo mecânico, S324)
+
+O censo de rotas de entrega da S324 rodou **installs reais** em targets
+`/tmp` (não leitura estática) e reproduziu defeitos que **não são** da
+classe de resolução-de-fonte. Ficam registrados porque foram
+reproduzidos e não devem ser perdidos — **nenhum entra na W5**, que segue
+sendo só D1/D2/D3/D4. Disposição declarada por achado.
+
+### 9.1 F1 — escrita FORA do `$TARGET` via symlink pendente (GRAVE)
+
+`install_docs_template` guarda o destino com `[[ -e "$dst" ]]`
+(`install.sh:1466-1472`). O teste `-e` **segue** symlink: um link
+**pendente** faz `-e` dar falso, e o `cp` seguinte escreve **através** do
+link, fora da árvore do target.
+
+Reprodução: plantar um symlink pendente de `docs/rotation-log.md` para
+`/tmp/<dir>/pwned.md` num target limpo e rodar o install em modo
+`maintainer` → `exit 0`, log `COPIED:`, arquivo fora do target escrito.
+
+A defesa **já existe no mesmo arquivo** para outra árvore
+(`install.sh:2139-2159`) e está ausente aqui. Superfície canônica ⇒ exige
+cerimônia.
+**Disposição: plano próprio, classe segurança.** Misturar com a W5
+alargaria uma cerimônia L3+ já grande.
+
+### 9.2 F2 — `--github-owner` com `/` aborta e deixa CODEOWNERS de 0 bytes (GRAVE)
+
+O `sed` de `install.sh:1508` interpola o valor da flag **sem escapar o
+delimitador**. Reprodução: um valor contendo `/` → `exit 1`,
+`sed: bad flag in substitute command`, e o destino com **0 bytes**. O
+arquivo vazio sobrevive e passa a ser **EXISTS-skipped para sempre**
+(`:1504`) — nenhum install ou upgrade posterior o corrige.
+**Disposição: mesmo plano de segurança que F1** (mesma função, mesma
+cerimônia).
+
+### 9.3 F3 — os dois ramos do CODEOWNERS não são exclusivos no TEMPO
+
+Os ramos gravam em **paths diferentes** e nenhum limpa o outro: instalar
+sem a flag e depois com ela deixa **os dois** no disco (`:1497` vs
+`:1514`).
+**Disposição: item da W5-b** — a chave do resolvedor tem de tolerar os
+dois destinos coexistindo, e o manifesto não pode reivindicar os dois
+como framework-owned.
+
+### 9.4 F4 — `.github/` está fora dos DOIS scanners de placeholder
+
+Os 11 `{{OWNER_HANDLE}}` entregues pelo ramo sem flag **nunca** são
+substituídos, e `.github/` não entra em `explicit_files`
+(`install.sh:2126-2135`) — nem o gate `--strict-placeholders` nem o aviso
+de fim de install olham para lá.
+**Disposição: candidato à W2 deste plano**, não à W5.
+
+### 9.5 F7 — o early-return de `apply_placeholder_substitutions` é MORTO
+
+O ramo `if [[ -z "$sed_script" ]]` (`:2096-2101`) é inalcançável:
+`:651-670` dá default **determinístico** a quatro `PH_*`, então
+`build_sed_script` nunca devolve vazio. Logo **o estágio 2 SEMPRE roda** e
+os dois docs são sempre reescritos in-place com troca de inode.
+**Disposição: entra na W5 como FATO DE DESENHO** (§9.7), não como
+correção.
+
+### 9.6 F9 — `install.sh` aponta 9 vezes para um doc que nunca entrega
+
+`grep -c 'docs/deny-baseline\.md' scripts/install.sh` = **9**, inclusive
+em mensagens de **ERRO de recuperação**. O arquivo não existe em
+`templates/docs/` e nunca é entregue: um adopter em falha é mandado ler um
+arquivo que ele não tem.
+**Disposição: W2 deste plano** — é a classe "instrução que não viaja para
+o adopter" que a W2 existe para fechar.
+
+### 9.7 O que DISSO muda a W5 (e só isso)
+
+1. **A rota de `docs/` é de DOIS ESTÁGIOS** — `cp` cru (`:1472`) **mais**
+   reescrita in-place (`:2130`/`:2131` via `:2165`). Todo hash de baseline
+   de `docs/*` tem de sair do arquivo **PÓS-substituição**, nunca do
+   template. Hoje os dois coincidem **por acidente** (os dois templates
+   têm **zero** marcadores `{{...}}`, medido), não por desenho: um
+   marcador novo em qualquer deles quebraria em silêncio um baseline
+   derivado do template.
+2. **As 5 rotas entregam ZERO registro de baseline.** Medido:
+   `_framework_target_entries` (`_framework_manifest_set.sh:113-190`)
+   enumera zero paths dessas árvores, e o manifesto entregue tem
+   **541 linhas com 0 entradas** delas. Confirmação independente de
+   D1/D3 pelo lado do produto entregue.
+3. **Modo `--link` não se aplica:** `install_docs_template` faz `cp`
+   incondicional (`:1472`) sem consultar `$MODE` — os 5 destinos são
+   sempre REGFILE. A dimensão "link" da tabela de ownership é **vacuosa**
+   para essas árvores, o que **reduz** a conta da OQ-4.
+4. **O registro de estado de `.github/` é vazio** (`:1491` grava `detail`
+   vazio; `docs/` grava string fixa em `:1479`). Confirma por medição que
+   `_state_record_op` é breadcrumb, não fonte de verdade de ownership.
