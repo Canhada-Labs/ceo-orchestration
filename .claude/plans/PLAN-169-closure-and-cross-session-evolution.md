@@ -1239,12 +1239,43 @@ o dado em mãos, não por simetria).
       decisões pedidas — W0.8 e W0.9 — foram aceites). O AC mede
       endereço, não fechamento: o OPEN não fecha este AC como "tudo
       pronto", ele fica visível com o defeito ainda no disco.
-- [ ] AC-2 [P0] Nightly Linux = 62 GREEN / 3 RED exatos
+- [x] AC-2 [P0] Nightly Linux = 62 GREEN / 3 RED exatos
       {OWN-0016,0024,0027} sem tocar tabela/expected-reds; riders
       (FALSE-GREEN 0073 + HARNESS-ERR fail-closed) com controle
       positivo cada.
-- [ ] AC-3 [P0] v1.3.0 GA publicada pela sequência pinada do 166 W2
+      **Fechado por medição (reconciliado 2026-08-22, S322): o
+      checkbox envelheceu — a prova estava no disco desde a W1.**
+      Run mais recente `32558333621` (`schedule`, `main`, SUCCESS,
+      2026-08-22T06:58:02Z) imprime literalmente
+      `GREEN=62  RED=3  AMBIG=0  HARNESS-ERR=0` e
+      `ownership gate: RED set stable (3 expected RED cells, zero
+      TIMEOUT/ESCAPE/AMBIG)`. Rider FALSE-GREEN: mecanismo em
+      `scripts/tests/test-ownership-table.sh:741-758` (`_selfcheck_mtime`,
+      exit 2 antes de qualquer célula). Rider HARNESS-ERR:
+      `test-ownership-table.sh:165-182,625,671` (MTIME-ERR ⇒ HARNESS-ERR)
+      com controle positivo automatizado — `test-ownership-nightly-gate.sh`
+      = 13/13, incluindo `S6 HARNESS-ERR=1 (gate rc=1)` e
+      `S3 set shrank (all green) (gate rc=1)`. **Não-toque provado por
+      ausência:** `git log 67a4c75..HEAD -- scripts/tests/ownership_table.tsv
+      scripts/tests/ownership-expected-reds.txt` = **0 commits** (último
+      toque `67a4c75`, 2026-08-07, ANTES da W1).
+- [x] AC-3 [P0] v1.3.0 GA publicada pela sequência pinada do 166 W2
       (AC-7 do 166 fechado com runs reais); PLAN-166 `done`.
+      **Fechado por medição (reconciliado 2026-08-22, S322): o
+      checkbox envelheceu — o §Ledger deste plano já registrava
+      A.2/A.3/A.4 CLOSED (linhas 1464-1467) e a entrada S312-S313
+      (linhas 1598-1601) já dizia "W6.1 CUMPRIDA".** Provas de runs
+      REAIS: `gh release list` ⇒ `v1.3.0  Latest  2026-08-18T01:16:59Z`;
+      `git tag -v v1.3.0` ⇒ *Good signature* (João Canhada), objeto
+      `d789721c2fd4a11c36c87eda0e1118eab59092e4`; cadeia de pré-releases
+      rc.1..rc.4 todas publicadas (2026-08-04 → 08-16). Veredito
+      assinado em `.claude/governance/pair-rail-verdict-v1.3.0.md`.
+      `PLAN-166` = `status: done`, e o AC-7 dele foi reconciliado no
+      MESMO commit que este (a dependência não fica pendurada).
+      **Desvio da letra, registrado com honestidade:** o AC-7 do 166
+      diz "rc.2 cortada" e o GA andou sobre a **rc.4** — a regra de
+      ancestralidade funcionou no sentido caro (ver linha 1466).
+      Objetivo cumprido; a letra virou título histórico.
 - [ ] AC-4 [P1] Quota-resume: probes W4.1.0 registrados; simulação
       (job ÚNICO no horário efetivo `resets_at+≥120s`, minuto ∉
       {:00,:30}) + live-fire real OU registro falsificável de por que

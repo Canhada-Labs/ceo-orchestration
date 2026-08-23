@@ -738,6 +738,7 @@ checkout de adopter, onde o fallback degradava em silêncio para
 - [ ] `[P1]` `ceo-backup.sh` / `ceo-restore.sh`: os dois ainda defaultam para `${CEO_PROJECT_NAME:-ceo-orchestration}` e são **INVISÍVEIS ao censo** — rodar o `_m1_hit()` do próprio derivador nos dois devolve `False`, porque o regex M1 exige aspas colando no literal e a forma `${VAR:-literal}` escapa. A exclusão é acidente de regex, não allowlist. Composto: backup lê o dir legado, restore escreve nele — um restore **nunca repopula o dir vivo**.
       Check: os dois scripts operam sobre o dir resolvido, nao sobre o literal; round-trip backup->restore->verify_chain no dir VIVO
 - [ ] `[P1]` **Templates com dono declarado:** `templates/grok/pre-push-review-gate.sh:144` é ENTREGUE ao adopter (`_grok_harness.sh:227`, a doc o chama de "the teeth") e constrói o literal; o gêmeo `templates/codex/pre-push-review-gate.sh:90` é ÓRFÃO (não aparece em `_codex_planned_pairs()`). `templates/scripts/statusline-ceo.py` é duplicata órfã — zero rota de entrega, zero teste; o adopter recebe a cópia VIVA já migrada. Curar exige um resolvedor em SHELL, que `runtime_paths.py` não expõe (não tem `__main__`). Decisão do Owner: expor CLI no módulo, ou aceitar.
+      **DECIDIDO — Owner, 2026-08-22 (S322), via AskUserQuestion, texto verbatim da opção escolhida:** "Expor CLI no runtime_paths.py (Recomendado) — Adiciono `__main__` ao módulo, os templates passam a chamar o resolvedor único em vez de reconstruir o literal. Fecha o item e mata a classe na raiz — o adopter deixa de receber o defeito. É a cura, não o contorno."
       Check: nenhum template entregue constroi o literal; orfaos deletados ou sincronizados com teste de paridade
 - [x] `[P1]` Dois adopters no mesmo `$HOME` sem env resolvem para caminhos e chaves distintos — **provado em processo** com HOME isolado; inclusive dois projetos de mesmo BASENAME em pais diferentes (a classe que a W1 curou). Residual conhecido reproduzido: `/srv/a-b/c` e `/srv/a/b-c` colidem em `-srv-a-b-c`, que é a derivação NATIVA do harness.
       Check: dois CLAUDE_PROJECT_DIR distintos sob HOME isolado resolvem dirs e chaves HMAC distintos; mesmo-basename em pais diferentes NAO colide
@@ -880,6 +881,18 @@ checkout de adopter, onde o fallback degradava em silêncio para
 5. **Ordem de execução** — installer-first, por-artefato, ou
    writers-atômico com leitores por candidate-list. Decidir **depois** da
    W0, não agora.
+6. **Resolvedor em SHELL para os templates** — **FECHADA (Owner,
+   2026-08-22, S322).** Decisão verbatim: *"Expor CLI no runtime_paths.py
+   (Recomendado) — Adiciono `__main__` ao módulo, os templates passam a
+   chamar o resolvedor único em vez de reconstruir o literal. Fecha o item
+   e mata a classe na raiz — o adopter deixa de receber o defeito. É a
+   cura, não o contorno."* Consequência: `.claude/hooks/_lib/runtime_paths.py`
+   ganha um `__main__` com contrato de CLI próprio; `templates/grok/`
+   e `templates/codex/pre-push-review-gate.sh` deixam de construir o
+   literal; o censo M1 precisa passar a VER a forma `${VAR:-literal}`
+   (hoje o regex exige aspas colando no literal, e por isso
+   `ceo-backup.sh`/`ceo-restore.sh` escapam por acidente, não por
+   allowlist).
 
 ## Reference links
 

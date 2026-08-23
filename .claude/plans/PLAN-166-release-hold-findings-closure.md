@@ -666,8 +666,21 @@ dizer mais que isso seria claim falsa.
       `PLAN-166/repass-r1/**` e `PLAN-166/debate/**` são evidência
       imutável e FICAM FORA do rename (um sed neles quebraria o
       MANIFEST.sha256).
-- [ ] AC-7 rc.2 cortada com `await-release-gate` verde ao vivo; hold
+- [x] AC-7 rc.2 cortada com `await-release-gate` verde ao vivo; hold
       cumprido; re-pass final GO; GA publicado com aprovação pós-gate.
+      **Fechado 2026-08-18 pela rota rc.4 (reconciliado 2026-08-22,
+      S322).** A letra dizia "rc.2"; o `main` avançou depois do corte,
+      a regra de ancestralidade recusou o GA sobre a rc.2, e o trem
+      cortou rc.3 e depois rc.4 — o mecanismo funcionou no sentido
+      caro, e é isso que o AC registra. Runs reais: pré-releases
+      `v1.3.0-rc.1` (2026-08-04) → `rc.2` (08-09) → `rc.3` (08-11) →
+      `rc.4` (2026-08-16T17:56:08Z), e o GA `v1.3.0` publicado em
+      `2026-08-18T01:16:59Z` (`gh release list` ⇒ `Latest`).
+      `git tag -v v1.3.0` ⇒ *Good signature*, objeto
+      `d789721c2fd4a11c36c87eda0e1118eab59092e4`. Veredito assinado em
+      `.claude/governance/pair-rail-verdict-v1.3.0.md`. Escrituração
+      cruzada em `PLAN-169:1464-1467,1598-1601` e no AC-3 do PLAN-169,
+      reconciliado no MESMO commit.
 
 ## Riscos
 
@@ -754,5 +767,11 @@ assinado e no `W1-ceremony-log.md`). Registro aqui + compromisso: a
 ratificação entra no **material assinado do verdito rc.2** (próxima
 superfície assinada do trem W6.1), não em superfície não-assinada.
 
-**AC-7** segue aberto por construção — é o próprio trem W6.1
-(rc.2 + hold + GA).
+**AC-7 — FECHADO em 2026-08-18** (reconciliado 2026-08-22, S322).
+Este parágrafo dizia "segue aberto por construção — é o próprio trem
+W6.1 (rc.2 + hold + GA)". O trem rodou, e a frase envelheceu junto
+com ele. O GA saiu pela **rc.4**, não pela rc.2: o `main` avançou
+após o corte, o guard de ancestralidade recusou a rc.2, e cortaram-se
+rc.3 e rc.4. Evidência de runs reais no próprio checkbox do AC-7
+acima; escrituração cruzada em `PLAN-169:1464-1467,1598-1601` e no
+AC-3 do PLAN-169, reconciliado no MESMO commit que este.
