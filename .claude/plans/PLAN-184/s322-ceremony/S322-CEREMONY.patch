@@ -1,0 +1,175 @@
+diff --git a/.claude/scripts/local/install-ceremony-precommit.sh b/.claude/scripts/local/install-ceremony-precommit.sh
+new file mode 100755
+index 0000000..ce9ece4
+--- /dev/null
++++ b/.claude/scripts/local/install-ceremony-precommit.sh
+@@ -0,0 +1,37 @@
++#!/bin/bash
++# install-ceremony-precommit.sh — instala a perna LOCAL (advisory) do
++# ceremony-lint como git hook clássico de pre-commit (PLAN-174 W2).
++#
++# DOUTRINA (consenso do debate r1, F5): CI é O GATE. Este hook é
++# conveniência de operador — bypassável por `git commit --no-verify`
++# por construção — e NUNCA conta como camada de enforcement. Instalação
++# é OPT-IN: rode este script uma vez por clone.
++#
++# Uso: bash .claude/scripts/local/install-ceremony-precommit.sh
++set -u -o pipefail
++
++REPO_ROOT="$(git rev-parse --show-toplevel)" || exit 2
++HOOK="$REPO_ROOT/.git/hooks/pre-commit"
++
++if [ -f "$HOOK" ] && ! grep -q "ceremony-lint" "$HOOK"; then
++  echo "AVISO: $HOOK já existe e não é o ceremony-lint — não vou sobrescrever." >&2
++  echo "Integre manualmente: python3 .claude/scripts/check-ceremony-script.py" >&2
++  exit 1
++fi
++
++cat > "$HOOK" <<'EOF'
++#!/bin/bash
++# ceremony-lint pre-commit (advisory local — CI é o gate; PLAN-174 W2)
++if git diff --cached --name-only | grep -qE '\.sh$'; then
++  python3 "$(git rev-parse --show-toplevel)/.claude/scripts/check-ceremony-script.py"
++  rc=$?
++  if [ "$rc" -ne 0 ]; then
++    echo "ceremony-lint: blocking/piso violado (rc=$rc)." >&2
++    echo "Bypass consciente: git commit --no-verify (o CI ainda e o gate)." >&2
++    exit "$rc"
++  fi
++fi
++exit 0
++EOF
++chmod +x "$HOOK"
++echo "instalado: $HOOK (advisory; bypass = --no-verify; CI e o gate)"
+diff --git a/.github/workflows/ceremony-lint.yml b/.github/workflows/ceremony-lint.yml
+new file mode 100644
+index 0000000..01349d9
+--- /dev/null
++++ b/.github/workflows/ceremony-lint.yml
+@@ -0,0 +1,89 @@
++name: Ceremony script lint
++
++on:
++  push:
++    branches: [main]
++    paths:
++      - ".claude/plans/**/*.sh"
++      - ".claude/scripts/local/generate-ceremony.sh"
++      - ".claude/scripts/check-ceremony-script.py"
++      - ".claude/scripts/ceremony-lint-waivers.json"
++      - ".github/workflows/ceremony-lint.yml"
++  pull_request:
++    paths:
++      - ".claude/plans/**/*.sh"
++      - ".claude/scripts/local/generate-ceremony.sh"
++      - ".claude/scripts/check-ceremony-script.py"
++      - ".claude/scripts/ceremony-lint-waivers.json"
++      - ".github/workflows/ceremony-lint.yml"
++
++permissions:
++  contents: read
++
++concurrency:
++  group: ceremony-lint-${{ github.ref }}
++  cancel-in-progress: true
++
++jobs:
++  ceremony-lint:
++    name: ceremony-lint (descoberta por conteúdo + classes do catálogo)
++    runs-on: ubuntu-latest
++    timeout-minutes: 5
++    steps:
++      # SHA-pinned: actions/checkout (mesmo pin do restante do repo)
++      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
++
++      - name: Run ceremony lint (fail-closed; imprime conjunto descoberto + piso)
++        run: |
++          set -uo pipefail
++          python3 .claude/scripts/check-ceremony-script.py
++          rc=$?
++          echo "ceremony-lint exit: $rc"
++          exit "$rc"
++
++      - name: Publish discovered set + waiver count to step summary
++        if: always()
++        run: |
++          set -uo pipefail
++          {
++            echo "## ceremony-lint — conjunto descoberto"
++            echo '```'
++            python3 .claude/scripts/check-ceremony-script.py --list
++            echo '```'
++            echo ""
++            echo "Waivers ativos (sha256-pinados, re-armam em edição):"
++            python3 - <<'PY'
++          import json
++          ws = json.load(open(".claude/scripts/ceremony-lint-waivers.json"))
++          print(f"{len(ws)} waiver(s)")
++          PY
++          } >> "$GITHUB_STEP_SUMMARY"
++
++  shellcheck-ceremony:
++    name: shellcheck cirúrgico sobre o conjunto descoberto
++    runs-on: ubuntu-latest
++    timeout-minutes: 5
++    steps:
++      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
++
++      # Flags CIRÚRGICAS do debate r1 (F2): check-extra-masked-returns
++      # (SC2312 — a classe A1 que custou o round 17). NUNCA --enable=all
++      # (422 SC2250 + 91 SC2292 de ruído medidos nos 3 scripts do round
++      # 5). ADVISORY nesta fase: o gate BLOCKING é o job ceremony-lint;
++      # promoção a gate = decisão registrada na W2, nunca silenciosa.
++      - name: shellcheck (advisory, flags cirúrgicas)
++        continue-on-error: true
++        run: |
++          set -uo pipefail
++          mapfile -t FILES < <(python3 .claude/scripts/check-ceremony-script.py --list)
++          printf 'conjunto: %s arquivo(s)\n' "${#FILES[@]}"
++          shellcheck --version | head -2
++          shellcheck -S warning --enable=check-extra-masked-returns "${FILES[@]}" \
++            > shellcheck-ceremony.txt 2>&1 || true
++          wc -l shellcheck-ceremony.txt
++          {
++            echo "## shellcheck-ceremony (advisory)"
++            echo '```'
++            head -100 shellcheck-ceremony.txt
++            echo '```'
++          } >> "$GITHUB_STEP_SUMMARY"
+diff --git a/.github/workflows/validate.yml b/.github/workflows/validate.yml
+index 0250bf4..c246308 100644
+--- a/.github/workflows/validate.yml
++++ b/.github/workflows/validate.yml
+@@ -4,6 +4,15 @@ on:
+   pull_request:
+   push:
+     branches: [main]
++  # PLAN-184 A0 — BACKSTOP do corte da matriz de Python no `push`.
++  # Medido ANTES de cortar: 100% dos runs deste workflow na janela
++  # vieram de `push` (por evento: {'push': 167}) e NAO existia
++  # `schedule:` nenhum. Sem este cron, remover 3.10/3.11 do `push`
++  # seria PERDA de cobertura, nao atraso de deteccao: as duas versoes
++  # deixariam de ser exercitadas em QUALQUER gatilho.
++  # O minuto e off-mark de proposito (nao :00/:30).
++  schedule:
++    - cron: "37 7 * * *"
+ 
+ # Cancel in-progress runs when a newer commit lands on the same ref.
+ # Prevents duplicate compute on rapid-fire PR updates and matches the
+@@ -1451,7 +1460,15 @@ jobs:
+     strategy:
+       fail-fast: false
+       matrix:
+-        python-version: ["3.9", "3.10", "3.11", "3.12"]
++        # PLAN-184 A0 — no `push`, so as versoes de FRONTEIRA (3.9 e
++        # 3.12); no `pull_request` e no `schedule` acima, as QUATRO.
++        # Troca latencia de deteccao por dinheiro (~US$3,15/dia de um
++        # teto de ~US$4,04) sem abrir janela de falso-verde, porque o
++        # nightly cobre 3.10/3.11 todos os dias.
++        python-version: >-
++          ${{ fromJSON(github.event_name == 'push'
++              && '["3.9","3.12"]'
++              || '["3.9","3.10","3.11","3.12"]') }}
+     steps:
+       - name: Checkout
+         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd

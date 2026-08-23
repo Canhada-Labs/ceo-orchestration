@@ -1,4 +1,11 @@
 #!/bin/bash
+# CEREMONY-LINT: handwritten-exception: script de cerimonia autorado a mao
+# (o gerador da W3 do PLAN-174 ainda nao emite cortes de wave; o wire dele
+# esta no pacote da S322). Marca adicionada pelo CEO na S322: o R1 do
+# ceremony-lint apontou este arquivo como BLOCKING no mesmo instante em que
+# ele passou a ser RASTREADO — untracked nao gateia, e o gate so falou depois
+# do commit. E a razao pela qual a bateria de corpus roda DEPOIS do
+# `git add`, nunca antes (CLAUDE.md §4).
 # PLAN-179 — LAND do pack de continuidade de contexto (Owner-run).
 # Cobre W0 + W1 + W1-b (+ W2/W4 se presentes no pack) numa ÚNICA cerimônia,
 # exatamente como manda a emenda 8.2 do debate round-1: o sentinel cobre
