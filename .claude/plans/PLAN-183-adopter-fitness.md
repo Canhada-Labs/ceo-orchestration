@@ -1245,8 +1245,46 @@ com a revisão refrescada, ou vira plano próprio.
       INV-4 intacto.
 - [ ] AC-2 [P0] Template de CI ativado sai VERDE num repositório
       **descartável nosso**, com o passo de ativação nomeado.
-- [ ] AC-3 [P0] Skill de VETO em `name-only` é impossível **por teste do
-      gerador** — não por correção no `settings.json`.
+- [x] AC-3 [P0] Skill de VETO em `name-only` é impossível **por teste do
+      gerador** — não por correção no `settings.json`. **FECHADO (S324,
+      2026-08-23) — verificado COMPORTAMENTALMENTE, rodando o gerador.**
+      Cobre o achado **A4** (a numeração dos ACs não segue a dos achados;
+      A3 é o `benchmarks.yml.template`). Landou em `ed4d1cf` (W3):
+      `.claude/scripts/veto_skill_map.py` (232 linhas, DERIVA o conjunto
+      dos organogramas de autoridade — nenhuma skill enumerada no
+      arquivo), `test_veto_skill_map.py` (22 testes), e o gerador ganhou o
+      **segundo eixo de proteção**: `skill-budget-generator.py:354-362`
+      diz literalmente *"TWO protection axes, not one (PLAN-183 W3 P0).
+      `tier` protects core/frontend; `veto_skills` protects VETO-bearing
+      skills in ANY tier"*. Medido rodando `--json`:
+      `veto_protected` = **18** entradas (inclui
+      `financial-correctness-and-math`), e o `skillOverrides` gerado (99
+      chaves) **não contém** nenhuma das três skills antes demovidas
+      (`financial-correctness-and-math`, `financial-display`,
+      `trading-execution` ⇒ todas `None`). O invariante mora no gerador,
+      que é o que o AC exige.
+
+      > **⚠️ FOLLOW-UP que este AC NÃO cobre, e que a S324 descobriu ao
+      > verificá-lo.** O gerador está curado; o **artefato gerado não**.
+      > `.claude/settings.json:872-873` AINDA tem
+      > `"financial-correctness-and-math": "name-only"` e
+      > `"financial-display": "name-only"` — medido no disco. Causa: a
+      > regeneração é passo **MANUAL**
+      > (`python3 .claude/scripts/skill-budget-generator.py --jq-fragment`,
+      > citado no próprio `_skill_budget_comment` do settings), não está
+      > wired em CI, e não foi rodada depois do land da W3. Logo o defeito
+      > A4 **segue VIVO neste repositório** apesar do AC estar fechado — e
+      > `.claude/settings.json` é **canônico**, então regenerar exige
+      > cerimônia. É a classe "gerador curado, artefato obsoleto": o teste
+      > do gerador não vigia o arquivo entregue.
+      >
+      > **Observação a verificar (não confirmada):** duas das 18 entradas
+      > de `veto_protected` são `'Kill Switches'` e `'Latency Budgets'` —
+      > parecem TÍTULOS DE PROSA derivados dos organogramas, não skills.
+      > Existe teste para essa classe
+      > (`test_toolchain_names_in_prose_are_not_derived`), então ou são
+      > vazamento novo, ou `veto_protected` é populado antes do bind ao
+      > inventário. Precisa de uma medição própria antes de virar achado.
 - [x] AC-4 [P0] W0-US1 conclui com veredito nomeado, e a aritmética é
       tentada ANTES da arqueologia. **FECHADO (S317, 2026-08-20):**
       veredito = `explicado pela aritmética`; conta exata
@@ -1256,8 +1294,21 @@ com a revisão refrescada, ou vira plano próprio.
       *"Check 5 - slow hooks"*, dirigido por MODELO).
 - [ ] AC-5 [P0] `smoke-install` passa a cobrir `.github/` e a EXECUTAR o
       CI entregue — hoje o grep pelos templates devolve zero.
-- [ ] AC-6 [P1] O A7 é curado: instalação limpa não planta a identidade
-      do mantenedor no repositório do adopter.
+- [x] AC-6 [P1] O A7 é curado: instalação limpa não planta a identidade
+      do mantenedor no repositório do adopter. **FECHADO (S324,
+      2026-08-23) — reconciliado contra o DISCO e contra o CI, não contra
+      a memória.** Três pernas: (a) a cura landou em `4f750f0`,
+      removendo o hardcode de identidade de
+      `.claude/scripts/check_contamination.py` e tirando o módulo de
+      `_ALLOWLIST_EXACT` (a auto-exenção era o que deixava a identidade
+      passar); (b) o guard unitário existe —
+      `.claude/scripts/tests/test_check_contamination.py` (+99 linhas no
+      mesmo commit), coletado por-PR em `validate.yml`; (c) o guard de
+      instalação entrou em `scripts/tests/smoke-install.sh` (+21 linhas) e
+      o step **`Run smoke install` saiu `success`** no run mais recente
+      (`32639637945`) — o vermelho daquele run é o step de paridade, outro
+      step, outro defeito (D1). Comentário no código não seria prova; o
+      step verde é.
 - [ ] AC-7 [P2, NÃO-BLOQUEANTE] Os achados do relatório de campo são
       respondidos ao adopter, inclusive os recusados (A6), com a razão.
       **Canal e dono:** o CEO escreve a resposta como um documento em
@@ -1292,6 +1343,45 @@ com a revisão refrescada, ou vira plano próprio.
    sessão para 2-4 (§7.2) **e** obriga a re-derivar o total
    `GREEN=62 RED=3` — por isso precisa vir ANTES da unidade de
    ownership, não durante.
+
+   **PROPOSTA DERIVADA (S324) — a OQ-4 deixa de ser pergunta aberta e
+   passa a ser ratificação.** Medido no disco por mim
+   (`scripts/tests/ownership_table.tsv`): **15 colunas, 65 linhas de
+   dados** — `spec` 29, `protocol` 13, `marker` 23. As colunas de
+   dimensão são `prior_record, live_type, live_content, source_has, mode,
+   ceremony, operation, skip_requested, fault`; `spec` e `marker` variam
+   nas **9**, `protocol` em **5**. `_ownership_verdict` ramifica em
+   `surface` em **7 pontos**, logo uma superfície nova exige ramo dentro
+   da MESMA função (§4 do `CLAUDE.md`).
+
+   Conta, com os fatores explícitos:
+
+   | cenário | linhas novas |
+   |---|---|
+   | piso — 1 superfície, perfil `protocol` (5 dims) | ~13 |
+   | realista — 1 superfície, perfil `marker`/`spec` (9 dims) | ~23–29 |
+   | `docs/` e `.github/` como superfícies SEPARADAS | ~26–58 |
+
+   **Dois fatores REDUZEM a conta, e os dois são medidos:**
+   (i) `ceremony=user` já é decidido em bloco (`:540`), o que casa
+   exactamente com a guarda `CEREMONY != user` de `install.sh:1484/:1525`
+   e elimina metade das combinações de `ceremony`;
+   (ii) **`mode` (copy/link) é INERTE para estas rotas** —
+   `install_docs_template:1472` faz `cp` incondicional sem consultar
+   `$MODE`, e a medição confirma que os 5 destinos saem `REGFILE` mesmo
+   com `--link` (§9.7 item 3), então `mode` pode ser `*`.
+   E `expect_verdict`/`expect_hash_source` **reutilizam os enums
+   existentes** — nenhum valor novo.
+
+   **Recomendação do CEO: UMA superfície nova (`template_delivered`), com
+   perfil de variação de `protocol` (5 dims) e `mode=*`** ⇒ ~13 linhas.
+   Razão: as duas árvores compartilham a guarda de cerimônia, o
+   skip-if-exists e a inércia de `mode`; o que as distingue é a
+   TRANSFORMAÇÃO, e transformação é metadado de ROTA (§8.5.2 peça (b)),
+   não dimensão de ownership. Separá-las em duas superfícies duplicaria
+   linhas para codificar uma diferença que pertence a outra tabela.
+   Fica registrado o custo se o Owner discordar: até ~58 linhas e o
+   orçamento da W5-b sobe de ~1 para 2–4 sessões (§7.2).
 
 5. **W5-b, BLOQUEANTE (§8.7)** — adopters históricos não têm registro de
    entrega e nenhum hash o recupera. Rota (i) não migrar, (ii) migrar com
@@ -1427,3 +1517,29 @@ o adopter" que a W2 existe para fechar.
 4. **O registro de estado de `.github/` é vazio** (`:1491` grava `detail`
    vazio; `docs/` grava string fixa em `:1479`). Confirma por medição que
    `_state_record_op` é breadcrumb, não fonte de verdade de ownership.
+
+### 9.8 O controle positivo da paridade é SKIPPED exatamente quando importa
+
+Observação do log do run `32639637945`, e ela é sobre o INSTRUMENTO, não
+sobre o defeito. A sequência de steps do `smoke-install.yml` é:
+
+```
+failure   Install/upgrade parity e2e (maintainer + user ceremony)
+skipped   Install/upgrade parity - positive control (planted divergence)
+skipped   Upgrade SPEC/marker delivery-record ownership (S1-S8)
+skipped   night-mode ignore efficacy (...)
+```
+
+O controle positivo — o step que responde *"o instrumento ainda DETECTA
+divergência plantada?"* — só roda quando a asserção principal passa. Ou
+seja: enquanto o main está vermelho por D1, **perdemos justamente o sinal
+que diria se o classificador continua tendo poder de detecção**. Um verde
+futuro do step principal, sem nunca ter reexecutado o controle, é
+exatamente a classe *instrumento verde cuja PERGUNTA envelheceu*.
+
+⇒ Item para a W5: o controle positivo tem de rodar **independentemente**
+do veredito do step principal (`if: always()` ou step próprio), senão a
+cura de D1 vai ser validada por um instrumento cujo poder de detecção não
+foi verificado no mesmo run. Vale também para os outros dois steps
+skipped, que testam ownership de entrega — exatamente a área que a W5-b
+mexe.

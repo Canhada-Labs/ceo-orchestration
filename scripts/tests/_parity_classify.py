@@ -218,8 +218,61 @@ def _walk(root: str) -> List[str]:
     return out
 
 
+# Delivery routes whose DESTINATION relpath differs from the SOURCE relpath,
+# measured from install.sh's copy functions (PLAN-183 §8.5.1, S324 census).
+#
+# This is an ENUMERATION, not an inversion: identity-first stays correct for
+# every path the installer copies under the same relpath, and blind
+# `templates/`-first would break all of them. Only the routes below need the
+# override, because for them a homonym of the DESTINATION also exists at the
+# repo root — a different framework artifact the adopter never received.
+# Comparing against it reports the wrong CLASS (UNCLASSIFIED where the truth
+# is STALE): that is defect D2, PLAN-183 §8.2.
+#
+# DEBT (named, PLAN-183 §8.5.2): this table must become SHARED data read by
+# `_framework_manifest_set.sh` and `doctor.sh` too. A second copy in bash
+# would be the "local branch that decides ownership" CLAUDE.md §4 forbids.
+# Promoting it is a W5-b item; this module is the first consumer, not the
+# owner.
+_TEMPLATE_DELIVERED = {
+    # destination -> real source under the checkout root
+    "docs/BRANCH-PROTECTION.md": "templates/docs/BRANCH-PROTECTION.md",
+    "docs/rotation-log.md": "templates/docs/rotation-log.md",
+}
+
+# Destinations delivered through a TRANSFORM: the bytes the adopter received
+# exist nowhere in the checkout (install.sh:1496-1510 applies
+# `sed s/{{OWNER_HANDLE}}/<handle>/`, 11 occurrences). Resolving them needs the
+# substitution value from the TARGET's install-state, which this classifier
+# does not read. Reporting None is deliberate fail-LOUD: better "source
+# unknown" than silently comparing against this repository's own live
+# `.github/CODEOWNERS` — the one file that carries the maintainer's real
+# handle. Consuming install-state is a W5-b item.
+_RENDERED_DELIVERED = {
+    ".github/CODEOWNERS": "templates/.github/CODEOWNERS.template",
+}
+
+
 def _src_digest(root: str, rel: str, subs: List[Tuple[bytes, bytes]]) -> Optional[str]:
-    """Source lookup: identity map first, then the templates/ map."""
+    """Source lookup by DELIVERY ROUTE, not by file existence.
+
+    Identity-first (the pre-S324 behavior) is preserved as the DEFAULT and is
+    correct for every identity-mapped delivery. It is wrong for the enumerated
+    routes above; see PLAN-183 §8.2 for the measured signature and §8.5.1 for
+    the three delivery routes.
+
+    Returning None on a declared-but-absent source is intentional: an OLD pin
+    may legitimately predate a template, and raising there would crash the
+    classifier on a valid comparison. The guard against a typo in the tables
+    lives in the unit test, which asserts every declared source exists at HEAD.
+    """
+    if rel in _RENDERED_DELIVERED:
+        # Rendered at install time; unresolvable without the target's
+        # substitution values. NEVER fall through to identity here.
+        return None
+    mapped = _TEMPLATE_DELIVERED.get(rel)
+    if mapped is not None:
+        return _digest(os.path.join(root, mapped), subs)
     for candidate in (os.path.join(root, rel), os.path.join(root, "templates", rel)):
         digest = _digest(candidate, subs)
         if digest is not None:

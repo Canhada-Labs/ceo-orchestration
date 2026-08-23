@@ -136,6 +136,34 @@
 
 #### W5-b — D1: a entrega no upgrade (L3+ canônico, cerimônia obrigatória)
 
+- [ ] `[P0]` **PRÉ-REQUISITO que nenhuma análise anterior nomeou (S324):
+      `install_docs_template` não tem sinal de entrega NENHUM.** Medido:
+      `install.sh:1446-1474` apenas ecoa (`COPIED:` / `EXISTS (skipping):`)
+      e não devolve nem grava indicação de que escreveu. Todas as 5 rotas
+      das duas árvores passam por ele (exceto o ramo `GITHUB_OWNER`, que
+      tem `sed` próprio em `:1508`). **Sem esse sinal, qualquer
+      `FMS_DELIVERED_*` seria ADIVINHADO** a partir de presença de arquivo
+      — que é exactamente a confusão EXISTS-skip ↔ entrega que a OQ-5 diz
+      que nenhum hash recupera, e que o `ADR-155-AMEND-1:87-125` proíbe.
+      O molde existe: `install_one` (`install.sh:874-876`) já emite sinal
+      **1 somente quando aquela chamada escreveu o destino**
+      (`COPIED`/`LINKED`); `EXISTS`-skip, fonte ausente e `--dry-run`
+      deixam **0**. Esta unidade vem ANTES de qualquer entrada de
+      manifesto.
+      Check: install_docs_template devolve/grava sinal por DESTINO com a mesma semantica de install_one; teste com os quatro casos (escreveu / EXISTS-skip / fonte ausente / dry-run) assertando 1,0,0,0; e nenhuma entrada FMS_DELIVERED_* e declarada antes deste item estar verde
+
+- [ ] `[P0]` **A tabela de ROTAS vira dado COMPARTILHADO (dívida criada
+      pela W5-a, §8.5.2).** A W5-a define `_TEMPLATE_DELIVERED` /
+      `_RENDERED_DELIVERED` **dentro** de `_parity_classify.py` porque é
+      L2 e só toca teste. Os outros dois consumidores são **bash**
+      (`_framework_manifest_set.sh`, `doctor.sh`), então uma segunda cópia
+      lá seria o "ramo local" que o `CLAUDE.md` §4 proíbe. A W5-b promove
+      a tabela a arquivo de dados lido pelos dois lados — a forma de
+      `ownership_table.tsv`. E o manifesto persiste só
+      **digest + relpath de destino**, logo o `doctor.sh` não tem de onde
+      RECUPERAR a fonte sem essa tabela.
+      Check: existe UM arquivo de dados de rotas, e grep prova que _parity_classify.py, _framework_manifest_set.sh e doctor.sh todos o LEEM; nenhum dos tres carrega mapa proprio; teste de censo falha se um quarto consumidor aparecer sem ler a tabela
+
 - [ ] `[P0]` **Debate L3 antes de qualquer linha.** `upgrade.sh` e
       `_framework_manifest_set.sh` são canônicos e são o coração do
       PLAN-167/168; a memória deste repo registra que essa classe de
