@@ -1,7 +1,7 @@
 ---
 id: PLAN-182
 title: Isolamento de runtime state por projeto — implementar o ADR-001 como escrito, quatro meses depois
-status: reviewed
+status: executing
 reviewed_at: 2026-08-20
 reviewed_by: "Owner — autorizacao explicita em chat (S315, 2026-08-20): 'se ja esta pronto deixa como revisado e apto pra fazer'. Debate L3 round 1 fechado com veredito PROCEED (13 consensos) e ajustes do consenso incorporados ao corpo; validate_governance_fast = 0 findings; pair-rail codex 6 rodadas fechadas, 32 achados, todos curados."
 created: 2026-08-20
@@ -493,7 +493,16 @@ rastreado (regenera das fontes).
 > decisão P0 do Owner por omissão**, e poderia rotacionar o salt ou
 > reiniciar a cadeia prematuramente.
 
-- [ ] `[P0]` Decidir e REGISTRAR. **"Segregar" está indisponível para
+
+> **⚠️ Este bloco é o ESBOÇO original da W2/W3, preservado como registro.
+> A execução real está no `### Registro de execução — W2 e W3 (S321)`
+> mais abaixo, e é ELE que carrega os checkboxes válidos.** Os itens
+> daqui ficam marcados conforme o que o registro PROVOU, para que o
+> documento não afirme duas coisas ao mesmo tempo — foi exatamente a
+> ambiguidade que o AC-6 pegou na W1 (texto de esboço apenso a um
+> registro de execução).
+
+- [x] `[P0]` Decidir e REGISTRAR. **"Segregar" está indisponível para
       ~68% do log** (não atribuível, §1), então a escolha real é
       "declarar a janela" contra "arquivar e recomeçar a cadeia".
       Incluir decisão sobre o **salt** e emitir marcador de migração na
@@ -512,7 +521,7 @@ rastreado (regenera das fontes).
       fica vazia por esta decisão). A unidade de emissores remanescentes
       (abaixo) permanece obrigatória. O checkbox fecha quando o arquivo
       + marcador forem EXECUTADOS na W1 reemitida.
-- [ ] `[P1]` **Emissores remanescentes (cura do r10 sobre o r9 #3):**
+- [x] `[P1]` **Emissores remanescentes (cura do r10 sobre o r9 #3):**
       derivar COMPORTAMENTALMENTE quais emissores ainda produzem
       eventos não-atribuíveis (os +149 do §1) e dispor CADA um — curar a
       atribuição ou registrar aceite por escrito. "Janela fechada" só
@@ -521,6 +530,12 @@ rastreado (regenera das fontes).
 - [ ] `[P1]` Reavaliar `ceo-boot`, `audit-tokens` e `skill-health` como
       **eficácia de controle**, não como medição — e prever a rajada de
       advisories pós-migração.
+      **ABERTO, e é o único item da W2 que sobra.** O "antes" existe; o
+      "depois" precisa de uma janela — o vazamento da suíte parou na
+      S321, então a re-medição só é significativa depois de alguns dias
+      de fluxo normal. Parcial já entregue: o `sentinels_pending_gpg` do
+      `ceo-boot` foi curado na mesma sessão (era cego a 9 dos 10
+      formatos de sentinel).
       Check: vereditos antes e depois diffados; toda mudanca de cor explicada por escrito
 
 ### W3 — Instalação e adopters (esboço)
@@ -528,10 +543,24 @@ rastreado (regenera das fontes).
 - [ ] `[P0]` Rota do installer: chave em `settings.base.json` e merge
       aditivo no `upgrade.sh`, usando o backup que já existe; curar
       `templates/{codex,grok}/pre-push-review-gate.sh`.
+      **ABERTO por DECISÃO, não por trabalho.** A metade do e2e está
+      provada em campo (S321): o upgrade real do `arbitrage-monitor`
+      migrou o adopter, e ele passou a resolver para o próprio diretório
+      com chave HMAC distinta — **sem chave nenhuma em
+      `settings.base.json`**. Isso é evidência a favor de NÃO acrescentar
+      a chave (ela viajaria hardcoded e é a var de MAIOR precedência).
+      O que resta é a decisão do Owner + os dois templates de pre-push,
+      que precisam de um resolvedor em SHELL.
       Check: e2e de upgrade sobre instalacao existente — migra ou declara aceite; falha se nenhum dos dois
 - [ ] `[P1]` `ceo-backup.sh` / `ceo-restore.sh` e `dist/ceo-plugin/hooks/`.
+      **ABERTO.** `dist/` foi resolvido na S321 (regenerado por
+      `build-plugin.py`; o gate M4 fecha em 0). Os dois scripts seguem
+      defaultando para `${CEO_PROJECT_NAME:-ceo-orchestration}` e são
+      INVISÍVEIS ao censo — o regex M1 exige aspas colando no literal e a
+      forma `${VAR:-literal}` escapa. Composto: backup lê o dir legado,
+      restore escreve nele, então um restore nunca repovoa o dir vivo.
       Check: os dois scripts operam sobre o dir resolvido, nao sobre o literal
-- [ ] `[P1]` Dois adopters no mesmo `$HOME` sem env resolvem para
+- [x] `[P1]` Dois adopters no mesmo `$HOME` sem env resolvem para
       caminhos e chaves distintos.
       Check: e2e com dois projetos; logs e chaves distintos
 
@@ -704,7 +733,7 @@ checkout de adopter, onde o fallback degradava em silêncio para
 - [ ] `[P0]` Rota do installer: chave em `settings.base.json` e merge aditivo no `upgrade.sh`; curar `templates/{codex,grok}/pre-push-review-gate.sh`.
       **Evidência da W3 que muda o item:** `install.sh`/`upgrade.sh` NÃO tocam estado (censo por grep de path de estado = 0 hits), e sem env nenhuma o resolvedor JÁ separa dois adopters (provado com HOME fake e dois `CLAUDE_PROJECT_DIR`). Uma chave `CLAUDE_PROJECT_DIR_NATIVE` literal em `settings.base.json` viajaria HARDCODED para o adopter e é a var de MAIOR precedência — pinar errado quebraria a isolação que a W1 comprou. **Recomendação do CEO: NÃO acrescentar chave; o veículo pronto, se a decisão for outra, é `_T54_BASELINES_JSON` em `upgrade.sh:153-188`, nunca o merge de hooks.** Decisão do Owner.
       Check: e2e de upgrade sobre instalacao existente — migra ou declara aceite; falha se nenhum dos dois
-- [ ] `[P0]` **NOVO (achado da W3):** o adopter `arbitrage-monitor` roda cópia PRÉ-W1 e escreve no literal HOJE (item (f)). Enquanto existir adopter não-migrado sob o mesmo `$HOME`, o literal recebe escrita — e nenhuma redação de "janela fechada" sobrevive a isso.
+- [x] `[P0]` **RESOLVIDO (S321, 2026-08-23T00:15Z):** o adopter `arbitrage-monitor` rodava cópia PRÉ-W1 e escrevia no literal. **Upgrade executado**, com as quatro pernas medidas (ver AC-5): resolvedor presente, dir próprio, chave HMAC distinta, e o literal com delta **0** entre dois snapshots sob controle positivo — um `emit` real no contexto do adopter aterrissou no diretório NOVO dele, não no literal. A mistura acidental sob o mesmo `$HOME` acabou de fato, não por declaração.
       Check: upgrade do adopter para uma versao com runtime_paths, OU aceite escrito de que o literal permanece como estado legitimo dele
 - [ ] `[P1]` `ceo-backup.sh` / `ceo-restore.sh`: os dois ainda defaultam para `${CEO_PROJECT_NAME:-ceo-orchestration}` e são **INVISÍVEIS ao censo** — rodar o `_m1_hit()` do próprio derivador nos dois devolve `False`, porque o regex M1 exige aspas colando no literal e a forma `${VAR:-literal}` escapa. A exclusão é acidente de regex, não allowlist. Composto: backup lê o dir legado, restore escreve nele — um restore **nunca repopula o dir vivo**.
       Check: os dois scripts operam sobre o dir resolvido, nao sobre o literal; round-trip backup->restore->verify_chain no dir VIVO
@@ -763,15 +792,44 @@ checkout de adopter, onde o fallback degradava em silêncio para
       `OWNER-S319-LAND.sh:67-74`). A EXECUÇÃO do arquivo está feita; o
       elo de custódia `new-chain ↔ archive` **não** — item próprio,
       reaberto na W2.
-- [ ] AC-5 [P1] Rota de adopter fechada ou explicitamente aceita.
-      **DECISÃO DO OWNER REGISTRADA (S321, 2026-08-22, chat): ATUALIZAR O
-      ADOPTER** — não aceite escrito. A rota fecha pelo upgrade real do
+- [x] AC-5 [P1] Rota de adopter fechada ou explicitamente aceita.
+      **FECHADO por EXECUÇÃO (S321, 2026-08-23T00:15Z).** O Owner
+      autorizou assim que o `arbitrage-monitor` ficou ocioso; o upgrade
+      real rodou com backup próprio (269 MB) antes do backup que o
+      próprio `upgrade.sh` faz.
+
+      **As quatro pernas do Check, medidas:**
+
+      | perna | resultado |
+      |---|---|
+      | `runtime_paths.py` no adopter | **existe** (7.688 B) |
+      | o adopter resolve para o próprio dir | `-Users-…-arbitrage-monitor`, não mais o literal |
+      | chave HMAC própria | **DIFERENTE** da canônica (`cmp` ⇒ isolamento real) |
+      | literal, dois snapshots consecutivos | 10.349 → 10.349 — **delta 0** |
+
+      **Controle positivo, não observação passiva:** disparei um `emit`
+      REAL no contexto do adopter. O literal **não cresceu** e o evento
+      aterrissou no diretório novo dele. Melhor que esperar dois
+      snapshots ociosos, porque prova que a escrita MUDOU DE DESTINO em
+      vez de apenas ter parado.
+
+      **Achado colateral que fecha o ciclo:** o evento do adopter saiu
+      com `project=/Users/…/arbitrage-monitor` **preenchido** — a cura de
+      atribuição do `statusline-ceo.py` feita nesta mesma sessão viajou
+      no upgrade e funciona em campo. Os `config_change_observed` do
+      mesmo lote ainda saem com `project` vazio: é exatamente a classe
+      que fica no pacote de cerimônia pendente.
+
+      **Nota de custódia:** as "customizações do adopter" que o dry-run
+      avisou que seriam sobrescritas eram **apenas placeholder
+      substituído** (`{{OWNER_NAME}}` → nome real) — 16 linhas de diff,
+      zero personas próprias, medido antes de executar. `CLAUDE.md`,
+      `MEMORY.md` e `agent-metrics.md` foram preservados pelo upgrade.
+
+      Registro histórico da decisão: **ATUALIZAR O ADOPTER** — não aceite
+      escrito. A rota fecha pelo upgrade real do
       `arbitrage-monitor` para uma versão com `runtime_paths`, não por
       uma linha declarando o literal como estado legítimo.
-      **DIFERIDO por decisão do Owner na mesma conversa:** o repositório
-      estava executando trabalho no momento, e mexer nos arquivos dele
-      ali complicaria. **Gatilho nomeado: a próxima sessão em que o
-      `arbitrage-monitor` estiver ocioso.**
       Estado medido que torna isto urgente-mas-não-emergência: o dir
       literal recebe escrita ATIVA (2.967 dos 3.010 eventos de lá são do
       adopter), então a mistura sob o mesmo `$HOME` continua até o
