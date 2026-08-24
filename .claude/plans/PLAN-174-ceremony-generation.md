@@ -205,10 +205,20 @@ erro (formaliza no closeout — cache discipline do CLAUDE.md).
 >
 > **A W2 ainda NÃO fecha, e não deve fechar vacuamente:** o AC exige "wire
 > landado **e** job verde no CI", e a perna do job verde não foi medida
-> aqui. **Dívida nova, criada pelo próprio land:** `PLAN-174/staged-w2/`
-> segue no disco **e rastreado** (`git ls-files` = 2 arquivos `.staged`)
-> depois de o conteúdo ter landado — duas fontes de verdade para o mesmo
-> wire, exatamente a classe que este repo cura. Remover no closeout da W2.
+> aqui.
+>
+> **Sobre o `staged-w2/`, agora MEDIDO (S325) — e a medição corrige a
+> primeira redação desta nota.** Os dois `.staged` seguem no disco e
+> rastreados, mas NÃO são cópias divergentes: o corpo é **byte-idêntico**
+> ao que landou, e a única diferença é o cabeçalho de instrução de land que
+> o próprio arquivo manda remover (`ceremony-lint.yml.staged` = 125 linhas,
+> idêntico ao landado a partir da **linha 37**, ou seja 36 linhas de
+> cabeçalho; `install-ceremony-precommit.sh.staged` idêntico a partir da
+> **linha 7**). Ou seja: a rota de land foi cumprida EXATAMENTE como
+> instruída. E `staged-w2/` não tem consumidor nenhum
+> (`grep -rln 'staged-w2/'` sobre `*.py`/`*.sh`/`*.yml` = vazio).
+> Portanto a dívida é de HIGIENE, não de duas verdades em conflito:
+> remover no closeout da W2, junto com a perna do job verde.
 - `check-ceremony-script.py` landado: descoberta por CONTEÚDO
   (os.walk), 54 descobertos/41 rastreados, piso=41, R1-R8 com split
   BLOCKING/ADVISORY, waivers sha256-pinados
