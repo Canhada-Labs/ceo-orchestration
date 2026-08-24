@@ -17,10 +17,12 @@ the live segment. The S321 cure (``9de4efc``) only ever covered fixture time.
 Two guards, ONE mechanism (a green negative is meaningful only because the
 positive control proves the detector can go red):
 
-- ``test_collecting_the_suite_writes_no_audit_lines`` — NEGATIVE, the class:
-  collecting the configured testpaths under a throwaway HOME (no audit
-  carriers, no harness signals — the exact shape ``verify-counts.sh`` runs in)
-  writes ZERO audit-log lines under that HOME.
+- ``test_collecting_hook_legs_writes_no_audit_lines`` (always) and
+  ``test_collecting_all_testpaths_writes_no_audit_lines`` (where PyYAML is
+  importable; skips visibly elsewhere) — NEGATIVE, the class: collecting the
+  testpaths under a throwaway HOME (no audit carriers, no harness signals —
+  the exact shape ``verify-counts.sh`` runs in) writes ZERO audit-log lines
+  under that HOME.
 - ``test_positive_control_import_time_emitter_is_seen`` — the instrument: a
   synthetic module that calls the policy engine at import, collected the same
   way, DOES write lines under the throwaway HOME.
@@ -107,26 +109,47 @@ class TestCollectOnlyAuditIsolation(TestEnvContext):
             capture_output=True, text=True, timeout=600,
         )
 
-    def test_collecting_the_suite_writes_no_audit_lines(self):
-        """NEGATIVE (the class): ``pytest --collect-only`` over the configured
-        testpaths, in production shape, leaves the throwaway HOME free of any
-        audit-log line. Anti-vacuity: the child must have collected ≥1000."""
+    def _assert_collect_writes_nothing(self, args, label: str, min_collected: int) -> None:
+        """Collect ``args`` in production shape and assert (a) the child collected
+        cleanly, (b) enough was collected for the negative to mean anything,
+        (c) no audit-log line exists under the throwaway HOME."""
         home = self._throwaway_home()
-        res = self._collect([], self._production_shape_env(home), _REPO_ROOT)
+        res = self._collect(list(args), self._production_shape_env(home), _REPO_ROOT)
         tail = "\n".join(res.stdout.splitlines()[-3:])
-        self.assertEqual(res.returncode, 0, msg=f"child collect failed:\n{res.stderr[-800:]}\n{tail}")
+        self.assertEqual(res.returncode, 0, msg=f"{label}: child collect failed:\n{res.stderr[-800:]}\n{tail}")
         collected = 0
         for tok in tail.replace(",", " ").split():
             if tok.isdigit():
                 collected = int(tok)
                 break
-        self.assertGreaterEqual(collected, _MIN_COLLECTED,
-                                msg=f"vacuous collect ({collected}): {tail!r}")
+        self.assertGreaterEqual(collected, min_collected,
+                                msg=f"{label}: vacuous collect ({collected}): {tail!r}")
         lines = _audit_log_lines(home)
         self.assertEqual(lines, {}, msg=(
-            "collection-time code reached the audit emitter — these lines would "
-            f"have landed in the LIVE chain on a real run: {lines}"
+            f"{label}: collection-time code reached the audit emitter — these lines "
+            f"would have landed in the LIVE chain on a real run: {lines}"
         ))
+
+    def test_collecting_hook_legs_writes_no_audit_lines(self):
+        """NEGATIVE (the class), leg A — ``.claude/hooks/tests`` (where the S326
+        emitter lived) + ``.claude/hooks/_lib/tests``. Needs nothing beyond
+        pytest, so it runs in EVERY CI job, including the hook-only one."""
+        self._assert_collect_writes_nothing(
+            [".claude/hooks/tests", ".claude/hooks/_lib/tests"], "hook legs", _MIN_COLLECTED)
+
+    def test_collecting_all_testpaths_writes_no_audit_lines(self):
+        """NEGATIVE (the class), leg B — ALL configured testpaths, i.e. exactly
+        the collect ``verify-counts.sh`` runs. ``.claude/scripts/tests`` reaches
+        a PyYAML-requiring script at import (``SystemExit(2)`` ⇒ pytest
+        INTERNALERROR without PyYAML) and the hook-only CI job installs no
+        PyYAML — so this leg runs where PyYAML is importable and SKIPS, visibly,
+        where it is not (S326 fix-forward: the first CI run reported that
+        dependency gap as a red guard)."""
+        try:
+            import yaml  # noqa: F401
+        except ImportError:
+            self.skipTest("PyYAML not importable here: the full-testpaths leg needs it at collection")
+        self._assert_collect_writes_nothing([], "all testpaths", _MIN_COLLECTED)
 
     def test_positive_control_import_time_emitter_is_seen(self):
         """POSITIVE CONTROL (the instrument): a module that calls
