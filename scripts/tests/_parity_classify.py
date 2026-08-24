@@ -219,7 +219,7 @@ def _walk(root: str) -> List[str]:
 
 
 # Delivery routes whose DESTINATION relpath differs from the SOURCE relpath,
-# measured from install.sh's copy functions (PLAN-183 §8.5.1, S324 census).
+# measured from install.sh's copy functions (PLAN-183 §8.5.1, S324/S325 census).
 #
 # This is an ENUMERATION, not an inversion: identity-first stays correct for
 # every path the installer copies under the same relpath, and blind
@@ -229,27 +229,106 @@ def _walk(root: str) -> List[str]:
 # Comparing against it reports the wrong CLASS (UNCLASSIFIED where the truth
 # is STALE): that is defect D2, PLAN-183 §8.2.
 #
-# DEBT (named, PLAN-183 §8.5.2): this table must become SHARED data read by
-# `_framework_manifest_set.sh` and `doctor.sh` too. A second copy in bash
-# would be the "local branch that decides ownership" CLAUDE.md §4 forbids.
-# Promoting it is a W5-b item; this module is the first consumer, not the
-# owner.
+# The table is NO LONGER LOCAL TO THIS MODULE. The §8.5.2 debt is closed: the
+# rows live in `scripts/delivery-routes.tsv` and are read from there by this
+# module AND by `scripts/doctor.sh`. The two dicts below are derived VIEWS
+# over that one file, deliberately kept under their historical names so that
+# every consumer — and every assertion in the unit test — keeps addressing
+# the same contract as before the promotion.
+#
+# Remaining consumer, out of scope by design:
+# `scripts/_framework_manifest_set.sh` is a CANONICAL path and needs the Owner
+# GPG ceremony. The TSV is shaped so it can read the same rows with the bash
+# idiom already used for `ownership_table.tsv`, so no second table has to be
+# invented for it.
+
+_ROUTES_TSV = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "delivery-routes.tsv",
+)
+
+_ROUTE_COLUMNS = ("dest", "src", "transform", "flag_dep", "origin", "note")
+
+# transform values meaning "copied verbatim"; anything else is RENDERED.
+_TRANSFORM_IDENTITY = "identity"
+
+
+def _load_delivery_routes(path: Optional[str] = None) -> List[Dict[str, str]]:
+    """Parse the shared delivery-route table.
+
+    Fail-CLOSED by design (CLAUDE.md §4: fail-open on infrastructure,
+    fail-closed on INPUT). This table decides which source each destination
+    is compared against, so a table we cannot parse is not a degraded read —
+    it is exactly the D2 misclassification this wave cures, arriving
+    silently. Every malformed shape raises instead of defaulting.
+    """
+    tsv = _ROUTES_TSV if path is None else path
+    try:
+        with open(tsv, "r", encoding="utf-8") as fh:
+            raw = fh.read()
+    except (IOError, OSError) as exc:
+        raise RuntimeError("delivery-route table unreadable: %s (%s)" % (tsv, exc))
+
+    routes = []  # type: List[Dict[str, str]]
+    seen = set()  # type: set
+    saw_header = False
+    for lineno, line in enumerate(raw.splitlines(), start=1):
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        fields = line.split("\t")
+        if fields[0] == _ROUTE_COLUMNS[0]:
+            if tuple(f.strip() for f in fields) != _ROUTE_COLUMNS:
+                raise RuntimeError(
+                    "%s:%d header drifted: expected %r, got %r"
+                    % (tsv, lineno, list(_ROUTE_COLUMNS), fields)
+                )
+            saw_header = True
+            continue
+        if len(fields) != len(_ROUTE_COLUMNS):
+            raise RuntimeError(
+                "%s:%d expected %d tab-separated fields, got %d"
+                % (tsv, lineno, len(_ROUTE_COLUMNS), len(fields))
+            )
+        row = dict(zip(_ROUTE_COLUMNS, fields))
+        if not row["dest"] or not row["src"] or not row["transform"]:
+            raise RuntimeError(
+                "%s:%d dest/src/transform must all be non-empty" % (tsv, lineno)
+            )
+        if row["dest"] in seen:
+            raise RuntimeError(
+                "%s:%d duplicate destination %r" % (tsv, lineno, row["dest"])
+            )
+        seen.add(row["dest"])
+        routes.append(row)
+
+    if not saw_header:
+        raise RuntimeError("%s: header row not found" % tsv)
+    if not routes:
+        raise RuntimeError("%s: no delivery routes declared" % tsv)
+    return routes
+
+
+DELIVERY_ROUTES = _load_delivery_routes()
+
+# destination -> real source under the checkout root (verbatim copies).
 _TEMPLATE_DELIVERED = {
-    # destination -> real source under the checkout root
-    "docs/BRANCH-PROTECTION.md": "templates/docs/BRANCH-PROTECTION.md",
-    "docs/rotation-log.md": "templates/docs/rotation-log.md",
+    r["dest"]: r["src"]
+    for r in DELIVERY_ROUTES
+    if r["transform"] == _TRANSFORM_IDENTITY
 }
 
 # Destinations delivered through a TRANSFORM: the bytes the adopter received
-# exist nowhere in the checkout (install.sh:1496-1510 applies
-# `sed s/{{OWNER_HANDLE}}/<handle>/`, 11 occurrences). Resolving them needs the
-# substitution value from the TARGET's install-state, which this classifier
-# does not read. Reporting None is deliberate fail-LOUD: better "source
-# unknown" than silently comparing against this repository's own live
-# `.github/CODEOWNERS` — the one file that carries the maintainer's real
-# handle. Consuming install-state is a W5-b item.
+# exist nowhere in the checkout (install.sh:1508 applies
+# `sed s/{{OWNER_HANDLE}}/<handle>/`). Resolving them needs the substitution
+# value from the TARGET's install-state, which this classifier does not read.
+# Reporting None is deliberate fail-LOUD: better "source unknown" than
+# silently comparing against this repository's own live `.github/CODEOWNERS` —
+# the one file that carries the maintainer's real handle. Consuming
+# install-state is a W5-b item.
 _RENDERED_DELIVERED = {
-    ".github/CODEOWNERS": "templates/.github/CODEOWNERS.template",
+    r["dest"]: r["src"]
+    for r in DELIVERY_ROUTES
+    if r["transform"] != _TRANSFORM_IDENTITY
 }
 
 

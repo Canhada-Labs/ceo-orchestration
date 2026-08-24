@@ -389,6 +389,64 @@ $_cf_rel
   return 1
 }
 
+# ---------------------------------------------------------------------------
+# Shared delivery-route table (PLAN-183 W5, S325 — defect D4)
+# ---------------------------------------------------------------------------
+# Truth: scripts/delivery-routes.tsv — the SAME file scripts/tests/_parity_classify.py
+# reads. Resolving a destination as "$SOURCE_DIR/$rel" assumes IDENTITY, which
+# is false for every route the installer delivers from `templates/`: the path
+# that resolves is a DIFFERENT framework artifact the adopter never received.
+# That is defect D4, and at _restore_file it does not merely misclassify — it
+# REPAIRS with the wrong bytes, and the post-copy check re-hashes the
+# DESTINATION, so a wrong-source copy that happens to match baseline passes
+# silently.
+#
+# Contract of _route_source:
+#   stdout = source relpath, exit 0 : identity route — hashable and copyable
+#   exit 1                          : no route declared — identity applies
+#   exit 2                          : RENDERED route (a transform ran at
+#                                     install time) — the delivered bytes
+#                                     exist in NO checkout, so there is
+#                                     nothing to hash and nothing to copy
+#
+# bash 3.2 floor (see the portability guard above): `declare -A` is
+# unavailable, so the lookup is a linear scan. The table is ~7 lines.
+# Skip guards act on the FIRST FIELD only, matching the idiom already used for
+# ownership_table.tsv in scripts/tests/test-ownership-verdict-unit.sh:61.
+DELIVERY_ROUTES_TSV="${DELIVERY_ROUTES_TSV:-$SOURCE_DIR/scripts/delivery-routes.tsv}"
+
+_route_source() {
+  _rs_want="$1"
+  _rs_rc=1
+  if [ ! -f "$DELIVERY_ROUTES_TSV" ]; then
+    return 1
+  fi
+  while IFS="$( printf '\t' )" read -r _rs_dest _rs_src _rs_transform _rs_rest; do
+    if [ -z "${_rs_dest:-}" ]; then continue; fi
+    case "$_rs_dest" in \#*|dest) continue ;; esac
+    if [ "$_rs_dest" != "$_rs_want" ]; then continue; fi
+    # Fail-CLOSED on malformed input (CLAUDE.md §4; rail S325 P2-1). An
+    # ABSENT or empty transform must never default to "copyable": a
+    # truncated row would otherwise be treated as identity and doctor would
+    # restore the live source over a rendered destination — re-opening the
+    # maintainer-handle leak the rendered branch exists to close. Only the
+    # literal string `identity` is copyable; everything else (rendered,
+    # unknown, empty, missing column) is rc=2.
+    case "${_rs_transform:-}" in
+      identity)
+        if [ -z "${_rs_src:-}" ]; then
+          _rs_rc=2          # declared identity but no source: malformed
+        else
+          printf '%s\n' "$_rs_src"; _rs_rc=0
+        fi
+        ;;
+      *) _rs_rc=2 ;;
+    esac
+    break
+  done < "$DELIVERY_ROUTES_TSV"
+  return "$_rs_rc"
+}
+
 # Restore one hash-record file from SOURCE_DIR. Preconditions already checked
 # by the caller: source exists AND H_src == H_base, and DRY_RUN handled by the
 # caller (a dry-run preview leaves the finding UNRESOLVED — the disk still
@@ -397,8 +455,18 @@ $_cf_rel
 _restore_file() {
   _rf_rel="$1"
   _rf_base="$2"
+  # D4: repair from the route's SOURCE, never from the destination relpath.
+  _rf_rc=0
+  _rf_src="$( _route_source "$_rf_rel" )" || _rf_rc=$?
+  if [ "$_rf_rc" -eq 2 ]; then
+    _log "    RESTORE-BLOCKED (delivered through a transform — the bytes exist in no checkout): $_rf_rel"
+    return 1
+  fi
+  if [ "$_rf_rc" -ne 0 ] || [ -z "${_rf_src:-}" ]; then
+    _rf_src="$_rf_rel"
+  fi
   mkdir -p "$TARGET/$( dirname "$_rf_rel" )"
-  cp -p "$SOURCE_DIR/$_rf_rel" "$TARGET/$_rf_rel"
+  cp -p "$SOURCE_DIR/$_rf_src" "$TARGET/$_rf_rel"
   # Post-copy verification: the restored content MUST re-hash to the recorded
   # baseline, or the uninstall SHA-identical property would silently not hold
   # (TOCTOU on the source between classify and copy).
@@ -504,7 +572,17 @@ while IFS= read -r line || [ -n "$line" ]; do
 
       if [ ! -e "$fpath" ] && [ ! -L "$fpath" ]; then
         MISSING_COUNT=$((MISSING_COUNT + 1))
-        src_hash="$( _hash_file "$SOURCE_DIR/$rel" 2>/dev/null || true )"
+        # D4: hash the route's SOURCE. A rendered route yields an empty
+        # src_hash on purpose, which the existing branch below already
+        # reports as not-repairable — the correct verdict.
+        _ms_rc=0
+        src_rel="$( _route_source "$rel" )" || _ms_rc=$?
+        if [ "$_ms_rc" -eq 2 ]; then
+          src_hash=""
+        else
+          if [ "$_ms_rc" -ne 0 ] || [ -z "${src_rel:-}" ]; then src_rel="$rel"; fi
+          src_hash="$( _hash_file "$SOURCE_DIR/$src_rel" 2>/dev/null || true )"
+        fi
         if [ -z "$src_hash" ]; then
           _log "    MISSING (framework checkout no longer ships this file): $rel"
           BLOCKED_COUNT=$((BLOCKED_COUNT + 1))
@@ -550,7 +628,15 @@ while IFS= read -r line || [ -n "$line" ]; do
       fi
 
       DRIFT_COUNT=$((DRIFT_COUNT + 1))
-      src_hash="$( _hash_file "$SOURCE_DIR/$rel" 2>/dev/null || true )"
+      # D4: hash the route's SOURCE (see the MISSING branch above).
+      _dr_rc=0
+      src_rel="$( _route_source "$rel" )" || _dr_rc=$?
+      if [ "$_dr_rc" -eq 2 ]; then
+        src_hash=""
+      else
+        if [ "$_dr_rc" -ne 0 ] || [ -z "${src_rel:-}" ]; then src_rel="$rel"; fi
+        src_hash="$( _hash_file "$SOURCE_DIR/$src_rel" 2>/dev/null || true )"
+      fi
       if [ -z "$src_hash" ]; then
         _log "    DRIFT (framework checkout no longer ships this file — not repairable): $rel"
         BLOCKED_COUNT=$((BLOCKED_COUNT + 1))

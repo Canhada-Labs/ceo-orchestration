@@ -284,6 +284,149 @@ class TestLiveRepoRoutes(_Tree):
             % sorted(unaccounted),
         )
 
+    # ---- the shared route table (PLAN-183 §8.5.2 debt, closed S325) -------
+
+    def test_route_table_is_shared_data_read_from_disk(self) -> None:
+        """USE, not mention -- debate convergence C3 / finding A9.
+
+        Verifying the promotion with `grep -l delivery-routes.tsv` proves the
+        filename APPEARS in a consumer; it does not prove the consumer
+        consults it. A module could grep-match and still carry a private
+        constant. So this asserts the views are exactly the projection of
+        what the TSV on disk currently says, at the shared path both
+        consumers agree on. Paired with the removal control (deleting the
+        table must make this suite red), that is behavioural proof.
+        """
+        tsv = Path(pc._ROUTES_TSV)
+        self.assertTrue(
+            tsv.is_file(),
+            "the shared route table is missing at %s -- the two consumers "
+            "have nothing to agree on" % tsv,
+        )
+        self.assertEqual(
+            tsv.relative_to(REPO).as_posix(),
+            "scripts/delivery-routes.tsv",
+            "the table moved; `scripts/doctor.sh` resolves it by that exact "
+            "relpath, so a move here silently un-shares it",
+        )
+        on_disk = pc._load_delivery_routes()
+        self.assertEqual(
+            pc._TEMPLATE_DELIVERED,
+            {
+                r["dest"]: r["src"]
+                for r in on_disk
+                if r["transform"] == pc._TRANSFORM_IDENTITY
+            },
+            "_TEMPLATE_DELIVERED is not the projection of the table on disk "
+            "-- it has drifted back into a module-local constant",
+        )
+        self.assertEqual(
+            pc._RENDERED_DELIVERED,
+            {
+                r["dest"]: r["src"]
+                for r in on_disk
+                if r["transform"] != pc._TRANSFORM_IDENTITY
+            },
+            "_RENDERED_DELIVERED is not the projection of the table on disk",
+        )
+
+    def test_table_rows_match_the_installers_own_call_sites(self) -> None:
+        """Breaks the tautology that let a WRONG source pass.
+
+        Measured in S325: repointing `docs/BRANCH-PROTECTION.md` at
+        `templates/docs/rotation-log.md` -- a source that is wrong but
+        present -- kept all ten pre-existing tests GREEN. The cause is
+        structural: the live-route assertions compare `_src_digest` against
+        the digest of the source THE TABLE ITSELF declares, so both sides of
+        the equality move together and no amount of digest-checking can tell
+        the right source from a wrong one.
+
+        The only way out is an INDEPENDENT truth. That truth is the
+        installer's own copy call-sites: `install_docs_template <src> <dst>`
+        plus the one inline rendered branch. Both directions are asserted --
+        a missing row and an invented row each fail here.
+        """
+        installer = (REPO / "scripts" / "install.sh").read_text()
+        joined = re.sub(r"\\\n\s*", " ", installer)  # join line continuations
+        pairs = set(
+            re.findall(r'install_docs_template\s+"([^"]+)"\s+"([^"]+)"', joined)
+        )
+        # The rendered branch does not go through the helper (inline sed).
+        for dest in re.findall(
+            r'local dst="\$TARGET/(\.github/CODEOWNERS)"', installer
+        ):
+            pairs.add(("templates/.github/CODEOWNERS.template", dest))
+        self.assertTrue(
+            pairs,
+            "no delivery routes parsed from install.sh -- the independent "
+            "truth this test depends on is gone, so a green here would be "
+            "vacuous",
+        )
+
+        table = {r["dest"]: r["src"] for r in pc.DELIVERY_ROUTES}
+
+        wrong = []
+        for src, dest in sorted(pairs):
+            declared = table.get(dest)
+            if declared is None:
+                wrong.append(
+                    "%s: MISSING from the table (installer delivers it from %s)"
+                    % (dest, src)
+                )
+            elif declared != src:
+                wrong.append(
+                    "%s: table says %r, installer says %r" % (dest, declared, src)
+                )
+        self.assertEqual(
+            wrong,
+            [],
+            "the shared table disagrees with install.sh about where these "
+            "destinations come from: %s. A wrong source makes every consumer "
+            "compare against the wrong bytes -- that is defect D2/D3/D4." % wrong,
+        )
+
+        invented = sorted(set(table) - {dest for _src, dest in pairs})
+        self.assertEqual(
+            invented,
+            [],
+            "the table declares destination(s) install.sh never delivers: %s. "
+            "An invented row makes doctor.sh repair a file the adopter was "
+            "never given." % invented,
+        )
+
+    def test_malformed_table_fails_closed(self) -> None:
+        """A table we cannot parse must RAISE, never default.
+
+        CLAUDE.md §4: fail-open on infrastructure, fail-closed on INPUT. This
+        table decides which source each destination is compared against, so a
+        silently-degraded read is not a degraded read -- it is the D2
+        misclassification arriving quietly.
+        """
+        header = "\t".join(pc._ROUTE_COLUMNS)
+        good = "docs/x.md\ttemplates/docs/x.md\tidentity\t-\torigin\tnote"
+        cases = {
+            "header drifted": "dest\tsrc\ttransform\n" + good,
+            "wrong field count": header + "\ndocs/x.md\ttemplates/docs/x.md\tidentity",
+            "duplicate destination": header + "\n" + good + "\n" + good,
+            "empty dest": header + "\n\ttemplates/docs/x.md\tidentity\t-\to\tn",
+            "no header": good,
+            "no routes": "# only comments\n" + header,
+        }
+        for label, body in sorted(cases.items()):
+            path = self.tmp / ("routes-%s.tsv" % label.replace(" ", "-"))
+            path.write_text(body + "\n", encoding="utf-8")
+            with self.assertRaises(RuntimeError, msg="%s parsed instead of raising" % label):
+                pc._load_delivery_routes(str(path))
+
+        # Positive control: the same reader accepts a well-formed table, so a
+        # green above cannot come from a reader that rejects everything.
+        ok = self.tmp / "routes-ok.tsv"
+        ok.write_text(header + "\n" + good + "\n", encoding="utf-8")
+        parsed = pc._load_delivery_routes(str(ok))
+        self.assertEqual(len(parsed), 1)
+        self.assertEqual(parsed[0]["dest"], "docs/x.md")
+        self.assertEqual(parsed[0]["src"], "templates/docs/x.md")
+
 
 if __name__ == "__main__":
     unittest.main()

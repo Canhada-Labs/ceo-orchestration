@@ -1,0 +1,21 @@
+# PLAN-183 W5 — delivery route table. THIS FILE IS THE TRUTH.
+# Destination relpath -> (source relpath, transformation). Reasoning lives
+# in PLAN-183 §8.5.1/§8.5.2; values live ONLY here. A second copy in bash or
+# Python would be the "local branch that decides ownership" CLAUDE.md §4 forbids.
+# Measured from scripts/install.sh (S324/S325 census): install_docs_template
+# :1446-1474, install_docs_templates :1476-1482, install_github_templates
+# :1488-1523. Both delivery functions are gated on CEREMONY != user (:1484, :1525).
+# Conventions: transform = "identity" (verbatim cp) or "substitute:<token>".
+#   flag_dep = the install.sh flag the route depends on; "-" = unconditional,
+#   "!github-owner" = the else-branch taken when the flag is ABSENT.
+# WARNING: .github/CODEOWNERS and .github/CODEOWNERS.template are MUTUALLY
+#   EXCLUSIVE (install.sh:1496 elif vs :1511 else) — any single run delivers 5
+#   files, never 6. A table keyed by DESTINATION needs both rows anyway.
+# note carries PROSE ONLY. Structured values live in columns.
+dest	src	transform	flag_dep	origin	note
+docs/BRANCH-PROTECTION.md	templates/docs/BRANCH-PROTECTION.md	identity	-	install_docs_templates	D2: a root homonym exists; comparing against it reports UNCLASSIFIED where the truth is STALE
+docs/rotation-log.md	templates/docs/rotation-log.md	identity	-	install_docs_templates	D2: a root homonym exists; latent, same class as BRANCH-PROTECTION.md
+.github/CODEOWNERS	templates/.github/CODEOWNERS.template	substitute:{{OWNER_HANDLE}}	github-owner	install_github_templates	rendered at install (install.sh:1508); the delivered bytes exist nowhere in a checkout, so it resolves to None fail-LOUD
+.github/CODEOWNERS.template	templates/.github/CODEOWNERS.template	identity	!github-owner	install_github_templates	else-branch: same source as the rendered row, different destination
+.github/workflows/validate.yml.template	templates/.github/workflows/validate.yml.template	identity	-	install_github_templates	the .template suffix SURVIVES delivery; the adopter never gets a live workflow from install
+.github/workflows/benchmarks.yml.template	templates/.github/workflows/benchmarks.yml.template	identity	-	install_github_templates	the .template suffix SURVIVES delivery; the adopter never gets a live workflow from install
