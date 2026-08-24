@@ -132,7 +132,6 @@ def _audit_dir() -> Path:
     env_dir = os.environ.get("CEO_AUDIT_LOG_DIR")
     if env_dir:
         return Path(env_dir)
-    home = os.environ.get("HOME") or str(Path.home())
     return _rp.runtime_state_dir()
 
 

@@ -97,6 +97,25 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+# PLAN-182 (S325) — resolve runtime state through the SINGLE resolver
+# (ADR-001), never by rebuilding the slug here. This file runs in the
+# ADOPTER's tree, where `_lib` is installed under `.claude/hooks/`; a partial
+# install must degrade, not crash a statusline, so the import is guarded and
+# `_audit_dir()` keeps the documented legacy fallback below.
+import sys as _sys_rp
+from pathlib import Path as _Path_rp
+
+_HOOKS_RP = _Path_rp(__file__).resolve()
+for _anc in _HOOKS_RP.parents:
+    if (_anc / ".claude" / "hooks" / "_lib").is_dir():
+        if str(_anc / ".claude" / "hooks") not in _sys_rp.path:
+            _sys_rp.path.insert(0, str(_anc / ".claude" / "hooks"))
+        break
+try:
+    from _lib import runtime_paths as _rp  # noqa: E402  # single resolver
+except Exception:  # noqa: BLE001 — partial upgrade: degrade, never crash
+    _rp = None  # type: ignore[assignment]
+
 SCHEMA = "statusline-sidecar/v1"
 SOURCE = "statusline-ceo/v1"
 _EMIT_ACTION = "statusline_sidecar_write"
@@ -120,11 +139,28 @@ _BUCKET_LABELS = (
 
 
 def _audit_dir() -> Path:
+    """Per-PROJECT runtime state dir, resolved by the single resolver.
+
+    PLAN-182 (S325): this template used to rebuild
+    `$HOME/.claude/projects/ceo-orchestration` literally. Every adopter that
+    installed it therefore wrote into a directory named after THIS framework
+    instead of their own project, entangling their HMAC chain with every
+    other project under the same $HOME — the class PLAN-182 W1 closed for the
+    live tree and left open in this orphan.
+
+    Fallback shape mirrors `.claude/hooks/SessionEnd.py`: fail-OPEN with a
+    stderr breadcrumb, because a partial upgrade must not crash a statusline.
+    """
     env_dir = os.environ.get("CEO_AUDIT_LOG_DIR")
     if env_dir:
         return Path(env_dir)
+    if _rp is not None:
+        return _rp.runtime_state_dir()
+    sys.stderr.write(
+        "# statusline: _lib/runtime_paths ausente — fallback legado (partial upgrade)\n"
+    )
     home = os.environ.get("HOME") or str(Path.home())
-    return Path(home) / ".claude" / "projects" / "ceo-orchestration"
+    return Path(home) / ".claude" / "projects" / "ceo-orchestration"  # rp-allow: partial-upgrade-fallback
 
 
 def _default_sidecar_path() -> Path:
