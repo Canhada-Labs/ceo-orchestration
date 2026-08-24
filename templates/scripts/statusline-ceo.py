@@ -49,7 +49,15 @@ Path resolution (mirror of ``_lib/audit_emit._audit_dir()``, ADR-001):
     $CEO_STATUSLINE_SIDECAR                              (full-path override)
     else <audit-dir>/state/statusline-snapshot.json
     where <audit-dir> = $CEO_AUDIT_LOG_DIR
-                        or ~/.claude/projects/ceo-orchestration
+                        or _lib.runtime_paths.runtime_state_dir()
+                           = $CLAUDE_PROJECT_DIR_NATIVE, else
+                             ~/.claude/projects/<native-slug>
+                           (the project's own path with `/` -> `-`)
+
+    On a partial upgrade where `_lib/runtime_paths` is absent, the resolution
+    degrades to the legacy `~/.claude/projects/ceo-orchestration` and says so
+    on stderr. Operators reading this contract to find a sidecar: on a normal
+    complete install it is under the NATIVE-SLUG dir, not the legacy one.
 
 Atomic write: tmp file in the same dir + ``os.replace``. Content is
 numbers / enum-ish ids only — free text from stdin is never echoed.

@@ -131,7 +131,10 @@ Wrapper que fecha os 7 gaps da tabela do estudo (cada linha = 1 AC):
 - HONESTIDADE: não reivindicar tamper-evidence de execution-context
   entre iterações (HMAC RESERVED, zero produtores até no swarm —
   ADR-133:166-182). Documentar a interação delay×TTL de cache
-  (F(Gate1+2) ≈ 45-55k re-pagos se o cache expirar entre ticks).
+  (F(Gate1+2) **≈ 97.292 MEDIDO** re-pagos se o cache expirar entre ticks;
+  o `45-55k` que esta linha pedia para documentar está REFUTADO — deixar
+  o requisito antigo carregaria a premissa obsoleta para dentro da
+  implementação do W2 e dos seus controles de custo).
 - Primeiro consumidor real: ciclo `nightly-proposals.py` →
   `morning_ledger.py` (caso 1.1 do estudo — $0, ratificação
   permanece Owner-only).

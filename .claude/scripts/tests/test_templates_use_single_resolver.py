@@ -43,15 +43,42 @@ if str(_HOOKS_DIR) not in sys.path:
 
 from _lib.testing import TestEnvContext  # noqa: E402
 
-# The legacy literal, matched as a CONSTRUCTED path rather than as prose: a
-# comment or docstring naming it (as this very file's docstring does) must not
-# trip the guard. The signature is the string appearing as a path segment
-# inside a quoted expression next to `projects`.
+# The legacy literal, matched as a CONSTRUCTED path rather than as prose.
+#
+# Two forms, and the second one was a FALSE GREEN until the S325 rail caught
+# it: the Python idiom (`"projects" / "ceo-orchestration"`) and the SHELL
+# idiom, where the segment continues into a path
+# (`.../projects/ceo-orchestration/state"`). The original pattern required a
+# quote immediately after the segment, so every suffixed use — including the
+# two delivered pre-push gates — slipped through.
+#
+# The trailing boundary is therefore a path separator, a quote, or
+# end-of-line; NOT "quote only". A prose mention (as in this file's own
+# docstring, or a sentence ending in a period) still does not match, which is
+# what keeps the guard from tripping on its own documentation.
 _LITERAL_RE = re.compile(
     r"""["']projects["']\s*/\s*["']ceo-orchestration["']"""
-    r"""|projects/ceo-orchestration["']"""
+    r"""|projects/ceo-orchestration(?=["'/]|$)"""
 )
 _ALLOW_MARKER = "rp-allow:"
+
+# Debt DECLARED by path, never hidden by a blind pattern. Each entry is a
+# template that still builds the legacy literal and CANNOT be cured without a
+# canonical edit; the reason is recorded so the entry is auditable rather than
+# an excuse. `rp-allow:` is deliberately NOT used for these — that marker
+# means "documented partial-upgrade fallback", and these are neither.
+_DECLARED_DEBT = {
+    "templates/codex/pre-push-review-gate.sh": (
+        "shell consumer: needs the resolver callable from bash, and "
+        "_lib/runtime_paths.py has no __main__ and is CANONICAL. Route "
+        "decided (expose a CLI); the edit belongs to the ceremony. An inline "
+        "`python3 -c` would invent a second invocation convention."
+    ),
+    "templates/grok/pre-push-review-gate.sh": (
+        "same class as the codex twin: shell consumer, blocked on the same "
+        "canonical CLI. Cure both together or the twins diverge."
+    ),
+}
 
 
 class TestTemplatesUseSingleResolver(TestEnvContext):
@@ -65,6 +92,7 @@ class TestTemplatesUseSingleResolver(TestEnvContext):
 
         scanned = 0
         offenders = []
+        debt_seen = set()
         for path in sorted(TEMPLATES.rglob("*")):
             if not path.is_file() or path.suffix not in {".py", ".sh"}:
                 continue
@@ -78,6 +106,10 @@ class TestTemplatesUseSingleResolver(TestEnvContext):
                     continue
                 if _ALLOW_MARKER in line:
                     continue  # documented partial-upgrade fallback
+                rel = path.relative_to(REPO).as_posix()
+                if rel in _DECLARED_DEBT:
+                    debt_seen.add(rel)
+                    continue
                 offenders.append(
                     "%s:%d: %s" % (path.relative_to(REPO), lineno, line.strip())
                 )
@@ -97,6 +129,18 @@ class TestTemplatesUseSingleResolver(TestEnvContext):
             "writes into a dir named after THIS framework, entangling their "
             "HMAC chain with every other project under the same $HOME:\n%s"
             % "\n".join(offenders),
+        )
+
+        # The declared-debt list must not rot into a permanent excuse: if a
+        # listed path no longer builds the literal, it was cured and the entry
+        # has to go. Failing here is the good kind of red.
+        stale_debt = sorted(set(_DECLARED_DEBT) - debt_seen)
+        self.assertEqual(
+            stale_debt,
+            [],
+            "declared-debt entr(ies) no longer build the legacy literal — "
+            "they were cured, so remove them from _DECLARED_DEBT instead of "
+            "carrying a stale exemption: %s" % stale_debt,
         )
 
     def test_allow_marker_is_load_bearing(self) -> None:

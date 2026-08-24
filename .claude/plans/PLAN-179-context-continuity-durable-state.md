@@ -172,8 +172,10 @@ funciona em sessões curtas — anti-correlacionada com o próprio caso de uso.
 
 Três conclusões que mudam o desenho:
 
-1. **O piso de thrashing deste framework é `T ≈ 60k`.** O mínimo permitido
-   pela API (`trigger.value = 50000`) está **abaixo** dele. Este repo
+1. **O piso de thrashing deste framework é `T ≈ 107k`** (`F+S` com o `F`
+   MEDIDO; a versão anterior desta linha dizia `T ≈ 60k`, derivado do
+   `F = 50k` refutado). O mínimo permitido pela API
+   (`trigger.value = 50000`) está **muito** abaixo dele. Este repo
    estruturalmente não pode usar compactação agressiva.
 2. **A faixa ótima medida na literatura (80k–120k, `research-S309.md
    §2.4`) rende aqui apenas η de 25–42%** — não porque a faixa esteja
@@ -599,7 +601,7 @@ memória (`research-S309.md §3`): *write-gate validation* e
   ciclo fica **abaixo** da faixa 40–60% que esta linha estimava: com o `F`
   medido, η é 42% em `T=184k` e cai a 29% em `T=150k` (§2.1 reconciliada).
   Dependência declarada, não escondida — e agora dimensionada.
-- **A tabela η de §2.1 é estimativa até W0.** Usa a heurística chars/4 do
+- **~~A tabela η de §2.1 é estimativa até W0.~~ MEDIDA na S322, reconciliada na S325** — a tabela agora usa o `F` observado (97.292; mediana da série 98.636), não a heurística. O parágrafo abaixo descreve o método ANTIGO e fica como registro histórico. Usava a heurística chars/4 do
   `context-budget.py`, explicitamente não o tokenizer da Anthropic, e um
   `F=50k` interpolado. A forma da curva e o piso de thrashing (`T ≈ F+S`)
   são robustos; os valores absolutos não são, até US2 medi-los.

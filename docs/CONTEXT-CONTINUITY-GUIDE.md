@@ -157,7 +157,9 @@ trusting any figure here — the instrument is
 Three consequences for an adopter:
 
 1. **The thrashing floor is roughly `T ≈ F + S`.** For this framework's own
-   surface that is ≈60k — *below* it you re-pay more than you produce.
+   surface that is **≈107k** with the MEASURED `F` — *below* it you re-pay
+   more than you produce. (This line previously said ≈60k, derived from the
+   refuted `F = 50k`; the measurement is no longer owed — it was taken.)
 2. **The lever is `F`, not `T`.** Lowering the compaction threshold without
    shrinking your governance surface only picks a worse point on the same
    curve.
