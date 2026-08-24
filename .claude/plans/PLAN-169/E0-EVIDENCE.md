@@ -2,7 +2,13 @@
 
 > **Procedência: VERIFICADA, não re-gerada.** O relatório da S300 foi
 > localizado em `~/.rc2-backup/e0-report-s300.txt`, conferido contra o
-> hash pinado no `PLAN-179/LEDGER.md:68` (`d07935b3…`) e copiado
+> hash pinado no `PLAN-179/LEDGER.md` (hoje `:134`, ancorado no fragmento
+> de UMA linha `AC-6 restante` — a citação `:68` que esta linha trazia estava
+> STALE: a linha 68 fala do nome do artefato do pack e não contém sha nenhum.
+> Corrigido na S325, e a âncora é de uma linha por escolha: a primeira
+> tentativa usou `conferindo o sha ...`, que atravessa um newline no LEDGER e
+> portanto nenhum grep acha — âncora inachável não é melhor que número de
+> linha stale, só falha mais quieto) e copiado
 > **byte-a-byte** para dentro do repo. `cmp` = idêntico; nenhuma linha
 > foi reescrita, reformatada ou sumarizada. O runner **não** foi
 > re-executado nesta sessão (não havia motivo: o artefato autentica).
@@ -14,7 +20,7 @@
 | relatório (no repo) | `.claude/plans/PLAN-169/e0-report-s300.txt` |
 | origem | `~/.rc2-backup/e0-report-s300.txt` (fora do repo desde a S300) |
 | sha256 | `d07935b3fc67d48dd0101a989b64b1ee04e071c3ac8c2550160baf68672e4f34` |
-| prefixo pinado | `d07935b3fc67d48d…` (`PLAN-179/LEDGER.md:68`) — **CONFERE** |
+| prefixo pinado | `d07935b3fc67d48d…` (`PLAN-179/LEDGER.md`, fragmento de uma linha `AC-6 restante`, hoje `:134` — a citação `:68` estava STALE, corrigida na S325) — **CONFERE**, re-verificado por `shasum -a 256` na S325 |
 | tamanho / mtime da origem | 4803 bytes · 2026-08-09 19:06 (-03) |
 | runner | `.claude/plans/PLAN-169/e0-serial-fraction.py` (rastreado) |
 
@@ -134,4 +140,9 @@ Fecha a **metade E0** do AC-6 (E0 executado, S medido com inputs
 impressos, decisão registrada, evidência dentro do repo). A outra
 metade do AC-6 — **criar o PLAN-170** com orçamento próprio declarado e
 gatilho nomeado (pós-corte v1.4.0-rc.1) — continua **aberta**
-(`PLAN-179/LEDGER.md:68-69`).
+(`PLAN-179/LEDGER.md`, fragmento de uma linha `**criar PLAN-170**`, hoje `:134`; a
+citação `:68-69` estava STALE, corrigida na S325). **Medido na S325:** o
+PLAN-170 EXISTE com `budget_tokens` e `external_wait` declarados, mas está
+`status: draft` e o gatilho dele é a tag `v1.4.0-rc.1`, que não existe —
+logo o AC-6 segue parcial por uma razão que nenhuma sessão resolve, e o
+box fica ABERTO de propósito.

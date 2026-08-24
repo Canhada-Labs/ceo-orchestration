@@ -127,6 +127,68 @@ por gates locais ⇒ W4 morre) ANTES de qualquer piloto.
 **Runbook sessão 1:** rodar o gate retrospectivo do W4 (barato,
 read-only, pode matar a wave inteira) + spike W1 (MCP stdio mínimo).
 
+### ✅ Pré-gate da W4 — EXECUTADO (S325). Veredito: **W4 VIVE**, com uma ressalva que muda o piloto.
+
+Medição read-only, 4 lanes (vereditos de rail, achados de debate, inventário
+dos gates locais existentes) + síntese. **N=76 achados classificados** de um
+universo de 212–293 candidatos (**cobertura ~26–36%**, não o corpus inteiro).
+
+Classificação: **LOCAL-DETECTABLE 56 / MODEL-ONLY 14 / AMBIGUOUS 6.**
+
+| leitura | fração | veredito (corte 30%) |
+|---|---:|---|
+| AMBIGUOUS → model-only | **73,7%** | VIVE |
+| AMBIGUOUS excluídos | 80,0% | VIVE |
+| AMBIGUOUS → local | 81,6% | VIVE |
+| **piso HOSTIL** (toda deflação de todas as lanes aplicada de uma vez) | **51,4%** | VIVE |
+
+A faixa **não** encosta em 30% — clareia por 20+ pontos até no piso hostil.
+O critério está satisfeito de forma NÃO-marginal.
+
+**⚠️ A ressalva, e ela é operacional, não estatística.** Existe UMA
+sub-população no corpus que REPROVA o critério: o cluster de
+resume/remote-state (`PLAN-174` r1 F6) mede **~23%** de lintabilidade sobre 5
+NO-GOs consecutivos, e ~34% sobre 6 classes nomeadas. ⇒ **Se o piloto da W4
+mirar esse cluster, ele falha o próprio pré-gate.** O veredito VIVE é sobre o
+corpus TODO; escolher o alvo do piloto dentro daquele cluster inverteria o
+resultado. Isso é decisão de escopo do piloto, e fica aqui declarada.
+
+**Limites, declarados porque mudam o que o número licencia:**
+
+1. **Hindsight conditioning — a maior inflação.** Em 11 de 16 LOCAL-DETECTABLE
+   de uma das lanes, o "gate local que teria pegado" é um check que o PRÓPRIO
+   debate inventou. Um pré-gate honesto exige que o check já EXISTA. Por isso
+   o número a planejar contra é o piso (51,4%), não o teto.
+2. **Amostragem.** 76 de 212–293. A cauda não foi classificada; os 76 são os
+   recentes e bem documentados — enviesados para o período em que o repo já
+   tinha gates.
+3. **Viés de seleção em DUAS direções.** NO-GOs são registrados; passes
+   silenciosos não deixam artefato, logo o denominador verdadeiro é
+   inobservável.
+4. **Sobreposição entre lanes** não deduplicada: alguns defeitos do
+   `PLAN-183` W5-b round-1 aparecem em duas lanes com ids diferentes.
+5. **Natureza da evidência:** ADVISORY. Foi produzida por agentes read-only,
+   não por um instrumento determinístico — vale como base de decisão do Owner,
+   não como gate mecânico. As três provas mais fortes de cada lado estão no
+   relatório da sessão.
+
+**Três LOCAL-DETECTABLE mais fortes** (existiam gates, não foram rodados):
+`179` r1#5 (teste novo com 11 violações de env-write — `check-test-env-hygiene.py`
+já existia e estava verde, só não foi re-rodado após a última edição);
+`179` r1#1 (`upgrade.sh` nunca adiciona o hook que `install.sh` adiciona —
+oráculo de paridade install/upgrade, a MESMA classe do D1 vivo); `183` W5-b
+B-1 (rodar install DUAS vezes derruba os registros, e nenhum Check roda
+install duas vezes).
+
+**Três MODEL-ONLY mais fortes** (justificam manter o segundo modelo):
+`184` r2 (a A0 — matriz 4→2 — nunca foi enumerada: gerar uma alternativa mais
+barata não proposta não é lint); `183` W5-b ("a rota (ii) é a rota (iii)
+disfarçada" — o censo dá a evidência, mas o veredito de que população de
+fixture ≠ população de campo é trabalho de modelo, e derrubou uma decisão do
+Owner); `166` r1 C2 (AC auto-anulável: RC e GA compartilham um SHA, então o
+poll por `head_sha` encontra o run do RC).
+
+
 **Gates de entrada (herdados, verificar antes de abrir):** E0b
 respondido (kill criterion do §4: quota-dominante ⇒ descarta sem
 build) + E5 substrato existente (cross-session).
