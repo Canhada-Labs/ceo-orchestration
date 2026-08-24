@@ -58,6 +58,26 @@ if [[ -n "$UNTRACKED_OK" ]]; then
   printf '  \033[33mNOTA\033[0m untracked nao-canonicos tolerados (nao entram no land):\n%s' "$UNTRACKED_OK"
 fi
 ok "nenhuma modificacao rastreada; untracked (se houver) sao nao-canonicos"
+
+# Os materiais da cerimonia tem de estar COMMITADOS antes de assinar (pair-rail
+# r9 P2): o LAND exige-os rastreados, e commita-los DEPOIS da assinatura muda o
+# HEAD e invalida o Anchor-SHA (G3). Mesma lista do LAND.
+MATERIALS=(
+  ".claude/plans/PLAN-182/OWNER-S326-SIGN.sh"
+  ".claude/plans/PLAN-182/OWNER-S326-LAND.sh"
+  ".claude/plans/PLAN-182/cli-ceremony/PROPOSED-PATCH.md"
+  "$PATCH"
+  "$SENTINEL"
+)
+for m in "${MATERIALS[@]}"; do
+  git ls-files --error-unmatch -- "$m" >/dev/null 2>&1 \
+    || die "material de cerimonia NAO commitado: $m — commite os materiais ANTES de assinar"
+done
+for r in .claude/plans/PLAN-182/cli-ceremony/rail-*.md; do
+  git ls-files --error-unmatch -- "$r" >/dev/null 2>&1 \
+    || die "registro de rail NAO commitado: $r — commite ANTES de assinar"
+done
+ok "materiais e registros de rail rastreados"
 grep -q 'TO-FILL-AT-FINAL-PATCH' "$SENTINEL" && die "Patch-sha256 ainda e placeholder — o patch nao foi finalizado"
 
 if [[ -f "$SENTINEL.asc" ]]; then
@@ -127,11 +147,17 @@ export GPG_TTY="${GPG_TTY:-$(tty 2>/dev/null || true)}"
 if command -v gpgconf >/dev/null 2>&1; then
   gpgconf --kill gpg-agent >/dev/null 2>&1 || printf ''
 fi
-gpg --armor --detach-sign --yes --local-user "$FPR" "$SENTINEL" \
-  || die "gpg falhou.
+if ! gpg --armor --detach-sign --yes --local-user "$FPR" "$SENTINEL"; then
+  # pair-rail r9 P2: o P3 ja reescreveu o sentinel; sem este rollback um
+  # re-run abortaria no P0 ("modificacao rastreada") e a recuperacao seria
+  # manual e nao documentada. Restaura o sentinel do HEAD e sai.
+  git checkout -- "$SENTINEL"
+  rm -f -- "$SENTINEL.asc"
+  die "gpg falhou — sentinel RESTAURADO do HEAD (nada assinado).
   Modo de falha conhecido: 'No pinentry'. Rode NO SEU TERMINAL, nao via agente:
     export GPG_TTY=\$(tty); gpgconf --kill gpg-agent
-  e repita."
+  e repita este script do zero."
+fi
 ok "assinatura gerada: $SENTINEL.asc"
 
 gpg --verify "$SENTINEL.asc" "$SENTINEL" 2>&1 | sed 's/^/    /'
