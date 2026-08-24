@@ -85,10 +85,32 @@ force a matching edit into ``audit_carrier_overrides`` and
 ``TestEnvContext.subprocess_env``. Production code keeps the override in full:
 nothing here touches ``_lib/runtime_paths``, and a test that exercises the
 override sets it for its own duration with ``mock.patch.dict``.
+## Axis 3 — the COLLECTION window (S326, 2026-08-24)
+
+pytest runs NO fixture under ``--collect-only`` — and in a normal run every
+test module is IMPORTED before the session fixture body executes. Import-time
+code that reaches an audit emitter therefore ran with the carriers still
+pointing at the live tree, and Axis 2 had already popped the whole-dir
+override, so nothing could redirect it. Measured: ``test_policy_mutations``
+replayed the policy corpus at import → 124 HMAC-signed, unattributable events
+per ``pytest --collect-only``; ``verify-counts.sh`` runs one before every
+commit → 19 runs / 2,356 links in 12 h = 79% of the live segment.
+
+Cure (``_redirect_collection_window``, import-time like Axis 2): snapshot the
+live log path FIRST (the WS-D1 comparator must still know what "live" means),
+then point the primary anchor ``CEO_AUDIT_LOG_DIR`` + ``CEO_PROJECT_STATE_DIR``
+at a throwaway ``ceo-collect-isolation-*`` tree. The session fixture keeps
+re-pointing everything at its own tree; at session END its restore now hands
+back the COLLECTION tree instead of the live value, which also closes the
+teardown-window escape (a late emit after the restore used to reach the live
+log). ``HOME`` is deliberately NOT touched here — it steers user-site package
+resolution for subprocesses, and the session fixture owns that dance. Guard:
+``.claude/hooks/tests/test_collect_only_audit_isolation.py``.
 """
 
 from __future__ import annotations
 
+import atexit
 import os
 import shutil
 import tempfile
@@ -265,6 +287,113 @@ def _resolve_live_log_path_snapshot() -> Optional[str]:
         return None
 
 
+# --- Axis 3 — collection-window redirect (S326) ----------------------------------
+COLLECT_WINDOW_PREFIX = "ceo-collect-isolation-"
+COLLECT_WINDOW_DIR: Optional[Path] = None
+IMPORT_TIME_LIVE_LOG_SNAPSHOT: Optional[str] = None
+
+
+def _snapshot_is_wellformed(value: str) -> bool:
+    """A usable inherited snapshot is an ABSOLUTE path that does NOT live
+    inside an isolation tree (a stale or redirected value is not truth).
+
+    Nothing about the name is pinned — not the basename and not the extension
+    (pair-rail r6 P2 + r7 P1): the documented ``CEO_AUDIT_LOG_PATH`` override
+    accepts any file (``/srv/audit/current.log``), and rejecting that inherited
+    truth made a worker re-resolve the DEFAULT path — so WS-D1 watched the
+    wrong file."""
+    return (
+        os.path.isabs(value)
+        and COLLECT_WINDOW_PREFIX not in value
+        and "ceo-suite-isolation-" not in value
+    )
+
+
+def _resolve_live_snapshot_outside_isolation() -> Optional[str]:
+    """Resolve the live log path with the whole-dir anchors temporarily removed
+    (pair-rail r2 P1). Used ONLY when an inherited snapshot was rejected: that
+    rejection is the proof the current anchor is an isolation redirect, so
+    resolving through it would hand the rejected path straight back. The
+    resolver then falls back to HOME; a result that still lives inside an
+    isolation tree is not truth either → ``None`` (the WS-D1 comparator fails
+    safe to no-quarantine when the snapshot is absent)."""
+    saved = {k: os.environ.pop(k, None) for k in ("CEO_AUDIT_LOG_DIR", "CEO_PROJECT_STATE_DIR")}
+    try:
+        candidate = _resolve_live_log_path_snapshot()
+    finally:
+        for key, value in saved.items():
+            if value is not None:
+                os.environ[key] = value
+    if candidate is not None and _snapshot_is_wellformed(candidate):
+        return candidate
+    return None
+
+
+def _redirect_collection_window() -> Dict[str, Optional[str]]:
+    """Point the primary audit anchor at a throwaway tree for the window between
+    conftest import and the session fixture body (module docstring, Axis 3).
+
+    Import-time by design, for the same reason as Axis 2. Three steps whose
+    ORDER is the whole point:
+
+    1. The throwaway tree and its ``atexit`` cleanup come FIRST (pair-rail r2
+       P2): ``atexit`` is LIFO and importing ``audit_emit`` (which step 2
+       does) registers the spool drain. Registering ``rmtree`` before that
+       import makes the drain run first and the ``rmtree`` last — the other
+       order let the drain re-create the tree we had just removed, leaking
+       one ``ceo-collect-isolation-*`` per process.
+    2. The live snapshot is captured BEFORE the anchor moves. An inherited,
+       well-formed value wins (pair-rail r1 P1: an xdist worker inherits the
+       truth AND a redirected anchor; re-resolving would return the parent's
+       collection tree). An inherited value that is NOT well-formed is a
+       redirected/stale one: resolve with the anchors removed (r2 P1) — never
+       through the anchor that produced it. Nothing inherited: resolve as the
+       process sees it (an operator-level ``CEO_AUDIT_LOG_DIR`` IS the live
+       location and must be honoured).
+    3. Only then the anchors move to the throwaway tree.
+
+    Returns the previous anchor values — diagnostic only, never restored (a
+    restore anywhere inside the process re-opens the escape at shutdown).
+    """
+    global COLLECT_WINDOW_DIR, IMPORT_TIME_LIVE_LOG_SNAPSHOT
+    # 1) tree + cleanup first (LIFO argument above)
+    root = Path(tempfile.mkdtemp(prefix=COLLECT_WINDOW_PREFIX))
+    atexit.register(shutil.rmtree, str(root), True)
+    audit = root / "audit"
+    state = audit / "state"
+    state.mkdir(parents=True, exist_ok=True)
+    # 2) snapshot before the anchor moves
+    inherited = os.environ.get(LIVE_LOG_SNAPSHOT_VAR) or None
+    if inherited is not None and _snapshot_is_wellformed(inherited):
+        snapshot: Optional[str] = inherited
+    elif inherited is not None:
+        snapshot = _resolve_live_snapshot_outside_isolation()
+    else:
+        snapshot = _resolve_live_log_path_snapshot()
+    IMPORT_TIME_LIVE_LOG_SNAPSHOT = snapshot
+    if snapshot is not None:
+        os.environ[LIVE_LOG_SNAPSHOT_VAR] = snapshot
+    else:
+        os.environ.pop(LIVE_LOG_SNAPSHOT_VAR, None)
+    # 3) move the anchors
+    previous = {
+        "CEO_AUDIT_LOG_DIR": os.environ.get("CEO_AUDIT_LOG_DIR"),
+        "CEO_PROJECT_STATE_DIR": os.environ.get("CEO_PROJECT_STATE_DIR"),
+    }
+    os.environ["CEO_AUDIT_LOG_DIR"] = str(audit)
+    os.environ["CEO_PROJECT_STATE_DIR"] = str(state)
+    # Per-file overrides inherited from the shell could still point a single
+    # sidecar at the live tree; clear them now, exactly as the fixture does.
+    for key in AUDIT_CLEAR_CARRIERS:
+        os.environ.pop(key, None)
+    COLLECT_WINDOW_DIR = root
+    return previous
+
+
+# Import-time side effect #2 (the pair with Axis 2 above) — see the docstring.
+COLLECTION_WINDOW_PREVIOUS: Dict[str, Optional[str]] = _redirect_collection_window()
+
+
 # --- Idempotent redirect state -------------------------------------------------
 # Holds the restore snapshot for the ONE fixture instance that performed the
 # real redirect. None ⇒ no active redirect (next session fixture will activate).
@@ -278,8 +407,14 @@ def _activate_redirect() -> Optional[Dict[str, object]]:
     if _REDIRECT is not None:
         return None  # a sibling conftest's session fixture already redirected
 
-    # 1) Snapshot the live log path BEFORE we touch env (WS-D1 comparator).
-    live_log_snapshot = _resolve_live_log_path_snapshot()
+    # 1) The live log path was snapshotted at IMPORT, before Axis 3 moved the
+    #    anchor (resolving it here would return the collection tree). Fall back
+    #    to resolving only if the import-time capture failed.
+    live_log_snapshot = (
+        IMPORT_TIME_LIVE_LOG_SNAPSHOT
+        if IMPORT_TIME_LIVE_LOG_SNAPSHOT is not None
+        else _resolve_live_log_path_snapshot()
+    )
 
     # 2) Capture the REAL PyYAML user-site BEFORE the HOME redirect so subprocess
     #    Python tooling (e.g. lint-skills' strict-YAML leg) still resolves it.

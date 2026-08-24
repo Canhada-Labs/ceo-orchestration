@@ -57,6 +57,7 @@ if [ "${CEO_CODEX_PUSH_GATE:-1}" = "0" ]; then
 fi
 
 ADVISORY="${CEO_CODEX_PUSH_GATE_ADVISORY:-0}"
+_repo_top="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 
 _zero="0000000000000000000000000000000000000000"
 
@@ -87,12 +88,34 @@ _state_dir() {
   elif [ -n "${CEO_AUDIT_LOG_DIR:-}" ]; then
     printf '%s' "${CEO_AUDIT_LOG_DIR}"
   else
-    printf '%s' "${HOME:-/tmp}/.claude/projects/ceo-orchestration/state"
+    # PLAN-182 OQ-6 (S326): the per-project runtime state dir comes from the
+    # framework single resolver -- never rebuilt here. Rebuilding the literal
+    # made every adopter under one $HOME share ONE review log, so an APPROVE
+    # recorded in one repository satisfied this gate in ANOTHER. Resolver
+    # missing (partial upgrade) or python3 absent => EMPTY: the sidecar
+    # acceptance path (b) is simply unavailable and only per-commit APPROVE
+    # trailers (path a) can clear the push -- the same degradation an oracle
+    # failure already takes. Never a literal fallback.
+    _rp="${_repo_top}/.claude/hooks/_lib/runtime_paths.py"
+    if [ -f "$_rp" ] && command -v python3 >/dev/null 2>&1; then
+      _base="$(CLAUDE_PROJECT_DIR="$_repo_top" python3 "$_rp" --state-dir 2>/dev/null || true)"
+      if [ -n "$_base" ]; then
+        printf '%s/state' "$_base"
+      else
+        echo "pre-push-review-gate: single resolver failed; sidecar APPROVE path unavailable (trailers still clear the push)" >&2
+      fi
+    else
+      echo "pre-push-review-gate: single resolver not found at $_rp; sidecar APPROVE path unavailable (run scripts/upgrade.sh)" >&2
+    fi
   fi
 }
 
 _review_log() {
-  printf '%s/codex-review-log.jsonl' "$(_state_dir)"
+  local sd
+  sd="$(_state_dir)"
+  # Empty state dir (resolver unavailable) => no sidecar log at all.
+  [ -n "$sd" ] || return 0
+  printf '%s/codex-review-log.jsonl' "$sd"
 }
 
 # Collect commits to check for one pushed ref range.
@@ -134,7 +157,7 @@ _commit_has_approve_trailer() {
 _sidecar_has_approve() {
   local fp="$1" log
   log="$(_review_log)"
-  [ -f "$log" ] || return 1
+  [ -n "$log" ] && [ -f "$log" ] || return 1
   # Match a JSON object line that is APPROVE AND carries this fingerprint.
   grep -F "\"fingerprint\": \"${fp}\"" "$log" 2>/dev/null \
     | grep -Eq '"verdict": ?"APPROVE"' && return 0

@@ -1,4 +1,4 @@
-7af3b1eaed0be7ff1c14be34ef4c36da4453c56f95b3cedaf7932d3c0f68be1c  .claude/scripts/local/verify-counts.sh
+3b72d56544a0f0f0a463188e1b0ed0cbd15d8e3f8ff2b8b9db478ad4240e142a  .claude/scripts/local/verify-counts.sh
 62310e466f0b702d7742533c7472f9d63ce96f9d4645361cf9d501b4426c83d0  .claude/scripts/validate-governance.sh
 db8eea5b66e7e144135396a14029fd7511857a3cf42c9e5116e57000dd4ffd62  .claude/scripts/local/_release_tag_guard.py
 fe72ecce835780e2515842bd2d05ee46b063b0ed00d564da75424089efeb67dc  .claude/scripts/check-canonical-doc-freshness.py

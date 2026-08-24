@@ -11,8 +11,8 @@ Plans: PLAN-182
 Wave: wave-cli (OQ-6 — CLI do resolvedor único; Axis 3 do isolamento de testes; manifesto ADR-192)
 Patch: .claude/plans/PLAN-182/cli-ceremony/S326-CLI-CEREMONY.patch
 Patch-sha256: fa78673e5f394ef62ad1a6b6b87dd2b3d9b7d3fe89515aa96aa2edb4942da38b
-Anchor-SHA: TO-FILL-AT-SIGN
-Data: TO-FILL-AT-SIGN
+Anchor-SHA: 318d0bcc0fbfb4f1a5dc126aa066c06d148fd2cd
+Data: 2026-08-24
 
 ## Autorização de governança
 
@@ -29,7 +29,7 @@ Data: TO-FILL-AT-SIGN
   última rodada sem achado P0/P1 é a condição de assinatura.
 
 <!-- BEGIN SIGNED SCOPE -->
-Approved-By: @Canhada-Labs TO-FILL-AT-SIGN
+Approved-By: @Canhada-Labs AE9B236FDAF0462874060C6BCFCFACF00335DC74
 Plans: PLAN-182
 Scope:
   - .claude/governance/gate-scripts-manifest.txt

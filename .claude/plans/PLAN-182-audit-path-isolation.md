@@ -17,6 +17,15 @@ tags: [runtime-state, audit, hmac, salt, confidentiality, isolation, adopter, ad
 
 > ## 🎯 PRÓXIMO FOCO RATIFICADO pelo Owner (2026-08-24): o CLI do resolvedor único
 >
+> **✅ LANDADO na S326 (2026-08-24) pelo `OWNER-S326-LAND.sh` sob o sentinel `wave-cli-approved.md`
+> (assinatura `.asc` commitada com o land; gates G1–G5 + V1–V6 no script):** `__main__` em
+> `_lib/runtime_paths.py` (contrato no docstring §CLI contract), os DOIS templates de
+> pre-push e `ceo-backup.sh`/`ceo-restore.sh` chamam o resolvedor; `_DECLARED_DEBT`
+> esvaziada com asserção POSITIVA (os gates CHAMAM `--state-dir`). O item 3 (alargar o
+> censo M1 para `${VAR:-literal}`) ficou para o closeout da S326 — muda a família publicada
+> no `CLAUDE.md` e o Gate-1 só se edita no closeout. No mesmo pacote: cura ESTRUTURAL do
+> achado S326 (`_lib/test_isolation.py` Axis 3 — redirect da janela de COLEÇÃO no import).
+>
 > Dar um `__main__` a `.claude/hooks/_lib/runtime_paths.py` é a cura de MAIOR
 > retorno por cerimônia hoje, porque **um** patch canônico fecha TRÊS dívidas
 > que estão bloqueadas pela mesma ausência:
@@ -761,9 +770,9 @@ checkout de adopter, onde o fallback degradava em silêncio para
       Check: e2e de upgrade sobre instalacao existente — migra ou declara aceite; falha se nenhum dos dois
 - [x] `[P0]` **RESOLVIDO (S321, 2026-08-23T00:15Z):** o adopter `arbitrage-monitor` rodava cópia PRÉ-W1 e escrevia no literal. **Upgrade executado**, com as quatro pernas medidas (ver AC-5): resolvedor presente, dir próprio, chave HMAC distinta, e o literal com delta **0** entre dois snapshots sob controle positivo — um `emit` real no contexto do adopter aterrissou no diretório NOVO dele, não no literal. A mistura acidental sob o mesmo `$HOME` acabou de fato, não por declaração.
       Check: upgrade do adopter para uma versao com runtime_paths, OU aceite escrito de que o literal permanece como estado legitimo dele
-- [ ] `[P1]` `ceo-backup.sh` / `ceo-restore.sh`: os dois ainda defaultam para `${CEO_PROJECT_NAME:-ceo-orchestration}` e são **INVISÍVEIS ao censo** — rodar o `_m1_hit()` do próprio derivador nos dois devolve `False`, porque o regex M1 exige aspas colando no literal e a forma `${VAR:-literal}` escapa. A exclusão é acidente de regex, não allowlist. Composto: backup lê o dir legado, restore escreve nele — um restore **nunca repopula o dir vivo**.
+- [x] `[P1]` **CURADO S326** — os dois resolvem por `runtime_paths.py --slug/--state-dir`; `--project-slug`/`CEO_PROJECT_NAME` seguem como override EXPLÍCITO, sem default literal; resolvedor ausente ⇒ falha alta (exit 2), nunca palpite. (histórico: ainda defaultavam para `${CEO_PROJECT_NAME:-ceo-orchestration}` e são **INVISÍVEIS ao censo** — rodar o `_m1_hit()` do próprio derivador nos dois devolve `False`, porque o regex M1 exige aspas colando no literal e a forma `${VAR:-literal}` escapa. A exclusão é acidente de regex, não allowlist. Composto: backup lê o dir legado, restore escreve nele — um restore **nunca repopula o dir vivo**.
       Check: os dois scripts operam sobre o dir resolvido, nao sobre o literal; round-trip backup->restore->verify_chain no dir VIVO
-- [ ] `[P1]` **Templates com dono declarado:** `templates/grok/pre-push-review-gate.sh:144` é ENTREGUE ao adopter (`_grok_harness.sh:227`, a doc o chama de "the teeth") e constrói o literal; o gêmeo `templates/codex/pre-push-review-gate.sh:90` é ÓRFÃO (não aparece em `_codex_planned_pairs()`). `templates/scripts/statusline-ceo.py` é duplicata órfã — zero rota de entrega, zero teste; o adopter recebe a cópia VIVA já migrada. Curar exige um resolvedor em SHELL, que `runtime_paths.py` não expõe (não tem `__main__`). Decisão do Owner: expor CLI no módulo, ou aceitar.
+- [x] `[P1]` **CURADO S326 (a decisão abaixo foi executada) — Templates com dono declarado:** `templates/grok/pre-push-review-gate.sh:144` era ENTREGUE ao adopter (`_grok_harness.sh:227`, a doc o chama de "the teeth") e constrói o literal; o gêmeo `templates/codex/pre-push-review-gate.sh:90` é ÓRFÃO (não aparece em `_codex_planned_pairs()`). `templates/scripts/statusline-ceo.py` é duplicata órfã — zero rota de entrega, zero teste; o adopter recebe a cópia VIVA já migrada. Curar exige um resolvedor em SHELL, que `runtime_paths.py` não expõe (não tem `__main__`). Decisão do Owner: expor CLI no módulo, ou aceitar.
       **DECIDIDO — Owner, 2026-08-22 (S322), via AskUserQuestion, texto verbatim da opção escolhida:** "Expor CLI no runtime_paths.py (Recomendado) — Adiciono `__main__` ao módulo, os templates passam a chamar o resolvedor único em vez de reconstruir o literal. Fecha o item e mata a classe na raiz — o adopter deixa de receber o defeito. É a cura, não o contorno."
       Check: nenhum template entregue constroi o literal; orfaos deletados ou sincronizados com teste de paridade
 - [x] `[P1]` Dois adopters no mesmo `$HOME` sem env resolvem para caminhos e chaves distintos — **provado em processo** com HOME isolado; inclusive dois projetos de mesmo BASENAME em pais diferentes (a classe que a W1 curou). Residual conhecido reproduzido: `/srv/a-b/c` e `/srv/a/b-c` colidem em `-srv-a-b-c`, que é a derivação NATIVA do harness.

@@ -53,6 +53,26 @@ canonicalization. Two spellings of one repo via symlinks therefore get
 two state dirs — same behavior the harness itself has for its memory
 dirs. Documented limitation, pinned by test.
 
+## CLI contract (PLAN-182 OQ-6 — Owner decision 2026-08-22, landed S326)
+
+Shell consumers get the SAME resolver, never a rebuilt literal::
+
+    python3 .claude/hooks/_lib/runtime_paths.py [--state-dir | --slug |
+                                                 --project-dir] [--project PATH]
+
+- ``--state-dir`` (default): :func:`runtime_state_dir`; ``--slug``:
+  :func:`project_slug`; ``--project-dir``: the slug input.
+- ``--project PATH`` replaces the slug INPUT (``CLAUDE_PROJECT_DIR`` / cwd).
+  ``CLAUDE_PROJECT_DIR_NATIVE`` still wins for ``--state-dir`` — it is the
+  documented operator override, not a default.
+- Read-only: prints ONE path + newline on stdout, creates nothing, exit 0.
+  Usage error: exit 2, message on stderr, NOTHING on stdout (a caller doing
+  ``dir="$(...)"`` must never capture prose as a path).
+- ONE invocation convention. An inline ``python3 -c`` in a template would
+  be a second one, and the class this cures is "a local branch that
+  re-derives the path" (CLAUDE.md §4). Consumers: the two pre-push review
+  gates in ``templates/{codex,grok}/``, ``ceo-backup.sh``, ``ceo-restore.sh``.
+
 Leaf module: stdlib only, imports nothing from ``_lib`` (loadable from
 any hook, mirrors ``injection_salt``'s constraint). Python ≥ 3.9.
 """
@@ -61,8 +81,9 @@ from __future__ import annotations
 
 import os
 import stat as stat_mod
+import sys
 from pathlib import Path
-from typing import Optional, Union
+from typing import List, Optional, Union
 
 __all__ = [
     "project_dir",
@@ -115,11 +136,15 @@ def _home() -> Path:
     return Path(home) if home else Path.home()
 
 
-def runtime_state_dir() -> Path:
+def runtime_state_dir(
+    project: Optional[Union["os.PathLike[str]", str]] = None,
+) -> Path:
     """Return the per-project runtime state base dir (family root).
 
     Precedence: ``CLAUDE_PROJECT_DIR_NATIVE`` (whole-dir override) →
-    ``$HOME/.claude/projects/<project_slug()>``. Callers create it with
+    ``$HOME/.claude/projects/<project_slug(project)>``. ``project`` (S326,
+    CLI ``--project``) replaces only the slug INPUT; ``None`` keeps the
+    ``CLAUDE_PROJECT_DIR`` / cwd derivation. Callers create it with
     mode ``0o700`` (creation stays at the call sites that already own
     mkdir + permission-validation semantics, e.g. ``spool_writer``).
 
@@ -133,7 +158,7 @@ def runtime_state_dir() -> Path:
     native = os.environ.get("CLAUDE_PROJECT_DIR_NATIVE")
     if native:
         return Path(native)
-    return _home() / ".claude" / "projects" / project_slug()
+    return _home() / ".claude" / "projects" / project_slug(project)
 
 
 def ensure_state_dir(path: Optional[Path] = None,
@@ -179,3 +204,73 @@ def legacy_state_dir() -> Path:
     style sweeps can allowlist the few sanctioned callers.
     """
     return _home() / ".claude" / "projects" / LEGACY_PROJECT_LITERAL
+
+
+# ---------------------------------------------------------------------------
+# CLI — the resolver for SHELL consumers (PLAN-182 OQ-6; Owner decision
+# 2026-08-22, S322; landed S326).
+#
+# The two pre-push review gates delivered to adopters and the operator
+# scripts ceo-backup.sh / ceo-restore.sh are bash. Without a CLI they rebuilt
+# the literal locally — the class W1 closed for Python — and a review APPROVE
+# recorded in one adopter satisfied the gate in ANOTHER (shared state dir).
+# Contract: module docstring §CLI contract. Keep it a thin printer: every
+# rule lives in the functions above, the CLI only chooses which one to call.
+# ---------------------------------------------------------------------------
+
+_CLI_MODES = ("--state-dir", "--slug", "--project-dir")
+_CLI_USAGE = (
+    "usage: runtime_paths.py [--state-dir | --slug | --project-dir] "
+    "[--project PATH]\n"
+    "  --state-dir     per-project runtime state dir (default)\n"
+    "  --slug          native path-based project slug\n"
+    "  --project-dir   the project dir the slug is derived from\n"
+    "  --project PATH  derive for PATH instead of CLAUDE_PROJECT_DIR / cwd\n"
+)
+
+
+def _cli(argv: List[str]) -> int:
+    """Parse ``argv`` (no argparse: keeps the leaf tiny and the usage text
+    byte-stable) and print exactly one path. Returns the exit status."""
+    mode = "--state-dir"
+    mode_seen = False
+    project: Optional[str] = None
+    i = 0
+    while i < len(argv):
+        arg = argv[i]
+        if arg in _CLI_MODES:
+            if mode_seen:
+                sys.stderr.write("runtime_paths: one mode flag only\n" + _CLI_USAGE)
+                return 2
+            mode, mode_seen = arg, True
+        elif arg == "--project":
+            # A missing value must never swallow the NEXT option as a path
+            # (pair-rail r6/r8 P2: `--project --slug` and `--project -h`
+            # printed a valid-looking state dir for a project literally
+            # named after the option). Any token that starts with "-" is an
+            # option, not a PATH; a real path beginning with "-" is not
+            # supported — use an absolute path.
+            if i + 1 >= len(argv) or not argv[i + 1] or argv[i + 1].startswith("-"):
+                sys.stderr.write("runtime_paths: --project needs a PATH\n" + _CLI_USAGE)
+                return 2
+            project = argv[i + 1]
+            i += 1
+        elif arg in ("-h", "--help"):
+            sys.stdout.write(_CLI_USAGE)
+            return 0
+        else:
+            sys.stderr.write("runtime_paths: unknown argument %r\n%s" % (arg, _CLI_USAGE))
+            return 2
+        i += 1
+    if mode == "--project-dir":
+        out = Path(os.path.abspath(project)) if project is not None else project_dir()
+    elif mode == "--slug":
+        out = project_slug(project)
+    else:
+        out = runtime_state_dir(project)
+    sys.stdout.write("%s\n" % out)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(_cli(sys.argv[1:]))

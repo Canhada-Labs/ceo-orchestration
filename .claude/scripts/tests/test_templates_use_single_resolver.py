@@ -67,18 +67,11 @@ _ALLOW_MARKER = "rp-allow:"
 # canonical edit; the reason is recorded so the entry is auditable rather than
 # an excuse. `rp-allow:` is deliberately NOT used for these — that marker
 # means "documented partial-upgrade fallback", and these are neither.
-_DECLARED_DEBT = {
-    "templates/codex/pre-push-review-gate.sh": (
-        "shell consumer: needs the resolver callable from bash, and "
-        "_lib/runtime_paths.py has no __main__ and is CANONICAL. Route "
-        "decided (expose a CLI); the edit belongs to the ceremony. An inline "
-        "`python3 -c` would invent a second invocation convention."
-    ),
-    "templates/grok/pre-push-review-gate.sh": (
-        "same class as the codex twin: shell consumer, blocked on the same "
-        "canonical CLI. Cure both together or the twins diverge."
-    ),
-}
+_DECLARED_DEBT: dict = {}
+# S326 (2026-08-24): both pre-push review gates were cured — they call the
+# resolver CLI (`runtime_paths.py --state-dir`, PLAN-182 OQ-6) — so their
+# entries left this dict. The machinery stays: a future template that rebuilds
+# the literal lands as an OFFENDER, and a future entry here rots loudly.
 
 
 class TestTemplatesUseSingleResolver(TestEnvContext):
@@ -142,6 +135,23 @@ class TestTemplatesUseSingleResolver(TestEnvContext):
             "they were cured, so remove them from _DECLARED_DEBT instead of "
             "carrying a stale exemption: %s" % stale_debt,
         )
+
+    def test_pre_push_gates_call_the_single_resolver(self) -> None:
+        """S326 — the cure is a CALL, not just the absence of the literal: each
+        delivered pre-push gate resolves its state dir through the resolver CLI
+        (`runtime_paths.py --state-dir`) and never through a rebuilt path."""
+        for vendor in ("codex", "grok"):
+            rel = "templates/%s/pre-push-review-gate.sh" % vendor
+            text = (REPO / rel).read_text(encoding="utf-8")
+            self.assertIn(
+                '_lib/runtime_paths.py"', text,
+                "%s does not reference the single resolver" % rel)
+            self.assertIn(
+                "--state-dir", text,
+                "%s references the resolver but not its --state-dir mode" % rel)
+            self.assertNotIn(
+                "projects/ceo-orchestration", text,
+                "%s still rebuilds the legacy literal" % rel)
 
     def test_allow_marker_is_load_bearing(self) -> None:
         """Positive control for the guard itself.

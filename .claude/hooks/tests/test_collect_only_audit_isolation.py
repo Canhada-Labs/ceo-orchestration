@@ -180,3 +180,125 @@ class TestCollectOnlyAuditIsolation(TestEnvContext):
             f"audit-log line under the throwaway HOME (found: {lines}); the "
             "negative guard above cannot be trusted"
         ))
+
+    def test_collection_window_tree_is_removed_at_exit(self):
+        """pair-rail r2 P2 — the throwaway tree must not outlive the process:
+        atexit is LIFO, so the cleanup has to be registered BEFORE audit_emit
+        registers the spool drain (else the drain re-creates the tree after
+        rmtree). Measured on the pre-cure tree: +1 leaked dir per collect."""
+        # The child gets a TMPDIR this test OWNS: under xdist another worker
+        # may be spawning its own collect at the same time, and counting the
+        # shared system tempdir reported that sibling as a "leak".
+        home = self._throwaway_home()
+        child_tmp = Path(tempfile.mkdtemp(prefix="s326-child-tmp-"))
+        self.addCleanup(shutil.rmtree, str(child_tmp), True)
+        env = self._production_shape_env(home)
+        env["TMPDIR"] = str(child_tmp)
+        # Anti-vacuity: the child interpreter really resolves its tempdir to
+        # OUR directory (else an empty glob below would pass trivially).
+        probe = subprocess.run(
+            [sys.executable, "-c", "import tempfile; print(tempfile.gettempdir())"],
+            env=env, capture_output=True, text=True, timeout=60)
+        self.assertEqual(Path(probe.stdout.strip()).resolve(), child_tmp.resolve())
+        res = self._collect([".claude/hooks/tests/test_runtime_paths.py"], env, _REPO_ROOT)
+        self.assertEqual(res.returncode, 0, msg=res.stderr[-800:])
+        leaked = sorted(p.name for p in child_tmp.glob(test_isolation.COLLECT_WINDOW_PREFIX + "*"))
+        self.assertEqual(leaked, [], msg="collection-window tree(s) leaked: %s" % leaked)
+
+
+class TestCollectionWindowRedirect(TestEnvContext):
+    """S326 structural cure — ``_lib/test_isolation`` Axis 3, asserted in-process.
+    These fail on a tree WITHOUT the cure (the attributes do not exist), which
+    is how a partial land shows up."""
+
+    def test_live_snapshot_was_captured_before_any_redirect(self):
+        snap = getattr(test_isolation, "IMPORT_TIME_LIVE_LOG_SNAPSHOT", None)
+        self.assertIsInstance(snap, str, "no import-time live-log snapshot")
+        self.assertNotIn(getattr(test_isolation, "COLLECT_WINDOW_PREFIX", "ceo-collect-isolation-"), snap)
+        self.assertNotIn("ceo-suite-isolation-", snap)
+        # The contract is "absolute path outside isolation trees" — never a
+        # basename: a suite launched under a documented CEO_AUDIT_LOG_PATH
+        # (any file name) captures THAT path at import (pair-rail r7 P2).
+        self.assertTrue(os.path.isabs(snap), snap)
+
+    def test_collection_window_dir_exists_with_the_prefix(self):
+        d = getattr(test_isolation, "COLLECT_WINDOW_DIR", None)
+        self.assertIsNotNone(d, "Axis 3 did not create a collection-window tree")
+        self.assertTrue(Path(d).is_dir(), d)
+        self.assertTrue(Path(d).name.startswith(test_isolation.COLLECT_WINDOW_PREFIX), d)
+
+    def test_published_snapshot_var_is_the_import_time_value(self):
+        self.assertEqual(
+            os.environ.get(test_isolation.LIVE_LOG_SNAPSHOT_VAR),
+            test_isolation.IMPORT_TIME_LIVE_LOG_SNAPSHOT,
+        )
+
+    def test_child_process_preserves_the_inherited_snapshot(self):
+        """pair-rail r1 P1 — an xdist worker inherits the true snapshot AND a
+        CEO_AUDIT_LOG_DIR already pointed at the parent's collection tree. Import
+        in that shape must keep the inherited truth, not re-resolve it."""
+        fake_collect = self._tmp_root / (test_isolation.COLLECT_WINDOW_PREFIX + "parent") / "audit"
+        fake_collect.mkdir(parents=True)
+        true_snapshot = str(self._tmp_root / "true-home" / ".claude" / "projects" / "-x" / "audit-log.jsonl")
+        env = self.subprocess_env()
+        env["CEO_AUDIT_LOG_DIR"] = str(fake_collect)
+        env[test_isolation.LIVE_LOG_SNAPSHOT_VAR] = true_snapshot
+        code = (
+            "import sys\n"
+            f"sys.path.insert(0, {str(_HOOKS_DIR)!r})\n"
+            "from _lib import test_isolation as ti\n"
+            "print('SNAP=' + str(ti.IMPORT_TIME_LIVE_LOG_SNAPSHOT))\n"
+        )
+        res = subprocess.run([sys.executable, "-c", code], env=env,
+                             capture_output=True, text=True, timeout=60)
+        self.assertEqual(res.returncode, 0, msg=res.stderr[-800:])
+        snap = [ln for ln in res.stdout.splitlines() if ln.startswith("SNAP=")]
+        self.assertTrue(snap, msg=res.stdout)
+        self.assertEqual(snap[0][len("SNAP="):], true_snapshot)
+
+    def test_custom_basename_snapshot_is_preserved(self):
+        """pair-rail r6 P2 — a supported CEO_AUDIT_LOG_PATH override may name
+        the live log differently; an inherited absolute .jsonl outside any
+        isolation tree is truth and must be kept, whatever its basename."""
+        fake_collect = self._tmp_root / (test_isolation.COLLECT_WINDOW_PREFIX + "parent") / "audit"
+        fake_collect.mkdir(parents=True)
+        custom = str(self._tmp_root / "true-home" / "srv" / "audit" / "current.log")
+        env = self.subprocess_env()
+        env["CEO_AUDIT_LOG_DIR"] = str(fake_collect)
+        env[test_isolation.LIVE_LOG_SNAPSHOT_VAR] = custom
+        code = (
+            "import sys\n"
+            f"sys.path.insert(0, {str(_HOOKS_DIR)!r})\n"
+            "from _lib import test_isolation as ti\n"
+            "print('SNAP=' + str(ti.IMPORT_TIME_LIVE_LOG_SNAPSHOT))\n"
+        )
+        res = subprocess.run([sys.executable, "-c", code], env=env,
+                             capture_output=True, text=True, timeout=60)
+        self.assertEqual(res.returncode, 0, msg=res.stderr[-800:])
+        snap = [ln for ln in res.stdout.splitlines() if ln.startswith("SNAP=")][0][len("SNAP="):]
+        self.assertEqual(snap, custom)
+
+    def test_stale_inherited_snapshot_inside_an_isolation_tree_is_ignored(self):
+        """The inherited value is trusted only when well-formed: a path inside a
+        collection/suite isolation tree is re-resolved, never adopted."""
+        fake_collect = self._tmp_root / (test_isolation.COLLECT_WINDOW_PREFIX + "parent") / "audit"
+        fake_collect.mkdir(parents=True)
+        env = self.subprocess_env()
+        env["CEO_AUDIT_LOG_DIR"] = str(fake_collect)
+        env[test_isolation.LIVE_LOG_SNAPSHOT_VAR] = str(fake_collect / "audit-log.jsonl")
+        code = (
+            "import sys\n"
+            f"sys.path.insert(0, {str(_HOOKS_DIR)!r})\n"
+            "from _lib import test_isolation as ti\n"
+            "print('SNAP=' + str(ti.IMPORT_TIME_LIVE_LOG_SNAPSHOT))\n"
+        )
+        res = subprocess.run([sys.executable, "-c", code], env=env,
+                             capture_output=True, text=True, timeout=60)
+        self.assertEqual(res.returncode, 0, msg=res.stderr[-800:])
+        snap = [ln for ln in res.stdout.splitlines() if ln.startswith("SNAP=")][0][len("SNAP="):]
+        # realpath on BOTH sides: on macOS mkdtemp lives under /var/... and the
+        # resolver returns /private/var/..., so a plain string compare passes
+        # vacuously (pair-rail r2 P1 caught exactly that).
+        self.assertNotEqual(os.path.realpath(snap),
+                            os.path.realpath(str(fake_collect / "audit-log.jsonl")))
+        self.assertNotIn(test_isolation.COLLECT_WINDOW_PREFIX, snap)

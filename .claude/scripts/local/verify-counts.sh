@@ -272,7 +272,22 @@ DERIVED_TESTS=0
 DERIVED_TESTS_ERRORS=0
 DERIVED_TESTS_CMD='python3 -m pytest --collect-only -q   # pytest.ini testpaths == `make test-collect`'
 if [ "$NO_TESTS" -eq 0 ]; then
-  _collect_out=$( { cd "$REPO_ROOT" && python3 -m pytest --collect-only -q 2>&1 | tail -5; } || true )
+  # The collect IMPORTS every test module, and pytest never runs fixtures
+  # under --collect-only -- so the session-level audit-dir redirect of the
+  # suite (a fixture) is NOT in force while modules import. Any import-time
+  # code that reaches an audit emitter then writes to the fallback
+  # $HOME/.claude/projects/<slug>: the LIVE HMAC chain. Measured S326
+  # (2026-08-24): 124 signed, unattributable links per collect, 19 pre-commit
+  # runs in 12 h = 79% of the live segment. Point the first-precedence
+  # carrier (CEO_AUDIT_LOG_DIR -- honoured by _lib/audit_emit._audit_dir()
+  # ahead of the single resolver, and NOT among the carriers the conftest
+  # pops at import) at a throwaway dir for THIS subprocess only. Guard:
+  # .claude/hooks/tests/test_collect_only_audit_isolation.py
+  _vc_audit_tmp=$(mktemp -d "${TMPDIR:-/tmp}/verify-counts-audit.XXXXXX")
+  _collect_out=$( { cd "$REPO_ROOT" && CEO_AUDIT_LOG_DIR="$_vc_audit_tmp" python3 -m pytest --collect-only -q 2>&1 | tail -5; } || true )
+  if [ -n "$_vc_audit_tmp" ] && [ -d "$_vc_audit_tmp" ]; then
+    rm -rf -- "$_vc_audit_tmp"
+  fi
   DERIVED_TESTS=$(
     printf '%s\n' "$_collect_out" | \
     awk '/[0-9]+ tests? collected/ {

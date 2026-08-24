@@ -95,13 +95,72 @@ if [ ! -f "$TARBALL" ]; then
   exit 1
 fi
 
-# Resolve destination
-PROJECT_SLUG="${PROJECT_SLUG_OVERRIDE:-${CEO_PROJECT_NAME:-ceo-orchestration}}"
+# The framework SINGLE resolver (ADR-001; PLAN-182 OQ-6, S326). The old
+# default slug `ceo-orchestration` named THIS framework, not the adopter: every
+# project under one $HOME backed up -- and restored -- the same shared dir.
+# `--project-slug` / CEO_PROJECT_NAME stay as EXPLICIT operator overrides;
+# nothing is defaulted from a literal. No resolver on disk (partial upgrade)
+# => fail loud rather than guess where the state lives.
+# `|| true` inside: under `set -e` a failed `cd` (script copied outside a
+# framework tree) would abort this assignment SILENTLY, before _resolve_rp can
+# print its loud `fatal:`. An empty dir here simply fails the -f test below.
+_RP_DIR="$(dirname "${BASH_SOURCE[0]}")/../hooks/_lib"
+_RP="$( { cd "$_RP_DIR" 2>/dev/null && pwd; } || printf '%s' "$_RP_DIR" )/runtime_paths.py"
+_project_root() {
+  # The project the state belongs to (rail r1 P2 + r3 P1):
+  #   1. the harness-set CLAUDE_PROJECT_DIR;
+  #   2. else walk up from the CWD to the nearest `.claude/` (the resolver
+  #      falls back to the CWD, so a call from a SUBDIRECTORY would otherwise
+  #      name the subdirectory);
+  #   3. else the project this script is INSTALLED in — it lives at
+  #      <project>/.claude/scripts/ — because the documented cron entry
+  #      (docs/DISASTER-RECOVERY.md) invokes it by absolute path with
+  #      CWD=$HOME and no CLAUDE_PROJECT_DIR, where step 2 finds nothing.
+  # Nothing at all => failure (never a guessed slug).
+  if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then printf '%s' "$CLAUDE_PROJECT_DIR"; return 0; fi
+  # A project is a directory with the framework INSTALL MARKER — not merely a
+  # `.claude/` (rail r4 P1): under the documented cron, CWD=$HOME and the
+  # user's GLOBAL ~/.claude exists, so a bare `-d .claude` test picked $HOME
+  # as the project and the backup targeted the wrong slug with exit 0.
+  local cur
+  cur="$(pwd)"
+  while [ "$cur" != "/" ]; do
+    if [ -f "$cur/.claude/.framework-version" ]; then printf '%s' "$cur"; return 0; fi
+    cur="$(dirname "$cur")"
+  done
+  local here
+  here="$( { cd "$(dirname "${BASH_SOURCE[0]}")/../.." 2>/dev/null && pwd; } || true )"
+  if [ -n "$here" ] && [ -d "$here/.claude/scripts" ] && [ -d "$here/.claude/hooks" ]; then printf '%s' "$here"; return 0; fi
+  return 1
+}
+_resolve_rp() {
+  if [ ! -f "$_RP" ] || ! command -v python3 >/dev/null 2>&1; then
+    echo "fatal: single resolver not found at $_RP (run scripts/upgrade.sh) -- refusing to guess the state dir" >&2
+    return 2
+  fi
+  local root
+  root="$(_project_root)" || {
+    echo "fatal: no project root (.claude/) above $(pwd) and CLAUDE_PROJECT_DIR unset -- pass --project-slug or run from the project" >&2
+    return 2
+  }
+  python3 "$_RP" --project "$root" "$@"
+}
+
+# Resolve destination. An EXPLICIT destination (--dest / CEO_AUDIT_LOG_DIR)
+# is honoured without any project discovery (pair-rail r2 P2): the slug is
+# only needed by the branch that builds the path from it.
 if [ -n "$DEST_OVERRIDE" ]; then
   DEST="$DEST_OVERRIDE"
+elif [ -n "${CEO_AUDIT_LOG_DIR:-}" ]; then
+  DEST="$CEO_AUDIT_LOG_DIR"
+elif [ -n "${PROJECT_SLUG_OVERRIDE:-}${CEO_PROJECT_NAME:-}" ]; then
+  # An explicit operator slug names the destination directly under $HOME.
+  PROJECT_SLUG="${PROJECT_SLUG_OVERRIDE:-$CEO_PROJECT_NAME}"
+  DEST="$HOME/.claude/projects/$PROJECT_SLUG"
 else
-  DEST="${CEO_AUDIT_LOG_DIR:-$HOME/.claude/projects/$PROJECT_SLUG}"
+  DEST="$(_resolve_rp --state-dir)" || exit 2
 fi
+[ -n "$DEST" ] || { echo "fatal: empty destination" >&2; exit 2; }
 
 log "ceo-restore: tarball=$TARBALL dest=$DEST mode=$([ "$APPLY" -eq 1 ] && echo APPLY || echo DRY-RUN)"
 
