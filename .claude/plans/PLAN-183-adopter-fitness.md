@@ -582,7 +582,8 @@ reimplementa, errando de um jeito diferente**:
 |---|---|---|
 | `_parity_classify.py:221-227` | **sim** | ordem errada (identity antes) |
 | `_framework_manifest_set.sh:430-436` | **não** | hash do arquivo errado, ou `continue` silencioso |
-| `scripts/doctor.sh:401,507,553` | **não** | classifica errado E repara com a fonte errada |
+| `scripts/doctor.sh:401,507,553` | **não** | classifica errado E **repara com a fonte errada** — CURADO na S325 (`_route_source`) |
+| `scripts/doctor.sh` `_dr_delivered` (:625, usado em :633/:638/:643) | n/a | **quarto sítio, achado do debate S324 — e a medição da S325 o REFINA:** ele decide ENUMERAÇÃO (logo quem é acusado de órfão) por `grep -Eq` sobre o manifesto sanitizado, mas os três fragmentos que testa são `SPEC/v1`, `PROTOCOL.md` e `.claude/.framework-version` — **nenhuma das 6 rotas de entrega**. Medido: `grep -nE 'docs/\|\.github\|BRANCH-PROTECTION\|CODEOWNERS\|rotation-log' scripts/_framework_manifest_set.sh` devolve **1 linha, e é comentário**. Ele é da mesma CLASSE, mas responde outra pergunta (governada por `_ownership_verdict()`), então fazê-lo ler o TSV hoje seria ERRADO. Vira consumidor real só quando a W5-b puser `docs/` e `.github/` no manifesto |
 
 Censo bruto (S323): `SOURCE_DIR/$rel`-e-parentes aparece em **8 arquivos**
 sob `scripts/`, com ~23 sítios — número que a S323 marcou como "não
@@ -732,6 +733,38 @@ foi encontrada e CURADA neste repositório:
 > nomeada**: a W5-b tem de PROMOVER essa tabela a arquivo de dados
 > compartilhado, senão a segunda cópia (no bash) é literalmente o "ramo
 > local" que o `CLAUDE.md` §4 proíbe. Item obrigatório da W5-b.
+
+> **⚠️ ESTADO DA DÍVIDA (S325) — REDUZIDA, não fechada.** A promoção
+> aconteceu: a tabela saiu de `_parity_classify.py` para
+> `scripts/delivery-routes.tsv` (**6 rotas**, 6 colunas
+> `dest/src/transform/flag_dep/origin/note`, forma copiada de
+> `ownership_table.tsv`), com **dois** consumidores já convertidos —
+> `scripts/tests/_parity_classify.py` (os dois dicts históricos passaram a
+> ser VIEWS derivadas, então os 10 testes seguem verdes sem UMA asserção
+> mudar) e `scripts/doctor.sh` (função `_route_source`, scan linear porque
+> o piso de bash 3.2 não tem `declare -A`). O oráculo devolve **0** para os
+> três paths ⇒ nada disso exigiu cerimônia.
+>
+> **O que FALTA para fechar:** `scripts/_framework_manifest_set.sh` é
+> **CANÔNICO (=1)** e é o terceiro consumidor. Até ele ler o TSV, a dívida
+> está em 1 tabela + 1 leitor canônico pendente, não em zero. O TSV foi
+> desenhado para que ele leia as mesmas linhas com o idiom bash que
+> `test-ownership-verdict-unit.sh:61` já usa — nenhuma segunda tabela
+> precisa ser inventada para ele.
+>
+> **A verificação NÃO é `grep`** (convergência C3 do debate: grep prova
+> MENÇÃO, não USO). Medido na S325: apontar
+> `docs/BRANCH-PROTECTION.md` para `templates/docs/rotation-log.md` — uma
+> fonte ERRADA mas existente — mantinha **os 10 testes verdes**, porque as
+> asserções comparavam `_src_digest` contra a fonte que a própria tabela
+> declarava (tautologia estrutural). A cura foi comparar contra uma verdade
+> INDEPENDENTE, os call-sites do próprio `install.sh`; com ela os quatro
+> controles (remover a tabela / apontar para fonte errada / remover uma
+> rota / inventar uma rota) ficam VERMELHOS e a mensagem NOMEIA o plant.
+>
+> **⚠️ A §8.5.2 como CORRIGIDA na S324 NÃO passou por rodada de rail.** A
+> correção (`HASH_SOURCE` não é o resolvedor; peças (a)/(b)) é redação
+> pós-rail. Rodar rail sobre ela segue sendo a PRIMEIRA unidade da W5-b.
 
 Três consequências, e elas invertem o plano de ação da §8.5:
 
@@ -1570,3 +1603,28 @@ cura de D1 vai ser validada por um instrumento cujo poder de detecção não
 foi verificado no mesmo run. Vale também para os outros dois steps
 skipped, que testam ownership de entrega — exatamente a área que a W5-b
 mexe.
+
+- [ ] `[P0]` O controle positivo da paridade roda **independentemente** do
+      veredito do step principal (`if: always()`), e o mesmo para os outros
+      dois steps skipped (delivery-record ownership, night-mode).
+      Check: num run com o step principal VERMELHO, o controle positivo sai
+      `success` ou `failure` — **nunca `skipped`**. Um run em que ele saia
+      `skipped` reprova o Check, mesmo que todo o resto esteja verde.
+
+> **CHECKBOX ≠ IMPLEMENTAÇÃO (registrado na S325).** A checkbox acima é
+> texto de plano e landa sem cerimônia. A implementação vive em
+> `.github/workflows/smoke-install.yml`, que o oráculo classifica como
+> **CANÔNICO (=1)** ⇒ exige sentinel + assinatura GPG do Owner. É item de
+> CERIMÔNIA da W5-b e não foi tocado.
+
+- [ ] `[P0]` `uninstall.sh` exercitado com as duas árvores no manifesto
+      (convergência **C4** do debate: a wave AMPLIA o alcance de um
+      consumidor DESTRUTIVO que hoje nenhum Check toca). Três pernas:
+      (a) install → uninstall ⇒ `docs/` e `.github/` removidos e **nenhum
+      path fora do `$TARGET`** tocado; (b) com `--github-owner`,
+      `.github/CODEOWNERS` sai **PRESERVED** (o renderizado nunca casa o sha
+      do template) e o exit avisa em vez de apagar; (c) dirs vazios de
+      `docs/`/`.github/` — decidir e ASSERTAR, porque a varredura de
+      `uninstall.sh:272` (`find "$TARGET/.claude" -depth -type d -empty
+      -delete`) cobre **só** `.claude/`.
+      Oráculo: `scripts/uninstall.sh` = **0** ⇒ pode landar sem cerimônia.

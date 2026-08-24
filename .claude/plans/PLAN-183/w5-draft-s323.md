@@ -211,7 +211,7 @@
       `ownership_table.tsv`. E o manifesto persiste só
       **digest + relpath de destino**, logo o `doctor.sh` não tem de onde
       RECUPERAR a fonte sem essa tabela.
-      Check: existe UM arquivo de dados de rotas, e grep prova que _parity_classify.py, _framework_manifest_set.sh e doctor.sh todos o LEEM; nenhum dos tres carrega mapa proprio; teste de censo falha se um quarto consumidor aparecer sem ler a tabela
+      Check: existe UM arquivo de dados de rotas e a prova de USO e COMPORTAMENTAL, nao grep (convergencia C3: grep prova MENCAO). Par positivo obrigatorio: MUTAR a linha de docs/BRANCH-PROTECTION.md para uma fonte errada-mas-EXISTENTE tem de deixar VERMELHO cada consumidor, e REMOVER a tabela tem de deixar os tres VERMELHOS; a mensagem de falha NOMEIA a linha mutada. Medido na S325: sem esse par, a mutacao passava com os 10 testes VERDES, porque as assercoes comparavam contra a fonte que a propria tabela declarava (tautologia) — a cura foi comparar contra os call-sites do install.sh, verdade INDEPENDENTE. ESTADO: dois consumidores (_parity_classify.py, doctor.sh) landaram na S325 com os 4 controles vermelhos; falta o TERCEIRO (_framework_manifest_set.sh, CANONICO) — o grep fica como censo secundario e falha se um quarto consumidor carregar mapa proprio
 
 - [ ] `[P0]` **Debate L3 antes de qualquer linha.** `upgrade.sh` e
       `_framework_manifest_set.sh` são canônicos e são o coração do
@@ -272,7 +272,7 @@
       deixou bytes de FRAMEWORK neste path"*. Enumeração fechada,
       derivada do enum do precedente: **INSTALLED / REFRESHED /
       IDENTICAL entram; PRESERVED / SKIPPED ficam fora.**
-      Check: a derivacao dos registros novos e uma funcao do enum de resultado por path, e o teste enumera os CINCO estados assertando que os 3 primeiros registram e os 2 ultimos nao; grep por CEREMONY na derivacao devolve zero; e2e de segundo upgrade consecutivo nao altera nenhum byte do arquivo adopter-owned
+      Check: a derivacao e uma funcao NOMEADA que o teste IMPORTA e INVOCA (ausencia da funcao = VERMELHO, nunca skip); enumera os CINCO estados assertando quantos registram; o grep por CEREMONY roda no CORPO dessa funcao localizado por nome/AST, nao no arquivo inteiro (um grep no arquivo devolve zero tambem quando a funcao foi RENOMEADA); e2e de segundo upgrade consecutivo nao altera nenhum byte do arquivo adopter-owned. ATENCAO (achado B1 do debate): a regra 'PRESERVED/SKIPPED ficam fora do registro' e REGRESSAO contra o precedente que esta wave adota — install.sh:1318-1329 registra TAMBEM quando nao escreveu, por byte-compare (INSTALL_ONE_WROTE || cmp -s). Decidir isso ANTES de fixar o numero esperado, senao um SEGUNDO install derruba os registros e embarca VERDE porque nenhum Check roda install duas vezes
 - [ ] `[P0]` **Adopters HISTÓRICOS: refresh HASH-GATED contra as gerações
       conhecidas (achado P1 do pair-rail r2, resolvido pelo precedente da
       §8.6).** Para a rota B do e2e (pin default `v1.2.0`) e para o
@@ -339,7 +339,7 @@
       classificador de paridade não pega isso, porque bytes do manifesto
       estão no `ACCEPTED`. Instalação fresca ficaria sem registro, e
       `doctor.sh` e `uninstall.sh` sem entrega registrada.
-      Check: o conjunto EXATO de registros para .github/ e docs/ e asserido em DOIS momentos — logo apos install limpo do HEAD e apos o upgrade — em DUAS fixtures (sem owner e com --github-owner), cada digest batendo com a fonte que o adopter recebeu (templates/... ou o renderizado), nenhum path ausente
+      Check: o conjunto EXATO de registros para .github/ e docs/ e asserido em DOIS momentos — logo apos install limpo do HEAD e apos o upgrade — em DUAS fixtures (sem owner e com --github-owner), cada digest batendo com a fonte que o adopter recebeu, contra LISTA LITERAL versionada no teste (validate.yml.template, benchmarks.yml.template, CODEOWNERS[.template], BRANCH-PROTECTION.md, rotation-log.md) e com count de registros == 5 nos DOIS momentos. Par positivo: o conjunto VAZIO tem de FALHAR — hoje 'cada digest batendo' e 'nenhum path ausente' sao os dois satisfeitos por zero registros, que e exatamente o estado atual medido (D3: manifest hit count = 0 para os 5)
 - [ ] `[P0]` **D4 — o mesmo mapeamento no `doctor.sh` (achado P1 do
       pair-rail r5, §8.4).** Assim que os registros existirem, o doctor
       passa a consumi-los e resolve a fonte sozinho, sem fallback:
@@ -360,7 +360,7 @@
       **reparar escrevendo o template cru, devolvendo
       `{{OWNER_HANDLE}}` literal** para o arquivo do adopter. É o `:401`
       copiando errado, na forma mais visível.
-      Check: TRES fixtures — (a) docs/BRANCH-PROTECTION.md deletado: doctor repara com os bytes de templates/, nao com o doc da raiz; (b) .github/workflows/validate.yml.template deletado: doctor repara em vez de reportar not-repairable; (c) .github/CODEOWNERS deletado E com drift, em target instalado com --github-owner: doctor repara com os bytes RENDERIZADOS, o re-hash bate com o baseline e grep por {{OWNER_HANDLE}} no arquivo reparado devolve ZERO; as tres ficam VERMELHAS com o mapeamento revertido
+      Check: TRES fixtures, cada asserção NEGATIVA com par POSITIVO (convergencia C2 — 'grep {{OWNER_HANDLE}} == 0' e satisfeito EXATAMENTE pelo modo de falha perigoso: um arquivo de 0 bytes ou ausente grepa zero). (a) docs/BRANCH-PROTECTION.md deletado: doctor repara com os BYTES de templates/ — sha256 igual ao template E diferente do doc da raiz E byte-count igual; (b) .github/workflows/validate.yml.template deletado: doctor repara em vez de reportar not-repairable; (c) .github/CODEOWNERS em target instalado com --github-owner: o arquivo reparado tem sha256 IGUAL ao registrado no baseline E 33 linhas E 1442 bytes E o handle real presente >= 1 vez, e SO DEPOIS grep -c '{{OWNER_HANDLE}}' == 0; controle negativo: truncar o reparado a 0 bytes tem de deixar o teste VERMELHO. As tres ficam VERMELHAS com o mapeamento revertido. ESTADO (S325): (a) e a variante RENDERED de (c) landaram em scripts/tests/test-doctor-delivery-route.sh (26 asserções, controle positivo = 10 passed/5 failed pre-cura, e o vermelho de (c) foi um VAZAMENTO REPRODUZIDO — o doctor pre-cura copiava o .github/CODEOWNERS VIVO deste repo, 10259 b com o handle real, para a arvore do adopter). Falta (b) e a fixture --github-owner completa, que dependem de D3 (registro no manifesto, CANONICO)
 - [ ] `[P0]` **Segundo upgrade consecutivo é o teste que pega D3.** A
       primeira rodada de paridade pode passar com o baseline errado; o
       dano aparece na classificação do upgrade SEGUINTE.
@@ -369,7 +369,7 @@
       `.claude/.install-state.json` incrementando `run_count`
       (`upgrade.sh:3605-3612`), então "nenhum diff no target" é
       insatisfazível mesmo com D3 curado.
-      Check: e2e roda upgrade DUAS vezes; diff da segunda restrito a .github/ e docs/ e vazio, e o .install-manifest.sha256 normalizado e byte-identico entre as duas rodadas
+      Check: PRECONDICAO PRIMEIRO — as duas arvores existem no target com os 5 paths e o count e 5 (count 0 = FALHA, nunca verde vazio); so depois e2e roda upgrade DUAS vezes; diff da segunda restrito a .github/ e docs/ e vazio, e o .install-manifest.sha256 normalizado e byte-identico entre as duas rodadas. Sem a precondicao o Check e VACUO enquanto D1 nao for curado: as duas arvores AUSENTES nas duas rodadas dao diff vazio e passam
 - [ ] `[P1]` **Variante `--github-owner` coberta (achado P2 do pair-rail
       S323, verificado).** Com essa flag o install escreve um
       `.github/CODEOWNERS` SUBSTITUÍDO (`install.sh:1508`) e grava
@@ -396,7 +396,7 @@
       falso. **A alternativa "asserir bytes de HEAD" foi REMOVIDA** (P2
       do r4): ela é vacuosa pela medição acima — só divergência plantada
       torna o teste sensível à reversão da rota.
-      Check: o e2e ganha caso com --github-owner e PLANTA divergencia no template; com a rota owner-aware revertida por git stash o teste fica VERMELHO; o manifesto registra o digest RENDERIZADO e ele se mantem estavel por DOIS upgrades; {{OWNER_HANDLE}} nao reaparece
+      Check: o e2e ganha caso com --github-owner e PLANTA divergencia no template; com a rota owner-aware revertida por git stash o teste fica VERMELHO; o manifesto registra o digest RENDERIZADO (33 linhas / 1442 bytes, sha256 fixado no teste) e ele se mantem estavel por DOIS upgrades; par POSITIVO antes da asserção negativa: o handle real aparece >= 1 vez, e SO ENTAO {{OWNER_HANDLE}} aparece 0 vezes (sozinha, a negativa e satisfeita por um arquivo vazio)
 - [ ] `[P0]` Paridade install==upgrade restaurada nos 3 paths que hoje
       são fatais, no modo `maintainer`, **sem** tocar `ACCEPTED` nem
       `KNOWN_OPEN`.
@@ -410,7 +410,7 @@
       Check: test-install-upgrade-parity-e2e.sh --mode maintainer sai 0; o diff de _parity_classify.py nao inclui ACCEPTED nem KNOWN_OPEN
 - [ ] `[P0]` Modo `user` permanece inalterado: nenhuma das duas árvores
       passa a ser escrita onde o install não escreveria.
-      Check: bash scripts/tests/test-install-upgrade-parity-e2e.sh --mode user sai 0 e o target em modo user nao contem .github/workflows/*.template
+      Check: bash scripts/tests/test-install-upgrade-parity-e2e.sh --mode user sai 0 e o target em modo user nao contem .github/workflows/*.template; par POSITIVO no MESMO teste, senao um target onde o install nao escreveu NADA passa: o modo maintainer da mesma fixture CONTEM os 5 paths (count == 5), provando que a ausencia em modo user e a cerimonia agindo e nao o install falhando
 - [ ] `[P0]` Bateria de ownership não regride — a cura toca o gerador que
       os PLAN-167/168 fecharam. Vale a regra do `CLAUDE.md` §4: o e2e
       termina **62 verde / 3 vermelho por desenho**; toda-verde é sinal
