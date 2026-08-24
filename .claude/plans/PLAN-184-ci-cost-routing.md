@@ -1196,6 +1196,11 @@ de `.md` — executa `.claude/hooks/tests/`, `.claude/scripts/tests/`,
 janela de 21 dias = **US$ 1,67/dia** (leitura de 30 dias: US$ 50) —
 número **derivado dos componentes da medição**, a confirmar na W3, não
 medido de forma independente, e na base congelada da W0-US4.
+**⚠️ CORRIGIDO na S325:** este derivado foi depois REFUTADO por medição —
+o resíduo real sobre pushes só-docs na janela limpa é **US$ 1,20/dia**,
+não US$ 1,67/dia (ver a nota de higiene em §Open questions e a OQ-3b).
+O parágrafo acima fica como registro de COMO o número foi derivado e de
+por que um derivado não substitui uma medição; o valor a usar é 1,20.
 
 Está aqui por honestidade de escopo: o corte que este plano entrega **não
 zera** o custo de um commit só-docs, e quem ler "71%" precisa saber o que
@@ -1297,6 +1302,13 @@ a rede de segurança que torna a A1 aceitável.
 >
 > As duas questões que o Owner precisa responder **antes** de qualquer
 > execução são as novas, no fim da lista.
+>
+> **RECONCILIADO na S325:** as três resoluções que este cabeçalho declarava
+> agora estão refletidas na lista — a OQ-3 está marcada MORTA em posição
+> (não renumerada, porque o id é referenciado adiante), a OQ-3b subiu para
+> logo depois dela, e o `US$ 1,67/dia` foi corrigido para **US$ 1,20/dia**.
+> Antes disso o cabeçalho e a lista se contradiziam, e a lista é
+> load-bearing para o flip.
 
 ### ✅ OQ-11 — RESPONDIDA pelo Owner (2026-08-22, S321): **A0 PRIMEIRO**
 
@@ -1369,16 +1381,24 @@ por repositório, e o AC-6 tem de medir por PUSH, como já reescrito.
    `224/21`) ou a composta com a sobreposição A1∩A2 (US$ 9,76/dia,
    `205/21`)? Só a fatura decide, e a §2 marca isto como derivação, não
    medição.
-3. **§9** — o resíduo do job de governança (~US$ 35/mês sobre commits
+3. ~~**§9** — o resíduo do job de governança (~US$ 35/mês sobre commits
    só-docs) vira um A3, ou fica declarado como custo aceito de
-   governança?
+   governança?~~ **MORTA — respondida como duplicata; use a 3b abaixo.**
+   Mantida em posição (não renumerada) porque o id é referenciado em
+   outros pontos do plano; apagá-la trocaria uma referência quebrada por
+   várias. Reconciliada na S325.
+3b. **§9 — a versão VIVA desta questão.** O resíduo do job de governança,
+   reexpresso na base canônica: o resíduo medido sobre pushes só-docs na
+   janela limpa é **US$ 1,20/dia**. O `US$ 1,67/dia` que esta entrada
+   trazia (de `15 × 106 × 0,022 = US$ 34,98` em 21 dias) está **REFUTADO**
+   pelo próprio cabeçalho desta seção, e foi corrigido aqui na S325 — a
+   lista é load-bearing, então deixá-lo faria o Owner responder uma
+   questão morta com um número errado. **A pergunta:** esse resíduo vira
+   um A3, ou fica declarado como custo aceito de governança?
 4. **F6** — 79 dos 167 runs (47%) terminaram `cancelled`, e minutos
    queimados antes do cancelamento são cobrados. Vale desagregar as
    causas (concorrência × timeout × corte de billing), ou é ruído?
    Fora do escopo deste plano.
-3b. **§9** — o resíduo do job de governança, reexpresso na base canônica:
-   `15 × 106 × 0,022 = US$ 34,98` na janela de 21 dias = **US$ 1,67/dia**
-   (leitura de 30 dias: US$ 50).
 5. **F1** — vale ligar branch protection em `main` depois deste corte?
    Se sim, a Rota C precisa virar Rota B antes, porque job ausente e job
    `skipped` se comportam de forma oposta diante de required checks.
