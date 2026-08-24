@@ -15,6 +15,32 @@ external_wait: "nenhum"
 tags: [runtime-state, audit, hmac, salt, confidentiality, isolation, adopter, adr-001]
 ---
 
+> ## 🎯 PRÓXIMO FOCO RATIFICADO pelo Owner (2026-08-24): o CLI do resolvedor único
+>
+> Dar um `__main__` a `.claude/hooks/_lib/runtime_paths.py` é a cura de MAIOR
+> retorno por cerimônia hoje, porque **um** patch canônico fecha TRÊS dívidas
+> que estão bloqueadas pela mesma ausência:
+>
+> 1. **O bypass de governança dos dois templates de pre-push** (achado do
+>    pair-rail na S325): `templates/{codex,grok}/pre-push-review-gate.sh`
+>    constroem `.../projects/ceo-orchestration/state`, então os gates de
+>    revisão cross-model **compartilham state entre projetos** — um APPROVE
+>    gravado para um fingerprint de path-set num adopter SATISFAZ o gate em
+>    outro. São consumidores SHELL: sem CLI não há como resolver
+>    corretamente. Estão hoje em `_DECLARED_DEBT` (com anti-rot) em
+>    `.claude/scripts/tests/test_templates_use_single_resolver.py`.
+> 2. **`ceo-backup.sh` / `ceo-restore.sh`** operarem sobre o diretório
+>    resolvido — mesma ausência de CLI (runbook da S325 §2).
+> 3. **Alargar o censo M1** para ver `${VAR:-literal}`: simulado, o
+>    offender-set de `--assert-migrated` vai de 0 para 2, e os dois são
+>    exatamente os scripts do item 2. Sem o CLI, alargar tornaria VERMELHO um
+>    gate que o `CLAUDE.md` §5 publica como verde.
+>
+> **A armadilha a não cair:** contornar com `python3 -c` inline criaria uma
+> segunda convenção de invocação contra arquitetura já ratificada — a classe
+> "ramo local reabre a classe" que o `CLAUDE.md` §4 proíbe. O CLI é a rota já
+> decidida (OQ-6); o que falta é a cerimônia.
+
 ## 1. O que este plano realmente é
 
 Achado na S315 durante os probes da W4 do PLAN-169: o fallback de

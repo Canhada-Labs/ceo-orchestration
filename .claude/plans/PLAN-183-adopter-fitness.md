@@ -901,6 +901,27 @@ intenção. As saídas são três, e a escolha é do Owner, não do CEO:
 
 Registrado como **OQ-5, bloqueante**. A W5-b não abre antes da resposta.
 
+> ## ✅ OQ-5 — RESPONDIDA pelo Owner (2026-08-24): rota **(ii) COM EMENDA**
+>
+> A rota (ii) sobrevive, **mas não como estava**: o debate mediu que ela não
+> alcança a população que existe para curar. `upgrade.sh:798-799` resolve
+> `CEREMONY_EFFECTIVE="user"` quando não há install-state legível, e a
+> entrega é gateada em `CEREMONY != user` (`install.sh:1484`, `:1525`) ⇒ o
+> adopter HISTÓRICO não recebe nada, e o e2e é estruturalmente incapaz de
+> ver isso porque o pin `v1.2.0` grava cerimônia.
+>
+> **A emenda ratificada:** sem install-state legível **mas com
+> `.claude/.framework-version` presente**, tratar como instalação de
+> framework e ENTREGAR. O marcador é a evidência de que aquele diretório já
+> é um adopter — que é exatamente a distinção que o `CEREMONY_EFFECTIVE`
+> fail-safe perde. O default para um diretório que nunca recebeu install
+> **não muda**.
+>
+> **Consequência de teste, e ela é obrigatória:** o Check da rota (ii) tem
+> de rodar num e2e **SEM o pin** `v1.2.0`, senão ele continua cego pela
+> mesma razão de hoje. Um Check que só exercite o caminho pinado passa
+> vacuamente — é a classe C2 deste próprio debate.
+
 ### 8.8 Por que a ordem é D2/D3/D4 ANTES de D1
 
 Enquanto D2 não estiver curado, o veredito do e2e sobre `docs/` sai na
@@ -1404,8 +1425,33 @@ com a revisão refrescada, ou vira plano próprio.
    `GREEN=62 RED=3` — por isso precisa vir ANTES da unidade de
    ownership, não durante.
 
-   **PROPOSTA DERIVADA (S324) — a OQ-4 deixa de ser pergunta aberta e
-   passa a ser ratificação.** Medido no disco por mim
+   > ## ⛔ OQ-4 — NÃO RATIFICADA. O Owner decidiu MEDIR primeiro (2026-08-24)
+   >
+   > A proposta abaixo continua sendo a proposta, mas **não foi ratificada**:
+   > o Owner escolheu medir a PISTA do gerador antes de fixar as linhas.
+   > A razão está no próprio código — `install.sh:2508-2511` registra que a
+   > tentativa anterior desta wave **regrediu 24 células** precisamente por
+   > declarar cedo.
+   >
+   > **O que a medição da S325 já adianta** (`_framework_manifest_set.sh`):
+   > `_wbm_is_conditional` (`:320-325`) cobre **apenas 4 paths** —
+   > `SPEC/v1`, `SPEC/v1/*`, `PROTOCOL.md`, `.claude/.framework-version` — e
+   > `_wbm_declared_hash_source` (`:313-315`) só tem `case` para esses. Logo
+   > as 6 rotas de `docs/`/`.github/` hoje caem na pista NÃO-condicional, e
+   > seu digest sai de `_wbm_abs` direto (`:393`).
+   >
+   > **A hipótese a testar** (recomendação do CEO, não decisão): pista
+   > MISTA — os 5 paths verbatim ficam na não-condicional, e só
+   > `.github/CODEOWNERS` entra na condicional, porque só ele é RENDERIZADO
+   > e tem ownership genuinamente ambígua. Se confirmada, a OQ-4 encolhe de
+   > ~13 linhas para ~2-3. **O experimento tem de rodar em árvore-sombra com
+   > o e2e de ownership nas duas pistas, e comparar o id-set exato contra
+   > `ownership-expected-reds.txt`** — o gate que falha em QUALQUER diferença
+   > é o instrumento que pega uma regressão de 24 células.
+   >
+   > Até esse veredito, **nenhuma linha do TSV de ownership se escreve.**
+
+   **PROPOSTA DERIVADA (S324), NÃO RATIFICADA — mantida como hipótese:** Medido no disco por mim
    (`scripts/tests/ownership_table.tsv`): **15 colunas, 65 linhas de
    dados** — `spec` 29, `protocol` 13, `marker` 23. As colunas de
    dimensão são `prior_record, live_type, live_content, source_has, mode,
