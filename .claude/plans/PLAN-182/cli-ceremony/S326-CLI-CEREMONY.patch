@@ -1,0 +1,956 @@
+diff --git a/.claude/governance/gate-scripts-manifest.txt b/.claude/governance/gate-scripts-manifest.txt
+index 661f421..d78ef17 100644
+--- a/.claude/governance/gate-scripts-manifest.txt
++++ b/.claude/governance/gate-scripts-manifest.txt
+@@ -1,4 +1,4 @@
+-7af3b1eaed0be7ff1c14be34ef4c36da4453c56f95b3cedaf7932d3c0f68be1c  .claude/scripts/local/verify-counts.sh
++3b72d56544a0f0f0a463188e1b0ed0cbd15d8e3f8ff2b8b9db478ad4240e142a  .claude/scripts/local/verify-counts.sh
+ 62310e466f0b702d7742533c7472f9d63ce96f9d4645361cf9d501b4426c83d0  .claude/scripts/validate-governance.sh
+ db8eea5b66e7e144135396a14029fd7511857a3cf42c9e5116e57000dd4ffd62  .claude/scripts/local/_release_tag_guard.py
+ fe72ecce835780e2515842bd2d05ee46b063b0ed00d564da75424089efeb67dc  .claude/scripts/check-canonical-doc-freshness.py
+diff --git a/.claude/hooks/_lib/runtime_paths.py b/.claude/hooks/_lib/runtime_paths.py
+index 67de85c..f9593c3 100644
+--- a/.claude/hooks/_lib/runtime_paths.py
++++ b/.claude/hooks/_lib/runtime_paths.py
+@@ -53,6 +53,26 @@ canonicalization. Two spellings of one repo via symlinks therefore get
+ two state dirs — same behavior the harness itself has for its memory
+ dirs. Documented limitation, pinned by test.
+ 
++## CLI contract (PLAN-182 OQ-6 — Owner decision 2026-08-22, landed S326)
++
++Shell consumers get the SAME resolver, never a rebuilt literal::
++
++    python3 .claude/hooks/_lib/runtime_paths.py [--state-dir | --slug |
++                                                 --project-dir] [--project PATH]
++
++- ``--state-dir`` (default): :func:`runtime_state_dir`; ``--slug``:
++  :func:`project_slug`; ``--project-dir``: the slug input.
++- ``--project PATH`` replaces the slug INPUT (``CLAUDE_PROJECT_DIR`` / cwd).
++  ``CLAUDE_PROJECT_DIR_NATIVE`` still wins for ``--state-dir`` — it is the
++  documented operator override, not a default.
++- Read-only: prints ONE path + newline on stdout, creates nothing, exit 0.
++  Usage error: exit 2, message on stderr, NOTHING on stdout (a caller doing
++  ``dir="$(...)"`` must never capture prose as a path).
++- ONE invocation convention. An inline ``python3 -c`` in a template would
++  be a second one, and the class this cures is "a local branch that
++  re-derives the path" (CLAUDE.md §4). Consumers: the two pre-push review
++  gates in ``templates/{codex,grok}/``, ``ceo-backup.sh``, ``ceo-restore.sh``.
++
+ Leaf module: stdlib only, imports nothing from ``_lib`` (loadable from
+ any hook, mirrors ``injection_salt``'s constraint). Python ≥ 3.9.
+ """
+@@ -61,8 +81,9 @@ from __future__ import annotations
+ 
+ import os
+ import stat as stat_mod
++import sys
+ from pathlib import Path
+-from typing import Optional, Union
++from typing import List, Optional, Union
+ 
+ __all__ = [
+     "project_dir",
+@@ -115,11 +136,15 @@ def _home() -> Path:
+     return Path(home) if home else Path.home()
+ 
+ 
+-def runtime_state_dir() -> Path:
++def runtime_state_dir(
++    project: Optional[Union["os.PathLike[str]", str]] = None,
++) -> Path:
+     """Return the per-project runtime state base dir (family root).
+ 
+     Precedence: ``CLAUDE_PROJECT_DIR_NATIVE`` (whole-dir override) →
+-    ``$HOME/.claude/projects/<project_slug()>``. Callers create it with
++    ``$HOME/.claude/projects/<project_slug(project)>``. ``project`` (S326,
++    CLI ``--project``) replaces only the slug INPUT; ``None`` keeps the
++    ``CLAUDE_PROJECT_DIR`` / cwd derivation. Callers create it with
+     mode ``0o700`` (creation stays at the call sites that already own
+     mkdir + permission-validation semantics, e.g. ``spool_writer``).
+ 
+@@ -133,7 +158,7 @@ def runtime_state_dir() -> Path:
+     native = os.environ.get("CLAUDE_PROJECT_DIR_NATIVE")
+     if native:
+         return Path(native)
+-    return _home() / ".claude" / "projects" / project_slug()
++    return _home() / ".claude" / "projects" / project_slug(project)
+ 
+ 
+ def ensure_state_dir(path: Optional[Path] = None,
+@@ -179,3 +204,73 @@ def legacy_state_dir() -> Path:
+     style sweeps can allowlist the few sanctioned callers.
+     """
+     return _home() / ".claude" / "projects" / LEGACY_PROJECT_LITERAL
++
++
++# ---------------------------------------------------------------------------
++# CLI — the resolver for SHELL consumers (PLAN-182 OQ-6; Owner decision
++# 2026-08-22, S322; landed S326).
++#
++# The two pre-push review gates delivered to adopters and the operator
++# scripts ceo-backup.sh / ceo-restore.sh are bash. Without a CLI they rebuilt
++# the literal locally — the class W1 closed for Python — and a review APPROVE
++# recorded in one adopter satisfied the gate in ANOTHER (shared state dir).
++# Contract: module docstring §CLI contract. Keep it a thin printer: every
++# rule lives in the functions above, the CLI only chooses which one to call.
++# ---------------------------------------------------------------------------
++
++_CLI_MODES = ("--state-dir", "--slug", "--project-dir")
++_CLI_USAGE = (
++    "usage: runtime_paths.py [--state-dir | --slug | --project-dir] "
++    "[--project PATH]\n"
++    "  --state-dir     per-project runtime state dir (default)\n"
++    "  --slug          native path-based project slug\n"
++    "  --project-dir   the project dir the slug is derived from\n"
++    "  --project PATH  derive for PATH instead of CLAUDE_PROJECT_DIR / cwd\n"
++)
++
++
++def _cli(argv: List[str]) -> int:
++    """Parse ``argv`` (no argparse: keeps the leaf tiny and the usage text
++    byte-stable) and print exactly one path. Returns the exit status."""
++    mode = "--state-dir"
++    mode_seen = False
++    project: Optional[str] = None
++    i = 0
++    while i < len(argv):
++        arg = argv[i]
++        if arg in _CLI_MODES:
++            if mode_seen:
++                sys.stderr.write("runtime_paths: one mode flag only\n" + _CLI_USAGE)
++                return 2
++            mode, mode_seen = arg, True
++        elif arg == "--project":
++            # A missing value must never swallow the NEXT option as a path
++            # (pair-rail r6/r8 P2: `--project --slug` and `--project -h`
++            # printed a valid-looking state dir for a project literally
++            # named after the option). Any token that starts with "-" is an
++            # option, not a PATH; a real path beginning with "-" is not
++            # supported — use an absolute path.
++            if i + 1 >= len(argv) or not argv[i + 1] or argv[i + 1].startswith("-"):
++                sys.stderr.write("runtime_paths: --project needs a PATH\n" + _CLI_USAGE)
++                return 2
++            project = argv[i + 1]
++            i += 1
++        elif arg in ("-h", "--help"):
++            sys.stdout.write(_CLI_USAGE)
++            return 0
++        else:
++            sys.stderr.write("runtime_paths: unknown argument %r\n%s" % (arg, _CLI_USAGE))
++            return 2
++        i += 1
++    if mode == "--project-dir":
++        out = Path(os.path.abspath(project)) if project is not None else project_dir()
++    elif mode == "--slug":
++        out = project_slug(project)
++    else:
++        out = runtime_state_dir(project)
++    sys.stdout.write("%s\n" % out)
++    return 0
++
++
++if __name__ == "__main__":
++    sys.exit(_cli(sys.argv[1:]))
+diff --git a/.claude/hooks/_lib/test_isolation.py b/.claude/hooks/_lib/test_isolation.py
+index c52abc8..7ad0d10 100644
+--- a/.claude/hooks/_lib/test_isolation.py
++++ b/.claude/hooks/_lib/test_isolation.py
+@@ -85,10 +85,32 @@ force a matching edit into ``audit_carrier_overrides`` and
+ ``TestEnvContext.subprocess_env``. Production code keeps the override in full:
+ nothing here touches ``_lib/runtime_paths``, and a test that exercises the
+ override sets it for its own duration with ``mock.patch.dict``.
++## Axis 3 — the COLLECTION window (S326, 2026-08-24)
++
++pytest runs NO fixture under ``--collect-only`` — and in a normal run every
++test module is IMPORTED before the session fixture body executes. Import-time
++code that reaches an audit emitter therefore ran with the carriers still
++pointing at the live tree, and Axis 2 had already popped the whole-dir
++override, so nothing could redirect it. Measured: ``test_policy_mutations``
++replayed the policy corpus at import → 124 HMAC-signed, unattributable events
++per ``pytest --collect-only``; ``verify-counts.sh`` runs one before every
++commit → 19 runs / 2,356 links in 12 h = 79% of the live segment.
++
++Cure (``_redirect_collection_window``, import-time like Axis 2): snapshot the
++live log path FIRST (the WS-D1 comparator must still know what "live" means),
++then point the primary anchor ``CEO_AUDIT_LOG_DIR`` + ``CEO_PROJECT_STATE_DIR``
++at a throwaway ``ceo-collect-isolation-*`` tree. The session fixture keeps
++re-pointing everything at its own tree; at session END its restore now hands
++back the COLLECTION tree instead of the live value, which also closes the
++teardown-window escape (a late emit after the restore used to reach the live
++log). ``HOME`` is deliberately NOT touched here — it steers user-site package
++resolution for subprocesses, and the session fixture owns that dance. Guard:
++``.claude/hooks/tests/test_collect_only_audit_isolation.py``.
+ """
+ 
+ from __future__ import annotations
+ 
++import atexit
+ import os
+ import shutil
+ import tempfile
+@@ -265,6 +287,113 @@ def _resolve_live_log_path_snapshot() -> Optional[str]:
+         return None
+ 
+ 
++# --- Axis 3 — collection-window redirect (S326) ----------------------------------
++COLLECT_WINDOW_PREFIX = "ceo-collect-isolation-"
++COLLECT_WINDOW_DIR: Optional[Path] = None
++IMPORT_TIME_LIVE_LOG_SNAPSHOT: Optional[str] = None
++
++
++def _snapshot_is_wellformed(value: str) -> bool:
++    """A usable inherited snapshot is an ABSOLUTE path that does NOT live
++    inside an isolation tree (a stale or redirected value is not truth).
++
++    Nothing about the name is pinned — not the basename and not the extension
++    (pair-rail r6 P2 + r7 P1): the documented ``CEO_AUDIT_LOG_PATH`` override
++    accepts any file (``/srv/audit/current.log``), and rejecting that inherited
++    truth made a worker re-resolve the DEFAULT path — so WS-D1 watched the
++    wrong file."""
++    return (
++        os.path.isabs(value)
++        and COLLECT_WINDOW_PREFIX not in value
++        and "ceo-suite-isolation-" not in value
++    )
++
++
++def _resolve_live_snapshot_outside_isolation() -> Optional[str]:
++    """Resolve the live log path with the whole-dir anchors temporarily removed
++    (pair-rail r2 P1). Used ONLY when an inherited snapshot was rejected: that
++    rejection is the proof the current anchor is an isolation redirect, so
++    resolving through it would hand the rejected path straight back. The
++    resolver then falls back to HOME; a result that still lives inside an
++    isolation tree is not truth either → ``None`` (the WS-D1 comparator fails
++    safe to no-quarantine when the snapshot is absent)."""
++    saved = {k: os.environ.pop(k, None) for k in ("CEO_AUDIT_LOG_DIR", "CEO_PROJECT_STATE_DIR")}
++    try:
++        candidate = _resolve_live_log_path_snapshot()
++    finally:
++        for key, value in saved.items():
++            if value is not None:
++                os.environ[key] = value
++    if candidate is not None and _snapshot_is_wellformed(candidate):
++        return candidate
++    return None
++
++
++def _redirect_collection_window() -> Dict[str, Optional[str]]:
++    """Point the primary audit anchor at a throwaway tree for the window between
++    conftest import and the session fixture body (module docstring, Axis 3).
++
++    Import-time by design, for the same reason as Axis 2. Three steps whose
++    ORDER is the whole point:
++
++    1. The throwaway tree and its ``atexit`` cleanup come FIRST (pair-rail r2
++       P2): ``atexit`` is LIFO and importing ``audit_emit`` (which step 2
++       does) registers the spool drain. Registering ``rmtree`` before that
++       import makes the drain run first and the ``rmtree`` last — the other
++       order let the drain re-create the tree we had just removed, leaking
++       one ``ceo-collect-isolation-*`` per process.
++    2. The live snapshot is captured BEFORE the anchor moves. An inherited,
++       well-formed value wins (pair-rail r1 P1: an xdist worker inherits the
++       truth AND a redirected anchor; re-resolving would return the parent's
++       collection tree). An inherited value that is NOT well-formed is a
++       redirected/stale one: resolve with the anchors removed (r2 P1) — never
++       through the anchor that produced it. Nothing inherited: resolve as the
++       process sees it (an operator-level ``CEO_AUDIT_LOG_DIR`` IS the live
++       location and must be honoured).
++    3. Only then the anchors move to the throwaway tree.
++
++    Returns the previous anchor values — diagnostic only, never restored (a
++    restore anywhere inside the process re-opens the escape at shutdown).
++    """
++    global COLLECT_WINDOW_DIR, IMPORT_TIME_LIVE_LOG_SNAPSHOT
++    # 1) tree + cleanup first (LIFO argument above)
++    root = Path(tempfile.mkdtemp(prefix=COLLECT_WINDOW_PREFIX))
++    atexit.register(shutil.rmtree, str(root), True)
++    audit = root / "audit"
++    state = audit / "state"
++    state.mkdir(parents=True, exist_ok=True)
++    # 2) snapshot before the anchor moves
++    inherited = os.environ.get(LIVE_LOG_SNAPSHOT_VAR) or None
++    if inherited is not None and _snapshot_is_wellformed(inherited):
++        snapshot: Optional[str] = inherited
++    elif inherited is not None:
++        snapshot = _resolve_live_snapshot_outside_isolation()
++    else:
++        snapshot = _resolve_live_log_path_snapshot()
++    IMPORT_TIME_LIVE_LOG_SNAPSHOT = snapshot
++    if snapshot is not None:
++        os.environ[LIVE_LOG_SNAPSHOT_VAR] = snapshot
++    else:
++        os.environ.pop(LIVE_LOG_SNAPSHOT_VAR, None)
++    # 3) move the anchors
++    previous = {
++        "CEO_AUDIT_LOG_DIR": os.environ.get("CEO_AUDIT_LOG_DIR"),
++        "CEO_PROJECT_STATE_DIR": os.environ.get("CEO_PROJECT_STATE_DIR"),
++    }
++    os.environ["CEO_AUDIT_LOG_DIR"] = str(audit)
++    os.environ["CEO_PROJECT_STATE_DIR"] = str(state)
++    # Per-file overrides inherited from the shell could still point a single
++    # sidecar at the live tree; clear them now, exactly as the fixture does.
++    for key in AUDIT_CLEAR_CARRIERS:
++        os.environ.pop(key, None)
++    COLLECT_WINDOW_DIR = root
++    return previous
++
++
++# Import-time side effect #2 (the pair with Axis 2 above) — see the docstring.
++COLLECTION_WINDOW_PREVIOUS: Dict[str, Optional[str]] = _redirect_collection_window()
++
++
+ # --- Idempotent redirect state -------------------------------------------------
+ # Holds the restore snapshot for the ONE fixture instance that performed the
+ # real redirect. None ⇒ no active redirect (next session fixture will activate).
+@@ -278,8 +407,14 @@ def _activate_redirect() -> Optional[Dict[str, object]]:
+     if _REDIRECT is not None:
+         return None  # a sibling conftest's session fixture already redirected
+ 
+-    # 1) Snapshot the live log path BEFORE we touch env (WS-D1 comparator).
+-    live_log_snapshot = _resolve_live_log_path_snapshot()
++    # 1) The live log path was snapshotted at IMPORT, before Axis 3 moved the
++    #    anchor (resolving it here would return the collection tree). Fall back
++    #    to resolving only if the import-time capture failed.
++    live_log_snapshot = (
++        IMPORT_TIME_LIVE_LOG_SNAPSHOT
++        if IMPORT_TIME_LIVE_LOG_SNAPSHOT is not None
++        else _resolve_live_log_path_snapshot()
++    )
+ 
+     # 2) Capture the REAL PyYAML user-site BEFORE the HOME redirect so subprocess
+     #    Python tooling (e.g. lint-skills' strict-YAML leg) still resolves it.
+diff --git a/.claude/hooks/tests/test_collect_only_audit_isolation.py b/.claude/hooks/tests/test_collect_only_audit_isolation.py
+index 395621b..7c9449c 100644
+--- a/.claude/hooks/tests/test_collect_only_audit_isolation.py
++++ b/.claude/hooks/tests/test_collect_only_audit_isolation.py
+@@ -180,3 +180,125 @@ class TestCollectOnlyAuditIsolation(TestEnvContext):
+             f"audit-log line under the throwaway HOME (found: {lines}); the "
+             "negative guard above cannot be trusted"
+         ))
++
++    def test_collection_window_tree_is_removed_at_exit(self):
++        """pair-rail r2 P2 — the throwaway tree must not outlive the process:
++        atexit is LIFO, so the cleanup has to be registered BEFORE audit_emit
++        registers the spool drain (else the drain re-creates the tree after
++        rmtree). Measured on the pre-cure tree: +1 leaked dir per collect."""
++        # The child gets a TMPDIR this test OWNS: under xdist another worker
++        # may be spawning its own collect at the same time, and counting the
++        # shared system tempdir reported that sibling as a "leak".
++        home = self._throwaway_home()
++        child_tmp = Path(tempfile.mkdtemp(prefix="s326-child-tmp-"))
++        self.addCleanup(shutil.rmtree, str(child_tmp), True)
++        env = self._production_shape_env(home)
++        env["TMPDIR"] = str(child_tmp)
++        # Anti-vacuity: the child interpreter really resolves its tempdir to
++        # OUR directory (else an empty glob below would pass trivially).
++        probe = subprocess.run(
++            [sys.executable, "-c", "import tempfile; print(tempfile.gettempdir())"],
++            env=env, capture_output=True, text=True, timeout=60)
++        self.assertEqual(Path(probe.stdout.strip()).resolve(), child_tmp.resolve())
++        res = self._collect([".claude/hooks/tests/test_runtime_paths.py"], env, _REPO_ROOT)
++        self.assertEqual(res.returncode, 0, msg=res.stderr[-800:])
++        leaked = sorted(p.name for p in child_tmp.glob(test_isolation.COLLECT_WINDOW_PREFIX + "*"))
++        self.assertEqual(leaked, [], msg="collection-window tree(s) leaked: %s" % leaked)
++
++
++class TestCollectionWindowRedirect(TestEnvContext):
++    """S326 structural cure — ``_lib/test_isolation`` Axis 3, asserted in-process.
++    These fail on a tree WITHOUT the cure (the attributes do not exist), which
++    is how a partial land shows up."""
++
++    def test_live_snapshot_was_captured_before_any_redirect(self):
++        snap = getattr(test_isolation, "IMPORT_TIME_LIVE_LOG_SNAPSHOT", None)
++        self.assertIsInstance(snap, str, "no import-time live-log snapshot")
++        self.assertNotIn(getattr(test_isolation, "COLLECT_WINDOW_PREFIX", "ceo-collect-isolation-"), snap)
++        self.assertNotIn("ceo-suite-isolation-", snap)
++        # The contract is "absolute path outside isolation trees" — never a
++        # basename: a suite launched under a documented CEO_AUDIT_LOG_PATH
++        # (any file name) captures THAT path at import (pair-rail r7 P2).
++        self.assertTrue(os.path.isabs(snap), snap)
++
++    def test_collection_window_dir_exists_with_the_prefix(self):
++        d = getattr(test_isolation, "COLLECT_WINDOW_DIR", None)
++        self.assertIsNotNone(d, "Axis 3 did not create a collection-window tree")
++        self.assertTrue(Path(d).is_dir(), d)
++        self.assertTrue(Path(d).name.startswith(test_isolation.COLLECT_WINDOW_PREFIX), d)
++
++    def test_published_snapshot_var_is_the_import_time_value(self):
++        self.assertEqual(
++            os.environ.get(test_isolation.LIVE_LOG_SNAPSHOT_VAR),
++            test_isolation.IMPORT_TIME_LIVE_LOG_SNAPSHOT,
++        )
++
++    def test_child_process_preserves_the_inherited_snapshot(self):
++        """pair-rail r1 P1 — an xdist worker inherits the true snapshot AND a
++        CEO_AUDIT_LOG_DIR already pointed at the parent's collection tree. Import
++        in that shape must keep the inherited truth, not re-resolve it."""
++        fake_collect = self._tmp_root / (test_isolation.COLLECT_WINDOW_PREFIX + "parent") / "audit"
++        fake_collect.mkdir(parents=True)
++        true_snapshot = str(self._tmp_root / "true-home" / ".claude" / "projects" / "-x" / "audit-log.jsonl")
++        env = self.subprocess_env()
++        env["CEO_AUDIT_LOG_DIR"] = str(fake_collect)
++        env[test_isolation.LIVE_LOG_SNAPSHOT_VAR] = true_snapshot
++        code = (
++            "import sys\n"
++            f"sys.path.insert(0, {str(_HOOKS_DIR)!r})\n"
++            "from _lib import test_isolation as ti\n"
++            "print('SNAP=' + str(ti.IMPORT_TIME_LIVE_LOG_SNAPSHOT))\n"
++        )
++        res = subprocess.run([sys.executable, "-c", code], env=env,
++                             capture_output=True, text=True, timeout=60)
++        self.assertEqual(res.returncode, 0, msg=res.stderr[-800:])
++        snap = [ln for ln in res.stdout.splitlines() if ln.startswith("SNAP=")]
++        self.assertTrue(snap, msg=res.stdout)
++        self.assertEqual(snap[0][len("SNAP="):], true_snapshot)
++
++    def test_custom_basename_snapshot_is_preserved(self):
++        """pair-rail r6 P2 — a supported CEO_AUDIT_LOG_PATH override may name
++        the live log differently; an inherited absolute .jsonl outside any
++        isolation tree is truth and must be kept, whatever its basename."""
++        fake_collect = self._tmp_root / (test_isolation.COLLECT_WINDOW_PREFIX + "parent") / "audit"
++        fake_collect.mkdir(parents=True)
++        custom = str(self._tmp_root / "true-home" / "srv" / "audit" / "current.log")
++        env = self.subprocess_env()
++        env["CEO_AUDIT_LOG_DIR"] = str(fake_collect)
++        env[test_isolation.LIVE_LOG_SNAPSHOT_VAR] = custom
++        code = (
++            "import sys\n"
++            f"sys.path.insert(0, {str(_HOOKS_DIR)!r})\n"
++            "from _lib import test_isolation as ti\n"
++            "print('SNAP=' + str(ti.IMPORT_TIME_LIVE_LOG_SNAPSHOT))\n"
++        )
++        res = subprocess.run([sys.executable, "-c", code], env=env,
++                             capture_output=True, text=True, timeout=60)
++        self.assertEqual(res.returncode, 0, msg=res.stderr[-800:])
++        snap = [ln for ln in res.stdout.splitlines() if ln.startswith("SNAP=")][0][len("SNAP="):]
++        self.assertEqual(snap, custom)
++
++    def test_stale_inherited_snapshot_inside_an_isolation_tree_is_ignored(self):
++        """The inherited value is trusted only when well-formed: a path inside a
++        collection/suite isolation tree is re-resolved, never adopted."""
++        fake_collect = self._tmp_root / (test_isolation.COLLECT_WINDOW_PREFIX + "parent") / "audit"
++        fake_collect.mkdir(parents=True)
++        env = self.subprocess_env()
++        env["CEO_AUDIT_LOG_DIR"] = str(fake_collect)
++        env[test_isolation.LIVE_LOG_SNAPSHOT_VAR] = str(fake_collect / "audit-log.jsonl")
++        code = (
++            "import sys\n"
++            f"sys.path.insert(0, {str(_HOOKS_DIR)!r})\n"
++            "from _lib import test_isolation as ti\n"
++            "print('SNAP=' + str(ti.IMPORT_TIME_LIVE_LOG_SNAPSHOT))\n"
++        )
++        res = subprocess.run([sys.executable, "-c", code], env=env,
++                             capture_output=True, text=True, timeout=60)
++        self.assertEqual(res.returncode, 0, msg=res.stderr[-800:])
++        snap = [ln for ln in res.stdout.splitlines() if ln.startswith("SNAP=")][0][len("SNAP="):]
++        # realpath on BOTH sides: on macOS mkdtemp lives under /var/... and the
++        # resolver returns /private/var/..., so a plain string compare passes
++        # vacuously (pair-rail r2 P1 caught exactly that).
++        self.assertNotEqual(os.path.realpath(snap),
++                            os.path.realpath(str(fake_collect / "audit-log.jsonl")))
++        self.assertNotIn(test_isolation.COLLECT_WINDOW_PREFIX, snap)
+diff --git a/.claude/hooks/tests/test_runtime_paths.py b/.claude/hooks/tests/test_runtime_paths.py
+index 047da86..7a30ff8 100644
+--- a/.claude/hooks/tests/test_runtime_paths.py
++++ b/.claude/hooks/tests/test_runtime_paths.py
+@@ -8,7 +8,9 @@ oraculo").
+ 
+ from __future__ import annotations
+ 
++import ast
+ import os
++import subprocess
+ import sys
+ import unittest
+ from pathlib import Path
+@@ -155,5 +157,95 @@ class TestRuntimeStateDir(TestEnvContext):
+             )
+ 
+ 
++
++
++_RESOLVER_FILE = Path(runtime_paths.__file__).resolve()
++
++
++class TestCli(TestEnvContext):
++    """PLAN-182 OQ-6 (S326) — the CLI is a thin printer over the functions."""
++
++    def _run(self, *args, env=None, cwd=None):
++        if env is None:
++            env = self.subprocess_env()  # the sanctioned isolated-env builder
++        return subprocess.run(
++            [sys.executable, str(_RESOLVER_FILE), *args],
++            env=env, cwd=cwd, capture_output=True, text=True, timeout=60,
++        )
++
++    def test_default_prints_state_dir_identical_to_the_function(self):
++        env = self.subprocess_env()
++        res = self._run(env=env)
++        self.assertEqual(res.returncode, 0, msg=res.stderr)
++        expected = str(Path(env["HOME"]) / ".claude" / "projects"
++                       / runtime_paths.project_slug(env["CLAUDE_PROJECT_DIR"]))
++        self.assertEqual(res.stdout, expected + "\n")
++        self.assertEqual(res.stderr, "")
++
++    def test_slug_and_project_dir_modes(self):
++        env = self.subprocess_env()
++        slug = self._run("--slug", env=env)
++        pdir = self._run("--project-dir", env=env)
++        self.assertEqual(slug.stdout.rstrip("\n"),
++                         runtime_paths.project_slug(env["CLAUDE_PROJECT_DIR"]))
++        self.assertEqual(pdir.stdout.rstrip("\n"),
++                         os.path.abspath(env["CLAUDE_PROJECT_DIR"]))
++
++    def test_project_flag_replaces_the_slug_input_only(self):
++        env = self.subprocess_env()
++        other = self._tmp_root / "other-repo"
++        other.mkdir()
++        res = self._run("--state-dir", "--project", str(other), env=env)
++        self.assertEqual(res.returncode, 0, msg=res.stderr)
++        self.assertEqual(
++            res.stdout.rstrip("\n"),
++            str(Path(env["HOME"]) / ".claude" / "projects" / runtime_paths.project_slug(other)))
++        slug = self._run("--slug", "--project", str(other), env=env)
++        self.assertEqual(slug.stdout.rstrip("\n"), runtime_paths.project_slug(other))
++
++    def test_native_override_wins_for_state_dir_even_with_project(self):
++        env = self.subprocess_env()
++        native = self._tmp_root / "native-override"
++        env["CLAUDE_PROJECT_DIR_NATIVE"] = str(native)
++        res = self._run("--project", str(self._tmp_root / "x"), env=env)
++        self.assertEqual(res.stdout.rstrip("\n"), str(native))
++        # ...but the slug is untouched by the whole-dir override.
++        slug = self._run("--slug", env=env)
++        self.assertEqual(slug.stdout.rstrip("\n"),
++                         runtime_paths.project_slug(env["CLAUDE_PROJECT_DIR"]))
++
++    def test_usage_errors_exit_2_with_empty_stdout(self):
++        for argv in (["--bogus"], ["--project"], ["--slug", "--state-dir"], ["--project", ""],
++                     ["--project", "--slug"], ["--project", "--help"], ["--project", "-h"]):
++            res = self._run(*argv)
++            self.assertEqual(res.returncode, 2, msg="argv=%r" % (argv,))
++            self.assertEqual(res.stdout, "", msg="argv=%r leaked prose on stdout" % (argv,))
++            self.assertIn("usage:", res.stderr)
++        helped = self._run("--help")
++        self.assertEqual(helped.returncode, 0)
++        self.assertIn("usage:", helped.stdout)
++
++    def test_module_invocation_from_the_hooks_dir(self):
++        env = self.subprocess_env()
++        hooks_dir = _RESOLVER_FILE.parent.parent
++        res = subprocess.run(
++            [sys.executable, "-m", "_lib.runtime_paths", "--slug"],
++            env=env, cwd=str(hooks_dir), capture_output=True, text=True, timeout=60)
++        self.assertEqual(res.returncode, 0, msg=res.stderr)
++        self.assertEqual(res.stdout.rstrip("\n"),
++                         runtime_paths.project_slug(env["CLAUDE_PROJECT_DIR"]))
++
++    def test_cli_keeps_the_module_a_leaf(self):
++        """The resolver must stay importable from any hook: stdlib only, no
++        ``_lib`` sibling imports (the CLI must not have smuggled one in)."""
++        tree = ast.parse(_RESOLVER_FILE.read_text(encoding="utf-8"))
++        for node in ast.walk(tree):
++            if isinstance(node, ast.ImportFrom):
++                self.assertFalse((node.module or "").startswith("_lib"), ast.dump(node))
++            elif isinstance(node, ast.Import):
++                for alias in node.names:
++                    self.assertFalse(alias.name.startswith("_lib"), alias.name)
++
++
+ if __name__ == "__main__":
+     unittest.main()
+diff --git a/.claude/plans/PLAN-182-audit-path-isolation.md b/.claude/plans/PLAN-182-audit-path-isolation.md
+index 3a60689..76d0f2c 100644
+--- a/.claude/plans/PLAN-182-audit-path-isolation.md
++++ b/.claude/plans/PLAN-182-audit-path-isolation.md
+@@ -17,6 +17,15 @@ tags: [runtime-state, audit, hmac, salt, confidentiality, isolation, adopter, ad
+ 
+ > ## 🎯 PRÓXIMO FOCO RATIFICADO pelo Owner (2026-08-24): o CLI do resolvedor único
+ >
++> **✅ LANDADO na S326 (2026-08-24) pelo `OWNER-S326-LAND.sh` sob o sentinel `wave-cli-approved.md`
++> (assinatura `.asc` commitada com o land; gates G1–G5 + V1–V6 no script):** `__main__` em
++> `_lib/runtime_paths.py` (contrato no docstring §CLI contract), os DOIS templates de
++> pre-push e `ceo-backup.sh`/`ceo-restore.sh` chamam o resolvedor; `_DECLARED_DEBT`
++> esvaziada com asserção POSITIVA (os gates CHAMAM `--state-dir`). O item 3 (alargar o
++> censo M1 para `${VAR:-literal}`) ficou para o closeout da S326 — muda a família publicada
++> no `CLAUDE.md` e o Gate-1 só se edita no closeout. No mesmo pacote: cura ESTRUTURAL do
++> achado S326 (`_lib/test_isolation.py` Axis 3 — redirect da janela de COLEÇÃO no import).
++>
+ > Dar um `__main__` a `.claude/hooks/_lib/runtime_paths.py` é a cura de MAIOR
+ > retorno por cerimônia hoje, porque **um** patch canônico fecha TRÊS dívidas
+ > que estão bloqueadas pela mesma ausência:
+@@ -761,9 +770,9 @@ checkout de adopter, onde o fallback degradava em silêncio para
+       Check: e2e de upgrade sobre instalacao existente — migra ou declara aceite; falha se nenhum dos dois
+ - [x] `[P0]` **RESOLVIDO (S321, 2026-08-23T00:15Z):** o adopter `arbitrage-monitor` rodava cópia PRÉ-W1 e escrevia no literal. **Upgrade executado**, com as quatro pernas medidas (ver AC-5): resolvedor presente, dir próprio, chave HMAC distinta, e o literal com delta **0** entre dois snapshots sob controle positivo — um `emit` real no contexto do adopter aterrissou no diretório NOVO dele, não no literal. A mistura acidental sob o mesmo `$HOME` acabou de fato, não por declaração.
+       Check: upgrade do adopter para uma versao com runtime_paths, OU aceite escrito de que o literal permanece como estado legitimo dele
+-- [ ] `[P1]` `ceo-backup.sh` / `ceo-restore.sh`: os dois ainda defaultam para `${CEO_PROJECT_NAME:-ceo-orchestration}` e são **INVISÍVEIS ao censo** — rodar o `_m1_hit()` do próprio derivador nos dois devolve `False`, porque o regex M1 exige aspas colando no literal e a forma `${VAR:-literal}` escapa. A exclusão é acidente de regex, não allowlist. Composto: backup lê o dir legado, restore escreve nele — um restore **nunca repopula o dir vivo**.
++- [x] `[P1]` **CURADO S326** — os dois resolvem por `runtime_paths.py --slug/--state-dir`; `--project-slug`/`CEO_PROJECT_NAME` seguem como override EXPLÍCITO, sem default literal; resolvedor ausente ⇒ falha alta (exit 2), nunca palpite. (histórico: ainda defaultavam para `${CEO_PROJECT_NAME:-ceo-orchestration}` e são **INVISÍVEIS ao censo** — rodar o `_m1_hit()` do próprio derivador nos dois devolve `False`, porque o regex M1 exige aspas colando no literal e a forma `${VAR:-literal}` escapa. A exclusão é acidente de regex, não allowlist. Composto: backup lê o dir legado, restore escreve nele — um restore **nunca repopula o dir vivo**.
+       Check: os dois scripts operam sobre o dir resolvido, nao sobre o literal; round-trip backup->restore->verify_chain no dir VIVO
+-- [ ] `[P1]` **Templates com dono declarado:** `templates/grok/pre-push-review-gate.sh:144` é ENTREGUE ao adopter (`_grok_harness.sh:227`, a doc o chama de "the teeth") e constrói o literal; o gêmeo `templates/codex/pre-push-review-gate.sh:90` é ÓRFÃO (não aparece em `_codex_planned_pairs()`). `templates/scripts/statusline-ceo.py` é duplicata órfã — zero rota de entrega, zero teste; o adopter recebe a cópia VIVA já migrada. Curar exige um resolvedor em SHELL, que `runtime_paths.py` não expõe (não tem `__main__`). Decisão do Owner: expor CLI no módulo, ou aceitar.
++- [x] `[P1]` **CURADO S326 (a decisão abaixo foi executada) — Templates com dono declarado:** `templates/grok/pre-push-review-gate.sh:144` era ENTREGUE ao adopter (`_grok_harness.sh:227`, a doc o chama de "the teeth") e constrói o literal; o gêmeo `templates/codex/pre-push-review-gate.sh:90` é ÓRFÃO (não aparece em `_codex_planned_pairs()`). `templates/scripts/statusline-ceo.py` é duplicata órfã — zero rota de entrega, zero teste; o adopter recebe a cópia VIVA já migrada. Curar exige um resolvedor em SHELL, que `runtime_paths.py` não expõe (não tem `__main__`). Decisão do Owner: expor CLI no módulo, ou aceitar.
+       **DECIDIDO — Owner, 2026-08-22 (S322), via AskUserQuestion, texto verbatim da opção escolhida:** "Expor CLI no runtime_paths.py (Recomendado) — Adiciono `__main__` ao módulo, os templates passam a chamar o resolvedor único em vez de reconstruir o literal. Fecha o item e mata a classe na raiz — o adopter deixa de receber o defeito. É a cura, não o contorno."
+       Check: nenhum template entregue constroi o literal; orfaos deletados ou sincronizados com teste de paridade
+ - [x] `[P1]` Dois adopters no mesmo `$HOME` sem env resolvem para caminhos e chaves distintos — **provado em processo** com HOME isolado; inclusive dois projetos de mesmo BASENAME em pais diferentes (a classe que a W1 curou). Residual conhecido reproduzido: `/srv/a-b/c` e `/srv/a/b-c` colidem em `-srv-a-b-c`, que é a derivação NATIVA do harness.
+diff --git a/.claude/scripts/ceo-backup.sh b/.claude/scripts/ceo-backup.sh
+index eae40d1..7bf56eb 100755
+--- a/.claude/scripts/ceo-backup.sh
++++ b/.claude/scripts/ceo-backup.sh
+@@ -55,7 +55,7 @@ Options:
+ 
+ Env vars honored:
+   CEO_AUDIT_LOG_DIR        Source dir for audit log + memory
+-  CEO_PROJECT_NAME         Default project slug
++  CEO_PROJECT_NAME         Explicit project slug (default: the single resolver, ADR-001)
+   CEO_BACKUP_ROOT          Default backup destination root
+ EOF
+ }
+@@ -83,15 +83,79 @@ log() {
+   return 0
+ }
+ 
++# The framework SINGLE resolver (ADR-001; PLAN-182 OQ-6, S326). The old
++# default slug `ceo-orchestration` named THIS framework, not the adopter: every
++# project under one $HOME backed up -- and restored -- the same shared dir.
++# `--project-slug` / CEO_PROJECT_NAME stay as EXPLICIT operator overrides;
++# nothing is defaulted from a literal. No resolver on disk (partial upgrade)
++# => fail loud rather than guess where the state lives.
++# `|| true` inside: under `set -e` a failed `cd` (script copied outside a
++# framework tree) would abort this assignment SILENTLY, before _resolve_rp can
++# print its loud `fatal:`. An empty dir here simply fails the -f test below.
++_RP_DIR="$(dirname "${BASH_SOURCE[0]}")/../hooks/_lib"
++_RP="$( { cd "$_RP_DIR" 2>/dev/null && pwd; } || printf '%s' "$_RP_DIR" )/runtime_paths.py"
++_project_root() {
++  # The project the state belongs to (rail r1 P2 + r3 P1):
++  #   1. the harness-set CLAUDE_PROJECT_DIR;
++  #   2. else walk up from the CWD to the nearest `.claude/` (the resolver
++  #      falls back to the CWD, so a call from a SUBDIRECTORY would otherwise
++  #      name the subdirectory);
++  #   3. else the project this script is INSTALLED in — it lives at
++  #      <project>/.claude/scripts/ — because the documented cron entry
++  #      (docs/DISASTER-RECOVERY.md) invokes it by absolute path with
++  #      CWD=$HOME and no CLAUDE_PROJECT_DIR, where step 2 finds nothing.
++  # Nothing at all => failure (never a guessed slug).
++  if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then printf '%s' "$CLAUDE_PROJECT_DIR"; return 0; fi
++  # A project is a directory with the framework INSTALL MARKER — not merely a
++  # `.claude/` (rail r4 P1): under the documented cron, CWD=$HOME and the
++  # user's GLOBAL ~/.claude exists, so a bare `-d .claude` test picked $HOME
++  # as the project and the backup targeted the wrong slug with exit 0.
++  local cur
++  cur="$(pwd)"
++  while [ "$cur" != "/" ]; do
++    if [ -f "$cur/.claude/.framework-version" ]; then printf '%s' "$cur"; return 0; fi
++    cur="$(dirname "$cur")"
++  done
++  local here
++  here="$( { cd "$(dirname "${BASH_SOURCE[0]}")/../.." 2>/dev/null && pwd; } || true )"
++  if [ -n "$here" ] && [ -d "$here/.claude/scripts" ] && [ -d "$here/.claude/hooks" ]; then printf '%s' "$here"; return 0; fi
++  return 1
++}
++_resolve_rp() {
++  if [ ! -f "$_RP" ] || ! command -v python3 >/dev/null 2>&1; then
++    echo "fatal: single resolver not found at $_RP (run scripts/upgrade.sh) -- refusing to guess the state dir" >&2
++    return 2
++  fi
++  local root
++  root="$(_project_root)" || {
++    echo "fatal: no project root (.claude/) above $(pwd) and CLAUDE_PROJECT_DIR unset -- pass --project-slug or run from the project" >&2
++    return 2
++  }
++  python3 "$_RP" --project "$root" "$@"
++}
++
+ # Resolve project slug
+-PROJECT_SLUG="${PROJECT_SLUG_OVERRIDE:-${CEO_PROJECT_NAME:-ceo-orchestration}}"
++if [ -n "${PROJECT_SLUG_OVERRIDE:-}" ]; then
++  PROJECT_SLUG="$PROJECT_SLUG_OVERRIDE"
++elif [ -n "${CEO_PROJECT_NAME:-}" ]; then
++  PROJECT_SLUG="$CEO_PROJECT_NAME"
++else
++  PROJECT_SLUG="$(_resolve_rp --slug)" || exit 2
++fi
++[ -n "$PROJECT_SLUG" ] || { echo "fatal: empty project slug" >&2; exit 2; }
+ 
+ # Resolve audit dir (where audit-log.jsonl + memory/ live)
+ if [ -n "$AUDIT_DIR_OVERRIDE" ]; then
+   AUDIT_DIR="$AUDIT_DIR_OVERRIDE"
++elif [ -n "${CEO_AUDIT_LOG_DIR:-}" ]; then
++  AUDIT_DIR="$CEO_AUDIT_LOG_DIR"
++elif [ -n "${PROJECT_SLUG_OVERRIDE:-}${CEO_PROJECT_NAME:-}" ]; then
++  # An explicit operator slug names the state dir directly under $HOME.
++  AUDIT_DIR="$HOME/.claude/projects/$PROJECT_SLUG"
+ else
+-  AUDIT_DIR="${CEO_AUDIT_LOG_DIR:-$HOME/.claude/projects/$PROJECT_SLUG}"
++  AUDIT_DIR="$(_resolve_rp --state-dir)" || exit 2
+ fi
++[ -n "$AUDIT_DIR" ] || { echo "fatal: empty audit dir" >&2; exit 2; }
+ 
+ # Resolve backup root
+ BACKUP_ROOT="${BACKUP_ROOT_OVERRIDE:-${CEO_BACKUP_ROOT:-$HOME/.ceo-backups}}"
+diff --git a/.claude/scripts/ceo-restore.sh b/.claude/scripts/ceo-restore.sh
+index 29d6311..610ef1a 100755
+--- a/.claude/scripts/ceo-restore.sh
++++ b/.claude/scripts/ceo-restore.sh
+@@ -95,13 +95,72 @@ if [ ! -f "$TARBALL" ]; then
+   exit 1
+ fi
+ 
+-# Resolve destination
+-PROJECT_SLUG="${PROJECT_SLUG_OVERRIDE:-${CEO_PROJECT_NAME:-ceo-orchestration}}"
++# The framework SINGLE resolver (ADR-001; PLAN-182 OQ-6, S326). The old
++# default slug `ceo-orchestration` named THIS framework, not the adopter: every
++# project under one $HOME backed up -- and restored -- the same shared dir.
++# `--project-slug` / CEO_PROJECT_NAME stay as EXPLICIT operator overrides;
++# nothing is defaulted from a literal. No resolver on disk (partial upgrade)
++# => fail loud rather than guess where the state lives.
++# `|| true` inside: under `set -e` a failed `cd` (script copied outside a
++# framework tree) would abort this assignment SILENTLY, before _resolve_rp can
++# print its loud `fatal:`. An empty dir here simply fails the -f test below.
++_RP_DIR="$(dirname "${BASH_SOURCE[0]}")/../hooks/_lib"
++_RP="$( { cd "$_RP_DIR" 2>/dev/null && pwd; } || printf '%s' "$_RP_DIR" )/runtime_paths.py"
++_project_root() {
++  # The project the state belongs to (rail r1 P2 + r3 P1):
++  #   1. the harness-set CLAUDE_PROJECT_DIR;
++  #   2. else walk up from the CWD to the nearest `.claude/` (the resolver
++  #      falls back to the CWD, so a call from a SUBDIRECTORY would otherwise
++  #      name the subdirectory);
++  #   3. else the project this script is INSTALLED in — it lives at
++  #      <project>/.claude/scripts/ — because the documented cron entry
++  #      (docs/DISASTER-RECOVERY.md) invokes it by absolute path with
++  #      CWD=$HOME and no CLAUDE_PROJECT_DIR, where step 2 finds nothing.
++  # Nothing at all => failure (never a guessed slug).
++  if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then printf '%s' "$CLAUDE_PROJECT_DIR"; return 0; fi
++  # A project is a directory with the framework INSTALL MARKER — not merely a
++  # `.claude/` (rail r4 P1): under the documented cron, CWD=$HOME and the
++  # user's GLOBAL ~/.claude exists, so a bare `-d .claude` test picked $HOME
++  # as the project and the backup targeted the wrong slug with exit 0.
++  local cur
++  cur="$(pwd)"
++  while [ "$cur" != "/" ]; do
++    if [ -f "$cur/.claude/.framework-version" ]; then printf '%s' "$cur"; return 0; fi
++    cur="$(dirname "$cur")"
++  done
++  local here
++  here="$( { cd "$(dirname "${BASH_SOURCE[0]}")/../.." 2>/dev/null && pwd; } || true )"
++  if [ -n "$here" ] && [ -d "$here/.claude/scripts" ] && [ -d "$here/.claude/hooks" ]; then printf '%s' "$here"; return 0; fi
++  return 1
++}
++_resolve_rp() {
++  if [ ! -f "$_RP" ] || ! command -v python3 >/dev/null 2>&1; then
++    echo "fatal: single resolver not found at $_RP (run scripts/upgrade.sh) -- refusing to guess the state dir" >&2
++    return 2
++  fi
++  local root
++  root="$(_project_root)" || {
++    echo "fatal: no project root (.claude/) above $(pwd) and CLAUDE_PROJECT_DIR unset -- pass --project-slug or run from the project" >&2
++    return 2
++  }
++  python3 "$_RP" --project "$root" "$@"
++}
++
++# Resolve destination. An EXPLICIT destination (--dest / CEO_AUDIT_LOG_DIR)
++# is honoured without any project discovery (pair-rail r2 P2): the slug is
++# only needed by the branch that builds the path from it.
+ if [ -n "$DEST_OVERRIDE" ]; then
+   DEST="$DEST_OVERRIDE"
++elif [ -n "${CEO_AUDIT_LOG_DIR:-}" ]; then
++  DEST="$CEO_AUDIT_LOG_DIR"
++elif [ -n "${PROJECT_SLUG_OVERRIDE:-}${CEO_PROJECT_NAME:-}" ]; then
++  # An explicit operator slug names the destination directly under $HOME.
++  PROJECT_SLUG="${PROJECT_SLUG_OVERRIDE:-$CEO_PROJECT_NAME}"
++  DEST="$HOME/.claude/projects/$PROJECT_SLUG"
+ else
+-  DEST="${CEO_AUDIT_LOG_DIR:-$HOME/.claude/projects/$PROJECT_SLUG}"
++  DEST="$(_resolve_rp --state-dir)" || exit 2
+ fi
++[ -n "$DEST" ] || { echo "fatal: empty destination" >&2; exit 2; }
+ 
+ log "ceo-restore: tarball=$TARBALL dest=$DEST mode=$([ "$APPLY" -eq 1 ] && echo APPLY || echo DRY-RUN)"
+ 
+diff --git a/.claude/scripts/local/verify-counts.sh b/.claude/scripts/local/verify-counts.sh
+index 3d08d9b..9705453 100755
+--- a/.claude/scripts/local/verify-counts.sh
++++ b/.claude/scripts/local/verify-counts.sh
+@@ -272,7 +272,22 @@ DERIVED_TESTS=0
+ DERIVED_TESTS_ERRORS=0
+ DERIVED_TESTS_CMD='python3 -m pytest --collect-only -q   # pytest.ini testpaths == `make test-collect`'
+ if [ "$NO_TESTS" -eq 0 ]; then
+-  _collect_out=$( { cd "$REPO_ROOT" && python3 -m pytest --collect-only -q 2>&1 | tail -5; } || true )
++  # The collect IMPORTS every test module, and pytest never runs fixtures
++  # under --collect-only -- so the session-level audit-dir redirect of the
++  # suite (a fixture) is NOT in force while modules import. Any import-time
++  # code that reaches an audit emitter then writes to the fallback
++  # $HOME/.claude/projects/<slug>: the LIVE HMAC chain. Measured S326
++  # (2026-08-24): 124 signed, unattributable links per collect, 19 pre-commit
++  # runs in 12 h = 79% of the live segment. Point the first-precedence
++  # carrier (CEO_AUDIT_LOG_DIR -- honoured by _lib/audit_emit._audit_dir()
++  # ahead of the single resolver, and NOT among the carriers the conftest
++  # pops at import) at a throwaway dir for THIS subprocess only. Guard:
++  # .claude/hooks/tests/test_collect_only_audit_isolation.py
++  _vc_audit_tmp=$(mktemp -d "${TMPDIR:-/tmp}/verify-counts-audit.XXXXXX")
++  _collect_out=$( { cd "$REPO_ROOT" && CEO_AUDIT_LOG_DIR="$_vc_audit_tmp" python3 -m pytest --collect-only -q 2>&1 | tail -5; } || true )
++  if [ -n "$_vc_audit_tmp" ] && [ -d "$_vc_audit_tmp" ]; then
++    rm -rf -- "$_vc_audit_tmp"
++  fi
+   DERIVED_TESTS=$(
+     printf '%s\n' "$_collect_out" | \
+     awk '/[0-9]+ tests? collected/ {
+diff --git a/.claude/scripts/tests/test_templates_use_single_resolver.py b/.claude/scripts/tests/test_templates_use_single_resolver.py
+index f6b1a83..4f14e86 100644
+--- a/.claude/scripts/tests/test_templates_use_single_resolver.py
++++ b/.claude/scripts/tests/test_templates_use_single_resolver.py
+@@ -67,18 +67,11 @@ _ALLOW_MARKER = "rp-allow:"
+ # canonical edit; the reason is recorded so the entry is auditable rather than
+ # an excuse. `rp-allow:` is deliberately NOT used for these — that marker
+ # means "documented partial-upgrade fallback", and these are neither.
+-_DECLARED_DEBT = {
+-    "templates/codex/pre-push-review-gate.sh": (
+-        "shell consumer: needs the resolver callable from bash, and "
+-        "_lib/runtime_paths.py has no __main__ and is CANONICAL. Route "
+-        "decided (expose a CLI); the edit belongs to the ceremony. An inline "
+-        "`python3 -c` would invent a second invocation convention."
+-    ),
+-    "templates/grok/pre-push-review-gate.sh": (
+-        "same class as the codex twin: shell consumer, blocked on the same "
+-        "canonical CLI. Cure both together or the twins diverge."
+-    ),
+-}
++_DECLARED_DEBT: dict = {}
++# S326 (2026-08-24): both pre-push review gates were cured — they call the
++# resolver CLI (`runtime_paths.py --state-dir`, PLAN-182 OQ-6) — so their
++# entries left this dict. The machinery stays: a future template that rebuilds
++# the literal lands as an OFFENDER, and a future entry here rots loudly.
+ 
+ 
+ class TestTemplatesUseSingleResolver(TestEnvContext):
+@@ -143,6 +136,23 @@ class TestTemplatesUseSingleResolver(TestEnvContext):
+             "carrying a stale exemption: %s" % stale_debt,
+         )
+ 
++    def test_pre_push_gates_call_the_single_resolver(self) -> None:
++        """S326 — the cure is a CALL, not just the absence of the literal: each
++        delivered pre-push gate resolves its state dir through the resolver CLI
++        (`runtime_paths.py --state-dir`) and never through a rebuilt path."""
++        for vendor in ("codex", "grok"):
++            rel = "templates/%s/pre-push-review-gate.sh" % vendor
++            text = (REPO / rel).read_text(encoding="utf-8")
++            self.assertIn(
++                '_lib/runtime_paths.py"', text,
++                "%s does not reference the single resolver" % rel)
++            self.assertIn(
++                "--state-dir", text,
++                "%s references the resolver but not its --state-dir mode" % rel)
++            self.assertNotIn(
++                "projects/ceo-orchestration", text,
++                "%s still rebuilds the legacy literal" % rel)
++
+     def test_allow_marker_is_load_bearing(self) -> None:
+         """Positive control for the guard itself.
+ 
+diff --git a/templates/codex/pre-push-review-gate.sh b/templates/codex/pre-push-review-gate.sh
+index 5b6e9fb..48c594b 100755
+--- a/templates/codex/pre-push-review-gate.sh
++++ b/templates/codex/pre-push-review-gate.sh
+@@ -57,6 +57,7 @@ if [ "${CEO_CODEX_PUSH_GATE:-1}" = "0" ]; then
+ fi
+ 
+ ADVISORY="${CEO_CODEX_PUSH_GATE_ADVISORY:-0}"
++_repo_top="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+ 
+ _zero="0000000000000000000000000000000000000000"
+ 
+@@ -87,12 +88,34 @@ _state_dir() {
+   elif [ -n "${CEO_AUDIT_LOG_DIR:-}" ]; then
+     printf '%s' "${CEO_AUDIT_LOG_DIR}"
+   else
+-    printf '%s' "${HOME:-/tmp}/.claude/projects/ceo-orchestration/state"
++    # PLAN-182 OQ-6 (S326): the per-project runtime state dir comes from the
++    # framework single resolver -- never rebuilt here. Rebuilding the literal
++    # made every adopter under one $HOME share ONE review log, so an APPROVE
++    # recorded in one repository satisfied this gate in ANOTHER. Resolver
++    # missing (partial upgrade) or python3 absent => EMPTY: the sidecar
++    # acceptance path (b) is simply unavailable and only per-commit APPROVE
++    # trailers (path a) can clear the push -- the same degradation an oracle
++    # failure already takes. Never a literal fallback.
++    _rp="${_repo_top}/.claude/hooks/_lib/runtime_paths.py"
++    if [ -f "$_rp" ] && command -v python3 >/dev/null 2>&1; then
++      _base="$(CLAUDE_PROJECT_DIR="$_repo_top" python3 "$_rp" --state-dir 2>/dev/null || true)"
++      if [ -n "$_base" ]; then
++        printf '%s/state' "$_base"
++      else
++        echo "pre-push-review-gate: single resolver failed; sidecar APPROVE path unavailable (trailers still clear the push)" >&2
++      fi
++    else
++      echo "pre-push-review-gate: single resolver not found at $_rp; sidecar APPROVE path unavailable (run scripts/upgrade.sh)" >&2
++    fi
+   fi
+ }
+ 
+ _review_log() {
+-  printf '%s/codex-review-log.jsonl' "$(_state_dir)"
++  local sd
++  sd="$(_state_dir)"
++  # Empty state dir (resolver unavailable) => no sidecar log at all.
++  [ -n "$sd" ] || return 0
++  printf '%s/codex-review-log.jsonl' "$sd"
+ }
+ 
+ # Collect commits to check for one pushed ref range.
+@@ -134,7 +157,7 @@ _commit_has_approve_trailer() {
+ _sidecar_has_approve() {
+   local fp="$1" log
+   log="$(_review_log)"
+-  [ -f "$log" ] || return 1
++  [ -n "$log" ] && [ -f "$log" ] || return 1
+   # Match a JSON object line that is APPROVE AND carries this fingerprint.
+   grep -F "\"fingerprint\": \"${fp}\"" "$log" 2>/dev/null \
+     | grep -Eq '"verdict": ?"APPROVE"' && return 0
+diff --git a/templates/grok/pre-push-review-gate.sh b/templates/grok/pre-push-review-gate.sh
+index 75b4144..07fae17 100755
+--- a/templates/grok/pre-push-review-gate.sh
++++ b/templates/grok/pre-push-review-gate.sh
+@@ -141,12 +141,34 @@ _state_dir() {
+   elif [ -n "${CEO_AUDIT_LOG_DIR:-}" ]; then
+     printf '%s' "${CEO_AUDIT_LOG_DIR}"
+   else
+-    printf '%s' "${HOME:-/tmp}/.claude/projects/ceo-orchestration/state"
++    # PLAN-182 OQ-6 (S326): the per-project runtime state dir comes from the
++    # framework single resolver -- never rebuilt here. Rebuilding the literal
++    # made every adopter under one $HOME share ONE review log, so an APPROVE
++    # recorded in one repository satisfied this gate in ANOTHER. Resolver
++    # missing (partial upgrade) or python3 absent => EMPTY: the sidecar
++    # acceptance path (b) is simply unavailable and only per-commit APPROVE
++    # trailers (path a) can clear the push -- the same degradation an oracle
++    # failure already takes. Never a literal fallback.
++    _rp="${_repo_top}/.claude/hooks/_lib/runtime_paths.py"
++    if [ -f "$_rp" ] && command -v python3 >/dev/null 2>&1; then
++      _base="$(CLAUDE_PROJECT_DIR="$_repo_top" python3 "$_rp" --state-dir 2>/dev/null || true)"
++      if [ -n "$_base" ]; then
++        printf '%s/state' "$_base"
++      else
++        echo "pre-push-review-gate: single resolver failed; sidecar APPROVE path unavailable (trailers still clear the push)" >&2
++      fi
++    else
++      echo "pre-push-review-gate: single resolver not found at $_rp; sidecar APPROVE path unavailable (run scripts/upgrade.sh)" >&2
++    fi
+   fi
+ }
+ 
+ _review_log() {
+-  printf '%s/grok-review-log.jsonl' "$(_state_dir)"
++  local sd
++  sd="$(_state_dir)"
++  # Empty state dir (resolver unavailable) => no sidecar log at all.
++  [ -n "$sd" ] || return 0
++  printf '%s/grok-review-log.jsonl' "$sd"
+ }
+ 
+ # Collect commits to check for one pushed ref range.
+@@ -254,7 +276,7 @@ _commit_has_approve_trailer() {
+ _sidecar_has_approve() {
+   local fp="$1" log
+   log="$(_review_log)"
+-  [ -f "$log" ] || return 1
++  [ -n "$log" ] && [ -f "$log" ] || return 1
+   # Match a JSON object line that is APPROVE AND carries this fingerprint.
+   grep -F "\"fingerprint\": \"${fp}\"" "$log" 2>/dev/null \
+     | grep -Eq '"verdict": ?"APPROVE"' && return 0

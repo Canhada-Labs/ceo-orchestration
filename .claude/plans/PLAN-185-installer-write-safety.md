@@ -78,6 +78,19 @@ Fora, declarado:
 
 ### W0 — censo da CLASSE antes de curar um sitio (read-only, sem cerimonia)
 
+> **Status S326 (2026-08-24): RASCUNHO no disco, NAO commitado.** Um agente Security Engineer
+> entregou `.claude/scripts/check-installer-write-safety.py` (censo das DUAS classes: 273 sitios,
+> 12 desguardados + 15 `indeterminado` = 27 bloqueantes, 4 sitios de `sed`), o baseline
+> `.claude/scripts/data/installer-write-safety-baseline.txt`, 56 testes com controle POSITIVO em
+> arvore-sombra e o relatorio `PLAN-185/w0-censo-S326.md`. O pair-rail devolveu tres levas de
+> achados P1 da MESMA classe (fail-open por forma nao modelada): 8 e 7 curados (§7, §7-ter), 9
+> ABERTOS (§7-quater). Classe que regenera apos 3 passadas = arquitetura errada (PROTOCOL
+> anti-padrao 6): a proxima passada tem de INVERTER a regra — enumerar as formas PROVADAS seguras
+> (cada uma com controle positivo) e classificar todo o resto como `indeterminado`. Ate la os 4
+> arquivos ficam untracked (nunca `git add -A` com eles no disco); as checkboxes seguem ABERTAS
+> tambem pela clausula "roda em CI" (wiring em `validate.yml` e canonico — cerimonia W1+W2; linha
+> exata no relatorio §8).
+
 A licao que este repo ja pagou duas vezes (PLAN-182: 16 modulos; PLAN-167:
 `_ownership_verdict`): curar os dois sitios reportados e deixar a classe viva
 converte defeito latente em defeito vivo na proxima wave que alargar o
