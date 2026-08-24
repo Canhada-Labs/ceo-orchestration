@@ -10,7 +10,17 @@ protocol requires that every named-agent Agent-tool call carry:
 
 1. **`## AGENT PROFILE`** — the persona block from `.claude/team.md`
    (or `frontend-team.md` / `domains/*/team-personas.md`)
-2. **`## SKILL CONTENT`** — the full SKILL.md for the agent's primary skill
+2. **the skill material** — in ONE of two accepted forms:
+   - **`## SKILL CONTENT`** — the full SKILL.md pasted inline; or
+   - **`## SKILL REFERENCE`** — a body line `@<path> sha256=<64-hex>`,
+     which the hook resolves and hash-verifies itself.
+
+   Prefer **REFERENCE** for anything but a small skill: it is the cheaper
+   form (a 735-line SKILL.md costs ~15.7k tokens per activation) and the
+   hook checks it FIRST, with strict fail-CLOSED validation
+   (`check_agent_spawn.py:1030` — REFERENCE, then inline CONTENT, then
+   block). Use INLINE when the skill material is assembled on the fly and
+   has no stable path to hash.
 3. **`## FILE ASSIGNMENT`** — explicit files this agent may edit (or "read-only")
 4. **`## TASK`** — the task description
 5. **`## RELEVANT PITFALLS`** — any matching pitfalls from the catalog
