@@ -144,6 +144,22 @@ tentativa por consulta. Basta para mostrar a DIREÇÃO e o atrator
 (4/8 no mesmo slug não é ruído), não para fixar a magnitude. O P1
 deve re-medir com N≥30 antes de decidir (b).
 
+> **⚠️ O pré-requisito N≥30 é INEXECUTÁVEL sob demanda — medido na S325.**
+> A re-medição precisa de spawns REAIS de arquétipo para ter denominador, e
+> o instrumento do próprio repo reporta ZERO: `skill_unknown_ratio` do
+> `/ceo-boot` sai `no custom-archetype spawns (0 general-purpose, 0
+> test-pollution)`. Não há sinal a medir hoje, então N≥30 só se acumula ao
+> longo de uma JANELA de uso normal — não é trabalho que uma sessão possa
+> executar, é tempo de exposição. Tentar rodar a medição agora cai na classe
+> `feedback-probe-window-must-exceed-signal-period`: sonda com janela menor
+> que o período do sinal é estruturalmente morta, e produziria um
+> unknown-ratio calculado sobre denominador zero.
+>
+> ⇒ **Consequência de sequenciamento:** este item NÃO é um gate que uma
+> sessão abre; ele é um gate que o CALENDÁRIO abre. Quem for executar a
+> Fase 1 deve tratá-lo como `external_wait` (o mesmo padrão do PLAN-170,
+> cujo gatilho é a tag `v1.4.0-rc.1`), não como trabalho pendente.
+
 ## 4. Anexo S305 — reframe context-engineering (advisory)
 
 A pesquisa S305 (linha 7 de `PLAN-178/research-S305.md`) reposiciona
