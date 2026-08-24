@@ -1299,7 +1299,7 @@ o dado em mãos, não por simetria).
 - [ ] AC-7 [P1] Marcador 12º site: controle plantado vermelho + bump
       1.4.0 real verde (as duas evidências).
 - [ ] AC-8 [P1] v1.4.0 GA publicada (trem completo com hold).
-- [ ] AC-9 [P2] As 4 dívidas C.* fechadas com evidência dinâmica
+- [x] AC-9 [P2] As 4 dívidas C.* fechadas com evidência dinâmica
       (pair-rail-gate roda até o fim NESTA máquina; injector
       fail-closed testado; **overhead: P4 não bloqueia fan-out
       legítimo de investigação — e, SE um canal persistido existir,

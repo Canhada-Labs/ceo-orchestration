@@ -122,15 +122,37 @@ Measured on this repo with the documented **chars/4 heuristic** (`1 token ≈ 4
 chars`, `.claude/scripts/context-budget.py`) — **these are estimates, not
 tokenizer counts**: Gate 1+2 ≈ **40,116 estimated tokens**, the memory index ≈
 **4,413 estimated tokens**. Adding system prompt and tool definitions puts `F`
-in an **interpolated** 45–55k band. Taking `F = 50k`, `S = 10k`:
+in an **interpolated** 45–55k band.
+
+> **That band is REFUTED by measurement — do not plan against it.** `F` was
+> measured at a real compaction boundary at **97,292 tokens** (`TOTAL_IN`
+> 112,638 − `postTokens` 15,346 = `cache_read` 68,980 + `cache_creation`
+> 28,310), with an independent cold-`F` control at **97,097** in the same
+> session (delta 0.20%). The interpolated band was built from a chars/4
+> estimate of the DOCUMENTS only; it omitted the system prompt, the tool
+> definitions and `cache_creation`.
+>
+> `F` is also **not a constant**. A cold-`F` series of n=41 (censoring
+> declared) gives min **84,101** / median **98,636** / max **138,552**,
+> pstdev **16,148** — a spread of 51.7% of the mean. Reporting only the mean
+> misleads; size your threshold against the upper end.
+
+Taking `F = 97k` (the measured median ≈ 98.6k) and `S = 10k`:
 
 | `T` | η | Reading |
 |---|---:|---|
-| 184k | 67% | healthy |
-| 150k | 60% | healthy |
-| 120k | 42% | mediocre |
-| 80k | 25% | thrashing |
-| 60k | 0% | never progresses |
+| 184k | 42% | mediocre |
+| 150k | 29% | thrashing |
+| 120k | 11% | thrashing |
+| 80k | negative — the working set does not fit | broken |
+| 60k | negative | broken |
+
+The practical consequence for an adopter: the thrashing floor is `T ≈ 107k`
+(`F + S`), **above** the API's own minimum (`trigger.value = 50000`). So on a
+repo with a governance surface this size, continuity works in SHORT sessions
+and degrades exactly where you would want it most. Measure your own `F` before
+trusting any figure here — the instrument is
+`.claude/plans/PLAN-179/w0/gateboot_repay.py`.
 
 Three consequences for an adopter:
 

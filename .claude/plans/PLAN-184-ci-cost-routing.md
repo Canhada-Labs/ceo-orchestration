@@ -798,6 +798,51 @@ mecânico". A decisão é dele; o plano não a antecipa.
 
 ## Waves
 
+### ✅ W-A0 — A0 LANDADA (2026-08-23, S322): `5ff06c9`
+
+> **Registrado na S325.** Até aqui este plano tinha 12 menções a "A0",
+> todas de PREVISÃO ou de decisão, e **zero** menção ao land, ao sha ou ao
+> cron. O único trabalho que shipou era invisível no plano que o governa.
+>
+> **Entregue** (`git show --stat 5ff06c9` — 5 arquivos, +155/−4):
+> `hook-tests-python-matrix` passa a rodar as versões de FRONTEIRA (3.9 e
+> 3.12) no gatilho `push`; as QUATRO seguem no `pull_request` e no
+> `schedule: - cron: "37 7 * * *"`, que entrou JUNTO — sem ele a A0 seria
+> PERDA de cobertura em vez de troca de latência por dinheiro (medido
+> antes de cortar: `{'push': 167}` e zero `schedule:` no arquivo).
+> Landado sob sentinel Owner-signed (`PLAN-184/wave-a0-approved.md` +
+> `.asc`, chave EDDSA AE9B236F…0335DC74, Anchor-SHA `d8ee055`).
+>
+> **PROVADA EM PRODUÇÃO, não em YAML:** a matriz do `push` do próprio
+> commit rendeu **2 entradas** — 3.9 e 3.12. Isso é observação do run, não
+> leitura do arquivo.
+>
+> **Ação humana com prazo, ainda aberta:** o cron novo aterrissou
+> 2026-08-23 12:31 UTC, depois das 07:37, logo o PRIMEIRO fire é
+> **2026-08-24 07:37 UTC**. Inspecionar à mão: uma matriz vazia no
+> `schedule` passaria **vacuamente** — confirmar que são 4 entradas.
+
+- [x] `[P0]` matriz de fronteira no `push` — `validate.yml` (+19 linhas)
+      Check: `git show 5ff06c9 -- .github/workflows/validate.yml` mostra a
+      expressão condicional entregando `["3.9","3.12"]` no `push` e as
+      quatro versões fora dele; e o run do PRÓPRIO commit rendeu 2
+      entradas de matriz — observação do run, não leitura do YAML.
+- [x] `[P0]` backstop nightly `37 7 * * *` (minuto off-mark por desenho)
+      Check: `grep -c 'cron: "37 7 \* \* \*"' .github/workflows/validate.yml`
+      == 1, e o `schedule:` do arquivo lista as QUATRO versões (sem isso a
+      A0 seria perda de cobertura, não troca de latência por dinheiro).
+- [x] `[P0]` cerimônia canônica: sentinel + `.asc`, gates de dry-run e
+      V1-V6 no land, todos verdes
+      Check: `gpg --verify .claude/plans/PLAN-184/wave-a0-approved.md.asc`
+      sai "Good signature" com a chave EDDSA AE9B236F…0335DC74, e o
+      Anchor-SHA do sentinel é `d8ee055`.
+- [ ] `[P1]` confirmar o PRIMEIRO fire do cron (2026-08-24 07:37 UTC) com
+      4 entradas na matriz — matriz vazia passa vacuamente
+      Check: no run agendado, a matriz de `hook-tests-python-matrix` tem
+      **4** entradas (3.9/3.10/3.11/3.12). Contagem 0 ou 2 REPROVA: uma
+      matriz vazia passaria vacuamente e é exatamente o modo de falha
+      que este item existe para pegar.
+
 ### W0 — Medir e derivar antes de filtrar (read-only)
 
 - [ ] `[P0][US0]` **PRÉ-REGISTRO — o resultado que MATA o plano.**

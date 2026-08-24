@@ -174,7 +174,7 @@ SECUNDÁRIA.
 **Runbook sessão 1:** extrair o catálogo W1 dos rounds reais
 (read-only sobre PLAN-166/repass-rc3-scripts/) + esqueleto do lint.
 
-### Registro de execução — W1 fechada; W2 executada com wire STAGED (S316, 2026-08-20)
+### Registro de execução — W1 fechada; W2 com wire LANDADO (S316 exec, land S322 2026-08-23)
 
 Debate L3 round-1 executado (3 críticos, 3× ADJUST, consenso PROCEED;
 revisão cross-model codex r1 REJECT → r2 → r3 com todas as curas
@@ -191,7 +191,24 @@ baseline W4 congelada por comando (**34/44** — substitui o irreprodutível
 pendente, com consequência de recálculo), draft do ADR de disciplina de
 erro (formaliza no closeout — cache discipline do CLAUDE.md).
 
-**W2 — executada; wire de CI STAGED por bloqueio LEGÍTIMO.**
+**W2 — executada; wire de CI LANDADO em `5ff06c9` (2026-08-23).**
+
+> **Reconciliado na S325.** A claim de "STAGED por bloqueio LEGÍTIMO"
+> sobreviveu **duas sessões** depois de o bloqueio deixar de existir: o
+> re-pin do codex já havia ocorrido em `32e29b1` (SENT-S318), e o wire
+> LANDOU em `5ff06c9` sob o sentinel Owner-signed
+> `PLAN-184/wave-a0-approved.md(.asc)`. Entregue, medido por
+> `git show --stat 5ff06c9`: `.github/workflows/ceremony-lint.yml` (+89,
+> dois jobs — `ceremony-lint` e `shellcheck-ceremony`) e
+> `.claude/scripts/local/install-ceremony-precommit.sh` (+37, perna LOCAL
+> advisory/opt-in — o CI é O gate).
+>
+> **A W2 ainda NÃO fecha, e não deve fechar vacuamente:** o AC exige "wire
+> landado **e** job verde no CI", e a perna do job verde não foi medida
+> aqui. **Dívida nova, criada pelo próprio land:** `PLAN-174/staged-w2/`
+> segue no disco **e rastreado** (`git ls-files` = 2 arquivos `.staged`)
+> depois de o conteúdo ter landado — duas fontes de verdade para o mesmo
+> wire, exatamente a classe que este repo cura. Remover no closeout da W2.
 - `check-ceremony-script.py` landado: descoberta por CONTEÚDO
   (os.walk), 54 descobertos/41 rastreados, piso=41, R1-R8 com split
   BLOCKING/ADVISORY, waivers sha256-pinados

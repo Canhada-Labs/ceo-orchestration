@@ -276,20 +276,34 @@ obrigatoriamente no corte.
 
 ### 3.1 O que o alvo compra na curva `η`
 
-`η = (T − F − S) / T`, com `S = 10k` (mesma fixação do §2.1):
+`η = (T − F − S) / T`, com `S = 10k` (mesma fixação do §2.1).
 
-| `T` | `η` com `F` medido hoje (45,3k) | `η` com `F = 20k` (alvo) |
+> **O HIT ESPECÍFICO, NOMEADO (reconciliado na S325).** A coluna abaixo
+> dizia `F` *medido hoje* **(45,3k)**. Esse número está **REFUTADO**, e a
+> palavra "medido" era o erro: 45,3k era a ESTIMATIVA chars/4 do
+> documento-só (§1.2) — omitia system prompt, definições de ferramentas e
+> `cache_creation`. O `F` real foi MEDIDO na fronteira de uma compactação
+> (S322) em **97.292** tokens (`TOTAL_IN` 112.638 − `postTokens` 15.346),
+> com controle cold-`F` independente em **97.097** (delta 0,20%). Série
+> cold-`F` de n=41: min 84.101 / mediana **98.636** / max 138.552, pstdev
+> 16.148 (spread 51,7% da média). Instrumento:
+> `PLAN-179/w0/gateboot_repay.py`.
+
+| `T` | `η` com `F` MEDIDO (97,3k) | `η` com `F = 20k` (alvo) |
 |---|---:|---:|
-| 150k | 63% | 80% |
-| 120k | 54% | 75% |
-| 100k | 45% | 70% |
-| 80k | 31% | **62%** |
-| 60k | 8% | 50% |
+| 150k | 29% | 80% |
+| 120k | 11% | 75% |
+| 100k | negativo | 70% |
+| 80k | negativo | **62%** |
+| 60k | negativo | 50% |
 
-A faixa 80k-120k (a faixa ótima de `research-S309.md §2.4`) sai de
-**31-54%** para **62-75%** — reproduz o "62-75%" afirmado no §2.1. O
-piso de thrashing sai de `T ≈ 55k` para `T ≈ 30k`, colocando o mínimo
-da API (`trigger.value = 50000`) **acima** do piso pela primeira vez.
+A conclusão **inverte**: com o `F` real, a faixa 80k-120k (a "faixa ótima"
+de `research-S309.md §2.4`) **não é operável** — `η` vai de negativo a 11%,
+não de 31-54%. O piso de thrashing NÃO sai de `T ≈ 55k`: ele está hoje em
+`T ≈ 107k` (`F+S`), **acima de toda** a tabela e muito acima do mínimo da
+API (`trigger.value = 50000`). Isso não enfraquece o alvo `F = 20k` — o
+fortalece: ele deixou de ser uma otimização e passou a ser a única coisa
+que reabre a faixa.
 
 ---
 

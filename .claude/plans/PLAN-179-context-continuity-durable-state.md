@@ -140,18 +140,35 @@ do ciclo é:
 ```
 
 Medição local (`research-S309.md §3`): Gate 1+2 = **40.116** tokens
-estimados, `MEMORY.md` = **4.413**. Com system prompt + ferramentas, `F`
-cai na faixa **45–55k**. Fixando `F=50k` e `S=10k`:
+estimados, `MEMORY.md` = **4.413**.
+
+> **⚠️ A FAIXA 45–55k ESTÁ REFUTADA (S322, reconciliado na S325).** Ela era
+> uma INTERPOLAÇÃO a partir da estimativa chars/4 do documento — omitia
+> system prompt, definições de ferramentas e `cache_creation`. O `F` real
+> foi MEDIDO na fronteira de uma compactação: **97.292** tokens
+> (`TOTAL_IN` 112.638 − `postTokens` 15.346 = `cache_read` 68.980 +
+> `cache_creation` 28.310), com controle cold-`F` independente em
+> **97.097** (delta 0,20%). E `F` **não é constante**: série cold-`F` de
+> n=41 (censura declarada) dá min 84.101 / mediana **98.636** / max
+> 138.552, pstdev 16.148 — spread de 51,7% da média, logo reportar só a
+> média engana. Instrumento: `PLAN-179/w0/gateboot_repay.py`.
+
+Fixando `F=97k` (mediana medida ≈ 98,6k) e `S=10k`:
 
 | `T` (limiar)            |   η  | Leitura |
 |-------------------------|-----:|---------|
-| 184k (≈92% de 200k)     |  67% | saudável |
-| 150k (default da API)   |  60% | saudável |
-| 120k (topo da faixa CWL)|  42% | medíocre |
-| 100k                    |  40% | medíocre |
-| 80k (piso da faixa CWL) |  25% | **thrashing** |
-| 60k                     |   0% | **loop: nunca progride** |
+| 184k (≈92% de 200k)     |  42% | medíocre |
+| 150k (default da API)   |  29% | **thrashing** |
+| 120k (topo da faixa CWL)|  11% | **thrashing** |
+| 100k                    |  <0  | **impossível** |
+| 80k (piso da faixa CWL) |  <0  | **impossível** |
+| 60k                     |  <0  | **impossível** |
 | 50k (mínimo da API)     |  <0  | **impossível** |
+
+Com o `F` medido, o piso de thrashing **não** é `T ≈ 60k`: é `T ≈ 107k`
+(`F+S`), acima de metade da tabela e muito acima do mínimo que a API
+permite (`trigger.value = 50000`). É por isso que a continuidade só
+funciona em sessões curtas — anti-correlacionada com o próprio caso de uso.
 
 Três conclusões que mudam o desenho:
 
@@ -259,20 +276,26 @@ wave posterior desenha em cima de premissa não medida
       ausente` (§B): o harness não expõe as parcelas. O agregado não
       degrada e lista os seus INPUTS, como a lição exige
       ([[feedback-measurement-must-list-its-inputs]]).
-- [ ] `[P2][US2][PLAN-179/w0-measurement.md]` — **2 de 3 sub-itens**
+- [x] `[P2][US2][PLAN-179/w0-measurement.md]` — **3 de 3 sub-itens**
       Relatório: N de compactações/semana, distribuição de `plan_id`
-      resolvido vs `unknown`, custo de gate-boot re-pago por compactação
-      (baseline documentado: ~44.786 tokens).
+      resolvido vs `unknown`, custo de gate-boot re-pago por compactação.
       **FECHADOS** (`08e25f4`): distribuição de `plan_id` = `{'unknown':
       2}` — 100 % das compactações observadas, categórico e não
       estatístico (§D); N = **1** compactação, com a NÃO-DERIVABILIDADE
       da taxa/semana declarada POR ESCRITO no relatório (não há
       denominador de semanas-de-exposição fiável, §D).
-      **AUSENTE — por isso o `[ ]`:** o custo de gate-boot re-pago.
-      `grep -c '44\.786\|44786'` sobre o relatório = **0**; controle
-      positivo do mesmo grep sobre ESTE plano = **2** (L257, L497), logo
-      o padrão pega quando o número existe. Marcar `[x]` com o sub-item
-      fora do arquivo embarcaria claim falsa.
+      **O TERCEIRO FECHOU na S322, e a evidência que este item declarava
+      está REFUTADA (reconciliado na S325).** O custo de gate-boot
+      re-pago está MEDIDO (§F.2): **97.292** tokens na fronteira de uma
+      compactação real (`TOTAL_IN` 112.638 − `postTokens` 15.346),
+      decompostos em `cache_read` 68.980 + `cache_creation` 28.310, com
+      controle cold-`F` independente em **97.097** (delta 0,20%). A
+      medição de ausência que este `[ ]` citava é FALSA hoje: o grep pelo
+      folclore de ordem 44k sobre o relatório dá **7**, não 0 (§F.2/§F.4
+      e o AC extra do próprio relatório, que diz **MEDIDO**), e o
+      "controle positivo = 2 (L257, L497)" também não reproduz — os
+      números de linha citados já não são os sítios. O baseline antigo
+      está refutado nos DOIS sentidos.
 - [x] `[P1][US2b][.claude/hooks/check_precompact_continuity.py]`
       (landado `c042f9e` — `_progress_guard`, `PROGRESS_FLOOR_ENV` =
       `CEO_CONTEXT_PROGRESS_FLOOR_TOKENS`, wire em `gate()`, ação
@@ -471,7 +494,7 @@ Ensaio obrigatório em clone, não no repo vivo
 > §2.1 estabelece que **a alavanca é `F`, não `T`**. Esta wave é onde o
 > piso desce.
 
-- [ ] `[P1][US9b][PLAN-179/floor-reduction.md]`
+- [x] `[P1][US9b][PLAN-179/floor-reduction.md]` — *reconciliado na S325: §3.1 reescrita contra o `F` MEDIDO, com o hit NOMEADO (a coluna dizia "`F` medido hoje (45,3k)" e o "medido" era o erro — era estimativa chars/4 do documento-só). A conclusão inverteu: a faixa 80k-120k não é operável e o piso está em `T ≈ 107k`.*
       Plano de redução de `F` a partir do ranking já produzido por
       `context-budget.py`: `ceo-orchestration/SKILL.md` (735L, ~15.768 tok,
       economia ~15.618 por ativação via `references/*.md` + ponteiro loader)
@@ -494,11 +517,22 @@ Ensaio obrigatório em clone, não no repo vivo
       `instructions` do `compact_20260112` na API (`research-S309.md §1`)
       — atenção: `instructions` **substitui integralmente** o prompt
       padrão, então omissão é perda de recall.
-- [ ] `[P2][US11][.claude/scripts/context-budget.py]`
+- [x] `[P2][US11][.claude/scripts/context-budget.py]`
       Decidir o destino de D1/D2/D5: consumir ou remover. Sonda órfã que
       permanece é dívida que parece cobertura. Se consumir, o consumidor
       é nomeado aqui; se remover, sai com o teste.
-- [ ] `[P3][US12][docs/CONTEXT-CONTINUITY-GUIDE.md]`
+      **FECHADO (reconciliado na S325, contra execução real).**
+      `python3 .claude/scripts/context-budget.py --probe-status` sai **0**
+      e emite as TRÊS entradas com veredito e consumidor NOMEADO, que é o
+      que o item exigia: D1 `keep_exported_policy` (consumidor = um HOST
+      LOOP ausente, que é dono do próprio context-management),
+      D5 `keep_exported_policy` (o MESMO host loop ausente),
+      D2 `remove_pending_test_codeletion` — sem consumidor e **nenhum
+      construível aqui** (stdlib-only, no-network), com o escopo de
+      remoção enumerado. Cada entrada carrega `consumer`,
+      `why_not_removed` e `removal_scope`, logo a declaração é legível por
+      máquina e não prosa. Nenhuma edição no script foi necessária.
+- [x] `[P3][US12][docs/CONTEXT-CONTINUITY-GUIDE.md]` — *reconciliado na S325: a faixa interpolada 45–55k e a tabela derivada dela foram substituídas pelo `F` MEDIDO (97.292; série n=41 com mediana 98.636 e spread de 51,7%), e o guia agora diz ao adopter que o piso de thrashing é `T ≈ 107k`, acima do mínimo da API.*
       Guia do adopter: o que sobrevive a uma compactação, o que não, e
       qual é o piso de working-set. Sem promessa que o código não cumpre
       ([[feedback-verify-counts-real-path-is-local]]).
@@ -517,11 +551,11 @@ memória (`research-S309.md §3`): *write-gate validation* e
       Write-gate: entrada de ledger passa pelo scanner de
       harness-mimicry antes de persistir (mesma rota do Step-4 do
       `/ceo-boot`). Hit ⇒ entrada DESCARTADA, nunca redigida.
-- [ ] `[P2][US15][PLAN-179/threat-model.md]`
+- [x] `[P2][US15][docs/threat-model.md]` — *retargetado por §8.7; o arquivo citado não existe no disco. Satisfeito por `docs/threat-model.md:2253-2262` (tabela dos seis eixos). Reconciliado na S325.*
       Modelo de ameaça do ledger nos seis eixos do survey Always-On
       (autoridade, escopo, mutabilidade, proveniência, recuperabilidade,
       acionabilidade). Registrar em `THREAT-MODEL-WORKSHEET.md §2`.
-- [ ] `[P1][US15b][THREAT-MODEL-WORKSHEET.md]`
+- [x] `[P1][US15b][docs/threat-model.md]` — *retargetado por §8.7 (o WORKSHEET citado NÃO existe no disco; o único worksheet presente é o template genérico da skill security-and-auth, que não é o alvo). **LANDADO:** `docs/threat-model.md:2264-2384`, §"Named scenarios" 1 (`T-compaction-eviction`) e 2 (`T-experience-grafting`), cada um com Vector / Evidence / Mitigations / Residual risk / Test, e com a adjudicação do gate A6 que este item pedia — ele verifica a INTEGRIDADE dos bytes aprovados, nunca a VERDADE da claim aprovada, e `_recency_decay` surfaceia PREFERENCIALMENTE a lição grafted. Verificado na S325 por grep independente; escrever entrada nova DUPLICARIA :2266 e :2315.*
       Registrar duas classes NOVAS de `research-S309.md §2.2` e §2.5:
       (a) **Compaction-Eviction Attack** — conteúdo hostil no transcript
       enviesa o sumarizador a descartar políticas; derrotou todos os
@@ -553,12 +587,18 @@ memória (`research-S309.md §3`): *write-gate validation* e
 - **Advisory não é enforcement.** W2 nasce advisory por escolha. O flip
   para enforce é cerimônia futura com evidência, não item desta wave.
 - **Este plano não elimina compactação.** Reduz o custo dela. O piso de
-  gate-boot (~44.786 tokens) é re-pago em toda compactação e só cai
-  atacando a superfície Gate-1 — execução no PLAN-175; aqui só o alvo.
+  gate-boot é re-pago em toda compactação e só cai atacando a superfície
+  Gate-1 — execução no PLAN-175; aqui só o alvo. **O número MEDIDO é
+  97.292 tokens** (S322, fronteira de compactação real; controle cold-`F`
+  97.097; série n=41 com mediana 98.636 e spread de 51,7%) — o `~44.786`
+  que esta linha citava era folclore de ordem 44k e está **REFUTADO nos
+  dois sentidos** (reconciliado na S325).
 - **O ganho de η depende de um plano que não é este.** §2.1 mostra que a
   alavanca é `F`, e `F` desce no PLAN-175. Se a poda não acontecer, W0–W4
   entregam continuidade e governança preservada, mas a eficiência de
-  ciclo continua na faixa 40–60%. Dependência declarada, não escondida.
+  ciclo fica **abaixo** da faixa 40–60% que esta linha estimava: com o `F`
+  medido, η é 42% em `T=184k` e cai a 29% em `T=150k` (§2.1 reconciliada).
+  Dependência declarada, não escondida — e agora dimensionada.
 - **A tabela η de §2.1 é estimativa até W0.** Usa a heurística chars/4 do
   `context-budget.py`, explicitamente não o tokenizer da Anthropic, e um
   `F=50k` interpolado. A forma da curva e o piso de thrashing (`T ≈ F+S`)

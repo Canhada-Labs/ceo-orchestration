@@ -10,6 +10,9 @@ owner_approval: "reviewed-gate granted S313 (2026-08-18); execução W0-W3 ainda
 related_adrs: [ADR-133 (autonomous-loop opt-in doctrine — molde das salvaguardas), ADR-125 (Tier-C: §Cost obrigatório), ADR-103 (hold 24h — alvo do piloto), ADR-081 (unidade tokens)]
 related_plans: [PLAN-135 (W4 D3 inventário session_crons), PLAN-165 (night-mode — molde de opt-in auditado), PLAN-179 (Constraint Pinning — re-ancoragem por ciclo)]
 budget_tokens: 120-220k (W0 piloto 20-40k; W1 inventário 20-40k; W2 wrapper 60-100k; W3 debate+cerimônia 20-40k)
+budget_usd_estimate: "~$16-30 total (o ~$8-15 do §Cost derivava de F=50k, refutado; reescalado por 97.292/50.000 = 1,95 — S325)"
+tier_mix_estimate: "sonnet ~90% / opus ~10% (opus só nos debates L3)"
+tier_mix_rationale: "tick mecânico é sonnet; Haiku proibido sem torneio (ADR-052); opus reservado ao debate, que é onde a decisão mora"
 budget_sessions: 2-3
 context_risk: low
 external_wait: "BLOQUEADO até GA v1.3.0 (freeze rota-SEQUÊNCIA S304 + decisão t10 do Owner pendente). W0 (piloto) só existe DURANTE um hold RC→GA ativo. W3 exige /debate (L3) + 1 GPG do Owner."
@@ -143,20 +146,36 @@ Wrapper que fecha os 7 gaps da tabela do estudo (cada linha = 1 AC):
 ## Cost (ADR-125:230-236 — condição de QUALQUER wave; emenda r1-C1)
 
 - **(a) Tokens por invocação/tick:** W0-ensaio (clone): alvo $0 de modelo
-  (script + exit codes); se um tick de modelo existir: ~F frio 45-55k
-  in + ~1-2k out por tick (cache sempre frio quando delay > TTL).
+  (script + exit codes); se um tick de modelo existir: **~F frio 97.292
+  MEDIDO** (mediana 98.636, max 138.552, pstdev 16.148 — série n=41; o
+  `45-55k` que esta linha citava foi **REFUTADO** na S322 e é ~1,95× menor
+  que a realidade) + ~1-2k out por tick (cache sempre frio quando
+  delay > TTL).
   Nightly (W2, 1 tick/dia): mesmo perfil frio, `model: sonnet`.
-- **(b) Cap diário de burn:** piloto ≤ $6/dia (24 ticks × ~$0,22);
-  nightly ≤ $0,50/dia. Estouro = single-strike: loop PARA e notifica.
+- **(b) Cap diário de burn — RECALCULADO na S325, porque o número
+  refutado da alínea (a) DECIDIA este cap.** Escalando o próprio $/tick
+  deste plano pelo `F` medido (97.292 / 50.000 = 1,946 sobre o ponto médio
+  da faixa antiga): $0,22 × 1,946 ≈ **$0,43/tick** ⇒ 24 ticks ≈
+  **$10,27/dia**; na cauda (max-`F` 138.552 / 50.000 = 2,771) ≈ $0,61/tick
+  ⇒ **$14,63/dia**. Portanto: piloto **≤ $11/dia** (F-mediano), com cap de
+  cauda **≤ $15/dia** se o gate não puder falso-disparar; nightly
+  **≤ $0,70/dia**. **O cap antigo era um falso-disparo esperando
+  acontecer:** `≤ $6/dia` estoura por volta do tick **14 de 24** mesmo com
+  `F` MEDIANO, e o `≤ $0,50/dia` do nightly estoura na cauda ($0,61) — o
+  single-strike teria parado o loop em execuções SAUDÁVEIS e isso seria
+  lido como estouro real. Estouro = single-strike: loop PARA e notifica.
 - **(c) Mecanismo de enforcement:** hook novo (W2) chamando
   `cost_envelope.check_and_record(cents, plan_id=<loop_id>)` na janela
   `per_plan`, com decisão EXPLÍCITA de `CEO_SWARM`/`class_tier`
   registrada no ADR do W2 (`is_disabled()` faz passthrough sem
   `CEO_SWARM=1` — sem essa decisão o cap nunca avalia: teatro t10).
-- Frontmatter a completar no flip p/ reviewed: `budget_usd_estimate`
-  (~$8-15 total), `tier_mix_estimate` (sonnet ~90% / opus ~10% nos
-  debates), `tier_mix_rationale` (tick mecânico = sonnet; Haiku proibido
-  sem torneio).
+- Frontmatter **completado na S325** (a dívida real: o flip para
+  `reviewed` aconteceu em 2026-08-18 e as três chaves nunca entraram —
+  `grep -cE '^(budget_usd_estimate|tier_mix_estimate|tier_mix_rationale):'`
+  dava **0**). Os valores estão no frontmatter deste arquivo;
+  `budget_usd_estimate` foi reescalado de `~$8-15` para `~$16-30` pelo
+  mesmo fator 1,95 da alínea (b), porque a estimativa antiga derivava de
+  `F = 50k`.
 - Dono do custo recorrente (OQ-5): LLM FinOps Architect revisa
   tokens/tick no fechamento de cada trem; nightly reporta no
   `morning_ledger.py`.
