@@ -167,10 +167,23 @@ def _baseline_decisions(policy_slug: str) -> List[Tuple[str, Any]]:
     return out
 
 
-_POLICY_BASELINES: Dict[str, List[Tuple[str, Any]]] = {
-    "bash-safety": _baseline_decisions("bash-safety"),
-    "plan-edit": _baseline_decisions("plan-edit"),
-}
+# Baseline cache — filled on FIRST USE, never at import (S326, 2026-08-24).
+# ``pol.decide()`` emits ``policy_evaluated`` / ``policy_denied`` audit events.
+# Module import happens at pytest COLLECTION, before the session isolation
+# fixture has redirected the audit dir (fixtures never run under
+# ``--collect-only``), so an import-time replay of the corpus wrote 124
+# HMAC-signed, unattributable links (82 rows + 42 denies) into the LIVE chain
+# on every collect — ``verify-counts.sh`` runs one before each commit: 19 runs
+# / 2,356 links in 12 h. Guard: ``test_collect_only_audit_isolation.py``.
+_POLICY_BASELINES: Dict[str, List[Tuple[str, Any]]] = {}
+
+
+def _policy_baseline(policy_slug: str) -> List[Tuple[str, Any]]:
+    """Un-mutated decisions for ``policy_slug``, computed lazily and cached
+    for the process (the test bodies run inside the isolated audit dir)."""
+    if policy_slug not in _POLICY_BASELINES:
+        _POLICY_BASELINES[policy_slug] = _baseline_decisions(policy_slug)
+    return _POLICY_BASELINES[policy_slug]
 
 
 def _run_policy_mutation(mod: Any, project_dir: Path) -> Tuple[bool, str]:
@@ -180,7 +193,7 @@ def _run_policy_mutation(mod: Any, project_dir: Path) -> Tuple[bool, str]:
     """
     slug = mod.MUTATION["policy"]
     fixture_file = mod.FIXTURE_FILE
-    baseline = _POLICY_BASELINES[slug]
+    baseline = _policy_baseline(slug)
     path = project_dir / f"{slug}-mutant.policy.yaml"
     path.write_text(mod.POLICY_YAML, encoding="utf-8")
     try:
