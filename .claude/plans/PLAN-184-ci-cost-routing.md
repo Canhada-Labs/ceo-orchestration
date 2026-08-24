@@ -836,12 +836,22 @@ mecânico". A decisão é dele; o plano não a antecipa.
       Check: `gpg --verify .claude/plans/PLAN-184/wave-a0-approved.md.asc`
       sai "Good signature" com a chave EDDSA AE9B236F…0335DC74, e o
       Anchor-SHA do sentinel é `d8ee055`.
-- [ ] `[P1]` confirmar o PRIMEIRO fire do cron (2026-08-24 07:37 UTC) com
+- [x] `[P1]` confirmar o PRIMEIRO fire do cron (2026-08-24 07:37 UTC) com
       4 entradas na matriz — matriz vazia passa vacuamente
       Check: no run agendado, a matriz de `hook-tests-python-matrix` tem
       **4** entradas (3.9/3.10/3.11/3.12). Contagem 0 ou 2 REPROVA: uma
       matriz vazia passaria vacuamente e é exatamente o modo de falha
       que este item existe para pegar.
+      **APROVADO (S325, verificado no run `32703818841`).** O fire real saiu
+      em `2026-08-24T07:56:22Z` — ~19 min depois do `37 7`, atraso normal do
+      scheduler do Actions, não defeito. `event=schedule`,
+      `conclusion=success`, e a CONTAGEM é **4**:
+      `hook-tests-python-matrix (3.9)`, `(3.10)`, `(3.11)`, `(3.12)`, todas
+      `success`. A verificação foi a contagem, não o verde: um run verde com
+      matriz vazia era exatamente o modo de falha que este item existia para
+      pegar, e ele não ocorreu. ⇒ o backstop nightly da A0 está **provado em
+      produção**, e a troca de latência por dinheiro (fronteira no `push`,
+      quatro versões no `schedule`) é real e não claim de YAML.
 
 ### W0 — Medir e derivar antes de filtrar (read-only)
 
