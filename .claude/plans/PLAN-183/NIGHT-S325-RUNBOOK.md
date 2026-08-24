@@ -284,27 +284,76 @@ Do consenso (`debate/w5-round-1/consensus.md`), estes são texto de plano
 
 ---
 
-### N3 · `[M]` · PLAN-182 — o elo de custódia e os `[P1]` abertos
+### N3 · `[M]` · PLAN-182 — os DOIS itens que sobraram
+
+> **Esta seção foi REESCRITA depois do survey.** O rascunho deste runbook
+> mandava fechar o elo de custódia preferindo "a linha de aceite escrita".
+> **Refutado por medição:** as duas rotas estão fechadas — ver §2. Se o
+> terminal tivesse seguido o rascunho, gastaria a janela num item
+> impossível.
+
+- **`[M]` e2e de DOIS adopters via `install.sh` REAL** (`[P1]` novo da W3,
+  L745). A lacuna é medida: `grep -cE '\bHOME\b' scripts/tests/smoke-install.sh`
+  = **0** (não isola `HOME`) e **nenhum** teste em `scripts/tests/*.sh`
+  menciona `verify_chain`. Modelos já existem:
+  `test-install-harness-{grok,codex}.sh` setam `HOME=`, e o
+  `smoke-install.sh` já faz 3 installs reais.
+  Alvo: `scripts/tests/test-two-adopter-isolation-e2e.sh` (livre).
+  **Fecha o Check por execução LOCAL**; a fiação em nightly é 🔒 e fica
+  fora — anote a separação.
+- **`[S]` o órfão `templates/scripts/statusline-ceo.py`** (metade órfã do
+  `[P1]` L740). Ele constrói o literal em `:127`
+  (`Path(home)/'.claude'/'projects'/'ceo-orchestration'`) **apesar de já
+  importar o resolvedor**. É Python, então **não** depende do CLI em shell
+  que bloqueia os gêmeos. Rota já decidida pelo Owner na OQ-6 ("os
+  templates passam a chamar o resolvedor único").
+  ⚠️ **Armadilha medida:** um teste de paridade **byte-a-byte nasceria
+  VERMELHO** — o órfão difere do vivo em 26 linhas (25.522 b vs 24.650 b).
+  O contrato tem de ser **afirmativo sobre o literal** ("nenhum template
+  constrói o literal"), nunca byte-identidade.
 
 **Não tente fechar o plano.** A rota do installer é `[P0]` e é decisão do
-Owner (recomendação registrada: **NÃO**). O que dá:
+Owner (recomendação registrada: **NÃO**).
 
-- **O elo de custódia `new-chain ↔ archive`** (`[P0]`, L667). O Check
-  aceita **duas** saídas: um evento na cadeia nova citando o caminho do
-  archive e o último HMAC dele, **OU** uma linha de aceite escrita.
-  ⚠️ **Prefira a linha de aceite escrita.** Emitir na cadeia HMAC VIVA é
-  exatamente a superfície que a S321 mediu como perigosa (a suíte
-  escrevendo 19.344 elos não-atribuíveis). Se optar pelo evento, isole e
-  prove atribuição — e isso é trabalho de sessão inteira, não de item.
-- **Os 4 `[P1]`:** re-avaliar `ceo-boot`/`audit-tokens`/`skill-health`
-  como eficácia de controle; `ceo-backup.sh`/`ceo-restore.sh` que ainda
-  defaultam para o literal; templates com dono declarado; e o e2e de dois
-  adopters via `install.sh` real. **Rode o oráculo em cada path antes de
-  tocar** — alguns podem ser 🔒.
+---
 
-**Fecha quando:** o `[P0]` do elo de custódia tem disposição escrita e
-verificável, e cada `[P1]` está fechado com evidência ou marcado com o
-bloqueador medido.
+### N4 · `[S]×N` · Varredura de RECONCILIAÇÃO — o melhor retorno por hora da noite
+
+O survey achou, em cinco planos, ACs e checkboxes **satisfeitos no disco
+com o box ABERTO**. É a classe que este repo já cura por reconciliação, e
+cada item é `[S]`. **Se o N1 travar, pule para cá** — é valor garantido.
+
+**Regra que vale para todos:** reconciliar é fechar contra o **disco**,
+citando o comando que prova. Nunca por memória, nunca por prosa do
+próprio plano. E rode os DOIS censos do §0.3 antes de tocar qualquer
+frontmatter.
+
+| plano | item | o que prova |
+|---|---|---|
+| **169** | AC-6 | pré-registro ASSINADO (`gpg --verify W5-preregistration.md.asc` ⇒ Good signature, chave `AE9B236F…`, commitado em `fcac12d`), E0 executado com `sha256 d07935b3…` conferido contra o pin do `PLAN-179/LEDGER.md:68`, e PLAN-170 criado com `budget_tokens` e gatilho no `external_wait` |
+| **169** | AC-9 `[P2]` | as 4 dívidas `C.*` aparecem CLOSED no §Ledger (L1508-1511) com evidência `path:line`/sha contra box aberto — re-obter a evidência DINÂMICA que o AC exige |
+| **179** | W0/US2 | a evidência declarada no próprio checkbox **é falsa hoje** — fechar contra o disco |
+| **179** | §2.1 | reescrever a tabela de η **in loco** com os inputs medidos e matar os dois sítios de prosa obsoletos |
+| **179** | W3/US12 | `docs/CONTEXT-CONTINUITY-GUIDE.md:125` tem η obsoleto |
+| **179** | W3/US9b | `PLAN-179/floor-reduction.md` §3.1 contra o piso MEDIDO (~97k), nomeando o *hit* |
+| **179** | W3/US11 | `context-budget.py:92-121` já carrega o veredito; executar e reconciliar |
+| **179** | W4/US15b | registrar as DUAS classes de ataque novas de `research-S309.md` (Compaction-Eviction; experience grafting) em `docs/threat-model.md` + worksheet |
+| **184** | registro da A0 | o plano tem **ZERO** registro do único trabalho que shipou (A0 landou em `5ff0…`) |
+| **184** | Open-questions | o cabeçalho `L1241-1254` declara três resoluções que a lista não reflete — defeito que o plano chama de load-bearing |
+| **174** | escrituração da W2 | o wire **LANDOU** e a §W2 ainda o descreve como STAGED |
+| **181** | dívida de §Cost | fechar o que ficou aberto no flip para `reviewed` e **corrigir o número refutado que decide o cap** |
+
+---
+
+### N5 · oportunista, se sobrar janela
+
+`171` — corrigir `.claude/commands/spawn.md:13`, que hoje manda injetar o
+SKILL.md inteiro quando o modo é *reference* `[S]` · `172` — sweep de
+atualidade das skills, **só a medição** (`check-model-deprecations.py`);
+a cura do literal é 🔒 `[S]` · `173` — o pré-gate da W4, que o próprio
+runbook do plano chama de *"barato, read-only, pode matar a wave inteira"*
+`[M]` · `175` — re-medição N≥30 do gap de idioma, que o §3.1 declara
+pré-requisito `[M]`.
 
 ---
 
@@ -335,11 +384,15 @@ dos transcripts antes de concluir.
 
 | janela | item | se estourar |
 |---|---|---|
-| 0:00–0:15 | ler o resultado do survey (N4) e re-priorizar | se ele morreu, re-rode e siga para N1 sem esperar |
-| 0:15–3:30 | **N1** (route table + 2 consumidores + testes) | é o item que mais paga; se travar em 3 tentativas, PARE e escreva o diagnóstico — não tente a 4ª |
-| 3:30–5:00 | **N2** (achados do debate no plano) | corte pelo fim da lista, não pela qualidade de cada item |
-| 5:00–6:15 | **N3** (PLAN-182) | se o elo de custódia exigir a rota do evento, ABANDONE e escreva a linha de aceite |
-| 6:15–7:00 | closeout: memória, `CLAUDE.md` (uma edição), handoff, resumo executivo | **reserve esta janela inteira** — closeout apressado é como a S324 gravou duas afirmações que caíram no mesmo dia |
+| 0:00–2:45 | **N1** (route table + 2 consumidores + testes + o teste do `:401`) | é o item que mais paga; 3 tentativas sem resolver ⇒ PARE, escreva o diagnóstico e **pule para o N4** (valor garantido) |
+| 2:45–4:00 | **N2** (achados do debate) | corte pelo fim da lista, nunca pela qualidade de cada item |
+| 4:00–5:15 | **N3** (os 2 itens do PLAN-182) | o `[S]` do statusline primeiro — fecha rápido e o contrato dele é afirmativo, não byte-identidade |
+| 5:15–6:15 | **N4** (varredura de reconciliação) | ordene por barato; cada item fechado é um AC visível em 5 planos |
+| 6:15–7:00 | closeout: memória, `CLAUDE.md` (**uma** edição, se o contrato mudou), handoff, resumo executivo | **reserve a janela inteira** — closeout apressado é como a S324 gravou duas afirmações que caíram no mesmo dia |
+
+O survey **já retornou** (3/3, `wf_8e901ad2-f03`) e o escopo acima **já
+incorpora** o resultado dele — não há janela de leitura a pagar. O N5 é
+o excedente.
 
 **Orçamento:** ~700k–1.1M tokens. O N1 é o único item com fan-out
 previsto (censo dos consumidores); N2 e N3 são trabalho direto e não
@@ -363,6 +416,17 @@ para o N4 e depois para dívida catalogada (`# CEO-DEBT:` no ledger) — mas
 | rota do installer do PLAN-182 (`[P0]`) | decisão do Owner (recomendação do CEO: **NÃO**) |
 | plano de segurança para F1/F2 | criar plano muda o roadmap — decisão do Owner |
 | flip do PLAN-179, destino do PLAN-176 | decisões do Owner |
+
+### Bloqueios que o survey MEDIU e que parecem executáveis — não caia neles
+
+| item | por que está fechado, medido |
+|---|---|
+| **PLAN-182 `[P0]` elo de custódia `new-chain ↔ archive`** | **As DUAS rotas estão fechadas.** Rota (a): o Check exige um evento cujo payload cite o caminho do archive e o último HMAC — e o enum de ações do SPEC é FECHADO/versionado, logo ação ou campo novo exige `SPEC/v1/audit-log.schema.md` (🔒) **e** `_lib/audit_emit.py` (🔒). Reusar `salt_rotation_registered` não serve: `SPEC:501` diz literalmente *"DENIED on the wire: the slug/path TEXT"* — exatamente o que o Check pede. Rota (b), o aceite escrito, é **decisão do Owner**. ⚠️ O rascunho deste runbook recomendava a rota (b) como se fosse trabalho — estava errado. |
+| **`ceo-backup.sh` / `ceo-restore.sh` sobre o dir resolvido** | Os dois scripts são livres, mas a cura exige um resolvedor em **shell**, e `_lib/runtime_paths.py` (🔒) **não tem `__main__`** (verificado: `grep -nE '__main__\|argparse\|sys.argv'` não devolve nada). A rota foi decidida (expor CLI), a EDIÇÃO é 🔒. **Não** contorne com `python3 -c` inline: criaria uma segunda convenção de invocação contra arquitetura já ratificada — a classe "ramo local reabre a classe" que o `CLAUDE.md` §4 proíbe. |
+| **alargar o censo M1 para ver `${VAR:-literal}`** | `derive-audit-family.py` é livre, mas a consequência acopla ao 🔒: simulado, o offender-set de `--assert-migrated` vai de **0 para 2** (`ceo-backup.sh`, `ceo-restore.sh`), e a única cura legal deles é o CLI canônico acima. Alargar sozinho tornaria **VERMELHO** um gate que o `CLAUDE.md` §5 publica como verde. Mascarar por allowlist está explicitamente proibido no plano. |
+| **re-avaliar `ceo-boot`/`audit-tokens`/`skill-health`** | **Externo, não canônico:** exige uma JANELA de dias de fluxo normal. O vazamento da suíte (19.344 elos) parou em 2026-08-23T00:15Z, há ~1 dia, e o próprio item diz que a re-medição só é significativa depois de alguns dias. Rodar hoje cai na lição `feedback-probe-window-must-exceed-signal-period` — sonda com janela menor que o período do sinal é estruturalmente morta. |
+| **PLAN-170** | `external_wait` real: o gatilho é a tag `v1.4.0-rc.1`, que não existe. |
+| **PLAN-176** | runbook inteiro da sessão 1 é 🔒 (`/debate start` → cerimônia do ADR-149-A2 → W0). |
 
 ---
 
