@@ -1,7 +1,8 @@
 ---
 id: PLAN-183
 title: Adopter fitness — o instrumento de adopter existe, mas seu escopo exclui .github/ e ele nunca executa o CI entregue
-status: reviewed
+status: executing
+executing_at: 2026-08-25
 reviewed_at: 2026-08-20
 reviewed_by: "Owner — autorizacao explicita em chat (S315, 2026-08-20): 'se ja esta pronto deixa como revisado e apto pra fazer'. Debate L3 round 1 fechado com veredito PROCEED (10 consensos, 28 ajustes) e ajustes incorporados ao corpo; validate_governance_fast = 0 findings; pair-rail codex 6 rodadas fechadas, 32 achados, todos curados."
 created: 2026-08-20
@@ -1425,7 +1426,7 @@ com a revisão refrescada, ou vira plano próprio.
    `GREEN=62 RED=3` — por isso precisa vir ANTES da unidade de
    ownership, não durante.
 
-   > ## ⛔ OQ-4 — NÃO RATIFICADA. O Owner decidiu MEDIR primeiro (2026-08-24)
+   > ## ✅ OQ-4 — RATIFICADA pelo Owner em 2026-08-25 (histórico abaixo: em 2026-08-24 o Owner decidiu MEDIR primeiro; a medição é da S327)
    >
    > A proposta abaixo continua sendo a proposta, mas **não foi ratificada**:
    > o Owner escolheu medir a PISTA do gerador antes de fixar as linhas.
@@ -1454,6 +1455,8 @@ com a revisão refrescada, ou vira plano próprio.
    > **MEDIDA na S327 (2026-08-24, night-run autônoma; `PLAN-183/w5-oq4-measurement-S327.md`):** braços A/B/C em clones separados; A registra 0/5 rotas no manifesto (D3 latente-por-não-entrada, confirmado), B e C registram 5/5 com manifestos byte-idênticos no install fresco; ownership e2e com RED set exato nos três; paridade idêntica; custo de C sobre B = +22 linhas de código, **0 linhas de TSV** (a moldura "2-3 linhas" estava errada). Recomendação do CEO: pista MISTA (braço C) — única que registra o `CODEOWNERS` renderizado na continuidade do upgrade. **Veredito = assinatura do Owner em `PLAN-183/wave-w5-approved.md` (pacote `w5-ceremony/`).**
    >
    > **W5 LANDADA em `6304f66` (2026-08-25 08:55, assinatura GPG do Owner sobre `wave-w5-approved.md`; `OWNER-S327-LAND.sh` V1–V6 verdes, V7 diferido ao nightly).** D1 e D3 curados no `main`; paridade maintainer `STALE 0` no próprio land; OQ-4 ratificada pela assinatura como pista MISTA com 0 linhas no TSV de ownership. Residual: o status textual do ADR-194 continua `PROPOSED` (arquivo canônico; o flip para `ACCEPTED` entra na próxima cerimônia). O primeiro land abortou no V4 por defeito do LAND (comparava contra zero uma suíte 33/1 por desenho) — curado em `ca0297c` antes da re-assinatura.
+   >
+   > **✅ RATIFICADA pelo Owner em 2026-08-25 (S328, AskUserQuestion, verbatim): «Pista MISTA — braço C (Recomendado)».** Retroativa: o braço C já é o conteúdo do patch landado em `6304f66` (`PLAN-183/w5-ceremony/PROPOSED-PATCH.md` — "pista MISTA (braço C), que é o conteúdo deste patch"; `_wbm_declared_hash_source` vivo em `scripts/_framework_manifest_set.sh`; `armC.diff` da medição não aplica mais — absorvido). A decisão inclui o flip deste plano `reviewed → executing` (frontmatter, `executing_at: 2026-08-25`). O que resta da W5-b é FECHAMENTO, não implementação: flip textual do ADR-194 para `ACCEPTED` com a seção de ratificação (arquivo canônico — pacote de cerimônia S328-A) e as obrigações residuais já nomeadas em `w5-draft-s323.md` / `w5-oq4-measurement-S327.md` §7 (@815 preservar + fixture pré-install-state-com-owner; @1579 chave do resolvedor tolerando os dois destinos sem o manifesto reivindicar ambos; §9.4 F4 `.github/` fora dos DOIS scanners de placeholder; @733 promoção da tabela; @1009 teste de `--github-owner` que PLANTA divergência — compartilhado com PLAN-185 W2, feito UMA vez aqui). Regra que a ratificação FIXA: a posse das duas árvores é o hash-gate da entrega + `hash_source` do `.github/CODEOWNERS`, **não** superfície nova em `_ownership_verdict()` — qualquer extensão é wave própria, com OQ própria.
 
    **PROPOSTA DERIVADA (S324), NÃO RATIFICADA — mantida como hipótese:** Medido no disco por mim
    (`scripts/tests/ownership_table.tsv`): **15 colunas, 65 linhas de

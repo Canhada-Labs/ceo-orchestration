@@ -172,6 +172,30 @@ Recomendacao do CEO: **uma** cerimonia cobrindo W1+W2, porque tocam a mesma
 funcao e a mesma superficie — duas cerimonias pagariam o custo em dobro para
 o mesmo Scope.
 
+**Decisão do Owner (2026-08-25, S328, AskUserQuestion, verbatim): «4ª passada
+INVERTIDA + W1/W2 em pacote (Recomendado)».** O que isso autoriza, e só isso:
+
+1. A **4ª passada** do censo da W0 INVERTE a regra: o instrumento
+   (`check-installer-write-safety.py`) enumera as formas PROVADAS seguras,
+   cada uma com controle positivo (remover a guarda ⇒ vermelho nomeado), e
+   classifica todo o resto como `indeterminado`. Os 19 achados abertos do
+   pair-rail (9 do §7-quater de `PLAN-185/w0-censo-S326.md` + 10 de
+   `PLAN-183/w5-ceremony/rail-materials-round-1.md`) viram fixtures de
+   regressão; o censo re-derivado sai em `PLAN-185/w0-censo-S328.md`. Os 4
+   arquivos hoje untracked são commitados (paths explícitos, nunca `-A`)
+   quando o rail sair limpo — isso fecha as duas checkboxes da W0, exceto a
+   cláusula "roda em CI" (wiring em `validate.yml` é canônico: vai no pacote).
+2. `/debate` round-1 sobre a proposta W1+W2 **antes** de qualquer patch.
+3. Flips autorizados: `draft → reviewed` (com `reviewed_at`) **após**
+   consensus `design-coherent` do round-1; `reviewed → executing` no commit da
+   W0. Se o debate devolver ESCALATE/VETO, o pacote NÃO se monta e a pergunta
+   entra no §6 abaixo.
+4. W1+W2 numa ÚNICA cerimônia (pacote S328-C), **empilhada** sobre a árvore
+   final do pacote A do PLAN-183, porque tocam os mesmos arquivos
+   (`scripts/install.sh`, `scripts/upgrade.sh`). Entrega conforme a decisão
+   Q4 da mesma rodada: push granular do não-canônico + pacotes independentes
+   com um único script da manhã (`PLAN-183/OWNER-S328-MORNING.sh`).
+
 ## 5. Limitacao honesta
 
 Os dois defeitos foram reproduzidos por mim em installs reais, mas **nao ha
@@ -181,3 +205,10 @@ o vetor realista e um target compartilhado ou um repositorio clonado de
 terceiro, nao um ataque remoto. Isso nao reduz a gravidade da cura (o
 installer nao deve escrever fora do diretorio que recebeu), mas situa a
 urgencia: e correcao de robustez com blast radius alto, nao incidente.
+
+## 6. Open questions
+
+Nenhuma aberta em 2026-08-25. Perguntas que surgirem durante a execução
+autônoma da S328 NÃO têm resposta na noite (o Owner está ausente): registram-se
+aqui como OQ numerada, a unidade correspondente fica BLOQUEADA nesse ponto, e a
+decisão é do Owner na manhã seguinte — nunca do CEO.

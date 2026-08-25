@@ -1561,6 +1561,25 @@ auditável, e `scripts/tests/**` continua sem lint em CI.
 
 ## Progress log
 
+- 2026-08-25 (S328): **night-run autônoma (~12 h, conta alternativa) —
+  moldura e decisões do Owner (AskUserQuestion, verbatim).** Q5, cuja dona
+  é este plano: **«Emenda + gate em pacote, e 1 rerun de madrugada
+  (Recomendado)»** — autoriza a emenda ao ADR-163 (o gate hook-latency do
+  `Validate` reprovou `a16ac96` com `check_output_secrets` p95
+  361/425/229 ms contra teto 180 ms, sonda de spawn UNCONTENDED 7,76 ms,
+  local 70–77 ms; e `56f050c` 209→435 ms — a sonda mede piso de SPAWN e
+  é cega a runner lento-mas-descontendido), o gate relativo / sonda de
+  execução em `profile-opus-4-7.py` + step do `validate.yml`, e a emenda
+  ao ADR-144 §S220 (`opts.model` NÃO é inerte — W4.3 mediu), tudo em
+  pacote de cerimônia próprio (S328-B); e UM rerun
+  (`gh run rerun 32866209415 --failed`) às 03:03 de 26/08 por cron
+  one-shot. W4.1.0 (probe de quota-resume): oportunista, no 1º estouro
+  de quota da noite, saída em `PLAN-169/w4.1-probe-S328.md`. Moldura da
+  noite: Q1 conta alternativa com quota integral (semanal 0 % medida no
+  boot); Q4 «Push granular + pacotes independentes»; Q7 ordem «183 W5-b →
+  179 w24 → ADR-163 → 185 → 169 W4.1 → reconciliação». Q2/Q3/Q6 estão
+  registradas nos donos (PLAN-183 OQ-4; PLAN-185 §4; PLAN-179
+  `staged-w24/README-COMO-MONTAR.md` item 1).
 - 2026-08-20 (S315): **W4 ABERTA pelo bloco de probes de disco** —
   Owner escolheu a W4 como próxima unidade (AskUserQuestion, decisão
   verbatim no `### Registro de execução — W4 ABERTA`). Executada a

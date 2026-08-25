@@ -37,7 +37,18 @@
    `scanner_unavailable`/`oversize`/`malformed_input` ficam breadcrumb-only.
    Decida EXPLICITAMENTE: registrar a terceira (327 → 330) ou shipar 2
    (327 → 329) e NOMEAR o breadcrumb como residual no sentinel.
-2. **`SPEC/v1/audit-log.schema.md`**: linhas novas (2 ou 3, conforme o item 1).
+   **DECIDIDO 2026-08-25 pelo Owner (S328, AskUserQuestion, verbatim): «3 ações
+   — registra ledger_entry_rejected (Recomendado)».** Logo: `_KNOWN_ACTIONS`
+   327 → 330 (re-medir com `len(_KNOWN_ACTIONS)` antes de assinar), o item 2
+   sai com **3** linhas no SPEC v2.59, e `ledger_entry_rejected` ganha emitter
+   próprio (`emit_ledger_entry_rejected`, allowlist deny-by-default + scrub,
+   nunca em `_EMIT_GENERIC_PASSTHROUGH`) — o breadcrumb-only de
+   `scanner_unavailable`/`oversize`/`malformed_input` deixa de ser residual.
+   Atenção ao NÚMERO do ADR deste pack: `ADR-194` foi tomado pelo PLAN-183
+   (`ADR-194-delivery-route-resolution.md`, landado em `6304f66`); o ADR do
+   pack renumera para **ADR-195** (próximo livre, medido S328; contagem de
+   ADRs 195 → 196) e toda referência interna (hook, testes, ADR) acompanha.
+2. **`SPEC/v1/audit-log.schema.md`**: linhas novas (**3** — decidido no item 1).
    **A versão é v2.59**, não v2.57: o SPEC vivo já tem v2.56 (linha 583, este
    plano), v2.57 (584, PLAN-174/SENT-S318) e v2.58 (585, PLAN-182/SENT-S319).
    Lembrar do `PACKMAP.txt` — o artefato do pack tem nome plano porque
@@ -114,5 +125,5 @@ O land script já existe: `.claude/plans/PLAN-179/OWNER-W179-W24-LAND.sh`
 `staged-w24`, o prompt do G0 e a bateria G4 trocados para os artefatos deste
 pack). Os gates G0-G7, o G2b (escopo do sentinel == manifesto) e o suporte a
 `PACKMAP` já estão lá. A mensagem de commit em G7 é um PLACEHOLDER — a
-cerimônia preenche com a decisão real do item 1 (2 ou 3 ações) antes de
-assinar.
+cerimônia preenche com a decisão real do item 1 (**3 ações** — decidido pelo
+Owner em 2026-08-25) antes de assinar.
