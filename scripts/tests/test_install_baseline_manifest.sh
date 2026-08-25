@@ -16,19 +16,25 @@
 # bash 3.2-safe. Uses mktemp -d (never a hardcoded path) so xdist/parallel runs
 # never collide. Exits 0 on success, non-zero on any failed assertion.
 #
-# EXECUTION POSTURE (PLAN-166 W0 re-pass r2 — declared so the next census
-# does not count this as a live CI gate): this suite is OPERATOR-LOCAL /
-# landing-gate only. NO workflow executes it (grep .github/ for this
-# filename: zero hits) — the same deliberate posture as its siblings
-# test_install_state_replay.sh / test-doctor.sh, recorded in the
-# validate.yml collection-note comment ("local/landing-gate only;
-# smoke-install.yml wiring is a separate ceremony"). A full run costs
-# ~15 min of real install/upgrade legs under load, which is why it is not
-# in push CI. The PLAN-166 W1 staged patch
-# `smoke-install-parity-e2e-wiring.patch` wires the parity e2e
-# (test-install-upgrade-parity-e2e.sh) into smoke-install.yml — NOT this
-# suite. If that ever changes, update THIS header: the declaration is what
-# a census reads.
+# ASSERTION IDS (rail round 3 F3, S327): every `bad` message in the C.6 family
+# carries a STABLE UNIQUE id, `C.6.<n>`, because the nightly gate compares the
+# failing SET and there are NINE distinct C.6 sites — reducing all of them to
+# the bare class name made "a different C.6 assertion regressed while the known
+# one was fixed" indistinguishable from success. The ids are LABELS, not an
+# ordering: a new site takes the next free number (C.6.10, ...), and an
+# existing id is NEVER renumbered or reused, or the workflow's declared set
+# silently starts meaning something else.
+#
+# EXECUTION POSTURE (updated S327 — PLAN-183 W5, pair-rail round 2 F4): this
+# suite runs NIGHTLY in .github/workflows/ownership-nightly.yml (step
+# "Install baseline-manifest suite (ADR-155 C.2-C.8 delivery records)") with a
+# DECLARED known-open set {C.6.2} — the gate fails on any NEW failure AND on
+# shrinkage of that set. It is NOT in push/PR CI (smoke-install.yml): a full
+# run costs ~11-15 min of real install/upgrade legs under load, and the per-PR
+# job is already near an hour. Locally it stays a landing-gate (the
+# OWNER-S327-LAND.sh V4 step runs it). The PLAN-166 posture note ("no
+# workflow executes it") is superseded by this paragraph — the declaration is
+# what a census reads, so keep it in sync with the nightly workflow.
 #
 # Run:  bash scripts/tests/test_install_baseline_manifest.sh ; echo rc=$?
 
@@ -75,6 +81,31 @@ fresh_install() {
   fi
   printf '%s\n' "$t"
 }
+
+# ---------------------------------------------------------------------------
+# C.6.0 (rail round-3 F3) — ASSERTION-ID HYGIENE, first because it is free and
+# because the NIGHTLY GATE'S PREMISE depends on it.
+#
+# ownership-nightly.yml compares the failing SET against a declared known-open
+# id. Reducing nine distinct sites in the C.6 family to the bare class name
+# made "a different site regressed while the known-open one was fixed"
+# indistinguishable from success. Each site now carries a stable C.6.<n> id;
+# this assertion is what stops the next author from adding an un-idded or
+# duplicated one and silently restoring the blind spot. Self-referential on
+# purpose — this file is the only place those ids live.
+# ---------------------------------------------------------------------------
+echo "==> C.6.0 — every C.6 assertion carries a stable unique id"
+_C60_SELF="${BASH_SOURCE[0]}"
+_c60_bare=0
+if grep -qE 'bad "C\.6[^.]' "$_C60_SELF" 2>/dev/null; then _c60_bare=1; fi
+_c60_ids="$( grep -oE 'bad "C\.6\.[0-9][0-9]*' "$_C60_SELF" 2>/dev/null | sed 's/^bad "//' )"
+_c60_n="$( printf '%s\n' "$_c60_ids" | grep -c . )"
+_c60_u="$( printf '%s\n' "$_c60_ids" | LC_ALL=C sort -u | grep -c . )"
+if [ "$_c60_bare" -eq 0 ] && [ "$_c60_n" -ge 9 ] && [ "$_c60_n" -eq "$_c60_u" ]; then
+  ok "C.6.0 assertion-id hygiene: $_c60_n idded sites, all unique, none bare"
+else
+  bad "C.6.0 assertion-id hygiene broken (bare_sites=$_c60_bare idded=$_c60_n unique=$_c60_u) — the nightly gate compares ids, so an un-idded or duplicated site makes a CHANGED failure set look identical to the declared one"
+fi
 
 echo "==> C.3 — _hash_lib.sh: _hash_file + _hash_stdin under each hasher alone"
 (
@@ -374,7 +405,7 @@ fi
 
 echo "==> C.6 — root PROTOCOL.md backed up with AND without a manifest"
 # (a) WITHOUT a manifest: remove it, customize root PROTOCOL.md, upgrade.
-T4="$( fresh_install core )" || { bad "C.6 install failed"; T4=""; }
+T4="$( fresh_install core )" || { bad "C.6.1 install failed"; T4=""; }
 if [ -n "$T4" ]; then
   rm -f "$T4/.claude/.install-manifest.sha256"
   printf '# CUSTOM ROOT PROTOCOL c8\nadopter content\n' > "$T4/PROTOCOL.md"
@@ -384,25 +415,25 @@ if [ -n "$T4" ]; then
     if [ -n "$BK" ] && grep -q 'CUSTOM ROOT PROTOCOL c8' "$BK"; then
       ok "C.6 root PROTOCOL.md backed up before overwrite (NO manifest)"
     else
-      bad "C.6 root PROTOCOL.md NOT backed up without a manifest"
+      bad "C.6.2 root PROTOCOL.md NOT backed up without a manifest"
     fi
   else
-    bad "C.6 upgrade failed (no-manifest path)"
+    bad "C.6.3 upgrade failed (no-manifest path)"
   fi
 fi
 # (b) WITH a manifest: a customized root PROTOCOL.md is preserved (refuse).
-T5="$( fresh_install core )" || { bad "C.6 install#2 failed"; T5=""; }
+T5="$( fresh_install core )" || { bad "C.6.4 install#2 failed"; T5=""; }
 if [ -n "$T5" ]; then
   printf '# CUSTOM ROOT PROTOCOL c8b\nadopter content 2\n' > "$T5/PROTOCOL.md"
   if bash "$SOURCE_DIR/scripts/upgrade.sh" "$T5" --profile core --on-conflict refuse >"$T5/.upgrade.log" 2>&1; then
     if grep -q 'CUSTOM ROOT PROTOCOL c8b' "$T5/PROTOCOL.md"; then
       ok "C.6 customized root PROTOCOL.md preserved with manifest (refuse)"
     else
-      bad "C.6 customized root PROTOCOL.md was clobbered despite manifest"
+      bad "C.6.5 customized root PROTOCOL.md was clobbered despite manifest"
     fi
     # backup still made regardless.
     BK2="$( find "$T5/.claude.bak" -name 'PROTOCOL.md' -type f 2>/dev/null | head -1 )"
-    [ -n "$BK2" ] && ok "C.6 root PROTOCOL.md also backed up (manifest path)" || bad "C.6 no backup on manifest path"
+    [ -n "$BK2" ] && ok "C.6 root PROTOCOL.md also backed up (manifest path)" || bad "C.6.6 no backup on manifest path"
     # (c) TWO-UPGRADE regression (Codex R2 P0): upgrade #1 above preserved the
     # customized PROTOCOL.md AND rewrote the manifest. The rewrite must record
     # the CANONICAL pointer hash, NOT the preserved customization — else
@@ -412,13 +443,13 @@ if [ -n "$T5" ]; then
       if grep -q 'CUSTOM ROOT PROTOCOL c8b' "$T5/PROTOCOL.md"; then
         ok "C.6 customized root PROTOCOL.md survives a SECOND upgrade (manifest rewrite not poisoned)"
       else
-        bad "C.6 2nd upgrade clobbered the customized root PROTOCOL.md (manifest-rewrite poison)"
+        bad "C.6.7 2nd upgrade clobbered the customized root PROTOCOL.md (manifest-rewrite poison)"
       fi
     else
-      bad "C.6 second upgrade failed (manifest path)"
+      bad "C.6.8 second upgrade failed (manifest path)"
     fi
   else
-    bad "C.6 upgrade failed (manifest path)"
+    bad "C.6.9 upgrade failed (manifest path)"
   fi
 fi
 
@@ -446,6 +477,101 @@ if [ -n "$T6" ]; then
     fi
   else
     bad "C.7 upgrade failed"
+  fi
+fi
+
+echo ""
+echo "==> C.8 — upgrade records the docs/ + .github/ deliveries (PLAN-183 W5 D1/D3)"
+# What this pins down, and why the two halves are separate assertions:
+#   (a) VERBATIM routes must be recorded with the digest of the SOURCE
+#       (templates/...), never of the destination. Recording the destination
+#       is what made an upgrade re-clobber a preserved file (C.5 idempotency),
+#       and for these routes the source relpath differs from the destination —
+#       that difference IS defect D3.
+#   (b) The RENDERED route (.github/CODEOWNERS) has no source bytes in any
+#       checkout, so it rides the conditional lane with a DECLARED hash_source.
+#       Its recorded digest must equal the RENDERED bytes. install.sh:2508-2511
+#       records that the previous attempt at this wave regressed 24 cells by
+#       leaving fresh deliveries undeclared, so "recorded at all" is the
+#       assertion, not "recorded on continuity".
+# Mutual exclusivity (install.sh:1551 elif vs :1563 else) is asserted in both
+# directions: whichever CODEOWNERS row is delivered, the other must be ABSENT
+# from the manifest.
+_c8_routes="$SOURCE_DIR/scripts/delivery-routes.tsv"
+_c8_manifest_digest() {   # $1 = manifest, $2 = relpath -> digest or ""
+  awk -v want="$2" '
+    { i = index($0, "  "); if (i == 0) next
+      d = substr($0, 1, i - 1); rest = substr($0, i + 2)
+      if (d == "LINK") next
+      if (rest != want) next
+      if (length(d) == 64) { print d; exit } }' "$1" 2>/dev/null
+}
+if [ ! -f "$_c8_routes" ]; then
+  bad "C.8 scripts/delivery-routes.tsv missing — the delivery routes have no truth to check against"
+else
+  T8="$( mktemp -d "$WORKROOT/tgt8-XXXXXX" )"
+  _git_init_retry "$T8"
+  if ! bash "$SOURCE_DIR/scripts/install.sh" "$T8" --profile core --ceremony maintainer \
+       >"$T8/.install.log" 2>&1; then
+    tail -30 "$T8/.install.log" >&2
+    bad "C.8 install (--ceremony maintainer) failed"
+  elif ! bash "$SOURCE_DIR/scripts/upgrade.sh" "$T8" --profile core --no-diff-warn \
+       >"$T8/.upgrade.log" 2>&1; then
+    tail -30 "$T8/.upgrade.log" >&2
+    bad "C.8 upgrade failed"
+  else
+    MAN8="$T8/.claude/.install-manifest.sha256"
+    # (a) every VERBATIM route, source digest.
+    _c8_checked=0
+    while IFS="$( printf '\t' )" read -r _c8_dest _c8_src _c8_tr _c8_rest; do
+      [ -n "${_c8_dest:-}" ] || continue
+      case "$_c8_dest" in \#*|dest) continue ;; esac
+      [ "${_c8_tr:-}" = "identity" ] || continue
+      # The CODEOWNERS.template row is the branch NOT taken here (this install
+      # passed no --github-owner... so it IS the taken branch). Check what is
+      # on disk rather than re-deriving the branch rule.
+      [ -e "$T8/$_c8_dest" ] || continue
+      _c8_want="$( shasum -a 256 "$SOURCE_DIR/$_c8_src" 2>/dev/null | cut -d' ' -f1 )"
+      _c8_got="$( _c8_manifest_digest "$MAN8" "$_c8_dest" )"
+      _c8_checked=$(( _c8_checked + 1 ))
+      if [ -z "$_c8_got" ]; then
+        bad "C.8 $_c8_dest is ABSENT from the baseline manifest after upgrade (D3's silent-drop signature)"
+      elif [ "$_c8_got" = "$_c8_want" ]; then
+        ok "C.8 $_c8_dest recorded with the digest of $_c8_src"
+      else
+        bad "C.8 $_c8_dest recorded as $_c8_got but $_c8_src hashes to $_c8_want (wrong source resolved — D3)"
+      fi
+    done < "$_c8_routes"
+    if [ "$_c8_checked" -ge 1 ]; then
+      ok "C.8 $_c8_checked verbatim route(s) were actually checked (0 would be a vacuous pass)"
+    else
+      bad "C.8 ZERO verbatim routes were checked — the upgrade delivered nothing, so every assertion above is vacuous"
+    fi
+    # (b) rendered route, with a handle.
+    T9="$( mktemp -d "$WORKROOT/tgt9-XXXXXX" )"
+    _git_init_retry "$T9"
+    if bash "$SOURCE_DIR/scripts/install.sh" "$T9" --profile core --ceremony maintainer \
+         --github-owner ceo-test-handle >"$T9/.install.log" 2>&1 \
+       && bash "$SOURCE_DIR/scripts/upgrade.sh" "$T9" --profile core --no-diff-warn \
+         >"$T9/.upgrade.log" 2>&1; then
+      MAN9="$T9/.claude/.install-manifest.sha256"
+      _c9_got="$( _c8_manifest_digest "$MAN9" ".github/CODEOWNERS" )"
+      _c9_want="$( shasum -a 256 "$T9/.github/CODEOWNERS" 2>/dev/null | cut -d' ' -f1 )"
+      if [ -n "$_c9_got" ] && [ "$_c9_got" = "$_c9_want" ]; then
+        ok "C.8 rendered .github/CODEOWNERS recorded with the digest of the DELIVERED bytes"
+      elif [ -z "$_c9_got" ]; then
+        bad "C.8 rendered .github/CODEOWNERS is ABSENT from the manifest — the conditional lane fail-closed (missing FMS_HASH_SOURCE_CODEOWNERS declaration; the 24-cell class)"
+      else
+        bad "C.8 rendered .github/CODEOWNERS recorded as $_c9_got, delivered bytes hash to $_c9_want"
+      fi
+      if [ -n "$( _c8_manifest_digest "$MAN9" ".github/CODEOWNERS.template" )" ]; then
+        bad "C.8 .github/CODEOWNERS.template is ALSO in the manifest — the two CODEOWNERS routes are mutually exclusive per run"
+      else
+        ok "C.8 the not-taken CODEOWNERS route is absent from the manifest"
+      fi
+    else
+      bad "C.8 install/upgrade with --github-owner failed"
+    fi
   fi
 fi
 

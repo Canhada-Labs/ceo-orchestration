@@ -407,9 +407,13 @@ Options:
                         install request from .claude/.install-state.json.
                         By default, when that file exists and validates,
                         --profile/--stack DEFAULT to the recorded values
-                        (explicit flags always win). Missing/invalid state
-                        falls back to the ADR-155 drift-classifier path —
-                        never an error, never a no-op.
+                        (explicit flags always win), and request.github_owner
+                        is what renders .github/CODEOWNERS (rail round-7 F4).
+                        With --no-replay the handle is treated as unknown and
+                        the .github/CODEOWNERS.template branch applies, exactly
+                        as for an install that never passed --github-owner.
+                        Missing/invalid state falls back to the ADR-155
+                        drift-classifier path — never an error, never a no-op.
   --harness <c|codex>   PLAN-155 Wave 5: override the harness. Defaults to the
                         recorded request.harness (B2 replay). When codex, the
                         upgrade also refreshes the .codex/ bundle from the
@@ -459,6 +463,9 @@ Exit codes:
   0 — upgrade completed (or --help / --dry-run preview)
   1 — bad usage / unknown option / missing target
   2 — target has uncommitted .claude/ changes when --pin was passed
+  3 — every other upgrade step completed, but the docs/ + .github/ delivery
+      FAILED its precondition (unreadable or poisoned delivery-route table).
+      See the 'PRECONDITION FAILED' line in the output for which one.
 
 Notes:
   Run after `git pull` in the source ceo-orchestration repo. The upgrade
@@ -590,7 +597,8 @@ ORIGINAL_BRANCH=""
 # guarded by PINNED_CHECKOUT_DONE + ORIGINAL_BRANCH — the non-dry --pin
 # restore semantics are preserved exactly, on success AND on mid-run failure;
 # (b) reap the sanitized baseline-manifest tempfile, which now lives OUTSIDE
-# $TARGET (see _load_baseline_manifest).
+# $TARGET (see _load_baseline_manifest); (c) reap the delivery-route snapshot
+# taken below (rail round-2 F2).
 _BASELINE_TMP_FILE=""
 _upgrade_cleanup() {
   if [[ "${PINNED_CHECKOUT_DONE:-0}" -eq 1 ]] && [[ -n "${ORIGINAL_BRANCH:-}" ]]; then
@@ -599,8 +607,86 @@ _upgrade_cleanup() {
   if [[ -n "${_BASELINE_TMP_FILE:-}" ]]; then
     rm -f "$_BASELINE_TMP_FILE" 2>/dev/null || true
   fi
+  if [[ -n "${_UP_ROUTES_SNAPSHOT:-}" ]]; then
+    rm -f "$_UP_ROUTES_SNAPSHOT" 2>/dev/null || true
+  fi
 }
 trap _upgrade_cleanup EXIT
+
+# --- rail round-2 F2: the route table must SURVIVE a pinned checkout -------
+# _WBM_ROUTES_TSV is RESOLVED when _framework_manifest_set.sh is
+# sourced (:463 there, from this file's :108) — i.e. out of the tree this
+# upgrader was invoked from — but the readers STAT that path at CALL time,
+# ~3300 lines later. Between the two sits `--pin <ref>`, which checks the
+# SOURCE tree out at <ref>. For any ref predating aaf32c7 the table is simply
+# GONE by then. MEASURED (S327): `git show v1.3.0:scripts/delivery-routes.tsv`
+# answers "exists on disk, but not in 'v1.3.0'" — so a `--pin v1.3.0` upgrade
+# enumerated ZERO routes, printed a precondition error, and still exited 0
+# with docs/ and .github/ undelivered. Pinned upgrades are exactly the
+# population the route table was added to serve.
+#
+# Cure: copy the table's BYTES out of the running upgrader's own checkout NOW,
+# before anything can check the source out at a pin, and point the ONE reader
+# at that snapshot for the rest of the run — so `_wbm_route_src`,
+# `_wbm_route_dests`, `_wbm_route_rows_total` and `_write_baseline_manifest`
+# all follow without knowing this happened.
+#
+# rail round-6 F3 — this is the ONLY production re-point of _WBM_ROUTES_TSV,
+# and it is in-process code running AFTER the library resolved the shipped
+# table, never a value read from the environment. The bytes copied are the
+# ones the running checkout ships; the destination is a scratch file this
+# process created (_up_tmpbase, below) and removes on EXIT. The oracles assert
+# that no second production assignment appears.
+#
+# What this deliberately does NOT change: route SOURCES are still read out of
+# the PINNED tree ("$SOURCE_DIR/$rel"), which is what --pin means. A source
+# absent at the pin is reported PER PATH by _up_deliver_template
+# ("SKIPPED (source missing at pin <ref>)"), never silently.
+#
+# Taken unconditionally, not only under --pin: the property wanted is "the
+# destination list cannot change under this run's feet", and making it
+# conditional would leave the same class open for every other way the source
+# tree can move mid-run.
+# --- rail round-5 F3: scratch NEVER lands inside $TARGET -------------------
+# `mktemp "${TMPDIR:-/tmp}/..."` is only outside the target while the CALLER's
+# TMPDIR is. Point TMPDIR at $TARGET (or any descendant) and every scratch file
+# this script takes is created INSIDE the adopter repository — under --dry-run
+# too, which contradicts the CLI's no-modification contract. The EXIT trap then
+# hides it from any final-tree comparison, while a SIGKILL leaves it behind.
+# _load_baseline_manifest (:1063-1084, PLAN-161 U1 codex r1 F5) already carries
+# the cure; this is that same check with ONE owner, because "where is scratch?"
+# is a question this file must not answer in five places (CLAUDE.md §4).
+# Physical resolution on BOTH sides (cd/pwd -P): /tmp is a symlink on macOS and
+# a lexical prefix test answers wrongly there.
+_up_tmpbase() {
+  _utb_base="${TMPDIR:-/tmp}"
+  _utb_base_abs="$( cd "$_utb_base" 2>/dev/null && pwd -P )" || _utb_base_abs=""
+  _utb_tgt_abs="$( cd "${TARGET:-/nonexistent}" 2>/dev/null && pwd -P )" || _utb_tgt_abs=""
+  if [[ -n "$_utb_base_abs" && -n "$_utb_tgt_abs" ]]; then
+    case "${_utb_base_abs%/}/" in
+      "${_utb_tgt_abs%/}/"*) _utb_base="/tmp" ;;
+    esac
+  fi
+  printf '%s\n' "$_utb_base"
+}
+
+_UP_ROUTES_ORIGIN="${_WBM_ROUTES_TSV:-}"
+_UP_ROUTES_SNAPSHOT=""
+if [[ -n "$_UP_ROUTES_ORIGIN" ]] && [[ -f "$_UP_ROUTES_ORIGIN" ]]; then
+  _UP_ROUTES_SNAPSHOT="$( mktemp "$( _up_tmpbase )/ceo-upgrade-routes.XXXXXX" 2>/dev/null || true )"
+  if [[ -n "$_UP_ROUTES_SNAPSHOT" ]] && cp "$_UP_ROUTES_ORIGIN" "$_UP_ROUTES_SNAPSHOT" 2>/dev/null; then
+    _WBM_ROUTES_TSV="$_UP_ROUTES_SNAPSHOT"
+  else
+    # Fail-OPEN on the SNAPSHOT only: an unusable tempdir is infrastructure,
+    # and leaving the reader pointed at the original path is exactly today's
+    # behaviour. The AC-9 precondition below is still the fail-CLOSED gate on
+    # what the reader actually returns.
+    [[ -n "$_UP_ROUTES_SNAPSHOT" ]] && rm -f "$_UP_ROUTES_SNAPSHOT" 2>/dev/null
+    _UP_ROUTES_SNAPSHOT=""
+    echo "    NOTE: could not snapshot the delivery-route table ($_UP_ROUTES_ORIGIN) —" >&2
+    echo "          a --pin checkout may leave it unreadable (rail round-2 F2)" >&2
+  fi
+fi
 
 if [[ -n "$PIN_REF" ]]; then
   if ! pushd "$SOURCE_DIR" >/dev/null; then
@@ -816,6 +902,57 @@ elif [[ "${CEO_UPGRADE_CEREMONY:-}" == "maintainer" || "${CEO_UPGRADE_CEREMONY:-
   _CEREMONY_PERSIST="1"
 fi
 
+# ===========================================================================
+# PLAN-183 W5 (OQ-5 — ratified route (ii) WITH AMENDMENT, Owner 2026-08-24)
+# ---------------------------------------------------------------------------
+# WHO receives the docs/ + .github/ delivery this run. install.sh gates BOTH
+# of its delivery functions on `CEREMONY != user` (install.sh:1484, :1525), so
+# the upgrade route has to agree or the two diverge by construction.
+#
+# But the fail-SAFE resolution above answers "user" for EVERY pre-Wave-B
+# install (no install-state file at all) — which is exactly the HISTORICAL
+# ADOPTER population this delivery exists to reach. The debate measured it:
+# route (ii) without an amendment delivers to nobody who needs it, and the
+# pinned e2e is structurally blind to that because install.sh @ v1.2.0 already
+# writes install-state (class C2, "a Check that only exercises the pinned path
+# passes vacuously"). Hence --blind-install-state on the parity e2e.
+#
+# The ratified amendment: install-state unreadable/absent BUT
+# `.claude/.framework-version` present => the directory IS an existing
+# framework install => DELIVER. The marker is the evidence the fail-safe
+# throws away. A directory with NEITHER keeps today's default and gets
+# nothing.
+#
+# TWO PROPERTIES THIS DELIBERATELY KEEPS — both are the amendment, not
+# timidity about it:
+#   1. `_CEREMONY_PERSIST` stays "0". The inference must never reach the state
+#      file (:801-803: only RECORDED or EXPLICIT resolutions persist).
+#      Persisting an inference would make ONE missed migration permanent and
+#      would outrank a later real `--ceremony` flag.
+#   2. `CEREMONY_EFFECTIVE` is NOT flipped. Flipping it would ALSO re-enable
+#      the ROOT surfaces (root .gitignore blocks, PROTOCOL.md, SPEC/v1) for a
+#      directory whose ceremony is UNKNOWN — reinstating precisely the
+#      cross-boundary write that re-pass rc.4 t2 P2 removed, because a
+#      pre-v1.2 `--ceremony user` install carries the marker too. The
+#      amendment widens the DELIVERY decision, which is what the Owner
+#      ratified, and nothing else. Widening it further is a separate decision
+#      with its own evidence.
+# A RECORDED `user` ceremony still delivers nothing: install.sh gives that
+# population nothing either, and parity with install is the contract.
+_TEMPLATE_DELIVERY=0
+_TEMPLATE_DELIVERY_SOURCE=""
+if [[ "$CEREMONY_EFFECTIVE" != "user" ]]; then
+  _TEMPLATE_DELIVERY=1
+  _TEMPLATE_DELIVERY_SOURCE="ceremony=$CEREMONY_EFFECTIVE — $_CEREMONY_SOURCE"
+elif [[ "$_CEREMONY_PERSIST" == "0" && -f "$TARGET/.claude/.framework-version" ]]; then
+  # Fail-safe ceremony (i.e. the ceremony is UNKNOWN, not recorded as user)
+  # + the framework marker on disk. INFERRED, never persisted.
+  _TEMPLATE_DELIVERY=1
+  _TEMPLATE_DELIVERY_SOURCE="OQ-5 amendment — no readable install-state, but .claude/.framework-version is present: existing framework install (INFERRED for THIS run only, never persisted)"
+else
+  _TEMPLATE_DELIVERY_SOURCE="ceremony=user (or a directory that never received an install) — install.sh writes no docs/ or .github/ for this population either"
+fi
+
 TIMESTAMP="$( date +%Y%m%d-%H%M%S )"
 BAK_DIR="$TARGET/.claude.bak/$TIMESTAMP"
 
@@ -828,6 +965,11 @@ echo "    Backup:  $BAK_DIR"
 echo "    Profile: $PROFILE"
 echo "    Stack:   $STACK"
 echo "    Ceremony: $CEREMONY_EFFECTIVE — $_CEREMONY_SOURCE"  # PLAN-166 F3
+if [[ "$_TEMPLATE_DELIVERY" -eq 1 ]]; then
+  echo "    docs/.github delivery: ENABLED — $_TEMPLATE_DELIVERY_SOURCE"   # PLAN-183 W5 OQ-5
+else
+  echo "    docs/.github delivery: DISABLED — $_TEMPLATE_DELIVERY_SOURCE"  # PLAN-183 W5 OQ-5
+fi
 if [[ "$_REPLAY_SOURCE" == "replay" ]]; then
   echo "    Request: replayed from .claude/.install-state.json (PLAN-153 B2)"
 fi
@@ -850,7 +992,7 @@ fi
 # folded into .claude/.install-state.json by _write_upgrade_state at the end.
 # Dry-run never creates it. Fail-open throughout.
 if [[ "$DRY_RUN" -eq 0 ]]; then
-  _UP_OPS_FILE="$(mktemp "${TMPDIR:-/tmp}/ceo-upgrade-ops.XXXXXX" 2>/dev/null || true)"
+  _UP_OPS_FILE="$(mktemp "$( _up_tmpbase )/ceo-upgrade-ops.XXXXXX" 2>/dev/null || true)"
 fi
 _up_record_op() {
   if [[ -n "${_UP_OPS_FILE:-}" && -f "${_UP_OPS_FILE:-}" ]]; then
@@ -958,20 +1100,13 @@ _load_baseline_manifest() {
   #
   # PLAN-161 U1 (codex r1 F5): "outside $TARGET" must hold even when the
   # CALLER's TMPDIR is $TARGET or lies under it — otherwise --dry-run writes
-  # in the target again. Resolve the tmp base physically (cd + pwd -P) and
-  # prefix-check it against the physically-resolved $TARGET (trailing-slash
-  # safe case glob, bash-3.2-safe); on equal-or-under, fall back to /tmp.
-  # If the base cannot be resolved (nonexistent), leave it — mktemp fails
+  # in the target again. That check was BORN here and, as of rail round-5 F3,
+  # lives in _up_tmpbase (:641) so every scratch file this script takes gets
+  # the same answer — the round-5 finding was a NEW mktemp that did not
+  # inherit it. If the base cannot be resolved (nonexistent), mktemp fails
   # below and we return 0 (the existing no-manifest fallback).
-  local _lbm_base _lbm_base_abs _lbm_target_abs
-  _lbm_base="${TMPDIR:-/tmp}"
-  _lbm_base_abs="$( cd "$_lbm_base" 2>/dev/null && pwd -P )" || _lbm_base_abs=""
-  _lbm_target_abs="$( cd "$TARGET" 2>/dev/null && pwd -P )" || _lbm_target_abs=""
-  if [[ -n "$_lbm_base_abs" && -n "$_lbm_target_abs" ]]; then
-    case "${_lbm_base_abs%/}/" in
-      "${_lbm_target_abs%/}/"*) _lbm_base="/tmp" ;;
-    esac
-  fi
+  local _lbm_base
+  _lbm_base="$( _up_tmpbase )"
   local sanitized
   sanitized="$( mktemp "$_lbm_base/ceo-baseline-manifest.XXXXXX" 2>/dev/null )" || return 0
   _BASELINE_TMP_FILE="$sanitized"
@@ -1449,7 +1584,7 @@ backup_and_replace() {
   local _lg_survivors=""
   if command -v _framework_path_excluded >/dev/null 2>&1 \
      && [[ -d "$dst" && -d "$src" ]]; then
-    _lg_survivors="$( mktemp "${TMPDIR:-/tmp}/ceo-upg-survivors.XXXXXX" )"
+    _lg_survivors="$( mktemp "$( _up_tmpbase )/ceo-upg-survivors.XXXXXX" )"
     _lg_excl_aware=1
   fi
 
@@ -3453,6 +3588,994 @@ else
   _apply_claude_dir_gitignore "$TARGET/.claude"
 fi
 
+# ===========================================================================
+# PLAN-183 W5 (D1) — deliver the docs/ + .github/ trees install.sh has always
+# shipped and this script never did.
+# ---------------------------------------------------------------------------
+# MEASURED (S323, re-run S327): `grep -c github scripts/upgrade.sh` = 0 and
+# every `docs` hit was a comment. install.sh delivers both trees through
+# install_docs_templates (:1533) and install_github_templates (:1580); nothing
+# here ever did. That is defect D1, and it is what holds the parity e2e at
+# STALE 3 (measured baseline: docs/BRANCH-PROTECTION.md,
+# .github/workflows/validate.yml.template, .github/workflows/benchmarks.yml.template).
+#
+# THE ROUTE TABLE IS THE TRUTH. Destination -> source is answered ONLY by
+# scripts/delivery-routes.tsv, through the SAME reader the manifest generator
+# uses (_wbm_route_src / _wbm_route_dests, D3). A second destination list here
+# would be the "local branch that decides ownership" CLAUDE.md §4 forbids and
+# this repo has already paid for twice (PLAN-182: 16 modules -> one resolver;
+# PLAN-167: _ownership_verdict).
+#
+# OWNERSHIP LADDER — the whole point is to REFRESH framework bytes without
+# ever taking an adopter's file. Per destination, in order:
+#   absent                                    -> INSTALLED
+#   target == current framework source        -> IDENTICAL   (no write)
+#   target == the digest the BASELINE MANIFEST recorded for it
+#                                             -> REFRESHED (prior record)
+#   target == some PRIOR GENERATION of the source in $SOURCE_DIR's git history
+#                                             -> REFRESHED (pristine prior generation)
+#   anything else                             -> PRESERVED (loud, never written)
+# Rungs 3 and 4 are both already-established mechanisms here: ownership
+# continuity by recorded digest (install.sh:2504's HASH_PRIOR_RECORD shape)
+# and the hash-gated generation refresh of _refresh_schema_doc (:3204-3212).
+# Neither is a heuristic about content; both are evidence that the framework
+# put those exact bytes there. When SOURCE_DIR is not a git checkout (a
+# release tarball) rung 4 yields nothing and the verdict falls to PRESERVED —
+# under-claiming, which is the recoverable direction.
+#
+# The generations are DERIVED FROM GIT at run time, never from tags and never
+# from a hand-maintained pin list. _refresh_schema_doc's hardcoded pins carry
+# a standing contract ("every commit that changes the doc must append the
+# replaced generation's hash") that has already been violated once in this
+# repo (S313, the 996d72b red). Deriving removes the contract instead of
+# adding five more of them.
+#
+# TWO-STAGE docs/ ROUTE (§9.7 item 1): install.sh cp's the docs templates and
+# THEN rewrites them in place through apply_placeholder_substitutions
+# (:2226-2231). Both templates carry ZERO {{...}} markers today (measured), so
+# the post-substitution bytes equal the template bytes and comparing against
+# the template is correct. That is an ACCIDENT of content, not a design
+# guarantee: the moment a marker appears in either file the comparison starts
+# lying. The guard for that is the parity e2e, which compares the DELIVERED
+# trees and would go red the same day. .github/ is NOT in the substitution
+# walk (explicit_files, install.sh:2196-2214) and is verbatim by construction.
+# ===========================================================================
+echo ""
+echo "==> Delivering docs/ + .github/ framework templates (PLAN-183 W5 D1)"
+
+_UP_TPL_ROUTES=0
+_UP_TPL_ROWS=0          # rail round-1 F2: the table's raw data-row count
+_UP_TPL_INSTALLED=0
+_UP_TPL_REFRESHED=0
+_UP_TPL_IDENTICAL=0
+_UP_TPL_PRESERVED=0
+_UP_TPL_SKIPPED=0
+_D1_DELIVERY_RAN=0
+_D1_DELIVERED_TEMPLATES=""
+_D1_CODEOWNERS_REGISTERED=0
+# rail round-2 F2 (second half) — a FAILED precondition must reach the CALLER.
+# Pre-cure, both precondition branches below printed an ERROR and the upgrade
+# still exited 0: docs/ and .github/ undelivered, `echo $?` saying success.
+# DEFERRED, not an immediate `exit`: this block sits ~500 lines before the end
+# and the mis-install purge scan, the C.7 baseline-manifest rewrite and
+# _write_upgrade_state all still have to run — aborting here would leave the
+# target HALF-upgraded, which is strictly worse than the fail-open being
+# cured. So the rest of the upgrade completes, the summary line carries
+# `precondition=FAILED` for log-only consumers, and the process exits 3.
+_UP_DELIVERY_PRECONDITION_FAILED=0
+# rail round-3 F2 — WHICH precondition failed, in one machine-readable token.
+# The deferred exit and the banner are both derived from the flag above; this
+# is what makes the PERSISTED record say more than "not true": a durable audit
+# entry that only knows "failed" cannot be triaged a week later.
+_UP_DELIVERY_PRECONDITION_REASON=""
+
+# The GitHub handle a previous install recorded, or empty. Same trust class as
+# every other install-state read: target-side, UNSIGNED, advisory. STRICTLY
+# charset-validated before it is ever interpolated into a sed script —
+# PLAN-183 §9.2 reproduced install.sh:1508 aborting with a 0-byte CODEOWNERS
+# when the handle contained the sed delimiter, and that file then survives as
+# EXISTS-skipped forever. This reader refuses anything that is not a GitHub
+# handle, so upgrade.sh cannot reproduce that defect.
+_read_install_state_github_owner() {
+  command -v python3 >/dev/null 2>&1 || return 3
+  [ -f "$_INSTALL_STATE_FILE" ] && [ -r "$_INSTALL_STATE_FILE" ] || return 3
+  PYTHONNOUSERSITE=1 python3 -I -c '
+import json, re, sys
+try:
+    with open(sys.argv[1], "r", encoding="utf-8") as f:
+        d = json.load(f)
+except (OSError, ValueError):
+    sys.exit(3)
+if not isinstance(d, dict) or d.get("schema_version") != 1:
+    sys.exit(3)
+req = d.get("request")
+if not isinstance(req, dict):
+    sys.exit(3)
+h = req.get("github_owner", "")
+if not isinstance(h, str) or not h:
+    sys.exit(3)
+# GitHub handle grammar, deliberately narrow: no "/" (the sed delimiter that
+# produced the 0-byte CODEOWNERS in PLAN-183 §9.2), no "&"/"\\" (sed
+# replacement metacharacters), no whitespace, no shell metacharacters.
+if not re.match(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$", h):
+    sys.exit(3)
+sys.stdout.write(h + "\n")
+' "$_INSTALL_STATE_FILE" 2>/dev/null
+}
+
+# sha256 of every generation of a SOURCE relpath in $SOURCE_DIR's git history,
+# one per line, deduplicated. $2 (optional) is a validated OWNER_HANDLE: when
+# non-empty each generation is RENDERED through the same substitution
+# install.sh applies before hashing, so the comparison happens on the bytes
+# that were actually DELIVERED, never on the unrendered template.
+# Empty output whenever the evidence cannot be produced (no git, no hasher,
+# SOURCE_DIR is not a checkout, path unknown to history) — the caller then has
+# no prior-generation evidence and PRESERVES.
+_up_tpl_generations() {
+  _utg_rel="$1"
+  _utg_handle="${2:-}"
+  _utg_out=""
+  command -v git >/dev/null 2>&1 || { printf ''; return 0; }
+  command -v _hash_stdin >/dev/null 2>&1 || { printf ''; return 0; }
+  git -C "$SOURCE_DIR" rev-parse --git-dir >/dev/null 2>&1 || { printf ''; return 0; }
+  while IFS= read -r _utg_commit; do
+    [ -n "$_utg_commit" ] || continue
+    _utg_blob="$( git -C "$SOURCE_DIR" rev-parse "$_utg_commit:$_utg_rel" 2>/dev/null || true )"
+    [ -n "$_utg_blob" ] || continue
+    if [ -n "$_utg_handle" ]; then
+      _utg_hash="$( git -C "$SOURCE_DIR" cat-file blob "$_utg_blob" 2>/dev/null \
+                    | sed "s/{{OWNER_HANDLE}}/$_utg_handle/g" \
+                    | _hash_stdin 2>/dev/null || true )"
+    else
+      _utg_hash="$( git -C "$SOURCE_DIR" cat-file blob "$_utg_blob" 2>/dev/null \
+                    | _hash_stdin 2>/dev/null || true )"
+    fi
+    [ -n "$_utg_hash" ] || continue
+    case "
+$_utg_out" in
+      *"
+$_utg_hash
+"*) continue ;;
+    esac
+    _utg_out="$_utg_out$_utg_hash
+"
+  done < <( git -C "$SOURCE_DIR" log --format='%H' -- "$_utg_rel" 2>/dev/null || true )
+  printf '%s' "$_utg_out"
+}
+
+# Refuse to write through a symlinked LEAF or any symlinked ANCESTOR. Verbatim
+# posture of _refresh_schema_doc (:3236-3255) and NOT optional here: a dangling
+# link makes `cp` materialise its referent OUTSIDE $TARGET, which PLAN-183
+# §9.1 reproduced as a live install.sh defect (PLAN-185 F1). upgrade.sh does
+# not get to ship the same hole on a new route. Returns 0 when the write must
+# be refused.
+_up_tpl_symlink_refuses() {
+  _uts_rel="$1"
+  if [ -L "$TARGET/$_uts_rel" ]; then
+    echo "    WARNING: PRESERVED $_uts_rel (destination is a symlink — a refresh would write through it, outside the target; replace the link manually if that is intended)"
+    return 0
+  fi
+  _uts_walk="$( dirname "$_uts_rel" )"
+  while [ -n "$_uts_walk" ] && [ "$_uts_walk" != "." ] && [ "$_uts_walk" != "/" ]; do
+    if [ -L "$TARGET/$_uts_walk" ]; then
+      echo "    WARNING: PRESERVED $_uts_rel (ancestor $_uts_walk is a symlink — refusing to write through it)"
+      return 0
+    fi
+    _uts_walk="$( dirname "$_uts_walk" )"
+  done
+  return 1
+}
+
+# Write the delivered bytes by the SAME mechanism install.sh uses for that
+# route, because the MECHANISM decides the resulting file MODE and MODE_DIFF
+# is a FATAL class in the very parity gate this wave exists to turn green.
+#   identity route : `cp` — exactly install_docs_template's cp (install.sh:1472),
+#                    so the destination inherits the template's bits.
+#   rendered route : shell redirection — exactly install.sh:1576's
+#                    `sed ... > "$dst"`, so the destination gets 0666 & ~umask.
+# MEASURED (S327): `cp` from the mktemp render buffer produces 0600 (mktemp is
+# created 0600 and POSIX cp copies the source's permission bits) while a fresh
+# install produces 0644 under the usual umask 022 — same bytes, different mode,
+# on the exact destination (.github/CODEOWNERS) the amendment exists to deliver.
+#
+# rail round-7 F3 — the write is ATOMIC: a same-directory temp file, the mode
+# set on THAT inode, then rename(2) over the destination. The pre-cure form
+# wrote INTO whatever inode already occupied the path, and an existing
+# destination hard-linked to a file outside the target shares that inode.
+# MEASURED pre-cure (S327), both mechanisms: `cp src dst` and `cat src > dst`
+# each changed the OUTSIDE file's bytes (sha before != sha after) and `chmod`
+# changed its mode — every symlink and ancestor confinement check passed,
+# because a hard link is not a link the path walk can see. `mv -f` replaces the
+# directory ENTRY instead, so the foreign inode keeps its bytes and its mode.
+# Same directory is a requirement, not a preference: rename(2) cannot cross
+# filesystems, so this temp file deliberately does NOT use _up_tmpbase (round 5
+# F3) — that function answers "where is SCRATCH?", and this is not scratch, it
+# is the destination being staged. It is removed on every failure path.
+# The mode has to be set EXPLICITLY here: `cp` onto the pre-created mktemp
+# inode keeps that inode's 0600 (measured), so relying on cp's mode-copy — the
+# round-3 F4 property — would silently ship 0600 and re-open MODE_DIFF.
+# _up_tpl_install_mode is the SAME function the normalisation path uses, so
+# "the mode a fresh install of this route produces" keeps exactly one owner.
+# rc 0 = delivered; rc 1 = nothing was written (caller reports and preserves).
+_up_tpl_write() {
+  _utw_src="$1"; _utw_dst="$2"; _utw_handle="${3:-}"
+  _utw_dir="$( dirname "$_utw_dst" )"
+  _utw_tmp="$( mktemp "$_utw_dir/.ceo-deliver.XXXXXX" 2>/dev/null || true )"
+  if [ -z "$_utw_tmp" ]; then
+    return 1
+  fi
+  if [ -n "$_utw_handle" ]; then
+    if ! cat "$_utw_src" > "$_utw_tmp" 2>/dev/null; then
+      rm -f "$_utw_tmp"
+      return 1
+    fi
+  else
+    if ! cp "$_utw_src" "$_utw_tmp" 2>/dev/null; then
+      rm -f "$_utw_tmp"
+      return 1
+    fi
+  fi
+  _utw_mode="$( _up_tpl_install_mode "$_utw_src" "$_utw_handle" )"
+  if [ -n "$_utw_mode" ]; then
+    chmod "$_utw_mode" "$_utw_tmp" 2>/dev/null || true
+  fi
+  if ! mv -f "$_utw_tmp" "$_utw_dst" 2>/dev/null; then
+    rm -f "$_utw_tmp"
+    return 1
+  fi
+  return 0
+}
+
+# --- rail round-7 F3: hard links are confinement holes the path walk misses -
+# _up_tpl_symlink_refuses and _up_tpl_confined_refuses both answer questions
+# about the PATH. A hard link is a second NAME for the same inode, invisible to
+# both: the destination is a regular file, physically inside $TARGET, and
+# writing it writes a file outside $TARGET. The atomic replace above already
+# makes the escape structurally impossible, so this is the named, auditable
+# refusal on top of it — an operator seeing `docs/rotation-log.md` silently
+# detached from its other link deserves to be told, not surprised.
+# Fail-OPEN when the link count cannot be read: that is INFRASTRUCTURE
+# (CLAUDE.md §4), and the structural wall (rename) is still standing.
+# GNU-first with the output VALIDATED, because on GNU `stat -f` SUCCEEDS
+# printing FILESYSTEM information rather than failing (the lesson
+# _up_tpl_stat_mode above already pays); `ls -ld` is the last resort.
+_up_tpl_nlink() {
+  _utn_out="$( stat -c '%h' "$1" 2>/dev/null || stat -f '%l' "$1" 2>/dev/null || true )"
+  case "$_utn_out" in
+    # `|| true` is load-bearing under `set -euo pipefail`: a failing pipeline
+    # inside a command substitution makes the ASSIGNMENT fail, which aborts the
+    # whole upgrade instead of falling through to the empty-answer path below.
+    ''|*[!0-9]*) _utn_out="$( ls -ld "$1" 2>/dev/null | awk 'NR==1 {print $2}' || true )" ;;
+  esac
+  case "$_utn_out" in
+    ''|*[!0-9]*) printf '' ;;
+    *)           printf '%s\n' "$_utn_out" ;;
+  esac
+}
+
+# Returns 0 when the write must be REFUSED (same polarity as its two siblings).
+_up_tpl_multilink_refuses() {
+  _utm_rel="$1"
+  _utm_dst="$2"
+  [ -e "$_utm_dst" ] || return 1
+  _utm_n="$( _up_tpl_nlink "$_utm_dst" )"
+  [ -n "$_utm_n" ] || return 1
+  if [ "$_utm_n" -gt 1 ] 2>/dev/null; then
+    echo "    WARNING: PRESERVED $_utm_rel (destination has $_utm_n hard links — writing it would change every other name for the same inode, including names outside the target; break the link manually if that is intended)"
+    return 0
+  fi
+  return 1
+}
+
+# --- rail round-3 F4: MODE NORMALISATION ----------------------------------
+# `cat >` and `cp` onto an EXISTING destination both keep the DESTINATION
+# inode's mode; only a fresh create takes the install mode. MEASURED (S327):
+# `cp src dst` with dst pre-chmod'ed 0755 leaves 0755, while the same cp onto a
+# non-existent dst yields the source's 0644. So an upgrade refreshes the BYTES
+# and keeps a stale bit — and the parity classifier's MODE_DIFF, which reads
+# the exec bit (scripts/tests/_parity_classify.py:203), stays FATAL while the
+# upgrade reports success. The IDENTICAL branch never wrote at all, so it could
+# not converge either.
+#
+# "The mode a fresh install produces", per transform, mirroring install.sh's
+# own mechanism rather than a remembered constant:
+#   * identity — install_docs_template's `cp "$src" "$dst"` onto a
+#     non-existent destination (install.sh:1494) yields the SOURCE's mode;
+#   * rendered — the `sed ... > "$dst"` redirection (install.sh:1602) yields
+#     0666 & ~umask. The SOURCE cannot be consulted on this lane: it is the
+#     mktemp'd render buffer, mode 0600, which is exactly why _up_tpl_write
+#     uses `cat >` there instead of `cp`.
+_up_tpl_stat_mode() {
+  # GNU-first, BSD fallback, and the output is VALIDATED: on GNU `stat -f`
+  # SUCCEEDS printing the FILESYSTEM, not the mode, so "it exited 0" is not
+  # evidence that the answer means what we wanted.
+  _utsm_out="$( stat -c '%a' "$1" 2>/dev/null || stat -f '%Lp' "$1" 2>/dev/null || true )"
+  case "$_utsm_out" in
+    [0-7][0-7][0-7]|[0-7][0-7][0-7][0-7]) printf '%s\n' "$_utsm_out" ;;
+    *) printf '' ;;
+  esac
+}
+
+# $1=src_abs  $2=handle ("" => identity route).
+# The header stays a bare `name() {` on purpose: the oracles extract these
+# functions BY NAME with `sed -n "/^name() {$/,/^}$/p", so a trailing comment
+# on the definition line silently empties the fragment.
+_up_tpl_install_mode() {
+  if [ -n "${2:-}" ]; then
+    _utim_umask="$( umask 2>/dev/null || printf '022' )"
+    case "$_utim_umask" in
+      [0-7]*) printf '%03o\n' "$(( 0666 & ~0$_utim_umask ))" ;;
+      *)      printf '' ;;
+    esac
+  else
+    _up_tpl_stat_mode "$1"
+  fi
+}
+
+# Normalise the delivered destination to the mode a fresh install of THIS route
+# would produce. Silent when already correct; one named line per change, so the
+# convergence is auditable in the log. Fail-OPEN on an unreadable mode: a stat
+# that will not answer is INFRASTRUCTURE, not adversarial input (CLAUDE.md §4).
+# $1=rel $2=dst $3=src_abs $4=handle. Bare `name() {` header — see above.
+#
+# rail round-6 F4 — DRY-RUN PREVIEWS the same mutation instead of returning
+# early. Pre-cure, a destination holding the CURRENT framework bytes with a
+# drifted mode printed only `IDENTICAL` under --dry-run, while the identical
+# code path in a real run also chmod'ed and printed MODE-NORMALIZED. A preview
+# that reports LESS than the run it previews is not a preview; an operator uses
+# --dry-run precisely to decide whether to let the real run touch the file. The
+# modes are COMPUTED here (both lanes read the same stat/umask), so the line is
+# derived from this tree, never guessed — and the only thing skipped is the
+# chmod itself.
+_up_tpl_normalize_mode() {
+  _utnm_want="$( _up_tpl_install_mode "$3" "${4:-}" )"
+  _utnm_have="$( _up_tpl_stat_mode "$2" )"
+  if [ -z "$_utnm_want" ] || [ -z "$_utnm_have" ]; then
+    [ "${DRY_RUN:-0}" -eq 0 ] \
+      && echo "    NOTE: mode not normalised for $1 (stat/umask gave no usable answer)" >&2
+    return 0
+  fi
+  # Compare NUMERICALLY: 644 and 0644 are one mode spelled two ways.
+  if [ "$(( 0$_utnm_have ))" -eq "$(( 0$_utnm_want ))" ]; then
+    return 0
+  fi
+  if [ "${DRY_RUN:-0}" -ne 0 ]; then
+    echo "    (dry-run) would MODE-NORMALIZE ($_utnm_have -> $_utnm_want): $1"
+    return 0
+  fi
+  # rail round-7 F3 — chmod acts on the INODE, so a multi-link destination
+  # would carry the new mode to every other name for it, outside the target
+  # included. Defence in depth: _up_deliver_template refuses a multi-link
+  # destination before any branch reaches here, and after an atomic replace the
+  # destination is a FRESH inode with one link — so this fires only if a future
+  # caller reaches the normaliser by another route.
+  _utnm_n="$( _up_tpl_nlink "$2" )"
+  if [ -n "$_utnm_n" ] && [ "$_utnm_n" -gt 1 ] 2>/dev/null; then
+    echo "    NOTE: mode $_utnm_have kept for $1 (destination has $_utnm_n hard links — a chmod would change the mode of every other name for the same inode)" >&2
+    return 0
+  fi
+  if chmod "$_utnm_want" "$2" 2>/dev/null; then
+    echo "    MODE-NORMALIZED ($_utnm_have -> $_utnm_want): $1"
+  else
+    echo "    NOTE: mode $_utnm_have kept for $1 (chmod to $_utnm_want failed)" >&2
+  fi
+  return 0
+}
+
+# --- rail round-3 F5: "is a CODEOWNERS surface already at the target?" ------
+# ONE definition, consulted by BOTH mutually-exclusive branches. `-e` alone is
+# FALSE for a DANGLING symlink, so a target whose .github/CODEOWNERS is a link
+# to a not-yet-existing file read as ABSENT and the .template route installed
+# alongside it — two active surfaces the moment the link target appears, which
+# no install ever produces, and permanently (the next upgrade finds the
+# template IDENTICAL and never removes it).
+# A symlink of ANY kind counts as PRESENT: _up_tpl_symlink_refuses already
+# refuses to write through a link at this destination, so "occupied" and "not
+# ours to overwrite" are the same answer here. Two branches asking the same
+# question two different ways is how this class was born (rail round-1 F5), so
+# the question gets exactly one implementation.
+_up_codeowners_present() {
+  [ -e "$TARGET/.github/CODEOWNERS" ] || [ -L "$TARGET/.github/CODEOWNERS" ]
+}
+
+# --- rail round-1 F2: PHYSICAL confinement, belt and braces ----------------
+# The reader already refuses a row whose dest or src is not a confined relpath
+# (_wbm_route_relpath_ok), so nothing hostile should ever reach here. This
+# assertion exists because "should" is not a property: the table is a FILE
+# (round 6 F3 removed the environment channel, it did not make the CONTENT
+# trusted) and this function is the LAST place before a write. MEASURED
+# pre-cure (S327): a row with `dest=../../outside/PWNED.md` put 536 real bytes
+# at "$TARGET/../../outside/PWNED.md".
+#
+# Two independent checks, both must pass:
+#   1. LEXICAL — the same predicate the reader uses, when it is reachable.
+#      A caller that somehow bypassed the reader still cannot pass `..`.
+#   2. PHYSICAL — resolve the deepest EXISTING ancestor of the destination with
+#      `cd -P`/`pwd -P` (bash 3.2: no realpath, no readlink -f on macOS) and
+#      require it to be $TARGET itself or a path UNDER it, comparing against
+#      the RESOLVED target so a symlinked target directory does not produce a
+#      spurious refusal. The parent may not exist yet on a fresh INSTALL, hence
+#      "deepest existing ancestor" rather than "the parent".
+# The check runs BEFORE `mkdir -p`, because mkdir -p of an escaping path
+# already creates directories outside the target.
+# Returns 0 when the write must be REFUSED (the polarity of
+# _up_tpl_symlink_refuses, deliberately: the two are read as a pair).
+_up_tpl_confined_refuses() {
+  _utc_rel="$1"
+  if command -v _wbm_route_relpath_ok >/dev/null 2>&1; then
+    if ! _wbm_route_relpath_ok "$_utc_rel"; then
+      echo "    ERROR: REFUSED $_utc_rel — not a confined relative path (route table poisoned?)" >&2
+      return 0
+    fi
+  else
+    case "$_utc_rel" in
+      ""|/*|./*|..|../*|*/../*|*/..|*//*|*\\*|*[[:space:]]*|*[[:cntrl:]]*)
+        echo "    ERROR: REFUSED $_utc_rel — not a confined relative path (route table poisoned?)" >&2
+        return 0 ;;
+    esac
+  fi
+  # rail round-5 F1 — CONFINED is not the same property as ALLOWED. A
+  # well-formed hostile table can declare `.git/hooks/pre-commit` (relative, no
+  # `..`, no glob) and every lexical gate agrees. The delivery DOMAIN is fixed
+  # in code, in the reader, and asked again HERE because this is the last stop
+  # before mkdir/cp — the same belt-and-braces posture the confinement check
+  # itself has. Fail-CLOSED when the authority is missing: in a real run the
+  # library is sourced (:106) and, without it, _wbm_route_dests is absent too,
+  # so the AC-9 precondition has already refused the whole delivery — reaching
+  # here without the predicate means a harness, not an upgrade.
+  if command -v _wbm_route_domain_ok >/dev/null 2>&1; then
+    if ! _wbm_route_domain_ok "$_utc_rel"; then
+      echo "    ERROR: REFUSED $_utc_rel — outside the delivery domain (this wave writes ONLY under docs/ or .github/)" >&2
+      return 0
+    fi
+  else
+    echo "    ERROR: REFUSED $_utc_rel — the delivery-domain predicate (_wbm_route_domain_ok) is unavailable; refusing rather than guessing" >&2
+    return 0
+  fi
+  # `|| true` is load-bearing: under `set -euo pipefail` a failing `cd -P` would
+  # abort the whole upgrade instead of reaching the named refusal below (rail r1
+  # follow-up, S327 — doctor.sh carries the same idiom).
+  _utc_tgt="$( cd -P "$TARGET" 2>/dev/null && pwd -P || true )"
+  if [ -z "$_utc_tgt" ]; then
+    echo "    ERROR: REFUSED $_utc_rel — the target directory does not resolve" >&2
+    return 0
+  fi
+  _utc_walk="$( dirname "$TARGET/$_utc_rel" )"
+  while [ -n "$_utc_walk" ] && [ ! -d "$_utc_walk" ]; do
+    _utc_next="$( dirname "$_utc_walk" )"
+    [ "$_utc_next" != "$_utc_walk" ] || break
+    _utc_walk="$_utc_next"
+  done
+  _utc_res="$( cd -P "$_utc_walk" 2>/dev/null && pwd -P || true )"
+  if [ -z "$_utc_res" ]; then
+    echo "    ERROR: REFUSED $_utc_rel — its nearest existing ancestor does not resolve" >&2
+    return 0
+  fi
+  case "$_utc_res" in
+    "$_utc_tgt"|"$_utc_tgt"/*) return 1 ;;
+  esac
+  echo "    ERROR: REFUSED $_utc_rel — resolves outside the target ($_utc_res is not under $_utc_tgt)" >&2
+  return 0
+}
+
+# --- rail round-7 F2: the SOURCE side of confinement ------------------------
+# The destination has been physically confined since round 1 F2. The source had
+# only the lexical predicate, and `[ -f ]`, `cp`, `cat` and sha256 all FOLLOW
+# links: a `templates/...` source that is a symlink (or has a symlinked
+# ancestor) to a regular file outside the checkout passed every gate and
+# delivered FOREIGN bytes into the adopter as framework content (measured
+# S327 — the delivered sha equalled the outside file's sha).
+# ONE implementation, in the library the three entrypoints share
+# (_wbm_source_confined), for the same reason ADR-194 gives the route reader:
+# a private copy is how the destination-side checks drifted apart in the first
+# place. Fail-CLOSED when the predicate is unavailable, exactly like the
+# delivery-domain check below it: in a real run the library is sourced (:106)
+# and without it the AC-9 precondition has already refused the whole delivery,
+# so arriving here without the predicate means a harness, not an upgrade.
+# Returns 0 when the read must be REFUSED (sibling polarity).
+_up_src_confined_refuses() {
+  _usc_rel="$1"
+  if ! command -v _wbm_source_confined >/dev/null 2>&1; then
+    echo "    ERROR: REFUSED source '$_usc_rel' — the source-confinement predicate (_wbm_source_confined) is unavailable; refusing rather than guessing" >&2
+    return 0
+  fi
+  if ! _wbm_source_confined "$SOURCE_DIR" "$_usc_rel"; then
+    echo "    ERROR: REFUSED source '$_usc_rel' — ${_WBM_SRC_CONFINE_WHY:-not confined to the source checkout}" >&2
+    return 0
+  fi
+  return 1
+}
+
+_up_tpl_register() {
+  # rail round-3 F1 — WHITELIST, mirroring install.sh:_append_delivered_template
+  # and the generator's own floor. Everything that reaches here today comes
+  # from _wbm_route_dests, so this refuses nothing in practice; it is the wall
+  # that keeps a FUTURE caller from registering a destination the shared table
+  # never declared. `command -v` guarded: the library is sourced conditionally
+  # (upgrade.sh:106, partial checkout).
+  if command -v _wbm_route_dest_declared >/dev/null 2>&1 \
+     && ! _wbm_route_dest_declared "$1"; then
+    echo "    ERROR: delivered-template registration REJECTED (not a destination declared in the shared route table): '$1'" >&2
+    return 0
+  fi
+  if [ -n "$_D1_DELIVERED_TEMPLATES" ]; then
+    _D1_DELIVERED_TEMPLATES="$_D1_DELIVERED_TEMPLATES
+$1"
+  else
+    _D1_DELIVERED_TEMPLATES="$1"
+  fi
+  if [ "$1" = ".github/CODEOWNERS" ]; then _D1_CODEOWNERS_REGISTERED=1; fi
+}
+
+# Deliver ONE destination. $1 = destination relpath, $2 = ABSOLUTE path to the
+# bytes to deliver (already rendered for a transform route), $3 = the source
+# relpath used to derive generations, $4 = validated handle or "" (render).
+_up_deliver_template() {
+  _udt_rel="$1"; _udt_src_abs="$2"; _udt_src_rel="$3"; _udt_handle="${4:-}"
+  _udt_dst="$TARGET/$_udt_rel"
+
+  if _path_is_skipped "$_udt_rel"; then
+    echo "    SKIPPED (--skip): $_udt_rel"
+    _UP_TPL_SKIPPED=$(( _UP_TPL_SKIPPED + 1 ))
+    return 0
+  fi
+  # rail round-1 F2 — LAST gate before anything touches the filesystem, and
+  # deliberately ahead of the `mkdir -p` further down (mkdir -p of an escaping
+  # destination already creates directories outside the target). Counted as
+  # PRESERVED for the same reason the symlink refusal is: nothing was written
+  # and the conservation law below still has to balance.
+  if _up_tpl_confined_refuses "$_udt_rel"; then
+    echo "    WARNING: PRESERVED $_udt_rel (refused — destination is not confined to the target)"
+    _UP_TPL_PRESERVED=$(( _UP_TPL_PRESERVED + 1 ))
+    return 0
+  fi
+  if [ -n "${_udt_src_rel:-}" ] && command -v _wbm_route_relpath_ok >/dev/null 2>&1 \
+     && ! _wbm_route_relpath_ok "$_udt_src_rel"; then
+    echo "    WARNING: PRESERVED $_udt_rel (refused — the route's SOURCE '$_udt_src_rel' is not a confined relative path)"
+    _UP_TPL_PRESERVED=$(( _UP_TPL_PRESERVED + 1 ))
+    return 0
+  fi
+  # rail round-7 F2 — PHYSICAL source confinement, before the `-f` test that
+  # would follow a symlink out of the checkout. On the rendered lane the bytes
+  # in $2 come from a temp buffer, but $3 still names the template this run
+  # read to produce them, so the check is correct on both lanes (the render
+  # site checks it FIRST, ahead of its own read; this is the second wall).
+  if [ -n "${_udt_src_rel:-}" ] && _up_src_confined_refuses "$_udt_src_rel"; then
+    echo "    WARNING: PRESERVED $_udt_rel (refused — the route's SOURCE is not confined to the framework checkout)"
+    _UP_TPL_PRESERVED=$(( _UP_TPL_PRESERVED + 1 ))
+    return 0
+  fi
+  if [ ! -f "$_udt_src_abs" ]; then
+    # rail round-2 F2: under --pin the DESTINATION list comes from this
+    # upgrader's own table (snapshotted before the checkout) while the SOURCES
+    # come from the PINNED tree — so a route the pin predates lands here. Say
+    # so BY NAME: "missing" and "not shipped at the ref you asked for" are
+    # different facts and an operator has to be able to tell them apart.
+    if [ -n "${PIN_REF:-}" ]; then
+      echo "    SKIPPED (source missing at pin $PIN_REF): $_udt_rel"
+    else
+      echo "    SKIP (source missing): $_udt_rel"
+    fi
+    _UP_TPL_SKIPPED=$(( _UP_TPL_SKIPPED + 1 ))
+    return 0
+  fi
+  if _up_tpl_symlink_refuses "$_udt_rel"; then
+    _UP_TPL_PRESERVED=$(( _UP_TPL_PRESERVED + 1 ))
+    return 0
+  fi
+  # rail round-7 F3 — a HARD link is a second name for the same inode and no
+  # path-based check can see it. Refused BEFORE the branch analysis, so it
+  # covers the INSTALL, REFRESH and IDENTICAL lanes at once (IDENTICAL still
+  # chmods through the normaliser).
+  if _up_tpl_multilink_refuses "$_udt_rel" "$_udt_dst"; then
+    _UP_TPL_PRESERVED=$(( _UP_TPL_PRESERVED + 1 ))
+    return 0
+  fi
+  if [ ! -e "$_udt_dst" ]; then
+    if [ "$DRY_RUN" -eq 1 ]; then
+      echo "    (dry-run) would INSTALL: $_udt_rel"
+    else
+      mkdir -p "$( dirname "$_udt_dst" )"
+      if ! _up_tpl_write "$_udt_src_abs" "$_udt_dst" "$_udt_handle"; then
+        echo "    WARNING: PRESERVED $_udt_rel (the atomic write could not be staged in $( dirname "$_udt_rel" ) — nothing was written)"
+        _UP_TPL_PRESERVED=$(( _UP_TPL_PRESERVED + 1 ))
+        return 0
+      fi
+      echo "    INSTALLED: $_udt_rel"
+    fi
+    _UP_TPL_INSTALLED=$(( _UP_TPL_INSTALLED + 1 ))
+    _up_tpl_register "$_udt_rel"
+    return 0
+  fi
+  # Ownership cannot be proven without a hasher => preserve loudly. Same
+  # posture, same wording, as _refresh_schema_doc.
+  if ! command -v _hash_file >/dev/null 2>&1; then
+    echo "    WARNING: PRESERVED $_udt_rel (no sha256 hasher available — ownership unprovable, not refreshing)"
+    _UP_TPL_PRESERVED=$(( _UP_TPL_PRESERVED + 1 ))
+    return 0
+  fi
+  _udt_h_dst="$( _hash_file "$_udt_dst" 2>/dev/null || true )"
+  _udt_h_src="$( _hash_file "$_udt_src_abs" 2>/dev/null || true )"
+  if [ -z "$_udt_h_dst" ] || [ -z "$_udt_h_src" ]; then
+    echo "    WARNING: PRESERVED $_udt_rel (hash unavailable — ownership unprovable, not refreshing)"
+    _UP_TPL_PRESERVED=$(( _UP_TPL_PRESERVED + 1 ))
+    return 0
+  fi
+  if [ "$_udt_h_dst" = "$_udt_h_src" ]; then
+    echo "    IDENTICAL: $_udt_rel"
+    # rail round-3 F4 — identical BYTES is not identical FILE. This branch
+    # writes nothing, so a destination whose mode drifted (or whose exec bit
+    # the framework changed between generations) could never converge: every
+    # future upgrade would find it identical and leave the parity classifier's
+    # fatal MODE_DIFF standing.
+    _up_tpl_normalize_mode "$_udt_rel" "$_udt_dst" "$_udt_src_abs" "$_udt_handle"
+    _UP_TPL_IDENTICAL=$(( _UP_TPL_IDENTICAL + 1 ))
+    _up_tpl_register "$_udt_rel"
+    return 0
+  fi
+  _udt_why=""
+  _udt_base="$( _baseline_lookup "$_udt_rel" 2>/dev/null || true )"
+  if [ -n "$_udt_base" ] && [ "$_udt_h_dst" = "$_udt_base" ]; then
+    _udt_why="recorded baseline digest"
+  else
+    while IFS= read -r _udt_gen; do
+      [ -n "$_udt_gen" ] || continue
+      if [ "$_udt_h_dst" = "$_udt_gen" ]; then
+        _udt_why="pristine prior generation"
+        break
+      fi
+    done <<UDTGEN
+$( _up_tpl_generations "$_udt_src_rel" "$_udt_handle" )
+UDTGEN
+  fi
+  if [ -n "$_udt_why" ]; then
+    if [ "$DRY_RUN" -eq 1 ]; then
+      echo "    (dry-run) would REFRESH ($_udt_why): $_udt_rel"
+      # rail round-6 F4 gave this lane a normalisation PREVIEW, because the
+      # write landed on an existing inode that kept its old bits and the real
+      # run then chmod'ed. rail round-7 F3 moved that responsibility INTO the
+      # write: the atomic replace stages a NEW inode and sets the fresh-install
+      # mode on it before the rename, so the real REFRESH performs no chmod and
+      # prints no MODE-NORMALIZED line (measured S327 on the H.16 fixture).
+      # A preview that announces a chmod the run does not perform is the same
+      # defect as round-6 F4 with the sign flipped, so this lane previews
+      # nothing about the mode — the mode it ends at is asserted by H.16.
+      :
+    else
+      mkdir -p "$BAK_DIR/$( dirname "$_udt_rel" )"
+      cp "$_udt_dst" "$BAK_DIR/$_udt_rel"
+      if ! _up_tpl_write "$_udt_src_abs" "$_udt_dst" "$_udt_handle"; then
+        echo "    WARNING: PRESERVED $_udt_rel (the atomic write could not be staged in $( dirname "$_udt_rel" ) — the file on disk is unchanged; a backup was taken)"
+        _UP_TPL_PRESERVED=$(( _UP_TPL_PRESERVED + 1 ))
+        return 0
+      fi
+      echo "    REFRESHED ($_udt_why): $_udt_rel"
+      # rail round-3 F4 — the write above landed on an EXISTING inode, which
+      # keeps its old mode. Converge to the fresh-install mode for this route.
+      _up_tpl_normalize_mode "$_udt_rel" "$_udt_dst" "$_udt_src_abs" "$_udt_handle"
+    fi
+    _UP_TPL_REFRESHED=$(( _UP_TPL_REFRESHED + 1 ))
+    _up_tpl_register "$_udt_rel"
+    return 0
+  fi
+  echo "    WARNING: PRESERVED adopter-modified $_udt_rel (matches neither the current framework generation nor any prior one — diff it manually; a pristine copy would have been refreshed)"
+  _UP_TPL_PRESERVED=$(( _UP_TPL_PRESERVED + 1 ))
+  return 0
+}
+
+if [ "$_TEMPLATE_DELIVERY" -ne 1 ]; then
+  echo "    SKIP: $_TEMPLATE_DELIVERY_SOURCE"
+else
+  # --- AC-9 precondition, asserted BEFORE any delivery ---------------------
+  # The route table is the only source of destinations. If it yields ZERO
+  # routes the loop below would deliver nothing and the summary would read
+  # `installed=0 refreshed=0 ...` — indistinguishable from "everything was
+  # already current". That is the vacuous pass this assertion exists to
+  # forbid: a count of 0 is a FAILURE, named, never a silent success.
+  # Fail-CLOSED because the table is INPUT, not infrastructure (CLAUDE.md §4).
+  _UP_TPL_DESTS=""
+  if command -v _wbm_route_dests >/dev/null 2>&1; then
+    # stderr is NOT suppressed: `_wbm_route_row_ok` emits the breadcrumb that
+    # NAMES a rejected row, and that breadcrumb is the whole reason round-1 F2
+    # is closed — a rejection nobody can see is the silence D3 was made of.
+    # It used to reach the log only because the registration fallback ~350
+    # lines below happened to re-run the same reader; rail round-4 F1 stopped
+    # that fallback from running on a failed precondition and the breadcrumb
+    # went with it (caught by H.13b). It belongs HERE, at the enumeration that
+    # decides, not as a side effect of an unrelated block.
+    _UP_TPL_DESTS="$( _wbm_route_dests || true )"
+  fi
+  _UP_TPL_ROUTES=0
+  while IFS= read -r _up_tpl_d; do
+    [ -n "$_up_tpl_d" ] || continue
+    _UP_TPL_ROUTES=$(( _UP_TPL_ROUTES + 1 ))
+  done <<UPTPLCOUNT
+$_UP_TPL_DESTS
+UPTPLCOUNT
+  # rail round-1 F2 — the DENOMINATOR. _wbm_route_dests now drops any row whose
+  # dest or src is not a confined relative path, so `routes < rows` is the
+  # observable signature of a poisoned table. Without this comparison the drop
+  # is INVISIBLE: the delivery would simply carry on with the surviving rows
+  # and report a plausible summary, which is the silent-continue the finding
+  # names. Counting stays inside the ONE reader (_wbm_route_rows_total) —
+  # a second parse here would be the second copy of the table CLAUDE.md §4
+  # forbids.
+  _UP_TPL_ROWS="$_UP_TPL_ROUTES"
+  if command -v _wbm_route_rows_total >/dev/null 2>&1; then
+    _UP_TPL_ROWS="$( _wbm_route_rows_total 2>/dev/null || echo "$_UP_TPL_ROUTES" )"
+  fi
+  case "$_UP_TPL_ROWS" in ''|*[!0-9]*) _UP_TPL_ROWS="$_UP_TPL_ROUTES" ;; esac
+  # Name the ORIGIN, never the tempfile: with the rail round-2 F2 snapshot in
+  # place _WBM_ROUTES_TSV points at /tmp, and a log line that named THAT would
+  # tell an operator nothing about which table decided this run.
+  _UP_TPL_TBL_SHOWN="${_UP_ROUTES_ORIGIN:-${_WBM_ROUTES_TSV:-<reader unavailable>}}"
+  [ -n "${_UP_ROUTES_SNAPSHOT:-}" ] && _UP_TPL_TBL_SHOWN="$_UP_TPL_TBL_SHOWN [snapshot taken before any --pin checkout]"
+  echo "    routes enumerated: $_UP_TPL_ROUTES of $_UP_TPL_ROWS table row(s) (source: $_UP_TPL_TBL_SHOWN)"
+fi
+
+if [ "$_TEMPLATE_DELIVERY" -eq 1 ] && [ "$_UP_TPL_ROUTES" -eq 0 ]; then
+  echo "    ERROR: the delivery-route table yielded ZERO routes — docs/ and" >&2
+  echo "           .github/ NOT delivered. A count of 0 is a FAILED" >&2
+  echo "           PRECONDITION, not 'nothing to do' (PLAN-183 W5 AC-9)." >&2
+  echo "           Expected scripts/delivery-routes.tsv next to the manifest" >&2
+  echo "           library, readable, with its dest/src/transform header." >&2
+  _UP_DELIVERY_PRECONDITION_FAILED=1
+  _UP_DELIVERY_PRECONDITION_REASON="zero-routes"
+  echo "    docs/.github delivery: routes=0 installed=0 refreshed=0 identical=0 preserved=0 skipped=0 precondition=FAILED — PRECONDITION FAILED"
+elif [ "$_TEMPLATE_DELIVERY" -eq 1 ] && [ "$_UP_TPL_ROUTES" -ne "$_UP_TPL_ROWS" ]; then
+  # rail round-1 F2: at least one row was REJECTED by the reader (escaping or
+  # otherwise malformed dest/src). Refuse the WHOLE delivery rather than
+  # proceeding with the survivors: a table someone can poison one row of is not
+  # a table this script gets to half-trust, and the rejected row's breadcrumb is
+  # already on stderr naming it.
+  echo "    ERROR: $_UP_TPL_ROWS route row(s) in the table but only $_UP_TPL_ROUTES passed" >&2
+  echo "           validation — at least one row declares a destination or source" >&2
+  echo "           that is not a confined relative path (see the REJECTED lines" >&2
+  echo "           above). docs/ and .github/ NOT delivered (fail-closed)." >&2
+  _UP_DELIVERY_PRECONDITION_FAILED=1
+  _UP_DELIVERY_PRECONDITION_REASON="rejected-route-row"
+  echo "    docs/.github delivery: routes=$_UP_TPL_ROUTES installed=0 refreshed=0 identical=0 preserved=0 skipped=0 precondition=FAILED — PRECONDITION FAILED (rejected route row)"
+elif [ "$_TEMPLATE_DELIVERY" -eq 1 ]; then
+  # The handle a previous install recorded. Empty => this run cannot render
+  # CODEOWNERS, which is the SAME state install.sh is in without
+  # --github-owner, so the exclusivity below resolves to the .template branch
+  # exactly as install.sh's else at :1563 does.
+  #
+  # rail round-7 F4 — `request.github_owner` is a RECORDED REQUEST field, the
+  # same class as request.profile / request.stack / request.harness, and
+  # --no-replay is the documented opt-out from replaying the recorded request
+  # (:44-48, :406). Pre-cure this read was unconditional, so `--no-replay` on a
+  # target with a recorded handle still rendered and refreshed
+  # .github/CODEOWNERS with it — the option contradicted by the one field that
+  # never learned about it.
+  # This is NOT the `_read_install_state_ceremony` case (:838-846): that reader
+  # runs independently of REPLAY on purpose, because its fail-safe direction is
+  # to write LESS (a missing ceremony means "user", which touches nothing). The
+  # fail-safe direction here is the same one an absent handle already has —
+  # empty => the .template branch, exactly install.sh's else at :1563 — so
+  # honouring the opt-out costs no safety and removes a contradiction.
+  # There is no `--github-owner` flag on upgrade.sh (measured: 0 occurrences
+  # outside this block), so with --no-replay the handle is simply unknown.
+  _UP_GH_OWNER=""
+  if [ "${REPLAY:-1}" -eq 1 ]; then
+    if _UP_GH_OWNER="$( _read_install_state_github_owner )"; then
+      _UP_GH_OWNER="$( printf '%s' "$_UP_GH_OWNER" | tr -d '\n' )"
+    else
+      _UP_GH_OWNER=""
+    fi
+  fi
+  if [ -n "$_UP_GH_OWNER" ]; then
+    echo "    CODEOWNERS handle: @$_UP_GH_OWNER (recorded install request)"
+  elif [ "${REPLAY:-1}" -ne 1 ]; then
+    echo "    CODEOWNERS handle: NOT replayed (--no-replay) — the recorded install request is not consulted; the .template branch applies (install.sh parity)"
+  else
+    echo "    CODEOWNERS handle: none recorded — the .template branch applies (install.sh parity)"
+  fi
+
+  # Rendered CODEOWNERS bytes for THIS run, materialised once in a temp file.
+  # Rendering is what install.sh:1576 does; doing it here is what lets the
+  # rendered destination take part in the same ownership ladder as every
+  # verbatim one instead of being a special case with weaker evidence.
+  _UP_CO_RENDERED=""
+  _UP_CO_SRC_REL=""
+  _UP_CO_TRANSFORM=""
+  # rail round-2 F3 — the ONE transform this script can render, spelled out
+  # once. install.sh:1508 performs the same substitution; the table declares
+  # the value and this branch COMPARES against it. Anything else (empty,
+  # misspelled, or a future transformation nobody taught this renderer) is
+  # refused by name instead of being silently rendered as if it were this one.
+  _UP_CO_TRANSFORM_SUPPORTED="substitute:{{OWNER_HANDLE}}"
+
+  while IFS= read -r _up_dest; do
+    [ -n "$_up_dest" ] || continue
+    _up_src_rel=""
+    _up_rc=0
+    _up_src_rel="$( _wbm_route_src "$_up_dest" )" || _up_rc=$?
+    case "$_up_dest" in
+      .github/CODEOWNERS)
+        # --- rail round-2 F3: the ROW decides whether rendering is legal ----
+        # Pre-cure this branch dropped `_up_rc` on the floor, re-parsed the row
+        # with awk for its SOURCE only, and applied the OWNER_HANDLE
+        # substitution unconditionally — so a row whose transform was empty,
+        # misspelled, or changed to some future transformation still produced
+        # substituted bytes, contradicting the shared table it claims to obey.
+        # Read BOTH fields from the row and consult the reader's verdict:
+        #   rc=2 is the EXPECTED answer for a transform route (there are no
+        #        framework bytes on disk for it — that is why it has no
+        #        identity source);
+        #   rc=0 would mean the table declares `identity` for a destination
+        #        this branch RENDERS;
+        #   rc=1 would mean the row vanished between the enumeration and here.
+        # Only rc=2 AND the exact declared transform may render. Everything
+        # else is a NAMED refusal that writes nothing — fail-closed, because
+        # the table is INPUT (CLAUDE.md §4), not infrastructure.
+        # rail round-5 F4 — BOTH fields come from the ONE validated accessor.
+        # They used to come from two private `awk` calls over the same
+        # environment-overridable TSV: a FOURTH parser of the shared table,
+        # which ADR-194 vetoes by name, and one that inherited none of the
+        # reader's validators (round 1/3/5) nor its unterminated-final-row fix
+        # (round 4). _wbm_route_meta prints "<src><TAB><transform>" only for a
+        # row that PASSED validation; anything else leaves both fields empty
+        # and the named refusal below fires.
+        _UP_CO_META=""
+        _UP_CO_META_RC=0
+        if command -v _wbm_route_meta >/dev/null 2>&1; then
+          _UP_CO_META="$( _wbm_route_meta ".github/CODEOWNERS" )" || _UP_CO_META_RC=$?
+        else
+          _UP_CO_META_RC=1
+        fi
+        if [ "$_UP_CO_META_RC" -eq 0 ] && [ -n "$_UP_CO_META" ]; then
+          _UP_CO_TAB="$( printf '\t' )"
+          _UP_CO_SRC_REL="${_UP_CO_META%%"$_UP_CO_TAB"*}"
+          _UP_CO_TRANSFORM="${_UP_CO_META#*"$_UP_CO_TAB"}"
+        else
+          _UP_CO_SRC_REL=""
+          _UP_CO_TRANSFORM=""
+        fi
+        if [ "$_up_rc" -ne 2 ] || [ "$_UP_CO_TRANSFORM" != "$_UP_CO_TRANSFORM_SUPPORTED" ]; then
+          echo "    SKIPPED (unsupported transform '$_UP_CO_TRANSFORM'): .github/CODEOWNERS (this upgrader renders only '$_UP_CO_TRANSFORM_SUPPORTED'; route reader rc=$_up_rc) — nothing written" >&2
+          _UP_TPL_SKIPPED=$(( _UP_TPL_SKIPPED + 1 ))
+          continue
+        fi
+        if [ -z "$_UP_CO_SRC_REL" ] \
+           || { command -v _wbm_route_relpath_ok >/dev/null 2>&1 \
+                && ! _wbm_route_relpath_ok "$_UP_CO_SRC_REL"; }; then
+          echo "    SKIPPED (unsupported transform '$_UP_CO_TRANSFORM'): .github/CODEOWNERS (the row declares no usable source: '$_UP_CO_SRC_REL') — nothing written" >&2
+          _UP_TPL_SKIPPED=$(( _UP_TPL_SKIPPED + 1 ))
+          continue
+        fi
+        # MUTUALLY EXCLUSIVE with .github/CODEOWNERS.template per run
+        # (install.sh:1551 elif vs :1563 else). Delivering both would leave a
+        # pair on disk that no install ever produces — §9.3 records that the
+        # two branches are not exclusive in TIME on the install side, and
+        # reproducing that here would widen a known defect.
+        if [ -z "$_UP_GH_OWNER" ]; then
+          # rail round-3 F5 — the SAME predicate the .template branch uses. If
+          # these two disagreed about what "present" means, the exclusivity
+          # invariant would hold only for the shapes both happened to see.
+          if _up_codeowners_present; then
+            echo "    PRESERVED (unclaimed): .github/CODEOWNERS (no recorded --github-owner — this run cannot reproduce the rendered bytes, so ownership is unprovable)"
+            _UP_TPL_PRESERVED=$(( _UP_TPL_PRESERVED + 1 ))
+          else
+            echo "    SKIPPED (branch not taken): .github/CODEOWNERS (no recorded --github-owner; the .template route applies)"
+            _UP_TPL_SKIPPED=$(( _UP_TPL_SKIPPED + 1 ))
+          fi
+          continue
+        fi
+        # rail round-7 F2 — the render below READS the template with `sed`,
+        # which follows symlinks, so the source has to be physically confined
+        # BEFORE the `-f` test (which follows them too). A refusal here writes
+        # nothing and counts as PRESERVED: the destination on disk is untouched
+        # and the conservation law still has to balance.
+        if _up_src_confined_refuses "$_UP_CO_SRC_REL"; then
+          echo "    WARNING: PRESERVED .github/CODEOWNERS (refused — the route's SOURCE is not confined to the framework checkout)"
+          _UP_TPL_PRESERVED=$(( _UP_TPL_PRESERVED + 1 ))
+          continue
+        fi
+        # The row was validated above; what is left is whether the PINNED tree
+        # actually ships those source bytes (rail round-2 F2 — under --pin the
+        # destination list is this upgrader's, the sources are the pin's).
+        if [ ! -f "$SOURCE_DIR/$_UP_CO_SRC_REL" ]; then
+          if [ -n "${PIN_REF:-}" ]; then
+            echo "    SKIPPED (source missing at pin $PIN_REF): .github/CODEOWNERS"
+          else
+            echo "    SKIP (source missing): .github/CODEOWNERS"
+          fi
+          _UP_TPL_SKIPPED=$(( _UP_TPL_SKIPPED + 1 ))
+          continue
+        fi
+        _UP_CO_RENDERED="$( mktemp "$( _up_tmpbase )/ceo-upgrade-codeowners.XXXXXX" 2>/dev/null || true )"
+        if [ -z "$_UP_CO_RENDERED" ] \
+           || ! sed "s/{{OWNER_HANDLE}}/$_UP_GH_OWNER/g" "$SOURCE_DIR/$_UP_CO_SRC_REL" > "$_UP_CO_RENDERED" 2>/dev/null; then
+          [ -n "$_UP_CO_RENDERED" ] && rm -f "$_UP_CO_RENDERED"
+          echo "    WARNING: PRESERVED .github/CODEOWNERS (could not render the template — not writing a partial file)"
+          _UP_TPL_PRESERVED=$(( _UP_TPL_PRESERVED + 1 ))
+          continue
+        fi
+        _up_deliver_template ".github/CODEOWNERS" "$_UP_CO_RENDERED" "$_UP_CO_SRC_REL" "$_UP_GH_OWNER"
+        rm -f "$_UP_CO_RENDERED"
+        ;;
+      .github/CODEOWNERS.template)
+        if [ -n "$_UP_GH_OWNER" ]; then
+          echo "    SKIPPED (branch not taken): .github/CODEOWNERS.template (a --github-owner is recorded; the rendered route applies)"
+          _UP_TPL_SKIPPED=$(( _UP_TPL_SKIPPED + 1 ))
+          continue
+        fi
+        # rail round-1 F5 — the two files are MUTUALLY EXCLUSIVE, and the
+        # `-n $_UP_GH_OWNER` test above does not cover the case that matters:
+        # a historical adopter whose install-state is gone but whose RENDERED
+        # .github/CODEOWNERS is still on disk. There the CODEOWNERS route
+        # resolves `PRESERVED (unclaimed)` — the file stays — and this route
+        # would then ALSO install .github/CODEOWNERS.template, leaving a pair
+        # on disk that NO install ever produces, permanently (the next upgrade
+        # finds the template IDENTICAL and never removes it).
+        # Presence of the rendered file is the whole condition: claimed or
+        # unclaimed, the adopter already has a CODEOWNERS and the template is
+        # the fallback for adopters who do not.
+        # rail round-3 F5 — presence via the ONE predicate, which also answers
+        # YES for a dangling symlink (`-e` alone answers NO, and the template
+        # was installed next to it).
+        if _up_codeowners_present; then
+          if [ -L "$TARGET/.github/CODEOWNERS" ]; then
+            echo "    SKIPPED (CODEOWNERS path present as symlink): .github/CODEOWNERS.template (a link — dangling or not — occupies the path; the two surfaces are mutually exclusive)"
+          else
+            echo "    SKIPPED (CODEOWNERS present): .github/CODEOWNERS.template (a rendered .github/CODEOWNERS is already on disk; the two are mutually exclusive)"
+          fi
+          _UP_TPL_SKIPPED=$(( _UP_TPL_SKIPPED + 1 ))
+          continue
+        fi
+        if [ "$_up_rc" -ne 0 ] || [ -z "$_up_src_rel" ]; then
+          echo "    SKIP (no identity route): $_up_dest"
+          _UP_TPL_SKIPPED=$(( _UP_TPL_SKIPPED + 1 ))
+          continue
+        fi
+        _up_deliver_template "$_up_dest" "$SOURCE_DIR/$_up_src_rel" "$_up_src_rel" ""
+        ;;
+      *)
+        if [ "$_up_rc" -ne 0 ] || [ -z "$_up_src_rel" ]; then
+          # rc=1 (no row) is impossible here — the destination came FROM the
+          # table. rc=2 means the row declares a transform this script has no
+          # renderer for: fail-CLOSED, named, never a silent skip.
+          echo "    SKIP (route declares a transform with no renderer, or the row is malformed): $_up_dest" >&2
+          _UP_TPL_SKIPPED=$(( _UP_TPL_SKIPPED + 1 ))
+          continue
+        fi
+        _up_deliver_template "$_up_dest" "$SOURCE_DIR/$_up_src_rel" "$_up_src_rel" ""
+        ;;
+    esac
+  done <<UPTPLLOOP
+$_UP_TPL_DESTS
+UPTPLLOOP
+
+  _D1_DELIVERY_RAN=1
+  # --- conservation law ----------------------------------------------------
+  # Every enumerated route must have reached exactly one verdict. This is the
+  # assertion the route-count one cannot make: it catches a destination
+  # falling through a hole in the case analysis above, which would otherwise
+  # be invisible (no line printed, no counter moved, summary still plausible).
+  _UP_TPL_SEEN=$(( _UP_TPL_INSTALLED + _UP_TPL_REFRESHED + _UP_TPL_IDENTICAL \
+                   + _UP_TPL_PRESERVED + _UP_TPL_SKIPPED ))
+  if [ "$_UP_TPL_SEEN" -ne "$_UP_TPL_ROUTES" ]; then
+    echo "    ERROR: $_UP_TPL_ROUTES route(s) enumerated but $_UP_TPL_SEEN verdict(s) reached —" >&2
+    echo "           a destination fell through the delivery case analysis." >&2
+    echo "           Registering NOTHING from this run (fail-closed)." >&2
+    # Clear the LIST, never the RAN flag. Clearing the flag would hand the
+    # registration back to the D3 byte-compare fallback, which would happily
+    # register the very destinations this branch just refused to vouch for —
+    # a fail-OPEN dressed as a fail-closed. _D1_DELIVERY_RAN=1 keeps D1
+    # authoritative; an empty list is what "register nothing" means.
+    _D1_DELIVERED_TEMPLATES=""
+    _D1_CODEOWNERS_REGISTERED=0
+    # rail round-2 F2: same property as the two precondition branches — a
+    # named failure that exits 0 is a failure the caller cannot see. This one
+    # only fires on a real hole in the case analysis, so a red CI here is the
+    # correct outcome, never noise.
+    _UP_DELIVERY_PRECONDITION_FAILED=1
+    _UP_DELIVERY_PRECONDITION_REASON="unclassified-route"
+  fi
+  echo "    docs/.github delivery: routes=$_UP_TPL_ROUTES installed=$_UP_TPL_INSTALLED refreshed=$_UP_TPL_REFRESHED identical=$_UP_TPL_IDENTICAL preserved=$_UP_TPL_PRESERVED skipped=$_UP_TPL_SKIPPED"
+fi
+
 # PLAN-161 U3 — mis-install scan/purge. Runs in ALL modes (flag-absent and
 # --dry-run runs emit the would-purge PREVIEW; deletion requires the explicit
 # --purge-misinstalled flag AND a non-dry run). Runs BEFORE the baseline-
@@ -3532,9 +4655,121 @@ if [[ "$DRY_RUN" -eq 0 ]] && command -v _write_baseline_manifest >/dev/null 2>&1
   export FMS_DELIVERED_PLAN_SCHEMA="${_SCHEMA_DELIVERED_PLAN:-0}"
   export FMS_DELIVERED_DEBATE_SCHEMA="${_SCHEMA_DELIVERED_DEBATE:-0}"
   export FMS_DELIVERED_MARKER="${_MARKER_DELIVERED:-0}"
+  # PLAN-183 W5 (D3) — docs/ + .github/ registration on the UPGRADE path.
+  #
+  # D1-HOOK: delivery of docs/ and .github/ on upgrade belongs HERE, above
+  # this block. upgrade.sh ships NEITHER tree today (measured S323:
+  # `grep -c github scripts/upgrade.sh` = 0; every `docs` hit is a comment) —
+  # that is defect D1 and it is what keeps the parity e2e at STALE 3. Until D1
+  # lands, this block only REGISTERS.
+  #
+  # The install precedent (install.sh:1318-1329, `wrote || cmp -s`) is a rule
+  # about a route the run PROCESSED; it is not a licence to claim a route the
+  # run never touched (rail round-4 F1, below). Ownership continuity for those
+  # is the PRIOR BASELINE RECORD — the same rule PROTOCOL.md already uses
+  # (HASH_PRIOR_RECORD, install.sh:2504), and the only evidence available for
+  # a RENDERED route (`.github/CODEOWNERS`, rc=2) whose delivered bytes exist
+  # in NO checkout. Registering them here is what makes the generator's lane
+  # choice OBSERVABLE instead of silently absent.
+  _UP_DELIVERED_TEMPLATES=""
+  # PLAN-183 W5 (D1) — when the delivery block above RAN, it is the authority:
+  # it knows the per-destination RESULT, which byte-compare can only
+  # approximate. INSTALLED/REFRESHED/IDENTICAL registered; PRESERVED/SKIPPED
+  # did not. Recomputing here would be a second copy of the ownership verdict
+  # and could disagree with the one that just decided the write.
+  #
+  # rail round-4 F1 — WHAT THE `else` MAY CLAIM, and why it is not byte-compare.
+  # The fallback used to register any route whose bytes happened to equal the
+  # framework source. On a run that delivered NOTHING that is not evidence of
+  # ownership, it is a COINCIDENCE: MEASURED pre-cure (S327), an
+  # `install --ceremony user` adopter who dropped a copy of the framework's
+  # `docs/BRANCH-PROTECTION.md` into its own tree came out of the next upgrade
+  # with that path in the framework manifest (`hits=1`, delivery line
+  # "DISABLED"), and `uninstall.sh:196` walks the manifest and DELETES on a
+  # SHA match — so the adopter's file was one `uninstall` from being removed by
+  # a framework that never wrote it.
+  #
+  # `install.sh:1318-1329` is not a precedent for this: its `|| cmp -s` runs
+  # INSIDE the delivery function, about a route that run processed. Byte-equal
+  # means "the framework's bytes are here" only once you already know the
+  # framework put them there. So:
+  #   delivery RAN      -> the per-destination verdict of THIS run (above).
+  #   delivery did NOT  -> the only admissible evidence is what a PREVIOUS run
+  #                        recorded: a prior baseline record for the relpath
+  #                        whose digest still matches the bytes on disk.
+  # One rule for both lanes (identity and rendered), which is also why the
+  # rc=2 special case is gone — the prior record was always the evidence, and
+  # the identity lane had no business using a weaker one. Under-claiming is
+  # the recoverable direction (CLAUDE.md §4): the NEXT delivering upgrade
+  # re-registers the path from a real verdict.
+  if [ "${_UP_DELIVERY_PRECONDITION_FAILED:-0}" -eq 1 ]; then
+    # rail round-4 F1 — a failed precondition means this run refused the WHOLE
+    # delivery because the route table could not be trusted (zero routes, a
+    # rejected row, or a destination that fell through the case analysis). The
+    # destination list below is READ FROM THAT TABLE, so registering anything
+    # derived from it is the same half-trust round-1 F2 refused at the write
+    # site. Empty, and the reason is already on stderr and in the summary line.
+    _UP_DELIVERED_TEMPLATES=""
+  elif [ "${_D1_DELIVERY_RAN:-0}" -eq 1 ]; then
+    _UP_DELIVERED_TEMPLATES="${_D1_DELIVERED_TEMPLATES:-}"
+  elif command -v _wbm_route_dests >/dev/null 2>&1 \
+     && command -v _wbm_prior_digest >/dev/null 2>&1 \
+     && command -v _hash_file >/dev/null 2>&1; then
+    # _wbm_prior_digest reads FMS_PRIOR_MANIFEST, exported just above. It is
+    # the library's own exact-relpath lookup — upgrade.sh used to carry a
+    # second awk for the same format, and one parser per format is the whole
+    # thesis of this wave.
+    while IFS= read -r _up_tpl_dest; do
+      [[ -n "$_up_tpl_dest" ]] || continue
+      _up_tpl_prior=""
+      _up_tpl_now=""
+      _up_tpl_prior="$( _wbm_prior_digest "$_up_tpl_dest" 2>/dev/null || true )"
+      [[ -n "$_up_tpl_prior" ]] || continue
+      # A regular file, never a symlink: a link is not bytes this framework
+      # left, and hashing through one claims whatever it points at (H.8/H.17).
+      [[ -f "$TARGET/$_up_tpl_dest" && ! -L "$TARGET/$_up_tpl_dest" ]] || continue
+      _up_tpl_now="$( _hash_file "$TARGET/$_up_tpl_dest" 2>/dev/null || true )"
+      [[ -n "$_up_tpl_now" && "$_up_tpl_now" = "$_up_tpl_prior" ]] || continue
+      if [[ -n "$_UP_DELIVERED_TEMPLATES" ]]; then
+        _UP_DELIVERED_TEMPLATES="$_UP_DELIVERED_TEMPLATES"$'\n'"$_up_tpl_dest"
+      else
+        _UP_DELIVERED_TEMPLATES="$_up_tpl_dest"
+      fi
+    done < <( _wbm_route_dests || true )
+  fi
+  export FMS_DELIVERED_TEMPLATES="$_UP_DELIVERED_TEMPLATES"
+  # PLAN-183 W5 (OQ-4, MIXED lane): the rendered destination rides the
+  # CONDITIONAL lane and must declare a hash_source or the generator
+  # fail-closes. On UPGRADE the only evidence is the prior record — upgrade.sh
+  # renders nothing today (D1). When D1 lands, a run that actually RENDERS the
+  # file must declare HASH_TARGET here instead, at the D1-HOOK above.
+  # Line-exact match: `.github/CODEOWNERS` is a prefix of the .template row.
+  _up_co_hit=0
+  while IFS= read -r _up_co_line; do
+    if [[ "$_up_co_line" = ".github/CODEOWNERS" ]]; then _up_co_hit=1; fi
+  done <<< "$_UP_DELIVERED_TEMPLATES"
+  if [[ "$_up_co_hit" -eq 1 ]]; then
+    # PLAN-183 W5 (D1): DECLARE ON EVERY DELIVERY PATH, never only on
+    # continuity — install.sh:2508-2511 records that the previous attempt at
+    # this wave regressed 24 cells precisely by leaving fresh deliveries
+    # undeclared. When the D1 block registered this destination it left the
+    # rendered bytes AT the target this run (INSTALLED/REFRESHED/IDENTICAL all
+    # end with target == rendered current source), so the target IS the
+    # delivered content => HASH_TARGET, the same shape install.sh uses for a
+    # fresh render. HASH_PRIOR_RECORD is the verdict on the non-delivering
+    # path, where (rail round-4 F1) the ONLY admissible evidence already IS a
+    # prior record with a matching digest — the declaration and the
+    # registration rule now name the same fact.
+    if [[ "${_D1_DELIVERY_RAN:-0}" -eq 1 && "${_D1_CODEOWNERS_REGISTERED:-0}" -eq 1 ]]; then
+      export FMS_HASH_SOURCE_CODEOWNERS="HASH_TARGET"
+    else
+      export FMS_HASH_SOURCE_CODEOWNERS="HASH_PRIOR_RECORD"
+    fi
+  fi
   _write_baseline_manifest "$TARGET/.claude/.install-manifest.sha256"
   unset FMS_ROOT FMS_HASH_ROOT FMS_PROFILE_PARTS FMS_MODE FMS_PROTOCOL_HASH FMS_LINK_PATHS
   unset FMS_DELIVERED_SPEC FMS_DELIVERED_PROTOCOL FMS_DELIVERED_MARKER
+  unset FMS_DELIVERED_TEMPLATES FMS_HASH_SOURCE_CODEOWNERS
 fi
 
 # ===========================================================================
@@ -3569,6 +4804,14 @@ _write_upgrade_state() {
     "managed_hooks" "$CODEX_MANAGED_HOOKS"
     "ceremony_effective" "$CEREMONY_EFFECTIVE"
     "ceremony_persist" "$_CEREMONY_PERSIST"
+    # rail round-3 F2 — the deferred route-delivery failure, CONSULTED HERE,
+    # before anything is persisted. Pre-cure this function wrote
+    # result.upgrade_succeeded: true and the caller then exited 3 ~40 lines
+    # later, so a poisoned or missing route table left a DURABLE record
+    # claiming a full upgrade. The reason token travels with it: "failed"
+    # alone cannot be triaged after the terminal scrollback is gone.
+    "route_delivery_failed" "${_UP_DELIVERY_PRECONDITION_FAILED:-0}"
+    "route_delivery_reason" "${_UP_DELIVERY_PRECONDITION_REASON:-}"
   )
   echo ""
   echo "==> (Re)writing install-state (.claude/.install-state.json — PLAN-153 Wave B)"
@@ -3653,6 +4896,12 @@ if vals.get("managed_hooks", "0") == "1":
     req["managed_hooks"] = True
 elif "managed_hooks" not in req:
     req["managed_hooks"] = False
+# rail round-3 F2 — read the deferred route-delivery verdict BEFORE the record
+# is built. Absent/unknown is treated as NOT failed (this key is written by
+# upgrade.sh itself on every call, so absence means an older caller, not a
+# hidden failure).
+_route_failed = vals.get("route_delivery_failed", "0") == "1"
+_route_reason = vals.get("route_delivery_reason", "")
 state = {
     "schema": "ceo.install-state/v1",
     "schema_version": 1,
@@ -3672,7 +4921,12 @@ state = {
         "ceremony_effective": vals.get("ceremony_effective", ""),
     },
     "operations": ops,
-    "result": {"upgrade_succeeded": True,
+    # rail round-3 F2: upgrade_succeeded is DERIVED from the deferred
+    # route-delivery flag, never hardcoded True. route_delivery carries the
+    # named reason so the record is triageable on its own.
+    "result": {"upgrade_succeeded": _route_failed is not True,
+               "route_delivery": ("failed(%s)" % (_route_reason or "unspecified")
+                                  if _route_failed else "ok"),
                "baseline_manifest": ".claude/.install-manifest.sha256"},
     "history": history,
     "_comment": "Target-side, UNSIGNED, advisory record (same trust class as the ADR-155 baseline manifest). upgrade.sh replays request.profile/request.stack as DEFAULTS only; explicit flags always win. Not a trust anchor.",
@@ -3777,7 +5031,15 @@ fi
 _write_upgrade_state
 
 echo ""
-echo "==> Upgrade complete."
+# rail round-3 F2 — the BANNER is derived from the same deferred flag the exit
+# code is. Pre-cure a run that exits 3 still printed "Upgrade complete." first,
+# so the two surfaces a human reads (banner) and a script reads (rc) disagreed.
+if [ "${_UP_DELIVERY_PRECONDITION_FAILED:-0}" -eq 1 ]; then
+  echo "==> Upgrade INCOMPLETE — docs/ + .github/ delivery FAILED its precondition"
+  echo "    (${_UP_DELIVERY_PRECONDITION_REASON:-unspecified}). Every OTHER step below completed; this run exits 3."
+else
+  echo "==> Upgrade complete."
+fi
 echo "    Preserved: CLAUDE.md, MEMORY.md, .claude/agent-metrics.md (and existing"
 echo "    .claude/settings.json keys — only NEW framework lifecycle hooks were"
 echo "    additively registered into it (PLAN-135 W2 H8) and only the PLAN-163"
@@ -3805,3 +5067,19 @@ echo "    additive-only and stays so):"
 echo "      \"Write(PROTOCOL.md)\""
 echo "      \"Write(.claude/settings.json)\""
 echo "      \"Write(SPEC/**)\""
+
+# --- rail round-2 F2 (second half): the FAILED precondition reaches the rc ---
+# Deferred to here on purpose (see _UP_DELIVERY_PRECONDITION_FAILED above):
+# everything else the upgrade owes the target has now run, so the target is
+# whole and only the docs/ + .github/ lane is missing. A caller that checks
+# only `$?` must not read that as success — which is exactly what the reviewer
+# measured pre-cure on `--pin v1.3.0`.
+if [ "${_UP_DELIVERY_PRECONDITION_FAILED:-0}" -eq 1 ]; then
+  echo "" >&2
+  echo "ERROR: docs/ + .github/ delivery FAILED its precondition — see the" >&2
+  echo "       'PRECONDITION FAILED' line above for which one. Every OTHER" >&2
+  echo "       upgrade step completed; exiting 3 so a caller that only reads" >&2
+  echo "       the exit code cannot mistake this run for a full upgrade." >&2
+  exit 3
+fi
+exit 0

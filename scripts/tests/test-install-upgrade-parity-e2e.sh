@@ -89,11 +89,27 @@
 #   divergence rather than from the plant. So CI runs the plain gate FIRST and
 #   the control only after it passed; run it the same way by hand.
 #
+# HISTORICAL-ADOPTER LEG (PLAN-183 W5, OQ-5)
+#   --blind-install-state (or CEO_PARITY_BLIND_STATE=1) deletes route B's
+#   .claude/.install-state.json between [B1] and [B2], keeping
+#   .claude/.framework-version. That is the pre-Wave-B population: framework
+#   installed, ceremony unrecorded. It exists because install.sh @ v1.2.0
+#   ALREADY writes install-state, so the default route B can never exercise
+#   the OQ-5 amendment — the pinned leg is structurally blind to it, which is
+#   the C2 vacuity class this plan keeps paying for.
+#   The blinded leg resolves CEREMONY_EFFECTIVE=user (the fail-safe), so route
+#   B skips every ROOT surface (PROTOCOL.md, SPEC/v1, root .gitignore) that
+#   route A's maintainer install writes. Divergence there is EXPECTED and is a
+#   measurement of what the amendment does NOT reach — read the classification
+#   table, do not read the exit code as a verdict on D1.
+#   OFF by default; the header always prints its value.
+#
 # USAGE
 #   bash scripts/tests/test-install-upgrade-parity-e2e.sh
 #   bash scripts/tests/test-install-upgrade-parity-e2e.sh --mode user
 #   bash scripts/tests/test-install-upgrade-parity-e2e.sh --positive-control
 #   bash scripts/tests/test-install-upgrade-parity-e2e.sh --print-pin
+#   bash scripts/tests/test-install-upgrade-parity-e2e.sh --mode maintainer --blind-install-state
 #
 # W1 CHECKLIST: the KNOWN_OPEN ledger in _parity_classify.py is MANDATORY-FIRE.
 # When W1 lands the F3 fix those entries stop matching and the classifier goes
@@ -111,6 +127,18 @@ PIN="${CEO_PARITY_PIN:-v1.2.0}"
 PROFILE="${CEO_PARITY_PROFILE:-core}"
 MODES="maintainer user"
 POSITIVE_CONTROL=0
+# PLAN-183 W5 (OQ-5) — the HISTORICAL-ADOPTER leg. Route B installs at $PIN
+# and install.sh @ v1.2.0 already writes .claude/.install-state.json, so the
+# default route B is a RECORDED-ceremony adopter and is STRUCTURALLY INCAPABLE
+# of exercising the amendment, which only fires when the state is unreadable
+# (debate class C2: "a Check that only exercises the pinned path passes
+# vacuously"). This knob deletes the state file between [B1] and [B2],
+# reproducing the pre-Wave-B population without needing a tag old enough to
+# predate install-state.
+#
+# OFF by default and NEVER auto-enabled: it changes WHAT is measured, so the
+# header below always prints its value and every report says which leg ran.
+BLIND_STATE="${CEO_PARITY_BLIND_STATE:-0}"
 # The single line deleted from a COPY of upgrade.sh by --positive-control.
 PLANT_TARGET='.claude/commands'
 
@@ -122,6 +150,9 @@ while [ $# -gt 0 ]; do
     --profile) PROFILE="${2:-}"; shift 2 ;;
     --pin) PIN="${2:-}"; shift 2 ;;
     --positive-control) POSITIVE_CONTROL=1; shift ;;
+    # PLAN-183 W5 (OQ-5): delete route B's install-state after [B1] so the
+    # upgrade sees the HISTORICAL adopter (marker present, ceremony unknown).
+    --blind-install-state) BLIND_STATE=1; shift ;;
     # Only meaningful with --positive-control. Exists so the vacuity guard
     # itself can be exercised: planting a target that did NOT drift between
     # $PIN and HEAD must end in exit 9, not in a green.
@@ -177,6 +208,7 @@ echo "  historical pin        : $PIN"
 echo "  profile               : $PROFILE"
 echo "  ceremony modes        : $MODES"
 echo "  positive control      : $POSITIVE_CONTROL"
+echo "  blind install-state   : $BLIND_STATE   (1 = route B upgrades as a HISTORICAL adopter — PLAN-183 W5 OQ-5)"
 echo "  workdir               : $WORK"
 echo "  git describe (repo)   : $( git -C "$REPO_ROOT" describe --tags --always --dirty 2>/dev/null || echo '(n/a)' )"
 echo "--------------------------------------------------------------"
@@ -214,6 +246,15 @@ if [ "$POSITIVE_CONTROL" -eq 1 ]; then
     [ -e "$_e" ] || continue
     _b="$( basename "$_e" )"
     [ "$_b" = "scripts" ] && continue
+    # Rail r8 (S327, P2): the W5 source-confinement guard refuses a route whose
+    # physical source lives outside the planted SOURCE_DIR — a symlinked
+    # templates/ would make every template delivery refuse for the WRONG
+    # reason and the control would FIRE spuriously. Copy templates/ for real
+    # (the route tests do the same); everything else may stay a symlink.
+    if [ "$_b" = "templates" ]; then
+      cp -R "$_e" "$PLANTED_SRC/$_b" || scaffold "could not copy templates/ into the planted source"
+      continue
+    fi
     ln -s "$_e" "$PLANTED_SRC/$_b" 2>/dev/null || true
   done
   for _f in "$REPO_ROOT"/scripts/* "$REPO_ROOT"/scripts/.[!.]*; do
@@ -275,6 +316,39 @@ for MODE in $MODES; do
         >"$WORK/$MODE-b-install.log" 2>&1; then
     tail -40 "$WORK/$MODE-b-install.log" >&2
     scaffold "[B1] install.sh @ $PIN failed (mode=$MODE)"
+  fi
+
+  # PLAN-183 W5 (OQ-5) — turn route B into the HISTORICAL adopter: the
+  # framework is installed (the marker is on disk) but nothing recorded HOW.
+  # The delete is asserted, never assumed: silently blinding nothing would
+  # make the whole leg a duplicate of the default one, green and meaningless.
+  if [ "$BLIND_STATE" -eq 1 ]; then
+    if [ ! -f "$B_DIR/.claude/.install-state.json" ]; then
+      scaffold "[B1] wrote no .claude/.install-state.json — nothing to blind, so the historical-adopter leg would silently duplicate the default leg (mode=$MODE)"
+    fi
+    rm -f "$B_DIR/.claude/.install-state.json"
+    if [ ! -f "$B_DIR/.claude/.framework-version" ]; then
+      {
+        echo ""
+        echo "  install.sh @ $PIN wrote no .claude/.framework-version, so blinding"
+        echo "  the state leaves a directory that is indistinguishable from one"
+        echo "  that never received an install — the OQ-5 amendment reads the"
+        echo "  MARKER, and there is none. This leg would measure the negative"
+        echo "  control, not the amendment."
+        echo ""
+        echo "  MEASURED (S327): the marker enters install.sh at v1.3.0 —"
+        echo "  \`git show v1.2.0:scripts/install.sh | grep -c framework-version\` = 0,"
+        echo "  \`git show v1.3.0:scripts/install.sh | grep -c framework-version\` = 13."
+        echo "  Re-run against a pin that writes it:"
+        echo "      CEO_PARITY_PIN=v1.3.0 bash $0 --mode $MODE --blind-install-state"
+        echo ""
+        echo "  A pre-v1.3.0 adopter is reached on its SECOND upgrade instead:"
+        echo "  the first one creates the marker, the second one delivers. That"
+        echo "  latency is asserted in scripts/tests/test-upgrade-historical-adopter.sh (N.2)."
+      } >&2
+      scaffold "[B1] left no .claude/.framework-version — cannot build a historical-adopter fixture at pin $PIN (mode=$MODE)"
+    fi
+    echo "--> [B1b] BLINDED: removed .claude/.install-state.json (marker kept) — route B now upgrades as a pre-Wave-B adopter"
   fi
 
   UP_SRC="$REPO_ROOT"

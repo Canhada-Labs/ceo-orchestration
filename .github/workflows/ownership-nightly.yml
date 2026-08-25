@@ -35,7 +35,13 @@ jobs:
     # ~25 min local (Darwin arm64, 16 cores, 2026-08-07); ubuntu-latest is the
     # usual 2-3x slower => 50-75 min expected. Same anti-flake sizing rule as
     # the smoke-install budget notes: leave headroom, re-tighten on a real p95.
-    timeout-minutes: 110
+    # rail round-2 F4: 110 -> 150. The baseline-manifest suite wired below is
+    # ~11-15 min local => 22-45 CI minutes at the same factor, and 110 was
+    # already sized for e2e (50-75) + replay (22-33) + INV-4 with little slack.
+    # A job-level timeout that clips a GREEN run surfaces as `cancelled` on an
+    # innocent step (the S2xx lesson this file's siblings record), so the
+    # margin is deliberate — re-tighten on a real p95, never on arithmetic.
+    timeout-minutes: 150
     permissions:
       contents: read
     steps:
@@ -99,6 +105,68 @@ jobs:
         run: |
           set -euo pipefail
           bash scripts/tests/test_install_state_replay.sh
+
+      # rail round-2 F4 — the baseline-manifest suite (ADR-155 C.2-C.7).
+      # Measured S327: `grep -r test_install_baseline_manifest.sh .github/` = 0.
+      # It is the ONLY check that observes what install and upgrade RECORD as
+      # framework-owned — the C.8 assertions the PLAN-183 W5 patch adds for the
+      # docs/ + .github/ delivery records live here, and nothing was running
+      # them. Wired HERE and not in smoke-install.yml on purpose: ~11-15 min of
+      # real install/upgrade legs locally, i.e. 22-45 CI minutes at this org's
+      # 2-3x runner factor, on top of a per-PR job already budgeted at 58 —
+      # exactly the sizing argument that put test_install_state_replay.sh in
+      # this workflow above (re-pass rc.4 t7 P2).
+      #
+      # KNOWN-OPEN SET, not continue-on-error. MEASURED on the W5 tree (S327,
+      # Darwin arm64, 692 s): 32 passed / 1 failed, the failure being C.6.2
+      # "root PROTOCOL.md NOT backed up without a manifest" — PRE-EXISTING and
+      # not this wave's (the W5 patch adds 95 lines to that file and touches
+      # ZERO C.6 lines). Wiring it as a plain `bash ...` would paint this
+      # workflow red every night for a defect it did not cause, which is how a
+      # channel gets trained to be ignored. So the step declares the failing
+      # SET and fails on ANY difference — a NEW failure and a DISAPPEARING one
+      # both go red, the same contract ownership-expected-reds.txt enforces for
+      # the e2e below (CLAUDE.md §4: shrinkage is a change, never a success).
+      # `continue-on-error` is deliberately absent: it would reinstate exactly
+      # the "red gate nobody runs" class this step closes.
+      # RESIDUAL, declared: C.6.2 was measured on Darwin only. If ubuntu passes
+      # it, this step goes red on its FIRST nightly with a message naming the
+      # difference — that is the intended failure mode (an unmeasured
+      # assumption failing loudly), not a regression. The right long-term home
+      # for EXPECTED is a tracked declaration file next to
+      # ownership-expected-reds.txt.
+      - name: Install baseline-manifest suite (ADR-155 C.2-C.8 delivery records)
+        run: |
+          set -uo pipefail
+          rc=0
+          bash scripts/tests/test_install_baseline_manifest.sh \
+            > /tmp/baseline-manifest.log 2>&1 || rc=$?
+          tail -40 /tmp/baseline-manifest.log
+          if ! grep -qE '^==> RESULT: [0-9]+ passed' /tmp/baseline-manifest.log; then
+            echo "::error::baseline-manifest suite produced no RESULT line (rc=$rc) — partial output is never comparable to a declared set"
+            exit 1
+          fi
+          OBSERVED="$(awk '$1 == "FAIL" { print $2 }' /tmp/baseline-manifest.log \
+                      | sort -u | tr '\n' ' ' | sed 's/[[:space:]]*$//')"
+          # rail round-3 F3 — the declared set is the EXACT assertion id, not
+          # the class. The suite has NINE distinct `bad "C.6 ..."` sites; while
+          # this compared the bare class, a run where a DIFFERENT C.6 assertion
+          # regressed and the known-open one was fixed produced the identical
+          # OBSERVED string and the nightly reported success. Each site now
+          # carries a stable C.6.<n> id (see the ASSERTION IDS header of
+          # scripts/tests/test_install_baseline_manifest.sh); C.6.2 is the one
+          # measured failing at HEAD ("root PROTOCOL.md NOT backed up without a
+          # manifest"), pre-existing and not caused by PLAN-183 W5.
+          EXPECTED="C.6.2"
+          if [ "$OBSERVED" != "$EXPECTED" ]; then
+            echo "::error::baseline-manifest failing set CHANGED — declared [$EXPECTED], observed [$OBSERVED]. A NEW id is a regression; a MISSING id means the known-open defect was fixed and this declaration must be updated in the same commit. Never widen it to make the red go away."
+            exit 1
+          fi
+          if [ "$rc" -eq 0 ]; then
+            echo "::error::rc=0 while [$EXPECTED] is reported failing — the suite's exit code and its own output disagree, so neither can be trusted"
+            exit 1
+          fi
+          echo "OK: baseline-manifest failing set matches the declared known-open set [$EXPECTED] (suite rc=$rc)"
 
       # PLAN-168 W2 (AC-6/AC-6b): INV-4 as an executable assertion — install
       # and upgrade produce the SAME pointer (byte identity + content

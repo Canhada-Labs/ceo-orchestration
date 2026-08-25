@@ -21,6 +21,28 @@ on:
       # an unwired test is the same as no test.
       - "scripts/tests/test-install-upgrade-parity-e2e.sh"
       - "scripts/tests/_parity_classify.py"
+      # PLAN-183 W5 (D1/D3): the SHARED delivery-route table. Three consumers
+      # read it — _parity_classify.py, doctor.sh and (D3) the canonical
+      # manifest generator — and until now a typo confined to the table fired
+      # NO e2e at all (grep count 0 in both lists, measured S325). A canonical
+      # script reads it now, so the gate has to light up on the table itself.
+      - "scripts/delivery-routes.tsv"
+      # PLAN-183 W5 (D1 + OQ-5): the historical-adopter e2e. Same wiring rule
+      # as every scripts/tests/*.sh above — unwired = no test. It is the ONLY
+      # check that exercises the OQ-5 amendment, because the parity e2e's
+      # pinned route always has a recorded ceremony.
+      - "scripts/tests/test-upgrade-historical-adopter.sh"
+      # rail round-1 F6: the route-resolution oracle for the CANONICAL manifest
+      # generator (D3). Measured S327: it was referenced by NOTHING but itself
+      # — no step invoked it and neither path filter named it — so its
+      # installer-versus-table checks and its malformed-row controls never ran
+      # in CI. Unwired = no test, the same rule the two entries above obey.
+      - "scripts/tests/test-manifest-delivery-route.sh"
+      # rail round-2 F4: doctor.sh's HALF of the same route table. Measured
+      # S327: zero references in .github/, so the new restore/confinement
+      # cases (59 assertions, ~107 s local) never executed in CI either. Same
+      # rule, third instance. `scripts/doctor.sh` is already in this list.
+      - "scripts/tests/test-doctor-delivery-route.sh"
       # PLAN-166 F3 (ADR-155-AMEND-1): delivery-record ownership e2e —
       # scripts/tests/*.sh runs ONLY in this workflow (same r11/r20 wiring
       # rule as the parity e2e above).
@@ -97,6 +119,11 @@ on:
       - "scripts/tests/smoke-install.sh"
       - "scripts/tests/test-install-upgrade-parity-e2e.sh"
       - "scripts/tests/_parity_classify.py"
+      # PLAN-183 W5 (D1/D3) — KEEP IDENTICAL to the pull_request list above.
+      - "scripts/delivery-routes.tsv"
+      - "scripts/tests/test-upgrade-historical-adopter.sh"
+      - "scripts/tests/test-manifest-delivery-route.sh"   # rail round-1 F6
+      - "scripts/tests/test-doctor-delivery-route.sh"     # rail round-2 F4
       - "scripts/tests/test-upgrade-spec-ownership.sh"
       - "scripts/tests/test-ownership-verdict-unit.sh"
       - "scripts/tests/test-ownership-table.sh"
@@ -169,7 +196,44 @@ jobs:
     # factor this workflow already sizes with, that is 4-7 CI minutes, so +7.
     # A job-level timeout that clips a green run reports as `cancelled` on an
     # innocent step (the S2xx lesson), so the margin stays deliberate.
-    timeout-minutes: 32
+    # PLAN-183 W5 (D1 + OQ-5): 32 -> 50. The historical-adopter e2e adds 2
+    # installs + 8 full upgrades (six independent adopter fixtures; the two
+    # installs are cached and cp -R'd, the upgrades cannot be). MEASURED, not
+    # guessed: 357 s wall on Darwin arm64 under concurrent load, 2026-08-24
+    # (372 s for the uncached version — the machine was contended, so treat
+    # these as an upper bound, not a p50). At the same 2-3x runner factor this
+    # file already sizes with, that is 12-18 CI minutes of NEW work, so +18.
+    # The `if: always()` steps below also mean a RED main gate no longer ends
+    # the job early: the worst case now runs every step, which is the point.
+    # rail round-1 (F2 + F5): 50 -> 58. The two new legs of that e2e — H.12
+    # (an unclaimed rendered CODEOWNERS must suppress the .template route, on
+    # the first upgrade AND the second) and H.13 (a poisoned route row is
+    # refused and NOTHING lands outside $TARGET) — add TWO cached fixtures
+    # (cp -R, cheap) and THREE more full upgrades: 8 -> 11.
+    # MEASURED, not extrapolated from the count: 9m12s wall on Darwin arm64
+    # for the 11-upgrade version while a second e2e lane ran concurrently
+    # (2026-08-24) — an upper bound under deliberate contention, against the
+    # 357 s the 8-upgrade version measured. Scaling the solo figure by the
+    # upgrade count gives ~491 s, i.e. ~+2.2 min solo, which at the same 2-3x
+    # runner factor is +5-7 CI minutes, so +8 with the anti-flake margin this
+    # file's doctrine requires.
+    # The deepen step and the delivery-route oracle added below are seconds
+    # and are not what moved this number.
+    # rail round-2 (F2 + F3 + F4): 58 -> 68. Two sources, both MEASURED on
+    # Darwin arm64 (2026-08-24), neither extrapolated from a count:
+    #   (a) the historical e2e went 11 -> 13 upgrades (H.14 runs a real
+    #       `--pin v1.3.0` upgrade against a throwaway source repo it builds
+    #       from two `git archive` extractions — 7 s; H.15 adds one more
+    #       upgrade against a hostile route table). 552 s -> 650 s wall under
+    #       comparable contention, i.e. +98 s solo => +3-5 CI minutes at the
+    #       2-3x runner factor this file sizes with.
+    #   (b) the doctor delivery-route oracle wired below: 104 s wall, 59
+    #       assertions => +4-5 CI minutes at the same factor.
+    # +10 with the anti-flake margin this file's doctrine requires: a
+    # job-level timeout that clips a GREEN run surfaces as `cancelled` on an
+    # innocent step (the S2xx lesson). Re-tighten on a real CI p95, never on
+    # arithmetic.
+    timeout-minutes: 68
     permissions:
       contents: read
     steps:
@@ -238,6 +302,39 @@ jobs:
         run: |
           set -euo pipefail
           bash scripts/tests/test-ownership-verdict-unit.sh
+
+      # rail round-1 F6 — the delivery-route resolution oracle for the
+      # CANONICAL manifest generator (D3). Measured S327: this test was
+      # referenced by NOTHING but itself, so its independent
+      # installer-versus-table truth derivation and its malformed-row /
+      # escaping-row controls never executed in CI. Seconds to run, no
+      # network, mktemp -d only.
+      # `if: always()` for the PLAN-183 §9.8 reason: it is the instrument that
+      # certifies the route table the delivery steps below depend on, so it is
+      # exactly the step that must not report `skipped` when something earlier
+      # in the job is red.
+      - name: Delivery-route resolution oracle (manifest generator, D3)
+        if: always()
+        run: |
+          set -euo pipefail
+          bash scripts/tests/test-manifest-delivery-route.sh
+
+      # rail round-2 F4 — the OTHER canonical consumer of the same table.
+      # Measured S327: `grep -r test-doctor-delivery-route.sh .github/` = 0, so
+      # doctor.sh's route resolution, its restore/`--repair` confinement cases
+      # and the anti-rot assertions that no private parser grew back had NO CI
+      # execution at all — the D4 contamination leak (the maintainer's live
+      # .github/CODEOWNERS copied into an adopter tree) is exactly what these
+      # 59 assertions detect, and nothing was running them.
+      # ~107 s local (Darwin arm64) — cheap enough for per-PR, unlike the
+      # install-baseline manifest suite, which went to ownership-nightly.yml.
+      # `if: always()` for the same PLAN-183 §9.8 reason as the step above: it
+      # certifies the table the delivery steps below depend on.
+      - name: Delivery-route resolution oracle (doctor restore/repair, D4)
+        if: always()
+        run: |
+          set -euo pipefail
+          bash scripts/tests/test-doctor-delivery-route.sh
 
       # Re-pass rc.4 t7 P2 (t6 condition 5): the gitignore symlink-refusal +
       # dry-run preview unit is seconds — run it per-PR. The full
@@ -336,7 +433,21 @@ jobs:
       # rc 9 means the plant stopped biting (vacuous control). Both fail here.
       # This step MUST stay AFTER the plain gate: if the un-planted run were
       # already fatal, rc=1 here would prove nothing about the plant.
+      # PLAN-183 W5 (§9.8) — `if: always()`. Observed in run 32639637945: with
+      # the main parity step FAILING (D1 open), this control and the two steps
+      # below all reported `skipped`. That is the worst possible moment to
+      # lose them: the control is the step that answers "does the classifier
+      # still DETECT a planted divergence?", so a later green main step would
+      # be certified by an instrument whose detection power was never
+      # re-verified in the same run — the "instrumento verde cuja PERGUNTA
+      # envelheceu" class. The Check: in a run with the main step RED, this
+      # step must report success or failure, NEVER skipped.
+      # TRADE-OFF, deliberate: always() also runs on a CANCELLED job (an
+      # operator cancel, or the job-level timeout, which surfaces as a cancel).
+      # `!cancelled()` would exclude that case; always() is what PLAN-183 §9.8
+      # specifies, and the cost is bounded by the job timeout below.
       - name: Install/upgrade parity - positive control (planted divergence)
+        if: always()
         run: |
           set -uo pipefail
           rc=0
@@ -373,7 +484,10 @@ jobs:
       # regression (S6). Same wiring rationale as the parity e2e above:
       # scripts/tests/*.sh runs ONLY here — unwired = no test. NO
       # continue-on-error, deliberately.
+      # PLAN-183 W5 (§9.8): delivery-record OWNERSHIP is exactly the area this
+      # wave widens, so it must not go `skipped` on a red main gate.
       - name: Upgrade SPEC/marker delivery-record ownership (S1-S8)
+        if: always()
         run: |
           set -euo pipefail
           bash scripts/tests/test-upgrade-spec-ownership.sh
@@ -388,9 +502,67 @@ jobs:
       # inline positive control that cannot be switched off. Needs the pin tag
       # fetched above. NO continue-on-error, deliberately.
       - name: night-mode ignore efficacy (upgrade route + user ceremony)
+        # PLAN-183 W5 (§9.8): third of the three steps observed as `skipped`
+        # in run 32639637945.
+        if: always()
         run: |
           set -euo pipefail
           bash scripts/tests/test-night-mode-ignore-effect.sh
+
+      # PLAN-183 W5 (D1 + OQ-5) — upgrade.sh delivers docs/ + .github/, and it
+      # reaches the HISTORICAL adopter. Two things no other check here can
+      # see: (a) the parity e2e observes the CONSEQUENCE (STALE) but never the
+      # per-destination ownership verdict that produced the write, and (b) its
+      # route B installs at v1.2.0, which already writes install-state, so it
+      # is structurally incapable of exercising the OQ-5 amendment (class C2:
+      # a Check that only exercises the pinned path passes vacuously). This
+      # test BLINDS the state on purpose. It also carries the two negative
+      # controls that keep the positive assertions honest: a never-installed
+      # directory must receive NOTHING, and a dangling-symlink destination
+      # must be preserved rather than written through (PLAN-183 §9.1 class).
+      # `if: always()` for the same §9.8 reason as the three steps above.
+      # NO continue-on-error, deliberately.
+      # rail round-1 F3 — DEEPEN THE HISTORY the step below needs.
+      # `actions/checkout` above runs at `fetch-depth: 1` and the later fetches
+      # are `--depth 1` TAG fetches, so `git log -- <path>` sees exactly ONE
+      # commit: the H.3 fixture can find no PRIOR generation of
+      # templates/docs/BRANCH-PROTECTION.md and the test scaffold-errors on
+      # every run.
+      # MEASURED (S327, this repo): that template has TWO generations — the
+      # current one landed at depth 40, the only differing one is the ROOT
+      # commit at depth 502 of 503 total. There is therefore no honest
+      # `--deepen=<N>` short of the whole history, so this unshallows: 503
+      # commits / 43 MB of .git, seconds against a 50-minute job.
+      # `--no-tags` keeps the explicit pin/release tag fetches above
+      # authoritative over which tags this checkout holds.
+      # `if: always()` is NOT optional here: the step it feeds carries
+      # always(), so without it a red earlier step would skip the deepen and
+      # run the e2e shallow — turning the cure back into the finding.
+      - name: Deepen git history (historical-adopter e2e needs prior generations)
+        if: always()
+        run: |
+          set -euo pipefail
+          if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
+            git fetch --unshallow --no-tags
+            echo "unshallowed: $(git rev-list --count HEAD) commits now reachable"
+          else
+            echo "already complete: $(git rev-list --count HEAD) commits reachable"
+          fi
+          # Fail CLOSED if the deepen did not actually produce what the e2e
+          # needs. A green step here followed by a scaffold error there would
+          # point the blame at the test instead of at this step.
+          gens="$(git log --format=%H -- templates/docs/BRANCH-PROTECTION.md | wc -l | tr -d ' ')"
+          echo "generations of templates/docs/BRANCH-PROTECTION.md: $gens"
+          if [ "$gens" -lt 2 ]; then
+            echo "::error::history deepen did not expose a prior generation (gens=$gens); the historical-adopter e2e cannot run" >&2
+            exit 1
+          fi
+
+      - name: Upgrade historical-adopter delivery (D1 + OQ-5 amendment)
+        if: always()
+        run: |
+          set -euo pipefail
+          bash scripts/tests/test-upgrade-historical-adopter.sh
 
       - name: Assert npx/npm shim contract (if present)
         # Phase 4 deliverable; skip if directory missing

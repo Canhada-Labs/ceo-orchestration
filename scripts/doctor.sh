@@ -181,12 +181,76 @@ if ! _hash_resolver >/dev/null 2>&1; then
   exit 2
 fi
 
-# _framework_manifest_set.sh is OPTIONAL — only the orphan scan needs it.
-HAVE_FMS=0
-if [ -f "$SCRIPT_DIR/_framework_manifest_set.sh" ]; then
-  # shellcheck source=scripts/_framework_manifest_set.sh
-  . "$SCRIPT_DIR/_framework_manifest_set.sh"
-  HAVE_FMS=1
+# _framework_manifest_set.sh is REQUIRED (PLAN-183 W6). It has TWO consumers
+# here now: the orphan scan (framework-owned enumeration) and — since W6 — the
+# ONE validated reader of scripts/delivery-routes.tsv. doctor used to carry its
+# own copy of that parser; the copy WAS the defect (see the delivery-route
+# section below), so there is no longer anything to degrade to. Falling back to
+# identity resolution is D4 returning, and D4 does not merely misclassify: it
+# REPAIRS with the wrong bytes. Fail-closed to rc=2 (infra), mirroring the
+# _hash_lib.sh treatment above.
+if [ ! -f "$SCRIPT_DIR/_framework_manifest_set.sh" ]; then
+  echo "ERROR: $SCRIPT_DIR/_framework_manifest_set.sh not found — partial checkout?" >&2
+  echo "       doctor resolves every delivery route through that library; without" >&2
+  echo "       it a repair would fall back to identity and copy the WRONG source." >&2
+  exit 2
+fi
+# shellcheck source=scripts/_framework_manifest_set.sh
+. "$SCRIPT_DIR/_framework_manifest_set.sh"
+# Presence of the FILE is not presence of the CONTRACT. Assert the three route
+# functions BY NAME, so an upstream rename fails HERE, loudly, instead of
+# silently taking the identity path at the first repair. _wbm_route_row_ok is
+# asserted even though doctor never calls it directly: it is what makes
+# _wbm_route_src fail-closed, and a reader missing it would answer rc=2 to
+# everything. (The S327 rail round paid this exact lesson on the manifest
+# oracle's own fragment harness.)
+# rail round-6 F2 added _wbm_route_table_gate to that set: the three readers
+# call it, so a library missing it would answer rc=2 to every lookup — the
+# right posture, reached the wrong way and with no name attached to it.
+# rail round-7 F2 added _wbm_source_confined for the same reason: _restore_file
+# COPIES from "$SOURCE_DIR/$src", and a library without that predicate would
+# copy through a symlinked source without anything saying so.
+for _fms_req in _wbm_route_src _wbm_route_relpath_ok _wbm_route_row_ok \
+                _wbm_route_table_ok _wbm_route_table_gate _wbm_source_confined; do
+  if ! command -v "$_fms_req" >/dev/null 2>&1; then
+    echo "ERROR: $SCRIPT_DIR/_framework_manifest_set.sh does not define $_fms_req —" >&2
+    echo "       the shared delivery-route reader is unavailable. Refusing to run" >&2
+    echo "       rather than resolve delivery routes by identity (defect D4)." >&2
+    exit 2
+  fi
+done
+unset _fms_req
+
+# rail round-4 F3 — the READER being present is not the TABLE being present.
+# _wbm_route_src answers rc=1 ("no row for this destination") when the table is
+# missing or unreadable, and every call site below answers rc=1 with the
+# identity fallback `$SOURCE_DIR/$rel`. On a partial checkout that is defect D4
+# arriving through an absent file instead of a wrong branch — and D4 does not
+# merely misclassify: `_restore_file` COPIES. MEASURED pre-cure (S327): with
+# the table removed, `--repair` of a deleted `docs/BRANCH-PROTECTION.md` wrote
+# the ROOT homonym's bytes into the adopter tree, and the same path applied to
+# `.github/CODEOWNERS` copies THIS repo's live maintainer file — the exact
+# contamination class PLAN-183 A3 closed elsewhere.
+#
+# So the table is a REQUIRED input, asserted once, before any verdict is
+# computed. Fail-closed rc=2 (infra), mirroring _hash_lib.sh and the library
+# itself above. The shape question is answered by the table's OWNER
+# (_wbm_route_table_ok); doctor parsing a header here would be the private copy
+# W6 deleted.
+#
+# rc=1 from _wbm_route_src keeps its meaning — "no route declared for this
+# path" — but now only for a path genuinely absent from a table that IS there.
+# Rail r8 (S327, P2): call the MEMOIZED gate so the parent process seeds the
+# memo — every later _wbm_route_src runs inside a command substitution and would
+# otherwise rescan the table once per manifest record.
+if ! _wbm_route_table_gate; then
+  echo "ERROR: the shared delivery-route table is unusable — ${_WBM_ROUTE_TABLE_WHY:-unknown reason}." >&2
+  echo "       doctor resolves every delivery route through that table; without it" >&2
+  echo "       a repair would fall back to identity and copy the WRONG source" >&2
+  echo "       (defect D4). Refusing to run rather than verify or repair blind." >&2
+  echo "       Expected scripts/delivery-routes.tsv next to the manifest library," >&2
+  echo "       readable, with its dest/src/transform header and at least one row." >&2
+  exit 2
 fi
 
 MANIFEST="$TARGET/.claude/.install-manifest.sha256"
@@ -390,61 +454,118 @@ $_cf_rel
 }
 
 # ---------------------------------------------------------------------------
-# Shared delivery-route table (PLAN-183 W5, S325 — defect D4)
+# Delivery-route resolution (PLAN-183 W5 defect D4; consolidated in W6)
 # ---------------------------------------------------------------------------
-# Truth: scripts/delivery-routes.tsv — the SAME file scripts/tests/_parity_classify.py
-# reads. Resolving a destination as "$SOURCE_DIR/$rel" assumes IDENTITY, which
-# is false for every route the installer delivers from `templates/`: the path
-# that resolves is a DIFFERENT framework artifact the adopter never received.
-# That is defect D4, and at _restore_file it does not merely misclassify — it
-# REPAIRS with the wrong bytes, and the post-copy check re-hashes the
-# DESTINATION, so a wrong-source copy that happens to match baseline passes
-# silently.
+# Truth: scripts/delivery-routes.tsv. READER: _wbm_route_src, in
+# scripts/_framework_manifest_set.sh, sourced above — the SAME reader install.sh,
+# upgrade.sh and scripts/tests/_parity_classify.py resolve through. doctor is the
+# fourth consumer, and until W6 it was the odd one out: it carried a PRIVATE copy
+# of the parser.
 #
-# Contract of _route_source:
+# What the copy cost, MEASURED (pair-rail round 1, finding F2 — S327): the
+# canonical reader had grown path validation the copy never received, so a route
+# table with an absolute or `..`-bearing `src` resolved rc=0 here and reached
+# `cp "$SOURCE_DIR/$src"` in _restore_file — a read from OUTSIDE the framework
+# checkout, delivered into an adopter tree as framework content. The second
+# implementation was the defect, not a convenience: it is the same class
+# CLAUDE.md §4 records closing twice already (PLAN-182, 16 modules -> one
+# resolver; PLAN-167, _ownership_verdict).
+#
+# The contract the three call sites below depend on is the canonical one, and it
+# is byte-for-byte the contract doctor's retired copy published:
 #   stdout = source relpath, exit 0 : identity route — hashable and copyable
 #   exit 1                          : no route declared — identity applies
-#   exit 2                          : RENDERED route (a transform ran at
-#                                     install time) — the delivered bytes
-#                                     exist in NO checkout, so there is
-#                                     nothing to hash and nothing to copy
+#   exit 2                          : RENDERED, malformed, or a REJECTED
+#                                     (hostile) row — the delivered bytes exist
+#                                     in NO checkout; nothing to hash, nothing
+#                                     to copy.
+# rc=2 must never collapse into rc=1: rc=1 is answered by the identity fallback,
+# which is exactly D4 coming back.
 #
-# bash 3.2 floor (see the portability guard above): `declare -A` is
-# unavailable, so the lookup is a linear scan. The table is ~7 lines.
-# Skip guards act on the FIRST FIELD only, matching the idiom already used for
-# ownership_table.tsv in scripts/tests/test-ownership-verdict-unit.sh:61.
-DELIVERY_ROUTES_TSV="${DELIVERY_ROUTES_TSV:-$SOURCE_DIR/scripts/delivery-routes.tsv}"
+# Table location: resolved by the READER, next to the library it ships in
+# (rail round-6 F3 removed the environment channel entirely). doctor's own
+# DELIVERY_ROUTES_TSV was RETIRED in W6. A second knob the reader does not
+# honour is worse than none: a caller could poison a table nobody reads and see
+# a green run for it.
 
-_route_source() {
-  _rs_want="$1"
-  _rs_rc=1
-  if [ ! -f "$DELIVERY_ROUTES_TSV" ]; then
-    return 1
+# Last gate before anything touches the filesystem. Returns 0 to REFUSE — the
+# polarity of upgrade.sh's _up_tpl_confined_refuses / _up_tpl_symlink_refuses,
+# deliberately, so the two files read as a pair; keep them consistent when
+# either changes. $1 = destination relpath, $2 = resolved source relpath.
+#
+# The route reader already rejects a hostile row, and doctor's manifest
+# sanitiser (_relpath_unsafe, above) already screens every destination at
+# INGEST. Neither of those is a property of THIS write: the table is a FILE and
+# a partial checkout or a tampered tree still reaches these fields, the
+# sanitiser ran before the whole verification loop (a symlink planted in
+# between is a real TOCTOU window), and this is the LAST place before `cp`.
+# Belt and braces, on BOTH halves of the copy:
+#   1. LEXICAL — the reader's own predicate, applied to the destination AND to
+#      the source relpath that will be appended to $SOURCE_DIR.
+#   2. SYMLINK — never write THROUGH a link: refuse a symlinked leaf and any
+#      symlinked ancestor component.
+#   3. PHYSICAL — the deepest EXISTING ancestor of the destination must resolve
+#      (cd -P/pwd -P; the bash 3.2 floor has no realpath) to $TARGET or to a
+#      path under it, comparing against the RESOLVED $TARGET so a symlinked
+#      target directory is not a spurious refusal.
+# `|| true` inside each command substitution is load-bearing under `set -e`:
+# without it a failing `cd -P` aborts the whole script (measured) and the
+# named-refusal branch below is unreachable.
+_restore_refuses() {
+  _rr_rel="$1"
+  _rr_src="${2:-}"
+  if ! _wbm_route_relpath_ok "$_rr_rel"; then
+    _log "    RESTORE-BLOCKED (destination is not a confined relative path): $_rr_rel"
+    return 0
   fi
-  while IFS="$( printf '\t' )" read -r _rs_dest _rs_src _rs_transform _rs_rest; do
-    if [ -z "${_rs_dest:-}" ]; then continue; fi
-    case "$_rs_dest" in \#*|dest) continue ;; esac
-    if [ "$_rs_dest" != "$_rs_want" ]; then continue; fi
-    # Fail-CLOSED on malformed input (CLAUDE.md §4; rail S325 P2-1). An
-    # ABSENT or empty transform must never default to "copyable": a
-    # truncated row would otherwise be treated as identity and doctor would
-    # restore the live source over a rendered destination — re-opening the
-    # maintainer-handle leak the rendered branch exists to close. Only the
-    # literal string `identity` is copyable; everything else (rendered,
-    # unknown, empty, missing column) is rc=2.
-    case "${_rs_transform:-}" in
-      identity)
-        if [ -z "${_rs_src:-}" ]; then
-          _rs_rc=2          # declared identity but no source: malformed
-        else
-          printf '%s\n' "$_rs_src"; _rs_rc=0
-        fi
-        ;;
-      *) _rs_rc=2 ;;
-    esac
-    break
-  done < "$DELIVERY_ROUTES_TSV"
-  return "$_rs_rc"
+  if [ -n "$_rr_src" ] && ! _wbm_route_relpath_ok "$_rr_src"; then
+    _log "    RESTORE-BLOCKED (source '$_rr_src' is not a confined relative path — route table poisoned?): $_rr_rel"
+    return 0
+  fi
+  # rail round-7 F2 — LEXICAL is not PHYSICAL on the source side either. `cp -p`
+  # follows symlinks, so a source whose leaf or ancestor is a link to a regular
+  # file outside this checkout would be copied into the adopter tree as
+  # framework content — the same escape measured on the upgrade side (S327),
+  # and the same class as D4/A3 (doctor copying the WRONG source) arriving
+  # through a different door. This covers BOTH lanes: the route lane and the
+  # identity fallback that answers for every `.claude/**` manifest record.
+  if [ -n "$_rr_src" ] && ! _wbm_source_confined "$SOURCE_DIR" "$_rr_src"; then
+    _log "    RESTORE-BLOCKED (source not confined to the framework checkout — ${_WBM_SRC_CONFINE_WHY:-unknown reason}): $_rr_rel"
+    return 0
+  fi
+  if [ -L "$TARGET/$_rr_rel" ]; then
+    _log "    RESTORE-BLOCKED (destination is a symlink — a copy would write through it): $_rr_rel"
+    return 0
+  fi
+  _rr_walk="$( dirname "$_rr_rel" )"
+  while [ -n "$_rr_walk" ] && [ "$_rr_walk" != "." ] && [ "$_rr_walk" != "/" ]; do
+    if [ -L "$TARGET/$_rr_walk" ]; then
+      _log "    RESTORE-BLOCKED (ancestor $_rr_walk is a symlink — refusing to write through it): $_rr_rel"
+      return 0
+    fi
+    _rr_walk="$( dirname "$_rr_walk" )"
+  done
+  _rr_tgt="$( cd -P "$TARGET" 2>/dev/null && pwd -P || true )"
+  if [ -z "$_rr_tgt" ]; then
+    _log "    RESTORE-BLOCKED (the target directory does not resolve): $_rr_rel"
+    return 0
+  fi
+  _rr_anc="$( dirname "$TARGET/$_rr_rel" )"
+  while [ -n "$_rr_anc" ] && [ ! -d "$_rr_anc" ]; do
+    _rr_next="$( dirname "$_rr_anc" )"
+    [ "$_rr_next" != "$_rr_anc" ] || break
+    _rr_anc="$_rr_next"
+  done
+  _rr_res="$( cd -P "$_rr_anc" 2>/dev/null && pwd -P || true )"
+  if [ -z "$_rr_res" ]; then
+    _log "    RESTORE-BLOCKED (its nearest existing ancestor does not resolve): $_rr_rel"
+    return 0
+  fi
+  case "$_rr_res" in
+    "$_rr_tgt"|"$_rr_tgt"/*) return 1 ;;
+  esac
+  _log "    RESTORE-BLOCKED (resolves outside the target — $_rr_res is not under $_rr_tgt): $_rr_rel"
+  return 0
 }
 
 # Restore one hash-record file from SOURCE_DIR. Preconditions already checked
@@ -457,13 +578,19 @@ _restore_file() {
   _rf_base="$2"
   # D4: repair from the route's SOURCE, never from the destination relpath.
   _rf_rc=0
-  _rf_src="$( _route_source "$_rf_rel" )" || _rf_rc=$?
+  _rf_src="$( _wbm_route_src "$_rf_rel" )" || _rf_rc=$?
   if [ "$_rf_rc" -eq 2 ]; then
-    _log "    RESTORE-BLOCKED (delivered through a transform — the bytes exist in no checkout): $_rf_rel"
+    _log "    RESTORE-BLOCKED (delivered through a transform, or its route row was rejected — the bytes exist in no checkout): $_rf_rel"
     return 1
   fi
   if [ "$_rf_rc" -ne 0 ] || [ -z "${_rf_src:-}" ]; then
     _rf_src="$_rf_rel"
+  fi
+  # Belt and braces (W6). Deliberately AHEAD of `mkdir -p`: mkdir -p of an
+  # escaping destination already creates directories outside the target, so a
+  # check placed after it would be too late to prevent the side effect.
+  if _restore_refuses "$_rf_rel" "$_rf_src"; then
+    return 1
   fi
   mkdir -p "$TARGET/$( dirname "$_rf_rel" )"
   cp -p "$SOURCE_DIR/$_rf_src" "$TARGET/$_rf_rel"
@@ -576,7 +703,7 @@ while IFS= read -r line || [ -n "$line" ]; do
         # src_hash on purpose, which the existing branch below already
         # reports as not-repairable — the correct verdict.
         _ms_rc=0
-        src_rel="$( _route_source "$rel" )" || _ms_rc=$?
+        src_rel="$( _wbm_route_src "$rel" )" || _ms_rc=$?
         if [ "$_ms_rc" -eq 2 ]; then
           src_hash=""
         else
@@ -630,7 +757,7 @@ while IFS= read -r line || [ -n "$line" ]; do
       DRIFT_COUNT=$((DRIFT_COUNT + 1))
       # D4: hash the route's SOURCE (see the MISSING branch above).
       _dr_rc=0
-      src_rel="$( _route_source "$rel" )" || _dr_rc=$?
+      src_rel="$( _wbm_route_src "$rel" )" || _dr_rc=$?
       if [ "$_dr_rc" -eq 2 ]; then
         src_hash=""
       else
@@ -685,7 +812,11 @@ done < "$SANITIZED"
 # record. Candidates ONLY — they may be adopter-authored; never removed.
 # ---------------------------------------------------------------------------
 if [ "$NO_ORPHAN_SCAN" -eq 0 ]; then
-  if [ "$HAVE_FMS" -eq 1 ]; then
+  # W6: the old `if [ "$HAVE_FMS" -eq 1 ]` guard and its "orphan scan skipped"
+  # else-branch are GONE, not silenced — _framework_manifest_set.sh is required
+  # at startup now, so the branch was unreachable, and an unreachable branch
+  # that reports a degraded mode is a lie a future reader has to disprove.
+  {
     if [ -n "$PROFILE" ]; then
       PROFILE_PARTS_STR="$( printf '%s' "$PROFILE" | tr ',' ' ' )"
     else
@@ -758,9 +889,7 @@ if [ "$NO_ORPHAN_SCAN" -eq 0 ]; then
         _log "    ORPHAN?: $orel"
       done < "$WORKDIR/orphans"
     fi
-  else
-    _log "    NOTE: orphan scan skipped — _framework_manifest_set.sh not found beside doctor.sh"
-  fi
+  }
 fi
 
 # ---------------------------------------------------------------------------

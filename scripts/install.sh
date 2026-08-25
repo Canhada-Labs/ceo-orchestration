@@ -796,6 +796,21 @@ _state_record_op() {
 _DELIVERED_SPEC=0
 _DELIVERED_PROTOCOL=0
 _DELIVERED_MARKER=0
+# rail round-1 F4 — the ENVIRONMENT is untrusted input for an installer. These
+# four are appended to (or flipped) but were never RESET, so an inherited
+# value survived into FMS_DELIVERED_* and the baseline manifest recorded it.
+# REPRODUCED (S327): with `_DELIVERED_TEMPLATES=ADOPTER-OWNED.md` exported and
+# an adopter-owned file of that name in the target, a `--ceremony user` install
+# — which runs NEITHER delivery function — recorded that adopter file as
+# framework-owned in .claude/.install-manifest.sha256, and a manifest-honouring
+# uninstall deletes on a hash match. The three flags below were the same class,
+# latent for the same reason; a family is swept when one of its members is.
+# Reset here, next to the flags above, so every entry point starts from zero.
+_DELIVERED_PLAN_SCHEMA=0
+_DELIVERED_DEBATE_SCHEMA=0
+_DELIVERED_TEMPLATES=""
+_DOCS_TEMPLATE_WROTE=0
+_CONTINUITY_PATHS=""
 
 # PLAN-155 Wave 5 — the codex harness helper records its operations through
 # this recorder, mapped onto the install-state journal (overrides the helper's
@@ -1443,12 +1458,45 @@ install_reference_personas
 
 # ---- 5d. docs/ templates (PLAN-003 Phase 0 I-3) ----
 
+# rail round-7 F2 — PHYSICAL confinement of a delivery SOURCE, through the ONE
+# predicate the library owns (_wbm_source_confined). `[ -f ]`, `cp`, `sed` and
+# `cmp` all FOLLOW symlinks, so a `templates/...` source that is a link (or has
+# a symlinked ancestor) to a regular file outside this checkout delivers FOREIGN
+# bytes into the adopter as framework content — measured on the upgrade side
+# (S327) with an identical sha, and install.sh reads exactly the same sources.
+# Fail-CLOSED when the predicate is missing: the library is sourced at :248 and
+# a partial checkout that lost it is not a tree this installer should deliver
+# templates from. Returns 0 when the read must be REFUSED.
+_install_src_refuses() {
+  local src_rel="$1"
+  if ! command -v _wbm_source_confined >/dev/null 2>&1; then
+    echo "    SKIP (source-confinement predicate unavailable — refusing rather than guessing): $src_rel"
+    return 0
+  fi
+  if ! _wbm_source_confined "$SOURCE_DIR" "$src_rel"; then
+    echo "    SKIP (source not confined to the framework checkout — ${_WBM_SRC_CONFINE_WHY:-unknown reason}): $src_rel"
+    return 0
+  fi
+  return 1
+}
+
 install_docs_template() {
   local src_rel="$1"
   local dst_rel="$2"
   local src="$SOURCE_DIR/$src_rel"
   local dst="$TARGET/$dst_rel"
 
+  # PLAN-183 W5 (D3): per-destination delivery signal. INSTALL_ONE_WROTE is
+  # OWNED by install_one (:877/:905/:919) and this function is not install_one
+  # — writing to it here would clobber the flag the schema registrations at
+  # :1318-1329 read. Own flag, reset on EVERY entry so a later SKIP can never
+  # inherit an earlier COPY's verdict.
+  _DOCS_TEMPLATE_WROTE=0
+
+  # rail round-7 F2 — ahead of the `-f` test, which follows symlinks.
+  if _install_src_refuses "$src_rel"; then
+    return
+  fi
   if [[ ! -f "$src" ]]; then
     echo "    SKIP (template missing): $src_rel"
     return
@@ -1470,7 +1518,72 @@ install_docs_template() {
 
   mkdir -p "$( dirname "$dst" )"
   cp "$src" "$dst"
+  _DOCS_TEMPLATE_WROTE=1
   echo "    COPIED: $src_rel -> $dst_rel"
+}
+
+# Is this EXACT destination in the delivered list? Line-exact on purpose:
+# `.github/CODEOWNERS` is a PREFIX of `.github/CODEOWNERS.template`, so the
+# substring `case` idiom used for _CONTINUITY_PATHS would fire on the wrong
+# one — and those two are mutually exclusive per run, so the wrong answer is
+# reachable, not theoretical.
+_delivered_template_has() {
+  local want="$1" line
+  while IFS= read -r line; do
+    if [[ "$line" = "$want" ]]; then return 0; fi
+  done <<< "${_DELIVERED_TEMPLATES:-}"
+  return 1
+}
+
+# PLAN-183 W5 (D3) — accumulate ONE delivered destination for the baseline
+# manifest. Newline-separated; the generator splits on IFS=newline.
+_append_delivered_template() {
+  # rail round-3 F1 — same WHITELIST discipline as the generator, applied at
+  # the one choke point where this list grows. The generator is the fail-closed
+  # floor (it lives in the same file as the reader and can always consult the
+  # table); this is defence in depth, so a registration the shared table never
+  # declared is refused HERE, named, instead of travelling to the manifest
+  # writer to be silently dropped there. `command -v` guarded because the
+  # library is sourced conditionally (install.sh:248, partial checkout).
+  if command -v _wbm_route_dest_declared >/dev/null 2>&1 \
+     && ! _wbm_route_dest_declared "$1"; then
+    echo "    ERROR: delivered-template registration REJECTED (not a destination declared in the shared route table): '$1'" >&2
+    return 0
+  fi
+  if [[ -n "${_DELIVERED_TEMPLATES:-}" ]]; then
+    _DELIVERED_TEMPLATES="$_DELIVERED_TEMPLATES"$'\n'"$1"
+  else
+    _DELIVERED_TEMPLATES="$1"
+  fi
+}
+
+# Register a VERBATIM (identity-route) destination, mirroring the schema
+# precedent at :1318-1329: delivered == this run WROTE it, OR the pre-existing
+# target is byte-identical to the framework source.
+#
+# The byte-compare half is load-bearing, not decoration. "Result-only"
+# (register only when we wrote) drops all five registrations on a SECOND
+# consecutive install — every destination is then EXISTS-skipped — and it
+# ships GREEN, because no current Check runs install twice. Byte-identical is
+# origin proof here: the content is framework-specific (the rendered CODEOWNERS
+# names .claude/skills/**, .claude/hooks/**, .claude/plans/PLAN-*.md).
+# PRESERVED (target differs) and SKIPPED (source missing) stay OUT — recording
+# an adopter's own bytes as framework-owned is the class uninstall deletes on.
+_register_delivered_template() {
+  local dst_rel="$1" src_rel="$2"
+  if [[ "$DRY_RUN" -eq 1 ]]; then return 0; fi
+  # rail round-7 F2 — `cmp` follows symlinks too, so an unconfined source could
+  # make an ADOPTER file compare equal to FOREIGN bytes and be registered as
+  # framework-owned (uninstall deletes on that record). Refuse the comparison
+  # rather than let it answer.
+  if _install_src_refuses "$src_rel"; then
+    return 0
+  fi
+  if [[ "${_DOCS_TEMPLATE_WROTE:-0}" = "1" ]] \
+     || cmp -s "$SOURCE_DIR/$src_rel" "$TARGET/$dst_rel" 2>/dev/null; then
+    _append_delivered_template "$dst_rel"
+  fi
+  return 0
 }
 
 install_docs_templates() {
@@ -1478,7 +1591,9 @@ install_docs_templates() {
   echo "==> Installing docs/ templates"
   _state_record_op "install_docs_templates" "BRANCH-PROTECTION.md + rotation-log.md"
   install_docs_template "templates/docs/BRANCH-PROTECTION.md" "docs/BRANCH-PROTECTION.md"
+  _register_delivered_template "docs/BRANCH-PROTECTION.md" "templates/docs/BRANCH-PROTECTION.md"
   install_docs_template "templates/docs/rotation-log.md" "docs/rotation-log.md"
+  _register_delivered_template "docs/rotation-log.md" "templates/docs/rotation-log.md"
 }
 
 if [[ "$CEREMONY" != "user" ]]; then install_docs_templates; fi  # WS4-guard-docs
@@ -1491,7 +1606,14 @@ install_github_templates() {
   _state_record_op "install_github_templates" ""
 
   local codeowners_src="$SOURCE_DIR/templates/.github/CODEOWNERS.template"
-  if [[ ! -f "$codeowners_src" ]]; then
+  # rail round-7 F2 — this source is read by `sed` (render) and by `cmp` (the
+  # EXISTS byte-compare), both of which follow symlinks. Confine it first.
+  if _install_src_refuses "templates/.github/CODEOWNERS.template"; then
+    codeowners_src=""
+  fi
+  if [[ -z "$codeowners_src" ]]; then
+    echo "    SKIP (CODEOWNERS.template source refused — not confined to the framework checkout)"
+  elif [[ ! -f "$codeowners_src" ]]; then
     echo "    SKIP (CODEOWNERS.template missing at $codeowners_src)"
   elif [[ -n "$GITHUB_OWNER" ]]; then
     local dst="$TARGET/.github/CODEOWNERS"
@@ -1503,23 +1625,46 @@ install_github_templates() {
       fi
     elif [[ -e "$dst" ]]; then
       echo "    EXISTS (skipping): .github/CODEOWNERS"
+      # PLAN-183 W5 (D3): byte-compare against the RENDERED bytes — the form
+      # actually delivered — never against the .template source. An adopter
+      # file that happened to match the UNRENDERED template is not a framework
+      # delivery, and claiming it would put the adopter's CODEOWNERS under
+      # framework ownership.
+      local _co_probe
+      if _co_probe="$( mktemp "${TMPDIR:-/tmp}/ceo-codeowners.XXXXXX" 2>/dev/null )"; then
+        if sed "s/{{OWNER_HANDLE}}/$GITHUB_OWNER/g" "$codeowners_src" > "$_co_probe" 2>/dev/null \
+           && cmp -s "$_co_probe" "$dst" 2>/dev/null; then
+          _append_delivered_template ".github/CODEOWNERS"
+        fi
+        rm -f "$_co_probe"
+      fi
     else
       mkdir -p "$TARGET/.github"
       sed "s/{{OWNER_HANDLE}}/$GITHUB_OWNER/g" "$codeowners_src" > "$dst"
       echo "    SUBSTITUTED: .github/CODEOWNERS (@$GITHUB_OWNER)"
+      _append_delivered_template ".github/CODEOWNERS"
     fi
   else
     install_docs_template \
       "templates/.github/CODEOWNERS.template" \
       ".github/CODEOWNERS.template"
+    _register_delivered_template \
+      ".github/CODEOWNERS.template" \
+      "templates/.github/CODEOWNERS.template"
   fi
 
   install_docs_template \
     "templates/.github/workflows/validate.yml.template" \
     ".github/workflows/validate.yml.template"
+  _register_delivered_template \
+    ".github/workflows/validate.yml.template" \
+    "templates/.github/workflows/validate.yml.template"
   install_docs_template \
     "templates/.github/workflows/benchmarks.yml.template" \
     ".github/workflows/benchmarks.yml.template"
+  _register_delivered_template \
+    ".github/workflows/benchmarks.yml.template" \
+    "templates/.github/workflows/benchmarks.yml.template"
 }
 
 if [[ "$CEREMONY" != "user" ]]; then install_github_templates; fi  # WS4-guard-github
@@ -2540,6 +2685,25 @@ PROTOCOL.md"
   # t8 P1: same delivery-record condition for the plans/ schema contracts.
   export FMS_DELIVERED_PLAN_SCHEMA="${_DELIVERED_PLAN_SCHEMA:-0}"
   export FMS_DELIVERED_DEBATE_SCHEMA="${_DELIVERED_DEBATE_SCHEMA:-0}"
+  # PLAN-183 W5 (D3): the docs/ + .github/ destinations THIS run delivered,
+  # newline-separated (a LIST, not a 0/1 flag: the set varies with
+  # --github-owner and with what already existed). Empty on a `--ceremony
+  # user` install, which skips both delivery functions (:1484, :1525).
+  # Mutual exclusivity of .github/CODEOWNERS vs .github/CODEOWNERS.template is
+  # already resolved here — only the branch that ran appended.
+  export FMS_DELIVERED_TEMPLATES="${_DELIVERED_TEMPLATES:-}"
+  # PLAN-183 W5 (OQ-4, MIXED lane): .github/CODEOWNERS is RENDERED, so it rides
+  # the CONDITIONAL lane and must declare a hash_source or the generator
+  # fail-closes and records nothing. Declared on EVERY delivery path, never
+  # only on continuity — install.sh:2508-2511 records that the previous attempt
+  # at this wave regressed 24 cells precisely by leaving fresh installs
+  # undeclared. Fresh render: the target IS the delivered bytes => HASH_TARGET.
+  if _delivered_template_has ".github/CODEOWNERS"; then
+    case "${_CONTINUITY_PATHS:-}" in
+      *".github/CODEOWNERS"*) export FMS_HASH_SOURCE_CODEOWNERS="HASH_PRIOR_RECORD" ;;
+      *)                      export FMS_HASH_SOURCE_CODEOWNERS="HASH_TARGET" ;;
+    esac
+  fi
   # Empty on a fresh install (target IS the freshly written pointer, hashing it
   # is correct); set only by the continuity path above.
   export FMS_PROTOCOL_HASH="${_PRIOR_PROTOCOL_HASH:-}"

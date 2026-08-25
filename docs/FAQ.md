@@ -105,7 +105,7 @@ Don't take the README table on faith. From a clean checkout:
 ```bash
 find .claude/skills -name SKILL.md | wc -l        # 166 skills (42 core + 8 frontend + 116 domain)
 ls .claude/commands/*.md | wc -l                  # 27 slash commands
-ls .claude/adr | grep -c '^ADR-'                  # 194 ADRs
+ls .claude/adr | grep -c '^ADR-'                  # 195 ADRs
 python3 -m pytest --collect-only -q | tail -1     # ~14,700 collected cases
 ```
 

@@ -15,8 +15,8 @@ Wave: wave-w5 (D3 — terceiro leitor de `delivery-routes.tsv`; D1 — entrega d
 Patch: .claude/plans/PLAN-183/w5-ceremony/S327-W5-DELIVERY.patch
 Patch-sha256: eaba627e0faa74b33e0ab047cc46eeefdf6ec8b40cb0c26f9975fec8fe8be45f
 Patch-base: 56f050c9a0c4630fae958d94c3e628a24825accd
-Anchor-SHA: TO-FILL-AT-SIGN
-Data: TO-FILL-AT-SIGN
+Anchor-SHA: ca0297ca0ef05a7151edf1c8ed0adf18901fb53a
+Data: 2026-08-25
 
 ## O que esta wave entrega
 
@@ -82,7 +82,7 @@ medição não sustentar a pista, NÃO assine.
   de assinatura.
 
 <!-- BEGIN SIGNED SCOPE -->
-Approved-By: @Canhada-Labs TO-FILL-AT-SIGN
+Approved-By: @Canhada-Labs AE9B236FDAF0462874060C6BCFCFACF00335DC74
 Plans: PLAN-183
 Scope:
   - .claude/adr/ADR-194-delivery-route-resolution.md
