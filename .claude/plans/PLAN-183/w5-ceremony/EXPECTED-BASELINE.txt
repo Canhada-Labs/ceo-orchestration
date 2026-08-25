@@ -16,3 +16,7 @@ EXPECTED_PARITY_USER_MODE_DIFF=0
 EXPECTED_PARITY_USER_ONLY_IN_B_OUTSIDE_CLAUDE=0
 EXPECTED_UNIT_ORACLE_FAIL=0
 EXPECTED_OWNERSHIP_RED_IDS="OWN-0016 OWN-0024 OWN-0027"
+# V4 (S327, medido no primeiro land real): test_install_baseline_manifest.sh e 33 passed / 1 failed POR DESENHO — o id
+# known-open C.6.2 e pre-existente (mesmo conjunto declarado no ownership-nightly.yml). rc e conjunto EXATO, nos dois sentidos.
+EXPECTED_BASELINE_MANIFEST_RC=1
+EXPECTED_BASELINE_MANIFEST_KNOWN_OPEN="C.6.2"

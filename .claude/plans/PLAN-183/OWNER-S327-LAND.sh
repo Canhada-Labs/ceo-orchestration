@@ -172,11 +172,12 @@ _fingerprint() {
 }
 _restore() {
   if [ "$RESTORE_ON_EXIT" = "1" ] && [ "$APPLIED" = "1" ]; then
+    git reset -q >/dev/null 2>&1 || true   # um abort DEPOIS do staging deixaria o index sujo
     if git apply -R "$PATCH" >/dev/null 2>&1; then
       APPLIED=0
       _fp_after="$(_fingerprint)"
       if [ "$_fp_after" = "$FP_BEFORE" ]; then
-        printf '\033[32m  ok\033[0m  dry-run: arvore e index restaurados byte a byte\n'
+        printf '\033[32m  ok\033[0m  arvore e index restaurados byte a byte (patch revertido; nada foi commitado)\n'
       else
         printf '\n\033[31mRESTAURACAO INCOMPLETA\033[0m — o estado difere do inicial.\n' >&2
         printf '  Inspecione:  git -C %s status\n' "$ROOT" >&2
@@ -467,7 +468,11 @@ FP_BEFORE="$(_fingerprint)"
 # ---------------------------------------------------------------------------
 step "APLICANDO o patch assinado"
 # ---------------------------------------------------------------------------
-[ "$DRY_RUN" = "1" ] && RESTORE_ON_EXIT=1
+# S327 (abort real medido): o primeiro land REAL abortou no V4 e deixou a arvore
+# com o patch aplicado — so o dry-run restaurava. Agora TODO abort depois do
+# apply restaura arvore e index; o land bem-sucedido desliga o restore logo
+# apos o commit (o patch passa a viver no commit, nao na arvore).
+RESTORE_ON_EXIT=1
 git apply "$PATCH"
 APPLIED=1
 ok "patch aplicado ($(wc -l < "$TOUCHED_FILE" | tr -d ' ') paths)"
@@ -571,8 +576,19 @@ BASE_LOG="$TMPDIR_LAND/baseline.log"
 BASE_RC=0
 bash scripts/tests/test_install_baseline_manifest.sh > "$BASE_LOG" 2>&1 || BASE_RC=$?
 tail -15 "$BASE_LOG" | sed 's/^/    /'
-[ "$BASE_RC" -eq 0 ] || die "V4: test_install_baseline_manifest.sh saiu rc=$BASE_RC — log em $BASE_LOG"
-ok "V4: manifesto de baseline verde"
+# S327 (abort real medido): a suite e 33/1 POR DESENHO — C.6.2 e known-open
+# pre-existente (nightly declara o mesmo conjunto). Comparar contra zero era
+# ruido e abortou o primeiro land. Mesma semantica do gate nightly: rc
+# declarado + conjunto EXATO de ids FAIL, nos dois sentidos (id NOVO =
+# regressao; id AUSENTE = a tabela-verdade mudou, atualize a base conscientemente).
+_v4_exp_rc="$(_expect EXPECTED_BASELINE_MANIFEST_RC)"
+_v4_exp_set="$(_expect EXPECTED_BASELINE_MANIFEST_KNOWN_OPEN | tr ' ' '\n' | sed '/^$/d' | LC_ALL=C sort -u | tr '\n' ' ' | sed 's/ $//')"
+_v4_obs_set="$(awk '$1 == "FAIL" { print $2 }' "$BASE_LOG" | LC_ALL=C sort -u | tr '\n' ' ' | sed 's/ $//')"
+[ "$BASE_RC" -eq "$_v4_exp_rc" ] \
+  || die "V4: test_install_baseline_manifest.sh saiu rc=$BASE_RC, esperado rc=$_v4_exp_rc (EXPECTED_BASELINE_MANIFEST_RC) — log em $BASE_LOG"
+[ "$_v4_obs_set" = "$_v4_exp_set" ] \
+  || die "V4: conjunto FAIL do baseline-manifest MUDOU — declarado [$_v4_exp_set], observado [$_v4_obs_set] — log em $BASE_LOG"
+ok "V4: baseline-manifest rc=$BASE_RC com o conjunto known-open EXATO [$_v4_exp_set]"
 
 # ---------------------------------------------------------------------------
 step "V5 — paridade install/upgrade (contra a base DECLARADA)"
@@ -712,6 +728,7 @@ if ! git commit -F "$COMMIT_MSG" --no-edit; then
 fi
 NEW_SHA="$(git rev-parse HEAD)"
 ok "commit criado: $NEW_SHA"
+RESTORE_ON_EXIT=0   # o patch vive no commit a partir daqui; um abort no push NAO reverte a arvore
 git --no-pager log -1 --format='    %h %s' | sed 's/^/  /'
 
 if [ "$SELFTEST" = "1" ]; then

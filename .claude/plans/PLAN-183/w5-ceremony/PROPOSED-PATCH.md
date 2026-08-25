@@ -54,6 +54,8 @@ EXPECTED_PARITY_USER_MODE_DIFF
 EXPECTED_PARITY_USER_ONLY_IN_B_OUTSIDE_CLAUDE
 EXPECTED_UNIT_ORACLE_FAIL
 EXPECTED_OWNERSHIP_RED_IDS
+EXPECTED_BASELINE_MANIFEST_RC
+EXPECTED_BASELINE_MANIFEST_KNOWN_OPEN
 ```
 
 Valores esperados **após** o land: `maintainer` rc=0 com as 5 contagens fatais em 0; `user` inalterado em 0; oráculo unitário `FAIL=0`; conjunto RED `{OWN-0016, OWN-0024, OWN-0027}`.
@@ -138,4 +140,8 @@ Os mesmos oráculos na árvore pré-rodada-1 (`shadow-183`) deram o mesmo veredi
 | 8 | shadow-fix6 (final) | **0** | 2 (fixture do controle positivo; memo do doctor) | curados (CEO) |
 
 Em TODAS as rodadas o revisor abriu com "sentinel assinado ausente" — by-design: o sentinel vive no repositório vivo e a assinatura é o passo do Owner. **Critério de parada (declarado antes da rodada 7):** rodada sem P0/P1 reais ⇒ finalizar; a rodada 8 cumpriu. A classe que o rail perseguiu de 1 a 7 é a de **segurança de escrita do installer** (a mesma do PLAN-185: escapes por `..`, symlink, hard-link, glob, tabela hostil) — as curas viveram no **leitor único** (`_framework_manifest_set.sh`) e nos dois sítios de escrita (`upgrade.sh`, `doctor.sh`), com controle positivo em bytes em cada rodada. **Residual declarado (rodada 5, mantido):** dentro do domínio inerte uma tabela COMMITADA no framework ainda decide *quais* templates entram — isso é decisão de mantenedor, não input de adopter, e o override de tabela foi removido do código de produção (rodada 6). Trailer `Pair-Rail-Reviewed: APPROVE` = este registro.
+
+## 11. Primeiro land real (2026-08-25 08:30) — abortou no V4 por DEFEITO DO SCRIPT, curado
+
+O SIGN e os gates G0–G5, V1–V3 passaram; o V4 exigia `rc=0` de `test_install_baseline_manifest.sh`, que é **33 passed / 1 failed por desenho** (`C.6.2`, known-open pré-existente, declarado no nightly e na §9) — os 8 checks novos C.8 passaram. Dois defeitos do LAND (não do patch), ambos curados neste commit de materiais: (a) V4 passa a comparar rc e o conjunto EXATO de ids `FAIL` contra `EXPECTED_BASELINE_MANIFEST_{RC,KNOWN_OPEN}` (mesma semântica do gate nightly); (b) um abort em modo REAL depois do apply agora restaura árvore e índice (só o dry-run restaurava — a árvore ficou com o patch aplicado e foi revertida à mão com `git apply --reverse`, byte a byte). O Anchor-SHA muda com este commit ⇒ o Owner re-executa o SIGN antes do LAND.
 
