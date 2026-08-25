@@ -1,0 +1,97 @@
+diff --git a/.github/workflows/smoke-install.yml b/.github/workflows/smoke-install.yml
+index cceaea8..02377fb 100644
+--- a/.github/workflows/smoke-install.yml
++++ b/.github/workflows/smoke-install.yml
+@@ -366,6 +366,50 @@ jobs:
+           set -euo pipefail
+           bash scripts/tests/test-ownership-nightly-gate.sh
+ 
++      # PLAN-183 W5 fix (S327b, measured in smoke run 32845976930): this deepen
++      # step MUST run BEFORE the parity e2e, not only before the historical e2e.
++      # The D1 hash-gate in upgrade.sh recognises an adopter file as framework-
++      # owned by matching it against the git GENERATIONS of the template SOURCE;
++      # with the depth-1 checkout the v1.2.0 generation is invisible, the three
++      # templates that diverged (docs/BRANCH-PROTECTION.md and the two workflow
++      # .template files) fall to PRESERVED, and the classifier reports STALE 3 —
++      # locally, with full history, the same tree measures STALE 0. Safe but
++      # blind: a shallow SOURCE never delivers wrong bytes, it just cannot see.
++      # `actions/checkout` above runs at `fetch-depth: 1` and the later fetches
++      # are `--depth 1` TAG fetches, so `git log -- <path>` sees exactly ONE
++      # commit: the H.3 fixture can find no PRIOR generation of
++      # templates/docs/BRANCH-PROTECTION.md and the test scaffold-errors on
++      # every run.
++      # MEASURED (S327, this repo): that template has TWO generations — the
++      # current one landed at depth 40, the only differing one is the ROOT
++      # commit at depth 502 of 503 total. There is therefore no honest
++      # `--deepen=<N>` short of the whole history, so this unshallows: 503
++      # commits / 43 MB of .git, seconds against a 50-minute job.
++      # `--no-tags` keeps the explicit pin/release tag fetches above
++      # authoritative over which tags this checkout holds.
++      # `if: always()` is NOT optional here: the step it feeds carries
++      # always(), so without it a red earlier step would skip the deepen and
++      # run the e2e shallow — turning the cure back into the finding.
++      - name: Deepen git history (parity + historical-adopter e2e need prior generations)
++        if: always()
++        run: |
++          set -euo pipefail
++          if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
++            git fetch --unshallow --no-tags
++            echo "unshallowed: $(git rev-list --count HEAD) commits now reachable"
++          else
++            echo "already complete: $(git rev-list --count HEAD) commits reachable"
++          fi
++          # Fail CLOSED if the deepen did not actually produce what the e2e
++          # needs. A green step here followed by a scaffold error there would
++          # point the blame at the test instead of at this step.
++          gens="$(git log --format=%H -- templates/docs/BRANCH-PROTECTION.md | wc -l | tr -d ' ')"
++          echo "generations of templates/docs/BRANCH-PROTECTION.md: $gens"
++          if [ "$gens" -lt 2 ]; then
++            echo "::error::history deepen did not expose a prior generation (gens=$gens); the historical-adopter e2e cannot run" >&2
++            exit 1
++          fi
++
+       # PLAN-168 W2 (AC-6, per-PR half of INV-4): the shared pointer
+       # generator's 8-scenario control — includes ONE real install (~1-2 min
+       # on CI iron). The full install->upgrade->cure e2e (4 legs, ~5 min CI)
+@@ -523,41 +567,6 @@ jobs:
+       # `if: always()` for the same §9.8 reason as the three steps above.
+       # NO continue-on-error, deliberately.
+       # rail round-1 F3 — DEEPEN THE HISTORY the step below needs.
+-      # `actions/checkout` above runs at `fetch-depth: 1` and the later fetches
+-      # are `--depth 1` TAG fetches, so `git log -- <path>` sees exactly ONE
+-      # commit: the H.3 fixture can find no PRIOR generation of
+-      # templates/docs/BRANCH-PROTECTION.md and the test scaffold-errors on
+-      # every run.
+-      # MEASURED (S327, this repo): that template has TWO generations — the
+-      # current one landed at depth 40, the only differing one is the ROOT
+-      # commit at depth 502 of 503 total. There is therefore no honest
+-      # `--deepen=<N>` short of the whole history, so this unshallows: 503
+-      # commits / 43 MB of .git, seconds against a 50-minute job.
+-      # `--no-tags` keeps the explicit pin/release tag fetches above
+-      # authoritative over which tags this checkout holds.
+-      # `if: always()` is NOT optional here: the step it feeds carries
+-      # always(), so without it a red earlier step would skip the deepen and
+-      # run the e2e shallow — turning the cure back into the finding.
+-      - name: Deepen git history (historical-adopter e2e needs prior generations)
+-        if: always()
+-        run: |
+-          set -euo pipefail
+-          if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
+-            git fetch --unshallow --no-tags
+-            echo "unshallowed: $(git rev-list --count HEAD) commits now reachable"
+-          else
+-            echo "already complete: $(git rev-list --count HEAD) commits reachable"
+-          fi
+-          # Fail CLOSED if the deepen did not actually produce what the e2e
+-          # needs. A green step here followed by a scaffold error there would
+-          # point the blame at the test instead of at this step.
+-          gens="$(git log --format=%H -- templates/docs/BRANCH-PROTECTION.md | wc -l | tr -d ' ')"
+-          echo "generations of templates/docs/BRANCH-PROTECTION.md: $gens"
+-          if [ "$gens" -lt 2 ]; then
+-            echo "::error::history deepen did not expose a prior generation (gens=$gens); the historical-adopter e2e cannot run" >&2
+-            exit 1
+-          fi
+-
+       - name: Upgrade historical-adopter delivery (D1 + OQ-5 amendment)
+         if: always()
+         run: |

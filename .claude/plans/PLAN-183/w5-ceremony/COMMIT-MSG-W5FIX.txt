@@ -1,0 +1,17 @@
+ci(PLAN-183 W5 fix): deepen do historico ANTES da paridade install/upgrade no smoke-install.yml
+
+Medido no run 32845976930 (pos-land 6304f66): paridade maintainer STALE 3 na CI
+— os 3 templates que divergem v1.2.0->HEAD — com STALE 0 no mesmo conteudo em
+historico completo (LAND V5 local). O hash-gate do D1 reconhece o arquivo do
+adopter pelas GERACOES git da FONTE; com fetch-depth: 1 a geracao v1.2.0 e
+invisivel e os 3 caem em PRESERVED (seguro, mas STALE para o classificador).
+O step "Deepen git history" (rail r1 F3 da W5) rodava depois da paridade.
+
+- Bloco do deepen movido para logo apos "Fetch the parity pin tag", antes do
+  controle do ponteiro e da paridade; if: always() e o fail-closed de >=2
+  geracoes mantidos; titulo nomeia os dois consumidores. YAML + actionlint ok,
+  SHA-pins intocados. Nenhum script de produto muda.
+- Reproducao local: fonte --depth 1 => STALE 3; --unshallow => STALE 0.
+
+Pair-Rail-Reviewed: APPROVE (rodada w5fix-1, S327b; registro em .claude/plans/PLAN-183/w5-ceremony/rail-round-w5fix-1.md)
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>

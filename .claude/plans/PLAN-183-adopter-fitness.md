@@ -1452,6 +1452,8 @@ com a revisão refrescada, ou vira plano próprio.
    > Até esse veredito, **nenhuma linha do TSV de ownership se escreve.**
    >
    > **MEDIDA na S327 (2026-08-24, night-run autônoma; `PLAN-183/w5-oq4-measurement-S327.md`):** braços A/B/C em clones separados; A registra 0/5 rotas no manifesto (D3 latente-por-não-entrada, confirmado), B e C registram 5/5 com manifestos byte-idênticos no install fresco; ownership e2e com RED set exato nos três; paridade idêntica; custo de C sobre B = +22 linhas de código, **0 linhas de TSV** (a moldura "2-3 linhas" estava errada). Recomendação do CEO: pista MISTA (braço C) — única que registra o `CODEOWNERS` renderizado na continuidade do upgrade. **Veredito = assinatura do Owner em `PLAN-183/wave-w5-approved.md` (pacote `w5-ceremony/`).**
+   >
+   > **W5 LANDADA em `6304f66` (2026-08-25 08:55, assinatura GPG do Owner sobre `wave-w5-approved.md`; `OWNER-S327-LAND.sh` V1–V6 verdes, V7 diferido ao nightly).** D1 e D3 curados no `main`; paridade maintainer `STALE 0` no próprio land; OQ-4 ratificada pela assinatura como pista MISTA com 0 linhas no TSV de ownership. Residual: o status textual do ADR-194 continua `PROPOSED` (arquivo canônico; o flip para `ACCEPTED` entra na próxima cerimônia). O primeiro land abortou no V4 por defeito do LAND (comparava contra zero uma suíte 33/1 por desenho) — curado em `ca0297c` antes da re-assinatura.
 
    **PROPOSTA DERIVADA (S324), NÃO RATIFICADA — mantida como hipótese:** Medido no disco por mim
    (`scripts/tests/ownership_table.tsv`): **15 colunas, 65 linhas de
