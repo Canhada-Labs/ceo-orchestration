@@ -15,8 +15,8 @@ Wave: wave-w5fix (smoke-install.yml — o step 'Deepen git history' passa a roda
 Patch: .claude/plans/PLAN-183/w5-ceremony/S327b-W5FIX.patch
 Patch-sha256: 219ec54ef1de73a7d1c60a704cd34b5265d97d14ef3457aa7eb9197fb6a48c9d
 Patch-base: 6304f6674a316f84f1e62fda431d59f57013b87a
-Anchor-SHA: TO-FILL-AT-SIGN
-Data: TO-FILL-AT-SIGN
+Anchor-SHA: c9141b301451900f4ec94cf77db79bdbe34ec95b
+Data: 2026-08-25
 
 ## O que esta wave entrega
 
@@ -44,7 +44,7 @@ a nomear os dois consumidores. Reprodução local: clone `--depth 1` como fonte 
   daquela wave, sem tocar em `scripts/`. Pair-rail: `w5-ceremony/rail-round-w5fix-1.md`.
 
 <!-- BEGIN SIGNED SCOPE -->
-Approved-By: @Canhada-Labs TO-FILL-AT-SIGN
+Approved-By: @Canhada-Labs AE9B236FDAF0462874060C6BCFCFACF00335DC74
 Plans: PLAN-183
 Scope:
   - .github/workflows/smoke-install.yml
