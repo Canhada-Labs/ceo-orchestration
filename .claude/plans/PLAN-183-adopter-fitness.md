@@ -1450,6 +1450,8 @@ com a revisão refrescada, ou vira plano próprio.
    > é o instrumento que pega uma regressão de 24 células.
    >
    > Até esse veredito, **nenhuma linha do TSV de ownership se escreve.**
+   >
+   > **MEDIDA na S327 (2026-08-24, night-run autônoma; `PLAN-183/w5-oq4-measurement-S327.md`):** braços A/B/C em clones separados; A registra 0/5 rotas no manifesto (D3 latente-por-não-entrada, confirmado), B e C registram 5/5 com manifestos byte-idênticos no install fresco; ownership e2e com RED set exato nos três; paridade idêntica; custo de C sobre B = +22 linhas de código, **0 linhas de TSV** (a moldura "2-3 linhas" estava errada). Recomendação do CEO: pista MISTA (braço C) — única que registra o `CODEOWNERS` renderizado na continuidade do upgrade. **Veredito = assinatura do Owner em `PLAN-183/wave-w5-approved.md` (pacote `w5-ceremony/`).**
 
    **PROPOSTA DERIVADA (S324), NÃO RATIFICADA — mantida como hipótese:** Medido no disco por mim
    (`scripts/tests/ownership_table.tsv`): **15 colunas, 65 linhas de

@@ -1,0 +1,783 @@
+diff --git a/scripts/_framework_manifest_set.sh b/scripts/_framework_manifest_set.sh
+index c33a13b..f4befc0 100644
+--- a/scripts/_framework_manifest_set.sh
++++ b/scripts/_framework_manifest_set.sh
+@@ -180,6 +180,34 @@ _framework_target_entries() {
+         *) printf '%s\n' ".claude/skills/domains/$_fms_part" ;;
+       esac
+     done
++
++    # PLAN-183 W5 (D3) — docs/ + .github/ destinations this run DELIVERED.
++    #
++    # FILE entries, never DIRECTORY entries (C5, decided S327): `docs/` and
++    # `.github/` are ADOPTER-owned trees that merely CONTAIN framework
++    # deliveries. A directory entry would make _framework_manifest_files walk
++    # them and record every adopter file underneath as framework-owned — the
++    # exact over-claim that _wbm_link_allowed and the conditional surfaces
++    # exist to prevent, and a later uninstall deletes on a hash match.
++    #
++    # Same delivery-record condition as PROTOCOL.md/SPEC/marker above: never
++    # ceremony alone, never file presence. The caller enumerates exactly what
++    # it delivered, so the mutual exclusivity of .github/CODEOWNERS vs
++    # .github/CODEOWNERS.template (install.sh:1496 elif vs :1511 else) is
++    # INHERITED — this function never has to know which branch ran.
++    #
++    # Placed LAST in the brace group on purpose: the IFS override below must
++    # not reach the unquoted `$( _fms_profile_parts )` word-splitting above.
++    if [ -n "${FMS_DELIVERED_TEMPLATES:-}" ]; then
++      _fms_tpl_oldIFS="$IFS"
++      IFS='
++'
++      for _fms_tpl in $FMS_DELIVERED_TEMPLATES; do
++        [ -n "$_fms_tpl" ] || continue
++        printf '%s\n' "$_fms_tpl"
++      done
++      IFS="$_fms_tpl_oldIFS"
++    fi
+   } | LC_ALL=C sort -u
+ }
+ 
+@@ -313,6 +341,16 @@ _wbm_declared_hash_source() {
+     SPEC/v1|SPEC/v1/*)          printf '%s' "${FMS_HASH_SOURCE_SPEC:-}" ;;
+     PROTOCOL.md)                printf '%s' "${FMS_HASH_SOURCE_PROTOCOL:-}" ;;
+     .claude/.framework-version) printf '%s' "${FMS_HASH_SOURCE_MARKER:-}" ;;
++    # PLAN-183 W5 (OQ-4, MIXED lane): the RENDERED delivery. Its bytes exist in
++    # NO checkout — `sed s/{{OWNER_HANDLE}}/<handle>/` at install.sh:1508
++    # produces them — so the route reader has nothing to hash and the
++    # non-conditional lane can only DROP it. The conditional lane is the one
++    # that can express "the target IS the delivered bytes" (HASH_TARGET on a
++    # fresh render) and "carry what was recorded" (HASH_PRIOR_RECORD on
++    # continuity), which is exactly the PROTOCOL.md pointer's situation.
++    # The 5 VERBATIM routes stay on the non-conditional lane: they have real
++    # source bytes and the route reader resolves them.
++    .github/CODEOWNERS)         printf '%s' "${FMS_HASH_SOURCE_CODEOWNERS:-}" ;;
+     *)                          printf '' ;;
+   esac
+ }
+@@ -320,10 +358,82 @@ _wbm_declared_hash_source() {
+ _wbm_is_conditional() {
+   case "$1" in
+     SPEC/v1|SPEC/v1/*|PROTOCOL.md|.claude/.framework-version) return 0 ;;
++    .github/CODEOWNERS) return 0 ;;
+   esac
+   return 1
+ }
+ 
++# --- PLAN-183 W5 (D3): the THIRD reader of the shared delivery-route table --
++# Defect D3: this generator resolved every framework path as "$root/$rel",
++# which assumes the SOURCE relpath equals the DESTINATION relpath. That is
++# false for every route install.sh delivers out of `templates/` — on the
++# upgrade path (FMS_HASH_ROOT=$SOURCE_DIR) `docs/BRANCH-PROTECTION.md` hashes
++# the ROOT HOMONYM (wrong bytes recorded as the framework baseline) and
++# `.github/*.template` hits the `continue` and vanishes from the baseline in
++# SILENCE. The route table is the one place that answers "which source is
++# this destination?"; a local branch here would re-open the class CLAUDE.md §4
++# closed twice already (PLAN-182 16 modules -> one resolver; PLAN-167
++# _ownership_verdict).
++#
++# Same table, same idiom as scripts/doctor.sh:_route_source and
++# scripts/tests/_parity_classify.py. bash 3.2 floor: no `declare -A`, so the
++# lookup is a linear scan over ~7 rows. Skip guards act on the FIRST FIELD
++# only (the ownership_table.tsv idiom).
++#
++# rc 0 = identity route, source relpath on stdout
++# rc 1 = no row for this destination (the normal case for every framework
++#        path that IS identity-mapped: callers keep today's behaviour)
++# rc 2 = RENDERED, or the row is malformed => there are no framework source
++#        bytes to hash. Fail-CLOSED (CLAUDE.md §4: fail-open on
++#        infrastructure, fail-closed on INPUT). `${_wbm_rs_transform:-}` is
++#        deliberately an unbraced-default-EMPTY: `:-identity` was the rail
++#        S325 fail-OPEN finding that let a truncated row be treated as
++#        copyable.
++#
++# The table sits NEXT TO this library (scripts/). Both callers source it via
++# an absolute $SCRIPT_DIR (install.sh:251, upgrade.sh:95), so BASH_SOURCE is
++# absolute and the lookup never depends on the caller's cwd. Overridable so
++# tests can point at a fixture copy.
++_FMS_LIB_DIR="$( dirname "${BASH_SOURCE[0]:-$0}" )"
++FMS_DELIVERY_ROUTES_TSV="${FMS_DELIVERY_ROUTES_TSV:-$_FMS_LIB_DIR/delivery-routes.tsv}"
++
++_wbm_route_src() {
++  _wbm_rs_want="$1"
++  _wbm_rs_rc=1
++  if [ ! -f "$FMS_DELIVERY_ROUTES_TSV" ]; then
++    return 1
++  fi
++  while IFS="$( printf '\t' )" read -r _wbm_rs_dest _wbm_rs_src _wbm_rs_transform _wbm_rs_rest; do
++    if [ -z "${_wbm_rs_dest:-}" ]; then continue; fi
++    case "$_wbm_rs_dest" in \#*|dest) continue ;; esac
++    if [ "$_wbm_rs_dest" != "$_wbm_rs_want" ]; then continue; fi
++    case "${_wbm_rs_transform:-}" in
++      identity)
++        if [ -z "${_wbm_rs_src:-}" ]; then
++          _wbm_rs_rc=2          # declared identity but no source: malformed
++        else
++          printf '%s\n' "$_wbm_rs_src"; _wbm_rs_rc=0
++        fi
++        ;;
++      *) _wbm_rs_rc=2 ;;
++    esac
++    break
++  done < "$FMS_DELIVERY_ROUTES_TSV"
++  return "$_wbm_rs_rc"
++}
++
++# Every destination the table declares, one per line. Callers that must decide
++# WHICH routes they delivered (upgrade.sh) iterate this instead of carrying a
++# second copy of the destination list.
++_wbm_route_dests() {
++  [ -f "$FMS_DELIVERY_ROUTES_TSV" ] || return 1
++  while IFS="$( printf '\t' )" read -r _wbm_rd_dest _wbm_rd_rest; do
++    if [ -z "${_wbm_rd_dest:-}" ]; then continue; fi
++    case "$_wbm_rd_dest" in \#*|dest) continue ;; esac
++    printf '%s\n' "$_wbm_rd_dest"
++  done < "$FMS_DELIVERY_ROUTES_TSV"
++}
++
+ # The digest the PRE-run manifest recorded. Empty when unavailable, which the
+ # fail-closed branch turns into "do not record" rather than a guess.
+ _wbm_prior_digest() {
+@@ -339,6 +449,16 @@ _write_baseline_manifest() {
+     return 0
+   fi
+   : "${FMS_ROOT:?_write_baseline_manifest requires FMS_ROOT}"
++  # PLAN-183 W5 (D3) fail-CLOSED precondition. Enumerating delivered templates
++  # WITHOUT the route table would resolve each one as "$root/$rel" — precisely
++  # the D3 defect, arriving silently. A missing table is INPUT, not
++  # infrastructure (CLAUDE.md §4), so refuse to record them at all rather than
++  # record the wrong bytes; ownership is under-claimed, which is recoverable.
++  if [ -n "${FMS_DELIVERED_TEMPLATES:-}" ] && [ ! -f "$FMS_DELIVERY_ROUTES_TSV" ]; then
++    echo "    ERROR: delivery-route table missing ($FMS_DELIVERY_ROUTES_TSV) —" >&2
++    echo "           docs/ + .github/ deliveries NOT recorded (fail-closed)" >&2
++    FMS_DELIVERED_TEMPLATES=""
++  fi
+   # FMS_HASH_ROOT (optional): hash the FRAMEWORK version of each file from here
+   # instead of FMS_ROOT. The ENUMERATION still walks FMS_ROOT (what the target
+   # holds), but the recorded baseline must be what the framework SHIPS — never
+@@ -429,8 +549,27 @@ _write_baseline_manifest() {
+         # path). Codex R2 P1.
+         _wbm_hash_path="$_wbm_abs"
+         if [ -n "${FMS_HASH_ROOT:-}" ] && _wbm_hash_root_applies "$_wbm_rel"; then
+-          if [ -f "$_wbm_hash_root/$_wbm_rel" ]; then
+-            _wbm_hash_path="$_wbm_hash_root/$_wbm_rel"
++          # PLAN-183 W5 (D3): resolve the SOURCE relpath through the shared
++          # route table before touching $_wbm_hash_root. Identity-mapped paths
++          # (rc=1, no row) keep today's "$root/$rel" behaviour exactly.
++          _wbm_src_rel="$_wbm_rel"
++          _wbm_route_rc=0
++          _wbm_route_out="$( _wbm_route_src "$_wbm_rel" )" || _wbm_route_rc=$?
++          case "$_wbm_route_rc" in
++            0) _wbm_src_rel="$_wbm_route_out" ;;
++            2)
++              # RENDERED (or malformed row): the delivered bytes exist in NO
++              # checkout, so this lane has nothing to hash. Today's behaviour
++              # was to `continue` SILENTLY — the silence is the defect, not
++              # the skip. Name the path.
++              echo "    NOTE: $_wbm_rel is delivered through a TRANSFORM (or its route row is malformed) —" >&2
++              echo "          no framework source bytes on this lane; NOT recorded (fail-closed)" >&2
++              continue
++              ;;
++            *) : ;;   # rc=1: no route row — identity destination, unchanged
++          esac
++          if [ -f "$_wbm_hash_root/$_wbm_src_rel" ]; then
++            _wbm_hash_path="$_wbm_hash_root/$_wbm_src_rel"
+           else
+             continue   # framework no longer ships this path — no baseline record
+           fi
+diff --git a/scripts/install.sh b/scripts/install.sh
+index d148bb7..9af60f5 100755
+--- a/scripts/install.sh
++++ b/scripts/install.sh
+@@ -1449,6 +1449,13 @@ install_docs_template() {
+   local src="$SOURCE_DIR/$src_rel"
+   local dst="$TARGET/$dst_rel"
+ 
++  # PLAN-183 W5 (D3): per-destination delivery signal. INSTALL_ONE_WROTE is
++  # OWNED by install_one (:877/:905/:919) and this function is not install_one
++  # — writing to it here would clobber the flag the schema registrations at
++  # :1318-1329 read. Own flag, reset on EVERY entry so a later SKIP can never
++  # inherit an earlier COPY's verdict.
++  _DOCS_TEMPLATE_WROTE=0
++
+   if [[ ! -f "$src" ]]; then
+     echo "    SKIP (template missing): $src_rel"
+     return
+@@ -1470,15 +1477,63 @@ install_docs_template() {
+ 
+   mkdir -p "$( dirname "$dst" )"
+   cp "$src" "$dst"
++  _DOCS_TEMPLATE_WROTE=1
+   echo "    COPIED: $src_rel -> $dst_rel"
+ }
+ 
++# Is this EXACT destination in the delivered list? Line-exact on purpose:
++# `.github/CODEOWNERS` is a PREFIX of `.github/CODEOWNERS.template`, so the
++# substring `case` idiom used for _CONTINUITY_PATHS would fire on the wrong
++# one — and those two are mutually exclusive per run, so the wrong answer is
++# reachable, not theoretical.
++_delivered_template_has() {
++  local want="$1" line
++  while IFS= read -r line; do
++    if [[ "$line" = "$want" ]]; then return 0; fi
++  done <<< "${_DELIVERED_TEMPLATES:-}"
++  return 1
++}
++
++# PLAN-183 W5 (D3) — accumulate ONE delivered destination for the baseline
++# manifest. Newline-separated; the generator splits on IFS=newline.
++_append_delivered_template() {
++  if [[ -n "${_DELIVERED_TEMPLATES:-}" ]]; then
++    _DELIVERED_TEMPLATES="$_DELIVERED_TEMPLATES"$'\n'"$1"
++  else
++    _DELIVERED_TEMPLATES="$1"
++  fi
++}
++
++# Register a VERBATIM (identity-route) destination, mirroring the schema
++# precedent at :1318-1329: delivered == this run WROTE it, OR the pre-existing
++# target is byte-identical to the framework source.
++#
++# The byte-compare half is load-bearing, not decoration. "Result-only"
++# (register only when we wrote) drops all five registrations on a SECOND
++# consecutive install — every destination is then EXISTS-skipped — and it
++# ships GREEN, because no current Check runs install twice. Byte-identical is
++# origin proof here: the content is framework-specific (the rendered CODEOWNERS
++# names .claude/skills/**, .claude/hooks/**, .claude/plans/PLAN-*.md).
++# PRESERVED (target differs) and SKIPPED (source missing) stay OUT — recording
++# an adopter's own bytes as framework-owned is the class uninstall deletes on.
++_register_delivered_template() {
++  local dst_rel="$1" src_rel="$2"
++  if [[ "$DRY_RUN" -eq 1 ]]; then return 0; fi
++  if [[ "${_DOCS_TEMPLATE_WROTE:-0}" = "1" ]] \
++     || cmp -s "$SOURCE_DIR/$src_rel" "$TARGET/$dst_rel" 2>/dev/null; then
++    _append_delivered_template "$dst_rel"
++  fi
++  return 0
++}
++
+ install_docs_templates() {
+   echo ""
+   echo "==> Installing docs/ templates"
+   _state_record_op "install_docs_templates" "BRANCH-PROTECTION.md + rotation-log.md"
+   install_docs_template "templates/docs/BRANCH-PROTECTION.md" "docs/BRANCH-PROTECTION.md"
++  _register_delivered_template "docs/BRANCH-PROTECTION.md" "templates/docs/BRANCH-PROTECTION.md"
+   install_docs_template "templates/docs/rotation-log.md" "docs/rotation-log.md"
++  _register_delivered_template "docs/rotation-log.md" "templates/docs/rotation-log.md"
+ }
+ 
+ if [[ "$CEREMONY" != "user" ]]; then install_docs_templates; fi  # WS4-guard-docs
+@@ -1503,23 +1558,46 @@ install_github_templates() {
+       fi
+     elif [[ -e "$dst" ]]; then
+       echo "    EXISTS (skipping): .github/CODEOWNERS"
++      # PLAN-183 W5 (D3): byte-compare against the RENDERED bytes — the form
++      # actually delivered — never against the .template source. An adopter
++      # file that happened to match the UNRENDERED template is not a framework
++      # delivery, and claiming it would put the adopter's CODEOWNERS under
++      # framework ownership.
++      local _co_probe
++      if _co_probe="$( mktemp "${TMPDIR:-/tmp}/ceo-codeowners.XXXXXX" 2>/dev/null )"; then
++        if sed "s/{{OWNER_HANDLE}}/$GITHUB_OWNER/g" "$codeowners_src" > "$_co_probe" 2>/dev/null \
++           && cmp -s "$_co_probe" "$dst" 2>/dev/null; then
++          _append_delivered_template ".github/CODEOWNERS"
++        fi
++        rm -f "$_co_probe"
++      fi
+     else
+       mkdir -p "$TARGET/.github"
+       sed "s/{{OWNER_HANDLE}}/$GITHUB_OWNER/g" "$codeowners_src" > "$dst"
+       echo "    SUBSTITUTED: .github/CODEOWNERS (@$GITHUB_OWNER)"
++      _append_delivered_template ".github/CODEOWNERS"
+     fi
+   else
+     install_docs_template \
+       "templates/.github/CODEOWNERS.template" \
+       ".github/CODEOWNERS.template"
++    _register_delivered_template \
++      ".github/CODEOWNERS.template" \
++      "templates/.github/CODEOWNERS.template"
+   fi
+ 
+   install_docs_template \
+     "templates/.github/workflows/validate.yml.template" \
+     ".github/workflows/validate.yml.template"
++  _register_delivered_template \
++    ".github/workflows/validate.yml.template" \
++    "templates/.github/workflows/validate.yml.template"
+   install_docs_template \
+     "templates/.github/workflows/benchmarks.yml.template" \
+     ".github/workflows/benchmarks.yml.template"
++  _register_delivered_template \
++    ".github/workflows/benchmarks.yml.template" \
++    "templates/.github/workflows/benchmarks.yml.template"
+ }
+ 
+ if [[ "$CEREMONY" != "user" ]]; then install_github_templates; fi  # WS4-guard-github
+@@ -2540,6 +2618,25 @@ PROTOCOL.md"
+   # t8 P1: same delivery-record condition for the plans/ schema contracts.
+   export FMS_DELIVERED_PLAN_SCHEMA="${_DELIVERED_PLAN_SCHEMA:-0}"
+   export FMS_DELIVERED_DEBATE_SCHEMA="${_DELIVERED_DEBATE_SCHEMA:-0}"
++  # PLAN-183 W5 (D3): the docs/ + .github/ destinations THIS run delivered,
++  # newline-separated (a LIST, not a 0/1 flag: the set varies with
++  # --github-owner and with what already existed). Empty on a `--ceremony
++  # user` install, which skips both delivery functions (:1484, :1525).
++  # Mutual exclusivity of .github/CODEOWNERS vs .github/CODEOWNERS.template is
++  # already resolved here — only the branch that ran appended.
++  export FMS_DELIVERED_TEMPLATES="${_DELIVERED_TEMPLATES:-}"
++  # PLAN-183 W5 (OQ-4, MIXED lane): .github/CODEOWNERS is RENDERED, so it rides
++  # the CONDITIONAL lane and must declare a hash_source or the generator
++  # fail-closes and records nothing. Declared on EVERY delivery path, never
++  # only on continuity — install.sh:2508-2511 records that the previous attempt
++  # at this wave regressed 24 cells precisely by leaving fresh installs
++  # undeclared. Fresh render: the target IS the delivered bytes => HASH_TARGET.
++  if _delivered_template_has ".github/CODEOWNERS"; then
++    case "${_CONTINUITY_PATHS:-}" in
++      *".github/CODEOWNERS"*) export FMS_HASH_SOURCE_CODEOWNERS="HASH_PRIOR_RECORD" ;;
++      *)                      export FMS_HASH_SOURCE_CODEOWNERS="HASH_TARGET" ;;
++    esac
++  fi
+   # Empty on a fresh install (target IS the freshly written pointer, hashing it
+   # is correct); set only by the continuity path above.
+   export FMS_PROTOCOL_HASH="${_PRIOR_PROTOCOL_HASH:-}"
+diff --git a/scripts/tests/test-manifest-delivery-route.sh b/scripts/tests/test-manifest-delivery-route.sh
+new file mode 100644
+index 0000000..ef41618
+--- /dev/null
++++ b/scripts/tests/test-manifest-delivery-route.sh
+@@ -0,0 +1,355 @@
++#!/usr/bin/env bash
++# PLAN-183 W5 (S327) — scripts/_framework_manifest_set.sh resolves the delivery
++# SOURCE through the SHARED route table (scripts/delivery-routes.tsv). Defect D3.
++#
++# What D3 is: the baseline-manifest generator resolved every framework path as
++# "$root/$rel", which assumes the SOURCE relpath equals the DESTINATION
++# relpath. That is false for every route install.sh delivers out of
++# `templates/`. On the UPGRADE path (FMS_HASH_ROOT=$SOURCE_DIR) the two
++# consequences are:
++#   * docs/BRANCH-PROTECTION.md hashes the ROOT HOMONYM — wrong bytes recorded
++#     as the framework baseline; and
++#   * .github/workflows/*.template has no homonym at all, hits the `continue`
++#     and vanishes from the baseline in SILENCE.
++# This file is the third reader's oracle, the sibling of
++# scripts/tests/test-doctor-delivery-route.sh (doctor.sh, D4) and
++# .claude/scripts/tests/test_parity_source_resolution.py (_parity_classify.py,
++# D2).
++#
++# WHY THE EXPECTATIONS ARE NOT READ FROM THE TSV (debate convergence C3,
++# measured S325): pointing a route row at a wrong-but-existing source kept all
++# ten existing tests GREEN, because every assertion compared against the
++# table's own claim. That is a tautology, not a test. Truth here is derived
++# INDEPENDENTLY, by parsing the `install_docs_template` call-sites and the
++# CODEOWNERS render site out of scripts/install.sh — the code that actually
++# performs the copy. If the table and the installer disagree, this file goes
++# RED and names the row.
++#
++# bash 3.2-safe. mktemp -d only (never a hardcoded path), so parallel runs
++# never collide.
++#
++# Run:  bash scripts/tests/test-manifest-delivery-route.sh ; echo rc=$?
++set -uo pipefail   # NOT -e: we assert on command failures explicitly.
++
++SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
++SOURCE_DIR="$( cd "$SCRIPT_DIR/../.." && pwd )"
++GENERATOR="$SOURCE_DIR/scripts/_framework_manifest_set.sh"
++INSTALLER="$SOURCE_DIR/scripts/install.sh"
++ROUTES="$SOURCE_DIR/scripts/delivery-routes.tsv"
++
++FAIL=0
++PASS=0
++WORKROOT="$( mktemp -d -t ceo-fms-route-XXXXXX )"
++cleanup() { [ -n "${WORKROOT:-}" ] && rm -rf "$WORKROOT" 2>/dev/null || true; }
++trap cleanup EXIT
++
++ok()  { PASS=$((PASS+1)); printf '  ok   %s\n' "$1"; }
++bad() { FAIL=$((FAIL+1)); printf '  FAIL %s\n' "$1" >&2; }
++
++# ---------------------------------------------------------------------------
++# S.0 — extract the reader BY NAME from the generator. A rename or a removal
++# makes this RED instead of silently skipping every assertion below.
++# ---------------------------------------------------------------------------
++echo "==> S.0 — extract _wbm_route_src from _framework_manifest_set.sh"
++
++[ -f "$ROUTES" ] && ok "S.0 shared route table exists at scripts/delivery-routes.tsv" \
++                 || bad "S.0 shared route table MISSING at $ROUTES"
++
++FRAG="$WORKROOT/wbm_route_src.sh"
++sed -n '/^_wbm_route_src() {$/,/^}$/p' "$GENERATOR" > "$FRAG"
++if [ ! -s "$FRAG" ]; then
++  bad "S.0 could not extract _wbm_route_src from _framework_manifest_set.sh (renamed or removed?)"
++  echo ""
++  echo "==> RESULT: $PASS passed, $FAIL failed"
++  exit 1
++fi
++ok "S.0 _wbm_route_src extracted from _framework_manifest_set.sh"
++
++# Probe harness: prints "<rc>|<stdout>" for one destination, against whichever
++# table $1 names. Proves the FMS_DELIVERY_ROUTES_TSV override works, which is
++# what lets the positive controls below run against a COPY and never mutate
++# the real table.
++HARNESS="$WORKROOT/harness.sh"
++{
++  echo 'set -uo pipefail'
++  echo 'FMS_DELIVERY_ROUTES_TSV="$1"'
++  cat "$FRAG"
++  echo '_probe() { local rc=0 out; out="$( _wbm_route_src "$2" )" || rc=$?; printf "%s|%s\n" "$rc" "${out:-}"; }'
++  echo '_probe "$1" "$2"'
++} > "$HARNESS"
++
++_probe() {  # $1=table $2=dest -> "<rc>|<src>"
++  bash "$HARNESS" "$1" "$2" 2>/dev/null
++}
++
++# ---------------------------------------------------------------------------
++# S.1 — INDEPENDENT TRUTH: what does install.sh actually copy?
++# Parsed from the installer's call-sites, never from the table.
++# ---------------------------------------------------------------------------
++echo "==> S.1 — derive (source -> destination) truth from install.sh call-sites"
++
++TRUTH="$WORKROOT/truth.tsv"        # dest \t src \t kind(identity|rendered)
++REGISTRATIONS="$WORKROOT/reg.tsv"  # dest \t src   (from _register_delivered_template)
++python3 - "$INSTALLER" "$TRUTH" "$REGISTRATIONS" <<'PY'
++import io, re, sys
++
++installer, truth_out, reg_out = sys.argv[1], sys.argv[2], sys.argv[3]
++src = io.open(installer, encoding="utf-8").read()
++# Join backslash line-continuations so multi-line calls parse as one.
++flat = re.sub(r"\\\n\s*", " ", src)
++
++def pairs(fn):
++    out = []
++    for m in re.finditer(r'\b%s\s+"([^"]+)"\s+"([^"]+)"' % fn, flat):
++        out.append((m.group(1), m.group(2)))
++    return out
++
++# install_docs_template <src_rel> <dst_rel> — the verbatim copy call-site.
++identity = [(dst, s) for (s, dst) in pairs("install_docs_template")]
++
++# _register_delivered_template <dst_rel> <src_rel> — the W5 registration
++# call-site. Extracted separately so a typo there is caught by S.2b instead of
++# silently agreeing with itself.
++regs = pairs("_register_delivered_template")
++
++# The RENDERED site: sed s/{{OWNER_HANDLE}}/.../ <codeowners_src> > <dst>.
++# Both operands are variables, so resolve them from their assignments rather
++# than assuming the literal paths.
++rendered = []
++co_src = re.search(r'codeowners_src="\$SOURCE_DIR/([^"]+)"', flat)
++co_dst = re.search(r'local dst="\$TARGET/(\.github/CODEOWNERS)"', flat)
++has_sed = re.search(r'sed "s/\{\{OWNER_HANDLE\}\}/\$GITHUB_OWNER/g" "\$codeowners_src" > "\$dst"', flat)
++if co_src and co_dst and has_sed:
++    rendered.append((co_dst.group(1), co_src.group(1)))
++
++with io.open(truth_out, "w", encoding="utf-8") as fh:
++    for dst, s in identity:
++        fh.write("%s\t%s\tidentity\n" % (dst, s))
++    for dst, s in rendered:
++        fh.write("%s\t%s\trendered\n" % (dst, s))
++with io.open(reg_out, "w", encoding="utf-8") as fh:
++    for dst, s in regs:
++        fh.write("%s\t%s\n" % (dst, s))
++PY
++
++TRUTH_N="$( grep -c . "$TRUTH" 2>/dev/null || echo 0 )"
++if [ "$TRUTH_N" -ge 5 ]; then
++  ok "S.1 parsed $TRUTH_N delivery call-sites out of install.sh"
++else
++  bad "S.1 parsed only $TRUTH_N delivery call-sites out of install.sh (expected >= 5) — the parser drifted from the installer; every assertion below would be vacuous"
++fi
++
++# The rendered site must be found, or S.4 silently stops testing anything.
++if grep -q "	rendered\$" "$TRUTH"; then
++  ok "S.1 the RENDERED CODEOWNERS call-site was located (S.4 is not vacuous)"
++else
++  bad "S.1 the RENDERED CODEOWNERS call-site was NOT located in install.sh — S.4 would be vacuous"
++fi
++
++# ---------------------------------------------------------------------------
++# S.2 — the reader agrees with the installer, route by route.
++# ---------------------------------------------------------------------------
++echo "==> S.2 — _wbm_route_src answers match the install.sh call-sites"
++
++while IFS="$( printf '\t' )" read -r t_dest t_src t_kind; do
++  [ -n "${t_dest:-}" ] || continue
++  res="$( _probe "$ROUTES" "$t_dest" )"
++  rc="${res%%|*}"; got="${res#*|}"
++  case "$t_kind" in
++    identity)
++      if [ "$rc" = "0" ] && [ "$got" = "$t_src" ]; then
++        ok "S.2 $t_dest -> $t_src (rc=0)"
++      else
++        bad "S.2 $t_dest: install.sh copies from '$t_src' but the route table answers rc=$rc src='$got' — fix the row for '$t_dest' in scripts/delivery-routes.tsv"
++      fi
++      ;;
++    rendered)
++      if [ "$rc" = "2" ] && [ -z "$got" ]; then
++        ok "S.2 $t_dest is RENDERED -> rc=2, no copiable source"
++      else
++        bad "S.2 $t_dest is RENDERED in install.sh but the route table answers rc=$rc src='$got' — a rendered destination must never be copiable (row '$t_dest')"
++      fi
++      ;;
++  esac
++done < "$TRUTH"
++
++echo "==> S.2b — the W5 registration call-sites name the same source as the copy"
++while IFS="$( printf '\t' )" read -r r_dest r_src; do
++  [ -n "${r_dest:-}" ] || continue
++  exp="$( awk -F'\t' -v d="$r_dest" '$1 == d { print $2; exit }' "$TRUTH" )"
++  if [ -z "$exp" ]; then
++    bad "S.2b _register_delivered_template names destination '$r_dest', which no install_docs_template call-site delivers"
++  elif [ "$exp" = "$r_src" ]; then
++    ok "S.2b registration of $r_dest names the copied source"
++  else
++    bad "S.2b _register_delivered_template '$r_dest' '$r_src' disagrees with the copy call-site ('$exp') — the byte-compare would compare the WRONG file"
++  fi
++done < "$REGISTRATIONS"
++
++# ---------------------------------------------------------------------------
++# S.3 — POSITIVE CONTROL: a row pointed at a wrong-but-existing source must
++# turn this file RED and name the row. Runs against a COPY; the real table is
++# never mutated.
++# ---------------------------------------------------------------------------
++echo "==> S.3 — positive control: wrong-but-existing source"
++
++BAD_TSV="$WORKROOT/routes-wrong-source.tsv"
++# Re-point docs/BRANCH-PROTECTION.md at a DIFFERENT file that really exists,
++# so the failure cannot be blamed on a missing path.
++DECOY="templates/docs/rotation-log.md"
++if [ ! -f "$SOURCE_DIR/$DECOY" ]; then
++  bad "S.3 decoy source $DECOY does not exist — the control would test 'missing file', not 'wrong file'"
++else
++  awk -F'\t' -v OFS='\t' -v decoy="$DECOY" '
++    $1 == "docs/BRANCH-PROTECTION.md" { $2 = decoy } { print }' "$ROUTES" > "$BAD_TSV"
++  res="$( _probe "$BAD_TSV" "docs/BRANCH-PROTECTION.md" )"
++  rc="${res%%|*}"; got="${res#*|}"
++  real="$( awk -F'\t' '$1 == "docs/BRANCH-PROTECTION.md" { print $2; exit }' "$TRUTH" )"
++  if [ "$rc" = "0" ] && [ "$got" = "$DECOY" ] && [ "$got" != "$real" ]; then
++    ok "S.3 the sabotaged table answers '$got' while install.sh copies '$real' — S.2 would go RED naming the row"
++  else
++    bad "S.3 sabotage did not take effect (rc=$rc src='$got'): the S.2 assertions are NOT discriminating and this suite is blind"
++  fi
++fi
++
++# ---------------------------------------------------------------------------
++# S.4 — POSITIVE CONTROL: a rendered row must never become copiable, however
++# the row is damaged. `${_wbm_rs_transform:-identity}` was the rail S325
++# fail-OPEN finding; a truncated row must stay rc=2.
++# ---------------------------------------------------------------------------
++echo "==> S.4 — positive control: rendered + malformed rows stay non-copiable"
++
++TRUNC_TSV="$WORKROOT/routes-truncated.tsv"
++awk -F'\t' -v OFS='\t' '
++  $1 == "docs/rotation-log.md" { print $1, $2; next } { print }' "$ROUTES" > "$TRUNC_TSV"
++res="$( _probe "$TRUNC_TSV" "docs/rotation-log.md" )"
++rc="${res%%|*}"; got="${res#*|}"
++if [ "$rc" = "2" ] && [ -z "$got" ]; then
++  ok "S.4 a truncated row (transform column absent) is rc=2, not silently identity"
++else
++  bad "S.4 truncated row answered rc=$rc src='$got' — fail-OPEN: an absent transform became copiable"
++fi
++
++EMPTYSRC_TSV="$WORKROOT/routes-emptysrc.tsv"
++awk -F'\t' -v OFS='\t' '
++  $1 == "docs/rotation-log.md" { $2 = "" } { print }' "$ROUTES" > "$EMPTYSRC_TSV"
++res="$( _probe "$EMPTYSRC_TSV" "docs/rotation-log.md" )"
++rc="${res%%|*}"
++if [ "$rc" = "2" ]; then
++  ok "S.4 an identity row with an EMPTY source is rc=2 (malformed), not rc=0 with an empty path"
++else
++  bad "S.4 empty-source row answered rc=$rc — a malformed row became copiable"
++fi
++
++res="$( _probe "$ROUTES" "PROTOCOL.md" )"
++rc="${res%%|*}"
++if [ "$rc" = "1" ]; then
++  ok "S.4 a path with NO row answers rc=1 (identity-mapped: callers keep today's behaviour)"
++else
++  bad "S.4 an unrouted path answered rc=$rc, expected rc=1 — every framework path would change resolution"
++fi
++
++# ---------------------------------------------------------------------------
++# S.5 — POSITIVE CONTROL: table missing => fail-CLOSED. The reader answers
++# rc=1, and the generator must then record NOTHING for the delivered
++# templates rather than silently resolving them as "$root/$rel" (D3 itself).
++# ---------------------------------------------------------------------------
++echo "==> S.5 — positive control: table missing is fail-CLOSED"
++
++res="$( _probe "$WORKROOT/does-not-exist.tsv" "docs/BRANCH-PROTECTION.md" )"
++rc="${res%%|*}"; got="${res#*|}"
++if [ "$rc" = "1" ] && [ -z "$got" ]; then
++  ok "S.5 reader with no table answers rc=1 and no source"
++else
++  bad "S.5 reader with no table answered rc=$rc src='$got'"
++fi
++
++# The generator-level half: FMS_DELIVERED_TEMPLATES non-empty + no table must
++# record nothing at all and say so on stderr.
++GEN_OUT="$WORKROOT/gen.out"
++GEN_ERR="$WORKROOT/gen.err"
++GEN_ROOT="$WORKROOT/genroot"
++mkdir -p "$GEN_ROOT/docs"
++printf 'adopter bytes\n' > "$GEN_ROOT/docs/BRANCH-PROTECTION.md"
++(
++  # shellcheck source=/dev/null
++  . "$SOURCE_DIR/scripts/_hash_lib.sh"
++  # shellcheck source=/dev/null
++  . "$GENERATOR"
++  # Read by _wbm_route_src at CALL time, so this override wins over the
++  # source-time default the generator assigned above. Exported only so the
++  # linter does not read it as dead (SC2034); the generator itself reads it
++  # as a plain shell variable.
++  export FMS_DELIVERY_ROUTES_TSV="$WORKROOT/does-not-exist.tsv"
++  export FMS_ROOT="$GEN_ROOT"
++  export FMS_HASH_ROOT="$SOURCE_DIR"
++  export FMS_PROFILE_PARTS="core"
++  export FMS_DELIVERED_TEMPLATES="docs/BRANCH-PROTECTION.md"
++  _write_baseline_manifest "$GEN_ROOT/.manifest" >/dev/null 2>"$GEN_ERR"
++) > "$GEN_OUT" 2>&1
++if [ -f "$GEN_ROOT/.manifest" ] && grep -q "  docs/BRANCH-PROTECTION.md\$" "$GEN_ROOT/.manifest" 2>/dev/null; then
++  bad "S.5 generator RECORDED docs/BRANCH-PROTECTION.md with no route table — fail-OPEN, this is D3 itself"
++else
++  ok "S.5 generator recorded nothing for the delivered template with no route table (fail-closed)"
++fi
++if grep -q "delivery-route table missing" "$GEN_ERR" 2>/dev/null; then
++  ok "S.5 generator said so on stderr (the refusal is not silent)"
++else
++  bad "S.5 generator refused SILENTLY — a missing table must be named on stderr"
++fi
++
++# ---------------------------------------------------------------------------
++# S.6 — the rendered route never copies bytes THROUGH the generator: enumerate
++# .github/CODEOWNERS on the FMS_HASH_ROOT lane and assert no record appears and
++# the path is NAMED.
++#
++# LANE-AGNOSTIC ON PURPOSE (OQ-4). The generator can refuse a rendered
++# destination on either lane, with a different message each time:
++#   * non-conditional lane -> "delivered through a TRANSFORM" (the route
++#     reader's rc=2 breadcrumb);
++#   * conditional lane     -> "declared no hash_source" (the pre-existing
++#     fail-closed branch, when no FMS_HASH_SOURCE_* is exported).
++# The CONTRACT this file defends is neither of those wordings: it is "never
++# recorded from source bytes, and never dropped in SILENCE". Asserting one
++# wording would make the suite a vote for one lane and turn the other into a
++# false RED — the measurement, not the test, is where the lane is decided.
++# ---------------------------------------------------------------------------
++echo "==> S.6 — a RENDERED destination is never recorded from source bytes"
++
++GEN2="$WORKROOT/genroot2"
++GEN2_ERR="$WORKROOT/gen2.err"
++mkdir -p "$GEN2/.github"
++printf '# rendered for @someone\n' > "$GEN2/.github/CODEOWNERS"
++(
++  # shellcheck source=/dev/null
++  . "$SOURCE_DIR/scripts/_hash_lib.sh"
++  # shellcheck source=/dev/null
++  . "$GENERATOR"
++  export FMS_ROOT="$GEN2"
++  export FMS_HASH_ROOT="$SOURCE_DIR"
++  export FMS_PROFILE_PARTS="core"
++  export FMS_DELIVERED_TEMPLATES=".github/CODEOWNERS"
++  _write_baseline_manifest "$GEN2/.manifest" >/dev/null 2>"$GEN2_ERR"
++) >/dev/null 2>&1
++if [ -f "$GEN2/.manifest" ] && grep -q "  \.github/CODEOWNERS\$" "$GEN2/.manifest" 2>/dev/null; then
++  recorded="$( awk '{ i = index($0, "  "); if (i && substr($0, i+2) == ".github/CODEOWNERS") print substr($0, 1, i-1) }' "$GEN2/.manifest" )"
++  live="$( ( . "$SOURCE_DIR/scripts/_hash_lib.sh"; _hash_file "$SOURCE_DIR/.github/CODEOWNERS" 2>/dev/null ) || true )"
++  if [ -n "$live" ] && [ "$recorded" = "$live" ]; then
++    bad "S.6 the generator recorded THIS repository's live .github/CODEOWNERS ($recorded) as the adopter's baseline — the maintainer-handle leak class (A3)"
++  else
++    bad "S.6 a RENDERED destination was recorded ($recorded); rendered bytes exist in no checkout, so any source-derived digest is wrong"
++  fi
++else
++  ok "S.6 rendered .github/CODEOWNERS is NOT recorded from source bytes on the FMS_HASH_ROOT lane"
++fi
++if grep -q "\.github/CODEOWNERS" "$GEN2_ERR" 2>/dev/null \
++   && grep -qE "delivered through a TRANSFORM|declared no hash_source" "$GEN2_ERR" 2>/dev/null; then
++  ok "S.6 the skip is NAMED on stderr (silence was the defect, not the skip)"
++else
++  bad "S.6 the rendered destination was dropped SILENTLY — the path must be named on stderr with a refusal reason"
++fi
++
++echo ""
++echo "==> RESULT: $PASS passed, $FAIL failed"
++[ "$FAIL" -eq 0 ] || exit 1
++exit 0
+diff --git a/scripts/upgrade.sh b/scripts/upgrade.sh
+index 1864abb..1fa84c0 100755
+--- a/scripts/upgrade.sh
++++ b/scripts/upgrade.sh
+@@ -3532,9 +3532,76 @@ if [[ "$DRY_RUN" -eq 0 ]] && command -v _write_baseline_manifest >/dev/null 2>&1
+   export FMS_DELIVERED_PLAN_SCHEMA="${_SCHEMA_DELIVERED_PLAN:-0}"
+   export FMS_DELIVERED_DEBATE_SCHEMA="${_SCHEMA_DELIVERED_DEBATE:-0}"
+   export FMS_DELIVERED_MARKER="${_MARKER_DELIVERED:-0}"
++  # PLAN-183 W5 (D3) — docs/ + .github/ registration on the UPGRADE path.
++  #
++  # D1-HOOK: delivery of docs/ and .github/ on upgrade belongs HERE, above
++  # this block. upgrade.sh ships NEITHER tree today (measured S323:
++  # `grep -c github scripts/upgrade.sh` = 0; every `docs` hit is a comment) —
++  # that is defect D1 and it is what keeps the parity e2e at STALE 3. Until D1
++  # lands, this block only REGISTERS: a destination counts as delivered when
++  # its bytes already MATCH the framework source, which is the byte-compare
++  # half of the install precedent (install.sh:1318-1329) and is exactly what
++  # an adopter who ran install then upgraded looks like.
++  #
++  # RENDERED routes (.github/CODEOWNERS) resolve rc=2: the delivered bytes
++  # exist in NO checkout, so there is nothing to byte-compare against. The
++  # evidence that the framework owns them is the PRIOR BASELINE RECORD — the
++  # same ownership-continuity rule PROTOCOL.md already uses
++  # (HASH_PRIOR_RECORD, install.sh:2504). Registering them here is what makes
++  # the generator's lane choice OBSERVABLE instead of silently absent.
++  _UP_DELIVERED_TEMPLATES=""
++  if command -v _wbm_route_src >/dev/null 2>&1 \
++     && command -v _wbm_route_dests >/dev/null 2>&1; then
++    while IFS= read -r _up_tpl_dest; do
++      [[ -n "$_up_tpl_dest" ]] || continue
++      _up_tpl_keep=0
++      _up_tpl_src=""
++      _up_tpl_rc=0
++      _up_tpl_src="$( _wbm_route_src "$_up_tpl_dest" )" || _up_tpl_rc=$?
++      if [[ "$_up_tpl_rc" -eq 0 && -n "$_up_tpl_src" ]]; then
++        if cmp -s "$SOURCE_DIR/$_up_tpl_src" "$TARGET/$_up_tpl_dest" 2>/dev/null; then
++          _up_tpl_keep=1
++        fi
++      elif [[ "$_up_tpl_rc" -eq 2 && -e "$TARGET/$_up_tpl_dest" ]]; then
++        # Rendered: claim ONLY what a previous run already recorded.
++        # Exact relpath match via awk, not a regex: `.github/...` carries
++        # metacharacters and a grep pattern would also match `Xgithub/...`.
++        if [[ -n "${_BASELINE_MANIFEST_FILE:-}" && -f "${_BASELINE_MANIFEST_FILE:-}" ]] \
++           && awk -v want="$_up_tpl_dest" '
++                { i = index($0, "  "); if (i == 0) next;
++                  if (substr($0, i + 2) == want) { found = 1; exit } }
++                END { exit(found ? 0 : 1) }' \
++                "$_BASELINE_MANIFEST_FILE" 2>/dev/null; then
++          _up_tpl_keep=1
++        fi
++      fi
++      if [[ "$_up_tpl_keep" -eq 1 ]]; then
++        if [[ -n "$_UP_DELIVERED_TEMPLATES" ]]; then
++          _UP_DELIVERED_TEMPLATES="$_UP_DELIVERED_TEMPLATES"$'\n'"$_up_tpl_dest"
++        else
++          _UP_DELIVERED_TEMPLATES="$_up_tpl_dest"
++        fi
++      fi
++    done < <( _wbm_route_dests || true )
++  fi
++  export FMS_DELIVERED_TEMPLATES="$_UP_DELIVERED_TEMPLATES"
++  # PLAN-183 W5 (OQ-4, MIXED lane): the rendered destination rides the
++  # CONDITIONAL lane and must declare a hash_source or the generator
++  # fail-closes. On UPGRADE the only evidence is the prior record — upgrade.sh
++  # renders nothing today (D1). When D1 lands, a run that actually RENDERS the
++  # file must declare HASH_TARGET here instead, at the D1-HOOK above.
++  # Line-exact match: `.github/CODEOWNERS` is a prefix of the .template row.
++  _up_co_hit=0
++  while IFS= read -r _up_co_line; do
++    if [[ "$_up_co_line" = ".github/CODEOWNERS" ]]; then _up_co_hit=1; fi
++  done <<< "$_UP_DELIVERED_TEMPLATES"
++  if [[ "$_up_co_hit" -eq 1 ]]; then
++    export FMS_HASH_SOURCE_CODEOWNERS="HASH_PRIOR_RECORD"
++  fi
+   _write_baseline_manifest "$TARGET/.claude/.install-manifest.sha256"
+   unset FMS_ROOT FMS_HASH_ROOT FMS_PROFILE_PARTS FMS_MODE FMS_PROTOCOL_HASH FMS_LINK_PATHS
+   unset FMS_DELIVERED_SPEC FMS_DELIVERED_PROTOCOL FMS_DELIVERED_MARKER
++  unset FMS_DELIVERED_TEMPLATES FMS_HASH_SOURCE_CODEOWNERS
+ fi
+ 
+ # ===========================================================================

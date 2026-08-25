@@ -1,0 +1,80 @@
+feat(PLAN-183 W5): D3 rota unica de entrega + D1 upgrade docs/.github
+
+Fecha os dois defeitos que sobraram do quarteto medido na S323 (D2 curado em
+b6de7cf, D4 em aaf32c7). Ordem obrigatoria: D3 ANTES de D1 — o mapeamento de
+origem precisa existir antes de a enumeracao alargar, ou ~25 sitios latentes
+viram vivos de uma vez.
+
+D3 — terceiro leitor de scripts/delivery-routes.tsv
+  scripts/_framework_manifest_set.sh resolvia $FMS_HASH_ROOT/$rel sem fallback:
+  docs/* gravava o hash do homonimo da raiz e .github/*.template caia no
+  `continue`, sumindo do baseline em silencio. Agora resolve por ROTA, com o
+  idioma de varredura linear copiado de doctor.sh (piso bash 3.2, sem
+  declare -A) e ${_rs_transform:-} com default VAZIO — ${_rs_transform:-identity}
+  foi o achado de fail-OPEN do rail que reabriu um vazamento de contaminacao.
+  A tabela deixa de ter 2 leitores e passa a ter 3, sendo o novo o canonico.
+
+D1 — upgrade.sh entrega docs/ e .github/
+  Medido: `grep -c github scripts/upgrade.sh` = 0; os 3 hits de `docs` eram
+  comentarios. O install entregava as duas arvores, o upgrade nunca — dai a
+  assinatura maintainer:1 user:0 e o STALE persistente da paridade.
+
+OQ-5 (emenda ratificada pelo Owner em 2026-08-24)
+  Sem install-state legivel mas com .claude/.framework-version presente:
+  tratar como adopter e ENTREGAR. O marcador e a evidencia de que o diretorio
+  ja e adopter — a distincao que o fail-safe CEREMONY_EFFECTIVE="user" perde e
+  que deixava a populacao historica sem receber nada. O default de diretorio
+  nunca instalado nao muda, e a resolucao inferida NAO persiste
+  (_CEREMONY_PERSIST segue 0: persistir uma inferencia tornaria permanente uma
+  migracao perdida).
+
+OQ-4 (MEDIDA na S327, .claude/plans/PLAN-183/w5-oq4-measurement-S327.md)
+  Bracos A/B/C em clones separados: A registra 0/5 rotas no manifesto (D3 era
+  latente-por-nao-entrada: _framework_target_entries nunca enumerava docs/ nem
+  .github/); B e C registram 5/5 com manifestos byte-identicos no install
+  fresco; ownership e2e com RED set exato nos tres; paridade identica. A
+  diferenca entre as pistas e SO a continuidade do CODEOWNERS renderizado no
+  upgrade — bytes que nao existem em checkout nenhum so entram por hash_source
+  declarado. Pista escolhida: MISTA (5 rotas verbatim na nao-condicional; so
+  .github/CODEOWNERS na condicional), +22 linhas de codigo sobre a
+  nao-condicional e ZERO linhas em scripts/tests/ownership_table.tsv — a
+  moldura "2-3 linhas de TSV" estava errada. A assinatura do sentinel ratifica
+  a pista e o residual de desenho declarado no PROPOSED-PATCH.md §6.
+
+ADR-194 (delivery-route resolution) registra a decisao; a contagem de ADRs
+sobe 194→195 em CLAUDE.md e nas 9 superficies derivadas (15 sitios), ou o
+verify-counts do V6 morre.
+
+Observadores novos (nao-canonicos, no mesmo patch):
+  scripts/tests/test-manifest-delivery-route.sh — 3o leitor vs call-sites do
+    install.sh (nunca vs a tabela: S325 mediu a tautologia), rotas hostis
+    (../, absoluto) recusadas com controle de "nada escrito fora do alvo"
+  scripts/tests/test-upgrade-historical-adopter.sh — a emenda OQ-5 SEM o pin
+    v1.2.0 (que e cego), controle negativo (diretorio nunca instalado nao
+    recebe nada), segundo upgrade idempotente, CODEOWNERS presente => template
+    SKIPPED; falha fechado (rc=9) em clone raso
+  scripts/tests/test_install_baseline_manifest.sh (+C.8) e
+  test-install-upgrade-parity-e2e.sh (perna cega) estendidos
+  scripts/doctor.sh passa a consumir o MESMO leitor validado (4o consumidor,
+  parser privado retirado) — a classe "rota hostil copia fora do alvo" fecha
+  nos dois sitios de escrita, upgrade e doctor.
+
+smoke-install.yml (PLAN-183 §9.8): if: always() nos steps que ficavam
+`skipped` exatamente quando importava; deepen do historico antes do teste
+historico; scripts/delivery-routes.tsv e os testes novos nas duas listas
+paths: — sem isso um typo confinado a tabela nao dispara o e2e que a consome.
+
+Verificacao (o land executa, fail-closed, contra EXPECTED-BASELINE.txt):
+  V1 bash -n + shellcheck nos scripts tocados
+  V2 manifesto ADR-192 com asserção de conjunto
+  V3 oraculo unitario de ownership (FAIL=0)
+  V4 test_install_baseline_manifest.sh
+  V5 paridade install/upgrade maintainer + user contra a base DECLARADA
+  V6 verify-counts.sh + check-claude-md-claims.py + subconjunto pytest
+  V7 e2e de ownership: conjunto RED inalterado {OWN-0016, OWN-0024, OWN-0027}
+
+O main estava VERMELHO por desenho (D1 aberto => STALE 3, fatal). D2 comprou
+diagnostico honesto, nao o verde; D1 e load-bearing para o verde.
+
+Pair-Rail-Reviewed: APPROVE (8 rodadas codex, S327; rodada 8 sem P0/P1 reais; registro em .claude/plans/PLAN-183/w5-ceremony/rail-round-1..8.md)
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
