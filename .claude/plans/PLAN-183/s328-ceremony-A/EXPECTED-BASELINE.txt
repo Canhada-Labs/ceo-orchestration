@@ -1,0 +1,33 @@
+# EXPECTED-BASELINE.txt — baseline DECLARADA que o OWNER-S328-A-LAND.sh compara no V-block (KEY=VALUE, uma por linha).
+#
+# Nenhum valor aqui é "zero porque zero é bonito": cada um foi MEDIDO na árvore-sombra do pacote A
+# (worktree destacado, PYTHONDONTWRITEBYTECODE=1) na S328, com a cura aplicada. Comparar contra zero
+# quando a verdade não é zero é o defeito que abortou o primeiro land real da W5 (V4, S327).
+#
+# MEDIÇÕES (S328, 2026-08-25, sombra do pacote A):
+#   test-ownership-verdict-unit.sh ......... PASS=63  FAIL=0  (2 linhas execution-fault puladas por desenho: OWN-0024, OWN-0027)
+#   test-install-upgrade-parity-e2e.sh --mode maintainer .. rc=0, STALE 0, 95 s
+#   test-install-upgrade-parity-e2e.sh --mode user ....... rc=0, STALE 0, 83 s
+#   test_install_baseline_manifest.sh ...... 33 passed / 1 failed POR DESENHO, known-open EXATO C.6.2
+#   ownership e2e (test-ownership-table.sh) . NÃO rodado localmente (~25 min) — RED set herdado do gate nightly
+#
+# Semântica do V-block: rc DECLARADO + conjunto EXATO de ids, nos DOIS sentidos.
+# Id NOVO = regressão. Id AUSENTE = a tabela-verdade mudou — atualize esta base CONSCIENTEMENTE, nunca para
+# fazer um vermelho sumir. Um ownership e2e todo verde (RED set menor) é sinal de PARADA, não de sucesso.
+
+EXPECTED_PARITY_MAINTAINER_RC=0
+EXPECTED_PARITY_MAINTAINER_STALE=0
+EXPECTED_PARITY_MAINTAINER_MISSING_IN_B=0
+EXPECTED_PARITY_MAINTAINER_UNCLASSIFIED=0
+EXPECTED_PARITY_MAINTAINER_MODE_DIFF=0
+EXPECTED_PARITY_MAINTAINER_ONLY_IN_B_OUTSIDE_CLAUDE=0
+EXPECTED_PARITY_USER_RC=0
+EXPECTED_PARITY_USER_STALE=0
+EXPECTED_PARITY_USER_MISSING_IN_B=0
+EXPECTED_PARITY_USER_UNCLASSIFIED=0
+EXPECTED_PARITY_USER_MODE_DIFF=0
+EXPECTED_PARITY_USER_ONLY_IN_B_OUTSIDE_CLAUDE=0
+EXPECTED_UNIT_ORACLE_FAIL=0
+EXPECTED_BASELINE_MANIFEST_RC=1
+EXPECTED_BASELINE_MANIFEST_KNOWN_OPEN="C.6.2"
+EXPECTED_OWNERSHIP_RED_IDS="OWN-0016 OWN-0024 OWN-0027"

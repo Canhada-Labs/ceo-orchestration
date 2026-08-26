@@ -1,0 +1,85 @@
+# EXPECTED-BASELINE.txt — wave-s328-B (PLAN-169)
+#
+# Base DECLARADA contra a qual o V-block do OWNER-S328-B-LAND.sh compara.
+# Nunca "contra zero" e nunca "> 0": um gate que so exige "passou" aceita uma
+# suite que encolheu. Cada valor abaixo foi MEDIDO nesta sessao, no checkout
+# vivo, com PYTHONDONTWRITEBYTECODE=1.
+#
+# Formato: CHAVE=valor (aspas opcionais). O leitor `_expect` do LAND e
+# fail-CLOSED: chave ausente ABORTA o land, nunca vira "0".
+#
+# Divergencia PARA MENOS e regressao. Divergencia PARA MAIS (a suite cresceu,
+# uma entrada de corpus foi adicionada) NAO e sucesso automatico: atualize este
+# arquivo conscientemente, com a medicao nova registrada num rail-round.
+
+# --- G-PRE: a metade NAO-CANONICA que este pacote pressupoe em HEAD ---------
+# As 4 flags que o profiler tem de conhecer. As DUAS primeiras sao as que o
+# validate.yml passa neste patch; as duas ultimas viajam com a mesma cura e
+# sao a superficie da fase 2 (`--relative-k-source`) e do auto-cap
+# (`--wall-budget-seconds`). Medido: cada uma aparece 2x no `--help` (linha de
+# usage + descricao); o gate exige >= 1, que e a pergunta certa.
+EXPECTED_HELP_FLAGS="--exec-reference --relative-advisory --relative-k-source --wall-budget-seconds"
+# As duas emendas apontam para PLAN-169 §Open questions OQ-7..OQ-12. Medido no
+# checkout vivo: 7 ocorrencias (`:1382` e `:1397`..`:1422`). O minimo e 6 — uma
+# por pergunta — para que o gate nao dependa da linha-cabecalho.
+EXPECTED_PLAN_OQ_MIN=6
+
+# --- G4/G5: forma do patch --------------------------------------------------
+# Conjunto EXATO de paths. Uma cerimonia que so conta arquivos aceitaria um
+# patch com 3 paths ERRADOS.
+EXPECTED_PATCH_PATHS=".github/workflows/validate.yml .claude/adr/ADR-163-hook-latency-gate-percentile-stability.md .claude/adr/ADR-144-subagent-model-tiering-frontmatter.md"
+# `git apply --numstat` esperado (added/deleted/path). ZERO linhas removidas em
+# todos os tres — o patch so acrescenta.
+#   3     0   .github/workflows/validate.yml
+#   219   0   .claude/adr/ADR-163-hook-latency-gate-percentile-stability.md
+#   57    0   .claude/adr/ADR-144-subagent-model-tiering-frontmatter.md
+EXPECTED_PATCH_ADDED_TOTAL=279
+EXPECTED_PATCH_DELETED_TOTAL=0
+# Medido: `.github/workflows/validate.yml` NAO consta do manifesto ADR-192
+# (`.claude/governance/gate-scripts-manifest.txt`, 9 membros); nenhum dos tres
+# paths e membro. Portanto NENHUM bump de sha e devido neste patch.
+EXPECTED_MANIFEST_MEMBERS_TOUCHED=0
+
+# --- V2: suite do gate relativo ---------------------------------------------
+# `python3 -m pytest .claude/scripts/tests/test_hook_latency_relative_gate.py -q`
+EXPECTED_GATE_PYTEST_RC=0
+EXPECTED_GATE_PYTEST_PASSED=42
+
+# --- V4: execucao REAL curta ------------------------------------------------
+# Teto DELIBERADAMENTE alto (100000 ms): o objetivo e provar que a superficie
+# NOVA e emitida e legivel, nao re-rodar o gate absoluto. Com o teto de
+# producao (180 ms) o rc dependeria da carga da maquina — medido nesta sessao:
+# sob 12 agentes o mesmo comando saiu rc 1 com p95 196-281 ms; com o teto alto
+# saiu rc 0 nas mesmas condicoes. Um V-block cujo veredito depende da carga
+# mede o runner, nao o pacote.
+EXPECTED_VBLOCK_ITERATIONS=22
+EXPECTED_VBLOCK_RUN_RC=0
+EXPECTED_VBLOCK_RUN_PHASE="1-advisory"
+# 5 entradas de corpus com `p95_ms`: check_agent_spawn,
+# check_anti_ceo_overhead[observe=unset], check_anti_ceo_overhead[observe=1],
+# check_output_secrets[observe=unset], check_output_secrets[observe=1].
+EXPECTED_VBLOCK_RUN_ENTRIES=5
+# As tres chaves da segunda chave, por entrada.
+EXPECTED_VBLOCK_PERHOOK_KEYS="R_e ref_p50_ms verdict_label"
+# Conjunto FECHADO de rotulos, DERIVADO do `_OUTCOME_LABELS` do profiler
+# (medido: exatamente 4 membros). Um rotulo fora deste conjunto e defeito.
+EXPECTED_OUTCOME_LABELS="advisory_slow_runner infrastructure_contended pass real_regression"
+
+# --- V5: o PYSUM do workflow le esse relatorio ------------------------------
+# O bloco e EXTRAIDO do validate.yml pos-patch, nunca reescrito no teste.
+EXPECTED_PYSUM_RC=0
+EXPECTED_PYSUM_MARKER="second key phase="
+
+# --- V6: literais de compatibilidade preservados ----------------------------
+# `PLAN-161/proof-retry-matrix.sh:150,162`,
+# `PLAN-159/wave2-regression-proof.sh:137,145` e
+# `PLAN-159/wave1-wrapper-matrix-proof.sh:114` casam este texto por GREP.
+# Medido: 2 ocorrencias em HEAD e 2 na sombra — o patch nao mexe nelas.
+EXPECTED_YML_BOTH_ATTEMPTS_LITERAL=2
+
+# --- V7: gates de governanca ------------------------------------------------
+# `check-ceremony-script.py --json` -> `blocking_unwaived`. Medido no checkout
+# vivo: 0 (58 arquivos rastreados descobertos, piso 41, 44 waivers ativos).
+# Os scripts DESTE pacote carregam o marcador
+# `# CEREMONY-LINT: handwritten-exception:` com a razao real.
+EXPECTED_CEREMONY_LINT_BLOCKING=0

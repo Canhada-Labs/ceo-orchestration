@@ -1,0 +1,269 @@
+diff --git a/.claude/adr/ADR-194-delivery-route-resolution.md b/.claude/adr/ADR-194-delivery-route-resolution.md
+index 5411980..21c3f05 100644
+--- a/.claude/adr/ADR-194-delivery-route-resolution.md
++++ b/.claude/adr/ADR-194-delivery-route-resolution.md
+@@ -1,11 +1,12 @@
+ ---
+ adr_id: ADR-194
+ title: A rota de entrega é DADO compartilhado — um resolvedor destino→(fonte, transformação) para os três consumidores, e as duas árvores entram na decisão de propriedade
+-status: PROPOSED
++status: ACCEPTED
+ date: 2026-08-24
++accepted: 2026-08-25 (assinatura GPG do Owner sobre wave-w5-approved.md — land 6304f66 — e decisão verbatim S328 «Pista MISTA — braço C (Recomendado)»)
+ plan: PLAN-183 (W5; D1/D3/OQ-5; OQ-4 medida em S327)
+ proposed_by: CEO (S327 night-run)
+-decided_by: Owner — a assinatura GPG de `.claude/plans/PLAN-183/wave-w5-approved.md` É a ratificação (status vira ACCEPTED no commit do land)
++decided_by: Owner — a assinatura GPG de `.claude/plans/PLAN-183/wave-w5-approved.md` É a ratificação (ocorrida em 2026-08-25; o flip textual para ACCEPTED chega ao main pela cerimônia, pacote S328-A, não pelo land 6304f66)
+ risk_tier: A
+ debate_required: true
+ related_plans: [PLAN-183, PLAN-167, PLAN-168, PLAN-182]
+@@ -14,8 +15,11 @@ related_adrs: [ADR-155, ADR-155-AMEND-1, ADR-190, ADR-192]
+ 
+ # ADR-194 — A rota de entrega é DADO compartilhado, não um ramo em cada script
+ 
+-**Status:** PROPOSED — vira ACCEPTED no land, e o ato que ratifica é a assinatura GPG do Owner
+-sobre `PLAN-183/wave-w5-approved.md`. **Enforcement commit:** pendente.
++**Status:** ACCEPTED — ratificado pela assinatura GPG do Owner sobre
++`PLAN-183/wave-w5-approved.md` (assinatura criada 2026-08-25 11:53:12Z; land `6304f66`,
++2026-08-25 09:08:28 -0300) e pela decisão verbatim de 2026-08-25 (S328): «Pista MISTA — braço C
++(Recomendado)». **Enforcement commits:** `6304f66` (D3 + D1 + emenda OQ-5) e `738007e` (deepen
++do histórico antes da paridade).
+ 
+ ## Context
+ 
+@@ -256,6 +260,44 @@ wave regrediu 24 células** por deixar installs frescos sem declaração. **Até
+ linhas se escrevem em `scripts/tests/ownership_table.tsv`** (medido: 15 colunas, 65 linhas de
+ dados).
+ 
++### §7 Ratificação da OQ-4 (2026-08-25) — a pista MISTA é decisão, não hipótese
++O Owner ratificou a OQ-4 em 2026-08-25 (S328). Resposta verbatim: **«Pista MISTA — braço C
++(Recomendado)»**. A ratificação é RETROATIVA: o braço C já É o conteúdo do patch de `6304f66`.
++Duas referências na árvore pós-land — `w5-ceremony/PROPOSED-PATCH.md:89` declara "pista MISTA
++(braço C), que é o conteúdo deste patch", e `_wbm_declared_hash_source` vive em
++`_framework_manifest_set.sh:376` com UM consumidor em `:1085` (as citações `:311`/`:320` do §6 são
++da árvore PRÉ-land). Nenhuma linha de código muda por causa desta seção.
++
++**O que a ratificação FIXA.** (1) A pista é MISTA: as 5 rotas verbatim ficam na não-condicional, e
++só `.github/CODEOWNERS` entra na condicional. (2) O custo é ZERO linhas em
++`scripts/tests/ownership_table.tsv`; a moldura "2-3 linhas de TSV" do enunciado da OQ-4 está
++refutada pela medição da S327. (3) A posse de `docs/` e `.github/` é decidida pelo hash-gate da
++entrega (§4) mais o `hash_source` declarado do `CODEOWNERS`, não por superfície nova em
++`_ownership_verdict()`. (4) Estender a propriedade "UMA decisão" às duas árvores permanece wave
++própria (W5-c), com OQ própria.
++
++**Checkout raso — a direção do erro é o que torna o defeito observável.** No run `32845976930`,
++com `fetch-depth: 1`, o hash-gate do `upgrade.sh` não enxerga a geração `v1.2.0` da FONTE e
++classifica os 3 templates como `PRESERVED`; a paridade maintainer acusa `STALE 3`. Reproduzido
++local: fonte `--depth 1` ⇒ 3, `--unshallow` ⇒ 0. `PRESERVED` é a direção SEGURA: falta de
++evidência nunca sobrescreve o arquivo do adopter. Foi ela que converteu histórico incompleto em
++divergência de paridade VISÍVEL, em vez de sobrescrita silenciosa. Um gate que respondesse
++`REFRESHED` à mesma falta de evidência teria posto bytes do framework sobre bytes do adopter, com
++o run saindo verde. Cura em `738007e`: o deepen roda ANTES da paridade em `smoke-install.yml`.
++
++**Este ADR não mantém nada PROPOSED.** O land `6304f66` CRIOU este arquivo com `status: PROPOSED`
++(medido em `git show 6304f66:.claude/adr/ADR-194-delivery-route-resolution.md`, linha 4). O flip
++textual para `ACCEPTED` é edição canônica posterior e entra no main pelo pacote de cerimônia
++S328-A. O ato que ratifica permanece a assinatura sobre o sentinel, não o commit que a reescreve.
++
++**Obrigação solidária do contrato-raiz.** O `CLAUDE.md` §5 descreve o estado deste ADR em prosa —
++hoje diz *"status textual `PROPOSED` — o flip é edição canônica da próxima cerimônia"* e *"OQ-4 foi
++MEDIDA (…), não decidida"*. As duas afirmações ficam **falsas** no instante em que este arquivo vira
++`ACCEPTED`. O `CLAUDE.md` é lido no Gate 1 de **toda** sessão nova, então um contrato-raiz que
++contradiz o ADR canônico não é imprecisão de documentação: é governança errada entregue por padrão,
++a cada boot, até alguém notar. A atualização das duas frases pertence ao **mesmo** pacote de
++cerimônia que faz este flip — não a um closeout posterior.
++
+ ## Consequences
+ 
+ **Positivas (+)** — "qual é a fonte deste destino?" ganha **um** dono, e um quarto
+@@ -311,6 +353,13 @@ receberam.
+   teste de baseline.
+ - **Verde-total é sinal de PARAR**, não de sucesso (`ownership-nightly-gate.sh` falha também com
+   encolhimento): significa que a tabela-verdade mudou.
++- **Evidência do land (2026-08-25):** `OWNER-S327-LAND.sh` V1–V6 verdes, V7 diferido ao nightly
++  (`--ownership-e2e=defer`), V5 com `EXPECTED_PARITY_MAINTAINER_STALE=0`. **Ainda NÃO observado
++  neste ADR:** a primeira rodada do nightly sobre D1+D3 (cron `43 6 * * *`) só ocorre depois deste
++  texto, e o conjunto RED **esperado** — não medido — é `{OWN-0016, OWN-0024, OWN-0027}`, o mesmo
++  declarado em `scripts/tests/ownership-expected-reds.txt`. Registrar o resultado de uma execução
++  futura como se fosse evidência colhida é fabricar auditoria; o resultado real entra aqui depois
++  de a rodada acontecer, ou não entra.
+ 
+ ## References
+ 
+diff --git a/CLAUDE.md b/CLAUDE.md
+index aab2038..45d7c00 100644
+--- a/CLAUDE.md
++++ b/CLAUDE.md
+@@ -99,7 +99,7 @@ workflow — the value here is governance and auditability, not throughput.
+ - **Rail Workflow fora do gate de spawn (MITIGADO — PLAN-178 Lote B, S307).** `agent()` de Workflow segue NÃO passando pelo `check_agent_spawn` (probe `wf_d7af49d9`: `blocked=false` — limite do substrato), mas as 4 skills Workflow shipadas agora validam a gramática REDUZIDA do ADR-191 PRÉ-despacho no próprio script (bloco COMMON byte-idêntico: PROMPT DEFENSE ≥6 + FILE ASSIGNMENT explícito + HARD-RULES marker; mecanismo provado em `wf_f2707efc`) e todo ingest de retorno inter-agente é fenced + capped 24000 com truncamento envenenando a dimensão dona. Residual: um workflow NOVO que esqueça o bloco COMMON nasce descoberto (ADR-191 §4); fan-out que ESCREVE segue fora do Workflow até existir gate no substrato.
+ - **Tamper-evidence entre projetos do mesmo `$HOME`: a mistura ACIDENTAL acabou (W1 do PLAN-182, S319) — e o limite sob mesmo UID é PERMANENTE.** O runtime state resolve por PROJETO através de um resolvedor único (`.claude/hooks/_lib/runtime_paths.py`), com o slug nativo path-based que o próprio harness usa (`/` → `-`); a variável que o ADR-001 define (`CLAUDE_PROJECT_DIR_NATIVE`) ganhou seu primeiro consumidor — antes era ficção de spec, com zero arquivos. O que isso COMPRA, medido: cadeias que não se entrelaçam, atribuição correta, `verify_chain()` significativo por projeto, chave HMAC distinta por projeto e salt POR PROJETO (`prompt_sha256` deixa de correlacionar entre projetos do mesmo usuário — ADR-079 emenda S318). **O gate mecânico responde MENOS do que parecia, e a S321 mediu quanto.** `derive-audit-family.py --assert-migrated` = **0** continua verdade, mas ele mede o LITERAL e nada mais — e o contrato do ADR-001 tem uma segunda metade que nenhum instrumento media: *nenhum arquivo re-deriva o slug localmente*. Havia **16 módulos runtime** violando-a, em 4 grafias, gerando **7 diretórios distintos onde deveria haver 3** (com `CLAUDE_PROJECT_DIR=/tmp/adopter-one`: `-tmp-adopter-one` vs `tmp-adopter-one` vs `-private-tmp-adopter-one`). A cura: marcador **M4** + modo `--assert-no-local-slug` (ADVISORY; enforcement por `CEO_AUDIT_FAMILY_M4_REQUIRED=1`), `tests/` dentro do censo, e o `--assert-migrated` passou a IMPRIMIR o próprio escopo. **16 → 7 (`9de4efc`) → 0: os 4 canônicos landaram em `965fb13` e a classe M4 FECHOU. Verificado na S322: `--assert-no-local-slug` e `--assert-migrated` saem 0 os dois, e `cost_envelope.py` / `lessons.py` / `check_tier_policy_misrouting_24h.py` / `SessionEnd.py` todos importam `runtime_paths` — o único literal restante é o fallback deliberado marcado `# rp-allow: partial-upgrade-fallback` (`SessionEnd.py:67`). O gate em 0 NÃO é falso-verde; é o estado correto pós-land, e os 3 espelhos em `dist/` saem com um `python3 scripts/build-plugin.py`.** A família derivada tem **604 arquivos** (579 no escopo de cura) — o número cresceu porque o CENSO cresceu, e os 587 que este arquivo publicava nunca reproduziram. **O outro furo, agora com causa medida:** a suíte escrevia na cadeia HMAC VIVA — `test_migrated_hooks_fixtures.py` não tinha isolamento nenhum e `policy.decide()` emite por fixture: **156 processos × exatamente 124 eventos = 19.344 elos assinados e não-atribuíveis, 99,5% de todo o fluxo não-atribuível pós-W1** (a aritmética que fecha o emissor: 82 fixtures + 42 `expected_decision "block"` = 124). Curado em `9de4efc`, com controle positivo em árvore-sombra. E o `CLAUDE_PROJECT_DIR_NATIVE` — carrier de **maior precedência** — segue fora de `_lib/test_isolation.AUDIT_DIR_CARRIERS`: a cura shipada é **perimetral** (pop no import do `conftest.py` raiz + `atexit`), e a **estrutural LANDOU** em `965fb13` (S321, sentinel `wave-w1-followup-approved.md`, 12 arquivos): o carrier é neutralizado NO IMPORT por `WHOLE_DIR_OVERRIDE_CARRIERS`, o bloco perimetral do `conftest.py` foi removido, e `CEO_AUDIT_FAMILY_M4_REQUIRED=1` sai **0** — a classe fechou. O land rodou sob `OWNER-S321-LAND.sh`, que implementa o gate `touched − scope = ∅` — medido, ele **não existia automatizado em lugar nenhum** apesar de o material de cerimônia anterior o invocar duas vezes como garantia. O marcador de dívida não foi removido: foi **INVERTIDO** em guard permanente (`test_isolation_layer_neutralises_ambient_carrier`), vermelho nos dois sentidos verificado. **Residual do pair-rail: FECHADO, verificado na S322 — os 3 saíram do pacote de cerimônia.** `_lib/cost_envelope.py` (P1) e `lessons.py` (P2) foram curados em `965fb13` e usam o resolvedor único. O terceiro é achado de FORMA, não defeito vivo: o import de `runtime_paths` em `check_tier_policy_misrouting_24h.py:93` de fato não tem `try/except`, mas por AST a **única** chamada a `_audit_log_path()` (`:119`) está no *body* do `Try` da `:118`, cujo handler (`:181`, "Tier-S fail-soft floor") é `except Exception` — que captura `ImportError`. O fail-soft **não** quebra. Continua valendo o limite de escopo: neste checkout os dirs antigos não existem (medido), e ausência aqui não prova ausência em adopter. **Residual declarado, e ele NÃO fecha na cerimônia:** sob `python -m unittest` DIRETO, `test_injection_salt` e `test_audit_family_two_projects` vazam (canário=2 cada) — a escrita acontece no `atexit`, depois do teardown, e `test_injection_salt` sequer importa `_lib.testing`. O CI é pytest-only por construção, então a exposição é o runner que o próprio repo manda não usar. Family-atomicity: log, key, lock, errors, `.salt` e sidecars resolvem do MESMO diretório em toda configuração — inclusive sob `CEO_AUDIT_LOG_PATH`, cujo split era defeito medido na W0 e está curado. **O que NÃO muda, antes nem depois:** sob o mesmo UID um processo lê o dir `0700` e a chave `0600` do outro projeto — fronteira real exigiria UID separado, e isso está FORA de escopo por decisão. **E a mistura acabou no `$HOME` INTEIRO, não só neste repositório (S321, AC-5 fechado por execução).** O adopter que ainda escrevia no literal (`arbitrage-monitor`, cópia pré-W1) foi migrado; quatro pernas medidas: resolvedor presente, diretório próprio, **chave HMAC distinta**, e o literal com **delta 0** entre dois snapshots sob controle POSITIVO — um `emit` real no contexto do adopter aterrissou no dir novo dele, provando que a escrita mudou de DESTINO e não apenas parou. A cadeia histórica que a W2 decidiu ARQUIVAR era, até então, um fork multi-tenant em crescimento; agora é um corpus fechado. Prova colateral de que a cura viaja: o evento do adopter saiu com `project` PREENCHIDO — a cura de atribuição do `statusline-ceo.py` chegou em campo pelo upgrade.
+ - **O framework é exercitado como adopter, mas o instrumento não cobre `.github/` (S315).** `scripts/tests/smoke-install.sh` + `.github/workflows/smoke-install.yml` rodam por-PR com install real e paridade install/upgrade. O que falta: o escopo **exclui** os dois templates de workflow (grep por eles em todos os testes = zero), e o instrumento **nunca ativa nem executa** o CI que entrega. Daí três defeitos de campo vivos — ponteiro `PROTOCOL.md` absoluto, template de CI com steps que só rodam aqui, e `check_contamination.py` embarcando a identidade do mantenedor no repositório do adopter. **PLAN-183** cobre os três; a W2 (A2+A3+A7) landou em `4f750f0`/`ed4d1cf` (S322).
+-- **PLAN-183 W5 LANDADA em `6304f66` (S327, 2026-08-25, assinatura GPG do Owner; night-run autônoma 24/25-08: 1 workflow + 12 agentes Opus, 8 rodadas de pair-rail, 9 P1 reais curados com controle em bytes). D1+D3 CURADOS; `wave-w5fix` (`738007e`) pôs o deepen do histórico ANTES da paridade no `smoke-install.yml` ⇒ Smoke Install VERDE pela 1ª vez desde a S323.** D3 = o gerador de manifesto é o 3º leitor de `scripts/delivery-routes.tsv`, com domínio de entrega INERTE fixo em código (`docs/<n>.md`, `.github/CODEOWNERS[.template]`, `.github/workflows/*.template`), confinamento físico de fonte e destino, escrita atômica, `nlink>1` recusado; a tabela é lida SÓ do checkout que executa (override de teste removido). D1 = `upgrade.sh` entrega `docs/` e `.github/` com hash-gate por gerações git da FONTE; registro só após entrega efetiva ou registro anterior com digest batendo; falha ⇒ `exit 3` com `upgrade_succeeded: false` persistido. Emenda OQ-5 = marcador presente + install-state ilegível ⇒ entrega, sem persistir a inferência (Check SEM o pin; a perna com pin v1.3.0 deixa `SPEC/v1` ×2 STALE por escopo). `doctor.sh` no mesmo leitor; ADR-194 (status textual `PROPOSED` — o flip é edição canônica da próxima cerimônia; a ratificação real é o `.asc` commitado). **OQ-4 foi MEDIDA (`PLAN-183/w5-oq4-measurement-S327.md`), não decidida:** A registra 0/5 rotas (D3 era latente-por-não-entrada), B e C 5/5 byte-idênticos, RED set exato nos três; a moldura "2-3 linhas de TSV" estava errada — pista MISTA = +22 linhas de código e ZERO linhas no `ownership_table.tsv`; a posse das duas árvores é o hash-gate da entrega + `hash_source` do .github/CODEOWNERS, não superfície nova em `_ownership_verdict()` (wave própria se o Owner quiser estender). **Lições pagas:** (1) o harness de cerimônia não exercita o V-block — o 1º land real abortou no V4 (comparava contra zero uma suíte 33/1 por desenho, `C.6.2`) e o abort não restaurava a árvore; curado em `ca0297c` (rc + conjunto EXATO de ids; restore em qualquer modo). (2) Checkout raso na CI: o hash-gate não enxerga a geração v1.2.0 ⇒ PRESERVED (seguro) mas `STALE 3` — reproduzido (depth-1 ⇒ 3, unshallow ⇒ 0). (3) O gate hook-latency do `Validate` reprovou 3× à tarde com probe `UNCONTENDED` e passou de madrugada com os MESMOS hooks (local 77 ms vs CI 209→435 ms no mesmo SHA): probe de spawn é cego a runner lento — emenda ADR-163 ainda proposta. (4) `CLAUDE.md` tem limite de 40.000 bytes no governance COMPLETO; o `--fast` não checa — rode o completo antes de um closeout.
++- **PLAN-183 W5 LANDADA em `6304f66` (S327, 2026-08-25, assinatura GPG do Owner; night-run autônoma 24/25-08: 1 workflow + 12 agentes Opus, 8 rodadas de pair-rail, 9 P1 reais curados com controle em bytes). D1+D3 CURADOS; `wave-w5fix` (`738007e`) pôs o deepen do histórico ANTES da paridade no `smoke-install.yml` ⇒ Smoke Install VERDE pela 1ª vez desde a S323.** D3 = o gerador de manifesto é o 3º leitor de `scripts/delivery-routes.tsv`, com domínio de entrega INERTE fixo em código (`docs/<n>.md`, `.github/CODEOWNERS[.template]`, `.github/workflows/*.template`), confinamento físico de fonte e destino, escrita atômica, `nlink>1` recusado; a tabela é lida SÓ do checkout que executa (override de teste removido). D1 = `upgrade.sh` entrega `docs/` e `.github/` com hash-gate por gerações git da FONTE; registro só após entrega efetiva ou registro anterior com digest batendo; falha ⇒ `exit 3` com `upgrade_succeeded: false` persistido. Emenda OQ-5 = marcador presente + install-state ilegível ⇒ entrega, sem persistir a inferência (Check SEM o pin; a perna com pin v1.3.0 deixa `SPEC/v1` ×2 STALE por escopo). `doctor.sh` no mesmo leitor; ADR-194 (`ACCEPTED` desde o pacote de cerimônia S328-A; a ratificação real é o `.asc` commitado sobre `wave-w5-approved.md`, não o commit que reescreve o status). **OQ-4 foi MEDIDA (`PLAN-183/w5-oq4-measurement-S327.md`) e RATIFICADA pelo Owner em 2026-08-25 — «Pista MISTA — braço C», retroativa a `6304f66`:** A registra 0/5 rotas (D3 era latente-por-não-entrada), B e C 5/5 byte-idênticos, RED set exato nos três; a moldura "2-3 linhas de TSV" estava errada — pista MISTA = +22 linhas de código e ZERO linhas no `ownership_table.tsv`; a posse das duas árvores é o hash-gate da entrega + `hash_source` do .github/CODEOWNERS, não superfície nova em `_ownership_verdict()` (wave própria se o Owner quiser estender). **Lições pagas:** (1) o harness de cerimônia não exercita o V-block — o 1º land real abortou no V4 (comparava contra zero uma suíte 33/1 por desenho, `C.6.2`) e o abort não restaurava a árvore; curado em `ca0297c` (rc + conjunto EXATO de ids; restore em qualquer modo). (2) Checkout raso na CI: o hash-gate não enxerga a geração v1.2.0 ⇒ PRESERVED (seguro) mas `STALE 3` — reproduzido (depth-1 ⇒ 3, unshallow ⇒ 0). (3) O gate hook-latency do `Validate` reprovou 3× à tarde com probe `UNCONTENDED` e passou de madrugada com os MESMOS hooks (local 77 ms vs CI 209→435 ms no mesmo SHA): probe de spawn é cego a runner lento — emenda ADR-163 ainda proposta. (4) `CLAUDE.md` tem limite de 40.000 bytes no governance COMPLETO; o `--fast` não checa — rode o completo antes de um closeout.
+ - **O main ficou VERMELHO de S322 a S327 por QUATRO defeitos sobrepostos da MESMA forma (S323, medido; desenho em `PLAN-183` §8 e `PLAN-183/w5-draft-s323.md`): D1 `upgrade.sh` nunca entregava `.github/`/`docs/`; D2 `_parity_classify.py` resolvia a fonte errada (falso `UNCLASSIFIED`); D3 `_framework_manifest_set.sh` resolvia sem fallback (hash do homônimo, `.template` sumindo); D4 `doctor.sh` REPARAVA com o arquivo errado — e o controle positivo reproduziu um vazamento (copiava o .github/CODEOWNERS VIVO do mantenedor para o adopter, classe A3). Curas: D2 `b6de7cf` (S324), D4 `aaf32c7` (S325), D1+D3 `6304f66` (S327).** A FORMA: não existia UM resolvedor "qual é a fonte deste path?" — a decisão de ORIGEM já tinha dono único (`_ownership_verdict()`), faltava o metadado de ROTA destino→(fonte, transformação), que virou DADO em `scripts/delivery-routes.tsv` com 3 leitores (`_parity_classify.py`, `doctor.sh`, `_framework_manifest_set.sh`). Verificação NÃO é `grep` (C3 do debate): na S325 uma rota apontando para fonte errada-mas-existente mantinha 10 testes verdes — a verdade vem dos call-sites do `install.sh`. Achado colateral do rail (S325): `templates/{codex,grok}/pre-push-review-gate.sh` compartilhavam state entre projetos — fechado pela cerimônia `wave-cli` (S326). Decisões do Owner de 2026-08-24: OQ-5 = rota (ii) COM emenda (marcador `.framework-version` ⇒ tratar como adopter e entregar; Check sem o pin); OQ-4 = medir antes de fixar linhas (a medição está na S327). F1/F2 (escrita fora do `$TARGET` via symlink pendente; `--github-owner` com `/` corrompendo o .github/CODEOWNERS) vivem no **PLAN-185**.
+ 
+ - **A suíte voltou a escrever na cadeia viva por OUTRA porta — e a cura de fixture-time da S321 nunca a cobria (S326, 2026-08-24; medido e curado em duas camadas).** O `/ceo-boot` da S326 encontrou **2.356 eventos `policy_*` em 7 dias = 19 processos × exatamente 124** (82 linhas de `.claude/policies/fixtures/*.jsonl` + 42 `block`), todos `session_id=''` — **79% do segmento vivo**. Emissor: `verify-counts.sh:275` (`python3 -m pytest --collect-only` para derivar a contagem de testes), rodado antes de CADA commit; módulo: `test_policy_mutations.py` replicava o corpus pelo `policy.decide()` em tempo de IMPORT. Mecanismo, documentado em `_lib/test_isolation.py`: o pop de `CLAUDE_PROJECT_DIR_NATIVE` é import-time, o redirect para tmp é FIXTURE de sessão, e `--collect-only` executa o primeiro sem o segundo ⇒ a emissão cai em `$HOME/.claude/projects/<slug>` e o carrier de maior precedência **não** redireciona (medido: carrier → scratch, delta 124 na viva). Curas não-canônicas LANDADAS (`2ae16d2`, `7a618c9`): baseline preguiçoso no módulo + guard anti-rot `test_collect_only_audit_isolation.py` (negativo em duas pernas — `hooks`+`_lib` sempre; os 16 testpaths só onde PyYAML importa, skip visível no job hook-only — e controle POSITIVO com módulo sintético emitindo no import; provado vermelho→verde; bateria completa de gates = delta 0). Cura ESTRUTURAL (`_lib/test_isolation.py` **Axis 3**: redirect da janela de COLEÇÃO no import, snapshot do log vivo capturado ANTES e herdado por workers xdist, `atexit` registrado antes do drain do spool) é canônica e viaja no pacote `wave-cli`. **Lição de governança paga na mesma sessão:** `verify-counts.sh` é membro do manifesto ADR-192 (`.claude/governance/gate-scripts-manifest.txt`) — o oráculo `--is-canonical` responde 0 para ele, mas edição de membro passa pela cerimônia; o Smoke Install pegou (`8ee507e` restaurou o byte; o hardening entrou no pacote com o bump do manifesto). Flake pré-existente registrado: `test_verify_counts_remediation::test_real_repo_passes_new_gates` sob xdist lê `npm/README.md` enquanto um vizinho o reescreve.
+diff --git a/scripts/install.sh b/scripts/install.sh
+index 57379a2..494d90f 100755
+--- a/scripts/install.sh
++++ b/scripts/install.sh
+@@ -2699,10 +2699,21 @@ PROTOCOL.md"
+   # at this wave regressed 24 cells precisely by leaving fresh installs
+   # undeclared. Fresh render: the target IS the delivered bytes => HASH_TARGET.
+   if _delivered_template_has ".github/CODEOWNERS"; then
+-    case "${_CONTINUITY_PATHS:-}" in
+-      *".github/CODEOWNERS"*) export FMS_HASH_SOURCE_CODEOWNERS="HASH_PRIOR_RECORD" ;;
+-      *)                      export FMS_HASH_SOURCE_CODEOWNERS="HASH_TARGET" ;;
+-    esac
++    # LINE-EXACT, not the substring `case` the SPEC/PROTOCOL/marker neighbours
++    # use — same reason as _delivered_template_has:1526 and the same shape
++    # upgrade.sh:4746 already uses: `.github/CODEOWNERS` is a PREFIX of
++    # `.github/CODEOWNERS.template`, so `*".github/CODEOWNERS"*` answers
++    # HASH_PRIOR_RECORD for a continuity carrying only the .template sibling —
++    # recording the PRIOR digest for a file this run RENDERED. Inert today (no
++    # writer of _CONTINUITY_PATHS appends a .github/ path), cured as FORM so
++    # the two entrypoints stop disagreeing before a writer arrives.
++    local _co_cont_line
++    export FMS_HASH_SOURCE_CODEOWNERS="HASH_TARGET"
++    while IFS= read -r _co_cont_line; do
++      if [[ "$_co_cont_line" = ".github/CODEOWNERS" ]]; then
++        export FMS_HASH_SOURCE_CODEOWNERS="HASH_PRIOR_RECORD"
++      fi
++    done <<< "${_CONTINUITY_PATHS:-}"
+   fi
+   # Empty on a fresh install (target IS the freshly written pointer, hashing it
+   # is correct); set only by the continuity path above.
+diff --git a/scripts/tests/test-manifest-delivery-route.sh b/scripts/tests/test-manifest-delivery-route.sh
+index e50b2c1..0f97ffc 100644
+--- a/scripts/tests/test-manifest-delivery-route.sh
++++ b/scripts/tests/test-manifest-delivery-route.sh
+@@ -1606,6 +1606,129 @@ else
+   bad "S.16 could not build the symlinked-template checkout — the install wiring is untested"
+ fi
+ 
++# ---------------------------------------------------------------------------
++# S.17 (W5 residual, named in PLAN-183/w5-oq4-measurement-S327.md) — the
++# CODEOWNERS hash_source discriminant is LINE-EXACT, not substring.
++#
++# install.sh decides FMS_HASH_SOURCE_CODEOWNERS off $_CONTINUITY_PATHS. The
++# neighbours (SPEC/v1, PROTOCOL.md, .framework-version) use a substring `case`,
++# which is safe for THEM — those three are the only literals any writer appends
++# and none is a substring of another. It is NOT safe here: `.github/CODEOWNERS`
++# is a PREFIX of `.github/CODEOWNERS.template`, the two coexist in the delivery
++# domain, and they are mutually exclusive per run. A continuity carrying only
++# the .template sibling therefore answered HASH_PRIOR_RECORD — the PRIOR digest
++# recorded as the baseline for a file the run had just RENDERED.
++#
++# INERT at the time of writing: no writer of $_CONTINUITY_PATHS appends a
++# .github/ path, so no production run reaches the branch. That is exactly why
++# the assertions below drive the BLOCK directly instead of an entrypoint, and
++# why S.17-control exists: without a plant that reproduces the defect, a leg
++# nothing can reach proves nothing.
++# ---------------------------------------------------------------------------
++echo "==> S.17 — the CODEOWNERS hash_source discriminant is line-exact"
++
++# Extracted by CONTENT anchors, never by line number. The block's own inner
++# `fi` is indented deeper, so the first column-2 `fi` is its terminator — the
++# same range works on the pre-cure form, which is what lets the plant below
++# share this extractor.
++S17_BLOCK="$WORKROOT/s17-block.sh"
++S17_HELPER="$WORKROOT/s17-helper.sh"
++sed -n '/^  if _delivered_template_has "\.github\/CODEOWNERS"; then$/,/^  fi$/p' \
++    "$INSTALLER" > "$S17_BLOCK"
++sed -n '/^_delivered_template_has() {$/,/^}$/p' "$INSTALLER" > "$S17_HELPER"
++
++if [ -s "$S17_BLOCK" ] && grep -q 'FMS_HASH_SOURCE_CODEOWNERS' "$S17_BLOCK" \
++   && grep -q '^_delivered_template_has() {' "$S17_HELPER"; then
++  ok "S.17 extracted the CODEOWNERS hash_source block + _delivered_template_has from install.sh"
++else
++  bad "S.17 could not extract the CODEOWNERS hash_source block from install.sh (moved or renamed?) — every S.17 assertion below is vacuous"
++fi
++
++# One scaffold, two bodies: the cured block and the plant run through
++# byte-identical surroundings, so a difference in the answer is a difference in
++# the DISCRIMINANT and nothing else. The real helper is carried, not stubbed —
++# a stub would make the outer gate untested and would hide a rename.
++_s17_harness() {   # $1=block-body file -> prints the path of a runnable script
++  local _body="$1" _out
++  _out="$WORKROOT/s17-h-$( basename "$_body" )"
++  {
++    echo 'set -uo pipefail'
++    cat "$S17_HELPER"
++    # The site lives inside write_install_manifest(), so it is hosted by a
++    # function here too — `local` is legal only there.
++    echo '_s17_site() {'
++    cat "$_body"
++    echo '}'
++    echo '_DELIVERED_TEMPLATES=".github/CODEOWNERS"'
++    echo '_CONTINUITY_PATHS="$1"'
++    echo '_s17_site'
++    echo 'printf "%s\n" "${FMS_HASH_SOURCE_CODEOWNERS:-<unset>}"'
++  } > "$_out"
++  printf '%s\n' "$_out"
++}
++_s17_ask() {  # $1=harness $2=_CONTINUITY_PATHS value -> the verdict word
++  bash "$1" "$2" 2>/dev/null | tail -1
++}
++
++S17_H="$( _s17_harness "$S17_BLOCK" )"
++# The real variable always opens with an empty first line (each writer appends
++# "${_CONTINUITY_PATHS:-}"$'\n'"<path>"), so the fixtures carry it too.
++S17_TPL="$(   printf '\n%s' ".github/CODEOWNERS.template" )"
++S17_EXACT="$( printf '\n%s' ".github/CODEOWNERS" )"
++S17_MIX="$(   printf '\n%s\n%s\n%s' "SPEC/v1" "PROTOCOL.md" ".github/CODEOWNERS.template" )"
++
++_s17_got="$( _s17_ask "$S17_H" "$S17_TPL" )"
++[ "$_s17_got" = "HASH_TARGET" ] \
++  && ok "S.17a continuity carrying ONLY .github/CODEOWNERS.template => HASH_TARGET" \
++  || bad "S.17a continuity carrying ONLY .github/CODEOWNERS.template answered '$_s17_got' (expected HASH_TARGET) — the discriminant matched the .template sibling by PREFIX, so a RENDERED file would be baselined from the prior record"
++
++_s17_got="$( _s17_ask "$S17_H" "$S17_EXACT" )"
++[ "$_s17_got" = "HASH_PRIOR_RECORD" ] \
++  && ok "S.17b continuity carrying .github/CODEOWNERS exactly => HASH_PRIOR_RECORD (non-regression)" \
++  || bad "S.17b continuity carrying .github/CODEOWNERS exactly answered '$_s17_got' (expected HASH_PRIOR_RECORD) — the cure overshot and dropped the continuity verdict"
++
++_s17_got="$( _s17_ask "$S17_H" "$S17_MIX" )"
++[ "$_s17_got" = "HASH_TARGET" ] \
++  && ok "S.17c a realistic SPEC/PROTOCOL continuity plus the .template sibling => HASH_TARGET" \
++  || bad "S.17c a realistic continuity plus the .template sibling answered '$_s17_got' (expected HASH_TARGET)"
++
++_s17_got="$( _s17_ask "$S17_H" "" )"
++[ "$_s17_got" = "HASH_TARGET" ] \
++  && ok "S.17d no continuity at all (the fresh-render path every install takes today) => HASH_TARGET" \
++  || bad "S.17d an empty continuity answered '$_s17_got' (expected HASH_TARGET) — the fresh-install default regressed"
++
++if grep -q 'case .*_CONTINUITY_PATHS' "$S17_BLOCK"; then
++  bad "S.17e the CODEOWNERS block reverted to the substring \`case\` idiom — see the comment at _delivered_template_has (install.sh) for why this destination cannot use it"
++else
++  ok "S.17e the CODEOWNERS block runs no substring \`case\` over _CONTINUITY_PATHS"
++fi
++
++# --- S.17-control: POSITIVE CONTROL -----------------------------------------
++# The plant is written HERE, not read from git history: once the cure is
++# committed, HEAD stops carrying the defect and a history-based control would
++# quietly invert into a permanent RED. This is the pre-cure body verbatim, so
++# it reproduces the MECHANISM (a substring `case`), not merely the appearance.
++S17_PLANT="$WORKROOT/s17-plant.sh"
++cat > "$S17_PLANT" <<'S17PLANT'
++  if _delivered_template_has ".github/CODEOWNERS"; then
++    case "${_CONTINUITY_PATHS:-}" in
++      *".github/CODEOWNERS"*) export FMS_HASH_SOURCE_CODEOWNERS="HASH_PRIOR_RECORD" ;;
++      *)                      export FMS_HASH_SOURCE_CODEOWNERS="HASH_TARGET" ;;
++    esac
++  fi
++S17PLANT
++S17_HP="$( _s17_harness "$S17_PLANT" )"
++_s17_got="$( _s17_ask "$S17_HP" "$S17_TPL" )"
++[ "$_s17_got" = "HASH_PRIOR_RECORD" ] \
++  && ok "S.17-control the pre-cure substring form answers HASH_PRIOR_RECORD on the SAME input — S.17a is not vacuous" \
++  || bad "S.17-control the pre-cure substring form answered '$_s17_got' (expected HASH_PRIOR_RECORD) — the plant no longer reproduces the defect, so S.17a proves nothing"
++# And the plant agrees with the cure everywhere the two SHOULD agree: the
++# control must isolate the prefix collision, not merely be a different script.
++_s17_got="$( _s17_ask "$S17_HP" "$S17_EXACT" )"
++[ "$_s17_got" = "HASH_PRIOR_RECORD" ] \
++  && ok "S.17-control the plant and the cure agree on the exact-match input — the only divergence is the .template prefix" \
++  || bad "S.17-control the plant answered '$_s17_got' on the exact-match input (expected HASH_PRIOR_RECORD) — it is not the pre-cure form"
++
+ echo ""
+ echo "==> RESULT: $PASS passed, $FAIL failed"
+ [ "$FAIL" -eq 0 ] || exit 1

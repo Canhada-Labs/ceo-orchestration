@@ -1,0 +1,69 @@
+closeout(PLAN-183 W5-b): ADR-194 ACCEPTED com a §7 de ratificação da OQ-4; discriminante do hash_source do CODEOWNERS line-exact
+
+Fechamento textual da W5. O ato que ratificou a OQ-4 foi a assinatura GPG do
+Owner sobre PLAN-183/wave-w5-approved.md (land 6304f66) mais a decisao verbatim
+de 2026-08-25 «Pista MISTA — braço C (Recomendado)»; este commit move o TEXTO
+do ADR, nao a autoridade. Nenhuma execucao existente muda de comportamento.
+
+- ADR-194 (canonico): status PROPOSED -> ACCEPTED, com o frontmatter e o
+  cabecalho nomeando quem ratificou e quando. Secao §7 nova, explicitamente
+  RETROATIVA (o braco C ja e o conteudo de 6304f66 — zero linhas de codigo
+  mudam por causa dela): fixa a pista MISTA, o custo de ZERO linhas em
+  scripts/tests/ownership_table.tsv (a moldura "2-3 linhas" do enunciado esta
+  refutada pela medicao da S327), a posse das duas arvores como hash-gate da
+  entrega + hash_source do CODEOWNERS — nao superficie nova em
+  _ownership_verdict() — e a extensao as duas arvores como wave propria.
+  Registra a licao do checkout raso: PRESERVED e a direcao SEGURA do erro, e
+  foi ela que tornou o historico incompleto VISIVEL como STALE 3 em vez de
+  sobrescrever bytes do adopter em silencio (cura em 738007e).
+- install.sh (canonico): o discriminante de FMS_HASH_SOURCE_CODEOWNERS sobre
+  $_CONTINUITY_PATHS passa a ser LINE-EXACT. O `case` por substring e seguro
+  para os vizinhos (SPEC/v1, PROTOCOL.md, .framework-version) e NAO e seguro
+  aqui: .github/CODEOWNERS e PREFIXO de .github/CODEOWNERS.template, os dois
+  coexistem no dominio de entrega e sao mutuamente exclusivos por execucao —
+  uma continuidade carregando so o irmao .template respondia HASH_PRIOR_RECORD,
+  gravando o digest ANTERIOR como baseline de um arquivo recem-RENDERIZADO.
+  Mesma forma que upgrade.sh:4746 ja usa. INERTE hoje (nenhum escritor de
+  _CONTINUITY_PATHS acrescenta path de .github/) — cura de FORMA, para os dois
+  entrypoints pararem de discordar antes de existir um escritor.
+- CLAUDE.md: uma linha, duas frases, +111 bytes. A linha 102 afirmava "status
+  textual PROPOSED" e "OQ-4 ... nao decidida" — as duas ficariam FALSAS no
+  mesmo commit que promove o ADR. Como o CLAUDE.md e lido no Gate 1 de TODA
+  sessao, landar o flip sem esta linha entregaria governanca contraditoria no
+  boot, por padrao. Achado do pair-rail, rodadas 1-3. `git diff --stat` = 1
+  insertion / 1 deletion; nada mais muda. validate-governance.sh COMPLETO na
+  sombra: rc 0, 22 gates, 0 erros, "CLAUDE.md is 32152 bytes (limit 40000)".
+- test-manifest-delivery-route.sh: bloco S.17 (5 assercoes) + S.17-control, um
+  controle POSITIVO que carrega a forma pre-cura verbatim e prova que ela
+  responde HASH_PRIOR_RECORD no MESMO input em que a cura responde HASH_TARGET.
+  O plant e escrito no teste, nao lido do historico: apos o commit da cura, um
+  controle baseado em git history se inverteria em vermelho permanente.
+
+Medido na sombra (S328): unit oracle PASS=63 FAIL=0; paridade maintainer rc=0
+STALE 0 (95 s) e user rc=0 STALE 0 (83 s); test-manifest-delivery-route.sh
+127 passed / 0 failed; test_install_baseline_manifest.sh 33/1 com known-open
+EXATO C.6.2; test-protocol-pointer-inv4.sh e test-doctor-delivery-route.sh
+verdes. Ownership e2e diferido ao nightly, RED set esperado inalterado
+{OWN-0016, OWN-0024, OWN-0027} — um all-green ali e alarme, nao vitoria.
+
+Sete obrigacoes residuais da W5-b seguem ABERTAS por exigirem decisao de
+produto (PLAN-183 §Open questions itens 5-11). Tres foram verificadas ja
+ENTREGUES e retiradas da lista: @815, @733 e §9.8.
+
+Pair-rail: 4 rodadas de `codex exec review --uncommitted` sobre a arvore-sombra.
+Rodadas 1-3 sobre o patch de 3 paths: 1 P2 CURADO (o ADR registrava como
+evidencia colhida o RED set de um nightly que ainda nao rodou — relabelado como
+conjunto ESPERADO) e 2 P1. O P1 do `CLAUDE.md:102` foi ACEITO e CURADO neste
+patch (o escopo foi a 4 paths). O P1 "falta sentinel assinado" e PUSHBACK
+estrutural — o rail le a SOMBRA, que por construcao nao contem o pacote de
+cerimonia; o gate que responde de verdade e o G5 do LAND
+(`_sentinel_grants_path`, a mesma funcao do hook), cuja nao-vacuidade o T7 do
+harness demonstra. RODADA 4, sobre os 4 paths e sobre exatamente os bytes deste
+patch: LIMPA — artefato de 161 bytes, ZERO achados, sem a secao "Full review
+comments" que as tres anteriores traziam. O token literal `VERDICT: APPROVE`
+nao aparece porque `codex exec review` nao o emite em nenhuma rodada; o que o
+artefato diz e uma afirmacao positiva — "the exact-line continuity check is
+correct and preserves existing behavior ... all pass".
+
+Pair-Rail-Reviewed: 4 rodadas; a 4a (sobre os bytes deste patch) LIMPA — zero achados, rc 0, sem secao de comentarios. O instrumento nao emite o token APPROVE. Registros em .claude/plans/PLAN-183/s328-ceremony-A/rail-round-1.md, rail-round-2.md, rail-round-3.md, rail-round-4.md
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>

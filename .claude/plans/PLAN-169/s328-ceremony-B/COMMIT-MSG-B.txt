@@ -1,0 +1,94 @@
+feat(PLAN-169 wave-s328-B): segunda chave RELATIVA do gate hook-latency, fase 1 advisory (ADR-163 + ADR-144 + 3 linhas no validate.yml)
+
+O gate de hook-latency reprovou o `Validate` com veredito FALSO e a sonda que
+existe para detectar isso disse que o runner estava bem. Run 32866209415
+(`a16ac96`): `check_output_secrets` p95 361,4 / 424,8 / 229,1 ms contra o teto
+duro de 180 ms, com a sonda de contencao lendo UNCONTENDED a 7,76 ms de piso de
+spawn e concedendo a 3a tentativa — cuja falha virou o veredito «real
+regression». Os mesmos bytes medem 70-77 ms local e PASSARAM 3 h 22 min antes
+(`6304f66`); `git diff 6304f66..a16ac96 -- .claude/hooks/` toca ZERO arquivos, e
+`check_output_secrets.py` esta inalterado desde 2026-07-02 (`7df843d`). Nao foi
+uma janela ruim: em `56f050c` o mesmo campo foi de 209 ms para 435 ms num rerun
+do commit identico, com a sonda UNCONTENDED o tempo todo.
+
+Causa ESTRUTURAL: `python3 -c pass` precifica a CRIACAO de processo; a entrada
+que estoura importa preguicosamente um fecho `_lib` e faz uma escrita travada e
+fsyncada. Um runner lento-mas-nao-contendido move esse trabalho varias vezes
+deixando o piso de spawn plano. A sonda e cega POR CONSTRUCAO — nenhuma
+recalibracao do limiar de 200 ms pegaria nenhum desses runs.
+
+A cura nao e mexer no teto (ja movido 120 -> 180 com evidencia; o espalhamento
+209 -> 435 ms num commit nao admite teto que sobreviva ao runner E detecte
+regressao). Entra uma SEGUNDA chave, relativa, medida na mesma janela de
+escalonador: `hook_p50 <= K_e * ref_p50`, p50 dos DOIS lados.
+
+Este commit e SO a superficie CANONICA (3 arquivos, +279 linhas, ZERO removidas):
+
+- `.github/workflows/validate.yml` (+3): duas flags de argv no `run_gate`
+  (`--exec-reference`, `--relative-advisory`) e uma `note()` no bloco PYSUM do
+  `publish()`, que passa a publicar por entrada `phase`, `verdict_label`,
+  `ref_p50_ms` e `R_e`. `run_gate` 1/2/3, `BACKOFF_S`, a `contention_probe` e o
+  literal `FAILED on BOTH attempts (rc1=` (2 ocorrencias) ficam byte a byte —
+  e o que mantem `PLAN-161/proof-retry-matrix.sh` e
+  `PLAN-159/wave2-regression-proof.sh` provados.
+- `.claude/adr/ADR-163-…` (+219): a emenda que DECIDE. Sete itens: teto de
+  180 ms fica duro; segunda chave relativa; referencia `ref_exec` stdlib-only de
+  3 termos, round-robin dentro do laco de cada entrada, proibida de importar
+  `_lib`/`.claude/hooks`; quatro rotulos num conjunto FECHADO; FASE 1 advisory
+  com exit codes byte-identicos aos de hoje; `K` NAO fixado aqui — o entregavel
+  e o PROCEDIMENTO (>=10 runs verdes / >=3 dias, `K_e = 1,25 x max(R_e)` sob
+  cota de admissibilidade); sonda de spawn mantida, vestigial.
+- `.claude/adr/ADR-144-…` (+57): emenda que REFUTA tres asercoes do §S220
+  (`:89`, `:90-91`, `:96`) com o probe `wf_9ddadaab-12f` (harness 2.1.237,
+  n=2): com `opts.model='haiku'` o modelo SERVIDO foi
+  `claude-haiku-4-5-20251001`; o controle sem override herdou `claude-fable-5`.
+  Escopo declarado ESTREITO; a Decisao do ADR fica intacta; os dois herdeiros
+  do claim refutado sao NOMEADOS sem serem editados (OQ-11).
+
+A LOGICA inteira vive em `.claude/scripts/profile-opus-4-7.py` e
+`.claude/scripts/tests/test_hook_latency_relative_gate.py`, ambos NAO-canonicos
+(oraculo `--is-canonical` = 0), commitados fora de cerimonia. O gate `G-PRE` do
+`OWNER-S328-B-LAND.sh` exige os dois em HEAD antes de aplicar este patch — sem
+eles o workflow passaria flags desconhecidas e o gate sairia 2 em todo push
+(achado do pair-rail, rodadas 1-5).
+
+Medido para este pacote: suite do gate 42/42 (rc 0); execucao real com as flags
+produz `phase=1-advisory` e as tres chaves nas 5 entradas (R_e observado
+1,567-2,365, `ref_p50` 82,2-89,9 ms — um ponto, NAO um `K`); o bloco PYSUM
+EXTRAIDO do workflow le esse relatorio (rc 0) e, contra um relatorio SEM as
+flags, degrada para `-` sem quebrar; `actionlint` byte-identico ao do HEAD.
+
+Este pacote NAO deixa o `Validate` verde por si — fase 1 nao muda veredito. O
+verde vem do rerun de madrugada (decisao Q5 do Owner, 2026-08-25: «Emenda +
+gate em pacote, e 1 rerun de madrugada»). As seis perguntas abertas do desenho
+estao em `PLAN-169` §Open questions OQ-7..OQ-12 e NAO sao decididas aqui.
+
+Dois achados do pair-rail CURADOS neste texto, ambos da classe 'texto
+canonico afirmando propriedade que o codigo nao tem'.
+
+(1) rodada 1, P1-2: a emenda AFIRMAVA que
+o auto-cap tornava inalcancavel o rotulo errado do wrapper para rc 124. Falso —
+ele RENOMEIA o caso para rc 5, que cai no mesmo ramo `else` e sai sob a mesma
+mensagem «real regression». Em fase 1 o caminho nao existe
+(`exit_class == (0 if passed else 1)`, provado por
+`test_auto_cap_in_phase1_keeps_a_nonzero_exit`, que forca
+`--wall-budget-seconds 0` e exige rc 1); distinguir rc 5 passa a ser
+pre-condicao NOMEADA da fase 2.
+
+(2) rodada 3, P2: a cota de admissibilidade era `K_e <= (baseline+150)/max(ref)`.
+Como a regra relativa aceita igualdade (`hook_p50 <= K_e * ref_p50`), em
+`K_e = cota` exatamente o controle plantado de +150 ms teria `rel_ok`
+VERDADEIRO e PASSARIA — o oposto do que admitir aquele K deveria garantir.
+A cota que embarca e ESTRITA (`<`). O codigo ainda NAO casa
+(`profile-opus-4-7.py` admite `K == cota` e compara com `<=`): e sitio de
+FASE 2 apenas, nao-canonico, e esta NOMEADO na emenda como pre-condicao do
+pacote da fase 2.
+
+Autorizacao: sentinel `.claude/plans/PLAN-169/wave-s328-B-approved.md`, assinado
+por GPG do Owner; Scope DERIVADO por `finalize_patch.py`; land por
+`OWNER-S328-B-LAND.sh` (G-PRE + G0..G5 + V1..V7, `touched - scope = 0`).
+
+Pair-Rail-Reviewed: codex-cli 0.147.0, 5 rodadas registradas em
+.claude/plans/PLAN-169/s328-ceremony-B/rail-round-*.md
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
