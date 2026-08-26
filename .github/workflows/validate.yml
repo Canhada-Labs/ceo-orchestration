@@ -1269,6 +1269,8 @@ jobs:
               --latency-iterations 200 \
               --p95-ceiling-ms 180 \
               --p99-ceiling-ms 160 \
+              --exec-reference \
+              --relative-advisory \
               --p99-advisory > "/tmp/hook-latency-attempt-$1.json"
           }
           publish() {
@@ -1302,6 +1304,7 @@ jobs:
           if rows:
               mode = "advisory" if d.get("p99_advisory") else "hard"
               note(f"hook-latency attempt {att}: p95 ceiling {d.get('p95_ceiling_ms')}ms hard / p99 {d.get('p99_ceiling_ms')}ms {mode}")
+              note(f"hook-latency attempt {att}: second key phase={d.get('phase','-')} verdict={d.get('verdict_label','-')} — " + " | ".join(f"{n}: {h.get('verdict_label','-')} ref_p50={h.get('ref_p50_ms','-')}ms R_e={h.get('R_e','-')}" for n, h in d.get("hooks", {}).items() if isinstance(h, dict) and "p95_ms" in h))
               note("| hook-latency entry | p50 | p95 | p99 | max (ms) |")
               note("|---|---|---|---|---|")
               note("\n".join(rows))

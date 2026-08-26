@@ -354,3 +354,224 @@ single-ceiling shape.
 + p95 120→180 com a evidência de hoje". Landed by the SENT-S318 pack
 ceremony (this file + `validate.yml` + `profile-opus-4-7.py` +
 `wave2-regression-proof.sh` + profiler tests, one signed commit).
+
+
+## Amendment (PLAN-169 S328, 2026-08-25) — runner-normalized second key; the spawn probe is blind by construction
+
+**Trigger:** validate run `32866209415` (commit `a16ac96`, started
+2026-08-25 15:30:23Z) failed with `check_output_secrets` p95
+**361.4 / 424.8 / 229.1 ms** across the three attempts, against the
+180 ms hard ceiling the amendment above had just recalibrated with
+evidence. The verdict was FALSE again. Three legs prove it:
+
+- **The probe said the runner was fine.** The PLAN-161-C4 contention
+  pre-probe read UNCONTENDED at a **7.76 ms** spawn floor (its own
+  threshold is 200 ms), granted the 3rd attempt, and that attempt's
+  failure became the "real regression" verdict.
+- **The same bytes are fast elsewhere.** The identical invocation
+  measured **70–77 ms** locally (77.3 ms `observe=unset` / 70.2 ms
+  `observe=1`; the 2026-08-20 baseline in the amendment above was
+  70.6 ms).
+- **The same bytes PASSED three hours earlier.** Run `32845976838`
+  (`6304f66`, started 12:08:32Z) was green — **3 h 22 min** before
+  the failing run started — and `git diff 6304f66..a16ac96 --
+  .claude/hooks/` touches **zero files**. `check_output_secrets.py`
+  itself is unchanged since 2026-07-02 (`7df843d`). Identical hook
+  bytes: PASS, then FAIL.
+
+Not one bad window. On `56f050c` (run `32758192634`, 2026-08-24) the
+same entry went from p95 209 ms in its first attempt series to
+**435 ms in a rerun of the identical commit**, with the probe
+UNCONTENDED throughout (floor p50 6.6–8.6 ms).
+
+**Why the probe cannot see this — the structural finding.**
+`python3 -c pass` prices process CREATION. The entry that breaches
+does something else: its module-level imports are stdlib-only, but
+its measured path lazily imports `_lib.output_scan`,
+`_lib.output_scan_dedup`, `_lib.audit_emit`, `_lib.tool_lifecycle`
+and `_lib.payload` (`check_output_secrets.py:223/236/231/328/376`),
+whose static transitive `_lib` closure is **12 modules / 21,448
+lines** (dominated by `audit_emit`, 14,068) — and then it takes a
+locked, fsynced write. How much of that closure executes per call
+depends on the path; NONE of it is priced by `python3 -c pass`. A
+runner that is slow-but-UNCONTENDED once execution starts (SKU
+drift, throttling, a cold page cache) moves that work several-fold
+while leaving the spawn floor flat. The probe is blind **by
+construction**, not by miscalibration — so no re-tuning of its
+200 ms threshold could have caught any of these runs.
+
+**Decision.**
+
+1. **The 180 ms absolute ceiling STAYS, hard — no third
+   recalibration.** The amendment above already moved it 120 → 180
+   with evidence. Moving it again would answer a MEASUREMENT problem
+   with a threshold, and the spread documented here (209 → 435 ms on
+   one commit) admits no ceiling that both survives the runner and
+   still detects a regression.
+2. **A SECOND, RELATIVE key**, measured in the same scheduler
+   window: `hook_p50 <= K_e × ref_p50`, **p50 on BOTH sides** — the
+   W2.2 amendment's median-on-shared-load doctrine, for its own
+   reason. The p95/p50 ratio of the longitudinal series in the
+   amendment above is 1.05 / 1.04 / **2.25** (120/126, 118/123,
+   79/178), so any p95-over-p50 key would swing 2× on unregressed
+   code.
+3. **The reference is a 6th corpus entry, `ref_exec`:** a frozen,
+   stdlib-only, 3-term script (cold `json`/`re`/`hashlib`/`pathlib`
+   imports plus a fixed `re.compile` set; a fixed CPU hash loop;
+   M × `open`/append/`flock`/`fsync`/rename on the same filesystem
+   as that entry's audit dir), source-pinned by `ref_source_sha256`
+   in the report, **ROUND-ROBIN interleaved inside each entry's own
+   loop**, `_REF_SAMPLES_PER_ENTRY = 40`.
+   - *Interleaving is load-bearing.* §Context of this ADR already
+     records one entry at 45–70 ms while a later entry hit
+     159–698 ms in the SAME run; the three attempts in the trigger
+     above (361 → 425 → 229 ms) move the same way. A reference
+     sampled once before the loop would price a different machine
+     than the hook it normalizes.
+   - *The reference MUST NOT import `_lib` or `.claude/hooks`.* The
+     regression class this gate exists for (PLAN-120 WS-J) IS an
+     eager framework import; a reference that shared it would
+     inflate numerator AND denominator and blind the ratio to its
+     own reason to exist.
+   - *The IO term is mandatory.* A 7.76 ms spawn floor beside a
+     361 ms hook is a disk/page-cache signature; a CPU-only
+     reference would be exactly as blind as the probe it succeeds.
+4. **Four named outcomes**, a closed set every consumer DERIVES
+   rather than recalls (`_OUTCOME_LABELS`): `pass` → exit 0,
+   `advisory_slow_runner` → 0, `real_regression` → 1,
+   `infrastructure_contended` → 5. A non-finite / non-positive /
+   bool / str `ref_p50`, a reference split-half p50 drift above
+   `_REF_DRIFT_MAX = 1.5`, or the profiler's own wall self-cap
+   (0.9 × `--wall-budget-seconds`) yield `infrastructure_contended`
+   — an explicitly NON-regression verdict, the same shape the
+   still-contended fail-fast introduced in the PLAN-161 C4
+   amendment.
+5. **PHASE 1 IS WHAT SHIPS: advisory, exit codes byte-identical to
+   today.** The CI step gains exactly two argv flags
+   (`--exec-reference --relative-advisory`) and one step-summary
+   line. Without a `K_e` there is no `rel_ok`, so the label mirrors
+   the absolute key and even a broken reference leaves the exit
+   alone. `run_gate`'s retry contract, `BACKOFF_S`, the contention
+   probe and the `FAILED on BOTH attempts (rc1=` back-compat
+   literal are **untouched**, so `proof-retry-matrix.sh` (which
+   mocks `run_gate`) and `wave2-regression-proof.sh` (which extracts
+   the run-block by indentation and runs it for real) both stay
+   proven. Named cost: because wave2 runs `run_gate` unmocked, its
+   attempts now also sample 5 × 40 reference points.
+6. **K is NOT set here; the PROCEDURE is the deliverable.** K is not
+   derivable today — zero paired `(hook, reference)` samples exist
+   anywhere, and every local measurement taken while writing this
+   amendment was self-declared contaminated. Phase 1 publishes
+   `R_e = hook_p50 / ref_p50` per entry; after **≥10 green CI runs
+   over ≥3 days**, `K_e = 1.25 × max(R_e)`, admitted only if
+   `K_e < (baseline_p50_e + 150) / max(ref_p50)` — the bound that
+   mechanically preserves the detection criterion, i.e. the +150 ms
+   positive control still fails at the WORST observed reference.
+   - **The bound is STRICT, and that is not cosmetic** (pair-rail
+     round 3). The relative rule at item 2 is `hook_p50 <= K_e ×
+     ref_p50` — it ACCEPTS equality, as an absolute ceiling does. So
+     at `K_e = (baseline_p50_e + 150) / max(ref_p50)` exactly, the
+     planted control has `hook_p50 = baseline_p50_e + 150 = K_e ×
+     max(ref_p50)`, `rel_ok` is TRUE, and the control **PASSES** —
+     the precise opposite of what admitting that K is supposed to
+     guarantee. One boundary point, and it is exactly the point the
+     formula selects when the interval is tight. A non-strict bound
+     here would make the whole admissibility argument decorative.
+   - **The implementation matches, and the strictness lives in
+     exactly ONE of the two comparisons.** `profile-opus-4-7.py`
+     rejects `K >= admissibility_max_K` — the cap is **EXCLUSIVE**,
+     so a K landing exactly ON it is inadmissible, not admitted —
+     while `_classify_entry` keeps `rel_ok = hook_p50 <= K_e ×
+     ref_p50`, which accepts equality the way an absolute ceiling
+     does. That asymmetry is the design, not an oversight: making
+     *both* strict would close the interval twice and reject a K
+     that is in fact admissible. An earlier draft of this amendment
+     asserted the opposite — that the cap admitted `K == cap` and
+     the code therefore disagreed with this ADR; that was true of an
+     earlier profiler and is **no longer the case**. The rule to
+     preserve, stated once: **the cap is exclusive; the gate
+     comparison is inclusive.** Changing either side alone
+     re-opens the hole.
+
+   An **EMPTY** admissibility interval means the reference is
+   mis-shaped and the design is REJECTED: **never widen K**. That is
+   the "bump the number" move this ADR already declined at the
+   amendment above, and it would be worse here, because widening K
+   silently deletes the detection the second key exists to provide.
+   Any K written into a ceremony package before that window is
+   INVENTED.
+7. **The spawn probe stays, vestigial.** Removing it buys nothing
+   and grows the canonical diff; it keeps gating the 3rd attempt
+   exactly as the PLAN-161 C4 amendment specifies. This amendment
+   demotes it in DOCTRINE, not in code: it is now understood to
+   answer "is this machine oversubscribed right now?", never "is
+   this machine fast?".
+
+**Detection contract (what would falsify this).**
+
+- **Positive control:** a planted +150 ms on the hook, with the
+  reference held at baseline, must yield `real_regression` — asserted
+  at the predicate level via the injected sampler, never on
+  wall-clock luck, plus a live plant through the real wrapper. A
+  `time.sleep` plant is NOT sufficient on its own: sleep is IO wait
+  and misses the WS-J eager-import shape, so an import-shaped plant
+  is required too.
+- **Negative control:** synthetic load (CPU and IO arms) on
+  unregressed code must NEVER yield `real_regression`, AND
+  `R_loaded / R_quiet` must stay in `[0.7, 1.4]`. The ratio half is
+  the anti-vacuity check: a CPU burner against an IO-bound hook
+  starves the REFERENCE harder, the ratio FALLS, and the control
+  would otherwise pass for the wrong reason.
+- **Declared residual:** an IO-slow runner remains indistinguishable
+  from an IO regression by any reference that also performs IO. This
+  is accepted, not solved.
+- **Known defect, RECORDED not cured — and the self-cap does NOT
+  remove it.** The retry wrapper's failure branches capture *any*
+  non-zero rc: after an UNCONTENDED probe, a third failing attempt is
+  stamped `::error::… treating as a real regression` and `exit 1`,
+  whatever the profiler returned (`validate.yml:1352-1376`). The
+  420 s cap-kill (rc 124) has always been mislabeled that way. The
+  wall self-cap does not make that mislabel unreachable — it
+  **RENAMES** it: the cap now exits 5 (`infrastructure_contended`),
+  which lands in the *same* branch and is published under the *same*
+  "real regression" text. An earlier draft of this amendment claimed
+  the self-cap "already removes" the case; that reasoning was wrong
+  and is corrected here.
+  - **Unreachable in PHASE 1, by construction.** Phase 1 keeps
+    `exit_class == (0 if passed else 1)`, so the profiler never
+    returns 5 while this package is what ships — asserted, not
+    assumed, by `test_auto_cap_in_phase1_keeps_a_nonzero_exit`, which
+    drives the most aggressive cap available
+    (`--wall-budget-seconds 0`) and requires **rc 1**. Nothing in
+    this canonical diff creates a path to the mislabel.
+  - **It becomes REQUIRED work for phase 2.** Phase 2 is the only
+    state that can return 5, so the phase-2 ceremony must either
+    teach the wrapper to distinguish rc 5 (an explicitly
+    NON-regression verdict, the shape the PLAN-161 C4 amendment
+    already introduced for the still-contended path) or change the
+    outcome contract so 5 is not produced. That is a named
+    precondition of phase 2, not an optional cleanup — and the
+    reason it is not done here is scope, not harmlessness.
+
+**Resolved by synthesis (three critics, recorded so they are not
+relitigated):** `n_ref = 40` (the ≥22 index-separation rule binds on
+p95; the relative key gates on p50, where collapse cannot arise);
+`K = 1.25 × max(R_e)` **plus** the admissibility bound, chosen over
+`1.6 × median` because it is the only form that mechanically proves
+the +150 ms control still fails at the worst observed reference; the
+`abs_ok ∧ ¬rel_ok` cell (which would close the blind spot the
+amendment above explicitly declares — a clean 2× regression on the
+fastest entry stays invisible under 180 ms) is implemented and
+unit-tested but **default OFF**, behind the `strict_relative`
+parameter, which has **no CLI flag** and is therefore unreachable
+from the workflow until a later decision wires it.
+
+**Open questions — NOT decided here.** Six questions this amendment
+deliberately leaves to the Owner (the `abs_ok ∧ ¬rel_ok` cell; the
+evidence-free 600 ms absolute backstop; accepting a phase-1 window in
+which no relative key gates; the fallback branch if the admissibility
+interval comes back empty; whether the two ADR-144 inheritors travel
+in this package; and that `test_hook_latency.py` — both tests
+`xfail(strict=False)`, corpus `check_agent_spawn` + `audit_log` — is
+NOT a safety net for `check_output_secrets`, the entry that actually
+fails) are recorded as **PLAN-169 §Open questions OQ-7..OQ-12**.

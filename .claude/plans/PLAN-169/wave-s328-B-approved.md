@@ -14,8 +14,8 @@ Wave: wave-s328-B (cura do gate hook-latency — decisão do Owner Q5 de 2026-08
 Patch: .claude/plans/PLAN-169/s328-ceremony-B/B.patch
 Patch-sha256: e635498ac63422537574a5ce9229d36a1ef11bc7c4aaa2f157c25b048d5e0950
 Patch-base: 5bbc256e23f491c1306c32c8cd31d27791ad474f
-Anchor-SHA: TO-FILL-AT-SIGN
-Data: TO-FILL-AT-SIGN
+Anchor-SHA: 44610ab2173672c31d9008835ce22d61f53d7da8
+Data: 2026-08-26
 
 ## O que esta wave entrega
 
@@ -111,7 +111,7 @@ não toca nenhum outro workflow, nenhum hook e nenhum gate.
   `.claude/plans/PLAN-169/s328-ceremony-B/rail-round-*.md`.
 
 <!-- BEGIN SIGNED SCOPE -->
-Approved-By: @Canhada-Labs TO-FILL-AT-SIGN
+Approved-By: @Canhada-Labs AE9B236FDAF0462874060C6BCFCFACF00335DC74
 Plans: PLAN-169
 Scope:
   - .claude/adr/ADR-144-subagent-model-tiering-frontmatter.md
