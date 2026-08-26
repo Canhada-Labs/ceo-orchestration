@@ -82,10 +82,23 @@ class Census(object):
         return out
 
     def at(self, name: str, snippet: str,
-           operand: Optional[str] = None) -> dict:
+           operand: Optional[str] = None,
+           cls: Optional[str] = None) -> dict:
         hits = [s for s in self.sites(name) if snippet in s["snippet"]]
         if operand is not None:
             hits = [s for s in hits if operand in s["operand"]]
+        if cls is not None:
+            hits = [s for s in hits if s["class"] == cls]
+        elif len(hits) > 1:
+            # The 5th pass added `write-candidate`, a class that asks a
+            # DIFFERENT question about the same line: not "is this tested path
+            # written unguarded" but "does this command write at all".  An
+            # assertion that named neither is asking the older, more specific
+            # question, so answer that one; the new class has its own
+            # assertions in TestFailClosedDiscovery.
+            specific = [s for s in hits if s["class"] != "write-candidate"]
+            if len(specific) == 1:
+                hits = specific
         if len(hits) != 1:
             raise AssertionError(
                 "expected exactly 1 site matching %r in %s, got %d:\n%s"
@@ -144,8 +157,9 @@ class CensusCase(TestEnvContext):
         return run_census(self.tmp, files, args, baseline_text)
 
     def assertSafe(self, c: Census, name: str, snippet: str,
-                   form: str, operand: Optional[str] = None) -> dict:
-        site = c.at(name, snippet, operand)
+                   form: str, operand: Optional[str] = None,
+                   cls: Optional[str] = None) -> dict:
+        site = c.at(name, snippet, operand, cls)
         self.assertFalse(
             site["blocking"],
             "expected the guarded form to be PROVEN safe, got %s (%s)\n%s"
@@ -157,8 +171,9 @@ class CensusCase(TestEnvContext):
 
     def assertBlocks(self, c: Census, name: str, snippet: str,
                      verdict: Optional[str] = None,
-                     operand: Optional[str] = None) -> dict:
-        site = c.at(name, snippet, operand)
+                     operand: Optional[str] = None,
+                     cls: Optional[str] = None) -> dict:
+        site = c.at(name, snippet, operand, cls)
         self.assertIn(
             site["verdict"], BLOCKING,
             "expected the mutated form to BLOCK, got %s (%s)\n%s"
@@ -918,6 +933,620 @@ render() {
 # --------------------------------------------------------------------------
 
 
+class TestRailRoundFive(CensusCase):
+    """The 16 findings of the 5th pair-rail round, one fixture per rail line.
+
+    Ids ``R5-01``..``R5-16`` map to
+    ``/private/tmp/.../rail-u1-1-commit-843eb57.txt`` and to §12 of
+    ``.claude/plans/PLAN-185/w0-censo-S329.md``.  Every one of them was
+    NON-blocking under the 4th pass — thirteen because the evidence rule was
+    too generous, three (R5-01..R5-03) because the site did not EXIST.
+    """
+
+    # -- discovery: the form produced no site at all ------------------------
+
+    def test_r5_01_unsupported_file_test_form_blocks(self) -> None:
+        """R5-01 — `test -a "$dst"` recorded no site, so a later write through
+        `$dst` was invisible rather than indeterminate."""
+        c = self.census({"r501.sh": sh("""
+deliver() {
+  local dst="$1"
+  if test -a "$dst"; then
+    return 0
+  fi
+  cp "$SRC" "$dst"
+}
+""")})
+        self.assertBlocks(c, "r501.sh", 'test -a "$dst"', "desguardado",
+                          cls="symlink-follow")
+
+    def test_r5_01_path_qualified_test_is_a_test(self) -> None:
+        """R5-01 — the host scan matched the bare word `test` only."""
+        c = self.census({"r501b.sh": sh("""
+deliver() {
+  local dst="$1"
+  if /bin/test -e "$dst"; then
+    return 0
+  fi
+  cp "$SRC" "$dst"
+}
+""")})
+        self.assertBlocks(c, "r501b.sh", "/bin/test -e", "desguardado",
+                          cls="symlink-follow")
+
+    def test_r5_01_unmodelled_test_operator_is_a_site(self) -> None:
+        """R5-01 — an operator the model does not know must SAY so."""
+        c = self.census({"r501c.sh": sh("""
+deliver() {
+  local dst="$1"
+  if [ -Q "$dst" ]; then
+    return 0
+  fi
+  cp "$SRC" "$dst"
+}
+""")})
+        site = self.assertBlocks(c, "r501c.sh", '-Q "$dst"', "indeterminado",
+                                 cls="symlink-follow")
+        self.assertEqual("i-unmodeled-test-form", site["form"])
+
+    def test_r5_01_a_redirection_on_a_test_is_not_unmodelled(self) -> None:
+        """Negative control for the line above: `[ ... ] 2>/dev/null` is an
+        ordinary test, and reporting it would put healthy lines in the
+        baseline."""
+        c = self.census({"r501d.sh": sh("""
+check() {
+  local n="$1"
+  if [ "$n" -gt 1 ] 2>/dev/null; then
+    echo many
+  fi
+}
+""")})
+        self.assertEqual(
+            [], [s for s in c.sites("r501d.sh")
+                 if s["form"] == "i-unmodeled-test-form"], c.describe())
+
+    def test_r5_02_path_qualified_stream_editor_is_judged(self) -> None:
+        """R5-02 — `/usr/bin/sed` matched no editor name, so the interpolation
+        was never looked at."""
+        c = self.census({"r502.sh": sh("""
+render() {
+  local value="$1"
+  /usr/bin/sed "s|x|$value|g" "$SRC" > /tmp/out
+}
+""")})
+        self.assertBlocks(c, "r502.sh", "/usr/bin/sed", "desguardado",
+                          cls="sed-interp")
+
+    def test_r5_03_positional_expansion_is_an_expansion(self) -> None:
+        """R5-03 — `$1` was not identifier-shaped, so `sed "s|x|$1|g"` came out
+        `n0-no-interpolation`: the verdict meaning "nothing to reason about"."""
+        c = self.census({"r503.sh": sh("""
+render() {
+  sed "s|x|$1|g" "$SRC" > /tmp/out
+}
+""")})
+        site = self.assertBlocks(c, "r503.sh", "s|x|$1|g", "desguardado",
+                                 cls="sed-interp")
+        self.assertIn("$1", site["detail"])
+
+    def test_r5_03_special_parameters_too(self) -> None:
+        """R5-03 — `$@`, `$*`, `$#`, `$?` and `$$` were equally invisible."""
+        for name in ("$@", "$*", "$#", "$?"):
+            c = self.census({"r503b.sh": sh("""
+render() {
+  sed "s|x|%s|g" "$SRC" > /tmp/out
+}
+""" % name)})
+            self.assertBlocks(c, "r503b.sh", "s|x|%s|g" % name,
+                              operand=None, cls="sed-interp")
+
+    def test_r5_03_literal_only_proof_sees_positionals(self) -> None:
+        """The same gap survived INSIDE the b3 proof: `local v="$1"` was read
+        as a safe literal, so a caller-controlled value was proven safe.  Found
+        by the positive-control probe, not by the rail."""
+        c = self.census({"r503c.sh": sh("""
+render() {
+  local v="$1"
+  sed "s|x|$v|g" "$SRC" > /tmp/out
+}
+""")})
+        self.assertBlocks(c, "r503c.sh", "s|x|$v|g", "desguardado",
+                          cls="sed-interp")
+
+    # -- evidence bound to the exact operation ------------------------------
+
+    def test_r5_04_bracket_internal_negation_is_not_a_guard(self) -> None:
+        """R5-04 — `[ ! -L "$dst" ] && return 1` aborts for everything EXCEPT a
+        symlink, so the symlink case is the one that continues."""
+        c = self.census({"r504.sh": sh("""
+deliver() {
+  local dst="$1"
+  [ ! -L "$dst" ] && return 1
+  if [ -e "$dst" ]; then
+    return 0
+  fi
+  cp "$SRC" "$dst"
+}
+""")})
+        self.assertBlocks(c, "r504.sh", '[ -e "$dst" ]', "desguardado",
+                          cls="symlink-follow")
+
+    def test_r5_04_legacy_conjunction_is_not_a_guard(self) -> None:
+        """R5-04 — `[ -f x -a -L x ]` is the `&&` case in legacy spelling."""
+        c = self.census({"r504b.sh": sh("""
+deliver() {
+  local dst="$1"
+  [ -f "$dst" -a -L "$dst" ] && return 1
+  if [ -e "$dst" ]; then
+    return 0
+  fi
+  cp "$SRC" "$dst"
+}
+""")})
+        self.assertBlocks(c, "r504b.sh", '[ -e "$dst" ]', operand=None,
+                          cls="symlink-follow")
+
+    def test_r5_05_abort_is_credited_to_its_own_command(self) -> None:
+        """R5-05 — `split_commands` made fresh objects, so `c is t.cmd` never
+        matched and the operand-text fallback credited the abort attached to
+        `-e` to a standalone `-L` later on the same line."""
+        c = self.census({"r505.sh": sh("""
+deliver() {
+  local dst="$1"
+  [ -e "$dst" ] && return 1; [ -L "$dst" ]
+  cp "$SRC" "$dst"
+}
+""")})
+        self.assertBlocks(c, "r505.sh", '[ -e "$dst" ]', "desguardado",
+                          cls="symlink-follow")
+
+    def test_r5_06_guard_is_invalidated_by_a_reassignment(self) -> None:
+        """R5-06 — dominance says the guard RAN, not that the value it looked
+        at is the one the write opens."""
+        c = self.census({"r506.sh": sh("""
+deliver() {
+  dst=/safe
+  [ -L "$dst" ] && return
+  dst="$1"
+  if [ -e "$dst" ]; then
+    return 0
+  fi
+  cp "$SRC" "$dst"
+}
+""")})
+        site = self.assertBlocks(c, "r506.sh", '[ -e "$dst" ]',
+                                 "indeterminado", cls="symlink-follow")
+        self.assertEqual("i-guard-value-rebound", site["form"])
+
+    def test_r5_06_without_the_reassignment_the_guard_holds(self) -> None:
+        """Negative control: the same fixture minus the rebinding must stay
+        PROVEN safe, or the rule would just be "block everything"."""
+        c = self.census({"r506b.sh": sh("""
+deliver() {
+  local dst="$1"
+  [ -L "$dst" ] && return
+  if [ -e "$dst" ]; then
+    return 0
+  fi
+  cp "$SRC" "$dst"
+}
+""")})
+        self.assertSafe(c, "r506b.sh", '[ -e "$dst" ]',
+                        "a1-nofollow-test-dominates", cls="symlink-follow")
+
+    def test_r5_06_a_read_rebinds_too(self) -> None:
+        """R5-06 — `read` is a reaching definition the assignment index never
+        carried."""
+        c = self.census({"r506c.sh": sh("""
+deliver() {
+  local dst=/safe
+  [ -L "$dst" ] && return
+  read -r dst
+  if [ -e "$dst" ]; then
+    return 0
+  fi
+  cp "$SRC" "$dst"
+}
+""")})
+        self.assertBlocks(c, "r506c.sh", '[ -e "$dst" ]', "indeterminado",
+                          cls="symlink-follow")
+
+    def test_r5_07_redirect_to_a_filename_is_a_write(self) -> None:
+        """R5-07 — `>& "$dst"` opens $dst for output; treating every `>&` as a
+        descriptor dup threw the filename away."""
+        c = self.census({"r507.sh": sh("""
+deliver() {
+  local dst="$1"
+  if [ -e "$dst" ]; then
+    return 0
+  fi
+  echo hi >& "$dst"
+}
+""")})
+        self.assertBlocks(c, "r507.sh", '[ -e "$dst" ]', "desguardado",
+                          cls="symlink-follow")
+
+    def test_r5_07_numeric_descriptor_is_still_a_dup(self) -> None:
+        """Negative control: `2>&1` must NOT become a write to a file named 1."""
+        c = self.census({"r507b.sh": sh("""
+deliver() {
+  local dst="$1"
+  if [ -e "$dst" ]; then
+    echo present >&2
+    return 0
+  fi
+  echo "$dst" 2>&1
+}
+""")})
+        self.assertSafe(c, "r507b.sh", '[ -e "$dst" ]',
+                        "a3-no-write-to-operand", cls="symlink-follow")
+
+    def test_r5_08_sort_o_writes_its_operand(self) -> None:
+        """R5-08 — `sort` sat in the read-only set, so `sort -o "$dst"` was
+        recorded as a READ."""
+        c = self.census({"r508.sh": sh("""
+deliver() {
+  local dst="$1"
+  if [ -e "$dst" ]; then
+    return 0
+  fi
+  sort -o "$dst" "$SRC"
+}
+""")})
+        self.assertBlocks(c, "r508.sh", '[ -e "$dst" ]', "desguardado",
+                          cls="symlink-follow")
+
+    def test_r5_08_uniq_second_operand_writes(self) -> None:
+        """R5-08 — `uniq IN OUT` writes OUT."""
+        c = self.census({"r508b.sh": sh("""
+deliver() {
+  local dst="$1"
+  if [ -e "$dst" ]; then
+    return 0
+  fi
+  uniq "$SRC" "$dst"
+}
+""")})
+        self.assertBlocks(c, "r508b.sh", '[ -e "$dst" ]', "desguardado",
+                          cls="symlink-follow")
+
+    def test_r5_08_yq_in_place_writes(self) -> None:
+        """R5-08 — `yq -i` edits its operand."""
+        c = self.census({"r508c.sh": sh("""
+deliver() {
+  local dst="$1"
+  if [ -e "$dst" ]; then
+    return 0
+  fi
+  yq -i '.a=1' "$dst"
+}
+""")})
+        self.assertBlocks(c, "r508c.sh", '[ -e "$dst" ]', "desguardado",
+                          cls="symlink-follow")
+
+    def test_r5_08_sort_without_an_output_option_still_reads(self) -> None:
+        """Negative control: option-AWARE, not name-based.  `sort "$dst"` with
+        no `-o` writes nothing, and must stay provably safe."""
+        c = self.census({"r508d.sh": sh("""
+deliver() {
+  local dst="$1"
+  if [ -e "$dst" ]; then
+    sort "$dst"
+  fi
+}
+""")})
+        self.assertSafe(c, "r508d.sh", '[ -e "$dst" ]',
+                        "a3-no-write-to-operand", cls="symlink-follow")
+
+    def test_r5_09_attached_target_directory_is_the_destination(self) -> None:
+        """R5-09 — quoting the option VALUE marked the whole token quoted, so
+        it bypassed option parsing and the SOURCE became the destination."""
+        c = self.census({"r509.sh": sh("""
+deliver() {
+  local dst="$1"
+  if [ -d "$dst" ]; then
+    return 0
+  fi
+  cp --target-directory="$dst" "$SRC"
+}
+""")})
+        self.assertBlocks(c, "r509.sh", '[ -d "$dst" ]', "desguardado",
+                          cls="symlink-follow")
+
+    def test_r5_10_b3_needs_a_reaching_assignment(self) -> None:
+        """R5-10 — a safe assignment AFTER the use, or in a branch that may not
+        run, was accepted as "only ever assigned safe literals"."""
+        c = self.census({"r510.sh": sh("""
+render() {
+  sed "s|x|$v|g" "$SRC" > /tmp/out
+  v=safe
+}
+""")})
+        site = self.assertBlocks(c, "r510.sh", "s|x|$v|g", "indeterminado",
+                                 cls="sed-interp")
+        self.assertEqual("i-escape-unproven", site["form"])
+
+    def test_r5_11_backslash_ampersand_is_not_an_escape(self) -> None:
+        """R5-11 — in sed, `\\&` emits a LITERAL ampersand.  Accepting any
+        replacement starting with one backslash called that an escape."""
+        c = self.census({"r511.sh": sh("""
+render() {
+  local raw="$1"
+  value="$(printf '%s' "$raw" | sed 's/[|&\\]/\\&/g')"
+  sed "s|x|$value|g" "$SRC" > /tmp/out
+}
+""")})
+        self.assertBlocks(c, "r511.sh", "s|x|$value|g", "desguardado",
+                          cls="sed-interp")
+
+    def test_r5_12_b4_requires_the_sole_producer(self) -> None:
+        """R5-12 — the substitution must produce the escaped value and nothing
+        else; here a second `printf` appends the RAW one."""
+        c = self.census({"r512.sh": sh("""
+render() {
+  local raw="$1"
+  sed "s|x|$(printf '%s' "$raw" | sed 's/[|&\\]/\\\\&/g'; printf %s "$raw")|g" "$SRC" > /tmp/out
+}
+""")})
+        hits = [s for s in c.sites("r512.sh")
+                if s["class"] == "sed-interp" and s["blocking"]]
+        self.assertTrue(hits, c.describe())
+        self.assertEqual("i-command-substitution", hits[0]["form"],
+                         c.describe())
+
+    def test_r5_13_validation_must_name_the_exact_variable(self) -> None:
+        """R5-13 — the substring test made a validation of `$value` cover a
+        later raw interpolation of `$v`."""
+        c = self.census({"r513.sh": sh("""
+render() {
+  local value="$1"
+  local v="$2"
+  [[ "$value" =~ ^[A-Za-z]+$ ]] || exit 1
+  sed "s|x|$v|g" "$SRC" > /tmp/out
+}
+""")})
+        self.assertBlocks(c, "r513.sh", "s|x|$v|g", "desguardado",
+                          cls="sed-interp")
+
+    def test_r5_14_validation_must_be_start_anchored(self) -> None:
+        """R5-14 — `[[ "$v" =~ [A-Za-z]+$ ]]` passes for `|safe`, which still
+        carries the delimiter."""
+        c = self.census({"r514.sh": sh("""
+render() {
+  local v="$1"
+  [[ "$v" =~ [A-Za-z]+$ ]] || exit 1
+  sed "s|x|$v|g" "$SRC" > /tmp/out
+}
+""")})
+        self.assertBlocks(c, "r514.sh", "s|x|$v|g", "desguardado",
+                          cls="sed-interp")
+
+    def test_r5_15_abort_must_be_bound_to_the_validation(self) -> None:
+        """R5-15 — any later `|| abort` on the line was accepted, so in
+        `[[ ... ]]; true || exit 1` the abort belongs to `true` and never
+        fires."""
+        c = self.census({"r515.sh": sh("""
+render() {
+  local v="$1"
+  [[ "$v" =~ ^[A-Za-z]+$ ]]; true || exit 1
+  sed "s|x|$v|g" "$SRC" > /tmp/out
+}
+""")})
+        self.assertBlocks(c, "r515.sh", "s|x|$v|g", "desguardado",
+                          cls="sed-interp")
+
+    def test_r5_15_a_bound_abort_is_still_a_proof(self) -> None:
+        """Negative control for R5-13/14/15 together: the anchored, exactly
+        matched, directly aborted form must still come out PROVEN safe."""
+        c = self.census({"r515b.sh": sh("""
+render() {
+  local v="$1"
+  [[ "$v" =~ ^[A-Za-z]+$ ]] || exit 1
+  sed "s|x|$v|g" "$SRC" > /tmp/out
+}
+""")})
+        self.assertSafe(c, "r515b.sh", "s|x|$v|g", "b2-closed-charset-validated",
+                        cls="sed-interp")
+
+    def test_r5_16_every_discovered_file_is_listed(self) -> None:
+        """R5-16 — a file with zero sites was indistinguishable from a file
+        discovery never reached."""
+        c = self.census({"withsites.sh": sh("""
+deliver() {
+  local d="$1"
+  cp "$SRC" "$d"
+}
+"""), "quiet.sh": "#!/usr/bin/env bash\necho hello\n"})
+        listed = {f["path"]: f for f in c.payload.get("files", [])}
+        self.assertIn("scripts/quiet.sh", listed, listed)
+        self.assertEqual(0, listed["scripts/quiet.sh"]["sites"], listed)
+        self.assertEqual("scanned", listed["scripts/quiet.sh"]["status"])
+        self.assertIn("scripts/withsites.sh", listed, listed)
+
+    def test_r5_16_the_file_list_reaches_the_text_output_too(self) -> None:
+        c = self.census({"quiet.sh": "#!/usr/bin/env bash\necho hello\n",
+                         "one.sh": sh('cp "$SRC" "$OUT"')}, args=())
+        proc = subprocess.run(
+            [sys.executable, str(CENSUS), "--repo-root", str(c.root),
+             "--baseline", str(c.root / "baseline.txt")],
+            capture_output=True, text=True)
+        self.assertIn("discovered shell files:", proc.stdout)
+        self.assertIn("scripts/quiet.sh", proc.stdout)
+
+
+class TestFailClosedDiscovery(CensusCase):
+    """The 5th pass's architectural change, asserted in both directions.
+
+    Discovery is now the ALLOWLIST: a command is skipped only when its name is
+    PROVEN read-only.  Each rule below has a positive control (the form is
+    seen) and a negative one (the proven-safe shape produces no site, so the
+    census has not degenerated into flagging every line).
+    """
+
+    def test_an_unknown_command_with_an_expansion_is_a_candidate(self) -> None:
+        c = self.census({"d1.sh": sh("""
+deliver() {
+  local dst="$1"
+  some_unmodelled_tool --out "$dst"
+}
+""")})
+        site = self.assertBlocks(c, "d1.sh", "some_unmodelled_tool",
+                                 "indeterminado", cls="write-candidate")
+        self.assertEqual("i-write-candidate-unproven", site["form"])
+
+    def test_a_proven_readonly_command_produces_no_candidate(self) -> None:
+        """The negative control that keeps the rule honest."""
+        c = self.census({"d2.sh": sh("""
+check() {
+  local d="$1"
+  grep -q foo "$d"
+  echo "$d"
+  basename "$d"
+}
+""")})
+        self.assertEqual([], c.sites("d2.sh"), c.describe())
+
+    def test_a_literal_path_is_not_a_candidate(self) -> None:
+        """Discovery narrows on EXPANSION, the one property the threat model
+        cares about: a fully literal destination is chosen by the script."""
+        c = self.census({"d3.sh": sh("""
+deliver() {
+  cp /a/fixed/src /a/fixed/dst
+}
+""")})
+        self.assertEqual([], c.sites("d3.sh"), c.describe())
+
+    def test_eval_is_always_a_candidate(self) -> None:
+        c = self.census({"d4.sh": sh("""
+deliver() {
+  eval "$1"
+}
+""")})
+        site = self.assertBlocks(c, "d4.sh", "eval", "indeterminado",
+                                 cls="write-candidate")
+        self.assertEqual("i-opaque-command", site["form"])
+
+    def test_a_write_no_test_ever_pointed_at_is_still_found(self) -> None:
+        """The whole point of the class: before it, a site existed only where
+        some `-e`/`-f` test had already named the path."""
+        c = self.census({"d5.sh": sh("""
+deliver() {
+  local dst="$1"
+  cp "$SRC" "$dst"
+}
+""")})
+        site = self.assertBlocks(c, "d5.sh", 'cp "$SRC" "$dst"', "desguardado",
+                                 cls="write-candidate")
+        self.assertIn("$dst", site["detail"])
+
+    def test_a_guarded_write_with_no_test_is_proven_safe(self) -> None:
+        """Negative control for the line above."""
+        c = self.census({"d6.sh": sh("""
+deliver() {
+  local dst="$1"
+  [ -L "$dst" ] && return 1
+  cp "$SRC" "$dst"
+}
+""")})
+        self.assertSafe(c, "d6.sh", 'cp "$SRC" "$dst"',
+                        "a1-nofollow-test-dominates", cls="write-candidate")
+
+    def test_a_reading_command_is_not_reported_as_writing(self) -> None:
+        """A proven destination and an unplaceable operand are different
+        facts: `diff -q "$a" "$b" >/dev/null` writes neither operand."""
+        c = self.census({"d7.sh": sh("""
+compare() {
+  local a="$1"
+  local b="$2"
+  diff -q "$a" "$b" >/dev/null 2>&1
+}
+""")})
+        site = self.assertBlocks(c, "d7.sh", "diff -q", "indeterminado",
+                                 cls="write-candidate")
+        self.assertEqual("i-write-candidate-unproven", site["form"])
+
+    def test_a_local_helper_that_only_logs_is_not_a_candidate(self) -> None:
+        """Depth-one interprocedural analysis, same as class A: a callee whose
+        positionals are only ever READ clears its callers, even when it
+        reshuffles them with `$*`."""
+        c = self.census({"d8.sh": sh("""
+_log() { printf '%s\\n' "$*"; }
+
+deliver() {
+  local dst="$1"
+  _log "target: $dst"
+}
+""")})
+        self.assertEqual([], [s for s in c.sites("d8.sh")
+                              if "_log" in s["operand"]], c.describe())
+
+    def test_a_local_helper_that_writes_is_a_candidate(self) -> None:
+        """Negative control for the line above: the NAME is never evidence."""
+        c = self.census({"d9.sh": sh("""
+_log() { cp "$SRC" "$1"; }
+
+deliver() {
+  local dst="$1"
+  _log "$dst"
+}
+""")})
+        hits = [s for s in c.sites("d9.sh")
+                if s["class"] == "write-candidate" and s["blocking"]
+                and s["line"] >= 8]
+        self.assertTrue(hits, c.describe())
+
+    def test_mkdir_p_writes_through_a_symlinked_component(self) -> None:
+        """Pass-2 self-audit of the 5th pass: `mkdir` was declared benign
+        because it cannot write through a link — true of the FINAL component
+        only.  `mkdir -p "$dst/sub"` resolves `$dst` and creates `sub` on the
+        other side of it, and the probe returned NO SITE for that line."""
+        c = self.census({"d11.sh": sh("""
+deliver() {
+  local dst="$1"
+  mkdir -p "$dst/sub"
+}
+""")})
+        self.assertBlocks(c, "d11.sh", "mkdir -p", "desguardado",
+                          cls="write-candidate")
+
+    def test_a_guarded_mkdir_is_still_proven_safe(self) -> None:
+        c = self.census({"d12.sh": sh("""
+deliver() {
+  local dst="$1"
+  [ -L "$dst" ] && return 1
+  mkdir -p "$dst"
+}
+""")})
+        self.assertSafe(c, "d12.sh", "mkdir -p", "a1-nofollow-test-dominates",
+                        cls="write-candidate")
+
+    def test_rmdir_is_decided_by_the_operand_not_the_name(self) -> None:
+        """`rmdir "$d"` removes the LINK; `rmdir "$d/"` acts on its target."""
+        plain = self.census({"d13.sh": sh("""
+deliver() {
+  local d="$1"
+  rmdir "$d"
+}
+""")})
+        self.assertEqual([], plain.sites("d13.sh"), plain.describe())
+        slashed = self.census({"d14.sh": sh("""
+deliver() {
+  local d="$1"
+  rmdir "$d/"
+}
+""")})
+        self.assertBlocks(slashed, "d14.sh", 'rmdir "$d/"', "desguardado",
+                          cls="write-candidate")
+
+    def test_a_function_definition_is_not_a_call(self) -> None:
+        """`_log() { printf ... }` names no command; reading its head as one
+        made every helper in the corpus a candidate write."""
+        c = self.census({"d10.sh": sh("""
+_emit() { printf '%s\\n' "$1"; }
+""")})
+        self.assertEqual([], c.sites("d10.sh"), c.describe())
+
+
 class TestParseIsFailClosed(CensusCase):
     def test_unterminated_quote_makes_the_file_block(self) -> None:
         c = self.census({"bad.sh": HEAD + 'echo "never closed\n'})
@@ -1057,8 +1686,18 @@ three() {
 }
 """)})
         blocking = c.blocking("twins.sh")
-        self.assertEqual(3, len(blocking), c.describe())
-        self.assertEqual(3, len({s["fingerprint"] for s in blocking}))
+        # Six, not three: the 5th pass sees each `cp` as a write candidate in
+        # its own right, independently of the `-e` test that points at it.
+        # The distinctness claim is what this test is for, and it holds per
+        # class and across them.
+        self.assertEqual(
+            3, len([s for s in blocking if s["class"] == "symlink-follow"]),
+            c.describe())
+        self.assertEqual(
+            3, len([s for s in blocking if s["class"] == "write-candidate"]),
+            c.describe())
+        self.assertEqual(6, len(blocking), c.describe())
+        self.assertEqual(6, len({s["fingerprint"] for s in blocking}))
 
     def test_rules_surface_lists_every_allowlisted_form(self) -> None:
         proc = subprocess.run([sys.executable, str(CENSUS), "--rules"],

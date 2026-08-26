@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""check-installer-write-safety.py — PLAN-185 W0, 4th pass (INVERTED RULE).
+"""check-installer-write-safety.py — PLAN-185 W0, 5th pass (FAIL-CLOSED DISCOVERY).
 
 Census of two classes of unsafe write in ``scripts/**/*.sh``:
 
@@ -16,22 +16,37 @@ Census of two classes of unsafe write in ``scripts/**/*.sh``:
                   first, the abort leaves a 0-byte file that the EXISTS-skip
                   branch then treats as installed forever.
 
-WHY THIS FILE WAS REWRITTEN (the architectural inversion)
----------------------------------------------------------
-Passes 1..3 of this instrument worked by *implicit denylist*: they enumerated
-the syntactic forms they could recognise and credited ``guardado`` /
-``nao-aplicavel`` to everything that did not match.  Every form nobody thought
-of was born fail-OPEN, so every review round found more of them — 8, then 7,
-then 9, then 10, then 16.  A class that regenerates round after round is not a
-tail of edge cases; it is the matcher's architecture (PROTOCOL anti-pattern 6).
+WHY THIS FILE WAS REWRITTEN TWICE (verdict, then DISCOVERY)
+-----------------------------------------------------------
+Passes 1..3 worked by *implicit denylist*: they enumerated the syntactic forms
+they could recognise and credited ``guardado``/``nao-aplicavel`` to everything
+that did not match.  Every form nobody thought of was born fail-OPEN, so every
+review round found more of them — 8, then 7, then 9, then 10, then 16.
 
-This pass inverts the rule.  Safety is a THEOREM the instrument must prove, and
-it may only prove it with one of the named forms in ALLOWLIST below, each of
-which has a positive control in the test file.  Everything else — every form
-the parser does not model, every command it does not know, every file whose
-block structure does not balance — is ``indeterminado``, which BLOCKS.
+The 4th pass inverted the VERDICT rule: safety became a THEOREM provable only
+by a named form in ALLOWLIST below.  The 5th round of review then returned 16
+findings of the SAME class, because inverting the verdict is only half the
+job.  DISCOVERY was still a denylist: a site existed only where a recognised
+file test or a bare ``sed`` name appeared, so ``test -a "$dst"``,
+``/usr/bin/sed``, ``$1``, ``>& "$dst"`` and ``sort -o "$dst"`` produced no site
+AT ALL.  An invisible site is worse than a wrongly-cleared one: nothing in the
+output says it exists.
 
-Two structural consequences, both deliberate:
+This pass makes discovery fail-closed as well.  A command is PROVEN read-only
+only if its name is in PROVEN_READONLY and it opens no file for output;
+everything else whose operands or redirections carry an expansion is a
+CANDIDATE WRITE (class ``write-candidate``) that must be proven safe like any
+other site.  A test expression the model cannot walk to the end, an
+``eval``/``source``/``exec``, and an unparseable file are sites too.  The
+census therefore reports what it does NOT understand, which is the only way a
+"no finding" line can mean anything.
+
+Three structural consequences, all deliberate:
+
+0. **Volume went up ~5x, and that is the correct direction.**  The baseline is
+   a RATCHET over what the instrument can see, not a list of reviewed defects;
+   PLAN-185 W1/W2 is what turns real sites into ``guardado``.  A small baseline
+   here would only mean discovery was narrow again.
 
 1. **Reachability analysis is gone.**  The old matcher spent ~600 lines asking
    "is the write reachable when the link dangles?", and answered
@@ -48,6 +63,13 @@ Two structural consequences, both deliberate:
    unterminated heredoc, a block stack that does not close, an unreadable file
    — any of these makes the WHOLE FILE unparseable: it emits a synthetic
    blocking ``parse`` site and every site inside it is ``indeterminado``.
+
+SITE CLASSES
+------------
+  symlink-follow  a dereferencing file test decides a path that is written.
+  sed-interp      a value is interpolated into a stream-editor script.
+  write-candidate a command that is not PROVEN read-only touches an expansion.
+  parse           the file could not be read or modelled at all.
 
 VERDICTS
 --------
@@ -95,6 +117,12 @@ EXCLUDED_REL_PREFIXES = ("scripts/tests/",)
 CLASS_SYMLINK = "symlink-follow"
 CLASS_SED = "sed-interp"
 CLASS_PARSE = "parse"
+# Fail-closed DISCOVERY (5th pass).  A command that is not PROVEN read-only and
+# touches an expansion is a candidate write, whether or not anything ever
+# tested that path.  Without this class the census could only see writes that
+# some `-e`/`-f` test had already pointed at, so the forms nobody tested were
+# invisible rather than indeterminate.
+CLASS_WRITE = "write-candidate"
 
 VERDICT_GUARDED = "guardado"
 VERDICT_UNGUARDED = "desguardado"
@@ -123,7 +151,7 @@ ALLOWLIST = (
     ("a3-no-write-to-operand",
      "Every occurrence of the tested path (and of its one-level aliases) in the "
      "analysis region is at a position proven not to write: a file test, an "
-     "argument of a KNOWN_READONLY command, a read redirection, or the SOURCE "
+     "argument of a PROVEN_READONLY command, a read redirection, or the SOURCE "
      "operand of a known writer.  A single occurrence the model cannot place "
      "voids the proof."),
     ("b1-delimiter-escape-dominates",
@@ -160,6 +188,10 @@ R_SCRIPT_UNPARSED = "i-script-unparsed"
 R_CMD_SUBST = "i-command-substitution"
 R_ESCAPE_UNPROVEN = "i-escape-unproven"
 R_AWK_EXPANSION = "i-awk-program-interpolated"
+R_GUARD_STALE = "i-guard-value-rebound"
+R_TEST_UNMODELED = "i-unmodeled-test-form"
+R_CANDIDATE = "i-write-candidate-unproven"
+R_OPAQUE = "i-opaque-command"
 
 # --------------------------------------------------------------------------
 # Lexer
@@ -469,7 +501,11 @@ def build_logical_lines(raw: str) -> List[LogicalLine]:
 # --------------------------------------------------------------------------
 
 _OPEN_KW = ("if", "for", "while", "until", "case", "select")
-_ABORTS = ("return", "exit", "continue", "break", "die", "_die", "fatal")
+# Builtins that leave the enclosing body on sight.
+_BUILTIN_ABORTS = frozenset(("return", "exit", "continue", "break"))
+# Names that USUALLY abort in this corpus but are ordinary functions.  Each is
+# credited only after its body is inspected (see `_is_abort_command`).
+_NAMED_ABORT_CANDIDATES = frozenset(("die", "_die", "fatal"))
 
 
 class Frame(object):
@@ -651,7 +687,7 @@ def assign_scopes(lines: List[LogicalLine]) -> List[FuncSpan]:
 # --------------------------------------------------------------------------
 
 class Command(object):
-    __slots__ = ("toks", "line_idx", "lineno", "prev_op", "negated")
+    __slots__ = ("toks", "line_idx", "lineno", "prev_op", "negated", "pos")
 
     def __init__(self, toks: List[Tok], line_idx: int, lineno: int,
                  prev_op: Optional[str]) -> None:
@@ -660,6 +696,13 @@ class Command(object):
         self.lineno = lineno
         self.prev_op = prev_op
         self.negated = False
+        # Index of this command within its logical line's command list.
+        # Identity, not `is`: every consumer that needs "the command AFTER the
+        # one that holds this evidence" must address it by position in the ONE
+        # list the model built.  Re-splitting the line makes fresh objects, so
+        # `c is t.cmd` silently never matched and the fallback credited an
+        # unrelated command on the same line (rail R5-05).
+        self.pos = 0
 
 
 _SPLITTERS = (";", "&&", "||", "|", "&", "\n", ";;", ";&", ";;&", "|&")
@@ -687,10 +730,23 @@ def split_commands(ll: LogicalLine, line_idx: int) -> List[Command]:
             cur = []
             prev_op = t.text
             continue
+        # A brace GROUP opener is not part of the command that precedes it.
+        # `_log() { printf '%s\n' "$*"; }` is one logical line, and swallowing
+        # the `{` made the whole body look like arguments to a call named
+        # `_log` — so its `printf` was never classified and every caller
+        # inherited an "unknown" occurrence.
+        if t.kind == "word" and not t.quoted and t.text in ("{", "}") \
+                and test_depth <= 0:
+            if cur:
+                cmds.append(Command(cur, line_idx, ll.lineno, prev_op))
+            cur = []
+            prev_op = t.text
+            continue
         cur.append(t)
     if cur:
         cmds.append(Command(cur, line_idx, ll.lineno, prev_op))
-    for c in cmds:
+    for i, c in enumerate(cmds):
+        c.pos = i
         while c.toks and c.toks[0].kind == "word" and c.toks[0].text == "!" \
                 and not c.toks[0].quoted:
             c.negated = not c.negated
@@ -698,17 +754,58 @@ def split_commands(ll: LogicalLine, line_idx: int) -> List[Command]:
     return cmds
 
 
-# Commands that never write any operand path.  Anything NOT here and not a
-# modelled writer makes an operand occurrence UNKNOWN, which blocks.
-KNOWN_READONLY = frozenset("""
-echo printf test [ true false : return exit local export readonly declare typeset
-unset shift eval_off source . cd pwd read wait shopt set trap umask hash type
-grep egrep fgrep zgrep cat zcat head tail wc sort uniq cut tr nl
-basename dirname realpath readlink stat file find ls du df md5 md5sum shasum
-sha1sum sha256sum cksum od xxd diff cmp comm join paste expr seq date sleep
-tput uname id whoami hostname getopt printenv column fold tee_off jq yq python3_off
-continue break die _die fatal log info warn note err error usage help version
+# --------------------------------------------------------------------------
+# THE READ-ONLY ALLOWLIST.  Fail-closed discovery reads this set and nothing
+# else: a command whose name is NOT here is a CANDIDATE WRITE the instrument
+# must reason about, never a command it may skip.
+#
+# Membership is a claim that NO option of that command turns a path operand
+# into a destination.  The reason for each entry is in
+# .claude/plans/PLAN-185/w0-censo-S329.md §12.  Three names the previous pass
+# called read-only are gone because that claim was FALSE for them:
+# `sort -o FILE`, `uniq IN OUT` and `yq -i FILE` all write an operand
+# (rail R5-08).  A dozen more (`cat`, `head`, `find`, `stat`, `jq`, `date`,
+# `git`, ...) are gone because the claim, while probably true, had no proof —
+# and an unproven claim is exactly what this pass stopped making.
+#
+# `die`/`log`/`warn`/... are gone for a different reason: they are LOCAL
+# FUNCTIONS in this corpus.  Crediting them by NAME is the anti-pattern the a2
+# form exists to refuse.
+# --------------------------------------------------------------------------
+PROVEN_READONLY = frozenset("""
+[ [[ test echo printf true false : return break continue exit
+basename dirname grep egrep fgrep local declare typeset export readonly
+unset read shift cd pwd umask
 """.split())
+
+# Commands with an OUTPUT MODE.  Named here so the census says "write-capable,
+# option-aware evidence required" rather than either "read-only" (the R5-08
+# fail-open) or "unknown" (which would lose the destination).  The mapping is
+# name -> the options whose ARGUMENT is a destination path.
+_OUTPUT_MODE_OPT = {
+    "sort": {"-o", "--output"},
+    "yq": set(),
+    "jq": set(),
+    "split": set(),
+    "csplit": set(),
+    "gpg": {"-o", "--output"},
+    "openssl": {"-out"},
+    "curl": {"-o", "--output"},
+    "wget": {"-O", "--output-document"},
+    "tar": {"-f", "--file"},
+    "zip": set(),
+    "unzip": {"-d"},
+    "patch": {"-o", "--output", "-i", "--input"},
+}
+# Commands whose LAST positional operand is a destination even with no option.
+_OUTPUT_MODE_LAST = {"uniq"}
+# In-place flags: their presence turns every remaining operand into a target.
+_INPLACE_FLAGS = {
+    "yq": ("-i", "--inplace", "--in-place"),
+    "jq": ("-i", "--in-place"),
+    "perl": ("-i",),
+    "ruby": ("-i",),
+}
 
 # Prefixes we can strip.  An option we do not model makes the command UNKNOWN.
 # (This is exactly the shape the rail flagged: `command cp "$src" "$dst"` must
@@ -736,7 +833,7 @@ _PREFIX_POSITIONAL = {"timeout": 1}
 
 # Writers: name -> ("last" | "all" | "none", options-with-args, target-opt)
 _WRITERS_LAST = {"cp", "mv", "install", "ln", "rsync"}
-_WRITERS_ALL = {"tee", "touch", "truncate", "chmod", "chown", "chgrp"}
+_WRITERS_ALL = {"tee", "touch", "truncate", "chmod", "chown", "chgrp", "mkdir"}
 _WRITER_OPT_ARG = {
     "cp": {"-t", "--target-directory", "-S", "--suffix"},
     "mv": {"-t", "--target-directory", "-S", "--suffix"},
@@ -750,13 +847,19 @@ _WRITER_OPT_ARG = {
     "chmod": set(),
     "chown": set(),
     "chgrp": set(),
+    "mkdir": {"-m", "--mode"},
 }
-# `mkdir` cannot write THROUGH a link (it fails on a dangling one and is a
-# no-op on a resolved directory link) and `rm` removes the LINK, not its
-# target — unless the operand carries a trailing slash, which makes `rm -r`
-# delete the linked directory's contents.  Both are declared, not assumed.
-_BENIGN_WRITERS = {"mkdir", "rmdir"}
-_LINK_LOCAL_DELETE = {"rm", "unlink"}
+# `mkdir` was declared benign on the grounds that it cannot write THROUGH a
+# link.  That is true of the FINAL component only: `mkdir -p "$dst/sub"`
+# resolves `$dst` and creates `sub` on the other side of it, which is exactly
+# the escape this census exists to find.  Found by the Pass-2 self-audit, which
+# asked what each non-blocking branch actually proves; the probe returned NO
+# SITE for that line.  `mkdir` is a writer.
+#
+# `rm` and `rmdir` remove the LINK, not its target — unless the operand carries
+# a trailing slash, which makes them act on the linked directory.  That is a
+# property of the OPERAND, so it is decided per call, not by the name.
+_LINK_LOCAL_DELETE = {"rm", "unlink", "rmdir"}
 
 _GIT_READONLY_SUBCMDS = frozenset("""
 rev-parse cat-file log show ls-files ls-tree status diff for-each-ref rev-list
@@ -776,6 +879,119 @@ class CmdInfo(object):
 
 
 _RE_ASSIGN = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)(\+?)=")
+# A descriptor duplication operand: a bare number, or `-` to close it.
+_RE_FD_OPERAND = re.compile(r"^(\d+|-)$")
+
+# --------------------------------------------------------------------------
+# EVERY expansion the shell performs — not only identifier-shaped ones.
+#
+# The previous pass matched `\$\{?([A-Za-z_][A-Za-z0-9_]*)`, so `$1`, `${10}`,
+# `$@`, `$*`, `$#`, `$?` and `$$` were not expansions at all: a script built
+# from `sed "s|x|$1|g"` was reported `n0-no-interpolation`, the verdict that
+# means "there is nothing here to reason about" (rail R5-03).  An
+# operator-controlled positional is the FIRST thing an installer interpolates.
+# --------------------------------------------------------------------------
+_RE_EXPANSION = re.compile(
+    r"\$\{[^}]*\}"          # ${name}, ${name:-x}, ${#name}, ${10}
+    r"|\$\("                # $( ... )
+    r"|\$[A-Za-z_][A-Za-z0-9_]*"
+    r"|\$[0-9]"             # positional
+    r"|\$[@*#?$!\-]"        # special parameters
+    r"|`")                  # backtick substitution
+
+def _has_cmd_subst(text: str) -> bool:
+    """A command substitution the SHELL performs (single quotes suppress it)."""
+    i = 0
+    n = len(text)
+    while i < n:
+        c = text[i]
+        if c == "\\" and i + 1 < n:
+            i += 2
+            continue
+        if c == "'":
+            k = text.find("'", i + 1)
+            if k < 0:
+                return False
+            i = k + 1
+            continue
+        if c == "`":
+            return True
+        if c == "$" and i + 1 < n and text[i + 1] == "(" \
+                and not text.startswith("((", i + 1):
+            return True
+        i += 1
+    return False
+
+
+def expansion_names(raw: str) -> Tuple[Set[str], bool]:
+    """Names the shell expands in this RAW token, plus "has a substitution".
+
+    The name of `$1` is ``1``; of `$@` it is ``@``; of `${x:-y}` it is ``x``.
+    Names that no assignment can ever bind (positionals, `$?`, `$$`) therefore
+    reach the prover with an EMPTY assignment set, which is exactly right:
+    no assignment means no proof means the site blocks.
+    """
+    names: Set[str] = set()
+    cmd_subst = False
+    i = 0
+    n = len(raw)
+    while i < n:
+        c = raw[i]
+        if c == "\\" and i + 1 < n:
+            i += 2
+            continue
+        if c == "'":
+            k = raw.find("'", i + 1)
+            if k < 0:
+                return names, cmd_subst
+            i = k + 1
+            continue
+        if c == "`":
+            cmd_subst = True
+            i += 1
+            continue
+        if c == "$" and i + 1 < n:
+            if raw[i + 1] == "(":
+                if raw.startswith("((", i + 1):
+                    i += 2
+                    continue
+                cmd_subst = True
+                i += 2
+                continue
+            m = _RE_EXPANSION.match(raw, i)
+            if m:
+                names.add(_expansion_name(m.group(0)))
+                i = m.end()
+                continue
+        i += 1
+    return names, cmd_subst
+
+
+_RE_INNER_NAME = re.compile(r"([A-Za-z_][A-Za-z0-9_]*|[0-9]+|[@*#?$!\-])")
+
+
+def _expansion_name(token: str) -> str:
+    """The parameter a single expansion token reads."""
+    body = token[1:]
+    if body.startswith("{") and body.endswith("}"):
+        body = body[1:-1]
+        # `${#name}`, `${!name}`, `${name:-x}`, `${name[0]}` all READ `name`.
+        body = body.lstrip("#!")
+    m = _RE_INNER_NAME.match(body)
+    return m.group(1) if m else body
+
+
+def command_basename(name: str) -> str:
+    """`/usr/bin/sed` and `./install.sh` name the same programs as their tails.
+
+    Accepting only the bare name meant a path-qualified invocation matched no
+    rule at all and produced NO SITE — the invisible-by-omission class
+    (rail R5-02).  An empty tail (`foo/`) is not a command name; the caller
+    treats that as unknown.
+    """
+    if "/" not in name:
+        return name
+    return name.rsplit("/", 1)[1]
 
 
 def _strip_prefixes(toks: List[Tok]) -> Tuple[Optional[List[Tok]], bool]:
@@ -862,8 +1078,26 @@ def classify_command(cmd: Command) -> CmdInfo:
                     continue
                 k += 1
                 continue
-            if t.text in ("<<", "<<-", ">&", "<&"):
-                k += 2          # heredoc tag / fd duplication: not a path
+            if t.text in ("<<", "<<-"):
+                k += 2          # heredoc tag: not a path
+                continue
+            if t.text in (">&", "<&"):
+                # `cmd >& "$dst"` OPENS $dst for output.  Only a NUMERIC
+                # operand (or `-`, which closes the descriptor) is a
+                # descriptor duplication; treating every `>&` as a dup threw
+                # the filename away and left the write invisible (rail R5-07).
+                if k + 1 < len(toks) and toks[k + 1].kind == "word":
+                    dup = canon_operand(toks[k + 1])
+                    if _RE_FD_OPERAND.match(dup):
+                        k += 2
+                        continue
+                    if t.text == ">&":
+                        info_dests.append(toks[k + 1])
+                    else:
+                        info_reads.append(toks[k + 1])
+                    k += 2
+                    continue
+                k += 1
                 continue
             if t.text == "[[":
                 is_test_host = True
@@ -903,15 +1137,25 @@ def classify_command(cmd: Command) -> CmdInfo:
         return info
 
     name_tok = stripped[0]
-    name = name_tok.text
+    raw_name = name_tok.text
     args = stripped[1:]
+
+    # A name that is itself an expansion (`"$CP" -f "$dst"`) names a program
+    # we cannot know, so it is UNKNOWN — never skipped.
+    if name_tok.quoted or _RE_EXPANSION.search(raw_name):
+        info = CmdInfo(raw_name, "unknown")
+        info.dests = list(info_dests)
+        info.reads = list(info_reads)
+        info.operands = list(args)
+        return info
+
+    name = command_basename(canon_operand(name_tok))
     info = CmdInfo(name, "unknown")
     info.dests = list(info_dests)
     info.reads = list(info_reads)
     info.operands = list(args)
 
-    if name_tok.quoted or "$" in name:
-        info.kind = "unknown"
+    if not name:
         return info
 
     if name in ("[[", "[", "test"):
@@ -930,10 +1174,22 @@ def classify_command(cmd: Command) -> CmdInfo:
         info.reads.extend(args)
         return info
 
-    if name in KNOWN_READONLY:
+    if name in PROVEN_READONLY:
+        if name in ("local", "declare", "typeset", "export", "readonly") \
+                and any(a.kind == "word" and _has_cmd_subst(a.text) for a in args):
+            # The binding itself writes no path, but a command substitution in
+            # its value runs commands.  Those ARE scanned separately; being
+            # conservative here costs one candidate site and removes the need
+            # to argue about it.
+            info.kind = "unknown"
+            return info
         info.kind = "readonly"
         info.reads.extend(args)
         return info
+
+    if name in _OUTPUT_MODE_OPT or name in _OUTPUT_MODE_LAST \
+            or name in _INPLACE_FLAGS:
+        return _classify_output_mode(name, args, info)
 
     if name == "git":
         sub = None
@@ -979,11 +1235,6 @@ def classify_command(cmd: Command) -> CmdInfo:
         info.reads.extend(args)
         return info
 
-    if name in _BENIGN_WRITERS:
-        info.kind = "readonly"
-        info.reads.extend(args)
-        return info
-
     if name in _LINK_LOCAL_DELETE:
         dangerous = [a for a in args
                      if a.kind == "word" and not a.text.startswith("-")
@@ -1004,8 +1255,12 @@ def classify_command(cmd: Command) -> CmdInfo:
         bad = False
         while j < len(args):
             a = args[j]
-            txt = a.text
-            if a.kind == "word" and not a.quoted and txt.startswith("-") and txt != "-":
+            # Option-ness is read off the CANONICAL text, not the quoted flag.
+            # `--target-directory="$dst"` carries a quoted segment, so the old
+            # `not a.quoted` guard sent the whole token to `positional` and
+            # made the SOURCE the destination (rail R5-09).
+            txt = canon_operand(a)
+            if a.kind == "word" and txt.startswith("-") and txt != "-":
                 if txt == "--":
                     positional.extend(args[j + 1:])
                     break
@@ -1013,12 +1268,18 @@ def classify_command(cmd: Command) -> CmdInfo:
                 if base in witharg:
                     if "=" in txt:
                         if base in ("-t", "--target-directory"):
-                            bad = True
+                            # The value is the destination.  Rebuild it as its
+                            # own token so the occurrence key is `$dst`, the
+                            # same key the guard analysis indexes by.
+                            target_opt = Tok("word", txt.split("=", 1)[1],
+                                             a.quoted)
                         j += 1
                         continue
                     if base in ("-t", "--target-directory"):
                         if j + 1 < len(args):
                             target_opt = args[j + 1]
+                        else:
+                            bad = True
                     j += 2
                     continue
                 j += 1
@@ -1057,6 +1318,74 @@ def classify_command(cmd: Command) -> CmdInfo:
         return info
 
     info.kind = "unknown"
+    return info
+
+
+def _classify_output_mode(name: str, args: List[Tok], info: CmdInfo) -> CmdInfo:
+    """Option-aware classification for commands that HAVE an output mode.
+
+    `sort`, `uniq` and `yq` sat in the read-only set of the previous pass, so a
+    tested path handed to `sort -o "$dst"` was recorded as a READ and the site
+    came out `a3-no-write-to-operand` (rail R5-08).  Membership in a read-only
+    set is a claim about every option; these commands falsify it, so they get
+    evidence instead of a set membership.
+    """
+    dest_opts = _OUTPUT_MODE_OPT.get(name, set())
+    inplace_flags = _INPLACE_FLAGS.get(name, ())
+    positional: List[Tok] = []
+    dests: List[Tok] = []
+    inplace = False
+    j = 0
+    while j < len(args):
+        a = args[j]
+        txt = canon_operand(a)
+        if a.kind == "word" and txt.startswith("-") and txt != "-":
+            if txt == "--":
+                positional.extend(args[j + 1:])
+                break
+            base = txt.split("=", 1)[0]
+            if base in inplace_flags or any(txt.startswith(f) for f in inplace_flags):
+                inplace = True
+                j += 1
+                continue
+            if base in dest_opts:
+                if "=" in txt:
+                    dests.append(Tok("word", txt.split("=", 1)[1], a.quoted))
+                    j += 1
+                    continue
+                if j + 1 < len(args):
+                    dests.append(args[j + 1])
+                    j += 2
+                    continue
+                info.kind = "unknown"
+                return info
+            # An option we do not model may itself be an output mode.
+            info.kind = "unknown"
+            return info
+        positional.append(a)
+        j += 1
+
+    if inplace:
+        info.kind = "writer"
+        info.dests.extend(positional)
+        return info
+    if name in _OUTPUT_MODE_LAST and len(positional) >= 2:
+        info.kind = "writer"
+        info.dests.append(positional[-1])
+        info.reads.extend(positional[:-1])
+        return info
+    if dests:
+        info.kind = "writer"
+        info.dests.extend(dests)
+        info.reads.extend(positional)
+        return info
+    if name in _OUTPUT_MODE_LAST:
+        # `uniq IN` (one operand) writes stdout; `uniq` alone reads stdin.
+        info.kind = "readonly"
+        info.reads.extend(positional)
+        return info
+    info.kind = "readonly"
+    info.reads.extend(positional)
     return info
 
 
@@ -1142,17 +1471,29 @@ _TEST_OPS_NOFOLLOW = frozenset(["L", "h"])
 
 
 class TestOccurrence(object):
-    __slots__ = ("line_idx", "lineno", "op", "operand", "canon", "cmd", "scope")
+    __slots__ = ("line_idx", "lineno", "op", "operand", "canon", "cmd", "scope",
+                 "cmd_pos", "has_negation", "has_conjunction")
 
     def __init__(self, line_idx: int, lineno: int, op: str, operand: Tok,
-                 canon: str, cmd: Command, scope: Tuple[int, ...]) -> None:
+                 canon: str, cmd: Command, scope: Tuple[int, ...],
+                 has_negation: bool = False,
+                 has_conjunction: bool = False) -> None:
         self.line_idx = line_idx
         self.lineno = lineno
         self.op = op
         self.operand = operand
         self.canon = canon
         self.cmd = cmd
+        self.cmd_pos = cmd.pos
         self.scope = scope
+        # Bracket-INTERNAL polarity and conjunction, both of which decide
+        # whether the branch a symlink takes is the one that aborts.
+        # `[ ! -L "$dst" ] && return 1` aborts for everything EXCEPT a
+        # symlink, and the previous pass read it as a guard because the `!`
+        # is a word inside the brackets, not the tokenised command-level `!`
+        # the model checked (rail R5-04).
+        self.has_negation = has_negation
+        self.has_conjunction = has_conjunction
 
 
 class FileModel(object):
@@ -1166,6 +1507,23 @@ class FileModel(object):
         self.tests: List[TestOccurrence] = []
         self.assigns: Dict[str, List[Tuple[int, str, Command]]] = {}
         self.unparseable: Optional[str] = None
+        # The ONE command list per logical line.  Every consumer that needs a
+        # neighbouring command addresses it here by index; re-splitting a line
+        # makes fresh objects whose identity nothing can match (rail R5-05).
+        self.line_cmds: Dict[int, List[Command]] = {}
+        # Test expressions the model could not walk to the end.  Each becomes a
+        # BLOCKING site: an unrecognised test must never be an absent one.
+        self.unmodelled_tests: List[Tuple[int, int, str, str]] = []
+        # Commands that are candidate WRITES: not provably read-only and
+        # touching an expansion.  This is the fail-closed half of discovery.
+        self.candidates: List[Tuple[Command, str, List[Tuple[str, Tok]]]] = []
+        # Every rebinding of a name that is NOT a plain assignment (`read x`,
+        # `for x in`, `getopts o x`, `printf -v x`).  A guard proved before one
+        # of these proves nothing about the value that reaches the write.
+        self.rebinds: Dict[str, List[int]] = {}
+
+    def cmds_of(self, line_idx: int) -> List[Command]:
+        return self.line_cmds.get(line_idx, [])
 
     def func_at(self, line_idx: int) -> Optional[FuncSpan]:
         best: Optional[FuncSpan] = None
@@ -1192,40 +1550,203 @@ def _record_occ(fm: FileModel, tok: Tok, kind: str, cmd: Command,
                    fm.lines[cmd.line_idx].scope, argpos))
 
 
+# Unary operators that take a PATH and dereference it.
+_TEST_UNARY_FILE = frozenset(list("efdsrwxbcpSugkGONLha"))
+# Unary operators that take something other than a path.
+_TEST_UNARY_OTHER = frozenset(("z", "n", "o", "v", "R", "t"))
+# Binary operators that COMPARE two paths, dereferencing both.
+_TEST_BINARY_FILE = frozenset(("-nt", "-ot", "-ef"))
+# Binary operators over strings/integers: no path is dereferenced.
+_TEST_BINARY_OTHER = frozenset(("=", "==", "!=", "=~", "<", ">",
+                                "-eq", "-ne", "-lt", "-le", "-gt", "-ge"))
+_TEST_JOIN = frozenset(("-a", "-o", "&&", "||"))
+
+
+_REDIR_OPS = (">", ">>", ">|", "<", "<<<", "<<", "<<-", ">&", "<&")
+
+
+def _strip_redirections(toks: List[Tok]) -> List[Tok]:
+    """Drop redirections (and the fd digit in front of them) from a token list.
+
+    `[ "$n" -gt 1 ] 2>/dev/null` is an ordinary test with a redirection glued
+    to it.  Leaving the redirection in the expression made the walker meet a
+    `]` it did not expect and report an unmodelled test — a FALSE positive that
+    would have put two healthy lines in the baseline.
+    """
+    out: List[Tok] = []
+    k = 0
+    n = len(toks)
+    while k < n:
+        t = toks[k]
+        if t.kind == "op" and t.text in _REDIR_OPS:
+            if out and out[-1].kind == "word" and re.match(r"^\d+$", out[-1].text):
+                out.pop()
+            k += 2 if k + 1 < n and toks[k + 1].kind == "word" else 1
+            continue
+        out.append(t)
+        k += 1
+    return out
+
+
+def _test_host_expression(cmd: Command) -> Optional[List[Tok]]:
+    """The expression tokens of a test command, or None if this is no test.
+
+    Recognises `[[ ... ]]`, `[ ... ]`, `test ...` and any PATH-QUALIFIED form
+    of the last two (`/bin/test -e "$x"`), which matched nothing before and so
+    produced no site at all (rail R5-01).
+    """
+    toks = list(cmd.toks)
+    if any(t.kind == "op" and t.text == "[[" for t in toks):
+        out: List[Tok] = []
+        depth = 0
+        for t in toks:
+            if t.kind == "op" and t.text == "[[":
+                depth += 1
+                continue
+            if t.kind == "op" and t.text == "]]":
+                depth -= 1
+                continue
+            if depth > 0:
+                out.append(t)
+        return out
+    body = _strip_redirections(toks)
+    while body and body[0].kind == "word" and not body[0].quoted \
+            and body[0].text in _KEYWORDS:
+        body = body[1:]
+    if not body or body[0].kind != "word" or body[0].quoted:
+        return None
+    head = command_basename(canon_operand(body[0]))
+    if head not in ("[", "test"):
+        return None
+    rest = body[1:]
+    if head == "[":
+        if rest and rest[-1].kind == "word" and canon_operand(rest[-1]) == "]":
+            rest = rest[:-1]
+        else:
+            return rest + [Tok("word", "\x00unterminated")]
+    return rest
+
+
 def _scan_tests(fm: FileModel, cmd: Command) -> None:
-    """Record every file-test operator applied to an operand in this command."""
-    toks = cmd.toks
-    for j, t in enumerate(toks):
-        if t.kind != "word" or t.quoted:
-            continue
-        txt = t.text
-        if len(txt) != 2 or not txt.startswith("-"):
-            continue
-        op = txt[1]
-        if op not in _TEST_OPS_FOLLOW and op not in _TEST_OPS_NOFOLLOW:
-            continue
-        # must be inside a test host: [ ... ], [[ ... ]] or `test`
-        host = False
-        for k in range(j - 1, -1, -1):
-            p = toks[k]
-            if p.kind == "op" and p.text == "[[":
-                host = True
+    """Model the WHOLE test expression, fail-closed.
+
+    The previous pass hunted for `-X` tokens and looked BACKWARDS for a host.
+    Every shape that search did not recognise — `test -a "$dst"`, a
+    path-qualified `test`, an operator with no operand, `-nt`/`-ef` — produced
+    NO SITE, so a later write through that path was invisible rather than
+    indeterminate (rail R5-01).  Here the expression is walked forwards and
+    anything the model cannot place raises the file's unmodelled-test flag,
+    which becomes a BLOCKING site.
+    """
+    expr = _test_host_expression(cmd)
+    if expr is None:
+        return
+    scope = fm.lines[cmd.line_idx].scope
+    found: List[Tuple[str, Tok]] = []
+    has_negation = cmd.negated
+    has_conjunction = False
+    unmodelled: Optional[str] = None
+
+    i = 0
+    n = len(expr)
+    expect_expr = True
+    while i < n:
+        t = expr[i]
+        txt = t.text if not t.quoted else canon_operand(t)
+        if t.kind == "op":
+            if t.text in ("&&", "||"):
+                if t.text == "&&":
+                    has_conjunction = True
+                expect_expr = True
+                i += 1
+                continue
+            if t.text in ("(", ")"):
+                i += 1
+                continue
+            unmodelled = "test operator %r" % t.text
+            break
+        if txt == "\x00unterminated":
+            unmodelled = "unterminated `[` expression"
+            break
+        if expect_expr:
+            if txt == "!" and not t.quoted:
+                has_negation = not has_negation
+                i += 1
+                continue
+            if not t.quoted and len(txt) == 2 and txt.startswith("-"):
+                op = txt[1]
+                if op in _TEST_UNARY_FILE:
+                    if i + 1 >= n or expr[i + 1].kind != "word":
+                        unmodelled = "%s with no operand" % txt
+                        break
+                    found.append((op, expr[i + 1]))
+                    i += 2
+                    expect_expr = False
+                    continue
+                if op in _TEST_UNARY_OTHER:
+                    if i + 1 >= n:
+                        unmodelled = "%s with no operand" % txt
+                        break
+                    i += 2
+                    expect_expr = False
+                    continue
+                unmodelled = "unmodelled unary test operator %r" % txt
                 break
-            if p.kind == "word" and not p.quoted and p.text in ("[", "test"):
-                host = True
+            if not t.quoted and txt.startswith("-") and txt not in _TEST_JOIN \
+                    and txt not in _TEST_BINARY_OTHER and len(txt) > 2:
+                unmodelled = "unmodelled test operator %r" % txt
                 break
-            if p.kind == "op" and p.text == "]]":
-                break
-        if not host:
+            # A word in expression position: either the left side of a binary
+            # operator, or a bare `[ "$x" ]` truth test.
+            if i + 1 < n and expr[i + 1].kind == "word" \
+                    and not expr[i + 1].quoted \
+                    and expr[i + 1].text in _TEST_BINARY_FILE:
+                if i + 2 >= n:
+                    unmodelled = "%s with no right operand" % expr[i + 1].text
+                    break
+                # `-nt`/`-ot`/`-ef` stat BOTH operands, so both are decided by
+                # a dereferencing test.
+                found.append(("e", t))
+                found.append(("e", expr[i + 2]))
+                i += 3
+                expect_expr = False
+                continue
+            if i + 1 < n and expr[i + 1].kind == "word" \
+                    and not expr[i + 1].quoted \
+                    and expr[i + 1].text in _TEST_BINARY_OTHER:
+                if i + 2 >= n:
+                    unmodelled = "%s with no right operand" % expr[i + 1].text
+                    break
+                i += 3
+                expect_expr = False
+                continue
+            i += 1
+            expect_expr = False
             continue
-        if j + 1 >= len(toks) or toks[j + 1].kind != "word":
+        if not t.quoted and txt in _TEST_JOIN:
+            if txt in ("-a", "&&"):
+                has_conjunction = True
+            expect_expr = True
+            i += 1
             continue
-        operand = toks[j + 1]
+        unmodelled = "unmodelled token %r after a complete test" % txt
+        break
+
+    if unmodelled is not None:
+        fm.unmodelled_tests.append((cmd.line_idx, cmd.lineno, unmodelled,
+                                    fm.lines[cmd.line_idx].snippet()))
+        return
+
+    for op, operand in found:
         c = canon_operand(operand)
         if not c:
             continue
-        fm.tests.append(TestOccurrence(cmd.line_idx, cmd.lineno, op, operand, c,
-                                       cmd, fm.lines[cmd.line_idx].scope))
+        # `-a` in expression position is the unary "exists" operator, which
+        # dereferences exactly like `-e`.
+        norm = "e" if op == "a" else op
+        fm.tests.append(TestOccurrence(cmd.line_idx, cmd.lineno, norm, operand,
+                                       c, cmd, scope, has_negation,
+                                       has_conjunction))
         _record_occ(fm, operand, OCC_TEST, cmd, "test")
 
 
@@ -1296,7 +1817,9 @@ def build_file_model(rel_path: str, raw: str) -> FileModel:
         return fm
 
     for idx, ll in enumerate(fm.lines):
-        for cmd in split_commands(ll, idx):
+        cmds = split_commands(ll, idx)
+        fm.line_cmds[idx] = cmds
+        for cmd in cmds:
             fm.commands.append(cmd)
         # Commands nested inside `$( ... )` on this line.  They are analysed
         # for occurrences and for class B; their TESTS are deliberately not
@@ -1350,10 +1873,180 @@ def build_file_model(rel_path: str, raw: str) -> FileModel:
 
         _scan_tests(fm, cmd)
         _record_command(fm, cmd)
+        _scan_rebinds(fm, cmd)
+        _scan_candidate(fm, cmd)
 
     for cmd in fm.subst_commands:
         _record_command(fm, cmd)
+        _scan_rebinds(fm, cmd)
+        _scan_candidate(fm, cmd)
     return fm
+
+
+# Names that run text the model never sees.  They are candidates ALWAYS, with
+# or without an expansion: `eval` and `source` execute code this instrument
+# cannot read, and `exec` replaces the process.
+_OPAQUE_COMMANDS = frozenset(("eval", "source", ".", "exec"))
+
+
+def _scan_rebinds(fm: FileModel, cmd: Command) -> None:
+    """Index every non-assignment rebinding of a name."""
+    body = [t for t in cmd.toks if t.kind == "word"]
+    while body and not body[0].quoted and body[0].text in _KEYWORDS:
+        body = body[1:]
+    if not body:
+        return
+    head = command_basename(canon_operand(body[0]))
+    args = body[1:]
+
+    def mark(name: str) -> None:
+        fm.rebinds.setdefault(name, []).append(cmd.line_idx)
+
+    if head == "read":
+        for a in args:
+            txt = canon_operand(a)
+            if txt.startswith("-"):
+                continue
+            if re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", txt):
+                mark(txt)
+        return
+    if head == "getopts" and len(args) >= 2:
+        mark(canon_operand(args[1]))
+        return
+    if head == "printf":
+        for j, a in enumerate(args):
+            if canon_operand(a) == "-v" and j + 1 < len(args):
+                mark(canon_operand(args[j + 1]))
+        return
+    if head == "shift":
+        # Every positional moves; a guard on `$1` proved nothing afterwards.
+        for j in range(1, 10):
+            mark(str(j))
+        mark("@")
+        mark("*")
+        return
+    # `for NAME in ...` / `select NAME in ...`
+    toks = cmd.toks
+    for j, t in enumerate(toks):
+        if t.kind == "word" and not t.quoted and t.text in ("for", "select") \
+                and j + 1 < len(toks) and toks[j + 1].kind == "word":
+            nxt = canon_operand(toks[j + 1])
+            if re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", nxt):
+                mark(nxt)
+
+
+def _scan_candidate(fm: FileModel, cmd: Command) -> None:
+    """Fail-CLOSED discovery: is this command a candidate write?
+
+    A command is a candidate unless it is PROVEN read-only.  "Proven" means its
+    name is in PROVEN_READONLY (or it is a modelled read-only form such as a
+    test or a non-acting `find`) AND it opens no file for output.  Everything
+    else — an unknown program, an expansion used as the program name, a
+    modelled writer, an output-mode command, `eval`/`source`/`exec` — is a
+    candidate the verdict layer must reason about.
+
+    Discovery ALSO requires an expansion somewhere in the operands or
+    redirections: a write to a fully literal path is decided by the script, not
+    by anything an operator controls, and PLAN-185's threat model is about
+    operator-controlled paths.  That is the ONE narrowing here, and it is a
+    property of the token text, not of a command list.
+    """
+    if not cmd.toks:
+        return
+    # A function DEFINITION is not a call: `_log() { printf '%s\n' "$*"; }`
+    # names no command at all, and reading its head as one made every helper in
+    # the corpus a candidate.
+    if _RE_FUNC_DEF.match(" ".join(t.text for t in cmd.toks)):
+        return
+    lead = [t for t in cmd.toks if t.kind == "word"]
+    if lead and not lead[0].quoted and lead[0].text in ("for", "select", "case"):
+        # A word LIST, not a command.  Expansions in it are data; any command
+        # substitution inside was already lexed into `fm.subst_commands`.
+        return
+
+    info = classify_command(cmd)
+    body = _strip_redirections(cmd.toks)
+    body = [t for t in body if t.kind == "word"]
+    while body and not body[0].quoted and body[0].text in _KEYWORDS:
+        body = body[1:]
+    if not body:
+        # Bare redirection (`exec 3> "$f"`, `> "$f"`): still a write.
+        body = []
+    head = ""
+    if body and not body[0].quoted:
+        head = command_basename(canon_operand(body[0]))
+    opaque = head in _OPAQUE_COMMANDS
+
+    # Proven destinations, and operands the model cannot place.  Conflating
+    # them made `diff -q "$dst" "$tmp" >/dev/null` report that `diff` WRITES
+    # its operands, when the only destination is the redirection.
+    dests = [t for t in info.dests
+             if t.kind == "word" and _token_is_expanded(t.text)]
+    unknowns: List[Tok] = []
+    if info.kind == "unknown" or opaque:
+        unknowns = [t for t in info.operands
+                    if t.kind == "word" and _token_is_expanded(t.text)]
+        # One level of interprocedural analysis, same depth as class A: a call
+        # to a function DEFINED IN THIS FILE whose matching parameter is never
+        # written is not a candidate.  Its NAME is never the evidence.
+        if head and fm.func_by_name(head) is not None:
+            # The argument POSITION must be the real one, counted over every
+            # word operand — not over the filtered subset.
+            argpos: Dict[int, int] = {}
+            pos = 0
+            for a in info.operands:
+                if a.kind != "word":
+                    continue
+                pos += 1
+                argpos[id(a)] = pos
+            kept: List[Tok] = []
+            for t in unknowns:
+                probe = Occurrence(cmd.line_idx, cmd.lineno, OCC_UNKNOWN, head,
+                                   canon_operand(t),
+                                   fm.lines[cmd.line_idx].scope,
+                                   argpos.get(id(t), 0))
+                if resolve_local_call(fm, probe) != OCC_READ:
+                    kept.append(t)
+            unknowns = kept
+
+    if not dests and not unknowns:
+        return
+    fm.candidates.append((cmd, "opaque" if opaque else "mixed",
+                          [("write", t) for t in dests]
+                          + [("unknown", t) for t in unknowns]))
+
+
+def _token_is_expanded(raw: str) -> bool:
+    """Does the SHELL decide part of this word?  Quoting-aware."""
+    names, subst = expansion_names(raw)
+    if names or subst:
+        return True
+    # A glob or a leading `~` outside quotes is expanded by the shell too.
+    i = 0
+    n = len(raw)
+    while i < n:
+        c = raw[i]
+        if c == "\\" and i + 1 < n:
+            i += 2
+            continue
+        if c == "'":
+            k = raw.find("'", i + 1)
+            if k < 0:
+                return False
+            i = k + 1
+            continue
+        if c == '"':
+            try:
+                i, _seg = _read_dquote(raw, i)
+            except ParseError:
+                return True
+            continue
+        if c in "*?":
+            return True
+        if c == "~" and (i == 0 or raw[i - 1] in "=:"):
+            return True
+        i += 1
+    return False
 
 
 def _record_command(fm: FileModel, cmd: Command) -> None:
@@ -1388,16 +2081,25 @@ def resolve_local_call(fm: FileModel, occ: Occurrence) -> str:
     span = fm.func_by_name(occ.cmd_name)
     if span is None:
         return OCC_UNKNOWN
-    for idx in range(span.start, span.end + 1):
-        if _RE_VARARGS.search(fm.lines[idx].text):
-            return OCC_UNKNOWN
-    param = "$%d" % occ.argpos
     region = (span.start, span.end)
+    reshuffles = any(_RE_VARARGS.search(fm.lines[idx].text)
+                     for idx in range(span.start, span.end + 1))
+    if reshuffles:
+        # `$@`/`$*`/`shift` break the position-to-parameter mapping, so THIS
+        # argument cannot be followed.  It can still be cleared, and soundly:
+        # if NO positional whatsoever is written inside the callee, then no
+        # permutation of the arguments is written either.  Bailing out to
+        # UNKNOWN instead made every call to a `printf "$*"` logger a candidate
+        # write, which is noise, not caution.
+        params = ["$@", "$*"] + ["$%d" % i for i in range(1, 10)]
+    else:
+        params = ["$%d" % occ.argpos]
     kinds: Set[str] = set()
-    for c in alias_set(fm, param, region):
-        for o in fm.occ.get(c, []):
-            if region[0] <= o.line_idx <= region[1]:
-                kinds.add(o.kind)
+    for param in params:
+        for c in alias_set(fm, param, region):
+            for o in fm.occ.get(c, []):
+                if region[0] <= o.line_idx <= region[1]:
+                    kinds.add(o.kind)
     if OCC_WRITE in kinds:
         return OCC_WRITE
     if OCC_UNKNOWN in kinds:
@@ -1433,9 +2135,73 @@ def dominates(g_scope: Tuple[int, ...], g_idx: int,
     return True
 
 
+def rebound_between(fm: FileModel, names: Set[str], g_idx: int,
+                    w_idx: int) -> Optional[Tuple[str, int]]:
+    """Is any of `names` re-bound after the guard and before the write?
+
+    Dominance says the guard RAN; it does not say the value it inspected is
+    still the one the write uses.  For
+
+        dst=/safe; [ -L "$dst" ] && return; dst="$1"; cp src "$dst"
+
+    the guard dominates and proves nothing, because `dst` was reassigned in
+    between (rail R5-06).  Any reaching definition invalidates the proof:
+    a plain assignment, a `local`/`export`, a `read`, a `for` loop variable,
+    `getopts`, `printf -v`, or a `shift` when the path is positional.
+
+    Returns (name, line index) of the first invalidating rebinding, or None.
+    """
+    hits: List[Tuple[str, int]] = []
+    for name in names:
+        for (idx, _rhs, _cmd) in fm.assigns.get(name, []):
+            if g_idx < idx <= w_idx:
+                hits.append((name, idx))
+        for idx in fm.rebinds.get(name, []):
+            if g_idx < idx <= w_idx:
+                hits.append((name, idx))
+    if not hits:
+        return None
+    hits.sort(key=lambda p: (p[1], p[0]))
+    return hits[0]
+
+
 # --------------------------------------------------------------------------
 # Class A — symlink-follow
 # --------------------------------------------------------------------------
+
+
+def _is_abort_command(fm: FileModel, cmd: Command) -> bool:
+    """Does this command leave the enclosing body?
+
+    `return`/`exit`/`continue`/`break` are shell builtins and prove it on
+    sight.  `die`/`_die`/`fatal` are FUNCTION NAMES in this corpus, so they
+    prove it only when the function is defined in this file and its body
+    aborts unconditionally.  Crediting them by name is the same
+    evidence-by-vocabulary the a2 form exists to refuse.
+    """
+    if not cmd.toks:
+        return False
+    head = cmd.toks[0]
+    if head.kind != "word" or head.quoted:
+        return False
+    name = command_basename(canon_operand(head))
+    if name in _BUILTIN_ABORTS:
+        return True
+    if name not in _NAMED_ABORT_CANDIDATES:
+        return False
+    span = fm.func_by_name(name)
+    if span is None:
+        return False
+    for idx in range(span.start, span.end + 1):
+        for c in fm.cmds_of(idx):
+            if not c.toks:
+                continue
+            h = c.toks[0]
+            if h.kind == "word" and not h.quoted \
+                    and command_basename(canon_operand(h)) in ("exit", "return") \
+                    and c.prev_op not in ("&&", "||"):
+                return True
+    return False
 
 
 def _branch_aborts_at_own_level(fm: FileModel, then_frame_uid: int,
@@ -1451,28 +2217,27 @@ def _branch_aborts_at_own_level(fm: FileModel, then_frame_uid: int,
             break
         if ll.scope[-1:] != (then_frame_uid,):
             continue
-        for cmd in split_commands(ll, idx):
-            if not cmd.toks:
+        for cmd in fm.cmds_of(idx):
+            if cmd.prev_op in ("&&", "||"):
                 continue
-            head = cmd.toks[0]
-            if head.kind == "word" and not head.quoted and head.text in _ABORTS:
-                if cmd.prev_op in ("&&", "||"):
-                    continue
+            if _is_abort_command(fm, cmd):
                 return True
     return False
 
 
-def _inline_abort_after(cmd_list: List[Command], pos: int) -> bool:
-    """`<test> && <abort>` on the same logical line."""
+def _inline_abort_after(fm: FileModel, cmd_list: List[Command],
+                        pos: int) -> bool:
+    """`<test> && <abort>` on the same logical line, ADJACENT.
+
+    Adjacency is the whole point: an abort further down the line is guarded by
+    whatever sits between it and the test, so it is not this test's abort.
+    """
     if pos + 1 >= len(cmd_list):
         return False
     nxt = cmd_list[pos + 1]
     if nxt.prev_op != "&&":
         return False
-    if not nxt.toks:
-        return False
-    head = nxt.toks[0]
-    return head.kind == "word" and not head.quoted and head.text in _ABORTS
+    return _is_abort_command(fm, nxt)
 
 
 def _find_then_uid(fm: FileModel, line_idx: int) -> Optional[int]:
@@ -1498,7 +2263,8 @@ def _find_then_uid(fm: FileModel, line_idx: int) -> Optional[int]:
     return None
 
 
-def _single_line_if_aborts(cmd_list: List[Command], pos: int) -> bool:
+def _single_line_if_aborts(fm: FileModel, cmd_list: List[Command],
+                           pos: int) -> bool:
     """`if [ -L x ]; then return 1; fi` entirely on one logical line."""
     for c in cmd_list[pos + 1:]:
         if not c.toks:
@@ -1507,22 +2273,29 @@ def _single_line_if_aborts(cmd_list: List[Command], pos: int) -> bool:
         if head.kind == "word" and not head.quoted:
             if head.text == "then":
                 continue
-            if head.text in _ABORTS:
+            if _is_abort_command(fm, c):
                 return True
-            if head.text in ("fi", "else", "elif"):
-                return False
             return False
     return False
 
 
-def _guard_test_is_unconditional(cmd: Command) -> bool:
-    """A `-L` conjoined with `&&` inside `[[ ]]` guards only part of the case.
+def _guard_polarity_is_usable(t: TestOccurrence) -> bool:
+    """The abort must fire for EVERY symlink at that path.
 
-    `[[ -f "$x" && -L "$x" ]] && return 1` refuses a symlink that is also a
-    regular file and lets a DANGLING one through — exactly the shape this
-    instrument exists to catch, so it cannot be evidence of safety.
+    Two ways it does not, both previously accepted:
+
+    * conjunction — `[[ -f "$x" && -L "$x" ]] && return 1` refuses a symlink
+      that is also a regular file and lets a DANGLING one through, which is
+      exactly the shape this instrument exists to catch;
+    * negation — `[ ! -L "$dst" ] && return 1` aborts for everything EXCEPT a
+      symlink, so the symlink case is precisely the one that CONTINUES
+      (rail R5-04).  A `!` inside the brackets is a word, not the tokenised
+      command-level `!`, so `cmd.negated` never saw it.
+
+    Disjunction stays usable: `[[ -L "$x" || -h "$x" ]]` is true for every
+    symlink, so the abort still fires for all of them.
     """
-    return not any(t.kind == "op" and t.text == "&&" for t in cmd.toks)
+    return not t.has_negation and not t.has_conjunction
 
 
 def _nofollow_guard_sites(fm: FileModel, canon_set: Set[str],
@@ -1537,21 +2310,21 @@ def _nofollow_guard_sites(fm: FileModel, canon_set: Set[str],
         if not (region[0] <= t.line_idx <= region[1]):
             continue
         ll = fm.lines[t.line_idx]
-        cmds = split_commands(ll, t.line_idx)
-        pos = None
-        for i, c in enumerate(cmds):
-            if c is t.cmd or (c.toks and c.lineno == t.lineno
-                              and any(x.text == t.operand.text for x in c.toks)):
-                pos = i
-                break
-        if pos is None:
+        # The ONE command list, addressed by the position the model recorded.
+        # Re-splitting made fresh objects, `c is t.cmd` never matched, and the
+        # operand-text fallback credited the FIRST command on the line that
+        # merely MENTIONED the path — so an abort attached to `-e` was read as
+        # an abort attached to `-L` (rail R5-05).
+        cmds = fm.cmds_of(t.line_idx)
+        pos = t.cmd_pos
+        if pos >= len(cmds) or cmds[pos] is not t.cmd:
             continue
-        if t.cmd.negated or not _guard_test_is_unconditional(t.cmd):
+        if not _guard_polarity_is_usable(t):
             continue
-        if _inline_abort_after(cmds, pos):
+        if _inline_abort_after(fm, cmds, pos):
             out.append((t.line_idx, ll.scope))
             continue
-        if _single_line_if_aborts(cmds, pos):
+        if _single_line_if_aborts(fm, cmds, pos):
             out.append((t.line_idx, ll.scope))
             continue
         uid = _find_then_uid(fm, t.line_idx)
@@ -1572,10 +2345,9 @@ def _helper_is_proven_guard(fm: FileModel, name: str) -> bool:
             continue
         if t.canon not in ("$1", "${1}"):
             continue
-        if t.cmd.negated or not _guard_test_is_unconditional(t.cmd):
+        if not _guard_polarity_is_usable(t):
             continue
-        ll = fm.lines[t.line_idx]
-        cmds = split_commands(ll, t.line_idx)
+        cmds = fm.cmds_of(t.line_idx)
         # the symlink branch must leave with a NON-ZERO status
         uid = _find_then_uid(fm, t.line_idx)
         if uid is not None:
@@ -1585,7 +2357,7 @@ def _helper_is_proven_guard(fm: FileModel, name: str) -> bool:
                     break
                 if l2.scope[-1:] != (uid,):
                     continue
-                for c in split_commands(l2, idx):
+                for c in fm.cmds_of(idx):
                     if not c.toks:
                         continue
                     h = c.toks[0]
@@ -1598,15 +2370,15 @@ def _helper_is_proven_guard(fm: FileModel, name: str) -> bool:
                                 return True
                         return False
         # single-line form: `[ -L "$1" ] && return 1`
-        for i, c in enumerate(cmds):
-            if c is t.cmd:
-                if i + 1 < len(cmds) and cmds[i + 1].prev_op == "&&":
-                    nc = cmds[i + 1]
-                    if nc.toks and nc.toks[0].text in ("return", "exit") \
-                            and len(nc.toks) >= 2:
-                        val = canon_operand(nc.toks[1])
-                        if val.isdigit() and int(val) != 0:
-                            return True
+        i = t.cmd_pos
+        if i < len(cmds) and cmds[i] is t.cmd:
+            if i + 1 < len(cmds) and cmds[i + 1].prev_op == "&&":
+                nc = cmds[i + 1]
+                if nc.toks and nc.toks[0].text in ("return", "exit") \
+                        and len(nc.toks) >= 2:
+                    val = canon_operand(nc.toks[1])
+                    if val.isdigit() and int(val) != 0:
+                        return True
     return False
 
 
@@ -1617,11 +2389,11 @@ def _helper_guard_sites(fm: FileModel, canon_set: Set[str],
     for idx, ll in enumerate(fm.lines):
         if not (region[0] <= idx <= region[1]):
             continue
-        cmds = split_commands(ll, idx)
+        cmds = fm.cmds_of(idx)
         for i, cmd in enumerate(cmds):
             if not cmd.toks or cmd.toks[0].kind != "word" or cmd.toks[0].quoted:
                 continue
-            name = cmd.toks[0].text
+            name = command_basename(canon_operand(cmd.toks[0]))
             if name not in [f.name for f in fm.funcs]:
                 continue
             args = [a for a in cmd.toks[1:] if a.kind == "word"]
@@ -1634,12 +2406,10 @@ def _helper_guard_sites(fm: FileModel, canon_set: Set[str],
             if not proven[name]:
                 continue
             # the call site must abort when the helper refuses
-            if i + 1 < len(cmds) and cmds[i + 1].prev_op == "||":
-                nc = cmds[i + 1]
-                if nc.toks and nc.toks[0].kind == "word" \
-                        and nc.toks[0].text in _ABORTS:
-                    out.append((idx, ll.scope))
-                    continue
+            if i + 1 < len(cmds) and cmds[i + 1].prev_op == "||" \
+                    and _is_abort_command(fm, cmds[i + 1]):
+                out.append((idx, ll.scope))
+                continue
             if cmd.negated:
                 # `if ! helper "$x"; then abort; fi`
                 uid = _find_then_uid(fm, idx)
@@ -1706,12 +2476,35 @@ def verdict_class_a(fm: FileModel, t: TestOccurrence) -> Tuple[str, str, str]:
         test_guards = _nofollow_guard_sites(fm, aliases, region)
         helper_guards = _helper_guard_sites(fm, aliases, region)
         guards = test_guards + helper_guards
+        watched: Set[str] = set(var_names(t.canon))
+        for c in aliases:
+            watched |= var_names(c)
         undominated = []
+        stale: Optional[Tuple[str, int]] = None
         for w in writes:
-            if not any(dominates(gs, gi, w.scope, w.line_idx, fm)
-                       for gi, gs in guards):
+            covering = [(gi, gs) for gi, gs in guards
+                        if dominates(gs, gi, w.scope, w.line_idx, fm)]
+            if not covering:
+                undominated.append(w)
+                continue
+            # A dominating guard whose value was re-bound before the write
+            # proves nothing about what the write actually opens.
+            live = []
+            for gi, gs in covering:
+                rb = rebound_between(fm, watched, gi, w.line_idx)
+                if rb is None:
+                    live.append((gi, gs))
+                elif stale is None:
+                    stale = rb
+            if not live:
                 undominated.append(w)
         undominated.sort(key=lambda o: (o.line_idx, o.lineno, o.canon))
+        if undominated and stale is not None and guards:
+            first = undominated[0]
+            return (VERDICT_INDETERMINATE, R_GUARD_STALE,
+                    "the -L guard is invalidated by a rebinding of $%s at line "
+                    "%d before the write at line %d"
+                    % (stale[0], fm.lines[stale[1]].lineno, first.lineno))
         if not undominated:
             form = ("a2-nofollow-helper-dominates" if helper_guards
                     else "a1-nofollow-test-dominates")
@@ -1741,7 +2534,14 @@ def verdict_class_a(fm: FileModel, t: TestOccurrence) -> Tuple[str, str, str]:
 # --------------------------------------------------------------------------
 
 _STREAM_EDITORS = ("sed", "gsed", "awk", "gawk", "mawk")
-_RE_HAS_EXPANSION = re.compile(r"\$[A-Za-z_{(]|`")
+# "Is there anything here the shell expands?"  This MUST be the same model the
+# rest of the file uses.  The old `\$[A-Za-z_{(]|`` did not recognise `$1`, so
+# `local v="$1"` was read as a SAFE LITERAL and a caller-controlled value was
+# proven safe by form b3 — the very fail-open of rail R5-03, surviving inside
+# the b3 proof after the discovery side had been cured.  Found by the
+# positive-control probe for R5-13/14/15, all three of which passed for the
+# wrong reason until this line changed.
+_RE_HAS_EXPANSION = _RE_EXPANSION
 
 
 class Subst(object):
@@ -1916,46 +2716,21 @@ def parse_sed_script(script: str) -> Tuple[List[Subst], Optional[str], List[str]
     return subs, None, residual
 
 
-def expanded_var_names(raw: str) -> Tuple[Set[str], bool]:
-    """Variable names the SHELL actually expands in this token, plus whether a
-    command substitution is expanded.
+def _names_in_text(text: str) -> Set[str]:
+    """Every parameter an expansion in this text READS.
 
-    Single-quoted regions expand nothing, so `sed -n '$p'` has no `$p`
-    variable and `sed "s/x/$V/"` has one.  Deciding this on the RAW token is
-    what keeps sed's own `$` (last-line address) out of the interpolation set.
+    Used on one side of a parsed substitution, where the quoting context has
+    already been resolved.  The caller intersects the result with the names the
+    SHELL actually expands in the raw token, which is what keeps sed's own `$`
+    (the last-line address) out of the interpolation set.
     """
-    names: Set[str] = set()
-    cmd_subst = False
-    i = 0
-    n = len(raw)
-    _ = None
-    while i < n:
-        c = raw[i]
-        if c == "\\" and i + 1 < n:
-            i += 2
+    out: Set[str] = set()
+    for m in _RE_EXPANSION.finditer(text):
+        tok = m.group(0)
+        if tok in ("`", "$("):
             continue
-        if c == "'":
-            k = raw.find("'", i + 1)
-            if k < 0:
-                return names, cmd_subst
-            i = k + 1
-            continue
-        if c == "$" and i + 1 < n:
-            if raw[i + 1] == "(":
-                cmd_subst = True
-                i += 2
-                continue
-            m = re.match(r"\$\{?([A-Za-z_][A-Za-z0-9_]*)", raw[i:])
-            if m:
-                names.add(m.group(1))
-                i += m.end()
-                continue
-        if c == "`":
-            cmd_subst = True
-            i += 1
-            continue
-        i += 1
-    return names, cmd_subst
+        out.add(_expansion_name(tok))
+    return out
 
 
 # Options of sed/awk that take a SEPARATE argument.  An option we do not model
@@ -2039,7 +2814,7 @@ def verdict_class_b(fm: FileModel, cmd: Command,
 def _verdict_one_script(fm: FileModel, cmd: Command, editor: str,
                         tok: Tok) -> Tuple[str, str, str, str]:
     raw = tok.text
-    names, cmd_subst = expanded_var_names(raw)
+    names, cmd_subst = expansion_names(raw)
     script = canon_operand(tok)
     ident = re.sub(r"\s+", " ", script).strip()[:70]
 
@@ -2077,7 +2852,7 @@ def _verdict_one_script(fm: FileModel, cmd: Command, editor: str,
                 # The names inside this substitution ARE accounted for by it;
                 # leaving them out made the leftover check fire on a value the
                 # b4 proof had already cleared.
-                covered.update(set(_RE_VARREF.findall(text)) & names)
+                covered.update(_names_in_text(text) & names)
                 if _inline_escape_covers(text, sub, side):
                     worst = _worse(worst, (VERDICT_GUARDED,
                                            "b4-inline-escape-substitution",
@@ -2088,7 +2863,7 @@ def _verdict_one_script(fm: FileModel, cmd: Command, editor: str,
                                            "command substitution on the %s "
                                            "side of s%s" % (side, sub.delim)))
                 continue
-            for name in _RE_VARREF.findall(text):
+            for name in sorted(_names_in_text(text)):
                 if name not in names:
                     continue        # literal `$` (sed's own), not an expansion
                 covered.add(name)
@@ -2129,13 +2904,27 @@ def _worse(a: Optional[Tuple[str, str, str]],
 
 _RE_ESCAPE_SED = re.compile(
     r"sed\s+(?P<q>['\"])s(?P<d>[^\w\s])(?P<cls>\[[^]]*\])(?P=d)(?P<rep>[^/|#@,]*?)(?P=d)")
+# The ONLY replacement that puts a backslash in front of the match.  In sed,
+# `\&` is a LITERAL ampersand — it escapes nothing and leaves an active `&`
+# for an outer replacement to interpret (rail R5-11).  `\\&` is an escaped
+# backslash followed by the whole match, which is the real escape.
+_RE_REPL_EMITS_BACKSLASH = re.compile(r"^\\\\&$")
+
+
+def _repl_emits_backslash(rep: str, quote: str) -> bool:
+    """Does this replacement actually EMIT a backslash before the match?"""
+    if quote == '"':
+        # Inside double quotes the shell already halves the backslashes.
+        rep = rep.replace("\\\\", "\\")
+    return _RE_REPL_EMITS_BACKSLASH.match(rep) is not None
 
 
 def _escape_assignment_covers(rhs_raw: str, sub: Subst, side: str) -> bool:
     """Form b1: the assignment escapes THIS delimiter AND inserts a backslash.
 
-    ``sed 's/[|&\\]/&/g'`` is a no-op — it replaces the match with itself.  A
-    real escape puts a backslash in the replacement.
+    ``sed 's/[|&\\]/&/g'`` is a no-op — it replaces the match with itself — and
+    ``sed 's/[|&\\]/\\&/g'`` is no better, because sed reads `\\&` as a literal
+    ampersand.  A real escape is `\\\\&`: an escaped backslash, then the match.
     """
     m = _RE_ESCAPE_SED.search(rhs_raw)
     if not m:
@@ -2156,22 +2945,64 @@ def _escape_assignment_covers(rhs_raw: str, sub: Subst, side: str) -> bool:
             continue
         if ch not in body:
             return False
-    # the replacement must actually insert a backslash before the match
-    return rep.startswith("\\\\") or rep.startswith("\\")
+    return _repl_emits_backslash(rep, m.group("q"))
+
+
+def _sole_pipeline_producer(text: str) -> Optional[Command]:
+    """The LAST stage of a substitution that is exactly one pipeline.
+
+    Form b4 claims the interpolated text IS the escaped value.  That is only
+    true when the substitution produces nothing else, so the body must be a
+    single pipeline (no `;`, `&&`, `||`, `&` or newline) and the value the
+    shell captures is its final stage's output.  Accepting anything that merely
+    starts with ``$(`` and ends with ``)`` let
+    ``$(printf ... | sed 'safe'; printf %s "$raw")`` through, where the last
+    command appends the RAW value (rail R5-12).
+    """
+    stripped = text.strip()
+    if not stripped.startswith("$("):
+        return None
+    try:
+        end, seg = _read_balanced(stripped, 1, "(", ")")
+    except ParseError:
+        return None
+    if end != len(stripped):
+        return None                     # `$(a) $(b)`, or trailing text
+    body = seg[1:-1]
+    try:
+        toks = lex(body)
+    except ParseError:
+        return None
+    holder = LogicalLine(0, body, toks)
+    cmds = split_commands(holder, 0)
+    if not cmds:
+        return None
+    for c in cmds[1:]:
+        if c.prev_op not in ("|", "|&"):
+            return None                 # a second producer, not a pipeline
+    return cmds[-1]
 
 
 def _inline_escape_covers(text: str, sub: "Subst", side: str) -> bool:
-    """Form b4: `$( printf %s "$v" | sed 's/[<delim>&\\]/\\&/g' )` in place.
+    """Form b4: `$( printf %s "$v" | sed 's/[<delim>&\\]/\\\\&/g' )` in place.
 
     Same proof as b1 — the class must cover THIS delimiter and the replacement
     must actually insert a backslash — but read off the substitution expression
-    itself instead of an assignment.  Only a text that is EXACTLY one
-    substitution qualifies: extra shell around it is unmodelled.
+    itself, and only when that substitution's SOLE producer is the escaping
+    sed.
     """
-    stripped = text.strip()
-    if not (stripped.startswith("$(") and stripped.endswith(")")):
+    last = _sole_pipeline_producer(text)
+    if last is None:
         return False
-    return _escape_assignment_covers(stripped, sub, side)
+    body = [t for t in last.toks if t.kind == "word"]
+    while body and not body[0].quoted and body[0].text in _KEYWORDS:
+        body = body[1:]
+    if not body or body[0].quoted:
+        return False
+    if command_basename(canon_operand(body[0])) not in ("sed", "gsed"):
+        return False
+    raw = " ".join(t.text for t in last.toks)
+    return _escape_assignment_covers(raw, sub, side)
 
 
 def _class_excludes(cls_body: str, sub: Subst) -> bool:
@@ -2212,26 +3043,61 @@ def _validation_dominates(fm: FileModel, cmd: Command, name: str,
     for idx, ll in enumerate(fm.lines):
         if idx >= cmd.line_idx:
             break
-        text = ll.text
-
-        if dominates(ll.scope, idx, use_scope, cmd.line_idx, fm) \
-                and target in canon_operand(text):
-            m = re.search(r"=~\s*\^?\[([^]]+)\][*+]?\$", text)
-            if m and _class_excludes(m.group(1), sub):
-                cmds = split_commands(ll, idx)
-                for i, c in enumerate(cmds):
-                    if i + 1 < len(cmds) and cmds[i + 1].prev_op == "||":
-                        nc = cmds[i + 1]
-                        if nc.toks and nc.toks[0].kind == "word" \
-                                and nc.toks[0].text in _ABORTS:
-                            return True
-                uid = _find_then_uid(fm, idx)
-                if uid is not None and _branch_aborts_at_own_level(fm, uid, idx + 1):
-                    return True
+        if dominates(ll.scope, idx, use_scope, cmd.line_idx, fm):
+            for i, c in enumerate(fm.cmds_of(idx)):
+                if not _regex_validation_matches(c, target, sub):
+                    continue
+                # The abort must be THIS command's abort.  Scanning the whole
+                # logical line for any later `|| die` accepted
+                # `[[ "$v" =~ ^..$ ]]; true || die`, where the abort belongs to
+                # `true` and never fires (rail R5-15).
+                cmds = fm.cmds_of(idx)
+                if i + 1 < len(cmds) and cmds[i + 1].prev_op == "||" \
+                        and _is_abort_command(fm, cmds[i + 1]):
+                    if rebound_between(fm, {name}, idx, cmd.line_idx) is None:
+                        return True
+                    continue
+                if c.negated:
+                    uid = _find_then_uid(fm, idx)
+                    if uid is not None \
+                            and _branch_aborts_at_own_level(fm, uid, idx + 1) \
+                            and rebound_between(fm, {name}, idx,
+                                                cmd.line_idx) is None:
+                        return True
 
         if _case_rejects_outside_class(fm, idx, cmd.line_idx, use_scope,
-                                       target, sub):
+                                       target, sub) \
+                and rebound_between(fm, {name}, idx, cmd.line_idx) is None:
             return True
+    return False
+
+
+# A validation is only a proof when the class is anchored at BOTH ends.  With
+# `^` optional, `[[ "$v" =~ [A-Za-z]+$ ]]` accepted `|safe` — which still
+# carries the sed delimiter — as validated (rail R5-14).
+_RE_ANCHORED_CLASS = re.compile(r"^\^\[([^]]+)\][*+]?\$$")
+
+
+def _regex_validation_matches(cmd: Command, target: str, sub: Subst) -> bool:
+    """`[[ <target> =~ ^[<closed class>]+$ ]]`, matched on TOKENS.
+
+    The previous pass asked whether the target string occurred ANYWHERE in the
+    logical line's text, so a validation of `$value` was credited to a later
+    raw interpolation of `$v` (rail R5-13).  Here the left operand of `=~` must
+    be that exact token.
+    """
+    toks = cmd.toks
+    for j, t in enumerate(toks):
+        if t.kind != "word" or t.quoted or t.text != "=~":
+            continue
+        if j == 0 or j + 1 >= len(toks):
+            return False
+        if canon_operand(toks[j - 1]) != target:
+            return False
+        m = _RE_ANCHORED_CLASS.match(canon_operand(toks[j + 1]))
+        if not m:
+            return False
+        return _class_excludes(m.group(1), sub)
     return False
 
 
@@ -2274,9 +3140,8 @@ def _case_rejects_outside_class(fm: FileModel, idx: int, use_idx: int,
             if len(nxt) > len(arm.scope) and nxt[:len(arm.scope)] == arm.scope:
                 arm_uid = nxt[len(arm.scope)]
             break
-        rest = split_commands(arm, j)
-        if any(c.toks and c.toks[0].kind == "word" and not c.toks[0].quoted
-               and c.toks[0].text in _ABORTS and c.prev_op not in ("&&", "||")
+        rest = fm.cmds_of(j)
+        if any(c.prev_op not in ("&&", "||") and _is_abort_command(fm, c)
                for c in rest):
             return True
         if arm_uid is not None and _branch_aborts_at_own_level(fm, arm_uid, j + 1):
@@ -2295,15 +3160,19 @@ def _prove_interp_safe(fm: FileModel, cmd: Command, name: str, sub: Subst,
                 "$%s validated against a closed class before s%s"
                 % (name, sub.delim))
 
+    # A name nothing in the region ever binds (`$1`, `$@`, `$?`, an inherited
+    # environment variable) has no assignment to prove anything with.
     if assigns:
         all_escape = True
         any_dominating = False
         all_literal_safe = True
+        any_literal_dominating = False
         for (i, _rhs, c) in assigns:
             raw = " ".join(t.text for t in c.toks)
+            reaches = dominates(fm.lines[i].scope, i,
+                                fm.lines[cmd.line_idx].scope, cmd.line_idx, fm)
             if _escape_assignment_covers(raw, sub, side):
-                if dominates(fm.lines[i].scope, i, fm.lines[cmd.line_idx].scope,
-                             cmd.line_idx):
+                if reaches:
                     any_dominating = True
             else:
                 all_escape = False
@@ -2311,15 +3180,30 @@ def _prove_interp_safe(fm: FileModel, cmd: Command, name: str, sub: Subst,
             if _RE_HAS_EXPANSION.search(val) or sub.delim in val or "&" in val \
                     or "\\" in val:
                 all_literal_safe = False
-        if all_escape and any_dominating:
+            elif reaches:
+                any_literal_dominating = True
+        # A rebinding the assignment index does not carry (`read`, a `for`
+        # variable, `getopts`) makes every assignment-based proof stale.
+        rebound = fm.rebinds.get(name, [])
+        clean = not any(region[0] <= i <= region[1] for i in rebound)
+        if all_escape and any_dominating and clean:
             return (VERDICT_GUARDED, "b1-delimiter-escape-dominates",
                     "every assignment to $%s escapes %r" % (name, sub.delim))
-        if all_literal_safe:
+        # b3 needs a SAFE assignment that actually reaches the use.  Without
+        # it, `sed "s|x|$v|g"` followed LATER by `v=safe`, or a safe assignment
+        # in a branch that may not run, was called literal-only even when $v
+        # came from the environment or the caller (rail R5-10).
+        if all_literal_safe and any_literal_dominating and clean:
             return (VERDICT_GUARDED, "b3-literal-only",
-                    "$%s is only ever assigned safe literals" % name)
-        if any_dominating or all_escape:
+                    "$%s is only ever assigned safe literals, and one of them "
+                    "reaches this use" % name)
+        if all_literal_safe and not any_literal_dominating:
             return (VERDICT_INDETERMINATE, R_ESCAPE_UNPROVEN,
-                    "$%s is escaped on some paths only" % name)
+                    "every assignment to $%s is a safe literal but none of "
+                    "them dominates this use" % name)
+        if any_dominating or all_escape or all_literal_safe:
+            return (VERDICT_INDETERMINATE, R_ESCAPE_UNPROVEN,
+                    "$%s is escaped or literal on some paths only" % name)
 
     return (VERDICT_UNGUARDED, "",
             "$%s interpolated raw on the %s side of s%s...%s"
@@ -2387,6 +3271,100 @@ class Site(object):
 # --------------------------------------------------------------------------
 
 
+def _display_head(cmd: Command) -> str:
+    """The program name a reader would say this command calls.
+
+    Keywords, redirections and leading `VAR=value` assignments are not the
+    command, and letting them stand in for it put `LC_ALL=C` and `if` in the
+    operand field — which is part of the site FINGERPRINT.
+    """
+    body = [t for t in _strip_redirections(cmd.toks) if t.kind == "word"]
+    while body and not body[0].quoted and body[0].text in _KEYWORDS:
+        body = body[1:]
+    stripped, ok = _strip_prefixes(body)
+    if ok and stripped:
+        body = stripped
+    if not body or body[0].quoted:
+        return "?"
+    return command_basename(canon_operand(body[0])) or "?"
+
+
+def _guard_is_live(fm: FileModel, cmd: Command,
+                   canon: str) -> Tuple[bool, Optional[Tuple[str, int]]]:
+    """Does a proven `-L` guard dominate this use with its value intact?"""
+    region = _region_for(fm, cmd.line_idx, canon)
+    aliases = alias_set(fm, canon, region)
+    guards = (_nofollow_guard_sites(fm, aliases, region)
+              + _helper_guard_sites(fm, aliases, region))
+    names: Set[str] = set()
+    for c in aliases:
+        names |= var_names(c)
+    stale: Optional[Tuple[str, int]] = None
+    for gi, gs in guards:
+        if not dominates(gs, gi, fm.lines[cmd.line_idx].scope, cmd.line_idx, fm):
+            continue
+        rb = rebound_between(fm, names, gi, cmd.line_idx)
+        if rb is None:
+            return True, None
+        if stale is None:
+            stale = rb
+    return False, stale
+
+
+def verdict_class_c(fm: FileModel, cmd: Command, kind: str,
+                    watched: Sequence[Tuple[str, Tok]]) -> Tuple[str, str, str]:
+    """Is this candidate write proven safe?
+
+    Same theorem as class A — a non-dereferencing guard must dominate — but
+    reached from the WRITE rather than from a test.  That is what makes
+    discovery fail-closed: a write whose path no test ever pointed at produced
+    no class-A site, and before this class it therefore produced no site at
+    all.
+
+    The two roles are kept apart on purpose.  A PROVEN destination with no
+    guard is `desguardado` — the instrument knows it writes.  An operand of a
+    command the model cannot place is `indeterminado` — it may write, and "may"
+    is not "does".  Collapsing the two would report `diff -q "$a" "$b"` as a
+    write to `$a`.
+    """
+    head = "?"
+    if cmd.toks and cmd.toks[0].kind == "word":
+        head = command_basename(canon_operand(cmd.toks[0])) or "?"
+    if kind == "opaque":
+        return (VERDICT_INDETERMINATE, R_OPAQUE,
+                "%s runs text this model never sees" % head)
+
+    unproven_writes: List[str] = []
+    unproven_unknown: List[str] = []
+    stale: Optional[Tuple[str, int]] = None
+    for role, tok in watched:
+        canon = canon_operand(tok)
+        if not canon:
+            continue
+        live, rb = _guard_is_live(fm, cmd, canon)
+        if live:
+            continue
+        if rb is not None and stale is None:
+            stale = rb
+        (unproven_writes if role == "write" else unproven_unknown).append(canon)
+
+    if not unproven_writes and not unproven_unknown:
+        return (VERDICT_GUARDED, "a1-nofollow-test-dominates",
+                "every expanded operand is dominated by a proven -L guard")
+    if stale is not None:
+        first = (unproven_writes or unproven_unknown)[0]
+        return (VERDICT_INDETERMINATE, R_GUARD_STALE,
+                "a -L guard exists for %s but $%s is rebound at line %d before "
+                "this write" % (first, stale[0], fm.lines[stale[1]].lineno))
+    if unproven_writes:
+        return (VERDICT_UNGUARDED, "",
+                "%s writes %s with no dominating -L guard"
+                % (head, ", ".join(sorted(set(unproven_writes)))))
+    return (VERDICT_INDETERMINATE, R_CANDIDATE,
+            "%s is not proven read-only and may write %s"
+            % (head, ", ".join(sorted(set(unproven_unknown)))))
+
+
 def census_file(rel_path: str, raw: str) -> List[Site]:
     fm = build_file_model(rel_path, raw)
     if fm.unparseable:
@@ -2404,6 +3382,16 @@ def census_file(rel_path: str, raw: str) -> List[Site]:
                           detail, span.name if span else "",
                           fm.lines[t.line_idx].snippet(), t.canon))
 
+    # A test expression the model could not walk is a BLOCKING site, not a
+    # silent skip.  This is the half of the inversion the 4th pass missed:
+    # inverting the VERDICT rule while leaving DISCOVERY fail-open still lets
+    # an unmodelled form be invisible (rail R5-01).
+    for (line_idx, lineno, why, snippet) in fm.unmodelled_tests:
+        span = fm.func_at(line_idx)
+        sites.append(Site(rel_path, lineno, CLASS_SYMLINK,
+                          VERDICT_INDETERMINATE, R_TEST_UNMODELED, why,
+                          span.name if span else "", snippet, "<test>"))
+
     for cmd in list(fm.commands) + list(fm.subst_commands):
         body = [t for t in cmd.toks if t.kind == "word"]
         while body and not body[0].quoted and body[0].text in _KEYWORDS:
@@ -2413,7 +3401,9 @@ def census_file(rel_path: str, raw: str) -> List[Site]:
             continue
         if stripped[0].quoted:
             continue
-        name = stripped[0].text
+        # `/usr/bin/sed` runs sed.  Matching only the bare name meant a
+        # path-qualified invocation produced no class-B site (rail R5-02).
+        name = command_basename(canon_operand(stripped[0]))
         if name not in _STREAM_EDITORS:
             continue
         probe = Command(stripped, cmd.line_idx, cmd.lineno, cmd.prev_op)
@@ -2423,6 +3413,16 @@ def census_file(rel_path: str, raw: str) -> List[Site]:
                           detail, span.name if span else "",
                           fm.lines[cmd.line_idx].snippet(),
                           "%s:%s" % (name, ident)))
+
+    for (cmd, kind, watched) in fm.candidates:
+        verdict, form, detail = verdict_class_c(fm, cmd, kind, watched)
+        span = fm.func_at(cmd.line_idx)
+        head = _display_head(cmd)
+        operand = "%s:%s" % (head, ",".join(sorted(
+            set(canon_operand(t) for _r, t in watched if canon_operand(t))))[:60])
+        sites.append(Site(rel_path, cmd.lineno, CLASS_WRITE, verdict, form,
+                          detail, span.name if span else "",
+                          fm.lines[cmd.line_idx].snippet(), operand))
 
     return sites
 
@@ -2442,8 +3442,18 @@ def discover_shell_files(scan_root: Path, repo_root: Path) -> List[Path]:
     return out
 
 
-def run_census(repo_root: Path, scan_root: Path) -> List[Site]:
+def run_census(repo_root: Path,
+               scan_root: Path) -> Tuple[List[Site], List[Dict[str, object]]]:
+    """Census every discovered shell file, and REPORT the discovery itself.
+
+    The inventory is returned alongside the sites because a file that produced
+    no site is otherwise indistinguishable from a file discovery never reached
+    (rail R5-16).  `doctor.sh` producing zero sites is a claim about
+    `doctor.sh`; `doctor.sh` missing from the scan is a claim about the
+    instrument, and the output has to tell them apart.
+    """
     sites: List[Site] = []
+    files: List[Dict[str, object]] = []
     for p in discover_shell_files(scan_root, repo_root):
         try:
             rel = p.relative_to(repo_root).as_posix()
@@ -2455,6 +3465,8 @@ def run_census(repo_root: Path, scan_root: Path) -> List[Site]:
                               R_UNREADABLE,
                               "shell file is a symlink or not a regular file",
                               "", "<file>", "<file>"))
+            files.append({"path": rel, "status": "symlink-or-not-regular",
+                          "sites": 1, "blocking": 1})
             continue
         try:
             raw = p.read_text(encoding="utf-8")
@@ -2462,8 +3474,16 @@ def run_census(repo_root: Path, scan_root: Path) -> List[Site]:
             # INPUT failure, not infrastructure: block, never skip.
             sites.append(Site(rel, 1, CLASS_PARSE, VERDICT_INDETERMINATE,
                               R_UNREADABLE, str(exc), "", "<file>", "<file>"))
+            files.append({"path": rel, "status": "unreadable",
+                          "sites": 1, "blocking": 1})
             continue
-        sites.extend(census_file(rel, raw))
+        found = census_file(rel, raw)
+        status = "unparseable" if any(s.cls == CLASS_PARSE for s in found) \
+            else "scanned"
+        files.append({"path": rel, "status": status, "sites": len(found),
+                      "blocking": sum(1 for s in found if s.blocking)})
+        sites.extend(found)
+    files.sort(key=lambda f: str(f["path"]))
     sites.sort(key=lambda s: (s.rel_path, s.lineno, s.cls))
     counter: Dict[Tuple[str, str, str, str, str], int] = {}
     for s in sites:
@@ -2471,7 +3491,7 @@ def run_census(repo_root: Path, scan_root: Path) -> List[Site]:
              re.sub(r"\s+", " ", s.snippet).strip())
         s.ordinal = counter.get(k, 0)
         counter[k] = s.ordinal + 1
-    return sites
+    return sites, files
 
 
 # --------------------------------------------------------------------------
@@ -2479,16 +3499,21 @@ def run_census(repo_root: Path, scan_root: Path) -> List[Site]:
 # --------------------------------------------------------------------------
 
 BASELINE_HEADER = """\
-# installer-write-safety-baseline.txt — PLAN-185 W0 (4th pass, INVERTED rule)
+# installer-write-safety-baseline.txt — PLAN-185 W0
+# (5th pass: inverted VERDICT rule + fail-CLOSED DISCOVERY)
 #
 # Every BLOCKING site (desguardado + indeterminado) the census currently finds.
 # A blocking site absent from this file fails the gate (exit 1); an entry here
 # that matches nothing also fails (rot). Removing a line is how a cure is
 # recorded — never how a finding is silenced.
 #
-# A line here means a human LOOKED at that site. It does NOT mean the shape is
-# safe: `indeterminado` is "the matcher cannot prove safety", which is the
-# fail-closed default of the inverted rule.
+# WHAT A LINE HERE MEANS, stated honestly. It is a RATCHET entry: this site is
+# known to the census, and no NEW one may appear without a decision. It is NOT
+# a per-site human review — there are hundreds of them, and claiming each was
+# read one by one would be false. `indeterminado` means "the matcher cannot
+# prove safety", which after the 5th pass is the default for every command not
+# proven read-only. Turning real sites into `guardado` is PLAN-185 W1/W2's job,
+# and the count going DOWN is how that work will show up here.
 #
 # Format: path:line:class:verdict:form-or-reason:fingerprint
 # Matching is on (path, class, fingerprint). The line number is informational:
@@ -2539,10 +3564,26 @@ def load_baseline(path: Path) -> Tuple[Dict[Tuple[str, str, str], Dict[str, str]
 
 def render_rules(scan_root: str) -> str:
     buf = []
-    buf.append("check-installer-write-safety.py — INVERTED rule (PLAN-185 W0, 4th pass)")
+    buf.append("check-installer-write-safety.py — INVERTED rule + FAIL-CLOSED "
+               "DISCOVERY (PLAN-185 W0, 5th pass)")
     buf.append("")
     buf.append("Corpus: %s/**/*.sh  (excluding %s)"
                % (scan_root, ", ".join(EXCLUDED_REL_PREFIXES)))
+    buf.append("")
+    buf.append("DISCOVERY (what becomes a site at all):")
+    buf.append("  A command is PROVEN read-only only if its name is below and")
+    buf.append("  it opens no file for output.  Every other command whose")
+    buf.append("  operands or redirections contain an expansion is a candidate")
+    buf.append("  write.  An unmodelled test expression, an unparseable file,")
+    buf.append("  and eval/source/exec are sites too — never omissions.")
+    buf.append("")
+    buf.append("  proven read-only: %s" % " ".join(sorted(PROVEN_READONLY)))
+    buf.append("")
+    buf.append("  write-capable, classified by OPTION not by name: %s"
+               % " ".join(sorted(set(_OUTPUT_MODE_OPT)
+                                 | set(_OUTPUT_MODE_LAST)
+                                 | set(_INPLACE_FLAGS)
+                                 | _WRITERS_LAST | _WRITERS_ALL)))
     buf.append("")
     buf.append("Safety is a THEOREM, proven only by one of these forms:")
     buf.append("")
@@ -2561,7 +3602,11 @@ def render_rules(scan_root: str) -> str:
             (R_SCRIPT_UNPARSED, "the sed/awk script uses a construct we do not model"),
             (R_CMD_SUBST, "an unproven command substitution sits inside it"),
             (R_AWK_EXPANSION, "an awk PROGRAM interpolates a shell value"),
-            (R_ESCAPE_UNPROVEN, "the value is escaped on some paths only")):
+            (R_ESCAPE_UNPROVEN, "the value is escaped on some paths only"),
+            (R_GUARD_STALE, "a -L guard exists but the value was rebound after it"),
+            (R_TEST_UNMODELED, "a test expression the model cannot walk"),
+            (R_CANDIDATE, "a command not proven read-only touches an expansion"),
+            (R_OPAQUE, "eval/source/exec runs text this model never sees")):
         buf.append("  %-24s %s" % (code, why))
     buf.append("")
     buf.append("Reachability analysis is deliberately ABSENT: an argument about")
@@ -2587,6 +3632,15 @@ def _wrap(text: str, width: int) -> List[str]:
     if cur:
         out.append(" ".join(cur))
     return out
+
+
+def render_files(files: Sequence[Dict[str, object]]) -> str:
+    """Every file discovery reached, whether or not it produced a site."""
+    buf = ["discovered shell files: %d" % len(files)]
+    for f in files:
+        buf.append("  %-22s %4d site(s) %4d blocking  %s"
+                   % (f["status"], f["sites"], f["blocking"], f["path"]))
+    return "\n".join(buf)
 
 
 def render_table(sites: Sequence[Site]) -> str:
@@ -2644,7 +3698,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     baseline_path = (Path(args.baseline) if args.baseline
                      else repo_root / DEFAULT_BASELINE_REL)
 
-    sites = run_census(repo_root, scan_root)
+    sites, files = run_census(repo_root, scan_root)
 
     if not sites:
         msg = ("FAIL: the census found ZERO sites under %s. Zero means the "
@@ -2652,6 +3706,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         if args.json:
             sys.stdout.write(json.dumps({"ok": False, "reason": "zero-sites",
                                          "scan_root": str(scan_root),
+                                         "files": files,
                                          "sites": []}, indent=2) + "\n")
         else:
             sys.stderr.write(msg + "\n")
@@ -2685,7 +3740,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             "ok": ok,
             "scan_root": str(scan_root),
             "baseline": str(baseline_path),
+            # EVERY discovered file, zero-site ones included: absence from the
+            # scan and absence of findings are different facts (rail R5-16).
+            "files": files,
             "counts": {
+                "files": len(files),
                 "sites": len(sites),
                 "blocking": sum(1 for s in sites if s.blocking),
                 VERDICT_UNGUARDED: sum(1 for s in sites
@@ -2706,6 +3765,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return 0 if ok else 1
 
     sys.stdout.write(render_table(sites) + "\n")
+    sys.stdout.write("\n" + render_files(files) + "\n")
     if new_blocking:
         sys.stdout.write("\nNEW BLOCKING SITES (not in %s):\n" % baseline_path)
         for s in new_blocking:
