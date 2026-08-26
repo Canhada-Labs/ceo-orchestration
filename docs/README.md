@@ -75,15 +75,15 @@ full set of commands; here is the summary you can spot-check in a minute.
 | Thing | Count | How to verify |
 |-------|-------|---------------|
 | Skills | **166** (42 core + 8 frontend + 116 domain) | `find .claude/skills -name SKILL.md \| wc -l` |
-| Hook scripts on disk | **58** Python scripts | count `*.py` in `.claude/hooks/` |
-| Hooks registered | **47** distinct scripts (49 event registrations) | inspect `.claude/settings.json` |
+| Hook scripts on disk | **59** Python scripts | count `*.py` in `.claude/hooks/` |
+| Hooks registered | **48** distinct scripts (50 event registrations) | inspect `.claude/settings.json` |
 | Slash commands | **27** | count `*.md` in `.claude/commands/` |
-| Architecture decision records | **195** | count `ADR-*.md` in `.claude/adr/` |
-| Shared library modules | **70** stdlib-only (top-level `_lib/`) | count `*.py` in `.claude/hooks/_lib/` |
+| Architecture decision records | **196** | count `ADR-*.md` in `.claude/adr/` |
+| Shared library modules | **71** stdlib-only (top-level `_lib/`) | count `*.py` in `.claude/hooks/_lib/` |
 | Tests | **~770 test files**; `make test-collect` (pytest `--collect-only`) reports **~14,700** collected cases | `make test-collect` |
 
-Two of these are easy to misread, so we state them plainly: the **58** hook
-scripts on disk are not all wired at once — **47** distinct scripts (across 49 event registrations) are registered in
+Two of these are easy to misread, so we state them plainly: the **59** hook
+scripts on disk are not all wired at once — **48** distinct scripts (across 50 event registrations) are registered in
 `settings.json` for this repo's install. And the test figure is *collected
 cases*, not hand-written functions; parametrization inflates the count, which is
 why we cite `make test-collect` as the authority rather than a grep.

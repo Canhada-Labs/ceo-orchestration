@@ -50,14 +50,14 @@ Todas as contagens abaixo são verificáveis a partir de um checkout limpo (veja
 | Componente | Contagem | Notas |
 |---|---|---|
 | Checklists de skills | **166** | 42 core + 8 frontend + 116 de domínio |
-| Scripts de hook (em disco) | **58** | entrypoints Python em `.claude/hooks/` |
-| Hooks ligados em `settings.json` | **47** | scripts distintos, 49 registros de evento |
-| Módulos de biblioteca compartilhada | **70** | apenas stdlib, em `.claude/hooks/_lib/` (excluindo o `__init__.py` do pacote) |
+| Scripts de hook (em disco) | **59** | entrypoints Python em `.claude/hooks/` |
+| Hooks ligados em `settings.json` | **48** | scripts distintos, 50 registros de evento |
+| Módulos de biblioteca compartilhada | **71** | apenas stdlib, em `.claude/hooks/_lib/` (excluindo o `__init__.py` do pacote) |
 | Slash commands | **27** | em `.claude/commands/` |
-| Architecture decision records | **195** | em `.claude/adr/` |
+| Architecture decision records | **196** | em `.claude/adr/` |
 | Testes | **~14.700 casos** | reportados por `pytest --collect-only` nas suítes de hook, script e conformidade |
 
-A diferença entre **58 em disco** e **47 ligados** é benigna: vários módulos que não respondem a eventos são ativados via dispatch in-process (invocados por outros hooks), e não por um registro de evento direto em `settings.json`.
+A diferença entre **59 em disco** e **48 ligados** é benigna: vários módulos que não respondem a eventos são ativados via dispatch in-process (invocados por outros hooks), e não por um registro de evento direto em `settings.json`.
 
 **Dependências de runtime: nenhuma.** Hooks e scripts são Python ≥ 3.9, **apenas biblioteca padrão** — zero pacotes de terceiros em runtime. Veja [`SBOM.md`](SBOM.md). (Desenvolvimento e CI usam ferramentas de teste de terceiros, como o pytest; o runtime instalado não usa.)
 
@@ -163,7 +163,7 @@ Não acredite na tabela por fé. A partir de um checkout limpo:
 ```bash
 find .claude/skills -name SKILL.md | wc -l        # 166 skills
 ls .claude/commands/*.md | wc -l                  # 27 slash commands
-ls .claude/adr | grep -c '^ADR-'                  # 195 ADRs
+ls .claude/adr | grep -c '^ADR-'                  # 196 ADRs
 python3 -m pytest --collect-only -q | tail -1     # ~14.700 casos coletados
 ```
 

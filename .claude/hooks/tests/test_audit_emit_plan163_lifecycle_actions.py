@@ -168,7 +168,8 @@ class TestRegistration(_Plan163Base):
         # + 1 PLAN-174 W1 registration completion, SENT-S318 pack
         #   (ceremony_lint_unlock_used) = 326; +1 PLAN-182 W1 SENT-S319
         #   (salt_rotation_registered) = 327.
-        self.assertEqual(len(self.ae._KNOWN_ACTIONS), 327)
+        # +3 PLAN-179 W2/W4 (ADR-195, staged-w24 pack; Owner decision 2026-08-25 "3 actions"): ledger_checkpoint_recorded + ledger_checkpoint_skipped + ledger_entry_rejected = 330.
+        self.assertEqual(len(self.ae._KNOWN_ACTIONS), 330)
 
     def test_never_passthrough(self) -> None:
         for action in ("directory_added_recorded", "notification_lifecycle"):

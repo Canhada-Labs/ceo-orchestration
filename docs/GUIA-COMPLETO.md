@@ -83,7 +83,7 @@ a dev to read the rest.
    (`check_agent_spawn.py`) blocks spawns that do not follow the
    format. Result: no more "generic agent with a pretty name".
 
-3. **Mechanical Python hooks.** 47 hooks wired in `settings.json` run on
+3. **Mechanical Python hooks.** 48 hooks wired in `settings.json` run on
    Claude Code's lifecycle events (`PreToolUse`, `PostToolUse`, `Stop`, …),
    including:
    - `check_agent_spawn` — persona+skill required
@@ -164,7 +164,7 @@ For those, use Claude Code directly. Spawn overhead > benefit.
   is deferred to v2+.
 - **Audited.** Every spawn, every decision, every veto becomes a JSONL
   event.
-- **Governed by ADR.** 195 ADRs document every architectural decision.
+- **Governed by ADR.** 196 ADRs document every architectural decision.
 
 ### It is NOT:
 - **A product.** No UI, no SaaS, no login.
@@ -1222,7 +1222,7 @@ mv .claude .claude.disabled
 - `.claude/frontend-team.md` — frontend roster
 - `.claude/pitfalls-catalog.yaml` — universal pitfalls
 - `.claude/task-chains.yaml` — 6 universal workflows
-- `.claude/adr/` — 195 Architecture Decision Records
+- `.claude/adr/` — 196 Architecture Decision Records
 - `.claude/plans/` — active plans + archive
 - `.claude/skills/core/` — 42 universal skills
 - `.claude/skills/frontend/` — 8 frontend skills

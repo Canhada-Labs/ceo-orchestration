@@ -23,6 +23,7 @@ import json
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 # Codex iter 2 P1-2 closure. The contract test is **promotion-canonical**:
 # the staged copy (under ``.claude/plans/PLAN-081/staging/phase-2/tests/``)
@@ -274,6 +275,7 @@ _EXPECTED_PUBLIC_SYMBOLS = frozenset({
     "emit_mcp_bearer_replay_rejected",
     "emit_mcp_non_loopback_rejected",
     # PLAN-085 v1.19.0 (S111 2026-05-12) — Wave G.1b ATLAS schema (4).
+    "emit_ledger_entry_rejected",  # PLAN-179 W4 / ADR-195 (staged-w24)
     "emit_prompt_injection_detected",
     "emit_secret_leak_detected",
     "emit_pii_redacted_outgoing",
@@ -515,6 +517,15 @@ _EXPECTED_PUBLIC_SYMBOLS = frozenset({
 # ADR-108 lineage. Sec MF-3 allowlist via _DISPATCHER_ROUTE_EMIT_ALLOWLIST.
 # Codex iter 1 closure: wall_clock_ms (int) + retry_at_timeout_ms (int) per
 # canonical_json.py:85 no-float invariant. Count: 114 → 115.
+# PLAN-179 W2/W4 staged-w24 ceremony (Owner decision 2026-08-25 "3
+# actions") — added ledger_checkpoint_recorded + ledger_checkpoint_skipped
+# (check_ledger_checkpoint.py, PreToolUse/Bash advisory) and
+# ledger_entry_rejected (_lib/ledger_provenance.py write-gate discard; ONE
+# new typed emitter emit_ledger_entry_rejected added to
+# _EXPECTED_PUBLIC_SYMBOLS). All three deny-by-default with dedicated scrub
+# branches, none in _EMIT_GENERIC_PASSTHROUGH. SPEC amend v2.59. SHA
+# re-derived from the STAGED audit_emit.py, never hand-edited.
+# Count: 327 -> 330.
 _EXPECTED_KNOWN_ACTIONS_SHA256 = (
     # Updated PLAN-105 Wave A (S134-cont) — rebaselined to absorb 28
     # actions from S128..S134 that were never folded into this contract:
@@ -775,7 +786,7 @@ _EXPECTED_KNOWN_ACTIONS_SHA256 = (
     # sha256(json.dumps(sorted(_KNOWN_ACTIONS))) derivation; the value
     # matched independently on local darwin and the ubuntu CI matrix
     # (S318 fix-forward).
-    "c5e1f44b75d920a54cd04bb43a02f07e5afc1deda5e90c49d2a7778f6e69fc9c"
+    "cbc718f6678877c7ae3aa788ee79823dca3a181466e45c9ea3293eee1aa44928"
 )
 
 
@@ -817,7 +828,7 @@ class AuditEmitPublicSurfaceTests(unittest.TestCase):
         self.assertEqual(
             actual, _EXPECTED_KNOWN_ACTIONS_SHA256,
             f"_KNOWN_ACTIONS drift detected. "
-            f"Count={len(actions)} (expected 327). "
+            f"Count={len(actions)} (expected 330). "
             f"Rebaseline this test + add audit-registry entry if the change is intentional.",
         )
 
@@ -836,7 +847,7 @@ class AuditEmitPublicSurfaceTests(unittest.TestCase):
         # 2026-08-20: ceremony_lint_unlock_used — ceremony-lint ADR-186
         # escape-hatch breadcrumb parked in 908707e, registered + restored).
         self.assertEqual(
-            len(audit_emit._KNOWN_ACTIONS), 327,
+            len(audit_emit._KNOWN_ACTIONS), 330,
             "_KNOWN_ACTIONS count drifted from 163 baseline (PLAN-088 S114 Wave 1 +11 actions: "
             "cache_discipline_alerted + first_run_wizard_dispatched + "
             "estimate_calibrator_pipeline_run + subagent_findings_partial_drop + "
@@ -920,6 +931,73 @@ class ContextPressureRegistrationTests(unittest.TestCase):
                 "%r must never be an allowed context_pressure_observed field "
                 "(raw size / free text on the audit wire)" % forbidden,
             )
+
+
+class TestLedgerEntryRejectedKeepsRejectionSemantics(unittest.TestCase):
+    """Pair-rail do main, rodada 3, P2 — a acao E o veredito.
+
+    `_LEDGER_GATE_DECISIONS` contem "accept", e o scrub so coagia valores
+    FORA do enum. Logo um `emit_generic("ledger_entry_rejected",
+    decision="accept", reason="ok")` direto passava intacto e produzia um
+    evento ASSINADO cuja acao diz rejeitada e cujos campos dizem aceita —
+    exatamente a serie de rejeicao/FPR que o ramo deny-by-default protege.
+    """
+
+    def _scrub(self, **fields):
+        event = {"action": "ledger_entry_rejected"}
+        event.update(fields)
+        captured = {}
+
+        def _fake_write(ev):
+            captured.update(ev)
+
+        with mock.patch.object(audit_emit, "_write_event", _fake_write):
+            audit_emit.emit_generic("ledger_entry_rejected", **fields)
+        return captured
+
+    def test_accept_decision_is_forced_to_reject(self):
+        got = self._scrub(decision="accept", reason="ok", family="none",
+                          hits_count=0, bytes_scanned=0, scanned=0, enforced=0)
+        self.assertEqual(
+            got.get("decision"), "reject",
+            "um evento cuja ACAO e ledger_entry_rejected saiu com "
+            "decision=accept — a serie de rejeicao fica envenenada",
+        )
+
+    def test_reason_ok_is_not_a_rejection_reason(self):
+        got = self._scrub(decision="reject", reason="ok", family="none",
+                          hits_count=0, bytes_scanned=0, scanned=0, enforced=0)
+        self.assertNotEqual(got.get("reason"), "ok")
+
+    def test_identity_fields_never_carry_a_path(self):
+        """Rodada 6, P2 — a allowlist ADMITE os campos, nada os validava.
+
+        Um chamador direto podia gravar `project="/Users/alice/private"` ou um
+        `session_id` com path no evento ASSINADO, contra o contrato do SPEC/v1
+        que nega qualquer path nesta acao.
+        """
+        got = self._scrub(decision="reject", reason="scanner_hit",
+                          family="harness_mimicry", hits_count=1,
+                          bytes_scanned=10, scanned=1, enforced=0,
+                          session_id="/Users/alice/x", project="/Users/alice/private")
+        self.assertEqual(got.get("project"), "",
+                         "um path chegou ao evento assinado: %r" % got.get("project"))
+        self.assertEqual(got.get("session_id"), "")
+
+    def test_a_wellformed_identity_survives(self):
+        got = self._scrub(decision="reject", reason="scanner_hit",
+                          family="harness_mimicry", hits_count=1,
+                          bytes_scanned=10, scanned=1, enforced=0,
+                          session_id="sess-abc123", project="proj_1")
+        self.assertEqual(got.get("session_id"), "sess-abc123")
+        self.assertEqual(got.get("project"), "proj_1")
+
+    def test_a_genuine_rejection_survives_untouched(self):
+        got = self._scrub(decision="reject", reason="scanner_hit",
+                          family="harness_mimicry", hits_count=2,
+                          bytes_scanned=128, scanned=1, enforced=0)
+        self.assertEqual(got.get("decision"), "reject")
+        self.assertEqual(got.get("reason"), "scanner_hit")
 
 
 if __name__ == "__main__":

@@ -206,6 +206,18 @@
             "statusMessage": "Checking adopter config protection..."
           }
         ]
+      },
+      {
+        "_comment": "PLAN-179 W2 US6 (ADR-195 work-boundary persistence) — ADVISORY ledger checkpoint, NEVER blocks. On a `git commit` that lands plan-scoped work (scope derived MECHANICALLY from the committed PATHS: any path under .claude/plans/PLAN-NNN/ or any path named in a plan AC — never from resolve_plan_id, whose session-coupling is the root cause PLAN-179 exists to fix), the hook reports whether that plan's LEDGER.md is in the SAME commit. PreToolUse is the only event where the omission is still curable (`git add <plan>/LEDGER.md` and re-issue) AND the only one whose output arm can carry `permissionDecision` — so the measure-first window and the FUTURE enforce flip measure the same code path. No branch in this module returns a decision today: there is no deny arm to disarm. Emits closed-enum ledger_checkpoint_recorded / ledger_checkpoint_skipped (SPEC v2.59) carrying identifiers and clamped counters only — never the commit message, the committed paths or the ledger content. Kill switches: CEO_LEDGER_CHECKPOINT=0 (rail off, and the skip is STILL measured so 'off' is observable), CEO_SOTA_DISABLE=1 (master precedence, fully silent).",
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_ledger_checkpoint.py",
+            "timeout": 5,
+            "statusMessage": "Checking work-boundary ledger checkpoint..."
+          }
+        ]
       }
     ],
     "PostToolUse": [

@@ -92,7 +92,8 @@ class TestW5OffPassthrough(TestEnvContext):
         # ceremony-lint ADR-186 escape-hatch breadcrumb, parked in 908707e,
         # registered + restored by the SENT-S318 pack) -> 326; +1 PLAN-182
         # W1 (salt_rotation_registered, SENT-S319 pack) -> 327.
-        self.assertEqual(len(audit_emit._KNOWN_ACTIONS), 327)
+        # +3 PLAN-179 W2/W4 (ADR-195, staged-w24 pack; Owner decision 2026-08-25 "3 actions"): ledger_checkpoint_recorded + ledger_checkpoint_skipped + ledger_entry_rejected = 330.
+        self.assertEqual(len(audit_emit._KNOWN_ACTIONS), 330)
 
 
 class TestAdminKeyScrub(_W5Base):

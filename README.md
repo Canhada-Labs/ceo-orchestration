@@ -52,14 +52,14 @@ All counts below are verifiable from a clean checkout (see *Verifying the number
 | Component | Count | Notes |
 |---|---|---|
 | Skill checklists | **166** | 42 core + 8 frontend + 116 domain |
-| Hook scripts (on disk) | **58** | Python entrypoints under `.claude/hooks/` |
-| Hooks wired in `settings.json` | **47** | distinct scripts, 49 event registrations |
-| Shared library modules | **70** | stdlib-only, under `.claude/hooks/_lib/` (excluding the package `__init__.py`) |
+| Hook scripts (on disk) | **59** | Python entrypoints under `.claude/hooks/` |
+| Hooks wired in `settings.json` | **48** | distinct scripts, 50 event registrations |
+| Shared library modules | **71** | stdlib-only, under `.claude/hooks/_lib/` (excluding the package `__init__.py`) |
 | Slash commands | **27** | under `.claude/commands/` |
-| Architecture decision records | **195** | under `.claude/adr/` |
+| Architecture decision records | **196** | under `.claude/adr/` |
 | Tests | **~14,700 cases** | reported by `pytest --collect-only` across the hook, script, and conformance suites |
 
-The gap between **58 on disk** and **47 wired** is benign: several non-event modules are activated through in-process dispatch (invoked by other hooks) rather than by a direct `settings.json` event registration.
+The gap between **59 on disk** and **48 wired** is benign: several non-event modules are activated through in-process dispatch (invoked by other hooks) rather than by a direct `settings.json` event registration.
 
 **Runtime dependencies: none.** Hooks and scripts are Python ≥ 3.9, **standard library only** — zero third-party runtime packages. See [`SBOM.md`](SBOM.md). (Development and CI use third-party test tooling such as pytest; the installed runtime does not.)
 
@@ -183,7 +183,7 @@ Don't take the table on faith. From a clean checkout:
 ```bash
 find .claude/skills -name SKILL.md | wc -l        # 166 skills
 ls .claude/commands/*.md | wc -l                  # 27 slash commands
-ls .claude/adr | grep -c '^ADR-'                  # 195 ADRs
+ls .claude/adr | grep -c '^ADR-'                  # 196 ADRs
 python3 -m pytest --collect-only -q | tail -1     # ~14,700 collected cases
 ```
 

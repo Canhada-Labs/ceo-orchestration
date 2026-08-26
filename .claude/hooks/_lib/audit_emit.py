@@ -1123,6 +1123,38 @@ _KNOWN_ACTIONS = {
     # by _lib/injection_salt.py at mint time (marker sidecar is the
     # forensic ground truth when the emit path is unavailable).
     "salt_rotation_registered",
+    # PLAN-179 W2/W4 (ADR-195 — work-boundary persistence; registered by the
+    # staged-w24 ceremony pack, Owner decision 2026-08-25 "3 actions";
+    # _KNOWN_ACTIONS 327 -> 330). All THREE are deny-by-default: a dedicated
+    # `action ==` scrub branch in emit_generic + the allowlists
+    # _LEDGER_CHECKPOINT_RECORDED_ALLOWLIST /
+    # _LEDGER_CHECKPOINT_SKIPPED_ALLOWLIST / _LEDGER_ENTRY_REJECTED_ALLOWLIST
+    # below, NEVER _EMIT_GENERIC_PASSTHROUGH.
+    #
+    # (1) The advisory work-boundary observation: a `git commit` landing
+    # plan-scoped work was inspected for its LEDGER.md checkpoint. Producer =
+    # check_ledger_checkpoint.py (PreToolUse/Bash), which never denies. Wire =
+    # closed enums (`outcome`, `scope_source`, `state_kind`), the strict
+    # PLAN-NNN id, and TYPE-strict INT counters clamped 0..99 (a float is
+    # refused by canonical_json and would discard the WHOLE event —
+    # S181/ADR-055-AMEND-2). DENIED on the wire: the commit MESSAGE, the
+    # committed PATHS, the ledger CONTENT, the repo root, any AC text.
+    "ledger_checkpoint_recorded",
+    # (2) The same rail's negative case, kept as its OWN action so "the rail
+    # did not fire" is countable instead of inferred from absence: the
+    # measure-first window needs a denominator, and "skipped because the
+    # commit was out of scope" and "never observed at all" are different
+    # facts.
+    "ledger_checkpoint_skipped",
+    # (3) The W4 ledger write-gate discard: an externally-sourced entry was
+    # refused fail-CLOSED. Producer = _lib/ledger_provenance.py. This action
+    # exists precisely so the discard is NOT filed as
+    # `prompt_injection_detected`: routing `scanner_unavailable` / `oversize`
+    # / `malformed_input` into a DETECTION action would poison the very FPR
+    # series the advisory window has to measure. Wire = closed enums + INT
+    # counters. DENIED on the wire: the rejected entry BODY (not even a
+    # preview), the entry id, and any path.
+    "ledger_entry_rejected",
 }
 
 
@@ -4128,6 +4160,47 @@ def emit_prompt_injection_detected(
     )
 
 
+def emit_ledger_entry_rejected(
+    *,
+    signal: str = "",
+    decision: str = "reject",
+    reason: str = "",
+    family: str = "",
+    hits_count: int = 0,
+    bytes_scanned: int = 0,
+    scanned: int = 0,
+    enforced: int = 0,
+    session_id: str = "",
+    project: str = "",
+) -> None:
+    """Emit ledger_entry_rejected (PLAN-179 W4 / ADR-195).
+
+    The ledger write-gate refused an externally-sourced entry fail-CLOSED.
+    Called by ``_lib/ledger_provenance._emit_rejection``; the keyword names
+    mirror ``GateVerdict.to_audit_fields()`` EXACTLY, because that caller
+    splats the dict (``typed(**fields)``) and a signature mismatch would
+    look like a raising emitter and degrade the rail silently.
+
+    Deliberately NO ``int()`` coercion here: the scrub branch is TYPE-strict
+    and a float must become 0, not be rounded into the signed chain. The
+    rejected entry BODY is not a parameter of this function at all — the
+    gate never forwards it, not even truncated.
+    """
+    emit_generic(
+        "ledger_entry_rejected",
+        signal=signal or _LEDGER_GATE_SIGNAL,
+        decision=decision,
+        reason=reason,
+        family=family,
+        hits_count=hits_count,
+        bytes_scanned=bytes_scanned,
+        scanned=scanned,
+        enforced=enforced,
+        session_id=session_id,
+        project=project,
+    )
+
+
 def emit_secret_leak_detected(
     *,
     signal: str = "",
@@ -7022,6 +7095,143 @@ def emit_generic(action: str, **kwargs: Any) -> None:
                 f"emit_generic context_pressure_observed dropped "
                 f"forbidden field(s): {sorted(dropped)[:10]}"
             )
+    # PLAN-179 W2 (ADR-195) — advisory work-boundary ledger observation.
+    # Dedicated deny-by-default branch (NEVER _EMIT_GENERIC_PASSTHROUGH). The
+    # field-name scrub DROPS non-allowlisted keys, so a smuggled commit
+    # message / committed path / ledger body never reaches the wire; the
+    # closed-enum + TYPE-strict int coercions then close the direct
+    # emit_generic-caller path (S172 doctrine — rejected values are replaced
+    # with the safe sentinel, never echoed). Every membership test is
+    # isinstance-guarded FIRST: `x in frozenset` raises TypeError when x is
+    # UNHASHABLE (a list/dict from a direct caller) and that exception would
+    # escape emit_generic's never-raises contract before _write_event's
+    # fail-open wrapper could absorb it (PLAN-179 rail finding B / H4 class).
+    elif action == "ledger_checkpoint_recorded":
+        event, dropped = _scrub_ceo_boot_event(
+            event, _LEDGER_CHECKPOINT_RECORDED_ALLOWLIST
+        )
+        _lc_outcome = event.get("outcome")
+        if (not isinstance(_lc_outcome, str)
+                or _lc_outcome not in _LEDGER_CHECKPOINT_OUTCOMES):
+            event["outcome"] = "other"
+        _lc_scope = event.get("scope_source")
+        if (not isinstance(_lc_scope, str)
+                or _lc_scope not in _LEDGER_CHECKPOINT_SCOPE_SOURCES):
+            event["scope_source"] = "other"
+        _lc_state = event.get("state_kind")
+        if (not isinstance(_lc_state, str)
+                or _lc_state not in _LEDGER_CHECKPOINT_STATE_KINDS):
+            # "unavailable" (not "other"): the producer's own sentinel for
+            # "the observation state could not be read".
+            event["state_kind"] = "unavailable"
+        if not _compaction_plan_id_ok(event.get("plan_id")):
+            # Shared strict PLAN-NNN validator — a path-traversal attempt
+            # smuggled through plan_id is rejected, not echoed.
+            event["plan_id"] = "unknown"
+        for _lc_key, _lc_hi in (
+            ("in_scope_path_count", 99),
+            ("ledger_size_bucket_kib", 99),
+            ("unverified_ac_claim_count", 99),
+            ("commits_since_last_observation", 99),
+            ("over_ceiling", 1),
+            ("would_block", 1),
+        ):
+            event[_lc_key] = _ledger_int_field(event.get(_lc_key), _lc_hi)
+        if dropped:
+            _breadcrumb(
+                f"emit_generic ledger_checkpoint_recorded dropped "
+                f"forbidden field(s): {sorted(dropped)[:10]}"
+            )
+    # PLAN-179 W2 (ADR-195) — the same rail's SKIP row. Same deny-by-default
+    # contract as the branch above; `reason` is the producer's closed skip
+    # enum and carries no free text, so "why the rail stayed quiet" is
+    # countable without ever describing the commit.
+    elif action == "ledger_checkpoint_skipped":
+        event, dropped = _scrub_ceo_boot_event(
+            event, _LEDGER_CHECKPOINT_SKIPPED_ALLOWLIST
+        )
+        _ls_reason = event.get("reason")
+        if (not isinstance(_ls_reason, str)
+                or _ls_reason not in _LEDGER_CHECKPOINT_SKIP_REASONS):
+            event["reason"] = "other"
+        _ls_state = event.get("state_kind")
+        if (not isinstance(_ls_state, str)
+                or _ls_state not in _LEDGER_CHECKPOINT_STATE_KINDS):
+            event["state_kind"] = "unavailable"
+        if not _compaction_plan_id_ok(event.get("plan_id")):
+            event["plan_id"] = "unknown"
+        for _ls_key, _ls_hi in (
+            ("commits_since_last_observation", 99),
+            ("would_block", 1),
+        ):
+            event[_ls_key] = _ledger_int_field(event.get(_ls_key), _ls_hi)
+        if dropped:
+            _breadcrumb(
+                f"emit_generic ledger_checkpoint_skipped dropped "
+                f"forbidden field(s): {sorted(dropped)[:10]}"
+            )
+    # PLAN-179 W4 (ADR-195) — ledger write-gate discard. Deny-by-default and
+    # deliberately STRICTER than the `prompt_injection_detected` branch this
+    # producer used to borrow: that branch allowlists `family` by NAME but
+    # leaves its VALUE caller-chosen, while this one re-coerces the value
+    # against the mirrored catalogue. `decision` and `reason` fall back to
+    # the FAIL-CLOSED sentinels ("reject" / "malformed_input") rather than a
+    # neutral "other", because an unreadable security verdict is a rejection,
+    # never an acceptance. The rejected entry BODY has no allowed field name
+    # at all — not even a truncated preview (public repo, LLM06).
+    elif action == "ledger_entry_rejected":
+        event, dropped = _scrub_ceo_boot_event(
+            event, _LEDGER_ENTRY_REJECTED_ALLOWLIST
+        )
+        if event.get("signal") != _LEDGER_GATE_SIGNAL:
+            event["signal"] = _LEDGER_GATE_SIGNAL
+        # A ACAO ja e o veredito: `ledger_entry_rejected` so existe para uma
+        # entrada REJEITADA. Coagir apenas valores fora do enum deixava passar
+        # `decision="accept"` intacto (accept esta NO enum), produzindo um
+        # evento ASSINADO cuja acao diz "rejeitada" e cujo campo diz
+        # "aceita" — e envenenando a serie de rejeicao/FPR que este ramo
+        # deny-by-default existe para proteger. O unico produtor legitimo
+        # (`_emit_rejection`) so chega aqui com veredito de rejeicao, entao
+        # forcar e coerente com ele e fecha a porta do `emit_generic` direto.
+        # (pair-rail do main, rodada 3, P2.)
+        # Campos de IDENTIDADE tambem sao entrada: a allowlist os ADMITE, mas
+        # nada os validava, entao um chamador direto podia gravar
+        # `project="/Users/alice/private"` ou um `session_id` com path no
+        # evento ASSINADO — contra o contrato do SPEC/v1, que nega qualquer
+        # path nesta acao (pair-rail rodada 6, P2).
+        _lg_sid = event.get("session_id")
+        if not isinstance(_lg_sid, str) or not _LEDGER_ID_RE.match(_lg_sid):
+            event["session_id"] = ""
+        _lg_proj = event.get("project")
+        if not isinstance(_lg_proj, str) or not _LEDGER_ID_RE.match(_lg_proj):
+            event["project"] = ""
+        if event.get("decision") != "reject":
+            event["decision"] = "reject"
+        _lg_reason = event.get("reason")
+        if (not isinstance(_lg_reason, str)
+                or _lg_reason not in _LEDGER_GATE_REASONS
+                # "ok" significa NAO-rejeitada: incoerente com esta acao.
+                or _lg_reason == "ok"):
+            event["reason"] = "malformed_input"
+        _lg_family = event.get("family")
+        if (not isinstance(_lg_family, str)
+                or _lg_family not in _LEDGER_GATE_FAMILIES):
+            event["family"] = "unknown_family"
+        for _lg_key, _lg_hi in (
+            ("hits_count", 9999),
+            # MAX_ENTRY_BYTES of the gate is 8192 and an oversize body is
+            # rejected WITHOUT scanning (bytes_scanned=0), so this ceiling
+            # can never truncate a legitimate value.
+            ("bytes_scanned", 8192),
+            ("scanned", 1),
+            ("enforced", 1),
+        ):
+            event[_lg_key] = _ledger_int_field(event.get(_lg_key), _lg_hi)
+        if dropped:
+            _breadcrumb(
+                f"emit_generic ledger_entry_rejected dropped "
+                f"forbidden field(s): {sorted(dropped)[:10]}"
+            )
     # PLAN-135 W2 H5 (ADR-154) — corrective bash-input rewrite breadcrumb.
     # Dedicated scrub branch (NEVER _EMIT_GENERIC_PASSTHROUGH). The
     # field-name scrub DROPS non-allowlisted keys (so a smuggled command
@@ -8341,6 +8551,115 @@ _SALT_ROTATION_REGISTERED_ALLOWLIST = frozenset({
 # Closed enum for salt_rotation_registered.reason (S172 doctrine: values
 # outside the set are COERCED to "other", never echoed).
 _SALT_ROTATION_REASONS = frozenset({"first_mint", "migration_mint", "other"})
+
+
+# PLAN-179 W2 (ADR-195) — Sec MF-3 field allowlists for the work-boundary
+# ledger rail. Deny-by-default, same no-value-echo contract as the compaction
+# pair: the commit MESSAGE, the committed PATHS, the ledger BODY and the repo
+# ROOT are never allowed field NAMES, so a smuggled value cannot reach the
+# wire even from a direct emit_generic caller.
+_LEDGER_CHECKPOINT_RECORDED_ALLOWLIST = frozenset({
+    "action", "session_id", "project",
+    "outcome", "plan_id", "scope_source",
+    "in_scope_path_count", "ledger_size_bucket_kib", "over_ceiling",
+    "unverified_ac_claim_count", "commits_since_last_observation",
+    "state_kind", "would_block",
+    # _write_event envelope (pre-allowed so scrub doesn't strip on round-trip):
+    "ts", "event_schema",
+    "tokens_in", "tokens_out", "tokens_total",
+    "hmac", "hmac_error",
+})
+
+_LEDGER_CHECKPOINT_SKIPPED_ALLOWLIST = frozenset({
+    "action", "session_id", "project",
+    "reason", "plan_id", "commits_since_last_observation",
+    "state_kind", "would_block",
+    # _write_event envelope (pre-allowed so scrub doesn't strip on round-trip):
+    "ts", "event_schema",
+    "tokens_in", "tokens_out", "tokens_total",
+    "hmac", "hmac_error",
+})
+
+_LEDGER_ENTRY_REJECTED_ALLOWLIST = frozenset({
+    "action", "session_id", "project",
+    "signal", "decision", "reason", "family",
+    "hits_count", "bytes_scanned", "scanned", "enforced",
+    # _write_event envelope (pre-allowed so scrub doesn't strip on round-trip):
+    "ts", "event_schema",
+    "tokens_in", "tokens_out", "tokens_total",
+    "hmac", "hmac_error",
+})
+
+# PLAN-179 W2 (ADR-195) — closed enums for the two checkpoint actions. These
+# MUST mirror the producer's own tuples in
+# `.claude/hooks/check_ledger_checkpoint.py` (`_OUTCOMES`, `_SKIP_REASONS`,
+# `_SCOPE_SOURCES`, `_STATE_KINDS`). Kept LITERAL here (never imported) so
+# audit_emit keeps its zero-import-time-dependency posture — the same
+# treatment `_SETTINGS_TAMPER_CLASSES` gets; the drift is caught by the
+# staged parity test in `.claude/hooks/tests/test_check_ledger_checkpoint.py`
+# (§enum-parity), which is what that test is for. Values outside a set are
+# COERCED to the safe sentinel (S172 doctrine — never echoed).
+_LEDGER_CHECKPOINT_OUTCOMES = frozenset({
+    "ledger_updated", "ledger_missing", "ledger_absent_from_plan",
+    "error", "other",
+})
+_LEDGER_CHECKPOINT_SKIP_REASONS = frozenset({
+    "out_of_scope_paths", "kill_switch", "hotfix", "exploratory",
+    "operator_opt_out", "unparseable", "budget_exhausted", "no_repo",
+    "other",
+})
+_LEDGER_CHECKPOINT_SCOPE_SOURCES = frozenset({
+    "plan_dir", "plan_ac", "both", "other",
+})
+_LEDGER_CHECKPOINT_STATE_KINDS = frozenset({"fresh", "resumed", "unavailable"})
+
+# PLAN-179 W4 (ADR-195) — closed enums for the ledger write-gate discard.
+# `_LEDGER_GATE_SIGNAL` is a fixed vocabulary of ONE: this action has exactly
+# one producer, so a different signal names a caller that is not the gate and
+# is coerced rather than echoed.
+_LEDGER_GATE_SIGNAL = "ledger_write_gate"
+_LEDGER_GATE_DECISIONS = frozenset({"accept", "reject"})
+#: Forma admissivel para os campos de IDENTIDADE das acoes de ledger. Sem
+#: barra, sem espaco, limitado: um path NUNCA casa, que e o ponto.
+_LEDGER_ID_RE = re.compile(r"^[A-Za-z0-9_-]{0,64}$")
+_LEDGER_GATE_REASONS = frozenset({
+    "ok", "not_scanned_trusted_provenance", "scanner_hit",
+    "scanner_unavailable", "oversize", "malformed_input",
+})
+# The family vocabulary is the UNION of two authorities, mirrored LITERALLY
+# for the same zero-import reason as the enums above:
+#   * `_lib/ledger_provenance._LOCAL_FAMILIES` — the families the gate names
+#     itself, without consulting a scanner;
+#   * `_lib/injection_patterns.family_names()` — the pattern CATALOGUE.
+# A catalogue that GROWS without this mirror growing would silently narrow a
+# legitimate family to `unknown_family`; the parity test in
+# `.claude/hooks/tests/test_ledger_provenance.py` (§family-enum-parity) is
+# the guard that turns that drift RED instead of silent.
+_LEDGER_GATE_FAMILIES = frozenset({
+    # local (ledger_provenance._LOCAL_FAMILIES)
+    "none", "scanner_unavailable", "oversize", "malformed_input",
+    "unknown_family",
+    # catalogue (injection_patterns.family_names())
+    "directive_prose", "harness_mimicry", "provider_tokens", "role_preamble",
+})
+
+
+def _ledger_int_field(value: Any, hi: int) -> int:
+    """TYPE-strict clamp for the ledger rail's integer wire fields.
+
+    Deliberately NOT ``int(value)``: ``bool`` is an ``int`` subclass (so
+    ``True`` would sail through any numeric test) and ``canonical_json``
+    REFUSES floats in HMAC-covered fields — a float here would drop the
+    WHOLE event to an ``audit-log.errors`` breadcrumb rather than the one
+    field (S181 / ADR-055-AMEND-2). Anything that is not a plain
+    non-negative ``int`` therefore becomes ``0``, and values above ``hi``
+    are clamped. Never echoes the rejected value.
+    """
+    if isinstance(value, bool) or not isinstance(value, int):
+        return 0
+    if value < 0:
+        return 0
+    return value if value <= hi else hi
 
 # PLAN-135 W1 S3 — closed enums. MUST mirror
 # _lib/effective_config.TAMPER_CLASSES and the layer names

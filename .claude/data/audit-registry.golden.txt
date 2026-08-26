@@ -1,7 +1,7 @@
 # audit-action registry golden (generated — do not hand-edit)
 # format: v1  source: .claude/hooks/_lib/audit_emit.py::_KNOWN_ACTIONS
 # regenerate: python3 .claude/scripts/check-audit-registry-coverage.py --write-golden
-# count: 327
+# count: 330
 action_required_held
 action_required_rejected
 action_required_resumed
@@ -149,6 +149,9 @@ invisible_unicode_blocked
 kernel_extension_landed
 kill_switch_invoked
 learning_rail_disabled
+ledger_checkpoint_recorded
+ledger_checkpoint_skipped
+ledger_entry_rejected
 lesson_approved
 lesson_archived
 lesson_boot_render_dropped

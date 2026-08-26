@@ -98,9 +98,9 @@ DOGFOOD_ONLY_HOOKS: Set[Tuple[str, str, str]] = frozenset({
 # suite exists to catch. It is NOT a T3.4-gated registration either (no
 # version-floor probe: SessionStart + matcher are long-standing substrate),
 # so it must NOT enter DOGFOOD_ONLY_HOOKS nor the gated set. The derived
-# relationship below is the real oracle and is unchanged: 49 == 46 + 1 + 2.
-T64_DOGFOOD_REGISTRATIONS = 49
-T64_TEMPLATE_REGISTRATIONS = 46
+# relationship below is the real oracle and is unchanged: 50 == 47 + 1 + 2.
+T64_DOGFOOD_REGISTRATIONS = 50
+T64_TEMPLATE_REGISTRATIONS = 47
 
 _BASELINES_CACHE: Optional[Dict] = None
 
