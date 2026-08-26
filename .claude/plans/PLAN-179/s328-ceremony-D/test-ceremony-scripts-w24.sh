@@ -72,8 +72,9 @@ head2 "T0 — montando o clone descartavel"
 REPO="$WORK/repo"
 git clone --local --quiet . "$REPO" || { red "git clone falhou"; printf '\nresumo: %s pass / %s fail\n' "$PASS" "$FAIL"; exit 1; }
 
-# Os materiais e o pack estao UNTRACKED/modificados na arvore viva; o clone so
-# tem o que esta em HEAD. Copiar e COMMITAR no clone — o LAND exige material
+# Os materiais e o pack PODEM estar untracked/modificados na arvore viva (estado
+# da noite) ou ja commitados em HEAD (estado pos-cura); o clone so tem o que
+# esta em HEAD. Copiar e commitar no clone O QUE MUDOU — o LAND exige material
 # rastreado, e essa exigencia e ela mesma parte do que se quer exercitar.
 mkdir -p "$REPO/$CEREMONY_DIR"
 rm -rf "${REPO:?}/${ST:?}"
@@ -141,10 +142,16 @@ PY
 (
   cd "$REPO" || exit 1
   git add -- "$ST" "$LAND" "$SIGN" "$DRAFT" "$CEREMONY_DIR" >/dev/null 2>&1
+  # Pack e materiais ja commitados em HEAD (S329, pos-cura do BASELINE): a
+  # re-montagem e a re-derivacao do Scope sao no-op, o index fica VAZIO e
+  # `git commit` devolve 1 com "nothing to commit" — isso nao e falha do
+  # harness (ele so passava antes PORQUE o pack em HEAD estava stale). Index
+  # vazio = HEAD ja e o material que o Owner tem na mao: seguir sem commit.
+  if git diff --cached --quiet; then exit 0; fi
   git -c user.email=harness@local -c user.name=harness commit -q -m "harness: materiais do pacote D" >/dev/null 2>&1
 ) || { red "commit dos materiais no clone falhou"; printf '\nresumo: %s pass / %s fail\n' "$PASS" "$FAIL"; exit 1; }
 CLONE_HEAD="$( cd "$REPO" && git rev-parse HEAD )"
-green "clone montado e materiais commitados (HEAD $CLONE_HEAD)"
+green "clone montado; materiais commitados ou ja em HEAD (HEAD $CLONE_HEAD)"
 
 # Sentinel sintetico: draft + campos preenchidos + .asc falso. O LAND sob
 # SELFTEST pula a verificacao GPG mas AINDA exige anchor == HEAD, entao o
