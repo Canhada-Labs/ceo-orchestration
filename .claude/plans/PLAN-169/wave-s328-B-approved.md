@@ -13,7 +13,7 @@ Plans: PLAN-169
 Wave: wave-s328-B (cura do gate hook-latency — decisão do Owner Q5 de 2026-08-25, «Emenda + gate em pacote, e 1 rerun de madrugada»: a segunda chave RELATIVA em fase 1 ADVISORY, mais as duas emendas de ADR que registram por que a primeira chave sozinha decide errado)
 Patch: .claude/plans/PLAN-169/s328-ceremony-B/B.patch
 Patch-sha256: e635498ac63422537574a5ce9229d36a1ef11bc7c4aaa2f157c25b048d5e0950
-Patch-base: 47b20044e5af50bdf5d12830eb2f461dca791cb4
+Patch-base: 0aa05c3efabc598721005d3bc721ce065fcc28bd
 Anchor-SHA: TO-FILL-AT-SIGN
 Data: TO-FILL-AT-SIGN
 
