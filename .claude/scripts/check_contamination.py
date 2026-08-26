@@ -30,6 +30,13 @@ Files matching the pattern outside the allowlist fail the check.
 Exact paths + glob patterns (see `_ALLOWLIST_*` below). Binary file
 suffixes are excluded by extension.
 
+One NEGATIVE exception overrides the allowlist (deny wins over allow):
+per-plan `LEDGER.md` / `LEDGER-ARCHIVE.md` files under `.claude/plans/`
+are ALWAYS scanned, even though `.claude/plans/*` exempts the tree they
+live in. See `is_never_allowlisted` for why. For that class alone, a file
+that is not valid UTF-8 is REPORTED rather than skipped — unparseable
+input is blocked, per the CLAUDE.md §4 security-matcher rule.
+
 ## Exit codes
 
 - 0 — clean
@@ -297,6 +304,52 @@ _ALLOWLIST_GLOBS = {
     "tests/fixtures/red-team-corpus/*",
 }
 
+# ---------------------------------------------------------------------------
+# NEGATIVE exception to the allowlist — deny WINS over allow
+# ---------------------------------------------------------------------------
+# `.claude/plans/*` in _ALLOWLIST_GLOBS exempts the plan tree WHOLESALE
+# (fnmatch's `*` crosses `/`, as the note on that set says). That exemption
+# was written for plan PROSE: hand-authored artifacts a maintainer reads
+# before committing, which legitimately name adopter context.
+#
+# PLAN-179 W2 puts a different KIND of file in the same tree. A per-plan
+# `LEDGER.md` is written INCREMENTALLY, mid-session, by the model, from
+# material that includes agent returns and tool output — and this repository
+# is PUBLIC. A blanket exemption over a machine-appended file is a standing
+# leak path, not a reviewed one, and "the model was told to write
+# identifiers only" is an instruction, not a control.
+#
+# The cure is a NEGATIVE exception for that ONE class rather than "add
+# coverage": dropping `.claude/plans/*` would drag every plan artifact into
+# the scan and regrow exactly the noise the exemption exists to remove.
+#
+# Matched by BASENAME under `.claude/plans/`, at ANY depth — deliberately
+# NOT by glob. `.claude/plans/*/LEDGER.md` misses both
+# `.claude/plans/LEDGER.md` and a ledger parked one directory deeper, and a
+# rule an author sidesteps by moving the file is not a rule.
+_NEVER_ALLOWLISTED_BASENAMES = frozenset({
+    "LEDGER.md",          # check_ledger_checkpoint.LEDGER_BASENAME
+    "LEDGER-ARCHIVE.md",  # check_ledger_checkpoint.LEDGER_ARCHIVE_BASENAME
+})
+_NEVER_ALLOWLISTED_ROOT = (".claude", "plans")
+
+
+def is_never_allowlisted(rel_path: str) -> bool:
+    """True for a file the allowlist must NOT be able to exempt.
+
+    ``rel_path`` is repo-relative and POSIX-separated. Kept a pure
+    function so the test can drive it directly and `scan()` can consult
+    it BEFORE the walker's allowlist — deny wins over allow.
+    """
+    parts = rel_path.split("/")
+    root = _NEVER_ALLOWLISTED_ROOT
+    return (
+        len(parts) > len(root)
+        and tuple(parts[: len(root)]) == root
+        and parts[-1] in _NEVER_ALLOWLISTED_BASENAMES
+    )
+
+
 # Suffixes to skip (binary / non-text files)
 _SKIP_SUFFIXES = {
     ".png", ".jpg", ".jpeg", ".gif", ".webp",
@@ -320,7 +373,15 @@ def scan(repo_root: Path) -> List[Path]:
         # Skip binaries by suffix
         if path.suffix.lower() in _SKIP_SUFFIXES:
             continue
-        if walker.is_allowlisted(path):
+        # Relative to the WALKER's root, which is already `.resolve()`d.
+        # Using the caller's unresolved `repo_root` would raise here the
+        # moment the two differ — which on macOS they routinely do
+        # (`/tmp` is a symlink to `/private/tmp`).
+        try:
+            rel = path.relative_to(walker.repo_root).as_posix()
+        except ValueError:
+            rel = path.as_posix()
+        if walker.is_allowlisted(path) and not is_never_allowlisted(rel):
             continue
         try:
             raw = path.read_bytes()
@@ -329,6 +390,24 @@ def scan(repo_root: Path) -> List[Path]:
         try:
             text = raw.decode("utf-8")
         except UnicodeDecodeError:
+            # rail round-1 P1. For an ordinary file this skip is fine: the
+            # allowlist already decided the file is not interesting, and an
+            # undecodable blob that slipped past _SKIP_SUFFIXES is noise.
+            #
+            # For the never-allowlisted class it is a FAIL-OPEN, and it was
+            # reachable: ONE stray 0xFF byte anywhere in a plan `LEDGER.md`
+            # made `scan()` skip the WHOLE file, marker and all — measured,
+            # the probe returned `[]` on a ledger that carried a placeholder
+            # handle in valid UTF-8 two lines below the bad byte.
+            #
+            # These files exist BECAUSE nobody reads them before they are
+            # committed, so "the guard could not parse it" must not read the
+            # same as "the guard found nothing". Fail CLOSED, per the
+            # CLAUDE.md §4 rule for security matchers: unparseable INPUT is
+            # blocked, never waved through. The OSError arm above stays
+            # fail-OPEN on purpose — an unreadable file is INFRASTRUCTURE.
+            if is_never_allowlisted(rel):
+                violations.append(path)
             continue
         normalized = unicodedata.normalize("NFKC", text)
         if pattern.search(normalized):
@@ -370,6 +449,10 @@ def main() -> int:
     print("  - CHANGELOG.md")
     print("  - .claude/skills/domains/**")
     print("  - .claude/plans/PLAN-*.md (all plan files)")
+    print("      EXCEPT LEDGER.md / LEDGER-ARCHIVE.md at any depth under")
+    print("      .claude/plans/ — machine-appended, always scanned")
+    print("      (such a file is ALSO reported when it is not valid UTF-8:")
+    print("       unparseable input is blocked, not skipped)")
     print("  - npm/** (NPM shim — uses owner handle in URLs)")
     print("  - .github/workflows/validate.yml")
     print("  - .github/CODEOWNERS (live config — Owner handle expected)")

@@ -209,7 +209,10 @@ fi
 # right posture, reached the wrong way and with no name attached to it.
 # rail round-7 F2 added _wbm_source_confined for the same reason: _restore_file
 # COPIES from "$SOURCE_DIR/$src", and a library without that predicate would
-# copy through a symlinked source without anything saying so.
+# copy through a symlinked source without anything saying so. rail round-8
+# widened that to the THREE sites that resolve a source — the write site and
+# both HASH sites — so this name is now load-bearing for CLASSIFICATION too,
+# not only for the copy.
 for _fms_req in _wbm_route_src _wbm_route_relpath_ok _wbm_route_row_ok \
                 _wbm_route_table_ok _wbm_route_table_gate _wbm_source_confined; do
   if ! command -v "$_fms_req" >/dev/null 2>&1; then
@@ -708,7 +711,24 @@ while IFS= read -r line || [ -n "$line" ]; do
           src_hash=""
         else
           if [ "$_ms_rc" -ne 0 ] || [ -z "${src_rel:-}" ]; then src_rel="$rel"; fi
-          src_hash="$( _hash_file "$SOURCE_DIR/$src_rel" 2>/dev/null || true )"
+          # rail round-8 — the WRITE site (_restore_refuses) has demanded
+          # PHYSICAL source confinement since round 7; the two HASH sites did
+          # not, and `_hash_file` follows symlinks exactly as `cp -p` does. A
+          # source whose leaf OR ancestor links to a regular file outside this
+          # checkout therefore hashed FOREIGN bytes, and the verdict flipped
+          # away from the conservative one: here to "MISSING (restorable)" for
+          # a file `_restore_file` would then refuse to write, and at the DRIFT
+          # site below to "baseline-stale" — a verdict that TELLS the operator
+          # to bless foreign bytes into the baseline by running upgrade.sh.
+          # Same predicate as the write site (no second implementation — the
+          # PLAN-182 lesson), and the refusal travels on the EXISTING
+          # empty-src_hash channel, so no verdict here is new.
+          if _wbm_source_confined "$SOURCE_DIR" "$src_rel"; then
+            src_hash="$( _hash_file "$SOURCE_DIR/$src_rel" 2>/dev/null || true )"
+          else
+            _log "    SOURCE-BLOCKED (source '$src_rel' is not confined to the framework checkout — ${_WBM_SRC_CONFINE_WHY:-unknown reason}): $rel"
+            src_hash=""
+          fi
         fi
         if [ -z "$src_hash" ]; then
           _log "    MISSING (framework checkout no longer ships this file): $rel"
@@ -762,7 +782,19 @@ while IFS= read -r line || [ -n "$line" ]; do
         src_hash=""
       else
         if [ "$_dr_rc" -ne 0 ] || [ -z "${src_rel:-}" ]; then src_rel="$rel"; fi
-        src_hash="$( _hash_file "$SOURCE_DIR/$src_rel" 2>/dev/null || true )"
+        # rail round-8 — the same physical confinement the MISSING branch above
+        # explains. THIS is the site the finding named: unguarded, a symlinked
+        # source made `cur` and `src_hash` agree on the FOREIGN bytes and the
+        # run reported `DRIFT (baseline-stale)`, i.e. "your baseline is behind
+        # the framework, run upgrade.sh" — laundering content from outside the
+        # checkout into the adopter's recorded framework baseline. Refused, the
+        # empty src_hash lands on the existing not-repairable verdict below.
+        if _wbm_source_confined "$SOURCE_DIR" "$src_rel"; then
+          src_hash="$( _hash_file "$SOURCE_DIR/$src_rel" 2>/dev/null || true )"
+        else
+          _log "    SOURCE-BLOCKED (source '$src_rel' is not confined to the framework checkout — ${_WBM_SRC_CONFINE_WHY:-unknown reason}): $rel"
+          src_hash=""
+        fi
       fi
       if [ -z "$src_hash" ]; then
         _log "    DRIFT (framework checkout no longer ships this file — not repairable): $rel"

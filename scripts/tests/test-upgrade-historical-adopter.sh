@@ -35,6 +35,12 @@
 #   H.8  a DANGLING SYMLINK destination is PRESERVED, never written through.
 #        PLAN-183 §9.1 reproduced that write-outside-$TARGET on install.sh
 #        (now PLAN-185 F1); the new upgrade route does not get to ship it too.
+#   H.27 the RENDERED route (.github/CODEOWNERS) recognises its OWN prior
+#        generations — the ladder has to substitute the handle into every
+#        historical blob before hashing. Its positive control PLANTS the
+#        pre-cure shape (generations hashed unrendered) and requires the
+#        adopter to stay stuck on stale bytes; without that plant, "REFRESHED"
+#        here is indistinguishable from "the file was already current".
 #   N.1  the NEGATIVE control: neither install-state nor .framework-version =>
 #        delivery DISABLED. Without it, "delivery enabled" could just be
 #        unconditional and every positive assertion above would still pass.
@@ -1900,6 +1906,254 @@ grep -qE "MODE-NORMALIZED \(.*\): $H24_REL\$" "$LOG_H26" \
 [ "$( ls -l "$H26/$H24_REL" | cut -c1-10 )" = "$MODE_REF_REFRESH" ] \
   && ok "H.26e and the mode converged to a fresh install's ($MODE_REF_REFRESH) with no chmod in sight — the write set it" \
   || bad "H.26e the mode is $( ls -l "$H26/$H24_REL" | cut -c1-10 ), a fresh install produces $MODE_REF_REFRESH — silence here would mean the drift SURVIVED"
+
+# --- H.27 (S328) the RENDERED route refreshes a PRISTINE PRIOR GENERATION ----
+# `.github/CODEOWNERS` is the ONLY rendered destination in the table, and it is
+# the only one whose prior-generation evidence has to be MANUFACTURED:
+# _up_tpl_generations (upgrade.sh:3714) renders every historical blob through
+# the recorded handle BEFORE hashing (:3725-3728), because the bytes on the
+# adopter's disk were substituted at install time and exist in no checkout.
+# Nothing in this file reached that code with a handle: H.11 DELETES the file
+# (INSTALLED lane, no generations consulted), H.12/H.25 have no recoverable
+# handle at all (PRESERVED unclaimed), H.15 refuses the row before rendering,
+# and H.3/H.24/H.26 exercise the ladder only on VERBATIM templates. So the one
+# route whose ownership evidence depends on a substitution had no fixture with
+# the power to detect that substitution going away.
+#
+# MEASURED (S328, this repo): templates/.github/CODEOWNERS.template has exactly
+# ONE commit in its history (9777a8d, 2026-06-29) — byte-identical from v1.2.0
+# to HEAD. A prior generation therefore cannot be HARVESTED the way H.3 harvests
+# one for docs/BRANCH-PROTECTION.md; it has to be PLANTED, in a throwaway git
+# history belonging to the COPIED checkout, and the divergence has to be
+# ASSERTED (blob_prev != blob_head) rather than assumed — an identical pair
+# would silently turn this leg into a restatement of H.11's IDENTICAL lane.
+echo ""
+echo "==> H.27 — the RENDERED .github/CODEOWNERS refreshes a pristine PRIOR generation"
+H27_SRC_REL="templates/.github/CODEOWNERS.template"
+H27_HANDLE="ceotesthandle"
+
+# WHICH source renders this destination is answered by the table, never by this
+# script: a fixture that plants generations of a file the delivery does not read
+# would be green about nothing (the D3 class, PLAN-183 §8).
+H27_ROW_SRC="$( awk -F'\t' '$1 == ".github/CODEOWNERS" { print $2; exit }' "$ROUTES" 2>/dev/null )"
+[ "${H27_ROW_SRC:-}" = "$H27_SRC_REL" ] \
+  || scaffold "H.27 the route table renders .github/CODEOWNERS from '${H27_ROW_SRC:-<no row>}', not '$H27_SRC_REL' —
+                 the fixture below would plant generations of a file this delivery never reads"
+
+H27="$WORK/priorgen/adopter"
+_install_into "$H27" --github-owner "$H27_HANDLE"
+[ -f "$H27/.github/CODEOWNERS" ] \
+  || scaffold "H.27 fixture: the --github-owner install delivered no .github/CODEOWNERS"
+# install.sh's OWN rendering of the CURRENT template — the oracle for "what the
+# upgrade must converge on". Never a sed of ours: that would compare the
+# upgrader against a second implementation of the substitution instead of
+# against the installer it has to stay in parity with (H.11c, same reason).
+H27_HEAD_SHA="$( _sha "$H27/.github/CODEOWNERS" )"
+
+H27_SRC="$WORK/priorgen/srccopy"
+_mk_source_copy "$H27_SRC" "$ROUTES" || scaffold "H.27 could not build the source checkout"
+# _mk_source_copy SYMLINKS everything but scripts/ and templates/, .git included,
+# and _up_tpl_generations resolves history with `git -C "$SOURCE_DIR"`. Left
+# alone, that reads the LIVE repository's history — and every commit below would
+# land in it. Swap the LINK for a throwaway repo. Guarded on -L, never a blind
+# `rm -rf`: a future _mk_source_copy that made .git a real copy would otherwise
+# turn this line into a silent delete of framework history.
+[ -L "$H27_SRC/.git" ] \
+  || scaffold "H.27 expected $H27_SRC/.git to be the symlink _mk_source_copy creates (it is $( [ -e "$H27_SRC/.git" ] && echo 'a real path' || echo absent )) — refusing to touch it"
+rm -f "$H27_SRC/.git" || scaffold "H.27 could not detach the symlinked .git"
+[ -e "$H27_SRC/.git" ] && scaffold "H.27 .git survived the detach — refusing to git init over it"
+( cd "$H27_SRC" && git init -q ) || scaffold "H.27 git init failed in $H27_SRC"
+
+# stderr is kept, not discarded: git DELIBERATELY refuses to read a symlinked
+# .gitignore (it reports ELOOP), which is harmless here — one path is staged by
+# name — but a real failure must still be readable, so it goes to a log the
+# scaffold message names instead of to /dev/null.
+H27_GIT_LOG="$WORK/priorgen/git.log"
+_h27_commit() {  # $1=message
+  git -C "$H27_SRC" add -- "$H27_SRC_REL" >>"$H27_GIT_LOG" 2>&1 \
+    || scaffold "H.27 could not stage $H27_SRC_REL in the throwaway history (see $H27_GIT_LOG)"
+  git -C "$H27_SRC" -c user.email=ceo-test@example.invalid -c user.name='CEO Test' \
+      -c commit.gpgsign=false commit -q -m "$1" >>"$H27_GIT_LOG" 2>&1 \
+    || scaffold "H.27 could not commit '$1' into the throwaway history $H27_SRC (see $H27_GIT_LOG)"
+}
+
+# Generation 1 — a DIVERGENT prior template that KEEPS the {{OWNER_HANDLE}}
+# markers (11 of them, measured). A prior generation without markers would hash
+# the same rendered or not, and the RED control below would pass for a reason
+# that has nothing to do with the substitution it exists to pin.
+H27_PRIOR_TPL="$WORK/priorgen/prior.template"
+cp "$REPO_ROOT/$H27_SRC_REL" "$H27_PRIOR_TPL" \
+  || scaffold "H.27 could not seed the prior generation from $REPO_ROOT/$H27_SRC_REL"
+printf '\n# H.27 fixture: a PRIOR framework generation of this template\n.github/dependabot.yml                  @{{OWNER_HANDLE}}\n' \
+  >> "$H27_PRIOR_TPL" || scaffold "H.27 could not age the prior generation"
+cp "$H27_PRIOR_TPL" "$H27_SRC/$H27_SRC_REL" || scaffold "H.27 could not stage the prior generation"
+_h27_commit "prior generation of $H27_SRC_REL"
+H27_BLOB_PREV="$( git -C "$H27_SRC" rev-parse "HEAD:$H27_SRC_REL" 2>/dev/null || true )"
+# Generation 2 — the framework's CURRENT bytes, which is both the copy's working
+# tree and the target the delivery has to converge on.
+cp "$REPO_ROOT/$H27_SRC_REL" "$H27_SRC/$H27_SRC_REL" || scaffold "H.27 could not restore the current generation"
+_h27_commit "current generation of $H27_SRC_REL"
+H27_BLOB_HEAD="$( git -C "$H27_SRC" rev-parse "HEAD:$H27_SRC_REL" 2>/dev/null || true )"
+
+if [ -n "$H27_BLOB_PREV" ] && [ -n "$H27_BLOB_HEAD" ] && [ "$H27_BLOB_PREV" != "$H27_BLOB_HEAD" ]; then
+  ok "H.27-control the copied checkout's history holds TWO DIVERGENT generations of $H27_SRC_REL ($( printf '%s' "$H27_BLOB_PREV" | cut -c1-7 ) != $( printf '%s' "$H27_BLOB_HEAD" | cut -c1-7 ))"
+else
+  bad "H.27-control blob_prev='${H27_BLOB_PREV:-<none>}' blob_head='${H27_BLOB_HEAD:-<none>}' — an identical or missing pair makes every assertion below a restatement of H.11's IDENTICAL lane"
+fi
+if cmp -s "$H27_SRC/$H27_SRC_REL" "$REPO_ROOT/$H27_SRC_REL"; then
+  ok "H.27-control the copied checkout ships the framework's CURRENT template (the bytes the refresh must land)"
+else
+  bad "H.27-control $H27_SRC/$H27_SRC_REL is not the framework's current bytes — the leg would measure a convergence onto a fixture, not onto the framework"
+fi
+
+# Age the DESTINATION to that prior generation, rendered with the SAME handle —
+# the shape of a real historical adopter who installed with an older framework
+# and never touched the file. `sed s/{{OWNER_HANDLE}}/<handle>/g` is what
+# install.sh:1576 applied then and what _up_tpl_generations:3727 replays now.
+H27_PRIOR_RENDER="$WORK/priorgen/prior.rendered"
+sed "s/{{OWNER_HANDLE}}/$H27_HANDLE/g" "$H27_PRIOR_TPL" > "$H27_PRIOR_RENDER" \
+  || scaffold "H.27 could not render the prior generation for @$H27_HANDLE"
+H27_PRIOR_SHA="$( _sha "$H27_PRIOR_RENDER" )"
+if [ -n "$H27_PRIOR_SHA" ] && [ "$H27_PRIOR_SHA" != "$H27_HEAD_SHA" ]; then
+  ok "H.27-control the RENDERED prior generation differs from install.sh's rendering of the current one — the substitution does not erase the planted divergence"
+else
+  bad "H.27-control rendered prior '$H27_PRIOR_SHA' equals the install's '$H27_HEAD_SHA' — the divergence vanishes under substitution and the refresh below would have nothing to do"
+fi
+cp "$H27_PRIOR_RENDER" "$H27/.github/CODEOWNERS" \
+  || scaffold "H.27 could not age the destination to the prior generation"
+
+# The RED fixture is snapshotted HERE — after the aging, before any upgrade —
+# so both lanes start from byte-identical adopters.
+H27_RED_TGT="$WORK/priorgen/adopter-red"
+cp -R "$H27" "$H27_RED_TGT" || scaffold "H.27-RED could not snapshot the fixture"
+
+# --- positive control: the pre-cure shape, planted, must REPRODUCE ----------
+# RED = generations hashed UNRENDERED. A destination holding a rendered prior
+# generation then matches nothing on the ladder and falls to PRESERVED, so the
+# adopter never converges. The mutation is planted at the CALLEE rather than at
+# the call site for a mechanical reason: the only call site (upgrade.sh:4228)
+# sits INSIDE a heredoc, where a `# RED-PLANT` marker would become part of the
+# generation LIST instead of a comment. That the two are equivalent is not
+# asserted from memory — the handle-passing call site count is MEASURED to be 1.
+H27_CALLS="$( grep -c '_up_tpl_generations "\$_udt_src_rel" "\$_udt_handle"' "$UPGRADE" 2>/dev/null )"
+case "${H27_CALLS:-}" in ''|*[!0-9]*) H27_CALLS=0 ;; esac
+if [ "$H27_CALLS" -eq 1 ]; then
+  ok "H.27-RED-control _up_tpl_generations has exactly ONE handle-passing call site — neutralising the callee IS neutralising that call"
+else
+  bad "H.27-RED-control $H27_CALLS handle-passing call site(s) of _up_tpl_generations (want 1) — the callee plant no longer stands in for the call-site one"
+fi
+H27_RED_SRC="$WORK/priorgen/srccopy-red"
+if cp -R "$H27_SRC" "$H27_RED_SRC"; then
+  awk '/^_up_tpl_generations\(\) \{$/ { print; print "  set -- \"$1\" \"\"  # RED-PLANT-NOHANDLE (pre-cure: generations hashed UNRENDERED)"; n++; next }
+       { print }
+       END { if (n != 1) exit 3 }' "$UPGRADE" > "$H27_RED_SRC/scripts/upgrade.sh"
+  _h27_prc=$?
+  _h27_pn="$( grep -c 'RED-PLANT-NOHANDLE' "$H27_RED_SRC/scripts/upgrade.sh" 2>/dev/null )" || _h27_pn=0
+  if [ "$_h27_prc" -eq 0 ] && [ "$_h27_pn" -eq 1 ] && bash -n "$H27_RED_SRC/scripts/upgrade.sh" 2>/dev/null; then
+    ok "H.27-RED-control the pre-cure unrendered-generations shape was planted exactly once (and it still parses)"
+  else
+    bad "H.27-RED-control plant rc=$_h27_prc count=$_h27_pn — the anchor missed, so the GREEN below is not evidence"
+  fi
+  _UPGRADE_SEQ=$(( _UPGRADE_SEQ + 1 ))
+  LOG_H27R="$H27_RED_TGT.upgrade.$_UPGRADE_SEQ.log"
+  bash "$H27_RED_SRC/scripts/upgrade.sh" "$H27_RED_TGT" --profile core --no-diff-warn \
+    > "$LOG_H27R" 2>&1 || true
+  if grep -q 'REFRESHED (pristine prior generation): \.github/CODEOWNERS$' "$LOG_H27R"; then
+    bad "H.27-RED the pre-cure copy refreshed .github/CODEOWNERS anyway — the finding does not reproduce, so the GREEN below is not evidence"
+  elif grep -q 'PRESERVED adopter-modified \.github/CODEOWNERS' "$LOG_H27R"; then
+    ok "H.27-RED pre-cure .github/CODEOWNERS falls to PRESERVED adopter-modified: unrendered generations never match a rendered destination — the finding reproduces BY NAME"
+  else
+    tail -20 "$LOG_H27R" >&2
+    bad "H.27-RED the pre-cure run neither refreshed nor preserved .github/CODEOWNERS — it took some third branch (see $LOG_H27R)"
+  fi
+  if [ "$( _sha "$H27_RED_TGT/.github/CODEOWNERS" 2>/dev/null || echo absent )" = "$H27_PRIOR_SHA" ]; then
+    ok "H.27-RED and the stale prior generation is still on disk afterwards — the pre-cure adopter never converges"
+  else
+    bad "H.27-RED the pre-cure run CHANGED .github/CODEOWNERS — the RED lane is not the shape this leg claims it is"
+  fi
+else
+  bad "H.27-RED could not copy the source checkout — the positive control did not run"
+fi
+
+# --- the cured run ---------------------------------------------------------
+_UPGRADE_SEQ=$(( _UPGRADE_SEQ + 1 ))
+LOG_H27="$H27.upgrade.$_UPGRADE_SEQ.log"
+_H27_RC=0
+bash "$H27_SRC/scripts/upgrade.sh" "$H27" --profile core --no-diff-warn > "$LOG_H27" 2>&1 || _H27_RC=$?
+[ "$_H27_RC" -eq 0 ] || { tail -40 "$LOG_H27" >&2; scaffold "H.27 upgrade returned rc=$_H27_RC (see $LOG_H27)"; }
+
+grep -q "CODEOWNERS handle: @$H27_HANDLE (recorded install request)" "$LOG_H27" \
+  && ok "H.27-control the run replayed the recorded handle — the RENDERED branch is the one under test" \
+  || bad "H.27-control the run did not replay @$H27_HANDLE (see $LOG_H27) — everything below would be about the .template branch instead"
+grep -q 'REFRESHED (pristine prior generation): \.github/CODEOWNERS$' "$LOG_H27" \
+  && ok "H.27a the rendered .github/CODEOWNERS was REFRESHED from a pristine PRIOR generation" \
+  || bad "H.27a no 'REFRESHED (pristine prior generation): .github/CODEOWNERS' line — the rendered route cannot recognise its own prior generations (see $LOG_H27)"
+[ "$( _sha "$H27/.github/CODEOWNERS" )" = "$H27_HEAD_SHA" ] \
+  && ok "H.27b the delivered bytes are byte-identical to install.sh's rendering of the CURRENT template for @$H27_HANDLE" \
+  || bad "H.27b the delivered .github/CODEOWNERS is not install.sh's rendering of the current template — the refresh converged somewhere else"
+
+# POSITIVE FIRST, then the negative. `grep -c '{{OWNER_HANDLE}}' = 0` on its own
+# is satisfied by an EMPTY file — the 0-byte CODEOWNERS PLAN-183 §9.2 reproduced
+# on the install side (debate class C2, W5-b convergence). The handle has to be
+# THERE before its absence means anything at all.
+H27_HANDLE_HITS="$( grep -c "@$H27_HANDLE" "$H27/.github/CODEOWNERS" 2>/dev/null )"
+case "${H27_HANDLE_HITS:-}" in ''|*[!0-9]*) H27_HANDLE_HITS=0 ;; esac
+[ "$H27_HANDLE_HITS" -ge 1 ] \
+  && ok "H.27c the delivered file NAMES the handle ($H27_HANDLE_HITS line(s) carrying @$H27_HANDLE)" \
+  || bad "H.27c the delivered .github/CODEOWNERS carries no @$H27_HANDLE — an empty or truncated file would satisfy H.27d below"
+H27_MARKER_HITS="$( grep -c '{{OWNER_HANDLE}}' "$H27/.github/CODEOWNERS" 2>/dev/null )"
+case "${H27_MARKER_HITS:-}" in ''|*[!0-9]*) H27_MARKER_HITS=0 ;; esac
+[ "$H27_MARKER_HITS" -eq 0 ] \
+  && ok "H.27d and no {{OWNER_HANDLE}} marker survived the substitution" \
+  || bad "H.27d $H27_MARKER_HITS unsubstituted {{OWNER_HANDLE}} marker(s) in the delivered file — the template was copied, not rendered"
+
+# The manifest record must describe the bytes that were DELIVERED. upgrade.sh
+# declares HASH_TARGET for this destination only when the D1 block actually
+# registered it (:4763-4764); the continuity lane declares HASH_PRIOR_RECORD and
+# would record the digest of the STALE file that was on disk before the refresh.
+# Comparing the RECORD against the BYTES is the only way to tell those apart
+# from outside — and a wrong record is what uninstall.sh:196 deletes on.
+_h27_man_digest() {  # $1=target -> manifest digest for .github/CODEOWNERS ("" if unrecorded)
+  _h27m="$1/.claude/.install-manifest.sha256"
+  [ -f "$_h27m" ] || { printf ''; return 0; }
+  awk '$2 == ".github/CODEOWNERS" { print $1; exit }' "$_h27m" 2>/dev/null
+}
+H27_MAN="$( _h27_man_digest "$H27" )"
+if [ -z "$H27_MAN" ]; then
+  bad "H.27e .github/CODEOWNERS has NO record in $H27/.claude/.install-manifest.sha256 — a destination this run refreshed and then declined to claim"
+elif [ "$H27_MAN" = "$H27_HEAD_SHA" ]; then
+  ok "H.27e the manifest records the digest of the bytes actually DELIVERED (HASH_TARGET, ADR-194 §3)"
+else
+  bad "H.27e the manifest records $H27_MAN, the delivered file hashes $H27_HEAD_SHA (the stale prior generation hashes $H27_PRIOR_SHA) — the record describes bytes that are not on disk"
+fi
+
+# --- and it holds still: a second consecutive upgrade -----------------------
+# The stability reference is the state AFTER the first upgrade, not the head
+# render: comparing against the head render would make this leg re-assert
+# H.27b's convergence and report a CONVERGENCE failure as a STABILITY one.
+H27_AFTER1_SHA="$( _sha "$H27/.github/CODEOWNERS" )"
+_UPGRADE_SEQ=$(( _UPGRADE_SEQ + 1 ))
+LOG_H27B="$H27.upgrade.$_UPGRADE_SEQ.log"
+_H27B_RC=0
+bash "$H27_SRC/scripts/upgrade.sh" "$H27" --profile core --no-diff-warn > "$LOG_H27B" 2>&1 || _H27B_RC=$?
+[ "$_H27B_RC" -eq 0 ] || { tail -40 "$LOG_H27B" >&2; scaffold "H.27 second upgrade returned rc=$_H27B_RC (see $LOG_H27B)"; }
+grep -q 'IDENTICAL: \.github/CODEOWNERS$' "$LOG_H27B" \
+  && ok "H.27f the second upgrade finds .github/CODEOWNERS IDENTICAL — the refresh converged instead of oscillating" \
+  || bad "H.27f the second upgrade did not reach the IDENTICAL branch for .github/CODEOWNERS (see $LOG_H27B)"
+grep -q 'REFRESHED (pristine prior generation): \.github/CODEOWNERS$' "$LOG_H27B" \
+  && bad "H.27g the SECOND upgrade refreshed .github/CODEOWNERS again — the rendered route is not idempotent" \
+  || ok "H.27g the second upgrade re-wrote nothing on the rendered route"
+[ "$( _sha "$H27/.github/CODEOWNERS" )" = "$H27_AFTER1_SHA" ] \
+  && ok "H.27h .github/CODEOWNERS is byte-identical across the two consecutive upgrades" \
+  || bad "H.27h .github/CODEOWNERS changed on the second upgrade (was $H27_AFTER1_SHA after the first)"
+H27_MAN2="$( _h27_man_digest "$H27" )"
+# Same reference discipline as H.27h — and an EMPTY-vs-EMPTY comparison would
+# pass vacuously on the very run where H.27e already found no record at all.
+if [ -n "$H27_MAN2" ] && [ "$H27_MAN2" = "${H27_MAN:-}" ]; then
+  ok "H.27i and the manifest digest is stable across both runs"
+else
+  bad "H.27i the manifest digest went '${H27_MAN:-<unrecorded>}' -> '${H27_MAN2:-<unrecorded>}' across the two upgrades"
+fi
 
 echo ""
 echo "=============================================================="

@@ -1083,6 +1083,242 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# R.11 (rail round-8) — the two HASH sites need the same PHYSICAL source
+# confinement the WRITE site got in round 7. `_hash_file` follows symlinks
+# exactly as `cp -p` does, so a source whose leaf OR ancestor links to a
+# regular file outside the checkout was hashed as framework content and the
+# VERDICT flipped:
+#
+#   DRIFT lane   — `cur` and the foreign `src_hash` agree, so the run reports
+#                  `DRIFT (baseline-stale: ... run upgrade.sh to refresh the
+#                  baseline)`. That is an instruction to the OPERATOR to bless
+#                  bytes from outside the checkout into the adopter's recorded
+#                  framework baseline: laundering, by verdict.
+#   MISSING lane — the foreign digest matches the recorded baseline, so the run
+#                  reports `MISSING (restorable)` for a file `_restore_file`
+#                  then refuses to write: a verdict the repair cannot honour.
+#
+# The exposure is a WRONG ANSWER, not a write — round 7 closed the write — so
+# the RED legs below keep the WRITE guard INTACT (asserted on the plant). That
+# makes the reproduction attributable to the hash sites alone, and it lets every
+# leg re-assert the byte claim: the count of adopter files carrying the foreign
+# digest is asserted EXACTLY (0 where nothing was planted, 1 where the fixture
+# itself planted it), never inferred from an exit code.
+#
+# Fixture shape follows R.8: a COPIED checkout, never the live tree. The
+# predicate resolves against the SOURCE_DIR of the doctor.sh that RUNS, so a
+# symlink planted under the real templates/ would poison the repository.
+# ---------------------------------------------------------------------------
+echo ""
+echo "==> R.11 — the HASH sites refuse a source resolving outside the checkout (round 8)"
+
+R11_REL="docs/BRANCH-PROTECTION.md"
+R11_SRC_REL="templates/docs/BRANCH-PROTECTION.md"
+R11_TPL_SHA="$( _sha "$SOURCE_DIR/$R11_SRC_REL" )"
+R11_OUT="$WORKROOT/r11-outside"
+mkdir -p "$R11_OUT/anc"
+printf 'FOREIGN LEAF BYTES — outside the framework checkout (R.11)\n' \
+  > "$R11_OUT/leaf.md"
+printf 'FOREIGN ANCESTOR BYTES — outside the framework checkout (R.11)\n' \
+  > "$R11_OUT/anc/BRANCH-PROTECTION.md"
+
+# Count adopter files carrying a given file's exact bytes. Size-prefiltered so
+# the whole tree can be scanned cheaply; `-size Nc` is exact bytes on both BSD
+# and GNU find. Fed by heredoc, not a pipe, so the counter survives (bash 3.2).
+_r11_foreign_hits() {  # $1 = adopter root, $2 = the foreign file
+  _fh_sha="$( _sha "$2" )"
+  _fh_sz="$( wc -c < "$2" | tr -d ' ' )"
+  _fh_n=0
+  while IFS= read -r _fh_f; do
+    [ -n "$_fh_f" ] || continue
+    [ -f "$_fh_f" ] || continue
+    if [ "$( _sha "$_fh_f" 2>/dev/null )" = "$_fh_sha" ]; then
+      _fh_n=$(( _fh_n + 1 ))
+    fi
+  done <<EOF
+$( find "$1" -type f -size "${_fh_sz}c" 2>/dev/null )
+EOF
+  printf '%s\n' "$_fh_n"
+}
+
+# $1 = mirror dir, $2 = leaf|ancestor. Everything else is _mk_source_copy's
+# faithful checkout; only the ONE source path is made hostile.
+_r11_mk_mirror() {
+  _mk_source_copy "$1" "$ROUTES" || return 1
+  case "$2" in
+    leaf)
+      rm -f "$1/$R11_SRC_REL" || return 1
+      ln -s "$R11_OUT/leaf.md" "$1/$R11_SRC_REL" || return 1
+      [ -L "$1/$R11_SRC_REL" ] || return 1
+      ;;
+    ancestor)
+      rm -rf "$1/templates/docs" || return 1
+      ln -s "$R11_OUT/anc" "$1/templates/docs" || return 1
+      [ -L "$1/templates/docs" ] || return 1
+      ;;
+    *) return 1 ;;
+  esac
+  return 0
+}
+
+# RED = the pre-cure doctor: the SAME file with the two hash-site guards
+# removed and the guarded `_hash_file` line kept in place, nothing else
+# touched. Anchored on the call, so a rename goes RED on the counts below.
+_r11_strip_hash_guards() {  # $1 = real doctor.sh, $2 = RED output
+  awk '/^ *if _wbm_source_confined "\$SOURCE_DIR" "\$src_rel"; then$/ {
+         getline hashline; print hashline; skip = 4; next
+       }
+       skip > 0 { skip--; next }
+       { print }' "$1" > "$2"
+}
+
+# Fixtures. Both rewrite the ONE manifest record (never append a second — a
+# duplicate relpath makes doctor drop the path as ambiguous, the R.2 lesson).
+_r11_seed_drift() {  # $1 = adopter, $2 = foreign file. dest = foreign bytes, baseline = template
+  _sd_m="$1/.claude/.install-manifest.sha256"
+  grep -v "  $R11_REL\$" "$_sd_m" > "$_sd_m.r11" || true
+  mv "$_sd_m.r11" "$_sd_m" || return 1
+  printf '%s  %s\n' "$R11_TPL_SHA" "$R11_REL" >> "$_sd_m"
+  cp "$2" "$1/$R11_REL" || return 1
+  return 0
+}
+_r11_seed_missing() {  # $1 = adopter, $2 = foreign file. dest deleted, baseline = foreign digest
+  _sm_m="$1/.claude/.install-manifest.sha256"
+  grep -v "  $R11_REL\$" "$_sm_m" > "$_sm_m.r11" || true
+  mv "$_sm_m.r11" "$_sm_m" || return 1
+  printf '%s  %s\n' "$( _sha "$2" )" "$R11_REL" >> "$_sm_m"
+  rm -f "$1/$R11_REL" || return 1
+  return 0
+}
+
+T11="$( fresh_install )" || { bad "R.11 install failed"; T11=""; }
+if [ -n "$T11" ]; then
+  if [ "$R11_TPL_SHA" = "$( _sha "$R11_OUT/leaf.md" )" ] \
+     || [ "$R11_TPL_SHA" = "$( _sha "$R11_OUT/anc/BRANCH-PROTECTION.md" )" ]; then
+    bad "R.11-control the foreign bytes collide with the template's — every verdict below would be vacuous"
+  else
+    ok "R.11-control the foreign files diverge from templates/$R11_REL (the verdicts discriminate)"
+  fi
+  [ "$( _r11_foreign_hits "$T11" "$R11_OUT/leaf.md" )" = "0" ] \
+    && ok "R.11-control a pristine adopter carries ZERO files with the foreign digest (the byte counter has a real zero)" \
+    || bad "R.11-control the pristine adopter already carries the foreign digest — the byte assertions cannot discriminate"
+
+  for _r11_v in leaf ancestor; do
+    R11_MIR="$WORKROOT/r11-mir-$_r11_v"
+    if [ "$_r11_v" = "leaf" ]; then
+      R11_FOR="$R11_OUT/leaf.md"
+    else
+      R11_FOR="$R11_OUT/anc/BRANCH-PROTECTION.md"
+    fi
+    if ! _r11_mk_mirror "$R11_MIR" "$_r11_v"; then
+      bad "R.11[$_r11_v] could not build the hostile mirror — the legs below are scaffolding"
+      continue
+    fi
+    ok "R.11[$_r11_v]-control the hostile source is planted (symlink on the $_r11_v, resolving outside the mirror)"
+
+    R11_RED_DOC="$R11_MIR/scripts/doctor-red.sh"
+    _r11_strip_hash_guards "$R11_MIR/scripts/doctor.sh" "$R11_RED_DOC"
+    _r11_real="$( grep -c '_wbm_source_confined "\$SOURCE_DIR" "\$src_rel"' "$R11_MIR/scripts/doctor.sh" )"
+    _r11_red="$( grep -c '_wbm_source_confined "\$SOURCE_DIR" "\$src_rel"' "$R11_RED_DOC" )" || _r11_red=0
+    _r11_red_hash="$( grep -c '_hash_file "\$SOURCE_DIR/\$src_rel"' "$R11_RED_DOC" )" || _r11_red_hash=0
+    _r11_red_write="$( grep -c '_wbm_source_confined "\$SOURCE_DIR" "\$_rr_src"' "$R11_RED_DOC" )" || _r11_red_write=0
+    if [ "$_r11_real" -eq 2 ] && [ "$_r11_red" -eq 0 ] \
+       && [ "$_r11_red_hash" -eq 2 ] && [ "$_r11_red_write" -eq 1 ] \
+       && bash -n "$R11_RED_DOC" 2>/dev/null; then
+      ok "R.11[$_r11_v]-control the RED removes both hash guards (2->0), keeps both _hash_file calls and the WRITE guard, and still parses"
+    else
+      bad "R.11[$_r11_v]-control plant rotted: guards real=$_r11_real red=$_r11_red, hash calls=$_r11_red_hash, write guard=$_r11_red_write (want 2/0/2/1) — the RED proves nothing"
+      continue
+    fi
+
+    # ---- DRIFT lane (the site the finding named) --------------------------
+    T11D_RED="$WORKROOT/r11-$_r11_v-drift-red"
+    cp -R "$T11" "$T11D_RED" && _r11_seed_drift "$T11D_RED" "$R11_FOR"
+    bash "$R11_RED_DOC" "$T11D_RED" --repair > "$T11D_RED/.r11.log" 2>&1
+    if grep -q "DRIFT (baseline-stale" "$T11D_RED/.r11.log"; then
+      ok "R.11[$_r11_v]-RED-drift the unguarded hash site reports 'DRIFT (baseline-stale ... run upgrade.sh)' — the wrong verdict reproduces"
+    else
+      bad "R.11[$_r11_v]-RED-drift no baseline-stale verdict appeared — the finding does not reproduce, so the GREEN below is not evidence"
+    fi
+
+    T11D="$WORKROOT/r11-$_r11_v-drift"
+    cp -R "$T11" "$T11D" && _r11_seed_drift "$T11D" "$R11_FOR"
+    bash "$R11_MIR/scripts/doctor.sh" "$T11D" --repair > "$T11D/.r11.log" 2>&1
+    grep -q "DRIFT (baseline-stale" "$T11D/.r11.log" \
+      && bad "R.11[$_r11_v]a the cured doctor still reports baseline-stale — the foreign source was hashed as framework content" \
+      || ok "R.11[$_r11_v]a no 'baseline-stale' verdict: the cured doctor never hashed the unconfined source"
+    grep -q "DRIFT (framework checkout no longer ships this file — not repairable): $R11_REL" "$T11D/.r11.log" \
+      && ok "R.11[$_r11_v]b the cured doctor falls back to the EXISTING conservative verdict (not repairable)" \
+      || bad "R.11[$_r11_v]b the conservative verdict is absent for $R11_REL — the refusal went somewhere else"
+    grep -q "SOURCE-BLOCKED (source '$R11_SRC_REL' is not confined" "$T11D/.r11.log" \
+      && ok "R.11[$_r11_v]c the refusal NAMES itself and the offending source (auditable, not silent)" \
+      || bad "R.11[$_r11_v]c the refusal is silent — no SOURCE-BLOCKED breadcrumb names $R11_SRC_REL"
+    _r11_hits="$( _r11_foreign_hits "$T11D" "$R11_FOR" )"
+    [ "$_r11_hits" = "1" ] \
+      && ok "R.11[$_r11_v]d exactly ONE adopter file carries the foreign digest — the one the fixture planted; doctor added none" \
+      || bad "R.11[$_r11_v]d $_r11_hits adopter files carry the foreign digest (want 1, the planted one) — bytes moved"
+
+    # ---- MISSING lane (the other hash site) -------------------------------
+    T11M_RED="$WORKROOT/r11-$_r11_v-missing-red"
+    cp -R "$T11" "$T11M_RED" && _r11_seed_missing "$T11M_RED" "$R11_FOR"
+    bash "$R11_RED_DOC" "$T11M_RED" --repair > "$T11M_RED/.r11.log" 2>&1
+    if grep -q "MISSING (restorable): $R11_REL" "$T11M_RED/.r11.log"; then
+      ok "R.11[$_r11_v]-RED-missing the unguarded hash site calls the path 'MISSING (restorable)' from the OUTSIDE file's digest"
+    else
+      bad "R.11[$_r11_v]-RED-missing no 'MISSING (restorable)' verdict — the finding does not reproduce on this lane"
+    fi
+    _r11_red_hits="$( _r11_foreign_hits "$T11M_RED" "$R11_FOR" )"
+    [ "$_r11_red_hits" = "0" ] \
+      && ok "R.11[$_r11_v]-RED-missing even RED wrote zero foreign bytes — round 7's WRITE guard held, so this finding is a VERDICT flip, not a write" \
+      || bad "R.11[$_r11_v]-RED-missing $_r11_red_hits foreign-digest files reached the adopter — the write guard regressed"
+
+    T11M="$WORKROOT/r11-$_r11_v-missing"
+    cp -R "$T11" "$T11M" && _r11_seed_missing "$T11M" "$R11_FOR"
+    bash "$R11_MIR/scripts/doctor.sh" "$T11M" --repair > "$T11M/.r11.log" 2>&1
+    grep -q "MISSING (restorable): $R11_REL" "$T11M/.r11.log" \
+      && bad "R.11[$_r11_v]e the cured doctor still calls it restorable — the unconfined source was hashed" \
+      || ok "R.11[$_r11_v]e the cured doctor no longer calls the path restorable"
+    grep -q "MISSING (framework checkout no longer ships this file): $R11_REL" "$T11M/.r11.log" \
+      && ok "R.11[$_r11_v]f the MISSING site falls back to the EXISTING conservative verdict too" \
+      || bad "R.11[$_r11_v]f the conservative MISSING verdict is absent for $R11_REL"
+    [ ! -e "$T11M/$R11_REL" ] \
+      && ok "R.11[$_r11_v]g the destination stayed absent (no repair from outside the checkout)" \
+      || bad "R.11[$_r11_v]g the destination was recreated despite the refusal"
+    _r11_hits="$( _r11_foreign_hits "$T11M" "$R11_FOR" )"
+    [ "$_r11_hits" = "0" ] \
+      && ok "R.11[$_r11_v]h ZERO adopter files carry the foreign digest (bytes compared across the whole tree, not an exit code)" \
+      || bad "R.11[$_r11_v]h $_r11_hits adopter files carry the foreign digest (want 0) — bytes from outside the checkout landed"
+  done
+
+  # Anti-over-rejection: the same cured doctor, a mirror with NO hostile
+  # symlink, and a genuinely stale baseline must still reach baseline-stale.
+  # Without this the greens above are satisfied by a doctor that refuses
+  # everything.
+  R11_CLEAN="$WORKROOT/r11-mir-clean"
+  if _mk_source_copy "$R11_CLEAN" "$ROUTES"; then
+    T11C="$WORKROOT/r11-clean-drift"
+    cp -R "$T11" "$T11C"
+    _r11_cm="$T11C/.claude/.install-manifest.sha256"
+    grep -v "  $R11_REL\$" "$_r11_cm" > "$_r11_cm.r11" || true
+    mv "$_r11_cm.r11" "$_r11_cm"
+    # Baseline = a digest matching NEITHER side; destination = the real
+    # template's bytes. That is exactly "the file matches the CURRENT
+    # framework, the baseline is behind" — the verdict under test.
+    printf '%s  %s\n' "0000000000000000000000000000000000000000000000000000000000000000" "$R11_REL" >> "$_r11_cm"
+    cp "$SOURCE_DIR/$R11_SRC_REL" "$T11C/$R11_REL"
+    bash "$R11_CLEAN/scripts/doctor.sh" "$T11C" --repair > "$T11C/.r11.log" 2>&1
+    grep -q "DRIFT (baseline-stale" "$T11C/.r11.log" \
+      && ok "R.11i a CONFINED source still reaches baseline-stale — the guard is not a blanket no" \
+      || bad "R.11i the cured doctor refused a legitimate confined source — false positive on the hash sites"
+    grep -q "SOURCE-BLOCKED" "$T11C/.r11.log" \
+      && bad "R.11j the cured doctor emitted SOURCE-BLOCKED on a checkout with no symlinked source — the predicate over-fires" \
+      || ok "R.11j no SOURCE-BLOCKED breadcrumb on a clean checkout (zero cost in production)"
+  else
+    bad "R.11i could not build the clean mirror — the anti-over-rejection control did not run"
+  fi
+fi
+
+# ---------------------------------------------------------------------------
 echo ""
 echo "==> RESULT: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ] || exit 1
