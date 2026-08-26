@@ -439,7 +439,8 @@ operador/local); (ii) UM sub-item do relatório (custo de gate-boot
 re-pago — ausente do arquivo, ver checkbox); (iii) a VÁLVULA do US2b —
 o OBSERVADOR de pressão shipou em `c042f9e`, mas HALTAR não tem canal
 em PreCompact. O AC de saída W0 permanece aberto por (i) e (ii). W2/W4
-seguem em `PLAN-179/staged-w24/`.
+**LANDADAS em `b07be9b` (S329 U0, 2026-08-26, pack `staged-w24` — sentinel
+`W179-W24-approved.md` assinado pelo Owner às 14:14; LAND V1–V6 verdes)**.
 
 ### W2 — Ledger de trabalho contínuo (a mudança de doutrina)
 

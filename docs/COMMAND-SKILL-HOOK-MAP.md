@@ -102,6 +102,7 @@ Events sorted alphabetically; within an event, rows keep registration order (= r
 | PreToolUse | `Bash` | `check_cost_envelope.py` | 5 |
 | PreToolUse | `Bash\|Edit\|Write\|MultiEdit` | `check_worktree_writer.py` | 5 |
 | PreToolUse | `Edit\|Write\|MultiEdit` | `check_config_protection.py` | 5 |
+| PreToolUse | `Bash` | `check_ledger_checkpoint.py` | 5 |
 | SessionEnd | `(all)` | `SessionEnd.py` | 5 |
 | SessionStart | `(all)` | `SessionStart.py` | 5 |
 | SessionStart | `(all)` | `turbo_sessionstart.py` | 5 |
@@ -129,4 +130,4 @@ Derivation rule: a registered hook guards a surface iff its source file under `.
 - Commands: 27
 - Skills (SKILL.md-bearing dirs): 166 — core 42, frontend 8, domain 116 (across 32 domains)
 - Skills with >=1 `activation_triggers` entry: 62
-- Hook registrations: 49 across 15 events (48 unique hook labels)
+- Hook registrations: 50 across 15 events (49 unique hook labels)
