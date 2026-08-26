@@ -1,7 +1,7 @@
 # PACOTE A — PROPOSED (PLAN-183 W5-b, fechamento) — S328, 2026-08-25
 
 Patch: `.claude/plans/PLAN-183/s328-ceremony-A/A.patch`
-Patch-sha256: dc048da4be3a9713e3cd3797b03d18387aedc0cfe1ecdde4e85fabf16656dfe3
+Patch-sha256: 2d9326a28ff1d8e51078f7a059e0b90a3b38b720e7296addf15ab9b95f47f05d
 Sentinel: `.claude/plans/PLAN-183/wave-s328-A-approved.md`
 Land: `.claude/plans/PLAN-183/OWNER-S328-A-LAND.sh --ownership-e2e=run|defer`
 

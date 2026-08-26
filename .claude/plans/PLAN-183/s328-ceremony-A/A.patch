@@ -91,7 +91,7 @@ index 5411980..21c3f05 100644
  ## References
  
 diff --git a/CLAUDE.md b/CLAUDE.md
-index aab2038..45d7c00 100644
+index d8d346c..b4f22a6 100644
 --- a/CLAUDE.md
 +++ b/CLAUDE.md
 @@ -99,7 +99,7 @@ workflow — the value here is governance and auditability, not throughput.

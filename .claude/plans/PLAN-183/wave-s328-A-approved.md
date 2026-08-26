@@ -13,8 +13,8 @@
 Plans: PLAN-183
 Wave: wave-s328-A (W5-b FECHAMENTO — ADR-194 PROPOSED→ACCEPTED com a §7 de ratificação da OQ-4, a mesma correção na linha 102 do `CLAUDE.md`, e o discriminante line-exact do `hash_source` do `.github/CODEOWNERS` em `install.sh`)
 Patch: .claude/plans/PLAN-183/s328-ceremony-A/A.patch
-Patch-sha256: dc048da4be3a9713e3cd3797b03d18387aedc0cfe1ecdde4e85fabf16656dfe3
-Patch-base: 560dad00ff8fba81584208014e04bbe8572bb83e
+Patch-sha256: 2d9326a28ff1d8e51078f7a059e0b90a3b38b720e7296addf15ab9b95f47f05d
+Patch-base: 4bd7def0ee0710bce4c04858a84b9ba88ef411d4
 Anchor-SHA: TO-FILL-AT-SIGN
 Data: TO-FILL-AT-SIGN
 
