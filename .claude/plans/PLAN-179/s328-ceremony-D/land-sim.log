@@ -1,7 +1,7 @@
 === land-sim PACOTE D (PLAN-179 W2+W4) ===
-data-utc      : 2026-08-26T03:28:05Z
-HEAD vivo     : 047d06e63c6ec3d58981b3306fcc00526bc09608
-clone         : /Users/joaocanhada/.w179-landsim/simD.IuJFgN/repo
+data-utc      : 2026-08-26T04:18:51Z
+HEAD vivo     : 37d7edd2b7b2df58292322f6cd28601c13475a4a
+clone         : /Users/joaocanhada/.w179-landsim/simD.y4wPFc/repo
 payload digest: 93dc7d76e2f7f30651bc0399289805782752c91282c2f55c6051db3bf94befc2
 
 APPLY: 27 arquivo(s) copiados do MANIFEST
@@ -24,26 +24,26 @@ STATUS: verde
 --- pytest hooks/tests (not serial, -n auto)
 $ python3 -m pytest .claude/hooks/tests/ -n auto -m not serial --strict-markers --tb=no -q -p no:cacheprovider
 rc=0
-............................................s........................... [ 96%]
+................................s....................................... [ 96%]
 ........................................................................ [ 97%]
-........................................................................ [ 98%]
+.......................................................s................ [ 98%]
 ........................................................................ [ 99%]
-...........................................                              [100%]
+....................................................                     [100%]
 =============================== warnings summary ===============================
 .claude/hooks/_lib/team.py:1: 16 warnings
 .claude/hooks/tests/test_audit_emit_ghost_action_guard.py: 12 warnings
-  /Users/joaocanhada/.w179-landsim/simD.IuJFgN/repo/.claude/hooks/_lib/team.py:1: DeprecationWarning: invalid escape sequence \*
+  /Users/joaocanhada/.w179-landsim/simD.y4wPFc/repo/.claude/hooks/_lib/team.py:1: DeprecationWarning: invalid escape sequence \*
     """
 
 .claude/hooks/tests/test_tier_policy_agent_frontmatter_disposition.py::TierPolicyAgentFrontmatterDispositionTest::test_no_production_hook_imports_lib_agent_frontmatter
   <unknown>:1: DeprecationWarning: invalid escape sequence \*
 
 .claude/hooks/tests/test_audit_emit_ghost_action_guard.py: 12 warnings
-  /Users/joaocanhada/.w179-landsim/simD.IuJFgN/repo/.claude/scripts/architect-bundle-validate.py:2: DeprecationWarning: invalid escape sequence \`
+  /Users/joaocanhada/.w179-landsim/simD.y4wPFc/repo/.claude/scripts/architect-bundle-validate.py:2: DeprecationWarning: invalid escape sequence \`
     """architect-bundle-validate.py — verify an Architect draft bundle.
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-6852 passed, 34 skipped, 4 xfailed, 41 warnings in 793.59s (0:13:13)
+6858 passed, 34 skipped, 4 xfailed, 41 warnings in 1510.88s (0:25:10)
 STATUS: verde
 
 --- pytest hooks/tests (serial)
@@ -53,16 +53,16 @@ rc=0
 ...............s........................................................ [ 29%]
 ........................................................................ [ 44%]
 ........................................................................ [ 59%]
-.x.........................xx........................................... [ 73%]
+.X.........................xx........................................... [ 73%]
 ........................................................................ [ 88%]
 ..............................................xx........                 [100%]
 =============================== warnings summary ===============================
 .claude/hooks/_lib/team.py:1
-  /Users/joaocanhada/.w179-landsim/simD.IuJFgN/repo/.claude/hooks/_lib/team.py:1: DeprecationWarning: invalid escape sequence \*
+  /Users/joaocanhada/.w179-landsim/simD.y4wPFc/repo/.claude/hooks/_lib/team.py:1: DeprecationWarning: invalid escape sequence \*
     """
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-481 passed, 2 skipped, 6889 deselected, 6 xfailed, 1 warning in 123.26s (0:02:03)
+481 passed, 2 skipped, 6895 deselected, 5 xfailed, 1 xpassed, 1 warning in 121.62s (0:02:01)
 STATUS: verde
 
 --- pytest _lib/tests (not serial, -n auto)
@@ -71,33 +71,35 @@ rc=0
 bringing up nodes...
 bringing up nodes...
 
-........................................................................ [ 18%]
+........................................................................ [ 17%]
 ........................................................................ [ 36%]
-........................................................................ [ 54%]
+......................................................................... [ 54%]
 ........................................................................ [ 73%]
 ........................................................................ [ 91%]
-.................................                                        [100%]
+................................                                         [100%]
 =============================== warnings summary ===============================
 .claude/hooks/_lib/team.py:1: 16 warnings
-  /Users/joaocanhada/.w179-landsim/simD.IuJFgN/repo/.claude/hooks/_lib/team.py:1: DeprecationWarning: invalid escape sequence \*
+  /Users/joaocanhada/.w179-landsim/simD.y4wPFc/repo/.claude/hooks/_lib/team.py:1: DeprecationWarning: invalid escape sequence \*
     """
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-393 passed, 16 warnings in 2.11s
+393 passed, 16 warnings in 2.01s
 STATUS: verde
 
 --- pytest _lib/tests (serial)
 $ python3 -m pytest .claude/hooks/_lib/tests -m serial --strict-markers --tb=no -q -p no:cacheprovider
-rc=0
-.............                                                            [100%]
+rc=1
+......F......                                                            [100%]
 =============================== warnings summary ===============================
 .claude/hooks/_lib/team.py:1
-  /Users/joaocanhada/.w179-landsim/simD.IuJFgN/repo/.claude/hooks/_lib/team.py:1: DeprecationWarning: invalid escape sequence \*
+  /Users/joaocanhada/.w179-landsim/simD.y4wPFc/repo/.claude/hooks/_lib/team.py:1: DeprecationWarning: invalid escape sequence \*
     """
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-13 passed, 393 deselected, 1 warning in 1.60s
-STATUS: verde
+=========================== short test summary info ============================
+FAILED .claude/hooks/_lib/tests/test_plan104_demand_resolver.py::TestWaiveTimingSemantics::test_waive_scoped_to_changed_paths
+1 failed, 12 passed, 393 deselected, 1 warning in 1.68s
+STATUS: VERMELHO
 
 --- check-audit-registry-coverage --check
 $ python3 .claude/scripts/check-audit-registry-coverage.py --check
@@ -113,9 +115,9 @@ rc=0
 Approx metrics (band +/-5%):
   test_files
     command        = git ls-files '*test_*.py' '*_test.py' | wc -l
-    observed       = 799
+    observed       = 805
     collect errors = n/a
-    accepted band  = [759..838]
+    accepted band  = [764..845]
     cited in docs  = ~770
   tests
     command        = python3 -m pytest --collect-only -q   # pytest.ini testpaths == `make test-collect`
@@ -138,7 +140,7 @@ STATUS: verde
 --- validate_governance_fast.py --json
 $ python3 .claude/scripts/validate_governance_fast.py --json
 rc=0
-{"checks_run": ["settings_json", "required_files", "active_hooks", "python_shim", "plan_schema", "plan_id_uniqueness", "plan_frontmatter_status", "plan_id_presence", "plan_vcheck_declarations"], "duration_ms": 111, "errors": [], "hooks_checked": 48, "profile": "fast", "rc": 0, "warnings": []}
+{"checks_run": ["settings_json", "required_files", "active_hooks", "python_shim", "plan_schema", "plan_id_uniqueness", "plan_frontmatter_status", "plan_id_presence", "plan_vcheck_declarations"], "duration_ms": 190, "errors": [], "hooks_checked": 48, "profile": "fast", "rc": 0, "warnings": []}
 STATUS: verde
 
 --- validate-governance.sh (COMPLETO)
@@ -175,7 +177,7 @@ STATUS: verde
 --- check-audit-hmac-null.py
 $ python3 .claude/scripts/check-audit-hmac-null.py
 rc=0
-warning: audit-log not found at /Users/joaocanhada/.claude/projects/-Users-joaocanhada-.w179-landsim-simD.IuJFgN-repo/audit-log.jsonl; nothing to check (fail-open, exit 0).
+warning: audit-log not found at /Users/joaocanhada/.claude/projects/-Users-joaocanhada-.w179-landsim-simD.y4wPFc-repo/audit-log.jsonl; nothing to check (fail-open, exit 0).
 STATUS: verde
 
 --- gate-scripts-manifest (ADR-192)
@@ -199,7 +201,7 @@ CLAUDE.md bytes=32041
   lib_recursive  = 144
 
 === CONTROLE: cadeia HMAC VIVA (classe S326) ===
-linhas antes=12776  depois=12785  delta=9
+linhas antes=12883  depois=12914  delta=31
 
 === TABELA comando -> rc ===
 py_compile (todos os .py do pack)	rc=0
@@ -208,7 +210,7 @@ json templates/settings/settings.base.json	rc=0
 pytest hooks/tests (not serial, -n auto)	rc=0
 pytest hooks/tests (serial)	rc=0
 pytest _lib/tests (not serial, -n auto)	rc=0
-pytest _lib/tests (serial)	rc=0
+pytest _lib/tests (serial)	rc=1
 check-audit-registry-coverage --check	rc=0
 verify-counts.sh --no-tests	rc=0
 check-claude-md-claims.py	rc=0
@@ -218,25 +220,20 @@ check-test-env-hygiene.py	rc=0
 check-audit-hmac-null.py	rc=0
 gate-scripts-manifest (ADR-192)	rc=0
 
-COMANDOS VERMELHOS: 0
-clone preservado em: /Users/joaocanhada/.w179-landsim/simD.IuJFgN/repo
+COMANDOS VERMELHOS: 1
+clone preservado em: /Users/joaocanhada/.w179-landsim/simD.y4wPFc/repo
 
-=== ADENDO S328 — ATRIBUICAO DOS FLAKES E RE-VERIFICACAO Pos-CURA ===
+=== ADENDO 2 — ATRIBUICAO DO 1 VERMELHO DESTA RODADA ===
+FAILED .claude/hooks/_lib/tests/test_plan104_demand_resolver.py::TestWaiveTimingSemantics::test_waive_scoped_to_changed_paths
 
-Cura aplicada entre a tabela vermelha e a verde acima (2 arquivos NOVOS no pack):
-  + staged-w24/CHANGELOG.md                                   (header: ADRs 195->196, _lib 70->71)
-  + staged-w24/.claude/hooks/tests/test_template_dogfood_parity.py (pins 49/46 -> 50/47)
-MANIFEST 25 -> 27 entradas, BASELINE 20 -> 22. Scope do sentinel-draft re-derivado (G2b OK, 27 paths).
+Evidencia (o teste monta um repo git temporario e usa datetime.now(timezone.utc)):
+  isolado, COM o pack ............. 1 passed
+  isolado, SEM o pack ............. 1 passed
+  passe serial _lib SEM o pack .... 13 passed
+  passe serial _lib COM o pack .... 13 passed / 13 passed / 13 passed  (3 repeticoes, MESMO clone que falhou)
+=> FLAKE POR CARGA/TEMPO. Falhou uma vez enquanto a maquina estava saturada pelo
+   passe -n auto em paralelo. NAO e causado pelo pack: nao reproduz em nenhuma
+   das 5 execucoes de controle, com ou sem o pack.
 
-ATRIBUICAO POR EXECUCAO ISOLADA (-k <id>, mesmo pytest nos DOIS clones):
-  test_case_a_p99_under_5ms        COM o pack: FAILED    SEM o pack: FAILED   => PRE-EXISTENTE
-  test_output_scan_1mb_completes   COM o pack: passed    SEM o pack: passed   => flake por CARGA
-  test_registration_counts         COM o pack: era FAILED (50 != 49)          => introduzido pelo pack
-                                   SEM o pack: 14 passed                         (pins fora do pack) - CURADO
-
-3 GATES RE-RODADOS NA ARVORE APLICADA (pos-cura):
-  verify-counts.sh --no-tests      rc=0   (zero DRIFT; antes: CHANGELOG adrs=195/live=196, lib=70/live=71)
-  check-claude-md-claims.py        rc=0
-  validate-governance.sh COMPLETO  rc=0
-
-HARNESS DE CERIMONIA: 30 pass / 0 fail (VERDE).
+Demais 14 comandos: rc=0, incluindo os dois passes de hooks/tests, verify-counts,
+validate-governance COMPLETO, env-hygiene, registry, claims e manifesto ADR-192.

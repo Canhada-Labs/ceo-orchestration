@@ -476,6 +476,52 @@ class TestSkipReasonsAreClosedEnum(LedgerCheckpointTestBase):
                 )
                 self.assertEqual(self.events(HOOK.ACTION_RECORDED), [])
 
+    @unittest.skipUnless(_GIT, "git not available")
+    def test_shell_conditionals_do_not_hide_the_commit(self) -> None:
+        """Rodada 6, P2 — `if`/`while`/`until` ABREM posicao de comando."""
+        self.init_repo()
+        self.write_project_file(".claude/plans/PLAN-900/LEDGER.md", "# L\n")
+        self.stage(".claude/plans/PLAN-900/notes.md")
+        for command in (
+            'if git commit -m "feat: work"; then echo ok; fi',
+            'while git commit -m "feat: work"; do break; done',
+            'until git commit -m "feat: work"; do break; done',
+            'stdbuf -o L git commit -m "feat: work"',
+        ):
+            with self.subTest(command=command):
+                self.recorder.calls = []
+                self.run_gate(command)
+                self.assertEqual(
+                    len(self.events(HOOK.ACTION_RECORDED)), 1,
+                    "o commit sumiu do universo observado: %s" % command,
+                )
+
+    def test_attached_short_message_is_parsed(self) -> None:
+        """Rodada 6, P2 — `-m"texto"` chega como UM token do shlex.
+
+        Tratar o sufixo inteiro como letras de flag perdia a mensagem (os
+        marcadores [skip-ledger]/[hotfix] eram ignorados) e podia ligar
+        `all_flag` por causa de um "a" DENTRO do texto.
+        """
+        inv = HOOK.parse_git_commit('git commit -m"[skip-ledger] work"')
+        self.assertTrue(inv.is_commit)
+        self.assertEqual(inv.message, "[skip-ledger] work")
+        self.assertFalse(inv.all_flag)
+        inv2 = HOOK.parse_git_commit('git commit -am"[hotfix] arrumar"')
+        self.assertEqual(inv2.message, "[hotfix] arrumar")
+        self.assertTrue(inv2.all_flag)
+        # controle: a forma SEPARADA continua funcionando
+        inv3 = HOOK.parse_git_commit('git commit -am "[hotfix] arrumar"')
+        self.assertEqual(inv3.message, "[hotfix] arrumar")
+        self.assertTrue(inv3.all_flag)
+
+    def test_bare_markers_match_on_word_boundaries(self) -> None:
+        """Rodada 6, P2 — `wip` dentro de `swipe` gerava isencao FALSA."""
+        self.assertIsNone(HOOK.classify_message("feat: swipe gesture"))
+        self.assertIsNone(HOOK.classify_message("fix: unwiped buffer"))
+        # controle positivo: a palavra NUA de verdade continua classificando
+        self.assertEqual(HOOK.classify_message("wip: meio caminho"), "exploratory")
+
     def test_unbalanced_quote_is_unparseable(self) -> None:
         self.run_gate('git commit -m "unterminated')
         self.assertEqual(self._only_skip()["reason"], "unparseable")

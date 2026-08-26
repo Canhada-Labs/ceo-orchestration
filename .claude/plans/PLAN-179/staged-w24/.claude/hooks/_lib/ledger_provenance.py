@@ -961,7 +961,13 @@ def _read_surface(path: object) -> Tuple[str, Optional[str]]:
     read failure is "unreadable", which the caller treats as NOT verified.
     """
     if path is None:
-        return "absent", None
+        # "absent" e uma AFIRMACAO sobre um caminho concreto que nao existe.
+        # `None` e ausencia de caminho: o chamador nao conseguiu resolver a
+        # superficie, e nada foi lido. Devolver "absent" fazia
+        # `verify_entry_absent` certificar uma delecao SEM ler superficie
+        # nenhuma — fail-open no caso exato de entrada nao-resolvida
+        # (pair-rail rodada 6, P2).
+        return "unreadable", None
     try:
         p = Path(path)
     except (TypeError, ValueError):

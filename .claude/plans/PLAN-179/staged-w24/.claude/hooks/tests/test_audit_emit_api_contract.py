@@ -969,6 +969,29 @@ class TestLedgerEntryRejectedKeepsRejectionSemantics(unittest.TestCase):
                           hits_count=0, bytes_scanned=0, scanned=0, enforced=0)
         self.assertNotEqual(got.get("reason"), "ok")
 
+    def test_identity_fields_never_carry_a_path(self):
+        """Rodada 6, P2 — a allowlist ADMITE os campos, nada os validava.
+
+        Um chamador direto podia gravar `project="/Users/alice/private"` ou um
+        `session_id` com path no evento ASSINADO, contra o contrato do SPEC/v1
+        que nega qualquer path nesta acao.
+        """
+        got = self._scrub(decision="reject", reason="scanner_hit",
+                          family="harness_mimicry", hits_count=1,
+                          bytes_scanned=10, scanned=1, enforced=0,
+                          session_id="/Users/alice/x", project="/Users/alice/private")
+        self.assertEqual(got.get("project"), "",
+                         "um path chegou ao evento assinado: %r" % got.get("project"))
+        self.assertEqual(got.get("session_id"), "")
+
+    def test_a_wellformed_identity_survives(self):
+        got = self._scrub(decision="reject", reason="scanner_hit",
+                          family="harness_mimicry", hits_count=1,
+                          bytes_scanned=10, scanned=1, enforced=0,
+                          session_id="sess-abc123", project="proj_1")
+        self.assertEqual(got.get("session_id"), "sess-abc123")
+        self.assertEqual(got.get("project"), "proj_1")
+
     def test_a_genuine_rejection_survives_untouched(self):
         got = self._scrub(decision="reject", reason="scanner_hit",
                           family="harness_mimicry", hits_count=2,

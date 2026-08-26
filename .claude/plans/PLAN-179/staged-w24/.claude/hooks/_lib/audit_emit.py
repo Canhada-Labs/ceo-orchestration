@@ -7194,6 +7194,17 @@ def emit_generic(action: str, **kwargs: Any) -> None:
         # (`_emit_rejection`) so chega aqui com veredito de rejeicao, entao
         # forcar e coerente com ele e fecha a porta do `emit_generic` direto.
         # (pair-rail do main, rodada 3, P2.)
+        # Campos de IDENTIDADE tambem sao entrada: a allowlist os ADMITE, mas
+        # nada os validava, entao um chamador direto podia gravar
+        # `project="/Users/alice/private"` ou um `session_id` com path no
+        # evento ASSINADO — contra o contrato do SPEC/v1, que nega qualquer
+        # path nesta acao (pair-rail rodada 6, P2).
+        _lg_sid = event.get("session_id")
+        if not isinstance(_lg_sid, str) or not _LEDGER_ID_RE.match(_lg_sid):
+            event["session_id"] = ""
+        _lg_proj = event.get("project")
+        if not isinstance(_lg_proj, str) or not _LEDGER_ID_RE.match(_lg_proj):
+            event["project"] = ""
         if event.get("decision") != "reject":
             event["decision"] = "reject"
         _lg_reason = event.get("reason")
@@ -8608,6 +8619,9 @@ _LEDGER_CHECKPOINT_STATE_KINDS = frozenset({"fresh", "resumed", "unavailable"})
 # is coerced rather than echoed.
 _LEDGER_GATE_SIGNAL = "ledger_write_gate"
 _LEDGER_GATE_DECISIONS = frozenset({"accept", "reject"})
+#: Forma admissivel para os campos de IDENTIDADE das acoes de ledger. Sem
+#: barra, sem espaco, limitado: um path NUNCA casa, que e o ponto.
+_LEDGER_ID_RE = re.compile(r"^[A-Za-z0-9_-]{0,64}$")
 _LEDGER_GATE_REASONS = frozenset({
     "ok", "not_scanned_trusted_provenance", "scanner_hit",
     "scanner_unavailable", "oversize", "malformed_input",

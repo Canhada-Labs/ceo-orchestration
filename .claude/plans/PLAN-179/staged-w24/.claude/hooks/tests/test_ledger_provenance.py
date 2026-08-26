@@ -721,6 +721,20 @@ class TestPostDeletionVerification(_Base):
         self.assertFalse(result.verified)
         self.assertEqual(result.outcome, "unreadable")
 
+    def test_unresolved_surface_is_not_a_verified_deletion(self):
+        """Rodada 6, P2 — `raw_path=None` nao e "arquivo ausente".
+
+        `None` significa que o chamador NAO conseguiu resolver a superficie:
+        nada foi lido. Devolver "absent" certificava uma delecao sem ler
+        superficie nenhuma — fail-open na entrada nao-resolvida.
+        """
+        result = lp.verify_entry_absent("A1", raw_path=None)
+        self.assertFalse(
+            result.verified,
+            "uma delecao foi certificada sem que nenhuma superficie fosse lida",
+        )
+        self.assertEqual(result.outcome, "unreadable")
+
     def test_missing_file_holds_nothing(self):
         result = lp.verify_entry_absent(
             "A1", raw_path=self.project_dir / "no-such-ledger.md"

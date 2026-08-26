@@ -372,7 +372,13 @@ class CommitInvocation(object):
 
 
 _SEPARATORS = frozenset({"&&", "||", ";", "|", "&", "(", ")", "{", "}", "\n"})
-_CMD_POSITION_WORDS = frozenset({"then", "do", "else", "elif", "!", "time"})
+# `if`/`while`/`until` ABREM uma posicao de comando tanto quanto `then`/`do`.
+# Sem elas, `if git commit -m x; then ...; fi` nao era reconhecido e o
+# commit sumia do universo observado (pair-rail rodada 6, P2).
+_CMD_POSITION_WORDS = frozenset({
+    "then", "do", "else", "elif", "!", "time",
+    "if", "while", "until",
+})
 #: `NAME=value` prefix — shell keeps the command position after it.
 _ENV_ASSIGN_RE = re.compile(r"^[A-Za-z_][A-Za-z_0-9]*=")
 #: Thin wrappers that keep the command position. Deliberately SHORT: each
@@ -493,6 +499,13 @@ def parse_git_commit(command: str) -> CommitInvocation:
                 if tok == "env" and nxt == "-u":
                     idx += 2
                     continue
+                # `stdbuf -o L git commit` e forma valida: `-i/-o/-e` aceitam o
+                # valor SEPARADO. So a forma colada (`-oL`) era tratada, e na
+                # separada o `L` virava "o comando", matando a posicao antes do
+                # `git` (pair-rail rodada 6, P2).
+                if tok == "stdbuf" and nxt in ("-i", "-o", "-e"):
+                    idx += 2
+                    continue
                 if nxt.startswith("-") or _ENV_ASSIGN_RE.match(nxt):
                     idx += 1
                     continue
@@ -591,14 +604,30 @@ def _parse_commit_args(args: List[str], inv: CommitInvocation) -> None:
             i += 2 if i + 1 < n else 1
             continue
         if tok.startswith("-") and len(tok) > 1:
-            # Combined short flags, e.g. -am / -amv. `m` takes the NEXT arg.
+            # Flags curtas combinadas (-am / -amv) E a forma COLADA
+            # `-m"texto"` / `-am"texto"`, que o shlex entrega como UM token.
+            # Tratar o sufixo inteiro como letras de flag perdia a mensagem
+            # (marcadores [skip-ledger]/[hotfix] eram ignorados) e ainda podia
+            # ligar `all_flag` por causa de um "a" DENTRO do texto
+            # (pair-rail rodada 6, P2).
             letters = tok[1:]
+            mi = letters.find("m")
+            if mi >= 0:
+                if "a" in letters[:mi]:
+                    inv.all_flag = True
+                attached = letters[mi + 1:]
+                if attached:
+                    inv.message = attached
+                    i += 1
+                    continue
+                if i + 1 < n:
+                    inv.message = args[i + 1]
+                    i += 2
+                    continue
+                i += 1
+                continue
             if "a" in letters:
                 inv.all_flag = True
-            if "m" in letters and i + 1 < n:
-                inv.message = args[i + 1]
-                i += 2
-                continue
             i += 1
             continue
         inv.pathspecs.append(tok)
@@ -624,11 +653,16 @@ def classify_message(message: str) -> Optional[str]:
         if tag in msg:
             return "exploratory"
     head = msg[:_MSG_TYPE_REGION]
+    # Palavra NUA casa por FRONTEIRA, nunca por substring: `wip` dentro de
+    # `swipe` fazia `feat: swipe gesture` virar uma isencao `exploratory`
+    # FALSA, e isencao falsa corrompe exatamente a metrica da janela que este
+    # rail existe para medir (pair-rail rodada 6, P2). Os TAGS acima seguem
+    # por substring de proposito: sao delimitados (`[skip-ledger]`).
     for word in _HOTFIX_WORDS:
-        if word in head:
+        if re.search(r"\b%s\b" % re.escape(word), head):
             return "hotfix"
     for word in _EXPLORATORY_WORDS:
-        if word in head:
+        if re.search(r"\b%s\b" % re.escape(word), head):
             return "exploratory"
     return None
 
