@@ -1,9 +1,10 @@
 ---
 id: PLAN-185
 title: "Seguranca de escrita do installer: symlink pendente escreve FORA do target, e --github-owner corrompe CODEOWNERS para sempre"
-status: reviewed
+status: executing
 created: 2026-08-24
 reviewed_at: 2026-08-26
+executing_at: 2026-08-26
 owner: CEO
 depends_on: []
 level: L3
