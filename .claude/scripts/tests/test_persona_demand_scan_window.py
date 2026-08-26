@@ -88,17 +88,31 @@ class GitRepoCase(TestEnvContext):
             subprocess.check_call(["git", "config", key, val], cwd=str(repo))
         return repo
 
+    @staticmethod
+    def _pinned_now(day: int = 15) -> datetime:
+        """A fixed instant on ``day`` of the current month, 12:00 UTC.
+
+        Used to pin BOTH the fixture commit dates and git's own clock
+        (``GIT_TEST_DATE_NOW`` — the hook git's approxidate reads instead
+        of gettimeofday), so an assertion about day-of-month arithmetic
+        holds on every calendar day (rail P1, S329).
+        """
+        now = datetime.now(timezone.utc)
+        return datetime(now.year, now.month, day, 12, 0, 0, tzinfo=timezone.utc)
+
     def _commit(self, repo: Path, rel_path: str, message: str,
-                minutes_ago: int) -> None:
+                minutes_ago: int, now: Optional[datetime] = None) -> None:
         """Commit ``rel_path`` with author+committer date ``minutes_ago``.
 
         The date travels in a COPY of os.environ handed to the subprocess;
-        the parent process environment is never touched.
+        the parent process environment is never touched. ``now`` pins the
+        reference instant (default: the real clock).
         """
         target = repo / rel_path
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text("# content\n", encoding="utf-8")
-        stamp = (datetime.now(timezone.utc) - timedelta(minutes=minutes_ago)).isoformat()
+        base = now if now is not None else datetime.now(timezone.utc)
+        stamp = (base - timedelta(minutes=minutes_ago)).isoformat()
         env = dict(os.environ)
         env["GIT_AUTHOR_DATE"] = stamp
         env["GIT_COMMITTER_DATE"] = stamp
@@ -107,12 +121,16 @@ class GitRepoCase(TestEnvContext):
             ["git", "commit", "-q", "-m", message], cwd=str(repo), env=env,
         )
 
-    def _git_subjects(self, repo: Path, since_arg: Optional[str]) -> List[str]:
+    def _git_subjects(self, repo: Path, since_arg: Optional[str],
+                      git_now: Optional[datetime] = None) -> List[str]:
         args = ["git", "log", "HEAD", "--no-merges", "--pretty=format:%s"]
         if since_arg is not None:
             args.insert(3, since_arg)
+        env = dict(os.environ)
+        if git_now is not None:
+            env["GIT_TEST_DATE_NOW"] = str(int(git_now.timestamp()))
         out = subprocess.run(
-            args, cwd=str(repo), capture_output=True, text=True,
+            args, cwd=str(repo), capture_output=True, text=True, env=env,
         )
         self.assertEqual(out.returncode, 0, out.stderr)
         return [ln for ln in out.stdout.splitlines() if ln.strip()]
@@ -154,15 +172,43 @@ class TestApproxidateMechanism(GitRepoCase):
         """
         with tempfile.TemporaryDirectory() as td:
             repo = self._init_repo(Path(td))
-            self._commit(repo, "a.txt", "aged-3-days", minutes_ago=4320)
-            subjects = self._git_subjects(repo, "--since=2h")
-            true_window = self._git_subjects(repo, "--since=2.hours.ago")
+            # Calendar-independent (rail P1, S329): `2h` resolves to day 2 of
+            # the CURRENT month, which precedes a 3-day-old commit only from
+            # the 6th onward. Pin the fixture AND git's clock to the 15th:
+            # "day 2" is then 13 days back and admits the commit, while the
+            # word form keeps the true 2-hour window and does not.
+            pinned = self._pinned_now(day=15)
+            self._commit(repo, "a.txt", "aged-3-days", minutes_ago=4320,
+                         now=pinned)
+            subjects = self._git_subjects(repo, "--since=2h", git_now=pinned)
+            true_window = self._git_subjects(
+                repo, "--since=2.hours.ago", git_now=pinned,
+            )
             self.assertEqual(true_window, [],
                              "a 3-day-old commit must not be inside 2 hours")
             self.assertEqual(
                 subjects, ["aged-3-days"],
-                "'2h' should resolve to day-of-month 2 of the current month "
-                "and therefore admit a 3-day-old commit",
+                "a bare digit falls through to a date field: with the clock "
+                "pinned to the 15th, `2h` reads as day-of-month 2 and admits "
+                "a 3-day-old commit",
+            )
+
+    def test_pinned_clock_is_honoured_by_git(self):
+        """Self-check of the pin: GIT_TEST_DATE_NOW must move git's now."""
+        with tempfile.TemporaryDirectory() as td:
+            repo = self._init_repo(Path(td))
+            self._commit(repo, "a.txt", "aged-3-days", minutes_ago=4320)
+            year_2000 = datetime(2000, 1, 1, tzinfo=timezone.utc)
+            self.assertEqual(
+                self._git_subjects(repo, "--since=1.second.ago",
+                                   git_now=year_2000),
+                ["aged-3-days"],
+                "with git's clock pinned to 2000, every commit is in the future "
+                "of the cutoff and must be listed",
+            )
+            self.assertEqual(
+                self._git_subjects(repo, "--since=1.second.ago"), [],
+                "control: without the pin the 3-day-old commit is outside",
             )
 
     def test_since_is_inclusive_of_the_cutoff_second(self):
@@ -310,24 +356,34 @@ class TestScannerSeesAgedCommits(GitRepoCase):
                 self.scanner._git = original
 
 
-class TestLiveRepoHorizon(TestEnvContext):
-    """READ-ONLY: the cure must actually open the window on a real repo."""
+class TestControlledHistoryHorizon(GitRepoCase):
+    """The 168h window spans a CONTROLLED multi-commit history.
 
-    def test_live_repo_window_is_not_collapsed(self):
+    Rail P1 (S329): the previous form ran `git log` over the live checkout
+    and required more than one commit. The validate and coverage jobs use
+    depth-1 `actions/checkout`, which exposes at most one commit (zero for
+    a merge head under `--no-merges`), so that assertion failed in CI for
+    reasons unrelated to `_since_arg`. A temporary repository with known
+    ages removes the checkout depth from the equation while keeping the
+    defect signature: a collapsed window sees at most the newest commit.
+    """
+
+    def test_window_over_controlled_history_is_not_collapsed(self):
         scanner = _load_scanner()
-        out = subprocess.run(
-            ["git", "log", "HEAD", "--no-merges", scanner._since_arg(168),
-             "--pretty=format:%H"],
-            cwd=str(_REPO_ROOT), capture_output=True, text=True,
-        )
-        self.assertEqual(out.returncode, 0, out.stderr)
-        commits = [ln for ln in out.stdout.splitlines() if ln.strip()]
-        self.assertGreater(
-            len(commits), 1,
-            "a 168h window over this repo should span more than one commit; "
-            "a collapsed window is the S329 defect returning",
-        )
-
-
-if __name__ == "__main__":
-    unittest.main()
+        with tempfile.TemporaryDirectory() as td:
+            repo = self._init_repo(Path(td))
+            self._commit(repo, "a.txt", "aged-6-days", minutes_ago=6 * 24 * 60)
+            self._commit(repo, "b.txt", "aged-2-days", minutes_ago=2 * 24 * 60)
+            self._commit(repo, "c.txt", "right-now", minutes_ago=0)
+            subjects = self._git_subjects(repo, scanner._since_arg(168))
+            self.assertEqual(
+                sorted(subjects), ["aged-2-days", "aged-6-days", "right-now"],
+                "a 168h window must span every commit younger than 7 days; "
+                "a collapsed window (the S329 defect) sees only right-now",
+            )
+            collapsed = self._git_subjects(repo, "--since=168h")
+            self.assertTrue(
+                set(collapsed) <= {"right-now"},
+                "positive control: the bare-unit form still collapses to the "
+                "current second (at most the newest commit): %r" % (collapsed,),
+            )
