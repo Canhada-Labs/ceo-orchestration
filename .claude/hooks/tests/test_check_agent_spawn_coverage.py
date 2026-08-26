@@ -23,6 +23,23 @@ from _lib.testing import TestEnvContext  # noqa: E402
 import check_agent_spawn as cas  # noqa: E402
 
 
+def _live_audit_emit():
+    """The `audit_emit` object `cas._audit_log_path` will ACTUALLY read.
+
+    That resolver does a call-time ``from _lib import audit_emit``, whose
+    IMPORT_FROM falls back to ``sys.modules`` when the `_lib` package attribute
+    is missing. ``mock.patch("_lib.audit_emit._log_path")`` has no such
+    fallback: it resolves via ``getattr(_lib, "audit_emit")`` and its
+    ``__import__`` retry is a no-op while the name is still in ``sys.modules``,
+    so a predecessor that shadows the module and drops the package attribute
+    makes these patches raise AttributeError instead of patching. That leak is
+    the one ``TestPLAN078Wave1ModelRoutingAdvisory.tearDown`` in
+    ``test_check_agent_spawn.py`` was hardened against.
+    """
+    from _lib import audit_emit as _ae
+    return _ae
+
+
 class AuditPathAndTsTest(TestEnvContext):
 
     def test_audit_log_path_normal(self):
@@ -30,11 +47,13 @@ class AuditPathAndTsTest(TestEnvContext):
         self.assertIsNotNone(cas._audit_log_path())
 
     def test_audit_log_path_fallback_env_path(self):
-        with mock.patch("_lib.audit_emit._log_path", side_effect=RuntimeError("x")):
+        with mock.patch.object(_live_audit_emit(), "_log_path",
+                               side_effect=RuntimeError("x")):
             self.assertIsNotNone(cas._audit_log_path())
 
     def test_audit_log_path_fallback_dir(self):
-        with mock.patch("_lib.audit_emit._log_path", side_effect=RuntimeError("x")), \
+        with mock.patch.object(_live_audit_emit(), "_log_path",
+                               side_effect=RuntimeError("x")), \
                 mock.patch.dict(os.environ,
                                 {"CEO_AUDIT_LOG_PATH": "",
                                  "CEO_AUDIT_LOG_DIR": str(self.audit_dir)}):
@@ -42,7 +61,8 @@ class AuditPathAndTsTest(TestEnvContext):
         self.assertIsNotNone(p)
 
     def test_audit_log_path_fallback_none(self):
-        with mock.patch("_lib.audit_emit._log_path", side_effect=RuntimeError("x")), \
+        with mock.patch.object(_live_audit_emit(), "_log_path",
+                               side_effect=RuntimeError("x")), \
                 mock.patch.dict(os.environ,
                                 {"CEO_AUDIT_LOG_PATH": "", "CEO_AUDIT_LOG_DIR": ""}):
             self.assertIsNone(cas._audit_log_path())

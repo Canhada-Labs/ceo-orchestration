@@ -28,6 +28,21 @@ from _lib.testing import TestEnvContext  # noqa: E402
 import check_read_injection as cri  # noqa: E402
 
 
+def _live_audit_emit():
+    """The `audit_emit` object `cri._try_emit_audit` will ACTUALLY read.
+
+    That helper does a call-time ``from _lib.audit_emit import
+    emit_injection_flag``, which reaches the module through ``sys.modules``.
+    ``mock.patch("_lib.audit_emit.emit_injection_flag")`` instead resolves via
+    ``getattr(_lib, "audit_emit")``, and its ``__import__`` retry is a no-op
+    while the name is still in ``sys.modules`` - so a predecessor that shadows
+    the module and drops the package attribute makes this patch raise
+    AttributeError instead of patching.
+    """
+    from _lib import audit_emit as _ae
+    return _ae
+
+
 class _Match:
     def __init__(self, snippet: str = "snip"):
         self.snippet = snippet
@@ -95,8 +110,8 @@ class ReadInjectionInProcessTest(TestEnvContext):
 
     def test_try_emit_audit_swallows_exception(self):
         # Force the import-or-call to raise; the helper must return None.
-        with mock.patch("_lib.audit_emit.emit_injection_flag",
-                        side_effect=RuntimeError("boom")):
+        with mock.patch.object(_live_audit_emit(), "emit_injection_flag",
+                               side_effect=RuntimeError("boom")):
             result = cri._try_emit_audit(
                 source="x", family_counts={"f": 1}, match_count=1,
                 bytes_scanned=10, snippet="s", truncated=False,

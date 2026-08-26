@@ -254,9 +254,16 @@ class SpoolDrainPathRotationRaceTest(unittest.TestCase):
         os.environ["CEO_PROJECT_STATE_DIR"] = str(self.audit_dir)
         # NO sync mode — exercise the SPOOL path
         os.environ.pop("CEO_AUDIT_SYNC_MODE", None)
-        # Reload to pick up env
-        importlib.reload(audit_hmac)
-        importlib.reload(audit_emit)
+        # Reload to pick up env. Same isolation guard as
+        # SpoolDrainRotationRaceRegressionTest.setUp: a predecessor in this
+        # process may have replaced sys.modules["_lib.audit_emit"], leaving the
+        # module-level alias stale, and importlib.reload() on a stale object
+        # raises "module ... not in sys.modules". Rebind the globals from
+        # sys.modules first — this class owns its rebind; the one in the other
+        # class only runs when that class runs.
+        global audit_emit, audit_hmac
+        audit_hmac = importlib.reload(importlib.import_module("_lib.audit_hmac"))
+        audit_emit = importlib.reload(importlib.import_module("_lib.audit_emit"))
         from _lib import spool_writer
         importlib.reload(spool_writer)
         spool_writer._reset_caches_for_test()

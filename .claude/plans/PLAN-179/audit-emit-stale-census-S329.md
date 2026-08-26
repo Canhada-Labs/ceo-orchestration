@@ -352,3 +352,211 @@ entregáveis desta fase também dão `0`.
 - **Escopo.** Só `.claude/hooks/tests/` e `.claude/hooks/_lib/tests/`. As
   outras 11 entradas de `testpaths` do `pytest.ini` não foram varridas, e
   rodam no MESMO worker sob `-n auto`.
+
+---
+
+## 9. Fase 3 — delta pós-rail (S329)
+
+Base: árvore viva pós-`bc8784f` (instrumento endurecido pelo rail). Entrada:
+o DELTA que o rail abriu — **3 `FRAGIL` + 30 `INDETERMINADO`**. Nenhum arquivo
+canônico tocado; nenhum commit.
+
+| Veredito | Entrada | Saída |
+|---|---:|---:|
+| `FRAGIL` | 3 | **0** |
+| `INDETERMINADO` | 30 | **14** |
+| `LOOKUP-VIVO` | 43 | **62** |
+| `SEGURO` | 29 | 29 |
+| **sítios** | **105** | **105** |
+
+Conservação verificada por arquivo: nenhum sítio inventado, nenhum descartado.
+
+### 9.1 `FRAGIL` (3) — curados, vermelho reproduzido
+
+Os três estão em `test_spool_drain_rotation_race.py`, todos da classe
+`SpoolDrainPathRotationRaceTest` (a classe 2), e todos vinham do MESMO defeito
+que o rail nomeou: a classe 2 herdava "por acidente" o rebind vivo do `setUp`
+da classe 1 e ficava descoberta quando rodava sozinha.
+
+**Cura**: C3 no `setUp` da PRÓPRIA classe (agora `:264-266` — `global
+audit_emit, audit_hmac` + `importlib.reload(importlib.import_module(...))`),
+idioma copiado do precedente na classe 1 (`:66-68`). Um sítio cura os três.
+
+**Prova (poluidor sintético do §4, classe 2 SOZINHA)**:
+
+```
+PYTHONPATH=<tmp>/pollute python3 -m pytest \
+  .claude/hooks/tests/test_spool_drain_rotation_race.py \
+  -q -p no:cacheprovider -p polluter_plugin -k SpoolDrainPathRotationRace
+```
+
+| | resultado |
+|---|---|
+| VERMELHO (antes) | `1 failed` — `ImportError: module _lib.audit_emit not in sys.modules`, em `setUp:259` |
+| VERDE (depois) | `1 passed` |
+
+Controles: sem poluidor `1 passed` nos dois lados; classe 1 sozinha com
+poluidor segue `3 passed`; arquivo inteiro com poluidor `4 passed`. O poluidor
+imprimiu `old_is_new=False` em todas as execuções (inerte é impossível).
+
+### 9.2 `INDETERMINADO` (30) — triagem por decisão
+
+| Decisão | Sítios | Forma | Desfecho |
+|---|---:|---|---|
+| **(a)** realmente frágil, vermelho reproduzido | **16** | `string-target` | **curados** (C1) |
+| **(b)** seguro, mas o instrumento não prova | **14** | `obj-consumer` (11), `obj-alias` (1), `direct-assign` (2) | **residual justificado** |
+| **(c)** alvo não é `_lib.audit_emit` | 0 | — | nenhum sobrou nesta classe |
+
+A separação NÃO veio de leitura: veio de uma segunda variante de poluidor
+(§9.3), que reprovou exatamente 16 e deixou 14 verdes.
+
+### 9.3 Decisão (a) — 16 sítios `string-target`: **OQ-3 fechada, e ela era real**
+
+A OQ-3 do §8 dizia que a variante *dangling* não tinha sido exercida. Foi
+agora, e é ela que separa a população.
+
+**Mecanismo.** `mock.patch("_lib.audit_emit.X")` resolve por
+`mock._dot_lookup` → `getattr(_lib, "audit_emit")`, com um retry
+`__import__("_lib.audit_emit")` que é **no-op enquanto o nome ainda está em
+`sys.modules`** — logo o atributo do pacote nunca é re-setado e o `getattr`
+falha uma segunda vez. Já o consumidor faz `from _lib import audit_emit` (ou
+`from _lib.audit_emit import X`), cujo `IMPORT_FROM` **tem** fallback para
+`sys.modules`. Teste e consumidor divergem: o consumidor funciona, o patch
+levanta `AttributeError`.
+
+**Isto não é hipótese.** O `tearDown` de
+`test_check_agent_spawn.py::TestPLAN078Wave1ModelRoutingAdvisory` (`:441-461`)
+documenta o incidente em prosa: *"popping sys.modules alone left the package
+attribute dangling, so a LATER test module's `mock.patch("_lib.audit_emit.emit_*")`
+raised `AttributeError` ... it reddened `test_skill_retrieve_rag_wire`"* no
+passo combinado do `validate.yml`. O restauro do atributo naquele `tearDown` é
+a mitigação histórica — e é `try/except: pass` fail-open, mantida por
+CONVENÇÃO: qualquer teste novo que sombreie o módulo e não restaure reabre a
+classe.
+
+**Poluidor variante 2** (`dangling_plugin.py`): garante `_lib.audit_emit`
+PRESENTE em `sys.modules` e `delattr(_lib, "audit_emit")`; aborta se o
+`delattr` não pegar ou se a entrada de `sys.modules` sumir.
+
+| Arquivo | Sítios | DANGLING antes | DANGLING depois |
+|---|---:|---|---|
+| `test_rag_events.py` | 12 | **12 failed** / 2 passed | **14 passed** |
+| `test_check_agent_spawn_coverage.py` | 3 | **3 failed** / 30 passed | **33 passed** |
+| `test_check_read_injection_coverage.py` | 1 | **1 failed** / 20 passed | **21 passed** |
+
+12+3+1 = **16 = exatamente a população `string-target`**. Correspondência 1:1,
+com `AttributeError` em todas — o instrumento acertou o critério que imprime.
+
+> Controle interno de graça: os 2 testes que passaram em `test_rag_events.py`
+> sob a variante dangling são justamente os que NÃO usam alvo-string
+> (`import _lib.audit_emit as ae` e o que anula `sys.modules`). Perna negativa
+> no mesmo arquivo.
+
+**Cura**: C1 — helper `_live_audit_emit()` por arquivo (3 helpers) e
+`patch.object(_live_audit_emit(), "<attr>", ...)` nos 16 sítios. Os três
+consumidores são `call-time` medidos (`rag_events.py:74`,
+`check_agent_spawn.py:2749`, `check_read_injection.py:232`), então o helper põe
+teste e consumidor na MESMA semântica `IMPORT_FROM`. Todos os 16 eram
+context-manager, então a conversão não move a resolução para o import do
+arquivo de teste.
+
+Verde nas TRÊS condições depois da cura: base, variante stale, variante
+dangling.
+
+**Vacuidade observada de passagem** (não curada — fora da classe, registrada
+para quem for ao §5): dos 3 sítios de `test_check_agent_spawn_coverage.py`,
+só `test_audit_log_path_fallback_none` (`:48`) depende do patch — os outros
+dois afirmam `assertIsNotNone` e passariam com o patch perdido. Idem
+`test_check_read_injection_coverage.py:98` (`assertIsNone` sobre um helper que
+retorna `None` de qualquer jeito). Sob a variante dangling isso não escondeu
+nada, porque a falha é ALTA; sob uma variante silenciosa, esconderia.
+
+### 9.4 Decisão (b) — 14 sítios residuais, cada linha justificada
+
+Todos verdes sob AS DUAS variantes de poluidor. O motivo é o mesmo em todos:
+**teste e consumidor ficam stale JUNTOS, no mesmo objeto** — a assimetria que
+define a classe (§1) não se forma.
+
+**Prova de execução, não de leitura** (`identity_probe.py`, poluidor abortando
+se `old is new`):
+
+| Consumidor | `holds_old` pós-poluição | `holds_new` | patch na própria referência intercepta |
+|---|:---:|:---:|:---:|
+| `check_anti_ceo_overhead` | True | False | **True** |
+| `check_bash_safety` | True | False | **True** |
+| `check_ledger_checkpoint` | True | False | **True** |
+| `_lib.mcp.canonical_guard` | True | False | **True** |
+
+Isto é o ponto: o consumidor **É** stale — e continua interceptável, porque lê
+o próprio global, não `sys.modules`.
+
+| # | Sítio | Forma | Por que o instrumento não prova | Por que é seguro |
+|---|---|---|---|---|
+| 1-2 | `test_anti_ceo_overhead.py:493,528` | `obj-consumer` | base `hook` vem de `spec_from_file_location`, não de `import` | `check_anti_ceo_overhead.py:116` liga `_audit_emit` no import e lê o global em `:594,:615`; o teste segura o próprio objeto do loader |
+| 3-4 | `test_bash_citation_gate.py:551,557` | `obj-consumer` | base `cbs`, mesmo loader | `check_bash_safety.py:233` import-time; leitura do global em `:1190,:1218,:1688` |
+| 5-7 | `test_fact_gate_deny_once.py:580,635,657` | `obj-consumer` | base `cbs`, mesmo loader | idem |
+| 8-9 | `test_check_ledger_checkpoint.py:136,1043` | `obj-consumer` | base `HOOK`, mesmo loader | `check_ledger_checkpoint.py:174` import-time; leitura em `:1039,:1050` |
+| 10-11 | `test_mcp_canonical_guard.py:550,555` | `obj-consumer` | consumidor fora das raízes indexadas (**OQ-6**) | `_lib/mcp/canonical_guard.py` resolve LAZY em `_init_imports` (`:240-256`) e **cacheia no próprio global**; o teste chama `_lazy_init()` ANTES de patchar, e `_IMPORTS_INITIALIZED` impede re-resolução depois |
+| 12 | `test_audit_emit_api_contract.py:954` | `obj-alias` | "nenhum módulo sob teste inferido" — o módulo sob teste **é** o próprio `audit_emit` | auto-consistente: `patch.object(audit_emit, "_write_event")` e `audit_emit.emit_generic(...)` passam pelo MESMO alias de nível de módulo (`:954-955`) |
+| 13-14 | `test_audit_emit_ghost_action_guard.py:232,237` | `direct-assign` | idem; alvo é DADO (`_KNOWN_ACTIONS`), não emissor | auto-consistente: a atribuição e o `_emit_and_read` (`:177`) usam o mesmo alias importado em `:50` |
+
+**Ressalva honesta sobre 10-11**: `test_audit_emit_called_on_block` embrulha
+todo o bloco de patch num `if canonical_guard._audit_emit is not None and
+hasattr(...)`. Se o `_lazy_init()` falhasse, a asserção `assertIn(...)` seria
+PULADA e o teste passaria vazio. Não é a classe deste censo, mas é vacuidade
+condicional na mesma vizinhança.
+
+**Pedidos de modelagem ao autor do instrumento** (nenhum implementado aqui —
+o instrumento é read-only nesta fase):
+
+1. **Loader dinâmico como base provável (9 sítios).** `X = <fn>()` onde `<fn>`
+   contém `spec_from_file_location(<literal>, <path>)` e `sys.modules[<literal>]
+   = mod`: o literal identifica o módulo tão bem quanto um `import`. Fecharia
+   a causa (a) do §2.2 sem regra textual — é resolução de NOME, não de forma.
+2. **Auto-consistência (3 sítios).** Quando o alvo do patch e a chamada
+   exercitada passam pelo MESMO nome de nível de módulo no MESMO arquivo de
+   teste, staleness não separa os dois. Regra estrutural, verificável por AST,
+   e cobre `obj-alias`/`direct-assign` sobre o próprio `audit_emit`.
+3. **Cache lazy sob flag de inicialização (2 sítios).** `global X` dentro de
+   uma função guardada por um booleano de módulo é um `import-time-module`
+   depois da primeira chamada. Hoje cai em `call-time` ou fora do índice.
+4. **OQ-6 continua aberta e agora tem dono nomeado**: `_lib/mcp/` fora do
+   índice é o que impede provar 10-11 mecanicamente.
+5. **Nova — OQ-9: a variante dangling deveria virar veredito próprio.** Ela
+   não é "não provavelmente seguro": é uma classe com vermelho reproduzido,
+   distinta da stale-alias. `string-target` merece um rótulo que a nomeie.
+
+### 9.5 Pacote `_lib/tests/` (guarded)
+
+**Vazio.** Os únicos 2 sítios do pacote (`test_memory_shared_fence.py:140,152`)
+seguem `SEGURO` e não entraram no DELTA. Nada exige cerimônia nesta fase.
+
+### 9.6 Verificação
+
+| Comando | Resultado |
+|---|---|
+| `check-stale-module-patch.py --strict` | `rc=1` — **0 `FRAGIL`**, 14 `INDETERMINADO` (regime inalterado por contrato: rc=1 enquanto houver `INDETERMINADO`; é a OQ-5) |
+| `check-stale-module-patch.py --json` | `rc=0`, 105 sítios |
+| `check-test-env-hygiene.py` | **`rc=0`** — "337 flagged files, all allowlisted" |
+| `test_spool_drain_rotation_race.py` | 4 passed |
+| `test_rag_events.py` | 14 passed |
+| `test_check_agent_spawn_coverage.py` | 33 passed |
+| `test_check_read_injection_coverage.py` | 21 passed |
+| cruzado `-n 4` (os 4 acima + `test_check_agent_spawn.py` + `test_ledger_provenance.py`) | **194 passed**, `rc=0` |
+
+**Higiene da cadeia VIVA.** Snapshot antes e depois do run cruzado: **delta =
+1 linha**, `action=tool_call_lifecycle_recorded`, `session_id=bc917148-eaee`,
+`project` preenchido — o hook da própria sessão para a chamada Bash que
+envolveu o pytest. Zero `policy_*`, zero `ledger_*`, zero `session_id` vazio.
+
+### 9.7 O que NÃO foi feito
+
+- **Nenhum commit, nenhum `git add`.** 4 arquivos de teste modificados + esta
+  seção.
+- **Instrumento não tocado** (`check-stale-module-patch.py` e seu teste são
+  read-only nesta fase). Os 5 pedidos do §9.4 são para o autor dele.
+- **Nenhuma asserção vacuosa curada.** As 4 identificadas (§9.3, §9.4) estão
+  registradas, não corrigidas: são a subclasse (b) do §5, e mexer nelas
+  ampliaria o diff para fora da classe deste censo.
+- **`build_target_index` não ampliado** para `_lib/mcp/` — OQ-6 é decisão de
+  escopo do censo, não desta fase.

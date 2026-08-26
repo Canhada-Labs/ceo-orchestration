@@ -25,6 +25,25 @@ _HOOKS_DIR = Path(__file__).resolve().parents[1]
 from _lib import rag_events  # type: ignore  # noqa: E402
 
 
+def _live_audit_emit():
+    """The `audit_emit` object `rag_events` will ACTUALLY read - resolved now.
+
+    `rag_events._emit` does a call-time ``from _lib import audit_emit``, whose
+    IMPORT_FROM falls back to ``sys.modules`` when the `_lib` package attribute
+    is missing. ``mock.patch("_lib.audit_emit.emit_generic")`` has no such
+    fallback: it resolves via ``getattr(_lib, "audit_emit")`` and its
+    ``__import__`` retry is a no-op while the name is still in ``sys.modules``,
+    so a predecessor that shadows the module and drops the package attribute
+    makes every one of these patches raise AttributeError. That leak is real -
+    it reddened ``test_skill_retrieve_rag_wire`` in the combined validate.yml
+    matrix step, and ``check_agent_spawn.py``'s tearDown was hardened against
+    it. Resolving here with the consumer's own semantics removes the
+    dependency on every shadowing test restoring that attribute.
+    """
+    from _lib import audit_emit as _ae
+    return _ae
+
+
 class _MockEmitter:
     def __init__(self):
         self.calls = []
@@ -37,7 +56,7 @@ class _MockEmitter:
 class TestEmitRagQueryIssued(unittest.TestCase):
     def test_forwards_to_emit_generic_with_correct_action(self) -> None:
         mock = _MockEmitter()
-        with patch("_lib.audit_emit.emit_generic", mock):
+        with patch.object(_live_audit_emit(), "emit_generic", mock):
             rag_events.emit_rag_query_issued(
                 method="rag.search",
                 timeout_ms=5000,
@@ -54,7 +73,7 @@ class TestEmitRagQueryIssued(unittest.TestCase):
 
     def test_timeout_coerced_to_int(self) -> None:
         mock = _MockEmitter()
-        with patch("_lib.audit_emit.emit_generic", mock):
+        with patch.object(_live_audit_emit(), "emit_generic", mock):
             rag_events.emit_rag_query_issued(
                 method="rag.search", timeout_ms=5000.7,  # type: ignore[arg-type]
             )
@@ -77,7 +96,7 @@ class TestEmitRagQueryIssued(unittest.TestCase):
 class TestEmitRagQueryReturned(unittest.TestCase):
     def test_forwards_correctly(self) -> None:
         mock = _MockEmitter()
-        with patch("_lib.audit_emit.emit_generic", mock):
+        with patch.object(_live_audit_emit(), "emit_generic", mock):
             rag_events.emit_rag_query_returned(
                 method="rag.search",
                 chunks_returned=5,
@@ -89,7 +108,7 @@ class TestEmitRagQueryReturned(unittest.TestCase):
 
     def test_defaults(self) -> None:
         mock = _MockEmitter()
-        with patch("_lib.audit_emit.emit_generic", mock):
+        with patch.object(_live_audit_emit(), "emit_generic", mock):
             rag_events.emit_rag_query_returned(method="rag.health")
         self.assertEqual(mock.calls[0]["chunks_returned"], 0)
         self.assertEqual(mock.calls[0]["chunks_dropped"], 0)
@@ -98,7 +117,7 @@ class TestEmitRagQueryReturned(unittest.TestCase):
 class TestEmitRagQueryFallback(unittest.TestCase):
     def test_reason_required(self) -> None:
         mock = _MockEmitter()
-        with patch("_lib.audit_emit.emit_generic", mock):
+        with patch.object(_live_audit_emit(), "emit_generic", mock):
             rag_events.emit_rag_query_fallback(
                 method="rag.search",
                 reason="timeout",
@@ -108,7 +127,7 @@ class TestEmitRagQueryFallback(unittest.TestCase):
 
     def test_rpc_error_code_optional(self) -> None:
         mock = _MockEmitter()
-        with patch("_lib.audit_emit.emit_generic", mock):
+        with patch.object(_live_audit_emit(), "emit_generic", mock):
             rag_events.emit_rag_query_fallback(
                 method="rag.search",
                 reason="rpc_error",
@@ -118,7 +137,7 @@ class TestEmitRagQueryFallback(unittest.TestCase):
 
     def test_rpc_error_code_omitted_when_none(self) -> None:
         mock = _MockEmitter()
-        with patch("_lib.audit_emit.emit_generic", mock):
+        with patch.object(_live_audit_emit(), "emit_generic", mock):
             rag_events.emit_rag_query_fallback(
                 method="rag.search",
                 reason="socket_missing",
@@ -129,7 +148,7 @@ class TestEmitRagQueryFallback(unittest.TestCase):
 class TestEmitRagQueryRedacted(unittest.TestCase):
     def test_family_counts_coerced(self) -> None:
         mock = _MockEmitter()
-        with patch("_lib.audit_emit.emit_generic", mock):
+        with patch.object(_live_audit_emit(), "emit_generic", mock):
             rag_events.emit_rag_query_redacted(
                 chunk_keys=["file", "snippet"],
                 family_counts={"LLM01_prompt_injection": 2},
@@ -139,7 +158,7 @@ class TestEmitRagQueryRedacted(unittest.TestCase):
 
     def test_handles_none_family_counts(self) -> None:
         mock = _MockEmitter()
-        with patch("_lib.audit_emit.emit_generic", mock):
+        with patch.object(_live_audit_emit(), "emit_generic", mock):
             rag_events.emit_rag_query_redacted(
                 chunk_keys=[], family_counts={},
             )
@@ -149,7 +168,7 @@ class TestEmitRagQueryRedacted(unittest.TestCase):
 class TestEmitRagIndexRedacted(unittest.TestCase):
     def test_forwards_correctly(self) -> None:
         mock = _MockEmitter()
-        with patch("_lib.audit_emit.emit_generic", mock):
+        with patch.object(_live_audit_emit(), "emit_generic", mock):
             rag_events.emit_rag_index_redacted(
                 file_path=".env.production",
                 reason="LLM06_sensitive_info",
@@ -161,7 +180,7 @@ class TestEmitRagIndexRedacted(unittest.TestCase):
 
     def test_family_counts_none_defaults_empty(self) -> None:
         mock = _MockEmitter()
-        with patch("_lib.audit_emit.emit_generic", mock):
+        with patch.object(_live_audit_emit(), "emit_generic", mock):
             rag_events.emit_rag_index_redacted(
                 file_path="x.py",
                 reason="tag_character",
@@ -190,7 +209,7 @@ class TestEmitFailOpen(unittest.TestCase):
     def test_all_emitters_fail_open_on_emitter_raises(self) -> None:
         def boom(**kwargs):
             raise RuntimeError("synthetic")
-        with patch("_lib.audit_emit.emit_generic", boom):
+        with patch.object(_live_audit_emit(), "emit_generic", boom):
             rag_events.emit_rag_query_issued(method="x", timeout_ms=1)
             rag_events.emit_rag_query_returned(method="x")
             rag_events.emit_rag_query_fallback(method="x", reason="r")
