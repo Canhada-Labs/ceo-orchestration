@@ -434,12 +434,21 @@ class TestDenyByDefault(_LifecycleBase):
 
 class TestFailOpen(_LifecycleBase):
     def test_record_post_swallows_emit_exception(self):
-        orig = audit_emit.emit_tool_call_lifecycle_recorded
+        # LIVE lookup, not this module's import-time `audit_emit` name:
+        # tool_lifecycle._emit_recorded re-resolves the emitter with a
+        # call-time `from _lib import audit_emit`, so a predecessor in this
+        # worker that pops and re-creates the module leaves the import-time
+        # name STALE and an assignment on it never reaches record_post.
+        # Class censused in PLAN-179/audit-emit-stale-census-S329.md.
+        from _lib import audit_emit as _live_audit_emit  # noqa: E402
+        orig = _live_audit_emit.emit_tool_call_lifecycle_recorded
+        calls = []
 
         def _boom(*a, **k):
+            calls.append(k)
             raise RuntimeError("simulated chain-write failure")
 
-        audit_emit.emit_tool_call_lifecycle_recorded = _boom  # type: ignore[assignment]
+        _live_audit_emit.emit_tool_call_lifecycle_recorded = _boom  # type: ignore[assignment]
         try:
             post = _PostEvent(
                 session_id="s", tool_use_id="u", tool_name="Bash", duration_ms=10,
@@ -447,7 +456,16 @@ class TestFailOpen(_LifecycleBase):
             # Must NOT raise (fail-open — never blocks the tool).
             tool_lifecycle.record_post(post, failure=False)
         finally:
-            audit_emit.emit_tool_call_lifecycle_recorded = orig  # type: ignore[assignment]
+            _live_audit_emit.emit_tool_call_lifecycle_recorded = orig  # type: ignore[assignment]
+        # The RAISING emitter must actually have been reached. Without this
+        # the test cannot fail: an assignment landing on a stale module
+        # object leaves the REAL emitter running, which also does not raise,
+        # so "did not raise" holds while the fail-open path it covers was
+        # never exercised.
+        self.assertEqual(
+            len(calls), 1,
+            "the raising emitter was never called — fail-open unexercised",
+        )
 
     def test_record_pre_swallows_save_exception(self):
         # Point the audit dir at a path that cannot be created (a file, not a

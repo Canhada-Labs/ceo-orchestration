@@ -34,7 +34,18 @@ class AuditEmitRotationTests(TestEnvContext):
         os.environ["CEO_AUDIT_HMAC_ENABLE"] = "1"
         # Reload audit_emit so module-level path helpers pick up the
         # isolated CEO_AUDIT_LOG_* env set by TestEnvContext.setUp().
-        importlib.reload(audit_emit)
+        #
+        # REBIND from a live import BEFORE reloading: a predecessor in the
+        # same pytest worker may have popped and re-created
+        # `_lib.audit_emit` (several files in this suite do), leaving this
+        # module's import-time name pointing at an object that is no longer
+        # `sys.modules["_lib.audit_emit"]`. `reload()` asserts that identity,
+        # so it raises ImportError outright — an order-dependent flake, green
+        # in isolation. Rebinding here makes the global fresh for every test
+        # in this class, so the three later reloads are live too.
+        # Precedent: test_spool_drain_rotation_race.py setUp.
+        global audit_emit
+        audit_emit = importlib.reload(importlib.import_module("_lib.audit_emit"))
 
     def tearDown(self) -> None:
         # Clean any rotate-bytes env we set in individual tests so it

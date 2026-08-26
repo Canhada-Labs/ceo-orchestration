@@ -746,8 +746,14 @@ class TestObservePerf(TestEnvContext):
         ),
     )
     def test_observe_write_path_under_2ms_p99(self):
-        orig = audit_emit.emit_tool_call_lifecycle_recorded
-        audit_emit.emit_tool_call_lifecycle_recorded = lambda **k: None  # type: ignore[assignment]
+        # LIVE lookup — same reason as _patch_typed_disabled_emitter above:
+        # record_post re-resolves the emitter on every call, so a no-op
+        # installed on this module's STALE import-time `audit_emit` name is
+        # never read and the REAL emitter (HMAC / spool / fsync) runs inside
+        # the timed window — the budget then measures something else.
+        from _lib import audit_emit as _live_audit_emit  # noqa: E402
+        orig = _live_audit_emit.emit_tool_call_lifecycle_recorded
+        _live_audit_emit.emit_tool_call_lifecycle_recorded = lambda **k: None  # type: ignore[assignment]
         samples_ms = []
         try:
             with mock.patch.dict(os.environ, {"CEO_LEARNING_OBSERVE": "1"}):
@@ -772,7 +778,7 @@ class TestObservePerf(TestEnvContext):
                     dt_ms = (time.perf_counter() - t0) * 1000.0
                     samples_ms.append(dt_ms)
         finally:
-            audit_emit.emit_tool_call_lifecycle_recorded = orig  # type: ignore[assignment]
+            _live_audit_emit.emit_tool_call_lifecycle_recorded = orig  # type: ignore[assignment]
 
         samples_ms.sort()
         idx = max(0, int(round(0.99 * len(samples_ms))) - 1)

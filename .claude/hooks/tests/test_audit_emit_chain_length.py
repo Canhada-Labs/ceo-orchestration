@@ -29,6 +29,21 @@ from _lib import audit_hmac  # noqa: E402
 from _lib.testing import TestEnvContext  # noqa: E402
 
 
+def _live_audit_emit():
+    """The `audit_emit` object the emit path will ACTUALLY read - resolved now.
+
+    A predecessor in the same pytest worker may have popped and re-created
+    `_lib.audit_emit` (several files in this suite do), leaving this module's
+    import-time `audit_emit` name STALE: a `patch.object` on the stale object
+    never reaches the code that runs. Resolve with the SAME `IMPORT_FROM`
+    semantics the emit path uses, then patch THAT object. Class censused in
+    `.claude/plans/PLAN-179/audit-emit-stale-census-S329.md`; precedent in
+    `test_ledger_provenance.py`.
+    """
+    from _lib import audit_emit as _ae  # noqa: E402  (live lookup, on purpose)
+    return _ae
+
+
 def _emit_one(plan_id: str = "PLAN-TEST", phase: str = "start") -> None:
     """Emit one valid debate_event (HMAC-bearing under default env)."""
     audit_emit.emit_debate_event(
@@ -75,7 +90,17 @@ class CanaryWiringTests(TestEnvContext):
         self._sidecar_patch.start()
         # Reload audit_emit so module-level path helpers pick up the
         # isolated CEO_AUDIT_LOG_* env set by TestEnvContext.setUp().
-        importlib.reload(audit_emit)
+        #
+        # REBIND from a live import BEFORE reloading: `reload()` asserts
+        # `sys.modules[name] is module`, so if a predecessor in this worker
+        # popped and re-created `_lib.audit_emit`, this module's import-time
+        # name is stale and reload raises ImportError — an order-dependent
+        # flake, green in isolation (11 failed under the S329 polluter).
+        # Rebinding makes the global fresh for every test in this class, so
+        # `_emit_one` and the later reload are live too.
+        # Precedent: test_spool_drain_rotation_race.py setUp.
+        global audit_emit
+        audit_emit = importlib.reload(importlib.import_module("_lib.audit_emit"))
 
     def tearDown(self) -> None:
         self._sidecar_patch.stop()
@@ -114,7 +139,7 @@ class CanaryWiringTests(TestEnvContext):
     # --- Test 4 ---------------------------------------------------------
     def test_canary_skip_when_HMAC_unavailable(self) -> None:
         """``_HMAC_AVAILABLE=False`` -> no AttributeError, counter stays 0."""
-        with patch.object(audit_emit, "_HMAC_AVAILABLE", False):
+        with patch.object(_live_audit_emit(), "_HMAC_AVAILABLE", False):
             _emit_one(phase="hmac-unavailable")
         # Counter unchanged because gate excluded.
         self.assertEqual(audit_hmac.read_chain_length(), 0)

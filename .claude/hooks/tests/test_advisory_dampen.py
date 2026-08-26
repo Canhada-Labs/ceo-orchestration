@@ -63,6 +63,24 @@ from _lib import audit_emit  # noqa: E402
 from _lib import trusted_env  # noqa: E402
 
 
+def _live_audit_emit():
+    """The `audit_emit` object `dampen` will ACTUALLY read - resolved now.
+
+    `advisory_dampen._emit_condensation_event` does a call-time
+    ``from _lib import audit_emit``. Predecessors in the same pytest worker
+    (several files in this suite ``sys.modules.pop``/rebind ``_lib.audit_emit``)
+    leave this file's module-level ``audit_emit`` name STALE: a
+    ``patch.object`` on the stale object never reaches the emit path, the REAL
+    emitter runs, and the recorder sees nothing (``len(dampened) == 0``).
+    Reproduced red under the S329 polluter. Resolve with the SAME
+    ``IMPORT_FROM`` semantics the module uses, then patch THAT object.
+    Class censused in `.claude/plans/PLAN-179/audit-emit-stale-census-S329.md`;
+    precedent in `test_ledger_provenance.py`.
+    """
+    from _lib import audit_emit as _ae  # noqa: E402  (live lookup, on purpose)
+    return _ae
+
+
 def _load_advisory_dampen():
     """Load advisory_dampen canonical-first / staged-fallback under a
     private module name (never mutates the `_lib` package namespace)."""
@@ -286,7 +304,7 @@ class TestSessionScopedState(_DampenBase):
 # ---------------------------------------------------------------------------
 class TestCondensationAuditEvent(_DampenBase):
     def test_at_most_one_event_per_id_per_session(self):
-        with mock.patch.object(audit_emit, "emit_generic") as emit:
+        with mock.patch.object(_live_audit_emit(), "emit_generic") as emit:
             for _ in range(6):
                 self._dampen()
         dampened = [
@@ -301,7 +319,7 @@ class TestCondensationAuditEvent(_DampenBase):
         self.assertEqual(kwargs.get("session_id"), self.SESSION_ID)
 
     def test_event_carries_metadata_only_never_the_text(self):
-        with mock.patch.object(audit_emit, "emit_generic") as emit:
+        with mock.patch.object(_live_audit_emit(), "emit_generic") as emit:
             self._dampen()
             self._dampen()
         dampened = [
@@ -315,10 +333,24 @@ class TestCondensationAuditEvent(_DampenBase):
 
     def test_emit_failure_is_fail_open_full_behavior(self):
         with mock.patch.object(
-            audit_emit, "emit_generic", side_effect=RuntimeError("boom")
-        ):
+            _live_audit_emit(), "emit_generic",
+            side_effect=RuntimeError("boom"),
+        ) as emit:
             self._dampen()
             res = self._dampen()  # emit raises inside; must not propagate
+        # The RAISING emitter must actually have been reached. Without this
+        # the test cannot fail: a patch landing on a stale module object
+        # leaves the REAL emitter running, which also does not raise, so the
+        # two assertions below hold while the fail-open path they claim to
+        # cover was never exercised.
+        dampened = [
+            c for c in emit.call_args_list
+            if c.args and c.args[0] == "advisory_dampened"
+        ]
+        self.assertEqual(
+            len(dampened), 1,
+            "the raising emitter was never called — fail-open unexercised",
+        )
         self.assertTrue(res.condensed)
         self.assertEqual(res.ordinal, 2)
 

@@ -33,6 +33,23 @@ from _lib import audit_emit  # noqa: E402
 from _lib.testing import TestEnvContext  # noqa: E402
 
 
+def _live_audit_emit():
+    """The `audit_emit` object `_audit_block` will ACTUALLY read - resolved now.
+
+    `check_arbitration_kernel._audit_block` does a call-time
+    ``from _lib import audit_emit``. Predecessors in the same pytest worker
+    (several files in this suite ``sys.modules.pop``/rebind ``_lib.audit_emit``)
+    leave this file's module-level ``audit_emit`` name STALE: a
+    ``patch.object`` on the stale object never reaches ``_audit_block``, which
+    then calls the REAL emitter. Resolve with the SAME ``IMPORT_FROM``
+    semantics the hook uses, then patch THAT object. Class censused in
+    `.claude/plans/PLAN-179/audit-emit-stale-census-S329.md`; precedent in
+    `test_ledger_provenance.py`.
+    """
+    from _lib import audit_emit as _ae  # noqa: E402  (live lookup, on purpose)
+    return _ae
+
+
 def _emit_veto_supports_caller() -> bool:
     try:
         sig = inspect.signature(audit_emit.emit_veto_triggered)
@@ -145,12 +162,22 @@ class TestAuditBlockNeverRaises(TestEnvContext):
 
     def test_does_not_raise_on_audit_emit_emit_failing(self) -> None:
         with mock.patch.object(
-            audit_emit, "emit_veto_triggered", side_effect=RuntimeError("boom")
-        ):
+            _live_audit_emit(), "emit_veto_triggered",
+            side_effect=RuntimeError("boom"),
+        ) as emit:
             try:
                 self._audit_block(rel="y.py", override_used=True)
             except Exception as e:
                 self.fail(f"_audit_block raised on emit failure: {e!r}")
+        # The RAISING emitter must actually have been reached. Without this
+        # the test cannot fail: a patch landing on a stale module object
+        # leaves the REAL emitter running, which also does not raise, so the
+        # "did not raise" claim above holds while the fail-open path it
+        # covers was never exercised.
+        self.assertEqual(
+            emit.call_count, 1,
+            "the raising emitter was never called — fail-open unexercised",
+        )
 
 
 if __name__ == "__main__":

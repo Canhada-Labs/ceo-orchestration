@@ -65,8 +65,18 @@ class TestLifecyclePerf(TestEnvContext):
     def test_in_process_pair_logic_under_2ms_p99(self):
         # Mock the audit-chain emit to a no-op: we measure ONLY the in-process
         # pairing/file logic, not the HMAC/spool/fsync write path.
-        orig = audit_emit.emit_tool_call_lifecycle_recorded
-        audit_emit.emit_tool_call_lifecycle_recorded = lambda **k: None  # type: ignore[assignment]
+        #
+        # LIVE lookup, not this module's import-time `audit_emit` name:
+        # tool_lifecycle re-resolves the emitter with a call-time
+        # `from _lib import audit_emit`, so if a predecessor in this worker
+        # popped and re-created the module, the no-op installed on the stale
+        # object is never read and the REAL write path runs inside the timed
+        # window — the budget then measures something else (measured: XPASS
+        # solo, XFAIL under the S329 polluter). Class censused in
+        # PLAN-179/audit-emit-stale-census-S329.md.
+        from _lib import audit_emit as _live_audit_emit  # noqa: E402
+        orig = _live_audit_emit.emit_tool_call_lifecycle_recorded
+        _live_audit_emit.emit_tool_call_lifecycle_recorded = lambda **k: None  # type: ignore[assignment]
         samples_ms = []
         try:
             # Warm up the lock-parent mkdir cache + import paths (discard).
@@ -88,7 +98,7 @@ class TestLifecyclePerf(TestEnvContext):
                 dt_ms = (time.perf_counter() - t0) * 1000.0
                 samples_ms.append(dt_ms)
         finally:
-            audit_emit.emit_tool_call_lifecycle_recorded = orig  # type: ignore[assignment]
+            _live_audit_emit.emit_tool_call_lifecycle_recorded = orig  # type: ignore[assignment]
 
         samples_ms.sort()
         # p99 via nearest-rank.
