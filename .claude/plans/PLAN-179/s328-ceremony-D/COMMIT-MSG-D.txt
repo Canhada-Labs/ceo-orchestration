@@ -51,4 +51,12 @@ Sentinel: PLAN-179/W179-W24-approved.md (GPG, Owner). Emenda 8.2: um sentinel,
 todos os 27 paths tocados, escopo verificado mecanicamente contra o
 MANIFEST.sha256 do pack (gate G2b).
 
+Re-montagens pos-assinatura (S329, 26/08): (1) o land de A (3bc3638) mudou o
+CLAUDE.md vivo depois da montagem — a copia do pack foi re-derivada POR ITEM
+sobre o vivo (so as 2 linhas de contagem; 2de5bb4); (2) o 1o land real
+abortou em V4a por flake de ORDEM em test_ledger_provenance.py (patch num
+objeto audit_emit stale; poluidor real: test_check_agent_spawn.py) — curado
+com lookup vivo do emissor (41fe0c9; rail-round-7.md). BASELINE/MANIFEST
+regenerados a cada re-montagem; sentinel re-assinado pelo Owner.
+
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
