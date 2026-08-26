@@ -16,3 +16,8 @@ The runtime cutoff change is sound, but the newly added regression suite is not 
 
 - P1 depth-1: `TestLiveRepoHorizon` (git log sobre o checkout vivo, exigia >1 commit) substituído por `TestControlledHistoryHorizon` (repo temporário com 3 commits de idades conhecidas + controle positivo do colapso). Provado em clone `--depth 1` (1 commit visível): 12 passed.
 - P1 calendário: `test_bare_2h_is_read_as_a_day_of_month` pina a data das fixtures E o relógio do git (`GIT_TEST_DATE_NOW`, o gancho que o approxidate lê em vez de gettimeofday) no dia 15 do mês — vale em qualquer dia; `test_pinned_clock_is_honoured_by_git` é o self-check do pin (ano 2000 ⇒ tudo listado; sem pin ⇒ nada).
+
+## Rodada 2 sobre d1817bc (2026-08-26T21:00:29Z)
+
+Rail-Verdict: APPROVE
+
