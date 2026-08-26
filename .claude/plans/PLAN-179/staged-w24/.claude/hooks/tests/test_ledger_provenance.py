@@ -22,8 +22,12 @@ Contract under test — one assertion per claim the module makes:
     ZERO times for `owner-instruction` / `ceo-derived`.
   * US14 visible discard: the marker names the family and carries no
     fragment of the rejected body; the event routes to the dedicated
-    action when registered, to `prompt_injection_detected` for a real
-    scanner hit, and NEVER files "the scanner was missing" as a detection.
+    action `ledger_entry_rejected` for EVERY reject reason, and NEVER to
+    `prompt_injection_detected` — a discard is not a detection, and
+    filing one as the other poisons the FPR series the advisory window
+    exists to measure. When the dedicated emitter is missing or raises,
+    the channel degrades to `unavailable` LOUDLY; there is deliberately
+    no second action to fall back to.
   * US14 posture: advisory by default (measure-first, amendment 8.4);
     binding only under CEO_LEDGER_WRITE_GATE_ENFORCE=1; CEO_SOTA_DISABLE=1
     keeps master precedence.
@@ -39,6 +43,7 @@ to a model.
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import sys
 import unittest
@@ -117,6 +122,21 @@ class _Result:
         self.matched = matched
         self.family_counts = family_counts
         self.bytes_scanned = bytes_scanned
+
+
+class _CompiledToNothingScanner(_RecordingScanner):
+    """Source families intact, compiled set EMPTY — the round-3 P1 shape.
+
+    The reference scanner drops patterns that fail to compile
+    (`except re.error: continue`), so `family_names()` can look healthy while
+    the working set is empty and every input answers `matched=False`.
+    """
+
+    def family_names(self):
+        return ["harness_mimicry", "role_confusion"]
+
+    def _compiled_patterns(self):
+        return []
 
 
 class _EmptyCatalogueScanner(_RecordingScanner):
@@ -324,6 +344,27 @@ class TestFailClosedWriteGate(_Base):
             )
         )
 
+    def test_catalogue_that_compiled_to_nothing_is_a_reject(self):
+        """Pair-rail round 3, P1 — source families are not evidence.
+
+        The reference scanner drops patterns that fail to compile, so
+        `family_names()` can list families while the working set is empty.
+        Checking only the source list made such a scanner report itself
+        usable; it then answered `matched=False` for EVERY input, with a
+        nonzero `bytes_scanned`, and hostile content was accepted as clean.
+        """
+        self._assert_scanner_unavailable(
+            lp.evaluate_entry(
+                _entry("agent-returned", _CLEAN),
+                scanner=_CompiledToNothingScanner(),
+            )
+        )
+
+    def test_compiled_catalogue_decides_over_the_source_list(self):
+        """The compiled answer, when available, is the one that counts."""
+        self.assertFalse(lp._scanner_is_usable(_CompiledToNothingScanner()))
+        self.assertTrue(lp._scanner_is_usable(_RecordingScanner()))
+
     def test_raising_scanner_is_a_reject(self):
         self._assert_scanner_unavailable(
             lp.evaluate_entry(
@@ -430,58 +471,96 @@ class TestDiscardIsVisible(_Base):
         self.assertIn("ADVISORY", lp.rejection_marker(advisory))
         self.assertIn("ENFORCED", lp.rejection_marker(enforced))
 
-    def test_scanner_hit_routes_to_the_registered_detection_action(self):
+    def test_scanner_hit_routes_to_the_dedicated_action(self):
         calls = []
 
         def _fake(**kwargs):
             calls.append(kwargs)
 
         with mock.patch.object(
-            audit_emit, "emit_prompt_injection_detected", _fake
+            audit_emit, "emit_ledger_entry_rejected", _fake
         ):
             admitted, verdict = lp.admit_entry(
                 _entry("agent-returned", _MIMICRY), enforced=True
             )
         self.assertIsNone(admitted)
-        self.assertEqual(verdict.audit_channel, "registered_generic")
+        self.assertEqual(verdict.audit_channel, "typed")
         self.assertEqual(len(calls), 1)
         self.assertEqual(calls[0]["signal"], lp.LEDGER_GATE_SIGNAL)
         self.assertEqual(calls[0]["family"], "harness_mimicry")
-        # Never echo the rejected value (S172 doctrine; public repo).
-        self.assertEqual(calls[0]["snippet_preview"], "")
-
-    def test_dedicated_action_wins_when_registered(self):
-        calls = []
-
-        with mock.patch.object(
-            audit_emit,
-            "emit_ledger_entry_rejected",
-            lambda **kw: calls.append(kw),
-            create=True,
-        ):
-            _admitted, verdict = lp.admit_entry(
-                _entry("agent-returned", _MIMICRY), enforced=True
-            )
-        self.assertEqual(verdict.audit_channel, "typed")
-        self.assertEqual(len(calls), 1)
         self.assertEqual(calls[0]["reason"], "scanner_hit")
+        # Never echo the rejected value (S172 doctrine; public repo). The
+        # body is not even a PARAMETER of the dedicated emitter, so this is
+        # a shape assertion, not a redaction one.
+        self.assertNotIn("snippet_preview", calls[0])
+        self.assertNotIn("text", calls[0])
 
-    def test_scanner_unavailable_is_not_filed_as_a_detection(self):
-        """The FPR series must not be poisoned by infrastructure rows."""
-        calls = []
+    def test_the_detection_action_is_never_used_for_a_discard(self):
+        """A discard is not a detection — the old fallback rung is GONE.
+
+        Routing ledger discards into `prompt_injection_detected` would make
+        that action's false-positive rate unmeasurable, which is the series
+        the advisory window is built on.
+        """
+        detections = []
+        typed = []
+        with mock.patch.object(
+            audit_emit, "emit_prompt_injection_detected",
+            lambda **kw: detections.append(kw),
+        ), mock.patch.object(
+            audit_emit, "emit_ledger_entry_rejected",
+            lambda **kw: typed.append(kw),
+        ):
+            for entry in (
+                _entry("agent-returned", _MIMICRY),   # scanner_hit
+                _entry("agent-returned", "x" * (lp.MAX_ENTRY_BYTES + 1)),
+            ):
+                lp.admit_entry(entry, enforced=True)
+        self.assertEqual(detections, [])
+        self.assertEqual(len(typed), 2)
+        self.assertEqual(
+            sorted(c["reason"] for c in typed), ["oversize", "scanner_hit"]
+        )
+
+    def test_scanner_unavailable_reaches_its_own_action(self):
+        """Infrastructure rows are RECORDED — under their own reason."""
+        typed = []
+        detections = []
 
         with mock.patch.object(lp, "_load_scanner", return_value=None), \
                 mock.patch.object(
-                    audit_emit,
-                    "emit_prompt_injection_detected",
-                    lambda **kw: calls.append(kw),
+                    audit_emit, "emit_ledger_entry_rejected",
+                    lambda **kw: typed.append(kw),
+                ), \
+                mock.patch.object(
+                    audit_emit, "emit_prompt_injection_detected",
+                    lambda **kw: detections.append(kw),
                 ):
             _admitted, verdict = lp.admit_entry(
                 _entry("agent-returned", _CLEAN), enforced=True
             )
         self.assertEqual(verdict.reason, "scanner_unavailable")
-        self.assertEqual(calls, [])
+        self.assertEqual(verdict.audit_channel, "typed")
+        self.assertEqual(detections, [])
+        self.assertEqual(len(typed), 1)
+        self.assertEqual(typed[0]["reason"], "scanner_unavailable")
+        self.assertEqual(typed[0]["family"], "scanner_unavailable")
+
+    def test_missing_emitter_degrades_loudly_to_unavailable(self):
+        """No second action to fall back to — the degrade must be VISIBLE."""
+        said = []
+        with mock.patch.object(lp, "_breadcrumb", lambda m: said.append(m)), \
+                mock.patch.object(
+                    audit_emit, "emit_ledger_entry_rejected", None
+                ):
+            _admitted, verdict = lp.admit_entry(
+                _entry("agent-returned", _MIMICRY), enforced=True
+            )
         self.assertEqual(verdict.audit_channel, "unavailable")
+        self.assertTrue(
+            any("INSTRUMENT DEFECT" in m for m in said),
+            "a lost audit row must be loud, not quiet: %r" % said,
+        )
 
     def test_audit_fields_are_closed_enums_and_ints_only(self):
         verdict = lp.evaluate_entry(_entry("agent-returned", _MIMICRY))
@@ -528,7 +607,7 @@ class TestPostureAndCounters(_Base):
             self.assertFalse(lp.gate_enforced())
 
     def test_advisory_keeps_the_entry_but_records_would_reject(self):
-        with mock.patch.object(audit_emit, "emit_prompt_injection_detected",
+        with mock.patch.object(audit_emit, "emit_ledger_entry_rejected",
                                lambda **kw: None):
             admitted, verdict = lp.admit_entry(
                 _entry("agent-returned", _MIMICRY), enforced=False
@@ -538,7 +617,7 @@ class TestPostureAndCounters(_Base):
         self.assertFalse(verdict.enforced)
 
     def test_enforced_discards_the_entry(self):
-        with mock.patch.object(audit_emit, "emit_prompt_injection_detected",
+        with mock.patch.object(audit_emit, "emit_ledger_entry_rejected",
                                lambda **kw: None):
             admitted, verdict = lp.admit_entry(
                 _entry("agent-returned", _MIMICRY), enforced=True
@@ -547,7 +626,7 @@ class TestPostureAndCounters(_Base):
         self.assertTrue(verdict.enforced)
 
     def test_counters_build_the_would_block_table(self):
-        with mock.patch.object(audit_emit, "emit_prompt_injection_detected",
+        with mock.patch.object(audit_emit, "emit_ledger_entry_rejected",
                                lambda **kw: None):
             lp.admit_entry(_entry("owner-instruction", _MIMICRY), enforced=False)
             lp.admit_entry(_entry("agent-returned", _CLEAN), enforced=False)
@@ -649,6 +728,45 @@ class TestPostDeletionVerification(_Base):
         self.assertTrue(result.verified)
         self.assertEqual(result.outcome, "absent")
 
+    def test_surface_over_the_read_cap_is_unreadable_not_absent(self):
+        """Pair-rail round 1, P1 — the fail-OPEN this closes.
+
+        The verification read is capped. If a surface exceeds the cap and
+        the marker lives PAST the prefix, a capped read that returns the
+        prefix makes ``verify_entry_absent`` search the wrong bytes, find
+        nothing, and certify a deletion that never happened. The ledger
+        size ceiling is advisory, so nothing upstream guarantees the file
+        fits.
+
+        POSITIVE CONTROL: the marker is written AFTER the cap, so the only
+        way to reach it is to notice truncation. A prefix-returning read
+        reports ``verified=True`` here (the bug); the fixed read reports
+        ``unreadable``, which ``DELETION_OUTCOMES`` defines as NOT absent.
+        """
+        big = self.project_dir / "huge-ledger.md"
+        marker = lp.entry_marker("A1")
+        pad = "x" * (lp._VERIFY_READ_CAP_BYTES + 4096)
+        big.write_text(pad + "\n" + marker + " still here\n", encoding="utf-8")
+        self.assertGreater(big.stat().st_size, lp._VERIFY_READ_CAP_BYTES)
+
+        result = lp.verify_entry_absent("A1", raw_path=big)
+        self.assertFalse(
+            result.verified,
+            "a surface too big to read whole was certified as verified — "
+            "that is the fail-open this test exists to catch",
+        )
+        self.assertEqual(result.outcome, "unreadable")
+
+    def test_surface_exactly_at_the_read_cap_still_reads(self):
+        """The boundary is not off by one: a file that fits EXACTLY in the
+        cap is a complete read, not a truncated one."""
+        exact = self.project_dir / "exact-ledger.md"
+        exact.write_bytes(b"y" * lp._VERIFY_READ_CAP_BYTES)
+        self.assertEqual(exact.stat().st_size, lp._VERIFY_READ_CAP_BYTES)
+        result = lp.verify_entry_absent("A1", raw_path=exact)
+        self.assertTrue(result.verified)
+        self.assertEqual(result.outcome, "absent")
+
     def test_a_raising_deleter_is_still_verified_against_disk(self):
         def _boom():
             raise RuntimeError("delete failed")
@@ -714,6 +832,177 @@ class TestWireHygiene(_Base):
     def test_module_declares_the_enforce_env_var(self):
         self.assertEqual(lp.ENFORCE_ENV, "CEO_LEDGER_WRITE_GATE_ENFORCE")
         self.assertTrue(lp.ENFORCE_ENV.startswith("CEO_"))
+
+
+# ---------------------------------------------------------------------------
+# W4 ceremony — the audit registration of `ledger_entry_rejected`
+#
+# POSITIVE CONTROLS for the canonical half: RED against the pre-ceremony
+# `audit_emit.py` (no action, no emitter) and GREEN against the pack copy.
+# ---------------------------------------------------------------------------
+
+
+class _RejectedAuditBase(TestEnvContext):
+    """Isolated $HOME + audit log; reads back what actually hit the wire."""
+
+    ACTION = "ledger_entry_rejected"
+
+    def events(self):
+        log = Path(os.environ["CEO_AUDIT_LOG_PATH"])
+        if not log.exists():
+            return []
+        out = []
+        for line in log.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line:
+                event = json.loads(line)
+                if event.get("action") == self.ACTION:
+                    out.append(event)
+        return out
+
+    def one(self):
+        found = self.events()
+        self.assertEqual(
+            len(found), 1,
+            "expected exactly 1 %s event, got %d" % (self.ACTION, len(found)),
+        )
+        return found[0]
+
+
+class TestLedgerEntryRejectedIsRegistered(_RejectedAuditBase):
+    def test_registered_and_not_passthrough(self):
+        self.assertIn(self.ACTION, audit_emit._KNOWN_ACTIONS)
+        self.assertNotIn(
+            self.ACTION, audit_emit._EMIT_GENERIC_PASSTHROUGH,
+            "the discard action must keep its dedicated deny-by-default "
+            "scrub branch — passthrough would let a direct caller sign the "
+            "rejected BODY into the chain",
+        )
+
+    def test_the_typed_emitter_accepts_the_verdict_splat(self):
+        """`_emit_rejection` does `typed(**verdict.to_audit_fields())`.
+
+        A signature that does not accept exactly those keywords raises
+        TypeError, which the caller swallows as "the emitter failed" — the
+        rail would degrade to breadcrumb-only and nobody would see why.
+        """
+        verdict = lp.evaluate_entry(_entry("agent-returned", _MIMICRY))
+        audit_emit.emit_ledger_entry_rejected(**verdict.to_audit_fields())
+        event = self.one()
+        self.assertEqual(event["reason"], "scanner_hit")
+        self.assertEqual(event["family"], "harness_mimicry")
+        self.assertEqual(event["signal"], lp.LEDGER_GATE_SIGNAL)
+
+
+class TestLedgerEntryRejectedEnumParity(_RejectedAuditBase):
+    """audit_emit mirrors the gate's vocabularies LITERALLY (zero imports).
+
+    The family half is the one that rots: it is the UNION of the gate's own
+    local families and the scanner CATALOGUE, and the catalogue grows on its
+    own schedule. A catalogue that grows without this mirror growing narrows
+    a legitimate family to `unknown_family` — indistinguishable in the log
+    from a hostile value being coerced.
+    """
+
+    def test_reason_enum_matches_the_gate(self):
+        self.assertEqual(
+            set(lp.GATE_REASONS), set(audit_emit._LEDGER_GATE_REASONS)
+        )
+
+    def test_decision_enum_matches_the_gate(self):
+        self.assertEqual(
+            set(lp.GATE_DECISIONS), set(audit_emit._LEDGER_GATE_DECISIONS)
+        )
+
+    def test_signal_matches_the_gate(self):
+        self.assertEqual(lp.LEDGER_GATE_SIGNAL, audit_emit._LEDGER_GATE_SIGNAL)
+
+    def test_family_enum_is_the_union_of_both_authorities(self):
+        expected = set(lp._LOCAL_FAMILIES) | set(injection_patterns.family_names())
+        self.assertEqual(
+            expected, set(audit_emit._LEDGER_GATE_FAMILIES),
+            "the mirrored family enum drifted from its authorities; a new "
+            "catalogue family would be silently coerced to unknown_family",
+        )
+
+
+class TestLedgerEntryRejectedScrub(_RejectedAuditBase):
+    def _emit(self, **overrides):
+        fields = {
+            "signal": lp.LEDGER_GATE_SIGNAL,
+            "decision": "reject",
+            "reason": "scanner_hit",
+            "family": "harness_mimicry",
+            "hits_count": 3,
+            "bytes_scanned": 128,
+            "scanned": 1,
+            "enforced": 1,
+        }
+        fields.update(overrides)
+        audit_emit.emit_generic(self.ACTION, **fields)
+
+    def test_every_declared_field_survives(self):
+        self._emit()
+        event = self.one()
+        self.assertEqual(event["decision"], "reject")
+        self.assertEqual(event["reason"], "scanner_hit")
+        self.assertEqual(event["family"], "harness_mimicry")
+        self.assertEqual(event["hits_count"], 3)
+        self.assertEqual(event["bytes_scanned"], 128)
+        self.assertEqual(event["scanned"], 1)
+        self.assertEqual(event["enforced"], 1)
+
+    def test_the_rejected_body_can_never_be_smuggled_through(self):
+        self._emit(
+            text=_MIMICRY,
+            snippet_preview=_MIMICRY[:80],
+            entry_id="E42",
+            path="/Users/someone/.claude/plans/PLAN-179/LEDGER.md",
+        )
+        event = self.one()
+        for forbidden in ("text", "snippet_preview", "entry_id", "path"):
+            self.assertNotIn(forbidden, event)
+        blob = json.dumps(event)
+        self.assertNotIn("system-reminder", blob)
+        self.assertNotIn("/Users/", blob)
+
+    def test_off_enum_values_are_coerced_fail_closed(self):
+        self._emit(
+            decision="accept-please",
+            reason="trust-me",
+            family="../../etc/passwd",
+            signal="some-other-gate",
+        )
+        event = self.one()
+        # Fail-CLOSED sentinels: an unreadable verdict is a rejection.
+        self.assertEqual(event["decision"], "reject")
+        self.assertEqual(event["reason"], "malformed_input")
+        self.assertEqual(event["family"], "unknown_family")
+        self.assertEqual(event["signal"], lp.LEDGER_GATE_SIGNAL)
+        blob = json.dumps(event)
+        self.assertNotIn("accept-please", blob)
+        self.assertNotIn("trust-me", blob)
+        self.assertNotIn("etc/passwd", blob)
+        self.assertNotIn("some-other-gate", blob)
+
+    def test_int_fields_are_type_strict_and_clamped(self):
+        self._emit(
+            hits_count=2.5, bytes_scanned=10 ** 9, scanned=True, enforced="1",
+        )
+        event = self.one()
+        self.assertEqual(event["hits_count"], 0)
+        self.assertEqual(event["bytes_scanned"], lp.MAX_ENTRY_BYTES)
+        self.assertEqual(event["scanned"], 0)
+        self.assertEqual(event["enforced"], 0)
+        for key in ("hits_count", "bytes_scanned", "scanned", "enforced"):
+            self.assertNotIsInstance(event[key], bool)
+            self.assertNotIsInstance(event[key], float)
+
+    def test_unhashable_value_does_not_raise_through_emit_generic(self):
+        self._emit(reason=["not", "hashable"], family={"a": 1})
+        event = self.one()
+        self.assertEqual(event["reason"], "malformed_input")
+        self.assertEqual(event["family"], "unknown_family")
 
 
 if __name__ == "__main__":  # pragma: no cover

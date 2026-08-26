@@ -1,108 +1,118 @@
-# RETOMAR AQUI — PLAN-179 · atualizado S314, 2026-08-20 (madrugada)
+# RETOMAR AQUI — PLAN-179 · atualizado S328, 2026-08-25 (madrugada autônoma)
 
 ## Situação em uma frase
 
-**W0+W1+W1-b LANDADO E VERDE**: o Owner assinou (opção (a) do memo —
-residual do cap de 20k declarado), a cerimônia landou em `c042f9e`, dois
-fix-forwards fecharam os efeitos colaterais do corte (`6f7f20e` modes
-parciais + banda ~730→~770; `45c75e3` sweep completo da família `_lib`)
-e o CI de `45c75e3` terminou **5/5 success** — com o profiler curado por
-RERUN (boundary-flake provado: verde no próprio sha do land, hook
-`check_output_secrets` não tocado pelo pack, delta A/B local 2-4ms).
+**`staged-w24` (W2+W4) está MONTADO, simulado e revisado — falta só a
+assinatura do Owner.** O pack tem **27 entradas** no `MANIFEST.sha256` (22
+destinos pré-existentes no `BASELINE.sha256` + 5 novos), montado sobre o HEAD
+`560dad0`. Os três scripts da cerimônia estão prontos e o pacote é o **D** da
+fila da manhã (ordem **B → A → C → D**).
 
-## Lições do pós-land (para o próximo corte)
+## O que falta, exatamente
 
-- O land copia MODOS do pack: `_lib/*.py` chegou 755 e o smoke-install
-  compara modo na paridade install/upgrade. Cura em dois passos porque o
-  primeiro log veio truncado — varrer a FAMÍLIA inteira de uma vez.
-- Os 3 test files novos do pack tiraram o "~730" da banda ±5% POR 2
-  arquivos — contagem approx nos docs também é superfície de corte.
-- `check_output_secrets` vive rente ao teto de 120ms p95 do profiler em
-  hosted runner — INDEPENDENTE do pack (pré-land = HEAD na medição
-  A/B). Se voltar a flakar, o item é recalibrar o teto ou otimizar o
-  hook em wave própria, nunca reverter o land.
+**DOIS arquivos, e nenhum deles está no FILE ASSIGNMENT dos agentes da noite.**
+Enquanto não entrarem no pack, o `--dry-run` do Owner ABORTA e o SIGN RECUSA
+assinar — os dois comportamentos são corretos, não defeitos.
+
+1. `staged-w24/CHANGELOG.md` (NOVO no pack) — cópia do vivo com a linha 12:
+   `195 ADRs, 70 \`_lib\` modules` → `196 ADRs, 71 \`_lib\` modules`.
+   **Medido:** sem ele, `verify-counts.sh --no-tests` sai **rc=1** com
+   `DRIFT: CHANGELOG.md: header cites adrs=195, live=196` e `lib=70, live=71`
+   (regra `changelog/header`). Com ele: **rc=0** (verificado em clone).
+2. `staged-w24/.claude/hooks/tests/test_template_dogfood_parity.py` (NOVO no
+   pack) — `:102` `49`→**50**, `:103` `46`→**47**, e o comentário `:101`
+   `49 == 46 + 1 + 2` → `50 == 47 + 1 + 2`.
+   **Medido:** sem ele, a suíte de hooks sai **1 failed** de 6.828
+   (`test_registration_counts`, `AssertionError: 50 != 49`). Com ele:
+   **14 passed** (verificado em clone).
+
+Depois dos dois: `python3 .claude/plans/PLAN-179/assemble_pack.py
+.claude/plans/PLAN-179/staged-w24` → uma rodada de pair-rail → registrar
+`Rail-Verdict: APPROVE` em `s328-ceremony-D/rail-round-6.md` (o SIGN LÊ esse
+campo da última rodada e só assina com APPROVE).
+
+Aí sim, os três comandos do Owner:
+
+1. `bash .claude/plans/PLAN-179/OWNER-W179-W24-SIGN.sh` — assina.
+2. `bash .claude/plans/PLAN-179/OWNER-W179-W24-LAND.sh --dry-run` — ensaio
+   completo (aplica, roda a bateria, DESFAZ; ~25-35 min).
+3. `bash .claude/plans/PLAN-179/OWNER-W179-W24-LAND.sh` — aplica, commita e
+   empurra para o `main` sozinho.
+
+Passo a passo para leigo, com os paths absolutos: **`s328-ceremony-D/README-D.md`**.
+
+## Onde está cada coisa
+
+| material | path |
+|---|---|
+| pack | `.claude/plans/PLAN-179/staged-w24/` (`MANIFEST.sha256`, `BASELINE.sha256`, `PACKMAP.txt`) |
+| sentinel-draft | `.claude/plans/PLAN-179/W179-W24-approved-draft.md` |
+| assinar | `.claude/plans/PLAN-179/OWNER-W179-W24-SIGN.sh` |
+| landar | `.claude/plans/PLAN-179/OWNER-W179-W24-LAND.sh` |
+| receita do Owner | `.claude/plans/PLAN-179/s328-ceremony-D/README-D.md` |
+| base declarada do V-block | `.claude/plans/PLAN-179/s328-ceremony-D/EXPECTED-BASELINE.txt` |
+| mensagem de commit | `.claude/plans/PLAN-179/s328-ceremony-D/COMMIT-MSG-D.txt` |
+| prova da simulação | `.claude/plans/PLAN-179/s328-ceremony-D/land-sim.log` |
+| pair-rail | `.claude/plans/PLAN-179/s328-ceremony-D/rail-round-1..5.md` (5 rodadas; veredito da última em `Rail-Verdict:`) |
+| harness dos scripts | `.claude/plans/PLAN-179/s328-ceremony-D/test-ceremony-scripts-w24.sh` |
+| receita de montagem | `.claude/plans/PLAN-179/staged-w24/README-COMO-MONTAR.md` (PACK-DOC — **não** aterrissa) |
+
+## Decisões já tomadas (não reabrir)
+
+- **3 ações, não 2** (Owner, 2026-08-25, verbatim: «3 ações — registra
+  `ledger_entry_rejected` (Recomendado)»). `_KNOWN_ACTIONS` **327 → 330**.
+  Com a terceira, o breadcrumb-only de `scanner_unavailable` / `oversize` /
+  `malformed_input` deixa de ser residual.
+- **ADR-195**, não 194 — o 194 foi tomado pelo PLAN-183
+  (`delivery-route-resolution`, `6304f66`) enquanto este pack esperava.
+  Contagem de ADRs 195 → 196.
+- **SPEC v2.59** (o vivo já tem v2.56, v2.57 e v2.58).
+
+## Contagens que o V-block exige (medidas, não lembradas)
+
+`len(_KNOWN_ACTIONS)` 330 · golden 334 linhas · hooks 59 · ligados 48 ·
+registros 50 · `_lib` 71 · ADRs 196 · 1 linha de histórico `v2.59`.
+Todas declaradas em `EXPECTED-BASELINE.txt`; o land aborta se qualquer uma
+divergir, **nos dois sentidos**. Se uma delas mudar porque o `main` andou, o
+caminho é re-montar o pack (`assemble_pack.py`) e re-assinar — nunca afrouxar
+o número.
+
+## O que este corte NÃO fecha
+
+- O flip de `status:` do PLAN-179 — decisão do Owner, edição canônica de
+  outra janela.
+- `check_contamination.py` (exceção negativa para a classe `LEDGER.md`, já
+  que `.claude/plans/*` atravessa `/` no fnmatch e isenta a árvore de planos
+  inteira) — script não-canônico, cabe em commit direto fora da cerimônia.
+- `SESSIONEND-NOTE.md` (US8: SessionEnd emitindo o delta candidato de
+  memória) — fica no pack como PACK-DOC e não aterrissa; é insumo da
+  cerimônia que tocar `SessionEnd.py`.
 
 ---
 
-## (histórico da preparação — mantido)
+## Histórico — W0+W1+W1-b (LANDADO E VERDE, S314)
 
-O rail rodou até o **round 11**, o critério de parada publicado DISPAROU
-(achado marginal de GC), **as rodadas autônomas encerraram** e o pack
-`staged-w01` (39 paths) foi assinado com **UM residual declarado**
-(memo em `rail-round-11/README.md`).
+O Owner assinou (opção (a) do memo — residual do cap de 20k declarado), a
+cerimônia landou em `c042f9e`, dois fix-forwards fecharam os efeitos
+colaterais do corte (`6f7f20e` modes parciais + banda ~730→~770; `45c75e3`
+sweep completo da família `_lib`) e o CI de `45c75e3` terminou **5/5 success**
+— com o profiler curado por RERUN (boundary-flake provado: verde no próprio
+sha do land, hook `check_output_secrets` não tocado pelo pack, delta A/B
+local 2-4 ms).
 
-## O que aconteceu na S314 (rounds 8→11, todos com evidência)
+### Lições do pós-land que este corte já absorveu
 
-Sequência completa do rail: 9 → 4 → 2 → 3 → 2 → 3 → 4 → **4 → 3 → 3 → 4**.
-
-- **Round 8 (4 curados):** redação por CAMPO + bytes ao store — o JSON do
-  snapshot não corrompe mais com `token=...` (era P1: a continuidade
-  morria para exatamente os segredos que deve sobreviver); identidade do
-  sidecar aceita cwd DENTRO do root; `constraint_count` reporta o
-  RENDERIZADO; CLAUDE.md do pack na verdade pós-land.
-- **Round 9 (3 curados):** exec bit 755 no hook novo (confirmado
-  independentemente pela suíte no clone — lição "cp perde exec bit");
-  `_resolve_project_root` (walk-up-first) cura a família cwd→root
-  inteira; GC nunca mais unlinka lock file (inode estável).
-- **Round 10 (3 curados, prescrição do rail seguida):**
-  `state_store.py` ENTROU no pack com `_reopen_if_vanished()` sob TODO
-  FileLock — a cura de raiz da corrida GC×conexão que os rounds 7/9/10
-  circulavam; PostCompact re-arma a histerese de pressão
-  (`clear_context_pressure_marker`); GC com cursor de RETOMADA
-  persistido (starvation de prefixo morta).
-- **Interlúdio (a suíte pegou a MINHA cura):** o `_git` do re-arme violava
-  o contrato no-exec do PostCompact (tripwire de
-  `test_postcompact_reinject_no_exec_payload`) — resolver do PostCompact
-  virou walk-up-only, e o do PreCompact walk-up-FIRST para os dois
-  concordarem. Registro honesto: o tripwire funcionou como desenhado.
-- **Round 11 (2 curados, 1 skew, 1 ABERTO por decisão):** escopo do
-  sentinel regenerado para 39 paths (G2b simulado OK); `(st_dev, st_ino)`
-  detecta inode SUBSTITUÍDO além de ausente (cenário de dois handles,
-  com teste); o "staged com subprocess" era skew clone×working-tree
-  (higiene adotada: clonar só depois de commitar); **o cap de 20k
-  entradas do scan fica ABERTO — ver o memo**.
-
-## O ÚNICO aberto do pack: memo de decisão (Owner)
-
-`rail-round-11/README.md` — em resumo: **(a) assinar com residual
-declarado (recomendado)**, (b) reduzir escopo (quebra o consenso r1-C2),
-(c) round 12 (contra o critério; margens decrescentes).
-
-## Verificação (estado ao escrever)
-
-- 39 paths, `MANIFEST.sha256` verificado; G2b (escopo==manifesto)
-  simulado OK com o awk/sort exato do `OWNER-W179-LAND.sh`.
-- Dirigidos: 63 (GC+state_store+compaction) + 66 (no-exec+integração no
-  clone) + parity + sonda — todos verdes, exit real lido de arquivo.
-- Suíte completa em clone com o pack aplicado: verde exceto 2 fails
-  PRÉ-EXISTENTES fora do pack, ambos documentados: (i)
-  `test_skill_patch_propose::test_diff_size_cap...` — timeout 30s
-  também no HEAD vivo, CI Linux verde (classe perf local/macOS); (ii)
-  `test_check_test_audit_isolation::test_gate_green_on_head` — flake
-  conhecido quando OUTRA sessão escreve o audit log vivo (lição
-  [[feedback-live-audit-isolation-flakes-under-concurrent-session]]).
-- (A última suíte, com o inode-fix, estava rodando ao fechar — resultado
-  em `~/.w179-suite8/RESULT.txt`; mudanças desde a anterior: só
-  state_store inode + testes, dirigidos verdes.)
-
-## Ordem quando o Owner decidir
-
-1. Se (a): `! bash ~/canhada-labs/BOM-DIA.sh` — assina (1 pinentry),
-   dry-run, land, push, vigia o CI. O BOM-DIA foi ENDURECIDO na S314:
-   verde = TODAS as runs do sha com `conclusion=success` (`cancelled`
-   não passa mais — classe do falso-verde do `c34e8e3`).
-2. Montar `staged-w24` (W2+W4) — itens novos NOMEADOS para ele nesta
-   sessão: state_store lock-then-open pleno (aí o GC pode coletar locks
-   com segurança) e a decisão do cap de scan se o Owner escolher (b).
-3. Flip do PLAN-179 `executing→done` — decisão do Owner.
-
-## Fora do PLAN-179, também fechado na S314
-
-- Escrituração: PLAN-169 (E.2 CLOSED via W3-K `c34e8e3`, ledger 58/3/1,
-  frase falsa do PLAN-170 corrigida) e PLAN-178 (fechamento parcial:
-  AC-1/2/2b/4/5 com evidência; W1.3 com destino nomeado no W4-C).
-- `ceo-boot.py`: stranded-proxy casa `PLAN-NNN` em paths E subjects
-  (falso-vermelho do 169 morto; live-fire feito).
-- Triagem CI: `coverage.yml` e `tournament.yml` eram reds OBSOLETOS (já
-  curados em `9179ef2` e `2aceb05`); o achado sistêmico é o
-  `cancel-in-progress` do validate — instrumentado no BOM-DIA.
+- **O land copiava MODOS do pack**: `_lib/*.py` chegou 755 e o smoke-install
+  compara modo na paridade install/upgrade. O `OWNER-W179-W24-LAND.sh` não
+  repete o erro — o modo é **derivado do índice** para destino existente, e
+  755 só para hook de profundidade 1 quando o destino é novo; o passo S
+  aborta se qualquer mudança de modo aparecer no índice. (O molde antigo
+  fazia `case "$p" in .claude/hooks/*.py) chmod +x`, e em `case` do bash o
+  `*` **atravessa** `/` — aquilo tornava `_lib/audit_emit.py` 755.)
+- Test files novos mexem na banda ±5% de contagem approx nos docs —
+  contagem approx também é superfície de corte.
+- `check_output_secrets` vive rente ao teto de 120 ms p95 do profiler em
+  hosted runner, **independente** de qualquer pack. Se flakar: recalibrar o
+  teto ou otimizar o hook em wave própria, nunca reverter o land.
+- O rail do w01 rodou até o round 11 (sequência 9→4→2→3→2→3→4→4→3→3→4) e o
+  critério de parada publicado disparou num achado marginal de GC.

@@ -91,18 +91,24 @@ silent degrade (the S313 lesson: four agents each probed a sibling with
 ``getattr``, found nothing, degraded quietly, and the cure did not exist
 while the tests stayed green).
 
-Concretely, the rejection event is routed in this order:
+Concretely, the rejection event has ONE route:
 
-  1. ``audit_emit.emit_ledger_entry_rejected`` — the dedicated action, if
-     a future canonical ceremony registers it;
-  2. ``audit_emit.emit_prompt_injection_detected`` — REGISTERED TODAY, and
-     used only for ``reason="scanner_hit"``, which genuinely IS a
-     detection. The other reject reasons (``scanner_unavailable``,
-     ``oversize``, ``malformed_input``) are deliberately NOT routed here:
-     filing "the scanner was missing" as a prompt-injection detection
-     would poison the very series the FPR window has to measure;
-  3. otherwise — a breadcrumb naming the missing action. The verdict still
-     carries ``audit_channel`` so the caller can render the degradation.
+  1. ``audit_emit.emit_ledger_entry_rejected`` — the dedicated action,
+     registered by the PLAN-179 W2/W4 canonical ceremony (Owner decision
+     2026-08-25: three actions, ``ledger_entry_rejected`` among them);
+  2. otherwise — a LOUD breadcrumb naming the missing or raising emitter.
+     The verdict still carries ``audit_channel`` so the caller can render
+     the degradation.
+
+The earlier draft of this module had a middle rung that borrowed
+``audit_emit.emit_prompt_injection_detected`` for ``reason="scanner_hit"``
+while the dedicated action did not exist. That rung is GONE, deliberately:
+it was only ever correct for one of five reasons, and keeping it now would
+file ledger discards into a DETECTION series whose false-positive rate the
+advisory window has to measure. A discard is not a detection. Rung 2 is
+therefore an INSTRUMENT DEFECT path, not a supported degrade — if it fires,
+the ceremony did not land or the emitter is raising, and the operator has
+to know rather than read a quieter series.
 
 ## Discipline
 
@@ -356,8 +362,13 @@ _LOCAL_FAMILIES: FrozenSet[str] = frozenset(
     {"none", "scanner_unavailable", "oversize", "malformed_input", "unknown_family"}
 )
 
+#: ``registered_generic`` was REMOVED when the dedicated action landed:
+#: a closed set that still advertises an unreachable value is a false
+#: affordance, and a stale caller passing it now coerces to
+#: ``"unavailable"`` — which is the honest reading of "this row did not
+#: reach its own action".
 AUDIT_CHANNELS: FrozenSet[str] = frozenset(
-    {"typed", "registered_generic", "unavailable", "none"}
+    {"typed", "unavailable", "none"}
 )
 
 
@@ -459,17 +470,54 @@ def _scanner_families(scanner: Optional[object] = None) -> FrozenSet[str]:
     return frozenset(n for n in names if isinstance(n, str) and n)
 
 
+def _compiled_pattern_count(scanner: object) -> Optional[int]:
+    """How many patterns actually COMPILED, or None if it cannot be asked.
+
+    ``family_names()`` reads the SOURCE catalogue, but the reference scanner
+    builds its working set with ``except re.error: continue`` — a pattern
+    that fails to compile is silently dropped. The two therefore disagree
+    precisely in the case that matters: every pattern broken, source families
+    still listed. Asking the compiled side is the only way to tell.
+    """
+    fn = getattr(scanner, "_compiled_patterns", None)
+    if not callable(fn):
+        return None
+    try:
+        out = fn()
+    except Exception:  # noqa: BLE001
+        return None
+    if not isinstance(out, (list, tuple)):
+        return None
+    return len(out)
+
+
 def _scanner_is_usable(scanner: Optional[object]) -> bool:
-    """True iff the scanner is present AND its catalogue is non-empty.
+    """True iff the scanner is present AND its catalogue actually COMPILED.
 
     A module whose patterns all failed to compile answers ``matched=False``
     for every input — indistinguishable from "clean" at the call site, and
     exactly the false-green the fail-CLOSED rule is written against.
+
+    Checking ``family_names()`` alone was NOT enough (pair-rail round 3, P1):
+    it enumerates the source catalogue, so a scanner whose regexes all failed
+    to compile still reported itself usable, `scan_harness_mimicry` returned
+    `matched=False` with a nonzero `bytes_scanned`, and `evaluate_entry`
+    accepted hostile external content as clean. The compiled count is asked
+    FIRST and, when the answer is available, it DECIDES.
+
+    Residual, declared rather than hidden: a scanner that exposes no way to
+    ask about its compiled set falls back to the source families. That is the
+    reference module's private API; if it is renamed this check degrades to
+    the old behaviour, which is why the fallback is named here and covered by
+    a test instead of living as an unstated assumption.
     """
     if scanner is None:
         return False
     if not callable(getattr(scanner, "scan_harness_mimicry", None)):
         return False
+    compiled = _compiled_pattern_count(scanner)
+    if compiled is not None:
+        return compiled > 0
     return bool(_scanner_families(scanner))
 
 
@@ -595,9 +643,10 @@ def _breadcrumb(message: str) -> None:
 def _emit_rejection(verdict: GateVerdict) -> str:
     """Emit the discard event. Returns the channel actually used.
 
-    Routing order and the reason only ``scanner_hit`` reaches the
-    registered generic action are documented in the module docstring.
-    Never raises.
+    ONE route (``emit_ledger_entry_rejected``) plus a LOUD breadcrumb when
+    that route is unavailable — see the module docstring for why the old
+    ``emit_prompt_injection_detected`` rung was removed rather than kept as
+    a fallback. Never raises.
     """
     fields = verdict.to_audit_fields()
     try:
@@ -621,31 +670,14 @@ def _emit_rejection(verdict: GateVerdict) -> str:
                 % type(exc).__name__
             )
 
-    if verdict.reason == "scanner_hit":
-        generic = getattr(audit_emit, "emit_prompt_injection_detected", None)
-        if callable(generic):
-            try:
-                generic(
-                    signal=LEDGER_GATE_SIGNAL,
-                    family=str(fields["family"]),
-                    # NEVER echo the rejected body — not even a preview.
-                    snippet_preview="",
-                    match_count=int(fields["hits_count"]),
-                    bytes_scanned=int(fields["bytes_scanned"]),
-                    triggered_by_tool=LEDGER_GATE_SIGNAL,
-                )
-                return "registered_generic"
-            except Exception as exc:  # noqa: BLE001
-                _breadcrumb(
-                    "emit_prompt_injection_detected raised (%s)"
-                    % type(exc).__name__
-                )
-
     _breadcrumb(
-        "audit action 'ledger_entry_rejected' is NOT registered in "
-        "_lib/audit_emit._KNOWN_ACTIONS (PLAN-179 W4 canonical ceremony "
-        "pending); ledger write-gate reject reason=%s family=%s recorded "
-        "as a breadcrumb only" % (fields["reason"], fields["family"])
+        "INSTRUMENT DEFECT: audit_emit.emit_ledger_entry_rejected is "
+        "missing or raised, so the ledger write-gate reject reason=%s "
+        "family=%s was recorded as a breadcrumb ONLY and is absent from "
+        "the signed chain. The advisory-window FPR table is INCOMPLETE "
+        "until this is fixed; there is deliberately no fallback action "
+        "(a discard is not a detection)."
+        % (fields["reason"], fields["family"])
     )
     return "unavailable"
 
@@ -939,11 +971,24 @@ def _read_surface(path: object) -> Tuple[str, Optional[str]]:
             return "absent", None
         # Fresh read every time: verification that trusts a cache is
         # presumption wearing a verification's clothes.
+        #
+        # Read ONE byte past the cap so truncation is DETECTABLE. A capped
+        # read that silently returns a prefix is fail-OPEN: if the surface
+        # exceeds the cap and the marker lives past it, the caller searches
+        # a prefix, finds nothing, and certifies a deletion that never
+        # happened. The ledger size ceiling is advisory, so nothing upstream
+        # guarantees the file fits. "unreadable" is NOT "absent" (see
+        # DELETION_OUTCOMES) and unverified is fail-CLOSED here — an
+        # over-cap surface is exactly that: not verified.
+        # (pair-rail round 1, P1: "Treat truncated deletion reads as
+        # unverified".)
         with p.open("rb") as fh:
-            raw = fh.read(_VERIFY_READ_CAP_BYTES)
+            raw = fh.read(_VERIFY_READ_CAP_BYTES + 1)
     except OSError:
         return "unreadable", None
     except Exception:  # noqa: BLE001
+        return "unreadable", None
+    if len(raw) > _VERIFY_READ_CAP_BYTES:
         return "unreadable", None
     return "present", raw.decode("utf-8", errors="replace")
 

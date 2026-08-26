@@ -1,0 +1,51 @@
+# PACKMAP — PLAN-179 W2/W4 staged pack (staged-w24)
+#
+# One line per pack file whose PACK path differs from its REPO destination:
+#
+#     <pack-relative-path> -> <repo-relative-path>
+#
+# Every other file in this pack already mirrors its destination path
+# (`.claude/hooks/...`, `.claude/adr/...`, `docs/...`, ...) and needs no
+# entry here.
+#
+# WHY THE INDIRECTION EXISTS
+# --------------------------
+# `.claude/settings.json` denies `Edit(SPEC/**)`, and on the current CLIs
+# that deny covers every file-editing tool. The glob matches ANY path
+# containing a `SPEC/` segment — including a staged copy inside a plan
+# directory — so a pack file could not be authored at
+# `staged-w24/SPEC/v1/audit-log.schema.md` at all.
+#
+# That deny is CORRECT and is not to be worked around: SPEC/v1 is a
+# canonical governance surface, and the ONLY writer to it is the Owner's
+# signed canonical-edit ceremony (ADR-031). The honest route is therefore
+# to name the artifact for what it is — a pack payload, not a SPEC file —
+# and let the land script perform the copy under the Owner's signature, at
+# which point the sentinel scope covers the write.
+#
+# CONTRACT FOR THE LAND SCRIPT
+# ----------------------------
+# - The payload is the COMPLETE destination file (live content + the
+#   PLAN-179 W2/W4 edits already applied), byte-for-byte what must end up
+#   at the destination. It is NOT a diff and NOT an excerpt: `cp`, never
+#   `patch`.
+# - The destination path MUST appear in the signed sentinel's Scope, or the
+#   canonical-edit guard blocks the write — which is the desired behaviour,
+#   not an obstacle to route around.
+# - This pack does NOT carry a second, untouched BASE copy of the schema.
+#   `staged-w01` did, and `assemble_pack.py` had to grow a shadowing rule to
+#   keep it out of the manifest; the drift check that copy served is already
+#   performed by `BASELINE.sha256`, which records the LIVE hash of every
+#   destination at assembly time and is what the land script's anti-stale
+#   gate (G1) compares. One authority, not two.
+#
+# WHAT THE PAYLOAD ADDS (v2.59)
+# -----------------------------
+# Three per-action rows (`ledger_checkpoint_recorded`,
+# `ledger_checkpoint_skipped`, `ledger_entry_rejected`) plus the v2.59
+# version-history entry. `_KNOWN_ACTIONS` 327 -> 330; the count and the
+# schema table are cross-checked by
+# `.claude/scripts/check-audit-registry-coverage.py`, so this payload and
+# the `audit_emit.py` payload in this same pack MUST land together.
+
+spec-v1-audit-log.schema.md -> SPEC/v1/audit-log.schema.md

@@ -1,0 +1,42 @@
+# EXPECTED-BASELINE.txt — base DECLARADA que o OWNER-W179-W24-LAND.sh compara no V-block.
+# Formato: KEY=VALUE, uma por linha. Comentarios com '#'.
+#
+# POR QUE ESTE ARQUIVO EXISTE (licao 1 da S327): o primeiro land real do
+# pacote W5 abortou no V4 porque o V-block comparava contra ZERO uma suite
+# que e 33/1 por desenho. Um gate que compara contra zero nao mede nada — ou
+# reprova sempre, ou (pior) foi afrouxado ate passar. Aqui cada numero e
+# DECLARADO, e o land aborta se o observado divergir em QUALQUER direcao.
+#
+# TODOS os valores abaixo foram MEDIDOS, nao lembrados:
+#   - o "antes" na arvore viva de 560dad0 (verify-counts.sh --no-tests --json,
+#     len(_KNOWN_ACTIONS) por importlib, wc -l no golden);
+#   - o "depois" na simulacao de land em clone com o pack aplicado
+#     (s328-ceremony-D/land-sim.log).
+# Se algum deles mudar, o caminho e re-medir e re-assinar — nunca afrouxar o
+# gate para caber no numero observado.
+
+# --- audit_emit: as 3 acoes da decisao do Owner (327 -> 330) ---------------
+# ledger_checkpoint_recorded / ledger_checkpoint_skipped / ledger_entry_rejected
+EXPECTED_KNOWN_ACTIONS=330
+
+# --- registro de auditoria -------------------------------------------------
+# .claude/data/audit-registry.golden.txt: 331 linhas vivas + 3 acoes novas.
+EXPECTED_GOLDEN_LINES=334
+
+# --- SPEC/v1/audit-log.schema.md ------------------------------------------
+# O vivo ja tem v2.56 (este plano), v2.57 (PLAN-174) e v2.58 (PLAN-182);
+# esta wave e a v2.59. O V-block exige EXATAMENTE 1 linha de historico dela.
+EXPECTED_SPEC_VERSION=v2.59
+
+# --- contagens derivadas (verify-counts.sh --no-tests --json, chave "live") -
+# antes -> depois, com a causa de cada delta:
+#   hook_py       58 -> 59   (+ check_ledger_checkpoint.py)
+#   registered    47 -> 48   (o hook novo entra em .claude/settings.json)
+#   registrations 49 -> 50   (uma registracao de evento nova)
+#   lib           70 -> 71   (+ _lib/ledger_provenance.py)
+#   adrs         195 -> 196  (+ ADR-195-work-boundary-persistence.md)
+EXPECTED_HOOKS_PY=59
+EXPECTED_HOOKS_REGISTERED=48
+EXPECTED_HOOK_REGISTRATIONS=50
+EXPECTED_LIB=71
+EXPECTED_ADRS=196

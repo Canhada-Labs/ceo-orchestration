@@ -37,6 +37,7 @@ import importlib.util
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -168,8 +169,14 @@ class LedgerCheckpointTestBase(TestEnvContext):
         self.write_project_file(relative, content)
         self.git("add", "--", relative)
 
-    def run_gate(self, command: str = 'git commit -m "feat: work"') -> Dict[str, Any]:
+    def run_gate(
+        self,
+        command: str = 'git commit -m "feat: work"',
+        session_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
         event = {"tool_name": "Bash", "tool_input": {"command": command}}
+        if session_id is not None:
+            event["session_id"] = session_id
         return HOOK.gate(event, cwd=str(self.project_dir))
 
     def events(self, action: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -224,9 +231,9 @@ class TestAdvisoryNeverBlocks(LedgerCheckpointTestBase):
         self.init_repo()
         self.write_project_file(".claude/plans/PLAN-900/LEDGER.md", "# LEDGER\n")
         self.stage(".claude/plans/PLAN-900/notes.md")
-        os.environ[HOOK.ENFORCE_ENV] = "1"
         stderr = io.StringIO()
-        with mock.patch.object(sys, "stderr", stderr):
+        with mock.patch.dict(os.environ, {HOOK.ENFORCE_ENV: "1"}), \
+                mock.patch.object(sys, "stderr", stderr):
             out = self.run_gate()
         self.assert_never_blocks(out)
         self.assertIn("enforce flip is NOT implemented", stderr.getvalue())
@@ -441,8 +448,88 @@ class TestSkipReasonsAreClosedEnum(LedgerCheckpointTestBase):
         self.run_gate('git commit -m "x" -- .claude/plans/PLAN-900/notes.md')
         self.assertEqual(self._only_skip()["reason"], "unparseable")
 
+    @unittest.skipUnless(_GIT, "git not available")
+    def test_pathspec_from_file_is_a_commit_selector(self) -> None:
+        """Pair-rail do main, rodada 3, P2 — o registro FALSO que isto fecha.
+
+        `--pathspec-from-file` FORNECE os paths do commit. Consumi-la como
+        opcao de valor comum deixava `inv.pathspecs` vazio, entao
+        `_committed_paths()` devolvia o conjunto staged INTEIRO: um LEDGER.md
+        staged mas EXCLUIDO pelo arquivo geraria `ledger_updated` para um
+        commit que nao o conteria. A resposta certa e a que o modulo ja da
+        para pathspec explicito: `unparseable`.
+        """
+        self.init_repo()
+        self.write_project_file(".claude/plans/PLAN-900/LEDGER.md", "# L\n")
+        self.stage(".claude/plans/PLAN-900/notes.md")
+        for command in (
+            'git commit --pathspec-from-file=paths.txt -m "feat: work"',
+            'git commit --pathspec-from-file paths.txt -m "feat: work"',
+        ):
+            with self.subTest(command=command):
+                self.recorder.calls = []
+                self.run_gate(command)
+                self.assertEqual(
+                    self._only_skip()["reason"], "unparseable",
+                    "o commit e dirigido por um arquivo de pathspec e mesmo "
+                    "assim foi classificado pelo conjunto staged: %s" % command,
+                )
+                self.assertEqual(self.events(HOOK.ACTION_RECORDED), [])
+
     def test_unbalanced_quote_is_unparseable(self) -> None:
         self.run_gate('git commit -m "unterminated')
+        self.assertEqual(self._only_skip()["reason"], "unparseable")
+
+    @unittest.skipUnless(_GIT, "git not available")
+    def test_value_bearing_options_do_not_become_pathspecs(self) -> None:
+        """Pair-rail round 1, P2 — the bias this closes.
+
+        ``--author``/``--date``/``--file`` take their value as a SEPARATE
+        token. Skipping only the option name left the VALUE to be read as a
+        pathspec, and an explicit pathspec makes the hook report
+        ``unparseable`` — so an ordinary ``git commit --author X -m msg``
+        vanished from the OBSERVED universe as a skip, biasing the very
+        window this rail exists to measure.
+        """
+        self.init_repo()
+        self.write_project_file(".claude/plans/PLAN-900/LEDGER.md", "# L\n")
+        self.stage(".claude/plans/PLAN-900/notes.md")
+        for command in (
+            'git commit --author "A U Thor <a@b.invalid>" -m "feat: work"',
+            'git commit --date "2026-08-25T00:00:00Z" -m "feat: work"',
+            'git commit --cleanup verbatim -m "feat: work"',
+        ):
+            with self.subTest(command=command):
+                self.recorder.calls = []
+                self.run_gate(command)
+                reasons = [e.get("reason") for e in self.events(HOOK.ACTION_SKIPPED)]
+                self.assertNotIn(
+                    "unparseable", reasons,
+                    "the option VALUE was read as a pathspec: %s" % command,
+                )
+                self.assertEqual(len(self.events(HOOK.ACTION_RECORDED)), 1)
+
+    @unittest.skipUnless(_GIT, "git not available")
+    def test_equals_form_of_a_value_option_still_works(self) -> None:
+        """``--author=X`` is ONE token; the generic ``--`` branch already
+        skipped it. Consuming a second token for it would eat a real
+        pathspec — the opposite error."""
+        self.init_repo()
+        self.write_project_file(".claude/plans/PLAN-900/LEDGER.md", "# L\n")
+        self.stage(".claude/plans/PLAN-900/notes.md")
+        self.run_gate('git commit --author="A <a@b.invalid>" -m "feat: work"')
+        self.assertEqual(len(self.events(HOOK.ACTION_RECORDED)), 1)
+
+    @unittest.skipUnless(_GIT, "git not available")
+    def test_a_real_pathspec_is_still_unparseable(self) -> None:
+        """Control in the other direction: consuming option values must not
+        make the hook blind to an ACTUAL explicit pathspec."""
+        self.init_repo()
+        self.stage(".claude/plans/PLAN-900/notes.md")
+        self.run_gate(
+            'git commit --author "A <a@b.invalid>" -m "x" '
+            '-- .claude/plans/PLAN-900/notes.md'
+        )
         self.assertEqual(self._only_skip()["reason"], "unparseable")
 
     def test_no_repo_is_named_not_swallowed(self) -> None:
@@ -480,6 +567,259 @@ class TestSkipReasonsAreClosedEnum(LedgerCheckpointTestBase):
 # 4. Kill switches
 # --------------------------------------------------------------------------
 
+class TestRepoRootIsTheGitTopLevel(LedgerCheckpointTestBase):
+    """Pair-rail round 2, P1 — the event's ``cwd`` is not the repo root.
+
+    A ``CwdChanged`` into a subdirectory used to make every filesystem lookup
+    point at that subdirectory while git kept answering ROOT-relative. Result:
+    AC-scoped commits skipped, an existing ledger reported absent, and the
+    observation state written into a nested un-gitignored directory.
+    """
+
+    @unittest.skipUnless(_GIT, "git not available")
+    def test_commit_from_a_subdirectory_is_still_in_scope(self) -> None:
+        self.init_repo()
+        self.write_project_file(".claude/plans/PLAN-900/LEDGER.md", "# L\n")
+        self.stage(".claude/plans/PLAN-900/notes.md")
+        subdir = self.project_dir / "src" / "deep"
+        subdir.mkdir(parents=True, exist_ok=True)
+
+        event = {"tool_name": "Bash",
+                 "tool_input": {"command": 'git commit -m "feat: work"'}}
+        HOOK.gate(event, cwd=str(subdir))
+
+        recorded = self.events(HOOK.ACTION_RECORDED)
+        self.assertEqual(
+            len(recorded), 1,
+            "a commit observed from a subdirectory produced no recorded "
+            "event — the scope derivation followed cwd instead of the git "
+            "top level: %r" % (self.events(),),
+        )
+        # The discriminating value: `ledger_missing` means the ledger was
+        # FOUND on disk and simply not updated by this commit.
+        # `ledger_absent_from_plan` is the BUG's signature — it is what you
+        # get when the lookup happened under the subdirectory.
+        self.assertEqual(
+            recorded[0]["outcome"], "ledger_missing",
+            "the existing ledger was not found — the lookup used the "
+            "subdirectory instead of the repo root",
+        )
+
+    @unittest.skipUnless(_GIT, "git not available")
+    def test_ledger_staged_from_a_subdirectory_reads_as_updated(self) -> None:
+        self.init_repo()
+        self.stage(".claude/plans/PLAN-900/LEDGER.md", "# L\n")
+        self.stage(".claude/plans/PLAN-900/notes.md")
+        subdir = self.project_dir / "src" / "deep"
+        subdir.mkdir(parents=True, exist_ok=True)
+
+        event = {"tool_name": "Bash",
+                 "tool_input": {"command": 'git commit -m "feat: work"'}}
+        HOOK.gate(event, cwd=str(subdir))
+
+        recorded = self.events(HOOK.ACTION_RECORDED)
+        self.assertEqual(len(recorded), 1)
+        self.assertEqual(recorded[0]["outcome"], "ledger_updated")
+
+    @unittest.skipUnless(_GIT, "git not available")
+    def test_state_is_written_at_the_top_level_not_under_the_subdir(self) -> None:
+        self.init_repo()
+        self.write_project_file(".claude/plans/PLAN-900/LEDGER.md", "# L\n")
+        self.stage(".claude/plans/PLAN-900/notes.md")
+        subdir = self.project_dir / "src" / "deep"
+        subdir.mkdir(parents=True, exist_ok=True)
+
+        event = {"tool_name": "Bash",
+                 "tool_input": {"command": 'git commit -m "feat: work"'}}
+        HOOK.gate(event, cwd=str(subdir))
+
+        self.assertFalse(
+            (subdir / ".claude" / "state").exists(),
+            "observation state fragmented into a nested directory",
+        )
+        self.assertTrue((self.project_dir / ".claude" / "state").exists())
+
+
+class TestEnvPrefixedCommitsAreSeen(LedgerCheckpointTestBase):
+    """Pair-rail round 2, P2 — `GIT_EDITOR=true git commit` is ordinary shell.
+
+    An assignment or a thin wrapper before ``git`` used to clear the command
+    position, so the ``git`` after it was never recognised. The commit then
+    got NEITHER an advisory NOR a skip event — it disappeared from the
+    observed universe, which is the one outcome this rail must never produce
+    for a real commit.
+    """
+
+    @unittest.skipUnless(_GIT, "git not available")
+    def test_assignment_and_wrapper_prefixes_still_trigger(self) -> None:
+        self.init_repo()
+        self.write_project_file(".claude/plans/PLAN-900/LEDGER.md", "# L\n")
+        self.stage(".claude/plans/PLAN-900/notes.md")
+        for command in (
+            'GIT_EDITOR=true git commit -m "feat: work"',
+            'FOO=1 BAR=2 git commit -m "feat: work"',
+            'env FOO=1 git commit -m "feat: work"',
+            # Pair-rail do main, rodada 2: consumir so o NOME do wrapper
+            # deixava a OPCAO dele limpar a posicao de comando.
+            'env -i FOO=1 git commit -m "feat: work"',
+            'env -u LESS git commit -m "feat: work"',
+            'command -- git commit -m "feat: work"',
+            'stdbuf -oL git commit -m "feat: work"',
+            'nohup git commit -m "feat: work"',
+        ):
+            with self.subTest(command=command):
+                self.recorder.calls = []
+                self.run_gate(command)
+                self.assertEqual(
+                    len(self.events(HOOK.ACTION_RECORDED)), 1,
+                    "the commit vanished from the observed universe: %s"
+                    % command,
+                )
+
+    def test_an_assignment_alone_is_still_silent(self) -> None:
+        """Control in the other direction: an assignment that is NOT followed
+        by a git commit must stay silent, as every non-commit Bash call does."""
+        out = self.run_gate('GIT_EDITOR=true echo hello')
+        self.assertEqual(out, {})
+        self.assertEqual(self.events(), [])
+
+
+class TestDeathCriterionAgreesWithTheADR(TestEnvContext):
+    """Pair-rail round 1, P2 — code and doctrine must name the SAME number.
+
+    Base is ``TestEnvContext`` and not ``unittest.TestCase`` even though
+    this class touches no environment: `check-test-env-hygiene.py` flags a
+    bare ``TestCase`` under `.claude/hooks/tests/` as a `bare-testcase`
+    violation and exits 1, and the land script runs that checker in V6d.
+    Found by pair-rail round 3 — the cure for one rail finding introduced
+    a blocker of its own, which is why the rail runs again after a cure.
+
+    `LEDGER_OMISSION_DEATH_THRESHOLD_PCT` read 30 while ADR-195 §3.2 M1 read
+    33. A measured omission rate in (30, 33] therefore produced OPPOSITE
+    keep/remove verdicts depending on which authority the report quoted —
+    and the previous test only asserted 0 < value < 100, which both numbers
+    satisfy. A range check cannot catch a disagreement; only reading the
+    other authority can.
+    """
+
+    def _adr_text(self) -> str:
+        canonical = _repo_root / ".claude" / "adr" / "ADR-195-work-boundary-persistence.md"
+        staged = (
+            _repo_root / ".claude" / "plans" / "PLAN-179" / "staged-w24"
+            / ".claude" / "adr" / "ADR-195-work-boundary-persistence.md"
+        )
+        for path in (canonical, staged):
+            try:
+                if path.is_file():
+                    return path.read_text(encoding="utf-8")
+            except OSError:
+                continue
+        self.fail(
+            "ADR-195 found in neither the canonical tree (%s) nor the staged "
+            "pack (%s) — the death criterion has no doctrine to agree with"
+            % (canonical, staged)
+        )
+
+    def test_threshold_matches_adr_195_m1(self) -> None:
+        text = self._adr_text()
+        matches = re.findall(r"M1 — omiss[^\n]*?>\s*(\d+)\s*%", text)
+        self.assertEqual(
+            len(matches), 1,
+            "expected exactly one M1 threshold statement in ADR-195 §3.2, "
+            "found %d — the parser or the ADR changed shape" % len(matches),
+        )
+        self.assertEqual(
+            int(matches[0]), HOOK.LEDGER_OMISSION_DEATH_THRESHOLD_PCT,
+            "ADR-195 M1 says %s%% and the code says %s%% — a rate between "
+            "them decides the ledger's life differently depending on which "
+            "one the report quotes"
+            % (matches[0], HOOK.LEDGER_OMISSION_DEATH_THRESHOLD_PCT),
+        )
+
+    def test_threshold_is_a_sane_percentage(self) -> None:
+        value = HOOK.LEDGER_OMISSION_DEATH_THRESHOLD_PCT
+        self.assertIsInstance(value, int)
+        self.assertGreater(value, 0)
+        self.assertLess(value, 100)
+
+
+class TestSessionIdentityOnEvents(LedgerCheckpointTestBase):
+    """Pair-rail round 1, P1 — the window is counted in SESSIONS.
+
+    The advisory window this rail declares is ">= 20 sessions". A row with
+    no ``session_id`` cannot be counted into a session nor partitioned by
+    project, so emitting the window's telemetry without those fields would
+    repeat the very session-coupling failure PLAN-179 exists to cure. Both
+    allowlists already admit the two fields; only the caller was missing.
+    """
+
+    @unittest.skipUnless(_GIT, "git not available")
+    def test_recorded_carries_the_session_id(self) -> None:
+        self.init_repo()
+        self.write_project_file(".claude/plans/PLAN-900/LEDGER.md", "# L\n")
+        self.stage(".claude/plans/PLAN-900/notes.md")
+        self.run_gate(session_id="sess-abc123")
+        recorded = self.events(HOOK.ACTION_RECORDED)
+        self.assertEqual(len(recorded), 1)
+        self.assertEqual(recorded[0]["session_id"], "sess-abc123")
+        # `project` is deliberately NOT on the wire: this rail forbids paths
+        # (test_no_ledger_content_reaches_the_audit_wire), and since PLAN-182
+        # W1 the audit dir + HMAC key are already per project, so rows are
+        # partitioned by LOCATION. See the note on `_IDENTITY` in the hook.
+        self.assertNotIn("project", recorded[0])
+
+    @unittest.skipUnless(_GIT, "git not available")
+    def test_skipped_carries_the_session_id(self) -> None:
+        self.init_repo()
+        self.stage("src/unrelated.py")
+        self.run_gate(session_id="sess-xyz789")
+        skipped = self.events(HOOK.ACTION_SKIPPED)
+        self.assertGreaterEqual(len(skipped), 1)
+        self.assertEqual(skipped[0]["session_id"], "sess-xyz789")
+
+    @unittest.skipUnless(_GIT, "git not available")
+    def test_absent_session_id_is_empty_never_missing(self) -> None:
+        """No id in the hook event is a KNOWN empty, not an absent field:
+        a consumer counting sessions must be able to tell 'no id' from
+        'field never emitted'."""
+        self.init_repo()
+        self.stage("src/unrelated.py")
+        self.run_gate()
+        skipped = self.events(HOOK.ACTION_SKIPPED)
+        self.assertGreaterEqual(len(skipped), 1)
+        self.assertIn("session_id", skipped[0])
+        self.assertEqual(skipped[0]["session_id"], "")
+
+    @unittest.skipUnless(_GIT, "git not available")
+    def test_session_id_reaching_the_chain_is_bounded(self) -> None:
+        """The id lands in an HMAC-chained record. Unbounded free text from
+        hook input has no business there: identifier characters only, and
+        hard-capped."""
+        self.init_repo()
+        self.stage("src/unrelated.py")
+        self.run_gate(session_id="a/../b " + ("z" * 200) + "\n<script>")
+        skipped = self.events(HOOK.ACTION_SKIPPED)
+        got = skipped[0]["session_id"]
+        self.assertLessEqual(len(got), HOOK._SESSION_ID_MAX)
+        self.assertTrue(set(got) <= HOOK._SESSION_ID_OK, got[:40])
+        self.assertNotIn("/", got)
+        self.assertNotIn("<", got)
+
+    def test_identity_is_captured_before_the_master_kill_returns(self) -> None:
+        """`_set_identity` runs FIRST in `gate`, so a later emitter added
+        above the kill-switch branch cannot inherit a stale id from the
+        previous invocation."""
+        source = _HOOK_SOURCE
+        gate_at = source.index("def gate(")
+        body = source[gate_at:]
+        set_at = body.index("_set_identity(event)")
+        kill_at = body.index("MASTER_KILL_ENV")
+        self.assertLess(
+            set_at, kill_at,
+            "_set_identity must precede the master-kill early return",
+        )
+
+
 class TestKillSwitches(LedgerCheckpointTestBase):
 
     @unittest.skipUnless(_GIT, "git not available")
@@ -489,8 +829,8 @@ class TestKillSwitches(LedgerCheckpointTestBase):
         self.init_repo()
         self.write_project_file(".claude/plans/PLAN-900/LEDGER.md", "# L\n")
         self.stage(".claude/plans/PLAN-900/notes.md")
-        os.environ[HOOK.KILL_SWITCH_ENV] = "0"
-        out = self.run_gate()
+        with mock.patch.dict(os.environ, {HOOK.KILL_SWITCH_ENV: "0"}):
+            out = self.run_gate()
         self.assertEqual(out, {})
         skipped = self.events(HOOK.ACTION_SKIPPED)
         self.assertEqual(len(skipped), 1)
@@ -503,8 +843,8 @@ class TestKillSwitches(LedgerCheckpointTestBase):
         self.init_repo()
         self.write_project_file(".claude/plans/PLAN-900/LEDGER.md", "# L\n")
         self.stage(".claude/plans/PLAN-900/notes.md")
-        os.environ[HOOK.MASTER_KILL_ENV] = "1"
-        out = self.run_gate()
+        with mock.patch.dict(os.environ, {HOOK.MASTER_KILL_ENV: "1"}):
+            out = self.run_gate()
         self.assertEqual(out, {})
         self.assertEqual(self.events(), [])
         self.assertFalse(
@@ -516,9 +856,9 @@ class TestKillSwitches(LedgerCheckpointTestBase):
     def test_master_kill_beats_the_enforce_env(self) -> None:
         self.init_repo()
         self.stage(".claude/plans/PLAN-900/notes.md")
-        os.environ[HOOK.MASTER_KILL_ENV] = "1"
-        os.environ[HOOK.ENFORCE_ENV] = "1"
-        self.assertEqual(self.run_gate(), {})
+        with mock.patch.dict(os.environ, {HOOK.MASTER_KILL_ENV: "1",
+                                          HOOK.ENFORCE_ENV: "1"}):
+            self.assertEqual(self.run_gate(), {})
         self.assertEqual(self.events(), [])
 
 
@@ -693,6 +1033,238 @@ class TestHonestDegradation(LedgerCheckpointTestBase):
         skipped = self.events(HOOK.ACTION_SKIPPED)
         self.assertEqual(len(skipped), 1)
         return skipped[0]["reason"]
+
+
+# ---------------------------------------------------------------------------
+# W2 ceremony — the audit registration itself (staged-w24 pack)
+#
+# These are the POSITIVE CONTROLS for the canonical half of the wave: they are
+# RED against the pre-ceremony `audit_emit.py` (the actions are not in
+# `_KNOWN_ACTIONS`, so `emit_generic` breadcrumbs and writes nothing) and GREEN
+# against the pack copy. They assert three separate things, because the three
+# fail independently:
+#   (a) the action is REGISTERED and is NOT in `_EMIT_GENERIC_PASSTHROUGH`
+#       (registration without a scrub branch is the ghost-action leak class);
+#   (b) a non-allowlisted field is DROPPED without taking the event with it
+#       (a scrub that killed the whole row would blind the window);
+#   (c) an off-enum / wrong-TYPE value is COERCED to the safe sentinel and
+#       never echoed (the direct-emit_generic-caller path, S172 doctrine).
+# ---------------------------------------------------------------------------
+
+from _lib import audit_emit  # noqa: E402
+
+
+class _LedgerAuditBase(TestEnvContext):
+    """Isolated $HOME + audit log; reads back what actually hit the wire."""
+
+    def events(self, action: str) -> List[Dict[str, Any]]:
+        log = Path(os.environ["CEO_AUDIT_LOG_PATH"])
+        if not log.exists():
+            return []
+        out = []  # type: List[Dict[str, Any]]
+        for line in log.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line:
+                event = json.loads(line)
+                if event.get("action") == action:
+                    out.append(event)
+        return out
+
+    def one(self, action: str) -> Dict[str, Any]:
+        found = self.events(action)
+        self.assertEqual(
+            len(found), 1,
+            "expected exactly 1 %s event, got %d" % (action, len(found)),
+        )
+        return found[0]
+
+
+class TestLedgerCheckpointActionsAreRegistered(_LedgerAuditBase):
+    def test_registered_and_not_passthrough(self) -> None:
+        for action in (HOOK.ACTION_RECORDED, HOOK.ACTION_SKIPPED):
+            self.assertIn(
+                action, audit_emit._KNOWN_ACTIONS,
+                "%s must be registered by the W2 ceremony" % action,
+            )
+            self.assertNotIn(
+                action, audit_emit._EMIT_GENERIC_PASSTHROUGH,
+                "%s must keep its dedicated deny-by-default scrub branch — "
+                "passthrough would hand a direct caller the whole field "
+                "namespace" % action,
+            )
+
+    def test_known_actions_count_is_the_measured_330(self) -> None:
+        # 327 measured live at 560dad0; +3 by this ceremony (Owner decision
+        # 2026-08-25: ledger_checkpoint_recorded + ledger_checkpoint_skipped
+        # + ledger_entry_rejected).
+        self.assertEqual(len(audit_emit._KNOWN_ACTIONS), 330)
+
+
+class TestLedgerCheckpointEnumParity(_LedgerAuditBase):
+    """audit_emit mirrors the producer's enums LITERALLY — this is the guard.
+
+    `audit_emit` deliberately does not import the hook (zero import-time
+    dependencies), so the mirrors can drift in silence. A drift narrows a
+    legitimate value to the sentinel, which looks exactly like a coercion of
+    a hostile value — the failure would be invisible in the log.
+    """
+
+    def test_outcome_enum_matches_the_producer(self) -> None:
+        self.assertEqual(
+            set(HOOK._OUTCOMES), set(audit_emit._LEDGER_CHECKPOINT_OUTCOMES)
+        )
+
+    def test_skip_reason_enum_matches_the_producer(self) -> None:
+        self.assertEqual(
+            set(HOOK._SKIP_REASONS),
+            set(audit_emit._LEDGER_CHECKPOINT_SKIP_REASONS),
+        )
+
+    def test_scope_source_enum_matches_the_producer(self) -> None:
+        self.assertEqual(
+            set(HOOK._SCOPE_SOURCES),
+            set(audit_emit._LEDGER_CHECKPOINT_SCOPE_SOURCES),
+        )
+
+    def test_state_kind_enum_matches_the_producer(self) -> None:
+        self.assertEqual(
+            set(HOOK._STATE_KINDS),
+            set(audit_emit._LEDGER_CHECKPOINT_STATE_KINDS),
+        )
+
+
+class TestLedgerCheckpointRecordedScrub(_LedgerAuditBase):
+    ACTION = "ledger_checkpoint_recorded"
+
+    def _emit_legit(self, **overrides: Any) -> None:
+        fields = {
+            "outcome": "ledger_missing",
+            "plan_id": "PLAN-179",
+            "scope_source": "plan_dir",
+            "in_scope_path_count": 3,
+            "ledger_size_bucket_kib": 7,
+            "over_ceiling": 0,
+            "unverified_ac_claim_count": 2,
+            "commits_since_last_observation": 5,
+            "state_kind": "fresh",
+            "would_block": 1,
+        }
+        fields.update(overrides)
+        audit_emit.emit_generic(self.ACTION, **fields)
+
+    def test_every_declared_producer_field_survives(self) -> None:
+        self._emit_legit()
+        event = self.one(self.ACTION)
+        self.assertEqual(event["outcome"], "ledger_missing")
+        self.assertEqual(event["plan_id"], "PLAN-179")
+        self.assertEqual(event["scope_source"], "plan_dir")
+        self.assertEqual(event["in_scope_path_count"], 3)
+        self.assertEqual(event["ledger_size_bucket_kib"], 7)
+        self.assertEqual(event["unverified_ac_claim_count"], 2)
+        self.assertEqual(event["commits_since_last_observation"], 5)
+        self.assertEqual(event["state_kind"], "fresh")
+        self.assertEqual(event["would_block"], 1)
+
+    def test_smuggled_fields_are_dropped_and_the_event_survives(self) -> None:
+        """(b) — the scrub drops the FIELD, never the row."""
+        self._emit_legit(
+            commit_message="fix: leak me",
+            committed_paths=["/Users/someone/secret/path.md"],
+            ledger_body="# LEDGER\nverbatim transcript",
+            repo_root="/Users/someone/canhada-labs",
+        )
+        event = self.one(self.ACTION)
+        for forbidden in (
+            "commit_message", "committed_paths", "ledger_body", "repo_root"
+        ):
+            self.assertNotIn(
+                forbidden, event,
+                "%s reached the signed chain — the allowlist is not "
+                "deny-by-default" % forbidden,
+            )
+        # ...and the legitimate payload is intact, so the drop is surgical.
+        self.assertEqual(event["outcome"], "ledger_missing")
+        self.assertEqual(event["plan_id"], "PLAN-179")
+
+    def test_off_enum_values_are_coerced_never_echoed(self) -> None:
+        """(c) — the direct emit_generic-caller path."""
+        self._emit_legit(
+            outcome="i-made-this-up",
+            scope_source="../../etc/passwd",
+            state_kind="whatever",
+            plan_id="../../../etc/passwd",
+        )
+        event = self.one(self.ACTION)
+        self.assertEqual(event["outcome"], "other")
+        self.assertEqual(event["scope_source"], "other")
+        self.assertEqual(event["state_kind"], "unavailable")
+        self.assertEqual(event["plan_id"], "unknown")
+        blob = json.dumps(event)
+        self.assertNotIn("i-made-this-up", blob)
+        self.assertNotIn("etc/passwd", blob)
+
+    def test_int_fields_are_type_strict_and_clamped(self) -> None:
+        """A float would be refused by canonical_json and drop the WHOLE row."""
+        self._emit_legit(
+            in_scope_path_count=3.5,
+            ledger_size_bucket_kib=True,
+            unverified_ac_claim_count=-4,
+            commits_since_last_observation=10 ** 6,
+            over_ceiling="1",
+            would_block=[1],
+        )
+        event = self.one(self.ACTION)
+        self.assertEqual(event["in_scope_path_count"], 0)
+        self.assertEqual(event["ledger_size_bucket_kib"], 0)
+        self.assertEqual(event["unverified_ac_claim_count"], 0)
+        self.assertEqual(event["commits_since_last_observation"], 99)
+        self.assertEqual(event["over_ceiling"], 0)
+        self.assertEqual(event["would_block"], 0)
+        for key in (
+            "in_scope_path_count", "ledger_size_bucket_kib",
+            "unverified_ac_claim_count", "commits_since_last_observation",
+            "over_ceiling", "would_block",
+        ):
+            self.assertIsInstance(event[key], int)
+            self.assertNotIsInstance(event[key], bool)
+
+    def test_unhashable_value_does_not_raise_through_emit_generic(self) -> None:
+        """`x in frozenset` raises TypeError on an unhashable x — the guard
+        is the isinstance check that runs FIRST (rail finding B / H4)."""
+        self._emit_legit(outcome=["not", "hashable"], scope_source={"a": 1})
+        event = self.one(self.ACTION)
+        self.assertEqual(event["outcome"], "other")
+        self.assertEqual(event["scope_source"], "other")
+
+
+class TestLedgerCheckpointSkippedScrub(_LedgerAuditBase):
+    ACTION = "ledger_checkpoint_skipped"
+
+    def test_legit_fields_survive_and_smuggled_ones_do_not(self) -> None:
+        audit_emit.emit_generic(
+            self.ACTION,
+            reason="hotfix",
+            plan_id="PLAN-183",
+            commits_since_last_observation=2,
+            state_kind="resumed",
+            would_block=0,
+            commit_message="hotfix: rotate the prod key AKIAI...",
+        )
+        event = self.one(self.ACTION)
+        self.assertEqual(event["reason"], "hotfix")
+        self.assertEqual(event["plan_id"], "PLAN-183")
+        self.assertEqual(event["commits_since_last_observation"], 2)
+        self.assertEqual(event["state_kind"], "resumed")
+        self.assertNotIn("commit_message", event)
+        self.assertNotIn("AKIAI", json.dumps(event))
+
+    def test_off_enum_reason_is_coerced(self) -> None:
+        audit_emit.emit_generic(
+            self.ACTION, reason="because-i-said-so", plan_id="PLAN-179",
+        )
+        event = self.one(self.ACTION)
+        self.assertEqual(event["reason"], "other")
+        self.assertNotIn("because-i-said-so", json.dumps(event))
 
 
 if __name__ == "__main__":  # pragma: no cover

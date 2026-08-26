@@ -1,0 +1,54 @@
+ceremony(PLAN-179 W2+W4): ledger de fronteira de trabalho + governanca do
+estado duravel — 3 acoes de auditoria, ADR-195, SPEC v2.59
+
+Decisao do Owner de 2026-08-25 (S328, AskUserQuestion, verbatim): "3 acoes —
+registra ledger_entry_rejected (Recomendado)". A alternativa de 2 acoes fica
+DESCARTADA, nao residual.
+
+audit_emit._KNOWN_ACTIONS 327 -> 330:
+  - ledger_checkpoint_recorded
+  - ledger_checkpoint_skipped
+  - ledger_entry_rejected
+
+Cada uma com allowlist deny-by-default + branch de scrub; NENHUMA em
+_EMIT_GENERIC_PASSTHROUGH. A terceira e a que fecha o degrade: sem ela,
+_lib/ledger_provenance.py so tinha fallback para reason="scanner_hit" (via
+emit_prompt_injection_detected), e scanner_unavailable / oversize /
+malformed_input ficavam breadcrumb-only.
+
+W2 — .claude/hooks/check_ledger_checkpoint.py (PreToolUse/Bash), ADVISORY por
+construcao: nao existe braco de deny no modulo. O gatilho deriva de PATHS e
+NUNCA de resolve_plan_id (emenda r1-C6 do debate round-1), com um teste de
+nivel AST que proibe a chamada — sem isso a wave re-herdaria a causa-raiz que
+o ADR-153 mediu (2 eventos plan_transition em 12.515 linhas, os dois de outra
+sessao).
+
+W4 — .claude/hooks/_lib/ledger_provenance.py: tags de proveniencia, write-gate
+fail-CLOSED e verificacao pos-delecao. ADR-195-work-boundary-persistence.md e
+o registro de doutrina (matriz de 3 opcoes, emenda 8.5; estrategia de saida
+escrita — a W2 e Embedded).
+
+Numeracao: o ADR-194 foi tomado pelo PLAN-183 (delivery-route-resolution,
+6304f66) enquanto este pack esperava montagem; o ADR deste pacote e o 195, com
+adr_id, titulo, numbering_note e o ponteiro de doutrina no docstring do hook
+todos acompanhando.
+
+SPEC/v1/audit-log.schema.md v2.59 (o vivo ja tinha v2.56/v2.57/v2.58). O
+artefato viaja no pack com nome plano porque .claude/settings.json nega
+Edit(SPEC/**) e o glob casa ate uma copia dentro do pack; o destino real vive
+no PACKMAP.txt e a escrita acontece sob a assinatura.
+
+Registracao do hook nos DOIS settings — .claude/settings.json e o espelho
+templates/settings/settings.base.json. Sem o espelho o adopter recebe o
+arquivo com o hook morto; foi exatamente esse o buraco que a suite completa
+pegou no staged-w01.
+
+Contagens derivadas: hooks 58->59, ligados 47->48, registros 49->50, _lib
+70->71, ADRs 195->196, audit-registry.golden.txt 331->334 linhas (regenerado
+com --write-golden no MESMO commit). Sitios de prosa varridos por NUMERO.
+
+Sentinel: PLAN-179/W179-W24-approved.md (GPG, Owner). Emenda 8.2: um sentinel,
+todos os 27 paths tocados, escopo verificado mecanicamente contra o
+MANIFEST.sha256 do pack (gate G2b).
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>

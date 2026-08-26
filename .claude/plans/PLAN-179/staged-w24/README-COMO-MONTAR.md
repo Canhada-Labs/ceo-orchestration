@@ -1,11 +1,34 @@
 # staged-w24 — pack do PLAN-179 W2 (ledger) + W4 (governança do estado durável)
 
-> **Este pack está IMPLEMENTADO mas NÃO MONTADO de propósito.** Ele toca
-> `audit_emit.py` e `settings.json`, que o pack `staged-w01` também move. O
-> BASELINE de um pack é o hash dos arquivos VIVOS: gerá-lo agora congelaria o
-> estado pré-w01 e o gate anti-stale (G1) abortaria — corretamente — no
-> primeiro segundo do land. **Monte só depois que o `staged-w01` tiver landado
-> e sido pushado.**
+> **MONTADO na S328 (2026-08-25), sobre `560dad0`.** A condição que segurava a
+> montagem — o `staged-w01` precisava ter landado antes, senão o BASELINE
+> congelaria o estado pré-w01 e o gate anti-stale (G1) abortaria no primeiro
+> segundo do land — está satisfeita: o SPEC vivo carrega a linha v2.56 e os
+> hooks do w01 estão em disco. `MANIFEST.sha256` (27 entradas) e
+> `BASELINE.sha256` (22) foram gerados contra a árvore VIVA desse commit;
+> qualquer land posterior a uma mudança nesses 22 destinos precisa
+> RE-RODAR `assemble_pack.py` antes de assinar.
+>
+> **Os dois arquivos que ficavam FORA por escopo de agente ENTRARAM** na
+> S328: `CHANGELOG.md` (header de contagens: ADRs 195→196, `_lib` 70→71 —
+> a ausência dele era o único vermelho do `verify-counts`) e
+> `.claude/hooks/tests/test_template_dogfood_parity.py` (pins de registração
+> 49/46 → 50/47). Land-sim depois deles: **15/15, zero vermelhos**.
+
+## Números medidos na montagem (S328) — não copie, re-meça
+
+| grandeza | antes | depois |
+|---|---:|---:|
+| `len(_KNOWN_ACTIONS)` | 327 | 330 |
+| `_EXPECTED_KNOWN_ACTIONS_SHA256` | `c5e1f44b…6e69fc9c` | `cbc718f6…1aa44928` |
+| `.claude/data/audit-registry.golden.txt` (linhas) | 331 | 334 |
+| SPEC `audit-log.schema.md` (linhas) | 1559 | 1563 (3 ações + v2.59) |
+| registros de evento (dogfood) | 49 | 50 |
+| hooks ligados (dogfood) | 47 | 48 |
+| registros de evento (template) | 46 | 47 |
+| ADRs em disco | 195 | 196 |
+| `_lib` (não-recursivo / recursivo) | 70 / 143 | 71 / 144 |
+| hooks `.py` em disco | 58 | 59 |
 
 ## O que já está pronto aqui
 
@@ -15,7 +38,7 @@
 | `.claude/hooks/tests/test_check_ledger_checkpoint.py` | 37 testes, incluindo um teste de nível AST que PROÍBE o hook de chamar `resolve_plan_id` (emenda r1-C6: o gatilho deriva de PATHS, senão a W2 re-herda a causa-raiz que o plano cura) |
 | `.claude/hooks/_lib/ledger_provenance.py` | tags de proveniência + write-gate fail-CLOSED + verificação pós-deleção |
 | `.claude/hooks/tests/test_ledger_provenance.py` | testes do acima |
-| `.claude/adr/ADR-194-work-boundary-persistence.md` | ADR de doutrina, abrindo com matriz de 3 opções (emenda 8.5) e com estratégia de saída escrita (W2 é *Embedded*) |
+| `.claude/adr/ADR-195-work-boundary-persistence.md` | ADR de doutrina, abrindo com matriz de 3 opções (emenda 8.5) e com estratégia de saída escrita (W2 é *Embedded*) |
 | `SESSIONEND-NOTE.md` | especificação do US8 (SessionEnd emite o delta candidato de memória) para a cerimônia que tocar `SessionEnd.py` |
 
 ## O que a cerimônia AINDA DEVE (números RE-MEDIDOS em 2026-08-22 — a redação anterior citava quatro que morreram)
@@ -44,10 +67,13 @@
    próprio (`emit_ledger_entry_rejected`, allowlist deny-by-default + scrub,
    nunca em `_EMIT_GENERIC_PASSTHROUGH`) — o breadcrumb-only de
    `scanner_unavailable`/`oversize`/`malformed_input` deixa de ser residual.
-   Atenção ao NÚMERO do ADR deste pack: `ADR-194` foi tomado pelo PLAN-183
-   (`ADR-194-delivery-route-resolution.md`, landado em `6304f66`); o ADR do
-   pack renumera para **ADR-195** (próximo livre, medido S328; contagem de
-   ADRs 195 → 196) e toda referência interna (hook, testes, ADR) acompanha.
+   Atenção ao NÚMERO do ADR deste pack: o 194 foi tomado pelo PLAN-183
+   (slug `delivery-route-resolution`, landado em `6304f66`), então o ADR do
+   pack é **ADR-195** (próximo livre, medido S328; contagem de ADRs
+   195 → 196). FEITO na S328: o arquivo foi renomeado, `adr_id`/título/
+   `numbering_note` acompanham, e o ponteiro de doutrina no docstring de
+   `check_ledger_checkpoint.py` (que apontava para o break-glass do
+   PLAN-169) passou a apontar para este ADR.
 2. **`SPEC/v1/audit-log.schema.md`**: linhas novas (**3** — decidido no item 1).
    **A versão é v2.59**, não v2.57: o SPEC vivo já tem v2.56 (linha 583, este
    plano), v2.57 (584, PLAN-174/SENT-S318) e v2.58 (585, PLAN-182/SENT-S319).
@@ -119,6 +145,54 @@ python3 .claude/plans/PLAN-179/assemble_pack.py .claude/plans/PLAN-179/staged-w2
 # 4. suíte COMPLETA de hooks no clone, com PYTHONDONTWRITEBYTECODE=1
 # 5. só então assinar
 ```
+
+## Censo de sítios CEGOS ao `verify-counts` (S328) — o item 6 estava certo
+
+O item 6 deste documento manda "varrer por NÚMERO, não por regra". A primeira
+passada da montagem varreu por REGRA (as do `verify-counts.sh`) e deixou
+**seis** linhas de prosa com número velho — todas invisíveis ao gate, todas
+verdes no land-sim. Duas foram achadas pelo agente da cerimônia lendo o diff
+pack-vs-vivo; as outras quatro só apareceram num censo mecânico por
+numeral + palavra de contagem.
+
+| sítio | claim | por que o gate não vê |
+|---|---|---|
+| `CLAUDE.md:53` | `70` → **71** `_lib` | as 3 regras `lib` exigem `shared modules` ou o numeral COLADO a `` `_lib` ``; o `stdlib-only ` no meio mata as três |
+| `README.md:62` | `58`/`47` → **59**/**48** | `**58 on disk**` não é `hook scripts`; `**47 wired**` não é `wired into` |
+| `docs/ARCHITECTURE.md:56` | `195` → **196** ADRs | comentário de árvore em minúscula; a regra `Architecture Decision Records` é case-SENSITIVE |
+| `docs/ARCHITECTURE.md:76` | `58 vs 47` → **59 vs 48** | numeral dentro de uma citação em negrito, longe de qualquer fraseologia vigiada |
+| `docs/ARCHITECTURE.md:77` | `47` → **48** | `47 is the number of those scripts *wired into*` — a regra exige `47 wired into` adjacente |
+| `npm/README.md:62` | `47` → **48** | idem `**47 wired**` |
+
+A cura ficou no script de montagem como uma tabela `BLIND_SITES` de trechos
+LITERAIS aplicada DEPOIS das regras, com âncora única obrigatória (âncora
+ambígua aborta, nunca adivinha), e o censo re-roda LIMPO. **Numa próxima
+wave que mexa em contagem, rode o censo por número ANTES de declarar os docs
+prontos** — o gate verde é condição necessária, nunca suficiente.
+
+## RESIDUAL — dois arquivos fora do escopo do agente montador (S328)
+
+A bateria na árvore-sombra fecha em VERDE exceto por dois pins que vivem em
+arquivos que o agente montador não tinha autorização de editar. Ambos foram
+MEDIDOS (patch aplicado numa árvore descartável, gate re-rodado, patch
+revertido), então a correção é mecânica e não precisa de investigação:
+
+1. **`CHANGELOG.md`, preâmbulo (a linha `> v1.3.0: … ADRs, … \`_lib\` modules)`)**
+   — `verify-counts.sh --no-tests` acusa `adrs=195, live=196` e
+   `lib=70, live=71` pela regra `changelog/header`. Com os dois numerais
+   bumpados o gate sai **RC=0**; é o ÚNICO drift restante. O `staged-w01`
+   levava `CHANGELOG.md` no pacote pelo mesmo motivo.
+2. **`.claude/hooks/tests/test_template_dogfood_parity.py`, linhas 102-103**
+   — `T64_DOGFOOD_REGISTRATIONS = 49` → `50` e
+   `T64_TEMPLATE_REGISTRATIONS = 46` → `47`. O hook novo é registrado nos
+   DOIS `settings`, então a relação derivada
+   (`dogfood == template + dogfood-only + gated`) continua válida; só os dois
+   pins absolutos quebram. Com o bump, esse arquivo passa 14/14. Este é
+   literalmente o teste que o item 3 desta lista sempre avisou que denunciaria
+   a omissão do espelho no template — ele funcionou.
+
+Os dois entram no pacote (e no Scope assinado) como qualquer outro payload:
+copie para `staged-w24/` no mesmo path relativo e RE-RODE `assemble_pack.py`.
 
 O land script já existe: `.claude/plans/PLAN-179/OWNER-W179-W24-LAND.sh`
 (copiado do molde do w01 — `OWNER-W179-LAND.sh` — com `ST` apontando para

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """PLAN-179 W2 US6 — work-boundary ledger checkpoint (ADVISORY, never blocks).
 
-The doctrine this hook exists to serve (ADR-193, PLAN-179 §W2): durable
+The doctrine this hook exists to serve (ADR-195, PLAN-179 §W2): durable
 state must be written at a WORK BOUNDARY, not at session death. S309 proved
 the death-time write does not arrive — the ADR-153 fires-proof fired on a
 real autocompact and delivered nothing. A commit that lands plan work is the
@@ -204,7 +204,15 @@ ADVISORY_WINDOW_MIN_SESSIONS = 20
 #: DEATH CRITERION (emendas r1-A1/A3/B6). Omitted-checkpoint rate over the
 #: OBSERVED universe, in percent. Above it the ledger is REMOVED, not kept
 #: as debt and not flipped to enforce.
-LEDGER_OMISSION_DEATH_THRESHOLD_PCT = 30
+#:
+#: The value is 33 because ADR-195 §3.2 M1 says 33 and gives the reason ("um
+#: ledger escrito em menos de dois terços das fronteiras é um ledger em que a
+#: próxima sessão não pode confiar"). This constant read 30 while the ADR read
+#: 33 (pair-rail round 1, P2): a measured rate in (30, 33] produced OPPOSITE
+#: keep/remove verdicts depending on which authority the report happened to
+#: quote. The agreement is now pinned by a test that PARSES the ADR, so the
+#: two cannot drift apart again silently.
+LEDGER_OMISSION_DEATH_THRESHOLD_PCT = 33
 
 #: Ledger size ceiling. A ledger is a context-floor cost; W3 exists to cut
 #: the floor, so W2 is not allowed to grow one without a bound.
@@ -365,10 +373,45 @@ class CommitInvocation(object):
 
 _SEPARATORS = frozenset({"&&", "||", ";", "|", "&", "(", ")", "{", "}", "\n"})
 _CMD_POSITION_WORDS = frozenset({"then", "do", "else", "elif", "!", "time"})
+#: `NAME=value` prefix — shell keeps the command position after it.
+_ENV_ASSIGN_RE = re.compile(r"^[A-Za-z_][A-Za-z_0-9]*=")
+#: Thin wrappers that keep the command position. Deliberately SHORT: each
+#: entry is a wrapper whose next non-option token is the real command. Things
+#: like `sudo` or `xargs` are NOT here — widening this set trades a false
+#: negative for a false positive, and the rail is advisory either way.
+_CMD_WRAPPERS = frozenset({"env", "command", "nohup", "stdbuf"})
 #: git GLOBAL options that take a value (consumed before the subcommand).
 _GIT_GLOBAL_VALUE_OPTS = frozenset({
     "-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path",
 })
+
+#: ``git commit`` options whose value is a SEPARATE next token. Skipping only
+#: the option name leaves the value to be read as a pathspec, and a bogus
+#: pathspec turns a perfectly normal commit into ``unparseable`` — a SKIP
+#: event in the very window this rail exists to measure (pair-rail round 1,
+#: P2: `git commit --author Alice -m x` recorded "Alice" as a path).
+#:
+#: REQUIRED-value options only. Options whose value is optional (``-S`` /
+#: ``--gpg-sign``, ``-u`` / ``--untracked-files``) accept it in ``=`` form
+#: alone, so consuming a second token for them would eat a real pathspec —
+#: the opposite error. The ``--opt=value`` form needs no entry here: it is
+#: one token and the generic ``--`` branch already skips it.
+_COMMIT_VALUE_OPTS_LONG = frozenset({
+    "--author", "--date", "--message", "--file", "--template",
+    "--cleanup", "--reuse-message", "--reedit-message",
+    "--fixup", "--squash", "--trailer",
+})
+
+#: NAO e opcao de valor comum: ela SELECIONA os paths do commit. Tratada como
+#: pathspec, porque consumi-la em silencio deixava `inv.pathspecs` vazio,
+#: `_committed_paths()` inspecionava o conjunto staged INTEIRO, e um
+#: LEDGER.md staged mas EXCLUIDO pelo arquivo de pathspec gerava um registro
+#: `ledger_updated` FALSO para um commit que nao o conteria.
+#: (pair-rail do main, rodada 3, P2.)
+_PATHSPEC_FROM_FILE = "--pathspec-from-file"
+#: Same, in short form. ``-m`` is handled earlier (it fills ``message``);
+#: the rest only need their value consumed so it is not read as a path.
+_COMMIT_VALUE_OPTS_SHORT = frozenset({"-F", "-c", "-C", "-t"})
 
 
 def parse_git_commit(command: str) -> CommitInvocation:
@@ -420,6 +463,40 @@ def parse_git_commit(command: str) -> CommitInvocation:
         if tok in _CMD_POSITION_WORDS:
             at_command_position = True
             idx += 1
+            continue
+        # A command position survives environment assignments and thin
+        # wrappers (pair-rail round 2, P2). `GIT_EDITOR=true git commit -m x`
+        # and `env FOO=1 git commit -m x` are ordinary shell; treating the
+        # assignment as "some other command" cleared the flag and the `git`
+        # right after it was never recognised — the commit got NEITHER an
+        # advisory NOR a skip event, i.e. it vanished from the observed
+        # universe entirely. Silence is the one outcome this rail is not
+        # allowed to produce for a real commit.
+        if at_command_position and _ENV_ASSIGN_RE.match(tok):
+            idx += 1
+            continue
+        if at_command_position and tok in _CMD_WRAPPERS:
+            # Consumir SO o nome do wrapper nao basta (pair-rail do main,
+            # rodada 2, P2): em `env -i FOO=1 git commit`, `command -- git
+            # commit` e `stdbuf -oL git commit`, a OPCAO do wrapper era lida
+            # como "outro comando" e limpava a posicao antes do `git`. Os
+            # commits voltavam a sumir do universo observado — a mesma
+            # invariante que a cura anterior tinha acabado de restaurar.
+            idx += 1
+            while idx < total:
+                nxt = tokens[idx]
+                if nxt in _SEPARATORS:
+                    break
+                # `env -u NAME` leva o valor num token SEPARADO; consumir os
+                # dois. As demais opcoes desta lista curta ou sao booleanas
+                # (`-i`, `--`) ou carregam o valor coladas (`-oL`).
+                if tok == "env" and nxt == "-u":
+                    idx += 2
+                    continue
+                if nxt.startswith("-") or _ENV_ASSIGN_RE.match(nxt):
+                    idx += 1
+                    continue
+                break
             continue
         if not at_command_position or tok != "git":
             at_command_position = False
@@ -493,8 +570,25 @@ def _parse_commit_args(args: List[str], inv: CommitInvocation) -> None:
             inv.message = tok[len("--message="):]
             i += 1
             continue
+        if tok == _PATHSPEC_FROM_FILE or tok.startswith(_PATHSPEC_FROM_FILE + "="):
+            # O commit passa a ser dirigido por paths que este hook NAO
+            # resolve (o arquivo pode conter globs, exclusoes, diretorios).
+            # Marcar como pathspec faz `_committed_paths()` devolver None e o
+            # caller reportar `unparseable` — a MESMA resposta que o modulo ja
+            # da para pathspec explicito, nao uma semantica nova.
+            inv.pathspecs.append(_PATHSPEC_FROM_FILE)
+            i += 2 if (tok == _PATHSPEC_FROM_FILE and i + 1 < n) else 1
+            continue
+        if tok in _COMMIT_VALUE_OPTS_LONG:
+            # Consume the VALUE too, or it lands in `pathspecs` and makes an
+            # ordinary commit look unparseable.
+            i += 2 if i + 1 < n else 1
+            continue
         if tok.startswith("--"):
             i += 1
+            continue
+        if tok in _COMMIT_VALUE_OPTS_SHORT:
+            i += 2 if i + 1 < n else 1
             continue
         if tok.startswith("-") and len(tok) > 1:
             # Combined short flags, e.g. -am / -amv. `m` takes the NEXT arg.
@@ -812,6 +906,86 @@ def inspect_ledger(repo_root: Path, plan_id: str) -> Dict[str, Any]:
 # Audit emission — LOUD when the action is not registered yet
 # --------------------------------------------------------------------------
 
+#: Identity of the session being observed. Set ONCE per invocation from the
+#: hook event, read by :func:`_emit`.
+#:
+#: Why it is not optional (pair-rail round 1, P1): this rail's whole purpose
+#: is a measure-first window declared in SESSIONS (">= 20 sessions"), and a
+#: row with no ``session_id`` cannot be counted into a session, nor
+#: partitioned by project. Emitting the window's own telemetry without the
+#: field the window is counted over would repeat the session-coupling
+#: failure that PLAN-179 exists to cure (ADR-153: `resolve_plan_id` needed a
+#: `plan_transition` FROM THE SAME SESSION and there were 2 in 12.515 lines).
+#: Both allowlists already admit ``session_id`` and ``project``
+#: (`audit_emit._LEDGER_CHECKPOINT_*_ALLOWLIST`) — only the caller was missing.
+#:
+#: ``project`` is DELIBERATELY not emitted, and the reason is local to this
+#: module: no path ever reaches this rail's wire (the invariant its own
+#: `test_no_ledger_content_reaches_the_audit_wire` enforces by asserting no
+#: emitted value contains "/"), and the correct project identity is the
+#: `runtime_paths` slug — re-deriving a slug locally is exactly the M4 class
+#: PLAN-182 closed, so it is NOT open-coded here. Nothing is lost: since
+#: PLAN-182 W1 the audit directory and HMAC key are already PER PROJECT, so
+#: rows are partitioned by project by LOCATION, not by a field. Wiring the
+#: single resolver into this hook is its own change, with its own contract
+#: tests — not a line slipped into a ceremony.
+_IDENTITY = {"session_id": ""}
+
+#: Bounded shape for the id that reaches the HMAC-chained event: identifier
+#: characters only, hard-capped. An unbounded string from hook input has no
+#: business in a signed record.
+_SESSION_ID_MAX = 64
+_SESSION_ID_OK = frozenset(
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_"
+)
+
+
+def _clean_session_id(raw: Any) -> str:
+    if not isinstance(raw, str):
+        return ""
+    kept = "".join(ch for ch in raw if ch in _SESSION_ID_OK)
+    return kept[:_SESSION_ID_MAX]
+
+
+def _set_identity(event: Dict[str, Any]) -> None:
+    """Capture session identity from the hook event, once per invocation."""
+    _IDENTITY["session_id"] = _clean_session_id(event.get("session_id"))
+
+
+def _resolve_repo_root(start: Path, deadline: float) -> Path:
+    """Git TOP-LEVEL for ``start``, or ``start`` itself if git cannot say.
+
+    Why this exists (pair-rail round 2, P1): the hook event's ``cwd`` follows
+    the session, and a ``CwdChanged`` into a subdirectory made every
+    filesystem lookup in this module point at the SUBDIRECTORY. Git does not
+    play along — ``diff --cached --name-only`` answers ROOT-relative — so the
+    paths and the tree disagreed:
+
+      * ``_ac_path_index`` scanned ``<subdir>/.claude/plans`` (usually absent)
+        ⇒ AC-scoped commits silently classified out of scope;
+      * ``inspect_ledger`` looked for ``<subdir>/.claude/plans/PLAN-NNN/
+        LEDGER.md`` ⇒ an existing ledger reported absent;
+      * ``_state_path`` WROTE observation state into ``<subdir>/.claude/state``
+        ⇒ the commit counter fragmented into nested, un-gitignored dirs.
+
+    Resolving the top level once, before any path is derived, closes all
+    three. Fail-OPEN by design (this is not a security matcher): if git is
+    unavailable the caller keeps the previous behaviour and the existing
+    ``no_repo`` route reports it honestly.
+    """
+    out = _git(start, ["rev-parse", "--show-toplevel"], deadline)
+    if out:
+        first = out.strip().splitlines()[0].strip() if out.strip() else ""
+        if first:
+            try:
+                top = Path(os.path.realpath(first))
+            except (OSError, ValueError):
+                return start
+            if top.is_dir():
+                return top
+    return start
+
+
 def _emit(action: str, **fields: Any) -> str:
     """Emit a closed-enum event. Returns the emit OUTCOME for the caller.
 
@@ -820,7 +994,11 @@ def _emit(action: str, **fields: Any) -> str:
     canonical and this action lands with the W2 ceremony) and it is LOUD:
     a window that silently loses its telemetry would decide the ledger's
     life on a number it does not have.
+
+    Session identity is injected here rather than at every call site, so a
+    future emitter cannot forget it.
     """
+    fields.setdefault("session_id", _IDENTITY["session_id"])
     if not _AUDIT_EMIT_AVAILABLE or _audit_emit is None:
         _loud("audit_emit unavailable — %s NOT recorded" % action)
         return "unavailable"
@@ -974,6 +1152,9 @@ def _output(additional_context: str, system_message: str = "") -> Dict[str, Any]
 
 def gate(event: Dict[str, Any], cwd: Optional[str] = None) -> Dict[str, Any]:
     """Advisory work-boundary check. ALWAYS allows (returns no decision)."""
+    # Identity FIRST: every emission below inherits it via _emit, and the
+    # master-kill path returns before emitting anything at all.
+    _set_identity(event)
     if _flag_on(MASTER_KILL_ENV):
         return {}
     tool_name = str(event.get("tool_name") or "")
@@ -989,9 +1170,12 @@ def gate(event: Dict[str, Any], cwd: Optional[str] = None) -> Dict[str, Any]:
         return {}
 
     deadline = time.monotonic() + TIME_BUDGET_S
-    repo_root = Path(
+    _start = Path(
         os.path.realpath(cwd or os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd())
     )
+    # The event's cwd may be a SUBDIRECTORY of the repo; git answers
+    # root-relative, so every path below has to be derived from the TOP LEVEL.
+    repo_root = _resolve_repo_root(_start, deadline)
     commits_since, state_kind = observe_commits_since(repo_root, deadline)
 
     if _flag_on(ENFORCE_ENV) and not ENFORCE_FLIP_IMPLEMENTED:

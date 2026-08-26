@@ -1,5 +1,5 @@
 ---
-adr_id: ADR-194
+adr_id: ADR-195
 title: Persistência em fronteira de trabalho — ledger de plano com obrigação derivada, e por que ele NÃO é derivado do audit log
 status: PROPOSED
 proposed_at: 2026-08-18
@@ -8,12 +8,12 @@ decided_by: Owner (PENDENTE — assinatura GPG da cerimônia W1+W2 do PLAN-179; 
 risk_tier: A
 debate_required: true
 debate: ".claude/plans/PLAN-179/debate/round-1/consensus.md (round 1, PROCEED, 3× ADJUST, 0 REJECT). A matriz do §2 existe por exigência da emenda 8.5 (achado A-U2); os critérios de morte do §3.2 vêm de A-U1/A-U3/A-U4."
-numbering_note: "O §7 do PLAN-179 reservava `ADR-193` para esta doutrina. O número foi consumido pelo break-glass do PLAN-169 (pack W3, S312). Alocado 194 no momento da escrita, conforme a própria emenda 8.2 (\"números de ADR alocados NO MOMENTO da escrita; nada de reservar no draft\")."
+numbering_note: "O §7 do PLAN-179 reservava `ADR-193` para esta doutrina. O número foi consumido pelo break-glass do PLAN-169 (pack W3, S312). Alocado 195 no momento da escrita: o número 194 foi por sua vez consumido pelo ADR de resolução de rota de entrega do PLAN-183 (slug `delivery-route-resolution`, landado em 6304f66), e 195 era o próximo livre medido na S328. Conforme a própria emenda 8.2 (\"números de ADR alocados NO MOMENTO da escrita; nada de reservar no draft\")."
 related_plans: [PLAN-179, PLAN-175, PLAN-135, PLAN-169]
 related_adrs: [ADR-153, ADR-027, ADR-034, ADR-055, ADR-191]
 ---
 
-# ADR-194 — Persistência em fronteira de trabalho
+# ADR-195 — Persistência em fronteira de trabalho
 
 ## §1 Contexto — a falha está MEDIDA, não argumentada
 
