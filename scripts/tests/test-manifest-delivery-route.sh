@@ -1606,6 +1606,129 @@ else
   bad "S.16 could not build the symlinked-template checkout — the install wiring is untested"
 fi
 
+# ---------------------------------------------------------------------------
+# S.17 (W5 residual, named in PLAN-183/w5-oq4-measurement-S327.md) — the
+# CODEOWNERS hash_source discriminant is LINE-EXACT, not substring.
+#
+# install.sh decides FMS_HASH_SOURCE_CODEOWNERS off $_CONTINUITY_PATHS. The
+# neighbours (SPEC/v1, PROTOCOL.md, .framework-version) use a substring `case`,
+# which is safe for THEM — those three are the only literals any writer appends
+# and none is a substring of another. It is NOT safe here: `.github/CODEOWNERS`
+# is a PREFIX of `.github/CODEOWNERS.template`, the two coexist in the delivery
+# domain, and they are mutually exclusive per run. A continuity carrying only
+# the .template sibling therefore answered HASH_PRIOR_RECORD — the PRIOR digest
+# recorded as the baseline for a file the run had just RENDERED.
+#
+# INERT at the time of writing: no writer of $_CONTINUITY_PATHS appends a
+# .github/ path, so no production run reaches the branch. That is exactly why
+# the assertions below drive the BLOCK directly instead of an entrypoint, and
+# why S.17-control exists: without a plant that reproduces the defect, a leg
+# nothing can reach proves nothing.
+# ---------------------------------------------------------------------------
+echo "==> S.17 — the CODEOWNERS hash_source discriminant is line-exact"
+
+# Extracted by CONTENT anchors, never by line number. The block's own inner
+# `fi` is indented deeper, so the first column-2 `fi` is its terminator — the
+# same range works on the pre-cure form, which is what lets the plant below
+# share this extractor.
+S17_BLOCK="$WORKROOT/s17-block.sh"
+S17_HELPER="$WORKROOT/s17-helper.sh"
+sed -n '/^  if _delivered_template_has "\.github\/CODEOWNERS"; then$/,/^  fi$/p' \
+    "$INSTALLER" > "$S17_BLOCK"
+sed -n '/^_delivered_template_has() {$/,/^}$/p' "$INSTALLER" > "$S17_HELPER"
+
+if [ -s "$S17_BLOCK" ] && grep -q 'FMS_HASH_SOURCE_CODEOWNERS' "$S17_BLOCK" \
+   && grep -q '^_delivered_template_has() {' "$S17_HELPER"; then
+  ok "S.17 extracted the CODEOWNERS hash_source block + _delivered_template_has from install.sh"
+else
+  bad "S.17 could not extract the CODEOWNERS hash_source block from install.sh (moved or renamed?) — every S.17 assertion below is vacuous"
+fi
+
+# One scaffold, two bodies: the cured block and the plant run through
+# byte-identical surroundings, so a difference in the answer is a difference in
+# the DISCRIMINANT and nothing else. The real helper is carried, not stubbed —
+# a stub would make the outer gate untested and would hide a rename.
+_s17_harness() {   # $1=block-body file -> prints the path of a runnable script
+  local _body="$1" _out
+  _out="$WORKROOT/s17-h-$( basename "$_body" )"
+  {
+    echo 'set -uo pipefail'
+    cat "$S17_HELPER"
+    # The site lives inside write_install_manifest(), so it is hosted by a
+    # function here too — `local` is legal only there.
+    echo '_s17_site() {'
+    cat "$_body"
+    echo '}'
+    echo '_DELIVERED_TEMPLATES=".github/CODEOWNERS"'
+    echo '_CONTINUITY_PATHS="$1"'
+    echo '_s17_site'
+    echo 'printf "%s\n" "${FMS_HASH_SOURCE_CODEOWNERS:-<unset>}"'
+  } > "$_out"
+  printf '%s\n' "$_out"
+}
+_s17_ask() {  # $1=harness $2=_CONTINUITY_PATHS value -> the verdict word
+  bash "$1" "$2" 2>/dev/null | tail -1
+}
+
+S17_H="$( _s17_harness "$S17_BLOCK" )"
+# The real variable always opens with an empty first line (each writer appends
+# "${_CONTINUITY_PATHS:-}"$'\n'"<path>"), so the fixtures carry it too.
+S17_TPL="$(   printf '\n%s' ".github/CODEOWNERS.template" )"
+S17_EXACT="$( printf '\n%s' ".github/CODEOWNERS" )"
+S17_MIX="$(   printf '\n%s\n%s\n%s' "SPEC/v1" "PROTOCOL.md" ".github/CODEOWNERS.template" )"
+
+_s17_got="$( _s17_ask "$S17_H" "$S17_TPL" )"
+[ "$_s17_got" = "HASH_TARGET" ] \
+  && ok "S.17a continuity carrying ONLY .github/CODEOWNERS.template => HASH_TARGET" \
+  || bad "S.17a continuity carrying ONLY .github/CODEOWNERS.template answered '$_s17_got' (expected HASH_TARGET) — the discriminant matched the .template sibling by PREFIX, so a RENDERED file would be baselined from the prior record"
+
+_s17_got="$( _s17_ask "$S17_H" "$S17_EXACT" )"
+[ "$_s17_got" = "HASH_PRIOR_RECORD" ] \
+  && ok "S.17b continuity carrying .github/CODEOWNERS exactly => HASH_PRIOR_RECORD (non-regression)" \
+  || bad "S.17b continuity carrying .github/CODEOWNERS exactly answered '$_s17_got' (expected HASH_PRIOR_RECORD) — the cure overshot and dropped the continuity verdict"
+
+_s17_got="$( _s17_ask "$S17_H" "$S17_MIX" )"
+[ "$_s17_got" = "HASH_TARGET" ] \
+  && ok "S.17c a realistic SPEC/PROTOCOL continuity plus the .template sibling => HASH_TARGET" \
+  || bad "S.17c a realistic continuity plus the .template sibling answered '$_s17_got' (expected HASH_TARGET)"
+
+_s17_got="$( _s17_ask "$S17_H" "" )"
+[ "$_s17_got" = "HASH_TARGET" ] \
+  && ok "S.17d no continuity at all (the fresh-render path every install takes today) => HASH_TARGET" \
+  || bad "S.17d an empty continuity answered '$_s17_got' (expected HASH_TARGET) — the fresh-install default regressed"
+
+if grep -q 'case .*_CONTINUITY_PATHS' "$S17_BLOCK"; then
+  bad "S.17e the CODEOWNERS block reverted to the substring \`case\` idiom — see the comment at _delivered_template_has (install.sh) for why this destination cannot use it"
+else
+  ok "S.17e the CODEOWNERS block runs no substring \`case\` over _CONTINUITY_PATHS"
+fi
+
+# --- S.17-control: POSITIVE CONTROL -----------------------------------------
+# The plant is written HERE, not read from git history: once the cure is
+# committed, HEAD stops carrying the defect and a history-based control would
+# quietly invert into a permanent RED. This is the pre-cure body verbatim, so
+# it reproduces the MECHANISM (a substring `case`), not merely the appearance.
+S17_PLANT="$WORKROOT/s17-plant.sh"
+cat > "$S17_PLANT" <<'S17PLANT'
+  if _delivered_template_has ".github/CODEOWNERS"; then
+    case "${_CONTINUITY_PATHS:-}" in
+      *".github/CODEOWNERS"*) export FMS_HASH_SOURCE_CODEOWNERS="HASH_PRIOR_RECORD" ;;
+      *)                      export FMS_HASH_SOURCE_CODEOWNERS="HASH_TARGET" ;;
+    esac
+  fi
+S17PLANT
+S17_HP="$( _s17_harness "$S17_PLANT" )"
+_s17_got="$( _s17_ask "$S17_HP" "$S17_TPL" )"
+[ "$_s17_got" = "HASH_PRIOR_RECORD" ] \
+  && ok "S.17-control the pre-cure substring form answers HASH_PRIOR_RECORD on the SAME input — S.17a is not vacuous" \
+  || bad "S.17-control the pre-cure substring form answered '$_s17_got' (expected HASH_PRIOR_RECORD) — the plant no longer reproduces the defect, so S.17a proves nothing"
+# And the plant agrees with the cure everywhere the two SHOULD agree: the
+# control must isolate the prefix collision, not merely be a different script.
+_s17_got="$( _s17_ask "$S17_HP" "$S17_EXACT" )"
+[ "$_s17_got" = "HASH_PRIOR_RECORD" ] \
+  && ok "S.17-control the plant and the cure agree on the exact-match input — the only divergence is the .template prefix" \
+  || bad "S.17-control the plant answered '$_s17_got' on the exact-match input (expected HASH_PRIOR_RECORD) — it is not the pre-cure form"
+
 echo ""
 echo "==> RESULT: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ] || exit 1

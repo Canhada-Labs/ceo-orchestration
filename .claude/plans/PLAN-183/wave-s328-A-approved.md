@@ -15,8 +15,8 @@ Wave: wave-s328-A (W5-b FECHAMENTO — ADR-194 PROPOSED→ACCEPTED com a §7 de 
 Patch: .claude/plans/PLAN-183/s328-ceremony-A/A.patch
 Patch-sha256: 2d9326a28ff1d8e51078f7a059e0b90a3b38b720e7296addf15ab9b95f47f05d
 Patch-base: 4bd7def0ee0710bce4c04858a84b9ba88ef411d4
-Anchor-SHA: TO-FILL-AT-SIGN
-Data: TO-FILL-AT-SIGN
+Anchor-SHA: 0ff80fab785d074ea1e273b283c3d131def92413
+Data: 2026-08-26
 
 ## O que esta wave entrega
 
@@ -102,7 +102,7 @@ PARADA, não de sucesso.
 - Pair-rail: registros em `.claude/plans/PLAN-183/s328-ceremony-A/rail-round-*.md`.
 
 <!-- BEGIN SIGNED SCOPE -->
-Approved-By: @Canhada-Labs TO-FILL-AT-SIGN
+Approved-By: @Canhada-Labs AE9B236FDAF0462874060C6BCFCFACF00335DC74
 Plans: PLAN-183
 Scope:
   - .claude/adr/ADR-194-delivery-route-resolution.md

@@ -2699,10 +2699,21 @@ PROTOCOL.md"
   # at this wave regressed 24 cells precisely by leaving fresh installs
   # undeclared. Fresh render: the target IS the delivered bytes => HASH_TARGET.
   if _delivered_template_has ".github/CODEOWNERS"; then
-    case "${_CONTINUITY_PATHS:-}" in
-      *".github/CODEOWNERS"*) export FMS_HASH_SOURCE_CODEOWNERS="HASH_PRIOR_RECORD" ;;
-      *)                      export FMS_HASH_SOURCE_CODEOWNERS="HASH_TARGET" ;;
-    esac
+    # LINE-EXACT, not the substring `case` the SPEC/PROTOCOL/marker neighbours
+    # use — same reason as _delivered_template_has:1526 and the same shape
+    # upgrade.sh:4746 already uses: `.github/CODEOWNERS` is a PREFIX of
+    # `.github/CODEOWNERS.template`, so `*".github/CODEOWNERS"*` answers
+    # HASH_PRIOR_RECORD for a continuity carrying only the .template sibling —
+    # recording the PRIOR digest for a file this run RENDERED. Inert today (no
+    # writer of _CONTINUITY_PATHS appends a .github/ path), cured as FORM so
+    # the two entrypoints stop disagreeing before a writer arrives.
+    local _co_cont_line
+    export FMS_HASH_SOURCE_CODEOWNERS="HASH_TARGET"
+    while IFS= read -r _co_cont_line; do
+      if [[ "$_co_cont_line" = ".github/CODEOWNERS" ]]; then
+        export FMS_HASH_SOURCE_CODEOWNERS="HASH_PRIOR_RECORD"
+      fi
+    done <<< "${_CONTINUITY_PATHS:-}"
   fi
   # Empty on a fresh install (target IS the freshly written pointer, hashing it
   # is correct); set only by the continuity path above.

@@ -1,11 +1,12 @@
 ---
 adr_id: ADR-194
 title: A rota de entrega é DADO compartilhado — um resolvedor destino→(fonte, transformação) para os três consumidores, e as duas árvores entram na decisão de propriedade
-status: PROPOSED
+status: ACCEPTED
 date: 2026-08-24
+accepted: 2026-08-25 (assinatura GPG do Owner sobre wave-w5-approved.md — land 6304f66 — e decisão verbatim S328 «Pista MISTA — braço C (Recomendado)»)
 plan: PLAN-183 (W5; D1/D3/OQ-5; OQ-4 medida em S327)
 proposed_by: CEO (S327 night-run)
-decided_by: Owner — a assinatura GPG de `.claude/plans/PLAN-183/wave-w5-approved.md` É a ratificação (status vira ACCEPTED no commit do land)
+decided_by: Owner — a assinatura GPG de `.claude/plans/PLAN-183/wave-w5-approved.md` É a ratificação (ocorrida em 2026-08-25; o flip textual para ACCEPTED chega ao main pela cerimônia, pacote S328-A, não pelo land 6304f66)
 risk_tier: A
 debate_required: true
 related_plans: [PLAN-183, PLAN-167, PLAN-168, PLAN-182]
@@ -14,8 +15,11 @@ related_adrs: [ADR-155, ADR-155-AMEND-1, ADR-190, ADR-192]
 
 # ADR-194 — A rota de entrega é DADO compartilhado, não um ramo em cada script
 
-**Status:** PROPOSED — vira ACCEPTED no land, e o ato que ratifica é a assinatura GPG do Owner
-sobre `PLAN-183/wave-w5-approved.md`. **Enforcement commit:** pendente.
+**Status:** ACCEPTED — ratificado pela assinatura GPG do Owner sobre
+`PLAN-183/wave-w5-approved.md` (assinatura criada 2026-08-25 11:53:12Z; land `6304f66`,
+2026-08-25 09:08:28 -0300) e pela decisão verbatim de 2026-08-25 (S328): «Pista MISTA — braço C
+(Recomendado)». **Enforcement commits:** `6304f66` (D3 + D1 + emenda OQ-5) e `738007e` (deepen
+do histórico antes da paridade).
 
 ## Context
 
@@ -256,6 +260,44 @@ wave regrediu 24 células** por deixar installs frescos sem declaração. **Até
 linhas se escrevem em `scripts/tests/ownership_table.tsv`** (medido: 15 colunas, 65 linhas de
 dados).
 
+### §7 Ratificação da OQ-4 (2026-08-25) — a pista MISTA é decisão, não hipótese
+O Owner ratificou a OQ-4 em 2026-08-25 (S328). Resposta verbatim: **«Pista MISTA — braço C
+(Recomendado)»**. A ratificação é RETROATIVA: o braço C já É o conteúdo do patch de `6304f66`.
+Duas referências na árvore pós-land — `w5-ceremony/PROPOSED-PATCH.md:89` declara "pista MISTA
+(braço C), que é o conteúdo deste patch", e `_wbm_declared_hash_source` vive em
+`_framework_manifest_set.sh:376` com UM consumidor em `:1085` (as citações `:311`/`:320` do §6 são
+da árvore PRÉ-land). Nenhuma linha de código muda por causa desta seção.
+
+**O que a ratificação FIXA.** (1) A pista é MISTA: as 5 rotas verbatim ficam na não-condicional, e
+só `.github/CODEOWNERS` entra na condicional. (2) O custo é ZERO linhas em
+`scripts/tests/ownership_table.tsv`; a moldura "2-3 linhas de TSV" do enunciado da OQ-4 está
+refutada pela medição da S327. (3) A posse de `docs/` e `.github/` é decidida pelo hash-gate da
+entrega (§4) mais o `hash_source` declarado do `CODEOWNERS`, não por superfície nova em
+`_ownership_verdict()`. (4) Estender a propriedade "UMA decisão" às duas árvores permanece wave
+própria (W5-c), com OQ própria.
+
+**Checkout raso — a direção do erro é o que torna o defeito observável.** No run `32845976930`,
+com `fetch-depth: 1`, o hash-gate do `upgrade.sh` não enxerga a geração `v1.2.0` da FONTE e
+classifica os 3 templates como `PRESERVED`; a paridade maintainer acusa `STALE 3`. Reproduzido
+local: fonte `--depth 1` ⇒ 3, `--unshallow` ⇒ 0. `PRESERVED` é a direção SEGURA: falta de
+evidência nunca sobrescreve o arquivo do adopter. Foi ela que converteu histórico incompleto em
+divergência de paridade VISÍVEL, em vez de sobrescrita silenciosa. Um gate que respondesse
+`REFRESHED` à mesma falta de evidência teria posto bytes do framework sobre bytes do adopter, com
+o run saindo verde. Cura em `738007e`: o deepen roda ANTES da paridade em `smoke-install.yml`.
+
+**Este ADR não mantém nada PROPOSED.** O land `6304f66` CRIOU este arquivo com `status: PROPOSED`
+(medido em `git show 6304f66:.claude/adr/ADR-194-delivery-route-resolution.md`, linha 4). O flip
+textual para `ACCEPTED` é edição canônica posterior e entra no main pelo pacote de cerimônia
+S328-A. O ato que ratifica permanece a assinatura sobre o sentinel, não o commit que a reescreve.
+
+**Obrigação solidária do contrato-raiz.** O `CLAUDE.md` §5 descreve o estado deste ADR em prosa —
+hoje diz *"status textual `PROPOSED` — o flip é edição canônica da próxima cerimônia"* e *"OQ-4 foi
+MEDIDA (…), não decidida"*. As duas afirmações ficam **falsas** no instante em que este arquivo vira
+`ACCEPTED`. O `CLAUDE.md` é lido no Gate 1 de **toda** sessão nova, então um contrato-raiz que
+contradiz o ADR canônico não é imprecisão de documentação: é governança errada entregue por padrão,
+a cada boot, até alguém notar. A atualização das duas frases pertence ao **mesmo** pacote de
+cerimônia que faz este flip — não a um closeout posterior.
+
 ## Consequences
 
 **Positivas (+)** — "qual é a fonte deste destino?" ganha **um** dono, e um quarto
@@ -311,6 +353,13 @@ receberam.
   teste de baseline.
 - **Verde-total é sinal de PARAR**, não de sucesso (`ownership-nightly-gate.sh` falha também com
   encolhimento): significa que a tabela-verdade mudou.
+- **Evidência do land (2026-08-25):** `OWNER-S327-LAND.sh` V1–V6 verdes, V7 diferido ao nightly
+  (`--ownership-e2e=defer`), V5 com `EXPECTED_PARITY_MAINTAINER_STALE=0`. **Ainda NÃO observado
+  neste ADR:** a primeira rodada do nightly sobre D1+D3 (cron `43 6 * * *`) só ocorre depois deste
+  texto, e o conjunto RED **esperado** — não medido — é `{OWN-0016, OWN-0024, OWN-0027}`, o mesmo
+  declarado em `scripts/tests/ownership-expected-reds.txt`. Registrar o resultado de uma execução
+  futura como se fosse evidência colhida é fabricar auditoria; o resultado real entra aqui depois
+  de a rodada acontecer, ou não entra.
 
 ## References
 
