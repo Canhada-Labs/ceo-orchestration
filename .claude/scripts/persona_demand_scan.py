@@ -2,7 +2,7 @@
 """PLAN-104 Wave B — persona-demand event detector.
 
 Stateless local-git scanner. Iterates a bounded horizon
-(git log HEAD~500 --since=168h --name-only) and emits one
+(git log HEAD~500 --since=<168h-ago as ISO-8601> --name-only) and emits one
 persona_demand_opened event per detected demand_id NOT already
 present in the audit-log (idempotency via demand_id dedup; no
 sidecar state file per S134 R2 Q7 fold).
@@ -35,6 +35,7 @@ import subprocess
 import sys
 import time
 import unicodedata
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterator, List, NamedTuple, Optional, Set, Tuple
 import sys as _sys_rp
@@ -197,6 +198,26 @@ def _scan_branch_ahead(repo_root: Path) -> Iterator[DemandEvent]:
         )
 
 
+def _since_arg(hours: int) -> str:
+    """Build an ABSOLUTE `--since=` cutoff, never a relative approxidate.
+
+    Git's approxidate parser needs at least four characters of a unit
+    word ("hour"), so a bare `<N>h` is not a duration to it. The digits
+    fall through to `pending_number()`, which assigns them to a date
+    field only when they fit one: `2h` becomes "day-of-month 2" and
+    `168h` fits nothing at all and is DISCARDED, leaving the cutoff at
+    the current second. Both misparses exit 0 with no diagnostic, so the
+    caller sees a well-formed empty window rather than an error — the
+    S329 flake, where `--since=168h` scanned only the current second and
+    the live repo reported 1 demand instead of 35.
+
+    An absolute ISO-8601 UTC instant removes the parser from the path.
+    Same shape as session-graph-build.py's `--since=`.
+    """
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+    return "--since=" + cutoff.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 def _scan_commit_files(repo_root: Path, hours: int) -> Iterator[DemandEvent]:
     """Detect file-edit demands in commits within the horizon."""
     horizon_anchor = f"HEAD~{SCAN_HORIZON_COMMITS}"
@@ -205,7 +226,7 @@ def _scan_commit_files(repo_root: Path, hours: int) -> Iterator[DemandEvent]:
     log_output = _git(
         [
             "log", rev_range,
-            f"--since={hours}h",
+            _since_arg(hours),
             "--name-only",
             "--pretty=format:__COMMIT__%H",
             "--no-merges",

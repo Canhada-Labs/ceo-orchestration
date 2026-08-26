@@ -27,7 +27,7 @@ import json
 import os
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, NamedTuple, Optional, Set, Tuple
 import sys as _sys_rp
@@ -39,6 +39,18 @@ for _anc in _HOOKS_RP.parents:
             _sys_rp.path.insert(0, str(_anc / ".claude" / "hooks"))
         break
 from _lib import runtime_paths as _rp  # noqa: E402  # PLAN-182 W1 single resolver
+
+
+def _since_arg(hours: int) -> str:
+    """ABSOLUTE `--since=` cutoff (ISO-8601 UTC), never a relative approxidate.
+
+    Git needs >= 4 chars of a unit word ("hour"): a bare `168h` is silently
+    DISCARDED by approxidate and the window collapses to the current second,
+    exit 0, no diagnostic (S329 flake class — same cure as
+    persona_demand_scan._since_arg).
+    """
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+    return "--since=" + cutoff.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 DEFAULT_AUDIT_LOG = Path(
     os.environ.get(
@@ -522,7 +534,7 @@ def emit_waives_for_scanned(
     import subprocess
     try:
         log_out = subprocess.check_output(
-            ["git", "log", f"--since={TREND_WINDOW_HOURS}h",
+            ["git", "log", _since_arg(TREND_WINDOW_HOURS),
              "--pretty=format:__SHA__%H%n%B%n__END_COMMIT__"],
             cwd=str(repo_root), stderr=subprocess.DEVNULL, text=True,
         )
