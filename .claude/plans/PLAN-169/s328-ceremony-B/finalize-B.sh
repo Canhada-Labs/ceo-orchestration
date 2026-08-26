@@ -209,7 +209,12 @@ PY_RC=0
 [ "$PY_RC" -eq 0 ] || { tail -25 "$PY_LOG" | sed 's/^/      /' >&2
                         die "4d: a suite do gate reprovou na sombra (rc=$PY_RC) — log em $PY_LOG"; }
 # "N deselected" NAO e "N passed" (licao S325): o numero vem do campo `passed`.
-_obs_passed="$(sed -n 's/.*[^0-9]\([0-9][0-9]*\) passed.*/\1/p' "$PY_LOG" | head -1)"
+# A linha do `pytest -q` COMECA pelo numero ("62 passed in 63.81s") — o sed
+# anterior exigia um nao-digito antes dele e abortava com a suite VERDE
+# (medido na manha de 2026-08-26, 1a execucao do MORNING). Aceita inicio de
+# linha OU um nao-digito antes; o numero e sempre o imediatamente antes de
+# " passed" (nunca o de "deselected"/"failed").
+_obs_passed="$(grep -oE '(^|[^0-9])[0-9]+ passed' "$PY_LOG" | head -1 | grep -oE '[0-9]+')"
 [ -n "$_obs_passed" ] || die "4d: nao consegui ler 'N passed' — log em $PY_LOG"
 [ "$_obs_passed" = "$_exp_passed" ] \
   || die "4d: $_obs_passed teste(s) passaram, esperado $_exp_passed (EXPECTED_GATE_PYTEST_PASSED).

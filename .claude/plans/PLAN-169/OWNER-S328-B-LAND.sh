@@ -623,7 +623,10 @@ _exp_pytest_rc="$(_expect EXPECTED_GATE_PYTEST_RC)"
 [ "$PY_RC" = "$_exp_pytest_rc" ] \
   || die "V2: pytest saiu rc=$PY_RC, esperado $_exp_pytest_rc — log em $PY_LOG"
 # "N deselected" NAO e "N passed" (licao S325): o numero vem do campo `passed`.
-_obs_passed="$(sed -n 's/.*[^0-9]\([0-9][0-9]*\) passed.*/\1/p' "$PY_LOG" | head -1)"
+# A linha do `pytest -q` COMECA pelo numero ("62 passed in 63.81s") — o sed
+# anterior exigia um nao-digito antes dele e abortaria com a suite VERDE
+# (a mesma classe derrubou o finalize-B na manha de 2026-08-26).
+_obs_passed="$(grep -oE '(^|[^0-9])[0-9]+ passed' "$PY_LOG" | head -1 | grep -oE '[0-9]+')"
 [ -n "$_obs_passed" ] || die "V2: nao consegui ler 'N passed' da saida do pytest — log em $PY_LOG"
 _exp_passed="$(_expect EXPECTED_GATE_PYTEST_PASSED)"
 [ "$_obs_passed" = "$_exp_passed" ] \

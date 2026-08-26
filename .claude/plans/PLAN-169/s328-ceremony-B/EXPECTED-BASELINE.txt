@@ -43,7 +43,7 @@ EXPECTED_MANIFEST_MEMBERS_TOUCHED=0
 # --- V2: suite do gate relativo ---------------------------------------------
 # `python3 -m pytest .claude/scripts/tests/test_hook_latency_relative_gate.py -q`
 EXPECTED_GATE_PYTEST_RC=0
-EXPECTED_GATE_PYTEST_PASSED=42
+EXPECTED_GATE_PYTEST_PASSED=62
 
 # --- V4: execucao REAL curta ------------------------------------------------
 # Teto DELIBERADAMENTE alto (100000 ms): o objetivo e provar que a superficie
