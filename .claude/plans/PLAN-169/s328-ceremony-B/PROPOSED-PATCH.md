@@ -1,7 +1,7 @@
 # PROPOSED-PATCH — wave-s328-B (PLAN-169): segunda chave relativa do gate hook-latency, fase 1 ADVISORY
 
 Patch: `.claude/plans/PLAN-169/s328-ceremony-B/B.patch`
-Patch-sha256: 7a939fe70ab4fa6969ff70c3ad3f803e54e73e67477f2bef7947242259327796
+Patch-sha256: e635498ac63422537574a5ce9229d36a1ef11bc7c4aaa2f157c25b048d5e0950
 Base: ver `BASE-SHA.txt` (o `finalize_patch.py` recusa uma sombra cuja base não
 seja o HEAD vivo, e grava o mesmo sha no `Patch-base:` do sentinel)
 
@@ -14,7 +14,7 @@ Três arquivos **canônicos**, nenhuma linha removida:
 | path | +/− | papel |
 |---|---|---|
 | `.github/workflows/validate.yml` | +3 / −0 | 2 flags de argv no `run_gate`; 1 `note()` no `PYSUM` |
-| `.claude/adr/ADR-163-hook-latency-gate-percentile-stability.md` | +219 / −0 | emenda que DECIDE a segunda chave |
+| `.claude/adr/ADR-163-hook-latency-gate-percentile-stability.md` | +221 / −0 | emenda que DECIDE a segunda chave |
 | `.claude/adr/ADR-144-subagent-model-tiering-frontmatter.md` | +57 / −0 | emenda que REFUTA o §S220 |
 
 A **lógica inteira** (referência `ref_exec`, classificador, rótulos, exit map,

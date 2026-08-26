@@ -71,10 +71,10 @@ index 78de98a..4223c85 100644
 +`claude -p --model` subprocess remains correct, it is simply belt-and-braces
 +now rather than the only option.
 diff --git a/.claude/adr/ADR-163-hook-latency-gate-percentile-stability.md b/.claude/adr/ADR-163-hook-latency-gate-percentile-stability.md
-index 1442bdf..af91263 100644
+index 1442bdf..46f5cc5 100644
 --- a/.claude/adr/ADR-163-hook-latency-gate-percentile-stability.md
 +++ b/.claude/adr/ADR-163-hook-latency-gate-percentile-stability.md
-@@ -354,3 +354,222 @@ single-ceiling shape.
+@@ -354,3 +354,224 @@ single-ceiling shape.
  + p95 120→180 com a evidência de hoje". Landed by the SENT-S318 pack
  ceremony (this file + `validate.yml` + `profile-opus-4-7.py` +
  `wave2-regression-proof.sh` + profiler tests, one signed commit).
@@ -201,19 +201,21 @@ index 1442bdf..af91263 100644
 +     guarantee. One boundary point, and it is exactly the point the
 +     formula selects when the interval is tight. A non-strict bound
 +     here would make the whole admissibility argument decorative.
-+   - **The implementation must match, and today it does NOT.** The
-+     admissibility check in `profile-opus-4-7.py` rejects a K that
-+     *exceeds* `admissibility_max_K`, i.e. it ADMITS `K == cap`;
-+     `_classify_entry` computes `rel_ok = hook_p50 <= k_e *
-+     ref_p50`. Either the cap check becomes `K >= cap ⇒ reject` or
-+     the comparison becomes strict — one of the two, not both, or
-+     the interval closes twice. This is **phase-2-only** code (no K
-+     applies in phase 1, so no execution reaches it while this
-+     package is what ships) and the profiler is NON-canonical, so it
-+     is fixed by ordinary commit, not by this ceremony. It is a
-+     NAMED precondition of the phase-2 package: shipping phase 2
-+     with the current `<=` on both sides would restore exactly the
-+     hole this bullet closes.
++   - **The implementation matches, and the strictness lives in
++     exactly ONE of the two comparisons.** `profile-opus-4-7.py`
++     rejects `K >= admissibility_max_K` — the cap is **EXCLUSIVE**,
++     so a K landing exactly ON it is inadmissible, not admitted —
++     while `_classify_entry` keeps `rel_ok = hook_p50 <= K_e ×
++     ref_p50`, which accepts equality the way an absolute ceiling
++     does. That asymmetry is the design, not an oversight: making
++     *both* strict would close the interval twice and reject a K
++     that is in fact admissible. An earlier draft of this amendment
++     asserted the opposite — that the cap admitted `K == cap` and
++     the code therefore disagreed with this ADR; that was true of an
++     earlier profiler and is **no longer the case**. The rule to
++     preserve, stated once: **the cap is exclusive; the gate
++     comparison is inclusive.** Changing either side alone
++     re-opens the hole.
 +
 +   An **EMPTY** admissibility interval means the reference is
 +   mis-shaped and the design is REJECTED: **never widen K**. That is

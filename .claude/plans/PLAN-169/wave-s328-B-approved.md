@@ -12,8 +12,8 @@
 Plans: PLAN-169
 Wave: wave-s328-B (cura do gate hook-latency — decisão do Owner Q5 de 2026-08-25, «Emenda + gate em pacote, e 1 rerun de madrugada»: a segunda chave RELATIVA em fase 1 ADVISORY, mais as duas emendas de ADR que registram por que a primeira chave sozinha decide errado)
 Patch: .claude/plans/PLAN-169/s328-ceremony-B/B.patch
-Patch-sha256: 7a939fe70ab4fa6969ff70c3ad3f803e54e73e67477f2bef7947242259327796
-Patch-base: 560dad00ff8fba81584208014e04bbe8572bb83e
+Patch-sha256: e635498ac63422537574a5ce9229d36a1ef11bc7c4aaa2f157c25b048d5e0950
+Patch-base: 47b20044e5af50bdf5d12830eb2f461dca791cb4
 Anchor-SHA: TO-FILL-AT-SIGN
 Data: TO-FILL-AT-SIGN
 
@@ -31,7 +31,7 @@ aplicar: sem eles o workflow passaria flags desconhecidas e o gate sairia 2 em
 todo push (achado do pair-rail, rodadas 1–5).
 
 1. **`.claude/adr/ADR-163-hook-latency-gate-percentile-stability.md`**
-   (canônico, +219 linhas) — emenda «runner-normalized second key; the spawn
+   (canônico, +221 linhas) — emenda «runner-normalized second key; the spawn
    probe is blind by construction». Registra o gatilho medido (run
    `32866209415`, `a16ac96`: `check_output_secrets` p95 **361,4 / 424,8 /
    229,1 ms** contra o teto duro de 180 ms, com a sonda de contenção lendo
@@ -136,18 +136,18 @@ Scope:
   força `--wall-budget-seconds 0` e exige **rc 1**. Este diff canônico não cria
   nenhuma rota para o rótulo errado — mas ensinar o wrapper a distinguir rc 5
   passa a ser **pré-condição NOMEADA da fase 2**, não faxina opcional.
-- **A cota de admissibilidade do `K` é ESTRITA, e o código ainda não é** (achado
-  do pair-rail, rodada 3, P2). A regra relativa `hook_p50 <= K_e × ref_p50`
-  aceita igualdade; se a cota fosse `K_e <= (baseline+150)/max(ref_p50)`, então
-  exatamente em `K_e = cota` o controle plantado de +150 ms teria
+- **A cota de admissibilidade do `K` é ESTRITA, e o código CASA** (achado do
+  pair-rail, rodada 3, P2 — curado nos dois lados). A regra relativa
+  `hook_p50 <= K_e × ref_p50` aceita igualdade; se a cota também aceitasse,
+  então exatamente em `K_e = cota` o controle plantado de +150 ms teria
   `hook_p50 = K_e × max(ref_p50)`, `rel_ok` VERDADEIRO, e **passaria** — o
-  oposto do que admitir aquele `K` deveria garantir. O texto que embarca usa
-  `<` estrito. O **código não casa ainda**: `profile-opus-4-7.py` rejeita `K`
-  que *excede* a cota (logo ADMITE `K == cota`) e compara com `<=`. É código
-  de **fase 2 apenas** (nenhum `K` se aplica em fase 1, então nenhuma execução
-  o alcança enquanto este pacote é o que embarca) e **não-canônico** — cura por
-  commit comum, não por cerimônia. Fica registrado como pré-condição NOMEADA do
-  pacote da fase 2.
+  oposto do que admitir aquele `K` deveria garantir. Estado atual, verificado
+  em disco: `profile-opus-4-7.py` rejeita `K >= admissibility_max_K` (cota
+  **EXCLUSIVA**) e mantém `rel_ok` com `<=`. **A estritez vive em exatamente
+  UMA das duas comparações** — torná-las ambas estritas fecharia o intervalo
+  duas vezes e rejeitaria um `K` admissível. A emenda que embarca descreve essa
+  regra. Uma versão anterior deste sentinel afirmava que o código «ainda não
+  casava»: era verdade sobre um profiler anterior e **não é mais**.
 - **A célula `abs_ok ∧ ¬rel_ok`** está implementada e testada por unidade atrás
   do parâmetro `strict_relative`, que **não tem flag de CLI** — é inalcançável
   a partir do workflow até uma decisão posterior a ligar (OQ-7).

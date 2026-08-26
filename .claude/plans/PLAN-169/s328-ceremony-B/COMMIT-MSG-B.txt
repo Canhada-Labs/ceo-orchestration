@@ -22,7 +22,7 @@ A cura nao e mexer no teto (ja movido 120 -> 180 com evidencia; o espalhamento
 regressao). Entra uma SEGUNDA chave, relativa, medida na mesma janela de
 escalonador: `hook_p50 <= K_e * ref_p50`, p50 dos DOIS lados.
 
-Este commit e SO a superficie CANONICA (3 arquivos, +279 linhas, ZERO removidas):
+Este commit e SO a superficie CANONICA (3 arquivos, +281 linhas, ZERO removidas):
 
 - `.github/workflows/validate.yml` (+3): duas flags de argv no `run_gate`
   (`--exec-reference`, `--relative-advisory`) e uma `note()` no bloco PYSUM do
@@ -31,7 +31,7 @@ Este commit e SO a superficie CANONICA (3 arquivos, +279 linhas, ZERO removidas)
   literal `FAILED on BOTH attempts (rc1=` (2 ocorrencias) ficam byte a byte —
   e o que mantem `PLAN-161/proof-retry-matrix.sh` e
   `PLAN-159/wave2-regression-proof.sh` provados.
-- `.claude/adr/ADR-163-…` (+219): a emenda que DECIDE. Sete itens: teto de
+- `.claude/adr/ADR-163-…` (+221): a emenda que DECIDE. Sete itens: teto de
   180 ms fica duro; segunda chave relativa; referencia `ref_exec` stdlib-only de
   3 termos, round-robin dentro do laco de cada entrada, proibida de importar
   `_lib`/`.claude/hooks`; quatro rotulos num conjunto FECHADO; FASE 1 advisory
@@ -79,10 +79,10 @@ pre-condicao NOMEADA da fase 2.
 Como a regra relativa aceita igualdade (`hook_p50 <= K_e * ref_p50`), em
 `K_e = cota` exatamente o controle plantado de +150 ms teria `rel_ok`
 VERDADEIRO e PASSARIA — o oposto do que admitir aquele K deveria garantir.
-A cota que embarca e ESTRITA (`<`). O codigo ainda NAO casa
-(`profile-opus-4-7.py` admite `K == cota` e compara com `<=`): e sitio de
-FASE 2 apenas, nao-canonico, e esta NOMEADO na emenda como pre-condicao do
-pacote da fase 2.
+A cota que embarca e ESTRITA e o codigo CASA: `profile-opus-4-7.py` rejeita
+`K >= admissibility_max_K` (cota EXCLUSIVA) e mantem `rel_ok` com `<=`. A
+estritez vive em exatamente UMA das duas comparacoes — torna-las ambas
+estritas fecharia o intervalo duas vezes e rejeitaria um K admissivel.
 
 Autorizacao: sentinel `.claude/plans/PLAN-169/wave-s328-B-approved.md`, assinado
 por GPG do Owner; Scope DERIVADO por `finalize_patch.py`; land por

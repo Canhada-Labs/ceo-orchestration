@@ -31,9 +31,9 @@ EXPECTED_PATCH_PATHS=".github/workflows/validate.yml .claude/adr/ADR-163-hook-la
 # `git apply --numstat` esperado (added/deleted/path). ZERO linhas removidas em
 # todos os tres — o patch so acrescenta.
 #   3     0   .github/workflows/validate.yml
-#   219   0   .claude/adr/ADR-163-hook-latency-gate-percentile-stability.md
+#   221   0   .claude/adr/ADR-163-hook-latency-gate-percentile-stability.md
 #   57    0   .claude/adr/ADR-144-subagent-model-tiering-frontmatter.md
-EXPECTED_PATCH_ADDED_TOTAL=279
+EXPECTED_PATCH_ADDED_TOTAL=281
 EXPECTED_PATCH_DELETED_TOTAL=0
 # Medido: `.github/workflows/validate.yml` NAO consta do manifesto ADR-192
 # (`.claude/governance/gate-scripts-manifest.txt`, 9 membros); nenhum dos tres

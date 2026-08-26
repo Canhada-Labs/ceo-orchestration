@@ -124,7 +124,7 @@ Nenhum passo é destrutivo antes de todos os portões passarem, e o ensaio
 
 | arquivo | papel |
 |---|---|
-| `B.patch` | o diff assinável (3 paths canônicos, +279/−0) |
+| `B.patch` | o diff assinável (3 paths canônicos, +281/−0) |
 | `BASE-SHA.txt` | o commit contra o qual o patch foi gerado |
 | `PROPOSED-PATCH.md` | o registro que a revisão leu (o quê, por quê, medições) |
 | `EXPECTED-BASELINE.txt` | os conjuntos DECLARADOS contra os quais o V-block compara |
