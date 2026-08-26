@@ -75,6 +75,25 @@ if str(_LIVE_HOOKS) not in sys.path:
 from _lib.testing import TestEnvContext  # noqa: E402
 from _lib import audit_emit  # noqa: E402
 from _lib import injection_patterns  # noqa: E402
+
+
+def _live_audit_emit():
+    """The `audit_emit` object the gate will ACTUALLY read - resolved now.
+
+    `ledger_provenance._emit_rejection` does a call-time
+    ``from _lib import audit_emit``. Predecessors in the same pytest worker
+    (23 files in this suite ``sys.modules.pop``/rebind ``_lib.audit_emit`` -
+    e.g. ``test_check_agent_spawn.py::TestPLAN078Wave1ModelRoutingAdvisory``
+    re-creates it in tearDown) leave this file's module-level ``audit_emit``
+    name STALE: a ``patch.object`` on the stale object never reaches the gate
+    (``len(calls) == 0``; channel ``typed`` instead of ``unavailable``).
+    Bit the S328 land of pack D under ``-n auto`` (4 failures, order-dependent;
+    green in the dry-run minutes earlier). Same cure as
+    ``test_tool_lifecycle_observe.py``: resolve with the SAME ``IMPORT_FROM``
+    semantics the gate uses, then patch THAT object.
+    """
+    from _lib import audit_emit as _ae  # noqa: E402  (live lookup, on purpose)
+    return _ae
 from _lib import trusted_env  # noqa: E402
 
 
@@ -478,7 +497,7 @@ class TestDiscardIsVisible(_Base):
             calls.append(kwargs)
 
         with mock.patch.object(
-            audit_emit, "emit_ledger_entry_rejected", _fake
+            _live_audit_emit(), "emit_ledger_entry_rejected", _fake
         ):
             admitted, verdict = lp.admit_entry(
                 _entry("agent-returned", _MIMICRY), enforced=True
@@ -505,10 +524,10 @@ class TestDiscardIsVisible(_Base):
         detections = []
         typed = []
         with mock.patch.object(
-            audit_emit, "emit_prompt_injection_detected",
+            _live_audit_emit(), "emit_prompt_injection_detected",
             lambda **kw: detections.append(kw),
         ), mock.patch.object(
-            audit_emit, "emit_ledger_entry_rejected",
+            _live_audit_emit(), "emit_ledger_entry_rejected",
             lambda **kw: typed.append(kw),
         ):
             for entry in (
@@ -529,11 +548,11 @@ class TestDiscardIsVisible(_Base):
 
         with mock.patch.object(lp, "_load_scanner", return_value=None), \
                 mock.patch.object(
-                    audit_emit, "emit_ledger_entry_rejected",
+                    _live_audit_emit(), "emit_ledger_entry_rejected",
                     lambda **kw: typed.append(kw),
                 ), \
                 mock.patch.object(
-                    audit_emit, "emit_prompt_injection_detected",
+                    _live_audit_emit(), "emit_prompt_injection_detected",
                     lambda **kw: detections.append(kw),
                 ):
             _admitted, verdict = lp.admit_entry(
@@ -551,7 +570,7 @@ class TestDiscardIsVisible(_Base):
         said = []
         with mock.patch.object(lp, "_breadcrumb", lambda m: said.append(m)), \
                 mock.patch.object(
-                    audit_emit, "emit_ledger_entry_rejected", None
+                    _live_audit_emit(), "emit_ledger_entry_rejected", None
                 ):
             _admitted, verdict = lp.admit_entry(
                 _entry("agent-returned", _MIMICRY), enforced=True
@@ -607,7 +626,7 @@ class TestPostureAndCounters(_Base):
             self.assertFalse(lp.gate_enforced())
 
     def test_advisory_keeps_the_entry_but_records_would_reject(self):
-        with mock.patch.object(audit_emit, "emit_ledger_entry_rejected",
+        with mock.patch.object(_live_audit_emit(), "emit_ledger_entry_rejected",
                                lambda **kw: None):
             admitted, verdict = lp.admit_entry(
                 _entry("agent-returned", _MIMICRY), enforced=False
@@ -617,7 +636,7 @@ class TestPostureAndCounters(_Base):
         self.assertFalse(verdict.enforced)
 
     def test_enforced_discards_the_entry(self):
-        with mock.patch.object(audit_emit, "emit_ledger_entry_rejected",
+        with mock.patch.object(_live_audit_emit(), "emit_ledger_entry_rejected",
                                lambda **kw: None):
             admitted, verdict = lp.admit_entry(
                 _entry("agent-returned", _MIMICRY), enforced=True
@@ -626,7 +645,7 @@ class TestPostureAndCounters(_Base):
         self.assertTrue(verdict.enforced)
 
     def test_counters_build_the_would_block_table(self):
-        with mock.patch.object(audit_emit, "emit_ledger_entry_rejected",
+        with mock.patch.object(_live_audit_emit(), "emit_ledger_entry_rejected",
                                lambda **kw: None):
             lp.admit_entry(_entry("owner-instruction", _MIMICRY), enforced=False)
             lp.admit_entry(_entry("agent-returned", _CLEAN), enforced=False)
