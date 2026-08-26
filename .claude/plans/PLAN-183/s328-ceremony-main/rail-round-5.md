@@ -12,7 +12,19 @@ rascunho PLAN-185, lido mais fundo a cada passada.)
 
 ---
 
-## Parada: DECLARADA, não alcançada
+## Parada: LIMPA PARA O ESCOPO (critério do CEO), com a lacuna do literal declarada
+
+**Critério aplicado** (disposição do CEO, 2026-08-26): o escopo do rail-main é
+`.claude/scripts/profile-opus-4-7.py` + `.claude/scripts/tests/test_hook_latency_relative_gate.py`;
+uma rodada sem NENHUM achado sobre esses dois arquivos fecha o rail **para o escopo**, mesmo que
+outros paths tragam achados. Verificado mecanicamente: `grep -c` dos dois nomes em `railmain-5.txt`
+= **0**. Os dois arquivos estão commitados em `d694e99` e intactos (`git status --porcelain` vazio);
+`pytest` de confirmação final = **62 passed, RC 0**.
+
+**Rail FECHADO para o escopo.** O que segue vale como limite declarado, não como ressalva ao
+fechamento.
+
+### A lacuna do literal (registrada, não contornada)
 
 O critério da task é `rc 0` **E** o literal `VERDICT: APPROVE`. Esse literal **nunca foi emitido em
 nenhuma das 5 rodadas**: o `codex-cli 0.147.0` deste substrato entrega prosa de síntese + lista de
@@ -20,10 +32,10 @@ comentários por achado, sem a linha `VERDICT:`. As saídas não foram vazias ne
 rc 0 em todas as 5), então **não é o caso F/UNAVAILABLE** do ADR-106 — é uma mudança de FORMATO do
 substrato, da mesma família que a memória `reference-codex-cli-substrate-drift` já registra.
 
-Portanto, e explicitamente: **não declaro "aprovado".** O que está provado é mais fraco e é isto —
-cinco rodadas ao teto permitido, com o escopo convergindo a zero achados na última, cada cura com
-verificação em `path:line` e controle positivo vermelho→verde. Quem for assinar precisa saber que a
-lacuna é do instrumento, não do escopo.
+Portanto, e explicitamente: **o fechamento acima é "zero achados no escopo", NÃO "APPROVE emitido".**
+São coisas diferentes e quem assinar precisa saber qual das duas tem. O que está provado: cinco
+rodadas ao teto permitido, escopo convergindo a zero na última, cada cura com verificação em
+`path:line` e controle positivo vermelho→verde. A lacuna é do instrumento, não do escopo.
 
 *(Se o Owner quiser o literal, a rota é fixar o formato de saída — envelope de formato fixo, o mesmo
 item já nomeado para a v1.4.0 no CLAUDE.md §5 — e não mais uma rodada: a rodada 5 já não tem o que
