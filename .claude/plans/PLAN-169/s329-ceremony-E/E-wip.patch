@@ -1,0 +1,1611 @@
+diff --git a/.claude/plans/PLAN-169/s329-ceremony-E/DESIGN-E.md b/.claude/plans/PLAN-169/s329-ceremony-E/DESIGN-E.md
+new file mode 100644
+index 0000000..7725ad1
+--- /dev/null
++++ b/.claude/plans/PLAN-169/s329-ceremony-E/DESIGN-E.md
+@@ -0,0 +1,228 @@
++# Pacote E — `upgrade.sh` deriva o roster de hooks do template
++
++> S329 (2026-08-26). Alvo canônico: `scripts/upgrade.sh`
++> (`_merge_lifecycle_hooks_into_settings`, `:2497` pré-cura, chamada em `:3434`).
++> Achado de origem: `.claude/plans/PLAN-179/s328-ceremony-D/FINDING-upgrade-lifecycle-hooks-S328.md`
++> (S328, rail codex rodada 3 do pacote D).
++> Trabalho feito em sombra (`git clone --local` de `b07be9b`); nada tocado no repo vivo.
++
++## 1. O que mudou, em cinco linhas
++
++| Dimensão | Antes (pré-S329) | Depois |
++|---|---|---|
++| **Fonte** | roster LITERAL de 6 registros dentro do programa `jq`, mais os mesmos 6 repetidos em prosa para o `--dry-run` | `$SOURCE_DIR/templates/settings/settings.base.json` — o template do checkout que EXECUTA o upgrade (mesma resolução que `_migrate_settings_baseline` já usa para o cap do pair-rail). Nunca `$TARGET`. |
++| **Semântica** | os 6 eram RE-CANONICALIZADOS (filtra o pré-existente, re-appenda o bloco canônico) — edição do adopter era silenciosamente substituída | ADITIVA: ausente ⇒ appenda o bloco do template; presente ⇒ **preserva byte-idêntico**. Nada presente é reescrito. |
++| **Chave de identidade** | `test("check_foo\\.py")` — substring, sem âncora | todo token `<nome>.py` do `hooks[].command`, casado como token INTEIRO (a classe de caracteres para em `/`, então um path rende o basename; o lookahead impede `check_x.py` casar dentro de `check_xy.py` / `check_xy.python`). Bloco sem `.py` (o `echo` inline do `PostToolUse\|Agent`) é chaveado pelo COMANDO inteiro. Um bloco presente conta como registrado quando TODAS as suas chaves já existem naquele evento. |
++| **`--dry-run`** | loop `for pair in "PreCompact:…" …` — uma SEGUNDA lista, mantida à mão | mesmo programa `jq`, `--arg mode report`: o anúncio não pode divergir da escrita porque é a mesma redução. |
++| **Atomicidade** | tempfile no mesmo dir + `[[ -s ]]` + `mv` | idem, mais validação `jq -e 'type=="object" and (.hooks\|type)=="object"'` do resultado ANTES do `mv`; e o arquivo **só é aberto para escrita quando falta alguma coisa** (re-run byte-idêntico — mesmo oráculo de idempotência da migração T5.4). |
++
++## 2. Antes/depois por registro
++
++Com o adopter partindo de `{"hooks": {}}` (o pior caso de adopter histórico):
++
++| Evento / hook | Pré-cura registrava? | Pós-cura |
++|---|---|---|
++| `PreCompact` / `check_precompact_continuity.py` | sim (literal) | sim (derivado) |
++| `PostCompact` / `check_postcompact_reinject.py` | sim (literal) | sim (derivado) |
++| `ConfigChange` / `check_config_change.py` | sim (literal) | sim (derivado) |
++| `SubagentStart` / `check_subagent_start.py` | sim (literal) | sim (derivado) |
++| `Setup` (matcher `init`) / `check_setup_verification.py` | sim (literal) | sim (derivado) |
++| `SessionStart` (matcher `compact`) / `check_compact_pinning.py` | sim (literal) | sim (derivado) |
++| **`PreToolUse` / `check_ledger_checkpoint.py`** | **NÃO — o achado** | **sim** |
++| os outros **40** registros do template (18 `PreToolUse`, 13 `PostToolUse`, `Stop` ×4, …) | NÃO | sim |
++
++O template enumera **47** registros; o merge derivado entrega os 47.
++Medido: E.2d/E.2g do e2e — nenhum faltando, nenhum inventado.
++
++## 3. Dois achados medidos durante a implementação (não previstos no briefing)
++
++### 3.1 As cópias literais já tinham APODRECIDO — e o upgrade estragava adopters corretos
++
++Extraindo os 6 blocos literais de `git show HEAD:scripts/upgrade.sh` e comparando
++com o template, campo a campo: **5 dos 6 DIVERGIAM** (todos no `_comment`;
++só `Setup` batia). Como o `_reg` pré-cura RE-CANONICALIZAVA, a sequência real em
++campo era:
++
++1. `install.sh` entrega o template ⇒ adopter fica com o `_comment` CORRENTE;
++2. o primeiro `upgrade.sh` sobrescreve 5 desses blocos com a cópia ESTAGNADA de dentro do upgrader.
++
++Ou seja, a segunda declaração não era só redundante — era regressiva. É a
++justificativa mais forte para a semântica aditiva: quem já está registrado não
++é reescrito. Guardado como `E.9` do e2e (informativo; degrada para SKIP quando
++`HEAD` já contém a cura).
++
++### 3.2 O fail-safe pré-existente era grosso demais: UM evento estranho desligava TODO o merge
++
++O e2e (`E.8`) plantou `.hooks.SubagentStart = {"not":"an array"}` e a primeira
++versão da minha cura **falhou** — `jq` levanta ao fatiar um objeto, o `jq`
++inteiro saía não-zero, e o wrapper tratava isso como "settings malformado" ⇒
++`return 0` sem registrar NADA. O RED control mostrou que **a versão pré-cura tem
++o mesmo defeito** (`test_a_non_array_event_value_...` vermelho contra `HEAD`),
++então não é regressão minha, é uma classe pré-existente que a cura agora fecha.
++
++Cura: `_cmds`/`_keys` aceitam apenas formas PROVADAS (object / array / string) e
++rendem zero chaves para qualquer outra — mais um `select((.value|type)=="array")`
++na lista de relatório. Fuzz de 8 formas hostis (evento não-array, blocos `1`/`"x"`,
++`hooks` objeto, `command` numérico, `hooks:[null]`, `hooks:[]`, `hooks:null`, `{}`):
++`rc=0` nas 8, tanto em `report` quanto em `apply`. Um evento estranho é
++PRESERVADO e NOMEADO em stderr; os outros 46 registros seguem.
++
++## 4. Testes
++
++### e2e (bash) — `scripts/tests/test-upgrade-lifecycle-hooks-derived.sh`
++
++```
++$ bash scripts/tests/test-upgrade-lifecycle-hooks-derived.sh
++RESULT: 29 passed, 0 failed
++# ~5 min 40 s: 7 invocações de upgrade (6 reais + 1 --dry-run) e 6 adopters
++# (1 install real de ~18 s, 5 cópias do cache).
++```
++
++Cobre, com install e upgrade REAIS: E.1 fixture não-vacuosa · E.2 adopter
++strippado (4 formas diferentes: `.py` em evento cheio, `.py` com irmãos, EVENTO
++inteiro ausente, bloco inline sem `.py`) volta completo · E.6 `--dry-run` nomeia
++e não escreve · E.7 edição do adopter (`timeout=4242`) preservada e não duplicada ·
++E.5 segundo upgrade byte-idêntico · **E.3 RED control** (upgrader pré-cura de
++`git HEAD` contra o MESMO fixture deixa `check_ledger_checkpoint.py`
++desregistrado — 2 registros faltando contra 0 do curado) · **E.4 controle
++POSITIVO** (hook sintético `check_zz_synthetic_e4.py`, inexistente em
++`upgrade.sh`, plantado só no template de uma cópia da árvore-fonte, é
++registrado; e a árvore NÃO modificada não o registra) · E.8 fail-safe ·
++E.9 a medição do §3.1.
++
++Vermelho contra o vivo, como pedido — o e2e roda o pré-cura ele mesmo (E.3),
++que é a mesma prova sem depender de eu editar o repo principal:
++
++```
++  ok   E.3a the pre-cure upgrader leaves check_ledger_checkpoint.py UNREGISTERED — the S328 finding reproduces
++  ok   E.3b the pre-cure upgrader leaves 2 template registration(s) missing (the cured one leaves 0)
++```
++
++### unit (pytest) — `.claude/scripts/tests/test_upgrade_lifecycle_hooks_derived.py`
++
++```
++$ python3 -m pytest .claude/scripts/tests/test_upgrade_lifecycle_hooks_derived.py -q
++23 passed in 0.83s
++```
++
++**Por que dirige a FUNÇÃO e não o programa `jq` isolado:** o corpo é extraído do
++`upgrade.sh` shipado por âncora (`^_merge_lifecycle_hooks_into_settings() {$` ..
++`^}$` — o mesmo idioma que `test-upgrade-historical-adopter.sh` usa para
++`_up_tmpbase`) e sourceado num harness bash com `TARGET`/`SOURCE_DIR`/`BAK_DIR`/
++`DRY_RUN`/`SETTINGS_MERGE` postos e `_up_record_op` stubado. As guardas
++fail-open, a escrita atômica, o ramo `--dry-run` e as mensagens que o adopter LÊ
++vivem no wrapper — e o único defeito real desta wave (§3.2) morava exatamente
++ali. Um harness só-`jq` teria passado verde por cima dele. O `SOURCE_DIR` de
++scratch também deixa cada variante de template custar milissegundos.
++
++Contém o guard anti-rot `TestNoSecondRoster::test_the_function_names_no_hook_filenames`:
++**vermelho se qualquer nome de hook voltar a aparecer dentro da função.** É a
++regra que impede a classe de renascer.
++
++**RED control do pytest** (mirror root com o `upgrade.sh` de `git HEAD`, sem
++tocar na sombra — sha256 do arquivo curado conferido idêntico antes e depois):
++
++```
++17 failed, 6 passed in 0.64s
++```
++
++Entre os vermelhos: `test_the_function_names_no_hook_filenames`
++(`['_name.py', 'check_compact_pinning.py', …] != []`),
++`test_every_template_registration_lands_on_an_empty_settings` (6 de 47),
++`test_the_function_reads_the_template_from_the_source_checkout`,
++`test_a_non_array_event_value_...` (o §3.2). Os 6 verdes contra o pré-cura são
++honestos: são asserções que valem nos dois mundos (ex.: preservação de um
++`check_x.py` que não está entre os seis) — a discriminação delas vem do e2e,
++que usa o template REAL.
++
++### Gates de corpus (rodados DEPOIS da última edição, por CLAUDE.md §4)
++
++| Gate | Resultado |
++|---|---|
++| `bash -n scripts/upgrade.sh` | OK |
++| `shellcheck -S warning scripts/upgrade.sh` | rc=0 (nota: o step do `validate.yml` varre só `.claude/scripts` + `.claude/hooks`; `scripts/` fica FORA — rodei à mão) |
++| `bash -n scripts/tests/test-upgrade-lifecycle-hooks-derived.sh` | OK |
++| `shellcheck -S warning scripts/tests/…derived.sh` | rc=0 |
++| `python3 .claude/scripts/check-test-env-hygiene.py` | OK, 0 violações novas (**pegou uma real**: `TestNoSecondRoster` nascera `unittest.TestCase`; curado para `TestEnvContext`) |
++| `python3 .claude/scripts/check-ceremony-script.py` | blocking não-waivado: 0 |
++
++## 5. Questões abertas para o Owner
++
++**OQ-E1 (a que decide o escopo) — derivar TODAS as 47 entradas muda quem manda
++no roster do adopter.** O briefing do CEO pediu "todas as entradas de
++`.hooks[*][]`, não só as seis", e é isso que está implementado: é a única
++semântica que fecha a classe (o adopter instalado em v1.0.0 não recebe HOJE
++nenhum hook posterior que não seja um dos seis). O efeito colateral: quem
++REMOVEU um hook de propósito o recebe de volta a cada upgrade. Hoje o escape é
++só o `--no-settings-merge`, que é tudo-ou-nada.
++*Opção conservadora, se o Owner quiser:* uma denylist por nome no
++`settings.json` do adopter (ex.: `"_ceoOptOutHooks": ["check_x.py"]`) respeitada
++pelo merge. Não implementei — inventa superfície de configuração e o Owner não
++pediu.
++
++**OQ-E2 — posição de inserção.** Blocos re-adicionados entram no FIM do array do
++evento; no template alguns estão no meio (o `echo` inline do `PostToolUse` é o
++4º de 13). O código pré-cura fazia o mesmo (`+ [$entry]`), e o harness não
++documenta ordem dentro de um evento. Se ordem for load-bearing em algum evento,
++a inserção deveria espelhar o índice do template. Conservador = manter append
++(comportamento idêntico ao que já rodava em campo).
++
++**OQ-E3 — o nome da função ficou estreito.** `_merge_lifecycle_hooks_into_settings`
++já não registra só hooks de "ciclo de vida". Mantive o nome: renomear toca o
++call-site e a superfície canônica sem comprar nada, e a mesma função aparece em
++duas cópias staged (`PLAN-169/staged-w3/`, `PLAN-180/staged-s313/`) que
++divergiriam de qualquer jeito. Anotado no comentário do código.
++
++**OQ-E4 — ⛔ O TESTE e2e NASCE DESLIGADO, e isso é bloqueante.**
++`.github/workflows/smoke-install.yml` está FORA do meu FILE ASSIGNMENT, e é o
++único lugar onde `scripts/tests/*.sh` roda. O comentário do próprio workflow
++(`:31`, `:47`, `:82`) diz a regra: *"unwired = no test"*. A cerimônia PRECISA
++adicionar, no mesmo patch:
++
++- em `paths:` (as duas listas, `push` e `pull_request`):
++  `- "scripts/tests/test-upgrade-lifecycle-hooks-derived.sh"`
++  e `- "templates/settings/settings.base.json"` (uma mudança no template é
++  exatamente o que este teste existe para vigiar);
++- um step no molde do vizinho (o de `test-upgrade-historical-adopter.sh`,
++  `:570-574`), `if: always()`, `set -euo pipefail`, `bash scripts/tests/test-upgrade-lifecycle-hooks-derived.sh`.
++
++Custo medido: ~5 min 40 s locais; o job já tem `timeout-minutes` folgado, mas
++vale conferir a margem. Sem isso a cura entra sem vigilância e a classe volta.
++
++**OQ-E5 — `--slurpfile` exige jq ≥ 1.5** (2015). O código já dependia de `jq`;
++isto acrescenta uma FLAG. Se algum adopter alvo puder ter jq mais velho, o
++fallback portátil é `jq -s '.[0] as $a | .[1] as $t | …' settings template`.
++Medido aqui em `jq-1.7.1`.
++
++**OQ-E6 — quem REPARA um registro que derivou?** A semântica aditiva move o
++reparo para fora do upgrader (INV-4: edição do adopter é preservada). Escrevi
++"é papel do `doctor.sh`" no comentário do código — **mas verifiquei e o
++`doctor.sh` hoje NÃO repara registros de hook**; ele só confere o *timeout* do
++`check_pair_rail.py` (`doctor.sh:930-969`). Então, hoje, um registro que o
++adopter deformou fica deformado. Não é regressão (pré-cura só re-canonicalizava
++6 de 47), mas a frase do comentário descreve um destino, não um mecanismo
++existente. Se o Owner quiser fechar: wave própria no `doctor.sh`, reusando esta
++mesma derivação.
++
++## 6. O que o rail codex provavelmente vai levantar
++
++1. **`_up_record_op` agora dispara mesmo quando o merge é no-op** — mantive a
++   posição exata de hoje (antes do ramo `--dry-run`), como o briefing pediu
++   ("como hoje"), para não mexer no oráculo de `test-upgrade-dryrun-identity.sh`.
++   Defensável, mas é uma assimetria: registra uma operação que pode não escrever.
++2. **`$_pending` cresce sem limite** — num adopter muito antigo o log lista as
++   47 linhas. É deliberado (a regra do dry-run é o adopter poder revisar), mas
++   alguém vai pedir um cap.
++3. **A chave de um bloco inline é o comando inteiro** — um adopter que mudou um
++   espaço no `echo` inline recebe um SEGUNDO bloco. Não achei jeito honesto de
++   evitar sem normalizar o comando (e normalizar arrisca colidir dois blocos
++   distintos). Registrado aqui em vez de escondido.
++4. **`E.9` compara contra `git HEAD`** e vira SKIP depois que a cura landar —
++   por desenho (é medição histórica, não invariante), mas é um verde que muda de
++   significado com o tempo, e a classe "instrumento verde cuja PERGUNTA
++   envelheceu" é conhecida deste repo.
++5. **O e2e depende de `git show HEAD:scripts/upgrade.sh`** (E.3): num checkout
++   raso isso ainda funciona (é o HEAD, não uma geração antiga), mas se a
++   cerimônia landar a cura, `HEAD` passa a conter a cura e E.3 vira o SKIP
++   explícito com instrução de re-armar. Está tratado, mas é uma manutenção
++   futura real.
+diff --git a/.claude/scripts/tests/test_upgrade_lifecycle_hooks_derived.py b/.claude/scripts/tests/test_upgrade_lifecycle_hooks_derived.py
+new file mode 100644
+index 0000000..46ea556
+--- /dev/null
++++ b/.claude/scripts/tests/test_upgrade_lifecycle_hooks_derived.py
+@@ -0,0 +1,521 @@
++"""PLAN-169 W-E (S329) — upgrade.sh derives its hook roster from the template.
++
++Covers ``scripts/upgrade.sh::_merge_lifecycle_hooks_into_settings`` after the
++S329 cure that replaced its hard-coded roster of six lifecycle registrations
++with a derivation over ``templates/settings/settings.base.json``.
++
++WHY THE FUNCTION AND NOT THE jq PROGRAM
++---------------------------------------
++The function text is extracted from the shipped ``upgrade.sh`` (a single
++anchored ``^_merge_lifecycle_hooks_into_settings() {$`` .. ``^}$`` range, the
++same idiom ``test-upgrade-historical-adopter.sh`` uses for ``_up_tmpbase``) and
++SOURCED into a scratch bash harness with ``TARGET`` / ``SOURCE_DIR`` /
++``BAK_DIR`` / ``DRY_RUN`` / ``SETTINGS_MERGE`` set and ``_up_record_op``
++stubbed. Driving the real bash wrapper — rather than lifting the jq program out
++and running it alone — is deliberate: the fail-open guards, the atomic write,
++the ``--dry-run`` branch and the NOTE lines the adopter actually reads all live
++in the wrapper, and the one defect this file's e2e sibling caught (a non-array
++event value aborting the WHOLE merge) surfaced in exactly that seam. A jq-only
++harness would have been green through it.
++
++Every expectation is DERIVED from the template artifact, never re-hardcoded —
++re-hardcoding the roster here would recreate, in the oracle, precisely the
++second-copy defect the cure removes.
++
++The heavy end-to-end evidence (a real install + a real upgrade, the pre-cure
++RED control, the synthetic-hook positive control, byte-idempotency) lives in
++``scripts/tests/test-upgrade-lifecycle-hooks-derived.sh``; this file is the
++fast per-PR oracle for the identity key and the anti-rot guard.
++
++stdlib-only; Python >= 3.9. Skips (with a reason) when ``jq`` is absent.
++"""
++from __future__ import annotations
++
++import json
++import os
++import re
++import shutil
++import subprocess
++import sys
++import tempfile
++import unittest
++from pathlib import Path
++from typing import Dict, List
++
++REPO_ROOT = Path(__file__).resolve().parents[3]
++UPGRADE_SH = REPO_ROOT / "scripts" / "upgrade.sh"
++TEMPLATE_SETTINGS = REPO_ROOT / "templates" / "settings" / "settings.base.json"
++
++_HOOKS_DIR = REPO_ROOT / ".claude" / "hooks"
++if str(_HOOKS_DIR) not in sys.path:
++    sys.path.insert(0, str(_HOOKS_DIR))
++
++from _lib.testing import TestEnvContext  # noqa: E402
++
++FUNC_NAME = "_merge_lifecycle_hooks_into_settings"
++
++# The same whole-token shape the function's jq uses. Kept here as an
++# INDEPENDENT re-implementation on purpose: an oracle that imports the
++# implementation's own extractor cannot catch that extractor being wrong.
++_PY_TOKEN = re.compile(r"(?<![A-Za-z0-9_.-])[A-Za-z0-9_][A-Za-z0-9_.-]*\.py(?![A-Za-z0-9_.-])")
++
++_HAVE_JQ = shutil.which("jq") is not None
++
++
++def _func_source() -> str:
++    """The shipped function body, extracted from upgrade.sh by anchor."""
++    text = UPGRADE_SH.read_text(encoding="utf-8")
++    starts = [
++        i for i, line in enumerate(text.split("\n"))
++        if line == "%s() {" % FUNC_NAME
++    ]
++    if len(starts) != 1:
++        raise AssertionError(
++            "expected exactly one definition of %s in upgrade.sh, found %d"
++            % (FUNC_NAME, len(starts))
++        )
++    lines = text.split("\n")
++    start = starts[0]
++    for end in range(start + 1, len(lines)):
++        if lines[end] == "}":
++            return "\n".join(lines[start:end + 1])
++    raise AssertionError("no closing brace found for %s" % FUNC_NAME)
++
++
++def _block_keys(block: Dict) -> List[str]:
++    """Registration keys of one hooks block (the oracle's own derivation)."""
++    if not isinstance(block, dict):
++        return []
++    entries = block.get("hooks")
++    if not isinstance(entries, list):
++        return []
++    keys: List[str] = []
++    for entry in entries:
++        if not isinstance(entry, dict):
++            continue
++        cmd = entry.get("command")
++        if not isinstance(cmd, str):
++            continue
++        names = _PY_TOKEN.findall(cmd)
++        keys.extend(names if names else [" ".join(cmd.split())])
++    return keys
++
++
++def _keyset(doc: Dict) -> List[str]:
++    """Sorted ``"<event> <key>"`` lines for a settings-shaped document."""
++    out = []
++    hooks = doc.get("hooks")
++    if not isinstance(hooks, dict):
++        return []
++    for event in sorted(hooks):
++        blocks = hooks[event]
++        if not isinstance(blocks, list):
++            continue
++        for block in blocks:
++            for key in _block_keys(block):
++                out.append("%s %s" % (event, key))
++    return sorted(set(out))
++
++
++@unittest.skipUnless(_HAVE_JQ, "jq is the merge engine under test and is not on PATH")
++class _MergeHarness(TestEnvContext):
++    """Drives the REAL bash function against a scratch target + scratch source."""
++
++    def setUp(self) -> None:
++        super().setUp()
++        self._tmp = tempfile.mkdtemp(prefix="w-e-merge-")
++        self.addCleanup(shutil.rmtree, self._tmp, True)
++        self.target = Path(self._tmp) / "target"
++        (self.target / ".claude").mkdir(parents=True)
++        self.source = Path(self._tmp) / "source"
++        (self.source / "templates" / "settings").mkdir(parents=True)
++        # Default source template == the shipped artifact.
++        self.set_template(json.loads(TEMPLATE_SETTINGS.read_text(encoding="utf-8")))
++
++    # --- fixture setters ---------------------------------------------------
++
++    @property
++    def settings_path(self) -> Path:
++        return self.target / ".claude" / "settings.json"
++
++    @property
++    def template_path(self) -> Path:
++        return self.source / "templates" / "settings" / "settings.base.json"
++
++    def set_template(self, obj: Dict) -> None:
++        self.template_path.write_text(json.dumps(obj, indent=2) + "\n", encoding="utf-8")
++
++    def seed(self, obj: Dict) -> None:
++        self.settings_path.write_text(json.dumps(obj, indent=2) + "\n", encoding="utf-8")
++
++    def result(self) -> Dict:
++        return json.loads(self.settings_path.read_text(encoding="utf-8"))
++
++    # --- driver ------------------------------------------------------------
++
++    def run_merge(self, *, dry: bool = False) -> "subprocess.CompletedProcess[str]":
++        script = "\n".join([
++            "set -uo pipefail",
++            "SETTINGS_MERGE=1",
++            "DRY_RUN=%d" % (1 if dry else 0),
++            'TARGET=%s' % json.dumps(str(self.target)),
++            'SOURCE_DIR=%s' % json.dumps(str(self.source)),
++            'BAK_DIR=%s' % json.dumps(str(Path(self._tmp) / "bak")),
++            "_up_record_op() { :; }",
++            "",
++            _func_source(),
++            "",
++            FUNC_NAME,
++        ])
++        env = os.environ.copy()
++        proc = subprocess.run(
++            ["bash", "-c", script], capture_output=True, text=True, timeout=120, env=env,
++        )
++        self.assertEqual(
++            proc.returncode, 0,
++            "the merge function must never exit non-zero (fail-open contract); "
++            "stderr=%s" % proc.stderr,
++        )
++        return proc
++
++
++class TestTemplateIsTheRoster(_MergeHarness):
++    """The roster comes from the template — all of it, and only it."""
++
++    def test_every_template_registration_lands_on_an_empty_settings(self) -> None:
++        template = json.loads(TEMPLATE_SETTINGS.read_text(encoding="utf-8"))
++        expected = _keyset(template)
++        self.assertGreaterEqual(
++            len(expected), 20,
++            "the template yielded %d registrations — a near-empty template "
++            "would make this whole file vacuous" % len(expected),
++        )
++        self.seed({"hooks": {}})
++        self.run_merge()
++        self.assertEqual(
++            _keyset(self.result()), expected,
++            "the merge over an empty settings.json must reproduce the template's "
++            "registration set exactly — no missing entry, no invented one",
++        )
++
++    def test_every_template_python_hook_is_present_by_name(self) -> None:
++        """The finding's own shape: a .py in the template must reach the adopter."""
++        template = json.loads(TEMPLATE_SETTINGS.read_text(encoding="utf-8"))
++        wanted = sorted({
++            name
++            for blocks in template["hooks"].values() if isinstance(blocks, list)
++            for block in blocks
++            for name in _block_keys(block)
++            if name.endswith(".py")
++        })
++        self.seed({"hooks": {}})
++        self.run_merge()
++        got = {line.split(" ", 1)[1] for line in _keyset(self.result())}
++        missing = [n for n in wanted if n not in got]
++        self.assertEqual(
++            missing, [],
++            "these template hooks were not registered by the merge: %s" % missing,
++        )
++        self.assertIn(
++            "check_ledger_checkpoint.py", got,
++            "check_ledger_checkpoint.py is the S328 finding — if the template "
++            "carries it, the upgrade must register it",
++        )
++
++    def test_a_synthetic_template_entry_is_registered(self) -> None:
++        """Positive control: a name invented here cannot be in any literal list."""
++        synth = "check_zz_unit_synthetic.py"
++        # assertTrue, not assertNotIn: the container here is a 200 KB script and
++        # unittest would paste all of it into the failure message.
++        self.assertTrue(
++            synth not in UPGRADE_SH.read_text(encoding="utf-8"),
++            "%r appears in upgrade.sh — pick another name; this control assumes "
++            "the upgrader cannot know it" % synth,
++        )
++        template = json.loads(TEMPLATE_SETTINGS.read_text(encoding="utf-8"))
++        template["hooks"].setdefault("PreToolUse", []).append({
++            "matcher": "Bash",
++            "hooks": [{"type": "command", "command": "bash h.sh %s" % synth, "timeout": 5}],
++        })
++        self.set_template(template)
++        self.seed({"hooks": {}})
++        self.run_merge()
++        self.assertIn("PreToolUse %s" % synth, _keyset(self.result()))
++
++    def test_a_template_entry_removed_is_not_registered(self) -> None:
++        """Negative half of the control: the roster tracks the template both ways."""
++        template = json.loads(TEMPLATE_SETTINGS.read_text(encoding="utf-8"))
++        template["hooks"]["PreToolUse"] = [
++            b for b in template["hooks"]["PreToolUse"]
++            if "check_ledger_checkpoint.py" not in _block_keys(b)
++        ]
++        self.set_template(template)
++        self.seed({"hooks": {}})
++        self.run_merge()
++        self.assertNotIn(
++            "check_ledger_checkpoint.py",
++            {line.split(" ", 1)[1] for line in _keyset(self.result())},
++            "the merge registered a hook the template does not declare — the "
++            "roster is not actually derived",
++        )
++
++
++class TestIdentityKey(_MergeHarness):
++    """The presence test compares WHOLE tokens, and covers the no-.py shape."""
++
++    def test_a_prefix_name_does_not_mask_a_longer_one(self) -> None:
++        self.set_template({"hooks": {"PreToolUse": [
++            {"matcher": "Bash", "hooks": [{"type": "command", "command": "bash h.sh check_x.py"}]},
++            {"matcher": "Bash", "hooks": [{"type": "command", "command": "bash h.sh check_xy.py"}]},
++        ]}})
++        self.seed({"hooks": {"PreToolUse": [
++            {"matcher": "Bash", "hooks": [{"type": "command", "command": "bash h.sh check_x.py"}]},
++        ]}})
++        self.run_merge()
++        keys = _keyset(self.result())
++        self.assertIn(
++            "PreToolUse check_xy.py", keys,
++            "check_x.py being registered must not suppress check_xy.py — the "
++            "identity match is not anchored",
++        )
++        self.assertEqual(
++            len([k for k in keys if k == "PreToolUse check_x.py"]), 1,
++            "check_x.py was duplicated — an already-present registration must "
++            "not be re-appended",
++        )
++
++    def test_a_longer_name_does_not_mask_a_prefix_one(self) -> None:
++        """The mirror direction, which a `test(name)` substring match fails."""
++        self.set_template({"hooks": {"PreToolUse": [
++            {"matcher": "Bash", "hooks": [{"type": "command", "command": "bash h.sh check_x.py"}]},
++        ]}})
++        self.seed({"hooks": {"PreToolUse": [
++            {"matcher": "Bash", "hooks": [{"type": "command", "command": "bash h.sh check_xy.py"}]},
++        ]}})
++        self.run_merge()
++        self.assertIn("PreToolUse check_x.py", _keyset(self.result()))
++
++    def test_a_path_qualified_command_matches_the_bare_name(self) -> None:
++        """A registration written as a PATH is the same registration."""
++        self.set_template({"hooks": {"PreToolUse": [
++            {"matcher": "Bash", "hooks": [{"type": "command", "command": "bash h.sh check_x.py"}]},
++        ]}})
++        self.seed({"hooks": {"PreToolUse": [
++            {"matcher": "Bash",
++             "hooks": [{"type": "command", "command": "python3 .claude/hooks/check_x.py"}]},
++        ]}})
++        self.run_merge()
++        self.assertEqual(
++            len(self.result()["hooks"]["PreToolUse"]), 1,
++            "the path-qualified form was not recognised as the same hook, so a "
++            "duplicate canonical block was appended",
++        )
++
++    def test_an_inline_block_without_a_py_is_registered_exactly_once(self) -> None:
++        inline = "echo '{\"decision\":\"allow\"}'"
++        self.set_template({"hooks": {"PostToolUse": [
++            {"matcher": "Agent", "hooks": [{"type": "command", "command": inline}]},
++        ]}})
++        self.seed({"hooks": {}})
++        self.run_merge()
++        self.assertEqual(len(self.result()["hooks"]["PostToolUse"]), 1)
++        self.run_merge()
++        self.assertEqual(
++            len(self.result()["hooks"]["PostToolUse"]), 1,
++            "the no-.py block is keyed by its full command; a second run "
++            "duplicated it, so that key is not stable",
++        )
++
++
++class TestPreservationAndIdempotency(_MergeHarness):
++    """Additive: what is already there is never rewritten."""
++
++    def test_an_adopter_edit_survives(self) -> None:
++        self.set_template({"hooks": {"PreToolUse": [
++            {"_comment": "canonical", "matcher": "Bash",
++             "hooks": [{"type": "command", "command": "bash h.sh check_x.py", "timeout": 5}]},
++        ]}})
++        self.seed({"hooks": {"PreToolUse": [
++            {"_comment": "ADOPTER EDITED", "matcher": "Bash",
++             "hooks": [{"type": "command", "command": "bash h.sh check_x.py", "timeout": 4242}]},
++        ]}, "customKey": "preserve me"})
++        self.run_merge()
++        result = self.result()
++        self.assertEqual(len(result["hooks"]["PreToolUse"]), 1)
++        self.assertEqual(result["hooks"]["PreToolUse"][0]["hooks"][0]["timeout"], 4242)
++        self.assertEqual(result["hooks"]["PreToolUse"][0]["_comment"], "ADOPTER EDITED")
++        self.assertEqual(result["customKey"], "preserve me")
++
++    def test_a_no_op_run_does_not_touch_the_file(self) -> None:
++        """Byte-identity, not merely value-identity: no gratuitous reformat."""
++        self.seed({"hooks": {}})
++        self.run_merge()
++        before = self.settings_path.read_bytes()
++        proc = self.run_merge()
++        self.assertEqual(
++            self.settings_path.read_bytes(), before,
++            "the second run rewrote settings.json — re-running an upgrade must "
++            "be a byte-level no-op",
++        )
++        self.assertIn("already present", proc.stdout)
++
++    def test_unrelated_settings_keys_and_events_are_untouched(self) -> None:
++        self.set_template({"hooks": {"PreToolUse": [
++            {"matcher": "Bash", "hooks": [{"type": "command", "command": "bash h.sh check_x.py"}]},
++        ]}})
++        self.seed({
++            "hooks": {"Stop": [
++                {"matcher": "", "hooks": [{"type": "command", "command": "bash h.sh adopter_own.py"}]},
++            ]},
++            "permissions": {"defaultMode": "acceptEdits"},
++        })
++        self.run_merge()
++        result = self.result()
++        self.assertEqual(result["permissions"], {"defaultMode": "acceptEdits"})
++        self.assertIn("Stop adopter_own.py", _keyset(result))
++
++
++class TestFailSafe(_MergeHarness):
++    """Shapes we cannot parse are preserved and named, never coerced."""
++
++    def test_a_non_array_event_value_is_preserved_and_the_rest_still_merges(self) -> None:
++        self.set_template({"hooks": {
++            "PreToolUse": [{"matcher": "Bash",
++                            "hooks": [{"type": "command", "command": "bash h.sh check_x.py"}]}],
++            "SubagentStart": [{"matcher": "",
++                               "hooks": [{"type": "command", "command": "bash h.sh check_y.py"}]}],
++        }})
++        self.seed({"hooks": {"SubagentStart": {"not": "an array"}}})
++        proc = self.run_merge()
++        result = self.result()
++        self.assertEqual(
++            result["hooks"]["SubagentStart"], {"not": "an array"},
++            "an unparseable event value must be preserved exactly",
++        )
++        self.assertIn(
++            "PreToolUse check_x.py", _keyset(result),
++            "one odd event disabled the whole merge — the fail-safe is too coarse",
++        )
++        self.assertIn("is not an array", proc.stderr)
++
++    def test_a_non_object_hooks_root_is_left_alone(self) -> None:
++        self.seed({"hooks": ["not", "an", "object"], "keep": 1})
++        proc = self.run_merge()
++        result = self.result()
++        self.assertEqual(result["hooks"], ["not", "an", "object"])
++        self.assertEqual(result["keep"], 1)
++        self.assertIn("not an object", proc.stderr)
++
++    def test_an_absent_hooks_root_is_populated(self) -> None:
++        self.seed({"keep": 1})
++        self.run_merge()
++        result = self.result()
++        self.assertEqual(result["keep"], 1)
++        self.assertGreaterEqual(len(_keyset(result)), 20)
++
++    def test_a_missing_template_is_advisory_not_fatal(self) -> None:
++        self.seed({"hooks": {}})
++        before = self.settings_path.read_bytes()
++        self.template_path.unlink()
++        proc = self.run_merge()
++        self.assertEqual(self.settings_path.read_bytes(), before)
++        self.assertIn("template unreadable", proc.stderr)
++
++    def test_an_invalid_template_is_advisory_not_fatal(self) -> None:
++        self.seed({"hooks": {}})
++        before = self.settings_path.read_bytes()
++        self.template_path.write_text("{ not json", encoding="utf-8")
++        proc = self.run_merge()
++        self.assertEqual(self.settings_path.read_bytes(), before)
++        self.assertIn("not JSON", proc.stderr)
++
++    def test_a_malformed_settings_is_left_untouched(self) -> None:
++        self.settings_path.write_text("{ not json", encoding="utf-8")
++        proc = self.run_merge()
++        self.assertEqual(self.settings_path.read_text(encoding="utf-8"), "{ not json")
++        self.assertIn("malformed settings.json", proc.stderr)
++
++    def test_garbage_blocks_are_ignored_without_aborting(self) -> None:
++        """jq raises on indexing a number; an uncaught raise kills the merge."""
++        self.set_template({"hooks": {"PreToolUse": [
++            {"matcher": "Bash", "hooks": [{"type": "command", "command": "bash h.sh check_x.py"}]},
++        ]}})
++        self.seed({"hooks": {"PreToolUse": [
++            1, "x", {"hooks": {"a": 1}}, {"hooks": [{"command": 5}]}, {"hooks": [None]},
++        ]}})
++        self.run_merge()
++        self.assertIn("PreToolUse check_x.py", _keyset(self.result()))
++
++
++class TestDryRun(_MergeHarness):
++    """--dry-run announces the same derivation and writes nothing."""
++
++    def test_dry_run_names_each_missing_registration_and_writes_nothing(self) -> None:
++        self.seed({"hooks": {}})
++        before = self.settings_path.read_bytes()
++        proc = self.run_merge(dry=True)
++        self.assertEqual(
++            self.settings_path.read_bytes(), before,
++            "--dry-run modified settings.json",
++        )
++        template = json.loads(TEMPLATE_SETTINGS.read_text(encoding="utf-8"))
++        for line in _keyset(template):
++            if not line.endswith(".py"):
++                continue
++            self.assertIn(
++                "would REGISTER %s" % line, proc.stdout,
++                "--dry-run did not announce %r; a migration silent in dry-run "
++                "is one the adopter cannot review" % line,
++            )
++
++    def test_dry_run_on_a_current_settings_says_no_op(self) -> None:
++        template = json.loads(TEMPLATE_SETTINGS.read_text(encoding="utf-8"))
++        self.seed({"hooks": template["hooks"]})
++        proc = self.run_merge(dry=True)
++        self.assertIn("ALREADY present", proc.stdout)
++        self.assertNotIn("would REGISTER", proc.stdout)
++
++
++class TestNoSecondRoster(TestEnvContext):
++    """Anti-rot: the cure is that there is no literal list. Guard it.
++
++    Reads only, but subclasses TestEnvContext per the S283 env-hygiene mandate
++    (check-test-env-hygiene.py rejects a bare unittest.TestCase in this tree).
++    """
++
++    def test_the_function_names_no_hook_filenames(self) -> None:
++        source = _func_source()
++        names = sorted(set(_PY_TOKEN.findall(source)))
++        self.assertEqual(
++            names, [],
++            "%s names hook filenames %s — a second roster is exactly the defect "
++            "this cure removed (S328: check_ledger_checkpoint.py shipped without "
++            "a registration because a literal list did not know about it). Add "
++            "the hook to templates/settings/settings.base.json instead."
++            % (FUNC_NAME, names),
++        )
++
++    def test_the_function_reads_the_template_from_the_source_checkout(self) -> None:
++        # assertTrue over assertIn throughout: the container is the whole
++        # function and unittest would paste it into every failure message.
++        source = _func_source()
++        self.assertTrue(
++            '"$SOURCE_DIR/templates/settings/settings.base.json"' in source,
++            "%s does not read $SOURCE_DIR/templates/settings/settings.base.json "
++            "— the roster must be derived from the template in the checkout "
++            "that is EXECUTING the upgrade" % FUNC_NAME,
++        )
++        self.assertTrue(
++            "$TARGET/templates/settings" not in source,
++            "%s reads the template from $TARGET — that would make the merge a "
++            "fixpoint on the adopter's own drift" % FUNC_NAME,
++        )
++
++    def test_the_function_is_defined_exactly_once(self) -> None:
++        text = UPGRADE_SH.read_text(encoding="utf-8")
++        self.assertEqual(text.count("\n%s() {\n" % FUNC_NAME), 1)
++        self.assertEqual(text.count("\n%s\n" % FUNC_NAME), 1, "expected one call site")
++
++
++if __name__ == "__main__":  # pragma: no cover
++    unittest.main()
+diff --git a/scripts/tests/test-upgrade-lifecycle-hooks-derived.sh b/scripts/tests/test-upgrade-lifecycle-hooks-derived.sh
+new file mode 100755
+index 0000000..13087a6
+--- /dev/null
++++ b/scripts/tests/test-upgrade-lifecycle-hooks-derived.sh
+@@ -0,0 +1,500 @@
++#!/usr/bin/env bash
++# scripts/tests/test-upgrade-lifecycle-hooks-derived.sh
++# PLAN-169 W-E (S329) — upgrade.sh derives the hook roster it registers from
++# templates/settings/settings.base.json instead of carrying a second copy of it.
++#
++# WHY THIS EXISTS
++# ---------------
++# `_merge_lifecycle_hooks_into_settings` used to hard-code SIX lifecycle
++# registrations inside its jq program and repeat the same six in prose for the
++# --dry-run announcement. Two measured consequences of that second declaration:
++#
++#   (1) check_ledger_checkpoint.py (PLAN-179 W2/W4) landed in .claude/settings.json
++#       AND in the template mirror and in NEITHER list, so every adopter that
++#       UPGRADED got the hook script with no registration. Fresh installs were
++#       fine (the template covers them), which is exactly why
++#       test_template_dogfood_parity never saw it: that oracle compares dogfood
++#       to template, never dogfood to THE RESULT OF AN UPGRADE.
++#       (S328, rail codex round 3 of the PLAN-179 pack D — see
++#        .claude/plans/PLAN-179/s328-ceremony-D/FINDING-upgrade-lifecycle-hooks-S328.md)
++#
++#   (2) FIVE of the six hard-coded blocks had already drifted from the template
++#       in their `_comment`, and the pre-cure merge RE-CANONICALIZED them on
++#       every upgrade — so an adopter who installed correctly had the current
++#       template text overwritten with a stale copy by their first upgrade.
++#       E.9 below measures that drift directly against the pre-cure source.
++#
++# THE ASSERTIONS THAT ARE NOT ABOUT THE HAPPY PATH
++#   E.1  the fixture is NOT vacuous: a fresh install already carries every
++#        template registration, so "all present after upgrade" would pass for
++#        free if the fixture were not deliberately stripped first.
++#   E.3  the PRE-CURE upgrader, run against the same stripped adopter, LEAVES
++#        check_ledger_checkpoint.py unregistered. Without this red control,
++#        E.2 green is indistinguishable from "the hook was already there".
++#   E.4  POSITIVE CONTROL — a SYNTHETIC hook added to a copy of the template is
++#        registered by the upgrade, and its name appears nowhere in upgrade.sh.
++#        This is what separates "derives from the template" from "carries a
++#        longer list": a literal roster cannot know a name invented at runtime.
++#   E.7  an adopter-EDITED registration survives byte-identical. The pre-cure
++#        code re-canonicalized its six; additive semantics is the whole point.
++#   E.8  a `.hooks` event whose value is NOT an array is PRESERVED and NAMED,
++#        never coerced — an unparseable shape must fail safe, not get guessed.
++#
++# bash-3.2 safe (no associative arrays, no mapfile). Network-free. Writes only
++# under mktemp -d. Requires: git, jq, python3.
++#
++# Run:  bash scripts/tests/test-upgrade-lifecycle-hooks-derived.sh ; echo rc=$?
++set -uo pipefail   # NOT -e: every failure is asserted, never fatal-by-default.
++
++SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
++REPO_ROOT="$( cd "$SCRIPT_DIR/../.." && pwd )"
++INSTALL="$REPO_ROOT/scripts/install.sh"
++UPGRADE="$REPO_ROOT/scripts/upgrade.sh"
++TEMPLATE="$REPO_ROOT/templates/settings/settings.base.json"
++
++# The synthetic hook E.4 plants. Asserted ABSENT from the upgrader (a literal
++# roster could not register it) before it is asserted PRESENT after the run.
++SYNTH="check_zz_synthetic_e4.py"
++
++PASS=0
++FAIL=0
++ok()  { PASS=$((PASS+1)); printf '  ok   %s\n' "$1"; }
++bad() { FAIL=$((FAIL+1)); printf '  FAIL %s\n' "$1" >&2; }
++
++scaffold() { echo "" >&2; echo "SCAFFOLD-ERROR: $*" >&2; exit 9; }
++
++command -v git     >/dev/null 2>&1 || scaffold "git not on PATH"
++command -v jq      >/dev/null 2>&1 || scaffold "jq not on PATH (the merge engine under test)"
++command -v python3 >/dev/null 2>&1 || scaffold "python3 not on PATH"
++[ -f "$INSTALL" ]  || scaffold "installer missing: $INSTALL"
++[ -f "$UPGRADE" ]  || scaffold "upgrader missing: $UPGRADE"
++[ -f "$TEMPLATE" ] || scaffold "template missing: $TEMPLATE"
++
++# E.3 replays the PRE-CURE upgrader out of git. A shallow/filtered checkout
++# cannot produce it, and a red control that silently degrades to a skip is
++# worse than no red control at all.
++git -C "$REPO_ROOT" rev-parse --verify HEAD >/dev/null 2>&1 \
++  || scaffold "no git HEAD in $REPO_ROOT — E.3 replays the pre-cure upgrader from history"
++
++WORK="$( mktemp -d -t ceo-hooks-derived-XXXXXX )" || scaffold "mktemp -d failed"
++cleanup() {
++  [ "${CEO_HOOKS_KEEP_WORK:-0}" = "1" ] && return 0
++  [ -n "${WORK:-}" ] || return 0
++  chmod -R u+w "$WORK" 2>/dev/null || true
++  rm -rf "$WORK" 2>/dev/null || true
++}
++trap cleanup EXIT
++
++export CEO_INSTALL_SKIP_SELF_SHA=1
++export CEO_RAG_INSTALL_PROMPT=0
++
++echo "=============================================================="
++echo " upgrade hook-roster derivation e2e   (PLAN-169 W-E — S329)"
++echo "=============================================================="
++echo "  repo   : $REPO_ROOT"
++echo "  workdir: $WORK"
++echo "--------------------------------------------------------------"
++
++# --- helpers ---------------------------------------------------------------
++
++_sha() { shasum -a 256 "$1" 2>/dev/null | cut -d' ' -f1; }
++
++# The (event, registration-key) SET of a settings-like document, one "ev key"
++# per line, sorted. This is the comparison every assertion below uses: the
++# merge APPENDS, so array ORDER legitimately differs from the template and a
++# literal diff would report a difference that is not a defect.
++#
++# The key derivation is INDEPENDENT of the upgrader's (python here, jq there)
++# on purpose: an oracle that reuses the implementation's own extractor cannot
++# catch that extractor being wrong.
++_keyset() {  # $1=json file
++  python3 - "$1" <<'PY'
++import json, re, sys
++TOK = re.compile(r'(?<![A-Za-z0-9_.-])[A-Za-z0-9_][A-Za-z0-9_.-]*\.py(?![A-Za-z0-9_.-])')
++try:
++    doc = json.load(open(sys.argv[1], encoding="utf-8"))
++except Exception:
++    sys.exit(0)
++out = []
++hooks = doc.get("hooks")
++if not isinstance(hooks, dict):
++    sys.exit(0)
++for ev in sorted(hooks):
++    blocks = hooks[ev]
++    if not isinstance(blocks, list):
++        continue
++    for b in blocks:
++        cmds = [(h.get("command") or "") for h in (b.get("hooks") or [])]
++        for c in cmds:
++            names = TOK.findall(c)
++            for n in (names or [" ".join(c.split())]):
++                out.append("%s %s" % (ev, n))
++for line in sorted(set(out)):
++    print(line)
++PY
++}
++
++# Fresh maintainer install into $1 (cached — a real install is the most
++# expensive thing here and every fixture below wants the same starting tree).
++_INSTALL_CACHE=""
++_install() {
++  _i_dir="$1"
++  if [ -n "$_INSTALL_CACHE" ] && [ -d "$_INSTALL_CACHE" ]; then
++    mkdir -p "$( dirname "$_i_dir" )"
++    cp -R "$_INSTALL_CACHE" "$_i_dir" || scaffold "could not copy the cached install into $_i_dir"
++    return 0
++  fi
++  mkdir -p "$_i_dir"
++  ( cd "$_i_dir" && git init -q ) || scaffold "git init failed in $_i_dir"
++  bash "$INSTALL" "$_i_dir" --profile core --ceremony maintainer \
++    > "$_i_dir.install.log" 2>&1 \
++    || { tail -30 "$_i_dir.install.log" >&2; scaffold "install.sh failed for $_i_dir"; }
++  _i_seed="$WORK/cache/adopter"
++  mkdir -p "$( dirname "$_i_seed" )"
++  cp -R "$_i_dir" "$_i_seed" || scaffold "could not seed the install cache"
++  _INSTALL_CACHE="$_i_seed"
++}
++
++# Upgrade $1 from source tree $2 (default: the working tree). Sets _UP_LOG and
++# _UP_RC in THIS shell — never echoes the path, because `LOG=$( _upgrade ... )`
++# would run the whole thing in a subshell and _UP_RC would come back unbound.
++_UP_LOG=""
++_UP_RC=0
++_UPGRADE_SEQ=0
++_upgrade() {  # $1=target  $2=source-root  [extra upgrade flags...]
++  _u_dir="$1"; _u_src="$2"; shift 2
++  _UPGRADE_SEQ=$(( _UPGRADE_SEQ + 1 ))
++  _UP_LOG="$_u_dir.upgrade.$_UPGRADE_SEQ.log"
++  _UP_RC=0
++  bash "$_u_src/scripts/upgrade.sh" "$_u_dir" --profile core --no-diff-warn --no-replay "$@" \
++    > "$_UP_LOG" 2>&1 || _UP_RC=$?
++}
++
++# A source tree that is the repo everywhere except scripts/ + templates/, which
++# are real copies so a fixture can edit them. Same idiom as
++# test-upgrade-historical-adopter.sh:_mk_source_copy.
++_mk_source_copy() {  # $1=dir
++  mkdir -p "$1" || return 1
++  for _msc_e in "$REPO_ROOT"/* "$REPO_ROOT"/.[!.]*; do
++    [ -e "$_msc_e" ] || continue
++    _msc_b="$( basename "$_msc_e" )"
++    case "$_msc_b" in scripts|templates) continue ;; esac
++    ln -s "$_msc_e" "$1/$_msc_b" 2>/dev/null || true
++  done
++  cp -R "$REPO_ROOT/scripts"   "$1/scripts"   || return 1
++  cp -R "$REPO_ROOT/templates" "$1/templates" || return 1
++  return 0
++}
++
++# Strip four registrations from $1's settings.json, covering four DIFFERENT
++# shapes so a cure that only handles one of them cannot pass:
++#   - a .py block in a crowded event          (PreToolUse check_ledger_checkpoint.py — THE finding)
++#   - a .py block in an event with siblings   (SessionStart check_compact_pinning.py)
++#   - a whole EVENT key                       (PreCompact — absent, not empty)
++#   - an INLINE block with no .py at all      (PostToolUse|Agent file-assignment echo)
++_strip_four() {  # $1=adopter dir
++  jq 'del(.hooks.PreToolUse[]  | select((.hooks[0].command // "") | test("check_ledger_checkpoint")))
++    | del(.hooks.SessionStart[] | select((.hooks[0].command // "") | test("check_compact_pinning")))
++    | del(.hooks.PreCompact)
++    | del(.hooks.PostToolUse[] | select((.hooks[0].command // "") | test("file assignment compliance")))' \
++    "$1/.claude/settings.json" > "$1/.claude/settings.json.stripped" \
++    && mv "$1/.claude/settings.json.stripped" "$1/.claude/settings.json"
++}
++
++# ---------------------------------------------------------------------------
++# E.1  the fixture is not vacuous
++# ---------------------------------------------------------------------------
++echo ""
++echo "==> E.1 — a fresh install already carries every template registration"
++BASE="$WORK/base/adopter"
++_install "$BASE"
++_keyset "$TEMPLATE"                     > "$WORK/tpl.keys"
++_keyset "$BASE/.claude/settings.json"   > "$WORK/base.keys"
++TPL_N="$( wc -l < "$WORK/tpl.keys" | tr -d ' ' )"
++
++[ "${TPL_N:-0}" -ge 20 ] \
++  && ok "E.1a the template enumerates $TPL_N registrations (a near-empty template would make every assertion below vacuous)" \
++  || bad "E.1a the template yielded only ${TPL_N:-0} registrations — the oracle is not reading it"
++
++if diff -q "$WORK/tpl.keys" "$WORK/base.keys" >/dev/null 2>&1; then
++  ok "E.1b a fresh install's registration set EQUALS the template's — so 'all present' after an upgrade is only evidence once the fixture is stripped"
++else
++  bad "E.1b fresh install != template registration set (see diff below); the fixture's starting point is not what this file assumes"
++  diff "$WORK/tpl.keys" "$WORK/base.keys" | head -10 >&2
++fi
++
++# ---------------------------------------------------------------------------
++# E.2  the historical adopter gets EVERY missing registration back
++# ---------------------------------------------------------------------------
++echo ""
++echo "==> E.2 — a stripped adopter is fully re-registered by a real upgrade"
++A="$WORK/hist/adopter"
++_install "$A"
++
++# E.7's fixture rides the same adopter: edit a timeout on a registration that
++# is PRESENT, and it must survive. 4242 is not a value any template carries.
++jq '(.hooks.PreToolUse[] | select((.hooks[0].command // "") | test("check_bash_safety")) | .hooks[0].timeout) = 4242' \
++   "$A/.claude/settings.json" > "$A/.claude/s.tmp" && mv "$A/.claude/s.tmp" "$A/.claude/settings.json"
++
++_strip_four "$A" || scaffold "could not strip the fixture registrations"
++_keyset "$A/.claude/settings.json" > "$WORK/hist.pre.keys"
++STRIPPED_N=$(( TPL_N - $( wc -l < "$WORK/hist.pre.keys" | tr -d ' ' ) ))
++
++[ "$STRIPPED_N" -eq 4 ] \
++  && ok "E.2a the fixture really is missing 4 registrations before the upgrade" \
++  || bad "E.2a expected 4 stripped registrations, got $STRIPPED_N — the strip did not bite, so E.2c proves nothing"
++
++grep -q 'check_ledger_checkpoint.py' "$WORK/hist.pre.keys" \
++  && bad "E.2b check_ledger_checkpoint.py is still registered before the upgrade — the strip missed THE finding" \
++  || ok "E.2b check_ledger_checkpoint.py (the S328 finding) is absent before the upgrade"
++
++# --- E.6 rides here: --dry-run must announce, and must not write ------------
++DRY_SHA_BEFORE="$( _sha "$A/.claude/settings.json" )"
++_upgrade "$A" "$REPO_ROOT" --dry-run
++DRY_SHA_AFTER="$( _sha "$A/.claude/settings.json" )"
++
++grep -q "would REGISTER PreToolUse check_ledger_checkpoint.py" "$_UP_LOG" \
++  && ok "E.6a --dry-run names the missing hook (a migration silent in dry-run is one the adopter cannot review)" \
++  || bad "E.6a --dry-run did not announce check_ledger_checkpoint.py (see $_UP_LOG)"
++
++grep -q "would REGISTER PreCompact check_precompact_continuity.py" "$_UP_LOG" \
++  && ok "E.6b --dry-run also names a registration under an ABSENT event key" \
++  || bad "E.6b --dry-run did not announce the PreCompact registration (see $_UP_LOG)"
++
++[ "$DRY_SHA_BEFORE" = "$DRY_SHA_AFTER" ] \
++  && ok "E.6c --dry-run left settings.json byte-identical" \
++  || bad "E.6c --dry-run MODIFIED settings.json ($DRY_SHA_BEFORE -> $DRY_SHA_AFTER)"
++
++# --- the real upgrade ------------------------------------------------------
++_upgrade "$A" "$REPO_ROOT"
++[ "$_UP_RC" -eq 0 ] \
++  && ok "E.2c the upgrade succeeded" \
++  || bad "E.2c the upgrade exited $_UP_RC (see $_UP_LOG)"
++
++_keyset "$A/.claude/settings.json" > "$WORK/hist.post.keys"
++MISSING="$( comm -23 "$WORK/tpl.keys" "$WORK/hist.post.keys" )"
++if [ -z "$MISSING" ]; then
++  ok "E.2d EVERY registration in the template is present in the upgraded adopter — all $TPL_N, not a curated six"
++else
++  bad "E.2d registrations still missing after the upgrade:"
++  printf '%s\n' "$MISSING" | sed 's/^/         /' >&2
++fi
++
++grep -q "^PreToolUse check_ledger_checkpoint.py$" "$WORK/hist.post.keys" \
++  && ok "E.2e check_ledger_checkpoint.py — the S328 finding — is registered by the upgrade" \
++  || bad "E.2e check_ledger_checkpoint.py is STILL unregistered after the upgrade; the finding is not cured"
++
++grep -q "file assignment compliance" "$WORK/hist.post.keys" \
++  && ok "E.2f the INLINE block that carries no .py at all was re-registered too (keyed by its full command)" \
++  || bad "E.2f the inline no-.py registration was not restored — the identity key does not cover that shape"
++
++# The upgrade must not INVENT registrations the template does not have.
++EXTRA="$( comm -13 "$WORK/tpl.keys" "$WORK/hist.post.keys" )"
++[ -z "$EXTRA" ] \
++  && ok "E.2g the upgrade added nothing the template does not declare" \
++  || { bad "E.2g the upgrade registered names absent from the template:"; printf '%s\n' "$EXTRA" | sed 's/^/         /' >&2; }
++
++DUPES="$( sort "$WORK/hist.post.keys" | uniq -d )"
++[ -z "$DUPES" ] \
++  && ok "E.2h no registration is duplicated" \
++  || { bad "E.2h duplicated registrations after the merge:"; printf '%s\n' "$DUPES" | sed 's/^/         /' >&2; }
++
++# ---------------------------------------------------------------------------
++# E.7  the adopter's own edit survived the merge
++# ---------------------------------------------------------------------------
++echo ""
++echo "==> E.7 — an adopter-edited registration is PRESERVED, not re-canonicalized"
++EDIT_TO="$( jq -r '[.hooks.PreToolUse[] | select((.hooks[0].command // "") | test("check_bash_safety")) | .hooks[0].timeout] | join(",")' "$A/.claude/settings.json" )"
++[ "$EDIT_TO" = "4242" ] \
++  && ok "E.7a the adopter's timeout=4242 on check_bash_safety.py survived the upgrade" \
++  || bad "E.7a the adopter's edited timeout became '$EDIT_TO' (expected 4242) — the merge re-canonicalized a present registration"
++
++BS_N="$( jq '[.hooks.PreToolUse[] | select((.hooks[0].command // "") | test("check_bash_safety"))] | length' "$A/.claude/settings.json" )"
++[ "$BS_N" = "1" ] \
++  && ok "E.7b and it was not duplicated by a second, canonical copy" \
++  || bad "E.7b check_bash_safety.py now appears $BS_N times under PreToolUse"
++
++# ---------------------------------------------------------------------------
++# E.5  idempotency — a second upgrade changes nothing, byte for byte
++# ---------------------------------------------------------------------------
++echo ""
++echo "==> E.5 — re-running the upgrade is a byte-level no-op"
++SHA1="$( _sha "$A/.claude/settings.json" )"
++_upgrade "$A" "$REPO_ROOT"
++SHA2="$( _sha "$A/.claude/settings.json" )"
++[ "$SHA1" = "$SHA2" ] \
++  && ok "E.5a settings.json is byte-identical across two consecutive upgrades" \
++  || bad "E.5a the second upgrade rewrote settings.json ($SHA1 -> $SHA2)"
++
++grep -q "already present — settings.json untouched" "$_UP_LOG" \
++  && ok "E.5b and the second run says so explicitly (it never opened the file for writing)" \
++  || bad "E.5b the second run did not report the no-op (see $_UP_LOG)"
++
++# ---------------------------------------------------------------------------
++# E.3  RED CONTROL — the PRE-CURE upgrader leaves the finding uncured
++# ---------------------------------------------------------------------------
++echo ""
++echo "==> E.3 — the pre-cure upgrader (git HEAD) does NOT register the hook"
++RED_SRC="$WORK/red/src"
++if _mk_source_copy "$RED_SRC" \
++   && git -C "$REPO_ROOT" show HEAD:scripts/upgrade.sh > "$RED_SRC/scripts/upgrade.sh" 2>/dev/null \
++   && [ -s "$RED_SRC/scripts/upgrade.sh" ] \
++   && bash -n "$RED_SRC/scripts/upgrade.sh" 2>/dev/null; then
++
++  # The plant is only a plant if HEAD really is the pre-cure text. If this
++  # file is being run AFTER the cure landed, say so instead of asserting a
++  # falsehood: the control has expired, it has not failed.
++  if grep -q 'settings.base.json' "$RED_SRC/scripts/upgrade.sh" \
++     && grep -q 'slurpfile tpl' "$RED_SRC/scripts/upgrade.sh"; then
++    ok "E.3-SKIP git HEAD already contains the cure — the red control has expired (re-point it at the pre-cure commit to re-arm)"
++  else
++    RED="$WORK/red/adopter"
++    _install "$RED"
++    _strip_four "$RED" || scaffold "could not strip the red fixture"
++    _upgrade "$RED" "$RED_SRC"
++    _keyset "$RED/.claude/settings.json" > "$WORK/red.post.keys"
++
++    grep -q "^PreToolUse check_ledger_checkpoint.py$" "$WORK/red.post.keys" \
++      && bad "E.3a the PRE-CURE upgrader registered check_ledger_checkpoint.py — the finding does not reproduce, so E.2e is not evidence" \
++      || ok "E.3a the pre-cure upgrader leaves check_ledger_checkpoint.py UNREGISTERED — the S328 finding reproduces"
++
++    RED_MISSING_N="$( comm -23 "$WORK/tpl.keys" "$WORK/red.post.keys" | wc -l | tr -d ' ' )"
++    [ "${RED_MISSING_N:-0}" -ge 1 ] \
++      && ok "E.3b the pre-cure upgrader leaves $RED_MISSING_N template registration(s) missing (the cured one leaves 0)" \
++      || bad "E.3b the pre-cure upgrader left nothing missing — the two upgraders are indistinguishable here"
++  fi
++else
++  bad "E.3-SCAFFOLD could not build the pre-cure source copy — the red control did not run"
++fi
++
++# ---------------------------------------------------------------------------
++# E.4  POSITIVE CONTROL — a name invented at runtime is registered
++# ---------------------------------------------------------------------------
++echo ""
++echo "==> E.4 — a SYNTHETIC hook added to the template is registered (and removing it un-registers it)"
++grep -q "$SYNTH" "$UPGRADE" \
++  && bad "E.4a '$SYNTH' appears in upgrade.sh — pick another name; this control assumes the upgrader cannot know it" \
++  || ok "E.4a '$SYNTH' appears nowhere in upgrade.sh, so only a template-derived roster can register it"
++
++SYN_SRC="$WORK/synth/src"
++if _mk_source_copy "$SYN_SRC"; then
++  jq --arg cmd "bash \"\$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" $SYNTH" '
++      .hooks.PreToolUse += [ { "_comment": "E.4 positive control — synthetic, template-only.",
++                               "matcher": "Bash",
++                               "hooks": [ { "type": "command", "command": $cmd, "timeout": 5 } ] } ]' \
++     "$TEMPLATE" > "$SYN_SRC/templates/settings/settings.base.json.tmp" \
++     && mv "$SYN_SRC/templates/settings/settings.base.json.tmp" "$SYN_SRC/templates/settings/settings.base.json"
++
++  if jq -e --arg n "$SYNTH" '[.hooks.PreToolUse[] | select((.hooks[0].command // "") | test($n))] | length == 1' \
++       "$SYN_SRC/templates/settings/settings.base.json" >/dev/null 2>&1; then
++    ok "E.4b the synthetic registration was planted exactly once in the source copy's template"
++
++    SYN="$WORK/synth/adopter"
++    _install "$SYN"
++    _upgrade "$SYN" "$SYN_SRC"
++    _keyset "$SYN/.claude/settings.json" > "$WORK/syn.post.keys"
++
++    grep -q "^PreToolUse $SYNTH$" "$WORK/syn.post.keys" \
++      && ok "E.4c the upgrade registered the synthetic hook — the roster is READ from the template, not recalled" \
++      || bad "E.4c the synthetic hook was NOT registered (see $_UP_LOG) — the derivation is not reading the template"
++
++    grep -q "$SYNTH" "$_UP_LOG" \
++      && ok "E.4d and the upgrade log names it" \
++      || bad "E.4d the upgrade log never mentions $SYNTH (see $_UP_LOG)"
++
++    # The NEGATIVE half: the SAME adopter upgraded from the UNMODIFIED tree
++    # must not gain the synthetic name. Without this, E.4c could be satisfied
++    # by an upgrader that registers everything it can think of.
++    SYN2="$WORK/synth2/adopter"
++    _install "$SYN2"
++    _upgrade "$SYN2" "$REPO_ROOT"
++    _keyset "$SYN2/.claude/settings.json" > "$WORK/syn2.post.keys"
++    grep -q "$SYNTH" "$WORK/syn2.post.keys" \
++      && bad "E.4e the UNMODIFIED source also registered $SYNTH — E.4c proves nothing" \
++      || ok "E.4e the unmodified source does not register it — the template is what changed the outcome"
++  else
++    bad "E.4b the synthetic plant did not land in the copied template — E.4c would prove nothing"
++  fi
++else
++  bad "E.4-SCAFFOLD could not build the synthetic source copy"
++fi
++
++# ---------------------------------------------------------------------------
++# E.8  an unparseable shape is PRESERVED and NAMED, never coerced
++# ---------------------------------------------------------------------------
++echo ""
++echo "==> E.8 — a non-array event value fails safe"
++ODD="$WORK/odd/adopter"
++_install "$ODD"
++jq '.hooks.SubagentStart = {"not":"an array"}' "$ODD/.claude/settings.json" > "$ODD/.claude/s.tmp" \
++  && mv "$ODD/.claude/s.tmp" "$ODD/.claude/settings.json"
++_strip_four "$ODD" || scaffold "could not strip the odd fixture"
++_upgrade "$ODD" "$REPO_ROOT"
++
++jq -e '.hooks.SubagentStart == {"not":"an array"}' "$ODD/.claude/settings.json" >/dev/null 2>&1 \
++  && ok "E.8a the non-array event value was PRESERVED exactly, not coerced into a list" \
++  || bad "E.8a the merge rewrote .hooks.SubagentStart — an unparseable shape must fail safe"
++
++grep -q "is not an array" "$_UP_LOG" \
++  && ok "E.8b and the skip was NAMED in the log (a silent skip is how a surprise becomes permanent)" \
++  || bad "E.8b the upgrade did not name the skipped event (see $_UP_LOG)"
++
++_keyset "$ODD/.claude/settings.json" > "$WORK/odd.post.keys"
++grep -q "^PreToolUse check_ledger_checkpoint.py$" "$WORK/odd.post.keys" \
++  && ok "E.8c the OTHER events were still merged — one odd event does not disable the whole step" \
++  || bad "E.8c the odd event aborted the entire merge"
++
++# ---------------------------------------------------------------------------
++# E.9  the drift the second copy had already accumulated
++# ---------------------------------------------------------------------------
++echo ""
++echo "==> E.9 — the pre-cure literal blocks had drifted from the template"
++# The pre-cure text goes to a FILE, never down a pipe: `git show | python3 - `
++# with a heredoc would have the heredoc shadow the pipe on stdin and python
++# would read an empty program input, printing "0 0" forever green.
++git -C "$REPO_ROOT" show HEAD:scripts/upgrade.sh > "$WORK/head-upgrade.sh" 2>/dev/null || true
++DRIFT="$( python3 - "$TEMPLATE" "$WORK/head-upgrade.sh" <<'PY'
++import json, re, sys
++try:
++    old = open(sys.argv[2], encoding="utf-8").read()
++except OSError:
++    print("0 0"); sys.exit(0)
++tpl = json.load(open(sys.argv[1], encoding="utf-8"))
++pairs = [("PreCompact","check_precompact_continuity"),("PostCompact","check_postcompact_reinject"),
++         ("ConfigChange","check_config_change"),("SubagentStart","check_subagent_start"),
++         ("Setup","check_setup_verification"),("SessionStart","check_compact_pinning")]
++drift = found = 0
++for ev, name in pairs:
++    m = re.search(r'_reg\("%s"; "%s\\\\\.py"; (\{.*?\n  \})\)' % (ev, name), old, re.S)
++    if not m:
++        continue
++    try:
++        blk = json.loads(m.group(1))
++    except ValueError:
++        continue
++    cand = [b for b in tpl["hooks"].get(ev, [])
++            if any(name in (h.get("command") or "") for h in b.get("hooks", []))]
++    if not cand:
++        continue
++    found += 1
++    if json.dumps(blk, sort_keys=True) != json.dumps(cand[0], sort_keys=True):
++        drift += 1
++print("%d %d" % (found, drift))
++PY
++)" || DRIFT=""
++DRIFT_FOUND="${DRIFT%% *}"; DRIFT_N="${DRIFT##* }"
++if [ -n "$DRIFT" ] && [ "${DRIFT_FOUND:-0}" -ge 5 ]; then
++  ok "E.9a extracted ${DRIFT_FOUND}/6 pre-cure literal blocks out of git HEAD"
++  [ "${DRIFT_N:-0}" -ge 1 ] \
++    && ok "E.9b ${DRIFT_N} of them had already DRIFTED from the template — the second copy was not merely redundant, it was rewriting adopters with stale text on every upgrade" \
++    || ok "E.9b none had drifted at this commit (the class is still what the cure removes)"
++else
++  ok "E.9-SKIP could not extract the pre-cure literals (HEAD is past the cure) — informational only"
++fi
++
++echo ""
++echo "=============================================================="
++echo "RESULT: $PASS passed, $FAIL failed"
++echo "=============================================================="
++[ "$FAIL" -eq 0 ] || exit 1
++exit 0
+diff --git a/scripts/upgrade.sh b/scripts/upgrade.sh
+index 9ef5b20..c829b54 100755
+--- a/scripts/upgrade.sh
++++ b/scripts/upgrade.sh
+@@ -2458,123 +2458,226 @@ _emit_deprecation_warnings() {
+ _emit_deprecation_warnings
+ 
+ # ---------------------------------------------------------------------------
+-# PLAN-135 W2 (unit h8) — idempotent settings-merge: register new framework
+-# lifecycle hooks into the adopter's EXISTING .claude/settings.json.
++# PLAN-135 W2 (unit h8) — idempotent settings-merge: register framework hook
++# registrations into the adopter's EXISTING .claude/settings.json.
+ #
+ # WHY THIS EXISTS (constraint b, debate R1): install.sh EXISTS-SKIPs an
+ # existing settings.json, so a hook that is only baked into the fresh-install
+ # template (settings.base.json) NEVER reaches the S217 population of existing
+-# adopters. Without this step the Setup/init self-verification hook would be a
+-# silent no-op for every already-installed repo. We therefore merge the new
+-# registration(s) into the live settings.json here, at upgrade time, in the
+-# SAME ceremony.
++# adopters. Without this step every hook added after an adopter's original
++# install would be a silent no-op for that repo — the script on disk, the
++# channel unwired. We therefore merge the missing registration(s) into the
++# live settings.json here, at upgrade time, in the SAME ceremony.
+ #
+-# This registers the FIVE new W2 lifecycle events: PreCompact + PostCompact
+-# (check_precompact_continuity.py / check_postcompact_reinject.py), ConfigChange
+-# (check_config_change.py), SubagentStart (check_subagent_start.py), and
+-# Setup/init (check_setup_verification.py). The jq program is IDEMPOTENT (per
+-# event: filters any pre-existing block that registers the hook, then
+-# re-appends the single canonical block) so re-running the upgrade is a no-op.
+-# It is ADDITIVE — existing settings keys + hooks are preserved untouched.
++# PLAN-169 W-E (S329) — THE LIST IS DERIVED, NEVER DECLARED TWICE.
++# ---------------------------------------------------------------------------
++# Until S329 this function carried a LITERAL roster of six lifecycle hooks
++# (PreCompact/PostCompact/ConfigChange/SubagentStart/Setup + the PLAN-179 W1-b
++# SessionStart(compact) pinning hook) inside its jq program, and repeated the
++# same six in prose for the --dry-run announcement. That is a second
++# declaration of a truth that already lives in
++# templates/settings/settings.base.json, and it rotted exactly the way a
++# second copy always does: check_ledger_checkpoint.py (PLAN-179 W2/W4) landed
++# in BOTH .claude/settings.json and the template mirror and in NEITHER list,
++# so every adopter that UPGRADED got the hook script with no registration
++# (fresh installs were fine — the template covers them — and
++# test_template_dogfood_parity is blind to it because it compares dogfood to
++# template, never dogfood to the RESULT OF AN UPGRADE). Measured S328, rail
++# codex round 3 of the PLAN-179 pack D; the finding is
++# .claude/plans/PLAN-179/s328-ceremony-D/FINDING-upgrade-lifecycle-hooks-S328.md
++#
++# The cure is NOT a seventh entry. The roster is now DERIVED, per upgrade run,
++# from the template that ships in the SOURCE checkout — the same artifact and
++# the same $SOURCE_DIR resolution the PLAN-164 W1 pair-rail timeout migration
++# already uses (see _migrate_settings_baseline: "the NEW cap is derived from
++# templates/settings/settings.base.json, never hardcoded"). Add a hook to the
++# template and upgraded adopters get it; there is no second place to forget.
++#
++# SOURCE (single):  $SOURCE_DIR/templates/settings/settings.base.json — the
++#   checkout that is EXECUTING this upgrade. Never $TARGET (that is the thing
++#   being upgraded; reading it would make the merge a fixpoint on the
++#   adopter's own drift).
++#
++# SEMANTICS (ADDITIVE — deliberate change from the pre-S329 six):
++#   registration ABSENT for that event  -> the template block is APPENDED
++#   registration PRESENT for that event -> the adopter's block is PRESERVED
++#                                          BYTE-IDENTICAL, never rewritten
++#   Pre-S329 the six were RE-CANONICALIZED: an adopter who had edited one got
++#   it silently replaced. That contradicts INV-4 of PLAN-167/168 (adopter
++#   edits are preserved; REPAIRING a drifted registration is doctor.sh's job,
++#   not the upgrader's), and it does not scale: re-canonicalizing all 47
++#   template registrations would clobber every timeout an adopter ever tuned.
++#   Additive is the only semantics that is safe at the full-roster scale.
+ #
+-# PLAN-179 W1-b (pair-rail finding P1 — "upgraded adopters never get the new
+-# hook"): the SIXTH registration, SessionStart(matcher "compact") ->
+-# check_compact_pinning.py, rides the SAME merge. It is the PRIMARY Constraint
+-# Pinning channel; baking it only into templates/settings/settings.base.json
+-# would leave every already-installed repo with the script on disk and the
+-# channel unwired — exactly the S217 class this function exists to close.
+-# SessionStart is a LONG-EXISTING event key (turbo_sessionstart.py et al are
+-# already registered there), so it needs NO T3.4 version-floor gate: that gate
+-# guards UNKNOWN event keys (DirectoryAdded/Notification), and none of the five
+-# W2 registrations above is gated either. Adding a gate here would invent a
+-# pattern this function does not use.
++# IDENTITY of a registration (the key the presence test compares):
++#   every "<name>.py" token in the block's hooks[].command, matched as a WHOLE
++#   token — the character class stops at "/" so a path yields its basename,
++#   and a trailing lookahead means "check_x.py" can never be found inside
++#   "check_xy.py" / "check_xy.python". A block whose command carries no .py at
++#   all (the inline PostToolUse|Agent file-assignment echo) is keyed by its
++#   FULL command string. A block is "already registered" under an event when
++#   EVERY key it carries is already present under that event. A block we
++#   cannot key at all (no hooks[]) is never appended — unidentifiable input is
++#   left alone rather than guessed at.
+ #
+-# Fail-open per CLAUDE.md §5: no jq, malformed settings, or a merge error =>
+-# stderr NOTE + the upgrade proceeds. A backup of the pre-merge settings.json
+-# is written under $BAK_DIR first so the Owner can always roll back.
+-# Suppress entirely with --no-settings-merge.
++# --dry-run announces the SAME derivation (one jq program, --arg mode): a
++# migration that is silent in --dry-run is a migration the adopter cannot
++# review before it runs for real.
++#
++# The file is rewritten ONLY when at least one registration is actually
++# missing (same idempotency oracle as the T5.4 migration below), so a re-run
++# is byte-identical — including the adopter's own formatting, which the
++# pre-S329 unconditional `jq` rewrite destroyed on every upgrade.
++#
++# Fail-open per CLAUDE.md §5: no jq, unreadable/invalid template, malformed
++# settings, or a merge error => stderr NOTE + the upgrade proceeds. A
++# structure we do not understand ($.hooks not an object, or one event's value
++# not an array) is SKIPPED and named, never coerced. The merged document is
++# validated as JSON and non-empty BEFORE the atomic same-directory mv, so a
++# partial settings.json is never observable. A backup of the pre-merge
++# settings.json is written under $BAK_DIR first so the Owner can always roll
++# back. Suppress entirely with --no-settings-merge.
+ # ---------------------------------------------------------------------------
+ _merge_lifecycle_hooks_into_settings() {
+   [[ "$SETTINGS_MERGE" -eq 1 ]] || return 0
+   local settings="$TARGET/.claude/settings.json"
++  # SINGLE SOURCE. $SOURCE_DIR is the checkout executing this upgrade (:96),
++  # the same resolution _migrate_settings_baseline uses for the pair-rail cap.
++  local template="$SOURCE_DIR/templates/settings/settings.base.json"
++
+   if [[ ! -f "$settings" ]]; then
+     echo "    NOTE: settings-merge skipped — no $settings (fresh install builds it from template)" >&2
+     return 0
+   fi
+   if ! command -v jq >/dev/null 2>&1; then
+-    echo "    NOTE: settings-merge skipped (jq not found) — register the Setup hook manually; advisory only" >&2
++    echo "    NOTE: settings-merge skipped (jq not found) — register new framework hooks manually; advisory only" >&2
++    return 0
++  fi
++  if [[ ! -r "$template" ]]; then
++    echo "    NOTE: settings-merge skipped — template unreadable at $template; advisory only" >&2
++    return 0
++  fi
++  if ! jq -e 'type == "object" and (.hooks | type) == "object"' "$template" >/dev/null 2>&1; then
++    echo "    NOTE: settings-merge skipped — template is not JSON with an object .hooks ($template); advisory only" >&2
+     return 0
+   fi
+ 
+   echo ""
+-  echo "==> Registering new lifecycle hooks into .claude/settings.json (PLAN-135 W2 H8)"
+-  _up_record_op "merge_lifecycle_hooks" "additive settings.json merge"
+-
+-  # Idempotent jq program — mirrors staged merges/{60,62,64,70}-*.jq. Registers
+-  # ALL FIVE new W2 lifecycle hooks (Codex V2 P2: registering only Setup left
+-  # PreCompact/PostCompact/ConfigChange/SubagentStart dead for upgraded
+-  # adopters) PLUS the PLAN-179 W1-b SessionStart(compact) pinning hook (rail
+-  # finding P1 — same class, one wave later). The `_reg` helper filters any
+-  # pre-existing entry that registers the hook filename, then re-appends the
+-  # single canonical block — so each event is idempotent and every other
+-  # settings key/hook is preserved. NOTE the deliberate consequence, unchanged
+-  # from the five: an adopter who EDITED one of these six registrations gets it
+-  # re-canonicalized (the backup under $BAK_DIR is the rollback route); every
+-  # OTHER entry under the same event — SessionStart already carries several —
+-  # is preserved in place, and the canonical block is appended last.
++  echo "==> Registering framework hooks into .claude/settings.json (derived from templates/settings/settings.base.json)"
++  _up_record_op "merge_lifecycle_hooks" "additive settings.json merge (template-derived)"
++
++  # ONE program, two modes. mode=report emits the decision lines the dry-run
++  # prints and the apply path echoes; mode=apply emits the merged document.
++  # Both walk the identical reduce, so the announcement cannot disagree with
++  # the write (the pre-S329 code had two hand-kept lists and they DID diverge).
++  #
++  # Single-quoted on purpose: the template's commands carry a LITERAL
++  # "$CLAUDE_PROJECT_DIR" that the harness expands at hook time. Here it
++  # travels as JSON from file to file and is never seen by the shell.
+   local jq_prog
+   jq_prog='
+-def _reg($event; $name; $entry):
+-  .hooks[$event] = (
+-    [ (.hooks[$event] // [])[]
+-      | select(([.hooks[]? | .command // ""] | map(test($name)) | any) | not) ]
+-    + [$entry]
+-  );
+-.hooks = (.hooks // {})
+-| _reg("PreCompact"; "check_precompact_continuity\\.py"; {
+-    "_comment": "PLAN-135 W2 H1 (ADR-153): PreCompact continuity snapshot — plan-id + execution-unit + ceremony flags + HMAC-chain anchor to the plan scratchpad before the transcript collapses. ADVISORY, fail-open. Kill: CEO_COMPACTION_CONTINUITY=0.",
+-    "matcher": "",
+-    "hooks": [ { "type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_precompact_continuity.py", "timeout": 5, "statusMessage": "Snapshotting governance state before compaction..." } ]
+-  })
+-| _reg("PostCompact"; "check_postcompact_reinject\\.py"; {
+-    "_comment": "PLAN-135 W2 H1 (ADR-153): PostCompact governance reinjection — reinjects governance POINTERS (active PLAN, unit position, Gate-1 reminder) via additionalContext after compaction. POINTERS ONLY, never file contents. ADVISORY, fail-open. Kill: CEO_COMPACTION_CONTINUITY=0.",
+-    "matcher": "",
+-    "hooks": [ { "type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_postcompact_reinject.py", "timeout": 5, "statusMessage": "Reinjecting governance pointers after compaction..." } ]
+-  })
+-| _reg("ConfigChange"; "check_config_change\\.py"; {
+-    "_comment": "PLAN-135 W2 H2: ConfigChange guard — advisory audit + advisory-block of out-of-band settings tamper (the S197 class) via _lib/effective_config. Fail-open, never blocks on infra. Kill: CEO_CONFIG_CHANGE_GUARD=0.",
+-    "matcher": "",
+-    "hooks": [ { "type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_config_change.py", "timeout": 5, "statusMessage": "Checking config change for tamper..." } ]
+-  })
+-| _reg("SubagentStart"; "check_subagent_start\\.py"; {
+-    "_comment": "PLAN-135 W2 H3: SubagentStart lifecycle recorder — spawn instant + context into a local sidecar (raw agent_id never persisted); the SubagentStop half consumes it for the per-agent bracket. ADVISORY, fail-open. Kill: CEO_SUBAGENT_LIFECYCLE=0.",
+-    "matcher": "",
+-    "hooks": [ { "type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_subagent_start.py", "timeout": 5, "statusMessage": "Recording sub-agent spawn instant..." } ]
+-  })
+-| _reg("Setup"; "check_setup_verification\\.py"; {
+-    "_comment": "PLAN-135 W2 H8: Setup-event post-install self-verification (init matcher) — validate-governance --fast + verify-counts + hook exec-bits (the S228 exec-bit class) + CLAUDE_ENV_FILE allowlist persistence (explicit CEO_* include-list; every override/escape-hatch/kill-switch EXCLUDED, S185/S197 stale-override class). ADVISORY + fail-open; NEVER blocks. Kill-switch: CEO_SETUP_VERIFICATION=0.",
+-    "matcher": "init",
+-    "hooks": [ { "type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_setup_verification.py", "timeout": 15, "statusMessage": "Post-install self-verification..." } ]
+-  })
+-| _reg("SessionStart"; "check_compact_pinning\\.py"; {
+-    "_comment": "PLAN-179 W1-b [amendment r1-C3]: Constraint Pinning PRIMARY channel. On a post-compaction session start (matcher compact — the hook ALSO re-checks source == compact in-process, never trusting the matcher alone), re-states the pinned governance constraints from the CODE constant _lib/pinned_constraints.PINNED_CONSTRAINTS (r1-C5 — never read from a .md at runtime, so it cannot be evicted by the summarizer) via additionalContext. RULES, not pointers: the PostCompact reinject hook is the REINFORCEMENT channel, this is the primary one. ADVISORY, fail-OPEN, never blocks. Kill-switch: CEO_CONSTRAINT_PINNING=0 (deliberately NOT the shared CEO_COMPACTION_CONTINUITY — PLAN-179 §8.8).",
+-    "matcher": "compact",
+-    "hooks": [ { "type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_compact_pinning.py", "timeout": 5, "statusMessage": "Pinning governance constraints after compaction..." } ]
+-  })'
++# Every shape this walks is ACCEPTED only after being proved to be the shape
++# we expect (object / array / string). Anything else yields NO key, which
++# makes its block unidentifiable and therefore untouched — the PLAN-185
++# doctrine: enumerate what is provably safe, never guess at the rest. jq
++# raises on indexing a number or slicing an object, and an uncaught raise here
++# would abort the WHOLE merge, turning one odd event into a silent no-op for
++# all 47 registrations (measured: E.8 of the e2e caught exactly that).
++def _cmds:
++  [ select(type == "object") | (.hooks // null)
++    | select(type == "array") | .[]
++    | select(type == "object") | (.command // null)
++    | select(type == "string") ];
++def _keys:
++  [ _cmds[]
++    | . as $cmd
++    | ([ match("[A-Za-z0-9_][A-Za-z0-9_.-]*\\.py(?![A-Za-z0-9_.-])"; "g").string ]) as $py
++    | if ($py | length) > 0 then $py[] else $cmd end ];
++def _disp:
++  (join(",") | gsub("\\s+"; " ") | if (length > 160) then (.[0:157] + "...") else . end);
++
++. as $orig
++| ( if   ($orig.hooks == null)            then {}
++    elif (($orig.hooks | type) == "object") then $orig.hooks
++    else null end ) as $ah
++| ( if (($tpl[0].hooks | type) == "object") then $tpl[0].hooks else null end ) as $th
++| if ($ah == null) or ($th == null) then
++    ( if $mode == "apply" then $orig else "SKIP-ALL" end )
++  else
++    ( reduce ($th | to_entries[]) as $te ($orig | .hooks = $ah;
++        if ((.hooks[$te.key] // []) | type) != "array" then .
++        else
++          reduce ($te.value[]?) as $blk (.;
++              ( .hooks[$te.key] // [] )           as $cur
++            | ( $blk | _keys )                    as $k
++            | ( $cur | map(_keys) | add // [] )   as $have
++            | if   ($k | length) == 0                                then .
++              elif ($k | all(. as $n | $have | any(. == $n)))        then .
++              else .hooks[$te.key] = ($cur + [$blk]) end )
++        end ) ) as $out
++    | if $mode == "apply" then $out
++      else
++        ( [ $th | to_entries[]
++            | select( (($orig.hooks[.key] // []) | type) != "array" )
++            | "SKIP-EVENT " + .key ]
++          + [ $out.hooks | to_entries[]
++              | select( (.value | type) == "array" )
++              | .key as $e
++              | ( ($orig.hooks[$e] // []) | if type == "array" then length else 0 end ) as $n0
++              | .value[$n0:][]
++              | "ADD " + $e + " " + (_keys | _disp) ] )
++        | .[]
++      end
++  end'
++
++  local _report
++  if ! _report="$( jq -r --arg mode report --slurpfile tpl "$template" "$jq_prog" "$settings" 2>/dev/null )"; then
++    echo "    NOTE: settings-merge skipped (malformed settings.json?) — settings.json unchanged; advisory only" >&2
++    return 0
++  fi
++  if [[ "$_report" == "SKIP-ALL" ]]; then
++    echo "    NOTE: settings-merge skipped — .claude/settings.json has a .hooks that is not an object; PRESERVED untouched; advisory only" >&2
++    return 0
++  fi
++
++  # Split the report: SKIP-EVENT lines are named regardless of mode (a silent
++  # skip is how a structural surprise becomes permanent); ADD lines drive both
++  # the dry-run preview and the post-write summary.
++  local _adds=0 _kind _rest _line _l
++  local _pending=""
++  while IFS= read -r _line; do
++    [[ -n "$_line" ]] || continue
++    _kind="${_line%% *}"; _rest="${_line#* }"
++    case "$_kind" in
++      SKIP-EVENT)
++        echo "    NOTE: event '$_rest' in settings.json is not an array — PRESERVED untouched, nothing registered under it" >&2
++        ;;
++      ADD)
++        _adds=$((_adds+1))
++        _pending="$_pending$_rest"$'\n'
++        ;;
++    esac
++  done <<< "$_report"
+ 
+   if [[ "$DRY_RUN" -eq 1 ]]; then
+-    local _missing=0 _ev _name
+-    # PLAN-179 W1-b (rail P1): the pinning registration MUST be announced in
+-    # dry-run too — a migration that is silent in --dry-run is a migration the
+-    # adopter cannot review before it runs for real.
+-    for pair in "PreCompact:check_precompact_continuity" "PostCompact:check_postcompact_reinject" "ConfigChange:check_config_change" "SubagentStart:check_subagent_start" "Setup:check_setup_verification" "SessionStart:check_compact_pinning"; do
+-      _ev="${pair%%:*}"; _name="${pair##*:}"
+-      if ! jq -e --arg ev "$_ev" --arg n "$_name" '(.hooks[$ev] // []) | map(.hooks[]?.command // "" | test($n + "\\.py")) | any' "$settings" >/dev/null 2>&1; then
+-        echo "    (dry-run) would REGISTER $_ev $_name.py"
+-        _missing=$((_missing+1))
+-      fi
+-    done
+-    [[ "$_missing" -eq 0 ]] && echo "    (dry-run) all 6 lifecycle hooks (5 x PLAN-135 W2 + PLAN-179 W1-b SessionStart/compact) ALREADY registered — would be a no-op"
++    if [[ "$_adds" -eq 0 ]]; then
++      echo "    (dry-run) every framework hook registration in the template is ALREADY present — would be a no-op"
++    else
++      echo "    (dry-run) $_adds hook registration(s) missing from .claude/settings.json:"
++      # `if`, not `[[ ... ]] && echo`: the AND-list returns 1 on the trailing
++      # empty line, and whether that trips `set -e` inside a loop body is a
++      # thing a reader should not have to re-derive.
++      while IFS= read -r _l; do
++        if [[ -n "$_l" ]]; then echo "    (dry-run) would REGISTER $_l"; fi
++      done <<< "$_pending"
++    fi
++    return 0
++  fi
++
++  if [[ "$_adds" -eq 0 ]]; then
++    # Nothing missing => do not touch the file at all. Rewriting it would
++    # reformat the adopter's JSON for no reason and break byte-idempotency.
++    echo "    OK: every framework hook registration in the template is already present — settings.json untouched"
+     return 0
+   fi
+ 
+@@ -2587,9 +2690,17 @@ def _reg($event; $name; $entry):
+     echo "    NOTE: settings-merge skipped (mktemp failed) — advisory only" >&2
+     return 0
+   }
+-  if jq "$jq_prog" "$settings" > "$tmp" 2>/dev/null && [[ -s "$tmp" ]]; then
++  # Atomic: same-directory tempfile, JSON-validated and non-empty BEFORE the
++  # mv. jq writing a truncated file (disk full, killed mid-write) must never
++  # become the live settings.json.
++  if jq --arg mode apply --slurpfile tpl "$template" "$jq_prog" "$settings" > "$tmp" 2>/dev/null \
++     && [[ -s "$tmp" ]] \
++     && jq -e 'type == "object" and (.hooks | type) == "object"' "$tmp" >/dev/null 2>&1; then
+     if mv "$tmp" "$settings"; then
+-      echo "    REGISTERED: 6 lifecycle hooks — PreCompact, PostCompact, ConfigChange, SubagentStart, Setup/init, SessionStart/compact (idempotent — re-runs are no-ops)"
++      echo "    REGISTERED: $_adds hook registration(s) derived from the template (idempotent — re-runs are no-ops):"
++      while IFS= read -r _l; do
++        if [[ -n "$_l" ]]; then echo "      $_l"; fi
++      done <<< "$_pending"
+     else
+       rm -f "$tmp"
+       echo "    NOTE: settings-merge atomic mv failed — settings.json unchanged; advisory only" >&2
