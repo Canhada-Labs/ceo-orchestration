@@ -153,3 +153,31 @@ O que este veredito NÃO afirma: que o pacote está livre de defeito. Seis
 rodadas devolveram 9 → 4 → 7 → 3 → 4 → 9 achados, e a curva não zerou. Afirma
 que, no escopo deste pacote, não resta nada de severidade P0/P1 verificado, e
 que tudo que fica está escrito.
+
+---
+
+## Tabela final (land-sim sobre o pack de 27 entradas)
+
+15 comandos, **14 rc=0**. O único vermelho foi
+`test_plan104_demand_resolver.py::TestWaiveTimingSemantics::test_waive_scoped_to_changed_paths`
+no passe serial do `_lib` — **flake por carga/tempo, atribuído por execução**:
+isolado passa COM e SEM o pack; o passe serial completo do `_lib` passa 13/13
+sem o pack e **13/13 em três repetições COM o pack, no mesmo clone que falhou**.
+O teste monta um repo git temporário e usa `datetime.now(timezone.utc)`; falhou
+uma vez enquanto a máquina estava saturada pelo passe `-n auto` paralelo.
+Evidência anexada ao `land-sim.log` (Adendo 2).
+
+Verdes na mesma corrida: os DOIS passes de `hooks/tests`, `verify-counts.sh`,
+`validate-governance.sh` COMPLETO, `check-test-env-hygiene.py`,
+`check-audit-registry-coverage --check`, `check-claude-md-claims.py`,
+`validate_governance_fast.py`, `check-audit-hmac-null.py` e o manifesto ADR-192.
+
+**Harness de cerimônia: 30 pass / 0 fail (VERDE).**
+`check-ceremony-script.py` **0 BLOCKING** nos três scripts; `bash -n` e
+`shellcheck -S warning` limpos.
+
+Nota de instrumento, registrada contra mim: o T8a do harness presumia que a
+ÚLTIMA rodada de rail era REJECT. Quando esta rodada 6 fechou em APPROVE, o
+teste ficou vermelho com o SIGN comportando-se **corretamente** — o teste media
+"qual foi a última rodada hoje" em vez de "o gate lê o veredito". Curado:
+o T8a agora PLANTA a rodada REJECT e não depende mais do estado ambiente.

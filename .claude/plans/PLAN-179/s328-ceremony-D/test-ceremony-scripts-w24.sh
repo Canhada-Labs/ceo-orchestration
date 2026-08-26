@@ -407,7 +407,17 @@ _run_sign() {  # $1 = tag
       bash "$SIGN" </dev/null ) >"$WORK/$1.log" 2>&1
   printf '%s' "$?"
 }
-# (a) PLANT: a ultima (e unica) rodada e REJECT -> tem de ABORTAR.
+# (a) PLANT: uma rodada MAIS NOVA com REJECT -> tem de ABORTAR.
+# O plant e obrigatorio: depender do veredito das rodadas REAIS acopla o teste
+# ao estado ambiente, e ele passa a medir "qual foi a ultima rodada hoje" em
+# vez de "o gate le o veredito". Foi o que aconteceu quando a rodada 6 fechou
+# em APPROVE e este teste, que presumia REJECT, ficou vermelho com o SIGN
+# comportando-se CORRETAMENTE.
+cat > "$REPO/$CEREMONY_DIR/rail-round-98.md" <<'EOF'
+# rodada sintetica do harness — NAO e um registro real de rail
+Rail-Verdict: REJECT
+EOF
+_commit_and_reanchor "harness: rodada 98 sintetica (REJECT)" "$CEREMONY_DIR/rail-round-98.md"
 RC="$(_run_sign t8a)"
 if [ "$RC" != "0" ]; then
   _expect_abort t8a "fechou em REJECT" "T8a ultima rodada REJECT"
@@ -436,8 +446,8 @@ if [ "$RC" != "0" ]; then
 else
   red "T8c — o SIGN assinou com a ultima rodada SEM veredito declarado (rc=0)"
 fi
-rm -f "$REPO/$CEREMONY_DIR/rail-round-99.md"
-_commit_and_reanchor "harness: remove a rodada sintetica"
+rm -f "$REPO/$CEREMONY_DIR/rail-round-99.md" "$REPO/$CEREMONY_DIR/rail-round-98.md"
+_commit_and_reanchor "harness: remove as rodadas sinteticas"
 
 printf '\n\033[1mRESUMO\033[0m  %s pass / %s fail   (logs em %s)\n' "$PASS" "$FAIL" "$WORK"
 if [ "$FAIL" -gt 0 ]; then
