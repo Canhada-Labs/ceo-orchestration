@@ -17,10 +17,12 @@ of pack D, and asserts the verdict FLIPS between them.
 
 from __future__ import annotations
 
+import importlib
 import importlib.util
 import json
 import subprocess
 import sys
+import uuid
 from pathlib import Path
 
 _SCRIPTS_DIR = Path(__file__).resolve().parent.parent
@@ -516,7 +518,9 @@ def test_setup_live_rebind_downgrades_to_lookup_vivo(tmp_path: Path) -> None:
     assert {s["verdict"] for s in sites} == {"LOOKUP-VIVO"}, sites
     reload_sites = [x for x in sites if x["form"] == "reload-stale"]
     assert len(reload_sites) == 1, sites
-    assert "REBOUND from a live import in setUp" in reload_sites[0]["criterion"]
+    crit = reload_sites[0]["criterion"]
+    assert "REBOUND from a live import in" in crit, crit
+    assert "setUp" in crit and "which owns this site" in crit, crit
     assert any(x["form"] == "live-rebind" for x in sites), sites
 
 
@@ -638,3 +642,572 @@ def test_no_patch_shaped_emitter_mention_escapes_the_census(tmp_path: Path) -> N
                 if (rel, node.lineno) not in seen:
                     missed.append("%s:%d  %s" % (rel, node.lineno, a0))
     assert not missed, "sites dropped by the census:\n  " + "\n  ".join(missed)
+
+
+# ===========================================================================
+# Rail round 1, finding 1 - a setUp rebind is scoped to its OWN class, its
+# OWN alias, and only when it declares `global`.
+# ===========================================================================
+TWO_CLASSES_ONE_REBIND = '''\
+from __future__ import annotations
+
+import importlib
+import unittest
+
+from _lib import audit_emit              # module-level: STALE-able
+
+
+class ClassA(unittest.TestCase):
+    def setUp(self):
+        global audit_emit
+        audit_emit = importlib.reload(importlib.import_module("_lib.audit_emit"))
+
+    def test_a(self):
+        importlib.reload(audit_emit)
+
+
+class ClassB(unittest.TestCase):
+    def setUp(self):
+        importlib.reload(audit_emit)
+
+    def test_b(self):
+        importlib.reload(audit_emit)
+'''
+
+
+def _by_line(root: Path) -> dict:
+    return {s["line"]: s for s in _sites(root)}
+
+
+def test_setup_rebind_does_not_travel_to_another_class(tmp_path: Path) -> None:
+    """The S329 false-safe: ClassB has no rebind of its own."""
+    root = _shadow(
+        tmp_path,
+        {"subject.py": IMPORT_TIME_TARGET},
+        {"test_subject.py": TWO_CLASSES_ONE_REBIND},
+    )
+    lines = TWO_CLASSES_ONE_REBIND.splitlines()
+    a_reload = lines.index("        importlib.reload(audit_emit)") + 1
+    b_sites = [
+        i + 1
+        for i, ln in enumerate(lines)
+        if ln == "        importlib.reload(audit_emit)" and i + 1 != a_reload
+    ]
+    assert len(b_sites) == 2, b_sites
+
+    sites = _by_line(root)
+    assert sites[a_reload]["verdict"] == "LOOKUP-VIVO", sites[a_reload]
+    assert sites[a_reload]["class"] == "ClassA"
+    for ln in b_sites:
+        assert sites[ln]["verdict"] == "FRAGIL", sites[ln]
+        assert sites[ln]["class"] == "ClassB"
+
+
+def test_setup_rebind_is_scoped_to_the_alias_it_rebinds(tmp_path: Path) -> None:
+    """A rebind of `ae` must not vouch for a site on `audit_emit`."""
+    body = (
+        "from __future__ import annotations\n\n"
+        "import importlib\n"
+        "import unittest\n\n"
+        "from _lib import audit_emit\n"
+        "from _lib import audit_emit as ae\n\n\n"
+        "class ClassA(unittest.TestCase):\n"
+        "    def setUp(self):\n"
+        "        global ae\n"
+        "        ae = importlib.reload(importlib.import_module('_lib.audit_emit'))\n\n"
+        "    def test_a(self):\n"
+        "        importlib.reload(audit_emit)\n"
+    )
+    root = _shadow(
+        tmp_path, {"subject.py": IMPORT_TIME_TARGET}, {"test_subject.py": body}
+    )
+    reloads = [s for s in _sites(root) if s["form"] == "reload-stale"]
+    assert len(reloads) == 1, _sites(root)
+    assert reloads[0]["verdict"] == "FRAGIL", reloads[0]
+
+
+def test_rebind_without_global_is_a_local_and_does_not_downgrade(
+    tmp_path: Path,
+) -> None:
+    """No `global` => the assignment binds a LOCAL; the module name stays stale."""
+    body = TWO_CLASSES_ONE_REBIND.replace("        global audit_emit\n", "")
+    root = _shadow(
+        tmp_path, {"subject.py": IMPORT_TIME_TARGET}, {"test_subject.py": body}
+    )
+    sites = _sites(root)
+    forms = {s["form"] for s in sites}
+    assert "local-rebind" in forms, sites
+    assert "live-rebind" not in forms, sites
+    local = [s for s in sites if s["form"] == "local-rebind"][0]
+    assert local["verdict"] == "INDETERMINADO", local
+    assert "binds a LOCAL" in local["criterion"], local
+    # And every reload in the file - ClassA's included - is now FRAGIL.
+    assert {s["verdict"] for s in sites if s["form"] == "reload-stale"} == {
+        "FRAGIL"
+    }, sites
+
+
+# ===========================================================================
+# Rail round 1, finding 2 - consumer ownership must be PROVEN, not assumed
+# from an attribute name that merely contains "audit_emit".
+# ===========================================================================
+DISPATCH_ALIAS_TARGET = '''\
+"""Consumer whose `_audit_emit` alias points at a DIFFERENT module."""
+
+from _lib import audit_emit_dispatch as _audit_emit
+
+
+def emit_rejection(reason):
+    _audit_emit.emit_generic(action="rejected")
+'''
+
+
+def test_consumer_base_must_be_resolvable_by_import(tmp_path: Path) -> None:
+    """A dynamically loaded module cannot vouch for anything (the `HOOK = _load()` shape)."""
+    body = (
+        "from __future__ import annotations\n\n"
+        "import unittest.mock as mock\n\n"
+        "HOOK = object()\n\n\n"
+        "def test_emits():\n"
+        "    with mock.patch.object(HOOK._audit_emit, 'emit_generic'):\n"
+        "        pass\n"
+    )
+    root = _shadow(
+        tmp_path,
+        {"subject.py": CONSUMER_ALIAS_TARGET},
+        {"test_subject.py": body},
+    )
+    sites = _sites(root)
+    assert len(sites) == 1, sites
+    assert sites[0]["form"] == "obj-consumer"
+    assert sites[0]["verdict"] == "INDETERMINADO", sites[0]
+    assert "not bound by an import statement" in sites[0]["criterion"], sites[0]
+
+
+def test_consumer_outside_the_indexed_roots_is_named_as_such(
+    tmp_path: Path,
+) -> None:
+    """An imported consumer the index never scanned is a SCOPE gap, not a
+    resolution failure - the criterion must distinguish the two."""
+    body = (
+        "from __future__ import annotations\n\n"
+        "import unittest.mock as mock\n\n"
+        "from _lib.mcp import canonical_guard\n\n\n"
+        "def test_emits():\n"
+        "    with mock.patch.object(canonical_guard._audit_emit, 'emit_generic'):\n"
+        "        pass\n"
+    )
+    root = _shadow(
+        tmp_path,
+        {"subject.py": CONSUMER_ALIAS_TARGET},
+        {"test_subject.py": body},
+    )
+    _write(root, ".claude/hooks/_lib/mcp/__init__.py", "")
+    _write(root, ".claude/hooks/_lib/mcp/canonical_guard.py", CONSUMER_ALIAS_TARGET)
+    sites = _sites(root)
+    assert len(sites) == 1, sites
+    assert sites[0]["verdict"] == "INDETERMINADO", sites[0]
+    assert "NOT in the target index" in sites[0]["criterion"], sites[0]
+    assert "outside the indexed roots" in sites[0]["criterion"], sites[0]
+
+
+def test_consumer_alias_object_needs_a_proven_emitter_alias(tmp_path: Path) -> None:
+    """`X._audit_emit` patched as an OBJECT while X binds another module."""
+    body = (
+        "from __future__ import annotations\n\n"
+        "import unittest.mock as mock\n\n"
+        "from _lib import subject\n\n\n"
+        "def test_emits():\n"
+        "    with mock.patch.object(subject._audit_emit, 'emit_generic'):\n"
+        "        subject.emit_rejection('x')\n"
+    )
+    root = _shadow(
+        tmp_path,
+        {"subject.py": DISPATCH_ALIAS_TARGET,
+         "audit_emit_dispatch.py": "def emit_generic(**kw):\n    return None\n"},
+        {"test_subject.py": body},
+    )
+    sites = _sites(root)
+    assert len(sites) == 1, sites
+    assert sites[0]["verdict"] == "INDETERMINADO", sites[0]
+    assert "not a proven _lib.audit_emit alias" in sites[0]["criterion"], sites[0]
+
+
+def test_consumer_attribute_name_that_is_not_an_alias_is_seguro(
+    tmp_path: Path,
+) -> None:
+    """`patch.object(X, "_audit_emit")` where X binds audit_emit_dispatch.
+
+    The patch replaces an attribute IN PLACE on X, so no `_lib.audit_emit`
+    lookup takes part in it - safe w.r.t. THIS class, and the criterion has
+    to say why instead of claiming an alias that does not exist.
+    """
+    body = (
+        "from __future__ import annotations\n\n"
+        "import unittest.mock as mock\n\n"
+        "from _lib import subject\n\n\n"
+        "def test_emits():\n"
+        "    with mock.patch.object(subject, '_audit_emit'):\n"
+        "        subject.emit_rejection('x')\n"
+    )
+    root = _shadow(
+        tmp_path,
+        {"subject.py": DISPATCH_ALIAS_TARGET,
+         "audit_emit_dispatch.py": "def emit_generic(**kw):\n    return None\n"},
+        {"test_subject.py": body},
+    )
+    sites = _sites(root)
+    assert len(sites) == 1, sites
+    assert sites[0]["verdict"] == "SEGURO", sites[0]
+    assert "merely contains" in sites[0]["criterion"], sites[0]
+
+
+def test_consumer_that_also_resolves_at_call_time_is_indeterminado(
+    tmp_path: Path,
+) -> None:
+    """Mixed consumer: import-time alias AND a call-time re-resolution."""
+    mixed = (
+        '"""Mixed consumer."""\n\n'
+        "from _lib import audit_emit as _audit_emit\n\n\n"
+        "def emit_rejection(reason):\n"
+        "    _audit_emit.emit_generic(action='rejected')\n\n\n"
+        "def emit_other(reason):\n"
+        "    from _lib import audit_emit\n"
+        "    audit_emit.emit_generic(action='other')\n"
+    )
+    body = (
+        "from __future__ import annotations\n\n"
+        "import unittest.mock as mock\n\n"
+        "from _lib import subject\n\n\n"
+        "def test_emits():\n"
+        "    with mock.patch.object(subject, '_audit_emit'):\n"
+        "        subject.emit_rejection('x')\n"
+    )
+    root = _shadow(tmp_path, {"subject.py": mixed}, {"test_subject.py": body})
+    sites = _sites(root)
+    assert len(sites) == 1, sites
+    assert sites[0]["verdict"] == "INDETERMINADO", sites[0]
+    assert "re-resolves the emitter" in sites[0]["criterion"], sites[0]
+
+
+def test_aliased_consumer_import_resolves(tmp_path: Path) -> None:
+    """`import subject as sj` must still resolve `sj` to the module under test."""
+    body = (
+        "from __future__ import annotations\n\n"
+        "import unittest.mock as mock\n\n"
+        "import subject as sj\n\n\n"
+        "def test_emits():\n"
+        "    with mock.patch.object(sj._audit_emit, 'emit_generic'):\n"
+        "        sj.emit_rejection('x')\n"
+    )
+    root = _shadow(
+        tmp_path,
+        {"subject.py": CONSUMER_ALIAS_TARGET},
+        {"test_subject.py": body},
+    )
+    sites = _sites(root)
+    assert len(sites) == 1, sites
+    assert sites[0]["verdict"] == "SEGURO", sites[0]
+    assert sites[0]["consumer_module"] == "subject", sites[0]
+
+
+# ===========================================================================
+# Rail round 1, finding 4 - a census root with no test directory is an error.
+# ===========================================================================
+def test_hooks_without_any_test_dir_is_usage_error(tmp_path: Path) -> None:
+    _write(tmp_path, ".claude/hooks/_lib/__init__.py", "")
+    _write(tmp_path, ".claude/hooks/_lib/subject.py", CALL_TIME_TARGET)
+    r = _run_cli(tmp_path)
+    assert r.returncode == 2, (r.returncode, r.stdout, r.stderr)
+    assert "no test root found" in r.stderr, r.stderr
+
+
+def test_one_present_test_dir_is_enough(tmp_path: Path) -> None:
+    """The negative leg: the guard must not fire when a root DOES exist."""
+    root = _shadow(
+        tmp_path,
+        {"subject.py": CALL_TIME_TARGET},
+        {"test_subject.py": TEST_PATCHES_TOP_OBJECT},
+    )
+    r = _run_cli(root)
+    assert r.returncode == 0, (r.returncode, r.stderr)
+    assert "(ABSENT)" in r.stdout, r.stdout  # _lib/tests is genuinely absent
+
+
+# ===========================================================================
+# Rail round 1, finding 3 - RUNTIME control.
+#
+# Everything above asks the classifier for its own verdict. This block builds
+# a real package, imports it, runs the REAL polluter sequence
+# (``sys.modules.pop`` + package-attribute ``delattr`` + fresh import) in THIS
+# process, and executes the consumer - then feeds the SAME source bytes to the
+# classifier and requires the two to agree. A wrong runtime model shows up as
+# a red here even when every AST-label assertion is green.
+#
+# The shadow package is named ``shadowpkg_<uuid>._lib`` so it can never touch
+# the repo's own ``_lib``, while still matching the instrument's importer rule
+# (``base.endswith("._lib")``).
+# ===========================================================================
+import contextlib  # noqa: E402  (kept next to the block that uses it)
+
+RT_EMITTER = '''\
+"""Shadow emitter. CALLS records what the REAL emitter received."""
+
+CALLS = []
+
+
+def emit_generic(**kw):
+    CALLS.append(kw)
+'''
+
+RT_SUBJECT = '''\
+"""A consumer that re-resolves the emitter on EVERY call."""
+
+
+def emit_rejection(reason):
+    from {pkg} import audit_emit          # call-time resolution
+
+    fn = getattr(audit_emit, "emit_generic", None)
+    if fn is not None:
+        fn(action="rejected", reason=reason)
+'''
+
+RT_TEST_STALE = '''\
+from __future__ import annotations
+
+import unittest.mock as mock
+
+from {pkg} import audit_emit              # module-level: STALE-able
+from {pkg} import subject
+
+
+def test_emits():
+    with mock.patch.object(audit_emit, "emit_generic") as fake:
+        subject.emit_rejection("x")
+    assert fake.call_count == 1
+'''
+
+RT_TEST_LIVE = '''\
+from __future__ import annotations
+
+import unittest.mock as mock
+
+from {pkg} import audit_emit              # module-level, but NOT the patch target
+from {pkg} import subject
+
+
+def _live_audit_emit():
+    """Resolve the object the consumer will ACTUALLY read, right now."""
+    from {pkg} import audit_emit as _ae
+    return _ae
+
+
+def test_emits():
+    with mock.patch.object(_live_audit_emit(), "emit_generic") as fake:
+        subject.emit_rejection("x")
+    assert fake.call_count == 1
+'''
+
+RT_TEST_CLASSES = '''\
+from __future__ import annotations
+
+import importlib
+import unittest
+
+from {pkg} import audit_emit              # module-level: STALE-able
+
+
+class ClassA(unittest.TestCase):
+    def setUp(self):
+        global audit_emit
+        audit_emit = importlib.reload(importlib.import_module("{pkg}.audit_emit"))
+
+    def test_a(self):
+        importlib.reload(audit_emit)
+
+
+class ClassB(unittest.TestCase):
+    def setUp(self):
+        importlib.reload(audit_emit)
+
+    def test_b(self):
+        pass
+'''
+
+
+def _rt_sources(pkg: str) -> dict:
+    """The source bytes used by BOTH legs. One text, two consumers."""
+    dotted = pkg + "._lib"
+    return {
+        "audit_emit.py": RT_EMITTER,
+        "subject.py": RT_SUBJECT.format(pkg=dotted),
+        "t_stale.py": RT_TEST_STALE.format(pkg=dotted),
+        "t_live.py": RT_TEST_LIVE.format(pkg=dotted),
+        "t_classes.py": RT_TEST_CLASSES.format(pkg=dotted),
+    }
+
+
+def _rt_tree(tmp_path: Path, pkg: str, sources: dict) -> Path:
+    """Write an importable ``<pkg>/_lib/`` package holding `sources`."""
+    rt = tmp_path / "rt"
+    (rt / pkg / "_lib").mkdir(parents=True, exist_ok=True)
+    _write(rt, pkg + "/__init__.py", "")
+    _write(rt, pkg + "/_lib/__init__.py", "")
+    for name, body in sources.items():
+        _write(rt, pkg + "/_lib/" + name, body)
+    return rt
+
+
+@contextlib.contextmanager
+def _import_sandbox(rt: Path, pkg: str):
+    """Import from `rt`, then remove every trace of `pkg` from the process."""
+    sys.path.insert(0, str(rt))
+    importlib.invalidate_caches()
+    try:
+        yield
+    finally:
+        for name in [
+            n for n in list(sys.modules) if n == pkg or n.startswith(pkg + ".")
+        ]:
+            sys.modules.pop(name, None)
+        try:
+            sys.path.remove(str(rt))
+        except ValueError:
+            pass
+        importlib.invalidate_caches()
+
+
+def _pollute(pkg: str):
+    """The measured polluter's exact sequence. Aborts if it would be inert."""
+    lib_name = pkg + "._lib"
+    mod_name = lib_name + ".audit_emit"
+    lib = importlib.import_module(lib_name)
+    old = sys.modules[mod_name]
+    sys.modules.pop(mod_name)
+    delattr(lib, "audit_emit")
+    new = importlib.import_module(mod_name)
+    assert new is not old, "polluter INERT: the re-import returned the SAME object"
+    return old, new
+
+
+def _classifier_leg(tmp_path: Path, sub: str, sources: dict, test_name: str) -> list:
+    """Run the census over the SAME bytes, laid out where it expects them."""
+    root = _shadow(
+        tmp_path / sub,
+        {"audit_emit.py": sources["audit_emit.py"],
+         "subject.py": sources["subject.py"]},
+        {test_name: sources[test_name.replace("test_", "t_", 1)]},
+    )
+    return _sites(root)
+
+
+def test_runtime_hazard_is_real_and_the_classifier_agrees(tmp_path: Path) -> None:
+    """RED: a patch on the stale module-level alias never reaches the consumer.
+
+    GREEN: the live-lookup shape does. Both legs EXECUTE; the classifier is
+    then required to label them FRAGIL / LOOKUP-VIVO.
+    """
+    pkg = "shadowpkg_" + uuid.uuid4().hex[:10]
+    sources = _rt_sources(pkg)
+    rt = _rt_tree(tmp_path, pkg, sources)
+
+    with _import_sandbox(rt, pkg):
+        stale = importlib.import_module(pkg + "._lib.t_stale")
+        live = importlib.import_module(pkg + "._lib.t_live")
+        old, new = _pollute(pkg)
+
+        # The module-level alias of BOTH test modules is now the OLD object.
+        assert stale.audit_emit is old
+        assert live.audit_emit is old
+
+        # --- RED leg: the patch lands on an object nobody reads -------------
+        raised = None
+        try:
+            stale.test_emits()
+        except AssertionError as exc:      # `fake.call_count == 1` fails
+            raised = exc
+        assert raised is not None, (
+            "the stale-alias patch INTERCEPTED the call - the hazard this "
+            "instrument is about was not reproduced, so nothing below proves "
+            "anything"
+        )
+        assert len(new.CALLS) == 1, (
+            "the REAL emitter should have run on the FRESH module", new.CALLS
+        )
+
+        # --- GREEN leg: the live lookup resolves the same object ------------
+        del new.CALLS[:]
+        live.test_emits()                  # must not raise
+        assert new.CALLS == [], (
+            "the mock did not intercept: the live-lookup cure does not work",
+            new.CALLS,
+        )
+
+    stale_src = (rt / pkg / "_lib" / "t_stale.py").read_text(encoding="utf-8")
+    live_src = (rt / pkg / "_lib" / "t_live.py").read_text(encoding="utf-8")
+
+    fragil = _classifier_leg(tmp_path, "cls_stale", sources, "test_stale.py")
+    vivo = _classifier_leg(tmp_path, "cls_live", sources, "test_live.py")
+
+    # The classifier read the SAME bytes that were just executed.
+    assert (
+        tmp_path / "cls_stale" / ".claude" / "hooks" / "tests" / "test_stale.py"
+    ).read_text(encoding="utf-8") == stale_src
+    assert (
+        tmp_path / "cls_live" / ".claude" / "hooks" / "tests" / "test_live.py"
+    ).read_text(encoding="utf-8") == live_src
+
+    assert [s["verdict"] for s in fragil] == ["FRAGIL"], fragil
+    assert [s["verdict"] for s in vivo] == ["LOOKUP-VIVO"], vivo
+
+
+def test_runtime_setup_rebind_is_order_dependent_and_class_scoped(
+    tmp_path: Path,
+) -> None:
+    """The cross-class case of finding 1, executed.
+
+    ``ClassB.setUp`` reloads the module-level alias it never rebinds. Run
+    alone after a polluter it raises ImportError; run after ``ClassA.setUp``
+    it succeeds. That is order-dependence, not safety - and the classifier
+    must not call ClassB's sites LOOKUP-VIVO.
+    """
+    pkg = "shadowpkg_" + uuid.uuid4().hex[:10]
+    sources = _rt_sources(pkg)
+    rt = _rt_tree(tmp_path, pkg, sources)
+
+    with _import_sandbox(rt, pkg):
+        mod = importlib.import_module(pkg + "._lib.t_classes")
+        _pollute(pkg)
+
+        err = None
+        try:
+            mod.ClassB("test_b").setUp()
+        except ImportError as exc:
+            err = exc
+        assert err is not None, (
+            "ClassB.setUp did NOT raise: the cross-class hazard was not "
+            "reproduced"
+        )
+        assert "not in sys.modules" in str(err), str(err)
+
+        # Same process, same polluter - only the ORDER changes.
+        mod.ClassA("test_a").setUp()
+        mod.ClassB("test_b").setUp()       # must not raise now
+
+    classes_src = (rt / pkg / "_lib" / "t_classes.py").read_text(encoding="utf-8")
+    root = _shadow(
+        tmp_path / "cls_classes",
+        {"audit_emit.py": sources["audit_emit.py"]},
+        {"test_classes.py": classes_src},
+    )
+    sites = _sites(root)
+    by_class = {}
+    for s in sites:
+        by_class.setdefault(s["class"], []).append(s)
+
+    assert {s["verdict"] for s in by_class["ClassA"]} == {"LOOKUP-VIVO"}, sites
+    b_verdicts = {s["verdict"] for s in by_class["ClassB"]}
+    assert b_verdicts == {"FRAGIL"}, (
+        "ClassB raises ImportError at runtime but the census called it "
+        "%r" % (sorted(b_verdicts),)
+    )

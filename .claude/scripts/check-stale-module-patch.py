@@ -34,11 +34,25 @@ Forms are not "safe because no rule matched". This instrument enumerates the
 forms it can PROVE safe; everything else is ``INDETERMINADO``. A verdict of
 ``SEGURO`` is an affirmative claim with a printed criterion, never a default.
 
+SCOPE OF A ``LOOKUP-VIVO`` DOWNGRADE (rail round 1, finding 1)
+--------------------------------------------------------------
+A ``setUp`` that rebinds the module-level alias only protects sites that run
+AFTER it, in the SAME class, on the SAME alias name. Ownership is therefore
+recorded per rebind (class + alias + ``global`` declaration) and matched
+against the owning class of each site. Two deliberate conservative choices,
+both erring toward FRAGIL (a false alarm is visible and cheap; a false
+``LOOKUP-VIVO`` is what aborted the S328 land of pack D):
+
+  * an INHERITED ``setUp`` (``class B(A)`` where only ``A`` rebinds) is NOT
+    credited to ``B``'s sites;
+  * an assignment without a ``global`` declaration binds a LOCAL and does not
+    refresh the module-level name - it is reported as ``local-rebind``.
+
 EXIT CODES
 ----------
     0  census completed; no INDETERMINADO site (or --strict not given)
     1  --strict and at least one INDETERMINADO site
-    2  usage error / no test root found
+    2  usage error / no test root found (no census root exists)
     3  internal parse failure that would silently shrink the census
 
 ADVISORY. This script gates nothing; it produces the census a cure wave
@@ -83,6 +97,29 @@ F_UNMODELLED = "unmodelled-form"   # patch-shaped, mentions the emitter,
                                    # matched no modelled rule
 F_ASSIGN = "direct-assign"         # <alias>.emit_x = fake
 F_RELOAD = "reload-stale"          # importlib.reload(<alias>)
+F_LOCAL_REBIND = "local-rebind"    # alias = reload(...) WITHOUT `global`
+
+
+def _declared_globals(fn_node):
+    """Names declared ``global`` in this function's OWN body.
+
+    Nested functions/classes are not descended into: a ``global`` inside a
+    closure does not make THIS function's assignment a module-level rebind.
+    """
+    out = set()
+    stack = list(fn_node.body)
+    while stack:
+        cur = stack.pop()
+        if isinstance(
+            cur,
+            (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda),
+        ):
+            continue
+        if isinstance(cur, ast.Global):
+            out.update(cur.names)
+            continue
+        stack.extend(ast.iter_child_nodes(cur))
+    return out
 
 
 def _dotted(node):
@@ -297,14 +334,35 @@ class TestFileScanner(ast.NodeVisitor):
         self.local_aliases = set()       # bound INSIDE a function
         self.live_providers = set()      # helpers returning a live lookup
         self.imported_modules = set()    # candidate targets
+        self.module_alias_map = {}       # local name -> module stem (or None)
         self.sites = []
         self.live_rebinds = []
         self._fn_stack = []
+        self._global_stack = []
+        self._class_stack = []
 
     def _enter_fn(self, node):
         self._fn_stack.append(node.name)
+        self._global_stack.append(_declared_globals(node))
         self.generic_visit(node)
+        self._global_stack.pop()
         self._fn_stack.pop()
+
+    def visit_ClassDef(self, node):
+        self._class_stack.append(node.name)
+        self.generic_visit(node)
+        self._class_stack.pop()
+
+    def _bind_module_alias(self, local, stem):
+        """Record ``local`` -> ``stem``; a conflict poisons the entry.
+
+        An ambiguous local name proves nothing about the consumer, so it is
+        mapped to ``None`` rather than to the last binding seen.
+        """
+        if local in self.module_alias_map and self.module_alias_map[local] != stem:
+            self.module_alias_map[local] = None
+        else:
+            self.module_alias_map[local] = stem
 
     @staticmethod
     def _returns_one_of(fn_node, names):
@@ -343,6 +401,9 @@ class TestFileScanner(ast.NodeVisitor):
                 if a.name != EMITTER_MODULE:
                     self.imported_modules.add(a.asname or a.name)
                     self.imported_modules.add(a.name)
+                    self._bind_module_alias(
+                        a.asname or a.name, a.name.split(".")[-1]
+                    )
             if node.module:
                 self.imported_modules.add(node.module.split(".")[-1])
         else:
@@ -350,6 +411,11 @@ class TestFileScanner(ast.NodeVisitor):
                 self.imported_modules.add(a.name.split(".")[-1])
                 if a.asname:
                     self.imported_modules.add(a.asname)
+                    self._bind_module_alias(a.asname, a.name.split(".")[-1])
+                else:
+                    # `import a.b` binds `a`, not `a.b`.
+                    top = a.name.split(".")[0]
+                    self._bind_module_alias(top, top)
 
     def visit_ImportFrom(self, node):
         self._record_import(node)
@@ -378,7 +444,7 @@ class TestFileScanner(ast.NodeVisitor):
                 rsrc = "<unparseable>"
             rhead = rsrc.split(".")[0].split("(")[0].strip()
             if rhead in self.module_aliases:
-                self._add_site(node, F_RELOAD, rsrc, None)
+                self._add_site(node, F_RELOAD, rsrc, None, alias_head=rhead)
             elif rhead in self.local_aliases or rhead in self.live_providers:
                 self._add_site(node, F_OBJ_LIVE, rsrc, None)
 
@@ -403,14 +469,31 @@ class TestFileScanner(ast.NodeVisitor):
                 elif head in self.local_aliases and head not in self.module_aliases:
                     self._add_site(node, F_OBJ_LIVE, src, attr)
                 elif head in self.module_aliases:
-                    self._add_site(node, F_OBJ_ALIAS, src, attr)
+                    self._add_site(node, F_OBJ_ALIAS, src, attr, alias_head=head)
                 elif attr is not None and EMITTER_MODULE in attr:
-                    self._add_site(node, F_OBJ_CONSUMER, src, attr)
+                    # patch.object(<consumer>, "<emitter alias>"): the patch
+                    # REPLACES an attribute in place on arg0. Ownership of arg0
+                    # still has to be proven before claiming SEGURO - only a
+                    # PLAIN NAME bound by an import is resolvable.
+                    self._add_site(
+                        node, F_OBJ_CONSUMER, src, attr,
+                        consumer_base=a0.id if isinstance(a0, ast.Name) else None,
+                        consumer_attr=attr,
+                        consumer_arg0="name",
+                    )
                 elif isinstance(a0, ast.Attribute) and EMITTER_MODULE in a0.attr:
                     # patch.object(<module under test>._audit_emit, "emit_x"):
-                    # the target OBJECT is the consumer's own alias, resolved
-                    # by attribute lookup at patch time.
-                    self._add_site(node, F_OBJ_CONSUMER, src, attr)
+                    # the target OBJECT is reached through an attribute, so it
+                    # CAN be a stale emitter unless the base is proven to be a
+                    # consumer holding an import-time alias.
+                    self._add_site(
+                        node, F_OBJ_CONSUMER, src, attr,
+                        consumer_base=(
+                            a0.value.id if isinstance(a0.value, ast.Name) else None
+                        ),
+                        consumer_attr=a0.attr,
+                        consumer_arg0="attribute",
+                    )
                 elif EMITTER_MODULE in src:
                     # Patch-shaped, mentions the emitter, matched no modelled
                     # rule. The INVERTED rule forbids dropping it silently.
@@ -431,24 +514,39 @@ class TestFileScanner(ast.NodeVisitor):
                 live = ("import_module" in vsrc and EMITTER_MODULE in vsrc) or (
                     "__import__" in vsrc and EMITTER_MODULE in vsrc
                 )
-                if live:
-                    fn = self._fn_stack[-1] if self._fn_stack else "<module>"
-                    self.live_rebinds.append((fn, node.lineno))
-                    # Surface the CURE as a site so the census shows where it
-                    # lives (and so the anti-drop cross-check stays honest).
-                    self._add_site(node, F_REBIND, t.id, None)
+                if not live:
+                    continue
+                fn = self._fn_stack[-1] if self._fn_stack else "<module>"
+                in_fn = bool(self._fn_stack)
+                # Inside a function, only a `global <alias>` declaration makes
+                # this assignment touch the module-level name at all.
+                if in_fn and t.id not in self._global_stack[-1]:
+                    self._add_site(node, F_LOCAL_REBIND, t.id, None)
+                    continue
+                self.live_rebinds.append(
+                    {
+                        "class": self._class_stack[-1] if self._class_stack else None,
+                        "func": fn,
+                        "alias": t.id,
+                        "line": node.lineno,
+                    }
+                )
+                # Surface the CURE as a site so the census shows where it
+                # lives (and so the anti-drop cross-check stays honest).
+                self._add_site(node, F_REBIND, t.id, None, alias_head=t.id)
         for t in node.targets:
             if isinstance(t, ast.Attribute):
                 d = _dotted(t) or ""
                 head = d.split(".")[0]
                 base = d.rsplit(".", 1)[0] if "." in d else d
                 if head in self.module_aliases:
-                    self._add_site(node, F_ASSIGN, base, t.attr)
+                    self._add_site(node, F_ASSIGN, base, t.attr, alias_head=head)
                 elif head in self.local_aliases:
                     self._add_site(node, F_OBJ_LIVE, base, t.attr)
         self.generic_visit(node)
 
-    def _add_site(self, node, form, target, attr):
+    def _add_site(self, node, form, target, attr, alias_head=None,
+                  consumer_base=None, consumer_attr=None, consumer_arg0=None):
         self.sites.append(
             {
                 "file": self.path,
@@ -457,6 +555,11 @@ class TestFileScanner(ast.NodeVisitor):
                 "target_expr": target,
                 "attr": attr,
                 "enclosing": self._fn_stack[-1] if self._fn_stack else "<module>",
+                "class": self._class_stack[-1] if self._class_stack else None,
+                "alias_head": alias_head,
+                "consumer_base": consumer_base,
+                "consumer_attr": consumer_attr,
+                "consumer_arg0": consumer_arg0,
             }
         )
 
@@ -488,19 +591,124 @@ def infer_targets(scanner, index, stem):
 SETUP_FUNCS = ("setUp", "setUpClass", "setup_method", "setup_class")
 
 
+def _verdict_for_consumer_site(site, index):
+    """Verdict for ``patch.object`` forms that name a consumer-held alias.
+
+    ``SEGURO`` here used to be granted to ANY attribute expression whose name
+    contained ``audit_emit`` - a substring match on a NAME, with no evidence
+    that the base was the module under test or that the attribute was an
+    ``_lib.audit_emit`` alias at all (rail round 1, finding 2). Ownership is
+    now proven from the target index or the site is ``INDETERMINADO``.
+    """
+    base = site.get("consumer_base")
+    mod = site.get("consumer_module")
+    alias_attr = site.get("consumer_attr")
+    arg0_kind = site.get("consumer_arg0")
+
+    if not base:
+        return (
+            V_INDETERMINADO,
+            "the patch target's base is not a plain name bound by an import "
+            "statement, so the consumer holding this alias cannot be "
+            "identified from the AST",
+        )
+    if mod is None:
+        return (
+            V_INDETERMINADO,
+            "base '{0}' is not bound by an import statement (dynamic loader "
+            "such as spec_from_file_location, a local variable, or an "
+            "ambiguous re-binding): the consumer's emitter aliases cannot be "
+            "proven".format(base),
+        )
+    if mod not in index:
+        return (
+            V_INDETERMINADO,
+            "base '{0}' resolves by import to module '{1}', which is NOT in "
+            "the target index: it lives outside the indexed roots "
+            "(.claude/hooks/*.py and .claude/hooks/_lib/*.py), so its emitter "
+            "resolution was never classified".format(base, mod),
+        )
+
+    info = index[mod]
+    aliases = sorted(info.get("aliases") or [])
+    shown = ", ".join(aliases) if aliases else "none"
+
+    if alias_attr not in aliases:
+        if arg0_kind == "attribute":
+            return (
+                V_INDETERMINADO,
+                "'{0}.{1}' is patched as an emitter OBJECT, but '{1}' is not a "
+                "proven _lib.audit_emit alias of consumer '{0}' (proven "
+                "aliases: {2}); the object it actually holds - and therefore "
+                "whether it can go stale - is unknown".format(
+                    mod, alias_attr, shown
+                ),
+            )
+        return (
+            V_SEGURO,
+            "'{0}' is NOT an _lib.audit_emit alias of consumer '{1}' (proven "
+            "aliases: {2}) - the NAME merely contains 'audit_emit'. "
+            "patch.object replaces an attribute IN PLACE on '{1}', so no "
+            "_lib.audit_emit lookup takes part in this patch".format(
+                alias_attr, mod, shown
+            ),
+        )
+
+    if info["kind"] != R_IMPORT_TIME_MODULE:
+        return (
+            V_INDETERMINADO,
+            "consumer '{0}' holds the import-time alias '{1}' but its "
+            "resolution kind is '{2}': at least one path re-resolves the "
+            "emitter, so the patch is not proven to reach the exercised "
+            "one".format(mod, alias_attr, info["kind"]),
+        )
+
+    return (
+        V_SEGURO,
+        "base '{0}' resolves by import to consumer '{1}', which binds the "
+        "emitter module at IMPORT time as '{2}': test and consumer read the "
+        "SAME reference, so a pop/rebind of _lib.audit_emit cannot separate "
+        "them".format(base, mod, alias_attr),
+    )
+
+
 def verdict_for_site(site, targets, index, live_rebinds=()):
     """(verdict, criterion). INVERTED rule: prove safe, else INDETERMINADO."""
     form = site["form"]
 
     # A per-test live rebind of the module-level alias makes every later use
-    # of that name live. Only a setUp-like rebind runs before EVERY test.
-    setup_rebind = [ln for fn, ln in live_rebinds if fn in SETUP_FUNCS]
+    # of that name live -- but ONLY for sites the rebind actually precedes:
+    # same owning class (an inherited setUp is not credited) and same alias
+    # name. A file-wide downgrade is what made the census call
+    # test_spool_drain_rotation_race.py's SECOND class safe while it raises
+    # ImportError when that class runs alone (rail round 1, finding 1).
+    setup_rebind = [
+        r
+        for r in live_rebinds
+        if r["func"] in SETUP_FUNCS
+        and r["class"] == site.get("class")
+        and (site.get("alias_head") is None or r["alias"] == site.get("alias_head"))
+    ]
     if setup_rebind and form in (F_OBJ_ALIAS, F_ASSIGN, F_RELOAD):
+        owner = setup_rebind[0]["class"] or "<module>"
         return (
             V_LOOKUP_VIVO,
-            "the module-level alias is REBOUND from a live import in setUp "
-            "(L{0}), so it is fresh for every test. CAVEAT: this holds only "
-            "while that setUp runs before the site".format(setup_rebind[0]),
+            "the module-level alias '{0}' is REBOUND from a live import in "
+            "{1}.{2} (L{3}), which owns this site, so it is fresh for every "
+            "test of that class. CAVEAT: this holds only while that setUp runs "
+            "before the site".format(
+                setup_rebind[0]["alias"], owner, setup_rebind[0]["func"],
+                setup_rebind[0]["line"],
+            ),
+        )
+
+    if form == F_LOCAL_REBIND:
+        return (
+            V_INDETERMINADO,
+            "'{0}' is reassigned from a live import INSIDE a function with no "
+            "`global {0}` declaration: the assignment binds a LOCAL and the "
+            "module-level name stays stale. Whether any site is protected "
+            "cannot be proven".format(site["target_expr"]),
         )
 
     if form == F_REBIND:
@@ -518,11 +726,7 @@ def verdict_for_site(site, targets, index, live_rebinds=()):
         )
 
     if form == F_OBJ_CONSUMER:
-        return (
-            V_SEGURO,
-            "patch lands on an attribute of the module UNDER TEST, not on "
-            "_lib.audit_emit - immune to pop/rebind of the emitter module",
-        )
+        return _verdict_for_consumer_site(site, index)
 
     if form == F_STRING:
         return (
@@ -622,11 +826,16 @@ def find_repo_root(start):
     return None
 
 
-def run_census(root):
-    test_dirs = [
+def census_test_dirs(root):
+    """The directories this census scans. At least one must exist."""
+    return [
         root / ".claude" / "hooks" / "tests",
         root / ".claude" / "hooks" / "_lib" / "tests",
     ]
+
+
+def run_census(root):
+    test_dirs = census_test_dirs(root)
     hook_dirs = [
         root / ".claude" / "hooks",
         root / ".claude" / "hooks" / "_lib",
@@ -674,6 +883,13 @@ def run_census(root):
                 continue
             targets = infer_targets(sc, index, p.stem)
             for site in sc.sites:
+                # The alias map is only complete after the whole file has been
+                # visited, so consumer ownership is resolved here, not at the
+                # moment the site was recorded.
+                if site.get("consumer_base"):
+                    site["consumer_module"] = sc.module_alias_map.get(
+                        site["consumer_base"]
+                    )
                 v, crit = verdict_for_site(
                     site, targets, index, sc.live_rebinds
                 )
@@ -688,6 +904,7 @@ def run_census(root):
     return {
         "root": str(root),
         "test_dirs": [str(d) for d in test_dirs],
+        "test_dirs_present": [str(d) for d in test_dirs if d.is_dir()],
         "files_scanned": len(scanned),
         "target_modules_indexed": len(index),
         "parse_failures": parse_failures,
@@ -712,7 +929,8 @@ def render_text(census, out):
     w("INPUTS (a measurement prints its inputs)\n")
     w("  repo root ............. {0}\n".format(census["root"]))
     for d in census["test_dirs"]:
-        w("  test dir .............. {0}\n".format(d))
+        w("  test dir .............. {0}{1}\n".format(
+            d, "" if d in census["test_dirs_present"] else "   (ABSENT)"))
     w("  test files scanned .... {0}\n".format(census["files_scanned"]))
     w("  target modules indexed  {0}\n".format(census["target_modules_indexed"]))
     w("  parse failures ........ {0}\n".format(len(census["parse_failures"])))
@@ -806,6 +1024,18 @@ def main(argv=None):
 
     if not (root / ".claude" / "hooks").is_dir():
         sys.stderr.write("error: no .claude/hooks under {0}\n".format(root))
+        return 2
+
+    # A tree with .claude/hooks but no test directory produces a ZERO-file
+    # census, which `main` used to return as success - an incomplete checkout
+    # looking clean (rail round 1, finding 4). Empty input is an error.
+    present = [d for d in census_test_dirs(root) if d.is_dir()]
+    if not present:
+        sys.stderr.write(
+            "error: no test root found under {0} (looked for: {1})\n".format(
+                root, ", ".join(str(d) for d in census_test_dirs(root))
+            )
+        )
         return 2
 
     census = run_census(root)
