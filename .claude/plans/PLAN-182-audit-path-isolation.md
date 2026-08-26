@@ -572,6 +572,10 @@ rastreado (regenera das fontes).
       `ceo-boot` foi curado na mesma sessão (era cego a 9 dos 10
       formatos de sentinel).
       Check: vereditos antes e depois diffados; toda mudanca de cor explicada por escrito
+      — Disposição S328 (2026-08-25): manter ABERTO, com a parcial creditada a `965fb13`
+      (`.claude/scripts/ceo-boot.py:884,935`); e corrigir a justificativa acima — a janela limpa NÃO
+      começa na S321: a 2ª porta (`verify-counts.sh --collect-only`) fechou em `2ae16d2`/`7a618c9` e a
+      cura estrutural (Axis 3) em `3d16070`, todas de 2026-08-24, então o "depois" começa nessa data.
 
 ### W3 — Instalação e adopters (esboço)
 
@@ -701,10 +705,18 @@ não da W2.**
       Check: o dir `<literal>.pre-W1-archive` existe com modo dr-x------ e a decisao esta no sentinel assinado lido fail-closed pelo land script
 - [ ] `[P0]` **REABERTO como item próprio:** emitir o elo de custódia `new-chain ↔ archive`, ou registrar por escrito que `salt_rotation_registered` basta. Hoje nenhum dos dois existe (item (a)).
       Check: um evento na cadeia nova cujo payload cite o caminho do archive e o ultimo hmac dele, OU uma linha de aceite escrita aqui com a razao
+      — Disposição S328 (2026-08-25): continua ABERTO e reproduz-se hoje — o mecanismo já existe
+      (`.claude/hooks/_lib/audit_emit.py:2538-2541` carrega `previous_archive_path` e
+      `previous_archive_last_hmac`) mas nunca foi apontado ao archive (0 hits de `pre-W1-archive` nos
+      `audit-log*.jsonl`); **needs Owner**: o AC oferece dois ramos, e escolher é decisão, não execução.
 - [x] `[P1]` Emissores remanescentes derivados COMPORTAMENTALMENTE e dispostos um a um — tabela em (d), cobertura 11/11 ações, soma conferida contra a contagem independente (15.208 = 15.208).
       Check: tabela emissor->disposicao cobrindo 100% dos nao-atribuiveis novos, com a soma conferida contra a contagem independente do mesmo corte
 - [ ] `[P1]` Reavaliar `ceo-boot`, `audit-tokens` e `skill-health` como eficácia de controle — pendente; a rajada pós-cura ainda não foi medida (o vazamento parou nesta sessão, então o "depois" precisa de uma janela).
       Check: vereditos antes e depois diffados; toda mudanca de cor explicada por escrito
+      — Disposição S328 (2026-08-25): DUPLICATA literal do item homônimo em `### W2` (Check
+      byte-idêntico) — a instância canônica é aquela; ver a disposição registrada lá, e não repetir a
+      análise aqui. A cláusula "o vazamento parou nesta sessão" está REFUTADA pela medição da S326
+      (124 elos não-atribuíveis por run na cadeia viva, até `2ae16d2`).
 
 #### O que a W3 encontrou: o gate da W1 é VERDE pela pergunta errada
 
@@ -768,6 +780,11 @@ checkout de adopter, onde o fallback degradava em silêncio para
 - [ ] `[P0]` Rota do installer: chave em `settings.base.json` e merge aditivo no `upgrade.sh`; curar `templates/{codex,grok}/pre-push-review-gate.sh`.
       **Evidência da W3 que muda o item:** `install.sh`/`upgrade.sh` NÃO tocam estado (censo por grep de path de estado = 0 hits), e sem env nenhuma o resolvedor JÁ separa dois adopters (provado com HOME fake e dois `CLAUDE_PROJECT_DIR`). Uma chave `CLAUDE_PROJECT_DIR_NATIVE` literal em `settings.base.json` viajaria HARDCODED para o adopter e é a var de MAIOR precedência — pinar errado quebraria a isolação que a W1 comprou. **Recomendação do CEO: NÃO acrescentar chave; o veículo pronto, se a decisão for outra, é `_T54_BASELINES_JSON` em `upgrade.sh:153-188`, nunca o merge de hooks.** Decisão do Owner.
       Check: e2e de upgrade sobre instalacao existente — migra ou declara aceite; falha se nenhum dos dois
+      — Disposição S328 (2026-08-25): templates CURADOS em `3d16070` (grok :152-154 / codex :99-101 usam
+      `runtime_paths.py --state-dir`); a metade da chave segue ABERTA (`settings.base.json` = 0 hits). A
+      decisão do CEO já está registrada na linha acima, verbatim: "**Recomendação do CEO: NÃO acrescentar
+      chave; o veículo pronto, se a decisão for outra, é `_T54_BASELINES_JSON` em `upgrade.sh:153-188`,
+      nunca o merge de hooks.**" — veículo confirmado exato na árvore viva; **needs Owner para ratificar**.
 - [x] `[P0]` **RESOLVIDO (S321, 2026-08-23T00:15Z):** o adopter `arbitrage-monitor` rodava cópia PRÉ-W1 e escrevia no literal. **Upgrade executado**, com as quatro pernas medidas (ver AC-5): resolvedor presente, dir próprio, chave HMAC distinta, e o literal com delta **0** entre dois snapshots sob controle positivo — um `emit` real no contexto do adopter aterrissou no diretório NOVO dele, não no literal. A mistura acidental sob o mesmo `$HOME` acabou de fato, não por declaração.
       Check: upgrade do adopter para uma versao com runtime_paths, OU aceite escrito de que o literal permanece como estado legitimo dele
 - [x] `[P1]` **CURADO S326** — os dois resolvem por `runtime_paths.py --slug/--state-dir`; `--project-slug`/`CEO_PROJECT_NAME` seguem como override EXPLÍCITO, sem default literal; resolvedor ausente ⇒ falha alta (exit 2), nunca palpite. (histórico: ainda defaultavam para `${CEO_PROJECT_NAME:-ceo-orchestration}` e são **INVISÍVEIS ao censo** — rodar o `_m1_hit()` do próprio derivador nos dois devolve `False`, porque o regex M1 exige aspas colando no literal e a forma `${VAR:-literal}` escapa. A exclusão é acidente de regex, não allowlist. Composto: backup lê o dir legado, restore escreve nele — um restore **nunca repopula o dir vivo**.
@@ -779,6 +796,10 @@ checkout de adopter, onde o fallback degradava em silêncio para
       Check: dois CLAUDE_PROJECT_DIR distintos sob HOME isolado resolvem dirs e chaves HMAC distintos; mesmo-basename em pais diferentes NAO colide
 - [ ] `[P1]` **NOVO:** e2e de dois adopters via `install.sh` real não existe (`smoke-install.sh` instala UM alvo e não toca `HOME`). O único oráculo de dois projetos é in-process. Candidato a nightly, não a per-PR (custo: install real ×2).
       Check: HOME isolado, install.sh em dois alvos, hook disparado em cada, dois dirs + duas chaves + verify_chain verde em cada
+      — Disposição S328 (2026-08-25): a premissa "não existe" está REFUTADA — `scripts/tests/test-two-adopter-isolation-e2e.sh`
+      (254 linhas) existe desde `1ea7777` e faz dois `install.sh` REAIS sob `HOME` falso (:86-88), com dirs e
+      chaves 0600 distintos e `verify_chain` por projeto; manter ABERTO por DOIS resíduos medidos — ele emite
+      por `emit_generic` direto (:117-127) e não por hook disparado, e não está fiado em workflow nenhum.
 
 
 ## Acceptance criteria

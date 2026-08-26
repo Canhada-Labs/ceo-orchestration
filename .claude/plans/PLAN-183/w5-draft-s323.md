@@ -173,6 +173,7 @@
       deixam **0**. Esta unidade vem ANTES de qualquer entrada de
       manifesto.
       Check: install_docs_template devolve/grava sinal por DESTINO com a mesma semantica de install_one; teste com os quatro casos (escreveu / EXISTS-skip / fonte ausente / dry-run) assertando 1,0,0,0; e nenhuma entrada FMS_DELIVERED_* e declarada antes deste item estar verde
+      — ◐ S328: entregue o sinal por destino — `_DOCS_TEMPLATE_WROTE` em `scripts/install.sh:812,1494,1521`, consumido por `_register_delivered_template` (:1572-1587, com `|| cmp -s` e guarda de `DRY_RUN`), commit `6304f66`; falta o teste dos QUATRO casos (escreveu/EXISTS-skip/fonte ausente/dry-run = 1,0,0,0) — o que existe, S.2b (`scripts/tests/test-manifest-delivery-route.sh:181-256`), confere call-sites e não comportamento.
 
 - [ ] `[P0]` **Fixture pré-Wave-B COM owner, e o default é PRESERVAR
       (achado P1 do pair-rail r5 sobre o commit do desenho).** A §8.5.3
@@ -189,6 +190,7 @@
       **Comportamento obrigatório: PRESERVAR** — sem estado, o arquivo é
       do adopter (regra de under-claim do `ADR-155-AMEND-1:87-125`).
       Check: fixture que instala com --github-owner e depois REMOVE o install-state (simulando pre-Wave-B); o upgrade deixa o CODEOWNERS renderizado byte-identico, NAO o registra no manifesto, e emite aviso nomeado; o teste fica VERMELHO se o arquivo for tocado ou reivindicado
+      — ◐ S328: entregue a fixture H.12 (`scripts/tests/test-upgrade-historical-adopter.sh:691-732`, `6304f66`) — install com `--github-owner`, `install-state` removido, linha `PRESERVED (unclaimed)` nomeada, H.12d byte-idêntico e H.12e idempotente; falta a perna "NÃO o registra no manifesto" NESTA fixture, já que H.18a (:1180) prova a classe só na fixture `ceremony=user`, onde a entrega está DISABLED.
 
 - [ ] `[P0]` **Coexistência dos DOIS destinos de CODEOWNERS (achado P1 do
       pair-rail r5).** A §9.3 atribui este caso à W5-b em PROSA e nenhuma
@@ -200,8 +202,9 @@
       resolvedor ou manifesto que reivindique **os dois** passa em todos
       os Checks.
       Check: fixture de install SEQUENCIAL (sem flag, depois com flag) assere o conjunto EXATO de paths owned — e falha se o manifesto listar os dois
+      — ◐ S328: entregue a exclusividade nos dois lados — upgrade H.12b/H.12c (`scripts/tests/test-upgrade-historical-adopter.sh:707-717`) e manifesto C.8 (`scripts/tests/test_install_baseline_manifest.sh:566-571`, "the not-taken CODEOWNERS route is absent"); falta a fixture NOMEADA de install SEQUENCIAL (sem flag e depois com flag) — os 4 `_install_into --github-owner` (:649,:693,:987,:1790) são installs frescos em diretórios distintos.
 
-- [ ] `[P0]` **A tabela de ROTAS vira dado COMPARTILHADO (dívida criada
+- [x] `[P0]` **A tabela de ROTAS vira dado COMPARTILHADO (dívida criada
       pela W5-a, §8.5.2).** A W5-a define `_TEMPLATE_DELIVERED` /
       `_RENDERED_DELIVERED` **dentro** de `_parity_classify.py` porque é
       L2 e só toca teste. Os outros dois consumidores são **bash**
@@ -212,8 +215,9 @@
       **digest + relpath de destino**, logo o `doctor.sh` não tem de onde
       RECUPERAR a fonte sem essa tabela.
       Check: existe UM arquivo de dados de rotas e a prova de USO e COMPORTAMENTAL, nao grep (convergencia C3: grep prova MENCAO). Par positivo obrigatorio: MUTAR a linha de docs/BRANCH-PROTECTION.md para uma fonte errada-mas-EXISTENTE tem de deixar VERMELHO cada consumidor, e REMOVER a tabela tem de deixar os tres VERMELHOS; a mensagem de falha NOMEIA a linha mutada. Medido na S325: sem esse par, a mutacao passava com os 10 testes VERDES, porque as assercoes comparavam contra a fonte que a propria tabela declarava (tautologia) — a cura foi comparar contra os call-sites do install.sh, verdade INDEPENDENTE. ESTADO: dois consumidores (_parity_classify.py, doctor.sh) landaram na S325 com os 4 controles vermelhos; falta o TERCEIRO (_framework_manifest_set.sh, CANONICO) — o grep fica como censo secundario e falha se um quarto consumidor carregar mapa proprio
+      — ✅ S328 (2026-08-25): scripts/delivery-routes.tsv (6 rotas) com os TRÊS leitores — scripts/_framework_manifest_set.sh:463, scripts/doctor.sh:462, scripts/tests/_parity_classify.py:247 — e par positivo em scripts/tests/test-manifest-delivery-route.sh:261-280 (S.3) e :370 (S.5) · commit 6304f66 (a tabela nasceu em aaf32c7; o 3º leitor, o CANÔNICO, é desta wave)
 
-- [ ] `[P0]` **Debate L3 antes de qualquer linha.** `upgrade.sh` e
+- [x] `[P0]` **Debate L3 antes de qualquer linha.** `upgrade.sh` e
       `_framework_manifest_set.sh` são canônicos e são o coração do
       PLAN-167/168; a memória deste repo registra que essa classe de
       script consumiu 34 de 44 rounds do trem v1.3.0.
@@ -224,6 +228,7 @@
       permanente, contra `PLAN-SCHEMA.md:117-120`. A rodada desta wave é
       ADITIVA, em diretório próprio.
       Check: existe .claude/plans/PLAN-183/debate/w5-round-1/consensus.md com veredito nomeado, e os 6 arquivos de debate/round-1/ saem do commit com sha256 inalterado
+      — ✅ S328 (2026-08-25): .claude/plans/PLAN-183/debate/w5-round-1/consensus.md:11 (veredito nomeado "⛔ ESCALATE", 24 achados) e debate/round-1/ com os 6 arquivos intocados · commit 4d752e4 (stat = só os 5 arquivos de w5-round-1)
 - [ ] `[P0]` **Granularidade POR PATH DE DESTINO, nunca por árvore
       (achado P1 do pair-rail S323, verificado).** O rascunho da S323
       propunha `FMS_DELIVERED_GITHUB` / `FMS_DELIVERED_DOCS` — uma flag
@@ -252,6 +257,7 @@
       (`:1493-1522`), então a fixture parcial tem de existir nas DUAS
       árvores.
       Check: DUAS fixtures parciais — (a) target que ja tem docs/BRANCH-PROTECTION.md e nao tem rotation-log.md; (b) target que ja tem .github/CODEOWNERS mas nao os dois workflows — em cada uma o manifesto lista EXATAMENTE os paths recem-entregues e NAO lista os pre-existentes, e todo arquivo pre-existente sai byte-identico do upgrade
+      — ◐ S328: entregue o registro por path de destino — `_up_tpl_register` (`scripts/upgrade.sh:4089`, contadores por veredito) e `_route_hit` (`scripts/tests/test-upgrade-historical-adopter.sh:1124-1136`), commit `6304f66`; faltam as DUAS fixtures parciais — (a) `docs/` com `BRANCH-PROTECTION.md` e sem `rotation-log.md`, (b) `.github/` com CODEOWNERS e sem os 2 workflows —, que não existem em teste nenhum (a busca por pré-população devolve só um comentário, :426).
 - [ ] `[P0]` Os registros derivam do **RESULTADO da operação**, nunca da
       cerimônia e nunca da presença do arquivo. Um alvo que já tinha o
       path (skip-if-exists) permanece adopter-owned e o upgrade NÃO o
@@ -273,6 +279,7 @@
       derivada do enum do precedente: **INSTALLED / REFRESHED /
       IDENTICAL entram; PRESERVED / SKIPPED ficam fora.**
       Check: a derivacao e uma funcao NOMEADA que o teste IMPORTA e INVOCA (ausencia da funcao = VERMELHO, nunca skip); enumera os CINCO estados assertando quantos registram; o grep por CEREMONY roda no CORPO dessa funcao localizado por nome/AST, nao no arquivo inteiro (um grep no arquivo devolve zero tambem quando a funcao foi RENOMEADA); e2e de segundo upgrade consecutivo nao altera nenhum byte do arquivo adopter-owned. ATENCAO (achado B1 do debate): a regra 'PRESERVED/SKIPPED ficam fora do registro' e REGRESSAO contra o precedente que esta wave adota — install.sh:1318-1329 registra TAMBEM quando nao escreveu, por byte-compare (INSTALL_ONE_WROTE || cmp -s). Decidir isso ANTES de fixar o numero esperado, senao um SEGUNDO install derruba os registros e embarca VERDE porque nenhum Check roda install duas vezes
+      — ◐ S328: entregue a derivação por RESULTADO — `_up_deliver_template` (`scripts/upgrade.sh:4113`) com os 5 contadores e H.18d (`scripts/tests/test-upgrade-historical-adopter.sh:1207-1227`) asserindo registros == installed+refreshed+identical (ADR-194 §3), commit `6304f66`; falta o FORMATO que o Check exige — nenhum teste IMPORTA e INVOCA a função (são testes bash sobre o script real) e não há enumeração explícita dos CINCO estados.
 - [ ] `[P0]` **Adopters HISTÓRICOS: refresh HASH-GATED contra as gerações
       conhecidas (achado P1 do pair-rail r2, resolvido pelo precedente da
       §8.6).** Para a rota B do e2e (pin default `v1.2.0`) e para o
@@ -318,6 +325,7 @@
       clone aceita qualquer commit de `main`), como
       `upgrade.sh:3204-3212` + `test-schema-generation-pins-unit.sh`.
       Check: OQ-5 respondida e registrada verbatim ANTES desta unidade; depois, e2e cobrindo os TRES casos — pristine de geracao conhecida, modificado, e a COLISAO (pre-existente byte-identico a template antigo) — cada um terminando no estado que a rota escolhida determina; teste de geracoes derivado do git, nao de lista memorizada
+      — ◐ S328: entregues dois dos três casos — H.3 (`scripts/tests/test-upgrade-historical-adopter.sh:339-349`, geração anterior pristina ⇒ REFRESHED) e H.4 (:351-361, modificado ⇒ PRESERVED), com as gerações derivadas de `git log` e fail-closed em clone raso (:70-95, scaffold exit 9), commit `6304f66`; falta o TERCEIRO — a COLISÃO (pré-existente byte-idêntico a um template antigo) sob um upgrade que ENTREGA, já que H.18a exercita a forma só com entrega DISABLED.
 - [ ] `[P0]` **D3 — mapeamento template-aware no gerador (achado P1 do
       pair-rail S323, §8.3).** Enumerar as duas árvores sem isso
       invalida o baseline: `FMS_HASH_ROOT="$SOURCE_DIR"`
@@ -340,6 +348,7 @@
       estão no `ACCEPTED`. Instalação fresca ficaria sem registro, e
       `doctor.sh` e `uninstall.sh` sem entrega registrada.
       Check: o conjunto EXATO de registros para .github/ e docs/ e asserido em DOIS momentos — logo apos install limpo do HEAD e apos o upgrade — em DUAS fixtures (sem owner e com --github-owner), cada digest batendo com a fonte que o adopter recebeu, contra LISTA LITERAL versionada no teste (validate.yml.template, benchmarks.yml.template, CODEOWNERS[.template], BRANCH-PROTECTION.md, rotation-log.md) e com count de registros == 5 nos DOIS momentos. Par positivo: o conjunto VAZIO tem de FALHAR — hoje 'cada digest batendo' e 'nenhum path ausente' sao os dois satisfeitos por zero registros, que e exatamente o estado atual medido (D3: manifest hit count = 0 para os 5)
+      — ◐ S328: entregue o mapeamento template-aware no gerador — `scripts/_framework_manifest_set.sh:463` lê as rotas (`6304f66`) e C.8 (`scripts/tests/test_install_baseline_manifest.sh:484-573`) assere digest da fonte por rota, CODEOWNERS renderizado (:561), exclusividade (:566) e guarda anti-vácuo (:546); falta o SEGUNDO momento que o Check nomeia — o pós-install-limpo só tem H.18-control (:1141) com `>= 5`, não o conjunto exato nem `count == 5`.
 - [ ] `[P0]` **D4 — o mesmo mapeamento no `doctor.sh` (achado P1 do
       pair-rail r5, §8.4).** Assim que os registros existirem, o doctor
       passa a consumi-los e resolve a fonte sozinho, sem fallback:
@@ -361,6 +370,7 @@
       `{{OWNER_HANDLE}}` literal** para o arquivo do adopter. É o `:401`
       copiando errado, na forma mais visível.
       Check: TRES fixtures, cada asserção NEGATIVA com par POSITIVO (convergencia C2 — 'grep {{OWNER_HANDLE}} == 0' e satisfeito EXATAMENTE pelo modo de falha perigoso: um arquivo de 0 bytes ou ausente grepa zero). (a) docs/BRANCH-PROTECTION.md deletado: doctor repara com os BYTES de templates/ — sha256 igual ao template E diferente do doc da raiz E byte-count igual; (b) .github/workflows/validate.yml.template deletado: doctor repara em vez de reportar not-repairable; (c) .github/CODEOWNERS em target instalado com --github-owner: o arquivo reparado tem sha256 IGUAL ao registrado no baseline E 33 linhas E 1442 bytes E o handle real presente >= 1 vez, e SO DEPOIS grep -c '{{OWNER_HANDLE}}' == 0; controle negativo: truncar o reparado a 0 bytes tem de deixar o teste VERMELHO. As tres ficam VERMELHAS com o mapeamento revertido. ESTADO (S325): (a) e a variante RENDERED de (c) landaram em scripts/tests/test-doctor-delivery-route.sh (26 asserções, controle positivo = 10 passed/5 failed pre-cura, e o vermelho de (c) foi um VAZAMENTO REPRODUZIDO — o doctor pre-cura copiava o .github/CODEOWNERS VIVO deste repo, 10259 b com o handle real, para a arvore do adopter). Falta (b) e a fixture --github-owner completa, que dependem de D3 (registro no manifesto, CANONICO)
+      — ◐ S328: entregues 2 das 3 fixtures — R.2 (`scripts/tests/test-doctor-delivery-route.sh:352-355`, repara com os bytes de `templates/`) e R.4 (:497-530, rota renderizada não reparada do arquivo vivo), com controle negativo em R.3 (:426-430), commits `aaf32c7`+`6304f66`; falta a fixture (b) — `.github/workflows/validate.yml.template` deletado ⇒ doctor REPARA —, cujo único hit do path é R.1 (:247-248), asserção de RESOLUÇÃO e não de reparo.
 - [ ] `[P0]` **Segundo upgrade consecutivo é o teste que pega D3.** A
       primeira rodada de paridade pode passar com o baseline errado; o
       dano aparece na classificação do upgrade SEGUINTE.
@@ -370,6 +380,7 @@
       (`upgrade.sh:3605-3612`), então "nenhum diff no target" é
       insatisfazível mesmo com D3 curado.
       Check: PRECONDICAO PRIMEIRO — as duas arvores existem no target com os 5 paths e o count e 5 (count 0 = FALHA, nunca verde vazio); so depois e2e roda upgrade DUAS vezes; diff da segunda restrito a .github/ e docs/ e vazio, e o .install-manifest.sha256 normalizado e byte-identico entre as duas rodadas. Sem a precondicao o Check e VACUO enquanto D1 nao for curado: as duas arvores AUSENTES nas duas rodadas dao diff vazio e passam
+      — ◐ S328: entregue o segundo upgrade sem mudança de bytes — H.9/H.9b/H.9c (`scripts/tests/test-upgrade-historical-adopter.sh:469-491`: installed=0, refreshed=0, `diff -r` vazio nas duas árvores), com precondição em H.1 (:231-246) e H.18-control (:1141), commit `6304f66`; falta a perna do Check sobre o `.install-manifest.sha256` normalizado byte-idêntico entre as duas rodadas — não existe comparação do manifesto entre upgrades.
 - [ ] `[P1]` **Variante `--github-owner` coberta (achado P2 do pair-rail
       S323, verificado).** Com essa flag o install escreve um
       `.github/CODEOWNERS` SUBSTITUÍDO (`install.sh:1508`) e grava
@@ -397,7 +408,8 @@
       do r4): ela é vacuosa pela medição acima — só divergência plantada
       torna o teste sensível à reversão da rota.
       Check: o e2e ganha caso com --github-owner e PLANTA divergencia no template; com a rota owner-aware revertida por git stash o teste fica VERMELHO; o manifesto registra o digest RENDERIZADO (33 linhas / 1442 bytes, sha256 fixado no teste) e ele se mantem estavel por DOIS upgrades; par POSITIVO antes da asserção negativa: o handle real aparece >= 1 vez, e SO ENTAO {{OWNER_HANDLE}} aparece 0 vezes (sozinha, a negativa e satisfeita por um arquivo vazio)
-- [ ] `[P0]` Paridade install==upgrade restaurada nos 3 paths que hoje
+      — ⛔ S328: o caso nomeado não existe — `grep -ci 'github.owner|CODEOWNERS'` em `scripts/tests/test-install-upgrade-parity-e2e.sh` devolve 0, e o único "plant" desse arquivo é `--plant-target` sobre `backup_and_replace` (:157-159,:235-272), que é outro controle.
+- [x] `[P0]` Paridade install==upgrade restaurada nos 3 paths que hoje
       são fatais, no modo `maintainer`, **sem** tocar `ACCEPTED` nem
       `KNOWN_OPEN`.
       A expectativa era CONDICIONAL à rota da OQ-5 (P2 do pair-rail r5).
@@ -408,9 +420,11 @@
       caso. Fica registrado que, se a rota for revista, este Check volta
       a ser condicional.
       Check: test-install-upgrade-parity-e2e.sh --mode maintainer sai 0; o diff de _parity_classify.py nao inclui ACCEPTED nem KNOWN_OPEN
+      — ✅ S328 (2026-08-25): scripts/tests/_parity_classify.py intocado por 6304f66 e 738007e (último commit no path: aaf32c7 ⇒ ACCEPTED/KNOWN_OPEN não alargados); e2e invocado em .github/workflows/smoke-install.yml:472 · commit 738007e (corpo: "--unshallow => STALE 0") — ressalva: a perna "sai 0" vem do corpo do commit e de CLAUDE.md:102, não de execução nesta sessão.
 - [ ] `[P0]` Modo `user` permanece inalterado: nenhuma das duas árvores
       passa a ser escrita onde o install não escreveria.
       Check: bash scripts/tests/test-install-upgrade-parity-e2e.sh --mode user sai 0 e o target em modo user nao contem .github/workflows/*.template; par POSITIVO no MESMO teste, senao um target onde o install nao escreveu NADA passa: o modo maintainer da mesma fixture CONTEM os 5 paths (count == 5), provando que a ausencia em modo user e a cerimonia agindo e nao o install falhando
+      — ◐ S328: entregue o modo `user` no e2e (`scripts/tests/test-install-upgrade-parity-e2e.sh:109,149,374` aceita `--mode user` e roda na CI), com a entrega gated por `ceremony != user` (`scripts/install.sh:1599`; `scripts/upgrade.sh:969-971`); faltam AS DUAS asserções que o Check pede nesse teste — que o alvo em modo `user` não contém `.github/workflows/*.template`, e o par POSITIVO maintainer com `count == 5` (busca por ambos = 0 hits).
 - [ ] `[P0]` Bateria de ownership não regride — a cura toca o gerador que
       os PLAN-167/168 fecharam. Vale a regra do `CLAUDE.md` §4: o e2e
       termina **62 verde / 3 vermelho por desenho**; toda-verde é sinal
@@ -424,10 +438,12 @@
       muda de lado sem atualização declarada no mesmo commit, e
       toda-verde continua sendo sinal de PARAR (`CLAUDE.md` §4).
       Check: OQ-4 respondida ANTES desta unidade; bash scripts/tests/test-ownership-verdict-unit.sh sai 0; ownership-nightly-gate.sh sai 0 contra um ownership-expected-reds.txt re-derivado e versionado no MESMO commit; nenhum id pre-existente muda de lado sem justificativa escrita
+      — ◐ S328: entregue a OQ-4 medida ANTES da unidade (`.claude/plans/PLAN-183/w5-oq4-measurement-S327.md`, `6304f66`), com `scripts/tests/ownership-expected-reds.txt` intocado nos 3 ids (OWN-0016/0024/0027), `ownership_table.tsv` sem linhas novas e o oráculo unitário invocado em `.github/workflows/smoke-install.yml:304`; falta a perna "`ownership-nightly-gate.sh` sai 0", que é resultado de execução nightly não verificada nesta sessão.
 - [ ] `[P1]` `ownership-baseline-map.txt` **re-gravado** pelo harness em
       `--stable-header`, nunca editado à mão; `ownership-expected-reds.txt`
       re-verificado no MESMO commit se qualquer id mudar de lado.
       Check: o diff do mapa e saida de harness (cabecalho estavel) e o gate nightly sai 0
+      — ⛔ S328: o mapa não foi re-gravado — `scripts/tests/ownership-baseline-map.txt` não aparece no stat de `6304f66` nem de `738007e`, e como nenhum id mudou de lado o item nunca foi acionado (aberto por ausência de evento de entrega, não por defeito).
 - [ ] `[P0]` **ADR formal para a mudança de contrato de ownership
       (achado P1 do pair-rail r4).** A W5-b altera o contrato através de
       três módulos canônicos produtor/consumidor e introduz um
@@ -441,6 +457,7 @@
       `CLAUDE.md` é editável só em closeout por cache-discipline (§0),
       o que faz disto um item de sequenciamento, não um detalhe.
       Check: existe .claude/adr/ADR-155-AMEND-N (ou ADR-NNN novo) em ACCEPTED nomeando as duas arvores, a regra de under-claim aplicada a elas e a rota escolhida na OQ-5; o path do ADR esta no Scope do sentinel; python3 .claude/scripts/check-claude-md-claims.py sai 0 no MESMO commit
+      — ◐ S328: entregue o ADR — `.claude/adr/ADR-194-delivery-route-resolution.md` (323 linhas, `6304f66`), no Scope do sentinel, com a contagem de ADRs subindo 194→195 em `CLAUDE.md` e nas superfícies derivadas; falta o que o Check exige — o frontmatter diz `status: PROPOSED` (:4) e o próprio `CLAUDE.md:102` registra que o flip para ACCEPTED é edição canônica da próxima cerimônia: **needs Owner**.
 - [ ] `[P0]` Cerimônia GPG: sentinel com Scope cobrindo **os TRÊS**
       canônicos — `scripts/install.sh`, `scripts/upgrade.sh` e
       `scripts/_framework_manifest_set.sh` — anchor-sha real, e
@@ -504,6 +521,7 @@
       canônico/livre mora no glob `case` do **G0 do LAND**, que decide se
       um arquivo sujo FORA do Scope aborta (canônico) ou só avisa (livre).
       Check: o sentinel esta em .claude/plans/PLAN-183/wave-w5b-approved.md com Approved-By: + os DOIS marcadores literais + bullets, e o bloco lista a UNIAO de todos os paths tocados (os 3 canonicos + o ADR + scripts/doctor.sh + os testes); prova MECANICA, nao visual: _sentinel_grants_path devolve True para cada um dos 3 canonicos e para o ADR; o LAND roda G0..G5 e o G4 sai vazio
+      — ◐ S328: entregue o sentinel assinado — `.claude/plans/PLAN-183/wave-w5-approved.md` (+ `.asc`) landou em `6304f66` com `Approved-By:`, os DOIS marcadores literais e 22 bullets cobrindo os 3 canônicos, o ADR-194, `scripts/doctor.sh` e os 5 testes; falta o que o Check NOMEIA — o path `wave-w5b-approved.md` não existe em disco e a prova mecânica pedida (`_sentinel_grants_path` True por canônico; G4 vazio) não está registrada, então não tiquei por semelhança de nome.
 
 ## Acceptance criteria (W5)
 
@@ -520,7 +538,7 @@
       controle negativo cirurgico vermelho, rodada LIMPA de pair-rail
       sobre o codigo, e bateria `.claude/scripts/tests/` com
       5315 passed / 23 skipped / 1 xfailed.
-- [ ] AC-9 [P0] `upgrade.sh` entrega `.github/` e `docs/` sob o contrato
+- [x] AC-9 [P0] `upgrade.sh` entrega `.github/` e `docs/` sob o contrato
       DELIVERY-RECORD-CONDITIONAL do ADR-155-AMEND-1, **com registro por
       PATH DE DESTINO** (não por árvore) derivado do **RESULTADO da
       operação** — `INSTALLED`/`REFRESHED`/`IDENTICAL` registram,
@@ -529,6 +547,7 @@
       `KNOWN_OPEN`. (S324: a redação anterior dizia "derivado da cópia
       realizada" e era insatisfazível — `IDENTICAL` não copia. Ver o item
       correspondente na W5-b.)
+      — ✅ S328 (2026-08-25): scripts/upgrade.sh:3592,3644 (bloco de entrega), :4113 (_up_deliver_template), :4319 (precondição AC-9 fail-closed), :4658-4675 (registro) + scripts/tests/test-upgrade-historical-adopter.sh:1207-1227 (H.18d, enumeração do ADR-194 §3) · commit 6304f66 — ressalva: a perna "paridade maintainer volta a 0" apoia-se em 738007e e CLAUDE.md:102, não em execução nesta sessão.
 - [ ] AC-10 [P0] O baseline pós-upgrade é VÁLIDO para as duas árvores
       novas: cada path registra o digest **dos bytes que o adopter
       realmente ficou com**, nenhum path some por `continue`, e um
@@ -548,3 +567,4 @@
       não da fonte crua — e o teste **planta** um placeholder num dos
       templates de `docs/` para que o Check não seja vacuoso.
       Check: e2e planta um marcador {{...}} em templates/docs/rotation-log.md e assere que o digest registrado bate com o arquivo POS-substituicao no target e NAO com o template cru; com a rota revertida para o template cru o teste fica VERMELHO
+      — ◐ S328: entregue o baseline pós-upgrade para as duas árvores — C.8 (`scripts/tests/test_install_baseline_manifest.sh:561-565`) registra o CODEOWNERS RENDERIZADO com o digest dos bytes entregues e :538 falha se um path sumir, e H.9/H.9b/H.9c (`test-upgrade-historical-adopter.sh:469-491`) cobrem o segundo upgrade; falta a não-vacuidade que o próprio AC exige — nenhum teste PLANTA um marcador `{{...}}` em `templates/docs/rotation-log.md` (0 ocorrências no arquivo) e a metade verbatim do C.8 ainda assere o digest da FONTE CRUA.

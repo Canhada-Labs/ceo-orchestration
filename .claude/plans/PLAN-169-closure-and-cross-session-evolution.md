@@ -1379,6 +1379,53 @@ o dado em mãos, não por simetria).
   mão/legado; fix já pronto na v1.4.0 via W3). Escolha explícita, não
   omissão.
 
+> **OQ-7..OQ-12 registradas na S328 (2026-08-25)** pelo desenho
+> read-only da cura do gate hook-latency (Q5 do Owner: "Emenda + gate
+> em pacote, e 1 rerun de madrugada"; workflow `wf_a0d74c15`, 3 críticos
+> anonimizados — performance-engineer, devops, qa-architect — + síntese;
+> artefato em `PLAN-169/gate-design-S328.json`). Desenho ratificado pelo
+> critério da noite (poder de detecção preservado): funde os dois
+> candidatos; toda a lógica no `.claude/scripts/profile-opus-4-7.py`
+> (não-canônico); `validate.yml` só passa 2 flags + 1 linha de sumário;
+> 6ª entrada de corpus `ref_exec` (referência stdlib de 3 termos,
+> round-robin); segunda chave RELATIVA `hook_p50 ≤ K_e × ref_p50`; 4
+> rótulos nomeados; **fase 1 advisory** (exit codes idênticos aos de
+> hoje) porque K só é derivável com pares (hook, ref) que ainda não
+> existem — pinar K agora seria "subir o número", a jogada que já falhou
+> no ADR-163:291. Nenhuma tem resposta na noite (runbook §2.2).
+
+- **OQ-7 (Owner, S328 — célula `abs_ok ∧ ¬rel_ok`):** ligar a célula
+  `abs_ok && !rel_ok ⇒ real_regression`? Fecha o ponto cego que o
+  próprio ADR-163:291 declara (uma regressão limpa de 2× na entrada
+  mais rápida fica invisível sob 180 ms), mas pode cunhar vermelhos em
+  código não-regredido enquanto K é jovem. Proposta do desenho: default
+  OFF na fase 1 (célula implementada e testada atrás de flag). Decisão
+  de piso de detecção — produto.
+- **OQ-8 (Owner, S328):** o backstop absoluto de 600 ms (acima do qual
+  um runner lento ainda FALHA em vez de ir a advisory) não tem evidência
+  — é juízo de "que latência é inutilizável numa sessão real". Nomear o
+  valor, ou autorizar derivá-lo da distribuição da fase 1.
+- **OQ-9 (Owner, S328):** aceitar a janela de fase 1 (≥10 runs de CI /
+  ≥3 dias) em que NENHUMA chave relativa decide (detecção exatamente a
+  de hoje, inclusive a exposição atual a falso-vermelho)? A alternativa
+  é shipar um K inventado — rejeitada pelos 3 críticos.
+- **OQ-10 (Owner, S328):** se o intervalo de admissibilidade voltar
+  VAZIO (`1,25 × max R > (base+150)/max ref`), a referência está
+  mal-formada e o fallback é mudança canônica MAIOR (pinar a imagem do
+  runner, pré-aquecer o conjunto de imports, ou shipar `.pyc`).
+  Autorizar esse ramo de antemão, ou exigir retorno ao Owner.
+- **OQ-11 (Owner, S328):** o pacote B leva também os dois herdeiros do
+  ADR-144 nomeados neste plano em `:713-714` (a claim AC-3/178 e a
+  descrição da skill `eval-baseline-n20`, que ainda diz "Workflow
+  opts.model is INERT"), ou vão a follow-up? Deixá-los mantém um
+  terceiro sítio vivo de uma claim refutada.
+- **OQ-12 (Owner, S328):** `test_hook_latency.py` NÃO é rede de
+  segurança para este hook: os dois testes são `xfail(strict=False)`
+  (`:160`, `:204`) e o corpus é `check_agent_spawn` + `audit_log` —
+  `check_output_secrets`, a entrada que falha, não é vigiada por mais
+  nada no repo. Acrescentá-la, ou aceitar a exposição de instrumento
+  único.
+
 ## How to continue
 
 **Passo 0 — gate humano (codex r3-r24): CUMPRIDO em 2026-08-08.** O
@@ -1561,6 +1608,16 @@ auditável, e `scripts/tests/**` continua sem lint em CI.
 
 ## Progress log
 
+- 2026-08-25 (S328, 19:03): **W4.1.0 live-fire MEDIDO** —
+  `PLAN-169/w4.1-probe-S328.md`: estouro de quota às 17:17 local
+  (`You've hit your session limit · resets 7pm`), 7 agentes caídos POR
+  CHAMADA (6 às 20:17Z, 1 às 20:51Z); zero eventos Stop/rate na cadeia
+  HMAC no minuto (StopFailure não registrado); sidecar fresco (3 s)
+  mas com `five_hour` = **35 %** no instante da recusa (79 % às 18:33Z)
+  ⇒ `used_pct` NÃO prova exaustão; latência reset → 1ª tool call =
+  189 s (acordado pelo harness, não pelo cron); agentes retomados por
+  `SendMessage` ao nome sem re-despacho. Decisões consequentes ficam
+  para o Owner (§4 da sonda).
 - 2026-08-25 (S328): **night-run autônoma (~12 h, conta alternativa) —
   moldura e decisões do Owner (AskUserQuestion, verbatim).** Q5, cuja dona
   é este plano: **«Emenda + gate em pacote, e 1 rerun de madrugada

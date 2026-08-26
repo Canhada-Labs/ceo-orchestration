@@ -1161,24 +1161,30 @@ com a revisão refrescada, ou vira plano próprio.
       REJEITADO: duplica a verdade e contradiz a doutrina 167/168 (um
       gerador, uma verdade).
       Check: e2e move source+target JUNTOS (prefixo comum renomeado, simulando outro home) e o ponteiro RESOLVE; segundo e2e move o target SOZINHO e o corpo do ponteiro conduz ao reparo nomeando --protocol-source; asserir so relatividade in-place segue insuficiente (pair-rail r8+r9)
+      — ⛔ S328: os DOIS e2e do Check não existem no HEAD (nenhum teste move source+target juntos, nenhum assere erro nomeado de `--protocol-source`), e a decisão in-function que está na árvore (`scripts/_framework_manifest_set.sh:1384-1386`) é do PLAN-168 (`67a4c75`), não desta wave — a W1 segue "cura desenhada e não executada" (`PLAN-183/resposta-ao-campo.md:44`).
 - [ ] `[P0]` **Remediação retroativa:** reconhecedor de "absoluto
       legado" no molde de `_protocol_pointer_is_degraded`
       (`_framework_manifest_set.sh:736-742`), com re-render byte-a-byte,
       falha **para preservação**, e backup em `$BAK_DIR`.
       Check: e2e — instalação feita com a versão ANTERIOR, ao rodar upgrade.sh, termina com ponteiro relativo
+      — ⛔ S328: não existe reconhecedor de "absoluto legado" — o único da árvore, `_protocol_pointer_is_degraded` (`scripts/_framework_manifest_set.sh:1439`, `67a4c75`), reconhece a classe do literal `{{PROTOCOL_SOURCE}}`, e o e2e "instalar com a versão ANTERIOR e depois dar upgrade" não existe.
 - [ ] `[P0]` Usar a interface que **já existe**: `--protocol-source` e
       `CEO_PROTOCOL_SOURCE` (`install.sh:409,522,663-668`), reusada pelo
       upgrade via install-state. Não introduzir env nova.
       Check: CEO_ORCHESTRATION_DIR nao aparece no gerador nem no plano; --protocol-source e o unico escape citado
+      — ◐ S328: entregue a metade do gerador — `--protocol-source`/`CEO_PROTOCOL_SOURCE` em `scripts/install.sh:409,522`, reusados pelo upgrade via install-state (`scripts/upgrade.sh:1745-1760`), e a env alternativa com 0 ocorrências em `scripts/`, tudo código pré-existente do PLAN-167/168 e não entrega desta wave; falta a metade do plano — o token que o Check proíbe segue presente no próprio Check (:1172) e em 5 arquivos de `PLAN-183/debate/round-1/`.
 - [ ] `[P0]` O corpo renderizado passa a **nomear** a interface — hoje
       ele manda "editar" sem dizer que existe flag para isso.
       Check: o ponteiro renderizado contem a string --protocol-source
+      — ⛔ S328: `grep --protocol-source` no corpo renderizado (`scripts/_framework_manifest_set.sh:1381-1440`) devolve 0 — a linha :1431 ainda manda só "Edit {{PROTOCOL_SOURCE}} to point at your ceo-orchestration checkout".
 - [ ] `[P1]` Preservação silenciosa vira **preservação AVISADA**:
       WARNING quando um ponteiro preservado contém caminho absoluto.
       Check: e2e com ponteiro absoluto editado pelo adopter — a edição sobrevive E o WARNING aparece
+      — ⛔ S328: o ramo `PRESERVE_OWNED` (`scripts/upgrade.sh:1855-1866`) imprime PRESERVED sem inspecionar o corpo preservado, e não há condição de caminho absoluto em ponto nenhum de `_refresh_protocol_pointer` (`:1718-1893`).
 - [ ] `[P0]` Preservar INV-4 — a cura não pode reabrir o que os
       PLAN-167/168 fecharam.
       Check: scripts/tests/test-protocol-pointer-inv4.sh verde
+      — ◐ S328: entregue o instrumento — `scripts/tests/test-protocol-pointer-inv4.sh` existe desde `67a4c75` (PLAN-168) e está fiado na CI (`ownership-nightly.yml:178`; `smoke-install.yml:80,151`); falta a cura da W1 que ele deveria proteger, então hoje o check é vacuoso.
 
 ### W2 — CI que passa no adopter (A2/A3/A7)
 
@@ -1190,6 +1196,7 @@ com a revisão refrescada, ou vira plano próprio.
       governança sem gate de drift. Gate de drift OU declaração escrita
       de "subconjunto mínimo congelado", com o teste que a executa.
       Check: a wave escolhe UM ramo na abertura e registra qual. Ramo A (gate de drift) — existe gate que falha quando o vivo ganha step fora da allowlist de divergencia. Ramo B (subconjunto congelado) — existe teste que falha se o template divergir do subconjunto declarado, e a declaracao nomeia cada step congelado. [pair-rail r8: o Check anterior exigia o ramo A e tornava o ramo B inexecutavel]
+      — ⛔ S328: nenhum ramo foi escolhido nem registrado — "Ramo A"/"Ramo B" não aparecem em lugar nenhum de `.claude/plans/PLAN-183/` fora deste Check, e nenhum teste diffa o template contra o vivo (os 4 arquivos de teste que citam `validate.yml.template` o tratam como DESTINO de rota de entrega, não como gate de drift).
 - [ ] `[P0]` **Re-derivar o censo step a step**, com mecanismo nomeado
       por step. Mínimo a cobrir: `:108-109` (PyYAML — dependência de
       terceiro, contra o stdlib-only do `CLAUDE.md` §3), `:148,158`
@@ -1199,25 +1206,31 @@ com a revisão refrescada, ou vira plano próprio.
       que o adopter não tem), `:22-23` (timeout 5 contra 25), `:27`
       (checkout sem pin).
       Check: tabela step para mecanismo para disposicao cobrindo os 14 steps; nenhum step fica sem veredito
-- [ ] `[P0]` **`Contamination check`: manter "ele estava CERTO"** quanto
+      — ◐ S328: entregue o censo aplicado — `4f750f0` levou `templates/.github/workflows/validate.yml.template` de 14 para 11 steps, com mecanismo nomeado por step no próprio arquivo (checkout SHA-pinado :31, PyYAML condicional :107-113, actionlint pinado em 1.7.7 :177, timeout 15 :26, remoção do skill-inventory explicada :193-198); falta a tabela step→mecanismo→disposição cobrindo os 14 steps, e o artefato mais próximo (`PLAN-183/resposta-ao-campo.md:63-75`) dispõe só os 3 steps removidos.
+- [x] `[P0]` **`Contamination check`: manter "ele estava CERTO"** quanto
       ao gatilho do A1, **e** curar o A7 — o padrão embarca a identidade
       do mantenedor, o arquivo é entregue ao adopter, e ele se
       auto-isenta. Cura = padrão **configurável na instalação**.
       Check: instalacao limpa produz um guard cujo padrao NAO contem o nome do mantenedor; controle negativo com o nome plantado dispara
+      — ✅ S328 (2026-08-25): .claude/scripts/check_contamination.py:74,80,83,108,133 + .claude/scripts/tests/test_check_contamination.py:223 · commit 4f750f0
 - [ ] `[P0]` Após a W1, re-rodar o `Contamination check` no adopter:
       espera-se VERDE **sem tocar a allowlist**. Se exigir mudança de
       allowlist, PARAR — mexer nela esconderia a contaminação.
       Check: o step sai verde e o diff da allowlist e vazio
-- [ ] `[P0]` `benchmarks.yml.template`: ou o `install.sh` entrega
+      — ⛔ S328: bloqueado na W1, que não foi executada (`PLAN-183/resposta-ao-campo.md:44`) — não há em disco registro de re-execução do `Contamination check` no adopter, e a allowlist MUDOU em `4f750f0` (`check_contamination.py:133`), logo o "diff vazio" tem de ser medido contra a baseline pós-A7.
+- [x] `[P0]` `benchmarks.yml.template`: ou o `install.sh` entrega
       `.github/scripts/`, ou a referência sai. Cabeçalho declara a
       variável de API key exigida e o custo em dinheiro do adopter.
       Check: instalacao limpa nao deixa referencia a script ausente
-- [ ] `[P1]` Template recebe kill-switch de job espelhando o vivo
+      — ✅ S328 (2026-08-25): templates/.github/workflows/benchmarks.yml.template:9-15,17-22 + scripts/tests/smoke-install.sh:149-152 · commit 4f750f0
+- [x] `[P1]` Template recebe kill-switch de job espelhando o vivo
       (16 ocorrências no vivo contra 0 no template).
       Check: actionlint limpo e o if presente no nivel de job
+      — ✅ S328 (2026-08-25): templates/.github/workflows/validate.yml.template:25 (`if` no nível de job) · commit 4f750f0 — ressalva: a metade "actionlint limpo" está atestada só no corpo do commit, nenhum gate vivo linta o template.
 - [ ] `[P1]` Nomear que o install entrega `.template` (**inerte**) e que
       o CI só existe após rename — o passo de ativação vira explícito.
       Check: AC-2 nomeia o passo de ativacao; prova em repo descartavel nosso
+      — ◐ S328: entregue a nomeação para UM dos dois templates — `templates/.github/workflows/benchmarks.yml.template:3-7` declara "INERT AS SHIPPED" e o `git mv` de ativação (`4f750f0`; 1 ocorrência da string em todo `templates/`); falta o mesmo cabeçalho em `validate.yml.template`, e o AC-2 (:1301 pré-S328) segue `- [ ]` sem prova de template ativado saindo verde em repo descartável.
 
 ### W3 — Catálogo e a regra de VETO (A4)
 
@@ -1527,6 +1540,91 @@ com a revisão refrescada, ou vira plano próprio.
    - O ADR da W5-b registra a rota (ii) e o risco de tomada como
      decisão consciente, com o argumento de prova-de-origem para
      `.github/**/*.template` explicitado.
+
+> **Itens 5–11 registrados na S328 (2026-08-25)** pela re-derivação
+> read-only das obrigações residuais da W5-b (workflow `wf_b2e30e3d`:
+> 2 leitores sobre fontes disjuntas + redutor; toda afirmação abaixo
+> cita path:line verificado no HEAD `560dad0`). **Nenhum tem resposta
+> na noite** (runbook §2.2 — o CEO não decide no lugar do Owner). A
+> W5-b fecha o que é MECÂNICO — H.27 com divergência plantada em
+> `test-upgrade-historical-adopter.sh`; confinamento nos 2 sítios de
+> hash do `doctor.sh`; discriminante line-exact da continuidade em
+> `install.sh` (canônico, pacote S328-A); bookkeeping das 20 checkboxes
+> abertas do rascunho — e deixa estes SETE para a manhã. Provados
+> ENTREGUES e retirados da lista: @815 (`upgrade.sh:4457` +
+> `test-upgrade-historical-adopter.sh:691-730`, H.12/b/c/d/e), @733
+> (`_framework_manifest_set.sh:463` `_WBM_ROUTES_TSV` + leitores) e
+> §9.8 (`if: always()` em 7 steps do `smoke-install.yml`).
+
+5. **W5-b / `uninstall.sh` com `docs/` + `.github/` no manifesto (§9.8
+   P0)** — a expectativa da perna (b) do plano está FALSIFICADA pela W5:
+   o manifesto registra o digest RENDERIZADO
+   (`test_install_baseline_manifest.sh:557-563`), logo a comparação de
+   SHA do `uninstall.sh` CASA e APAGA — o plano esperava `PRESERVED`. E
+   `uninstall.sh:273` varre diretórios vazios SÓ sob `$TARGET/.claude`,
+   então a perna `docs/`/`.github/` está descoberta por construção.
+   **Pergunta:** o uninstall APAGA um `.github/CODEOWNERS` renderizado
+   (entregue pelo framework, registrado exatamente) ou o PRESERVA como
+   configuração do adopter? Estimativa após a decisão: ~180 linhas.
+6. **§9.4 F4 — `.github/` fora dos DOIS scanners de placeholder**
+   (`install.sh:2265-2281` `explicit_files`; `:2363-2374` `scan_roots`;
+   e o walk filtra `-name '*.md' -o -name '*.py'` em `:2385`, então
+   incluir a raiz SOZINHA ainda não veria `CODEOWNERS.template`).
+   Medido: 11 `{{OWNER_HANDLE}}` viajam sem render via
+   `install.sh:1647-1654` quando não há handle. **Pergunta:** um
+   `*.template` entregue CARREGANDO placeholders é defeito a sinalizar,
+   ou é o contrato pretendido "o adopter preenche" (o ramo `else` é
+   tomado exatamente porque nenhum handle foi dado)? A disposição do
+   próprio plano atribui F4 à W2, não à W5.
+7. **§9.3 / @1582 — o par install-side.** Verificado aberto:
+   `install.sh:1618` renderiza `.github/CODEOWNERS` só com o skip
+   `[[ -e $dst ]]` e nunca procura um `.template` existente;
+   `:1647-1654` copia o `.template` sem checar um renderizado existente;
+   nenhum remove o outro; nenhum teste roda o install duas vezes;
+   `upgrade.sh:4447-4450` DECLINA explicitamente reproduzir a cura.
+   **Pergunta:** o install REMOVE o arquivo superado, ou deixa o par e
+   apenas se recusa a REIVINDICAR os dois (under-claim,
+   ADR-155-AMEND-1)? Estimativa após a decisão: 45-70 linhas.
+8. **§7 residual (a) — `_register_delivered_template` recebe o relpath
+   da FONTE como LITERAL por call-site** (`install.sh:1573`; call-sites
+   `:1594-1597`, `:1650-1653`, `:1656-1667`) — um segundo lugar onde o
+   par destino→fonte é declarado. A mitigação é real:
+   `test-manifest-delivery-route.sh:247-256` (S.2b) cruza os argumentos
+   com os call-sites de `install_docs_template`. **Pergunta:** colapsar
+   para UM argumento resolvido via `_wbm_route_src` (o `install.sh`
+   vira 4º consumidor do TSV, fail-CLOSED sem a tabela — alarga um
+   arquivo CANÔNICO, exige cerimônia) ou manter o literal + o cruzamento
+   mecânico? Estimativa: 35-45 linhas.
+9. **`_parity_classify.py` resolve a rota RENDERIZADA para `None`** —
+   o gate de paridade nunca classifica `.github/CODEOWNERS`, exatamente
+   o destino pelo qual a pista MISTA (braço C) foi escolhida; o próprio
+   arquivo nomeia isso como item da W5-b em
+   `scripts/tests/_parity_classify.py:326-327`. **Pergunta:** um harness
+   de TESTE pode ler o `.claude/.install-state.json` NÃO-ASSINADO do
+   lado do adopter? A H.7 de `test-upgrade-historical-adopter.sh` trata
+   um `github_owner` com `/` ali como entrada HOSTIL. Se sim: mesma
+   validação de `upgrade.sh:3696-3702` + controle de que o handle do
+   mantenedor nunca vaza para a saída. Estimativa: ~55 linhas.
+10. **§9.6 F9 (ÓRFÃO)** — `install.sh` cita `docs/deny-baseline.md` 9
+    vezes (medido: `grep -c` = 9), inclusive em mensagens de recuperação
+    de erro, e nunca o entrega (`ls templates/docs/` =
+    `BRANCH-PROTECTION.md`, `rotation-log.md`). A disposição diz "W2",
+    mas a W2 landou (`4f750f0`/`ed4d1cf`) sem curá-lo e a lista de
+    ratificação da S328 não o nomeia — hoje não pertence a wave aberta
+    nenhuma. **Pergunta:** entregar `templates/docs/deny-baseline.md`
+    (7ª rota + linha no TSV de rotas + entrada no manifesto) ou
+    reescrever as 9 mensagens para não citarem um doc que o adopter
+    nunca recebe? Estimativa: ~40 linhas.
+11. **STALE ×2 do `SPEC/`** — o material ASSINADO
+    (`PLAN-183/w5-ceremony/PROPOSED-PATCH.md:101`) registra que estender
+    a emenda da OQ-5 ao `SPEC/` é "decisão do Owner, fora deste patch";
+    os dois paths STALE são `SPEC/v1/audit-log.schema.md` e
+    `SPEC/v1/state-stores.schema.md`. Precisa de disposição (fazer
+    agora, ou registrar como W5-c) ANTES de a W5-b ser declarada
+    fechada. (A W5-c em si — superfície `template` com linhas de 9
+    dimensões em `ownership_table.tsv` — já está ratificada como wave
+    própria em `PROPOSED-PATCH.md:89` e deliberadamente NÃO é obrigação
+    da W5-b.)
 
 ## Reference links
 

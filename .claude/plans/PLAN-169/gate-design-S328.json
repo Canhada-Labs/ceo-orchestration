@@ -1,0 +1,122 @@
+{
+ "anonymization_map": {
+  "Critic-A": "perf",
+  "Critic-B": "devops",
+  "Critic-C": "qa"
+ },
+ "critiques_returned": 3,
+ "ingest_truncated": false,
+ "synthesis": {
+  "design": "Fuse (i)+(ii); ALL logic in the non-canonical profile-opus-4-7.py, workflow only passes flags. Add a 6th corpus entry ref_exec sampled ROUND-ROBIN inside each entry's loop (fixes the S318 decorrelation all 3 critics named: entry 1 read 45-70ms while a later entry hit 159-698ms in the SAME run). Two keys per entry: absolute (unchanged) + runner-normalized relative. Candidate (ii) standalone is REJECTED (slow-day amnesty = detection zero exactly when the runner is bad); only its label vocabulary survives. Ship PHASE 1 advisory-only: labels computed and published, exit codes byte-identical to today; K pinned later by a second ceremony.",
+  "gate_rule": "Per entry: abs_ok = hook_p95 <= 180 (unchanged). rel_ok = hook_p50 <= K_e * ref_p50 — p50 on BOTH sides (ADR-163:258 median doctrine; measured runner p95/p50 spread 1.05/1.04/2.25 makes any p95-over-p50 ratio swing 2x on unregressed code). abs_ok && rel_ok => pass exit 0. !abs_ok && rel_ok && p95<=600 => advisory_slow_runner exit 0 + ::warning:: + summary row. !abs_ok && (!rel_ok || p95>600) => real_regression exit 1. ref_p50 non-finite/<=0/bool/str, ref split-half p50 drift >1.5x, or self-elapsed >0.9*wall-budget => infrastructure_contended exit 5 (the self-cap fires BEFORE timeout 420, so rc124 stays unreachable). Phase 1: label published, exit code = today's.",
+  "reference_measure": "Frozen 3-term stdlib-ONLY subprocess, source pinned by sha256 in the report: (1) import json/re/hashlib/pathlib + a fixed re.compile set, (2) fixed CPU hash loop, (3) M x open/append/flock/fsync/rename under entry_tmp/ref, same FS as the audit dir. MUST NOT import _lib or .claude/hooks — unanimous: the WS-J class this gate exists for IS an eager _lib import, which inflates numerator AND denominator and blinds the ratio to its own reason to exist. The IO term is mandatory: a 7.76ms spawn floor beside a 361ms hook is a disk/page-cache signature, and a CPU-only ref stays as blind as the spawn probe. n_ref>=40, p50 via _pct_of_sorted. Scrub CLAUDE_PROJECT_DIR_NATIVE in the per-entry env (highest-precedence carrier, currently unscrubbed — S321/S326 class).",
+  "threshold_derivation": "K is NOT derivable today: zero paired (hook, ref) samples exist anywhere, local or CI (unanimous; each critic's own local numbers are self-declared contaminated). Ship the PROCEDURE. Phase 1 (--exec-reference --relative-advisory) publishes R_e = hook_p50/ref_p50 per entry; after >=10 green CI runs over >=3 days, K_e = 1.25 * max(R_e). ADMISSIBILITY, which is what answers the criterion: K_e <= (baseline_p50_e + 150)/max(ref_p50), so the +150ms plant still fails at the WORST observed reference. An EMPTY interval means the reference is mis-shaped and the design is REJECTED — never widen K, that is the 'bump the number' move already failed at ADR-163:291. Expected 2-4; any K written into a package before that window is invented.",
+  "outcome_labels": [
+   "pass",
+   "advisory_slow_runner",
+   "real_regression",
+   "infrastructure_contended"
+  ],
+  "positive_control": "Hermetic per-PR in .claude/scripts/tests/: mock the timing source so check_output_secrets yields baseline+150ms while ref_exec stays at baseline; assert label=='real_regression' AND exit 1 — predicate-level, never wall-clock luck. Live (workflow_dispatch): extend PLAN-159/wave2-regression-proof.sh, which already plants time.sleep(0.15) in a throwaway worktree and requires the JOB red through the real wrapper, with (a) assert label=='real_regression', not merely exit!=0; (b) ref_p50 delta clean-vs-planted <15%, proving the plant hit the HOOK not the machine; (c) a SECOND plant of eager module-scope imports — sleep is IO wait and misses the WS-J shape; (d) re-run the plant WITH the negative-control load and still require real_regression. Fooled by: a plant in a term the ref shares; K admitted from the fast band only; a hook slow only on Linux (run it in CI too).",
+  "negative_control": "Clean clone, unregressed, same machine, 3 arms because the CPU-vs-IO cause is unsettled on disk. N1 CPU: nproc busy-loop siblings (taskset -c 0 on Linux; absent on macOS; nice alone reorders and creates NO contention, so it is not a stressor). N2 IO: dd conv=fsync loop on entry_tmp's device, matching the field signature. N3 ref-starvation trap: starve ONLY the reference (slow FS for entry_tmp/ref) and require infrastructure_contended, never pass. Assert BOTH label in {advisory_slow_runner, infrastructure_contended} (never real_regression) AND R_loaded/R_quiet in [0.7,1.4] — the ratio half is the anti-vacuity check: a CPU burner against an IO-bound hook starves the REFERENCE harder, the ratio FALLS, and the control passes for the wrong reason. Declared residual: an IO-slow runner is indistinguishable from an IO regression by any ref that also does IO.",
+  "files_touched": [
+   ".github/workflows/validate.yml",
+   ".claude/scripts/profile-opus-4-7.py",
+   ".claude/scripts/tests/test_hook_latency_relative_gate.py",
+   ".claude/scripts/data/hook-latency-ref-baseline.json",
+   ".claude/adr/ADR-163-hook-latency-gate-percentile-stability.md",
+   ".claude/adr/ADR-144-subagent-model-tiering-frontmatter.md",
+   ".claude/plans/PLAN-159/wave2-regression-proof.sh"
+  ],
+  "canonical_diff_minimal": "validate.yml ONLY, 3 functional lines. (a) run_gate argv block, lines 1267-1272: insert 2 lines after :1271 — `--exec-reference \\` and `--relative-advisory \\` (phase 2 swaps the second for `--relative-k-source .claude/scripts/data/hook-latency-ref-baseline.json`). (b) publish() PYSUM, ~:1303-1305: one extra note() printing verdict_label + ref_p50_ms per entry. NOTHING else: run_gate 1/2/3 (:1349/:1357/:1364), BACKOFF_S, contention_probe and the literals 'FAILED on BOTH attempts (rc1=' (:1371,:1375) and 'FAIL: hook latency gate --' are untouched, so proof-retry-matrix.sh and wave2-regression-proof.sh stay proven. WARNING: the brief's argv is drifted — on disk it is `--latency-iterations 200` (:1269) and `--p99-ceiling-ms 160` (:1271); a patch written from the brief would not apply.",
+  "adr163_amendment_outline": "## Amendment (PLAN-169 S328) — runner-normalized second key; the spawn probe is blind by construction. CONTEXT: Validate failed a16ac96 (run 32866209415) with check_output_secrets p95 361.4/424.8/229.1ms vs the 180ms hard ceiling while the spawn probe read UNCONTENDED 7.76ms and the same SHA ran 70-77ms locally; 56f050c 209->435ms; 6304f66 PASSED the same morning — and git diff 6304f66..a16ac96 touches ZERO files under .claude/hooks/, so identical hook bytes gave PASS and FAIL 3.5h apart. `python3 -c pass` prices the spawn floor, a few percent of a hook importing ~16.5k lines of _lib plus a locked write. DECISION: keep 180ms hard (no third recalibration after :291's 120->180); add hook_p50 <= K_e*ref_p50 against a frozen stdlib-only 3-term execution reference sampled round-robin; four named outcomes; phase 1 advisory until >=10 green runs pin K_e by the admissibility bound. Spawn probe kept, vestigial.",
+  "adr144_amendment_outline": "## Amendment — opts.model is NOT inert; the Workflow rail ROUTES model (PLAN-169 W4.3, closed S316 2026-08-20). §S220 (ADR-144:87-96) still asserts ':89 opts.model is silently ignored', ':90-91 tiering for WORKFLOW subagents is NOT achievable today', ':96 the per-agent model: frontmatter remains the sole working tiering channel'. MEASURED refutation, PLAN-169:704-716 (verified verbatim on disk): probe wf_9ddadaab-12f on harness 2.1.237, 2 agents — with opts.model='haiku' the model SERVED in the transcript turns was claude-haiku-4-5-20251001; the no-override control inherited claude-fable-5. Evidence: agent-a3fbe640*.jsonl / agent-a8dea319*.jsonl + .meta.json, model field of the RESPONSE envelope ('servido, nao pedido'). Verdict quoted: 'agent(...,{model}) NAO e mais inerte'. SCOPE it to harness 2.1.237, n=2 — not timeless. Inheritors at :713-714 (AC-3/178, eval-baseline-n20 skill) fix in the same package.",
+  "test_plan": [
+   "Extract a PURE classify_entry(hook_p50, hook_p95, ref_p50, ceiling, K_e) -> (label, passed); today timing lives inside the subprocess loop, so with subprocess.run mocked every sample is ~0 and the existing test can only fake a breach with an impossible ceiling of -1.",
+   "Full 2x2 truth table in .claude/scripts/tests/test_hook_latency_relative_gate.py asserting label AND exit code (0/1/5) per cell. The design in one test: the SAME hook numbers (p50 250 / p95 361) give advisory_slow_runner with ref_p50 210 and real_regression with ref_p50 60.",
+   "Adversarial ref_p50 -> infrastructure_contended, never pass: 0 (no ZeroDivisionError), -1, NaN, -Infinity, True (bool), '-1' (str), missing key. Reuse the exact case list already proven for contention_probe (codex r1 F8) so the two parsers cannot diverge. Plus split-half drift >1.5x.",
+   "ANTI-COUPLING: AST-walk the frozen reference source, assert it imports nothing under _lib or .claude/hooks, and assert its sha256 matches the value in the report (a future edit making the ref heavier silently loosens the gate). Positive control: a planted `from _lib import audit_emit` must turn this test RED.",
+   "Precondition parity: n_ref < 22 -> a named reference_indices_collapsed error with passed=False, fired BEFORE any subprocess spawn, mirroring ADR-163:258's percentile_indices_collapsed contract. Label set derived from a module-level OUTCOMES tuple asserted to have exactly 4 members (closed sets are derived, never recalled).",
+   "Interleaving invariant: mock subprocess.run with a call-index recorder and assert ref samples are spread (max gap <= 2k), blocking a future optimisation back into one pre-loop block — the S318 probe bug re-created.",
+   "BACK-COMPAT: without --exec-reference the JSON keys and exit codes are byte-identical to today; --floor JSON still carries subprocess_floor_ms.p50 (proof-retry-matrix.sh parses it); the observe positive control still sees on_rows == iterations (ref writes only under entry_tmp/ref). Phase-1 proof: an R>K input still exits 0 with advisory_phase=true.",
+   "Shell proof in the proof-retry-matrix.sh shape: extract the run-block from the live validate.yml, mock run_gate to return 0/1/5/124, assert each maps to its label and that 'FAILED on BOTH attempts (rc1=' survives the real-regression path."
+  ],
+  "disagreements": [
+   "n_ref: A demands >=60, B 40, C 25. ADOPTED 40 — A's >=22 index-separation argument applies to p95, and the relative key is gated on p50, where index collapse does not arise. Costs ~3% of the wall cap.",
+   "K formula: A = 1.6 x median(ratio) reusing ADR-163's declared detection factor; B = 1.25 x max(ratio) PLUS an admissibility bound; C = m x r0 with m 2.5->2.0. ADOPTED B — it is the only one that mechanically proves the +150ms positive control still fails at the WORST observed reference, which is the decision criterion. A's 1.6x is kept as a sanity floor on the resulting K.",
+   "abs_ok && !rel_ok => real_regression (new power closing ADR-163:291's declared blind spot): B and C want it ON, A wants the <=180 short-circuit so the verdict stays bit-identical. NOT decided here — product judgment, see open questions. Default OFF; the cell is implemented and unit-tested behind a flag.",
+   "rc124 relabel at validate.yml:1372 (a 420s cap-kill stamped 'real regression'): B wants +8 canonical lines, A wants zero. ADOPTED zero — the profiler self-caps at 0.9 x wall-budget and exits 5 first, making rc124 unreachable in practice. The pre-existing mislabel is RECORDED in the ADR as a known defect, not fixed here (it would grow the canonical diff for a case the self-cap removes).",
+   "Candidate (ii) standalone: B rates ADOPT_WITH_CHANGES, A and C REJECT. ADOPTED REJECT — B itself concedes it is safe 'only if the advisory state still applies a RELATIVE key hard', which collapses it into (i). Its label vocabulary is kept in full.",
+   "Deleting the spawn probe: A says leave it vestigial (smaller canonical diff), B/C imply replacing it. ADOPTED A — removal buys nothing and grows the diff."
+  ],
+  "open_questions_for_owner": [
+   "Enable the abs_ok && !rel_ok => real_regression cell? It closes the blind spot ADR-163:291 itself declares (a clean 2x regression on the fastest entry stays invisible under 180ms) but can mint reds on unregressed code while K is young. Proposed default OFF in phase 1. This is a detection-floor product call.",
+   "The 600ms absolute backstop (above which a slow runner still FAILs instead of going advisory) has no evidence behind it — it is a 'what latency is unusable in a real session' judgment. Name it, or authorize deriving it from the phase-1 distribution.",
+   "Accept a phase-1 window of >=10 CI runs / >=3 days in which NO relative key gates (detection stays exactly today's, including the current false-red exposure)? The alternative is shipping an invented K, which all three critics reject.",
+   "If the admissibility interval comes back EMPTY (1.25 x maxR > (base+150)/max_ref), the reference is mis-shaped and the fallback is a LARGER canonical change — pinning the runner image, pre-warming the import set, or shipping .pyc. Authorize that branch in advance or require a return to the Owner.",
+   "Does this package also carry the two ADR-144 inheritors named at PLAN-169:713-714 (the AC-3/178 claim and the eval-baseline-n20 skill description, which still reads 'Workflow opts.model is INERT'), or do they go to a follow-up? Leaving them keeps a third live site of a refuted claim.",
+   "test_hook_latency.py is NOT a safety net for this hook: both tests are xfail(strict=False) (:160, :204) and its corpus is check_agent_spawn + audit_log — check_output_secrets, the entry that fails, is watched by nothing else in the repo. Add it, or accept the single-instrument exposure."
+  ],
+  "est_lines_total": 715,
+  "ingest_truncated": false
+ },
+ "critic_verdicts": [
+  {
+   "critic": "Critic-A",
+   "i": "ADOPT_WITH_CHANGES",
+   "ii": "REJECT",
+   "est": {
+    "profiler": 220,
+    "workflow": 14,
+    "adr163": 60,
+    "adr144": 14,
+    "tests": 300
+   },
+   "blockers": [
+    "K CANNOT BE SET TODAY: no run has ever measured an execution-shaped reference on a CI runner. Any K in the ceremony package is invented unless phase-1 --relative-advisory runs first and >=10 green runs are read.",
+    "UNTESTED PREMISE: that the reference inflates proportionally on the runner that actually failed. If it does not, candidate (i) fails its own decision criterion.",
+    "I am read-only and did not run the profiler; my numbers are python3 -c micro-benchmarks on this loaded macOS laptop (floor p50 52.6/72.8ms in two runs a minute apart -- the machine itself moved 38%). No claim here rests on a profiler run I made.",
+    "EVIDENCE ARGV IS WRONG: the step passes `--latency-iterations 200` (not `--iterations 200`) and ALSO `--p99-ceiling-ms 160`. A patch written from the prompt's argv would not apply. validate.yml:1215-1222.",
+    "Run 32866209415 numbers are not independently verifiable here (no network/gh). On-disk corroboration only: PLAN-169:1568-1573 repeats 361/425/229ms, 209->435ms, probe 7.76ms, local 70-77ms.",
+    "STRONGER THAN THE PROMPT CLAIMS: git diff --stat 6304f66..a16ac96 touches ZERO files under .claude/hooks/ (only plans, smoke-install.yml, CLAUDE.md), so PASS and 361ms FAIL are the same hook bytes 3.5h apart. Note the narrower 'check_output_secrets.py unchanged since 2026-07-02' would NOT have covered it: audit_emit.py and tool_lifecycle.py both changed 2026-08-21."
+   ]
+  },
+  {
+   "critic": "Critic-B",
+   "i": "ADOPT_WITH_CHANGES",
+   "ii": "ADOPT_WITH_CHANGES",
+   "est": {
+    "profiler": 220,
+    "workflow": 35,
+    "adr163": 70,
+    "adr144": 14,
+    "tests": 440
+   },
+   "blockers": [
+    "Cannot verify runs 32866209415 / 32758192634 via gh (read-only, no network). Verified indirectly: memory project-s327-boot-validate-red-hook-latency-runner-drift reproduces 361.4/424.8/229.1ms and probe 7.76ms exactly, plus the fuller 2026-08-24 series (green mornings; 226/262->182/196->196; 209/214->323/199->210/255; rerun same SHA 281->385->435; probe always UNCONTENDED at floor p50 6.6-8.6ms).",
+    "No execution reference has EVER been measured on CI. K and the 'high execution floor' threshold are both underivable today — this blocks phase 2 of any relative rule until an advisory window lands. Phase 1 (flags, advisory publish) is unblocked.",
+    "Dominant cause (disk/page-cache vs CPU throttle) is unsettled by any on-disk evidence; the negative control's stressor choice depends on it. One instrumented run reporting a CPU-only AND an I/O reference settles it.",
+    "My local reference measurement is contaminated — taken while this session ran parallel agents (local spawn p50 51.93ms vs the runner's 7.76ms; exec/spawn p50 ratio 2.47). Do not use it to set K.",
+    "Minor EVIDENCE drift: the bullet says `--iterations 200`; validate.yml:1269 is `--latency-iterations 200`, and the argv also carries `--p99-ceiling-ms 160` which the bullet omits. All other checkable bullets CONFIRMED (check_output_secrets untouched since 7df843d 2026-07-02; ADR-163 amendments at :188, :258, :291; validate.yml canonical via check_canonical_edit.py:184-185; profile-opus-4-7.py NOT canonical and NOT in the ADR-192 manifest)."
+   ]
+  },
+  {
+   "critic": "Critic-C",
+   "i": "ADOPT_WITH_CHANGES",
+   "ii": "REJECT",
+   "est": {
+    "profiler": 210,
+    "workflow": 14,
+    "adr163": 85,
+    "adr144": 22,
+    "tests": 460
+   },
+   "blockers": [
+    "ZERO paired (hook, reference) samples exist, so r0/K cannot be derived from evidence today. Read-only confinement barred me from running the profiler (it writes tmpdirs), so I have no local r0 either. First implementation step must be 1 local + 1 green-CI paired series.",
+    "Run 32866209415 / 56f050c / 6304f66 outcomes are not on disk. The 361/425/229ms, 209->435ms and 7.76ms figures are corroborated only by PLAN-169:1568-1571 prose, not by a run artifact.",
+    "The I/O-vs-CPU cause of the field slowdown is UNTESTED; negative-control arm N2 is what would falsify it. If N2 is not runnable in CI, the hypothesis behind the reference design stays open.",
+    "validate.yml and both ADRs are canonical (signed ceremony); timeout(1) is absent on this macOS host, so the wrapper's real shell can only be exercised on Linux."
+   ]
+  }
+ ]
+}
