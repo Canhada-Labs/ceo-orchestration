@@ -1272,6 +1272,29 @@ pelo Owner; `OWNER-S329-E-LAND.sh` G-PRE..G5 + V1..V7 verdes; patch
   (a mesma classe que esta wave fecha no upgrader, uma camada acima). OQ-E1
   (recusa hook a hook) alarga-se ao `.env`; OQ-E6 (quem repara um registro
   deformado — hoje ninguém).
+- **✅ OQ-E5 RATIFICADA pelo Owner em 2026-08-27 (S330, AskUserQuestion,
+  verbatim): «OQ-E5 settings.user.json (Recomendado)» — a próxima cerimônia
+  da sessão, antes de OQ-7 do PLAN-185 e do pin de modelo.** Wave própria
+  **wave-s330-F**, hospedada aqui (pacote `PLAN-169/s330-ceremony-F/`,
+  molde = E). Escopo ratificado: derivar `templates/settings/settings.user.json`
+  da base por SUBTRAÇÃO da lista declarada de 10 (hoje só em PROSA no
+  `_comment` do próprio template — vira DADO), gerador idempotente + teste
+  de paridade fail-closed (a base ganha um hook fora da lista ⇒ vermelho),
+  com as divergências já MEDIDAS nesta sessão como controle vermelho.
+  **Censo de partida (S330, comportamental, por basename de hook):** base
+  **46** hooks distintos (o «47» acima conta REGISTROS —
+  `check_output_secrets.py` está em `PostToolUse` e `PostToolUseFailure`),
+  user **20**, 26 só-na-base (10 deliberados + 16 defasados), 0 só-no-user;
+  **2 hooks presentes nos dois com matcher DIFERENTE** —
+  `check_anti_ceo_overhead.py` (base cobre 14 ferramentas, user 5) e
+  `check_output_secrets.py` (user sem o registro `PostToolUseFailure`) —
+  o que REFUTA a claim «campos comportamentais byte-idênticos» do
+  `_comment`; env: base tem 5 chaves a mais, user tem
+  `CEO_CONFIG_PROTECTION_ADVISORY=1` (deliberada: postura advisory do
+  perfil). Os demais top-level (`permissions`, `statusLine`,
+  `availableModels`, …) ficam FORA da derivação por desenho do perfil
+  (`_model_comment`: advisory-only). Desenho, testes e rail em
+  `s330-ceremony-F/DESIGN-F.md`.
 
 ## Acceptance criteria
 

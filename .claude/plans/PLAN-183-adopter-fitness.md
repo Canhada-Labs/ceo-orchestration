@@ -1417,6 +1417,17 @@ com a revisão refrescada, ou vira plano próprio.
 
 ## Open questions
 
+> **✅ Decisão do Owner em 2026-08-27 (S330, AskUserQuestion, verbatim):
+> «182 → done; 183 segue com W1 na fila (Recomendado)».** Este plano
+> permanece `executing`. A **W1 — ponteiro portátil e retroativo (AC-1)** é
+> a próxima wave DESTE plano no trem, imediatamente DEPOIS da wave OQ-E5 do
+> PLAN-169 (ratificada na mesma sessão como próxima cerimônia). AC-2
+> (template de CI verde num adopter) e AC-5 (`smoke-install` cobre
+> `.github/` e EXECUTA o CI entregue) seguem abertos e nomeados; o
+> `stranded` do staleness (>24 h sem commit) é informativo até a W1 tocar
+> o plano. A alternativa «183 → abandoned com transferência de AC-1/2/5
+> para plano novo» foi apresentada e NÃO escolhida.
+
 1. **W2** — os dois steps de `unittest discover` saem do template ou são
    reescritos para a invocação real do CI? (a rota "preservar atrás de
    guarda" já foi eliminada em §6)

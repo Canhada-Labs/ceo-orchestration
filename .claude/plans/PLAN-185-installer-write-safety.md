@@ -1,10 +1,12 @@
 ---
 id: PLAN-185
 title: "Seguranca de escrita do installer: symlink pendente escreve FORA do target, e --github-owner corrompe CODEOWNERS para sempre"
-status: executing
+status: done
 created: 2026-08-24
 reviewed_at: 2026-08-26
 executing_at: 2026-08-26
+completed_at: 2026-08-27
+related_commits: [2f71dea, cc00235, adb6e84, c0cb915]
 owner: CEO
 depends_on: []
 level: L3
@@ -576,3 +578,24 @@ seguinte — nunca do CEO.
 - **OQ-7 — FU-7, `scripts/doctor.sh` como terceiro consumidor de `_wbm_dst_refuses`.** Wave
   própria, canônica, 1 path; até lá o `doctor.sh` segue com os seus escritores fora do predicado
   (o ADR-196 já o nomeia como consumidor previsto).
+
+> **✅ OQ-6 RATIFICADA pelo Owner em 2026-08-27 (S330, AskUserQuestion, verbatim): «done agora
+> (Recomendado)».** Flip `executing → done` neste commit (`completed_at: 2026-08-27`;
+> `related_commits`: `2f71dea` W0 parado como ratchet, `cc00235` W1+W2+W3, `adb6e84` oráculo
+> D3 S.1 realinhado, `c0cb915` baseline do censo pós-E). A classe «escrita fora do `$TARGET` /
+> handle que corrompe o CODEOWNERS» está fechada na população que a wave cura (e2e
+> `test-installer-write-safety-e2e.sh` 105/0 em BYTES; ratchet rc=0 no `validate.yml`).
+> **Follow-ups nomeados — escopo explicitamente diferido, nenhum reabre este plano:**
+> - **FU-1** — o censo não modela «predicado domina» (a régua do AC-3, que fica registrada como
+>   TROCADA, não como cumprida): wave de MODELAGEM do instrumento
+>   (`check-installer-write-safety.py`); gatilho = a decisão do Owner sobre OQ-W0-STOP.
+> - **FU-7 / OQ-7** — `scripts/doctor.sh` como 3º consumidor de `_wbm_dst_refuses` (1 canônico,
+>   molde = pacote E). Ordem ratificada na mesma sessão: DEPOIS da wave OQ-E5 do PLAN-169.
+> - **OQ-W0-STOP** — o censo vive como ratchet fail-closed com pontos cegos declarados; «modelar
+>   vs manter ratchet» é decisão do Owner e não bloqueia nada.
+>
+> **Veículo (PLAN-SCHEMA §1.4 — «parent shipped with explicit deferred AC items»):** quando FU-1 ou
+> FU-7 forem escalonados, entram como `PLAN-185-FOLLOWUP-<slug>` (lineage do 185, `related_commits`
+> com o ship do pai), não como wave deste plano nem como `NNN` novo — o registro aqui é o
+> apontador, o plano de follow-up é o que se executa. TOCTOU entre predicado e escrita (bash sem
+> `openat`/`O_NOFOLLOW`) permanece como limitação declarada em `docs/threat-model.md`, sem dono.

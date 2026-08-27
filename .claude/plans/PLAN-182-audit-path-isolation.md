@@ -1,8 +1,13 @@
 ---
 id: PLAN-182
 title: Isolamento de runtime state por projeto — implementar o ADR-001 como escrito, quatro meses depois
-status: executing
+status: done
 reviewed_at: 2026-08-20
+completed_at: 2026-08-27
+related_commits: [32e29b1, 71ef682, 796f809, 9de4efc, 965fb13, cf4ca20, 3d16070]
+# Higiene de status S330 (2026-08-27, ratificada pelo Owner via AskUserQuestion):
+# 7/7 ACs `[x]` desde a wave-cli (`3d16070`, S326); o frontmatter ficou em
+# `executing` por bookkeeping nao feito — flip neste commit, sem trabalho novo.
 reviewed_by: "Owner — autorizacao explicita em chat (S315, 2026-08-20): 'se ja esta pronto deixa como revisado e apto pra fazer'. Debate L3 round 1 fechado com veredito PROCEED (13 consensos) e ajustes do consenso incorporados ao corpo; validate_governance_fast = 0 findings; pair-rail codex 6 rodadas fechadas, 32 achados, todos curados."
 created: 2026-08-20
 owner: CEO
@@ -949,6 +954,23 @@ checkout de adopter, onde o fallback degradava em silêncio para
    (hoje o regex exige aspas colando no literal, e por isso
    `ceo-backup.sh`/`ceo-restore.sh` escapam por acidente, não por
    allowlist).
+
+> **✅ FECHAMENTO RATIFICADO pelo Owner em 2026-08-27 (S330, AskUserQuestion,
+> verbatim): «182 → done; 183 segue com W1 na fila (Recomendado)».** Flip
+> `executing → done` neste commit (`completed_at: 2026-08-27`). Estado dos
+> ACs: **7/7 `[x]`** — W0/W1 (S316–S319: emendas ADR-001/ADR-079 em
+> `32e29b1`, execução da W1 em `71ef682`/`796f809`), W2+W3 em `9de4efc`,
+> cura estrutural do carrier + fecho da classe M4 em `965fb13`, AC-5
+> (adopter migrado de FATO) em `cf4ca20`, OQ-6 (CLI do resolvedor) + Axis 3
+> do isolamento de testes em `3d16070`. As OQs 1–5 acima têm as respostas
+> nos registros de execução das waves (W2 = decisão de ARQUIVAR a cadeia
+> histórica; namespace/esquemas de nome = slug nativo do harness pelo
+> resolvedor único; ADR-079 = emenda em `32e29b1`; ordem = W1 primeiro) e
+> a 6 está fechada verbatim. **Limite que NÃO fecha e fica declarado**
+> (CLAUDE.md §5): sob o mesmo UID um processo lê o dir `0700` e a chave
+> `0600` do outro projeto — fronteira real exigiria UID separado, fora de
+> escopo por decisão. O plano fechou sem AC residual; nenhum
+> `PLAN-182-FOLLOWUP` é necessário.
 
 ## Reference links
 
