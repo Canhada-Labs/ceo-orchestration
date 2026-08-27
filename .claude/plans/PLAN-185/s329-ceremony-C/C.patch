@@ -3224,10 +3224,10 @@ index 494d90f..1c50a17 100755
    _write_install_state
 diff --git a/scripts/tests/test-installer-write-safety-e2e.sh b/scripts/tests/test-installer-write-safety-e2e.sh
 new file mode 100755
-index 0000000..10decfb
+index 0000000..6fa7722
 --- /dev/null
 +++ b/scripts/tests/test-installer-write-safety-e2e.sh
-@@ -0,0 +1,965 @@
+@@ -0,0 +1,980 @@
 +#!/usr/bin/env bash
 +# PLAN-185 W1+W2 (S329) — the installer must not write outside the directory it
 +# was given, and --github-owner must not be able to leave .github/CODEOWNERS
@@ -3310,8 +3310,17 @@ index 0000000..10decfb
 +
 +# One real install. rc lands in RC; output in $LOG. Never `local` (called at
 +# top level), never piped (a pipe would make $? the tail's, not the install's).
++# CEO_RAG_INSTALL_PROMPT=0: the installer's RAG-sidecar block runs only under a
++# TTY (`[[ -t 0 ]]`, install.sh) and, when it runs, invokes
++# detect-repo-profile.py, which stamps `detected_at`/`created_at` with the wall
++# clock into .claude/repo-profile.yaml. Under the Owner's terminal (the real
++# LAND) that made F1.8's two clean installs differ by a timestamp; in CI and in
++# background runs the block never ran, so the leg was green there and red only
++# in the ceremony. Same kill-switch scripts/tests/smoke-install.sh uses — this
++# test is about write confinement, not about the interactive sidecar prompt.
 +_install() {
-+  bash "$INSTALLER" "$TARGET" --profile core --ceremony maintainer "$@" >"$LOG" 2>&1
++  CEO_RAG_INSTALL_PROMPT=0 \
++    bash "$INSTALLER" "$TARGET" --profile core --ceremony maintainer "$@" >"$LOG" 2>&1
 +  RC=$?
 +}
 +
@@ -3780,9 +3789,15 @@ index 0000000..10decfb
 +  ( cd "$TARGET" && find . -type f -exec shasum -a 256 {} \; 2>/dev/null | sort -k2 ) \
 +      > "$WORKROOT/sums-b.txt"
 +  # .install-state.json stamps written_at/first_recorded_at with wall-clock
-+  # time, so it cannot be byte-identical across runs by construction.
-+  grep -v '\.install-state\.json$' "$WORKROOT/sums-a.txt" > "$WORKROOT/sums-a.f" 2>/dev/null
-+  grep -v '\.install-state\.json$' "$WORKROOT/sums-b.txt" > "$WORKROOT/sums-b.f" 2>/dev/null
++  # time, so it cannot be byte-identical across runs by construction. The same
++  # holds for .claude/repo-profile.yaml (detected_at/created_at) whenever the
++  # TTY-gated sidecar block runs; _install disables that block, and the filter
++  # is kept as belt-and-braces so a future TTY-only path cannot turn a clock
++  # into a false write-confinement regression.
++  grep -v -e '\.install-state\.json$' -e '/\.claude/repo-profile\.yaml$' \
++      "$WORKROOT/sums-a.txt" > "$WORKROOT/sums-a.f" 2>/dev/null
++  grep -v -e '\.install-state\.json$' -e '/\.claude/repo-profile\.yaml$' \
++      "$WORKROOT/sums-b.txt" > "$WORKROOT/sums-b.f" 2>/dev/null
 +  if diff -q "$WORKROOT/sums-a.f" "$WORKROOT/sums-b.f" >/dev/null 2>&1; then
 +    ok "F1.8 — re-installing into the same path is byte-identical ($(wc -l < "$WORKROOT/sums-a.f" | tr -d ' ') files)"
 +  else
