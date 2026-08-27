@@ -1,5 +1,5 @@
 diff --git a/.claude/plans/PLAN-169/s329-ceremony-E/DESIGN-E.md b/.claude/plans/PLAN-169/s329-ceremony-E/DESIGN-E.md
-index 7725ad1..b4edacd 100644
+index 7725ad1..d8c9d4d 100644
 --- a/.claude/plans/PLAN-169/s329-ceremony-E/DESIGN-E.md
 +++ b/.claude/plans/PLAN-169/s329-ceremony-E/DESIGN-E.md
 @@ -73,9 +73,10 @@ PRESERVADO e NOMEADO em stderr; os outros 46 registros seguem.
@@ -50,7 +50,7 @@ index 7725ad1..b4edacd 100644
  `.github/workflows/smoke-install.yml` está FORA do meu FILE ASSIGNMENT, e é o
  único lugar onde `scripts/tests/*.sh` roda. O comentário do próprio workflow
  (`:31`, `:47`, `:82`) diz a regra: *"unwired = no test"*. A cerimônia PRECISA
-@@ -226,3 +236,630 @@ mesma derivação.
+@@ -226,3 +236,668 @@ mesma derivação.
     cerimônia landar a cura, `HEAD` passa a conter a cura e E.3 vira o SKIP
     explícito com instrução de re-armar. Está tratado, mas é uma manutenção
     futura real.
@@ -681,6 +681,44 @@ index 7725ad1..b4edacd 100644
 +
 +A lição em uma linha, escrita no comentário do workflow para o próximo leitor:
 +**uma medição sob contenção não é automaticamente a conservadora.**
++
++## 10. Re-derivação por item sobre `cc00235` (S329, manhã de 27/08)
++
++O pacote C (PLAN-185 W1+W2) landou primeiro (`cc00235`) e tocou dois dos cinco
++paths deste pacote — `scripts/upgrade.sh` e `.github/workflows/smoke-install.yml`.
++O guard de drift do `finalize-E.sh` abortou corretamente («path(s) do pacote
++mudaram no HEAD vivo depois que a sombra foi criada»). A cura foi a que o próprio
++guard prescreve — re-derivar a sombra POR ITEM sobre o conteúdo novo — e não
++forçar a cópia:
++
++- **`scripts/upgrade.sh`** — rebase limpo. Os hunks de C (3676–3865: consumo de
++  `_wbm_github_handle_ok` e `_wbm_nlink`) e os de E (2458–2848:
++  `_merge_lifecycle_hooks_into_settings`) são disjuntos. O diff desta sombra
++  contra `cc00235` mostra EXATAMENTE os dois hunks de E (+366 / −94, os mesmos
++  números da rodada 5), e as 10 referências que C introduziu continuam
++  presentes no arquivo composto. Nenhuma linha de E mudou.
++- **`.github/workflows/smoke-install.yml`** — os dois pacotes adicionam nos
++  MESMOS quatro lugares. União consciente, C primeiro (já vivo) e E depois: as
++  duas listas de `paths:` carregam os dois e2e (3 referências cada, como o V2c
++  de C e o 4f/V4 de E exigem); os dois steps coexistem, o de E logo abaixo do
++  de C (o comentário de E passa de «four steps above» para «five»); e o
++  `timeout-minutes` é COMPOSTO — C levou 68 → 83 (+15) e E soma os seus +43
++  sobre a base NOVA: **126**, não 111. Tomar o maior dos dois valores (111)
++  sub-dimensionaria o job exatamente pelo step de C — a classe «`cancelled`
++  num passo inocente» que o próprio arquivo documenta. O bloco de comentário
++  do timeout registra a composição.
++- **`DESIGN-E.md`** — add/add contra o snapshot intermediário commitado no vivo
++  (228 linhas, sem §7–9). A sombra, com os registros das rodadas de rail, é a
++  autoridade — como o cabeçalho do `finalize-E.sh` já documenta.
++- Os dois testes (`scripts/tests/test-upgrade-lifecycle-hooks-derived.sh`,
++  `.claude/scripts/tests/test_upgrade_lifecycle_hooks_derived.py`) não existem
++  no vivo: sem conflito.
++
++Consequência nos materiais rastreados: `EXPECTED_YML_TIMEOUT_MINUTES` 111 → 126
++(o V4d do LAND compara o valor EXATO), e a prosa do sentinel, do
++`PROPOSED-PATCH.md`, do `README-E.md` e do `COMMIT-MSG-E.txt` acompanha. A
++composição do workflow é o único conteúdo novo desde a rodada 5 do rail; a
++rodada 6 revisa a sombra re-derivada.
 diff --git a/.claude/scripts/tests/test_upgrade_lifecycle_hooks_derived.py b/.claude/scripts/tests/test_upgrade_lifecycle_hooks_derived.py
 new file mode 100644
 index 0000000..4a0fdd7
@@ -1602,13 +1640,13 @@ index 0000000..4a0fdd7
 +if __name__ == "__main__":  # pragma: no cover
 +    unittest.main()
 diff --git a/.github/workflows/smoke-install.yml b/.github/workflows/smoke-install.yml
-index 02377fb..3bc0922 100644
+index 7b55f02..9f01ec9 100644
 --- a/.github/workflows/smoke-install.yml
 +++ b/.github/workflows/smoke-install.yml
-@@ -43,6 +43,13 @@ on:
-       # cases (59 assertions, ~107 s local) never executed in CI either. Same
-       # rule, third instance. `scripts/doctor.sh` is already in this list.
-       - "scripts/tests/test-doctor-delivery-route.sh"
+@@ -52,6 +52,13 @@ on:
+       # covers — install.sh, upgrade.sh, _framework_manifest_set.sh — are
+       # already in this list.
+       - "scripts/tests/test-installer-write-safety-e2e.sh"
 +      # PLAN-169 W-E (S329, rail round-1 P2): the hook-roster derivation e2e.
 +      # Same rule, fourth instance — it was born with no step and no filter
 +      # entry, so E.1-E.10 would never have run. The TEMPLATE it derives from
@@ -1619,21 +1657,21 @@ index 02377fb..3bc0922 100644
        # PLAN-166 F3 (ADR-155-AMEND-1): delivery-record ownership e2e —
        # scripts/tests/*.sh runs ONLY in this workflow (same r11/r20 wiring
        # rule as the parity e2e above).
-@@ -124,6 +131,8 @@ on:
-       - "scripts/tests/test-upgrade-historical-adopter.sh"
+@@ -134,6 +141,8 @@ on:
        - "scripts/tests/test-manifest-delivery-route.sh"   # rail round-1 F6
        - "scripts/tests/test-doctor-delivery-route.sh"     # rail round-2 F4
+       - "scripts/tests/test-installer-write-safety-e2e.sh"  # PLAN-185 W1+W2
 +      # PLAN-169 W-E (S329) — KEEP IDENTICAL to the pull_request list above.
 +      - "scripts/tests/test-upgrade-lifecycle-hooks-derived.sh"
        - "scripts/tests/test-upgrade-spec-ownership.sh"
        - "scripts/tests/test-ownership-verdict-unit.sh"
        - "scripts/tests/test-ownership-table.sh"
-@@ -233,7 +242,30 @@ jobs:
-     # job-level timeout that clips a GREEN run surfaces as `cancelled` on an
-     # innocent step (the S2xx lesson). Re-tighten on a real CI p95, never on
-     # arithmetic.
--    timeout-minutes: 68
-+    # PLAN-169 W-E (S329, rail rounds 1-3): 68 -> 111. The hook-roster
+@@ -254,7 +263,37 @@ jobs:
+     # already uses = 9-14 CI minutes of NEW work, so +15 with the anti-flake
+     # margin the doctrine above requires. Re-tighten on a real CI p95, never
+     # on arithmetic — and never on the faster of two local runs.
+-    timeout-minutes: 83
++    # PLAN-169 W-E (S329, rail rounds 1-3): 83 -> 126. The hook-roster
 +    # derivation e2e wired below is a whole new e2e, not a leg on an existing
 +    # one: 11 adopter fixtures (one real install, ten cp -R from the cache)
 +    # and 15 full upgrades, two of them --dry-run.
@@ -1656,14 +1694,21 @@ index 02377fb..3bc0922 100644
 +    # innocent step. The FIRST real CI run of this step is the number that
 +    # should replace this estimate — re-tighten on that p95, never on
 +    # arithmetic.
-+    timeout-minutes: 111
++    # RE-DERIVED on the S329 morning, per item: this block was written as
++    # 68 -> 111 against a base that PLAN-185 W1+W2 had meanwhile taken to 83
++    # (its own e2e, +15, landed first in cc00235). The two e2e are ADDITIVE
++    # in this one job, so E's +43 lands on 83, not on 68: 126. Composing
++    # by taking the larger of the two (111) would have under-sized the job
++    # by exactly the PLAN-185 step — the `cancelled`-on-an-innocent-step
++    # class the doctrine above exists to prevent.
++    timeout-minutes: 126
      permissions:
        contents: read
      steps:
-@@ -573,6 +605,28 @@ jobs:
-           set -euo pipefail
-           bash scripts/tests/test-upgrade-historical-adopter.sh
- 
+@@ -622,6 +661,27 @@ jobs:
+             exit 1
+           fi
+           bash "$T"
 +      # PLAN-169 W-E (S329) — upgrade.sh derives the hook roster it registers
 +      # from templates/settings/settings.base.json rather than carrying a
 +      # second copy of it. Nothing else here can see this: the parity e2e
@@ -1678,17 +1723,16 @@ index 02377fb..3bc0922 100644
 +      # patch lands, HEAD carries the cure and E.3 reports itself EXPIRED by
 +      # name instead of asserting a falsehood; re-arming it means pinning the
 +      # pre-cure commit, and that is deliberate maintenance, not a failure.
-+      # `if: always()` for the same §9.8 reason as the four steps above.
++      # `if: always()` for the same §9.8 reason as the five steps above.
 +      # NO continue-on-error, deliberately.
 +      - name: Upgrade hook-roster derivation (W-E — template is the roster)
 +        if: always()
 +        run: |
 +          set -euo pipefail
 +          bash scripts/tests/test-upgrade-lifecycle-hooks-derived.sh
-+
+ 
        - name: Assert npx/npm shim contract (if present)
          # Phase 4 deliverable; skip if directory missing
-         run: |
 diff --git a/scripts/tests/test-upgrade-lifecycle-hooks-derived.sh b/scripts/tests/test-upgrade-lifecycle-hooks-derived.sh
 new file mode 100755
 index 0000000..d7ea375
@@ -2479,7 +2523,7 @@ index 0000000..d7ea375
 +[ "$FAIL" -eq 0 ] || exit 1
 +exit 0
 diff --git a/scripts/upgrade.sh b/scripts/upgrade.sh
-index 9ef5b20..f40dce4 100755
+index b50619d..68c6645 100755
 --- a/scripts/upgrade.sh
 +++ b/scripts/upgrade.sh
 @@ -2458,123 +2458,384 @@ _emit_deprecation_warnings() {
