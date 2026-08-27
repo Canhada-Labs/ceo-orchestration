@@ -1,0 +1,164 @@
+fix(PLAN-185 wave-s329-C): o installer nao pode mais escrever FORA do diretorio que recebeu, e --github-owner nao pode mais zerar o .github/CODEOWNERS
+
+Dois defeitos de campo, os dois MEDIDOS contra a arvore pre-cura antes de
+qualquer linha de cura ser escrita.
+
+F1 — `-e` SEGUE SYMLINK. Todo escritor de destino do `install.sh` decidia se
+escrevia testando o destino por EXISTENCIA. Um link PENDENTE plantado no
+destino responde falso ao `-e`, o escritor toma o ramo "ainda nao tem nada ai",
+e `cp`/`>` escrevem ATRAVES do link. Medido: com `docs/rotation-log.md` sendo
+um link pendente para fora do alvo, a execucao SAIU 0, registrou `COPIED:` e
+536 bytes aterrissaram no caminho externo. Um link RESOLVIDO e um ANCESTRAL
+symlink escapam do mesmo jeito; um HARD LINK escapa com TODA checagem de
+caminho passando, porque um segundo nome para um inode nao e um link que
+caminhada de path nenhuma encontra. O `--dry-run` tambem MENTIA: dizia
+`(dry-run) would COPY:` com rc 0, e e com esse preview que o adopter decide.
+
+F2 — `--github-owner` INTERPOLADO CRU num programa `sed`. Um valor contendo `/`
+termina o comando cedo: o `sed` sai com "bad flag in substitute command" DEPOIS
+de o `>` ja ter truncado o destino. O `.github/CODEOWNERS` sobrevive com 0
+BYTES — pulado por EXISTS para sempre, fora do snapshot de rollback (que cobre
+so `$TARGET/.claude`), e lido pelo GitHub como "sem donos". Medido: rc 1, 0
+bytes.
+
+A CURA, e a decisao de arquitetura que ela carrega:
+
+- `scripts/_framework_manifest_set.sh` (canonico) — o predicado compartilhado
+  `_wbm_dst_refuses <raiz> <relpath>`: `rc 0` = RECUSAR, motivo legivel em
+  `_WBM_DST_REFUSE_WHY`, sem `echo` e sem `exit`. Ele recusa, em ordem: relpath
+  nao confinado; QUALQUER componente symlink sob a raiz FISICA testado com `-L`,
+  folha incluida (`-L` e verdadeiro para link PENDENTE — a forma exata que e
+  cega ao `-e`); contencao fisica por `cd -P`/`pwd -P` (o piso bash 3.2 nao tem
+  `realpath`); tipo da folha regular-ou-diretorio, com todo OUTRO tipo recusado
+  NOMEADO; e `nlink > 1`, a unica perna que pega hard link. Junto vao a
+  gramatica de handle e o dono do `nlink` (movido de `upgrade.sh`).
+
+  PREDICADO NA BIBLIOTECA, POLITICA NO CHAMADOR (ADR-196). O corpo NAO foi para
+  dentro do `install.sh` de proposito: isso fecharia a porta para `upgrade.sh` e
+  `doctor.sh` e recriaria a classe das copias divergentes — que e exatamente a
+  forma dos quatro defeitos D1..D4 que deixaram o main vermelho da S322 a S327.
+
+- `scripts/install.sh` (canonico, 26 hunks) — os sete escritores de destino
+  consultam o predicado. `install_one` PRESERVA o SKIP que os testes atuais
+  fixam; os escritores de entrega ACUMULAM recusa nomeada e a RUN falha no fim
+  (`_dst_refusal_verdict` => `exit 1`), ANTES de o manifesto e o install-state
+  registrarem qualquer coisa — um destino recusado inventariado como entrega
+  vira o `PRESERVED (unclaimed)` silencioso do proximo upgrade. Acumular em vez
+  de abortar no sitio e do plano (OQ-4): o snapshot de rollback cobre so
+  `$TARGET/.claude`, e `docs/`/`.github/` nao tem rota de restauracao — abortar
+  no meio deixaria o alvo MISTO em permanencia. Dai tambem o PRE-VOO: todos os
+  destinos de um grupo sao respondidos ANTES da primeira escrita do grupo.
+
+  Os DOIS `sed` SUMIRAM — nao foram escapados. `_render_owner_handle` usa
+  expansao de parametro do bash por linha (`${line//$marker/$handle}`): o
+  marcador e literal e o lado de substituicao de `${//}` nao tem caractere
+  ativo nenhum, entao nenhum valor pode mudar o que o programa FAZ, so o que
+  ele escreve. A escrita virou atomica: `mktemp` NO DIRETORIO DE DESTINO (mesmo
+  filesystem e REQUISITO, nao preferencia — `rename(2)` nao cruza filesystem, e
+  estagiar em `$TMPDIR` degrada `mv` para copy+unlink e reabre a janela de 0
+  byte), `_ATOMIC_TMP_PENDING` publicado para o trap, `chmod 0644` explicito
+  (`mktemp` cria `0600`, e um CODEOWNERS que o time nao le e regressao que
+  bytes e linhas nao pegam) e `mv -f`. O destino so e tocado pelo rename, entao
+  TODA rota de falha o deixa como estava, inclusive inexistente.
+  `portable_sed_inplace` recebeu o mesmo tratamento: o nome fixo
+  `${file}.ceo-sed-tmp` era um path pre-plantavel como symlink.
+
+  Recuperacao do CODEOWNERS de 0 byte: PROVENIENCIA decide, nunca tamanho.
+  Truncar para zero e um jeito REAL de desligar roteamento de revisao
+  obrigatoria sem apagar o path. `_codeowners_provenance` exige o manifesto
+  baseline registrando o path como entrega do framework, OU um `github_owner` no
+  install-state lido pela MESMA gramatica compartilhada (um valor que a
+  gramatica recusa e registro corrompido, nao evidencia). Com prova => re-render
+  RUIDOSO nomeando qual evidencia disparou; sem prova => `WARNING` nomeado e o
+  arquivo NAO e tocado.
+
+- `scripts/upgrade.sh` (canonico) — vira CONSUMIDOR do mesmo predicado e da
+  mesma gramatica, no MESMO patch (OQ-5). Biblioteca ausente => WARNING nomeado
+  e a semantica que o chamador ja tinha (fail-open em INFRAESTRUTURA, CLAUDE.md
+  secao 4), nunca re-implementacao local.
+
+- `.github/workflows/smoke-install.yml` + `.github/workflows/validate.yml`
+  (canonicos) — o e2e novo entra nas DUAS listas de `paths:` mais o step que o
+  EXECUTA, e a linha do censo entra no `validate.yml` (que nao tem filtro
+  `paths:`, logo nao tem a armadilha de "gate que a mudanca nao dispara"). Sem
+  estas linhas a cura entraria sem vigilancia: `scripts/tests/*.sh` roda SO no
+  smoke-install, e o proprio arquivo escreve a regra "unwired = no test".
+
+- `.claude/adr/ADR-196-installer-write-confinement.md` (canonico) — o registro
+  da decisao transversal, com os tres consumidores previstos.
+
+- `scripts/tests/test-installer-write-safety-e2e.sh` — 15 fixtures, 50
+  assercoes, ~7 min. TODA assercao F1 e sobre o CAMINHO EXTERNO, nunca so sobre
+  o exit code, porque o defeito pre-cura SAI 0: uma assercao de exit code teria
+  passado contra ele.
+
+- `docs/threat-model.md` — a superficie de escrita de destino do installer entra
+  no contrato (ate aqui so T-004, extracao de tarball).
+
+MEDIDO. e2e curado: 50 passed / 0 failed, rc 0. CONTROLE POSITIVO contra a
+arvore PRE-CURA do MESMO commit: 22 passed / 33 failed, rc 1, com as falhas
+NOMEANDO os bytes — 536, 8468, 454 e 48708 bytes escritos fora do alvo, o
+CODEOWNERS criado com 0 bytes, e o primeiro destino de um grupo escrito antes de
+o grupo ser recusado. Nao-regressao medida e nao afirmada: install das duas
+arvores no MESMO path de destino da 566 arquivos identicos por sha256 (exceto
+`PROTOCOL.md`, cujo diff e 100% o path do checkout embutido no ponteiro, e o
+manifesto que o hasheia) e modos identicos em 567 — o modo foi medido a parte
+porque `sha256` nao o ve e esta wave reescreve o caminho de escrita estagiada.
+Censo com o instrumento de HEAD PINADO por sha256 (`9067ecfb...`): `desguardado`
+220 -> 217 no corpus e 57 -> 54 no `install.sh`; `upgrade.sh` fica em 80, porque
+ele so vira consumidor. O pin nao e cerimonial: ele JA disparou uma vez nesta
+noite — a primeira finalizacao media contra `e19ca115...` e abortou quando a
+reescrita do instrumento landou. O mesmo `scripts/` byte-identico rende 341
+sitios num e 799 no outro. Numero de censo sem o sha do instrumento nao e
+reproduzivel.
+
+O RATCHET do censo entra REGENERADO neste patch
+(`.claude/scripts/data/installer-write-safety-baseline.txt`), e isso e condicao
+de land, nao residuo: 45 fingerprints nascem e 15 morrem porque a cura reescreve
+o codigo em volta de sitios ja conhecidos, e o `validate.yml` deste MESMO patch
+instala um step que roda o censo FAIL-CLOSED (`set -euo pipefail`, sem
+`|| true`, sem `continue-on-error`). Landar com o ratchet sujo deixaria o
+`Validate` vermelho no main no primeiro push, por um gate que o proprio pacote
+instala — a classe que manteve o main vermelho da S322 a S327. O V4 do LAND e o
+passo 4f do finalize ABORTAM enquanto ele nao estiver limpo. Regenerar nao e
+silenciar: o cabecalho da propria baseline diz que uma linha ali significa
+"sitio CONHECIDO do censo", explicitamente NAO uma revisao humana por sitio; o
+que o ratchet impede e um sitio novo entrar CALADO, e entrar por um commit
+assinado e o oposto de calado.
+
+FICA ABERTO, e e chamada do Owner:
+
+- FU-1 / OQ-6 — o censo NAO enxerga a forma que o plano mandou construir, e isso
+  e ESTRUTURAL: as formas provadas seguras exigem, para a familia symlink, um
+  teste `-L` no mesmo arquivo ou um helper definido no MESMO arquivo com
+  polaridade `|| abort`. A cura viola as duas por DECISAO DO PLANO (o corpo vive
+  na biblioteca; a polaridade e de RECUSA). Reformar a cura para caber no
+  instrumento seria deixar o instrumento ditar a arquitetura. Consequencia
+  declarada: o AC-3 como escrito ("19 -> 0") NAO e satisfeito por este pacote, e
+  nao por falta de cura.
+- FU-7 — `scripts/doctor.sh` e o terceiro consumidor previsto e NAO foi
+  convertido. Enquanto nao for, a classe segue aberta la.
+- OQ-2 — `org/team` e sintaxe VALIDA de CODEOWNERS e esta gramatica o rejeita.
+  A mensagem de erro DIZ isso e aponta a edicao manual, em vez de corromper o
+  arquivo. Suportar time exige trocar o delimitador em todos os consumidores.
+
+RESIDUAL DECLARADO. TOCTOU permanece e e irredutivel em bash: entre o predicado
+responder e a escrita acontecer, nada impede o destino de VIRAR symlink, e bash
+nao oferece `openat`/`O_NOFOLLOW` — a guarda ESTREITA a janela, nao a fecha.
+`install_one` continua PULANDO, nao recusando, por decisao do plano.
+`install_mcp_secrets_dir` NAO foi guardado: nao esta entre os sete escritores que
+o plano enumera, e alargar o conjunto no meio de um pacote assinado e como o
+Scope estoura. E F1.2/F1.4 ja passam a assercao de BYTES na arvore pre-cura (o
+codigo antigo pegava o ramo EXISTS e pulava): nessas duas pernas o vermelho do
+controle vem da assercao de recusa NOMEADA, nao de um escape vivo — dito aqui
+para que ninguem leia as 33 falhas como 33 escapes.
+
+Autorizacao: sentinel `.claude/plans/PLAN-185/wave-s329-C-approved.md`, assinado
+por GPG do Owner; Scope DERIVADO por `finalize_patch.py`; land por
+`OWNER-S329-C-LAND.sh` (G-PRE + G0..G5 + V1..V7, `touched - scope = 0`, e2e real
+no V5 e smoke-install real no V6). Debate round-1 da S329: PROCEED /
+design-coherent, 3 criticas ADJUST, sintese anonimizada.
+
+Pair-Rail-Reviewed: codex gpt-5.6 — 5 rodadas na shadow-185 (r1 2P1+1P2; r2 3P1+1P2; r3 2×por-construção; r4 2P1+1P2 — todos curados com reprodução, DESIGN-C §12-§14; r5 LIMPA no estado final, zero blocos; registros em .claude/plans/PLAN-185/s329-ceremony-C/rail-round-{1..5}.md)
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
