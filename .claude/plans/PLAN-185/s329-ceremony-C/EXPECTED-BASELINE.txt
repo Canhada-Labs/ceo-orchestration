@@ -1,0 +1,322 @@
+# EXPECTED-BASELINE.txt — wave-s329-C (PLAN-185 W1+W2)
+#
+# Base DECLARADA contra a qual o V-block do OWNER-S329-C-LAND.sh compara.
+# Nunca "contra zero" e nunca "> 0": um gate que so exige "passou" aceita uma
+# suite que encolheu. Cada valor abaixo foi MEDIDO, e o comando que o produziu
+# esta na linha de comentario imediatamente acima dele.
+#
+# Formato: CHAVE=valor (aspas opcionais). O leitor `_expect` do LAND e do SIGN
+# e fail-CLOSED: chave ausente ABORTA, nunca vira "0".
+#
+# Divergencia PARA MENOS e regressao. Divergencia PARA MAIS (a suite cresceu, o
+# censo achou mais um sitio) NAO e sucesso automatico: atualize este arquivo
+# conscientemente, com a medicao nova registrada num rail-round.
+#
+# ===========================================================================
+# POR QUE ESTE ARQUIVO TEM DUAS METADES, e o pacote E nao tinha
+# ===========================================================================
+# O pacote E nascia inteiro numa sombra so. O pacote C e escrito por DOIS
+# autores em paralelo na MESMA sombra: a metade de codigo (install.sh,
+# upgrade.sh, _framework_manifest_set.sh, o e2e, o DESIGN-C.md) e a metade de
+# CI/docs (os dois workflows, o threat-model, o ADR-196 e as linhas de contagem
+# derivada). Congelar aqui uma lista EXATA de paths no momento em que a segunda
+# metade ainda nao existe produziria um `EXPECTED_PATCH_PATHS` errado — e o
+# unico jeito de conserta-lo de manha seria o Owner editando este arquivo, que
+# e exatamente o que uma cerimonia existe para evitar.
+#
+# Entao a fronteira e declarada por HUMANO em tres listas fechadas
+# (REQUIRED + ALLOWED_EXTRA + GENERATED) e o CONJUNTO EXATO e derivado pelo
+# finalize-C.sh dentro do bloco AUTO no fim deste arquivo. O que cada camada
+# compra:
+#
+#   REQUIRED  — o patch tem de tocar TODOS estes, e a SOMBRA tem de carrega-los.
+#               Falta um => o pacote esta incompleto (tipicamente: a metade de
+#               CI/docs nao entrou).
+#   ALLOWED   — o patch PODE tocar estes e mais nada. Um path fora das tres
+#               listas ABORTA o finalize: ou a sombra ganhou trabalho que esta
+#               cerimonia nao revisou, ou a fronteira ficou velha. Nos dois
+#               casos a decisao e do CEO.
+#   GENERATED — o finalize os PRODUZ (hoje: o ratchet do censo). Exigidos do
+#               PATCH, nunca da sombra.
+#   AUTO      — o conjunto EXATO observado e as contagens de censo, escritos
+#               pelo finalize e CONGELADOS pela assinatura. O G4 e o V4 do LAND
+#               comparam contra eles, entao entre assinar e landar nada anda.
+#
+# O bloco AUTO nao e uma tautologia: ele e derivado ANTES da assinatura e
+# comparado DEPOIS dela. A pergunta que o G4 responde nao e "o patch toca o que
+# o finalize viu?" e sim "o patch ainda toca o que foi ASSINADO?".
+
+# ===========================================================================
+# 1. Fronteira de paths (HUMANO — o finalize NUNCA reescreve estas duas)
+# ===========================================================================
+
+# Os cinco da metade de CODIGO (a sombra ja os carrega) mais os quatro da
+# metade de CI/docs que os follow-ups FU-2, FU-3, FU-5 e FU-6 do DESIGN-C
+# tornam obrigatorios. Um teste que landasse sem o wiring de CI e um teste que
+# nunca executa ("unwired = no test", a regra escrita no proprio
+# smoke-install.yml); um predicado compartilhado sem ADR e uma decisao
+# transversal sem registro.
+REQUIRED_PATCH_PATHS="scripts/_framework_manifest_set.sh scripts/install.sh scripts/upgrade.sh scripts/tests/test-installer-write-safety-e2e.sh .claude/plans/PLAN-185/s329-ceremony-C/DESIGN-C.md .github/workflows/smoke-install.yml .github/workflows/validate.yml docs/threat-model.md .claude/adr/ADR-196-installer-write-confinement.md"
+
+# Superficies de CONTAGEM DERIVADA que ganhar um ADR novo obriga a atualizar.
+# Lista fechada, derivada dos literais de path que `verify-counts.sh` de fato
+# le (medido: `grep -oE '[A-Za-z0-9_./-]+\.(md|json|txt)'` sobre o gate), mais
+# o mapa gerado. Tolerados, NUNCA exigidos: quais deles o `verify-counts.sh`
+# acusa depende de quais contagens o ADR novo move.
+ALLOWED_EXTRA_PATCH_PATHS="CLAUDE.md README.md README.pt-BR.md npm/README.md CHANGELOG.md INSTALL.md docs/ARCHITECTURE.md docs/CTO-GUIDE.md docs/FAQ.md docs/GUIA-COMPLETO.md docs/README.md docs/WHAT-WE-ARE.md docs/COMMAND-SKILL-HOOK-MAP.md"
+
+# Paths que o `finalize-C.sh` GERA na arvore-sombra e que por isso NAO existem
+# na sombra de trabalho. Eles tem uma terceira polaridade, e ela e o motivo
+# desta chave existir:
+#   - a fronteira do passo 1 (sobre a SOMBRA) NAO pode exigi-los — a sombra
+#     legitimamente nao os carrega, e exigi-los la abortaria sempre;
+#   - a checagem do passo 5 (sobre o PATCH) EXIGE-os, porque e ali que eles tem
+#     de aparecer, e o G4 do LAND exige o mesmo;
+#   - se a regeneracao sair byte-identica ao HEAD, o path nao viajaria no patch
+#     e o G4 abortaria de manha. Entao o finalize ABORTA ali mesmo, nomeando o
+#     caso: com a cura reescrevendo 26 hunks, um baseline identico significa que
+#     o instrumento nao esta enxergando a cura ou que a regeneracao nao rodou.
+# Hoje ha exatamente um: o RATCHET do censo. A secao 5 explica por que ele nao
+# e opcional.
+GENERATED_PATCH_PATHS=".claude/scripts/data/installer-write-safety-baseline.txt"
+
+# Piso de canonicidade. Medido com
+# `python3 .claude/hooks/check_canonical_edit.py --is-canonical <path>`: dos
+# nove REQUIRED, seis respondem 1 (os tres scripts de `scripts/`, os dois
+# workflows e o ADR) e tres respondem 0 (o e2e, o DESIGN-C.md e o
+# threat-model). O G5 do LAND exige ao menos este numero: menos significa que
+# um alvo canonico saiu do patch, e "zero canonicos tocados" e trivialmente
+# "todos concedidos pelo sentinel".
+EXPECTED_PATCH_CANONICAL_MIN=6
+
+# Medido: nenhum dos nove REQUIRED consta de
+# `.claude/governance/gate-scripts-manifest.txt` (9 membros). Portanto NENHUM
+# bump de sha e devido neste patch. Se um membro entrar, o G5 aborta.
+EXPECTED_MANIFEST_MEMBERS_TOUCHED=0
+
+# Scripts shell que o patch toca, e que o V1 do LAND passa por `bash -n` e
+# `shellcheck -S warning`: os tres de `scripts/` mais o e2e. Zero aqui seria o
+# V1 medindo a coisa errada, nao "nada a fazer".
+EXPECTED_SHELL_FILES_IN_PATCH=4
+
+# `scripts/tests/*.sh` e executavel neste repositorio: medido, 100755 e o modo
+# da grande maioria dos vizinhos. A copia na sombra nasceu 100644; o
+# `finalize-C.sh` normaliza o bit na arvore-sombra ANTES de gerar o patch e
+# ANUNCIA que o fez, e o passo S do LAND confere o modo no index.
+EXPECTED_E2E_INDEX_MODE=100755
+
+# ===========================================================================
+# 2. O predicado compartilhado — o invariante anti-rot desta wave
+# ===========================================================================
+# A classe que esta wave fecha nao e "falta uma guarda": e "cada escritor tem a
+# SUA guarda, e elas divergem". A cura poe UM predicado numa biblioteca e faz
+# os escritores o consultarem. Se alguem copiar o corpo para dentro de
+# `install.sh` ou `upgrade.sh`, a classe renasceu — e um segundo original
+# divergente e exatamente o defeito que os quatro D1..D4 da S323 produziram.
+EXPECTED_PREDICATE_NAME=_wbm_dst_refuses
+# `grep -c '^_wbm_dst_refuses() {'` por arquivo. Medido na sombra: 1 em
+# `scripts/_framework_manifest_set.sh`, 0 em `install.sh` e em `upgrade.sh`.
+EXPECTED_PREDICATE_DEFINITION_FILE=scripts/_framework_manifest_set.sh
+EXPECTED_PREDICATE_DEFINITIONS_TOTAL=1
+# `grep -c '_wbm_dst_refuses'` por arquivo, medido na sombra: install.sh 4,
+# upgrade.sh 1. O piso e 1 em cada: um consumidor com ZERO referencias e um
+# consumidor que nao consome — o predicado existiria e nao guardaria nada.
+EXPECTED_PREDICATE_CONSUMER_FILES=2
+# `scripts/doctor.sh` e o TERCEIRO consumidor previsto e NAO foi convertido
+# (FU-7 do DESIGN-C, residual declarado). O gate registra o numero de hoje para
+# que a conversao futura apareca como divergencia consciente, nao como surpresa.
+EXPECTED_PREDICATE_DOCTOR_REFS=0
+
+# ===========================================================================
+# 3. V2 — o e2e de write-safety (o gate CARO, ~7 min)
+# ===========================================================================
+# `bash scripts/tests/test-installer-write-safety-e2e.sh`
+#
+# 80 passed / 0 failed, rc 0 — medido pelo CEO na arvore-sombra na S329, DEPOIS
+# das curas da rodada 2 do rail. NAO foi re-executado por mim: sao ~7 min e a
+# sombra andou durante a montagem deste pacote. Quem o executa de verdade e o V5
+# do LAND, contra este numero.
+#
+# Trajetoria, porque um numero que sobe merece explicacao: o DESIGN-C secao 6
+# registra 50 asercoes sobre um arquivo de 641 linhas; as curas do rail o
+# levaram a 868 linhas e 80 asercoes. Subir e a suite crescendo, e por isso este
+# valor foi atualizado CONSCIENTEMENTE em vez de afrouxado — um V5 que aceitasse
+# "50 ou mais" aceitaria tambem uma suite que encolheu de 80 para 50.
+#
+# ~7 min de parede (aprox. 13 installs reais de 27 s). O sumario tem a forma exata
+#   === summary ===
+#       framework root : <path>
+#       passed         : <N>
+#       failed         : <M>
+# e o script sai 1 quando `failed` != 0.
+#
+# CONTROLE POSITIVO, medido no MESMO commit contra a arvore PRE-CURA:
+# 22 passed / 33 failed, rc 1 — com as falhas NOMEANDO os bytes escritos fora
+# do alvo (F1.1 536 B, F1.3 8468 B, F1.6 454 B, F1.7 48708 B) e o CODEOWNERS de
+# 0 bytes (F2.1). A receita esta no cabecalho do proprio teste.
+EXPECTED_E2E_RC=0
+EXPECTED_E2E_PASSED=80
+EXPECTED_E2E_FAILED=0
+
+# ===========================================================================
+# 4. V3 — a nao-regressao do install (o segundo gate caro)
+# ===========================================================================
+# `bash scripts/tests/smoke-install.sh`
+# O install real, com paridade install/upgrade. Medido no CI e localmente: a
+# ultima linha e `==> smoke install OK` e o script sai 0; qualquer falha emite
+# `::error::` e sai 1. Nao ha contagem para comparar — a asercao e a linha.
+EXPECTED_SMOKE_INSTALL_RC=0
+EXPECTED_SMOKE_INSTALL_MARKER="==> smoke install OK"
+
+# ===========================================================================
+# 5. V4 - o censo de escrita insegura (RATCHET REGENERADO NO PATCH)
+# ===========================================================================
+# ORDEM DO CEO (S329): o baseline do censo entra NO PATCH, regenerado pelo
+# finalize-C.sh a partir da arvore-sombra JA PATCHADA. Isto nao e escolha de
+# estilo - e o que impede o pacote de deixar o main vermelho no proprio push
+# que o entrega, e o raciocinio esta escrito aqui porque ele e a razao de o
+# arquivo ter esta secao.
+#
+# O ENCADEAMENTO. A cura toca install.sh, upgrade.sh e
+# _framework_manifest_set.sh. O baseline que esta em HEAD foi derivado da arvore
+# PRE-cura, entao depois do patch ele deixa de descrever a arvore: fingerprints
+# de sitios conhecidos mudam de lugar (medido: 45 nascem, 15 morrem, e o total
+# BLOQUEANTE nem sobe - a direcao e boa, desguardado CAI). E o
+# .github/workflows/validate.yml DESTE MESMO PATCH instala um step que roda o
+# censo com set -euo pipefail, SEM '|| true' e SEM continue-on-error. Com o
+# baseline velho esse step sai 1. Ou seja: o pacote instalaria o gate e o
+# quebraria no mesmo commit - exatamente a classe que manteve o main vermelho
+# da S322 a S327.
+#
+# POR QUE REGENERAR NAO E SILENCIAR. O cabecalho da propria baseline diz que
+# uma linha ali significa "este sitio e CONHECIDO do censo", e diz
+# explicitamente que NAO e uma revisao humana por sitio ("there are hundreds of
+# them"). O que o ratchet impede e um sitio novo entrar CALADO. Entrar por um
+# commit assinado, com o numero na mensagem, e o oposto de calado.
+#
+# POR QUE NENHUMA CONTAGEM DE CENSO E ESCRITA A MAO AQUI. O instrumento e alvo
+# movel: nesta MESMA noite ele mudou duas vezes (e19ca115 -> 9067ecfb, com a 6a
+# passada em voo), e o mesmo scripts/ byte-identico rendeu 341 sitios numa
+# versao e 799 na outra. Uma contagem fixada a mao envelhece entre o finalize e
+# a manha. Entao os NUMEROS moram no bloco AUTO (secao 8), derivados pelo
+# finalize e CONGELADOS pela assinatura; o que mora aqui sao os INVARIANTES,
+# que nao dependem da regua.
+#
+# Confinamento verificado por MEDICAO, nao por leitura do --help: rodar
+# `--repo-root <worktree> --write-baseline` escreve
+# <worktree>/.claude/scripts/data/installer-write-safety-baseline.txt (o caminho
+# aparece na saida), sai rc 0, e a arvore VIVA fica byte-identica. Numa arvore
+# pristina em HEAD a regeneracao reproduz o baseline de HEAD byte a byte - logo
+# todo delta no patch vem do conteudo da cura, de nada mais.
+
+# INVARIANTE 1 - o ratchet tem de sair LIMPO na arvore patchada. E a MESMA
+# pergunta que o step do CI faz: check-installer-write-safety.py sem flags,
+# rc 0, zero entradas novas e zero mortas. Nao existe valor "aceitavel"
+# diferente de limpo: qualquer outro deixa o CI vermelho.
+EXPECTED_CENSUS_RATCHET_CLEAN=1
+
+# INVARIANTE 2 - a cura NAO PODE AUMENTAR o numero de sitios desguardado.
+# Cair e a cura aparecendo; subir e a cura abrindo um buraco novo, e isso
+# aborta. A comparacao e PRE vs POS, as duas medidas pelo finalize na MESMA
+# execucao e com o MESMO instrumento - nunca contra um numero de ontem.
+EXPECTED_CENSUS_DESGUARDADO_MUST_NOT_INCREASE=1
+
+# INVARIANTE 3 - piso de nao-vacuidade. Um censo que devolve zero sitios
+# significa que a BUSCA quebrou, nao que o corpus esta limpo (o proprio
+# instrumento sai 2 nesse caso). O piso e deliberadamente FOLGADO: ele responde
+# "a busca esta viva?", nunca "o numero esta certo?". Ficou em 200 porque a
+# faixa observada nesta noite foi 341..832 em tres geracoes do instrumento, e um
+# piso apertado viraria falso vermelho na proxima.
+EXPECTED_CENSUS_SITES_MIN=200
+
+# ===========================================================================
+# 6. V5 — os workflows pos-patch enxergam o teste
+# ===========================================================================
+# `grep -cF 'test-installer-write-safety-e2e.sh' .github/workflows/smoke-install.yml`
+# O FU-2 do DESIGN-C exige as DUAS listas de `paths:` (`push` em :119 e
+# `pull_request` em :18, que o proprio arquivo manda manter identicas) MAIS o
+# step que EXECUTA. Faltando um filtro o job nao dispara quando o teste muda;
+# faltando o step, o teste nao roda. Se o autor da metade de CI acrescentar o
+# controle NEGATIVO que o FU-2 tambem pede (renomear o e2e => o step falha por
+# arquivo ausente), este numero sobe e a atualizacao e consciente.
+# Medido na sombra: 3 — `:54` (lista `pull_request`), `:136` (lista `push`) e
+# `:619` (o step que EXECUTA).
+EXPECTED_YML_E2E_REFS=3
+# `grep -m1 'timeout-minutes:' .github/workflows/smoke-install.yml`
+# Era 68; o autor da metade de CI declarou 83. O e2e novo custa ~7 min locais;
+# no fator 2-3x de runner isso e ~15-21 min. Um timeout que corta um run VERDE
+# aparece como `cancelled` num passo INOCENTE, e re-apertar so se faz sobre o
+# p95 REAL observado, nunca sobre a aritmetica.
+EXPECTED_YML_TIMEOUT_MINUTES=83
+# `grep -cF 'check-installer-write-safety' .github/workflows/validate.yml`
+# O FU-3 pede a linha do censo no `validate.yml` (que NAO tem filtro `paths:`,
+# entao nao ha a armadilha de "gate que a mudanca nao dispara"). Medido: 4 — o
+# nome do step, o comando fail-closed, e o par nome+comando do step ADVISORY que
+# le o conjunto `indeterminado` sob `continue-on-error`.
+EXPECTED_VALIDATE_YML_CENSUS_REFS=4
+
+# ===========================================================================
+# 7. V6 — gates de governanca do repositorio
+# ===========================================================================
+# Todos medidos no checkout vivo em HEAD bc8784f (2026-08-26).
+#
+# `python3 .claude/scripts/check-ceremony-script.py --json` -> `blocking_unwaived`
+# Medido: 0. Os scripts DESTE pacote carregam o marcador
+# `# CEREMONY-LINT: handwritten-exception:` com a razao real.
+EXPECTED_CEREMONY_LINT_BLOCKING=0
+# `bash .claude/scripts/validate-governance.sh` (COMPLETO, nao `--fast`).
+# Medido: rc 0, `Errors: 0`, `Warnings: 65`, ~2 min. O modo COMPLETO e exigido
+# de proposito: o `--fast` NAO checa o tamanho do CLAUDE.md, e foi essa a licao
+# paga na S327 (o governance completo tem limite de 40 000 bytes e o `--fast`
+# nao o enxerga). Warnings NAO sao comparados: 65 e ruido historico e travar
+# nele transformaria qualquer WARN novo, de qualquer wave, num abort desta.
+EXPECTED_VALIDATE_GOVERNANCE_RC=0
+# `wc -c < CLAUDE.md` = 37485 hoje; o limite que o governance completo aplica e
+# 40000. A folga e de 2515 bytes, e este pacote escreve no CLAUDE.md.
+EXPECTED_CLAUDE_MD_MAX_BYTES=40000
+# `python3 .claude/scripts/gen-command-skill-hook-map.py --check`  -> rc 0.
+# O land do pacote D (S329) deixou o main VERMELHO exatamente aqui: um doc
+# GERADO que nao foi regenerado.
+EXPECTED_GENMAP_RC=0
+# `python3 .claude/scripts/check-claude-md-claims.py`   -> rc 0.
+EXPECTED_CLAUDE_MD_CLAIMS_RC=0
+# `python3 .claude/scripts/check-test-env-hygiene.py`   -> rc 0.
+EXPECTED_ENV_HYGIENE_RC=0
+# `bash .claude/scripts/local/verify-counts.sh --quiet` -> rc 0.
+EXPECTED_VERIFY_COUNTS_RC=0
+# `python3 .claude/scripts/check-staleness.py`          -> rc 0 (modo ADVISORY).
+# Medido: `--strict` sai 1 no main de hoje, por planos e ADRs que nada tem a ver
+# com esta wave. Um gate que ja nasce vermelho nao e um gate: e um abort com
+# outro nome. Rodamos o modo advisory e exigimos rc 0, que e a asercao honesta
+# de que o checker EXECUTOU.
+EXPECTED_STALENESS_RC=0
+
+# ===========================================================================
+# 8. Bloco AUTO — reescrito pelo finalize-C.sh a cada execucao
+# ===========================================================================
+# NAO edite a mao. O finalize apaga tudo entre os dois marcadores e reescreve.
+#
+# O que mora aqui, e por que NAO na parte humana:
+#   EXPECTED_PATCH_PATHS            o conjunto EXATO tocado, ja validado contra
+#                                   REQUIRED / ALLOWED / GENERATED acima
+#   EXPECTED_PATCH_CANONICAL_PATHS  a contagem canonica observada
+#   EXPECTED_CENSUS_*               o pin do instrumento e as contagens PRE/POS,
+#                                   porque o instrumento e alvo movel (mudou
+#                                   DUAS vezes nesta noite) e um numero fixado a
+#                                   mao envelhece entre o finalize e a manha
+#
+# Isto NAO e uma tautologia. O bloco e derivado ANTES da assinatura e comparado
+# DEPOIS dela: a pergunta que o LAND responde nao e "o patch e o que o finalize
+# viu?" e sim "o patch ainda e o que foi ASSINADO?". Se o instrumento, o corpus
+# ou o conjunto de paths andarem entre assinar e landar, o LAND aborta nomeando
+# o que mudou — que e exatamente a classe que abortou o pacote D duas vezes.
+# <<<AUTO-DERIVED-BY-FINALIZE-C>>>
+EXPECTED_PATCH_PATHS=".claude/adr/ADR-196-installer-write-confinement.md .claude/plans/PLAN-185/s329-ceremony-C/DESIGN-C.md .claude/scripts/data/installer-write-safety-baseline.txt .github/workflows/smoke-install.yml .github/workflows/validate.yml CHANGELOG.md CLAUDE.md README.md README.pt-BR.md docs/ARCHITECTURE.md docs/CTO-GUIDE.md docs/FAQ.md docs/GUIA-COMPLETO.md docs/README.md docs/threat-model.md npm/README.md scripts/_framework_manifest_set.sh scripts/install.sh scripts/tests/test-installer-write-safety-e2e.sh scripts/upgrade.sh"
+EXPECTED_PATCH_CANONICAL_PATHS=6
+EXPECTED_CENSUS_INSTRUMENT_SHA256=484e65766afc5cb0da00aef30dbd88b936e9349c184c330a68c80e115fc769c4
+EXPECTED_CENSUS_DESGUARDADO_PRE=197
+EXPECTED_CENSUS_DESGUARDADO_POS=194
+EXPECTED_CENSUS_SITES_POS=838
+FINALIZED_AT=2026-08-27T03:30:07Z
+FINALIZED_AGAINST_HEAD=b0e992f3b6df478eacbce2afc2641153a934e9c0
+# <<<END-AUTO-DERIVED-BY-FINALIZE-C>>>
