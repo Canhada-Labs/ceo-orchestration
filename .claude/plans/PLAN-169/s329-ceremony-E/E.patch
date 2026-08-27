@@ -1,5 +1,5 @@
 diff --git a/.claude/plans/PLAN-169/s329-ceremony-E/DESIGN-E.md b/.claude/plans/PLAN-169/s329-ceremony-E/DESIGN-E.md
-index 7725ad1..d8c9d4d 100644
+index 7725ad1..27d6cf5 100644
 --- a/.claude/plans/PLAN-169/s329-ceremony-E/DESIGN-E.md
 +++ b/.claude/plans/PLAN-169/s329-ceremony-E/DESIGN-E.md
 @@ -73,9 +73,10 @@ PRESERVADO e NOMEADO em stderr; os outros 46 registros seguem.
@@ -50,7 +50,7 @@ index 7725ad1..d8c9d4d 100644
  `.github/workflows/smoke-install.yml` está FORA do meu FILE ASSIGNMENT, e é o
  único lugar onde `scripts/tests/*.sh` roda. O comentário do próprio workflow
  (`:31`, `:47`, `:82`) diz a regra: *"unwired = no test"*. A cerimônia PRECISA
-@@ -226,3 +236,668 @@ mesma derivação.
+@@ -226,3 +236,943 @@ mesma derivação.
     cerimônia landar a cura, `HEAD` passa a conter a cura e E.3 vira o SKIP
     explícito com instrução de re-armar. Está tratado, mas é uma manutenção
     futura real.
@@ -719,12 +719,287 @@ index 7725ad1..d8c9d4d 100644
 +`PROPOSED-PATCH.md`, do `README-E.md` e do `COMMIT-MSG-E.txt` acompanha. A
 +composição do workflow é o único conteúdo novo desde a rodada 5 do rail; a
 +rodada 6 revisa a sombra re-derivada.
++
++## 11. Rail round 6 — um P1 real na sombra re-derivada, e a cura
++
++**Achado (codex, `gpt-5.6`, sobre a sombra re-derivada do §10):** o merge derivado
++lia `settings.base.json` incondicionalmente, mas o `install.sh` constrói o
++`settings.json` de um adopter `--ceremony user` a partir de
++`templates/settings/settings.user.json` (`WS4-ceremony-settings`) — um perfil que
++omite DE PROPÓSITO os 10 hooks de governança que bloqueiam edições ou exigem
++GPG/sentinel (`check_plan_edit`, `check_canonical_edit`, `check_tier_policy`,
++`check_arbitration_kernel`, …; lista no `_comment` do próprio template). Um upgrade
++re-registraria exatamente esses, convertendo em silêncio o perfil advisory em
++perfil maintainer — na única população que escolheu não os ter.
++
++**Verificação da claim COMO FEITA (medida, não lida):**
++
++- `settings.base.json` enumera **47** registros; `settings.user.json`, **20**.
++  Os nomes só na base são **26** = os **10** excluídos de propósito + **16**
++  que a base ganhou depois de 30/07 e nunca chegaram ao template `user`
++  (`check_ledger_checkpoint.py` — o próprio achado S328 — entre eles).
++- O `upgrade.sh` JÁ resolve a cerimônia num único lugar (`CEREMONY_EFFECTIVE`:
++  install-state gravado → `--ceremony` → `CEO_UPGRADE_CEREMONY` → fail-safe
++  `user`, §PLAN-166 F3), e todo o resto do upgrader — SPEC/v1, ponteiro
++  `PROTOCOL.md`, entrega de `docs/`/`.github/` — consulta essa decisão. O merge
++  de hooks era o único consumidor que NÃO consultava.
++- **A classe é pré-existente e a wave a alargava.** Os 6 literais pré-cura
++  (`check_compact_pinning`, `check_config_change`, `check_postcompact_reinject`,
++  `check_precompact_continuity`, `check_setup_verification`,
++  `check_subagent_start`) também estão só na base: o upgrader antigo já injetava
++  6 registros não-`user` em adopters `user`. Derivar da base inteira levava isso
++  de 6 para 27, agora incluindo os 10 bloqueadores. O rail viu o alargamento;
++  as rodadas 1–5 não viram (a rodada limpa prova a superfície, não o
++  entregável).
++
++**Cura — reutilizar a decisão, não refazê-la.** `_merge_lifecycle_hooks_into_settings`
++seleciona o template pelo `CEREMONY_EFFECTIVE`, como o `install.sh` já faz:
++
++```bash
++case "${CEREMONY_EFFECTIVE:-}" in
++  maintainer) template="$SOURCE_DIR/templates/settings/settings.base.json" ;;
++  *)          template="$SOURCE_DIR/templates/settings/settings.user.json" ;;
++esac
++```
++
++Só o literal `maintainer` seleciona o roster largo; qualquer outro valor —
++inclusive a variável NÃO definida, que só um harness produz — toma o template
++estreito, a mesma direção fail-SAFE que a própria resolução escolheu em `:884`.
++A mensagem de registro passa a NOMEAR o template e a cerimônia
++(`derived from templates/settings/settings.user.json — ceremony=user`). O
++invariante anti-rot (§V5 / 4g: zero tokens `.py` na função) continua em 0 — a
++seleção cita dois `.json`, nenhum hook.
++
++**Testes (todos derivados dos dois artefatos, nunca de uma lista escrita à mão):**
++
++- Unidade, classe nova `TestCeremonySelectsTheTemplate` (8 casos; suíte 49 → 57):
++  não-vacuidade (user omite ≥10 da base, e `check_canonical_edit.py` está entre
++  eles); `user` reproduz o conjunto de `settings.user.json`; `user` não registra
++  NENHUM nome só-na-base; `maintainer` reproduz a base; variável ausente e valor
++  desconhecido (`wizard`) caem no template estreito; um install `user` fresco é
++  no-op byte a byte; **controle positivo de seleção viva** — um hook plantado só
++  no template `user` chega sob `user` e NÃO chega sob `maintainer`. O harness
++  passa a carregar os DOIS templates (um scratch source só com a base faria
++  todo merge `user` cair no fail-open «template unreadable» e provar nada).
++  `TestNoSecondRoster` ganha duas asserções: a função lê o literal
++  `settings.user.json` e consome `CEREMONY_EFFECTIVE`.
++- **Controle vermelho do oráculo:** a classe nova, rodada contra a função
++  PRÉ-cura (o index da sombra antes desta rodada), FALHA; contra a função
++  curada, passa. O registro está no log da sessão (`e2e-E-shadow-cure.log`).
++- e2e, caso novo **E.14** (9 asserções): install REAL `--ceremony user` (o cache
++  do fixture é maintainer e não serve); a cerimônia chega ao upgrade como no
++  campo — GRAVADA em `.claude/.install-state.json`, sem flag na chamada;
++  E.14a não-vacuidade (≥10 só-na-base); E.14b o registro diz `user`; E.14c o
++  install fresco == template `user`; strip de um registro que o template `user`
++  DECLARA (para o merge ter trabalho real); E.14d upgrade rc 0; E.14e o
++  registro removido volta (merge VIVO, não pulado); **E.14f zero nomes
++  só-na-base no adopter `user`**; E.14g conjunto == template `user` de novo;
++  E.14h o log nomeia `settings.user.json`; **E.14i controle positivo** — o
++  MESMO adopter com o registro reescrito para `maintainer` recebe TODOS os
++  só-na-base (a escolha é dirigida pelo registro, e E.14f pode falhar).
++
++**Residual declarado (fora do escopo desta wave — OQ-E5 ao Owner):**
++`settings.user.json` está DEFASADO em relação à base: 16 hooks que não são os
++excluídos de propósito (advisory, continuidade de compaction, ledger, pair-rail
++etc.) existem na base e não no `user`. Esta cura torna o upgrade HONESTO sobre a
++cerimônia; ela não pode — e não deve — entregar a um adopter `user` hooks que o
++template `user` não declara. A cura da defasagem é OUTRA wave: derivar
++`settings.user.json` da base por subtração dos 10 (gerador + teste de paridade),
++em vez de mantê-lo como segunda cópia — exatamente a classe que esta wave fecha
++no upgrader, uma camada acima. Até lá, um adopter `user` que faça upgrade recebe
++os 20 do seu template, e nada mais.
++
++## 12. Rail round 7 — dois P1 e dois P2 sobre a sombra curada, e as curas
++
++Sobre a sombra do §11 (cerimônia seleciona o template; unit 57, e2e 60/0), o
++rail devolveu quatro achados. Um é por construção; três são reais e foram
++medidos antes de qualquer edição.
++
++**[P1 — por construção, disposto] sentinel sem assinatura.** O
++`wave-s329-E-approved.md` traz `TO-FILL-AT-SIGN` e não há `.asc` — porque a
++sombra é o estado PRÉ-assinatura por desenho: o `OWNER-S329-E-SIGN.sh` preenche
++Anchor/Data/Approved-By e assina; o LAND recusa sem isso (G1). Mesma disposição
++das rodadas 2 e 3.
++
++**[P1 — real] o `.env` não viajava com os `.hooks`.** Medido:
++`settings.user.json` declara `env.CEO_CONFIG_PROTECTION_ADVISORY=1` e
++`check_config_protection.py` (que está nos DOIS templates) só é advisory com
++essa chave (`check_config_protection.py` §Escape hatches: «the maintainer
++ceremony leaves it unset (BLOCKING)»). O `upgrade.sh` nunca tocava `.env`. Um
++adopter `user` anterior ao PLAN-124 — sem o registro E sem a chave — recebia,
++pela derivação, o hook na variante BLOQUEANTE, no perfil que escolheu não
++bloquear. A base tem 6 chaves de `env` próprias (`CEO_QUIET_MODE`,
++`CLAUDE_CODE_SUBAGENT_MODEL`, …), nenhuma delas a advisory.
++
++*Cura — arquitetura, não lista:* o template é o roster dos registros E das
++configurações que eles leem. O programa jq passa a derivar também `.env`, com
++a MESMA doutrina dos eventos: aditivo chave a chave; um valor que o adopter já
++tem NUNCA é sobrescrito; `.env` presente com forma inesperada é PRESERVADO e
++NOMEADO (`SKIP-ENV`, resultado PARTIAL); template sem `.env` não inventa a
++chave (documento sem `.env` segue byte-idêntico num no-op). O relatório e o
++dry-run anunciam `env <chave>` na mesma lista dos hooks; a escrita é o mesmo
++`mv` atômico. A alternativa — «pular o registro quando o modo advisory não pode
++ser garantido» — exigiria saber QUAL hook depende de QUAL chave: uma segunda
++lista, exatamente a classe que esta wave remove.
++
++*Alargamento declarado:* a regra vale para os dois perfis. Um adopter
++`maintainer` legado que não tenha as 6 chaves da base passa a recebê-las
++(valores dele sempre vencem). É a mesma semântica ADITIVA da wave, uma camada
++ao lado; a decisão de recusar chave a chave é a mesma OQ-E1 dos hooks.
++
++**[P2 — real] chave de identidade sem fronteira à esquerda.** Medido em jq
++(Oniguruma): `"python3 .claude/hooks/.check_ledger_checkpoint.py"` rendia
++`check_ledger_checkpoint.py` com o regex antigo e `[]` com lookbehind. Sem a
++fronteira, um comando do adopter que invoque `.check_x.py` ou `-check_x.py`
++faz o registro canônico parecer PRESENTE e ele nunca é ligado — e o oráculo
++Python dos testes (`_PY_TOKEN`) já tinha o lookbehind: os dois extratores
++discordavam. Cura: `(?<![A-Za-z0-9_.-])` no `match` de `_keys`; teste afirma
++que os dois extratores carregam a mesma fronteira.
++
++**[P2 — real] template como stream de dois documentos.** Medido: `jq -e` sobre
++o arquivo valida os dois documentos (rc 0) e `--slurpfile` carrega 2; o
++programa lê `$tpl[0]` e o segundo some em silêncio. Cura: guard fail-closed
++antes de qualquer forma — `jq -n --slurpfile t "$template" '$t | length'` tem de
++ser exatamente 1; senão NOTE nomeada com o número encontrado e nada é escrito.
++
++**Testes:** unidade +12 (57 → 69): `TestEnvTravelsWithTheRoster` (7: adopter
++user legado recebe o `.env` do template inteiro, com a âncora do rail; valor do
++adopter nunca sobrescrito — chave derivada; `.env` não-objeto preservado e
++nomeado com os hooks ainda mergeados; template sem `.env` não cria a chave;
++idempotência byte a byte; dry-run anuncia `env <chave>` e não escreve;
++maintainer legado recebe o `.env` da base — o alargamento, afirmado),
++`TestTemplateMustBeExactlyOneDocument` (2: stream de 2 recusado e nomeado,
++nada escrito; controle — os dois artefatos reais são um documento cada),
++`TestHiddenScriptIsNotTheCanonicalRegistration` (3: `.check_x.py`,
++`-check_x.py`, paridade das fronteiras). e2e +2 (60 → 62): E.14j — a chave
++`user`-only (DERIVADA: chaves de `env` do template `user` menos as da base) é
++removida do adopter antes do upgrade e volta com o valor do template; E.14k —
++o controle com registro `maintainer` NÃO a recebe (a base não a declara): o
++merge de `env` é dirigido pelo template, não por literal.
++
++## 13. Rail round 8 — INFERIDO não é GRAVADO, e a cura
++
++Sobre a sombra do §12 (unit 69, e2e 62/0) o rail devolveu um P1 e um P2, os
++dois reais.
++
++**[P1] cerimônia inferida tratada como cerimônia user.** O resolver do
++`upgrade.sh` (`:884–:902`) responde `user` sem install-state legível e sem
++flag SÓ como fail-safe de ESCRITA NA RAIZ (`_CEREMONY_PERSIST=0`): essa
++população é o install histórico pré-Wave-B cuja cerimônia ninguém conhece. A
++seleção do §11 lia só o valor e, para um maintainer histórico, (a) retinha
++TODOS os hooks só-na-base — `check_ledger_checkpoint.py`, o próprio achado
++S328, exatamente para os adopters que esta wave existe para alcançar — e (b)
++com o §12, entregava `CEO_CONFIG_PROTECTION_ADVISORY=1`, que transforma em
++allow um matcher bloqueante que esse adopter já carrega. Medido: a interseção
++dos dois templates é os 20 registros do `user` (todos ⊆ base) e uma única
++chave de `env` comum (`CEO_QUIET_MODE=1`); a chave user-only é exatamente a
++advisory.
++
++*Cura — uma terceira postura, não um ajuste do default.* A seleção passa a ler
++`CEREMONY_EFFECTIVE/_CEREMONY_PERSIST`: `maintainer/1` → base; `user/1`
++(gravado, `--ceremony`, `CEO_UPGRADE_CEREMONY`) → user; **qualquer outra
++combinação → SHARED**: o roster que os DOIS templates declaram, derivado em
++runtime pelo MESMO `_keys` do merge (hooks por chave de identidade; `env` por
++chave E valor), escrito em `$BAK_DIR/.claude/settings.template-shared.json`
++como artefato de auditoria, e uma NOTE que nomeia a situação, quantifica o que
++foi RETIDO por perfil e diz como optar (`--ceremony maintainer|user`). Nada que
++um dos perfis recusaria; os 20 em que os perfis concordam chegam. As definições
++jq (`_cmds`/`_keys`/`_disp`) foram içadas para `$jq_defs`, compartilhado pelos
++dois programas — a fronteira do §12 não pode divergir entre duas cópias.
++
++**[P2] bloco multi-comando parcialmente presente.** Um bloco do template com
++vários comandos de que o adopter já tem alguns era appendado INTEIRO
++(`all(...)` falha), duplicando os presentes — para sempre, porque o upgrade
++seguinte vê a duplicata como presente. Nenhum template shipado tem esse
++formato (medido: 0 e 0), mas o guard estrutural o ACEITA. Cura: só as entradas
++AUSENTES do bloco são appendadas, cada uma julgada pelas próprias chaves.
++
++**Testes:** unidade (69 → 80): `TestUnknownCeremonyTakesTheSharedRoster` (9:
++não-vacuidade; `user/0` recebe o shared e NÃO a chave user-only; unset e valor
++desconhecido → shared; o shared ⊆ dos dois templates, `env` inclusive; hook
++só-na-base retido + NOTE com opt-in e `WITHHELD:`; artefato de auditoria
++escrito e coerente; controles — `user/1` e `maintainer/1` recebem o perfil
++inteiro); `TestPartiallyPresentMultiCommandBlock` (2: só a entrada ausente é
++appendada, sem duplicar; bloco inteiro presente é no-op byte a byte). Os dois
++testes do §11 sobre unset/valor desconhecido passam a afirmar o invariante que
++as rodadas 6 e 8 compartilham (nunca o roster largo). e2e +E.15 (7 asserções,
++62 → 69): fixture = install maintainer do cache SEM install-state, com um hook
++compartilhado, um só-na-base e uma chave de `env` compartilhada removidos —
++upgrade sem flag: NOTE (E.15a), compartilhado volta (E.15b), só-na-base
++RETIDO (E.15c), `env` compartilhado volta (E.15d), user-only ausente
++(E.15e); controles com `--ceremony maintainer` (E.15f) e `--ceremony user`
++(E.15g), cada um recebendo o seu perfil inteiro e não o do outro.
++
++## 14. Rail round 9 — a postura SHARED do §13 não era provável; a que é
++
++Sobre a sombra do §13 (unit 80, e2e 69/0) o rail devolveu dois P1 e um P2,
++todos sobre a postura SHARED — a segunda cura consecutiva a gerar o achado
++seguinte, o sinal de que a ARQUITETURA da cura estava errada, não o remendo.
++
++**[P1] hooks e settings intersectados em separado.** `check_config_protection.py`
++está nos DOIS templates (entrava no shared), mas o seu interruptor advisory é
++user-only (ficava fora): um adopter `user` legado, sem os dois, recebia o hook
++BLOQUEANTE — o §12 de novo, por outra porta. A raiz: a dependência
++hook → setting vive no CÓDIGO do hook, que o `upgrade.sh` não lê; nenhuma
++interseção de JSON a enxerga.
++
++**[P1] `--dry-run` escrevia.** O branch shared fazia `mkdir -p $BAK_DIR/.claude`
++e gravava o roster derivado ANTES do `return` do dry-run — a garantia de
++árvore intocada (`:981`) quebrada numa pré-visualização.
++
++**[P2] fontes sem validação.** Os guards de documento único e de forma corriam
++só sobre o arquivo derivado; um template-fonte em stream de dois documentos
++era coerçido (`$b[0]`) e aplicado truncado onde as posturas explícitas o
++recusariam.
++
++**Cura — o que é PROVÁVEL sem roster.** Para cerimônia desconhecida o upgrade
++**não registra hook nenhum**. O que os dois perfis provadamente compartilham é
++só o conjunto de settings que ambos declaram com o MESMO valor (hoje:
++`CEO_QUIET_MODE=1`); isso é aplicado, todo o resto é RETIDO e nomeado
++(`WITHHELD: 47 registros + 5 settings da base, 20 + 1 do user`), e o sumário
++diz `PARTIAL (ceremony unknown)` — nunca a frase de completude — com o opt-in
++`--ceremony maintainer|user`. O pré-cura empurrava 6 literais só-na-base para
++essa população; esses 6 eram o defeito. A derivação vai para `mktemp` (trap
++`RETURN` apaga); só o caminho que ESCREVE copia o artefato de auditoria para
++`$BAK_DIR/.claude/settings.template-shared.json`. As duas fontes passam pelos
++mesmos três guards (legível, um documento, objeto com `.hooks` objeto) antes de
++qualquer derivação. `$jq_defs` segue içado (um único `_keys`).
++
++**Testes:** unidade (80 → 82): `TestUnknownCeremonyRegistersNoHooks` substitui a
++classe do §13 (11 casos: não-vacuidade; `user/0`, unset e valor desconhecido
++→ zero hooks + só settings compartilhadas, user-only ausente; NOTE + `PARTIAL`
++e nunca «already present»; adopter já atual continua PARTIAL; artefato só no
++caminho que escreveu; **dry-run não cria `bak/` nem nada sob `.claude/`**;
++fonte em stream de 2 recusada e nomeada ANTES de derivar; controles `user/1` e
++`maintainer/1` inteiros). e2e (69 → 71): E.15b INVERTIDO (o hook compartilhado
++removido NÃO volta), E.15h (sumário PARTIAL, sem completude), E.15i
++(`--dry-run` no adopter desconhecido: sem `.claude.bak`, sem arquivo derivado,
++`settings.json` byte-idêntico); E.15f/E.15g seguem provando que, com a
++cerimônia DITA, cada perfil chega inteiro.
++
++## 15. Rail round 10 — um P2 sobre a forma do template, e a cura
++
++Sobre a sombra do §14 (unit 82, e2e 71/0) o rail devolveu um único P2, sem
++bloco `Full review comments:` — tratado como achado mesmo assim: um template
++cujo `.env` está PRESENTE mas não é objeto era coerçido a `{}` na derivação e
++os seus hooks entravam sem as settings que os mantêm no modo do perfil (para
++`settings.user.json`, `check_config_protection.py` sem a advisory). Nenhum
++template shipado tem essa forma; o guard a aceitava.
++
++**Cura:** o guard estrutural do template (o mesmo que recusa evento não-array
++e bloco não-identificável) emite `ENV (<tipo>)` quando `.env` está presente e
++não é objeto — recusa integral, nomeada, nada escrito. Um template SEM `.env`
++continua válido (não inventa chave); um `.env` vazio (`{}`) também.
++
++**Testes:** unidade 82 → 84 (`TestTemplateEnvMustBeAnObject`: template com
++`env: [1]` recusado e nomeado com `settings.json` intocado; controle com
++`env: {}` merge normal e sem chave inventada). O e2e não muda (71).
 diff --git a/.claude/scripts/tests/test_upgrade_lifecycle_hooks_derived.py b/.claude/scripts/tests/test_upgrade_lifecycle_hooks_derived.py
 new file mode 100644
-index 0000000..4a0fdd7
+index 0000000..6b9e1c2
 --- /dev/null
 +++ b/.claude/scripts/tests/test_upgrade_lifecycle_hooks_derived.py
-@@ -0,0 +1,914 @@
+@@ -0,0 +1,1377 @@
 +"""PLAN-169 W-E (S329) — upgrade.sh derives its hook roster from the template.
 +
 +Covers ``scripts/upgrade.sh::_merge_lifecycle_hooks_into_settings`` after the
@@ -767,11 +1042,12 @@ index 0000000..4a0fdd7
 +import tempfile
 +import unittest
 +from pathlib import Path
-+from typing import Dict, List
++from typing import Dict, List, Optional
 +
 +REPO_ROOT = Path(__file__).resolve().parents[3]
 +UPGRADE_SH = REPO_ROOT / "scripts" / "upgrade.sh"
 +TEMPLATE_SETTINGS = REPO_ROOT / "templates" / "settings" / "settings.base.json"
++TEMPLATE_USER_SETTINGS = REPO_ROOT / "templates" / "settings" / "settings.user.json"
 +
 +_HOOKS_DIR = REPO_ROOT / ".claude" / "hooks"
 +if str(_HOOKS_DIR) not in sys.path:
@@ -868,8 +1144,12 @@ index 0000000..4a0fdd7
 +        (self.target / ".claude").mkdir(parents=True)
 +        self.source = Path(self._tmp) / "source"
 +        (self.source / "templates" / "settings").mkdir(parents=True)
-+        # Default source template == the shipped artifact.
++        # Default source templates == the shipped artifacts, BOTH of them: the
++        # ceremony selects between them (rail round 6, P1), so a scratch source
++        # that carried only settings.base.json would make every user-ceremony
++        # merge fail-open on "template unreadable" and prove nothing.
 +        self.set_template(json.loads(TEMPLATE_SETTINGS.read_text(encoding="utf-8")))
++        self.set_user_template(json.loads(TEMPLATE_USER_SETTINGS.read_text(encoding="utf-8")))
 +
 +    # --- fixture setters ---------------------------------------------------
 +
@@ -881,8 +1161,15 @@ index 0000000..4a0fdd7
 +    def template_path(self) -> Path:
 +        return self.source / "templates" / "settings" / "settings.base.json"
 +
++    @property
++    def user_template_path(self) -> Path:
++        return self.source / "templates" / "settings" / "settings.user.json"
++
 +    def set_template(self, obj: Dict) -> None:
 +        self.template_path.write_text(json.dumps(obj, indent=2) + "\n", encoding="utf-8")
++
++    def set_user_template(self, obj: Dict) -> None:
++        self.user_template_path.write_text(json.dumps(obj, indent=2) + "\n", encoding="utf-8")
 +
 +    def seed(self, obj: Dict) -> None:
 +        self.settings_path.write_text(json.dumps(obj, indent=2) + "\n", encoding="utf-8")
@@ -892,11 +1179,20 @@ index 0000000..4a0fdd7
 +
 +    # --- driver ------------------------------------------------------------
 +
-+    def run_merge(self, *, dry: bool = False) -> "subprocess.CompletedProcess[str]":
++    def run_merge(
++        self, *, dry: bool = False, ceremony: Optional[str] = "maintainer",
++        persist: Optional[str] = "1",
++    ) -> "subprocess.CompletedProcess[str]":
++        # `ceremony=None` leaves CEREMONY_EFFECTIVE UNSET on purpose — under
++        # `set -u` that is the one condition upgrade.sh itself can never
++        # produce (it resolves the ceremony before any function runs), and the
++        # function has to survive it by taking the fail-safe branch.
 +        script = "\n".join([
 +            "set -uo pipefail",
 +            "SETTINGS_MERGE=1",
 +            "DRY_RUN=%d" % (1 if dry else 0),
++        ] + (["CEREMONY_EFFECTIVE=%s" % json.dumps(ceremony)] if ceremony is not None else [])
++          + (["_CEREMONY_PERSIST=%s" % json.dumps(persist)] if persist is not None else []) + [
 +            'TARGET=%s' % json.dumps(str(self.target)),
 +            'SOURCE_DIR=%s' % json.dumps(str(self.source)),
 +            'BAK_DIR=%s' % json.dumps(str(Path(self._tmp) / "bak")),
@@ -1590,10 +1886,440 @@ index 0000000..4a0fdd7
 +
 +    def test_dry_run_on_a_current_settings_says_no_op(self) -> None:
 +        template = json.loads(TEMPLATE_SETTINGS.read_text(encoding="utf-8"))
-+        self.seed({"hooks": template["hooks"]})
++        # A CURRENT settings carries the template's .env too (rail round 7, P1:
++        # the settings travel with the hooks) — a seed without it is a legacy
++        # adopter, and for that one the dry-run correctly announces work.
++        self.seed({"hooks": template["hooks"], "env": template["env"]})
 +        proc = self.run_merge(dry=True)
 +        self.assertIn("ALREADY present", proc.stdout)
 +        self.assertNotIn("would REGISTER", proc.stdout)
++
++
++class TestCeremonySelectsTheTemplate(_MergeHarness):
++    """The CEREMONY picks the template — the same decision install.sh makes.
++
++    Rail round 6 (P1): deriving from settings.base.json regardless of the
++    ceremony would re-register, on upgrade, the governance hooks that
++    settings.user.json deliberately omits — the advisory profile silently
++    turned into the maintainer profile. Every expectation here is DERIVED from
++    the two shipped artifacts; the one literal name is the rail's own example,
++    kept as an anchor the way check_ledger_checkpoint.py anchors the S328
++    finding above.
++    """
++
++    def _base_only(self) -> List[str]:
++        base = json.loads(TEMPLATE_SETTINGS.read_text(encoding="utf-8"))
++        user = json.loads(TEMPLATE_USER_SETTINGS.read_text(encoding="utf-8"))
++        return sorted(set(_keyset(base)) - set(_keyset(user)))
++
++    def _user_keys(self) -> List[str]:
++        return _keyset(json.loads(TEMPLATE_USER_SETTINGS.read_text(encoding="utf-8")))
++
++    def test_the_two_templates_actually_differ(self) -> None:
++        # Non-vacuity first: if user == base, nothing below can fail.
++        only = self._base_only()
++        self.assertGreaterEqual(
++            len(only), 10,
++            "settings.user.json omits only %d registrations of settings.base.json "
++            "— the profile this class protects no longer exists in that shape"
++            % len(only),
++        )
++        self.assertIn(
++            "PreToolUse check_canonical_edit.py", only,
++            "check_canonical_edit.py is the rail's example of a deliberately "
++            "omitted blocker — if it is now in settings.user.json, re-read that "
++            "template's _comment before trusting this class",
++        )
++
++    def test_user_ceremony_derives_from_the_user_template(self) -> None:
++        self.seed({"hooks": {}})
++        self.run_merge(ceremony="user")
++        self.assertEqual(
++            _keyset(self.result()), self._user_keys(),
++            "under ceremony=user the merge over an empty settings.json must "
++            "reproduce settings.user.json's registration set exactly",
++        )
++
++    def test_user_ceremony_registers_nothing_the_user_template_omits(self) -> None:
++        self.seed({"hooks": {}})
++        self.run_merge(ceremony="user")
++        got = set(_keyset(self.result()))
++        leaked = [k for k in self._base_only() if k in got]
++        self.assertEqual(
++            leaked, [],
++            "a user-ceremony upgrade registered hooks the user profile "
++            "deliberately omits: %s — the rail round-6 P1, the advisory profile "
++            "turned into the maintainer profile" % leaked,
++        )
++
++    def test_maintainer_ceremony_derives_from_the_base_template(self) -> None:
++        base = json.loads(TEMPLATE_SETTINGS.read_text(encoding="utf-8"))
++        self.seed({"hooks": {}})
++        self.run_merge(ceremony="maintainer")
++        self.assertEqual(_keyset(self.result()), _keyset(base))
++
++    def test_unset_ceremony_never_selects_the_wider_roster(self) -> None:
++        # Round 6 said "unset => user"; round 8 refined it: unset => the roster
++        # both profiles SHARE (TestUnknownCeremonyTakesTheSharedRoster). What
++        # this test keeps is the invariant both rounds agree on.
++        self.seed({"hooks": {}})
++        self.run_merge(ceremony=None, persist=None)
++        got = set(_keyset(self.result()))
++        self.assertTrue(got < set(_keyset(json.loads(TEMPLATE_SETTINGS.read_text(encoding="utf-8")))),
++                        "with CEREMONY_EFFECTIVE unset the merge selected the full base roster")
++
++    def test_unknown_ceremony_value_never_selects_the_wider_roster(self) -> None:
++        self.seed({"hooks": {}})
++        self.run_merge(ceremony="wizard")
++        got = set(_keyset(self.result()))
++        self.assertTrue(got < set(_keyset(json.loads(TEMPLATE_SETTINGS.read_text(encoding="utf-8")))),
++                        "an unrecognised ceremony value selected the full base roster")
++
++    def test_a_fresh_user_install_is_already_complete(self) -> None:
++        self.seed(json.loads(TEMPLATE_USER_SETTINGS.read_text(encoding="utf-8")))
++        before = self.settings_path.read_bytes()
++        proc = self.run_merge(ceremony="user")
++        self.assertEqual(
++            self.settings_path.read_bytes(), before,
++            "a settings.json built from settings.user.json must be a byte-level "
++            "no-op under ceremony=user (the same idempotency the maintainer path has)",
++        )
++        self.assertIn("already present", proc.stdout)
++
++    def test_selection_is_live_not_a_fixpoint(self) -> None:
++        """Positive control: a hook planted ONLY in the user template is
++        registered under ceremony=user and NOT under ceremony=maintainer."""
++        planted = "synthetic_user_only_probe_%d.py" % os.getpid()
++        user = json.loads(TEMPLATE_USER_SETTINGS.read_text(encoding="utf-8"))
++        user["hooks"].setdefault("SessionStart", []).append({
++            "hooks": [{"type": "command", "timeout": 5,
++                       "command": 'python3 "$CLAUDE_PROJECT_DIR"/.claude/hooks/%s' % planted}],
++        })
++        self.set_user_template(user)
++        self.seed({"hooks": {}})
++        self.run_merge(ceremony="user")
++        self.assertIn("SessionStart %s" % planted, _keyset(self.result()))
++        self.seed({"hooks": {}})
++        self.run_merge(ceremony="maintainer")
++        self.assertNotIn(
++            "SessionStart %s" % planted, _keyset(self.result()),
++            "the hook planted only in settings.user.json reached a MAINTAINER "
++            "merge — the ceremony is not selecting the template",
++        )
++        self.assertNotIn(planted, UPGRADE_SH.read_text(encoding="utf-8"))
++
++
++class TestEnvTravelsWithTheRoster(_MergeHarness):
++    """The template's .env is part of the roster (rail round 7, P1).
++
++    A registration is only as advisory as the setting it reads:
++    settings.user.json ships check_config_protection.py TOGETHER with
++    env.CEO_CONFIG_PROTECTION_ADVISORY=1, and an adopter that receives the hook
++    without the key runs the BLOCKING variant. Expectations are derived from
++    the shipped artifacts; the one literal key is the rail's anchor.
++    """
++
++    def _tpl(self, which: str) -> Dict:
++        path = TEMPLATE_USER_SETTINGS if which == "user" else TEMPLATE_SETTINGS
++        return json.loads(path.read_text(encoding="utf-8"))
++
++    def test_a_legacy_user_adopter_receives_the_settings_with_the_hooks(self) -> None:
++        self.seed({"hooks": {}})
++        self.run_merge(ceremony="user")
++        res = self.result()
++        self.assertEqual(
++            res.get("env"), self._tpl("user")["env"],
++            "a user adopter that predates the template's .env must receive it "
++            "with the hooks — otherwise the hooks run in a mode the profile "
++            "never chose",
++        )
++        self.assertIn(
++            "CEO_CONFIG_PROTECTION_ADVISORY", res.get("env", {}),
++            "the rail's anchor: this key is what keeps check_config_protection.py "
++            "advisory in the user profile",
++        )
++
++    def test_an_adopter_value_is_never_overwritten(self) -> None:
++        key = sorted(self._tpl("user")["env"])[0]
++        self.seed({"hooks": {}, "env": {key: "adopter-kept"}})
++        self.run_merge(ceremony="user")
++        res = self.result()
++        self.assertEqual(res["env"][key], "adopter-kept")
++        for k, v in self._tpl("user")["env"].items():
++            if k != key:
++                self.assertEqual(res["env"].get(k), v, "missing template key %s" % k)
++
++    def test_env_that_is_not_an_object_is_preserved_and_named(self) -> None:
++        self.seed({"hooks": {}, "env": ["nope"]})
++        proc = self.run_merge(ceremony="user")
++        res = self.result()
++        self.assertEqual(res["env"], ["nope"], "an odd .env must be PRESERVED, never coerced")
++        self.assertEqual(
++            _keyset(res), _keyset(self._tpl("user")),
++            "the hooks must still merge when only .env has an unexpected shape",
++        )
++        self.assertIn(".env in settings.json is not an object (found: array)", proc.stderr)
++        self.assertIn("PRESERVED:", proc.stdout)
++        self.assertIn("NOT APPLIED to env:", proc.stdout)
++
++    def test_a_template_without_env_creates_no_env_key(self) -> None:
++        self.set_template({"hooks": {"PreToolUse": [
++            {"matcher": "Bash", "hooks": [{"type": "command", "command": "bash h.sh check_x.py"}]},
++        ]}})
++        self.seed({"hooks": {}})
++        self.run_merge(ceremony="maintainer")
++        self.assertNotIn("env", self.result(), "no template env => no .env key invented")
++
++    def test_env_merge_is_idempotent_byte_for_byte(self) -> None:
++        self.seed({"hooks": {}})
++        self.run_merge(ceremony="user")
++        first = self.settings_path.read_bytes()
++        proc = self.run_merge(ceremony="user")
++        self.assertEqual(self.settings_path.read_bytes(), first)
++        self.assertIn("already present", proc.stdout)
++
++    def test_dry_run_announces_env_and_writes_nothing(self) -> None:
++        self.seed({"hooks": {}})
++        before = self.settings_path.read_bytes()
++        proc = self.run_merge(dry=True, ceremony="user")
++        self.assertIn("would REGISTER env ", proc.stdout)
++        self.assertEqual(self.settings_path.read_bytes(), before)
++
++    def test_a_legacy_maintainer_adopter_receives_the_base_env(self) -> None:
++        # Stated on purpose: the same rule widens to the maintainer profile —
++        # every key settings.base.json declares reaches a legacy adopter that
++        # lacks it. The adopter's own values always win (test above).
++        self.seed({"hooks": {}})
++        self.run_merge(ceremony="maintainer")
++        self.assertEqual(self.result().get("env"), self._tpl("base")["env"])
++
++
++class TestTemplateMustBeExactlyOneDocument(_MergeHarness):
++    """A stream of two JSON documents is a malformed roster (rail round 7, P2)."""
++
++    def test_a_two_document_stream_is_refused_and_named(self) -> None:
++        one = {"hooks": {"PreToolUse": [
++            {"matcher": "Bash", "hooks": [{"type": "command", "command": "bash h.sh check_x.py"}]},
++        ]}}
++        two = {"hooks": {"PreToolUse": [
++            {"matcher": "Bash", "hooks": [{"type": "command", "command": "bash h.sh check_y.py"}]},
++        ]}}
++        self.template_path.write_text(
++            json.dumps(one) + "\n" + json.dumps(two) + "\n", encoding="utf-8",
++        )
++        self.seed({"hooks": {}})
++        before = self.settings_path.read_bytes()
++        proc = self.run_merge(ceremony="maintainer")
++        self.assertEqual(self.settings_path.read_bytes(), before, "NOTHING may be written")
++        self.assertIn("not exactly ONE JSON document (found: 2)", proc.stderr)
++
++    def test_the_shipped_templates_are_one_document_each(self) -> None:
++        # Positive control for the guard: the real artifacts pass it.
++        for path in (TEMPLATE_SETTINGS, TEMPLATE_USER_SETTINGS):
++            self.assertIsInstance(json.loads(path.read_text(encoding="utf-8")), dict)
++
++
++class TestHiddenScriptIsNotTheCanonicalRegistration(_MergeHarness):
++    """The identity key needs BOTH boundaries (rail round 7, P2)."""
++
++    def _check(self, odd_command: str) -> None:
++        self.set_template({"hooks": {"PreToolUse": [
++            {"matcher": "Bash", "hooks": [{"type": "command", "command": "bash h.sh check_x.py"}]},
++        ]}})
++        self.seed({"hooks": {"PreToolUse": [
++            {"matcher": "Bash", "hooks": [{"type": "command", "command": odd_command}]},
++        ]}})
++        self.run_merge(ceremony="maintainer")
++        res = self.result()
++        self.assertIn(
++            "PreToolUse check_x.py", _keyset(res),
++            "%r was taken for the canonical check_x.py — the canonical "
++            "registration was never wired" % odd_command,
++        )
++        self.assertEqual(len(res["hooks"]["PreToolUse"]), 2, "the odd block must be preserved too")
++
++    def test_a_dot_prefixed_command_does_not_mask_the_canonical_hook(self) -> None:
++        self._check("bash h.sh .check_x.py")
++
++    def test_a_dash_prefixed_command_does_not_mask_the_canonical_hook(self) -> None:
++        self._check("bash h.sh -check_x.py")
++
++    def test_the_two_extractors_carry_the_same_boundaries(self) -> None:
++        self.assertIn("(?<![A-Za-z0-9_.-])", _func_source())
++        self.assertIn("(?<![A-Za-z0-9_.-])", _PY_TOKEN.pattern)
++
++
++class TestUnknownCeremonyRegistersNoHooks(_MergeHarness):
++    """INFERRED is not RECORDED (rail rounds 8 and 9).
++
++    With no install-state and no flag the resolver answers `user` only as a
++    root-write fail-safe (_CEREMONY_PERSIST=0): the historical install whose
++    ceremony nobody knows. Round 8 gave it the hooks both templates share;
++    round 9 showed that is not provable either — a shared hook's BEHAVIOUR can
++    depend on a setting the profiles disagree on, through code this script
++    cannot read. So: NO hooks, only the settings both profiles declare with
++    the same value, a NOTE with the opt-in, and a --dry-run that writes
++    nothing. All expectations derived from the shipped artifacts.
++    """
++
++    def _tpl(self, which: str) -> Dict:
++        path = TEMPLATE_USER_SETTINGS if which == "user" else TEMPLATE_SETTINGS
++        return json.loads(path.read_text(encoding="utf-8"))
++
++    def _shared_env(self) -> Dict:
++        b, u = self._tpl("base")["env"], self._tpl("user")["env"]
++        return {k: v for k, v in u.items() if b.get(k) == v}
++
++    def _user_only_env(self) -> List[str]:
++        b, u = self._tpl("base")["env"], self._tpl("user")["env"]
++        return sorted(k for k in u if k not in b)
++
++    def test_the_fixture_is_not_vacuous(self) -> None:
++        self.assertGreaterEqual(len(self._shared_env()), 1, "the profiles must agree on at least one setting")
++        self.assertGreaterEqual(len(self._user_only_env()), 1, "the user profile must declare a setting of its own")
++        self.assertGreaterEqual(len(_keyset(self._tpl("base"))), 20)
++
++    def test_inferred_user_registers_no_hooks_and_only_the_shared_settings(self) -> None:
++        self.seed({"hooks": {}})
++        self.run_merge(ceremony="user", persist="0")
++        res = self.result()
++        self.assertEqual(_keyset(res), [], "an INFERRED ceremony must register NO hooks")
++        self.assertEqual(res.get("env"), self._shared_env())
++        for k in self._user_only_env():
++            self.assertNotIn(k, res.get("env", {}))
++
++    def test_unset_ceremony_registers_no_hooks(self) -> None:
++        self.seed({"hooks": {}})
++        self.run_merge(ceremony=None, persist=None)
++        self.assertEqual(_keyset(self.result()), [])
++
++    def test_unknown_value_registers_no_hooks(self) -> None:
++        self.seed({"hooks": {}})
++        self.run_merge(ceremony="wizard", persist="1")
++        self.assertEqual(_keyset(self.result()), [])
++
++    def test_the_note_names_the_situation_and_the_opt_in(self) -> None:
++        self.seed({"hooks": {}})
++        proc = self.run_merge(ceremony="user", persist="0")
++        self.assertIn("ceremony UNKNOWN", proc.stderr)
++        self.assertIn("--ceremony maintainer|user", proc.stderr)
++        self.assertIn("WITHHELD:", proc.stderr)
++        self.assertIn("PARTIAL (ceremony unknown)", proc.stdout)
++        self.assertNotIn("already present", proc.stdout, "an unknown ceremony must never claim completeness")
++
++    def test_a_current_adopter_is_still_told_it_is_partial(self) -> None:
++        # Nothing to add (the shared settings are present) — the summary must
++        # still say PARTIAL, never the completeness sentence.
++        self.seed({"hooks": {}, "env": self._shared_env()})
++        before = self.settings_path.read_bytes()
++        proc = self.run_merge(ceremony="user", persist="0")
++        self.assertEqual(self.settings_path.read_bytes(), before)
++        self.assertIn("PARTIAL (ceremony unknown)", proc.stdout)
++        self.assertNotIn("already present", proc.stdout)
++
++    def test_the_audit_copy_is_kept_only_when_something_was_written(self) -> None:
++        self.seed({"hooks": {}})
++        self.run_merge(ceremony="user", persist="0")
++        kept = Path(self._tmp) / "bak" / ".claude" / "settings.template-shared.json"
++        self.assertTrue(kept.is_file(), "the derived settings must be kept next to the backup on the apply path")
++        doc = json.loads(kept.read_text(encoding="utf-8"))
++        self.assertEqual(doc.get("hooks"), {})
++        self.assertEqual(doc.get("env"), self._shared_env())
++
++    def test_dry_run_writes_nothing_anywhere(self) -> None:
++        self.seed({"hooks": {}})
++        before = self.settings_path.read_bytes()
++        proc = self.run_merge(dry=True, ceremony="user", persist="0")
++        self.assertEqual(self.settings_path.read_bytes(), before)
++        self.assertFalse((Path(self._tmp) / "bak").exists(), "--dry-run created the backup dir (rail round 9, P1)")
++        self.assertEqual(sorted(p.name for p in (self.target / ".claude").iterdir()), ["settings.json"],
++                         "--dry-run left something under the adopter's .claude/")
++        self.assertIn("would REGISTER env ", proc.stdout)
++        self.assertIn("PARTIAL (ceremony unknown)", proc.stdout)
++
++    def test_a_malformed_source_template_is_refused_before_deriving(self) -> None:
++        # Round 9, P2: the SOURCES pass the one-document guard, not only the
++        # derived file. Two documents in the base template => refused, named.
++        base = self._tpl("base")
++        self.template_path.write_text(json.dumps(base) + "\n" + json.dumps(base) + "\n", encoding="utf-8")
++        self.seed({"hooks": {}})
++        before = self.settings_path.read_bytes()
++        proc = self.run_merge(ceremony="user", persist="0")
++        self.assertEqual(self.settings_path.read_bytes(), before)
++        self.assertIn("not exactly ONE JSON document (found: 2)", proc.stderr)
++
++    def test_recorded_user_still_gets_the_full_user_profile(self) -> None:
++        # Control: the posture is about PROVENANCE, not about the value.
++        self.seed({"hooks": {}})
++        self.run_merge(ceremony="user", persist="1")
++        self.assertEqual(_keyset(self.result()), _keyset(self._tpl("user")))
++        self.assertEqual(self.result().get("env"), self._tpl("user")["env"])
++
++    def test_recorded_maintainer_still_gets_the_full_base_profile(self) -> None:
++        self.seed({"hooks": {}})
++        self.run_merge(ceremony="maintainer", persist="1")
++        self.assertEqual(_keyset(self.result()), _keyset(self._tpl("base")))
++        self.assertEqual(self.result().get("env"), self._tpl("base")["env"])
++
++
++class TestPartiallyPresentMultiCommandBlock(_MergeHarness):
++    """Only the MISSING entries of a block are appended (rail round 8, P2)."""
++
++    def _two(self) -> Dict:
++        return {"hooks": {"PreToolUse": [
++            {"matcher": "Bash", "hooks": [
++                {"type": "command", "command": "bash h.sh check_a.py"},
++                {"type": "command", "command": "bash h.sh check_b.py"},
++            ]},
++        ]}}
++
++    def test_only_the_missing_command_is_appended(self) -> None:
++        self.set_template(self._two())
++        self.seed({"hooks": {"PreToolUse": [
++            {"matcher": "Bash", "hooks": [{"type": "command", "command": "bash h.sh check_a.py"}]},
++        ]}})
++        self.run_merge()
++        res = self.result()
++        self.assertIn("PreToolUse check_b.py", _keyset(res))
++        self.assertEqual(
++            len([k for k in _keybag(res) if k == "PreToolUse check_a.py"]), 1,
++            "check_a.py was duplicated — the whole block was appended instead of the missing entry",
++        )
++        appended = res["hooks"]["PreToolUse"][-1]
++        self.assertEqual([h["command"] for h in appended["hooks"]], ["bash h.sh check_b.py"])
++
++    def test_a_fully_present_block_is_a_no_op(self) -> None:
++        self.set_template(self._two())
++        self.seed(self._two())
++        before = self.settings_path.read_bytes()
++        self.run_merge()
++        self.assertEqual(self.settings_path.read_bytes(), before)
++
++
++class TestTemplateEnvMustBeAnObject(_MergeHarness):
++    """A template with a PRESENT, malformed .env is refused whole (rail round 10, P2)."""
++
++    def test_a_malformed_template_env_refuses_the_whole_template(self) -> None:
++        self.set_template({"hooks": {"PreToolUse": [
++            {"matcher": "Bash", "hooks": [{"type": "command", "command": "bash h.sh check_x.py"}]},
++        ]}, "env": [1]})
++        self.seed({"hooks": {}})
++        before = self.settings_path.read_bytes()
++        proc = self.run_merge(ceremony="maintainer")
++        self.assertEqual(self.settings_path.read_bytes(), before,
++                         "the hooks were written although the template's .env is malformed")
++        self.assertIn("structurally invalid", proc.stderr)
++        self.assertIn(".env present but not an object: (array)", proc.stderr)
++
++    def test_an_empty_template_env_object_is_fine(self) -> None:
++        # Control: the refusal is about SHAPE, not about presence or size.
++        self.set_template({"hooks": {"PreToolUse": [
++            {"matcher": "Bash", "hooks": [{"type": "command", "command": "bash h.sh check_x.py"}]},
++        ]}, "env": {}})
++        self.seed({"hooks": {}})
++        self.run_merge(ceremony="maintainer")
++        self.assertIn("PreToolUse check_x.py", _keyset(self.result()))
++        self.assertNotIn("env", self.result(), "an empty template env must not invent a key")
 +
 +
 +class TestNoSecondRoster(TestEnvContext):
@@ -1624,6 +2350,18 @@ index 0000000..4a0fdd7
 +            "%s does not read $SOURCE_DIR/templates/settings/settings.base.json "
 +            "— the roster must be derived from the template in the checkout "
 +            "that is EXECUTING the upgrade" % FUNC_NAME,
++        )
++        self.assertTrue(
++            '"$SOURCE_DIR/templates/settings/settings.user.json"' in source,
++            "%s does not read $SOURCE_DIR/templates/settings/settings.user.json "
++            "— a `--ceremony user` adopter would be upgraded from the maintainer "
++            "roster (rail round 6, P1)" % FUNC_NAME,
++        )
++        self.assertTrue(
++            "CEREMONY_EFFECTIVE" in source,
++            "%s does not consume CEREMONY_EFFECTIVE — the template must be "
++            "selected by the ONE ceremony resolution upgrade.sh already makes, "
++            "never by a second decision" % FUNC_NAME,
 +        )
 +        self.assertTrue(
 +            "$TARGET/templates/settings" not in source,
@@ -1735,10 +2473,10 @@ index 7b55f02..9f01ec9 100644
          # Phase 4 deliverable; skip if directory missing
 diff --git a/scripts/tests/test-upgrade-lifecycle-hooks-derived.sh b/scripts/tests/test-upgrade-lifecycle-hooks-derived.sh
 new file mode 100755
-index 0000000..d7ea375
+index 0000000..226546c
 --- /dev/null
 +++ b/scripts/tests/test-upgrade-lifecycle-hooks-derived.sh
-@@ -0,0 +1,783 @@
+@@ -0,0 +1,1010 @@
 +#!/usr/bin/env bash
 +# scripts/tests/test-upgrade-lifecycle-hooks-derived.sh
 +# PLAN-169 W-E (S329) — upgrade.sh derives the hook roster it registers from
@@ -2469,6 +3207,233 @@ index 0000000..d7ea375
 +  || bad "E.13d the completeness sentence no longer prints even when it is true"
 +
 +# ---------------------------------------------------------------------------
++# E.14  the CEREMONY selects the template (rail round 6, P1)
++# ---------------------------------------------------------------------------
++# install.sh builds a `--ceremony user` adopter from settings.user.json — a
++# profile that deliberately omits the governance hooks that block edits or
++# need GPG/sentinel infrastructure. An upgrade that derives from
++# settings.base.json regardless would re-register exactly those, turning the
++# advisory profile into the maintainer profile in the one population that
++# chose not to have it. The fixture is a REAL user-ceremony install (the cached
++# fixture is maintainer, so it cannot be reused), and the ceremony reaches the
++# upgrade the way it does in the field: RECORDED in .claude/.install-state.json,
++# no flag on the upgrade call. E.14i is the positive control that keeps E.14f
++# honest: the same adopter with its record rewritten to maintainer MUST
++# receive the base-only registrations.
++echo ""
++echo "==> E.14 — a --ceremony user adopter is upgraded from settings.user.json, never from settings.base.json"
++TEMPLATE_USER="$REPO_ROOT/templates/settings/settings.user.json"
++_keyset "$TEMPLATE_USER" > "$WORK/tpl.user.keys"
++comm -23 "$WORK/tpl.keys" "$WORK/tpl.user.keys" > "$WORK/tpl.base-only.keys"
++BASE_ONLY_N="$( wc -l < "$WORK/tpl.base-only.keys" | tr -d ' ' )"
++[ "${BASE_ONLY_N:-0}" -ge 10 ] \
++  && ok "E.14a settings.user.json omits $BASE_ONLY_N of the base template's registrations — the profile this case protects exists, so E.14f can fail" \
++  || bad "E.14a settings.user.json omits only ${BASE_ONLY_N:-0} base registrations — the user profile no longer differs enough for this case to mean anything"
++
++UA="$WORK/user/adopter"
++mkdir -p "$UA"
++( cd "$UA" && git init -q ) || scaffold "git init failed in $UA"
++bash "$INSTALL" "$UA" --profile core --ceremony user > "$UA.install.log" 2>&1 \
++  || { tail -30 "$UA.install.log" >&2; scaffold "install.sh --ceremony user failed for $UA"; }
++
++jq -e '.request.ceremony == "user"' "$UA/.claude/.install-state.json" >/dev/null 2>&1 \
++  && ok "E.14b the install RECORDED ceremony=user in .claude/.install-state.json — the path the upgrade resolves, no flag needed" \
++  || bad "E.14b .claude/.install-state.json does not record ceremony=user; the fixture is not a user-ceremony install"
++
++_keyset "$UA/.claude/settings.json" > "$WORK/user.pre.keys"
++if diff -q "$WORK/tpl.user.keys" "$WORK/user.pre.keys" >/dev/null 2>&1; then
++  ok "E.14c a fresh user install's registration set EQUALS settings.user.json's"
++else
++  bad "E.14c fresh user install != settings.user.json registration set"
++  diff "$WORK/tpl.user.keys" "$WORK/user.pre.keys" | head -10 >&2
++fi
++
++# ... and strip the env key the user template ships WITH its hooks (rail
++# round 7, P1): a pre-PLAN-124 user adopter has neither the registration nor
++# the key, and the hook without the key is the BLOCKING variant. The key is
++# DERIVED — the user template's env keys minus the base template's — so this
++# case protects whatever the user profile declares for itself, by name.
++USER_ONLY_ENV="$( comm -23 <( jq -r '.env | keys[]' "$TEMPLATE_USER" | sort ) <( jq -r '.env | keys[]' "$TEMPLATE" | sort ) )"
++ENV_KEY="$( printf '%s\n' "$USER_ONLY_ENV" | head -1 )"
++[ -n "$ENV_KEY" ] || scaffold "settings.user.json declares no env key of its own — E.14j has nothing to protect"
++ENV_VAL="$( jq -r --arg k "$ENV_KEY" '.env[$k]' "$TEMPLATE_USER" )"
++jq --arg k "$ENV_KEY" 'del(.env[$k])' "$UA/.claude/settings.json" > "$UA/.claude/settings.json.stripped" \
++  && mv "$UA/.claude/settings.json.stripped" "$UA/.claude/settings.json" \
++  || scaffold "could not strip env.$ENV_KEY from the user adopter"
++jq -e --arg k "$ENV_KEY" '.env | has($k) | not' "$UA/.claude/settings.json" >/dev/null 2>&1 \
++  || scaffold "the strip of env.$ENV_KEY did not bite"
++
++# Strip a registration the USER template DOES declare, so the merge has real
++# work to do — otherwise E.14f could pass for a build that skipped the merge
++# entirely under ceremony=user.
++STRIP_LINE="$( grep '^PreToolUse ' "$WORK/tpl.user.keys" | grep '\.py$' | head -1 )"
++STRIP_NAME="${STRIP_LINE#PreToolUse }"
++[ -n "$STRIP_NAME" ] || scaffold "settings.user.json declares no PreToolUse .py registration to strip"
++jq --arg n "$STRIP_NAME" 'del(.hooks.PreToolUse[] | select((.hooks[0].command // "") | test($n)))' \
++  "$UA/.claude/settings.json" > "$UA/.claude/settings.json.stripped" \
++  && mv "$UA/.claude/settings.json.stripped" "$UA/.claude/settings.json" \
++  || scaffold "could not strip $STRIP_NAME from the user adopter"
++if _keyset "$UA/.claude/settings.json" | grep -q "^PreToolUse $STRIP_NAME\$"; then
++  scaffold "the strip of $STRIP_NAME did not bite"
++fi
++
++_upgrade "$UA" "$REPO_ROOT"
++[ "$_UP_RC" -eq 0 ] \
++  && ok "E.14d the upgrade of the user adopter succeeded" \
++  || bad "E.14d the upgrade exited $_UP_RC (see $_UP_LOG)"
++
++_keyset "$UA/.claude/settings.json" > "$WORK/user.post.keys"
++grep -q "^PreToolUse $STRIP_NAME\$" "$WORK/user.post.keys" \
++  && ok "E.14e the stripped registration ($STRIP_NAME) was re-registered — the merge is LIVE under ceremony=user, not skipped" \
++  || bad "E.14e $STRIP_NAME is still missing after the upgrade — the user-ceremony merge did nothing (see $_UP_LOG)"
++
++LEAKED="$( comm -12 "$WORK/tpl.base-only.keys" "$WORK/user.post.keys" )"
++if [ -z "$LEAKED" ]; then
++  ok "E.14f none of the $BASE_ONLY_N base-only registrations reached the user adopter — the advisory profile stayed advisory"
++else
++  bad "E.14f the upgrade registered base-only hooks into a user-ceremony adopter (rail round 6, P1):"
++  printf '%s\n' "$LEAKED" | sed 's/^/         /' >&2
++fi
++
++if diff -q "$WORK/tpl.user.keys" "$WORK/user.post.keys" >/dev/null 2>&1; then
++  ok "E.14g after the upgrade the user adopter's set EQUALS settings.user.json's again — restored, and nothing invented"
++else
++  bad "E.14g user adopter != settings.user.json after the upgrade"
++  diff "$WORK/tpl.user.keys" "$WORK/user.post.keys" | head -10 >&2
++fi
++
++grep -q "settings.user.json" "$_UP_LOG" \
++  && ok "E.14h the upgrade NAMED the template it derived from (settings.user.json)" \
++  || bad "E.14h the upgrade log never names settings.user.json (see $_UP_LOG)"
++
++if [ "$( jq -r --arg k "$ENV_KEY" '.env[$k] // "ABSENT"' "$UA/.claude/settings.json" )" = "$ENV_VAL" ]; then
++  ok "E.14j env.$ENV_KEY=$ENV_VAL came back WITH the hooks — the setting that keeps the user profile advisory travels with the roster (rail round 7, P1)"
++else
++  bad "E.14j env.$ENV_KEY is not '$ENV_VAL' after the upgrade — the hooks arrived without the setting they read (see $_UP_LOG)"
++fi
++
++UM="$WORK/user/adopter-as-maintainer"
++cp -R "$UA" "$UM" || scaffold "could not copy the user adopter for the E.14 control"
++jq '.request.ceremony = "maintainer"' "$UM/.claude/.install-state.json" > "$UM/.claude/.install-state.json.tmp" \
++  && mv "$UM/.claude/.install-state.json.tmp" "$UM/.claude/.install-state.json" \
++  || scaffold "could not rewrite the ceremony record for the E.14 control"
++jq --arg k "$ENV_KEY" 'del(.env[$k])' "$UM/.claude/settings.json" > "$UM/.claude/settings.json.stripped" \
++  && mv "$UM/.claude/settings.json.stripped" "$UM/.claude/settings.json" \
++  || scaffold "could not strip env.$ENV_KEY from the E.14 control"
++_upgrade "$UM" "$REPO_ROOT"
++_keyset "$UM/.claude/settings.json" > "$WORK/user-as-maint.post.keys"
++if jq -e --arg k "$ENV_KEY" '.env | has($k) | not' "$UM/.claude/settings.json" >/dev/null 2>&1; then
++  ok "E.14k CONTROL — under a maintainer record env.$ENV_KEY is NOT re-applied (settings.base.json does not declare it): the env merge is template-driven, not a literal"
++else
++  bad "E.14k CONTROL — env.$ENV_KEY appeared under a maintainer record; something other than the selected template wrote it"
++fi
++CTRL_N="$( comm -12 "$WORK/tpl.base-only.keys" "$WORK/user-as-maint.post.keys" | wc -l | tr -d ' ' )"
++[ "${CTRL_N:-0}" -eq "$BASE_ONLY_N" ] \
++  && ok "E.14i CONTROL — with the record rewritten to maintainer the same adopter DOES receive all $BASE_ONLY_N base-only registrations: the choice is driven by the recorded ceremony, and E.14f can fail" \
++  || bad "E.14i CONTROL — expected $BASE_ONLY_N base-only registrations under a maintainer record, got ${CTRL_N:-0} (upgrade rc=$_UP_RC, see $_UP_LOG)"
++
++# ---------------------------------------------------------------------------
++# E.15  an INFERRED ceremony is not a recorded one (rail round 8, P1)
++# ---------------------------------------------------------------------------
++# No install-state, no flag: the resolver answers `user` only as a root-write
++# fail-safe. That adopter is the pre-Wave-B historical install, ceremony
++# unknown — it must get NO hook registration at all (round 9: a shared hook's
++# behaviour can depend on a setting the profiles disagree on, through code the
++# upgrader cannot read), only the settings both profiles declare with the same
++# value, and a NOTE with the opt-in; and its --dry-run must write nothing.
++# The fixture is the cached MAINTAINER install with its install-state removed
++# and one shared hook, one base-only hook and one shared setting stripped;
++# E.15f/E.15g are the controls: the same fixture WITH --ceremony gets each
++# profile in full.
++echo ""
++echo "==> E.15 — with no recorded ceremony the upgrade registers NO hooks, applies only the shared settings, and says so"
++BO_LINE="$( grep '^PreToolUse ' "$WORK/tpl.base-only.keys" | grep '\.py$' | head -1 )"
++BO_NAME="${BO_LINE#PreToolUse }"
++[ -n "$BO_NAME" ] || scaffold "no base-only PreToolUse registration to withhold in E.15"
++SHARED_ENV_KEY="$( jq -r --slurpfile u "$TEMPLATE_USER" '.env | to_entries[] | select(.value == $u[0].env[.key]) | .key' "$TEMPLATE" | sort | head -1 )"
++[ -n "$SHARED_ENV_KEY" ] || scaffold "the two templates share no env key with the same value — E.15d has nothing to restore"
++SHARED_ENV_VAL="$( jq -r --arg k "$SHARED_ENV_KEY" '.env[$k]' "$TEMPLATE" )"
++
++_mk_unknown() {  # $1=dir  — cached maintainer install, ceremony record removed, three strips
++  _install "$1"
++  rm -f "$1/.claude/.install-state.json"
++  jq --arg a "$STRIP_NAME" --arg b "$BO_NAME" --arg k "$SHARED_ENV_KEY" '
++      del(.hooks.PreToolUse[] | select((.hooks[0].command // "") | test($a)))
++    | del(.hooks.PreToolUse[] | select((.hooks[0].command // "") | test($b)))
++    | del(.env[$k])' "$1/.claude/settings.json" > "$1/.claude/settings.json.stripped" \
++    && mv "$1/.claude/settings.json.stripped" "$1/.claude/settings.json" \
++    || scaffold "could not build the unknown-ceremony fixture in $1"
++  [ ! -e "$1/.claude/.install-state.json" ] || scaffold "install-state still present in $1"
++}
++
++UK="$WORK/unknown/adopter"
++_mk_unknown "$UK"
++_keyset "$UK/.claude/settings.json" | grep -q "^PreToolUse $BO_NAME\$" && scaffold "the base-only strip did not bite"
++_upgrade "$UK" "$REPO_ROOT"
++
++grep -q "ceremony UNKNOWN" "$_UP_LOG" \
++  && ok "E.15a the upgrade NAMED the unknown ceremony and the opt-in ($( grep -o 'WITHHELD: [^.]*' "$_UP_LOG" | head -1 ))" \
++  || bad "E.15a the upgrade never said the ceremony was unknown (see $_UP_LOG)"
++
++_keyset "$UK/.claude/settings.json" > "$WORK/unknown.post.keys"
++grep -q "^PreToolUse $STRIP_NAME\$" "$WORK/unknown.post.keys" \
++  && bad "E.15b the stripped registration ($STRIP_NAME) was RE-REGISTERED for an unknown ceremony — a hook the profiles share can still block under one of them (rail round 9)" \
++  || ok "E.15b the stripped registration ($STRIP_NAME) stays WITHHELD — no hook is registered until the ceremony is stated"
++
++grep -q "^PreToolUse $BO_NAME\$" "$WORK/unknown.post.keys" \
++  && bad "E.15c the BASE-ONLY registration ($BO_NAME) reached an adopter whose ceremony is unknown" \
++  || ok "E.15c the base-only registration ($BO_NAME) was WITHHELD — a possible user profile is not handed a blocker"
++
++if [ "$( jq -r --arg k "$SHARED_ENV_KEY" '.env[$k] // "ABSENT"' "$UK/.claude/settings.json" )" = "$SHARED_ENV_VAL" ]; then
++  ok "E.15d the SHARED setting env.$SHARED_ENV_KEY=$SHARED_ENV_VAL was restored"
++else
++  bad "E.15d env.$SHARED_ENV_KEY was not restored to '$SHARED_ENV_VAL' (see $_UP_LOG)"
++fi
++
++if jq -e --arg k "$ENV_KEY" '.env | has($k) | not' "$UK/.claude/settings.json" >/dev/null 2>&1; then
++  ok "E.15e the USER-ONLY setting env.$ENV_KEY was NOT applied — a possible maintainer profile keeps its blocking matcher"
++else
++  bad "E.15e env.$ENV_KEY reached an adopter whose ceremony is unknown — a blocking matcher was turned into an allow"
++fi
++
++if grep -q "PARTIAL (ceremony unknown)" "$_UP_LOG" && ! grep -q "already present" "$_UP_LOG"; then
++  ok "E.15h the summary says PARTIAL (ceremony unknown) and never claims completeness"
++else
++  bad "E.15h the unknown-ceremony summary is wrong (missing PARTIAL, or claims 'already present') — see $_UP_LOG"
++fi
++
++UKD="$WORK/unknown/adopter-dry"
++_mk_unknown "$UKD"
++DRY_UK_SHA="$( _sha "$UKD/.claude/settings.json" )"
++_upgrade "$UKD" "$REPO_ROOT" --dry-run
++if [ "$( _sha "$UKD/.claude/settings.json" )" = "$DRY_UK_SHA" ] && [ ! -e "$UKD/.claude.bak" ] \
++   && ! find "$UKD/.claude" -name 'settings.template-shared.json' | grep -q .; then
++  ok "E.15i --dry-run on an unknown-ceremony adopter wrote NOTHING (no .claude.bak, no derived file, settings.json byte-identical) — the no-write guarantee holds on this path too (rail round 9, P1)"
++else
++  bad "E.15i --dry-run on an unknown-ceremony adopter WROTE under the adopter (see $_UP_LOG)"
++fi
++
++UKM="$WORK/unknown/adopter-maintainer"
++_mk_unknown "$UKM"
++_upgrade "$UKM" "$REPO_ROOT" --ceremony maintainer
++if _keyset "$UKM/.claude/settings.json" | grep -q "^PreToolUse $BO_NAME\$" \
++   && jq -e --arg k "$ENV_KEY" '.env | has($k) | not' "$UKM/.claude/settings.json" >/dev/null 2>&1; then
++  ok "E.15f CONTROL — the same fixture WITH --ceremony maintainer gets the base-only registration and NOT the user-only setting: the withholding is about provenance, not about the value"
++else
++  bad "E.15f CONTROL — with --ceremony maintainer the base-only registration is missing or the user-only setting appeared (see $_UP_LOG)"
++fi
++
++UKU="$WORK/unknown/adopter-user"
++_mk_unknown "$UKU"
++_upgrade "$UKU" "$REPO_ROOT" --ceremony user
++if ! _keyset "$UKU/.claude/settings.json" | grep -q "^PreToolUse $BO_NAME\$" \
++   && [ "$( jq -r --arg k "$ENV_KEY" '.env[$k] // "ABSENT"' "$UKU/.claude/settings.json" )" = "$ENV_VAL" ]; then
++  ok "E.15g CONTROL — the same fixture WITH --ceremony user gets the user-only setting and NOT the base-only registration"
++else
++  bad "E.15g CONTROL — with --ceremony user the base-only registration appeared or the user-only setting is missing (see $_UP_LOG)"
++fi
++
++# ---------------------------------------------------------------------------
 +# E.9  the drift the second copy had already accumulated
 +# ---------------------------------------------------------------------------
 +echo ""
@@ -2523,10 +3488,10 @@ index 0000000..d7ea375
 +[ "$FAIL" -eq 0 ] || exit 1
 +exit 0
 diff --git a/scripts/upgrade.sh b/scripts/upgrade.sh
-index b50619d..68c6645 100755
+index b50619d..9de347d 100755
 --- a/scripts/upgrade.sh
 +++ b/scripts/upgrade.sh
-@@ -2458,123 +2458,384 @@ _emit_deprecation_warnings() {
+@@ -2458,123 +2458,572 @@ _emit_deprecation_warnings() {
  _emit_deprecation_warnings
  
  # ---------------------------------------------------------------------------
@@ -2604,10 +3569,6 @@ index b50619d..68c6645 100755
 +#   EVERY key it carries is already present under that event. A block we
 +#   cannot key at all (no hooks[]) is never appended — unidentifiable input is
 +#   left alone rather than guessed at.
-+#
-+# --dry-run announces the SAME derivation (one jq program, --arg mode): a
-+# migration that is silent in --dry-run is a migration the adopter cannot
-+# review before it runs for real.
  #
 -# PLAN-179 W1-b (pair-rail finding P1 — "upgraded adopters never get the new
 -# hook"): the SIXTH registration, SessionStart(matcher "compact") ->
@@ -2620,15 +3581,19 @@ index b50619d..68c6645 100755
 -# guards UNKNOWN event keys (DirectoryAdded/Notification), and none of the five
 -# W2 registrations above is gated either. Adding a gate here would invent a
 -# pattern this function does not use.
-+# The file is rewritten ONLY when at least one registration is actually
-+# missing (same idempotency oracle as the T5.4 migration below), so a re-run
-+# is byte-identical — including the adopter's own formatting, which the
-+# pre-S329 unconditional `jq` rewrite destroyed on every upgrade.
++# --dry-run announces the SAME derivation (one jq program, --arg mode): a
++# migration that is silent in --dry-run is a migration the adopter cannot
++# review before it runs for real.
  #
 -# Fail-open per CLAUDE.md §5: no jq, malformed settings, or a merge error =>
 -# stderr NOTE + the upgrade proceeds. A backup of the pre-merge settings.json
 -# is written under $BAK_DIR first so the Owner can always roll back.
 -# Suppress entirely with --no-settings-merge.
++# The file is rewritten ONLY when at least one registration is actually
++# missing (same idempotency oracle as the T5.4 migration below), so a re-run
++# is byte-identical — including the adopter's own formatting, which the
++# pre-S329 unconditional `jq` rewrite destroyed on every upgrade.
++#
 +# ABSENT vs PRESENT-BUT-FALSY (rail round 1, P2 — these are NOT the same
 +# question, and the obvious jq idiom conflates them):
 +#   .hooks / an event key MISSING       -> nothing was ever written there;
@@ -2667,7 +3632,80 @@ index b50619d..68c6645 100755
    local settings="$TARGET/.claude/settings.json"
 +  # SINGLE SOURCE. $SOURCE_DIR is the checkout executing this upgrade (:96),
 +  # the same resolution _migrate_settings_baseline uses for the pair-rail cap.
-+  local template="$SOURCE_DIR/templates/settings/settings.base.json"
++  #
++  # WHICH template is the CEREMONY's call, and the call is not re-made here
++  # (rail round 6, P1). install.sh builds the adopter's settings.json from
++  # settings.user.json under `--ceremony user` (its WS4-ceremony-settings
++  # branch) — a profile that deliberately OMITS the governance hooks that block
++  # edits or need GPG/sentinel infrastructure. Deriving from settings.base.json
++  # regardless of ceremony would re-register exactly those on the next upgrade,
++  # silently turning the advisory user profile into the maintainer profile —
++  # wider than the pre-cure literal roster ever reached, and in the one
++  # population that chose not to have them. CEREMONY_EFFECTIVE is the ONE
++  # resolution of the ceremony in this script (recorded install-state, then
++  # --ceremony, then CEO_UPGRADE_CEREMONY, then the fail-safe `user`); this
++  # function CONSUMES it. Only the literal `maintainer` selects the wider
++  # template; every other value — including unset, which only a harness can
++  # produce — takes the narrower one, the same fail-SAFE direction the
++  # resolution itself chose.
++  #
++  # And INFERRED is not RECORDED (rail round 8, P1). With no readable
++  # install-state and no --ceremony, the resolver above answers `user` only as
++  # a fail-safe for ROOT WRITES (_CEREMONY_PERSIST=0): that population is the
++  # pre-Wave-B historical install whose ceremony nobody knows. Treating that
++  # as a real user profile would withhold every base-only hook from a
++  # historical MAINTAINER — the S328 finding itself, for exactly the adopters
++  # this wave exists to reach — and hand it the user-only advisory switch,
++  # which turns a blocking matcher it already carries into an allow. So the
++  # unknown case gets its own posture: the roster BOTH templates share, derived
++  # at run time (hooks by identity key, settings by key AND value), NAMED, with
++  # the opt-in spelled out. Nothing either profile would refuse, and the 20
++  # registrations the profiles agree on do arrive.
++  local template="" _tpl_posture _tpl_label
++  case "${CEREMONY_EFFECTIVE:-}/${_CEREMONY_PERSIST:-0}" in
++    maintainer/1)
++      _tpl_posture="maintainer"
++      template="$SOURCE_DIR/templates/settings/settings.base.json"
++      _tpl_label="templates/settings/settings.base.json" ;;
++    user/1)
++      _tpl_posture="user"
++      template="$SOURCE_DIR/templates/settings/settings.user.json"
++      _tpl_label="templates/settings/settings.user.json" ;;
++    *)
++      _tpl_posture="shared"
++      _tpl_label="the roster shared by settings.base.json and settings.user.json (ceremony unknown)" ;;
++  esac
++  # ONE identity rule, hoisted (rail round 8) so that any second jq program in
++  # this function shares it and the boundary fix of round 7 cannot drift
++  # between two copies of the regex.
++  local jq_defs
++  jq_defs='
++# Every shape this walks is ACCEPTED only after being proved to be the shape
++# we expect (object / array / string). Anything else yields NO key, which
++# makes its block unidentifiable and therefore untouched — the PLAN-185
++# doctrine: enumerate what is provably safe, never guess at the rest. jq
++# raises on indexing a number or slicing an object, and an uncaught raise here
++# would abort the WHOLE merge, turning one odd event into a silent no-op for
++# all 47 registrations (measured: E.8 of the e2e caught exactly that).
++def _cmds:
++  [ select(type == "object") | (.hooks // null)
++    | select(type == "array") | .[]
++    | select(type == "object") | (.command // null)
++    | select(type == "string") ];
++def _keys:
++  [ _cmds[]
++    | . as $cmd
++    # Both boundaries (rail round 7, P2): without the lookbehind, an adopter
++    # command that invokes a hidden (dot-prefixed) or dash-prefixed copy of a
++    # hook yields the CANONICAL name as its key, the template registration is
++    # judged PRESENT, and
++    # it is never wired. The Python oracle in the tests carries the same
++    # lookbehind; the two extractors have to agree or one of them is lying.
++    | ([ match("(?<![A-Za-z0-9_.-])[A-Za-z0-9_][A-Za-z0-9_.-]*\\.py(?![A-Za-z0-9_.-])"; "g").string ]) as $py
++    | if ($py | length) > 0 then $py[] else $cmd end ];
++def _disp:
++  (join(",") | gsub("\\s+"; " ") | if (length > 160) then (.[0:157] + "...") else . end);
++'
 +
    if [[ ! -f "$settings" ]]; then
      echo "    NOTE: settings-merge skipped — no $settings (fresh install builds it from template)" >&2
@@ -2678,8 +3716,83 @@ index b50619d..68c6645 100755
 +    echo "    NOTE: settings-merge skipped (jq not found) — register new framework hooks manually; advisory only" >&2
 +    return 0
 +  fi
++  if [[ "$_tpl_posture" == "shared" ]]; then
++    local _tpl_base="$SOURCE_DIR/templates/settings/settings.base.json"
++    local _tpl_user="$SOURCE_DIR/templates/settings/settings.user.json"
++    local _t _t_docs
++    # BOTH sources are held to the standard the explicit postures apply to
++    # their one template (rail round 9, P2): readable, exactly one JSON
++    # document, an object with an object .hooks. A stream or a scalar would
++    # otherwise be coerced into the derivation and applied as if it were real.
++    for _t in "$_tpl_base" "$_tpl_user"; do
++      if [[ ! -r "$_t" ]]; then
++        echo "    NOTE: settings-merge skipped — template unreadable at $_t; advisory only" >&2
++        return 0
++      fi
++      _t_docs="$( jq -n --slurpfile t "$_t" '$t | length' 2>/dev/null )" || _t_docs=""
++      if [[ "$_t_docs" != "1" ]]; then
++        echo "    NOTE: settings-merge skipped — $_t is not exactly ONE JSON document (found: ${_t_docs:-unreadable}); NOTHING was written to settings.json; advisory only" >&2
++        return 0
++      fi
++      if ! jq -e 'type == "object" and (.hooks | type) == "object"' "$_t" >/dev/null 2>&1; then
++        echo "    NOTE: settings-merge skipped — $_t is not JSON with an object .hooks; NOTHING was written to settings.json; advisory only" >&2
++        return 0
++      fi
++    done
++    # Derived into a TEMP file, never under the adopter (rail round 9, P1): a
++    # --dry-run reaches this point too, and the whole-tree no-write guarantee
++    # of --dry-run has to hold here as well. The apply path copies the derived
++    # document next to the backup once it actually writes something.
++    local _tpl_tmp
++    _tpl_tmp="$( mktemp "${TMPDIR:-/tmp}/ceo-shared-roster.XXXXXX" )" || {
++      echo "    NOTE: settings-merge skipped — mktemp failed for the shared roster; advisory only" >&2
++      return 0
++    }
++    # shellcheck disable=SC2064  # expanded NOW on purpose: the path must outlive the local
++    trap "rm -f '$_tpl_tmp'" RETURN
++    template="$_tpl_tmp"
++    # What the two profiles PROVABLY agree on is their SETTINGS with equal
++    # values — nothing else (rail round 9, P1). The hooks the two templates
++    # share are identical blocks, but a hook's BEHAVIOUR can depend on a
++    # setting the profiles disagree on (the config-protection hook blocks
++    # unless the user profile's advisory switch is present), and that
++    # dependency lives in code this script cannot read. So an unknown
++    # ceremony registers NO hooks: the settings both profiles declare with the
++    # same value are applied, everything else is WITHHELD and NAMED, and the
++    # adopter is told how to state the ceremony. The pre-cure code pushed six
++    # base-only literals into this population — and those six were the defect.
++    if ! jq -n --slurpfile b "$_tpl_base" --slurpfile u "$_tpl_user" '
++        ($b[0].env | if type == "object" then . else {} end) as $be
++        | ($u[0].env | if type == "object" then . else {} end) as $ue
++        | { hooks: {},
++            env: ( $ue | with_entries(select( .key as $k | ($be | has($k)) and ($be[$k] == .value) )) ) }' \
++        > "$template" 2>/dev/null || [[ ! -s "$template" ]]; then
++      echo "    NOTE: settings-merge skipped — could not derive the settings shared by settings.base.json and settings.user.json; advisory only" >&2
++      return 0
++    fi
++    local _wh_b _wh_u _we_b _we_u
++    _wh_b="$( jq '[.hooks | to_entries[] | .value[]] | length' "$_tpl_base" 2>/dev/null || printf '?' )"
++    _wh_u="$( jq '[.hooks | to_entries[] | .value[]] | length' "$_tpl_user" 2>/dev/null || printf '?' )"
++    _we_b="$( jq --slurpfile s "$template" '((.env // {}) | length) - (($s[0].env // {}) | length)' "$_tpl_base" 2>/dev/null || printf '?' )"
++    _we_u="$( jq --slurpfile s "$template" '((.env // {}) | length) - (($s[0].env // {}) | length)' "$_tpl_user" 2>/dev/null || printf '?' )"
++    echo "    NOTE: ceremony UNKNOWN (no readable install-state, no --ceremony, no CEO_UPGRADE_CEREMONY) — NO hook registration is applied until the ceremony is stated; only the settings BOTH profiles declare with the same value are. WITHHELD: $_wh_b registration(s) + $_we_b setting(s) of settings.base.json, $_wh_u + $_we_u of settings.user.json. Pass --ceremony maintainer|user to register the profile you installed." >&2
++  fi
 +  if [[ ! -r "$template" ]]; then
 +    echo "    NOTE: settings-merge skipped — template unreadable at $template; advisory only" >&2
++    return 0
++  fi
++  # ONE document, exactly (rail round 7, P2). `jq -e` over a FILE validates
++  # every document of a stream in turn, so a template that accidentally carries
++  # two top-level objects passes every shape guard below TWICE; `--slurpfile`
++  # then loads both and the program reads only $tpl[0] — the second document's
++  # registrations vanish without a word. The roster is all-or-nothing, so a
++  # stream is refused and NAMED, like every other malformed template.
++  local _tpl_docs
++  _tpl_docs="$( jq -n --slurpfile t "$template" '$t | length' 2>/dev/null )" || _tpl_docs=""
++  # An EMPTY count means jq could not parse the file at all; that case keeps
++  # its own, older, name ("not JSON") in the guard right below.
++  if [[ -n "$_tpl_docs" && "$_tpl_docs" != "1" ]]; then
++    echo "    NOTE: settings-merge skipped — the template is not exactly ONE JSON document (found: ${_tpl_docs:-unreadable}) ($template); NOTHING was written to settings.json; advisory only" >&2
 +    return 0
 +  fi
 +  if ! jq -e 'type == "object" and (.hooks | type) == "object"' "$template" >/dev/null 2>&1; then
@@ -2715,9 +3828,16 @@ index b50619d..68c6645 100755
 +  # BLOCK is validated here too, before the reduction starts: an object, with a
 +  # non-empty .hooks array, whose every entry is an object carrying a non-empty
 +  # string .command. Anything else names the event, the INDEX and the reason.
++  # And .env, when PRESENT, has to be an object (rail round 10, P2): the
++  # settings travel with the hooks (round 7), so a template whose .env is
++  # malformed would otherwise be coerced to {} and its hooks written WITHOUT
++  # the settings that keep them in the profile's mode. Same all-or-nothing
++  # rule as a malformed event, same named refusal.
 +  local _tpl_bad _tpl_rc=0
 +  _tpl_bad="$( jq -r '
-+      .hooks
++      ( if (has("env")) and ((.env | type) != "object")
++        then "ENV (" + (.env | type) + ")" else empty end ),
++      ( .hooks
 +      | to_entries[]
 +      | .key as $ev
 +      | if (.value | type) != "array" then
@@ -2739,7 +3859,7 @@ index b50619d..68c6645 100755
 +                else null end ) as $why
 +            | select($why != null)
 +            | "BLOCK " + $ev + "[" + ($ix | tostring) + "] (" + $why + ")" )
-+        end' "$template" 2>/dev/null )" || _tpl_rc=$?
++        end )' "$template" 2>/dev/null )" || _tpl_rc=$?
 +  if [[ "$_tpl_rc" -ne 0 ]]; then
 +    echo "    NOTE: settings-merge skipped — could not validate the template's event shapes ($template); settings.json unchanged; advisory only" >&2
 +    return 0
@@ -2752,6 +3872,7 @@ index b50619d..68c6645 100755
 +      _tkind="${_tl%% *}"; _trest="${_tl#* }"
 +      case "$_tkind" in
 +        EVENT) echo "          template event not an array: $_trest  ($template)" >&2 ;;
++        ENV)   echo "          template .env present but not an object: $_trest  ($template)" >&2 ;;
 +        BLOCK) echo "          template block not identifiable: $_trest  ($template)" >&2 ;;
 +        *)     echo "          template problem: $_tl  ($template)" >&2 ;;
 +      esac
@@ -2775,8 +3896,8 @@ index b50619d..68c6645 100755
 -  # re-canonicalized (the backup under $BAK_DIR is the rollback route); every
 -  # OTHER entry under the same event — SessionStart already carries several —
 -  # is preserved in place, and the canonical block is appended last.
-+  echo "==> Registering framework hooks into .claude/settings.json (derived from templates/settings/settings.base.json)"
-+  _up_record_op "merge_lifecycle_hooks" "additive settings.json merge (template-derived)"
++  echo "==> Registering framework hooks into .claude/settings.json (derived from $_tpl_label — ceremony=${CEREMONY_EFFECTIVE:-unset}, posture=$_tpl_posture)"
++  _up_record_op "merge_lifecycle_hooks" "additive settings.json merge (posture=$_tpl_posture, ceremony=${CEREMONY_EFFECTIVE:-unset})"
 +
 +  # ONE program, two modes. mode=report emits the decision lines the dry-run
 +  # prints and the apply path echoes; mode=apply emits the merged document.
@@ -2787,7 +3908,7 @@ index b50619d..68c6645 100755
 +  # "$CLAUDE_PROJECT_DIR" that the harness expands at hook time. Here it
 +  # travels as JSON from file to file and is never seen by the shell.
    local jq_prog
-   jq_prog='
+-  jq_prog='
 -def _reg($event; $name; $entry):
 -  .hooks[$event] = (
 -    [ (.hooks[$event] // [])[]
@@ -2825,25 +3946,7 @@ index b50619d..68c6645 100755
 -    "matcher": "compact",
 -    "hooks": [ { "type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_compact_pinning.py", "timeout": 5, "statusMessage": "Pinning governance constraints after compaction..." } ]
 -  })'
-+# Every shape this walks is ACCEPTED only after being proved to be the shape
-+# we expect (object / array / string). Anything else yields NO key, which
-+# makes its block unidentifiable and therefore untouched — the PLAN-185
-+# doctrine: enumerate what is provably safe, never guess at the rest. jq
-+# raises on indexing a number or slicing an object, and an uncaught raise here
-+# would abort the WHOLE merge, turning one odd event into a silent no-op for
-+# all 47 registrations (measured: E.8 of the e2e caught exactly that).
-+def _cmds:
-+  [ select(type == "object") | (.hooks // null)
-+    | select(type == "array") | .[]
-+    | select(type == "object") | (.command // null)
-+    | select(type == "string") ];
-+def _keys:
-+  [ _cmds[]
-+    | . as $cmd
-+    | ([ match("[A-Za-z0-9_][A-Za-z0-9_.-]*\\.py(?![A-Za-z0-9_.-])"; "g").string ]) as $py
-+    | if ($py | length) > 0 then $py[] else $cmd end ];
-+def _disp:
-+  (join(",") | gsub("\\s+"; " ") | if (length > 160) then (.[0:157] + "...") else . end);
++  jq_prog="$jq_defs"'
 +
 +# ABSENT is not the same question as FALSY, and `//` cannot tell them apart:
 +# `null // []` and `false // []` both yield [], so an adopter who wrote an
@@ -2872,8 +3975,33 @@ index b50619d..68c6645 100755
 +            | ( [ $cur[] | _keys[] ] )            as $have
 +            | if   ($k | length) == 0                                then .
 +              elif ($k | all(. as $n | $have | any(. == $n)))        then .
-+              else .hooks[$te.key] = ($cur + [$blk]) end )
++              # Only the MISSING entries are appended (rail round 8, P2). A
++              # block with several commands of which the adopter already has
++              # some would otherwise be appended whole, and every present
++              # command would then run twice — for ever, since later upgrades
++              # see the duplicate as present. Each entry is judged on its own
++              # keys; an entry with none is dropped (the structural guard has
++              # already refused such blocks, so this is belt and braces).
++              else .hooks[$te.key] = ($cur + [ $blk | .hooks = [ .hooks[]
++                       | select(type == "object")
++                       | ({hooks: [.]} | _keys) as $ek
++                       | select( ($ek | length) > 0 and (($ek | all(. as $n | $have | any(. == $n))) | not) ) ] ]) end )
 +        end ) ) as $out
++    # ENV is part of the roster (rail round 7, P1). A registration is only as
++    # advisory as the setting it reads: settings.user.json ships
++    # the config-protection hook TOGETHER with env.CEO_CONFIG_PROTECTION_ADVISORY,
++    # and an adopter that receives the hook without the key gets the BLOCKING
++    # variant. So the .env of the template travels with its .hooks — additively, key
++    # by key, never overwriting a value the adopter already has; an .env that is
++    # present but not an object is PRESERVED and NAMED, like a non-array event;
++    # a template without .env adds nothing (and creates no key, so a document
++    # without .env stays byte-identical on a no-op run).
++    | ( if   (($out | has("env")) | not)      then {}
++        elif (($out.env | type) == "object")  then $out.env
++        else null end ) as $ae
++    | ( if (($tpl[0] | has("env")) and (($tpl[0].env | type) == "object")) then $tpl[0].env else {} end ) as $te
++    | ( if $ae == null then {} else ($te | with_entries(select(.key as $k | ($ae | has($k)) | not))) end ) as $env_add
++    | ( if ($env_add | length) > 0 then ($out | .env = ($ae + $env_add)) else $out end ) as $out
 +    | if $mode == "apply" then $out
 +      else
 +        ( [ $th | to_entries[] | .key as $e
@@ -2887,7 +4015,11 @@ index b50619d..68c6645 100755
 +              | .key as $e
 +              | ( if ($ah[$e] | type) == "array" then ($ah[$e] | length) else 0 end ) as $n0
 +              | .value[$n0:][]
-+              | "ADD " + $e + " " + (_keys | _disp) ] )
++              | "ADD " + $e + " " + (_keys | _disp) ]
++          + ( if ($ae == null) and (($te | length) > 0)
++              then [ "SKIP-ENV " + ($out.env | type) + " " + ($te | keys | join(",")) ]
++              else [] end )
++          + [ $env_add | keys[] | "ADD-ENV " + . ] )
 +        | .[]
 +      end
 +  end'
@@ -2939,6 +4071,19 @@ index b50619d..68c6645 100755
 +        _adds=$((_adds+1))
 +        _pending="$_pending$_rest"$'\n'
 +        ;;
++      ADD-ENV)
++        # A setting the template ships and the adopter lacks. It rides the same
++        # counters as a hook: it is written in the same atomic mv, announced in
++        # the same dry-run list, and its absence makes the result incomplete.
++        _adds=$((_adds+1))
++        _pending="${_pending}env $_rest"$'\n'
++        ;;
++      SKIP-ENV)
++        _ty="${_rest%% *}"; _tail="${_rest#* }"
++        _absent="${_absent}env: ${_tail}"$'\n'
++        _skips=$((_skips+1))
++        echo "    NOTE: .env in settings.json is not an object (found: $_ty) — PRESERVED untouched, these template settings are NOT applied: $_tail" >&2
++        ;;
 +    esac
 +  done <<< "$_report"
 +
@@ -2952,11 +4097,15 @@ index b50619d..68c6645 100755
 +  # apply cannot drift apart in the one place the adopter reads for reassurance.
 +  _report_preserved() {  # $1 = "(dry-run) " prefix or ""
 +    local _p="$1" _a
-+    echo "    ${_p}PRESERVED: $_skips event(s) in settings.json are not arrays and were left untouched, so these template hooks are NOT registered:"
++    echo "    ${_p}PRESERVED: $_skips container(s) in settings.json have an unexpected shape and were left untouched, so these template entries are NOT applied:"
 +    while IFS= read -r _a; do
-+      if [[ -n "$_a" ]]; then echo "    ${_p}  NOT REGISTERED under $_a"; fi
++      if [[ -z "$_a" ]]; then continue; fi
++      case "$_a" in
++        env:*) echo "    ${_p}  NOT APPLIED to $_a" ;;
++        *)     echo "    ${_p}  NOT REGISTERED under $_a" ;;
++      esac
 +    done <<< "$_absent"
-+    echo "    ${_p}To register them, make those events arrays in .claude/settings.json and re-run the upgrade."
++    echo "    ${_p}To apply them, give those containers the expected shape (events: arrays; env: an object) in .claude/settings.json and re-run the upgrade."
 +  }
  
    if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -2970,8 +4119,10 @@ index b50619d..68c6645 100755
 -        echo "    (dry-run) would REGISTER $_ev $_name.py"
 -        _missing=$((_missing+1))
 +    if [[ "$_adds" -eq 0 ]]; then
-+      if [[ "$_skips" -eq 0 ]]; then
++      if [[ "$_skips" -eq 0 && "$_tpl_posture" != "shared" ]]; then
 +        echo "    (dry-run) every framework hook registration in the template is ALREADY present — would be a no-op"
++      elif [[ "$_skips" -eq 0 ]]; then
++        echo "    (dry-run) PARTIAL (ceremony unknown): hook registrations WITHHELD, the shared settings are in place — pass --ceremony maintainer|user to register the profile you installed"
 +      else
 +        echo "    (dry-run) nothing would be REGISTERED — but the result is PARTIAL, not complete:"
 +        _report_preserved "(dry-run) "
@@ -2987,6 +4138,7 @@ index b50619d..68c6645 100755
 +        if [[ -n "$_l" ]]; then echo "    (dry-run) would REGISTER $_l"; fi
 +      done <<< "$_pending"
 +      [[ "$_skips" -eq 0 ]] || _report_preserved "(dry-run) "
++      [[ "$_tpl_posture" != "shared" ]] || echo "    (dry-run) PARTIAL (ceremony unknown): hook registrations WITHHELD — pass --ceremony maintainer|user to register the profile you installed"
 +    fi
 +    return 0
 +  fi
@@ -2994,8 +4146,10 @@ index b50619d..68c6645 100755
 +  if [[ "$_adds" -eq 0 ]]; then
 +    # Nothing missing => do not touch the file at all. Rewriting it would
 +    # reformat the adopter's JSON for no reason and break byte-idempotency.
-+    if [[ "$_skips" -eq 0 ]]; then
++    if [[ "$_skips" -eq 0 && "$_tpl_posture" != "shared" ]]; then
 +      echo "    OK: every framework hook registration in the template is already present — settings.json untouched"
++    elif [[ "$_skips" -eq 0 ]]; then
++      echo "    PARTIAL (ceremony unknown): hook registrations WITHHELD, the shared settings are in place — settings.json untouched; pass --ceremony maintainer|user to register the profile you installed"
 +    else
 +      echo "    PARTIAL: nothing to register outside the preserved event(s) — settings.json untouched"
 +      _report_preserved ""
@@ -3003,7 +4157,7 @@ index b50619d..68c6645 100755
      return 0
    fi
  
-@@ -2587,9 +2848,20 @@ def _reg($event; $name; $entry):
+@@ -2587,9 +3036,28 @@ def _reg($event; $name; $entry):
      echo "    NOTE: settings-merge skipped (mktemp failed) — advisory only" >&2
      return 0
    }
@@ -3023,6 +4177,14 @@ index b50619d..68c6645 100755
 +      # Same tail as the dry-run: a run that registered something AND preserved
 +      # an event is still a PARTIAL result, and saying so is the whole point.
 +      [[ "$_skips" -eq 0 ]] || _report_preserved ""
++      if [[ "$_tpl_posture" == "shared" ]]; then
++        # The audit copy of what an unknown-ceremony upgrade applied lands next
++        # to the backup — only here, on the path that actually wrote.
++        if cp "$template" "$BAK_DIR/.claude/settings.template-shared.json" 2>/dev/null; then
++          echo "    kept the derived shared settings at $BAK_DIR/.claude/settings.template-shared.json"
++        fi
++        echo "    PARTIAL (ceremony unknown): hook registrations WITHHELD — pass --ceremony maintainer|user to register the profile you installed"
++      fi
      else
        rm -f "$tmp"
        echo "    NOTE: settings-merge atomic mv failed — settings.json unchanged; advisory only" >&2

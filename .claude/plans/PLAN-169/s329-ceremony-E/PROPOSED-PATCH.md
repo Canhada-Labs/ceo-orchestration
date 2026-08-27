@@ -1,7 +1,7 @@
 # PROPOSED-PATCH — wave-s329-E (PLAN-169): `upgrade.sh` DERIVA o roster de hooks do template
 
 Patch: `.claude/plans/PLAN-169/s329-ceremony-E/E.patch`
-Patch-sha256: 9995a27d33c9e82ff0f873d6530501a270d0fc629a5e6c5477de8aad8a78ffc4
+Patch-sha256: 50e3c5f305f50c990e826c9573f724e7b40ba212800c1901885f71bd380ec391
 Base: ver `BASE-SHA.txt` (o `finalize_patch.py` recusa uma sombra cuja base não
 seja o HEAD vivo, e grava o mesmo sha no `Patch-base:` do sentinel)
 
