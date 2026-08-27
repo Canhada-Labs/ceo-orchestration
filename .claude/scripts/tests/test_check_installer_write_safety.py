@@ -140,6 +140,13 @@ def run_census(tmp: Path, files: Dict[str, str],
             payload = json.loads(proc.stdout)
         except ValueError:
             payload = None
+    if payload is None and proc.returncode not in (2,):
+        # A crash used to arrive here as an empty site list, so every
+        # assertion about a planted defect passed vacuously — the census
+        # "found nothing" because it never ran. Fail LOUDLY instead.
+        raise AssertionError(
+            "census produced no JSON (rc=%d)\nstdout: %s\nstderr: %s"
+            % (proc.returncode, proc.stdout[-2000:], proc.stderr[-4000:]))
     return Census(proc.returncode, payload, proc.stdout, proc.stderr, root)
 
 
@@ -424,6 +431,245 @@ check() {
 }
 """)})
         self.assertBlocks(c, "a3.sh", '-f "$probe"', "desguardado")
+
+
+class TestFormA4ConfinementPredicateDominates(CensusCase):
+    """a4 — a confinement predicate living in a SHARED library.
+
+    Requested by the PLAN-185 W1 cure, whose predicate deliberately lives in
+    `scripts/_framework_manifest_set.sh` rather than in each writer: one
+    original consulted by install/upgrade/doctor, instead of the per-writer
+    copies that produced the PLAN-183 D1..D4 divergence.  a2 could not express
+    it (same-file only, `|| abort` polarity only).
+
+    Everything else about a2's doctrine survives: the body is inspected, the
+    name proves nothing, and the arguments must actually BIND the destination.
+    """
+
+    LIB = sh("""
+_wbm_dst_refuses() {
+  _wbm_root="$1"
+  _wbm_rel="$2"
+  _wbm_probe="$_wbm_root/$_wbm_rel"
+  if [ -L "$_wbm_probe" ]; then
+    _WBM_DST_REFUSE_WHY="destination is a symlink"
+    return 0
+  fi
+  return 1
+}
+""")
+
+    # Refusal polarity: rc 0 = refuse, consulted as the condition of an `if`.
+    CONSUMER = sh("""
+deliver() {
+  local rel="$1"
+  local dst="$TARGET/$rel"
+  if _wbm_dst_refuses "$TARGET" "$rel"; then
+    echo "    SKIP: $_WBM_DST_REFUSE_WHY" >&2
+    return
+  fi
+  if [ -e "$dst" ]; then
+    return 0
+  fi
+  cp "$SRC" "$dst"
+}
+""")
+
+    def test_shared_predicate_is_proven_safe(self) -> None:
+        c = self.census({"lib.sh": self.LIB, "consumer.sh": self.CONSUMER})
+        self.assertSafe(c, "consumer.sh", '-e "$dst"',
+                        "a4-confinement-predicate-dominates")
+
+    def test_predicate_defined_nowhere_is_not_a_guard(self) -> None:
+        """The library is not in the corpus, so the body cannot be read."""
+        c = self.census({"consumer.sh": self.CONSUMER})
+        self.assertBlocks(c, "consumer.sh", '-e "$dst"')
+
+    def test_two_definitions_are_ambiguous(self) -> None:
+        """Two files defining one name: the census cannot know which body
+        runs, and a guard whose body is unknown proves nothing."""
+        c = self.census({"lib.sh": self.LIB,
+                         "lib2.sh": self.LIB,
+                         "consumer.sh": self.CONSUMER})
+        self.assertBlocks(c, "consumer.sh", '-e "$dst"')
+
+    def test_a_body_that_only_warns_is_not_a_guard(self) -> None:
+        """Same NAME, same call shape, body with no symlink check at all."""
+        c = self.census({"lib.sh": sh("""
+_wbm_dst_refuses() {
+  echo "checking $1/$2" >&2
+  return 1
+}
+"""), "consumer.sh": self.CONSUMER})
+        self.assertBlocks(c, "consumer.sh", '-e "$dst"')
+
+    def test_arguments_must_bind_the_destination(self) -> None:
+        """The predicate was told about a DIFFERENT path than the one written.
+
+        `"$TARGET" + "$rel"` confines `$TARGET/$rel`, but the write lands at
+        `$TARGET/.github/$rel` — a path the predicate never saw."""
+        c = self.census({"lib.sh": self.LIB, "consumer.sh": sh("""
+deliver() {
+  local rel="$1"
+  local dst="$TARGET/.github/$rel"
+  if _wbm_dst_refuses "$TARGET" "$rel"; then
+    return
+  fi
+  if [ -e "$dst" ]; then
+    return 0
+  fi
+  cp "$SRC" "$dst"
+}
+""")})
+        site = self.assertBlocks(c, "consumer.sh", '-e "$dst"')
+        self.assertEqual("i-predicate-arg-unbound", site["form"])
+
+    def test_a_discarded_refusal_is_not_a_guard(self) -> None:
+        """A bare call whose status nobody reads.  This one nearly shipped:
+        `_find_then_uid` picked up the `then` of the FOLLOWING `if`, so a4
+        briefly became a bypass around the a2 mutation control."""
+        c = self.census({"lib.sh": self.LIB, "consumer.sh": sh("""
+deliver() {
+  local rel="$1"
+  local dst="$TARGET/$rel"
+  _wbm_dst_refuses "$TARGET" "$rel"
+  if [ -e "$dst" ]; then
+    return 0
+  fi
+  cp "$SRC" "$dst"
+}
+""")})
+        self.assertBlocks(c, "consumer.sh", '-e "$dst"')
+
+    def test_the_other_polarity_also_works(self) -> None:
+        """`<pred> ... || <abort>` — rc != 0 = refuse."""
+        c = self.census({"lib.sh": sh("""
+_wbm_dst_allows() {
+  _wbm_probe="$1/$2"
+  if [ -L "$_wbm_probe" ]; then
+    return 1
+  fi
+  return 0
+}
+"""), "consumer.sh": sh("""
+deliver() {
+  local rel="$1"
+  local dst="$TARGET/$rel"
+  _wbm_dst_allows "$TARGET" "$rel" || return
+  if [ -e "$dst" ]; then
+    return 0
+  fi
+  cp "$SRC" "$dst"
+}
+""")})
+        self.assertSafe(c, "consumer.sh", '-e "$dst"',
+                        "a4-confinement-predicate-dominates")
+
+    def test_the_destination_itself_binds(self) -> None:
+        """The simpler call shape: the predicate is handed the destination."""
+        c = self.census({"lib.sh": sh("""
+_wbm_dst_refuses() {
+  if [ -L "$1" ]; then
+    return 0
+  fi
+  return 1
+}
+"""), "consumer.sh": sh("""
+deliver() {
+  local dst="$1"
+  if _wbm_dst_refuses "$dst"; then
+    return
+  fi
+  if [ -e "$dst" ]; then
+    return 0
+  fi
+  cp "$SRC" "$dst"
+}
+""")})
+        self.assertSafe(c, "consumer.sh", '-e "$dst"',
+                        "a4-confinement-predicate-dominates")
+
+
+class TestA4DelegationBoundary(CensusCase):
+    """Where a4 stops, measured against the SHAPE of the PLAN-185 W1 cure.
+
+    The cure's real call chain has three levels: the writer calls a local
+    wrapper (`_dst_refuses <rel>`), which supplies the target root and
+    delegates to the shared predicate (`_wbm_dst_refuses <root> <rel>`) in
+    another file.  a4 inspects the body of the function actually CALLED, and
+    the wrapper checks no parameter of its own — it delegates.  So a4 stops at
+    the wrapper.
+
+    Both directions are asserted.  The negative one is not a wish for the cure
+    to fail: it is a guard, so that widening a4 to bless a delegation chain has
+    to be a deliberate change with its own controls rather than something that
+    quietly starts passing.
+    """
+
+    LIB = sh("""
+_wbm_dst_refuses() {
+  _wbm_dr_root="${1:-}"
+  _wbm_dr_rel="${2:-}"
+  _wbm_dr_walk="$_wbm_dr_root/$_wbm_dr_rel"
+  if [ -L "$_wbm_dr_walk" ]; then
+    _WBM_DST_REFUSE_WHY="component is a symlink"
+    return 0
+  fi
+  return 1
+}
+""")
+
+    def test_a_direct_call_to_the_shared_predicate_is_credited(self) -> None:
+        c = self.census({"lib.sh": self.LIB, "writer.sh": sh("""
+install_docs_template() {
+  local dst_rel="$1"
+  local dst="$TARGET/$dst_rel"
+  if _wbm_dst_refuses "$TARGET" "$dst_rel"; then
+    return
+  fi
+  if [[ -e "$dst" ]]; then
+    return
+  fi
+  cp "$SRC" "$dst"
+}
+""")})
+        self.assertSafe(c, "writer.sh", '-e "$dst"',
+                        "a4-confinement-predicate-dominates")
+
+    def test_a_delegating_wrapper_is_not_credited(self) -> None:
+        """The wrapper's own body checks nothing, so a4 cannot prove it.
+
+        Widening this is an allowlist decision, not a bug fix: it would mean
+        trusting that a wrapper's return value faithfully carries a delegate's
+        verdict, which needs its own positive control and its own mutations.
+        """
+        c = self.census({"lib.sh": self.LIB, "writer.sh": sh("""
+_dst_refuses() {
+  local dst_rel="$1"
+  local why=""
+  if ! command -v _wbm_dst_refuses >/dev/null 2>&1; then
+    why="predicate unavailable"
+  elif _wbm_dst_refuses "$TARGET" "$dst_rel"; then
+    why="${_WBM_DST_REFUSE_WHY:-unknown}"
+  else
+    return 1
+  fi
+  return 0
+}
+
+install_docs_template() {
+  local dst_rel="$1"
+  local dst="$TARGET/$dst_rel"
+  if _dst_refuses "$dst_rel"; then
+    return
+  fi
+  if [[ -e "$dst" ]]; then
+    return
+  fi
+  cp "$SRC" "$dst"
+}
+""")})
+        self.assertBlocks(c, "writer.sh", '-e "$dst"')
 
 
 class TestFormB1DelimiterEscapeDominates(CensusCase):
@@ -1372,6 +1618,398 @@ deliver() {
             capture_output=True, text=True)
         self.assertIn("discovered shell files:", proc.stdout)
         self.assertIn("scripts/quiet.sh", proc.stdout)
+
+
+class TestRailRoundSix(CensusCase):
+    """The 6th pass — the SEVEN specific circumventions of the fail-closed rule.
+
+    Round 2 of the pair-rail (over commit ``7383518``) accepted the fail-closed
+    DISCOVERY architecture and then named seven concrete paths around it: a
+    write that reached a non-blocking verdict, or produced no site at all,
+    because one branch normalised, filtered, split or trusted something it had
+    not proven.  Each is replayed here as a fixture whose id is the finding id.
+
+    Every cure carries a NEGATIVE control in the same class.  A cure that only
+    made the census stricter would be indistinguishable from "block
+    everything", and the R5 pass already paid for learning that the negative
+    direction is the half that keeps the instrument usable.
+
+    ``R6-07`` is the one finding that REMOVES a block: `patch -i FILE` reads
+    the patch document, so listing it as a destination was a blocking false
+    positive.  Its positive control asserts that the POSITIONAL target of
+    `patch` still blocks, so the removal cannot widen into an amnesty.
+    """
+
+    # -- R6-01: basename trust ------------------------------------------
+
+    def test_r6_01_untrusted_path_qualified_command_is_unknown(self) -> None:
+        """R6-01 — `./grep` executes THAT file.  Normalising it to the
+        allowlisted basename reached `a3-no-write-to-operand` with no write
+        candidate at all."""
+        c = self.census({"r601.sh": sh("""
+deliver() {
+  local dst="$1"
+  if [ -e "$dst" ]; then
+    return 0
+  fi
+  ./grep --output "$dst" "$SRC"
+}
+""")})
+        self.assertBlocks(c, "r601.sh", '[ -e "$dst" ]', cls="symlink-follow")
+
+    def test_r6_01_an_absolute_untrusted_path_is_unknown_too(self) -> None:
+        """R6-01 — `/tmp/printf` is not the printf any rule describes."""
+        c = self.census({"r601b.sh": sh("""
+deliver() {
+  local dst="$1"
+  if [ -e "$dst" ]; then
+    return 0
+  fi
+  /tmp/printf '%s' "$dst"
+}
+""")})
+        self.assertBlocks(c, "r601b.sh", '[ -e "$dst" ]', cls="symlink-follow")
+
+    def test_r6_01_a_trusted_system_path_is_still_normalised(self) -> None:
+        """Negative control: `/usr/bin/grep` IS the grep the allowlist proves
+        read-only.  Without this the cure would just be "distrust paths"."""
+        c = self.census({"r601c.sh": sh("""
+deliver() {
+  local dst="$1"
+  if [ -e "$dst" ]; then
+    /usr/bin/grep -q needle "$dst"
+  fi
+}
+""")})
+        self.assertSafe(c, "r601c.sh", '[ -e "$dst" ]',
+                        "a3-no-write-to-operand", cls="symlink-follow")
+
+    # -- R6-02: positional destinations ---------------------------------
+
+    def test_r6_02_traditional_tar_create_writes_its_archive(self) -> None:
+        """R6-02 — `tar czf "$dst" .` carries no dash, so the key letters were
+        filed as a positional and the command fell through to READ-ONLY.
+        This exact form is live in scripts/uninstall.sh."""
+        c = self.census({"r602.sh": sh("""
+deliver() {
+  local dst="$1"
+  if [ -e "$dst" ]; then
+    return 0
+  fi
+  tar czf "$dst" .
+}
+""")})
+        self.assertBlocks(c, "r602.sh", '[ -e "$dst" ]', "desguardado",
+                          cls="symlink-follow")
+
+    def test_r6_02_zip_writes_its_first_positional(self) -> None:
+        """R6-02 — `zip ARCHIVE file...`."""
+        c = self.census({"r602b.sh": sh("""
+deliver() {
+  local dst="$1"
+  if [ -e "$dst" ]; then
+    return 0
+  fi
+  zip "$dst" "$SRC"
+}
+""")})
+        self.assertBlocks(c, "r602b.sh", '[ -e "$dst" ]', "desguardado",
+                          cls="symlink-follow")
+
+    def test_r6_02_split_writes_its_prefix_operand(self) -> None:
+        """R6-02 — `split INPUT PREFIX` writes files at PREFIX."""
+        c = self.census({"r602c.sh": sh("""
+deliver() {
+  local dst="$1"
+  if [ -e "$dst" ]; then
+    return 0
+  fi
+  split "$SRC" "$dst"
+}
+""")})
+        self.assertBlocks(c, "r602c.sh", '[ -e "$dst" ]', "desguardado",
+                          cls="symlink-follow")
+
+    def test_r6_02_an_unmodelled_output_command_is_unknown(self) -> None:
+        """R6-02 — the fallback must be UNKNOWN, never read-only: `csplit` has
+        an output mode this pass does not model."""
+        c = self.census({"r602d.sh": sh("""
+deliver() {
+  local dst="$1"
+  if [ -e "$dst" ]; then
+    return 0
+  fi
+  csplit "$SRC" "$dst"
+}
+""")})
+        self.assertBlocks(c, "r602d.sh", '[ -e "$dst" ]', cls="symlink-follow")
+
+    def test_r6_02_tar_list_reads_its_archive(self) -> None:
+        """Negative control: the key letters DISCRIMINATE.  `tar tf "$dst"`
+        lists the archive and writes nothing, so it must stay provably safe."""
+        c = self.census({"r602e.sh": sh("""
+deliver() {
+  local dst="$1"
+  if [ -e "$dst" ]; then
+    tar tf "$dst"
+  fi
+}
+""")})
+        self.assertSafe(c, "r602e.sh", '[ -e "$dst" ]',
+                        "a3-no-write-to-operand", cls="symlink-follow")
+
+    def test_r6_02_tar_extract_is_not_absolved(self) -> None:
+        """Pass-2 self-audit: `tar xf "$dst"` READS that operand but extracts
+        files into the working directory.  No rule here can name that
+        destination, so read-only would have absolved a real write."""
+        c = self.census({"r602f.sh": sh("""
+deliver() {
+  local dst="$1"
+  if [ -e "$dst" ]; then
+    tar xf "$dst"
+  fi
+}
+""")})
+        self.assertBlocks(c, "r602f.sh", '[ -e "$dst" ]', cls="symlink-follow")
+
+    def test_r6_02_a_dest_bearing_option_is_not_an_input(self) -> None:
+        """Pass-2 self-audit: `patch -r FILE` WRITES the reject file.  It sat
+        in the input-option table, which would have re-opened the fail-open
+        that R6-07 came from, in the opposite direction."""
+        c = self.census({"r602g.sh": sh("""
+apply() {
+  local dst="$1"
+  if [ -e "$dst" ]; then
+    return 0
+  fi
+  patch -r "$dst" /fixed/target
+}
+""")})
+        self.assertBlocks(c, "r602g.sh", '[ -e "$dst" ]', "desguardado",
+                          cls="symlink-follow")
+
+    # -- R6-03: nested expansions ---------------------------------------
+
+    def test_r6_03_nested_default_expansion_is_collected(self) -> None:
+        """R6-03 — `${safe:-$RAW}` with `safe` null substitutes RAW.  Reading
+        the braced form as ONE token proved the interpolation guarded by
+        looking only at `safe`."""
+        c = self.census({"r603.sh": sh("""
+build() {
+  local safe=
+  sed "s|x|${safe:-$RAW}|g" "$SRC"
+}
+""")})
+        self.assertBlocks(c, "r603.sh", 'sed "s|x|', cls="sed-interp")
+
+    def test_r6_03_a_nested_command_substitution_is_collected(self) -> None:
+        """R6-03 — `${x:=$(cmd)}` runs a command inside the expansion."""
+        c = self.census({"r603b.sh": sh("""
+build() {
+  local safe=
+  sed "s|x|${safe:=$(cat /etc/hostname)}|g" "$SRC"
+}
+""")})
+        self.assertBlocks(c, "r603b.sh", 'sed "s|x|', cls="sed-interp")
+
+    def test_r6_03_a_subscript_expansion_is_collected(self) -> None:
+        """R6-03 — `${a[$i]}` reads `i` as well as `a`."""
+        c = self.census({"r603c.sh": sh("""
+build() {
+  local a=safe
+  sed "s|x|${a[$RAW]}|g" "$SRC"
+}
+""")})
+        self.assertBlocks(c, "r603c.sh", 'sed "s|x|', cls="sed-interp")
+
+    def test_r6_03_a_literal_default_is_still_proven(self) -> None:
+        """Negative control: `${safe:-fallback}` has no nested expansion, so
+        the b3 proof about `safe` still stands."""
+        c = self.census({"r603d.sh": sh("""
+build() {
+  local safe=ok
+  sed "s|x|${safe:-fallback}|g" "$SRC"
+}
+""")})
+        self.assertSafe(c, "r603d.sh", 'sed "s|x|', "b3-literal-only",
+                        cls="sed-interp")
+
+    # -- R6-04: opaque commands before the expansion filter --------------
+
+    def test_r6_04_eval_of_a_literal_string_is_a_site(self) -> None:
+        """R6-04 — `eval 'cp "$SRC" "$DST"'` has NO outer expansion, so the
+        operand filter dropped the command and the census emitted nothing.
+        The inner shell expands both variables."""
+        c = self.census({"r604.sh": sh("""
+deliver() {
+  eval 'cp "$SRC" "$DST"'
+}
+""")})
+        site = c.at("r604.sh", "eval")
+        self.assertTrue(site["blocking"], c.describe())
+        self.assertEqual("i-opaque-command", site["form"], c.describe())
+
+    def test_r6_04_source_of_a_literal_operand_is_a_site(self) -> None:
+        """R6-04 — a literal `source` has the same omission."""
+        c = self.census({"r604b.sh": sh("""
+deliver() {
+  source .claude/lib.sh
+}
+""")})
+        site = c.at("r604b.sh", "source")
+        self.assertTrue(site["blocking"], c.describe())
+        self.assertEqual("i-opaque-command", site["form"], c.describe())
+
+    def test_r6_04_xargs_is_opaque(self) -> None:
+        """R6-04 — `xargs` runs a command line assembled from stdin.  This
+        form is live in scripts/measure-repo-size.sh."""
+        c = self.census({"r604c.sh": sh("""
+deliver() {
+  printf '%s' "$SRC" | xargs wc -l
+}
+""")})
+        site = c.at("r604c.sh", "xargs")
+        self.assertTrue(site["blocking"], c.describe())
+        self.assertEqual("i-opaque-command", site["form"], c.describe())
+
+    def test_r6_04_a_shell_handed_a_script_is_opaque(self) -> None:
+        """R6-04 — `bash -c STRING` and `bash SCRIPT` both run text this model
+        never reads.  Live in scripts/install.sh."""
+        c = self.census({"r604d.sh": sh("""
+deliver() {
+  bash -c 'cp "$SRC" "$DST"'
+}
+""")})
+        site = c.at("r604d.sh", "bash")
+        self.assertTrue(site["blocking"], c.describe())
+        self.assertEqual("i-opaque-command", site["form"], c.describe())
+
+    def test_r6_04_opaque_does_not_cap_a_proven_write(self) -> None:
+        """R6-04 — opaque FLOORS the verdict at indeterminate, it does not CAP
+        it: a redirection the model DID prove keeps `desguardado`.  Collapsing
+        every opaque command to "indeterminate" would discard a write the
+        instrument actually knows about (live: smoke-install-parity.sh:126)."""
+        c = self.census({"r604e.sh": sh("""
+deliver() {
+  local dst="$1"
+  bash .claude/run.sh >"$dst" 2>&1
+}
+""")})
+        site = c.at("r604e.sh", "bash .claude/run.sh")
+        self.assertEqual("desguardado", site["verdict"], c.describe())
+
+    def test_r6_04_a_shell_running_nothing_of_ours_is_not_a_site(self) -> None:
+        """Negative control: `bash --version` is handed no script.  Without
+        this the cure would emit a site for every mention of a shell."""
+        c = self.census({"r604f.sh": sh("""
+deliver() {
+  bash --version
+}
+""")})
+        self.assertEqual([], [s for s in c.sites("r604f.sh")], c.describe())
+
+    def test_r6_04_a_literal_redirection_is_not_a_proven_write(self) -> None:
+        """Negative control: `2>/dev/null` on an opaque command is a literal
+        path the SCRIPT chose — the outer shell resolves it, so the discovery
+        narrowing still applies.  Crediting it as a proven unguarded write was
+        a blocking false positive this pass introduced and then removed."""
+        c = self.census({"r604g.sh": sh("""
+deliver() {
+  printf '%s' "$SRC" | xargs wc -l 2>/dev/null
+}
+""")})
+        site = c.at("r604g.sh", "xargs")
+        self.assertEqual("indeterminado", site["verdict"], c.describe())
+        self.assertEqual("i-opaque-command", site["form"], c.describe())
+
+    # -- R6-05: quoted regex RHS ----------------------------------------
+
+    def test_r6_05_a_quoted_regex_is_not_validation(self) -> None:
+        """R6-05 — bash treats a QUOTED `=~` right-hand side as a literal
+        STRING.  `[[ "$v" =~ "^[A-Za-z]+$" ]]` accepts every value except the
+        literal regex text, yet was credited as closed-charset validation."""
+        c = self.census({"r605.sh": sh("""
+build() {
+  local v="$1"
+  [[ "$v" =~ "^[A-Za-z]+$" ]] || exit 1
+  sed "s|x|$v|g" "$SRC"
+}
+""")})
+        self.assertBlocks(c, "r605.sh", 'sed "s|x|', cls="sed-interp")
+
+    def test_r6_05_an_unquoted_regex_is_still_validation(self) -> None:
+        """Negative control: the UNQUOTED form really is a regex, and b2 must
+        still prove it."""
+        c = self.census({"r605b.sh": sh("""
+build() {
+  local v="$1"
+  [[ "$v" =~ ^[A-Za-z]+$ ]] || exit 1
+  sed "s|x|$v|g" "$SRC"
+}
+""")})
+        self.assertSafe(c, "r605b.sh", 'sed "s|x|',
+                        "b2-closed-charset-validated", cls="sed-interp")
+
+    # -- R6-06: braces are syntax only in command position ---------------
+
+    def test_r6_06_a_brace_outside_command_position_is_an_operand(self) -> None:
+        """R6-06 — an unquoted `{` is a reserved word only in command
+        position.  `tee { "$dst"` writes BOTH files, but splitting there tore
+        `tee` from its destination and the write disappeared."""
+        c = self.census({"r606.sh": sh("""
+deliver() {
+  local dst="$1"
+  if [ -e "$dst" ]; then
+    return 0
+  fi
+  printf data | tee { "$dst"
+}
+""")})
+        self.assertBlocks(c, "r606.sh", '[ -e "$dst" ]', "desguardado",
+                          cls="symlink-follow")
+
+    def test_r6_06_a_function_body_brace_still_opens_a_group(self) -> None:
+        """Negative control: after a function header's `)` the brace IS in
+        command position, so the body is still analysed as commands of its
+        own.  Losing this would make every helper in the corpus opaque."""
+        c = self.census({"r606b.sh": sh("""
+deliver() { cp "$SRC" "$1"; }
+""")})
+        site = c.at("r606b.sh", "cp ")
+        self.assertEqual("write-candidate", site["class"], c.describe())
+
+    # -- R6-07: `patch -i` is an INPUT ----------------------------------
+
+    def test_r6_07_patch_input_option_is_a_read(self) -> None:
+        """R6-07 — `patch -i FILE` READS the patch document.  Listing it as a
+        destination reported `$patchfile` as an unguarded write: a blocking
+        FALSE POSITIVE.  This is the only block this pass removes."""
+        c = self.census({"r607.sh": sh("""
+apply() {
+  local patchfile="$1"
+  if [ -e "$patchfile" ]; then
+    patch -i "$patchfile" /fixed/target
+  fi
+}
+""")})
+        self.assertSafe(c, "r607.sh", '[ -e "$patchfile" ]',
+                        "a3-no-write-to-operand", cls="symlink-follow")
+
+    def test_r6_07_positional_patch_target_still_blocks(self) -> None:
+        """R6-07 — paired positive control for the removal above: the
+        POSITIONAL target of `patch` is still a destination, so the fix cannot
+        widen into an amnesty for `patch`."""
+        c = self.census({"r607b.sh": sh("""
+apply() {
+  local dst="$1"
+  if [ -e "$dst" ]; then
+    return 0
+  fi
+  patch "$dst" "$SRC"
+}
+""")})
+        self.assertBlocks(c, "r607b.sh", '[ -e "$dst" ]', "desguardado",
+                          cls="symlink-follow")
 
 
 class TestFailClosedDiscovery(CensusCase):

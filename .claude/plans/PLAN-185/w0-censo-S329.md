@@ -140,7 +140,52 @@ NOMEANDO o path plantado).
 | `b2-closed-charset-validated` | Validação dominante que aborta salvo se o valor casa classe fechada literal excluindo delimitador, `&`, `\` e newline. Duas formas: `[[ =~ ^[...]+$ ]] \|\| die` e `case ... in *[!...]*) die ;; esac`. | 0 | `TestFormB2ClosedCharsetValidated::{test_case_validation,test_regex_validation}_is_proven_safe` |
 | `b3-literal-only` | Toda atribuição à variável é literal livre de delimitador, `&` e `\`. | 0 | `TestFormB3LiteralOnly::test_safe_literal_is_proven_safe` |
 | `b4-inline-escape-substitution` | A interpolação é UMA substituição de comando que escapa o delimitador desta substituição em linha. | 1 | `TestFormB4InlineEscapeSubstitution::test_inline_escape_is_proven_safe` |
+| `a4-confinement-predicate-dominates` | Chamada dominante a um predicado **definido EXATAMENTE UMA vez no corpus varrido — outro arquivo serve**, cujo CORPO aplica checagem não-dereferenciante a caminho construído dos próprios parâmetros posicionais e tem via de recusa explícita, chamado em polaridade de recusa modelada, E cujos argumentos **COBREM o destino** (o destino em si, ou o par `(root, relpath)` de que ele é concatenado). | 0 | `TestFormA4ConfinementPredicateDominates::test_shared_predicate_is_proven_safe` |
 | `n0-no-interpolation` | O script do editor é literal e nenhuma substituição carrega expansão. Distingue o `$` do próprio `sed` (endereço de última linha, dentro de aspas simples) de `$VAR` do shell. | 52 | `TestFormN0NoInterpolation::{test_literal_script,test_sed_dollar_inside_single_quotes}_...` |
+
+### 3.1 Por que a4 existe, e por que ela NÃO afrouxa a doutrina
+
+A cura da W1 põe o predicado de confinamento numa **biblioteca compartilhada**
+(`scripts/_framework_manifest_set.sh`), não dentro de cada escritor — de
+propósito: um original consultado por `install.sh`, `upgrade.sh` e `doctor.sh`
+é o oposto da classe de cópias divergentes que produziu os quatro defeitos
+D1–D4 da S323. E a polaridade é de RECUSA (`rc 0 = recusa`), consultada como
+`if _pred …; then return; fi`. A forma `a2` não expressa nenhuma das duas
+coisas: exige mesmo arquivo e polaridade `|| abort`.
+
+O que a4 **mantém** de a2, porque é o núcleo da inversão:
+
+- **O nome nunca é evidência.** O corpo é localizado no índice do corpus e
+  parseado em tempo de censo. Um `_wbm_dst_refuses` que só imprime um aviso
+  não é creditado (`test_a_body_that_only_warns_is_not_a_guard`).
+- **Definição ambígua não é empate a desempatar.** Dois arquivos definindo o
+  mesmo nome ⇒ o censo não sabe qual corpo roda ⇒ nada provado
+  (`test_two_definitions_are_ambiguous`). Zero definições idem.
+- **Os argumentos precisam LIGAR o destino.** Duas formas e só duas: um
+  argumento cujo conjunto de aliases contém o destino, ou um par
+  `(root, relpath)` que concatena com exatamente uma `/` para o destino. A
+  regra do par é deliberadamente exata: para uma escrita em
+  `"$TARGET/.github/$rel"` chamada com `("$TARGET", "$rel")`, o predicado
+  confinou `$TARGET/$rel` — outro caminho — e **não liga**
+  (`test_arguments_must_bind_the_destination`, veredito
+  `i-predicate-arg-unbound`).
+- **Guardas a4 passam pelas MESMAS checagens** de dominância e de
+  re-vinculação (`i-guard-value-rebound`) que as outras formas. Uma forma
+  nova não pode virar desvio em volta de uma cura existente.
+
+**Um fail-open que a4 introduziu e que o próprio oráculo pegou.** Na primeira
+versão, uma chamada NUA (`_wbm_dst_refuses "$T" "$r"`, status descartado) era
+creditada, porque `_find_then_uid` casava o `then` do `if` **seguinte** —
+a4 virou desvio do controle de mutação de a2
+(`test_helper_whose_refusal_is_ignored_is_not_a_guard` ficou vermelho). A cura
+exige que o predicado seja a CONDIÇÃO de um `if` na própria linha; o controle
+dedicado é `test_a_discarded_refusal_is_not_a_guard`.
+
+**Uso vivo: zero, e isso é o esperado** — o predicado da W1 não existe nesta
+árvore (`scripts/install.sh` é canônico e a cura espera cerimônia). A forma
+está modelada e testada de antemão para que a cura aterrisse `guardado` sem
+editar o instrumento junto com o produto, exatamente como b1/b2/b3 para a W2.
+Se a cura REAL será creditada é medição que exige a árvore curada — ver §12.
 
 `b1`, `b2` e `b3` têm **zero** uso vivo hoje — são exatamente as formas que a
 W2 vai introduzir como cura de F2. Estão modeladas de antemão para que a cura
@@ -444,6 +489,77 @@ material de wave, não de unidade de censo. *Decisão do Owner sobre onde alocar
 
 ---
 
+## 11-bis. Reprodutibilidade: todo número carrega o sha256 do instrumento
+
+Um leitor externo mediu o MESMO `scripts/` e obteve 341 sítios numa hora e 832
+noutra. Não havia defeito na medição dele: o instrumento estava sendo
+desenvolvido concorrentemente, e duas versões deste script julgando o mesmo
+corpus são **duas medições diferentes**, não uma discrepância.
+
+Cura: `instrument_sha256()` — o script digere o próprio arquivo e imprime o
+resultado na primeira linha da tabela e no campo `instrument_sha256` do
+`--json`. Um número publicado sem esse hash não é reproduzível, e agora não há
+como publicá-lo sem ele.
+
+**Números desta página valem para
+`sha256=a8703edece8c319e25de2b5e4a3251e3425c1ae93fbce459b7b8f4208b1ac539`.**
+Uma cópia congelada com outro hash mede outra coisa — em particular, cópias
+anteriores a esta não têm as curas de fail-open da §5.1 nem a forma a4, e
+portanto **subestimam** o conjunto bloqueante.
+
+## 12. Aberto: a cura da W1 é creditada?
+
+**Resposta medida, não estimada.** O `s329-ceremony-C/C.patch` ficou legível no
+disco durante esta unidade, então li o corpo de `_wbm_dst_refuses`
+(`C.patch:1406`) e os call-sites reais (`:1658-1670`) e reproduzi a cadeia
+exata numa árvore-sombra. Resultado:
+
+| Forma da chamada | Veredito de a4 |
+|---|---|
+| escritor → `_wbm_dst_refuses "$TARGET" "$rel"` **direto** | **`guardado` / `a4-confinement-predicate-dominates`** |
+| escritor → `_dst_refuses "$rel"` → `_wbm_dst_refuses "$TARGET" "$rel"` (a cadeia REAL) | **`desguardado`** |
+
+As duas medições estão travadas como testes
+(`TestA4DelegationBoundary::{test_a_direct_call_to_the_shared_predicate_is_credited,
+test_a_delegating_wrapper_is_not_credited}`).
+
+**A causa é uma só, e é precisa: o WRAPPER.** O corpo de `_wbm_dst_refuses`
+passa nas duas checagens de a4 — ele aplica `[ -L … ]` a um caminho construído
+dos próprios parâmetros (alcançado em 3 saltos de atribuição:
+`$1 → _wbm_dr_root → _wbm_dr_phys → _wbm_dr_walk`) e tem via de recusa
+explícita. O que a4 inspeciona, porém, é o corpo da função **efetivamente
+chamada**, e `_dst_refuses` não checa parâmetro nenhum: ele supre o `$TARGET` e
+DELEGA. a4 para no wrapper.
+
+**Por que eu NÃO estendi a4 para atravessar o wrapper.** Creditar uma cadeia de
+delegação significa confiar que o valor de retorno do wrapper carrega
+fielmente o veredito do delegado. Isso é demonstrável — no `_dst_refuses` real
+o único `return` de NÃO-recusa é o `else` do ramo que consulta o delegado, e
+todo o resto cai em `return 0` — mas é uma análise interprocedural de polaridade
+em dois níveis, e seria a forma **mais permissiva** de toda a allowlist. Três
+vezes hoje a primeira versão de um pedaço de a4 nasceu fail-open (§5.2), e as
+três só apareceram porque havia controle. Ampliar a allowlist sob pressão de
+cronograma de outra unidade, para abençoar uma cura que eu não consigo executar
+aqui, é o movimento que a 4ª passada existe para impedir.
+
+**OQ-4 — a4 deve atravessar um wrapper de delegação?** Duas rotas, e a decisão
+é do Owner:
+
+- **(a) O escritor chama o predicado compartilhado direto.** Custo: o wrapper
+  hoje também registra o motivo da recusa (`_dst_record_refusal`), então a
+  contabilidade teria de mudar de lugar. Ganho: nenhuma superfície nova no
+  instrumento, e a cura fica creditada hoje (medido acima).
+- **(b) a4 ganha um passo de delegação de UM nível**, com a condição estrita
+  «o único `return` de não-recusa do wrapper está no ramo falso da condição
+  que consulta o delegado», mais controle positivo e mutações próprias (corpo
+  que delega mas retorna 0 incondicionalmente; delegado ambíguo; wrapper cujo
+  parâmetro não chega ao delegado). É trabalho de instrumento, uma unidade
+  própria.
+
+**Nada disso bloqueia a cerimônia C.** O AC-3 pede que nenhum sítio
+desguardado NOVO apareça; a cura não cria nenhum. O efeito de (a)/(b) é apenas
+o baseline encolher em vez de as entradas continuarem lá.
+
 ## 11. O que a W1/W2 herda
 
 - Os sítios de F1 e F2 estão no censo, **bloqueantes e provados perigosos**
@@ -718,3 +834,47 @@ grep -vxF 'scripts/install.sh:220:write-candidate:indeterminado:i-write-candidat
 python3 .claude/scripts/check-installer-write-safety.py # rc 1, nomeia install.sh:220
 # (baseline restaurado; rc volta a 0)
 ```
+
+## 13. 6ª passada — os 7 contornos do rail r2 (S329, fechada pelo CEO após queda do agente)
+
+> Escrita pelo CEO a partir do estado MEDIDO no disco (o agente da 6ª passada caiu
+> duas vezes por quota — "Not logged in" e "monthly spend limit" — depois de terminar
+> o código e antes de escrever esta seção). Cada número abaixo vem de um comando
+> executado às 00:25 de 27/08; os comandos estão inline.
+
+O rail r2 sobre `7383518` (`w0-rail-round-2-7383518.md`) devolveu 6 P1 + 1 P2 —
+caminhos ESPECÍFICOS que contornavam a descoberta fail-closed da 5ª passada. Os
+sete foram fechados no instrumento, cada um com fixtures nomeadas
+(`grep -oE 'def test_r6_0[0-9][a-z_]*' .claude/scripts/tests/test_check_installer_write_safety.py`):
+
+| Contorno | Fixtures |
+|---|---|
+| R6-01 basename de executável não confiável (`./grep`, `/tmp/printf`) | `test_r6_01_*` (3: untrusted relativo; untrusted absoluto; trusted normaliza) |
+| R6-02 comandos com destino POSICIONAL (`tar cf`, `zip`, `split`) e fallback read-only | `test_r6_02_*` (7, incl. controle negativo `tar -t` lê) |
+| R6-03 expansões aninhadas (`${a:-$RAW}`, `$(cmd)` aninhado, subscript) | `test_r6_03_*` (4, incl. default LITERAL segue provado) |
+| R6-04 comandos opacos antes do filtro (`eval`, `source`, shell-com-script, `xargs`) | `test_r6_04_*` (6, incl. opaco não CAPA uma escrita provada) |
+| R6-05 RHS de `=~` entre aspas = string literal, não regex | `test_r6_05_*` (2, com controle positivo do não-quoted) |
+| R6-06 `{`/`}` só é sintaxe em posição de comando | `test_r6_06_*` (2, incl. corpo de função ainda abre grupo) |
+| R6-07 `patch -i` é INPUT (falso-positivo removido) | `test_r6_07_*` (2, incl. alvo posicional segue bloqueando) |
+
+**Estado medido:** `python3 -m pytest .claude/scripts/tests/test_check_installer_write_safety.py -q`
+= **148 passed** (121 da 5ª passada + 27 R6). Ratchet
+(`python3 .claude/scripts/check-installer-write-safety.py`) **rc=0** contra o
+baseline regenerado; controle positivo da sessão anterior (remover uma linha real
+⇒ rc=1 `NEW BLOCKING SITES`) permanece válido. `check-test-env-hygiene.py` limpo.
+Baseline: **620 sítios** (delta da 6ª passada: +32/−25 — R6-01/R6-02/R6-04 criaram
+candidatos novos; R6-07 removeu falso-positivos de `patch -i`). Contagens por
+classe/veredito: sed-interp 6/1/1/52, symlink-follow 40/7/127/107,
+write-candidate 151/18/295 (desguardado/guardado/indeterminado[/n-a]).
+
+**O que esta passada NÃO fecha (residual honesto):** o self-audit por ramo que a
+tarefa pedia não foi escrito pelo agente; a garantia vigente é a da 5ª passada
+(§12: descoberta fail-closed + evidência ligada à operação exata) mais os 7
+contornos fechados COM fixtures. Formas de shell além do parser continuam
+aparecendo como `indeterminado` — nunca como ausência (invariante do §12). A
+disposição do registro do rail r2 permanece: o W0 entra no CI como RATCHET com
+pontos cegos declarados (OQ-1/OQ-2); `--strict` e a modelagem completa são wave
+própria. A rodada de rail sobre o commit desta passada decide se a classe
+regenera de novo; se regenerar, PARAR e levar ao Owner (anti-padrão 6 — três
+arquiteturas de regra já foram pagas: denylist → allowlist de formas →
+descoberta fail-closed).
