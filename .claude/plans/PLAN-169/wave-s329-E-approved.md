@@ -14,8 +14,8 @@ Wave: wave-s329-E (cura do achado S328 sobre `scripts/upgrade.sh`: o roster de h
 Patch: .claude/plans/PLAN-169/s329-ceremony-E/E.patch
 Patch-sha256: dfe1866b2a07c4a447e694bf1c7939fdc871c02a84fef6d3594083174c5ebec1
 Patch-base: 5d6ae25649cddb0b3260ec124317110efe3717d4
-Anchor-SHA: TO-FILL-AT-SIGN
-Data: TO-FILL-AT-SIGN
+Anchor-SHA: 4efdfac4fbfa3e65092efe20c01e04a63ce5d7c4
+Data: 2026-08-27
 
 ## O que esta wave entrega
 
@@ -118,7 +118,7 @@ Nenhum outro workflow é tocado.
   carregar `Rail-Verdict: APPROVE`.
 
 <!-- BEGIN SIGNED SCOPE -->
-Approved-By: @Canhada-Labs TO-FILL-AT-SIGN
+Approved-By: @Canhada-Labs AE9B236FDAF0462874060C6BCFCFACF00335DC74
 Plans: PLAN-169
 Scope:
   - .claude/plans/PLAN-169/s329-ceremony-E/DESIGN-E.md

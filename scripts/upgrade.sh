@@ -2458,123 +2458,591 @@ _emit_deprecation_warnings() {
 _emit_deprecation_warnings
 
 # ---------------------------------------------------------------------------
-# PLAN-135 W2 (unit h8) — idempotent settings-merge: register new framework
-# lifecycle hooks into the adopter's EXISTING .claude/settings.json.
+# PLAN-135 W2 (unit h8) — idempotent settings-merge: register framework hook
+# registrations into the adopter's EXISTING .claude/settings.json.
 #
 # WHY THIS EXISTS (constraint b, debate R1): install.sh EXISTS-SKIPs an
 # existing settings.json, so a hook that is only baked into the fresh-install
 # template (settings.base.json) NEVER reaches the S217 population of existing
-# adopters. Without this step the Setup/init self-verification hook would be a
-# silent no-op for every already-installed repo. We therefore merge the new
-# registration(s) into the live settings.json here, at upgrade time, in the
-# SAME ceremony.
+# adopters. Without this step every hook added after an adopter's original
+# install would be a silent no-op for that repo — the script on disk, the
+# channel unwired. We therefore merge the missing registration(s) into the
+# live settings.json here, at upgrade time, in the SAME ceremony.
 #
-# This registers the FIVE new W2 lifecycle events: PreCompact + PostCompact
-# (check_precompact_continuity.py / check_postcompact_reinject.py), ConfigChange
-# (check_config_change.py), SubagentStart (check_subagent_start.py), and
-# Setup/init (check_setup_verification.py). The jq program is IDEMPOTENT (per
-# event: filters any pre-existing block that registers the hook, then
-# re-appends the single canonical block) so re-running the upgrade is a no-op.
-# It is ADDITIVE — existing settings keys + hooks are preserved untouched.
+# PLAN-169 W-E (S329) — THE LIST IS DERIVED, NEVER DECLARED TWICE.
+# ---------------------------------------------------------------------------
+# Until S329 this function carried a LITERAL roster of six lifecycle hooks
+# (PreCompact/PostCompact/ConfigChange/SubagentStart/Setup + the PLAN-179 W1-b
+# SessionStart(compact) pinning hook) inside its jq program, and repeated the
+# same six in prose for the --dry-run announcement. That is a second
+# declaration of a truth that already lives in
+# templates/settings/settings.base.json, and it rotted exactly the way a
+# second copy always does: check_ledger_checkpoint.py (PLAN-179 W2/W4) landed
+# in BOTH .claude/settings.json and the template mirror and in NEITHER list,
+# so every adopter that UPGRADED got the hook script with no registration
+# (fresh installs were fine — the template covers them — and
+# test_template_dogfood_parity is blind to it because it compares dogfood to
+# template, never dogfood to the RESULT OF AN UPGRADE). Measured S328, rail
+# codex round 3 of the PLAN-179 pack D; the finding is
+# .claude/plans/PLAN-179/s328-ceremony-D/FINDING-upgrade-lifecycle-hooks-S328.md
 #
-# PLAN-179 W1-b (pair-rail finding P1 — "upgraded adopters never get the new
-# hook"): the SIXTH registration, SessionStart(matcher "compact") ->
-# check_compact_pinning.py, rides the SAME merge. It is the PRIMARY Constraint
-# Pinning channel; baking it only into templates/settings/settings.base.json
-# would leave every already-installed repo with the script on disk and the
-# channel unwired — exactly the S217 class this function exists to close.
-# SessionStart is a LONG-EXISTING event key (turbo_sessionstart.py et al are
-# already registered there), so it needs NO T3.4 version-floor gate: that gate
-# guards UNKNOWN event keys (DirectoryAdded/Notification), and none of the five
-# W2 registrations above is gated either. Adding a gate here would invent a
-# pattern this function does not use.
+# The cure is NOT a seventh entry. The roster is now DERIVED, per upgrade run,
+# from the template that ships in the SOURCE checkout — the same artifact and
+# the same $SOURCE_DIR resolution the PLAN-164 W1 pair-rail timeout migration
+# already uses (see _migrate_settings_baseline: "the NEW cap is derived from
+# templates/settings/settings.base.json, never hardcoded"). Add a hook to the
+# template and upgraded adopters get it; there is no second place to forget.
 #
-# Fail-open per CLAUDE.md §5: no jq, malformed settings, or a merge error =>
-# stderr NOTE + the upgrade proceeds. A backup of the pre-merge settings.json
-# is written under $BAK_DIR first so the Owner can always roll back.
-# Suppress entirely with --no-settings-merge.
+# SOURCE (single):  $SOURCE_DIR/templates/settings/settings.base.json — the
+#   checkout that is EXECUTING this upgrade. Never $TARGET (that is the thing
+#   being upgraded; reading it would make the merge a fixpoint on the
+#   adopter's own drift).
+#
+# SEMANTICS (ADDITIVE — deliberate change from the pre-S329 six):
+#   registration ABSENT for that event  -> the template block is APPENDED
+#   registration PRESENT for that event -> the adopter's block is PRESERVED
+#                                          BYTE-IDENTICAL, never rewritten
+#   Pre-S329 the six were RE-CANONICALIZED: an adopter who had edited one got
+#   it silently replaced. That contradicts INV-4 of PLAN-167/168 (adopter
+#   edits are preserved; REPAIRING a drifted registration is doctor.sh's job,
+#   not the upgrader's), and it does not scale: re-canonicalizing all 47
+#   template registrations would clobber every timeout an adopter ever tuned.
+#   Additive is the only semantics that is safe at the full-roster scale.
+#
+# IDENTITY of a registration (the key the presence test compares):
+#   every "<name>.py" token in the block's hooks[].command, matched as a WHOLE
+#   token — the character class stops at "/" so a path yields its basename,
+#   and a trailing lookahead means "check_x.py" can never be found inside
+#   "check_xy.py" / "check_xy.python". A block whose command carries no .py at
+#   all (the inline PostToolUse|Agent file-assignment echo) is keyed by its
+#   FULL command string. A block is "already registered" under an event when
+#   EVERY key it carries is already present under that event. A block we
+#   cannot key at all (no hooks[]) is never appended — unidentifiable input is
+#   left alone rather than guessed at.
+#
+# --dry-run announces the SAME derivation (one jq program, --arg mode): a
+# migration that is silent in --dry-run is a migration the adopter cannot
+# review before it runs for real.
+#
+# The file is rewritten ONLY when at least one registration is actually
+# missing (same idempotency oracle as the T5.4 migration below), so a re-run
+# is byte-identical — including the adopter's own formatting, which the
+# pre-S329 unconditional `jq` rewrite destroyed on every upgrade.
+#
+# ABSENT vs PRESENT-BUT-FALSY (rail round 1, P2 — these are NOT the same
+# question, and the obvious jq idiom conflates them):
+#   .hooks / an event key MISSING       -> nothing was ever written there;
+#                                          this is the historical adopter, and
+#                                          registering is the whole point
+#   present with an EXPLICIT null/false -> the adopter wrote that on purpose;
+#                                          PRESERVED untouched + named on
+#                                          stderr, exactly like {"not":"array"}
+# `x // []` yields [] for BOTH, so every presence test in the jq program is
+# `has(...)` on the CONTAINER. Getting this wrong meant an adopter who had
+# deliberately emptied .hooks got 47 registrations written back into it.
+#
+# THE TWO INPUTS ARE NOT TRUSTED THE SAME WAY (rail round 2, P2):
+#   the ADOPTER's settings.json is untrusted and possibly hand-edited, so a
+#     shape we cannot parse is PRESERVED and NAMED, per EVENT — the other 46
+#     registrations still land (E.8/E.10 of the e2e)
+#   the TEMPLATE is the artifact that DEFINES the roster; it ships with the
+#     framework, and a malformed one means we do not know what the right
+#     answer IS. There is no partial merge to salvage: every event value must
+#     be an array of blocks or the whole merge is REFUSED, named, and nothing
+#     is written. Degrading to "merge the events that happen to parse" would
+#     silently ship a truncated roster, which is this wave's own bug class.
+#
+# Fail-open per CLAUDE.md §5: no jq, unreadable/invalid/structurally-invalid
+# template, malformed settings, or a merge error => stderr NOTE + the upgrade
+# proceeds. A structure we do not understand (settings.json not an object,
+# $.hooks present and not an object, or one event's value present and not an
+# array) is SKIPPED and NAMED WITH ITS TYPE, never coerced. The merged document is
+# validated as JSON and non-empty BEFORE the atomic same-directory mv, so a
+# partial settings.json is never observable. A backup of the pre-merge
+# settings.json is written under $BAK_DIR first so the Owner can always roll
+# back. Suppress entirely with --no-settings-merge.
 # ---------------------------------------------------------------------------
 _merge_lifecycle_hooks_into_settings() {
   [[ "$SETTINGS_MERGE" -eq 1 ]] || return 0
   local settings="$TARGET/.claude/settings.json"
+  # SINGLE SOURCE. $SOURCE_DIR is the checkout executing this upgrade (:96),
+  # the same resolution _migrate_settings_baseline uses for the pair-rail cap.
+  #
+  # WHICH template is the CEREMONY's call, and the call is not re-made here
+  # (rail round 6, P1). install.sh builds the adopter's settings.json from
+  # settings.user.json under `--ceremony user` (its WS4-ceremony-settings
+  # branch) — a profile that deliberately OMITS the governance hooks that block
+  # edits or need GPG/sentinel infrastructure. Deriving from settings.base.json
+  # regardless of ceremony would re-register exactly those on the next upgrade,
+  # silently turning the advisory user profile into the maintainer profile —
+  # wider than the pre-cure literal roster ever reached, and in the one
+  # population that chose not to have them. CEREMONY_EFFECTIVE is the ONE
+  # resolution of the ceremony in this script (recorded install-state, then
+  # --ceremony, then CEO_UPGRADE_CEREMONY, then the fail-safe `user`); this
+  # function CONSUMES it. Only the literal `maintainer` selects the wider
+  # template; every other value — including unset, which only a harness can
+  # produce — takes the narrower one, the same fail-SAFE direction the
+  # resolution itself chose.
+  #
+  # And INFERRED is not RECORDED (rail round 8, P1). With no readable
+  # install-state and no --ceremony, the resolver above answers `user` only as
+  # a fail-safe for ROOT WRITES (_CEREMONY_PERSIST=0): that population is the
+  # pre-Wave-B historical install whose ceremony nobody knows. Treating that
+  # as a real user profile would withhold every base-only hook from a
+  # historical MAINTAINER — the S328 finding itself, for exactly the adopters
+  # this wave exists to reach — and hand it the user-only advisory switch,
+  # which turns a blocking matcher it already carries into an allow. So the
+  # unknown case gets its own posture: the roster BOTH templates share, derived
+  # at run time (hooks by identity key, settings by key AND value), NAMED, with
+  # the opt-in spelled out. Nothing either profile would refuse, and the 20
+  # registrations the profiles agree on do arrive.
+  local template="" _tpl_posture _tpl_label
+  case "${CEREMONY_EFFECTIVE:-}/${_CEREMONY_PERSIST:-0}" in
+    maintainer/1)
+      _tpl_posture="maintainer"
+      template="$SOURCE_DIR/templates/settings/settings.base.json"
+      _tpl_label="templates/settings/settings.base.json" ;;
+    user/1)
+      _tpl_posture="user"
+      template="$SOURCE_DIR/templates/settings/settings.user.json"
+      _tpl_label="templates/settings/settings.user.json" ;;
+    *)
+      _tpl_posture="shared"
+      _tpl_label="the roster shared by settings.base.json and settings.user.json (ceremony unknown)" ;;
+  esac
+  # ONE identity rule, hoisted (rail round 8) so that any second jq program in
+  # this function shares it and the boundary fix of round 7 cannot drift
+  # between two copies of the regex.
+  local jq_defs
+  jq_defs='
+# Every shape this walks is ACCEPTED only after being proved to be the shape
+# we expect (object / array / string). Anything else yields NO key, which
+# makes its block unidentifiable and therefore untouched — the PLAN-185
+# doctrine: enumerate what is provably safe, never guess at the rest. jq
+# raises on indexing a number or slicing an object, and an uncaught raise here
+# would abort the WHOLE merge, turning one odd event into a silent no-op for
+# all 47 registrations (measured: E.8 of the e2e caught exactly that).
+def _cmds:
+  [ select(type == "object") | (.hooks // null)
+    | select(type == "array") | .[]
+    | select(type == "object") | (.command // null)
+    | select(type == "string") ];
+def _keys:
+  [ _cmds[]
+    | . as $cmd
+    # Both boundaries (rail round 7, P2): without the lookbehind, an adopter
+    # command that invokes a hidden (dot-prefixed) or dash-prefixed copy of a
+    # hook yields the CANONICAL name as its key, the template registration is
+    # judged PRESENT, and
+    # it is never wired. The Python oracle in the tests carries the same
+    # lookbehind; the two extractors have to agree or one of them is lying.
+    | ([ match("(?<![A-Za-z0-9_.-])[A-Za-z0-9_][A-Za-z0-9_.-]*\\.py(?![A-Za-z0-9_.-])"; "g").string ]) as $py
+    | if ($py | length) > 0 then $py[] else $cmd end ];
+def _disp:
+  (join(",") | gsub("\\s+"; " ") | if (length > 160) then (.[0:157] + "...") else . end);
+'
+
   if [[ ! -f "$settings" ]]; then
     echo "    NOTE: settings-merge skipped — no $settings (fresh install builds it from template)" >&2
     return 0
   fi
   if ! command -v jq >/dev/null 2>&1; then
-    echo "    NOTE: settings-merge skipped (jq not found) — register the Setup hook manually; advisory only" >&2
+    echo "    NOTE: settings-merge skipped (jq not found) — register new framework hooks manually; advisory only" >&2
+    return 0
+  fi
+  if [[ "$_tpl_posture" == "shared" ]]; then
+    local _tpl_base="$SOURCE_DIR/templates/settings/settings.base.json"
+    local _tpl_user="$SOURCE_DIR/templates/settings/settings.user.json"
+    local _t _t_docs
+    # BOTH sources are held to the standard the explicit postures apply to
+    # their one template (rail round 9, P2): readable, exactly one JSON
+    # document, an object with an object .hooks. A stream or a scalar would
+    # otherwise be coerced into the derivation and applied as if it were real.
+    for _t in "$_tpl_base" "$_tpl_user"; do
+      if [[ ! -r "$_t" ]]; then
+        echo "    NOTE: settings-merge skipped — template unreadable at $_t; advisory only" >&2
+        return 0
+      fi
+      _t_docs="$( jq -n --slurpfile t "$_t" '$t | length' 2>/dev/null )" || _t_docs=""
+      if [[ "$_t_docs" != "1" ]]; then
+        echo "    NOTE: settings-merge skipped — $_t is not exactly ONE JSON document (found: ${_t_docs:-unreadable}); NOTHING was written to settings.json; advisory only" >&2
+        return 0
+      fi
+      if ! jq -e 'type == "object" and (.hooks | type) == "object"' "$_t" >/dev/null 2>&1; then
+        echo "    NOTE: settings-merge skipped — $_t is not JSON with an object .hooks; NOTHING was written to settings.json; advisory only" >&2
+        return 0
+      fi
+    done
+    # Derived into a TEMP file, never under the adopter (rail round 9, P1): a
+    # --dry-run reaches this point too, and the whole-tree no-write guarantee
+    # of --dry-run has to hold here as well. The apply path copies the derived
+    # document next to the backup once it actually writes something.
+    local _tpl_tmp
+    # Through _up_tmpbase like every other scratch file of this script (rail
+    # round 11, P2): with TMPDIR pointing INSIDE the target, a raw mktemp would
+    # create the derived roster in the adopter — in a --dry-run too.
+    _tpl_tmp="$( mktemp "$( _up_tmpbase )/ceo-shared-roster.XXXXXX" )" || {
+      echo "    NOTE: settings-merge skipped — mktemp failed for the shared roster; advisory only" >&2
+      return 0
+    }
+    # The trap body is FIXED text (rail round 11, P2): the path is read from a
+    # GLOBAL when the trap fires, never re-parsed into the trap — an apostrophe
+    # in TMPDIR would otherwise abort the upgrade under set -e, and a crafted
+    # path could inject. Global on purpose: a `local` is gone by then.
+    _UP_SHARED_TPL_TMP="$_tpl_tmp"
+    trap 'rm -f -- "$_UP_SHARED_TPL_TMP"' RETURN
+    template="$_tpl_tmp"
+    # What the two profiles PROVABLY agree on is their SETTINGS with equal
+    # values — nothing else (rail round 9, P1). The hooks the two templates
+    # share are identical blocks, but a hook's BEHAVIOUR can depend on a
+    # setting the profiles disagree on (the config-protection hook blocks
+    # unless the user profile's advisory switch is present), and that
+    # dependency lives in code this script cannot read. So an unknown
+    # ceremony registers NO hooks: the settings both profiles declare with the
+    # same value are applied, everything else is WITHHELD and NAMED, and the
+    # adopter is told how to state the ceremony. The pre-cure code pushed six
+    # base-only literals into this population — and those six were the defect.
+    if ! jq -n --slurpfile b "$_tpl_base" --slurpfile u "$_tpl_user" '
+        ($b[0].env | if type == "object" then . else {} end) as $be
+        | ($u[0].env | if type == "object" then . else {} end) as $ue
+        | { hooks: {},
+            env: ( $ue | with_entries(select( .key as $k | ($be | has($k)) and ($be[$k] == .value) )) ) }' \
+        > "$template" 2>/dev/null || [[ ! -s "$template" ]]; then
+      echo "    NOTE: settings-merge skipped — could not derive the settings shared by settings.base.json and settings.user.json; advisory only" >&2
+      return 0
+    fi
+    local _wh_b _wh_u _we_b _we_u
+    _wh_b="$( jq '[.hooks | to_entries[] | .value[]] | length' "$_tpl_base" 2>/dev/null || printf '?' )"
+    _wh_u="$( jq '[.hooks | to_entries[] | .value[]] | length' "$_tpl_user" 2>/dev/null || printf '?' )"
+    _we_b="$( jq --slurpfile s "$template" '((.env // {}) | length) - (($s[0].env // {}) | length)' "$_tpl_base" 2>/dev/null || printf '?' )"
+    _we_u="$( jq --slurpfile s "$template" '((.env // {}) | length) - (($s[0].env // {}) | length)' "$_tpl_user" 2>/dev/null || printf '?' )"
+    echo "    NOTE: ceremony UNKNOWN (no readable install-state, no --ceremony, no CEO_UPGRADE_CEREMONY) — NO hook registration is applied until the ceremony is stated; only the settings BOTH profiles declare with the same value are. WITHHELD: $_wh_b registration(s) + $_we_b setting(s) of settings.base.json, $_wh_u + $_we_u of settings.user.json. Pass --ceremony maintainer|user to register the profile you installed." >&2
+  fi
+  if [[ ! -r "$template" ]]; then
+    echo "    NOTE: settings-merge skipped — template unreadable at $template; advisory only" >&2
+    return 0
+  fi
+  # ONE document, exactly (rail round 7, P2). `jq -e` over a FILE validates
+  # every document of a stream in turn, so a template that accidentally carries
+  # two top-level objects passes every shape guard below TWICE; `--slurpfile`
+  # then loads both and the program reads only $tpl[0] — the second document's
+  # registrations vanish without a word. The roster is all-or-nothing, so a
+  # stream is refused and NAMED, like every other malformed template.
+  local _tpl_docs
+  _tpl_docs="$( jq -n --slurpfile t "$template" '$t | length' 2>/dev/null )" || _tpl_docs=""
+  # An EMPTY count means jq could not parse the file at all; that case keeps
+  # its own, older, name ("not JSON") in the guard right below.
+  if [[ -n "$_tpl_docs" && "$_tpl_docs" != "1" ]]; then
+    echo "    NOTE: settings-merge skipped — the template is not exactly ONE JSON document (found: ${_tpl_docs:-unreadable}) ($template); NOTHING was written to settings.json; advisory only" >&2
+    return 0
+  fi
+  if ! jq -e 'type == "object" and (.hooks | type) == "object"' "$template" >/dev/null 2>&1; then
+    echo "    NOTE: settings-merge skipped — template is not JSON with an object .hooks ($template); advisory only" >&2
+    return 0
+  fi
+  # ".hooks is an object" is NOT enough (rail round 2, P2). Every event value in
+  # the template has to be an ARRAY of blocks, and neither the guard above nor
+  # `$te.value[]?` in the program below enforces that — `[]?` swallows the
+  # error and the two ways it goes wrong are both silent:
+  #
+  #   event value is an OBJECT -> `.[]?` iterates its VALUES, so whatever sits
+  #     under those keys is fed to the merge AS IF it were a hooks block and
+  #     can be APPENDED to the adopter's settings.json (measured: an object
+  #     {"x": {...}} yields the inner {...} as a $blk)
+  #   event value is a SCALAR/null/false -> `.[]?` yields NOTHING, so the whole
+  #     event is dropped from the roster without a word — the exact failure
+  #     this wave exists to remove, one layer up: registrations that are in the
+  #     template and never reach the adopter
+  #
+  # The adopter's settings.json is untrusted input and gets PRESERVED + NAMED
+  # (see the paragraph above). The TEMPLATE is different: it is the artifact
+  # that DEFINES the roster, it ships with the framework, and a malformed one
+  # means we do not know what the correct answer is. So this is fail-CLOSED on
+  # the merge — name every offending event with the type found, write nothing,
+  # and let the rest of the upgrade proceed (advisory, per CLAUDE.md §5).
+  # And an ARRAY of blocks is not enough either (rail round 3, P2). A block the
+  # key-derivation cannot identify — null, {}, {"hooks": []}, an entry with no
+  # string .command — yields ZERO keys, and the reduction's `($k|length) == 0`
+  # arm then SKIPS it while its well-formed siblings merge. That is a partial
+  # roster arriving through a different door than the one closed above, and it
+  # contradicts the all-or-nothing rule this guard exists to enforce. So every
+  # BLOCK is validated here too, before the reduction starts: an object, with a
+  # non-empty .hooks array, whose every entry is an object carrying a non-empty
+  # string .command. Anything else names the event, the INDEX and the reason.
+  # And .env, when PRESENT, has to be an object (rail round 10, P2): the
+  # settings travel with the hooks (round 7), so a template whose .env is
+  # malformed would otherwise be coerced to {} and its hooks written WITHOUT
+  # the settings that keep them in the profile's mode. Same all-or-nothing
+  # rule as a malformed event, same named refusal.
+  local _tpl_bad _tpl_rc=0
+  _tpl_bad="$( jq -r '
+      ( if (has("env")) and ((.env | type) != "object")
+        then "ENV (" + (.env | type) + ")" else empty end ),
+      ( .hooks
+      | to_entries[]
+      | .key as $ev
+      | if (.value | type) != "array" then
+          "EVENT " + $ev + " (" + (.value | type) + ")"
+        else
+          ( .value | to_entries[]
+            | .key as $ix
+            | .value as $blk
+            | ( if   ($blk | type) != "object"                then ($blk | type)
+                elif ($blk | has("hooks") | not)              then "no .hooks"
+                elif ($blk.hooks | type) != "array"           then ".hooks is " + ($blk.hooks | type)
+                elif ($blk.hooks | length) == 0               then ".hooks is empty"
+                elif ([ $blk.hooks[] | select(type != "object") ] | length) > 0
+                  then "a .hooks entry is not an object"
+                elif ([ $blk.hooks[] | select((.command | type) != "string") ] | length) > 0
+                  then "a .hooks entry has no string .command"
+                elif ([ $blk.hooks[] | select((.command | length) == 0) ] | length) > 0
+                  then "a .hooks entry has an empty .command"
+                else null end ) as $why
+            | select($why != null)
+            | "BLOCK " + $ev + "[" + ($ix | tostring) + "] (" + $why + ")" )
+        end )' "$template" 2>/dev/null )" || _tpl_rc=$?
+  if [[ "$_tpl_rc" -ne 0 ]]; then
+    echo "    NOTE: settings-merge skipped — could not validate the template's event shapes ($template); settings.json unchanged; advisory only" >&2
+    return 0
+  fi
+  if [[ -n "$_tpl_bad" ]]; then
+    echo "    NOTE: settings-merge skipped — the template is structurally invalid; NOTHING was written to settings.json; advisory only" >&2
+    local _tl _tkind _trest
+    while IFS= read -r _tl; do
+      [[ -n "$_tl" ]] || continue
+      _tkind="${_tl%% *}"; _trest="${_tl#* }"
+      case "$_tkind" in
+        EVENT) echo "          template event not an array: $_trest  ($template)" >&2 ;;
+        ENV)   echo "          template .env present but not an object: $_trest  ($template)" >&2 ;;
+        BLOCK) echo "          template block not identifiable: $_trest  ($template)" >&2 ;;
+        *)     echo "          template problem: $_tl  ($template)" >&2 ;;
+      esac
+    done <<< "$_tpl_bad"
     return 0
   fi
 
   echo ""
-  echo "==> Registering new lifecycle hooks into .claude/settings.json (PLAN-135 W2 H8)"
-  _up_record_op "merge_lifecycle_hooks" "additive settings.json merge"
+  echo "==> Registering framework hooks into .claude/settings.json (derived from $_tpl_label — ceremony=${CEREMONY_EFFECTIVE:-unset}, posture=$_tpl_posture)"
+  _up_record_op "merge_lifecycle_hooks" "additive settings.json merge (posture=$_tpl_posture, ceremony=${CEREMONY_EFFECTIVE:-unset})"
 
-  # Idempotent jq program — mirrors staged merges/{60,62,64,70}-*.jq. Registers
-  # ALL FIVE new W2 lifecycle hooks (Codex V2 P2: registering only Setup left
-  # PreCompact/PostCompact/ConfigChange/SubagentStart dead for upgraded
-  # adopters) PLUS the PLAN-179 W1-b SessionStart(compact) pinning hook (rail
-  # finding P1 — same class, one wave later). The `_reg` helper filters any
-  # pre-existing entry that registers the hook filename, then re-appends the
-  # single canonical block — so each event is idempotent and every other
-  # settings key/hook is preserved. NOTE the deliberate consequence, unchanged
-  # from the five: an adopter who EDITED one of these six registrations gets it
-  # re-canonicalized (the backup under $BAK_DIR is the rollback route); every
-  # OTHER entry under the same event — SessionStart already carries several —
-  # is preserved in place, and the canonical block is appended last.
+  # ONE program, two modes. mode=report emits the decision lines the dry-run
+  # prints and the apply path echoes; mode=apply emits the merged document.
+  # Both walk the identical reduce, so the announcement cannot disagree with
+  # the write (the pre-S329 code had two hand-kept lists and they DID diverge).
+  #
+  # Single-quoted on purpose: the template's commands carry a LITERAL
+  # "$CLAUDE_PROJECT_DIR" that the harness expands at hook time. Here it
+  # travels as JSON from file to file and is never seen by the shell.
   local jq_prog
-  jq_prog='
-def _reg($event; $name; $entry):
-  .hooks[$event] = (
-    [ (.hooks[$event] // [])[]
-      | select(([.hooks[]? | .command // ""] | map(test($name)) | any) | not) ]
-    + [$entry]
-  );
-.hooks = (.hooks // {})
-| _reg("PreCompact"; "check_precompact_continuity\\.py"; {
-    "_comment": "PLAN-135 W2 H1 (ADR-153): PreCompact continuity snapshot — plan-id + execution-unit + ceremony flags + HMAC-chain anchor to the plan scratchpad before the transcript collapses. ADVISORY, fail-open. Kill: CEO_COMPACTION_CONTINUITY=0.",
-    "matcher": "",
-    "hooks": [ { "type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_precompact_continuity.py", "timeout": 5, "statusMessage": "Snapshotting governance state before compaction..." } ]
-  })
-| _reg("PostCompact"; "check_postcompact_reinject\\.py"; {
-    "_comment": "PLAN-135 W2 H1 (ADR-153): PostCompact governance reinjection — reinjects governance POINTERS (active PLAN, unit position, Gate-1 reminder) via additionalContext after compaction. POINTERS ONLY, never file contents. ADVISORY, fail-open. Kill: CEO_COMPACTION_CONTINUITY=0.",
-    "matcher": "",
-    "hooks": [ { "type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_postcompact_reinject.py", "timeout": 5, "statusMessage": "Reinjecting governance pointers after compaction..." } ]
-  })
-| _reg("ConfigChange"; "check_config_change\\.py"; {
-    "_comment": "PLAN-135 W2 H2: ConfigChange guard — advisory audit + advisory-block of out-of-band settings tamper (the S197 class) via _lib/effective_config. Fail-open, never blocks on infra. Kill: CEO_CONFIG_CHANGE_GUARD=0.",
-    "matcher": "",
-    "hooks": [ { "type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_config_change.py", "timeout": 5, "statusMessage": "Checking config change for tamper..." } ]
-  })
-| _reg("SubagentStart"; "check_subagent_start\\.py"; {
-    "_comment": "PLAN-135 W2 H3: SubagentStart lifecycle recorder — spawn instant + context into a local sidecar (raw agent_id never persisted); the SubagentStop half consumes it for the per-agent bracket. ADVISORY, fail-open. Kill: CEO_SUBAGENT_LIFECYCLE=0.",
-    "matcher": "",
-    "hooks": [ { "type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_subagent_start.py", "timeout": 5, "statusMessage": "Recording sub-agent spawn instant..." } ]
-  })
-| _reg("Setup"; "check_setup_verification\\.py"; {
-    "_comment": "PLAN-135 W2 H8: Setup-event post-install self-verification (init matcher) — validate-governance --fast + verify-counts + hook exec-bits (the S228 exec-bit class) + CLAUDE_ENV_FILE allowlist persistence (explicit CEO_* include-list; every override/escape-hatch/kill-switch EXCLUDED, S185/S197 stale-override class). ADVISORY + fail-open; NEVER blocks. Kill-switch: CEO_SETUP_VERIFICATION=0.",
-    "matcher": "init",
-    "hooks": [ { "type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_setup_verification.py", "timeout": 15, "statusMessage": "Post-install self-verification..." } ]
-  })
-| _reg("SessionStart"; "check_compact_pinning\\.py"; {
-    "_comment": "PLAN-179 W1-b [amendment r1-C3]: Constraint Pinning PRIMARY channel. On a post-compaction session start (matcher compact — the hook ALSO re-checks source == compact in-process, never trusting the matcher alone), re-states the pinned governance constraints from the CODE constant _lib/pinned_constraints.PINNED_CONSTRAINTS (r1-C5 — never read from a .md at runtime, so it cannot be evicted by the summarizer) via additionalContext. RULES, not pointers: the PostCompact reinject hook is the REINFORCEMENT channel, this is the primary one. ADVISORY, fail-OPEN, never blocks. Kill-switch: CEO_CONSTRAINT_PINNING=0 (deliberately NOT the shared CEO_COMPACTION_CONTINUITY — PLAN-179 §8.8).",
-    "matcher": "compact",
-    "hooks": [ { "type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_compact_pinning.py", "timeout": 5, "statusMessage": "Pinning governance constraints after compaction..." } ]
-  })'
+  jq_prog="$jq_defs"'
+
+# ABSENT is not the same question as FALSY, and `//` cannot tell them apart:
+# `null // []` and `false // []` both yield [], so an adopter who wrote an
+# EXPLICIT "hooks": null (or "PreCompact": false) would be read as "nothing
+# here yet" and silently overwritten with the template — the exact coercion
+# the paragraph above promises never happens. Every presence test below is
+# therefore `has(...)` on the container, never a `//` default on the value.
+. as $orig
+| ( if   (($orig | type) != "object")       then null
+    elif (($orig | has("hooks")) | not)     then {}
+    elif (($orig.hooks | type) == "object") then $orig.hooks
+    else null end ) as $ah
+| ( if (($tpl[0].hooks | type) == "object") then $tpl[0].hooks else null end ) as $th
+| if ($ah == null) or ($th == null) then
+    ( if   $mode == "apply"             then $orig
+      elif $th == null                  then "SKIP-ALL template"
+      elif ($orig | type) != "object"   then "SKIP-ALL document " + ($orig | type)
+      else "SKIP-ALL hooks " + ($orig.hooks | type) end )
+  else
+    ( reduce ($th | to_entries[]) as $te ($orig | .hooks = $ah;
+        if (.hooks | has($te.key)) and ((.hooks[$te.key] | type) != "array") then .
+        else
+          reduce ($te.value[]?) as $blk (.;
+              ( if (.hooks | has($te.key)) then .hooks[$te.key] else [] end ) as $cur
+            | ( $blk | _keys )                    as $k
+            | ( [ $cur[] | _keys[] ] )            as $have
+            | if   ($k | length) == 0                                then .
+              elif ($k | all(. as $n | $have | any(. == $n)))        then .
+              # Only the MISSING entries are appended (rail round 8, P2). A
+              # block with several commands of which the adopter already has
+              # some would otherwise be appended whole, and every present
+              # command would then run twice — for ever, since later upgrades
+              # see the duplicate as present. Each entry is judged on its own
+              # keys; an entry with none is dropped (the structural guard has
+              # already refused such blocks, so this is belt and braces).
+              else .hooks[$te.key] = ($cur + [ $blk | .hooks = [ .hooks[]
+                       | select(type == "object")
+                       | ({hooks: [.]} | _keys) as $ek
+                       | select( ($ek | length) > 0 and (($ek | all(. as $n | $have | any(. == $n))) | not) ) ] ]) end )
+        end ) ) as $out
+    # ENV is part of the roster (rail round 7, P1). A registration is only as
+    # advisory as the setting it reads: settings.user.json ships
+    # the config-protection hook TOGETHER with env.CEO_CONFIG_PROTECTION_ADVISORY,
+    # and an adopter that receives the hook without the key gets the BLOCKING
+    # variant. So the .env of the template travels with its .hooks — additively, key
+    # by key, never overwriting a value the adopter already has; an .env that is
+    # present but not an object is PRESERVED and NAMED, like a non-array event;
+    # a template without .env adds nothing (and creates no key, so a document
+    # without .env stays byte-identical on a no-op run).
+    | ( if   (($out | has("env")) | not)      then {}
+        elif (($out.env | type) == "object")  then $out.env
+        else null end ) as $ae
+    | ( if (($tpl[0] | has("env")) and (($tpl[0].env | type) == "object")) then $tpl[0].env else {} end ) as $te
+    | ( if $ae == null then {} else ($te | with_entries(select(.key as $k | ($ae | has($k)) | not))) end ) as $env_add
+    | ( if ($env_add | length) > 0 then ($out | .env = ($ae + $env_add)) else $out end ) as $out
+    | if $mode == "apply" then $out
+      else
+        ( [ $th | to_entries[] | .key as $e
+            | select( ($ah | has($e)) and (($ah[$e] | type) != "array") )
+            # The template keys ride along: a preserved event means every hook
+            # the template declares under it is ABSENT from the adopter, and
+            # the summary has to be able to NAME them (rail round 3, P2).
+            | "SKIP-EVENT " + $e + " " + ($ah[$e] | type) + " " + ([ .value[] | _keys[] ] | _disp) ]
+          + [ $out.hooks | to_entries[]
+              | select( (.value | type) == "array" )
+              | .key as $e
+              | ( if ($ah[$e] | type) == "array" then ($ah[$e] | length) else 0 end ) as $n0
+              | .value[$n0:][]
+              | "ADD " + $e + " " + (_keys | _disp) ]
+          + ( if ($ae == null) and (($te | length) > 0)
+              then [ "SKIP-ENV " + ($out.env | type) + " " + ($te | keys | join(",")) ]
+              else [] end )
+          + [ $env_add | keys[] | "ADD-ENV " + . ] )
+        | .[]
+      end
+  end'
+
+  local _report
+  # The adopter's settings.json has to be exactly ONE document too (rail round
+  # 11, P2): jq accepts a stream, so an EMPTY file would yield no report and
+  # be announced complete, and a stream of objects would yield several merged
+  # documents that the object validator below still accepts — the mv would
+  # install a file ordinary JSON consumers cannot parse. Unparseable input
+  # keeps its own, older name ("malformed settings.json") right below.
+  local _set_docs
+  _set_docs="$( jq -n --slurpfile s "$settings" '$s | length' 2>/dev/null )" || _set_docs=""
+  if [[ -n "$_set_docs" && "$_set_docs" != "1" ]]; then
+    echo "    NOTE: settings-merge skipped — .claude/settings.json is not exactly ONE JSON document (found: $_set_docs); PRESERVED untouched; advisory only" >&2
+    return 0
+  fi
+  if ! _report="$( jq -r --arg mode report --slurpfile tpl "$template" "$jq_prog" "$settings" 2>/dev/null )"; then
+    echo "    NOTE: settings-merge skipped (malformed settings.json?) — settings.json unchanged; advisory only" >&2
+    return 0
+  fi
+  # A whole-document skip. The reason is NAMED rather than folded into one
+  # message: "you wrote an explicit null" and "your .hooks is a list" are
+  # different mistakes with different fixes, and the adopter is the one who
+  # has to act on it.
+  # The observed type rides in a trailing `(found: <type>)` so the sentence a
+  # consumer already greps for stays intact: adding the diagnostic must not
+  # silently retire the wording the tests and the runbooks match on.
+  case "$_report" in
+    "SKIP-ALL template")
+      echo "    NOTE: settings-merge skipped — the template has no .hooks that is an object; settings.json unchanged; advisory only" >&2
+      return 0 ;;
+    "SKIP-ALL document "*)
+      echo "    NOTE: settings-merge skipped — .claude/settings.json is not a JSON object (found: ${_report#SKIP-ALL document }); PRESERVED untouched; advisory only" >&2
+      return 0 ;;
+    "SKIP-ALL hooks "*)
+      echo "    NOTE: settings-merge skipped — .claude/settings.json has a .hooks that is not an object (found: ${_report#SKIP-ALL hooks }); PRESERVED untouched; advisory only" >&2
+      return 0 ;;
+  esac
+
+  # Split the report: SKIP-EVENT lines are named regardless of mode (a silent
+  # skip is how a structural surprise becomes permanent); ADD lines drive both
+  # the dry-run preview and the post-write summary.
+  local _adds=0 _skips=0 _kind _rest _line _l _ev _ty _tail
+  local _pending="" _absent=""
+  while IFS= read -r _line; do
+    [[ -n "$_line" ]] || continue
+    _kind="${_line%% *}"; _rest="${_line#* }"
+    case "$_kind" in
+      SKIP-EVENT)
+        # "<event> <type> <template keys under it>" — the type distinguishes an
+        # explicit null or false (which we now PRESERVE) from a shape like an
+        # object, and the key list is what the summary needs to name the hooks
+        # this preservation leaves UNREGISTERED.
+        _ev="${_rest%% *}"; _tail="${_rest#* }"
+        _ty="${_tail%% *}"; _absent="$_absent$_ev: ${_tail#* }"$'\n'
+        _skips=$((_skips+1))
+        echo "    NOTE: event '$_ev' in settings.json is not an array (found: $_ty) — PRESERVED untouched, nothing registered under it" >&2
+        ;;
+      ADD)
+        _adds=$((_adds+1))
+        _pending="$_pending$_rest"$'\n'
+        ;;
+      ADD-ENV)
+        # A setting the template ships and the adopter lacks. It rides the same
+        # counters as a hook: it is written in the same atomic mv, announced in
+        # the same dry-run list, and its absence makes the result incomplete.
+        _adds=$((_adds+1))
+        _pending="${_pending}env $_rest"$'\n'
+        ;;
+      SKIP-ENV)
+        _ty="${_rest%% *}"; _tail="${_rest#* }"
+        _absent="${_absent}env: ${_tail}"$'\n'
+        _skips=$((_skips+1))
+        echo "    NOTE: .env in settings.json is not an object (found: $_ty) — PRESERVED untouched, these template settings are NOT applied: $_tail" >&2
+        ;;
+    esac
+  done <<< "$_report"
+
+  # A PRESERVED event is not a registered one (rail round 3, P2). With
+  # `_adds == 0` the old summary said "every framework hook registration in the
+  # template is already present" even when an event had just been skipped —
+  # and the hooks the template declares under that event are precisely the ones
+  # that are NOT there. The completeness sentence is therefore reserved for
+  # `_skips == 0`; otherwise the result is PARTIAL and names what is missing.
+  # `_report_preserved` prints that tail for both modes, so the dry-run and the
+  # apply cannot drift apart in the one place the adopter reads for reassurance.
+  _report_preserved() {  # $1 = "(dry-run) " prefix or ""
+    local _p="$1" _a
+    echo "    ${_p}PRESERVED: $_skips container(s) in settings.json have an unexpected shape and were left untouched, so these template entries are NOT applied:"
+    while IFS= read -r _a; do
+      if [[ -z "$_a" ]]; then continue; fi
+      case "$_a" in
+        env:*) echo "    ${_p}  NOT APPLIED to $_a" ;;
+        *)     echo "    ${_p}  NOT REGISTERED under $_a" ;;
+      esac
+    done <<< "$_absent"
+    echo "    ${_p}To apply them, give those containers the expected shape (events: arrays; env: an object) in .claude/settings.json and re-run the upgrade."
+  }
 
   if [[ "$DRY_RUN" -eq 1 ]]; then
-    local _missing=0 _ev _name
-    # PLAN-179 W1-b (rail P1): the pinning registration MUST be announced in
-    # dry-run too — a migration that is silent in --dry-run is a migration the
-    # adopter cannot review before it runs for real.
-    for pair in "PreCompact:check_precompact_continuity" "PostCompact:check_postcompact_reinject" "ConfigChange:check_config_change" "SubagentStart:check_subagent_start" "Setup:check_setup_verification" "SessionStart:check_compact_pinning"; do
-      _ev="${pair%%:*}"; _name="${pair##*:}"
-      if ! jq -e --arg ev "$_ev" --arg n "$_name" '(.hooks[$ev] // []) | map(.hooks[]?.command // "" | test($n + "\\.py")) | any' "$settings" >/dev/null 2>&1; then
-        echo "    (dry-run) would REGISTER $_ev $_name.py"
-        _missing=$((_missing+1))
+    if [[ "$_adds" -eq 0 ]]; then
+      if [[ "$_skips" -eq 0 && "$_tpl_posture" != "shared" ]]; then
+        echo "    (dry-run) every framework hook registration in the template is ALREADY present — would be a no-op"
+      elif [[ "$_skips" -eq 0 ]]; then
+        echo "    (dry-run) PARTIAL (ceremony unknown): hook registrations WITHHELD, the shared settings are in place — pass --ceremony maintainer|user to register the profile you installed"
+      else
+        echo "    (dry-run) nothing would be REGISTERED — but the result is PARTIAL, not complete:"
+        _report_preserved "(dry-run) "
       fi
-    done
-    [[ "$_missing" -eq 0 ]] && echo "    (dry-run) all 6 lifecycle hooks (5 x PLAN-135 W2 + PLAN-179 W1-b SessionStart/compact) ALREADY registered — would be a no-op"
+    else
+      echo "    (dry-run) $_adds hook registration(s) missing from .claude/settings.json:"
+      # `if`, not `[[ ... ]] && echo`: the AND-list returns 1 on the trailing
+      # empty line, and whether that trips `set -e` inside a loop body is a
+      # thing a reader should not have to re-derive.
+      while IFS= read -r _l; do
+        if [[ -n "$_l" ]]; then echo "    (dry-run) would REGISTER $_l"; fi
+      done <<< "$_pending"
+      [[ "$_skips" -eq 0 ]] || _report_preserved "(dry-run) "
+      [[ "$_tpl_posture" != "shared" ]] || echo "    (dry-run) PARTIAL (ceremony unknown): hook registrations WITHHELD — pass --ceremony maintainer|user to register the profile you installed"
+    fi
+    return 0
+  fi
+
+  if [[ "$_adds" -eq 0 ]]; then
+    # Nothing missing => do not touch the file at all. Rewriting it would
+    # reformat the adopter's JSON for no reason and break byte-idempotency.
+    if [[ "$_skips" -eq 0 && "$_tpl_posture" != "shared" ]]; then
+      echo "    OK: every framework hook registration in the template is already present — settings.json untouched"
+    elif [[ "$_skips" -eq 0 ]]; then
+      echo "    PARTIAL (ceremony unknown): hook registrations WITHHELD, the shared settings are in place — settings.json untouched; pass --ceremony maintainer|user to register the profile you installed"
+    else
+      echo "    PARTIAL: nothing to register outside the preserved event(s) — settings.json untouched"
+      _report_preserved ""
+    fi
     return 0
   fi
 
@@ -2587,9 +3055,28 @@ def _reg($event; $name; $entry):
     echo "    NOTE: settings-merge skipped (mktemp failed) — advisory only" >&2
     return 0
   }
-  if jq "$jq_prog" "$settings" > "$tmp" 2>/dev/null && [[ -s "$tmp" ]]; then
+  # Atomic: same-directory tempfile, JSON-validated and non-empty BEFORE the
+  # mv. jq writing a truncated file (disk full, killed mid-write) must never
+  # become the live settings.json.
+  if jq --arg mode apply --slurpfile tpl "$template" "$jq_prog" "$settings" > "$tmp" 2>/dev/null \
+     && [[ -s "$tmp" ]] \
+     && jq -e 'type == "object" and (.hooks | type) == "object"' "$tmp" >/dev/null 2>&1; then
     if mv "$tmp" "$settings"; then
-      echo "    REGISTERED: 6 lifecycle hooks — PreCompact, PostCompact, ConfigChange, SubagentStart, Setup/init, SessionStart/compact (idempotent — re-runs are no-ops)"
+      echo "    REGISTERED: $_adds hook registration(s) derived from the template (idempotent — re-runs are no-ops):"
+      while IFS= read -r _l; do
+        if [[ -n "$_l" ]]; then echo "      $_l"; fi
+      done <<< "$_pending"
+      # Same tail as the dry-run: a run that registered something AND preserved
+      # an event is still a PARTIAL result, and saying so is the whole point.
+      [[ "$_skips" -eq 0 ]] || _report_preserved ""
+      if [[ "$_tpl_posture" == "shared" ]]; then
+        # The audit copy of what an unknown-ceremony upgrade applied lands next
+        # to the backup — only here, on the path that actually wrote.
+        if cp "$template" "$BAK_DIR/.claude/settings.template-shared.json" 2>/dev/null; then
+          echo "    kept the derived shared settings at $BAK_DIR/.claude/settings.template-shared.json"
+        fi
+        echo "    PARTIAL (ceremony unknown): hook registrations WITHHELD — pass --ceremony maintainer|user to register the profile you installed"
+      fi
     else
       rm -f "$tmp"
       echo "    NOTE: settings-merge atomic mv failed — settings.json unchanged; advisory only" >&2

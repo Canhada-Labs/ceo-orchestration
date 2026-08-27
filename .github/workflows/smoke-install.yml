@@ -52,6 +52,13 @@ on:
       # covers — install.sh, upgrade.sh, _framework_manifest_set.sh — are
       # already in this list.
       - "scripts/tests/test-installer-write-safety-e2e.sh"
+      # PLAN-169 W-E (S329, rail round-1 P2): the hook-roster derivation e2e.
+      # Same rule, fourth instance — it was born with no step and no filter
+      # entry, so E.1-E.10 would never have run. The TEMPLATE it derives from
+      # is already covered by `templates/**` below, which is the other half of
+      # what makes this gate meaningful: adding a hook to settings.base.json
+      # is exactly the event this test exists to watch.
+      - "scripts/tests/test-upgrade-lifecycle-hooks-derived.sh"
       # PLAN-166 F3 (ADR-155-AMEND-1): delivery-record ownership e2e —
       # scripts/tests/*.sh runs ONLY in this workflow (same r11/r20 wiring
       # rule as the parity e2e above).
@@ -134,6 +141,8 @@ on:
       - "scripts/tests/test-manifest-delivery-route.sh"   # rail round-1 F6
       - "scripts/tests/test-doctor-delivery-route.sh"     # rail round-2 F4
       - "scripts/tests/test-installer-write-safety-e2e.sh"  # PLAN-185 W1+W2
+      # PLAN-169 W-E (S329) — KEEP IDENTICAL to the pull_request list above.
+      - "scripts/tests/test-upgrade-lifecycle-hooks-derived.sh"
       - "scripts/tests/test-upgrade-spec-ownership.sh"
       - "scripts/tests/test-ownership-verdict-unit.sh"
       - "scripts/tests/test-ownership-table.sh"
@@ -254,7 +263,37 @@ jobs:
     # already uses = 9-14 CI minutes of NEW work, so +15 with the anti-flake
     # margin the doctrine above requires. Re-tighten on a real CI p95, never
     # on arithmetic — and never on the faster of two local runs.
-    timeout-minutes: 83
+    # PLAN-169 W-E (S329, rail rounds 1-3): 83 -> 126. The hook-roster
+    # derivation e2e wired below is a whole new e2e, not a leg on an existing
+    # one: 11 adopter fixtures (one real install, ten cp -R from the cache)
+    # and 15 full upgrades, two of them --dry-run.
+    # MEASURED on Darwin arm64, 2026-08-26, 51 assertions, rc=0 — and measured
+    # TWICE on purpose, because the two numbers disagree by 45%:
+    #   854 s  SOLO   <- the basis for this budget
+    #   1233 s with a second full e2e lane running concurrently
+    # The blocks above size from contended figures and call them upper bounds;
+    # doing that here would have compounded two pessimisms, so the solo run is
+    # the basis and the contended one is recorded as the observed spread. At
+    # the 2-3x runner factor this file sizes with, 854 s is 28-43 CI minutes of
+    # NEW work; +43 takes the top of that range and adds the anti-flake margin.
+    # (An earlier revision of this block read 101, sized from the 649 s the
+    # 12-upgrade version measured UNDER CONTENTION — lower than the solo figure
+    # of the 15-upgrade version, i.e. too tight. Left visible because "a
+    # contended measurement is not automatically the conservative one" is the
+    # part that was counter-intuitive.)
+    # NOTE the asymmetry this file keeps re-learning: over-sizing costs
+    # nothing on a green run, while under-sizing reports as `cancelled` on an
+    # innocent step. The FIRST real CI run of this step is the number that
+    # should replace this estimate — re-tighten on that p95, never on
+    # arithmetic.
+    # RE-DERIVED on the S329 morning, per item: this block was written as
+    # 68 -> 111 against a base that PLAN-185 W1+W2 had meanwhile taken to 83
+    # (its own e2e, +15, landed first in cc00235). The two e2e are ADDITIVE
+    # in this one job, so E's +43 lands on 83, not on 68: 126. Composing
+    # by taking the larger of the two (111) would have under-sized the job
+    # by exactly the PLAN-185 step — the `cancelled`-on-an-innocent-step
+    # class the doctrine above exists to prevent.
+    timeout-minutes: 126
     permissions:
       contents: read
     steps:
@@ -622,6 +661,27 @@ jobs:
             exit 1
           fi
           bash "$T"
+      # PLAN-169 W-E (S329) — upgrade.sh derives the hook roster it registers
+      # from templates/settings/settings.base.json rather than carrying a
+      # second copy of it. Nothing else here can see this: the parity e2e
+      # compares install against upgrade on the SAME tree (a roster missing
+      # from both is byte-identical and green), and test_template_dogfood_parity
+      # compares dogfood to template, never dogfood to THE RESULT OF AN
+      # UPGRADE — which is exactly why check_ledger_checkpoint.py shipped for
+      # a whole wave with its script on disk and its registration nowhere
+      # (S328). Its E.3 red control replays `git show HEAD:scripts/upgrade.sh`,
+      # which a depth-1 checkout satisfies (HEAD, not a prior generation) — so
+      # unlike the two steps above it does NOT depend on the deepen. Once this
+      # patch lands, HEAD carries the cure and E.3 reports itself EXPIRED by
+      # name instead of asserting a falsehood; re-arming it means pinning the
+      # pre-cure commit, and that is deliberate maintenance, not a failure.
+      # `if: always()` for the same §9.8 reason as the five steps above.
+      # NO continue-on-error, deliberately.
+      - name: Upgrade hook-roster derivation (W-E — template is the roster)
+        if: always()
+        run: |
+          set -euo pipefail
+          bash scripts/tests/test-upgrade-lifecycle-hooks-derived.sh
 
       - name: Assert npx/npm shim contract (if present)
         # Phase 4 deliverable; skip if directory missing
