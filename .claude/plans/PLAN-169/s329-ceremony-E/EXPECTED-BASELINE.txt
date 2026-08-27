@@ -90,7 +90,7 @@ EXPECTED_E2E_FAILED=0
 # mudanca do teste) ou o step faltando (`unwired = no test`, a regra escrita
 # no proprio workflow).
 EXPECTED_YML_E2E_REFS=3
-# `grep -c 'timeout-minutes:' ...` = 1, e o valor. 68 -> 111: o e2e novo e uma
+# `grep -c 'timeout-minutes:' ...` = 1, e o valor. 83 -> 126: o e2e novo e uma
 # suite inteira, nao uma perna a mais, e as rodadas 3/4 do rail acrescentaram
 # pernas (E.10, containers falsy explicitos; E.11, template com valor de evento
 # nao-array) que somam upgrades REAIS. Medido, nao extrapolado das contagens.
@@ -104,7 +104,14 @@ EXPECTED_YML_E2E_REFS=3
 # A regra deste arquivo continua valendo: super-dimensionar nao custa nada num
 # run VERDE; sub-dimensionar reporta como `cancelled` num passo INOCENTE. A
 # primeira execucao real de CI e o numero que deve substituir esta estimativa.
-EXPECTED_YML_TIMEOUT_MINUTES=111
+# RE-DERIVADO por item na manha de 27/08 (S329): o pacote C (PLAN-185 W1+W2,
+# cc00235) landou ANTES e ja tinha levado o job de 68 para 83 (+15, o e2e de
+# write-safety). Os dois e2e sao ADITIVOS no mesmo job, entao os +43 deste
+# pacote compoem sobre 83, nao sobre 68: 126. O valor anterior desta linha
+# (111 = 68 + 43) descrevia a base VELHA; mantido aqui como historico porque
+# `max(83, 111)` teria sub-dimensionado o job exatamente pelo step de C.
+# Registro: DESIGN-E.md §10.
+EXPECTED_YML_TIMEOUT_MINUTES=126
 
 # --- V5: o invariante anti-rot, medido no ARQUIVO landado -------------------
 # A funcao `_merge_lifecycle_hooks_into_settings`, extraida por ancora

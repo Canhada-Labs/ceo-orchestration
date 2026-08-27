@@ -14,10 +14,10 @@ Cinco arquivos, dois deles **canônicos**:
 | path | +/− | canônico? | papel |
 |---|---|---|---|
 | `scripts/upgrade.sh` | +366 / −94 | **sim** | a cura: o roster deixa de ser literal e passa a ser derivado do template |
-| `.github/workflows/smoke-install.yml` | +55 / −1 | **sim** | 2 entradas de `paths:` + 1 step + `timeout-minutes` 68 → 111 |
+| `.github/workflows/smoke-install.yml` | +61 / −1 | **sim** | 2 entradas de `paths:` + 1 step + `timeout-minutes` 83 → 126 (composto sobre o +15 do PLAN-185 W1+W2) |
 | `scripts/tests/test-upgrade-lifecycle-hooks-derived.sh` | +783 / −0 | não | e2e com install e upgrade REAIS (51 asserções) |
 | `.claude/scripts/tests/test_upgrade_lifecycle_hooks_derived.py` | +914 / −0 | não | 49 testes de unidade sobre a FUNÇÃO extraída do `upgrade.sh` shipado |
-| `.claude/plans/PLAN-169/s329-ceremony-E/DESIGN-E.md` | +642 / −5 | não | o registro de desenho |
+| `.claude/plans/PLAN-169/s329-ceremony-E/DESIGN-E.md` | +680 / −5 | não | o registro de desenho (§10 = re-derivação por item sobre cc00235) |
 
 > Os números de linha acima são os da sombra no momento em que este registro foi
 > escrito. O `finalize-E.sh` re-deriva o patch contra o HEAD vivo e o

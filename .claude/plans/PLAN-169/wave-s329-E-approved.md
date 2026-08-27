@@ -43,10 +43,10 @@ depois da cura seria uma janela em que a classe não tem guarda.
    template** (todas no `_comment`), então o upgrade pré-cura *estragava* um
    adopter que o `install.sh` tinha deixado correto.
 
-2. **`.github/workflows/smoke-install.yml`** (canônico, +55 / −1) — o e2e novo
+2. **`.github/workflows/smoke-install.yml`** (canônico, +61 / −1) — o e2e novo
    entra nas DUAS listas de `paths:` (`push` e `pull_request`) e ganha um step
    no molde do vizinho `test-upgrade-historical-adopter.sh`, e o
-   `timeout-minutes` do job vai de 68 para 111. `scripts/tests/*.sh` roda SÓ
+   `timeout-minutes` do job vai de 83 para 126 (composto sobre o +15 do PLAN-185 W1+W2, que landou antes — DESIGN-E §10). `scripts/tests/*.sh` roda SÓ
    neste workflow, e o próprio arquivo escreve a regra: *unwired = no test*.
    Sem estas linhas a cura entraria sem vigilância — foi achado do pair-rail
    (rodada 1, P2) e era a **OQ-E4** do desenho.
@@ -88,7 +88,7 @@ depois da cura seria uma janela em que a classe não tem guarda.
 ## Base de CI esperada após o land
 
 O `smoke-install.yml` passa a executar um e2e a mais, com 51 asserções e dez
-upgrades reais. O `timeout-minutes` de 111 é dimensionado no fator 2–3× de runner que
+upgrades reais. O `timeout-minutes` de 126 é dimensionado no fator 2–3× de runner que
 este arquivo já usa, com margem anti-flake; a **primeira execução real** é o
 número que deve substituir essa estimativa — re-apertar no p95 observado, nunca
 na aritmética (a lição que este arquivo re-aprende: super-dimensionar não custa

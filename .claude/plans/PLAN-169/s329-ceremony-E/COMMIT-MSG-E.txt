@@ -38,8 +38,8 @@ Este commit entrega cinco arquivos, dois canonicos:
   escrita quando falta alguma coisa (re-run byte-identico).
 - `.github/workflows/smoke-install.yml` (canonico) — as duas listas de `paths:`
   (`push` e `pull_request`) ganham o e2e novo, mais um step no molde do vizinho
-  `test-upgrade-historical-adopter.sh`, e o `timeout-minutes` do job vai de 68
-  para 111. `scripts/tests/*.sh` roda SO neste workflow, e o proprio arquivo
+  `test-upgrade-historical-adopter.sh`, e o `timeout-minutes` do job vai de 83
+  para 126 (composto sobre o +15 do PLAN-185 W1+W2, que landou antes). `scripts/tests/*.sh` roda SO neste workflow, e o proprio arquivo
   escreve a regra: "unwired = no test". Sem estas linhas a cura entraria sem
   vigilancia (achado do pair-rail rodada 1, P2; era a OQ-E4 do desenho).
 - `scripts/tests/test-upgrade-lifecycle-hooks-derived.sh` — e2e com install e

@@ -118,7 +118,7 @@ peça que impede o problema de voltar.
 ## Depois do land
 
 O `Smoke Install` passa a rodar um teste a mais. O tempo-limite do job foi de
-68 para 111 minutos, e esse 111 é uma **estimativa**: veja quanto o primeiro run
+83 para 126 minutos, e esse 126 é uma **estimativa**: veja quanto o primeiro run
 real leva e ajuste em cima desse número, nunca em cima de uma conta. Um
 tempo-limite curto demais corta um run que estava verde e reporta o erro num
 passo inocente.
