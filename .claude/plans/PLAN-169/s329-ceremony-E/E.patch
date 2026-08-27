@@ -1,5 +1,5 @@
 diff --git a/.claude/plans/PLAN-169/s329-ceremony-E/DESIGN-E.md b/.claude/plans/PLAN-169/s329-ceremony-E/DESIGN-E.md
-index 7725ad1..27d6cf5 100644
+index 7725ad1..a5c3290 100644
 --- a/.claude/plans/PLAN-169/s329-ceremony-E/DESIGN-E.md
 +++ b/.claude/plans/PLAN-169/s329-ceremony-E/DESIGN-E.md
 @@ -73,9 +73,10 @@ PRESERVADO e NOMEADO em stderr; os outros 46 registros seguem.
@@ -50,7 +50,7 @@ index 7725ad1..27d6cf5 100644
  `.github/workflows/smoke-install.yml` está FORA do meu FILE ASSIGNMENT, e é o
  único lugar onde `scripts/tests/*.sh` roda. O comentário do próprio workflow
  (`:31`, `:47`, `:82`) diz a regra: *"unwired = no test"*. A cerimônia PRECISA
-@@ -226,3 +236,943 @@ mesma derivação.
+@@ -226,3 +236,978 @@ mesma derivação.
     cerimônia landar a cura, `HEAD` passa a conter a cura e E.3 vira o SKIP
     explícito com instrução de re-armar. Está tratado, mas é uma manutenção
     futura real.
@@ -994,12 +994,47 @@ index 7725ad1..27d6cf5 100644
 +**Testes:** unidade 82 → 84 (`TestTemplateEnvMustBeAnObject`: template com
 +`env: [1]` recusado e nomeado com `settings.json` intocado; controle com
 +`env: {}` merge normal e sem chave inventada). O e2e não muda (71).
++
++## 16. Rail round 11 — três P2 na periferia, e as curas
++
++Sobre a sombra do §15 (unit 84, e2e 71/0) o rail devolveu o P1 do sentinel
++(por construção, pré-SIGN) e três P2 reais, todos na periferia do que os
++rounds 8–10 introduziram:
++
++- **scratch dentro do alvo.** O `mktemp` da postura SHARED usava
++  `${TMPDIR:-/tmp}` cru; com `TMPDIR` apontando para dentro do `$TARGET` o
++  arquivo derivado nasceria no adopter — inclusive num `--dry-run`. O
++  `upgrade.sh` já tem `_up_tmpbase()` (cai para `/tmp` quando `TMPDIR` está
++  sob o alvo) e todos os outros scratch files passam por ele. Cura: este
++  também.
++- **trap com path interpolado.** `trap "rm -f '$path'" RETURN` faz o bash
++  re-parsear o path quando o trap dispara: um apóstrofo inocente aborta sob
++  `set -e`, um path forjado injeta. Cura: corpo do trap FIXO em aspas simples
++  (`trap 'rm -f -- "$_UP_SHARED_TPL_TMP"' RETURN`) com a variável — global,
++  não `local` — expandida só na execução. Medido antes de escrever: o trap
++  `RETURN` enxerga a global e remove o arquivo.
++- **`settings.json` que não é UM documento.** Vazio ou stream de vários
++  objetos: o `jq` aceita streams, então o vazio produzia relatório vazio e a
++  frase de completude (falsa), e o stream produzia várias saídas que o
++  validador de objeto aceitava — o `mv` instalaria um arquivo que consumidores
++  JSON comuns não leem. Cura: o mesmo guard de documento único que o template
++  já tem, agora sobre o `settings.json` do adopter, antes do report —
++  vazio/stream ⇒ NOTE nomeada com a contagem, PRESERVADO; JSON inválido segue
++  na mensagem antiga («malformed settings.json»).
++
++**Testes:** unidade 84 → 88 — `TestSettingsMustBeExactlyOneDocument` (2:
++vazio e stream de 2 recusados e nomeados, arquivo intocado, sem frase de
++completude) e `TestScratchStaysOutsideTheTarget` (2: com `TMPDIR` dentro do
++`$TARGET`, um `--dry-run` de cerimônia desconhecida — que deriva o roster — não
++deixa NADA no adopter, usando o `_up_tmpbase` REAL extraído do `upgrade.sh`;
++e o invariante textual — a função chama `_up_tmpbase` e o trap não interpola).
++O e2e não muda (71).
 diff --git a/.claude/scripts/tests/test_upgrade_lifecycle_hooks_derived.py b/.claude/scripts/tests/test_upgrade_lifecycle_hooks_derived.py
 new file mode 100644
-index 0000000..6b9e1c2
+index 0000000..aeda9f4
 --- /dev/null
 +++ b/.claude/scripts/tests/test_upgrade_lifecycle_hooks_derived.py
-@@ -0,0 +1,1377 @@
+@@ -0,0 +1,1434 @@
 +"""PLAN-169 W-E (S329) — upgrade.sh derives its hook roster from the template.
 +
 +Covers ``scripts/upgrade.sh::_merge_lifecycle_hooks_into_settings`` after the
@@ -1083,6 +1118,19 @@ index 0000000..6b9e1c2
 +        if lines[end] == "}":
 +            return "\n".join(lines[start:end + 1])
 +    raise AssertionError("no closing brace found for %s" % FUNC_NAME)
++
++
++def _tmpbase_source() -> str:
++    """The shipped _up_tmpbase, extracted by anchor — the REAL helper, so the
++    scratch-confinement test measures the contract the upgrader actually runs."""
++    lines = UPGRADE_SH.read_text(encoding="utf-8").split("\n")
++    starts = [i for i, line in enumerate(lines) if line == "_up_tmpbase() {"]
++    if len(starts) != 1:
++        raise AssertionError("expected exactly one _up_tmpbase in upgrade.sh, found %d" % len(starts))
++    for end in range(starts[0] + 1, len(lines)):
++        if lines[end] == "}":
++            return "\n".join(lines[starts[0]:end + 1])
++    raise AssertionError("no closing brace found for _up_tmpbase")
 +
 +
 +def _block_keys(block: Dict) -> List[str]:
@@ -1181,7 +1229,7 @@ index 0000000..6b9e1c2
 +
 +    def run_merge(
 +        self, *, dry: bool = False, ceremony: Optional[str] = "maintainer",
-+        persist: Optional[str] = "1",
++        persist: Optional[str] = "1", tmpdir: Optional[str] = None,
 +    ) -> "subprocess.CompletedProcess[str]":
 +        # `ceremony=None` leaves CEREMONY_EFFECTIVE UNSET on purpose — under
 +        # `set -u` that is the one condition upgrade.sh itself can never
@@ -1198,11 +1246,15 @@ index 0000000..6b9e1c2
 +            'BAK_DIR=%s' % json.dumps(str(Path(self._tmp) / "bak")),
 +            "_up_record_op() { :; }",
 +            "",
++            _tmpbase_source(),
++            "",
 +            _func_source(),
 +            "",
 +            FUNC_NAME,
 +        ])
 +        env = os.environ.copy()
++        if tmpdir is not None:
++            env["TMPDIR"] = tmpdir
 +        proc = subprocess.run(
 +            ["bash", "-c", script], capture_output=True, text=True, timeout=120, env=env,
 +        )
@@ -2320,6 +2372,46 @@ index 0000000..6b9e1c2
 +        self.run_merge(ceremony="maintainer")
 +        self.assertIn("PreToolUse check_x.py", _keyset(self.result()))
 +        self.assertNotIn("env", self.result(), "an empty template env must not invent a key")
++
++
++class TestSettingsMustBeExactlyOneDocument(_MergeHarness):
++    """An empty settings.json or a stream of objects is refused, named, untouched
++    (rail round 11, P2) — jq would otherwise accept the stream."""
++
++    def test_an_empty_settings_is_refused_and_named(self) -> None:
++        self.settings_path.write_bytes(b"")
++        proc = self.run_merge(ceremony="maintainer")
++        self.assertEqual(self.settings_path.read_bytes(), b"")
++        self.assertIn("not exactly ONE JSON document (found: 0)", proc.stderr)
++        self.assertNotIn("already present", proc.stdout, "an empty file was announced complete")
++
++    def test_a_two_document_settings_is_refused_and_named(self) -> None:
++        doc = json.dumps({"hooks": {}})
++        self.settings_path.write_text(doc + "\n" + doc + "\n", encoding="utf-8")
++        before = self.settings_path.read_bytes()
++        proc = self.run_merge(ceremony="maintainer")
++        self.assertEqual(self.settings_path.read_bytes(), before)
++        self.assertIn("not exactly ONE JSON document (found: 2)", proc.stderr)
++
++
++class TestScratchStaysOutsideTheTarget(_MergeHarness):
++    """The derived shared roster never lands inside the adopter (rail round 11, P2)."""
++
++    def test_tmpdir_inside_the_target_is_not_used_for_scratch(self) -> None:
++        inside = self.target / ".claude" / "scratch"
++        inside.mkdir()
++        self.seed({"hooks": {}})
++        proc = self.run_merge(dry=True, ceremony="user", persist="0", tmpdir=str(inside))
++        self.assertIn("PARTIAL (ceremony unknown)", proc.stdout)
++        left = [p for p in self.target.rglob("*") if p.is_file() and p.name != "settings.json"]
++        self.assertEqual(left, [], "scratch or artifacts were left inside the target: %s" % left)
++        self.assertEqual(list(inside.iterdir()), [], "the in-target TMPDIR was written to")
++
++    def test_the_scratch_and_the_trap_are_confined_by_construction(self) -> None:
++        source = _func_source()
++        self.assertIn('mktemp "$( _up_tmpbase )/ceo-shared-roster', source)
++        self.assertIn("trap 'rm -f -- \"$_UP_SHARED_TPL_TMP\"' RETURN", source)
++        self.assertNotIn('trap "rm', source, "a trap with an interpolated path came back")
 +
 +
 +class TestNoSecondRoster(TestEnvContext):
@@ -3488,10 +3580,10 @@ index 0000000..226546c
 +[ "$FAIL" -eq 0 ] || exit 1
 +exit 0
 diff --git a/scripts/upgrade.sh b/scripts/upgrade.sh
-index b50619d..9de347d 100755
+index b50619d..14fff65 100755
 --- a/scripts/upgrade.sh
 +++ b/scripts/upgrade.sh
-@@ -2458,123 +2458,572 @@ _emit_deprecation_warnings() {
+@@ -2458,123 +2458,591 @@ _emit_deprecation_warnings() {
  _emit_deprecation_warnings
  
  # ---------------------------------------------------------------------------
@@ -3744,12 +3836,19 @@ index b50619d..9de347d 100755
 +    # of --dry-run has to hold here as well. The apply path copies the derived
 +    # document next to the backup once it actually writes something.
 +    local _tpl_tmp
-+    _tpl_tmp="$( mktemp "${TMPDIR:-/tmp}/ceo-shared-roster.XXXXXX" )" || {
++    # Through _up_tmpbase like every other scratch file of this script (rail
++    # round 11, P2): with TMPDIR pointing INSIDE the target, a raw mktemp would
++    # create the derived roster in the adopter — in a --dry-run too.
++    _tpl_tmp="$( mktemp "$( _up_tmpbase )/ceo-shared-roster.XXXXXX" )" || {
 +      echo "    NOTE: settings-merge skipped — mktemp failed for the shared roster; advisory only" >&2
 +      return 0
 +    }
-+    # shellcheck disable=SC2064  # expanded NOW on purpose: the path must outlive the local
-+    trap "rm -f '$_tpl_tmp'" RETURN
++    # The trap body is FIXED text (rail round 11, P2): the path is read from a
++    # GLOBAL when the trap fires, never re-parsed into the trap — an apostrophe
++    # in TMPDIR would otherwise abort the upgrade under set -e, and a crafted
++    # path could inject. Global on purpose: a `local` is gone by then.
++    _UP_SHARED_TPL_TMP="$_tpl_tmp"
++    trap 'rm -f -- "$_UP_SHARED_TPL_TMP"' RETURN
 +    template="$_tpl_tmp"
 +    # What the two profiles PROVABLY agree on is their SETTINGS with equal
 +    # values — nothing else (rail round 9, P1). The hooks the two templates
@@ -4025,6 +4124,18 @@ index b50619d..9de347d 100755
 +  end'
 +
 +  local _report
++  # The adopter's settings.json has to be exactly ONE document too (rail round
++  # 11, P2): jq accepts a stream, so an EMPTY file would yield no report and
++  # be announced complete, and a stream of objects would yield several merged
++  # documents that the object validator below still accepts — the mv would
++  # install a file ordinary JSON consumers cannot parse. Unparseable input
++  # keeps its own, older name ("malformed settings.json") right below.
++  local _set_docs
++  _set_docs="$( jq -n --slurpfile s "$settings" '$s | length' 2>/dev/null )" || _set_docs=""
++  if [[ -n "$_set_docs" && "$_set_docs" != "1" ]]; then
++    echo "    NOTE: settings-merge skipped — .claude/settings.json is not exactly ONE JSON document (found: $_set_docs); PRESERVED untouched; advisory only" >&2
++    return 0
++  fi
 +  if ! _report="$( jq -r --arg mode report --slurpfile tpl "$template" "$jq_prog" "$settings" 2>/dev/null )"; then
 +    echo "    NOTE: settings-merge skipped (malformed settings.json?) — settings.json unchanged; advisory only" >&2
 +    return 0
@@ -4157,7 +4268,7 @@ index b50619d..9de347d 100755
      return 0
    fi
  
-@@ -2587,9 +3036,28 @@ def _reg($event; $name; $entry):
+@@ -2587,9 +3055,28 @@ def _reg($event; $name; $entry):
      echo "    NOTE: settings-merge skipped (mktemp failed) — advisory only" >&2
      return 0
    }
