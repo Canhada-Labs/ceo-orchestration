@@ -1,0 +1,138 @@
+# EXPECTED-BASELINE.txt — wave-s329-E (PLAN-169)
+#
+# Base DECLARADA contra a qual o V-block do OWNER-S329-E-LAND.sh compara.
+# Nunca "contra zero" e nunca "> 0": um gate que so exige "passou" aceita uma
+# suite que encolheu. Cada valor abaixo foi MEDIDO nesta sessao, na arvore
+# sombra, com PYTHONDONTWRITEBYTECODE=1, e o comando que o produziu esta na
+# linha de comentario imediatamente acima dele.
+#
+# Formato: CHAVE=valor (aspas opcionais). O leitor `_expect` do LAND e
+# fail-CLOSED: chave ausente ABORTA o land, nunca vira "0".
+#
+# Divergencia PARA MENOS e regressao. Divergencia PARA MAIS (a suite cresceu,
+# o template ganhou um registro) NAO e sucesso automatico: atualize este
+# arquivo conscientemente, com a medicao nova registrada num rail-round.
+
+# --- G4: forma do patch -----------------------------------------------------
+# Conjunto EXATO de paths. Uma cerimonia que so conta arquivos aceitaria um
+# patch com 5 paths ERRADOS. Dois sao CANONICOS (oraculo --is-canonical = 1):
+# scripts/upgrade.sh e .github/workflows/smoke-install.yml. Os tres restantes
+# respondem 0 e viajam no mesmo patch porque sao a vigilancia dos dois
+# primeiros — um teste que landasse DEPOIS da cura seria uma janela sem guarda.
+EXPECTED_PATCH_PATHS="scripts/upgrade.sh .github/workflows/smoke-install.yml scripts/tests/test-upgrade-lifecycle-hooks-derived.sh .claude/scripts/tests/test_upgrade_lifecycle_hooks_derived.py .claude/plans/PLAN-169/s329-ceremony-E/DESIGN-E.md"
+# Medido: `python3 .claude/hooks/check_canonical_edit.py --is-canonical -` com
+# os 5 paths na entrada devolve 1 para exatamente dois deles.
+EXPECTED_PATCH_CANONICAL_PATHS=2
+# Medido: nenhum dos 5 paths consta de
+# `.claude/governance/gate-scripts-manifest.txt` (9 membros). Portanto NENHUM
+# bump de sha e devido neste patch.
+EXPECTED_MANIFEST_MEMBERS_TOUCHED=0
+
+# --- G-PRE: substrato que a cura pressupoe ----------------------------------
+# O programa `jq` derivado usa `--slurpfile`, que exige jq >= 1.5 (2015). O
+# codigo JA dependia de `jq`; isto acrescenta uma FLAG. Medido: jq-1.7.1-apple.
+# O gate exige a FLAG, nunca uma string de versao — comparar versao por texto
+# ja quebrou neste repo com sufixos de vendor ("-apple").
+EXPECTED_JQ_SLURPFILE_REQUIRED=1
+
+# --- V2: suite de unidade ---------------------------------------------------
+# `python3 -m pytest .claude/scripts/tests/test_upgrade_lifecycle_hooks_derived.py -q`
+# Medido: `49 passed in 1.91s`, rc 0 — numa arvore em HEAD com os 5 arquivos da
+# sombra FINAL copiados por cima (o mesmo estado que sera landado). O rail
+# fechou em APPROVE na rodada 4, entao este numero e o do codigo final.
+# Trajetoria registrada: 23 (rodada 1) -> 33 (curas P2-1 e P2-3) -> 40 (rodada
+# 2) -> 49 (curas das rodadas 3 e 4). Cada salto e cura de achado, nao inflacao.
+EXPECTED_UNIT_PYTEST_RC=0
+EXPECTED_UNIT_PYTEST_PASSED=49
+
+# --- V3: e2e (o gate CARO — ~11 min) ----------------------------------------
+# `bash scripts/tests/test-upgrade-lifecycle-hooks-derived.sh`
+# Medido: `RESULT: 51 passed, 0 failed`, rc 0, sob carga concorrente ALTA
+# (load ~23-34, varios agentes) — a condicao pre-cura descrita abaixo, com
+# `E.3a`/`E.3b`/`E.9a`/`E.9b` no log e zero SKIP. Trajetoria registrada:
+# 29 (rodada 1 do rail) -> 36 -> 42 (rodada 2) -> 51 (rodadas 3 e 4, que
+# acrescentaram E.10 — containers falsy explicitos — e E.11 — template com
+# valor de evento nao-array). Cada salto e cura de achado, nao inflacao.
+# O tempo de parede NAO e declarado como gate: sob contencao ele varia por um
+# fator grande, e um gate de tempo mediria o runner, nao o pacote.
+# A linha final do script tem a forma exata `RESULT: <N> passed, <M> failed`.
+#
+# ⚠ ONDE MEDIR — este numero MUDA depois do land, e medi-lo no lugar errado
+# produz um abort correto sobre a coisa errada.
+#
+# Dois casos do e2e leem `git show HEAD:scripts/upgrade.sh`: E.3 (o RED control
+# que replica o upgrader PRE-CURA) e E.9 (a medicao historica do drift dos 6
+# literais). Os dois se AUTO-DECLARAM EXPIRADOS quando o HEAD passa a conter a
+# cura: E.3 troca `E.3a`+`E.3b` por um unico `E.3-SKIP`, e E.9 troca
+# `E.9a`+`E.9b` por `E.9-SKIP`. Ou seja, o MESMO script rende MENOS asercoes
+# depois deste land — por desenho, nao por regressao.
+#
+# O V3 do LAND NAO e afetado, e vale entender por que: quando ele roda, o patch
+# esta na ARVORE DE TRABALHO e o HEAD ainda e a ancora PRE-cura (o G1 exige
+# `Anchor-SHA == HEAD`, e o commit so acontece no passo C, depois do V7). Entao
+# o V3 ve o HEAD pre-cura e E.3/E.9 rendem as 4 asercoes.
+#
+# Portanto o numero abaixo TEM de ser medido na MESMA condicao: uma arvore em
+# HEAD (pre-cura) com os 5 arquivos da sombra copiados por cima. Foi assim que
+# ele foi medido, e o log confirma `E.3a`/`E.3b`/`E.9a`/`E.9b`, nenhum SKIP.
+# Medir num checkout onde a cura ja esta COMMITADA daria 2 a MENOS, e o V3
+# abortaria acusando regressao onde ha apenas um instrumento que envelheceu.
+EXPECTED_E2E_RC=0
+EXPECTED_E2E_PASSED=51
+EXPECTED_E2E_FAILED=0
+
+# --- V4: o workflow pos-patch ENXERGA o teste -------------------------------
+# `grep -c 'test-upgrade-lifecycle-hooks-derived\.sh' .github/workflows/smoke-install.yml`
+# Medido: 3 — `:52` (lista `pull_request`), `:135` (lista `push`) e `:621` (o
+# step que EXECUTA). As tres tem de existir: as duas listas de
+# `paths:` decidem se o job RODA, e o step decide se o teste roda dentro dele.
+# Duas ocorrencias significariam ou um filtro faltando (o job nao dispara na
+# mudanca do teste) ou o step faltando (`unwired = no test`, a regra escrita
+# no proprio workflow).
+EXPECTED_YML_E2E_REFS=3
+# `grep -c 'timeout-minutes:' ...` = 1, e o valor. 68 -> 111: o e2e novo e uma
+# suite inteira, nao uma perna a mais, e as rodadas 3/4 do rail acrescentaram
+# pernas (E.10, containers falsy explicitos; E.11, template com valor de evento
+# nao-array) que somam upgrades REAIS. Medido, nao extrapolado das contagens.
+#
+# MEDIDO ONDE: no POST-IMAGE do proprio E.patch — o patch aplicado sobre o seu
+# `Patch-base` numa arvore descartavel. E a unica fonte que NAO pode divergir do
+# que o V4d vai ler, porque e literalmente o que sera landado. Medir na sombra
+# viva ja falhou uma vez nesta sessao: entre a medicao (101) e a re-derivacao do
+# patch (111) a sombra andou, e o harness ficou vermelho no V4d — corretamente.
+#
+# A regra deste arquivo continua valendo: super-dimensionar nao custa nada num
+# run VERDE; sub-dimensionar reporta como `cancelled` num passo INOCENTE. A
+# primeira execucao real de CI e o numero que deve substituir esta estimativa.
+EXPECTED_YML_TIMEOUT_MINUTES=111
+
+# --- V5: o invariante anti-rot, medido no ARQUIVO landado -------------------
+# A funcao `_merge_lifecycle_hooks_into_settings`, extraida por ancora
+# (`^_merge_lifecycle_hooks_into_settings\(\) \{$` .. `^\}$`), NAO pode conter
+# nenhum token `<nome>.py`. E a regra que impede a classe de renascer: um
+# segundo roster literal dentro do upgrader e exatamente o defeito que esta
+# wave fecha. O teste de unidade tem a mesma assercao
+# (`TestNoSecondRoster::test_the_function_names_no_hook_filenames`); aqui ela e
+# repetida contra o arquivo POS-PATCH porque o V2 roda a suite e o V5 mede o
+# entregavel — se as duas divergirem, uma das duas esta medindo a coisa errada.
+# Medido: 0 tokens distintos; a funcao tem 311 linhas.
+# O MIN_LINES abaixo e um PISO DE NAO-VACUIDADE, nao a contagem: se a ancora
+# nao casar, o corpo extraido sai VAZIO e o contador de literais daria 0 —
+# verde por nao medir nada. 120 e folgado de proposito (a funcao cresceu 201 ->
+# 236 -> 311 ao longo das rodadas de rail); o que ele barra e o corpo vazio.
+EXPECTED_UPGRADE_FN_HOOK_LITERALS=0
+EXPECTED_UPGRADE_FN_MIN_LINES=120
+
+# --- V6: o roster que a derivacao entrega -----------------------------------
+# `jq '[.hooks | to_entries[] | .value[]] | length' templates/settings/settings.base.json`
+# Medido: 47. O merge derivado entrega os 47 (E.2d/E.2g do e2e: nenhum
+# faltando, nenhum inventado). O pre-cura entregava 6.
+# Um numero MENOR aqui significa que o template encolheu — e uma mudanca de
+# produto, nao um detalhe: atualize conscientemente.
+EXPECTED_TEMPLATE_REGISTRATIONS=47
+
+# --- V9: gates de governanca ------------------------------------------------
+# `check-ceremony-script.py --json` -> `blocking_unwaived`. Medido no checkout
+# vivo: 0. Os scripts DESTE pacote carregam o marcador
+# `# CEREMONY-LINT: handwritten-exception:` com a razao real.
+EXPECTED_CEREMONY_LINT_BLOCKING=0

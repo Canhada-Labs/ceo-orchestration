@@ -1,0 +1,118 @@
+feat(PLAN-169 wave-s329-E): upgrade.sh DERIVA o roster de hooks do template (6 literais -> 47 do settings.base.json), semantica ADITIVA, e o e2e que vigia isso entra no CI
+
+`_merge_lifecycle_hooks_into_settings` carregava um roster LITERAL de 6
+registros dentro do programa `jq`, mais os mesmos 6 repetidos em prosa para o
+`--dry-run`. O template `templates/settings/settings.base.json` enumera 47.
+
+O achado de origem (PLAN-179/s328-ceremony-D/FINDING-upgrade-lifecycle-hooks-S328.md,
+rail codex rodada 3 do pacote D): `PreToolUse` / `check_ledger_checkpoint.py`
+NUNCA foi registrado por nenhum upgrade. Um adopter instalado em v1.0.0 nao
+recebe hoje nenhum hook posterior que nao seja um dos seis.
+
+O achado que so apareceu ao implementar, e que e a justificativa mais forte
+para trocar a SEMANTICA junto com a fonte: extraindo os 6 blocos literais de
+`git show HEAD:scripts/upgrade.sh` e comparando com o template campo a campo,
+5 DOS 6 DIVERGIAM (todos no `_comment`; so `Setup` batia). Como o `_reg`
+pre-cura RE-CANONICALIZAVA — filtrava o pre-existente e re-appendava o bloco
+literal — a sequencia real em campo era: (1) `install.sh` entrega o template e
+o adopter fica com o `_comment` CORRENTE; (2) o primeiro `upgrade.sh`
+sobrescreve 5 desses blocos com a copia ESTAGNADA de dentro do upgrader. A
+segunda declaracao nao era so redundante: era REGRESSIVA.
+
+Por que nenhum instrumento existente pegava isto: a paridade install/upgrade
+compara as duas na MESMA arvore (um roster faltando nas duas e byte-identico e
+verde), e `test_template_dogfood_parity` compara dogfood contra template, nunca
+dogfood contra O RESULTADO DE UM UPGRADE. O buraco fica exatamente entre os dois.
+
+Este commit entrega cinco arquivos, dois canonicos:
+
+- `scripts/upgrade.sh` (canonico) — a fonte passa a ser
+  `$SOURCE_DIR/templates/settings/settings.base.json`, o template do checkout
+  que EXECUTA o upgrade (mesma resolucao que `_migrate_settings_baseline` ja
+  usa; nunca `$TARGET`). A semantica passa de RE-CANONICALIZACAO para ADITIVA:
+  ausente => appenda o bloco do template, presente => preserva BYTE-IDENTICO. A
+  chave de identidade deixa de ser substring (`test("check_foo\\.py")`) e passa
+  a ser todo token `<nome>.py` do `hooks[].command` casado como token INTEIRO. O
+  `--dry-run` usa o MESMO programa `jq` com `--arg mode report`: o anuncio nao
+  pode divergir da escrita porque e a mesma reducao. O arquivo so e aberto para
+  escrita quando falta alguma coisa (re-run byte-identico).
+- `.github/workflows/smoke-install.yml` (canonico) — as duas listas de `paths:`
+  (`push` e `pull_request`) ganham o e2e novo, mais um step no molde do vizinho
+  `test-upgrade-historical-adopter.sh`, e o `timeout-minutes` do job vai de 68
+  para 111. `scripts/tests/*.sh` roda SO neste workflow, e o proprio arquivo
+  escreve a regra: "unwired = no test". Sem estas linhas a cura entraria sem
+  vigilancia (achado do pair-rail rodada 1, P2; era a OQ-E4 do desenho).
+- `scripts/tests/test-upgrade-lifecycle-hooks-derived.sh` — e2e com install e
+  upgrade REAIS: 51 assercoes. Carrega o RED control (E.3: o
+  upgrader pre-cura de `git HEAD` contra o MESMO fixture deixa
+  `check_ledger_checkpoint.py` desregistrado — 2 faltando contra 0 do curado) e
+  o controle POSITIVO (E.4: um hook sintetico inexistente em `upgrade.sh`,
+  plantado so no template de uma copia da arvore-fonte, E registrado; a arvore
+  nao modificada nao o registra).
+- `.claude/scripts/tests/test_upgrade_lifecycle_hooks_derived.py` — 49 testes de
+  unidade que dirigem a FUNCAO extraida por ancora do `upgrade.sh` shipado, num
+  harness bash com `TARGET`/`SOURCE_DIR`/`BAK_DIR`/`DRY_RUN` postos: as guardas
+  fail-open, a escrita atomica e as mensagens que o adopter LE vivem no wrapper,
+  e o unico defeito real desta wave morava exatamente ali. Contem o guard
+  anti-rot `TestNoSecondRoster::test_the_function_names_no_hook_filenames`,
+  VERMELHO se qualquer nome de hook voltar para dentro da funcao. RED control
+  contra o `upgrade.sh` de `git HEAD`: 17 failed, 6 passed.
+- `.claude/plans/PLAN-169/s329-ceremony-E/DESIGN-E.md` — o registro de desenho.
+
+Um defeito PRE-EXISTENTE fechado de passagem (E.8): o fail-safe era grosso
+demais — `.hooks.<evento>` com valor nao-array fazia o `jq` inteiro sair
+nao-zero, e o wrapper tratava isso como "settings malformado" e retornava sem
+registrar NADA. O RED control mostra a versao pre-cura com o mesmo defeito
+(`test_a_non_array_event_value_...` vermelho contra HEAD). Agora `_cmds`/`_keys`
+aceitam so formas PROVADAS (object/array/string) e rendem zero chaves para
+qualquer outra: um evento estranho e PRESERVADO e NOMEADO em stderr, e os
+outros 46 registros seguem. Fuzz de 8 formas hostis: rc=0 nas 8.
+
+Tres achados do pair-rail (rodada 1) curados neste patch, todos P2:
+(1) container falsy EXPLICITO (`"hooks": null`, evento `null`/`false`) era
+classificado como ausencia (`== null` e `// []`) e substituido por arrays do
+template, contra o contrato de preservacao declarado — curado com `has(...)` no
+CONTAINER, nunca `//` no valor; (2) o e2e nascia CI-dark (a OQ-E4), curado no
+MESMO patch, que e a unica forma que fecha; (3) a assercao de duplicatas era
+estruturalmente incapaz de falhar — o `_keyset` ja emitia `sorted(set(out))`, o
+`uniq -d` recebia um fluxo deduplicado e vinha sempre vazio — curada com um
+fluxo que preserva multiplicidade, nos dois lados (bash e Python).
+
+Medido para este pacote: unidade 49/49 (rc 0); e2e 51 passed / 0 failed (rc 0),
+medido DUAS vezes de forma independente na condicao pre-cura; o template enumera
+47 registros e o merge derivado entrega os 47
+(E.2d/E.2g: nenhum faltando, nenhum inventado); a funcao curada tem 311 linhas e
+cita ZERO tokens `<nome>.py`; o e2e aparece 3x no `smoke-install.yml` (as duas
+listas de paths e o step); `bash -n` e `shellcheck -S warning` rc 0 nos dois
+scripts; `yaml.safe_load` e `actionlint` OK; `check-test-env-hygiene.py` sem
+violacoes novas; `check-ceremony-script.py --json` com blocking_unwaived 0.
+
+Fica ABERTO e e chamada do Owner: OQ-E1 — derivar as 47 entradas move o roster
+do adopter para o template, e quem REMOVEU um hook de proposito o recebe de
+volta a cada upgrade (hoje o unico escape e `--no-settings-merge`, que e
+tudo-ou-nada); a opcao conservadora seria uma denylist por nome no
+`settings.json` do adopter, NAO implementada porque inventa superficie de
+configuracao que ninguem pediu. E OQ-E6 — a semantica aditiva move o reparo de
+um registro deformado para fora do upgrader, e o `doctor.sh` hoje NAO repara
+registros de hook (so confere o timeout do `check_pair_rail.py`). Nao e
+regressao — o pre-cura so re-canonicalizava 6 de 47 — mas e um destino, nao um
+mecanismo existente.
+
+Residual declarado no sentinel: a chave de um bloco sem `.py` e o comando
+inteiro (um adopter que mudou um espaco no `echo` inline recebe um SEGUNDO
+bloco); `_up_record_op` dispara mesmo quando o merge e no-op (posicao EXATA de
+hoje, preservada para nao mexer no oraculo de `test-upgrade-dryrun-identity.sh`);
+`E.3` e `E.9` comparam contra `git HEAD` e degradam para SKIP depois deste land,
+por desenho — e a classe "instrumento verde cuja PERGUNTA envelheceu" e
+conhecida deste repositorio; e `--slurpfile` exige jq >= 1.5 (medido em 1.7.1),
+checado COMPORTAMENTALMENTE pelo G-PRE do SIGN e do LAND, nunca por string de
+versao.
+
+Autorizacao: sentinel `.claude/plans/PLAN-169/wave-s329-E-approved.md`, assinado
+por GPG do Owner; Scope DERIVADO por `finalize_patch.py`; land por
+`OWNER-S329-E-LAND.sh` (G-PRE + G0..G5 + V1..V7, `touched - scope = 0`, e2e real
+no V3).
+
+Pair-Rail-Reviewed: codex gpt-5.6 — 5 rodadas na shadow-E (r1 3P2; r2 1P2; r3 2P2 — todos curados; r4 e r5 LIMPAS; r5 sobre o estado final congelado; registros em .claude/plans/PLAN-169/s329-ceremony-E/rail-round-{1..5}.md)
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
