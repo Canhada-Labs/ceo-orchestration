@@ -13,7 +13,7 @@ Plans: PLAN-185
 Wave: wave-s329-C (PLAN-185 W1+W2 — o installer deixa de poder escrever FORA do diretório que recebeu, e `--github-owner` deixa de poder zerar o `.github/CODEOWNERS` para sempre)
 Patch: .claude/plans/PLAN-185/s329-ceremony-C/C.patch
 Patch-sha256: effaeb877ae41cee977807850015e5a354e3582266d0d4a45f3bcebdb839c79e
-Patch-base: c53f4f804708b68f95a8401b8a7f9ac38a14752e
+Patch-base: bf95dbb0cb4df8109e44dd33de95fb3661a9696f
 Anchor-SHA: TO-FILL-AT-SIGN
 Data: TO-FILL-AT-SIGN
 
