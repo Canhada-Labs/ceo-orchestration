@@ -189,8 +189,15 @@ regs = pairs("_register_delivered_template")
 rendered = []
 co_src = re.search(r'codeowners_src="\$SOURCE_DIR/([^"]+)"', flat)
 co_dst = re.search(r'local dst="\$TARGET/(\.github/CODEOWNERS)"', flat)
-has_sed = re.search(r'sed "s/\{\{OWNER_HANDLE\}\}/\$GITHUB_OWNER/g" "\$codeowners_src" > "\$dst"', flat)
-if co_src and co_dst and has_sed:
+# The render call-site. PLAN-185 W2 (cc00235) replaced the pre-cure
+# `sed "s/{{OWNER_HANDLE}}/$GITHUB_OWNER/g" "$codeowners_src" > "$dst"` — the
+# form whose `>` truncated CODEOWNERS to 0 bytes on a bad handle — with the
+# atomic writer `_write_rendered_codeowners <src> <handle> <dst>`. This locator
+# names THAT call: it is the only place install.sh writes the rendered file.
+# (S329 morning: the old locator kept matching the retired `sed` form, S.1 went
+# red on the first CI run after the land, and ten later steps were skipped.)
+has_render = re.search(r'_write_rendered_codeowners "\$codeowners_src" "\$GITHUB_OWNER" "\$dst"', flat)
+if co_src and co_dst and has_render:
     rendered.append((co_dst.group(1), co_src.group(1)))
 
 with io.open(truth_out, "w", encoding="utf-8") as fh:
