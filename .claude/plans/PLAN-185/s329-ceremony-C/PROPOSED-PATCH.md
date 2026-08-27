@@ -1,7 +1,7 @@
 # PROPOSED-PATCH — wave-s329-C (PLAN-185 W1+W2): confinamento de escrita do installer
 
 Patch: `.claude/plans/PLAN-185/s329-ceremony-C/C.patch`
-Patch-sha256: 85c725fadd64414bfb77ebb5af00d294299684f59760a2fcd4662f03646e8642
+Patch-sha256: 32db4a20a9044be59841eaddc2e641f8e118e8344ff889c5ef616e15c6e4aa24
 Base: ver `BASE-SHA.txt` (o `finalize_patch.py` recusa uma sombra cuja base não
 seja o HEAD vivo, e grava o mesmo sha no `Patch-base:` do sentinel)
 

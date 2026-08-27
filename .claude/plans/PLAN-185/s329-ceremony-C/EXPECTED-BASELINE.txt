@@ -56,7 +56,7 @@
 # nunca executa ("unwired = no test", a regra escrita no proprio
 # smoke-install.yml); um predicado compartilhado sem ADR e uma decisao
 # transversal sem registro.
-REQUIRED_PATCH_PATHS="scripts/_framework_manifest_set.sh scripts/install.sh scripts/upgrade.sh scripts/tests/test-installer-write-safety-e2e.sh .claude/plans/PLAN-185/s329-ceremony-C/DESIGN-C.md .github/workflows/smoke-install.yml .github/workflows/validate.yml docs/threat-model.md .claude/adr/ADR-196-installer-write-confinement.md"
+REQUIRED_PATCH_PATHS="scripts/_framework_manifest_set.sh scripts/install.sh scripts/upgrade.sh scripts/tests/test-installer-write-safety-e2e.sh .claude/scripts/tests/test_check_installer_write_safety.py .claude/plans/PLAN-185/s329-ceremony-C/DESIGN-C.md .github/workflows/smoke-install.yml .github/workflows/validate.yml docs/threat-model.md .claude/adr/ADR-196-installer-write-confinement.md"
 
 # Superficies de CONTAGEM DERIVADA que ganhar um ADR novo obriga a atualizar.
 # Lista fechada, derivada dos literais de path que `verify-counts.sh` de fato
@@ -78,6 +78,11 @@ ALLOWED_EXTRA_PATCH_PATHS="CLAUDE.md README.md README.pt-BR.md npm/README.md CHA
 #     o instrumento nao esta enxergando a cura ou que a regeneracao nao rodou.
 # Hoje ha exatamente um: o RATCHET do censo. A secao 5 explica por que ele nao
 # e opcional.
+# Fronteira ALARGADA pelo CEO (01:10 27/08, rail r4): o teste vivo do censo
+# (.claude/scripts/tests/test_check_installer_write_safety.py) e ACOPLADO ao
+# patch — a cura remove o sed de install_github_templates e a assercao
+# test_f2_* muda JUNTO (mesma classe do baseline: os dois lados trocam no
+# mesmo commit ou o CI quebra). Revisado: rail r4 pediu, rail r5 limpo.
 GENERATED_PATCH_PATHS=".claude/scripts/data/installer-write-safety-baseline.txt"
 
 # Piso de canonicidade. Medido com
@@ -311,12 +316,12 @@ EXPECTED_STALENESS_RC=0
 # ou o conjunto de paths andarem entre assinar e landar, o LAND aborta nomeando
 # o que mudou — que e exatamente a classe que abortou o pacote D duas vezes.
 # <<<AUTO-DERIVED-BY-FINALIZE-C>>>
-EXPECTED_PATCH_PATHS=".claude/adr/ADR-196-installer-write-confinement.md .claude/plans/PLAN-185/s329-ceremony-C/DESIGN-C.md .claude/scripts/data/installer-write-safety-baseline.txt .github/workflows/smoke-install.yml .github/workflows/validate.yml CHANGELOG.md CLAUDE.md README.md README.pt-BR.md docs/ARCHITECTURE.md docs/CTO-GUIDE.md docs/FAQ.md docs/GUIA-COMPLETO.md docs/README.md docs/threat-model.md npm/README.md scripts/_framework_manifest_set.sh scripts/install.sh scripts/tests/test-installer-write-safety-e2e.sh scripts/upgrade.sh"
+EXPECTED_PATCH_PATHS=".claude/adr/ADR-196-installer-write-confinement.md .claude/plans/PLAN-185/s329-ceremony-C/DESIGN-C.md .claude/scripts/data/installer-write-safety-baseline.txt .claude/scripts/tests/test_check_installer_write_safety.py .github/workflows/smoke-install.yml .github/workflows/validate.yml CHANGELOG.md CLAUDE.md README.md README.pt-BR.md docs/ARCHITECTURE.md docs/CTO-GUIDE.md docs/FAQ.md docs/GUIA-COMPLETO.md docs/README.md docs/threat-model.md npm/README.md scripts/_framework_manifest_set.sh scripts/install.sh scripts/tests/test-installer-write-safety-e2e.sh scripts/upgrade.sh"
 EXPECTED_PATCH_CANONICAL_PATHS=6
-EXPECTED_CENSUS_INSTRUMENT_SHA256=484e65766afc5cb0da00aef30dbd88b936e9349c184c330a68c80e115fc769c4
+EXPECTED_CENSUS_INSTRUMENT_SHA256=e368a4e7146c8dfea30ec8d4ce83938036ca823ce4c01747468ebd860fcbee71
 EXPECTED_CENSUS_DESGUARDADO_PRE=197
 EXPECTED_CENSUS_DESGUARDADO_POS=194
 EXPECTED_CENSUS_SITES_POS=838
-FINALIZED_AT=2026-08-27T03:30:07Z
-FINALIZED_AGAINST_HEAD=b0e992f3b6df478eacbce2afc2641153a934e9c0
+FINALIZED_AT=2026-08-27T04:24:50Z
+FINALIZED_AGAINST_HEAD=a485296507b62e19c959ec4082da7e608a3c4fdd
 # <<<END-AUTO-DERIVED-BY-FINALIZE-C>>>

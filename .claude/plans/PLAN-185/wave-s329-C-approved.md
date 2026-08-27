@@ -12,8 +12,8 @@
 Plans: PLAN-185
 Wave: wave-s329-C (PLAN-185 W1+W2 — o installer deixa de poder escrever FORA do diretório que recebeu, e `--github-owner` deixa de poder zerar o `.github/CODEOWNERS` para sempre)
 Patch: .claude/plans/PLAN-185/s329-ceremony-C/C.patch
-Patch-sha256: 85c725fadd64414bfb77ebb5af00d294299684f59760a2fcd4662f03646e8642
-Patch-base: b0e992f3b6df478eacbce2afc2641153a934e9c0
+Patch-sha256: 32db4a20a9044be59841eaddc2e641f8e118e8344ff889c5ef616e15c6e4aa24
+Patch-base: a485296507b62e19c959ec4082da7e608a3c4fdd
 Anchor-SHA: TO-FILL-AT-SIGN
 Data: TO-FILL-AT-SIGN
 
@@ -111,6 +111,7 @@ Scope:
   - .claude/adr/ADR-196-installer-write-confinement.md
   - .claude/plans/PLAN-185/s329-ceremony-C/DESIGN-C.md
   - .claude/scripts/data/installer-write-safety-baseline.txt
+  - .claude/scripts/tests/test_check_installer_write_safety.py
   - .github/workflows/smoke-install.yml
   - .github/workflows/validate.yml
   - CHANGELOG.md

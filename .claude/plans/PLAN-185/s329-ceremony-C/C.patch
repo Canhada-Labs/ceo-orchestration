@@ -186,10 +186,10 @@ index 0000000..d248fe8
 +* `docs/threat-model.md` §Tampering T-008 — a superfície no contrato de ameaça.
 diff --git a/.claude/plans/PLAN-185/s329-ceremony-C/DESIGN-C.md b/.claude/plans/PLAN-185/s329-ceremony-C/DESIGN-C.md
 new file mode 100644
-index 0000000..9901868
+index 0000000..f0ae13a
 --- /dev/null
 +++ b/.claude/plans/PLAN-185/s329-ceremony-C/DESIGN-C.md
-@@ -0,0 +1,846 @@
+@@ -0,0 +1,1000 @@
 +# PLAN-185 W1+W2 — DESIGN-C (pacote C, S329)
 +
 +> Estado: patch pronto na sombra, **não commitado**, aguardando a cerimônia GPG
@@ -413,8 +413,9 @@ index 0000000..9901868
 +
 +| Comando | Resultado |
 +|---|---|
-+| `bash scripts/tests/test-installer-write-safety-e2e.sh` (sombra curada) | **80 passed / 0 failed, rc 0** |
-+| idem contra a árvore PRÉ-CURA do MESMO commit (controle positivo) | **31 passed / 50 failed, rc 1** |
++| `bash scripts/tests/test-installer-write-safety-e2e.sh` (sombra curada) | **105 passed / 0 failed, rc 0** |
++| idem contra a árvore PRÉ-CURA do MESMO commit (controle positivo) | **40 passed / 62 failed, rc 1** |
++| `python3 -m pytest .claude/scripts/tests/test_check_installer_write_safety.py` (sombra) | **111 passed** |
 +| `bash -n` nos 3 scripts + no teste | OK |
 +| `shellcheck -S warning` nos 3 scripts + no teste | limpo |
 +| smoke do upgrade (conversão a consumidor) | **7/7** |
@@ -539,7 +540,7 @@ index 0000000..9901868
 +4. **F1.2 e F1.4 passam a asserção de BYTES já na árvore pré-cura** (o código
 +   antigo pegava o ramo EXISTS e pulava): nessas duas pernas o vermelho do
 +   controle vem da asserção de "recusa NOMEADA", não de um escape vivo. Dito
-+   aqui para que ninguém leia as 50 falhas do controle como 50 escapes — os
++   aqui para que ninguém leia as 62 falhas do controle como 62 escapes — os
 +   escapes VIVOS medidos são quatro, e vêm com bytes (536, 8468, 454, 48708).
 +5. **A suíte roda ~7 min** (≈13 installs reais de 27 s). É e2e, não unitário; a
 +   seção F0 é instantânea e não depende de install.
@@ -845,7 +846,7 @@ index 0000000..9901868
 +| `python3 .claude/scripts/check-test-env-hygiene.py` | **rc 0** — "337 flagged files, all allowlisted" |
 +| `actionlint` nos dois workflows | **limpo** |
 +| parse YAML dos dois workflows | OK; `paths:` 37/37 com conjuntos idênticos; `validate.yml` sem filtro `paths:`; 8 steps com `if: always()` |
-+| `bash scripts/tests/test-installer-write-safety-e2e.sh` | **80 passed / 0 failed, rc 0** — 63 antes das curas do rail round-1 (§12); ver §11.1 para as duas runs e o sha |
++| `bash scripts/tests/test-installer-write-safety-e2e.sh` | **105 passed / 0 failed, rc 0** — 63 antes do rail r1 (§12), 80 depois dele, 98 depois do r2 (§13), 105 depois do r4 (§14); ver §11.1 para as duas runs e o sha |
 +| controle NEGATIVO do step, as duas pernas | arquivo ausente ⇒ **rc 1** + `::error::` nomeado; arquivo presente ⇒ **rc 0** e o teste roda. Executado com a lógica EXATA do step numa árvore isolada, não afirmado |
 +| gate do censo, ratchet (a invocação que o step roda) | **rc 0** na árvore viva |
 +| step advisory `--strict`, bloco executado verbatim | imprime `rc=1` + `--strict: 424 indeterminate site(s) block:` + 15 linhas de cauda; **o shell do step sai 0** |
@@ -1036,8 +1037,161 @@ index 0000000..9901868
 +fora. É fail-CLOSED por semântica do SO, não por guarda nossa, e a mensagem é o
 +erro cru do `mkdir`, não uma recusa nomeada. Não regride nada e não escapa; está
 +aqui porque um SO que se comportasse diferente mudaria a conclusão.
++
++---
++
++## 13. Rail round 2 — achados e curas (2 P1)
++
++### R2-A — o pré-voo global ignorava os templates FIXOS de projeto
++
++`CLAUDE.md`, `MEMORY.md` e `.mcp.json` são entregues pelo ÚLTIMO escritor da
++run, muito depois de `.claude/`, `docs/` e `.github/` estarem populados; o
++pré-voo global da rodada 1 listava só os grupos anteriores. **Reproduzido** com
++`CLAUDE.md` plantado como symlink pendente num alvo maintainer novo: na árvore
++pré-cura (sem cura nenhuma) o framework inteiro foi entregue — 566 arquivos — e
++**4504 bytes foram escritos ATRAVÉS do link**. Na árvore da rodada 1 o escape
++não acontecia (a guarda por-escritor pega), mas restava a instalação PARCIAL
++que o pré-voo existe para impedir, num alvo novo sem `BACKUP_DIR`.
++
++**Cura, na forma que o rail pediu — DERIVAR, não duplicar.** As linhas
++`origem|destino` viram DADO em duas listas (`_FIXED_TEMPLATES_ALL_CEREMONIES`
++para o par tier-policy, que entra em toda cerimônia por viver dentro de
++`.claude/`; `_FIXED_TEMPLATES_MAINTAINER` para os três da raiz), e os DOIS lados
++leem as mesmas linhas: o pré-voo pega as metades de DESTINO
++(`_fixed_template_dests`), os escritores pegam as linhas inteiras
++(`_install_fixed_templates`). Um destino não pode mais estar num lado e faltar
++no outro. Medido: `grep` acusa exatamente dois leitores por lista.
++
++Escopo alargado por disciplina de irmãos: o rail nomeou os três da raiz, mas
++`install_tier_policy` chama o MESMO escritor com destinos fixos e cai na mesma
++classe — guardar um sítio e deixar o irmão aberto é o anti-padrão que este plano
++inteiro combate. Fixture **F1.10**; controle positivo vermelho na pré-cura
++nomeando os 4504 bytes.
++
++### R2-B — raiz do alvo que é symlink RESOLVIDO
++
++O root era testado com `! -e` primeiro, então só uma raiz PENDENTE chegava ao
++`-L`: uma raiz symlink RESOLVIDA respondia `-e` verdadeiro, caía no `cd -P` e
++movia a BASE de confinamento para o referente, calada. **Medido:** o install
++rodou até o fim e 567 arquivos aterrissaram sob o referente — **zero fora
++dele**. Ou seja: contenção NÃO foi violada; o defeito era o comentário afirmar
++uma recusa que o código não fazia, e o `install.sh` resolver o alvo com `cd`/
++`pwd` sem `-P` (caminho LÓGICO, symlink preservado), o que torna o caso
++alcançável em todo install real.
++
++**Cura: recusa NOMEADA com a rota de recuperação embutida.** A mensagem imprime
++o referente e diz para re-rodar contra ele. Escolhi recusar em vez de aceitar-e-
++avisar porque o gate fica fail-closed e o custo para um diretório de projeto
++legitimamente symlinkado é UMA re-execução com o caminho que a própria mensagem
++imprime — e `CLAUDE.md` §4 exige justamente que um gate fail-closed tenha rota
++de recuperação. `-L` testa só o ÚLTIMO componente, então um caminho que apenas
++atravessa um ancestral symlinkado (`/tmp` → `/private/tmp` no macOS) não é
++afetado. Fixture **F1.11** + **controle** (diretório real ⇒ instala, com os
++cinco templates fixos presentes) — o controle fica VERDE também na árvore
++pré-cura, que é o que prova que ele não está só herdando a recusa.
++
++---
++
++## 14. Rail round 4 — achados e curas (2 P1 + 1 P2)
++
++### R4-1 — variável herdada do ambiente virava DELEÇÃO ARBITRÁRIA `[P1]`
++
++Meu próprio defeito, introduzido na rodada 1. O trap de saída roda `rm -f` em
++`_STATE_OPS_FILE` e `_ATOMIC_TMP_PENDING` e `rm -rf` em `BACKUP_DIR`. Só o
++terceiro era inicializado antes do `trap`: `_ATOMIC_TMP_PENDING` só recebia
++valor DENTRO do escritor atômico (que o `--dry-run` nunca chama) e
++`_STATE_OPS_FILE` dez linhas ABAIXO do `trap`. Qualquer uma exportada pelo
++chamador era um caminho arbitrário que o trap apagava em qualquer saída.
++
++**Reproduzido:**
++
++```
++env _ATOMIC_TMP_PENDING=<arquivo-qualquer> install.sh <alvo> --dry-run
++  => rc 0, e o arquivo-qualquer SUMIU
++```
++
++`rc 0`, com a promessa de "nenhum arquivo modificado" no rótulo. **Cura:**
++`_ATOMIC_TMP_PENDING=""` e `_STATE_OPS_FILE=""` explicitamente ANTES de
++registrar o trap. Escopo alargado outra vez por disciplina de irmãos: o rail
++nomeou uma variável, o censo do trap achou duas. Mesma classe que o arquivo já
++documentava para `_DELIVERED_TEMPLATES` (`:841`) — uma variável que o script só
++ESCREVE ainda é uma variável que o ambiente pode semear. Fixture **F4.1**, duas
++pernas, asserção nos BYTES da vítima.
++
++### R4-2 — o teste vivo exigia o sítio F2 DESGUARDADO `[P1]`
++
++`TestLiveCorpus::test_f2_the_reported_sed_site_is_unguarded` exigia um sítio
++`sed-interp` desguardado em `install_github_templates`. A cura da W2 não
++escapou o `sed` — ela o REMOVEU —, então o teste falharia em todo run de CI
++depois do land. **Medido na sombra antes da cura: 1 failed, 7 passed.**
++
++**Cura:** a asserção INVERTE (nenhum sítio `sed-interp` desguardado pode restar)
++**mais um controle** que exige que o censo ainda DESCUBRA a função — sem essa
++segunda perna, "nenhum sítio desguardado aqui" é satisfeito igualmente por um
++matcher que parou de enxergar `install_github_templates`, que é o verde-por-
++cegueira que este censo existe para recusar. Medido: a função segue com 10
++sítios descobertos, 0 deles `sed-interp`.
++
++Renomeei o método para `test_f2_the_reported_sed_site_is_cured` — um teste cujo
++NOME afirma o contrário da sua asserção é uma armadilha para o próximo leitor, e
++o nome não é referenciado por nenhum seletor de CI (verificado nos dois repos).
++
++**Prova de acoplamento patch↔teste, nas DUAS direções:**
++
++| | corpus pré-patch | corpus curado |
++|---|---|---|
++| asserção ANTIGA | passa | **falha** (medido: 1 failed / 7 passed) |
++| asserção NOVA | **falha** (medido: rc 1, `AssertionError: [] != [...]`) | passa (111 passed) |
++
++**Aviso de montagem, importante.** A sombra está na **5ª passada** do censo
++(`7383518`) e o repo VIVO já está na **6ª** (`f31e1b1`); o arquivo de teste
++difere em 22 KB entre os dois. O corpo deste teste, porém, é **byte-idêntico**
++nas duas versões (só muda a linha absoluta: 1748 na sombra, 2386 no vivo), então
++um hunk com contexto aplica nos dois. **Se o C.patch for montado como diff de
++contexto isso é seguro; montado por número de linha, reverte a 6ª passada.**
++`--write-baseline` NÃO foi necessário: o censo da sombra sai `rc 0` com
++`new_blocking: 0` e `dead_baseline_entries: 0`.
++
++### R4-3 — owner validado DEPOIS de um transporte lossy `[P2]`
++
++`upgrade.sh` lê `github_owner` do install-state por substituição de comando, e
++esse transporte é lossy de dois jeitos específicos: bash não consegue guardar
++NUL numa variável (é descartado em silêncio) e `$( )` tira newlines finais. O
++shell validava, portanto, uma string DIFERENTE da registrada. **Reproduzido
++contra o leitor EXTRAÍDO do `upgrade.sh` shipado** (nunca uma cópia — cópia só
++concorda consigo mesma):
++
++```
++owner "ali\0ce"   => ACEITO como "alice"
++owner "alice\n\n"     => ACEITO como "alice"
++owner "alice\r"       => recusado pela gramática (CR sobrevive ao transporte)
++```
++
++**Cura onde os bytes ainda estão íntegros:** o leitor python recusa NUL/CR/LF e
++sai `3`. Isso é **integridade de transporte, não gramática** — a pergunta "este
++valor sobrevive ao transporte?" é outra pergunta que "este valor é um handle?",
++e restaurar o charset no python reconstruiria a segunda cópia que a rodada 1
++apagou. `_wbm_github_handle_ok` segue dono único da gramática. Depois: os três
++recusados, `acme-platform` aceito. Fixture **F4.2**, com o leitor extraído e um
++controle de handle limpo.
++
++### Limite honesto dos controles de F4.1 e F4.2
++
++Nenhuma das duas fica vermelha na árvore pré-patch, e por razões diferentes:
++
++* **F4.1** passa lá porque aquela árvore não tem a linha de trap que eu
++  introduzi — é guarda de REGRESSÃO da minha própria cura, e o vermelho dela foi
++  medido contra a implementação intermediária (`>>> victim DELETED`);
++* **F4.2** não consegue nem rodar lá: o leitor pré-patch tem outra FORMA (sem
++  `_riso_h`) e a âncora de extração não casa. A perna reporta
++  «could not extract the reader — this leg is dead, not passing», que é o
++  comportamento certo de um instrumento cuja âncora sumiu, e conta como FALHA em
++  vez de passar calada.
++
++Está dito aqui para que ninguém leia o verde delas no controle como prova de
++algo que elas não medem.
 diff --git a/.claude/scripts/data/installer-write-safety-baseline.txt b/.claude/scripts/data/installer-write-safety-baseline.txt
-index 8a0de3f..f7ab5d0 100644
+index 8a0de3f..6945f51 100644
 --- a/.claude/scripts/data/installer-write-safety-baseline.txt
 +++ b/.claude/scripts/data/installer-write-safety-baseline.txt
 @@ -50,29 +50,37 @@ scripts/_codex_harness.sh:459:write-candidate:indeterminado:i-write-candidate-un
@@ -1248,144 +1402,144 @@ index 8a0de3f..f7ab5d0 100644
 +scripts/install.sh:768:write-candidate:indeterminado:i-write-candidate-unproven:e455687d949e13fd
 +scripts/install.sh:792:symlink-follow:desguardado:-:40877c72bc0ba308
 +scripts/install.sh:794:symlink-follow:indeterminado:i-guard-not-dominating:8da492a09d986dc0
-+scripts/install.sh:815:write-candidate:indeterminado:i-write-candidate-unproven:711982f81b794eda
-+scripts/install.sh:818:symlink-follow:indeterminado:i-unmodeled-occurrence:9c8510aec6a4aea9
-+scripts/install.sh:819:write-candidate:desguardado:-:3ddc8f91140ee715
-+scripts/install.sh:920:write-candidate:indeterminado:i-write-candidate-unproven:f4a13378d0518c8e
-+scripts/install.sh:925:write-candidate:indeterminado:i-write-candidate-unproven:831e7922c27e940a
-+scripts/install.sh:936:write-candidate:indeterminado:i-write-candidate-unproven:997de11235590916
-+scripts/install.sh:1062:write-candidate:indeterminado:i-write-candidate-unproven:c323d59660306b19
-+scripts/install.sh:1081:symlink-follow:indeterminado:i-guard-not-dominating:e42ab272c91eab4f
-+scripts/install.sh:1082:write-candidate:indeterminado:i-write-candidate-unproven:46601320fa2e3b6c
-+scripts/install.sh:1083:write-candidate:desguardado:-:5e5ab4f423c9862f
-+scripts/install.sh:1086:write-candidate:desguardado:-:e19bbf164c1d388d
-+scripts/install.sh:1094:symlink-follow:indeterminado:i-unmodeled-occurrence:1c2a0131a48e7cbe
-+scripts/install.sh:1099:symlink-follow:indeterminado:i-unmodeled-occurrence:a1b702a2460f471a
-+scripts/install.sh:1101:write-candidate:indeterminado:i-write-candidate-unproven:12f863e8651a5a16
-+scripts/install.sh:1102:write-candidate:desguardado:-:2d1acf48edb452f1
-+scripts/install.sh:1104:write-candidate:desguardado:-:45987a1ce335f299
-+scripts/install.sh:1186:write-candidate:desguardado:-:1e133e558064e0f9
-+scripts/install.sh:1228:write-candidate:indeterminado:i-write-candidate-unproven:fb29b89da4066ebb
-+scripts/install.sh:1233:symlink-follow:desguardado:-:fe374f37a2a77e29
-+scripts/install.sh:1241:symlink-follow:desguardado:-:974163b961f02033
-+scripts/install.sh:1246:write-candidate:desguardado:-:bc9efe675f629445
-+scripts/install.sh:1247:write-candidate:desguardado:-:83b982a50784ebd1
-+scripts/install.sh:1298:write-candidate:indeterminado:i-write-candidate-unproven:bc44c8e13acbd6d5
-+scripts/install.sh:1373:write-candidate:indeterminado:i-write-candidate-unproven:28c024ca7257f04f
-+scripts/install.sh:1380:symlink-follow:indeterminado:i-unmodeled-occurrence:2e3de9c5bb5549c7
-+scripts/install.sh:1381:write-candidate:indeterminado:i-write-candidate-unproven:ffad8ac0545794cb
-+scripts/install.sh:1401:write-candidate:indeterminado:i-write-candidate-unproven:e96f126f44f120e4
-+scripts/install.sh:1423:write-candidate:desguardado:-:5ff46352c79301e5
-+scripts/install.sh:1426:write-candidate:desguardado:-:e705701d62bf3eac
-+scripts/install.sh:1451:write-candidate:indeterminado:i-write-candidate-unproven:eaca492050c49507
-+scripts/install.sh:1495:symlink-follow:indeterminado:i-unmodeled-occurrence:49eb2d7b9aa13a08
-+scripts/install.sh:1543:write-candidate:indeterminado:i-write-candidate-unproven:04ce691621f8e9f8
-+scripts/install.sh:1545:write-candidate:indeterminado:i-write-candidate-unproven:f08469500acaf64b
-+scripts/install.sh:1616:write-candidate:indeterminado:i-write-candidate-unproven:e9515c5d02f5c8a3
-+scripts/install.sh:1623:write-candidate:indeterminado:i-write-candidate-unproven:6c28c1b4ba96134b
-+scripts/install.sh:1652:write-candidate:indeterminado:i-write-candidate-unproven:5fb17184ab2f3aaf
-+scripts/install.sh:1725:symlink-follow:desguardado:-:6bc6bf37245a9645
-+scripts/install.sh:1733:symlink-follow:desguardado:-:ac9ca69279055712
-+scripts/install.sh:1736:write-candidate:desguardado:-:0dc71d98b315f437
-+scripts/install.sh:1737:write-candidate:desguardado:-:3f37da8d6f969952
-+scripts/install.sh:1763:write-candidate:indeterminado:i-write-candidate-unproven:fb9e505f619d6990
-+scripts/install.sh:1784:write-candidate:indeterminado:i-write-candidate-unproven:c22ba1f13b487393
-+scripts/install.sh:1791:write-candidate:indeterminado:i-write-candidate-unproven:6343ae4a012b2635
-+scripts/install.sh:1800:symlink-follow:desguardado:-:0a9b7184330b0fc6
-+scripts/install.sh:1808:symlink-follow:desguardado:-:53c8df9ee7d7a346
-+scripts/install.sh:1813:write-candidate:desguardado:-:a53f0731c299fbaa
-+scripts/install.sh:1814:write-candidate:desguardado:-:2381c2ec2a0ffc70
-+scripts/install.sh:1842:write-candidate:indeterminado:i-write-candidate-unproven:edc1e9b2f223d595
-+scripts/install.sh:1873:write-candidate:indeterminado:i-write-candidate-unproven:441e8c2b1fc8afc8
-+scripts/install.sh:1876:write-candidate:indeterminado:i-write-candidate-unproven:0521ff3ffa446953
-+scripts/install.sh:1878:write-candidate:indeterminado:i-write-candidate-unproven:c5e66385001afe06
-+scripts/install.sh:1943:write-candidate:desguardado:-:c9d0cf1f3878aa1a
-+scripts/install.sh:1944:write-candidate:indeterminado:i-write-candidate-unproven:b0ece1bae4e39128
-+scripts/install.sh:1947:write-candidate:indeterminado:i-write-candidate-unproven:0e253091810cb6e6
-+scripts/install.sh:1949:write-candidate:indeterminado:i-write-candidate-unproven:033f58fecd454874
-+scripts/install.sh:1953:write-candidate:desguardado:-:ca9fc0ea25a3c845
-+scripts/install.sh:1955:write-candidate:indeterminado:i-write-candidate-unproven:abcac9f38de6bdfb
-+scripts/install.sh:1958:write-candidate:desguardado:-:d2e695afee322bc4
-+scripts/install.sh:1961:write-candidate:indeterminado:i-write-candidate-unproven:0847398ee763eb45
-+scripts/install.sh:2028:write-candidate:indeterminado:i-write-candidate-unproven:cc9e31aa437616f8
-+scripts/install.sh:2036:symlink-follow:indeterminado:i-unmodeled-occurrence:c25cc391b4aea0b9
-+scripts/install.sh:2043:write-candidate:indeterminado:i-write-candidate-unproven:4c04dc4a01b8fca3
-+scripts/install.sh:2045:symlink-follow:indeterminado:i-unmodeled-occurrence:352dbb98a4044c84
-+scripts/install.sh:2050:symlink-follow:indeterminado:i-unmodeled-occurrence:c542724ae12e395a
-+scripts/install.sh:2050:symlink-follow:indeterminado:i-unmodeled-occurrence:11ef44199ce88457
-+scripts/install.sh:2059:write-candidate:indeterminado:i-write-candidate-unproven:32097a16d7bccf9c
-+scripts/install.sh:2071:symlink-follow:indeterminado:i-unmodeled-occurrence:0769243b7bd95057
-+scripts/install.sh:2082:write-candidate:indeterminado:i-write-candidate-unproven:76c0137367cb54ae
-+scripts/install.sh:2086:write-candidate:indeterminado:i-write-candidate-unproven:c30543af77a17a9c
-+scripts/install.sh:2146:symlink-follow:indeterminado:i-predicate-arg-unbound:30457e40a30ee694
-+scripts/install.sh:2160:symlink-follow:indeterminado:i-predicate-arg-unbound:1cc8bd21f2341c3e
-+scripts/install.sh:2169:symlink-follow:indeterminado:i-unmodeled-occurrence:142f21ab3229053b
-+scripts/install.sh:2185:symlink-follow:indeterminado:i-predicate-arg-unbound:710b678361e7810e
-+scripts/install.sh:2189:symlink-follow:indeterminado:i-unmodeled-occurrence:d6753d61347632f0
-+scripts/install.sh:2194:write-candidate:desguardado:-:e5844924b52cdef2
-+scripts/install.sh:2200:symlink-follow:indeterminado:i-unmodeled-occurrence:585d2a21597b5461
-+scripts/install.sh:2202:write-candidate:desguardado:-:013a0a85e5607868
-+scripts/install.sh:2214:write-candidate:desguardado:-:59f8d97068a4ba1c
-+scripts/install.sh:2239:write-candidate:desguardado:-:02d13b02b601560e
-+scripts/install.sh:2339:symlink-follow:indeterminado:i-predicate-arg-unbound:f9f1b3d02d9a03cc
-+scripts/install.sh:2359:write-candidate:desguardado:-:33750b69fdabcb7c
-+scripts/install.sh:2363:write-candidate:desguardado:-:141048f7eab2a307
-+scripts/install.sh:2374:write-candidate:desguardado:-:0576b738f33ba73d
-+scripts/install.sh:2387:write-candidate:desguardado:-:12e4bb496b8fb63d
-+scripts/install.sh:2423:symlink-follow:indeterminado:i-predicate-arg-unbound:81b638ca6d1de2c1
-+scripts/install.sh:2430:write-candidate:indeterminado:i-write-candidate-unproven:ab483f61c347cf4d
-+scripts/install.sh:2436:write-candidate:indeterminado:i-write-candidate-unproven:db96cb2082386e1e
-+scripts/install.sh:2450:write-candidate:desguardado:-:f8dcaf8eddcf5dec
-+scripts/install.sh:2451:write-candidate:desguardado:-:6b2d3192dea92f86
-+scripts/install.sh:2469:write-candidate:indeterminado:i-write-candidate-unproven:a9aed7649b483919
-+scripts/install.sh:2504:write-candidate:indeterminado:i-write-candidate-unproven:d260a9136b59a4da
-+scripts/install.sh:2510:write-candidate:indeterminado:i-write-candidate-unproven:9913519cec5a92e4
-+scripts/install.sh:2524:write-candidate:indeterminado:i-write-candidate-unproven:25c207dffaa48b5b
-+scripts/install.sh:2552:write-candidate:indeterminado:i-write-candidate-unproven:df166b1b482b3726
-+scripts/install.sh:2559:write-candidate:indeterminado:i-write-candidate-unproven:9f5e3f9c3bc96885
-+scripts/install.sh:2592:symlink-follow:indeterminado:i-guard-not-dominating:3d0e5c04e79d09a4
-+scripts/install.sh:2618:write-candidate:desguardado:-:c956fc7858f1e6b3
-+scripts/install.sh:2621:write-candidate:desguardado:-:ae620df37714d626
-+scripts/install.sh:2655:write-candidate:indeterminado:i-write-candidate-unproven:b2c5131827e73767
-+scripts/install.sh:2655:write-candidate:indeterminado:i-write-candidate-unproven:5daad1971f227520
-+scripts/install.sh:2677:write-candidate:indeterminado:i-write-candidate-unproven:953ef6c4f3ce245e
-+scripts/install.sh:2687:write-candidate:indeterminado:i-write-candidate-unproven:ca705749564836b0
-+scripts/install.sh:2689:sed-interp:indeterminado:i-script-not-literal:bf1704d618695580
-+scripts/install.sh:2689:write-candidate:desguardado:-:7b76533b148de2e6
-+scripts/install.sh:2694:write-candidate:desguardado:-:13c4e4b4a0d956b6
-+scripts/install.sh:2695:write-candidate:desguardado:-:ff5d383fd60db6b8
-+scripts/install.sh:2830:symlink-follow:desguardado:-:80f66dc652c0c893
-+scripts/install.sh:2835:write-candidate:indeterminado:i-write-candidate-unproven:6614c849a872ade7
-+scripts/install.sh:2848:symlink-follow:desguardado:-:436b287f52920b28
-+scripts/install.sh:2853:write-candidate:indeterminado:i-write-candidate-unproven:1fa17fba42631b15
-+scripts/install.sh:2906:symlink-follow:desguardado:-:5fa978aff80d99b0
-+scripts/install.sh:2908:write-candidate:desguardado:-:3d79ed8afa29f82a
-+scripts/install.sh:2913:write-candidate:desguardado:-:be2f01306f93604a
-+scripts/install.sh:2918:symlink-follow:desguardado:-:f7867010aed60fd5
-+scripts/install.sh:2922:write-candidate:indeterminado:i-write-candidate-unproven:f59df3cea864746d
-+scripts/install.sh:2956:symlink-follow:indeterminado:i-unmodeled-occurrence:b40a8812fed6e22a
-+scripts/install.sh:2964:write-candidate:indeterminado:i-write-candidate-unproven:eda787f88edf90b0
-+scripts/install.sh:2964:write-candidate:indeterminado:i-write-candidate-unproven:9ca4662af4540801
-+scripts/install.sh:2968:write-candidate:indeterminado:i-write-candidate-unproven:4b52b362c43997b9
-+scripts/install.sh:2968:write-candidate:indeterminado:i-write-candidate-unproven:80b1c749cf590cd7
-+scripts/install.sh:2980:symlink-follow:indeterminado:i-unmodeled-occurrence:d221c1780fbe6108
-+scripts/install.sh:2987:symlink-follow:desguardado:-:894dce4858de1084
-+scripts/install.sh:2996:symlink-follow:indeterminado:i-unmodeled-occurrence:d704fce482d5ce57
-+scripts/install.sh:2998:write-candidate:indeterminado:i-write-candidate-unproven:5870f6f63386c3bd
-+scripts/install.sh:3085:write-candidate:indeterminado:i-write-candidate-unproven:b5e29836504a0e46
-+scripts/install.sh:3103:symlink-follow:indeterminado:i-unmodeled-occurrence:cbde12916d70da6c
-+scripts/install.sh:3109:symlink-follow:indeterminado:i-unmodeled-occurrence:c0efda7374641dd9
-+scripts/install.sh:3118:symlink-follow:indeterminado:i-unmodeled-occurrence:622281003b56e551
-+scripts/install.sh:3143:symlink-follow:indeterminado:i-unmodeled-occurrence:a734b8df92c09888
-+scripts/install.sh:3257:symlink-follow:indeterminado:i-unmodeled-occurrence:67f6a061a2d235cc
-+scripts/install.sh:3295:write-candidate:indeterminado:i-write-candidate-unproven:74bf15507dcb0097
-+scripts/install.sh:3344:write-candidate:indeterminado:i-write-candidate-unproven:2c72ccffe1aa14e0
-+scripts/install.sh:3415:write-candidate:indeterminado:i-write-candidate-unproven:a97f573ae91c7a1a
-+scripts/install.sh:3609:symlink-follow:indeterminado:i-unmodeled-occurrence:d41d28522da2b4fc
-+scripts/install.sh:3610:write-candidate:indeterminado:i-write-candidate-unproven:9e3db91084a1d894
-+scripts/install.sh:3627:write-candidate:indeterminado:i-opaque-command:e39ddb6aec8ea5ee
-+scripts/install.sh:3725:write-candidate:indeterminado:i-write-candidate-unproven:3512cb83417b29eb
-+scripts/install.sh:3738:write-candidate:indeterminado:i-write-candidate-unproven:0f07b4c8d7a15488
++scripts/install.sh:836:write-candidate:indeterminado:i-write-candidate-unproven:711982f81b794eda
++scripts/install.sh:839:symlink-follow:indeterminado:i-unmodeled-occurrence:9c8510aec6a4aea9
++scripts/install.sh:840:write-candidate:desguardado:-:3ddc8f91140ee715
++scripts/install.sh:941:write-candidate:indeterminado:i-write-candidate-unproven:f4a13378d0518c8e
++scripts/install.sh:946:write-candidate:indeterminado:i-write-candidate-unproven:831e7922c27e940a
++scripts/install.sh:957:write-candidate:indeterminado:i-write-candidate-unproven:997de11235590916
++scripts/install.sh:1083:write-candidate:indeterminado:i-write-candidate-unproven:c323d59660306b19
++scripts/install.sh:1102:symlink-follow:indeterminado:i-guard-not-dominating:e42ab272c91eab4f
++scripts/install.sh:1103:write-candidate:indeterminado:i-write-candidate-unproven:46601320fa2e3b6c
++scripts/install.sh:1104:write-candidate:desguardado:-:5e5ab4f423c9862f
++scripts/install.sh:1107:write-candidate:desguardado:-:e19bbf164c1d388d
++scripts/install.sh:1115:symlink-follow:indeterminado:i-unmodeled-occurrence:1c2a0131a48e7cbe
++scripts/install.sh:1120:symlink-follow:indeterminado:i-unmodeled-occurrence:a1b702a2460f471a
++scripts/install.sh:1122:write-candidate:indeterminado:i-write-candidate-unproven:12f863e8651a5a16
++scripts/install.sh:1123:write-candidate:desguardado:-:2d1acf48edb452f1
++scripts/install.sh:1125:write-candidate:desguardado:-:45987a1ce335f299
++scripts/install.sh:1207:write-candidate:desguardado:-:1e133e558064e0f9
++scripts/install.sh:1249:write-candidate:indeterminado:i-write-candidate-unproven:fb29b89da4066ebb
++scripts/install.sh:1254:symlink-follow:desguardado:-:fe374f37a2a77e29
++scripts/install.sh:1262:symlink-follow:desguardado:-:974163b961f02033
++scripts/install.sh:1267:write-candidate:desguardado:-:bc9efe675f629445
++scripts/install.sh:1268:write-candidate:desguardado:-:83b982a50784ebd1
++scripts/install.sh:1319:write-candidate:indeterminado:i-write-candidate-unproven:bc44c8e13acbd6d5
++scripts/install.sh:1394:write-candidate:indeterminado:i-write-candidate-unproven:28c024ca7257f04f
++scripts/install.sh:1401:symlink-follow:indeterminado:i-unmodeled-occurrence:2e3de9c5bb5549c7
++scripts/install.sh:1402:write-candidate:indeterminado:i-write-candidate-unproven:ffad8ac0545794cb
++scripts/install.sh:1422:write-candidate:indeterminado:i-write-candidate-unproven:e96f126f44f120e4
++scripts/install.sh:1444:write-candidate:desguardado:-:5ff46352c79301e5
++scripts/install.sh:1447:write-candidate:desguardado:-:e705701d62bf3eac
++scripts/install.sh:1472:write-candidate:indeterminado:i-write-candidate-unproven:eaca492050c49507
++scripts/install.sh:1516:symlink-follow:indeterminado:i-unmodeled-occurrence:49eb2d7b9aa13a08
++scripts/install.sh:1564:write-candidate:indeterminado:i-write-candidate-unproven:04ce691621f8e9f8
++scripts/install.sh:1566:write-candidate:indeterminado:i-write-candidate-unproven:f08469500acaf64b
++scripts/install.sh:1637:write-candidate:indeterminado:i-write-candidate-unproven:e9515c5d02f5c8a3
++scripts/install.sh:1644:write-candidate:indeterminado:i-write-candidate-unproven:6c28c1b4ba96134b
++scripts/install.sh:1673:write-candidate:indeterminado:i-write-candidate-unproven:5fb17184ab2f3aaf
++scripts/install.sh:1746:symlink-follow:desguardado:-:6bc6bf37245a9645
++scripts/install.sh:1754:symlink-follow:desguardado:-:ac9ca69279055712
++scripts/install.sh:1757:write-candidate:desguardado:-:0dc71d98b315f437
++scripts/install.sh:1758:write-candidate:desguardado:-:3f37da8d6f969952
++scripts/install.sh:1784:write-candidate:indeterminado:i-write-candidate-unproven:fb9e505f619d6990
++scripts/install.sh:1805:write-candidate:indeterminado:i-write-candidate-unproven:c22ba1f13b487393
++scripts/install.sh:1812:write-candidate:indeterminado:i-write-candidate-unproven:6343ae4a012b2635
++scripts/install.sh:1821:symlink-follow:desguardado:-:0a9b7184330b0fc6
++scripts/install.sh:1829:symlink-follow:desguardado:-:53c8df9ee7d7a346
++scripts/install.sh:1834:write-candidate:desguardado:-:a53f0731c299fbaa
++scripts/install.sh:1835:write-candidate:desguardado:-:2381c2ec2a0ffc70
++scripts/install.sh:1863:write-candidate:indeterminado:i-write-candidate-unproven:edc1e9b2f223d595
++scripts/install.sh:1894:write-candidate:indeterminado:i-write-candidate-unproven:441e8c2b1fc8afc8
++scripts/install.sh:1897:write-candidate:indeterminado:i-write-candidate-unproven:0521ff3ffa446953
++scripts/install.sh:1899:write-candidate:indeterminado:i-write-candidate-unproven:c5e66385001afe06
++scripts/install.sh:1964:write-candidate:desguardado:-:c9d0cf1f3878aa1a
++scripts/install.sh:1965:write-candidate:indeterminado:i-write-candidate-unproven:b0ece1bae4e39128
++scripts/install.sh:1968:write-candidate:indeterminado:i-write-candidate-unproven:0e253091810cb6e6
++scripts/install.sh:1970:write-candidate:indeterminado:i-write-candidate-unproven:033f58fecd454874
++scripts/install.sh:1974:write-candidate:desguardado:-:ca9fc0ea25a3c845
++scripts/install.sh:1976:write-candidate:indeterminado:i-write-candidate-unproven:abcac9f38de6bdfb
++scripts/install.sh:1979:write-candidate:desguardado:-:d2e695afee322bc4
++scripts/install.sh:1982:write-candidate:indeterminado:i-write-candidate-unproven:0847398ee763eb45
++scripts/install.sh:2049:write-candidate:indeterminado:i-write-candidate-unproven:cc9e31aa437616f8
++scripts/install.sh:2057:symlink-follow:indeterminado:i-unmodeled-occurrence:c25cc391b4aea0b9
++scripts/install.sh:2064:write-candidate:indeterminado:i-write-candidate-unproven:4c04dc4a01b8fca3
++scripts/install.sh:2066:symlink-follow:indeterminado:i-unmodeled-occurrence:352dbb98a4044c84
++scripts/install.sh:2071:symlink-follow:indeterminado:i-unmodeled-occurrence:c542724ae12e395a
++scripts/install.sh:2071:symlink-follow:indeterminado:i-unmodeled-occurrence:11ef44199ce88457
++scripts/install.sh:2080:write-candidate:indeterminado:i-write-candidate-unproven:32097a16d7bccf9c
++scripts/install.sh:2092:symlink-follow:indeterminado:i-unmodeled-occurrence:0769243b7bd95057
++scripts/install.sh:2103:write-candidate:indeterminado:i-write-candidate-unproven:76c0137367cb54ae
++scripts/install.sh:2107:write-candidate:indeterminado:i-write-candidate-unproven:c30543af77a17a9c
++scripts/install.sh:2167:symlink-follow:indeterminado:i-predicate-arg-unbound:30457e40a30ee694
++scripts/install.sh:2181:symlink-follow:indeterminado:i-predicate-arg-unbound:1cc8bd21f2341c3e
++scripts/install.sh:2190:symlink-follow:indeterminado:i-unmodeled-occurrence:142f21ab3229053b
++scripts/install.sh:2206:symlink-follow:indeterminado:i-predicate-arg-unbound:710b678361e7810e
++scripts/install.sh:2210:symlink-follow:indeterminado:i-unmodeled-occurrence:d6753d61347632f0
++scripts/install.sh:2215:write-candidate:desguardado:-:e5844924b52cdef2
++scripts/install.sh:2221:symlink-follow:indeterminado:i-unmodeled-occurrence:585d2a21597b5461
++scripts/install.sh:2223:write-candidate:desguardado:-:013a0a85e5607868
++scripts/install.sh:2235:write-candidate:desguardado:-:59f8d97068a4ba1c
++scripts/install.sh:2260:write-candidate:desguardado:-:02d13b02b601560e
++scripts/install.sh:2360:symlink-follow:indeterminado:i-predicate-arg-unbound:f9f1b3d02d9a03cc
++scripts/install.sh:2380:write-candidate:desguardado:-:33750b69fdabcb7c
++scripts/install.sh:2384:write-candidate:desguardado:-:141048f7eab2a307
++scripts/install.sh:2395:write-candidate:desguardado:-:0576b738f33ba73d
++scripts/install.sh:2408:write-candidate:desguardado:-:12e4bb496b8fb63d
++scripts/install.sh:2444:symlink-follow:indeterminado:i-predicate-arg-unbound:81b638ca6d1de2c1
++scripts/install.sh:2451:write-candidate:indeterminado:i-write-candidate-unproven:ab483f61c347cf4d
++scripts/install.sh:2457:write-candidate:indeterminado:i-write-candidate-unproven:db96cb2082386e1e
++scripts/install.sh:2471:write-candidate:desguardado:-:f8dcaf8eddcf5dec
++scripts/install.sh:2472:write-candidate:desguardado:-:6b2d3192dea92f86
++scripts/install.sh:2490:write-candidate:indeterminado:i-write-candidate-unproven:a9aed7649b483919
++scripts/install.sh:2525:write-candidate:indeterminado:i-write-candidate-unproven:d260a9136b59a4da
++scripts/install.sh:2531:write-candidate:indeterminado:i-write-candidate-unproven:9913519cec5a92e4
++scripts/install.sh:2545:write-candidate:indeterminado:i-write-candidate-unproven:25c207dffaa48b5b
++scripts/install.sh:2573:write-candidate:indeterminado:i-write-candidate-unproven:df166b1b482b3726
++scripts/install.sh:2580:write-candidate:indeterminado:i-write-candidate-unproven:9f5e3f9c3bc96885
++scripts/install.sh:2613:symlink-follow:indeterminado:i-guard-not-dominating:3d0e5c04e79d09a4
++scripts/install.sh:2639:write-candidate:desguardado:-:c956fc7858f1e6b3
++scripts/install.sh:2642:write-candidate:desguardado:-:ae620df37714d626
++scripts/install.sh:2676:write-candidate:indeterminado:i-write-candidate-unproven:b2c5131827e73767
++scripts/install.sh:2676:write-candidate:indeterminado:i-write-candidate-unproven:5daad1971f227520
++scripts/install.sh:2698:write-candidate:indeterminado:i-write-candidate-unproven:953ef6c4f3ce245e
++scripts/install.sh:2708:write-candidate:indeterminado:i-write-candidate-unproven:ca705749564836b0
++scripts/install.sh:2710:sed-interp:indeterminado:i-script-not-literal:bf1704d618695580
++scripts/install.sh:2710:write-candidate:desguardado:-:7b76533b148de2e6
++scripts/install.sh:2715:write-candidate:desguardado:-:13c4e4b4a0d956b6
++scripts/install.sh:2716:write-candidate:desguardado:-:ff5d383fd60db6b8
++scripts/install.sh:2851:symlink-follow:desguardado:-:80f66dc652c0c893
++scripts/install.sh:2856:write-candidate:indeterminado:i-write-candidate-unproven:6614c849a872ade7
++scripts/install.sh:2869:symlink-follow:desguardado:-:436b287f52920b28
++scripts/install.sh:2874:write-candidate:indeterminado:i-write-candidate-unproven:1fa17fba42631b15
++scripts/install.sh:2927:symlink-follow:desguardado:-:5fa978aff80d99b0
++scripts/install.sh:2929:write-candidate:desguardado:-:3d79ed8afa29f82a
++scripts/install.sh:2934:write-candidate:desguardado:-:be2f01306f93604a
++scripts/install.sh:2939:symlink-follow:desguardado:-:f7867010aed60fd5
++scripts/install.sh:2943:write-candidate:indeterminado:i-write-candidate-unproven:f59df3cea864746d
++scripts/install.sh:2977:symlink-follow:indeterminado:i-unmodeled-occurrence:b40a8812fed6e22a
++scripts/install.sh:2985:write-candidate:indeterminado:i-write-candidate-unproven:eda787f88edf90b0
++scripts/install.sh:2985:write-candidate:indeterminado:i-write-candidate-unproven:9ca4662af4540801
++scripts/install.sh:2989:write-candidate:indeterminado:i-write-candidate-unproven:4b52b362c43997b9
++scripts/install.sh:2989:write-candidate:indeterminado:i-write-candidate-unproven:80b1c749cf590cd7
++scripts/install.sh:3001:symlink-follow:indeterminado:i-unmodeled-occurrence:d221c1780fbe6108
++scripts/install.sh:3008:symlink-follow:desguardado:-:894dce4858de1084
++scripts/install.sh:3017:symlink-follow:indeterminado:i-unmodeled-occurrence:d704fce482d5ce57
++scripts/install.sh:3019:write-candidate:indeterminado:i-write-candidate-unproven:5870f6f63386c3bd
++scripts/install.sh:3106:write-candidate:indeterminado:i-write-candidate-unproven:b5e29836504a0e46
++scripts/install.sh:3124:symlink-follow:indeterminado:i-unmodeled-occurrence:cbde12916d70da6c
++scripts/install.sh:3130:symlink-follow:indeterminado:i-unmodeled-occurrence:c0efda7374641dd9
++scripts/install.sh:3139:symlink-follow:indeterminado:i-unmodeled-occurrence:622281003b56e551
++scripts/install.sh:3164:symlink-follow:indeterminado:i-unmodeled-occurrence:a734b8df92c09888
++scripts/install.sh:3278:symlink-follow:indeterminado:i-unmodeled-occurrence:67f6a061a2d235cc
++scripts/install.sh:3316:write-candidate:indeterminado:i-write-candidate-unproven:74bf15507dcb0097
++scripts/install.sh:3365:write-candidate:indeterminado:i-write-candidate-unproven:2c72ccffe1aa14e0
++scripts/install.sh:3436:write-candidate:indeterminado:i-write-candidate-unproven:a97f573ae91c7a1a
++scripts/install.sh:3630:symlink-follow:indeterminado:i-unmodeled-occurrence:d41d28522da2b4fc
++scripts/install.sh:3631:write-candidate:indeterminado:i-write-candidate-unproven:9e3db91084a1d894
++scripts/install.sh:3648:write-candidate:indeterminado:i-opaque-command:e39ddb6aec8ea5ee
++scripts/install.sh:3746:write-candidate:indeterminado:i-write-candidate-unproven:3512cb83417b29eb
++scripts/install.sh:3759:write-candidate:indeterminado:i-write-candidate-unproven:0f07b4c8d7a15488
  scripts/local/historical/OWNER-CEREMONY-PLAN-094-WAVE-A.sh:106:write-candidate:indeterminado:i-write-candidate-unproven:2c97bc46f6df970d
  scripts/local/historical/OWNER-CEREMONY-PLAN-094-WAVE-A.sh:126:write-candidate:indeterminado:i-write-candidate-unproven:c1d31c671ff50931
  scripts/local/historical/OWNER-CEREMONY-PLAN-094-WAVE-A.sh:154:symlink-follow:indeterminado:i-unmodeled-occurrence:455a1503953d465f
@@ -1452,58 +1606,98 @@ index 8a0de3f..f7ab5d0 100644
 +scripts/upgrade.sh:3694:symlink-follow:indeterminado:i-unmodeled-occurrence:645b0b6a7ed0d567
 +scripts/upgrade.sh:3694:symlink-follow:indeterminado:i-unmodeled-occurrence:5773abc3efabf35c
 +scripts/upgrade.sh:3696:write-candidate:indeterminado:i-write-candidate-unproven:52b742e63933159a
-+scripts/upgrade.sh:3713:write-candidate:indeterminado:i-write-candidate-unproven:7aba0a14ef57c4cf
-+scripts/upgrade.sh:3737:sed-interp:desguardado:-:c68e6b3213970f6c
-+scripts/upgrade.sh:3814:write-candidate:indeterminado:i-write-candidate-unproven:af30cd0835dc6ae0
-+scripts/upgrade.sh:3819:write-candidate:desguardado:-:043a4540489ddb1c
-+scripts/upgrade.sh:3829:write-candidate:indeterminado:i-write-candidate-unproven:69efbd3b7ae6e5ce
-+scripts/upgrade.sh:3831:write-candidate:desguardado:-:7e0e07860537cbeb
-+scripts/upgrade.sh:3873:write-candidate:indeterminado:i-write-candidate-unproven:c18ec2b0b16a36af
-+scripts/upgrade.sh:3880:symlink-follow:desguardado:-:f2e8b1f11cb0aa42
-+scripts/upgrade.sh:3881:write-candidate:indeterminado:i-write-candidate-unproven:c42ad3523a0026b6
-+scripts/upgrade.sh:3912:write-candidate:indeterminado:i-write-candidate-unproven:94a0bd4dc68977d2
-+scripts/upgrade.sh:3912:write-candidate:indeterminado:i-write-candidate-unproven:46345440379e112b
-+scripts/upgrade.sh:3951:write-candidate:indeterminado:i-write-candidate-unproven:258caabae10a6da7
-+scripts/upgrade.sh:3952:write-candidate:indeterminado:i-write-candidate-unproven:069d6fe01e8aa431
-+scripts/upgrade.sh:3972:write-candidate:indeterminado:i-write-candidate-unproven:a41770557f83ebe8
-+scripts/upgrade.sh:3977:write-candidate:desguardado:-:1307e637ac36ffb2
-+scripts/upgrade.sh:3998:symlink-follow:indeterminado:i-unmodeled-occurrence:04d1c97dc7ccbb9d
-+scripts/upgrade.sh:4026:write-candidate:indeterminado:i-write-candidate-unproven:24498c0c118e175a
-+scripts/upgrade.sh:4047:write-candidate:indeterminado:i-write-candidate-unproven:e7962ddb1efb2f03
-+scripts/upgrade.sh:4102:write-candidate:indeterminado:i-write-candidate-unproven:ace4555b2d794407
-+scripts/upgrade.sh:4116:write-candidate:indeterminado:i-write-candidate-unproven:92cb8f19d024283f
-+scripts/upgrade.sh:4147:write-candidate:indeterminado:i-write-candidate-unproven:17b238f04eee5369
-+scripts/upgrade.sh:4152:write-candidate:indeterminado:i-write-candidate-unproven:08dcbf8afc3e09ef
-+scripts/upgrade.sh:4163:write-candidate:indeterminado:i-write-candidate-unproven:4c1155bbb0d9d29c
-+scripts/upgrade.sh:4168:symlink-follow:desguardado:-:663d54a5b7c637d7
-+scripts/upgrade.sh:4194:symlink-follow:indeterminado:i-predicate-arg-unbound:f16a7be0a625d3fc
-+scripts/upgrade.sh:4198:write-candidate:desguardado:-:225f65793b5f6c6f
-+scripts/upgrade.sh:4199:write-candidate:indeterminado:i-write-candidate-unproven:abe50204323ebbe7
-+scripts/upgrade.sh:4207:write-candidate:indeterminado:i-write-candidate-unproven:3ec7b3ec71e20e37
-+scripts/upgrade.sh:4217:write-candidate:indeterminado:i-write-candidate-unproven:9f70f4df01493025
-+scripts/upgrade.sh:4218:write-candidate:indeterminado:i-write-candidate-unproven:d403e0696924d867
-+scripts/upgrade.sh:4231:write-candidate:indeterminado:i-write-candidate-unproven:b759c099432496e9
-+scripts/upgrade.sh:4233:write-candidate:indeterminado:i-write-candidate-unproven:5beadab26846bedb
-+scripts/upgrade.sh:4265:write-candidate:desguardado:-:e57025c1a653b685
-+scripts/upgrade.sh:4266:write-candidate:desguardado:-:ad55adbad82a594d
-+scripts/upgrade.sh:4267:write-candidate:indeterminado:i-write-candidate-unproven:68659e9262d45461
-+scripts/upgrade.sh:4275:write-candidate:indeterminado:i-write-candidate-unproven:4d2e7659033cc428
-+scripts/upgrade.sh:4278:write-candidate:indeterminado:i-write-candidate-unproven:250df65add32a570
-+scripts/upgrade.sh:4413:write-candidate:indeterminado:i-write-candidate-unproven:6dbd8eefe3a7e062
-+scripts/upgrade.sh:4460:write-candidate:indeterminado:i-write-candidate-unproven:111dfdc94bde700e
-+scripts/upgrade.sh:4490:write-candidate:indeterminado:i-write-candidate-unproven:7d4b6a48fbc6206c
-+scripts/upgrade.sh:4507:write-candidate:indeterminado:i-write-candidate-unproven:de2066544dba551e
-+scripts/upgrade.sh:4508:sed-interp:desguardado:-:6d080c06d619c3c0
-+scripts/upgrade.sh:4508:write-candidate:desguardado:-:d444324bf5f44d7d
-+scripts/upgrade.sh:4515:write-candidate:indeterminado:i-write-candidate-unproven:2c88732ea8da9560
-+scripts/upgrade.sh:4552:write-candidate:indeterminado:i-write-candidate-unproven:3946e94bee7d4222
-+scripts/upgrade.sh:4563:write-candidate:indeterminado:i-write-candidate-unproven:ef69dbc68bac4718
-+scripts/upgrade.sh:4632:symlink-follow:desguardado:-:0d210f7bb9b81559
-+scripts/upgrade.sh:4746:write-candidate:indeterminado:i-write-candidate-unproven:f8687516d610d149
-+scripts/upgrade.sh:4750:symlink-follow:indeterminado:i-unmodeled-occurrence:5c2a9c6c718a4fa9
-+scripts/upgrade.sh:4751:write-candidate:indeterminado:i-write-candidate-unproven:c8d531f0cdc3a98a
-+scripts/upgrade.sh:4789:write-candidate:indeterminado:i-write-candidate-unproven:651c0c9369adecb7
-+scripts/upgrade.sh:4838:write-candidate:indeterminado:i-write-candidate-unproven:344a994694fac74e
++scripts/upgrade.sh:3728:write-candidate:indeterminado:i-write-candidate-unproven:7aba0a14ef57c4cf
++scripts/upgrade.sh:3752:sed-interp:desguardado:-:c68e6b3213970f6c
++scripts/upgrade.sh:3829:write-candidate:indeterminado:i-write-candidate-unproven:af30cd0835dc6ae0
++scripts/upgrade.sh:3834:write-candidate:desguardado:-:043a4540489ddb1c
++scripts/upgrade.sh:3844:write-candidate:indeterminado:i-write-candidate-unproven:69efbd3b7ae6e5ce
++scripts/upgrade.sh:3846:write-candidate:desguardado:-:7e0e07860537cbeb
++scripts/upgrade.sh:3888:write-candidate:indeterminado:i-write-candidate-unproven:c18ec2b0b16a36af
++scripts/upgrade.sh:3895:symlink-follow:desguardado:-:f2e8b1f11cb0aa42
++scripts/upgrade.sh:3896:write-candidate:indeterminado:i-write-candidate-unproven:c42ad3523a0026b6
++scripts/upgrade.sh:3927:write-candidate:indeterminado:i-write-candidate-unproven:94a0bd4dc68977d2
++scripts/upgrade.sh:3927:write-candidate:indeterminado:i-write-candidate-unproven:46345440379e112b
++scripts/upgrade.sh:3966:write-candidate:indeterminado:i-write-candidate-unproven:258caabae10a6da7
++scripts/upgrade.sh:3967:write-candidate:indeterminado:i-write-candidate-unproven:069d6fe01e8aa431
++scripts/upgrade.sh:3987:write-candidate:indeterminado:i-write-candidate-unproven:a41770557f83ebe8
++scripts/upgrade.sh:3992:write-candidate:desguardado:-:1307e637ac36ffb2
++scripts/upgrade.sh:4013:symlink-follow:indeterminado:i-unmodeled-occurrence:04d1c97dc7ccbb9d
++scripts/upgrade.sh:4041:write-candidate:indeterminado:i-write-candidate-unproven:24498c0c118e175a
++scripts/upgrade.sh:4062:write-candidate:indeterminado:i-write-candidate-unproven:e7962ddb1efb2f03
++scripts/upgrade.sh:4117:write-candidate:indeterminado:i-write-candidate-unproven:ace4555b2d794407
++scripts/upgrade.sh:4131:write-candidate:indeterminado:i-write-candidate-unproven:92cb8f19d024283f
++scripts/upgrade.sh:4162:write-candidate:indeterminado:i-write-candidate-unproven:17b238f04eee5369
++scripts/upgrade.sh:4167:write-candidate:indeterminado:i-write-candidate-unproven:08dcbf8afc3e09ef
++scripts/upgrade.sh:4178:write-candidate:indeterminado:i-write-candidate-unproven:4c1155bbb0d9d29c
++scripts/upgrade.sh:4183:symlink-follow:desguardado:-:663d54a5b7c637d7
++scripts/upgrade.sh:4209:symlink-follow:indeterminado:i-predicate-arg-unbound:f16a7be0a625d3fc
++scripts/upgrade.sh:4213:write-candidate:desguardado:-:225f65793b5f6c6f
++scripts/upgrade.sh:4214:write-candidate:indeterminado:i-write-candidate-unproven:abe50204323ebbe7
++scripts/upgrade.sh:4222:write-candidate:indeterminado:i-write-candidate-unproven:3ec7b3ec71e20e37
++scripts/upgrade.sh:4232:write-candidate:indeterminado:i-write-candidate-unproven:9f70f4df01493025
++scripts/upgrade.sh:4233:write-candidate:indeterminado:i-write-candidate-unproven:d403e0696924d867
++scripts/upgrade.sh:4246:write-candidate:indeterminado:i-write-candidate-unproven:b759c099432496e9
++scripts/upgrade.sh:4248:write-candidate:indeterminado:i-write-candidate-unproven:5beadab26846bedb
++scripts/upgrade.sh:4280:write-candidate:desguardado:-:e57025c1a653b685
++scripts/upgrade.sh:4281:write-candidate:desguardado:-:ad55adbad82a594d
++scripts/upgrade.sh:4282:write-candidate:indeterminado:i-write-candidate-unproven:68659e9262d45461
++scripts/upgrade.sh:4290:write-candidate:indeterminado:i-write-candidate-unproven:4d2e7659033cc428
++scripts/upgrade.sh:4293:write-candidate:indeterminado:i-write-candidate-unproven:250df65add32a570
++scripts/upgrade.sh:4428:write-candidate:indeterminado:i-write-candidate-unproven:6dbd8eefe3a7e062
++scripts/upgrade.sh:4475:write-candidate:indeterminado:i-write-candidate-unproven:111dfdc94bde700e
++scripts/upgrade.sh:4505:write-candidate:indeterminado:i-write-candidate-unproven:7d4b6a48fbc6206c
++scripts/upgrade.sh:4522:write-candidate:indeterminado:i-write-candidate-unproven:de2066544dba551e
++scripts/upgrade.sh:4523:sed-interp:desguardado:-:6d080c06d619c3c0
++scripts/upgrade.sh:4523:write-candidate:desguardado:-:d444324bf5f44d7d
++scripts/upgrade.sh:4530:write-candidate:indeterminado:i-write-candidate-unproven:2c88732ea8da9560
++scripts/upgrade.sh:4567:write-candidate:indeterminado:i-write-candidate-unproven:3946e94bee7d4222
++scripts/upgrade.sh:4578:write-candidate:indeterminado:i-write-candidate-unproven:ef69dbc68bac4718
++scripts/upgrade.sh:4647:symlink-follow:desguardado:-:0d210f7bb9b81559
++scripts/upgrade.sh:4761:write-candidate:indeterminado:i-write-candidate-unproven:f8687516d610d149
++scripts/upgrade.sh:4765:symlink-follow:indeterminado:i-unmodeled-occurrence:5c2a9c6c718a4fa9
++scripts/upgrade.sh:4766:write-candidate:indeterminado:i-write-candidate-unproven:c8d531f0cdc3a98a
++scripts/upgrade.sh:4804:write-candidate:indeterminado:i-write-candidate-unproven:651c0c9369adecb7
++scripts/upgrade.sh:4853:write-candidate:indeterminado:i-write-candidate-unproven:344a994694fac74e
+diff --git a/.claude/scripts/tests/test_check_installer_write_safety.py b/.claude/scripts/tests/test_check_installer_write_safety.py
+index 0740b3f..1d4a953 100644
+--- a/.claude/scripts/tests/test_check_installer_write_safety.py
++++ b/.claude/scripts/tests/test_check_installer_write_safety.py
+@@ -2383,12 +2383,29 @@ class TestLiveCorpus(TestEnvContext):
+                 and s["verdict"] == "desguardado"]
+         self.assertTrue(hits, "F1 must still be found, and found UNGUARDED")
+ 
+-    def test_f2_the_reported_sed_site_is_unguarded(self) -> None:
+-        hits = [s for s in self.payload["sites"]
+-                if s["function"] == "install_github_templates"
+-                and s["class"] == "sed-interp"
+-                and s["verdict"] == "desguardado"]
+-        self.assertTrue(hits, "F2 must still be found, and found UNGUARDED")
++    def test_f2_the_reported_sed_site_is_cured(self) -> None:
++        """COUPLED to the W2 cure (PLAN-185, ceremony C — rail r4 finding 2).
++
++        Pre-cure this asserted the sed-interp site in
++        install_github_templates was found UNGUARDED; the cure removes the
++        interpolated sed entirely (value-safe substitution + atomic write),
++        so the coupled form asserts BOTH halves: the function is still seen
++        by the census (the discovery did not lose it — an empty census is
++        the fail-open shape this instrument exists to refuse) AND it has no
++        sed-interp site left at any verdict. This test and scripts/install.sh
++        change in the SAME ceremony patch; on a pre-cure tree it goes red on
++        the second assertion (the sed is still there), which is the coupling
++        proof the rail asked for.
++        """
++        igt = [s for s in self.payload["sites"]
++               if s["function"] == "install_github_templates"]
++        self.assertTrue(igt, "install_github_templates must still be seen "
++                             "by the census (discovery must not lose it)")
++        sed_hits = [s for s in igt if s["class"] == "sed-interp"]
++        self.assertEqual(
++            sed_hits, [],
++            "the F2 sed-interp site must be GONE after the W2 cure "
++            "(found: %r)" % [(h["line"], h["verdict"]) for h in sed_hits])
+ 
+     def test_f1_has_siblings_the_plan_did_not_name(self) -> None:
+         """PLAN-185 §1 named one site; the census found the same shape in
 diff --git a/.github/workflows/smoke-install.yml b/.github/workflows/smoke-install.yml
 index 02377fb..7b55f02 100644
 --- a/.github/workflows/smoke-install.yml
@@ -2207,7 +2401,7 @@ index 735c096..d18c3d6 100644
  # row on stderr — a rejection nobody can see is the silence D3 was made of.
  # rc 0 = the row may be used; rc 1 = rejected.
 diff --git a/scripts/install.sh b/scripts/install.sh
-index 494d90f..ebf6332 100755
+index 494d90f..1c50a17 100755
 --- a/scripts/install.sh
 +++ b/scripts/install.sh
 @@ -457,6 +457,38 @@ print_help() {
@@ -2272,7 +2466,35 @@ index 494d90f..ebf6332 100755
    if [[ "$DRY_RUN" -eq 1 ]]; then
      # Dry-run never touches $TARGET, so never restore.
      exit "$rc"
-@@ -817,6 +856,227 @@ _CONTINUITY_PATHS=""
+@@ -761,6 +800,27 @@ cleanup_on_failure() {
+   fi
+   exit "$rc"
+ }
++
++# PLAN-185 W1 (rail round-4 P1) — EVERY path the EXIT trap deletes is
++# initialised HERE, before the trap can fire, so none of them can be inherited
++# from the caller's environment.
++#
++# The trap runs `rm -f` on `_STATE_OPS_FILE` and `_ATOMIC_TMP_PENDING`, and
++# `rm -rf` on `BACKUP_DIR`. `BACKUP_DIR` was already set above; the other two
++# were not — `_ATOMIC_TMP_PENDING` was first assigned inside the atomic writer
++# (which `--dry-run` never calls at all) and `_STATE_OPS_FILE` ten lines BELOW
++# the trap. Either one exported by the caller was an arbitrary path the trap
++# deleted on any exit. REPRODUCED against the pre-cure shadow:
++#
++#   env _ATOMIC_TMP_PENDING=/path/to/unrelated/file install.sh TARGET --dry-run
++#
++# exited 0 — with the "no files modified" promise on the label — and the
++# unrelated file was GONE. Same class this file already documents for
++# `_DELIVERED_TEMPLATES` (:841): a variable the script only ever writes is still
++# a variable the environment can seed.
++_ATOMIC_TMP_PENDING=""
++_STATE_OPS_FILE=""
++
+ trap cleanup_on_failure EXIT
+ 
+ # ---------------------------------------------------------------------
+@@ -817,6 +877,227 @@ _CONTINUITY_PATHS=""
  # no-op default so codex emissions land in .claude/.install-state.json).
  codex_journal() { _state_record_op "$1" "${2:-}"; }
  
@@ -2500,7 +2722,7 @@ index 494d90f..ebf6332 100755
  if [[ "$DRY_RUN" -eq 0 ]]; then
    if [[ -d "$TARGET/.claude" ]]; then
      BACKUP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/ceo-install-backup.XXXXXX")"
-@@ -867,9 +1127,18 @@ _assert_no_symlink_parents() {
+@@ -867,9 +1148,18 @@ _assert_no_symlink_parents() {
    parent_rel="$( dirname "$rel_path" )"
    [[ "$parent_rel" == "." ]] && return 0
    local cur="$TARGET"
@@ -2522,7 +2744,7 @@ index 494d90f..ebf6332 100755
      [[ -z "$comp" || "$comp" == "." ]] && continue
      cur="$cur/$comp"
      if [[ -L "$cur" ]]; then
-@@ -881,6 +1150,12 @@ _assert_no_symlink_parents() {
+@@ -881,6 +1171,12 @@ _assert_no_symlink_parents() {
    return 0
  }
  
@@ -2535,7 +2757,7 @@ index 494d90f..ebf6332 100755
  install_one() {
    local rel_path="$1"
    local src="$SOURCE_DIR/$rel_path"
-@@ -947,6 +1222,13 @@ install_template() {
+@@ -947,6 +1243,13 @@ install_template() {
      return
    fi
  
@@ -2549,7 +2771,7 @@ index 494d90f..ebf6332 100755
    if [[ "$DRY_RUN" -eq 1 ]]; then
      if [[ -e "$dst" ]]; then
        echo "    (dry-run) EXISTS (would skip template): $dst_rel"
-@@ -1179,8 +1461,9 @@ install_tier_policy() {
+@@ -1179,8 +1482,9 @@ install_tier_policy() {
    echo ""
    echo "==> Installing tier-policy (templates/.claude/tier-policy.json + .sigchain)"
    _state_record_op "install_tier_policy" ".claude/tier-policy.json"
@@ -2561,7 +2783,7 @@ index 494d90f..ebf6332 100755
  }
  
  # PLAN-133 E2 — OSV.dev / OSSF malicious-packages supply-chain advisory.
-@@ -1434,6 +1717,10 @@ install_reference_personas() {
+@@ -1434,6 +1738,10 @@ install_reference_personas() {
      _state_record_op "install_reference_personas" "opt-in"
      local src="$SOURCE_DIR/templates/team-personas-reference.md"
      local dst="$TARGET/.claude/team-personas-reference.md"
@@ -2572,7 +2794,7 @@ index 494d90f..ebf6332 100755
      if [[ "$DRY_RUN" -eq 1 ]]; then
        if [[ -e "$dst" ]]; then
          echo "    (dry-run) KEEP (would exist): .claude/team-personas-reference.md"
-@@ -1497,6 +1784,13 @@ install_docs_template() {
+@@ -1497,6 +1805,13 @@ install_docs_template() {
    if _install_src_refuses "$src_rel"; then
      return
    fi
@@ -2586,7 +2808,7 @@ index 494d90f..ebf6332 100755
    if [[ ! -f "$src" ]]; then
      echo "    SKIP (template missing): $src_rel"
      return
-@@ -1590,6 +1884,12 @@ install_docs_templates() {
+@@ -1590,6 +1905,12 @@ install_docs_templates() {
    echo ""
    echo "==> Installing docs/ templates"
    _state_record_op "install_docs_templates" "BRANCH-PROTECTION.md + rotation-log.md"
@@ -2599,7 +2821,7 @@ index 494d90f..ebf6332 100755
    install_docs_template "templates/docs/BRANCH-PROTECTION.md" "docs/BRANCH-PROTECTION.md"
    _register_delivered_template "docs/BRANCH-PROTECTION.md" "templates/docs/BRANCH-PROTECTION.md"
    install_docs_template "templates/docs/rotation-log.md" "docs/rotation-log.md"
-@@ -1600,29 +1900,174 @@ if [[ "$CEREMONY" != "user" ]]; then install_docs_templates; fi  # WS4-guard-doc
+@@ -1600,29 +1921,174 @@ if [[ "$CEREMONY" != "user" ]]; then install_docs_templates; fi  # WS4-guard-doc
  
  # ---- 5e. .github/ templates (PLAN-003 Phase 0 I-3) ----
  
@@ -2775,7 +2997,7 @@ index 494d90f..ebf6332 100755
      elif [[ -e "$dst" ]]; then
        echo "    EXISTS (skipping): .github/CODEOWNERS"
        # PLAN-183 W5 (D3): byte-compare against the RENDERED bytes — the form
-@@ -1630,19 +2075,18 @@ install_github_templates() {
+@@ -1630,19 +2096,18 @@ install_github_templates() {
        # file that happened to match the UNRENDERED template is not a framework
        # delivery, and claiming it would put the adopter's CODEOWNERS under
        # framework ownership.
@@ -2805,7 +3027,7 @@ index 494d90f..ebf6332 100755
      fi
    else
      install_docs_template \
-@@ -1681,16 +2125,37 @@ if [[ "$CEREMONY" == "user" ]]; then  # WS4-ceremony-settings
+@@ -1681,16 +2146,37 @@ if [[ "$CEREMONY" == "user" ]]; then  # WS4-ceremony-settings
    BASE_SRC="$SOURCE_DIR/templates/settings/settings.user.json"
  fi
  
@@ -2844,7 +3066,7 @@ index 494d90f..ebf6332 100755
    if [[ "$DRY_RUN" -eq 1 ]]; then
      if [[ -e "$SETTINGS_DST" ]]; then
        echo "    (dry-run) EXISTS (would skip settings.json)"
-@@ -1844,6 +2309,15 @@ DENY_BASELINE_ENTRIES=(
+@@ -1844,6 +2330,15 @@ DENY_BASELINE_ENTRIES=(
  )
  
  apply_deny_baseline() {
@@ -2860,7 +3082,7 @@ index 494d90f..ebf6332 100755
    if [[ "${CEO_INSTALL_SKIP_DENY_BASELINE:-0}" = "1" ]]; then
      echo "    SKIP: deny baseline (CEO_INSTALL_SKIP_DENY_BASELINE=1)"
      return 0
-@@ -2095,21 +2569,26 @@ echo ""
+@@ -2095,21 +2590,26 @@ echo ""
  echo "==> Installing project templates"
  _state_record_op "install_project_templates" "ceremony=$CEREMONY"
  if [[ "$CEREMONY" != "user" ]]; then  # WS4-guard-projtmpl
@@ -2897,7 +3119,7 @@ index 494d90f..ebf6332 100755
    if [[ -e "$TARGET/PROTOCOL.md" ]]; then
      return 0
    fi
-@@ -2167,12 +2646,58 @@ if [[ "$CEREMONY" != "user" ]]; then install_protocol_pointer; fi  # WS4-guard-p
+@@ -2167,12 +2667,58 @@ if [[ "$CEREMONY" != "user" ]]; then install_protocol_pointer; fi  # WS4-guard-p
  # CLAUDE.md / MEMORY.md already existed at target, we leave them alone
  # (install.sh never overwrites them).
  
@@ -2959,7 +3181,7 @@ index 494d90f..ebf6332 100755
  }
  
  # Build the sed script iteratively. Each non-empty placeholder adds an
-@@ -2807,6 +3332,18 @@ _write_install_state() {
+@@ -2807,6 +3353,18 @@ _write_install_state() {
      echo "    NOTE: install-state skipped (python3 not found) — upgrade.sh will use the ADR-155 fallback path" >&2
      return 0
    fi
@@ -2978,7 +3200,7 @@ index 494d90f..ebf6332 100755
    local state_file="$TARGET/.claude/.install-state.json"
    local fw_version=""
    if [[ -f "$SOURCE_DIR/VERSION" ]]; then
-@@ -3032,6 +3569,21 @@ if [[ "$HARNESS" == "grok" ]]; then
+@@ -3032,6 +3590,21 @@ if [[ "$HARNESS" == "grok" ]]; then
    fi
  fi
  
@@ -3002,10 +3224,10 @@ index 494d90f..ebf6332 100755
    _write_install_state
 diff --git a/scripts/tests/test-installer-write-safety-e2e.sh b/scripts/tests/test-installer-write-safety-e2e.sh
 new file mode 100755
-index 0000000..7c457e4
+index 0000000..10decfb
 --- /dev/null
 +++ b/scripts/tests/test-installer-write-safety-e2e.sh
-@@ -0,0 +1,868 @@
+@@ -0,0 +1,965 @@
 +#!/usr/bin/env bash
 +# PLAN-185 W1+W2 (S329) — the installer must not write outside the directory it
 +# was given, and --github-owner must not be able to leave .github/CODEOWNERS
@@ -3811,6 +4033,103 @@ index 0000000..7c457e4
 +_assert_external_untouched "$OUTSIDE/preview-lie.md" "F3 (dry-run)"
 +
 +# ---------------------------------------------------------------------------
++# F4.1 — nothing the EXIT trap deletes may be inherited from the environment.
++#
++# Rail round-4. The trap runs `rm -f` on `_STATE_OPS_FILE` and
++# `_ATOMIC_TMP_PENDING`; neither was initialised before the trap was installed
++# (`_ATOMIC_TMP_PENDING` was first assigned inside the atomic writer, which
++# --dry-run never calls; `_STATE_OPS_FILE` ten lines below the trap). A caller
++# exporting either one therefore handed the installer an arbitrary path to
++# delete on ANY exit. REPRODUCED: a --dry-run — the mode whose entire promise is
++# that no file is modified — exited 0 and the unrelated file was gone.
++#
++# The assertion is on the victim's BYTES, not on the exit code, for the same
++# reason every F1 leg is: the pre-cure run reported success while doing it.
++# ---------------------------------------------------------------------------
++echo "==> F4.1 an inherited trap variable must not become an arbitrary deletion"
++_trap_inherit_leg() {
++  _til_var="$1"
++  _mkcase "f4-trap-${2}"
++  _til_victim="$CASE/precious.txt"
++  printf 'ADOPTER DATA THAT MUST SURVIVE\n' > "$_til_victim"
++  _til_before="$( shasum -a 256 < "$_til_victim" | awk '{print $1}' )"
++  env "$_til_var=$_til_victim" \
++      bash "$INSTALLER" "$TARGET" --profile core --ceremony maintainer --dry-run \
++      >"$LOG" 2>&1
++  if [ ! -e "$_til_victim" ]; then
++    bad "F4.1 ($_til_var) — the file was DELETED by the trap under --dry-run"
++  elif [ "$( shasum -a 256 < "$_til_victim" | awk '{print $1}' )" = "$_til_before" ]; then
++    ok "F4.1 ($_til_var) — the inherited path survives byte-identical"
++  else
++    bad "F4.1 ($_til_var) — the file was MODIFIED"
++  fi
++}
++_trap_inherit_leg _ATOMIC_TMP_PENDING atomic
++_trap_inherit_leg _STATE_OPS_FILE ops
++
++# ---------------------------------------------------------------------------
++# F4.2 — the recorded owner is validated BEFORE the lossy transport.
++#
++# Rail round-4. `upgrade.sh` reads github_owner out of the install-state through
++# a command substitution, and that transport is lossy in two specific ways:
++# bash cannot hold a NUL in a variable (it is dropped silently) and `$( )`
++# strips trailing newlines. So the shell validated a DIFFERENT string than the
++# one recorded. MEASURED pre-cure, against the reader extracted from the shipped
++# upgrade.sh: "ali<NUL>ce" arrived as "alice" and PASSED the grammar, and so did
++# "alice\n\n".
++#
++# The reader is EXTRACTED from upgrade.sh rather than copied here, so this leg
++# measures the shipped code — an embedded copy would only ever agree with
++# itself.
++# ---------------------------------------------------------------------------
++echo "==> F4.2 an owner that cannot survive the transport is refused at the source"
++UPGRADE="$FRAMEWORK_ROOT/scripts/upgrade.sh"
++if [ ! -f "$UPGRADE" ]; then
++  bad "F4.2 — no scripts/upgrade.sh at $UPGRADE"
++else
++  _mkcase f4-owner-transport
++  READER_PY="$CASE/reader.py"
++  awk '/_riso_h="\$\( PYTHONNOUSERSITE=1 python3 -I -c /{f=1;next} f&&/^'"'"' "\$_INSTALL_STATE_FILE"/{f=0} f{print}' \
++      "$UPGRADE" > "$READER_PY"
++  if [ ! -s "$READER_PY" ]; then
++    bad "F4.2 — could not extract the reader from upgrade.sh; this leg is dead, not passing"
++  else
++    ok "F4.2 — extracted the reader from the shipped upgrade.sh ($( wc -l < "$READER_PY" | tr -d ' ' ) lines)"
++    _owner_leg() {
++      _ol_label="$1"; _ol_pyexpr="$2"; _ol_tag="$3"; _ol_expect="$4"
++      _ol_dir="$CASE/$_ol_tag"; mkdir -p "$_ol_dir"
++      PYTHONNOUSERSITE=1 python3 -I -c "$_ol_pyexpr" > "$_ol_dir/state.json" 2>/dev/null
++      _ol_got="$(
++        # shellcheck disable=SC1090
++        . "$LIB" >/dev/null 2>&1
++        h="$( PYTHONNOUSERSITE=1 python3 -I "$READER_PY" "$_ol_dir/state.json" 2>/dev/null )" \
++          || { printf 'refused'; exit 0; }
++        if _wbm_github_handle_ok "$h"; then printf 'accepted:%s' "$h"; else printf 'refused'; fi
++      )"
++      if [ "$_ol_got" = "$_ol_expect" ]; then
++        ok "F4.2 — $_ol_label => $_ol_got"
++      else
++        bad "F4.2 — $_ol_label => $_ol_got (expected $_ol_expect)"
++      fi
++    }
++    _owner_leg "owner carrying a NUL" \
++      'import json,sys; sys.stdout.write(json.dumps({"schema_version":1,"request":{"github_owner":"ali\u0000ce"}}))' \
++      nul refused
++    _owner_leg "owner with two trailing newlines" \
++      'import json,sys; sys.stdout.write(json.dumps({"schema_version":1,"request":{"github_owner":"alice\n\n"}}))' \
++      nl refused
++    _owner_leg "owner with a carriage return" \
++      'import json,sys; sys.stdout.write(json.dumps({"schema_version":1,"request":{"github_owner":"alice\r"}}))' \
++      cr refused
++    # Control: without this the three refusals above are satisfied by a reader
++    # that refuses everything, which would silently disable the CODEOWNERS route.
++    _owner_leg "a clean handle (control)" \
++      'import json,sys; sys.stdout.write(json.dumps({"schema_version":1,"request":{"github_owner":"acme-platform"}}))' \
++      ok "accepted:acme-platform"
++  fi
++fi
++
++# ---------------------------------------------------------------------------
 +# F2.7 — ONE grammar, two executables. install.sh validates through
 +# _wbm_github_handle_ok; upgrade.sh's _read_install_state_github_owner reads
 +# back through the SAME function. A divergence here does not fail loudly: the
@@ -3875,7 +4194,7 @@ index 0000000..7c457e4
 +echo "OK"
 +exit 0
 diff --git a/scripts/upgrade.sh b/scripts/upgrade.sh
-index 9ef5b20..066dc90 100755
+index 9ef5b20..b50619d 100755
 --- a/scripts/upgrade.sh
 +++ b/scripts/upgrade.sh
 @@ -3676,11 +3676,25 @@ _UP_DELIVERY_PRECONDITION_REASON=""
@@ -3906,7 +4225,7 @@ index 9ef5b20..066dc90 100755
  try:
      with open(sys.argv[1], "r", encoding="utf-8") as f:
          d = json.load(f)
-@@ -3694,13 +3708,10 @@ if not isinstance(req, dict):
+@@ -3694,13 +3708,25 @@ if not isinstance(req, dict):
  h = req.get("github_owner", "")
  if not isinstance(h, str) or not h:
      sys.exit(3)
@@ -3914,7 +4233,21 @@ index 9ef5b20..066dc90 100755
 -# produced the 0-byte CODEOWNERS in PLAN-183 §9.2), no "&"/"\\" (sed
 -# replacement metacharacters), no whitespace, no shell metacharacters.
 -if not re.match(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$", h):
--    sys.exit(3)
++# TRANSPORT INTEGRITY — not the grammar (rail round-4 P2). The value leaves
++# here through a command substitution, and that transport is LOSSY in two
++# specific ways: bash cannot hold a NUL in a variable at all, so it is dropped
++# silently, and `$( )` strips trailing newlines. Either one means the shell
++# validates a DIFFERENT string than the one recorded. MEASURED against this
++# reader before the check existed: "ali\x00ce" arrived as "alice" and PASSED,
++# and so did "alice\n\n".
++#
++# So the question that must be answered HERE, where the bytes are still intact,
++# is "does this value survive the transport unchanged?" — and only that. The
++# CHARACTER SET question stays with _wbm_github_handle_ok, which remains the
++# single owner of the grammar; restating the charset here would rebuild the
++# second copy round-1 deleted.
++if "\x00" in h or "\r" in h or "\n" in h:
+     sys.exit(3)
 -sys.stdout.write(h + "\n")
 -' "$_INSTALL_STATE_FILE" 2>/dev/null
 +sys.stdout.write(h)
@@ -3924,7 +4257,7 @@ index 9ef5b20..066dc90 100755
  }
  
  # sha256 of every generation of a SOURCE relpath in $SOURCE_DIR's git history,
-@@ -3839,18 +3850,27 @@ _up_tpl_write() {
+@@ -3839,18 +3865,27 @@ _up_tpl_write() {
  # GNU-first with the output VALIDATED, because on GNU `stat -f` SUCCEEDS
  # printing FILESYSTEM information rather than failing (the lesson
  # _up_tpl_stat_mode above already pays); `ls -ld` is the last resort.
