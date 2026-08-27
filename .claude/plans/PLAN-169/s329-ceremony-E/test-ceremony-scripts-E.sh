@@ -260,8 +260,14 @@ _land() {
 # arquivo conhecido, e `-A` e um add capaz de diretorio — bloqueado pela regra
 # R4 do ceremony-lint.
 _commit_plant() {
+  # T-S329-2 / classe d9d9cab: um plant que coincide com o estado ja commitado
+  # em HEAD (ex.: o trailer do COMMIT-MSG ja preenchido na arvore viva) deixa o
+  # index vazio, e um commit incondicional abortaria com "nothing to commit" —
+  # o cenario ficaria vermelho pelo motivo errado. Index vazio => plant ja
+  # vigente, seguir sem commit.
   ( cd "$1" && git add -- "$2" \
-    && git -c user.name=t -c user.email=t@example.invalid commit -q -m "selftest plant" )
+    && { git diff --cached --quiet \
+         || git -c user.name=t -c user.email=t@example.invalid commit -q -m "selftest plant"; } )
 }
 # Espera VERMELHO com uma razao NOMEADA. Um abort pelo motivo errado e
 # indistinguivel de um gate morto se so olharmos o exit code.
