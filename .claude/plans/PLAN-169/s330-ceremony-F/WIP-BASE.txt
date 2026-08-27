@@ -1,0 +1,3 @@
+WIP-BASE=1c34eb59bf8639c4f413960a49f38e6baa34ade1
+snapshot=2026-08-27T22:38:15Z
+note=snapshot point-in-time da sombra shadow-F-c0cb915 (writer f-derivation-writer em curso, 2 cortes de quota); recuperar: git clone --local . <dir> && git -C <dir> checkout <WIP-BASE> && git -C <dir> apply --3way F-wip.patch
