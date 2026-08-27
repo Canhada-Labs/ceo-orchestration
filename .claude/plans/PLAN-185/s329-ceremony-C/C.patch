@@ -1882,7 +1882,7 @@ index e0d679b..c68fd1b 100644
  > `bash .claude/scripts/local/verify-counts.sh`.
  
 diff --git a/CLAUDE.md b/CLAUDE.md
-index 21f7317..4644256 100644
+index 0322d55..ac48de2 100644
 --- a/CLAUDE.md
 +++ b/CLAUDE.md
 @@ -51,7 +51,7 @@ library — you install it *into* an existing repository with
