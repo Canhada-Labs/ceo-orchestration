@@ -143,6 +143,16 @@ Fora, declarado:
 > (nunca `git add -A` com eles no disco); as checkboxes seguem ABERTAS tambem pela clausula "roda
 > em CI" (wiring em `validate.yml` e canonico — vai no pacote; linha exata no relatorio §8).
 
+> **Status S329 (2026-08-27): W0 COMMITADO e PARADO como ratchet; W1+W2+W3 LANDADAS em `cc00235`.**
+> O censo entrou no repo em três passadas commitadas (`843eb57` invertida, `7383518` 5ª,
+> `f31e1b1` 6ª — 7 contornos, 27 fixtures, 148 testes) e PAROU por anti-padrão 6 em `2f71dea`:
+> 7 levas de rail da classe «forma não modelada ⇒ fail-open» em 3 arquiteturas de regra. Fica
+> como RATCHET fail-closed no `validate.yml` (per-PR, sem filtro `paths:`; o baseline é
+> regenerado no MESMO patch de qualquer wave que toque `scripts/`) com pontos cegos DECLARADOS —
+> a decisão de escopo é a **OQ-W0-STOP** (§6). As checkboxes acima ficam abertas de propósito: a
+> régua «desguardado = 0» que elas pedem foi trocada pela 4ª passada (ver AC-3 e o registro de
+> execução abaixo).
+
 A licao que este repo ja pagou duas vezes (PLAN-182: 16 modulos; PLAN-167:
 `_ownership_verdict`): curar os sitios reportados e deixar a classe viva
 converte defeito latente em defeito vivo na proxima wave que alargar o
@@ -313,16 +323,55 @@ dominio de entrada.
       (`install.sh`, `upgrade.sh`, `doctor.sh`) — a fronteira de 3+ módulos
       que o próprio gate de arquitetura exige.
 
+### Registro de execução — W1+W2+W3 LANDADAS (S329, 2026-08-27, commit `cc00235`)
+
+**Pacote C** (`PLAN-185/s329-ceremony-C/`; sentinel `wave-s329-C-approved.md` assinado pelo
+Owner às 11:40; `OWNER-S329-C-LAND.sh` G-PRE..G5 + V1..V7 verdes; push OK): patch `effaeb87…`
+de 21 paths, 6 canônicos (`install.sh`, `upgrade.sh`, `_framework_manifest_set.sh`,
+`smoke-install.yml`, `validate.yml`, ADR-196), base `cb234f4`.
+
+- **W1** — `_wbm_dst_refuses <root> <rel>` em `scripts/_framework_manifest_set.sh` (predicado na
+  biblioteca, política no chamador), consumido por `install.sh` (26 hunks; PRÉ-VOO de todos os
+  destinos antes da primeira escrita; recusas NOMEADAS e acumuladas, sumário no fim) e por
+  `upgrade.sh` (`_up_tpl_multilink_refuses` sobre `_wbm_nlink`). `doctor.sh` NÃO convertido (FU-7).
+- **W2** — gramática única `_wbm_github_handle_ok` (produtor e consumidor); `--github-owner`
+  validado no parse, antes de persistir e antes de cada render; render em PIPE + escrita atômica
+  (`_write_rendered_codeowners`: mktemp no mesmo diretório + `mv`); recuperação do CODEOWNERS de
+  0 bytes por EVIDÊNCIA de entrega (delivery record / manifesto), nunca por cerimônia nem por
+  handle gravado.
+- **W3** — `docs/threat-model.md` ganha a superfície de escrita de destino; ADR-196
+  (`installer-write-confinement`) registra «predicado na biblioteca, política no chamador» com
+  os três consumidores previstos.
+- **Evidência:** e2e `scripts/tests/test-installer-write-safety-e2e.sh` **105/0** no V5 do LAND
+  (asserções em BYTES em caminho externo; controle positivo 22 passed / 33 failed contra o
+  pré-cura); rail codex 5 rodadas (r1 2P1+1P2 → r4 2P1+1P2 → r5 LIMPA); censo no V4 «desguardado
+  197 → 194, 838 sítios, ratchet limpo»; harness 17/0. Três aborts pagos ANTES do land, todos pelo
+  gate certo: drift do `CLAUDE.md` (re-derivado por item, `836214a`); F1.8 `repo-profile.yaml`
+  com timestamp só sob TTY (`[[ -t 0 ]]` no `install.sh` — cura no e2e com pseudo-TTY, 104/1 →
+  105/0); `EXPECTED_E2E_PASSED` 80 → 105 stale (atualizado conscientemente, 3 fontes, `cb234f4`).
+- **Colateral no CI:** o `Smoke Install` de `cc00235` REPROVOU no oráculo D3
+  (`test-manifest-delivery-route.sh` S.1 localizava o render do CODEOWNERS pela forma `sed`
+  pré-W2) com 10 steps `skipped` — curado em `adb6e84` (127/0). O V6 do LAND roda o
+  `smoke-install.sh`, não os oráculos de rota que grepam `install.sh`: teste fora do patch que
+  localiza código por texto literal apodrece em silêncio.
+- **Abertos por desenho:** FU-1 (o censo não modela «predicado-de-confinamento domina», então os
+  escritores curados seguem contados como desguardado/indeterminado — daí a régua do AC-3); FU-7
+  (`doctor.sh`); OQ-W0-STOP; TOCTOU entre predicado e escrita (bash não tem `openat`/`O_NOFOLLOW`
+  — a guarda estreita a janela, declarado no sentinel). O flip `executing → done` é decisão do
+  Owner (§6, pós-land).
+
 ## Acceptance criteria
 
-- [ ] AC-1 `[P0]` F1 não reproduz em **nenhum** dos sete escritores: a
+- [x] AC-1 `[P0]` F1 não reproduz em **nenhum** dos sete escritores: a
       reprodução da §1 termina com **zero bytes escritos fora do target** e
       recusa NOMEADA. **O critério é BYTES, nunca exit code** — o defeito
       atual sai `exit 0` com log `COPIED:`, e a política por chamador (W1
       `[P0]`) permite que a run siga sem `exit` não-zero no ponto da recusa.
       Check: os SETE testes da W1 verdes, e VERMELHOS com a função revertida
       por `git stash` do plant.
-- [ ] AC-2 `[P0]` F2 não reproduz, em três pernas: **(i)** handle inválido ⇒
+      **Provado (S329, `cc00235`):** pernas F1.x do e2e em BYTES, 105/0 no V5 do LAND; controle
+      22 passed / 33 failed contra o pré-cura (registro de execução acima).
+- [x] AC-2 `[P0]` F2 não reproduz, em três pernas: **(i)** handle inválido ⇒
       falha nomeada e nenhum `.github/CODEOWNERS` criado; **(ii)** handle
       inválido ⇒ `github_owner` **não** é gravado no install-state (validação
       de `:2829` — sem ela o handle corrompido degrada silenciosamente a
@@ -335,6 +384,8 @@ dominio de entrada.
       re-renderiza. A recuperação exige `install.sh --github-owner <handle>`,
       e isso entra no texto da mensagem de erro.
       Check: as três fixtures da W2 verdes; a (c) prova a recuperabilidade.
+      **Provado (S329, `cc00235`):** pernas F2.x do e2e (gramática única sobre 22 valores, handle
+      lossy via `$(...)` com NUL/CR/LF, recuperação por evidência de entrega), 105/0 no V5.
 - [ ] AC-3 `[P0]` A CLASSE está fechada na população que esta wave cura, e o
       instrumento roda em CI. **Critério (rota (i) do censo §5.1):** zero
       sítios BLOQUEANTES de classe A em `install.sh` e `upgrade.sh` — **19 →
@@ -354,7 +405,11 @@ dominio de entrada.
       idênticas) **e** ganha step invocador **e** controle NEGATIVO (renomear
       o e2e ⇒ o step falha por arquivo ausente, nunca passa calado).
       Polaridade do gate per-PR: **OQ-3**.
-- [ ] AC-4 `[P1]` UMA cerimônia cobrindo W1+W2+W3: sentinel na forma VIVA,
+      **Estado S329:** a CLASSE fechou nos escritores (W1) e o instrumento roda em CI (ratchet
+      fail-closed; V4 «197 → 194 desguardado sobre 838 sítios»), mas a contagem «19 → 0 sobre 27»
+      foi escrita sobre a régua do censo de S326, que a 4ª passada trocou — FU-1 antes de este AC
+      poder ser marcado; decisão em §6 (OQ-6).
+- [x] AC-4 `[P1]` UMA cerimônia cobrindo W1+W2+W3: sentinel na forma VIVA,
       Scope **DERIVADO do patch** no finalize (nunca à mão — a S324 errou
       duas vezes), `touched − scope = ∅` antes do commit.
       **O gate NÃO é sobre canônicos:** medido em
@@ -371,6 +426,8 @@ dominio de entrada.
       plano.
       Check: `_sentinel_grants_path` devolve True para cada path CANÔNICO
       tocado, e o gate `touched − scope` sai zero sobre o conjunto INTEIRO.
+      **Provado (S329):** G4 «21 path(s): touched == scope nos dois sentidos»; G5 «6 canônicos,
+      todos concedidos pelo sentinel»; Scope DERIVADO por `finalize_patch.py` (`00f56df`).
 
 ## 4. Cerimonia
 
@@ -509,3 +566,13 @@ Perguntas NOVAS que surgirem durante a execução autônoma NÃO têm resposta n
 noite (o Owner está ausente): registram-se aqui como OQ numerada, a unidade
 correspondente fica BLOQUEADA nesse ponto, e a decisão é do Owner na manhã
 seguinte — nunca do CEO.
+
+**Pós-land (2026-08-27, S329) — decisões do Owner pendentes.**
+
+- **OQ-6 — o flip `executing → done`.** W1+W2+W3 landaram (`cc00235`); W0 parou como ratchet
+  (OQ-W0-STOP). O que falta para `done`: AC-3 (régua trocada — FU-1) e a conversão de `doctor.sh`
+  (FU-7). **Default recomendado:** `done`, com FU-1, FU-7 e OQ-W0-STOP registrados como
+  follow-ups nomeados — a classe está fechada na população que a wave cura; o resto é escopo novo.
+- **OQ-7 — FU-7, `scripts/doctor.sh` como terceiro consumidor de `_wbm_dst_refuses`.** Wave
+  própria, canônica, 1 path; até lá o `doctor.sh` segue com os seus escritores fora do predicado
+  (o ADR-196 já o nomeia como consumidor previsto).

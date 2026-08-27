@@ -40,7 +40,7 @@ documentation bug.
 | Artifact | Count | Verify |
 |---|---|---|
 | Python tests collected | ~14,700 | `make test-collect` (or `python3 -m pytest --collect-only -q \| tail -1` — pytest.ini pins the testpath roots) |
-| Test files | ~770 | `git ls-files '*test_*.py' '*_test.py' \| wc -l` |
+| Test files | ~810 | `git ls-files '*test_*.py' '*_test.py' \| wc -l` |
 | ADRs shipped | 197 | `ls .claude/adr/ADR-*.md \| wc -l` |
 | SPEC/v1 files | 32 (28 `*.schema.md`) | `ls SPEC/v1/*.md \| wc -l` |
 | Workflows | 23 | `ls .github/workflows/*.yml \| wc -l` |

@@ -1225,6 +1225,54 @@ o dado em mãos, não por simetria).
   tag v1.4.0 → publish**. Deferred E.13 (workflow_call) segue deferido
   — gatilho inalterado.
 
+### Registro de execução — wave-s329-E LANDADA (S329, 2026-08-27, commit `5930974`)
+
+Cura do achado do rail (rodada 3) do pack D do PLAN-179
+(`PLAN-179/s328-ceremony-D/FINDING-upgrade-lifecycle-hooks-S328.md`):
+`upgrade.sh` carregava um roster LITERAL de 6 lifecycle hooks, e
+`check_ledger_checkpoint.py` nunca foi registrado por upgrade nenhum.
+Hospedada aqui por ser substrato de instalação/upgrade, com pacote próprio
+em `PLAN-169/s329-ceremony-E/` (sentinel `wave-s329-E-approved.md` assinado
+pelo Owner; `OWNER-S329-E-LAND.sh` G-PRE..G5 + V1..V7 verdes; patch
+`dfe1866b…`, 5 paths, 2 canônicos — `scripts/upgrade.sh` e
+`.github/workflows/smoke-install.yml`).
+
+- **Semântica landada:** `_merge_lifecycle_hooks_into_settings` DERIVA o
+  roster do template da CERIMÔNIA — `settings.base.json` (47 registros) sob
+  `maintainer` GRAVADO/explícito, `settings.user.json` (20) sob `user`
+  GRAVADO/explícito — aditivo por chave de identidade (nunca re-canonicaliza
+  um registro presente; appenda só as entradas AUSENTES de um bloco); o
+  `.env` do template viaja com os `.hooks` (o valor do adopter vence; forma
+  inesperada PRESERVADA e nomeada); cerimônia DESCONHECIDA (sem install-state
+  e sem flag — o `user` que o resolver responde é só fail-safe de escrita na
+  raiz) registra NENHUM hook, aplica só as settings que os dois perfis
+  declaram com o mesmo valor, diz `PARTIAL (ceremony unknown)` e o opt-in
+  `--ceremony maintainer|user`; template malformado (stream de documentos,
+  `.hooks` ou `.env` de forma errada) ⇒ recusa integral nomeada; `--dry-run`
+  não escreve nada (scratch via `_up_tmpbase`, trap `RETURN` de corpo fixo).
+- **Evidência:** unit `test_upgrade_lifecycle_hooks_derived.py` 88/88 (V2);
+  e2e `test-upgrade-lifecycle-hooks-derived.sh` 71/0 (V3 — install e
+  upgrades reais; E.3 red-control pré-cura; E.4 hook sintético; E.14
+  cerimônia `user`; E.15 cerimônia desconhecida); rail codex **12 rodadas**:
+  r1–r5 na noite (r5 limpa no estado congelado) e **r6–r12 sobre a sombra
+  RE-DERIVADA** depois do land de C, que acharam 4 P1 REAIS no núcleo (r6 a
+  cerimônia era ignorada; r7 o `.env` não viajava; r8 inferido ≠ gravado; r9
+  a postura SHARED do r8 não era provável ⇒ arquitetura trocada) + 6 P2,
+  cada um com controle vermelho; r12 limpa. Registro em `DESIGN-E.md`
+  §10–§16 e `rail-round-{1..12}.md`. O `smoke-install.yml` ganhou o step
+  (`if: always()`) e `timeout-minutes` 83 → 126 — composto sobre o +15 de C
+  (`max` teria sub-dimensionado o job).
+- **Lições pagas:** rodada limpa do rail prova a SUPERFÍCIE revisada, não o
+  entregável — uma sombra re-derivada ganha o rail inteiro de novo; cura que
+  gera o achado seguinte (r8 → r9) pede troca de ARQUITETURA, não remendo.
+- **Abertas (Owner):** **OQ-E5** — `settings.user.json` está DEFASADO: 26
+  nomes só-na-base = 10 excluídos de propósito + **16 não-deliberados** (a
+  base cresceu desde 30/07; `check_ledger_checkpoint.py` entre eles); cura =
+  derivar o template `user` da base por subtração dos 10 + teste de paridade
+  (a mesma classe que esta wave fecha no upgrader, uma camada acima). OQ-E1
+  (recusa hook a hook) alarga-se ao `.env`; OQ-E6 (quem repara um registro
+  deformado — hoje ninguém).
+
 ## Acceptance criteria
 
 - [x] AC-1 [P0] Ledger 100% endereçado: cada item A-F fecha numa wave,
