@@ -324,6 +324,81 @@ jobs:
           echo "✓ Shellcheck clean on all active hooks/scripts"
 
       # -----------------------------------------------------------------
+      # Step: installer unsafe-write census (PLAN-185 W0, AC-3)
+      #
+      # The CLASS shellcheck above cannot see: a write whose DESTINATION was
+      # decided by an existence test. `-e` follows symlinks, so a dangling
+      # link at the destination sends the writer down the "nothing there yet"
+      # branch and the write lands OUTSIDE $TARGET (measured: 536 bytes,
+      # PLAN-185 §1). The census enumerates the forms PROVEN safe and treats
+      # everything else as `indeterminado` — fail-closed by construction,
+      # after three earlier passes that enumerated DANGEROUS forms and
+      # regenerated the same "form not modelled => fail-open" finding on
+      # every pair-rail round.
+      #
+      # validate.yml has NO `paths:` filter (it runs on every pull_request
+      # and every push to main), so this gate cannot fall into the S325
+      # "gate the change does not trigger" trap that the smoke-install path
+      # lists exist to avoid.
+      #
+      # Exit codes, both fail-closed — no `|| true`, no continue-on-error:
+      #   1 = a NEW blocking site, a DEAD baseline entry, or a malformed
+      #       baseline row (a row the loader cannot read waives nothing and
+      #       reports nothing, so swallowing it would let a corrupted
+      #       baseline look healthy);
+      #   2 = a census of ZERO sites, which FAILS by design — zero means the
+      #       search pattern broke, never that the repo got clean.
+      #
+      # RATCHET, not `--strict`, per the census §7 and OQ-1. MEASURED on the
+      # live tree 2026-08-26 with instrument sha256 25d6dcf3…: ratchet rc=0,
+      # `--strict` rc=1 on 424 indeterminate sites. A `--strict` gate would be
+      # born red and nothing could merge. That 424 MOVES with the instrument
+      # (the same tree answered 76 an instrument-generation earlier), so treat
+      # it as a dated reading, not a constant — measure, do not trust this
+      # comment. `--strict` is the target state once W1/W2 and the triage
+      # shrink the set; flipping it is a wave of its own, not a flag change.
+      #
+      # The instrument's own unit suite needs no step here: the "Run Python
+      # script unit tests" step below runs the whole `.claude/scripts/tests/`
+      # directory, so it is wired by membership — the same rule `:291-295`
+      # states for the Wave C tests ("do NOT re-list them as paths").
+      #
+      # UNCONDITIONAL on purpose. The instrument ships in its own commit
+      # (PLAN-185 W0, 7383518) and is a tracked file, so there is no checkout
+      # of this workflow's own branch where it is legitimately absent. A
+      # defensive `if [ -f … ]` was considered and REJECTED: it converts a
+      # blocking gate into one that reports success when it ran nothing, which
+      # is the exact class the negative control in smoke-install.yml exists to
+      # prevent. If the instrument is ever missing, RED is the correct answer —
+      # it means the bundle did not land.
+      # -----------------------------------------------------------------
+      - name: Run check-installer-write-safety.py (PLAN-185 W0)
+        run: |
+          set -euo pipefail
+          python3 .claude/scripts/check-installer-write-safety.py
+
+      # ADVISORY, never a gate (PLAN-185 OQ-1). The ratchet above is blind to
+      # ONE thing by design: the baseline waives `indeterminado`, so that set
+      # can GROW without turning any check red. This step is that set's
+      # readout — one line per PR, so the debt is visible while OQ-1 is open.
+      # `continue-on-error: true` makes it structurally incapable of blocking
+      # a merge. Output is BOUNDED on purpose: `--strict` lists every site
+      # (424 lines today), which is a wall nobody reads, so only the summary
+      # line and a short tail are printed. The rc is captured immediately and
+      # printed rather than swallowed — `cmd > log; RC=$?` and never
+      # `cmd || true`, which would report success for every outcome.
+      - name: check-installer-write-safety.py --strict (advisory, OQ-1)
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          LOG="${RUNNER_TEMP:-/tmp}/iws-strict.log"
+          python3 .claude/scripts/check-installer-write-safety.py --strict > "$LOG" 2>&1
+          RC=$?
+          echo "--strict rc=$RC — ADVISORY; OQ-1 decides when (and whether) this becomes a gate."
+          grep -E '^--strict: ' "$LOG" || echo "(no --strict summary line — see the tail below)"
+          tail -n 15 "$LOG"
+
+      # -----------------------------------------------------------------
       # Step: Python hook unit tests (Sprint 2 A.4)
       # Runs every test under .claude/hooks/tests/. Uses Python 3.12
       # from setup-python (audit-v2 hot-fix: ubuntu-24.04 runner's

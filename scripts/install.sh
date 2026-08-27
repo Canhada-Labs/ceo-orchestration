@@ -457,6 +457,38 @@ print_help() {
   exit 0
 }
 
+# PLAN-185 W2 — validate the GitHub handle AT THE PARSE BOUNDARY, through the
+# ONE grammar scripts/_framework_manifest_set.sh owns (_wbm_github_handle_ok,
+# adopted from the one upgrade.sh:3700 already enforced).
+#
+# WHY HERE: this is the single point that covers all three interpolation sites
+# at once — the CODEOWNERS render, the EXISTS byte-compare probe, and the
+# placeholder substitution — plus the install-state persistence. MEASURED
+# pre-cure (S329): `--github-owner 'acme/platform'` was accepted raw, the `/`
+# closed the `sed` s-command early, sed exited "bad flag in substitute
+# command", and `>` had ALREADY truncated .github/CODEOWNERS to 0 bytes. That
+# file then survives as EXISTS-skipped forever, the rollback never reaches it
+# (the snapshot covers $TARGET/.claude only), and GitHub reads an empty
+# CODEOWNERS as "no owners".
+#
+# Fail-CLOSED when the predicate is missing: this validates INPUT, and content
+# a guard cannot parse is refused rather than waved through (CLAUDE.md §4).
+# exit 2 is the established code for a rejected flag VALUE (--ceremony, :471).
+_assert_github_owner_grammar() {
+  local _ago_val="$1" _ago_where="$2"
+  if ! command -v _wbm_github_handle_ok >/dev/null 2>&1; then
+    echo "ERROR: cannot validate $_ago_where — scripts/_framework_manifest_set.sh was not sourced (partial checkout)." >&2
+    echo "       Refusing rather than interpolating an unvalidated value into .github/CODEOWNERS." >&2
+    exit 2
+  fi
+  if ! _wbm_github_handle_ok "$_ago_val"; then
+    echo "ERROR: $_ago_where must be a GitHub handle: 1-39 characters, starting with a letter or digit, containing only letters, digits and hyphens (got: '$_ago_val')" >&2
+    echo "       TEAM handles (org/team) are NOT supported by this flag — '/' is the substitution delimiter, and interpolating it is what leaves .github/CODEOWNERS empty." >&2
+    echo "       Install without --github-owner (the .github/CODEOWNERS.template is delivered instead) and write the team line by hand." >&2
+    exit 2
+  fi
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --link)
@@ -476,7 +508,9 @@ while [[ $# -gt 0 ]]; do
     --stack)
       STACK="${2:-}"; STACK_EXPLICIT=1; shift 2 ;;
     --github-owner)
-      GITHUB_OWNER="${2:-}"; shift 2 ;;
+      GITHUB_OWNER="${2:-}"
+      _assert_github_owner_grammar "$GITHUB_OWNER" "--github-owner"
+      shift 2 ;;
     --with-reference-personas)
       WITH_REFERENCE_PERSONAS=1; shift ;;
     --dry-run)
@@ -739,6 +773,11 @@ cleanup_on_failure() {
   # PLAN-153 Wave B item B1 — the ops journal lives OUTSIDE $TARGET; drop it
   # on every exit path (fail-open, never affects rc).
   if [[ -n "${_STATE_OPS_FILE:-}" ]]; then rm -f "$_STATE_OPS_FILE" 2>/dev/null || true; fi
+  # PLAN-185 W2 — the staging file of an in-flight atomic write. Every failure
+  # path inside the writer removes it; this is the trap half, for an abort
+  # BETWEEN mktemp and mv (a signal, or `set -e` firing in a callee). Without
+  # it a `.ceo-codeowners.XXXXXX` would be left in the adopter's .github/.
+  if [[ -n "${_ATOMIC_TMP_PENDING:-}" ]]; then rm -f "$_ATOMIC_TMP_PENDING" 2>/dev/null || true; fi
   if [[ "$DRY_RUN" -eq 1 ]]; then
     # Dry-run never touches $TARGET, so never restore.
     exit "$rc"
@@ -761,6 +800,27 @@ cleanup_on_failure() {
   fi
   exit "$rc"
 }
+
+# PLAN-185 W1 (rail round-4 P1) — EVERY path the EXIT trap deletes is
+# initialised HERE, before the trap can fire, so none of them can be inherited
+# from the caller's environment.
+#
+# The trap runs `rm -f` on `_STATE_OPS_FILE` and `_ATOMIC_TMP_PENDING`, and
+# `rm -rf` on `BACKUP_DIR`. `BACKUP_DIR` was already set above; the other two
+# were not — `_ATOMIC_TMP_PENDING` was first assigned inside the atomic writer
+# (which `--dry-run` never calls at all) and `_STATE_OPS_FILE` ten lines BELOW
+# the trap. Either one exported by the caller was an arbitrary path the trap
+# deleted on any exit. REPRODUCED against the pre-cure shadow:
+#
+#   env _ATOMIC_TMP_PENDING=/path/to/unrelated/file install.sh TARGET --dry-run
+#
+# exited 0 — with the "no files modified" promise on the label — and the
+# unrelated file was GONE. Same class this file already documents for
+# `_DELIVERED_TEMPLATES` (:841): a variable the script only ever writes is still
+# a variable the environment can seed.
+_ATOMIC_TMP_PENDING=""
+_STATE_OPS_FILE=""
+
 trap cleanup_on_failure EXIT
 
 # ---------------------------------------------------------------------
@@ -817,6 +877,227 @@ _CONTINUITY_PATHS=""
 # no-op default so codex emissions land in .claude/.install-state.json).
 codex_journal() { _state_record_op "$1" "${2:-}"; }
 
+# ---------------------------------------------------------------------------
+# PLAN-185 W1 — DESTINATION confinement: the install-side POLICY.
+#
+# The predicate lives in scripts/_framework_manifest_set.sh (_wbm_dst_refuses);
+# this is the policy wrapper, the mirror of _install_src_refuses on the write
+# side. Returns 0 when the write must be REFUSED, having already NAMED the path
+# and the reason and recorded it for the end-of-run summary.
+#
+# It sits HERE, above everything that writes, because the global pre-flight
+# below has to answer before the first thing that touches the target — and that
+# is the `mkdir -p "$TARGET/.claude"` a few lines down.
+#
+# Fail-CLOSED when the predicate is missing: the library is sourced at :249,
+# and a partial checkout that lost it is not a tree this installer should write
+# an adopter's target from.
+#
+# The refusal is ACCUMULATED rather than fatal in place (debate C5/C14). An
+# `exit 1` mid-delivery — the shape _assert_no_symlink_parents uses — would
+# leave the target MIXED, because the rollback snapshot covers $TARGET/.claude
+# ONLY: docs/ and .github/ are never restored. So the writers refuse, keep
+# going, and the RUN fails at the end with the whole list. Silence was the
+# other option and it is fail-open on delivery.
+_DST_REFUSALS=""
+_DST_REFUSED_PATHS=""
+_DST_REFUSAL_COUNT=0
+
+# Line-exact membership, NOT a substring `case`. `.github/CODEOWNERS` is a
+# PREFIX of `.github/CODEOWNERS.template` and both are destinations of the same
+# group, so the substring idiom would answer about the wrong one — the exact
+# collision _delivered_template_has already documents.
+_dst_already_refused() {
+  local want="$1" line
+  while IFS= read -r line; do
+    [[ "$line" = "$want" ]] && return 0
+  done <<< "$_DST_REFUSED_PATHS"
+  return 1
+}
+
+# Record ONE unwritten destination for the end-of-run verdict. Shared by the
+# confinement refusal below and by the atomic writer, so "the run failed and
+# here is every path it did not write" has a single list behind it.
+_dst_record_refusal() {
+  local dst_rel="$1" why="$2"
+  # A destination answered by the pre-flight AND again by its writer must
+  # appear ONCE in the summary; the refusal itself is re-answered every time,
+  # because the answer closest to the write is the one that matters.
+  _dst_already_refused "$dst_rel" && return 0
+  echo "    REFUSED (nothing written): $dst_rel — $why" >&2
+  _DST_REFUSALS="${_DST_REFUSALS}${_DST_REFUSALS:+
+}$dst_rel — $why"
+  _DST_REFUSED_PATHS="${_DST_REFUSED_PATHS}${_DST_REFUSED_PATHS:+
+}$dst_rel"
+  _DST_REFUSAL_COUNT=$(( _DST_REFUSAL_COUNT + 1 ))
+  return 0
+}
+
+_dst_refuses() {
+  local dst_rel="$1"
+  local why=""
+  if ! command -v _wbm_dst_refuses >/dev/null 2>&1; then
+    why="destination-confinement predicate unavailable (scripts/_framework_manifest_set.sh not sourced) — refusing rather than guessing"
+  elif _wbm_dst_refuses "$TARGET" "$dst_rel"; then
+    why="${_WBM_DST_REFUSE_WHY:-unknown reason}"
+  else
+    return 1
+  fi
+  _dst_record_refusal "$dst_rel" "$why"
+  return 0
+}
+
+# PLAN-185 W1 — per-GROUP pre-flight (OQ-4, Owner default). Every destination of
+# a delivery group is answered BEFORE that group's first write, so a refusal on
+# the SECOND destination cannot leave the FIRST one written.
+# rc 0 = the whole group may proceed.
+_dst_preflight() {
+  local rel rc=0
+  for rel in "$@"; do
+    if _dst_refuses "$rel"; then rc=1; fi
+  done
+  if [[ "$rc" -ne 0 ]]; then
+    echo "    PRE-FLIGHT: refusing this delivery group before its first write (docs/ and .github/ are outside the rollback snapshot, so a mid-group abort would be permanent)" >&2
+  fi
+  return "$rc"
+}
+
+# Run-level verdict. Called once, after every writer, before the manifest is
+# written — a destination the installer refused must never be recorded as a
+# framework-owned delivery.
+_dst_refusal_verdict() {
+  [[ "$_DST_REFUSAL_COUNT" -gt 0 ]] || return 0
+  echo "" >&2
+  echo "::error::install FAILED — $_DST_REFUSAL_COUNT destination(s) refused because writing them would have escaped $TARGET:" >&2
+  local line
+  while IFS= read -r line; do
+    [[ -n "$line" ]] && echo "::error::  $line" >&2
+  done <<< "$_DST_REFUSALS"
+  echo "::error::Nothing was written at those paths. Remove the symlink or hard link (or point it inside the target) and re-run." >&2
+  return 1
+}
+
+# PLAN-185 W1 (rail round-2 P1) — the FIXED template destinations, as ONE list.
+#
+# `install_template` is called with a hardcoded (source, destination) pair in
+# five places, and three of them — CLAUDE.md, MEMORY.md, .mcp.json — run at the
+# very END of the install, long after `.claude/`, `docs/` and `.github/` have
+# been populated. The global pre-flight below therefore has to know about them,
+# and a SECOND hand-written copy of that list is exactly how the pre-flight and
+# the writers drift apart. So the rows live HERE and both sides read them: the
+# pre-flight takes the destination halves, the writers take whole rows.
+#
+# MEASURED pre-cure: a dangling `CLAUDE.md` symlink on a fresh maintainer target
+# sailed through the pre-flight, the whole framework was delivered, and the
+# refusal surfaced only at this last step — leaving a partial install with no
+# manifest on a target that has no BACKUP_DIR to roll back to.
+#
+# Format: one `source|destination` row per line.
+
+# The tier-policy pair lands INSIDE .claude/, so every ceremony delivers it.
+_FIXED_TEMPLATES_ALL_CEREMONIES="templates/.claude/tier-policy.json|.claude/tier-policy.json
+templates/.claude/tier-policy.json.sigchain|.claude/tier-policy.json.sigchain"
+
+# The project-root files are maintainer-only (WS4: a user install writes inside
+# .claude/ and nowhere else).
+#
+# PLAN-135 W1 S5-lite on `.mcp.json`: it is the project-scope MCP registration
+# for the Codex pair-rail (the 'codex' server backs the mcp__codex__codex |
+# mcp__codex__codex-reply matchers in settings.json). install_template is
+# idempotent EXISTS->SKIP, so an adopter's own .mcp.json is never clobbered;
+# credentials travel by ${ENV} expansion only, never as secrets on disk.
+_FIXED_TEMPLATES_MAINTAINER="templates/CLAUDE.md|CLAUDE.md
+templates/MEMORY.md|MEMORY.md
+templates/.mcp.json|.mcp.json"
+
+# The destination halves of a row list, one per line.
+_fixed_template_dests() {
+  local row
+  while IFS= read -r row; do
+    [[ -n "$row" ]] || continue
+    printf '%s\n' "${row#*|}"
+  done <<< "$1"
+}
+
+# Deliver every row of a list through the ONE writer.
+_install_fixed_templates() {
+  local row
+  while IFS= read -r row; do
+    [[ -n "$row" ]] || continue
+    install_template "${row%%|*}" "${row#*|}"
+  done <<< "$1"
+}
+
+# PLAN-185 W1 (rail round-1 P1) — GLOBAL PRE-FLIGHT, before the FIRST write.
+#
+# The per-group pre-flights are not enough on their own: each runs when its
+# group runs, and by then `.claude` has been created and populated. MEASURED
+# pre-cure on a FRESH target carrying a dangling `docs/rotation-log.md`: the run
+# ended rc 1, the refusal was named, and zero bytes went outside the target —
+# but **563 files were left INSIDE it**, `PROTOCOL.md` and `.github/` among
+# them, with NO manifest and NO install-state. Rollback cannot reach that:
+# BACKUP_DIR is EMPTY for a fresh target (there was no `.claude` to snapshot),
+# and even on an existing target it restores `.claude` only. The adopter is left
+# holding a half-installed framework that nothing records — the partial-state
+# outcome the accumulate-and-fail-at-the-end policy exists to avoid, arriving
+# through the door that policy left open.
+#
+# So the run answers FIRST, for every destination whose relpath is known before
+# delivery begins, and refuses with the COMPLETE list while the target is still
+# untouched. `install_one` / `install_template` destinations are enumerated from
+# the source tree as delivery proceeds and keep their per-writer check; those
+# per-writer checks stay regardless, because the answer taken immediately before
+# a write is the one that matters under TOCTOU.
+#
+# rc 0 = every known destination is confined.
+_dst_global_preflight() {
+  local rels rel rc=0
+  rels=".claude/settings.json
+$( _fixed_template_dests "$_FIXED_TEMPLATES_ALL_CEREMONIES" )"
+  if [[ "$WITH_REFERENCE_PERSONAS" -eq 1 ]]; then
+    rels="$rels
+.claude/team-personas-reference.md"
+  fi
+  # A `--ceremony user` install writes inside .claude/ only (WS4), so the root,
+  # docs/ and .github/ destinations below are not its to answer for.
+  if [[ "$CEREMONY" != "user" ]]; then
+    rels="$rels
+$( _fixed_template_dests "$_FIXED_TEMPLATES_MAINTAINER" )
+docs/BRANCH-PROTECTION.md
+docs/rotation-log.md
+PROTOCOL.md
+.github/workflows/validate.yml.template
+.github/workflows/benchmarks.yml.template"
+    # The two CODEOWNERS destinations are mutually exclusive and the handle
+    # decides which, exactly as the delivery branches do.
+    if [[ -n "$GITHUB_OWNER" ]]; then
+      rels="$rels
+.github/CODEOWNERS"
+    else
+      rels="$rels
+.github/CODEOWNERS.template"
+    fi
+  fi
+  while IFS= read -r rel; do
+    [[ -n "$rel" ]] || continue
+    if _dst_refuses "$rel"; then rc=1; fi
+  done <<< "$rels"
+  return "$rc"
+}
+
+if ! _dst_global_preflight; then
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    # The preview keeps running: truncating it here would hide everything the
+    # adopter asked to see. The verdict at the end still reports non-zero.
+    echo "    (dry-run) PRE-FLIGHT: a real install would REFUSE the destination(s) above and write NOTHING." >&2
+  else
+    echo "" >&2
+    echo "::error::install REFUSED before its first write — the target has NOT been touched." >&2
+    _dst_refusal_verdict || true
+    exit 1
+  fi
+fi
+
 if [[ "$DRY_RUN" -eq 0 ]]; then
   if [[ -d "$TARGET/.claude" ]]; then
     BACKUP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/ceo-install-backup.XXXXXX")"
@@ -867,9 +1148,18 @@ _assert_no_symlink_parents() {
   parent_rel="$( dirname "$rel_path" )"
   [[ "$parent_rel" == "." ]] && return 0
   local cur="$TARGET"
-  local IFS='/'
-  local comp
-  for comp in $parent_rel; do
+  local comp rest="$parent_rel"
+  # PLAN-185 W1 — the segment walk is now a `case` split, not `IFS='/'` plus an
+  # UNQUOTED `for`. The old form asked for IFS word splitting and silently got
+  # PATHNAME expansion with it, so a component containing `*` was replaced by
+  # whatever it matched in the cwd (or, matching nothing, kept verbatim) — the
+  # walk then tested paths that were not the ones being installed. Same walk as
+  # _wbm_dst_refuses in the shared library, for the same reason.
+  while [[ -n "$rest" ]]; do
+    case "$rest" in
+      */*) comp="${rest%%/*}"; rest="${rest#*/}" ;;
+      *)   comp="$rest";       rest="" ;;
+    esac
     [[ -z "$comp" || "$comp" == "." ]] && continue
     cur="$cur/$comp"
     if [[ -L "$cur" ]]; then
@@ -880,6 +1170,12 @@ _assert_no_symlink_parents() {
   done
   return 0
 }
+
+# The PLAN-185 W1 destination-confinement POLICY (_dst_refuses and friends) used
+# to live here. It now sits immediately after `trap cleanup_on_failure EXIT`,
+# because the global pre-flight has to answer BEFORE the first thing that
+# touches the target — and that thing is `mkdir -p "$TARGET/.claude"`, which
+# runs well above this point.
 
 install_one() {
   local rel_path="$1"
@@ -944,6 +1240,13 @@ install_template() {
 
   if [[ ! -f "$src" ]]; then
     echo "    SKIP (template missing): $src_rel"
+    return
+  fi
+
+  # PLAN-185 W1 (writer 1/6) — ahead of the `-e` test, which follows symlinks.
+  # The dry-run branch consults the SAME predicate: its "would COPY" line is
+  # what the adopter decides on, and over a dangling link it was a lie.
+  if _dst_refuses "$dst_rel"; then
     return
   fi
 
@@ -1179,8 +1482,9 @@ install_tier_policy() {
   echo ""
   echo "==> Installing tier-policy (templates/.claude/tier-policy.json + .sigchain)"
   _state_record_op "install_tier_policy" ".claude/tier-policy.json"
-  install_template "templates/.claude/tier-policy.json"          ".claude/tier-policy.json"
-  install_template "templates/.claude/tier-policy.json.sigchain" ".claude/tier-policy.json.sigchain"
+  # Rows from the SHARED list the global pre-flight also reads, so these two
+  # destinations cannot be answered by one side and missed by the other.
+  _install_fixed_templates "$_FIXED_TEMPLATES_ALL_CEREMONIES"
 }
 
 # PLAN-133 E2 — OSV.dev / OSSF malicious-packages supply-chain advisory.
@@ -1434,6 +1738,10 @@ install_reference_personas() {
     _state_record_op "install_reference_personas" "opt-in"
     local src="$SOURCE_DIR/templates/team-personas-reference.md"
     local dst="$TARGET/.claude/team-personas-reference.md"
+    # PLAN-185 W1 (writer 2/6) — ahead of every `-e` test below.
+    if _dst_refuses ".claude/team-personas-reference.md"; then
+      return
+    fi
     if [[ "$DRY_RUN" -eq 1 ]]; then
       if [[ -e "$dst" ]]; then
         echo "    (dry-run) KEEP (would exist): .claude/team-personas-reference.md"
@@ -1495,6 +1803,13 @@ install_docs_template() {
 
   # rail round-7 F2 — ahead of the `-f` test, which follows symlinks.
   if _install_src_refuses "$src_rel"; then
+    return
+  fi
+  # PLAN-185 W1 (writer 3/6) — the DESTINATION half of the same question. The
+  # `-e "$dst"` below follows symlinks, so a dangling link here answered "not
+  # installed yet" and the `cp` at the end wrote THROUGH it: measured (S329),
+  # 536 bytes outside the target with the run exiting 0.
+  if _dst_refuses "$dst_rel"; then
     return
   fi
   if [[ ! -f "$src" ]]; then
@@ -1590,6 +1905,12 @@ install_docs_templates() {
   echo ""
   echo "==> Installing docs/ templates"
   _state_record_op "install_docs_templates" "BRANCH-PROTECTION.md + rotation-log.md"
+  # PLAN-185 W1 — pre-flight the WHOLE group (both destinations) before the
+  # first cp, so a refusal on rotation-log.md cannot leave BRANCH-PROTECTION.md
+  # behind in a tree the rollback does not cover.
+  if ! _dst_preflight "docs/BRANCH-PROTECTION.md" "docs/rotation-log.md"; then
+    return
+  fi
   install_docs_template "templates/docs/BRANCH-PROTECTION.md" "docs/BRANCH-PROTECTION.md"
   _register_delivered_template "docs/BRANCH-PROTECTION.md" "templates/docs/BRANCH-PROTECTION.md"
   install_docs_template "templates/docs/rotation-log.md" "docs/rotation-log.md"
@@ -1600,28 +1921,173 @@ if [[ "$CEREMONY" != "user" ]]; then install_docs_templates; fi  # WS4-guard-doc
 
 # ---- 5e. .github/ templates (PLAN-003 Phase 0 I-3) ----
 
+# PLAN-185 W2 — render {{OWNER_HANDLE}} with NO substitution LANGUAGE involved.
+#
+# The pre-cure form was `sed "s/{{OWNER_HANDLE}}/$GITHUB_OWNER/g"`, which puts
+# the value inside a sed PROGRAM: a `/` ends the s-command, `&` re-inserts the
+# match, `\` escapes. Escaping the value would only make the interpolation
+# survivable; this removes the interpolation. The marker is a literal, `{` and
+# `}` are not bash pattern metacharacters, and the replacement side of `${//}`
+# has no active characters at all — so no value can change what this program
+# DOES, only what it writes. That is also why the census stops seeing a
+# sed-interpolation site here: the site is gone, not escaped.
+#
+# `|| [[ -n "$line" ]]` keeps a final line that lacks its newline (the shipped
+# template ends with one — measured, 1442 bytes / 33 lines / 11 markers).
+_render_owner_handle() {
+  local _roh_src="$1" _roh_handle="$2"
+  local _roh_marker='{{OWNER_HANDLE}}'
+  local _roh_line
+  while IFS= read -r _roh_line || [[ -n "$_roh_line" ]]; do
+    printf '%s\n' "${_roh_line//$_roh_marker/$_roh_handle}"
+  done < "$_roh_src"
+}
+
+# PLAN-185 W2 — ATOMIC destination write: stage in the DESTINATION directory,
+# set the mode on that inode, then rename(2) over the destination.
+#
+# Same directory is a requirement, not a preference: rename(2) cannot cross
+# filesystems, so staging in $TMPDIR (what the pre-cure probe did) degrades
+# `mv` to copy+unlink and re-opens the very 0-byte window this wave exists to
+# close. The name is UNPREDICTABLE (mktemp), because a fixed one inside the
+# target is a path an attacker can pre-plant — the defect portable_sed_inplace
+# still had. `chmod 0644` is explicit: mktemp creates 0600, and a CODEOWNERS
+# the team cannot read is a regression that byte and line counts do not catch.
+# The destination is only ever touched by the rename, so EVERY failure path
+# leaves it exactly as it was — including untouched when it did not exist.
+# rc 0 = delivered.
+_write_rendered_codeowners() {
+  local _wrc_src="$1" _wrc_handle="$2" _wrc_dst="$3"
+  local _wrc_rel="${_wrc_dst#"$TARGET"/}"
+  local _wrc_dir _wrc_tmp
+  _wrc_dir="$( dirname "$_wrc_dst" )"
+  if ! mkdir -p "$_wrc_dir" 2>/dev/null; then
+    _dst_record_refusal "$_wrc_rel" "could not create $_wrc_dir"
+    return 1
+  fi
+  _wrc_tmp="$( mktemp "$_wrc_dir/.ceo-codeowners.XXXXXX" 2>/dev/null || true )"
+  if [[ -z "$_wrc_tmp" ]]; then
+    _dst_record_refusal "$_wrc_rel" "could not stage the render in $_wrc_dir (mktemp failed)"
+    return 1
+  fi
+  _ATOMIC_TMP_PENDING="$_wrc_tmp"
+  if ! _render_owner_handle "$_wrc_src" "$_wrc_handle" > "$_wrc_tmp" 2>/dev/null; then
+    rm -f "$_wrc_tmp"; _ATOMIC_TMP_PENDING=""
+    _dst_record_refusal "$_wrc_rel" "rendering failed — the destination was NOT touched"
+    return 1
+  fi
+  chmod 0644 "$_wrc_tmp" 2>/dev/null || true
+  if ! mv -f "$_wrc_tmp" "$_wrc_dst" 2>/dev/null; then
+    rm -f "$_wrc_tmp"; _ATOMIC_TMP_PENDING=""
+    _dst_record_refusal "$_wrc_rel" "could not move the staged render into place — the destination was NOT touched"
+    return 1
+  fi
+  _ATOMIC_TMP_PENDING=""
+  return 0
+}
+
+# NOTE (rail round-1 P1): a `_read_target_install_state_github_owner` used to
+# live here, reading the persisted handle so it could be offered as provenance.
+# It is GONE rather than merely unused. The recorded handle is evidence of a
+# REQUEST, never of a delivery, and leaving the reader in place as dead code is
+# an invitation to wire it back into the recovery branch — which is exactly the
+# defect the rail reproduced. The handle is still validated where it is actually
+# needed: at the flag parse, before the render, and before it is persisted.
+
+# PLAN-185 W2 / OQ-1 — can this framework PROVE it wrote .github/CODEOWNERS in
+# this target? Prints the evidence that fired (so the recovery line names it);
+# rc 1 = no evidence.
+#
+# EXACTLY ONE kind of evidence counts: a DELIVERY RECORD. The baseline manifest
+# gets a `.github/CODEOWNERS` row only when a writer actually rendered the file
+# (_append_delivered_template -> FMS_DELIVERED_TEMPLATES -> the manifest); when
+# the install SKIPS an adopter-owned file, no row appears. Measured both ways:
+# 1 row after a real delivery, 0 rows after an EXISTS-skip.
+#
+# A recorded `github_owner` was ALSO accepted here until rail round-1, and it is
+# NOT evidence of delivery — it is evidence of a REQUEST. The two come apart in
+# a case that is ordinary rather than exotic, and it was REPRODUCED: an adopter
+# with their own non-empty `.github/CODEOWNERS` runs the installer with
+# `--github-owner`; the file is skipped (their bytes survive, correctly) but the
+# owner is persisted anyway. Later the adopter empties that file deliberately —
+# which is how you switch mandatory review routing off without deleting the path
+# — and the next install read the persisted owner as proof of authorship and
+# re-rendered 1409 bytes of framework template over it, silently re-enabling
+# review routing in a repository this framework never wrote to. That is the
+# PLAN-183 D4 class, and the whole reason OQ-1 requires provenance rather than
+# byte count: asking "did we ask for this?" instead of "did we write this?"
+# reintroduces the defect one question earlier.
+_codeowners_provenance() {
+  local _cp_manifest="$TARGET/.claude/.install-manifest.sha256"
+  if [[ -f "$_cp_manifest" ]] \
+     && grep -q '  \.github/CODEOWNERS$' "$_cp_manifest" 2>/dev/null; then
+    printf 'the baseline manifest (.claude/.install-manifest.sha256) records .github/CODEOWNERS as a framework delivery'
+    return 0
+  fi
+  return 1
+}
+
 install_github_templates() {
   echo ""
   echo "==> Installing .github/ templates"
   _state_record_op "install_github_templates" ""
 
   local codeowners_src="$SOURCE_DIR/templates/.github/CODEOWNERS.template"
-  # rail round-7 F2 — this source is read by `sed` (render) and by `cmp` (the
+  # rail round-7 F2 — this source is read by the render and by `cmp` (the
   # EXISTS byte-compare), both of which follow symlinks. Confine it first.
   if _install_src_refuses "templates/.github/CODEOWNERS.template"; then
     codeowners_src=""
   fi
+
+  # PLAN-185 W1 — pre-flight EVERY destination of this group. The CODEOWNERS
+  # destination is itself an F1 site (debate C3): the `-e "$dst"` below follows
+  # the link, the old `mkdir -p "$TARGET/.github"` checked no components, and
+  # the render used `>`. Which of the two mutually exclusive CODEOWNERS
+  # destinations is in play depends on the handle, exactly as the branches do.
+  local _co_dst_rel=".github/CODEOWNERS"
+  [[ -n "$GITHUB_OWNER" ]] || _co_dst_rel=".github/CODEOWNERS.template"
+  if ! _dst_preflight "$_co_dst_rel" \
+                      ".github/workflows/validate.yml.template" \
+                      ".github/workflows/benchmarks.yml.template"; then
+    return
+  fi
+
   if [[ -z "$codeowners_src" ]]; then
     echo "    SKIP (CODEOWNERS.template source refused — not confined to the framework checkout)"
   elif [[ ! -f "$codeowners_src" ]]; then
     echo "    SKIP (CODEOWNERS.template missing at $codeowners_src)"
   elif [[ -n "$GITHUB_OWNER" ]]; then
     local dst="$TARGET/.github/CODEOWNERS"
+    # PLAN-185 W2 — GITHUB_OWNER is a global, and the flag parse is not the
+    # only way it can be set. Re-validate through the SHARED grammar at the
+    # boundary that RENDERS, so no path reaches the substitution unvalidated.
+    _assert_github_owner_grammar "$GITHUB_OWNER" "the recorded GitHub owner"
     if [[ "$DRY_RUN" -eq 1 ]]; then
       if [[ -e "$dst" ]]; then
         echo "    (dry-run) EXISTS (would skip): .github/CODEOWNERS"
       else
         echo "    (dry-run) would SUBSTITUTE + write: .github/CODEOWNERS (@$GITHUB_OWNER)"
+      fi
+    elif [[ -e "$dst" && ! -s "$dst" ]]; then
+      # PLAN-185 W2 / OQ-1 — a 0-byte CODEOWNERS is the signature of the defect
+      # this wave closes (the `>` truncated the file, then `sed` aborted on the
+      # delimiter), and it is ALSO how an adopter deliberately switches
+      # mandatory review routing off without deleting the path. Size cannot
+      # tell those apart, so PROVENANCE decides: re-render only where the
+      # framework can prove it wrote this file, and say which evidence fired.
+      local _co_prov=""
+      if _co_prov="$( _codeowners_provenance )" && [[ -n "$_co_prov" ]]; then
+        if _write_rendered_codeowners "$codeowners_src" "$GITHUB_OWNER" "$dst"; then
+          echo "    RECOVERED: .github/CODEOWNERS was 0 bytes and $_co_prov — re-rendered (@$GITHUB_OWNER)"
+          _state_record_op "recover_codeowners" ".github/CODEOWNERS"
+          _append_delivered_template ".github/CODEOWNERS"
+        fi
+      else
+        echo "    WARNING: .github/CODEOWNERS exists and is EMPTY, and nothing proves this framework wrote it — leaving it untouched." >&2
+        echo "             GitHub reads an empty CODEOWNERS as 'no owners'. If that is not what you want:" >&2
+        echo "               * run scripts/doctor.sh on this target to see what the framework believes it delivered; then" >&2
+        echo "               * delete the file and re-run scripts/install.sh --github-owner <handle>, or write the owners by hand." >&2
+        echo "             Re-rendering it here would silently re-enable review routing in a repository this framework cannot prove it owns." >&2
       fi
     elif [[ -e "$dst" ]]; then
       echo "    EXISTS (skipping): .github/CODEOWNERS"
@@ -1630,19 +2096,18 @@ install_github_templates() {
       # file that happened to match the UNRENDERED template is not a framework
       # delivery, and claiming it would put the adopter's CODEOWNERS under
       # framework ownership.
-      local _co_probe
-      if _co_probe="$( mktemp "${TMPDIR:-/tmp}/ceo-codeowners.XXXXXX" 2>/dev/null )"; then
-        if sed "s/{{OWNER_HANDLE}}/$GITHUB_OWNER/g" "$codeowners_src" > "$_co_probe" 2>/dev/null \
-           && cmp -s "$_co_probe" "$dst" 2>/dev/null; then
-          _append_delivered_template ".github/CODEOWNERS"
-        fi
-        rm -f "$_co_probe"
+      # PLAN-185 W2: rendered on a PIPE. The pre-cure probe staged this in
+      # $TMPDIR with `sed`, so an out-of-grammar handle aborted it in silence
+      # (2>/dev/null), the `cmp` never ran, and the OWNERSHIP verdict flipped —
+      # the upgrade then landed on PRESERVED (unclaimed) (debate C8).
+      if _render_owner_handle "$codeowners_src" "$GITHUB_OWNER" | cmp -s - "$dst" 2>/dev/null; then
+        _append_delivered_template ".github/CODEOWNERS"
       fi
     else
-      mkdir -p "$TARGET/.github"
-      sed "s/{{OWNER_HANDLE}}/$GITHUB_OWNER/g" "$codeowners_src" > "$dst"
-      echo "    SUBSTITUTED: .github/CODEOWNERS (@$GITHUB_OWNER)"
-      _append_delivered_template ".github/CODEOWNERS"
+      if _write_rendered_codeowners "$codeowners_src" "$GITHUB_OWNER" "$dst"; then
+        echo "    SUBSTITUTED: .github/CODEOWNERS (@$GITHUB_OWNER)"
+        _append_delivered_template ".github/CODEOWNERS"
+      fi
     fi
   else
     install_docs_template \
@@ -1681,16 +2146,37 @@ if [[ "$CEREMONY" == "user" ]]; then  # WS4-ceremony-settings
   BASE_SRC="$SOURCE_DIR/templates/settings/settings.user.json"
 fi
 
+# PLAN-185 W1 (writer 4/7) — the settings destination is answered ONCE, here,
+# before any test on it derives a decision. THREE consumers read that answer:
+# SETTINGS_PRE_EXISTING immediately below, build_settings, and
+# apply_deny_baseline — and every one of them asks with `-e`/`-f`, which follow
+# symlinks. A DANGLING link at .claude/settings.json therefore answered
+# "nothing here yet" to all three, and the `cp` in build_settings wrote the
+# framework's settings THROUGH the link, outside $TARGET. Answering once and
+# sharing the verdict is what keeps the three from drifting apart again.
+_SETTINGS_DST_REFUSED=0
+if _dst_refuses ".claude/settings.json"; then
+  _SETTINGS_DST_REFUSED=1
+fi
+
 # PLAN-153 Wave E item 3: remember whether settings.json pre-existed so the
 # deny-baseline injection (section 6a below) only ever touches a file THIS
 # run created. Re-runs hit build_settings' EXISTS->SKIP path, so entries an
 # adopter deliberately removed are never re-added.
 SETTINGS_PRE_EXISTING=0
-if [[ -e "$SETTINGS_DST" ]]; then
+if [[ "$_SETTINGS_DST_REFUSED" -eq 0 && -e "$SETTINGS_DST" ]]; then
   SETTINGS_PRE_EXISTING=1
 fi
 
 build_settings() {
+  # PLAN-185 W1 — the refusal was recorded when SETTINGS_DST was resolved. This
+  # returns 0 rather than a failing rc on purpose: a non-zero return here is
+  # `exit "$build_rc"` at the call site, an abort in the MIDDLE of delivery, and
+  # docs/ + .github/ have no restore path. The run fails at the end instead,
+  # with the whole refusal list (_dst_refusal_verdict).
+  if [[ "${_SETTINGS_DST_REFUSED:-0}" -eq 1 ]]; then
+    return 0
+  fi
   if [[ "$DRY_RUN" -eq 1 ]]; then
     if [[ -e "$SETTINGS_DST" ]]; then
       echo "    (dry-run) EXISTS (would skip settings.json)"
@@ -1844,6 +2330,15 @@ DENY_BASELINE_ENTRIES=(
 )
 
 apply_deny_baseline() {
+  # PLAN-185 W1 — third consumer of the settings-destination verdict. Its own
+  # `-f "$SETTINGS_DST"` test below is symlink-FOLLOWING, so on a RESOLVED link
+  # it answers true and the jq rewrite lands outside $TARGET; and `$tmp` is a
+  # sibling INSIDE the target, so the `mv` would additionally replace the
+  # adopter's link with a regular file. Neither is reachable once the shared
+  # verdict is consulted first.
+  if [[ "${_SETTINGS_DST_REFUSED:-0}" -eq 1 ]]; then
+    return 0
+  fi
   if [[ "${CEO_INSTALL_SKIP_DENY_BASELINE:-0}" = "1" ]]; then
     echo "    SKIP: deny baseline (CEO_INSTALL_SKIP_DENY_BASELINE=1)"
     return 0
@@ -2095,21 +2590,26 @@ echo ""
 echo "==> Installing project templates"
 _state_record_op "install_project_templates" "ceremony=$CEREMONY"
 if [[ "$CEREMONY" != "user" ]]; then  # WS4-guard-projtmpl
-install_template "templates/CLAUDE.md" "CLAUDE.md"
-install_template "templates/MEMORY.md" "MEMORY.md"
-# PLAN-135 W1 S5-lite: project-scope MCP registration for the Codex
-# pair-rail (the 'codex' server backs the mcp__codex__codex |
-# mcp__codex__codex-reply matchers in settings.json). install_template
-# is idempotent EXISTS->SKIP — an adopter's own .mcp.json is never
-# clobbered. Credentials via ${ENV} expansion only; no secrets on disk.
-# Root-level file => stays inside the WS4-guard-projtmpl maintainer
-# guard (user ceremony writes .claude/ only).
-install_template "templates/.mcp.json" ".mcp.json"
+# Rows from the SHARED list (_FIXED_TEMPLATES_MAINTAINER, declared next to the
+# global pre-flight): CLAUDE.md, MEMORY.md, .mcp.json. These run LAST, which is
+# precisely why the pre-flight has to read the same rows — pre-cure, a dangling
+# CLAUDE.md was only discovered here, with the whole framework already on disk.
+# Root-level files => they stay inside this WS4 maintainer guard, because a user
+# ceremony writes .claude/ and nothing else.
+_install_fixed_templates "$_FIXED_TEMPLATES_MAINTAINER"
 fi  # WS4-guard-projtmpl
 
 # ---- 8. Drop a pointer to PROTOCOL.md (DevOps-P1-4: relative, not absolute) ----
 
 install_protocol_pointer() {
+  # PLAN-185 W1 (writer 5/7) — ahead of the `-e` test below, which follows
+  # symlinks: a dangling PROTOCOL.md link answered "not installed yet" and the
+  # `>` redirection at the end of this function wrote the rendered pointer
+  # THROUGH it. Refusal is recorded and the run fails at the end; returning 0
+  # here keeps the delivery from aborting mid-flight (nothing restores docs/).
+  if _dst_refuses "PROTOCOL.md"; then
+    return 0
+  fi
   if [[ -e "$TARGET/PROTOCOL.md" ]]; then
     return 0
   fi
@@ -2167,12 +2667,58 @@ if [[ "$CEREMONY" != "user" ]]; then install_protocol_pointer; fi  # WS4-guard-p
 # CLAUDE.md / MEMORY.md already existed at target, we leave them alone
 # (install.sh never overwrites them).
 
-# Portable sed -i for GNU + BSD (macOS): write to .tmp and mv.
+# The octal mode of a path, or EMPTY when it cannot be read. GNU-first with the
+# output VALIDATED: on GNU, `stat -f` SUCCEEDS printing FILESYSTEM information
+# instead of failing, so an unvalidated fallback chain silently returns a
+# filesystem field where a mode was expected.
+_file_mode() {
+  local _fm_out
+  _fm_out="$( stat -c '%a' "$1" 2>/dev/null || stat -f '%Lp' "$1" 2>/dev/null || true )"
+  case "$_fm_out" in
+    ''|*[!0-7]*) printf '' ;;
+    *)           printf '%s' "$_fm_out" ;;
+  esac
+}
+
+# Portable sed -i for GNU + BSD (macOS): stage beside the file, then rename.
 portable_sed_inplace() {
   # $1 = sed script, $2 = file
   local script="$1" file="$2"
-  local tmp="${file}.ceo-sed-tmp"
-  sed "$script" "$file" > "$tmp" && mv "$tmp" "$file"
+  local dir tmp mode
+  dir="$( dirname "$file" )"
+
+  # PLAN-185 W1 (writer 6/7) — the staging name is UNPREDICTABLE and lives in
+  # the file's OWN directory. The pre-cure name was `${file}.ceo-sed-tmp`: a
+  # path an attacker can pre-plant as a symlink, so the `>` wrote the
+  # substituted content THROUGH it, outside $TARGET, before the `mv` ever ran —
+  # the same predictable-name defect the plan names at this site. Staging in the
+  # destination directory (never $TMPDIR) also keeps `mv` a rename(2); across
+  # filesystems it degrades to copy+unlink, which re-opens the truncated-
+  # destination window this wave exists to close.
+  tmp="$( mktemp "$dir/.ceo-sed.XXXXXX" 2>/dev/null || true )"
+  if [[ -z "$tmp" ]]; then
+    echo "    ERROR: could not stage the substitution for ${file#$TARGET/} in $dir" >&2
+    return 1
+  fi
+  _ATOMIC_TMP_PENDING="$tmp"
+
+  # mktemp creates 0600, where the pre-cure `>` produced a umask-derived mode.
+  # Carry the ORIGINAL file's mode across instead — that is what `sed -i` does,
+  # and it keeps a delivered file readable by everyone who could read it before.
+  mode="$( _file_mode "$file" )"
+
+  if ! sed "$script" "$file" > "$tmp" 2>/dev/null; then
+    rm -f "$tmp"; _ATOMIC_TMP_PENDING=""
+    echo "    ERROR: substitution failed for ${file#$TARGET/} — left unchanged" >&2
+    return 1
+  fi
+  chmod "${mode:-644}" "$tmp" 2>/dev/null || true
+  if ! mv -f "$tmp" "$file"; then
+    rm -f "$tmp"; _ATOMIC_TMP_PENDING=""
+    echo "    ERROR: could not move the substituted ${file#$TARGET/} into place — left unchanged" >&2
+    return 1
+  fi
+  _ATOMIC_TMP_PENDING=""
 }
 
 # Build the sed script iteratively. Each non-empty placeholder adds an
@@ -2807,6 +3353,18 @@ _write_install_state() {
     echo "    NOTE: install-state skipped (python3 not found) — upgrade.sh will use the ADR-155 fallback path" >&2
     return 0
   fi
+  # PLAN-185 W2 — validate BEFORE PERSISTING, the second of the two boundaries
+  # the plan names. The flag parse is not the only way GITHUB_OWNER can hold a
+  # value by the time this runs, and this record is read back by
+  # upgrade.sh's _read_install_state_github_owner, which exits 3 on anything its
+  # grammar refuses — a handle persisted out of grammar therefore does not fail
+  # loudly, it degrades the NEXT upgrade to an empty handle and flips the
+  # CODEOWNERS delivery branch. Same shared grammar, so the writer cannot record
+  # a value the reader will reject.
+  if [[ -n "$GITHUB_OWNER" ]]; then
+    _assert_github_owner_grammar "$GITHUB_OWNER" "the GitHub owner about to be recorded in .claude/.install-state.json"
+  fi
+
   local state_file="$TARGET/.claude/.install-state.json"
   local fw_version=""
   if [[ -f "$SOURCE_DIR/VERSION" ]]; then
@@ -3030,6 +3588,21 @@ if [[ "$HARNESS" == "grok" ]]; then
     echo "ERROR: grok harness emission failed/refused (rc=$_gk_rc)" >&2
     exit "$_gk_rc"
   fi
+fi
+
+# PLAN-185 W1 — the RUN-level verdict, and it runs BEFORE anything records what
+# was delivered. A destination this installer refused must never be inventoried
+# as a framework-owned delivery: the manifest and the install-state are exactly
+# what upgrade.sh later reads to decide OWNERSHIP, so claiming a path nothing
+# was written to is how today's refusal becomes tomorrow's silent
+# PRESERVED (unclaimed). Refusals ACCUMULATE rather than abort at the writer
+# (docs/ and .github/ are outside the rollback snapshot, so a mid-delivery abort
+# leaves the target permanently mixed) — this is the one place the run ends
+# non-zero, with the whole list. It fires in --dry-run too: the preview exists
+# for the adopter to decide on, and a preview that hides the refusal is the
+# same lie the `-e` test told.
+if ! _dst_refusal_verdict; then
+  exit 1
 fi
 
 if [[ "$DRY_RUN" -eq 0 ]]; then

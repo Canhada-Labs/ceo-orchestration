@@ -3676,11 +3676,25 @@ _UP_DELIVERY_PRECONDITION_REASON=""
 # when the handle contained the sed delimiter, and that file then survives as
 # EXISTS-skipped forever. This reader refuses anything that is not a GitHub
 # handle, so upgrade.sh cannot reproduce that defect.
+#
+# PLAN-185 W2 — the GRAMMAR is now consumed, not re-stated. It moved verbatim
+# into scripts/_framework_manifest_set.sh as _wbm_github_handle_ok, and
+# install.sh — the script that PRODUCES the 0-byte defect, and which until this
+# wave accepted --github-owner raw — validates through that same function at its
+# flag parse, before persisting, and before each render. A grammar written twice
+# is a grammar that can answer differently on the two sides of one contract:
+# whatever the writer persists that the reader refuses does not fail loudly, it
+# exits 3 here and degrades the upgrade to an empty handle.
+#
+# python3 still does the JSON work (schema, types, presence); the CHARACTER SET
+# question is answered by the shared predicate. Missing predicate = broken
+# checkout = rc 3, never a local re-implementation.
 _read_install_state_github_owner() {
   command -v python3 >/dev/null 2>&1 || return 3
   [ -f "$_INSTALL_STATE_FILE" ] && [ -r "$_INSTALL_STATE_FILE" ] || return 3
-  PYTHONNOUSERSITE=1 python3 -I -c '
-import json, re, sys
+  command -v _wbm_github_handle_ok >/dev/null 2>&1 || return 3
+  _riso_h="$( PYTHONNOUSERSITE=1 python3 -I -c '
+import json, sys
 try:
     with open(sys.argv[1], "r", encoding="utf-8") as f:
         d = json.load(f)
@@ -3694,13 +3708,25 @@ if not isinstance(req, dict):
 h = req.get("github_owner", "")
 if not isinstance(h, str) or not h:
     sys.exit(3)
-# GitHub handle grammar, deliberately narrow: no "/" (the sed delimiter that
-# produced the 0-byte CODEOWNERS in PLAN-183 §9.2), no "&"/"\\" (sed
-# replacement metacharacters), no whitespace, no shell metacharacters.
-if not re.match(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$", h):
+# TRANSPORT INTEGRITY — not the grammar (rail round-4 P2). The value leaves
+# here through a command substitution, and that transport is LOSSY in two
+# specific ways: bash cannot hold a NUL in a variable at all, so it is dropped
+# silently, and `$( )` strips trailing newlines. Either one means the shell
+# validates a DIFFERENT string than the one recorded. MEASURED against this
+# reader before the check existed: "ali\x00ce" arrived as "alice" and PASSED,
+# and so did "alice\n\n".
+#
+# So the question that must be answered HERE, where the bytes are still intact,
+# is "does this value survive the transport unchanged?" — and only that. The
+# CHARACTER SET question stays with _wbm_github_handle_ok, which remains the
+# single owner of the grammar; restating the charset here would rebuild the
+# second copy round-1 deleted.
+if "\x00" in h or "\r" in h or "\n" in h:
     sys.exit(3)
-sys.stdout.write(h + "\n")
-' "$_INSTALL_STATE_FILE" 2>/dev/null
+sys.stdout.write(h)
+' "$_INSTALL_STATE_FILE" 2>/dev/null )" || return 3
+  _wbm_github_handle_ok "$_riso_h" || return 3
+  printf '%s\n' "$_riso_h"
 }
 
 # sha256 of every generation of a SOURCE relpath in $SOURCE_DIR's git history,
@@ -3839,18 +3865,27 @@ _up_tpl_write() {
 # GNU-first with the output VALIDATED, because on GNU `stat -f` SUCCEEDS
 # printing FILESYSTEM information rather than failing (the lesson
 # _up_tpl_stat_mode above already pays); `ls -ld` is the last resort.
+# PLAN-185 W1 — CONSUMER of the shared primitive. The body that used to live
+# here is now _wbm_nlink in scripts/_framework_manifest_set.sh, so that ONE
+# implementation answers "how many names does this inode have?" for BOTH sides
+# of the delivery: install.sh refuses a hard-linked DESTINATION through
+# _wbm_dst_refuses, this side refuses one through _up_tpl_multilink_refuses.
+# Leaving the two copies to drift apart is the exact mechanism of PLAN-183
+# D1-D4 — six sessions of red main — and a hard link is the escape route no
+# path check can see, because a second name for one inode is not a link any
+# path walk encounters.
+#
+# An EMPTY answer means the infrastructure could not tell us, and the caller
+# does NOT refuse on it (fail-open on INFRASTRUCTURE, CLAUDE.md §4). A missing
+# library lands in that same branch, but it is also a broken checkout, so it
+# says so once rather than degrading in silence.
 _up_tpl_nlink() {
-  _utn_out="$( stat -c '%h' "$1" 2>/dev/null || stat -f '%l' "$1" 2>/dev/null || true )"
-  case "$_utn_out" in
-    # `|| true` is load-bearing under `set -euo pipefail`: a failing pipeline
-    # inside a command substitution makes the ASSIGNMENT fail, which aborts the
-    # whole upgrade instead of falling through to the empty-answer path below.
-    ''|*[!0-9]*) _utn_out="$( ls -ld "$1" 2>/dev/null | awk 'NR==1 {print $2}' || true )" ;;
-  esac
-  case "$_utn_out" in
-    ''|*[!0-9]*) printf '' ;;
-    *)           printf '%s\n' "$_utn_out" ;;
-  esac
+  if ! command -v _wbm_nlink >/dev/null 2>&1; then
+    echo "    WARNING: hard-link detection unavailable (scripts/_framework_manifest_set.sh not sourced) — destinations will not be checked for extra names" >&2
+    printf ''
+    return 0
+  fi
+  _wbm_nlink "$1"
 }
 
 # Returns 0 when the write must be REFUSED (same polarity as its two siblings).

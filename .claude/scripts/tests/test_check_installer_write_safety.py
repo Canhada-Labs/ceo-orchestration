@@ -2383,12 +2383,29 @@ class TestLiveCorpus(TestEnvContext):
                 and s["verdict"] == "desguardado"]
         self.assertTrue(hits, "F1 must still be found, and found UNGUARDED")
 
-    def test_f2_the_reported_sed_site_is_unguarded(self) -> None:
-        hits = [s for s in self.payload["sites"]
-                if s["function"] == "install_github_templates"
-                and s["class"] == "sed-interp"
-                and s["verdict"] == "desguardado"]
-        self.assertTrue(hits, "F2 must still be found, and found UNGUARDED")
+    def test_f2_the_reported_sed_site_is_cured(self) -> None:
+        """COUPLED to the W2 cure (PLAN-185, ceremony C — rail r4 finding 2).
+
+        Pre-cure this asserted the sed-interp site in
+        install_github_templates was found UNGUARDED; the cure removes the
+        interpolated sed entirely (value-safe substitution + atomic write),
+        so the coupled form asserts BOTH halves: the function is still seen
+        by the census (the discovery did not lose it — an empty census is
+        the fail-open shape this instrument exists to refuse) AND it has no
+        sed-interp site left at any verdict. This test and scripts/install.sh
+        change in the SAME ceremony patch; on a pre-cure tree it goes red on
+        the second assertion (the sed is still there), which is the coupling
+        proof the rail asked for.
+        """
+        igt = [s for s in self.payload["sites"]
+               if s["function"] == "install_github_templates"]
+        self.assertTrue(igt, "install_github_templates must still be seen "
+                             "by the census (discovery must not lose it)")
+        sed_hits = [s for s in igt if s["class"] == "sed-interp"]
+        self.assertEqual(
+            sed_hits, [],
+            "the F2 sed-interp site must be GONE after the W2 cure "
+            "(found: %r)" % [(h["line"], h["verdict"]) for h in sed_hits])
 
     def test_f1_has_siblings_the_plan_did_not_name(self) -> None:
         """PLAN-185 §1 named one site; the census found the same shape in

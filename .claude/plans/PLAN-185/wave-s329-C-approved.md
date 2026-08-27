@@ -14,8 +14,8 @@ Wave: wave-s329-C (PLAN-185 W1+W2 — o installer deixa de poder escrever FORA d
 Patch: .claude/plans/PLAN-185/s329-ceremony-C/C.patch
 Patch-sha256: effaeb877ae41cee977807850015e5a354e3582266d0d4a45f3bcebdb839c79e
 Patch-base: cb234f4d8f056f11f0b910fb38e36e744a5b630a
-Anchor-SHA: TO-FILL-AT-SIGN
-Data: TO-FILL-AT-SIGN
+Anchor-SHA: 00f56df544d7ec7caa631c9c683aad1bc4bd9232
+Data: 2026-08-27
 
 ## Os dois defeitos, medidos
 
@@ -105,7 +105,7 @@ manifesto que o hasheia) e **modos idênticos em 567**.
   carregar `Rail-Verdict: APPROVE`.
 
 <!-- BEGIN SIGNED SCOPE -->
-Approved-By: @Canhada-Labs TO-FILL-AT-SIGN
+Approved-By: @Canhada-Labs AE9B236FDAF0462874060C6BCFCFACF00335DC74
 Plans: PLAN-185
 Scope:
   - .claude/adr/ADR-196-installer-write-confinement.md

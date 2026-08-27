@@ -19,6 +19,29 @@
 > per-ADR threshold of 2 is the wrong instrument for a 194-ADR repo.
 > What DID get reviewed today is scoped and stated: the durable-state /
 > ledger trust boundary section added by PLAN-179 W4 below.
+>
+> **S329 re-measurement (2026-08-26, PLAN-185 W3), same discipline.**
+> `--dry-run --verbose` (which does NOT write) reports **195** in the live
+> checkout and **196** in the ceremony tree — the +1 is the untracked
+> `ADR-196`, which the script counts as new by its own conservative
+> untracked-file rule. The verdict is `rc 1` either way, so this document
+> would flip to `stale` on ANY bare run, with or without PLAN-185.
+> **A finding that changes the named follow-up above:** the list starts at
+> `ADR-001`, a 2026-04 record. The script dates each ADR by
+> `git log --diff-filter=A --follow`, i.e. by the last commit that ADDED that
+> path, so a directory-wide move re-dates the whole corpus. The number is
+> therefore a *rename-dated census*, not "N ADRs landed without review" — the
+> follow-up should fix the dating rule before anyone re-reviews 196 records.
+> Status stays `accepted` for the reason already given: a real re-review did
+> not happen, and `stale` fails
+> `tests/integration/test_threat_model_coverage.py::test_status_is_accepted`.
+> What DID get reviewed in S329 is scoped and stated: the installer
+> write-destination surface, added below as **T-008** (Tampering) and decided
+> in `.claude/adr/ADR-196-installer-write-confinement.md`.
+> **Operational note for any ceremony that touches this file:** the freshness
+> script REWRITES it as a side effect, and a dirty `Status:` line fails the P0
+> of a SIGN. Run it with `--dry-run` in preflight, or revert the flip before
+> signing — the S328 morning runbook does exactly that.
 **Last updated:** 2026-06-12 (PLAN-135 W4 D5+D8 — harness-vs-hook containment map + MCP-connector decision rule; W3 K14b — browser/computer-use trust boundary)
 **Owner:** Principal Security Engineer
 **Scope:** ceo-orchestration framework v1.7.0-rc.1 (pre-adopter)
@@ -509,7 +532,7 @@ LABELED BOUNDARIES:
 
 ---
 
-## STRIDE scenarios (33 total)
+## STRIDE scenarios (34 total)
 
 ### Spoofing (5)
 
@@ -589,7 +612,7 @@ LABELED BOUNDARIES:
 
 ---
 
-### Tampering (7)
+### Tampering (8)
 
 1. **T-001: State-store poisoning via plan-id spoofing**
    - **Vector:** agent spoofs `CEO_PLAN_ID` env var to write into a
@@ -686,6 +709,68 @@ LABELED BOUNDARIES:
      `a`) — partial mitigation via NFKC; full mitigation = GPG signer
      trust + CODEOWNERS review of `.claude/skills/**`.
    - **Test:** `tests/scripts/test_skill_patch_unicode_attacks.py`.
+
+8. **T-008: Installer writes outside the target it was given (write-destination confinement)**
+   - **Vector:** every destination writer in `install.sh` decided whether to
+     write by testing the destination for EXISTENCE, and `-e` **follows**
+     symlinks. Six concrete forms escape the target directory: (a) a DANGLING
+     symlink planted at a destination answers false, so the writer takes the
+     "nothing there yet" branch and `cp`/`>` write THROUGH the link; (b) a
+     RESOLVED symlink escapes the same way; (c) a symlinked ANCESTOR component
+     escapes even when the leaf is clean; (d) a HARD LINK escapes while every
+     path check passes, because a second name for one inode is not a link any
+     path walk encounters; (e) a relative path carrying `..` or an absolute
+     path leaves the tree without any link at all; (f) an unvalidated
+     `--github-owner` value was interpolated raw into a `sed` s-command, so a
+     value containing `/` ends the program early — after `>` has already
+     truncated the destination, leaving `.github/CODEOWNERS` at 0 bytes,
+     EXISTS-skipped for ever and read by GitHub as "no owners".
+   - **Evidence:** MEASURED against the pre-cure installer (PLAN-185, S325 and
+     S329): rc 0, log line `COPIED:`, **536 bytes** landing at a path outside
+     the target; and rc 1 with a 0-byte `.github/CODEOWNERS` for the flag
+     vector. `scripts/install.sh`, `scripts/upgrade.sh`,
+     `scripts/_framework_manifest_set.sh`;
+     `.claude/adr/ADR-196-installer-write-confinement.md`;
+     `.claude/plans/PLAN-185/debate/round-1/consensus.md` §C4 (population of 7
+     unguarded writers, measured).
+   - **Mitigations:** ADR-196 — ONE destination-confinement predicate in the
+     library the three scripts already load (`_wbm_dst_refuses`, refusal reason
+     published in `_WBM_DST_REFUSE_WHY`), refusing empty/absolute/`..`/glob
+     relpaths, symlink components INCLUDING the leaf (`-L`, which is true for a
+     dangling link — the form `-e` is blind to), physical containment of the
+     deepest existing ancestor, non-regular leaf types, and `nlink > 1` for
+     hard links. Policy stays with the caller: delivery writers accumulate a
+     NAMED refusal and the run fails at the end, before the manifest or the
+     install-state record anything. Group PRE-FLIGHT answers every destination
+     before the first write of the group, because the rollback snapshot covers
+     only `$TARGET/.claude`. The flag vector is closed by a shared closed
+     charset grammar validated at parse time, by deleting the two `sed`
+     programs in favour of bash parameter expansion (no active character on the
+     substitution side), and by an atomic write staged with `mktemp` in the
+     DESTINATION directory (same filesystem, so `mv` is a real `rename(2)`)
+     with an explicit `chmod 0644`. Recovery of a 0-byte CODEOWNERS requires a
+     DELIVERY RECORD — the baseline manifest's `.github/CODEOWNERS` row, which
+     only a real render creates — never a size heuristic (truncating to zero is
+     a real way to switch mandatory review off) and never a recorded
+     `--github-owner`, which proves a REQUEST rather than authorship: an
+     adopter-owned file is EXISTS-skipped while the handle is persisted anyway,
+     so treating the handle as provenance re-enables review routing in a
+     repository the framework never wrote to. Wired in CI: the
+     write-confinement e2e runs in
+     `.github/workflows/smoke-install.yml` and the PLAN-185 W0 census gate runs
+     ratchet-mode in `.github/workflows/validate.yml`.
+   - **Residual risk:** **TOCTOU is irreducible in shell** — between the
+     predicate and the write nothing stops the destination from BECOMING a
+     symlink; bash offers no `openat`/`O_NOFOLLOW`, so the guard narrows the
+     window rather than closing it, and it is the shared-target / third-party
+     clone scenario where that matters. `install_one` still SKIPS rather than
+     refusing (the predicate is consulted, the old policy kept, by decision);
+     `install_mcp_secrets_dir` is a known unguarded site outside the cured set;
+     and `scripts/doctor.sh`, the third intended consumer, is not converted
+     yet, so the class stays open there.
+   - **Test:** `scripts/tests/test-installer-write-safety-e2e.sh` — 62
+     assertions, every F1 leg asserting on BYTES at the EXTERNAL path rather
+     than on the exit code, because the pre-cure defect exits 0.
 
 ---
 

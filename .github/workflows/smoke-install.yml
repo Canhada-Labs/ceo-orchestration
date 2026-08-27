@@ -43,6 +43,15 @@ on:
       # cases (59 assertions, ~107 s local) never executed in CI either. Same
       # rule, third instance. `scripts/doctor.sh` is already in this list.
       - "scripts/tests/test-doctor-delivery-route.sh"
+      # PLAN-185 W1+W2 (AC-3): the installer write-confinement e2e. Same
+      # wiring rule as every scripts/tests/*.sh above — unwired = no test,
+      # and this workflow is their ONLY CI execution. It is the sole check
+      # that a destination symlink/hardlink cannot make install.sh write
+      # OUTSIDE $TARGET, so a PR touching only the e2e (or only the library
+      # predicate it exercises) must light this gate up. The three scripts it
+      # covers — install.sh, upgrade.sh, _framework_manifest_set.sh — are
+      # already in this list.
+      - "scripts/tests/test-installer-write-safety-e2e.sh"
       # PLAN-166 F3 (ADR-155-AMEND-1): delivery-record ownership e2e —
       # scripts/tests/*.sh runs ONLY in this workflow (same r11/r20 wiring
       # rule as the parity e2e above).
@@ -124,6 +133,7 @@ on:
       - "scripts/tests/test-upgrade-historical-adopter.sh"
       - "scripts/tests/test-manifest-delivery-route.sh"   # rail round-1 F6
       - "scripts/tests/test-doctor-delivery-route.sh"     # rail round-2 F4
+      - "scripts/tests/test-installer-write-safety-e2e.sh"  # PLAN-185 W1+W2
       - "scripts/tests/test-upgrade-spec-ownership.sh"
       - "scripts/tests/test-ownership-verdict-unit.sh"
       - "scripts/tests/test-ownership-table.sh"
@@ -233,7 +243,18 @@ jobs:
     # job-level timeout that clips a GREEN run surfaces as `cancelled` on an
     # innocent step (the S2xx lesson). Re-tighten on a real CI p95, never on
     # arithmetic.
-    timeout-minutes: 68
+    # PLAN-185 W1+W2 (AC-3): 68 -> 83. The installer write-confinement e2e
+    # wired below runs ~13 real installs across an F0 unit section plus 15
+    # e2e fixtures. MEASURED on Darwin arm64, 2026-08-26 — TWO runs, because
+    # the first one is not a p50 and saying so matters more than a tidy
+    # number: 2m49s at 87% CPU (62 assertions), then 4m42s at 55% CPU (63
+    # assertions, file sha256 83e8ed3c…) with another night-run lane doing
+    # its own installs. Same suite, 1.7x spread — the machine, not the test.
+    # Sized on the UPPER bound: 282 s x the 2-3x runner factor this file
+    # already uses = 9-14 CI minutes of NEW work, so +15 with the anti-flake
+    # margin the doctrine above requires. Re-tighten on a real CI p95, never
+    # on arithmetic — and never on the faster of two local runs.
+    timeout-minutes: 83
     permissions:
       contents: read
     steps:
@@ -572,6 +593,35 @@ jobs:
         run: |
           set -euo pipefail
           bash scripts/tests/test-upgrade-historical-adopter.sh
+
+      # PLAN-185 W1+W2 (AC-3 Check (d)) — the installer must not write outside
+      # the directory it was given, and --github-owner must not be able to
+      # leave .github/CODEOWNERS empty for ever. Nothing else in CI can see
+      # either defect: the parity and ownership e2e above compare TARGETS, and
+      # a write that lands OUTSIDE the target is invisible to a comparison of
+      # what is inside it. Every F1 leg asserts on BYTES at an external path,
+      # never on the exit code — the pre-cure installer exits 0 while writing
+      # outside the target, so an exit-code assertion would have passed
+      # against the defect (plan AC-1, debate consensus C2/C4).
+      # NEGATIVE CONTROL (debate consensus C12): the file must be PROVED
+      # present before it is invoked. Renaming or deleting the e2e is exactly
+      # the drift this step exists to catch, and a step that reports success
+      # because it ran nothing is the "red gate nobody runs" class the two
+      # oracles above were wired to close.
+      # `if: always()` for the same PLAN-183 §9.8 reason as the seven steps
+      # above that carry it: a security oracle must not report `skipped`
+      # because something earlier in the job is red. NO continue-on-error,
+      # deliberately.
+      - name: Installer write-confinement e2e (F1 symlink/hardlink, F2 CODEOWNERS)
+        if: always()
+        run: |
+          set -euo pipefail
+          T=scripts/tests/test-installer-write-safety-e2e.sh
+          if [[ ! -f "$T" ]]; then
+            echo "::error::$T is missing — the write-confinement e2e was renamed, moved or deleted. This step must never pass without running it (PLAN-185 AC-3)."
+            exit 1
+          fi
+          bash "$T"
 
       - name: Assert npx/npm shim contract (if present)
         # Phase 4 deliverable; skip if directory missing

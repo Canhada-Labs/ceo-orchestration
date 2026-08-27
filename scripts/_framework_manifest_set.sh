@@ -668,6 +668,222 @@ _wbm_source_confined() {
   return 1
 }
 
+# --- PLAN-185 W1: DESTINATION confinement ----------------------------------
+# The link count of a path, or EMPTY when it cannot be read.
+#
+# Moved here from upgrade.sh's _up_tpl_nlink (which now consumes it) so that
+# ONE implementation answers "how many names does this inode have?" for both
+# sides of the delivery. Two copies of a confinement primitive drifting apart
+# is the exact mechanism of PLAN-183 D1-D4, six sessions of red main.
+#
+# GNU-first with the output VALIDATED, because on GNU `stat -f` SUCCEEDS
+# printing FILESYSTEM information rather than failing; `ls -ld` is the last
+# resort. An EMPTY answer means the infrastructure could not tell us, and
+# CLAUDE.md §4 makes that fail-OPEN: the caller does not refuse on it.
+_wbm_nlink() {
+  # `|| true` is load-bearing under `set -euo pipefail`: a failing pipeline
+  # inside a command substitution makes the ASSIGNMENT fail, which aborts the
+  # caller instead of falling through to the empty-answer path below.
+  _wbm_nl_out="$( stat -c '%h' "$1" 2>/dev/null || stat -f '%l' "$1" 2>/dev/null || true )"
+  case "$_wbm_nl_out" in
+    ''|*[!0-9]*) _wbm_nl_out="$( ls -ld "$1" 2>/dev/null | awk 'NR==1 {print $2}' || true )" ;;
+  esac
+  case "$_wbm_nl_out" in
+    ''|*[!0-9]*) printf '' ;;
+    *)           printf '%s\n' "$_wbm_nl_out" ;;
+  esac
+}
+
+# Is this destination one the installer may write? The mirror of
+# _wbm_source_confined, on the side that WRITES.
+#
+# WHY THIS EXISTS: install.sh decides whether to write by testing the
+# destination for EXISTENCE, and `-e` FOLLOWS symlinks. A DANGLING link planted
+# at a destination answers false, so the writer takes the "nothing there yet"
+# branch and `cp`/`>` write THROUGH the link, outside $TARGET. MEASURED
+# pre-cure (S329) against the live installer: with `docs/rotation-log.md` a
+# dangling symlink to a path outside the target, a `--ceremony maintainer`
+# install exited 0, logged `COPIED:`, and 536 bytes landed at the external
+# path. A RESOLVED link and a symlinked ANCESTOR escape the same way; a HARD
+# LINK escapes while every path check passes, because a second name for one
+# inode is not a link any path walk can see.
+#
+# Three walls, all required:
+#   1. LEXICAL — the relpath must be confined, through the same
+#      _wbm_route_relpath_ok every other confined path in this library uses
+#      (absolute, `..`, empty segment, glob metacharacter, whitespace).
+#   2. NO SYMLINK COMPONENT — every component under the physical target root is
+#      tested with `-L`, leaf INCLUDED. `-L` is true for a DANGLING link, which
+#      is precisely the form the `-e` guard is blind to.
+#   3. PHYSICAL CONTAINMENT — the deepest EXISTING ancestor must resolve
+#      (cd -P/pwd -P; the bash 3.2 floor has no realpath) under the physically
+#      resolved root.
+# Plus two properties of the LEAF that walls 1-3 cannot express: an existing
+# leaf must be a REGULAR FILE or a DIRECTORY, and it must not carry a second
+# hard link. Refusing every OTHER file type is the PLAN-185 W0 inversion
+# applied here — enumerate the forms proven safe to write, refuse the rest —
+# so a fifo or a device node at a destination is a named refusal rather than a
+# form nobody modelled.
+#
+# POLICY IS NOT HERE (debate C5). This answers "must this destination be
+# refused?" and publishes the reason; whether that means FAIL, SKIP or
+# ACCUMULATE belongs to the caller — install_one keeps the EXISTS-skip its
+# tests fix, while the delivery writers accumulate a named refusal and fail the
+# run at the end.
+#
+# TOCTOU, declared: between this answer and the write, nothing prevents the
+# destination from BECOMING a symlink. bash offers no openat/O_NOFOLLOW, so the
+# window is irreducible — this narrows it, it does not close it.
+#
+# $1 = target root (absolute). $2 = destination relpath.
+# rc 0 = REFUSE the write, reason in _WBM_DST_REFUSE_WHY. rc 1 = confined.
+# The polarity is the one _install_src_refuses and _up_tpl_multilink_refuses
+# already use: the function is named for what a 0 MEANS.
+_WBM_DST_REFUSE_WHY=""
+_wbm_dst_refuses() {
+  _WBM_DST_REFUSE_WHY=""
+  _wbm_dr_root="${1:-}"
+  _wbm_dr_rel="${2:-}"
+  if [ -z "$_wbm_dr_root" ] || [ -z "$_wbm_dr_rel" ]; then
+    _WBM_DST_REFUSE_WHY="empty target root or destination relpath"
+    return 0
+  fi
+  if ! _wbm_route_relpath_ok "$_wbm_dr_rel"; then
+    _WBM_DST_REFUSE_WHY="'$_wbm_dr_rel' is not a confined relative path"
+    return 0
+  fi
+  # An ABSENT target root is not a refusal (rail round-1 P2). Nothing exists
+  # under a directory that does not exist, so there is no component to follow
+  # and nothing to escape through — the lexical wall above has already done the
+  # only work available. Refusing here instead broke `install.sh --dry-run`
+  # against a target that does not exist yet, which is SUPPORTED behaviour
+  # (preview without creating): measured pre-cure, 12 destinations came back
+  # "does not resolve" and the run exited 1.
+  #
+  # The ROOT is tested for being a symlink BEFORE it is resolved (rail round-2
+  # P1). The previous order asked `! -e` first, so only a DANGLING root was ever
+  # tested with `-L`: a RESOLVED symlink root answered `-e` true, fell through to
+  # `cd -P`, and silently moved the confinement BASE to the referent. MEASURED:
+  # with the target passed as a symlink to a real directory, the install ran to
+  # completion, 567 files landed under the referent and zero landed anywhere
+  # else — so containment held, but the comment here claimed a refusal that the
+  # code did not perform, and `install.sh` resolves the target with plain
+  # `cd`/`pwd` (LOGICAL path, symlink preserved), so the case is reachable on
+  # every real install.
+  #
+  # It is a REFUSAL, not a warning, and the reason carries the recovery: the
+  # operator re-runs against the referent. That keeps the gate fail-closed while
+  # costing a legitimate symlinked project directory exactly one re-run with the
+  # path the message prints — and it makes the dereference an explicit choice
+  # instead of something the installer did on the operator's behalf without
+  # saying so. Note `-L` tests only the LAST component, so an ordinary path that
+  # merely traverses a symlinked ancestor (/tmp -> /private/tmp on macOS) is
+  # unaffected.
+  if [ -L "$_wbm_dr_root" ]; then
+    _wbm_dr_ref="$( cd -P "$_wbm_dr_root" 2>/dev/null && pwd -P || true )"
+    if [ -n "$_wbm_dr_ref" ]; then
+      _WBM_DST_REFUSE_WHY="the target root '$_wbm_dr_root' is a SYMLINK to '$_wbm_dr_ref' — every write would follow it; re-run against '$_wbm_dr_ref' if that is the directory you meant"
+    else
+      _WBM_DST_REFUSE_WHY="the target root '$_wbm_dr_root' is a DANGLING symlink — every write under it would follow the link outside the target"
+    fi
+    return 0
+  fi
+  if [ ! -e "$_wbm_dr_root" ]; then
+    return 1
+  fi
+  _wbm_dr_phys="$( cd -P "$_wbm_dr_root" 2>/dev/null && pwd -P || true )"
+  if [ -z "$_wbm_dr_phys" ]; then
+    _WBM_DST_REFUSE_WHY="the target root '$_wbm_dr_root' exists but does not resolve to a directory"
+    return 0
+  fi
+  _wbm_dr_walk="$_wbm_dr_phys"
+  _wbm_dr_rest="$_wbm_dr_rel"
+  while [ -n "$_wbm_dr_rest" ]; do
+    case "$_wbm_dr_rest" in
+      */*) _wbm_dr_seg="${_wbm_dr_rest%%/*}"; _wbm_dr_rest="${_wbm_dr_rest#*/}" ;;
+      *)   _wbm_dr_seg="$_wbm_dr_rest";       _wbm_dr_rest="" ;;
+    esac
+    _wbm_dr_walk="$_wbm_dr_walk/$_wbm_dr_seg"
+    if [ -L "$_wbm_dr_walk" ]; then
+      if [ -e "$_wbm_dr_walk" ]; then
+        _WBM_DST_REFUSE_WHY="component '$_wbm_dr_seg' of '$_wbm_dr_rel' is a symlink — the write would follow it outside the target"
+      else
+        _WBM_DST_REFUSE_WHY="component '$_wbm_dr_seg' of '$_wbm_dr_rel' is a DANGLING symlink — the existence test guarding this write answers false and the write follows the link outside the target"
+      fi
+      return 0
+    fi
+  done
+  _wbm_dr_anc="$( dirname "$_wbm_dr_phys/$_wbm_dr_rel" )"
+  while [ -n "$_wbm_dr_anc" ] && [ ! -d "$_wbm_dr_anc" ]; do
+    _wbm_dr_next="$( dirname "$_wbm_dr_anc" )"
+    [ "$_wbm_dr_next" != "$_wbm_dr_anc" ] || break
+    _wbm_dr_anc="$_wbm_dr_next"
+  done
+  _wbm_dr_res="$( cd -P "$_wbm_dr_anc" 2>/dev/null && pwd -P || true )"
+  if [ -z "$_wbm_dr_res" ]; then
+    _WBM_DST_REFUSE_WHY="the nearest existing ancestor of '$_wbm_dr_rel' does not resolve"
+    return 0
+  fi
+  case "$_wbm_dr_res" in
+    "$_wbm_dr_phys"|"$_wbm_dr_phys"/*) ;;
+    *)
+      _WBM_DST_REFUSE_WHY="'$_wbm_dr_rel' resolves to $_wbm_dr_res, outside the target $_wbm_dr_phys"
+      return 0
+      ;;
+  esac
+  _wbm_dr_leaf="$_wbm_dr_phys/$_wbm_dr_rel"
+  if [ -e "$_wbm_dr_leaf" ]; then
+    if [ ! -f "$_wbm_dr_leaf" ] && [ ! -d "$_wbm_dr_leaf" ]; then
+      _WBM_DST_REFUSE_WHY="'$_wbm_dr_rel' exists and is neither a regular file nor a directory — no proven-safe way to write it"
+      return 0
+    fi
+    if [ -f "$_wbm_dr_leaf" ]; then
+      _wbm_dr_n="$( _wbm_nlink "$_wbm_dr_leaf" )"
+      if [ -n "$_wbm_dr_n" ] && [ "$_wbm_dr_n" -gt 1 ] 2>/dev/null; then
+        _WBM_DST_REFUSE_WHY="'$_wbm_dr_rel' has $_wbm_dr_n hard links — writing it would change every other name for the same inode, including names outside the target"
+        return 0
+      fi
+    fi
+  fi
+  return 1
+}
+
+# --- PLAN-185 W2: the GitHub handle grammar, with ONE owner -----------------
+# The SAME grammar upgrade.sh:3700 has enforced since PLAN-183 §9.2, expressed
+# once, here, where both executables can reach it. Its comment there says in as
+# many words that it exists so the upgrade cannot reproduce the 0-byte
+# CODEOWNERS defect — while install.sh, the script that PRODUCES the defect,
+# accepted the flag raw. A third implementation would have been the fourth
+# local branch of one shared value (debate C6).
+#
+# Equivalent to the Python `^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$`: 1-39
+# characters, first alphanumeric, rest alphanumeric or hyphen. The character
+# sets are ENUMERATED rather than written as `[A-Za-z0-9]` ranges because a
+# shell range is resolved through the locale's collating sequence, which in a
+# UTF-8 locale can admit characters Python's codepoint ranges never match — and
+# a grammar that answers differently in two locales is not one grammar.
+#
+# What the closed set buys, and it is the whole point: the value cannot contain
+# `/` (the sed delimiter that produced the 0-byte CODEOWNERS), `&` or `\` (sed
+# replacement metacharacters), a newline, whitespace, or a shell metacharacter.
+#
+# DELIBERATELY NARROW (OQ-2, Owner default): `org/team` is valid CODEOWNERS
+# syntax — the template renders `@{{OWNER_HANDLE}}`, so `@org/team` names a
+# TEAM — and this grammar rejects it. Supporting teams means changing the
+# delimiter in every consumer, which is its own wave; until then the refusal
+# says so instead of corrupting the file.
+# rc 0 = the value is a handle this framework may interpolate.
+_wbm_github_handle_ok() {
+  _wbm_gh_v="${1:-}"
+  [ -n "$_wbm_gh_v" ] || return 1
+  [ "${#_wbm_gh_v}" -le 39 ] || return 1
+  case "$_wbm_gh_v" in
+    [!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789]*) return 1 ;;
+    *[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-]*) return 1 ;;
+  esac
+  return 0
+}
+
 # One row's fields, validated together. Emits a breadcrumb NAMING the offending
 # row on stderr — a rejection nobody can see is the silence D3 was made of.
 # rc 0 = the row may be used; rc 1 = rejected.
