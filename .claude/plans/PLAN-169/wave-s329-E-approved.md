@@ -13,7 +13,7 @@ Plans: PLAN-169
 Wave: wave-s329-E (cura do achado S328 sobre `scripts/upgrade.sh`: o roster de hooks que o upgrade registra passa a ser DERIVADO de `templates/settings/settings.base.json`, em vez de uma segunda cópia literal de 6 registros mantida dentro do upgrader; e o template é SELECIONADO pela cerimônia — `settings.user.json` sob `--ceremony user` — rail round 6)
 Patch: .claude/plans/PLAN-169/s329-ceremony-E/E.patch
 Patch-sha256: dfe1866b2a07c4a447e694bf1c7939fdc871c02a84fef6d3594083174c5ebec1
-Patch-base: fb79e712adcb684c26a86c13c9d631bce795641c
+Patch-base: 5d6ae25649cddb0b3260ec124317110efe3717d4
 Anchor-SHA: TO-FILL-AT-SIGN
 Data: TO-FILL-AT-SIGN
 
