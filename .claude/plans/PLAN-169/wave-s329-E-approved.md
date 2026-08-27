@@ -10,7 +10,7 @@
 > invalida o `.asc`.
 
 Plans: PLAN-169
-Wave: wave-s329-E (cura do achado S328 sobre `scripts/upgrade.sh`: o roster de hooks que o upgrade registra passa a ser DERIVADO de `templates/settings/settings.base.json`, em vez de uma segunda cópia literal de 6 registros mantida dentro do upgrader)
+Wave: wave-s329-E (cura do achado S328 sobre `scripts/upgrade.sh`: o roster de hooks que o upgrade registra passa a ser DERIVADO de `templates/settings/settings.base.json`, em vez de uma segunda cópia literal de 6 registros mantida dentro do upgrader; e o template é SELECIONADO pela cerimônia — `settings.user.json` sob `--ceremony user` — rail round 6)
 Patch: .claude/plans/PLAN-169/s329-ceremony-E/E.patch
 Patch-sha256: dfe1866b2a07c4a447e694bf1c7939fdc871c02a84fef6d3594083174c5ebec1
 Patch-base: 7d0fb25e49a0a4cacc4d04cd29b2b0b481de5508
@@ -26,13 +26,22 @@ responde `1` para os dois primeiros e `0` para os três últimos; todos os cinco
 entram por esta cerimônia porque o patch é atômico — um teste que landasse
 depois da cura seria uma janela em que a classe não tem guarda.
 
-1. **`scripts/upgrade.sh`** (canônico, +366 / −94) —
+1. **`scripts/upgrade.sh`** (canônico, +582 / −95) —
    `_merge_lifecycle_hooks_into_settings` deixa de carregar um roster LITERAL de
    6 registros dentro do programa `jq` (mais os mesmos 6 repetidos em prosa para
    o `--dry-run`) e passa a REDUZIR `$SOURCE_DIR/templates/settings/settings.base.json`,
    o template do checkout que EXECUTA o upgrade — a mesma resolução que
    `_migrate_settings_baseline` já usa. O template enumera **47** registros; o
-   merge derivado entrega os 47. O achado de origem
+   merge derivado entrega os 47 — sob a cerimônia `maintainer`. Sob
+   `--ceremony user` a fonte é `settings.user.json` (**20** registros): a
+   cerimônia SELECIONA o template, a mesma decisão que o `install.sh` já toma
+   (`CEREMONY_EFFECTIVE`) — achado P1 do rail round 6 sobre a sombra
+   re-derivada, curado com controle vermelho (DESIGN-E §11). O `.env` do
+   template viaja com os hooks (rail round 7, §12). E cerimônia DESCONHECIDA —
+   sem install-state e sem flag, o `user` que o resolver responde é só
+   fail-safe de escrita na raiz — NÃO recebe hook nenhum: só as settings que os
+   dois perfis declaram com o mesmo valor, o resto RETIDO e nomeado, com o
+   opt-in `--ceremony` (rail rounds 8 e 9, §13–§14). O achado de origem
    (`PLAN-179/s328-ceremony-D/FINDING-upgrade-lifecycle-hooks-S328.md`, rail
    codex rodada 3 do pacote D) é o registro **`PreToolUse` /
    `check_ledger_checkpoint.py`**, que nenhum upgrade jamais registrou.
@@ -52,14 +61,14 @@ depois da cura seria uma janela em que a classe não tem guarda.
    (rodada 1, P2) e era a **OQ-E4** do desenho.
 
 3. **`scripts/tests/test-upgrade-lifecycle-hooks-derived.sh`** (não-canônico,
-   +783) — e2e com install e upgrade REAIS, **51 asserções**. Carrega o
+   +1010) — e2e com install e upgrade REAIS, **71 asserções** (E.14: cerimônia `user` + o `.env` que viaja com os hooks; E.15: cerimônia desconhecida → nenhum hook, só as settings comuns, dry-run intocado). Carrega o
    **RED control** (`E.3`: o upgrader pré-cura de `git HEAD` contra o MESMO
    fixture deixa `check_ledger_checkpoint.py` desregistrado) e o **controle
    POSITIVO** (`E.4`: um hook sintético inexistente em `upgrade.sh`, plantado só
    no template de uma cópia da árvore-fonte, é registrado).
 
 4. **`.claude/scripts/tests/test_upgrade_lifecycle_hooks_derived.py`**
-   (não-canônico, +914) — **49** testes de unidade que dirigem a FUNÇÃO extraída
+   (não-canônico, +1434) — **88** testes de unidade que dirigem a FUNÇÃO extraída
    por âncora do `upgrade.sh` shipado (não o programa `jq` isolado: o único
    defeito real desta wave morava no wrapper). Contém o guard anti-rot
    `TestNoSecondRoster::test_the_function_names_no_hook_filenames` — **vermelho
@@ -87,8 +96,8 @@ depois da cura seria uma janela em que a classe não tem guarda.
 
 ## Base de CI esperada após o land
 
-O `smoke-install.yml` passa a executar um e2e a mais, com 51 asserções e dez
-upgrades reais. O `timeout-minutes` de 126 é dimensionado no fator 2–3× de runner que
+O `smoke-install.yml` passa a executar um e2e a mais, com 71 asserções e
+upgrades reais (E.14 acrescenta um install real `--ceremony user` e dois upgrades). O `timeout-minutes` de 126 é dimensionado no fator 2–3× de runner que
 este arquivo já usa, com margem anti-flake; a **primeira execução real** é o
 número que deve substituir essa estimativa — re-apertar no p95 observado, nunca
 na aritmética (a lição que este arquivo re-aprende: super-dimensionar não custa

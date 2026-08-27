@@ -95,6 +95,7 @@ E2E_TEST="scripts/tests/test-upgrade-lifecycle-hooks-derived.sh"
 UNIT_TEST=".claude/scripts/tests/test_upgrade_lifecycle_hooks_derived.py"
 YML=".github/workflows/smoke-install.yml"
 TEMPLATE="templates/settings/settings.base.json"
+TEMPLATE_USER="templates/settings/settings.user.json"
 UPGRADE_FN="_merge_lifecycle_hooks_into_settings"
 # --------------------------------------------------------------------------
 
@@ -422,6 +423,17 @@ if command -v jq >/dev/null 2>&1; then
     || die "4h: $TEMPLATE enumera $_reg_obs registro(s), esperado $_reg_exp.
   Atualize $BASELINE_ENV conscientemente, com a medicao nova num rail-round."
   ok "4h: $TEMPLATE enumera $_reg_obs registro(s) (esperado $_reg_exp)"
+  # 4h-bis — o template USER, pela mesma razao (rail round 6, P1): a cerimonia
+  # seleciona o template, entao um adopter `--ceremony user` recebe ESTE
+  # roster. Um template user que encolha, ou que ganhe por engano um dos 10
+  # hooks que ele omite de proposito, chegaria ao adopter em silencio.
+  [ -r "$WT/$TEMPLATE_USER" ] || die "4h-bis: $TEMPLATE_USER ausente na arvore-sombra — a selecao por cerimonia nao tem de onde derivar"
+  _regu_obs="$( jq '[.hooks | to_entries[] | .value[]] | length' "$WT/$TEMPLATE_USER" )"
+  _regu_exp="$(_expect EXPECTED_TEMPLATE_REGISTRATIONS_USER)"
+  [ "$_regu_obs" = "$_regu_exp" ] \
+    || die "4h-bis: $TEMPLATE_USER enumera $_regu_obs registro(s), esperado $_regu_exp.
+  Atualize $BASELINE_ENV conscientemente, com a medicao nova num rail-round."
+  ok "4h-bis: $TEMPLATE_USER enumera $_regu_obs registro(s) (esperado $_regu_exp)"
 else
   warn "4h: jq AUSENTE — o G-PRE do SIGN e do LAND aborta por isso"
 fi

@@ -63,6 +63,7 @@ E2E_TEST="scripts/tests/test-upgrade-lifecycle-hooks-derived.sh"
 UNIT_TEST=".claude/scripts/tests/test_upgrade_lifecycle_hooks_derived.py"
 YML=".github/workflows/smoke-install.yml"
 TEMPLATE="templates/settings/settings.base.json"
+TEMPLATE_USER="templates/settings/settings.user.json"
 UPGRADE_FN="_merge_lifecycle_hooks_into_settings"
 PUSH_REMOTE="origin"
 PUSH_BRANCH="main"
@@ -716,6 +717,17 @@ _reg_exp="$(_expect EXPECTED_TEMPLATE_REGISTRATIONS)"
   Um numero MENOR significa que o template encolheu — e mudanca de produto, nao
   detalhe. Atualize $BASELINE_ENV conscientemente."
 ok "V6: $TEMPLATE enumera $_reg_obs registro(s) (esperado $_reg_exp)"
+# V6-bis — o template USER (rail round 6, P1). A cerimonia seleciona o template
+# que o merge deriva, entao um adopter `--ceremony user` recebe ESTE roster; um
+# template user que encolha, ou que ganhe por engano um dos 10 hooks que ele
+# omite de proposito, chegaria ao adopter em silencio. Mesmo gate, mesma razao.
+[ -r "$TEMPLATE_USER" ] || die "V6-bis: $TEMPLATE_USER ausente — a selecao por cerimonia nao tem de onde derivar"
+_regu_obs="$(jq '[.hooks | to_entries[] | .value[]] | length' "$TEMPLATE_USER")"
+_regu_exp="$(_expect EXPECTED_TEMPLATE_REGISTRATIONS_USER)"
+[ "$_regu_obs" = "$_regu_exp" ] \
+  || die "V6-bis: $TEMPLATE_USER enumera $_regu_obs registro(s), esperado $_regu_exp.
+  Atualize $BASELINE_ENV conscientemente."
+ok "V6-bis: $TEMPLATE_USER enumera $_regu_obs registro(s) (esperado $_regu_exp)"
 
 if [ "$DRY_RUN" = "1" ]; then
   printf '\n\033[33mDRY-RUN\033[0m — G-PRE, G0..G5 verdes; patch aplicado; V1, V4, V5 e V6 executados.\n'

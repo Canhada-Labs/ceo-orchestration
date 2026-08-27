@@ -1,4 +1,4 @@
-feat(PLAN-169 wave-s329-E): upgrade.sh DERIVA o roster de hooks do template (6 literais -> 47 do settings.base.json), semantica ADITIVA, e o e2e que vigia isso entra no CI
+feat(PLAN-169 wave-s329-E): upgrade.sh DERIVA o roster de hooks do template DA CERIMONIA (6 literais -> 47 do settings.base.json; 20 do settings.user.json sob --ceremony user), semantica ADITIVA, e o e2e que vigia isso entra no CI
 
 `_merge_lifecycle_hooks_into_settings` carregava um roster LITERAL de 6
 registros dentro do programa `jq`, mais os mesmos 6 repetidos em prosa para o
@@ -43,13 +43,13 @@ Este commit entrega cinco arquivos, dois canonicos:
   escreve a regra: "unwired = no test". Sem estas linhas a cura entraria sem
   vigilancia (achado do pair-rail rodada 1, P2; era a OQ-E4 do desenho).
 - `scripts/tests/test-upgrade-lifecycle-hooks-derived.sh` — e2e com install e
-  upgrade REAIS: 51 assercoes. Carrega o RED control (E.3: o
+  upgrade REAIS: 71 assercoes. Carrega o RED control (E.3: o
   upgrader pre-cura de `git HEAD` contra o MESMO fixture deixa
   `check_ledger_checkpoint.py` desregistrado — 2 faltando contra 0 do curado) e
   o controle POSITIVO (E.4: um hook sintetico inexistente em `upgrade.sh`,
   plantado so no template de uma copia da arvore-fonte, E registrado; a arvore
   nao modificada nao o registra).
-- `.claude/scripts/tests/test_upgrade_lifecycle_hooks_derived.py` — 49 testes de
+- `.claude/scripts/tests/test_upgrade_lifecycle_hooks_derived.py` — 88 testes de
   unidade que dirigem a FUNCAO extraida por ancora do `upgrade.sh` shipado, num
   harness bash com `TARGET`/`SOURCE_DIR`/`BAK_DIR`/`DRY_RUN` postos: as guardas
   fail-open, a escrita atomica e as mensagens que o adopter LE vivem no wrapper,
@@ -78,9 +78,14 @@ estruturalmente incapaz de falhar — o `_keyset` ja emitia `sorted(set(out))`, 
 `uniq -d` recebia um fluxo deduplicado e vinha sempre vazio — curada com um
 fluxo que preserva multiplicidade, nos dois lados (bash e Python).
 
-Medido para este pacote: unidade 49/49 (rc 0); e2e 51 passed / 0 failed (rc 0),
+Medido para este pacote: unidade 88/88 (rc 0); e2e 71 passed / 0 failed (rc 0),
 medido DUAS vezes de forma independente na condicao pre-cura; o template enumera
-47 registros e o merge derivado entrega os 47
+47 registros e o merge derivado entrega os 47 sob a cerimonia maintainer (sob
+`--ceremony user`, settings.user.json: 20 — a cerimonia SELECIONA o template,
+rail round 6 P1, DESIGN-E §11; e o .env do template viaja com os .hooks —
+rail round 7 P1, DESIGN-E §12; cerimonia DESCONHECIDA nao recebe hook
+nenhum, so as settings comuns, nomeado — rail rounds 8 e 9, DESIGN-E §13-§14; OQ-E5: o template user esta DEFASADO em 16
+hooks nao-deliberados, wave propria)
 (E.2d/E.2g: nenhum faltando, nenhum inventado); a funcao curada tem 311 linhas e
 cita ZERO tokens `<nome>.py`; o e2e aparece 3x no `smoke-install.yml` (as duas
 listas de paths e o step); `bash -n` e `shellcheck -S warning` rc 0 nos dois
@@ -113,6 +118,6 @@ por GPG do Owner; Scope DERIVADO por `finalize_patch.py`; land por
 `OWNER-S329-E-LAND.sh` (G-PRE + G0..G5 + V1..V7, `touched - scope = 0`, e2e real
 no V3).
 
-Pair-Rail-Reviewed: codex gpt-5.6 — 5 rodadas na shadow-E (r1 3P2; r2 1P2; r3 2P2 — todos curados; r4 e r5 LIMPAS; r5 sobre o estado final congelado; registros em .claude/plans/PLAN-169/s329-ceremony-E/rail-round-{1..5}.md)
+Pair-Rail-Reviewed: codex gpt-5.6 — 12 rodadas na shadow-E (r1 3P2; r2 1P2; r3 2P2 — todos curados; r4 e r5 LIMPAS; r6 sobre a sombra RE-DERIVADA apos o land de C: 1 P1 — o merge ignorava a cerimonia — curado com controle vermelho; r7: 1 P1 real — .env nao viajava com .hooks — + 2 P2 reais curados, 1 P1 por construcao (sentinel pre-SIGN); r8: 1 P1 real — cerimonia INFERIDA tratada como gravada — + 1 P2 real, curados; r9: 2 P1 + 1 P2 reais sobre a postura SHARED do r8 — arquitetura trocada (nenhum hook sem cerimonia dita), curados; r10: 1 P2 real — .env malformado no template — curado; r11: 3 P2 reais (scratch via _up_tmpbase, trap sem interpolacao, settings.json um documento) curados + 1 P1 por construcao; r12 LIMPA no codigo (so o P1 do sentinel, por construcao); registros em .claude/plans/PLAN-169/s329-ceremony-E/rail-round-{1..12}.md)
 
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>

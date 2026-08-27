@@ -42,8 +42,26 @@ EXPECTED_JQ_SLURPFILE_REQUIRED=1
 # fechou em APPROVE na rodada 4, entao este numero e o do codigo final.
 # Trajetoria registrada: 23 (rodada 1) -> 33 (curas P2-1 e P2-3) -> 40 (rodada
 # 2) -> 49 (curas das rodadas 3 e 4). Cada salto e cura de achado, nao inflacao.
+# -> 57 (rail round 6, P1: a classe TestCeremonySelectsTheTemplate, 8 casos,
+# derivados dos DOIS templates; controle vermelho contra a funcao pre-r6 =
+# 7 failed / 4 passed, contra a curada = 11 passed — DESIGN-E.md §11).
+# -> 69 (rail round 7: 1 P1 real — o .env do template nao viajava com os
+# .hooks — e 2 P2 reais — fronteira a esquerda na chave de identidade; template
+# como stream de 2 documentos; DESIGN-E.md §12): 3 classes novas, 12 casos.
+# -> 80 (rail round 8: P1 real — cerimonia INFERIDA nao e GRAVADA; postura
+# SHARED derivada em runtime; P2 real — bloco multi-comando parcial; DESIGN-E.md
+# §13): 2 classes novas, 11 casos, e os 2 testes de fail-safe do r6 re-afirmados.
+# -> 82 (rail round 9: a postura SHARED do r8 nao era provavel — cerimonia
+# desconhecida passa a registrar NENHUM hook, so as settings que os dois perfis
+# declaram com o mesmo valor; dry-run intocado; fontes validadas; DESIGN-E.md
+# §14): classe TestUnknownCeremonyRegistersNoHooks (11) substitui a do r8 (9).
+# -> 84 (rail round 10, P2: template com .env presente-mas-nao-objeto e recusado
+# inteiro e nomeado; DESIGN-E.md §15). Medido: `84 passed in 6.78s`, rc 0.
+# -> 88 (rail round 11, 3 P2: scratch via _up_tmpbase, trap RETURN sem
+# interpolacao, settings.json exatamente UM documento; DESIGN-E.md §16).
+# Medido: `88 passed in 4.32s`, rc 0.
 EXPECTED_UNIT_PYTEST_RC=0
-EXPECTED_UNIT_PYTEST_PASSED=49
+EXPECTED_UNIT_PYTEST_PASSED=88
 
 # --- V3: e2e (o gate CARO — ~11 min) ----------------------------------------
 # `bash scripts/tests/test-upgrade-lifecycle-hooks-derived.sh`
@@ -77,8 +95,20 @@ EXPECTED_UNIT_PYTEST_PASSED=49
 # ele foi medido, e o log confirma `E.3a`/`E.3b`/`E.9a`/`E.9b`, nenhum SKIP.
 # Medir num checkout onde a cura ja esta COMMITADA daria 2 a MENOS, e o V3
 # abortaria acusando regressao onde ha apenas um instrumento que envelheceu.
+# -> 71 (rail rounds 6 a 9): E.14 acrescenta 11 asercoes e E.15 mais 9 — install REAL
+# `--ceremony user`, strip de um registro que o template user DECLARA e da chave
+# de .env propria do perfil user (derivada: chaves do user menos as da base),
+# upgrade sem flag (a cerimonia chega GRAVADA no install-state), zero nomes
+# so-na-base no adopter user (E.14f), a chave de .env volta com o valor do
+# template (E.14j), e os controles positivos E.14i (registro reescrito para
+# maintainer recebe todos os so-na-base) e E.14k (e NAO recebe a chave user-only).
+# E.15 (cerimonia DESCONHECIDA: install maintainer sem install-state) prova que
+# NENHUM hook e registrado, que so as settings comuns voltam, que a chave
+# user-only fica fora, que o sumario diz PARTIAL, que o --dry-run nao escreve,
+# e os dois controles --ceremony. Medido na sombra re-derivada e curada,
+# HEAD=cc00235 (pre-cura, E.3/E.9 ativos): `RESULT: 71 passed, 0 failed`, rc 0.
 EXPECTED_E2E_RC=0
-EXPECTED_E2E_PASSED=51
+EXPECTED_E2E_PASSED=71
 EXPECTED_E2E_FAILED=0
 
 # --- V4: o workflow pos-patch ENXERGA o teste -------------------------------
@@ -137,6 +167,19 @@ EXPECTED_UPGRADE_FN_MIN_LINES=120
 # Um numero MENOR aqui significa que o template encolheu — e uma mudanca de
 # produto, nao um detalhe: atualize conscientemente.
 EXPECTED_TEMPLATE_REGISTRATIONS=47
+# `jq '[.hooks | to_entries[] | .value[]] | length' templates/settings/settings.user.json`
+# Medido: 20 (rail round 6, P1 — DESIGN-E.md §11). A cerimonia seleciona o
+# template: `--ceremony user` deriva DESTE, nunca do de 47, porque o perfil
+# user omite de proposito os 10 hooks que bloqueiam ou exigem GPG/sentinel.
+# E.14 do e2e prova a selecao com um install real `--ceremony user` (E.14f:
+# zero nomes so-na-base chegam ao adopter; E.14i: o controle positivo com o
+# registro reescrito para maintainer recebe todos). 26 nomes so-na-base = 10
+# deliberados + 16 DEFASADOS (o template user nao acompanhou a base desde
+# 30/07) — a defasagem e a OQ-E5, fora do Scope desta wave. O gate abaixo
+# existe pela mesma razao que o de cima: um template user que encolha (ou que
+# ganhe um dos 10, por engano) e mudanca de produto, e o merge derivado a
+# entregaria em silencio.
+EXPECTED_TEMPLATE_REGISTRATIONS_USER=20
 
 # --- V9: gates de governanca ------------------------------------------------
 # `check-ceremony-script.py --json` -> `blocking_unwaived`. Medido no checkout

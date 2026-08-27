@@ -13,11 +13,11 @@ Cinco arquivos, dois deles **canônicos**:
 
 | path | +/− | canônico? | papel |
 |---|---|---|---|
-| `scripts/upgrade.sh` | +366 / −94 | **sim** | a cura: o roster deixa de ser literal e passa a ser derivado do template |
+| `scripts/upgrade.sh` | +582 / −95 | **sim** | a cura: o roster deixa de ser literal e passa a ser derivado do template — o template da CERIMÔNIA (rail r6), `.env` incluído (rail r7), cerimônia desconhecida → nenhum hook, só settings comuns (rail r8/r9) |
 | `.github/workflows/smoke-install.yml` | +61 / −1 | **sim** | 2 entradas de `paths:` + 1 step + `timeout-minutes` 83 → 126 (composto sobre o +15 do PLAN-185 W1+W2) |
-| `scripts/tests/test-upgrade-lifecycle-hooks-derived.sh` | +783 / −0 | não | e2e com install e upgrade REAIS (51 asserções) |
-| `.claude/scripts/tests/test_upgrade_lifecycle_hooks_derived.py` | +914 / −0 | não | 49 testes de unidade sobre a FUNÇÃO extraída do `upgrade.sh` shipado |
-| `.claude/plans/PLAN-169/s329-ceremony-E/DESIGN-E.md` | +680 / −5 | não | o registro de desenho (§10 = re-derivação por item sobre cc00235) |
+| `scripts/tests/test-upgrade-lifecycle-hooks-derived.sh` | +1010 / −0 | não | e2e com install e upgrade REAIS (71 asserções; E.14 = cerimônia `user` + `.env`; E.15 = cerimônia desconhecida, dry-run intocado) |
+| `.claude/scripts/tests/test_upgrade_lifecycle_hooks_derived.py` | +1434 / −0 | não | 88 testes de unidade sobre a FUNÇÃO extraída do `upgrade.sh` shipado |
+| `.claude/plans/PLAN-169/s329-ceremony-E/DESIGN-E.md` | +990 / −5 | não | o registro de desenho (§10 re-derivação sobre cc00235; §11 rail r6 — a cerimônia seleciona o template; §12 rail r7 — o `.env` viaja com os hooks; §13–§14 rails r8/r9 — inferido não é gravado: nenhum hook sem cerimônia dita; §15 rail r10 — `.env` malformado no template recusa o template; §16 rail r11 — scratch confinado, trap fixo, settings.json um documento) |
 
 > Os números de linha acima são os da sombra no momento em que este registro foi
 > escrito. O `finalize-E.sh` re-deriva o patch contra o HEAD vivo e o

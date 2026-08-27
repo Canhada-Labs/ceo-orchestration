@@ -83,7 +83,10 @@ Quando você atualiza o framework num projeto que já o usa, o `upgrade.sh`
 precisa registrar os "hooks" — os pequenos programas de governança que rodam
 automaticamente. Até hoje ele carregava, **dentro dele mesmo**, uma lista
 escrita à mão com **6** desses registros. O arquivo de referência do framework
-tem **47**.
+tem **47** — e o perfil `--ceremony user`, que omite de propósito os hooks que
+bloqueiam ou exigem GPG, tem o seu próprio arquivo com **20**. O upgrade passa a
+usar o arquivo da cerimônia do projeto (a revisão cruzada da manhã pegou que ele
+usava sempre o de 47, o que transformaria um projeto `user` em `maintainer`).
 
 Consequências medidas:
 
