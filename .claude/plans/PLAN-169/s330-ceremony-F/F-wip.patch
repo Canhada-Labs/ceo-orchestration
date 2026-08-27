@@ -1,14 +1,15 @@
 diff --git a/.claude/plans/PLAN-169/s330-ceremony-F/DESIGN-F.md b/.claude/plans/PLAN-169/s330-ceremony-F/DESIGN-F.md
 new file mode 100644
-index 0000000..c20468b
+index 0000000..2c341cc
 --- /dev/null
 +++ b/.claude/plans/PLAN-169/s330-ceremony-F/DESIGN-F.md
-@@ -0,0 +1,383 @@
+@@ -0,0 +1,515 @@
 +# Pacote F — `settings.user.json` DERIVADO da base por subtração declarada
 +
 +> S330 (2026-08-27). Alvo canônico: `templates/settings/settings.user.json`.
 +> Achado de origem: **PLAN-169 OQ-E5**, aberta no closeout do pacote E
 +> (`5930974`): o template `user` estava DEFASADO em 16 hooks não-deliberados.
++> Classificação por mérito: `hook-classification-S330.md` (commit `4f4df3a`).
 +> Trabalho feito em sombra (`git clone --local` de `1c34eb5`); nada tocado no
 +> repo vivo. Molde: `PLAN-169/s329-ceremony-E/DESIGN-E.md` §1–§4.
 +
@@ -18,130 +19,124 @@ index 0000000..c20468b
 +|---|---|---|
 +| **Fonte** | cópia MANUAL de `settings.base.json` com hooks apagados à mão, congelada em `9777a8d` (só o pin de modelo mudou depois, em `8ed9f6f`) | `templates/settings/settings.base.json` + a subtração DECLARADA na chave `_derivation` do próprio arquivo gerado |
 +| **Mecanismo** | nenhum — o arquivo era o artefato e a explicação era prosa no `_comment` | `.claude/scripts/gen-settings-user-template.py`, único aplicador; `--check` / `--write` / `--json` |
-+| **Verificação** | nenhuma. O `_comment` afirmava «removendo exatamente 10» e «entradas retidas byte-idênticas nos campos comportamentais» — **as duas afirmações eram FALSAS** e nenhum gate as lia | `--check` compara BYTE a byte o on-disk com o gerado; `test_gen_settings_user_template.py` fecha a integridade do spec (exclusão morta, override morto, classe fora do vocabulário, `reason`/`evidence` vazios ⇒ vermelho) |
-+| **Não-decidido** | invisível: 17 registros ausentes sem nada dizer | **estado de primeira classe**: `exclude_hooks_pending` + `pending_note`, `provisional: true`, e um teste que exige que os dois casem |
-+| **Roster entregue** | 20 registros | **20 registros, byte-idênticos** — a wave troca o MECANISMO, não a superfície do adopter |
++| **Verificação** | nenhuma. O `_comment` afirmava «removendo exatamente 10» e «entradas retidas byte-idênticas nos campos comportamentais» — **as duas afirmações eram FALSAS** e nenhum gate as lia | `--check` compara BYTE a byte; `test_gen_settings_user_template.py` fecha a integridade do spec (exclusão morta, override morto, classe fora do vocabulário, `reason`/`evidence` vazios, chave de topo não-declarada ⇒ vermelho) |
++| **Critério** | prosa que **não se sustentava**: dos 10 «bloqueia ou exige GPG», só 5 sustentam (§2) | uma linha em `_derivation.criterion`, e cada exclusão com `class` de vocabulário fechado + `reason` + `evidence` linha-a-linha |
++| **Roster entregue** | 20 registros | **30 registros** (29 basenames): 10 hooks entram por MÉRITO, nenhum sai |
 +
 +## 2. Antes/depois por registro
 +
 +Base enumera **47** registros (46 `.py` em 45 basenames distintos, mais **1
-+comando INLINE** sem script — ver §3.1). O template `user` entrega **20**.
-+A diferença — **27 registros** — passa a ser declarada, em dois baldes:
++comando INLINE** sem script — ver §3.1). O template `user` passa de **20** para
++**30**; o conjunto só-na-base cai de 27 para **17**, e os 17 são exatamente as
++`exclude_hooks` do spec. Predições da classificação (§3 «notas»): 30 registros,
++29 basenames, 17 base-only — **as três batem exatamente** na medição do
++artefato gerado.
 +
-+| Balde | N | Semântica |
++### 2.1 Os 10 que ENTRAM (nenhum removido)
++
++| Evento / hook | Por que entra (classificação §1.1) |
++|---|---|
++| `ConfigChange` / `check_config_change.py` | única defesa contra `disableAllHooks` no momento da edição; entra **com** `CEO_CONFIG_CHANGE_GUARD=1` declarado |
++| `PostToolUse` / `accel_dispatch.py` | advisory, fail-OPEN; já viajava no plugin advisory |
++| `PostToolUse` / `check_skill_reference_read.py` | observer; a metade EMISSORA (`check_agent_spawn.py`) já está no perfil user — sem ele o contrato ADR-051 do adopter é inauditável |
++| `PostToolUseFailure` / `check_output_secrets.py` | a 2ª registração de um hook JÁ retido: uma ferramenta que **falha** é onde stack-trace vaza segredo |
++| `PreToolUse` / `check_scratchpad_access.py` | guarda `scratchpad.py`, que o perfil user **recebe**; não bloqueia edição e não usa sentinel |
++| `SessionStart` / `turbo_sessionstart.py` | só `additionalContext`; já no plugin advisory |
++| `Setup` / `check_setup_verification.py` | fecha «hook no disco mas não registrado»; valor puro para quem não roda `validate-governance.sh` à mão |
++| `Stop` / `codex_review_user_code.py` | o propósito declarado é revisar o código DO ADOPTER |
++| `Stop` / `review_loop.py` | inerte por default (`CEO_REVIEW_LOOP` é opt-in) |
++| `SubagentStart` / `check_subagent_start.py` | **repara assimetria existente**: `check_fluency_nudge.py` (`SubagentStop`) já está no user e é o CONSUMIDOR deste sidecar |
++
++### 2.2 Os 17 que FICAM DE FORA, por classe
++
++`criterion` (uma linha, no spec): *fica de fora todo hook que (a) bloqueia uma
++chamada de ferramenta sem rota advisory, (b) exige infraestrutura de cerimônia
++que `--ceremony user` não instala, ou (c) observa/reforça um rito de mantenedor
++cuja metade enforcing o perfil não registra.*
++
++| `class` | N | Hooks |
 +|---|---|---|
-+| `exclude_hooks` | **10** | DECIDIDOS. Os mesmos 10 que o `_comment` congelado nomeava. Cada um com `class` (vocabulário fechado), `reason` e `evidence` apontando para o próprio hook. |
-+| `exclude_hooks_pending` | **17** | NÃO DECIDIDOS (OQ-E5). Ficam FORA exatamente como a cópia congelada os deixava; a decisão é do Owner. |
++| `exige-gpg-sentinel` | 3 | `check_canonical_edit`, `check_skill_patch_sentinel`, `check_tier_policy` |
++| `bloqueia-edicao` | 3 | `check_arbitration_kernel`, `check_plan_edit`, `check_adversary` |
++| `exige-infra-ausente-no-user` | 2 | `check_pair_rail`, `check_protocol_semver_cascade` |
++| `maintainer-only-por-desenho` | 9 | `check_codex_filewrite`, `check_worktree_writer`, `check_bash_canonical_forensic`, `check_skill_bootstrap_post`, `check_closeout_guard`, `check_ledger_checkpoint`, `check_compact_pinning`, `check_postcompact_reinject`, `check_precompact_continuity` |
 +
-+Os 10 decididos, com a `class` **medida** (o hook emite `"block"`? consome
-+material de sentinel?) e não adivinhada:
++Quatro eventos somem inteiros da saída (`PreCompact`, `PostCompact`, sobra
++`Setup`/`SubagentStart`/`ConfigChange`/`PostToolUseFailure` que agora EXISTEM):
++o gerador REMOVE um evento esvaziado em vez de emitir array vazio, porque array
++vazio afirma «este evento está ligado a nada», que não é «este evento não está
++ligado».
 +
-+| Hook | `class` | Medido |
-+|---|---|---|
-+| `check_plan_edit.py` | `blocks-tool-calls` | emite `block`; 0 refs de sentinel |
-+| `check_scratchpad_access.py` | `blocks-tool-calls` | emite `block`; 0 refs de sentinel |
-+| `check_canonical_edit.py` | `requires-ceremony-infra` | emite `block`; 242 refs de sentinel |
-+| `check_arbitration_kernel.py` | `requires-ceremony-infra` | emite `block`; 32 refs |
-+| `check_tier_policy.py` | `requires-ceremony-infra` | emite `block`; 18 refs |
-+| `check_skill_patch_sentinel.py` | `requires-ceremony-infra` | emite `block`; 7 refs |
-+| `check_protocol_semver_cascade.py` | `framework-internal-observer` | NÃO emite `block` |
-+| `check_skill_reference_read.py` | `framework-internal-observer` | NÃO emite `block` |
-+| `check_skill_bootstrap_post.py` | `framework-internal-observer` | NÃO emite `block` |
-+| `check_bash_canonical_forensic.py` | `framework-internal-observer` | NÃO emite `block` |
++### 2.3 Fora dos hooks
 +
-+Os 17 pendentes são **17 basenames distintos**: 16 ausentes por completo do
-+roster `user`, mais `check_output_secrets.py`, que está PRESENTE uma vez
-+(`PostToolUse`) e perdeu a segunda registração (`PostToolUseFailure`):
-+
-+```
-+ConfigChange       check_config_change.py
-+PostCompact        check_postcompact_reinject.py
-+PostToolUse        accel_dispatch.py
-+PostToolUseFailure check_output_secrets.py     <- a 2a registração de um hook RETIDO
-+PreCompact         check_precompact_continuity.py
-+PreToolUse         check_adversary.py
-+PreToolUse         check_codex_filewrite.py
-+PreToolUse         check_ledger_checkpoint.py  <- o achado que abriu o pacote E
-+PreToolUse         check_pair_rail.py
-+PreToolUse         check_worktree_writer.py
-+SessionStart       check_compact_pinning.py
-+SessionStart       turbo_sessionstart.py
-+Setup              check_setup_verification.py
-+Stop               check_closeout_guard.py
-+Stop               codex_review_user_code.py
-+Stop               review_loop.py
-+SubagentStart      check_subagent_start.py
-+```
-+
-+Seis eventos desaparecem inteiros da saída (`ConfigChange`, `PostCompact`,
-+`PostToolUseFailure`, `PreCompact`, `Setup`, `SubagentStart`) — o gerador
-+REMOVE o evento em vez de emitir um array vazio, porque array vazio é a
-+afirmação «este evento está ligado a nada», que é diferente de «este evento
-+não está ligado».
-+
-+Fora dos hooks: `env` = base menos 5 chaves (`env_exclude`) mais
-+`CEO_CONFIG_PROTECTION_ADVISORY` (`env_overrides`); `model`,
-+`squad_allowlist` e `_squad_allowlist_comment` são **copiados da base** (uma
-+fonte, drift impossível por construção); `_model_comment` é literal do spec.
++* **`env`**: `env_exclude` fica **vazio** — o perfil user ganha as 5 chaves da
++  base (`CLAUDE_CODE_SUBAGENT_MODEL`, `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB`,
++  `BASH_MAX_TIMEOUT_MS`, `CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR`,
++  `ENABLE_TOOL_SEARCH`) e mantém as suas duas
++  (`CEO_CONFIG_PROTECTION_ADVISORY`, `CEO_CONFIG_CHANGE_GUARD`). A
++  classificação (§1.3) mostra que `CLAUDE_CODE_SUBAGENT_MODEL: "inherit"` é o
++  valor **anti-veneno** escolhido pelo ADR-144 *sobre* apagar a chave — a
++  exclusão era herança do congelamento, não decisão.
++* **`model`, `squad_allowlist`, `_squad_allowlist_comment`**: copiados da base
++  (uma fonte, drift impossível por construção).
++* **`_model_comment`**: literal do spec (prosa de POLÍTICA do perfil).
++* **`_comment`**: texto fixo do gerador, sem número nenhum, apontando para o
++  spec e para o `criterion`.
 +
 +## 3. Achados medidos que não estavam no briefing
 +
 +### 3.1 A identidade de um hook NÃO é sempre um basename `.py`
 +
-+O briefing (e a minha primeira versão do gerador) assumiram que todo registro
-+é identificável pelo basename `*.py` do `command`. **É falso.** A base
-+registra um comando INLINE, em `PostToolUse`:
++O briefing (e a minha 1ª versão do gerador) assumiram que todo registro é
++identificável pelo basename `*.py` do `command`. **É falso.** A base registra
++um comando INLINE em `PostToolUse`:
 +
 +```
 +echo '{"decision":"allow","message":"POST-AGENT: Check git diff to verify file assignment compliance. ..."}'
 +```
 +
-+A primeira versão do gerador era fail-CLOSED nesse caso e **recusava rodar
-+sobre o template real**. A cura não é afrouxar: é dar ao comando inline uma
-+identidade estável e endereçável — `inline:<12 hex de sha256(command)>` — para
-+que ele possa ser excluído se alguém quiser, e para que uma exclusão dele
-+APODREÇA RUIDOSAMENTE (exclusão morta ⇒ vermelho) se o texto do comando mudar.
-+Fail-closed continua onde a identidade é impossível: `command` ausente ou
-+não-string.
++A 1ª versão era fail-CLOSED nesse caso e **recusava rodar sobre o template
++real**. A cura não é afrouxar: é dar ao inline uma identidade estável e
++endereçável — `inline:<12 hex de sha256(command)>` — para que possa ser
++excluído se alguém quiser, e para que uma exclusão dele APODREÇA RUIDOSAMENTE
++(exclusão morta ⇒ vermelho) se o texto mudar. Fail-closed continua onde a
++identidade é impossível: `command` ausente ou não-string.
 +
-+Consequência para a contagem: 47 registros = 46 `.py` (45 basenames distintos,
-+porque `check_output_secrets.py` aparece duas vezes) + 1 inline.
++Consequência para a contagem: 47 = 46 `.py` (45 basenames, porque
++`check_output_secrets.py` aparece 2×) + 1 inline.
 +
 +### 3.2 As divergências entre `user` e `base` eram TRÊS classes, não duas
 +
-+O briefing nomeava duas (matcher estreito em `check_anti_ceo_overhead.py`;
-+registro `PostToolUseFailure` perdido). Medindo campo a campo os 20 registros
-+retidos, há **três** classes de edição à mão:
++O briefing nomeava duas. Medindo campo a campo os 20 registros retidos, há
++**três**:
 +
 +| Registro | Campo | Estado |
 +|---|---|---|
-+| `PreToolUse/check_anti_ceo_overhead.py` | `matcher` | base = 14 ferramentas + `mcp__.*`; user = `Read\|Edit\|Write\|MultiEdit\|Bash` |
-+| `PreToolUse/check_anti_ceo_overhead.py` | `_comment` (bloco) | user perdeu o parágrafo PLAN-125 WS-1 que EXPLICA por que o matcher da base é largo |
-+| `PreToolUse/check_config_protection.py` | `_comment` (bloco) | reescrito para a variante advisory |
-+| `PreToolUse/check_config_protection.py` | `statusMessage` (entrada) | `"...(advisory)..."` |
-+| `UserPromptSubmit/UserPromptSubmit.py` | `_comment` (bloco) | acrescenta a nota do recomendador PLAN-122 |
++| `PreToolUse/check_anti_ceo_overhead.py` | `matcher` | base = 14 ferramentas + `mcp__.*`; user = 5 |
++| `PreToolUse/check_anti_ceo_overhead.py` | `_comment` de bloco | user perdeu o parágrafo PLAN-125 WS-1 que explica o matcher largo |
++| `PreToolUse/check_config_protection.py` | `_comment` de bloco | reescrito para a variante advisory |
++| `PreToolUse/check_config_protection.py` | `statusMessage` | `"...(advisory)..."` |
++| `UserPromptSubmit/UserPromptSubmit.py` | `_comment` de bloco | acrescenta a nota do recomendador PLAN-122 |
 +
-+O `_comment` congelado só reconhecia a última («the retained UserPromptSubmit
-+entry carries an added PLAN-122 optimizer note») — uma de três.
++O `_comment` congelado reconhecia só a última. Isso força a forma do spec:
++`matcher_overrides` sozinho **não cobre** `_comment` de bloco nem
++`statusMessage`. Ficaram duas chaves, com divisão semântica limpa:
 +
-+Isso força a forma do spec: `matcher_overrides` sozinho (a chave que o
-+briefing pedia) **não cobre** `_comment` de bloco nem `statusMessage` de
-+entrada. Ficaram duas chaves, com divisão semântica limpa:
++* `matcher_overrides` — o campo COMPORTAMENTAL. Forma da classificação §3:
++  objeto com `matcher` + `reason` + `evidence` (um matcher estreitado sem
++  justificativa registrada é exatamente como o atual apareceu).
++* `annotation_overrides` — `_comment` de bloco e campos de entrada, com
++  `reason` obrigatório. **`command` é PROIBIDO ali**: overridar o comando seria
++  uma segunda fonte para o roster, a classe que o gerador existe para remover.
 +
-+* `matcher_overrides` — o campo COMPORTAMENTAL, o que o Owner precisa julgar;
-+* `annotation_overrides` — `_comment` de bloco e campos de entrada, mais um
-+  `reason` obrigatório por override. **`command` é proibido ali**: overridar o
-+  comando seria uma segunda fonte para o roster, exatamente a classe que o
-+  gerador existe para remover.
-+
-+Todos os cinco desvios foram **PRESERVADOS verbatim** (lidos do disco, nunca
-+redigitados) e agora são declarados com motivo. Nenhum comportamento muda.
++Os cinco desvios foram **PRESERVADOS verbatim** (lidos do disco, nunca
++redigitados) e agora são declarados com motivo.
 +
 +### 3.3 O arquivo-irmão para o spec trip(ari)a um gate — medido, com controle
 +
 +O entregável 1 pedia `templates/settings/settings.user.derivation.json`, com
 +instrução explícita de trocar a arquitetura se algum glob o pegasse. **Pegou.**
-+`.claude/scripts/check-install-profiles.py` (`:240`) exige uma BIJEÇÃO entre as
++`.claude/scripts/check-install-profiles.py` (`:240`) exige BIJEÇÃO entre as
 +entradas `hook_stacks` de `scripts/profiles/profiles.json` e
 +`templates/settings/settings*.json` no disco:
 +
@@ -152,79 +147,92 @@ index 0000000..c20468b
 +VARIANTE (user-derivation.json)          -> rc=0  (não casa o glob settings*)
 +```
 +
-+O nome que não casa o glob passaria, mas não está no FILE ASSIGNMENT desta
-+wave; a rota sancionada pelo briefing é embutir. Então o spec vive na chave
-+`_derivation` do próprio `settings.user.json`.
++O nome fora do glob passaria, mas não está no FILE ASSIGNMENT; a rota
++sancionada pelo briefing é embutir. O spec vive na chave `_derivation` do
++próprio `settings.user.json`.
 +
 +**E é a arquitetura melhor, não um consolo.** A prosa que ele substitui já
-+viajava para exatamente os mesmos lugares (o `_comment` congelado tem 1.2 kB
-+e é copiado verbatim para o `.claude/settings.json` de todo adopter
-+`--ceremony user`); a diferença é que agora um gate a lê. Um adopter que abra
-+seu `settings.json` vê, no arquivo, quais hooks de governança estão ausentes e
-+por quê.
++viajava para os mesmos lugares (o `_comment` congelado tem 1,2 kB e é copiado
++verbatim para o `.claude/settings.json` de todo adopter `--ceremony user`); a
++diferença é que agora um gate a lê. Um adopter que abra seu `settings.json` vê,
++no arquivo, quais hooks de governança estão ausentes e por quê.
 +
 +**Prova de não-entrega / de entrega, medida em cada consumidor:**
 +
 +| Consumidor | Lê o quê | O `_derivation` chega? |
 +|---|---|---|
 +| `scripts/delivery-routes.tsv` (+ `_framework_manifest_set.sh`, `doctor.sh`, `_parity_classify.py`) | 6 rotas, domínio INERTE fixo em código: `docs/<n>.md`, `.github/CODEOWNERS[.template]`, `.github/workflows/*.template` | **não** — `templates/settings/**` não é destino de rota nenhuma |
-+| `scripts/install.sh` (`:2144-2146`) | copia o template escolhido para `$TARGET/.claude/settings.json` | **sim** — instalação `--ceremony user` nova carrega o spec (custo declarado abaixo) |
-+| `scripts/upgrade.sh` (`:2603-2712`) | só `.hooks` e `.env` do template | **não** — adopter existente nunca recebe a chave por upgrade |
-+| `scripts/build-plugin.py` (`:284`) | só `.hooks` (`advisory.get("hooks", {})`) | **não** — `dist/ceo-plugin/hooks/hooks.json` inalterado |
-+| `.claude/scripts/check-install-profiles.py` | itera `.hooks` dos templates declarados + bijeção por nome de arquivo | **inerte** — nenhum arquivo novo, rc=0 medido |
-+| `.github/workflows/validate.yml` (`:254`) | `jq empty` em cada `templates/settings/*.json` | **inerte** — JSON válido |
-+| `.claude/hooks/check_canonical_edit.py` (`:308`) | glob `templates/settings/*.json` | o arquivo já era canônico; editar o spec exige cerimônia GPG — **desejável**, é ele que decide a superfície de hooks do adopter |
++| `scripts/install.sh` (`:2144-2146`) | copia o template para `$TARGET/.claude/settings.json` | **sim** — instalação `--ceremony user` nova carrega o spec (custo em §5) |
++| `scripts/upgrade.sh` (`:2603-2712`) | só `.hooks` e `.env` | **não** — adopter existente nunca recebe a chave por upgrade |
++| `scripts/build-plugin.py` (`:284`) | só `.hooks` | **não** no `hooks.json`; mas ver **FU-F-ACCEL** (§5) |
++| `.claude/scripts/check-install-profiles.py` | `.hooks` dos templates declarados + bijeção por nome de arquivo | **inerte** — nenhum arquivo novo, rc=0 medido |
++| `.github/workflows/validate.yml` (`:254`) | `jq empty` em `templates/settings/*.json` | **inerte** — JSON válido |
++| `.claude/hooks/check_canonical_edit.py` (`:308`) | glob `templates/settings/*.json` | já era canônico; editar o spec exige cerimônia GPG — **desejável** |
 +
-+Custo medido da chave: **15.818 B → 28.294 B (+12.476 B)**. A primeira versão
-+custava +16.9 kB; a nota idêntica repetida nas 17 entradas pendentes foi
-+içada para um único `pending_note` (e o validador REJEITA uma entrada pendente
-+que traga `note` próprio, para a repetição não voltar).
++Custo medido: **15.818 B → 35.879 B (+20.061 B)**.
 +
-+### 3.4 Nenhum dos quatro sítios do entregável 5 precisou de edição — e isso é medido
++### 3.4 `top_level_keep` era a mesma classe de defeito — trocado por acordo em DUAS direções
++
++A classificação (§3, nota) rejeitou o `top_level_keep` que o briefing pediu:
++uma lista literal de chaves a manter é «a mesma classe de lista literal que a
++OQ-E5 existe para matar», porque a base ganhar uma chave significa o perfil
++advisory silenciosamente NÃO a receber. Mas um `top_level_exclude` puro tem o
++defeito oposto — a base ganha `permissions` e o perfil advisory **herda**
++(quebrando `test-install-deny-baseline.sh` perna D e
++`test_template_dogfood_parity.py:398-412`).
++
++Nenhuma das duas direções fica silenciosa:
++
++* **droppada** ⇒ `top_level_exclude` tem de NOMEAR a chave, com `reason`
++  (fail-closed no validador; exclusão morta ou sem razão ⇒ vermelho);
++* **herdada** ⇒ a chave nova é copiada, os bytes gerados mudam, `--check`
++  fica VERMELHO e a chave aparece no diff que um humano revisa antes do
++  `--write` (e o write passa pela cerimônia canônica).
++
++São **15** chaves de topo declaradas fora, cada uma com razão: `permissions`,
++`availableModels`, `fallbackModel`, `statusLine`, `plansDirectory`,
++`cleanupPeriodDays`, `attribution`, `skillOverrides`,
++`skillListingBudgetFraction`, `disableSkillShellExecution`,
++`_model_pin_comment` e os 4 comentários que explicam os blocos removidos.
++Teste `test_every_base_top_level_key_is_carried_or_named` fecha o invariante;
++`test_the_enforcing_model_keys_never_reach_the_advisory_profile` é o cinto.
++
++### 3.5 O que o entregável 5 pedia já estava certo — e isso é medido
 +
 +O briefing pedia para atualizar contagens em quatro arquivos, citando
 +`EXPECTED_TEMPLATE_REGISTRATIONS_USER=20`. Medido:
 +
-+* `git grep EXPECTED_TEMPLATE_REGISTRATIONS` **não** casa nenhum teste. O
-+  literal vive só em `.claude/plans/PLAN-169/s329-ceremony-E/EXPECTED-BASELINE.txt`
-+  e no `finalize-E.sh`/`OWNER-S329-E-LAND.sh` que o consomem — artefatos
-+  CONGELADOS da cerimônia E, já landada. Não são tocados (a wave F terá o seu
-+  próprio baseline, gerado pelo finalize).
-+* `.claude/scripts/tests/test_upgrade_lifecycle_hooks_derived.py` e
-+  `scripts/tests/test-upgrade-lifecycle-hooks-derived.sh` **derivam tudo** dos
-+  templates em tempo de execução (`_base_only()`, `BASE_ONLY_N`,
-+  `USER_ONLY_ENV`, `STRIP_NAME`). Os únicos limiares são
-+  `assertGreaterEqual(len(only), 10)` e `[ "$BASE_ONLY_N" -ge 10 ]`, e o valor
-+  real é 27.
-+* `.claude/hooks/tests/test_template_dogfood_parity.py` afirma `model` e a
-+  AUSÊNCIA de `availableModels`/`enforceAvailableModels` — nada sobre o
-+  conjunto de chaves top-level.
-+* `scripts/tests/test-install-deny-baseline.sh` perna `[D]` roda um install
-+  real e checa o deny baseline — indiferente.
++* `git grep EXPECTED_TEMPLATE_REGISTRATIONS` **não casa nenhum teste**. O
++  literal vive só em `PLAN-169/s329-ceremony-E/EXPECTED-BASELINE.txt:182`, lido
++  por `finalize-E.sh:432` e `OWNER-S329-E-LAND.sh:726` — artefatos CONGELADOS
++  de uma cerimônia já landada. **Não tocados**; a wave F terá o seu próprio
++  baseline, e re-rodar o material da E pós-wave falharia por desenho (nota já
++  registrada na classificação §4 #22).
++* `test_upgrade_lifecycle_hooks_derived.py` e
++  `test-upgrade-lifecycle-hooks-derived.sh` **derivam tudo** em tempo de
++  execução. Os limiares são `>= 10` e o valor real cai de 27 para **17** —
++  passa com margem 7. O alvo derivado `sorted(tpl["env"])[0]` muda de
++  `CEO_CONFIG_PROTECTION_ADVISORY` para `BASH_MAX_TIMEOUT_MS`; o teste continua
++  válido porque é derivado (previsto na classificação §4 #7).
++* `test_template_dogfood_parity.py` afirma `model` e a AUSÊNCIA de
++  `availableModels`/`enforceAvailableModels` — garantido por `top_level_exclude`.
++* `test-install-deny-baseline.sh` perna `[D]` exige que o template **não**
++  traga bloco `permissions` — garantido pelo mesmo mecanismo.
 +
-+Ou seja: os oráculos vizinhos já estavam escritos da maneira certa. Como o
-+roster não muda, eles ficam verdes **sem uma linha de edição** — verificado
-+por execução, não por leitura (E unit 88/88, dogfood 14/14).
++Nenhum dos quatro precisou de edição, verificado por **execução**: E unit
++88/88, dogfood 14/14, e2e abaixo.
 +
-+### 3.5 O conflito do briefing entre «não decida os 16» e «as contagens NÃO mudam»
++### 3.6 A mudança de roster torna uma invariante nova load-bearing — medida
 +
-+Excluir só os 10 declarados produz 47 − 10 = **37** registros, não 20. As duas
-+instruções não podiam valer ao mesmo tempo com um único balde de exclusões. O
-+balde `exclude_hooks_pending` resolve as duas: os 17 saem do roster (contagem
-+fica em 20, comportamento inalterado) **sem que ninguém tenha decidido nada**
-+sobre eles — a não-decisão vira um estado explícito, com `oq`, `pending_note`
-+e `provisional: true`, em vez de uma ausência invisível. Que é, literalmente,
-+o defeito que OQ-E5 descreve, uma camada acima.
-+
-+Pelo mesmo motivo o teste (f) do briefing («`check_output_secrets.py` presente
-+em `PostToolUse` E `PostToolUseFailure` no gerado») **não** foi escrito como
-+asserção literal: escrevê-la seria decidir um dos 17. Ela virou (i) o teste de
-+MECANISMO em três direções sobre base sintética — sem exclusão ⇒ as duas
-+registrações sobrevivem; exclusão com `event` ⇒ cai só aquela; exclusão sem
-+`event` ⇒ caem as duas — e (ii) uma asserção sobre o corpus real que segue o
-+SPEC (`test_the_shipped_template_tracks_the_spec_for_the_dual_hook`). Quando o
-+Owner mandar a segunda registração voltar, basta apagar a entrada pendente e
-+rodar `--write`: o teste acompanha, sem editar literal nenhum.
++Pela primeira vez o perfil advisory registra hooks que antes eram apenas
++COPIADOS, nunca wired. Se algum dos 10 não chegasse ao disco do adopter, a
++registração apontaria para nada. Medido: `install_hooks_selective`
++(`scripts/install.sh:1413`) copia **todo** `.claude/hooks/*.py` e `*.sh` de
++topo, **sem nenhum ramo por cerimônia** — o arquivo existir no repo é
++exatamente a condição para chegar ao adopter. Os 10 existem (verificado um a
++um). Guardado por `test_every_registered_hook_has_a_file_install_will_copy`,
++que é a pergunta do ADOPTER («esta registração resolve?»), distinta da bijeção
++manifesto↔disco que `check-install-profiles.py` faz.
 +
 +## 4. Testes
 +
@@ -232,167 +240,291 @@ index 0000000..c20468b
 +
 +```
 +python3 -m pytest .claude/scripts/tests/test_gen_settings_user_template.py -q
-+50 passed, 1 skipped in 1.53s
++61 passed, 2 skipped
 +```
 +
-+O skip é `test_no_match_statement`, e a razão é boa: **o python3 local É 3.9**,
-+então `ast.Match` não existe e um `match` sequer parsearia. O piso do repo
-+está sendo exercitado de verdade, não simulado.
++Os 2 skips são honestos e nomeados: `test_no_match_statement` (o python3 local
++**É 3.9**, então `ast.Match` não existe — o piso do repo está sendo exercitado
++de verdade) e `test_pending_entries_point_at_an_open_question` (o balde
++`exclude_hooks_pending` está VAZIO agora que a classificação decidiu os 17; o
++mecanismo permanece para a próxima não-decisão).
 +
-+Cinco classes:
++Sete classes:
 +
-+* `ShippedTemplateMatchesItsDerivation` — paridade em BYTES (não estrutural:
-+  um `--check` estrutural ficaria verde sobre um arquivo reformatado à mão),
-+  idempotência (`--write` duas vezes ⇒ mesmos bytes), drift nomeado com o
-+  comando de remediação, e `--check` como modo default.
-+* `ShippedSpecIsInternallyConsistent` — toda exclusão aponta para registro
-+  vivo; `class` no vocabulário; `reason`/`evidence` não-vazios; **`evidence`
-+  RESOLVE** (o primeiro token tem de ser `.claude/hooks/<o próprio hook>` e
-+  existir em disco); sem duplicatas; `provisional` casa com o balde pendente;
-+  e o invariante-mãe `test_the_two_buckets_cover_every_base_only_registration`
-+  — nada sai da base sem estar declarado em um dos dois baldes.
++* `ShippedTemplateMatchesItsDerivation` — paridade em BYTES (um `--check`
++  estrutural ficaria verde sobre um arquivo reformatado à mão), idempotência,
++  drift nomeado com o comando de remediação, `--check` como default.
++* `ShippedSpecIsInternallyConsistent` — exclusões apontam para registro vivo;
++  `class` no vocabulário; `reason`/`evidence` não-vazios; **`evidence` RESOLVE**
++  (o 1º token tem de ser `.claude/hooks/<o próprio hook>` e existir em disco);
++  sem duplicatas; `provisional` casa com o balde; toda chave de topo da base
++  carregada ou nomeada; as chaves enforcing nunca vazam; `criterion` presente e
++  apontado pelo `_comment`; e o invariante-mãe
++  `test_the_two_buckets_cover_every_base_only_registration`.
 +* `FrozenCopyFailsItsOwnClaim` — o **CONTROLE VERMELHO** (abaixo).
 +* `DerivationMechanics` — base sintética: hook novo não-excluído ⇒ `--check`
-+  vermelho nomeando-o; `model` segue a base; dupla registração nas três
-+  direções; evento esvaziado some; bloco parcialmente esvaziado mantém os
-+  sobreviventes; entradas retidas byte-idênticas à base salvo override
-+  declarado; `env` = base − exclude + overrides; identidade do hook inline.
-+* `SpecIntegrityIsFailClosed` — 16 arms de rejeição (exclusão morta por nome e
-+  por evento, classe desconhecida, `reason` vazio, duplicata, pendente sem
-+  `oq`, pendente sem `pending_note`, override morto, override sobre excluído,
-+  chave de override ambígua, override de `command`, `env_exclude` morto,
-+  chave em dois baldes, `top_level_keep` desconhecido, `source` errado, hook
-+  sem `command`) + a fronteira INFRA/DRIFT: artefato ausente é **rc 2**,
-+  nunca rc 1.
-+* `GeneratorRuntimeContract` — compila; imports só de stdlib (lista fechada);
-+  `from __future__ import annotations`; sem `match`; sem `|` de união em
-+  runtime.
++  vermelho nomeando-o; `model` segue a base; dupla registração nas 3 direções;
++  evento esvaziado some; bloco parcialmente esvaziado mantém sobreviventes;
++  entradas retidas byte-idênticas salvo override declarado; `env`; identidade
++  do hook inline.
++* `SpecIntegrityIsFailClosed` — 20 arms de rejeição, incluindo o `top_level_keep`
++  **recusado por nome** para a forma rejeitada não voltar, e a fronteira
++  INFRA/DRIFT: artefato ausente é **rc 2**, nunca rc 1.
++* `PluginAccelOverlapIsDeclaredDebt` — a dívida FU-F-ACCEL (§5), com anti-rot.
++* `GeneratorRuntimeContract` — compila; imports só de stdlib; `from __future__`;
++  sem `match`; sem `|` de união em runtime.
 +
 +### CONTROLE VERMELHO — a cópia congelada contra a própria afirmação
 +
 +`fixtures/settings.user.pre-F.json` é
-+`git show 1c34eb5:templates/settings/settings.user.json`, 15.818 B, 20
-+registros, sem `_derivation`. O teste toma o `_comment` congelado ao pé da
-+letra — spec com os 10 decididos, balde pendente VAZIO, overrides VAZIOS
-+(«byte-idênticas nos campos comportamentais») — e mostra que isso **não
-+reproduz** o arquivo congelado:
++`git show 1c34eb5:templates/settings/settings.user.json` (15.818 B, 20
++registros, sem `_derivation`). O teste toma o `_comment` congelado ao pé da
++letra — spec com **os 10 que ele mesmo listou**, sem overrides («byte-idênticas
++nos campos comportamentais») — e mostra que isso **não reproduz** o arquivo
++congelado:
 +
 +```
 +registrações que a cópia congelada NÃO tinha: 17
-+   ConfigChange check_config_change.py
-+   PostCompact check_postcompact_reinject.py
-+   PostToolUse accel_dispatch.py
-+   PostToolUseFailure check_output_secrets.py
-+   PreCompact check_precompact_continuity.py
-+   PreToolUse check_adversary.py
-+   PreToolUse check_codex_filewrite.py
-+   PreToolUse check_ledger_checkpoint.py
-+   PreToolUse check_pair_rail.py
-+   PreToolUse check_worktree_writer.py
-+   SessionStart check_compact_pinning.py
-+   SessionStart turbo_sessionstart.py
-+   Setup check_setup_verification.py
-+   Stop check_closeout_guard.py
-+   Stop codex_review_user_code.py
-+   Stop review_loop.py
-+   SubagentStart check_subagent_start.py
++   ConfigChange check_config_change.py          PreToolUse check_pair_rail.py
++   PostCompact check_postcompact_reinject.py    PreToolUse check_worktree_writer.py
++   PostToolUse accel_dispatch.py                SessionStart check_compact_pinning.py
++   PostToolUseFailure check_output_secrets.py   SessionStart turbo_sessionstart.py
++   PreCompact check_precompact_continuity.py    Setup check_setup_verification.py
++   PreToolUse check_adversary.py                Stop check_closeout_guard.py
++   PreToolUse check_codex_filewrite.py          Stop codex_review_user_code.py
++   PreToolUse check_ledger_checkpoint.py        Stop review_loop.py
++                                                SubagentStart check_subagent_start.py
 +
 +campos divergentes: PreToolUse check_anti_ceo_overhead.py: matcher
 +                    PreToolUse check_config_protection.py: statusMessage
 +```
 +
-+Asserções sobre a MENSAGEM (não só sobre a desigualdade): o relatório tem de
++Asserções sobre a MENSAGEM, não só sobre a desigualdade: o relatório tem de
 +nomear `PreToolUse check_ledger_checkpoint.py`, `PostToolUseFailure
-+check_output_secrets.py`, o matcher e o `statusMessage`; e a contagem de
-+faltantes tem de bater EXATAMENTE com o balde pendente. Fecha com
-+`test_the_shipped_spec_does_reproduce_the_frozen_roster`: com o balde e os
-+overrides, o roster entregue é idêntico ao congelado — a wave é
-+comportamentalmente neutra.
++check_output_secrets.py`, o matcher e o `statusMessage`; e a contagem tem de
++bater com o censo (17, declarado com fonte). A lista dos 10 é um literal
++**deliberado** — é uma CITAÇÃO de um artefato histórico, não um roster que este
++arquivo mantém; se o spec entregue divergir dela, é a wave funcionando.
++
++Fecha com dois invariantes de direção:
++`test_the_shipped_roster_loses_nothing_the_frozen_copy_had` (a única direção
++que seria REGRESSÃO para um adopter) e
++`test_what_the_shipped_roster_gained_is_exactly_what_was_ruled_in` (os 10 de
++§2.1, declarados com fonte).
 +
 +### CONTROLE POSITIVO ao vivo, no artefato real
 +
-+Não só em cópias sintéticas: plantei `CEO_QUIET_MODE: "1" -> "0"` no
-+`templates/settings/settings.user.json` do checkout e rodei a suíte.
++Plantei `CEO_QUIET_MODE: "1" -> "0"` no template do checkout e rodei a suíte:
 +
 +```
 +PLANT  -> 5 failed, 45 passed, 1 skipped
 +          test_check_mode_is_green_on_the_shipped_tree
 +          test_default_mode_is_check
 +          test_generated_bytes_equal_the_shipped_bytes
-+          test_the_shipped_spec_does_reproduce_the_frozen_roster
++          test_the_shipped_spec_does_reproduce_the_frozen_roster   (versão provisional)
 +          test_env_is_base_minus_exclusions_plus_overrides
-+RESTORE (gen --write) -> 50 passed, 1 skipped
++RESTORE (gen --write) -> verde
 +```
 +
 +### Suítes vizinhas (nenhuma editada)
 +
 +```
-+.claude/scripts/tests/test_upgrade_lifecycle_hooks_derived.py   88 passed   (E unit: 88 -> 88)
++.claude/scripts/tests/test_upgrade_lifecycle_hooks_derived.py   88 passed   (E unit 88 -> 88)
 +.claude/hooks/tests/test_template_dogfood_parity.py             14 passed
 +python3 .claude/scripts/check-install-profiles.py               rc=0
-+scripts/tests/test-upgrade-lifecycle-hooks-derived.sh           <preenchido no fecho: E e2e 71 -> N>
++scripts/tests/test-upgrade-lifecycle-hooks-derived.sh           69 passed, 0 failed  (E e2e)
++python3 -m pytest .claude/scripts/tests/  (varredura completa)  5748 passed, 1 FAILED, 26 skipped, 1 xfailed (17min20)
 +```
++
++A única vermelha é `test_install_user_skips_governance_hooks.py` — **§4b**,
++fora do FILE ASSIGNMENT. Ela só apareceu porque rodei o diretório INTEIRO;
++nenhuma das suítes que o briefing e a classificação nomeiam a cobre.
++
++**Nota sobre o e2e — por que 69 e não os 71 do briefing.** Rodado DUAS vezes:
++uma no estado provisional (roster 20) e outra no final (roster 30). **As duas
++deram 69 passed / 0 failed**, o que é evidência direta de que a mudança de
++roster não moveu nada no e2e. O delta contra 71 é **independente do patch**:
++`E.3` e `E.9` replicam o upgrader PRÉ-CURA a partir de `git show HEAD:...` e,
++com HEAD (`1c34eb5`) já além da cura do pacote E (`5930974`), os dois controles
++vermelhos **expiram** e degradam para um SKIP NOMEADO (`E.3-SKIP`,
++`E.9-SKIP`) em vez de emitirem os seus `ok` individuais. Nenhum dos dois lê
++algo que este patch toca.
++
++**Dois casos derivados passaram a exercitar as chaves NOVAS, sozinhos** — a
++prova de que os oráculos vizinhos são derivados de verdade:
++
++```
++ok  E.14j env.CEO_CONFIG_CHANGE_GUARD=1 came back WITH the hooks
++ok  E.15d the SHARED setting env.BASH_MAX_TIMEOUT_MS=600000 was restored
++ok  E.15e the USER-ONLY setting env.CEO_CONFIG_CHANGE_GUARD was NOT applied
++```
++
++`E.14j`/`E.15e` derivam a chave «só-do-user» por subtração e, com
++`env_exclude` vazio, ela deixou de ser `CEO_CONFIG_PROTECTION_ADVISORY` e
++passou a ser `CEO_CONFIG_CHANGE_GUARD`; `E.15d` derivou uma chave COMPARTILHADA
++que antes não existia. Nenhuma linha foi editada nesses arquivos.
 +
 +### Gates de corpus (rodados DEPOIS da última edição, sobre o staged)
 +
-+`<preenchido no fecho>`
++Ordem do CLAUDE.md §4: `git add` com paths EXPLÍCITOS → gates sobre a árvore
++staged → (sem commit; o finalize deriva o patch).
 +
-+## 5. Questões abertas para o Owner
++```
++python3 .claude/scripts/check-test-env-hygiene.py      rc=0   337 flagged, all allowlisted
++python3 .claude/scripts/check-staleness.py             rc=0   9 findings, TODAS pré-existentes
++python3 .claude/scripts/check-installer-write-safety.py rc=0  baseline intacto (nada em scripts/)
++python3 .claude/scripts/check-install-profiles.py      rc=0   bijeção OK (nenhum arquivo novo em templates/settings/)
++bash .claude/scripts/local/verify-counts.sh            rc=0   test_files 811 -> 812, tests 15396, sem drift
++python3 -m py_compile <gerador> <teste>                rc=0
++jq empty templates/settings/*.json                     rc=0   (5 templates)
++```
 +
-+* **OQ-F1 (a que importa) — os 17 pendentes.** O balde é o mecanismo, não a
-+  resposta. Cada entrada precisa de um veredito: registrar no perfil advisory
-+  (apagar a entrada e rodar `--write`) ou excluir de vez (mover para
-+  `exclude_hooks` com `class`, `reason`, `evidence`). Um agente de
-+  classificação paralelo foi anunciado no briefing e **não chegou** durante
-+  esta execução; nada nos 17 foi decidido, por instrução explícita. Quando o
-+  balde esvaziar, `provisional` vira `false` — e há teste exigindo que os dois
-+  andem juntos.
-+* **OQ-F2 — os dois overrides comportamentais.** O matcher estreito de
-+  `check_anti_ceo_overhead.py` foi congelado ANTES de PLAN-125 WS-1 alargar o
-+  da base (o alargamento acrescentou o carimbo de ciclo de vida por
-+  tool-call). Preservei por neutralidade. Se o perfil advisory deve receber o
-+  matcher largo, apague a entrada de `matcher_overrides` e a de
-+  `annotation_overrides` correspondente e rode `--write`.
-+* **OQ-F3 — as 5 chaves de `env`.** `BASH_MAX_TIMEOUT_MS`,
-+  `CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR`, `CLAUDE_CODE_SUBAGENT_MODEL`,
-+  `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB`, `ENABLE_TOOL_SEARCH` estão em
-+  `env_exclude`. Nenhuma delas é de governança e nenhuma exige GPG; a exclusão
-+  parece herança do congelamento, não decisão. Mesma rota de cura.
-+* **OQ-F4 — o gate no CI.** O `--check` não está wired em workflow nenhum
-+  (fora do escopo desta wave: `.github/` e `scripts/` não estão no FILE
-+  ASSIGNMENT). Sem isso, a paridade é garantida só pelo pytest — que É o gate
-+  de CI para `.claude/scripts/tests/`, então a cobertura existe; um step
-+  dedicado em `validate.yml` (ao lado do idempotency check do
-+  `generate-skill-inventory.sh`) daria mensagem melhor. Decisão do Owner.
-+* **OQ-F5 — +12.476 B no `settings.json` de todo adopter `--ceremony user`
-+  novo.** Declarado, não escondido. Se for demais, a rota é encurtar
-+  `reason`/`evidence` (não remover: são o que torna a subtração auditável) ou
-+  aceitar o arquivo-irmão com um nome fora do glob `settings*.json` — o que
-+  exige uma linha em `scripts/profiles/profiles.json` ou uma mudança na
-+  bijeção, e portanto uma wave própria.
++As 9 do `check-staleness` são **pré-existentes**, provado por controle:
++`git stash --include-untracked` → re-rodar → **9**; `git stash pop` → **9**.
++Nenhuma cita algo que este patch toca (a entrada `PLAN-169` é
++`plan_executing_stalled`, sobre o arquivo do plano, não sobre a wave).
++
++O ratchet `installer-write-safety` **não** precisou de regeneração: o patch não
++toca nenhum arquivo em `scripts/` (`git status --porcelain` = 5 paths, todos em
++`.claude/` e `templates/`).
++
++Higiene do artefato gerado: 35.879 B, termina com exatamente um `\n`, sem CR,
++sem BOM, UTF-8 válido.
++
++## 4b. BLOQUEADOR — o 26º sítio, achado por varredura, FORA do FILE ASSIGNMENT
++
++**`.claude/scripts/tests/test_install_user_skips_governance_hooks.py` fica
++VERMELHO com este patch, e eu não posso consertá-lo.**
++
++Ele não está no mapa de 25 sítios da classificação (§4) nem no FILE ASSIGNMENT
++desta wave. Foi achado rodando a suíte INTEIRA de `.claude/scripts/tests/`
++(5.748 passed, 1 failed, 17 min) — não por leitura.
++
++O que ele é: uma **segunda cópia congelada da mesma afirmação que a wave
++refuta**. A tupla `_GOVERNANCE_HOOKS` (`:57-68`) é literalmente a lista de 10
++do `_comment` congelado, e o teste afirma que nenhum deles é registrado sob
++`--ceremony user`. A classificação S330 §2 tirou **dois** daquela lista por
++mérito medido:
++
++* `check_scratchpad_access.py` — não bloqueia edição (bloqueia só
++  `scratchpad.py --plan X` divergente), zero `CEO_*`, zero sentinel, e guarda
++  uma ferramenta que o perfil user **recebe**;
++* `check_skill_reference_read.py` — observer, zero sítios de `block`, e a
++  metade EMISSORA (`check_agent_spawn.py`) já está no perfil user.
++
++Falha medida (para no primeiro):
++
++```
++AssertionError: 'check_scratchpad_access.py' unexpectedly found in ...
++  : governance hook check_scratchpad_access should NOT be registered for user
++```
++
++**Evidência POSITIVA que vem junto:** esse teste faz um `install --ceremony
++user` REAL, e o install **passou** (`returncode == 0`), produzindo um
++`settings.json` com exatamente **30 registros** — os 20 antigos mais os 10 da
++§2.1, incluindo a 2ª registração de `check_output_secrets.py` e o `echo`
++inline. É a prova de campo de que o template gerado instala.
++
++**Cura (uma edição, para quem tiver o path no assignment):** trocar a lista
++literal por uma derivada do próprio spec — a mesma cura que a wave aplica ao
++template:
++
++```python
++import json, os
++_USER_TPL = os.path.join(_REPO_ROOT, "templates", "settings", "settings.user.json")
++with open(_USER_TPL, encoding="utf-8") as fh:
++    _SPEC = json.load(fh)["_derivation"]
++_GOVERNANCE_HOOKS = tuple(
++    e["name"][:-3] for e in _SPEC["exclude_hooks"]
++)          # .py stripped, because the assertions append ".py"
++```
++
++`_KEEP_HOOKS` fica como está (é uma asserção POSITIVA sobre 4 hooks que
++continuam registrados, e os 4 continuam). Com isso o oráculo passa a seguir o
++spec e vira vermelho quando o spec e o template divergirem — que é a pergunta
++que ele deveria estar fazendo.
++
++Enquanto isso não acontecer, **o pacote não pode landar**: a suíte fica 1
++vermelha. Não reverti as duas inclusões para «ficar verde» porque isso
++desfaria, em silêncio, um veredito medido que é decisão do Owner.
++
++## 5. Questões abertas e follow-ups
++
++* **FU-F-ACCEL (o único que a classificação marcou como «mesmo patch», e que
++  este pacote NÃO pode fechar).** `scripts/build-plugin.py` monta o
++  `hooks.json` do plugin a partir do `.hooks` do template user (`:284`) e
++  **depois** estende com a sua própria tabela `ACCEL` (`:44-66`). Antes da wave
++  F esses 4 hooks estavam fora do template, então `ACCEL` era a única fonte.
++  Agora o template registra os quatro — `accel_dispatch.py`,
++  `codex_review_user_code.py`, `review_loop.py`, `turbo_sessionstart.py` — e o
++  build emite cada um **duas vezes**, com timeouts divergentes (`review_loop.py`
++  60 vs 15 do template; `turbo_sessionstart.py` 10 vs 5).
++  `scripts/build-plugin.py` está **fora do FILE ASSIGNMENT** desta wave, então
++  a reconciliação é do Owner/da cerimônia. O que landa aqui é o **tripwire**:
++  `PluginAccelOverlapIsDeclaredDebt` afirma que a sobreposição é EXATAMENTE
++  esses 4 nomes — vermelho se alguém reconciliar o `ACCEL` (aí a lista encolhe
++  para vazio e o teste passa a exigir vazio) e vermelho se alguém alargar a
++  sobreposição. Verde-agora, vermelho-na-mudança, **nas duas direções**, e
++  jamais um passe silencioso. Doutrina:
++  [[feedback-widen-guard-then-declare-debt]] — cura bloqueada ⇒ declarar a
++  dívida por path com anti-rot, nunca deixar o guard falso-verde nem landar um
++  teste sabidamente vermelho.
++* **OQ-F1 — `EXPECTED_TEMPLATE_REGISTRATIONS_USER=20`** em
++  `s329-ceremony-E/EXPECTED-BASELINE.txt:182` fica DEFASADO (o valor real passa
++  a ser 30). É baseline congelada de cerimônia já landada; re-rodar
++  `finalize-E.sh` / `OWNER-S329-E-LAND.sh` pós-wave falha por desenho. Decisão:
++  deixar congelado (histórico) ou atualizar conscientemente com fonte. Não
++  toquei.
++* **OQ-F2 — o matcher estreito de `check_anti_ceo_overhead.py`.** A
++  classificação recomenda **MANTER, mas DECLARADO** (escolha de latência: 5
++  ferramentas em vez de 14 cold-starts; hook fail-OPEN, budget ≤20/dia).
++  Implementado como `matcher_overrides` com `reason` + `evidence`. Se o Owner
++  preferir o matcher largo, apague a entrada e rode `--write`.
++* **OQ-F3 — o gate no CI.** O `--check` não está wired em workflow nenhum
++  (`.github/` está fora do FILE ASSIGNMENT). A cobertura existe porque
++  `.claude/scripts/tests/` É coletado pelo CI; um step dedicado em
++  `validate.yml`, ao lado do idempotency check do `generate-skill-inventory.sh`,
++  daria mensagem melhor.
++* **OQ-F4 — +20.061 B no `settings.json` de todo adopter `--ceremony user`
++  novo.** Declarado, não escondido. Encurtar `reason`/`evidence` é a rota se
++  for demais (removê-los, não: são o que torna a subtração auditável).
++* **OQ-F5 — riscos de INCLUIR**, já enumerados na classificação §5, ficam com o
++  Owner. Os dois que valem repetir: `check_config_change.py` entra com
++  `CEO_CONFIG_CHANGE_GUARD=1` **explícito** (o default vive em código, e a
++  lição do rail round 7 do pacote E é que «uma registração é só tão advisory
++  quanto a setting que ela lê»); e `codex_review_user_code.py` é DETECT-ONLY
++  por default, nunca roda Codex sem opt-in.
++* **Fora de escopo, mesma classe (classificação §4 #16/#17):**
++  `settings.base.json:617` afirma «45 registrations» (são 47) e o `_comment` da
++  base afirma «~16+» hooks (são 46 distintos). Ponteiro morto: o `_comment` do
++  user citava `PLAN-122 WS-4`, que **não existe em nenhum ref git** — removido
++  pela regeneração.
 +
 +## 6. Limites declarados desta wave
 +
-+* Não toquei `scripts/install.sh`, `scripts/upgrade.sh`, `.claude/settings.json`,
-+  `templates/settings/settings.base.json`, `CLAUDE.md`, `SPEC/`, `.claude/adr/`,
-+  `PROTOCOL.md` — nada em `scripts/`, portanto o baseline do ratchet
-+  `installer-write-safety` não precisa ser regenerado (verificado por
-+  `git status`).
++* Não toquei `scripts/install.sh`, `scripts/upgrade.sh`, `scripts/build-plugin.py`,
++  `.claude/settings.json`, `templates/settings/settings.base.json`, `CLAUDE.md`,
++  `SPEC/`, `.claude/adr/`, `PROTOCOL.md` — nada em `scripts/`, portanto o
++  baseline do ratchet `installer-write-safety` não precisa ser regenerado
++  (verificado por `git status` e por execução do próprio ratchet).
 +* `templates/settings/settings.user.derivation.json` **não foi criado** (§3.3),
 +  apesar de constar do FILE ASSIGNMENT: criá-lo deixa `check-install-profiles.py`
 +  vermelho, medido com controle positivo.
-+* O gerador lê o spec do artefato que ele mesmo escreve. É circular por
-+  desenho (auto-descritivo), com duas saídas: `--spec <path>` para bootstrap, e
-+  rc 2 fail-loud se o arquivo sumir ou perder a chave — nunca um default
-+  silencioso.
++* O gerador lê o spec do artefato que ele mesmo escreve. Circular por desenho
++  (auto-descritivo), com duas saídas: `--spec <path>` para bootstrap e rc 2
++  fail-loud se o arquivo sumir ou perder a chave — nunca um default silencioso.
 +* TOCTOU entre `--check` e um editor concorrente não é tratado; o gate é de CI
 +  e de pre-commit, não um lock.
++* A wave MUDA a superfície de hooks do adopter `--ceremony user` (20 → 30).
++  Isso é o ponto da OQ-E5, não um efeito colateral — mas significa que o
++  próximo `upgrade.sh` de um adopter user **registra 10 hooks novos**. Os
++  riscos por hook estão na classificação §5.
 diff --git a/.claude/scripts/gen-settings-user-template.py b/.claude/scripts/gen-settings-user-template.py
 new file mode 100644
-index 0000000..67f651c
+index 0000000..e36b9e0
 --- /dev/null
 +++ b/.claude/scripts/gen-settings-user-template.py
-@@ -0,0 +1,719 @@
+@@ -0,0 +1,833 @@
 +#!/usr/bin/env python3
 +"""Generate ``templates/settings/settings.user.json`` from the base template.
 +
@@ -418,6 +550,14 @@ index 0000000..67f651c
 +it. Same shape as ``.claude/scripts/generate-skill-inventory.sh``: regenerate
 +after changing the spec, or CI (``--check``) turns red.
 +
++The exclusions themselves are not this script's opinion. Every one was ruled
++per hook in ``.claude/plans/PLAN-169/s330-ceremony-F/hook-classification-S330.md``
++— which also found that the OLD criterion ("blocks edits or requires
++GPG/sentinel infra") held for only 5 of the 10 hooks it was written to
++justify, and moved two of them (``check_scratchpad_access.py``,
++``check_skill_reference_read.py``) INTO the advisory profile. The rule that
++does hold is stated once, as ``_derivation.criterion``.
++
 +## Why the spec is EMBEDDED rather than a sibling file
 +
 +The natural home would be ``templates/settings/settings.user.derivation.json``.
@@ -435,14 +575,18 @@ index 0000000..67f651c
 +
 +Sources, one each, no second copy anywhere:
 +
-+  hooks                     base.hooks minus the declared exclusions
-+  env                       base.env minus env_exclude, plus env_overrides
-+  model                     COPIED from base (one pin, no drift by construction)
-+  squad_allowlist           COPIED from base
-+  _squad_allowlist_comment  COPIED from base
-+  _model_comment            spec ``literals`` (profile POLICY prose, not mechanism)
-+  _comment                  fixed text in this script (describes the MECHANISM)
-+  _derivation               the spec itself, round-tripped verbatim
++  hooks             base.hooks minus the declared exclusions
++  env               base.env minus env_exclude, plus env_overrides
++  _model_comment    spec ``literals`` (profile POLICY prose, not mechanism)
++  _comment          fixed text in this script (describes the MECHANISM)
++  _derivation       the spec itself, round-tripped verbatim
++  everything else   COPIED from base verbatim, in base's own key order,
++                    unless ``top_level_exclude`` NAMES it with a reason
++
++So ``model``, ``squad_allowlist`` and ``_squad_allowlist_comment`` have one
++source (base) and cannot drift by construction, while ``permissions``,
++``availableModels`` and the rest of the maintainer surface stay out because
++the spec says so, in writing, per key.
 +
 +Retained hook entries are byte-identical to the base template — including
 +group ``_comment`` annotations — except where ``matcher_overrides`` or
@@ -494,21 +638,25 @@ index 0000000..67f651c
 +RC_DRIFT = 1
 +RC_INFRA = 2
 +
-+#: Closed vocabulary for a DECIDED exclusion. Values were derived in S330 by
-+#: measuring each hook (does it emit ``"block"``? does it depend on sentinel
-+#: infrastructure?) rather than by reading its name.
++#: Closed vocabulary for a DECIDED exclusion, from the S330 classification
++#: (``.claude/plans/PLAN-169/s330-ceremony-F/hook-classification-S330.md`` §1).
++#: Each verdict there was MEASURED per hook — does it emit ``block``? does it
++#: have an advisory switch? what infrastructure does it resolve? — and the
++#: audit found that for 5 of the 10 hooks the previously declared criterion
++#: was FALSE. These four names are the criterion that actually holds.
 +EXCLUSION_CLASSES = (
-+    # Emits a block decision on framework-governance grounds. An adopter who
-+    # never signs sentinels would be blocked with no route forward.
-+    "blocks-tool-calls",
-+    # Blocks AND resolves an Owner-signed sentinel / proposal. Without the
-+    # ceremony infrastructure the hook has no reachable allow path.
-+    "requires-ceremony-infra",
-+    # Never blocks; observes framework-internal artifacts (canonical paths,
-+    # SKILL.md bootstrap, PROTOCOL.md cascade) that an adopter repo does not
-+    # have. Registering it costs a subprocess per tool call and returns
-+    # nothing.
-+    "framework-internal-observer",
++    # Blocks a tool call with no advisory route out.
++    "bloqueia-edicao",
++    # Blocks, and its allow path resolves Owner-signed sentinel / GPG
++    # material that `--ceremony user` never installs.
++    "exige-gpg-sentinel",
++    # Depends on infrastructure the user ceremony does not install (Codex CLI
++    # pin manifest, PROTOCOL.md, .claude/proposals/).
++    "exige-infra-ausente-no-user",
++    # Observes or reinforces a maintainer rite whose enforcing half this
++    # profile does not register — a forensic trail for a gate that is not
++    # there.
++    "maintainer-only-por-desenho",
 +)
 +
 +#: The only class a PENDING entry may carry. A pending entry is excluded from
@@ -517,19 +665,38 @@ index 0000000..67f651c
 +#: of a reason/evidence pair.
 +PENDING_CLASS = "pending-classification"
 +
-+#: Keys ``top_level_keep`` may name, and where each is sourced from. A key the
-+#: spec names but this table does not know is a spec-integrity failure: the
-+#: generator refuses to invent a source.
-+TOP_LEVEL_SOURCES = {
-+    "_derivation": "spec",
++#: Top-level keys the generator SOURCES itself instead of copying base's value
++#: verbatim. Everything else in base is copied as-is unless ``top_level_exclude``
++#: names it.
++#:
++#: The direction matters. An earlier draft used a literal ``top_level_keep``
++#: list; the S330 classification (§3, note on top_level_keep) rejected it as
++#: "the same class of literal list OQ-E5 exists to kill" — with a keep list,
++#: base gaining a key means the user profile silently does NOT get it, which
++#: is the very defect this wave closes, one layer up. But a bare exclude list
++#: has the opposite failure: base gains ``permissions`` or ``availableModels``
++#: and the advisory profile silently INHERITS it (and
++#: ``test-install-deny-baseline.sh`` leg D plus
++#: ``test_template_dogfood_parity.py`` would redden).
++#:
++#: So neither direction is left silent: base keys are carried by default, and
++#: ``validate_spec`` requires every base key to be either carried or NAMED in
++#: ``top_level_exclude`` with a reason. A new base key stops the generator
++#: until someone decides, which is the only honest answer.
++TOP_LEVEL_COMPUTED = {
 +    "_comment": "generated",
++    "_derivation": "spec",
 +    "_model_comment": "literal",
-+    "_squad_allowlist_comment": "base",
-+    "squad_allowlist": "base",
-+    "model": "base",
-+    "env": "computed",
 +    "hooks": "computed",
++    "env": "computed",
 +}
++
++#: Keys the user template carries that base does NOT have, and where they go.
++#: Position is mechanism (deterministic output), not policy.
++USER_ONLY_PLACEMENT = (
++    ("_derivation", "after", "_comment"),
++    ("_model_comment", "before", "model"),
++)
 +
 +#: The generated ``_comment``. Fixed text, and deliberately WITHOUT any count:
 +#: a number in prose is exactly the claim that rotted here, and no gate in
@@ -541,7 +708,9 @@ index 0000000..67f651c
 +    ".claude/scripts/gen-settings-user-template.py, applying the subtraction "
 +    "declared in the `_derivation` key of this same file. To change what the "
 +    "user profile carries, edit `_derivation` and re-run the generator with "
-+    "--write; CI re-runs it with --check and reddens on any drift. Retained "
++    "--write; CI re-runs it with --check and reddens on any drift. The rule "
++    "the exclusions follow is stated once, in `_derivation.criterion`, and "
++    "every excluded hook carries its own class, reason and evidence. Retained "
 +    "entries are byte-identical to the base template, including their "
 +    "`_comment` annotations, except where `_derivation.matcher_overrides` or "
 +    "`_derivation.annotation_overrides` declares a difference and says why. "
@@ -697,7 +866,7 @@ index 0000000..67f651c
 +    if not isinstance(spec, dict):
 +        raise SpecError("the derivation spec is not a JSON object")
 +
-+    for required in ("source", "generator", "top_level_keep"):
++    for required in ("source", "generator", "criterion", "top_level_exclude"):
 +        if required not in spec:
 +            raise SpecError("spec is missing required key `%s`" % required)
 +    if spec.get("source") != Path(BASE_REL).name:
@@ -813,8 +982,28 @@ index 0000000..67f651c
 +                    % (field, raw_key, len(live), ", ".join(e for e, _ in live), name)
 +                )
 +            if field == "matcher_overrides":
-+                if not isinstance(value, str):
-+                    raise SpecError("`matcher_overrides[%s]` must be a string" % raw_key)
++                # Shape from the S330 classification §3: an override carries
++                # its own justification, the same discipline `exclude_hooks`
++                # has. A bare string would let a matcher be narrowed with no
++                # recorded reason — which is exactly how the current one got
++                # there.
++                if not isinstance(value, dict):
++                    raise SpecError(
++                        "`matcher_overrides[%s]` must be an object with "
++                        "`matcher`, `reason` and `evidence`" % raw_key
++                    )
++                unknown = set(value) - {"matcher", "reason", "evidence"}
++                if unknown:
++                    raise SpecError(
++                        "`matcher_overrides[%s]` has unknown field(s) %s"
++                        % (raw_key, sorted(unknown))
++                    )
++                for sub in ("matcher", "reason", "evidence"):
++                    if not isinstance(value.get(sub), str) or not value[sub].strip():
++                        raise SpecError(
++                            "`matcher_overrides[%s]` has an empty `%s`"
++                            % (raw_key, sub)
++                        )
 +            else:
 +                if not isinstance(value, dict):
 +                    raise SpecError("`annotation_overrides[%s]` must be an object" % raw_key)
@@ -868,35 +1057,71 @@ index 0000000..67f651c
 +
 +    # --- literals / top level --------------------------------------------
 +    literals = _as_dict(spec, "literals")
-+    keep = spec.get("top_level_keep")
-+    if not isinstance(keep, list) or not keep:
-+        raise SpecError("`top_level_keep` must be a non-empty array")
-+    if len(set(keep)) != len(keep):
-+        raise SpecError("`top_level_keep` names a key twice")
-+    for key in keep:
-+        if not isinstance(key, str):
-+            raise SpecError("`top_level_keep` holds a non-string entry")
-+        source = TOP_LEVEL_SOURCES.get(key)
-+        if source is None:
++    if "top_level_keep" in spec:
++        raise SpecError(
++            "`top_level_keep` was replaced by `top_level_exclude` (S330 "
++            "classification §3): a keep list makes a NEW base key silently "
++            "absent from the advisory profile, which is the defect this wave "
++            "closes"
++        )
++    excluded_top = _as_list(spec, "top_level_exclude")
++    seen_top = set()
++    for item in excluded_top:
++        if not isinstance(item, dict):
++            raise SpecError("`top_level_exclude` holds a non-object entry")
++        name = item.get("name")
++        if not isinstance(name, str) or not name.strip():
++            raise SpecError("`top_level_exclude` entry has no `name`")
++        if name in seen_top:
++            raise SpecError("`top_level_exclude` names %r twice" % name)
++        seen_top.add(name)
++        if name not in base:
 +            raise SpecError(
-+                "`top_level_keep` names %r, which this generator has no source "
-+                "for. Known keys: %s" % (key, sorted(TOP_LEVEL_SOURCES))
++                "`top_level_exclude` names %r, which the base template does "
++                "not carry — a dead exclusion" % name
 +            )
++        if name in TOP_LEVEL_COMPUTED:
++            raise SpecError(
++                "`top_level_exclude` names %r, which the generator sources "
++                "itself; excluding it would produce a template without it" % name
++            )
++        reason = item.get("reason")
++        if not isinstance(reason, str) or not reason.strip():
++            raise SpecError(
++                "`top_level_exclude` entry %r has an empty `reason` — an "
++                "undeclared omission is the defect this spec replaces" % name
++            )
++
++    # Both directions are loud, by different mechanisms, and neither is
++    # silent:
++    #   dropped  -> `top_level_exclude` must NAME it, with a reason (above);
++    #   inherited-> a new base key is COPIED, so the generated bytes change,
++    #               so `--check` reddens and the key shows up in the diff a
++    #               human must review before `--write` (and the write itself
++    #               goes through the canonical-edit ceremony).
++    # What is impossible is a base key quietly appearing in, or vanishing
++    # from, the advisory profile without a person seeing it.
++
++    for key, source in TOP_LEVEL_COMPUTED.items():
 +        if source == "literal" and key not in literals:
 +            raise SpecError(
-+                "`top_level_keep` names %r but `literals` does not provide it" % key
-+            )
-+        if source == "base" and key not in base:
-+            raise SpecError(
-+                "`top_level_keep` names %r but the base template does not "
-+                "carry it" % key
++                "`literals` must provide %r (the generator has no other "
++                "source for it)" % key
 +            )
 +    for key in literals:
-+        if key not in keep:
++        if TOP_LEVEL_COMPUTED.get(key) != "literal":
 +            raise SpecError(
-+                "`literals` provides %r, which `top_level_keep` does not keep "
-+                "— dead data" % key
++                "`literals` provides %r, which the generator does not source "
++                "from `literals` — dead data" % key
 +            )
++
++    criterion = spec.get("criterion")
++    if not isinstance(criterion, str) or not criterion.strip():
++        raise SpecError(
++            "spec must carry a `criterion` — the one-line rule the exclusions "
++            "follow. The frozen copy's criterion was measured FALSE for 5 of "
++            "its 10 hooks precisely because nothing checked it was stated."
++        )
 +
 +
 +def exclusion_sets(spec: Dict[str, Any]) -> Tuple[Set[Tuple[str, str]], Set[str]]:
@@ -962,8 +1187,8 @@ index 0000000..67f651c
 +            if len(kept_entries) == 1:
 +                only = kept_entries[0][0]
 +                matcher = lookup(matcher_ov, event, only)
-+                if isinstance(matcher, str):
-+                    new_group["matcher"] = matcher
++                if isinstance(matcher, dict):
++                    new_group["matcher"] = matcher["matcher"]
 +                annot = lookup(annot_ov, event, only)
 +                if isinstance(annot, dict) and "_comment" in annot:
 +                    new_group["_comment"] = annot["_comment"]
@@ -990,23 +1215,44 @@ index 0000000..67f651c
 +
 +
 +def generate(base: Dict[str, Any], spec: Dict[str, Any]) -> Dict[str, Any]:
-+    """Build the user template. Assumes ``validate_spec`` already passed."""
++    """Build the user template. Assumes ``validate_spec`` already passed.
++
++    Emission order is BASE's order, with the excluded keys removed and the
++    user-only keys inserted at the positions ``USER_ONLY_PLACEMENT`` fixes.
++    Deriving the order from base rather than from a literal list means one
++    less hand-maintained sequence to rot.
++    """
 +    literals = _as_dict(spec, "literals")
-+    out: Dict[str, Any] = {}
-+    for key in spec["top_level_keep"]:
-+        source = TOP_LEVEL_SOURCES[key]
++    excluded = set(
++        item["name"] for item in _as_list(spec, "top_level_exclude")
++    )
++
++    def value_for(key: str) -> Any:
++        source = TOP_LEVEL_COMPUTED.get(key)
 +        if source == "spec":
-+            out[key] = spec
-+        elif source == "generated":
-+            out[key] = GENERATED_COMMENT
-+        elif source == "literal":
-+            out[key] = literals[key]
-+        elif source == "base":
-+            out[key] = base[key]
-+        elif key == "env":
-+            out[key] = derive_env(base, spec)
-+        else:
-+            out[key] = derive_hooks(base, spec)
++            return spec
++        if source == "generated":
++            return GENERATED_COMMENT
++        if source == "literal":
++            return literals[key]
++        if source == "computed":
++            return derive_env(base, spec) if key == "env" else derive_hooks(base, spec)
++        return base[key]
++
++    before: Dict[str, List[str]] = {}
++    after: Dict[str, List[str]] = {}
++    for key, where, anchor in USER_ONLY_PLACEMENT:
++        (before if where == "before" else after).setdefault(anchor, []).append(key)
++
++    out: Dict[str, Any] = {}
++    for key in base:
++        if key in excluded:
++            continue
++        for extra in before.get(key, []):
++            out[extra] = value_for(extra)
++        out[key] = value_for(key)
++        for extra in after.get(key, []):
++            out[extra] = value_for(extra)
 +    return out
 +
 +
@@ -1387,10 +1633,10 @@ index 0000000..67e0916
 +}
 diff --git a/.claude/scripts/tests/test_gen_settings_user_template.py b/.claude/scripts/tests/test_gen_settings_user_template.py
 new file mode 100644
-index 0000000..c952c15
+index 0000000..f27976e
 --- /dev/null
 +++ b/.claude/scripts/tests/test_gen_settings_user_template.py
-@@ -0,0 +1,794 @@
+@@ -0,0 +1,1038 @@
 +"""PLAN-169 wave-s330-F (OQ-E5) — the user template is DERIVED, not copied.
 +
 +Oracle for ``.claude/scripts/gen-settings-user-template.py`` and for the
@@ -1432,6 +1678,7 @@ index 0000000..c952c15
 +import importlib.util
 +import json
 +import py_compile
++import re
 +import subprocess
 +import sys
 +import tempfile
@@ -1462,6 +1709,9 @@ index 0000000..c952c15
 +
 +
 +GEN = _load_generator()
++
++#: Any member of the closed vocabulary; synthetic specs do not care WHICH.
++_KLASS = GEN.EXCLUSION_CLASSES[0]
 +
 +
 +def _read(path: Path) -> Any:
@@ -1500,7 +1750,9 @@ index 0000000..c952c15
 +    spec = {
 +        "source": "settings.base.json",
 +        "generator": ".claude/scripts/gen-settings-user-template.py",
-+        "top_level_keep": ["_comment", "_derivation", "hooks", "env"],
++        "criterion": "test fixture criterion",
++        "top_level_exclude": [],
++        "literals": {"_model_comment": "test fixture model comment"},
 +    }
 +    spec.update(over)
 +    return spec
@@ -1637,7 +1889,8 @@ index 0000000..c952c15
 +    def test_evidence_points_at_a_file_that_exists(self) -> None:
 +        """Evidence must RESOLVE. A pointer to a deleted hook is rot."""
 +        for item in self.spec["exclude_hooks"]:
-+            head = item["evidence"].split()[0].rstrip(":,")
++            token = item["evidence"].split()[0]
++            head = token.split(".py")[0] + ".py" if ".py" in token else token
 +            self.assertTrue(
 +                (REPO_ROOT / head).is_file(),
 +                "exclusion %s cites evidence at %r, which is not a file in the "
@@ -1694,6 +1947,44 @@ index 0000000..c952c15
 +            "no entry in exclude_hooks or exclude_hooks_pending: %s" % undeclared,
 +        )
 +
++    def test_every_base_top_level_key_is_carried_or_named(self) -> None:
++        """No top-level key leaves base silently — the §3 leak concern.
++
++        The S330 classification warned that a subtraction-shaped generator
++        leaks ``permissions`` / ``availableModels`` into the advisory profile.
++        The cure is not a literal keep list (same rot class); it is: whatever
++        base has is either in the output or NAMED in ``top_level_exclude``.
++        """
++        excluded = set(i["name"] for i in self.spec.get("top_level_exclude", []))
++        for key in self.base:
++            if key in GEN.TOP_LEVEL_COMPUTED:
++                continue
++            self.assertTrue(
++                key in self.user or key in excluded,
++                "base top-level key %r is neither in the user template nor "
++                "named in top_level_exclude" % key,
++            )
++
++    def test_the_enforcing_model_keys_never_reach_the_advisory_profile(self) -> None:
++        """Belt to test_template_dogfood_parity's braces, stated as intent."""
++        for key in ("availableModels", "enforceAvailableModels", "fallbackModel",
++                    "permissions"):
++            self.assertNotIn(
++                key, self.user,
++                "%s leaked into the advisory user template — it would change "
++                "the profile's nature (and redden "
++                "test_template_dogfood_parity.py / test-install-deny-baseline.sh)"
++                % key,
++            )
++
++    def test_the_criterion_is_stated(self) -> None:
++        self.assertTrue(self.spec.get("criterion", "").strip())
++        self.assertIn(
++            "_derivation.criterion", self.user["_comment"],
++            "the generated _comment must point at the criterion instead of "
++            "restating it (a second copy of a rule is a rule that rots)",
++        )
++
 +    def test_the_generated_comment_states_no_count(self) -> None:
 +        """The rotted claim was a NUMBER in prose. Keep numbers out."""
 +        import re
@@ -1724,20 +2015,38 @@ index 0000000..c952c15
 +    paragraph in a plan.
 +    """
 +
++    #: The ten names the frozen ``_comment`` itself listed. A literal on
++    #: purpose: it is a QUOTATION of a historical artifact, not a roster this
++    #: file maintains. It must not be "kept in sync" with anything — if the
++    #: shipped spec drifts from it, that is the wave working.
++    CLAIMED_TEN = (
++        "check_plan_edit.py", "check_arbitration_kernel.py", "check_tier_policy.py",
++        "check_canonical_edit.py", "check_protocol_semver_cascade.py",
++        "check_skill_patch_sentinel.py", "check_scratchpad_access.py",
++        "check_skill_reference_read.py", "check_skill_bootstrap_post.py",
++        "check_bash_canonical_forensic.py",
++    )
++
++    #: Registrations the frozen copy lacked once the claim is applied.
++    #: Declared with its source (S330 census, hook-classification-S330.md §0
++    #: and §1.1: 26 base-only basenames = 10 claimed + 16 never received, plus
++    #: the second check_output_secrets registration). Updated CONSCIOUSLY, and
++    #: never relaxed.
++    EXPECTED_MISSING = 17
++
 +    def setUp(self) -> None:
 +        super().setUp()
 +        self.base = _read(BASE_TEMPLATE)
 +        self.fixture = _read(PRE_F_FIXTURE)
-+        shipped_spec = _read(USER_TEMPLATE)["_derivation"]
-+        # The claim, spelled as a spec: the ten decided exclusions, no pending
-+        # bucket, and no overrides (the claim said "byte-identical").
-+        claim = copy.deepcopy(shipped_spec)
-+        claim["exclude_hooks_pending"] = []
-+        claim.pop("pending_note", None)
-+        claim["provisional"] = False
-+        claim["matcher_overrides"] = {}
-+        claim["annotation_overrides"] = {}
-+        self.claim = claim
++        # The claim, spelled as a spec: the ten hooks the frozen _comment
++        # named, and NO overrides (it said retained entries were
++        # byte-identical in matcher/command/timeout).
++        self.claim = _minimal_spec(exclude_hooks=[
++            {"name": n, "class": GEN.EXCLUSION_CLASSES[0],
++             "reason": "as claimed by the frozen _comment",
++             "evidence": ".claude/hooks/%s" % n}
++            for n in self.CLAIMED_TEN
++        ])
 +
 +    def test_the_fixture_is_the_pre_wave_artifact(self) -> None:
 +        self.assertNotIn("_derivation", self.fixture,
@@ -1769,11 +2078,10 @@ index 0000000..c952c15
 +            "the dual-registration anchor is missing from the report: %s" % report,
 +        )
 +        self.assertEqual(
-+            len(missing), len(self.fixture and
-+                              [i for i in _read(USER_TEMPLATE)["_derivation"]["exclude_hooks_pending"]]),
-+            "every registration the frozen copy lacked must be exactly the set "
-+            "now parked in exclude_hooks_pending — found %d missing: %s"
-+            % (len(missing), report),
++            len(missing), self.EXPECTED_MISSING,
++            "the S330 census counted %d registrations absent from the frozen "
++            "copy under its own claim; found %d: %s"
++            % (self.EXPECTED_MISSING, len(missing), report),
 +        )
 +
 +    def test_the_failure_names_the_hand_edited_fields(self) -> None:
@@ -1813,19 +2121,55 @@ index 0000000..c952c15
 +            "S330 census measured, found: %s" % report,
 +        )
 +
-+    def test_the_shipped_spec_does_reproduce_the_frozen_roster(self) -> None:
-+        """With the pending bucket and the overrides, the roster is unchanged.
++    #: What the S330 classification ruled INTO the advisory profile
++    #: (hook-classification-S330.md §1.1 "INCLUIR-NO-USER" + §1.2 + the one
++    #: INCLUIR-COM-ENV). Declared with its source; changing the ruling means
++    #: changing this list CONSCIOUSLY, in the same patch as the spec.
++    RULED_IN = (
++        ("ConfigChange", "check_config_change.py"),
++        ("PostToolUse", "accel_dispatch.py"),
++        ("PostToolUse", "check_skill_reference_read.py"),
++        ("PostToolUseFailure", "check_output_secrets.py"),
++        ("PreToolUse", "check_scratchpad_access.py"),
++        ("SessionStart", "turbo_sessionstart.py"),
++        ("Setup", "check_setup_verification.py"),
++        ("Stop", "codex_review_user_code.py"),
++        ("Stop", "review_loop.py"),
++        ("SubagentStart", "check_subagent_start.py"),
++    )
 +
-+        The wave is behaviour-neutral: what ships must register exactly what
-+        the frozen copy registered.
++    def test_the_shipped_roster_loses_nothing_the_frozen_copy_had(self) -> None:
++        """The one direction that would be a REGRESSION for an adopter.
++
++        wave-F adds registrations by ruling; it must never silently drop one
++        the advisory profile already had.
 +        """
-+        shipped = _read(USER_TEMPLATE)
++        shipped = set(_registrations(_read(USER_TEMPLATE)))
++        lost = sorted(set(_registrations(self.fixture)) - shipped)
 +        self.assertEqual(
-+            _registrations(shipped), _registrations(self.fixture),
-+            "the derived template changed the hook roster — wave-F is supposed "
-+            "to change the MECHANISM, not the adopter's hook surface",
++            lost, [],
++            "the derived template DROPPED registration(s) the frozen copy "
++            "shipped: %s — wave-F rules hooks IN, it does not remove them" % lost,
 +        )
-+        self.assertEqual(shipped["env"], self.fixture["env"])
++
++    def test_what_the_shipped_roster_gained_is_exactly_what_was_ruled_in(self) -> None:
++        shipped = set(_registrations(_read(USER_TEMPLATE)))
++        gained = sorted(shipped - set(_registrations(self.fixture)))
++        self.assertEqual(
++            gained, sorted(self.RULED_IN),
++            "the roster gained something the S330 classification did not rule "
++            "in (or missed something it did). Expected %s, got %s"
++            % (sorted(self.RULED_IN), gained),
++        )
++
++    def test_the_env_the_frozen_copy_declared_survives(self) -> None:
++        shipped = _read(USER_TEMPLATE)
++        for key, value in self.fixture["env"].items():
++            self.assertEqual(
++                shipped["env"].get(key), value,
++                "env key %s changed or vanished — the advisory switch the "
++                "profile depends on must survive the derivation" % key,
++            )
 +        self.assertEqual(shipped["model"], self.fixture["model"])
 +
 +
@@ -1878,7 +2222,7 @@ index 0000000..c952c15
 +
 +        scoped = _minimal_spec(exclude_hooks=[{
 +            "name": "dual.py", "event": "PostToolUseFailure",
-+            "class": "framework-internal-observer",
++            "class": _KLASS,
 +            "reason": "r", "evidence": "e",
 +        }])
 +        GEN.validate_spec(scoped, base)
@@ -1888,7 +2232,7 @@ index 0000000..c952c15
 +        )
 +
 +        broad = _minimal_spec(exclude_hooks=[{
-+            "name": "dual.py", "class": "framework-internal-observer",
++            "name": "dual.py", "class": _KLASS,
 +            "reason": "r", "evidence": "e",
 +        }])
 +        GEN.validate_spec(broad, base)
@@ -1928,7 +2272,7 @@ index 0000000..c952c15
 +            "env": {},
 +        }
 +        spec = _minimal_spec(exclude_hooks=[{
-+            "name": "gone.py", "class": "framework-internal-observer",
++            "name": "gone.py", "class": _KLASS,
 +            "reason": "r", "evidence": "e",
 +        }])
 +        out = GEN.generate(base, spec)
@@ -1946,7 +2290,7 @@ index 0000000..c952c15
 +            "env": {},
 +        }
 +        spec = _minimal_spec(exclude_hooks=[{
-+            "name": "gone.py", "class": "framework-internal-observer",
++            "name": "gone.py", "class": _KLASS,
 +            "reason": "r", "evidence": "e",
 +        }])
 +        out = GEN.generate(base, spec)
@@ -1986,6 +2330,30 @@ index 0000000..c952c15
 +        expected = {k: v for k, v in base["env"].items() if k not in spec.get("env_exclude", [])}
 +        expected.update(spec.get("env_overrides", {}))
 +        self.assertEqual(user["env"], expected)
++
++    def test_every_registered_hook_has_a_file_install_will_copy(self) -> None:
++        """A registration pointing at a missing file breaks the adopter.
++
++        This became load-bearing in wave-F: the user roster grew by ten, so
++        for the first time the advisory profile registers hooks that were
++        previously only ever copied, never wired.
++        ``install_hooks_selective`` (scripts/install.sh:1413) copies every
++        top-level ``.claude/hooks/*.py`` with NO ceremony branch, so the file
++        existing in the repo is exactly the condition for it reaching the
++        adopter.
++        """
++        missing = []
++        for event, name in _registrations(_read(USER_TEMPLATE)):
++            if name.startswith("inline:"):
++                continue
++            if not (REPO_ROOT / ".claude" / "hooks" / name).is_file():
++                missing.append("%s %s" % (event, name))
++        self.assertEqual(
++            missing, [],
++            "the user template registers hook(s) with no file in "
++            ".claude/hooks/, so a --ceremony user adopter would get a "
++            "registration pointing at nothing: %s" % missing,
++        )
 +
 +    def test_an_inline_hook_keeps_a_stable_identity(self) -> None:
 +        """The base template registers an inline `echo` with no .py at all.
@@ -2027,12 +2395,12 @@ index 0000000..c952c15
 +
 +    def test_dead_exclusion_is_rejected(self) -> None:
 +        self._rejects(_minimal_spec(exclude_hooks=[{
-+            "name": "nope.py", "class": "blocks-tool-calls",
++            "name": "nope.py", "class": _KLASS,
 +            "reason": "r", "evidence": "e"}]), "dead exclusion")
 +
 +    def test_dead_exclusion_by_event_is_rejected(self) -> None:
 +        self._rejects(_minimal_spec(exclude_hooks=[{
-+            "name": "a.py", "event": "SessionEnd", "class": "blocks-tool-calls",
++            "name": "a.py", "event": "SessionEnd", "class": _KLASS,
 +            "reason": "r", "evidence": "e"}]), "dead exclusion")
 +
 +    def test_unknown_class_is_rejected(self) -> None:
@@ -2042,11 +2410,11 @@ index 0000000..c952c15
 +
 +    def test_empty_reason_is_rejected(self) -> None:
 +        self._rejects(_minimal_spec(exclude_hooks=[{
-+            "name": "a.py", "class": "blocks-tool-calls",
++            "name": "a.py", "class": _KLASS,
 +            "reason": "  ", "evidence": "e"}]), "empty `reason`")
 +
 +    def test_duplicate_exclusion_is_rejected(self) -> None:
-+        item = {"name": "a.py", "class": "blocks-tool-calls", "reason": "r", "evidence": "e"}
++        item = {"name": "a.py", "class": _KLASS, "reason": "r", "evidence": "e"}
 +        self._rejects(_minimal_spec(exclude_hooks=[item, dict(item)]), "duplicate exclusion")
 +
 +    def test_pending_without_open_question_is_rejected(self) -> None:
@@ -2064,7 +2432,7 @@ index 0000000..c952c15
 +
 +    def test_override_of_an_excluded_hook_is_rejected(self) -> None:
 +        self._rejects(_minimal_spec(
-+            exclude_hooks=[{"name": "a.py", "class": "blocks-tool-calls",
++            exclude_hooks=[{"name": "a.py", "class": _KLASS,
 +                            "reason": "r", "evidence": "e"}],
 +            matcher_overrides={"a.py": "X"},
 +        ), "EXCLUDED")
@@ -2092,9 +2460,30 @@ index 0000000..c952c15
 +    def test_env_key_in_both_buckets_is_rejected(self) -> None:
 +        self._rejects(_minimal_spec(env_exclude=["K"], env_overrides={"K": "2"}), "does not say")
 +
-+    def test_unknown_top_level_key_is_rejected(self) -> None:
-+        self._rejects(_minimal_spec(top_level_keep=["hooks", "permissions"]),
-+                      "no source for")
++    def test_a_keep_list_is_rejected_outright(self) -> None:
++        """The shape the S330 classification rejected must not come back."""
++        self._rejects(_minimal_spec(top_level_keep=["hooks", "env"]),
++                      "was replaced by `top_level_exclude`")
++
++    def test_dead_top_level_exclusion_is_rejected(self) -> None:
++        self._rejects(
++            _minimal_spec(top_level_exclude=[{"name": "nope", "reason": "r"}]),
++            "dead exclusion")
++
++    def test_top_level_exclusion_without_reason_is_rejected(self) -> None:
++        self._rejects(
++            _minimal_spec(top_level_exclude=[{"name": "model", "reason": " "}]),
++            "empty `reason`")
++
++    def test_excluding_a_generator_sourced_key_is_rejected(self) -> None:
++        self._rejects(
++            _minimal_spec(top_level_exclude=[{"name": "hooks", "reason": "r"}]),
++            "sources itself")
++
++    def test_missing_criterion_is_rejected(self) -> None:
++        spec = _minimal_spec()
++        del spec["criterion"]
++        self._rejects(spec, "criterion")
 +
 +    def test_wrong_source_is_rejected(self) -> None:
 +        self._rejects(_minimal_spec(source="settings.stack.node.json"), "`source` must be")
@@ -2117,7 +2506,7 @@ index 0000000..c952c15
 +        with tempfile.TemporaryDirectory() as td:
 +            doc = _read(USER_TEMPLATE)
 +            doc["_derivation"]["exclude_hooks"].append(
-+                {"name": "ghost.py", "class": "blocks-tool-calls",
++                {"name": "ghost.py", "class": _KLASS,
 +                 "reason": "r", "evidence": "e"})
 +            root = _synth_root(Path(td), _read(BASE_TEMPLATE),
 +                               json.dumps(doc, indent=2, ensure_ascii=False) + "\n")
@@ -2125,6 +2514,107 @@ index 0000000..c952c15
 +            self.assertEqual(proc.returncode, 1)
 +            self.assertIn("SPEC:", proc.stderr)
 +            self.assertIn("_derivation", proc.stderr)
++
++
++# ---------------------------------------------------------------------------
++# the plugin ACCEL overlap — DECLARED DEBT with anti-rot
++# ---------------------------------------------------------------------------
++
++class PluginAccelOverlapIsDeclaredDebt(TestEnvContext):
++    """``build-plugin.py`` re-adds four hooks the user template now registers.
++
++    ``scripts/build-plugin.py`` builds the plugin's ``hooks.json`` from the
++    user template's ``.hooks`` (``:284``) and then EXTENDS it with its own
++    ``ACCEL`` table (``:44-66``). Before wave-F those four hooks were absent
++    from the template, so ACCEL was the only source. Now the template
++    registers them, so the plugin build emits each one TWICE — and with
++    divergent timeouts (``review_loop.py`` 60 vs the template's 15,
++    ``turbo_sessionstart.py`` 10 vs 5).
++
++    ``scripts/build-plugin.py`` is outside this wave's FILE ASSIGNMENT, so the
++    reconciliation is a follow-up (DESIGN-F §5, FU-F-ACCEL). What lands here
++    is the tripwire: the overlap is asserted to be EXACTLY the known set, so
++    the ceremony that reconciles ACCEL — or anything that widens the overlap —
++    turns this red with a message saying what to do. Green-now, red-on-change,
++    in BOTH directions; never a silent pass.
++
++    Doctrine: [[feedback-widen-guard-then-declare-debt]] — when the cure is
++    blocked, declare the debt per path with anti-rot rather than leave the
++    guard falsely green or land a knowingly-red test.
++    """
++
++    BUILD_PLUGIN = REPO_ROOT / "scripts" / "build-plugin.py"
++
++    #: Measured S330 against build-plugin.py ACCEL. Shrinks to empty when the
++    #: follow-up reconciles ACCEL; then this test asserts emptiness instead.
++    KNOWN_OVERLAP = {
++        "accel_dispatch.py",
++        "codex_review_user_code.py",
++        "review_loop.py",
++        "turbo_sessionstart.py",
++    }
++
++    def _accel_hook_names(self) -> set:
++        """Names ACCEL registers, read from the file. Never imported.
++
++        Importing build-plugin.py would execute module-level code that writes
++        into dist/; the AST is the safe reader.
++        """
++        tree = ast.parse(self.BUILD_PLUGIN.read_text(encoding="utf-8"))
++        accel = None
++        for node in tree.body:
++            if isinstance(node, ast.Assign):
++                for target in node.targets:
++                    if isinstance(target, ast.Name) and target.id == "ACCEL":
++                        accel = node.value
++        self.assertIsNotNone(
++            accel,
++            "no module-level ACCEL assignment in %s — this tripwire has lost "
++            "its subject; re-point it or delete it deliberately" % self.BUILD_PLUGIN,
++        )
++        names = set()
++        for literal in ast.walk(accel):
++            if isinstance(literal, ast.Constant) and isinstance(literal.value, str):
++                for found in re.findall(r"([A-Za-z0-9_.\-]+\.py)", literal.value):
++                    names.add(found.rsplit("/", 1)[-1])
++        return names
++
++    def test_the_overlap_is_exactly_the_known_debt(self) -> None:
++        if not self.BUILD_PLUGIN.is_file():
++            self.skipTest("scripts/build-plugin.py absent")
++        template_names = set(n for _, n in _registrations(_read(USER_TEMPLATE)))
++        overlap = template_names & self._accel_hook_names()
++        self.assertEqual(
++            overlap, self.KNOWN_OVERLAP,
++            "the user template / build-plugin ACCEL overlap CHANGED.\n"
++            "  expected (declared debt, DESIGN-F FU-F-ACCEL): %s\n"
++            "  found:                                          %s\n"
++            "Every name in the overlap is registered TWICE in the plugin's "
++            "hooks.json (build-plugin.py:284 reads the template, :44-66 "
++            "appends ACCEL). If you reconciled ACCEL, shrink KNOWN_OVERLAP to "
++            "match (empty is the goal). If you added a hook to the template "
++            "that ACCEL also carries, reconcile ACCEL in the SAME patch."
++            % (sorted(self.KNOWN_OVERLAP), sorted(overlap)),
++        )
++
++    def test_the_debt_is_recorded_in_the_design(self) -> None:
++        """A tripwire nobody documented is a tripwire nobody will act on."""
++        design = REPO_ROOT / ".claude" / "plans" / "PLAN-169" / "s330-ceremony-F" / "DESIGN-F.md"
++        if not design.is_file():
++            self.skipTest("DESIGN-F.md not present in this tree")
++        text = design.read_text(encoding="utf-8")
++        # assertTrue, not assertIn: a failing assertIn would dump the whole
++        # design document into the report.
++        self.assertTrue(
++            "FU-F-ACCEL" in text,
++            "DESIGN-F.md does not carry the FU-F-ACCEL follow-up id",
++        )
++        missing = [n for n in sorted(self.KNOWN_OVERLAP) if n not in text]
++        self.assertEqual(
++            missing, [],
++            "these names are in the declared ACCEL overlap but the DESIGN "
++            "does not name them: %s" % missing,
++        )
 +
 +
 +# ---------------------------------------------------------------------------
@@ -2185,231 +2675,464 @@ index 0000000..c952c15
 +
 +if __name__ == "__main__":  # pragma: no cover
 +    unittest.main()
+diff --git a/.claude/scripts/tests/test_install_user_skips_governance_hooks.py b/.claude/scripts/tests/test_install_user_skips_governance_hooks.py
+index 3818ec1..d93acbb 100644
+--- a/.claude/scripts/tests/test_install_user_skips_governance_hooks.py
++++ b/.claude/scripts/tests/test_install_user_skips_governance_hooks.py
+@@ -55,18 +55,39 @@ def _all_commands(settings):
+     return out
+ 
+ 
+-_GOVERNANCE_HOOKS = (
+-    "check_plan_edit",
+-    "check_arbitration_kernel",
+-    "check_tier_policy",
+-    "check_canonical_edit",
+-    "check_protocol_semver_cascade",
+-    "check_skill_patch_sentinel",
+-    "check_scratchpad_access",
+-    "check_skill_reference_read",
+-    "check_skill_bootstrap_post",
+-    "check_bash_canonical_forensic",
++# wave-s330-F (PLAN-169 OQ-E5): the excluded roster is DERIVED from the
++# `_derivation.exclude_hooks` spec embedded in the user template — the same
++# source the generator (.claude/scripts/gen-settings-user-template.py) reads.
++# Before this wave the tuple below was a second frozen copy of the template's
++# `_comment` list of 10, and it went red the moment the classification
++# (PLAN-169/s330-ceremony-F/hook-classification-S330.md §2) ruled two of
++# those ten back IN by merit. A literal here would re-open that drift class;
++# the oracle must ask "does `install --ceremony user` honour the spec?",
++# not "does it honour a list someone typed once?".
++_USER_TEMPLATE = os.path.join(
++    _REPO_ROOT, "templates", "settings", "settings.user.json"
+ )
++
++
++def _excluded_hooks_from_spec():
++    with open(_USER_TEMPLATE, encoding="utf-8") as fh:
++        spec = json.load(fh)["_derivation"]
++    names = tuple(
++        entry["name"][:-3] if entry["name"].endswith(".py") else entry["name"]
++        for entry in spec["exclude_hooks"]
++    )
++    # Fail LOUD if the spec ever degenerates: an empty exclusion list would
++    # make every assertNotIn below vacuous, and the sentinel-ceremony guard
++    # is the one hook the user profile can never register (no GPG, no
++    # approved.md) — if it is not in the spec, the spec is wrong, not this test.
++    assert names, "_derivation.exclude_hooks is empty — the oracle would be vacuous"
++    assert "check_canonical_edit" in names, (
++        "check_canonical_edit missing from _derivation.exclude_hooks: %r" % (names,)
++    )
++    return names
++
++
++_GOVERNANCE_HOOKS = _excluded_hooks_from_spec()
+ _KEEP_HOOKS = (
+     "check_agent_spawn",
+     "check_bash_safety",
+@@ -76,8 +97,10 @@ _KEEP_HOOKS = (
+ 
+ 
+ class TestInstallUserSkipsGovernanceHooks(TestEnvContext):
+-    """User settings.json omits the 10 governance/sentinel/kernel hooks but KEEPS
+-    the advisory/safety hooks + core spawn/audit + the UserPromptSubmit optimizer."""
++    """User settings.json omits every hook the template's `_derivation` spec
++    excludes (governance/sentinel/kernel — 17 as of wave-s330-F, read live, never
++    counted here) but KEEPS the advisory/safety hooks + core spawn/audit + the
++    UserPromptSubmit optimizer."""
+ 
+     def test_install_user_skips_governance_hooks(self):
+         with tempfile.TemporaryDirectory() as target:
 diff --git a/templates/settings/settings.user.json b/templates/settings/settings.user.json
-index 67e0916..cb0d61b 100644
+index 67e0916..e10c7d6 100644
 --- a/templates/settings/settings.user.json
 +++ b/templates/settings/settings.user.json
-@@ -1,5 +1,222 @@
+@@ -1,9 +1,214 @@
  {
 -  "_comment": "CEO Orchestration — USER ceremony settings (PLAN-122 WS-4). Derived from settings.base.json by REMOVING exactly the 10 governance/sentinel/kernel hooks that block edits or require GPG/sentinel ceremony infra (check_plan_edit, check_arbitration_kernel, check_tier_policy, check_canonical_edit, check_protocol_semver_cascade, check_skill_patch_sentinel, check_scratchpad_access, check_skill_reference_read, check_skill_bootstrap_post, check_bash_canonical_forensic). Every RETAINED entry's BEHAVIORAL fields (matcher/command/timeout) are byte-identical to settings.base.json; some _comment annotations differ (the retained UserPromptSubmit entry carries an added PLAN-122 optimizer note). The advisory/safety scanners AND the UserPromptSubmit optimizer recommender (the whole point of the user profile) are KEPT — none of them block adopter code, and they never need a sentinel or GPG. All hook FILES are still copied to disk by install.sh so validate-governance.sh REQUIRED_FILES are satisfied; the governance subset is simply not registered, so it is dormant for the no-GPG user profile.",
-+  "_comment": "CEO Orchestration - USER ceremony settings. GENERATED FILE, do not hand-edit: every hook registration, env key and top-level value below is DERIVED from templates/settings/settings.base.json by .claude/scripts/gen-settings-user-template.py, applying the subtraction declared in the `_derivation` key of this same file. To change what the user profile carries, edit `_derivation` and re-run the generator with --write; CI re-runs it with --check and reddens on any drift. Retained entries are byte-identical to the base template, including their `_comment` annotations, except where `_derivation.matcher_overrides` or `_derivation.annotation_overrides` declares a difference and says why. All hook FILES are still copied to disk by install.sh, so validate-governance.sh REQUIRED_FILES stay satisfied; an omitted hook is simply never registered, and is therefore dormant for the no-GPG user profile.",
++  "_comment": "CEO Orchestration - USER ceremony settings. GENERATED FILE, do not hand-edit: every hook registration, env key and top-level value below is DERIVED from templates/settings/settings.base.json by .claude/scripts/gen-settings-user-template.py, applying the subtraction declared in the `_derivation` key of this same file. To change what the user profile carries, edit `_derivation` and re-run the generator with --write; CI re-runs it with --check and reddens on any drift. The rule the exclusions follow is stated once, in `_derivation.criterion`, and every excluded hook carries its own class, reason and evidence. Retained entries are byte-identical to the base template, including their `_comment` annotations, except where `_derivation.matcher_overrides` or `_derivation.annotation_overrides` declares a difference and says why. All hook FILES are still copied to disk by install.sh, so validate-governance.sh REQUIRED_FILES stay satisfied; an omitted hook is simply never registered, and is therefore dormant for the no-GPG user profile.",
 +  "_derivation": {
-+    "_comment": "PLAN-169 wave-s330-F (PLAN-169 OQ-E5). THE SUBTRACTION, AS DATA. This object is the only place that says what the USER ceremony profile removes from templates/settings/settings.base.json; .claude/scripts/gen-settings-user-template.py is the only mechanism that applies it, and CI re-runs that generator with --check. It replaces a hand-written prose claim that had rotted: the frozen copy said it removed \"exactly 10\" hooks and kept every retained entry byte-identical in its behavioural fields, while the measured truth in S330 was 26 removed basenames, one hand-narrowed matcher, one silently dropped second registration, three hand-edited _comment annotations and one hand-edited statusMessage. Prose no gate reads is how that happened; this object is read by a gate.",
++    "_comment": "PLAN-169 wave-s330-F (OQ-E5). THE SUBTRACTION, AS DATA. This object is the only place that says what the USER ceremony profile removes from templates/settings/settings.base.json; .claude/scripts/gen-settings-user-template.py is the only mechanism that applies it, and its --check mode is re-run by the test suite. It replaces a prose claim that had rotted: the frozen copy said it removed \"exactly 10\" hooks and kept every retained entry byte-identical in its behavioural fields, while the S330 census measured 26 removed basenames, one hand-narrowed matcher, one silently dropped second registration, three hand-edited _comment annotations and one hand-edited statusMessage. The per-hook audit behind every verdict below is .claude/plans/PLAN-169/s330-ceremony-F/hook-classification-S330.md.",
 +    "source": "settings.base.json",
 +    "generator": ".claude/scripts/gen-settings-user-template.py",
-+    "provisional": true,
-+    "provisional_reason": "The 16 basenames (17 registrations) the frozen copy never received are parked in exclude_hooks_pending, not judged. They stay OUT of the roster exactly as the frozen copy held them out, so this wave is behaviour-neutral for adopters. Resolving each one is PLAN-169 OQ-E5: rule it IN by deleting its entry and re-running --write, or rule it OUT by moving it to exclude_hooks with a class, a reason and evidence. When exclude_hooks_pending is empty, set provisional to false.",
-+    "top_level_keep": [
-+      "_comment",
-+      "_derivation",
-+      "_squad_allowlist_comment",
-+      "squad_allowlist",
-+      "_model_comment",
-+      "model",
-+      "hooks",
-+      "env"
-+    ],
++    "classification": ".claude/plans/PLAN-169/s330-ceremony-F/hook-classification-S330.md",
++    "provisional": false,
++    "criterion": "Fica de fora todo hook que (a) bloqueia uma chamada de ferramenta sem rota advisory, (b) exige infraestrutura de cerimonia que --ceremony user nao instala, ou (c) observa/reforca um rito de mantenedor cuja metade enforcing o perfil nao registra.",
 +    "literals": {
 +      "_model_comment": "PLAN-163 T1.1 / FXe (ADR-181 Contingency). Advisory session-default pin so a fresh `install --ceremony user` does NOT inherit the CC 2.1.220 sonnet-5 tier-default (the silent-flip that settings.base.json closes for the maintainer path). This is the MINIMUM pin for the advisory profile: it deliberately OMITS availableModels + enforceAvailableModels so the user path stays non-enforcing (advisory-only) by design. Do NOT add availableModels/enforceAvailableModels here — that would change the profile's advisory nature."
 +    },
++    "top_level_exclude": [
++      {
++        "name": "_model_pin_comment",
++        "reason": "prosa do pin do MANTENEDOR (fala de availableModels/enforceAvailableModels); o perfil advisory carrega _model_comment no lugar, que proibe exatamente essas duas chaves"
++      },
++      {
++        "name": "availableModels",
++        "reason": "o perfil user e advisory por desenho: nao restringe o conjunto de modelos. test_template_dogfood_parity.py reprova a presenca desta chave aqui"
++      },
++      {
++        "name": "fallbackModel",
++        "reason": "par de availableModels; sem allowlist nao ha para onde cair"
++      },
++      {
++        "name": "_posture_keys_comment",
++        "reason": "prosa que explica o bloco permissions acima"
++      },
++      {
++        "name": "_default_mode_arbitration_comment",
++        "reason": "prosa que explica permissions.defaultMode"
++      },
++      {
++        "name": "_night_mode_deny_surface_comment",
++        "reason": "prosa da superficie de deny do night-mode, que e rito do mantenedor"
++      },
++      {
++        "name": "permissions",
++        "reason": "deny/allow/defaultMode do MANTENEDOR. install.sh constroi a deny-baseline do adopter do zero na cerimonia user; test-install-deny-baseline.sh perna (D) exige que este template NAO traga bloco permissions"
++      },
++      {
++        "name": "cleanupPeriodDays",
++        "reason": "politica de retencao do checkout do mantenedor"
++      },
++      {
++        "name": "plansDirectory",
++        "reason": "aponta para .claude/plans/, que a cerimonia user nao instala"
++      },
++      {
++        "name": "attribution",
++        "reason": "atribuicao de commit do repo do framework"
++      },
++      {
++        "name": "_skill_budget_comment",
++        "reason": "prosa que explica skillListingBudgetFraction"
++      },
++      {
++        "name": "skillListingBudgetFraction",
++        "reason": "tuning do catalogo de skills do mantenedor"
++      },
++      {
++        "name": "skillOverrides",
++        "reason": "overrides por skill do mantenedor"
++      },
++      {
++        "name": "disableSkillShellExecution",
++        "reason": "postura de execucao de shell em skills, decidida pelo mantenedor"
++      },
++      {
++        "name": "statusLine",
++        "reason": "statusline do framework (statusline-ceo.py), ferramenta de mantenedor"
++      }
++    ],
 +    "exclude_hooks": [
 +      {
-+        "name": "check_plan_edit.py",
-+        "class": "blocks-tool-calls",
-+        "reason": "Enforces PLAN-<NNN> lifecycle transitions and blocks an edit that violates them. An adopter repo has no .claude/plans/ lifecycle for it to enforce.",
-+        "evidence": ".claude/hooks/check_plan_edit.py - docstring \"mechanical enforcement of plan lifecycle transitions\"; emits a block decision (measured S330)."
-+      },
-+      {
-+        "name": "check_arbitration_kernel.py",
-+        "class": "requires-ceremony-infra",
-+        "reason": "HARD-DENY on edits to the arbitration kernel, released only through Owner-signed sentinel material that the no-GPG profile never has.",
-+        "evidence": ".claude/hooks/check_arbitration_kernel.py - docstring \"PreToolUse hook: HARD-DENY edits to the arbitration kernel\"; blocks, and resolves sentinel material (measured S330)."
-+      },
-+      {
-+        "name": "check_tier_policy.py",
-+        "class": "requires-ceremony-infra",
-+        "reason": "VETO-floor structural defense over the framework tier policy; it blocks, and its allow path resolves sentinel material the advisory profile cannot produce.",
-+        "evidence": ".claude/hooks/check_tier_policy.py - docstring \"STAGED PreToolUse hook for VETO-floor structural defense\"; blocks, and resolves sentinel material (measured S330)."
-+      },
-+      {
 +        "name": "check_canonical_edit.py",
-+        "class": "requires-ceremony-infra",
-+        "reason": "Gates every canonical-path edit on an Owner-signed sentinel. Without the GPG ceremony there is no reachable allow path, so the adopter would be stuck.",
-+        "evidence": ".claude/hooks/check_canonical_edit.py - docstring \"gate canonical-path edits on Owner-signed sentinel\"; blocks, and is the densest sentinel consumer (measured S330)."
-+      },
-+      {
-+        "name": "check_protocol_semver_cascade.py",
-+        "class": "framework-internal-observer",
-+        "reason": "Advisory cascade check over PROTOCOL.md / SPEC version coupling - artifacts that belong to the framework repo, not to an adopter's.",
-+        "evidence": ".claude/hooks/check_protocol_semver_cascade.py - docstring \"PreToolUse advisory hook\"; emits no block decision (measured S330)."
++        "class": "exige-gpg-sentinel",
++        "reason": "bloqueia toda edicao de path canonico sem approved.md assinado pelo Owner; o perfil user nao tem rito de sentinel nem GPG",
++        "evidence": ".claude/hooks/check_canonical_edit.py:686,3110"
 +      },
 +      {
 +        "name": "check_skill_patch_sentinel.py",
-+        "class": "requires-ceremony-infra",
-+        "reason": "Gates SKILL.md writes on an Owner-signed skill-patch proposal (ADR-031); the proposal infrastructure is maintainer-only.",
-+        "evidence": ".claude/hooks/check_skill_patch_sentinel.py - docstring \"gate SKILL.md writes on an Owner-signed skill-patch proposal\"; blocks (measured S330)."
++        "class": "exige-gpg-sentinel",
++        "reason": "bloqueia escrita de SKILL.md sem proposta SP-NNN em .claude/proposals/ (nao instalado) + CEO_SKILL_PATCH_SHA",
++        "evidence": ".claude/hooks/check_skill_patch_sentinel.py:81; scripts/install.sh nao instala .claude/proposals/"
 +      },
 +      {
-+        "name": "check_scratchpad_access.py",
-+        "class": "blocks-tool-calls",
-+        "reason": "Blocks cross-plan scratchpad access. The plan-scoped scratchpad layout it polices is a framework-internal convention.",
-+        "evidence": ".claude/hooks/check_scratchpad_access.py - docstring \"cross-plan scratchpad access guard\"; emits a block decision (measured S330)."
++        "name": "check_tier_policy.py",
++        "class": "exige-gpg-sentinel",
++        "reason": "bloqueia edicao dos 2 agentes com VETO sem sentinel Approved-By",
++        "evidence": ".claude/hooks/check_tier_policy.py:80,84-88"
 +      },
 +      {
-+        "name": "check_skill_reference_read.py",
-+        "class": "framework-internal-observer",
-+        "reason": "PostToolUse observer that re-hashes SKILL.md after a sub-agent reads it - forensics over framework skill material, with no adopter-visible effect.",
-+        "evidence": ".claude/hooks/check_skill_reference_read.py - docstring \"verify sub-agent SKILL.md re-hash post-Read\"; emits no block decision (measured S330)."
++        "name": "check_arbitration_kernel.py",
++        "class": "bloqueia-edicao",
++        "reason": "HARD-DENY do kernel de arbitragem; anti-sentinel por desenho, sem rota advisory",
++        "evidence": ".claude/hooks/check_arbitration_kernel.py:309, docstring :4-10"
 +      },
 +      {
-+        "name": "check_skill_bootstrap_post.py",
-+        "class": "framework-internal-observer",
-+        "reason": "PostToolUse TOCTOU forensic over SKILL.md bootstrap; observer only, and the artifact it watches is framework-internal.",
-+        "evidence": ".claude/hooks/check_skill_bootstrap_post.py - docstring \"SKILL.md bootstrap TOCTOU forensic guard\"; emits no block decision (measured S330)."
-+      },
-+      {
-+        "name": "check_bash_canonical_forensic.py",
-+        "class": "framework-internal-observer",
-+        "reason": "PostToolUse forensic audit of canonical-path edits made through Bash. It observes the canonical surface that the advisory profile deliberately does not gate.",
-+        "evidence": ".claude/hooks/check_bash_canonical_forensic.py - docstring \"PostToolUse Bash canonical-edit forensic audit (PLAN-085 Wave E.4)\"; emits no block decision (measured S330)."
-+      }
-+    ],
-+    "pending_note": "Registered in settings.base.json but never present in the hand-frozen user template. Held OUT so this wave changes no adopter-visible behaviour; the ruling (register in the advisory profile, or move to exclude_hooks with a class and evidence) is the Owner's.",
-+    "exclude_hooks_pending": [
-+      {
-+        "name": "accel_dispatch.py",
-+        "event": "PostToolUse",
-+        "class": "pending-classification",
-+        "oq": "PLAN-169 OQ-E5"
++        "name": "check_plan_edit.py",
++        "class": "bloqueia-edicao",
++        "reason": "bloqueia transicoes ilegais de status: em arquivos de plano",
++        "evidence": ".claude/hooks/check_plan_edit.py:239,733"
 +      },
 +      {
 +        "name": "check_adversary.py",
-+        "event": "PreToolUse",
-+        "class": "pending-classification",
-+        "oq": "PLAN-169 OQ-E5"
-+      },
-+      {
-+        "name": "check_closeout_guard.py",
-+        "event": "Stop",
-+        "class": "pending-classification",
-+        "oq": "PLAN-169 OQ-E5"
-+      },
-+      {
-+        "name": "check_codex_filewrite.py",
-+        "event": "PreToolUse",
-+        "class": "pending-classification",
-+        "oq": "PLAN-169 OQ-E5"
-+      },
-+      {
-+        "name": "check_compact_pinning.py",
-+        "event": "SessionStart",
-+        "class": "pending-classification",
-+        "oq": "PLAN-169 OQ-E5"
-+      },
-+      {
-+        "name": "check_config_change.py",
-+        "event": "ConfigChange",
-+        "class": "pending-classification",
-+        "oq": "PLAN-169 OQ-E5"
-+      },
-+      {
-+        "name": "check_ledger_checkpoint.py",
-+        "event": "PreToolUse",
-+        "class": "pending-classification",
-+        "oq": "PLAN-169 OQ-E5"
-+      },
-+      {
-+        "name": "check_output_secrets.py",
-+        "event": "PostToolUseFailure",
-+        "class": "pending-classification",
-+        "oq": "PLAN-169 OQ-E5"
++        "class": "bloqueia-edicao",
++        "reason": "bloqueia comando Bash com credencial viva mesmo com CEO_ADVERSARY unset (ask tambem emite block); nao existe switch para esse caminho",
++        "evidence": ".claude/hooks/check_adversary.py:156-158,254-271; a mensagem :260 e falsa para o caminho de segredo"
 +      },
 +      {
 +        "name": "check_pair_rail.py",
-+        "event": "PreToolUse",
-+        "class": "pending-classification",
-+        "oq": "PLAN-169 OQ-E5"
++        "class": "exige-infra-ausente-no-user",
++        "reason": "exige Codex CLI + .claude/governance/codex-cli-pin-manifest.json (nao instalado); 210s; os globs L3+ incluem .github/workflows/*.yml do proprio adopter",
++        "evidence": ".claude/hooks/check_pair_rail.py:157-169,1502-1511"
 +      },
 +      {
-+        "name": "check_postcompact_reinject.py",
-+        "event": "PostCompact",
-+        "class": "pending-classification",
-+        "oq": "PLAN-169 OQ-E5"
++        "name": "check_protocol_semver_cascade.py",
++        "class": "exige-infra-ausente-no-user",
++        "reason": "vigia PROTOCOL.md, que --ceremony user nao instala; advisory fail-OPEN sempre, entao o criterio antigo (bloqueia) era falso",
++        "evidence": ".claude/hooks/check_protocol_semver_cascade.py:14-15; scripts/install.sh:2655"
 +      },
 +      {
-+        "name": "check_precompact_continuity.py",
-+        "event": "PreCompact",
-+        "class": "pending-classification",
-+        "oq": "PLAN-169 OQ-E5"
-+      },
-+      {
-+        "name": "check_setup_verification.py",
-+        "event": "Setup",
-+        "class": "pending-classification",
-+        "oq": "PLAN-169 OQ-E5"
-+      },
-+      {
-+        "name": "check_subagent_start.py",
-+        "event": "SubagentStart",
-+        "class": "pending-classification",
-+        "oq": "PLAN-169 OQ-E5"
++        "name": "check_codex_filewrite.py",
++        "class": "maintainer-only-por-desenho",
++        "reason": "deny-list compartilhada com _CANONICAL_GUARDS contem paths que num adopter sao DELE (.github/workflows/*.yml, .github/CODEOWNERS, AGENTS.md, requirements.toml); fail-CLOSED por ADR-107",
++        "evidence": ".claude/hooks/check_codex_filewrite.py:24-25,275,294,356"
 +      },
 +      {
 +        "name": "check_worktree_writer.py",
-+        "event": "PreToolUse",
-+        "class": "pending-classification",
-+        "oq": "PLAN-169 OQ-E5"
++        "class": "maintainer-only-por-desenho",
++        "reason": "policia o modo parallel-writer (ADR-049a AMEND-1) do mantenedor; inerte sem CEO_PARALLEL_WRITER, que nada no perfil user seta",
++        "evidence": ".claude/hooks/check_worktree_writer.py:31-33,665"
 +      },
 +      {
-+        "name": "codex_review_user_code.py",
-+        "event": "Stop",
-+        "class": "pending-classification",
-+        "oq": "PLAN-169 OQ-E5"
++        "name": "check_bash_canonical_forensic.py",
++        "class": "maintainer-only-por-desenho",
++        "reason": "metade forense E.4 de um par cuja metade E.3 (check_canonical_edit) o perfil nao registra; nunca bloqueia",
++        "evidence": ".claude/hooks/check_bash_canonical_forensic.py:4,8-9"
 +      },
 +      {
-+        "name": "review_loop.py",
-+        "event": "Stop",
-+        "class": "pending-classification",
-+        "oq": "PLAN-169 OQ-E5"
++        "name": "check_skill_bootstrap_post.py",
++        "class": "maintainer-only-por-desenho",
++        "reason": "audita o bypass _bootstrap_bypass_allows de check_skill_patch_sentinel, que o perfil nao registra; sem sujeito",
++        "evidence": ".claude/hooks/check_skill_bootstrap_post.py:7-14"
 +      },
 +      {
-+        "name": "turbo_sessionstart.py",
-+        "event": "SessionStart",
-+        "class": "pending-classification",
-+        "oq": "PLAN-169 OQ-E5"
++        "name": "check_closeout_guard.py",
++        "class": "maintainer-only-por-desenho",
++        "reason": "lembra o rito de closeout do mantenedor (CLAUDE.md, CHANGELOG, finish-*.sh em staged/)",
++        "evidence": ".claude/hooks/check_closeout_guard.py:11,14"
++      },
++      {
++        "name": "check_ledger_checkpoint.py",
++        "class": "maintainer-only-por-desenho",
++        "reason": "checkpoint do ledger plan-scoped (ADR-195); sem .claude/plans/PLAN-NNN/ sai sempre por out_of_scope_paths pagando um cold-start por chamada Bash",
++        "evidence": ".claude/hooks/check_ledger_checkpoint.py:1235-1246"
++      },
++      {
++        "name": "check_compact_pinning.py",
++        "class": "maintainer-only-por-desenho",
++        "reason": "reinjeta PINNED_CONSTRAINTS cujas entradas 1 e 2 sao PROTOCOL.md/ADR-052 e o rito de sentinel ADR-031 - nenhum dos dois existe no perfil user",
++        "evidence": ".claude/hooks/check_compact_pinning.py:19-21; scripts/install.sh:2655"
++      },
++      {
++        "name": "check_postcompact_reinject.py",
++        "class": "maintainer-only-por-desenho",
++        "reason": "re-emite o mesmo bloco de check_compact_pinning; mesma razao, e depende do par PreCompact",
++        "evidence": ".claude/hooks/check_postcompact_reinject.py:1-11"
++      },
++      {
++        "name": "check_precompact_continuity.py",
++        "class": "maintainer-only-por-desenho",
++        "reason": "metade PreCompact do par acima; incluir uma sem a outra reproduz a assimetria que esta wave cura",
++        "evidence": ".claude/hooks/check_precompact_continuity.py:1-12; CLAUDE.md secao 5 (ADR-153 fires-proof NEGATIVO)"
 +      }
 +    ],
-+    "env_exclude": [
-+      "CLAUDE_CODE_SUBAGENT_MODEL",
-+      "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB",
-+      "BASH_MAX_TIMEOUT_MS",
-+      "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR",
-+      "ENABLE_TOOL_SEARCH"
-+    ],
++    "exclude_hooks_pending": [],
++    "env_exclude": [],
 +    "env_overrides": {
-+      "CEO_CONFIG_PROTECTION_ADVISORY": "1"
++      "CEO_CONFIG_PROTECTION_ADVISORY": "1",
++      "CEO_CONFIG_CHANGE_GUARD": "1"
 +    },
 +    "matcher_overrides": {
-+      "PreToolUse/check_anti_ceo_overhead.py": "Read|Edit|Write|MultiEdit|Bash"
++      "PreToolUse/check_anti_ceo_overhead.py": {
++        "matcher": "Read|Edit|Write|MultiEdit|Bash",
++        "reason": "Escolha DELIBERADA de latencia do perfil advisory: 5 ferramentas em vez de 14 cold-starts por chamada. O hook e fail-OPEN, advisory, com budget <=20/dia. Antes da wave F esta divergencia era drift NAO-declarado e nenhum oraculo a via (o keyset dos testes colapsa o matcher).",
++        "evidence": "hook-classification-S330.md secao 1.2; scripts/tests/test-upgrade-lifecycle-hooks-derived.sh _keys_raw colapsa o matcher"
++      }
 +    },
 +    "annotation_overrides": {
 +      "PreToolUse/check_anti_ceo_overhead.py": {
 +        "_comment": "PLAN-083 Wave 0a sub-agent 0.5: anti-CEO-overhead detector. PreToolUse hook detecting CEO doing work a sub-agent could do equally well. Fail-OPEN. Emit budget ≤20/day. Override CEO_OVERHEAD_ACK=1. Kill-switch CEO_ANTI_OVERHEAD=0.",
-+        "reason": "Hand-narrowed in the frozen copy before the base matcher was widened by PLAN-125 WS-1 (which added the per-tool-call lifecycle stamp). PRESERVED verbatim so wave-F changes no behaviour; whether the advisory profile should take the wide base matcher is part of PLAN-169 OQ-E5."
++        "reason": "Acompanha o matcher_overrides acima: o texto da base explica o matcher LARGO (PLAN-125 WS-1, carimbo de ciclo de vida por tool-call), que este perfil deliberadamente nao usa."
 +      },
 +      "PreToolUse/check_config_protection.py": {
 +        "_comment": "PLAN-124 WS-2 (ECC value-harvest) — adopter linter/formatter config protection, ADVISORY variant for the USER ceremony. Same hook as the maintainer ceremony but NON-BLOCKING: the top-level env sets CEO_CONFIG_PROTECTION_ADVISORY=1, so on an edit of an EXISTING adopter linter config the hook ALLOWS the tool call and attaches a systemMessage steer ('fix the code, not the config') instead of blocking. Per the user-ceremony doctrine this hook only ever reads/writes the adopter's own files and never blocks the session. Escape hatches still apply (CEO_CONFIG_PROTECTION=0 / <repo>/.claude/.config-protection-disable). To make it BLOCKING in a user install, remove CEO_CONFIG_PROTECTION_ADVISORY from env.",
 +        "hook": {
 +          "statusMessage": "Checking adopter config protection (advisory)..."
 +        },
-+        "reason": "The user ceremony sets CEO_CONFIG_PROTECTION_ADVISORY=1, so this hook allows and steers instead of blocking. The annotation states the posture the adopter actually gets; the base text describes the blocking maintainer variant."
++        "reason": "O perfil user seta CEO_CONFIG_PROTECTION_ADVISORY=1, entao este hook PERMITE e orienta em vez de bloquear. O texto da base descreve a variante bloqueante do mantenedor."
 +      },
 +      "UserPromptSubmit/UserPromptSubmit.py": {
 +        "_comment": "PLAN-028 / ADR-056 lifecycle hook. Fires pre-model-inference on each user prompt — redact-hit breadcrumb + 5-family injection smell-test + advisory banner on hit. Observer-only at State 0 (never blocks). Also carries the PLAN-122 optimizer recommender (advisory additionalContext; never dispatches). Kill-switches: CEO_EXTENDED_LIFECYCLE=0 (disables hook), CEO_PROMPT_INJECTION_SCAN=0 (disables only the scan), CEO_OPTIMIZER=0 (disables only the recommender).",
-+        "reason": "The frozen copy documented the PLAN-122 optimizer recommender, which is the point of the user profile. Kept because it is accurate for this profile."
++        "reason": "A copia congelada documentava o recomendador PLAN-122, que e a razao de existir do perfil user. Preservado por ser exato para este perfil."
 +      }
 +    }
 +  },
    "_squad_allowlist_comment": "Sprint 11 CR2: empty default means nothing imports. Owners add entries via git; see ADR-039 + docs/squad-marketplace.md.",
    "squad_allowlist": [],
-   "_model_comment": "PLAN-163 T1.1 / FXe (ADR-181 Contingency). Advisory session-default pin so a fresh `install --ceremony user` does NOT inherit the CC 2.1.220 sonnet-5 tier-default (the silent-flip that settings.base.json closes for the maintainer path). This is the MINIMUM pin for the advisory profile: it deliberately OMITS availableModels + enforceAvailableModels so the user path stays non-enforcing (advisory-only) by design. Do NOT add availableModels/enforceAvailableModels here — that would change the profile's advisory nature.",
+-  "_model_comment": "PLAN-163 T1.1 / FXe (ADR-181 Contingency). Advisory session-default pin so a fresh `install --ceremony user` does NOT inherit the CC 2.1.220 sonnet-5 tier-default (the silent-flip that settings.base.json closes for the maintainer path). This is the MINIMUM pin for the advisory profile: it deliberately OMITS availableModels + enforceAvailableModels so the user path stays non-enforcing (advisory-only) by design. Do NOT add availableModels/enforceAvailableModels here — that would change the profile's advisory nature.",
+-  "model": "claude-opus-5",
+   "hooks": {
+     "PreToolUse": [
+       {
+@@ -42,6 +247,18 @@
+           }
+         ]
+       },
++      {
++        "_comment": "Scratchpad scope gate (Sprint 11 Phase 7, ADR-034, M2): PreToolUse Bash hook that inspects python3 .claude/scripts/scratchpad.py invocations; blocks cross-plan --plan X when the active session derives Y. Allows non-scratchpad Bash and same-plan / no-plan invocations. Fail-open on infra error.",
++        "matcher": "Bash",
++        "hooks": [
++          {
++            "type": "command",
++            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_scratchpad_access.py",
++            "timeout": 5,
++            "statusMessage": "Checking scratchpad scope..."
++          }
++        ]
++      },
+       {
+         "_comment": "Cost/budget advisory (Sprint 11 Phase 6, ADR-033): PreToolUse Agent hook that tallies running tokens for the active plan and emits budget_exceeded audit event + systemMessage warning when CEO_MAX_PLAN_TOKENS is exceeded. ALWAYS allows in Sprint 11 (State 0 advisory). CEO_BUDGET_BYPASS=1 is the Owner-only escape hatch (rate-limited 10/24h per plan per H13). Sprint 12 flip criterion documented in ADR-033 §2 Flip Criteria Table.",
+         "matcher": "Agent",
+@@ -187,6 +404,44 @@
+             "statusMessage": "Scanning Codex response for injection patterns..."
+           }
+         ]
++      },
++      {
++        "_comment": "Skill-reference Read scanner (Session 75 Codex Finding 2 mirror from dogfood): tracks Read tool calls against SKILL.md files to detect skill-bootstrap drift. Advisory only.",
++        "matcher": "Read",
++        "hooks": [
++          {
++            "type": "command",
++            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_skill_reference_read.py",
++            "timeout": 5,
++            "statusMessage": "Tracking skill-reference Read..."
++          }
++        ]
++      },
++      {
++        "_comment": "PLAN-128 W1 #1+#4: after-edit verify dispatcher (advisory default-on; CEO_VERIFY_AFTER_EDIT=0 to disable). Runs syntax/lint on the changed file; surfaces findings as additionalContext for self-repair. Fail-OPEN.",
++        "matcher": "Edit|Write|MultiEdit",
++        "hooks": [
++          {
++            "type": "command",
++            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" accel_dispatch.py",
++            "timeout": 20,
++            "statusMessage": "Verifying edit..."
++          }
++        ]
++      }
++    ],
++    "PostToolUseFailure": [
++      {
++        "_comment": "PLAN-125 WS-1 (kooky-harvest): per-tool-call lifecycle FAILURE coverage. Fires only on the rare tool-failure path (not the hot success path). Reuses check_output_secrets.py — it reads the native duration_ms + tool_use_id, pairs with the PreToolUse stamp, and emits tool_call_lifecycle_recorded with success=false (the PostToolUseFailure phase IS the success signal — no marker scan). Routes through the dedicated scrub-branch + allowlist (NEVER _EMIT_GENERIC_PASSTHROUGH, MF-SEC-2); raw mcp__* tool name → mcp_other (MF-SEC-1); duration_bucket only, never raw ms (MF-SEC-3). Advisory + fail-open. Kill-switch CEO_TOOL_LIFECYCLE=0.",
++        "matcher": "",
++        "hooks": [
++          {
++            "type": "command",
++            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_output_secrets.py",
++            "timeout": 5,
++            "statusMessage": "Recording tool-failure lifecycle..."
++          }
++        ]
+       }
+     ],
+     "SubagentStop": [
+@@ -215,6 +470,18 @@
+             "statusMessage": "Session warmup..."
+           }
+         ]
++      },
++      {
++        "_comment": "PLAN-128 W2: turbo what's-on line + first-run banner + (opt-in CEO_AUTO_BOOT=1) /ceo-boot nudge. Advisory additionalContext; fail-open. Kill: CEO_TURBO=0 / .claude/turbo-off.",
++        "matcher": "",
++        "hooks": [
++          {
++            "type": "command",
++            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" turbo_sessionstart.py",
++            "timeout": 5,
++            "statusMessage": "Turbo status..."
++          }
++        ]
+       }
+     ],
+     "SessionEnd": [
+@@ -257,11 +524,85 @@
+             "statusMessage": "Session interrupt cleanup..."
+           }
+         ]
++      },
++      {
++        "_comment": "PLAN-128 W1 #3: cross-model review detector (detect-only default; CEO_CODEX_USER_REVIEW_AUTO=1 to auto-run codex; CEO_CODEX_USER_REVIEW=0 to disable). On a NEW risky diff advises `codex review --uncommitted`. Fail-OPEN.",
++        "matcher": "",
++        "hooks": [
++          {
++            "type": "command",
++            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" codex_review_user_code.py",
++            "timeout": 130,
++            "statusMessage": "Checking for risky diff..."
++          }
++        ]
++      },
++      {
++        "_comment": "PLAN-128 W2: auto review-loop. OPT-IN (CEO_REVIEW_LOOP=1; default OFF/no-op). On a risky+unreviewed uncommitted diff, BLOCKS Stop with a 'run codex review --uncommitted' nudge, bounded at 3 iters then fail-open. READ-ONLY. Kill: CEO_REVIEW_LOOP=0.",
++        "matcher": "",
++        "hooks": [
++          {
++            "type": "command",
++            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" review_loop.py",
++            "timeout": 15,
++            "statusMessage": "Checking review loop..."
++          }
++        ]
++      }
++    ],
++    "ConfigChange": [
++      {
++        "_comment": "PLAN-135 W2 H2: ConfigChange guard — ADVISORY audit + advisory-block of out-of-band settings.json tamper (the S197 class). Resolves multi-layer settings via _lib/effective_config (shared FORBIDDEN-KEYS source) + classifies tamper on the settings-FILE surfaces; emits config_change_observed (benign) / config_change_forbidden_key (advisory-block, ONE per tamper class). Fail-OPEN, never blocks on infra. Honest coverage boundary: disarmed by disableAllHooks + blind to outside-harness edits; compensators = /ceo-boot tripwires (S3) + W5 O10 OTEL witness (ADR-153 §H2). Kill: CEO_CONFIG_CHANGE_GUARD=0.",
++        "matcher": "",
++        "hooks": [
++          {
++            "type": "command",
++            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_config_change.py",
++            "timeout": 5,
++            "statusMessage": "Checking config change for tamper..."
++          }
++        ]
++      }
++    ],
++    "SubagentStart": [
++      {
++        "_comment": "PLAN-135 W2 H3: SubagentStart lifecycle recorder — records the spawn instant + spawn context (agent_type, session binding) into a local sidecar keyed by sha256(agent_id)[:16] (raw agent_id NEVER persisted). The SubagentStop half (check_fluency_nudge.py) consumes it + agent_transcript_path to emit ONE closed-enum subagent_lifecycle_observed bracket (per-agent wall-time + token + claim; feeds persona-ledger). ADVISORY, fail-OPEN, never blocks, NO audit action from this hook. Kill: CEO_SUBAGENT_LIFECYCLE=0.",
++        "matcher": "",
++        "hooks": [
++          {
++            "type": "command",
++            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_subagent_start.py",
++            "timeout": 5,
++            "statusMessage": "Recording sub-agent spawn instant..."
++          }
++        ]
++      }
++    ],
++    "Setup": [
++      {
++        "_comment": "PLAN-135 W2 H8: Setup-event post-install self-verification (init matcher) — validate-governance --fast + verify-counts + hook exec-bits (the S228 exec-bit class) + CLAUDE_ENV_FILE allowlist persistence (explicit CEO_* include-list; every override/escape-hatch/kill-switch EXCLUDED, S185/S197 stale-override class). ADVISORY + fail-open; NEVER blocks. Kill-switch: CEO_SETUP_VERIFICATION=0.",
++        "matcher": "init",
++        "hooks": [
++          {
++            "type": "command",
++            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_setup_verification.py",
++            "timeout": 15,
++            "statusMessage": "Post-install self-verification..."
++          }
++        ]
+       }
+     ]
+   },
+   "env": {
+     "CEO_QUIET_MODE": "1",
+-    "CEO_CONFIG_PROTECTION_ADVISORY": "1"
+-  }
++    "CLAUDE_CODE_SUBAGENT_MODEL": "inherit",
++    "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB": "1",
++    "BASH_MAX_TIMEOUT_MS": "600000",
++    "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR": "1",
++    "ENABLE_TOOL_SEARCH": "auto",
++    "CEO_CONFIG_PROTECTION_ADVISORY": "1",
++    "CEO_CONFIG_CHANGE_GUARD": "1"
++  },
++  "_model_comment": "PLAN-163 T1.1 / FXe (ADR-181 Contingency). Advisory session-default pin so a fresh `install --ceremony user` does NOT inherit the CC 2.1.220 sonnet-5 tier-default (the silent-flip that settings.base.json closes for the maintainer path). This is the MINIMUM pin for the advisory profile: it deliberately OMITS availableModels + enforceAvailableModels so the user path stays non-enforcing (advisory-only) by design. Do NOT add availableModels/enforceAvailableModels here — that would change the profile's advisory nature.",
++  "model": "claude-opus-5"
+ }
