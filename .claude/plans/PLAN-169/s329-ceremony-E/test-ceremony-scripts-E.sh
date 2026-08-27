@@ -153,9 +153,16 @@ done
 
 git -C "$SRC" add -- "${MATERIAL_LIST[@]}" "$CEREMONY_DIR" \
   >/dev/null 2>&1 || die "git add dos materiais falhou no clone"
-git -C "$SRC" -c user.name=selftest -c user.email=selftest@example.invalid \
-  commit -q -m "selftest: materiais da cerimonia wave-s329-E" \
-  || die "commit sintetico falhou no clone"
+# T-S329-2 / classe d9d9cab: com os materiais JA commitados em HEAD o index
+# fica vazio e um commit incondicional aborta com "nothing to commit" — o
+# harness estaria vermelho pelo motivo errado. Index vazio => segue sem commit.
+if git -C "$SRC" diff --cached --quiet; then
+  printf '  materiais ja commitados em HEAD — commit sintetico dispensado\n'
+else
+  git -C "$SRC" -c user.name=selftest -c user.email=selftest@example.invalid \
+    commit -q -m "selftest: materiais da cerimonia wave-s329-E" \
+    || die "commit sintetico falhou no clone"
+fi
 SYNTH_HEAD="$( git -C "$SRC" rev-parse HEAD )"
 printf '  commit sintetico: %s (%d registro(s) de rail)\n' "$SYNTH_HEAD" "$RAIL_COPIED"
 

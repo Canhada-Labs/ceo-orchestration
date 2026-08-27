@@ -4288,6 +4288,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             "ok": ok,
             "scan_root": str(scan_root),
             "baseline": str(baseline_path),
+            # Reproducibility contract (report section 5.1): a published
+            # number without the instrument digest measures an unknown
+            # instrument. render_table() already prints it; --json is the
+            # primary machine-readable surface and must carry it too.
+            "instrument_sha256": instrument_sha256(),
             # EVERY discovered file, zero-site ones included: absence from the
             # scan and absence of findings are different facts (rail R5-16).
             "files": files,

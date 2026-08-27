@@ -445,6 +445,16 @@ a cura da W2 não o reintroduza por descuido.
 
 ## 6. Open questions
 
+**OQ-W0-STOP (2026-08-27, night-run S329 — decisão do Owner pendente).** O censo
+W0 passou por 3 arquiteturas de regra e 7 levas de rail; a classe «forma não
+modelada ⇒ fail-open» regenerou na 3ª arquitetura (rail r3 sobre `f31e1b1`:
+5 P1, registrados em `PLAN-185/w0-rail-round-3-f31e1b1.md` como fixtures da wave
+futura). O CEO PAROU as passadas (PROTOCOL anti-padrão 6). Default conservador
+implementado pela noite: o W0 fica como RATCHET com pontos cegos DECLARADOS
+(controle positivo provado; 148 testes; baseline 620 sítios; digest de
+reprodutibilidade) e o wiring no CI segue na cerimônia C. Alternativa que só o
+Owner pode escolher: wave própria de modelagem completa ANTES do wiring.
+
 O debate round-1 (2026-08-26) devolveu cinco decisões de POLÍTICA, não de
 desenho. Nenhuma bloqueia a execução: cada uma tem um **default conservador que
 a noite implementa**, escolhido para ser o mais fácil de reverter. O Owner

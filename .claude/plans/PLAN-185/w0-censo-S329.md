@@ -502,7 +502,7 @@ resultado na primeira linha da tabela e no campo `instrument_sha256` do
 como publicá-lo sem ele.
 
 **Números desta página valem para
-`sha256=a8703edece8c319e25de2b5e4a3251e3425c1ae93fbce459b7b8f4208b1ac539`.**
+`sha256=e368a4e7146c8dfea30ec8d4ce83938036ca823ce4c01747468ebd860fcbee71`** (re-pinado após as curas da 6ª passada e dos 2 P2 do rail r3 — o valor anterior `a8703ede…` era de uma cópia intermediária; rail r3 P2-2).
 Uma cópia congelada com outro hash mede outra coisa — em particular, cópias
 anteriores a esta não têm as curas de fail-open da §5.1 nem a forma a4, e
 portanto **subestimam** o conjunto bloqueante.
