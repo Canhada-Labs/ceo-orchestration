@@ -137,16 +137,20 @@ EXPECTED_PREDICATE_DOCTOR_REFS=0
 # ===========================================================================
 # `bash scripts/tests/test-installer-write-safety-e2e.sh`
 #
-# 80 passed / 0 failed, rc 0 — medido pelo CEO na arvore-sombra na S329, DEPOIS
-# das curas da rodada 2 do rail. NAO foi re-executado por mim: sao ~7 min e a
-# sombra andou durante a montagem deste pacote. Quem o executa de verdade e o V5
-# do LAND, contra este numero.
+# 105 passed / 0 failed, rc 0 — medido 3x em 27/08: (a) sombra sob pseudo-TTY
+# (`script`) apos a cura do F1.8, (b) o proprio LAND do Owner das 09:35 (log
+# preservado em s329-ceremony-main/land-C-20260827-093536-e2e.log: 105/0 — o
+# LAND abortou SO porque este numero dizia 80), (c) worktree sem TTY 4x.
 #
 # Trajetoria, porque um numero que sobe merece explicacao: o DESIGN-C secao 6
-# registra 50 asercoes sobre um arquivo de 641 linhas; as curas do rail o
-# levaram a 868 linhas e 80 asercoes. Subir e a suite crescendo, e por isso este
-# valor foi atualizado CONSCIENTEMENTE em vez de afrouxado — um V5 que aceitasse
-# "50 ou mais" aceitaria tambem uma suite que encolheu de 80 para 50.
+# registra 50 asercoes sobre um arquivo de 641 linhas; as curas do rail r2 o
+# levaram a 80; as curas do rail r4 (preflight dos templates fixos, root
+# symlink, _ATOMIC_TMP_PENDING herdado, owner lossy) e a cura do F1.8 (TTY)
+# levaram a 105. Subir e a suite crescendo, e por isso este valor foi
+# atualizado CONSCIENTEMENTE em vez de afrouxado — um V5 que aceitasse "80 ou
+# mais" aceitaria tambem uma suite que encolheu de 105 para 80. O valor 80
+# ficou stale porque era declaracao MANUAL fora do bloco AUTO do finalize
+# (classe registrada: finalize-E ja abortou pela mesma razao em 26/08).
 #
 # ~7 min de parede (aprox. 13 installs reais de 27 s). O sumario tem a forma exata
 #   === summary ===
@@ -160,7 +164,7 @@ EXPECTED_PREDICATE_DOCTOR_REFS=0
 # do alvo (F1.1 536 B, F1.3 8468 B, F1.6 454 B, F1.7 48708 B) e o CODEOWNERS de
 # 0 bytes (F2.1). A receita esta no cabecalho do proprio teste.
 EXPECTED_E2E_RC=0
-EXPECTED_E2E_PASSED=80
+EXPECTED_E2E_PASSED=105
 EXPECTED_E2E_FAILED=0
 
 # ===========================================================================
