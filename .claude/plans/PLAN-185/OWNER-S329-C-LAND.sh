@@ -225,6 +225,10 @@ _fingerprint() {
   } | shasum -a 256 | awk '{print $1}'
 }
 _restore() {
+  # exit status na ENTRADA do trap: != 0 significa que um die/abort disparou.
+  # Logs caros so sao preservados nesse caso — um dry-run VERDE nao pode
+  # deixar arquivo novo na arvore (o harness T2 confere byte a byte).
+  _land_rc=$?
   if [ "$RESTORE_ON_EXIT" = "1" ] && [ "$APPLIED" = "1" ]; then
     git reset -q >/dev/null 2>&1 || true   # um abort DEPOIS do staging deixaria o index sujo
     if git apply -R "$PATCH" >/dev/null 2>&1; then
@@ -240,6 +244,17 @@ _restore() {
       printf '\n\033[31mFALHA AO RESTAURAR\033[0m — a arvore ficou com o patch aplicado.\n' >&2
       printf '  Restaure a mao:  git -C %s apply -R %s\n' "$ROOT" "$PATCH" >&2
     fi
+  fi
+  # Licao S329-manha: o abort do V-block apagava o UNICO log do e2e junto com o
+  # tmpdir -- o Owner ficou sem a assercao que falhou. Preserva os logs caros
+  # (e2e/smoke) no dir de logs de cerimonia ANTES de remover o tmpdir.
+  _keep_dir="$ROOT/.claude/plans/PLAN-185/s329-ceremony-main"
+  if [ "$_land_rc" != "0" ] && [ -d "$TMPDIR_LAND" ] && [ -d "$_keep_dir" ] && [ -w "$_keep_dir" ]; then
+    for _l in "$TMPDIR_LAND"/*.log; do
+      [ -f "$_l" ] || continue
+      _kept="$_keep_dir/land-C-$(date +%Y%m%d-%H%M%S)-$(basename "$_l")"
+      cp -p "$_l" "$_kept" 2>/dev/null && printf '  log preservado: %s\n' "$_kept"
+    done
   fi
   rm -rf "$TMPDIR_LAND"
 }
