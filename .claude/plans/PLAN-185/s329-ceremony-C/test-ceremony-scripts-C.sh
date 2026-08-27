@@ -158,9 +158,16 @@ done
 
 git -C "$SRC" add -- "${MATERIAL_LIST[@]}" "$CEREMONY_DIR" \
   >/dev/null 2>&1 || die "git add dos materiais falhou no clone"
-git -C "$SRC" -c user.name=selftest -c user.email=selftest@example.invalid \
-  commit -q -m "selftest: materiais da cerimonia wave-s329-C" \
-  || die "commit sintetico falhou no clone"
+# T-S329-2 / classe d9d9cab: materiais ja commitados em HEAD => index vazio,
+# e um commit incondicional aborta com "nothing to commit" — vermelho pelo
+# motivo errado. Index vazio => segue sem commit.
+if git -C "$SRC" diff --cached --quiet; then
+  printf '  materiais ja commitados em HEAD — commit sintetico dispensado\n'
+else
+  git -C "$SRC" -c user.name=selftest -c user.email=selftest@example.invalid \
+    commit -q -m "selftest: materiais da cerimonia wave-s329-C" \
+    || die "commit sintetico falhou no clone"
+fi
 SYNTH_HEAD="$( git -C "$SRC" rev-parse HEAD )"
 printf '  commit sintetico: %s (%d registro(s) de rail)\n' "$SYNTH_HEAD" "$RAIL_COPIED"
 
@@ -254,8 +261,12 @@ _land() {
 # arquivo conhecido, e `-A` e um add capaz de diretorio — bloqueado pela regra
 # R4 do ceremony-lint.
 _commit_plant() {
+  # T-S329-2 / classe d9d9cab: plant que coincide com o HEAD deixa o index
+  # vazio; commit incondicional abortaria "nothing to commit" — vermelho pelo
+  # motivo errado. Index vazio => plant ja vigente, seguir sem commit.
   ( cd "$1" && git add -- "$2" \
-    && git -c user.name=t -c user.email=t@example.invalid commit -q -m "selftest plant" )
+    && { git diff --cached --quiet \
+         || git -c user.name=t -c user.email=t@example.invalid commit -q -m "selftest plant"; } )
 }
 # Espera VERMELHO com uma razao NOMEADA. Um abort pelo motivo errado e
 # indistinguivel de um gate morto se so olharmos o exit code.
