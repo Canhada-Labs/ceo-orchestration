@@ -1,3 +1,3 @@
-WIP-BASE=1c34eb59bf8639c4f413960a49f38e6baa34ade1
-snapshot=2026-08-27T23:12:14Z
-note=estado FINAL do writer (f-derivation-writer, STATUS DONE_WITH_CONCERNS) + cura do bloqueador §4b do DESIGN-F aplicada pelo CEO (test_install_user_skips_governance_hooks.py deriva a lista do spec); 6 paths; recuperar: git clone --local . <dir> && git -C <dir> checkout <WIP-BASE> && git -C <dir> apply --3way F-wip.patch; o finalize-F (a escrever) deriva o patch de cerimonia daqui
+WIP-BASE=7ffcdeb7b2c6eb689d9522d1f7ebfe340f6d0a48
+snapshot=2026-08-30T19:23:19Z
+note=estado FINAL da S331 apos 7 rodadas de pair-rail (11 defeitos reais curados; bateria 267/2). 20 paths. Recuperar: git clone --local . <dir> && git -C <dir> checkout <WIP-BASE> && git -C <dir> apply --3way --index F-wip.patch. O finalize-F.sh deriva o patch de cerimonia daqui. PENDENTE: a decisao do Owner sobre check_scratchpad_access (rail-round-7.md) muda o spec e o roster, entao este snapshot e pre-decisao.
