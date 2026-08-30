@@ -11,7 +11,7 @@
 #
 # Fluxo completo, do zero ao push (4 comandos, nenhum editor):
 #
-#   bash .claude/plans/PLAN-169/s330-ceremony-F/finalize-E.sh
+#   bash .claude/plans/PLAN-169/s330-ceremony-F/finalize-F.sh
 #   bash .claude/plans/PLAN-169/OWNER-S331-F-SIGN.sh
 #   bash .claude/plans/PLAN-169/OWNER-S331-F-LAND.sh --dry-run
 #   bash .claude/plans/PLAN-169/OWNER-S331-F-LAND.sh
@@ -59,7 +59,7 @@ _expect() {
 }
 
 # --- interruptor de AUTO-TESTE (recusado fora do scratchpad) ---------------
-# Existe so para `s330-ceremony-F/test-ceremony-scripts-E.sh` exercitar os gates
+# Existe so para `s330-ceremony-F/test-ceremony-scripts-F.sh` exercitar os gates
 # sem uma chave GPG. A comparacao e por REALPATH dos DOIS lados (/tmp e symlink
 # no macOS: comparar formato de string mediria formato, nao caminho).
 SELFTEST=0
@@ -80,7 +80,7 @@ step "P0 — pre-condicoes"
 # ---------------------------------------------------------------------------
 [ -f "$SENTINEL" ] || die "sentinel ausente: $SENTINEL"
 [ -f "$PATCH" ]    || die "patch ausente: $PATCH
-  Gere-o com:  bash $ROOT/$CEREMONY_DIR/finalize-E.sh
+  Gere-o com:  bash $ROOT/$CEREMONY_DIR/finalize-F.sh
   (ele deriva o patch da arvore-sombra, re-baseia no HEAD vivo, roda a bateria
    curta e chama o $FINALIZE com --sentinel/--proposed deste pacote)"
 [ -f "$PROPOSED" ] || die "registro ausente: $PROPOSED"
@@ -177,12 +177,12 @@ MATERIALS=(
   "$PLAN_DIR/OWNER-S331-F-SIGN.sh"
   "$LAND_SCRIPT"
   "$PROPOSED"
-  "$CEREMONY_DIR/COMMIT-MSG-E.txt"
+  "$CEREMONY_DIR/COMMIT-MSG-F.txt"
   "$BASELINE_ENV"
   "$CEREMONY_DIR/BASE-SHA.txt"
-  "$CEREMONY_DIR/finalize-E.sh"
-  "$CEREMONY_DIR/test-ceremony-scripts-E.sh"
-  "$CEREMONY_DIR/README-E.md"
+  "$CEREMONY_DIR/finalize-F.sh"
+  "$CEREMONY_DIR/test-ceremony-scripts-F.sh"
+  "$CEREMONY_DIR/README-F.md"
   "$FINALIZE"
   "$PATCH"
   "$SENTINEL"
@@ -246,11 +246,11 @@ fi
 
 case "$(cat "$SENTINEL")" in
   *TO-FILL-AT-FINAL-PATCH*)
-    die "o sentinel ainda tem placeholder de patch — rode o finalize-E.sh primeiro" ;;
+    die "o sentinel ainda tem placeholder de patch — rode o finalize-F.sh primeiro" ;;
 esac
 case "$(cat "$SENTINEL")" in
   *"  - placeholder"*)
-    die "o bloco Scope ainda e placeholder — rode o finalize-E.sh primeiro" ;;
+    die "o bloco Scope ainda e placeholder — rode o finalize-F.sh primeiro" ;;
 esac
 ok "sentinel finalizado (sem placeholders de patch)"
 
@@ -294,7 +294,7 @@ git merge-base --is-ancestor "$PATCH_BASE" "$HEAD_SHA" \
   || die "a base do patch NAO e ancestral do HEAD
   Patch-base: $PATCH_BASE
   HEAD atual: $HEAD_SHA
-  A arvore andou por outro caminho. Refinalize (finalize-E.sh) e repita."
+  A arvore andou por outro caminho. Refinalize (finalize-F.sh) e repita."
 DRIFT_TMP="$(mktemp)"
 git diff --name-only "$PATCH_BASE" "$HEAD_SHA" | sort -u > "$DRIFT_TMP"
 TOUCHED_TMP="$(mktemp)"
@@ -320,7 +320,7 @@ RECORDED_BASE="$(sed -n 's/^[[:space:]]*\([0-9a-f]\{40\}\)[[:space:]]*$/\1/p' "$
 [ "$RECORDED_BASE" = "$PATCH_BASE" ] || die "BASE-SHA.txt discorda do Patch-base do sentinel
   em $BASE_SHA_FILE: $RECORDED_BASE
   no sentinel        : $PATCH_BASE
-  Rode o finalize-E.sh de novo (ele reescreve os dois)."
+  Rode o finalize-F.sh de novo (ele reescreve os dois)."
 ok "BASE-SHA.txt casa o Patch-base assinado"
 
 git apply --check "$PATCH" || die "git apply --check FALHOU — a arvore divergiu do patch"

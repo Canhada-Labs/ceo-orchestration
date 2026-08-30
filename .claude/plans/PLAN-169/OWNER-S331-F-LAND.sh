@@ -130,8 +130,17 @@ if [ "$(_expect EXPECTED_JQ_REQUIRED)" = "1" ]; then
 fi
 [ -f "$TEMPLATE" ] || die "G-PRE: $TEMPLATE ausente — o template user e DERIVADO dele"
 [ -f "$TEMPLATE_USER" ] || die "G-PRE: $TEMPLATE_USER ausente — e o entregavel da wave"
-[ -f "$GENERATOR" ] || die "G-PRE: $GENERATOR ausente — sem ele a paridade nao e verificavel"
-ok "G-PRE: os dois templates e o gerador presentes"
+# O gerador e arquivo NOVO desta wave: ele chega COM o patch, nao no HEAD.
+# Exigir o arquivo pre-apply abortaria todo land legitimo (medido pelo
+# harness T2..T16: G-PRE vermelho incondicional). Fail-CLOSED continua:
+# ausente no HEAD E ausente do patch => abort nomeado.
+if [ ! -f "$GENERATOR" ]; then
+  git apply --numstat "$PATCH" | awk '{print $3}' | grep -qxF "$GENERATOR" \
+    || die "G-PRE: $GENERATOR ausente do HEAD E do patch — sem ele a paridade nao e verificavel"
+  ok "G-PRE: os dois templates presentes; o gerador chega no patch"
+else
+  ok "G-PRE: os dois templates e o gerador presentes"
+fi
 
 # ---------------------------------------------------------------------------
 step "G0 — insumos, materiais rastreados e arvore limpa"
@@ -160,9 +169,9 @@ MATERIALS=(
   "$COMMIT_MSG"
   "$BASELINE_ENV"
   "$CEREMONY_DIR/BASE-SHA.txt"
-  "$CEREMONY_DIR/finalize-E.sh"
-  "$CEREMONY_DIR/test-ceremony-scripts-E.sh"
-  "$CEREMONY_DIR/README-E.md"
+  "$CEREMONY_DIR/finalize-F.sh"
+  "$CEREMONY_DIR/test-ceremony-scripts-F.sh"
+  "$CEREMONY_DIR/README-F.md"
   "$FINALIZE"
   "$PATCH"
   "$SENTINEL"
@@ -953,7 +962,7 @@ ok "$(wc -l < "$STAGED_FILE" | tr -d ' ') path(s) staged == patch + sentinel + .
 # Esta wave nao adiciona script executavel, entao o gate de modo do pacote E
 # nao tem sujeito aqui. O que ele checa em seu lugar: NENHUM path do patch
 # entrou no index com o bit de execucao ligado por acidente — um `.json`, um
-# `.md` ou um `.yml` executavel e ruido que o `git add -A` de um dia carrega
+# `.md` ou um `.yml` executavel e ruido que um add-tudo de um dia carrega
 # adiante (CLAUDE.md §4: o `--chmod=-x` sozinho nao gruda).
 while IFS= read -r f; do
   [ -z "$f" ] && continue

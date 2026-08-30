@@ -1,6 +1,10 @@
 # Pacote F — rail codex rodada 11 (sombra rebaseada em `6961a23`, 2026-08-30 ~18:1x -03)
 
-Rail-Verdict: APPROVE (rodada LIMPA — zero achados acionáveis)
+Rail-Verdict: APPROVE
+
+Rodada LIMPA — zero achados acionáveis. (A linha acima fica nua de
+propósito: o parser do SIGN normaliza espaços e exige igualdade exata
+com `APPROVE` — qualquer qualificação na mesma linha vira recusa.)
 
 Comando: `codex exec review --uncommitted --skip-git-repo-check -c sandbox_mode="workspace-write"`,
 via `rail_round.sh` (snapshot sha256 de cada path staged antes/depois).

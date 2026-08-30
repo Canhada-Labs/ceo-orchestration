@@ -82,8 +82,10 @@ done
   $SP_BASE/$REPO_SLUG/*/scratchpad
   Este harness so roda sob o scratchpad (os scripts recusam o interruptor de
   auto-teste em qualquer outra arvore)."
-WORK="$( mktemp -d "$SESSION_DIR/ceremony-selftest-s329E.XXXXXX" )"
-trap 'rm -rf "$WORK"' EXIT
+WORK="$( mktemp -d "$SESSION_DIR/ceremony-selftest-s330F.XXXXXX" )"
+# Logs sao preservados quando ha FAIL (licao S329: LANDs preservam os logs
+# caros no abort — sem eles a triagem de um FAIL exige re-rodar tudo).
+trap '[ "${FAIL:-0}" -gt 0 ] && { printf "\n  logs preservados em %s/logs\n" "$WORK"; find "$WORK" -mindepth 1 -maxdepth 1 ! -name logs -exec rm -rf {} +; } || rm -rf "$WORK"' EXIT
 printf '  area de teste: %s\n' "$WORK"
 
 # ---------------------------------------------------------------------------
@@ -94,19 +96,19 @@ step "PRE — T-S329-2: os materiais estao COMMITADOS na arvore viva?"
 MATERIAL_LIST=(
   "$SIGN_SCRIPT" "$LAND_SCRIPT"
   "$CEREMONY_DIR/PROPOSED-PATCH.md"
-  "$CEREMONY_DIR/COMMIT-MSG-E.txt"
+  "$CEREMONY_DIR/COMMIT-MSG-F.txt"
   "$BASELINE_ENV"
   "$CEREMONY_DIR/BASE-SHA.txt"
-  "$CEREMONY_DIR/finalize-E.sh"
+  "$CEREMONY_DIR/finalize-F.sh"
   "$CEREMONY_DIR/test-ceremony-scripts-F.sh"
-  "$CEREMONY_DIR/README-E.md"
+  "$CEREMONY_DIR/README-F.md"
   "$PATCH"
   "$SENTINEL"
 )
 UNCOMMITTED=""
 for m in "${MATERIAL_LIST[@]}"; do
   [ -f "$ROOT/$m" ] || die "material AUSENTE na arvore viva: $m
-  Rode primeiro:  bash $ROOT/$CEREMONY_DIR/finalize-E.sh"
+  Rode primeiro:  bash $ROOT/$CEREMONY_DIR/finalize-F.sh"
   git -C "$ROOT" ls-files --error-unmatch -- "$m" >/dev/null 2>&1 \
     || UNCOMMITTED="$UNCOMMITTED  $m
 "
@@ -245,6 +247,23 @@ _done() { [ -n "${1:-}" ] && rm -rf "$1" 2>/dev/null || printf ''; }
 # untracked visiveis ao `git status`, e o T2 (restauracao byte a byte) acusaria
 # o land por um arquivo que o proprio harness criou.
 _logdir() { printf '%s' "$WORK/logs/$( basename "$1" )"; }
+# Restaura os placeholders de assinatura no clone: o SIGN preenche
+# Anchor-SHA/Data/Approved-By por regex ancorado no placeholder e ABORTA se ja
+# estiverem preenchidos ("campo nao encontrado ou ja preenchido"). Um caso que
+# re-assina (T12/T14) precisa devolver o sentinel ao estado de draft e apagar
+# o .asc velho ANTES do commit do plant.
+_reset_sign_fields() {
+  python3 - "$1/$SENTINEL" <<'PY'
+import re, sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+s = re.sub(r"(?m)^Anchor-SHA: .*$", "Anchor-SHA: TO-FILL-AT-SIGN", s)
+s = re.sub(r"(?m)^Data: .*$", "Data: TO-FILL-AT-SIGN", s)
+s = re.sub(r"(?m)^Approved-By: .*$", "Approved-By: @Canhada-Labs TO-FILL-AT-SIGN", s)
+open(p, "w", encoding="utf-8").write(s)
+PY
+  rm -f "$1/$SENTINEL.asc"
+}
 _sign() {
   mkdir -p "$( _logdir "$1" )"
   ( cd "$1" && CEREMONY_SELFTEST_NO_GPG=1 bash "$SIGN_SCRIPT" ) >"$( _logdir "$1" )/sign.log" 2>&1
@@ -269,7 +288,7 @@ _commit_plant() {
   # index vazio, e um commit incondicional abortaria com "nothing to commit" —
   # o cenario ficaria vermelho pelo motivo errado. Index vazio => plant ja
   # vigente, seguir sem commit.
-  ( cd "$1" && git add -- "$2" \
+  ( _d="$1"; shift; cd "$_d" && git add -- "$@" \
     && { git diff --cached --quiet \
          || git -c user.name=t -c user.email=t@example.invalid commit -q -m "selftest plant"; } )
 }
@@ -401,9 +420,10 @@ if [ "$RAIL_IS_APPROVE" = "1" ]; then
 import sys
 p = sys.argv[1]
 s = open(p, encoding="utf-8").read()
-s = s.replace("  - scripts/upgrade.sh\n",
-              "  - scripts/upgrade.sh\n  - scripts/install.sh\n", 1)
-open(p, "w", encoding="utf-8").write(s)
+s2 = s.replace("  - scripts/build-plugin.py\n",
+               "  - scripts/build-plugin.py\n  - scripts/install.sh\n", 1)
+assert s2 != s, "plant T4 MORTO: a ancora nao existe no Scope deste sentinel"
+open(p, "w", encoding="utf-8").write(s2)
 PY
   _commit_plant "$D" "$SENTINEL" || fail "T4: nao consegui commitar o plant"
   _sign "$D" || fail "T4: SIGN falhou no setup"
@@ -423,8 +443,9 @@ if [ "$RAIL_IS_APPROVE" = "1" ]; then
 import sys
 p = sys.argv[1]
 s = open(p, encoding="utf-8").read()
-s = s.replace("  - .github/workflows/smoke-install.yml\n", "", 1)
-open(p, "w", encoding="utf-8").write(s)
+s2 = s.replace("  - .github/workflows/validate.yml\n", "", 1)
+assert s2 != s, "plant T5 MORTO: a ancora nao existe no Scope deste sentinel"
+open(p, "w", encoding="utf-8").write(s2)
 PY
   _commit_plant "$D" "$SENTINEL" || fail "T5: nao consegui commitar o plant"
   _sign "$D" || fail "T5: SIGN falhou no setup"
@@ -578,7 +599,8 @@ if [ "$RAIL_IS_APPROVE" = "1" ]; then
   # O patch e aplicado pelo LAND; o plant tem de sobreviver a isso, entao ele
   # entra depois — via o proprio EXPECTED, que e o que o V5a compara.
   _set_expect "$D" EXPECTED_GEN_CHECK_RC 1
-  _commit_plant "$D" "$BASELINE_ENV" || fail "T12: nao consegui commitar o plant"
+  _reset_sign_fields "$D"
+  _commit_plant "$D" "$BASELINE_ENV" "$SENTINEL" || fail "T12: nao consegui commitar o plant"
   _sign "$D" || fail "T12: re-SIGN falhou (o EXPECTED mudou)"
   _er_rc=0; _land "$D" --dry-run || _er_rc=$?
   _expect_red "$D" "esperado 1" "T12: V5a roda o gerador e compara o rc declarado"
@@ -620,7 +642,8 @@ if [ "$RAIL_IS_APPROVE" = "1" ]; then
   # esperadas com o codigo CURADO produzindo 0 e a mesma prova, pelo outro lado:
   # o gate compara de verdade.
   _set_expect "$D" EXPECTED_PLUGIN_DUPLICATE_TRIPLES 4
-  _commit_plant "$D" "$BASELINE_ENV" || fail "T14: nao consegui commitar o plant"
+  _reset_sign_fields "$D"
+  _commit_plant "$D" "$BASELINE_ENV" "$SENTINEL" || fail "T14: nao consegui commitar o plant"
   _sign "$D" || fail "T14: re-SIGN falhou (o EXPECTED mudou)"
   _er_rc=0; _land "$D" --dry-run || _er_rc=$?
   _expect_red "$D" "esperado" "T14: V6d compara as duplicatas do plugin"
@@ -632,13 +655,13 @@ fi
 # ---------------------------------------------------------------------------
 step "T15a — mensagem de commit com o trailer por preencher => vermelho"
 # ---------------------------------------------------------------------------
-# O `COMMIT-MSG-E.txt` sai desta cerimonia com
+# O `COMMIT-MSG-F.txt` sai desta cerimonia com
 # `Pair-Rail-Reviewed: TO-FILL-AFTER-LAST-RAIL-ROUND` de proposito: o CEO so
 # sabe QUANTAS rodadas houve depois da ultima. Um land que aceitasse isso
 # gravaria no historico um commit que mente sobre a propria revisao.
 if [ "$RAIL_IS_APPROVE" = "1" ]; then
   D="$( _fresh )"
-  if grep -qF 'Pair-Rail-Reviewed: TO-FILL' "$D/$CEREMONY_DIR/COMMIT-MSG-E.txt"; then
+  if grep -qF 'Pair-Rail-Reviewed: TO-FILL' "$D/$CEREMONY_DIR/COMMIT-MSG-F.txt"; then
     _sign "$D" || fail "T15a: SIGN falhou no setup"
     _er_rc=0; _land "$D" || _er_rc=$?
     _expect_red "$D" "trailer Pair-Rail-Reviewed por preencher" \
@@ -659,7 +682,7 @@ step "T15b — com o trailer preenchido, o LAND COMPLETO e VERDE (nao-vacuidade)
 # pulado no auto-teste) e o `.asc` tem de estar DENTRO do commit.
 if [ "$RAIL_IS_APPROVE" = "1" ]; then
   D="$( _fresh )"
-  python3 - "$D/$CEREMONY_DIR/COMMIT-MSG-E.txt" <<'PY'
+  python3 - "$D/$CEREMONY_DIR/COMMIT-MSG-F.txt" <<'PY'
 import re, sys
 p = sys.argv[1]
 s = open(p, encoding="utf-8").read()
@@ -668,7 +691,7 @@ s = re.sub(r"^Pair-Rail-Reviewed: TO-FILL.*$",
            s, count=1, flags=re.M)
 open(p, "w", encoding="utf-8").write(s)
 PY
-  _commit_plant "$D" "$CEREMONY_DIR/COMMIT-MSG-E.txt" || fail "T15b: nao consegui commitar o plant"
+  _commit_plant "$D" "$CEREMONY_DIR/COMMIT-MSG-F.txt" || fail "T15b: nao consegui commitar o plant"
   _sign "$D" || fail "T15b: SIGN falhou no setup"
   _er_rc=0; _land "$D" || _er_rc=$?
   if [ "$_er_rc" -ne 0 ]; then
