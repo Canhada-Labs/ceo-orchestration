@@ -73,6 +73,9 @@ EXPECTED_JQ_REQUIRED=1
 # NoOpDeclarationsAreRejected (8 casos; controle vermelho medido
 # 5 failed / 3 passed antes da cura -> 8 passed depois). O P1 da r9 foi
 # refutado (descreve o proprio fluxo pre-assinatura) — rail-round-9.md.
+# 277 r10: chave COMPUTADA sobrevive a base sem a gemea (env/_comment) —
+# classe ComputedKeysSurviveABaseWithoutThem (2 casos, vermelho 2F -> 2P);
+# e os numerais do CLAUDE.md s5 atualizados delta-zero (rail-round-10.md).
 #
 # O conjunto e mais largo que os dois arquivos que a wave EDITA, de proposito:
 # `test_build_plugin_idempotency.py` e `test_check_install_profiles.py` sao as
@@ -114,7 +117,7 @@ EXPECTED_JQ_REQUIRED=1
 # `test_install_user_skips_governance_hooks.py` (a classe
 # `TestExclusionParsingKeepsTheEvent`, que exercita o ramo scoped que o spec
 # real ainda nao alcanca).
-EXPECTED_UNIT_PYTEST_PASSED=275
+EXPECTED_UNIT_PYTEST_PASSED=277
 # Os 2 skips sao estruturais e ja existiam antes desta wave (ambiente sem a
 # dependencia opcional); um skip a MAIS significa que uma suite parou de rodar.
 EXPECTED_UNIT_PYTEST_SKIPPED=2
