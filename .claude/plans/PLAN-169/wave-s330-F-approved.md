@@ -12,8 +12,8 @@
 Plans: PLAN-169
 Wave: wave-s330-F (PLAN-169 OQ-E5 — `templates/settings/settings.user.json` deixa de ser uma cópia manual da base e passa a ser DERIVADO dela por subtração declarada, com o spec vivendo na chave `_derivation` do próprio arquivo; junto vêm a reconciliação do FU-F-ACCEL, o ADR-197, o gate de paridade no `validate.yml` e as contagens de ADR que o `verify-counts.sh` cobra)
 Patch: .claude/plans/PLAN-169/s330-ceremony-F/F.patch
-Patch-sha256: TO-FILL-AT-FINALIZE
-Patch-base: TO-FILL-AT-FINALIZE
+Patch-sha256: 7297ab4fb1ff0e048b16d6c62097b7245170da708a94cb64617bb88ef1f5f441
+Patch-base: ad6e78ef6721d83806fdaedb3e8ac3723566d748
 Anchor-SHA: TO-FILL-AT-SIGN
 Data: TO-FILL-AT-SIGN
 
@@ -92,8 +92,29 @@ o CI cobra, seria uma janela vermelha.
    narrativa da §5 continua sendo trabalho de closeout.
 
 <!-- BEGIN SIGNED SCOPE -->
+Approved-By: @Canhada-Labs TO-FILL-AT-SIGN
+Plans: PLAN-169
 Scope:
-  - TO-FILL-AT-FINALIZE
+  - .claude/adr/ADR-197-user-profile-derivation.md
+  - .claude/adr/README.md
+  - .claude/plans/PLAN-169/s330-ceremony-F/DESIGN-F.md
+  - .claude/scripts/gen-settings-user-template.py
+  - .claude/scripts/tests/fixtures/settings.user.pre-F.json
+  - .claude/scripts/tests/test_gen_settings_user_template.py
+  - .claude/scripts/tests/test_install_user_skips_governance_hooks.py
+  - .github/workflows/validate.yml
+  - CHANGELOG.md
+  - CLAUDE.md
+  - README.md
+  - README.pt-BR.md
+  - docs/ARCHITECTURE.md
+  - docs/CTO-GUIDE.md
+  - docs/FAQ.md
+  - docs/GUIA-COMPLETO.md
+  - docs/README.md
+  - npm/README.md
+  - scripts/build-plugin.py
+  - templates/settings/settings.user.json
 <!-- END SIGNED SCOPE -->
 
 ## Residual declarado

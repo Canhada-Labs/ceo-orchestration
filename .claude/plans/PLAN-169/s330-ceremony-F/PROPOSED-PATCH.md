@@ -1,7 +1,7 @@
 # PROPOSED-PATCH — wave-s330-F (PLAN-169 OQ-E5): o perfil `user` é DERIVADO da base
 
 Patch: `.claude/plans/PLAN-169/s330-ceremony-F/F.patch`
-Patch-sha256: TO-FILL-AT-FINALIZE
+Patch-sha256: 7297ab4fb1ff0e048b16d6c62097b7245170da708a94cb64617bb88ef1f5f441
 Base: ver `BASE-SHA.txt` (o `finalize_patch.py` recusa uma sombra cuja base não
 seja o HEAD vivo, e grava o mesmo sha no `Patch-base:` do sentinel)
 
