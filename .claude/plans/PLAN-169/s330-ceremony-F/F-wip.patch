@@ -1,9 +1,9 @@
 diff --git a/.claude/adr/ADR-197-user-profile-derivation.md b/.claude/adr/ADR-197-user-profile-derivation.md
 new file mode 100644
-index 0000000..9d7ec45
+index 0000000..9be2034
 --- /dev/null
 +++ b/.claude/adr/ADR-197-user-profile-derivation.md
-@@ -0,0 +1,187 @@
+@@ -0,0 +1,197 @@
 +---
 +adr_id: ADR-197
 +title: O perfil `user` é DERIVADO de `settings.base.json` por subtração declarada — nunca uma segunda cópia literal, e a lista de exclusão é dado com leitores
@@ -127,15 +127,25 @@ index 0000000..9d7ec45
 +
 +## Consequences
 +
-+* O roster `user` vai de **20 para 30 registrações** (29 basenames). O próximo
-+  `upgrade.sh` de um adopter `--ceremony user` **registra 10 hooks novos**. Isso
++* O roster `user` vai de **20 para 29 registrações** (28 basenames). O próximo
++  `upgrade.sh` de um adopter `--ceremony user` **registra 9 registrações novas**
++  (8 hooks + a 2ª registração de `check_output_secrets.py`). Isso
 +  é o ponto da OQ-E5, não efeito colateral; os riscos por hook estão na
 +  classificação §5. Dois merecem repetição: `check_config_change.py` entra com
 +  `CEO_CONFIG_CHANGE_GUARD=1` **explícito** (o default vive em código, e uma
 +  registração é só tão advisory quanto a setting que ela lê), e
 +  `codex_review_user_code.py` é DETECT-ONLY por default — nunca roda Codex sem
 +  opt-in.
-+* **+22.360 B** no `settings.json` de todo adopter `--ceremony user` novo, quase
++* **Uma reversão pós-classificação, decidida pelo Owner (2026-08-30,
++  rail-round-7 P2-a):** `check_scratchpad_access.py` fica FORA do roster. O
++  matcher casa por sufixo — qualquer caminho terminando em `scratchpad.py` —
++  e bloquearia o script homônimo do próprio adopter sem rota praticável,
++  contra o critério (a) do spec. A exclusão viaja no `_derivation` com classe
++  `bloqueia-edicao`; o CLI `scratchpad.py` continua instalado nas duas
++  cerimônias pelo `install.sh`, e o plugin deixa de embarcá-lo
++  (`copy_guarded_clis` é condicional ao registro — «guard not registered →
++  CLI not needed»).
++* **+22.001 B** no `settings.json` de todo adopter `--ceremony user` novo, quase
 +  tudo `reason`/`evidence`. Declarado, não escondido: encurtá-los é rota
 +  disponível; removê-los não é — são o que torna a subtração auditável.
 +* `EXPECTED_TEMPLATE_REGISTRATIONS_USER=20`, congelado em
@@ -266,10 +276,10 @@ index eb39a2b..a22f221 100644
  
 diff --git a/.claude/plans/PLAN-169/s330-ceremony-F/DESIGN-F.md b/.claude/plans/PLAN-169/s330-ceremony-F/DESIGN-F.md
 new file mode 100644
-index 0000000..ee231d7
+index 0000000..3b0e901
 --- /dev/null
 +++ b/.claude/plans/PLAN-169/s330-ceremony-F/DESIGN-F.md
-@@ -0,0 +1,931 @@
+@@ -0,0 +1,986 @@
 +# Pacote F — `settings.user.json` DERIVADO da base por subtração declarada
 +
 +> S330 (2026-08-27). Alvo canônico: `templates/settings/settings.user.json`.
@@ -287,18 +297,19 @@ index 0000000..ee231d7
 +| **Mecanismo** | nenhum — o arquivo era o artefato e a explicação era prosa no `_comment` | `.claude/scripts/gen-settings-user-template.py`, único aplicador; `--check` / `--write` / `--json` |
 +| **Verificação** | nenhuma. O `_comment` afirmava «removendo exatamente 10» e «entradas retidas byte-idênticas nos campos comportamentais» — **as duas afirmações eram FALSAS** e nenhum gate as lia | `--check` compara BYTE a byte; `test_gen_settings_user_template.py` fecha a integridade do spec (exclusão morta, override morto, classe fora do vocabulário, `reason`/`evidence` vazios, chave de topo não-declarada ⇒ vermelho) |
 +| **Critério** | prosa que **não se sustentava**: dos 10 «bloqueia ou exige GPG», só 5 sustentam (§2) | uma linha em `_derivation.criterion`, e cada exclusão com `class` de vocabulário fechado + `reason` + `evidence` linha-a-linha |
-+| **Roster entregue** | 20 registros | **30 registros** (29 basenames): 10 hooks entram por MÉRITO, nenhum sai |
++| **Roster entregue** | 20 registros | **29 registros** (28 basenames): a classificação mandou 10 por MÉRITO; o Owner reverteu 1 na r7 (§7.12); nenhum sai |
 +
 +## 2. Antes/depois por registro
 +
 +Base enumera **47** registros (46 `.py` em 45 basenames distintos, mais **1
 +comando INLINE** sem script — ver §3.1). O template `user` passa de **20** para
-+**30**; o conjunto só-na-base cai de 27 para **17**, e os 17 são exatamente as
++**29**; o conjunto só-na-base cai de 27 para **18**, e os 18 são exatamente as
 +`exclude_hooks` do spec. Predições da classificação (§3 «notas»): 30 registros,
-+29 basenames, 17 base-only — **as três batem exatamente** na medição do
-+artefato gerado.
++29 basenames, 17 base-only — **as três bateram exatamente** na medição
++PRÉ-decisão; após a reversão do Owner (§7.12) o artefato gerado mede
++**29 / 28 / 18**.
 +
-+### 2.1 Os 10 que ENTRAM (nenhum removido)
++### 2.1 Os 10 que a classificação mandou ENTRAR (nenhum removido; 9 entram — §7.12)
 +
 +| Evento / hook | Por que entra (classificação §1.1) |
 +|---|---|
@@ -306,14 +317,14 @@ index 0000000..ee231d7
 +| `PostToolUse` / `accel_dispatch.py` | advisory, fail-OPEN; já viajava no plugin advisory |
 +| `PostToolUse` / `check_skill_reference_read.py` | observer; a metade EMISSORA (`check_agent_spawn.py`) já está no perfil user — sem ele o contrato ADR-051 do adopter é inauditável |
 +| `PostToolUseFailure` / `check_output_secrets.py` | a 2ª registração de um hook JÁ retido: uma ferramenta que **falha** é onde stack-trace vaza segredo |
-+| `PreToolUse` / `check_scratchpad_access.py` | guarda `scratchpad.py`, que o perfil user **recebe**; não bloqueia edição e não usa sentinel |
++| `PreToolUse` / `check_scratchpad_access.py` | guarda `scratchpad.py`, que o perfil user **recebe**; não bloqueia edição e não usa sentinel — **revertido pelo Owner na r7: EXCLUIR (§7.12)** |
 +| `SessionStart` / `turbo_sessionstart.py` | só `additionalContext`; já no plugin advisory |
 +| `Setup` / `check_setup_verification.py` | fecha «hook no disco mas não registrado»; valor puro para quem não roda `validate-governance.sh` à mão |
 +| `Stop` / `codex_review_user_code.py` | o propósito declarado é revisar o código DO ADOPTER |
 +| `Stop` / `review_loop.py` | inerte por default (`CEO_REVIEW_LOOP` é opt-in) |
 +| `SubagentStart` / `check_subagent_start.py` | **repara assimetria existente**: `check_fluency_nudge.py` (`SubagentStop`) já está no user e é o CONSUMIDOR deste sidecar |
 +
-+### 2.2 Os 17 que FICAM DE FORA, por classe
++### 2.2 Os 18 que FICAM DE FORA, por classe
 +
 +`criterion` (uma linha, no spec): *fica de fora todo hook que (a) bloqueia uma
 +chamada de ferramenta sem rota advisory, (b) exige infraestrutura de cerimônia
@@ -323,7 +334,7 @@ index 0000000..ee231d7
 +| `class` | N | Hooks |
 +|---|---|---|
 +| `exige-gpg-sentinel` | 3 | `check_canonical_edit`, `check_skill_patch_sentinel`, `check_tier_policy` |
-+| `bloqueia-edicao` | 3 | `check_arbitration_kernel`, `check_plan_edit`, `check_adversary` |
++| `bloqueia-edicao` | 4 | `check_arbitration_kernel`, `check_plan_edit`, `check_adversary`, `check_scratchpad_access` (§7.12) |
 +| `exige-infra-ausente-no-user` | 2 | `check_pair_rail`, `check_protocol_semver_cascade` |
 +| `maintainer-only-por-desenho` | 9 | `check_codex_filewrite`, `check_worktree_writer`, `check_bash_canonical_forensic`, `check_skill_bootstrap_post`, `check_closeout_guard`, `check_ledger_checkpoint`, `check_compact_pinning`, `check_postcompact_reinject`, `check_precompact_continuity` |
 +
@@ -577,8 +588,8 @@ index 0000000..ee231d7
 +Fecha com dois invariantes de direção:
 +`test_the_shipped_roster_loses_nothing_the_frozen_copy_had` (a única direção
 +que seria REGRESSÃO para um adopter) e
-+`test_what_the_shipped_roster_gained_is_exactly_what_was_ruled_in` (os 10 de
-+§2.1, declarados com fonte).
++`test_what_the_shipped_roster_gained_is_exactly_what_was_ruled_in` (o veredito
++de §2.1 — 9 registrações após a reversão de §7.12 — declarado com fonte).
 +
 +### CONTROLE POSITIVO ao vivo, no artefato real
 +
@@ -609,7 +620,8 @@ index 0000000..ee231d7
 +nenhuma das suítes que o briefing e a classificação nomeiam a cobre.
 +
 +**Nota sobre o e2e — por que 69 e não os 71 do briefing.** Rodado DUAS vezes:
-+uma no estado provisional (roster 20) e outra no final (roster 30). **As duas
++uma no estado provisional (roster 20) e outra no estado pós-reconciliação
++(roster 30; o final, pós-§7.12, é 29). **As duas
 +deram 69 passed / 0 failed**, o que é evidência direta de que a mudança de
 +roster não moveu nada no e2e. O delta contra 71 é **independente do patch**:
 +`E.3` e `E.9` replicam o upgrader PRÉ-CURA a partir de `git show HEAD:...` e,
@@ -689,7 +701,8 @@ index 0000000..ee231d7
 +
 +**Evidência POSITIVA que vem junto:** esse teste faz um `install --ceremony
 +user` REAL, e o install **passou** (`returncode == 0`), produzindo um
-+`settings.json` com exatamente **30 registros** — os 20 antigos mais os 10 da
++`settings.json` com exatamente **30 registros** na medição da época
++(pré-§7.12; o mesmo install hoje produz 29) — os 20 antigos mais os 10 da
 +§2.1, incluindo a 2ª registração de `check_output_secrets.py` e o `echo`
 +inline. É a prova de campo de que o template gerado instala.
 +
@@ -1201,12 +1214,64 @@ index 0000000..ee231d7
 +alguém pensou não é contrato.
 +
 +Bateria **261 → 266**.
++
++### 7.12 A decisão do Owner (pós-r7), e a exclusão do scratchpad guard
++
++A rodada 7 (registro: `rail-round-7.md`) saiu `CHANGES-REQUESTED` com dois P2:
++um curado na hora (alvo malformado sob `--check --spec` escapava como traceback
++ou era nomeado DRIFT — os dois casos agora saem `RC_INFRA == 2` com o arquivo
++nomeado), e um que era **chamada do Owner**: `check_scratchpad_access.py` casa
++por SUFIXO (`_tokens_target_scratchpad`, `check_scratchpad_access.py:96-120` —
++folga deliberada para fixtures), então um adopter `--ceremony user` que rode o
++PRÓPRIO script chamado `scratchpad.py` com `--plan X` levaria bloqueio de um
++guard que existe para proteger o CLI do framework — sem rota praticável, contra
++o critério (a) que o próprio spec declara. A cura da r6 (empacotar o CLI no
++plugin) fechou «guard sem sujeito», mas não estreita o matcher.
++
++**Decisão do Owner (2026-08-30): opção (a) — EXCLUIR o hook do perfil user**,
++revertendo o INCLUIR-NO-USER da classificação §1.1 (que fora produzido pelo
++critério ANTIGO, substituído pela própria wave — a mesma defasagem
++lista-vs-regra da r2, um nível abaixo). Mecânica, toda por DADO no spec:
++
++* `_derivation.exclude_hooks` ganha a entrada (classe `bloqueia-edicao`,
++  reason nomeando o falso positivo e a decisão, evidence com linhas): 17 → 18.
++* `_derivation.blocking_inclusions` perde a entrada: 5 → 4.
++* Roster gerado: 30 → **29 registrações** (28 basenames); delta de bytes do
++  template: +22.360 → **+22.001 B** (37.819 B totais).
++* O plugin segue derivado do template e perde a registração E o CLI:
++  `copy_guarded_clis` já era condicional («guard not registered → CLI not
++  needed») — zero edição em `build-plugin.py`. O `scratchpad.py` continua
++  instalado nas duas cerimônias pelo `install.sh` (classificação §5, item 15).
++* `RULED_IN` do teste: 10 → 9 tuplas, no MESMO patch que o spec (o comentário
++  da lista exige exatamente isso); o completeness test de
++  `blocking_inclusions` re-deriva do roster novo e não precisou de edição.
++
++Estreitar o matcher no hook (opção b) ficou registrado como defensável e
++não-escolhido: tocaria arquivo fora do FILE ASSIGNMENT desta cerimônia e os
++testes próprios do hook assumem a folga de caminho.
++
++A propagação da decisão atravessou mais duas rodadas do rail. A **r8** revisou
++a sombra com a cura aplicada e flagrou — corretamente — que os materiais de
++cerimônia commitados na árvore ainda diziam 30/10: a cura dos materiais vivia
++no working tree do checkout vivo, invisível ao clone que o revisor lê. A
++resposta foi estrutural (commit dos materiais no vivo + rebase da sombra), e é
++por isso que a rodada seguinte revisou uma árvore CONSISTENTE. A **r9** trouxe
++os dois últimos membros da família «declaração aceita e ignorada»:
++`_derivation.generator` validado só por PRESENÇA (um caminho vazio ou errado
++sobrevivia ao round-trip `--write`/`--check` apontando o leitor para nada), e
++o override que vira NO-OP quando a base evolui até o valor declarado — com
++reason/evidence sobrevivendo como «exceção documentada» que não existe. Curas
++com controle vermelho→verde medido (5 failed / 3 passed → 8 passed, classe
++`NoOpDeclarationsAreRejected`; arquivo nuclear 112 → 120 casos; bateria
++267 → 275). O P1 da r9 (falta de sentinel assinado) foi refutado como
++descrição do próprio fluxo pré-assinatura — registros em `rail-round-8.md` e
++`rail-round-9.md`.
 diff --git a/.claude/scripts/gen-settings-user-template.py b/.claude/scripts/gen-settings-user-template.py
 new file mode 100644
-index 0000000..005f970
+index 0000000..524d03a
 --- /dev/null
 +++ b/.claude/scripts/gen-settings-user-template.py
-@@ -0,0 +1,1256 @@
+@@ -0,0 +1,1333 @@
 +#!/usr/bin/env python3
 +"""Generate ``templates/settings/settings.user.json`` from the base template.
 +
@@ -1314,6 +1379,11 @@ index 0000000..005f970
 +
 +BASE_REL = "templates/settings/settings.base.json"
 +USER_REL = "templates/settings/settings.user.json"
++#: The one regeneration mechanism the artifact may advertise. `source` is
++#: validated by VALUE below; `generator` was validated by PRESENCE only,
++#: so an empty or wrong path survived `--write`/`--check` round-trips
++#: while pointing readers at nothing (pair-rail round 9).
++GEN_REL = ".claude/scripts/gen-settings-user-template.py"
 +SPEC_KEY = "_derivation"
 +
 +RC_OK = 0
@@ -1619,6 +1689,16 @@ index 0000000..005f970
 +            "spec `source` must be %r (found %r) — this generator derives from "
 +            "the base template and nothing else" % (Path(BASE_REL).name, spec.get("source"))
 +        )
++    # Same ruler as `source`, one line down: the artifact ADVERTISES its
++    # regeneration mechanism, and generate() round-trips the spec, so a
++    # wrong or empty path here stays green forever (pair-rail round 9).
++    if spec.get("generator") != GEN_REL:
++        raise SpecError(
++            "spec `generator` must be %r (found %r) — the artifact's own "
++            "pointer at how to regenerate it is a declaration like any "
++            "other, and an unvalidated one survives every round-trip"
++            % (GEN_REL, spec.get("generator"))
++        )
 +
 +    regs = base_registrations(base)
 +    reg_set: Set[Tuple[str, str]] = set(regs)
@@ -1767,6 +1847,22 @@ index 0000000..005f970
 +            )
 +        return 0
 +
++    def _base_site(event: str, name: str) -> Tuple[Any, Any]:
++        """The (block, entry) in the BASE for one retained (event, name).
++
++        Serves the no-op guards below: an override whose declared value is
++        byte-equal to what the base already carries changes no output byte,
++        so its reason/evidence would survive as stale justification for an
++        exception that no longer exists (pair-rail round 9).
++        """
++        for _blk in base.get("hooks", {}).get(event, []):
++            if not isinstance(_blk, dict):
++                continue
++            for _ent in _blk.get("hooks", []):
++                if isinstance(_ent, dict) and hook_basename(_ent.get("command")) == name:
++                    return _blk, _ent
++        return None, None
++
 +    # --- overrides --------------------------------------------------------
 +    for field in ("matcher_overrides", "annotation_overrides"):
 +        table = _as_dict(spec, field)
@@ -1842,6 +1938,21 @@ index 0000000..005f970
 +                        "DROPPED. Either exclude the other entries of that "
 +                        "block, or narrow the matcher in the base template."
 +                        % (raw_key, _kept)
++                    )
++                # Presence passed, scope passed — now the VALUE. If the
++                # base block already carries this exact matcher (because
++                # the base moved underneath the spec), the override is a
++                # NO-OP whose reason/evidence read as a live exception.
++                _blk, _ent = _base_site(live[0][0], live[0][1])
++                if _blk is not None and value["matcher"] == _blk.get("matcher", ""):
++                    raise SpecError(
++                        "`matcher_overrides[%s]` is a NO-OP: the base block "
++                        "already carries matcher %r, so the output is "
++                        "identical with or without it and its "
++                        "reason/evidence survive as stale justification. "
++                        "Delete the override, or update it to the value it "
++                        "should enforce (pair-rail round 9)."
++                        % (raw_key, value["matcher"])
 +                    )
 +            else:
 +                if not isinstance(value, dict):
@@ -1928,6 +2039,26 @@ index 0000000..005f970
 +                            "note to `reason`, or exclude the other entries."
 +                            % (raw_key, _kept)
 +                        )
++                # Same VALUE ruler as the matcher branch above: a field
++                # whose declared value equals what the base already has is
++                # a dead exception wearing a live reason (pair-rail r9).
++                _blk, _ent = _base_site(live[0][0], live[0][1])
++                for _field in sorted(hook_fields):
++                    if _ent is not None and _ent.get(_field) == hook_fields[_field]:
++                        raise SpecError(
++                            "`annotation_overrides[%s].hook.%s` is a NO-OP: "
++                            "the base entry already carries this exact "
++                            "value. Delete the field or update it "
++                            "(pair-rail round 9)." % (raw_key, _field)
++                        )
++                if ("_comment" in value and _blk is not None
++                        and _blk.get("_comment") == value["_comment"]):
++                    raise SpecError(
++                        "`annotation_overrides[%s]._comment` is a NO-OP: "
++                        "the base block already carries this exact comment. "
++                        "Delete it or update it (pair-rail round 9)."
++                        % raw_key
++                    )
 +
 +    # --- env --------------------------------------------------------------
 +    base_env = base.get("env", {})
@@ -2232,6 +2363,17 @@ index 0000000..005f970
 +    for generated, _where, _anchor in USER_ONLY_PLACEMENT:
 +        if generated not in out:
 +            out[generated] = value_for(generated)
++    # Same vanishing act, one table up: every COMPUTED key must reach the
++    # output even when the base omits its passthrough twin. A base without
++    # `env` is a shape `validate_spec` accepts, and losing `env` here silently
++    # drops every declared `env_override` — with the shipped spec that would
++    # ship `check_config_protection.py` BLOCKING instead of advisory; a
++    # missing base `_comment` likewise swallows the generated one (pair-rail
++    # round 10). `hooks` cannot be absent (validate_spec requires it) but is
++    # covered anyway: the rule is the TABLE, not a hand-picked subset of it.
++    for computed_key in TOP_LEVEL_COMPUTED:
++        if computed_key not in out and computed_key not in excluded:
++            out[computed_key] = value_for(computed_key)
 +    return out
 +
 +
@@ -2738,10 +2880,10 @@ index 0000000..67e0916
 +}
 diff --git a/.claude/scripts/tests/test_gen_settings_user_template.py b/.claude/scripts/tests/test_gen_settings_user_template.py
 new file mode 100644
-index 0000000..635eca0
+index 0000000..0a4624c
 --- /dev/null
 +++ b/.claude/scripts/tests/test_gen_settings_user_template.py
-@@ -0,0 +1,1840 @@
+@@ -0,0 +1,1969 @@
 +"""PLAN-169 wave-s330-F (OQ-E5) — the user template is DERIVED, not copied.
 +
 +Oracle for ``.claude/scripts/gen-settings-user-template.py`` and for the
@@ -3230,12 +3372,15 @@ index 0000000..635eca0
 +    #: (hook-classification-S330.md §1.1 "INCLUIR-NO-USER" + §1.2 + the one
 +    #: INCLUIR-COM-ENV). Declared with its source; changing the ruling means
 +    #: changing this list CONSCIOUSLY, in the same patch as the spec.
++    #: Owner ruling 2026-08-30 (rail-round-7 P2-a; spec exclude_hooks +
++    #: classification addendum): check_scratchpad_access.py was ruled back
++    #: OUT — its suffix matcher would block an adopter's homonymous
++    #: script with no practicable route.
 +    RULED_IN = (
 +        ("ConfigChange", "check_config_change.py"),
 +        ("PostToolUse", "accel_dispatch.py"),
 +        ("PostToolUse", "check_skill_reference_read.py"),
 +        ("PostToolUseFailure", "check_output_secrets.py"),
-+        ("PreToolUse", "check_scratchpad_access.py"),
 +        ("SessionStart", "turbo_sessionstart.py"),
 +        ("Setup", "check_setup_verification.py"),
 +        ("Stop", "codex_review_user_code.py"),
@@ -3833,8 +3978,11 @@ index 0000000..635eca0
 +    `check_scratchpad_access.py` violating it. The census that followed found
 +    the criterion was never a description of the PROFILE — ten of the kept
 +    hooks block, most of them since v1.0.0 — but also that FIVE of the nine
-+    hooks this wave ADDS can block, not one. Naming a single exception would
-+    have reproduced the defect at a smaller scale.
++    hooks the census ruled in could block, not one. Naming a single exception
++    would have reproduced the defect at a smaller scale. The Owner's r7
++    ruling later took the scratchpad guard back out (suffix matcher, no
++    route for an adopter's homonymous script), so the wave ships four
++    blocking hooks among the eight it adds.
 +
 +    So the criterion states its scope, and `blocking_inclusions` names every
 +    blocking hook the wave adds together with the adopter's actual route. The
@@ -3975,9 +4123,11 @@ index 0000000..635eca0
 +        """A completeness test that compares two empty sets proves nothing."""
 +        declared = _read(USER_TEMPLATE)["_derivation"].get("blocking_inclusions", [])
 +        self.assertGreaterEqual(
-+            len(declared), 5,
-+            "the wave was measured to add 5 blocking hooks; a shorter list "
-+            "means either the roster shrank or the declaration rotted")
++            len(declared), 4,
++            "the wave was measured to add 4 blocking hooks (5 until the "
++            "Owner ruling in r7 took check_scratchpad_access.py back out of "
++            "the roster); a shorter list means either the roster shrank or "
++            "the declaration rotted")
 +
 +    def test_the_criterion_states_its_own_scope(self) -> None:
 +        """The rule that the reviewer read as a biconditional now says it is not.
@@ -3989,6 +4139,127 @@ index 0000000..635eca0
 +        self.assertIn("EXCLUSAO", criterion)
 +        self.assertIn("blocking_inclusions", criterion)
 +        self.assertIn("rota praticavel", criterion)
++
++
++# ---------------------------------------------------------------------------
++# pair-rail round 10 — computed keys survive a base that omits their twin
++# ---------------------------------------------------------------------------
++
++class ComputedKeysSurviveABaseWithoutThem(TestEnvContext):
++    """Round 10: the output loop iterates BASE keys, so a computed key whose
++    passthrough twin is absent from the base never got emitted. A base without
++    `env` is a shape validate_spec accepts — and losing `env` silently drops
++    every declared env_override (with the shipped spec, that ships
++    check_config_protection.py BLOCKING instead of advisory). Same for a
++    missing base `_comment` swallowing the generated one."""
++
++    def setUp(self) -> None:
++        super().setUp()
++        self.base_no_env = {
++            "_comment": "c",
++            "model": "m",
++            "hooks": {"PreToolUse": [_group("Edit", _hook("python3 .claude/hooks/a.py"))]},
++        }
++
++    def test_env_overrides_survive_a_base_without_env(self) -> None:
++        spec = _minimal_spec(env_overrides={"CEO_X_ADVISORY": "1"})
++        GEN.validate_spec(spec, self.base_no_env)
++        out = GEN.generate(self.base_no_env, spec)
++        self.assertIn("env", out,
++                      "a declared env_override vanished with the base `env` key")
++        self.assertEqual(out["env"].get("CEO_X_ADVISORY"), "1")
++
++    def test_generated_comment_survives_a_base_without_comment(self) -> None:
++        base = {
++            "model": "m",
++            "hooks": {"PreToolUse": [_group("Edit", _hook("python3 .claude/hooks/a.py"))]},
++            "env": {"K": "1"},
++        }
++        spec = _minimal_spec()
++        GEN.validate_spec(spec, base)
++        out = GEN.generate(base, spec)
++        self.assertEqual(out.get("_comment"), GEN.GENERATED_COMMENT,
++                         "the generated _comment vanished with the base key")
++
++
++# ---------------------------------------------------------------------------
++# pair-rail round 9 — declarations validated by VALUE, not presence
++# ---------------------------------------------------------------------------
++
++class NoOpDeclarationsAreRejected(TestEnvContext):
++    """Round 9 of the rail: two more members of the accepted-then-ignored family.
++
++    (a) `_derivation.generator` was checked for PRESENCE only, so an empty or
++        wrong path round-tripped through `--write`/`--check` green while the
++        artifact advertised a regeneration mechanism that does not exist.
++    (b) an override whose declared value is byte-equal to what the base
++        already carries (because the base moved underneath it) changes no
++        output byte, so its reason/evidence survive as stale justification
++        for an exception that no longer exists.
++    """
++
++    def setUp(self) -> None:
++        super().setUp()
++        self.base = {
++            "_comment": "c",
++            "model": "m",
++            "hooks": {"PreToolUse": [_group(
++                "Edit",
++                _hook("python3 .claude/hooks/a.py", statusMessage="base msg"),
++                _comment="base block comment",
++            )]},
++            "env": {"K": "1"},
++        }
++
++    def _rejects(self, spec, fragment):
++        with self.assertRaises(GEN.SpecError) as ctx:
++            GEN.validate_spec(spec, self.base)
++        self.assertIn(fragment, str(ctx.exception))
++
++    # -- (a) generator path ------------------------------------------------
++
++    def test_wrong_generator_path_is_rejected(self) -> None:
++        self._rejects(
++            _minimal_spec(generator=".claude/scripts/some-other-script.py"),
++            "generator")
++
++    def test_empty_generator_is_rejected(self) -> None:
++        self._rejects(_minimal_spec(generator=""), "generator")
++
++    def test_the_shipped_generator_path_is_the_one_accepted(self) -> None:
++        GEN.validate_spec(_minimal_spec(), self.base)  # must not raise
++
++    # -- (b) no-op overrides ----------------------------------------------
++
++    def test_noop_matcher_override_is_rejected(self) -> None:
++        self._rejects(
++            _minimal_spec(matcher_overrides={"a.py": {
++                "matcher": "Edit", "reason": "r", "evidence": "e"}}),
++            "NO-OP")
++
++    def test_changed_matcher_override_is_accepted(self) -> None:
++        GEN.validate_spec(
++            _minimal_spec(matcher_overrides={"a.py": {
++                "matcher": "Edit|Write", "reason": "r", "evidence": "e"}}),
++            self.base)
++
++    def test_noop_annotation_field_is_rejected(self) -> None:
++        self._rejects(
++            _minimal_spec(annotation_overrides={"a.py": {
++                "hook": {"statusMessage": "base msg"}, "reason": "r"}}),
++            "NO-OP")
++
++    def test_changed_annotation_field_is_accepted(self) -> None:
++        GEN.validate_spec(
++            _minimal_spec(annotation_overrides={"a.py": {
++                "hook": {"statusMessage": "new msg"}, "reason": "r"}}),
++            self.base)
++
++    def test_noop_block_comment_is_rejected(self) -> None:
++        self._rejects(
++            _minimal_spec(annotation_overrides={"a.py": {
++                "_comment": "base block comment", "reason": "r"}}),
++            "NO-OP")
 +
 +
 +# ---------------------------------------------------------------------------
@@ -4867,7 +5138,7 @@ index c68fd1b..b5fc460 100644
  > `bash .claude/scripts/local/verify-counts.sh`.
  
 diff --git a/CLAUDE.md b/CLAUDE.md
-index 69853da..fd7c233 100644
+index e71cabe..16138b6 100644
 --- a/CLAUDE.md
 +++ b/CLAUDE.md
 @@ -51,7 +51,7 @@ library — you install it *into* an existing repository with
@@ -4879,6 +5150,17 @@ index 69853da..fd7c233 100644
  
  A note this repo keeps deliberately: **there is no speed claim.** Six
  internal experiments found no general speedup over an optimized solo
+@@ -106,8 +106,8 @@ workflow — the value here is governance and auditability, not throughput.
+ - **Cerimônia `wave-cli` (PLAN-182 OQ-6 + Axis 3) LANDADA em `3d16070` (S326, 2026-08-24; assinada pelo Owner, `OWNER-S326-LAND.sh` V1–V6 verdes com live-fire delta 0) — 12 paths, 1 assinatura, 9 rodadas de pair-rail.** `_lib/runtime_paths.py` ganha `__main__` (CLI `[--state-dir|--slug|--project-dir] [--project PATH]`, contrato no docstring), os 2 templates de pre-push e `ceo-backup/restore` chamam o resolvedor (walk-up exige `.claude/.framework-version` — o `~/.claude` GLOBAL não é projeto; fallback ao projeto do `BASH_SOURCE` para o cron documentado; sem projeto ⇒ exit 2 alto), `_DECLARED_DEBT` esvaziada com asserção POSITIVA, testes do CLI, manifesto ADR-192 com o sha novo de `verify-counts.sh`. Materiais em `PLAN-182/`: `wave-cli-approved.md` (sentinel-draft; SIGN preenche Anchor/Data/Approved-By), `OWNER-S326-SIGN.sh` (P0: modificação rastreada aborta; untracked tolerado só com oráculo=0), `OWNER-S326-LAND.sh` (G0 por oráculo `--is-canonical` + porcelain `-z` com rename abortando + materiais rastreados; G4 `touched − scope = ∅`; V1–V6 com live-fire delta 0; passo S stageia EXATAMENTE `touched ∪ {sentinel, .asc}` com `cmp`), `cli-ceremony/` (patch, PROPOSED, registros `rail-round-1..8` + `rail-materials-round-1..3`). O rail achou e curou, entre outros: snapshot vivo perdido em workers xdist, `atexit` LIFO vazando um dir por processo, `git add -u` que nunca inclui o `.asc`, espelho incompleto de `_CANONICAL_GUARDS` no G0. Fluxo: `SIGN` → `LAND --dry-run` → `LAND` → `git commit` → `git push` (memória: `project-s326-session-state` §RETOMAR AQUI).
+ - **PLAN-185 (escrita insegura do installer) — W1+W2+W3 LANDADAS em `cc00235` (S329, 2026-08-27, assinatura GPG do Owner); W0 commitado e PARADO como ratchet.** F1 (symlink/hardlink pendente escrevia FORA do `$TARGET`) e F2 (`--github-owner` com `/` deixava o `.github/CODEOWNERS` com 0 bytes para sempre) fecham com UM predicado de confinamento de destino na biblioteca (`_wbm_dst_refuses` em `scripts/_framework_manifest_set.sh`; política no chamador — `install.sh` pré-voa TODOS os destinos antes da primeira escrita e recusa NOMEADO, `upgrade.sh` consome via `_wbm_nlink`), gramática única do handle (`_wbm_github_handle_ok`, produtor e consumidor), render em pipe + escrita atômica e recuperação do CODEOWNERS por EVIDÊNCIA de entrega. Evidência: e2e `test-installer-write-safety-e2e.sh` 105/0 em BYTES (controle 22/33 pré-cura), 5 rodadas de rail, ADR-196, `docs/threat-model.md`. **O censo** (`check-installer-write-safety.py`, 838 sítios) parou por anti-padrão 6 depois de 3 arquiteturas de regra e 7 levas de rail da classe «forma não modelada ⇒ fail-open» — vive como RATCHET fail-closed no `validate.yml` com pontos cegos declarados (`OQ-W0-STOP`); qualquer wave que toque `scripts/` regenera o baseline no MESMO patch. Abertos por desenho: FU-1 (o censo não modela «predicado domina» — a régua do AC-3), FU-7 (`doctor.sh` não convertido), TOCTOU entre predicado e escrita (bash sem `openat`). O flip `executing → done` foi RATIFICADO e feito na S330 (`1c34eb5`; FU-1/FU-7 entram como `PLAN-185-FOLLOWUP-<slug>`, PLAN-SCHEMA §1.4). **Colateral medido:** o `Smoke Install` de `cc00235` REPROVOU num oráculo FORA do patch (D3 S.1 localizava o render do CODEOWNERS pela forma `sed` pré-W2; 10 steps `skipped`) — curado em `adb6e84`. O V6 do LAND roda o `smoke-install.sh`, não os oráculos de rota que grepam `install.sh`: a bateria de um LAND que toca o installer inclui esses steps, e todo localizador literal migra no mesmo patch.
+ - **Night-runs S328/S329 (25–27/08, contas alternativas por quota, ~22 h autônomas): A, B, D, C e E LANDADOS pelo Owner via `OWNER-S328-MORNING.sh` / `OWNER-S329-MORNING.sh` (`4bd7def`, `3bc3638`, `b07be9b`, `cc00235`, `5930974`).** A = PLAN-183 W5-b (ADR-194 `ACCEPTED`; OQ-4 «Pista MISTA — braço C» retroativa a `6304f66`; discriminante line-exact no `install.sh`). B = gate hook-latency com chave RELATIVA (`hook_p50 ≤ K_e × ref_p50`, fase 1 advisory — a sonda de spawn é cega a runner lento). D = pack `staged-w24` (3 ações, ADR-195, SPEC v2.59). **Fatos medidos que ficam:** `used_pct` do sidecar NÃO prova exaustão (`five_hour`=35 % no instante da recusa `session limit`); agentes mortos por quota RETOMAM por `SendMessage` ao nome, com transcript — o mecanismo de continuidade que funcionou nas duas noites; `check-threat-model-freshness.py` ESCREVE `docs/threat-model.md` (accepted→stale) e derruba o P0 de qualquer SIGN — o MORNING reverte só esse flip; o rail codex corrente NÃO emite `VERDICT:` (rodada limpa = ausência do bloco `Full review comments:`); `git log --since=<N>h` é approxidate-MISPARSE silencioso (`168h` é descartado e a janela colapsa) — 2 sítios curados + 12 regressões (`9af6114`/`d1817bc`); a classe audit_emit-stale (teste que patcha o módulo importado no topo enquanto o código resolve `from _lib import audit_emit` NA CHAMADA) ganhou instrumento AST e 9 sítios com lookup vivo (`41fe0c9`; U2 FECHADA, FRAGIL 0). **Regras que a noite pagou:** enquanto um pack MANIFEST-based espera assinatura, nenhum destino pré-existente dele pode ser editado — o BASELINE é o hash do vivo (o land de A invalidou o pack D duas vezes; cura por ITEM, `2de5bb4`); docs GERADOS entram na bateria de TODO land (`f787cf2`); harness com materiais/plant JÁ em HEAD segue com index vazio (`d9d9cab`); `EXPECTED_*` declarado à mão envelhece — atualizar CONSCIENTEMENTE com fontes, nunca relaxar; harness verde SEM TTY não prova a cerimônia do Owner (`[[ -t 0 ]]` no `install.sh`; controle = `script` pseudo-TTY); LANDs preservam os logs caros no abort (`3cb8977`).
+-- **Pacote E (`5930974`): `upgrade.sh` DERIVA o roster de hooks do template da CERIMÔNIA — e 7 rodadas de rail sobre a sombra RE-DERIVADA acharam 4 P1 reais que as 5 rodadas «limpas» da noite não viram.** O land de C tocou 2 dos 5 paths de E; o guard de drift do finalize abortou (certo) e a sombra foi re-derivada por item (hunks disjuntos no `upgrade.sh`; `smoke-install.yml` composto, `timeout-minutes` 83+43=126 — `max` sub-dimensionaria o job). O rail r6–r12 sobre ESSA sombra: o merge ignorava a cerimônia (perfil `user` viraria `maintainer` no upgrade); o `.env` do template não viajava com os `.hooks` (hook advisory chegaria BLOQUEANTE); cerimônia INFERIDA (sem install-state e sem flag — o `user` do resolver é só fail-safe de escrita na raiz) era tratada como gravada; e a primeira cura disso (interseção dos perfis) ainda vazava ⇒ arquitetura trocada: **sem cerimônia dita, NENHUM hook** — só as settings comuns, `PARTIAL (ceremony unknown)`, opt-in `--ceremony`. Cada rodada com controle vermelho; unit 49 → 88, e2e 51 → 71; r12 limpa. **Regra:** rodada limpa prova a SUPERFÍCIE revisada, não o entregável — sombra re-derivada ganha o rail inteiro; cura que gera o achado seguinte pede troca de ARQUITETURA. **OQ-E5 RATIFICADA (S330, 2026-08-27) — wave-s330-F EM CURSO:** `settings.user.json` estava DEFASADO (26 só-na-base) e a classificação POR MÉRITO (`4f4df3a`) mediu que a aritmética «10 deliberados + 16 defasados» sobrevive mas a semântica não — dos 10, só 5 sustentam o critério declarado, 2 saem da lista, e 13 dos 16 já faltavam na v1.0.0; veredito 17 EXCLUIR / 9 INCLUIR, roster `user` 20 → 30 registros. Cura = template DERIVADO da base por subtração DECLARADA na chave `_derivation` do próprio arquivo (`gen-settings-user-template.py --check/--write`, paridade com controle vermelho), código PRONTO e verificado na sombra — snapshot final commitado em `6a51eca` (6 paths; 164 testes verdes incl. o oráculo de install `user` que derivava de uma 2ª cópia congelada da lista de 10 — curado para ler o spec); falta rail codex + pack + cerimônia. Obrigações do land: reconciliar o bloco `ACCEL` de `scripts/build-plugin.py` (4 hooks passam a vir do template — duplicata no plugin) e o `EXPECTED_TEMPLATE_REGISTRATIONS_USER=20` congelado no pacote E. O `timeout-minutes` 126 do `Smoke Install` é ESTIMATIVA: medidos `adb6e84` (só C) 1h08 e `5930974` (C+E) 58 min — re-apertar no p95 com ≥3 amostras.
+-- **wave-s330-F (PLAN-169 OQ-E5) PRONTA menos UMA DECISÃO do Owner — pacote `89747e8`, código `c0536cf` (20 paths, bateria 267/2); 7 rodadas de pair-rail, 11 defeitos REAIS, todos na própria cura.** O perfil `user` vira DERIVADO da base por subtração declarada na chave `_derivation` (roster 20 → 30), com `gen-settings-user-template.py --check` byte-a-byte, step no `validate.yml` (OQ-F3), **ADR-197** (novo, não AMEND: nenhum ADR-pai decide o roster) e o **FU-F-ACCEL no mesmo patch** — a tabela `ACCEL` do `build-plugin.py` era 3ª cópia divergente (`review_loop` 60 s vs os 15 da base E do repo vivo) e sumiu; o marcador de dívida virou guard permanente. **A decisão que falta:** `check_scratchpad_access.py` casa por SUFIXO ⇒ o adopter que rode o PRÓPRIO `scratchpad.py --plan X` leva bloqueio sem rota, contra o critério que a wave declara. Recomendação: EXCLUIR (o «INCLUIR» veio do critério ANTIGO que o documento substituiu). O `SIGN` recusa até lá, por desenho — detalhe em `s330-ceremony-F/rail-round-7.md`. **O rail achou a MESMA forma onze vezes** (declaração aceita e depois ignorada em silêncio): campo gerado sumindo com a âncora — perder `_derivation` deixa o artefato incapaz de ler o próprio spec —, o critério não batendo com a própria lista, typo `events` virando exclusão TOTAL de hook de segurança, **proveniência ≠ localização** (spec untracked DENTRO da árvore dirigia `--write`), e o `git status --porcelain` que **mente sob `skip-worktree`** (a cura pergunta pelos BYTES). **Lições de método:** (1) *teste cuja segurança depende do código que ele testa não é teste* — o controle vermelho da r3 corrompeu o `settings.user.json` shipado e o `--check` saiu **rc 0** sobre a destruição (o arquivo batia com o spec falso que passara a carregar); caso de ESCRITA roda em árvore descartável. (2) `EXPECTED_CEREMONY_LINT_BLOCKING` era LIDA pelo LAND e não declarada — `_expect` é fail-CLOSED, o land abortaria DEPOIS de aplicar o patch; achado por conferência manual, não pelo rail, curado com o guard T0. **Aberto (FU-F-ADRGATE):** `check-adr-chain.py` e `generate-adr-index.py` **não rodam em CI** — índice congelado em 170 ADRs com 198 no disco; cadeia rc 1 com 11 erros pré-existentes (o ADR-197 não acrescenta nenhum, medido).
++- **Pacote E (`5930974`): `upgrade.sh` DERIVA o roster de hooks do template da CERIMÔNIA — e 7 rodadas de rail sobre a sombra RE-DERIVADA acharam 4 P1 reais que as 5 rodadas «limpas» da noite não viram.** O land de C tocou 2 dos 5 paths de E; o guard de drift do finalize abortou (certo) e a sombra foi re-derivada por item (hunks disjuntos no `upgrade.sh`; `smoke-install.yml` composto, `timeout-minutes` 83+43=126 — `max` sub-dimensionaria o job). O rail r6–r12 sobre ESSA sombra: o merge ignorava a cerimônia (perfil `user` viraria `maintainer` no upgrade); o `.env` do template não viajava com os `.hooks` (hook advisory chegaria BLOQUEANTE); cerimônia INFERIDA (sem install-state e sem flag — o `user` do resolver é só fail-safe de escrita na raiz) era tratada como gravada; e a primeira cura disso (interseção dos perfis) ainda vazava ⇒ arquitetura trocada: **sem cerimônia dita, NENHUM hook** — só as settings comuns, `PARTIAL (ceremony unknown)`, opt-in `--ceremony`. Cada rodada com controle vermelho; unit 49 → 88, e2e 51 → 71; r12 limpa. **Regra:** rodada limpa prova a SUPERFÍCIE revisada, não o entregável — sombra re-derivada ganha o rail inteiro; cura que gera o achado seguinte pede troca de ARQUITETURA. **OQ-E5 RATIFICADA (S330, 2026-08-27) — wave-s330-F EM CURSO:** `settings.user.json` estava DEFASADO (26 só-na-base) e a classificação POR MÉRITO (`4f4df3a`) mediu que a aritmética «10 deliberados + 16 defasados» sobrevive mas a semântica não — dos 10, só 5 sustentam o critério declarado, 2 saem da lista, e 13 dos 16 já faltavam na v1.0.0; veredito 18 EXCLUIR / 8 INCLUIR, roster `user` 20 → 29 registros. Cura = template DERIVADO da base por subtração DECLARADA na chave `_derivation` do próprio arquivo (`gen-settings-user-template.py --check/--write`, paridade com controle vermelho), código PRONTO e verificado na sombra — snapshot final commitado em `6a51eca` (6 paths; 164 testes verdes incl. o oráculo de install `user` que derivava de uma 2ª cópia congelada da lista de 10 — curado para ler o spec); falta rail codex + pack + cerimônia. Obrigações do land: reconciliar o bloco `ACCEL` de `scripts/build-plugin.py` (4 hooks passam a vir do template — duplicata no plugin) e o `EXPECTED_TEMPLATE_REGISTRATIONS_USER=20` congelado no pacote E. O `timeout-minutes` 126 do `Smoke Install` é ESTIMATIVA: medidos `adb6e84` (só C) 1h08 e `5930974` (C+E) 58 min — re-apertar no p95 com ≥3 amostras.
++- **wave-s330-F (PLAN-169 OQ-E5) PRONTA menos UMA DECISÃO do Owner — pacote `89747e8`, código `c0536cf` (20 paths, bateria 275/2); 7 rodadas de pair-rail, 11 defeitos REAIS, todos na própria cura.** O perfil `user` vira DERIVADO da base por subtração declarada na chave `_derivation` (roster 20 → 29), com `gen-settings-user-template.py --check` byte-a-byte, step no `validate.yml` (OQ-F3), **ADR-197** (novo, não AMEND: nenhum ADR-pai decide o roster) e o **FU-F-ACCEL no mesmo patch** — a tabela `ACCEL` do `build-plugin.py` era 3ª cópia divergente (`review_loop` 60 s vs os 15 da base E do repo vivo) e sumiu; o marcador de dívida virou guard permanente. **A decisão que falta:** `check_scratchpad_access.py` casa por SUFIXO ⇒ o adopter que rode o PRÓPRIO `scratchpad.py --plan X` leva bloqueio sem rota, contra o critério que a wave declara. Recomendação: EXCLUIR (o «INCLUIR» veio do critério ANTIGO que o documento substituiu). O `SIGN` recusa até lá, por desenho — detalhe em `s330-ceremony-F/rail-round-7.md`. **O rail achou a MESMA forma onze vezes** (declaração aceita e depois ignorada em silêncio): campo gerado sumindo com a âncora — perder `_derivation` deixa o artefato incapaz de ler o próprio spec —, o critério não batendo com a própria lista, typo `events` virando exclusão TOTAL de hook de segurança, **proveniência ≠ localização** (spec untracked DENTRO da árvore dirigia `--write`), e o `git status --porcelain` que **mente sob `skip-worktree`** (a cura pergunta pelos BYTES). **Lições de método:** (1) *teste cuja segurança depende do código que ele testa não é teste* — o controle vermelho da r3 corrompeu o `settings.user.json` shipado e o `--check` saiu **rc 0** sobre a destruição (o arquivo batia com o spec falso que passara a carregar); caso de ESCRITA roda em árvore descartável. (2) `EXPECTED_CEREMONY_LINT_BLOCKING` era LIDA pelo LAND e não declarada — `_expect` é fail-CLOSED, o land abortaria DEPOIS de aplicar o patch; achado por conferência manual, não pelo rail, curado com o guard T0. **Aberto (FU-F-ADRGATE):** `check-adr-chain.py` e `generate-adr-index.py` **não rodam em CI** — índice congelado em 170 ADRs com 198 no disco; cadeia rc 1 com 11 erros pré-existentes (o ADR-197 não acrescenta nenhum, medido).
+ - **Bus factor.** Single primary maintainer; treat operational continuity accordingly.
+ - **Same-vendor reviewer caveat.** The pair-rail reduces single-model blind spots but does not eliminate shared-vendor or shared-training-data failure modes.
+ - **Formal model not in CI.** A TLA+ specification of the core state machine exists (`docs/formal-verification/`), but model-checking is not yet wired into CI — these are specifications, not a "formally verified" claim.
 diff --git a/README.md b/README.md
 index 8fd0e89..263cf6d 100644
 --- a/README.md
@@ -5212,10 +5494,10 @@ index ea0cd37..1b1b8cc 100644
      write_marketplace()
      sanitize_paths()
 diff --git a/templates/settings/settings.user.json b/templates/settings/settings.user.json
-index 67e0916..b185ff2 100644
+index 67e0916..e5c3fa0 100644
 --- a/templates/settings/settings.user.json
 +++ b/templates/settings/settings.user.json
-@@ -1,9 +1,241 @@
+@@ -1,9 +1,242 @@
  {
 -  "_comment": "CEO Orchestration — USER ceremony settings (PLAN-122 WS-4). Derived from settings.base.json by REMOVING exactly the 10 governance/sentinel/kernel hooks that block edits or require GPG/sentinel ceremony infra (check_plan_edit, check_arbitration_kernel, check_tier_policy, check_canonical_edit, check_protocol_semver_cascade, check_skill_patch_sentinel, check_scratchpad_access, check_skill_reference_read, check_skill_bootstrap_post, check_bash_canonical_forensic). Every RETAINED entry's BEHAVIORAL fields (matcher/command/timeout) are byte-identical to settings.base.json; some _comment annotations differ (the retained UserPromptSubmit entry carries an added PLAN-122 optimizer note). The advisory/safety scanners AND the UserPromptSubmit optimizer recommender (the whole point of the user profile) are KEPT — none of them block adopter code, and they never need a sentinel or GPG. All hook FILES are still copied to disk by install.sh so validate-governance.sh REQUIRED_FILES are satisfied; the governance subset is simply not registered, so it is dormant for the no-GPG user profile.",
 +  "_comment": "CEO Orchestration - USER ceremony settings. GENERATED FILE, do not hand-edit: every hook registration, env key and top-level value below is DERIVED from templates/settings/settings.base.json by .claude/scripts/gen-settings-user-template.py, applying the subtraction declared in the `_derivation` key of this same file. To change what the user profile carries, edit `_derivation` and re-run the generator with --write; CI re-runs it with --check and reddens on any drift. The rule the exclusions follow is stated once, in `_derivation.criterion`, and every excluded hook carries its own class, reason and evidence. Retained entries are byte-identical to the base template, including their `_comment` annotations, except where `_derivation.matcher_overrides` or `_derivation.annotation_overrides` declares a difference and says why. All hook FILES are still copied to disk by install.sh, so validate-governance.sh REQUIRED_FILES stay satisfied; an omitted hook is simply never registered, and is therefore dormant for the no-GPG user profile.",
@@ -5236,11 +5518,6 @@ index 67e0916..b185ff2 100644
 +        "hook": "check_config_change.py",
 +        "route": "CEO_CONFIG_CHANGE_GUARD=0 (a chave entra em env_overrides com o valor 1 EXPLICITO, para que o default nao viva so em codigo)",
 +        "evidence": ".claude/hooks/check_config_change.py:116 (le a chave; default '1'); bloqueia so achado de FORBIDDEN_KEYS em camada de settings (:245-249)"
-+      },
-+      {
-+        "hook": "check_scratchpad_access.py",
-+        "route": "rodar scratchpad.py SEM --plan (o plan_id e derivado no proprio CLI); a alternativa e impressa na mensagem do bloqueio",
-+        "evidence": ".claude/hooks/check_scratchpad_access.py:180-190 — bloqueia EXATAMENTE `scratchpad.py --plan X` com X divergente do plano da sessao; sem --plan, sem plano resolvivel ou em erro, fail-open"
 +      },
 +      {
 +        "hook": "codex_review_user_code.py",
@@ -5356,6 +5633,12 @@ index 67e0916..b185ff2 100644
 +        "evidence": ".claude/hooks/check_adversary.py:156-158,254-271; a mensagem :260 e falsa para o caminho de segredo"
 +      },
 +      {
++        "name": "check_scratchpad_access.py",
++        "class": "bloqueia-edicao",
++        "reason": "casa por SUFIXO qualquer caminho que termine em scratchpad.py (folga deliberada para fixtures de teste), entao um adopter que rode o PROPRIO script homonimo com --plan X leva bloqueio de um guard do CLI do framework, sem rota praticavel e sem saber por que; decisao do Owner de 2026-08-30 (rail-round-7 P2-a) revertendo o INCLUIR-NO-USER da classificacao S330 s1.1 pelo criterio (a) da propria regra",
++        "evidence": ".claude/hooks/check_scratchpad_access.py:96-120 (_tokens_target_scratchpad aceita qualquer dirname); .claude/plans/PLAN-169/s330-ceremony-F/rail-round-7.md"
++      },
++      {
 +        "name": "check_pair_rail.py",
 +        "class": "exige-infra-ausente-no-user",
 +        "reason": "exige Codex CLI + .claude/governance/codex-cli-pin-manifest.json (nao instalado); 210s; os globs L3+ incluem .github/workflows/*.yml do proprio adopter",
@@ -5460,26 +5743,7 @@ index 67e0916..b185ff2 100644
    "hooks": {
      "PreToolUse": [
        {
-@@ -42,6 +274,18 @@
-           }
-         ]
-       },
-+      {
-+        "_comment": "Scratchpad scope gate (Sprint 11 Phase 7, ADR-034, M2): PreToolUse Bash hook that inspects python3 .claude/scripts/scratchpad.py invocations; blocks cross-plan --plan X when the active session derives Y. Allows non-scratchpad Bash and same-plan / no-plan invocations. Fail-open on infra error.",
-+        "matcher": "Bash",
-+        "hooks": [
-+          {
-+            "type": "command",
-+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_scratchpad_access.py",
-+            "timeout": 5,
-+            "statusMessage": "Checking scratchpad scope..."
-+          }
-+        ]
-+      },
-       {
-         "_comment": "Cost/budget advisory (Sprint 11 Phase 6, ADR-033): PreToolUse Agent hook that tallies running tokens for the active plan and emits budget_exceeded audit event + systemMessage warning when CEO_MAX_PLAN_TOKENS is exceeded. ALWAYS allows in Sprint 11 (State 0 advisory). CEO_BUDGET_BYPASS=1 is the Owner-only escape hatch (rate-limited 10/24h per plan per H13). Sprint 12 flip criterion documented in ADR-033 §2 Flip Criteria Table.",
-         "matcher": "Agent",
-@@ -187,6 +431,44 @@
+@@ -187,6 +420,44 @@
              "statusMessage": "Scanning Codex response for injection patterns..."
            }
          ]
@@ -5524,7 +5788,7 @@ index 67e0916..b185ff2 100644
        }
      ],
      "SubagentStop": [
-@@ -215,6 +497,18 @@
+@@ -215,6 +486,18 @@
              "statusMessage": "Session warmup..."
            }
          ]
@@ -5543,7 +5807,7 @@ index 67e0916..b185ff2 100644
        }
      ],
      "SessionEnd": [
-@@ -257,11 +551,85 @@
+@@ -257,11 +540,85 @@
              "statusMessage": "Session interrupt cleanup..."
            }
          ]

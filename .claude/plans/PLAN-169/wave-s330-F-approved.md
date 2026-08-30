@@ -73,10 +73,10 @@ o CI cobra, seria uma janela vermelha.
    de idempotência de gerador que já existiam. Contrato: **0** in-sync / **1**
    drift / **2** input inutilizável; qualquer não-zero reprova.
 
-6. **Os dois testes e a fixture** — **120 casos** no arquivo nuclear (61 no
+6. **Os dois testes e a fixture** — **122 casos** no arquivo nuclear (61 no
    snapshot do writer; 87 após a rodada 2 do pair-rail; 112 após as rodadas
-   3–7; 120 com a rodada 9; trajetória rodada a rodada no
-   `EXPECTED-BASELINE.txt`, bloco V2). Cada salto é cura de
+   3–7; 120 com a rodada 9; 122 com a rodada 10; trajetória rodada a
+   rodada no `EXPECTED-BASELINE.txt`, bloco V2). Cada salto é cura de
    achado, nomeada em `rail-round-*.md`. Controle vermelho por fixture congelada
    (`settings.user.pre-F.json`, o template de `1c34eb5`) contra a própria
    afirmação do `_comment` antigo: 17 registrações ausentes e 2 campos

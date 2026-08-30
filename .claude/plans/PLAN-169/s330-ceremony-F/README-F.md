@@ -14,10 +14,10 @@ em **2026-08-30: opção (a) — EXCLUIR o hook do perfil user.** O que foi feit
   `bloqueia-edicao`, com razão e evidência; `blocking_inclusions` 5 → 4);
 - o roster entregue passou de 30 para **29 registrações** (28 basenames) — o
   template foi regenerado e a paridade `--check` sai rc 0;
-- a bateria da cerimônia re-mediu **267 passed / 2 skipped**;
-- a rodada final do pair-rail saiu **APPROVE** (`rail-round-9.md`; a r8 pediu
-  exatamente esta sincronização de materiais antes de aprovar — ver o
-  registro `rail-round-8.md`);
+- a bateria da cerimônia re-mediu **277 passed / 2 skipped**;
+- a rodada final do pair-rail saiu **APPROVE** (`rail-round-11.md`, limpa;
+  no caminho, as rodadas 8–10 acharam e curaram mais 4 defeitos reais e 1
+  de sincronização — ver os registros `rail-round-8..10.md`);
 - ADR-197, DESIGN-F (§7.12), sentinel, classificação (adendo) e baselines
   foram atualizados na mesma tacada.
 

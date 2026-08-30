@@ -1,3 +1,1 @@
-WIP-BASE=7ffcdeb7b2c6eb689d9522d1f7ebfe340f6d0a48
-snapshot=2026-08-30T19:23:19Z
-note=estado FINAL da S331 apos 7 rodadas de pair-rail (11 defeitos reais curados; bateria 267/2). 20 paths. Recuperar: git clone --local . <dir> && git -C <dir> checkout <WIP-BASE> && git -C <dir> apply --3way --index F-wip.patch. O finalize-F.sh deriva o patch de cerimonia daqui. PENDENTE: a decisao do Owner sobre check_scratchpad_access (rail-round-7.md) muda o spec e o roster, entao este snapshot e pre-decisao.
+6961a23aa7370193ddb6ffe3bc1a7253b7c0d4f0
