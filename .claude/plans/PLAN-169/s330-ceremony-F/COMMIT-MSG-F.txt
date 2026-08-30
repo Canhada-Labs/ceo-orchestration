@@ -1,0 +1,95 @@
+feat(PLAN-169 wave-s330-F): o perfil `user` é DERIVADO da base por subtração declarada — e a lista paralela do build-plugin some junto
+
+`templates/settings/settings.user.json` era uma cópia manual de
+`settings.base.json` com hooks apagados à mão, congelada em `9777a8d` e nunca
+reconciliada. O `_comment` do próprio arquivo afirmava duas coisas que nada
+lia: que a remoção era de "exatamente 10" hooks, e que cada registro retido era
+byte-idêntico ao da base nos campos de comportamento. As duas eram falsas.
+
+Medido na classificação por mérito (`4f4df3a`, 43,5 KB, evidência por hook):
+
+  * 26 basenames — não 10 — registrados na base e ausentes do template user.
+  * Dos 10 nomeados, só 5 sustentam o critério que o comentário declara; 2 não
+    pertencem à lista por leitura nenhuma (`check_scratchpad_access.py`,
+    `check_skill_reference_read.py`).
+  * Dos 16 restantes, 13 já faltavam na v1.0.0: a cópia nasceu incompleta.
+  * Duas divergências de matcher/registro que o `_comment` dizia não existir.
+  * `PLAN-122 WS-4`, a proveniência citada, não existe em ref git nenhum.
+
+Veredito: 17 EXCLUIR / 9 INCLUIR. O roster user vai de 20 para 30 registrações.
+
+A cura não é corrigir a cópia — isso restauraria o valor de hoje e reconstruiria
+o mecanismo de apodrecimento intacto. A subtração vira DADO: a chave
+`_derivation` do próprio template declara `exclude_hooks` (classe, razão e
+evidência que RESOLVE, por hook), `env_overrides`, `matcher_overrides` e
+`top_level_exclude`; `gen-settings-user-template.py` re-deriva e byte-diffa.
+rc 1 = drift, rc 2 = INFRA (spec ausente ou sem a chave) — fail-loud nos dois.
+
+FU-F-ACCEL, reconciliado no mesmo patch por decisão do Owner: `build-plugin.py`
+carregava uma TERCEIRA cópia das registrações dos quatro aceleradores do
+PLAN-128, e divergente — `review_loop.py` em 60 s e `turbo_sessionstart.py` em
+10 s, enquanto `settings.base.json` e o `.claude/settings.json` vivo deste
+repositório rodam 15 s e 5 s. Depois que o roster cresceu, cada um dos quatro
+era registrado DUAS vezes no `hooks.json` do plugin. A composição virou função
+pura (`compose_plugin_hooks`), e o marcador de dívida foi INVERTIDO em guard
+permanente: `PluginHooksHaveNoParallelSource` recusa qualquer tabela
+module-level que nomeie hook já registrado pelo template — inclusive uma que
+volte com outro nome.
+
+Verificação (medida, com controle vermelho onde há oráculo novo):
+
+  * `gen --check` rc 0 no artefato; rc 1 com diff unificado sob um único byte
+    alterado; rc 2 sem a chave `_derivation`.
+  * 252 passed / 2 skipped no conjunto declarado da cerimônia (218 antes do
+    pair-rail; +34 são guards de achado, cada um com controle vermelho).
+  * O guard do plugin: 7 verdes. Controle positivo replantando a tabela ACCEL e
+    o extend pré-cura ⇒ 3 vermelhos, nomeando o ofensor, a duplicata de
+    (evento, matcher, comando) e a contagem 2 onde deve ser 1.
+  * O plugin composto: 30 registrações, ZERO triplos duplicados (eram 4), e a
+    chave `_derivation` não vaza para o `hooks.json`.
+  * Controle vermelho do gerador por fixture congelada (o template de
+    `1c34eb5`) contra a própria afirmação do `_comment` antigo: 17 registrações
+    ausentes e 2 campos divergentes, nomeados.
+
+ADR-197 (novo, PROPOSED) registra a decisão. É ADR novo e não AMEND pela
+recomendação medida da §6 da classificação: um AMEND exige um ADR-pai que decida
+a coisa emendada, e nenhum existe — o único que menciona `--ceremony user` é o
+ADR-155-AMEND-1, e só para dizer o que o install pula.
+
+OQ-F3: `validate.yml` ganha o step `User-template derivation (regen+diff)`, ao
+lado dos dois steps de idempotência de gerador que já existiam.
+
+As 15 citações de contagem de ADR (197 → 198) em 9 arquivos não são escolha:
+`verify-counts.sh` e `check-claude-md-claims.py` rodam no `validate.yml`, e um
+patch que adiciona um ADR sem elas nasce com o CI vermelho. No `CLAUDE.md`
+viaja o numeral e nada mais.
+
+Quatro rodadas de pair-rail cross-vendor acharam onze defeitos REAIS, todos na
+própria cura e todos da mesma família — uma declaração que o gerador aceitava e
+depois ignorava em silêncio: override de escopo de bloco descartado; exceção sem
+justificativa; seletores nu/qualificado que se sombreiam; campo gerado que sumia
+com a âncora (perder `_derivation` deixa o artefato incapaz de ler o próprio
+spec); o critério que não batia com a própria lista; vocabulários abertos onde um
+typo passava verde; exclusões sobrepostas; e o `--write` alcançável com um spec
+de fora da árvore. Cada cura tem controle vermelho nomeado; os registros estão em
+`rail-round-1..4.md` e o desenho em DESIGN-F §7.6-§7.9.
+
+Uma delas cobrou caro e está registrada: o controle vermelho da rodada 3
+corrompeu o `settings.user.json` shipado, porque o teste de `--write` rodava
+contra o repositório real e era seguro apenas enquanto a cura que ele testa
+existisse. Recuperado do patch commitado, e os casos de escrita passaram a rodar
+em árvore sintética.
+
+Declarado e NÃO curado aqui: `check-adr-chain.py` e `generate-adr-index.py` não
+rodam em CI (FU-F-ADRGATE). O índice estava congelado em 170 ADRs com 198 no
+disco, então a regeneração traz 27 linhas que não são desta wave; e a cadeia sai
+com 11 erros pré-existentes, aos quais o ADR-197 não acrescenta nenhum (medido
+por comparação normalizada contra o main).
+
+Plan: PLAN-169 (OQ-E5)
+ADR: ADR-197
+Sentinel: .claude/plans/PLAN-169/wave-s330-F-approved.md (assinado pelo Owner)
+Pair-Rail-Reviewed: TO-FILL
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01T4nsoRJtLkTa86mf16ctRz

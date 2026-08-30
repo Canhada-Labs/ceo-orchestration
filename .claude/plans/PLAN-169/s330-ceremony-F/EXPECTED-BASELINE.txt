@@ -1,0 +1,195 @@
+# EXPECTED-BASELINE.txt — wave-s330-F (PLAN-169, OQ-E5)
+#
+# Base DECLARADA contra a qual o V-block do OWNER-S331-F-LAND.sh compara.
+# Nunca "contra zero" e nunca "> 0": um gate que so exige "passou" aceita uma
+# suite que encolheu. Cada valor abaixo foi MEDIDO na sessao S331, na arvore
+# sombra, com PYTHONDONTWRITEBYTECODE=1, e o comando que o produziu esta na
+# linha de comentario imediatamente acima dele.
+#
+# Formato: CHAVE=valor (aspas opcionais). O leitor `_expect` do LAND e
+# fail-CLOSED: chave ausente ABORTA o land, nunca vira "0".
+#
+# Divergencia PARA MENOS e regressao. Divergencia PARA MAIS (a suite cresceu,
+# o template ganhou um registro) NAO e sucesso automatico: atualize este
+# arquivo conscientemente, com a medicao nova registrada num rail-round.
+
+# --- G4: forma do patch -----------------------------------------------------
+# Conjunto EXATO de paths. Uma cerimonia que so CONTA arquivos aceitaria um
+# patch com 20 paths ERRADOS.
+#
+# A composicao merece leitura, porque ela e mais larga do que a wave "settings
+# user derivado" sugere, e cada grupo tem uma razao NOMEADA:
+#
+#   (a) o entregavel  — templates/settings/settings.user.json (CANONICO),
+#       .claude/scripts/gen-settings-user-template.py e os dois testes.
+#   (b) FU-F-ACCEL    — scripts/build-plugin.py. Decisao do Owner de 2026-08-30:
+#       reconciliar NO MESMO patch. Nao e canonico e nao e membro do manifesto
+#       ADR-192; viaja aqui porque a duplicata que ele produzia so existe DEPOIS
+#       que o roster do template cresce. Separa-lo criaria uma janela em que o
+#       plugin registra quatro hooks duas vezes.
+#   (c) a decisao     — .claude/adr/ADR-197-user-profile-derivation.md
+#       (CANONICO) e .claude/adr/README.md (CANONICO, indice REGENERADO).
+#   (d) o gate no CI  — .github/workflows/validate.yml (CANONICO), OQ-F3.
+#   (e) as contagens  — 9 arquivos de documentacao que citam o numero de ADRs.
+#       Nao sao escolha: `verify-counts.sh` e `check-claude-md-claims.py` RODAM
+#       no validate.yml, e um patch que adiciona um ADR sem eles nasce com o CI
+#       vermelho. Todos respondem 0 ao oraculo `--is-canonical`.
+EXPECTED_PATCH_PATHS="templates/settings/settings.user.json .claude/scripts/gen-settings-user-template.py .claude/scripts/tests/test_gen_settings_user_template.py .claude/scripts/tests/test_install_user_skips_governance_hooks.py .claude/scripts/tests/fixtures/settings.user.pre-F.json .claude/plans/PLAN-169/s330-ceremony-F/DESIGN-F.md scripts/build-plugin.py .claude/adr/ADR-197-user-profile-derivation.md .claude/adr/README.md .github/workflows/validate.yml CLAUDE.md CHANGELOG.md README.md README.pt-BR.md docs/ARCHITECTURE.md docs/README.md docs/CTO-GUIDE.md docs/GUIA-COMPLETO.md docs/FAQ.md npm/README.md"
+# Medido: `python3 .claude/hooks/check_canonical_edit.py --is-canonical <path>`
+# devolve `<path>\t1` para exatamente QUATRO deles — settings.user.json,
+# ADR-197, .claude/adr/README.md e .github/workflows/validate.yml. Esses quatro
+# sao o Scope que a assinatura do Owner concede; os outros 16 viajam no mesmo
+# commit sem exigir sentinel.
+EXPECTED_PATCH_CANONICAL_PATHS=4
+# Medido: `comm -12` entre os 20 paths e os 9 membros de
+# `.claude/governance/gate-scripts-manifest.txt` = vazio. NENHUM bump de sha e
+# devido neste patch. (Se um dia `build-plugin.py` entrar no manifesto, este
+# numero muda e o G5 do LAND cobra o bump.)
+EXPECTED_MANIFEST_MEMBERS_TOUCHED=0
+
+# --- G-PRE: substrato que a bateria pressupoe -------------------------------
+# `jq` e usado pelos gates 4h/V6 para contar registros nos dois templates. Ja
+# era dependencia das cerimonias B e E. Medido: jq-1.7.1-apple.
+EXPECTED_JQ_REQUIRED=1
+
+# --- V2: suite de unidade ---------------------------------------------------
+# PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q -p no:cacheprovider \
+#   .claude/scripts/tests/test_gen_settings_user_template.py \
+#   .claude/scripts/tests/test_install_user_skips_governance_hooks.py \
+#   .claude/scripts/tests/test_upgrade_lifecycle_hooks_derived.py \
+#   .claude/hooks/tests/test_template_dogfood_parity.py \
+#   .claude/scripts/tests/test_build_plugin_idempotency.py \
+#   .claude/scripts/tests/test_check_install_profiles.py \
+#   .claude/scripts/tests/test_generate_adr_index.py
+# Medido S331 apos a rodada 7 do pair-rail: `267 passed, 2 skipped in 19.04s`,
+# rc 0. (218 antes do rail; 225 r1; 239 r2; 252 r3; 258 r4; 261 r5; 266 r6;
+# 267 r7.)
+#
+# O conjunto e mais largo que os dois arquivos que a wave EDITA, de proposito:
+# `test_build_plugin_idempotency.py` e `test_check_install_profiles.py` sao as
+# suites que a reconciliacao do ACCEL e o crescimento do roster poderiam
+# quebrar SEM tocar em nenhum arquivo delas, e `test_generate_adr_index.py`
+# cobre o indice regenerado. Uma bateria que so roda os arquivos editados nao
+# faz a pergunta que interessa.
+#
+# Trajetoria do arquivo nuclear (test_gen_settings_user_template.py):
+#   61  snapshot do writer (`6a51eca`)
+#   66  a classe `PluginAccelOverlapIsDeclaredDebt` (2 testes, marcador de
+#       divida) e SUBSTITUIDA por `PluginHooksHaveNoParallelSource` (7 testes,
+#       guard permanente) — FU-F-ACCEL reconciliado
+#   73  pair-rail rodada 1: `DeclaredOverridesAreAppliedOrRejected` (7 testes)
+#       fecha as duas formas de override que o gerador aceitava e depois
+#       ignorava em silencio (DESIGN-F §7.6)
+#   87  pair-rail rodada 2: `SelectorsAndAnchorsAreFailClosed` (5) +
+#       `BlockingInclusionsCarryTheirRoute` (9) — seletores que se sombreiam,
+#       campos gerados que sumiam com a ancora, e o criterio que nao batia com
+#       a propria lista (DESIGN-F §7.7)
+#   98  pair-rail rodada 3: `SpecVocabulariesAreClosed` (7) +
+#       `WriteRefusesAnOutOfTreeSpec` (3) — vocabulario top-level e de anotacao
+#       fechados, exclusoes sobrepostas, e o `--write` com spec de fora da
+#       arvore (DESIGN-F §7.8)
+#  106  pair-rail rodada 4: vocabulario fechado por ENTRADA de exclusao (o typo
+#       `events` virava exclusao TOTAL) + `WriteRefusesAnUnreviewedSpec` passa a
+#       exercitar as TRES proveniencias — fora da arvore, untracked, e
+#       rastreado-mas-modificado (DESIGN-F §7.9)
+#  109  pair-rail rodada 5: proveniencia por BYTES (o porcelain mente sob
+#       `skip-worktree`), tipo do valor de anotacao, e vocabulario de exclusao
+#       POR BUCKET (DESIGN-F §7.10)
+#  114  pair-rail rodada 6: sobreviventes em `blocking_inclusions`, e
+#       `UnreadableInputIsInfrastructure` (UTF-8 invalido saia com traceback em
+#       vez do rc 2 documentado). O plugin passou a EMPACOTAR o `scratchpad.py`
+#       que o guard protege (DESIGN-F §7.11)
+# Cada salto e cura de achado, nao inflacao.
+#
+# O numero do conjunto INTEIRO (252) inclui os 4 casos novos de
+# `test_install_user_skips_governance_hooks.py` (a classe
+# `TestExclusionParsingKeepsTheEvent`, que exercita o ramo scoped que o spec
+# real ainda nao alcanca).
+EXPECTED_UNIT_PYTEST_PASSED=267
+# Os 2 skips sao estruturais e ja existiam antes desta wave (ambiente sem a
+# dependencia opcional); um skip a MAIS significa que uma suite parou de rodar.
+EXPECTED_UNIT_PYTEST_SKIPPED=2
+
+# --- V5: o guard invertido (FU-F-ACCEL) -------------------------------------
+# PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q \
+#   .claude/scripts/tests/test_gen_settings_user_template.py -k PluginHooks
+# Medido: `7 passed, 61 deselected`, rc 0.
+# Controle POSITIVO medido na mesma sessao (replantando a tabela ACCEL e o
+# extend pre-cura em scripts/build-plugin.py): 3 failed / 4 passed, com os
+# vermelhos NOMEANDO o ofensor. Restaurado por backup; sem residuo.
+EXPECTED_PLUGIN_GUARD_PASSED=7
+
+# --- V6: o roster que a derivacao entrega -----------------------------------
+# jq '[.hooks | to_entries[] | .value[]] | length' templates/settings/settings.base.json
+EXPECTED_TEMPLATE_REGISTRATIONS=47
+# jq '[.hooks | to_entries[] | .value[]] | length' templates/settings/settings.user.json
+# 20 ANTES desta wave, 30 depois. E O PONTO da OQ-E5, nao efeito colateral:
+# 10 registros novos chegam ao adopter `--ceremony user` no proximo upgrade.
+# O `EXPECTED_TEMPLATE_REGISTRATIONS_USER=20` congelado em
+# `s329-ceremony-E/EXPECTED-BASELINE.txt:182` fica DEFASADO POR DECISAO do
+# Owner (2026-08-30): e baseline historica de cerimonia ja landada, nao e
+# consumida por workflow nenhum, e re-rodar o finalize-E pos-wave falha por
+# desenho. Nao a reescreva.
+EXPECTED_TEMPLATE_REGISTRATIONS_USER=30
+# Basenames distintos entre os 30 registros (dois eventos podem registrar o
+# mesmo hook — `check_output_secrets.py` em PostToolUse e PostToolUseFailure).
+EXPECTED_TEMPLATE_USER_BASENAMES=29
+
+# --- V6-bis: o que o plugin emite -------------------------------------------
+# Derivado de `compose_plugin_hooks(USER_TEMPLATE)` em scripts/build-plugin.py.
+# Registracoes = triplos (evento, matcher, comando).
+EXPECTED_PLUGIN_REGISTRATIONS=30
+# A METRICA DA CURA. Antes de FU-F-ACCEL os quatro aceleradores apareciam DUAS
+# vezes cada (o template registrava, o ACCEL re-adicionava com outro timeout),
+# e este numero era 4. Zero e o estado curado; qualquer valor > 0 significa que
+# uma segunda fonte de registros voltou.
+EXPECTED_PLUGIN_DUPLICATE_TRIPLES=0
+# Os quatro aceleradores do PLAN-128, cada um exatamente 1x, vindos do template.
+EXPECTED_PLUGIN_ACCELERATORS=4
+
+# --- V7: o gate de derivacao (OQ-F3) ----------------------------------------
+# `python3 .claude/scripts/gen-settings-user-template.py --check`
+# Contrato: 0 in-sync / 1 drift / 2 input inutilizavel. Medido nos DOIS
+# sentidos: rc 0 no artefato commitado; rc 1 com diff unificado sob um unico
+# byte alterado (`"timeout": 15` -> `16`), restaurado em seguida.
+EXPECTED_GEN_CHECK_RC=0
+# `grep -c 'gen-settings-user-template.py --check' .github/workflows/validate.yml`
+# Uma unica referencia: o step novo. Se virar 0, o gate saiu do CI e a paridade
+# volta a depender so da coleta da suite.
+EXPECTED_YML_GEN_CHECK_REFS=1
+
+# --- V8: gates de contagem que o validate.yml roda --------------------------
+# `ls .claude/adr/ADR-*.md | wc -l`
+EXPECTED_ADR_COUNT=198
+# `python3 .claude/scripts/check-claude-md-claims.py` -> rc 0
+EXPECTED_CLAUDE_MD_CLAIMS_RC=0
+# `bash .claude/scripts/local/verify-counts.sh` -> rc 0
+EXPECTED_VERIFY_COUNTS_RC=0
+# `python3 .claude/scripts/generate-adr-index.py --check` -> rc 0
+# O indice estava congelado em 170 ADRs com 198 no disco (28 sem regeneracao):
+# nem este script nem `check-adr-chain.py` rodam em CI — FU-F-ADRGATE, DESIGN-F
+# §7.4. A regeneracao traz 27 linhas que NAO sao desta wave; declarado.
+EXPECTED_ADR_INDEX_CHECK_RC=0
+
+# --- V9: gates de governanca do repositorio ---------------------------------
+# `bash .claude/scripts/validate-governance.sh` -> "Errors: 0"
+EXPECTED_GOVERNANCE_ERRORS=0
+# `python3 .claude/scripts/check-installer-write-safety.py` -> rc 0.
+# A regra do CLAUDE.md ("wave que toca scripts/ regenera o baseline") NAO
+# dispara aqui: o censo varre `.sh` e `build-plugin.py` e Python. Medido:
+# `grep -c build-plugin` no baseline = 0, e o ratchet sai 0 sem regeneracao.
+EXPECTED_RATCHET_RC=0
+# `python3 .claude/scripts/check-adr-chain.py` -> rc 1 com 11 erros, TODOS
+# pre-existentes no main (5 ADRs sem campo `Status:`, 2 `Supersedes` apontando
+# para um ADR ainda ACCEPTED). Medido com saida normalizada: o conjunto de
+# erros da sombra e IDENTICO ao do main — o ADR-197 nao acrescenta nenhum.
+# O gate declara o valor pre-existente para que o LAND compare DELTA e nao
+# valor absoluto: exigir 0 aqui reprovaria um patch inocente.
+EXPECTED_ADR_CHAIN_ERRORS=11
+
+# --- V7a: ceremony-lint -----------------------------------------------------
+# `python3 .claude/scripts/check-ceremony-script.py --json` -> `blocking_unwaived`.
+# Medido no checkout vivo COM os scripts desta cerimonia ja no disco: 0. Os
+# scripts deste pacote carregam o marcador
+# `# CEREMONY-LINT: handwritten-exception:` com a razao real.
+EXPECTED_CEREMONY_LINT_BLOCKING=0
