@@ -68,6 +68,11 @@ EXPECTED_JQ_REQUIRED=1
 # passed, 2 skipped — a exclusao e DADO no spec, e o unico teste tocado
 # (piso do guard anti-vacuo de blocking_inclusions, 5 -> 4, em
 # test_the_declared_set_is_not_vacuous) nao muda a contagem de casos.
+# 275 r9: os dois P2 REAIS da rodada 9 (generator validado por VALOR, nao
+# por presenca; override NO-OP contra a base rejeitado) entram com a classe
+# NoOpDeclarationsAreRejected (8 casos; controle vermelho medido
+# 5 failed / 3 passed antes da cura -> 8 passed depois). O P1 da r9 foi
+# refutado (descreve o proprio fluxo pre-assinatura) — rail-round-9.md.
 #
 # O conjunto e mais largo que os dois arquivos que a wave EDITA, de proposito:
 # `test_build_plugin_idempotency.py` e `test_check_install_profiles.py` sao as
@@ -109,7 +114,7 @@ EXPECTED_JQ_REQUIRED=1
 # `test_install_user_skips_governance_hooks.py` (a classe
 # `TestExclusionParsingKeepsTheEvent`, que exercita o ramo scoped que o spec
 # real ainda nao alcanca).
-EXPECTED_UNIT_PYTEST_PASSED=267
+EXPECTED_UNIT_PYTEST_PASSED=275
 # Os 2 skips sao estruturais e ja existiam antes desta wave (ambiente sem a
 # dependencia opcional); um skip a MAIS significa que uma suite parou de rodar.
 EXPECTED_UNIT_PYTEST_SKIPPED=2
