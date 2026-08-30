@@ -4,38 +4,31 @@
 > Se algum editor abrir mesmo assim: aperte `Esc`, digite `:q!` e Enter — sai
 > sem salvar e nada se perde.
 
-## 🔴 LEIA PRIMEIRO — falta UMA decisão sua
+## ✅ A decisão foi tomada e está aplicada
 
-O pacote está completo e verificado, **menos um item**, e por isso o `SIGN`
-ainda **recusa** assinar (ele exige `Rail-Verdict: APPROVE` no último registro
-de rail — o comportamento certo).
+A pendência da rodada 7 (o `check_scratchpad_access.py`, que casa por sufixo e
+bloquearia o `scratchpad.py` do próprio adopter sem rota) foi decidida por você
+em **2026-08-30: opção (a) — EXCLUIR o hook do perfil user.** O que foi feito:
 
-A sétima rodada do pair-rail achou o seguinte: o hook `check_scratchpad_access.py`,
-que esta wave passa a ligar para o adopter, casa por **sufixo** — qualquer
-caminho que termine em `scratchpad.py`. Então um adopter que rode o **próprio**
-script com esse nome e `--plan X` leva bloqueio de um guard que existe para
-proteger o CLI do framework, e não tem como saber por quê. Isso bate no critério
-que a própria wave declara: fica de fora todo hook que bloqueia *sem deixar uma
-rota praticável*.
+- a exclusão virou DADO no spec (`_derivation.exclude_hooks`, classe
+  `bloqueia-edicao`, com razão e evidência; `blocking_inclusions` 5 → 4);
+- o roster entregue passou de 30 para **29 registrações** (28 basenames) — o
+  template foi regenerado e a paridade `--check` sai rc 0;
+- a bateria da cerimônia re-mediu **267 passed / 2 skipped**;
+- a rodada final do pair-rail saiu **APPROVE** (`rail-round-9.md`; a r8 pediu
+  exatamente esta sincronização de materiais antes de aprovar — ver o
+  registro `rail-round-8.md`);
+- ADR-197, DESIGN-F (§7.12), sentinel, classificação (adendo) e baselines
+  foram atualizados na mesma tacada.
 
-Duas saídas. A escolha é sua porque muda um veredito que você ratificou:
-
-- **(a) Excluir o hook do perfil user** — uma linha no spec, roster 30 → 29.
-  **É a minha recomendação:** o critério da wave decide, e o «INCLUIR» veio do
-  critério ANTIGO que o próprio documento substituiu.
-- **(b) Estreitar o matcher** dentro do `check_scratchpad_access.py` — mais
-  correto na raiz, mas acrescenta um arquivo fora do escopo desta cerimônia, e o
-  hook tem testes que assumem a folga de caminho.
-
-O detalhe completo está em `rail-round-7.md`. Depois da sua decisão: aplico,
-rodo uma rodada final de rail, e aí sim os três comandos abaixo funcionam.
+Os três comandos abaixo estão prontos para rodar.
 
 ---
 
 ## Antes de começar
 
 Você vai assinar uma mudança que **altera o que um adopter recebe**: o perfil
-`--ceremony user` passa de 20 para 30 registrações de hook. Isso é o ponto da
+`--ceremony user` passa de 20 para 29 registrações de hook. Isso é o ponto da
 wave (a OQ-E5 que você ratificou em 27/08), não um efeito colateral. Os
 detalhes, com os riscos hook a hook, estão no sentinel que você vai assinar —
 seção **Residual declarado**.
@@ -86,8 +79,8 @@ diz o que fazer. Os dois abortos mais prováveis:
 
 1. O **`Validate`** ganha um step novo (`User-template derivation`). Ele deve
    passar; se reprovar, o reparo está na mensagem do próprio step.
-2. O próximo `upgrade.sh` de um adopter `--ceremony user` registra **10 hooks
-   novos**. Esperado.
+2. O próximo `upgrade.sh` de um adopter `--ceremony user` registra **9
+   registrações novas**. Esperado.
 3. O plugin passa a rodar `review_loop.py` com 15 s e `turbo_sessionstart.py`
    com 5 s (eram 60 e 10). Alinhado ao que este repositório já roda.
 

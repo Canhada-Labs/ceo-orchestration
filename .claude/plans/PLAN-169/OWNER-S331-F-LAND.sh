@@ -693,7 +693,8 @@ if command -v jq >/dev/null 2>&1; then
   _regu_exp="$(_expect EXPECTED_TEMPLATE_REGISTRATIONS_USER)"
   [ "$_regu_obs" = "$_regu_exp" ] \
     || die "V6b: $TEMPLATE_USER enumera $_regu_obs registro(s), esperado $_regu_exp.
-  Este numero E o produto da wave (20 -> 30): 10 registros novos chegam ao
+  Este numero E o produto da wave (20 -> 29; era 30 ate a decisao do Owner
+  na rodada 7): 9 registros novos chegam ao
   adopter --ceremony user no proximo upgrade. Se ele mudou de novo, alguem
   mexeu no spec _derivation — decida conscientemente antes de tocar
   $BASELINE_ENV."
@@ -1021,8 +1022,9 @@ fi
 cat <<'EOF'
 
   LEMBRETE — o que observar depois deste land:
-  1. O proximo `upgrade.sh` de um adopter `--ceremony user` REGISTRA 10 HOOKS
-     NOVOS (o roster vai de 20 para 30). E o ponto da OQ-E5, nao um efeito
+  1. O proximo `upgrade.sh` de um adopter `--ceremony user` REGISTRA 9
+     REGISTRACOES NOVAS (o roster vai de 20 para 29; a decisao do Owner na
+     rodada 7 excluiu o scratchpad guard). E o ponto da OQ-E5, nao um efeito
      colateral — mas e mudanca de produto em campo, e os riscos por hook estao
      na classificacao §5. Dois merecem atencao: `check_config_change.py` entra
      com `CEO_CONFIG_CHANGE_GUARD=1` explicito, e `codex_review_user_code.py` e

@@ -13,7 +13,7 @@ Vinte arquivos, **quatro** deles canônicos.
 
 | path | +/− | canônico? | papel |
 |---|---|---|---|
-| `templates/settings/settings.user.json` | +346 / −5 | **sim** | o entregável: deixa de ser cópia manual e passa a ser derivado da base pelo spec da chave `_derivation`. Roster **20 → 30** registrações (29 basenames) |
+| `templates/settings/settings.user.json` | +346 / −5 | **sim** | o entregável: deixa de ser cópia manual e passa a ser derivado da base pelo spec da chave `_derivation`. Roster **20 → 29** registrações (28 basenames; era 30 até a decisão do Owner na rodada 7 — P2-a) |
 | `.claude/adr/ADR-197-user-profile-derivation.md` | +187 / −0 | **sim** | a decisão registrada (ADR novo, não AMEND — §6 da classificação) |
 | `.claude/adr/README.md` | +30 / −3 | **sim** | índice de ADRs REGENERADO. Estava congelado em 170 com 198 no disco — 27 das linhas não são desta wave (FU-F-ADRGATE) |
 | `.github/workflows/validate.yml` | +38 / −0 | **sim** | OQ-F3: step `User-template derivation (regen+diff)` |
@@ -30,6 +30,12 @@ Vinte arquivos, **quatro** deles canônicos.
 > escrito. O `finalize-F.sh` re-deriva o patch contra o HEAD vivo, e o
 > `EXPECTED_PATCH_PATHS` do `EXPECTED-BASELINE.txt` é o conjunto que o G4 do
 > LAND compara — é ele, não esta tabela, que decide.
+>
+> **Atualização S332 (2026-08-30):** a decisão do Owner na rodada 7 (P2-a)
+> excluiu `check_scratchpad_access.py` do roster — o produto final é
+> **20 → 29 registrações**. Os «+/−» e as contagens de suíte desta página
+> são os da época em que ela foi escrita; o `EXPECTED-BASELINE.txt` (bloco
+> V2 e V6) carrega os valores re-medidos que o LAND compara.
 
 Os dezesseis não-canônicos viajam no MESMO patch de propósito. Um gerador que
 landasse sem o gate seria uma janela sem vigilância; um ADR que landasse sem as
@@ -62,7 +68,7 @@ cópia — é fazer a subtração virar DADO com leitores, a mesma forma do ADR-
 | suíte da cerimônia (7 arquivos) | **225 passed / 2 skipped** |
 | guard do plugin (`-k PluginHooks`) | 7 passed; **controle positivo** replantando o ACCEL ⇒ 3 vermelhos nomeando o ofensor |
 | guards da rodada 1 do rail | 7 passed; **controle vermelho** com o validador pré-cura ⇒ 4 vermelhos |
-| plugin composto | 30 registrações, **0 triplos duplicados** (eram 4), spec não vaza |
+| plugin composto | 29 registrações (30 até a r7), **0 triplos duplicados** (eram 4), spec não vaza |
 | `verify-counts.sh` | rc 0 |
 | `check-claude-md-claims.py` | rc 0 |
 | `validate-governance.sh` | 0 erros |

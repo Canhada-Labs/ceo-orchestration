@@ -349,3 +349,27 @@ decida a coisa emendada; não existe. O ADR novo deve fixar, no mínimo:
 ---
 
 **STATUS: DONE_WITH_CONCERNS**
+
+---
+
+## Adendo — decisão do Owner (2026-08-30, pós-rail-round-7)
+
+O veredito **INCLUIR-NO-USER** do item 15 (`check_scratchpad_access.py`, §2 e
+§5) foi **REVERTIDO pelo Owner** na sétima rodada do pair-rail da cerimônia
+(`rail-round-7.md`, P2-a): `_tokens_target_scratchpad` aceita qualquer caminho
+que termine em `scratchpad.py` (`check_scratchpad_access.py:96-120`, folga
+deliberada para as fixtures de teste), então um adopter `--ceremony user` que
+rode o PRÓPRIO script homônimo com `--plan X` levaria bloqueio de um guard do
+CLI do framework — sem rota praticável e sem saber por quê, contra o critério
+(a) que o spec da wave declara. O «INCLUIR» havia sido produzido pelo critério
+ANTIGO («bloqueia edição ou exige GPG/sentinel»), que a própria wave substituiu
+— a mesma defasagem lista-vs-regra do §2, um nível abaixo.
+
+Placar após a decisão: **18 EXCLUIR / 8 INCLUIR** (era 17/9); roster `user`
+**29 registrações / 28 basenames** (era 30/29); `blocking_inclusions` com **4**
+entradas (era 5). A exclusão vive em `_derivation.exclude_hooks` com classe
+`bloqueia-edicao`, razão e evidência; a tabela acima permanece como registro
+histórico da classificação que produziu o veredito original. Estreitar o
+matcher no hook ficou registrado como rota defensável e não-escolhida — tocaria
+arquivo fora do FILE ASSIGNMENT desta cerimônia, e os testes próprios do hook
+assumem a folga de caminho (DESIGN-F §7.12).

@@ -16,7 +16,11 @@ Medido na classificação por mérito (`4f4df3a`, 43,5 KB, evidência por hook):
   * Duas divergências de matcher/registro que o `_comment` dizia não existir.
   * `PLAN-122 WS-4`, a proveniência citada, não existe em ref git nenhum.
 
-Veredito: 17 EXCLUIR / 9 INCLUIR. O roster user vai de 20 para 30 registrações.
+Veredito da classificação: 17 EXCLUIR / 9 INCLUIR. A decisão do Owner na
+rodada 7 do pair-rail (2026-08-30, P2-a) reverteu `check_scratchpad_access.py`
+para FORA — o matcher casa por sufixo e bloquearia o script homônimo do
+próprio adopter, sem rota praticável (critério (a) do próprio spec). Final:
+18 EXCLUIR / 8 INCLUIR; o roster user vai de 20 para 29 registrações.
 
 A cura não é corrigir a cópia — isso restauraria o valor de hoje e reconstruiria
 o mecanismo de apodrecimento intacto. A subtração vira DADO: a chave
@@ -40,12 +44,12 @@ Verificação (medida, com controle vermelho onde há oráculo novo):
 
   * `gen --check` rc 0 no artefato; rc 1 com diff unificado sob um único byte
     alterado; rc 2 sem a chave `_derivation`.
-  * 252 passed / 2 skipped no conjunto declarado da cerimônia (218 antes do
-    pair-rail; +34 são guards de achado, cada um com controle vermelho).
+  * 267 passed / 2 skipped no conjunto declarado da cerimônia (218 antes do
+    pair-rail; +49 são guards de achado, cada um com controle vermelho).
   * O guard do plugin: 7 verdes. Controle positivo replantando a tabela ACCEL e
     o extend pré-cura ⇒ 3 vermelhos, nomeando o ofensor, a duplicata de
     (evento, matcher, comando) e a contagem 2 onde deve ser 1.
-  * O plugin composto: 30 registrações, ZERO triplos duplicados (eram 4), e a
+  * O plugin composto: 29 registrações, ZERO triplos duplicados (eram 4), e a
     chave `_derivation` não vaza para o `hooks.json`.
   * Controle vermelho do gerador por fixture congelada (o template de
     `1c34eb5`) contra a própria afirmação do `_comment` antigo: 17 registrações
@@ -64,15 +68,17 @@ As 15 citações de contagem de ADR (197 → 198) em 9 arquivos não são escolh
 patch que adiciona um ADR sem elas nasce com o CI vermelho. No `CLAUDE.md`
 viaja o numeral e nada mais.
 
-Quatro rodadas de pair-rail cross-vendor acharam onze defeitos REAIS, todos na
-própria cura e todos da mesma família — uma declaração que o gerador aceitava e
+Oito rodadas de pair-rail cross-vendor acharam onze defeitos REAIS, todos na
+própria cura — e uma decisão de produto que só o Owner podia tomar (a
+exclusão do scratchpad guard, rodada 7, ratificada em 2026-08-30). Quase
+todos da mesma família — uma declaração que o gerador aceitava e
 depois ignorava em silêncio: override de escopo de bloco descartado; exceção sem
 justificativa; seletores nu/qualificado que se sombreiam; campo gerado que sumia
 com a âncora (perder `_derivation` deixa o artefato incapaz de ler o próprio
 spec); o critério que não batia com a própria lista; vocabulários abertos onde um
 typo passava verde; exclusões sobrepostas; e o `--write` alcançável com um spec
 de fora da árvore. Cada cura tem controle vermelho nomeado; os registros estão em
-`rail-round-1..4.md` e o desenho em DESIGN-F §7.6-§7.9.
+`rail-round-1..8.md` e o desenho em DESIGN-F §7.6-§7.12.
 
 Uma delas cobrou caro e está registrada: o controle vermelho da rodada 3
 corrompeu o `settings.user.json` shipado, porque o teste de `--write` rodava

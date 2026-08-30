@@ -30,8 +30,8 @@ o CI cobra, seria uma janela vermelha.
 1. **`templates/settings/settings.user.json`** (canônico) — o entregável.
    Deixa de ser cópia manual e passa a ser a saída de
    `gen-settings-user-template.py` sobre `settings.base.json` mais o spec de
-   subtração embutido na chave `_derivation`. O roster vai de **20 para 30
-   registrações** (29 basenames).
+   subtração embutido na chave `_derivation`. O roster vai de **20 para 29
+   registrações** (28 basenames).
 
    O que a classificação por mérito mediu (`4f4df3a`), e que motiva a wave: o
    `_comment` do arquivo afirmava remover **"exatamente 10"** hooks; eram **26**.
@@ -40,7 +40,11 @@ o CI cobra, seria uma janela vermelha.
    (`check_scratchpad_access.py`, `check_skill_reference_read.py`). Dos 16
    restantes, **13 já faltavam na v1.0.0** — a cópia nasceu incompleta. A
    proveniência citada (`PLAN-122 WS-4`) **não existe em ref git nenhum**.
-   Veredito: **17 EXCLUIR / 9 INCLUIR**, cada exclusão com classe, razão e
+   Veredito da classificação: **17 EXCLUIR / 9 INCLUIR** — e a decisão do
+   Owner na rodada 7 (2026-08-30, `rail-round-7.md` P2-a) reverteu
+   `check_scratchpad_access.py` para FORA: o matcher casa por SUFIXO e
+   bloquearia o script homônimo do próprio adopter, sem rota praticável.
+   Final: **18 EXCLUIR / 8 INCLUIR**, cada exclusão com classe, razão e
    evidência que RESOLVE.
 
 2. **`.claude/scripts/gen-settings-user-template.py`** — o gerador.
@@ -69,9 +73,9 @@ o CI cobra, seria uma janela vermelha.
    de idempotência de gerador que já existiam. Contrato: **0** in-sync / **1**
    drift / **2** input inutilizável; qualquer não-zero reprova.
 
-6. **Os dois testes e a fixture** — **87 casos** no arquivo nuclear (61 no
-   snapshot do writer; 66 com o guard invertido do FU-F-ACCEL; 73 com os guards
-   da rodada 1 do pair-rail; 87 com os da rodada 2). Cada salto é cura de
+6. **Os dois testes e a fixture** — **112 casos** no arquivo nuclear (61 no
+   snapshot do writer; 87 após a rodada 2 do pair-rail; 112 após as rodadas
+   3–7; trajetória rodada a rodada no `EXPECTED-BASELINE.txt`, bloco V2). Cada salto é cura de
    achado, nomeada em `rail-round-*.md`. Controle vermelho por fixture congelada
    (`settings.user.pre-F.json`, o template de `1c34eb5`) contra a própria
    afirmação do `_comment` antigo: 17 registrações ausentes e 2 campos
@@ -94,7 +98,8 @@ Scope:
 ## Residual declarado
 
 - **A superfície de hooks do adopter `--ceremony user` MUDA.** O próximo
-  `upgrade.sh` registra **10 hooks novos**. É o ponto da OQ-E5, não efeito
+  `upgrade.sh` registra **9 registrações novas** (8 hooks + a 2ª registração
+  de `check_output_secrets.py`; eram 10 até a reversão da rodada 7). É o ponto da OQ-E5, não efeito
   colateral, mas é mudança de produto em campo. Riscos por hook na classificação
   §5; dois merecem repetição: `check_config_change.py` entra com
   `CEO_CONFIG_CHANGE_GUARD=1` **explícito** (o default vive em código, e uma
@@ -105,7 +110,7 @@ Scope:
   com 5 s.** Alinhado à base e ao repositório vivo, mas é mudança de
   comportamento real: os valores antigos (60 e 10) não tinham fonte que os
   sustentasse.
-- **+22.360 B no `settings.json` de todo adopter `--ceremony user` novo**
+- **+22.001 B no `settings.json` de todo adopter `--ceremony user` novo**
   (OQ-F4), quase tudo `reason`/`evidence`. Declarado, não escondido: encurtá-los
   é rota disponível; removê-los não é — são o que torna a subtração auditável.
 - **`EXPECTED_TEMPLATE_REGISTRATIONS_USER=20`** em
@@ -135,14 +140,26 @@ Scope:
   de um hook nem sempre é o basename `.py` (DESIGN-F §3.1). Ambos declarados no
   ADR-197 como pontos cegos.
 - **O critério do spec declara o próprio ESCOPO, e isso foi achado do rail.**
-  Lido como bicondicional ele é falso: **dez** dos 29 hooks que o perfil retém
-  têm sítio de bloqueio, quase todos desde a v1.0.0. Ele governa a decisão de
+  Lido como bicondicional ele é falso: **nove** dos 28 basenames que o perfil
+  retém têm sítio de bloqueio, quase todos desde a v1.0.0. Ele governa a decisão de
   EXCLUIR entre os 26 candidatos que a classificação pesou — e agora diz isso.
-  Junto vem `blocking_inclusions`: os **cinco** hooks bloqueantes que ESTA wave
-  acrescenta (`accel_dispatch`, `check_config_change`, `check_scratchpad_access`,
+  Junto vem `blocking_inclusions`: os **quatro** hooks bloqueantes que ESTA
+  wave acrescenta (`accel_dispatch`, `check_config_change`,
   `codex_review_user_code`, `review_loop`), cada um com a rota que o adopter
-  realmente tem. O revisor achou UM; o censo mecânico que se seguiu achou os
-  cinco.
+  realmente tem. O revisor achou UM; o censo mecânico que se seguiu achou
+  cinco — e a rodada 7 devolveu um deles (`check_scratchpad_access`) para
+  FORA do roster, por decisão do Owner.
+- **Uma reversão pós-classificação, decidida pelo Owner (2026-08-30, rodada 7
+  P2-a).** `check_scratchpad_access.py` fica FORA do roster `user`:
+  `_tokens_target_scratchpad` casa qualquer caminho terminando em
+  `scratchpad.py` (`check_scratchpad_access.py:96-120`, folga deliberada para
+  fixtures), então um adopter que rode o PRÓPRIO script homônimo com
+  `--plan X` levaria bloqueio sem rota — contra o critério (a) do spec. A
+  exclusão viaja no `_derivation` (classe `bloqueia-edicao`); o CLI continua
+  instalado nas duas cerimônias pelo `install.sh`, e o plugin deixa de
+  embarcá-lo (`copy_guarded_clis` é condicional ao registro). Estreitar o
+  matcher ficou registrado como rota defensável e não-escolhida (arquivo fora
+  do FILE ASSIGNMENT desta cerimônia; DESIGN-F §7.12).
 - **O ADR-197 entra como `PROPOSED`.** O flip para `ACCEPTED` é cerimônia
   própria: a ratificação real é o `.asc` sobre este sentinel, não o commit que
   reescreve o campo — o mesmo que ADR-194 e ADR-196 registraram.

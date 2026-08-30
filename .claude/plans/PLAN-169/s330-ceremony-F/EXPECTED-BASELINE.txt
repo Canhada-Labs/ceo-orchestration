@@ -64,6 +64,10 @@ EXPECTED_JQ_REQUIRED=1
 # Medido S331 apos a rodada 7 do pair-rail: `267 passed, 2 skipped in 19.04s`,
 # rc 0. (218 antes do rail; 225 r1; 239 r2; 252 r3; 258 r4; 261 r5; 266 r6;
 # 267 r7.)
+# Re-medido S332 apos a cura da decisao do Owner (r7 P2-a aplicada): 267
+# passed, 2 skipped — a exclusao e DADO no spec, e o unico teste tocado
+# (piso do guard anti-vacuo de blocking_inclusions, 5 -> 4, em
+# test_the_declared_set_is_not_vacuous) nao muda a contagem de casos.
 #
 # O conjunto e mais largo que os dois arquivos que a wave EDITA, de proposito:
 # `test_build_plugin_idempotency.py` e `test_check_install_profiles.py` sao as
@@ -123,22 +127,25 @@ EXPECTED_PLUGIN_GUARD_PASSED=7
 # jq '[.hooks | to_entries[] | .value[]] | length' templates/settings/settings.base.json
 EXPECTED_TEMPLATE_REGISTRATIONS=47
 # jq '[.hooks | to_entries[] | .value[]] | length' templates/settings/settings.user.json
-# 20 ANTES desta wave, 30 depois. E O PONTO da OQ-E5, nao efeito colateral:
-# 10 registros novos chegam ao adopter `--ceremony user` no proximo upgrade.
+# 20 ANTES desta wave, 29 depois (era 30 ate a rodada 7: a decisao do Owner
+# de 2026-08-30, rail-round-7 P2-a, excluiu check_scratchpad_access.py do
+# roster — matcher por sufixo, sem rota praticavel para o script homonimo
+# de um adopter). E O PONTO da OQ-E5, nao efeito colateral:
+# 9 registros novos chegam ao adopter `--ceremony user` no proximo upgrade.
 # O `EXPECTED_TEMPLATE_REGISTRATIONS_USER=20` congelado em
 # `s329-ceremony-E/EXPECTED-BASELINE.txt:182` fica DEFASADO POR DECISAO do
 # Owner (2026-08-30): e baseline historica de cerimonia ja landada, nao e
 # consumida por workflow nenhum, e re-rodar o finalize-E pos-wave falha por
 # desenho. Nao a reescreva.
-EXPECTED_TEMPLATE_REGISTRATIONS_USER=30
-# Basenames distintos entre os 30 registros (dois eventos podem registrar o
+EXPECTED_TEMPLATE_REGISTRATIONS_USER=29
+# Basenames distintos entre os 29 registros (dois eventos podem registrar o
 # mesmo hook — `check_output_secrets.py` em PostToolUse e PostToolUseFailure).
-EXPECTED_TEMPLATE_USER_BASENAMES=29
+EXPECTED_TEMPLATE_USER_BASENAMES=28
 
 # --- V6-bis: o que o plugin emite -------------------------------------------
 # Derivado de `compose_plugin_hooks(USER_TEMPLATE)` em scripts/build-plugin.py.
 # Registracoes = triplos (evento, matcher, comando).
-EXPECTED_PLUGIN_REGISTRATIONS=30
+EXPECTED_PLUGIN_REGISTRATIONS=29
 # A METRICA DA CURA. Antes de FU-F-ACCEL os quatro aceleradores apareciam DUAS
 # vezes cada (o template registrava, o ACCEL re-adicionava com outro timeout),
 # e este numero era 4. Zero e o estado curado; qualquer valor > 0 significa que
