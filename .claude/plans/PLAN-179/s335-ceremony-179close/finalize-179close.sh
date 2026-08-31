@@ -118,11 +118,13 @@ PY_FILES=".claude/hooks/check_precompact_continuity.py \
 .claude/hooks/tests/test_check_ledger_checkpoint.py \
 .claude/hooks/tests/test_w5_scrub_enforcement.py \
 .claude/hooks/tests/test_codex_egress_proof_telemetry.py \
-.claude/hooks/tests/test_audit_emit_plan163_lifecycle_actions.py"
+.claude/hooks/tests/test_audit_emit_plan163_lifecycle_actions.py \
+.claude/hooks/tests/test_git_bypass_guard.py"
 # A bateria de unidade DECLARADA: as 3 suites tocadas + o contrato de API do
 # audit_emit (que pina contagem/sha do _KNOWN_ACTIONS — e o que o wire novo
 # poderia quebrar sem tocar num arquivo dele).
-UNIT_TESTS=".claude/hooks/tests/test_session_end_memory_delta.py .claude/hooks/tests/test_session_end.py .claude/hooks/tests/test_check_compaction_continuity.py .claude/hooks/tests/test_audit_emit_api_contract.py .claude/hooks/tests/test_check_ledger_checkpoint.py .claude/hooks/tests/test_w5_scrub_enforcement.py .claude/hooks/tests/test_codex_egress_proof_telemetry.py .claude/hooks/tests/test_audit_emit_plan163_lifecycle_actions.py"
+UNIT_TESTS=".claude/hooks/tests/test_session_end_memory_delta.py .claude/hooks/tests/test_session_end.py .claude/hooks/tests/test_check_compaction_continuity.py .claude/hooks/tests/test_audit_emit_api_contract.py .claude/hooks/tests/test_check_ledger_checkpoint.py .claude/hooks/tests/test_w5_scrub_enforcement.py .claude/hooks/tests/test_codex_egress_proof_telemetry.py .claude/hooks/tests/test_audit_emit_plan163_lifecycle_actions.py \
+.claude/hooks/tests/test_git_bypass_guard.py"
 # --------------------------------------------------------------------------
 
 die() { printf '\n\033[31mABORT:\033[0m %s\n' "$*" >&2; exit 1; }

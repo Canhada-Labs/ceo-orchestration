@@ -19,7 +19,7 @@ Data: DATA-PLACEHOLDER
 
 ## O que esta wave entrega
 
-**Cinco arquivos canônicos** e **doze não-canônicos** que só são verdadeiros
+**Cinco arquivos canônicos** e **treze não-canônicos** que só são verdadeiros
 juntos. O oráculo `--is-canonical` responde `1` para
 `.claude/hooks/check_precompact_continuity.py`,
 `.claude/hooks/check_postcompact_reinject.py`, `.claude/hooks/SessionEnd.py`,
@@ -66,14 +66,17 @@ claim falsa numa superfície de governança.
 
 Não-canônicos que viajam juntos: o golden regenerado (`# count: 331`), o
 `harness-noop-allowlist.txt` novo (rota gate-side ADR-160 §7 exigida pela
-spec §3), a suíte nova `test_session_end_memory_delta.py` (17 testes = §7 da
-spec + paridade de enums + os 3 controles das curas do rail r1), extensões em `test_check_compaction_continuity.py`
-(12 testes US7/válvula/reinjector, incl. o controle de injeção do título
-hostil), o rebaseline consciente dos 4 pins de contagem
+spec §3), a suíte nova `test_session_end_memory_delta.py` (20 testes = §7 da
+spec + paridade de enums + os controles das curas dos rails r1+r2 —
+NFKC-bypass, âncora forjada, compact-restart, birthtime, scan incompleto), extensões em `test_check_compaction_continuity.py`
+(14 testes US7/válvula/reinjector, incl. os controles de injeção do
+título hostil e do shape do pointer — path/sha fora de forma caem), o rebaseline consciente dos 5 pins de contagem
 (`test_audit_emit_api_contract.py` — contagem+SHA re-derivado+símbolo
 público, `test_check_ledger_checkpoint.py`, `test_w5_scrub_enforcement.py`,
 `test_codex_egress_proof_telemetry.py`,
-`test_audit_emit_plan163_lifecycle_actions.py`), o plano com os 4 últimos
+`test_audit_emit_plan163_lifecycle_actions.py`,
+`test_git_bypass_guard.py` — o 6º pin, achado pela bateria integral), o
+plano com os 4 últimos
 checkboxes fechados + AC(a) supersedido + registro S335 + frontmatter
 `done`/`completed_at`/`related_commits`, o LEDGER com a unidade da
 cerimônia, e o guia §2/§6 com as claims atualizadas (a claim «verifies

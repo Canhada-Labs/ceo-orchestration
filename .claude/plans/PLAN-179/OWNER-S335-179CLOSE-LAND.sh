@@ -77,7 +77,8 @@ SPEC_FILE="SPEC/v1/audit-log.schema.md"
 NOOP_ALLOWLIST=".claude/hooks/harness-noop-allowlist.txt"
 PLAN_FILE=".claude/plans/PLAN-179-context-continuity-durable-state.md"
 ADR_DIR=".claude/adr"
-UNIT_TESTS=".claude/hooks/tests/test_session_end_memory_delta.py .claude/hooks/tests/test_session_end.py .claude/hooks/tests/test_check_compaction_continuity.py .claude/hooks/tests/test_audit_emit_api_contract.py .claude/hooks/tests/test_check_ledger_checkpoint.py .claude/hooks/tests/test_w5_scrub_enforcement.py .claude/hooks/tests/test_codex_egress_proof_telemetry.py .claude/hooks/tests/test_audit_emit_plan163_lifecycle_actions.py"
+UNIT_TESTS=".claude/hooks/tests/test_session_end_memory_delta.py .claude/hooks/tests/test_session_end.py .claude/hooks/tests/test_check_compaction_continuity.py .claude/hooks/tests/test_audit_emit_api_contract.py .claude/hooks/tests/test_check_ledger_checkpoint.py .claude/hooks/tests/test_w5_scrub_enforcement.py .claude/hooks/tests/test_codex_egress_proof_telemetry.py .claude/hooks/tests/test_audit_emit_plan163_lifecycle_actions.py \
+.claude/hooks/tests/test_git_bypass_guard.py"
 PUSH_REMOTE="origin"
 PUSH_BRANCH="main"
 # --------------------------------------------------------------------------

@@ -28,14 +28,16 @@ do W0 supersedido pela r1-C3, válvula US2b resolvida, flip `done` no patch;
    operador. Nada de float; nada de campo novo em evento existente.
 5. **Kernel.** `audit_emit.py` ∈ `_KERNEL_PATHS` (o runbook errou nessa
    metade) ⇒ o LAND arma o override no menor escopo, molde adrgate/cfab980.
-6. **Pins 330→331 rebaselineados CONSCIENTEMENTE** em 4 suítes + o contrato
+6. **Pins 330→331 rebaselineados CONSCIENTEMENTE** em 5 suítes + o contrato
    de API (SHA re-derivado do módulo, símbolo público adicionado) — a
    alternativa (relaxar) é proibida pela regra da S328.
 
 ## Números medidos (fontes no EXPECTED-BASELINE.txt)
 
-- 211 passed / 0 skipped nas 8 suítes declaradas; 7361 passed na bateria
-  completa de hooks pós-fix (6 falhas pré-fix eram TODAS pins 330).
+- 304 passed / 0 skipped nas 9 suítes declaradas; 7775 passed / 1 flake
+  de perf sob carga (`test_case_a_p99_under_5ms`, verde isolado) na
+  bateria completa pós-curas (as 6 falhas originais eram TODAS pins 330;
+  o 6º — `test_git_bypass_guard` — só apareceu na captura integral).
 - `_KNOWN_ACTIONS` 330→331; golden `# count: 331`; registry checker
   `OK: audit registry in sync`.
 - η = 887‰ derivado de F+S=112638 / T=998043 (medidos, w0-measurement §C/§E).
