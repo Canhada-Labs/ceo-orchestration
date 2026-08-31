@@ -245,6 +245,94 @@ def _load_known_chain_gaps(adr_dir: Path) -> set:
     return {m2.group(1).upper() for m2 in _GAP_ENTRY_RE.finditer(section_text)}
 
 
+# ---------------------------------------------------------------------------
+# README "Declared supersession exemptions" ledger (PLAN-169 wave-adrgate,
+# route designed in s333-ceremony-adrgate/rail-round-3.md)
+# ---------------------------------------------------------------------------
+#
+# Three rail rounds (r1: 1 finding, r2: 4, r3: 4 — same fail-open class each
+# time) proved that INFERRING a supersession exemption from frontmatter
+# qualifier keys (`original_id` / `amended_by` / `rename_source`) is a grammar
+# surface wider than the semantics it declares. The cure is architectural:
+# the two legitimate pairs are DECLARED as reviewed data in the README, in
+# the exact mold of the "Known amendment chain gaps" section this checker
+# already reads — and the ledger is MANDATORY-FIRE: an entry that does not
+# suppress a real error edge is itself an ERROR, because the ledger cannot
+# outlive the bug it names.
+
+_README_EXEMPTION_SECTION_RE = re.compile(
+    r"(?is)##\s+Declared supersession exemptions.*?(?=^##|\Z)", re.MULTILINE
+)
+#: A full ledger entry: **ADR-NNN -> ADR-MMM: reason** (arrow or unicode
+#: arrow). Reason is bounded and horizontal-only.
+_EXEMPTION_ENTRY_RE = re.compile(
+    r"^\*\*(ADR-\d{3})\s*(?:\u2192|->)\s*(ADR-\d{3})\s*:\s*"
+    r"([^\n]{1,200}?)\*\*[\t ]*$",
+    re.MULTILINE,
+)
+#: Any bold line inside the section that CARRIES an arrow — used for the
+#: fail-closed input gate: an arrow-bearing bold line that does not parse as
+#: a full triple is an ERROR, never silently ignored.
+_EXEMPTION_MARKER_RE = re.compile(
+    r"^\*\*[^\n]*(?:\u2192|->)[^\n]*\*\*[\t ]*$", re.MULTILINE
+)
+
+
+def _load_declared_exemptions(adr_dir: Path):
+    """Parse the README ledger and return ``(exemptions, parse_errors)``.
+
+    ``exemptions`` maps ``(declarer_base_id, target_base_id)`` to the
+    declared reason. Pairs are LITERAL — no qualifier grammar, no
+    normalization beyond the base-ID regex itself. Mandatory-fire semantics
+    live in the caller (`validate_chain`): every entry must suppress at
+    least one error edge or the run fails.
+
+    Missing README or absent section => no exemptions, no errors (the
+    ledger is opt-in data). Malformed arrow-bearing entries inside the
+    section => named parse ERRORS (fail-closed on input, per the security-
+    matcher doctrine).
+    """
+    exemptions = {}
+    parse_errors: List[str] = []
+    readme = adr_dir / "README.md"
+    if not readme.is_file():
+        return exemptions, parse_errors
+    try:
+        text = readme.read_text(encoding="utf-8")
+    except OSError:
+        return exemptions, parse_errors
+    m = _README_EXEMPTION_SECTION_RE.search(text)
+    if not m:
+        return exemptions, parse_errors
+    section = m.group(0)
+    parsed_spans = []
+    for em in _EXEMPTION_ENTRY_RE.finditer(section):
+        declarer, target, reason = em.group(1), em.group(2), em.group(3)
+        pair = (declarer.upper(), target.upper())
+        if pair in exemptions:
+            parse_errors.append(
+                "README declared supersession exemptions: duplicate entry "
+                f"{pair[0]} -> {pair[1]} — one edge, one entry"
+            )
+            continue
+        exemptions[pair] = reason.strip()
+        parsed_spans.append((em.start(), em.end()))
+    for mm in _EXEMPTION_MARKER_RE.finditer(section):
+        if not any(a <= mm.start() < b for a, b in parsed_spans):
+            parse_errors.append(
+                "README declared supersession exemptions: unparseable "
+                f"entry line {mm.group(0)[:120]!r} — expected "
+                "'**ADR-NNN -> ADR-MMM: reason**'"
+            )
+    return exemptions, parse_errors
+
+
+def _base_adr_id(corpus_key: str):
+    """``ADR-120`` from either ``ADR-120`` or a full AMEND stem."""
+    m = re.match(r"(ADR-\d{3})", str(corpus_key))
+    return m.group(1).upper() if m else None
+
+
 def _extract_yaml_supersedes(text: str) -> List[str]:
     """Return ADR-NNN identifiers declared in a YAML frontmatter
     ``supersedes:`` block sequence (multi-line YAML list form).
@@ -390,6 +478,13 @@ def validate_chain(adr_dir: Path) -> Tuple[List[str], List[str]]:
     # Load documented chain gaps from README before building corpus.
     known_chain_gaps = _load_known_chain_gaps(adr_dir)
 
+    # Load the declared supersession-exemption ledger (mandatory-fire).
+    declared_exemptions, exemption_parse_errors = _load_declared_exemptions(
+        adr_dir
+    )
+    errors.extend(exemption_parse_errors)
+    fired_exemptions = set()
+
     adrs: Dict[str, Dict[str, object]] = {}
     for f in sorted(adr_dir.iterdir()):
         if f.name == "README.md":
@@ -479,6 +574,15 @@ def validate_chain(adr_dir: Path) -> Tuple[List[str], List[str]]:
                 continue
             target_d = adrs[target]
             if not str(target_d.get("status") or "").startswith("SUPERSEDED"):
+                pair = (_base_adr_id(adr_id), _base_adr_id(target))
+                if pair in declared_exemptions:
+                    # Reviewed data says this exact edge is legitimate
+                    # (e.g. a rename completed under ADR-117 doctrine, or a
+                    # clause supersession with `amended_by` on the target).
+                    # Suppress THIS error only, and record the firing —
+                    # an entry that never fires fails the run below.
+                    fired_exemptions.add(pair)
+                    continue
                 errors.append(
                     f"{d['path']}: declares Supersedes={target}, but "
                     f"{target_d['path']} has "
@@ -602,6 +706,18 @@ def validate_chain(adr_dir: Path) -> Tuple[List[str], List[str]]:
                     f"(document this gap in the README 'Known amendment chain gaps' "
                     f"section if it is intentional)"
                 )
+
+    # Mandatory-fire: every declared exemption must have suppressed a real
+    # error edge in THIS run. A stale entry is an ERROR, not a comment —
+    # the ledger cannot outlive the bug it names (rail-round-3 route).
+    for pair in sorted(declared_exemptions):
+        if pair not in fired_exemptions:
+            errors.append(
+                f"README declared exemption {pair[0]} -> {pair[1]} did not "
+                "fire (mandatory-fire): no matching "
+                "'Supersedes without SUPERSEDED target' edge exists — "
+                "remove the stale entry or fix the reference it names"
+            )
 
     return errors, warnings
 

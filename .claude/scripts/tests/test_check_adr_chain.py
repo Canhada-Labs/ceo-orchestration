@@ -788,5 +788,185 @@ class TestAmendLineageValidation(unittest.TestCase):
             )
 
 
+
+
+class TestDeclaredExemptionLedger(unittest.TestCase):
+    """PLAN-169 wave-adrgate: the declared supersession-exemption ledger.
+
+    Route from s333-ceremony-adrgate/rail-round-3.md: pairs are DECLARED
+    reviewed data in the README (mold: _load_known_chain_gaps), with
+    MANDATORY-FIRE semantics — a stale entry is an error, and malformed
+    arrow-bearing entries are fail-closed parse errors.
+    """
+
+    A_SUPERSEDES_B = {
+        "ADR-001-old.md": "# ADR-001\n\n**Status:** ACCEPTED\n",
+        "ADR-002-new.md": (
+            "# ADR-002\n\n**Status:** ACCEPTED\n\nSupersedes: ADR-001\n"
+        ),
+    }
+
+    def _corpus(self, td, files, readme=None):
+        for name, body in files.items():
+            (td / name).write_text(body, encoding="utf-8")
+        if readme is not None:
+            (td / "README.md").write_text(readme, encoding="utf-8")
+        return td
+
+    @staticmethod
+    def _ledger(*entries):
+        body = "\n\n".join(entries)
+        return (
+            "# ADR index\n\n"
+            "## Declared supersession exemptions (reviewed data, mandatory-fire)\n\n"
+            + body
+            + "\n\n## Next section\n\nprose\n"
+        )
+
+    def test_declared_exemption_suppresses_matching_edge(self):
+        with tempfile.TemporaryDirectory() as td:
+            d = self._corpus(
+                Path(td),
+                dict(self.A_SUPERSEDES_B),
+                readme=self._ledger(
+                    "**ADR-002 -> ADR-001: clause supersession, "
+                    "amended_by declared on the target**"
+                ),
+            )
+            errors, _ = check_adr_chain.validate_chain(d)
+            self.assertEqual(errors, [], errors)
+
+    def test_unicode_arrow_form_accepted(self):
+        with tempfile.TemporaryDirectory() as td:
+            d = self._corpus(
+                Path(td),
+                dict(self.A_SUPERSEDES_B),
+                readme=self._ledger(
+                    "**ADR-002 \u2192 ADR-001: rename completed under "
+                    "ADR-117 doctrine**"
+                ),
+            )
+            errors, _ = check_adr_chain.validate_chain(d)
+            self.assertEqual(errors, [], errors)
+
+    def test_stale_entry_is_mandatory_fire_error(self):
+        with tempfile.TemporaryDirectory() as td:
+            d = self._corpus(
+                Path(td),
+                {
+                    "ADR-001-a.md": "# ADR-001\n\n**Status:** ACCEPTED\n",
+                    "ADR-002-b.md": "# ADR-002\n\n**Status:** ACCEPTED\n",
+                },
+                readme=self._ledger("**ADR-002 -> ADR-001: nothing here**"),
+            )
+            errors, _ = check_adr_chain.validate_chain(d)
+            self.assertTrue(
+                any("did not fire" in e and "mandatory-fire" in e for e in errors),
+                errors,
+            )
+
+    def test_error_without_exemption_still_fires(self):
+        with tempfile.TemporaryDirectory() as td:
+            d = self._corpus(
+                Path(td),
+                dict(self.A_SUPERSEDES_B),
+                readme=self._ledger(),
+            )
+            errors, _ = check_adr_chain.validate_chain(d)
+            self.assertTrue(
+                any("should be SUPERSEDED" in e for e in errors), errors
+            )
+
+    def test_reversed_direction_does_not_match(self):
+        with tempfile.TemporaryDirectory() as td:
+            d = self._corpus(
+                Path(td),
+                dict(self.A_SUPERSEDES_B),
+                readme=self._ledger("**ADR-001 -> ADR-002: wrong direction**"),
+            )
+            errors, _ = check_adr_chain.validate_chain(d)
+            self.assertTrue(
+                any("should be SUPERSEDED" in e for e in errors), errors
+            )
+            self.assertTrue(
+                any("did not fire" in e for e in errors), errors
+            )
+
+    def test_section_absent_is_inert(self):
+        with tempfile.TemporaryDirectory() as td:
+            d = self._corpus(
+                Path(td),
+                dict(self.A_SUPERSEDES_B),
+                readme="# ADR index\n\nno ledger section here\n",
+            )
+            errors, _ = check_adr_chain.validate_chain(d)
+            self.assertEqual(
+                len([e for e in errors if "should be SUPERSEDED" in e]), 1
+            )
+
+    def test_malformed_arrow_entry_is_parse_error(self):
+        with tempfile.TemporaryDirectory() as td:
+            d = self._corpus(
+                Path(td),
+                {
+                    "ADR-001-a.md": "# ADR-001\n\n**Status:** ACCEPTED\n",
+                },
+                readme=self._ledger("**something -> somewhere odd**"),
+            )
+            errors, _ = check_adr_chain.validate_chain(d)
+            self.assertTrue(
+                any("unparseable" in e for e in errors), errors
+            )
+
+    def test_duplicate_entry_is_error(self):
+        with tempfile.TemporaryDirectory() as td:
+            d = self._corpus(
+                Path(td),
+                dict(self.A_SUPERSEDES_B),
+                readme=self._ledger(
+                    "**ADR-002 -> ADR-001: first**",
+                    "**ADR-002 -> ADR-001: second**",
+                ),
+            )
+            errors, _ = check_adr_chain.validate_chain(d)
+            self.assertTrue(
+                any("duplicate entry" in e for e in errors), errors
+            )
+
+    def test_exemption_suppresses_only_the_named_edge(self):
+        with tempfile.TemporaryDirectory() as td:
+            files = dict(self.A_SUPERSEDES_B)
+            files["ADR-003-c.md"] = (
+                "# ADR-003\n\n**Status:** ACCEPTED\n\nSupersedes: ADR-001\n"
+            )
+            d = self._corpus(
+                Path(td),
+                files,
+                readme=self._ledger("**ADR-002 -> ADR-001: only this edge**"),
+            )
+            errors, _ = check_adr_chain.validate_chain(d)
+            supers = [e for e in errors if "should be SUPERSEDED" in e]
+            self.assertEqual(len(supers), 1, errors)
+            self.assertIn("ADR-003", supers[0])
+            self.assertFalse(any("did not fire" in e for e in errors), errors)
+
+    def test_amend_declarer_matches_by_base_id(self):
+        with tempfile.TemporaryDirectory() as td:
+            d = self._corpus(
+                Path(td),
+                {
+                    "ADR-001-old.md": "# ADR-001\n\n**Status:** ACCEPTED\n",
+                    "ADR-002-base.md": "# ADR-002\n\n**Status:** ACCEPTED\n",
+                    "ADR-002-AMEND-1-x.md": (
+                        "# ADR-002 AMEND 1\n\n**Status:** ACCEPTED\n\n"
+                        "amends: ADR-002\n\nSupersedes: ADR-001\n"
+                    ),
+                },
+                readme=self._ledger("**ADR-002 -> ADR-001: amend declarer**"),
+            )
+            errors, _ = check_adr_chain.validate_chain(d)
+            self.assertEqual(errors, [], errors)
+
+
 if __name__ == "__main__":
     unittest.main()

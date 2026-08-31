@@ -14,10 +14,14 @@ Stdlib-only por contrato (CLAUDE.md §4): o parse é textual, sem PyYAML.
 from __future__ import annotations
 
 import re
+import sys
 import unittest
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(REPO_ROOT / ".claude" / "hooks"))
+
+from _lib.testing import TestEnvContext  # noqa: E402
 TEMPLATE = (
     REPO_ROOT / "templates" / ".github" / "workflows" / "validate.yml.template"
 )
@@ -64,7 +68,10 @@ def _step_names(text: str) -> list:
     return re.findall(r"^\s+- name:\s*(.+?)\s*$", text, re.M)
 
 
-class TestFrozenSubsetDeclaration(unittest.TestCase):
+class TestFrozenSubsetDeclaration(TestEnvContext):
+    """Read-only over the live tree, but `TestEnvContext` is still the
+    base: env isolation is the corpus-wide contract for new tests
+    (check-test-env-hygiene gate), and it costs nothing here."""
     def test_template_exists(self) -> None:
         self.assertTrue(TEMPLATE.is_file(), TEMPLATE)
 
