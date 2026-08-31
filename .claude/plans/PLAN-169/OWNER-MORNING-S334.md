@@ -33,6 +33,10 @@ SEM escape, na árvore commitada. IMPORTANTE: o HEAD andou depois do
 finalize (curas do rail) — **rode o finalize PRIMEIRO** (1º comando da
 fila acima): ele re-baseia o patch no HEAD atual em segundos e recusa
 qualquer drift real dos 4 paths; depois SIGN → LAND --dry-run → LAND.
+CONTINGÊNCIA (só se a máquina reiniciou e o scratchpad sumiu): a sombra
+que o finalize procura pode ser reconstruída do próprio patch commitado —
+`git worktree add --detach /tmp/shadow-adrgate HEAD && git -C /tmp/shadow-adrgate apply .claude/plans/PLAN-169/s334-ceremony-adrgate/ADRGATE.patch`
+e rode o finalize com `CEO_ADRGATE_SHADOW=/tmp/shadow-adrgate`.
 
 ### 2. Decisões que SÓ você pode tomar (nenhuma bloqueia o item 1)
 
