@@ -20,7 +20,7 @@ index e445c00..2793211 100644
  session_stop
  settings_tamper_detected
 diff --git a/.claude/hooks/SessionEnd.py b/.claude/hooks/SessionEnd.py
-index 0faffc3..08d45cf 100755
+index 0faffc3..497caa9 100755
 --- a/.claude/hooks/SessionEnd.py
 +++ b/.claude/hooks/SessionEnd.py
 @@ -17,6 +17,15 @@ Fires at the end of every Claude Code session. Four responsibilities:
@@ -94,7 +94,7 @@ index 0faffc3..08d45cf 100755
  
  def _emit_observe(system_message: Optional[str] = None) -> str:
      """Schema-compliant lifecycle hook output (see SessionStart docstring)."""
-@@ -297,6 +336,430 @@ def _flush_audit_log_filelock(repo_root: Path) -> None:
+@@ -297,6 +336,440 @@ def _flush_audit_log_filelock(repo_root: Path) -> None:
          return
  
  
@@ -395,6 +395,16 @@ index 0faffc3..08d45cf 100755
 +            return out
 +        start_ts, anchor_source = _session_start_ts(session_id, repo_root)
 +        out["anchor_source"] = anchor_source
++        # Rail r3 P2-c: o `ts` do wire e serializado em SEGUNDOS INTEIROS
++        # (audit_emit trunca), e mtimes tem subsegundo — um arquivo escrito
++        # pela sessao ANTERIOR no mesmo segundo do start satisfaria
++        # `st_mtime >= start_ts` e viraria um falso "written". A janela
++        # exclui conservadoramente o segundo nao-resolvido: um arquivo
++        # escrito no 1o segundo DESTA sessao pode ser perdido (undercount
++        # de borda, documentado) — o desenho ja prefere perder a inventar.
++        # birthtime (fallback) carrega subsegundo e nao precisa do ajuste.
++        if start_ts is not None and anchor_source == "chain":
++            start_ts += 1.0
 +        deadline = time.monotonic() + (_MEMORY_DELTA_SCAN_BUDGET_MS / 1000.0)
 +        files_count = 0
 +        modified: List[str] = []
@@ -525,7 +535,7 @@ index 0faffc3..08d45cf 100755
  def decide(*, repo_root: Path, session_id: str, reason: str) -> str:
      """Pure decision function."""
      if _kill_switch_active():
-@@ -304,6 +767,16 @@ def decide(*, repo_root: Path, session_id: str, reason: str) -> str:
+@@ -304,6 +777,16 @@ def decide(*, repo_root: Path, session_id: str, reason: str) -> str:
  
      try:
          memory_state = _memory_dir_state(repo_root)
@@ -542,7 +552,7 @@ index 0faffc3..08d45cf 100755
          # PLAN-125 WS-1 — evict the per-session lifecycle record file (MF-PERF-2).
          _cleanup_tool_lifecycle(session_id)
          _flush_audit_log_filelock(repo_root)
-@@ -318,18 +791,28 @@ def decide(*, repo_root: Path, session_id: str, reason: str) -> str:
+@@ -318,18 +801,28 @@ def decide(*, repo_root: Path, session_id: str, reason: str) -> str:
              repo_root=repo_root,
              session_id=session_id,
          )
@@ -576,6 +586,24 @@ index 0faffc3..08d45cf 100755
      except Exception as e:
          sys.stderr.write(f"[SessionEnd] FATAL: {type(e).__name__}: {e}\n")
          return _emit_observe()
+@@ -353,9 +846,15 @@ def main() -> int:
+         sys.stdout.write(_emit_observe() + "\n")
+         return 0
+ 
++    # Rail r3 P2-b: PAYLOAD-first. CLAUDE_SESSION_ID e agent-spoofable
++    # (consensus M2 — a mesma razao pela qual _session_scope_id do
++    # PreCompact recusa o env), e o SPEC row do delta exige o id "threaded
++    # from the harness event". Um env divergente do payload faria o scan
++    # ancorar na sessao ERRADA (falso written/absent). O env sobrevive
++    # apenas como fallback para um harness sem id no payload.
+     session_id = (
+-        os.environ.get("CLAUDE_SESSION_ID", "")
+-        or getattr(event, "session_id", "") or ""
++        (getattr(event, "session_id", "") or "")
++        or os.environ.get("CLAUDE_SESSION_ID", "")
+     ) or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
+     reason = os.environ.get("CLAUDE_SESSION_END_REASON", "normal")
+     repo_root = Path(os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd())
 diff --git a/.claude/hooks/_lib/audit_emit.py b/.claude/hooks/_lib/audit_emit.py
 index 8758e2d..44c2f0b 100644
 --- a/.claude/hooks/_lib/audit_emit.py
@@ -1389,10 +1417,10 @@ index 5031368..7f089ba 100755
          # git_bypass.GIT_BYPASS_FLAG_CLASSES MUST equal the audit_emit mirror.
 diff --git a/.claude/hooks/tests/test_session_end_memory_delta.py b/.claude/hooks/tests/test_session_end_memory_delta.py
 new file mode 100644
-index 0000000..02b56c8
+index 0000000..42e29b7
 --- /dev/null
 +++ b/.claude/hooks/tests/test_session_end_memory_delta.py
-@@ -0,0 +1,553 @@
+@@ -0,0 +1,560 @@
 +"""PLAN-179 W2 US8 — SessionEnd memory-delta observation (wave-179-close).
 +
 +Test surface from the SIGNED spec ``PLAN-179/staged-w24/SESSIONEND-NOTE.md``
@@ -1887,8 +1915,15 @@ index 0000000..02b56c8
 +            ts, src = SessionEnd._session_start_ts(
 +                self.SESSION_ID, self.repo_root
 +            )
-+            self.assertEqual(src, "state_file")
-+            self.assertIsNotNone(ts)
++            # Rail r3 P1-a: no Linux nao ha st_birthtime e o fallback e
++            # honestamente INUTILIZAVEL por desenho (rail r1 P1-2) — o
++            # esperado depende da plataforma; incondicional quebrava o CI
++            # Ubuntu que coleta todos os hook tests.
++            if getattr(record.stat(), "st_birthtime", None) is not None:
++                self.assertEqual(src, "state_file")
++                self.assertIsNotNone(ts)
++            else:
++                self.assertEqual((ts, src), (None, "none"))
 +            record.unlink()  # the "cleanup ran first" world
 +            ts2, src2 = SessionEnd._session_start_ts(
 +                self.SESSION_ID, self.repo_root
